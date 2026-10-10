@@ -97,6 +97,48 @@ Counters:
 curl -s http://127.0.0.1:8788/metrics
 ```
 
+### Preview Settings → Phone
+
+The Phone tab exists only when Core has a relay URL. To walk its states
+in the desktop app before there is an iPhone app, run a relay as above and
+start the app against it:
+
+```bash
+GALLEY_REMOTE_RELAY_URL=ws://127.0.0.1:8787 pnpm --dir gui tauri dev
+```
+
+Release builds bake the variable in at compile time
+(`option_env!`), so setting or clearing it rebuilds Core once.
+
+Then Settings → Phone → Show pairing code, and connect a fake phone,
+Core's example `fake_phone`:
+
+```bash
+cargo run --manifest-path core/Cargo.toml -p galley-core --example fake_phone -- --scan
+```
+
+`--scan` lets you drag a box around the QR code on screen; macOS's own QR
+detector reads it (Core Image through `osascript`), and the screenshot is
+deleted at once. `--qr-image <file>` reads a screenshot you took, and
+without either it reads the `galley-pair:1?…` string from standard input.
+The desktop needs no new way to hand out the code (it carries the pairing
+key): the fake phone reads it off the screen like a real one, and never
+prints or stores it.
+
+The fake phone connects to the relay named in the code, runs the
+handshake, says `hello`, lists the sessions and stays online, printing
+what happens, until Ctrl-C or until the desktop unpairs it. It reconnects
+by itself when the relay or the desktop goes away. The page's states:
+
+| State | How |
+|---|---|
+| not paired | before the first Show pairing code, or after Unpair |
+| paired, no phone online | hide the code without scanning, or stop the fake phone |
+| phones online | the fake phone running; a second one after Add a phone |
+| network down (Connecting) | stop the relay; start it again to reconnect |
+
+The fake phone is an example, so no shipped build contains it.
+
 ## Configuration
 
 Flags win over environment variables:

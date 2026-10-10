@@ -137,6 +137,12 @@ tokio-tungstenite = { version = "=0.30.0", default-features = false, features = 
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 whoami = { version = "1.6", default-features = false }
 zeroize = "1"
+# The pairing QR code for Settings → Phone (ticket 05d), drawn here as an
+# SVG so the QR string (it carries the pairing master key) never reaches
+# the page's JavaScript as text. Pinned; with default features off it
+# pulls in no crate (the optional `image` renderer stays off), so nothing
+# can unify features with the rest of the workspace.
+qrcode = { version = "=0.14.1", default-features = false, features = ["svg"] }
 
 [features]
 # Enables the bridge-owner-experiment binary. Not part of any default set.

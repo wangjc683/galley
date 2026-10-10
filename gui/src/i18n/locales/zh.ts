@@ -632,6 +632,7 @@ export const zhCopy = {
       models: { label: "Models", helper: "模型", title: "模型" },
       agent: { label: "Agent", helper: "智能体接入", title: "智能体接入" },
       im: { label: "Channels", helper: "聊天软件", title: "聊天软件" },
+      phone: { label: "Phone", helper: "手机", title: "手机" },
       browser: {
         label: "Browser Control",
         helper: "浏览器控制",
@@ -640,6 +641,44 @@ export const zhCopy = {
       shortcuts: { label: "Shortcuts", helper: "快捷键", title: "快捷键" },
       feedback: { label: "Feedback", helper: "报告问题" },
       about: { label: "About", helper: "关于" },
+    },
+    phone: {
+      subtitle: "在 iPhone 上查看和继续这台电脑上的对话",
+      pairTitle: "配对手机",
+      pairDescription:
+        "用 iPhone 上的 Galley 扫一次码，之后就能在手机上查看和继续这里的对话。",
+      showCode: "显示配对码",
+      hideCode: "收起配对码",
+      qrAlt: "配对二维码",
+      scanSteps: [
+        "在 iPhone 上打开 Galley，扫描这个二维码。",
+        "扫码后手机就会连上这台电脑，以后打开 Galley 都会自动连上。",
+      ],
+      scanWarning:
+        "这个二维码等于这台电脑的使用权：只用自己的手机扫，不要截图或发给别人。",
+      badgeOnline: "已连接",
+      badgeIdle: "未连接",
+      badgeConnecting: "正在连接",
+      onlineTitle: (count: number) => `${count} 台手机在线`,
+      idleTitle: "没有手机在线",
+      connectingTitle: "暂时连不上网络",
+      connectingDetail: "正在重试。连上之前，手机连不到这台电脑。",
+      lastConnected: (time: string) => `上次连接 ${time}`,
+      autoConnectHint: "手机打开 Galley 时会自动连上",
+      addTitle: "添加手机",
+      addDescription: "再显示一次配对码，已配对的手机不受影响",
+      unpairTitle: "解除配对",
+      unpairDescription: "断开所有手机，之后每台都要重新扫码",
+      unpair: "解除配对",
+      unpairDialogTitle: "解除所有手机的配对？",
+      unpairDialogBody:
+        "所有已配对的手机会立即断开，现在的配对码随之作废。之后每台手机都要扫描新的配对码才能再连上。",
+      pairFailed: (detail: string) => `无法显示配对码：${detail}`,
+      unpairFailed: (detail: string) => `解除配对失败：${detail}`,
+      backgroundHintTitle: "关闭窗口后 Galley 会退出",
+      backgroundHintBody:
+        "退出后手机就连不上这台电脑。打开「关闭窗口时保持后台运行」，关窗后 Galley 会留在菜单栏 / 托盘里继续运行。",
+      backgroundHintAction: "打开",
     },
     general: {
       subtitle: "外观、语言与应用行为",

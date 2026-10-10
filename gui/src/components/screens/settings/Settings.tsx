@@ -7,11 +7,13 @@ import { SettingsBrowserControl } from "@/components/screens/settings/SettingsBr
 import { SettingsIM } from "@/components/screens/settings/SettingsIM";
 import { SettingsIntegration } from "@/components/screens/settings/SettingsIntegration";
 import { SettingsModels } from "@/components/screens/settings/SettingsModels";
+import { SettingsPhone } from "@/components/screens/settings/SettingsPhone";
 import { SettingsRuntime } from "@/components/screens/settings/SettingsRuntime";
 import { SettingsFeedback } from "@/components/screens/settings/SettingsFeedback";
 import { SettingsSidebar } from "@/components/screens/settings/SettingsSidebar";
 import { SettingsShortcuts } from "@/components/screens/settings/SettingsShortcuts";
 import { DialogCloseButton } from "@/components/ui/dialog-close-button";
+import { useRemoteStatus } from "@/hooks/useRemoteStatus";
 import type { ConversationFontSize } from "@/lib/conversation-font-size";
 import { useCopy } from "@/lib/i18n";
 import type { LanguagePreference, ResolvedLanguage } from "@/lib/language";
@@ -153,6 +155,11 @@ export function Settings({
     if (!showBrowserTab && tab === "browser") setTab("runtime");
   }, [setTab, showBrowserTab, tab]);
 
+  // Phone (ticket 05d) exists only when Core has remote access (a build
+  // that knows a relay URL); `null` / not yet known hides the tab, so a
+  // build without it shows exactly the tabs it always did.
+  const remoteStatus = useRemoteStatus(open);
+
   const contentRef = useRef<HTMLDivElement>(null);
   // Radix handles Esc on `document` in the capture phase, so without
   // this a field's own Esc handling (the GA path field reverts its
@@ -206,6 +213,7 @@ export function Settings({
             resolvedLanguage={resolvedLanguage}
             showImTab={showImTab}
             showBrowserTab={showBrowserTab}
+            showPhoneTab={remoteStatus != null}
           />
 
           {/* The pane owns X legibility, not the button's backdrop: the
@@ -271,6 +279,15 @@ export function Settings({
               )}
               {showBrowserTab && tab === "browser" && (
                 <SettingsBrowserControl onRunDemo={onRunBrowserControlDemo} />
+              )}
+              {remoteStatus && tab === "phone" && (
+                <SettingsPhone
+                  status={remoteStatus}
+                  keepInBackgroundOnClose={keepInBackgroundOnClose}
+                  onEnableKeepInBackground={() =>
+                    onChangeKeepInBackgroundOnClose(true)
+                  }
+                />
               )}
               {tab === "shortcuts" && <SettingsShortcuts />}
               {tab === "feedback" && (

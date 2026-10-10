@@ -1,6 +1,7 @@
 import {
   ChatCircleText,
   Cpu,
+  DeviceMobile,
   Gear,
   Info,
   Keyboard,
@@ -22,12 +23,14 @@ export function SettingsSidebar({
   resolvedLanguage,
   showImTab,
   showBrowserTab,
+  showPhoneTab,
 }: {
   tab: SettingsTab;
   onChange: (tab: SettingsTab) => void;
   resolvedLanguage: ResolvedLanguage;
   showImTab: boolean;
   showBrowserTab: boolean;
+  showPhoneTab: boolean;
 }) {
   const copy = useCopy();
   // Chinese UI: the Chinese name is the primary label and the English
@@ -46,11 +49,15 @@ export function SettingsSidebar({
   return (
     <nav className="flex w-[180px] shrink-0 flex-col border-r border-line bg-app py-3">
       {/* Three groups, separated by space only (no rules): everyday setup
-          (general / models / browser / channels), agent and engine
-          plumbing (agent access / runtime / shortcuts), then meta
+          (general / models / browser / channels / phone), agent and
+          engine plumbing (agent access / runtime / shortcuts), then meta
           (feedback / about). Browser and Channels exist only on the
           managed runtime; general and models keep group one non-empty
-          in external mode, so no gap ever renders without tabs. */}
+          in external mode, so no gap ever renders without tabs. Phone
+          sits next to Channels (both reach Galley from elsewhere) and
+          exists only in a build with remote access; it ignores the
+          runtime mode, because while a phone is paired its unpair button
+          must stay reachable. */}
       <div className="flex flex-col gap-3">
         <div>
           <SettingsTabButton
@@ -79,6 +86,14 @@ export function SettingsSidebar({
               Icon={ChatCircleText}
               {...labelsFor(tabCopy.im)}
               onClick={() => onChange("im")}
+            />
+          )}
+          {showPhoneTab && (
+            <SettingsTabButton
+              active={tab === "phone"}
+              Icon={DeviceMobile}
+              {...labelsFor(tabCopy.phone)}
+              onClick={() => onChange("phone")}
             />
           )}
         </div>

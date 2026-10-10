@@ -649,6 +649,7 @@ export const enCopy: AppCopy = {
       models: { label: "Models", helper: "模型", title: "Models" },
       agent: { label: "Agent", helper: "智能体接入", title: "Agent" },
       im: { label: "Channels", helper: "Messaging", title: "Channels" },
+      phone: { label: "Phone", helper: "Phone", title: "Phone" },
       browser: {
         label: "Browser Control",
         helper: "Browser control",
@@ -657,6 +658,49 @@ export const enCopy: AppCopy = {
       shortcuts: { label: "Shortcuts", helper: "快捷键", title: "Shortcuts" },
       feedback: { label: "Feedback", helper: "报告问题" },
       about: { label: "About", helper: "关于" },
+    },
+    phone: {
+      subtitle:
+        "Read and continue this computer's conversations on your iPhone",
+      pairTitle: "Pair a phone",
+      pairDescription:
+        "Scan a code once with Galley on your iPhone, then read and continue these conversations from your phone.",
+      showCode: "Show pairing code",
+      hideCode: "Hide pairing code",
+      qrAlt: "Pairing QR code",
+      scanSteps: [
+        "Open Galley on your iPhone and scan this code.",
+        "Your phone then connects to this computer, and again whenever you open Galley on it.",
+      ],
+      scanWarning:
+        "This code gives access to this computer. Scan it only with your own phone, and don't screenshot or share it.",
+      badgeOnline: "Connected",
+      badgeIdle: "Not connected",
+      badgeConnecting: "Connecting",
+      onlineTitle: (count: number) =>
+        count === 1 ? "1 phone online" : `${count} phones online`,
+      idleTitle: "No phone online",
+      connectingTitle: "Can't reach the network right now",
+      connectingDetail:
+        "Retrying. Until then, your phone can't reach this computer.",
+      lastConnected: (time: string) => `Last connected ${time}`,
+      autoConnectHint: "Your phone connects when you open Galley on it",
+      addTitle: "Add a phone",
+      addDescription:
+        "Shows the pairing code again. Paired phones stay paired.",
+      unpairTitle: "Unpair",
+      unpairDescription: "Disconnects every phone. Each one has to scan again.",
+      unpair: "Unpair",
+      unpairDialogTitle: "Unpair all phones?",
+      unpairDialogBody:
+        "Every paired phone disconnects now and the current pairing code stops working. Each phone has to scan a new code to connect again.",
+      pairFailed: (detail: string) =>
+        `Couldn't show the pairing code: ${detail}`,
+      unpairFailed: (detail: string) => `Couldn't unpair: ${detail}`,
+      backgroundHintTitle: "Closing the window quits Galley",
+      backgroundHintBody:
+        "Once Galley quits, your phone can't reach this computer. Turn on “Keep running when the window closes” to keep Galley in the menu bar / tray.",
+      backgroundHintAction: "Turn on",
     },
     general: {
       subtitle: "Appearance, language, and app behavior",

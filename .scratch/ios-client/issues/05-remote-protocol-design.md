@@ -593,6 +593,11 @@ CI：`.github/workflows/ios-protocol.yml`（07a），macOS runner（`macos-26`�
 ### 05d — 设置「手机」页（依赖 05b）
 
 - 二维码、解除配对、连接状态；配对页检查「接通电源时保持唤醒」（票 04）和「关闭窗口时保持后台运行」（裁决 10）。视觉先本地预览给 JC。
+- 实现（2026-10-10）：三个 Tauri 命令 `get_remote_status`（没有远程模块回 `null`，页面据此不出「手机」项）、`pair_remote_phone`、
+  `unpair_remote_phones`，只走 Tauri、不进 `GalleyApi`，二维码只能出现在桌面屏幕上；二维码在 Core 用 `qrcode` 0.14.1（关默认特性、只开 `svg`，
+  零传递依赖）画成 SVG 交给页面，二维码串不以文字进 JS。页面规范见 `docs/design/overlays-and-settings.md`「Phone」。
+  「接通电源时保持唤醒」随票 04 再加，本票只查「关闭窗口时保持后台运行」。预览用的假手机是 Core 的 example `fake_phone`，
+  从屏幕上的二维码读码（macOS 自带的 Core Image 识别），用法见 `relay/README.md`「Preview Settings → Phone」。
 
 ### 06a — relay（依赖 05a）
 

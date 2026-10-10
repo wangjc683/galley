@@ -23,7 +23,9 @@
 //! this desktop is paired (a pairing master key exists,
 //! [`crate::remote_pairing`]). The settings page (ticket 05d) drives
 //! [`RemoteModule::pair`] / [`RemoteModule::unpair`] /
-//! [`RemoteModule::status`]; the tray's quit stops it. While running it
+//! [`RemoteModule::status`] through the Tauri commands in
+//! `commands/remote.rs` — Tauri only: pairing shows the master key, so no
+//! socket or CLI path reaches it; the tray's quit stops it. While running it
 //! registers its event sink with [`crate::notify`], so every
 //! `TauriNotifier` emit can reach the phones, and announces its own state
 //! as [`REMOTE_STATUS_EVENT`].
@@ -192,6 +194,26 @@ pub struct PairingQr(Zeroizing<String>);
 impl PairingQr {
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// The QR code as an SVG image, for the settings page (ticket 05d):
+    /// black modules on white, the standard 4-module quiet zone (so it
+    /// scans on a dark page too), one SVG unit per module (the page
+    /// scales it), error correction M. The string itself is not in it as
+    /// text, so the page never holds it.
+    pub fn to_svg(&self) -> Result<String, RemoteError> {
+        use qrcode::render::svg;
+        let code =
+            qrcode::QrCode::with_error_correction_level(self.0.as_bytes(), qrcode::EcLevel::M)
+                // The error names the limit, never the data.
+                .map_err(|e| RemoteError::Pairing(format!("QR code: {e}")))?;
+        Ok(code
+            .render::<svg::Color<'_>>()
+            .module_dimensions(1, 1)
+            .quiet_zone(true)
+            .dark_color(svg::Color("#000000"))
+            .light_color(svg::Color("#ffffff"))
+            .build())
     }
 }
 
@@ -467,5 +489,60 @@ impl RemoteModule {
             s.relay_connected = false;
             s.online_phones = 0;
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use galley_remote_protocol::keys::RelayUrl;
+
+    fn qr(name: &str) -> PairingQr {
+        let code = PairingCode::new(
+            RelayUrl::parse("wss://relay.example.com").unwrap(),
+            MasterKey::from_bytes([0x5A; 32]),
+            name.into(),
+        )
+        .unwrap();
+        PairingQr(code.to_qr_string())
+    }
+
+    /// `(width, height)` from the SVG's `viewBox`.
+    fn view_box(svg: &str) -> (u32, u32) {
+        let start = svg.find("viewBox=\"0 0 ").expect("a viewBox") + 13;
+        let end = start + svg[start..].find('"').unwrap();
+        let mut parts = svg[start..end].split(' ').map(|n| n.parse().unwrap());
+        (parts.next().unwrap(), parts.next().unwrap())
+    }
+
+    #[test]
+    fn the_svg_is_the_qr_code_with_a_quiet_zone_and_no_text() {
+        let pairing = qr("JC 的 MacBook");
+        let svg = pairing.to_svg().unwrap();
+        assert!(svg.contains("<svg"), "{svg}");
+        assert!(svg.ends_with("</svg>"));
+        // White behind every module, quiet zone included.
+        assert!(svg.contains(r##"fill="#ffffff""##));
+        assert!(svg.contains(r##"fill="#000000""##));
+        let code = qrcode::QrCode::with_error_correction_level(
+            pairing.as_str().as_bytes(),
+            qrcode::EcLevel::M,
+        )
+        .unwrap();
+        let side = u32::try_from(code.width()).unwrap() + 8;
+        assert_eq!(view_box(&svg), (side, side));
+        // Neither the code nor any piece of it is in the image as text.
+        let mk = &pairing.as_str()[pairing.as_str().find("mk=").unwrap() + 3..][..43];
+        assert!(!svg.contains(mk));
+        assert!(!svg.contains("galley-pair"));
+        assert!(!svg.contains("relay.example.com"));
+        // The same code draws the same image.
+        assert_eq!(qr("JC 的 MacBook").to_svg().unwrap(), svg);
+    }
+
+    #[test]
+    fn the_longest_desktop_name_still_fits_a_qr_code() {
+        let name = "名".repeat(galley_remote_protocol::keys::DESKTOP_NAME_MAX_BYTES / 3);
+        assert!(qr(&name).to_svg().is_ok());
     }
 }
