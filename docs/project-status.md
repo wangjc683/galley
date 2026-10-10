@@ -703,10 +703,15 @@ main-chat planning docs, main has:
   turn-persist broadcast the GUI skips, attachment read by id, the pairing
   key, migration **043** adding a nullable `client` column, message
   paging), 05a `remote-protocol/`, 05b `core/src/remote/`, 06a `relay/`,
-  06b APNs sending (not yet tried against real APNs), 07a `ios/GalleyRemote/`. The remote module only exists when a relay URL
+  06b APNs sending (not yet tried against real APNs), 07a `ios/GalleyRemote/`,
+  05d Settings → Phone (pairing QR, unpair, status). The remote module only exists when a relay URL
   is configured: `GALLEY_REMOTE_RELAY_URL` is not set in the release
   workflow yet, so a release cut now ships migration 043 with remote access
-  off.
+  off and no Phone tab.
+
+- **Settings sidebar evenly spaced** (2026-10-10, JC). The 10-07 three
+  groups had 12px between them, which on the 50px two-line Chinese rows
+  read as misaligned spacing; one even list now, same order.
 
 - **WeChat conversation aligned with the desktop** (2026-10-10,
   `.scratch/wechat-ux/`, devlog
