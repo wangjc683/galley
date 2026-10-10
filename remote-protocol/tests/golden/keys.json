@@ -1,0 +1,72 @@
+{
+  "channelKey": "3a541e28b32c009d58d148a1a22c7c47688e5c4e95c44dd15fda5a79c81c6f1d",
+  "channelSecret": "cb392b204ce6a51fe67ab30ee163dca554586b97c7788da8f5d9ce45c7128ecd",
+  "channelSecretHeader": "yzkrIEzmpR_merMO4WPcpVRYa5fHeI2o9dnORccSjs0",
+  "description": "Pairing master key, its HKDF-SHA256 derivations, the channel key and the pairing QR string (design §3.1). Hex unless named otherwise.",
+  "fixture": "galley-remote/keys",
+  "hkdf": {
+    "info": {
+      "channelSecret": "channel",
+      "noisePsk": "noise-psk",
+      "pushKey": "push"
+    },
+    "salt": "galley-remote-v1"
+  },
+  "masterKey": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "masterKeyBase64url": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+  "noisePsk": "c5b97d352bc906ac73f2992bf413ccbf4b239e5bfc5061f1a7ca60cbd67e81c2",
+  "pushKey": "8cac303a21ee4f7c9b23df0e3894dffec9eea713f9e864f061dd46b2a9ef5ba8",
+  "qr": {
+    "desktopName": "JC 的 MacBook",
+    "relay": "wss://relay.example.com",
+    "relayConnectUrl": "wss://relay.example.com/v1/connect",
+    "string": "galley-pair:1?relay=wss%3A%2F%2Frelay.example.com&mk=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&name=JC%20%E7%9A%84%20MacBook"
+  },
+  "qrInvalid": [
+    {
+      "input": "galley-pair:2?relay=wss%3A%2F%2Frelay.example.com&mk=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&name=a",
+      "rustError": "BadPrefix",
+      "why": "wrong version"
+    },
+    {
+      "input": "galley-pair:1?relay=wss%3A%2F%2Frelay.example.com&mk=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdH&name=a",
+      "rustError": "BadMasterKey(BadBase64)",
+      "why": "mk too short"
+    },
+    {
+      "input": "galley-pair:1?relay=wss%3A%2F%2Frelay.example.com&mk=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=&name=a",
+      "rustError": "BadMasterKey(BadBase64)",
+      "why": "mk is padded"
+    },
+    {
+      "input": "galley-pair:1?relay=ws%3A%2F%2Frelay.example.com&mk=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&name=a",
+      "rustError": "BadRelayUrl(InsecureRemote)",
+      "why": "ws:// to a remote relay"
+    },
+    {
+      "input": "galley-pair:1?relay=wss%3A%2F%2Frelay.example.com&mk=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&name=a&v=2",
+      "rustError": "UnknownKey(\"v\")",
+      "why": "unknown field"
+    },
+    {
+      "input": "galley-pair:1?relay=wss%3A%2F%2Frelay.example.com&mk=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&name=a&name=b",
+      "rustError": "DuplicateKey(\"name\")",
+      "why": "duplicate field"
+    },
+    {
+      "input": "galley-pair:1?relay=wss%3A%2F%2Frelay.example.com&mk=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&name=%E7%9A",
+      "rustError": "BadUtf8",
+      "why": "incomplete UTF-8 sequence"
+    },
+    {
+      "input": "galley-pair:1?relay=wss%3A%2F%2Frelay.example.com&mk=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&name=%G1",
+      "rustError": "BadPercentEncoding",
+      "why": "bad percent escape"
+    },
+    {
+      "input": "galley-pair:1?relay=wss%3A%2F%2Frelay.example.com&mk=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&name=a b",
+      "rustError": "BadPercentEncoding",
+      "why": "raw space"
+    }
+  ]
+}

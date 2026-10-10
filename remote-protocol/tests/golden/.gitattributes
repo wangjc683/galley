@@ -1,0 +1,3 @@
+# Golden fixtures are compared byte-for-byte (and decoded by the Swift
+# package): keep LF line endings on every checkout, Windows included.
+*.json text eol=lf

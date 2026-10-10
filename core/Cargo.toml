@@ -1,12 +1,14 @@
 # Workspace root for the Galley Rust side. Members:
-#   - .       (this crate, the Tauri app — `galley-core`)
-#   - ../cli  (the `galley-cli` binary, used by agents)
+#   - .                   (this crate, the Tauri app — `galley-core`)
+#   - ../cli              (the `galley-cli` binary, used by agents)
+#   - ../remote-protocol  (`galley-remote-protocol`, the wire formats Core,
+#                          the relay and the iOS app share; no Tauri / tokio)
 # Workspace root being at `core/` (not the repo root) keeps `target/` under
 # `core/target/` so the existing CI cache key + tauri build paths are
 # unaffected by the B1 layout change. Cli's discovery hint lives in
 # `../cli/Cargo.toml` via `[package].workspace = "../core"`.
 [workspace]
-members = [".", "../cli"]
+members = [".", "../cli", "../remote-protocol"]
 
 [package]
 name = "galley-core"

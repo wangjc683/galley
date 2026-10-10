@@ -1,0 +1,50 @@
+[package]
+name = "galley-remote-protocol"
+# Not one of the desktop release's version files
+# (`scripts/check-version-consistency.mjs`): the wire versions that matter
+# are constants in the code (relay outer version, Noise prologue, app
+# protocol major / minor), and the relay ships under its own `relay-v*`
+# tags (design §4.4).
+version = "0.1.0"
+edition = "2021"
+description = "Galley remote access wire formats: pairing keys, relay frames, Noise session, padding, push sealing, app protocol"
+license = "MIT"
+publish = false
+# Workspace root lives at ../core, as for ../cli.
+workspace = "../core"
+
+[lib]
+name = "galley_remote_protocol"
+
+[features]
+# Deterministic hooks for golden fixtures and test vectors: a fixed Noise
+# ephemeral key and a fixed push nonce. Never enabled by Core or the relay;
+# this crate's own tests turn it on through the self dev-dependency below.
+test-hooks = []
+
+[dependencies]
+# Noise. Pinned exactly (design §5, §11: no formal audit, so upgrades are
+# deliberate). Only the primitives of `Noise_*_25519_ChaChaPoly_SHA256`:
+# snow's default `std` feature names `ring/std`, which would pull ring in.
+snow = { version = "=0.10.0", default-features = false, features = [
+    "use-chacha20poly1305",
+    "use-sha2",
+    "use-curve25519",
+    "use-getrandom",
+] }
+# Push sealing (design §4.3); the same crate snow already uses.
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
+# Key derivation (design §3.1). Versions already in core/Cargo.lock.
+hkdf = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
+# OS randomness for the master key and push nonces; snow's resolver uses
+# the same 0.3 line.
+getrandom = "0.3"
+zeroize = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+galley-remote-protocol = { path = ".", features = ["test-hooks"] }
+hex = "0.4"

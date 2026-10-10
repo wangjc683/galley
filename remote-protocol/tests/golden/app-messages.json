@@ -1,0 +1,1072 @@
+{
+  "chunked": {
+    "chunkSize": 96,
+    "chunks": [
+      {
+        "data": "eyJ0IjoicmVzIiwiaWQiOjE1LCJvayI6dHJ1ZSwiciI6eyJhdHRhY2htZW50SWQiOiJhdHRfMDIiLCJtaW1lVHlwZSI6ImltYWdlL3BuZyIsImJ5dGVTaXplIjo5Niwi",
+        "i": 0,
+        "id": 1,
+        "last": false,
+        "t": "chunk"
+      },
+      {
+        "data": "ZGF0YSI6IkFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFB",
+        "i": 1,
+        "id": 1,
+        "last": false,
+        "t": "chunk"
+      },
+      {
+        "data": "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIn19",
+        "i": 2,
+        "id": 1,
+        "last": true,
+        "t": "chunk"
+      }
+    ],
+    "description": "The chunks' data joined in order is the JSON of `reassembled`.",
+    "reassembled": {
+      "id": 15,
+      "ok": true,
+      "r": {
+        "attachmentId": "att_02",
+        "byteSize": 96,
+        "data": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "mimeType": "image/png"
+      },
+      "t": "res"
+    }
+  },
+  "description": "App protocol samples (design §6): one request and one response per method, error responses, one event per event name, and a chunked message. `type` names the Rust type of p / r / e; `message` is the wire JSON (keys sorted here; key order on the wire is not significant).",
+  "events": [
+    "session.created",
+    "session.updated",
+    "session.archived",
+    "session.unarchived",
+    "session.moved",
+    "session.deleted",
+    "project.created",
+    "project.updated",
+    "project.deleted",
+    "message.persisted",
+    "runner.event",
+    "session.runState",
+    "history.replay",
+    "goal.updated",
+    "queue.changed",
+    "sync.required"
+  ],
+  "fixture": "galley-remote/app",
+  "limits": {
+    "chunkDataMax": 48000,
+    "maxAppRecordLen": 65516,
+    "maxMessageLen": 41943040,
+    "maxStreams": 4,
+    "messagesPageDefault": 50,
+    "messagesPageMax": 200
+  },
+  "methods": [
+    "hello",
+    "sessions.list",
+    "session.messages",
+    "session.send",
+    "session.stop",
+    "session.create",
+    "session.markRead",
+    "session.subscribe",
+    "session.unsubscribe",
+    "attachment.read",
+    "device.registerPush"
+  ],
+  "protocol": {
+    "major": 1,
+    "minor": 0
+  },
+  "samples": [
+    {
+      "kind": "request",
+      "message": {
+        "id": 1,
+        "m": "hello",
+        "p": {
+          "appVersion": "1.0.0",
+          "protocol": {
+            "major": 1,
+            "minor": 0
+          }
+        },
+        "t": "req"
+      },
+      "method": "hello",
+      "name": "hello.request",
+      "type": "HelloParams"
+    },
+    {
+      "kind": "response",
+      "message": {
+        "id": 1,
+        "ok": true,
+        "r": {
+          "coreVersion": "0.6.2",
+          "desktopName": "JC 的 MacBook",
+          "protocol": {
+            "major": 1,
+            "minor": 0
+          }
+        },
+        "t": "res"
+      },
+      "method": "hello",
+      "name": "hello.response",
+      "type": "CoreHello"
+    },
+    {
+      "kind": "request",
+      "message": {
+        "id": 2,
+        "m": "sessions.list",
+        "p": {},
+        "t": "req"
+      },
+      "method": "sessions.list",
+      "name": "sessions.list.request",
+      "type": "Empty"
+    },
+    {
+      "kind": "response",
+      "message": {
+        "id": 2,
+        "ok": true,
+        "r": {
+          "projects": [
+            {
+              "color": null,
+              "createdAt": "2026-09-01T00:00:00.000Z",
+              "icon": "📁",
+              "id": "proj_a1b2c3d4e5f6a7b8",
+              "lastActivityAt": "2026-10-10T08:30:00.000Z",
+              "name": "周报",
+              "pinned": false,
+              "updatedAt": "2026-09-01T00:00:00.000Z"
+            }
+          ],
+          "runStates": [
+            {
+              "agentRunning": true,
+              "askPending": false,
+              "lastExit": null,
+              "openRun": true,
+              "queuedCount": 1,
+              "runnerAlive": true,
+              "sessionId": "ses_7f3a9c"
+            }
+          ],
+          "sessions": [
+            {
+              "createdAt": "2026-10-09T02:00:00.000Z",
+              "hasUnread": null,
+              "id": "ses_7f3a9c",
+              "lastActivityAt": "2026-10-10T08:30:00.000Z",
+              "origin": {
+                "reason": null,
+                "supervisor": null,
+                "via": "gui"
+              },
+              "pinned": true,
+              "projectId": "proj_a1b2c3d4e5f6a7b8",
+              "reasoningEffort": null,
+              "selectedLlmDisplayName": "Claude",
+              "selectedLlmKey": "mm_claude",
+              "status": "idle",
+              "summary": "Turn 3 · 汇总了三份周报",
+              "title": "整理周报",
+              "turnCount": 3,
+              "updatedAt": "2026-10-10T08:30:00.000Z"
+            }
+          ]
+        },
+        "t": "res"
+      },
+      "method": "sessions.list",
+      "name": "sessions.list.response",
+      "type": "SessionsListResult"
+    },
+    {
+      "kind": "request",
+      "message": {
+        "id": 3,
+        "m": "session.messages",
+        "p": {
+          "before": "msg_01",
+          "limit": 50,
+          "sessionId": "ses_7f3a9c"
+        },
+        "t": "req"
+      },
+      "method": "session.messages",
+      "name": "session.messages.request",
+      "type": "SessionMessagesParams"
+    },
+    {
+      "kind": "response",
+      "message": {
+        "id": 3,
+        "ok": true,
+        "r": {
+          "hasMore": true,
+          "messages": [
+            {
+              "askUser": null,
+              "attachments": [
+                {
+                  "byteSize": 182044,
+                  "createdAt": "2026-10-10T08:29:58.000Z",
+                  "height": 2556,
+                  "id": "att_01",
+                  "kind": "image",
+                  "messageId": "msg_01",
+                  "mimeType": "image/jpeg",
+                  "sessionId": "ses_7f3a9c",
+                  "width": 1179
+                }
+              ],
+              "content": "把三份周报合成一份",
+              "createdAt": "2026-10-10T08:29:58.000Z",
+              "finalAnswer": null,
+              "goalId": null,
+              "id": "msg_01",
+              "origin": {
+                "reason": null,
+                "supervisor": null,
+                "via": "gui"
+              },
+              "preamble": null,
+              "role": "user",
+              "sequence": null,
+              "sessionId": "ses_7f3a9c",
+              "summary": null,
+              "telemetry": null,
+              "thinking": null,
+              "toolCalls": null,
+              "toolResults": null,
+              "turnIndex": 3
+            },
+            {
+              "askUser": {
+                "candidates": [
+                  "发",
+                  "不发"
+                ],
+                "question": "要不要把附件也发给 Alice？"
+              },
+              "attachments": [],
+              "content": "已合并。",
+              "createdAt": "2026-10-10T08:30:16.000Z",
+              "finalAnswer": "已合并为 weekly.md。要不要把附件也发给 Alice？",
+              "goalId": null,
+              "id": "msg_02",
+              "origin": null,
+              "preamble": null,
+              "role": "agent",
+              "sequence": 1,
+              "sessionId": "ses_7f3a9c",
+              "summary": "合并周报",
+              "telemetry": {
+                "cacheCreateTokens": null,
+                "cacheReadTokens": 4096,
+                "contextLimitChars": null,
+                "contextUsedChars": null,
+                "elapsedMs": 18250,
+                "inputTokens": 5120,
+                "outputTokens": 388,
+                "requestCount": 3
+              },
+              "thinking": "先读三份文件。",
+              "toolCalls": [
+                {
+                  "args": {
+                    "path": "weekly.md"
+                  },
+                  "id": "call_1",
+                  "name": "file_write"
+                },
+                {
+                  "args": {
+                    "candidates": [
+                      "发",
+                      "不发"
+                    ],
+                    "question": "要不要把附件也发给 Alice？"
+                  },
+                  "id": "call_2",
+                  "name": "ask_user"
+                }
+              ],
+              "toolResults": [
+                {
+                  "id": "call_1",
+                  "status": "success"
+                }
+              ],
+              "turnIndex": 3
+            }
+          ]
+        },
+        "t": "res"
+      },
+      "method": "session.messages",
+      "name": "session.messages.response",
+      "type": "SessionMessagesResult"
+    },
+    {
+      "kind": "request",
+      "message": {
+        "id": 4,
+        "m": "session.send",
+        "p": {
+          "clientRequestId": "crq_ios_0001",
+          "images": [
+            {
+              "data": "iVBORw0KGgo=",
+              "height": 2,
+              "mimeType": "image/png",
+              "width": 2
+            }
+          ],
+          "sessionId": "ses_7f3a9c",
+          "text": "发"
+        },
+        "t": "req"
+      },
+      "method": "session.send",
+      "name": "session.send.request",
+      "type": "SessionSendParams"
+    },
+    {
+      "kind": "response",
+      "message": {
+        "id": 4,
+        "ok": true,
+        "r": {
+          "message": {
+            "askUser": null,
+            "attachments": [
+              {
+                "byteSize": 182044,
+                "createdAt": "2026-10-10T08:29:58.000Z",
+                "height": 2556,
+                "id": "att_01",
+                "kind": "image",
+                "messageId": "msg_01",
+                "mimeType": "image/jpeg",
+                "sessionId": "ses_7f3a9c",
+                "width": 1179
+              }
+            ],
+            "content": "把三份周报合成一份",
+            "createdAt": "2026-10-10T08:29:58.000Z",
+            "finalAnswer": null,
+            "goalId": null,
+            "id": "msg_01",
+            "origin": {
+              "reason": null,
+              "supervisor": null,
+              "via": "gui"
+            },
+            "preamble": null,
+            "role": "user",
+            "sequence": null,
+            "sessionId": "ses_7f3a9c",
+            "summary": null,
+            "telemetry": null,
+            "thinking": null,
+            "toolCalls": null,
+            "toolResults": null,
+            "turnIndex": 3
+          },
+          "outcome": "dispatched",
+          "queue": null
+        },
+        "t": "res"
+      },
+      "method": "session.send",
+      "name": "session.send.response",
+      "type": "SessionSendResult"
+    },
+    {
+      "kind": "request",
+      "message": {
+        "id": 5,
+        "m": "session.stop",
+        "p": {
+          "sessionId": "ses_7f3a9c"
+        },
+        "t": "req"
+      },
+      "method": "session.stop",
+      "name": "session.stop.request",
+      "type": "SessionIdParams"
+    },
+    {
+      "kind": "response",
+      "message": {
+        "id": 5,
+        "ok": true,
+        "r": {
+          "dispatch": "abort_sent"
+        },
+        "t": "res"
+      },
+      "method": "session.stop",
+      "name": "session.stop.response",
+      "type": "SessionStopResult"
+    },
+    {
+      "kind": "request",
+      "message": {
+        "id": 6,
+        "m": "session.create",
+        "p": {
+          "projectId": "proj_a1b2c3d4e5f6a7b8",
+          "title": null
+        },
+        "t": "req"
+      },
+      "method": "session.create",
+      "name": "session.create.request",
+      "type": "SessionCreateParams"
+    },
+    {
+      "kind": "response",
+      "message": {
+        "id": 6,
+        "ok": true,
+        "r": {
+          "session": {
+            "createdAt": "2026-10-09T02:00:00.000Z",
+            "hasUnread": null,
+            "id": "ses_new01",
+            "lastActivityAt": "2026-10-10T08:30:00.000Z",
+            "origin": {
+              "reason": null,
+              "supervisor": null,
+              "via": "gui"
+            },
+            "pinned": true,
+            "projectId": "proj_a1b2c3d4e5f6a7b8",
+            "reasoningEffort": null,
+            "selectedLlmDisplayName": "Claude",
+            "selectedLlmKey": "mm_claude",
+            "status": "idle",
+            "summary": "Turn 3 · 汇总了三份周报",
+            "title": "整理周报",
+            "turnCount": 3,
+            "updatedAt": "2026-10-10T08:30:00.000Z"
+          }
+        },
+        "t": "res"
+      },
+      "method": "session.create",
+      "name": "session.create.response",
+      "type": "SessionCreateResult"
+    },
+    {
+      "kind": "request",
+      "message": {
+        "id": 7,
+        "m": "session.markRead",
+        "p": {
+          "sessionId": "ses_7f3a9c"
+        },
+        "t": "req"
+      },
+      "method": "session.markRead",
+      "name": "session.markRead.request",
+      "type": "SessionIdParams"
+    },
+    {
+      "kind": "response",
+      "message": {
+        "id": 7,
+        "ok": true,
+        "r": {},
+        "t": "res"
+      },
+      "method": "session.markRead",
+      "name": "session.markRead.response",
+      "type": "Empty"
+    },
+    {
+      "kind": "request",
+      "message": {
+        "id": 8,
+        "m": "session.subscribe",
+        "p": {
+          "sessionId": "ses_7f3a9c"
+        },
+        "t": "req"
+      },
+      "method": "session.subscribe",
+      "name": "session.subscribe.request",
+      "type": "SessionIdParams"
+    },
+    {
+      "kind": "response",
+      "message": {
+        "id": 8,
+        "ok": true,
+        "r": {},
+        "t": "res"
+      },
+      "method": "session.subscribe",
+      "name": "session.subscribe.response",
+      "type": "Empty"
+    },
+    {
+      "kind": "request",
+      "message": {
+        "id": 9,
+        "m": "session.unsubscribe",
+        "p": {
+          "sessionId": "ses_7f3a9c"
+        },
+        "t": "req"
+      },
+      "method": "session.unsubscribe",
+      "name": "session.unsubscribe.request",
+      "type": "SessionIdParams"
+    },
+    {
+      "kind": "response",
+      "message": {
+        "id": 9,
+        "ok": true,
+        "r": {},
+        "t": "res"
+      },
+      "method": "session.unsubscribe",
+      "name": "session.unsubscribe.response",
+      "type": "Empty"
+    },
+    {
+      "kind": "request",
+      "message": {
+        "id": 10,
+        "m": "attachment.read",
+        "p": {
+          "attachmentId": "att_01",
+          "sessionId": "ses_7f3a9c"
+        },
+        "t": "req"
+      },
+      "method": "attachment.read",
+      "name": "attachment.read.request",
+      "type": "AttachmentReadParams"
+    },
+    {
+      "kind": "response",
+      "message": {
+        "id": 10,
+        "ok": true,
+        "r": {
+          "attachmentId": "att_01",
+          "byteSize": 8,
+          "data": "iVBORw0KGgo=",
+          "mimeType": "image/png"
+        },
+        "t": "res"
+      },
+      "method": "attachment.read",
+      "name": "attachment.read.response",
+      "type": "AttachmentReadResult"
+    },
+    {
+      "kind": "request",
+      "message": {
+        "id": 11,
+        "m": "device.registerPush",
+        "p": {
+          "env": "sandbox",
+          "token": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf"
+        },
+        "t": "req"
+      },
+      "method": "device.registerPush",
+      "name": "device.registerPush.request",
+      "type": "RegisterPushParams"
+    },
+    {
+      "kind": "response",
+      "message": {
+        "id": 11,
+        "ok": true,
+        "r": {},
+        "t": "res"
+      },
+      "method": "device.registerPush",
+      "name": "device.registerPush.response",
+      "type": "Empty"
+    },
+    {
+      "kind": "error",
+      "message": {
+        "e": {
+          "code": "unknown_method",
+          "message": "unknown method \"session.fly\""
+        },
+        "id": 12,
+        "ok": false,
+        "t": "res"
+      },
+      "method": "session.fly",
+      "name": "error.unknown_method",
+      "type": "ErrorBody"
+    },
+    {
+      "kind": "error",
+      "message": {
+        "e": {
+          "code": "images_not_queueable",
+          "message": "a run is in progress and a message with images cannot wait in the queue"
+        },
+        "id": 13,
+        "ok": false,
+        "t": "res"
+      },
+      "method": "session.send",
+      "name": "error.images_not_queueable",
+      "type": "ErrorBody"
+    },
+    {
+      "kind": "error",
+      "message": {
+        "e": {
+          "code": "protocol_mismatch",
+          "message": "desktop speaks 1.0, app speaks 2.0"
+        },
+        "id": 14,
+        "ok": false,
+        "t": "res"
+      },
+      "method": "hello",
+      "name": "error.protocol_mismatch",
+      "type": "ErrorBody"
+    },
+    {
+      "event": "session.created",
+      "kind": "event",
+      "message": {
+        "n": "session.created",
+        "p": {
+          "session": {
+            "createdAt": "2026-10-09T02:00:00.000Z",
+            "hasUnread": null,
+            "id": "ses_7f3a9c",
+            "lastActivityAt": "2026-10-10T08:30:00.000Z",
+            "origin": {
+              "reason": null,
+              "supervisor": null,
+              "via": "gui"
+            },
+            "pinned": true,
+            "projectId": "proj_a1b2c3d4e5f6a7b8",
+            "reasoningEffort": null,
+            "selectedLlmDisplayName": "Claude",
+            "selectedLlmKey": "mm_claude",
+            "status": "idle",
+            "summary": "Turn 3 · 汇总了三份周报",
+            "title": "整理周报",
+            "turnCount": 3,
+            "updatedAt": "2026-10-10T08:30:00.000Z"
+          },
+          "via": "gui"
+        },
+        "t": "evt"
+      },
+      "name": "event.session.created",
+      "type": "SessionEvent"
+    },
+    {
+      "event": "session.updated",
+      "kind": "event",
+      "message": {
+        "n": "session.updated",
+        "p": {
+          "session": {
+            "createdAt": "2026-10-09T02:00:00.000Z",
+            "hasUnread": null,
+            "id": "ses_7f3a9c",
+            "lastActivityAt": "2026-10-10T08:30:00.000Z",
+            "origin": {
+              "reason": null,
+              "supervisor": null,
+              "via": "gui"
+            },
+            "pinned": true,
+            "projectId": "proj_a1b2c3d4e5f6a7b8",
+            "reasoningEffort": null,
+            "selectedLlmDisplayName": "Claude",
+            "selectedLlmKey": "mm_claude",
+            "status": "idle",
+            "summary": "Turn 3 · 汇总了三份周报",
+            "title": "整理周报",
+            "turnCount": 3,
+            "updatedAt": "2026-10-10T08:30:00.000Z"
+          },
+          "via": "auto-title"
+        },
+        "t": "evt"
+      },
+      "name": "event.session.updated",
+      "type": "SessionEvent"
+    },
+    {
+      "event": "session.archived",
+      "kind": "event",
+      "message": {
+        "n": "session.archived",
+        "p": {
+          "session": {
+            "createdAt": "2026-10-09T02:00:00.000Z",
+            "hasUnread": null,
+            "id": "ses_7f3a9c",
+            "lastActivityAt": "2026-10-10T08:30:00.000Z",
+            "origin": {
+              "reason": null,
+              "supervisor": null,
+              "via": "gui"
+            },
+            "pinned": true,
+            "projectId": "proj_a1b2c3d4e5f6a7b8",
+            "reasoningEffort": null,
+            "selectedLlmDisplayName": "Claude",
+            "selectedLlmKey": "mm_claude",
+            "status": "idle",
+            "summary": "Turn 3 · 汇总了三份周报",
+            "title": "整理周报",
+            "turnCount": 3,
+            "updatedAt": "2026-10-10T08:30:00.000Z"
+          },
+          "via": "session.archive"
+        },
+        "t": "evt"
+      },
+      "name": "event.session.archived",
+      "type": "SessionEvent"
+    },
+    {
+      "event": "session.unarchived",
+      "kind": "event",
+      "message": {
+        "n": "session.unarchived",
+        "p": {
+          "session": {
+            "createdAt": "2026-10-09T02:00:00.000Z",
+            "hasUnread": null,
+            "id": "ses_7f3a9c",
+            "lastActivityAt": "2026-10-10T08:30:00.000Z",
+            "origin": {
+              "reason": null,
+              "supervisor": null,
+              "via": "gui"
+            },
+            "pinned": true,
+            "projectId": "proj_a1b2c3d4e5f6a7b8",
+            "reasoningEffort": null,
+            "selectedLlmDisplayName": "Claude",
+            "selectedLlmKey": "mm_claude",
+            "status": "idle",
+            "summary": "Turn 3 · 汇总了三份周报",
+            "title": "整理周报",
+            "turnCount": 3,
+            "updatedAt": "2026-10-10T08:30:00.000Z"
+          },
+          "via": "gui"
+        },
+        "t": "evt"
+      },
+      "name": "event.session.unarchived",
+      "type": "SessionEvent"
+    },
+    {
+      "event": "session.moved",
+      "kind": "event",
+      "message": {
+        "n": "session.moved",
+        "p": {
+          "session": {
+            "createdAt": "2026-10-09T02:00:00.000Z",
+            "hasUnread": null,
+            "id": "ses_7f3a9c",
+            "lastActivityAt": "2026-10-10T08:30:00.000Z",
+            "origin": {
+              "reason": null,
+              "supervisor": null,
+              "via": "gui"
+            },
+            "pinned": true,
+            "projectId": "proj_a1b2c3d4e5f6a7b8",
+            "reasoningEffort": null,
+            "selectedLlmDisplayName": "Claude",
+            "selectedLlmKey": "mm_claude",
+            "status": "idle",
+            "summary": "Turn 3 · 汇总了三份周报",
+            "title": "整理周报",
+            "turnCount": 3,
+            "updatedAt": "2026-10-10T08:30:00.000Z"
+          },
+          "via": "gui"
+        },
+        "t": "evt"
+      },
+      "name": "event.session.moved",
+      "type": "SessionEvent"
+    },
+    {
+      "event": "session.deleted",
+      "kind": "event",
+      "message": {
+        "n": "session.deleted",
+        "p": {
+          "sessionId": "ses_7f3a9c",
+          "via": "gui"
+        },
+        "t": "evt"
+      },
+      "name": "event.session.deleted",
+      "type": "SessionDeletedEvent"
+    },
+    {
+      "event": "project.created",
+      "kind": "event",
+      "message": {
+        "n": "project.created",
+        "p": {
+          "project": {
+            "color": null,
+            "createdAt": "2026-09-01T00:00:00.000Z",
+            "icon": "📁",
+            "id": "proj_a1b2c3d4e5f6a7b8",
+            "lastActivityAt": "2026-10-10T08:30:00.000Z",
+            "name": "周报",
+            "pinned": false,
+            "updatedAt": "2026-09-01T00:00:00.000Z"
+          },
+          "via": "gui"
+        },
+        "t": "evt"
+      },
+      "name": "event.project.created",
+      "type": "ProjectEvent"
+    },
+    {
+      "event": "project.updated",
+      "kind": "event",
+      "message": {
+        "n": "project.updated",
+        "p": {
+          "project": {
+            "color": null,
+            "createdAt": "2026-09-01T00:00:00.000Z",
+            "icon": "📁",
+            "id": "proj_a1b2c3d4e5f6a7b8",
+            "lastActivityAt": "2026-10-10T08:30:00.000Z",
+            "name": "周报",
+            "pinned": false,
+            "updatedAt": "2026-09-01T00:00:00.000Z"
+          },
+          "via": "project.update"
+        },
+        "t": "evt"
+      },
+      "name": "event.project.updated",
+      "type": "ProjectEvent"
+    },
+    {
+      "event": "project.deleted",
+      "kind": "event",
+      "message": {
+        "n": "project.deleted",
+        "p": {
+          "detachedSessionIds": [
+            "ses_7f3a9c"
+          ],
+          "projectId": "proj_a1b2c3d4e5f6a7b8"
+        },
+        "t": "evt"
+      },
+      "name": "event.project.deleted",
+      "type": "ProjectDeletedEvent"
+    },
+    {
+      "event": "message.persisted",
+      "kind": "event",
+      "message": {
+        "n": "message.persisted",
+        "p": {
+          "clientRequestId": "crq_ios_0001",
+          "dispatch": "pending",
+          "message": {
+            "askUser": null,
+            "attachments": [
+              {
+                "byteSize": 182044,
+                "createdAt": "2026-10-10T08:29:58.000Z",
+                "height": 2556,
+                "id": "att_01",
+                "kind": "image",
+                "messageId": "msg_01",
+                "mimeType": "image/jpeg",
+                "sessionId": "ses_7f3a9c",
+                "width": 1179
+              }
+            ],
+            "content": "把三份周报合成一份",
+            "createdAt": "2026-10-10T08:29:58.000Z",
+            "finalAnswer": null,
+            "goalId": null,
+            "id": "msg_01",
+            "origin": {
+              "reason": null,
+              "supervisor": null,
+              "via": "gui"
+            },
+            "preamble": null,
+            "role": "user",
+            "sequence": null,
+            "sessionId": "ses_7f3a9c",
+            "summary": null,
+            "telemetry": null,
+            "thinking": null,
+            "toolCalls": null,
+            "toolResults": null,
+            "turnIndex": 3
+          },
+          "sessionId": "ses_7f3a9c"
+        },
+        "t": "evt"
+      },
+      "name": "event.message.persisted",
+      "type": "MessagePersistedEvent"
+    },
+    {
+      "event": "runner.event",
+      "kind": "event",
+      "message": {
+        "n": "runner.event",
+        "p": {
+          "events": [
+            {
+              "kind": "turn_progress",
+              "sessionId": "ses_7f3a9c",
+              "text": "正在读取",
+              "timestamp": "2026-10-10T08:30:01.000Z",
+              "turnIndex": 3
+            },
+            {
+              "absoluteTurnIndex": 3,
+              "args": {
+                "path": "a.md"
+              },
+              "argsPreview": "a.md",
+              "kind": "tool_call_start",
+              "sessionId": "ses_7f3a9c",
+              "timestamp": "2026-10-10T08:30:01.100Z",
+              "toolCallId": "call_1",
+              "toolName": "file_read",
+              "turnIndex": 3
+            }
+          ],
+          "sessionId": "ses_7f3a9c"
+        },
+        "t": "evt"
+      },
+      "name": "event.runner.event",
+      "type": "RunnerEventBatch"
+    },
+    {
+      "event": "session.runState",
+      "kind": "event",
+      "message": {
+        "n": "session.runState",
+        "p": {
+          "agentRunning": true,
+          "askPending": false,
+          "lastExit": null,
+          "openRun": true,
+          "queuedCount": 1,
+          "runnerAlive": true,
+          "sessionId": "ses_7f3a9c"
+        },
+        "t": "evt"
+      },
+      "name": "event.session.runState",
+      "type": "SessionRunState"
+    },
+    {
+      "event": "history.replay",
+      "kind": "event",
+      "message": {
+        "n": "history.replay",
+        "p": {
+          "phase": "started",
+          "sessionId": "ses_7f3a9c"
+        },
+        "t": "evt"
+      },
+      "name": "event.history.replay",
+      "type": "HistoryReplayEvent"
+    },
+    {
+      "event": "goal.updated",
+      "kind": "event",
+      "message": {
+        "n": "goal.updated",
+        "p": {
+          "goal": {
+            "id": "goal_01",
+            "objective": "把周报发出去",
+            "sessionId": "ses_7f3a9c",
+            "status": "active"
+          }
+        },
+        "t": "evt"
+      },
+      "name": "event.goal.updated",
+      "type": "GoalUpdatedEvent"
+    },
+    {
+      "event": "queue.changed",
+      "kind": "event",
+      "message": {
+        "n": "queue.changed",
+        "p": {
+          "items": [
+            {
+              "queueId": "qm_01",
+              "queuedAt": "2026-10-10T08:30:05.000Z",
+              "text": "再检查一遍"
+            }
+          ],
+          "sessionId": "ses_7f3a9c"
+        },
+        "t": "evt"
+      },
+      "name": "event.queue.changed",
+      "type": "QueueChangedEvent"
+    },
+    {
+      "event": "sync.required",
+      "kind": "event",
+      "message": {
+        "n": "sync.required",
+        "p": {
+          "sessionId": null
+        },
+        "t": "evt"
+      },
+      "name": "event.sync.required",
+      "type": "SyncRequiredEvent"
+    }
+  ]
+}

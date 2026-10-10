@@ -1,0 +1,73 @@
+{
+  "description": "Plaintext padding (design §5): u16 BE length ‖ payload ‖ zeros; total = max(256, Padmé(2 + len)) capped at 65519.",
+  "example": {
+    "padded": "000568656c6c6f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "payload": "68656c6c6f"
+  },
+  "fixture": "galley-remote/padding",
+  "maxPayloadLen": 65517,
+  "maxPlaintextLen": 65519,
+  "minPaddedLen": 256,
+  "sizes": [
+    {
+      "paddedLen": 256,
+      "payloadLen": 0
+    },
+    {
+      "paddedLen": 256,
+      "payloadLen": 1
+    },
+    {
+      "paddedLen": 256,
+      "payloadLen": 100
+    },
+    {
+      "paddedLen": 256,
+      "payloadLen": 254
+    },
+    {
+      "paddedLen": 272,
+      "payloadLen": 255
+    },
+    {
+      "paddedLen": 272,
+      "payloadLen": 256
+    },
+    {
+      "paddedLen": 304,
+      "payloadLen": 300
+    },
+    {
+      "paddedLen": 1024,
+      "payloadLen": 1000
+    },
+    {
+      "paddedLen": 1024,
+      "payloadLen": 1022
+    },
+    {
+      "paddedLen": 1088,
+      "payloadLen": 1023
+    },
+    {
+      "paddedLen": 4352,
+      "payloadLen": 4096
+    },
+    {
+      "paddedLen": 10240,
+      "payloadLen": 10000
+    },
+    {
+      "paddedLen": 49152,
+      "payloadLen": 48000
+    },
+    {
+      "paddedLen": 65519,
+      "payloadLen": 65000
+    },
+    {
+      "paddedLen": 65519,
+      "payloadLen": 65517
+    }
+  ]
+}

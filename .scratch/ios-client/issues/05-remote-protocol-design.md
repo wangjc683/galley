@@ -109,15 +109,29 @@ Rule 2 原文：「The relay sees ciphertext and routing metadata, stores no use
   - `X-Galley-Channel: <base64url(channel_secret)>`
   - `X-Galley-Role: host | client`
   - `X-Galley-Relay: 1`（relay 外层协议版本）
-- **外层帧**（WebSocket 二进制消息，首字节为类型；`remote-protocol` crate 定义，Core、relay、iOS 三方共用）：
+- **外层帧**（WebSocket 二进制消息；`remote-protocol` crate 的 `frame` 模块定义，Core、relay、iOS 三方共用）。首字节为类型，整数一律大端。
+  每种帧只有一种布局，解码是严格的：截断、多余字节、越界取值、未知类型都报错，错误带固定标签（`empty`、`unknown_type`、`truncated`、
+  `trailing_bytes`、`invalid_field`），供 relay 计数。字节表（05a 定稿，2026-10-10）：
 
-| 类型 | 方向 | 内容 |
-|---|---|---|
-| `DATA` | 双向 | 一条 Noise 消息（≤ 65535 字节，外部 §1）。host 发出的带目标 `peer`，client 发出的由 relay 标上来源 `peer` |
-| `PEER` | relay → 端 | 对端上线 / 下线。手机据此显示「电脑已离线」；Core 据此决定要不要往外推事件 |
-| `PUSH` | host → relay | `{deviceToken, env, collapseId, priority, ciphertext}` |
-| `PUSH_RESULT` | relay → host | 成功，或 APNs 410（token 失效，桌面删掉），或其他错误 |
-| `PING` / `PONG` | 双向 | 心跳，25 秒 |
+| 类型 | 字节 | 方向 | 类型字节之后的布局 |
+|---|---|---|---|
+| `DATA` | `0x01` | 双向 | `peer u32` ‖ 一条 Noise 消息（1～65535 字节，外部 §1） |
+| `PEER` | `0x02` | relay → 端 | `peer u32` ‖ `role u8`（`0x01` host、`0x02` client） ‖ `online u8`（`0x00` 下线、`0x01` 上线） |
+| `PUSH` | `0x03` | host → relay | `request_id u32` ‖ `env u8`（`0x00` 生产、`0x01` 沙盒） ‖ `priority u8`（APNs 原值 10、5、1） ‖ `token_len u16` ‖ 设备 token（原始字节，1～1024） ‖ `collapse_len u8` ‖ collapse id（可打印 ASCII，0～64 字节，0 表示不带） ‖ 推送密文（余下全部，28～2994 字节） |
+| `PUSH_RESULT` | `0x04` | relay → host | `request_id u32`（回显） ‖ `status u8`（`0x00` 成功、`0x01` token 失效即 APNs 410、`0x02` 其他失败） ‖ `apns_status u16`（APNs 的 HTTP 状态码，没收到回应为 0） ‖ `reason_len u8` ‖ reason（可打印 ASCII，APNs 的 `reason` 或 relay 自己的短码，可为空） |
+| `PING` | `0x05` | 端 → relay | `nonce u64` |
+| `PONG` | `0x06` | relay → 端 | `nonce u64`（原样回显） |
+
+- **帧的语义**：
+  - `peer`：relay 给频道里每条 client 连接分配非零编号，频道存续期间不复用；`0` 固定指 host。host 发出的 `DATA` 写目标 client 的编号；
+    relay 把 client 发来的 `DATA` 标上该 client 的编号再交给 host；client 与 relay 之间的 `DATA` 一律写 `0`。
+  - `PEER`：对端上线 / 下线。手机据此显示「电脑已离线」；Core 据此决定要不要往外推事件。host 连上时，relay 给它逐个补发已在线 client 的上线帧。
+    `peer = 0` 当且仅当 `role` 是 host，否则解码报错。
+  - `PUSH` / `PUSH_RESULT`：`request_id` 由 host 选，relay 在结果里回显；成功必须配 200，失效必须配 410（桌面据此删掉 token）。
+  - `PING` / `PONG`：端与 relay 之间逐跳的心跳，25 秒一次；relay 自己回 `PONG`，不转发。
+  - 上限：最大的帧是满载的 `DATA`，65540 字节，也就是 relay 的 WebSocket 单条消息上限。推送密文上限 2994 字节，是 APNs 载荷不超过 4096 字节的最大值；
+    实际的推送密文固定 2076 字节（第 4.3 节）。
+  - 字节级样例和非法样例：`remote-protocol/tests/golden/frames.json`。
 
 - **规则**：
   - 一个频道一个 host，新 host 连上就挤掉旧的（桌面重启的情形）；
@@ -139,9 +153,17 @@ Rule 2 原文：「The relay sees ciphertext and routing metadata, stores no use
     "g": "<base64(nonce ‖ ChaChaPoly(push_key, 明文))>" }
   ```
 
-  - 明文是 `{seq, sessionId, kind, title, body}` 的 JSON，填充到固定桶长；
-  - `seq` 单调递增，NSE 在 App Group 里记已收到的最大 `seq`，拒绝 relay 重放的旧推送；
+  - 明文是 `{seq, sessionId, kind, title, body}` 的 JSON（`sessionId` 可为 `null`），按第 5 节的格式（`u16` 长度 ‖ JSON ‖ 补零）填充到固定的
+    2048 字节，所有推送一样长，relay 从长度上看不出内容；
+  - 密文是 `nonce ‖ ChaCha20-Poly1305(push_key, nonce, plaintext, aad = "galley-push/1")`，nonce 是 12 字节随机数，整条固定 2076 字节。
+    AAD 绑定推送格式的版本：以后换格式就换 AAD，旧的 NSE 解不开（显示占位文案），不会解错。`g` 是密文的标准 base64（带填充），整个 APNs 载荷 2871 字节；
+  - `title`、`body` 按 JSON 转义后的字节数截断（分别 256、1536 字节），在字符边界截，截过的末尾加「…」；
+    `sessionId` 限可打印 ASCII（不含 `"` 和 `\`）、不超过 128 字节，`kind` 限 `[a-z0-9_]`、不超过 32 字节。按这套规则最坏情况也装得进 2048 字节，有测试钉住；
+  - `kind` 先定四个值，对应裁决 17 的四类：`reply_done`、`ask_user`、`goal`、`schedule_failed`。这是开放集合，NSE 遇到不认识的照常显示；
+  - `seq` 单调递增，NSE 在 App Group 里记已收到的最大 `seq`，拒绝 relay 重放的旧推送。建议 Core 取 `max(上一个 + 1, 当前毫秒时间戳)`，
+    这样计数器丢了也不会退回到手机见过的值以下；
   - `collapse-id` 用不透明值。
+  - 字节级样例（固定 nonce）：`remote-protocol/tests/golden/push.json`。
 - **兜底**：NSE 30 秒内解不开，或者超时，系统显示外层的占位文案（外部 §4）。不申请静默丢弃推送的 entitlement。
 - **设备 token**：手机经端到端通道调 `device.registerPush` 交给桌面，桌面存在 prefs，以后 P1 改为按设备存。收到 410 就删掉。relay 不存 token。
 - **哪些事件推送**：裁决 17 的四类「需要关注」由 Core 判断（票 08）。本票只负责把推送发得出去、解得开。
@@ -167,27 +189,50 @@ Rule 2 原文：「The relay sees ciphertext and routing metadata, stores no use
 
 - **模式**：`Noise_NNpsk0_25519_ChaChaPoly_SHA256`。iOS 的 CryptoKit 没有 BLAKE2，所以选 SHA256 套件（外部 §3）。
 - **角色**：手机是发起方，Core 是响应方。
-- **prologue**：`galley-remote/1` ‖ relay 外层版本 ‖ 双方角色，把版本绑进握手，防降级。
+- **prologue**：`galley-remote/1` ‖ relay 外层版本 ‖ 双方角色，把版本绑进握手，防降级。05a 定稿的 19 个字节：
+
+  | 偏移 | 长度 | 内容 |
+  |---|---|---|
+  | 0 | 15 | ASCII `galley-remote/1`（P1 的握手改用 `galley-remote/2`） |
+  | 15 | 1 | `0x00` 分隔 |
+  | 16 | 1 | relay 外层版本，即 `X-Galley-Relay`，现为 `0x01` |
+  | 17 | 1 | 发起方角色，`0x02` client（手机） |
+  | 18 | 1 | 响应方角色，`0x01` host（Core） |
+
+  合起来是 `67616c6c65792d72656d6f74652f3100010201`；角色字节与外层帧 `PEER` 的 `role` 同一套编码。
 - **握手两步**：
-  1. 手机 → Core：`psk, e`，载荷为空。这条消息只靠 psk 保护，可被重放、没有前向保密，所以什么都不放（外部建议 1）。
+  1. 手机 → Core：`psk, e`，载荷为空，所以整条固定 48 字节（32 字节 `e` 加空载荷的 16 字节标签），Core 拒收其他长度。
+     这条消息只靠 psk 保护，可被重放、没有前向保密，所以什么都不放（外部建议 1）。
      relay 重放它也没用：Core 会回一个新的 `e`，重放者没有手机的临时私钥，算不出会话密钥。
-  2. Core → 手机：`e, ee`，载荷是 Core 的 hello（见第 6 节）。
+  2. Core → 手机：`e, ee`，载荷是 Core 的 hello（见第 6 节），按下文的格式填充；hello 本身 1～4096 字节。
 - **传输**：
   - 每条手机连接一个会话，重连就重新握手，开销很小；
   - 会话最长 24 小时，到点主动重连换密钥；
   - 每条 Noise 消息 ≤ 65535 字节，应用层超过就分片（第 6 节 `chunk`）；
-  - 会话结束显式发结束标记，防截断（外部建议 10）。
+  - 会话结束显式发结束标记，防截断（外部建议 10），格式见下一条。
+- **传输记录与结束标记**（05a 定稿）：每条传输消息的明文是一条记录，即「填充（类型 `u8` ‖ 内容）」：
+  - `0x01` APP：内容是一条应用层消息或一个分片，1～65516 字节；
+  - `0x02` CLOSE：内容是 1 字节原因：`0x00` 正常结束、`0x01` 会话满 24 小时、`0x02` 协议大版本不一致、`0x03` 已解除配对（桌面换了配对主密钥），
+    其他值按正常结束处理；
+  - CLOSE 就是结束标记：要结束的一方先发 CLOSE 再断开，此后不能再有记录。没收到 CLOSE 连接就断了（relay 断线、`PEER` 下线），算截断：
+    丢掉分片重组之类的半截状态，下次连上重新同步（第 6.5 节）；
+  - 任何一条解不开（标签不对、填充不规范、类型不认识、重放或乱序），这个会话就作废，不再继续用。
+  - 样例：`remote-protocol/tests/golden/noise-nnpsk0.json`（固定临时钥的完整会话，含握手、两条 APP 和一条 CLOSE）。
 - **不压缩，只填充**：
   - agent 读的网页由外部攻击者控制，又和对话内容在同一压缩上下文里，relay 看得到密文长度，满足 BREACH / VORACLE 类攻击的前提。
     RFC 9113 §10.6 的结论是不压缩（外部 §7）。
   - WebSocket 的 permessage-deflate 关掉。
-  - 明文填充：小于 256 字节的补到 256，更大的按 Padmé（额外开销 ≤ 12%，外部 §7）。
+  - 明文填充：小于 256 字节的补到 256，更大的按 Padmé（额外开销 ≤ 12%，外部 §7）。05a 定稿的格式：`u16` 大端长度 ‖ 内容 ‖ 补零，
+    总长为 `max(256, padme(2 + len))`（`len` 是内容长度），上限 65519（65535 减 16 字节标签）。解填充是严格的：总长必须正好是该长度对应的规范值，补的必须全是零；
+    所以改填充规则就要换 prologue 的版本。推送用同一格式，但总长固定 2048（第 4.3 节）。
 - **库**：
   - Rust 用 `snow` 0.10.0。它支持 psk；没有正式审计；0.9.5 修过一个 nonce DoS（外部 §2）。
   - Swift 三条路：用 CryptoKit 原语写一个薄的 Noise（iOS 13 起原语齐全，规范 §5 有伪代码）；vendor `swift-libp2p/swift-noise` 并锁定提交（4 star，1 个贡献者）；
     或者把 Rust 这一份编译进 App，Swift 经绑定调用。见第 12 节裁决点 2。
 - **测试**：Rust 和 Swift 两侧都跑 cacophony 向量（944 条，覆盖 NNpsk0、XXpsk3、KK 等的 ChaChaPoly_SHA256 组合）。
   另加一条固定临时钥的 Rust↔Swift 互通用例；snow 有 `fixed_ephemeral_key_for_testing_only`（外部 §3）。
+  05a 只 vendor 了用得到的三条：`NNpsk0`、`XXpsk3`、`KK`（均为 `25519_ChaChaPoly_SHA256`），来源、提交与许可（Unlicense）见
+  `remote-protocol/tests/vectors/README.md`。固定临时钥和固定推送 nonce 的钩子只在 crate 的 `test-hooks` feature 里，Core 和 relay 不开。
 
 ## 6. 应用层协议（端到端通道内）
 
@@ -237,6 +282,7 @@ JSON，UTF-8；每条 Noise 传输消息装一条，大的经 `chunk` 重组后�
 | `runner.event` | `runner-event`，只转订阅的会话 | `turn_progress` 按 100ms 合批；单条最大的是 `turn_end`，带完整工具调用与结果（`core/src/ipc.rs:184-219`） |
 | `session.runState` | **新增**的 Core 事件（第 7 节缺口 3） | 「在跑 / 在问你 / 排队」 |
 | `history.replay`、`goal.updated`、`queue.changed` | 已有 | |
+| `sync.required` | 远程模块自己发（05a 新增） | 丢过给这台手机的事件后通知它重读，见第 6.5、6.6 节 |
 
 ### 6.5 重新同步
 
@@ -246,6 +292,24 @@ JSON，UTF-8；每条 Noise 传输消息装一条，大的经 `chunk` 重组后�
   3. 若正在看某会话：`session.messages` 取尾部，再 `subscribe`。
 - 事件漏了就以重读为准，与 `notify.rs:16-23`「GUI 漏了事件从数据库重读」同一个约定。
 - 转发队列按手机分开、有上限。手机跟不上时先丢 `runner.event` 的增量，状态类事件保留；丢过就让手机重拉当前会话。
+
+### 6.6 05a 落定的细节（2026-10-10）
+
+`remote-protocol` 的 `app` 模块按下面实现；每个方法、每种事件的 JSON 样例在 `remote-protocol/tests/golden/app-messages.json`。
+
+- **可选字段与枚举**：手机侧类型的可选字段一律显式写 `null`，读的时候 `null` 与缺省等价（02d 的规矩）。开放集合的枚举（会话状态、`via`、
+  发送结果等）都有 `Unknown` 兜底，新增取值不会让旧版解码失败。
+- **`hello`**：协议版本 major 1、minor 0。Core 的 hello 同时就是 `hello` 方法的结果；major 不一致时 Core 回 `protocol_mismatch`，再发原因为 `0x02` 的 CLOSE。
+- **`sessions.list`**：结果是 `{sessions, projects, runStates}`。带上全部项目供侧栏分组；`runStates` 只列不是空闲默认值的会话，不在里面的就是空闲。
+- **`session.messages`**：`before` 是上一页里的消息 id（`null` 取尾部），`limit` 缺省 50、上限 200；结果按时间正序，带 `hasMore`。
+- **`session.send`**：图片用 `{mimeType, data, width, height}`，`data` 是标准 base64，不用 data URL；限额照桌面（4 张、单张 10MB、合计 25MB）。
+- **透传的大块 JSON**：`runner.event` 的载荷是 `{sessionId, events: [...]}`，一条消息装 100ms 合批的多条 runner 事件，每条原样透传 Core 的 `IpcEvent` JSON；
+  消息的 `toolCalls` / `toolResults`、`goal.updated` 的 `goal` 也原样透传，不在手机类型里展开。
+- **`sync.required`**：载荷 `{sessionId}`。Core 丢过给这台手机的事件（第 6.5 节队列满）时发，手机据此重读；`sessionId` 为 `null` 表示全部重读。
+- **分片**：
+  - `chunk` 的 `id` 是发送方自己的流编号，与请求 id 无关；`i` 从 0 逐一递增，`last: true` 结束；不同的流之间、流与普通消息之间可以交错；
+  - 每片原始数据 1～48000 字节，base64 之后仍装得进一条记录；重组出来必须是一条完整的、非 `chunk` 的消息；
+  - 接收方同时最多收 4 条流，在途合计不超过 40MiB（够装 25MB 图片的 base64 加 JSON），超了就报错并丢掉该流。
 
 ## 7. Core 改动（票 05）
 
@@ -355,7 +419,8 @@ CI：iOS 用单独的 workflow，按路径过滤（`ios/**`、`remote-protocol/*
 - 测试：
   - cacophony 向量，只收用到的套件，记下来源与许可；
   - golden 文件：外层帧字节、应用层 JSON 样例、固定临时钥的握手与推送密文，供 07a 的 Swift 侧解码；改了结构不改 golden 就红。
-- CI：`check.yml` 加 `cargo test -p remote-protocol`。现有步骤只跑 `-p galley-core` 和 `-p galley-cli`（`check.yml:204-217`），不会自动带上新 crate。
+- CI：`check.yml` 加 `cargo test -p galley-remote-protocol`（包名 `galley-remote-protocol`，库名 `galley_remote_protocol`）。
+  现有步骤只跑 `-p galley-core` 和 `-p galley-cli`（`check.yml:204-217`），不会自动带上新 crate。
 - 不做：网络、Core 接线。
 
 ### 05c — Core 缺口（无依赖，与 05a 并行）

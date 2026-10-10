@@ -1,0 +1,205 @@
+{
+  "connect": {
+    "headers": [
+      "X-Galley-Channel",
+      "X-Galley-Role",
+      "X-Galley-Relay"
+    ],
+    "path": "/v1/connect"
+  },
+  "description": "Relay frames (design §4.2): each valid frame's fields and exact bytes, and invalid byte strings with the error label a strict decoder gives.",
+  "fixture": "galley-remote/frames",
+  "frames": [
+    {
+      "fields": {
+        "payload": "6e6f697365206d657373616765206279746573",
+        "peer": 3
+      },
+      "hex": "01000000036e6f697365206d657373616765206279746573",
+      "name": "data-host-to-client-3",
+      "type": "DATA"
+    },
+    {
+      "fields": {
+        "payload": "00ff10",
+        "peer": 0
+      },
+      "hex": "010000000000ff10",
+      "name": "data-client-side",
+      "type": "DATA"
+    },
+    {
+      "fields": {
+        "online": true,
+        "peer": 0,
+        "role": "host"
+      },
+      "hex": "02000000000101",
+      "name": "peer-host-online",
+      "type": "PEER"
+    },
+    {
+      "fields": {
+        "online": false,
+        "peer": 7,
+        "role": "client"
+      },
+      "hex": "02000000070200",
+      "name": "peer-client-7-offline",
+      "type": "PEER"
+    },
+    {
+      "fields": {
+        "collapseId": "c-5f2a",
+        "deviceToken": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+        "env": "production",
+        "priority": 10,
+        "requestId": 16909060,
+        "sealed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b"
+      },
+      "hex": "0301020304000a0020a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf06632d35663261000102030405060708090a0b0c0d0e0f101112131415161718191a1b",
+      "name": "push",
+      "type": "PUSH"
+    },
+    {
+      "fields": {
+        "collapseId": null,
+        "deviceToken": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+        "env": "sandbox",
+        "priority": 5,
+        "requestId": 9,
+        "sealed": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+      },
+      "hex": "030000000901050020a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf005a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "name": "push-sandbox-no-collapse",
+      "type": "PUSH"
+    },
+    {
+      "fields": {
+        "apnsStatus": 200,
+        "reason": "",
+        "requestId": 16909060,
+        "status": "ok"
+      },
+      "hex": "04010203040000c800",
+      "name": "push-result-ok",
+      "type": "PUSH_RESULT"
+    },
+    {
+      "fields": {
+        "apnsStatus": 410,
+        "reason": "Unregistered",
+        "requestId": 9,
+        "status": "unregistered"
+      },
+      "hex": "040000000901019a0c556e72656769737465726564",
+      "name": "push-result-unregistered",
+      "type": "PUSH_RESULT"
+    },
+    {
+      "fields": {
+        "apnsStatus": 0,
+        "reason": "apns_unreachable",
+        "requestId": 10,
+        "status": "failed"
+      },
+      "hex": "040000000a0200001061706e735f756e726561636861626c65",
+      "name": "push-result-failed",
+      "type": "PUSH_RESULT"
+    },
+    {
+      "fields": {
+        "nonce": 1234567890
+      },
+      "hex": "0500000000499602d2",
+      "name": "ping",
+      "type": "PING"
+    },
+    {
+      "fields": {
+        "nonce": 1234567890
+      },
+      "hex": "0600000000499602d2",
+      "name": "pong",
+      "type": "PONG"
+    }
+  ],
+  "invalid": [
+    {
+      "error": "empty",
+      "hex": "",
+      "why": "empty"
+    },
+    {
+      "error": "unknown_type",
+      "hex": "000102",
+      "why": "unknown type 0x00"
+    },
+    {
+      "error": "unknown_type",
+      "hex": "7f",
+      "why": "unknown type 0x7f"
+    },
+    {
+      "error": "truncated",
+      "hex": "0100000003",
+      "why": "DATA without payload"
+    },
+    {
+      "error": "truncated",
+      "hex": "010000",
+      "why": "DATA header cut"
+    },
+    {
+      "error": "invalid_field",
+      "hex": "02000000000201",
+      "why": "PEER host id with client role"
+    },
+    {
+      "error": "invalid_field",
+      "hex": "02000000010202",
+      "why": "PEER online byte 2"
+    },
+    {
+      "error": "trailing_bytes",
+      "hex": "0200000001020100",
+      "why": "PEER trailing byte"
+    },
+    {
+      "error": "invalid_field",
+      "hex": "0300000001020a0001aa0000000000000000000000000000000000000000000000000000000000",
+      "why": "PUSH unknown env"
+    },
+    {
+      "error": "invalid_field",
+      "hex": "030000000100090001aa0000000000000000000000000000000000000000000000000000000000",
+      "why": "PUSH priority 9"
+    },
+    {
+      "error": "invalid_field",
+      "hex": "0300000001000a0001aa00000000000000000000000000000000000000000000000000000000",
+      "why": "PUSH sealed shorter than nonce and tag"
+    },
+    {
+      "error": "invalid_field",
+      "hex": "040000000100019000",
+      "why": "PUSH_RESULT ok with HTTP 400"
+    },
+    {
+      "error": "truncated",
+      "hex": "04000000010200000561",
+      "why": "PUSH_RESULT reason cut"
+    },
+    {
+      "error": "truncated",
+      "hex": "0500000000000000",
+      "why": "PING cut"
+    },
+    {
+      "error": "trailing_bytes",
+      "hex": "06000000000000000100",
+      "why": "PONG trailing byte"
+    }
+  ],
+  "relayProtocolVersion": 1
+}

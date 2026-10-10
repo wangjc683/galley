@@ -195,9 +195,10 @@ jobs:
       # integration suite.
       #
       # We do NOT run `--workspace` here — the workspace currently includes
-      # `core` + `../cli`, and the CLI's integration tests need the
-      # `galley` binary built first, which is a slower job. Per-package
-      # runs let each fail independently and report clearly.
+      # `core`, `../cli` and `../remote-protocol`, and the CLI's integration
+      # tests need the `galley` binary built first, which is a slower job.
+      # Per-package runs let each fail independently and report clearly, so
+      # a new workspace member needs its own step below.
       - name: Cargo test (core, full)
         if: matrix.target != 'x86_64-pc-windows-msvc'
         working-directory: ./core
@@ -215,3 +216,11 @@ jobs:
       - name: Cargo test (cli)
         working-directory: ./core
         run: cargo test --target ${{ matrix.target }} -p galley-cli
+
+      # The wire formats Core, the relay and the iOS app share (design
+      # `.scratch/ios-client/issues/05-remote-protocol-design.md`): Noise
+      # test vectors and the golden fixtures the Swift package decodes. No
+      # Tauri, so the full suite runs on Windows too.
+      - name: Cargo test (remote-protocol)
+        working-directory: ./core
+        run: cargo test --target ${{ matrix.target }} -p galley-remote-protocol
