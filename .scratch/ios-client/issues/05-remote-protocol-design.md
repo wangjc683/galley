@@ -126,7 +126,8 @@ Rule 2 原文：「The relay sees ciphertext and routing metadata, stores no use
   - `peer`：relay 给频道里每条 client 连接分配非零编号，频道存续期间不复用；`0` 固定指 host。host 发出的 `DATA` 写目标 client 的编号；
     relay 把 client 发来的 `DATA` 标上该 client 的编号再交给 host；client 与 relay 之间的 `DATA` 一律写 `0`。
   - `PEER`：对端上线 / 下线。手机据此显示「电脑已离线」；Core 据此决定要不要往外推事件。host 连上时，relay 给它逐个补发已在线 client 的上线帧。
-    `peer = 0` 当且仅当 `role` 是 host，否则解码报错。
+    client 连上时，relay 先发一条 host 当前在不在线的 `PEER`，手机不必猜；新 host 挤掉旧 host 时，各 client 先收到 host 下线、再收到上线，
+    据此重新握手（06a 补，2026-10-10）。`peer = 0` 当且仅当 `role` 是 host，否则解码报错。
   - `PUSH` / `PUSH_RESULT`：`request_id` 由 host 选，relay 在结果里回显；成功必须配 200，失效必须配 410（桌面据此删掉 token）。
   - `PING` / `PONG`：端与 relay 之间逐跳的心跳，25 秒一次；relay 自己回 `PONG`，不转发。
   - 上限：最大的帧是满载的 `DATA`，65540 字节，也就是 relay 的 WebSocket 单条消息上限。推送密文上限 2994 字节，是 APNs 载荷不超过 4096 字节的最大值；
@@ -170,9 +171,28 @@ Rule 2 原文：「The relay sees ciphertext and routing metadata, stores no use
 
 ### 4.4 实现、部署与容量
 
-- **实现**：Rust 二进制 `relay/`，tokio，配合 axum 或 hyper 加 tokio-tungstenite；只依赖 `remote-protocol` 的外层帧模块。
-  - 配置走环境变量和文件：APNs 密钥路径、team id、key id、bundle id、环境；
-  - 计数器只监听 127.0.0.1，记每日进出字节、连接数、推送数、错误数，不含频道键。
+- **实现**（06a 落定，2026-10-10；用法见 `relay/README.md`）：Rust 二进制 `relay/`（包名 `galley-relay`），tokio；hyper 1 收 HTTP 与升级，
+  tokio-tungstenite 0.30.0（与 Core 同一版本）跑 WebSocket；只用 `remote-protocol` 的 `frame` 和 `keys`（算频道键）。
+  - 建连：路径、方法、WebSocket 升级头和三个 `X-Galley-*` 头逐项校验，不合格就在升级前回纯 HTTP 错误（404、405、400，WebSocket 版本不对回 426），
+    URL 带 query 也拒；频道已有 4 个 client 回 429。占位在回 101 之前完成，两个 client 抢最后一个位置不会都进来。
+  - 限速是背压，不是断开：按每条连接发给 relay 的字节记令牌桶（持续 512KB/s、突发 2MB，按 1024 进位），超了就放慢读这条连接，
+    由 TCP 把压力传回发送方。25MB 的图片上传是正当流量，断开只会逼它重传。
+  - 慢接收方：每条连接的待发队列到 1MB 时，往它转发的一方先等；队列 10 秒没有任何进展，就按「读得太慢」断开接收方（关闭码 4003），发送方照常。
+    代价：同一 host 下一台手机卡住时，host 发往其他手机的帧最多停 10 秒。
+  - 心跳：90 秒内收不到任何消息（帧和 WebSocket ping 都算）就断（4002）。
+  - 违规即断：解码失败按 05a 的错误标签计数；方向不对（端发 `PEER`、`PONG`、`PUSH_RESULT`，client 发 `PUSH`）、client 的 `DATA` 写了非 0 的 peer，
+    都计数并以 1008 断开；文本消息 1003；超过 65540 字节 1009。发给不在线对端的 `DATA` 丢弃并计数，不断开（`PEER` 通知已在路上）。
+  - 关闭码：1001 relay 关停、1002 WebSocket 协议错、1003 文本消息、1008 帧违规、1009 超长、4001 被新 host 挤掉、4002 心跳超时、4003 读得太慢。
+  - 推送：`ApnsSender` trait（`async fn send(&self, push: &PushRequest) -> ApnsResponse`，06b 实现），每条 `PUSH` 单起一个任务，不挡 host 的读；
+    每个 host 同时最多 32 条在等 APNs，再多就立即回 `push_busy`。06b 之前的默认实现一律回「其他失败」、`apns_status` 为 0、reason 为 `push_unavailable`。
+  - 配置：命令行参数优先，其次环境变量。`--listen` / `GALLEY_RELAY_LISTEN`（默认 `127.0.0.1:8787`），`--metrics-listen` / `GALLEY_RELAY_METRICS_LISTEN`
+    （默认 `127.0.0.1:8788`，必须是回环地址）；APNs 的密钥路径、key id、team id、bundle id 留了 `GALLEY_RELAY_APNS_*` 四个变量给 06b。
+    「环境」不做成 relay 配置，因为每条 `PUSH` 自带生产或沙盒；「文件」就是 systemd 的 `EnvironmentFile`（06c）。
+  - 计数器：独立端口的 `GET /metrics` 回 JSON，键固定。内容是频道数、按角色的在线与累计连接数、被挤掉的 host 数、进出字节与帧数、
+    推送（请求、成功、410、失败）、按标签的错误、升级前的拒绝、因对端不在而丢的帧；不含频道键、peer 编号、IP、token。
+    计数从进程启动算起，「每日」由部署侧两次读数相减（06c）。
+  - 日志：不记访问日志；stderr 只写启动、关停和服务器错误（如 accept 失败），不带任何标识。收到 SIGTERM 或 Ctrl-C 就停止接新连接，
+    以 1001 关闭全部连接，最多等 5 秒。
 - **部署**（归 inkstone-ops，裁决 23）：
   - 用 systemd 跑二进制，不进 docker：frankfurt 上 docker 会被无人值守升级重启（frankfurt 档案第三节）；
   - Caddy 站点文件配 `stream_close_delay`、关访问日志；
@@ -342,8 +362,13 @@ JSON，UTF-8；每条 Noise 传输消息装一条，大的经 `chunk` 重组后�
 
 ## 8. relay 实现（票 06）
 
-- `relay/`：频道表 `HashMap<频道键, {host, clients}>`，按外层帧转发，代发 APNs，计数器。不依赖 Core。
+- `relay/`：频道表 `HashMap<频道键, {host, clients}>`，按外层帧转发，代发 APNs，计数器。不依赖 Core。06a 已实现 APNs 发送以外的全部（第 4.4 节）。
 - 测试：进程内起 relay，加两个假端点，覆盖转发、挤掉旧 host、限速、心跳超时、推送 410 回报；APNs 用假服务器。
+  - 06a 落定：relay 绑 `127.0.0.1:0`，假 host 和假手机都是普通 WebSocket 客户端，收发 05a 的帧。15 个集成用例覆盖双向转发与 peer 改写、
+    `PEER` 通知与给晚到 host 的补发、挤掉旧 host、第 5 个 client 被拒、升级前拒绝坏请求、非法帧计数并断开、超长消息、心跳超时、限速只放慢不断开、
+    慢接收方被断开、host 推送回 `push_unavailable`、假 `ApnsSender` 的 410 回报、client 推送被拒、计数器不含标识、关停。
+  - 定时器靠缩小 `Limits` 提速，不用 tokio 的暂停时钟：时钟暂停时，运行时一等真实 socket 就会把时间往前拨。
+  - 走 HTTP/2 的 410 回报（假 APNs 服务器）归 06b。
 
 ## 9. iOS 侧的协议要点（票 07 的一部分）
 
@@ -485,3 +510,6 @@ iOS 的工程与界面（票 07 其余部分）仍按产品定义的次序，等
   3 JC 指出用户不接触 relay、不该是产品决策，核对后初稿「App 里会写死地址」与第 3.1 节二维码带地址自相矛盾，撤销该点，
   第 2 节补「relay 地址从哪来」（照更新地址先例编译期注入、二维码带给手机、运行时环境变量覆盖）。
 - 2026-10-10 JC 裁第 2 点按推荐（A：CryptoKit 自写）；拆出第 13 节实现票，05a、05c 开工。
+- 2026-10-10 06a（relay）实现：第 4.2 节补「client 连上先收到 host 在不在线」「挤掉旧 host 时 client 先收下线、再收上线」；
+  第 4.4 节写定限速为背压、慢接收方 10 秒无进展即断、关闭码、推送接口、配置与计数器形状；第 8 节记测试覆盖。
+  待 05b 对齐：`GALLEY_REMOTE_RELAY_URL` 按 05a 的 `RelayUrl` 填基础地址（开发时 `ws://127.0.0.1:8787`，不带 `/v1/connect`）。

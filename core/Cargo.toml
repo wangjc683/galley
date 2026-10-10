@@ -3,12 +3,14 @@
 #   - ../cli              (the `galley-cli` binary, used by agents)
 #   - ../remote-protocol  (`galley-remote-protocol`, the wire formats Core,
 #                          the relay and the iOS app share; no Tauri / tokio)
+#   - ../relay            (`galley-relay`, the WebSocket relay between Core
+#                          and the phones; runs on a server, not the desktop)
 # Workspace root being at `core/` (not the repo root) keeps `target/` under
 # `core/target/` so the existing CI cache key + tauri build paths are
 # unaffected by the B1 layout change. Cli's discovery hint lives in
 # `../cli/Cargo.toml` via `[package].workspace = "../core"`.
 [workspace]
-members = [".", "../cli", "../remote-protocol"]
+members = [".", "../cli", "../remote-protocol", "../relay"]
 
 [package]
 name = "galley-core"

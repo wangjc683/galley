@@ -195,8 +195,9 @@ jobs:
       # integration suite.
       #
       # We do NOT run `--workspace` here — the workspace currently includes
-      # `core`, `../cli` and `../remote-protocol`, and the CLI's integration
-      # tests need the `galley` binary built first, which is a slower job.
+      # `core`, `../cli`, `../remote-protocol` and `../relay`, and the CLI's
+      # integration tests need the `galley` binary built first, which is a
+      # slower job.
       # Per-package runs let each fail independently and report clearly, so
       # a new workspace member needs its own step below.
       - name: Cargo test (core, full)
@@ -224,3 +225,34 @@ jobs:
       - name: Cargo test (remote-protocol)
         working-directory: ./core
         run: cargo test --target ${{ matrix.target }} -p galley-remote-protocol
+
+      # The relay (design §4, §8) runs on a Linux server; here it is built
+      # and its in-process tests (relay on 127.0.0.1:0, fake host and
+      # phones over real loopback sockets) run on every desktop target.
+      # No Tauri, so the full suite runs on Windows too.
+      - name: Cargo test (relay)
+        working-directory: ./core
+        run: cargo test --target ${{ matrix.target }} -p galley-relay
+
+  relay-linux:
+    # The relay's production target is a Debian x86_64 server (design
+    # §4.4); the Core matrix above only covers macOS and Windows. Building
+    # just the two Tauri-free crates needs no webkit / GTK system packages.
+    name: Relay (Linux)
+    needs: workflow-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./core -> target
+
+      - name: Cargo test (remote-protocol, relay)
+        working-directory: ./core
+        run: cargo test -p galley-remote-protocol -p galley-relay

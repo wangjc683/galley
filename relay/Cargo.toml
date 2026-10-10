@@ -1,0 +1,45 @@
+[package]
+name = "galley-relay"
+# Ships under its own `relay-v*` tags (design §4.4), not the desktop
+# release's version files.
+version = "0.1.0"
+edition = "2021"
+description = "Galley relay: stateless WebSocket forwarder between a desktop Core and its paired phones"
+license = "MIT"
+publish = false
+# Workspace root lives at ../core, as for ../cli and ../remote-protocol.
+workspace = "../core"
+
+[lib]
+name = "galley_relay"
+
+[[bin]]
+name = "galley-relay"
+path = "src/main.rs"
+
+[dependencies]
+# Frames and the channel key. The relay never touches the Noise, push or
+# app modules: it holds no key that opens them.
+galley-remote-protocol = { path = "../remote-protocol" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal"] }
+# The same tokio-tungstenite as Core's remote module (ticket 05b), so the
+# lockfile carries one tungstenite. No TLS (Caddy terminates it) and no
+# client connector: the relay only takes over an upgraded hyper socket.
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
+# HTTP/1 server for the upgrade and the metrics endpoint. Versions already
+# in core/Cargo.lock through reqwest; hyper's `server` feature adds
+# `httpdate`.
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+# `ApnsSender` is a trait object; Core uses the same crate.
+async-trait = "0.1"
+serde_json = "1"
+# Flags with environment fallbacks; ../cli already builds clap 4.
+clap = { version = "4", features = ["derive", "env"] }
+
+[dev-dependencies]
+# Test peers dial the relay as plain WebSocket clients.
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect"] }
