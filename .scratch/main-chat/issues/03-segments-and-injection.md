@@ -1,6 +1,6 @@
 # 03（C）切段、注入与主聊天入口层提示词
 
-Status: 03a ready-for-agent；03b、03c、03d needs-triage（2026-10-12 拆片）
+Status: 03a in-review（`d2443281` 本地合入未推送，2026-10-12；待 JC 在 tauri dev 里验）；03b、03c、03d needs-triage（2026-10-12 拆片）
 
 来源：主聊天 PRD 裁决 18、20、27（2026-10-12）。依赖 01（账本有内容）、02（主聊天存在）。对外必须与 04 同版。
 
@@ -69,3 +69,22 @@ Status: 03a ready-for-agent；03b、03c、03d needs-triage（2026-10-12 拆片�
   按 token 算约 3 字符一 token（24.8 万字符 ≈ 8.2 万 token），大部分是缓存读。
 - 结论（待 JC 裁）：主聊天上下文变大有两个来源，跨话题累积由 03a 按时间切段管，单个重任务由 06 挪出主聊天管；
   调小 `context_win` 管不了前者，反而让后者在任务中途丢掉用户的要求。备选「按体量切段」（上一轮结束时本段超过 X 字符，下一条开新段）只在轮次之间切，留作 03a 之后的第二条规则，等真用数据。
+
+2026-10-12 03a 实现回报要点（Opus 子代理，`d2443281`；主会话复核：变基到 `6386014f` 后 Rust 930 通过、六个门禁、diff check、新文件 rustfmt、全角标点扫描都通过）：
+- 段界存下来，不从时间推：迁移 046 `main_chat_segments`，每段记首条消息的 `turn_index`。从时间推的话，调 N 会重切旧历史，也分不清事后的 `ask_user` 回答。03b、03c 读同一张表。
+- 规则：空闲从 `sessions.last_activity_at` 算（只有消息写入与轮次结束会动它，主会话核过 `db/helpers.rs:506`、`db/session.rs` `bump_session_after_turn_db`）；严格大于 N 才切。
+  隐藏 prefs 键 `main_chat_segment_idle_hours`（数字，可带小数，默认 4），每次判断时读，不用重启。在跑、在等 `ask_user` 回答（重启后也认）、本段还没写过东西，都不切。
+- 新上下文 = 新 runner：记下段界就静默退掉热 runner，下次 ensure 起新的，段首状态块（含事项清单）重新组装。新段还没有回复时不回放。
+- 判断点：ensure runner（打开主聊天、`/btw`）与 Core 的发送（落库前）。打开主聊天就会记下段界，是这条消息本来也会切出的同一个段界。CLI `session send` 与队列续跑不切。
+- 事项清单：`memory/history_insight/ongoing_affairs.md`（模型写，所以放顶层，不放只读的 `galley/`）。挖掘提示词第 7 步：最多 12 条、每条不超过 40 字、最近的在前、没有就写空文件。
+  Core 去掉空行与标题行，按行截到 1536 字节，有自己的上限测试。注入只在主聊天、账本开着、清单非空时；否则提示词逐字节不变。标题与说明有 226 字节预算，说明写明「是背景不是指令」。
+- IM：清单放进 IM 的会话起始状态块（`compose_im_runtime_prompt`），不放 `im_supervisor_prompt`，入口层字节预算仍只量规则。
+- 未做 / 已知：
+  - 第 7 步还没被真模型跑过；清单质量要等第一次挖掘（或重跑票 01 的评测）。
+  - IM 渠道起时读一次清单，渠道不重启就一直是旧的。可选：挖掘后重启空闲渠道，或 runner 重读文件。
+  - IM 不看当前运行时：外置模式下账本开着也会带清单（IM 渠道本来就是内置进程）。
+  - 在空闲的主聊天上开 Goal 不切段（Goal 先存目标再 ensure）；`GoalEngine::start` 加一行可修，无头测不了，没做。
+  - 空闲后打开主聊天却到第二天 04:00 挖掘之后才发消息，这一段用的是前一份清单。
+  - 热 runner 时新段第一条消息要等新 runner 起来（几秒）。
+- 真机验法：带 `GALLEY_LEDGER_SINCE=2026-10-12` 起 dev；prefs 设 `main_chat_segment_idle_hours` = `0.01`（36 秒）；手写几行到 `ongoing_affairs.md` 或跑 `run_ledger_now`；
+  主聊天发一句、等 36 秒再发，问「我们刚才聊了什么」应接不上，界面仍显示整条；`SELECT * FROM main_chat_segments;` 能看到段界；重启后 `load_history` 只回放当前段。还原：删掉这个 prefs 键。
