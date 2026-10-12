@@ -302,12 +302,25 @@ fn read_range(path: &Path, from: u64, to: u64) -> io::Result<Vec<u8>> {
     Ok(buf)
 }
 
-/// Read archive records from byte `offset` to the last complete line.
-/// Returns the records and the offset just past them.
-pub fn read_archive_from(path: &Path, offset: u64) -> io::Result<(Vec<ImRecord>, u64)> {
+/// Archive lines read from some offset: each record with the offset just
+/// past its line, and where the read started and ended.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ArchiveRead {
+    pub records: Vec<(ImRecord, u64)>,
+    /// Where reading started (the requested offset, or 0 when the
+    /// archive is shorter than it).
+    pub start: u64,
+    /// Just past the last complete line.
+    pub end: u64,
+}
+
+/// Read archive records from byte `offset` to the last complete line,
+/// each with the offset just past it (so a reader can stop after any
+/// record).
+pub fn read_archive_entries(path: &Path, offset: u64) -> io::Result<ArchiveRead> {
     let len = match fs::metadata(path) {
         Ok(meta) => meta.len(),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok((Vec::new(), 0)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(ArchiveRead::default()),
         Err(e) => return Err(e),
     };
     // A shorter archive than the processed offset was replaced by hand:
@@ -316,16 +329,32 @@ pub fn read_archive_from(path: &Path, offset: u64) -> io::Result<(Vec<ImRecord>,
     let buf = read_range(path, from, len)?;
     let complete = buf.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1);
     let mut records = Vec::new();
-    for line in buf[..complete].split(|b| *b == b'\n') {
+    let mut at = 0usize;
+    for line in buf[..complete].split_inclusive(|b| *b == b'\n') {
+        at += line.len();
         if line.iter().all(u8::is_ascii_whitespace) {
             continue;
         }
         match serde_json::from_slice::<ImRecord>(line) {
-            Ok(record) => records.push(record),
+            Ok(record) => records.push((record, from + at as u64)),
             Err(e) => eprintln!("[ledger] skipping an unreadable archive line: {e}"),
         }
     }
-    Ok((records, from + complete as u64))
+    Ok(ArchiveRead {
+        records,
+        start: from,
+        end: from + complete as u64,
+    })
+}
+
+/// Read archive records from byte `offset` to the last complete line.
+/// Returns the records and the offset just past them.
+pub fn read_archive_from(path: &Path, offset: u64) -> io::Result<(Vec<ImRecord>, u64)> {
+    let read = read_archive_entries(path, offset)?;
+    Ok((
+        read.records.into_iter().map(|(record, _)| record).collect(),
+        read.end,
+    ))
 }
 
 fn existing_keys(path: &Path) -> io::Result<HashSet<String>> {

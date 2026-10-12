@@ -12,6 +12,7 @@ use std::fmt::Display;
 
 use chrono::{DateTime, FixedOffset, TimeZone, Utc};
 
+use super::forgotten::{self, Forgotten};
 use super::sources::GuiTurn;
 use super::LedgerPaths;
 use crate::ledger::im_archive::ImRecord;
@@ -164,23 +165,45 @@ pub fn render_batch(batch: &Batch, generated_at: &str) -> String {
     out
 }
 
-/// The task the hidden mining session is given. Kept under GA's
-/// 2000-character long-prompt threshold (`agentmain.run`), so the model
-/// reads it as written. Step 7 (ticket 03a) has the run end with the
-/// ongoing-affairs short list ([`super::affairs`]); its limits (40
-/// characters, 12 items, newest first) are what
+/// The task the hidden mining session is given.
+///
+/// Step 7 (ticket 04) pins the two outputs' format in place of the SOP's
+/// 「格式自定」: Galley parses them for the Memory page
+/// ([`super::entries`]), so the shape is the contract. Step 8 lists the
+/// entries the user deleted ([`super::forgotten`]), present only when
+/// there are some. The last step (ticket 03a) has the run end with the
+/// ongoing-affairs short list ([`super::affairs`]), each line numbered
+/// so a delete can take it along; its limits (40 characters after the
+/// number, 12 items, newest first) are what
 /// [`super::affairs::AFFAIRS_CAP_BYTES`] is sized for.
-pub fn task_prompt(paths: &LedgerPaths, batch: &Batch) -> String {
+///
+/// Without a deletion list the task stays under GA's 2000-character
+/// long-prompt threshold (`agentmain.run`), so the model reads it as
+/// written; a long list pushes it over, and GA then saves the task to
+/// `temp/user_prompt_*.md` and has the model read it from there — the
+/// same words, one tool call later.
+pub fn task_prompt(paths: &LedgerPaths, batch: &Batch, forgotten: &[Forgotten]) -> String {
     let span = batch
         .span
         .as_ref()
         .map(|(a, b)| format!("{a} 至 {b}"))
         .unwrap_or_default();
+    let (forget_step, last) = if forgotten.is_empty() {
+        (String::new(), 8)
+    } else {
+        (
+            format!(
+                "8. 用户删掉过下面这些条目，表示不想被记住。不要重建它们，也不要把同一件事写进别的条目或情绪事件：\n{}\n",
+                forgotten::prompt_lines(forgotten)
+            ),
+            9,
+        )
+    };
     format!(
         "这是 Galley 每天一次的事项账本整理，在后台运行，没有人会回答问题，不要调用 ask_user。\n\
          \n\
          先完整读一遍历史重点挖掘 SOP：{sop}\n\
-         按它的提取标准与产物要求执行（持续活动、已消失事项、情绪事件；增量；读原文），只有下面几点替代 SOP 里对应的写法：\n\
+         按它的提取标准执行（持续活动、已消失事项、情绪事件；增量；读原文），下面几点替代 SOP 里对应的写法：\n\
          \n\
          1. 数据源：读 {batch_file}。不要读或生成 all_histories.txt，不要运行 compress_session.py。这个文件只有用户本人说过的话，按会话分组，带会话标识与时间。\n\
          2. 产物目录：{insight}（绝对路径，代替 SOP 里的 ./history_insight/）。先读已有产物，再增量更新。\n\
@@ -188,7 +211,23 @@ pub fn task_prompt(paths: &LedgerPaths, batch: &Batch) -> String {
          4. 会话标识用批次里 SESSION 行的标识（Galley 会话 id，或 im-渠道-日期），代替 SOP 里的 L4 文件名。\n\
          5. 测试产品、调试工具的对话不算生活事项的证据（例如测模型是哪个、测记忆、让它记暗号、测连通性），不要据此建条目或标情绪。\n\
          6. 只写上面的产物目录：不要调用 start_long_term_update，不要改全局记忆或其他 SOP（账本何时进入对话由 Galley 决定）。\n\
-         7. 最后一步：照活动知识层里的持续活动，整份重写 {affairs}。只放进行中的事项，一行一条，以「- 」开头；每条写清是什么事、到了哪一步，必要时带日期，不超过 40 字；最近还在动的排前面，最多 12 条。不写已消失事项、情绪事件、会话标识和原文；没有进行中的事项就写空文件。Galley 会把它放进对话的上下文，所以要短。\n\
+         7. 产物格式固定（代替 SOP 的「格式自定」，Galley 按它解析给用户看），只有两个文件：\n\
+         activities.md：标题「# 活动知识层」，下分「## 持续活动」「## 已消失事项」两节，每条一块：\n\
+         ### A001｜事项标题\n\
+         - 现状：一句话，不超过 60 字；已消失的写怎么结束的\n\
+         - 最近：最近一次证据的日期 YYYY-MM-DD\n\
+         - 会话：`会话标识`、`会话标识`\n\
+         - 原文（`会话标识`，YYYY-MM-DD HH:MM）：“用户原话”\n\
+         emotional_events.md：标题「# 情绪事件」，每条一块：\n\
+         ## E001｜事件标题\n\
+         - 时间：YYYY-MM-DD HH:MM\n\
+         - 会话：`会话标识`\n\
+         - 标签：焦急、不安\n\
+         - 原文：“用户原话”\n\
+         - 关联活动：A001（没有就不写）\n\
+         原文可以多条，其他说明写成「- 键：值」行。编号接着现有最大号往后排，删过的号不复用。不写口径、批次说明、证据边界之类的段落，整理过程写在最后的回复里。\n\
+         {forget_step}\
+         {last}. 最后一步：照持续活动整份重写 {affairs}。只放进行中的事项，一行一条，写成「- A001｜……」，编号用该活动的编号，编号后写清是什么事、到了哪一步，必要时带日期，不超过 40 字；最近还在动的排前面，最多 12 条。不写已消失事项、情绪事件、会话标识和原文；没有进行中的事项就写空文件。Galley 会把它放进对话的上下文，所以要短。\n\
          \n\
          本批次：{groups} 个会话，{turns} 条用户消息，{span}。完成后用一两句话说明更新了哪些文件。",
         sop = paths.sop_file().display(),
@@ -300,7 +339,7 @@ mod tests {
             &[],
             &shanghai(),
         );
-        let task = task_prompt(&paths, &batch);
+        let task = task_prompt(&paths, &batch, &[]);
         assert!(task.contains("/managed-ga-state/memory/L4_raw_sessions/salient_mining_sop.md"));
         assert!(task.contains("/managed-ga-state/memory/history_insight/galley/batch.md"));
         assert!(task.contains("/managed-ga-state/memory/history_insight（绝对路径"));
@@ -311,5 +350,64 @@ mod tests {
         assert!(task.contains("只放进行中的事项，一行一条"));
         assert!(!task.starts_with(crate::ledger::im_archive::FILE_HINT));
         assert!(task.chars().count() < 2000, "{}", task.chars().count());
+    }
+
+    /// Ticket 04: the format the Memory page parses, and the deletion
+    /// list. One line per check: Windows checks the source out with CRLF.
+    #[test]
+    fn the_task_pins_the_format_and_lists_what_was_deleted() {
+        let paths = LedgerPaths::new("/state".into());
+        let batch = build_batch(
+            &[gui("s-a", "2026-10-11T01:00:00Z", "一句")],
+            &[],
+            &shanghai(),
+        );
+        let task = task_prompt(&paths, &batch, &[]);
+        for line in [
+            "activities.md：标题「# 活动知识层」，下分「## 持续活动」「## 已消失事项」两节，每条一块：",
+            "### A001｜事项标题",
+            "- 现状：一句话，不超过 60 字；已消失的写怎么结束的",
+            "- 最近：最近一次证据的日期 YYYY-MM-DD",
+            "- 原文（`会话标识`，YYYY-MM-DD HH:MM）：“用户原话”",
+            "emotional_events.md：标题「# 情绪事件」，每条一块：",
+            "## E001｜事件标题",
+            "- 关联活动：A001（没有就不写）",
+            "编号接着现有最大号往后排，删过的号不复用。",
+            "8. 最后一步：照持续活动整份重写 /state/memory/history_insight/ongoing_affairs.md。",
+            "写成「- A001｜……」，编号用该活动的编号",
+        ] {
+            assert!(task.contains(line), "missing {line:?}");
+        }
+        assert!(!task.contains("用户删掉过"));
+
+        // The pinned example parses as one entry of each kind.
+        let example: String = task
+            .lines()
+            .skip_while(|l| !l.starts_with("### A001"))
+            .take_while(|l| !l.starts_with("emotional_events.md"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let crate::ledger::entries::Parsed::Parsed(a) =
+            crate::ledger::entries::parse_activities(&format!("## 持续活动\n{example}"))
+        else {
+            panic!("example does not parse");
+        };
+        assert_eq!(a.ongoing.len(), 1);
+        assert_eq!(a.ongoing[0].title, "事项标题");
+        assert!(a.ongoing[0].status.is_some());
+        assert_eq!(a.ongoing[0].sessions, ["会话标识"]);
+        assert_eq!(a.ongoing[0].quotes.len(), 1);
+
+        let forgotten = vec![Forgotten {
+            id: "A003".into(),
+            kind: crate::ledger::entries::EntryKind::Activity,
+            title: "日语 N3 备考".into(),
+            deleted_at: "2026-10-12T08:00:00+00:00".into(),
+        }];
+        let task = task_prompt(&paths, &batch, &forgotten);
+        assert!(task.contains(
+            "8. 用户删掉过下面这些条目，表示不想被记住。不要重建它们，也不要把同一件事写进别的条目或情绪事件："
+        ));
+        assert!(task.contains("\nA003｜日语 N3 备考\n9. 最后一步："));
     }
 }

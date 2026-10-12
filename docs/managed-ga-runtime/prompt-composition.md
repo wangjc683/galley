@@ -201,19 +201,27 @@ mentions them; GA trims history by volume, but this lives in the system
 prompt, so trimming cannot drop it. Identity (the static rules) and global
 memory (GA's own system prompt) are already there and are not repeated.
 
-- **Switch**: the ledger's, `GALLEY_LEDGER_SINCE`. Unset, or no list written
-  yet, or a list with nothing in it → no section, and the prompt is exactly
-  `compose_runtime_prompt`'s. Every other session never gets it; attach
-  mode never runs this code.
+- **Switch**: the ledger's, the Core pref `affairs_ledger` that the Memory
+  page sets (ticket 04, `core/src/ledger/config.rs`; read at every spawn, no
+  restart needed). Off or undecided (the file is then not even read), no
+  list written yet, or a list with nothing in it → no section, and the
+  prompt is exactly `compose_runtime_prompt`'s. Every other session never
+  gets it; attach mode never runs this code.
+- **Numbers stripped**: each line of the file carries its activity's number
+  (`- A001｜…`) so a delete on the Memory page takes the line with its
+  entry. Core strips the number before injection (a line without one is
+  kept as is); the model never sees it, and the caps below count what is
+  left.
 - **When it is read**: at spawn. A main chat runner is spawned at the start
   of every segment (a new segment retires the warm runner, see
   [runtime modes and sessions](./runtime-modes-and-sessions.md#main-chat-segments)),
-  so each segment starts with the latest list. An IM channel reads it when
-  the channel starts and keeps it until it restarts.
+  so each segment starts with the latest list. An IM channel reads it (and
+  the switch) when the channel starts and keeps it until it restarts.
 - **Bounded**: Core does not trust the file — blank lines and Markdown
   headings are dropped, and the list is cut at a line boundary to
   `AFFAIRS_CAP_BYTES` = 1536 (`ledger::affairs`, with its own cap test).
-  The mining task's limits (at most 12 lines of at most 40 characters) come
+  The mining task's limits (at most 12 lines of at most 40 characters
+  after the number) come
   to 1475 bytes at worst in Chinese, so the cut only bites when the model
   ignores them; the six ongoing affairs of the ticket-01 corpus after three
   weeks come to about 480 bytes as one line each. The heading and framing are held to

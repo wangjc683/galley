@@ -6,7 +6,7 @@
 
 - `corpus.json`：语料（下面的剧本落成的对话，带时间）。
 - `expected.json`：埋好的答案与不该出现的噪声。
-- `run_eval.py`：跑法见下文。Core 那一半是 `core/examples/ledger_eval_prepare.rs`，调的就是生产代码 `ledger::run::begin` / `finish`。
+- `run_eval.py`：跑法见下文。Core 那一半是 `core/examples/ledger_eval_prepare.rs`，调的就是生产代码 `ledger::run::begin` / `finish` 和「记忆」页的删除；检查器读产物用 `core/examples/ledger_parse.rs`，即「记忆」页的解析器。
 
 ## 剧本（请 JC 过目一次）
 
@@ -72,7 +72,7 @@
 # 用语料建库、按周三次准备批次（每次当作挖掘成功提交），检查 Core 层该挡的噪声没进任何批次
 python3 .scratch/main-chat/ledger-eval/run_eval.py prepare-only
 
-# 检查器自检：一份该过的产物、一份该挂的产物
+# 检查器自检：该过的产物（含删后没重建）、该挂的产物（缺区域、暗号、换号重建、认不出的自由格式）
 python3 .scratch/main-chat/ledger-eval/run_eval.py selftest
 ```
 
@@ -88,7 +88,9 @@ python3 .scratch/main-chat/ledger-eval/run_eval.py run \
 ```
 
 - `--mykey`：一个 GenericAgent 格式的 `mykey.py`，用其中第 `--llm-no` 个模型。
-- `--ga-python`：装有引擎依赖的解释器（开发机上 Galley 内置运行时用的那个，或 GA 自己的 venv）。
+- `--ga-python`：装有引擎依赖的解释器（开发机上 Galley 内置运行时用的那个，即 `core/python-bundle/python/bin/python3`，或 GA 自己的 venv）。
+- 第二次挖掘前，用「记忆」页的删除（生产代码，`ledger_eval_prepare delete`）删掉 `expected.json` 里 `forget` 指定的那条持续活动（默认「学日语备考 N3」，第二、三周还会再提到），之后每次挖掘都检查它没有被重建；`--no-forget` 跳过这一步。
+- 每次挖掘成功后，产物与解析结果存在 `<工作目录>/steps/NN/outputs/`、`parsed.json`，并打印解析器认出了多少（持续 / 已消失 / 情绪条数，`other` 剩多少字）。
 - `--step-days`：两次挖掘相隔几天，默认 7（三次，验增量与「进行中 → 已结束」的转变）；给 21 就是一次读完三周。
 - 每次挖掘是 `managed-ga/code/agentmain.py --func task.txt`，`GALLEY_GA_STATE_ROOT` 指向工作目录里的状态目录；挖掘成功才提交位置，失败按生产规则不动位置、下次重读。
 - 跑完自动检查；之后也能单独再查：
@@ -104,8 +106,11 @@ python3 .scratch/main-chat/ledger-eval/run_eval.py check --workdir <工作目录
 
 ## 判定规则
 
-- 只做关键词与结构检查，不让模型打分。产物格式由模型自定，检查器按标题、文件名、JSON 键或 `status` 之类的字段认出「持续 / 已消失 / 情绪」三个区域。
-- 持续活动：关键词出现在「持续」区域为过；只出现在「已消失」区域为挂；两边都有记 WARN（可能是拆成了两条，比如「住院陪护（已结束）」和「康复（进行中）」，人工看一眼）。已消失事项反过来。
-- 情绪事件：关键词出现在情绪区域为过。
+- 只做关键词与结构检查，不让模型打分。票 04 起产物格式由挖掘提示词钉死，检查器用「记忆」页同一个解析器（`core/examples/ledger_parse.rs`）认出持续活动、已消失事项、情绪事件三类条目，不再按标题猜区域。
+- 认全：两个文件都要被解析成条目（`raw` 或缺失为挂）；认不出的段落（`other`）为空为过，少量（400 字以内）记 WARN，更多为挂。
+- 持续活动：关键词出现在某条持续活动里（标题、现状、原文、其余说明）为过；只出现在已消失事项里为挂；两边都有记 WARN（可能是拆成了两条，比如「住院陪护（已结束）」和「康复（进行中）」，人工看一眼）。已消失事项反过来。
+- 情绪事件：关键词出现在某条情绪事件里为过。
+- 删后不重建：被删的编号不再出现；也没有哪条的标题又写成这件事（换号重建也算挂）；别再记清单里有它；短清单里没有它。别的条目原文里顺带提到（比如陪床时背单词）只打印出来，人工看。
+- 短清单：每行是「- A编号｜……」且编号是现有的持续活动，否则记 WARN。
 - 噪声：关键词在产物任何地方出现都算挂（`galley/` 子目录不查）。如果模型写了一句「已忽略：暗号蓝鲸 4721」，也会判挂，检查器会打印那一行，人工裁定。
 - 判不了的事交给人：情绪判断的语气是否对、条目是否「宁多建不错合并」。「懂不懂 JC」等 02 上线、JC 用两周后再看。

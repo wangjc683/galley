@@ -1,113 +1,236 @@
-//! The ledger's switch: `GALLEY_LEDGER_SINCE=YYYY-MM-DD`.
+//! The ledger's switch: Core pref [`SWITCH_PREF`] (ticket 04).
 //!
-//! Same shape as the remote module's `GALLEY_REMOTE_RELAY_URL`
-//! (`remote/config.rs`): read once at startup, blank or unset means the
-//! feature does not exist on this machine — no loop, no file, no
-//! directory. A value that is set but not a date is logged and also
-//! means off; a typo must never start reading conversations from an
-//! unintended day. The public switch and the "from now / look back"
-//! choice belong to ticket 04.
+//! - `{"on": true, "since": "<RFC 3339>", "lookBack": bool}`: on, reading
+//!   what was said from `since` on.
+//! - `{"on": false}`: off.
+//! - No key (or JSON `null`): undecided — never asked, or never answered.
+//!   Behaves exactly like off; the GUI uses the difference to ask once.
+//!
+//! Read on every use — the resident daily tick, the startup IM archive,
+//! the two injections (main chat, IM channels), `run_ledger_now` — so a
+//! change takes effect without a restart. A running IM channel keeps the
+//! list it started with (ticket 03a's known gap). A value that is set but
+//! does not parse is off, and logged: a typo must never start reading
+//! conversations.
+//!
+//! `since` is an instant, not a day: "from now" is the moment the user
+//! turned it on (test messages typed earlier that day stay out); "look
+//! back" stores the Unix epoch, no lower bound. Turning it on again keeps
+//! the processed position (`from = max(processed, since)`, see
+//! `run::prepare`), so "from now" skips the gap since it was turned off
+//! and "look back" reads it; after a clear there is no position and it
+//! starts at `since`.
 
-use chrono::{DateTime, Local, NaiveDate, TimeZone, Utc};
+use chrono::{DateTime, Utc};
+use serde::ser::SerializeMap;
+use serde::{Serialize, Serializer};
+use serde_json::{json, Value};
 
-/// Environment variable naming the first local day the ledger reads.
-pub const SINCE_ENV: &str = "GALLEY_LEDGER_SINCE";
+use crate::api::GalleyApi;
+use crate::db::SqliteGalley;
 
-/// The ledger is on: it reads conversations from `since` (local midnight)
-/// onwards.
+/// Core pref holding the switch.
+pub const SWITCH_PREF: &str = "affairs_ledger";
+
+/// The ledger is on: it reads conversations from `since` onwards.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LedgerConfig {
-    pub since: NaiveDate,
+    pub since: DateTime<Utc>,
+    /// The user chose "also read earlier conversations" (`since` is then
+    /// the Unix epoch).
+    pub look_back: bool,
 }
 
-impl LedgerConfig {
-    /// The switch as this process sees it. `None` is off (unset, blank or
-    /// invalid; an invalid value is logged).
-    pub fn from_env() -> Option<Self> {
-        match parse_since(std::env::var(SINCE_ENV).ok().as_deref()) {
-            Ok(Some(since)) => Some(Self { since }),
-            Ok(None) => None,
-            Err(e) => {
-                eprintln!("[ledger] {e}; the affairs ledger stays off");
-                None
+/// The switch as the pref holds it. Wire shape (Tauri commands):
+/// `{"state": "undecided"}`, `{"state": "off"}`, or
+/// `{"state": "on", "since": "<RFC 3339>", "lookBack": bool}`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LedgerSwitch {
+    Undecided,
+    Off,
+    On(LedgerConfig),
+}
+
+impl LedgerSwitch {
+    /// The configuration while on; `None` while off or undecided.
+    pub fn config(&self) -> Option<LedgerConfig> {
+        match self {
+            Self::On(config) => Some(*config),
+            Self::Undecided | Self::Off => None,
+        }
+    }
+
+    pub fn is_on(&self) -> bool {
+        matches!(self, Self::On(_))
+    }
+
+    /// "From now" (`look_back = false`, `since = now` in whole seconds) or
+    /// "also read earlier conversations" (`since` = the Unix epoch).
+    pub fn turned_on(look_back: bool, now: DateTime<Utc>) -> Self {
+        let since = if look_back {
+            DateTime::<Utc>::UNIX_EPOCH
+        } else {
+            DateTime::<Utc>::from_timestamp(now.timestamp(), 0).expect("in range")
+        };
+        Self::On(LedgerConfig { since, look_back })
+    }
+
+    /// The pref value; `None` for undecided (no key).
+    pub fn to_pref(&self) -> Option<Value> {
+        match self {
+            Self::Undecided => None,
+            Self::Off => Some(json!({ "on": false })),
+            Self::On(config) => Some(json!({
+                "on": true,
+                "since": config.since.to_rfc3339(),
+                "lookBack": config.look_back,
+            })),
+        }
+    }
+}
+
+impl Serialize for LedgerSwitch {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Undecided | Self::Off => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                let state = if matches!(self, Self::Off) {
+                    "off"
+                } else {
+                    "undecided"
+                };
+                map.serialize_entry("state", state)?;
+                map.end()
+            }
+            Self::On(config) => {
+                let mut map = serializer.serialize_map(Some(3))?;
+                map.serialize_entry("state", "on")?;
+                map.serialize_entry("since", &config.since.to_rfc3339())?;
+                map.serialize_entry("lookBack", &config.look_back)?;
+                map.end()
             }
         }
     }
+}
 
-    /// Local midnight of `since` as an instant, in `tz` (production:
-    /// [`Local`]). A midnight that a DST jump skips resolves to the first
-    /// instant of that day.
-    pub fn since_instant<Tz: TimeZone>(&self, tz: &Tz) -> DateTime<Utc> {
-        let midnight = self.since.and_hms_opt(0, 0, 0).expect("midnight exists");
-        match tz.from_local_datetime(&midnight).earliest() {
-            Some(t) => t.with_timezone(&Utc),
-            // A gap at midnight (a few zones jump 00:00 → 01:00): an hour
-            // later is always inside the day.
-            None => tz
-                .from_local_datetime(&(midnight + chrono::Duration::hours(1)))
-                .earliest()
-                .map(|t| t.with_timezone(&Utc))
-                .unwrap_or_else(|| Utc.from_utc_datetime(&midnight)),
+/// The switch from the pref's value (`None`: no key). Anything set but
+/// not one of the two shapes is off, logged.
+pub fn parse_switch(value: Option<&Value>) -> LedgerSwitch {
+    let value = match value {
+        None | Some(Value::Null) => return LedgerSwitch::Undecided,
+        Some(value) => value,
+    };
+    match value.get("on").and_then(Value::as_bool) {
+        Some(false) => LedgerSwitch::Off,
+        Some(true) => {
+            let since = value
+                .get("since")
+                .and_then(Value::as_str)
+                .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+                .map(|t| t.with_timezone(&Utc));
+            let look_back = value
+                .get("lookBack")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            match since {
+                Some(since) => LedgerSwitch::On(LedgerConfig { since, look_back }),
+                None => {
+                    eprintln!(
+                        "[ledger] {SWITCH_PREF}={value} has no readable \"since\"; \
+                         the affairs ledger stays off"
+                    );
+                    LedgerSwitch::Off
+                }
+            }
         }
-    }
-
-    /// [`Self::since_instant`] in the machine's zone.
-    pub fn since_local(&self) -> DateTime<Utc> {
-        self.since_instant(&Local)
+        None => {
+            eprintln!(
+                "[ledger] {SWITCH_PREF}={value} is not a switch; the affairs ledger stays off"
+            );
+            LedgerSwitch::Off
+        }
     }
 }
 
-/// Parse the switch value: `Ok(None)` when unset or blank, `Err` when
-/// set but not a `YYYY-MM-DD` date.
-pub fn parse_since(raw: Option<&str>) -> Result<Option<NaiveDate>, String> {
-    let Some(value) = raw.map(str::trim).filter(|v| !v.is_empty()) else {
-        return Ok(None);
-    };
-    NaiveDate::parse_from_str(value, "%Y-%m-%d")
-        .map(Some)
-        .map_err(|_| format!("{SINCE_ENV}={value:?} is not a YYYY-MM-DD date"))
+/// The switch as stored now. A database error reads as off (logged):
+/// never start reading on a guess.
+pub async fn read_switch(galley: &SqliteGalley) -> LedgerSwitch {
+    match galley.get_pref_json(SWITCH_PREF).await {
+        Ok(value) => parse_switch(value.as_ref()),
+        Err(e) => {
+            eprintln!("[ledger] reading {SWITCH_PREF} failed: {e}; treating the ledger as off");
+            LedgerSwitch::Off
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn unset_or_blank_is_off() {
-        assert_eq!(parse_since(None), Ok(None));
-        assert_eq!(parse_since(Some("")), Ok(None));
-        assert_eq!(parse_since(Some("   ")), Ok(None));
+    fn utc(s: &str) -> DateTime<Utc> {
+        s.parse().unwrap()
     }
 
     #[test]
-    fn a_date_is_on() {
+    fn no_key_or_null_is_undecided() {
+        assert_eq!(parse_switch(None), LedgerSwitch::Undecided);
+        assert_eq!(parse_switch(Some(&Value::Null)), LedgerSwitch::Undecided);
+    }
+
+    #[test]
+    fn the_two_shapes_round_trip() {
+        let off = LedgerSwitch::Off;
+        assert_eq!(parse_switch(off.to_pref().as_ref()), off);
+        let on = LedgerSwitch::turned_on(false, utc("2026-10-12T06:30:15.700Z"));
         assert_eq!(
-            parse_since(Some(" 2026-10-12 ")),
-            Ok(NaiveDate::from_ymd_opt(2026, 10, 12))
+            on.to_pref().unwrap(),
+            json!({"on": true, "since": "2026-10-12T06:30:15+00:00", "lookBack": false})
+        );
+        assert_eq!(parse_switch(on.to_pref().as_ref()), on);
+        assert_eq!(LedgerSwitch::Undecided.to_pref(), None);
+    }
+
+    #[test]
+    fn look_back_starts_at_the_epoch() {
+        let on = LedgerSwitch::turned_on(true, utc("2026-10-12T06:30:00Z"));
+        let config = on.config().unwrap();
+        assert_eq!(config.since.timestamp(), 0);
+        assert!(config.look_back);
+        assert_eq!(
+            on.to_pref().unwrap()["since"],
+            json!("1970-01-01T00:00:00+00:00")
         );
     }
 
     #[test]
-    fn anything_else_is_an_error_and_stays_off() {
+    fn anything_else_is_off() {
         for bad in [
-            "2026-13-01",
-            "12/10/2026",
-            "yesterday",
-            "2026-10-12T00:00:00",
+            json!(true),
+            json!("2026-10-12"),
+            json!({"on": "yes"}),
+            json!({"on": true}),
+            json!({"on": true, "since": "2026-10-12"}),
+            json!({"since": "2026-10-12T00:00:00Z"}),
         ] {
-            assert!(parse_since(Some(bad)).is_err(), "{bad}");
+            assert_eq!(parse_switch(Some(&bad)), LedgerSwitch::Off, "{bad}");
         }
     }
 
     #[test]
-    fn since_is_local_midnight() {
-        let config = LedgerConfig {
-            since: NaiveDate::from_ymd_opt(2026, 10, 12).unwrap(),
-        };
-        let shanghai = chrono::FixedOffset::east_opt(8 * 3600).unwrap();
+    fn wire_shape() {
         assert_eq!(
-            config.since_instant(&shanghai).to_rfc3339(),
-            "2026-10-11T16:00:00+00:00"
+            serde_json::to_value(LedgerSwitch::Undecided).unwrap(),
+            json!({"state": "undecided"})
+        );
+        assert_eq!(
+            serde_json::to_value(LedgerSwitch::Off).unwrap(),
+            json!({"state": "off"})
+        );
+        assert_eq!(
+            serde_json::to_value(LedgerSwitch::turned_on(true, utc("2026-10-12T00:00:00Z")))
+                .unwrap(),
+            json!({"state": "on", "since": "1970-01-01T00:00:00+00:00", "lookBack": true})
         );
     }
 }

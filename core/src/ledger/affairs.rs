@@ -16,12 +16,26 @@
 //! [`AFFAIRS_CAP_BYTES`] at a line boundary, keeping the top (the most
 //! recently active items, as the task asks).
 //!
-//! Same switch as the ledger: with `GALLEY_LEDGER_SINCE` unset there is
-//! no list to read and no section ([`for_injection`]).
+//! Each line carries its activity's number (`- A001｜…`, ticket 04) so a
+//! delete on the Memory page takes the line with the entry
+//! ([`remove_affair`]). The number is for Galley, not the model: it is
+//! stripped before injection ([`strip_number`]; a line without one is
+//! kept as it is), and the caps count what is left.
+//!
+//! Same switch as the ledger: while it is off (or undecided) there is no
+//! section, and the file is not even read ([`for_injection`]).
 
 use std::path::Path;
+use std::sync::LazyLock;
 
-use super::{LedgerConfig, LedgerPaths};
+use regex::Regex;
+
+use super::LedgerPaths;
+
+/// `A001｜` at the start of a line (after its `- `): the activity's
+/// number, for Galley only.
+static NUMBER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^([AE]\d+)\s*[｜|]\s*").expect("number regex"));
 
 /// Byte cap on the injected list (the lines, not the section heading).
 ///
@@ -41,15 +55,60 @@ pub const AFFAIRS_CAP_BYTES: usize = 1536;
 /// file costs no more.
 const READ_LIMIT_BYTES: u64 = 64 * 1024;
 
+/// `(bullet, number, rest)` of a short-list line: `- A001｜事` is
+/// `("- ", Some("A001"), "事")`.
+fn split_number(line: &str) -> (&str, Option<&str>, &str) {
+    let (bullet, body) = match line.strip_prefix("- ") {
+        Some(body) => ("- ", body),
+        None => ("", line),
+    };
+    match NUMBER.captures(body) {
+        Some(caps) => {
+            let whole = caps.get(0).expect("group 0");
+            let number = caps.get(1).expect("group 1").as_str();
+            (bullet, Some(number), &body[whole.end()..])
+        }
+        None => (bullet, None, body),
+    }
+}
+
+/// One line as it is injected: its number taken out.
+pub fn strip_number(line: &str) -> String {
+    let (bullet, _, rest) = split_number(line);
+    format!("{bullet}{rest}")
+}
+
+/// The short list without the lines numbered `id`, every other byte as
+/// it was; `None` when no line carries that number.
+pub fn remove_affair(raw: &str, id: &str) -> Option<String> {
+    let mut out = String::with_capacity(raw.len());
+    let mut removed = false;
+    for line in raw.split_inclusive('\n') {
+        let (_, number, _) = split_number(line.trim());
+        if number == Some(id) {
+            removed = true;
+        } else {
+            out.push_str(line);
+        }
+    }
+    removed.then_some(out)
+}
+
 /// The list cleaned and cut to `cap` bytes, or `None` when nothing is
-/// left. Lines are trimmed; blank lines and Markdown headings are
-/// dropped; whole lines are kept from the top while they fit (counting
-/// the newline between them). A first line longer than the cap on its
-/// own is cut at a character boundary and marked with `…`.
+/// left. Lines are trimmed and their numbers stripped; blank lines,
+/// Markdown headings and bare numbers are dropped; whole lines are kept
+/// from the top while they fit (counting the newline between them). A
+/// first line longer than the cap on its own is cut at a character
+/// boundary and marked with `…`.
 pub fn cap_affairs(raw: &str, cap: usize) -> Option<String> {
     let mut out = String::new();
     for line in raw.lines().map(str::trim) {
         if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let stripped = strip_number(line);
+        let line = stripped.trim_end();
+        if line.is_empty() || line == "-" {
             continue;
         }
         let needed = if out.is_empty() {
@@ -97,23 +156,18 @@ pub fn read_affairs(paths: &LedgerPaths) -> Option<String> {
 }
 
 /// The list to inject, under the ledger's switch: `None` while the
-/// ledger is off (`config` is `None`) or before the first run wrote a
-/// list.
-pub fn for_injection(config: Option<LedgerConfig>, state_root: &Path) -> Option<String> {
-    config?;
+/// ledger is not on (the file is not read) or before the first run wrote
+/// a list.
+pub fn for_injection(on: bool, state_root: &Path) -> Option<String> {
+    if !on {
+        return None;
+    }
     read_affairs(&LedgerPaths::new(state_root.to_path_buf()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::NaiveDate;
-
-    fn on() -> Option<LedgerConfig> {
-        Some(LedgerConfig {
-            since: NaiveDate::from_ymd_opt(2026, 10, 12).unwrap(),
-        })
-    }
 
     #[test]
     fn keeps_whole_lines_from_the_top_within_the_cap() {
@@ -189,18 +243,51 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let paths = LedgerPaths::new(dir.path().to_path_buf());
         // On, but no run has written a list yet.
-        assert_eq!(for_injection(on(), dir.path()), None);
+        assert_eq!(for_injection(true, dir.path()), None);
         std::fs::create_dir_all(paths.insight_dir()).unwrap();
         std::fs::write(paths.affairs_file(), "- 半马备赛\n").unwrap();
         assert_eq!(
-            for_injection(on(), dir.path()).as_deref(),
+            for_injection(true, dir.path()).as_deref(),
             Some("- 半马备赛")
         );
         // Off: the file is not even read.
-        assert_eq!(for_injection(None, dir.path()), None);
+        assert_eq!(for_injection(false, dir.path()), None);
         // A list the run emptied (no ongoing affairs) is no section.
         std::fs::write(paths.affairs_file(), "\n").unwrap();
-        assert_eq!(for_injection(on(), dir.path()), None);
+        assert_eq!(for_injection(true, dir.path()), None);
+    }
+
+    /// Ticket 04: the numbers are Galley's; the model never sees them,
+    /// and the caps count what is left.
+    #[test]
+    fn numbers_are_stripped_before_injection() {
+        let raw = "- A001｜半马备赛：本周长距离 18 公里\n- A003 | 日语 N3\n- 没带编号的一行\nA004｜没有横线\n";
+        assert_eq!(
+            cap_affairs(raw, AFFAIRS_CAP_BYTES).as_deref(),
+            Some("- 半马备赛：本周长距离 18 公里\n- 日语 N3\n- 没带编号的一行\n没有横线")
+        );
+        let line = format!("- A012｜{}", "事".repeat(40));
+        let raw = vec![line; 12].join("\n");
+        let capped = cap_affairs(&raw, AFFAIRS_CAP_BYTES).unwrap();
+        assert_eq!(capped.lines().count(), 12);
+        assert!(!capped.contains("A012"));
+        // A line that is only a number is no item.
+        assert_eq!(cap_affairs("- A001｜\n", AFFAIRS_CAP_BYTES), None);
+    }
+
+    #[test]
+    fn removing_an_affair_takes_its_numbered_line_only() {
+        let raw = "- A001｜半马\n- A003｜日语\n- 没编号\n- A0031｜别的\n";
+        assert_eq!(
+            remove_affair(raw, "A003").as_deref(),
+            Some("- A001｜半马\n- 没编号\n- A0031｜别的\n")
+        );
+        assert_eq!(remove_affair(raw, "A009"), None);
+        let crlf = raw.replace('\n', "\r\n");
+        assert_eq!(
+            remove_affair(&crlf, "A001").as_deref(),
+            Some("- A003｜日语\r\n- 没编号\r\n- A0031｜别的\r\n")
+        );
     }
 
     #[test]

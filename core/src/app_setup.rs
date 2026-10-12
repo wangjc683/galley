@@ -33,7 +33,8 @@ pub(crate) fn setup_app(
     }
     write_cli_discovery_file();
     // The affairs ledger copies IM turns out of the engine logs before
-    // the prune can delete them (no-op unless GALLEY_LEDGER_SINCE is set).
+    // the prune can delete them (no-op unless its switch, the
+    // `affairs_ledger` pref, is on).
     crate::ledger::archive_before_prune(app);
     prune_engine_logs(app);
     start_background_services(app);

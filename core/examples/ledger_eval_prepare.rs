@@ -8,18 +8,20 @@
 //! `ledger::run::begin` (IM archive, source selection, batch file,
 //! pending position) at a chosen local time, and writes the mining task
 //! to `<workdir>/task.txt`; `commit` / `fail` are `ledger::run::finish`
-//! with the run's verdict. The model run in between is
-//! `run_eval.py`'s, against the same state root.
+//! with the run's verdict; `delete` is the Memory page's delete
+//! (`LedgerControl::delete_entry`, ticket 04). The model run in between
+//! is `run_eval.py`'s, against the same state root.
 //!
 //! ```text
 //! cargo run --manifest-path core/Cargo.toml -p galley-core --example ledger_eval_prepare -- \
 //!   --corpus .scratch/main-chat/ledger-eval/corpus.json --workdir /tmp/x prepare --now "2026-09-14 04:00"
 //! cargo run … --example ledger_eval_prepare -- --corpus … --workdir /tmp/x commit
 //! cargo run … --example ledger_eval_prepare -- --corpus … --workdir /tmp/x fail --reason "…"
+//! cargo run … --example ledger_eval_prepare -- --corpus … --workdir /tmp/x delete --id A003
 //! ```
 //!
 //! Prints one JSON line: `{"status": "ready" | "empty" | "committed" |
-//! "failed", …}`.
+//! "failed" | "deleted", …}`.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -29,7 +31,7 @@ use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::ledger::im_archive::FILE_HINT;
 use galley_core_lib::ledger::run::{begin, finish, Begun};
 use galley_core_lib::ledger::state::LedgerState;
-use galley_core_lib::ledger::{LedgerConfig, LedgerPaths, LedgerTarget};
+use galley_core_lib::ledger::{LedgerConfig, LedgerControl, LedgerPaths, LedgerTarget};
 use serde::Deserialize;
 use serde_json::json;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool};
@@ -272,6 +274,7 @@ async fn main() {
     let mut command: Option<String> = None;
     let mut now_arg: Option<String> = None;
     let mut reason = String::from("the model run failed");
+    let mut entry_id: Option<String> = None;
     let mut it = args.into_iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -279,13 +282,14 @@ async fn main() {
             "--workdir" => workdir = it.next().map(PathBuf::from),
             "--now" => now_arg = it.next(),
             "--reason" => reason = it.next().unwrap_or(reason),
-            "prepare" | "commit" | "fail" => command = Some(a),
+            "--id" => entry_id = it.next(),
+            "prepare" | "commit" | "fail" | "delete" => command = Some(a),
             other => fail(format!("unknown argument {other:?}")),
         }
     }
     let corpus_path = corpus_path.unwrap_or_else(|| fail("--corpus is required"));
     let workdir = workdir.unwrap_or_else(|| fail("--workdir is required"));
-    let command = command.unwrap_or_else(|| fail("prepare | commit | fail"));
+    let command = command.unwrap_or_else(|| fail("prepare | commit | fail | delete"));
     guard_workdir(&workdir);
 
     let corpus: Corpus = serde_json::from_str(
@@ -297,9 +301,17 @@ async fn main() {
         .utc_offset
         .parse()
         .unwrap_or_else(|_| fail(format!("utcOffset {:?}", corpus.utc_offset)));
+    // The corpus names a day; the switch holds an instant: that day's
+    // local midnight, as "from now" turned on at 00:00 would.
+    let since_day = NaiveDate::parse_from_str(&corpus.since, "%Y-%m-%d")
+        .unwrap_or_else(|_| fail(format!("since {:?}", corpus.since)));
     let config = LedgerConfig {
-        since: NaiveDate::parse_from_str(&corpus.since, "%Y-%m-%d")
-            .unwrap_or_else(|_| fail(format!("since {:?}", corpus.since))),
+        since: tz
+            .from_local_datetime(&since_day.and_hms_opt(0, 0, 0).expect("midnight"))
+            .single()
+            .expect("fixed offset")
+            .with_timezone(&Utc),
+        look_back: false,
     };
     let paths = LedgerPaths::new(workdir.join("managed-ga-state"));
 
@@ -353,12 +365,21 @@ async fn main() {
             }
         }
         "commit" => {
-            finish(&paths, &mut state, None, &Ok(())).unwrap_or_else(|e| fail(e));
+            finish(&paths, &mut state, None, &Ok(()), Utc::now()).unwrap_or_else(|e| fail(e));
             println!("{}", json!({"status": "committed", "mined": state.mined}));
         }
         "fail" => {
-            finish(&paths, &mut state, None, &Err(reason)).unwrap_or_else(|e| fail(e));
+            finish(&paths, &mut state, None, &Err(reason), Utc::now()).unwrap_or_else(|e| fail(e));
             println!("{}", json!({"status": "failed", "mined": state.mined}));
+        }
+        "delete" => {
+            // The Memory page's delete, production code.
+            let id = entry_id.unwrap_or_else(|| fail("delete needs --id"));
+            LedgerControl::new()
+                .delete_entry(&galley, &paths, &id, Utc::now())
+                .await
+                .unwrap_or_else(|e| fail(format!("delete {id}: {e}")));
+            println!("{}", json!({"status": "deleted", "id": id}));
         }
         _ => unreachable!(),
     }

@@ -14,15 +14,19 @@
 //! daily due rule) are unit-tested next to their code.
 
 use async_trait::async_trait;
-use chrono::{DateTime, FixedOffset, NaiveDate, Utc};
+use chrono::{DateTime, FixedOffset, Utc};
 use galley_core_lib::api::{GalleyApi, OriginVia, SessionFilter, SessionId, SessionStatus};
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::ipc::{IpcCommand, IpcEvent, RunCompleteEvent};
+use galley_core_lib::ledger::config::SWITCH_PREF;
+use galley_core_lib::ledger::control::{
+    self, LedgerControl, SwitchChange, LEDGER_BUSY, MANAGED_ONLY, NOT_FOUND,
+};
 use galley_core_lib::ledger::im_archive::FILE_HINT;
 use galley_core_lib::ledger::state::LedgerState;
 use galley_core_lib::ledger::{
-    is_mining_session, run, sources, LedgerConfig, LedgerPaths, LedgerTarget, MiningDeps,
-    RunReport, Trigger, LEDGER_SUPERVISOR,
+    forgotten, global_memory, is_mining_session, run, sources, LedgerConfig, LedgerPaths,
+    LedgerSwitch, LedgerTarget, MiningDeps, RunReport, Trigger, LEDGER_SUPERVISOR,
 };
 use galley_core_lib::runner_manager::{
     BroadcastItem, RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
@@ -124,7 +128,9 @@ fn shanghai() -> FixedOffset {
 
 fn config() -> LedgerConfig {
     LedgerConfig {
-        since: NaiveDate::from_ymd_opt(2026, 10, 10).unwrap(), // 2026-10-09T16:00Z
+        // 2026-10-10 00:00 in Shanghai.
+        since: "2026-10-09T16:00:00Z".parse().unwrap(),
+        look_back: false,
     }
 }
 
@@ -275,7 +281,7 @@ async fn reads_only_what_a_human_typed_into_gui_managed_sessions_since() {
         .await
         .unwrap();
 
-    let since = config().since_instant(&shanghai());
+    let since = config().since;
     let turns = sources::gui_turns(&galley, since, utc("2026-10-11T00:00:00Z"))
         .await
         .unwrap();
@@ -454,6 +460,7 @@ async fn run_at(
         utc(now),
         &shanghai(),
         Duration::from_secs(5),
+        &run::RunHooks::default(),
     )
     .await
 }
@@ -784,4 +791,747 @@ async fn scheduled_runs_once_a_day_manual_runs_whenever() {
     )
     .await;
     assert!(matches!(report, RunReport::Succeeded { .. }), "{report:?}");
+}
+
+// ---------------- ticket 04: the switch, the cap, the page ----------------
+
+async fn switch_on(galley: &SqliteGalley, config: LedgerConfig) {
+    galley
+        .set_pref_json(SWITCH_PREF, LedgerSwitch::On(config).to_pref().unwrap())
+        .await
+        .unwrap();
+}
+
+/// One attempt through the control, as the resident tick makes it.
+#[allow(clippy::too_many_arguments)]
+async fn control_run(
+    control: &LedgerControl,
+    galley: &SqliteGalley,
+    runner: &FakeRunner,
+    paths: &LedgerPaths,
+    trigger: Trigger,
+    now: &str,
+    timeout: Duration,
+) -> RunReport {
+    let deps = MiningDeps {
+        galley,
+        runner,
+        env: Some(&FakeEnv),
+    };
+    control
+        .run(&deps, paths, trigger, utc(now), &shanghai(), timeout, None)
+        .await
+}
+
+/// Until a run is going and its task has been dispatched.
+async fn until_running(control: &LedgerControl, runner: &FakeRunner) {
+    for _ in 0..500 {
+        if control.is_running() && !runner.tasks.lock().unwrap().is_empty() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("the run never got going");
+}
+
+fn files_under(dir: &std::path::Path) -> Vec<String> {
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            out.extend(files_under(&path));
+        } else {
+            out.push(path.display().to_string());
+        }
+    }
+    out
+}
+
+#[tokio::test]
+async fn undecided_or_off_runs_nothing_and_creates_nothing() {
+    let (pool, galley) = fresh().await;
+    seed_mix(&pool).await;
+    let dir = tempfile::tempdir().unwrap();
+    let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
+    let control = LedgerControl::new();
+    let runner = FakeRunner::new(vec![run_complete("CURRENT_TASK_DONE")]);
+
+    assert_eq!(
+        control::get_switch(&galley).await.unwrap(),
+        LedgerSwitch::Undecided
+    );
+    for _ in 0..2 {
+        let report = control_run(
+            &control,
+            &galley,
+            &runner,
+            &paths,
+            Trigger::Manual,
+            "2026-10-11T01:00:00Z",
+            Duration::from_secs(5),
+        )
+        .await;
+        assert!(matches!(report, RunReport::Skipped { .. }), "{report:?}");
+        galley
+            .set_pref_json(SWITCH_PREF, json!({"on": false}))
+            .await
+            .unwrap();
+    }
+    assert!(!paths.state_root().exists());
+    assert!(runner.spawned.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn the_external_runtime_gets_managed_only_from_every_page_command() {
+    let (pool, galley) = fresh().await;
+    seed_mix(&pool).await;
+    galley
+        .set_pref_json("active_runtime_kind", json!("external"))
+        .await
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
+    let control = LedgerControl::new();
+    let now = utc("2026-10-11T01:00:00Z");
+    let only = Err::<(), String>(MANAGED_ONLY.into());
+
+    assert_eq!(control::get_switch(&galley).await.map(|_| ()), only);
+    assert_eq!(
+        control
+            .overview(&galley, &paths, now, &shanghai())
+            .await
+            .map(|_| ()),
+        only
+    );
+    for change in [
+        SwitchChange::Enable { look_back: true },
+        SwitchChange::Disable { clear: true },
+    ] {
+        assert_eq!(
+            control
+                .set_switch(&galley, &paths, change, now)
+                .await
+                .map(|_| ()),
+            only
+        );
+    }
+    assert_eq!(
+        control.delete_entry(&galley, &paths, "A001", now).await,
+        only
+    );
+    assert_eq!(control.unforget(&galley, &paths, "A001").await, only);
+    assert_eq!(
+        control
+            .write_global_memory(&galley, &paths, "global_mem.txt", "x", "r")
+            .await
+            .map(|_| ()),
+        only
+    );
+    // Nothing read into existence, nothing written, the switch untouched.
+    assert!(!dir.path().join("managed-ga-state").exists());
+    assert_eq!(galley.get_pref_json(SWITCH_PREF).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn turning_on_from_now_skips_what_was_said_before_and_waits_for_four() {
+    let (pool, galley) = fresh().await;
+    seed_mix(&pool).await;
+    let dir = tempfile::tempdir().unwrap();
+    let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
+    let control = LedgerControl::new();
+
+    // 2026-10-11 10:00 in Shanghai: everything seeded is earlier.
+    let switch = control
+        .set_switch(
+            &galley,
+            &paths,
+            SwitchChange::Enable { look_back: false },
+            utc("2026-10-11T02:00:00.600Z"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(switch).unwrap(),
+        json!({"state": "on", "since": "2026-10-11T02:00:00+00:00", "lookBack": false})
+    );
+    assert_eq!(control::get_switch(&galley).await.unwrap(), switch);
+    // Nothing written on the way: "from now" has nothing to schedule.
+    assert!(!paths.state_root().exists());
+
+    said(
+        &pool,
+        "s-gui",
+        10,
+        "2026-10-11T03:00:00+00:00",
+        "打开之后说的",
+    )
+    .await;
+    let runner = FakeRunner::new(vec![run_complete("CURRENT_TASK_DONE")]);
+    // Same day, after it was turned on: not due.
+    let report = control_run(
+        &control,
+        &galley,
+        &runner,
+        &paths,
+        Trigger::Scheduled,
+        "2026-10-11T08:00:00Z",
+        Duration::from_secs(5),
+    )
+    .await;
+    assert!(matches!(report, RunReport::Skipped { .. }), "{report:?}");
+    // Next day, 04:00 Shanghai.
+    let report = control_run(
+        &control,
+        &galley,
+        &runner,
+        &paths,
+        Trigger::Scheduled,
+        "2026-10-11T20:00:00Z",
+        Duration::from_secs(5),
+    )
+    .await;
+    assert!(
+        matches!(report, RunReport::Succeeded { turns: 1, .. }),
+        "{report:?}"
+    );
+    let batch = std::fs::read_to_string(paths.batch_file()).unwrap();
+    assert!(batch.contains("打开之后说的"));
+    assert!(!batch.contains("我在准备十一月的半马"));
+}
+
+#[tokio::test]
+async fn turning_on_with_look_back_reads_everything_within_a_minute() {
+    let (pool, galley) = fresh().await;
+    seed_mix_marked(&pool, &galley).await;
+    said(
+        &pool,
+        "s-gui",
+        10,
+        "2025-01-01T00:00:00+00:00",
+        "很久以前说的",
+    )
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
+    let control = LedgerControl::new();
+    let now = "2026-10-11T02:00:00Z"; // 10:00 Shanghai
+    let switch = control
+        .set_switch(
+            &galley,
+            &paths,
+            SwitchChange::Enable { look_back: true },
+            utc(now),
+        )
+        .await
+        .unwrap();
+    assert_eq!(switch.config().unwrap().since.timestamp(), 0);
+    assert_eq!(
+        state(&paths).due_at.as_deref(),
+        Some("2026-10-11T02:00:00+00:00")
+    );
+
+    let runner = FakeRunner::new(vec![run_complete("CURRENT_TASK_DONE")]);
+    let report = control_run(
+        &control,
+        &galley,
+        &runner,
+        &paths,
+        Trigger::Scheduled,
+        "2026-10-11T02:00:30Z",
+        Duration::from_secs(5),
+    )
+    .await;
+    // The three said from 2026-10-10 on, and the one long before.
+    assert!(
+        matches!(report, RunReport::Succeeded { turns: 4, .. }),
+        "{report:?}"
+    );
+    let batch = std::fs::read_to_string(paths.batch_file()).unwrap();
+    assert!(batch.contains("很久以前说的"));
+    assert!(batch.contains("since 之前的一句"));
+    // Exclusions still hold with no lower bound.
+    assert!(!batch.contains("私人项目里的话"));
+    assert_eq!(state(&paths).due_at, None);
+}
+
+#[tokio::test]
+async fn the_read_cap_splits_a_long_history_and_the_rest_follows_ten_minutes_later() {
+    let (pool, galley) = fresh().await;
+    session(&pool, "s-long", "gui", "managed", None).await;
+    let block = |c: &str| c.repeat(run::READ_CAP_CHARS / 3);
+    for (turn, (at, ch)) in [
+        ("2026-10-10T01:00:00+00:00", "甲"),
+        ("2026-10-10T02:00:00+00:00", "乙"),
+        ("2026-10-10T03:00:00+00:00", "丙"),
+        ("2026-10-10T04:00:00+00:00", "丁"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        said(&pool, "s-long", turn as i64, at, &block(ch)).await;
+    }
+    switch_on(&galley, config()).await;
+    let dir = tempfile::tempdir().unwrap();
+    let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
+    let control = LedgerControl::new();
+    let runner = FakeRunner::new(vec![run_complete("CURRENT_TASK_DONE")]);
+    let run_at_time = |now: &'static str| {
+        control_run(
+            &control,
+            &galley,
+            &runner,
+            &paths,
+            Trigger::Scheduled,
+            now,
+            Duration::from_secs(5),
+        )
+    };
+
+    // Three blocks are exactly the cap; the fourth waits.
+    let report = run_at_time("2026-10-11T01:00:00Z").await;
+    assert!(
+        matches!(report, RunReport::Succeeded { turns: 3, .. }),
+        "{report:?}"
+    );
+    let batch = std::fs::read_to_string(paths.batch_file()).unwrap();
+    assert!(batch.contains(&block("丙")) && !batch.contains("丁"));
+    let s = state(&paths);
+    assert_eq!(
+        s.mined.as_ref().unwrap().gui_until,
+        "2026-10-10T04:00:00+00:00"
+    );
+    let due_at: DateTime<Utc> = s.due_at.as_deref().unwrap().parse().unwrap();
+    let after = due_at - utc("2026-10-11T01:00:00Z");
+    assert!(
+        after >= chrono::Duration::minutes(10) && after < chrono::Duration::minutes(11),
+        "{after:?}"
+    );
+
+    // Not before the ten minutes, then the rest.
+    let report = run_at_time("2026-10-11T01:05:00Z").await;
+    assert!(matches!(report, RunReport::Skipped { .. }), "{report:?}");
+    let report = run_at_time("2026-10-11T01:11:00Z").await;
+    assert!(
+        matches!(report, RunReport::Succeeded { turns: 1, .. }),
+        "{report:?}"
+    );
+    let batch = std::fs::read_to_string(paths.batch_file()).unwrap();
+    assert!(batch.contains(&block("丁")) && !batch.contains("甲"));
+    let s = state(&paths);
+    assert_eq!(s.due_at, None);
+    assert_eq!(
+        s.mined.unwrap().gui_until,
+        "2026-10-11T01:11:00+00:00",
+        "read to the end"
+    );
+}
+
+#[tokio::test]
+async fn a_failed_run_with_more_to_read_waits_for_the_next_day() {
+    let (pool, galley) = fresh().await;
+    session(&pool, "s-long", "gui", "managed", None).await;
+    for turn in 0..4 {
+        said(
+            &pool,
+            "s-long",
+            turn,
+            &format!("2026-10-10T0{}:00:00+00:00", turn + 1),
+            &"字".repeat(run::READ_CAP_CHARS / 3),
+        )
+        .await;
+    }
+    switch_on(&galley, config()).await;
+    let dir = tempfile::tempdir().unwrap();
+    let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
+    let control = LedgerControl::new();
+    let runner = FakeRunner::new(vec![run_complete("ABORTED")]);
+    let report = control_run(
+        &control,
+        &galley,
+        &runner,
+        &paths,
+        Trigger::Scheduled,
+        "2026-10-11T01:00:00Z",
+        Duration::from_secs(5),
+    )
+    .await;
+    assert!(matches!(report, RunReport::Failed { .. }), "{report:?}");
+    let s = state(&paths);
+    assert_eq!((s.due_at, s.mined, s.pending_more), (None, None, false));
+}
+
+#[tokio::test]
+async fn switching_off_mid_run_stops_it_and_clearing_leaves_nothing_behind() {
+    let (pool, galley) = fresh().await;
+    seed_mix(&pool).await;
+    switch_on(&galley, config()).await;
+    let dir = tempfile::tempdir().unwrap();
+    let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
+    std::fs::create_dir_all(paths.insight_dir()).unwrap();
+    std::fs::write(paths.activities_file(), "## 持续活动\n### A001｜半马\n").unwrap();
+    let control = LedgerControl::new();
+    // A runner that never finishes on its own.
+    let runner = FakeRunner::new(Vec::new());
+
+    let (report, (switch, busy)) = tokio::join!(
+        control_run(
+            &control,
+            &galley,
+            &runner,
+            &paths,
+            Trigger::Manual,
+            "2026-10-11T01:00:00Z",
+            Duration::from_secs(60),
+        ),
+        async {
+            until_running(&control, &runner).await;
+            // A delete does not queue behind the run.
+            let busy = control
+                .delete_entry(&galley, &paths, "A001", utc("2026-10-11T01:00:01Z"))
+                .await;
+            let switch = control
+                .set_switch(
+                    &galley,
+                    &paths,
+                    SwitchChange::Disable { clear: true },
+                    utc("2026-10-11T01:00:02Z"),
+                )
+                .await;
+            (switch, busy)
+        }
+    );
+    assert_eq!(busy, Err(LEDGER_BUSY.into()));
+    assert_eq!(switch, Ok(LedgerSwitch::Off));
+    let RunReport::Failed { reason, session_id } = report else {
+        panic!("{report:?}");
+    };
+    assert_eq!(reason, run::STOPPED_REASON);
+    // Its runner was shut down and its row archived.
+    let session_id = session_id.unwrap();
+    assert_eq!(
+        runner.shutdowns.lock().unwrap().as_slice(),
+        &[session_id.clone()]
+    );
+    assert_eq!(
+        galley
+            .session_brief(SessionId(session_id))
+            .await
+            .unwrap()
+            .status,
+        SessionStatus::Archived
+    );
+    // The run's last state write came before the clear: nothing is back.
+    assert!(
+        !paths.insight_dir().exists(),
+        "{:?}",
+        files_under(dir.path())
+    );
+    assert!(!control.is_running());
+    assert_eq!(
+        galley.get_pref_json(SWITCH_PREF).await.unwrap(),
+        Some(json!({"on": false}))
+    );
+}
+
+#[tokio::test]
+async fn switching_off_and_keeping_leaves_the_files_and_the_position() {
+    let (pool, galley) = fresh().await;
+    seed_mix(&pool).await;
+    switch_on(&galley, config()).await;
+    let dir = tempfile::tempdir().unwrap();
+    let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
+    let control = LedgerControl::new();
+    let runner = FakeRunner::new(Vec::new());
+
+    let (report, _) = tokio::join!(
+        control_run(
+            &control,
+            &galley,
+            &runner,
+            &paths,
+            Trigger::Manual,
+            "2026-10-11T01:00:00Z",
+            Duration::from_secs(60),
+        ),
+        async {
+            until_running(&control, &runner).await;
+            control
+                .set_switch(
+                    &galley,
+                    &paths,
+                    SwitchChange::Disable { clear: false },
+                    utc("2026-10-11T01:00:02Z"),
+                )
+                .await
+                .unwrap()
+        }
+    );
+    assert!(matches!(report, RunReport::Failed { .. }), "{report:?}");
+    let s = state(&paths);
+    assert!(s.mined.is_none(), "a stopped run moves nothing");
+    let last = s.last_run.unwrap();
+    assert_eq!(
+        (last.outcome.as_str(), last.detail.as_deref()),
+        ("failed", Some(run::STOPPED_REASON))
+    );
+    assert!(paths.batch_file().exists());
+
+    // Off: the tick does nothing; on again, the position is where it was.
+    let runner = FakeRunner::new(vec![run_complete("CURRENT_TASK_DONE")]);
+    let report = control_run(
+        &control,
+        &galley,
+        &runner,
+        &paths,
+        Trigger::Manual,
+        "2026-10-11T02:00:00Z",
+        Duration::from_secs(5),
+    )
+    .await;
+    assert!(matches!(report, RunReport::Skipped { .. }), "{report:?}");
+}
+
+const ACTIVITIES: &str = "# 活动知识层
+
+## 持续活动
+
+### A001｜杭州半程马拉松备赛
+- 现状：离半马还有八周。
+- 最近：2026-09-27
+- 会话：`s-gui`
+
+### A002｜日语 N3 备考
+- 现状：这周落后，下周补两课。
+- 最近：2026-09-27
+- 会话：`s-gui`
+
+## 已消失事项
+
+### A003｜中秋活动页
+- 现状：9 月 16 日上线。
+";
+
+const EMOTIONS: &str = "# 情绪事件
+
+## E001｜手术等待时的焦急
+- 时间：2026-09-10 15:40
+- 原文：“手术还没出来”
+";
+
+fn write_outputs(paths: &LedgerPaths) {
+    std::fs::create_dir_all(paths.insight_dir()).unwrap();
+    std::fs::write(paths.activities_file(), ACTIVITIES).unwrap();
+    std::fs::write(paths.emotions_file(), EMOTIONS).unwrap();
+    std::fs::write(
+        paths.affairs_file(),
+        "- A001｜半马备赛：离比赛八周\n- A002｜日语 N3：下周补两课\n",
+    )
+    .unwrap();
+}
+
+#[tokio::test]
+async fn deleting_an_entry_is_exact_and_the_next_task_lists_it() {
+    let (pool, galley) = fresh().await;
+    seed_mix(&pool).await;
+    switch_on(&galley, config()).await;
+    let dir = tempfile::tempdir().unwrap();
+    let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
+    write_outputs(&paths);
+    let control = LedgerControl::new();
+    let now = utc("2026-10-11T01:00:00Z");
+
+    control
+        .delete_entry(&galley, &paths, "A002", now)
+        .await
+        .unwrap();
+    let start = ACTIVITIES.find("### A002").unwrap();
+    let end = ACTIVITIES.find("## 已消失事项").unwrap();
+    assert_eq!(
+        std::fs::read_to_string(paths.activities_file()).unwrap(),
+        format!("{}{}", &ACTIVITIES[..start], &ACTIVITIES[end..])
+    );
+    assert_eq!(
+        std::fs::read_to_string(paths.affairs_file()).unwrap(),
+        "- A001｜半马备赛：离比赛八周\n"
+    );
+    let list = forgotten::load(&paths.forgotten_file()).unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(
+        (list[0].id.as_str(), list[0].title.as_str()),
+        ("A002", "日语 N3 备考")
+    );
+    assert_eq!(list[0].deleted_at, "2026-10-11T01:00:00+00:00");
+
+    // Gone is gone; ids that are no entry are not found.
+    for id in ["A002", "A999", "X1", ""] {
+        assert_eq!(
+            control.delete_entry(&galley, &paths, id, now).await,
+            Err(NOT_FOUND.into()),
+            "{id}"
+        );
+    }
+    control
+        .delete_entry(&galley, &paths, "E001", now)
+        .await
+        .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(paths.emotions_file()).unwrap(),
+        "# 情绪事件\n\n"
+    );
+
+    // The next run's task tells the model what not to rebuild.
+    let runner = FakeRunner::new(vec![run_complete("CURRENT_TASK_DONE")]);
+    let report = control_run(
+        &control,
+        &galley,
+        &runner,
+        &paths,
+        Trigger::Manual,
+        "2026-10-11T02:00:00Z",
+        Duration::from_secs(5),
+    )
+    .await;
+    assert!(matches!(report, RunReport::Succeeded { .. }), "{report:?}");
+    let task = runner.tasks.lock().unwrap()[0].1.clone();
+    assert!(task.contains("用户删掉过下面这些条目"), "{task}");
+    assert!(task.contains("\nA002｜日语 N3 备考\n"), "{task}");
+    assert!(task.contains("\nE001｜手术等待时的焦急\n"), "{task}");
+
+    // "Unforget" takes it off the list, and only that.
+    control.unforget(&galley, &paths, "A002").await.unwrap();
+    control.unforget(&galley, &paths, "A002").await.unwrap();
+    let list = forgotten::load(&paths.forgotten_file()).unwrap();
+    assert_eq!(
+        list.iter().map(|f| f.id.as_str()).collect::<Vec<_>>(),
+        ["E001"]
+    );
+}
+
+#[tokio::test]
+async fn the_overview_shows_the_switch_the_entries_the_marks_and_the_global_memory() {
+    let (pool, galley) = fresh().await;
+    seed_mix_marked(&pool, &galley).await;
+    sqlx::query(
+        "UPDATE sessions SET title = '私密会话', status = 'archived' WHERE id = 's-excluded'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
+    let control = LedgerControl::new();
+    let now = utc("2026-10-11T02:00:00Z"); // 10:00 Shanghai
+
+    // Undecided, nothing on disk: reading creates nothing.
+    let overview = serde_json::to_value(
+        control
+            .overview(&galley, &paths, now, &shanghai())
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(overview["ledger"]["switch"], json!({"state": "undecided"}));
+    assert_eq!(overview["ledger"]["running"], json!(false));
+    assert_eq!(overview["ledger"]["activities"], json!({"kind": "absent"}));
+    assert_eq!(overview["ledger"]["emotions"], json!({"kind": "absent"}));
+    assert!(overview["ledger"].get("nextRunAt").is_none());
+    assert!(overview["ledger"].get("lastRun").is_none());
+    assert_eq!(
+        overview["ledger"]["exclusions"],
+        json!([
+            {"target": {"kind": "session", "id": "s-excluded"},
+             "createdAt": overview["ledger"]["exclusions"][0]["createdAt"],
+             "title": "私密会话"},
+            {"target": {"kind": "project", "id": "p-private"},
+             "createdAt": overview["ledger"]["exclusions"][1]["createdAt"],
+             "title": "p-private"},
+        ])
+    );
+    assert_eq!(
+        overview["globalMemory"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| (f["name"].clone(), f["exists"].clone()))
+            .collect::<Vec<_>>(),
+        vec![
+            (json!("global_mem.txt"), json!(false)),
+            (json!("global_mem_insight.txt"), json!(false)),
+        ]
+    );
+    assert!(!paths.state_root().exists());
+
+    // On, with outputs and an interrupted run on record.
+    switch_on(&galley, config()).await;
+    write_outputs(&paths);
+    let mut s = LedgerState::default();
+    s.last_attempt_date = Some("2026-10-11".into());
+    s.last_run = Some(galley_core_lib::ledger::state::LastRun {
+        started_at: "2026-10-10T20:00:00+00:00".into(),
+        session_id: None,
+        outcome: "running".into(),
+        detail: None,
+        turns: 7,
+    });
+    s.save(&paths.state_file()).unwrap();
+    std::fs::write(
+        paths.memory_dir().join("global_mem.txt"),
+        "# [Global Memory - L2]\n",
+    )
+    .unwrap();
+
+    let overview = serde_json::to_value(
+        control
+            .overview(&galley, &paths, now, &shanghai())
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let ledger = &overview["ledger"];
+    assert_eq!(ledger["switch"]["state"], json!("on"));
+    assert_eq!(ledger["lastRun"]["outcome"], json!("failed"));
+    assert_eq!(ledger["lastRun"]["turns"], json!(7));
+    assert!(ledger["lastRun"]["detail"]
+        .as_str()
+        .unwrap()
+        .starts_with("interrupted"));
+    // Attempted today: tomorrow 04:00 Shanghai.
+    assert_eq!(ledger["nextRunAt"], json!("2026-10-11T20:00:00+00:00"));
+    assert_eq!(ledger["activities"]["kind"], json!("parsed"));
+    assert_eq!(ledger["activities"]["ongoing"][1]["id"], json!("A002"));
+    assert_eq!(
+        ledger["activities"]["ended"][0]["title"],
+        json!("中秋活动页")
+    );
+    assert_eq!(
+        ledger["emotions"]["entries"][0]["at"],
+        json!("2026-09-10 15:40")
+    );
+    assert_eq!(ledger["forgotten"], json!([]));
+    let gm = &overview["globalMemory"][0];
+    assert_eq!(gm["exists"], json!(true));
+    assert_eq!(gm["content"], json!("# [Global Memory - L2]\n"));
+
+    // An edit from that revision lands; a stale one is refused.
+    let revision = gm["revision"].as_str().unwrap();
+    let next = control
+        .write_global_memory(&galley, &paths, "global_mem.txt", "改过的\n", revision)
+        .await
+        .unwrap();
+    assert_eq!(next, global_memory::revision("改过的\n".as_bytes()));
+    assert_eq!(
+        control
+            .write_global_memory(&galley, &paths, "global_mem.txt", "再改", revision)
+            .await,
+        Err(control::CHANGED_ON_DISK.into())
+    );
+    assert_eq!(
+        control
+            .write_global_memory(&galley, &paths, "other.txt", "x", revision)
+            .await,
+        Err(NOT_FOUND.into())
+    );
 }

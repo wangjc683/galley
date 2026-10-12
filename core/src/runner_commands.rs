@@ -383,7 +383,7 @@ pub(crate) async fn prepare_managed_spawn_args(
     )
     .await;
     if let Some(main_chat) = main_chat {
-        let affairs = main_chat_affairs(&context);
+        let affairs = main_chat_affairs(app, &context).await;
         if let Some(entry) = context
             .env
             .iter_mut()
@@ -413,12 +413,16 @@ pub(crate) async fn prepare_managed_spawn_args(
 }
 
 /// The ongoing-affairs list for the main chat's runner, when the ledger
-/// is on (ticket 03a, [`crate::ledger::affairs`]); `None` while it is off
-/// or no list has been written yet.
-fn main_chat_affairs(context: &ManagedRuntimeProcessContext) -> Option<String> {
-    let config = crate::ledger::LedgerConfig::from_env()?;
+/// is on (ticket 03a, [`crate::ledger::affairs`]; the switch is the
+/// `affairs_ledger` pref, ticket 04); `None` while it is not on or no
+/// list has been written yet.
+async fn main_chat_affairs(
+    app: &AppHandle,
+    context: &ManagedRuntimeProcessContext,
+) -> Option<String> {
+    let switch = crate::ledger::read_switch(&app.state::<SqliteGalley>()).await;
     crate::ledger::affairs::for_injection(
-        Some(config),
+        switch.is_on(),
         std::path::Path::new(&context.diagnostics.paths.state_root),
     )
 }

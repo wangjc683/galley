@@ -253,10 +253,16 @@ pub fn run() {
             request_goal_stop,
             start_session_goal,
             extend_goal,
-            // Affairs ledger (.scratch/main-chat ticket 01)
+            // Affairs ledger (.scratch/main-chat tickets 01, 04)
             set_ledger_excluded,
             list_ledger_exclusions,
             run_ledger_now,
+            get_ledger_switch,
+            get_memory_overview,
+            set_ledger_switch,
+            delete_ledger_entry,
+            unforget_ledger_entry,
+            write_global_memory,
             // B2 runner commands
             runner_commands::spawn_runner,
             runner_commands::send_to_runner,

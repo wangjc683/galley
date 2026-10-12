@@ -3,7 +3,7 @@
 //! typed into Galley sessions.
 
 use super::*;
-use crate::ledger::{LedgerExclusion, LedgerTarget};
+use crate::ledger::{LedgerExclusion, LedgerTarget, TitledExclusion};
 
 /// One user message as `ledger_human_turns` reads it.
 #[derive(Debug, Clone, FromRow)]
@@ -76,6 +76,38 @@ impl SqliteGalley {
                     _ => return None, // the CHECK rules this out
                 };
                 Some(LedgerExclusion { target, created_at })
+            })
+            .collect())
+    }
+
+    /// Every mark with its session's title or project's name, oldest
+    /// first (the Memory page, ticket 04). Archived sessions keep their
+    /// title; a deleted session or project took its mark with it.
+    pub async fn list_ledger_exclusions_titled(&self) -> Result<Vec<TitledExclusion>> {
+        let rows: Vec<(Option<String>, Option<String>, String, Option<String>)> = sqlx::query_as(
+            "SELECT e.session_id, e.project_id, e.created_at, \
+                        COALESCE(s.title, p.name) \
+                 FROM ledger_exclusions e \
+                 LEFT JOIN sessions s ON s.id = e.session_id \
+                 LEFT JOIN projects p ON p.id = e.project_id \
+                 ORDER BY e.id",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(rows
+            .into_iter()
+            .filter_map(|(session, project, created_at, title)| {
+                let target = match (session, project) {
+                    (Some(id), None) => LedgerTarget::Session(id),
+                    (None, Some(id)) => LedgerTarget::Project(id),
+                    _ => return None, // the CHECK rules this out
+                };
+                Some(TitledExclusion {
+                    target,
+                    created_at,
+                    title,
+                })
             })
             .collect())
     }

@@ -16,6 +16,12 @@
 //!   `pending`; only a run that completed successfully turns `pending`
 //!   into `mined`. A failed run leaves `mined` alone, so its batch is part
 //!   of the next one.
+//!
+//! Plus `dueAt`, a one-off "run from this instant on" beside the daily
+//! schedule: set when the user turns the ledger on with "look back" (the
+//! first run starts within a minute) and after a successful run that
+//! stopped at the read cap (the rest follows ten minutes later); every
+//! other attempt clears it (`run::begin` / `run::finish`).
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -44,6 +50,14 @@ pub struct LedgerState {
     /// What the last attempt did, for whoever looks (ticket 04, a human).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_run: Option<LastRun>,
+    /// RFC 3339 instant from which a run is due whatever the daily
+    /// schedule says (see the module notes).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due_at: Option<String>,
+    /// The pending batch stopped at the read cap: more is left to read
+    /// after it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pending_more: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

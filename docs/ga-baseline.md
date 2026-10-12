@@ -1011,8 +1011,8 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     as on the other channels.
 20. The affairs ledger reading IM turns out of the engine logs
     (2026-10-12, `.scratch/main-chat/issues/01-affairs-ledger.md`; managed
-    runtime only, read-only, no managed patch; off unless
-    `GALLEY_LEDGER_SINCE` is set). IM conversations never reach
+    runtime only, read-only, no managed patch; off unless the user turns
+    it on, the Core pref `affairs_ledger`, ticket 04). IM conversations never reach
     `workbench.db`, so `core/src/ledger/im_archive.rs` copies the user's
     words out of `temp/model_responses/model_responses_*.txt` into the
     ledger's own archive before the startup prune can delete them. It
@@ -1037,6 +1037,22 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     text). Known gaps: a text-protocol IM message with images is logged as
     a Python list repr and is missed; group and private chats are not told
     apart.
+21. The Memory page (2026-10-12, `.scratch/main-chat/issues/04-what-it-remembers-page.md`;
+    managed runtime only, no managed patch). Two couplings. (a) It shows
+    and edits GA's global memory in the managed state root,
+    `memory/global_mem.txt` and `memory/global_mem_insight.txt`
+    (`core/src/ledger/global_memory.rs`), relying on upstream creating
+    either file only when it is missing (`agentmain.py`, module level) and
+    reading them as plain text on every prompt (`ga.get_global_memory`). A
+    write names the content hash it edited and is refused when the file
+    changed meanwhile (the assistant may just have written it). (b) The
+    mining task (`core/src/ledger/batch.rs` `task_prompt`) follows the
+    seeded 历史重点挖掘 SOP (`memory/L4_raw_sessions/salient_mining_sop.md`)
+    but replaces its 「格式自定」 with a format Galley parses
+    (`core/src/ledger/entries.rs`). Re-check on upgrade: whether upstream
+    starts rewriting the two global-memory files wholesale or moves them,
+    and whether the SOP's 产物 section still says 「格式自定」 and still asks
+    for the three regions (持续活动、已消失事项、情绪事件).
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
@@ -1094,6 +1110,9 @@ start the audit there instead of grepping the bridge:
   — item 20: `complete_blocks` (the log block shape), `im_texts` /
   `human_text` (the hint, both prompt protocols, the long-prompt file),
   `channels_by_log` (Galley's channel state).
+- **[`core/src/ledger/global_memory.rs`](../core/src/ledger/global_memory.rs)**
+  and **`core/src/ledger/batch.rs::task_prompt`** — item 21: the two
+  global-memory files, and the mining SOP section the task replaces.
 - **[`runner/im_wechat.py`](../runner/im_wechat.py)** — items 15 and 19:
   `WechatConversation` (`_Run.observe` for the item shape,
   `_on_turn_end` / `_take_ask_event` for the ask payload and
