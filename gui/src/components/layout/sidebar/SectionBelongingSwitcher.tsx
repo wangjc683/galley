@@ -7,14 +7,23 @@ import { useSessionsStore } from "@/stores/sessions";
 import {
   SECTION_BELONGINGS,
   type SectionDivider,
+  type SectionDividerWeight,
+  SECTION_DIVIDER_WEIGHTS,
   SECTION_DIVIDERS,
   useSectionBelongingStore,
   useSectionDividerStore,
+  useSectionDividerWeightStore,
 } from "./section-belonging-trial";
 
 const DIVIDER_LABELS: Record<SectionDivider, string> = {
   scroll: "滚动",
   always: "常显",
+};
+
+const WEIGHT_LABELS: Record<SectionDividerWeight, string> = {
+  light: "淡",
+  default: "默认",
+  strong: "加重",
 };
 
 /**
@@ -33,6 +42,8 @@ export function SectionBelongingSwitcher() {
   const setBelonging = useSectionBelongingStore((s) => s.setBelonging);
   const divider = useSectionDividerStore((s) => s.divider);
   const setDivider = useSectionDividerStore((s) => s.setDivider);
+  const weight = useSectionDividerWeightStore((s) => s.weight);
+  const setWeight = useSectionDividerWeightStore((s) => s.setWeight);
   const hasMainChat = useSessionsStore((s) => !!findMainChat(s.sessions));
   if (!hasMainChat) return null;
   return createPortal(
@@ -73,6 +84,23 @@ export function SectionBelongingSwitcher() {
           )}
         >
           {DIVIDER_LABELS[option]}
+        </button>
+      ))}
+      <span className="select-none pl-1.5">线</span>
+      {SECTION_DIVIDER_WEIGHTS.map((option) => (
+        <button
+          key={option}
+          type="button"
+          aria-pressed={weight === option}
+          onClick={() => setWeight(option)}
+          className={cn(
+            "rounded-full px-2 py-0.5 font-medium",
+            weight === option
+              ? "bg-selected text-ink"
+              : "text-ink-muted hover:bg-hover hover:text-ink",
+          )}
+        >
+          {WEIGHT_LABELS[option]}
         </button>
       ))}
     </div>,

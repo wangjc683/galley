@@ -149,6 +149,72 @@ export function useSectionDivider(): SectionDivider {
   return useSectionDividerStore((s) => s.divider);
 }
 
+/**
+ * How strong the 主对话 divider is (JC, 2026-10-12: 「常显」 in the
+ * masthead's `line/60` was "几乎看不太到"). 淡 = the masthead's own line;
+ * 默认 = `line`, the token's default-divider tone; 加重 = `line-strong`
+ * (#D4D2CF light / #41464E dark), today the hover / focus edge tone —
+ * reusing it here would make this the sidebar's strongest structural line.
+ */
+export type SectionDividerWeight = "light" | "default" | "strong";
+
+export const SECTION_DIVIDER_WEIGHTS: readonly SectionDividerWeight[] = [
+  "light",
+  "default",
+  "strong",
+];
+
+const WEIGHT_STORAGE_KEY = "galley.tmp.sectionDividerWeight";
+const DEFAULT_WEIGHT: SectionDividerWeight = "strong";
+
+function readStoredWeight(): SectionDividerWeight {
+  try {
+    const stored = window.localStorage.getItem(WEIGHT_STORAGE_KEY);
+    return (
+      SECTION_DIVIDER_WEIGHTS.find((option) => option === stored) ??
+      DEFAULT_WEIGHT
+    );
+  } catch {
+    return DEFAULT_WEIGHT;
+  }
+}
+
+interface SectionDividerWeightState {
+  weight: SectionDividerWeight;
+  setWeight: (weight: SectionDividerWeight) => void;
+}
+
+export const useSectionDividerWeightStore = create<SectionDividerWeightState>(
+  (set) => ({
+    weight: readStoredWeight(),
+    setWeight: (weight) => {
+      try {
+        window.localStorage.setItem(WEIGHT_STORAGE_KEY, weight);
+      } catch {
+        // Not remembered across reloads; the switch itself still works.
+      }
+      set({ weight });
+    },
+  }),
+);
+
+export function useSectionDividerWeight(): SectionDividerWeight {
+  return useSectionDividerWeightStore((s) => s.weight);
+}
+
+export function sectionDividerBorderClass(
+  weight: SectionDividerWeight,
+): string {
+  switch (weight) {
+    case "default":
+      return "border-line";
+    case "strong":
+      return "border-line-strong";
+    default:
+      return "border-line/60";
+  }
+}
+
 /** The classes each variant puts on the sectioned list's three
  * wrappers (Sidebar.tsx): the section (header + children), the sticky
  * header's wrapper (its ground: it must be opaque, rows slide under

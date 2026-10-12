@@ -38,6 +38,9 @@ const belonging = vi.hoisted(() => ({
 const divider = vi.hoisted(() => ({
   current: "scroll" as "scroll" | "always",
 }));
+const dividerWeight = vi.hoisted(() => ({
+  current: "light" as "light" | "default" | "strong",
+}));
 vi.mock("./sidebar/section-belonging-trial", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("./sidebar/section-belonging-trial")>();
@@ -45,6 +48,7 @@ vi.mock("./sidebar/section-belonging-trial", async (importOriginal) => {
     ...actual,
     useSectionBelonging: () => belonging.current,
     useSectionDivider: () => divider.current,
+    useSectionDividerWeight: () => dividerWeight.current,
   };
 });
 
@@ -293,8 +297,18 @@ describe("the section's belonging (ticket 09)", () => {
       const block = html.lastIndexOf("border-b py-1", at(html, "s-main"));
       expect(block).toBeGreaterThan(-1);
       expect(html.slice(block, at(html, "s-main"))).toContain("border-line/60");
+      dividerWeight.current = "strong";
+      const strong = render([mainChat, sideChat]);
+      const strongBlock = strong.lastIndexOf(
+        "border-b py-1",
+        at(strong, "s-main"),
+      );
+      expect(strong.slice(strongBlock, at(strong, "s-main"))).toContain(
+        "border-line-strong",
+      );
     } finally {
       divider.current = "scroll";
+      dividerWeight.current = "light";
     }
   });
 

@@ -31,8 +31,10 @@ import {
 import { SidebarSectionsList } from "./sidebar/SidebarTimeline";
 import {
   sectionBelongingClasses,
+  sectionDividerBorderClass,
   useSectionBelonging,
   useSectionDivider,
+  useSectionDividerWeight,
 } from "./sidebar/section-belonging-trial";
 
 export interface SidebarProps {
@@ -200,6 +202,9 @@ export function Sidebar({
   // wrappers; read only by the sectioned branch below.
   const belonging = sectionBelongingClasses(useSectionBelonging());
   const sectionDivider = useSectionDivider();
+  const sectionDividerBorder = sectionDividerBorderClass(
+    useSectionDividerWeight(),
+  );
   // Memoised: building the list walks every session; without memo it
   // re-runs on every Sidebar render, and Sidebar re-renders whenever
   // App does (which can be triggered by lower-frequency state like
@@ -451,7 +456,7 @@ export function Sidebar({
               "border-b py-1",
               // TEMPORARY: 「常显」 divider trial (section-belonging-trial.ts).
               sectionDivider === "always"
-                ? "border-line/60"
+                ? sectionDividerBorder
                 : listScrolled
                   ? "border-line/70"
                   : "border-transparent",
