@@ -84,6 +84,10 @@ README「dense context instead of long」（`README.md:54`）。
 31. 侧栏骨架：主对话行（首页）→「旁聊」分区头（加号在头上）→ 置顶 / 项目 / 时间桶。
 32. agent 开的对话（CLI、supervisor 等）移出「旁聊」：在项目里的留在项目组，不在项目里的收成一行「其他来源 N」，等你回复 / 出错时按 10-08 项目组的挂出规则露出。与账本「只读人说的话」同一原则。
 33. 真机比 A3（对照）/ B（骨架）/ B′（骨架 + 侧栏可收起），带演示状态档。票 [07](./issues/07-sidebar-structure-trial.md)。
+34. （07 真机比后）侧栏定 B′：主对话行 →「其他对话」分区头（加号在头上）→ 置顶 / 项目 / 时间桶 / 其他来源 / 更早，侧栏可收起（⌘\）。
+    A3、不可收起的 B 不要。外置运行时（没有主对话）侧栏保持今天的样子，不可收起。
+35. 叫法定「主对话 / 其他对话 / 新对话」：用户不用学新词，也守住「对话」这条文案规范；「主聊天」「旁聊」只作内部术语留在 PRD 与代码里。
+36. 删掉主对话行空态副行「什么都可以跟它说」（JC：不太合适）。收尾见票 [08](./issues/08-sidebar-finalize.md)。
 
 ## 事实依据（2026-10-12 核对）
 
@@ -135,7 +139,8 @@ README「dense context instead of long」（`README.md:54`）。
 | [03](./issues/03-segments-and-injection.md) | C | 切段、注入、入口层提示词 | 01、02 | needs-triage |
 | [04](./issues/04-what-it-remembers-page.md) | D | 「它记得我什么」页面 | 01 | needs-triage |
 | [06](./issues/06-subtasks.md) | F | 子任务：父会话、原生派活工具、卡片、定时任务改卡片 | 02 | needs-triage |
-| [07](./issues/07-sidebar-structure-trial.md) | — | 侧栏结构试验：A3 / B / B′ + 演示状态 | 02 | in-review（`6df6ec44`，待真机比） |
+| [07](./issues/07-sidebar-structure-trial.md) | — | 侧栏结构试验：A3 / B / B′ + 演示状态 | 02 | done（JC 定 B′ + 其他对话） |
+| [08](./issues/08-sidebar-finalize.md) | — | 侧栏收尾：B′ 转正、删试验代码、改设计文档 | 07 | 开工中（2026-10-12） |
 | [05](./issues/05-proactive-cards.md) | E | 主动提醒卡片 + IM 出口 | 01、06 | needs-triage |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
