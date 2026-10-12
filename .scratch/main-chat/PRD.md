@@ -158,10 +158,10 @@ README「dense context instead of long」（`README.md:54`）。
 
 | 票 | 讨论中的代号 | 内容 | 依赖 | 状态 |
 |---|---|---|---|---|
-| [01](./issues/01-affairs-ledger.md) | A | 事项账本后台挖掘 | — | in-review（`82e1d674`，默认关闭，待语料评测） |
-| [02](./issues/02-main-chat-form.md) | B | 主聊天形态 + A1 / A2 切换器 + 排队 / 开旁聊 | — | in-review（`034b9169`，待真机比） |
-| [03](./issues/03-segments-and-injection.md) | C | 切段、注入、入口层提示词 | 01、02 | needs-triage |
-| [04](./issues/04-what-it-remembers-page.md) | D | 「它记得我什么」页面 | 01 | 04a、04b 本地合入；04c（默认开 + 问候）ready-for-agent（裁决 47） |
+| [01](./issues/01-affairs-ledger.md) | A | 事项账本后台挖掘 | — | done（评测通过；04 起默认开） |
+| [02](./issues/02-main-chat-form.md) | B | 主聊天形态 + A1 / A2 切换器 + 排队 / 开旁聊 | — | done（侧栏形态见 07–09） |
+| [03](./issues/03-segments-and-injection.md) | C | 切段、注入、入口层提示词 | 01、02 | 03a、03b done；03c、03d needs-triage（等真用几天） |
+| [04](./issues/04-what-it-remembers-page.md) | D | 「它记得我什么」页面 | 01 | 04a–04c 合入（裁决 43–47；默认开 + 主对话问候），待 JC 真机看页面与问候 |
 | [06](./issues/06-subtasks.md) | F | 子任务：父会话、原生派活工具、卡片、定时任务改卡片 | 02 | needs-triage |
 | [07](./issues/07-sidebar-structure-trial.md) | — | 侧栏结构试验：A3 / B / B′ + 演示状态 | 02 | done（JC 定 B′ + 其他对话） |
 | [08](./issues/08-sidebar-finalize.md) | — | 侧栏收尾：B′ 转正、删试验代码、改设计文档 | 07 | done（`a3d7254b`） |

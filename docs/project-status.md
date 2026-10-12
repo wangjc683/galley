@@ -735,6 +735,34 @@ main-chat planning docs, main has:
   idle), two queued messages, a file sent back, `/new` mid-run; voice
   cannot be told from typing in the log.
 
+- **Main chat, affairs ledger and Settings → Memory** (2026-10-12/13,
+  `.scratch/main-chat/`, devlogs
+  [2026-10-12-main-chat-concept-review](./devlog/2026-10-12-main-chat-concept-review.md),
+  [2026-10-12-main-chat-sidebar-trial](./devlog/2026-10-12-main-chat-sidebar-trial.md),
+  [2026-10-12-affairs-ledger-and-memory-page](./devlog/2026-10-12-affairs-ledger-and-memory-page.md)).
+  Managed runtime only; the external runtime's sidebar is frozen. One
+  persistent main chat (migration **044**) opened at launch, the sidebar
+  regrouped under it (主对话 / 其他对话, collapsible with ⌘\). The affairs
+  ledger mines what the user said (GUI messages, IM private chats archived
+  from engine logs; exclusions in migration **045**) once a day from 04:00
+  and ends each run with an ongoing-affairs list that the main chat's and
+  IM's state blocks carry. The main chat cuts a new context segment after 4
+  idle hours (migration **046**); the CLI gains `session show --around /
+  --since / --until` and search fields (additive, Rule 3). Settings →
+  Memory shows the entries (pinned format, per-entry delete, a
+  "don't record again" list, "not used to understand me" marks, the
+  engine's global memory files editable). The ledger is **on by default**:
+  a new main chat opens with a fixed greeting saying so, earlier
+  conversations are read, the first run waits for the next 04:00, and the
+  page has one allow switch (Rule 4's 2026-10-12 interpretation). Mining
+  sessions are deleted from the database after each run; deleting any
+  session now also deletes its `messages_fts` rows. Owed: JC's live look
+  at the Memory page and the greeting (a fresh data directory is needed to
+  see the greeting), a few days of real main-chat use before tickets 03c /
+  03d, and old orphaned `messages_fts` rows are not cleaned. Estimated
+  mining cost per run: about 11 model calls, 330–380K characters of input
+  (mostly re-sent history), about 10K characters of output.
+
 Carried forward. The README screenshots still show the old sidebar, and
 `projects.png` the retired project view (its caption still says 项目视图);
 re-shoot with the next screenshot round (kept out of `v0.6.2`).
