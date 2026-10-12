@@ -1,6 +1,6 @@
 # 04（D）「它记得我什么」页面
 
-Status: 04a、04b in-review（`2b9d985d`、`a90a15d9`、`d4103c38` 本地合入未推送，2026-10-12；宪法 Rule 4 补句同日写进 `AGENTS.md`；待：真机切换器定询问形态、JC 过文案，定了拆切换器、写设计文档）
+Status: 04a、04b 本地合入（`2b9d985d`、`a90a15d9`、`d4103c38`）；04c ready-for-agent（裁决 47，2026-10-12）
 
 来源：主聊天 PRD 裁决 11、20、22、43–46（2026-10-09、10-12）。依赖 01。01 与 03 对外发版必须和本票同版。
 
@@ -227,13 +227,53 @@ interface MemoryOverview {
 - 旧文件只格式化自己的 hunk（gui 不是 prettier-clean）。
 - 视觉由主会话合入后在真机上和 JC 过，界面代理不做最终视觉结论。
 
+### 04c 默认开 + 主对话问候（ready-for-agent，裁决 47）
+
+2026-10-12 JC 改裁：主对话下个版本才发布，升级和新装的用户是第一批；不让用户三选一，主对话里 AI 先说一句，告知默认开启并建议保持开启。
+裁决 46 的询问与 A / B 切换器作废。
+
+**Core**
+
+- **主对话建出来的那一刻**（`get_or_create_main_chat` 走 `Created`，`core/src/db/main_chat.rs:59`；从归档恢复不算）：
+  - 开关键 `affairs_ledger` 不存在时写成开、读全部历史（`{"on": true, "since": <Unix 纪元>, "lookBack": true}`）；已经存在（只有开发机）就不动。
+  - 第一次整理排在建出之后的下一个 04:00，不立刻跑：现在已过 04:00 就是明天 04:00，没过就是今天 04:00（`run.rs` `due` 现在的规则是当天 04:00 后任意时刻都算到点，要改成这次不算）。
+  - 写入问候：一条 AI 消息，固定文案（下文），按界面语言选中文或英文。界面语言由 GUI 调命令时传（命令加可选参数，只做加法）；不传用英文。
+  - 问候只显示：不回放进模型上下文（Core 重启、runner 变冷后的历史回放都跳过它），不进事项账本（账本本来只读用户消息），不算一轮问答。用什么标记由你定（现有列或迁移；加迁移要补六处手写列表），回报理由。
+- **主对话状态块**：账本开着时，主对话的段首状态块固定带一行说明（英文，和状态块其余部分一致）：账本开着、每天整理用户说过的话（含以前的对话，不含 AI 的回复）、用户在「设置 → 记忆」查看、删除或关掉。
+  有没有事项清单都带；关着不带；IM 状态块不带。单独的字节上限与测试（参照 03a / 03b 的预算测试）。
+  理由：问候不回放，升级当天还没有清单，不加这一行 AI 就不知道记忆开着。
+- 页面上手动打开（`enable`）照 04a 不变；界面以后只传 `lookBack: true`。
+
+**界面**
+
+- 删掉主对话里的询问和临时切换器：`MemoryAsk.tsx`、`MemoryAskSwitcher.tsx`、`memory-ask-trial.ts`、`memory-demo-backend.ts`，以及 `MainView.tsx`、`App.tsx`、`SettingsMemory.tsx` 里的试验分支（拆法见 `memory-ask-trial.ts` 头注释）。
+  `memory-entry.ts` 里只给询问用的函数一起删；fixture 留给测试。
+- 「记忆」页的开关：打开直接打开（`lookBack: true`），不弹选择框；关掉仍弹「保留已记下的 / 一起清空」。说明文字加上「包括以前的对话」。
+- 调 `get_or_create_main_chat` 时传界面语言。
+- 问候按普通 AI 消息显示（不带运行折叠、步数、用时）。
+- 设计文档：`docs/design/overlays-and-settings.md` 写「记忆」页（标签位置、七个区域、开关与对话框）；`docs/design/conversation.md` 写主对话的问候是空状态规则的例外（裁决 47）；设置标签列表若在别处有记载一并改。
+
+**问候文案**（JC 2026-10-12 认可中文；英文由你译，回报给主会话过目）
+
+> 你好。以后有什么事，直接在这里跟我说就行，不用再想是开新对话还是接着哪个旧的。
+>
+> 为了接得上你在忙的事，我会整理你在 Galley 和聊天软件私聊里说过的话（包括以前的对话，不含我的回复），记下你在忙什么、到了哪一步，也会记下让你着急或开心的时刻，只用来把事办好。第一次整理在今晚，之后每天一次；整理要多调用模型，记下的内容只存在这台电脑上。
+>
+> 建议保持开启。想看我记了什么、删掉某一条或者关掉，点上面的「主对话」→「它记得我什么」。
+
+**验收**
+
+- Core：建出主对话时开关与第一次整理时间（04:00 前后两种）、已存在开关不动、从归档恢复不写问候、问候不回放、状态块那一行的有无与字节上限、外置运行时什么都不做。
+- 界面：询问与切换器的代码与测试都删干净（`grep -rn "MemoryAsk\|memory-ask-trial\|memoryDemo" gui/src` 为空），开关不弹选择框、关掉弹对话框，问候显示。
+- `cargo test --workspace`、六个门禁脚本、`pnpm --dir gui typecheck`、`lint`、vitest、`git diff --check`。
+
 ## 宪法 Rule 4 补句（2026-10-12 JC 定措辞；与本票同版落地）
 
 来源：票 01 落地核对（见 01 的 Comments）：读日志、不进库与 08-13 解释一致，但 IM 归档是 Core 为账本写的、比日志活得久的副本，08-13 的字面盖不住。
 2026-10-12 JC：其余几件按建议推进；改宪法照 Rule 2 的先例，措辞先给 JC 过目（主会话的做法，不是 JC 的原话）。同日 JC 认可下面的措辞，原样接在 `AGENTS.md` Rule 4 的 08-13 解释之后。
-其中「用户能在 Galley 里查看和删除」要等本票做完才成立，所以随本票同版改宪法，不提前：
+其中「用户能在 Galley 里查看和删除」要等本票做完才成立，所以随本票同版改宪法，不提前。2026-10-12 随裁决 47 改括号里那段（JC 认可），下面是现行措辞：
 
-> Interpretation (2026-10-12): the affairs ledger (managed runtime only, off unless the user turns it on) keeps the user's own words from IM channels — never the agent's replies — under the managed state root's `memory/history_insight/`, so the engine's memory layer can still learn from them after engine logs are pruned. It is the user's memory state, not Galley conversation storage: it never enters Galley's database, the user can see and delete it in Galley, and runtime upgrades never overwrite it.
+> Interpretation (2026-10-12): the affairs ledger (managed runtime only; on by default, which the main chat's first message tells the user, and the user can turn it off) keeps the user's own words from IM channels — never the agent's replies — under the managed state root's `memory/history_insight/`, so the engine's memory layer can still learn from them after engine logs are pruned. It is the user's memory state, not Galley conversation storage: it never enters Galley's database, the user can see and delete it in Galley, and runtime upgrades never overwrite it.
 
 ## Comments
 

@@ -156,8 +156,9 @@ under the managed state root (e.g. `model_responses`, which serves `/restore`
 and debugging) are engine-internal runtime state, not Galley conversation
 storage. This rule governs Galley's own database and product surfaces.
 
-Interpretation (2026-10-12): the affairs ledger (managed runtime only, off
-unless the user turns it on) keeps the user's own words from IM channels —
+Interpretation (2026-10-12): the affairs ledger (managed runtime only; on by
+default, which the main chat's first message tells the user, and the user can
+turn it off) keeps the user's own words from IM channels —
 never the agent's replies — under the managed state root's
 `memory/history_insight/`, so the engine's memory layer can still learn from
 them after engine logs are pruned. It is the user's memory state, not Galley
