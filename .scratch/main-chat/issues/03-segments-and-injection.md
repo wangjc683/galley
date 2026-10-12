@@ -1,6 +1,6 @@
 # 03（C）切段、注入与主聊天入口层提示词
 
-Status: 03a in-review（`d2443281` 本地合入未推送，2026-10-12；待 JC 在 tauri dev 里验）；03b ready-for-agent（2026-10-12 改走现有 CLI 读路径）；03c、03d needs-triage
+Status: 03a、03b in-review（`d2443281`、`b615ff96` 本地合入未推送，2026-10-12；待 JC 在 tauri dev 里验）；03c、03d needs-triage
 
 来源：主聊天 PRD 裁决 18、20、27（2026-10-12）。依赖 01（账本有内容）、02（主聊天存在）。对外必须与 04 同版。
 
@@ -101,3 +101,22 @@ Status: 03a in-review（`d2443281` 本地合入未推送，2026-10-12；待 JC �
   主聊天发一句、等 36 秒再发，问「我们刚才聊了什么」应接不上，界面仍显示整条；`SELECT * FROM main_chat_segments;` 能看到段界；重启后 `load_history` 只回放当前段。还原：删掉这个 prefs 键。
 
 2026-10-12 JC 裁：`context_win` 选 A，不调。主聊天上下文跨话题累积靠 03a 切段，单个重任务靠 06；按体量切段留作预留规则，等真用数据。
+
+2026-10-12 03b 实现回报要点（Opus 子代理，`b615ff96`；主会话复核：变基到 `ca070249` 后 Rust 947 通过、六个门禁、diff check、新文件 rustfmt 都通过）：
+- 没有新迁移、新 IPC、新错误标识，GUI 与 managed-ga 没动，没有托管补丁。
+- CLI（schema 1、2 都有）：
+  - `session show <id> --around=<messageId> [--context=N]`：前后各 N 条可见消息，默认 10（与提示词里 `--tail=20` 量级相当）；到头就截短；会话里没有这条可见消息返回 `not_found`。
+  - `session show <id> --since=<时间> [--until=<时间>]`：`since` 含、`until` 不含；`YYYY-MM-DD` 是本地整天，也收本地时间与 RFC 3339；可与 `--tail` 合用取窗口里最后 N 条。
+  - `--around` 与 `--tail` / `--since` / `--until` 同用、单有 `--context`、`since` 不早于 `until`、读不懂的时间值，都是 `invalid_args`。
+  - `sessions search` 每条结果追加 `createdAt`、`role`、`turnIndex`，加 `--session=<id>`（叠在 `--runtime` / `--all` 之上）。
+  - 不带新参数的 `session show` 输出与改动前逐字节一致（同库实测比对 + 黄金测试）。
+- 主聊天状态块加「## Main Chat」一节：会话 id、本段从第几轮、哪天开始，更早的部分用 CLI 先搜再 `--around`。典型 323 字节，上限 327；不跟账本开关，内置主聊天都有；其他会话、IM、外置都不带。
+- 静态提示词：历史命令示例加一行 `--around`；两句覆盖范围合成一句（删掉的「from the desktop or created by a supervisor」是 10-06 压缩时的写法，意思由「This reaches every Galley session」保留）；字节数前后不变（6855 / 6837），预算没抬；条款台账加两行，回归清单加第 19、20 条。
+- 待定 / 留意：
+  - 提示词没教 `--since` / `--until`（读一整天可能灌进一大段），留给 03d。
+  - 静态措辞改了，回归清单第 6、19、20 条要用真模型跑一遍。
+  - 段首日期取段界记下的时间：午夜前打开主聊天、午夜后才发消息，显示前一天。
+  - `--session` 搜已归档或另一运行时的会话，要同时带 `--runtime all --all`。
+  - 本地整天的 CLI 断言靠 `TZ`，只在 Unix 上跑；时区换算的单元测试各平台都跑。
+- 真机验法：合入后重启 dev（会重建 CLI，`"$(sed -n 1p ~/.config/galley/cli-path)" session show --help` 里应有 `--around`）；prefs `main_chat_segment_idle_hours` = `0.01`；
+  主聊天里说「下周三去体检，记得空腹」，等 36 秒以上再问「我们上次说的体检是哪天？要注意什么？」，应先 `sessions search` 再 `--around`，答出周三和空腹；再问「这个对话从哪天开始的？」，应答出本段起点。
