@@ -98,6 +98,11 @@ README「dense context instead of long」（`README.md:54`）。
 40. 宪法 Rule 4 补句措辞定稿（JC 认可票 04 的草稿），随票 04 同版写进 `AGENTS.md`。
 41. 查历史不做新工具：走现有「Past Galley Conversations」的 Galley CLI 只读路径，CLI 只做加法（`--around`、时间窗口、搜索结果带时间），段首状态块告诉模型哪条是主聊天、这段从哪开始（票 03b）。
 42. 外置运行时的侧栏冻结，只修 bug；新的侧栏改动只做有主对话那一套（JC 选 A）。外置也上主对话做不到：账本与记忆要写 GA 的 `memory/`，外置下 Rule 1 禁止。见 `docs/design/layout-and-chrome.md` §4.2「结构」开头。
+43. 「它记得我什么」放在设置里新开的「记忆」一页（只在内置），主聊天标题菜单直达（票 04）。
+44. 账本按条目显示：挖掘提示词把产物格式钉死，页面显示标题、一行现状、来源，展开看原文，每条能删；认不出的退回只读原文（JC 选 A）。
+45. 删一条是确定的；不再重新记下靠提示词遵守「别再记」清单；确定式出口是「不用于了解我」（排除表，迁移 045）。先不做逐条编辑（JC 选 A）。
+46. 账本默认关，开关在「记忆」页（替代环境变量）：打开时选「从现在开始 / 也读以前的对话」，关掉时选「保留 / 清空」。
+    主聊天第一次有来有回之后在主聊天里问一次，答过不再问；空的主聊天不问（空状态规则）。理由：开关藏在设置里，多数人永远不开，主聊天的「大脑」就空着。
 
 ## 事实依据（2026-10-12 核对）
 
@@ -147,7 +152,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [01](./issues/01-affairs-ledger.md) | A | 事项账本后台挖掘 | — | in-review（`82e1d674`，默认关闭，待语料评测） |
 | [02](./issues/02-main-chat-form.md) | B | 主聊天形态 + A1 / A2 切换器 + 排队 / 开旁聊 | — | in-review（`034b9169`，待真机比） |
 | [03](./issues/03-segments-and-injection.md) | C | 切段、注入、入口层提示词 | 01、02 | needs-triage |
-| [04](./issues/04-what-it-remembers-page.md) | D | 「它记得我什么」页面 | 01 | needs-triage |
+| [04](./issues/04-what-it-remembers-page.md) | D | 「它记得我什么」页面 | 01 | 04a、04b ready-for-agent（裁决 43–46） |
 | [06](./issues/06-subtasks.md) | F | 子任务：父会话、原生派活工具、卡片、定时任务改卡片 | 02 | needs-triage |
 | [07](./issues/07-sidebar-structure-trial.md) | — | 侧栏结构试验：A3 / B / B′ + 演示状态 | 02 | done（JC 定 B′ + 其他对话） |
 | [08](./issues/08-sidebar-finalize.md) | — | 侧栏收尾：B′ 转正、删试验代码、改设计文档 | 07 | done（`a3d7254b`） |

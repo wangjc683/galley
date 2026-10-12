@@ -1,26 +1,231 @@
 # 04（D）「它记得我什么」页面
 
-Status: needs-triage
+Status: 04a、04b ready-for-agent（2026-10-12 JC「按建议推进」，裁决 43–46）
 
-来源：主聊天 PRD 裁决 11、20、22（2026-10-09、10-12）。依赖 01。01 与 03 对外发版必须和本票同版。
+来源：主聊天 PRD 裁决 11、20、22、43–46（2026-10-09、10-12）。依赖 01。01 与 03 对外发版必须和本票同版。
 
 ## 目标
 
-账本写的是对用户生活的推断（含情绪事件），用户必须能看、能改、能删，并知道它是怎么来的。
+账本写的是对用户生活的推断（含情绪事件），用户必须能看、能删，并知道它是怎么来的；要不要让它读，由用户自己决定。
 
-## 范围
+## 裁决（2026-10-12，JC「按建议推进」）
 
-- 查看、编辑、删除：GA 全局记忆（`memory/global_mem.txt`、`global_mem_insight.txt`）与事项账本（持续活动、已消失事项、情绪事件）。
-- 说清来源与去向：挖掘每天读一遍你的对话，内容会再经过一次模型服务商；账本在你自己的电脑上，换模型带得走。
-- 开关：可以关掉挖掘（廉价出口）。
-- 用户亲手改过的内容，运行时升级与之后的挖掘不得覆盖（Rule 1 managed 规则「code is replaceable; user state is not」）。
-- 只在内置；外置模式不出现。
-- 视觉走真机流程；动手前查 `docs/design/` 相关禁令。
+1. **放在哪**：设置里新开一页「记忆」，只在内置运行时出现；主聊天标题下拉菜单加一项「它记得我什么」直达这一页（裁决 43）。
+2. **怎么展示**：挖掘提示词把产物格式钉死，页面按条目显示：标题、一行现状、来源（哪天、哪个对话），展开看原文，每条能删；解析失败退回只读原文（裁决 44）。
+3. **删除语义**：删一条是确定的；同一件事以后会不会被重新记下，靠挖掘提示词遵守「别再记」清单（推断式，做不到完全确定）。
+   确定式的出口是「不用于了解我」：对话或项目标上后，挖掘从来源上就不读它（票 01 的排除表，迁移 045）。先不做逐条编辑（裁决 45）。
+4. **开关**：页面上的开关替代环境变量 `GALLEY_LEDGER_SINCE`。默认关；打开时选「从现在开始 / 也读以前的对话」，关掉时选「保留已记下的 / 一起清空」。
+   不把开关藏在设置里：主聊天第一次有来有回之后，在主聊天里问一次（「从现在开始 / 也读以前的对话 / 先不要」），答过就不再问（裁决 46）。
 
-## 待定
+已定规矩，不另裁：情绪事件单独一区、默认折叠、每条能删，写明它的用法（裁决 20：只为把事办好时引用，不单独评论情绪）；GA 全局记忆文件不大，显示原文、可以编辑。
 
-- 放在哪：设置里一页，还是主聊天里能直达。
-- 参考 OpenMuse「只记用户明确说过或确认过的」与上游 SOP「推断式」的张力怎么在页面上表达。
+## 拆片
+
+04a（Core）与 04b（界面）并行做，接口以下文「接口」一节为准；合入后主会话在真机上做视觉切换器试用（主聊天里的询问两种形态 + 演示数据），JC 定了再拆切换器、写设计文档。
+
+### 接口（Tauri 命令，不进 Agent API）
+
+```ts
+// 开关：Core prefs 键 `affairs_ledger`。没有这个键 = undecided（从没问过 / 没答过）。
+type LedgerSwitch =
+  | { state: "undecided" }
+  | { state: "off" }
+  | { state: "on"; since: string /* RFC3339 */; lookBack: boolean };
+
+interface LedgerQuote { session?: string; at?: string /* "YYYY-MM-DD HH:MM" */; text: string }
+interface LedgerEntry {          // 持续活动 / 已消失事项一条
+  id: string;                    // "A001"
+  title: string;
+  status?: string;               // 「现状：」一行
+  lastSeen?: string;             // 「最近：」YYYY-MM-DD
+  sessions: string[];            // Galley 会话 id 或 im-渠道-日期
+  quotes: LedgerQuote[];
+  extra: string[];               // 其余「- 键：值」行，原样
+}
+interface LedgerEmotion {
+  id: string;                    // "E001"
+  title: string;
+  at?: string;
+  sessions: string[];
+  tags: string[];
+  quotes: LedgerQuote[];
+  related?: string;              // 关联活动 id
+  extra: string[];
+}
+type Parsed<T> = { kind: "absent" } | ({ kind: "parsed" } & T) | { kind: "raw"; text: string };
+
+interface MemoryOverview {
+  ledger: {
+    switch: LedgerSwitch;
+    running: boolean;
+    lastRun?: { startedAt: string; outcome: "running" | "succeeded" | "failed" | "empty"; turns: number; detail?: string };
+    nextRunAt?: string;          // RFC3339；开着时下一次到点的时间
+    activities: Parsed<{ ongoing: LedgerEntry[]; ended: LedgerEntry[]; other?: string }>; // other：认不出的段落，原样
+    emotions: Parsed<{ entries: LedgerEmotion[]; other?: string }>;
+    forgotten: { id: string; kind: "activity" | "emotion"; title: string; deletedAt: string }[];
+    exclusions: { target: { kind: "session" | "project"; id: string }; createdAt: string; title: string | null }[];
+  };
+  globalMemory: { name: "global_mem.txt" | "global_mem_insight.txt"; exists: boolean; content: string; revision: string }[];
+}
+```
+
+| 命令 | 参数 | 返回 / 错误 |
+|---|---|---|
+| `get_ledger_switch` | — | `LedgerSwitch`（主聊天询问用，轻量） |
+| `get_memory_overview` | — | `MemoryOverview` |
+| `set_ledger_switch` | `{ action: "enable", lookBack: boolean }` 或 `{ action: "disable", clear: boolean }` | 新的 `LedgerSwitch` |
+| `delete_ledger_entry` | `{ id }` | `()`；整理进行中 `ledger_busy`，找不到 `not_found` |
+| `unforget_ledger_entry` | `{ id }` | `()` |
+| `write_global_memory` | `{ name, content, revision }` | 新 `revision`；磁盘上已被改过 `changed_on_disk` |
+| `set_ledger_excluded` / `list_ledger_exclusions` / `run_ledger_now` | 已有 | 不变（`run_ledger_now` 改读 prefs） |
+
+- 外置运行时：以上新命令一律返回错误 `managed_only`，什么都不读不写。
+- 事件 `memory-changed`（无载荷）：开关变化、整理开始与结束、删除、移出、写全局记忆之后发，页面收到就重新取 overview。
+- 错误字符串就是上面的标识（`ledger_busy` 等），界面按标识出文案。
+
+### 04a Core（ready-for-agent）
+
+**开关进 prefs，实时生效**
+
+- 读 Core prefs `affairs_ledger`：`{"on": true, "since": "<RFC3339>", "lookBack": bool}` 或 `{"on": false}`；没有这个键是 undecided。
+  去掉环境变量 `GALLEY_LEDGER_SINCE` 这条路（`core/src/ledger/config.rs`、`mod.rs:163/205`、`commands/ledger.rs:40`、`runner_commands.rs:419`、`im_supervisor/manager.rs:207`）。
+  评测 harness（`core/examples/ledger_eval_prepare.rs`）照旧直接构造配置。
+- 起点从「日期」改成「时刻」：「从现在开始」= 打开那一刻（今天早些时候的测试消息不进账本）；「也读以前的对话」= 不设下限（`since` 记成 Unix 纪元，`lookBack: true`）。
+  再次打开时位置照旧：`from = max(已处理位置, since)`，所以关掉保留后「从现在开始」跳过空档、「也读以前的对话」补读空档；清空过就从头读。
+- 每日任务不再只在启动时按环境变量决定挂不挂：常驻，每个 tick 读 prefs，关着就什么都不做。启动时的 IM 归档（`archive_before_prune`）同样读 prefs。
+- 03a 的段首注入（主聊天状态块）与 IM 状态块的事项清单跟这个开关走。IM 渠道照 03a 的已知缺口，重启渠道才换。
+- 打开且 `lookBack` 时，一分钟内开始第一次整理（不等第二天 04:00）；「从现在开始」没有可读的，照常等到点。
+
+**分批读（「也读以前的对话」才真正用得上）**
+
+- 每次整理最多读 60,000 字的用户原话（常量，Core 测试覆盖）。超出就按时间截在某条消息之前：GUI 消息到截点、IM 归档到截点前最后一行，位置只推进到截点；
+  这次成功且还有没读的，10 分钟后再跑一次，直到读完；失败照旧等第二天（不在失败里烧钱）。
+  分批会把跨截点的会话拆开，接受这个偏差（模型每次都先读已有产物）。JC 本机 GUI 历史一共 327 条、9,133 字，用不上分批；别的用户的历史可能大得多。
+
+**关掉**
+
+- 「保留」：只把 prefs 改成 off，文件都留着；注入随之停。
+- 「清空」：删掉整个 `memory/history_insight/`（产物、短清单、`galley/` 里的状态、IM 归档、别再记清单）。排除表在库里，不动。
+- 正在整理时关掉：先停掉这次整理（算失败、位置不动），等它退出后再处理保留 / 清空；这次整理的收尾不能把刚清空的文件又写出来。
+
+**把格式钉死（挖掘提示词，`core/src/ledger/batch.rs` `task_prompt`）**
+
+用下面的格式代替 SOP 的「格式自定」。编号从现有最大号往后排，删过的号不复用。
+
+`activities.md`：
+
+```
+# 活动知识层
+
+## 持续活动
+
+### A001｜杭州半程马拉松备赛
+- 现状：9 月 27 日长距离 18 公里，离半马还有八周。
+- 最近：2026-09-27
+- 会话：`s-0907-run`、`im-feishu-2026-09-21`
+- 频次：4 会话 / 5 消息
+- 原文（`s-0927-run`，2026-09-27 07:00）：“今天长距离 18 公里，配速 6 分 15，比计划快。”
+- （其余说明写成「- 键：值」行，可选）
+
+## 已消失事项
+
+### A002｜中秋活动页设计与上线
+- 现状：9 月 16 日上线，首日点击率 4.2%。（写怎么结束的）
+- 最近：……（同上）
+```
+
+`emotional_events.md`：
+
+```
+# 情绪事件
+
+## E001｜手术等待超预期时的明显焦急
+- 时间：2026-09-10 15:40
+- 会话：`s-0910-surgery`
+- 标签：焦急、不安
+- 原文：“手术还没出来，已经三个多小时了……”
+- 关联活动：A006
+```
+
+- 「现状」一句话，不超过 60 字；「最近」是最近一次证据的日期。
+- 不写口径、批次说明、证据边界之类的段落：整理过程写在最后的回复里。模型照写了也不丢：解析器把认不出的段落原样放进 `other`，页面照样给用户看。
+- 03a 的短清单（第 7 步）每行带编号：`- A001｜……`。Core 注入前去掉编号（没带编号的行照收），40 字上限不含编号，1536 字节上限按去掉后的算。
+
+**别再记清单**
+
+- 文件 `history_insight/galley/forgotten.json`（Galley 的，模型只读）：`[{id, kind, title, deletedAt}]`。
+- 每次整理把清单写进任务提示词：「用户删掉过下面这些条目，表示不想被记住。不要重建它们，也不要把同一件事写进别的条目或情绪事件」，每条一行「编号｜标题」。
+- 页面上「移出」只把这件事从清单里拿掉（以后可以再记），删掉的内容不恢复。
+
+**删除一条（确定式）**
+
+- 从 `activities.md` / `emotional_events.md` 里删掉这条的整块（到下一个同级或上级标题为止），文件其余部分逐字不动；短清单里同编号那一行一起删；标题记进别再记清单。
+- 整理进行中返回 `ledger_busy`（与整理共用 `RUN_LOCK`，不排队）。
+- 写文件用临时文件 + 改名。
+
+**解析**
+
+- 只认上面的格式：`## 持续活动` / `## 已消失事项` 下的 `### A\d+｜标题`，情绪文件里的 `## E\d+｜标题`；条目里的 `- 键：值` 行按键名归位，「原文（`会话`，时间）：“…”」拆成 `LedgerQuote`。
+- 文件存在、非空却一条都认不出，就是 `raw`（页面只读显示原文）；认出一部分时，其余放 `other`。
+- 解析器与删除共用同一套块边界，单测覆盖：评测产物（`/var/folders/.../galley-ledger-eval-sanafxuv/` 那份 17KB 的是格式钉死之前的，拿来当「认不全」的样本）、钉死格式的样本、空文件、只有标题。
+
+**GA 全局记忆**
+
+- 读写内置状态 `memory/global_mem.txt`、`memory/global_mem_insight.txt`。`revision` 是内容哈希；写的时候对不上就 `changed_on_disk`（助理可能刚写过）。临时文件 + 改名。
+- 核对运行时升级与种子不会覆盖这两个文件（Rule 1）；会覆盖就是 bug，回报。
+
+**排除表的标题**：overview 里给每条排除带上会话 / 项目标题（会话已归档也要有；已删的行随级联删除，不会出现）。
+
+**验收**
+
+- `cargo test --workspace`、`cargo check`；外置运行时每个新命令都是 `managed_only`、不建任何文件（测试）。
+- 用钉死格式重跑一次评测（真模型，`run_eval.py run`，默认三次挖掘）：三次产物都能被解析器认全（`other` 为空或只剩少量），删一条后下一次挖掘没有重建它（在评测里加一步：第二次挖掘前删一条持续活动，看第三次）。检查器改用解析器的结构认区域。回报产物样例与检查结果。
+- 文档：`docs/managed-ga-runtime/`（`prompt-composition.md`、`code-state-and-patches.md`）、`docs/ga-baseline.md:1015` 里的环境变量说法改成 prefs；`core/src/ledger/` 模块注释同步。
+
+### 04b 界面（ready-for-agent）
+
+动手前读 `docs/design/overlays-and-settings.md`（设置页）、`docs/design/conversation.md`（空状态 765–788、Composer 537–539）、`docs/copy-language-guidelines.md`，撞到禁令就停下回报，不要自己绕。
+
+**设置 →「记忆」一页**（`gui/src/components/screens/settings/`，只在内置运行时出现；标签位置放「模型」之后，理由写进注释）
+
+自上而下：
+
+1. **开关一行**「从对话里了解我」+ 一句来源与去向：每天读一遍你在桌面和 IM 私聊里说的话（不读助理的回复），交给当前默认模型整理一次，所以会再经过一次模型服务商；
+   记下的内容只在这台电脑上，换模型也带得走。开着时下面一行状态：起点（「从 10 月 12 日 14:30 开始」或「从最早的对话开始」）、上次整理（时间、结果）、下次整理时间；正在整理时显示「正在整理」。
+   - 打开：选「从现在开始 / 也读以前的对话」（后者注明第一次整理要读完以前的对话，用量会大一些）。
+   - 关掉：选「保留已记下的 / 一起清空」（清空注明：已记下的内容和别再记清单都删除；标为「不用于了解我」的对话仍然不读）。
+2. **正在进行的事**（持续活动）：按「最近」倒序。每条：标题、现状、「最近提到：9 月 27 日 · 4 个对话」；展开看原文与其余说明，来源里的 Galley 会话可点（打开那个对话，已归档的也能开），IM 来源显示成「飞书 · 9 月 21 日」。每条一个删除（确认一次：删掉后以后整理也不会再记这件事）。
+3. **已经结束的事**（已消失事项）：同上，默认折叠。
+4. **情绪时刻**（情绪事件）：默认折叠；区首一句用法（只为把事办好时引用，不会单独评论你的情绪）；每条能删。
+5. **不再记的事**（别再记清单）：默认折叠；每条「移出」。注明为了不再记，Galley 留着这件事的标题。
+6. **不用于了解我的对话**：列出排除的对话与项目，每条「恢复」。
+7. **助理的长期记忆**（GA 全局记忆两份文件）：原文、可编辑、显式保存；`changed_on_disk` 时提示重新载入。注明这部分是助理在对话里自己记的，不受上面的开关控制。
+- 解析失败（`raw`）的区域只读显示原文；`other` 有内容时在该区域末尾给「其他内容」只读原文。
+- 开关是 undecided / off 而且文件都不在时，2–6 区不出现，只留开关与第 7 区。
+- 整理进行中删除按钮禁用并说明原因（`ledger_busy`）。
+- 收到 `memory-changed` 重新取 overview。
+
+**入口**
+
+- 主聊天标题菜单（`gui/src/components/layout/header/SessionTitleMenu.tsx`）加「它记得我什么」→ 打开设置并定位到「记忆」。
+- 其他内置会话的标题菜单加「不用于了解我」（勾选态）；项目的菜单加同一项。只在内置且开关开着时出现。主聊天的标题菜单不放这一项。
+  标上时提示一句：以后不再读这个对话；已经记下的到「记忆」页删。
+
+**主聊天里问一次**（裁决 46）
+
+- 条件：内置运行时、开关 undecided、主聊天里已经有至少一轮完成的问答。空的主聊天不问（空状态 austerity，`conversation.md:784–788`）。
+- 三个选择：「从现在开始」「也读以前的对话」「先不要」；「先不要」= `disable`（不清空），之后不再问。文案说清读什么、经过谁、存在哪、在哪关。不进模型上下文。
+- 两种形态做成临时切换器（常驻可点 pill，portal + `pointer-events:auto`）：
+  - **A 输入框上方一条**（最克制）：一行说明 + 三个按钮，贴在 Composer 上方。
+  - **B 时间线末尾一张卡片**（裁决 10 的卡片形态）：跟在最后一条回复后面。
+- 切换器另带「演示数据」档：「记忆」页用评测产物（林晓那份）渲染，询问强制出现。演示数据只在开发构建里，放测试 fixture，不碰 Core 和真实文件。
+
+**验收**
+
+- `pnpm --dir gui typecheck`、`lint`、相关 vitest（页面在 undecided / off / on / raw / busy 下的渲染；询问的出现条件；外置运行时不出现标签与菜单项）。
+- 新命令的 TS 类型与调用包装进 `gui/src/` 现有位置（同时核对 `gui/src/types/ipc.ts` 是否需要镜像）；中英文案都写。
+- 旧文件只格式化自己的 hunk（gui 不是 prettier-clean）。
+- 视觉由主会话合入后在真机上和 JC 过，界面代理不做最终视觉结论。
 
 ## 宪法 Rule 4 补句（2026-10-12 JC 定措辞；与本票同版落地）
 
@@ -31,3 +236,7 @@ Status: needs-triage
 > Interpretation (2026-10-12): the affairs ledger (managed runtime only, off unless the user turns it on) keeps the user's own words from IM channels — never the agent's replies — under the managed state root's `memory/history_insight/`, so the engine's memory layer can still learn from them after engine logs are pruned. It is the user's memory state, not Galley conversation storage: it never enters Galley's database, the user can see and delete it in Galley, and runtime upgrades never overwrite it.
 
 ## Comments
+
+- 2026-10-12 主会话：JC 问开关是什么、为何要有。答：现在的开关是环境变量，普通用户设不了；账本每天把用户的话再交给模型服务商读一遍、推断生活与情绪、花用户的钱，用户没在对话里要求过；
+  Rule 4 补句已承诺「用户打开才开」；PRD 裁决 15「做得便宜、能退」。真正要定的是默认状态：藏在设置里多数人永远不开，主聊天的「大脑」就空着，所以在主聊天里问一次。JC「按建议推进」。
+- 主会话核对设计文档时发现：空的主聊天按空状态规则不能放提示（`conversation.md:784–788`），所以询问的条件定为「已经有一轮完成的问答」。
