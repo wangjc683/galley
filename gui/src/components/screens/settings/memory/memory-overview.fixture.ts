@@ -16,12 +16,14 @@ export const MEMORY_OVERVIEW_FIXTURE: MemoryOverview = {
   ledger: {
     switch: { state: "on", since: "1970-01-01T00:00:00Z", lookBack: true },
     running: false,
+    // Local 04:00 (the run time), built in the test machine's zone: CI
+    // runs in UTC, and a fixed `+08:00` there reads as 昨天 20:00.
     lastRun: {
-      startedAt: "2026-10-12T04:00:00+08:00",
+      startedAt: new Date(2026, 9, 12, 4, 0).toISOString(),
       outcome: "succeeded",
       turns: 10,
     },
-    nextRunAt: "2026-10-13T04:00:00+08:00",
+    nextRunAt: new Date(2026, 9, 13, 4, 0).toISOString(),
     activities: {
       kind: "parsed",
       ongoing: [
