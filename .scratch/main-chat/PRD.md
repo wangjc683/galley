@@ -93,6 +93,10 @@ README「dense context instead of long」（`README.md:54`）。
     C2（C1 + 子项缩进）/ C3（C1 + 整块底色），票 [09](./issues/09-section-belonging-trial.md)。
 38. （09 真机比后）归属定 C3 + 常显 + 加重：分区头回列表当吸顶第一行、间距反转；整个「其他对话」区铺 `bg-app`，主对话留在 chrome；
     主对话行下常显一条 `line-strong` 分隔线（JC：`line/60`「几乎看不太到」）。C1、C2（缩进）不要。收尾在本地直接做（`docs/design/layout-and-chrome.md`「有主对话时」）。
+39. 主聊天不单独调小 `context_win`（JC 选 A）：它按整个模型生效、从最早的消息裁、还连着工具结果上限，调小会在重任务中途丢掉用户的要求，等于撤回 06-23 的 `751bbc8c`。
+    跨话题累积靠切段（03a），单个重任务靠子任务（06）；按体量切段留作预留规则。依据见票 03 Comments。
+40. 宪法 Rule 4 补句措辞定稿（JC 认可票 04 的草稿），随票 04 同版写进 `AGENTS.md`。
+41. 查历史不做新工具：走现有「Past Galley Conversations」的 Galley CLI 只读路径，CLI 只做加法（`--around`、时间窗口、搜索结果带时间），段首状态块告诉模型哪条是主聊天、这段从哪开始（票 03b）。
 
 ## 事实依据（2026-10-12 核对）
 

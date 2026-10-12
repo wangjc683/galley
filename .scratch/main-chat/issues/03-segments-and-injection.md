@@ -1,6 +1,6 @@
 # 03（C）切段、注入与主聊天入口层提示词
 
-Status: 03a in-review（`d2443281` 本地合入未推送，2026-10-12；待 JC 在 tauri dev 里验）；03b、03c、03d needs-triage（2026-10-12 拆片）
+Status: 03a in-review（`d2443281` 本地合入未推送，2026-10-12；待 JC 在 tauri dev 里验）；03b ready-for-agent（2026-10-12 改走现有 CLI 读路径）；03c、03d needs-triage
 
 来源：主聊天 PRD 裁决 18、20、27（2026-10-12）。依赖 01（账本有内容）、02（主聊天存在）。对外必须与 04 同版。
 
@@ -28,9 +28,20 @@ Status: 03a in-review（`d2443281` 本地合入未推送，2026-10-12；待 JC �
 - **IM L0**：IM 入口层（`im_supervisor_prompt`）带同一份清单，同一开关。
 - 只在内置；外置零变化；非主聊天会话零变化。
 
-### 03b 查主聊天历史的工具（needs-triage）
+### 03b 查主聊天历史（ready-for-agent）
 
-只读，内置运行时专用；管「你问起时找得到」。按时间、关键词查主聊天里人和助理说过的话。读库走 Core（Rule 5），工具是托管补丁。依赖 03a 的段界。
+管「你问起时找得到」。2026-10-12 改：不做新的 GA 工具、不打托管补丁。内置提示词已有「Past Galley Conversations」一节，
+模型用 Galley CLI 的只读命令（`sessions search` 全文检索、`session show`）查以前的对话，主聊天本身也在里面（`core/src/managed_prompt.rs:135-147`）。
+缺的是：搜到一条后读不到它前后的内容（`session show` 只有全量与 `--tail`，主聊天会越来越长），以及模型不知道哪条是主聊天、当前这段从哪开始。
+
+- **CLI 只做加法**（Rule 3，`docs/agent-api/session-commands.md`）：
+  - `session show <id> --around=<messageId> [--context=N]`：这条消息前后各 N 条。
+  - `session show <id> --since=<时间> [--until=<时间>]`：按时间窗口读（「上周三聊的」）。
+  - `sessions search` 的结果加 `createdAt`、`role`、`turnIndex` 字段，加 `--session=<id>` 过滤。
+  - 现有调用的行为与输出不变。外置模式下这些参数同样可用，无害。
+- **主聊天的状态**（只在内置、只在主聊天）：段首状态块写明这是主聊天、它的会话 id、当前这段从第几轮、哪天开始；
+  再一句：更早的部分不在上下文里，用户提到时用 CLI 查（先搜，再 `--around`）。静态命令示例（`history_cli_commands!`）若要加 `--around`，守静态字节预算（先删或缩，或同 diff 抬上限并记条款台账）。
+- 搜索范围照旧覆盖全部对话：账本的事项来自主聊天和用户开的其他对话，事项清单里提到的事要能查到出处。
 
 ### 03d 主聊天入口层提示词（needs-triage）
 
@@ -88,3 +99,5 @@ Status: 03a in-review（`d2443281` 本地合入未推送，2026-10-12；待 JC �
   - 热 runner 时新段第一条消息要等新 runner 起来（几秒）。
 - 真机验法：带 `GALLEY_LEDGER_SINCE=2026-10-12` 起 dev；prefs 设 `main_chat_segment_idle_hours` = `0.01`（36 秒）；手写几行到 `ongoing_affairs.md` 或跑 `run_ledger_now`；
   主聊天发一句、等 36 秒再发，问「我们刚才聊了什么」应接不上，界面仍显示整条；`SELECT * FROM main_chat_segments;` 能看到段界；重启后 `load_history` 只回放当前段。还原：删掉这个 prefs 键。
+
+2026-10-12 JC 裁：`context_win` 选 A，不调。主聊天上下文跨话题累积靠 03a 切段，单个重任务靠 06；按体量切段留作预留规则，等真用数据。
