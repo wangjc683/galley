@@ -342,7 +342,8 @@ impl Mapper {
             .await
     }
 
-    /// Whether `session_id` is a managed-runtime session (cached).
+    /// Whether `session_id` is a managed-runtime session the phone sees —
+    /// not a ledger mining session (cached).
     async fn is_managed(&mut self, session_id: &str) -> bool {
         if let Some(managed) = self.managed.get(session_id) {
             return *managed;
@@ -353,7 +354,8 @@ impl Mapper {
             .await
         {
             Ok(brief) => {
-                let managed = brief.ga_runtime_kind == RuntimeKind::Managed;
+                let managed = brief.ga_runtime_kind == RuntimeKind::Managed
+                    && !crate::ledger::is_mining_session(&brief);
                 self.managed.insert(session_id.to_string(), managed);
                 managed
             }
@@ -396,7 +398,8 @@ impl Mapper {
         };
         if let Some(make) = session_event {
             let SessionEventIn { session, via } = serde_json::from_value(payload)?;
-            let managed = session.ga_runtime_kind == RuntimeKind::Managed;
+            let managed = session.ga_runtime_kind == RuntimeKind::Managed
+                && !crate::ledger::is_mining_session(&session);
             self.managed.insert(session.id.0.clone(), managed);
             if !managed {
                 return Ok(Mapped::Nothing);

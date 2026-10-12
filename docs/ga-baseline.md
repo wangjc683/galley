@@ -1009,6 +1009,34 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     `galley_im_display` pulls in `chatapp_common`, which installs
     `/continue` / `/btw` / `/review` on the GA class in the WeChat process,
     as on the other channels.
+20. The affairs ledger reading IM turns out of the engine logs
+    (2026-10-12, `.scratch/main-chat/issues/01-affairs-ledger.md`; managed
+    runtime only, read-only, no managed patch; off unless
+    `GALLEY_LEDGER_SINCE` is set). IM conversations never reach
+    `workbench.db`, so `core/src/ledger/im_archive.rs` copies the user's
+    words out of `temp/model_responses/model_responses_*.txt` into the
+    ledger's own archive before the startup prune can delete them. It
+    relies on: (a) `llmcore._write_llm_log`'s block shape, `=== Prompt ===
+    <local %Y-%m-%d %H:%M:%S>[ model=…]\n<body>\n\n`, appended; (b)
+    `chatapp_common.FILE_HINT` ("If you need to show files to user, use
+    [FILE:filepath] in your response.", `frontends/chatapp_common.py:39`,
+    copied by `runner/im_wechat.py:61`) prefixing every IM user message
+    the frontends hand to `put_task`, and no other path prefixing it — it
+    is the only thing that marks a prompt as an IM user turn; (c) a task's
+    first prompt carrying that message as written: a `text` block of
+    `NativeToolClient`'s `{"role": "user", "content": [...]}` log line,
+    or a `=== USER ===` section of `ToolClient`'s protocol prompt; (d)
+    `agentmain.run`'s long-prompt indirection (over 2000 characters the
+    query goes to `temp/user_prompt_*.md` and the prompt says `Long user
+    prompt saved to <path>. Read and execute.`), followed back to the
+    file. Channel attribution reads Galley's own channel state
+    (`im/<channel>/context_log.json`, `im/discord/
+    discord_active_channels.json`), not GA's. Re-check on upgrade: (a)–(d)
+    above, and whether upstream's `/continue` copy (`continue_copy`) still
+    duplicates a whole log under a new name (the archive dedupes on time +
+    text). Known gaps: a text-protocol IM message with images is logged as
+    a Python list repr and is missed; group and private chats are not told
+    apart.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
@@ -1062,6 +1090,10 @@ start the audit there instead of grepping the bridge:
   conversation calls `ChannelResume` directly). The call sites (the
   module-level agents, fsapp's `get_agent` wrapper) are in `_run_feishu` /
   `_run_telegram` / `_run_wechat` of `runner/managed_im_supervisor.py`.
+- **[`core/src/ledger/im_archive.rs`](../core/src/ledger/im_archive.rs)**
+  — item 20: `complete_blocks` (the log block shape), `im_texts` /
+  `human_text` (the hint, both prompt protocols, the long-prompt file),
+  `channels_by_log` (Galley's channel state).
 - **[`runner/im_wechat.py`](../runner/im_wechat.py)** — items 15 and 19:
   `WechatConversation` (`_Run.observe` for the item shape,
   `_on_turn_end` / `_take_ask_event` for the ask payload and

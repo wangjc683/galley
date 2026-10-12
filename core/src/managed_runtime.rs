@@ -147,6 +147,21 @@ pub fn prune_model_responses_for_app(
     crate::model_responses_prune::prune_model_responses(&paths.model_responses_dir)
 }
 
+/// The managed state root (`<app data>/managed-ga-state`), without
+/// creating anything — for callers that must not touch disk when their
+/// feature is off (the affairs ledger, `crate::ledger`).
+pub fn state_root_for_app(app: &AppHandle) -> std::io::Result<PathBuf> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::NotFound, e))?;
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::NotFound, e))?;
+    Ok(layout_paths(resolve_resource_root(&resource_dir), app_data_dir).state_root)
+}
+
 pub fn bridge_cwd_for_app(app: &AppHandle) -> std::io::Result<PathBuf> {
     if cfg!(debug_assertions) {
         Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR"))

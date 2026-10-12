@@ -32,6 +32,9 @@ pub(crate) fn setup_app(
         return Ok(());
     }
     write_cli_discovery_file();
+    // The affairs ledger copies IM turns out of the engine logs before
+    // the prune can delete them (no-op unless GALLEY_LEDGER_SINCE is set).
+    crate::ledger::archive_before_prune(app);
     prune_engine_logs(app);
     start_background_services(app);
     #[cfg(target_os = "windows")]
@@ -408,7 +411,8 @@ fn prune_engine_logs(app: &tauri::App) {
 
 /// Fire-and-forget background services: IM supervisor autostart, the
 /// resident browser bridge (managed runtime only), parking goals left
-/// `active` by the previous Core process, and the remote module. Goal v2's
+/// `active` by the previous Core process, the scheduler and the affairs
+/// ledger's daily job, and the remote module. Goal v2's
 /// continuation loop lives in this process, so after a restart nothing
 /// is driving those goals; `paused` is the honest state and the user's
 /// next message on the session resumes them (goal-simplify PRD §3.3).
@@ -461,6 +465,7 @@ fn start_background_services(app: &tauri::App) {
     }
 
     crate::scheduler::start(app);
+    crate::ledger::start(app);
 
     start_remote_module(app);
 }

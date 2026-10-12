@@ -17,6 +17,7 @@ pub mod discovery;
 pub mod error;
 pub mod im_supervisor;
 pub mod ipc;
+pub mod ledger;
 pub mod local_file;
 pub mod git_review;
 pub mod goal_engine;
@@ -252,6 +253,10 @@ pub fn run() {
             request_goal_stop,
             start_session_goal,
             extend_goal,
+            // Affairs ledger (.scratch/main-chat ticket 01)
+            set_ledger_excluded,
+            list_ledger_exclusions,
+            run_ledger_now,
             // B2 runner commands
             runner_commands::spawn_runner,
             runner_commands::send_to_runner,

@@ -49,6 +49,8 @@ Application Support/app.galley/
   galley.db
   managed-ga-state/
     memory/                   # the ONLY dir GA reads SOPs from
+      history_insight/        # affairs ledger (GALLEY_LEDGER_SINCE only): mining outputs
+        galley/               # Core's: state.json, im_archive.jsonl, batch.md
     sop/                      # vestigial: created but GA never reads it
     skills/                   # vestigial: created but GA never reads it
     temp/                     # engine scratch: code_run cwd, reflect logs
@@ -77,6 +79,12 @@ Application Support/app.galley/
 > pre-migration backup (`app.galley.backup.*`) skips `managed-ga-state/temp/`
 > for the same reason: a schema rollback never needs engine scratch. Both
 > are managed-runtime only; attach mode never touches a user-owned `temp/`.
+> When the affairs ledger is on (`GALLEY_LEDGER_SINCE`, `core/src/ledger/`),
+> its startup step copies the IM user turns the logs gained since its last
+> pass into `memory/history_insight/galley/im_archive.jsonl` **before** the
+> prune runs, so a log is never deleted unarchived. Everything under
+> `history_insight/` is user state: the mining outputs are the ledger, the
+> archive is the only lasting record of what was said in IM.
 
 Initial setup may seed default state only when the target file or directory is
 missing. Existing state must not be overwritten:

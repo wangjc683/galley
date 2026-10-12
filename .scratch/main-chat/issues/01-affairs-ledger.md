@@ -55,3 +55,15 @@ Status: ready-for-agent（2026-10-12 JC 按建议推进：只读人说的话、�
 - Rule 4：IM 对话进账本。按 08-13 解释，引擎写进内置状态的东西属于引擎内部状态；落地时逐条核一遍，结论写进 Comments。
 
 ## Comments
+
+### 2026-10-12 Rule 4 落地核对（实现时）
+
+依据：`AGENTS.md:148-149`「Galley stores session data and supervisor action metadata. It does not store the conversation between a supervisor and the user in IM / Claude / another agent.」；`AGENTS.md:154-157`「Interpretation (2026-08-13): logs the GA engine writes for its own operation under the managed state root (e.g. `model_responses`, …) are engine-internal runtime state, not Galley conversation storage. This rule governs Galley's own database and product surfaces.」
+
+1. 读引擎日志：只读 `temp/model_responses/`，与 `/restore` 读的是同一批文件，属于 08-13 解释里的引擎内部状态。一致。
+2. 不进库：IM 原话只写进内置状态 `memory/history_insight/galley/im_archive.jsonl`，`workbench.db` 里只多了排除标记（迁移 045）。「governs Galley's own database」这一半守住了。一致。
+3. 归档本身：它不是「引擎为自身运行写的日志」，而是 Core 为账本写的、专门比日志活得久的副本（就是为了躲过 30 天 / 500MB 清理）。08-13 的字面盖不住它。把它看成上游 L4 归档的替身说得通（上游 `reflect/scheduler.py:62-74` 也把日志永久压进 `memory/L4_raw_sessions/`；Galley 不开反射模式，由 Core 代做其中「只存用户原话」的一步），但这是延伸解释，不是现成结论。
+4. 内置 IM 渠道的 agent 在 Galley 里就是 supervisor（`runner/im_wechat.py:68`「Galley 托管的微信渠道固定由 supervisor 处理消息」），所以第一句的字面也指向这条对话。归档只存用户一侧的话、不存 agent 的回复，削弱了这层张力，没有消除。
+5. 账本产物（模型写在 `history_insight/` 的条目，含情绪事件）将由 04 页面展示，属于「product surfaces」。
+
+结论：读日志、不进库两点与 08-13 解释一致；IM 归档与账本产物是 08-13 字面之外的新情形。建议对外发版（与 04 同版）前在 Rule 4 补一句解释，例如「事项账本在内置状态里保存用户本人在 IM 里说过的话（`memory/history_insight/`），作为引擎记忆层的一部分，是用户状态，不进 Galley 数据库」。改宪法由 JC 定，本票没有动 `AGENTS.md`。

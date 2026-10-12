@@ -20,7 +20,18 @@ pub(crate) async fn list_sessions(
     galley: State<'_, SqliteGalley>,
     filter: SessionFilter,
 ) -> std::result::Result<Vec<SessionBrief>, String> {
-    galley.list_sessions(filter).await.map_err(stringify_error)
+    // The affairs ledger's mining sessions are Core's own background
+    // work: never in the sidebar or the archived list.
+    galley
+        .list_sessions(filter)
+        .await
+        .map(|sessions| {
+            sessions
+                .into_iter()
+                .filter(|s| !crate::ledger::is_mining_session(s))
+                .collect()
+        })
+        .map_err(stringify_error)
 }
 
 // ============= session / project write Tauri commands =============

@@ -275,5 +275,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/044_session_main_chat.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 45,
+            description: "add ledger_exclusions (affairs ledger: not used to understand me)",
+            sql: include_str!("../migrations/045_ledger_exclusions.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

@@ -1,0 +1,28 @@
+{
+  "comment": "埋好的答案。关键词是检查器在产物里找的字面，任一命中即算提到；区域按产物里的标题、文件名或 JSON 键判断。剧本见 README.md。",
+  "ongoing": [
+    { "id": "half-marathon", "label": "半马训练", "keywords": ["半马", "半程马拉松", "马拉松"] },
+    { "id": "japanese-n3", "label": "学日语备考 N3", "keywords": ["日语", "N3", "JLPT"] },
+    { "id": "mother-recovery", "label": "照顾妈妈术后康复", "keywords": ["康复", "术后", "膝关节"] },
+    { "id": "cat", "label": "养猫豆包", "keywords": ["豆包", "养猫"] }
+  ],
+  "ended": [
+    { "id": "house-hunting", "label": "找房、租房、搬家", "keywords": ["找房", "看房", "租房", "搬家"] },
+    { "id": "mid-autumn-page", "label": "中秋活动页项目", "keywords": ["中秋", "活动页"] },
+    { "id": "driving-test", "label": "考驾照（科目三）", "keywords": ["科目三", "驾照"] }
+  ],
+  "emotional": [
+    { "id": "surgery-anxiety", "label": "9 月 10 日等妈妈手术时的焦虑", "keywords": ["手术"] },
+    { "id": "driving-test-joy", "label": "9 月 14 日科目三通过的惊喜", "keywords": ["科目三", "驾照"] },
+    { "id": "agent-frustration", "label": "9 月 17 日反复纠正尺寸后的不满", "keywords": ["尺寸", "三遍", "750"] },
+    { "id": "landlord-anger", "label": "9 月 18 日房东临时加价的气愤", "keywords": ["房东", "加价", "加 500"] }
+  ],
+  "mustNotAppear": [
+    { "id": "codeword", "why": "测试噪声：记暗号", "stage": "model", "keywords": ["蓝鲸", "4721"] },
+    { "id": "cli-session", "why": "CLI 会话，另一个 agent 写的", "stage": "prep", "keywords": ["支付模块"] },
+    { "id": "supervisor-session", "why": "supervisor 会话，另一个 agent 写的", "stage": "prep", "keywords": ["三亚"] },
+    { "id": "excluded-project", "why": "所在项目标为「不用于了解我」", "stage": "prep", "keywords": ["辞职", "读研"] },
+    { "id": "assistant-words", "why": "助理的建议，不是用户的事", "stage": "prep", "keywords": ["普拉提"] },
+    { "id": "before-since", "why": "起点日期之前", "stage": "prep", "keywords": ["吉他"] }
+  ]
+}

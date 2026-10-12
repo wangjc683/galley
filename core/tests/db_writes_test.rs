@@ -70,6 +70,7 @@ const MIG_040: &str = include_str!("../migrations/040_session_reasoning_effort.s
 const MIG_042: &str = include_str!("../migrations/042_managed_model_advanced_layers.sql");
 const MIG_043: &str = include_str!("../migrations/043_message_session_client.sql");
 const MIG_044: &str = include_str!("../migrations/044_session_main_chat.sql");
+const MIG_045: &str = include_str!("../migrations/045_ledger_exclusions.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -111,7 +112,7 @@ async fn run_migrations(pool: &SqlitePool) {
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
         MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
         MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037, MIG_038, MIG_039, MIG_040,
-        MIG_042, MIG_043, MIG_044,
+        MIG_042, MIG_043, MIG_044, MIG_045,
     ] {
         sqlx::raw_sql(sql)
             .execute(pool)

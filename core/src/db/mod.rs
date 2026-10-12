@@ -137,6 +137,7 @@ impl SqliteGalley {
 mod api_impl;
 mod goal;
 mod helpers;
+mod ledger;
 mod main_chat;
 mod managed_model;
 mod prefs;
@@ -149,6 +150,7 @@ mod session;
 use helpers::*;
 use rows::*;
 
+pub use ledger::LedgerHumanTurnRow;
 pub use main_chat::{MainChatEnsured, MAIN_CHAT_TITLE};
 pub use rows::{
     ManagedModelSecretRow, MessageAttachmentCreate, MessageSearchHit, PersistAssistantMessage,
