@@ -54,6 +54,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   onCancelRename,
   singleLine = false,
   mainChatLabel,
+  mainChatHome = false,
 }: {
   session: Session;
   active?: boolean;
@@ -106,6 +107,10 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
    * of its own (layout-and-chrome.md: tone is for state, not identity).
    * The caller wires no row actions: it has no menu. */
   mainChatLabel?: string;
+  /** Main chat layout A3 (on trial): the main chat is the home, so its
+   * title keeps full-strength ink even when another row is selected —
+   * the subtractive dimming below skips it. */
+  mainChatHome?: boolean;
 }) {
   const copy = useCopy();
   const hasRowActions = !!(
@@ -485,7 +490,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                 // with the selected row itself, and it costs no channel —
                 // title COLOUR was unused, while title WEIGHT belongs to
                 // running/unread and is left alone here.
-                active ? "text-ink" : "text-ink-soft",
+                active || mainChatHome ? "text-ink" : "text-ink-soft",
                 isRunning ||
                   goalRunning ||
                   goalParked ||

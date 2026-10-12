@@ -19,6 +19,7 @@ import {
   ROW_NAV_ICONS_DISPLAY,
   ROW_NAV_ICONS_DISPLAY_WITH_SIDE_CHAT,
 } from "./sidebar-width";
+import { mainChatTrialCopy, useMainChatLayoutStore } from "./main-chat-layout";
 
 /** Mono, muted shortcut text — the tooltip's "⌘K" and the new-chat
  * row's ⌘N hint. Render the text through `ShortcutGlyphs` so the
@@ -77,6 +78,13 @@ export function SidebarNavIcons({
   newSideChatActive?: boolean;
 }) {
   const copy = useCopy();
+  // TEMPORARY: the A2 icon's label follows the trial's copy pair in the
+  // Chinese UI (main-chat-layout.ts); English keeps New side chat.
+  const copyVariant = useMainChatLayoutStore((s) => s.copyVariant);
+  const sideChatLabel =
+    copy.sidebar.mainChat === "主聊天"
+      ? mainChatTrialCopy(copy, copyVariant).newChat
+      : copy.sidebar.newSideChat;
   const inHeader = placement === "header";
   const NavButton = inHeader ? HeaderIconButton : QuickIconButton;
   const iconSize = inHeader ? 16 : 14;
@@ -133,10 +141,10 @@ export function SidebarNavIcons({
       </NavButton>
       {withSideChat && (
         <NavButton
-          label={copy.sidebar.newSideChat}
+          label={sideChatLabel}
           tooltip={
             <ShortcutTooltipText
-              label={copy.sidebar.newSideChat}
+              label={sideChatLabel}
               shortcut={formatShortcut("Mod+N")}
             />
           }

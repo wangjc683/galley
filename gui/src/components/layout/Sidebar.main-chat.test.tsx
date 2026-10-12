@@ -11,11 +11,16 @@ import type { MainChatLayout } from "./sidebar/main-chat-layout";
 // useCopy falls back to the zh copy without a CopyProvider.
 
 // Static rendering reads a store's initial state, so the switcher's
-// choice is fed through the hook instead.
+// choices (layout and copy pair) are fed through the module instead.
 const layoutChoice = vi.hoisted(() => ({ current: "A2" as MainChatLayout }));
+const copyChoice = vi.hoisted(() => ({
+  current: { mainChat: "主聊天", newChat: "新旁聊" },
+}));
 vi.mock("./sidebar/main-chat-layout", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./sidebar/main-chat-layout")>()),
   useMainChatLayout: () => layoutChoice.current,
+  useMainChatTrialCopy: () => copyChoice.current,
+  mainChatTrialCopy: () => copyChoice.current,
 }));
 
 const today = new Date().toISOString();
@@ -42,9 +47,11 @@ function render(
     layout?: MainChatLayout;
     activeId?: string;
     newChatActive?: boolean;
+    copy?: { mainChat: string; newChat: string };
   } = {},
 ) {
   layoutChoice.current = opts.layout ?? "A2";
+  copyChoice.current = opts.copy ?? { mainChat: "主聊天", newChat: "新旁聊" };
   return renderToStaticMarkup(
     <Tooltip.Provider>
       <Sidebar
@@ -99,7 +106,10 @@ describe("the main chat's row", () => {
 
 describe("A1 and A2", () => {
   it("A1 keeps the 新对话 row under the main chat, three masthead icons", () => {
-    const html = render([mainChat, sideChat], { layout: "A1" });
+    const html = render([mainChat, sideChat], {
+      layout: "A1",
+      copy: { mainChat: "主聊天", newChat: "新对话" },
+    });
     expect(html).toContain('aria-label="新对话"');
     expect(html).not.toContain('aria-label="新旁聊"');
     expect(html.indexOf('data-session-id="s-main"')).toBeLessThan(
@@ -119,8 +129,35 @@ describe("A1 and A2", () => {
     expect(count(html, 'aria-current="page"')).toBe(2);
   });
 
-  it("without a main chat (external runtime) both are today's sidebar", () => {
-    for (const layout of ["A1", "A2"] as const) {
+  it("A3 keeps the 新对话 row, quiet: no brand plus, regular weight", () => {
+    const html = render([mainChat, sideChat], {
+      layout: "A3",
+      copy: { mainChat: "主对话", newChat: "新对话" },
+    });
+    expect(html).toContain('aria-label="新对话"');
+    expect(html).toContain("主对话");
+    expect(html.indexOf('data-session-id="s-main"')).toBeLessThan(
+      html.indexOf('aria-label="新对话"'),
+    );
+    const row = html.slice(
+      html.lastIndexOf("<button", html.indexOf('aria-label="新对话"')),
+    );
+    expect(row.slice(0, 600)).toContain("h-7");
+    expect(row.slice(0, 1600)).not.toContain("text-brand-strong");
+  });
+
+  it("A3's main chat keeps full ink while another row is selected", () => {
+    const html = render([mainChat, sideChat], {
+      layout: "A3",
+      activeId: "s-side",
+      copy: { mainChat: "主对话", newChat: "新对话" },
+    });
+    const main = html.slice(html.indexOf('data-session-id="s-main"'));
+    expect(main.slice(0, 1600)).toMatch(/text-\[13px\] text-ink font-medium/);
+  });
+
+  it("without a main chat (external runtime) every layout is today's sidebar", () => {
+    for (const layout of ["A1", "A2", "A3"] as const) {
       const html = render([sideChat], { layout });
       expect(html).toContain('aria-label="新对话"');
       expect(html).not.toContain('aria-label="新旁聊"');

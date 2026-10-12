@@ -14,7 +14,10 @@ import { cn } from "@/lib/utils";
 import type { GoalBrief } from "@/types/goal";
 import type { Project, Session } from "@/types/session";
 
-import { useMainChatLayout } from "./sidebar/main-chat-layout";
+import {
+  useMainChatLayout,
+  useMainChatTrialCopy,
+} from "./sidebar/main-chat-layout";
 import { SidebarFooter } from "./sidebar/SidebarFooter";
 import { SidebarHeader } from "./sidebar/SidebarHeader";
 import {
@@ -172,8 +175,9 @@ export function Sidebar({
   sessionGoalStatus,
 }: SidebarProps) {
   const copy = useCopy();
-  // TEMPORARY: the A1 / A2 trial (see main-chat-layout.ts).
+  // TEMPORARY: the A1 / A2 / A3 trial (see main-chat-layout.ts).
   const mainChatLayout = useMainChatLayout();
+  const trialCopy = useMainChatTrialCopy();
   const mainChat = useMemo(() => findMainChat(sessions), [sessions]);
   const listSessions = useMemo(
     () => (mainChat ? sessions.filter((s) => s.id !== mainChat.id) : sessions),
@@ -361,7 +365,8 @@ export function Sidebar({
       sessionGoal={sessionGoalStatus?.get(mainChat.id)}
       projects={navigationProjects}
       onClick={() => handleSelectSession(mainChat.id)}
-      mainChatLabel={copy.sidebar.mainChat}
+      mainChatLabel={trialCopy.mainChat}
+      mainChatHome={mainChatLayout === "A3"}
     />
   ) : null;
 
@@ -403,9 +408,12 @@ export function Sidebar({
       ) : (
         <>
           {/* A1: the main-chat row above the 新对话 row, which keeps its
-              place, its divider and its narrow fallback. */}
+              place, its divider and its narrow fallback. A3: the same
+              order with the 新对话 row quiet (smaller, no brand plus). */}
           {mainChatRow && <div className="pt-1">{mainChatRow}</div>}
           <SidebarQuickActions
+            quiet={mainChat !== undefined && mainChatLayout === "A3"}
+            newChatLabel={mainChat ? trialCopy.newChat : undefined}
             onNewChat={onNewChat}
             onSearch={onSearch}
             onOpenScheduled={onOpenScheduled}

@@ -29,6 +29,8 @@ import {
  * 新建项目 too.
  */
 export function SidebarQuickActions({
+  quiet = false,
+  newChatLabel,
   onNewChat,
   onSearch,
   onOpenScheduled,
@@ -37,6 +39,12 @@ export function SidebarQuickActions({
   newChatActive = false,
   listScrolled = false,
 }: {
+  /** Main chat layout A3 (on trial, ticket 02): the main chat is the
+   * home, so 新对话 steps down — see NewChatButton. */
+  quiet?: boolean;
+  /** The trial's label for this row (main-chat-layout.ts); the locale's
+   * 新对话 otherwise. */
+  newChatLabel?: string;
   onNewChat?: () => void;
   onSearch?: () => void;
   onOpenScheduled?: () => void;
@@ -63,7 +71,12 @@ export function SidebarQuickActions({
       )}
     >
       <div className="mx-1.5 flex items-center gap-0.5">
-        <NewChatButton active={newChatActive} onClick={onNewChat} />
+        <NewChatButton
+          active={newChatActive}
+          quiet={quiet}
+          label={newChatLabel}
+          onClick={onNewChat}
+        />
         <SidebarNavIcons
           placement="row"
           onSearch={onSearch}
@@ -141,14 +154,23 @@ export function SidebarNarrowNavRow({
  */
 function NewChatButton({
   active = false,
+  quiet = false,
+  label: labelOverride,
   onClick,
 }: {
   active?: boolean;
+  /** A3's quiet form (on trial): still a full labelled row — findable,
+   * unlike A2's masthead icon — but a step down from the main chat:
+   * 28px tall, 12.5px regular muted text, a regular-weight muted plus.
+   * The band's brand colour goes with it: the main chat is now where
+   * the eye lands. */
+  quiet?: boolean;
+  label?: string;
   onClick?: () => void;
 }) {
   const copy = useCopy();
   const language = useLanguage();
-  const label = copy.sidebar.newConversation;
+  const label = labelOverride ?? copy.sidebar.newConversation;
   const shortcut = formatShortcut("Mod+N");
   return (
     <IconTooltip
@@ -164,7 +186,10 @@ function NewChatButton({
           // min-w: pl-3 + the 16px plus column. Not min-w-0 — at the
           // narrowest widths the row must squeeze the icons, not clip
           // the plus.
-          "flex h-8 min-w-[28px] flex-1 items-center gap-2 rounded-sm pl-3 text-left text-[13px] text-ink",
+          "flex min-w-[28px] flex-1 items-center gap-2 rounded-sm pl-3 text-left",
+          quiet
+            ? "h-7 text-[12.5px] text-ink-muted hover:text-ink-soft"
+            : "h-8 text-[13px] text-ink",
           "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
           // Selected or not, the row answers the pointer: it is an
           // action (clicking it while selected refocuses the composer),
@@ -181,7 +206,11 @@ function NewChatButton({
             in a 16px column like their status icons (centre 26px), gap-2,
             so the label starts on their 42px title edge (it sat at 43). */}
         <span className="flex w-4 shrink-0 justify-center">
-          <Plus size={15} weight="bold" className="text-brand-strong" />
+          {quiet ? (
+            <Plus size={13} weight="regular" className="text-ink-muted" />
+          ) : (
+            <Plus size={15} weight="bold" className="text-brand-strong" />
+          )}
         </span>
         {/* The action text shows whole or not at all — never cut in
             half. It can only run out of room in the narrow state, with
@@ -193,7 +222,8 @@ function NewChatButton({
             squeeze to ~29px each. */}
         <span
           className={cn(
-            "flex min-w-0 flex-1 pr-2 font-medium",
+            "flex min-w-0 flex-1 pr-2",
+            quiet ? "font-normal" : "font-medium",
             language === "en-US"
               ? NEW_CHAT_LABEL_HIDDEN.en
               : NEW_CHAT_LABEL_HIDDEN.zh,

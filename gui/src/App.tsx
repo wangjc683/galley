@@ -5,6 +5,10 @@ import { AppShell } from "@/components/layout/AppShell";
 import { MainHeaderHost } from "@/components/layout/MainHeaderHost";
 import { browserControlInviteVisible } from "@/components/layout/header/browser-control-indicator-status";
 import { Sidebar } from "@/components/layout/Sidebar";
+import {
+  mainChatTrialCopy,
+  useMainChatLayoutStore,
+} from "@/components/layout/sidebar/main-chat-layout";
 import { MainChatLayoutSwitcher } from "@/components/layout/sidebar/MainChatLayoutSwitcher";
 import { CommandPalette } from "@/components/overlay/CommandPalette";
 import { ThemeProvider } from "@/components/theme/ThemeContext";
@@ -459,13 +463,16 @@ function App() {
     [visibleSessions],
   );
   // ⌘K lists the main chat under its label, not its stored title (the
-  // sidebar and the header do the same).
+  // sidebar and the header do the same). TEMPORARY: the label follows
+  // the sidebar trial's copy pair (main-chat-layout.ts).
+  const mainChatCopyVariant = useMainChatLayoutStore((s) => s.copyVariant);
+  const mainChatLabel = mainChatTrialCopy(copy, mainChatCopyVariant).mainChat;
   const paletteSessions = useMemo(
     () =>
       visibleSessions.map((s) =>
-        s.mainChat ? { ...s, title: copy.sidebar.mainChat } : s,
+        s.mainChat ? { ...s, title: mainChatLabel } : s,
       ),
-    [visibleSessions, copy],
+    [visibleSessions, mainChatLabel],
   );
   // What the delete-project dialog's 「同时归档」 would archive — the
   // same set as the project group's 归档全部对话.
@@ -610,7 +617,7 @@ function App() {
                 <MainHeaderHost
                   sessionTitle={
                     activeSession?.mainChat
-                      ? copy.sidebar.mainChat
+                      ? mainChatLabel
                       : activeSession?.title
                   }
                   // The main chat keeps its name (ticket 02).
