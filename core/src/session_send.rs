@@ -20,7 +20,11 @@
 //! 4. with the gate held: an `ask_user` question pending makes this the
 //!    answer (`ask_user_response`, no images); an attached runtime whose
 //!    live runner reported that its model takes no images refuses them;
-//! 5. persist (with attachments), broadcast `user-message-persisted`
+//! 5. on the main chat, unless this is an answer, apply the segment rule
+//!    (ticket 03a, [`crate::session_runner::segment`]): after an idle
+//!    gap this message starts a new segment and the live runner is
+//!    retired;
+//!    persist (with attachments), broadcast `user-message-persisted`
 //!    (`dispatch: "pending"`), derive the title ([`crate::session_title`]);
 //! 6. ensure a runner with the session's history in it
 //!    ([`crate::session_runner`], `holds_run_gate`);
@@ -49,8 +53,8 @@ use crate::ipc::{AskUserResponseCommand, IpcCommand, UserMessageCommand};
 use crate::notify::notify;
 use crate::runner_manager::{is_side_question, QueueOffer, SendCommandError};
 use crate::session_runner::{
-    ensure_session_runner, EnsureOptions, EnsureOutcome, GaConfigPref, LlmChoice, ReplayTimeouts,
-    RunnerHost, SessionRunnerError,
+    ensure_session_runner, open_main_chat_segment_if_due, EnsureOptions, EnsureOutcome,
+    GaConfigPref, LlmChoice, ReplayTimeouts, RunnerHost, SessionRunnerError,
 };
 use crate::socket_listener::RunnerPort;
 use serde::Serialize;
@@ -227,6 +231,13 @@ async fn send_reserved(host: &RunnerHost<'_>, req: SendRequest) -> Result<SendOu
     }
     if has_images && !answer {
         refuse_unsupported_images(host, sid).await?;
+    }
+    if !answer {
+        // The main chat after an idle gap: this message starts a new
+        // segment (ticket 03a). Judged before the message moves the
+        // session's last activity; the ensure below then finds the
+        // retired runner gone and starts a fresh one.
+        open_main_chat_segment_if_due(host, sid, true).await;
     }
 
     let message = host

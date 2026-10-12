@@ -121,6 +121,29 @@ impl SqliteGalley {
         self.with_attachments(records).await
     }
 
+    /// [`Self::persisted_message_rows`] from `from_turn_index` on: the
+    /// main chat's current segment (ticket 03a), which is all its runner
+    /// is given back.
+    pub async fn persisted_message_rows_from(
+        &self,
+        session_id: &SessionId,
+        from_turn_index: i64,
+    ) -> Result<Vec<PersistedMessageRow>> {
+        let records: Vec<PersistedMessageRowRecord> =
+            sqlx::query_as::<_, PersistedMessageRowRecord>(&format!(
+                "SELECT {PERSISTED_MESSAGE_COLS} \
+                 FROM messages \
+                 WHERE session_id = ? AND visibility = 'visible' AND turn_index >= ? \
+                 ORDER BY turn_index ASC, sequence ASC"
+            ))
+            .bind(session_id.as_str())
+            .bind(from_turn_index)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        self.with_attachments(records).await
+    }
+
     /// The paged [`Self::persisted_message_rows`]: up to `limit` visible
     /// rows (clamped to `1..=`[`MESSAGE_PAGE_MAX`]) immediately before
     /// `before` — or the transcript's tail when `before` is `None` — in

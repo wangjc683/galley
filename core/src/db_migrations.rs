@@ -281,5 +281,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/045_ledger_exclusions.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 46,
+            description: "add main_chat_segments (where the main chat's context segments start)",
+            sql: include_str!("../migrations/046_main_chat_segments.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

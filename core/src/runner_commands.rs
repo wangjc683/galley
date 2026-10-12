@@ -372,7 +372,19 @@ pub(crate) async fn prepare_managed_spawn_args(
     app: &AppHandle,
 ) -> Result<SpawnArgs, RunnerSpawnError> {
     let requested_model_id = args.llm_key.clone();
-    let context = prepare_managed_runtime_context(app, requested_model_id.as_deref()).await?;
+    let mut context = prepare_managed_runtime_context(app, requested_model_id.as_deref()).await?;
+    if let Some(affairs) = main_chat_affairs(app, &args.session_id, &context).await {
+        if let Some(entry) = context
+            .env
+            .iter_mut()
+            .find(|(key, _)| key == "GALLEY_RUNTIME_PROMPT_TEXT")
+        {
+            entry.1 = managed_prompt::compose_main_chat_runtime_prompt(
+                &app.package_info().version.to_string(),
+                &affairs,
+            );
+        }
+    }
     if requested_model_id.is_some() {
         // The selected managed model may have been deleted or lost its
         // credential since the session last ran. Falling back to the current
@@ -387,6 +399,27 @@ pub(crate) async fn prepare_managed_spawn_args(
     args.cwd = None;
     args.env.extend(context.env);
     Ok(args)
+}
+
+/// The ongoing-affairs list for a runner of `session_id`, when that is
+/// the main chat and the ledger is on (ticket 03a,
+/// [`crate::ledger::affairs`]). Read at spawn: a main chat runner is
+/// spawned at the start of each segment, so each segment starts with the
+/// latest list. `None` for every other session.
+async fn main_chat_affairs(
+    app: &AppHandle,
+    session_id: &str,
+    context: &ManagedRuntimeProcessContext,
+) -> Option<String> {
+    let config = crate::ledger::LedgerConfig::from_env()?;
+    let main_chat = app.state::<SqliteGalley>().main_chat_id().await.ok()??;
+    if main_chat.as_str() != session_id {
+        return None;
+    }
+    crate::ledger::affairs::for_injection(
+        Some(config),
+        std::path::Path::new(&context.diagnostics.paths.state_root),
+    )
 }
 
 fn elapsed_ms(started_at: Instant) -> f64 {

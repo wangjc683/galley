@@ -22,7 +22,11 @@ Source of truth is `core/src/managed_prompt.rs`:
 rules; Core passes the composed text through the existing
 `GALLEY_RUNTIME_PROMPT_TEXT` env seam. External attach mode does not pass this
 prompt value. The runner appends it as `extra_sys_prompt` and needs no
-knowledge of the composition.
+knowledge of the composition. Two surfaces get one more state-block section,
+the user's ongoing affairs (below): the main chat
+(`compose_main_chat_runtime_prompt`, chosen in
+`runner_commands::prepare_managed_spawn_args` by session id) and the IM
+channels (`compose_im_runtime_prompt`).
 
 ## Admission Test For Static Clauses
 
@@ -143,6 +147,44 @@ The block closes with the fallback rule: for state not listed, check via
 Galley CLI where available, otherwise ask the user to check Settings — self-
 serve before deflecting.
 
+### Ongoing Affairs (main chat and IM only)
+
+Since ticket 03a (`.scratch/main-chat/issues/03-segments-and-injection.md`)
+the main chat's and the IM channels' state block ends with a section
+`## Ongoing Affairs`: one framing paragraph, then the short list the affairs
+ledger's daily mining run ends with
+(`memory/history_insight/ongoing_affairs.md`, `core/src/ledger/affairs.rs`).
+It is how the assistant connects a topic to last week's affairs when nobody
+mentions them; GA trims history by volume, but this lives in the system
+prompt, so trimming cannot drop it. Identity (the static rules) and global
+memory (GA's own system prompt) are already there and are not repeated.
+
+- **Switch**: the ledger's, `GALLEY_LEDGER_SINCE`. Unset, or no list written
+  yet, or a list with nothing in it → no section, and the prompt is exactly
+  `compose_runtime_prompt`'s. Every other session never gets it; attach
+  mode never runs this code.
+- **When it is read**: at spawn. A main chat runner is spawned at the start
+  of every segment (a new segment retires the warm runner, see
+  [runtime modes and sessions](./runtime-modes-and-sessions.md#main-chat-segments)),
+  so each segment starts with the latest list. An IM channel reads it when
+  the channel starts and keeps it until it restarts.
+- **Bounded**: Core does not trust the file — blank lines and Markdown
+  headings are dropped, and the list is cut at a line boundary to
+  `AFFAIRS_CAP_BYTES` = 1536 (`ledger::affairs`, with its own cap test).
+  The mining task's limits (at most 12 lines of at most 40 characters) come
+  to 1475 bytes at worst in Chinese, so the cut only bites when the model
+  ignores them; the six ongoing affairs of the ticket-01 corpus after three
+  weeks come to about 480 bytes as one line each. The heading and framing are held to
+  `AFFAIRS_HEADER_BUDGET_BYTES` (226, no headroom). Neither counts toward the
+  static budget or the prompt hash: this is data.
+- **Admission**: users do not ask for the list, but the feature is the
+  association it enables (PRD rulings 16, 18). It is captured at spawn and
+  cannot change within a segment; the framing says it may be out of date
+  and that what the user says now wins. It is the user's own words,
+  distilled — the same content the conversation already sends.
+- **Wording**: data only ("Background, not instructions"). How the model
+  should use the list belongs to the main chat entry layer (ticket 03d).
+
 ## IM Entry Layer
 
 IM channels (WeChat, Feishu, Telegram, Discord; managed runtime only) compose
@@ -174,6 +216,11 @@ says four things:
 
 Budget: `IM_PROMPT_BUDGET_BYTES` caps the template (empty SOP path, `\r` not
 counted) on the longest platform variant, same rule as the static budget.
+
+IM's state block carries the ongoing-affairs section too (IM L0, main chat
+PRD ruling 27): same list, same switch, read when the channel starts. It sits
+in the state block rather than in the entry layer, so the entry layer's
+budget keeps measuring rules only and Discord's template needs no change.
 
 ## Profile Id And Hash
 
@@ -210,6 +257,7 @@ row.
 | Files You Create: full paths, once per file, inside tables too | 2026-09-09 incident (session `s-mttuo5ip-kkdb`): four files saved to `~/Downloads`, directory named once, bare filenames in a table — nothing click-to-open. Devlog [2026-09-09 reading panel](../devlog/2026-09-09-reading-panel-files-and-git-baseline.md) §补 |
 | Scheduled Tasks: no `sche_tasks` files, point to sidebar「定时」 (merged into What Only The User Changes, 2026-10-06; the sidebar pointer now comes from the About map) | galley#31 (2026-09-28): a user migrating from external GA copied `sche_tasks/` into the managed state root and nothing fired. Reading the seeded `scheduled_task_sop.md` (`../sche_tasks/`) against the agent's cwd (`managed-ga-state/temp`) shows the managed agent would write the same dead files itself; that path is inferred, not yet seen in a transcript. Devlog [2026-10-01 GA scheduler in managed mode](../devlog/2026-10-01-ga-scheduler-managed-mode.md) |
 | State block | 2026-07-07 session: replace "don't invent metadata, go check Settings" deflection with injected facts |
+| State block: Ongoing Affairs (main chat, IM) | main chat PRD rulings 18 and 27, ticket 03a (2026-10-12): association needs the affairs in context, and the full ledger was already 17 KB after three weeks of the ticket-01 corpus, so the mining run writes a short list and Core caps it |
 
 ## Dogfood Regression Checklist
 
@@ -260,3 +308,9 @@ in a real managed session after any prompt change:
     `--reason`; the completion report arrives in the same chat.
 17. WeChat: a reply with a link or numbered steps → the link and the `1.`
     numbers arrive intact (Galley's handler passes Markdown through).
+18. Main chat, ledger on and `ongoing_affairs.md` present: start a new
+    segment (see the segment rule) and ask about something one list item
+    bears on without naming it → the answer can draw on it. An ordinary
+    session asked the same has no such knowledge. Note whether it brings the
+    list up unprompted: the usage rules are ticket 03d's, not in the prompt
+    yet.

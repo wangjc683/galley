@@ -210,14 +210,19 @@ pub(super) async fn replay_once(
     }
 
     let sid = SessionId(session_id.to_string());
-    let completed = i64::from(
-        host.galley
-            .session_brief(sid.clone())
-            .await?
-            .turn_count
-            .unwrap_or(0),
-    );
-    let rows = host.galley.persisted_message_rows(&sid).await?;
+    let session = host.galley.session_brief(sid.clone()).await?;
+    let completed = i64::from(session.turn_count.unwrap_or(0));
+    // The main chat's runner gets its current segment only (ticket 03a,
+    // `super::segment`); every other session its whole conversation.
+    let segment_start = if session.main_chat == Some(true) {
+        host.galley.main_chat_segment_start(&sid).await?
+    } else {
+        None
+    };
+    let rows = match segment_start {
+        Some(start) => host.galley.persisted_message_rows_from(&sid, start).await?,
+        None => host.galley.persisted_message_rows(&sid).await?,
+    };
     let messages = rows_to_conversation_messages(rows.into_iter().map(ReplayRow::from), completed);
     if messages.is_empty() {
         return Ok(Attempt::Confirmed);

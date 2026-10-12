@@ -9,7 +9,9 @@
 //! upstream's 历史重点挖掘 SOP over it, maintaining
 //! `memory/history_insight/` in the managed state root ([`run`]). The
 //! processed position ([`state`]) moves only after that run completed
-//! successfully.
+//! successfully. Each run ends with a short list of the ongoing affairs
+//! ([`affairs`], ticket 03a), which Core puts in the main chat's and the
+//! IM channels' session-start state block.
 //!
 //! - **Switch**: [`LedgerConfig::from_env`] (`GALLEY_LEDGER_SINCE`).
 //!   Unset → [`start`] and [`archive_before_prune`] return at once; no
@@ -27,12 +29,16 @@
 //!
 //! ```text
 //! history_insight/            the SOP's outputs (the model's; user state)
+//!   ongoing_affairs.md        the short list each run ends with: ongoing
+//!                             affairs only, one per line (`affairs`);
+//!                             written by the model, read by Core
 //!   galley/                   Galley's own, read-only to the model
 //!     state.json              positions + last run (`state`)
 //!     im_archive.jsonl        archived IM user turns (`im_archive`)
 //!     batch.md                the current run's input (`batch`)
 //! ```
 
+pub mod affairs;
 pub mod batch;
 pub mod config;
 pub mod im_archive;
@@ -124,6 +130,11 @@ impl LedgerPaths {
     /// The SOP's output directory.
     pub fn insight_dir(&self) -> PathBuf {
         self.state_root.join("memory").join("history_insight")
+    }
+    /// The ongoing-affairs short list ([`affairs`]): beside the SOP's
+    /// own outputs, since the model writes it.
+    pub fn affairs_file(&self) -> PathBuf {
+        self.insight_dir().join("ongoing_affairs.md")
     }
     pub fn galley_dir(&self) -> PathBuf {
         self.insight_dir().join("galley")
@@ -326,6 +337,10 @@ mod tests {
         assert_eq!(
             p.sop_file(),
             PathBuf::from("/x/managed-ga-state/memory/L4_raw_sessions/salient_mining_sop.md")
+        );
+        assert_eq!(
+            p.affairs_file(),
+            PathBuf::from("/x/managed-ga-state/memory/history_insight/ongoing_affairs.md")
         );
     }
 }

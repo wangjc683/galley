@@ -87,6 +87,47 @@ Rules:
 - A future "Copy to Galley runtime" action can explicitly duplicate selected
   external history into a managed session, but v1 should not auto-convert.
 
+### Main Chat Segments
+
+The managed runtime's main chat (`sessions.main_chat`, migration 044) is one
+thread to the user and a series of **segments** to the model (ticket 03a,
+`.scratch/main-chat/issues/03-segments-and-injection.md`;
+`core/src/session_runner/segment.rs`). Every other session, and attach mode,
+is unaffected.
+
+- **Rule (deterministic)**: when the main chat has been idle for more than N
+  hours, the next message starts a new segment. N is the hidden Core pref
+  `main_chat_segment_idle_hours` (a JSON number, fractions allowed; default 4;
+  no Settings UI; read on every judgement). Idle is measured from
+  `sessions.last_activity_at`, which only a turn ending or a message being
+  written moves. No cut while a run is going, while an `ask_user` question
+  waits for its answer (live, or the latest reply ending on one), or when
+  nothing has been written since the current segment began.
+- **Recorded, not derived**: Core writes each boundary once, as the
+  `turn_index` its first message gets (`main_chat_segments`, migration 046).
+  Replay reads it back, so the runner restored after a Core restart gets
+  exactly the segment the live runner had, and tuning N never moves a past
+  boundary. Deriving boundaries from message times would re-cut history on
+  every change of N, and could not tell an answer to a question from a new
+  message after the fact.
+- **Fresh context = fresh runner**: recording a boundary retires a live
+  runner (quietly, like ensure's own restart); the next ensure spawns one
+  with an empty GA history and a newly composed state block, including the
+  ongoing-affairs list ([prompt composition](./prompt-composition.md#ongoing-affairs-main-chat-and-im-only)).
+  A cold runner is given back only the current segment
+  (`persisted_message_rows_from`); a segment with no reply yet needs no
+  replay.
+- **Where the rule runs**: in `ensure_session_runner` (the GUI opening the
+  main chat, `/btw`) and in Core's send just before it persists the message.
+  Opening the main chat after the gap records the boundary at the next
+  message's `turn_index` before that message exists; it is the same
+  boundary, since the gap only grows until the message comes. Socket
+  `session send` and the queue drain dispatch to a live runner as before and
+  never cut; a Goal persists its objective before its ensure, so a Goal on an
+  idle main chat continues the current segment.
+- **The database keeps everything**: messages are not touched, the desktop
+  shows the whole thread, and there is no segment marker in the UI.
+
 ## CLI Runtime Contract
 
 Galley has not shipped a stable CLI release before managed runtime, so the CLI

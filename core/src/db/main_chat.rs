@@ -125,3 +125,125 @@ impl SqliteGalley {
         }
     }
 }
+
+/// What the main chat's segment rule reads from the database
+/// (`crate::session_runner::segment`, ticket 03a). Read in one query so
+/// the rule judges one consistent snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MainChatSegmentFacts {
+    /// `sessions.last_activity_at`: moved by a turn ending and by a user
+    /// or Galley message being written, by nothing else.
+    pub last_activity_at: String,
+    /// The `turn_index` the next message written to the session gets
+    /// (`MAX(turn_index) + 1`, `0` for an empty session).
+    pub next_turn_index: i64,
+    /// Where the current segment starts; `None` while the session is
+    /// still in its first segment.
+    pub segment_start: Option<i64>,
+    /// The latest reply ended on an `ask_user` question — the next
+    /// message answers it, whatever Core remembers after a restart.
+    pub ends_on_question: bool,
+}
+
+impl SqliteGalley {
+    /// [`MainChatSegmentFacts`] for `session_id` (migration 046).
+    pub async fn main_chat_segment_facts(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<MainChatSegmentFacts> {
+        let row: Option<(String, i64, Option<i64>, Option<String>)> = sqlx::query_as(
+            "SELECT s.last_activity_at, \
+               (SELECT COALESCE(MAX(m.turn_index), -1) + 1 FROM messages m \
+                 WHERE m.session_id = s.id), \
+               (SELECT MAX(g.start_turn_index) FROM main_chat_segments g \
+                 WHERE g.session_id = s.id), \
+               (SELECT r.tool_calls FROM messages r \
+                 WHERE r.session_id = s.id AND r.role = 'assistant' \
+                 ORDER BY r.turn_index DESC, r.sequence DESC LIMIT 1) \
+             FROM sessions s WHERE s.id = ?",
+        )
+        .bind(session_id.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        let (last_activity_at, next_turn_index, segment_start, reply_tool_calls) =
+            row.ok_or_else(|| GalleyError::NotFound {
+                message: format!("session '{}' does not exist", session_id.as_str()),
+            })?;
+        Ok(MainChatSegmentFacts {
+            last_activity_at,
+            next_turn_index,
+            segment_start,
+            ends_on_question: reply_tool_calls
+                .as_deref()
+                .and_then(crate::api::AskUserBrief::from_tool_calls_json)
+                .is_some(),
+        })
+    }
+
+    /// Where `session_id`'s current segment starts (the latest boundary,
+    /// migration 046); `None` for a session that has none — every
+    /// session but a main chat that has been idle past the threshold.
+    pub async fn main_chat_segment_start(&self, session_id: &SessionId) -> Result<Option<i64>> {
+        sqlx::query_scalar(
+            "SELECT MAX(start_turn_index) FROM main_chat_segments WHERE session_id = ?",
+        )
+        .bind(session_id.as_str())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_err)
+    }
+
+    /// Every boundary of `session_id`, oldest first.
+    pub async fn main_chat_segment_starts(&self, session_id: &SessionId) -> Result<Vec<i64>> {
+        sqlx::query_scalar(
+            "SELECT start_turn_index FROM main_chat_segments \
+             WHERE session_id = ? ORDER BY start_turn_index ASC",
+        )
+        .bind(session_id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)
+    }
+
+    /// Record a boundary: a segment starts at `start_turn_index`.
+    /// `false` when that boundary was already there.
+    pub async fn record_main_chat_segment(
+        &self,
+        session_id: &SessionId,
+        start_turn_index: i64,
+    ) -> Result<bool> {
+        let done = sqlx::query(
+            "INSERT OR IGNORE INTO main_chat_segments \
+             (session_id, start_turn_index, created_at) VALUES (?, ?, ?)",
+        )
+        .bind(session_id.as_str())
+        .bind(start_turn_index)
+        .bind(chrono_now_iso())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(done.rows_affected() > 0)
+    }
+
+    /// Whether a visible reply was written at or after `from_turn_index`:
+    /// without one, a history replay from there converts to nothing
+    /// (`crate::session_runner::rows_to_conversation_messages` drops a
+    /// trailing user message).
+    pub async fn has_reply_from(
+        &self,
+        session_id: &SessionId,
+        from_turn_index: i64,
+    ) -> Result<bool> {
+        sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM messages \
+             WHERE session_id = ? AND role = 'assistant' AND visibility = 'visible' \
+               AND turn_index >= ?)",
+        )
+        .bind(session_id.as_str())
+        .bind(from_turn_index)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_err)
+    }
+}

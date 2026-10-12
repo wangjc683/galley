@@ -151,7 +151,7 @@ use helpers::*;
 use rows::*;
 
 pub use ledger::LedgerHumanTurnRow;
-pub use main_chat::{MainChatEnsured, MAIN_CHAT_TITLE};
+pub use main_chat::{MainChatEnsured, MainChatSegmentFacts, MAIN_CHAT_TITLE};
 pub use rows::{
     ManagedModelSecretRow, MessageAttachmentCreate, MessageSearchHit, PersistAssistantMessage,
     PersistedMessageRow, UpsertManagedModelMetadata, UpsertManagedModelProviderMetadata,

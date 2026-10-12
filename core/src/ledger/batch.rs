@@ -166,7 +166,10 @@ pub fn render_batch(batch: &Batch, generated_at: &str) -> String {
 
 /// The task the hidden mining session is given. Kept under GA's
 /// 2000-character long-prompt threshold (`agentmain.run`), so the model
-/// reads it as written.
+/// reads it as written. Step 7 (ticket 03a) has the run end with the
+/// ongoing-affairs short list ([`super::affairs`]); its limits (40
+/// characters, 12 items, newest first) are what
+/// [`super::affairs::AFFAIRS_CAP_BYTES`] is sized for.
 pub fn task_prompt(paths: &LedgerPaths, batch: &Batch) -> String {
     let span = batch
         .span
@@ -185,12 +188,14 @@ pub fn task_prompt(paths: &LedgerPaths, batch: &Batch) -> String {
          4. 会话标识用批次里 SESSION 行的标识（Galley 会话 id，或 im-渠道-日期），代替 SOP 里的 L4 文件名。\n\
          5. 测试产品、调试工具的对话不算生活事项的证据（例如测模型是哪个、测记忆、让它记暗号、测连通性），不要据此建条目或标情绪。\n\
          6. 只写上面的产物目录：不要调用 start_long_term_update，不要改全局记忆或其他 SOP（账本何时进入对话由 Galley 决定）。\n\
+         7. 最后一步：照活动知识层里的持续活动，整份重写 {affairs}。只放进行中的事项，一行一条，以「- 」开头；每条写清是什么事、到了哪一步，必要时带日期，不超过 40 字；最近还在动的排前面，最多 12 条。不写已消失事项、情绪事件、会话标识和原文；没有进行中的事项就写空文件。Galley 会把它放进对话的上下文，所以要短。\n\
          \n\
          本批次：{groups} 个会话，{turns} 条用户消息，{span}。完成后用一两句话说明更新了哪些文件。",
         sop = paths.sop_file().display(),
         batch_file = paths.batch_file().display(),
         insight = paths.insight_dir().display(),
         galley = paths.galley_dir().display(),
+        affairs = paths.affairs_file().display(),
         groups = batch.groups.len(),
         turns = batch.turn_count,
     )
@@ -301,6 +306,9 @@ mod tests {
         assert!(task.contains("/managed-ga-state/memory/history_insight（绝对路径"));
         assert!(task.contains("测试产品、调试工具的对话不算生活事项的证据"));
         assert!(task.contains("不要调用 start_long_term_update"));
+        // Ticket 03a: the run ends with the short list Core injects.
+        assert!(task.contains("/managed-ga-state/memory/history_insight/ongoing_affairs.md。"));
+        assert!(task.contains("只放进行中的事项，一行一条"));
         assert!(!task.starts_with(crate::ledger::im_archive::FILE_HINT));
         assert!(task.chars().count() < 2000, "{}", task.chars().count());
     }

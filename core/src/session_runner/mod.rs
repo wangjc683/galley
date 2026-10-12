@@ -51,11 +51,18 @@
 //! exits and is not replaced has its close announced when ensure lets go
 //! (`RunnerPort::release_close`).
 //!
+//! The main chat is the one session whose history is not all of its
+//! conversation (ticket 03a, [`segment`]): its runner holds the current
+//! segment only. Ensure applies the segment rule first — a boundary it
+//! records retires the live runner — and replays from the current
+//! segment's start; a segment with no reply yet needs no replay at all.
+//!
 //! Dependencies are seams, not transports: [`RunnerPort`] (the registry,
 //! faked in tests), [`Notifier`], and [`SpawnEnv`] (the Tauri app). No
 //! socket wire types, no Tauri `State`.
 
 mod replay;
+pub mod segment;
 mod spawn_config;
 
 pub use replay::{
@@ -198,6 +205,7 @@ pub async fn ensure_session_runner(
     opts: EnsureOptions<'_>,
 ) -> Result<EnsureOutcome, SessionRunnerError> {
     let _flight = single_flight::enter(session_id).await;
+    segment::open_if_due(host, session_id, opts.holds_run_gate).await;
 
     if let Some(pid) = host.runner.live_pid(session_id).await {
         return ensure_live_history(host, session_id, pid, &opts).await;
@@ -205,7 +213,7 @@ pub async fn ensure_session_runner(
 
     let session = read_session(host, session_id).await?;
     let args = spawn_args_for(host, session_id, &session, &opts).await?;
-    if completed_turns(&session) == 0 {
+    if !has_history(host, &session).await? {
         // Nothing to replay: the runner's empty history is the session's.
         let pid = attach_spawned(host, args, opts.active_session_id, opts.via, false).await?;
         host.runner.release_close(session_id, pid, true).await;
@@ -242,7 +250,7 @@ async fn ensure_live_history(
         return live(pid).await;
     }
     let session = read_session(host, session_id).await?;
-    if completed_turns(&session) == 0 {
+    if !has_history(host, &session).await? {
         // Nothing completed yet, so whatever this runner holds is all the
         // session has — and every later turn completes on it.
         host.runner.release_close(session_id, pid, true).await;
@@ -367,6 +375,50 @@ async fn run_in_progress(
 
 fn completed_turns(session: &SessionBrief) -> u32 {
     session.turn_count.unwrap_or(0)
+}
+
+/// Whether a runner for `session` has history to be given: completed
+/// turns — for the main chat, a reply in the current segment
+/// ([`segment`]). Every other session reads exactly as before 03a.
+async fn has_history(
+    host: &RunnerHost<'_>,
+    session: &SessionBrief,
+) -> Result<bool, SessionRunnerError> {
+    if completed_turns(session) == 0 {
+        return Ok(false);
+    }
+    if session.main_chat != Some(true) {
+        return Ok(true);
+    }
+    let sid = &session.id;
+    match host
+        .galley
+        .main_chat_segment_start(sid)
+        .await
+        .map_err(SessionRunnerError::Db)?
+    {
+        None => Ok(true),
+        Some(start) => host
+            .galley
+            .has_reply_from(sid, start)
+            .await
+            .map_err(SessionRunnerError::Db),
+    }
+}
+
+/// Apply the main chat's segment rule ([`segment`]) for a caller about
+/// to write the next message: Core's send, with the run gate it reserved
+/// (`holds_run_gate`), just before it persists. Takes the session's
+/// single-flight slot, so it never retires a runner an ensure is
+/// replaying into. Returns the new segment's start when one was
+/// recorded; does nothing for any other session.
+pub async fn open_main_chat_segment_if_due(
+    host: &RunnerHost<'_>,
+    session_id: &str,
+    holds_run_gate: bool,
+) -> Option<i64> {
+    let _flight = single_flight::enter(session_id).await;
+    segment::open_if_due(host, session_id, holds_run_gate).await
 }
 
 async fn read_session(

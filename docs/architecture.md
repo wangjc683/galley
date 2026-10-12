@@ -134,6 +134,15 @@ Goal on a cold session therefore gets the session's history before its
 objective. Socket `session send` is unchanged: with no runner it only
 persists (ADR-0002, ruling 1 of the ticket).
 
+The main chat is the one session whose runner holds less than its whole
+conversation (ticket 03a, [`segment.rs`](../core/src/session_runner/segment.rs)):
+after more than N idle hours its next message starts a new segment. Ensure
+(and Core's send, just before it persists) applies the rule first; a boundary
+it records retires the live runner, and replay gives a cold runner only the
+current segment. Boundaries are recorded in `main_chat_segments`, never
+re-derived. See
+[runtime modes and sessions](./managed-ga-runtime/runtime-modes-and-sessions.md#main-chat-segments).
+
 Each runner keeps a **ready snapshot** — its latest `ready`, folded with
 later `llm_changed` / `reasoning_effort_changed` — which Core hands to a
 page that attaches after `ready` went by (`ensure_session_runner`,

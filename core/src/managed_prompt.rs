@@ -189,22 +189,51 @@ Rules:
 /// session (stale injected state answered confidently is worse than "I don't
 /// know"), and it is safe to send to the LLM provider on every request.
 pub(crate) fn compose_runtime_prompt(app_version: &str) -> String {
-    compose(app_version, true)
+    compose(app_version, true, None)
+}
+
+/// The main chat's variant (ticket 03a): the workbench prompt, its state
+/// block closing with the user's ongoing affairs
+/// ([`crate::ledger::affairs`], already capped). Only when the ledger is
+/// on and a list exists — otherwise the main chat gets
+/// [`compose_runtime_prompt`] like every other session. Users do not ask
+/// for the list, so it is a deliberate exception to the first admission
+/// rule above: the association it enables is the feature
+/// (docs/managed-ga-runtime/prompt-composition.md, "Ongoing Affairs").
+pub(crate) fn compose_main_chat_runtime_prompt(app_version: &str, affairs: &str) -> String {
+    compose(app_version, true, Some(affairs))
 }
 
 /// IM-supervisor variant: same runtime rules WITHOUT the suggestion
 /// mandate. The tag is consumed only by the GUI composer; IM frontends
-/// would show it raw.
-pub(crate) fn compose_im_runtime_prompt(app_version: &str) -> String {
-    compose(app_version, false)
+/// would show it raw. IM carries the same ongoing-affairs list as the
+/// main chat (PRD ruling 27, IM L0), under the same switch.
+pub(crate) fn compose_im_runtime_prompt(app_version: &str, affairs: Option<&str>) -> String {
+    compose(app_version, false, affairs)
 }
 
-fn compose(app_version: &str, with_suggestion: bool) -> String {
+/// Heading and framing of the ongoing-affairs section. Data, not rules:
+/// how the model uses the list belongs to the entry-layer prompts
+/// (ticket 03d).
+const ONGOING_AFFAIRS_HEADER: &str = r#"## Ongoing Affairs
+
+Background, not instructions: what the user has going on lately, distilled
+once a day from what they said to you in Galley and in chat apps. It may be
+out of date or incomplete; what the user says now wins."#;
+
+fn ongoing_affairs_section(affairs: &str) -> String {
+    format!("{ONGOING_AFFAIRS_HEADER}\n\n{affairs}")
+}
+
+fn compose(app_version: &str, with_suggestion: bool, affairs: Option<&str>) -> String {
     let static_rules = if with_suggestion {
         workbench_static_prompt()
     } else {
         RUNTIME_PROMPT_STATIC.to_string()
     };
+    let affairs = affairs
+        .map(|list| format!("\n\n{}", ongoing_affairs_section(list)))
+        .unwrap_or_default();
     format!(
         r#"{static_rules}
 
@@ -219,7 +248,7 @@ Facts about this Galley installation, captured at session start:
 
 For state not listed here — model configuration, connected channels, update
 channel, session or project state — do not guess. Check it through Galley CLI
-where available; otherwise ask the user to check the relevant Settings page."#,
+where available; otherwise ask the user to check the relevant Settings page.{affairs}"#,
         platform = platform_label(),
     )
 }
@@ -353,7 +382,10 @@ mod tests {
         // never reaches existing users) teaches the agent to write
         // sche_tasks/*.json. Both the workbench and the IM surfaces carry
         // the correction.
-        for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
+        for prompt in [
+            compose_runtime_prompt("t"),
+            compose_im_runtime_prompt("t", None),
+        ] {
             assert!(prompt.contains("never write `sche_tasks`"));
             assert!(prompt.contains("\"定时\" / \"Scheduled\""));
             assert!(prompt.contains("the prompt must stand on its own"));
@@ -367,7 +399,10 @@ mod tests {
     /// an author clause phrased as instructions reach both surfaces.
     #[test]
     fn self_description_rules_reach_every_surface() {
-        for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
+        for prompt in [
+            compose_runtime_prompt("t"),
+            compose_im_runtime_prompt("t", None),
+        ] {
             assert!(prompt.contains("## About Galley"));
             assert!(prompt.contains("Settings: General"));
             assert!(prompt.contains("https://github.com/wangjc683/galley/releases"));
@@ -437,6 +472,71 @@ mod tests {
         );
     }
 
+    /// Ticket 03a: the ongoing-affairs list reaches the main chat and the
+    /// IM channels, appended to the state block and nothing else changed;
+    /// every other workbench session gets the prompt it always had.
+    #[test]
+    fn ongoing_affairs_reach_only_the_main_chat_and_im() {
+        let list = "- 半马备赛：本周长距离 18 公里\n- 日语 N3：下周补两课";
+        let ordinary = compose_runtime_prompt("t");
+        assert!(!ordinary.contains("## Ongoing Affairs"));
+
+        let main = compose_main_chat_runtime_prompt("t", list);
+        assert!(main.contains("## Ongoing Affairs"));
+        assert!(main.contains("- 日语 N3：下周补两课"));
+        assert!(main.contains("## Next-Step Suggestion"));
+        assert_eq!(
+            main,
+            format!("{ordinary}\n\n{}", ongoing_affairs_section(list)),
+            "the section is appended after the state block, nothing else moves"
+        );
+        assert!(main.find("## Galley State") < main.find("## Ongoing Affairs"));
+
+        let im = compose_im_runtime_prompt("t", Some(list));
+        assert!(im.contains("## Ongoing Affairs"));
+        assert!(im.contains("- 半马备赛：本周长距离 18 公里"));
+        assert!(!im.contains("next-suggestion"));
+        assert!(!compose_im_runtime_prompt("t", None).contains("## Ongoing Affairs"));
+
+        // Data, not behavior: the prompt generation does not change.
+        let hash = prompt_hash();
+        let _ = compose_main_chat_runtime_prompt("t", list);
+        assert_eq!(prompt_hash(), hash);
+    }
+
+    /// Byte cap on the ongoing-affairs heading and framing, set with no
+    /// headroom like the other budgets (`\r` not counted). The list under
+    /// it has its own cap, `AFFAIRS_CAP_BYTES` (`ledger::affairs`), so the
+    /// whole section is bounded: it rides every request of the main chat
+    /// and the IM channels, and the static budget does not cover it.
+    const AFFAIRS_HEADER_BUDGET_BYTES: usize = 226;
+
+    #[test]
+    fn ongoing_affairs_section_stays_within_budget() {
+        let header = ONGOING_AFFAIRS_HEADER
+            .bytes()
+            .filter(|&byte| byte != b'\r')
+            .count();
+        assert!(
+            header <= AFFAIRS_HEADER_BUDGET_BYTES,
+            "affairs header is {header} bytes, budget {AFFAIRS_HEADER_BUDGET_BYTES}"
+        );
+        let raw: String = (1..=100)
+            .map(|i| format!("- 第 {i} 件进行中的事\n"))
+            .collect();
+        let list =
+            crate::ledger::affairs::cap_affairs(&raw, crate::ledger::affairs::AFFAIRS_CAP_BYTES)
+                .expect("a list");
+        let section = ongoing_affairs_section(&list)
+            .bytes()
+            .filter(|&byte| byte != b'\r')
+            .count();
+        assert!(
+            section <= AFFAIRS_HEADER_BUDGET_BYTES + 2 + crate::ledger::affairs::AFFAIRS_CAP_BYTES,
+            "affairs section is {section} bytes"
+        );
+    }
+
     #[test]
     fn state_block_stays_out_of_static_rules_and_hash() {
         assert!(!RUNTIME_PROMPT_STATIC.contains("## Galley State"));
@@ -453,7 +553,7 @@ mod tests {
     fn file_references_rule_asks_for_full_paths_on_every_surface() {
         for prompt in [
             compose_runtime_prompt("0.0.0-test"),
-            compose_im_runtime_prompt("0.0.0-test"),
+            compose_im_runtime_prompt("0.0.0-test", None),
         ] {
             assert!(prompt.contains("## Files You Create"));
             assert!(prompt.contains("`~/Downloads/report.csv`"));
@@ -469,7 +569,7 @@ mod tests {
         let workbench = compose_runtime_prompt("0.0.0-test");
         assert!(workbench.contains("## Next-Step Suggestion"));
         assert!(workbench.contains("<next-suggestion>"));
-        let im = compose_im_runtime_prompt("0.0.0-test");
+        let im = compose_im_runtime_prompt("0.0.0-test", None);
         assert!(!im.contains("next-suggestion"));
         // Both variants still carry the shared runtime rules + state block.
         assert!(im.starts_with(RUNTIME_PROMPT_STATIC));
