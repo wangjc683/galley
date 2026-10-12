@@ -1,6 +1,5 @@
 import { X } from "@phosphor-icons/react";
 
-import { useMainChatTrialCopy } from "@/components/layout/sidebar/main-chat-layout";
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
@@ -12,22 +11,20 @@ const FOCUS_RING = "focus-visible:ring-2 focus-visible:ring-brand/30";
 
 /**
  * The two-way choice above the Composer when a message goes to the main
- * chat (主聊天) while it is working (ticket 02, PRD ruling 12):
+ * chat (主聊天; 「主对话」 in the UI) while it is working (ticket 02, PRD
+ * ruling 12):
  *
- *   排队   — Core's queue, the ordinary mid-run send: it runs when the
- *            current task ends. A follow-up for that task (「要靠窗的座
- *            位」) belongs here, which is why sends are not simply
- *            turned into side chats.
- *   开旁聊 — a new ordinary session with this message, started now.
+ *   排队     — Core's queue, the ordinary mid-run send: it runs when the
+ *              current task ends. A follow-up for that task (「要靠窗的座
+ *              位」) belongs here, which is why sends are not simply
+ *              turned into side chats.
+ *   开新对话 — a new ordinary session (a side chat) with this message,
+ *              started now. The UI says 新对话, not 旁聊 (ruling 35).
  *
  * 排队 has the focus, so Enter twice queues. The draft stays in the box
  * until a choice is made; Esc or × only closes the choice. A message
  * with images cannot queue (Core's queue is text-only): 排队 is then
- * disabled and the focus starts on 开旁聊.
- *
- * TEMPORARY: the words follow the sidebar trial (ticket 07,
- * main-chat-layout.ts) — 主对话, and the second button after its naming
- * (开旁聊 / 开新话题 / 开新对话).
+ * disabled and the focus starts on 开新对话.
  */
 export function MainChatBusyChoice({
   imagesAttached,
@@ -41,11 +38,10 @@ export function MainChatBusyChoice({
   onDismiss: () => void;
 }) {
   const copy = useCopy();
-  const trialCopy = useMainChatTrialCopy();
   return (
     <div
       role="group"
-      aria-label={trialCopy.busyLabel}
+      aria-label={copy.composer.mainChatBusyLabel}
       data-role="main-chat-busy-choice"
       onKeyDown={(e) => {
         if (e.key !== "Escape") return;
@@ -56,13 +52,13 @@ export function MainChatBusyChoice({
       className="mb-1.5 flex items-center gap-2 rounded-md border border-line bg-surface py-1.5 pl-2.5 pr-1.5"
     >
       <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-soft">
-        {trialCopy.busyLabel}
+        {copy.composer.mainChatBusyLabel}
       </span>
       <TooltipLabel
         text={
           imagesAttached
-            ? trialCopy.busyQueueImages
-            : trialCopy.busyQueueTooltip
+            ? copy.composer.mainChatBusyQueueImages
+            : copy.composer.mainChatBusyQueueTooltip
         }
       >
         {/* The wrapper carries the tooltip for the disabled state: a
@@ -80,7 +76,7 @@ export function MainChatBusyChoice({
           </Button>
         </span>
       </TooltipLabel>
-      <TooltipLabel text={trialCopy.busySideChatTooltip}>
+      <TooltipLabel text={copy.composer.mainChatBusySideChatTooltip}>
         <Button
           variant="secondary"
           size="sm"
@@ -88,7 +84,7 @@ export function MainChatBusyChoice({
           onClick={onOpenSideChat}
           className={cn("shrink-0", FOCUS_RING)}
         >
-          {trialCopy.busySideChat}
+          {copy.composer.mainChatBusySideChat}
         </Button>
       </TooltipLabel>
       <TooltipLabel text={copy.composer.mainChatBusyKeepEditing}>

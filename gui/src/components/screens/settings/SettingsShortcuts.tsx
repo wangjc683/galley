@@ -56,6 +56,13 @@ function buildGroups(copy: ReturnType<typeof useCopy>): ShortcutGroup[] {
           action: shortcuts.openCommandPalette,
         },
         { combo: formatShortcut("Mod+N"), action: shortcuts.newConversation },
+        // Only the managed runtime's sidebar collapses (it has the main
+        // chat); the row stays on both, its note names the exception.
+        {
+          combo: formatShortcut("Mod+\\"),
+          action: shortcuts.toggleSidebar,
+          note: shortcuts.toggleSidebarNote,
+        },
         { combo: formatShortcut("Mod+,"), action: shortcuts.openSettings },
       ],
     },

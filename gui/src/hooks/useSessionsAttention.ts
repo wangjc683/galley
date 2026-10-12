@@ -1,7 +1,5 @@
-import { useContext } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { MainChatDemoLiveContext } from "@/components/layout/sidebar/main-chat-demo";
 import { deriveSessionStatus } from "@/lib/sessions";
 import { useMessagesStore } from "@/stores/messages";
 import { useRuntimeStore } from "@/stores/runtime";
@@ -56,8 +54,6 @@ export function useSessionsAttention(
   const bridgeStatuses = useRuntimeStore(
     useShallow((s) => ids.map((id) => s.byId[id]?.bridgeStatus)),
   );
-  // TEMPORARY: the sidebar trial's demo states (main-chat-demo.ts).
-  const demoLive = useContext(MainChatDemoLiveContext);
 
   let errorCount = 0;
   let askCount = 0;
@@ -65,13 +61,12 @@ export function useSessionsAttention(
   let unreadCount = 0;
   const needsYouIds = new Set<string>();
   sessions.forEach((session, i) => {
-    const demo = demoLive?.get(session.id);
     const status = deriveSessionStatus(
       session,
-      { agentRunning: (flags[i] & 1) !== 0 || !!demo?.running },
-      demo?.error ? "error" : bridgeStatuses[i],
+      { agentRunning: (flags[i] & 1) !== 0 },
+      bridgeStatuses[i],
     );
-    const ask = (flags[i] & 2) !== 0 || !!demo?.ask;
+    const ask = (flags[i] & 2) !== 0;
     const error = status === "error";
     const asking = ask && !error;
     const goal = sessionGoalStatus?.get(session.id);

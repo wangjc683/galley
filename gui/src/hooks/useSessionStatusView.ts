@@ -1,7 +1,5 @@
-import { useContext } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { MainChatDemoLiveContext } from "@/components/layout/sidebar/main-chat-demo";
 import { deriveSessionStatus } from "@/lib/sessions";
 import { useMessagesStore } from "@/stores/messages";
 import { useRuntimeStore } from "@/stores/runtime";
@@ -43,16 +41,13 @@ export function useSessionStatusView(session: Session): SessionStatusView {
       };
     }),
   );
-  // TEMPORARY: the sidebar trial's demo states fake live flags here,
-  // render layer only (main-chat-demo.ts). Null outside the demo.
-  const demo = useContext(MainChatDemoLiveContext)?.get(session.id);
   return {
     status: deriveSessionStatus(
       session,
-      { agentRunning: live.agentRunning || !!demo?.running },
-      demo?.error ? "error" : bridgeStatus,
+      { agentRunning: live.agentRunning },
+      bridgeStatus,
     ),
-    hasPendingAskUser: live.hasPendingAskUser || !!demo?.ask,
+    hasPendingAskUser: live.hasPendingAskUser,
     pausedAtStepLimit: live.pausedAtStepLimit,
   };
 }

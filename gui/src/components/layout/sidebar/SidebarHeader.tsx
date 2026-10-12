@@ -46,8 +46,9 @@ export function SidebarHeader({
   // (Windows adds the list's scrollbar lane). Narrow widths: once the
   // wordmark and the icons no longer fit (251px on mac, 189 / 179px
   // elsewhere — sidebar-width.ts), the icons drop into the new-chat row
-  // below and this header is the wordmark alone. Main chat layout B (on
-  // trial) has no new-chat row; there they drop into a row of their own.
+  // below and this header is the wordmark alone. The sectioned sidebar
+  // (with a main chat) has no new-chat row; there they drop into a row
+  // of their own.
   return (
     <div
       data-tauri-drag-region

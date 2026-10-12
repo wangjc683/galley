@@ -54,8 +54,6 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   onCancelRename,
   singleLine = false,
   mainChatLabel,
-  mainChatHome = false,
-  idleSubline,
 }: {
   session: Session;
   active?: boolean;
@@ -100,22 +98,16 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
    * are and state still rides the rail, the icon and the title weight,
    * so an open group stays compact. */
   singleLine?: boolean;
-  /** The main chat's row (主聊天, ticket 02): this label instead of the
-   * stored title, and a house in the icon column while the row rests.
-   * Everything else is a session row's — rail, subline, weight, the
+  /** The main chat's row (主聊天, tickets 02 / 08): this label instead
+   * of the stored title, and a house in the icon column while the row
+   * rests. It is the home, so its title keeps full-strength ink even
+   * when another row is selected — the subtractive dimming below skips
+   * it. Everything else is a session row's — rail, subline, weight, the
    * selected style — and every state outranks the house exactly as it
    * outranks the check circle; unread fills it brand. No brand colour
    * of its own (layout-and-chrome.md: tone is for state, not identity).
    * The caller wires no row actions: it has no menu. */
   mainChatLabel?: string;
-  /** Main chat layouts A3 / B (on trial): the main chat is the home, so
-   * its title keeps full-strength ink even when another row is selected
-   * — the subtractive dimming below skips it. */
-  mainChatHome?: boolean;
-  /** A muted subline for a row that has nothing to say yet (main chat
-   * layout B, on trial: the main chat before its first message). Every
-   * state and summary replaces it. */
-  idleSubline?: string;
 }) {
   const copy = useCopy();
   const hasRowActions = !!(
@@ -264,7 +256,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                 { cancelled: status === "cancelled", pausedAtStepLimit },
                 copy.sidebar,
               )
-            : (idleSubline ?? null);
+            : null;
   // A single-line row renders no subline and centers like a row that
   // has none.
   const subline = singleLine ? null : sublineText;
@@ -495,7 +487,9 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                 // with the selected row itself, and it costs no channel —
                 // title COLOUR was unused, while title WEIGHT belongs to
                 // running/unread and is left alone here.
-                active || mainChatHome ? "text-ink" : "text-ink-soft",
+                active || mainChatLabel !== undefined
+                  ? "text-ink"
+                  : "text-ink-soft",
                 isRunning ||
                   goalRunning ||
                   goalParked ||

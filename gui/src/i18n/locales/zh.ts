@@ -150,9 +150,16 @@ export const zhCopy = {
   },
   sidebar: {
     newConversation: "新对话",
-    /** 主聊天（票 02）：内置内核唯一一条一直在的对话；其余对话是旁聊。 */
-    mainChat: "主聊天",
-    newSideChat: "新旁聊",
+    /** 主聊天（票 02）：内置内核唯一一条一直在的对话；其余对话是旁聊。
+     * 「主聊天」「旁聊」只作内部术语，界面叫「主对话 / 其他对话 / 新对话」
+     * （主聊天 PRD 裁决 35）。主对话行、顶栏标题、⌘K 共用。 */
+    mainChat: "主对话",
+    /** 有主对话时侧栏的分区头（票 08）。 */
+    otherChats: "其他对话",
+    /** 分区里还没有人开的对话时的一行说明，有了第一条就消失。 */
+    otherChatsHint: "另开一个对话聊一件事，主对话不受打扰。",
+    /** agent 开的、不在项目里的对话收成的一组（裁决 32）。 */
+    otherSources: "其他来源",
     search: "搜索",
     projects: "项目",
     newProject: "新建项目",
@@ -238,6 +245,11 @@ export const zhCopy = {
     openSettings: "打开设置",
     supervisorSopTooltip: "Supervisor SOP",
     openSupervisorSop: "打开 Supervisor SOP 设置",
+    /** 顶栏最左的侧栏开关，只在有主对话时出现（票 08）。 */
+    collapseSidebar: "收起侧栏",
+    expandSidebar: "展开侧栏",
+    /** 收起时开关上的计数徽标，读作提示与无障碍名称。 */
+    sidebarNeedsYou: (count: number) => `${count} 个对话在等你`,
     display: {
       tooltip: "显示",
       aria: "显示设置",
@@ -466,20 +478,20 @@ export const zhCopy = {
     newlineHint: "Shift+Enter 换行",
     /** 消息队列（galley#19/#20）：运行中 Enter 不再被闸，改为排队。 */
     queueEnterHint: "Enter 排队 · 本轮结束后自动发送",
-    mainChatBusyEnterHint: "Enter 后选择排队或开旁聊",
+    mainChatBusyEnterHint: "Enter 后选择排队或开新对话",
     stoppingQueueHint: "正在停止，排队的消息会自动发出",
     queueStripLabel: (count: number) => `排队中 · ${count}`,
     queueJump: "立即执行",
     queueJumpTooltip: "打断当前任务，优先执行这条",
     queueRemove: "删除",
     queueEditTooltip: "取回编辑（从队列移除并填回输入框）",
-    /** 主聊天在跑时发消息（票 02）：排队进正在跑的任务，或用这句话开旁聊。 */
-    mainChatBusyLabel: "主聊天正在忙",
+    /** 主聊天在跑时发消息（票 02）：排队进正在跑的任务，或用这句话开旁聊（界面叫「开新对话」）。 */
+    mainChatBusyLabel: "主对话正在忙",
     mainChatBusyQueue: "排队",
-    mainChatBusyQueueTooltip: "本轮结束后接着交给主聊天",
-    mainChatBusyQueueImages: "带图的消息不能排队，可以开旁聊",
-    mainChatBusySideChat: "开旁聊",
-    mainChatBusySideChatTooltip: "用这句话开一个旁聊，马上开始",
+    mainChatBusyQueueTooltip: "本轮结束后接着交给主对话",
+    mainChatBusyQueueImages: "带图的消息不能排队，可以开新对话",
+    mainChatBusySideChat: "开新对话",
+    mainChatBusySideChatTooltip: "用这句话开一个新对话，马上开始",
     mainChatBusyKeepEditing: "继续编辑",
     imageOnlyFallback: "请看这张图片。",
     pastedImage: "已粘贴图片",
@@ -1014,6 +1026,9 @@ export const zhCopy = {
       navigation: "导航",
       openCommandPalette: "搜索 / 命令面板",
       newConversation: "新对话",
+      toggleSidebar: "收起 / 展开侧栏",
+      // 外部 GA 没有主对话，侧栏不可收起（票 08）。
+      toggleSidebarNote: "使用外部 GA 时不生效",
       openSettings: "打开设置",
       composer: "输入框",
       sendMessage: "发送消息",

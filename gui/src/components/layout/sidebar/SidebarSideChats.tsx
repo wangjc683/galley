@@ -1,6 +1,7 @@
 import { Plus, Tray } from "@phosphor-icons/react";
 
 import { IconTooltip } from "@/components/ui/tooltip";
+import { useCopy } from "@/lib/i18n";
 import { formatShortcut } from "@/lib/shortcuts";
 import { PROJECT_GROUP_RECENT_COUNT } from "@/lib/sidebar-timeline";
 import { cn } from "@/lib/utils";
@@ -11,19 +12,20 @@ import { ShortcutTooltipText } from "./SidebarNavIcons";
 import type { SidebarTimelineRowWiring } from "./SidebarTimelineRow";
 
 /**
- * Main chat layout B's pieces (on trial, ticket 07, PRD rulings 30–32;
- * see main-chat-layout.ts). B: the main-chat row is the home, and every
- * other conversation sits in one section under it —
+ * The sectioned sidebar's pieces (main chat tickets 07 / 08, PRD rulings
+ * 30–36): with a main chat, its row is the home, and every other
+ * conversation sits in one section under it —
  *
  *   ⌂ 主对话
- *   旁聊                  +   ← SidebarSideChatHeader
- *     (新旁聊)                ← SidebarNewSideChatRow, while the empty
+ *   其他对话              +   ← SidebarSideChatHeader
+ *     (新对话)                ← SidebarNewSideChatRow, while the empty
  *                               new-chat composer is up
  *     置顶 / 项目 / 今天 …
  *     其他来源 N             ← SidebarOtherSources
  *     更早 N
  *
- * The labels follow the trial's naming (旁聊 / 话题 / 其他对话).
+ * 「旁聊」 (side chat) is the PRD's and the code's word for these; the
+ * UI says 其他对话 / 新对话 (ruling 35).
  */
 
 /**
@@ -37,18 +39,16 @@ import type { SidebarTimelineRowWiring } from "./SidebarTimelineRow";
  * with the main-chat row, so the new-chat + never scrolls away.
  */
 export function SidebarSideChatHeader({
-  label,
-  newChatLabel,
   onNewChat,
 }: {
-  label: string;
-  newChatLabel: string;
   onNewChat?: () => void;
 }) {
+  const copy = useCopy();
+  const newChatLabel = copy.sidebar.newConversation;
   return (
     <div className="mx-1.5 flex h-8 items-center gap-1.5 pl-3 pr-1.5">
       <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ink-soft">
-        {label}
+        {copy.sidebar.otherChats}
       </span>
       <IconTooltip
         text={
@@ -78,21 +78,17 @@ export function SidebarSideChatHeader({
 }
 
 /**
- * "You are here" for the empty new-chat composer: B has no 新对话 row
- * to select, so while the composer is up the section's top holds this
- * one selected row (the session row's selected fill and lift, full
- * ink), and the sidebar still has exactly one row saying where you are
+ * "You are here" for the empty new-chat composer: the sectioned sidebar
+ * has no 新对话 row to select, so while the composer is up the
+ * section's top holds this one selected row (the session row's
+ * selected fill and lift, full ink), and the sidebar still has exactly
+ * one row saying where you are
  * (layout-and-chrome.md, 「新对话是列表的开头」). The first message's
  * session row takes over. Like the 新对话 row it is an action: clicking
  * it refocuses the composer, so it answers the pointer.
  */
-export function SidebarNewSideChatRow({
-  label,
-  onClick,
-}: {
-  label: string;
-  onClick?: () => void;
-}) {
+export function SidebarNewSideChatRow({ onClick }: { onClick?: () => void }) {
+  const copy = useCopy();
   return (
     <div className="pt-1">
       <button
@@ -110,7 +106,7 @@ export function SidebarNewSideChatRow({
           <Plus size={13} weight="regular" className="text-ink-muted" />
         </span>
         <span className="truncate text-[13px] font-medium text-ink">
-          {label}
+          {copy.sidebar.newConversation}
         </span>
       </button>
     </div>
@@ -119,11 +115,12 @@ export function SidebarNewSideChatRow({
 
 /** The section's one line while it holds no conversation a person
  * started — the empty sidebar's 「你的对话会出现在这里。」 register. Gone
- * with the first one. */
-export function SidebarSideChatEmptyHint({ text }: { text: string }) {
+ * with the first one; agent-started sessions don't count. */
+export function SidebarSideChatEmptyHint() {
+  const copy = useCopy();
   return (
     <p className="mx-1.5 px-3 py-2 text-[12.5px] italic text-ink-muted">
-      {text}
+      {copy.sidebar.otherChatsHint}
     </p>
   );
 }
@@ -142,21 +139,20 @@ const OTHER_SOURCES_ICON = { closed: Tray, open: Tray };
  */
 export function SidebarOtherSources({
   sessions,
-  label,
   expanded,
   onToggleExpanded,
   ...rowWiring
 }: {
   sessions: Session[];
-  label: string;
   expanded: boolean;
   onToggleExpanded: () => void;
 } & SidebarTimelineRowWiring) {
+  const copy = useCopy();
   if (sessions.length === 0) return null;
   const newest = sessions[0].lastActivityAt;
   const group: Project = {
     id: OTHER_SOURCES_ID,
-    name: label,
+    name: copy.sidebar.otherSources,
     workspaceEnabled: false,
     pinned: false,
     lastActivityAt: newest,

@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-import { useMainChatTrialCopy } from "@/components/layout/sidebar/main-chat-layout";
 import { resolveComposerHint } from "@/lib/composer-hint";
 import { useCopy } from "@/lib/i18n";
 
@@ -58,9 +57,6 @@ export function ComposerFooterHint({
   mainChatBusy = false,
 }: ComposerFooterHintProps) {
   const copy = useCopy();
-  // TEMPORARY: the busy hint names the side chat the way the sidebar
-  // trial does (main-chat-layout.ts).
-  const trialCopy = useMainChatTrialCopy();
   const hintKey = resolveComposerHint({
     showFooterHint,
     stopMode,
@@ -72,12 +68,7 @@ export function ComposerFooterHint({
     goalSubmitting,
     mainChatBusy,
   });
-  const keyboardHint =
-    hintKey === "mainChatBusyEnterHint"
-      ? trialCopy.busyEnterHint
-      : hintKey
-        ? copy.composer[hintKey]
-        : null;
+  const keyboardHint = hintKey ? copy.composer[hintKey] : null;
   // Keyboard hints get kbd-token styling; a caller-supplied staticHint
   // is already a ReactNode and renders as-is in the same slot.
   const footerHint: ReactNode = goalBlockedHintVisible ? (

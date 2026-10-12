@@ -2,48 +2,16 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { CopyProvider } from "@/lib/i18n";
 import { makeSession } from "@/test/factories";
 import type { Project, Session } from "@/types/session";
 
 import { Sidebar } from "./Sidebar";
-import { buildMainChatDemo, isDemoSessionId } from "./sidebar/main-chat-demo";
-import type {
-  MainChatLayout,
-  SideChatNaming,
-} from "./sidebar/main-chat-layout";
 
 // useCopy falls back to the zh copy without a CopyProvider.
 
-// Static rendering reads a store's initial state, so the switcher's
-// choices (layout, naming, demo) are fed through the modules instead.
-const trial = vi.hoisted(() => ({
-  layout: "B" as MainChatLayout,
-  naming: "旁聊" as SideChatNaming,
-  demo: false,
-}));
-vi.mock("./sidebar/main-chat-layout", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("./sidebar/main-chat-layout")>();
-  const { zhCopy } = await import("@/i18n/locales/zh");
-  return {
-    ...actual,
-    useMainChatLayout: () => trial.layout,
-    useMainChatTrialCopy: () =>
-      actual.mainChatTrialCopy(zhCopy, "zh-CN", trial.naming),
-  };
-});
-const DEMO_ANCHOR = new Date().toISOString();
-vi.mock("./sidebar/main-chat-demo", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("./sidebar/main-chat-demo")>();
-  return {
-    ...actual,
-    useMainChatDemoOverlay: (sessions: Session[]) =>
-      trial.demo ? actual.buildMainChatDemo(sessions, DEMO_ANCHOR) : null,
-  };
-});
-// A session's erroring bridge can't be seeded in a store either; mark
-// ids as needing the user on top of the real hook.
+// A session's erroring bridge can't be seeded in a store under static
+// rendering; mark ids as needing the user on top of the real hook.
 const needsYou = vi.hoisted(() => new Set<string>());
 vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
   const actual =
@@ -105,32 +73,29 @@ const project = {
 function render(
   sessions: Session[],
   opts: {
-    layout?: MainChatLayout;
-    naming?: SideChatNaming;
-    demo?: boolean;
     activeId?: string;
     newChatActive?: boolean;
     projects?: Project[];
+    language?: "zh-CN" | "en-US";
   } = {},
 ) {
-  trial.layout = opts.layout ?? "B";
-  trial.naming = opts.naming ?? "旁聊";
-  trial.demo = opts.demo ?? false;
   return renderToStaticMarkup(
-    <Tooltip.Provider>
-      <Sidebar
-        sessions={sessions}
-        projects={opts.projects}
-        activeId={opts.activeId}
-        newChatActive={opts.newChatActive}
-        expandedProjectIds={[]}
-        onNewChat={() => {}}
-        onSelectSession={() => {}}
-        onArchiveSession={() => {}}
-        onRenameSession={() => {}}
-        onTogglePinSession={() => {}}
-      />
-    </Tooltip.Provider>,
+    <CopyProvider language={opts.language ?? "zh-CN"}>
+      <Tooltip.Provider>
+        <Sidebar
+          sessions={sessions}
+          projects={opts.projects}
+          activeId={opts.activeId}
+          newChatActive={opts.newChatActive}
+          expandedProjectIds={[]}
+          onNewChat={() => {}}
+          onSelectSession={() => {}}
+          onArchiveSession={() => {}}
+          onRenameSession={() => {}}
+          onTogglePinSession={() => {}}
+        />
+      </Tooltip.Provider>
+    </CopyProvider>,
   );
 }
 
@@ -138,22 +103,23 @@ const count = (html: string, needle: string) => html.split(needle).length - 1;
 const at = (html: string, id: string) =>
   html.indexOf(`data-session-id="${id}"`);
 const OTHER_SOURCES = 'data-project-id="galley:other-sources"';
+const SECTION = ">其他对话<";
+const HINT = "另开一个对话聊一件事，主对话不受打扰。";
 
 afterEach(() => {
   needsYou.clear();
 });
 
 describe("the main chat's row", () => {
-  it("stands on its own: once, under its label, never in a time bucket", () => {
-    for (const layout of ["A3", "B", "B′"] as const) {
-      const html = render([mainChat, sideChat], { layout });
-      expect(count(html, 'data-session-id="s-main"')).toBe(1);
-      expect(count(html, 'data-session-id="s-side"')).toBe(1);
-      expect(html).toContain(">主对话<");
-      // 今天 lists only the side chat.
-      expect(at(html, "s-main")).toBeLessThan(html.indexOf(">今天<"));
-      expect(at(html, "s-side")).toBeGreaterThan(html.indexOf(">今天<"));
-    }
+  it("stands on its own: once, as 主对话, never in a time bucket", () => {
+    const html = render([mainChat, sideChat]);
+    expect(count(html, 'data-session-id="s-main"')).toBe(1);
+    expect(count(html, 'data-session-id="s-side"')).toBe(1);
+    expect(html).toContain(">主对话<");
+    expect(html).not.toContain(">主聊天<");
+    // 今天 lists only the other chat.
+    expect(at(html, "s-main")).toBeLessThan(html.indexOf(">今天<"));
+    expect(at(html, "s-side")).toBeGreaterThan(html.indexOf(">今天<"));
   });
 
   it("has no menu: no pin, rename, project or archive", () => {
@@ -171,67 +137,41 @@ describe("the main chat's row", () => {
   });
 
   it("keeps full ink while another row is selected", () => {
-    for (const layout of ["A3", "B"] as const) {
-      const html = render([mainChat, sideChat], {
-        layout,
-        activeId: "s-side",
-      });
-      const main = html.slice(at(html, "s-main"));
-      expect(main.slice(0, 1600)).toMatch(/text-\[13px\] text-ink font-medium/);
-    }
+    const html = render([mainChat, sideChat], { activeId: "s-side" });
+    const main = html.slice(at(html, "s-main"));
+    expect(main.slice(0, 1600)).toMatch(/text-\[13px\] text-ink font-medium/);
   });
 
-  it("says 什么都可以跟它说 in B until its first message", () => {
-    expect(render([mainChat], { layout: "B" })).toContain("什么都可以跟它说");
-    expect(render([mainChat], { layout: "A3" })).not.toContain(
-      "什么都可以跟它说",
+  it("has no subline of its own before its first message", () => {
+    const html = render([mainChat]);
+    const main = html.slice(
+      html.lastIndexOf("<", at(html, "s-main")),
+      html.lastIndexOf("<", html.indexOf(SECTION)),
     );
+    // The row's only text is its label.
+    expect(main.replace(/<[^>]*>/g, "")).toBe("主对话");
+    // Its status reads like any row's once it has one.
     const used = { ...mainChat, turnCount: 3, summary: "订好了" };
-    const html = render([used], { layout: "B" });
-    expect(html).not.toContain("什么都可以跟它说");
-    expect(html).toContain(">订好了<");
+    expect(render([used])).toContain(">订好了<");
   });
 });
 
-describe("A3", () => {
-  it("keeps the 新对话 row under the main chat, quiet, named by the trial", () => {
-    const html = render([mainChat, sideChat], { layout: "A3" });
-    expect(html).toContain('aria-label="新旁聊"');
-    expect(at(html, "s-main")).toBeLessThan(
-      html.indexOf('aria-label="新旁聊"'),
-    );
-    const row = html.slice(
-      html.lastIndexOf("<button", html.indexOf('aria-label="新旁聊"')),
-    );
-    expect(row.slice(0, 600)).toContain("h-7");
-    expect(row.slice(0, 1600)).not.toContain("text-brand-strong");
-    // No section header, no 其他来源.
-    expect(html).not.toContain(">旁聊<");
-    expect(render([mainChat, cliChat], { layout: "A3" })).not.toContain(
-      OTHER_SOURCES,
-    );
-  });
-});
-
-describe("B", () => {
-  it("heads the list with a 旁聊 section header and its +, no 新对话 row", () => {
+describe("with a main chat: the sectioned sidebar", () => {
+  it("heads the list with 其他对话 and its +, no 新对话 row", () => {
     const html = render([mainChat, sideChat]);
-    expect(html).toContain(">旁聊<");
+    expect(html).toContain(SECTION);
     // The + is the only new-chat control.
-    expect(count(html, 'aria-label="新旁聊"')).toBe(1);
-    expect(html).not.toContain('aria-label="新对话"');
-    expect(at(html, "s-main")).toBeLessThan(html.indexOf(">旁聊<"));
-    expect(html.indexOf(">旁聊<")).toBeLessThan(html.indexOf(">今天<"));
+    expect(count(html, 'aria-label="新对话"')).toBe(1);
+    expect(html.indexOf(SECTION)).toBeLessThan(
+      html.indexOf('aria-label="新对话"'),
+    );
+    // No brand plus: that is the external runtime's 新对话 row.
+    expect(html).not.toContain("text-brand-strong");
+    expect(at(html, "s-main")).toBeLessThan(html.indexOf(SECTION));
+    expect(html.indexOf(SECTION)).toBeLessThan(html.indexOf(">今天<"));
     // Narrow fallback: the three icons, in the masthead and in a row of
     // their own (the width picks one).
     expect(count(html, 'aria-label="搜索"')).toBe(2);
-  });
-
-  it("draws B′ exactly as B (the collapse lives in AppShell)", () => {
-    const sessions = [mainChat, sideChat, cliChat];
-    expect(render(sessions, { layout: "B′" })).toBe(
-      render(sessions, { layout: "B" }),
-    );
   });
 
   it("puts what a person started in the buckets and the rest in 其他来源 or its project", () => {
@@ -259,7 +199,7 @@ describe("B", () => {
     }
   });
 
-  it("is collapsed at launch and hangs what needs you under 其他来源", () => {
+  it("keeps 其他来源 collapsed at launch and hangs what needs you under it", () => {
     needsYou.add("s-cli");
     const html = render([mainChat, cliChat, supervisorChat]);
     const others = html.indexOf(OTHER_SOURCES);
@@ -276,96 +216,63 @@ describe("B", () => {
     expect(at(selected, "s-cli")).toBeGreaterThan(at(selected, "s-sup"));
   });
 
-  it("selects a placeholder row at the section's top while the new-chat composer is up", () => {
+  it("selects a 新对话 placeholder at the section's top while the new-chat composer is up", () => {
     const html = render([mainChat, sideChat], { newChatActive: true });
     expect(count(html, 'aria-current="page"')).toBe(1);
     const placeholder = html.indexOf('aria-current="page"');
-    expect(placeholder).toBeGreaterThan(html.indexOf(">旁聊<"));
+    expect(placeholder).toBeGreaterThan(html.indexOf(SECTION));
     expect(placeholder).toBeLessThan(html.indexOf(">今天<"));
-    expect(html.slice(placeholder, placeholder + 800)).toContain(">新旁聊<");
+    expect(html.slice(placeholder, placeholder + 800)).toContain(">新对话<");
     expect(render([mainChat, sideChat])).not.toContain('aria-current="page"');
   });
 
   it("explains the section until a person starts a conversation", () => {
-    const line = "单独聊一件事，主对话不受打扰。";
-    expect(render([mainChat])).toContain(line);
+    expect(render([mainChat])).toContain(HINT);
     // Agent sessions don't count; the 其他来源 row is there with it.
     const agentsOnly = render([mainChat, cliChat]);
-    expect(agentsOnly).toContain(line);
+    expect(agentsOnly).toContain(HINT);
     expect(agentsOnly).toContain(OTHER_SOURCES);
     expect(agentsOnly).not.toContain("你的对话会出现在这里。");
-    expect(render([mainChat, sideChat])).not.toContain(line);
+    expect(render([mainChat, sideChat])).not.toContain(HINT);
   });
 
-  it("follows the naming on the header, the +, the placeholder and the line", () => {
-    const topic = render([mainChat], { naming: "话题", newChatActive: true });
-    expect(topic).toContain(">话题<");
-    expect(topic).toContain('aria-label="新话题"');
-    expect(topic).toContain(">新话题<");
-    expect(topic).toContain("一件事一个话题，主对话不受打扰。");
-    const other = render([mainChat], { naming: "其他对话" });
-    expect(other).toContain(">其他对话<");
-    expect(other).toContain('aria-label="新对话"');
-    const a3 = render([mainChat], { layout: "A3", naming: "话题" });
-    expect(a3).toContain('aria-label="新话题"');
+  it("speaks English in the English UI", () => {
+    const html = render([mainChat, cliChat], {
+      language: "en-US",
+      newChatActive: true,
+    });
+    expect(html).toContain(">Main chat<");
+    expect(html).toContain(">Chats<");
+    expect(html).toContain('aria-label="New chat"');
+    expect(html).toContain(">Other sources<");
+    expect(html).toContain(
+      "Give one thing its own chat. The main chat stays uncluttered.",
+    );
   });
 });
 
 describe("without a main chat (external runtime)", () => {
-  it("is today's sidebar in every layout and naming", () => {
-    for (const layout of ["A3", "B", "B′"] as const) {
-      for (const naming of ["旁聊", "话题"] as const) {
-        const html = render([sideChat, cliChat], { layout, naming });
-        expect(html).toContain('aria-label="新对话"');
-        expect(html).not.toContain(">旁聊<");
-        expect(html).not.toContain(">话题<");
-        expect(html).not.toContain(OTHER_SOURCES);
-        expect(html).not.toContain("主对话");
-        // The CLI session stays in 今天; the 新对话 row is the loud one.
-        expect(at(html, "s-cli")).toBeGreaterThan(html.indexOf(">今天<"));
-        expect(html).toContain("text-brand-strong");
-        expect(render([], { layout, naming })).toContain(
-          "你的对话会出现在这里。",
-        );
-      }
-    }
-  });
-
-  it("ignores the demo", () => {
-    const html = render([sideChat], { demo: true });
-    expect(html).not.toContain("等你回复");
+  it("is today's sidebar: the 新对话 row, nothing split off", () => {
+    const html = render([sideChat, cliChat]);
+    expect(count(html, 'aria-label="新对话"')).toBe(1);
+    // The 新对话 row is the loud one.
+    expect(html).toContain("text-brand-strong");
+    expect(html).not.toContain(SECTION);
     expect(html).not.toContain(OTHER_SOURCES);
-  });
-});
-
-describe("demo states", () => {
-  it("fakes the states over the real list, render layer only", () => {
-    const demo = buildMainChatDemo([mainChat, sideChat], DEMO_ANCHOR);
-    expect(demo).not.toBeNull();
-    // The real side chat runs; three fakes fill in; two fake agents.
-    expect(demo!.live.get("s-main")).toEqual({ ask: true });
-    expect(demo!.live.get("s-side")).toEqual({ running: true });
-    const fakes = demo!.sessions.filter((s) => isDemoSessionId(s.id));
-    expect(fakes).toHaveLength(5);
-    expect(fakes.filter((s) => s.origin?.via !== "gui")).toHaveLength(2);
-    // The input is untouched.
-    expect(sideChat.summary).toBeUndefined();
-    expect(buildMainChatDemo([sideChat], DEMO_ANCHOR)).toBeNull();
+    expect(html).not.toContain(HINT);
+    expect(html).not.toContain("主对话");
+    // The CLI session stays in 今天.
+    expect(at(html, "s-cli")).toBeGreaterThan(html.indexOf(">今天<"));
+    expect(render([])).toContain("你的对话会出现在这里。");
   });
 
-  it("shows the main chat asking, a running step and 其他来源 with a row hung", () => {
-    const html = render([mainChat, sideChat], { demo: true });
-    const main = html.slice(at(html, "s-main"), at(html, "s-main") + 3000);
-    expect(main).toContain("等你回复");
-    expect(html).toContain("第 3 步 · 对比三家航司的退改规则");
-    expect(html).toContain("出错");
-    const others = html.indexOf(OTHER_SOURCES);
-    expect(others).toBeGreaterThan(-1);
-    // The asking CLI fake is newer than the scheduled one, yet hangs
-    // after the shut drawer.
-    expect(at(html, "demo:agent-cli")).toBeGreaterThan(
-      at(html, "demo:agent-scheduled"),
+  it("selects the 新对话 row itself while the new-chat composer is up", () => {
+    const html = render([sideChat], { newChatActive: true });
+    expect(count(html, 'aria-current="page"')).toBe(1);
+    const row = html.lastIndexOf(
+      "<button",
+      html.indexOf('aria-current="page"'),
     );
-    expect(at(html, "demo:agent-scheduled")).toBeGreaterThan(others);
+    expect(html.slice(row, row + 400)).toContain('aria-label="新对话"');
   });
 });

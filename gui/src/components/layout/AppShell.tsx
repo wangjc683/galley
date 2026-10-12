@@ -72,21 +72,28 @@ import { TooltipLabel } from "@/components/ui/tooltip";
  * scrolling when content overflows, which would otherwise push
  * Composer out of view.
  *
- * Sidebar is intentionally non-collapsible. The dragable separator
- * (ResizeSeparator below) lets users shrink it down to 14% if they
- * want less chrome; full collapse was considered and rejected on
- * 2026-05-13 — sidebar is the physical embodiment of multi-session,
- * which is the product's core differentiator. Hiding it hides the
- * value prop. See devlog for the full reasoning.
+ * The sidebar collapses only with a main chat (the managed runtime;
+ * main chat ticket 08, PRD rulings 30 / 34): App passes
+ * `sidebarCollapsed`, toggled by the main header's leftmost button and
+ * ⌘\ (header/SidebarCollapseToggle.tsx) and kept in Core prefs
+ * (stores/sidebar-collapse.ts). Without a main chat (the external
+ * runtime) it never collapses. Either way the draggable separator
+ * (ResizeSeparator below) shrinks it down to 14% for less chrome.
  *
- * TEMPORARY exception: main chat layout B′ (on trial, ticket 07 — the
- * main chat made the rule's premise change, PRD ruling 30) collapses
- * it (`sidebarCollapsed`). The sidebar panel and the separator are
- * hidden, not unmounted, and the group's resizing is disabled so the
- * hidden separator's hit area can't start a drag: the layout itself
- * never changes, so the main panel — alone in the group — takes the
- * whole width, and expanding brings back the width it had. Nothing
- * remounts either way (the conversation keeps its scroll and draft).
+ * Full collapse was rejected on 2026-05-13 — the sidebar was the
+ * physical embodiment of multi-session, the product's core
+ * differentiator, and hiding it hid the value prop. The main chat
+ * changed that premise (PRD ruling 30): the main chat is the home and
+ * the sidebar's first job is getting back to it, so collapsed the main
+ * chat fills the window. The external runtime has no home and keeps
+ * the 2026-05-13 rule.
+ *
+ * Collapsed, the sidebar panel and the separator are hidden, not
+ * unmounted, and the group's resizing is disabled so the hidden
+ * separator's hit area can't start a drag: the layout itself never
+ * changes, so the main panel — alone in the group — takes the whole
+ * width, and expanding brings back the width it had. Nothing remounts
+ * either way (the conversation keeps its scroll and draft).
  */
 export function AppShell({
   sidebar,

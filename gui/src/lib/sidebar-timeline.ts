@@ -62,10 +62,11 @@ export interface SidebarSections {
   otherProjects: SidebarProjectGroupItem[];
   /** Time buckets with sessions outside projects only (S4). */
   buckets: Record<SidebarTimeBucket, Session[]>;
-  /** With `splitOtherSources` (main chat layout B, on trial — ticket
-   * 07): the window sessions an agent started (CLI, supervisor, a
-   * scheduled task, `system`) outside projects, newest first, taken out
-   * of the time buckets into one 「其他来源」 group row. Empty otherwise. */
+  /** With `splitOtherSources` (the sectioned sidebar, with a main chat —
+   * main chat tickets 07 / 08): the window sessions an agent started
+   * (CLI, supervisor, a scheduled task, `system`) outside projects,
+   * newest first, taken out of the time buckets into one 「其他来源」
+   * group row. Empty otherwise. */
   otherSources: Session[];
   /** Sessions behind the 更早 entry: the EarlierDialog list (a group's
    * older sessions are in here too). */
@@ -79,7 +80,7 @@ export interface SidebarSections {
 
 export interface SidebarSectionsOptions {
   now?: Date;
-  /** Main chat layout B (on trial, ticket 07): time buckets keep the
+  /** The sectioned sidebar (with a main chat): time buckets keep the
    * conversations a person started; see `otherSources`. */
   splitOtherSources?: boolean;
 }

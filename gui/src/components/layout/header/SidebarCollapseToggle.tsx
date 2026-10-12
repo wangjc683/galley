@@ -2,18 +2,10 @@ import { SidebarSimple } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
 import { TopBarIconButton } from "@/components/layout/TopBarIconButton";
-import {
-  MainChatDemoLiveContext,
-  useMainChatDemoOverlay,
-} from "@/components/layout/sidebar/main-chat-demo";
-import {
-  type MainChatTrialCopy,
-  useMainChatLayoutStore,
-  useMainChatTrialCopy,
-} from "@/components/layout/sidebar/main-chat-layout";
 import { ShortcutTooltipText } from "@/components/layout/sidebar/SidebarNavIcons";
 import { IconTooltip } from "@/components/ui/tooltip";
 import { useSessionsAttention } from "@/hooks/useSessionsAttention";
+import { useCopy } from "@/lib/i18n";
 import { isMac } from "@/lib/platform";
 import { formatShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
@@ -26,89 +18,63 @@ import type { Session } from "@/types/session";
 const TOGGLE_SHORTCUT = "Mod+\\";
 
 /**
- * TEMPORARY — main chat layout B′'s sidebar toggle (on trial, ticket
- * 07; see main-chat-layout.ts). The leftmost thing in the main header,
- * one button for both directions, with ⌘\. Collapsed, the main header
- * is the window's top-left: on macOS the button clears the traffic
- * lights the way SidebarHeader's wordmark does (lights end ~68px; the
- * button starts at 80px), and the space around it stays the header's
- * drag region (a button is never one). Windows / Linux: the same
- * button at the header's normal left gutter.
+ * The sidebar toggle (main chat ticket 08, PRD rulings 30 / 34): the
+ * leftmost thing in the main header, one button for both directions,
+ * with ⌘\. App renders it only while there is a main chat (the managed
+ * runtime), so the external runtime has neither the button nor the key
+ * and its sidebar never collapses.
  *
- * While collapsed, side chats waiting for a reply or erroring count on
- * a badge at the icon's corner — the 定时 icon's badge recipe (warning
- * tint; error when any has errored), a number, never a status dot
- * (layout-and-chrome.md bans those). The session open in the main area
- * is not counted: it is in front of you.
+ * Collapsed, the main header is the window's top-left: on macOS the
+ * button clears the traffic lights the way SidebarHeader's wordmark
+ * does (lights end ~68px; the button starts at 80px), and the space
+ * around it stays the header's drag region (a button is never one).
+ * Windows / Linux: the same button at the header's normal left gutter.
+ *
+ * While collapsed, conversations waiting for a reply or erroring count
+ * on a badge at the icon's corner — the 定时 icon's badge recipe
+ * (warning tint; error when any has errored), a number, never a status
+ * dot (layout-and-chrome.md bans those). The session open in the main
+ * area is not counted: it is in front of you. The main chat counts
+ * like any other when it is not the one open (its subtasks' asks reach
+ * its row).
  */
 export function SidebarCollapseToggle({
-  sessions,
-  activeId,
-  sessionGoalStatus,
-}: {
-  sessions: Session[];
-  activeId?: string;
-  sessionGoalStatus?: Map<string, GoalBrief>;
-}) {
-  const collapsed = useMainChatLayoutStore((s) => s.sidebarCollapsed);
-  const toggle = useMainChatLayoutStore((s) => s.toggleSidebarCollapsed);
-  const copy = useMainChatTrialCopy();
-  // The demo states count here too, so the badge matches the sidebar.
-  const demo = useMainChatDemoOverlay(sessions);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(isMac ? e.metaKey : e.ctrlKey) || e.altKey || e.shiftKey) return;
-      if (e.code !== "Backslash" && e.key !== "\\") return;
-      e.preventDefault();
-      toggle();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [toggle]);
-
-  return (
-    <MainChatDemoLiveContext.Provider value={demo?.live ?? null}>
-      <SidebarCollapseButton
-        collapsed={collapsed}
-        onToggle={toggle}
-        copy={copy}
-        sessions={demo?.sessions ?? sessions}
-        activeId={activeId}
-        sessionGoalStatus={sessionGoalStatus}
-      />
-    </MainChatDemoLiveContext.Provider>
-  );
-}
-
-function SidebarCollapseButton({
   collapsed,
   onToggle,
-  copy,
   sessions,
   activeId,
   sessionGoalStatus,
 }: {
   collapsed: boolean;
   onToggle: () => void;
-  copy: MainChatTrialCopy;
   sessions: Session[];
   activeId?: string;
   sessionGoalStatus?: Map<string, GoalBrief>;
 }) {
-  const sideChats = sessions.filter(
-    (s) => !s.mainChat && s.id !== activeId && s.status !== "archived",
+  const copy = useCopy();
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(isMac ? e.metaKey : e.ctrlKey) || e.altKey || e.shiftKey) return;
+      if (e.code !== "Backslash" && e.key !== "\\") return;
+      e.preventDefault();
+      onToggle();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onToggle]);
+
+  const others = sessions.filter(
+    (s) => s.id !== activeId && s.status !== "archived",
   );
-  const attention = useSessionsAttention(
-    sideChats,
-    activeId,
-    sessionGoalStatus,
-  );
+  const attention = useSessionsAttention(others, activeId, sessionGoalStatus);
   const needsYou = attention.needsYouIds.size;
   const count = collapsed ? needsYou : 0;
-  const label = collapsed ? copy.expandSidebar : copy.collapseSidebar;
+  const label = collapsed
+    ? copy.topbar.expandSidebar
+    : copy.topbar.collapseSidebar;
   const fullLabel =
-    count > 0 ? `${label} · ${copy.needsYouCount(count)}` : label;
+    count > 0 ? `${label} · ${copy.topbar.sidebarNeedsYou(count)}` : label;
   return (
     <span
       className={cn("inline-flex shrink-0", isMac && collapsed && "ml-[70px]")}

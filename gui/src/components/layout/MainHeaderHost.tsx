@@ -57,7 +57,7 @@ export function MainHeaderHost({
   sessionTitle: string | undefined;
   /** False for the main chat (主聊天): the title menu has no Rename. */
   canRenameSession?: boolean;
-  /** TEMPORARY: MainHeader's leftmost slot (B′'s sidebar toggle). */
+  /** MainHeader's leftmost slot (the sidebar toggle, with a main chat). */
   leading?: ReactNode;
 }) {
   const browserControlStatus = useBrowserControlStore((s) => s.status);

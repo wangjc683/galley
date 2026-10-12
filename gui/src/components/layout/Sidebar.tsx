@@ -15,15 +15,6 @@ import { cn } from "@/lib/utils";
 import type { GoalBrief } from "@/types/goal";
 import type { Project, Session } from "@/types/session";
 
-import {
-  isDemoSessionId,
-  MainChatDemoLiveContext,
-  useMainChatDemoOverlay,
-} from "./sidebar/main-chat-demo";
-import {
-  useMainChatLayout,
-  useMainChatTrialCopy,
-} from "./sidebar/main-chat-layout";
 import { SidebarFooter } from "./sidebar/SidebarFooter";
 import { SidebarHeader } from "./sidebar/SidebarHeader";
 import {
@@ -133,26 +124,25 @@ export interface SidebarProps {
  *           anything is archived
  *   empty — nothing listed (no sessions, no fresh empty project):
  *           header + new-chat row + muted hint
- *           ("你的对话会出现在这里。"); no sections
+ *           ("你的对话会出现在这里。"); no sections. Sectioned (below),
+ *           the section's own line says it instead.
  *
  * Either way the archive footer follows one rule: it exists only when
  * archived sessions exist.
  *
- * The main chat (主对话, managed runtime only, ticket 02) is never in
- * 置顶 / 项目 / a time bucket: its row stands on its own above the list,
- * outside the scroll, and is the home (full ink even when another row
- * is selected). Its layouts are on trial behind a temporary switcher
- * (sidebar/main-chat-layout.ts, ticket 07):
+ * With a main chat (主对话, managed runtime only; main chat tickets 02 /
+ * 07 / 08, PRD rulings 30–36) the sidebar is sectioned: the main chat's
+ * row stands on its own above the list, outside the scroll, and is the
+ * home (full ink even when another row is selected) — never in 置顶 /
+ * 项目 / a time bucket. Under it the 「其他对话」 section header carries
+ * the new-chat + (sidebar/SidebarSideChats.tsx); the list below holds
+ * what a person started, and agent-started sessions outside projects
+ * fold into 「其他来源 N」. The whole sidebar can collapse (AppShell,
+ * header/SidebarCollapseToggle.tsx).
  *
- *   A3 — the main-chat row above a quiet 新对话 row; nothing else moves.
- *   B / B′ — the main-chat row, then a 「旁聊」 section header with the
- *        new-chat + (sidebar/SidebarSideChats.tsx); the list below
- *        holds what a person started, agent-started sessions outside
- *        projects fold into 「其他来源 N」. B′ adds the collapse
- *        (AppShell).
- *
- * Without a main chat (the external runtime) every layout is today's
- * sidebar.
+ * Without a main chat (the external runtime) it is the sidebar as it
+ * was before: the 新对话 row heads the list, nothing is split off, and
+ * nothing collapses.
  *
  * The active session row gets `bg-selected` (apricot tint) — this is a
  * brand moment, not just hover state. Since 2026-08-21 it also carries a
@@ -160,54 +150,7 @@ export interface SidebarProps {
  * back to ink-soft; one channel was not enough to catch at a glance. See
  * the channel inventory in SidebarSessionRow.
  */
-export function Sidebar(props: SidebarProps) {
-  // TEMPORARY: the trial's demo states (sidebar/main-chat-demo.ts) —
-  // fake live states and fake sessions over the real list, render layer
-  // only; actions aimed at a fake row go nowhere.
-  const demo = useMainChatDemoOverlay(props.sessions);
-  return (
-    <MainChatDemoLiveContext.Provider value={demo?.live ?? null}>
-      <SidebarBody
-        {...(demo ? withDemoSessions(props, demo.sessions) : props)}
-      />
-    </MainChatDemoLiveContext.Provider>
-  );
-}
-
-/** TEMPORARY (demo states): the demo's list, and every per-session
- * action filtered so a fake row reaches no store and no Core. */
-function withDemoSessions(
-  props: SidebarProps,
-  sessions: Session[],
-): SidebarProps {
-  const realOnly =
-    <A extends unknown[]>(fn?: (id: string, ...rest: A) => void) =>
-    (id: string, ...rest: A) => {
-      if (!isDemoSessionId(id)) fn?.(id, ...rest);
-    };
-  return {
-    ...props,
-    sessions,
-    onSelectSession: realOnly(props.onSelectSession),
-    onArchiveSession:
-      props.onArchiveSession && realOnly(props.onArchiveSession),
-    onRenameSession: props.onRenameSession && realOnly(props.onRenameSession),
-    onTogglePinSession:
-      props.onTogglePinSession && realOnly(props.onTogglePinSession),
-    onAssignSessionToProject:
-      props.onAssignSessionToProject &&
-      realOnly(props.onAssignSessionToProject),
-    onCreateProjectForSession:
-      props.onCreateProjectForSession &&
-      realOnly(props.onCreateProjectForSession),
-    onArchiveSessions:
-      props.onArchiveSessions &&
-      ((ids) =>
-        props.onArchiveSessions?.(ids.filter((id) => !isDemoSessionId(id)))),
-  };
-}
-
-function SidebarBody({
+export function Sidebar({
   sessions,
   projects = [],
   activeId,
@@ -238,16 +181,14 @@ function SidebarBody({
   sessionGoalStatus,
 }: SidebarProps) {
   const copy = useCopy();
-  // TEMPORARY: the A3 / B / B′ trial (see main-chat-layout.ts).
-  const mainChatLayout = useMainChatLayout();
-  const trialCopy = useMainChatTrialCopy();
   const mainChat = useMemo(() => findMainChat(sessions), [sessions]);
   const listSessions = useMemo(
     () => (mainChat ? sessions.filter((s) => s.id !== mainChat.id) : sessions),
     [sessions, mainChat],
   );
-  // B and B′ draw the same sidebar (B′'s collapse lives in AppShell).
-  const sectioned = mainChat !== undefined && mainChatLayout !== "A3";
+  // The sectioned sidebar is the main chat's (its collapse lives in
+  // AppShell); the external runtime keeps the 新对话 row.
+  const sectioned = mainChat !== undefined;
   // Memoised: building the list walks every session; without memo it
   // re-runs on every Sidebar render, and Sidebar re-renders whenever
   // App does (which can be triggered by lower-frequency state like
@@ -256,8 +197,8 @@ function SidebarBody({
   // open past midnight kept yesterday's sessions under 今天 until an
   // unrelated session mutation happened to retrigger the memo.
   const dayStamp = useDayStamp();
-  // 置顶, the 项目 section and the time buckets (S1–S6); B also takes
-  // the agent-started sessions out into 「其他来源」.
+  // 置顶, the 项目 section and the time buckets (S1–S6); sectioned, the
+  // agent-started sessions also come out into 「其他来源」.
   const sections = useMemo(
     () =>
       buildSidebarSections(listSessions, projects, {
@@ -275,7 +216,7 @@ function SidebarBody({
     SIDEBAR_TIME_BUCKETS.every(
       (bucket) => sections.buckets[bucket].length === 0,
     );
-  // B's empty-state line stays until a person has started a
+  // The section's empty-state line stays until a person has started a
   // conversation (「其他来源」 can be there before that).
   const hasHumanChats = useMemo(
     () => listSessions.some(isHumanStarted),
@@ -293,7 +234,7 @@ function SidebarBody({
     useSidebarProjectsCollapsed();
   // The 更多项目 row's fold: this run only, like a group's.
   const [othersOpen, setOthersOpen] = useState(false);
-  // B's 「其他来源」 group: collapsed at launch, like a project's.
+  // The 「其他来源」 group: collapsed at launch, like a project's.
   const [otherSourcesOpen, setOtherSourcesOpen] = useState(false);
   // A project asked into view (new project / 查看项目) opens a
   // collapsed 项目 section first — and the 更多项目 row when the
@@ -430,9 +371,8 @@ function SidebarBody({
   };
 
   // The main chat's row: a session row in every respect but its label,
-  // its resting house glyph and its missing menu (no pin, rename,
-  // project, archive). Same wiring as a list row otherwise. In B it
-  // says 「什么都可以跟它说」 until its first message.
+  // its resting house glyph, its full ink and its missing menu (no pin,
+  // rename, project, archive). Same wiring as a list row otherwise.
   const mainChatRow = mainChat ? (
     <SidebarSessionRow
       session={mainChat}
@@ -441,13 +381,7 @@ function SidebarBody({
       sessionGoal={sessionGoalStatus?.get(mainChat.id)}
       projects={navigationProjects}
       onClick={() => handleSelectSession(mainChat.id)}
-      mainChatLabel={trialCopy.mainChat}
-      mainChatHome
-      idleSubline={
-        sectioned && (mainChat.turnCount ?? 0) === 0
-          ? trialCopy.idleSubline
-          : undefined
-      }
+      mainChatLabel={copy.sidebar.mainChat}
     />
   ) : null;
 
@@ -470,8 +404,8 @@ function SidebarBody({
             scheduledActionCount={scheduledActionCount}
             onNewProject={onNewProject}
           />
-          {/* B: the main-chat row and the section header stay put above
-              the list, and own the divider the 新对话 row had — clear at
+          {/* The main-chat row and the section header stay put above
+              the list, and own the divider the 新对话 row has — clear at
               rest, drawn once the list scrolls under them
               (SidebarQuickActions). */}
           <div
@@ -482,33 +416,20 @@ function SidebarBody({
           >
             <div className="pt-1">{mainChatRow}</div>
             <div className="pt-2">
-              <SidebarSideChatHeader
-                label={trialCopy.sectionLabel}
-                newChatLabel={trialCopy.newChat}
-                onNewChat={onNewChat}
-              />
+              <SidebarSideChatHeader onNewChat={onNewChat} />
             </div>
           </div>
         </>
       ) : (
-        <>
-          {/* A3: the main-chat row above the 新对话 row, which keeps its
-              place, its divider and its narrow fallback, but quiet
-              (smaller, no brand plus). Without a main chat: today's
-              sidebar. */}
-          {mainChatRow && <div className="pt-1">{mainChatRow}</div>}
-          <SidebarQuickActions
-            quiet={mainChat !== undefined}
-            newChatLabel={mainChat ? trialCopy.newChat : undefined}
-            onNewChat={onNewChat}
-            onSearch={onSearch}
-            onOpenScheduled={onOpenScheduled}
-            scheduledActionCount={scheduledActionCount}
-            onNewProject={onNewProject}
-            newChatActive={newChatActive}
-            listScrolled={listScrolled}
-          />
-        </>
+        <SidebarQuickActions
+          onNewChat={onNewChat}
+          onSearch={onSearch}
+          onOpenScheduled={onOpenScheduled}
+          scheduledActionCount={scheduledActionCount}
+          onNewProject={onNewProject}
+          newChatActive={newChatActive}
+          listScrolled={listScrolled}
+        />
       )}
 
       <div
@@ -517,16 +438,11 @@ function SidebarBody({
         className="scrollbar-stable min-h-0 flex-1 overflow-y-auto pb-2"
       >
         {sectioned && newChatActive && (
-          <SidebarNewSideChatRow
-            label={trialCopy.newChat}
-            onClick={onNewChat}
-          />
+          <SidebarNewSideChatRow onClick={onNewChat} />
         )}
-        {sectioned && !hasHumanChats && (
-          <SidebarSideChatEmptyHint text={trialCopy.emptyHint} />
-        )}
+        {sectioned && !hasHumanChats && <SidebarSideChatEmptyHint />}
         {listEmpty ? (
-          // B's section line above already says it.
+          // Sectioned, the section's line above already says it.
           sectioned ? null : (
             <div className="px-5 py-6 text-[12.5px] italic text-ink-muted">
               {copy.sidebar.emptySessions}
@@ -545,7 +461,6 @@ function SidebarBody({
             otherSourcesSlot={
               <SidebarOtherSources
                 sessions={sections.otherSources}
-                label={trialCopy.otherSources}
                 expanded={otherSourcesOpen}
                 onToggleExpanded={() => setOtherSourcesOpen((open) => !open)}
                 {...rowWiring}

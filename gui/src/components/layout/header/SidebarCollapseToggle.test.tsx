@@ -8,38 +8,8 @@ import type { Session } from "@/types/session";
 
 import { SidebarCollapseToggle } from "./SidebarCollapseToggle";
 
-// Main chat layout B′ (on trial, ticket 07). Static rendering reads a
-// store's initial state, so the collapse is fed through the module.
-const trial = vi.hoisted(() => ({ collapsed: true }));
-vi.mock(
-  "@/components/layout/sidebar/main-chat-layout",
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import("@/components/layout/sidebar/main-chat-layout")
-      >();
-    const { zhCopy } = await import("@/i18n/locales/zh");
-    return {
-      ...actual,
-      useMainChatLayoutStore: <T,>(
-        selector: (state: {
-          sidebarCollapsed: boolean;
-          toggleSidebarCollapsed: () => void;
-          demo: boolean;
-          demoAnchor: string;
-        }) => T,
-      ) =>
-        selector({
-          sidebarCollapsed: trial.collapsed,
-          toggleSidebarCollapsed: () => {},
-          demo: false,
-          demoAnchor: "2026-10-12T00:00:00.000Z",
-        }),
-      useMainChatTrialCopy: () =>
-        actual.mainChatTrialCopy(zhCopy, "zh-CN", "旁聊"),
-    };
-  },
-);
+// useCopy falls back to the zh copy without a CopyProvider.
+
 // The persisted split reads localStorage, which node has none of.
 vi.mock("react-resizable-panels", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-resizable-panels")>()),
@@ -48,6 +18,9 @@ vi.mock("react-resizable-panels", async (importOriginal) => ({
     onLayoutChanged: () => {},
   }),
 }));
+// A session's erroring bridge or pending ask can't be seeded in a store
+// under static rendering; mark ids as needing the user on top of the
+// real hook.
 const needsYou = vi.hoisted(() => new Set<string>());
 const erroring = vi.hoisted(() => ({ on: false }));
 vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
@@ -84,10 +57,15 @@ const sessions = [
   managed("c"),
 ];
 
-function renderToggle(activeId?: string) {
+function renderToggle(collapsed: boolean, activeId?: string) {
   return renderToStaticMarkup(
     <Tooltip.Provider>
-      <SidebarCollapseToggle sessions={sessions} activeId={activeId} />
+      <SidebarCollapseToggle
+        collapsed={collapsed}
+        onToggle={() => {}}
+        sessions={sessions}
+        activeId={activeId}
+      />
     </Tooltip.Provider>,
   );
 }
@@ -95,43 +73,48 @@ function renderToggle(activeId?: string) {
 afterEach(() => {
   needsYou.clear();
   erroring.on = false;
-  trial.collapsed = true;
 });
 
 describe("SidebarCollapseToggle", () => {
-  it("counts the side chats that need you on the expand button", () => {
+  it("counts the conversations that need you on the expand button", () => {
     needsYou.add("a");
     needsYou.add("b");
-    // The main chat is in front of you when collapsed: never counted.
+    // The open one is in front of you: never counted.
     needsYou.add("s-main");
-    const html = renderToggle();
-    expect(html).toContain('aria-label="展开侧栏 · 2 个旁聊在等你"');
+    const html = renderToggle(true, "s-main");
+    expect(html).toContain('aria-label="展开侧栏 · 2 个对话在等你"');
     expect(html).toMatch(/data-role="sidebar-needs-you-badge"[^>]*>2</);
     // Waiting only: the warning tint, not a dot.
     expect(html).toContain("text-warning");
     expect(html).not.toContain("rounded-full bg-warning");
   });
 
+  it("counts the main chat too while another conversation is open", () => {
+    needsYou.add("s-main");
+    const html = renderToggle(true, "a");
+    expect(html).toContain('aria-label="展开侧栏 · 1 个对话在等你"');
+  });
+
   it("leaves out the open session and turns red when one has errored", () => {
     needsYou.add("a");
     needsYou.add("b");
     erroring.on = true;
-    const html = renderToggle("a");
+    const html = renderToggle(true, "a");
     expect(html).toMatch(/data-role="sidebar-needs-you-badge"[^>]*>1</);
     expect(html).toContain("text-error");
   });
 
   it("shows no badge with nothing waiting, or while the sidebar is open", () => {
-    expect(renderToggle()).not.toContain("sidebar-needs-you-badge");
+    expect(renderToggle(true)).not.toContain("sidebar-needs-you-badge");
+    expect(renderToggle(true)).toContain('aria-label="展开侧栏"');
     needsYou.add("a");
-    trial.collapsed = false;
-    const html = renderToggle();
+    const html = renderToggle(false);
     expect(html).not.toContain("sidebar-needs-you-badge");
     expect(html).toContain('aria-label="收起侧栏"');
   });
 });
 
-describe("AppShell's B′ collapse", () => {
+describe("AppShell's collapse", () => {
   const shell = (collapsed: boolean) =>
     renderToStaticMarkup(
       <Tooltip.Provider>

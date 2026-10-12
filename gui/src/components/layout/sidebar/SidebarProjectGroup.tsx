@@ -63,9 +63,10 @@ import {
  *   line say whose they are.
  * - Expanding never sets project context (D8); the row's `+` does.
  *
- * Main chat layout B (on trial, ticket 07) reuses the group for its
- * 「其他来源 N」 row — agent-started sessions outside projects — with
- * its own icon and no row actions (SidebarSideChats.tsx).
+ * The sectioned sidebar (with a main chat, main chat tickets 07 / 08)
+ * reuses the group for its 「其他来源 N」 row — agent-started sessions
+ * outside projects — with its own icon and no row actions
+ * (SidebarSideChats.tsx).
  */
 export function SidebarProjectGroup({
   project,

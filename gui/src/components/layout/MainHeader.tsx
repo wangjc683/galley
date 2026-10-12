@@ -109,9 +109,9 @@ export interface MainHeaderProps {
    */
   onRenameSession?: (newTitle: string) => void;
   /**
-   * TEMPORARY: the leftmost slot, before the title — main chat layout
-   * B′'s sidebar toggle (on trial, ticket 07; SidebarCollapseToggle,
-   * which clears the macOS traffic lights itself while collapsed).
+   * The leftmost slot, before the title — the sidebar toggle while
+   * there is a main chat (SidebarCollapseToggle, which clears the macOS
+   * traffic lights itself while the sidebar is collapsed).
    */
   leading?: ReactNode;
 }
@@ -149,8 +149,8 @@ export interface MainHeaderProps {
  * window's top-LEFT, which is the *Sidebar* column — SidebarHeader owns
  * that clearance. This header only reserves the right edge for the
  * Windows custom WindowControls (min / max / close); macOS hands window
- * control to the overlay traffic light on the sidebar side. (TEMPORARY
- * exception: main chat layout B′'s collapsed sidebar, see `leading`.)
+ * control to the overlay traffic light on the sidebar side. (Exception:
+ * the main chat's collapsed sidebar, see `leading`.)
  *
  * Window dragging:
  *   - Tauri v2 only honours `data-tauri-drag-region` when the

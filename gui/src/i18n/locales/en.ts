@@ -166,7 +166,10 @@ export const enCopy: AppCopy = {
   sidebar: {
     newConversation: "New chat",
     mainChat: "Main chat",
-    newSideChat: "New side chat",
+    otherChats: "Chats",
+    otherChatsHint:
+      "Give one thing its own chat. The main chat stays uncluttered.",
+    otherSources: "Other sources",
     search: "Search",
     projects: "Projects",
     newProject: "New project",
@@ -248,6 +251,10 @@ export const enCopy: AppCopy = {
     openSettings: "Open Settings",
     supervisorSopTooltip: "Supervisor SOP",
     openSupervisorSop: "Open Supervisor SOP settings",
+    collapseSidebar: "Hide sidebar",
+    expandSidebar: "Show sidebar",
+    sidebarNeedsYou: (count) =>
+      count === 1 ? "1 chat needs you" : `${count} chats need you`,
     display: {
       tooltip: "Display",
       aria: "Display settings",
@@ -483,7 +490,7 @@ export const enCopy: AppCopy = {
     dragToReferenceHint: "Drop any file or folder here to send it to the AI",
     newlineHint: "Shift+Enter for a new line",
     queueEnterHint: "Enter queues · runs after the current task",
-    mainChatBusyEnterHint: "Enter, then queue it or open a side chat",
+    mainChatBusyEnterHint: "Enter, then queue it or start a new chat",
     stoppingQueueHint: "Stopping — your queued message will be sent automatically",
     queueStripLabel: (count) => `Queued · ${count}`,
     queueJump: "Run now",
@@ -494,9 +501,9 @@ export const enCopy: AppCopy = {
     mainChatBusyQueue: "Queue",
     mainChatBusyQueueTooltip: "Hand it to the main chat after the current task",
     mainChatBusyQueueImages:
-      "Messages with images can't queue. Open a side chat instead.",
-    mainChatBusySideChat: "Open side chat",
-    mainChatBusySideChatTooltip: "Start a side chat with this message now",
+      "Messages with images can't be queued. Start a new chat instead.",
+    mainChatBusySideChat: "New chat",
+    mainChatBusySideChatTooltip: "Start a new chat with this message now",
     mainChatBusyKeepEditing: "Keep editing",
     imageOnlyFallback: "Please look at this image.",
     pastedImage: "Pasted image",
@@ -1053,6 +1060,8 @@ export const enCopy: AppCopy = {
       navigation: "Navigation",
       openCommandPalette: "Search / command palette",
       newConversation: "New chat",
+      toggleSidebar: "Hide / show sidebar",
+      toggleSidebarNote: "Not available with an external GA.",
       openSettings: "Open Settings",
       composer: "Input",
       sendMessage: "Send message",

@@ -236,7 +236,7 @@ describe("buildSidebarSections", () => {
   });
 });
 
-// Main chat layout B (on trial, ticket 07).
+// The sectioned sidebar, with a main chat (main chat tickets 07 / 08).
 describe("buildSidebarSections with splitOtherSources", () => {
   const sessions = [
     session("gui", 0, { origin: { via: "gui" } }),

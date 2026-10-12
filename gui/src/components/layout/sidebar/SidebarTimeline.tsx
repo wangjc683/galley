@@ -123,7 +123,7 @@ function SidebarEarlier({
 /**
  * The sidebar list (S1): 置顶, the 项目 section, then the time buckets
  * — holding only sessions outside projects (S4) — and the 更早 entry.
- * Main chat layout B (on trial, ticket 07) puts its 「其他来源」 row
+ * The sectioned sidebar (with a main chat) puts its 「其他来源」 row
  * between the buckets and 更早 (`otherSourcesSlot`).
  */
 export function SidebarSectionsList({

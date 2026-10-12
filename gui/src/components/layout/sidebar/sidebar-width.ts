@@ -43,8 +43,8 @@ export const HEADER_NAV_ICONS_DISPLAY = isMac
     ? "hidden @min-[189px]/sidebar:flex"
     : "hidden @min-[179px]/sidebar:flex";
 
-/** The icon group's copy in the new-chat row — the complement. Main
- * chat layout B (on trial, ticket 07) has no new-chat row: below the
+/** The icon group's copy in the new-chat row — the complement. The
+ * sectioned sidebar (with a main chat) has no new-chat row: below the
  * threshold the three icons get a row of their own under the masthead
  * (SidebarNarrowNavRow), which exists only in the narrow state —
  * crossing the threshold there moves the list by one row height. */
