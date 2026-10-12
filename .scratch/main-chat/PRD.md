@@ -73,6 +73,18 @@ README「dense context instead of long」（`README.md:54`）。
 27. IM 三级：L0「同一个大脑、线分开」随票 01 / 03；L1「IM 当出口」随票 05；L2「并入主聊天」仍在 [deferred](../../docs/devlog/deferred.md)，
     启动信号改为「桌面主聊天 02、03 上线后，重排 L2 与 iOS 的先后」。理由：iOS 只覆盖 iPhone，安卓用户在手机上用主聊天只有 IM 一条路。
 
+### 第三轮·侧栏（JC，2026-10-12，02 真机预览后）
+
+28. 样式上 A3 胜过 A1、A2：A1 主次不分，A2 找不到新建入口。A3 = A1 的顺序、层级反转（主对话是首页，新对话行降为安静的一行）。
+29. 界面不用「主聊天」：文案规范「用户可见的 session / chat 概念统一叫『对话』」（`docs/copy-language-guidelines.md:324`），主入口暂定「主对话」；
+    另一类的叫法（旁聊 / 话题 / 其他对话）在侧栏骨架定了之后真机定。说明文字只在空的时候出现（先例：侧栏空列表「你的对话会出现在这里。」）。
+30. 侧栏职责重排：回到主对话 > 看哪里需要我 > 新开旁聊 > 找回旧旁聊；不是换一个按钮一个文案。两条旧规则的前提已变：
+    「不可折叠」的理由「多 session 是核心产品形态」（`layout-and-chrome.md:22`）、「不做状态区块」的理由之一「Approval Dock 兜底」（10-05 已移除审批）。
+    状态区块仍不做（在跑的旁聊本来就在时间线顶部，子任务状态汇到主对话行）。
+31. 侧栏骨架：主对话行（首页）→「旁聊」分区头（加号在头上）→ 置顶 / 项目 / 时间桶。
+32. agent 开的对话（CLI、supervisor 等）移出「旁聊」：在项目里的留在项目组，不在项目里的收成一行「其他来源 N」，等你回复 / 出错时按 10-08 项目组的挂出规则露出。与账本「只读人说的话」同一原则。
+33. 真机比 A3（对照）/ B（骨架）/ B′（骨架 + 侧栏可收起），带演示状态档。票 [07](./issues/07-sidebar-structure-trial.md)。
+
 ## 事实依据（2026-10-12 核对）
 
 - 桌面用量（`workbench.db`）：GUI 会话 5 个月里最长 21 轮；跨天续用的会话一共 6 个，9 月起 0 个；9 月 41 个会话共 116 轮，单个最长 8 轮。习惯是「开一个，问完就走」。
@@ -123,6 +135,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [03](./issues/03-segments-and-injection.md) | C | 切段、注入、入口层提示词 | 01、02 | needs-triage |
 | [04](./issues/04-what-it-remembers-page.md) | D | 「它记得我什么」页面 | 01 | needs-triage |
 | [06](./issues/06-subtasks.md) | F | 子任务：父会话、原生派活工具、卡片、定时任务改卡片 | 02 | needs-triage |
+| [07](./issues/07-sidebar-structure-trial.md) | — | 侧栏结构试验：A3 / B / B′ + 演示状态 | 02 | 开工中（2026-10-12） |
 | [05](./issues/05-proactive-cards.md) | E | 主动提醒卡片 + IM 出口 | 01、06 | needs-triage |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
