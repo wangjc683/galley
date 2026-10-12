@@ -82,11 +82,10 @@ pub struct MinedCursor {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LastRun {
-    /// RFC 3339 UTC instant the attempt started.
+    /// RFC 3339 UTC instant the attempt started. (No session id: the
+    /// mining session is deleted once the run settles. A `sessionId` in
+    /// a state file from before ticket 04 is ignored.)
     pub started_at: String,
-    /// The hidden mining session, when one was created.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<String>,
     /// `running`, `succeeded`, `empty` (nothing new, no model call) or
     /// `failed`.
     pub outcome: String,
@@ -157,6 +156,20 @@ mod tests {
         state.save(&path).unwrap();
         assert_eq!(LedgerState::load(&path).unwrap(), state);
         assert!(!path.with_extension("json.tmp").exists());
+    }
+
+    #[test]
+    fn a_state_file_from_before_ticket_04_still_loads() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.json");
+        fs::write(
+            &path,
+            r#"{"lastAttemptDate": "2026-10-12", "lastRun": {"startedAt": "2026-10-12T00:00:00+00:00", "sessionId": "s-old", "outcome": "succeeded", "turns": 3}}"#,
+        )
+        .unwrap();
+        let state = LedgerState::load(&path).unwrap();
+        assert_eq!(state.last_run.unwrap().turns, 3);
+        assert_eq!(state.due_at, None);
     }
 
     #[test]

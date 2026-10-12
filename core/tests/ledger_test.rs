@@ -15,7 +15,9 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Utc};
-use galley_core_lib::api::{GalleyApi, OriginVia, SessionFilter, SessionId, SessionStatus};
+use galley_core_lib::api::{
+    CreateSessionInput, GalleyApi, Origin, OriginVia, RuntimeKind, SessionFilter, SessionId,
+};
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::ipc::{IpcCommand, IpcEvent, RunCompleteEvent};
 use galley_core_lib::ledger::config::SWITCH_PREF;
@@ -362,10 +364,12 @@ impl SpawnEnv for FakeEnv {
     }
 }
 
-/// Fake registry: every spawn succeeds; dispatching the task plays
-/// `script` on the session's broadcast.
+/// Fake registry: every spawn succeeds; dispatching the task writes
+/// `writes` (the model editing the ledger) and plays `script` on the
+/// session's broadcast.
 struct FakeRunner {
     script: Vec<BroadcastItem>,
+    writes: Vec<(PathBuf, String)>,
     channel: broadcast::Sender<BroadcastItem>,
     spawned: Mutex<Vec<SpawnArgs>>,
     tasks: Mutex<Vec<(String, String)>>,
@@ -374,8 +378,13 @@ struct FakeRunner {
 
 impl FakeRunner {
     fn new(script: Vec<BroadcastItem>) -> Self {
+        Self::writing(script, Vec::new())
+    }
+
+    fn writing(script: Vec<BroadcastItem>, writes: Vec<(PathBuf, String)>) -> Self {
         Self {
             script,
+            writes,
             channel: broadcast::channel(64).0,
             spawned: Mutex::new(Vec::new()),
             tasks: Mutex::new(Vec::new()),
@@ -404,6 +413,10 @@ impl RunnerPort for FakeRunner {
                 .lock()
                 .unwrap()
                 .push((session_id.to_string(), m.text.clone()));
+            for (path, body) in &self.writes {
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(path, body).unwrap();
+            }
             for item in &self.script {
                 let _ = self.channel.send(item.clone());
             }
@@ -467,6 +480,30 @@ async fn run_at(
 
 fn state(paths: &LedgerPaths) -> LedgerState {
     LedgerState::load(&paths.state_file()).unwrap()
+}
+
+async fn rows_of(pool: &SqlitePool, table: &str, session_id: &str) -> i64 {
+    sqlx::query_scalar(&format!(
+        "SELECT COUNT(*) FROM {table} WHERE session_id = ?"
+    ))
+    .bind(session_id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+/// Rule 4: nothing of a mining session stays in the database — not the
+/// row, not its messages, not its search-index rows.
+async fn assert_session_gone(pool: &SqlitePool, galley: &SqliteGalley, session_id: &str) {
+    assert!(
+        galley
+            .session_brief(SessionId(session_id.to_string()))
+            .await
+            .is_err(),
+        "{session_id} is still there"
+    );
+    assert_eq!(rows_of(pool, "messages", session_id).await, 0);
+    assert_eq!(rows_of(pool, "messages_fts", session_id).await, 0);
 }
 
 /// An IM turn in a native-protocol engine log, Shanghai wall time.
@@ -597,21 +634,13 @@ async fn a_successful_run_reads_the_batch_in_a_hidden_session_and_then_moves_the
     );
     drop(spawned);
 
-    // The session: system-made, ledger-labelled, archived, runner stopped,
-    // and not in a GUI-style list.
-    let brief = galley
-        .session_brief(SessionId(session_id.clone()))
-        .await
-        .unwrap();
-    let origin = brief.origin.clone().expect("non-GUI origin");
-    assert_eq!(origin.via, OriginVia::System);
-    assert_eq!(origin.supervisor.as_deref(), Some(LEDGER_SUPERVISOR));
-    assert_eq!(brief.status, SessionStatus::Archived);
-    assert!(is_mining_session(&brief));
+    // The session: runner stopped, then deleted with everything it held
+    // (its origin while it runs: `switching_off_mid_run_…`).
     assert_eq!(
         runner.shutdowns.lock().unwrap().as_slice(),
         &[session_id.clone()]
     );
+    assert_session_gone(&pool, &galley, &session_id).await;
     // Its own messages are never read back as the human's.
     let again = sources::gui_turns(
         &galley,
@@ -630,11 +659,9 @@ async fn a_successful_run_reads_the_batch_in_a_hidden_session_and_then_moves_the
         })
         .await
         .unwrap();
-    assert_eq!(
-        listed.iter().filter(|s| is_mining_session(s)).count(),
-        1,
-        "the DB keeps it; the GUI / phone list commands filter it"
-    );
+    assert_eq!(listed.iter().filter(|s| is_mining_session(s)).count(), 0);
+    // A successful run keeps what it wrote: no snapshot left.
+    assert!(!paths.rollback_dir().exists());
 
     // The position moved to what the batch covered.
     let s = state(&paths);
@@ -709,13 +736,9 @@ async fn a_failed_run_leaves_the_position_so_the_next_batch_repeats_it() {
         let RunReport::Failed { session_id, .. } = report else {
             panic!("{report:?}");
         };
-        // Wound down all the same.
+        // Wound down all the same: runner stopped, session deleted.
         assert_eq!(runner.shutdowns.lock().unwrap().len(), 1);
-        let brief = galley
-            .session_brief(SessionId(session_id.unwrap()))
-            .await
-            .unwrap();
-        assert_eq!(brief.status, SessionStatus::Archived);
+        assert_session_gone(&pool, &galley, &session_id.unwrap()).await;
         let s = state(&paths);
         assert!(s.mined.is_none(), "position must not move on failure");
         assert!(s.pending.is_none());
@@ -1172,9 +1195,11 @@ async fn switching_off_mid_run_stops_it_and_clearing_leaves_nothing_behind() {
     let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
     std::fs::create_dir_all(paths.insight_dir()).unwrap();
     std::fs::write(paths.activities_file(), "## 持续活动\n### A001｜半马\n").unwrap();
+    // A mining session archived before ticket 04 deleted them.
+    old_mining_session(&galley, "s-old-mining").await;
     let control = LedgerControl::new();
-    // A runner that never finishes on its own.
-    let runner = FakeRunner::new(Vec::new());
+    // A runner that writes half the ledger and never finishes on its own.
+    let runner = FakeRunner::writing(Vec::new(), half_written(&paths));
 
     let (report, (switch, busy)) = tokio::join!(
         control_run(
@@ -1188,6 +1213,14 @@ async fn switching_off_mid_run_stops_it_and_clearing_leaves_nothing_behind() {
         ),
         async {
             until_running(&control, &runner).await;
+            // While it runs, its session is a system one, ledger-labelled,
+            // so the GUI and phone lists leave it out.
+            let live = runner.tasks.lock().unwrap()[0].0.clone();
+            let brief = galley.session_brief(SessionId(live)).await.unwrap();
+            let origin = brief.origin.clone().expect("non-GUI origin");
+            assert_eq!(origin.via, OriginVia::System);
+            assert_eq!(origin.supervisor.as_deref(), Some(LEDGER_SUPERVISOR));
+            assert!(is_mining_session(&brief));
             // A delete does not queue behind the run.
             let busy = control
                 .delete_entry(&galley, &paths, "A001", utc("2026-10-11T01:00:01Z"))
@@ -1209,21 +1242,22 @@ async fn switching_off_mid_run_stops_it_and_clearing_leaves_nothing_behind() {
         panic!("{report:?}");
     };
     assert_eq!(reason, run::STOPPED_REASON);
-    // Its runner was shut down and its row archived.
+    // Its runner was shut down and its session deleted; so was the old one.
     let session_id = session_id.unwrap();
     assert_eq!(
         runner.shutdowns.lock().unwrap().as_slice(),
         &[session_id.clone()]
     );
-    assert_eq!(
-        galley
-            .session_brief(SessionId(session_id))
-            .await
-            .unwrap()
-            .status,
-        SessionStatus::Archived
-    );
-    // The run's last state write came before the clear: nothing is back.
+    assert_session_gone(&pool, &galley, &session_id).await;
+    assert_session_gone(&pool, &galley, "s-old-mining").await;
+    // Everyone else's sessions are untouched.
+    assert!(galley
+        .session_brief(SessionId("s-gui".into()))
+        .await
+        .is_ok());
+    assert!(rows_of(&pool, "messages", "s-gui").await > 0);
+    // The run's rollback and last state write came before the clear:
+    // nothing is back.
     assert!(
         !paths.insight_dir().exists(),
         "{:?}",
@@ -1236,6 +1270,62 @@ async fn switching_off_mid_run_stops_it_and_clearing_leaves_nothing_behind() {
     );
 }
 
+/// What a run "writes" mid-way: one file rewritten, two created.
+fn half_written(paths: &LedgerPaths) -> Vec<(PathBuf, String)> {
+    vec![
+        (paths.activities_file(), "# 活动知识层\n\n## 持续".into()),
+        (
+            paths.emotions_file(),
+            "# 情绪事件\n\n## E001｜写了一".into(),
+        ),
+        (paths.affairs_file(), "- A001｜".into()),
+    ]
+}
+
+/// A mining session as ticket 01 left them: archived, with its task
+/// message (and so a search-index row).
+async fn old_mining_session(galley: &SqliteGalley, id: &str) {
+    let origin = Origin {
+        via: OriginVia::System,
+        supervisor: Some(LEDGER_SUPERVISOR.into()),
+        reason: Some("affairs ledger mining".into()),
+        client: None,
+    };
+    let mut tx = galley.begin_tx().await.unwrap();
+    galley
+        .create_session_in_tx(
+            &mut tx,
+            CreateSessionInput {
+                id: id.into(),
+                title: "事项账本整理 2026-10-01".into(),
+                project_id: None,
+                selected_llm_index: None,
+                selected_llm_key: None,
+                selected_llm_display_name: None,
+                ga_runtime_kind: Some(RuntimeKind::Managed),
+                ga_runtime_id: None,
+                prompt_profile: None,
+            },
+            origin.clone(),
+        )
+        .await
+        .unwrap();
+    galley
+        .send_message_in_tx(
+            &mut tx,
+            SessionId(id.into()),
+            "用户删掉过下面这些条目：A003｜日语 N3 备考".into(),
+            origin.clone(),
+        )
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    galley
+        .archive_session(SessionId(id.into()), origin)
+        .await
+        .unwrap();
+}
+
 #[tokio::test]
 async fn switching_off_and_keeping_leaves_the_files_and_the_position() {
     let (pool, galley) = fresh().await;
@@ -1243,8 +1333,11 @@ async fn switching_off_and_keeping_leaves_the_files_and_the_position() {
     switch_on(&galley, config()).await;
     let dir = tempfile::tempdir().unwrap();
     let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
+    std::fs::create_dir_all(paths.insight_dir()).unwrap();
+    let before = "## 持续活动\n### A001｜半马\n- 现状：在练\n";
+    std::fs::write(paths.activities_file(), before).unwrap();
     let control = LedgerControl::new();
-    let runner = FakeRunner::new(Vec::new());
+    let runner = FakeRunner::writing(Vec::new(), half_written(&paths));
 
     let (report, _) = tokio::join!(
         control_run(
@@ -1278,6 +1371,14 @@ async fn switching_off_and_keeping_leaves_the_files_and_the_position() {
         ("failed", Some(run::STOPPED_REASON))
     );
     assert!(paths.batch_file().exists());
+    // No half-written state: the files are as the run found them.
+    assert_eq!(
+        std::fs::read_to_string(paths.activities_file()).unwrap(),
+        before
+    );
+    assert!(!paths.emotions_file().exists());
+    assert!(!paths.affairs_file().exists());
+    assert!(!paths.rollback_dir().exists());
 
     // Off: the tick does nothing; on again, the position is where it was.
     let runner = FakeRunner::new(vec![run_complete("CURRENT_TASK_DONE")]);
@@ -1471,7 +1572,6 @@ async fn the_overview_shows_the_switch_the_entries_the_marks_and_the_global_memo
     s.last_attempt_date = Some("2026-10-11".into());
     s.last_run = Some(galley_core_lib::ledger::state::LastRun {
         started_at: "2026-10-10T20:00:00+00:00".into(),
-        session_id: None,
         outcome: "running".into(),
         detail: None,
         turns: 7,
@@ -1534,4 +1634,194 @@ async fn the_overview_shows_the_switch_the_entries_the_marks_and_the_global_memo
             .await,
         Err(NOT_FOUND.into())
     );
+}
+
+// ---------------- ticket 04: nothing in the database, nothing half-done ----------------
+
+#[tokio::test]
+async fn a_failed_run_puts_the_files_back_and_a_successful_one_keeps_them() {
+    let (pool, galley) = fresh().await;
+    seed_mix(&pool).await;
+    let dir = tempfile::tempdir().unwrap();
+    let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
+    std::fs::create_dir_all(paths.insight_dir()).unwrap();
+    let before = "## 持续活动\n### A001｜半马\n";
+    std::fs::write(paths.activities_file(), before).unwrap();
+
+    for script in [
+        vec![run_complete("ABORTED")],
+        vec![run_complete("MAX_TURNS_EXCEEDED")],
+        vec![BroadcastItem::Closed {
+            code: Some(1),
+            signal: None,
+            quiet: false,
+        }],
+    ] {
+        let runner = FakeRunner::writing(script, half_written(&paths));
+        let report = run_at(
+            &galley,
+            &runner,
+            &paths,
+            Trigger::Manual,
+            "2026-10-11T01:00:00Z",
+        )
+        .await;
+        assert!(matches!(report, RunReport::Failed { .. }), "{report:?}");
+        assert_eq!(
+            std::fs::read_to_string(paths.activities_file()).unwrap(),
+            before
+        );
+        assert!(!paths.emotions_file().exists());
+        assert!(!paths.affairs_file().exists());
+        assert!(!paths.rollback_dir().exists());
+        assert!(state(&paths).mined.is_none());
+    }
+
+    // The same batch again, now succeeding: what it wrote stays.
+    let runner = FakeRunner::writing(
+        vec![run_complete("CURRENT_TASK_DONE")],
+        half_written(&paths),
+    );
+    let report = run_at(
+        &galley,
+        &runner,
+        &paths,
+        Trigger::Manual,
+        "2026-10-11T02:00:00Z",
+    )
+    .await;
+    assert!(matches!(report, RunReport::Succeeded { .. }), "{report:?}");
+    assert_eq!(
+        std::fs::read_to_string(paths.affairs_file()).unwrap(),
+        "- A001｜"
+    );
+    assert!(paths.emotions_file().exists());
+    assert!(!paths.rollback_dir().exists());
+}
+
+#[tokio::test]
+async fn an_interrupted_runs_snapshot_is_restored_before_the_next_run() {
+    let (pool, galley) = fresh().await;
+    seed_mix(&pool).await;
+    let dir = tempfile::tempdir().unwrap();
+    let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
+    std::fs::create_dir_all(paths.insight_dir()).unwrap();
+    let before = "## 持续活动\n### A001｜半马\n";
+    std::fs::write(paths.activities_file(), before).unwrap();
+    // Galley quit mid-run: the snapshot was taken, the model wrote, no
+    // settle.
+    galley_core_lib::ledger::rollback::snapshot(&paths).unwrap();
+    for (path, body) in half_written(&paths) {
+        std::fs::write(path, body).unwrap();
+    }
+
+    // The next run starts from the files as they were.
+    let runner = FakeRunner::new(vec![run_complete("CURRENT_TASK_DONE")]);
+    let report = run_at(
+        &galley,
+        &runner,
+        &paths,
+        Trigger::Manual,
+        "2026-10-11T01:00:00Z",
+    )
+    .await;
+    assert!(matches!(report, RunReport::Succeeded { .. }), "{report:?}");
+    assert_eq!(
+        std::fs::read_to_string(paths.activities_file()).unwrap(),
+        before
+    );
+    assert!(!paths.emotions_file().exists());
+    assert!(!paths.affairs_file().exists());
+}
+
+#[tokio::test]
+async fn the_launch_sweep_deletes_leftover_mining_sessions_only() {
+    let (pool, galley) = fresh().await;
+    seed_mix(&pool).await;
+    old_mining_session(&galley, "s-old-mining").await;
+    old_mining_session(&galley, "s-interrupted").await;
+    galley
+        .unarchive_session(
+            SessionId("s-interrupted".into()),
+            Origin {
+                via: OriginVia::System,
+                supervisor: Some(LEDGER_SUPERVISOR.into()),
+                reason: None,
+                client: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(rows_of(&pool, "messages_fts", "s-old-mining").await > 0);
+    let control = LedgerControl::new();
+    assert_eq!(control.sweep_mining_sessions(&galley).await, Ok(2));
+    assert_session_gone(&pool, &galley, "s-old-mining").await;
+    assert_session_gone(&pool, &galley, "s-interrupted").await;
+    // `system` sessions without the label, and everything else, stay.
+    for kept in ["s-gui", "s-system", "s-cli", "s-supervisor"] {
+        assert!(
+            galley.session_brief(SessionId(kept.into())).await.is_ok(),
+            "{kept}"
+        );
+    }
+    assert_eq!(control.sweep_mining_sessions(&galley).await, Ok(0));
+}
+
+/// The ordinary session delete takes the session's search-index rows
+/// along (`messages_fts` has no foreign key): one session or several.
+#[tokio::test]
+async fn deleting_a_session_drops_its_search_index_rows() {
+    let (pool, galley) = fresh().await;
+    let origin = Origin {
+        via: OriginVia::Gui,
+        supervisor: None,
+        reason: None,
+        client: None,
+    };
+    for id in ["s-a", "s-b", "s-c"] {
+        let mut tx = galley.begin_tx().await.unwrap();
+        galley
+            .create_session_in_tx(
+                &mut tx,
+                CreateSessionInput {
+                    id: id.into(),
+                    title: id.into(),
+                    project_id: None,
+                    selected_llm_index: None,
+                    selected_llm_key: None,
+                    selected_llm_display_name: None,
+                    ga_runtime_kind: Some(RuntimeKind::Managed),
+                    ga_runtime_id: None,
+                    prompt_profile: None,
+                },
+                origin.clone(),
+            )
+            .await
+            .unwrap();
+        galley
+            .send_message_in_tx(
+                &mut tx,
+                SessionId(id.into()),
+                format!("{id} 里说过的一段话"),
+                origin.clone(),
+            )
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        assert_eq!(rows_of(&pool, "messages_fts", id).await, 1);
+    }
+    galley
+        .delete_session(SessionId("s-a".into()), origin.clone())
+        .await
+        .unwrap();
+    assert_eq!(rows_of(&pool, "messages_fts", "s-a").await, 0);
+    assert_eq!(
+        galley
+            .bulk_delete_sessions(vec![SessionId("s-b".into())], origin)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(rows_of(&pool, "messages_fts", "s-b").await, 0);
+    assert_eq!(rows_of(&pool, "messages_fts", "s-c").await, 1);
 }

@@ -365,11 +365,11 @@ async fn main() {
             }
         }
         "commit" => {
-            finish(&paths, &mut state, None, &Ok(()), Utc::now()).unwrap_or_else(|e| fail(e));
+            finish(&paths, &mut state, &Ok(()), Utc::now()).unwrap_or_else(|e| fail(e));
             println!("{}", json!({"status": "committed", "mined": state.mined}));
         }
         "fail" => {
-            finish(&paths, &mut state, None, &Err(reason), Utc::now()).unwrap_or_else(|e| fail(e));
+            finish(&paths, &mut state, &Err(reason), Utc::now()).unwrap_or_else(|e| fail(e));
             println!("{}", json!({"status": "failed", "mined": state.mined}));
         }
         "delete" => {

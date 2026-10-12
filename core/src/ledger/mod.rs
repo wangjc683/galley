@@ -51,7 +51,14 @@
 //!     im_archive.jsonl        archived IM user turns (`im_archive`)
 //!     batch.md                the current run's input (`batch`)
 //!     forgotten.json          entries the user deleted (`forgotten`)
+//!     rollback/               the three files as a running run found
+//!                             them; restored if it fails (`rollback`)
 //! ```
+//!
+//! Nothing of the ledger stays in Galley's database: the hidden mining
+//! session is deleted — messages, attachments, search index — as soon as
+//! its run settles, whatever the outcome (`run`); "clear" and every
+//! launch delete any mining session still there ([`control`]).
 
 pub mod affairs;
 pub mod batch;
@@ -61,6 +68,7 @@ pub mod entries;
 pub mod forgotten;
 pub mod global_memory;
 pub mod im_archive;
+pub mod rollback;
 pub mod run;
 pub mod sources;
 pub mod state;
@@ -196,6 +204,10 @@ impl LedgerPaths {
     pub fn forgotten_file(&self) -> PathBuf {
         self.galley_dir().join("forgotten.json")
     }
+    /// A running run's snapshot of the files it may change ([`rollback`]).
+    pub fn rollback_dir(&self) -> PathBuf {
+        self.galley_dir().join("rollback")
+    }
 }
 
 /// Replace `path` with `body` through a temp file beside it and a rename,
@@ -279,6 +291,14 @@ pub(crate) fn start(app: &tauri::App) {
     let handle = app.handle().clone();
     let galley: SqliteGalley = app.state::<SqliteGalley>().inner().clone();
     tauri::async_runtime::spawn(async move {
+        // A mining session still in the database is a run Galley quit in
+        // the middle of; at launch no run is going. Under the run lock
+        // all the same, ahead of the first tick.
+        match LedgerControl::global().sweep_mining_sessions(&galley).await {
+            Ok(0) => {}
+            Ok(n) => eprintln!("[ledger] deleted {n} leftover mining session(s)"),
+            Err(e) => eprintln!("[ledger] deleting leftover mining sessions failed: {e}"),
+        }
         let mut interval = tokio::time::interval(Duration::from_secs(TICK_SECONDS));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {

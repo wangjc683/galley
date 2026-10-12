@@ -10,8 +10,12 @@
 //! `session-created-external` / `runner-spawned-external` broadcast and
 //! no `runner-event` emit task (no page attaches to it, so no page's LRU
 //! can evict it), and a caller-chosen title (no auto-title model call).
-//! Afterwards its runner is shut down and its row archived, which also
-//! keeps its messages out of search.
+//! Once the run settles — success, failure or stop alike — its runner is
+//! shut down and the session is deleted through the ordinary session
+//! delete (messages, attachments, search index): its task names what
+//! the user asked not to be recorded, its tool calls carry the ledger,
+//! its tool results the batch. The ledger never stays in Galley's
+//! database (Rule 4); nothing records the session's id.
 //!
 //! "Completed successfully" is exact: the run's `run_complete` arrives
 //! with GA's `CURRENT_TASK_DONE`, no fatal error was reported during the
@@ -19,7 +23,9 @@
 //! missed. Anything else — abort, max turns, runner exit, timeout, the
 //! user switching the ledger off mid-run ([`StopSignal`]) — is a
 //! failure: `mined` stays where it was, so the next batch includes this
-//! one.
+//! one, and the files the run may have half-written are put back as it
+//! found them ([`super::rollback`]). A failure is exactly "nothing
+//! happened".
 //!
 //! **Read cap** (ticket 04). One run reads at most [`READ_CAP_CHARS`]
 //! characters of what the user said; "also read earlier conversations"
@@ -45,7 +51,7 @@ use super::batch::{build_batch, render_batch, task_prompt, Batch};
 use super::im_archive::{self, read_archive_entries, ArchiveOutcome, ImRecord};
 use super::sources::{self, GuiTurn};
 use super::state::{LastRun, LedgerState, MinedCursor};
-use super::{forgotten, LedgerConfig, LedgerPaths, LEDGER_SUPERVISOR};
+use super::{forgotten, rollback, LedgerConfig, LedgerPaths, LEDGER_SUPERVISOR};
 use crate::api::{CreateSessionInput, GalleyApi, Origin, OriginVia, RuntimeKind, SessionId};
 use crate::db::SqliteGalley;
 use crate::ipc::{IpcCommand, IpcEvent, UserMessageCommand};
@@ -444,7 +450,9 @@ pub enum Begun {
 /// Prepare one attempt and record it in `state.json`: archive IM turns,
 /// gather what is new, stamp today's attempt, then either move the
 /// position (nothing new) or write the batch file and record its position
-/// as pending. The task lists the entries the user deleted
+/// as pending and snapshot the files the run may change
+/// ([`super::rollback`]). A snapshot an interrupted run left behind is
+/// restored first. The task lists the entries the user deleted
 /// (`forgotten.json`). The production run and the eval harness
 /// (`examples/ledger_eval_prepare.rs`) share it.
 pub async fn begin<Tz: TimeZone>(
@@ -458,6 +466,10 @@ pub async fn begin<Tz: TimeZone>(
 where
     Tz::Offset: Display,
 {
+    // Galley quit in the middle of the last run: undo what it wrote.
+    if rollback::restore(paths).map_err(|e| format!("rolling back an interrupted run: {e}"))? {
+        eprintln!("[ledger] rolled back the files of an interrupted run");
+    }
     let prepared = prepare(galley, paths, config, state, now, tz).await?;
     let local_now = now.with_timezone(tz);
     state.last_attempt_date = Some(local_now.format("%Y-%m-%d").to_string());
@@ -475,7 +487,6 @@ where
         state.pending_more = false;
         state.last_run = Some(LastRun {
             started_at: now.to_rfc3339(),
-            session_id: None,
             outcome: "empty".into(),
             detail: None,
             turns: 0,
@@ -497,11 +508,11 @@ where
             )
         })
         .map_err(|e| format!("writing the batch: {e}"))?;
+    rollback::snapshot(paths).map_err(|e| format!("snapshotting the ledger: {e}"))?;
     state.pending = Some(prepared.pending);
     state.pending_more = prepared.more;
     state.last_run = Some(LastRun {
         started_at: now.to_rfc3339(),
-        session_id: None,
         outcome: "running".into(),
         detail: None,
         turns,
@@ -517,13 +528,13 @@ where
 /// Settle the attempt [`begin`] recorded. Only `Ok` — a run that
 /// completed successfully — turns the pending position into the
 /// processed one, and when its batch stopped at the read cap makes the
-/// next run due [`CONTINUE_AFTER`] after `ended_at`; a failure drops the
-/// pending position, so the next batch repeats this one, and waits for
-/// the daily schedule.
+/// next run due [`CONTINUE_AFTER`] after `ended_at`, and keeps the files
+/// it wrote; a failure drops the pending position, so the next batch
+/// repeats this one, puts the files back as the run found them
+/// ([`super::rollback`]), and waits for the daily schedule.
 pub fn finish(
     paths: &LedgerPaths,
     state: &mut LedgerState,
-    session_id: Option<String>,
     verdict: &Result<(), String>,
     ended_at: DateTime<Utc>,
 ) -> std::io::Result<()> {
@@ -533,11 +544,19 @@ pub fn finish(
         Ok(()) => {
             state.mined = state.pending.take();
             state.due_at = more.then(|| (ended_at + CONTINUE_AFTER).to_rfc3339());
+            if let Err(e) = rollback::discard(paths) {
+                eprintln!("[ledger] dropping the run's snapshot failed: {e}");
+            }
             ("succeeded", None)
         }
         Err(reason) => {
             state.pending = None;
             state.due_at = None;
+            // A failed restore keeps the snapshot; the next run's `begin`
+            // restores it before anything else.
+            if let Err(e) = rollback::restore(paths) {
+                eprintln!("[ledger] rolling back the failed run failed: {e}");
+            }
             ("failed", Some(reason.clone()))
         }
     };
@@ -545,7 +564,6 @@ pub fn finish(
         started_at: begun
             .as_ref()
             .map_or_else(|| ended_at.to_rfc3339(), |r| r.started_at.clone()),
-        session_id,
         outcome: outcome.into(),
         detail,
         turns: begun.map_or(0, |r| r.turns),
@@ -624,7 +642,7 @@ where
     if let Some(id) = &session_id {
         wind_down(deps, id).await;
     }
-    if let Err(e) = finish(paths, &mut state, session_id.clone(), &verdict, ended_at()) {
+    if let Err(e) = finish(paths, &mut state, &verdict, ended_at()) {
         return failed(
             session_id,
             format!("saving ledger state after the run: {e}"),
@@ -639,7 +657,7 @@ where
     }
 }
 
-fn mining_origin() -> Origin {
+pub(super) fn mining_origin() -> Origin {
     Origin {
         via: OriginVia::System,
         supervisor: Some(LEDGER_SUPERVISOR.into()),
@@ -794,9 +812,11 @@ pub async fn watch_run(
     }
 }
 
-/// Stop the mining runner and archive its row (out of search, out of
-/// every non-`--all` list). Best effort: a failure here does not change
-/// the run's verdict.
+/// Stop the mining runner, then delete its session through the ordinary
+/// session delete (CASCADE: messages, tool events, attachments; the
+/// search index alongside). Best effort: a failure here does not change
+/// the run's verdict, and a session left behind is deleted at the next
+/// launch or "clear" (`super::control`).
 async fn wind_down(deps: &MiningDeps<'_>, session_id: &str) {
     if let Err(e) = deps
         .runner
@@ -807,10 +827,10 @@ async fn wind_down(deps: &MiningDeps<'_>, session_id: &str) {
     }
     if let Err(e) = deps
         .galley
-        .archive_session(SessionId(session_id.to_string()), mining_origin())
+        .delete_session(SessionId(session_id.to_string()), mining_origin())
         .await
     {
-        eprintln!("[ledger] archiving mining session {session_id}: {e}");
+        eprintln!("[ledger] deleting mining session {session_id}: {e}");
     }
 }
 

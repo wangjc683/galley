@@ -50,7 +50,7 @@ Application Support/app.galley/
   managed-ga-state/
     memory/                   # the ONLY dir GA reads SOPs from
       history_insight/        # affairs ledger (only once switched on): mining outputs
-        galley/               # Core's: state.json, im_archive.jsonl, batch.md, forgotten.json
+        galley/               # Core's: state.json, im_archive.jsonl, batch.md, forgotten.json, rollback/
     sop/                      # vestigial: created but GA never reads it
     skills/                   # vestigial: created but GA never reads it
     temp/                     # engine scratch: code_run cwd, reflect logs
@@ -88,7 +88,13 @@ Application Support/app.galley/
 > archive is the only lasting record of what was said in IM. Galley deletes
 > it only when the user asks: one entry from the Memory page (its block,
 > its short-list line), or the whole directory when they switch the ledger
-> off with "clear".
+> off with "clear". A mining run that fails or is stopped leaves the
+> outputs as it found them (a snapshot in `galley/rollback/`, restored on
+> failure). None of it stays in `workbench.db`: the hidden mining session
+> is deleted (messages, attachments, search index) as soon as its run
+> settles, and "clear" and every launch delete any mining session still
+> there. Its engine logs under `temp/` are engine runtime state and follow
+> the prune above.
 >
 > The Memory page also edits `memory/global_mem.txt` and
 > `memory/global_mem_insight.txt` (ticket 04). Nothing else in Galley

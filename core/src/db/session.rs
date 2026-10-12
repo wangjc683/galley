@@ -1200,11 +1200,16 @@ impl SqliteGalley {
         self.session_brief(id).await
     }
 
+    /// Delete one session: CASCADE takes its messages, tool events and
+    /// attachment rows; its search-index rows (`messages_fts` is a
+    /// standalone FTS5 table, no foreign key, no trigger) go in the same
+    /// transaction; its attachment files after the commit.
     pub(super) async fn delete_session_db(&self, id: SessionId, _origin: Origin) -> Result<()> {
         let attachment_dir = crate::app_paths::conversation_attachment_session_dir(id.as_str());
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
         let res = sqlx::query("DELETE FROM sessions WHERE id = ?")
             .bind(id.as_str())
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(map_sqlx_err)?;
         if res.rows_affected() == 0 {
@@ -1212,6 +1217,12 @@ impl SqliteGalley {
                 message: format!("session {id} not found"),
             });
         }
+        sqlx::query("DELETE FROM messages_fts WHERE session_id = ?")
+            .bind(id.as_str())
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+        tx.commit().await.map_err(map_sqlx_err)?;
         if let Some(dir) = attachment_dir {
             cleanup_attachment_dir(&dir).await;
         }
@@ -1457,9 +1468,10 @@ impl SqliteGalley {
         Ok(self.bulk_delete_session_ids(&ids).await?.len() as u32)
     }
 
-    /// Delete every listed session (CASCADE takes its messages), in one
-    /// transaction; returns the ids it deleted, in `ids` order. Unknown
-    /// ids are left out.
+    /// Delete every listed session (CASCADE takes its messages; their
+    /// search-index rows are deleted alongside), in one transaction;
+    /// returns the ids it deleted, in `ids` order. Unknown ids are left
+    /// out.
     pub async fn bulk_delete_session_ids(&self, ids: &[SessionId]) -> Result<Vec<SessionId>> {
         if ids.is_empty() {
             return Ok(Vec::new());
@@ -1476,6 +1488,15 @@ impl SqliteGalley {
             q = q.bind(id.as_str());
         }
         let deleted: Vec<String> = q.fetch_all(&mut *tx).await.map_err(map_sqlx_err)?;
+        if !deleted.is_empty() {
+            let placeholders = vec!["?"; deleted.len()].join(",");
+            let sql = format!("DELETE FROM messages_fts WHERE session_id IN ({placeholders})");
+            let mut q = sqlx::query(&sql);
+            for id in &deleted {
+                q = q.bind(id);
+            }
+            q.execute(&mut *tx).await.map_err(map_sqlx_err)?;
+        }
         tx.commit().await.map_err(map_sqlx_err)?;
         for dir in attachment_dirs {
             cleanup_attachment_dir(&dir).await;

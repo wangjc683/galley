@@ -13,7 +13,9 @@
 //!   either sees off and does nothing or sees the stop. The run counts as
 //!   failed (position unchanged), shuts its runner down and writes its
 //!   state; only then is the run lock free, and only then does "clear"
-//!   remove `history_insight/` — nothing the run does can write it back.
+//!   remove `history_insight/` — nothing the run does can write it back —
+//!   and delete every mining session left in the database (so does
+//!   every launch, [`LedgerControl::sweep_mining_sessions`]).
 //! - **Galley's own files** (`forgotten.json`, `state.json` outside a
 //!   run, the global-memory files) are changed under the `files` lock,
 //!   so a clear and an "unforget" never interleave.
@@ -38,8 +40,8 @@ use super::forgotten::{self, Forgotten};
 use super::global_memory::{self, GlobalMemoryFile};
 use super::run::{self, MiningDeps, RunHooks, RunReport, StopSignal, Trigger};
 use super::state::LedgerState;
-use super::{affairs, write_atomic, LedgerPaths, TitledExclusion};
-use crate::api::RuntimeKind;
+use super::{affairs, is_mining_session, write_atomic, LedgerPaths, TitledExclusion};
+use crate::api::{GalleyApi, RuntimeKind, SessionFilter, SessionId};
 use crate::db::SqliteGalley;
 
 /// Error identifiers of the Memory page's commands (the GUI words them).
@@ -271,8 +273,18 @@ impl LedgerControl {
                 Err(e) if e.kind() == io::ErrorKind::NotFound => {}
                 Err(e) => return Err(io_error("clearing the affairs ledger", e)),
             }
+            delete_mining_sessions(galley).await?;
         }
         Ok(LedgerSwitch::Off)
+    }
+
+    /// Delete every mining session still in the database (a run Galley
+    /// quit in the middle of, or one archived before ticket 04), under
+    /// the run lock so the one in flight is never among them. At launch
+    /// (`super::start`). Returns how many went.
+    pub async fn sweep_mining_sessions(&self, galley: &SqliteGalley) -> Result<u32, String> {
+        let _run = self.run.lock().await;
+        delete_mining_sessions(galley).await
     }
 
     /// `delete_ledger_entry`: remove entry `id`'s block from its file,
@@ -423,6 +435,33 @@ impl LedgerControl {
             global_memory: global_memory::read_all(paths),
         })
     }
+}
+
+/// Every session [`super::is_mining_session`] recognises, archived ones
+/// included, deleted through the ordinary bulk session delete (CASCADE,
+/// search index, attachments). The caller holds the run lock.
+async fn delete_mining_sessions(galley: &SqliteGalley) -> Result<u32, String> {
+    let all = galley
+        .list_sessions(SessionFilter {
+            project_id: None,
+            status: None,
+            archived: None,
+            runtime_kind: None,
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    let ids: Vec<SessionId> = all
+        .into_iter()
+        .filter(is_mining_session)
+        .map(|s| s.id)
+        .collect();
+    if ids.is_empty() {
+        return Ok(0);
+    }
+    galley
+        .bulk_delete_sessions(ids, run::mining_origin())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// `get_ledger_switch`.
