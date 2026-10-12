@@ -1,5 +1,6 @@
 import { X } from "@phosphor-icons/react";
 
+import { useMainChatTrialCopy } from "@/components/layout/sidebar/main-chat-layout";
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
@@ -23,6 +24,10 @@ const FOCUS_RING = "focus-visible:ring-2 focus-visible:ring-brand/30";
  * until a choice is made; Esc or × only closes the choice. A message
  * with images cannot queue (Core's queue is text-only): 排队 is then
  * disabled and the focus starts on 开旁聊.
+ *
+ * TEMPORARY: the words follow the sidebar trial (ticket 07,
+ * main-chat-layout.ts) — 主对话, and the second button after its naming
+ * (开旁聊 / 开新话题 / 开新对话).
  */
 export function MainChatBusyChoice({
   imagesAttached,
@@ -36,10 +41,11 @@ export function MainChatBusyChoice({
   onDismiss: () => void;
 }) {
   const copy = useCopy();
+  const trialCopy = useMainChatTrialCopy();
   return (
     <div
       role="group"
-      aria-label={copy.composer.mainChatBusyLabel}
+      aria-label={trialCopy.busyLabel}
       data-role="main-chat-busy-choice"
       onKeyDown={(e) => {
         if (e.key !== "Escape") return;
@@ -50,13 +56,13 @@ export function MainChatBusyChoice({
       className="mb-1.5 flex items-center gap-2 rounded-md border border-line bg-surface py-1.5 pl-2.5 pr-1.5"
     >
       <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-soft">
-        {copy.composer.mainChatBusyLabel}
+        {trialCopy.busyLabel}
       </span>
       <TooltipLabel
         text={
           imagesAttached
-            ? copy.composer.mainChatBusyQueueImages
-            : copy.composer.mainChatBusyQueueTooltip
+            ? trialCopy.busyQueueImages
+            : trialCopy.busyQueueTooltip
         }
       >
         {/* The wrapper carries the tooltip for the disabled state: a
@@ -74,7 +80,7 @@ export function MainChatBusyChoice({
           </Button>
         </span>
       </TooltipLabel>
-      <TooltipLabel text={copy.composer.mainChatBusySideChatTooltip}>
+      <TooltipLabel text={trialCopy.busySideChatTooltip}>
         <Button
           variant="secondary"
           size="sm"
@@ -82,7 +88,7 @@ export function MainChatBusyChoice({
           onClick={onOpenSideChat}
           className={cn("shrink-0", FOCUS_RING)}
         >
-          {copy.composer.mainChatBusySideChat}
+          {trialCopy.busySideChat}
         </Button>
       </TooltipLabel>
       <TooltipLabel text={copy.composer.mainChatBusyKeepEditing}>

@@ -123,6 +123,8 @@ function SidebarEarlier({
 /**
  * The sidebar list (S1): 置顶, the 项目 section, then the time buckets
  * — holding only sessions outside projects (S4) — and the 更早 entry.
+ * Main chat layout B (on trial, ticket 07) puts its 「其他来源」 row
+ * between the buckets and 更早 (`otherSourcesSlot`).
  */
 export function SidebarSectionsList({
   sections,
@@ -131,6 +133,7 @@ export function SidebarSectionsList({
   othersOpen,
   onToggleOthers,
   onOpenEarlier,
+  otherSourcesSlot,
   groupWiring,
   ...rowWiring
 }: {
@@ -140,6 +143,7 @@ export function SidebarSectionsList({
   othersOpen: boolean;
   onToggleOthers: () => void;
   onOpenEarlier?: () => void;
+  otherSourcesSlot?: React.ReactNode;
   groupWiring: SidebarProjectGroupWiring;
 } & SidebarTimelineRowWiring) {
   const copy = useCopy();
@@ -174,6 +178,7 @@ export function SidebarSectionsList({
           {...rowWiring}
         />
       ))}
+      {otherSourcesSlot}
       <SidebarEarlier
         earlier={sections.earlier}
         groupedSessionIds={sections.groupedSessionIds}

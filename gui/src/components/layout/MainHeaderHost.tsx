@@ -1,6 +1,6 @@
 import { MainHeader } from "@/components/layout/MainHeader";
 import type { RuntimeIndicator } from "@/components/layout/header/runtime-indicator";
-import { useContext } from "react";
+import { type ReactNode, useContext } from "react";
 import { GitReviewContext } from "@/lib/git-review";
 import { useActiveRuntime } from "@/hooks/useActiveSession";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
@@ -38,6 +38,7 @@ export function MainHeaderHost({
   resolvedTheme,
   sessionTitle,
   canRenameSession = true,
+  leading,
 }: {
   activeGoals: GoalBrief[];
   channelStatuses: ReadonlyArray<ImSupervisorStatus | null>;
@@ -56,6 +57,8 @@ export function MainHeaderHost({
   sessionTitle: string | undefined;
   /** False for the main chat (主聊天): the title menu has no Rename. */
   canRenameSession?: boolean;
+  /** TEMPORARY: MainHeader's leftmost slot (B′'s sidebar toggle). */
+  leading?: ReactNode;
 }) {
   const browserControlStatus = useBrowserControlStore((s) => s.status);
   const browserControlVerified = useBrowserControlStore((s) => s.verified);
@@ -206,6 +209,7 @@ export function MainHeaderHost({
           : undefined
       }
       onOpenSettings={onOpenSettings}
+      leading={leading}
     />
   );
 }

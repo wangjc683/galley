@@ -4,10 +4,12 @@ import { ToastHost } from "@/components/error-card/ToastHost";
 import { AppShell } from "@/components/layout/AppShell";
 import { MainHeaderHost } from "@/components/layout/MainHeaderHost";
 import { browserControlInviteVisible } from "@/components/layout/header/browser-control-indicator-status";
+import { SidebarCollapseToggle } from "@/components/layout/header/SidebarCollapseToggle";
 import { Sidebar } from "@/components/layout/Sidebar";
 import {
-  mainChatTrialCopy,
-  useMainChatLayoutStore,
+  useMainChatLayout,
+  useMainChatTrialCopy,
+  useSidebarCollapsed,
 } from "@/components/layout/sidebar/main-chat-layout";
 import { MainChatLayoutSwitcher } from "@/components/layout/sidebar/MainChatLayoutSwitcher";
 import { CommandPalette } from "@/components/overlay/CommandPalette";
@@ -31,6 +33,7 @@ import {
   EditProjectDialog,
 } from "@/components/screens/project/EditProjectDialog";
 import { CopyProvider, copyForLanguage } from "@/lib/i18n";
+import { findMainChat } from "@/lib/main-chat";
 import { useAppHydrationEffects } from "@/hooks/useAppHydrationEffects";
 import { useBrowserControlLiveStatus } from "@/hooks/useBrowserControlLiveStatus";
 import { useChannelsStatus } from "@/hooks/useChannelsStatus";
@@ -463,10 +466,17 @@ function App() {
     [visibleSessions],
   );
   // ⌘K lists the main chat under its label, not its stored title (the
-  // sidebar and the header do the same). TEMPORARY: the label follows
-  // the sidebar trial's copy pair (main-chat-layout.ts).
-  const mainChatCopyVariant = useMainChatLayoutStore((s) => s.copyVariant);
-  const mainChatLabel = mainChatTrialCopy(copy, mainChatCopyVariant).mainChat;
+  // sidebar and the header do the same). TEMPORARY: the label comes from
+  // the sidebar trial (main-chat-layout.ts).
+  const mainChatLabel = useMainChatTrialCopy().mainChat;
+  // TEMPORARY: main chat layout B′ — the collapsible sidebar and its
+  // toggle at the main header's left (ticket 07). Only with a main chat.
+  const hasMainChat = useMemo(
+    () => findMainChat(visibleSessions) !== undefined,
+    [visibleSessions],
+  );
+  const sidebarToggleShown = useMainChatLayout() === "B′" && hasMainChat;
+  const sidebarCollapsed = useSidebarCollapsed(hasMainChat);
   const paletteSessions = useMemo(
     () =>
       visibleSessions.map((s) =>
@@ -548,6 +558,7 @@ function App() {
   return (
     <CopyProvider language={resolvedLanguage}>
       <AppShell
+        sidebarCollapsed={sidebarCollapsed}
         sidebar={
           <Sidebar
             sessions={visibleSessions}
@@ -622,6 +633,15 @@ function App() {
                   }
                   // The main chat keeps its name (ticket 02).
                   canRenameSession={!activeSession?.mainChat}
+                  leading={
+                    sidebarToggleShown ? (
+                      <SidebarCollapseToggle
+                        sessions={visibleSessions}
+                        activeId={effectiveActiveId}
+                        sessionGoalStatus={sessionGoalStatus}
+                      />
+                    ) : undefined
+                  }
                   activeGoals={activeGoals}
                   channelStatuses={channelStatuses}
                   channelsLoadError={channelsLoadError}
@@ -887,7 +907,7 @@ function App() {
         }}
       />
 
-      {/* TEMPORARY: the A1 / A2 sidebar trial (main chat ticket 02). */}
+      {/* TEMPORARY: the A3 / B / B′ sidebar trial (main chat ticket 07). */}
       <MainChatLayoutSwitcher />
 
       <ToastHost

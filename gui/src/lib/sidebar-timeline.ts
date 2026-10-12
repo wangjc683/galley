@@ -62,6 +62,11 @@ export interface SidebarSections {
   otherProjects: SidebarProjectGroupItem[];
   /** Time buckets with sessions outside projects only (S4). */
   buckets: Record<SidebarTimeBucket, Session[]>;
+  /** With `splitOtherSources` (main chat layout B, on trial — ticket
+   * 07): the window sessions an agent started (CLI, supervisor, a
+   * scheduled task, `system`) outside projects, newest first, taken out
+   * of the time buckets into one 「其他来源」 group row. Empty otherwise. */
+  otherSources: Session[];
   /** Sessions behind the 更早 entry: the EarlierDialog list (a group's
    * older sessions are in here too). */
   earlier: Session[];
@@ -74,6 +79,20 @@ export interface SidebarSections {
 
 export interface SidebarSectionsOptions {
   now?: Date;
+  /** Main chat layout B (on trial, ticket 07): time buckets keep the
+   * conversations a person started; see `otherSources`. */
+  splitOtherSources?: boolean;
+}
+
+/**
+ * Whether a person started this conversation — at the desktop or from
+ * the phone (both `origin.via === "gui"`); rows from before origins
+ * were recorded count as theirs. CLI, supervisor, scheduled-task and
+ * `system` sessions are an agent's (PRD ruling 32: the same line the
+ * affairs ledger draws, "only what the person said").
+ */
+export function isHumanStarted(session: Session): boolean {
+  return !session.origin || session.origin.via === "gui";
 }
 
 /**
@@ -100,7 +119,7 @@ export interface SidebarSectionsOptions {
 export function buildSidebarSections(
   sessions: Session[],
   projects: Project[],
-  { now = new Date() }: SidebarSectionsOptions = {},
+  { now = new Date(), splitOtherSources = false }: SidebarSectionsOptions = {},
 ): SidebarSections {
   const buckets: GroupedSessions = backfillRecentSessions(
     groupSessions(sessions, now),
@@ -163,27 +182,33 @@ export function buildSidebarSections(
   }
 
   const timeBuckets = {} as Record<SidebarTimeBucket, Session[]>;
+  const otherSources: Session[] = [];
   for (const bucket of SIDEBAR_TIME_BUCKETS) {
-    timeBuckets[bucket] = buckets[bucket].filter(
-      (s) => !groupedSessionIds.has(s.id),
-    );
+    timeBuckets[bucket] = [];
+    for (const s of buckets[bucket]) {
+      if (groupedSessionIds.has(s.id)) continue;
+      if (splitOtherSources && !isHumanStarted(s)) otherSources.push(s);
+      else timeBuckets[bucket].push(s);
+    }
   }
   return {
     pinned: buckets.pinned,
     projects: listedProjects,
     otherProjects,
     buckets: timeBuckets,
+    otherSources,
     earlier: buckets.earlier,
     groupedSessionIds,
   };
 }
 
-/** Section holding `sessionId` — a bucket, or "projects" when a project
- * group lists it — or `undefined` when the sidebar doesn't list it. */
+/** Section holding `sessionId` — a bucket, "projects" when a project
+ * group lists it, "otherSources" when the 「其他来源」 row does — or
+ * `undefined` when the sidebar doesn't list it. */
 export function findSectionsSlot(
   sections: SidebarSections,
   sessionId: string,
-): SessionBucket | "projects" | undefined {
+): SessionBucket | "projects" | "otherSources" | undefined {
   if (sections.pinned.some((s) => s.id === sessionId)) return "pinned";
   if (
     [...sections.projects, ...sections.otherProjects].some(
@@ -198,6 +223,9 @@ export function findSectionsSlot(
     if (sections.buckets[bucket].some((s) => s.id === sessionId)) {
       return bucket;
     }
+  }
+  if (sections.otherSources.some((s) => s.id === sessionId)) {
+    return "otherSources";
   }
   return sections.earlier.some((s) => s.id === sessionId)
     ? "earlier"

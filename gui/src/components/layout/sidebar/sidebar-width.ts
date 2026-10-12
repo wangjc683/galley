@@ -43,37 +43,16 @@ export const HEADER_NAV_ICONS_DISPLAY = isMac
     ? "hidden @min-[189px]/sidebar:flex"
     : "hidden @min-[179px]/sidebar:flex";
 
-/** The icon group's copy in the new-chat row — the complement. */
+/** The icon group's copy in the new-chat row — the complement. Main
+ * chat layout B (on trial, ticket 07) has no new-chat row: below the
+ * threshold the three icons get a row of their own under the masthead
+ * (SidebarNarrowNavRow), which exists only in the narrow state —
+ * crossing the threshold there moves the list by one row height. */
 export const ROW_NAV_ICONS_DISPLAY = isMac
   ? "flex @min-[251px]/sidebar:hidden"
   : isWindows
     ? "flex @min-[189px]/sidebar:hidden"
     : "flex @min-[179px]/sidebar:hidden";
-
-/**
- * The same pair with 新旁聊 as a fourth icon — layout A2 of the main
- * chat (main chat ticket 02; on trial against A1 behind a temporary
- * switcher, see main-chat-layout.ts). One more icon + gap-1 = 32px:
- *   mac      250.8 + 32 = 282.8 -> 283px
- *   Windows  188.8 + 32 = 220.8 -> 221px
- *   other    178.8 + 32 = 210.8 -> 211px
- * A2 has no new-chat row to fall back into, so below the threshold the
- * four icons get a row of their own under the masthead, above the
- * main-chat row (SidebarNarrowNavRow). That row exists only in the
- * narrow state: crossing the threshold moves the main-chat row and the
- * list by one row height — the price of A2's narrow fallback.
- */
-export const HEADER_NAV_ICONS_DISPLAY_WITH_SIDE_CHAT = isMac
-  ? "hidden @min-[283px]/sidebar:flex"
-  : isWindows
-    ? "hidden @min-[221px]/sidebar:flex"
-    : "hidden @min-[211px]/sidebar:flex";
-
-export const ROW_NAV_ICONS_DISPLAY_WITH_SIDE_CHAT = isMac
-  ? "flex @min-[283px]/sidebar:hidden"
-  : isWindows
-    ? "flex @min-[221px]/sidebar:hidden"
-    : "flex @min-[211px]/sidebar:hidden";
 
 /** ⌘N hint at the new-chat row's end: only while the row is alone. */
 export const NEW_CHAT_HINT_DISPLAY = isMac

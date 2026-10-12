@@ -1,4 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import type { ReactNode } from "react";
 
 import { useCopy } from "@/lib/i18n";
 import { isMac, isWindowActionTarget } from "@/lib/platform";
@@ -107,6 +108,12 @@ export interface MainHeaderProps {
    * equally-discoverable rename paths.
    */
   onRenameSession?: (newTitle: string) => void;
+  /**
+   * TEMPORARY: the leftmost slot, before the title — main chat layout
+   * B′'s sidebar toggle (on trial, ticket 07; SidebarCollapseToggle,
+   * which clears the macOS traffic lights itself while collapsed).
+   */
+  leading?: ReactNode;
 }
 
 /**
@@ -142,7 +149,8 @@ export interface MainHeaderProps {
  * window's top-LEFT, which is the *Sidebar* column — SidebarHeader owns
  * that clearance. This header only reserves the right edge for the
  * Windows custom WindowControls (min / max / close); macOS hands window
- * control to the overlay traffic light on the sidebar side.
+ * control to the overlay traffic light on the sidebar side. (TEMPORARY
+ * exception: main chat layout B′'s collapsed sidebar, see `leading`.)
  *
  * Window dragging:
  *   - Tauri v2 only honours `data-tauri-drag-region` when the
@@ -192,6 +200,7 @@ export function MainHeader({
   onTogglePet,
   currentSessionHasPet = false,
   onRenameSession,
+  leading,
 }: MainHeaderProps) {
   const copy = useCopy();
   const hasTopBarStatusItems =
@@ -255,8 +264,12 @@ export function MainHeader({
           trigger drag), so clicks open the menu instead of dragging. */}
       <div
         data-tauri-drag-region
-        className="flex min-w-0 flex-1 items-center justify-start pl-4 pr-3"
+        className={cn(
+          "flex min-w-0 flex-1 items-center justify-start pr-3",
+          leading ? "gap-1.5 pl-2.5" : "pl-4",
+        )}
       >
+        {leading}
         {sessionTitle ? (
           <SessionTitleMenu
             title={sessionTitle}

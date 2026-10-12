@@ -236,6 +236,45 @@ describe("buildSidebarSections", () => {
   });
 });
 
+// Main chat layout B (on trial, ticket 07).
+describe("buildSidebarSections with splitOtherSources", () => {
+  const sessions = [
+    session("gui", 0, { origin: { via: "gui" } }),
+    session("legacy", 0),
+    session("cli", 0, { origin: { via: "cli" } }),
+    session("sup", 2, { origin: { via: "supervisor", supervisor: "ga-1" } }),
+    session("sys", 10, { origin: { via: "system" } }),
+    session("cli-p", 0, { projectId: "p", origin: { via: "cli" } }),
+    session("cli-pin", 0, { pinned: true, origin: { via: "cli" } }),
+    session("cli-old", 50, { origin: { via: "cli" } }),
+  ];
+
+  it("keeps what a person started in the buckets, the rest in otherSources", () => {
+    const t = buildSidebarSections(sessions, [project("p")], {
+      now: NOW,
+      splitOtherSources: true,
+    });
+    expect(ids(t.buckets.today)).toEqual(["gui", "legacy"]);
+    expect(ids(t.buckets.week)).toEqual([]);
+    expect(ids(t.buckets.month)).toEqual([]);
+    // Newest first, across buckets.
+    expect(ids(t.otherSources)).toEqual(["cli", "sup", "sys"]);
+    // A project keeps its agent sessions, 置顶 keeps its own, and 更早
+    // keeps the old ones.
+    expect(shape(t.projects)).toEqual(["p[cli-p]"]);
+    expect(ids(t.pinned)).toEqual(["cli-pin"]);
+    expect(ids(t.earlier)).toEqual(["cli-old"]);
+    expect(findSectionsSlot(t, "sup")).toBe("otherSources");
+    expect(findSectionsSlot(t, "gui")).toBe("today");
+  });
+
+  it("leaves the buckets as they were without the option", () => {
+    const t = buildSidebarSections(sessions, [project("p")], { now: NOW });
+    expect(ids(t.buckets.today)).toEqual(["gui", "legacy", "cli"]);
+    expect(t.otherSources).toEqual([]);
+  });
+});
+
 describe("archivableProjectSessions", () => {
   it("is the group's sessions plus its 显示更多 tail, as 归档全部对话 archives", () => {
     const sessions = [

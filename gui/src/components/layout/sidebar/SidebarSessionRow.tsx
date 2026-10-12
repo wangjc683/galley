@@ -55,6 +55,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   singleLine = false,
   mainChatLabel,
   mainChatHome = false,
+  idleSubline,
 }: {
   session: Session;
   active?: boolean;
@@ -107,10 +108,14 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
    * of its own (layout-and-chrome.md: tone is for state, not identity).
    * The caller wires no row actions: it has no menu. */
   mainChatLabel?: string;
-  /** Main chat layout A3 (on trial): the main chat is the home, so its
-   * title keeps full-strength ink even when another row is selected —
-   * the subtractive dimming below skips it. */
+  /** Main chat layouts A3 / B (on trial): the main chat is the home, so
+   * its title keeps full-strength ink even when another row is selected
+   * — the subtractive dimming below skips it. */
   mainChatHome?: boolean;
+  /** A muted subline for a row that has nothing to say yet (main chat
+   * layout B, on trial: the main chat before its first message). Every
+   * state and summary replaces it. */
+  idleSubline?: string;
 }) {
   const copy = useCopy();
   const hasRowActions = !!(
@@ -259,7 +264,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                 { cancelled: status === "cancelled", pausedAtStepLimit },
                 copy.sidebar,
               )
-            : null;
+            : (idleSubline ?? null);
   // A single-line row renders no subline and centers like a row that
   // has none.
   const subline = singleLine ? null : sublineText;

@@ -78,13 +78,24 @@ import { TooltipLabel } from "@/components/ui/tooltip";
  * 2026-05-13 — sidebar is the physical embodiment of multi-session,
  * which is the product's core differentiator. Hiding it hides the
  * value prop. See devlog for the full reasoning.
+ *
+ * TEMPORARY exception: main chat layout B′ (on trial, ticket 07 — the
+ * main chat made the rule's premise change, PRD ruling 30) collapses
+ * it (`sidebarCollapsed`). The sidebar panel and the separator are
+ * hidden, not unmounted, and the group's resizing is disabled so the
+ * hidden separator's hit area can't start a drag: the layout itself
+ * never changes, so the main panel — alone in the group — takes the
+ * whole width, and expanding brings back the width it had. Nothing
+ * remounts either way (the conversation keeps its scroll and draft).
  */
 export function AppShell({
   sidebar,
   main,
+  sidebarCollapsed = false,
 }: {
   sidebar: ReactNode;
   main: ReactNode;
+  sidebarCollapsed?: boolean;
 }) {
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: "ga-workbench-layout-2col-v2",
@@ -108,11 +119,18 @@ export function AppShell({
         id="ga-workbench-layout-2col-v2"
         orientation="horizontal"
         groupRef={groupRef}
+        disabled={sidebarCollapsed}
         defaultLayout={defaultLayout}
         onLayoutChanged={onLayoutChanged}
         className="flex min-h-0 flex-1"
       >
-        <Panel id="sidebar" defaultSize="20%" minSize="14%" maxSize="30%">
+        <Panel
+          id="sidebar"
+          defaultSize="20%"
+          minSize="14%"
+          maxSize="30%"
+          hidden={sidebarCollapsed}
+        >
           {/* chrome-hover-scope retunes --color-hover (and, in dark,
               --color-selected) for the chrome ground, which sits on the
               opposite side of --color-app in each theme (globals.css)
@@ -122,7 +140,7 @@ export function AppShell({
             {sidebar}
           </aside>
         </Panel>
-        <ResizeSeparator />
+        <ResizeSeparator hidden={sidebarCollapsed} />
         <Panel id="main" defaultSize="80%" minSize="40%">
           <main className="flex h-full min-w-0 flex-col overflow-hidden bg-app">
             {main}
@@ -156,11 +174,12 @@ export function AppShell({
  * entered instead of the mid-height of a window-tall trigger. Radix
  * hides the tooltip on pointerdown, so it never lingers into a drag.
  */
-function ResizeSeparator() {
+function ResizeSeparator({ hidden = false }: { hidden?: boolean }) {
   const copy = useCopy();
   const [pointerOffsetY, setPointerOffsetY] = useState(0);
   return (
     <Separator
+      hidden={hidden}
       onDoubleClick={() => void resetWindowLayout()}
       className="group relative w-1.5 shrink-0 cursor-col-resize"
     >

@@ -1,0 +1,181 @@
+import { Plus, Tray } from "@phosphor-icons/react";
+
+import { IconTooltip } from "@/components/ui/tooltip";
+import { formatShortcut } from "@/lib/shortcuts";
+import { PROJECT_GROUP_RECENT_COUNT } from "@/lib/sidebar-timeline";
+import { cn } from "@/lib/utils";
+import type { Project, Session } from "@/types/session";
+
+import { SidebarProjectGroup } from "./SidebarProjectGroup";
+import { ShortcutTooltipText } from "./SidebarNavIcons";
+import type { SidebarTimelineRowWiring } from "./SidebarTimelineRow";
+
+/**
+ * Main chat layout B's pieces (on trial, ticket 07, PRD rulings 30–32;
+ * see main-chat-layout.ts). B: the main-chat row is the home, and every
+ * other conversation sits in one section under it —
+ *
+ *   ⌂ 主对话
+ *   旁聊                  +   ← SidebarSideChatHeader
+ *     (新旁聊)                ← SidebarNewSideChatRow, while the empty
+ *                               new-chat composer is up
+ *     置顶 / 项目 / 今天 …
+ *     其他来源 N             ← SidebarOtherSources
+ *     更早 N
+ *
+ * The labels follow the trial's naming (旁聊 / 话题 / 其他对话).
+ */
+
+/**
+ * The section header. A step above the 10px time-bucket labels so the
+ * two never read as one family: 12px semibold `ink-soft`, no tracking
+ * (the buckets are 10px semibold `ink-muted` with 0.08em) — the
+ * section is a container, the buckets are its scale. The label sits on
+ * the rows' 18px edge; the + is the rows' 28px `⋯` button in the `⋯`
+ * column (and the masthead's 新建项目 column above it). The header itself
+ * does nothing: no click, no fold. It stays above the scrolling list
+ * with the main-chat row, so the new-chat + never scrolls away.
+ */
+export function SidebarSideChatHeader({
+  label,
+  newChatLabel,
+  onNewChat,
+}: {
+  label: string;
+  newChatLabel: string;
+  onNewChat?: () => void;
+}) {
+  return (
+    <div className="mx-1.5 flex h-8 items-center gap-1.5 pl-3 pr-1.5">
+      <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ink-soft">
+        {label}
+      </span>
+      <IconTooltip
+        text={
+          <ShortcutTooltipText
+            label={newChatLabel}
+            shortcut={formatShortcut("Mod+N")}
+          />
+        }
+        side="right"
+      >
+        <button
+          type="button"
+          onClick={onNewChat}
+          aria-label={newChatLabel}
+          className={cn(
+            "inline-flex size-7 shrink-0 items-center justify-center rounded-sm text-ink-soft",
+            "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+            "hover:bg-hover hover:text-ink active:translate-y-px active:bg-selected/60",
+            "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
+          )}
+        >
+          <Plus size={14} weight="regular" />
+        </button>
+      </IconTooltip>
+    </div>
+  );
+}
+
+/**
+ * "You are here" for the empty new-chat composer: B has no 新对话 row
+ * to select, so while the composer is up the section's top holds this
+ * one selected row (the session row's selected fill and lift, full
+ * ink), and the sidebar still has exactly one row saying where you are
+ * (layout-and-chrome.md, 「新对话是列表的开头」). The first message's
+ * session row takes over. Like the 新对话 row it is an action: clicking
+ * it refocuses the composer, so it answers the pointer.
+ */
+export function SidebarNewSideChatRow({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick?: () => void;
+}) {
+  return (
+    <div className="pt-1">
+      <button
+        type="button"
+        onClick={onClick}
+        aria-current="page"
+        className={cn(
+          "mx-1.5 grid min-h-9 w-[calc(100%-12px)] grid-cols-[16px_minmax(0,1fr)] items-center gap-2 rounded-sm px-3 text-left",
+          "bg-selected shadow-[var(--shadow-selected)] hover:bg-(--color-selected-hover)",
+          "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm active:translate-y-px",
+          "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
+        )}
+      >
+        <span className="flex justify-center">
+          <Plus size={13} weight="regular" className="text-ink-muted" />
+        </span>
+        <span className="truncate text-[13px] font-medium text-ink">
+          {label}
+        </span>
+      </button>
+    </div>
+  );
+}
+
+/** The section's one line while it holds no conversation a person
+ * started — the empty sidebar's 「你的对话会出现在这里。」 register. Gone
+ * with the first one. */
+export function SidebarSideChatEmptyHint({ text }: { text: string }) {
+  return (
+    <p className="mx-1.5 px-3 py-2 text-[12.5px] italic text-ink-muted">
+      {text}
+    </p>
+  );
+}
+
+const OTHER_SOURCES_ID = "galley:other-sources";
+const OTHER_SOURCES_ICON = { closed: Tray, open: Tray };
+
+/**
+ * 「其他来源 N」 (PRD ruling 32): the agent-started sessions outside
+ * projects — CLI, supervisor, scheduled tasks — as one project-group
+ * row, with the group's behaviour as is: collapsed by default (this
+ * run only), a click opens it, the newest five then 显示更多, and while
+ * collapsed the sessions erroring / waiting for a reply and the
+ * selected one hang under the row. No + and no menu: it is not a
+ * project. A tray, not a folder: things handed in from elsewhere.
+ */
+export function SidebarOtherSources({
+  sessions,
+  label,
+  expanded,
+  onToggleExpanded,
+  ...rowWiring
+}: {
+  sessions: Session[];
+  label: string;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+} & SidebarTimelineRowWiring) {
+  if (sessions.length === 0) return null;
+  const newest = sessions[0].lastActivityAt;
+  const group: Project = {
+    id: OTHER_SOURCES_ID,
+    name: label,
+    workspaceEnabled: false,
+    pinned: false,
+    lastActivityAt: newest,
+    createdAt: newest,
+    updatedAt: newest,
+  };
+  // pt-2: the 更早 entry's gap — the row closes the time buckets, it
+  // is not the last bucket's last session.
+  return (
+    <div className="pt-2">
+      <SidebarProjectGroup
+        project={group}
+        groupIcon={OTHER_SOURCES_ICON}
+        sessions={sessions.slice(0, PROJECT_GROUP_RECENT_COUNT)}
+        olderSessions={sessions.slice(PROJECT_GROUP_RECENT_COUNT)}
+        expanded={expanded}
+        onToggleExpanded={onToggleExpanded}
+        {...rowWiring}
+      />
+    </div>
+  );
+}

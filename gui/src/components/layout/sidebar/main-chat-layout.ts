@@ -1,47 +1,87 @@
 import { create } from "zustand";
 
-import { useCopy } from "@/lib/i18n";
+import { type AppCopy, useCopy, useLanguage } from "@/lib/i18n";
+import type { ResolvedLanguage } from "@/lib/language";
 
 /**
- * TEMPORARY — the sidebar switcher for the main chat
- * (`.scratch/main-chat` ticket 02, PRD 「桌面形态」). JC compares the
- * layouts live in tauri dev and picks one; then this file and
- * `MainChatLayoutSwitcher.tsx` go, `useMainChatLayout()` in Sidebar.tsx
- * becomes the chosen constant (or its branch is inlined), the chosen
- * copy pair moves into the locales, and the `<MainChatLayoutSwitcher />`
- * line in App.tsx goes.
+ * TEMPORARY — the sidebar structure trial for the main chat
+ * (`.scratch/main-chat` ticket 07, PRD rulings 28–33). JC compares the
+ * variants live in tauri dev (pill: MainChatLayoutSwitcher.tsx) and
+ * rules on the layout and the naming; removal steps at the end.
  *
- *   A1 — the main-chat row sits above the 新对话 row; nothing else moves.
- *   A2 — the main-chat row takes over the escape exit: fixed at the top
- *        of the list area, the 新对话 row gone, 新旁聊 a fourth masthead
- *        icon (⌘N unchanged).
- *   A3 — A1's order with the hierarchy turned round (JC, 2026-10-12): the
- *        main-chat row is the home, the 新对话 row stays a full-width
- *        labelled row (findable, unlike A2's icon) but smaller and quiet —
- *        no brand plus, regular weight, muted ink.
+ * Layouts:
  *
- * Copy pairs (main-chat label / new-chat label): 甲 follows the copy
- * rule 「用户可见的 session / chat 概念统一叫『对话』」
- * (docs/copy-language-guidelines.md); 乙 is the PRD's own words; 丙 names
- * the home after the assistant.
+ *   A3 — the control (ticket 02): the main-chat row is the home, the
+ *        新对话 row under it stays a full-width labelled row, quiet.
+ *   B  — the skeleton: the main-chat row, then a 「旁聊」 section header
+ *        with the new-chat + on it, then 置顶 / 项目 / the time buckets
+ *        holding only conversations a person started; agent-started
+ *        ones outside projects fold into one 「其他来源 N」 group row.
+ *   B′ — B plus a collapsible sidebar (toggle at the far left of the
+ *        main header, ⌘\; SidebarCollapseToggle.tsx).
+ *
+ * Naming: what the non-main conversations are called — 旁聊 / 话题 /
+ * 其他对话 — on the section header, the + tooltip, the empty-state
+ * line, A3's quiet row, the placeholder row and the busy choice's
+ * second button. The main entry is 「主对话」 throughout. The English
+ * UI keeps one fixed set (not part of the trial).
+ *
+ * Demo states: a render-layer overlay of fake live states
+ * (main-chat-demo.ts) — JC's own data is mostly idle.
+ *
+ * Without a main chat (the external runtime) every variant is today's
+ * sidebar, the demo stays off and nothing collapses.
  *
  * The choices are a per-machine convenience kept in localStorage
  * (wrapped: storage can be unavailable), never in Core.
+ *
+ * Removal, after the ruling (every trial line says TEMPORARY or "on
+ * trial"):
+ *
+ *   Always — delete MainChatLayoutSwitcher.tsx and its line in App.tsx;
+ *   delete main-chat-demo.ts, the demo reads in
+ *   hooks/useSessionStatusView.ts and hooks/useSessionsAttention.ts,
+ *   and Sidebar.tsx's `Sidebar` wrapper + `withDemoSessions` (rename
+ *   `SidebarBody` back); move the chosen naming's strings into the
+ *   locales (zh `sidebar.mainChat` becomes 主对话, `composer.mainChatBusy*`
+ *   follow; English after copy review), point the `useMainChatTrialCopy`
+ *   callers (Sidebar, App, MainChatBusyChoice, ComposerFooterHint,
+ *   SidebarCollapseToggle) at `copy`, then delete this file.
+ *   A3 wins — delete SidebarSideChats.tsx, header/SidebarCollapseToggle
+ *   (+ test), SidebarNarrowNavRow, Sidebar.tsx's `sectioned` branch,
+ *   `splitOtherSources` / `otherSources` / `isHumanStarted` in
+ *   lib/sidebar-timeline.ts (+ tests), `otherSourcesSlot` in
+ *   SidebarTimeline.tsx, `groupIcon` in SidebarProjectGroup.tsx,
+ *   `idleSubline` in SidebarSessionRow.tsx, AppShell's
+ *   `sidebarCollapsed`, MainHeader(Host)'s `leading` and App's B′ lines.
+ *   B wins — `sectioned` becomes `mainChat !== undefined`; the A3 branch
+ *   and SidebarQuickActions' `quiet` / `newChatLabel` go; so do B′'s
+ *   pieces: header/SidebarCollapseToggle (+ test), AppShell's
+ *   `sidebarCollapsed`, MainHeader(Host)'s `leading`, App's B′ lines.
+ *   B′ wins — as B, but the collapse stays: `sidebarCollapsed` moves out
+ *   of this store, and the two rules it breaks are rewritten
+ *   (layout-and-chrome.md 「Sidebar 不可折叠」 / 「不放 Sidebar toggle」,
+ *   AppShell's and app_menu.rs' comments).
  */
-export type MainChatLayout = "A1" | "A2" | "A3";
-export type MainChatCopyVariant = "甲" | "乙" | "丙";
+export type MainChatLayout = "A3" | "B" | "B′";
+export type SideChatNaming = "旁聊" | "话题" | "其他对话";
 
-export const MAIN_CHAT_LAYOUTS: readonly MainChatLayout[] = ["A1", "A2", "A3"];
-export const MAIN_CHAT_COPY_VARIANTS: readonly MainChatCopyVariant[] = [
-  "甲",
-  "乙",
-  "丙",
+export const MAIN_CHAT_LAYOUTS: readonly MainChatLayout[] = ["A3", "B", "B′"];
+export const SIDE_CHAT_NAMINGS: readonly SideChatNaming[] = [
+  "旁聊",
+  "话题",
+  "其他对话",
 ];
 
-const STORAGE_KEY = "galley.tmp.mainChatLayout";
-const COPY_STORAGE_KEY = "galley.tmp.mainChatCopy";
-const DEFAULT_LAYOUT: MainChatLayout = "A3";
-const DEFAULT_COPY: MainChatCopyVariant = "甲";
+const LAYOUT_KEY = "galley.tmp.sidebarTrial.layout";
+const NAMING_KEY = "galley.tmp.sidebarTrial.naming";
+const DEMO_KEY = "galley.tmp.sidebarTrial.demo";
+const COLLAPSED_KEY = "galley.tmp.sidebarTrial.collapsed";
+// Ticket 02's keys (A1 / A2 / A3, copy pairs 甲乙丙) — superseded.
+const RETIRED_KEYS = ["galley.tmp.mainChatLayout", "galley.tmp.mainChatCopy"];
+
+const DEFAULT_LAYOUT: MainChatLayout = "B";
+const DEFAULT_NAMING: SideChatNaming = "旁聊";
 
 function readStored<T extends string>(
   key: string,
@@ -64,64 +104,195 @@ function writeStored(key: string, value: string) {
   }
 }
 
-interface MainChatLayoutState {
-  layout: MainChatLayout;
-  copyVariant: MainChatCopyVariant;
-  setLayout: (layout: MainChatLayout) => void;
-  setCopyVariant: (copyVariant: MainChatCopyVariant) => void;
+function dropRetiredKeys() {
+  try {
+    for (const key of RETIRED_KEYS) window.localStorage.removeItem(key);
+  } catch {
+    // Nothing to tidy without storage.
+  }
 }
 
-export const useMainChatLayoutStore = create<MainChatLayoutState>((set) => ({
-  layout: readStored(STORAGE_KEY, MAIN_CHAT_LAYOUTS, DEFAULT_LAYOUT),
-  copyVariant: readStored(
-    COPY_STORAGE_KEY,
-    MAIN_CHAT_COPY_VARIANTS,
-    DEFAULT_COPY,
-  ),
-  setLayout: (layout) => {
-    writeStored(STORAGE_KEY, layout);
-    set({ layout });
-  },
-  setCopyVariant: (copyVariant) => {
-    writeStored(COPY_STORAGE_KEY, copyVariant);
-    set({ copyVariant });
-  },
-}));
+interface MainChatLayoutState {
+  layout: MainChatLayout;
+  naming: SideChatNaming;
+  demo: boolean;
+  /** When the demo was switched on (ISO): its fake sessions' activity
+   * times count back from here, so rendering never reads the clock. */
+  demoAnchor: string;
+  /** B′: the sidebar is collapsed. Read only while B′ is on. */
+  sidebarCollapsed: boolean;
+  setLayout: (layout: MainChatLayout) => void;
+  setNaming: (naming: SideChatNaming) => void;
+  setDemo: (demo: boolean) => void;
+  toggleSidebarCollapsed: () => void;
+}
+
+export const useMainChatLayoutStore = create<MainChatLayoutState>((set) => {
+  dropRetiredKeys();
+  return {
+    layout: readStored(LAYOUT_KEY, MAIN_CHAT_LAYOUTS, DEFAULT_LAYOUT),
+    naming: readStored(NAMING_KEY, SIDE_CHAT_NAMINGS, DEFAULT_NAMING),
+    demo: readStored(DEMO_KEY, ["on", "off"], "off") === "on",
+    demoAnchor: new Date().toISOString(),
+    sidebarCollapsed:
+      readStored(COLLAPSED_KEY, ["collapsed", "expanded"], "expanded") ===
+      "collapsed",
+    setLayout: (layout) => {
+      writeStored(LAYOUT_KEY, layout);
+      set({ layout });
+    },
+    setNaming: (naming) => {
+      writeStored(NAMING_KEY, naming);
+      set({ naming });
+    },
+    setDemo: (demo) =>
+      set((state) => {
+        if (state.demo === demo) return state;
+        writeStored(DEMO_KEY, demo ? "on" : "off");
+        return demo ? { demo, demoAnchor: new Date().toISOString() } : { demo };
+      }),
+    toggleSidebarCollapsed: () =>
+      set((state) => {
+        const sidebarCollapsed = !state.sidebarCollapsed;
+        writeStored(COLLAPSED_KEY, sidebarCollapsed ? "collapsed" : "expanded");
+        return { sidebarCollapsed };
+      }),
+  };
+});
 
 export function useMainChatLayout(): MainChatLayout {
   return useMainChatLayoutStore((s) => s.layout);
 }
 
-/**
- * The trial's labels: the main chat's (sidebar row, header, ⌘K) and the
- * new-chat action's (A1 / A3 row, A2 icon). The English UI keeps its
- * locale strings — the pairs are a Chinese copy question.
- */
-export function mainChatTrialCopy(
-  copy: { sidebar: { mainChat: string; newConversation: string } },
-  variant: MainChatCopyVariant,
-): { mainChat: string; newChat: string } {
-  if (copy.sidebar.mainChat !== "主聊天") {
-    return {
-      mainChat: copy.sidebar.mainChat,
-      newChat: copy.sidebar.newConversation,
-    };
-  }
-  switch (variant) {
-    case "乙":
-      return { mainChat: "主聊天", newChat: "新旁聊" };
-    case "丙":
-      return { mainChat: "助理", newChat: "新对话" };
-    default:
-      return { mainChat: "主对话", newChat: "新对话" };
-  }
+/** The demo overlay is on (main-chat-demo.ts decides what it fakes). */
+export function useMainChatDemo(): boolean {
+  return useMainChatLayoutStore((s) => s.demo);
 }
 
-export function useMainChatTrialCopy(): {
+/** B′'s collapse: only with a main chat and while B′ is the layout. */
+export function useSidebarCollapsed(hasMainChat: boolean): boolean {
+  return useMainChatLayoutStore(
+    (s) => hasMainChat && s.layout === "B′" && s.sidebarCollapsed,
+  );
+}
+
+/** The trial's labels — see the header comment for where each shows. */
+export interface MainChatTrialCopy {
+  /** The main entry: sidebar row, main header, ⌘K. */
   mainChat: string;
+  /** B's section header. */
+  sectionLabel: string;
+  /** The new-chat action: B's + tooltip and placeholder row, A3's
+   * quiet row. */
   newChat: string;
-} {
+  /** B's one line while the section has no conversation a person
+   * started. */
+  emptyHint: string;
+  /** The main-chat row's subline before its first message (B / B′). */
+  idleSubline: string;
+  /** B's 「其他来源」 group row. */
+  otherSources: string;
+  /** B′'s toggle. */
+  collapseSidebar: string;
+  expandSidebar: string;
+  /** B′'s badge, spelled out for its tooltip and accessible name. */
+  needsYouCount: (count: number) => string;
+  /** The busy choice above the composer (MainChatBusyChoice). */
+  busyLabel: string;
+  busyQueueTooltip: string;
+  busyQueueImages: string;
+  busySideChat: string;
+  busySideChatTooltip: string;
+  busyEnterHint: string;
+}
+
+const ZH_NAMING: Record<
+  SideChatNaming,
+  Pick<
+    MainChatTrialCopy,
+    | "sectionLabel"
+    | "newChat"
+    | "emptyHint"
+    | "busyQueueImages"
+    | "busySideChat"
+    | "busySideChatTooltip"
+    | "busyEnterHint"
+  > & { noun: string }
+> = {
+  旁聊: {
+    noun: "旁聊",
+    sectionLabel: "旁聊",
+    newChat: "新旁聊",
+    emptyHint: "单独聊一件事，主对话不受打扰。",
+    busyQueueImages: "带图的消息不能排队，可以开旁聊",
+    busySideChat: "开旁聊",
+    busySideChatTooltip: "用这句话开一个旁聊，马上开始",
+    busyEnterHint: "Enter 后选择排队或开旁聊",
+  },
+  话题: {
+    noun: "话题",
+    sectionLabel: "话题",
+    newChat: "新话题",
+    emptyHint: "一件事一个话题，主对话不受打扰。",
+    busyQueueImages: "带图的消息不能排队，可以开新话题",
+    busySideChat: "开新话题",
+    busySideChatTooltip: "用这句话开一个新话题，马上开始",
+    busyEnterHint: "Enter 后选择排队或开新话题",
+  },
+  其他对话: {
+    noun: "对话",
+    sectionLabel: "其他对话",
+    newChat: "新对话",
+    emptyHint: "另开一个对话聊一件事，主对话不受打扰。",
+    busyQueueImages: "带图的消息不能排队，可以开新对话",
+    busySideChat: "开新对话",
+    busySideChatTooltip: "用这句话开一个新对话，马上开始",
+    busyEnterHint: "Enter 后选择排队或开新对话",
+  },
+};
+
+export function mainChatTrialCopy(
+  copy: AppCopy,
+  language: ResolvedLanguage,
+  naming: SideChatNaming,
+): MainChatTrialCopy {
+  if (language === "en-US") {
+    return {
+      mainChat: copy.sidebar.mainChat,
+      sectionLabel: "Side chats",
+      newChat: copy.sidebar.newSideChat,
+      emptyHint: "Talk one thing through here. The main chat stays as it is.",
+      idleSubline: "Tell it anything",
+      otherSources: "Other sources",
+      collapseSidebar: "Hide sidebar",
+      expandSidebar: "Show sidebar",
+      needsYouCount: (count) =>
+        count === 1 ? "1 side chat needs you" : `${count} side chats need you`,
+      busyLabel: copy.composer.mainChatBusyLabel,
+      busyQueueTooltip: copy.composer.mainChatBusyQueueTooltip,
+      busyQueueImages: copy.composer.mainChatBusyQueueImages,
+      busySideChat: copy.composer.mainChatBusySideChat,
+      busySideChatTooltip: copy.composer.mainChatBusySideChatTooltip,
+      busyEnterHint: copy.composer.mainChatBusyEnterHint,
+    };
+  }
+  const { noun, ...named } = ZH_NAMING[naming];
+  return {
+    ...named,
+    mainChat: "主对话",
+    idleSubline: "什么都可以跟它说",
+    otherSources: "其他来源",
+    collapseSidebar: "收起侧栏",
+    expandSidebar: "展开侧栏",
+    needsYouCount: (count) => `${count} 个${noun}在等你`,
+    busyLabel: "主对话正在忙",
+    busyQueueTooltip: "本轮结束后接着交给主对话",
+  };
+}
+
+export function useMainChatTrialCopy(): MainChatTrialCopy {
   const copy = useCopy();
-  const variant = useMainChatLayoutStore((s) => s.copyVariant);
-  return mainChatTrialCopy(copy, variant);
+  const language = useLanguage();
+  const naming = useMainChatLayoutStore((s) => s.naming);
+  return mainChatTrialCopy(copy, language, naming);
 }

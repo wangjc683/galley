@@ -12,6 +12,7 @@ import {
   PushPin,
   PushPinSlash,
   Trash,
+  type Icon,
 } from "@phosphor-icons/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -61,12 +62,17 @@ import {
  * - Every child row is single-line (2026-10-09): the indent and guide
  *   line say whose they are.
  * - Expanding never sets project context (D8); the row's `+` does.
+ *
+ * Main chat layout B (on trial, ticket 07) reuses the group for its
+ * 「其他来源 N」 row — agent-started sessions outside projects — with
+ * its own icon and no row actions (SidebarSideChats.tsx).
  */
 export function SidebarProjectGroup({
   project,
   sessions,
   olderSessions,
   defaultOlderOpen = false,
+  groupIcon,
   expanded,
   onToggleExpanded,
   onStartConversation,
@@ -84,6 +90,8 @@ export function SidebarProjectGroup({
   /** Start with the tail open (uncontrolled, like Radix's
    * `defaultOpen`); 显示更多 / 收起 own it from there. */
   defaultOlderOpen?: boolean;
+  /** The row's icon in place of Folder / FolderOpen. */
+  groupIcon?: { closed: Icon; open: Icon };
   expanded: boolean;
   onToggleExpanded?: () => void;
   onStartConversation?: () => void;
@@ -138,6 +146,7 @@ export function SidebarProjectGroup({
     <div data-project-id={project.id}>
       <ProjectGroupRow
         project={project}
+        groupIcon={groupIcon}
         expanded={expanded}
         connector={(expanded && total > 0) || hanging.length > 0}
         attention={attention}
@@ -219,6 +228,7 @@ const GROUP_CHILDREN_CLASS =
 
 function ProjectGroupRow({
   project,
+  groupIcon,
   expanded,
   connector = false,
   attention,
@@ -231,6 +241,7 @@ function ProjectGroupRow({
   onDelete,
 }: {
   project: Project;
+  groupIcon?: { closed: Icon; open: Icon };
   expanded: boolean;
   /** Draw the guide line up into the row from under the folder icon,
    * so the children's line hangs from the project (open with
@@ -248,7 +259,9 @@ function ProjectGroupRow({
   const copy = useCopy();
   const hasRowActions = !!(onTogglePin || onEdit || onArchiveAll || onDelete);
   const [actionsOpen, setActionsOpen] = useState(false);
-  const ProjectIcon = expanded ? FolderOpen : Folder;
+  const ProjectIcon = expanded
+    ? (groupIcon?.open ?? FolderOpen)
+    : (groupIcon?.closed ?? Folder);
   const newConversationTitle = copy.sidebar.newConversationInProjectTitle(
     project.name,
   );
