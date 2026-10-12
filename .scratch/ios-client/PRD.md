@@ -84,7 +84,7 @@ Status: needs-info（讨论中；待 JC 内部确认 Apple 开发者账号主体
 18. 移动端只服务内置 GA 用户；Galley 后续主力开发也在内置方向。手机只显示内置会话，不随桌面当前运行时切换
     （Core 本来支持跨运行时操作内置会话，`docs/agent-api/session-commands.md:499`）；手机发图不需要图片能力闸门（内置恒支持，补丁 0008）。
 19. IM 渠道留给偏好 IM 或有群聊需求的用户；手机上的主力入口引导到原生 App。
-20. 主聊天做成 Galley 的一等会话，桌面和手机都有，只在内置内核；先零成本试用一周再定形态。详见 [主聊天 PRD](../main-chat/PRD.md)。
+20. 主聊天做成 Galley 的一等会话，桌面和手机都有，只在内置内核；~~先零成本试用一周再定形态~~（2026-10-12 试用取消，主聊天先在桌面上，形态见主聊天 PRD 第三轮）。详见 [主聊天 PRD](../main-chat/PRD.md)。
 21. Supervisor 分三层处理（本机 `workbench.db` 161 个会话中 CLI / supervisor 建的 42 个，带标签的几乎全是试用和测试；社区 galley#29 / #30 作者在用）：
     - 退：「人在外面 → IM → Supervisor → CLI → Galley」的远程叙事（`docs/PRD.md:41-45`、§4.2），随票 01 改写。
     - 降：设置 Agent 页的「复制 Supervisor SOP」与 SOP 文档改为「让其他 Agent 操作 Galley」，面向高级用户；不急（见 deferred）。
