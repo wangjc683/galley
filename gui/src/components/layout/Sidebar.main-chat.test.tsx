@@ -294,6 +294,11 @@ describe("with a main chat: the section owns its list (ticket 09)", () => {
     expect(headerTag).toContain("sticky top-0 z-20");
     expect(headerTag).toContain("bg-app");
     expect(tagWith(html, 'data-sidebar-section=""')).toContain("bg-app");
+    // Rows sliding under it fade out; at rest (list at its top) the fade
+    // is off, nothing is clipped.
+    const fade = tagWith(html, "data-sidebar-section-fade");
+    expect(fade).toContain("top-full");
+    expect(fade).toContain("opacity-0");
     // scrollIntoView clears it.
     expect(tagWith(html, SCROLL_LIST)).toContain("scroll-pt-11");
     // The first label under it opens on the small gap.

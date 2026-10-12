@@ -484,6 +484,25 @@ export function Sidebar({
               className="sticky top-0 z-20 bg-app pt-3"
             >
               <SidebarSideChatHeader onNewChat={onNewChat} />
+              {/* Rows sliding under the stuck header fade into its ground
+                  instead of being cut by an invisible edge (rejected
+                  10-08) — not a line, which would split the header from
+                  its children right under the 主对话 line. Same recipe as
+                  Settings' scrolled-pane fade; only once the list
+                  scrolls, since at rest the first label sits 6px below
+                  and nothing is clipped. */}
+              <div
+                aria-hidden
+                data-sidebar-section-fade=""
+                style={{
+                  background:
+                    "linear-gradient(to bottom, var(--color-app), transparent)",
+                }}
+                className={cn(
+                  "pointer-events-none absolute inset-x-0 top-full h-3",
+                  listScrolled ? "opacity-100" : "opacity-0",
+                )}
+              />
             </div>
             {/* SidebarTimeline's labels and 其他来源 key their first-child
                 spacing on this attribute. */}
