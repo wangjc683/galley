@@ -42,3 +42,5 @@ Status: in-review（`034b9169` 本地合入未推送，2026-10-12；待 JC 用�
 - A2 窄宽回落：四个图标放不下时（mac 283px）落到书眉下单独一行；代价是跨过门槛时主聊天行与列表下移一行。
 - 粗糙处：启动时空白新对话先闪一下再切到主聊天；⌘K、设置快捷键页、空屏标题仍叫「新对话」，A2 胜出后再改名。
 - 切换器移除步骤见子代理回报：删 `main-chat-layout.ts`、`MainChatLayoutSwitcher.tsx`，`App.tsx` 一行，`Sidebar.tsx` 按胜出方收拢，测试去掉 mock。
+
+2026-10-12 JC 裁：CLI 归档守卫选（a）保持现状——Rule 3 要求 schemaVersion 内只做加法；被 CLI 归档的主对话下次启动自动恢复，代价只是侧栏暂时少一行。真遇到 agent 误归档再议。
