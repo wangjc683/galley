@@ -97,6 +97,7 @@ README「dense context instead of long」（`README.md:54`）。
     跨话题累积靠切段（03a），单个重任务靠子任务（06）；按体量切段留作预留规则。依据见票 03 Comments。
 40. 宪法 Rule 4 补句措辞定稿（JC 认可票 04 的草稿），随票 04 同版写进 `AGENTS.md`。
 41. 查历史不做新工具：走现有「Past Galley Conversations」的 Galley CLI 只读路径，CLI 只做加法（`--around`、时间窗口、搜索结果带时间），段首状态块告诉模型哪条是主聊天、这段从哪开始（票 03b）。
+42. 外置运行时的侧栏冻结，只修 bug；新的侧栏改动只做有主对话那一套（JC 选 A）。外置也上主对话做不到：账本与记忆要写 GA 的 `memory/`，外置下 Rule 1 禁止。见 `docs/design/layout-and-chrome.md` §4.2「结构」开头。
 
 ## 事实依据（2026-10-12 核对）
 
