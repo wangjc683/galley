@@ -41,6 +41,7 @@ import {
   extractLiveThinking,
   extractPreamble,
 } from "@/lib/ipc/ga-output-cleaning";
+import { offersBusyChoice } from "@/lib/main-chat";
 import { mendStreamingMarkdown } from "@/lib/mend-streaming-markdown";
 import { stepLimitTailVisible } from "@/lib/step-limit";
 import { cn } from "@/lib/utils";
@@ -75,6 +76,14 @@ export interface MainViewProps {
     config: GoalLaunchConfig,
   ) => void | Promise<void>;
   onStop?: () => void;
+  /** This is the main chat (主聊天, ticket 02): a send while it works
+   * first offers 排队 / 开旁聊 (see `offersBusyChoice`). */
+  isMainChat?: boolean;
+  /** 开旁聊: start a new ordinary session with this message. */
+  onOpenSideChat?: (
+    text: string,
+    attachments: PendingImageAttachment[],
+  ) => void;
   /** When true, the agent is mid-run; the Composer hides Submit and
    * shows Stop, the LLM switcher disables. */
   isRunning?: boolean;
@@ -187,6 +196,8 @@ function MainViewContent({
   onSubmit,
   onGoalSubmit,
   onStop,
+  isMainChat = false,
+  onOpenSideChat,
   isRunning = false,
   isStopping = false,
   llms,
@@ -723,6 +734,16 @@ function MainViewContent({
             imagesEnabled={imagesEnabled}
             onImageBlocked={onImageBlocked}
             onTextDropBlocked={onTextDropBlocked}
+            mainChatBusy={
+              onOpenSideChat &&
+              offersBusyChoice({
+                isMainChat,
+                runOpen: isRunning || isStopping,
+                waitingAskUser: Boolean(pendingAskUser),
+              })
+                ? { onOpenSideChat }
+                : undefined
+            }
           />
         </div>
       </div>

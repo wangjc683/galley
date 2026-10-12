@@ -32,12 +32,30 @@ pub(crate) async fn list_sessions(
 // the GUI's writes too. The command only builds the notifier and
 // stringifies the `GalleyError` envelope for the invoke wire.
 
-/// Core's write path for a GUI write, broadcasting through the app.
+/// Core's write path for a GUI write, broadcasting through the app. The
+/// desktop can neither archive nor delete the main chat
+/// ([`Writes::protecting_main_chat`]).
 fn gui_writes<'a>(
     galley: &'a SqliteGalley,
     notifier: &'a std::sync::Arc<dyn Notifier>,
 ) -> Writes<'a> {
-    Writes::new(galley, notifier.as_ref(), VIA_GUI)
+    Writes::new(galley, notifier.as_ref(), VIA_GUI).protecting_main_chat()
+}
+
+/// The managed runtime's main chat (主聊天, `.scratch/main-chat` ticket
+/// 02), created by Core on the first ask. The desktop opens on it at
+/// launch; it never creates one itself (Rule 5). `invalid_args` while
+/// the attached external GA is the active runtime — it has no main chat.
+#[tauri::command]
+pub(crate) async fn get_or_create_main_chat(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+) -> std::result::Result<SessionBrief, String> {
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
+        .get_or_create_main_chat(Origin::gui().with_client(OriginClient::Desktop))
+        .await
+        .map_err(stringify_error)
 }
 
 #[tauri::command]

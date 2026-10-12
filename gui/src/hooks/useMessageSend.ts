@@ -133,7 +133,7 @@ function settleStoppedRun(sid: string): void {
  * Everything that turns a user action into a Core command: the
  * main-view send path (Core starts the runner and replays its history
  * as needed), `/btw` side questions, the empty-screen first-message
- * path, Stop, and the Browser Control demo. Pulled out of App so the
+ * path, the main chat's 开旁聊, Stop, and the Browser Control demo. Pulled out of App so the
  * entry component stops carrying ~300 lines of dense IPC choreography
  * inline.
  *
@@ -415,9 +415,60 @@ export function useMessageSend({
     })();
   };
 
+  /**
+   * 开旁聊 (ticket 02): a message the user sent to the main chat while it
+   * was working, started instead as a new ordinary session — a side chat
+   * (旁聊). Created like the empty composer's first message (no project:
+   * the main chat has none to inherit), opened, and sent; the main chat
+   * keeps its run. 排队 needs nothing new: it is `sendUserMessage`, whose
+   * mid-run send Core queues.
+   */
+  const openSideChat = (t: string, images: PendingImageAttachment[]) => {
+    if (requiresManagedModelConfig) {
+      openModelsForMissingConfig();
+      return;
+    }
+    void (async () => {
+      let id: string | undefined;
+      try {
+        const sessions = useSessionsStore.getState();
+        sessions.setActiveProjectFilter(undefined);
+        id = await sessions.createSessionPersisted();
+        await useSessionsStore
+          .getState()
+          .activateSession(id, { ensureRunner: false });
+        useUiStore.getState().setScreen("main");
+        const outcome = await sendThroughCore(id, {
+          text: t,
+          images,
+          echo: "turn",
+        });
+        markIfRun(id, outcome);
+      } catch (e) {
+        if (id) {
+          reportUserSendFailure(id, "send_user_message", e);
+          return;
+        }
+        useUiStore.getState().pushToast(
+          makeAppError({
+            category: "business",
+            severity: "error",
+            title: copy.errors.sendFailed,
+            message: e instanceof Error ? e.message : String(e),
+            hint: null,
+            retryable: true,
+            context: "create_session_for_side_chat",
+            traceback: null,
+          }),
+        );
+      }
+    })();
+  };
+
   return {
     sendUserMessage,
     submitFromEmpty,
+    openSideChat,
     stopRun,
     runBrowserControlDemo,
   };

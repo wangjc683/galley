@@ -100,6 +100,43 @@ describe("switchRuntimeKind", () => {
     expect(toastIds()).toEqual([BROWSER_CONTROL_READY_TOAST_ID]);
   });
 
+  it("lands on the main chat after a switch to the managed runtime", async () => {
+    usePrefsStore.setState({ activeRuntimeKind: "external" });
+    useSessionsStore.setState({ hydrate: vi.fn(async () => {}) });
+    tauriMocks.invoke.mockImplementation(async (command) =>
+      command === "get_or_create_main_chat"
+        ? {
+            id: "s-main",
+            title: "主聊天",
+            status: "idle",
+            lastActivityAt: "2026-10-12T08:00:00.000Z",
+            createdAt: "2026-10-12T08:00:00.000Z",
+            updatedAt: "2026-10-12T08:00:00.000Z",
+            gaRuntimeKind: "managed",
+            mainChat: true,
+          }
+        : undefined,
+    );
+
+    await switchRuntimeKind("managed");
+
+    expect(useSessionsStore.getState().activeSessionId).toBe("s-main");
+    expect(useUiStore.getState().screen).toBe("main");
+  });
+
+  it("a switch to the external runtime asks for no main chat", async () => {
+    useSessionsStore.setState({ hydrate: vi.fn(async () => {}) });
+
+    await switchRuntimeKind("external");
+
+    expect(
+      tauriMocks.invoke.mock.calls.some(
+        ([command]) => command === "get_or_create_main_chat",
+      ),
+    ).toBe(false);
+    expect(useUiStore.getState().screen).toBe("empty");
+  });
+
   it.each<[RuntimeKind, RuntimeKind]>([
     ["managed", "external"],
     ["external", "managed"],

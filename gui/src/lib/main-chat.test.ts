@@ -1,0 +1,158 @@
+import { beforeEach, describe, expect, it } from "vitest";
+
+import {
+  sessionFromBrief,
+  type SessionBriefWire,
+} from "@/stores/sessions/shared";
+import { usePrefsStore } from "@/stores/prefs";
+import { useSessionsStore } from "@/stores/sessions";
+import { useUiStore } from "@/stores/ui";
+import { makeSession } from "@/test/factories";
+import { getTauriMocks } from "@/test/setup";
+import { resetStores } from "@/test/store-reset";
+
+import { findMainChat, offersBusyChoice, openMainChat } from "./main-chat";
+
+/**
+ * The main chat (ticket 02): Core creates it (`get_or_create_main_chat`),
+ * the page lands on it in managed mode, and a send while it works first
+ * offers 排队 / 开旁聊.
+ */
+
+const tauriMocks = getTauriMocks();
+const NOW = "2026-10-12T08:00:00.000Z";
+
+const MAIN_BRIEF: SessionBriefWire = {
+  id: "s-main",
+  title: "主聊天",
+  status: "idle",
+  turnCount: 0,
+  lastActivityAt: NOW,
+  createdAt: NOW,
+  updatedAt: NOW,
+  runtimeKind: "managed",
+  runtimeLabel: "内置内核",
+  gaRuntimeKind: "managed",
+  promptProfile: "galley-persona-v1",
+  mainChat: true,
+};
+
+function calls(command: string): number {
+  return tauriMocks.invoke.mock.calls.filter(([c]) => c === command).length;
+}
+
+beforeEach(() => {
+  resetStores();
+  usePrefsStore.setState({ activeRuntimeKind: "managed" });
+  tauriMocks.invoke.mockImplementation(async (command) =>
+    command === "get_or_create_main_chat" ? MAIN_BRIEF : undefined,
+  );
+});
+
+describe("the wire", () => {
+  it("marks only the main chat", () => {
+    expect(sessionFromBrief(MAIN_BRIEF).mainChat).toBe(true);
+    const side = sessionFromBrief({
+      ...MAIN_BRIEF,
+      id: "s-side",
+      mainChat: undefined,
+    });
+    expect("mainChat" in side).toBe(false);
+  });
+
+  it("finds it among the sessions", () => {
+    const sessions = [
+      makeSession({ id: "a" }),
+      makeSession({ id: "b", mainChat: true }),
+    ];
+    expect(findMainChat(sessions)?.id).toBe("b");
+    expect(findMainChat([makeSession({ id: "a" })])).toBeUndefined();
+  });
+});
+
+describe("offersBusyChoice", () => {
+  it("only for the main chat, mid-run, with nothing asking the user", () => {
+    expect(
+      offersBusyChoice({
+        isMainChat: true,
+        runOpen: true,
+        waitingAskUser: false,
+      }),
+    ).toBe(true);
+    expect(
+      offersBusyChoice({
+        isMainChat: false,
+        runOpen: true,
+        waitingAskUser: false,
+      }),
+    ).toBe(false);
+    expect(
+      offersBusyChoice({
+        isMainChat: true,
+        runOpen: false,
+        waitingAskUser: false,
+      }),
+    ).toBe(false);
+    // A reply to an ask_user question is an answer, not a new message.
+    expect(
+      offersBusyChoice({
+        isMainChat: true,
+        runOpen: true,
+        waitingAskUser: true,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("openMainChat", () => {
+  it("lands on the main chat Core hands back, without starting a runner", async () => {
+    await expect(openMainChat()).resolves.toBe(true);
+
+    expect(calls("get_or_create_main_chat")).toBe(1);
+    const sessions = useSessionsStore.getState();
+    expect(sessions.sessions.map((s) => s.id)).toEqual(["s-main"]);
+    expect(sessions.sessions[0].mainChat).toBe(true);
+    expect(sessions.activeSessionId).toBe("s-main");
+    expect(useUiStore.getState().screen).toBe("main");
+    // The first send starts it, as the empty composer's first message does.
+    expect(calls("ensure_session_runner")).toBe(0);
+  });
+
+  it("asks again but changes nothing while the main chat is on screen", async () => {
+    await openMainChat();
+    const before = useSessionsStore.getState().sessions;
+
+    await expect(openMainChat()).resolves.toBe(true);
+
+    expect(useSessionsStore.getState().sessions).toBe(before);
+    expect(useSessionsStore.getState().activeSessionId).toBe("s-main");
+  });
+
+  it("shares one landing between concurrent calls", async () => {
+    const [a, b] = await Promise.all([openMainChat(), openMainChat()]);
+    expect([a, b]).toEqual([true, true]);
+    expect(calls("get_or_create_main_chat")).toBe(1);
+  });
+
+  it("does nothing on the external runtime, which has no main chat", async () => {
+    usePrefsStore.setState({ activeRuntimeKind: "external" });
+
+    await expect(openMainChat()).resolves.toBe(false);
+
+    expect(calls("get_or_create_main_chat")).toBe(0);
+    expect(useUiStore.getState().screen).toBe("empty");
+    expect(useSessionsStore.getState().activeSessionId).toBeUndefined();
+  });
+
+  it("leaves the empty composer up when Core fails", async () => {
+    tauriMocks.invoke.mockImplementation(async (command) => {
+      if (command === "get_or_create_main_chat") throw new Error("db down");
+      return undefined;
+    });
+
+    await expect(openMainChat()).resolves.toBe(false);
+
+    expect(useUiStore.getState().screen).toBe("empty");
+    expect(useSessionsStore.getState().sessions).toEqual([]);
+  });
+});

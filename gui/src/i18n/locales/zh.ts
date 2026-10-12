@@ -150,6 +150,9 @@ export const zhCopy = {
   },
   sidebar: {
     newConversation: "新对话",
+    /** 主聊天（票 02）：内置内核唯一一条一直在的对话；其余对话是旁聊。 */
+    mainChat: "主聊天",
+    newSideChat: "新旁聊",
     search: "搜索",
     projects: "项目",
     newProject: "新建项目",
@@ -463,12 +466,21 @@ export const zhCopy = {
     newlineHint: "Shift+Enter 换行",
     /** 消息队列（galley#19/#20）：运行中 Enter 不再被闸，改为排队。 */
     queueEnterHint: "Enter 排队 · 本轮结束后自动发送",
+    mainChatBusyEnterHint: "Enter 后选择排队或开旁聊",
     stoppingQueueHint: "正在停止，排队的消息会自动发出",
     queueStripLabel: (count: number) => `排队中 · ${count}`,
     queueJump: "立即执行",
     queueJumpTooltip: "打断当前任务，优先执行这条",
     queueRemove: "删除",
     queueEditTooltip: "取回编辑（从队列移除并填回输入框）",
+    /** 主聊天在跑时发消息（票 02）：排队进正在跑的任务，或用这句话开旁聊。 */
+    mainChatBusyLabel: "主聊天正在忙",
+    mainChatBusyQueue: "排队",
+    mainChatBusyQueueTooltip: "本轮结束后接着交给主聊天",
+    mainChatBusyQueueImages: "带图的消息不能排队，可以开旁聊",
+    mainChatBusySideChat: "开旁聊",
+    mainChatBusySideChatTooltip: "用这句话开一个旁聊，马上开始",
+    mainChatBusyKeepEditing: "继续编辑",
     imageOnlyFallback: "请看这张图片。",
     pastedImage: "已粘贴图片",
     addMenuTooltip: "添加文件或提示词",

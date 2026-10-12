@@ -32,6 +32,7 @@ interface ComposerFooterHintProps {
   goalSubmitting: boolean;
   goalBlockedHintVisible: boolean;
   staticHint?: ReactNode;
+  mainChatBusy?: boolean;
 }
 
 /**
@@ -53,6 +54,7 @@ export function ComposerFooterHint({
   goalSubmitting,
   goalBlockedHintVisible,
   staticHint,
+  mainChatBusy = false,
 }: ComposerFooterHintProps) {
   const copy = useCopy();
   const hintKey = resolveComposerHint({
@@ -64,6 +66,7 @@ export function ComposerFooterHint({
     isSideQuestion,
     effectiveGoalArmed,
     goalSubmitting,
+    mainChatBusy,
   });
   const keyboardHint = hintKey ? copy.composer[hintKey] : null;
   // Keyboard hints get kbd-token styling; a caller-supplied staticHint

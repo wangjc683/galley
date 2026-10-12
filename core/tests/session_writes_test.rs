@@ -768,6 +768,7 @@ fn all_none_brief() -> SessionBrief {
         ga_runtime_id: None,
         prompt_profile: None,
         reasoning_effort: None,
+        main_chat: None,
     }
 }
 
@@ -790,6 +791,7 @@ fn all_some_brief() -> SessionBrief {
         ga_runtime_id: Some("r".into()),
         prompt_profile: Some("p".into()),
         reasoning_effort: Some("high".into()),
+        main_chat: Some(true),
         ..all_none_brief()
     }
 }

@@ -88,6 +88,8 @@ export interface SessionBriefWire {
   gaRuntimeKind?: RuntimeKind;
   gaRuntimeId?: string | null;
   promptProfile?: string | null;
+  /** Only ever `true`, and only on the main chat. */
+  mainChat?: boolean | null;
 }
 
 // Mirror of Rust `ProjectBrief`; Core's `project-*-external` events send
@@ -177,6 +179,9 @@ export function sessionFromBrief(b: SessionBriefWire): Session {
     gaRuntimeKind,
     gaRuntimeId: b.gaRuntimeId ?? undefined,
     promptProfile: b.promptProfile ?? undefined,
+    // Set once by Core, never changes — so only creation carries it
+    // (`applyExternalSessionUpdated` leaves it alone).
+    ...(b.mainChat ? { mainChat: true } : {}),
   };
 }
 

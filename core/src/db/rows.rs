@@ -24,6 +24,7 @@ pub(super) struct SessionRow {
     pub(super) ga_runtime_id: Option<String>,
     pub(super) prompt_profile: Option<String>,
     pub(super) reasoning_effort: Option<String>,
+    pub(super) main_chat: i64,
 }
 
 impl SessionRow {
@@ -70,6 +71,7 @@ impl SessionRow {
             ga_runtime_id: self.ga_runtime_id,
             prompt_profile: self.prompt_profile,
             reasoning_effort: self.reasoning_effort,
+            main_chat: (self.main_chat != 0).then_some(true),
         })
     }
 }

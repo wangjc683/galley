@@ -37,6 +37,7 @@ export function MainHeaderHost({
   onOpenSettings,
   resolvedTheme,
   sessionTitle,
+  canRenameSession = true,
 }: {
   activeGoals: GoalBrief[];
   channelStatuses: ReadonlyArray<ImSupervisorStatus | null>;
@@ -53,6 +54,8 @@ export function MainHeaderHost({
   onOpenSettings: () => void;
   resolvedTheme: ResolvedTheme;
   sessionTitle: string | undefined;
+  /** False for the main chat (主聊天): the title menu has no Rename. */
+  canRenameSession?: boolean;
 }) {
   const browserControlStatus = useBrowserControlStore((s) => s.status);
   const browserControlVerified = useBrowserControlStore((s) => s.verified);
@@ -194,10 +197,14 @@ export function MainHeaderHost({
       currentSessionHasPet={
         !!activeSessionId && petAttachedSessionId === activeSessionId
       }
-      onRenameSession={(newTitle) => {
-        if (!activeSessionId) return;
-        renameSession(activeSessionId, newTitle);
-      }}
+      onRenameSession={
+        canRenameSession
+          ? (newTitle) => {
+              if (!activeSessionId) return;
+              renameSession(activeSessionId, newTitle);
+            }
+          : undefined
+      }
       onOpenSettings={onOpenSettings}
     />
   );

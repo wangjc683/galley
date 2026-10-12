@@ -8,6 +8,10 @@ impl SqliteGalley {
     /// both until its first turn ends — so a hydrate during that first
     /// turn (app launch beside a scheduler catch-up, a webview reload)
     /// used to delete a live session and, by cascade, its message.
+    ///
+    /// The main chat is never swept: an empty one is its first-use state
+    /// (it carries its own title, so the title test alone would already
+    /// spare it; the `main_chat` test says so on purpose).
     pub async fn delete_empty_new_sessions(&self) -> Result<u32> {
         Ok(self.delete_empty_new_session_ids().await?.len() as u32)
     }
@@ -20,6 +24,7 @@ impl SqliteGalley {
              WHERE title = ? \
                AND turn_count = 0 \
                AND status != 'archived' \
+               AND main_chat = 0 \
                AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.session_id = sessions.id) \
              RETURNING id",
         )

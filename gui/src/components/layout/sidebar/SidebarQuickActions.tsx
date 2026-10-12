@@ -6,7 +6,11 @@ import { useCopy, useLanguage } from "@/lib/i18n";
 import { formatShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 
-import { NEW_CHAT_HINT_DISPLAY, NEW_CHAT_LABEL_HIDDEN } from "./sidebar-width";
+import {
+  NEW_CHAT_HINT_DISPLAY,
+  NEW_CHAT_LABEL_HIDDEN,
+  ROW_NAV_ICONS_DISPLAY_WITH_SIDE_CHAT,
+} from "./sidebar-width";
 import {
   SHORTCUT_TEXT_CLASS,
   ShortcutTooltipText,
@@ -68,6 +72,49 @@ export function SidebarQuickActions({
           onNewProject={onNewProject}
         />
       </div>
+    </div>
+  );
+}
+
+/**
+ * Main chat layout A2's narrow fallback (on trial, ticket 02): A2 has
+ * no new-chat row, so when the masthead cannot hold the wordmark and
+ * four icons (sidebar-width.ts), 搜索 / 定时 / 新建项目 / 新旁聊 come down
+ * into this row of their own — right-aligned, in the masthead's order
+ * and column — above the main-chat row. In the wide state the row is
+ * not there at all.
+ */
+export function SidebarNarrowNavRow({
+  onSearch,
+  onOpenScheduled,
+  scheduledActionCount = 0,
+  onNewProject,
+  onNewSideChat,
+  newSideChatActive = false,
+}: {
+  onSearch?: () => void;
+  onOpenScheduled?: () => void;
+  scheduledActionCount?: number;
+  onNewProject?: () => void;
+  onNewSideChat: () => void;
+  newSideChatActive?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        ROW_NAV_ICONS_DISPLAY_WITH_SIDE_CHAT,
+        "mx-1.5 justify-end py-1",
+      )}
+    >
+      <SidebarNavIcons
+        placement="row"
+        onSearch={onSearch}
+        onOpenScheduled={onOpenScheduled}
+        scheduledActionCount={scheduledActionCount}
+        onNewProject={onNewProject}
+        onNewSideChat={onNewSideChat}
+        newSideChatActive={newSideChatActive}
+      />
     </div>
   );
 }

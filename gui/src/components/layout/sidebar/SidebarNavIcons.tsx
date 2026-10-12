@@ -1,4 +1,9 @@
-import { Clock, FolderPlus, MagnifyingGlass } from "@phosphor-icons/react";
+import {
+  Clock,
+  FolderPlus,
+  MagnifyingGlass,
+  NotePencil,
+} from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
 import { TopBarIconButton } from "@/components/layout/TopBarIconButton";
@@ -10,7 +15,9 @@ import { cn } from "@/lib/utils";
 
 import {
   HEADER_NAV_ICONS_DISPLAY,
+  HEADER_NAV_ICONS_DISPLAY_WITH_SIDE_CHAT,
   ROW_NAV_ICONS_DISPLAY,
+  ROW_NAV_ICONS_DISPLAY_WITH_SIDE_CHAT,
 } from "./sidebar-width";
 
 /** Mono, muted shortcut text — the tooltip's "⌘K" and the new-chat
@@ -36,6 +43,14 @@ type NavIconsPlacement = "header" | "row";
  * The 定时 badge rides along in both. The third icon creates a project
  * (2026-10-09; it was the 项目 menu): the projects themselves are all in
  * the 项目 section, the quiet ones behind its 「更多项目」 row.
+ *
+ * With `onNewSideChat` (main chat layout A2, ticket 02 — on trial) a
+ * fourth icon, 新旁聊 (⌘N), ends the group: the main-chat row took the
+ * new-chat row's place as the escape exit. Last, so it sits over the
+ * rows' `⋯` column at the masthead's right edge. While the empty
+ * composer is up it wears the selected-row fill, as the 新对话 row did —
+ * the sidebar's one "you are here". The wider group moves the width
+ * threshold (sidebar-width.ts).
  */
 export function SidebarNavIcons({
   placement,
@@ -43,6 +58,8 @@ export function SidebarNavIcons({
   onOpenScheduled,
   scheduledActionCount = 0,
   onNewProject,
+  onNewSideChat,
+  newSideChatActive = false,
 }: {
   placement: NavIconsPlacement;
   onSearch?: () => void;
@@ -54,22 +71,37 @@ export function SidebarNavIcons({
    * meaningful (a number here always means "handle something"). */
   scheduledActionCount?: number;
   onNewProject?: () => void;
+  /** Layout A2: the 新旁聊 icon. Absent = the three-icon group. */
+  onNewSideChat?: () => void;
+  /** The empty new-chat composer is up (A2's "you are here"). */
+  newSideChatActive?: boolean;
 }) {
   const copy = useCopy();
   const inHeader = placement === "header";
   const NavButton = inHeader ? HeaderIconButton : QuickIconButton;
   const iconSize = inHeader ? 16 : 14;
   const scheduledLabel = scheduledTooltip(copy, scheduledActionCount);
+  const withSideChat = onNewSideChat !== undefined;
   return (
     <div
       className={cn(
         "items-center",
         inHeader
-          ? cn(HEADER_NAV_ICONS_DISPLAY, "shrink-0 gap-1")
+          ? cn(
+              withSideChat
+                ? HEADER_NAV_ICONS_DISPLAY_WITH_SIDE_CHAT
+                : HEADER_NAV_ICONS_DISPLAY,
+              "shrink-0 gap-1",
+            )
           : // min-w-0: lets the row squeeze the icons at the narrowest
             // widths (their own 32px widths would otherwise pin this
             // wrapper's minimum at 100px and overflow the row).
-            cn(ROW_NAV_ICONS_DISPLAY, "min-w-0 gap-0.5"),
+            cn(
+              withSideChat
+                ? ROW_NAV_ICONS_DISPLAY_WITH_SIDE_CHAT
+                : ROW_NAV_ICONS_DISPLAY,
+              "min-w-0 gap-0.5",
+            ),
       )}
     >
       <NavButton
@@ -99,6 +131,21 @@ export function SidebarNavIcons({
       >
         <FolderPlus size={iconSize} weight="thin" />
       </NavButton>
+      {withSideChat && (
+        <NavButton
+          label={copy.sidebar.newSideChat}
+          tooltip={
+            <ShortcutTooltipText
+              label={copy.sidebar.newSideChat}
+              shortcut={formatShortcut("Mod+N")}
+            />
+          }
+          onClick={onNewSideChat}
+          active={newSideChatActive}
+        >
+          <NotePencil size={iconSize} weight="thin" />
+        </NavButton>
+      )}
     </div>
   );
 }
@@ -198,14 +245,21 @@ type NavIconButtonProps = {
   label: string;
   tooltip: React.ReactNode;
   onClick?: () => void;
+  /** Selected-row fill: "you are here" (A2's 新旁聊 on the empty
+   * composer). Like the 新对话 row it still answers the pointer. */
+  active?: boolean;
   children: React.ReactNode;
 };
+
+const ACTIVE_NAV_BUTTON_CLASS =
+  "bg-selected text-ink shadow-[var(--shadow-selected)] hover:bg-(--color-selected-hover)";
 
 /** Header form: the shared TopBarIconButton. */
 function HeaderIconButton({
   label,
   tooltip,
   onClick,
+  active = false,
   children,
 }: NavIconButtonProps) {
   return (
@@ -213,8 +267,9 @@ function HeaderIconButton({
       <TopBarIconButton
         onClick={onClick}
         aria-label={label}
+        aria-current={active ? "page" : undefined}
         // relative: anchors the 定时 badge.
-        className="relative"
+        className={cn("relative", active && ACTIVE_NAV_BUTTON_CLASS)}
       >
         {children}
       </TopBarIconButton>
@@ -228,6 +283,7 @@ function QuickIconButton({
   label,
   tooltip,
   onClick,
+  active = false,
   children,
 }: NavIconButtonProps) {
   return (
@@ -236,13 +292,16 @@ function QuickIconButton({
         type="button"
         onClick={onClick}
         aria-label={label}
+        aria-current={active ? "page" : undefined}
         className={cn(
           // Default flex-shrink stays on: at the 134px minimum sidebar
           // the row squeezes these to ~29px instead of overflowing.
           "relative inline-flex size-8 items-center justify-center rounded-sm",
           "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm active:translate-y-px",
           "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-          "text-ink-soft hover:bg-hover hover:text-ink active:bg-selected/60",
+          active
+            ? ACTIVE_NAV_BUTTON_CLASS
+            : "text-ink-soft hover:bg-hover hover:text-ink active:bg-selected/60",
         )}
       >
         {children}

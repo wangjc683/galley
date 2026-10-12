@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { MainHeaderHost } from "@/components/layout/MainHeaderHost";
 import { browserControlInviteVisible } from "@/components/layout/header/browser-control-indicator-status";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { MainChatLayoutSwitcher } from "@/components/layout/sidebar/MainChatLayoutSwitcher";
 import { CommandPalette } from "@/components/overlay/CommandPalette";
 import { ThemeProvider } from "@/components/theme/ThemeContext";
 import { BrowserControlAttentionSurface } from "@/components/screens/BrowserControlAttentionBanner";
@@ -372,14 +373,19 @@ function App() {
   const goalSlotOccupied = Boolean(activeSessionGoal);
   const activeSessionBusy =
     screen === "main" && (isRunning || pendingAskUser !== null);
-  const { sendUserMessage, submitFromEmpty, stopRun, runBrowserControlDemo } =
-    useMessageSend({
-      activeSession,
-      requiresManagedModelConfig,
-      copy,
-      showImageBlockedToast,
-      openModelsForMissingConfig,
-    });
+  const {
+    sendUserMessage,
+    submitFromEmpty,
+    openSideChat,
+    stopRun,
+    runBrowserControlDemo,
+  } = useMessageSend({
+    activeSession,
+    requiresManagedModelConfig,
+    copy,
+    showImageBlockedToast,
+    openModelsForMissingConfig,
+  });
   const {
     activeProject,
     assignSessionToProjectWithToast,
@@ -444,9 +450,22 @@ function App() {
   // Uses the same grouping+backfill as the sidebar timeline so the
   // dialog holds exactly what the "更早 N" row counts — sessions
   // promoted into 最近 by backfillRecentSessions are excluded here too.
+  // The main chat is never under 更早 (its row stands above the list).
   const earlierSessions = useMemo(
-    () => backfillRecentSessions(groupSessions(visibleSessions)).earlier,
+    () =>
+      backfillRecentSessions(
+        groupSessions(visibleSessions.filter((s) => !s.mainChat)),
+      ).earlier,
     [visibleSessions],
+  );
+  // ⌘K lists the main chat under its label, not its stored title (the
+  // sidebar and the header do the same).
+  const paletteSessions = useMemo(
+    () =>
+      visibleSessions.map((s) =>
+        s.mainChat ? { ...s, title: copy.sidebar.mainChat } : s,
+      ),
+    [visibleSessions, copy],
   );
   // What the delete-project dialog's 「同时归档」 would archive — the
   // same set as the project group's 归档全部对话.
@@ -589,7 +608,13 @@ function App() {
               }
               header={
                 <MainHeaderHost
-                  sessionTitle={activeSession?.title}
+                  sessionTitle={
+                    activeSession?.mainChat
+                      ? copy.sidebar.mainChat
+                      : activeSession?.title
+                  }
+                  // The main chat keeps its name (ticket 02).
+                  canRenameSession={!activeSession?.mainChat}
                   activeGoals={activeGoals}
                   channelStatuses={channelStatuses}
                   channelsLoadError={channelsLoadError}
@@ -688,6 +713,8 @@ function App() {
                     onTextDropBlocked={handleTextDropBlocked}
                     onSubmit={sendUserMessage}
                     onStop={stopRun}
+                    isMainChat={Boolean(activeSession?.mainChat)}
+                    onOpenSideChat={openSideChat}
                     isRunning={isRunning}
                     isStopping={isStopping}
                     pendingAskUser={pendingAskUser}
@@ -705,7 +732,7 @@ function App() {
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
-        sessions={visibleSessions}
+        sessions={paletteSessions}
         runtimeKind={activeRuntimeKind}
         llms={llms}
         onNewChat={() => {
@@ -852,6 +879,9 @@ function App() {
           setEditingProjectId(null);
         }}
       />
+
+      {/* TEMPORARY: the A1 / A2 sidebar trial (main chat ticket 02). */}
+      <MainChatLayoutSwitcher />
 
       <ToastHost
         toasts={toasts}

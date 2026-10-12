@@ -10,6 +10,7 @@ import {
   Cat,
   Clock,
   DotsThree,
+  House,
   PauseCircle,
   PlugsConnected,
 } from "@phosphor-icons/react";
@@ -52,6 +53,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   onConfirmRename,
   onCancelRename,
   singleLine = false,
+  mainChatLabel,
 }: {
   session: Session;
   active?: boolean;
@@ -96,6 +98,14 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
    * are and state still rides the rail, the icon and the title weight,
    * so an open group stays compact. */
   singleLine?: boolean;
+  /** The main chat's row (主聊天, ticket 02): this label instead of the
+   * stored title, and a house in the icon column while the row rests.
+   * Everything else is a session row's — rail, subline, weight, the
+   * selected style — and every state outranks the house exactly as it
+   * outranks the check circle; unread fills it brand. No brand colour
+   * of its own (layout-and-chrome.md: tone is for state, not identity).
+   * The caller wires no row actions: it has no menu. */
+  mainChatLabel?: string;
 }) {
   const copy = useCopy();
   const hasRowActions = !!(
@@ -205,6 +215,13 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     ? displaySessionSummary(session.summary, copy.sidebar.turnProtocolFailure)
     : null;
   const errorCount = session.errorCount || 0;
+  const title = mainChatLabel ?? session.title;
+  // The main chat's resting glyph stands where a settled row draws its
+  // check circle (or hollow ring); live and blocking states replace it.
+  const mainChatResting =
+    mainChatLabel !== undefined &&
+    !goalRunning &&
+    (status === "idle" || status === "completed");
   // Goal subline — the same stage word the TopBar pill uses, prefixed
   // so the row says WHICH kind of work is open ("Goal · 已暂停"). Null
   // unless this session carries a goal.
@@ -416,6 +433,12 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             an amber pause icon next to a red rail read as two states. */}
         {hasPendingAsk && !hasBlockingError ? (
           <PauseCircle size={14} weight="fill" className="text-warning" />
+        ) : mainChatResting ? (
+          <House
+            size={14}
+            weight={showUnread ? "fill" : "thin"}
+            className={showUnread ? "text-brand" : "text-ink-muted"}
+          />
         ) : (
           <StatusIcon
             status={goalRunning ? "running" : status}
@@ -453,9 +476,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
               // syncTruncatedTitle); a fully visible title gets no OS
               // tooltip repeating it.
               ref={truncationFadeRef}
-              onPointerEnter={(e) =>
-                syncTruncatedTitle(e.currentTarget, session.title)
-              }
+              onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, title)}
               className={cn(
                 "truncate-fade min-w-0 flex-1 text-[13px]",
                 // Subtractive focus: the selected row keeps full-strength
@@ -475,7 +496,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                   : "font-medium",
               )}
             >
-              {session.title}
+              {title}
             </div>
           )}
           {petAttached && (

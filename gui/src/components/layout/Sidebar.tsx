@@ -3,18 +3,25 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { useSidebarProjectsCollapsed } from "@/hooks/useSidebarProjectsCollapsed";
 import { useCopy } from "@/lib/i18n";
+import { findMainChat } from "@/lib/main-chat";
 import { sortProjectsForNavigation } from "@/lib/projects";
 import {
   buildSidebarSections,
   findSectionsSlot,
   SIDEBAR_TIME_BUCKETS,
 } from "@/lib/sidebar-timeline";
+import { cn } from "@/lib/utils";
 import type { GoalBrief } from "@/types/goal";
 import type { Project, Session } from "@/types/session";
 
+import { useMainChatLayout } from "./sidebar/main-chat-layout";
 import { SidebarFooter } from "./sidebar/SidebarFooter";
 import { SidebarHeader } from "./sidebar/SidebarHeader";
-import { SidebarQuickActions } from "./sidebar/SidebarQuickActions";
+import {
+  SidebarNarrowNavRow,
+  SidebarQuickActions,
+} from "./sidebar/SidebarQuickActions";
+import { SidebarSessionRow } from "./sidebar/SidebarSessionRow";
 import { SidebarSectionsList } from "./sidebar/SidebarTimeline";
 
 export interface SidebarProps {
@@ -116,6 +123,18 @@ export interface SidebarProps {
  * Either way the archive footer follows one rule: it exists only when
  * archived sessions exist.
  *
+ * The main chat (主聊天, managed runtime only, ticket 02) is never in
+ * 置顶 / 项目 / a time bucket: its row stands on its own above the list,
+ * outside the scroll. Two layouts are on trial behind a temporary
+ * switcher (sidebar/main-chat-layout.ts):
+ *
+ *   A1 — the main-chat row above the 新对话 row; nothing else moves.
+ *   A2 — the main-chat row is the escape exit, the list's head with the
+ *        scroll-linked divider under it; no 新对话 row, 新旁聊 is a
+ *        fourth masthead icon (⌘N unchanged).
+ *
+ * Without a main chat (the external runtime) both are today's sidebar.
+ *
  * The active session row gets `bg-selected` (apricot tint) — this is a
  * brand moment, not just hover state. Since 2026-08-21 it also carries a
  * lift (shadow) and full-strength title ink while every other row steps
@@ -153,6 +172,14 @@ export function Sidebar({
   sessionGoalStatus,
 }: SidebarProps) {
   const copy = useCopy();
+  // TEMPORARY: the A1 / A2 trial (see main-chat-layout.ts).
+  const mainChatLayout = useMainChatLayout();
+  const mainChat = useMemo(() => findMainChat(sessions), [sessions]);
+  const listSessions = useMemo(
+    () => (mainChat ? sessions.filter((s) => s.id !== mainChat.id) : sessions),
+    [sessions, mainChat],
+  );
+  const mainChatIsExit = mainChat !== undefined && mainChatLayout === "A2";
   // Memoised: building the list walks every session; without memo it
   // re-runs on every Sidebar render, and Sidebar re-renders whenever
   // App does (which can be triggered by lower-frequency state like
@@ -163,9 +190,9 @@ export function Sidebar({
   const dayStamp = useDayStamp();
   // 置顶, the 项目 section and the time buckets (S1–S6).
   const sections = useMemo(
-    () => buildSidebarSections(sessions, projects),
+    () => buildSidebarSections(listSessions, projects),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sessions, projects, dayStamp],
+    [listSessions, projects, dayStamp],
   );
   const listEmpty =
     sections.earlier.length === 0 &&
@@ -206,8 +233,8 @@ export function Sidebar({
     }
   }
   const navigationProjects = useMemo(
-    () => sortProjectsForNavigation(projects, sessions),
-    [projects, sessions],
+    () => sortProjectsForNavigation(projects, listSessions),
+    [projects, listSessions],
   );
   const expandedProjectIdSet = useMemo(
     () => new Set(expandedProjectIds),
@@ -321,6 +348,23 @@ export function Sidebar({
     onArchiveSessions,
   };
 
+  // A2's 新旁聊 is the same action as A1's 新对话 row and ⌘N.
+  const startSideChat = () => onNewChat?.();
+  // The main chat's row: a session row in every respect but its label,
+  // its resting house glyph and its missing menu (no pin, rename,
+  // project, archive). Same wiring as a list row otherwise.
+  const mainChatRow = mainChat ? (
+    <SidebarSessionRow
+      session={mainChat}
+      active={activeId === mainChat.id}
+      petAttached={petAttachedSessionId === mainChat.id}
+      sessionGoal={sessionGoalStatus?.get(mainChat.id)}
+      projects={navigationProjects}
+      onClick={() => handleSelectSession(mainChat.id)}
+      mainChatLabel={copy.sidebar.mainChat}
+    />
+  ) : null;
+
   return (
     // @container/sidebar: the width SidebarHeader and the new-chat row
     // both query to decide where 搜索 / 定时 / 项目 go
@@ -331,16 +375,47 @@ export function Sidebar({
         onOpenScheduled={onOpenScheduled}
         scheduledActionCount={scheduledActionCount}
         onNewProject={onNewProject}
+        onNewSideChat={mainChatIsExit ? startSideChat : undefined}
+        newSideChatActive={mainChatIsExit && newChatActive}
       />
-      <SidebarQuickActions
-        onNewChat={onNewChat}
-        onSearch={onSearch}
-        onOpenScheduled={onOpenScheduled}
-        scheduledActionCount={scheduledActionCount}
-        onNewProject={onNewProject}
-        newChatActive={newChatActive}
-        listScrolled={listScrolled}
-      />
+      {mainChatIsExit ? (
+        <>
+          <SidebarNarrowNavRow
+            onSearch={onSearch}
+            onOpenScheduled={onOpenScheduled}
+            scheduledActionCount={scheduledActionCount}
+            onNewProject={onNewProject}
+            onNewSideChat={startSideChat}
+            newSideChatActive={newChatActive}
+          />
+          {/* A2: the main-chat row heads the list and owns the divider
+              the 新对话 row had — clear at rest, drawn once the list
+              scrolls under it (SidebarQuickActions). */}
+          <div
+            className={cn(
+              "border-b py-1",
+              listScrolled ? "border-line/70" : "border-transparent",
+            )}
+          >
+            {mainChatRow}
+          </div>
+        </>
+      ) : (
+        <>
+          {/* A1: the main-chat row above the 新对话 row, which keeps its
+              place, its divider and its narrow fallback. */}
+          {mainChatRow && <div className="pt-1">{mainChatRow}</div>}
+          <SidebarQuickActions
+            onNewChat={onNewChat}
+            onSearch={onSearch}
+            onOpenScheduled={onOpenScheduled}
+            scheduledActionCount={scheduledActionCount}
+            onNewProject={onNewProject}
+            newChatActive={newChatActive}
+            listScrolled={listScrolled}
+          />
+        </>
+      )}
 
       <div
         ref={scrollContainerRef}

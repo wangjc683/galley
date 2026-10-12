@@ -764,6 +764,54 @@ describe("useMessageSend handlers", () => {
     expect(consumeReplyNotifyPending(sid)).toBe(true);
   });
 
+  // Main chat busy (ticket 02): 排队 is the ordinary mid-run send above
+  // ("a send into an open run shows no echo; Core queues it"); 开旁聊 is
+  // this one.
+  it("openSideChat: a new plain session gets the message; the main chat keeps its run", async () => {
+    const main = seed("s-main", {
+      mainChat: true,
+      gaRuntimeKind: "managed",
+      runtimeKind: "managed",
+    });
+    useMessagesStore.getState().setAgentRunning("s-main", true);
+    useSessionsStore.getState().setActiveProjectFilter("p-left-over");
+    core((args) => {
+      const message = row(args.sessionId, 1, "顺便查下周五的天气");
+      broadcast({
+        sessionId: args.sessionId,
+        message,
+        dispatch: "pending",
+        clientRequestId: args.clientRequestId,
+      });
+      return dispatched(message);
+    });
+    const { api } = mountSend(main);
+
+    api.openSideChat("顺便查下周五的天气", []);
+    await settle();
+
+    const create = calls("create_session")[0] as {
+      input: { id: string; projectId?: string };
+    };
+    expect(create.input.projectId).toBeUndefined();
+    const sid = useSessionsStore.getState().activeSessionId!;
+    expect(sid).toBe(create.input.id);
+    expect(sid).not.toBe("s-main");
+    expect(calls("send_user_message")).toHaveLength(1);
+    expect(calls("send_user_message")[0]).toMatchObject({
+      sessionId: sid,
+      text: "顺便查下周五的天气",
+    });
+    expect(userTurns(sid)).toHaveLength(1);
+    expect(useUiStore.getState().screen).toBe("main");
+    // Nothing went to the main chat, whose run goes on.
+    expect(userTurns("s-main")).toHaveLength(0);
+    expect(slice("s-main").agentRunning).toBe(true);
+    expect(
+      useSessionsStore.getState().sessions.find((s) => s.id === sid)?.mainChat,
+    ).toBeUndefined();
+  });
+
   describe("stopRun → stop_session_run", () => {
     function running(sid: string): Session {
       const session = seed(sid);

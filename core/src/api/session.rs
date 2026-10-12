@@ -123,6 +123,12 @@ pub struct SessionBrief {
     /// for agents (2026-09-22).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
+    /// `true` on the managed runtime's main chat (主聊天, migration
+    /// 044): the one permanent conversation the desktop opens on. Absent
+    /// on every other session. Additive read-only field for agents
+    /// (2026-10-12).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub main_chat: Option<bool>,
 }
 
 /// Filter / scope for `list_sessions`. All fields optional — None means

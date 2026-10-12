@@ -157,6 +157,15 @@ export interface Session {
   imagesSupported?: boolean;
   /** Managed prompt profile applied at session creation, if any. */
   promptProfile?: string;
+  /**
+   * The managed runtime's main chat (主聊天; Core's `mainChat`,
+   * migration 044): the one permanent conversation the desktop opens
+   * on. Its sidebar row stands apart from 置顶 / 项目 / the time
+   * buckets, and it has no archive, delete, pin, rename or move to a
+   * project. Core sets it once, at creation; absent on every other
+   * session (a side chat, 旁聊).
+   */
+  mainChat?: boolean;
 }
 
 export interface Project {

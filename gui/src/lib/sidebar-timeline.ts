@@ -212,7 +212,13 @@ export function archivableProjectSessions(
   sessions: Session[],
   projectId: string,
 ): Session[] {
+  // The main chat is never in a project's group (ticket 02), even if
+  // the CLI moved it into one.
   return sessions.filter(
-    (s) => s.projectId === projectId && !s.pinned && s.status !== "archived",
+    (s) =>
+      s.projectId === projectId &&
+      !s.pinned &&
+      !s.mainChat &&
+      s.status !== "archived",
   );
 }

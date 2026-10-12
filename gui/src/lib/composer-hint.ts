@@ -33,6 +33,7 @@
 /** i18n `composer` key of the hint to show; null collapses the slot. */
 export type ComposerHintKey =
   | "queueEnterHint"
+  | "mainChatBusyEnterHint"
   | "stoppingQueueHint"
   | "newlineHint"
   | "enterHint"
@@ -57,6 +58,9 @@ export interface ComposerHintState {
   effectiveGoalArmed: boolean;
   /** The launch is in flight (start_session_goal pending). */
   goalSubmitting: boolean;
+  /** The main chat is working: Enter opens the 排队 / 开旁聊 choice
+   * instead of queueing (ticket 02). */
+  mainChatBusy?: boolean;
 }
 
 export function resolveComposerHint(s: ComposerHintState): ComposerHintKey | null {
@@ -66,7 +70,8 @@ export function resolveComposerHint(s: ComposerHintState): ComposerHintKey | nul
     // Stop in flight with messages parked: the status line outranks
     // the keyboard legend — it answers "did my send get lost?".
     if (s.isStopping && s.hasQueuedMessages) return "stoppingQueueHint";
-    return s.hasText ? "queueEnterHint" : "newlineHint";
+    if (!s.hasText) return "newlineHint";
+    return s.mainChatBusy ? "mainChatBusyEnterHint" : "queueEnterHint";
   }
   // Armed changes what Enter does (launches the Goal, not send) —
   // with no confirm dialog since ticket 09, this hint and the button

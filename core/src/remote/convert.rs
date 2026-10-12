@@ -78,6 +78,8 @@ pub(super) fn session(brief: SessionBrief) -> phone::Session {
         ga_runtime_id: _,
         prompt_profile: _,
         reasoning_effort,
+        // The phone protocol has no main chat yet (iOS PRD, later).
+        main_chat: _,
     } = brief;
     phone::Session {
         id: id.0,
@@ -424,6 +426,7 @@ mod tests {
             ga_runtime_id: Some("rt".into()),
             prompt_profile: Some("profile".into()),
             reasoning_effort: None,
+            main_chat: None,
         }
     }
 

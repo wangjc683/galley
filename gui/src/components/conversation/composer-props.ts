@@ -147,4 +147,18 @@ export interface ComposerProps {
    * handler toasts "use copy & paste" — the accepted trade-off of native
    * drag-drop (PRD 定案 8). */
   onTextDropBlocked?: () => void;
+  /**
+   * Set while this is the main chat (主聊天, ticket 02) and it is
+   * working with nothing asking the user. A send then opens a two-way
+   * choice above the box instead of going out (MainChatBusyChoice):
+   * 排队 hands the draft to `onSubmit` — the ordinary mid-run send into
+   * Core's queue — and 开旁聊 to `onOpenSideChat`. The draft stays in
+   * the box until the user picks. `/btw` side questions skip the choice.
+   */
+  mainChatBusy?: {
+    onOpenSideChat: (
+      text: string,
+      attachments: PendingImageAttachment[],
+    ) => void;
+  };
 }

@@ -14,9 +14,9 @@
 //!
 //! | Write | Event |
 //! |---|---|
-//! | create a session | `session-created-external` |
+//! | create a session; the main chat's first ask | `session-created-external` |
 //! | rename, pin, reasoning effort, unread, model | `session-updated-external` |
-//! | archive / unarchive (bulk: one event per session it changed) | `session-archived-external` / `session-unarchived-external` |
+//! | archive / unarchive (bulk: one event per session it changed); an archived main chat's ask | `session-archived-external` / `session-unarchived-external` |
 //! | delete, bulk delete, empty-session and demo sweeps (one per session) | `session-deleted-external` `{ sessionId, via }` |
 //! | move to a project | `session-moved-external` |
 //! | create / update / delete a project | `project-created-external` / `project-updated-external` / `project-deleted-external` |
@@ -35,6 +35,14 @@
 //! by `clientRequestId`, waits for P1), so a page receives the broadcast
 //! of its own write, and applying it must change nothing — see the GUI's
 //! `applyExternalSession*`.
+//!
+//! **The main chat** (主聊天, `.scratch/main-chat` ticket 02) cannot be
+//! archived or deleted from the desktop: [`Writes::protecting_main_chat`]
+//! turns that guard on, and the GUI's Tauri commands always use it. The
+//! socket's writes (CLI / supervisor) do not, on purpose — refusing an
+//! existing `session archive` would change what an existing command does
+//! inside a schema version (Rule 3), which is the user's call, not this
+//! module's.
 
 use crate::api::{
     CreateProjectInput, CreateScheduledTaskInput, CreateSessionInput, GalleyApi, Origin,
@@ -42,8 +50,8 @@ use crate::api::{
     ScheduledTaskPatch, SessionBrief, SessionFilter, SessionId, SessionStatus,
     SCHEDULED_TASKS_CHANGED_EVENT,
 };
-use crate::db::{RenameTitleSource, SqliteGalley};
-use crate::error::Result;
+use crate::db::{MainChatEnsured, RenameTitleSource, SqliteGalley};
+use crate::error::{GalleyError, Result};
 use crate::ipc::{IpcCommand, SetLlmCommand, SetReasoningEffortCommand};
 use crate::notify::{notify, Notifier};
 use crate::socket_listener::RunnerPort;
@@ -89,6 +97,7 @@ pub struct SessionBriefEvent {
     pub ga_runtime_id: Option<String>,
     pub prompt_profile: Option<String>,
     pub reasoning_effort: Option<String>,
+    pub main_chat: Option<bool>,
 }
 
 impl From<SessionBrief> for SessionBriefEvent {
@@ -117,6 +126,7 @@ impl From<SessionBrief> for SessionBriefEvent {
             ga_runtime_id,
             prompt_profile,
             reasoning_effort,
+            main_chat,
         } = brief;
         Self {
             id,
@@ -140,6 +150,7 @@ impl From<SessionBrief> for SessionBriefEvent {
             ga_runtime_id,
             prompt_profile,
             reasoning_effort,
+            main_chat,
         }
     }
 }
@@ -254,6 +265,7 @@ pub struct Writes<'a> {
     galley: &'a SqliteGalley,
     notifier: &'a dyn Notifier,
     via: &'static str,
+    protect_main_chat: bool,
 }
 
 impl<'a> Writes<'a> {
@@ -262,7 +274,41 @@ impl<'a> Writes<'a> {
             galley,
             notifier,
             via,
+            protect_main_chat: false,
         }
+    }
+
+    /// Refuse to archive or delete the main chat (`invalid_args`), and
+    /// leave it out of bulk archives and deletes. The desktop's writes
+    /// (PRD ruling 14: the main chat has no archive, no delete).
+    pub fn protecting_main_chat(self) -> Self {
+        Self {
+            protect_main_chat: true,
+            ..self
+        }
+    }
+
+    /// `Err(invalid_args)` when guarding and `id` is the main chat.
+    async fn refuse_main_chat(&self, id: &SessionId, action: &str) -> Result<()> {
+        if !self.protect_main_chat {
+            return Ok(());
+        }
+        if self.galley.main_chat_id().await?.as_ref() == Some(id) {
+            return Err(GalleyError::InvalidArgs {
+                message: format!("session {id} is the main chat; it cannot be {action}"),
+            });
+        }
+        Ok(())
+    }
+
+    /// `ids` without the main chat when guarding.
+    async fn spare_main_chat(&self, mut ids: Vec<SessionId>) -> Result<Vec<SessionId>> {
+        if self.protect_main_chat {
+            if let Some(main) = self.galley.main_chat_id().await? {
+                ids.retain(|id| *id != main);
+            }
+        }
+        Ok(ids)
     }
 
     fn session_event(&self, event: &str, session: SessionBrief) {
@@ -301,6 +347,25 @@ impl<'a> Writes<'a> {
     }
 
     // ---------------- sessions ----------------
+
+    /// The managed runtime's main chat, created on first ask
+    /// ([`SqliteGalley::get_or_create_main_chat`]): broadcast as created
+    /// the first time, as unarchived when it comes back from the
+    /// archive, not at all when it was simply there.
+    pub async fn get_or_create_main_chat(&self, origin: Origin) -> Result<SessionBrief> {
+        let new_id = crate::socket_listener::mint_session_id();
+        let ensured = self.galley.get_or_create_main_chat(&new_id, origin).await?;
+        match &ensured {
+            MainChatEnsured::Existing(_) => {}
+            MainChatEnsured::Created(brief) => {
+                self.session_event(SESSION_CREATED_EXTERNAL_EVENT, brief.clone())
+            }
+            MainChatEnsured::Restored(brief) => {
+                self.session_event(SESSION_UNARCHIVED_EXTERNAL_EVENT, brief.clone())
+            }
+        }
+        Ok(ensured.brief().clone())
+    }
 
     pub async fn create_session(
         &self,
@@ -428,6 +493,7 @@ impl<'a> Writes<'a> {
     }
 
     pub async fn archive_session(&self, id: SessionId, origin: Origin) -> Result<SessionBrief> {
+        self.refuse_main_chat(&id, "archived").await?;
         let brief = self.galley.archive_session(id, origin).await?;
         self.session_event(SESSION_ARCHIVED_EXTERNAL_EVENT, brief.clone());
         Ok(brief)
@@ -443,6 +509,7 @@ impl<'a> Writes<'a> {
     /// `session-archived-external` per session it changed. Returns that
     /// count.
     pub async fn bulk_archive_sessions(&self, ids: Vec<SessionId>, _origin: Origin) -> Result<u32> {
+        let ids = self.spare_main_chat(ids).await?;
         let rows = self.galley.bulk_archive_session_rows(&ids).await?;
         let count = rows.len() as u32;
         for row in rows {
@@ -466,6 +533,7 @@ impl<'a> Writes<'a> {
     }
 
     pub async fn delete_session(&self, id: SessionId, origin: Origin) -> Result<()> {
+        self.refuse_main_chat(&id, "deleted").await?;
         self.galley.delete_session(id.clone(), origin).await?;
         self.session_deleted(&id);
         Ok(())
@@ -474,6 +542,7 @@ impl<'a> Writes<'a> {
     /// Delete the listed sessions; one `session-deleted-external` per
     /// session that existed. Returns that count.
     pub async fn bulk_delete_sessions(&self, ids: Vec<SessionId>, _origin: Origin) -> Result<u32> {
+        let ids = self.spare_main_chat(ids).await?;
         let deleted = self.galley.bulk_delete_session_ids(&ids).await?;
         for id in &deleted {
             self.session_deleted(id);

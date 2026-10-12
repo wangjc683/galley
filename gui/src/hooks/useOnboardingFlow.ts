@@ -1,6 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 
 import { requestExternalAccessExpanded } from "@/components/screens/settings/runtime/external-access-intent";
+import { openMainChat } from "@/lib/main-chat";
 import { switchRuntimeKind } from "@/lib/runtime-mode";
 import type { SetGAConfigOptions } from "@/stores/prefs";
 import type { Screen } from "@/stores/ui";
@@ -164,6 +165,13 @@ export function useOnboardingFlow({
   const handleManagedComplete = () => {
     void (async () => {
       await activateRuntimeKind("managed");
+      // The managed runtime's home is its main chat (主聊天); first use
+      // finds it empty. The empty composer only when Core has none.
+      if (await openMainChat()) {
+        setHealthCheckRevisit(false);
+        setSetupAssistantFromSettings(false);
+        return;
+      }
       returnToMainAfterSetup();
     })();
   };

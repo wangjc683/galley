@@ -1,5 +1,6 @@
 import { copyForLanguage } from "@/lib/i18n";
 import { resolveLanguagePreference } from "@/lib/language";
+import { openMainChat } from "@/lib/main-chat";
 import { BROWSER_CONTROL_READY_TOAST_ID } from "@/stores/browser-control";
 import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
@@ -14,7 +15,8 @@ import type { RuntimeKind } from "@/types/session";
  * to the old runtime, reload the session list for the new one, and
  * confirm with a toast. Settings → 运行环境 and the Setup Assistant
  * both go through here, so the sidebar never keeps showing the other
- * runtime's conversations after a switch.
+ * runtime's conversations after a switch. The managed runtime then lands
+ * on its main chat (主聊天), the external one on the empty composer.
  *
  * No-op when `kind` is already active. First-launch onboarding does not
  * use this — there is nothing to reload or keep, so it writes the pref
@@ -36,6 +38,7 @@ export async function switchRuntimeKind(kind: RuntimeKind): Promise<void> {
   sessions.setActiveSession(undefined);
   useUiStore.getState().setScreen("empty");
   await useSessionsStore.getState().hydrate();
+  if (kind === "managed") await openMainChat();
   const copy = copyForLanguage(
     resolveLanguagePreference(usePrefsStore.getState().languagePreference),
   );

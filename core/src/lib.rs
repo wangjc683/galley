@@ -200,6 +200,8 @@ pub fn run() {
             list_sessions,
             // B3 M4a session writes
             create_session,
+            // The main chat (.scratch/main-chat ticket 02)
+            get_or_create_main_chat,
             archive_session,
             unarchive_session,
             rename_session,

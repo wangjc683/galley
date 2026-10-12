@@ -269,5 +269,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/043_message_session_client.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 44,
+            description: "add sessions.main_chat (the managed runtime's one main chat)",
+            sql: include_str!("../migrations/044_session_main_chat.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

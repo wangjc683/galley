@@ -13,7 +13,9 @@
  *   3. Saved prompts hydrate (Composer convenience state).
  *   4. Managed runtime layout ensure (creates state dirs if missing and
  *      records diagnostics for Settings).
- *   5. Managed model records hydrate (needed for managed-mode routing).
+ *   5. Managed model records hydrate (needed for managed-mode routing),
+ *      then — managed with models — land on the main chat (主聊天)
+ *      instead of the empty new-chat composer.
  *   6. sessionsStore.hydrate (sessions + projects via Rust Core), then
  *      re-attach every runner Core still holds — a no-op on a cold
  *      start, the recovery path after a webview reload.
@@ -43,6 +45,7 @@ import {
 } from "@/lib/db";
 import { copyForLanguage } from "@/lib/i18n";
 import { resolveLanguagePreference } from "@/lib/language";
+import { openMainChat } from "@/lib/main-chat";
 import { applyManagedRuntimeDiagnostics } from "@/lib/managed-runtime-diagnostics";
 import { useAppUpdateStore } from "@/stores/app-update";
 import { useManagedModelsStore } from "@/stores/managed-models";
@@ -95,6 +98,19 @@ export async function hydrateApp(): Promise<void> {
   // 5. Managed models. Startup reads only metadata and local credential
   // presence, never the real API key values.
   const managedConfig = await useManagedModelsStore.getState().load();
+  const activeRuntimeKind = usePrefsStore.getState().activeRuntimeKind;
+
+  // 5b. The managed runtime opens on the main chat (主聊天, ticket 02),
+  // not the empty new-chat composer — unless it still needs onboarding
+  // (no model yet; a failed load keeps the normal screen, see 9). Before
+  // the session list, so the main area switches as the list fills in.
+  // The external runtime has no main chat: nothing changes there.
+  if (
+    activeRuntimeKind === "managed" &&
+    (managedConfig.loadError || managedConfig.models.length > 0)
+  ) {
+    await openMainChat();
+  }
 
   // 6. Startup-critical state: sessions/projects. Route through Rust
   // Core so a slow direct-SQL housekeeping pass cannot leave the
@@ -139,7 +155,6 @@ export async function hydrateApp(): Promise<void> {
   }
 
   // 9. Branch on active runtime config.
-  const activeRuntimeKind = usePrefsStore.getState().activeRuntimeKind;
   if (activeRuntimeKind === "managed" && managedConfig.loadError) {
     // A failed load says nothing about whether models are configured —
     // routing to onboarding here used to throw configured users back to

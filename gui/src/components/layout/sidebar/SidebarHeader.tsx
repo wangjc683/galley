@@ -11,11 +11,16 @@ export function SidebarHeader({
   onOpenScheduled,
   scheduledActionCount,
   onNewProject,
+  onNewSideChat,
+  newSideChatActive,
 }: {
   onSearch?: () => void;
   onOpenScheduled?: () => void;
   scheduledActionCount?: number;
   onNewProject?: () => void;
+  /** Main chat layout A2 (on trial): 新旁聊 as a fourth icon. */
+  onNewSideChat?: () => void;
+  newSideChatActive?: boolean;
 }) {
   // Masthead row (2026-10-03): the "Galley" wordmark left, 搜索 / 定时 /
   // 新建项目 as 28px icons right — the same TopBarIconButton rhythm as
@@ -46,7 +51,9 @@ export function SidebarHeader({
   // (Windows adds the list's scrollbar lane). Narrow widths: once the
   // wordmark and the icons no longer fit (251px on mac, 189 / 179px
   // elsewhere — sidebar-width.ts), the icons drop into the new-chat row
-  // below and this header is the wordmark alone.
+  // below and this header is the wordmark alone. Main chat layout A2
+  // adds 新旁聊 as a fourth icon (283 / 221 / 211px) and, having no
+  // new-chat row, drops the four into a row of their own.
   return (
     <div
       data-tauri-drag-region
@@ -90,6 +97,8 @@ export function SidebarHeader({
         onOpenScheduled={onOpenScheduled}
         scheduledActionCount={scheduledActionCount}
         onNewProject={onNewProject}
+        onNewSideChat={onNewSideChat}
+        newSideChatActive={newSideChatActive}
       />
     </div>
   );
