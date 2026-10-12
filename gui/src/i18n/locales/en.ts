@@ -379,6 +379,24 @@ export const enCopy: AppCopy = {
     desktopPet: "Desktop Pet",
     closeDesktopPet: "Close Desktop Pet",
   },
+  memory: {
+    whatItRemembers: "What it remembers about me",
+    notUsedToLearn: "Don't use to learn about me",
+    excludedSessionTitle: "This conversation won't be read from now on",
+    excludedProjectTitle:
+      "Conversations in this project won't be read from now on",
+    excludedBody: "To delete what's already noted, go to Settings → Memory.",
+    excludeFailed: "Couldn't change “Don't use to learn about me”",
+    askTitle: "Should Galley learn from your conversations?",
+    askBody:
+      "Once a day it reads what you said here and in IM direct messages (never the AI's replies) and has your model provider sort it. What it notes stays on this computer; see it or turn it off anytime in Settings → Memory.",
+    askFromNow: "Start now",
+    askLookBack: "Include earlier conversations",
+    askLookBackTooltip:
+      "The first run reads all your earlier conversations, so it uses more tokens",
+    askDecline: "No thanks",
+    askFailed: "Couldn't save your choice",
+  },
   browserControlAttention: {
     message:
       "Let Galley use your signed-in browser: look things up, fill in forms, work in web dashboards.",
@@ -665,6 +683,7 @@ export const enCopy: AppCopy = {
       general: { label: "General", helper: "通用", title: "General" },
       runtime: { label: "Runtime", helper: "运行环境", title: "Runtime" },
       models: { label: "Models", helper: "模型", title: "Models" },
+      memory: { label: "Memory", helper: "记忆", title: "Memory" },
       agent: { label: "Agent", helper: "智能体接入", title: "Agent" },
       im: { label: "Channels", helper: "Messaging", title: "Channels" },
       phone: { label: "Phone", helper: "Phone", title: "Phone" },
@@ -676,6 +695,106 @@ export const enCopy: AppCopy = {
       shortcuts: { label: "Shortcuts", helper: "快捷键", title: "Shortcuts" },
       feedback: { label: "Feedback", helper: "报告问题" },
       about: { label: "About", helper: "关于" },
+    },
+    memory: {
+      subtitle:
+        "What Galley has noted from your conversations — view it, delete it, or turn it off",
+      switchTitle: "Learn from my conversations",
+      switchDescription:
+        "Once a day, Galley reads what you said on the desktop and in IM direct messages (never the AI's replies) and has your default model sort it, so it passes through your model provider once more. What it notes stays on this computer and carries over when you switch models.",
+      sinceFrom: (time) => `Since ${time}`,
+      sinceEarliest: "From your earliest conversations",
+      running: "Sorting now",
+      lastRun: (time, outcome) => `Last run ${time}, ${outcome}`,
+      outcomeSucceeded: "updated",
+      outcomeEmpty: "nothing new",
+      outcomeFailed: "didn't finish",
+      outcomeRunning: "still going",
+      nextRun: (time) => `Next ${time}`,
+      dayWords: {
+        today: (time) => `today ${time}`,
+        tomorrow: (time) => `tomorrow ${time}`,
+        yesterday: (time) => `yesterday ${time}`,
+      },
+      loadFailed: (detail) => `Couldn't read memory: ${detail}`,
+      retry: "Retry",
+      actionFailed: "Action failed",
+      enableTitle: "Where should it start reading?",
+      enableBody:
+        "Once it's on, Galley sorts through what you said once a day.",
+      enableFromNow: "Start now",
+      enableFromNowDetail: "Only what you say from now on.",
+      enableLookBack: "Include earlier conversations",
+      enableLookBackDetail:
+        "The first run reads all your earlier conversations, so it uses more tokens.",
+      disableTitle: "Stop learning from your conversations?",
+      disableBody: "Once it's off, no new conversations are read.",
+      disableKeep: "Keep what it noted",
+      disableKeepDetail:
+        "What it noted stays on this computer, and you can turn it back on later.",
+      disableClear: "Clear everything",
+      disableClearDetail:
+        "Deletes what it noted and the do-not-record list. Conversations marked “Don't use to learn about me” still aren't read.",
+      ongoingTitle: "Ongoing",
+      endedTitle: "Finished",
+      activitiesRawTitle: "What it noted",
+      emotionsTitle: "Moments of feeling",
+      emotionsUsage:
+        "Used only when it helps get something done; it never comments on your feelings on its own.",
+      forgottenTitle: "Not to be recorded",
+      forgottenNote:
+        "Things you deleted. Galley keeps their titles so it won't record them again. Remove one and it may be recorded again; what you deleted doesn't come back.",
+      exclusionsTitle: "Not used to learn about me",
+      exclusionsNote:
+        "What you say in these conversations and projects isn't read.",
+      globalTitle: "The AI's long-term memory",
+      globalNote:
+        "The AI writes this itself during conversations; the switch above doesn't control it.",
+      lastMentioned: (day) => `Last mentioned ${day}`,
+      conversationCount: (count) =>
+        `${count} ${count === 1 ? "conversation" : "conversations"}`,
+      sources: "Sources",
+      related: (title) => `Related: ${title}`,
+      deletedSession: "Deleted conversation",
+      archivedSuffix: " (archived)",
+      openSession: "Open this conversation",
+      openArchivedSession: "Restore and open this conversation",
+      imSource: (channel, day) => `${channel} · ${day}`,
+      imUnknown: "IM",
+      deleteAria: (title) => `Delete “${title}”`,
+      deleteBusy: "Sorting now; you can delete once it's done",
+      deleteTitle: "Delete this?",
+      deleteEmotionTitle: "Delete this moment?",
+      deleteBody: (title) =>
+        `“${title}” is deleted, and later runs won't record it again.`,
+      deleteConfirm: "Delete",
+      deleteFailedBusy: "Sorting now. Delete it once that's done.",
+      deleteFailedGone: "This one is already gone.",
+      deleteFailed: "Delete failed",
+      unforget: "Remove",
+      deletedAt: (time) => `Deleted ${time}`,
+      restore: "Use again",
+      exclusionSession: "Conversation",
+      exclusionProject: "Project",
+      untitled: "Untitled",
+      emptyOngoing: "Nothing ongoing noted yet.",
+      emptyEnded: "None yet.",
+      emptyEmotions: "None yet.",
+      emptyForgotten: "You haven't deleted anything.",
+      emptyExclusions:
+        "None yet. Choose “Don't use to learn about me” in a conversation's title menu or a project's menu.",
+      rawNote: "Couldn't read the format, so here is the original text.",
+      otherTitle: "Other notes",
+      otherNote: "Other paragraphs written while sorting, as they are.",
+      globalFileMissing: "This file doesn't exist yet; saving creates it.",
+      save: "Save",
+      discard: "Discard changes",
+      changedOnDisk:
+        "This file changed elsewhere — the AI may have just written to it. Reload, then edit again.",
+      reload: "Reload",
+      saveFailed: (detail) => `Couldn't save: ${detail}`,
+      characterCount: (count) =>
+        `${count} ${count === 1 ? "character" : "characters"}`,
     },
     phone: {
       subtitle:

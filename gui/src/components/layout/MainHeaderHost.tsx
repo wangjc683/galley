@@ -4,10 +4,14 @@ import { type ReactNode, useContext } from "react";
 import { GitReviewContext } from "@/lib/git-review";
 import { useActiveRuntime } from "@/hooks/useActiveSession";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
+import { useCopy } from "@/lib/i18n";
 import type { ImSupervisorStatus } from "@/lib/im-supervisor";
+import { titleMenuMemoryItems } from "@/lib/memory-entry";
+import { toggleLedgerExclusion } from "@/lib/memory-exclusion";
 import type { ResolvedTheme } from "@/lib/theme";
 import { useAppUpdateStore } from "@/stores/app-update";
 import { useBrowserControlStore } from "@/stores/browser-control";
+import { useMemoryStore } from "@/stores/memory";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
@@ -93,6 +97,20 @@ export function MainHeaderHost({
   const setPendingPetMigration = useUiStore((s) => s.setPendingPetMigration);
   const restartAppUpdate = useAppUpdateStore((s) => s.restart);
   const appUpdateStatus = useAppUpdateStore((s) => s.status);
+  const memoryCopy = useCopy().memory;
+  const activeSession = useSessionsStore((s) =>
+    s.sessions.find((session) => session.id === s.activeSessionId),
+  );
+  const ledgerSwitch = useMemoryStore((s) => s.ledgerSwitch);
+  const ledgerExclusions = useMemoryStore((s) => s.exclusions);
+  // Ticket 04b: the main chat's menu leads to Settings → Memory; other
+  // managed sessions' menus offer 「不用于了解我」 while the ledger is on.
+  const memoryItems = titleMenuMemoryItems({
+    runtimeKind: activeRuntimeKind,
+    session: sessionTitle ? activeSession : undefined,
+    ledgerSwitch,
+    exclusions: ledgerExclusions,
+  });
 
   // Changes shows only while there is a repository to open (project
   // root or the one last reviewed) — without one the button only led to
@@ -205,6 +223,23 @@ export function MainHeaderHost({
           ? (newTitle) => {
               if (!activeSessionId) return;
               renameSession(activeSessionId, newTitle);
+            }
+          : undefined
+      }
+      onOpenMemory={
+        memoryItems.whatItRemembers ? () => openSettings("memory") : undefined
+      }
+      ledgerExclusion={
+        memoryItems.exclusion && activeSession
+          ? {
+              checked: memoryItems.exclusion.checked,
+              onCheckedChange: (checked) => {
+                void toggleLedgerExclusion(
+                  { kind: "session", id: activeSession.id },
+                  checked,
+                  memoryCopy,
+                );
+              },
             }
           : undefined
       }

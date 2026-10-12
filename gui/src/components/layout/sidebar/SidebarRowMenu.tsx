@@ -82,6 +82,45 @@ export function SidebarRowMenuItem({
   );
 }
 
+/** A check item (role menuitemcheckbox); `indicator` shows while
+ * checked. */
+export function SidebarRowMenuCheckboxItem({
+  kind,
+  checked,
+  onCheckedChange,
+  indicator,
+  children,
+  className,
+}: BaseProps & {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  indicator: ReactNode;
+}) {
+  return kind === "context" ? (
+    <ContextMenu.CheckboxItem
+      checked={checked}
+      onCheckedChange={onCheckedChange}
+      className={className}
+    >
+      {children}
+      <ContextMenu.ItemIndicator className="inline-flex">
+        {indicator}
+      </ContextMenu.ItemIndicator>
+    </ContextMenu.CheckboxItem>
+  ) : (
+    <DropdownMenu.CheckboxItem
+      checked={checked}
+      onCheckedChange={onCheckedChange}
+      className={className}
+    >
+      {children}
+      <DropdownMenu.ItemIndicator className="inline-flex">
+        {indicator}
+      </DropdownMenu.ItemIndicator>
+    </DropdownMenu.CheckboxItem>
+  );
+}
+
 export function SidebarRowMenuSeparator({
   kind,
   className,

@@ -6,6 +6,7 @@ import { SettingsGeneral } from "@/components/screens/settings/SettingsGeneral";
 import { SettingsBrowserControl } from "@/components/screens/settings/SettingsBrowserControl";
 import { SettingsIM } from "@/components/screens/settings/SettingsIM";
 import { SettingsIntegration } from "@/components/screens/settings/SettingsIntegration";
+import { SettingsMemory } from "@/components/screens/settings/SettingsMemory";
 import { SettingsModels } from "@/components/screens/settings/SettingsModels";
 import { SettingsPhone } from "@/components/screens/settings/SettingsPhone";
 import { SettingsRuntime } from "@/components/screens/settings/SettingsRuntime";
@@ -47,6 +48,8 @@ export interface SettingsProps {
   onReRunHealthCheck?: () => void;
   onOpenSetupAssistant?: () => void;
   onRunBrowserControlDemo?: () => void;
+  /** Settings → Memory: open a session a ledger entry cites. */
+  onOpenMemorySession?: (sessionId: string) => void;
   onToggleExternalPython?: (useExternal: boolean) => void;
   onCommitGAPath?: (path: string) => Promise<void>;
   onChangeRuntimeKind?: (kind: RuntimeKind) => void;
@@ -112,6 +115,7 @@ export function Settings({
   onReRunHealthCheck,
   onOpenSetupAssistant,
   onRunBrowserControlDemo,
+  onOpenMemorySession,
   onToggleExternalPython,
   onCommitGAPath,
   onChangeRuntimeKind,
@@ -154,6 +158,14 @@ export function Settings({
   useEffect(() => {
     if (!showBrowserTab && tab === "browser") setTab("runtime");
   }, [setTab, showBrowserTab, tab]);
+
+  // Memory (main chat ticket 04b) has a ledger only on the managed
+  // runtime, and Galley must not read an external GA's memory files.
+  const showMemoryTab = activeRuntimeKind === "managed";
+
+  useEffect(() => {
+    if (!showMemoryTab && tab === "memory") setTab("runtime");
+  }, [setTab, showMemoryTab, tab]);
 
   // Phone (ticket 05d) exists only when Core has remote access (a build
   // that knows a relay URL); `null` / not yet known hides the tab, so a
@@ -214,6 +226,7 @@ export function Settings({
             showImTab={showImTab}
             showBrowserTab={showBrowserTab}
             showPhoneTab={remoteStatus != null}
+            showMemoryTab={showMemoryTab}
           />
 
           {/* The pane owns X legibility, not the button's backdrop: the
@@ -269,6 +282,9 @@ export function Settings({
               )}
               {tab === "models" && (
                 <SettingsModels activeRuntimeKind={activeRuntimeKind} />
+              )}
+              {showMemoryTab && tab === "memory" && (
+                <SettingsMemory onOpenSession={onOpenMemorySession} />
               )}
               {tab === "integration" && <SettingsIntegration />}
               {showImTab && tab === "im" && (

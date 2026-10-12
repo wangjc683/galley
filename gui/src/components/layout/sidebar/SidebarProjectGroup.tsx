@@ -4,7 +4,9 @@ import {
   Archive,
   CaretDown,
   CaretUp,
+  Check,
   DotsThree,
+  EyeSlash,
   Folder,
   FolderOpen,
   Pencil,
@@ -24,11 +26,16 @@ import {
   useSessionsAttention,
 } from "@/hooks/useSessionsAttention";
 import { useCopy } from "@/lib/i18n";
+import { projectMenuExclusion } from "@/lib/memory-entry";
+import { toggleLedgerExclusion } from "@/lib/memory-exclusion";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { cn } from "@/lib/utils";
+import { useMemoryStore } from "@/stores/memory";
+import { usePrefsStore } from "@/stores/prefs";
 import type { Project, Session } from "@/types/session";
 
 import {
+  SidebarRowMenuCheckboxItem,
   SidebarRowMenuContent,
   SidebarRowMenuItem,
   type SidebarRowMenuKind,
@@ -506,6 +513,18 @@ function ProjectMenuItems({
     "flex items-center gap-2 rounded-callout px-2.5 py-1.5 text-[12.5px] text-error outline-none",
     "data-[highlighted]:bg-error/[var(--opacity-soft)] data-[highlighted]:text-error",
   );
+  // 「不用于了解我」 (main chat ticket 04b): managed runtime, ledger on.
+  // Read here rather than threaded down the sidebar — only the menu
+  // needs it.
+  const runtimeKind = usePrefsStore((s) => s.activeRuntimeKind);
+  const ledgerSwitch = useMemoryStore((s) => s.ledgerSwitch);
+  const ledgerExclusions = useMemoryStore((s) => s.exclusions);
+  const exclusion = projectMenuExclusion({
+    runtimeKind,
+    projectId: project.id,
+    ledgerSwitch,
+    exclusions: ledgerExclusions,
+  });
 
   return (
     <>
@@ -559,6 +578,24 @@ function ProjectMenuItems({
           <Archive size={13} weight="thin" />
           {copy.sidebar.archiveProjectSessions}
         </SidebarRowMenuItem>
+      )}
+      {exclusion && (
+        <SidebarRowMenuCheckboxItem
+          kind={kind}
+          checked={exclusion.checked}
+          onCheckedChange={(checked) => {
+            void toggleLedgerExclusion(
+              { kind: "project", id: project.id },
+              checked,
+              copy.memory,
+            );
+          }}
+          indicator={<Check size={12} weight="bold" />}
+          className={itemClass}
+        >
+          <EyeSlash size={13} weight="thin" />
+          <span className="flex-1">{copy.memory.notUsedToLearn}</span>
+        </SidebarRowMenuCheckboxItem>
       )}
       {onDelete && (
         <>

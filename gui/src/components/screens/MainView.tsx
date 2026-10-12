@@ -14,6 +14,11 @@ import {
 } from "@/components/conversation/Conversation";
 import { ConversationSkeleton } from "@/components/conversation/ConversationSkeleton";
 import { GoalPausedTail } from "@/components/conversation/GoalRunMarkers";
+import {
+  MemoryAskCard,
+  MemoryAskStrip,
+} from "@/components/conversation/MemoryAsk";
+import { useMemoryAskTrial } from "@/components/conversation/memory-ask-trial";
 import { StepLimitTail } from "@/components/conversation/StepLimitTail";
 import { liveWindowHasSettledStep, planGoalRuns } from "@/lib/goal-run-groups";
 import { buildRunGroups, liveRunElapsedBaseMs } from "@/lib/run-groups";
@@ -42,10 +47,13 @@ import {
   extractPreamble,
 } from "@/lib/ipc/ga-output-cleaning";
 import { offersBusyChoice } from "@/lib/main-chat";
+import { shouldAskAboutMemory } from "@/lib/memory-entry";
 import { mendStreamingMarkdown } from "@/lib/mend-streaming-markdown";
 import { stepLimitTailVisible } from "@/lib/step-limit";
 import { cn } from "@/lib/utils";
+import { useMemoryStore } from "@/stores/memory";
 import { useMessagesStore } from "@/stores/messages";
+import { usePrefsStore } from "@/stores/prefs";
 import type {
   PendingAskUser,
   PendingImageAttachment,
@@ -243,6 +251,21 @@ function MainViewContent({
     waitingAskUser: !!pendingAskUser,
     hasOpenGoal:
       !!goal || !!sessionGoals?.some((g) => isOpenGoalStatus(g.status)),
+  });
+  // The main chat asks once whether the ledger may read (ticket 04b,
+  // PRD ruling 46). TEMPORARY (ticket 04b trial): form A above the
+  // Composer or B at the timeline's end, and demo mode forcing it.
+  const runtimeKind = usePrefsStore((s) => s.activeRuntimeKind);
+  const ledgerSwitch = useMemoryStore((s) => s.ledgerSwitch);
+  const memoryAskTrial = useMemoryAskTrial();
+  const askMemory = shouldAskAboutMemory({
+    runtimeKind,
+    isMainChat,
+    ledgerSwitch,
+    turns,
+    runOpen: isRunning || isStopping,
+    waitingAskUser: Boolean(pendingAskUser),
+    demo: memoryAskTrial.demo,
   });
 
   // Streaming state, subscribed locally so token churn stays inside
@@ -595,6 +618,11 @@ function MainViewContent({
             )}
             {/* The run paused at GA's step cap; one reply continues it. */}
             {showStepLimitTail && <StepLimitTail />}
+            {/* Ticket 04b trial, form B: the memory ask as a card after
+                the last reply. */}
+            {askMemory && memoryAskTrial.form === "B" && (
+              <MemoryAskCard demo={memoryAskTrial.demo} />
+            )}
           </div>
         </div>
 
@@ -692,6 +720,11 @@ function MainViewContent({
             conversationWidth === "wide" ? "max-w-[1200px]" : "max-w-[760px]",
           )}
         >
+          {/* Ticket 04b trial, form A: the memory ask as a strip above
+              the Composer. */}
+          {askMemory && memoryAskTrial.form === "A" && (
+            <MemoryAskStrip demo={memoryAskTrial.demo} />
+          )}
           <Composer
             ref={composerRef}
             key={activeSessionId ?? "main-composer"}

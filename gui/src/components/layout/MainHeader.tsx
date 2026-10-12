@@ -108,6 +108,14 @@ export interface MainHeaderProps {
    * equally-discoverable rename paths.
    */
   onRenameSession?: (newTitle: string) => void;
+  /** Title menu 「它记得我什么」 → Settings → Memory (the main chat). */
+  onOpenMemory?: () => void;
+  /** Title menu 「不用于了解我」 check item (other managed sessions while
+   * the ledger is on). */
+  ledgerExclusion?: {
+    checked: boolean;
+    onCheckedChange: (checked: boolean) => void;
+  };
   /**
    * The leftmost slot, before the title — the sidebar toggle while
    * there is a main chat (SidebarCollapseToggle, which clears the macOS
@@ -200,6 +208,8 @@ export function MainHeader({
   onTogglePet,
   currentSessionHasPet = false,
   onRenameSession,
+  onOpenMemory,
+  ledgerExclusion,
   leading,
 }: MainHeaderProps) {
   const copy = useCopy();
@@ -277,6 +287,8 @@ export function MainHeader({
             onTogglePet={onTogglePet}
             currentSessionHasPet={currentSessionHasPet}
             onRename={onRenameSession}
+            onOpenMemory={onOpenMemory}
+            ledgerExclusion={ledgerExclusion}
           />
         ) : (
           <span

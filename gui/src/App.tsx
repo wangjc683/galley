@@ -6,6 +6,7 @@ import { MainHeaderHost } from "@/components/layout/MainHeaderHost";
 import { browserControlInviteVisible } from "@/components/layout/header/browser-control-indicator-status";
 import { SidebarCollapseToggle } from "@/components/layout/header/SidebarCollapseToggle";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { MemoryAskSwitcher } from "@/components/conversation/MemoryAskSwitcher";
 import { CommandPalette } from "@/components/overlay/CommandPalette";
 import { ThemeProvider } from "@/components/theme/ThemeContext";
 import { BrowserControlAttentionSurface } from "@/components/screens/BrowserControlAttentionBanner";
@@ -38,6 +39,7 @@ import { useGoalActions } from "@/hooks/useGoalActions";
 import { useGoalEffects } from "@/hooks/useGoalEffects";
 import { useImageBlockedToast } from "@/hooks/useImageBlockedToast";
 import { useLLMDisplay } from "@/hooks/useLLMDisplay";
+import { useMemorySync } from "@/hooks/useMemorySync";
 import { useMessageSend } from "@/hooks/useMessageSend";
 import { useOnboardingFlow } from "@/hooks/useOnboardingFlow";
 import { useProjectNavigation } from "@/hooks/useProjectNavigation";
@@ -250,6 +252,7 @@ function App() {
     screen,
   });
   useBrowserControlLiveStatus(activeRuntimeKind);
+  useMemorySync(activeRuntimeKind);
   useGlobalShortcuts({ setEmptyComposerFocusTick, setSettingsTab });
   useExternalCoreEvents();
   useSessionQueueEvents(activeSessionId ?? null);
@@ -524,6 +527,17 @@ function App() {
     setActiveProjectFilter(undefined);
     void activateSession(id);
     setScreen("main");
+  };
+
+  // Settings → Memory cites the sessions an entry came from (ticket 04b).
+  // An archived one is restored first: the main view only shows
+  // sessions in the list.
+  const openSessionFromMemory = (id: string) => {
+    if (sessions.some((s) => s.id === id && s.status === "archived")) {
+      unarchiveSession(id);
+    }
+    setSettingsOpen(false);
+    openSession(id);
   };
 
   // Onboarding takeover: no AppShell, no overlays besides the dev
@@ -808,6 +822,7 @@ function App() {
           setSettingsOpen(false);
           void runBrowserControlDemo();
         }}
+        onOpenMemorySession={openSessionFromMemory}
       />
 
       <ArchivedDialog
@@ -902,6 +917,10 @@ function App() {
           setEditingProjectId(null);
         }}
       />
+
+      {/* TEMPORARY: the main chat memory-ask trial, form A / B and demo
+          data (ticket 04b; development builds only). */}
+      <MemoryAskSwitcher />
 
       <ToastHost
         toasts={toasts}
