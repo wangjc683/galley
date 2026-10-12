@@ -1,6 +1,6 @@
 # 02（B）主聊天形态
 
-Status: ready-for-agent
+Status: in-review（`034b9169` 本地合入未推送，2026-10-12；待 JC 用切换器真机比 A1 / A2；CLI 归档守卫待裁，见 Comments）
 
 来源：主聊天 PRD 裁决 1、3、12、14、24（2026-10-09、10-12）。
 
@@ -34,3 +34,11 @@ Status: ready-for-agent
 - JC 在 tauri dev 里用切换器比 A1 / A2 并裁决。
 
 ## Comments
+
+2026-10-12 实现回报要点（Opus 子代理，主会话复核门禁：Rust 871 通过、GUI 1033 通过、typecheck / lint / diff check 通过）：
+- 迁移 044：`sessions.main_chat`，CHECK 只允许内置行，部分唯一索引保证最多一条；标题存「主聊天」，自动标题与空会话清扫都不碰它。
+- Core：Tauri 命令 `get_or_create_main_chat`；桌面写路径 `Writes::protecting_main_chat()` 拒绝单条归档 / 删除、批量时跳过；被 CLI 归档的主聊天下次启动自动恢复。
+- 待裁：socket（CLI / supervisor）写路径不拦，agent 仍能 `session archive` 主聊天。选项：(a) 保持；(b) 用现有 `invalid_args` 拒绝（不新增错误标识，但让一个已有命令在 schemaVersion 2 内对一条会话开始失败，不算严格加法）；(c) 等 schemaVersion 3。
+- A2 窄宽回落：四个图标放不下时（mac 283px）落到书眉下单独一行；代价是跨过门槛时主聊天行与列表下移一行。
+- 粗糙处：启动时空白新对话先闪一下再切到主聊天；⌘K、设置快捷键页、空屏标题仍叫「新对话」，A2 胜出后再改名。
+- 切换器移除步骤见子代理回报：删 `main-chat-layout.ts`、`MainChatLayoutSwitcher.tsx`，`App.tsx` 一行，`Sidebar.tsx` 按胜出方收拢，测试去掉 mock。
