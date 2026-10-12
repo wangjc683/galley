@@ -25,7 +25,7 @@ Status: needs-triage
 ## 宪法 Rule 4 补句（草稿，待 JC 定措辞；与本票同版落地）
 
 来源：票 01 落地核对（见 01 的 Comments）：读日志、不进库与 08-13 解释一致，但 IM 归档是 Core 为账本写的、比日志活得久的副本，08-13 的字面盖不住。
-2026-10-12 JC：其余按建议推进，宪法措辞先给他看。草稿（接在 `AGENTS.md` Rule 4 的 08-13 解释之后）：
+2026-10-12 JC：其余几件按建议推进；改宪法照 Rule 2 的先例，措辞先给 JC 过目（主会话的做法，不是 JC 的原话）。草稿（接在 `AGENTS.md` Rule 4 的 08-13 解释之后）：
 
 > Interpretation (2026-10-12): the affairs ledger (managed runtime only, off unless the user turns it on) keeps the user's own words from IM channels — never the agent's replies — under the managed state root's `memory/history_insight/`, so the engine's memory layer can still learn from them after engine logs are pruned. It is the user's memory state, not Galley conversation storage: it never enters Galley's database, the user can see and delete it in Galley, and runtime upgrades never overwrite it.
 
