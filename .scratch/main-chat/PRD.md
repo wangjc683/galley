@@ -91,6 +91,8 @@ README「dense context instead of long」（`README.md:54`）。
 37. （08 后）「其他对话」与下面的置顶 / 项目 / 时间桶归属感不够（JC）。根因：分区头与主对话行包在同一个固定块里，分隔线画在分区头下面；
     分区头文字离主对话约 24px、离第一个子标签约 29px，距离与「一起固定」都把它归给了主对话。真机比 C1（只固定主对话、分区头回列表并吸顶、间距反转）/
     C2（C1 + 子项缩进）/ C3（C1 + 整块底色），票 [09](./issues/09-section-belonging-trial.md)。
+38. （09 真机比后）归属定 C3 + 常显 + 加重：分区头回列表当吸顶第一行、间距反转；整个「其他对话」区铺 `bg-app`，主对话留在 chrome；
+    主对话行下常显一条 `line-strong` 分隔线（JC：`line/60`「几乎看不太到」）。C1、C2（缩进）不要。收尾在本地直接做（`docs/design/layout-and-chrome.md`「有主对话时」）。
 
 ## 事实依据（2026-10-12 核对）
 
@@ -144,7 +146,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [06](./issues/06-subtasks.md) | F | 子任务：父会话、原生派活工具、卡片、定时任务改卡片 | 02 | needs-triage |
 | [07](./issues/07-sidebar-structure-trial.md) | — | 侧栏结构试验：A3 / B / B′ + 演示状态 | 02 | done（JC 定 B′ + 其他对话） |
 | [08](./issues/08-sidebar-finalize.md) | — | 侧栏收尾：B′ 转正、删试验代码、改设计文档 | 07 | done（`a3d7254b`） |
-| [09](./issues/09-section-belonging-trial.md) | — | 「其他对话」归属感试验：C1 / C2 / C3 | 08 | in-review（`c242e9b1`，待真机比） |
+| [09](./issues/09-section-belonging-trial.md) | — | 「其他对话」归属感试验：C1 / C2 / C3 | 08 | done（JC 定 C3 + 常显 + 加重） |
 | [05](./issues/05-proactive-cards.md) | E | 主动提醒卡片 + IM 出口 | 01、06 | needs-triage |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）

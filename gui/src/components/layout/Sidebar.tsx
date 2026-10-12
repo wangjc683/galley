@@ -29,13 +29,6 @@ import {
   SidebarSideChatHeader,
 } from "./sidebar/SidebarSideChats";
 import { SidebarSectionsList } from "./sidebar/SidebarTimeline";
-import {
-  sectionBelongingClasses,
-  sectionDividerBorderClass,
-  useSectionBelonging,
-  useSectionDivider,
-  useSectionDividerWeight,
-} from "./sidebar/section-belonging-trial";
 
 export interface SidebarProps {
   sessions: Session[];
@@ -198,13 +191,6 @@ export function Sidebar({
   // The sectioned sidebar is the main chat's (its collapse lives in
   // AppShell); the external runtime keeps the 新对话 row.
   const sectioned = mainChat !== undefined;
-  // TEMPORARY (ticket 09 trial): C1 / C2 / C3's classes on the section's
-  // wrappers; read only by the sectioned branch below.
-  const belonging = sectionBelongingClasses(useSectionBelonging());
-  const sectionDivider = useSectionDivider();
-  const sectionDividerBorder = sectionDividerBorderClass(
-    useSectionDividerWeight(),
-  );
   // Memoised: building the list walks every session; without memo it
   // re-runs on every Sidebar render, and Sidebar re-renders whenever
   // App does (which can be triggered by lower-frequency state like
@@ -449,21 +435,13 @@ export function Sidebar({
           />
           {/* Only the main-chat row stays put above the list (ticket 09:
               the section header went into the list, to its children).
-              It owns the divider the 新对话 row has — clear at rest,
-              drawn once the list scrolls under it (SidebarQuickActions). */}
-          <div
-            className={cn(
-              "border-b py-1",
-              // TEMPORARY: 「常显」 divider trial (section-belonging-trial.ts).
-              sectionDivider === "always"
-                ? sectionDividerBorder
-                : listScrolled
-                  ? "border-line/70"
-                  : "border-transparent",
-            )}
-          >
-            {mainChatRow}
-          </div>
+              Under it, always, the sidebar's strongest structural line
+              (line-strong): what stays put (masthead, 主对话) sits above
+              it, the scrolling 其他对话 block below. The 10-08 "no line
+              at rest" rule kept the 新对话 row joined to the list it
+              heads; the 主对话 row heads nothing, so here the line is
+              the point (JC, 2026-10-12: C3 + 常显 + 加重). */}
+          <div className="border-b border-line-strong py-1">{mainChatRow}</div>
         </>
       ) : (
         <SidebarQuickActions
@@ -488,8 +466,13 @@ export function Sidebar({
         )}
       >
         {sectioned ? (
-          // One section: the header and everything under it (ticket 09).
-          <div data-sidebar-section="" className={belonging.section}>
+          // One section: the header and everything under it, on the app
+          // ground (ticket 09, C3) while the main-chat row stays on
+          // chrome. `app` is the one ground on the far side of chrome
+          // from the sidebar's hover / selected fills in both themes, so
+          // both separate more on it, not less. pb-2: the block's last
+          // row doesn't sit on its bottom edge.
+          <div data-sidebar-section="" className="bg-app pb-2">
             {/* The header sticks to the list's top, opaque and above the
                 rows (their ⋯ / + overlays are z-10), so its + never
                 scrolls away. pt-3 + the main-chat block's pb-1 and border
@@ -498,13 +481,13 @@ export function Sidebar({
                 row's pt-1, the hint's py-2): the space says whose it is. */}
             <div
               data-sidebar-section-header=""
-              className={cn("sticky top-0 z-20 pt-3", belonging.header)}
+              className="sticky top-0 z-20 bg-app pt-3"
             >
               <SidebarSideChatHeader onNewChat={onNewChat} />
             </div>
             {/* SidebarTimeline's labels and 其他来源 key their first-child
                 spacing on this attribute. */}
-            <div data-sidebar-section-body="" className={belonging.body}>
+            <div data-sidebar-section-body="">
               {newChatActive && <SidebarNewSideChatRow onClick={onNewChat} />}
               {!hasHumanChats && <SidebarSideChatEmptyHint />}
               {/* Empty, the section's line above already says it. */}
