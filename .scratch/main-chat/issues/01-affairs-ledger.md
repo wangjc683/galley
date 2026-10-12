@@ -1,6 +1,6 @@
 # 01（A）事项账本后台挖掘
 
-Status: ready-for-agent（2026-10-12 JC 按建议推进：只读人说的话、只归档 IM、起点日期 + 排除标记、合成语料验收；挖掘用当前模型）
+Status: in-review（`82e1d674` 本地合入未推送，2026-10-12；默认关闭，`GALLEY_LEDGER_SINCE` 未设时不运行；待：JC 过目语料剧本、跑一次真模型评测、02 上线后在本机启用；对外前 Rule 4 补一句，见 Comments）
 
 来源：主聊天 PRD 裁决 17、19、22、27（2026-10-12）。
 
@@ -67,3 +67,15 @@ Status: ready-for-agent（2026-10-12 JC 按建议推进：只读人说的话、�
 5. 账本产物（模型写在 `history_insight/` 的条目，含情绪事件）将由 04 页面展示，属于「product surfaces」。
 
 结论：读日志、不进库两点与 08-13 解释一致；IM 归档与账本产物是 08-13 字面之外的新情形。建议对外发版（与 04 同版）前在 Rule 4 补一句解释，例如「事项账本在内置状态里保存用户本人在 IM 里说过的话（`memory/history_insight/`），作为引擎记忆层的一部分，是用户状态，不进 Galley 数据库」。改宪法由 JC 定，本票没有动 `AGENTS.md`。
+
+### 2026-10-12 实现回报要点（主会话复核：rebase 到 02 之后 Rust 905 通过、GUI 1033 通过、typecheck / lint / diff check、评测 selftest 通过）
+
+- 排除标记是独立表 `ledger_exclusions`（迁移 045），会话或项目二选一，删除随之级联；项目标记覆盖项目内全部会话。
+- 来源：消息与会话两级都要 `created_via = 'gui'`，所以 CLI 往人的会话里 `session send` 的话也不读。
+- 每天 04:00 之后到期一次，错过当天任意时刻补跑；失败当天不重试；`run_ledger_now` 可手动触发。
+- 挖掘会话：来源 `system`、supervisor `galley-ledger`，不广播创建事件；GUI 列表与手机端都过滤掉；跑完关 runner 并归档。运行中退出 Galley 会提示有任务在跑；CLI `--all` 看得到每天一行归档。
+- 位置只在干净完成（无致命错误、无 ask_user、无漏事件）后前移；失败则下批重做。
+- 任务提示词多了一条：不许调用 `start_long_term_update`、不许改全局记忆（否则挖掘结果会经全局记忆注入所有会话，违背本票「不注入任何会话」）。
+- IM 已知缺口：群聊与私聊分不开；文本协议里带图的 IM 消息漏掉。
+- 改起点日期不会回读更早的历史，「回溯」随 04 做。
+- 评测：`python3 .scratch/main-chat/ledger-eval/run_eval.py run --mykey <mykey.py> --ga-python <python>`，直接跑引擎、不经 Galley 的运行时提示词与模型配置；模型那一步尚未跑过。

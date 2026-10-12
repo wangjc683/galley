@@ -118,7 +118,7 @@ README「dense context instead of long」（`README.md:54`）。
 
 | 票 | 讨论中的代号 | 内容 | 依赖 | 状态 |
 |---|---|---|---|---|
-| [01](./issues/01-affairs-ledger.md) | A | 事项账本后台挖掘 | — | 开工中（2026-10-12） |
+| [01](./issues/01-affairs-ledger.md) | A | 事项账本后台挖掘 | — | in-review（`82e1d674`，默认关闭，待语料评测） |
 | [02](./issues/02-main-chat-form.md) | B | 主聊天形态 + A1 / A2 切换器 + 排队 / 开旁聊 | — | in-review（`034b9169`，待真机比） |
 | [03](./issues/03-segments-and-injection.md) | C | 切段、注入、入口层提示词 | 01、02 | needs-triage |
 | [04](./issues/04-what-it-remembers-page.md) | D | 「它记得我什么」页面 | 01 | needs-triage |
