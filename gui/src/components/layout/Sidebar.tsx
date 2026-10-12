@@ -32,6 +32,7 @@ import { SidebarSectionsList } from "./sidebar/SidebarTimeline";
 import {
   sectionBelongingClasses,
   useSectionBelonging,
+  useSectionDivider,
 } from "./sidebar/section-belonging-trial";
 
 export interface SidebarProps {
@@ -198,6 +199,7 @@ export function Sidebar({
   // TEMPORARY (ticket 09 trial): C1 / C2 / C3's classes on the section's
   // wrappers; read only by the sectioned branch below.
   const belonging = sectionBelongingClasses(useSectionBelonging());
+  const sectionDivider = useSectionDivider();
   // Memoised: building the list walks every session; without memo it
   // re-runs on every Sidebar render, and Sidebar re-renders whenever
   // App does (which can be triggered by lower-frequency state like
@@ -447,7 +449,12 @@ export function Sidebar({
           <div
             className={cn(
               "border-b py-1",
-              listScrolled ? "border-line/70" : "border-transparent",
+              // TEMPORARY: 「常显」 divider trial (section-belonging-trial.ts).
+              sectionDivider === "always"
+                ? "border-line/60"
+                : listScrolled
+                  ? "border-line/70"
+                  : "border-transparent",
             )}
           >
             {mainChatRow}

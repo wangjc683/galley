@@ -101,6 +101,54 @@ export function useSectionBelonging(): SectionBelonging {
   return useSectionBelongingStore((s) => s.belonging);
 }
 
+/**
+ * The divider under the 主对话 row (JC, 2026-10-12, on top of C1 / C2 /
+ * C3): 「滚动」 keeps the 10-08 rule — clear at rest, drawn once the list
+ * scrolls; 「常显」 draws it always, in the masthead's own `border-line/60`,
+ * so everything fixed (masthead, 主对话) sits above a line and everything
+ * that scrolls (the 其他对话 block) below it. The 10-08 rule left the line
+ * out because the 新对话 row headed the list it would have fenced off;
+ * the 主对话 row heads nothing, so that reason does not hold here.
+ */
+export type SectionDivider = "scroll" | "always";
+
+export const SECTION_DIVIDERS: readonly SectionDivider[] = ["scroll", "always"];
+
+const DIVIDER_STORAGE_KEY = "galley.tmp.sectionDivider";
+const DEFAULT_DIVIDER: SectionDivider = "always";
+
+function readStoredDivider(): SectionDivider {
+  try {
+    const stored = window.localStorage.getItem(DIVIDER_STORAGE_KEY);
+    return (
+      SECTION_DIVIDERS.find((option) => option === stored) ?? DEFAULT_DIVIDER
+    );
+  } catch {
+    return DEFAULT_DIVIDER;
+  }
+}
+
+interface SectionDividerState {
+  divider: SectionDivider;
+  setDivider: (divider: SectionDivider) => void;
+}
+
+export const useSectionDividerStore = create<SectionDividerState>((set) => ({
+  divider: readStoredDivider(),
+  setDivider: (divider) => {
+    try {
+      window.localStorage.setItem(DIVIDER_STORAGE_KEY, divider);
+    } catch {
+      // Not remembered across reloads; the switch itself still works.
+    }
+    set({ divider });
+  },
+}));
+
+export function useSectionDivider(): SectionDivider {
+  return useSectionDividerStore((s) => s.divider);
+}
+
 /** The classes each variant puts on the sectioned list's three
  * wrappers (Sidebar.tsx): the section (header + children), the sticky
  * header's wrapper (its ground: it must be opaque, rows slide under

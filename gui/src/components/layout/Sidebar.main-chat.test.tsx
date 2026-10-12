@@ -35,10 +35,17 @@ vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
 const belonging = vi.hoisted(() => ({
   current: "C1" as "C1" | "C2" | "C3",
 }));
+const divider = vi.hoisted(() => ({
+  current: "scroll" as "scroll" | "always",
+}));
 vi.mock("./sidebar/section-belonging-trial", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("./sidebar/section-belonging-trial")>();
-  return { ...actual, useSectionBelonging: () => belonging.current };
+  return {
+    ...actual,
+    useSectionBelonging: () => belonging.current,
+    useSectionDivider: () => divider.current,
+  };
 });
 
 const minutesAgo = (minutes: number) =>
@@ -279,6 +286,18 @@ describe("with a main chat: the sectioned sidebar", () => {
 });
 
 describe("the section's belonging (ticket 09)", () => {
+  it("「常显」 draws the divider under the main-chat row at rest, in the masthead's line", () => {
+    divider.current = "always";
+    try {
+      const html = render([mainChat, sideChat]);
+      const block = html.lastIndexOf("border-b py-1", at(html, "s-main"));
+      expect(block).toBeGreaterThan(-1);
+      expect(html.slice(block, at(html, "s-main"))).toContain("border-line/60");
+    } finally {
+      divider.current = "scroll";
+    }
+  });
+
   it("C1: pins only the main-chat row; the section header heads the scrolling list and sticks", () => {
     const html = render([mainChat, sideChat]);
     const list = html.indexOf(SCROLL_LIST);
