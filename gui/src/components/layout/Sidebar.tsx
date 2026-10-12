@@ -29,6 +29,10 @@ import {
   SidebarSideChatHeader,
 } from "./sidebar/SidebarSideChats";
 import { SidebarSectionsList } from "./sidebar/SidebarTimeline";
+import {
+  sectionBelongingClasses,
+  useSectionBelonging,
+} from "./sidebar/section-belonging-trial";
 
 export interface SidebarProps {
   sessions: Session[];
@@ -131,11 +135,13 @@ export interface SidebarProps {
  * archived sessions exist.
  *
  * With a main chat (主对话, managed runtime only; main chat tickets 02 /
- * 07 / 08, PRD rulings 30–36) the sidebar is sectioned: the main chat's
- * row stands on its own above the list, outside the scroll, and is the
- * home (full ink even when another row is selected) — never in 置顶 /
- * 项目 / a time bucket. Under it the 「其他对话」 section header carries
- * the new-chat + (sidebar/SidebarSideChats.tsx); the list below holds
+ * 07 / 08 / 09, PRD rulings 30–37) the sidebar is sectioned: the main
+ * chat's row stands on its own above the list, outside the scroll, and
+ * is the home (full ink even when another row is selected) — never in
+ * 置顶 / 项目 / a time bucket. The list under it is one section: its
+ * 「其他对话」 header, carrying the new-chat + (sidebar/SidebarSideChats.tsx),
+ * is the list's first element and sticks to its top, so it scrolls with
+ * its children and its + never leaves (ticket 09); the section holds
  * what a person started, and agent-started sessions outside projects
  * fold into 「其他来源 N」. The whole sidebar can collapse (AppShell,
  * header/SidebarCollapseToggle.tsx).
@@ -189,6 +195,9 @@ export function Sidebar({
   // The sectioned sidebar is the main chat's (its collapse lives in
   // AppShell); the external runtime keeps the 新对话 row.
   const sectioned = mainChat !== undefined;
+  // TEMPORARY (ticket 09 trial): C1 / C2 / C3's classes on the section's
+  // wrappers; read only by the sectioned branch below.
+  const belonging = sectionBelongingClasses(useSectionBelonging());
   // Memoised: building the list walks every session; without memo it
   // re-runs on every Sidebar render, and Sidebar re-renders whenever
   // App does (which can be triggered by lower-frequency state like
@@ -320,10 +329,16 @@ export function Sidebar({
     if (!container || !row || row.closest("[data-collapsed-drawer]")) return;
     const rowRect = row.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
-    if (
-      rowRect.top >= containerRect.top &&
-      rowRect.bottom <= containerRect.bottom
-    ) {
+    // Sectioned, the sticky section header covers the list's top: a row
+    // under it is not in view (the container's scroll-pt clears it for
+    // scrollIntoView).
+    const sectionHeader = container.querySelector<HTMLElement>(
+      "[data-sidebar-section-header]",
+    );
+    const visibleTop = sectionHeader
+      ? sectionHeader.getBoundingClientRect().bottom
+      : containerRect.top;
+    if (rowRect.top >= visibleTop && rowRect.bottom <= containerRect.bottom) {
       return;
     }
     row.scrollIntoView({ block: "nearest", behavior: "instant" });
@@ -385,6 +400,27 @@ export function Sidebar({
     />
   ) : null;
 
+  const sectionsList = (
+    <SidebarSectionsList
+      sections={sections}
+      projectsCollapsed={projectsCollapsed}
+      onToggleProjectsCollapsed={() => setProjectsCollapsed(!projectsCollapsed)}
+      othersOpen={othersOpen}
+      onToggleOthers={() => setOthersOpen((open) => !open)}
+      onOpenEarlier={onOpenEarlier}
+      otherSourcesSlot={
+        <SidebarOtherSources
+          sessions={sections.otherSources}
+          expanded={otherSourcesOpen}
+          onToggleExpanded={() => setOtherSourcesOpen((open) => !open)}
+          {...rowWiring}
+        />
+      }
+      groupWiring={groupWiring}
+      {...rowWiring}
+    />
+  );
+
   return (
     // @container/sidebar: the width SidebarHeader and the new-chat row
     // both query to decide where 搜索 / 定时 / 项目 go
@@ -404,20 +440,17 @@ export function Sidebar({
             scheduledActionCount={scheduledActionCount}
             onNewProject={onNewProject}
           />
-          {/* The main-chat row and the section header stay put above
-              the list, and own the divider the 新对话 row has — clear at
-              rest, drawn once the list scrolls under them
-              (SidebarQuickActions). */}
+          {/* Only the main-chat row stays put above the list (ticket 09:
+              the section header went into the list, to its children).
+              It owns the divider the 新对话 row has — clear at rest,
+              drawn once the list scrolls under it (SidebarQuickActions). */}
           <div
             className={cn(
-              "border-b pb-1",
+              "border-b py-1",
               listScrolled ? "border-line/70" : "border-transparent",
             )}
           >
-            <div className="pt-1">{mainChatRow}</div>
-            <div className="pt-2">
-              <SidebarSideChatHeader onNewChat={onNewChat} />
-            </div>
+            {mainChatRow}
           </div>
         </>
       ) : (
@@ -435,40 +468,43 @@ export function Sidebar({
       <div
         ref={scrollContainerRef}
         onScroll={(e) => setListScrolled(e.currentTarget.scrollTop > 0)}
-        className="scrollbar-stable min-h-0 flex-1 overflow-y-auto pb-2"
-      >
-        {sectioned && newChatActive && (
-          <SidebarNewSideChatRow onClick={onNewChat} />
+        className={cn(
+          "scrollbar-stable min-h-0 flex-1 overflow-y-auto pb-2",
+          // scrollIntoView clears the sticky section header (44px:
+          // pt-3 + the header's h-8).
+          sectioned && "scroll-pt-11",
         )}
-        {sectioned && !hasHumanChats && <SidebarSideChatEmptyHint />}
-        {listEmpty ? (
-          // Sectioned, the section's line above already says it.
-          sectioned ? null : (
-            <div className="px-5 py-6 text-[12.5px] italic text-ink-muted">
-              {copy.sidebar.emptySessions}
+      >
+        {sectioned ? (
+          // One section: the header and everything under it (ticket 09).
+          <div data-sidebar-section="" className={belonging.section}>
+            {/* The header sticks to the list's top, opaque and above the
+                rows (their ⋯ / + overlays are z-10), so its + never
+                scrolls away. pt-3 + the main-chat block's pb-1 and border
+                = 17px over the header; to its first child it is 4–8px
+                (the first-child rules on the labels, the placeholder
+                row's pt-1, the hint's py-2): the space says whose it is. */}
+            <div
+              data-sidebar-section-header=""
+              className={cn("sticky top-0 z-20 pt-3", belonging.header)}
+            >
+              <SidebarSideChatHeader onNewChat={onNewChat} />
             </div>
-          )
+            {/* SidebarTimeline's labels and 其他来源 key their first-child
+                spacing on this attribute. */}
+            <div data-sidebar-section-body="" className={belonging.body}>
+              {newChatActive && <SidebarNewSideChatRow onClick={onNewChat} />}
+              {!hasHumanChats && <SidebarSideChatEmptyHint />}
+              {/* Empty, the section's line above already says it. */}
+              {!listEmpty && sectionsList}
+            </div>
+          </div>
+        ) : listEmpty ? (
+          <div className="px-5 py-6 text-[12.5px] italic text-ink-muted">
+            {copy.sidebar.emptySessions}
+          </div>
         ) : (
-          <SidebarSectionsList
-            sections={sections}
-            projectsCollapsed={projectsCollapsed}
-            onToggleProjectsCollapsed={() =>
-              setProjectsCollapsed(!projectsCollapsed)
-            }
-            othersOpen={othersOpen}
-            onToggleOthers={() => setOthersOpen((open) => !open)}
-            onOpenEarlier={onOpenEarlier}
-            otherSourcesSlot={
-              <SidebarOtherSources
-                sessions={sections.otherSources}
-                expanded={otherSourcesOpen}
-                onToggleExpanded={() => setOtherSourcesOpen((open) => !open)}
-                {...rowWiring}
-              />
-            }
-            groupWiring={groupWiring}
-            {...rowWiring}
-          />
+          sectionsList
         )}
       </div>
 

@@ -35,8 +35,10 @@ import type { SidebarTimelineRowWiring } from "./SidebarTimelineRow";
  * section is a container, the buckets are its scale. The label sits on
  * the rows' 18px edge; the + is the rows' 28px `⋯` button in the `⋯`
  * column (and the masthead's 新建项目 column above it). The header itself
- * does nothing: no click, no fold. It stays above the scrolling list
- * with the main-chat row, so the new-chat + never scrolls away.
+ * does nothing: no click, no fold. It is the scrolling list's first
+ * element and sticks to its top (Sidebar.tsx, ticket 09: it went from
+ * the main chat's pinned block to its children), so the new-chat +
+ * never scrolls away.
  */
 export function SidebarSideChatHeader({
   onNewChat,
@@ -160,9 +162,11 @@ export function SidebarOtherSources({
     updatedAt: newest,
   };
   // pt-2: the 更早 entry's gap — the row closes the time buckets, it
-  // is not the last bucket's last session.
+  // is not the last bucket's last session. First under the header
+  // (nothing a person started is listed above it), the placeholder
+  // row's pt-1 (ticket 09).
   return (
-    <div className="pt-2">
+    <div className="pt-2 [[data-sidebar-section-body]>&:first-child]:pt-1">
       <SidebarProjectGroup
         project={group}
         groupIcon={OTHER_SOURCES_ICON}

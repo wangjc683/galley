@@ -334,9 +334,11 @@ function SidebarCollapsibleSectionLabel({
   onToggle: () => void;
 }) {
   // pt-2 + py-1.5 = the plain label's pt-3.5 / pb-1.5, with the hover
-  // fill hugging the text the way the 更早 entry's does.
+  // fill hugging the text the way the 更早 entry's does. First under the
+  // 「其他对话」 header (Sidebar.tsx, ticket 09) the pt-2 goes: 6px to
+  // the text, as the plain label's pt-1.5 there.
   return (
-    <div className="pt-2">
+    <div className="pt-2 [[data-sidebar-section-body]>&:first-child]:pt-0">
       <button
         type="button"
         onClick={onToggle}
@@ -378,8 +380,11 @@ export function SidebarSectionLabel({
   // mx-1.5 + px-3 puts the label on the session rows' grid (2026-10-08):
   // it starts on the 18px status-icon edge and the count ends on the
   // 18px text edge, under the new-chat row's ⌘N. It was px-4 (16px).
+  // Directly under the sectioned sidebar's 「其他对话」 header (ticket 09)
+  // pt-3.5 drops to pt-1.5: the header is what it belongs to, so the
+  // gap is the small one. The attribute exists only there.
   return (
-    <div className="mx-1.5 flex items-center gap-1.5 px-3 pb-1.5 pt-3.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+    <div className="mx-1.5 flex items-center gap-1.5 px-3 pb-1.5 pt-3.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted [[data-sidebar-section-body]>&:first-child]:pt-1.5">
       <span className="min-w-0 flex-1 truncate">{children}</span>
       {count != null && (
         <span className="shrink-0 tabular-nums normal-case tracking-normal text-ink-muted">

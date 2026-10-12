@@ -6,6 +6,7 @@ import { MainHeaderHost } from "@/components/layout/MainHeaderHost";
 import { browserControlInviteVisible } from "@/components/layout/header/browser-control-indicator-status";
 import { SidebarCollapseToggle } from "@/components/layout/header/SidebarCollapseToggle";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { SectionBelongingSwitcher } from "@/components/layout/sidebar/SectionBelongingSwitcher";
 import { CommandPalette } from "@/components/overlay/CommandPalette";
 import { ThemeProvider } from "@/components/theme/ThemeContext";
 import { BrowserControlAttentionSurface } from "@/components/screens/BrowserControlAttentionBanner";
@@ -902,6 +903,10 @@ function App() {
           setEditingProjectId(null);
         }}
       />
+
+      {/* TEMPORARY: the C1 / C2 / C3 section-belonging trial (main chat
+          ticket 09). */}
+      <SectionBelongingSwitcher />
 
       <ToastHost
         toasts={toasts}

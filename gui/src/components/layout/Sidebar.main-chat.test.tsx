@@ -30,6 +30,17 @@ vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
   };
 });
 
+// TEMPORARY (ticket 09 trial): the section-belonging variant, fed past
+// the localStorage-backed store.
+const belonging = vi.hoisted(() => ({
+  current: "C1" as "C1" | "C2" | "C3",
+}));
+vi.mock("./sidebar/section-belonging-trial", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./sidebar/section-belonging-trial")>();
+  return { ...actual, useSectionBelonging: () => belonging.current };
+});
+
 const minutesAgo = (minutes: number) =>
   new Date(Date.now() - minutes * 60_000).toISOString();
 
@@ -108,7 +119,23 @@ const HINT = "另开一个对话聊一件事，主对话不受打扰。";
 
 afterEach(() => {
   needsYou.clear();
+  belonging.current = "C1";
 });
+
+/** The opening tag of the element carrying `needle`. */
+const tagWith = (html: string, needle: string) => {
+  const i = html.indexOf(needle);
+  return html.slice(html.lastIndexOf("<", i), html.indexOf(">", i) + 1);
+};
+/** The opening tag right after the element carrying `needle` opens: its
+ * first child. */
+const firstChildOf = (html: string, needle: string) => {
+  const i = html.indexOf(">", html.indexOf(needle)) + 1;
+  return html.slice(i, html.indexOf(">", i) + 1);
+};
+const SCROLL_LIST = "overflow-y-auto";
+const SECTION_HEADER = "data-sidebar-section-header";
+const SECTION_BODY = "data-sidebar-section-body";
 
 describe("the main chat's row", () => {
   it("stands on its own: once, as 主对话, never in a time bucket", () => {
@@ -248,6 +275,84 @@ describe("with a main chat: the sectioned sidebar", () => {
     expect(html).toContain(
       "Give one thing its own chat. The main chat stays uncluttered.",
     );
+  });
+});
+
+describe("the section's belonging (ticket 09)", () => {
+  it("C1: pins only the main-chat row; the section header heads the scrolling list and sticks", () => {
+    const html = render([mainChat, sideChat]);
+    const list = html.indexOf(SCROLL_LIST);
+    // The main-chat row is outside the scroll container, in the block
+    // that owns the scroll-linked divider (clear at rest).
+    expect(at(html, "s-main")).toBeLessThan(list);
+    const block = html.lastIndexOf("border-b py-1", at(html, "s-main"));
+    expect(block).toBeGreaterThan(-1);
+    expect(html.slice(block, at(html, "s-main"))).toContain(
+      "border-transparent",
+    );
+    // The header is inside it, first, sticky, opaque and above the rows.
+    const header = html.indexOf(SECTION_HEADER);
+    expect(header).toBeGreaterThan(list);
+    expect(firstChildOf(html, SCROLL_LIST)).toContain("data-sidebar-section");
+    expect(html.indexOf(SECTION)).toBeGreaterThan(header);
+    expect(html.indexOf(SECTION)).toBeLessThan(at(html, "s-side"));
+    const headerTag = tagWith(html, SECTION_HEADER);
+    expect(headerTag).toContain("sticky top-0 z-20");
+    expect(headerTag).toContain("bg-chrome");
+    // scrollIntoView clears it.
+    expect(tagWith(html, SCROLL_LIST)).toContain("scroll-pt-11");
+    // The first label under it opens on the small gap.
+    expect(firstChildOf(html, SECTION_BODY)).toContain(
+      "[[data-sidebar-section-body]&gt;&amp;:first-child]:pt-1.5",
+    );
+    // The placeholder row and the empty hint sit under the header.
+    const composing = render([mainChat, sideChat], { newChatActive: true });
+    expect(firstChildOf(composing, SECTION_BODY)).toContain('class="pt-1"');
+    const empty = render([mainChat]);
+    expect(empty.indexOf(HINT)).toBeGreaterThan(empty.indexOf(SECTION_BODY));
+  });
+
+  it("C2: indents everything under the header, not the header", () => {
+    belonging.current = "C2";
+    const html = render([mainChat, sideChat]);
+    expect(tagWith(html, SECTION_BODY)).toContain('class="pl-2"');
+    expect(tagWith(html, SECTION_HEADER)).not.toContain("pl-2");
+    belonging.current = "C1";
+    expect(tagWith(render([mainChat, sideChat]), SECTION_BODY)).toContain(
+      'class=""',
+    );
+  });
+
+  it("C3: lays the section, header included, on its own ground; the main chat stays on chrome", () => {
+    belonging.current = "C3";
+    const html = render([mainChat, sideChat]);
+    const section = tagWith(html, 'data-sidebar-section=""');
+    expect(section).toContain("bg-app");
+    const headerTag = tagWith(html, SECTION_HEADER);
+    expect(headerTag).toContain("bg-app");
+    expect(headerTag).not.toContain("bg-chrome");
+    expect(at(html, "s-main")).toBeLessThan(html.indexOf(section));
+    belonging.current = "C1";
+    expect(
+      tagWith(render([mainChat, sideChat]), 'data-sidebar-section=""'),
+    ).not.toContain("bg-app");
+  });
+
+  it("leaves the external runtime's sidebar alone in every variant", () => {
+    const today = render([sideChat, cliChat], { newChatActive: true });
+    // No section wrappers (the labels' first-child class names the
+    // attribute but needs it on a parent to match).
+    for (const attr of ["section", "section-header", "section-body"]) {
+      expect(today).not.toContain(`data-sidebar-${attr}=""`);
+    }
+    expect(today).not.toContain("sticky");
+    expect(tagWith(today, SCROLL_LIST)).toContain(
+      'class="scrollbar-stable min-h-0 flex-1 overflow-y-auto pb-2"',
+    );
+    for (const variant of ["C2", "C3"] as const) {
+      belonging.current = variant;
+      expect(render([sideChat, cliChat], { newChatActive: true })).toBe(today);
+    }
   });
 });
 
