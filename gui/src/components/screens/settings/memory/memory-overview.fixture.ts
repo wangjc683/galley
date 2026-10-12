@@ -1,8 +1,8 @@
 import type { MemoryOverview } from "@/lib/memory";
 
 /**
- * A filled-in Settings → Memory, for tests and for the dev-only 「演示数据」
- * trial (components/conversation/memory-ask-trial.ts). Hand-converted
+ * A filled-in Settings → Memory, for the page's tests (it also fed the
+ * ticket 04b trial's 「演示数据」, removed with 04c). Hand-converted
  * into the 04 interface shape from the ledger eval's output
  * (`galley-ledger-eval-sanafxuv/…/history_insight/activities.md` and
  * `emotional_events.md`): the user is 林晓, a made-up person in a

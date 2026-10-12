@@ -404,8 +404,27 @@ where
     }
 }
 
+/// The first [`RUN_AT`] after `now`: today's while it is still before
+/// four in the morning, tomorrow's from four on. Where the ledger turned
+/// on by default holds its first run back to
+/// ([`super::LedgerSwitch::on_by_default`], ticket 04c).
+pub fn next_daily_run_time<Tz: TimeZone>(now: DateTime<Utc>, tz: &Tz) -> DateTime<Utc>
+where
+    Tz::Offset: Display,
+{
+    let local = now.with_timezone(tz).naive_local();
+    let today = local.date();
+    if local.time() < RUN_AT {
+        local_instant(tz, today.and_time(RUN_AT))
+    } else {
+        let tomorrow = today.succ_opt().expect("not the end of time");
+        local_instant(tz, tomorrow.and_time(RUN_AT))
+    }
+}
+
 /// When the resident tick will next run (at or after `now`): the daily
-/// schedule, or `state.dueAt` when that is earlier.
+/// schedule, or `state.dueAt` when that is earlier — and never before
+/// the switch's `notBefore` (ticket 04c).
 pub fn next_run_at<Tz: TimeZone>(
     state: &LedgerState,
     config: &LedgerConfig,
@@ -419,6 +438,10 @@ where
     let next = match state.due_at.as_deref().and_then(parse_instant) {
         Some(due) => due.min(daily),
         None => daily,
+    };
+    let next = match config.not_before {
+        Some(not_before) => next.max(not_before),
+        None => next,
     };
     next.max(now)
 }
@@ -838,6 +861,7 @@ async fn wind_down(deps: &MiningDeps<'_>, session_id: &str) {
 mod tests {
     use super::*;
     use crate::ipc::{AskUserEvent, ErrorEvent, RunCompleteEvent};
+    use crate::ledger::LedgerSwitch;
     use serde_json::json;
 
     fn complete(result: &str) -> BroadcastItem {
@@ -962,6 +986,63 @@ mod tests {
         LedgerConfig {
             since: at(s),
             look_back: false,
+            not_before: None,
+        }
+    }
+
+    /// Ticket 04c: the main chat turned it on by default, reading every
+    /// earlier conversation — the epoch `since` alone would make it due
+    /// at once after four. The first run waits for the next 04:00, then
+    /// the daily rule applies as before (a Mac asleep at four runs on
+    /// waking).
+    #[test]
+    fn on_by_default_runs_first_at_the_next_four_oclock() {
+        let state = LedgerState::default();
+        let tz = shanghai();
+        // Created after four: tomorrow's 04:00.
+        let LedgerSwitch::On(after) = LedgerSwitch::on_by_default(at("2026-10-12 10:30"), &tz)
+        else {
+            panic!("on")
+        };
+        assert!(!due(&state, &after, at("2026-10-12 10:31"), &tz));
+        assert!(!due(&state, &after, at("2026-10-12 23:59"), &tz));
+        assert!(!due(&state, &after, at("2026-10-13 03:59"), &tz));
+        assert!(due(&state, &after, at("2026-10-13 04:00"), &tz));
+        assert!(due(&state, &after, at("2026-10-13 09:30"), &tz));
+        assert_eq!(
+            next_run_at(&state, &after, at("2026-10-12 10:31"), &tz),
+            at("2026-10-13 04:00")
+        );
+        // A `dueAt` (the page's "look back") cannot bring it forward.
+        let early = LedgerState {
+            due_at: Some(at("2026-10-12 10:40").to_rfc3339()),
+            ..LedgerState::default()
+        };
+        assert!(!due(&early, &after, at("2026-10-12 10:41"), &tz));
+        // Created before four: today's 04:00.
+        let LedgerSwitch::On(before) = LedgerSwitch::on_by_default(at("2026-10-12 02:15"), &tz)
+        else {
+            panic!("on")
+        };
+        assert!(!due(&state, &before, at("2026-10-12 03:59"), &tz));
+        assert!(due(&state, &before, at("2026-10-12 04:00"), &tz));
+        assert_eq!(
+            next_run_at(&state, &before, at("2026-10-12 02:16"), &tz),
+            at("2026-10-12 04:00")
+        );
+    }
+
+    #[test]
+    fn next_daily_run_time_is_strictly_ahead() {
+        let tz = shanghai();
+        for (now, next) in [
+            ("2026-10-12 00:00", "2026-10-12 04:00"),
+            ("2026-10-12 03:59", "2026-10-12 04:00"),
+            ("2026-10-12 04:00", "2026-10-13 04:00"),
+            ("2026-10-12 21:00", "2026-10-13 04:00"),
+            ("2026-12-31 22:00", "2027-01-01 04:00"),
+        ] {
+            assert_eq!(next_daily_run_time(at(now), &tz), at(next), "{now}");
         }
     }
 

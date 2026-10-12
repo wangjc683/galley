@@ -1,7 +1,6 @@
 import { CircleNotch } from "@phosphor-icons/react";
 import { useState, type ReactNode } from "react";
 
-import { useMemoryAskTrial } from "@/components/conversation/memory-ask-trial";
 import {
   SettingsPanelHeader,
   SettingsSectionLabel,
@@ -19,6 +18,7 @@ import {
   type LedgerEntry,
   type LedgerTarget,
   type MemoryOverview,
+  type SetLedgerSwitchArgs,
 } from "@/lib/memory";
 import { useSessionsStore } from "@/stores/sessions";
 import { useUiStore } from "@/stores/ui";
@@ -27,7 +27,6 @@ import { makeAppError } from "@/types/app-error";
 import { ErrorLine } from "./models/ModelPrimitives";
 import { GlobalMemoryEditor } from "./memory/GlobalMemoryEditor";
 import { coreMemoryActions, type MemoryActions } from "./memory/memory-actions";
-import { useMemoryDemoBackend } from "./memory/memory-demo-backend";
 import { MemoryChoiceDialog } from "./memory/MemoryChoiceDialog";
 import {
   ActivityRow,
@@ -42,6 +41,7 @@ import {
 import {
   showsLedgerAreas,
   sortByLastSeen,
+  switchToggle,
   switchStatus,
   type SessionLookup,
 } from "./memory/memory-view";
@@ -53,9 +53,12 @@ import { useMemoryOverview } from "./memory/useMemoryOverview";
  * engine's own global memory, top to bottom:
  *
  *   1. the switch 「从对话里了解我」 with where the words come from and go
- *      (read daily, through the model provider once more, kept on this
- *      computer), and while on: where reading starts, the last run, the
- *      next one;
+ *      (read daily, earlier conversations included, through the model
+ *      provider once more, kept on this computer), and while on: where
+ *      reading starts, the last run, the next one. One allow switch
+ *      (ticket 04c, PRD ruling 47): turning it on asks nothing and reads
+ *      earlier conversations too; turning it off asks 「保留 / 清空」
+ *      about what was already noted;
  *   2. 正在进行的事 — ongoing activities, newest 「最近」 first;
  *   3. 已经结束的事 — ended ones, folded;
  *   4. 情绪时刻 — emotional events, folded, with how they are used;
@@ -78,35 +81,26 @@ export function SettingsMemory({
   /** Open a cited Galley session (App closes Settings first). */
   onOpenSession?: (sessionId: string) => void;
 }) {
-  // TEMPORARY (ticket 04b trial): 演示数据 renders the eval fixture on a
-  // local copy instead of asking Core.
-  const { demo } = useMemoryAskTrial();
-  const real = useMemoryOverview(!demo);
-  const demoBackend = useMemoryDemoBackend(demo);
+  const { overview, error, reload } = useMemoryOverview(true);
   const sessions = useSessionsStore((s) => s.sessions);
   const mainChatLabel = useCopy().sidebar.mainChat;
 
   const lookupSession = (id: string): SessionLookup | null => {
     const session = sessions.find((s) => s.id === id);
-    if (session) {
-      return {
-        title: session.mainChat ? mainChatLabel : session.title,
-        archived: session.status === "archived",
-      };
-    }
-    const demoTitle = demo ? demoBackend.sessionTitles[id] : undefined;
-    return demoTitle ? { title: demoTitle, archived: false } : null;
+    if (!session) return null;
+    return {
+      title: session.mainChat ? mainChatLabel : session.title,
+      archived: session.status === "archived",
+    };
   };
-
-  const actions = demo ? demoBackend.actions : coreMemoryActions(real.reload);
 
   return (
     <MemoryPage
-      overview={demo ? demoBackend.overview : real.overview}
-      loadError={demo ? null : real.error}
-      actions={actions}
+      overview={overview}
+      loadError={error}
+      actions={coreMemoryActions(reload)}
       lookupSession={lookupSession}
-      onOpenSession={demo ? undefined : onOpenSession}
+      onOpenSession={onOpenSession}
     />
   );
 }
@@ -460,7 +454,7 @@ function MemorySwitchArea({
   const copy = appCopy.settings.memory;
   const language = useLanguage();
   const todayStartMs = useDayStamp();
-  const [dialog, setDialog] = useState<"enable" | "disable" | null>(null);
+  const [disableOpen, setDisableOpen] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const { ledger } = overview;
   const on = ledger.switch.state === "on";
@@ -474,19 +468,15 @@ function MemorySwitchArea({
     copy,
   });
 
-  const choose = async (key: string) => {
+  // `key` names what is in flight: "enable" (the switch itself) or the
+  // off dialog's choice.
+  const apply = async (key: string, args: SetLedgerSwitchArgs) => {
     setBusyKey(key);
     try {
-      await actions.setSwitch(
-        key === "from-now"
-          ? { action: "enable", lookBack: false }
-          : key === "look-back"
-            ? { action: "enable", lookBack: true }
-            : { action: "disable", clear: key === "clear" },
-      );
-      setDialog(null);
+      await actions.setSwitch(args);
+      setDisableOpen(false);
     } catch (e) {
-      setDialog(null);
+      setDisableOpen(false);
       useUiStore.getState().pushToast(
         makeAppError({
           category: "business",
@@ -519,7 +509,11 @@ function MemorySwitchArea({
           checked={on}
           ariaLabel={copy.switchTitle}
           disabled={busyKey !== null}
-          onCheckedChange={(next) => setDialog(next ? "enable" : "disable")}
+          onCheckedChange={(next) => {
+            const toggle = switchToggle(next);
+            if (toggle.kind === "apply") void apply("enable", toggle.args);
+            else setDisableOpen(true);
+          }}
         />
       </div>
       {status && (
@@ -543,28 +537,8 @@ function MemorySwitchArea({
       )}
 
       <MemoryChoiceDialog
-        open={dialog === "enable"}
-        onOpenChange={(open) => !open && setDialog(null)}
-        title={copy.enableTitle}
-        body={copy.enableBody}
-        choices={[
-          {
-            key: "from-now",
-            label: copy.enableFromNow,
-            detail: copy.enableFromNowDetail,
-          },
-          {
-            key: "look-back",
-            label: copy.enableLookBack,
-            detail: copy.enableLookBackDetail,
-          },
-        ]}
-        busyKey={dialog === "enable" ? busyKey : null}
-        onChoose={(key) => void choose(key)}
-      />
-      <MemoryChoiceDialog
-        open={dialog === "disable"}
-        onOpenChange={(open) => !open && setDialog(null)}
+        open={disableOpen}
+        onOpenChange={(open) => !open && setDisableOpen(false)}
         title={copy.disableTitle}
         body={copy.disableBody}
         choices={[
@@ -580,8 +554,10 @@ function MemorySwitchArea({
             destructive: true,
           },
         ]}
-        busyKey={dialog === "disable" ? busyKey : null}
-        onChoose={(key) => void choose(key)}
+        busyKey={busyKey}
+        onChoose={(key) =>
+          void apply(key, { action: "disable", clear: key === "clear" })
+        }
       />
     </div>
   );

@@ -90,6 +90,10 @@ pub struct ReplayRow {
     pub content: String,
     #[serde(default)]
     pub attachments: Vec<ReplayAttachment>,
+    /// Shown to the user, never the model's history: the main chat's
+    /// greeting (PRD ruling 47, [`crate::db::is_main_chat_greeting`]).
+    #[serde(default)]
+    pub shown_only: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -101,6 +105,11 @@ pub struct ReplayAttachment {
 impl From<PersistedMessageRow> for ReplayRow {
     fn from(row: PersistedMessageRow) -> Self {
         Self {
+            shown_only: crate::db::is_main_chat_greeting(
+                &row.role,
+                row.created_via.as_deref(),
+                row.supervisor.as_deref(),
+            ),
             role: row.role,
             turn_index: row.turn_index,
             content: row.content,
@@ -120,7 +129,9 @@ impl From<PersistedMessageRow> for ReplayRow {
 /// runner gets. `completed_turn_count` is the session row's `turn_count`,
 /// which a turn bumps only when it ends.
 ///
-/// - Only `user` / `assistant` rows count.
+/// - Only `user` / `assistant` rows count, and not one that is shown
+///   only (the main chat's greeting, Galley's words in the AI's voice:
+///   the model never said it, ticket 04c).
 /// - A row past `completed_turn_count` is input still waiting for its
 ///   reply (the message just persisted for this very dispatch), not
 ///   history: replayed, GA would see it twice.
@@ -135,7 +146,7 @@ pub fn rows_to_conversation_messages(
 ) -> Vec<ConversationMessage> {
     let mut messages: Vec<ConversationMessage> = Vec::new();
     for row in rows {
-        if row.role != "user" && row.role != "assistant" {
+        if row.shown_only || (row.role != "user" && row.role != "assistant") {
             continue;
         }
         if row.turn_index > completed_turn_count {

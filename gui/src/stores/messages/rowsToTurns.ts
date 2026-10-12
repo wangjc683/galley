@@ -89,6 +89,7 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
         telemetry: row.telemetry,
       });
       turn.messageId = row.id;
+      if (isMainChatGreeting(row)) turn.greeting = true;
       turns.push(turn);
     } else if (row.role === "system") {
       // The only `system` rows persisted to `messages` are Galley Goal
@@ -162,6 +163,23 @@ function originFromRow(row: MessageRow): Origin | undefined {
   if (row.supervisor) origin.supervisor = row.supervisor;
   if (row.origin_note) origin.reason = row.origin_note;
   return origin;
+}
+
+/** Origin supervisor of the main chat's greeting row (Core
+ * `MAIN_CHAT_GREETING_SUPERVISOR`, `core/src/db/main_chat.rs`). */
+const MAIN_CHAT_GREETING_SUPERVISOR = "galley-greeting";
+
+/**
+ * The main chat's greeting (ticket 04c): an assistant row Core wrote
+ * itself (origin `system`) when it created the main chat. A runner's
+ * turn never gives an assistant row an origin of its own, so the pair
+ * names the greeting alone.
+ */
+function isMainChatGreeting(row: MessageRow): boolean {
+  return (
+    row.created_via === "system" &&
+    row.supervisor === MAIN_CHAT_GREETING_SUPERVISOR
+  );
 }
 
 /** Defensive JSON.parse — returns `[]` on malformed / null / non-array. */

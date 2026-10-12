@@ -7,6 +7,95 @@ use super::*;
 /// launch sweep of empty `新对话` rows never matches it.
 pub const MAIN_CHAT_TITLE: &str = "主聊天";
 
+/// The main chat's first message, said by the AI the moment Core
+/// creates it (PRD ruling 47, ticket 04c): the main chat is for
+/// everything, the affairs ledger is on — reading earlier conversations
+/// too — and where to see it or turn it off. Fixed text, chosen by the
+/// UI language ([`main_chat_greeting`]); the Chinese is JC's
+/// (2026-10-12), word for word.
+///
+/// Shown only. It is an assistant row Core writes itself, marked by its
+/// origin ([`is_main_chat_greeting`]): the history replay skips it, so
+/// the model never has it in context (the main chat's state block says
+/// the ledger is on instead, `crate::managed_prompt`); the ledger reads
+/// user messages only; and it is not a turn — `turn_count` stays 0 and
+/// it sits at [`MAIN_CHAT_GREETING_TURN_INDEX`], before the first one.
+///
+/// Paragraph breaks are spelled `\n\n`, not line breaks in the source,
+/// so a Windows (CRLF) checkout stores the same text.
+pub const MAIN_CHAT_GREETING_ZH: &str = concat!(
+    "你好。以后有什么事，直接在这里跟我说就行，不用再想是开新对话还是接着哪个旧的。",
+    "\n\n",
+    "为了接得上你在忙的事，我会整理你在 Galley 和聊天软件私聊里说过的话（包括以前的对话，",
+    "不含我的回复），记下你在忙什么、到了哪一步，也会记下让你着急或开心的时刻，只用来把事办好。",
+    "第一次整理在今晚，之后每天一次；整理要多调用模型，记下的内容只存在这台电脑上。",
+    "\n\n",
+    "建议保持开启。想看我记了什么、删掉某一条或者关掉，点上面的「主对话」→「它记得我什么」。",
+);
+
+/// [`MAIN_CHAT_GREETING_ZH`] for every other UI language. The menu path
+/// names the English UI's labels (`sidebar.mainChat`,
+/// `memory.whatItRemembers` in `gui/src/i18n/locales/en.ts`).
+pub const MAIN_CHAT_GREETING_EN: &str = concat!(
+    "Hi. From now on, whatever comes up, just tell me here. No need to decide ",
+    "whether to start a new conversation or pick up an old one.",
+    "\n\n",
+    "To keep up with what you're working on, I'll go through what you've said in ",
+    "Galley and in private chats on your chat apps (earlier conversations included, ",
+    "my replies left out) and note what you're busy with and how far along it is. ",
+    "I'll also note the moments that made you anxious or happy, only to help get ",
+    "things done. The first pass is tonight, then once a day; each pass takes extra ",
+    "model calls, and what I note stays only on this computer.",
+    "\n\n",
+    "I suggest keeping it on. To see what I've noted, delete an entry, or turn it ",
+    "off, click “Main chat” → “What it remembers about me” at the top.",
+);
+
+/// Origin supervisor label of the greeting row (with `created_via =
+/// 'system'`). Assistant rows a runner's turn writes never carry an
+/// origin of their own (`persist_assistant_message`), so the pair names
+/// the greeting and nothing else.
+pub const MAIN_CHAT_GREETING_SUPERVISOR: &str = "galley-greeting";
+
+/// `turn_index` of the greeting: before the first turn, so the first
+/// message is turn 0 as in every session — `turn_count`, the next turn
+/// index and the first segment's start (turn 0) read exactly as they
+/// would without it.
+pub const MAIN_CHAT_GREETING_TURN_INDEX: i64 = -1;
+
+/// The greeting for a UI language as the GUI resolves it (`zh-CN`,
+/// `en-US`): Chinese for any `zh…`, English for anything else or none.
+pub fn main_chat_greeting(language: Option<&str>) -> &'static str {
+    match language {
+        Some(tag) if tag.trim().to_ascii_lowercase().starts_with("zh") => MAIN_CHAT_GREETING_ZH,
+        _ => MAIN_CHAT_GREETING_EN,
+    }
+}
+
+/// Whether a persisted message is the main chat's greeting — shown to
+/// the user, never the model's history.
+pub fn is_main_chat_greeting(
+    role: &str,
+    created_via: Option<&str>,
+    supervisor: Option<&str>,
+) -> bool {
+    role == "assistant"
+        && created_via == Some("system")
+        && supervisor == Some(MAIN_CHAT_GREETING_SUPERVISOR)
+}
+
+/// What Core writes with a new main chat, in the transaction that
+/// creates it — so a main chat never exists without them, and a restore
+/// from the archive (or a main chat that was simply there) writes none.
+#[derive(Debug, Clone, Default)]
+pub struct MainChatSeed {
+    /// The AI's first message ([`MAIN_CHAT_GREETING_ZH`]).
+    pub greeting: Option<String>,
+    /// Core prefs set only where the key is missing (or JSON `null`):
+    /// the affairs ledger's switch, on by default.
+    pub prefs_if_absent: Vec<(String, serde_json::Value)>,
+}
+
 /// What [`SqliteGalley::get_or_create_main_chat`] found.
 #[derive(Debug, Clone)]
 pub enum MainChatEnsured {
@@ -21,6 +110,12 @@ pub enum MainChatEnsured {
 
 impl MainChatEnsured {
     pub fn brief(&self) -> &SessionBrief {
+        match self {
+            Self::Existing(b) | Self::Created(b) | Self::Restored(b) => b,
+        }
+    }
+
+    pub fn into_brief(self) -> SessionBrief {
         match self {
             Self::Existing(b) | Self::Created(b) | Self::Restored(b) => b,
         }
@@ -53,13 +148,19 @@ impl SqliteGalley {
     ///
     /// Refused (`invalid_args`) while the active runtime is not the
     /// managed one: an attached external GA has no main chat (PRD ruling
-    /// 3). An archived main chat comes back restored. Two concurrent
-    /// asks both see none and both insert; the unique index refuses the
-    /// second flag, which then rolls back and reads the first one's row.
+    /// 3), and nothing is written. An archived main chat comes back
+    /// restored. Two concurrent asks both see none and both insert; the
+    /// unique index refuses the second flag, which then rolls back and
+    /// reads the first one's row.
+    ///
+    /// Only a creation writes `seed` (ticket 04c), in the same
+    /// transaction as the row: the greeting, and the prefs it names where
+    /// they are not set yet.
     pub async fn get_or_create_main_chat(
         &self,
         new_id: &str,
         origin: Origin,
+        seed: &MainChatSeed,
     ) -> Result<MainChatEnsured> {
         {
             let mut conn = self.pool.acquire().await.map_err(map_sqlx_err)?;
@@ -108,6 +209,12 @@ impl SqliteGalley {
                 .map_err(|e| map_constraint_err("main chat", e)),
             Err(e) => Err(e),
         };
+        let flagged = match flagged {
+            Ok(()) => write_main_chat_seed(&mut tx, new_id, seed)
+                .await
+                .map_err(map_sqlx_err),
+            Err(e) => Err(e),
+        };
         match flagged {
             Ok(()) => {
                 tx.commit().await.map_err(map_sqlx_err)?;
@@ -124,6 +231,61 @@ impl SqliteGalley {
             }
         }
     }
+}
+
+/// The creation half of [`MainChatSeed`], inside the creating
+/// transaction. The greeting is indexed for search like any reply: the
+/// launch backfill counts every visible assistant row with an answer
+/// (`backfill_fts_if_empty`), so an unindexed one would rebuild the
+/// index on every launch.
+async fn write_main_chat_seed(
+    conn: &mut SqliteConnection,
+    session_id: &str,
+    seed: &MainChatSeed,
+) -> std::result::Result<(), sqlx::Error> {
+    let now = chrono_now_iso();
+    if let Some(greeting) = seed.greeting.as_deref() {
+        let id = format!("msg_{session_id}_greeting");
+        sqlx::query(
+            "INSERT INTO messages \
+             (id, session_id, turn_index, sequence, role, content, final_answer, created_at, \
+              created_via, supervisor, visibility) \
+             VALUES (?, ?, ?, 1, 'assistant', ?, ?, ?, 'system', ?, 'visible')",
+        )
+        .bind(&id)
+        .bind(session_id)
+        .bind(MAIN_CHAT_GREETING_TURN_INDEX)
+        .bind(greeting)
+        .bind(greeting)
+        .bind(&now)
+        .bind(MAIN_CHAT_GREETING_SUPERVISOR)
+        .execute(&mut *conn)
+        .await?;
+        sqlx::query(
+            "INSERT INTO messages_fts (message_id, session_id, role, turn_index, body) \
+             VALUES (?, ?, 'assistant', ?, ?)",
+        )
+        .bind(&id)
+        .bind(session_id)
+        .bind(MAIN_CHAT_GREETING_TURN_INDEX)
+        .bind(greeting)
+        .execute(&mut *conn)
+        .await?;
+    }
+    for (key, value) in &seed.prefs_if_absent {
+        sqlx::query(
+            "INSERT INTO prefs (key, value, updated_at) VALUES (?, ?, ?) \
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value, \
+               updated_at = excluded.updated_at \
+             WHERE prefs.value = 'null'",
+        )
+        .bind(key)
+        .bind(value.to_string())
+        .bind(&now)
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
 }
 
 /// What the main chat's segment rule reads from the database

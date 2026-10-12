@@ -26,7 +26,7 @@ import {
 export interface MemorySourceWiring {
   lookupSession: (id: string) => SessionLookup | null;
   /** Open a cited session (restoring it first when archived). Absent:
-   * sources are plain text (demo data). */
+   * sources are plain text (static renders in tests). */
   onOpenSession?: (id: string) => void;
   todayStartMs: number;
 }

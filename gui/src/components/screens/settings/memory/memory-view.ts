@@ -4,6 +4,7 @@ import type {
   LedgerRun,
   LedgerSwitch,
   MemoryOverview,
+  SetLedgerSwitchArgs,
 } from "@/lib/memory";
 import { formatMessageDateTime } from "@/lib/message-time";
 
@@ -295,4 +296,19 @@ export function switchStatus({
     if (next) parts.push(copy.nextRun(next));
   }
   return { parts, running, failureDetail };
+}
+
+/**
+ * What flipping the switch does (ticket 04c, PRD ruling 47): it is one
+ * allow switch, so turning it on is a single call that reads earlier
+ * conversations too — nothing to choose. Turning it off first asks
+ * 「保留已记下的 / 一起清空」, a question about what is already noted,
+ * not about what to read.
+ */
+export function switchToggle(
+  next: boolean,
+): { kind: "apply"; args: SetLedgerSwitchArgs } | { kind: "ask-disable" } {
+  return next
+    ? { kind: "apply", args: { action: "enable", lookBack: true } }
+    : { kind: "ask-disable" };
 }

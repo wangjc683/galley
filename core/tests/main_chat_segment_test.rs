@@ -22,7 +22,9 @@ use chrono::{Duration as ChronoDuration, Utc};
 use galley_core_lib::api::{
     CreateSessionInput, GalleyApi, MessageVisibility, Origin, OriginVia, RuntimeKind, SessionId,
 };
-use galley_core_lib::db::{PersistAssistantMessage, SqliteGalley};
+use galley_core_lib::db::{
+    MainChatSeed, PersistAssistantMessage, SqliteGalley, MAIN_CHAT_GREETING_ZH,
+};
 use galley_core_lib::ipc::{HistoryLoadedEvent, IpcCommand, IpcEvent, ReadyEvent};
 use galley_core_lib::notify::Notifier;
 use galley_core_lib::runner_manager::{
@@ -74,9 +76,15 @@ fn gui_origin() -> Origin {
     }
 }
 
+/// The main chat as Core creates it, greeting included (ticket 04c): a
+/// row before the first turn that no rule here may count or replay.
 async fn main_chat(galley: &SqliteGalley, id: &str) {
+    let seed = MainChatSeed {
+        greeting: Some(MAIN_CHAT_GREETING_ZH.into()),
+        prefs_if_absent: Vec::new(),
+    };
     let ensured = galley
-        .get_or_create_main_chat(id, gui_origin())
+        .get_or_create_main_chat(id, gui_origin(), &seed)
         .await
         .expect("main chat");
     assert_eq!(ensured.brief().id.as_str(), id);
@@ -538,8 +546,9 @@ async fn after_an_idle_gap_the_warm_runner_is_swapped_before_the_message() {
     assert!(runner.load_histories().is_empty());
     // The boundary is the message's own turn.
     assert_eq!(boundaries(&galley, sid).await, vec![start]);
-    // The database keeps the whole thread.
-    assert_eq!(row_count(&pool, sid).await, 5);
+    // The database keeps the whole thread (the greeting, two exchanges,
+    // the new message).
+    assert_eq!(row_count(&pool, sid).await, 6);
 }
 
 #[tokio::test]
@@ -691,7 +700,8 @@ async fn a_cold_main_chat_gets_only_the_current_segment_back_also_after_a_restar
         assert_eq!(after.load_histories(), vec![expected]);
     }
     assert_eq!(boundaries(&galley, sid).await, vec![start]);
-    assert_eq!(row_count(&pool, sid).await, 8);
+    // The greeting and four exchanges.
+    assert_eq!(row_count(&pool, sid).await, 9);
 }
 
 #[tokio::test]

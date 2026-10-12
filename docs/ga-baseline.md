@@ -1011,8 +1011,10 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     as on the other channels.
 20. The affairs ledger reading IM turns out of the engine logs
     (2026-10-12, `.scratch/main-chat/issues/01-affairs-ledger.md`; managed
-    runtime only, read-only, no managed patch; off unless the user turns
-    it on, the Core pref `affairs_ledger`, ticket 04). IM conversations never reach
+    runtime only, read-only, no managed patch; the Core pref
+    `affairs_ledger`, ticket 04: on by default once Core creates the main
+    chat, which says so, and the user turns it off on the Memory page,
+    ticket 04c). IM conversations never reach
     `workbench.db`, so `core/src/ledger/im_archive.rs` copies the user's
     words out of `temp/model_responses/model_responses_*.txt` into the
     ledger's own archive before the startup prune can delete them. It

@@ -374,8 +374,8 @@ export const zhCopy = {
     desktopPet: "桌面宠物",
     closeDesktopPet: "关闭桌面宠物",
   },
-  // 「它记得我什么」（票 04b）：标题菜单、项目菜单的入口，主对话里问一次。
-  // 页面本身的文案在 settings.memory。
+  // 「它记得我什么」（票 04b）：标题菜单、项目菜单的入口。页面本身的文案在
+  // settings.memory；主对话的问候是 Core 写的（票 04c）。
   memory: {
     whatItRemembers: "它记得我什么",
     notUsedToLearn: "不用于了解我",
@@ -383,14 +383,6 @@ export const zhCopy = {
     excludedProjectTitle: "以后不再读这个项目里的对话",
     excludedBody: "已经记下的，到 设置 → 记忆 里删。",
     excludeFailed: "没能更改「不用于了解我」",
-    askTitle: "要让 Galley 从对话里了解你吗？",
-    askBody:
-      "每天读一遍你在桌面和 IM 私聊里说的话（不读 AI 的回复），交给模型服务商整理。记下的只存在这台电脑上，随时可以在 设置 → 记忆 里查看和关掉。",
-    askFromNow: "从现在开始",
-    askLookBack: "也读以前的对话",
-    askLookBackTooltip: "第一次整理要读完以前的对话，用量会大一些",
-    askDecline: "先不要",
-    askFailed: "没能保存你的选择",
   },
   browserControlAttention: {
     message: "让 Galley 用你已登录的浏览器办事：查资料、填表单、操作网页后台。",
@@ -687,12 +679,13 @@ export const zhCopy = {
     },
     // 设置 → 记忆（票 04b）：七个区域自上而下。读什么、经过谁、存在哪写在
     // 开关一行；情绪区写用法；不再记的事注明留着标题；AI 的长期记忆注明
-    // 不受开关控制。
+    // 不受开关控制。开关只有「允许」一档（票 04c）：打开不问范围，关掉问
+    // 保留还是清空。
     memory: {
       subtitle: "Galley 从对话里记下的事，你可以查看、删除或关掉",
       switchTitle: "从对话里了解我",
       switchDescription:
-        "每天读一遍你在桌面和 IM 私聊里说的话（不读 AI 的回复），交给当前默认模型整理，所以会再经过一次模型服务商。记下的内容只存在这台电脑上，换模型也带得走。",
+        "每天读一遍你在桌面和 IM 私聊里说的话（包括以前的对话，不读 AI 的回复），交给当前默认模型整理，所以会再经过一次模型服务商。记下的内容只存在这台电脑上，换模型也带得走。",
       sinceFrom: (time: string) => `从 ${time} 开始`,
       sinceEarliest: "从最早的对话开始",
       running: "正在整理",
@@ -711,12 +704,6 @@ export const zhCopy = {
       loadFailed: (detail: string) => `读取记忆失败：${detail}`,
       retry: "重试",
       actionFailed: "操作失败",
-      enableTitle: "从哪里开始读？",
-      enableBody: "打开后，Galley 每天整理一次你说过的话。",
-      enableFromNow: "从现在开始",
-      enableFromNowDetail: "只读打开之后说的话。",
-      enableLookBack: "也读以前的对话",
-      enableLookBackDetail: "第一次整理要读完以前的对话，用量会大一些。",
       disableTitle: "关掉「从对话里了解我」？",
       disableBody: "关掉后不再读新的对话。",
       disableKeep: "保留已记下的",

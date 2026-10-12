@@ -79,8 +79,10 @@ Application Support/app.galley/
 > pre-migration backup (`app.galley.backup.*`) skips `managed-ga-state/temp/`
 > for the same reason: a schema rollback never needs engine scratch. Both
 > are managed-runtime only; attach mode never touches a user-owned `temp/`.
-> When the affairs ledger is on (the Core pref `affairs_ledger`, set from
-> the Memory page; `core/src/ledger/`), its startup step copies the IM user
+> When the affairs ledger is on (the Core pref `affairs_ledger`: on by
+> default once Core creates the main chat, set from the Memory page;
+> `core/src/ledger/`) and its first run is not still waiting for the next
+> 04:00 (ticket 04c), its startup step copies the IM user
 > turns the logs gained since its last pass into
 > `memory/history_insight/galley/im_archive.jsonl` **before** the prune
 > runs, so a log is never deleted unarchived. Everything under

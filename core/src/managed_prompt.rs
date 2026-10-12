@@ -198,18 +198,21 @@ pub(crate) fn compose_runtime_prompt(app_version: &str) -> String {
 /// The main chat's variant: the workbench prompt, its state block
 /// followed by a "Main Chat" section (ticket 03b: this is the main chat,
 /// its id, where the segment its runner holds begins, and how to look up
-/// earlier parts) and — when the ledger is on and a list exists — the
-/// user's ongoing affairs (ticket 03a, [`crate::ledger::affairs`], already
-/// capped). Every other session gets [`compose_runtime_prompt`]. Users do
-/// not ask for the affairs list, so it is a deliberate exception to the
-/// first admission rule above: the association it enables is the feature
+/// earlier parts; ticket 04c: while the ledger is on, one paragraph that
+/// says so, [`LEDGER_ON_NOTE`]) and — when the ledger is on and a list
+/// exists — the user's ongoing affairs (ticket 03a,
+/// [`crate::ledger::affairs`], already capped). Every other session gets
+/// [`compose_runtime_prompt`]. Users do not ask for the affairs list, so
+/// it is a deliberate exception to the first admission rule above: the
+/// association it enables is the feature
 /// (docs/managed-ga-runtime/prompt-composition.md, "Ongoing Affairs").
 pub(crate) fn compose_main_chat_runtime_prompt(
     app_version: &str,
     main_chat: &MainChatPromptState,
+    ledger_on: bool,
     affairs: Option<&str>,
 ) -> String {
-    compose(app_version, true, Some(main_chat), affairs)
+    compose(app_version, true, Some((main_chat, ledger_on)), affairs)
 }
 
 /// IM-supervisor variant: same runtime rules WITHOUT the suggestion
@@ -240,6 +243,16 @@ with the Galley CLI (search, then `session show <id> --around=<messageId>`)."#,
     )
 }
 
+/// The main chat section's last paragraph while the affairs ledger is on
+/// (ticket 04c), whether or not a list exists yet. The main chat opens
+/// with a greeting that tells the user the ledger is on, but the
+/// greeting is never replayed, and on the first day there is no list:
+/// without this the model would not know its memory is on, nor where the
+/// user turns it off. Data, like the rest of the block. Never in IM's.
+const LEDGER_ON_NOTE: &str = r#"Galley's affairs ledger is on: once a day it distills what the user said in
+Galley and chat apps (earlier conversations included, never your replies).
+The user can view, delete or turn it off in Settings → Memory."#;
+
 /// Heading and framing of the ongoing-affairs section. Data, not rules:
 /// how the model uses the list belongs to the entry-layer prompts
 /// (ticket 03d).
@@ -256,7 +269,7 @@ fn ongoing_affairs_section(affairs: &str) -> String {
 fn compose(
     app_version: &str,
     with_suggestion: bool,
-    main_chat: Option<&MainChatPromptState>,
+    main_chat: Option<(&MainChatPromptState, bool)>,
     affairs: Option<&str>,
 ) -> String {
     let static_rules = if with_suggestion {
@@ -265,7 +278,14 @@ fn compose(
         RUNTIME_PROMPT_STATIC.to_string()
     };
     let main_chat = main_chat
-        .map(|state| format!("\n\n{}", main_chat_section(state)))
+        .map(|(state, ledger_on)| {
+            let note = if ledger_on {
+                format!("\n\n{LEDGER_ON_NOTE}")
+            } else {
+                String::new()
+            };
+            format!("\n\n{}{note}", main_chat_section(state))
+        })
         .unwrap_or_default();
     let affairs = affairs
         .map(|list| format!("\n\n{}", ongoing_affairs_section(list)))
@@ -526,14 +546,14 @@ mod tests {
         assert!(!ordinary.contains("## Ongoing Affairs"));
 
         let state = main_chat_state();
-        let main = compose_main_chat_runtime_prompt("t", &state, Some(list));
+        let main = compose_main_chat_runtime_prompt("t", &state, true, Some(list));
         assert!(main.contains("## Ongoing Affairs"));
         assert!(main.contains("- 日语 N3：下周补两课"));
         assert!(main.contains("## Next-Step Suggestion"));
         assert_eq!(
             main,
             format!(
-                "{ordinary}\n\n{}\n\n{}",
+                "{ordinary}\n\n{}\n\n{LEDGER_ON_NOTE}\n\n{}",
                 main_chat_section(&state),
                 ongoing_affairs_section(list)
             ),
@@ -550,7 +570,7 @@ mod tests {
 
         // Data, not behavior: the prompt generation does not change.
         let hash = prompt_hash();
-        let _ = compose_main_chat_runtime_prompt("t", &state, Some(list));
+        let _ = compose_main_chat_runtime_prompt("t", &state, true, Some(list));
         assert_eq!(prompt_hash(), hash);
     }
 
@@ -562,7 +582,7 @@ mod tests {
     fn main_chat_section_names_the_conversation_and_its_segment() {
         let state = main_chat_state();
         let ordinary = compose_runtime_prompt("t");
-        let main = compose_main_chat_runtime_prompt("t", &state, None);
+        let main = compose_main_chat_runtime_prompt("t", &state, false, None);
         assert_eq!(main, format!("{ordinary}\n\n{}", main_chat_section(&state)));
         assert!(!main.contains("## Ongoing Affairs"));
         // Single-line fragments only (a Windows checkout makes the raw
@@ -604,6 +624,51 @@ mod tests {
         assert!(
             len <= MAIN_CHAT_SECTION_BUDGET_BYTES,
             "main chat section is {len} bytes, budget {MAIN_CHAT_SECTION_BUDGET_BYTES}"
+        );
+    }
+
+    /// Ticket 04c: while the ledger is on, the main chat's block says so
+    /// — with or without a list yet, at the end of its own section, ahead
+    /// of the list. Off, it says nothing; IM never carries it.
+    #[test]
+    fn ledger_note_rides_the_main_chat_only_while_the_ledger_is_on() {
+        let state = main_chat_state();
+        let section = main_chat_section(&state);
+        let on_no_list = compose_main_chat_runtime_prompt("t", &state, true, None);
+        assert!(on_no_list.ends_with(&format!("{section}\n\n{LEDGER_ON_NOTE}")));
+        assert!(!on_no_list.contains("## Ongoing Affairs"));
+        // Single-line fragments only (CRLF on a Windows checkout).
+        assert!(on_no_list.contains("Galley's affairs ledger is on: once a day it distills"));
+        assert!(on_no_list.contains("(earlier conversations included, never your replies)."));
+        assert!(on_no_list.contains("turn it off in Settings → Memory."));
+
+        let off = compose_main_chat_runtime_prompt("t", &state, false, None);
+        assert!(!off.contains("affairs ledger"));
+
+        let on_list = compose_main_chat_runtime_prompt("t", &state, true, Some("- 一件事"));
+        assert!(on_list.find("affairs ledger is on") < on_list.find("## Ongoing Affairs"));
+
+        for prompt in [
+            compose_runtime_prompt("t"),
+            compose_im_runtime_prompt("t", None),
+            compose_im_runtime_prompt("t", Some("- 一件事")),
+        ] {
+            assert!(!prompt.contains("affairs ledger"));
+        }
+    }
+
+    /// Byte cap on the ledger note (ticket 04c), fixed text, no headroom,
+    /// `\r` not counted. It rides every request of the main chat while
+    /// the ledger is on, and neither the static budget nor the main chat
+    /// section's covers it.
+    const LEDGER_ON_NOTE_BUDGET_BYTES: usize = 215;
+
+    #[test]
+    fn ledger_note_stays_within_budget() {
+        let len = LEDGER_ON_NOTE.bytes().filter(|&byte| byte != b'\r').count();
+        assert!(
+            len <= LEDGER_ON_NOTE_BUDGET_BYTES,
+            "ledger note is {len} bytes, budget {LEDGER_ON_NOTE_BUDGET_BYTES}"
         );
     }
 

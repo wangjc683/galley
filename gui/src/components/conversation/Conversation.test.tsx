@@ -49,6 +49,50 @@ function narrationRows(html: string): number {
   return html.split('data-role="agent-narration"').length - 1;
 }
 
+describe("Conversation main chat greeting", () => {
+  const greeting: AgentTurn = {
+    role: "agent",
+    tools: [],
+    finalAnswer: "你好。以后有什么事，直接在这里跟我说就行。",
+    turnIndex: -1,
+    greeting: true,
+  };
+  const html = (turns: Turn[]) =>
+    renderToStaticMarkup(
+      <Tooltip.Provider>
+        <LocalFilesContext.Provider value={() => undefined}>
+          <Conversation turns={turns} />
+        </LocalFilesContext.Provider>
+      </Tooltip.Provider>,
+    );
+
+  // Ticket 04c: a plain AI message — no step marker, no rule, no run
+  // fold — alone and with a conversation after it.
+  it("renders as a plain answer, without a step, rule or fold", () => {
+    for (const out of [
+      html([greeting]),
+      html([
+        greeting,
+        { role: "user", content: "早" },
+        { role: "agent", tools: [], finalAnswer: "早上好", turnIndex: 1 },
+      ]),
+    ]) {
+      expect(out).toContain("你好。以后有什么事，直接在这里跟我说就行。");
+      const head = out.slice(0, out.indexOf("你好。"));
+      expect(head).not.toContain('data-role="step-marker"');
+      expect(head).not.toContain("<hr");
+      expect(head).not.toContain('data-role="run-fold"');
+    }
+  });
+
+  it("would carry a marker without the flag (the control)", () => {
+    const { greeting: _flag, ...plain } = greeting;
+    const out = html([plain]);
+    const head = out.slice(0, out.indexOf("你好。"));
+    expect(head).toContain('data-role="step-marker"');
+  });
+});
+
 describe("Conversation echo-narration step", () => {
   it("puts the narration on the marker line and drops its own row", () => {
     const narration = "营业时间只在搜索摘要里，我去 `厦门网` 原文核对。";

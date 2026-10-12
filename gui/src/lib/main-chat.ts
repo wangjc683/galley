@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import { resolveLanguagePreference } from "@/lib/language";
 import { usePrefsStore } from "@/stores/prefs";
 import { useSessionsStore } from "@/stores/sessions";
 import type { SessionBriefWire } from "@/stores/sessions/shared";
@@ -10,7 +11,8 @@ import type { Session } from "@/types/session";
  * The main chat (主聊天, `.scratch/main-chat` ticket 02): one permanent
  * conversation on the managed runtime that the desktop opens on; every
  * other session is a side chat (旁聊). Core owns it (Rule 5) — it
- * creates the row on the first ask (`get_or_create_main_chat`) and
+ * creates the row on the first ask (`get_or_create_main_chat`), with
+ * the AI's greeting in the UI language the ask names (ticket 04c), and
  * refuses the desktop's archive / delete of it. The attached external
  * GA has none, so nothing here runs in that mode (PRD ruling 3).
  */
@@ -63,10 +65,15 @@ export function openMainChat(): Promise<boolean> {
 }
 
 async function landOnMainChat(): Promise<boolean> {
-  if (usePrefsStore.getState().activeRuntimeKind !== "managed") return false;
+  const prefs = usePrefsStore.getState();
+  if (prefs.activeRuntimeKind !== "managed") return false;
   let brief: SessionBriefWire | undefined;
   try {
-    brief = await invoke<SessionBriefWire>("get_or_create_main_chat");
+    // The UI language picks the greeting a new main chat opens with
+    // (ticket 04c); Core falls back to English without it.
+    brief = await invoke<SessionBriefWire>("get_or_create_main_chat", {
+      language: resolveLanguagePreference(prefs.languagePreference),
+    });
   } catch (e) {
     console.warn("[main-chat] get_or_create_main_chat failed.", e);
     return false;

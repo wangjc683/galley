@@ -14,6 +14,7 @@ import {
   showsLedgerAreas,
   sortByLastSeen,
   switchStatus,
+  switchToggle,
 } from "./memory-view";
 
 const TODAY = new Date(2026, 9, 12).getTime(); // 2026-10-12, local midnight
@@ -288,5 +289,20 @@ describe("switchStatus", () => {
     });
     expect(status?.parts).toContain("上次整理 昨天 04:00，没有完成");
     expect(status?.failureDetail).toBe("model timed out");
+  });
+});
+
+// Ticket 04c: one allow switch. On asks nothing and reads earlier
+// conversations too; off asks 保留 / 清空.
+describe("switchToggle", () => {
+  it("turns on at once, earlier conversations included", () => {
+    expect(switchToggle(true)).toEqual({
+      kind: "apply",
+      args: { action: "enable", lookBack: true },
+    });
+  });
+
+  it("asks before turning off", () => {
+    expect(switchToggle(false)).toEqual({ kind: "ask-disable" });
   });
 });

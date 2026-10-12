@@ -15,11 +15,14 @@
 //! Core puts in the main chat's and the IM channels' session-start state
 //! block.
 //!
-//! - **Switch**: Core pref `affairs_ledger` ([`config`]), set from the
-//!   Memory page. Default undecided, which is off. Read live: the daily
-//!   tick is resident ([`start`]) and does nothing while off; the startup
-//!   IM archive ([`archive_before_prune`]) and both injections read it
-//!   too. While off nothing here creates a file or a directory.
+//! - **Switch**: Core pref `affairs_ledger` ([`config`]). Undecided —
+//!   which is off — until Core creates the main chat, which turns it on
+//!   (reading earlier conversations too, the first run at the next
+//!   04:00; PRD ruling 47, ticket 04c) and says so in its greeting; the
+//!   Memory page turns it off and on again. Read live: the daily tick is
+//!   resident ([`start`]) and does nothing while off; the startup IM
+//!   archive ([`archive_before_prune`]) and both injections read it too.
+//!   While off nothing here creates a file or a directory.
 //! - **The user's say** ([`control`], ticket 04): the page shows every
 //!   entry, deletes one deterministically (the "do not record again"
 //!   list, [`forgotten`], asks the model not to rebuild it), switches the
@@ -240,12 +243,17 @@ pub(crate) fn emit_memory_changed(app: &tauri::AppHandle) {
 /// so a log the prune is about to delete is never lost. No bridge exists
 /// yet, so every log's last block counts as complete. Synchronous; it
 /// reads only logs written since the last pass (or since `since`).
-/// Nothing while the switch is not on.
+/// Nothing while the switch is not on, nor while a switch Core turned on
+/// by default waits for its first run (`notBefore`, ticket 04c): until
+/// then nothing is read.
 pub(crate) fn archive_before_prune(app: &tauri::App) {
     let galley: SqliteGalley = app.state::<SqliteGalley>().inner().clone();
     let Some(config) = tauri::async_runtime::block_on(read_switch(&galley)).config() else {
         return;
     };
+    if config.waiting_at(Utc::now()) {
+        return;
+    }
     match tauri::async_runtime::block_on(galley.active_runtime_kind()) {
         Ok(RuntimeKind::Managed) => {}
         Ok(_) => return,

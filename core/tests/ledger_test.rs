@@ -133,6 +133,7 @@ fn config() -> LedgerConfig {
         // 2026-10-10 00:00 in Shanghai.
         since: "2026-10-09T16:00:00Z".parse().unwrap(),
         look_back: false,
+        not_before: None,
     }
 }
 

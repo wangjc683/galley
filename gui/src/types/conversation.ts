@@ -269,6 +269,14 @@ export interface AgentTurn {
   summary?: string;
   /** Optional metadata shown in the final-answer footer. */
   telemetry?: MessageTelemetry;
+  /**
+   * The main chat's greeting (ticket 04c, PRD ruling 47): Core writes it
+   * as the AI's first message when it creates the main chat. Rendered
+   * as a plain answer — no run fold, step marker or duration; it was no
+   * run. Read from the row's origin (`created_via = 'system'`,
+   * supervisor `galley-greeting`), see rowsToTurns.
+   */
+  greeting?: true;
 }
 
 export type Turn = UserTurn | AgentTurn | SystemTurn;

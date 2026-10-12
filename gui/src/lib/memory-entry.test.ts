@@ -1,14 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { LedgerExclusion, LedgerSwitch } from "@/lib/memory";
-import type { Turn } from "@/types/conversation";
 
-import {
-  hasCompletedExchange,
-  projectMenuExclusion,
-  shouldAskAboutMemory,
-  titleMenuMemoryItems,
-} from "./memory-entry";
+import { projectMenuExclusion, titleMenuMemoryItems } from "./memory-entry";
 
 const ON: LedgerSwitch = {
   state: "on",
@@ -137,71 +131,5 @@ describe("projectMenuExclusion", () => {
         exclusions: MARKS,
       }),
     ).toEqual({ checked: false });
-  });
-});
-
-const user = (content: string): Turn => ({ role: "user", content });
-const agent = (finalAnswer: string | null): Turn => ({
-  role: "agent",
-  tools: [],
-  finalAnswer,
-});
-
-describe("hasCompletedExchange", () => {
-  it("needs a user message followed by a finished answer", () => {
-    expect(hasCompletedExchange([])).toBe(false);
-    expect(hasCompletedExchange([user("hi")])).toBe(false);
-    expect(hasCompletedExchange([user("hi"), agent(null)])).toBe(false);
-    expect(hasCompletedExchange([user("hi"), agent("  ")])).toBe(false);
-    expect(hasCompletedExchange([agent("hello"), user("hi")])).toBe(false);
-    expect(hasCompletedExchange([user("hi"), agent("hello")])).toBe(true);
-  });
-});
-
-describe("shouldAskAboutMemory", () => {
-  const ask = (
-    overrides: Partial<Parameters<typeof shouldAskAboutMemory>[0]>,
-  ) =>
-    shouldAskAboutMemory({
-      runtimeKind: "managed",
-      isMainChat: true,
-      ledgerSwitch: { state: "undecided" },
-      turns: [user("hi"), agent("hello")],
-      runOpen: false,
-      waitingAskUser: false,
-      ...overrides,
-    });
-
-  it("asks in the main chat after the first exchange while undecided", () => {
-    expect(ask({})).toBe(true);
-  });
-
-  it("does not ask in an empty main chat or mid-first-exchange", () => {
-    expect(ask({ turns: [] })).toBe(false);
-    expect(ask({ turns: [user("hi")] })).toBe(false);
-  });
-
-  it("asks once: not after an answer, nor before the switch is known", () => {
-    expect(ask({ ledgerSwitch: { state: "off" } })).toBe(false);
-    expect(
-      ask({ ledgerSwitch: { state: "on", since: "x", lookBack: false } }),
-    ).toBe(false);
-    expect(ask({ ledgerSwitch: null })).toBe(false);
-  });
-
-  it("only in the managed runtime's main chat", () => {
-    expect(ask({ isMainChat: false })).toBe(false);
-    expect(ask({ runtimeKind: "external" })).toBe(false);
-  });
-
-  it("waits while a run is open or the AI is asking", () => {
-    expect(ask({ runOpen: true })).toBe(false);
-    expect(ask({ waitingAskUser: true })).toBe(false);
-  });
-
-  it("demo mode forces it, still only in the managed main chat", () => {
-    expect(ask({ demo: true, turns: [], ledgerSwitch: ON })).toBe(true);
-    expect(ask({ demo: true, isMainChat: false })).toBe(false);
-    expect(ask({ demo: true, runtimeKind: "external" })).toBe(false);
   });
 });

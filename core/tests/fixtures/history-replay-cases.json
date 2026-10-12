@@ -319,6 +319,19 @@
         { "role": "user", "content": "" },
         { "role": "assistant", "content": "ok" }
       ]
+    },
+    {
+      "name": "a row shown only (the main chat's greeting, ticket 04c) is never history",
+      "completedTurnCount": 1,
+      "rows": [
+        { "role": "assistant", "turn_index": -1, "content": "你好。以后有什么事，直接在这里跟我说就行。", "attachments": [], "shown_only": true },
+        { "role": "user", "turn_index": 0, "content": "早", "attachments": [] },
+        { "role": "assistant", "turn_index": 0, "content": "早上好", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "user", "content": "早" },
+        { "role": "assistant", "content": "早上好" }
+      ]
     }
   ]
 }

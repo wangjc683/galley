@@ -6,7 +6,6 @@ import { MainHeaderHost } from "@/components/layout/MainHeaderHost";
 import { browserControlInviteVisible } from "@/components/layout/header/browser-control-indicator-status";
 import { SidebarCollapseToggle } from "@/components/layout/header/SidebarCollapseToggle";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { MemoryAskSwitcher } from "@/components/conversation/MemoryAskSwitcher";
 import { CommandPalette } from "@/components/overlay/CommandPalette";
 import { ThemeProvider } from "@/components/theme/ThemeContext";
 import { BrowserControlAttentionSurface } from "@/components/screens/BrowserControlAttentionBanner";
@@ -917,10 +916,6 @@ function App() {
           setEditingProjectId(null);
         }}
       />
-
-      {/* TEMPORARY: the main chat memory-ask trial, form A / B and demo
-          data (ticket 04b; development builds only). */}
-      <MemoryAskSwitcher />
 
       <ToastHost
         toasts={toasts}

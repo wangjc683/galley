@@ -12,8 +12,8 @@ import {
  * Settings → Memory's overview from Core (`get_memory_overview`), read
  * when the page opens and again on every `memory-changed` (no polling)
  * or `reload()`. A newer read cancels an older one still in flight, so
- * an old snapshot never lands over a new one. `enabled` false (the
- * external runtime, the demo data) reads nothing.
+ * an old snapshot never lands over a new one. `enabled` false reads
+ * nothing.
  */
 export function useMemoryOverview(enabled: boolean): {
   overview: MemoryOverview | null;

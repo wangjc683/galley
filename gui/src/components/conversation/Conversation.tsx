@@ -390,6 +390,11 @@ export function Conversation({
     if (!g.foldable) {
       for (const i of g.memberIndices) {
         if (i === g.openerIndex) continue;
+        // The main chat's greeting (ticket 04c) heads a headless group
+        // of its own: no region, so no step marker or rule — it renders
+        // as the plain answer it is (answerOnly hides the marker).
+        const turn = turns[i];
+        if (turn.role === "agent" && turn.greeting) continue;
         regionOwner.set(i, g.openerIndex);
       }
       continue;

@@ -118,6 +118,18 @@ describe("openMainChat", () => {
     expect(calls("ensure_session_runner")).toBe(0);
   });
 
+  it("names the UI language, which picks a new main chat's greeting", async () => {
+    usePrefsStore.setState({ languagePreference: "en-US" });
+    await openMainChat();
+    usePrefsStore.setState({ languagePreference: "zh-CN" });
+    await openMainChat();
+
+    const args = tauriMocks.invoke.mock.calls
+      .filter(([c]) => c === "get_or_create_main_chat")
+      .map(([, a]) => a);
+    expect(args).toEqual([{ language: "en-US" }, { language: "zh-CN" }]);
+  });
+
   it("asks again but changes nothing while the main chat is on screen", async () => {
     await openMainChat();
     const before = useSessionsStore.getState().sessions;

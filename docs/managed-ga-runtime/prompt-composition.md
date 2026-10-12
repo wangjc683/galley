@@ -25,8 +25,9 @@ prompt value. The runner appends it as `extra_sys_prompt` and needs no
 knowledge of the composition. Two surfaces get more state-block sections
 (below). The main chat (`compose_main_chat_runtime_prompt`, chosen in
 `runner_commands::prepare_managed_spawn_args` by session id) always gets
-`## Main Chat`, then the user's ongoing affairs when the ledger has a list;
-the IM channels (`compose_im_runtime_prompt`) get the ongoing affairs only.
+`## Main Chat` — ending with one paragraph that says the ledger is on, while
+it is — then the user's ongoing affairs when the ledger has a list; the IM
+channels (`compose_im_runtime_prompt`) get the ongoing affairs only.
 
 ## Admission Test For Static Clauses
 
@@ -188,6 +189,25 @@ with the Galley CLI (search, then `session show <id> --around=<messageId>`).
   six-digit turn index), no headroom, `\r` not counted. Data: outside the
   static budget and the prompt hash.
 
+Since ticket 04c (PRD ruling 47) the section ends with one more paragraph
+while the affairs ledger is on, with or without a list yet
+(`LEDGER_ON_NOTE`):
+
+```text
+Galley's affairs ledger is on: once a day it distills what the user said in
+Galley and chat apps (earlier conversations included, never your replies).
+The user can view, delete or turn it off in Settings → Memory.
+```
+
+- **Why**: the ledger is on by default; the main chat opens with a greeting
+  that says so, but the greeting is never replayed into the model's history,
+  and on the first day there is no list. Without this paragraph the model
+  would not know its memory is on, nor where the user turns it off.
+- **Switch**: the ledger's (`affairs_ledger`, read at spawn with the list).
+  Off or undecided → no paragraph. IM never carries it.
+- **Bounded**: `LEDGER_ON_NOTE_BUDGET_BYTES` = 215, fixed text, no headroom,
+  `\r` not counted. Data: outside the static budget and the prompt hash.
+
 ### Ongoing Affairs (main chat and IM only)
 
 Since ticket 03a (`.scratch/main-chat/issues/03-segments-and-injection.md`)
@@ -201,9 +221,10 @@ mentions them; GA trims history by volume, but this lives in the system
 prompt, so trimming cannot drop it. Identity (the static rules) and global
 memory (GA's own system prompt) are already there and are not repeated.
 
-- **Switch**: the ledger's, the Core pref `affairs_ledger` that the Memory
-  page sets (ticket 04, `core/src/ledger/config.rs`; read at every spawn, no
-  restart needed). Off or undecided (the file is then not even read), no
+- **Switch**: the ledger's, the Core pref `affairs_ledger` that Core turns
+  on when it creates the main chat (ticket 04c) and the Memory page sets
+  (ticket 04, `core/src/ledger/config.rs`; read at every spawn, no restart
+  needed). Off or undecided (the file is then not even read), no
   list written yet, or a list with nothing in it → no section, and the
   prompt is exactly `compose_runtime_prompt`'s. Every other session never
   gets it; attach mode never runs this code.
@@ -309,6 +330,7 @@ row.
 | State block | 2026-07-07 session: replace "don't invent metadata, go check Settings" deflection with injected facts |
 | State block: Ongoing Affairs (main chat, IM) | main chat PRD rulings 18 and 27, ticket 03a (2026-10-12): association needs the affairs in context, and the full ledger was already 17 KB after three weeks of the ticket-01 corpus, so the mining run writes a short list and Core caps it |
 | State block: Main Chat (id, segment start, "search, then `--around`") | main chat PRD rulings 18 and 41, ticket 03b (2026-10-12): segments leave earlier parts out of context, and the decided lookup path is the existing CLI rather than a new GA tool. Own cap `MAIN_CHAT_SECTION_BUDGET_BYTES` |
+| State block: Main Chat, "the affairs ledger is on" paragraph | main chat PRD ruling 47, ticket 04c (2026-10-12): the ledger is on by default and the main chat's greeting, which says so, is never replayed; on the first day there is no list either. Own cap `LEDGER_ON_NOTE_BUDGET_BYTES` |
 | Past Galley Conversations: `--around` example; coverage sentence reworded to 「This reaches every Galley session, but not direct IM chats …」 | ticket 03b (2026-10-12): `session show` gained `--around`, and `--tail=20` reads the end of a session, not where a search hit is. Paid for in the same diff: the two coverage sentences became one (−51 bytes against the +51-byte line on both platforms), so the static text stays at 6855 bytes (Windows) / 6837 (POSIX) and the cap is unchanged |
 
 ## Dogfood Regression Checklist

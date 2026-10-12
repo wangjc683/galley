@@ -57,16 +57,30 @@ fn gui_writes<'a>(
 /// 02), created by Core on the first ask. The desktop opens on it at
 /// launch; it never creates one itself (Rule 5). `invalid_args` while
 /// the attached external GA is the active runtime — it has no main chat.
+///
+/// `language` (optional, ticket 04c): the UI language the GUI resolved
+/// (`zh-CN` / `en-US`), which picks the greeting a new main chat opens
+/// with; English without it. Creating it may switch the affairs ledger
+/// on, so a creation also tells the Memory page and the menus to reread
+/// (`memory-changed`).
 #[tauri::command]
 pub(crate) async fn get_or_create_main_chat(
     app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
+    language: Option<String>,
 ) -> std::result::Result<SessionBrief, String> {
-    let notifier = TauriNotifier::new(app);
-    gui_writes(&galley, &notifier)
-        .get_or_create_main_chat(Origin::gui().with_client(OriginClient::Desktop))
+    let notifier = TauriNotifier::new(app.clone());
+    let ensured = gui_writes(&galley, &notifier)
+        .get_or_create_main_chat(
+            Origin::gui().with_client(OriginClient::Desktop),
+            language.as_deref(),
+        )
         .await
-        .map_err(stringify_error)
+        .map_err(stringify_error)?;
+    if matches!(ensured, crate::db::MainChatEnsured::Created(_)) {
+        crate::ledger::emit_memory_changed(&app);
+    }
+    Ok(ensured.into_brief())
 }
 
 #[tauri::command]

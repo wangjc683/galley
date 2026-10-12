@@ -387,15 +387,6 @@ export const enCopy: AppCopy = {
       "Conversations in this project won't be read from now on",
     excludedBody: "To delete what's already noted, go to Settings → Memory.",
     excludeFailed: "Couldn't change “Don't use to learn about me”",
-    askTitle: "Should Galley learn from your conversations?",
-    askBody:
-      "Once a day it reads what you said here and in IM direct messages (never the AI's replies) and has your model provider sort it. What it notes stays on this computer; see it or turn it off anytime in Settings → Memory.",
-    askFromNow: "Start now",
-    askLookBack: "Include earlier conversations",
-    askLookBackTooltip:
-      "The first run reads all your earlier conversations, so it uses more tokens",
-    askDecline: "No thanks",
-    askFailed: "Couldn't save your choice",
   },
   browserControlAttention: {
     message:
@@ -701,7 +692,7 @@ export const enCopy: AppCopy = {
         "What Galley has noted from your conversations — view it, delete it, or turn it off",
       switchTitle: "Learn from my conversations",
       switchDescription:
-        "Once a day, Galley reads what you said on the desktop and in IM direct messages (never the AI's replies) and has your default model sort it, so it passes through your model provider once more. What it notes stays on this computer and carries over when you switch models.",
+        "Once a day, Galley reads what you said on the desktop and in IM direct messages (earlier conversations included, never the AI's replies) and has your default model sort it, so it passes through your model provider once more. What it notes stays on this computer and carries over when you switch models.",
       sinceFrom: (time) => `Since ${time}`,
       sinceEarliest: "From your earliest conversations",
       running: "Sorting now",
@@ -719,14 +710,6 @@ export const enCopy: AppCopy = {
       loadFailed: (detail) => `Couldn't read memory: ${detail}`,
       retry: "Retry",
       actionFailed: "Action failed",
-      enableTitle: "Where should it start reading?",
-      enableBody:
-        "Once it's on, Galley sorts through what you said once a day.",
-      enableFromNow: "Start now",
-      enableFromNowDetail: "Only what you say from now on.",
-      enableLookBack: "Include earlier conversations",
-      enableLookBackDetail:
-        "The first run reads all your earlier conversations, so it uses more tokens.",
       disableTitle: "Stop learning from your conversations?",
       disableBody: "Once it's off, no new conversations are read.",
       disableKeep: "Keep what it noted",

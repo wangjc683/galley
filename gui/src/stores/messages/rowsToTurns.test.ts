@@ -256,6 +256,42 @@ describe("rowsToTurns", () => {
     expect((turns[0] as UserTurn).messageId).toBe("msg_s-test_7_user");
     expect((turns[1] as AgentTurn).messageId).toBe("msg_s-test_7_assistant");
   });
+
+  // Ticket 04c: Core writes the main chat's greeting as an assistant
+  // row with origin system / galley-greeting; only that row is flagged.
+  it("flags the main chat's greeting by its origin", () => {
+    const turns = rowsToTurns([
+      makeMessageRow({
+        id: "msg_s-main_greeting",
+        role: "assistant",
+        turn_index: -1,
+        content: "你好。",
+        final_answer: "你好。",
+        created_via: "system",
+        supervisor: "galley-greeting",
+      }),
+      makeMessageRow({ role: "user", turn_index: 0, content: "早" }),
+      makeMessageRow({
+        role: "assistant",
+        turn_index: 0,
+        final_answer: "早上好",
+      }),
+      makeMessageRow({
+        role: "assistant",
+        turn_index: 1,
+        final_answer: "一次定时任务",
+        created_via: "system",
+        supervisor: "galley-scheduler",
+      }),
+    ]);
+    const agents = turns.filter((t): t is AgentTurn => t.role === "agent");
+    expect(agents.map((t) => t.greeting ?? false)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+    expect(agents[0].finalAnswer).toBe("你好。");
+  });
 });
 
 describe("derivePendingAskUser", () => {

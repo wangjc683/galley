@@ -312,6 +312,7 @@ async fn main() {
             .expect("fixed offset")
             .with_timezone(&Utc),
         look_back: false,
+        not_before: None,
     };
     let paths = LedgerPaths::new(workdir.join("managed-ga-state"));
 

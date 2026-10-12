@@ -27,7 +27,7 @@ interface MemoryState {
   connect: () => () => void;
   /** Forget everything (the external runtime has no ledger). */
   reset: () => void;
-  /** Answer the switch (the main chat's ask, Settings → Memory). */
+  /** Set the switch (Settings → Memory). */
   setSwitch: (args: SetLedgerSwitchArgs) => Promise<LedgerSwitch>;
   /** Mark / unmark a session or project, then read the marks again. */
   setExcluded: (target: LedgerTarget, excluded: boolean) => Promise<void>;
@@ -38,9 +38,9 @@ let readGeneration = 0;
 /**
  * A mirror of Core's ledger switch and exclusion marks (ticket 04b). Core
  * owns both (Rule 5); this store only reads them, live from
- * `memory-changed`, so the main chat's ask and the title / project menus
- * agree with Settings → Memory without each asking Core. Settings →
- * Memory reads the full overview itself.
+ * `memory-changed`, so the title / project menus agree with Settings →
+ * Memory without each asking Core. Settings → Memory reads the full
+ * overview itself.
  */
 export const useMemoryStore = create<MemoryState>((set, get) => ({
   ledgerSwitch: null,

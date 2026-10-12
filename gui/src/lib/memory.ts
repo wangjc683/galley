@@ -19,9 +19,10 @@ import { invoke } from "@tauri-apps/api/core";
  * global memory file is written. Listeners read again. */
 export const MEMORY_CHANGED_EVENT = "memory-changed";
 
-/** Core prefs key `affairs_ledger`; no key = undecided (never asked, or
- * never answered). `since` is RFC3339; reading earlier conversations
- * stores the Unix epoch with `lookBack: true`. */
+/** Core prefs key `affairs_ledger`; no key = undecided (never set — Core
+ * turns it on when it creates the main chat, ticket 04c). `since` is
+ * RFC3339; reading earlier conversations stores the Unix epoch with
+ * `lookBack: true`. */
 export type LedgerSwitch =
   | { state: "undecided" }
   | { state: "off" }
@@ -194,7 +195,7 @@ export function memoryErrorText(error: unknown): string {
   return String(error);
 }
 
-/** The switch alone — light; the main chat's ask and the menus use it. */
+/** The switch alone — light; the menus use it. */
 export async function getLedgerSwitch(): Promise<LedgerSwitch> {
   return invoke<LedgerSwitch>("get_ledger_switch");
 }
