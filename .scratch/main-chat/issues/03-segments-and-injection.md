@@ -1,6 +1,6 @@
 # 03（C）切段、注入与主聊天入口层提示词
 
-Status: 03a、03b in-review（`d2443281`、`b615ff96` 本地合入未推送，2026-10-12；待 JC 在 tauri dev 里验）；03c、03d needs-triage
+Status: 03a、03b done（`d2443281`、`b615ff96`，2026-10-12 主会话真机验过）；03c、03d needs-triage（等主聊天真用几天，条款按准入规则由实际问题驱动）
 
 来源：主聊天 PRD 裁决 18、20、27（2026-10-12）。依赖 01（账本有内容）、02（主聊天存在）。对外必须与 04 同版。
 
@@ -120,3 +120,14 @@ Status: 03a、03b in-review（`d2443281`、`b615ff96` 本地合入未推送，20
   - 本地整天的 CLI 断言靠 `TZ`，只在 Unix 上跑；时区换算的单元测试各平台都跑。
 - 真机验法：合入后重启 dev（会重建 CLI，`"$(sed -n 1p ~/.config/galley/cli-path)" session show --help` 里应有 `--around`）；prefs `main_chat_segment_idle_hours` = `0.01`；
   主聊天里说「下周三去体检，记得空腹」，等 36 秒以上再问「我们上次说的体检是哪天？要注意什么？」，应先 `sessions search` 再 `--around`，答出周三和空腹；再问「这个对话从哪天开始的？」，应答出本段起点。
+
+2026-10-12 主会话在 tauri dev 里真机验 03a、03b（JC 让我代验）：
+- 环境：带 `GALLEY_LEDGER_SINCE=2026-10-13` 起 dev（起算改到 10-13，测试消息不进账本）；prefs `main_chat_segment_idle_hours` = `0.01`；手写两条带「（测试 03a）」的事项清单。
+  发送走 GUI 自己的发送函数（临时 harness 调 `sendThroughCore`，与点发送按钮同一条路），测完已撤。
+- 切段：第一句后空闲 42 秒再发，日志 `[segment …] idle since …: new segment from turn 1; retired runner pid …`，`main_chat_segments` 记下第 1 轮。
+- 查历史：问「刚才让你记住的测试暗号是什么」，模型先说当前上下文没有，再 `sessions search` → `session show … --around=…`，答出原文；没有任何提示词之外的引导。
+- 段首状态：问对话和当前上下文从哪开始，答出「最早 10 月 12 日第 0 轮，当前上下文从第 1 轮开始」。
+- 事项联想：问「周末去花市有什么要顺便买的」，没调工具就答出清单里的「薄荷换盆还差营养土、陶盆已买」。
+- 界面：主聊天照常显示整条，没有段落标记（截图核对）。
+- 重启回放：重启 dev 后第一次发送，日志 `load_history (6 messages)`，正好是当前段 3 轮问答，第 0 轮没回放；模型也说上下文里没有最早那条原文。
+- 收尾：删掉 prefs 键与测试清单，再重启一次 dev 让热 runner 丢掉测试清单。主聊天里留下 6 条带【测试】前缀的消息（主聊天不能删消息），4 小时后自然在上一段。
