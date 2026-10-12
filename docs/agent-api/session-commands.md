@@ -86,24 +86,25 @@ truthful busy signal an agent can read):
 | `askPending`   | bool | **Additive (2026-10-01, galley#30).** The last run ended on an `ask_user` question nobody has answered yet. Queued messages are held while it is `true` (they were queued before the question and must not answer it), so `busy` stays `true` if any are waiting. Answer with `session send`: with no run open it dispatches at once as the answer, and the held messages run after it (§5.5a). |
 | `lastExit`     | string? | **Additive (2026-10-01, galley#30).** `exitReason.result` of this session's most recently completed run since Galley Core started, passed through verbatim; `null` until one completes (in memory only, not persisted). It is kept while the next run starts, because a queued message can start the moment a run ends and a Supervisor polling after `session wait` still needs to know why that run ended. Only the next run's completion replaces it. Values: `CURRENT_TASK_DONE` (finished), `EXITED` (the agent ended the run itself, including to ask the user, see `askPending`), `MAX_TURNS_EXCEEDED` (paused at the engine's per-run step cap; send a follow-up to continue), `ABORTED` (stopped), `SLASH_COMMAND_COMPLETED` (a slash command was handled), `DONE_WITHOUT_EXIT` (the engine task ended without an exit, after a runtime error). Treat any other value as "ended". |
 
-### 5.3 · `galley sessions search <query> [--runtime current|managed|external|all] [--all]`
+### 5.3 · `galley sessions search <query> [--runtime current|managed|external|all] [--all] [--session=<id>]`
 
 FTS5 trigram search over message bodies. Two-character queries fall
 back to LIKE substring search. Queries shorter than two characters
 return empty. By default, search follows the GUI's current runtime context, so
 managed and external GA histories stay separate unless the caller explicitly
-asks for all runtimes.
+asks for all runtimes. At most 20 hits.
 
 | Flag        | Default   | Notes                                                         |
 | ----------- | --------- | ------------------------------------------------------------- |
 | `--runtime` | `current` | runtime scope: current GUI context, managed, external, or all |
 | `--all`     | false     | include archived sessions in the scan; does not change runtime scope |
+| `--session` | (unset)   | **Additive (2026-10-12).** Keep only hits from this session id. It narrows the runtime and archive scope above, it does not replace it: pass `--runtime all --all` to be sure an archived or other-runtime session is searched. An unknown id returns no hits (exit 0), like any filter |
 
 Example:
 
 ```bash
 $ galley sessions search "ndjson"
-{"sessionId":"s-abc","messageId":"m1","snippet":"… emit <mark>ndjson</mark> on stdout …","rank":-1.234}
+{"sessionId":"s-abc","messageId":"m1","snippet":"… emit <mark>ndjson</mark> on stdout …","rank":-1.234,"createdAt":"2026-10-08T06:30:00+00:00","role":"agent","turnIndex":7}
 ```
 
 `SearchHit` fields:
@@ -111,9 +112,15 @@ $ galley sessions search "ndjson"
 | Field        | Type   | Notes                                                                          |
 | ------------ | ------ | ------------------------------------------------------------------------------ |
 | `sessionId`  | string | the session containing the hit                                                 |
-| `messageId`  | string | the matching message id                                                        |
+| `messageId`  | string | the matching message id; read it in context with `session show <sessionId> --around=<messageId>` (§5.5) |
 | `snippet`    | string | excerpt with matches wrapped in `<mark>…</mark>`; HTML-safe                    |
 | `rank`       | float  | FTS5 BM25 score (lower = better). `0.0` when the LIKE fallback returned the hit |
+| `createdAt`  | string (ISO8601) | **Additive (2026-10-12).** When the message was written, as `MessageBrief.createdAt` |
+| `role`       | string enum | **Additive (2026-10-12).** `user / agent / system`, as `MessageBrief.role` |
+| `turnIndex`  | int    | **Additive (2026-10-12).** The turn the message belongs to, as `MessageBrief.turnIndex` |
+
+The three additive fields come after `rank`; the first four keep their
+names, order and values.
 
 ### 5.4 · `galley session brief <id>`
 
@@ -129,14 +136,57 @@ $ galley session brief sess_missing ; echo "exit: $?"
 exit: 3
 ```
 
-### 5.5 · `galley session show <id> [--tail=N]`
+### 5.5 · `galley session show <id> [--tail=N] [--around=<messageId> [--context=N]] [--since=<time>] [--until=<time>]`
 
 Conversation messages for a session, oldest first. NDJSON, one
-`MessageBrief` per line.
+`MessageBrief` per line. Only visible messages (`visibility: visible`)
+are read. An unknown session id prints nothing and exits 0, except with
+`--around` (below).
 
-| Flag     | Default          | Notes                                              |
-| -------- | ---------------- | -------------------------------------------------- |
-| `--tail` | (full transcript)| return only the last `N` messages (still ordered)  |
+| Flag        | Default          | Notes                                              |
+| ----------- | ---------------- | -------------------------------------------------- |
+| `--tail`    | (full transcript)| return only the last `N` messages (still ordered). With `--since` / `--until`: the last `N` messages of that window |
+| `--around`  | (unset)          | **Additive (2026-10-12).** Read around one message, typically a `sessions search` hit: the message plus up to `--context` messages before it and `--context` after it, in transcript order. Near either end of the transcript the window is cut short, not shifted. Exit 3 `not_found` when the session has no visible message with that id (also when the session does not exist) |
+| `--context` | `10`             | **Additive (2026-10-12).** Messages on each side of `--around`; `0` returns the message alone. Ten either side make one look at most 21 rows, about the `--tail=20` read Galley's own prompt uses, and usually reach from a hit back to the user message that opened its turn and on to the reply (a turn is one user row plus a row per agent step) |
+| `--since`   | (unset)          | **Additive (2026-10-12).** Messages whose `createdAt` is at or after this time |
+| `--until`   | (unset)          | **Additive (2026-10-12).** Messages whose `createdAt` is before this time (exclusive) |
+
+Time values for `--since` / `--until`, read in the time zone of the
+machine running the CLI (the user's own computer):
+
+| Form | Meaning |
+| ---- | ------- |
+| `YYYY-MM-DD` | a whole local calendar day: `--since` from its start, `--until` through its end (the bound is the next day's start). `--since=2026-10-08 --until=2026-10-08` is that one day |
+| `YYYY-MM-DDTHH:MM`, `YYYY-MM-DDTHH:MM:SS[.fff]` (a space works in place of the `T`) | that local time. A time skipped by a daylight-saving change is refused; one that occurs twice means its first occurrence |
+| RFC 3339 with `Z` or `±HH:MM`, e.g. `2026-10-08T14:30:00+08:00` | that instant |
+
+Either bound may be given alone. A window nothing was written in prints
+nothing and exits 0. Messages compare as instants whatever form their
+stored `createdAt` takes (`…Z`, `…+00:00`, another offset).
+
+How the flags combine (anything else exits 2 `invalid_args`):
+
+| Flags | Result |
+| ----- | ------ |
+| none | full transcript (unchanged) |
+| `--tail` | last `N` messages (unchanged) |
+| `--around` [`--context`] | the message and its neighbours |
+| `--since` and / or `--until` [`--tail`] | the window, or its last `N` messages |
+| `--around` with `--tail`, `--since` or `--until` | `invalid_args`: `--around` is its own window |
+| `--context` without `--around` | `invalid_args` |
+| `--since` not earlier than `--until`, or a time the table above does not accept | `invalid_args` |
+
+```bash
+$ galley sessions search "半马" --runtime all --all
+{"sessionId":"s-abc","messageId":"msg_s-abc_12_user","snippet":"…","rank":-1.2,"createdAt":"2026-10-08T06:30:00+00:00","role":"user","turnIndex":12}
+$ galley session show s-abc --around=msg_s-abc_12_user --context=3
+… up to 7 MessageBrief lines, the hit in the middle …
+$ galley session show s-abc --since=2026-10-08 --until=2026-10-08 --tail=40
+… the last 40 messages written on 2026-10-08 (local day) …
+```
+
+Invocations without the new flags print exactly what they printed before
+2026-10-12.
 
 `MessageBrief` fields:
 

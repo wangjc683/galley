@@ -214,6 +214,20 @@ codes and error discriminants unchanged):
   "follow the default"), is gone. It was never emitted in practice and
   its absence reads exactly as before, so this is not a breaking change.
   The same applies under `--schema=1`.
+- 2026-10-12 — Reading past conversations (main chat ticket 03b).
+  `session show` gained `--around=<messageId>` with `--context=N`
+  (default 10) and a time window, `--since` / `--until` (local days,
+  local times or RFC 3339 instants; `--tail` keeps the window's last
+  rows). `--around` with `--tail` / `--since` / `--until`, `--context`
+  without `--around`, and a window whose start is not before its end are
+  `invalid_args`; an `--around` message the session does not have is
+  `not_found`. `sessions search` gained `--session=<id>`, and every
+  `SearchHit` now carries `createdAt`, `role` and `turnIndex` after its
+  four existing fields. Without the new flags, `session show` prints
+  exactly what it printed before. No new exit code or error
+  discriminant. See §5.3 and §5.5 in
+  [session-commands.md](./session-commands.md). Also served under
+  `--schema=1`.
 
 ### 7.2 `schemaVersion: 1` (frozen, served for unchanged commands)
 

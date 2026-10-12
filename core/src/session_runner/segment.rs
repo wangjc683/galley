@@ -160,6 +160,71 @@ pub(super) async fn open_if_due(
     Some(start)
 }
 
+/// What the main chat's session-start state block says about the
+/// conversation (ticket 03b): it is the main chat, its id, and where the
+/// segment its runner holds begins — so the model can tell a search hit
+/// from an earlier segment (`turnIndex` below the start) and look it up
+/// instead of guessing. Read at spawn, like the ongoing-affairs list: a
+/// new segment retires the runner, so the start never changes under a
+/// live one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MainChatPromptState {
+    pub session_id: String,
+    /// `turnIndex` of the current segment's first message; 0 in the
+    /// first segment.
+    pub segment_start_turn: i64,
+    /// The local calendar day (`YYYY-MM-DD`) the segment began.
+    pub segment_start_date: String,
+}
+
+/// [`MainChatPromptState`] for a runner of `session_id`, in this
+/// machine's time zone. `None` unless it is the main chat (or on a
+/// database error, logged: the runner still starts, with the ordinary
+/// prompt).
+pub async fn prompt_state(
+    galley: &crate::db::SqliteGalley,
+    session_id: &str,
+) -> Option<MainChatPromptState> {
+    prompt_state_in(galley, session_id, &chrono::Local).await
+}
+
+/// [`prompt_state`] with an explicit time zone (tests).
+pub async fn prompt_state_in<Tz: chrono::TimeZone>(
+    galley: &crate::db::SqliteGalley,
+    session_id: &str,
+    tz: &Tz,
+) -> Option<MainChatPromptState> {
+    match galley.main_chat_id().await {
+        Ok(Some(id)) if id.as_str() == session_id => {}
+        Ok(_) => return None,
+        Err(e) => {
+            eprintln!("[segment {session_id}] main chat lookup failed: {e}");
+            return None;
+        }
+    }
+    let start = match galley
+        .main_chat_current_segment(&SessionId(session_id.to_string()))
+        .await
+    {
+        Ok(Some(start)) => start,
+        Ok(None) => return None,
+        Err(e) => {
+            eprintln!("[segment {session_id}] reading the segment start failed: {e}");
+            return None;
+        }
+    };
+    // Stored times are RFC 3339; anything else keeps its date part as
+    // written rather than dropping the block.
+    let segment_start_date = DateTime::parse_from_rfc3339(&start.started_at)
+        .map(|at| at.with_timezone(tz).date_naive().to_string())
+        .unwrap_or_else(|_| start.started_at.chars().take(10).collect());
+    Some(MainChatPromptState {
+        session_id: session_id.to_string(),
+        segment_start_turn: start.start_turn_index,
+        segment_start_date,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -259,7 +259,10 @@ pub(crate) enum SessionsCmd {
         #[arg(long)]
         all: bool,
     },
-    /// FTS5 trigram search across persisted message bodies.
+    /// FTS5 trigram search across persisted message bodies. Each hit
+    /// carries `sessionId`, `messageId`, `createdAt`, `role` and
+    /// `turnIndex`; read one in context with `session show <sessionId>
+    /// --around=<messageId>`.
     Search {
         /// Runtime scope. Default follows the GUI's current runtime so
         /// agents see the same session set as the human operator.
@@ -271,6 +274,11 @@ pub(crate) enum SessionsCmd {
         /// Search archived sessions too (default: active only).
         #[arg(long)]
         all: bool,
+        /// Only hits from this session. Applies on top of `--runtime`
+        /// and `--all`: pass `--runtime all --all` to be sure an archived
+        /// or other-runtime session is searched.
+        #[arg(long)]
+        session: Option<String>,
     },
 }
 
@@ -282,14 +290,33 @@ pub(crate) enum SessionCmd {
         /// Session id (e.g. `sess_abc…`).
         id: String,
     },
-    /// Conversation messages for a session.
+    /// Conversation messages for a session, oldest first. Without a
+    /// window flag: the full transcript (or its last `--tail` messages).
     Show {
         /// Session id.
         id: String,
         /// Return only the last N messages instead of the full
-        /// transcript. Useful for agents catching up.
+        /// transcript. Useful for agents catching up. With `--since` /
+        /// `--until`: the last N messages of that window.
         #[arg(long)]
         tail: Option<usize>,
+        /// Read around one message (e.g. a `sessions search` hit): the
+        /// message plus `--context` messages before and after it. Exit 3
+        /// when the session has no such visible message.
+        #[arg(long, value_name = "MESSAGE_ID", conflicts_with_all = ["tail", "since", "until"])]
+        around: Option<String>,
+        /// Messages on each side of `--around` (default 10).
+        #[arg(long, value_name = "N", requires = "around")]
+        context: Option<usize>,
+        /// Messages written at or after this time. `YYYY-MM-DD` = from
+        /// the start of that local day; `YYYY-MM-DDTHH:MM[:SS]` = local
+        /// time; RFC 3339 with `Z` / `±HH:MM` = that instant.
+        #[arg(long, value_name = "TIME")]
+        since: Option<String>,
+        /// Messages written before this time (exclusive). Same forms as
+        /// `--since`; a bare `YYYY-MM-DD` includes that whole local day.
+        #[arg(long, value_name = "TIME")]
+        until: Option<String>,
     },
     /// Send a user message into a session. Persists the message with the
     /// supplied origin and dispatches it to the live runner; a mid-run

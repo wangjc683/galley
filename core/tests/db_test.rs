@@ -5,7 +5,8 @@
 //! cases isolated.
 
 use galley_core_lib::api::{
-    GalleyApi, OriginVia, RuntimeKind, SearchScope, SessionFilter, SessionId, SessionStatus,
+    GalleyApi, MessageId, MessageWindow, OriginVia, RuntimeKind, SearchScope, SessionFilter,
+    SessionId, SessionStatus,
 };
 use galley_core_lib::db::SqliteGalley;
 use sqlx::SqlitePool;
@@ -455,6 +456,270 @@ async fn session_messages_tail_returns_last_n_in_order() {
     assert_eq!(ids, vec!["m4", "m5"]);
 }
 
+/// Ticket 03b fixture: turns 0..6, each a user row then an agent row
+/// (`u{turn}` / `a{turn}`), one minute apart from 2026-10-08T00:00Z,
+/// plus an internal row inside turn 3 that no window may show.
+async fn seed_window_transcript(pool: &SqlitePool) {
+    seed_session(pool, "sess_w", "w", "idle", "2026-10-08T00:00:00Z").await;
+    seed_session(pool, "sess_other", "o", "idle", "2026-10-08T00:00:00Z").await;
+    for turn in 0..6 {
+        for (seq, role, prefix) in [(0, "user", "u"), (1, "assistant", "a")] {
+            let minute = turn * 2 + seq;
+            seed_message(
+                pool,
+                &format!("{prefix}{turn}"),
+                "sess_w",
+                turn,
+                seq,
+                role,
+                &format!("{prefix}{turn} body"),
+                &format!("2026-10-08T00:{minute:02}:00+00:00"),
+            )
+            .await;
+        }
+    }
+    seed_message(
+        pool,
+        "internal3",
+        "sess_w",
+        3,
+        2,
+        "assistant",
+        "internal",
+        "2026-10-08T00:07:30+00:00",
+    )
+    .await;
+    sqlx::query("UPDATE messages SET visibility = 'internal' WHERE id = 'internal3'")
+        .execute(pool)
+        .await
+        .expect("mark internal");
+    seed_message(
+        pool,
+        "o1",
+        "sess_other",
+        0,
+        0,
+        "user",
+        "other",
+        "2026-10-08T00:00:00+00:00",
+    )
+    .await;
+}
+
+fn window_ids(msgs: &[galley_core_lib::api::MessageBrief]) -> Vec<&str> {
+    msgs.iter().map(|m| m.id.0.as_str()).collect()
+}
+
+async fn around(
+    galley: &SqliteGalley,
+    message_id: &str,
+    context: usize,
+) -> galley_core_lib::error::Result<Vec<galley_core_lib::api::MessageBrief>> {
+    galley
+        .session_messages_window(
+            SessionId("sess_w".into()),
+            MessageWindow::Around {
+                message_id: MessageId(message_id.into()),
+                context,
+            },
+        )
+        .await
+}
+
+#[tokio::test]
+async fn session_messages_around_reads_both_sides_in_transcript_order() {
+    let pool = fresh_pool().await;
+    seed_window_transcript(&pool).await;
+    let galley = SqliteGalley::from_pool(pool);
+
+    // Middle: two visible rows each side; the internal row is skipped.
+    let msgs = around(&galley, "u3", 2).await.expect("around u3");
+    assert_eq!(window_ids(&msgs), vec!["u2", "a2", "u3", "a3", "u4"]);
+    let msgs = around(&galley, "a3", 1).await.expect("around a3");
+    assert_eq!(window_ids(&msgs), vec!["u3", "a3", "u4"]);
+    // Near the start and the end: the window is cut short, not shifted.
+    let msgs = around(&galley, "a0", 3).await.expect("around a0");
+    assert_eq!(window_ids(&msgs), vec!["u0", "a0", "u1", "a1", "u2"]);
+    let msgs = around(&galley, "a5", 2).await.expect("around a5");
+    assert_eq!(window_ids(&msgs), vec!["a4", "u5", "a5"]);
+    // Zero context: the message alone; a huge one: the whole transcript.
+    let msgs = around(&galley, "u4", 0).await.expect("around u4");
+    assert_eq!(window_ids(&msgs), vec!["u4"]);
+    let all = around(&galley, "u4", usize::MAX).await.expect("around all");
+    let full = galley
+        .session_messages(SessionId("sess_w".into()), None)
+        .await
+        .expect("full");
+    assert_eq!(window_ids(&all), window_ids(&full));
+    assert_eq!(all.len(), 12);
+    // Fields are the full MessageBrief projection.
+    assert_eq!(all[1].role, galley_core_lib::api::MessageRole::Agent);
+    assert_eq!(all[1].turn_index, Some(0));
+    assert_eq!(all[1].created_at, "2026-10-08T00:01:00+00:00");
+
+    // Not a visible message of this session: not_found.
+    for missing in ["nope", "internal3", "o1"] {
+        let err = around(&galley, missing, 2).await.unwrap_err();
+        assert!(
+            matches!(err, galley_core_lib::error::GalleyError::NotFound { .. }),
+            "{missing}: {err:?}"
+        );
+    }
+}
+
+async fn between(
+    galley: &SqliteGalley,
+    since: Option<&str>,
+    until: Option<&str>,
+    tail: Option<usize>,
+) -> Vec<String> {
+    let parse = |s: &str| {
+        chrono::DateTime::parse_from_rfc3339(s)
+            .unwrap()
+            .with_timezone(&chrono::Utc)
+    };
+    let window = MessageWindow::between(since.map(parse), until.map(parse), tail).expect("window");
+    galley
+        .session_messages_window(SessionId("sess_w".into()), window)
+        .await
+        .expect("between")
+        .into_iter()
+        .map(|m| m.id.0)
+        .collect()
+}
+
+#[tokio::test]
+async fn session_messages_between_is_half_open_and_reads_every_time_format() {
+    let pool = fresh_pool().await;
+    seed_window_transcript(&pool).await;
+    // Rows written by other writers over the years: a JS `toISOString`
+    // value and a local offset. Both are instants like the rest.
+    sqlx::query("UPDATE messages SET created_at = '2026-10-08T00:04:00.000Z' WHERE id = 'u2'")
+        .execute(&pool)
+        .await
+        .expect("z form");
+    sqlx::query("UPDATE messages SET created_at = '2026-10-08T08:05:00+08:00' WHERE id = 'a2'")
+        .execute(&pool)
+        .await
+        .expect("offset form");
+    let galley = SqliteGalley::from_pool(pool);
+
+    // since inclusive, until exclusive.
+    assert_eq!(
+        between(
+            &galley,
+            Some("2026-10-08T00:04:00Z"),
+            Some("2026-10-08T00:07:00Z"),
+            None
+        )
+        .await,
+        vec!["u2", "a2", "u3"]
+    );
+    // Either bound alone.
+    assert_eq!(
+        between(&galley, Some("2026-10-08T00:10:00Z"), None, None).await,
+        vec!["u5", "a5"]
+    );
+    assert_eq!(
+        between(&galley, None, Some("2026-10-08T00:02:00Z"), None).await,
+        vec!["u0", "a0"]
+    );
+    // --tail keeps the window's last rows, still oldest first.
+    assert_eq!(
+        between(&galley, Some("2026-10-08T00:00:00Z"), None, Some(3)).await,
+        vec!["a4", "u5", "a5"]
+    );
+    // A window nothing was written in is empty, not an error.
+    assert!(between(
+        &galley,
+        Some("2026-10-09T00:00:00Z"),
+        Some("2026-10-10T00:00:00Z"),
+        None
+    )
+    .await
+    .is_empty());
+    // An unknown session reads as empty, like `session show`.
+    let none = galley
+        .session_messages_window(
+            SessionId("sess_missing".into()),
+            MessageWindow::between(None, None, None).expect("window"),
+        )
+        .await
+        .expect("missing session");
+    assert!(none.is_empty());
+}
+
+#[tokio::test]
+async fn search_hits_carry_time_role_and_turn_and_filter_by_session() {
+    let pool = fresh_pool().await;
+    seed_window_transcript(&pool).await;
+    seed_message(
+        &pool,
+        "o2",
+        "sess_other",
+        1,
+        0,
+        "user",
+        "a3 body elsewhere",
+        "2026-10-09T00:00:00+00:00",
+    )
+    .await;
+    let galley = SqliteGalley::from_pool(pool);
+
+    // FTS path (>= 3 chars).
+    let hits = galley
+        .search_messages("a3 body".into(), SearchScope::All, None, None)
+        .await
+        .expect("fts");
+    let mut found: Vec<(&str, &str)> = hits
+        .iter()
+        .map(|h| (h.session_id.0.as_str(), h.message_id.0.as_str()))
+        .collect();
+    found.sort();
+    assert_eq!(found, vec![("sess_other", "o2"), ("sess_w", "a3")]);
+    let a3 = hits.iter().find(|h| h.message_id.0 == "a3").unwrap();
+    assert_eq!(a3.role, galley_core_lib::api::MessageRole::Agent);
+    assert_eq!(a3.turn_index, 3);
+    assert_eq!(a3.created_at, "2026-10-08T00:07:00+00:00");
+
+    let only_w = galley
+        .search_messages(
+            "a3 body".into(),
+            SearchScope::All,
+            None,
+            Some(SessionId("sess_w".into())),
+        )
+        .await
+        .expect("fts in session");
+    assert_eq!(only_w.len(), 1);
+    assert_eq!(only_w[0].message_id.0, "a3");
+
+    // LIKE path (2 chars): same fields, same filter.
+    let like = galley
+        .search_messages(
+            "u4".into(),
+            SearchScope::All,
+            None,
+            Some(SessionId("sess_w".into())),
+        )
+        .await
+        .expect("like in session");
+    assert_eq!(like.len(), 1);
+    assert_eq!(like[0].role, galley_core_lib::api::MessageRole::User);
+    assert_eq!(like[0].turn_index, 4);
+    assert_eq!(like[0].created_at, "2026-10-08T00:08:00+00:00");
+    assert!(galley
+        .search_messages(
+            "u4".into(),
+            SearchScope::All,
+            None,
+            Some(SessionId("sess_other".into())),
+        )
+        .await
+        .expect("like elsewhere")
+        .is_empty());
+}
+
 #[tokio::test]
 async fn search_messages_short_query_returns_empty() {
     let pool = fresh_pool().await;
@@ -473,7 +738,7 @@ async fn search_messages_short_query_returns_empty() {
 
     let galley = SqliteGalley::from_pool(pool);
     assert!(galley
-        .search_messages("a".into(), SearchScope::default(), None)
+        .search_messages("a".into(), SearchScope::default(), None, None)
         .await
         .expect("search 1-char")
         .is_empty());
@@ -529,6 +794,7 @@ async fn search_messages_runtime_filter_limits_fts_and_like() {
             "sharedtoken".into(),
             SearchScope::Active,
             Some(RuntimeKind::Managed),
+            None,
         )
         .await
         .expect("managed fts search");
@@ -540,6 +806,7 @@ async fn search_messages_runtime_filter_limits_fts_and_like() {
             "sharedtoken".into(),
             SearchScope::Active,
             Some(RuntimeKind::External),
+            None,
         )
         .await
         .expect("external fts search");
@@ -547,7 +814,7 @@ async fn search_messages_runtime_filter_limits_fts_and_like() {
     assert_eq!(external_hits[0].session_id.0, "sess_external");
 
     let all_runtime_hits = galley
-        .search_messages("sharedtoken".into(), SearchScope::Active, None)
+        .search_messages("sharedtoken".into(), SearchScope::Active, None, None)
         .await
         .expect("all-runtime fts search");
     assert_eq!(all_runtime_hits.len(), 2);
@@ -557,6 +824,7 @@ async fn search_messages_runtime_filter_limits_fts_and_like() {
             "兔子".into(),
             SearchScope::Active,
             Some(RuntimeKind::Managed),
+            None,
         )
         .await
         .expect("managed like search");
@@ -593,7 +861,7 @@ async fn search_messages_fts_finds_hit() {
 
     let galley = SqliteGalley::from_pool(pool);
     let hits = galley
-        .search_messages("quick".into(), SearchScope::default(), None)
+        .search_messages("quick".into(), SearchScope::default(), None, None)
         .await
         .expect("search");
 
@@ -704,7 +972,7 @@ async fn backfill_fts_rebuilds_full_index_in_batches() {
     // A hit on the last id proves keyset pagination walked the whole
     // keyspace, not just the first batch.
     let hits = galley
-        .search_messages("token01999".into(), SearchScope::default(), None)
+        .search_messages("token01999".into(), SearchScope::default(), None, None)
         .await
         .expect("search last batch");
     assert_eq!(hits.len(), 1);
@@ -821,14 +1089,14 @@ async fn search_messages_active_scope_excludes_archived() {
 
     let galley = SqliteGalley::from_pool(pool);
     let active_hits = galley
-        .search_messages("needle".into(), SearchScope::Active, None)
+        .search_messages("needle".into(), SearchScope::Active, None, None)
         .await
         .expect("search active");
     assert_eq!(active_hits.len(), 1);
     assert_eq!(active_hits[0].message_id.0, "m1");
 
     let all_hits = galley
-        .search_messages("needle".into(), SearchScope::All, None)
+        .search_messages("needle".into(), SearchScope::All, None, None)
         .await
         .expect("search all");
     assert_eq!(all_hits.len(), 2);

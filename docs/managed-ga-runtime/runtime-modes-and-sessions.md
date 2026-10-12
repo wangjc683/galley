@@ -127,6 +127,13 @@ is unaffected.
   idle main chat continues the current segment.
 - **The database keeps everything**: messages are not touched, the desktop
   shows the whole thread, and there is no segment marker in the UI.
+- **Earlier segments are looked up, not replayed** (ticket 03b): the main
+  chat's state block says it is the main chat, gives its id and where the
+  current segment begins (first `turnIndex`, local day), and sends the
+  model to the Galley CLI for anything earlier — `sessions search`, then
+  `session show <id> --around=<messageId>`, or a `--since` / `--until`
+  window ([prompt composition](./prompt-composition.md#main-chat-main-chat-only),
+  [session commands](../agent-api/session-commands.md) §5.3, §5.5).
 
 ## CLI Runtime Contract
 

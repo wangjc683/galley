@@ -145,6 +145,17 @@ pub struct MainChatSegmentFacts {
     pub ends_on_question: bool,
 }
 
+/// Where the main chat's current segment starts
+/// ([`SqliteGalley::main_chat_current_segment`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MainChatSegmentStart {
+    /// `turn_index` of the segment's first message.
+    pub start_turn_index: i64,
+    /// When the segment began (ISO 8601, as stored): the boundary's
+    /// `created_at`, or the session's for the first segment.
+    pub started_at: String,
+}
+
 impl SqliteGalley {
     /// [`MainChatSegmentFacts`] for `session_id` (migration 046).
     pub async fn main_chat_segment_facts(
@@ -192,6 +203,36 @@ impl SqliteGalley {
         .fetch_one(&self.pool)
         .await
         .map_err(map_sqlx_err)
+    }
+
+    /// Where `session_id`'s current segment starts, for the main chat's
+    /// state block (ticket 03b): the latest boundary's `turn_index` and
+    /// the time Core recorded it, or — still in the first segment — turn
+    /// 0 and the session's creation time. Both are fixed once written, so
+    /// every runner of one segment is told the same start. `None` when
+    /// the session does not exist.
+    pub async fn main_chat_current_segment(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<Option<MainChatSegmentStart>> {
+        let row: Option<(i64, String)> = sqlx::query_as(
+            "SELECT COALESCE(g.start_turn_index, 0), COALESCE(g.created_at, s.created_at) \
+             FROM sessions s \
+             LEFT JOIN main_chat_segments g ON g.session_id = s.id \
+               AND g.start_turn_index = (SELECT MAX(start_turn_index) \
+                 FROM main_chat_segments WHERE session_id = s.id) \
+             WHERE s.id = ?",
+        )
+        .bind(session_id.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(
+            row.map(|(start_turn_index, started_at)| MainChatSegmentStart {
+                start_turn_index,
+                started_at,
+            }),
+        )
     }
 
     /// Every boundary of `session_id`, oldest first.

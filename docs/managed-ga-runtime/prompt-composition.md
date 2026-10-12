@@ -22,11 +22,11 @@ Source of truth is `core/src/managed_prompt.rs`:
 rules; Core passes the composed text through the existing
 `GALLEY_RUNTIME_PROMPT_TEXT` env seam. External attach mode does not pass this
 prompt value. The runner appends it as `extra_sys_prompt` and needs no
-knowledge of the composition. Two surfaces get one more state-block section,
-the user's ongoing affairs (below): the main chat
-(`compose_main_chat_runtime_prompt`, chosen in
-`runner_commands::prepare_managed_spawn_args` by session id) and the IM
-channels (`compose_im_runtime_prompt`).
+knowledge of the composition. Two surfaces get more state-block sections
+(below). The main chat (`compose_main_chat_runtime_prompt`, chosen in
+`runner_commands::prepare_managed_spawn_args` by session id) always gets
+`## Main Chat`, then the user's ongoing affairs when the ledger has a list;
+the IM channels (`compose_im_runtime_prompt`) get the ongoing affairs only.
 
 ## Admission Test For Static Clauses
 
@@ -108,7 +108,9 @@ Before adding, also check whether an existing section already says it: the
   the `L4_raw_sessions` dead end is called out explicitly. Only the commands
   for the platform Core is built for are included (the
   `history_cli_commands!` macro, `cfg(windows)` vs POSIX), so the static text
-  differs by platform.
+  differs by platform. The examples pair search with reading a hit in
+  context (`session show <id> --around=<messageId>`, since 2026-10-12) and
+  the list with reading a session's end (`--tail=20`).
 
 ## Session-Start State Block
 
@@ -140,18 +142,58 @@ Deliberately excluded:
 | Connected channels | Connect / disconnect in Settings mid-session; would go stale |
 | Update channel | Low-frequency; one glance at Settings |
 | GUI language | Model follows the user's message language |
-| Session id / project | Low-frequency; model can self-serve via CLI |
+| Session id / project | Low-frequency; model can self-serve via CLI. Exception: the main chat is told its own id (Main Chat, below) |
 | Current date | GA core prompt already injects `Today:` (`agentmain.py`) |
 
 The block closes with the fallback rule: for state not listed, check via
 Galley CLI where available, otherwise ask the user to check Settings — self-
 serve before deflecting.
 
+### Main Chat (main chat only)
+
+Since ticket 03b (`.scratch/main-chat/issues/03-segments-and-injection.md`)
+the main chat's state block has a section `## Main Chat` right after the
+installation facts. Its segments (03a) leave everything before the current
+segment out of the model's context, while the user sees one thread and
+says "what we talked about last week". The section gives the facts the
+model needs to recognize and fetch those parts, and nothing else
+(`main_chat_section` in `core/src/managed_prompt.rs`):
+
+```text
+## Main Chat
+
+This conversation is the user's main chat, session `<id>`. Your context
+holds it from turnIndex <N> on, a segment that began <YYYY-MM-DD>. Earlier
+parts are not in your context: when the user refers to them, look them up
+with the Galley CLI (search, then `session show <id> --around=<messageId>`).
+```
+
+- **Facts**: the session id (a search hit with this `sessionId` and a
+  `turnIndex` below N is from an earlier segment), the segment's first
+  `turnIndex`, and the local day it began. Source:
+  `session_runner::segment::prompt_state`, from `main_chat_segments` — the
+  latest boundary's `start_turn_index` and `created_at` (when Core recorded
+  it), or turn 0 and the session's `created_at` in the first segment. Both
+  are fixed once written, so a runner respawned mid-segment (Core restart,
+  crash) is told the same start; a new segment retires the runner, so the
+  start never changes under a live one (admission rule 3).
+- **Routing sentence**: search, then `--around`. Search scope stays every
+  conversation: the ongoing affairs come from the main chat and the user's
+  other conversations, and their source must be findable. When to bring old
+  context up unprompted is the entry layer's (ticket 03d).
+- **Switch**: none of its own. Every managed main chat runner gets it,
+  ledger on or off; every other session, IM, and attach mode never do.
+- **Bounded**: `MAIN_CHAT_SECTION_BUDGET_BYTES` = 327, measured on the
+  longest values in practice (a Core-minted 19-character session id, a
+  six-digit turn index), no headroom, `\r` not counted. Data: outside the
+  static budget and the prompt hash.
+
 ### Ongoing Affairs (main chat and IM only)
 
 Since ticket 03a (`.scratch/main-chat/issues/03-segments-and-injection.md`)
 the main chat's and the IM channels' state block ends with a section
-`## Ongoing Affairs`: one framing paragraph, then the short list the affairs
+`## Ongoing Affairs` (in the main chat, after `## Main Chat`): one framing
+paragraph, then the short list the affairs
 ledger's daily mining run ends with
 (`memory/history_insight/ongoing_affairs.md`, `core/src/ledger/affairs.rs`).
 It is how the assistant connects a topic to last week's affairs when nobody
@@ -258,6 +300,8 @@ row.
 | Scheduled Tasks: no `sche_tasks` files, point to sidebar「定时」 (merged into What Only The User Changes, 2026-10-06; the sidebar pointer now comes from the About map) | galley#31 (2026-09-28): a user migrating from external GA copied `sche_tasks/` into the managed state root and nothing fired. Reading the seeded `scheduled_task_sop.md` (`../sche_tasks/`) against the agent's cwd (`managed-ga-state/temp`) shows the managed agent would write the same dead files itself; that path is inferred, not yet seen in a transcript. Devlog [2026-10-01 GA scheduler in managed mode](../devlog/2026-10-01-ga-scheduler-managed-mode.md) |
 | State block | 2026-07-07 session: replace "don't invent metadata, go check Settings" deflection with injected facts |
 | State block: Ongoing Affairs (main chat, IM) | main chat PRD rulings 18 and 27, ticket 03a (2026-10-12): association needs the affairs in context, and the full ledger was already 17 KB after three weeks of the ticket-01 corpus, so the mining run writes a short list and Core caps it |
+| State block: Main Chat (id, segment start, "search, then `--around`") | main chat PRD rulings 18 and 41, ticket 03b (2026-10-12): segments leave earlier parts out of context, and the decided lookup path is the existing CLI rather than a new GA tool. Own cap `MAIN_CHAT_SECTION_BUDGET_BYTES` |
+| Past Galley Conversations: `--around` example; coverage sentence reworded to 「This reaches every Galley session, but not direct IM chats …」 | ticket 03b (2026-10-12): `session show` gained `--around`, and `--tail=20` reads the end of a session, not where a search hit is. Paid for in the same diff: the two coverage sentences became one (−51 bytes against the +51-byte line on both platforms), so the static text stays at 6855 bytes (Windows) / 6837 (POSIX) and the cap is unchanged |
 
 ## Dogfood Regression Checklist
 
@@ -314,3 +358,11 @@ in a real managed session after any prompt change:
     session asked the same has no such knowledge. Note whether it brings the
     list up unprompted: the usage rules are ticket 03d's, not in the prompt
     yet.
+19. Main chat, after a segment cut: ask about something said only in an
+    earlier segment (「我们上次说的 X 后来定了吗？」) → runs `sessions search`,
+    then `session show <id> --around=<messageId>` on a hit, and answers from
+    it; does not say it has no record, and does not read the whole
+    transcript. Asked 「这个对话从哪天开始的？你现在记得哪些？」 → answers from the
+    Main Chat section (this segment's start), not by guessing.
+20. Any managed session: 「找一下我们之前聊 X 的那次，当时怎么说的」 → after the
+    search, reads the hit with `--around`, not the session's `--tail`.

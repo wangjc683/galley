@@ -1319,6 +1319,421 @@ async fn session_show_carries_ask_user_on_the_asking_row() {
     );
 }
 
+// ---------------- ticket 03b: windows into a transcript ----------------
+
+/// `turns` turns in session `s-w`, each a user row and an agent row
+/// (`u{turn}` / `a{turn}`), one minute apart from 2026-10-08T00:00Z.
+async fn seed_minute_transcript(pool: &SqlitePool, turns: i64) {
+    seed_session(pool, "s-w", "w", "idle", "2026-10-08T00:00:00Z").await;
+    for turn in 0..turns {
+        for (seq, role, prefix) in [(0i64, "user", "u"), (1, "assistant", "a")] {
+            let minute = turn * 2 + seq;
+            let id = format!("{prefix}{turn}");
+            sqlx::query(
+                "INSERT INTO messages (id, session_id, turn_index, sequence, role, content, \
+                    created_at) VALUES (?, 's-w', ?, ?, ?, ?, ?)",
+            )
+            .bind(&id)
+            .bind(turn)
+            .bind(seq)
+            .bind(role)
+            .bind(format!("{id} body"))
+            .bind(format!(
+                "2026-10-08T{:02}:{:02}:00+00:00",
+                minute / 60,
+                minute % 60
+            ))
+            .execute(pool)
+            .await
+            .expect("seed message");
+        }
+    }
+}
+
+fn row_ids(stdout: &str) -> Vec<String> {
+    parse_ndjson(stdout)
+        .iter()
+        .map(|row| row["id"].as_str().expect("id").to_string())
+        .collect()
+}
+
+/// `run_galley_with_tmpdir` with a fixed `TZ`, so a bare date means a
+/// known local day (Unix `chrono::Local` reads `TZ`).
+fn run_galley_in_tz(
+    db: &std::path::Path,
+    tmp: &std::path::Path,
+    tz: &str,
+    args: &[&str],
+) -> (String, Option<i32>) {
+    let out = Command::new(galley_bin())
+        .args(args)
+        .env("GALLEY_DB_PATH", db)
+        .env("TMPDIR", tmp)
+        .env("TZ", tz)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("spawn galley");
+    (
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        out.status.code(),
+    )
+}
+
+#[tokio::test]
+async fn session_show_around_reads_a_message_in_context() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_minute_transcript(&pool, 15).await;
+    drop(pool);
+    let show = |args: &[&str]| run_galley_with_tmpdir(&db, td.path(), args);
+
+    // Default context: 10 rows each side, 21 in all, oldest first.
+    let (stdout, code) = show(&["session", "show", "s-w", "--around=a7"]);
+    assert_eq!(code, Some(0), "stdout = {stdout}");
+    let ids = row_ids(&stdout);
+    assert_eq!(ids.len(), 21, "{ids:?}");
+    assert_eq!(
+        (ids[0].as_str(), ids[10].as_str(), ids[20].as_str()),
+        ("a2", "a7", "a12")
+    );
+    // Explicit context; space-separated flags work the same.
+    let (stdout, code) = show(&["session", "show", "s-w", "--around", "u8", "--context", "2"]);
+    assert_eq!(code, Some(0), "stdout = {stdout}");
+    assert_eq!(row_ids(&stdout), ["u7", "a7", "u8", "a8", "u9"]);
+    // Near either end the window is cut short.
+    let (stdout, _) = show(&["session", "show", "s-w", "--around=u0", "--context=3"]);
+    assert_eq!(row_ids(&stdout), ["u0", "a0", "u1", "a1"]);
+    let (stdout, _) = show(&["session", "show", "s-w", "--around=a14", "--context=1"]);
+    assert_eq!(row_ids(&stdout), ["u14", "a14"]);
+    let (stdout, _) = show(&["session", "show", "s-w", "--around=a14", "--context=0"]);
+    assert_eq!(row_ids(&stdout), ["a14"]);
+    // Rows are full MessageBriefs, as `session show` prints them.
+    let rows = parse_ndjson(&stdout);
+    assert_eq!(rows[0]["role"], "agent");
+    assert_eq!(rows[0]["turnIndex"], 14);
+    assert_eq!(rows[0]["createdAt"], "2026-10-08T00:29:00+00:00");
+
+    // A message the session does not have: exit 3 not_found.
+    for (session, message) in [("s-w", "nope"), ("s-missing", "a7")] {
+        let (stdout, code) = show(&["session", "show", session, &format!("--around={message}")]);
+        assert_eq!(code, Some(3), "stdout = {stdout}");
+        let err: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+        assert_eq!(err["error"], "not_found");
+    }
+}
+
+#[tokio::test]
+async fn session_show_reads_a_time_window() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_minute_transcript(&pool, 15).await;
+    drop(pool);
+    let show = |args: &[&str]| run_galley_with_tmpdir(&db, td.path(), args);
+
+    // Instants: since inclusive, until exclusive.
+    let (stdout, code) = show(&[
+        "session",
+        "show",
+        "s-w",
+        "--since=2026-10-08T00:10:00Z",
+        "--until=2026-10-08T08:14:00+08:00",
+    ]);
+    assert_eq!(code, Some(0), "stdout = {stdout}");
+    assert_eq!(row_ids(&stdout), ["u5", "a5", "u6", "a6"]);
+    // `--tail` keeps the window's last rows.
+    let (stdout, _) = show(&[
+        "session",
+        "show",
+        "s-w",
+        "--since=2026-10-08T00:10:00Z",
+        "--until=2026-10-08T00:14:00Z",
+        "--tail=1",
+    ]);
+    assert_eq!(row_ids(&stdout), ["a6"]);
+    // Either bound alone.
+    let (stdout, _) = show(&["session", "show", "s-w", "--until=2026-10-08T00:02:00Z"]);
+    assert_eq!(row_ids(&stdout), ["u0", "a0"]);
+    let (stdout, _) = show(&["session", "show", "s-w", "--since=2026-10-08T00:28:00Z"]);
+    assert_eq!(row_ids(&stdout), ["u14", "a14"]);
+    // A window with nothing in it: empty output, exit 0.
+    let (stdout, code) = show(&["session", "show", "s-w", "--since=2026-10-09T00:00:00Z"]);
+    assert_eq!(code, Some(0));
+    assert_eq!(stdout, "");
+
+    // Local days and local times (`TZ` is read on Unix only; the zone
+    // math itself is unit-tested in `core/src/api/transcript_window.rs`).
+    if cfg!(unix) {
+        let local = |args: &[&str]| run_galley_in_tz(&db, td.path(), "Asia/Shanghai", args);
+        // The rows fall on 2026-10-08 08:00–08:29 in Shanghai.
+        let (stdout, code) = local(&[
+            "session",
+            "show",
+            "s-w",
+            "--since=2026-10-08",
+            "--until=2026-10-08",
+        ]);
+        assert_eq!(code, Some(0), "stdout = {stdout}");
+        assert_eq!(row_ids(&stdout).len(), 30);
+        let (stdout, _) = local(&["session", "show", "s-w", "--until=2026-10-07"]);
+        assert_eq!(stdout, "");
+        let (stdout, _) = local(&["session", "show", "s-w", "--since=2026-10-09"]);
+        assert_eq!(stdout, "");
+        let (stdout, _) = local(&["session", "show", "s-w", "--since=2026-10-08T08:28"]);
+        assert_eq!(row_ids(&stdout), ["u14", "a14"]);
+        let (stdout, _) = local(&["session", "show", "s-w", "--until=2026-10-08 08:01"]);
+        assert_eq!(row_ids(&stdout), ["u0"], "until is exclusive");
+    }
+}
+
+#[tokio::test]
+async fn session_show_refuses_window_flags_that_do_not_combine() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_minute_transcript(&pool, 2).await;
+    drop(pool);
+
+    for args in [
+        &["--around=a1", "--tail=5"][..],
+        &["--around=a1", "--since=2026-10-08"],
+        &["--around=a1", "--until=2026-10-08"],
+        &["--context=3"],
+        &["--since=2026-10-09", "--until=2026-10-08"],
+        &[
+            "--since=2026-10-08T00:10:00Z",
+            "--until=2026-10-08T00:10:00Z",
+        ],
+        &["--since=yesterday"],
+        &["--until=2026-10-08T25:00"],
+    ] {
+        let mut full = vec!["session", "show", "s-w"];
+        full.extend_from_slice(args);
+        let (stdout, code) = run_galley_with_tmpdir(&db, td.path(), &full);
+        assert_eq!(code, Some(2), "{args:?}: stdout = {stdout}");
+        let err: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+        assert_eq!(err["error"], "invalid_args", "{args:?}");
+    }
+}
+
+/// Seed of the golden test below: the same rows the pre-03b binary was
+/// run against to capture the expected lines.
+async fn seed_golden_transcript(pool: &SqlitePool) {
+    seed_session(pool, "s-g", "g", "idle", "2026-05-18T00:00:00Z").await;
+    for (i, (id, turn, seq, role, content, final_answer, summary)) in [
+        ("g1", 0, 0, "user", "找一下上周的“方案”", None, None),
+        (
+            "g2",
+            0,
+            1,
+            "assistant",
+            "<summary>查</summary>正在找",
+            Some("好的，方案在这里"),
+            Some("查方案"),
+        ),
+        ("g3", 1, 0, "user", "谢谢", None, None),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        sqlx::query(
+            "INSERT INTO messages (id, session_id, turn_index, sequence, role, content, \
+                final_answer, summary, created_at) VALUES (?, 's-g', ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(id)
+        .bind(turn)
+        .bind(seq)
+        .bind(role)
+        .bind(content)
+        .bind(final_answer)
+        .bind(summary)
+        .bind(format!("2026-05-18T00:00:0{i}Z"))
+        .execute(pool)
+        .await
+        .expect("seed message");
+        sqlx::query(
+            "INSERT INTO messages_fts (message_id, session_id, role, turn_index, body) \
+             VALUES (?, 's-g', ?, ?, ?)",
+        )
+        .bind(id)
+        .bind(role)
+        .bind(turn)
+        .bind(final_answer.unwrap_or(content))
+        .execute(pool)
+        .await
+        .expect("seed fts row");
+    }
+}
+
+/// Ticket 03b is additive: `session show` without the new flags prints
+/// exactly what it printed before (lines captured from the pre-03b
+/// binary), and a search hit keeps its four fields, in order and with
+/// the same values, ahead of the three new ones — under both schema pins.
+#[tokio::test]
+async fn existing_show_and_search_output_is_unchanged() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_golden_transcript(&pool).await;
+    drop(pool);
+
+    let g1 = r#"{"id":"g1","sessionId":"s-g","role":"user","content":"找一下上周的“方案”","createdAt":"2026-05-18T00:00:00Z","turnIndex":0,"visibility":"visible","origin":{"via":"gui"}}"#;
+    let g2 = r#"{"id":"g2","sessionId":"s-g","role":"agent","content":"<summary>查</summary>正在找","finalAnswer":"好的，方案在这里","createdAt":"2026-05-18T00:00:01Z","summary":"查方案","turnIndex":0,"visibility":"visible","origin":{"via":"gui"}}"#;
+    let g3 = r#"{"id":"g3","sessionId":"s-g","role":"user","content":"谢谢","createdAt":"2026-05-18T00:00:02Z","turnIndex":1,"visibility":"visible","origin":{"via":"gui"}}"#;
+    for pin in [None, Some("--schema=1"), Some("--schema=2")] {
+        let with_pin = |args: &[&str]| {
+            let mut full: Vec<&str> = pin.into_iter().collect();
+            full.extend_from_slice(args);
+            run_galley_with_tmpdir(&db, td.path(), &full)
+        };
+        let (stdout, code) = with_pin(&["session", "show", "s-g"]);
+        assert_eq!(code, Some(0));
+        assert_eq!(stdout, format!("{g1}\n{g2}\n{g3}\n"), "pin {pin:?}");
+        let (stdout, _) = with_pin(&["session", "show", "s-g", "--tail=1"]);
+        assert_eq!(stdout, format!("{g3}\n"), "pin {pin:?}");
+        let (stdout, code) = with_pin(&["session", "show", "s-missing"]);
+        assert_eq!((stdout.as_str(), code), ("", Some(0)));
+
+        // LIKE path (2 chars): the old line, three fields appended.
+        let (stdout, _) = with_pin(&["sessions", "search", "方案", "--runtime", "all"]);
+        assert_eq!(
+            stdout,
+            "{\"sessionId\":\"s-g\",\"messageId\":\"g1\",\"snippet\":\"找一下上周的“方案”\",\
+             \"rank\":0.0,\"createdAt\":\"2026-05-18T00:00:00Z\",\"role\":\"user\",\
+             \"turnIndex\":0}\n",
+            "pin {pin:?}"
+        );
+        // FTS path: same keys in the same order, rank from BM25.
+        let (stdout, _) = with_pin(&["sessions", "search", "上周的", "--runtime", "all"]);
+        let line = stdout.trim();
+        assert!(
+            line.starts_with(
+                "{\"sessionId\":\"s-g\",\"messageId\":\"g1\",\
+                 \"snippet\":\"找一下<mark>上周的</mark>“方案”\",\"rank\":-"
+            ),
+            "pin {pin:?}: {line}"
+        );
+        assert!(
+            line.ends_with(
+                ",\"createdAt\":\"2026-05-18T00:00:00Z\",\"role\":\"user\",\"turnIndex\":0}"
+            ),
+            "pin {pin:?}: {line}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn sessions_search_session_filter_and_hit_fields() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_minute_transcript(&pool, 3).await;
+    seed_session(&pool, "s-x", "x", "idle", "2026-10-09T00:00:00Z").await;
+    for (id, session, turn, seq, role, content) in [
+        ("a1", "s-w", 1, 1, "assistant", "the needle answer"),
+        ("x1", "s-x", 4, 0, "user", "another needle"),
+    ] {
+        sqlx::query(
+            "INSERT INTO messages_fts (message_id, session_id, role, turn_index, body) \
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(id)
+        .bind(session)
+        .bind(role)
+        .bind(turn)
+        .bind(content)
+        .execute(&pool)
+        .await
+        .expect("seed fts row");
+        if session == "s-x" {
+            sqlx::query(
+                "INSERT INTO messages (id, session_id, turn_index, sequence, role, content, \
+                    created_at) VALUES (?, ?, ?, ?, ?, ?, '2026-10-09T01:00:00+00:00')",
+            )
+            .bind(id)
+            .bind(session)
+            .bind(turn)
+            .bind(seq)
+            .bind(role)
+            .bind(content)
+            .execute(&pool)
+            .await
+            .expect("seed message");
+        }
+    }
+    drop(pool);
+
+    let (stdout, code) = run_galley_with_tmpdir(
+        &db,
+        td.path(),
+        &["sessions", "search", "needle", "--runtime", "all"],
+    );
+    assert_eq!(code, Some(0), "stdout = {stdout}");
+    assert_search_session_ids(&stdout, &["s-w", "s-x"]);
+
+    for pin in ["--schema=1", "--schema=2"] {
+        let (stdout, code) = run_galley_with_tmpdir(
+            &db,
+            td.path(),
+            &[
+                pin,
+                "sessions",
+                "search",
+                "needle",
+                "--runtime",
+                "all",
+                "--session=s-w",
+            ],
+        );
+        assert_eq!(code, Some(0), "stdout = {stdout}");
+        let hits = parse_ndjson(&stdout);
+        assert_eq!(hits.len(), 1, "{pin}: {stdout}");
+        assert_eq!(hits[0]["messageId"], "a1");
+        assert_eq!(hits[0]["role"], "agent");
+        assert_eq!(hits[0]["turnIndex"], 1);
+        assert_eq!(hits[0]["createdAt"], "2026-10-08T00:03:00+00:00");
+
+        // The hit, read in context.
+        let (stdout, code) = run_galley_with_tmpdir(
+            &db,
+            td.path(),
+            &[pin, "session", "show", "s-w", "--around=a1", "--context=1"],
+        );
+        assert_eq!(code, Some(0), "stdout = {stdout}");
+        assert_eq!(row_ids(&stdout), ["u1", "a1", "u2"]);
+    }
+    // The filter applies on top of the runtime scope (`s-w` is external).
+    let (stdout, _) = run_galley_with_tmpdir(
+        &db,
+        td.path(),
+        &[
+            "sessions",
+            "search",
+            "needle",
+            "--runtime",
+            "managed",
+            "--session=s-w",
+        ],
+    );
+    assert_eq!(stdout, "");
+    let (stdout, _) = run_galley_with_tmpdir(
+        &db,
+        td.path(),
+        &[
+            "sessions",
+            "search",
+            "needle",
+            "--runtime",
+            "all",
+            "--session=s-missing",
+        ],
+    );
+    assert_eq!(stdout, "");
+}
+
 /// `galley sessions list | head` closes stdout early. That must end the
 /// process quietly (exit 0, empty stderr) — not with a Rust panic trace,
 /// which is what `println!` produced on a broken pipe.

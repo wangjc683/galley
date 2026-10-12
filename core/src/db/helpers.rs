@@ -625,13 +625,17 @@ pub(super) fn mint_goal_id(prefix: &str) -> String {
     format!("{prefix}_{x:016x}")
 }
 
-pub(super) fn into_search_hit(r: SearchHitRow) -> SearchHit {
-    SearchHit {
+pub(super) fn into_search_hit(r: SearchHitRow) -> Result<SearchHit> {
+    Ok(SearchHit {
         session_id: SessionId(r.session_id),
         message_id: MessageId(r.message_id),
         snippet: r.snippet,
         rank: r.rank,
-    }
+        created_at: r.created_at,
+        role: parse_message_role(&r.role)?,
+        // Same mapping as `MessageBrief.turnIndex` (`MessageRow::into_brief`).
+        turn_index: r.turn_index.max(0) as u32,
+    })
 }
 
 pub(super) fn escape_like(s: &str) -> String {

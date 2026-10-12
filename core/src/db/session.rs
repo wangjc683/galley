@@ -296,6 +296,108 @@ impl SqliteGalley {
         Ok(briefs)
     }
 
+    /// [`GalleyApi::session_messages_window`]: visible rows only, in the
+    /// transcript order key `(turn_index, sequence, id)` of
+    /// [`MessageCursor`]. A time window compares `julianday()` values, so
+    /// rows written as `…Z`, `…+00:00` or with another offset all compare
+    /// as instants; a row whose `created_at` SQLite cannot read falls
+    /// outside every bounded window.
+    pub(super) async fn session_messages_window_db(
+        &self,
+        id: SessionId,
+        window: MessageWindow,
+    ) -> Result<Vec<MessageBrief>> {
+        let select = format!(
+            "SELECT id, session_id, turn_index, role, content, final_answer, summary, \
+                    created_via, supervisor, origin_note, visibility, goal_id, created_at, \
+                    {ASK_USER_TOOL_CALLS_COL} \
+             FROM messages \
+             WHERE session_id = ? AND visibility = 'visible'"
+        );
+        let rows: Vec<MessageRow> = match window {
+            MessageWindow::Around {
+                message_id,
+                context,
+            } => {
+                let at = self
+                    .message_cursor(&id, message_id.0.as_str())
+                    .await?
+                    .ok_or_else(|| GalleyError::NotFound {
+                        message: format!("message {} not found in session {id}", message_id.0),
+                    })?;
+                let context = i64::try_from(context).unwrap_or(i64::MAX);
+                let mut rows: Vec<MessageRow> = sqlx::query_as::<_, MessageRow>(&format!(
+                    "{select} AND (turn_index, sequence, id) < (?, ?, ?) \
+                     ORDER BY turn_index DESC, sequence DESC, id DESC LIMIT ?"
+                ))
+                .bind(id.as_str())
+                .bind(at.turn_index)
+                .bind(at.sequence)
+                .bind(at.id.as_str())
+                .bind(context)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(map_sqlx_err)?;
+                rows.reverse();
+                // The message itself and the `context` rows after it.
+                let from_it: Vec<MessageRow> = sqlx::query_as::<_, MessageRow>(&format!(
+                    "{select} AND (turn_index, sequence, id) >= (?, ?, ?) \
+                     ORDER BY turn_index ASC, sequence ASC, id ASC LIMIT ?"
+                ))
+                .bind(id.as_str())
+                .bind(at.turn_index)
+                .bind(at.sequence)
+                .bind(at.id.as_str())
+                .bind(context.saturating_add(1))
+                .fetch_all(&self.pool)
+                .await
+                .map_err(map_sqlx_err)?;
+                rows.extend(from_it);
+                rows
+            }
+            MessageWindow::Between { since, until, tail } => {
+                let since_clause = if since.is_some() {
+                    " AND julianday(created_at) >= julianday(?)"
+                } else {
+                    ""
+                };
+                let until_clause = if until.is_some() {
+                    " AND julianday(created_at) < julianday(?)"
+                } else {
+                    ""
+                };
+                // `--tail` keeps the window's last rows: read them
+                // newest first, then put them back in order.
+                let (order, limit_clause) = match tail {
+                    Some(_) => ("DESC", " LIMIT ?"),
+                    None => ("ASC", ""),
+                };
+                let sql = format!(
+                    "{select}{since_clause}{until_clause} \
+                     ORDER BY turn_index {order}, sequence {order}, id {order}{limit_clause}"
+                );
+                let mut query = sqlx::query_as::<_, MessageRow>(&sql).bind(id.as_str());
+                for bound in [since, until].into_iter().flatten() {
+                    query = query.bind(bound.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+                }
+                if let Some(n) = tail {
+                    query = query.bind(i64::try_from(n).unwrap_or(i64::MAX));
+                }
+                let mut rows = query.fetch_all(&self.pool).await.map_err(map_sqlx_err)?;
+                if tail.is_some() {
+                    rows.reverse();
+                }
+                rows
+            }
+        };
+        let mut briefs: Vec<MessageBrief> = rows
+            .into_iter()
+            .map(MessageRow::into_brief)
+            .collect::<Result<Vec<_>>>()?;
+        self.attach_message_attachments(&mut briefs).await?;
+        Ok(briefs)
+    }
+
     pub async fn persist_gui_user_message(
         &self,
         session_id: SessionId,

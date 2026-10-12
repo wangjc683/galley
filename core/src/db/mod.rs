@@ -27,9 +27,10 @@ use crate::api::{
     GoalBrief, GoalId, GoalStatus, HealthCheck, HealthReport, HealthStatus, ManagedModelAuthKind,
     ManagedModelCredentialStatus, ManagedModelProtocol, ManagedModelProviderRecord,
     ManagedModelRecord, MessageAttachmentBrief, MessageBrief, MessageId, MessageRole,
-    MessageTelemetry, MessageVisibility, Origin, OriginVia, ProjectBrief, ProjectId, ProjectPatch,
-    RuntimeKind, ScheduledTaskBrief, ScheduledTaskId, ScheduledTaskPatch, ScheduledTaskRepeat,
-    SearchHit, SearchScope, SessionBrief, SessionFilter, SessionId, SessionStatus, StatusSummary,
+    MessageTelemetry, MessageVisibility, MessageWindow, Origin, OriginVia, ProjectBrief, ProjectId,
+    ProjectPatch, RuntimeKind, ScheduledTaskBrief, ScheduledTaskId, ScheduledTaskPatch,
+    ScheduledTaskRepeat, SearchHit, SearchScope, SessionBrief, SessionFilter, SessionId,
+    SessionStatus, StatusSummary,
 };
 use crate::app_paths;
 use crate::error::{GalleyError, Result};
@@ -151,7 +152,7 @@ use helpers::*;
 use rows::*;
 
 pub use ledger::LedgerHumanTurnRow;
-pub use main_chat::{MainChatEnsured, MainChatSegmentFacts, MAIN_CHAT_TITLE};
+pub use main_chat::{MainChatEnsured, MainChatSegmentFacts, MainChatSegmentStart, MAIN_CHAT_TITLE};
 pub use rows::{
     ManagedModelSecretRow, MessageAttachmentCreate, MessageSearchHit, PersistAssistantMessage,
     PersistedMessageRow, UpsertManagedModelMetadata, UpsertManagedModelProviderMetadata,

@@ -94,6 +94,7 @@ Read commands:
 | `"$GALLEY" sessions list --runtime all` | Cross-runtime listing when explicitly needed |
 | `"$GALLEY" sessions search "<kw>"` | Find related conversations in the current runtime |
 | `"$GALLEY" sessions search "<kw>" --runtime all` | Cross-runtime search when explicitly needed |
+| `"$GALLEY" session show <id> --around=<messageId>` | A search hit in context: the message and 10 messages either side (`--context=N`); `--since` / `--until` read a time window |
 | `"$GALLEY" session brief <id>` | One-session summary with `turnCount` and `live` |
 | `"$GALLEY" session show <id> --tail=20` | Recent visible messages; an agent row that asked a question carries `askUser` |
 | `"$GALLEY" session wait <id> --after-turn=<N> --until-idle --timeout=600 --poll=5 --tail=20 --final-show` | Bounded result retrieval; `N` = the `turnCount` from `session brief` read right before sending (not +1); `--until-idle` = `completed` only once the run has finished; frames carry `session.live` |

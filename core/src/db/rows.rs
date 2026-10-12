@@ -429,6 +429,9 @@ pub(super) struct SearchHitRow {
     /// (decoded as `0.0`).
     #[sqlx(default)]
     pub(super) rank: f64,
+    pub(super) created_at: String,
+    pub(super) role: String,
+    pub(super) turn_index: i64,
 }
 
 #[derive(Debug, FromRow)]

@@ -19,13 +19,23 @@ impl GalleyApi for SqliteGalley {
         self.session_messages_db(id, tail).await
     }
 
+    async fn session_messages_window(
+        &self,
+        id: SessionId,
+        window: MessageWindow,
+    ) -> Result<Vec<MessageBrief>> {
+        self.session_messages_window_db(id, window).await
+    }
+
     async fn search_messages(
         &self,
         query: String,
         scope: SearchScope,
         runtime_kind: Option<RuntimeKind>,
+        session_id: Option<SessionId>,
     ) -> Result<Vec<SearchHit>> {
-        self.search_messages_db(query, scope, runtime_kind).await
+        self.search_messages_db(query, scope, runtime_kind, session_id)
+            .await
     }
 
     async fn status(&self) -> Result<StatusSummary> {

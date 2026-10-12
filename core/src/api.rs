@@ -22,6 +22,7 @@ pub mod schedule;
 pub mod search;
 pub mod session;
 pub mod status;
+pub mod transcript_window;
 
 pub use goal::{CreateGoalInput, GoalBrief, GoalId, GoalStatus, DEFAULT_GOAL_BUDGET_SECONDS};
 pub use health::{HealthCheck, HealthReport, HealthStatus};
@@ -48,6 +49,9 @@ pub use session::{
     CreateSessionInput, RuntimeKind, SessionBrief, SessionFilter, SessionId, SessionStatus,
 };
 pub use status::StatusSummary;
+pub use transcript_window::{
+    parse_local_time_bound, parse_time_bound, MessageWindow, TimeBound, DEFAULT_AROUND_CONTEXT,
+};
 
 use async_trait::async_trait;
 
@@ -87,12 +91,23 @@ pub trait GalleyApi: Send + Sync {
         tail: Option<usize>,
     ) -> Result<Vec<MessageBrief>>;
 
-    /// FTS5 search across messages.
+    /// Part of a session's visible transcript, oldest first: around one
+    /// message, or inside a time window ([`MessageWindow`]). `not_found`
+    /// when an `Around` message is not a visible message of the session.
+    async fn session_messages_window(
+        &self,
+        id: SessionId,
+        window: MessageWindow,
+    ) -> Result<Vec<MessageBrief>>;
+
+    /// FTS5 search across messages; `session_id` keeps only that
+    /// session's hits.
     async fn search_messages(
         &self,
         query: String,
         scope: SearchScope,
         runtime_kind: Option<RuntimeKind>,
+        session_id: Option<SessionId>,
     ) -> Result<Vec<SearchHit>>;
 
     /// Aggregate counts useful for status dashboards.

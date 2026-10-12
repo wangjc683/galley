@@ -11,7 +11,8 @@
 //! - a cold runner gets only the current segment back, the same after a
 //!   "restart" (a new registry on the same database) and after N changes;
 //! - the database keeps the whole thread;
-//! - side chats — managed or attached — are untouched.
+//! - side chats — managed or attached — are untouched;
+//! - what the main chat's state block says about its segment (03b).
 //!
 //! The pure rule (exactly N hours, empty segments, the pref fallback)
 //! is unit-tested in `core/src/session_runner/segment.rs`.
@@ -829,4 +830,73 @@ async fn side_chats_are_never_cut() {
         .expect("restore");
     assert_eq!(runner.load_histories(), vec![turn("第一问", "第一答")]);
     assert!(boundaries(&galley, sid).await.is_empty());
+}
+
+// ---------------- the main chat's state block (ticket 03b) ----------------
+
+/// What a main chat runner is told about the conversation at spawn: its
+/// id and where the current segment begins (turn index, local date) —
+/// the first segment from turn 0 on the day the main chat was created,
+/// later ones from the latest recorded boundary. Every other session
+/// gets nothing, so its prompt stays the ordinary one.
+#[tokio::test]
+async fn main_chat_prompt_state_names_the_current_segment() {
+    use chrono_tz::Asia::Shanghai;
+    use galley_core_lib::session_runner::segment::{prompt_state_in, MainChatPromptState};
+
+    let (pool, galley) = fresh().await;
+    let sid = "s-main-state";
+    main_chat(&galley, sid).await;
+    side_chat(&galley, "s-side-managed", RuntimeKind::Managed).await;
+    side_chat(&galley, "s-side-external", RuntimeKind::External).await;
+    // 01:30 the next day in Shanghai.
+    sqlx::query("UPDATE sessions SET created_at = '2026-10-01T17:30:00+00:00' WHERE id = ?")
+        .bind(sid)
+        .execute(&pool)
+        .await
+        .expect("created_at");
+
+    assert_eq!(
+        prompt_state_in(&galley, sid, &Shanghai).await,
+        Some(MainChatPromptState {
+            session_id: sid.into(),
+            segment_start_turn: 0,
+            segment_start_date: "2026-10-02".into(),
+        }),
+        "first segment"
+    );
+
+    for start in [4, 9] {
+        galley
+            .record_main_chat_segment(&SessionId(sid.into()), start)
+            .await
+            .expect("boundary");
+    }
+    sqlx::query(
+        "UPDATE main_chat_segments SET created_at = CASE start_turn_index \
+           WHEN 4 THEN '2026-10-05T03:00:00+00:00' \
+           ELSE '2026-10-11T23:10:00+00:00' END \
+         WHERE session_id = ?",
+    )
+    .bind(sid)
+    .execute(&pool)
+    .await
+    .expect("boundary times");
+    assert_eq!(
+        prompt_state_in(&galley, sid, &Shanghai).await,
+        Some(MainChatPromptState {
+            session_id: sid.into(),
+            segment_start_turn: 9,
+            segment_start_date: "2026-10-12".into(),
+        }),
+        "the latest boundary, on its local day"
+    );
+
+    for other in ["s-side-managed", "s-side-external", "s-missing"] {
+        assert_eq!(
+            prompt_state_in(&galley, other, &Shanghai).await,
+            None,
+            "{other}"
+        );
+    }
 }

@@ -306,12 +306,18 @@ impl SqliteGalley {
         query: String,
         scope: SearchScope,
         runtime_kind: Option<RuntimeKind>,
+        session_id: Option<SessionId>,
     ) -> Result<Vec<SearchHit>> {
         let q = query.trim();
         if q.len() < 2 {
             return Ok(vec![]);
         }
         const LIMIT: i64 = 20;
+        let session_clause = if session_id.is_some() {
+            " AND s.id = ?"
+        } else {
+            ""
+        };
 
         // FTS5 trigram path (>= 3 chars). Wraps as a phrase so SQLite
         // treats the whole thing as a literal — matches the GUI's
@@ -331,12 +337,15 @@ impl SqliteGalley {
                 "SELECT fts.message_id AS message_id, \
                         fts.session_id AS session_id, \
                         snippet(messages_fts, 4, '<mark>', '</mark>', '…', 16) AS snippet, \
-                        bm25(messages_fts) AS rank \
+                        bm25(messages_fts) AS rank, \
+                        m.created_at AS created_at, \
+                        m.role AS role, \
+                        m.turn_index AS turn_index \
                  FROM messages_fts fts \
                  JOIN messages m ON m.id = fts.message_id \
                  JOIN sessions s ON s.id = fts.session_id \
                  WHERE messages_fts MATCH ? \
-                   AND m.visibility = 'visible'{scope_clause}{runtime_clause} \
+                   AND m.visibility = 'visible'{scope_clause}{runtime_clause}{session_clause} \
                  ORDER BY rank ASC \
                  LIMIT ?"
             );
@@ -344,9 +353,12 @@ impl SqliteGalley {
             if let Some(kind) = runtime_kind {
                 query = query.bind(runtime_kind_sql(kind));
             }
+            if let Some(id) = &session_id {
+                query = query.bind(id.as_str());
+            }
             let res = query.bind(LIMIT).fetch_all(&self.pool).await;
             match res {
-                Ok(rows) => return Ok(rows.into_iter().map(into_search_hit).collect()),
+                Ok(rows) => return rows.into_iter().map(into_search_hit).collect(),
                 Err(e) => {
                     // FTS5 MATCH can fail on weird inputs (rare with
                     // phrase wrapping but possible). Fall through to
@@ -371,12 +383,15 @@ impl SqliteGalley {
         let sql = format!(
             "SELECT m.id AS message_id, \
                     m.session_id AS session_id, \
-                    substr(m.content, 1, 200) AS snippet \
+                    substr(m.content, 1, 200) AS snippet, \
+                    m.created_at AS created_at, \
+                    m.role AS role, \
+                    m.turn_index AS turn_index \
              FROM messages m \
              JOIN sessions s ON s.id = m.session_id \
              WHERE m.role IN ('user','assistant') \
                AND m.visibility = 'visible' \
-               AND m.content LIKE ? ESCAPE '\\'{scope_clause}{runtime_clause} \
+               AND m.content LIKE ? ESCAPE '\\'{scope_clause}{runtime_clause}{session_clause} \
              ORDER BY s.last_activity_at DESC \
              LIMIT ?"
         );
@@ -384,11 +399,14 @@ impl SqliteGalley {
         if let Some(kind) = runtime_kind {
             query = query.bind(runtime_kind_sql(kind));
         }
+        if let Some(id) = &session_id {
+            query = query.bind(id.as_str());
+        }
         let rows = query
             .bind(LIMIT)
             .fetch_all(&self.pool)
             .await
             .map_err(map_sqlx_err)?;
-        Ok(rows.into_iter().map(into_search_hit).collect())
+        rows.into_iter().map(into_search_hit).collect()
     }
 }

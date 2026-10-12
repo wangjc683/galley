@@ -373,7 +373,17 @@ pub(crate) async fn prepare_managed_spawn_args(
 ) -> Result<SpawnArgs, RunnerSpawnError> {
     let requested_model_id = args.llm_key.clone();
     let mut context = prepare_managed_runtime_context(app, requested_model_id.as_deref()).await?;
-    if let Some(affairs) = main_chat_affairs(app, &args.session_id, &context).await {
+    // The main chat's runner gets the main chat's state block (tickets
+    // 03a / 03b). Read at spawn: a main chat runner is spawned at the
+    // start of each segment, so each segment starts with its own start
+    // and the latest affairs list.
+    let main_chat = crate::session_runner::segment::prompt_state(
+        &app.state::<SqliteGalley>(),
+        &args.session_id,
+    )
+    .await;
+    if let Some(main_chat) = main_chat {
+        let affairs = main_chat_affairs(&context);
         if let Some(entry) = context
             .env
             .iter_mut()
@@ -381,7 +391,8 @@ pub(crate) async fn prepare_managed_spawn_args(
         {
             entry.1 = managed_prompt::compose_main_chat_runtime_prompt(
                 &app.package_info().version.to_string(),
-                &affairs,
+                &main_chat,
+                affairs.as_deref(),
             );
         }
     }
@@ -401,21 +412,11 @@ pub(crate) async fn prepare_managed_spawn_args(
     Ok(args)
 }
 
-/// The ongoing-affairs list for a runner of `session_id`, when that is
-/// the main chat and the ledger is on (ticket 03a,
-/// [`crate::ledger::affairs`]). Read at spawn: a main chat runner is
-/// spawned at the start of each segment, so each segment starts with the
-/// latest list. `None` for every other session.
-async fn main_chat_affairs(
-    app: &AppHandle,
-    session_id: &str,
-    context: &ManagedRuntimeProcessContext,
-) -> Option<String> {
+/// The ongoing-affairs list for the main chat's runner, when the ledger
+/// is on (ticket 03a, [`crate::ledger::affairs`]); `None` while it is off
+/// or no list has been written yet.
+fn main_chat_affairs(context: &ManagedRuntimeProcessContext) -> Option<String> {
     let config = crate::ledger::LedgerConfig::from_env()?;
-    let main_chat = app.state::<SqliteGalley>().main_chat_id().await.ok()??;
-    if main_chat.as_str() != session_id {
-        return None;
-    }
     crate::ledger::affairs::for_injection(
         Some(config),
         std::path::Path::new(&context.diagnostics.paths.state_root),

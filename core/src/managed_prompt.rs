@@ -4,6 +4,7 @@
 //! Core so it is versioned with the app, not treated as user-editable roleplay
 //! content in the managed runtime resource directory.
 
+use crate::session_runner::segment::MainChatPromptState;
 use ring::digest::{Context, SHA256};
 use std::fmt::Write;
 
@@ -19,6 +20,7 @@ macro_rules! history_cli_commands {
 
   $GALLEY = Get-Content "$env:APPDATA\galley\cli-path" | Select-Object -First 1
   & $GALLEY sessions search "<keywords>" --runtime all --all
+  & $GALLEY session show <id> --around=<messageId>
   & $GALLEY sessions list --runtime all --all
   & $GALLEY session show <id> --tail=20"#
     };
@@ -28,6 +30,7 @@ macro_rules! history_cli_commands {
     () => {
         r#"  GALLEY="$(sed -n '1p' "${XDG_CONFIG_HOME:-$HOME/.config}/galley/cli-path")"
   "$GALLEY" sessions search "<keywords>" --runtime all --all
+  "$GALLEY" session show <id> --around=<messageId>
   "$GALLEY" sessions list --runtime all --all
   "$GALLEY" session show <id> --tail=20"#
     };
@@ -143,10 +146,10 @@ covers archived sessions and both runtimes); narrow only when asked.
     history_cli_commands!(),
     r#"
 
-You can read any Galley session, from the desktop or created by a supervisor.
-You cannot read direct IM chats (WeChat / Feishu / Telegram / Discord): they
-belong to the IM channel and Galley does not store them. Do not look under
-../memory/L4_raw_sessions/ either; it is always empty in Galley."#
+This reaches every Galley session, but not direct IM chats (WeChat / Feishu /
+Telegram / Discord): they belong to the IM channel and Galley does not store
+them. Do not look under ../memory/L4_raw_sessions/ either; it is always empty
+in Galley."#
 );
 
 /// GUI-composer surface feature: the ghost-text suggestion the workbench
@@ -189,19 +192,24 @@ Rules:
 /// session (stale injected state answered confidently is worse than "I don't
 /// know"), and it is safe to send to the LLM provider on every request.
 pub(crate) fn compose_runtime_prompt(app_version: &str) -> String {
-    compose(app_version, true, None)
+    compose(app_version, true, None, None)
 }
 
-/// The main chat's variant (ticket 03a): the workbench prompt, its state
-/// block closing with the user's ongoing affairs
-/// ([`crate::ledger::affairs`], already capped). Only when the ledger is
-/// on and a list exists — otherwise the main chat gets
-/// [`compose_runtime_prompt`] like every other session. Users do not ask
-/// for the list, so it is a deliberate exception to the first admission
-/// rule above: the association it enables is the feature
+/// The main chat's variant: the workbench prompt, its state block
+/// followed by a "Main Chat" section (ticket 03b: this is the main chat,
+/// its id, where the segment its runner holds begins, and how to look up
+/// earlier parts) and — when the ledger is on and a list exists — the
+/// user's ongoing affairs (ticket 03a, [`crate::ledger::affairs`], already
+/// capped). Every other session gets [`compose_runtime_prompt`]. Users do
+/// not ask for the affairs list, so it is a deliberate exception to the
+/// first admission rule above: the association it enables is the feature
 /// (docs/managed-ga-runtime/prompt-composition.md, "Ongoing Affairs").
-pub(crate) fn compose_main_chat_runtime_prompt(app_version: &str, affairs: &str) -> String {
-    compose(app_version, true, Some(affairs))
+pub(crate) fn compose_main_chat_runtime_prompt(
+    app_version: &str,
+    main_chat: &MainChatPromptState,
+    affairs: Option<&str>,
+) -> String {
+    compose(app_version, true, Some(main_chat), affairs)
 }
 
 /// IM-supervisor variant: same runtime rules WITHOUT the suggestion
@@ -209,7 +217,27 @@ pub(crate) fn compose_main_chat_runtime_prompt(app_version: &str, affairs: &str)
 /// would show it raw. IM carries the same ongoing-affairs list as the
 /// main chat (PRD ruling 27, IM L0), under the same switch.
 pub(crate) fn compose_im_runtime_prompt(app_version: &str, affairs: Option<&str>) -> String {
-    compose(app_version, false, affairs)
+    compose(app_version, false, None, affairs)
+}
+
+/// The main chat's own state-block section (ticket 03b). Its segments
+/// (03a) leave earlier parts of the thread out of the model's context;
+/// this says so, with the facts the model needs to tell an earlier
+/// segment's search hit (same session, `turnIndex` below the start) and
+/// to fetch it. Data plus one routing sentence: when to bring old context
+/// up belongs to the entry layer (ticket 03d).
+fn main_chat_section(state: &MainChatPromptState) -> String {
+    format!(
+        r#"## Main Chat
+
+This conversation is the user's main chat, session `{id}`. Your context
+holds it from turnIndex {turn} on, a segment that began {date}. Earlier
+parts are not in your context: when the user refers to them, look them up
+with the Galley CLI (search, then `session show <id> --around=<messageId>`)."#,
+        id = state.session_id,
+        turn = state.segment_start_turn,
+        date = state.segment_start_date,
+    )
 }
 
 /// Heading and framing of the ongoing-affairs section. Data, not rules:
@@ -225,12 +253,20 @@ fn ongoing_affairs_section(affairs: &str) -> String {
     format!("{ONGOING_AFFAIRS_HEADER}\n\n{affairs}")
 }
 
-fn compose(app_version: &str, with_suggestion: bool, affairs: Option<&str>) -> String {
+fn compose(
+    app_version: &str,
+    with_suggestion: bool,
+    main_chat: Option<&MainChatPromptState>,
+    affairs: Option<&str>,
+) -> String {
     let static_rules = if with_suggestion {
         workbench_static_prompt()
     } else {
         RUNTIME_PROMPT_STATIC.to_string()
     };
+    let main_chat = main_chat
+        .map(|state| format!("\n\n{}", main_chat_section(state)))
+        .unwrap_or_default();
     let affairs = affairs
         .map(|list| format!("\n\n{}", ongoing_affairs_section(list)))
         .unwrap_or_default();
@@ -248,7 +284,7 @@ Facts about this Galley installation, captured at session start:
 
 For state not listed here — model configuration, connected channels, update
 channel, session or project state — do not guess. Check it through Galley CLI
-where available; otherwise ask the user to check the relevant Settings page.{affairs}"#,
+where available; otherwise ask the user to check the relevant Settings page.{main_chat}{affairs}"#,
         platform = platform_label(),
     )
 }
@@ -472,6 +508,14 @@ mod tests {
         );
     }
 
+    fn main_chat_state() -> MainChatPromptState {
+        MainChatPromptState {
+            session_id: "s-mgn4k2x1-7q3z9w0e".into(),
+            segment_start_turn: 42,
+            segment_start_date: "2026-10-12".into(),
+        }
+    }
+
     /// Ticket 03a: the ongoing-affairs list reaches the main chat and the
     /// IM channels, appended to the state block and nothing else changed;
     /// every other workbench session gets the prompt it always had.
@@ -481,16 +525,22 @@ mod tests {
         let ordinary = compose_runtime_prompt("t");
         assert!(!ordinary.contains("## Ongoing Affairs"));
 
-        let main = compose_main_chat_runtime_prompt("t", list);
+        let state = main_chat_state();
+        let main = compose_main_chat_runtime_prompt("t", &state, Some(list));
         assert!(main.contains("## Ongoing Affairs"));
         assert!(main.contains("- 日语 N3：下周补两课"));
         assert!(main.contains("## Next-Step Suggestion"));
         assert_eq!(
             main,
-            format!("{ordinary}\n\n{}", ongoing_affairs_section(list)),
-            "the section is appended after the state block, nothing else moves"
+            format!(
+                "{ordinary}\n\n{}\n\n{}",
+                main_chat_section(&state),
+                ongoing_affairs_section(list)
+            ),
+            "the sections are appended after the state block, nothing else moves"
         );
-        assert!(main.find("## Galley State") < main.find("## Ongoing Affairs"));
+        assert!(main.find("## Galley State") < main.find("## Main Chat"));
+        assert!(main.find("## Main Chat") < main.find("## Ongoing Affairs"));
 
         let im = compose_im_runtime_prompt("t", Some(list));
         assert!(im.contains("## Ongoing Affairs"));
@@ -500,8 +550,70 @@ mod tests {
 
         // Data, not behavior: the prompt generation does not change.
         let hash = prompt_hash();
-        let _ = compose_main_chat_runtime_prompt("t", list);
+        let _ = compose_main_chat_runtime_prompt("t", &state, Some(list));
         assert_eq!(prompt_hash(), hash);
+    }
+
+    /// Ticket 03b: the main chat's state block says which conversation
+    /// this is and where the model's context of it begins, and sends the
+    /// model to the CLI for anything earlier. Only the main chat gets it
+    /// (with or without the ledger's affairs); IM never does.
+    #[test]
+    fn main_chat_section_names_the_conversation_and_its_segment() {
+        let state = main_chat_state();
+        let ordinary = compose_runtime_prompt("t");
+        let main = compose_main_chat_runtime_prompt("t", &state, None);
+        assert_eq!(main, format!("{ordinary}\n\n{}", main_chat_section(&state)));
+        assert!(!main.contains("## Ongoing Affairs"));
+        // Single-line fragments only (a Windows checkout makes the raw
+        // string CRLF).
+        assert!(main.contains("This conversation is the user's main chat"));
+        assert!(main.contains("session `s-mgn4k2x1-7q3z9w0e`"));
+        assert!(main.contains("holds it from turnIndex 42 on, a segment that began 2026-10-12."));
+        assert!(main.contains("parts are not in your context"));
+        assert!(main.contains("`session show <id> --around=<messageId>`"));
+
+        for prompt in [
+            ordinary,
+            compose_im_runtime_prompt("t", None),
+            compose_im_runtime_prompt("t", Some("- 一件事")),
+        ] {
+            assert!(!prompt.contains("## Main Chat"));
+            assert!(!prompt.contains("main chat"));
+        }
+    }
+
+    /// Byte cap on the main chat section, rendered with the longest
+    /// values it takes in practice: a Core-minted session id (19
+    /// characters until 2059; `mint_session_id`), a six-digit turn index
+    /// and a date. No headroom, `\r` not counted. It rides every request
+    /// of the main chat, and the static budget does not cover it.
+    const MAIN_CHAT_SECTION_BUDGET_BYTES: usize = 327;
+
+    #[test]
+    fn main_chat_section_stays_within_budget() {
+        let longest = MainChatPromptState {
+            session_id: "s-zzzzzzzz-zzzzzzzz".into(),
+            segment_start_turn: 999_999,
+            segment_start_date: "2026-10-12".into(),
+        };
+        let len = main_chat_section(&longest)
+            .bytes()
+            .filter(|&byte| byte != b'\r')
+            .count();
+        assert!(
+            len <= MAIN_CHAT_SECTION_BUDGET_BYTES,
+            "main chat section is {len} bytes, budget {MAIN_CHAT_SECTION_BUDGET_BYTES}"
+        );
+    }
+
+    /// The `--around` read pairs with search in the static history
+    /// commands, on both platforms (ticket 03b).
+    #[test]
+    fn history_lookup_shows_reading_a_hit_in_context() {
+        assert!(RUNTIME_PROMPT_STATIC.contains("session show <id> --around=<messageId>"));
+        assert!(RUNTIME_PROMPT_STATIC.contains("session show <id> --tail=20"));
+        assert!(RUNTIME_PROMPT_STATIC.contains("This reaches every Galley session"));
     }
 
     /// Byte cap on the ongoing-affairs heading and framing, set with no

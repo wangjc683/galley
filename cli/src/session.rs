@@ -5,8 +5,9 @@ use crate::common::{
     runtime_filter, with_live, StreamEndPayload, SCHEMA_VERSION,
 };
 use galley_core_lib::api::{
-    GalleyApi, MessageBrief, MessageRole, SearchScope, SessionBrief, SessionFilter, SessionId,
-    SessionStatus,
+    parse_local_time_bound, GalleyApi, MessageBrief, MessageId, MessageRole, MessageWindow,
+    SearchScope, SessionBrief, SessionFilter, SessionId, SessionStatus, TimeBound,
+    DEFAULT_AROUND_CONTEXT,
 };
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
@@ -98,6 +99,7 @@ pub(crate) async fn sessions_search(
     runtime: RuntimeArg,
     query: String,
     all: bool,
+    session: Option<String>,
 ) -> Result<(), GalleyError> {
     let galley = SqliteGalley::open().await?;
     let scope = if all {
@@ -106,7 +108,9 @@ pub(crate) async fn sessions_search(
         SearchScope::Active
     };
     let runtime_kind = runtime_filter(&galley, runtime).await?;
-    let hits = galley.search_messages(query, scope, runtime_kind).await?;
+    let hits = galley
+        .search_messages(query, scope, runtime_kind, session.map(SessionId))
+        .await?;
     for hit in hits {
         emit_json(&hit)?;
     }
@@ -122,9 +126,43 @@ pub(crate) async fn session_brief(id: String) -> Result<(), GalleyError> {
     Ok(())
 }
 
-pub(crate) async fn session_show(id: String, tail: Option<usize>) -> Result<(), GalleyError> {
+pub(crate) async fn session_show(
+    id: String,
+    tail: Option<usize>,
+    around: Option<String>,
+    context: Option<usize>,
+    since: Option<String>,
+    until: Option<String>,
+) -> Result<(), GalleyError> {
+    // clap already refused the combinations that make no sense
+    // (`--around` with `--tail` / `--since` / `--until`, `--context`
+    // without `--around`); the time values are read before the DB opens
+    // so a bad one is `invalid_args` whatever the DB state.
+    let window = if let Some(message_id) = around {
+        Some(MessageWindow::Around {
+            message_id: MessageId(message_id),
+            context: context.unwrap_or(DEFAULT_AROUND_CONTEXT),
+        })
+    } else if since.is_some() || until.is_some() {
+        let since = since
+            .map(|value| parse_local_time_bound(&value, TimeBound::Since))
+            .transpose()?;
+        let until = until
+            .map(|value| parse_local_time_bound(&value, TimeBound::Until))
+            .transpose()?;
+        Some(MessageWindow::between(since, until, tail)?)
+    } else {
+        None
+    };
     let galley = SqliteGalley::open().await?;
-    let msgs = galley.session_messages(SessionId(id), tail).await?;
+    let msgs = match window {
+        None => galley.session_messages(SessionId(id), tail).await?,
+        Some(window) => {
+            galley
+                .session_messages_window(SessionId(id), window)
+                .await?
+        }
+    };
     for m in msgs {
         emit_json(&m)?;
     }
