@@ -1,6 +1,6 @@
 # 07 侧栏结构试验：A3 / B / B′
 
-Status: ready-for-agent
+Status: in-review（`6df6ec44` 本地合入未推送，2026-10-12；待 JC 真机比 A3 / B / B′ 与叫法）
 
 来源：主聊天 PRD 裁决 28–33（2026-10-12，JC 看过 02 的 A1 / A2 / A3 之后）。依赖 02（已本地合入）。只改 GUI，不碰 Core。
 
@@ -64,3 +64,12 @@ Galley                    搜索 定时 新建项目
 - JC 在 tauri dev 里比 A3 / B / B′ 并裁决层级与叫法。
 
 ## Comments
+
+2026-10-12 实现回报要点（主会话复核：GUI 1050 通过、typecheck / lint / diff check 通过）：
+- 分区头 12px semibold ink-soft，不加字距（时间桶标题是 10px ink-muted 加字距）；主对话行与分区头一起固定在滚动列表之上，加号不会滚走。
+- 「其他来源」复用项目组组件（伪项目 + `groupIcon`，Tray 图标、无加号、无菜单），收起时挂出等你回复 / 出错 / 选中的行；只收时间窗内、不在项目、未置顶的 agent 会话，旧的仍在「更早」后面。
+- 「人开的」判据：没有来源记录或来源为 gui。
+- B′：⌘\（Windows / Linux 为 Ctrl+\）；侧栏隐藏而非卸载，展开回到原宽度，对话滚动与草稿保留；macOS 收起时按钮从 80px 起给红绿灯让位；计数徽标照「定时」图标的做法，不用状态点。
+- 演示状态：渲染层 context 叠加假的在跑 / 在问你 / 出错 / 新回复，不写 store、不碰 Core；对 `demo:` 开头的假会话的操作一律丢弃。
+- 已知：从项目组加号新建时占位行也出现在分区顶部；收起侧栏时书眉的搜索 / 定时 / 新建项目看不到（⌘K 仍可用）；两个状态 hook 临时反向依赖了 `components/layout/sidebar/main-chat-demo.ts`。
+- 胜出方收拢步骤写在 `main-chat-layout.ts` 头部注释里。

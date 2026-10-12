@@ -135,7 +135,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [03](./issues/03-segments-and-injection.md) | C | 切段、注入、入口层提示词 | 01、02 | needs-triage |
 | [04](./issues/04-what-it-remembers-page.md) | D | 「它记得我什么」页面 | 01 | needs-triage |
 | [06](./issues/06-subtasks.md) | F | 子任务：父会话、原生派活工具、卡片、定时任务改卡片 | 02 | needs-triage |
-| [07](./issues/07-sidebar-structure-trial.md) | — | 侧栏结构试验：A3 / B / B′ + 演示状态 | 02 | 开工中（2026-10-12） |
+| [07](./issues/07-sidebar-structure-trial.md) | — | 侧栏结构试验：A3 / B / B′ + 演示状态 | 02 | in-review（`6df6ec44`，待真机比） |
 | [05](./issues/05-proactive-cards.md) | E | 主动提醒卡片 + IM 出口 | 01、06 | needs-triage |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
