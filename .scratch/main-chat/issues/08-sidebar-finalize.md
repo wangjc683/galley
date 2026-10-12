@@ -1,6 +1,6 @@
 # 08 侧栏收尾：B′ 转正
 
-Status: ready-for-agent
+Status: done（`a3d7254b` 本地合入未推送，2026-10-12；英文文案待 JC 过目）
 
 来源：主聊天 PRD 裁决 34–36（2026-10-12，JC 真机比 07 后定 B′ + 其他对话，删主对话空态副行）。依赖 07（已本地合入 `6df6ec44`）。只改 GUI 与文档，不碰 Rust。
 
@@ -54,3 +54,10 @@ Status: ready-for-agent
 - 测试：有主对话 ⇒ 分区与收起；外置 ⇒ 今天的侧栏、无收起；收起状态读写 prefs；文案定稿。
 
 ## Comments
+
+2026-10-12 实现回报要点（主会话复核：GUI 1054 通过、typecheck / lint / diff check、文档链接检查通过）：
+- prefs 键 `sidebar_collapsed`，照项目分区：读回之前的切换优先、读回后写回。
+- 与试验的两处不同：收起时的徽标把主对话也计入（不在主对话里时）；⌘K 与顶栏标题跟随界面语言（试验时总是中文）。
+- 设置 → 快捷键：「导航」里 ⌘N 之后加「收起 / 展开侧栏」，注「使用外部 GA 时不生效」。
+- 英文待过目：分区头 Chats（直译备选 Other chats）；空态 Give one thing its own chat. The main chat stays uncluttered.；忙时 New chat / Start a new chat with this message now；徽标 N chats need you；开关 Hide sidebar / Show sidebar。
+- 留给下次碰 Rust 的票：`core/src/app_menu.rs:247` 注释仍写侧栏不可折叠；原生菜单「显示 / 隐藏侧栏」。
