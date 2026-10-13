@@ -6,7 +6,12 @@ import {
   applyRunnerHistoryReplay,
   type RunnerHistoryReplayPayload,
 } from "@/lib/ipc/history-replay";
+import { applySubtaskDispatched } from "@/lib/ipc-handlers";
 import type { UserMessagePersistedPayload } from "@/lib/session-send";
+import {
+  SUBTASK_DISPATCHED_EVENT,
+  type SubtaskDispatchedPayload,
+} from "@/lib/subtasks";
 import { useMessagesStore } from "@/stores/messages";
 import { useRuntimeStore } from "@/stores/runtime";
 
@@ -82,6 +87,30 @@ export function useExternalCoreEvents(): void {
       const fn = await listen<RunnerHistoryReplayPayload>(
         "runner-history-replay",
         (e) => applyRunnerHistoryReplay(e.payload),
+      );
+      if (cancelled) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  // The main chat's subtasks (ticket 06a): Core announces each dispatch
+  // record as it is written (a subtask's once it exists, again if its
+  // runner did not start); the cards under that reply read them from
+  // the subtasks store.
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    void (async () => {
+      const fn = await listen<SubtaskDispatchedPayload>(
+        SUBTASK_DISPATCHED_EVENT,
+        (e) => applySubtaskDispatched(e.payload),
       );
       if (cancelled) {
         fn();

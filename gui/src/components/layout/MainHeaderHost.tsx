@@ -1,4 +1,7 @@
-import { MainHeader } from "@/components/layout/MainHeader";
+import {
+  MainHeader,
+  type MainHeaderProps,
+} from "@/components/layout/MainHeader";
 import type { RuntimeIndicator } from "@/components/layout/header/runtime-indicator";
 import { type ReactNode, useContext } from "react";
 import { GitReviewContext } from "@/lib/git-review";
@@ -39,6 +42,7 @@ export function MainHeaderHost({
   sessionTitle,
   canRenameSession = true,
   leading,
+  breadcrumb,
 }: {
   activeGoals: GoalBrief[];
   channelStatuses: ReadonlyArray<ImSupervisorStatus | null>;
@@ -59,6 +63,8 @@ export function MainHeaderHost({
   canRenameSession?: boolean;
   /** MainHeader's leftmost slot (the sidebar toggle, with a main chat). */
   leading?: ReactNode;
+  /** 「主对话 ›」 before the title while a subtask is open (ticket 06a). */
+  breadcrumb?: MainHeaderProps["breadcrumb"];
 }) {
   const browserControlStatus = useBrowserControlStore((s) => s.status);
   const browserControlVerified = useBrowserControlStore((s) => s.verified);
@@ -210,6 +216,7 @@ export function MainHeaderHost({
       }
       onOpenSettings={onOpenSettings}
       leading={leading}
+      breadcrumb={breadcrumb}
     />
   );
 }

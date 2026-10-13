@@ -149,14 +149,20 @@ export function derivePendingAskUser(turns: Turn[]): PendingAskUser | null {
 /**
  * Lift the SQLite origin triple onto a Turn-level Origin object. Returns
  * undefined when the row has the default `gui` via — supervisor / cli /
- * system rows get a populated Origin so MessageUser can decide whether
- * to show the M7 provenance marker. Pre-migration-006 rows (NULL
+ * system / subtask rows get a populated Origin so MessageUser can decide
+ * whether to show a provenance marker (a subtask's instructions row,
+ * ticket 06a, carries `subtask`). Pre-migration-006 rows (NULL
  * `created_via`) treat as `gui` and return undefined.
  */
 function originFromRow(row: MessageRow): Origin | undefined {
   const via = row.created_via;
   if (!via || via === "gui") return undefined;
-  if (via !== "cli" && via !== "supervisor" && via !== "system") {
+  if (
+    via !== "cli" &&
+    via !== "supervisor" &&
+    via !== "system" &&
+    via !== "subtask"
+  ) {
     return undefined;
   }
   const origin: Origin = { via };

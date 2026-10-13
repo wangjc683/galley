@@ -19,6 +19,15 @@ import {
   toolEventsFromRaw,
 } from "@/lib/agent-turn";
 import { isStepLimitExit } from "@/lib/step-limit";
+import {
+  dispatchFailureNotifications,
+  subtaskAskingNotification,
+  subtaskDoneNotification,
+  subtaskFailedNotification,
+  usesSubtaskNotifications,
+  type SubtaskNotification,
+} from "@/lib/subtask-notify";
+import type { SubtaskDispatchedPayload } from "@/lib/subtasks";
 import { resolveAbsoluteTurnIndex } from "@/lib/turn-index";
 import { fromIPCError, makeAppError } from "@/types/app-error";
 import type { AgentTurn } from "@/types/conversation";
@@ -35,6 +44,7 @@ import { useManagedModelsStore } from "@/stores/managed-models";
 import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
+import { useSubtasksStore } from "@/stores/subtasks";
 import { useUiStore } from "@/stores/ui";
 
 export {
@@ -50,6 +60,58 @@ function eventVisibility(event: { visibility?: MessageVisibility }): MessageVisi
 function currentCopy() {
   return copyForLanguage(
     resolveLanguagePreference(usePrefsStore.getState().languagePreference),
+  );
+}
+
+function findSession(sessionId: string) {
+  return useSessionsStore.getState().sessions.find((s) => s.id === sessionId);
+}
+
+function sendSubtaskNotification(n: SubtaskNotification): void {
+  void sendGatedSystemNotification(n.kind, {
+    title: n.title,
+    body: n.body,
+    throttleKey: n.throttleKey,
+    tone: n.tone,
+  });
+}
+
+/**
+ * Core's `subtask-dispatched` (main chat ticket 06a): the records of
+ * one main chat reply's subtasks go to the cards' store, and every one
+ * that did not start notifies — a failed subtask always does
+ * (lib/subtask-notify.ts).
+ */
+export function applySubtaskDispatched(
+  payload: SubtaskDispatchedPayload,
+): void {
+  useSubtasksStore.getState().applyDispatched(payload);
+  for (const n of dispatchFailureNotifications(
+    payload.dispatches,
+    currentCopy(),
+  )) {
+    sendSubtaskNotification(n);
+  }
+}
+
+/**
+ * A runner closed abnormally (the bridge slice's `onClose`). An
+ * unpromoted subtask's crash notifies like any of its failures; every
+ * other session keeps the in-app toast only.
+ */
+export function notifySubtaskRunnerCrash(
+  sessionId: string,
+  message: string,
+): void {
+  const session = findSession(sessionId);
+  if (!usesSubtaskNotifications(session)) return;
+  sendSubtaskNotification(
+    subtaskFailedNotification(
+      session.title,
+      session.id,
+      { kind: "error", message },
+      currentCopy(),
+    ),
   );
 }
 
@@ -261,6 +323,24 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // A dead run must not leave a reply-notify flag behind — it
       // would mis-fire on the session's next non-GUI-driven run.
       clearReplyNotifyPending(event.sessionId);
+      // An unpromoted subtask's run that ends on an error is a failed
+      // subtask: its card says so, and it always notifies (ticket 06a).
+      const errored = findSession(event.sessionId);
+      if (
+        usesSubtaskNotifications(errored) &&
+        event.severity === "error" &&
+        event.category !== "business"
+      ) {
+        useSubtasksStore.getState().setRunError(event.sessionId, event.message);
+        sendSubtaskNotification(
+          subtaskFailedNotification(
+            errored.title,
+            errored.id,
+            { kind: "error", message: event.message },
+            currentCopy(),
+          ),
+        );
+      }
       return;
     }
 
@@ -362,7 +442,34 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       const endsInAskUser = event.toolCalls.some(
         (tc) => tc.toolName === "ask_user",
       );
-      if (
+      // An unpromoted subtask (main chat ticket 06a) has its own rule:
+      // its runs are Core's, so the GUI-started gate below would keep
+      // them silent. Done notifies only after two minutes of running
+      // (lib/subtask-notify.ts); its question has its own handler below.
+      const subtask = findSession(event.sessionId);
+      if (usesSubtaskNotifications(subtask)) {
+        if (
+          event.exitReason != null &&
+          visibility === "visible" &&
+          !endsInAskUser
+        ) {
+          consumeReplyNotifyPending(event.sessionId);
+          const done = hitStepLimit
+            ? null
+            : subtaskDoneNotification(
+                subtask,
+                {
+                  runStartedAtMs:
+                    messages.byId[event.sessionId]?.currentRunStartedAtMs ??
+                    null,
+                  nowMs: Date.now(),
+                  summary: event.summary,
+                },
+                currentCopy(),
+              );
+          if (done) sendSubtaskNotification(done);
+        }
+      } else if (
         event.exitReason != null &&
         visibility === "visible" &&
         !endsInAskUser &&
@@ -443,6 +550,8 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // Same for the step-limit tail (#29): whatever started this run —
       // composer, queue, CLI — the paused run is moving again.
       messages.setPausedAtStepLimit(event.sessionId, false);
+      // A new run of a subtask clears the error its card showed.
+      useSubtasksStore.getState().setRunError(event.sessionId, null);
       messages.setCurrentTurnIndex(
         event.sessionId,
         (messages.byId[event.sessionId]?.runStepBase ?? 0) + event.turnIndex,
@@ -496,7 +605,15 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // (same GUI-started-run gating) and send the question itself.
       // `reply:` throttleKey shared with replyDone: they're the same
       // run-terminus channel, never both firing for one run.
-      if (consumeReplyNotifyPending(event.sessionId)) {
+      // An unpromoted subtask asking you always notifies (ticket 06a),
+      // whoever started its run.
+      const asker = findSession(event.sessionId);
+      if (usesSubtaskNotifications(asker)) {
+        consumeReplyNotifyPending(event.sessionId);
+        sendSubtaskNotification(
+          subtaskAskingNotification(asker, question, currentCopy()),
+        );
+      } else if (consumeReplyNotifyPending(event.sessionId)) {
         const sessionTitle = useSessionsStore
           .getState()
           .sessions.find((s) => s.id === event.sessionId)?.title;

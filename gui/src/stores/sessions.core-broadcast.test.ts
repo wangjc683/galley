@@ -252,6 +252,50 @@ describe("applyExternalSessionUpdated · cleared vs not sent", () => {
   });
 });
 
+describe("subtask rows (main chat ticket 06a)", () => {
+  it("a subtask arrives with its parent, unpromoted; a promotion turns it on for good", () => {
+    const sub = makeSession({ id: "s-sub", title: "把 PDF 分类" });
+    useSessionsStore.getState().applyExternalSessionCreated(
+      eventRow(sub, {
+        parentSessionId: "s-main",
+        promoted: null,
+        origin: { via: "subtask" },
+      }),
+    );
+    expect(row("s-sub")).toMatchObject({
+      parentSessionId: "s-main",
+      origin: { via: "subtask" },
+    });
+    expect(row("s-sub").promoted).toBeUndefined();
+
+    useSessionsStore
+      .getState()
+      .applyExternalSessionUpdated(
+        eventRow(sub, { parentSessionId: "s-main", promoted: true }),
+      );
+    expect(row("s-sub")).toMatchObject({
+      parentSessionId: "s-main",
+      promoted: true,
+    });
+    // A later row that does not say it keeps it: Core never takes it back.
+    useSessionsStore
+      .getState()
+      .applyExternalSessionUpdated(eventRow(sub, { promoted: null }));
+    expect(row("s-sub").promoted).toBe(true);
+  });
+
+  it("an ordinary session's rows carry neither field", () => {
+    const plain = makeSession({ id: "s-plain" });
+    useSessionsStore
+      .getState()
+      .applyExternalSessionCreated(
+        eventRow(plain, { parentSessionId: null, promoted: null }),
+      );
+    expect(row("s-plain")).not.toHaveProperty("parentSessionId");
+    expect(row("s-plain")).not.toHaveProperty("promoted");
+  });
+});
+
 describe("applyExternalSessionCreated / Deleted", () => {
   it("inserts another frontend's session, nulls read as absent", () => {
     useSessionsStore

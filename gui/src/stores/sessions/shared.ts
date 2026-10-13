@@ -90,6 +90,10 @@ export interface SessionBriefWire {
   promptProfile?: string | null;
   /** Only ever `true`, and only on the main chat. */
   mainChat?: boolean | null;
+  /** A subtask's parent, the main chat (ticket 06a). */
+  parentSessionId?: string | null;
+  /** Only ever `true`, and only on a promoted subtask. */
+  promoted?: boolean | null;
 }
 
 // Mirror of Rust `ProjectBrief`; Core's `project-*-external` events send
@@ -182,6 +186,10 @@ export function sessionFromBrief(b: SessionBriefWire): Session {
     // Set once by Core, never changes — so only creation carries it
     // (`applyExternalSessionUpdated` leaves it alone).
     ...(b.mainChat ? { mainChat: true } : {}),
+    // A subtask's parent is set once, at creation; `promoted` can turn
+    // on later (`applyExternalSessionUpdated`).
+    ...(b.parentSessionId ? { parentSessionId: b.parentSessionId } : {}),
+    ...(b.promoted ? { promoted: true } : {}),
   };
 }
 

@@ -1,4 +1,5 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -243,5 +244,70 @@ describe("Conversation paged history (main-chat ticket 12)", () => {
 
   it("renders the same whatever the key base", () => {
     expect(html({ keyBase: 37 })).toBe(html({}));
+  });
+});
+
+describe("Conversation slot under a reply (main chat ticket 06a)", () => {
+  const turns: Turn[] = [
+    { role: "user", content: "把下载文件夹里的 PDF 按内容分类" },
+    {
+      role: "agent",
+      tools: [{ id: "t1", name: "file_read", status: "success-historical" }],
+      finalAnswer: null,
+      turnIndex: 1,
+      messageId: "msg_s_1_assistant",
+    },
+    {
+      role: "agent",
+      tools: [],
+      finalAnswer: "交给一个子任务了，卡片里能看到进度。",
+      turnIndex: 2,
+      messageId: "msg_s_2_assistant",
+    },
+  ];
+  const render = (renderAfterAnswer?: (id: string) => ReactNode) =>
+    renderToStaticMarkup(
+      <Tooltip.Provider>
+        <LocalFilesContext.Provider value={() => undefined}>
+          <Conversation turns={turns} renderAfterAnswer={renderAfterAnswer} />
+        </LocalFilesContext.Provider>
+      </Tooltip.Provider>,
+    );
+
+  it("hangs what the caller gives under the reply it names, after its answer", () => {
+    const html = render((id) =>
+      id === "msg_s_2_assistant" ? <div data-role="cards">CARDS</div> : null,
+    );
+    expect(html.split('data-role="cards"').length - 1).toBe(1);
+    expect(html.indexOf("CARDS")).toBeGreaterThan(
+      html.indexOf("交给一个子任务了"),
+    );
+  });
+
+  it("renders nothing more without it", () => {
+    expect(render()).toBe(render(() => null));
+  });
+
+  it("marks a subtask's instructions as the main chat's, not the user's", () => {
+    const html = renderToStaticMarkup(
+      <Tooltip.Provider>
+        <LocalFilesContext.Provider value={() => undefined}>
+          <Conversation
+            turns={[
+              {
+                role: "user",
+                content: "把下载文件夹里的 PDF 按内容分类",
+                origin: { via: "subtask" },
+              },
+              { role: "user", content: "顺便把发票单独放" },
+            ]}
+          />
+        </LocalFilesContext.Provider>
+      </Tooltip.Provider>,
+    );
+    expect(html.split('aria-label="主对话派来的"').length - 1).toBe(1);
+    expect(html.indexOf('aria-label="主对话派来的"')).toBeLessThan(
+      html.indexOf("把下载文件夹里的 PDF"),
+    );
   });
 });

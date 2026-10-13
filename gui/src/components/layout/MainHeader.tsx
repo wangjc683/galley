@@ -1,3 +1,4 @@
+import { CaretRight } from "@phosphor-icons/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ReactNode } from "react";
 
@@ -114,6 +115,12 @@ export interface MainHeaderProps {
    * traffic lights itself while the sidebar is collapsed).
    */
   leading?: ReactNode;
+  /**
+   * A crumb before the title — 「主对话 ›」 while an unpromoted subtask
+   * is open (main chat ticket 06a): the subtask has no sidebar row, so
+   * this is the way back. Clicking it opens `onClick`'s target.
+   */
+  breadcrumb?: { label: string; ariaLabel: string; onClick: () => void };
 }
 
 /**
@@ -201,6 +208,7 @@ export function MainHeader({
   currentSessionHasPet = false,
   onRenameSession,
   leading,
+  breadcrumb,
 }: MainHeaderProps) {
   const copy = useCopy();
   const hasTopBarStatusItems =
@@ -270,6 +278,32 @@ export function MainHeader({
         )}
       >
         {leading}
+        {breadcrumb && sessionTitle && (
+          // The crumb wears the title button's hit area and hover, one
+          // ink step down (the title is the page you are on), and the
+          // chevron between them is chrome: the crumb gives up width
+          // before the title does.
+          <span className="flex min-w-0 shrink-[2] items-center">
+            <button
+              type="button"
+              aria-label={breadcrumb.ariaLabel}
+              onClick={breadcrumb.onClick}
+              className={cn(
+                "inline-flex min-w-0 items-center rounded-md px-2 py-1 text-ink-muted",
+                "transition-none active:translate-y-px active:transition-[transform] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
+                "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
+              )}
+            >
+              <span className="truncate">{breadcrumb.label}</span>
+            </button>
+            <CaretRight
+              aria-hidden
+              size={11}
+              weight="bold"
+              className="-mx-0.5 shrink-0 text-ink-muted"
+            />
+          </span>
+        )}
         {sessionTitle ? (
           <SessionTitleMenu
             title={sessionTitle}

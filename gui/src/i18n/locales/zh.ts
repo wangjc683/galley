@@ -237,6 +237,39 @@ export const zhCopy = {
         ? `归档后它们从侧栏消失，可在「已归档」里恢复。其中 ${runningCount} 个仍在运行，归档不会停止它们，但你将看不到后续进展。`
         : "归档后它们从侧栏消失，可在「已归档」里恢复。",
   },
+  /** 子任务（主聊天票 06a，裁决 25、52、53）：主对话把要跑很久的活派出去，
+   * 每个子任务一张卡片，挂在派活的那条回复下面。界面只说「子任务」，
+   * 不说「派活」「标签」；用户在子任务里说过一句话，它就成了普通对话。 */
+  subtask: {
+    /** 卡片的无障碍名、通知正文的类别名。 */
+    label: "子任务",
+    /** 卡片右侧：在主区打开这个子任务。 */
+    open: "打开",
+    /** 完成但没有一行结果可写时。在问你时卡片不写状态行，
+     * 卡片里的提问气泡自己写「等你回复」。 */
+    done: "已完成",
+    replyPlaceholder: "回复…",
+    send: "发送",
+    gone: "这个子任务已经删除",
+    notStartedEmpty: "没有开始：主对话没写要做什么",
+    notStartedUnclosed: "没有开始：主对话没写完要做什么",
+    couldNotStart: (detail: string) => `没能启动：${detail}`,
+    couldNotStartBare: "没能启动",
+    failed: (message: string) => `出错：${message}`,
+    failedBare: "出错",
+    didNotFinish: "没有跑完",
+    /** 顶栏面包屑：子任务开在主区时，标题前一段「主对话 ›」，点它回去。 */
+    backToMainChat: "回到主对话",
+    /** 子任务第一条消息（主对话写的说明）上方的来源图标提示。 */
+    fromMainChat: "主对话派来的",
+    /** 子任务在问你、出错时，状态汇到侧栏的主对话行（裁决 30）。 */
+    sidebarWaiting: "子任务在问你",
+    sidebarErrored: "子任务出错",
+    /** 系统通知标题：在问你、出错一律通知；完成只在跑了 2 分钟以上时通知。 */
+    notifyAsking: "子任务在问你",
+    notifyDone: "子任务完成",
+    notifyFailed: "子任务出错",
+  },
   topbar: {
     newConversation: "新对话",
     statusGroupLabel: "运行状态",

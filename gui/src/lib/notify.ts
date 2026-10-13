@@ -38,7 +38,8 @@ export type SystemNotifyKind =
   | "goalEnd"
   | "replyDone"
   | "askUser"
-  | "scheduleFailed";
+  | "scheduleFailed"
+  | "subtaskFailed";
 
 /**
  * Audible register of a notification, so an away user can tell from
@@ -53,6 +54,7 @@ const KIND_TONE: Record<SystemNotifyKind, NotifyTone> = {
   replyDone: "done",
   askUser: "needsYou",
   scheduleFailed: "alert",
+  subtaskFailed: "alert",
 };
 
 /**
@@ -196,6 +198,10 @@ export async function sendGatedSystemNotification(
     // scheduleFailed has no pref on purpose: a failed scheduled fire is
     // an error condition, not routine chatter — rare, and always "needs
     // your action". The focus / permission gates below still apply.
+    // subtaskFailed (main chat ticket 06a) follows it: a subtask the
+    // main chat sent off that failed is work the user expects that will
+    // not happen. A subtask asking or done uses askUser / replyDone and
+    // their pref.
     // askUser shares the replyDone pref: both are run-terminus "the
     // agent stopped, look at the session" signals, differing only in
     // register (finished vs asking) — a separate toggle would be

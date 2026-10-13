@@ -6,8 +6,10 @@ import { ShortcutTooltipText } from "@/components/layout/sidebar/SidebarNavIcons
 import { IconTooltip } from "@/components/ui/tooltip";
 import { useSessionsAttention } from "@/hooks/useSessionsAttention";
 import { useCopy } from "@/lib/i18n";
+import { findMainChat } from "@/lib/main-chat";
 import { isMac } from "@/lib/platform";
 import { formatShortcut } from "@/lib/shortcuts";
+import { isUnpromotedSubtask, unpromotedSubtasksOf } from "@/lib/subtasks";
 import { cn } from "@/lib/utils";
 import type { GoalBrief } from "@/types/goal";
 import type { Session } from "@/types/session";
@@ -64,11 +66,32 @@ export function SidebarCollapseToggle({
     return () => window.removeEventListener("keydown", onKey);
   }, [onToggle]);
 
+  // Counted the way the sidebar shows them: an unpromoted subtask has no
+  // row of its own, its ask / error lights the main chat's (ticket 06a),
+  // so it counts as the main chat — unless the main chat, or the
+  // subtask itself, is the one open.
+  const mainChat = findMainChat(sessions);
+  const subtasks = unpromotedSubtasksOf(sessions, mainChat?.id).filter(
+    (s) => s.status !== "archived",
+  );
+  const mainChatOpen =
+    !!mainChat &&
+    (activeId === mainChat.id || subtasks.some((s) => s.id === activeId));
   const others = sessions.filter(
-    (s) => s.id !== activeId && s.status !== "archived",
+    (s) =>
+      s.id !== activeId && s.status !== "archived" && !isUnpromotedSubtask(s),
   );
   const attention = useSessionsAttention(others, activeId, sessionGoalStatus);
-  const needsYou = attention.needsYouIds.size;
+  const subtaskAttention = useSessionsAttention(
+    mainChatOpen ? [] : subtasks,
+    activeId,
+    sessionGoalStatus,
+  );
+  const subtasksNeedYou =
+    !!mainChat &&
+    subtaskAttention.needsYouIds.size > 0 &&
+    !attention.needsYouIds.has(mainChat.id);
+  const needsYou = attention.needsYouIds.size + (subtasksNeedYou ? 1 : 0);
   const count = collapsed ? needsYou : 0;
   const label = collapsed
     ? copy.topbar.expandSidebar
@@ -98,7 +121,12 @@ export function SidebarCollapseToggle({
           <NeedsYouBadge
             count={needsYou}
             visible={collapsed}
-            tone={attention.kind === "error" ? "error" : "warning"}
+            tone={
+              attention.kind === "error" ||
+              (subtasksNeedYou && subtaskAttention.kind === "error")
+                ? "error"
+                : "warning"
+            }
           />
         </TopBarIconButton>
       </IconTooltip>

@@ -21,11 +21,13 @@ import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToolbar";
 import { StepRegion } from "@/components/conversation/StepRegion";
+import { SubtaskCards } from "@/components/conversation/SubtaskCards";
 import { ThinkingPreview } from "@/components/conversation/ThinkingPreview";
 import { UserQuestionRail } from "@/components/conversation/UserQuestionRail";
 import { useActiveMessages } from "@/hooks/useActiveSession";
 import { useEarlierTurns } from "@/hooks/useEarlierTurns";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
+import { useSubtaskDispatchesByMessage } from "@/hooks/useSubtaskCards";
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { useMarkdownStream } from "@/hooks/useMarkdownStream";
 import {
@@ -245,6 +247,12 @@ function MainViewContent({
     hasOpenGoal:
       !!goal || !!sessionGoals?.some((g) => isOpenGoalStatus(g.status)),
   });
+
+  // The main chat's subtask cards (ticket 06a), by the reply that
+  // dispatched them. Every other session has none.
+  const subtaskDispatches = useSubtaskDispatchesByMessage(
+    isMainChat ? activeSessionId : undefined,
+  );
 
   // Streaming state, subscribed locally so token churn stays inside
   // this subtree instead of re-rendering the whole app. These were
@@ -476,6 +484,16 @@ function MainViewContent({
                 onExtendGoal={onExtendGoal}
                 askUserPending={Boolean(pendingAskUser)}
                 agentRunning={isRunning}
+                renderAfterAnswer={
+                  subtaskDispatches.size > 0
+                    ? (messageId) => {
+                        const dispatches = subtaskDispatches.get(messageId);
+                        return dispatches ? (
+                          <SubtaskCards dispatches={dispatches} />
+                        ) : null;
+                      }
+                    : undefined
+                }
               />
             )}
             {/* In-flight placeholder. User sent a message; the bridge

@@ -89,9 +89,13 @@ export interface SidebarSectionsOptions {
  * Whether a person started this conversation — at the desktop or from
  * the phone (both `origin.via === "gui"`); rows from before origins
  * were recorded count as theirs. CLI, supervisor, scheduled-task and
- * `system` sessions are an agent's (PRD ruling 32).
+ * `system` sessions are an agent's (PRD ruling 32). A promoted subtask
+ * (ticket 06a) is the person's too: the main chat started it, but it
+ * became theirs when they wrote in it (PRD ruling 25: 升为旁聊). An
+ * unpromoted one is in no section at all (the Sidebar leaves it out).
  */
 export function isHumanStarted(session: Session): boolean {
+  if (session.parentSessionId && session.promoted) return true;
   return !session.origin || session.origin.via === "gui";
 }
 

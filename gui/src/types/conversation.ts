@@ -117,7 +117,9 @@ export type BrowserFacts =
  * agent-api.md §6A is the canonical contract.
  */
 export interface Origin {
-  via: "gui" | "cli" | "supervisor" | "system";
+  /** `subtask`: a subtask session and its first message, the
+   * instructions the main chat wrote (main chat ticket 06a). */
+  via: "gui" | "cli" | "supervisor" | "system" | "subtask";
   /** Supervisor label / agent identity (e.g. `ga-claude-1`). Required
    * when `via === "supervisor"`; optional otherwise. */
   supervisor?: string;

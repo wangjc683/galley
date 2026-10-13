@@ -292,6 +292,21 @@ describe("rowsToTurns", () => {
     ]);
     expect(agents[0].finalAnswer).toBe("你好。");
   });
+
+  // Ticket 06a: a subtask's first message is the main chat's
+  // instructions, stamped `subtask` — the same origin the live
+  // `user-message-persisted` row carries.
+  it("keeps a subtask's instructions marked as the main chat's", () => {
+    const turns = rowsToTurns([
+      makeMessageRow({
+        role: "user",
+        turn_index: 0,
+        content: "把下载文件夹里的 PDF 按内容分类",
+        created_via: "subtask",
+      }),
+    ]);
+    expect((turns[0] as UserTurn).origin).toEqual({ via: "subtask" });
+  });
 });
 
 describe("derivePendingAskUser", () => {

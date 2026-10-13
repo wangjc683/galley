@@ -54,6 +54,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   onCancelRename,
   singleLine = false,
   mainChatLabel,
+  subtaskState,
 }: {
   session: Session;
   active?: boolean;
@@ -108,6 +109,13 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
    * of its own (layout-and-chrome.md: tone is for state, not identity).
    * The caller wires no row actions: it has no menu. */
   mainChatLabel?: string;
+  /** The main chat's row only (ticket 06a, PRD ruling 30): one of its
+   * unpromoted subtasks has errored or is asking the user. It reaches
+   * this row in the row's own priority — error, then ask, over running
+   * and unread — with the subline naming the subtask
+   * (「子任务出错」/「子任务在问你」); the main chat's own error or
+   * question keeps its usual words. */
+  subtaskState?: "error" | "ask";
 }) {
   const copy = useCopy();
   const hasRowActions = !!(
@@ -132,9 +140,18 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   // skips the unread mark for sessionId === activeSessionId.
   // Effective status is derived at read time from live conversation +
   // bridge state (replaces the old fireSessionMirror push onto the row).
-  const { status, hasPendingAskUser, pausedAtStepLimit } =
-    useSessionStatusView(session);
-  const hasPendingAsk = hasPendingAskUser;
+  const {
+    status: ownStatus,
+    hasPendingAskUser,
+    pausedAtStepLimit,
+  } = useSessionStatusView(session);
+  // A subtask's error or question reaches the main chat's row as if it
+  // were the row's own (ticket 06a), the words aside (subline below).
+  const subtaskErrored = subtaskState === "error" && ownStatus !== "error";
+  const subtaskAsking =
+    subtaskState === "ask" && !hasPendingAskUser && ownStatus !== "error";
+  const status = subtaskErrored ? "error" : ownStatus;
+  const hasPendingAsk = hasPendingAskUser || subtaskAsking;
   const isRunning = status === "running";
   const hasBlockingError = status === "error";
   // A session carrying an open goal: its own bridge status can be idle
@@ -234,11 +251,15 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   // (no italic), text-explicit for the blocking states so a glance
   // reads "等你回复 / 出错" without decoding an icon.
   const sublineText = hasBlockingError
-    ? errorCount > 1
-      ? `${copy.sidebar.errored} · ${errorCount}`
-      : copy.sidebar.errored
+    ? subtaskErrored
+      ? copy.subtask.sidebarErrored
+      : errorCount > 1
+        ? `${copy.sidebar.errored} · ${errorCount}`
+        : copy.sidebar.errored
     : hasPendingAsk
-      ? copy.sidebar.waitingForYou
+      ? subtaskAsking
+        ? copy.subtask.sidebarWaiting
+        : copy.sidebar.waitingForYou
       : showRunningActivity
         ? session.lastStepIndex != null && cleanSummary
           ? copy.sidebar.stepSummary(session.lastStepIndex, cleanSummary)

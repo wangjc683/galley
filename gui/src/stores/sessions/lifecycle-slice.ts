@@ -900,6 +900,13 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
             : s.lastActivityAt,
           updatedAt: brief.updatedAt,
         };
+        // A subtask's promotion (ticket 06a) rides this channel: the
+        // row comes back with `promoted: true` once the user wrote in it.
+        // Only turned on — Core never takes it back.
+        if (sent("promoted") && brief.promoted) next.promoted = true;
+        if (sent("parentSessionId") && brief.parentSessionId) {
+          next.parentSessionId = brief.parentSessionId;
+        }
         // An echo that matches the row keeps the same object.
         if (sameSessionRow(s, next)) return s;
         changed = true;

@@ -27,7 +27,7 @@ import {
   EditProjectDialog,
 } from "@/components/screens/project/EditProjectDialog";
 import { CopyProvider, copyForLanguage } from "@/lib/i18n";
-import { findMainChat } from "@/lib/main-chat";
+import { findMainChat, openMainChat } from "@/lib/main-chat";
 import { useAppHydrationEffects } from "@/hooks/useAppHydrationEffects";
 import { useBrowserControlLiveStatus } from "@/hooks/useBrowserControlLiveStatus";
 import { useChannelsStatus } from "@/hooks/useChannelsStatus";
@@ -58,6 +58,7 @@ import {
 } from "@/lib/reasoning-effort";
 import { backfillRecentSessions, groupSessions } from "@/lib/sessions";
 import { archivableProjectSessions } from "@/lib/sidebar-timeline";
+import { isUnpromotedSubtask, subtaskBreadcrumb } from "@/lib/subtasks";
 import type { EpigraphCondition } from "@/lib/epigraphs";
 import { useBrowserControlStore } from "@/stores/browser-control";
 import { useManagedModelsStore } from "@/stores/managed-models";
@@ -452,11 +453,15 @@ function App() {
   // Uses the same grouping+backfill as the sidebar timeline so the
   // dialog holds exactly what the "更早 N" row counts — sessions
   // promoted into 最近 by backfillRecentSessions are excluded here too.
-  // The main chat is never under 更早 (its row stands above the list).
+  // The main chat is never under 更早 (its row stands above the list),
+  // nor is a subtask the user has not written in (ticket 06a: it is a
+  // card in the main chat, not a row).
   const earlierSessions = useMemo(
     () =>
       backfillRecentSessions(
-        groupSessions(visibleSessions.filter((s) => !s.mainChat)),
+        groupSessions(
+          visibleSessions.filter((s) => !s.mainChat && !isUnpromotedSubtask(s)),
+        ),
       ).earlier,
     [visibleSessions],
   );
@@ -627,6 +632,16 @@ function App() {
                   }
                   // The main chat keeps its name (ticket 02).
                   canRenameSession={!activeSession?.mainChat}
+                  // A subtask the user has not written in has no sidebar
+                  // row; 「主对话 ›」 before its title is the way back
+                  // (ticket 06a). Its parent is the main chat.
+                  breadcrumb={subtaskBreadcrumb(activeSession, {
+                    label: mainChatLabel,
+                    ariaLabel: copy.subtask.backToMainChat,
+                    openParent: () => {
+                      void openMainChat();
+                    },
+                  })}
                   leading={
                     hasMainChat ? (
                       <SidebarCollapseToggle

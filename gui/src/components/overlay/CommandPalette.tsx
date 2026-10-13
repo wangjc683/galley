@@ -22,6 +22,7 @@ import { displaySessionSummary } from "@/lib/session-summary";
 import { resetWindowLayout } from "@/lib/layout-reset";
 import { formatShortcut, formatShortcutReadable } from "@/lib/shortcuts";
 import { StatusIcon } from "@/lib/status-icon";
+import { isUnpromotedSubtask } from "@/lib/subtasks";
 import { cn } from "@/lib/utils";
 import type { RuntimeKind, Session } from "@/types/session";
 
@@ -286,8 +287,13 @@ function RootPage({
   // title" must reach past the recent window (cmdk's filter runs on
   // the same value string, so it never hides what we pre-selected).
   const query = search.trim().toLowerCase();
+  // A subtask the user has not written in (ticket 06a) is found by
+  // search like any conversation — it opens with 「主对话 ›」 over it —
+  // but stays out of the no-query list, which mirrors the sidebar.
   const recentSessions = useMemo(() => {
-    if (!query) return sessions.slice(0, 8);
+    if (!query) {
+      return sessions.filter((s) => !isUnpromotedSubtask(s)).slice(0, 8);
+    }
     const matches: Session[] = [];
     for (const s of sessions) {
       const preview = s.summary

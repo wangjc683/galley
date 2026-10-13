@@ -13,6 +13,9 @@ import { Sidebar } from "./Sidebar";
 // A session's erroring bridge can't be seeded in a store under static
 // rendering; mark ids as needing the user on top of the real hook.
 const needsYou = vi.hoisted(() => new Set<string>());
+// A subtask's ask / error the same way: the kind the hook would report
+// for a list holding it (ticket 06a).
+const attentionKind = vi.hoisted(() => new Map<string, "error" | "ask">());
 vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/hooks/useSessionsAttention")>();
@@ -22,8 +25,17 @@ vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
       ...args: Parameters<typeof actual.useSessionsAttention>
     ) => {
       const view = actual.useSessionsAttention(...args);
+      const kinds = args[0]
+        .map((s) => attentionKind.get(s.id))
+        .filter((k) => k !== undefined);
+      const kind = kinds.includes("error")
+        ? "error"
+        : kinds.includes("ask")
+          ? "ask"
+          : view.kind;
       return {
         ...view,
+        kind,
         needsYouIds: new Set([...view.needsYouIds, ...needsYou]),
       };
     },
@@ -108,6 +120,7 @@ const HINT = "另开一个对话聊一件事，主对话不受打扰。";
 
 afterEach(() => {
   needsYou.clear();
+  attentionKind.clear();
 });
 
 /** The opening tag of the element carrying `needle`. */
@@ -348,5 +361,68 @@ describe("without a main chat (external runtime)", () => {
       html.indexOf('aria-current="page"'),
     );
     expect(html.slice(row, row + 400)).toContain('aria-label="新对话"');
+  });
+});
+
+describe("subtasks (ticket 06a)", () => {
+  const subtask = managed("s-sub", {
+    title: "把 PDF 分类",
+    origin: { via: "subtask" },
+    parentSessionId: "s-main",
+    lastActivityAt: minutesAgo(1),
+  });
+  const oldSubtask = managed("s-sub-old", {
+    title: "旧子任务",
+    origin: { via: "subtask" },
+    parentSessionId: "s-main",
+    lastActivityAt: new Date(Date.now() - 90 * 86_400_000).toISOString(),
+  });
+
+  it("lists an unpromoted subtask nowhere: no bucket, no 其他来源, no 更早", () => {
+    const html = render([mainChat, sideChat, subtask, oldSubtask]);
+    expect(html).not.toContain('data-session-id="s-sub"');
+    expect(html).not.toContain('data-session-id="s-sub-old"');
+    expect(html).not.toContain(OTHER_SOURCES);
+    expect(html).not.toContain(">更早<");
+    // Agent-started as it is, it does not stand in for a person's chat.
+    expect(render([mainChat, subtask])).toContain(HINT);
+  });
+
+  it("lists a promoted one as a person's conversation, in its time bucket", () => {
+    const html = render([mainChat, { ...subtask, promoted: true }]);
+    expect(count(html, 'data-session-id="s-sub"')).toBe(1);
+    expect(at(html, "s-sub")).toBeGreaterThan(html.indexOf(">今天<"));
+    expect(html).not.toContain(OTHER_SOURCES);
+    expect(html).not.toContain(HINT);
+  });
+
+  it("keeps the main chat's row selected while a subtask is open", () => {
+    const html = render([mainChat, sideChat, subtask], { activeId: "s-sub" });
+    const tagStart = html.lastIndexOf("<div", at(html, "s-main"));
+    expect(html.slice(tagStart, at(html, "s-main") + 200)).toContain(
+      "bg-selected",
+    );
+    // The open subtask has no row to select.
+    expect(html).not.toContain('data-session-id="s-sub"');
+  });
+
+  it("brings a subtask's question or error to the main chat's row", () => {
+    const row = (html: string) =>
+      html.slice(
+        html.lastIndexOf("<", at(html, "s-main")),
+        html.indexOf(SECTION),
+      );
+    attentionKind.set("s-sub", "ask");
+    const asking = render([mainChat, subtask]);
+    expect(row(asking)).toContain(">子任务在问你<");
+    expect(row(asking)).toContain("text-warning");
+
+    attentionKind.set("s-sub", "error");
+    const errored = render([mainChat, subtask]);
+    expect(row(errored)).toContain(">子任务出错<");
+    expect(row(errored)).toContain("text-error");
+
+    attentionKind.clear();
+    expect(row(render([mainChat, subtask]))).not.toContain("子任务");
   });
 });

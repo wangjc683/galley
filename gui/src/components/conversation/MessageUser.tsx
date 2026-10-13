@@ -4,6 +4,7 @@ import {
   CaretUp,
   Check,
   Copy,
+  House,
   PlugsConnected,
 } from "@phosphor-icons/react";
 import { useEffect, memo, useMemo, useRef, useState } from "react";
@@ -171,9 +172,10 @@ export interface MessageUserProps {
   /**
    * Audit origin for this user message (B4 M7). When `origin.via ===
    * "supervisor"`, a small robot provenance icon renders by the left
-   * identity bar. Other via values (gui / cli / system) render no
-   * annotation — the default Galley-driven origin shouldn't interrupt
-   * the reading flow.
+   * identity bar; `subtask` (a subtask's instructions, written by the
+   * main chat — ticket 06a) gets the main chat's house there. Other via
+   * values (gui / cli / system) render no annotation — the default
+   * Galley-driven origin shouldn't interrupt the reading flow.
    */
   origin?: Origin;
   /**
@@ -231,6 +233,10 @@ export const MessageUser = memo(function MessageUser({
   const copyTimer = useRef<number | null>(null);
 
   const isSupervisor = origin?.via === "supervisor";
+  // A subtask's first message is the instructions the main chat wrote
+  // (ticket 06a), not something the user typed: the main chat's house
+  // marks it, in the row the Supervisor icon uses.
+  const fromMainChat = origin?.via === "subtask";
 
   useEffect(() => {
     return () => {
@@ -294,8 +300,23 @@ export const MessageUser = memo(function MessageUser({
       {/* Meta row above the bubble: Supervisor provenance and / or the
           pinned send time, whichever applies. In flow — it takes its
           real height, like the icon-only row it grew out of. */}
-      {(isSupervisor || pinnedTime) && (
+      {(isSupervisor || fromMainChat || pinnedTime) && (
         <div className="mb-1 flex items-center gap-1.5">
+          {fromMainChat && (
+            <IconTooltip text={copy.subtask.fromMainChat} side="top">
+              <span
+                role="img"
+                tabIndex={-1}
+                aria-label={copy.subtask.fromMainChat}
+                className={cn(
+                  "inline-flex items-center rounded-sm text-ink-muted",
+                  "hover:text-ink-soft",
+                )}
+              >
+                <House size={12} weight="thin" />
+              </span>
+            </IconTooltip>
+          )}
           {isSupervisor && (
             <IconTooltip text="Supervisor" side="top">
               <span

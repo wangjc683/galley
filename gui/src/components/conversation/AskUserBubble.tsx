@@ -1,6 +1,6 @@
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { ChatCircleDots, Check, PauseCircle } from "@phosphor-icons/react";
-import type { MouseEvent } from "react";
+import type { MouseEvent, ReactNode } from "react";
 
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,13 @@ export interface AskUserBubbleProps {
   onFillCandidate?: (candidateText: string) => void;
   /** When true, chips are disabled (e.g. bridge not connected). */
   disabled?: boolean;
+  /** Merged over the bubble's own classes. A subtask card (ticket 06a)
+   * passes the bubble in bare — the card carries the warning bar and
+   * tint itself. */
+  className?: string;
+  /** Rendered under the candidates: the subtask card's one-line reply
+   * (its question is answered in the card, not the Composer). */
+  children?: ReactNode;
 }
 
 /**
@@ -82,13 +89,18 @@ export function AskUserBubble({
   onPickCandidate,
   onFillCandidate,
   disabled = false,
+  className,
+  children,
 }: AskUserBubbleProps) {
   const copy = useCopy();
   const layout = candidateLayout(pending.candidates);
   return (
     <div
       data-role="ask-user-bubble"
-      className="my-5 rounded-r-sm border-l-[3px] border-warning bg-warning/[var(--opacity-subtle)] px-4 py-2.5"
+      className={cn(
+        "my-5 rounded-r-sm border-l-[3px] border-warning bg-warning/[var(--opacity-subtle)] px-4 py-2.5",
+        className,
+      )}
     >
       <div className="mb-2 flex items-center gap-1.5 text-[11.5px] font-medium uppercase tracking-[0.06em] text-warning">
         <PauseCircle size={12} weight="bold" />
@@ -127,6 +139,7 @@ export function AskUserBubble({
           ))}
         </div>
       )}
+      {children}
     </div>
   );
 }

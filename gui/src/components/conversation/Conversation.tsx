@@ -91,6 +91,13 @@ export interface ConversationProps {
    * history is not loaded (messages store `earlier`): the first loaded
    * user message's send-time break measures against it. */
   previousUserCreatedAt?: string | null;
+  /**
+   * What hangs under a final answer, by the reply's `messageId` — the
+   * main chat's subtask cards (ticket 06a), supplied by MainView for the
+   * main chat only. Null for a reply with nothing under it. Display only:
+   * nothing here reaches the model.
+   */
+  renderAfterAnswer?: (messageId: string) => ReactNode;
 }
 
 /**
@@ -119,6 +126,7 @@ export function Conversation({
   agentRunning = false,
   keyBase = 0,
   previousUserCreatedAt = null,
+  renderAfterAnswer,
 }: ConversationProps) {
   const items = annotateGoalThread(turns, goals ?? []);
   // A turn's place that survives a prepend (see `keyBase`): every key
@@ -569,6 +577,14 @@ export function Conversation({
             }
           />
         )}
+        {/* Under the reply that dispatched them: the main chat's
+            subtask cards (ticket 06a), keyed on the reply's row id —
+            only that reply's final turn matches one, even one whose
+            answer was nothing but tags. */}
+        {item.kind === "turn" &&
+          item.turn.role === "agent" &&
+          item.turn.messageId &&
+          renderAfterAnswer?.(item.turn.messageId)}
         {/* No divider between turns — the TurnMarker on each
             AgentTurn carries the chapter-break feel via its own
             top-margin and visual weight. Earlier iterations had

@@ -166,6 +166,21 @@ export interface Session {
    * session (a side chat, 旁聊).
    */
   mainChat?: boolean;
+  /**
+   * A subtask's parent: the main chat whose reply dispatched it (Core's
+   * `parentSessionId`, main chat ticket 06a). A subtask is an ordinary
+   * conversation the main chat started; until the user writes in it
+   * (`promoted`) it stays out of the sidebar and shows as a card under
+   * the reply instead. Absent on every other session.
+   */
+  parentSessionId?: string;
+  /**
+   * The subtask was promoted to an ordinary conversation: the user sent
+   * it a message of their own (not an answer to its question) from the
+   * desktop or the phone. Core sets it once; from then on the sidebar
+   * lists it like any conversation a person started. Only on subtasks.
+   */
+  promoted?: boolean;
 }
 
 export interface Project {
