@@ -7,8 +7,9 @@ use crate::api::{
     SessionId, SetManagedModelDefaultsInput,
 };
 use crate::db::{
-    MessageAttachmentCreate, MessageSearchHit, PersistedMessageRow, SqliteGalley,
-    UpsertManagedModelMetadata, UpsertManagedModelProviderMetadata,
+    MessageAttachmentCreate, MessageSearchHit, PersistedMessageRow, PersistedTurnPage,
+    SqliteGalley, UpsertManagedModelMetadata, UpsertManagedModelProviderMetadata,
+    MESSAGE_TURN_PAGE,
 };
 use crate::notify::{Notifier, TauriNotifier};
 use crate::session_writes::{Writes, VIA_GUI};

@@ -102,6 +102,54 @@ impl PersistedMessagePage {
     }
 }
 
+/// Turns per page of the desktop conversation
+/// ([`SqliteGalley::persisted_message_turns_page`], ticket 12).
+pub const MESSAGE_TURN_PAGE: usize = 50;
+
+/// One page of a session's visible transcript cut at whole turns, oldest
+/// first: what the desktop conversation reads
+/// ([`SqliteGalley::persisted_message_turns_page`]). Unlike
+/// [`PersistedMessagePage`] (the phone's, cut at rows), a page holds every
+/// visible row of its turns and never starts inside a run, because the
+/// GUI rebuilds turns and runs from the rows it holds
+/// (`gui/src/stores/messages/rowsToTurns.ts`, `gui/src/lib/run-groups.ts`).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedTurnPage {
+    /// The page's rows in transcript order, the shape of
+    /// [`SqliteGalley::persisted_message_rows`].
+    pub rows: Vec<PersistedMessageRow>,
+    /// Older turns exist before the first one here; page back by passing
+    /// that turn's index as `before`.
+    pub has_more: bool,
+    /// `created_at` of the last visible user row before the page, while
+    /// `has_more`: the page's first user message measures its send-time
+    /// break against it (`gui/src/lib/message-time.ts`), as it would with
+    /// the whole transcript loaded.
+    pub previous_user_created_at: Option<String>,
+}
+
+/// The visible user row a run opens at (see
+/// [`SqliteGalley::run_opener_at_or_before`]).
+struct RunOpener {
+    turn_index: i64,
+    sequence: i64,
+    created_at: String,
+    goal_id: Option<String>,
+}
+
+/// Whether persisted `tool_calls` hold an `ask_user` call — the GUI's
+/// test for "the next user message answers it" (`hasAskUserTool` in
+/// `gui/src/lib/run-groups.ts` over `toolEventsFromRaw`): any entry
+/// named `ask_user`, whatever its args. Malformed JSON holds none.
+fn tool_calls_ask_user(raw: &str) -> bool {
+    serde_json::from_str::<Vec<serde_json::Value>>(raw).is_ok_and(|calls| {
+        calls
+            .iter()
+            .any(|call| call.get("toolName").and_then(|v| v.as_str()) == Some("ask_user"))
+    })
+}
+
 impl SqliteGalley {
     pub async fn persisted_message_rows(
         &self,
@@ -191,6 +239,255 @@ impl SqliteGalley {
             rows: self.with_attachments(records).await?,
             has_more,
         })
+    }
+
+    /// The desktop's paged [`Self::persisted_message_rows`] (ticket 12):
+    /// the `turns` most recent visible turns before turn `before` — the
+    /// transcript's tail when `None` — with every visible row of each, in
+    /// ascending order. A turn is a `turn_index` (a user row and the
+    /// first step of its reply share one, the main chat's greeting is
+    /// -1). The page reaches further back when its oldest turn is not
+    /// where a run starts ([`Self::turn_page_start`]), so it can hold
+    /// more than `turns` turns; it never splits a turn or a run. Rows a
+    /// run appends get turn indices past the session's highest, so paging
+    /// back by turn index neither skips nor repeats while it is written to.
+    pub async fn persisted_message_turns_page(
+        &self,
+        session_id: &SessionId,
+        before: Option<i64>,
+        turns: usize,
+    ) -> Result<PersistedTurnPage> {
+        let before_clause = if before.is_some() {
+            " AND turn_index < ?"
+        } else {
+            ""
+        };
+        let sql = format!(
+            "SELECT DISTINCT turn_index FROM messages \
+             WHERE session_id = ? AND visibility = 'visible'{before_clause} \
+             ORDER BY turn_index DESC \
+             LIMIT ?"
+        );
+        let mut query = sqlx::query_scalar::<_, i64>(&sql).bind(session_id.as_str());
+        if let Some(before) = before {
+            query = query.bind(before);
+        }
+        let recent = query
+            .bind(turns.max(1) as i64)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        let Some(&oldest) = recent.last() else {
+            return Ok(PersistedTurnPage {
+                rows: Vec::new(),
+                has_more: false,
+                previous_user_created_at: None,
+            });
+        };
+        let start = self.turn_page_start(session_id, oldest).await?;
+
+        let sql = format!(
+            "SELECT {PERSISTED_MESSAGE_COLS} \
+             FROM messages \
+             WHERE session_id = ? AND visibility = 'visible' AND turn_index >= ?{before_clause} \
+             ORDER BY turn_index ASC, sequence ASC"
+        );
+        let mut query = sqlx::query_as::<_, PersistedMessageRowRecord>(&sql)
+            .bind(session_id.as_str())
+            .bind(start);
+        if let Some(before) = before {
+            query = query.bind(before);
+        }
+        let records = query.fetch_all(&self.pool).await.map_err(map_sqlx_err)?;
+
+        let has_more: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM messages \
+             WHERE session_id = ? AND visibility = 'visible' AND turn_index < ?)",
+        )
+        .bind(session_id.as_str())
+        .bind(start)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        let previous_user_created_at = if has_more {
+            sqlx::query_scalar(
+                "SELECT created_at FROM messages \
+                 WHERE session_id = ? AND visibility = 'visible' AND role = 'user' \
+                   AND turn_index < ? \
+                 ORDER BY turn_index DESC, sequence DESC \
+                 LIMIT 1",
+            )
+            .bind(session_id.as_str())
+            .bind(start)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?
+        } else {
+            None
+        };
+        Ok(PersistedTurnPage {
+            rows: self.with_attachments(records).await?,
+            has_more,
+            previous_user_created_at,
+        })
+    }
+
+    /// Where a page whose oldest turn would be `turn` starts so it splits
+    /// no run: the turn of the opener of the run `turn` belongs to
+    /// ([`Self::run_opener_at_or_before`]), or the transcript's first
+    /// turn when no run opens before it. When that opener is a message
+    /// sent into a Goal's episode, the page goes back to the Goal's
+    /// commission ([`Self::goal_commission_before`]): the conversation
+    /// brackets an episode from its commission (`gui/src/lib/goal-thread.ts`).
+    /// Repeats until it settles, since a commission can be an `ask_user`
+    /// reply inside an earlier run.
+    async fn turn_page_start(&self, session_id: &SessionId, turn: i64) -> Result<i64> {
+        let mut start = turn;
+        loop {
+            let next = match self.run_opener_at_or_before(session_id, start).await? {
+                Some(opener) => self
+                    .goal_commission_before(session_id, &opener)
+                    .await?
+                    .unwrap_or(opener.turn_index),
+                None => {
+                    let first: Option<i64> = sqlx::query_scalar(
+                        "SELECT MIN(turn_index) FROM messages \
+                         WHERE session_id = ? AND visibility = 'visible'",
+                    )
+                    .bind(session_id.as_str())
+                    .fetch_one(&self.pool)
+                    .await
+                    .map_err(map_sqlx_err)?;
+                    first.unwrap_or(start)
+                }
+            };
+            if next >= start {
+                return Ok(start);
+            }
+            start = next;
+        }
+    }
+
+    /// The visible user row that opens the run turn `turn` belongs to:
+    /// the latest user row at or before it that does not answer an
+    /// `ask_user`. The rule is `buildRunGroups` (`gui/src/lib/run-groups.ts`)
+    /// read backwards: a user row answers when the last user or assistant
+    /// row before it (system rows are bystanders) is an assistant row
+    /// with an `ask_user` call. `None` when no run opens at or before
+    /// `turn` — it sits in the transcript's headless lead-in (the main
+    /// chat's greeting).
+    async fn run_opener_at_or_before(
+        &self,
+        session_id: &SessionId,
+        turn: i64,
+    ) -> Result<Option<RunOpener>> {
+        // `(turn_index, sequence) < (turn + 1, i64::MIN)` is "at or before
+        // `turn`"; after a reply it is "before that reply".
+        let mut bound = (turn.saturating_add(1), i64::MIN);
+        loop {
+            let user: Option<(i64, i64, String, Option<String>)> = sqlx::query_as(
+                "SELECT turn_index, sequence, created_at, goal_id FROM messages \
+                 WHERE session_id = ? AND visibility = 'visible' AND role = 'user' \
+                   AND (turn_index, sequence) < (?, ?) \
+                 ORDER BY turn_index DESC, sequence DESC \
+                 LIMIT 1",
+            )
+            .bind(session_id.as_str())
+            .bind(bound.0)
+            .bind(bound.1)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+            let Some((turn_index, sequence, created_at, goal_id)) = user else {
+                return Ok(None);
+            };
+            let sql = format!(
+                "SELECT role, {ASK_USER_TOOL_CALLS_COL} FROM messages \
+                 WHERE session_id = ? AND visibility = 'visible' \
+                   AND role IN ('user', 'assistant') \
+                   AND (turn_index, sequence) < (?, ?) \
+                 ORDER BY turn_index DESC, sequence DESC \
+                 LIMIT 1"
+            );
+            let previous: Option<(String, Option<String>)> = sqlx::query_as(&sql)
+                .bind(session_id.as_str())
+                .bind(turn_index)
+                .bind(sequence)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(map_sqlx_err)?;
+            let answers_ask_user = matches!(
+                &previous,
+                Some((role, Some(calls))) if role == "assistant" && tool_calls_ask_user(calls)
+            );
+            if !answers_ask_user {
+                return Ok(Some(RunOpener {
+                    turn_index,
+                    sequence,
+                    created_at,
+                    goal_id,
+                }));
+            }
+            bound = (turn_index, sequence);
+        }
+    }
+
+    /// The turn of the commission whose Goal episode `opener` was sent
+    /// into, if it was: the latest earlier user row stamped with one of
+    /// this session's Goals (`messages.goal_id`), when that Goal is still
+    /// open or `opener` was sent before it ended. That is where
+    /// `annotateGoalThread` (`gui/src/lib/goal-thread.ts`) ends an episode:
+    /// at the next commission, or at the first run opened after the Goal
+    /// ended. A commission opens its own episode, so it gets `None`;
+    /// so does an unreadable time, which the GUI also reads as "after".
+    async fn goal_commission_before(
+        &self,
+        session_id: &SessionId,
+        opener: &RunOpener,
+    ) -> Result<Option<i64>> {
+        if let Some(goal_id) = &opener.goal_id {
+            let commission: bool = sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM goals WHERE id = ? AND session_id = ?)",
+            )
+            .bind(goal_id)
+            .bind(session_id.as_str())
+            .fetch_one(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+            if commission {
+                return Ok(None);
+            }
+        }
+        let commission: Option<(i64, Option<String>)> = sqlx::query_as(
+            "SELECT m.turn_index, g.ended_at FROM messages m \
+             JOIN goals g ON g.id = m.goal_id AND g.session_id = m.session_id \
+             WHERE m.session_id = ? AND m.visibility = 'visible' AND m.role = 'user' \
+               AND (m.turn_index, m.sequence) < (?, ?) \
+             ORDER BY m.turn_index DESC, m.sequence DESC \
+             LIMIT 1",
+        )
+        .bind(session_id.as_str())
+        .bind(opener.turn_index)
+        .bind(opener.sequence)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        let Some((turn_index, ended_at)) = commission else {
+            return Ok(None);
+        };
+        let inside = match ended_at {
+            None => true,
+            Some(ended_at) => {
+                match (
+                    chrono::DateTime::parse_from_rfc3339(&opener.created_at),
+                    chrono::DateTime::parse_from_rfc3339(&ended_at),
+                ) {
+                    (Ok(sent), Ok(ended)) => sent <= ended,
+                    _ => false,
+                }
+            }
+        };
+        Ok(inside.then_some(turn_index))
     }
 
     /// The paging position of visible message `message_id` of

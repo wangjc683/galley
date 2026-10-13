@@ -275,6 +275,22 @@ pub(crate) async fn session_message_rows(
         .map_err(stringify_error)
 }
 
+/// The conversation's read (ticket 12): the latest
+/// [`MESSAGE_TURN_PAGE`] whole turns, or with `before_turn_index` the
+/// page before that turn — see
+/// [`SqliteGalley::persisted_message_turns_page`].
+#[tauri::command]
+pub(crate) async fn session_message_turns_page(
+    galley: State<'_, SqliteGalley>,
+    session_id: SessionId,
+    before_turn_index: Option<i64>,
+) -> std::result::Result<PersistedTurnPage, String> {
+    galley
+        .persisted_message_turns_page(&session_id, before_turn_index, MESSAGE_TURN_PAGE)
+        .await
+        .map_err(stringify_error)
+}
+
 /// One image of a user message as the page sends it: a base64 `data:`
 /// URL plus the dimensions it measured (`send_user_message`).
 #[derive(Debug, Deserialize)]
