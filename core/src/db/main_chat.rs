@@ -8,47 +8,23 @@ use super::*;
 pub const MAIN_CHAT_TITLE: &str = "主聊天";
 
 /// The main chat's first message, said by the AI the moment Core
-/// creates it (PRD ruling 47, ticket 04c): the main chat is for
-/// everything, the affairs ledger is on — reading earlier conversations
-/// too — and where to see it or turn it off. Fixed text, chosen by the
-/// UI language ([`main_chat_greeting`]); the Chinese is JC's
-/// (2026-10-12), word for word.
+/// creates it (PRD ruling 47, ticket 04c; ruling 49 kept its first
+/// paragraph only): it teaches how to use the main chat. Fixed text,
+/// chosen by the UI language ([`main_chat_greeting`]); the Chinese is
+/// JC's (2026-10-12), word for word.
 ///
 /// Shown only. It is an assistant row Core writes itself, marked by its
 /// origin ([`is_main_chat_greeting`]): the history replay skips it, so
-/// the model never has it in context (the main chat's state block says
-/// the ledger is on instead, `crate::managed_prompt`); the ledger reads
-/// user messages only; and it is not a turn — `turn_count` stays 0 and
-/// it sits at [`MAIN_CHAT_GREETING_TURN_INDEX`], before the first one.
-///
-/// Paragraph breaks are spelled `\n\n`, not line breaks in the source,
-/// so a Windows (CRLF) checkout stores the same text.
-pub const MAIN_CHAT_GREETING_ZH: &str = concat!(
-    "你好。以后有什么事，直接在这里跟我说就行，不用再想是开新对话还是接着哪个旧的。",
-    "\n\n",
-    "为了接得上你在忙的事，我会整理你在 Galley 和聊天软件私聊里说过的话（包括以前的对话，",
-    "不含我的回复），记下你在忙什么、到了哪一步，也会记下让你着急或开心的时刻，只用来把事办好。",
-    "第一次整理在今晚，之后每天一次，只看新说的；整理要多调用模型，记下的内容只存在这台电脑上。",
-    "\n\n",
-    "建议保持开启。想看我记了什么、删掉某一条或者关掉，点上面的「主对话」→「它记得我什么」。",
-);
+/// the model never has it in context; and it is not a turn —
+/// `turn_count` stays 0 and it sits at [`MAIN_CHAT_GREETING_TURN_INDEX`],
+/// before the first one.
+pub const MAIN_CHAT_GREETING_ZH: &str =
+    "你好。以后有什么事，直接在这里跟我说就行，不用再想是开新对话还是接着哪个旧的。";
 
-/// [`MAIN_CHAT_GREETING_ZH`] for every other UI language. The menu path
-/// names the English UI's labels (`sidebar.mainChat`,
-/// `memory.whatItRemembers` in `gui/src/i18n/locales/en.ts`).
+/// [`MAIN_CHAT_GREETING_ZH`] for every other UI language.
 pub const MAIN_CHAT_GREETING_EN: &str = concat!(
     "Hi. From now on, whatever comes up, just tell me here. No need to decide ",
     "whether to start a new conversation or pick up an old one.",
-    "\n\n",
-    "To keep up with what you're working on, I'll go through what you've said in ",
-    "Galley and in private chats on your chat apps (earlier conversations included, ",
-    "my replies left out) and note what you're busy with and how far along it is. ",
-    "I'll also note the moments that made you anxious or happy, only to help get ",
-    "things done. The first pass is tonight, then once a day, only over what's new; ",
-    "each pass takes extra model calls, and what I note stays only on this computer.",
-    "\n\n",
-    "I suggest keeping it on. To see what I've noted, delete an entry, or turn it ",
-    "off, click “Main chat” → “What it remembers about me” at the top.",
 );
 
 /// Origin supervisor label of the greeting row (with `created_via =
@@ -85,15 +61,12 @@ pub fn is_main_chat_greeting(
 }
 
 /// What Core writes with a new main chat, in the transaction that
-/// creates it — so a main chat never exists without them, and a restore
+/// creates it — so a main chat never exists without it, and a restore
 /// from the archive (or a main chat that was simply there) writes none.
 #[derive(Debug, Clone, Default)]
 pub struct MainChatSeed {
     /// The AI's first message ([`MAIN_CHAT_GREETING_ZH`]).
     pub greeting: Option<String>,
-    /// Core prefs set only where the key is missing (or JSON `null`):
-    /// the affairs ledger's switch, on by default.
-    pub prefs_if_absent: Vec<(String, serde_json::Value)>,
 }
 
 /// What [`SqliteGalley::get_or_create_main_chat`] found.
@@ -154,8 +127,7 @@ impl SqliteGalley {
     /// reads the first one's row.
     ///
     /// Only a creation writes `seed` (ticket 04c), in the same
-    /// transaction as the row: the greeting, and the prefs it names where
-    /// they are not set yet.
+    /// transaction as the row: the greeting.
     pub async fn get_or_create_main_chat(
         &self,
         new_id: &str,
@@ -269,19 +241,6 @@ async fn write_main_chat_seed(
         .bind(session_id)
         .bind(MAIN_CHAT_GREETING_TURN_INDEX)
         .bind(greeting)
-        .execute(&mut *conn)
-        .await?;
-    }
-    for (key, value) in &seed.prefs_if_absent {
-        sqlx::query(
-            "INSERT INTO prefs (key, value, updated_at) VALUES (?, ?, ?) \
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value, \
-               updated_at = excluded.updated_at \
-             WHERE prefs.value = 'null'",
-        )
-        .bind(key)
-        .bind(value.to_string())
-        .bind(&now)
         .execute(&mut *conn)
         .await?;
     }

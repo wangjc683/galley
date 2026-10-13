@@ -212,7 +212,6 @@ async fn sessions_list(ctx: &MethodCtx) -> Result<phone::SessionsListResult, Err
         .map_err(galley_error)?
         .into_iter()
         .filter(|session| session.ga_runtime_kind == RuntimeKind::Managed)
-        .filter(|session| !crate::ledger::is_mining_session(session))
         .collect();
     let projects = galley.list_projects().await.map_err(galley_error)?;
     let listed: BTreeSet<&str> = sessions.iter().map(|s| s.id.as_str()).collect();

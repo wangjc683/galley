@@ -4,12 +4,11 @@
 //! archive or delete it, while the socket's (CLI / supervisor) is left
 //! as it was.
 //!
-//! Ticket 04c (PRD ruling 47): a creation — and only a creation — opens
-//! it with the AI's greeting in the UI language and turns the affairs
-//! ledger on where its switch was never set, the first run at the next
-//! 04:00. The greeting is shown, never replayed, never a turn.
+//! Ticket 04c (PRD ruling 47, trimmed by ruling 49): a creation — and
+//! only a creation — opens it with the AI's greeting in the UI language,
+//! and writes nothing else. The greeting is shown, never replayed, never
+//! a turn.
 
-use chrono::{DateTime, FixedOffset, Utc};
 use galley_core_lib::api::{
     CreateSessionInput, GalleyApi, MessageRole, Origin, OriginVia, RuntimeKind, SessionBrief,
     SessionFilter, SessionId, SessionStatus,
@@ -19,7 +18,6 @@ use galley_core_lib::db::{
     MAIN_CHAT_GREETING_ZH, MAIN_CHAT_TITLE,
 };
 use galley_core_lib::error::GalleyError;
-use galley_core_lib::ledger::config::{parse_switch, LedgerSwitch, SWITCH_PREF};
 use galley_core_lib::notify::Notifier;
 use galley_core_lib::session_runner::{rows_to_conversation_messages, ReplayRow};
 use galley_core_lib::session_writes::{Writes, VIA_GUI};
@@ -217,8 +215,7 @@ async fn an_attached_external_ga_has_no_main_chat() {
     assert!(matches!(err, GalleyError::InvalidArgs { .. }), "{err:?}");
     assert!(rec.names().is_empty());
     assert_eq!(galley.main_chat_id().await.unwrap(), None);
-    // Nothing of ticket 04c either: no switch, no greeting.
-    assert_eq!(galley.get_pref_json(SWITCH_PREF).await.unwrap(), None);
+    // Nothing of ticket 04c either: no greeting.
     assert_eq!(greetings(&galley).await, 0);
 }
 
@@ -335,15 +332,7 @@ async fn the_launch_sweep_keeps_an_empty_main_chat() {
     assert!(galley.session_brief(main).await.is_ok());
 }
 
-// ---------------- the greeting and the ledger (ticket 04c) ----------------
-
-fn shanghai() -> FixedOffset {
-    FixedOffset::east_opt(8 * 3600).unwrap()
-}
-
-fn at(s: &str) -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc)
-}
+// ---------------- the greeting (ticket 04c) ----------------
 
 /// How many greeting rows the database holds.
 async fn greetings(galley: &SqliteGalley) -> usize {
@@ -362,30 +351,34 @@ async fn greetings(galley: &SqliteGalley) -> usize {
     n
 }
 
-async fn switch(galley: &SqliteGalley) -> LedgerSwitch {
-    parse_switch(galley.get_pref_json(SWITCH_PREF).await.unwrap().as_ref())
+/// How many prefs the database holds.
+async fn prefs(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM prefs")
+        .fetch_one(pool)
+        .await
+        .unwrap()
 }
 
 /// The Chinese greeting is JC's wording (ticket 04, 04c, 2026-10-12),
-/// word for word; both are three paragraphs with no `\r` on any
-/// checkout.
+/// word for word; ruling 49 kept its first paragraph only. One paragraph
+/// each, with no `\r` on any checkout.
 #[test]
 fn the_greeting_text_is_the_approved_wording() {
     assert_eq!(
         MAIN_CHAT_GREETING_ZH,
-        [
-            "你好。以后有什么事，直接在这里跟我说就行，不用再想是开新对话还是接着哪个旧的。",
-            "为了接得上你在忙的事，我会整理你在 Galley 和聊天软件私聊里说过的话（包括以前的对话，不含我的回复），记下你在忙什么、到了哪一步，也会记下让你着急或开心的时刻，只用来把事办好。第一次整理在今晚，之后每天一次，只看新说的；整理要多调用模型，记下的内容只存在这台电脑上。",
-            "建议保持开启。想看我记了什么、删掉某一条或者关掉，点上面的「主对话」→「它记得我什么」。",
-        ]
-        .join("\n\n")
+        "你好。以后有什么事，直接在这里跟我说就行，不用再想是开新对话还是接着哪个旧的。"
+    );
+    assert_eq!(
+        MAIN_CHAT_GREETING_EN,
+        concat!(
+            "Hi. From now on, whatever comes up, just tell me here. No need to decide ",
+            "whether to start a new conversation or pick up an old one.",
+        )
     );
     for text in [MAIN_CHAT_GREETING_ZH, MAIN_CHAT_GREETING_EN] {
-        assert_eq!(text.split("\n\n").count(), 3);
+        assert!(!text.contains('\n'));
         assert!(!text.contains('\r'));
     }
-    // The English one names the English UI's menu path.
-    assert!(MAIN_CHAT_GREETING_EN.contains("“Main chat” → “What it remembers about me”"));
 }
 
 #[tokio::test]
@@ -456,82 +449,35 @@ async fn the_greeting_is_no_turn_and_never_history() {
     // The trailing user message is dropped too, so nothing is left.
     assert!(rows_to_conversation_messages(replay, 1).is_empty());
 
-    // Never read by the ledger: it reads what a human typed.
-    let human = galley.ledger_human_turns("1970-01-01").await.unwrap();
-    assert_eq!(human.len(), 1);
-    assert_eq!(human[0].content, "早");
-
     // Searchable like any reply, so the launch backfill finds the index
     // complete and leaves it alone.
     assert_eq!(galley.backfill_fts_if_empty().await.unwrap(), 0);
 }
 
+/// A creation writes the row and the greeting, nothing else: no pref.
 #[tokio::test]
-async fn creating_it_turns_the_ledger_on_with_the_first_run_at_the_next_four_oclock() {
-    for (now, first) in [
-        ("2026-10-12T10:30:00+08:00", "2026-10-13T04:00:00+08:00"),
-        ("2026-10-12T02:15:00+08:00", "2026-10-12T04:00:00+08:00"),
-    ] {
-        let galley = fresh_galley(RuntimeKind::Managed).await;
-        let rec = Recorder::default();
-        desktop(&galley, &rec)
-            .get_or_create_main_chat_at(gui(), Some("zh-CN"), at(now), &shanghai())
-            .await
-            .unwrap();
-        let LedgerSwitch::On(config) = switch(&galley).await else {
-            panic!("on by default ({now})")
-        };
-        assert_eq!(config.since.timestamp(), 0, "every earlier conversation");
-        assert!(config.look_back);
-        assert_eq!(config.not_before, Some(at(first)), "{now}");
-    }
-}
-
-#[tokio::test]
-async fn a_switch_already_set_is_left_alone() {
-    let set = [
-        LedgerSwitch::Off.to_pref().unwrap(),
-        LedgerSwitch::turned_on(false, at("2026-10-01T09:00:00+08:00"))
-            .to_pref()
-            .unwrap(),
-    ];
-    for value in set {
-        let galley = fresh_galley(RuntimeKind::Managed).await;
-        galley
-            .set_pref_json(SWITCH_PREF, value.clone())
-            .await
-            .unwrap();
-        let rec = Recorder::default();
-        main_chat(&galley, &rec).await;
-        assert_eq!(
-            galley.get_pref_json(SWITCH_PREF).await.unwrap(),
-            Some(value)
-        );
-        assert_eq!(greetings(&galley).await, 1, "the greeting all the same");
-    }
-    // JSON null reads as never set, like no key.
-    let galley = fresh_galley(RuntimeKind::Managed).await;
-    galley
-        .set_pref_json(SWITCH_PREF, Value::Null)
+async fn creating_it_writes_no_pref() {
+    let pool = fresh_pool().await;
+    let galley = galley_on(pool.clone(), RuntimeKind::Managed).await;
+    let before = prefs(&pool).await;
+    let rec = Recorder::default();
+    desktop(&galley, &rec)
+        .get_or_create_main_chat(gui(), Some("zh-CN"))
         .await
         .unwrap();
-    main_chat(&galley, &Recorder::default()).await;
-    assert!(switch(&galley).await.is_on());
+    assert_eq!(prefs(&pool).await, before);
+    assert_eq!(greetings(&galley).await, 1);
 }
 
 #[tokio::test]
-async fn only_a_creation_greets_or_sets_the_switch() {
+async fn only_a_creation_greets() {
     let galley = fresh_galley(RuntimeKind::Managed).await;
     let rec = Recorder::default();
     let main = main_chat(&galley, &rec).await;
     assert_eq!(greetings(&galley).await, 1);
 
-    // The user turned it off; the main chat is asked for again, then
-    // archived through the CLI and restored.
-    galley
-        .set_pref_json(SWITCH_PREF, LedgerSwitch::Off.to_pref().unwrap())
-        .await
-        .unwrap();
+    // The main chat is asked for again, then archived through the CLI
+    // and restored.
     main_chat(&galley, &rec).await;
     Writes::new(&galley, &rec, "session.archive")
         .archive_session(main.clone(), gui())
@@ -543,5 +489,4 @@ async fn only_a_creation_greets_or_sets_the_switch() {
         .unwrap();
     assert!(matches!(back, MainChatEnsured::Restored(_)));
     assert_eq!(greetings(&galley).await, 1, "no second greeting");
-    assert_eq!(switch(&galley).await, LedgerSwitch::Off, "still off");
 }

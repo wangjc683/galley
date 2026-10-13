@@ -26,7 +26,6 @@ use serde::Deserialize;
 pub(crate) use tauri::State;
 
 mod goal;
-mod ledger;
 mod managed_model;
 mod project;
 mod queue;
@@ -37,7 +36,6 @@ mod session;
 mod system;
 
 pub(crate) use goal::*;
-pub(crate) use ledger::*;
 pub(crate) use managed_model::*;
 pub(crate) use project::*;
 pub(crate) use queue::*;

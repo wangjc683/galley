@@ -1756,6 +1756,68 @@ async fn delete_session_not_found() {
     assert!(matches!(err, GalleyError::NotFound { .. }));
 }
 
+async fn fts_rows(pool: &SqlitePool, session_id: &str) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM messages_fts WHERE session_id = ?")
+        .bind(session_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// The ordinary session delete takes the session's search-index rows
+/// along (`messages_fts` has no foreign key): one session or several.
+#[tokio::test]
+async fn deleting_a_session_drops_its_search_index_rows() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool.clone());
+    for id in ["s-a", "s-b", "s-c"] {
+        let mut tx = galley.begin_tx().await.unwrap();
+        galley
+            .create_session_in_tx(
+                &mut tx,
+                CreateSessionInput {
+                    id: id.into(),
+                    title: id.into(),
+                    project_id: None,
+                    selected_llm_index: None,
+                    selected_llm_key: None,
+                    selected_llm_display_name: None,
+                    ga_runtime_kind: Some(RuntimeKind::Managed),
+                    ga_runtime_id: None,
+                    prompt_profile: None,
+                },
+                Origin::gui(),
+            )
+            .await
+            .unwrap();
+        galley
+            .send_message_in_tx(
+                &mut tx,
+                sid(id),
+                format!("{id} 里说过的一段话"),
+                Origin::gui(),
+            )
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        assert_eq!(fts_rows(&pool, id).await, 1);
+    }
+    galley
+        .delete_session(sid("s-a"), Origin::gui())
+        .await
+        .unwrap();
+    assert_eq!(fts_rows(&pool, "s-a").await, 0);
+    assert_eq!(
+        galley
+            .bulk_delete_sessions(vec![sid("s-b")], Origin::gui())
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(fts_rows(&pool, "s-b").await, 0);
+    assert_eq!(fts_rows(&pool, "s-c").await, 1);
+}
+
 // ---------------- assign_session_to_project ----------------
 
 #[tokio::test]

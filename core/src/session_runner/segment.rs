@@ -22,10 +22,9 @@
 //! - **Fresh context = a fresh runner.** Recording a boundary retires a
 //!   live runner (quietly, like ensure's own restart): the next ensure
 //!   spawns one whose GA history holds nothing from earlier segments and
-//!   whose session-start state block — including the main chat's
-//!   ongoing-affairs list ([`crate::ledger::affairs`]) — is composed
-//!   anew. `load_history` with nothing would empty the history but keep
-//!   the state block the runner was spawned with.
+//!   whose session-start state block is composed anew. `load_history`
+//!   with nothing would empty the history but keep the state block the
+//!   runner was spawned with.
 //!
 //! Where the rule is applied: [`super::ensure_session_runner`] (every
 //! caller: the GUI opening the main chat, a `/btw`, a Goal) and Core's
@@ -164,9 +163,8 @@ pub(super) async fn open_if_due(
 /// conversation (ticket 03b): it is the main chat, its id, and where the
 /// segment its runner holds begins — so the model can tell a search hit
 /// from an earlier segment (`turnIndex` below the start) and look it up
-/// instead of guessing. Read at spawn, like the ongoing-affairs list: a
-/// new segment retires the runner, so the start never changes under a
-/// live one.
+/// instead of guessing. Read at spawn: a new segment retires the runner,
+/// so the start never changes under a live one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MainChatPromptState {
     pub session_id: String,

@@ -81,7 +81,6 @@ fn gui_origin() -> Origin {
 async fn main_chat(galley: &SqliteGalley, id: &str) {
     let seed = MainChatSeed {
         greeting: Some(MAIN_CHAT_GREETING_ZH.into()),
-        prefs_if_absent: Vec::new(),
     };
     let ensured = galley
         .get_or_create_main_chat(id, gui_origin(), &seed)

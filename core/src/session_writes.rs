@@ -356,38 +356,16 @@ impl<'a> Writes<'a> {
     /// archive, not at all when it was simply there.
     ///
     /// Created, it opens with the AI's greeting in `language` (the UI
-    /// language the GUI resolved; English when none, PRD ruling 47), and
-    /// the affairs ledger is switched on where its switch was never set,
-    /// its first run held back to the next 04:00 (ticket 04c,
-    /// [`crate::ledger::config`]). Restored or existing, neither.
+    /// language the GUI resolved; English when none, PRD ruling 47).
+    /// Restored or existing, none.
     pub async fn get_or_create_main_chat(
         &self,
         origin: Origin,
         language: Option<&str>,
     ) -> Result<MainChatEnsured> {
-        self.get_or_create_main_chat_at(origin, language, chrono::Utc::now(), &chrono::Local)
-            .await
-    }
-
-    /// [`Self::get_or_create_main_chat`] at a given time, in a given time
-    /// zone (tests).
-    pub async fn get_or_create_main_chat_at<Tz: chrono::TimeZone>(
-        &self,
-        origin: Origin,
-        language: Option<&str>,
-        now: chrono::DateTime<chrono::Utc>,
-        tz: &Tz,
-    ) -> Result<MainChatEnsured>
-    where
-        Tz::Offset: std::fmt::Display,
-    {
         let new_id = crate::socket_listener::mint_session_id();
-        let ledger_on = crate::ledger::LedgerSwitch::on_by_default(now, tz)
-            .to_pref()
-            .expect("on is stored");
         let seed = MainChatSeed {
             greeting: Some(main_chat_greeting(language).to_string()),
-            prefs_if_absent: vec![(crate::ledger::config::SWITCH_PREF.to_string(), ledger_on)],
         };
         let ensured = self
             .galley

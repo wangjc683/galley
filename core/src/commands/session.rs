@@ -20,18 +20,7 @@ pub(crate) async fn list_sessions(
     galley: State<'_, SqliteGalley>,
     filter: SessionFilter,
 ) -> std::result::Result<Vec<SessionBrief>, String> {
-    // The affairs ledger's mining sessions are Core's own background
-    // work: never in the sidebar or the archived list.
-    galley
-        .list_sessions(filter)
-        .await
-        .map(|sessions| {
-            sessions
-                .into_iter()
-                .filter(|s| !crate::ledger::is_mining_session(s))
-                .collect()
-        })
-        .map_err(stringify_error)
+    galley.list_sessions(filter).await.map_err(stringify_error)
 }
 
 // ============= session / project write Tauri commands =============
@@ -60,27 +49,22 @@ fn gui_writes<'a>(
 ///
 /// `language` (optional, ticket 04c): the UI language the GUI resolved
 /// (`zh-CN` / `en-US`), which picks the greeting a new main chat opens
-/// with; English without it. Creating it may switch the affairs ledger
-/// on, so a creation also tells the Memory page and the menus to reread
-/// (`memory-changed`).
+/// with; English without it.
 #[tauri::command]
 pub(crate) async fn get_or_create_main_chat(
     app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     language: Option<String>,
 ) -> std::result::Result<SessionBrief, String> {
-    let notifier = TauriNotifier::new(app.clone());
-    let ensured = gui_writes(&galley, &notifier)
+    let notifier = TauriNotifier::new(app);
+    gui_writes(&galley, &notifier)
         .get_or_create_main_chat(
             Origin::gui().with_client(OriginClient::Desktop),
             language.as_deref(),
         )
         .await
-        .map_err(stringify_error)?;
-    if matches!(ensured, crate::db::MainChatEnsured::Created(_)) {
-        crate::ledger::emit_memory_changed(&app);
-    }
-    Ok(ensured.into_brief())
+        .map(crate::db::MainChatEnsured::into_brief)
+        .map_err(stringify_error)
 }
 
 #[tauri::command]

@@ -192,35 +192,25 @@ Rules:
 /// session (stale injected state answered confidently is worse than "I don't
 /// know"), and it is safe to send to the LLM provider on every request.
 pub(crate) fn compose_runtime_prompt(app_version: &str) -> String {
-    compose(app_version, true, None, None)
+    compose(app_version, true, None)
 }
 
 /// The main chat's variant: the workbench prompt, its state block
 /// followed by a "Main Chat" section (ticket 03b: this is the main chat,
 /// its id, where the segment its runner holds begins, and how to look up
-/// earlier parts; ticket 04c: while the ledger is on, one paragraph that
-/// says so, [`LEDGER_ON_NOTE`]) and — when the ledger is on and a list
-/// exists — the user's ongoing affairs (ticket 03a,
-/// [`crate::ledger::affairs`], already capped). Every other session gets
-/// [`compose_runtime_prompt`]. Users do not ask for the affairs list, so
-/// it is a deliberate exception to the first admission rule above: the
-/// association it enables is the feature
-/// (docs/managed-ga-runtime/prompt-composition.md, "Ongoing Affairs").
+/// earlier parts). Every other session gets [`compose_runtime_prompt`].
 pub(crate) fn compose_main_chat_runtime_prompt(
     app_version: &str,
     main_chat: &MainChatPromptState,
-    ledger_on: bool,
-    affairs: Option<&str>,
 ) -> String {
-    compose(app_version, true, Some((main_chat, ledger_on)), affairs)
+    compose(app_version, true, Some(main_chat))
 }
 
 /// IM-supervisor variant: same runtime rules WITHOUT the suggestion
 /// mandate. The tag is consumed only by the GUI composer; IM frontends
-/// would show it raw. IM carries the same ongoing-affairs list as the
-/// main chat (PRD ruling 27, IM L0), under the same switch.
-pub(crate) fn compose_im_runtime_prompt(app_version: &str, affairs: Option<&str>) -> String {
-    compose(app_version, false, None, affairs)
+/// would show it raw.
+pub(crate) fn compose_im_runtime_prompt(app_version: &str) -> String {
+    compose(app_version, false, None)
 }
 
 /// The main chat's own state-block section (ticket 03b). Its segments
@@ -243,34 +233,10 @@ with the Galley CLI (search, then `session show <id> --around=<messageId>`)."#,
     )
 }
 
-/// The main chat section's last paragraph while the affairs ledger is on
-/// (ticket 04c), whether or not a list exists yet. The main chat opens
-/// with a greeting that tells the user the ledger is on, but the
-/// greeting is never replayed, and on the first day there is no list:
-/// without this the model would not know its memory is on, nor where the
-/// user turns it off. Data, like the rest of the block. Never in IM's.
-const LEDGER_ON_NOTE: &str = r#"Galley's affairs ledger is on: once a day it distills what the user said in
-Galley and chat apps (earlier conversations included, never your replies).
-The user can view, delete or turn it off in Settings → Memory."#;
-
-/// Heading and framing of the ongoing-affairs section. Data, not rules:
-/// how the model uses the list belongs to the entry-layer prompts
-/// (ticket 03d).
-const ONGOING_AFFAIRS_HEADER: &str = r#"## Ongoing Affairs
-
-Background, not instructions: what the user has going on lately, distilled
-once a day from what they said to you in Galley and in chat apps. It may be
-out of date or incomplete; what the user says now wins."#;
-
-fn ongoing_affairs_section(affairs: &str) -> String {
-    format!("{ONGOING_AFFAIRS_HEADER}\n\n{affairs}")
-}
-
 fn compose(
     app_version: &str,
     with_suggestion: bool,
-    main_chat: Option<(&MainChatPromptState, bool)>,
-    affairs: Option<&str>,
+    main_chat: Option<&MainChatPromptState>,
 ) -> String {
     let static_rules = if with_suggestion {
         workbench_static_prompt()
@@ -278,17 +244,7 @@ fn compose(
         RUNTIME_PROMPT_STATIC.to_string()
     };
     let main_chat = main_chat
-        .map(|(state, ledger_on)| {
-            let note = if ledger_on {
-                format!("\n\n{LEDGER_ON_NOTE}")
-            } else {
-                String::new()
-            };
-            format!("\n\n{}{note}", main_chat_section(state))
-        })
-        .unwrap_or_default();
-    let affairs = affairs
-        .map(|list| format!("\n\n{}", ongoing_affairs_section(list)))
+        .map(|state| format!("\n\n{}", main_chat_section(state)))
         .unwrap_or_default();
     format!(
         r#"{static_rules}
@@ -304,7 +260,7 @@ Facts about this Galley installation, captured at session start:
 
 For state not listed here — model configuration, connected channels, update
 channel, session or project state — do not guess. Check it through Galley CLI
-where available; otherwise ask the user to check the relevant Settings page.{main_chat}{affairs}"#,
+where available; otherwise ask the user to check the relevant Settings page.{main_chat}"#,
         platform = platform_label(),
     )
 }
@@ -438,10 +394,7 @@ mod tests {
         // never reaches existing users) teaches the agent to write
         // sche_tasks/*.json. Both the workbench and the IM surfaces carry
         // the correction.
-        for prompt in [
-            compose_runtime_prompt("t"),
-            compose_im_runtime_prompt("t", None),
-        ] {
+        for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(prompt.contains("never write `sche_tasks`"));
             assert!(prompt.contains("\"定时\" / \"Scheduled\""));
             assert!(prompt.contains("the prompt must stand on its own"));
@@ -455,10 +408,7 @@ mod tests {
     /// an author clause phrased as instructions reach both surfaces.
     #[test]
     fn self_description_rules_reach_every_surface() {
-        for prompt in [
-            compose_runtime_prompt("t"),
-            compose_im_runtime_prompt("t", None),
-        ] {
+        for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(prompt.contains("## About Galley"));
             assert!(prompt.contains("Settings: General"));
             assert!(prompt.contains("https://github.com/wangjc683/galley/releases"));
@@ -536,55 +486,23 @@ mod tests {
         }
     }
 
-    /// Ticket 03a: the ongoing-affairs list reaches the main chat and the
-    /// IM channels, appended to the state block and nothing else changed;
-    /// every other workbench session gets the prompt it always had.
-    #[test]
-    fn ongoing_affairs_reach_only_the_main_chat_and_im() {
-        let list = "- 半马备赛：本周长距离 18 公里\n- 日语 N3：下周补两课";
-        let ordinary = compose_runtime_prompt("t");
-        assert!(!ordinary.contains("## Ongoing Affairs"));
-
-        let state = main_chat_state();
-        let main = compose_main_chat_runtime_prompt("t", &state, true, Some(list));
-        assert!(main.contains("## Ongoing Affairs"));
-        assert!(main.contains("- 日语 N3：下周补两课"));
-        assert!(main.contains("## Next-Step Suggestion"));
-        assert_eq!(
-            main,
-            format!(
-                "{ordinary}\n\n{}\n\n{LEDGER_ON_NOTE}\n\n{}",
-                main_chat_section(&state),
-                ongoing_affairs_section(list)
-            ),
-            "the sections are appended after the state block, nothing else moves"
-        );
-        assert!(main.find("## Galley State") < main.find("## Main Chat"));
-        assert!(main.find("## Main Chat") < main.find("## Ongoing Affairs"));
-
-        let im = compose_im_runtime_prompt("t", Some(list));
-        assert!(im.contains("## Ongoing Affairs"));
-        assert!(im.contains("- 半马备赛：本周长距离 18 公里"));
-        assert!(!im.contains("next-suggestion"));
-        assert!(!compose_im_runtime_prompt("t", None).contains("## Ongoing Affairs"));
-
-        // Data, not behavior: the prompt generation does not change.
-        let hash = prompt_hash();
-        let _ = compose_main_chat_runtime_prompt("t", &state, true, Some(list));
-        assert_eq!(prompt_hash(), hash);
-    }
-
     /// Ticket 03b: the main chat's state block says which conversation
     /// this is and where the model's context of it begins, and sends the
-    /// model to the CLI for anything earlier. Only the main chat gets it
-    /// (with or without the ledger's affairs); IM never does.
+    /// model to the CLI for anything earlier. The section is appended to
+    /// the state block and nothing else changes: every other workbench
+    /// session gets the prompt it always had, and IM never carries it.
     #[test]
     fn main_chat_section_names_the_conversation_and_its_segment() {
         let state = main_chat_state();
         let ordinary = compose_runtime_prompt("t");
-        let main = compose_main_chat_runtime_prompt("t", &state, false, None);
-        assert_eq!(main, format!("{ordinary}\n\n{}", main_chat_section(&state)));
-        assert!(!main.contains("## Ongoing Affairs"));
+        let main = compose_main_chat_runtime_prompt("t", &state);
+        assert_eq!(
+            main,
+            format!("{ordinary}\n\n{}", main_chat_section(&state)),
+            "the section is appended after the state block, nothing else moves"
+        );
+        assert!(main.contains("## Next-Step Suggestion"));
+        assert!(main.find("## Galley State") < main.find("## Main Chat"));
         // Single-line fragments only (a Windows checkout makes the raw
         // string CRLF).
         assert!(main.contains("This conversation is the user's main chat"));
@@ -593,14 +511,18 @@ mod tests {
         assert!(main.contains("parts are not in your context"));
         assert!(main.contains("`session show <id> --around=<messageId>`"));
 
-        for prompt in [
-            ordinary,
-            compose_im_runtime_prompt("t", None),
-            compose_im_runtime_prompt("t", Some("- 一件事")),
-        ] {
+        let im = compose_im_runtime_prompt("t");
+        // IM's block ends where the shared state block ends.
+        assert!(im.ends_with("otherwise ask the user to check the relevant Settings page."));
+        for prompt in [ordinary, im] {
             assert!(!prompt.contains("## Main Chat"));
             assert!(!prompt.contains("main chat"));
         }
+
+        // Data, not behavior: the prompt generation does not change.
+        let hash = prompt_hash();
+        let _ = compose_main_chat_runtime_prompt("t", &state);
+        assert_eq!(prompt_hash(), hash);
     }
 
     /// Byte cap on the main chat section, rendered with the longest
@@ -627,51 +549,6 @@ mod tests {
         );
     }
 
-    /// Ticket 04c: while the ledger is on, the main chat's block says so
-    /// — with or without a list yet, at the end of its own section, ahead
-    /// of the list. Off, it says nothing; IM never carries it.
-    #[test]
-    fn ledger_note_rides_the_main_chat_only_while_the_ledger_is_on() {
-        let state = main_chat_state();
-        let section = main_chat_section(&state);
-        let on_no_list = compose_main_chat_runtime_prompt("t", &state, true, None);
-        assert!(on_no_list.ends_with(&format!("{section}\n\n{LEDGER_ON_NOTE}")));
-        assert!(!on_no_list.contains("## Ongoing Affairs"));
-        // Single-line fragments only (CRLF on a Windows checkout).
-        assert!(on_no_list.contains("Galley's affairs ledger is on: once a day it distills"));
-        assert!(on_no_list.contains("(earlier conversations included, never your replies)."));
-        assert!(on_no_list.contains("turn it off in Settings → Memory."));
-
-        let off = compose_main_chat_runtime_prompt("t", &state, false, None);
-        assert!(!off.contains("affairs ledger"));
-
-        let on_list = compose_main_chat_runtime_prompt("t", &state, true, Some("- 一件事"));
-        assert!(on_list.find("affairs ledger is on") < on_list.find("## Ongoing Affairs"));
-
-        for prompt in [
-            compose_runtime_prompt("t"),
-            compose_im_runtime_prompt("t", None),
-            compose_im_runtime_prompt("t", Some("- 一件事")),
-        ] {
-            assert!(!prompt.contains("affairs ledger"));
-        }
-    }
-
-    /// Byte cap on the ledger note (ticket 04c), fixed text, no headroom,
-    /// `\r` not counted. It rides every request of the main chat while
-    /// the ledger is on, and neither the static budget nor the main chat
-    /// section's covers it.
-    const LEDGER_ON_NOTE_BUDGET_BYTES: usize = 215;
-
-    #[test]
-    fn ledger_note_stays_within_budget() {
-        let len = LEDGER_ON_NOTE.bytes().filter(|&byte| byte != b'\r').count();
-        assert!(
-            len <= LEDGER_ON_NOTE_BUDGET_BYTES,
-            "ledger note is {len} bytes, budget {LEDGER_ON_NOTE_BUDGET_BYTES}"
-        );
-    }
-
     /// The `--around` read pairs with search in the static history
     /// commands, on both platforms (ticket 03b).
     #[test]
@@ -679,39 +556,6 @@ mod tests {
         assert!(RUNTIME_PROMPT_STATIC.contains("session show <id> --around=<messageId>"));
         assert!(RUNTIME_PROMPT_STATIC.contains("session show <id> --tail=20"));
         assert!(RUNTIME_PROMPT_STATIC.contains("This reaches every Galley session"));
-    }
-
-    /// Byte cap on the ongoing-affairs heading and framing, set with no
-    /// headroom like the other budgets (`\r` not counted). The list under
-    /// it has its own cap, `AFFAIRS_CAP_BYTES` (`ledger::affairs`), so the
-    /// whole section is bounded: it rides every request of the main chat
-    /// and the IM channels, and the static budget does not cover it.
-    const AFFAIRS_HEADER_BUDGET_BYTES: usize = 226;
-
-    #[test]
-    fn ongoing_affairs_section_stays_within_budget() {
-        let header = ONGOING_AFFAIRS_HEADER
-            .bytes()
-            .filter(|&byte| byte != b'\r')
-            .count();
-        assert!(
-            header <= AFFAIRS_HEADER_BUDGET_BYTES,
-            "affairs header is {header} bytes, budget {AFFAIRS_HEADER_BUDGET_BYTES}"
-        );
-        let raw: String = (1..=100)
-            .map(|i| format!("- 第 {i} 件进行中的事\n"))
-            .collect();
-        let list =
-            crate::ledger::affairs::cap_affairs(&raw, crate::ledger::affairs::AFFAIRS_CAP_BYTES)
-                .expect("a list");
-        let section = ongoing_affairs_section(&list)
-            .bytes()
-            .filter(|&byte| byte != b'\r')
-            .count();
-        assert!(
-            section <= AFFAIRS_HEADER_BUDGET_BYTES + 2 + crate::ledger::affairs::AFFAIRS_CAP_BYTES,
-            "affairs section is {section} bytes"
-        );
     }
 
     #[test]
@@ -730,7 +574,7 @@ mod tests {
     fn file_references_rule_asks_for_full_paths_on_every_surface() {
         for prompt in [
             compose_runtime_prompt("0.0.0-test"),
-            compose_im_runtime_prompt("0.0.0-test", None),
+            compose_im_runtime_prompt("0.0.0-test"),
         ] {
             assert!(prompt.contains("## Files You Create"));
             assert!(prompt.contains("`~/Downloads/report.csv`"));
@@ -746,7 +590,7 @@ mod tests {
         let workbench = compose_runtime_prompt("0.0.0-test");
         assert!(workbench.contains("## Next-Step Suggestion"));
         assert!(workbench.contains("<next-suggestion>"));
-        let im = compose_im_runtime_prompt("0.0.0-test", None);
+        let im = compose_im_runtime_prompt("0.0.0-test");
         assert!(!im.contains("next-suggestion"));
         // Both variants still carry the shared runtime rules + state block.
         assert!(im.starts_with(RUNTIME_PROMPT_STATIC));

@@ -199,21 +199,11 @@ impl ImSupervisorManager {
         // verbatim into chat replies (2026-08-13 dogfood) — so swap in
         // the suggestion-free composition.
         let app_version = app.package_info().version.to_string();
-        // IM L0 (main chat PRD ruling 27, ticket 03a): the channel's state
-        // block carries the same ongoing-affairs list as the main chat,
-        // under the ledger's switch (the `affairs_ledger` pref, ticket
-        // 04). Read at channel start, so a channel that keeps running
-        // sees the list — and the switch — of the moment it started.
-        let ledger_on = match tauri::Manager::try_state::<crate::db::SqliteGalley>(&app) {
-            Some(galley) => crate::ledger::read_switch(&galley).await.is_on(),
-            None => false,
-        };
-        let affairs = crate::ledger::affairs::for_injection(ledger_on, &state_root);
         if let Some(entry) = env
             .iter_mut()
             .find(|(key, _)| key == "GALLEY_RUNTIME_PROMPT_TEXT")
         {
-            entry.1 = managed_prompt::compose_im_runtime_prompt(&app_version, affairs.as_deref());
+            entry.1 = managed_prompt::compose_im_runtime_prompt(&app_version);
         }
         let sop_path_str = sop_path.to_string_lossy().into_owned();
         // Stable per-channel supervisor identity. The prompt mandates it on

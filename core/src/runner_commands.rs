@@ -375,15 +375,13 @@ pub(crate) async fn prepare_managed_spawn_args(
     let mut context = prepare_managed_runtime_context(app, requested_model_id.as_deref()).await?;
     // The main chat's runner gets the main chat's state block (tickets
     // 03a / 03b). Read at spawn: a main chat runner is spawned at the
-    // start of each segment, so each segment starts with its own start
-    // and the latest affairs list.
+    // start of each segment, so each segment starts with its own start.
     let main_chat = crate::session_runner::segment::prompt_state(
         &app.state::<SqliteGalley>(),
         &args.session_id,
     )
     .await;
     if let Some(main_chat) = main_chat {
-        let (ledger_on, affairs) = main_chat_ledger(app, &context).await;
         if let Some(entry) = context
             .env
             .iter_mut()
@@ -392,8 +390,6 @@ pub(crate) async fn prepare_managed_spawn_args(
             entry.1 = managed_prompt::compose_main_chat_runtime_prompt(
                 &app.package_info().version.to_string(),
                 &main_chat,
-                ledger_on,
-                affairs.as_deref(),
             );
         }
     }
@@ -411,23 +407,6 @@ pub(crate) async fn prepare_managed_spawn_args(
     args.cwd = None;
     args.env.extend(context.env);
     Ok(args)
-}
-
-/// What the main chat's runner is told of the ledger, from one read of
-/// its switch (the `affairs_ledger` pref, ticket 04): whether it is on
-/// (the state block's note, ticket 04c), and the ongoing-affairs list
-/// (ticket 03a, [`crate::ledger::affairs`]) — `None` while it is not on
-/// or no list has been written yet.
-async fn main_chat_ledger(
-    app: &AppHandle,
-    context: &ManagedRuntimeProcessContext,
-) -> (bool, Option<String>) {
-    let switch = crate::ledger::read_switch(&app.state::<SqliteGalley>()).await;
-    let affairs = crate::ledger::affairs::for_injection(
-        switch.is_on(),
-        std::path::Path::new(&context.diagnostics.paths.state_root),
-    );
-    (switch.is_on(), affairs)
 }
 
 fn elapsed_ms(started_at: Instant) -> f64 {
