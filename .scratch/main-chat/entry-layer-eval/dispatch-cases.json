@@ -1,0 +1,10 @@
+{
+  "_note": "派活方式对照用例（票 06）。每条在 T / C / P 三组各跑一次，三组都带入口层草稿加各自的派活条款。should_dispatch 是预期：大活该派，快活不该派。",
+  "cases": [
+    { "id": "big-quotes", "should_dispatch": true, "message": "帮我去三家供应商官网（华立、东辰、明光）把这周的钢材报价抓下来，整理成一张对比表。" },
+    { "id": "big-pdfs", "should_dispatch": true, "message": "把我下载文件夹里所有 PDF 按内容分类，挪到对应的子文件夹里。" },
+    { "id": "big-research", "should_dispatch": true, "message": "帮我调研一下主流的本地笔记软件，比较它们的同步方式和价格，写个报告给我。" },
+    { "id": "quick-usd", "should_dispatch": false, "message": "1 美元现在大概多少人民币？" },
+    { "id": "quick-downloads", "should_dispatch": false, "message": "帮我看看下载文件夹里有哪些超过 1GB 的文件。" }
+  ]
+}

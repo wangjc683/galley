@@ -1,0 +1,45 @@
+{
+  "_note": "主对话入口层对照用例（票 03d）。history 是上下文里已有的轮次；carried 为 true 时这些轮次是从上一段带过来的（状态块要写明轮数与最后一条的时间），hours_ago 是距今多久。without / with 两组除入口层外完全相同。",
+  "cases": [
+    { "id": "chat-tired", "group": "随口一句", "message": "今天好累，开了一天会。" },
+    { "id": "chat-full", "group": "随口一句", "message": "刚吃完饭，有点撑。" },
+    { "id": "chat-morning", "group": "随口一句", "message": "早" },
+    { "id": "quick-tomato", "group": "快问快答", "message": "番茄炒蛋先放番茄还是先放蛋？" },
+    { "id": "quick-usd", "group": "快问快答", "message": "1 美元现在大概多少人民币？" },
+    { "id": "quick-title", "group": "快问快答", "message": "帮我想个周报的标题，这周主要在修登录 bug。" },
+    { "id": "errand-rent", "group": "随口交代", "message": "提醒我一下，周五之前要给房东转房租。" },
+    { "id": "errand-translate", "group": "随口交代", "message": "把这句翻成英文：这个需求下周再排期。" },
+    {
+      "id": "carry-quote",
+      "group": "接前事",
+      "carried": true,
+      "hours_ago": 5,
+      "history": [
+        { "role": "user", "content": "供应商刚发来报价，比上次贵了 12%，我先出门，晚点回来再说这个报价。" },
+        { "role": "assistant", "content": "好，回来再说。贵了 12% 值得问清楚是原材料还是运费涨了。" }
+      ],
+      "message": "回来了"
+    },
+    {
+      "id": "carry-laptop",
+      "group": "接前事",
+      "carried": true,
+      "hours_ago": 6,
+      "history": [
+        { "role": "user", "content": "帮我对比一下这两台：A 是 14 寸 1.2kg 续航 12 小时 7999 元，B 是 16 寸 2.1kg 带独显 9499 元。我主要写代码，偶尔剪视频。" },
+        { "role": "assistant", "content": "主要写代码、要常带出门选 A：轻、续航长，7999 元也便宜 1500。剪视频多、基本放桌上选 B：独显和大屏剪辑舒服得多，但 2.1kg 背着累。按你说的「偶尔剪视频」，我倾向 A。" }
+      ],
+      "message": "那我就要第二台吧，还有什么要注意的？"
+    },
+    {
+      "id": "carry-older",
+      "group": "接前事",
+      "carried": false,
+      "message": "对了，上周说的那个去成都的事，机票我订好了。"
+    },
+    { "id": "work-email", "group": "正经活", "message": "帮我写一封邮件给客户，说明交付要推迟一周，原因是第三方接口还没开放，语气客气但不卑微。" },
+    { "id": "work-rust", "group": "正经活", "message": "解释一下 Rust 的生命周期标注是干什么的，给个例子。" },
+    { "id": "work-downloads", "group": "正经活", "message": "帮我看看下载文件夹里有哪些超过 1GB 的文件。" },
+    { "id": "personal-surgery", "group": "个人", "message": "我妈明天做手术，有点紧张。" }
+  ]
+}
