@@ -22,12 +22,10 @@ Source of truth is `core/src/managed_prompt.rs`:
 rules; Core passes the composed text through the existing
 `GALLEY_RUNTIME_PROMPT_TEXT` env seam. External attach mode does not pass this
 prompt value. The runner appends it as `extra_sys_prompt` and needs no
-knowledge of the composition. Two surfaces get more state-block sections
-(below). The main chat (`compose_main_chat_runtime_prompt`, chosen in
-`runner_commands::prepare_managed_spawn_args` by session id) always gets
-`## Main Chat` — ending with one paragraph that says the ledger is on, while
-it is — then the user's ongoing affairs when the ledger has a list; the IM
-channels (`compose_im_runtime_prompt`) get the ongoing affairs only.
+knowledge of the composition. The main chat gets one more state-block
+section (below): `compose_main_chat_runtime_prompt`, chosen in
+`runner_commands::prepare_managed_spawn_args` by session id, adds
+`## Main Chat`.
 
 ## Admission Test For Static Clauses
 
@@ -179,82 +177,14 @@ with the Galley CLI (search, then `session show <id> --around=<messageId>`).
   crash) is told the same start; a new segment retires the runner, so the
   start never changes under a live one (admission rule 3).
 - **Routing sentence**: search, then `--around`. Search scope stays every
-  conversation: the ongoing affairs come from the main chat and the user's
-  other conversations, and their source must be findable. When to bring old
-  context up unprompted is the entry layer's (ticket 03d).
-- **Switch**: none of its own. Every managed main chat runner gets it,
-  ledger on or off; every other session, IM, and attach mode never do.
+  conversation. When to bring old context up unprompted is the entry
+  layer's (ticket 03d).
+- **Switch**: none. Every managed main chat runner gets it; every other
+  session, IM, and attach mode never do.
 - **Bounded**: `MAIN_CHAT_SECTION_BUDGET_BYTES` = 327, measured on the
   longest values in practice (a Core-minted 19-character session id, a
   six-digit turn index), no headroom, `\r` not counted. Data: outside the
   static budget and the prompt hash.
-
-Since ticket 04c (PRD ruling 47) the section ends with one more paragraph
-while the affairs ledger is on, with or without a list yet
-(`LEDGER_ON_NOTE`):
-
-```text
-Galley's affairs ledger is on: once a day it distills what the user said in
-Galley and chat apps (earlier conversations included, never your replies).
-The user can view, delete or turn it off in Settings → Memory.
-```
-
-- **Why**: the ledger is on by default; the main chat opens with a greeting
-  that says so, but the greeting is never replayed into the model's history,
-  and on the first day there is no list. Without this paragraph the model
-  would not know its memory is on, nor where the user turns it off.
-- **Switch**: the ledger's (`affairs_ledger`, read at spawn with the list).
-  Off or undecided → no paragraph. IM never carries it.
-- **Bounded**: `LEDGER_ON_NOTE_BUDGET_BYTES` = 215, fixed text, no headroom,
-  `\r` not counted. Data: outside the static budget and the prompt hash.
-
-### Ongoing Affairs (main chat and IM only)
-
-Since ticket 03a (`.scratch/main-chat/issues/03-segments-and-injection.md`)
-the main chat's and the IM channels' state block ends with a section
-`## Ongoing Affairs` (in the main chat, after `## Main Chat`): one framing
-paragraph, then the short list the affairs
-ledger's daily mining run ends with
-(`memory/history_insight/ongoing_affairs.md`, `core/src/ledger/affairs.rs`).
-It is how the assistant connects a topic to last week's affairs when nobody
-mentions them; GA trims history by volume, but this lives in the system
-prompt, so trimming cannot drop it. Identity (the static rules) and global
-memory (GA's own system prompt) are already there and are not repeated.
-
-- **Switch**: the ledger's, the Core pref `affairs_ledger` that Core turns
-  on when it creates the main chat (ticket 04c) and the Memory page sets
-  (ticket 04, `core/src/ledger/config.rs`; read at every spawn, no restart
-  needed). Off or undecided (the file is then not even read), no
-  list written yet, or a list with nothing in it → no section, and the
-  prompt is exactly `compose_runtime_prompt`'s. Every other session never
-  gets it; attach mode never runs this code.
-- **Numbers stripped**: each line of the file carries its activity's number
-  (`- A001｜…`) so a delete on the Memory page takes the line with its
-  entry. Core strips the number before injection (a line without one is
-  kept as is); the model never sees it, and the caps below count what is
-  left.
-- **When it is read**: at spawn. A main chat runner is spawned at the start
-  of every segment (a new segment retires the warm runner, see
-  [runtime modes and sessions](./runtime-modes-and-sessions.md#main-chat-segments)),
-  so each segment starts with the latest list. An IM channel reads it (and
-  the switch) when the channel starts and keeps it until it restarts.
-- **Bounded**: Core does not trust the file — blank lines and Markdown
-  headings are dropped, and the list is cut at a line boundary to
-  `AFFAIRS_CAP_BYTES` = 1536 (`ledger::affairs`, with its own cap test).
-  The mining task's limits (at most 12 lines of at most 40 characters
-  after the number) come
-  to 1475 bytes at worst in Chinese, so the cut only bites when the model
-  ignores them; the six ongoing affairs of the ticket-01 corpus after three
-  weeks come to about 480 bytes as one line each. The heading and framing are held to
-  `AFFAIRS_HEADER_BUDGET_BYTES` (226, no headroom). Neither counts toward the
-  static budget or the prompt hash: this is data.
-- **Admission**: users do not ask for the list, but the feature is the
-  association it enables (PRD rulings 16, 18). It is captured at spawn and
-  cannot change within a segment; the framing says it may be out of date
-  and that what the user says now wins. It is the user's own words,
-  distilled — the same content the conversation already sends.
-- **Wording**: data only ("Background, not instructions"). How the model
-  should use the list belongs to the main chat entry layer (ticket 03d).
 
 ## IM Entry Layer
 
@@ -287,11 +217,6 @@ says four things:
 
 Budget: `IM_PROMPT_BUDGET_BYTES` caps the template (empty SOP path, `\r` not
 counted) on the longest platform variant, same rule as the static budget.
-
-IM's state block carries the ongoing-affairs section too (IM L0, main chat
-PRD ruling 27): same list, same switch, read when the channel starts. It sits
-in the state block rather than in the entry layer, so the entry layer's
-budget keeps measuring rules only and Discord's template needs no change.
 
 ## Profile Id And Hash
 
@@ -328,9 +253,7 @@ row.
 | Files You Create: full paths, once per file, inside tables too | 2026-09-09 incident (session `s-mttuo5ip-kkdb`): four files saved to `~/Downloads`, directory named once, bare filenames in a table — nothing click-to-open. Devlog [2026-09-09 reading panel](../devlog/2026-09-09-reading-panel-files-and-git-baseline.md) §补 |
 | Scheduled Tasks: no `sche_tasks` files, point to sidebar「定时」 (merged into What Only The User Changes, 2026-10-06; the sidebar pointer now comes from the About map) | galley#31 (2026-09-28): a user migrating from external GA copied `sche_tasks/` into the managed state root and nothing fired. Reading the seeded `scheduled_task_sop.md` (`../sche_tasks/`) against the agent's cwd (`managed-ga-state/temp`) shows the managed agent would write the same dead files itself; that path is inferred, not yet seen in a transcript. Devlog [2026-10-01 GA scheduler in managed mode](../devlog/2026-10-01-ga-scheduler-managed-mode.md) |
 | State block | 2026-07-07 session: replace "don't invent metadata, go check Settings" deflection with injected facts |
-| State block: Ongoing Affairs (main chat, IM) | main chat PRD rulings 18 and 27, ticket 03a (2026-10-12): association needs the affairs in context, and the full ledger was already 17 KB after three weeks of the ticket-01 corpus, so the mining run writes a short list and Core caps it |
 | State block: Main Chat (id, segment start, "search, then `--around`") | main chat PRD rulings 18 and 41, ticket 03b (2026-10-12): segments leave earlier parts out of context, and the decided lookup path is the existing CLI rather than a new GA tool. Own cap `MAIN_CHAT_SECTION_BUDGET_BYTES` |
-| State block: Main Chat, "the affairs ledger is on" paragraph | main chat PRD ruling 47, ticket 04c (2026-10-12): the ledger is on by default and the main chat's greeting, which says so, is never replayed; on the first day there is no list either. Own cap `LEDGER_ON_NOTE_BUDGET_BYTES` |
 | Past Galley Conversations: `--around` example; coverage sentence reworded to 「This reaches every Galley session, but not direct IM chats …」 | ticket 03b (2026-10-12): `session show` gained `--around`, and `--tail=20` reads the end of a session, not where a search hit is. Paid for in the same diff: the two coverage sentences became one (−51 bytes against the +51-byte line on both platforms), so the static text stays at 6855 bytes (Windows) / 6837 (POSIX) and the cap is unchanged |
 
 ## Dogfood Regression Checklist
@@ -382,17 +305,11 @@ in a real managed session after any prompt change:
     `--reason`; the completion report arrives in the same chat.
 17. WeChat: a reply with a link or numbered steps → the link and the `1.`
     numbers arrive intact (Galley's handler passes Markdown through).
-18. Main chat, ledger on and `ongoing_affairs.md` present: start a new
-    segment (see the segment rule) and ask about something one list item
-    bears on without naming it → the answer can draw on it. An ordinary
-    session asked the same has no such knowledge. Note whether it brings the
-    list up unprompted: the usage rules are ticket 03d's, not in the prompt
-    yet.
-19. Main chat, after a segment cut: ask about something said only in an
+18. Main chat, after a segment cut: ask about something said only in an
     earlier segment (「我们上次说的 X 后来定了吗？」) → runs `sessions search`,
     then `session show <id> --around=<messageId>` on a hit, and answers from
     it; does not say it has no record, and does not read the whole
     transcript. Asked 「这个对话从哪天开始的？你现在记得哪些？」 → answers from the
     Main Chat section (this segment's start), not by guessing.
-20. Any managed session: 「找一下我们之前聊 X 的那次，当时怎么说的」 → after the
+19. Any managed session: 「找一下我们之前聊 X 的那次，当时怎么说的」 → after the
     search, reads the hit with `--around`, not the session's `--tail`.

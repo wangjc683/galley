@@ -1009,55 +1009,6 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     `galley_im_display` pulls in `chatapp_common`, which installs
     `/continue` / `/btw` / `/review` on the GA class in the WeChat process,
     as on the other channels.
-20. The affairs ledger reading IM turns out of the engine logs
-    (2026-10-12, `.scratch/main-chat/issues/01-affairs-ledger.md`; managed
-    runtime only, read-only, no managed patch; the Core pref
-    `affairs_ledger`, ticket 04: on by default once Core creates the main
-    chat, which says so, and the user turns it off on the Memory page,
-    ticket 04c). IM conversations never reach
-    `workbench.db`, so `core/src/ledger/im_archive.rs` copies the user's
-    words out of `temp/model_responses/model_responses_*.txt` into the
-    ledger's own archive before the startup prune can delete them. It
-    relies on: (a) `llmcore._write_llm_log`'s block shape, `=== Prompt ===
-    <local %Y-%m-%d %H:%M:%S>[ model=…]\n<body>\n\n`, appended; (b)
-    `chatapp_common.FILE_HINT` ("If you need to show files to user, use
-    [FILE:filepath] in your response.", `frontends/chatapp_common.py:39`,
-    copied by `runner/im_wechat.py:61`) prefixing every IM user message
-    the frontends hand to `put_task`, and no other path prefixing it — it
-    is the only thing that marks a prompt as an IM user turn; (c) a task's
-    first prompt carrying that message as written: a `text` block of
-    `NativeToolClient`'s `{"role": "user", "content": [...]}` log line,
-    or a `=== USER ===` section of `ToolClient`'s protocol prompt; (d)
-    `agentmain.run`'s long-prompt indirection (over 2000 characters the
-    query goes to `temp/user_prompt_*.md` and the prompt says `Long user
-    prompt saved to <path>. Read and execute.`), followed back to the
-    file. Channel attribution reads Galley's own channel state
-    (`im/<channel>/context_log.json`, `im/discord/
-    discord_active_channels.json`), not GA's. Re-check on upgrade: (a)–(d)
-    above, and whether upstream's `/continue` copy (`continue_copy`) still
-    duplicates a whole log under a new name (the archive dedupes on time +
-    text). Known gaps: a text-protocol IM message with images is logged as
-    a Python list repr and is missed; group and private chats are not told
-    apart.
-21. The Memory page (2026-10-12, `.scratch/main-chat/issues/04-what-it-remembers-page.md`;
-    managed runtime only, no managed patch). Two couplings. (a) It shows
-    and edits GA's global memory in the managed state root,
-    `memory/global_mem.txt` and `memory/global_mem_insight.txt`
-    (`core/src/ledger/global_memory.rs`), relying on upstream creating
-    either file only when it is missing (`agentmain.py`, module level) and
-    reading them as plain text on every prompt (`ga.get_global_memory`). A
-    write names the content hash it edited and is refused when the file
-    changed meanwhile (the assistant may just have written it). (b) The
-    mining task (`core/src/ledger/batch.rs` `task_prompt`) follows the
-    seeded 历史重点挖掘 SOP (`memory/L4_raw_sessions/salient_mining_sop.md`)
-    but replaces its 「格式自定」 with a format Galley parses
-    (`core/src/ledger/entries.rs`): one `activities.md`, the emotional
-    events written as lines inside the affair they belong to and those
-    that belong to none not recorded (ticket 04d), the SOP's criteria for
-    what to mark kept. Re-check on upgrade: whether upstream starts
-    rewriting the two global-memory files wholesale or moves them, and
-    whether the SOP's 产物 section still says 「格式自定」 and still asks for
-    the three regions (持续活动、已消失事项、情绪事件).
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
@@ -1111,13 +1062,6 @@ start the audit there instead of grepping the bridge:
   conversation calls `ChannelResume` directly). The call sites (the
   module-level agents, fsapp's `get_agent` wrapper) are in `_run_feishu` /
   `_run_telegram` / `_run_wechat` of `runner/managed_im_supervisor.py`.
-- **[`core/src/ledger/im_archive.rs`](../core/src/ledger/im_archive.rs)**
-  — item 20: `complete_blocks` (the log block shape), `im_texts` /
-  `human_text` (the hint, both prompt protocols, the long-prompt file),
-  `channels_by_log` (Galley's channel state).
-- **[`core/src/ledger/global_memory.rs`](../core/src/ledger/global_memory.rs)**
-  and **`core/src/ledger/batch.rs::task_prompt`** — item 21: the two
-  global-memory files, and the mining SOP section the task replaces.
 - **[`runner/im_wechat.py`](../runner/im_wechat.py)** — items 15 and 19:
   `WechatConversation` (`_Run.observe` for the item shape,
   `_on_turn_end` / `_take_ask_event` for the ask payload and

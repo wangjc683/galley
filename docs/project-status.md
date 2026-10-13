@@ -735,37 +735,26 @@ main-chat planning docs, main has:
   idle), two queued messages, a file sent back, `/new` mid-run; voice
   cannot be told from typing in the log.
 
-- **Main chat, affairs ledger and Settings → Memory** (2026-10-12/13,
-  `.scratch/main-chat/`, devlogs
+- **Main chat** (2026-10-12/13, `.scratch/main-chat/`, devlogs
   [2026-10-12-main-chat-concept-review](./devlog/2026-10-12-main-chat-concept-review.md),
   [2026-10-12-main-chat-sidebar-trial](./devlog/2026-10-12-main-chat-sidebar-trial.md),
-  [2026-10-12-affairs-ledger-and-memory-page](./devlog/2026-10-12-affairs-ledger-and-memory-page.md)).
+  [2026-10-12-affairs-ledger-and-memory-page](./devlog/2026-10-12-affairs-ledger-and-memory-page.md),
+  [2026-10-13-drop-affairs-ledger](./devlog/2026-10-13-drop-affairs-ledger.md)).
   Managed runtime only; the external runtime's sidebar is frozen. One
   persistent main chat (migration **044**) opened at launch, the sidebar
-  regrouped under it (主对话 / 其他对话, collapsible with ⌘\). The affairs
-  ledger mines what the user said (GUI messages, IM private chats archived
-  from engine logs) once a day from 04:00
-  and ends each run with an ongoing-affairs list that the main chat's and
-  IM's state blocks carry. The main chat cuts a new context segment after 4
-  idle hours (migration **046**); the CLI gains `session show --around /
-  --since / --until` and search fields (additive, Rule 3). Settings →
-  Memory has three areas (ticket 04d, PRD ruling 48): the switch; the
-  entries in a pinned format, each affair carrying its emotions, ended
-  ones behind a last 「已经结束的 N 件」 row, an affair or one emotion
-  deletable (only a delete: no do-not-record list); the engine's global
-  memory files, editable. The per-conversation / per-project opt-out of
-  migration **045** is gone again (**047** drops its table); the switch
-  is the one way to stop the reading. The ledger is **on by default**:
-  a new main chat opens with a fixed greeting saying so, earlier
-  conversations are read, the first run waits for the next 04:00, and the
-  page has one allow switch (Rule 4's 2026-10-12 interpretation). Mining
-  sessions are deleted from the database after each run; deleting any
-  session now also deletes its `messages_fts` rows. Owed: JC's live look
-  at the Memory page and the greeting (a fresh data directory is needed to
-  see the greeting), a few days of real main-chat use before tickets 03c /
-  03d, and old orphaned `messages_fts` rows are not cleaned. Estimated
-  mining cost per run: about 11 model calls, 330–380K characters of input
-  (mostly re-sent history), about 10K characters of output.
+  regrouped under it (主对话 / 其他对话, collapsible with ⌘\). A new main
+  chat opens with a fixed one-paragraph greeting in the UI language (shown
+  only: never replayed to the model, not a turn). The main chat cuts a new
+  context segment after 4 idle hours (migration **046**); its state block
+  names the main chat and where the segment begins, and the CLI gains
+  `session show --around / --since / --until` and search fields (additive,
+  Rule 3). Deleting any session now also deletes its `messages_fts` rows.
+  The affairs ledger and Settings → Memory, built in the same two days,
+  were removed before release (PRD ruling 49, ticket 10); migrations
+  **045** / **047** stay as they are, one creating and the other dropping
+  a table nothing uses. Owed: JC's live look at the greeting (a fresh data
+  directory is needed to see it), a few days of real main-chat use before
+  tickets 03c / 03d, and old orphaned `messages_fts` rows are not cleaned.
 
 Carried forward. The README screenshots still show the old sidebar, and
 `projects.png` the retired project view (its caption still says 项目视图);

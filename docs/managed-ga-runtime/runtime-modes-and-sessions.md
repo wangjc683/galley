@@ -112,11 +112,9 @@ is unaffected.
   message after the fact.
 - **Fresh context = fresh runner**: recording a boundary retires a live
   runner (quietly, like ensure's own restart); the next ensure spawns one
-  with an empty GA history and a newly composed state block, including the
-  ongoing-affairs list ([prompt composition](./prompt-composition.md#ongoing-affairs-main-chat-and-im-only)).
-  A cold runner is given back only the current segment
-  (`persisted_message_rows_from`); a segment with no reply yet needs no
-  replay.
+  with an empty GA history and a newly composed state block. A cold runner
+  is given back only the current segment (`persisted_message_rows_from`); a
+  segment with no reply yet needs no replay.
 - **Where the rule runs**: in `ensure_session_runner` (the GUI opening the
   main chat, `/btw`) and in Core's send just before it persists the message.
   Opening the main chat after the gap records the boundary at the next

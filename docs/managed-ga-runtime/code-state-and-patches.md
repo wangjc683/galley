@@ -49,8 +49,6 @@ Application Support/app.galley/
   galley.db
   managed-ga-state/
     memory/                   # the ONLY dir GA reads SOPs from
-      history_insight/        # affairs ledger (only once switched on): activities.md, ongoing_affairs.md
-        galley/               # Core's: state.json, im_archive.jsonl, batch.md, rollback/
     sop/                      # vestigial: created but GA never reads it
     skills/                   # vestigial: created but GA never reads it
     temp/                     # engine scratch: code_run cwd, reflect logs
@@ -79,30 +77,6 @@ Application Support/app.galley/
 > pre-migration backup (`app.galley.backup.*`) skips `managed-ga-state/temp/`
 > for the same reason: a schema rollback never needs engine scratch. Both
 > are managed-runtime only; attach mode never touches a user-owned `temp/`.
-> When the affairs ledger is on (the Core pref `affairs_ledger`: on by
-> default once Core creates the main chat, set from the Memory page;
-> `core/src/ledger/`) and its first run is not still waiting for the next
-> 04:00 (ticket 04c), its startup step copies the IM user
-> turns the logs gained since its last pass into
-> `memory/history_insight/galley/im_archive.jsonl` **before** the prune
-> runs, so a log is never deleted unarchived. Everything under
-> `history_insight/` is user state: the mining outputs are the ledger, the
-> archive is the only lasting record of what was said in IM. Galley deletes
-> it only when the user asks: one entry from the Memory page (its block,
-> its short-list line), or the whole directory when they switch the ledger
-> off with "clear". A mining run that fails or is stopped leaves the
-> outputs as it found them (a snapshot in `galley/rollback/`, restored on
-> failure). None of it stays in `workbench.db`: the hidden mining session
-> is deleted (messages, attachments, search index) as soon as its run
-> settles, and "clear" and every launch delete any mining session still
-> there. Its engine logs under `temp/` are engine runtime state and follow
-> the prune above.
->
-> The Memory page also edits `memory/global_mem.txt` and
-> `memory/global_mem_insight.txt` (ticket 04). Nothing else in Galley
-> writes them, and nothing overwrites a user's edit: upstream creates either
-> only when it is missing (`agentmain.py`), the seed below is missing-only
-> and does not ship them, and runtime upgrades replace code, not this root.
 
 Initial setup may seed default state only when the target file or directory is
 missing. Existing state must not be overwritten:
