@@ -187,7 +187,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [08](./issues/08-sidebar-finalize.md) | — | 侧栏收尾：B′ 转正、删试验代码、改设计文档 | 07 | done（`a3d7254b`） |
 | [09](./issues/09-section-belonging-trial.md) | — | 「其他对话」归属感试验：C1 / C2 / C3 | 08 | done（JC 定 C3 + 常显 + 加重） |
 | [05](./issues/05-proactive-cards.md) | E | 主动提醒卡片 + IM 出口 | 01、06 | 暂缓（裁决 49，依赖的账本已撤） |
-| [10](./issues/10-remove-affairs-ledger.md) | — | 拆掉事项账本与「记忆」页，问候只留第一段 | — | ready-for-agent（裁决 49） |
+| [10](./issues/10-remove-affairs-ledger.md) | — | 拆掉事项账本与「记忆」页，问候只留第一段 | — | done（裁决 49，`fa6f9127`–`36affec8`） |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 

@@ -1,6 +1,6 @@
 # 10 拆掉事项账本与「记忆」页
 
-Status: ready-for-agent
+Status: done（`fa6f9127`、`93f2f2d6`、`36affec8`，2026-10-13 合入；75 个文件，删 13,264 行；迁移 045 / 047 未动）
 
 来源：主聊天 PRD 裁决 49（2026-10-13，JC 选 A）。撤销票 01、04；票 05 暂缓。
 
@@ -57,3 +57,12 @@ JC 起初要的只是主对话的记忆与持续对话体验。账本没发过�
 - 外置运行时零变化（本来就没有主对话与账本）。
 - `cargo test --manifest-path core/Cargo.toml --workspace`，并在 `TZ=UTC` 下再跑一遍；`pnpm --dir gui exec vitest run`（本机时区与 `TZ=UTC`）、`typecheck`、`lint`；六个门禁脚本；`git diff --check`。
 - 格式化只动自己的文件或 hunk（core 不是 rustfmt-clean，gui 不是 prettier-clean）。
+
+## Comments
+
+- 2026-10-13 合入回报（主会话）：子代理三个提交（Core / GUI / 文档），`cargo test --workspace` 910 通过（本机时区与 `TZ=UTC`），vitest 1061 通过，六个门禁通过。
+  - 票外多删：`managed_runtime.rs` 的 `state_root_for_app`、`MainChatSeed.prefs_if_absent`、`Writes::get_or_create_main_chat_at`（只为开关与 04:00 存在）；`copy-language-guidelines.md`、`runtime-modes-and-sessions.md`、`layout-and-chrome.md` 里的账本字句。
+  - 票写得不准：挖掘会话的过滤在 Core（`commands/session.rs` `list_sessions`、`remote/*`），不在 GUI；两个弹窗里的「ledger rail」是排版用词，保留。
+  - `messages_fts` 修复的测试从 `ledger_test.rs` 搬到 `core/tests/db_writes_test.rs`。
+  - 几个 GUI 外壳与文档整份恢复到账本之前的版本；主会话逐个核对过中间经手的提交全是账本相关（传界面语言在 `lib/main-chat.ts`，不在被恢复的 `App.tsx`）。
+  - `prompt-composition.md` 回归清单删第 18 条后改号，票 03 里「第 19、20 条」的历史记录与新编号对不上，按规矩不改。
