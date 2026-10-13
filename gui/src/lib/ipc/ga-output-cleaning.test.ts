@@ -152,6 +152,49 @@ describe("goal-status tag stripping", () => {
   });
 });
 
+// Main chat ticket 06a: the instructions the main chat hands a subtask
+// never show as answer prose — neither while the reply streams nor once
+// it is persisted (the Rust port, `turn_persistence/derive.rs`, is held
+// to `cleanFinalAnswer` by the shared golden fixtures).
+describe("subtask tag stripping", () => {
+  const reply =
+    "好，交给子任务。\n<subtask>把下载文件夹里的 PDF 分类\n发票一类</subtask>\n" +
+    "<subtask>查报价</subtask>";
+
+  it("strips every tag from final answers and partials", async () => {
+    const { cleanFinalAnswer, stripGATags } =
+      await import("@/lib/ipc/ga-output-cleaning");
+    for (const clean of [cleanFinalAnswer, cleanPartialContent, stripGATags]) {
+      const out = clean(reply);
+      expect(out).toContain("好，交给子任务。");
+      expect(out).not.toContain("subtask");
+      expect(out).not.toContain("PDF");
+    }
+  });
+
+  it("drops an unclosed tag and what follows it", async () => {
+    const { cleanFinalAnswer } = await import("@/lib/ipc/ga-output-cleaning");
+    expect(
+      cleanFinalAnswer("派出去了。\n<subtask>整理下载文件夹，没写完"),
+    ).toBe("派出去了。");
+    // Mid-stream: inside the instructions, and inside the tag name.
+    expect(cleanPartialContent("派出去了。\n<subtask>整理下载")).toBe(
+      "派出去了。\n",
+    );
+    expect(cleanPartialContent("派出去了。\n<subt")).toBe("派出去了。\n");
+    expect(cleanPartialContent("派出去了。\n<subtask>整理</subt")).toBe(
+      "派出去了。\n",
+    );
+  });
+
+  it("keeps the tag out of the extracted preamble", () => {
+    expect(extractPreamble("先看一下。<subtask>不该在这里</subtask>")).toBe(
+      "先看一下。",
+    );
+    expect(extractPreamble("先看一下。<subtask>没写完")).toBe("先看一下。");
+  });
+});
+
 // #22 sample 2 (redacted): a proxied model emitted its tool call as
 // plain text — the whole reply body is `<invoke …>` markup and must
 // never render as prose.

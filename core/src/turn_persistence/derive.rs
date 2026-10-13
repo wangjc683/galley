@@ -67,7 +67,7 @@ fn js_regex(pattern: &str) -> Regex {
 }
 
 /// `GA_TAG_PATTERNS`, in the same order.
-static GA_TAG_BLOCKS: LazyLock<[Regex; 6]> = LazyLock::new(|| {
+static GA_TAG_BLOCKS: LazyLock<[Regex; 7]> = LazyLock::new(|| {
     [
         js_regex(r"(?s)<thinking>.*?</thinking>"),
         js_regex(r"(?s)<summary>.*?</summary>"),
@@ -75,8 +75,14 @@ static GA_TAG_BLOCKS: LazyLock<[Regex; 6]> = LazyLock::new(|| {
         js_regex(r"(?s)<file_content[^>]*>.*?</file_content>"),
         js_regex(r"(?s)<next-suggestion>.*?</next-suggestion>"),
         js_regex(r"(?s)<goal-status>.*?</goal-status>"),
+        js_regex(r"(?s)<subtask>.*?</subtask>"),
     ]
 });
+
+/// `SUBTASK_OPEN`: an unclosed `<subtask>` and everything after it are
+/// instructions that never went anywhere (main chat ticket 06a), not
+/// answer prose.
+const SUBTASK_OPEN: &str = "<subtask>";
 
 /// `FILE_REF_PATTERN`.
 static FILE_REF: LazyLock<Regex> = LazyLock::new(|| js_regex(r"\[FILE:[^\]]+\]"));
@@ -99,7 +105,7 @@ static TOOL_DISPATCH_VERBOSE_PARTIAL: LazyLock<Regex> =
 /// there, so only the match start matters.
 static UNCLOSED_GA_TAG: LazyLock<Regex> = LazyLock::new(|| {
     js_regex(
-        r"<(?:thinking|summary|tool_use|file_content|next-suggestion|goal-status)(?:\s[^>]*)?>",
+        r"<(?:thinking|summary|tool_use|file_content|next-suggestion|goal-status|subtask)(?:\s[^>]*)?>",
     )
 });
 
@@ -273,6 +279,9 @@ pub(crate) fn clean_final_answer(text: &str) -> String {
         return String::new();
     }
     let mut out = strip_ga_tag_blocks(text);
+    if let Some(open) = out.find(SUBTASK_OPEN) {
+        out.truncate(open);
+    }
     out = replace_line_anchored(&out, llm_running_marker_at);
     out = replace_line_anchored(&out, action_line_at);
     out = replace_line_anchored(&out, phase_preamble_at);

@@ -25,6 +25,8 @@ pub(super) struct SessionRow {
     pub(super) prompt_profile: Option<String>,
     pub(super) reasoning_effort: Option<String>,
     pub(super) main_chat: i64,
+    pub(super) parent_session_id: Option<String>,
+    pub(super) promoted_at: Option<String>,
 }
 
 impl SessionRow {
@@ -45,12 +47,7 @@ impl SessionRow {
             origin: self
                 .created_via
                 .map(|via| {
-                    Ok(Origin {
-                        via: parse_origin_via(&via)?,
-                        supervisor: self.created_by_supervisor,
-                        reason: self.created_origin_note,
-                        client: None,
-                    })
+                    origin_from_stored(&via, self.created_by_supervisor, self.created_origin_note)
                 })
                 .transpose()?
                 .filter(|origin| origin.via != OriginVia::Gui),
@@ -72,6 +69,9 @@ impl SessionRow {
             prompt_profile: self.prompt_profile,
             reasoning_effort: self.reasoning_effort,
             main_chat: (self.main_chat != 0).then_some(true),
+            promoted: (self.parent_session_id.is_some() && self.promoted_at.is_some())
+                .then_some(true),
+            parent_session_id: self.parent_session_id,
         })
     }
 }
@@ -121,14 +121,7 @@ impl MessageRow {
             attachments: Vec::new(),
             origin: self
                 .created_via
-                .map(|via| {
-                    Ok(Origin {
-                        via: parse_origin_via(&via)?,
-                        supervisor: self.supervisor,
-                        reason: self.origin_note,
-                        client: None,
-                    })
-                })
+                .map(|via| origin_from_stored(&via, self.supervisor, self.origin_note))
                 .transpose()?,
             ask_user,
         })
@@ -184,6 +177,15 @@ pub struct PersistedMessageRow {
 
 impl PersistedMessageRowRecord {
     pub(super) fn into_persisted(self) -> PersistedMessageRow {
+        // A subtask's instructions row is stored as `system` with the
+        // reserved label (migration 048); raw rows say `subtask`, as the
+        // briefs do.
+        let (created_via, supervisor) =
+            if Origin::is_stored_subtask(self.created_via.as_deref(), self.supervisor.as_deref()) {
+                (Some(OriginVia::Subtask.wire_name().to_string()), None)
+            } else {
+                (self.created_via, self.supervisor)
+            };
         PersistedMessageRow {
             id: self.id,
             session_id: self.session_id,
@@ -197,8 +199,8 @@ impl PersistedMessageRowRecord {
             final_answer: self.final_answer,
             summary: self.summary,
             preamble: self.preamble,
-            created_via: self.created_via,
-            supervisor: self.supervisor,
+            created_via,
+            supervisor,
             origin_note: self.origin_note,
             visibility: self.visibility,
             telemetry: self
@@ -497,12 +499,7 @@ pub(super) struct GoalRow {
 impl GoalRow {
     pub(super) fn into_brief(self) -> Result<GoalBrief> {
         let elapsed_seconds = elapsed_seconds_between(&self.started_at, self.ended_at.as_deref());
-        let origin = Origin {
-            via: parse_origin_via(&self.created_via)?,
-            supervisor: self.supervisor,
-            reason: self.origin_note,
-            client: None,
-        };
+        let origin = origin_from_stored(&self.created_via, self.supervisor, self.origin_note)?;
         Ok(GoalBrief {
             id: GoalId(self.id),
             session_id: SessionId(self.session_id),

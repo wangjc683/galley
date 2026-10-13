@@ -211,7 +211,8 @@ async fn sessions_list(ctx: &MethodCtx) -> Result<phone::SessionsListResult, Err
         .await
         .map_err(galley_error)?
         .into_iter()
-        .filter(|session| session.ga_runtime_kind == RuntimeKind::Managed)
+        // As the desktop sidebar: no subtask the user never wrote in.
+        .filter(convert::shows_on_phone)
         .collect();
     let projects = galley.list_projects().await.map_err(galley_error)?;
     let listed: BTreeSet<&str> = sessions.iter().map(|s| s.id.as_str()).collect();

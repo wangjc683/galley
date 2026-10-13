@@ -13,7 +13,15 @@ const GA_TAG_PATTERNS: RegExp[] = [
   // model's completion verdict on a Goal turn. Consumed by Core through
   // turn_end.goalStatus — never rendered as answer prose.
   /<goal-status>[\s\S]*?<\/goal-status>/g,
+  // Galley's own tag (main chat ticket 06a): work the main chat hands to
+  // a subtask. Core starts it when the reply's run ends and shows it as
+  // a card under the reply — never as answer prose.
+  /<subtask>[\s\S]*?<\/subtask>/g,
 ];
+
+/** An unclosed `<subtask>`: everything from it on is instructions that
+ * never went anywhere, not answer prose (`cleanFinalAnswer`). */
+const SUBTASK_OPEN = "<subtask>";
 
 const FILE_REF_PATTERN = /\[FILE:[^\]]+\]/g;
 
@@ -179,6 +187,8 @@ export function cleanFinalAnswer(text: string): string {
   if (!text) return "";
   let out = text;
   for (const p of GA_TAG_PATTERNS) out = out.replace(p, "");
+  const subtaskOpen = out.indexOf(SUBTASK_OPEN);
+  if (subtaskOpen !== -1) out = out.slice(0, subtaskOpen);
   out = out.replace(LLM_RUNNING_MARKER, "");
   out = out.replace(TOOL_ACTION_LINE, "");
   out = out.replace(PHASE_PREAMBLE, "");
@@ -194,6 +204,7 @@ const GA_TAG_NAMES = [
   "file_content",
   "next-suggestion",
   "goal-status",
+  "subtask",
 ];
 
 // Superset used only for the trailing-partial-tag truncation in
@@ -569,6 +580,7 @@ export function extractPreamble(text: string): string | undefined {
   segment = segment.replace(/<file_content[^>]*>[\s\S]*?<\/file_content>/g, "");
   segment = segment.replace(/<next-suggestion>[\s\S]*?<\/next-suggestion>/g, "");
   segment = segment.replace(/<goal-status>[\s\S]*?<\/goal-status>/g, "");
+  segment = segment.replace(/<subtask>[\s\S]*?<\/subtask>/g, "");
   // Frontend / dispatch markers that occasionally leak into raw
   // response content (see cleanPartialContent for the full set; we
   // care about the ones that produce text noise).
@@ -587,7 +599,7 @@ export function extractPreamble(text: string): string | undefined {
   // means the chunk fell mid-block. Truncate at the open so we
   // don't leak partial tag content into the preamble display.
   segment = segment.replace(
-    /<(thinking|summary|tool_use|file_content|next-suggestion|goal-status)(?:\s[^>]*)?>[\s\S]*$/,
+    /<(thinking|summary|tool_use|file_content|next-suggestion|goal-status|subtask)(?:\s[^>]*)?>[\s\S]*$/,
     "",
   );
   segment = segment.replace(/\n{3,}/g, "\n\n");

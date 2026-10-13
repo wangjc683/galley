@@ -22,6 +22,7 @@ pub mod schedule;
 pub mod search;
 pub mod session;
 pub mod status;
+pub mod subtask;
 pub mod transcript_window;
 
 pub use goal::{CreateGoalInput, GoalBrief, GoalId, GoalStatus, DEFAULT_GOAL_BUDGET_SECONDS};
@@ -37,7 +38,7 @@ pub use model::{
     ReorderManagedModelsInput, SaveManagedModelInput, SaveManagedProviderInput,
     SetManagedModelDefaultsInput,
 };
-pub use origin::{Origin, OriginClient, OriginVia};
+pub use origin::{Origin, OriginClient, OriginVia, SUBTASK_STORED_SUPERVISOR};
 pub use project::{CreateProjectInput, ProjectBrief, ProjectId, ProjectPatch};
 pub use queue::{QueuedMessage, SessionQueueChangedPayload, SESSION_QUEUE_CHANGED_EVENT};
 pub use schedule::{
@@ -49,6 +50,9 @@ pub use session::{
     CreateSessionInput, RuntimeKind, SessionBrief, SessionFilter, SessionId, SessionStatus,
 };
 pub use status::StatusSummary;
+pub use subtask::{
+    SubtaskDispatch, SubtaskDispatchedPayload, SubtaskFailure, SUBTASK_DISPATCHED_EVENT,
+};
 pub use transcript_window::{
     parse_local_time_bound, parse_time_bound, MessageWindow, TimeBound, DEFAULT_AROUND_CONTEXT,
 };

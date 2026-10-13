@@ -331,6 +331,39 @@
       "preamble": null,
       "telemetry": null,
       "visibility": "visible"
+    },
+    "subtask-tags-stay-out-of-the-answer": {
+      "content": "好，这件事交给子任务去做，进度看下面的卡片。\n<subtask>把下载文件夹里的 PDF 按内容分类。\n用户说：发票、合同、论文各一类，其他放「杂项」。</subtask>\n<subtask>   </subtask>\n<next-suggestion>分类做到哪了</next-suggestion>",
+      "toolCalls": "[]",
+      "toolResults": "[]",
+      "thinking": null,
+      "finalAnswer": "好，这件事交给子任务去做，进度看下面的卡片。",
+      "summary": "交给子任务",
+      "preamble": null,
+      "telemetry": null,
+      "visibility": "visible"
+    },
+    "subtask-unclosed-truncates-the-answer": {
+      "content": "派出去了。\n<subtask>整理下载文件夹，可这段说明没写完",
+      "toolCalls": "[]",
+      "toolResults": "[]",
+      "thinking": null,
+      "finalAnswer": "派出去了。",
+      "summary": null,
+      "preamble": null,
+      "telemetry": null,
+      "visibility": "visible"
+    },
+    "subtask-tags-stay-out-of-a-preamble": {
+      "content": "先看一下下载文件夹。<subtask>不该在这里</subtask>\n<subtask>也没写完",
+      "toolCalls": "[{\"args\":{\"code\":\"ls ~/Downloads\"},\"toolName\":\"code_run\"}]",
+      "toolResults": "[{\"content\":\"a.pdf\"}]",
+      "thinking": null,
+      "finalAnswer": "先看一下下载文件夹。",
+      "summary": "看一下下载文件夹",
+      "preamble": "先看一下下载文件夹。",
+      "telemetry": null,
+      "visibility": "visible"
     }
   }
 }

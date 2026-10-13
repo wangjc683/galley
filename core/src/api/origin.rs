@@ -12,6 +12,11 @@ use serde::{Deserialize, Serialize};
 ///     transport with an attached supervisor label
 ///   - System     → Galley itself injected the message (e.g. /btw replies,
 ///     system-level notifications)
+///   - Subtask    → the main chat dispatched it (main chat ticket 06a): a
+///     subtask session and its first message, the instructions. Stored as
+///     `system` + [`SUBTASK_STORED_SUPERVISOR`] — the CHECK names the four
+///     values above, and a fifth would mean rebuilding `sessions` and
+///     `messages` (migration 048).
 ///
 /// B1 used a narrower {Manual, Cli} pair; B2 M5 widens it to match the
 /// migrated schema. The `manual` wire value is no longer accepted — old
@@ -28,20 +33,38 @@ pub enum OriginVia {
     Supervisor,
     /// Galley itself (system messages, /btw replies, etc.).
     System,
+    /// A subtask the main chat dispatched (main chat ticket 06a). Added
+    /// inside schema version 2: `Origin.via` is a stable identifier set,
+    /// and additions are non-breaking (Agent API §1.1).
+    Subtask,
 }
 
 impl OriginVia {
     /// SQL-friendly string. Matches the CHECK constraint on
-    /// `messages.created_via` / `sessions.created_via`.
+    /// `messages.created_via` / `sessions.created_via`, so a subtask is
+    /// stored as `system` (with [`Origin::stored_supervisor`]).
     pub fn as_sql(&self) -> &'static str {
         match self {
             Self::Gui => "gui",
             Self::Cli => "cli",
             Self::Supervisor => "supervisor",
-            Self::System => "system",
+            Self::System | Self::Subtask => "system",
+        }
+    }
+
+    /// The value on the wire (`via` in the CLI's JSON).
+    pub fn wire_name(&self) -> &'static str {
+        match self {
+            Self::Subtask => "subtask",
+            other => other.as_sql(),
         }
     }
 }
+
+/// Supervisor label that, with `created_via = 'system'`, stores
+/// [`OriginVia::Subtask`]. Reserved: read back, the pair is `via:
+/// "subtask"` with no supervisor ([`Origin::is_stored_subtask`]).
+pub const SUBTASK_STORED_SUPERVISOR: &str = "galley-subtask";
 
 /// Which app a human used for a write (iOS PRD ruling 9): stored in
 /// `messages.client` / `sessions.client` (migration 043), next to `via`,
@@ -119,6 +142,34 @@ impl Origin {
         }
     }
 
+    /// A subtask the main chat dispatched: its session and its first
+    /// message (main chat ticket 06a).
+    pub fn subtask() -> Self {
+        Self {
+            via: OriginVia::Subtask,
+            supervisor: None,
+            reason: None,
+            client: None,
+        }
+    }
+
+    /// The `supervisor` / `created_by_supervisor` column this origin is
+    /// stored with: [`SUBTASK_STORED_SUPERVISOR`] for a subtask, which is
+    /// stored as `system` ([`OriginVia::as_sql`]); the origin's own
+    /// supervisor otherwise.
+    pub fn stored_supervisor(&self) -> Option<&str> {
+        match self.via {
+            OriginVia::Subtask => Some(SUBTASK_STORED_SUPERVISOR),
+            _ => self.supervisor.as_deref(),
+        }
+    }
+
+    /// Whether stored origin columns name a subtask: `system` with
+    /// [`SUBTASK_STORED_SUPERVISOR`].
+    pub fn is_stored_subtask(created_via: Option<&str>, supervisor: Option<&str>) -> bool {
+        created_via == Some("system") && supervisor == Some(SUBTASK_STORED_SUPERVISOR)
+    }
+
     /// CLI-originated write. `supervisor` is the label the agent
     /// declared (`--supervisor=<x>`); `reason` is the `--reason=<y>`
     /// note.
@@ -142,6 +193,39 @@ mod tests {
         assert_eq!(OriginVia::Cli.as_sql(), "cli");
         assert_eq!(OriginVia::Supervisor.as_sql(), "supervisor");
         assert_eq!(OriginVia::System.as_sql(), "system");
+        // No CHECK value of its own (migration 048).
+        assert_eq!(OriginVia::Subtask.as_sql(), "system");
+    }
+
+    #[test]
+    fn subtask_is_stored_as_system_with_a_reserved_label() {
+        let o = Origin::subtask();
+        assert_eq!(serde_json::to_string(&o).unwrap(), r#"{"via":"subtask"}"#);
+        assert_eq!(o.via.as_sql(), "system");
+        assert_eq!(o.stored_supervisor(), Some(SUBTASK_STORED_SUPERVISOR));
+        assert!(Origin::is_stored_subtask(
+            Some("system"),
+            Some(SUBTASK_STORED_SUPERVISOR)
+        ));
+        assert!(!Origin::is_stored_subtask(
+            Some("supervisor"),
+            Some(SUBTASK_STORED_SUPERVISOR)
+        ));
+        assert!(!Origin::is_stored_subtask(Some("system"), None));
+        let cli = Origin::cli(Some("ga-1".into()), None);
+        assert_eq!(cli.stored_supervisor(), Some("ga-1"));
+        for via in [
+            OriginVia::Gui,
+            OriginVia::Cli,
+            OriginVia::Supervisor,
+            OriginVia::System,
+            OriginVia::Subtask,
+        ] {
+            assert_eq!(
+                serde_json::to_value(via).unwrap(),
+                serde_json::json!(via.wire_name())
+            );
+        }
     }
 
     #[test]

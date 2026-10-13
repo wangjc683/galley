@@ -293,5 +293,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/047_drop_ledger_exclusions.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 48,
+            description: "add subtasks (a session's parent and promotion, subtask_dispatches)",
+            sql: include_str!("../migrations/048_subtasks.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

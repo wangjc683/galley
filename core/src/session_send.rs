@@ -26,6 +26,9 @@
 //!    retired;
 //!    persist (with attachments), broadcast `user-message-persisted`
 //!    (`dispatch: "pending"`), derive the title ([`crate::session_title`]);
+//!    a person's message that is not an answer promotes a subtask to an
+//!    ordinary conversation ([`crate::subtask`], ticket 06a; a queued one
+//!    too);
 //! 6. ensure a runner with the session's history in it
 //!    ([`crate::session_runner`], `holds_run_gate`);
 //! 7. dispatch, and broadcast the same message again as `dispatched`.
@@ -201,6 +204,15 @@ pub async fn send_user_message(
                     &sid,
                 )
                 .await;
+                // Queued behind an open run, so not the answer to a
+                // question: the user wrote in it (ticket 06a).
+                crate::subtask::promote_after_user_send(
+                    host.galley,
+                    host.notifier.as_ref(),
+                    &sid,
+                    &req.origin,
+                )
+                .await;
                 return Ok(SendOutcome::Queued { queue_id, position });
             }
             QueueOffer::DispatchNow => {}
@@ -265,6 +277,17 @@ async fn send_reserved(host: &RunnerHost<'_>, req: SendRequest) -> Result<SendOu
     announce("pending");
     crate::session_title::derive_and_announce(host.galley, host.notifier.as_ref(), sid, &req.text)
         .await;
+    if !answer {
+        // A subtask the user writes in becomes an ordinary conversation
+        // (ticket 06a); answering its question does not.
+        crate::subtask::promote_after_user_send(
+            host.galley,
+            host.notifier.as_ref(),
+            sid,
+            &req.origin,
+        )
+        .await;
+    }
 
     let runner = match ensure_session_runner(
         host,

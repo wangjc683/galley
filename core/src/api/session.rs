@@ -129,6 +129,19 @@ pub struct SessionBrief {
     /// (2026-10-12).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub main_chat: Option<bool>,
+    /// On a subtask (main chat ticket 06a, migration 048): the main chat
+    /// that dispatched it from a reply's `<subtask>` tag. Absent on
+    /// every other session. Additive read-only field for agents
+    /// (2026-10-13).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_session_id: Option<String>,
+    /// `true` once a subtask was promoted to an ordinary conversation:
+    /// the user wrote in it from the desktop or the phone (an answer to
+    /// its question does not count, nor does a CLI, supervisor or
+    /// scheduled send). Absent otherwise. Additive read-only field for
+    /// agents (2026-10-13).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub promoted: Option<bool>,
 }
 
 /// Filter / scope for `list_sessions`. All fields optional — None means

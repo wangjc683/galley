@@ -100,6 +100,8 @@ pub struct SessionBriefEvent {
     pub prompt_profile: Option<String>,
     pub reasoning_effort: Option<String>,
     pub main_chat: Option<bool>,
+    pub parent_session_id: Option<String>,
+    pub promoted: Option<bool>,
 }
 
 impl From<SessionBrief> for SessionBriefEvent {
@@ -129,6 +131,8 @@ impl From<SessionBrief> for SessionBriefEvent {
             prompt_profile,
             reasoning_effort,
             main_chat,
+            parent_session_id,
+            promoted,
         } = brief;
         Self {
             id,
@@ -153,6 +157,8 @@ impl From<SessionBrief> for SessionBriefEvent {
             prompt_profile,
             reasoning_effort,
             main_chat,
+            parent_session_id,
+            promoted,
         }
     }
 }

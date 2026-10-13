@@ -267,6 +267,14 @@ look it up with the Galley CLI (search, then
 /// own model before it went in (`.scratch/main-chat/entry-layer-eval/`):
 /// remarks and personal news got short, plain replies, real work kept its
 /// length.
+///
+/// It ends with the dispatch clause (ticket 06a, PRD ruling 52): long work
+/// goes to a subtask through a `<subtask>` tag at the end of the reply,
+/// which Core starts when the run settles ([`crate::subtask`]). The
+/// wording is the `T` clause the same eval compared against a CLI command
+/// and a native tool (`dispatch-clauses.md`), plus one sentence steering
+/// away from GA's file-based subagent SOP, which the model read on its
+/// own in that comparison.
 const MAIN_CHAT_ENTRY_LAYER: &str = r#"## Galley Main Chat Entry Layer
 
 This is the user's main chat: the one conversation with you that is always
@@ -283,7 +291,17 @@ Reply at the weight of what they said:
   summary.
 - When your context opens with turns from before a break and something there
   was left open, pick it up when they come back to it, without recapping it
-  unasked."#;
+  unasked.
+
+Work that would keep this chat busy for a long time (many steps, several
+websites, a long batch of files) goes to a subtask, so the main chat stays
+free: end your reply with <subtask>what to do</subtask>. Galley starts it
+after this reply, as a separate conversation that cannot see this one, so
+write everything it needs: the goal, the facts the user gave, and what to
+hand back. Tell the user in a sentence that it is on its way; its card shows
+the progress, and you can look it up when they ask. Do quick work yourself.
+Use this, not the file-based subagent in your memory (subagent.md), which
+the user cannot see."#;
 
 fn compose(
     app_version: &str,
@@ -654,17 +672,44 @@ mod tests {
         assert!(main.contains("relationship, not a queue of tasks"));
         assert!(main.contains("Reply at the weight of what they said:"));
         assert!(main.contains("Open with the answer or outcome"));
-        assert!(main.ends_with("unasked."));
+        assert!(main.contains("without recapping it"));
+        assert!(main.ends_with("the user cannot see."));
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(!prompt.contains("Main Chat Entry Layer"));
+        }
+    }
+
+    /// Ticket 06a: the entry layer ends with the dispatch clause — the
+    /// tag Core reads ([`crate::subtask`]), what the instructions must
+    /// carry, no waiting, and Galley's subtask over GA's file-based
+    /// subagent. Main chat only, like the rest of the layer.
+    #[test]
+    fn main_chat_entry_layer_dispatches_long_work_to_a_subtask() {
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state());
+        // Single-line fragments only (a Windows checkout makes the raw
+        // string CRLF).
+        assert!(main.contains("free: end your reply with <subtask>what to do</subtask>. Galley"));
+        assert!(main.contains("write everything it needs: the goal, the facts the user gave, and"));
+        assert!(main.contains("the progress, and you can look it up when they ask."));
+        assert!(main.contains("Use this, not the file-based subagent in your memory (subagent.md)"));
+        let layer = main.find("Main Chat Entry Layer").unwrap();
+        let clause = main.find("goes to a subtask").unwrap();
+        assert!(layer < clause, "the clause closes the entry layer");
+        for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
+            assert!(!prompt.contains("<subtask>"));
         }
     }
 
     /// Byte cap on the main chat entry layer: no headroom, `\r` not
     /// counted. It rides every request of the main chat, outside the
     /// static budget. Set at 03d to the draft compared on the main chat's
-    /// model; grow it only with a reason, as for the static budget.
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 827;
+    /// model (827); grow it only with a reason, as for the static budget.
+    /// Raised 827 → 1446 by ticket 06a: +619 bytes for the dispatch
+    /// clause — the compared `T` text (522), the sentence away from GA's
+    /// file-based subagent (94), and the breaks before them (3). Without
+    /// the clause the main chat has no way to hand off long work and
+    /// stays busy for the whole of it (PRD rulings 25, 52).
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 1446;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {

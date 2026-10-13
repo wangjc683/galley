@@ -267,10 +267,15 @@ pub(super) async fn replay_once(
     };
     let (carried, rows) = match segment_start {
         Some(start) => carry::read(host.galley, &sid, start).await?,
-        None => (
-            CarriedWindow::default(),
-            host.galley.persisted_message_rows(&sid).await?,
-        ),
+        None => {
+            let mut rows = host.galley.persisted_message_rows(&sid).await?;
+            // The main chat's replies name their subtasks instead of
+            // carrying the instructions (ticket 06a).
+            if session.main_chat == Some(true) {
+                crate::subtask::mark_replay_rows(host.galley, &sid, &mut rows).await?;
+            }
+            (CarriedWindow::default(), rows)
+        }
     };
     let carried_turns = carried.turns.len();
     let messages = continue_conversation(

@@ -457,6 +457,49 @@
         "absoluteTurnIndex": 28,
         "timestamp": "2026-10-07T08:00:28+00:00"
       }
+    },
+    {
+      "name": "subtask-tags-stay-out-of-the-answer",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "交给子任务",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "好，这件事交给子任务去做，进度看下面的卡片。\n<subtask>把下载文件夹里的 PDF 按内容分类。\n用户说：发票、合同、论文各一类，其他放「杂项」。</subtask>\n<subtask>   </subtask>\n<next-suggestion>分类做到哪了</next-suggestion>",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 29,
+        "nextSuggestion": "分类做到哪了",
+        "timestamp": "2026-10-07T08:00:29+00:00"
+      }
+    },
+    {
+      "name": "subtask-unclosed-truncates-the-answer",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "派出去了。\n<subtask>整理下载文件夹，可这段说明没写完",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 30,
+        "timestamp": "2026-10-07T08:00:30+00:00"
+      }
+    },
+    {
+      "name": "subtask-tags-stay-out-of-a-preamble",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 2,
+        "summary": "看一下下载文件夹",
+        "toolCalls": [{ "toolName": "code_run", "args": { "code": "ls ~/Downloads" } }],
+        "toolResults": [{ "content": "a.pdf" }],
+        "responseContent": "先看一下下载文件夹。<subtask>不该在这里</subtask>\n<subtask>也没写完",
+        "exitReason": null,
+        "absoluteTurnIndex": 31,
+        "timestamp": "2026-10-07T08:00:31+00:00"
+      }
     }
   ]
 }

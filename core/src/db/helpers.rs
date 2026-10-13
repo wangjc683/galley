@@ -201,6 +201,30 @@ pub(super) fn message_visibility_sql(visibility: MessageVisibility) -> &'static 
     }
 }
 
+/// An origin as stored (`created_via`, its supervisor and note columns),
+/// read back: `system` with the subtask label is `via: "subtask"` with
+/// no supervisor (migration 048, [`Origin::stored_supervisor`]).
+pub(super) fn origin_from_stored(
+    via: &str,
+    supervisor: Option<String>,
+    reason: Option<String>,
+) -> Result<Origin> {
+    if Origin::is_stored_subtask(Some(via), supervisor.as_deref()) {
+        return Ok(Origin {
+            via: OriginVia::Subtask,
+            supervisor: None,
+            reason,
+            client: None,
+        });
+    }
+    Ok(Origin {
+        via: parse_origin_via(via)?,
+        supervisor,
+        reason,
+        client: None,
+    })
+}
+
 pub(super) fn parse_origin_via(s: &str) -> Result<OriginVia> {
     Ok(match s {
         "gui" => OriginVia::Gui,
@@ -313,7 +337,7 @@ pub(super) async fn insert_session_row_inner(
     .bind(&now)
     .bind(&now)
     .bind(origin.via.as_sql())
-    .bind(&origin.supervisor)
+    .bind(origin.stored_supervisor())
     .bind(&origin.reason)
     .bind(origin.client.map(|c| c.as_sql()))
     .bind(runtime_kind_value)
@@ -346,6 +370,8 @@ pub(super) async fn insert_session_row_inner(
         prompt_profile,
         reasoning_effort: None,
         main_chat: None,
+        parent_session_id: None,
+        promoted: None,
     })
 }
 
@@ -471,7 +497,7 @@ pub(super) async fn insert_message_inner(
     .bind(&content)
     .bind(&now)
     .bind(origin.via.as_sql())
-    .bind(&origin.supervisor)
+    .bind(origin.stored_supervisor())
     .bind(&origin.reason)
     .bind(origin.client.map(|c| c.as_sql()))
     .bind(message_visibility_sql(visibility))
@@ -574,7 +600,7 @@ pub(super) const SESSIONS_SELECT_COLS: &str =
     pinned, has_unread, last_activity_at, created_at, updated_at, \
     created_via, created_by_supervisor, created_origin_note, \
     llm_index, llm_key, llm_display_name, ga_runtime_kind, ga_runtime_id, prompt_profile, \
-    reasoning_effort, main_chat";
+    reasoning_effort, main_chat, parent_session_id, promoted_at";
 
 pub(super) fn chrono_now_iso() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};

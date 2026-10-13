@@ -769,6 +769,8 @@ fn all_none_brief() -> SessionBrief {
         prompt_profile: None,
         reasoning_effort: None,
         main_chat: None,
+        parent_session_id: None,
+        promoted: None,
     }
 }
 
@@ -792,6 +794,8 @@ fn all_some_brief() -> SessionBrief {
         prompt_profile: Some("p".into()),
         reasoning_effort: Some("high".into()),
         main_chat: Some(true),
+        parent_session_id: Some("m".into()),
+        promoted: Some(true),
         ..all_none_brief()
     }
 }

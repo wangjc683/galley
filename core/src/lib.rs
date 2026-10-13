@@ -44,6 +44,7 @@ pub mod session_title;
 pub mod session_writes;
 pub mod socket_listener;
 pub mod sop_install;
+pub mod subtask;
 mod tray;
 pub mod turn_persistence;
 
@@ -202,6 +203,8 @@ pub fn run() {
             create_session,
             // The main chat (.scratch/main-chat ticket 02)
             get_or_create_main_chat,
+            // The main chat's subtasks (.scratch/main-chat ticket 06a)
+            list_subtask_dispatches,
             archive_session,
             unarchive_session,
             rename_session,

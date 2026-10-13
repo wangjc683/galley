@@ -9,8 +9,9 @@
 //! (`sync.required` with `sessionId: null`, design §6.5).
 //!
 //! [`map_events`] is the task behind it: it decodes each payload with
-//! Core's own type, keeps managed-runtime sessions only (PRD ruling 18),
-//! converts to the phone's type, and batches each session's
+//! Core's own type, keeps managed-runtime sessions only (PRD ruling 18)
+//! and of those not the subtasks the user never wrote in (main chat
+//! ticket 06a), converts to the phone's type, and batches each session's
 //! `runner-event`s for [`super::RemoteTuning::runner_batch_window`] into
 //! one `runner.event` (a state event about a session first flushes that
 //! session's batch, so the phone sees them in Core's order). The
@@ -18,8 +19,8 @@
 
 use super::convert;
 use crate::api::{
-    GalleyApi, MessageBrief, ProjectBrief, RuntimeKind, SessionBrief, SessionId,
-    SessionQueueChangedPayload, SESSION_QUEUE_CHANGED_EVENT,
+    GalleyApi, MessageBrief, ProjectBrief, SessionBrief, SessionId, SessionQueueChangedPayload,
+    SESSION_QUEUE_CHANGED_EVENT,
 };
 use crate::db::SqliteGalley;
 use crate::error::GalleyError;
@@ -223,9 +224,12 @@ struct GoalUpdatedIn {
 struct Mapper {
     galley: SqliteGalley,
     out: mpsc::Sender<PhoneEvent>,
-    /// Session id → is a managed-runtime session. A session's runtime
-    /// never changes, so an answer is kept until the session is deleted.
-    managed: HashMap<String, bool>,
+    /// Session id → does a phone see it: a managed-runtime session
+    /// (PRD ruling 18) that is not a subtask the user never wrote in
+    /// (main chat ticket 06a, [`convert::shows_on_phone`]). A session's
+    /// runtime never changes; a subtask's promotion comes as a row event,
+    /// which updates its answer. Kept until the session is deleted.
+    shown: HashMap<String, bool>,
     /// Pending `runner-event`s per session, in arrival order of sessions.
     batches: Vec<(String, Vec<Value>)>,
     deadline: Option<Instant>,
@@ -244,7 +248,7 @@ pub(super) async fn map_events(
     let mut mapper = Mapper {
         galley,
         out,
-        managed: HashMap::new(),
+        shown: HashMap::new(),
         batches: Vec::new(),
         deadline: None,
         window,
@@ -342,10 +346,10 @@ impl Mapper {
             .await
     }
 
-    /// Whether `session_id` is a managed-runtime session (cached).
-    async fn is_managed(&mut self, session_id: &str) -> bool {
-        if let Some(managed) = self.managed.get(session_id) {
-            return *managed;
+    /// Whether a phone sees `session_id` (cached, see [`Mapper::shown`]).
+    async fn is_shown(&mut self, session_id: &str) -> bool {
+        if let Some(shown) = self.shown.get(session_id) {
+            return *shown;
         }
         match self
             .galley
@@ -353,9 +357,9 @@ impl Mapper {
             .await
         {
             Ok(brief) => {
-                let managed = brief.ga_runtime_kind == RuntimeKind::Managed;
-                self.managed.insert(session_id.to_string(), managed);
-                managed
+                let shown = convert::shows_on_phone(&brief);
+                self.shown.insert(session_id.to_string(), shown);
+                shown
             }
             Err(GalleyError::NotFound { .. }) => false,
             Err(e) => {
@@ -384,7 +388,7 @@ impl Mapper {
     }
 
     /// Decode one Core event and convert it, filtering out what is not
-    /// a managed session's.
+    /// a shown session's ([`Mapper::shown`]).
     async fn convert(&mut self, name: &str, payload: Value) -> Result<Mapped, serde_json::Error> {
         let session_event: Option<fn(phone::SessionEvent) -> AppEvent> = match name {
             SESSION_CREATED_EXTERNAL_EVENT => Some(AppEvent::SessionCreated),
@@ -396,11 +400,20 @@ impl Mapper {
         };
         if let Some(make) = session_event {
             let SessionEventIn { session, via } = serde_json::from_value(payload)?;
-            let managed = session.ga_runtime_kind == RuntimeKind::Managed;
-            self.managed.insert(session.id.0.clone(), managed);
-            if !managed {
+            // A subtask the user never wrote in is not in the phone's
+            // list (main chat ticket 06a), so neither are its events; its
+            // promotion is where the phone first hears of it.
+            let shown = convert::shows_on_phone(&session);
+            self.shown.insert(session.id.0.clone(), shown);
+            if !shown {
                 return Ok(Mapped::Nothing);
             }
+            let make: fn(phone::SessionEvent) -> AppEvent =
+                if via == crate::subtask::VIA_SUBTASK_PROMOTED {
+                    AppEvent::SessionCreated
+                } else {
+                    make
+                };
             let session_id = session.id.0.clone();
             let event = make(phone::SessionEvent {
                 session: convert::session(session),
@@ -412,7 +425,7 @@ impl Mapper {
             SESSION_DELETED_EXTERNAL_EVENT => {
                 let SessionDeletedIn { session_id, via } = serde_json::from_value(payload)?;
                 // The row is gone: forward unless it was known external.
-                if self.managed.remove(&session_id) == Some(false) {
+                if self.shown.remove(&session_id) == Some(false) {
                     return Ok(Mapped::Nothing);
                 }
                 let event = AppEvent::SessionDeleted(phone::SessionDeletedEvent {
@@ -441,7 +454,7 @@ impl Mapper {
                 } = serde_json::from_value(payload)?;
                 let mut managed = Vec::with_capacity(detached_session_ids.len());
                 for session_id in detached_session_ids {
-                    if self.is_managed(&session_id).await {
+                    if self.is_shown(&session_id).await {
                         managed.push(session_id);
                     }
                 }
@@ -458,7 +471,7 @@ impl Mapper {
                     dispatch,
                     client_request_id,
                 } = serde_json::from_value(payload)?;
-                if !self.is_managed(&session_id).await {
+                if !self.is_shown(&session_id).await {
                     return Ok(Mapped::Nothing);
                 }
                 let event = AppEvent::MessagePersisted(phone::MessagePersistedEvent {
@@ -477,7 +490,7 @@ impl Mapper {
             }
             SESSION_RUN_STATE_EVENT => {
                 let state: SessionRunStatePayload = serde_json::from_value(payload)?;
-                if !self.is_managed(&state.session_id).await {
+                if !self.is_shown(&state.session_id).await {
                     return Ok(Mapped::Nothing);
                 }
                 let session_id = state.session_id.clone();
@@ -486,7 +499,7 @@ impl Mapper {
             }
             RUNNER_HISTORY_REPLAY_EVENT => {
                 let replay: HistoryReplayPayload = serde_json::from_value(payload)?;
-                if !self.is_managed(&replay.session_id).await {
+                if !self.is_shown(&replay.session_id).await {
                     return Ok(Mapped::Nothing);
                 }
                 let session_id = replay.session_id.clone();
@@ -502,7 +515,7 @@ impl Mapper {
                 else {
                     return Ok(Mapped::Nothing);
                 };
-                if !self.is_managed(&session_id).await {
+                if !self.is_shown(&session_id).await {
                     return Ok(Mapped::Nothing);
                 }
                 let event = AppEvent::GoalUpdated(phone::GoalUpdatedEvent { goal });
@@ -511,7 +524,7 @@ impl Mapper {
             SESSION_QUEUE_CHANGED_EVENT => {
                 let SessionQueueChangedPayload { session_id, items } =
                     serde_json::from_value(payload)?;
-                if !self.is_managed(&session_id).await {
+                if !self.is_shown(&session_id).await {
                     return Ok(Mapped::Nothing);
                 }
                 let event = AppEvent::QueueChanged(phone::QueueChangedEvent {

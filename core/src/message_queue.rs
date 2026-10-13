@@ -177,6 +177,19 @@ pub fn spawn_queue_drain_task(
                 | RunSignal::Closed { session_id }
                 | RunSignal::UserRunStarted { session_id } => session_id.clone(),
             };
+            // The main chat's subtasks (ticket 06a): read the settled
+            // run's reply before the next queued message can start a run
+            // that writes another one. Dispatched in the background.
+            if matches!(signal, RunSignal::RunComplete { .. }) {
+                crate::subtask::after_run_complete(
+                    &galley,
+                    &manager,
+                    &notifier,
+                    app.as_ref(),
+                    &session_id,
+                )
+                .await;
+            }
             if let Some(item) = manager.queue_take_next(&signal).await {
                 dispatch_queued_message(&galley, &manager, &notifier, &session_id, item).await;
                 continue;

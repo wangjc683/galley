@@ -88,7 +88,7 @@ impl SqliteGalley {
         .bind(budget_seconds.map(i64::from))
         .bind(&now)
         .bind(origin.via.as_sql())
-        .bind(&origin.supervisor)
+        .bind(origin.stored_supervisor())
         .bind(&origin.reason)
         .bind(&now)
         .bind(&now)

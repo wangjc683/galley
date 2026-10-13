@@ -33,6 +33,8 @@ use galley_core_lib::remote::{
 };
 use galley_core_lib::remote_pairing;
 use galley_core_lib::runner_manager::RunState;
+use galley_core_lib::session_writes::{announce_session, SESSION_UPDATED_EXTERNAL_EVENT};
+use galley_core_lib::subtask::{promote_after_user_send, VIA_SUBTASK_PROMOTED};
 use galley_remote_protocol::app::{self as phone, error_code, AppEvent, PROTOCOL_VERSION};
 use galley_remote_protocol::frame::{
     Frame, PeerId, PushEnv, PushRequest, PushResult, PushStatus, Role, HEADER_CHANNEL,
@@ -584,6 +586,66 @@ async fn the_session_list_shows_managed_sessions_only() {
         .await
         .unwrap_err();
     assert_eq!(bad.code, error_code::INVALID_PARAMS);
+}
+
+/// Main chat ticket 06a: as in the desktop sidebar, a subtask the user
+/// never wrote in is not in the phone's list and its row events stay on
+/// the desktop; its promotion reaches the phone as the session appearing.
+#[tokio::test]
+async fn a_subtask_reaches_the_phone_only_once_promoted() {
+    let (fx, keys) = Fixture::paired(fast()).await;
+    fx.session("m1", RuntimeKind::Managed, None).await;
+    fx.session("sub", RuntimeKind::Managed, None).await;
+    sqlx::query("UPDATE sessions SET parent_session_id = 'm1' WHERE id = 'sub'")
+        .execute(&fx.pool)
+        .await
+        .unwrap();
+    let mut phone = fx.phone(&keys).await;
+    let listed = |list: &phone::SessionsListResult| {
+        let mut ids: Vec<String> = list.sessions.iter().map(|s| s.id.clone()).collect();
+        ids.sort();
+        ids
+    };
+    let list = phone
+        .call::<phone::SessionsList>(&phone::Empty {})
+        .await
+        .unwrap();
+    assert_eq!(listed(&list), ["m1"]);
+
+    // A row event of the hidden subtask (a turn's bump), and its run
+    // state, stay here.
+    let brief = fx
+        .galley
+        .session_brief(SessionId("sub".into()))
+        .await
+        .unwrap();
+    announce_session(
+        fx.notifier.as_ref(),
+        SESSION_UPDATED_EXTERNAL_EVENT,
+        brief,
+        "turn-persist",
+    );
+    fx.forward(
+        "session-run-state",
+        json!({
+            "sessionId": "sub", "runnerAlive": true, "agentRunning": true,
+            "openRun": true, "queuedCount": 0, "askPending": false, "lastExit": null,
+        }),
+    );
+    assert!(phone.events_within(QUIET).await.is_empty());
+
+    // The user writes in it: promoted, and the phone hears of it as new.
+    promote_after_user_send(&fx.galley, fx.notifier.as_ref(), "sub", &Origin::desktop()).await;
+    let Some(AppEvent::SessionCreated(event)) = phone.event("session.created", WAIT).await else {
+        panic!("session.created expected");
+    };
+    assert_eq!(event.session.id, "sub");
+    assert_eq!(event.via, VIA_SUBTASK_PROMOTED);
+    let list = phone
+        .call::<phone::SessionsList>(&phone::Empty {})
+        .await
+        .unwrap();
+    assert_eq!(listed(&list), ["m1", "sub"]);
 }
 
 #[tokio::test]

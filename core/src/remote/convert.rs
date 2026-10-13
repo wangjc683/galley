@@ -8,7 +8,7 @@
 
 use crate::api::{
     AskUserBrief, MessageAttachmentBrief, MessageBrief, MessageRole, MessageTelemetry, Origin,
-    OriginVia, ProjectBrief, QueuedMessage, SessionBrief, SessionStatus,
+    OriginVia, ProjectBrief, QueuedMessage, RuntimeKind, SessionBrief, SessionStatus,
 };
 use crate::db::PersistedMessageRow;
 use crate::runner_manager::{RunState, SessionRunStatePayload};
@@ -35,6 +35,9 @@ fn origin_via(via: OriginVia) -> phone::OriginVia {
         OriginVia::Cli => phone::OriginVia::Cli,
         OriginVia::Supervisor => phone::OriginVia::Supervisor,
         OriginVia::System => phone::OriginVia::System,
+        // The phone protocol has no subtask value yet (iOS 07): Galley
+        // itself started it.
+        OriginVia::Subtask => phone::OriginVia::System,
     }
 }
 
@@ -51,6 +54,15 @@ pub(super) fn origin(origin: Origin) -> phone::Origin {
         supervisor,
         reason,
     }
+}
+
+/// Whether a phone lists this session, as the desktop sidebar would: a
+/// managed-runtime session (PRD ruling 18) that is not a subtask the user
+/// never wrote in (main chat ticket 06a; the desktop shows those as cards
+/// in the main chat, the phone's are iOS 07's).
+pub(super) fn shows_on_phone(brief: &SessionBrief) -> bool {
+    brief.ga_runtime_kind == RuntimeKind::Managed
+        && (brief.parent_session_id.is_none() || brief.promoted == Some(true))
 }
 
 /// A session row. Whether it is a managed session is the caller's check
@@ -80,6 +92,11 @@ pub(super) fn session(brief: SessionBrief) -> phone::Session {
         reasoning_effort,
         // The phone protocol has no main chat yet (iOS PRD, later).
         main_chat: _,
+        // Nor subtasks (iOS 07): the list leaves out the ones not
+        // promoted ([`shows_on_phone`]), and a promoted one is an
+        // ordinary conversation.
+        parent_session_id: _,
+        promoted: _,
     } = brief;
     phone::Session {
         id: id.0,
@@ -427,6 +444,8 @@ mod tests {
             prompt_profile: Some("profile".into()),
             reasoning_effort: None,
             main_chat: None,
+            parent_session_id: None,
+            promoted: None,
         }
     }
 

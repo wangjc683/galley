@@ -726,7 +726,7 @@ impl SqliteGalley {
         .bind(&content)
         .bind(&created_at)
         .bind(origin.via.as_sql())
-        .bind(&origin.supervisor)
+        .bind(origin.stored_supervisor())
         .bind(&origin.reason)
         .bind(origin.client.map(|c| c.as_sql()))
         .execute(&self.pool)

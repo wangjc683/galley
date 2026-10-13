@@ -67,6 +67,22 @@ pub(crate) async fn get_or_create_main_chat(
         .map_err(stringify_error)
 }
 
+/// The subtasks the main chat's replies dispatched, in reply order
+/// (main chat ticket 06a): one record per `<subtask>` tag, including the
+/// ones that started nothing. The desktop draws a card per record under
+/// its reply; `subtask-dispatched` announces new ones. Desktop only: the
+/// Agent API reads a subtask through its session's `parentSessionId`.
+#[tauri::command]
+pub(crate) async fn list_subtask_dispatches(
+    galley: State<'_, SqliteGalley>,
+    parent_session_id: String,
+) -> std::result::Result<Vec<crate::api::SubtaskDispatch>, String> {
+    galley
+        .subtask_dispatches(&SessionId(parent_session_id))
+        .await
+        .map_err(stringify_error)
+}
+
 #[tauri::command]
 pub(crate) async fn create_session(
     app: tauri::AppHandle,

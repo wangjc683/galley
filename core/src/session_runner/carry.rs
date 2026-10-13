@@ -227,6 +227,9 @@ pub(super) async fn read(
         .await?
         .unwrap_or(segment_start);
     let mut rows = galley.persisted_message_rows_from(session_id, from).await?;
+    // Replies name their subtasks instead of carrying the instructions,
+    // in the carried turns as in the segment (ticket 06a).
+    crate::subtask::mark_replay_rows(galley, session_id, &mut rows).await?;
     // Rows come in turn order: the ones before the start come first.
     let segment = rows.split_off(rows.partition_point(|row| row.turn_index < segment_start));
     let window = CarriedWindow::from_rows(rows.into_iter().map(ReplayRow::from));

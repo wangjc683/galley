@@ -58,6 +58,7 @@ const MIG_044: &str = include_str!("../../core/migrations/044_session_main_chat.
 const MIG_045: &str = include_str!("../../core/migrations/045_ledger_exclusions.sql");
 const MIG_046: &str = include_str!("../../core/migrations/046_main_chat_segments.sql");
 const MIG_047: &str = include_str!("../../core/migrations/047_drop_ledger_exclusions.sql");
+const MIG_048: &str = include_str!("../../core/migrations/048_subtasks.sql");
 
 /// Build a temp .db file with all migrations applied + (optionally)
 /// seed rows. Returns the path; caller stashes it for the spawned
@@ -72,7 +73,7 @@ async fn seeded_db_at(path: &std::path::Path) -> SqlitePool {
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
         MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_031, MIG_034, MIG_040, MIG_042,
-        MIG_043, MIG_044, MIG_045, MIG_046, MIG_047,
+        MIG_043, MIG_044, MIG_045, MIG_046, MIG_047, MIG_048,
     ] {
         sqlx::raw_sql(sql)
             .execute(&pool)
@@ -308,6 +309,59 @@ async fn sessions_list_emits_ndjson_recent_first() {
     let second: serde_json::Value = serde_json::from_str(lines[1]).expect("ndjson line 2");
     assert_eq!(first["id"], "new");
     assert_eq!(second["id"], "old");
+}
+
+/// Main chat ticket 06a: a subtask stays in the default `sessions list`
+/// (the desktop sidebar hides it, the Agent API does not), and the
+/// session JSON gains `parentSessionId` and `promoted` (additive, Rule 3)
+/// with `origin.via: "subtask"`.
+#[tokio::test]
+async fn sessions_list_shows_subtasks_with_their_parent_and_promotion() {
+    let td = tempdir();
+    let db = td.path().join("workbench.db");
+    let pool = seeded_db_at(&db).await;
+    for (id, ts) in [
+        ("main", "2026-10-13T08:00:00Z"),
+        ("sub-new", "2026-10-13T09:00:00Z"),
+        ("sub-promoted", "2026-10-13T10:00:00Z"),
+    ] {
+        seed_session_with_runtime(&pool, id, id, "idle", ts, "managed").await;
+    }
+    sqlx::query(
+        "UPDATE sessions SET parent_session_id = 'main', created_via = 'system', \
+            created_by_supervisor = 'galley-subtask' \
+         WHERE id IN ('sub-new', 'sub-promoted')",
+    )
+    .execute(&pool)
+    .await
+    .expect("subtasks");
+    sqlx::query(
+        "UPDATE sessions SET promoted_at = '2026-10-13T10:05:00Z' WHERE id = 'sub-promoted'",
+    )
+    .execute(&pool)
+    .await
+    .expect("promote");
+    drop(pool);
+
+    let (stdout, code) = run_galley(&db, &["sessions", "list"]);
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+    let rows = parse_ndjson(&stdout);
+    let ids: Vec<&str> = rows.iter().map(|r| r["id"].as_str().unwrap()).collect();
+    assert_eq!(ids, ["sub-promoted", "sub-new", "main"]);
+    assert_eq!(rows[0]["parentSessionId"], "main");
+    assert_eq!(rows[0]["promoted"], true);
+    assert_eq!(rows[0]["origin"], serde_json::json!({ "via": "subtask" }));
+    assert_eq!(rows[1]["parentSessionId"], "main");
+    assert!(rows[1].get("promoted").is_none(), "{}", rows[1]);
+    assert!(rows[2].get("parentSessionId").is_none(), "{}", rows[2]);
+    assert!(rows[2].get("promoted").is_none(), "{}", rows[2]);
+
+    let (stdout, code) = run_galley(&db, &["session", "brief", "sub-new"]);
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+    let brief: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+    let session = brief.get("session").unwrap_or(&brief);
+    assert_eq!(session["parentSessionId"], "main", "{brief}");
+    assert_eq!(session["origin"]["via"], "subtask", "{brief}");
 }
 
 #[tokio::test]
