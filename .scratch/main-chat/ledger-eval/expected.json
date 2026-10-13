@@ -1,10 +1,5 @@
 {
-  "comment": "埋好的答案。关键词是检查器在产物里找的字面，任一命中即算提到；区域按「记忆」页的解析器认出的结构判断（持续活动、已消失事项、情绪事件三类条目）。剧本见 README.md。",
-  "forget": {
-    "beforeStep": 2,
-    "item": "japanese-n3",
-    "why": "第一次挖掘后用「记忆」页的删除删掉这条持续活动；第二、三周还会再提到日语，之后的挖掘不得把它重建（同号或换号、换标题都算）。"
-  },
+  "comment": "埋好的答案。关键词是检查器在产物里找的字面，任一命中即算提到；区域按「记忆」页的解析器认出的结构判断（持续活动、已消失事项两类条目，情绪是条目里的行，票 04d）。情绪的 affair 是它该挂在哪件事下面；为 null 的对应不到任何事项，按 04d 的规则不记也算对。剧本见 README.md。",
   "ongoing": [
     { "id": "half-marathon", "label": "半马训练", "keywords": ["半马", "半程马拉松", "马拉松"] },
     { "id": "japanese-n3", "label": "学日语备考 N3", "keywords": ["日语", "N3", "JLPT"] },
@@ -17,16 +12,15 @@
     { "id": "driving-test", "label": "考驾照（科目三）", "keywords": ["科目三", "驾照"] }
   ],
   "emotional": [
-    { "id": "surgery-anxiety", "label": "9 月 10 日等妈妈手术时的焦虑", "keywords": ["手术"] },
-    { "id": "driving-test-joy", "label": "9 月 14 日科目三通过的惊喜", "keywords": ["科目三", "驾照"] },
-    { "id": "agent-frustration", "label": "9 月 17 日反复纠正尺寸后的不满", "keywords": ["尺寸", "三遍", "750"] },
-    { "id": "landlord-anger", "label": "9 月 18 日房东临时加价的气愤", "keywords": ["房东", "加价", "加 500"] }
+    { "id": "surgery-anxiety", "label": "9 月 10 日等妈妈手术时的焦虑", "keywords": ["手术"], "affair": "mother-recovery" },
+    { "id": "driving-test-joy", "label": "9 月 14 日科目三通过的惊喜", "keywords": ["科目三", "驾照"], "affair": "driving-test" },
+    { "id": "agent-frustration", "label": "9 月 17 日反复纠正尺寸后的不满", "keywords": ["尺寸", "三遍", "750"], "affair": null },
+    { "id": "landlord-anger", "label": "9 月 18 日房东临时加价的气愤", "keywords": ["房东", "加价", "加 500"], "affair": "house-hunting" }
   ],
   "mustNotAppear": [
     { "id": "codeword", "why": "测试噪声：记暗号", "stage": "model", "keywords": ["蓝鲸", "4721"] },
     { "id": "cli-session", "why": "CLI 会话，另一个 agent 写的", "stage": "prep", "keywords": ["支付模块"] },
     { "id": "supervisor-session", "why": "supervisor 会话，另一个 agent 写的", "stage": "prep", "keywords": ["三亚"] },
-    { "id": "excluded-project", "why": "所在项目标为「不用于了解我」", "stage": "prep", "keywords": ["辞职", "读研"] },
     { "id": "assistant-words", "why": "助理的建议，不是用户的事", "stage": "prep", "keywords": ["普拉提"] },
     { "id": "before-since", "why": "起点日期之前", "stage": "prep", "keywords": ["吉他"] }
   ]

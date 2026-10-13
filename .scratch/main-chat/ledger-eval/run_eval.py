@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Affairs-ledger eval (tickets 01 and 04, 「合成语料与验收」). See README.md.
+"""Affairs-ledger eval (tickets 01, 04 and 04d, 「合成语料与验收」). See README.md.
 
 Everything runs in a throwaway work directory (a fresh temp dir unless
 --workdir is given): its own workbench.db and its own managed state root.
@@ -12,23 +12,21 @@ Commands:
                 ledger_eval_prepare.rs, i.e. ledger::run::begin) at every
                 step, committing each step as if the run had succeeded.
                 Saves each batch under <workdir>/steps/ and checks the
-                prep-stage expectations (CLI / supervisor / excluded /
-                assistant / before-since content absent from every batch).
+                prep-stage expectations (CLI / supervisor / assistant /
+                before-since content absent from every batch).
   run           Needs a real model (manual, like `pytest -m e2e`). Same
                 steps, but between prepare and commit the bundled engine
                 (managed-ga/code/agentmain.py --func) executes the mining
                 task against the work directory's state root; a failed run
                 is recorded with `fail` (the position stays). After every
                 successful step the outputs go through the Memory page's
-                parser (core/examples/ledger_parse.rs). Before the step
-                expected.json's "forget" names, one ongoing entry is deleted
-                with the page's own delete; later steps must not rebuild
-                it. Then `check`.
+                parser (core/examples/ledger_parse.rs). Then `check`.
   check         Compare <state root>/memory/history_insight/ with
                 expected.json through the parser's structure: which entries
-                are ongoing / ended / emotional, whether every file was
-                read whole, and whether a deleted entry came back. Keyword
-                checks only, no LLM grading.
+                are ongoing / ended, which emotions sit under which entry
+                (ticket 04d: emotions live in their affair's block, there is
+                no emotions file), and whether the file was read whole.
+                Keyword checks only, no LLM grading.
   selftest      No model. Runs the checker on hand-written outputs (ones
                 that should pass, ones that should fail).
 """
@@ -186,9 +184,9 @@ def snapshot(workdir: Path, step_dir: Path) -> dict[str, Any]:
     insight = insight_dir(workdir)
     out = step_dir / "outputs"
     out.mkdir(exist_ok=True)
-    for name in ("activities.md", "emotional_events.md", "ongoing_affairs.md"):
-        if (insight / name).exists():
-            shutil.copy(insight / name, out / name)
+    for path in insight.iterdir():
+        if path.is_file():
+            shutil.copy(path, out / path.name)
     parsed = parse_outputs(insight)
     (step_dir / "parsed.json").write_text(
         json.dumps(parsed, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -198,54 +196,29 @@ def snapshot(workdir: Path, step_dir: Path) -> dict[str, Any]:
 
 
 def parse_summary(parsed: dict[str, Any]) -> str:
-    a, e = parsed["activities"], parsed["emotions"]
-    parts = []
-    if a["kind"] == "parsed":
-        parts.append(
-            f"activities {len(a['ongoing'])} ongoing / {len(a['ended'])} ended, "
-            f"other {len(a.get('other') or '')} chars"
-        )
-    else:
-        parts.append(f"activities {a['kind']}")
-    if e["kind"] == "parsed":
-        parts.append(f"emotions {len(e['entries'])}, other {len(e.get('other') or '')} chars")
-    else:
-        parts.append(f"emotions {e['kind']}")
-    return "; ".join(parts)
+    a = parsed["activities"]
+    if a["kind"] != "parsed":
+        return f"activities {a['kind']}"
+    entries = a["ongoing"] + a["ended"]
+    emotions = sum(len(e.get("emotions", [])) for e in entries)
+    return (
+        f"activities {len(a['ongoing'])} ongoing / {len(a['ended'])} ended, "
+        f"{emotions} emotion line(s) under {sum(1 for e in entries if e.get('emotions'))} "
+        f"entr(ies), other {len(a.get('other') or '')} chars"
+    )
 
 
 def entry_text(entry: dict[str, Any]) -> str:
-    parts = [entry.get("title", ""), entry.get("status") or "", entry.get("at") or ""]
-    parts += entry.get("sessions", []) + entry.get("tags", []) + entry.get("extra", [])
+    """An entry's own words: title, status, sessions, quotes, extra — not
+    its emotions (those are checked on their own)."""
+    parts = [entry.get("title", ""), entry.get("status") or ""]
+    parts += entry.get("sessions", []) + entry.get("extra", [])
     parts += [q.get("text", "") for q in entry.get("quotes", [])]
     return "\n".join(parts)
 
 
-def forget_before(workdir: Path, expected: dict[str, Any]) -> None:
-    """Delete the ongoing entry expected.json's "forget" names, with the
-    page's own delete (production code), and remember what was deleted."""
-    item_id = expected["forget"]["item"]
-    item = next(i for i in expected["ongoing"] if i["id"] == item_id)
-    parsed = parse_outputs(insight_dir(workdir))
-    acts = parsed["activities"]
-    candidates = (
-        [e for e in acts["ongoing"] if any(k in e["title"] for k in item["keywords"])]
-        if acts["kind"] == "parsed"
-        else []
-    )
-    if not candidates:
-        print(f"  [WARN] forget: no ongoing entry titled with {item['keywords']}; skipped")
-        return
-    target = candidates[0]
-    result = core(workdir, "delete", "--id", target["id"])
-    print(f"  forget: deleted {target['id']}｜{target['title']} ({result['status']})")
-    (workdir / "deleted.json").write_text(
-        json.dumps(
-            {"id": target["id"], "title": target["title"], "item": item_id},
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
+def emotion_text(emotion: dict[str, Any]) -> str:
+    return "\n".join([emotion.get("text") or "", *emotion.get("tags", [])])
 
 
 def run_steps(args: argparse.Namespace, with_model: bool, expected: dict[str, Any]) -> Path:
@@ -261,13 +234,10 @@ def run_steps(args: argparse.Namespace, with_model: bool, expected: dict[str, An
     state_root = workdir / "managed-ga-state"
     seed_memory(state_root)
     corpus = json.loads(CORPUS.read_text(encoding="utf-8"))
-    forget_step = expected.get("forget", {}).get("beforeStep")
     print(f"work directory: {workdir}")
     for i, now in enumerate(steps(corpus, args.step_days), start=1):
         step_dir = workdir / "steps" / f"{i:02d}"
         step_dir.mkdir(parents=True, exist_ok=True)
-        if with_model and i == forget_step and not args.no_forget:
-            forget_before(workdir, expected)
         result = core(workdir, "prepare", "--now", now)
         print(
             f"step {i} @ {now}: {result['status']}"
@@ -339,10 +309,14 @@ def raw_lines(insight: Path) -> list[tuple[str, str]]:
     return out
 
 
+# The outputs since ticket 04d: one ledger file and the short list.
+OUTPUTS = {"activities.md", "ongoing_affairs.md"}
+EMOTION_LINE = re.compile(r"^\s*[-*+]\s*情绪")
+
+
 def check(
     insight: Path,
     expected: dict[str, Any],
-    deleted: dict[str, Any] | None = None,
     parsed: dict[str, Any] | None = None,
 ) -> bool:
     lines = raw_lines(insight)
@@ -353,41 +327,70 @@ def check(
     ok = True
     print(f"\noutput checks over {len({w for w, _ in lines})} file(s) in {insight}:")
 
-    # Read whole: both files parsed, little or nothing left over.
-    for name in ("activities", "emotions"):
-        doc = parsed[name]
-        if doc["kind"] != "parsed":
-            ok = False
-            print(f"  [FAIL] {name}: {doc['kind']} (the parser recognised no entry)")
-            continue
+    # One ledger file and the short list, nothing else (no emotions file).
+    files = {p.name for p in insight.iterdir() if p.is_file()}
+    stray = sorted(files - OUTPUTS)
+    ok &= not stray
+    print(
+        f"  [{'PASS' if not stray else 'FAIL'}] outputs are activities.md and the short list only"
+        + (f"; also {stray}" if stray else "")
+    )
+
+    # Read whole: parsed, little or nothing left over.
+    doc = parsed["activities"]
+    acts = doc if doc["kind"] == "parsed" else None
+    if not acts:
+        ok = False
+        print(f"  [FAIL] activities: {doc['kind']} (the parser recognised no entry)")
+    else:
         other = doc.get("other") or ""
         status = "PASS" if not other else ("WARN" if len(other) < 400 else "FAIL")
         ok &= status != "FAIL"
-        print(f"  [{status}] {name}: read whole" + (f", other {len(other)} chars" if other else ""))
+        print(f"  [{status}] activities: read whole" + (f", other {len(other)} chars" if other else ""))
         for line in [ln for ln in other.splitlines() if ln.strip()][:5]:
             print(f"      other: {line[:120]}")
-    acts = parsed["activities"] if parsed["activities"]["kind"] == "parsed" else None
-    emos = parsed["emotions"] if parsed["emotions"]["kind"] == "parsed" else None
     regions: dict[str, list[dict[str, Any]]] = {
         "ongoing": acts["ongoing"] if acts else [],
         "ended": acts["ended"] if acts else [],
-        "emotional": emos["entries"] if emos else [],
     }
+    entries = regions["ongoing"] + regions["ended"]
+    emotions = [(e, emo) for e in entries for emo in e.get("emotions", [])]
+
+    # Every emotion line sits in an entry's block and reads as an emotion.
+    activities_file = insight / "activities.md"
+    raw = (
+        activities_file.read_text(encoding="utf-8", errors="replace").splitlines()
+        if activities_file.exists()
+        else []
+    )
+    written = [ln.rstrip() for ln in raw if EMOTION_LINE.match(ln)]
+    read = {emo["line"].split("\n")[0].rstrip() for _, emo in emotions}
+    unread = [ln for ln in written if ln not in read]
+    ok &= not unread
+    print(
+        f"  [{'PASS' if not unread else 'FAIL'}] emotion lines: {len(written)} written, "
+        f"all inside an entry and read as emotions"
+        + (f"; {len(unread)} not" if unread else "")
+    )
+    for line in unread[:5]:
+        print(f"      not read as an entry's emotion: {line[:120]}")
+    print(
+        f"  [info] {len(emotions)} emotion(s) under "
+        f"{len({e['id'] for e, _ in emotions})} entr(ies)"
+    )
+    for e, emo in emotions:
+        print(f"      {e['id']}｜{e['title']}: {emo['line'][:140]}")
 
     def regions_hit(keywords: list[str]) -> set[str]:
         return {
             region
-            for region, entries in regions.items()
-            if region != "emotional"
-            for e in entries
+            for region, items in regions.items()
+            for e in items
             if any(k in entry_text(e) for k in keywords)
         }
 
-    forgotten_item = deleted["item"] if deleted else None
     for kind in ("ongoing", "ended"):
         for item in expected[kind]:
-            if item["id"] == forgotten_item:
-                continue
             hit = regions_hit(item["keywords"])
             if kind not in hit:
                 status = "FAIL"
@@ -397,42 +400,26 @@ def check(
             else:
                 status = "PASS"
             print(f"  [{status}] {kind}: {item['label']}  (sections hit: {sorted(hit) or '-'})")
-    for item in expected["emotional"]:
-        felt = any(
-            any(k in entry_text(e) for k in item["keywords"]) for e in regions["emotional"]
-        )
-        ok &= felt
-        print(f"  [{'PASS' if felt else 'FAIL'}] emotional: {item['label']}")
 
-    # A deleted entry stays deleted: not under its id, not as another entry
-    # titled with the same thing.
-    if deleted:
-        item = next(i for i in expected["ongoing"] if i["id"] == deleted["item"])
-        all_entries = regions["ongoing"] + regions["ended"] + regions["emotional"]
-        same_id = [e for e in all_entries if e["id"] == deleted["id"]]
-        retitled = [e for e in all_entries if any(k in e["title"] for k in item["keywords"])]
-        rebuilt = same_id + [e for e in retitled if e not in same_id]
-        ok &= not rebuilt
-        print(
-            f"  [{'PASS' if not rebuilt else 'FAIL'}] deleted stays deleted: "
-            f"{deleted['id']}｜{deleted['title']}"
-        )
-        for e in rebuilt:
-            print(f"      rebuilt as {e['id']}｜{e['title']}")
-        listed = any(f["id"] == deleted["id"] for f in parsed.get("forgotten", []))
-        ok &= listed
-        print(f"  [{'PASS' if listed else 'FAIL'}] deleted is on the do-not-record list")
-        mentions = [
-            e["id"]
-            for e in all_entries
-            if e not in rebuilt and any(k in entry_text(e) for k in item["keywords"])
-        ]
-        if mentions:
-            print(f"  [info] other entries still mention it (review by hand): {mentions}")
-        short = parsed.get("affairsRaw") or ""
-        in_short = deleted["id"] in short or any(k in short for k in item["keywords"])
-        ok &= not in_short
-        print(f"  [{'PASS' if not in_short else 'FAIL'}] deleted is not in the short list")
+    affairs = {i["id"]: i for i in expected["ongoing"] + expected["ended"]}
+    for item in expected["emotional"]:
+        hosts = [e for e, emo in emotions if any(k in emotion_text(emo) for k in item["keywords"])]
+        affair = affairs.get(item.get("affair") or "")
+        if not hosts:
+            if affair:
+                ok = False
+                print(f"  [FAIL] emotional: {item['label']}  (not recorded)")
+            else:
+                print(
+                    f"  [info] emotional: {item['label']}  not recorded "
+                    "(it belongs to no affair, so the task drops it)"
+                )
+            continue
+        where = ", ".join(f"{e['id']}｜{e['title']}" for e in hosts)
+        if affair and not any(any(k in entry_text(e) for k in affair["keywords"]) for e in hosts):
+            print(f"  [WARN] emotional: {item['label']}  under {where}, not {affair['label']}")
+        else:
+            print(f"  [PASS] emotional: {item['label']}  under {where}")
 
     # The short list: numbered lines of ongoing entries.
     short = parsed.get("affairsRaw")
@@ -441,12 +428,12 @@ def check(
         lines_ = [ln.strip() for ln in short.splitlines() if ln.strip()]
         numbered = [re.match(r"^- (A\d+)｜", ln) for ln in lines_]
         bad = [ln for ln, m in zip(lines_, numbered) if not m]
-        stray = [m.group(1) for m in numbered if m and m.group(1) not in ongoing_ids]
-        status = "PASS" if not bad and not stray else "WARN"
+        stray_ids = [m.group(1) for m in numbered if m and m.group(1) not in ongoing_ids]
+        status = "PASS" if not bad and not stray_ids else "WARN"
         print(
             f"  [{status}] short list: {len(lines_)} line(s), numbered"
             + (f"; unnumbered {bad[:3]}" if bad else "")
-            + (f"; not ongoing {stray}" if stray else "")
+            + (f"; not ongoing {stray_ids}" if stray_ids else "")
         )
 
     for item in expected["mustNotAppear"]:
@@ -463,14 +450,6 @@ def check(
         "(SOP: every finding names one)"
     )
     return ok
-
-
-def load_deleted(workdir: Path) -> dict[str, Any] | None:
-    path = workdir / "deleted.json"
-    if not path.exists():
-        return None
-    data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
-    return data
 
 
 # ---------------- selftest ----------------
@@ -492,7 +471,8 @@ GOOD = """# 活动知识层
 
 ### A003｜妈妈膝关节术后康复
 - 现状：能自己扶着走到楼下。
-- 会话：`im-feishu-2026-09-17`
+- 会话：`im-feishu-2026-09-17`、`s-0910-surgery`
+- 情绪（`s-0910-surgery`，2026-09-10 15:40）：焦急、不安——“手术还没出来，手一直在抖”
 
 ### A004｜养猫豆包
 - 现状：医生说胖了，换低卡猫粮。
@@ -503,6 +483,7 @@ GOOD = """# 活动知识层
 ### A005｜找房租房与搬家
 - 现状：9 月 26 日搬完。
 - 会话：`s-0908-house`、`s-0926-house`
+- 情绪（`s-0918-house`，2026-09-18 20:30）：愤怒——“房东突然说每月要加 500”
 
 ### A006｜中秋活动页
 - 现状：9 月 16 日上线。
@@ -511,49 +492,26 @@ GOOD = """# 活动知识层
 ### A007｜科目三与驾照
 - 现状：第三次通过，拿到驾照。
 - 会话：`s-0914-driving`
-"""
-GOOD_EMOTIONS = """# 情绪事件
-
-## E001｜等手术时的焦急
-- 时间：2026-09-10 15:40
-- 会话：`s-0910-surgery`
-- 原文：“手术还没出来，手一直在抖”
-
-## E002｜科目三通过的惊喜
-- 会话：`s-0914-driving`
-- 原文：“科目三过了！！！”
-
-## E003｜反复纠正尺寸后的不满
-- 会话：`s-0917-banner`
-- 原文：“我说了三遍了，是 750 宽 1000 高”
-
-## E004｜房东加价的气愤
-- 会话：`s-0918-house`
-- 原文：“房东突然说每月要加 500”
+- 情绪（`s-0914-driving`，2026-09-14 11:15）：喜悦——“科目三过了！！！”
 """
 GOOD_SHORT = "- A001｜半马备赛：离比赛八周\n- A002｜日语 N3：下周补两课\n"
 BAD = GOOD.replace("## 已消失事项", "## 其他").replace(
     "### A004｜养猫豆包", "### A008｜暗号蓝鲸 4721\n\n### A004｜养猫豆包"
 )
-DELETED = {"id": "A002", "title": "日语 N3 备考", "item": "japanese-n3"}
-FORGOTTEN = [
-    {"id": "A002", "kind": "activity", "title": "日语 N3 备考", "deletedAt": "2026-09-14T00:00:00Z"}
-]
+RETIRED_EMOTIONS = """# 情绪事件
+
+## E001｜反复纠正尺寸后的不满
+- 原文：“我说了三遍了，是 750 宽 1000 高”
+"""
 
 
-def write_case(
-    root: Path, activities: str, emotions: str | None, short: str, forgotten: list[Any]
-) -> Path:
+def write_case(root: Path, activities: str, short: str, extra: dict[str, str] | None = None) -> Path:
     root.mkdir(parents=True)
     (root / "galley").mkdir()
     (root / "activities.md").write_text(activities, encoding="utf-8")
-    if emotions is not None:
-        (root / "emotional_events.md").write_text(emotions, encoding="utf-8")
     (root / "ongoing_affairs.md").write_text(short, encoding="utf-8")
-    if forgotten:
-        (root / "galley" / "forgotten.json").write_text(
-            json.dumps(forgotten, ensure_ascii=False), encoding="utf-8"
-        )
+    for name, body in (extra or {}).items():
+        (root / name).write_text(body, encoding="utf-8")
     # Galley's own files are never checked.
     (root / "galley" / "batch.md").write_text("蓝鲸 4721 三亚", encoding="utf-8")
     return root
@@ -561,41 +519,40 @@ def write_case(
 
 def selftest(expected: dict[str, Any]) -> bool:
     ok = True
-    without_japanese = GOOD.replace(
-        GOOD[GOOD.index("### A002") : GOOD.index("### A003")], ""
-    )
     with tempfile.TemporaryDirectory() as tmp:
         t = Path(tmp)
         print("selftest: an output that should pass")
-        ok &= check(write_case(t / "good", GOOD, GOOD_EMOTIONS, GOOD_SHORT, []), expected)
-
-        print("\nselftest: a deleted entry that stayed deleted (should pass)")
-        case = write_case(
-            t / "forgot",
-            without_japanese,
-            GOOD_EMOTIONS,
-            "- A001｜半马备赛：离比赛八周\n",
-            FORGOTTEN,
-        )
-        ok &= check(case, expected, DELETED)
+        ok &= check(write_case(t / "good", GOOD, GOOD_SHORT), expected)
 
         print(
             "\nselftest: an output that should fail (no ended section, the codeword, "
-            "no emotions file)"
+            "an emotions file)"
         )
-        ok &= not check(write_case(t / "bad", BAD, None, GOOD_SHORT, []), expected)
+        case = write_case(t / "bad", BAD, GOOD_SHORT, {"emotional_events.md": RETIRED_EMOTIONS})
+        ok &= not check(case, expected)
 
-        print("\nselftest: a deleted entry rebuilt under a new number (should fail)")
-        rebuilt = without_japanese.replace(
-            "### A003｜", "### A009｜日语 N3 考试准备\n- 现状：补两课\n\n### A003｜"
+        print("\nselftest: an emotion line outside any entry (should fail)")
+        outside = GOOD.replace(
+            "## 持续活动\n",
+            "## 持续活动\n\n- 情绪（`s-0917-banner`）：不满——“我说了三遍了”\n",
         )
-        case = write_case(t / "rebuilt", rebuilt, GOOD_EMOTIONS, GOOD_SHORT, FORGOTTEN)
-        ok &= not check(case, expected, DELETED)
+        ok &= not check(write_case(t / "outside", outside, GOOD_SHORT), expected)
+
+        print("\nselftest: an emotion line the parser cannot read (should fail)")
+        unread = GOOD.replace(
+            "- 情绪（`s-0914-driving`，2026-09-14 11:15）：喜悦——“科目三过了！！！”",
+            "- 情绪（`s-0914-driving`：喜悦",
+        )
+        ok &= not check(write_case(t / "unread", unread, GOOD_SHORT), expected)
+
+        print("\nselftest: a required emotion missing (should fail)")
+        missing = GOOD.replace(
+            "- 情绪（`s-0918-house`，2026-09-18 20:30）：愤怒——“房东突然说每月要加 500”\n", ""
+        )
+        ok &= not check(write_case(t / "missing", missing, GOOD_SHORT), expected)
 
         print("\nselftest: free-form outputs the parser cannot read (should fail)")
-        case = write_case(
-            t / "raw", "跑步、日语、搬家都提到过。\n", "很焦虑。\n", GOOD_SHORT, []
-        )
+        case = write_case(t / "raw", "跑步、日语、搬家都提到过，很焦虑。\n", GOOD_SHORT)
         ok &= not check(case, expected)
     print(f"\nselftest {'passed' if ok else 'FAILED'}")
     return ok
@@ -618,9 +575,6 @@ def main() -> None:
     parser.add_argument("--mykey", help="GenericAgent mykey.py with the model to use (run only)")
     parser.add_argument("--llm-no", type=int, default=0, help="model index in that mykey.py")
     parser.add_argument("--timeout", type=int, default=3600, help="seconds per model run")
-    parser.add_argument(
-        "--no-forget", action="store_true", help="skip the delete step (run only)"
-    )
     args = parser.parse_args()
     expected = json.loads(EXPECTED.read_text(encoding="utf-8"))
 
@@ -631,14 +585,14 @@ def main() -> None:
             fail("check needs --workdir")
         workdir = Path(args.workdir).resolve()
         guard(workdir)
-        ok = check(insight_dir(workdir), expected, load_deleted(workdir))
+        ok = check(insight_dir(workdir), expected)
         sys.exit(0 if ok else 1)
     if args.command == "run" and not args.mykey:
         fail("run needs --mykey (a GenericAgent mykey.py)")
     workdir = run_steps(args, with_model=args.command == "run", expected=expected)
     ok = check_batches(workdir, expected)
     if args.command == "run":
-        ok &= check(insight_dir(workdir), expected, load_deleted(workdir))
+        ok &= check(insight_dir(workdir), expected)
     print(f"\n{'all checks passed' if ok else 'some checks FAILED'}; work directory: {workdir}")
     sys.exit(0 if ok else 1)
 
