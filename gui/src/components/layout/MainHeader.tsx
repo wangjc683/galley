@@ -108,8 +108,6 @@ export interface MainHeaderProps {
    * equally-discoverable rename paths.
    */
   onRenameSession?: (newTitle: string) => void;
-  /** Title menu 「它记得我什么」 → Settings → Memory (the main chat). */
-  onOpenMemory?: () => void;
   /**
    * The leftmost slot, before the title — the sidebar toggle while
    * there is a main chat (SidebarCollapseToggle, which clears the macOS
@@ -202,7 +200,6 @@ export function MainHeader({
   onTogglePet,
   currentSessionHasPet = false,
   onRenameSession,
-  onOpenMemory,
   leading,
 }: MainHeaderProps) {
   const copy = useCopy();
@@ -280,7 +277,6 @@ export function MainHeader({
             onTogglePet={onTogglePet}
             currentSessionHasPet={currentSessionHasPet}
             onRename={onRenameSession}
-            onOpenMemory={onOpenMemory}
           />
         ) : (
           <span

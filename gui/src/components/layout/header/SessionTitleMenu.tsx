@@ -3,7 +3,6 @@ import {
   ArrowsClockwise,
   CaretDown,
   Cat,
-  Notebook,
   PencilSimple,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
@@ -30,10 +29,6 @@ import { SessionTitleEditor } from "../SessionTitleEditor";
  * Future V0.2 entries (`/branch`, `/rewind`) slot in here too — see
  * discussion thread 2026-05-13.
  *
- * Memory (main chat ticket 04b; lib/memory-entry.ts decides when):
- * 它记得我什么, the main chat only, first in its menu → Settings →
- * Memory. (Ticket 04d removed the other sessions' 「不用于了解我」.)
- *
  * Why title-as-trigger instead of a sibling `⋯` button: a bare title +
  * trailing dots reads as CSS text-overflow ellipsis. The whole-block
  * trigger removes that ambiguity and gives the rename affordance a
@@ -45,15 +40,12 @@ export function SessionTitleMenu({
   onTogglePet,
   currentSessionHasPet,
   onRename,
-  onOpenMemory,
 }: {
   title: string;
   onReinjectTools?: () => void;
   onTogglePet?: () => void;
   currentSessionHasPet?: boolean;
   onRename?: (newTitle: string) => void;
-  /** 「它记得我什么」 (the main chat's menu). */
-  onOpenMemory?: () => void;
 }) {
   const copy = useCopy();
   const petHere = !!currentSessionHasPet;
@@ -177,21 +169,6 @@ export function SessionTitleMenu({
             "text-[13px] text-ink shadow-elevated",
           )}
         >
-          {onOpenMemory && (
-            <>
-              <DropdownMenu.Item
-                onSelect={onOpenMemory}
-                className={cn(
-                  "flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none",
-                  "data-[highlighted]:bg-hover",
-                )}
-              >
-                <Notebook size={14} weight="thin" className="text-ink-soft" />
-                <span>{copy.memory.whatItRemembers}</span>
-              </DropdownMenu.Item>
-              <DropdownMenu.Separator className="my-1 h-px bg-line" />
-            </>
-          )}
           {onRename && (
             <>
               <DropdownMenu.Item

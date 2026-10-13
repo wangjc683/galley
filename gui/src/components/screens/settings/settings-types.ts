@@ -2,7 +2,6 @@ export type SettingsTab =
   | "general"
   | "runtime"
   | "models"
-  | "memory"
   | "integration"
   | "im"
   | "browser"

@@ -526,17 +526,6 @@ function App() {
     setScreen("main");
   };
 
-  // Settings → Memory cites the sessions an entry came from (ticket 04b).
-  // An archived one is restored first: the main view only shows
-  // sessions in the list.
-  const openSessionFromMemory = (id: string) => {
-    if (sessions.some((s) => s.id === id && s.status === "archived")) {
-      unarchiveSession(id);
-    }
-    setSettingsOpen(false);
-    openSession(id);
-  };
-
   // Onboarding takeover: no AppShell, no overlays besides the dev
   // toggle.
   if (screen === "onboarding") {
@@ -819,7 +808,6 @@ function App() {
           setSettingsOpen(false);
           void runBrowserControlDemo();
         }}
-        onOpenMemorySession={openSessionFromMemory}
       />
 
       <ArchivedDialog

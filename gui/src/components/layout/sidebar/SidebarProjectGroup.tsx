@@ -506,6 +506,7 @@ function ProjectMenuItems({
     "flex items-center gap-2 rounded-callout px-2.5 py-1.5 text-[12.5px] text-error outline-none",
     "data-[highlighted]:bg-error/[var(--opacity-soft)] data-[highlighted]:text-error",
   );
+
   return (
     <>
       {/* The row's + only shows on hover; the menu gives the project's

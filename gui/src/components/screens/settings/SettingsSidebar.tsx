@@ -7,7 +7,6 @@ import {
   Keyboard,
   Key,
   Megaphone,
-  Notebook,
   PlugsConnected,
   PuzzlePiece,
 } from "@phosphor-icons/react";
@@ -25,7 +24,6 @@ export function SettingsSidebar({
   showImTab,
   showBrowserTab,
   showPhoneTab,
-  showMemoryTab = false,
 }: {
   tab: SettingsTab;
   onChange: (tab: SettingsTab) => void;
@@ -33,8 +31,6 @@ export function SettingsSidebar({
   showImTab: boolean;
   showBrowserTab: boolean;
   showPhoneTab: boolean;
-  /** Memory (main chat ticket 04b): managed runtime only. */
-  showMemoryTab?: boolean;
 }) {
   const copy = useCopy();
   // Chinese UI: the Chinese name is the primary label and the English
@@ -75,20 +71,6 @@ export function SettingsSidebar({
         {...labelsFor(tabCopy.models)}
         onClick={() => onChange("models")}
       />
-      {/* Memory (main chat ticket 04b) right after Models: what it shows
-          is read and written by the default model (the ledger's run, the
-          engine's global memory), and the main chat title menu's 「它记得
-          我什么」 lands here, so it sits with the everyday tabs, not the
-          plumbing. Managed runtime only — the external GA has no ledger
-          and Galley must not read its memory files. */}
-      {showMemoryTab && (
-        <SettingsTabButton
-          active={tab === "memory"}
-          Icon={Notebook}
-          {...labelsFor(tabCopy.memory)}
-          onClick={() => onChange("memory")}
-        />
-      )}
       {showBrowserTab && (
         <SettingsTabButton
           active={tab === "browser"}

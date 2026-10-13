@@ -26,7 +26,6 @@ export function SettingsHost({
   onReRunHealthCheck,
   onOpenSetupAssistant,
   onRunBrowserControlDemo,
-  onOpenMemorySession,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -36,8 +35,6 @@ export function SettingsHost({
   onReRunHealthCheck: () => void;
   onOpenSetupAssistant: () => void;
   onRunBrowserControlDemo: () => void;
-  /** Settings → Memory: open a session a ledger entry cites. */
-  onOpenMemorySession?: (sessionId: string) => void;
 }) {
   const copy = useCopy();
   const resolvedLanguage = useLanguage();
@@ -129,7 +126,6 @@ export function SettingsHost({
       onReRunHealthCheck={onReRunHealthCheck}
       onOpenSetupAssistant={onOpenSetupAssistant}
       onRunBrowserControlDemo={onRunBrowserControlDemo}
-      onOpenMemorySession={onOpenMemorySession}
       languagePreference={languagePreference}
       resolvedLanguage={resolvedLanguage}
       onChangeLanguagePreference={(preference) => {

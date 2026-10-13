@@ -379,9 +379,6 @@ export const enCopy: AppCopy = {
     desktopPet: "Desktop Pet",
     closeDesktopPet: "Close Desktop Pet",
   },
-  memory: {
-    whatItRemembers: "What it remembers about me",
-  },
   browserControlAttention: {
     message:
       "Let Galley use your signed-in browser: look things up, fill in forms, work in web dashboards.",
@@ -668,7 +665,6 @@ export const enCopy: AppCopy = {
       general: { label: "General", helper: "通用", title: "General" },
       runtime: { label: "Runtime", helper: "运行环境", title: "Runtime" },
       models: { label: "Models", helper: "模型", title: "Models" },
-      memory: { label: "Memory", helper: "记忆", title: "Memory" },
       agent: { label: "Agent", helper: "智能体接入", title: "Agent" },
       im: { label: "Channels", helper: "Messaging", title: "Channels" },
       phone: { label: "Phone", helper: "Phone", title: "Phone" },
@@ -680,85 +676,6 @@ export const enCopy: AppCopy = {
       shortcuts: { label: "Shortcuts", helper: "快捷键", title: "Shortcuts" },
       feedback: { label: "Feedback", helper: "报告问题" },
       about: { label: "About", helper: "关于" },
-    },
-    memory: {
-      subtitle:
-        "What Galley has noted from your conversations — view it, delete it, or turn it off",
-      switchTitle: "Learn from my conversations",
-      switchDescription:
-        "Once a day, Galley reads what you have newly said on the desktop and in IM direct messages — the first time, your earlier conversations too (never the AI's replies) — and has your default model sort it, so it passes through your model provider once more. What it notes stays on this computer and carries over when you switch models.",
-      sinceFrom: (time) => `Since ${time}`,
-      sinceEarliest: "From your earliest conversations",
-      running: "Sorting now",
-      lastRun: (time, outcome) => `Last run ${time}, ${outcome}`,
-      outcomeSucceeded: "updated",
-      outcomeEmpty: "nothing new",
-      outcomeFailed: "didn't finish",
-      outcomeRunning: "still going",
-      nextRun: (time) => `Next ${time}`,
-      dayWords: {
-        today: (time) => `today ${time}`,
-        tomorrow: (time) => `tomorrow ${time}`,
-        yesterday: (time) => `yesterday ${time}`,
-      },
-      loadFailed: (detail) => `Couldn't read memory: ${detail}`,
-      retry: "Retry",
-      actionFailed: "Action failed",
-      disableTitle: "Stop learning from your conversations?",
-      disableBody: "Once it's off, no new conversations are read.",
-      disableKeep: "Keep what it noted",
-      disableKeepDetail:
-        "What it noted stays on this computer, and you can turn it back on later.",
-      disableClear: "Clear everything",
-      disableClearDetail: "Deletes what it noted.",
-      notedTitle: "What it noted",
-      endedFold: (count) =>
-        `${count} finished ${count === 1 ? "item" : "items"}`,
-      emotionsLabel: "Feelings",
-      emotionsUsage:
-        "Used only when it helps get something done; it never comments on your feelings on its own.",
-      emotionWords: (text) => `“${text}”`,
-      globalTitle: "The AI's long-term memory",
-      globalNote:
-        "The AI writes this itself during conversations; the switch above doesn't control it.",
-      lastMentioned: (day) => `Last mentioned ${day}`,
-      conversationCount: (count) =>
-        `${count} ${count === 1 ? "conversation" : "conversations"}`,
-      sources: "Sources",
-      deletedSession: "Deleted conversation",
-      archivedSuffix: " (archived)",
-      openSession: "Open this conversation",
-      openArchivedSession: "Restore and open this conversation",
-      imSource: (channel, day) => `${channel} · ${day}`,
-      imUnknown: "IM",
-      deleteAria: (title) => `Delete “${title}”`,
-      deleteEmotionAria: (title, what) =>
-        `Delete the feeling under “${title}”: ${what}`,
-      deleteBusy: "Sorting now; you can delete once it's done",
-      deleteTitle: "Delete this?",
-      deleteEmotionTitle: "Delete this feeling?",
-      deleteBody: (title) =>
-        `“${title}” is deleted from what it noted. If it comes up again later, it may be noted again.`,
-      deleteBodyEmotions: " The feelings noted under it are deleted too.",
-      deleteEmotionBody: (title) =>
-        `This feeling is deleted from “${title}”; the item itself stays.`,
-      deleteConfirm: "Delete",
-      deleteFailedBusy: "Sorting now. Delete it once that's done.",
-      deleteFailedGone: "This one is already gone.",
-      deleteFailed: "Delete failed",
-      emptyNoted: "Nothing noted yet. It shows up here after a run.",
-      rawNote: "Couldn't read the format, so here is the original text.",
-      otherTitle: "Other notes",
-      otherNote: "Other paragraphs written while sorting, as they are.",
-      globalFileMissing: "This file doesn't exist yet; saving creates it.",
-      save: "Save",
-      discard: "Discard changes",
-      changedOnDisk:
-        "This file changed elsewhere — the AI may have just written to it. Reload, then edit again.",
-      reload: "Reload",
-      saveFailed: (detail) => `Couldn't save: ${detail}`,
-      characterCount: (count) =>
-        `${count} ${count === 1 ? "character" : "characters"}`,
     },
     phone: {
       subtitle:

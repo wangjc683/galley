@@ -5,7 +5,6 @@ import { GitReviewContext } from "@/lib/git-review";
 import { useActiveRuntime } from "@/hooks/useActiveSession";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
 import type { ImSupervisorStatus } from "@/lib/im-supervisor";
-import { titleMenuOpensMemory } from "@/lib/memory-entry";
 import type { ResolvedTheme } from "@/lib/theme";
 import { useAppUpdateStore } from "@/stores/app-update";
 import { useBrowserControlStore } from "@/stores/browser-control";
@@ -94,14 +93,6 @@ export function MainHeaderHost({
   const setPendingPetMigration = useUiStore((s) => s.setPendingPetMigration);
   const restartAppUpdate = useAppUpdateStore((s) => s.restart);
   const appUpdateStatus = useAppUpdateStore((s) => s.status);
-  const activeSession = useSessionsStore((s) =>
-    s.sessions.find((session) => session.id === s.activeSessionId),
-  );
-  // Ticket 04b: the main chat's menu leads to Settings → Memory.
-  const opensMemory = titleMenuOpensMemory({
-    runtimeKind: activeRuntimeKind,
-    session: sessionTitle ? activeSession : undefined,
-  });
 
   // Changes shows only while there is a repository to open (project
   // root or the one last reviewed) — without one the button only led to
@@ -217,7 +208,6 @@ export function MainHeaderHost({
             }
           : undefined
       }
-      onOpenMemory={opensMemory ? () => openSettings("memory") : undefined}
       onOpenSettings={onOpenSettings}
       leading={leading}
     />

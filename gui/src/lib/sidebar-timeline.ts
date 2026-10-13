@@ -89,8 +89,7 @@ export interface SidebarSectionsOptions {
  * Whether a person started this conversation — at the desktop or from
  * the phone (both `origin.via === "gui"`); rows from before origins
  * were recorded count as theirs. CLI, supervisor, scheduled-task and
- * `system` sessions are an agent's (PRD ruling 32: the same line the
- * affairs ledger draws, "only what the person said").
+ * `system` sessions are an agent's (PRD ruling 32).
  */
 export function isHumanStarted(session: Session): boolean {
   return !session.origin || session.origin.via === "gui";
