@@ -1,6 +1,6 @@
 # 主聊天（主管家）
 
-Status: active（第三轮 2026-10-12 定形：入口 / 大脑 / 出口，界面一条、上下文分段，桌面先上；2026-10-13 裁决 49 撤掉事项账本，大脑回到 GA 自己的记忆 + 查历史，主动提醒暂缓；同日裁决 50、51：新段带最近几轮、对话历史分页）
+Status: active（第三轮 2026-10-12 定形：入口 / 大脑 / 出口，界面一条、上下文分段，桌面先上；2026-10-13 裁决 49 撤掉事项账本，大脑回到 GA 自己的记忆 + 查历史，主动提醒暂缓；同日裁决 50–53：新段带最近几轮、对话历史分页、入口层与派活标签、子任务卡片，均已合入；裁决 54：先在 dev 里试用几天，暂不发版）
 
 来源：2026-10-09 iOS 客户端讨论中 JC 提出。参照 Meta Muse：有一个主聊天，会话长期继续，什么都跟它说；只有要同时进行、或明确另开话题时才开旁聊；
 主聊天还能主动提醒、给建议。JC 的定位：Galley 从来不是 coding 或 IDE，而是用户本地的全能个人助手；主聊天更接近「长期陪伴、越来越懂你的助理」。
@@ -151,6 +151,11 @@ README「dense context instead of long」（`README.md:54`）。
 53. **06 的五点**（JC 按建议定）：一条回复里一个标签一个子任务、一张卡（不做「能并行的活合成一张卡」）；子任务是普通对话，派活说明作为它的第一条消息（不是 Goal）；
     卡片第一版四种状态各一行（在跑 / 在问你 / 完成 / 失败），不做浏览器「已看 3 / 7」；子任务在问你一律通知、完成只在跑了 2 分钟以上时通知；定时任务改卡片拆到 06b，排在派活之后。
     同日入口层按草稿接入（票 03d，`0cec6d94`），派活条款随 06a 补上。
+54. **主对话先在 dev 里试用几天，暂不发版**（JC，2026-10-13）：发版后难改的是库结构（迁移 044–048）与 CLI 字段（`parentSessionId`、`promoted`、`origin.via: "subtask"`、`session show --around / --since / --until`，Rule 3 只能加）；
+    入口层提示词、界面、通知规则、2 分钟门槛与 4 小时切段阈值发版后照样能改。试用里要留意的是前两类有没有定错（比如子任务该不该算用户的对话、段该怎么切）。
+    依据：到 10-13 主对话只有 10-12 的 5 条用户消息，入口层、票 11、12、06a 都还没真实用过；JC 自己没有定时任务（`scheduled_tasks` 为空），06b 排后。
+    发版前的自由不是无限的：tauri dev 用真实数据目录，迁移 048 已应用在 JC 的库上，改已应用的迁移要手修这一个库，但不用给所有用户写迁移。
+    代价：`v0.6.2` 之后 112 个提交（含微信对话对齐、Core 发送接管）用户暂时拿不到；急需修的问题从 `v0.6.2` 标签单出补丁，不带主对话。
 
 ## 事实依据（2026-10-12 核对）
 
@@ -202,15 +207,15 @@ README「dense context instead of long」（`README.md:54`）。
 | [03](./issues/03-segments-and-injection.md) | C | 切段、注入、入口层提示词 | 02 | 03a、03b、03d done（事项清单注入由票 10 拆掉；03d `0cec6d94`）；03c needs-triage（按 deferred 的启动信号） |
 | [04](./issues/04-what-it-remembers-page.md) | D | 「它记得我什么」页面 | 01 | 撤销（裁决 49）：04a–04d 合入后整页由票 10 拆掉，问候只留第一段 |
 | [06](./issues/06-subtasks.md) | F | 子任务：父会话、派活标签（裁决 52）、卡片、定时任务改卡片 | 02 | 拆为 06a、06b（裁决 53） |
-| [06a](./issues/06a-subtask-dispatch-and-cards.md) | — | 派活标签、子会话、卡片、面包屑、升级、通知、入口层派活条款 | 03d | ready-for-agent |
+| [06a](./issues/06a-subtask-dispatch-and-cards.md) | — | 派活标签、子会话、卡片、面包屑、升级、通知、入口层派活条款 | 03d | done（`0366baf9`–`567b3560`，迁移 048；JC 真机验收随 dev 试用） |
 | [06b](./issues/06b-scheduled-results-as-cards.md) | — | 定时任务的结果改为主对话里的卡片 | 06a | needs-triage |
 | [07](./issues/07-sidebar-structure-trial.md) | — | 侧栏结构试验：A3 / B / B′ + 演示状态 | 02 | done（JC 定 B′ + 其他对话） |
 | [08](./issues/08-sidebar-finalize.md) | — | 侧栏收尾：B′ 转正、删试验代码、改设计文档 | 07 | done（`a3d7254b`） |
 | [09](./issues/09-section-belonging-trial.md) | — | 「其他对话」归属感试验：C1 / C2 / C3 | 08 | done（JC 定 C3 + 常显 + 加重） |
 | [05](./issues/05-proactive-cards.md) | E | 主动提醒卡片 + IM 出口 | 01、06 | 暂缓（裁决 49，依赖的账本已撤） |
 | [10](./issues/10-remove-affairs-ledger.md) | — | 拆掉事项账本与「记忆」页，问候只留第一段 | — | done（裁决 49，`fa6f9127`–`36affec8`） |
-| [11](./issues/11-carry-last-turns-into-new-segment.md) | — | 新段带上段首之前的最近 3 轮 | 03a | ready-for-agent（裁决 50） |
-| [12](./issues/12-paged-conversation-history.md) | — | 对话历史按轮分页加载（所有对话） | — | ready-for-agent（裁决 51） |
+| [11](./issues/11-carry-last-turns-into-new-segment.md) | — | 新段带上段首之前的最近 3 轮 | 03a | done（裁决 50，`b9c1eef8`） |
+| [12](./issues/12-paged-conversation-history.md) | — | 对话历史按轮分页加载（所有对话） | — | done（裁决 51，`0d086e2a`–`acc3559a`） |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 

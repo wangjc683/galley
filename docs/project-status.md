@@ -752,9 +752,25 @@ main-chat planning docs, main has:
   The affairs ledger and Settings → Memory, built in the same two days,
   were removed before release (PRD ruling 49, ticket 10); migrations
   **045** / **047** stay as they are, one creating and the other dropping
-  a table nothing uses. Owed: JC's live look at the greeting (a fresh data
-  directory is needed to see it), a few days of real main-chat use before
-  tickets 03c / 03d, and old orphaned `messages_fts` rows are not cleaned.
+  a table nothing uses. Later on 2026-10-13 (PRD rulings 50–53): the main
+  chat gained an entry layer in its prompt (ticket 03d: reply at the weight
+  of what was said); a new segment opens with the last 3 turns before it, at
+  most 6,000 characters (ticket 11); every conversation loads its history 50
+  turns a page, a run never split (ticket 12, new Tauri command
+  `session_message_turns_page`, `session_message_rows` dropped); and the
+  main chat hands long work to subtasks through a `<subtask>` tag in its
+  reply (ticket 06a, migration **048**): a card under the reply, 「主对话 ›」
+  breadcrumb, no sidebar row until the user writes in it, notifications for
+  asking / failed / done after 2 minutes; the CLI session JSON gains
+  `parentSessionId` and `promoted`, and `origin.via` can be `subtask`
+  (additive, Rule 3). **Release held** (JC, 2026-10-13, ruling 54): a few
+  days of dev use first, because after a release the schema (migrations
+  044–048) and the new CLI fields can only move forward; an urgent fix in
+  the meantime goes out as a patch from the `v0.6.2` tag. Owed: JC's live
+  look at 06a (cards, breadcrumb, the four open points in its ticket),
+  ticket 11 met in real use (a natural 4-hour cut), ticket 12's scroll feel,
+  the greeting (a fresh data directory is needed to see it); old orphaned
+  `messages_fts` rows are not cleaned.
 
 Carried forward. The README screenshots still show the old sidebar, and
 `projects.png` the retired project view (its caption still says 项目视图);

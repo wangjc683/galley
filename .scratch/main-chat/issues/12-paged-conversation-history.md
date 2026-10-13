@@ -1,6 +1,6 @@
 # 12 对话历史按轮分页加载
 
-Status: ready-for-agent
+Status: done（`0d086e2a`、`53f95367`、`acc3559a`、`db3954fe`，2026-10-13 已推送；滚动手感待 JC 在 dev 里看）
 
 来源：主聊天 PRD 裁决 51（2026-10-13，JC 按建议推进）。
 
