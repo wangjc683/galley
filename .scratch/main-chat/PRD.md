@@ -143,6 +143,11 @@ README「dense context instead of long」（`README.md:54`）。
 51. **对话历史按轮分页加载，现在做**（JC：引导用户一直在主对话里说，长历史一定要解决）：所有对话都走分页（一条代码路径），每页 50 轮；
     接近顶部自动加载上一页、滚动位置不跳；搜索跳到还没加载的消息时一页页往上加载到它；问题轨只显示已加载部分。票 [12](./issues/12-paged-conversation-history.md)。
     没选只给主对话分页（多一个特例）、「加载更早的消息」按钮、全量问题索引。
+52. **06 派活走回复里的标签**（JC 选 T，取代裁决 5 的「托管补丁给 GA 加原生工具」）：主对话在回复末尾写 `<subtask>要做的事</subtask>`，Core 在这一轮结束后开子任务；不碰内核，不加公开契约。
+    依据：真实模型对照（`.scratch/main-chat/entry-layer-eval/`，主对话的模型，5 条用例 × 标签 / CLI 命令 / 原生工具，查询在沙盒里真实执行）：三种都派得出去、判断一致（两条大活全派、两条快活全自己做、报价那条先问清是哪三家）；
+    6 份派活说明都写全了目标、用户给的信息、范围和交回什么；派完都直接收尾，没有回头守着子任务；派之前查的步数原生工具 0–1、标签 1、命令 2–3。
+    没选原生工具：会是第一个给 GA 加工具的补丁，还要一条三端都改的 IPC；没选命令：最慢，还要长期维护一条公开 CLI 命令。
+    标签的代价由 06 接住：界面藏起标签、回放时把说明换成一行带子任务编号的标记、写坏或没派出去时界面露出来。模型会去读 GA 自带的 `subagent.md`，派活条款要写明用 Galley 的子任务。
 
 ## 事实依据（2026-10-12 核对）
 
@@ -193,7 +198,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [02](./issues/02-main-chat-form.md) | B | 主聊天形态 + A1 / A2 切换器 + 排队 / 开旁聊 | — | done（侧栏形态见 07–09） |
 | [03](./issues/03-segments-and-injection.md) | C | 切段、注入、入口层提示词 | 02 | 03a、03b done（事项清单注入由票 10 拆掉）；03c、03d needs-triage（按 deferred 的启动信号） |
 | [04](./issues/04-what-it-remembers-page.md) | D | 「它记得我什么」页面 | 01 | 撤销（裁决 49）：04a–04d 合入后整页由票 10 拆掉，问候只留第一段 |
-| [06](./issues/06-subtasks.md) | F | 子任务：父会话、原生派活工具、卡片、定时任务改卡片 | 02 | needs-triage |
+| [06](./issues/06-subtasks.md) | F | 子任务：父会话、派活标签（裁决 52）、卡片、定时任务改卡片 | 02 | needs-triage（派活方式已定，余项讨论中） |
 | [07](./issues/07-sidebar-structure-trial.md) | — | 侧栏结构试验：A3 / B / B′ + 演示状态 | 02 | done（JC 定 B′ + 其他对话） |
 | [08](./issues/08-sidebar-finalize.md) | — | 侧栏收尾：B′ 转正、删试验代码、改设计文档 | 07 | done（`a3d7254b`） |
 | [09](./issues/09-section-belonging-trial.md) | — | 「其他对话」归属感试验：C1 / C2 / C3 | 08 | done（JC 定 C3 + 常显 + 加重） |
