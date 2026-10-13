@@ -264,17 +264,6 @@ pub(crate) async fn clear_session_unread(
         .map_err(stringify_error)
 }
 
-#[tauri::command]
-pub(crate) async fn session_message_rows(
-    galley: State<'_, SqliteGalley>,
-    session_id: SessionId,
-) -> std::result::Result<Vec<PersistedMessageRow>, String> {
-    galley
-        .persisted_message_rows(&session_id)
-        .await
-        .map_err(stringify_error)
-}
-
 /// The conversation's read (ticket 12): the latest
 /// [`MESSAGE_TURN_PAGE`] whole turns, or with `before_turn_index` the
 /// page before that turn — see

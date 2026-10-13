@@ -83,7 +83,7 @@ pub struct ConversationMessage {
 }
 
 /// The fields of a persisted message row the conversion reads (the
-/// `session_message_rows` shape, snake_case).
+/// `persisted_message_rows` shape, snake_case).
 #[derive(Debug, Clone, Deserialize)]
 pub struct ReplayRow {
     pub role: String,

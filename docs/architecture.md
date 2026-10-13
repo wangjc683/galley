@@ -51,8 +51,7 @@ A conversation is read a page of whole turns at a time (Tauri
 main-chat ticket 12): the latest 50 turns on opening, the page before as the
 reader scrolls up. Core cuts the pages, never inside a turn, a run or a Goal
 episode, so the GUI rebuilds the same turns from pages as from the whole
-transcript. The phone pages by rows instead (`persisted_message_rows_page`);
-the unpaged `session_message_rows` command has no GUI caller left.
+transcript. The phone pages by rows instead (`persisted_message_rows_page`).
 
 Local file references use `LocalFileWorkspace` for session-scoped transient
 preview state. Rust `local_file` validates paths, bounds reads, and invokes the

@@ -212,7 +212,6 @@ describe("activateSession → Core's ensure_session_runner", () => {
     expect(useRuntimeStore.getState().byId["s-ens-ctrl"]?.bridgeStatus).toBe(
       "connected",
     );
-    expect(calls("session_message_rows")).toHaveLength(0);
     expect(calls("session_message_turns_page")).toHaveLength(0);
     expect(pageLoadHistories()).toHaveLength(0);
   });

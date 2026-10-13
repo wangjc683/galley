@@ -169,9 +169,10 @@ impl SqliteGalley {
         self.with_attachments(records).await
     }
 
-    /// [`Self::persisted_message_rows`] from `from_turn_index` on: the
-    /// main chat's current segment (ticket 03a), which is all its runner
-    /// is given back.
+    /// [`Self::persisted_message_rows`] from `from_turn_index` on: what
+    /// the main chat's runner is given back — its current segment (ticket
+    /// 03a) and the turns before it that the segment carries over (ticket
+    /// 11, `crate::session_runner::carry`).
     pub async fn persisted_message_rows_from(
         &self,
         session_id: &SessionId,

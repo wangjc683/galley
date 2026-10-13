@@ -212,7 +212,6 @@ pub fn run() {
             set_session_llm,
             mark_session_unread,
             clear_session_unread,
-            session_message_rows,
             // Paged conversation read (.scratch/main-chat ticket 12)
             session_message_turns_page,
             // Core-owned send / stop (ticket 02c)
