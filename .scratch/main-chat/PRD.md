@@ -196,7 +196,7 @@ README「dense context instead of long」（`README.md:54`）。
 |---|---|---|---|---|
 | [01](./issues/01-affairs-ledger.md) | A | 事项账本后台挖掘 | — | 撤销（裁决 49，代码由票 10 拆掉） |
 | [02](./issues/02-main-chat-form.md) | B | 主聊天形态 + A1 / A2 切换器 + 排队 / 开旁聊 | — | done（侧栏形态见 07–09） |
-| [03](./issues/03-segments-and-injection.md) | C | 切段、注入、入口层提示词 | 02 | 03a、03b done（事项清单注入由票 10 拆掉）；03c、03d needs-triage（按 deferred 的启动信号） |
+| [03](./issues/03-segments-and-injection.md) | C | 切段、注入、入口层提示词 | 02 | 03a、03b、03d done（事项清单注入由票 10 拆掉；03d `0cec6d94`）；03c needs-triage（按 deferred 的启动信号） |
 | [04](./issues/04-what-it-remembers-page.md) | D | 「它记得我什么」页面 | 01 | 撤销（裁决 49）：04a–04d 合入后整页由票 10 拆掉，问候只留第一段 |
 | [06](./issues/06-subtasks.md) | F | 子任务：父会话、派活标签（裁决 52）、卡片、定时任务改卡片 | 02 | needs-triage（派活方式已定，余项讨论中） |
 | [07](./issues/07-sidebar-structure-trial.md) | — | 侧栏结构试验：A3 / B / B′ + 演示状态 | 02 | done（JC 定 B′ + 其他对话） |
