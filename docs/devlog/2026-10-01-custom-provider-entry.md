@@ -22,7 +22,7 @@
      `…/v1beta/openai/` 被拼成 `…/v1beta/openai/v1/chat/completions`；README「任意 OpenAI 兼容端点可用」对 Gemini 不成立。上游同源。
   2. **拿官方卡接别家端点，第一个模型带上第一方专属参数**：新建 provider 时第一个模型直接用卡片的选项包（`provider-setup.ts:304`），
      OpenAI 卡改了地址也照样写入 `reasoning_effort: high`；之后再加的模型按地址匹配，又不会带。08-07 的裁决写明兼容层可能因此回 400。
-- 本机：JC 的 Grok 走中转站 `cpa.subsage.top/v1`，不是直连 `api.x.ai`，所以拿不到直连 xAI 的证据；Gemini 未配过。
+- 本机：JC 的 Grok 走一个中转站，不是直连 `api.x.ai`，所以拿不到直连 xAI 的证据；Gemini 未配过。
 
 ## 讨论与裁决（JC，2026-10-01）
 
