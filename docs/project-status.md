@@ -744,14 +744,18 @@ main-chat planning docs, main has:
   persistent main chat (migration **044**) opened at launch, the sidebar
   regrouped under it (主对话 / 其他对话, collapsible with ⌘\). The affairs
   ledger mines what the user said (GUI messages, IM private chats archived
-  from engine logs; exclusions in migration **045**) once a day from 04:00
+  from engine logs) once a day from 04:00
   and ends each run with an ongoing-affairs list that the main chat's and
   IM's state blocks carry. The main chat cuts a new context segment after 4
   idle hours (migration **046**); the CLI gains `session show --around /
   --since / --until` and search fields (additive, Rule 3). Settings →
-  Memory shows the entries (pinned format, per-entry delete, a
-  "don't record again" list, "not used to understand me" marks, the
-  engine's global memory files editable). The ledger is **on by default**:
+  Memory has three areas (ticket 04d, PRD ruling 48): the switch; the
+  entries in a pinned format, each affair carrying its emotions, ended
+  ones behind a last 「已经结束的 N 件」 row, an affair or one emotion
+  deletable (only a delete: no do-not-record list); the engine's global
+  memory files, editable. The per-conversation / per-project opt-out of
+  migration **045** is gone again (**047** drops its table); the switch
+  is the one way to stop the reading. The ledger is **on by default**:
   a new main chat opens with a fixed greeting saying so, earlier
   conversations are read, the first run waits for the next 04:00, and the
   page has one allow switch (Rule 4's 2026-10-12 interpretation). Mining

@@ -49,8 +49,8 @@ Application Support/app.galley/
   galley.db
   managed-ga-state/
     memory/                   # the ONLY dir GA reads SOPs from
-      history_insight/        # affairs ledger (only once switched on): mining outputs
-        galley/               # Core's: state.json, im_archive.jsonl, batch.md, forgotten.json, rollback/
+      history_insight/        # affairs ledger (only once switched on): activities.md, ongoing_affairs.md
+        galley/               # Core's: state.json, im_archive.jsonl, batch.md, rollback/
     sop/                      # vestigial: created but GA never reads it
     skills/                   # vestigial: created but GA never reads it
     temp/                     # engine scratch: code_run cwd, reflect logs

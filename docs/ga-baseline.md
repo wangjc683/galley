@@ -1051,10 +1051,13 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     mining task (`core/src/ledger/batch.rs` `task_prompt`) follows the
     seeded 历史重点挖掘 SOP (`memory/L4_raw_sessions/salient_mining_sop.md`)
     but replaces its 「格式自定」 with a format Galley parses
-    (`core/src/ledger/entries.rs`). Re-check on upgrade: whether upstream
-    starts rewriting the two global-memory files wholesale or moves them,
-    and whether the SOP's 产物 section still says 「格式自定」 and still asks
-    for the three regions (持续活动、已消失事项、情绪事件).
+    (`core/src/ledger/entries.rs`): one `activities.md`, the emotional
+    events written as lines inside the affair they belong to and those
+    that belong to none not recorded (ticket 04d), the SOP's criteria for
+    what to mark kept. Re-check on upgrade: whether upstream starts
+    rewriting the two global-memory files wholesale or moves them, and
+    whether the SOP's 产物 section still says 「格式自定」 and still asks for
+    the three regions (持续活动、已消失事项、情绪事件).
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
