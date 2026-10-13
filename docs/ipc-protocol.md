@@ -338,7 +338,7 @@ agent 主动调用 `ask_user` 工具时发出。bridge 此时 agent_runner_loop 
 - `"MAX_TURNS_EXCEEDED"`：达到 max_turns 上限。由 bridge 在 final `turn_end` 上合成（`data.maxTurns` 为当时的上限），见 §4.7 `exitReason`
 - `"ABORTED"`：用户主动 abort（bridge 自定义状态，非 GA 原生）
 - `"SLASH_COMMAND_COMPLETED"`：斜杠命令（如 `/session.x=v`）由 GA 直接处理、不进 agent_runner_loop，没有 `turn_end`；bridge 收到 `source: "system"` 的 `done` 后先发 `system_message`，再合成这个 `run_complete`（bridge 自定义状态，非 GA 原生）
-- `"DONE_WITHOUT_EXIT"`：bridge 兜底（bridge 自定义状态，非 GA 原生，galley#29）。GA 的任务已经结束（display queue 的任务级 `done` 已到）却没有任何 `turn_end` 上报退出，例如任务循环抛异常、`_stop` 文件中断。前面没有带 `exitReason` 的 final `turn_end`，而是紧挨着一条 `category: "runtime"`、`severity: "error"`、`context: "task_end"` 的 `error`：任务循环抛异常时 `message` 是 GA 附在 `done` 末尾的 backend error（去掉源码位置，截到 500 字符，完整文本放 `traceback`），据此照常推断 `hint`；其他情况是一句通用说明。Core 把这条 error 记进本次运行，进行中的 Goal 因此转为 Blocked，而不是继续派发。`finalContent` 为空，`data` 为 null。bridge 按运行代次比对：上一个任务迟到的 `done` 不会关掉新开的运行，也不会抢在 `ABORTED` 之前关掉正被 abort 的运行；`SLASH_COMMAND_COMPLETED` 同样按代次比对
+- `"DONE_WITHOUT_EXIT"`：bridge 兜底（bridge 自定义状态，非 GA 原生，galley#29）。GA 的任务已经结束（display queue 的任务级 `done` 已到）却没有任何 `turn_end` 上报退出，例如任务循环抛异常、`_stop` 文件中断。前面没有带 `exitReason` 的 final `turn_end`，而是紧挨着一条 `category: "runtime"`、`severity: "error"`、`context: "task_end"` 的 `error`：任务循环抛异常时 `message` 是 GA 附在 `done` 末尾的 backend error（去掉源码位置，截到 500 字符，完整文本放 `traceback`），据此照常推断 `hint`；其他情况是一句通用说明。`finalContent` 为空，`data` 为 null。bridge 按运行代次比对：上一个任务迟到的 `done` 不会关掉新开的运行，也不会抢在 `ABORTED` 之前关掉正被 abort 的运行；`SLASH_COMMAND_COMPLETED` 同样按代次比对
 
 ### 4.10 `error`
 
@@ -767,7 +767,7 @@ bridge:   { kind: "ready", ... }
 Core:     { kind: "load_history", messages: [...] }
 bridge:   { kind: "history_loaded", messageCount: 12 }
 Core:     ensure 返回：runner 存活且历史已确认
-caller:   { kind: "user_message", text: "继续之前的话题" }   （GUI / Goal / 以后的手机端）
+caller:   { kind: "user_message", text: "继续之前的话题" }   （GUI / 以后的手机端）
           (agent_runner_loop 启动，client.backend.history 已含 12 条历史)
 bridge:   { kind: "turn_start", ... }
           ...

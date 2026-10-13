@@ -11,9 +11,9 @@ them. We commit to the rules in
 
 - **A schema version is additive-only.** New optional fields can
   arrive on requests and responses; existing field names and semantics
-  do not change inside a major version. Current: `schemaVersion: 2`
-  (since 2026-09-16; see §7 for what changed and how `1` is still
-  served).
+  do not change inside a major version. Current: `schemaVersion: 3`
+  (since 2026-10-13; see §7 for what changed and how `1` and `2` are
+  still served).
 - **Breaking change requires a bump.** A new major introduces the
   breaking change; commands that did not change keep answering the old
   pin (§7), so old SOPs keep working until they touch the changed
@@ -34,7 +34,7 @@ gets a `schemaVersion` bump.
 
 The following enum / discriminant strings are **stable identifiers** —
 agents pattern-match on them, additions are non-breaking, renames /
-removals require a `schemaVersion: 2` bump.
+removals require the next `schemaVersion`.
 
 #### Error discriminants — CLI-visible (5)
 
@@ -70,7 +70,10 @@ get a clean error path; the JSON envelope carries the original tag.
 | `MessageBrief.role`        | `user / agent / system` (DB `tool` rows normalize to `agent`)                         |
 | `HealthCheck.status`       | `ok / warn / fail / deferred_b4` (`deferred_b4` is a legacy stable value; new `deferred_<phase>` values are additive) |
 | `Origin.via`               | `gui / cli / supervisor / system / subtask` (`subtask` additive 2026-10-13: a session the main chat dispatched and its first message) |
-| `GoalBrief.status`         | `active / paused / blocked / completed / budget_limited / stopped / failed` (schemaVersion 2; open = the first three) |
+
+Retired in `3` (§7.1): `GoalBrief.status` (`active / paused / blocked /
+completed / budget_limited / stopped / failed`), with the rest of the
+Goal surface. No command produces it under any pin.
 
 #### `dispatch` values (per-command)
 
@@ -85,7 +88,9 @@ mislead. SOPs branch per command:
 | `session btw`                    | `dispatched` (only — exit 5 on no bridge)          |
 | `session stop`                   | `abort_sent` / `already_stopped`                   |
 | `llm set`                        | `dispatched` / `persisted_only`                    |
-| `goal start`                     | `dispatched` (only — failures are error envelopes; schemaVersion 2) |
+
+Retired in `3` (§7.1): `goal start` and its `dispatched` value, with the
+rest of the `goal` family.
 
 #### `stream.reason` values (streaming / wait commands)
 
@@ -111,16 +116,13 @@ For NDJSON stream-end frames on `session watch` (§5.5b),
 SOPs that want to defend against schema bumps pin explicitly:
 
 - **CLI**: pass `--schema=N` on any command (global flag). `N` outside
-  the binary's accepted set (`1`, `2` today) → exit 2
-  (`error: "invalid_args"`) + message prefixed `schema_mismatch:`. The
-  same exit + prefix when `N` is `1` and the command exists only under
-  `2` (the `goal` family).
+  the binary's accepted set (`1`, `2`, `3` today) → exit 2
+  (`error: "invalid_args"`) + message prefixed `schema_mismatch:`.
 - **Socket**: include `"schemaVersion": N` in the request JSON. `N`
   outside the accepted set → the wire `schema_mismatch` discriminant
-  (§2A), which the CLI maps to exit 1 (`internal`). A `1` pin on a
-  v2-only command → `unknown_command`.
+  (§2A), which the CLI maps to exit 1 (`internal`).
 
-Omitting the pin uses the server's default, `2`. `galley version`
+Omitting the pin uses the server's default, `3`. `galley version`
 prints the default (`schemaVersion`); the accepted set is documented
 here rather than exposed as a field.
 
@@ -130,7 +132,42 @@ they read keep their names + semantics inside the current major.
 
 ## 7 · Versioning
 
-### 7.1 `schemaVersion: 2` (current, since 2026-09-16)
+### 7.1 `schemaVersion: 3` (current, since 2026-10-13)
+
+The bump exists for one reason: the Goal surface was removed
+(`.scratch/remove-goal`, [devlog](../devlog/2026-10-13-remove-goal.md)).
+The `goal start / status / active / stop / extend` commands (socket
+`goal.*`) are **removed** with no successor, and so are `GoalBrief`, its
+status enum and `goal start`'s `dispatch` value. Nothing else changed:
+`3` carries every `2` command, field, enum value, exit code and error
+discriminant unchanged, except that `MessageBrief.goalId` is no longer
+produced. It was optional and absent on every message outside a Goal, so
+readers already handle its absence.
+
+**How `1` and `2` are still served.** The server accepts `1`, `2` and
+`3`:
+
+- A request pinned `1` or `2` for any command that survived unchanged is
+  answered exactly as before. An old SOP that never used Goal keeps
+  running without edits.
+- Every goal command — the v2 family and the v1 commands `2` had already
+  retired — is `unknown_command` under every pin. The CLI has no `goal`
+  subcommand: `galley goal …` exits `2` (`invalid_args`) at argument
+  parsing.
+
+As with `2`, "removed" is spelled honestly as "not found": the blast
+radius of the bump is exactly the callers that used Goal.
+
+Migrating a goal SOP: there is no replacement command. Put what "done"
+looks like into the task itself, watch it with
+`session wait --until-idle` or `session follow`, and if a run stops
+early, send the next message on the same session.
+
+### 7.2 `schemaVersion: 2` (served for unchanged commands, since 2026-09-16)
+
+> The record of the `2` bump as it shipped. The goal family it describes
+> was removed in `3` (§7.1); where this section speaks in the present
+> tense about goal commands, §7.1 is what holds now.
 
 The bump exists for one reason: the Goal surface was replaced
 (`.scratch/goal-simplify`, Goal v2). The v1 `goal propose / run / task /
@@ -229,7 +266,7 @@ codes and error discriminants unchanged):
   [session-commands.md](./session-commands.md). Also served under
   `--schema=1`.
 
-### 7.2 `schemaVersion: 1` (frozen, served for unchanged commands)
+### 7.3 `schemaVersion: 1` (frozen, served for unchanged commands)
 
 Introduced in v0.2, unchanged through v0.3.x and v0.4.x. Additions that
 landed under it: `session wait` (with `--after-turn` and the
@@ -239,7 +276,7 @@ landed under it: `session wait` (with `--after-turn` and the
 `sessions list` / `session brief` / `status`. The v1 `goal` surface also
 landed here and is the part `2` retired.
 
-### 7.3 Rules inside a major
+### 7.4 Rules inside a major
 
 Inside the current major:
 
@@ -256,7 +293,7 @@ Inside the current major:
 - Removing or renaming a command / flag / field / enum value is
   **breaking**. Don't.
 
-At the next major (`3`):
+At the next major (`4`):
 
 - A breaking change can ship.
 - The same policy applies: the previous pin keeps answering every
@@ -264,6 +301,6 @@ At the next major (`3`):
   under the old pin. No dual semantics.
 
 `galley version` returns the schema version the CLI binary speaks by
-default (`2`). The socket `version` command returns the server's
-default. The accepted set is `{1, 2}` on both ends and is documented
+default (`3`). The socket `version` command returns the server's
+default. The accepted set is `{1, 2, 3}` on both ends and is documented
 here, not exposed as a field.

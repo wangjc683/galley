@@ -60,7 +60,6 @@ Powered by the bundled engine — a derivative work of [GenericAgent](https://gi
 Galley's orchestration layer. You operate in the GUI; a Supervisor Agent goes through the stable `galley` CLI. Both are first-class operators sharing the same sessions and history — not separate worlds.
 
 - 🧭 **Projects + parallel sessions** — point a Project at a folder, a code repo or a document directory, and let several sessions advance around it in parallel.
-- 🎯 **Galley Goal** — give a conversation a goal and it keeps going on its own until the model says it's done, the time ceiling runs out, or you stop it.
 - 🔧 **Transparent runs** — watch the reasoning stream in; every step opens to its full arguments and result, and a finished run folds into one line.
 - ⏰ **Scheduled tasks** — a prompt that runs daily, weekly, or monthly in a new session, its result waiting in the sidebar. Galley needs to be running and can launch at login.
 - 💬 **IM Channels** — WeChat, Feishu, Telegram, or Discord: the same assistant from your phone, handing longer jobs to desktop sessions.
@@ -75,10 +74,9 @@ Galley's orchestration layer. You operate in the GUI; a Supervisor Agent goes th
   </tr>
   <tr>
     <td width="50%" valign="top"><img src="docs/screenshots/en/projects.png" alt="Project view" /><br/><sub>Project view — sessions advancing around one project</sub></td>
-    <td width="50%" valign="top"><img src="docs/screenshots/en/goal.png" alt="Goal" /><br/><sub>Goal — a long-running objective with chapter markers</sub></td>
+    <td width="50%" valign="top"><img src="docs/screenshots/en/scheduled.png" alt="Scheduled tasks" /><br/><sub>Scheduled tasks — a prompt that runs itself every morning</sub></td>
   </tr>
   <tr>
-    <td width="50%" valign="top"><img src="docs/screenshots/en/scheduled.png" alt="Scheduled tasks" /><br/><sub>Scheduled tasks — a prompt that runs itself every morning</sub></td>
     <td width="50%" valign="top"><img src="docs/screenshots/en/search.png" alt="Search" /><br/><sub>⌘K — every past conversation, straight to the matching line</sub></td>
   </tr>
 </table>
@@ -127,8 +125,7 @@ You don't need to learn the CLI yourself — tell your Supervisor Agent what you
 Work scales to the right container instead of becoming one giant prompt:
 
 - **Simple requests** — read from or follow a single session;
-- **Project / folder work** — bind a workspace with Project Workspace and run sessions in parallel;
-- **Long-running goals** — when you ask for one, start a Goal on a session with a time ceiling and let it keep going until it's done.
+- **Project / folder work** — bind a workspace with Project Workspace and run sessions in parallel.
 
 You can also connect WeChat / Feishu / Telegram / Discord from **Settings → Channels** and reach the same assistant from your phone; it hands longer jobs to desktop sessions.
 
@@ -160,15 +157,6 @@ galley session new "Read-only check of packaging, release workflow, bundled reso
 
 galley project follow <project-id> --tail=80 --until-idle --final-show
 
-# Long-running goal (only when the user asks for one): the session keeps going
-# until the model declares it done, the time ceiling hits, or you stop it
-galley goal start <session-id> "ship the next patch release" --budget-minutes=60 \
-  --supervisor=ga-claude-1 --reason="user asked Galley to keep going until done"
-
-galley goal status <goal-id>
-galley goal extend <goal-id> --minutes=30
-galley goal stop <goal-id>
-
 # Follow one session, or wait until its run ends
 galley session follow <id>
 galley session wait <id> --until-idle --timeout=600
@@ -187,13 +175,13 @@ Full command reference, JSON schemas, and exit codes live in the [Agent API docs
 
 ## Architecture
 
-The GUI and the CLI are **peer frontends** — not a GUI wrapping a CLI, but two equals each talking directly to the same **Rust Core**: the GUI from inside the app, the CLI over a local socket. Core is the single authority, owning session / Project / Goal state, the Goal loop, scheduled tasks, SQLite writes, and every Python process Galley runs; by default those run on the bundled engine, ready out of the box.
+The GUI and the CLI are **peer frontends** — not a GUI wrapping a CLI, but two equals each talking directly to the same **Rust Core**: the GUI from inside the app, the CLI over a local socket. Core is the single authority, owning session / Project state, scheduled tasks, SQLite writes, and every Python process Galley runs; by default those run on the bundled engine, ready out of the box.
 
 ```mermaid
 flowchart TB
   GUI["Galley GUI<br/>Tauri · React"] -- in-process --> Core
   CLI["Galley CLI<br/>Rust"] -- "local socket · named pipe<br/>no TCP · no token" --> Core
-  Core["Galley Core<br/>Rust<br/>sessions<br/>projects · goals<br/>scheduled tasks<br/>SQLite"]
+  Core["Galley Core<br/>Rust<br/>sessions<br/>projects<br/>scheduled tasks<br/>SQLite"]
   Core --> R["Session runners<br/>one per session"]
   Core --> IM["IM channels<br/>one per app"]
   Core --> BB["Browser bridge<br/>resident"]
@@ -218,11 +206,11 @@ A few design choices that aren't in the feature list but shape Galley's engineer
 
 - **Peer frontends, not a GUI wrapping a CLI.** The GUI and CLI each reach the Rust Core on their own, so neither depends on the other. Closing the window leaves Core, its sessions, and the CLI running in the background. Chat apps didn't need a protocol of their own either: inside each IM channel, the assistant drives Galley through the same CLI a Supervisor uses.
 
-- **The Rust Core is the single authority.** The state machines for sessions / Projects / Goals, the Goal loop, scheduled tasks, SQLite writes, and every child process converge in one place. Frontends read projections and send intents; they hold no writable state, which removes multi-end state drift at the root.
+- **The Rust Core is the single authority.** The state machines for sessions / Projects, scheduled tasks, SQLite writes, and every child process converge in one place. Frontends read projections and send intents; they hold no writable state, which removes multi-end state drift at the root.
 
 - **A local-first security model.** Inter-process traffic runs over a Unix socket (`0600`) or a Windows named pipe, localhost only, no token, no TLS — because the trust boundary is "the same user on the same machine." Not forcing network-style auth onto a local tool is a deliberate subtraction.
 
-- **The Agent API is a versioned public contract.** CLI output carries a `schemaVersion`; within a version, changes are additive only, and a breaking change takes a new version — `2` arrived with Goal v2 in v0.5.0, while every command that didn't change still answers `1`. Write commands record who asked and why (`via` / `supervisor` / `reason`). A Supervisor can program against it with confidence.
+- **The Agent API is a versioned public contract.** CLI output carries a `schemaVersion`; within a version, changes are additive only, and a breaking change takes a new version — the current one is `3`, and every command that didn't change still answers `1` and `2`. Write commands record who asked and why (`via` / `supervisor` / `reason`). A Supervisor can program against it with confidence.
 
 - **Discipline at the dual-runtime boundary.** The default is the bundled engine (CPython 3.11 and dependencies included, ready out of the box); when attaching an external GenericAgent, Galley stays strictly read-only — it never touches the external GA's code, memory, SOP, or `mykey.py`, so your existing environment stays clean.
 

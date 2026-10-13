@@ -53,7 +53,8 @@ what the hash covers) to `STATIC_PROMPT_BUDGET_BYTES`, set with no headroom
 on the larger platform variant. Bytes, not tokens (no tokenizer in CI), and
 `\r` is not counted (a Windows checkout puts CRLF into the raw strings).
 Raised once since, on 2026-10-07: 6688 → 6855 bytes (+167, the Chinese
-Settings labels; see the clause ledger).
+Settings labels; see the clause ledger), and lowered on 2026-10-13 to 6775
+(−80, Goal left the feature map), keeping it at no headroom.
 
 To add a clause, remove or shorten one first. Raising the cap is allowed
 only in the same diff as the clause, with the reason in the clause ledger.
@@ -85,8 +86,8 @@ Before adding, also check whether an existing section already says it: the
   browser, never says it is done, and instead says where it is and prepares
   what the user needs. Plus: describe only capabilities confirmed in this
   session. The boundary covers configuration only — the IM entry layer
-  deliberately has the agent drive sessions, projects, Goals, and
-  `llm set` through the CLI. Since 2026-10-06 it also carries what used to
+  deliberately has the agent drive sessions, projects, and `llm set`
+  through the CLI. Since 2026-10-06 it also carries what used to
   be the Scheduled Tasks section: a prepared scheduled-task prompt must
   stand on its own (each run opens a new conversation), and GenericAgent's
   own scheduler (`sche_tasks/*.json`) never runs in Galley, so the model
@@ -337,6 +338,7 @@ row.
 | Main chat entry layer: ongoing relationship, reply at the weight of the message, pick up what a break left open, `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` | ticket 03d (2026-10-13): JC found the main chat read as a pinned ordinary session; the draft was compared with and without on the main chat's model (`.scratch/main-chat/entry-layer-eval/`) before it went in |
 | Main chat entry layer: dispatch clause (long work → `<subtask>` tag, self-contained instructions, quick work stays; Galley's subtask, not GA's `subagent.md`) | ticket 06a, PRD rulings 52, 53 (2026-10-13): the main chat must not be occupied by one long job, and JC chose a tag in the reply over a native GA tool or a CLI command after the three were compared on the main chat's model (`dispatch-clauses.md`); models read GA's file-based subagent SOP unprompted in that comparison. Cap raised 827 → 1446 (+619 bytes) in the same diff |
 | Past Galley Conversations: `--around` example; coverage sentence reworded to 「This reaches every Galley session, but not direct IM chats …」 | ticket 03b (2026-10-12): `session show` gained `--around`, and `--tail=20` reads the end of a session, not where a search hit is. Paid for in the same diff: the two coverage sentences became one (−51 bytes against the +51-byte line on both platforms), so the static text stays at 6855 bytes (Windows) / 6837 (POSIX) and the cap is unchanged |
+| Removed 2026-10-13: Goal in the feature map's message-box line, `goal` in the IM entry layer's CLI write list | Goal was removed (devlog [2026-10-13 remove Goal](../devlog/2026-10-13-remove-goal.md)). Both caps lowered in the same diff to stay at no headroom: static 6855 → 6775 bytes (Windows; POSIX 6757), IM 1383 → 1376 (Telegram) |
 
 ## Dogfood Regression Checklist
 

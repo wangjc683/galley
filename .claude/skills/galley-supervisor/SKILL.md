@@ -2,14 +2,14 @@
 name: galley-supervisor
 description: >-
   Operate the user's local Galley desktop orchestrator through the Galley CLI:
-  inspect sessions/projects/goals, start or continue a Galley session, split work
+  inspect sessions/projects, start or continue a Galley session, split work
   into a small Project-backed group, wait for results, archive/restore/move
-  sessions, switch a session LLM, or manage Galley Goal after confirmation.
+  sessions, or switch a session LLM.
   Use only when the user asks to operate local Galley state on this machine, not
   for ordinary Galley product discussion, repo coding, or architecture questions.
   Trigger phrases: 帮我看看 Galley 现在跑啥 / 开个 Galley session / 继续那个 session /
   盯一下进度 / 把复杂任务拆成几个 Galley sessions / archive that session /
-  move sessions to project / switch the LLM / start a Galley Goal /
+  move sessions to project / switch the LLM /
   what's running in Galley / spin up a Galley session.
 ---
 
@@ -32,8 +32,8 @@ You are acting as a **Galley Supervisor**: a dispatcher for the user's local
 Galley desktop orchestrator. Operate through the `galley` CLI. Do not edit
 GenericAgent state directly and do not launch another runtime orchestrator.
 
-Use this skill only for managing Galley sessions, Projects, Goals, or model
-choices on the machine where you can run local commands. For ordinary Galley
+Use this skill only for managing Galley sessions, Projects, or model choices
+on the machine where you can run local commands. For ordinary Galley
 questions, code changes in this repo, product design, or architecture review,
 answer normally instead of entering Supervisor workflow.
 
@@ -42,15 +42,15 @@ answer normally instead of entering Supervisor workflow.
 **Read [`references/galley-supervisor-sop.md`](references/galley-supervisor-sop.md)
 before your first CLI call in a conversation.** It is the operating
 procedure: hard rules, CLI discovery, mode choice, hot paths (inspect / start
-/ continue / split / Goal), error handling, and the self-check. This file
+/ continue / split / long tasks), error handling, and the self-check. This file
 adds only what is specific to running the SOP from this host.
 
-For command details, Goal, origin-field conventions, and the canonical
+For command details, origin-field conventions, and the canonical
 Do-not / You-may boundary list, read
 [`references/galley-supervisor-reference.md`](references/galley-supervisor-reference.md).
 
-Target: Galley CLI `schemaVersion: 2` (since `v0.5.0`; only the `goal` family is
-`2`-only, every other command still answers `1`; additive-only within a version).
+Target: Galley CLI `schemaVersion: 3` (since 2026-10-13; `1` / `2` still answer
+every unchanged command; additive-only within a version).
 
 ## Host-specific notes
 
@@ -109,6 +109,6 @@ explanations and example prompts.
 ## See also
 
 - [`references/galley-supervisor-sop.md`](references/galley-supervisor-sop.md) — the operating procedure (verbatim copy, CI-checked)
-- [`references/galley-supervisor-reference.md`](references/galley-supervisor-reference.md) — detailed commands, Goal, boundaries
+- [`references/galley-supervisor-reference.md`](references/galley-supervisor-reference.md) — detailed commands, boundaries
 - [Agent API](https://github.com/wangjc683/galley/blob/main/docs/agent-api/README.md) — full schema
 - [AGENTS.md](https://github.com/wangjc683/galley/blob/main/AGENTS.md) — localhost-only, CLI contract, and data boundaries

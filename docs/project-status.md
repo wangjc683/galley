@@ -12,10 +12,11 @@ live in [refactor](./archive/refactor/README.md).
 - Package version: `0.6.2`.
 - Git tag / GitHub Release: `v0.6.2` is the current published stable release
   (tagged at `1bc4900d` on 2026-10-09, GitHub Latest).
-- Agent API schema: `schemaVersion: 2` (since the Goal v2 rework on
-  2026-09-16, first shipped in `v0.5.0`). The server keeps answering `1` for
-  every command that did not change; only the `goal` family is `2`-only, and
-  the retired v1 goal commands are `unknown_command` under every version.
+- Agent API schema: `schemaVersion: 3` on main (since the Goal removal on
+  2026-10-13, unreleased; the published `v0.6.2` speaks `2`, first shipped in
+  `v0.5.0`). The server keeps answering `1` and `2` for every command that did
+  not change; every goal command, v1 and v2, is `unknown_command` under every
+  pin.
 - Release tier: stable patch; default update channel points at `v0.6.2`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `f308ee7` (audited 2026-10-06, first shipped in
@@ -155,7 +156,7 @@ continuity state. **macOS Stop** interrupts a request still waiting for
 response headers (patch `0025`: upstream `abort()`'s force-close stays on
 Windows only; the upstream PR draft is on hold in deferred). **CLI**:
 `galley llm list` takes `--runtime` (default `current`) and lists the Galley
-model store under bundled GA — an Agent API behavior fix recorded in §7.1;
+model store under bundled GA — an Agent API behavior fix recorded in §7.2;
 external `llm set` / `session new --llm` no longer trip a serde alias on every
 GUI-written cache. Graded patch: the largest features stay on the existing IM
 channel line (the `v0.4.7` precedent); size alone does not grade. The
@@ -675,7 +676,7 @@ Post-release follow-up:
    (`maxlen_multiplier` 2.25 → 1.93 as a denominator). `f06d550` did not move
    it again, so the watch is unchanged: `...[Truncated]...` arriving sooner is
    the regression direction that only long real sessions surface.
-3. Verify the reply-done / goal-end / ask_user notifications on an installed
+3. Verify the reply-done / ask_user notifications on an installed
    Windows build (macOS was smoked at release; `tauri dev` cannot show
    notifications on macOS — see devlog 2026-07-21-reply-done-notification).
    `v0.4.5` adds sounds to these, so the Windows pass now also covers the
@@ -696,8 +697,8 @@ main-chat planning docs, main has:
 - **Core send takeover and remote-access groundwork** (2026-10-10,
   `.scratch/ios-client/`, devlog
   [2026-10-10-remote-access-protocol-and-first-tickets](./devlog/2026-10-10-remote-access-protocol-and-first-tickets.md)).
-  Ticket 02a–02d: Core owns ensure-runner, history replay (fixes Goal
-  cold start), the unified send (ADR-0003) and broadcasts every write; GUI
+  Ticket 02a–02d: Core owns ensure-runner, history replay, the unified
+  send (ADR-0003) and broadcasts every write; GUI
   behavior is meant to be unchanged, JC's GUI acceptance is still open.
   Then 05c (remote sink on the notifier, `session-run-state`, a
   turn-persist broadcast the GUI skips, attachment read by id, the pairing
@@ -772,6 +773,21 @@ main-chat planning docs, main has:
   the greeting (a fresh data directory is needed to see it); old orphaned
   `messages_fts` rows are not cleaned.
 
+- **Goal removed; Agent API `schemaVersion: 3`** (2026-10-13, JC,
+  `.scratch/remove-goal/`, devlog
+  [2026-10-13-remove-goal](./devlog/2026-10-13-remove-goal.md)). Usage was
+  the reason: five v2 goals in four weeks, zero continuations, the longest
+  task 52 steps against GA's 180. The Core continuation engine, the GUI entry
+  points (composer, top-bar indicator, goal markers, the Goal-end
+  notification toggle), the CLI `goal` family, managed patch `0022`, the
+  remote-protocol goal event / push kind and the `<goal-status>` handling are
+  gone; the GUI still strips that tag when rendering old rows. Every goal
+  command is `unknown_command` under every pin, `galley goal …` exits 2, and
+  `MessageBrief.goalId` is no longer produced. No migration: the `goals`
+  table, `messages.goal_id` and the `notify_on_goal_end` pref stay, unread.
+  Release notes must say `schemaVersion: 3` and that Goal is gone (a removal,
+  so the release is minor); the README Goal screenshots are deleted.
+
 Carried forward. The README screenshots still show the old sidebar, and
 `projects.png` the retired project view (its caption still says 项目视图);
 re-shoot with the next screenshot round (kept out of `v0.6.2`).
@@ -840,13 +856,11 @@ from the IM dogfood (subtext on one-step answers, narration kept in the
 answered-question echo, the typing indicator lingering up to ~10 s) stay as
 built.
 
-Standing follow-ups: whether a Goal session's opening (the `v0.5.4` send-time
-row stacked above the commission marker's eyebrow) reads cluttered has not
-been confirmed on a real session — the send-time devlog has the fallback (move
-the time into the eyebrow row); the ticket `.scratch/live-run-window/PRD.md`
+Standing follow-ups: the ticket `.scratch/live-run-window/PRD.md`
 stays `ready-for-human` until a few more live runs pass;
-`.scratch/goal-simplify/` is `done`; the "use the whole budget" Goal mode
-and the user-message typography re-review are in
+`.scratch/goal-simplify/` is `done` (and Goal itself was removed on
+2026-10-13); the long-task resume path, should Goal ever be wanted back, and
+the user-message typography re-review are in
 [deferred](./devlog/deferred.md). The community 524 thread that prompted
 `v0.4.15` has not yet been answered (reply draft agreed in session, awaiting
 JC's per-item confirmation); the #21 thread has not yet been told the
@@ -922,7 +936,7 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Area | Status | Read More |
 |---|---|---|
 | Core architecture | Rust Galley Core is authoritative | [architecture demo](./architecture-demo.md) |
-| CLI / Agent API | `schemaVersion: 2` since v0.5.0 (Goal v2 family); `1` still served for unchanged commands | [agent-api](./agent-api.md) |
+| CLI / Agent API | `schemaVersion: 3` on main since 2026-10-13 (Goal removed; unreleased); `2` (since v0.5.0) and `1` still served for unchanged commands | [agent-api](./agent-api.md) |
 | Agent surface | Settings -> Agent, copy-first SOP, Claude Skill | [Supervisor SOP](./integrations/galley-supervisor-sop.md) |
 | Managed GA runtime | Shipped in v0.2.0; Memory/SOP seed repair shipped in v0.2.6; audited upstream `b1e173dc` baseline shipped in v0.2.16; GUI / CLI split, Provider / Model config, local encrypted SQLite credentials, and Project Workspace are the current baseline | [managed GA runtime](./managed-ga-runtime/README.md) |
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
@@ -971,8 +985,8 @@ Detailed phase narratives are intentionally not duplicated here. Use:
   rule above judges additions; a patch number would tell auto-updating users
   that nothing they rely on was taken away.
 - Use `vX.Y.Z` for Git tag and GitHub Release title.
-- Agent API is at `schemaVersion: 2`; changes within a version are
-  additive-only.
+- Agent API is at `schemaVersion: 3` on main (`2` in the published
+  `v0.6.2`); changes within a version are additive-only.
 - A breaking Agent API change requires the next `schemaVersion`, with explicit
-  compatibility notes in [agent-api](./agent-api.md) (how `1` is still served
-  after the `2` bump is the template: stability §7).
+  compatibility notes in [agent-api](./agent-api.md) (how `1` and `2` are
+  still served after the `3` bump is the template: stability §7).

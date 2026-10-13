@@ -170,7 +170,7 @@ Rule 2 原文：「The relay sees ciphertext and routing metadata, stores no use
     AAD 绑定推送格式的版本：以后换格式就换 AAD，旧的 NSE 解不开（显示占位文案），不会解错。`g` 是密文的标准 base64（带填充），整个 APNs 载荷 2871 字节；
   - `title`、`body` 按 JSON 转义后的字节数截断（分别 256、1536 字节），在字符边界截，截过的末尾加「…」；
     `sessionId` 限可打印 ASCII（不含 `"` 和 `\`）、不超过 128 字节，`kind` 限 `[a-z0-9_]`、不超过 32 字节。按这套规则最坏情况也装得进 2048 字节，有测试钉住；
-  - `kind` 先定四个值，对应裁决 17 的四类：`reply_done`、`ask_user`、`goal`、`schedule_failed`。这是开放集合，NSE 遇到不认识的照常显示；
+  - `kind` 先定四个值，对应裁决 17 的四类：`reply_done`、`ask_user`、`goal`、`schedule_failed`（`goal` 随 2026-10-13 Goal 移除删掉，`.scratch/remove-goal/`）。这是开放集合，NSE 遇到不认识的照常显示；
   - `seq` 单调递增，NSE 在 App Group 里记已收到的最大 `seq`，拒绝 relay 重放的旧推送。建议 Core 取 `max(上一个 + 1, 当前毫秒时间戳)`，
     这样计数器丢了也不会退回到手机见过的值以下；
   - `collapse-id` 用不透明值。

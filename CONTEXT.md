@@ -153,12 +153,11 @@ silently dropped argument (2026-07-11 decision; see devlog).
   **confirmed** (in the process; a respawn starts unconfirmed). An idle
   unconfirmed live runner is replayed into; a running one is left alone.
   A failed replay restarts the runner once, quietly (no `Closed` to the
-  run gate or Goal, no `runner-closed` to pages); a second failure is a
+  run gate, no `runner-closed` to pages); a second failure is a
   `HistoryReplay` error. Single-flight per session, replay included; a
   running runner is never replaced (`RunnerManager::spawn` would kill
   its run). Callers: the GUI (Tauri `ensure_session_runner`, on
-  activation), Core's send (below, before every dispatch), Goal dispatch,
-  and —
+  activation), Core's send (below, before every dispatch), and —
   spawn-only, since the session is new and so confirmed at once —
   socket `session.new` (`spawn_and_attach`). Every runner it starts gets
   the emit task, the auto-title watcher and a `runner-spawned-external`

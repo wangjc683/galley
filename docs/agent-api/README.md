@@ -3,12 +3,12 @@
 The contract between **Galley** and any agent that drives it via the
 `galley` CLI binary or the Unix-socket / named-pipe local transport.
 
-> **Status: `schemaVersion: 2` since 2026-09-16** — the Goal surface was
-> replaced ([§7](./stability-and-versioning.md)); every other command is
-> unchanged from the frozen `1`, and the server still answers `1` for
-> them. Inside a major the rules in §1 hold: additive commands, flags,
-> and optional fields are non-breaking; renames / removals require a
-> bump.
+> **Status: `schemaVersion: 3` since 2026-10-13** — the Goal surface was
+> removed ([§7](./stability-and-versioning.md)); every other command is
+> unchanged from `2` (and from the frozen `1`), and the server still
+> answers `1` and `2` for them. Inside a major the rules in §1 hold:
+> additive commands, flags, and optional fields are non-breaking;
+> renames / removals require a bump.
 
 **This directory is a public contract.** Every command name, JSON field,
 exit code, and error identifier in these files is load-bearing for
@@ -27,5 +27,5 @@ This document was split into topic files on 2026-07-04. Section numbers
 | [errors-and-exit-codes.md](./errors-and-exit-codes.md) | §3, §4, §6, §6A | Exit codes, output discipline, CLI + socket error envelopes, shared `Origin` type |
 | [session-commands.md](./session-commands.md) | §5.1–§5.13 | `version`, `status`, `health`, `sessions list / search`, `session brief / show / send / watch / follow / wait / new / btw / stop / archive / restore / move` |
 | [project-and-llm-commands.md](./project-and-llm-commands.md) | §5.14–§5.18 | `project create / list / brief / show / follow / delete`, `llm list / set` |
-| [goal-commands.md](./goal-commands.md) | §5.19 | `goal start / status / active / stop / extend` (Goal v2, schemaVersion 2 only) |
+| [goal-commands.md](./goal-commands.md) | §5.19 | Retired in `schemaVersion: 3`: the `goal` family was removed on 2026-10-13 |
 | [roadmap-and-references.md](./roadmap-and-references.md) | §8, §8A, §9 | Deferred v1 additions, `GalleyApi` trait surface, transport notes, see-also references |

@@ -74,7 +74,7 @@ Request:
 {
   "command": "session.send",
   "args": { /* command-specific */ },
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "requestId": "any-client-string-for-demux"
 }
 ```
@@ -118,7 +118,7 @@ These are stable identifiers — agents pattern-match on them:
 | `not_found`        | Target resource missing (no session with that id, etc.)              |
 | `db_unavailable`   | DB file missing / unopenable / Galley Core not running               |
 | `unknown_command`  | Server doesn't know that command name                                |
-| `schema_mismatch`  | Client's `schemaVersion` outside the server's accepted set (`1`, `2`) |
+| `schema_mismatch`  | Client's `schemaVersion` outside the server's accepted set (`1`, `2`, `3`) |
 | `not_implemented`  | Reserved — currently NO emitter on either end; do not expect it      |
 | `idle_timeout`     | Connection sat idle past 90s — server politely closed                |
 | `internal`         | Unexpected server failure                                            |

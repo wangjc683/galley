@@ -61,7 +61,7 @@ rm -rf ~/Documents/galley-refs/galley-site
 | 对话字号 | standard |
 | Sidebar 宽度 | 默认 20% |
 | 截图方式 | `⌘⇧4 + 空格` 带窗口阴影；全套一致 |
-| 文件组织 | `docs/screenshots/zh/` + `docs/screenshots/en/`，**按场景命名**：`hero.png` `hero-dark.png` `tools.png` `reading.png` `projects.png` `goal.png` `scheduled.png` `search.png`；两份 README 各自引用对应语言目录 |
+| 文件组织 | `docs/screenshots/zh/` + `docs/screenshots/en/`，**按场景命名**：`hero.png` `hero-dark.png` `tools.png` `reading.png` `projects.png` `scheduled.png` `search.png`；两份 README 各自引用对应语言目录 |
 | 入镜纪律 | 无 dev 调试 chrome、无系统通知、无 tooltip；时间状态合理（种子时间戳相对拍摄日生成） |
 | 提交前 | 缩到 1600px 宽（系统 Python 的 Pillow：LANCZOS + `optimize=True`），单张 ≤ 600KB 上下（见文末资产政策） |
 
@@ -73,7 +73,7 @@ rm -rf ~/Documents/galley-refs/galley-site
 
 | 项目 | 领域 | 内含会话 |
 |---|---|---|
-| 维特根斯坦哲学与 LLM | 知识 | PI §43 与工具调用的语义整理（已完成，`projects.png` 主区）· 「语言游戏」概念的产品化笔记（未读）· 《哲学研究》中译本豆瓣评分对比（已完成）· 筹备读书会（**Goal 完成态**，`goal.png`） |
+| 维特根斯坦哲学与 LLM | 知识 | PI §43 与工具调用的语义整理（已完成，`projects.png` 主区）· 「语言游戏」概念的产品化笔记（未读）· 《哲学研究》中译本豆瓣评分对比（已完成）· 筹备读书会（已完成） |
 | 九月搬家 | 生活 | 三家搬家公司报价与评价对比（已完成，表格，`tools.png` 主区）· 下周三去杭州的高铁班次（清单）· 旧家具二手挂牌文案（短文） |
 | galley-site | Dev | 给 galley-site 加导览页并接进导航（已完成，`reading.png` 主区）· 排查 CI 缓存命中率下降（**running · 思考中**）· 跟进 #1234 PR 的 review 反馈（**supervisor 徽标**） |
 
@@ -87,7 +87,7 @@ rm -rf ~/Documents/galley-refs/galley-site
 整理（已停用）。
 
 **产出形态分布**：表格 ×5、编号或圆点清单 ×3、代码块 ×1、短文 ×1、一句话
-结论 ×3。**工具组合**：每条会话的工具序列不重样（web_scan / web_execute_js
+结论 ×4。**工具组合**：每条会话的工具序列不重样（web_scan / web_execute_js
 / file_read / file_write / file_patch / code_run 各有出场）。每条 final 都带
 telemetry（「N 步 · 用时」页脚）。
 
@@ -115,8 +115,7 @@ reports*）。豆瓣一条换成 Goodreads 英译本对比。
 | `hero-dark.png` | 同上，暗色主题 | 同上 | 切换外观 → 等 tooltip 消失再拍 | 同上；右上外观 tooltip 不入镜 |
 | `tools.png` | 打开「三家搬家公司报价与评价对比」，展开一次工具调用，参数与结果可见，下方是结果表 | 工具时间线 | 点开会话 → 点第 2 步的 `web_execute_js` 展开 | 展开态的参数 / 结果 / 耗时；折叠态的另一次调用同框；final 表格入镜 |
 | `reading.png` | 阅读面板分栏：左边「给 galley-site 加导览页并接进导航」，右边演示仓库的工作区改动 | 阅读面板 | 点开会话 → 顶栏「查看工作区改动」→ 选择仓库 `~/Documents/galley-refs/galley-site` → 文件列表选 `src/styles.css` → 双列显示 | 文件列表 3 改 1 新；diff 双列；「与最新提交比较 · <hash>」头；左侧 final 的文件清单 |
-| `projects.png` | 侧栏「项目」分区里展开项目组「维特根斯坦哲学与 LLM」，主区打开「PI §43 与工具调用的语义整理」显示对照表（2026-10-08 起没有项目视图，待重拍） | 项目工作区 + 多会话并行 | 「项目」分区若折叠先点分区头展开 → 点「维特根斯坦哲学与 LLM」组行展开 → 点开 PI §43（已完成行，安全） | 置顶下的「项目 3」分区头；展开的组行（双行汇总）含 Goal 完成态与未读行；另外两个项目的组行折叠在列；时间桶里只有项目以外的会话；主区对照表 |
-| `goal.png` | 打开「筹备读书会」，Goal 章节框：委派、三条旁白、收口交付 | Galley Goal | 点开会话 | 目标锚点；三条旁白章节标记；交付摘要 |
+| `projects.png` | 侧栏「项目」分区里展开项目组「维特根斯坦哲学与 LLM」，主区打开「PI §43 与工具调用的语义整理」显示对照表（2026-10-08 起没有项目视图，待重拍） | 项目工作区 + 多会话并行 | 「项目」分区若折叠先点分区头展开 → 点「维特根斯坦哲学与 LLM」组行展开 → 点开 PI §43（已完成行，安全） | 置顶下的「项目 3」分区头；展开的组行（双行汇总）含已完成会话与未读行；另外两个项目的组行折叠在列；时间桶里只有项目以外的会话；主区对照表 |
 | `scheduled.png` | 定时任务对话框，背后主区是「昨日支出汇总」 | 定时任务、后台常驻 | 先点开「昨日支出汇总」→ 侧栏「定时」→ 对话框 | 三条任务三种重复方式；一条带「上次 …」可打开；一条「尚未运行」；一条已停用 |
 | `search.png` | ⌘K 已输入「整理」（en: sort），标题与正文两类命中，高亮停在一条正文命中 | 持久化 + 搜索 | ⌘K → 输入 → 键盘下移到正文命中 | ≥3 条标题命中 + ≥1 条正文命中；浮层 + 半透明遮罩构图 |
 
@@ -152,8 +151,8 @@ hero 保持 `<picture prefers-color-scheme>`；导览网格替换现有 Screensh
 | | |
 |---|---|
 | ![Tool timeline](docs/screenshots/en/tools.png)<br/><sub>Tool timeline — every call's arguments, result, and timing, inline</sub> | ![Reading panel](docs/screenshots/en/reading.png)<br/><sub>Reading panel — review worktree changes beside the conversation</sub> |
-| ![Project view](docs/screenshots/en/projects.png)<br/><sub>Project view — sessions advancing around one project</sub> | ![Goal](docs/screenshots/en/goal.png)<br/><sub>Goal — a long-running objective with chapter markers</sub> |
-| ![Scheduled tasks](docs/screenshots/en/scheduled.png)<br/><sub>Scheduled tasks — a prompt that runs itself every morning</sub> | ![Search](docs/screenshots/en/search.png)<br/><sub>⌘K — every past conversation, straight to the matching line</sub> |
+| ![Project view](docs/screenshots/en/projects.png)<br/><sub>Project view — sessions advancing around one project</sub> | ![Scheduled tasks](docs/screenshots/en/scheduled.png)<br/><sub>Scheduled tasks — a prompt that runs itself every morning</sub> |
+| ![Search](docs/screenshots/en/search.png)<br/><sub>⌘K — every past conversation, straight to the matching line</sub> | |
 ```
 
 中文版同构（`docs/screenshots/zh/`，标题「截图」）。旧的 `01-hero` …
@@ -164,7 +163,7 @@ hero 保持 `<picture prefers-color-scheme>`；导览网格替换现有 Screensh
 进 git 的二进制**永远留在历史里**——删除和替换都只会让仓库更大，不会
 更小。所以规则设在入口处：
 
-- **只提交被文档引用的资产**。README 截图 = 上方场景清单的 8 张 × 双语，
+- **只提交被文档引用的资产**。README 截图 = 上方场景清单的 7 张 × 双语，
   重拍**同名覆盖**，不新增文件、不留旧版（旧版在 git 历史里）。
 - **提交前压尺寸**：README 截图导出后先缩到 2× 展示宽（README 展示宽
   800px → 图片 1600px 宽即可，无需 3200px 原始 Retina 尺寸），PNG 走一遍

@@ -195,14 +195,14 @@
 - **状态**：暂缓（2026-10-07 JC 裁决：截图先不动，不重拍；README 文字已刷新，截图与图注原样保留）。
 - **提出**：2026-10-07，README 全面排查。
 - **启动信号**：任一即可。① UI 一轮大改收尾（Settings 逐页第二段与暗色复查做完），外壳短期不再变；② 有用户或社区
-  反馈截图与实物对不上（尤其 Goal）；③ Goal 或运行区再改版，`goal.png` / `hero.png` 偏差继续扩大。
-- **方案**：18 张全部早于 v0.4.16 起的改版；`goal.png` 仍是 v1 的「3 个 Agent · 预算 30 分钟」，图注「章节标记」
-  已失效；`hero` 差异最大。照 v2 playbook 由 JC 实拍，可分批先 `goal` + `hero`，图注随图改。同日版式打磨
+  反馈截图与实物对不上；③ 运行区再改版，`hero.png` 偏差继续扩大。
+- **方案**：全部早于 v0.4.16 起的改版（2026-10-13 Goal 移除时中英两张 `goal.png` 已删，剩 16 张；其余截图里若拍到
+  Goal 入口也随之过时）；`hero` 差异最大。照 v2 playbook 由 JC 实拍，可分批先 `hero`，图注随图改。同日版式打磨
   （[devlog](./2026-10-07-readme-visual-pass.md)）把依赖重拍的第三层并到这里：导览从 2×3 小图（每张约 370px，
   手机上约 150px，UI 读不出）改成大图逐张或局部特写；补深色版截图（现在深色模式下是 6 块浅色图块）；
   一段 20–40 秒真实任务的演示视频（user-attachments 上传的 mp4 能在 README 里内联播放）。
-- **实施要点**：重拍前先修 `scripts/seed-screenshots.py` 的 goals 插入（仍写 039 迁移删掉的 v1 列，种子会失败），
-  并把 playbook 的 goal 场景改成 v2。
+- **实施要点**：种子脚本的 goals 插入与 playbook 的 goal 场景已随 Goal 移除删掉（[devlog](./2026-10-13-remove-goal.md)）；
+  重拍前先跑一遍种子，确认其余场景都能生成。
 - **关联**：`.scratch/readme-screenshots-v3/PRD.md`；[README 刷新 devlog](./2026-10-07-readme-refresh.md)；
   [截图 playbook](../screenshot-playbook.md)。
 
@@ -366,27 +366,23 @@
 
 ---
 
-## Goal「用满时间」模式（use_budget）
+## 长任务续跑：Goal 移除后若要回来（原 Goal「用满时间」use_budget）
 
-- **状态**：暂存（2026-09-16 goal v2 真机后讨论，JC 裁决先按 Codex「干完为止」用法）
-- **提出**：2026-09-16，[goal v2 devlog](./2026-09-16-goal-v2-codex-shape.md) 后记四。
-- **启动信号**：JC 实际用 goal 的主场景是「离开桌面扔一个长任务」或「quota
-  快重置、把余量用掉」——即想让 agent 把时间用满；若真机里反复出现「10 分钟
-  上限、2 分钟就自判完成」的落差，或出现明确想烧 quota 的场景，启动。
-- **方案**：同一引擎加 `goals.mode`（`until_done` / `use_budget`）。`use_budget`
-  必须有上限；续跑提示换一版——预算是计划不是上限，每轮必须是有据的改进
-  （审计当前最佳的缺口 → 沿目标扩展 → 验证，维护「当前最佳」，不复述不翻工不
-  越界）；完成收紧为「连续两轮审计无改进才可打 complete」；到点走现有收尾轮，
-  `budget_limited` 文案改「时间用满」。
-- **实施要点**：039 未发版可直接加列；`CreateGoalInput.mode`；`goal_prompts.rs`
-  一份续跑变体；确认框两档开关；CLI flag；文档。引擎与状态机不动。
-- **待定**：默认模式（讨论时倾向 `use_budget`）；`use_budget` 下是否完全禁止
-  提前完成；预算按「截止时刻」输入（quota 重置时间）作为自定义框的第二种写法。
-- **与 v1 的区别**（防止被当成回退）：v1 solo 的 nudge 只说「不能宣告完成、继续
-  提高质量」，没有定义有效改进；这里靠 Codex 式的上一轮分类与审计协议约束，
-  且允许在真正做到头时停。
-- **关联**：[goal v2 devlog](./2026-09-16-goal-v2-codex-shape.md)、
-  `.scratch/goal-simplify/PRD.md` §6 裁决 2。
+- **状态**：暂存，2026-10-13 改写（Goal 整体移除，见 [devlog](./2026-10-13-remove-goal.md)；原 `use_budget`
+  方案依附的 Core 引擎已删，「同一引擎加 `goals.mode`」不再成立）。
+- **提出**：2026-09-16，[goal v2 devlog](./2026-09-16-goal-v2-codex-shape.md) 后记四（JC 的主场景是「离桌扔长任务 /
+  把 quota 用满」）；2026-10-13 随 Goal 移除改写为回归路径。
+- **启动信号**：一个月内 ≥3 次「长任务中途手动发『继续』」（`workbench.db` 的 user 行可查），或社区有人要回
+  Goal / 「把时间用满」。
+- **方案（按序，前一步够用就停）**：
+  1. 改 GA 每次 `put_task` 的 180 步上限（`managed-ga/code/agentmain.py:218`，一行内置补丁）；
+  2. 接上游 `reflect/goal_mode.py` + `memory/goal_mode_sop.md`（已是「用满预算」语义；但它起独立进程，
+     要先解决 Galley 看得见、停得掉）；
+  3. 最后才考虑在 Core 自建续跑循环。v2 实现见 git 历史（移除前最后版本 `e1125549`），`use_budget` 的
+     审计式续跑协议见 goal v2 devlog 后记四。
+- **背景**（2026-10-13 核实）：本机 5 个 v2 goal 续跑 0 次；478 个用户任务单任务最多 52 步，≥80 步 0 个。
+- **关联**：[remove-goal devlog](./2026-10-13-remove-goal.md)、`.scratch/remove-goal/PRD.md`、
+  [goal v2 devlog](./2026-09-16-goal-v2-codex-shape.md)。
 
 ---
 
@@ -396,7 +392,7 @@
 - **提出**：2026-08-23，JC 指多步 run 过程区空间利用率低、层级应低于 final answer。当日已落的 A 刀：run 内 `mt-3` 两档间距 + 裸步合并（详见 devlog）。以下是当时评估过、刻意没动的三把更大的刀。
 - **B. 全面单行合并**（每步 marker+pill 合一行）：**2026-09-16 真机试过并否决**——`flex-wrap` 变体（summary 装得下时 pill 跟在句尾、装不下折行，一行步 31）落地一轮（`0270ff56`，已 revert），JC：「太密集后，单个步骤的阅读体验其实变得更差了」。否决理由记入 [步号淡一档 devlog](./2026-09-16-step-marker-recede-and-reference-audit.md) 后记九：密度与阅读体验在同一套静态排版里无解，空间问题改按状态分流（完成即折、live 封顶另议）。**不再作为密度手段重提**；若将来重开，只能以「阅读形态本身更好」为由，且要同时解决同行两个披露 caret 的问题。
 - **C. timeline / rail 重塑**（左侧竖轨连接步骤的日志形态）：
-  - 启动信号：过程区的角色从「瞬态过程日志」变成「需要长期回看的执行轨迹」（例如 Goal 场景要求跨 run 审计）。在 settled run 会折进 RunFoldHeader 的现状下，为瞬态区域做重皮肤不值。
+  - 启动信号：过程区的角色从「瞬态过程日志」变成「需要长期回看的执行轨迹」（例如需要跨 run 审计的长任务）。在 settled run 会折进 RunFoldHeader 的现状下，为瞬态区域做重皮肤不值。
 - **横向利用率 / 列宽**：inline pill 右对齐 mono 工具名在宽窗口下拉出大片死区；conversation 列没有 max-width，是否该有 measure 是独立且更大的排印题（会牵动正文行长）。
   - 启动信号：JC 在宽屏 dogfood 中对行长或死区有实感；或做阅读排印批次时一并。
 - **关联**：[密度 pass](./2026-08-23-step-density-pass.md)；下一节「第 1 步前缀收敛」（B 的规范近亲）；`conversation.md` §4.3 间距演化史第 6 条。
@@ -611,8 +607,8 @@
   留白扛，未必构成实感问题。
 - **方案**：把 `MessageUser` 外层 wrapper 的上边距升到 `mt-7` / `mt-8`
   （保持 `mb-5`），使轮间 ≥ 28px > 24px，恢复「对间 > 对内」排序。
-- **待定**：具体档位（28 vs 32px）；`GoalCommissionMarker` 前的间距是否
-  同步。
+- **待定**：具体档位（28 vs 32px）。（原「`GoalCommissionMarker` 前的间距是否同步」随 2026-10-13
+  Goal 移除作废。）
 - **关联**：[run-fold header spacing](./2026-08-06-run-fold-header-spacing.md)、
   [user message highlighter](./2026-08-06-user-message-highlighter.md)。
 
@@ -661,13 +657,13 @@
 
 ---
 
-## 架构审查第二轮剩余候选(useComposerGoal / GaSession gate / quick wins)
+## 架构审查第二轮剩余候选（GaSession gate / quick wins）
 
 - **状态**:暂存
 - **提出**:2026-07-28(架构审查第二轮收尾,见 [审查 devlog](./2026-07-28-architecture-review-deepening-round.md);四个 Strong 候选已落地,以下为 Worth exploring 档)
 - **启动信号**:下次动到对应模块时顺手做,或再跑一轮架构审查时按新鲜度重估。
 - **候选 5**（hive Goal controller helpers 收窄）随 2026-09-16 goal v2 退役 `cli/src/goal/` 一并消失。
-- **候选 6 · useComposerGoal 13 出参收成 goalView**:26 成员 interface 罩 ~90 行逻辑,3 个入参是回调回 caller,10 个返回值原样穿过 Composer 进 ComposerGoalControls。改返回 `goalView` 对象 + 4 action。
+- **候选 6**（useComposerGoal 出参收成 goalView）随 2026-10-13 Goal 移除一并消失。
 - **候选 7 · GaSession seam grep gate**:seam 本身干净(bridge 11 处调用零 reach-in),但"re-audit 面 = 一个文件"的承诺无 CI 强制,且 `managed_im_supervisor.py:346` 的 `_galley_im_prompt_installed` 写入是结构性旁路(该路径无 Bridge)。做法:grep gate(同 `check-supervisor-sop-drift.mjs` 文风)+ docstring 补旁路,或让 supervisor 路径也构造 `GaSession(agent)`。
 - **Quick wins**:`hasRunningSessions` 收成 messages store selector(三处重推导:App.tsx / MainHeaderHost / app-update.ts);`lib/ipc/ga-output-cleaning.ts` 补测试(纯函数、流式热路径、零覆盖);`socket_listener/` 的 `use super::*` 互 glob 改具名 re-export(照 `codex_oauth/mod.rs`);`spawn_args_for_session_new` 7 参改 `&SessionBrief`+2;runtime store 补 slice-merge shape 守卫(照 `sessions.shape.test.ts`)。
 - **关联**:[架构审查第二轮](./2026-07-28-architecture-review-deepening-round.md) · ADR-0002。
@@ -750,8 +746,8 @@
   `file_write` / `file_patch`），并接了 GUI 的写入步骤入口与正文按名解析，见
   [written-file references](./2026-09-17-written-file-references.md)。本项其余
   部分（每 session 目录、软链 + `handler.cwd`、`code_run` 产物）仍暂缓。
-- **实施要点**：`workspace_path` 存 `sessions` 表首次定死（照抄
-  `goals.workspace_path`），改设置只影响新 session；空目录 session 结束时回收，
+- **实施要点**：`workspace_path` 存 `sessions` 表首次定死（照 v1 Goal 的
+  `goals.workspace_path`，代码已随 Goal 退役，做法见 git 历史），改设置只影响新 session；空目录 session 结束时回收，
   **不写标记文件**（会废掉回收）；工具调用的绝对路径**在 bridge 现场解析**
   （事后推导会在项目模式和 agent 自行 chdir 时猜错，而错的绝对路径比相对路径
   更坏），存进 `messages.tool_calls` 而**不复活 `tool_events`**（那是审批审计表，
@@ -809,8 +805,7 @@
   站点因别的原因重做时顺带评估。
 - **方案**：thinking 行已改状态文字扫光（§2.7 唯一豁免），RunElapsedHud
   已改「计数器即活性」的无动效形态，LiveDots 仍服役于 ToolCallout
-  （运行中工具）；goal 运行尾标随 2026-09-16 goal v2 退役（v2 的暂停 /
-  受阻尾标是静态的，无活性信号）。暂不统一的论证：工具级忙碌不是「LLM
+  （运行中工具）；goal 运行尾标已随 Goal 退役（2026-10-13 整体移除）。暂不统一的论证：工具级忙碌不是「LLM
   正在思考」，三点作为通用 working 指示语义成立；且 §2.7 豁免边界写明
   「一视图至多一处 shimmer」，全量迁移会直接违反刚立的边界。
 - **实施要点**：若启动，方向不是「都改 shimmer」而是逐站点问「这里的
@@ -936,7 +931,7 @@
 
 - **状态**：暂存（2026-09-14 开放 `max_retry_after` 时浮出，有意不并入）
 - **提出**：2026-09-14，[高级配置开放 max_retry_after](./2026-09-14-max-retry-after-advanced-option.md) 的余量项。
-- **启动信号**：有人把重试等待上限调大后抱怨「像卡死」；或无人值守（Goal / Supervisor）任务因可重试错误直接死掉的投诉——后者同时是「Retry-After 超上限时睡到上限再重试」这条语义改动的启动信号，两条一起做。
+- **启动信号**：有人把重试等待上限调大后抱怨「像卡死」；或无人值守（定时任务 / Supervisor）任务因可重试错误直接死掉的投诉——后者同时是「Retry-After 超上限时睡到上限再重试」这条语义改动的启动信号，两条一起做。
 - **背景**：内核 `_stream_with_retry` 退避期间只 `print` 一行 `[LLM Retry] HTTP 524, retry in 90.0s (1/4)`，core / runner / gui 无人消费，用户看到的是转圈。停止按钮能打断这段睡眠（`agentmain.py` 把 `should_stop` 接进了可中断 sleep），所以不是死锁，是静默等待。上限默认 60 秒时静默最长 60 秒；开放旋钮后用户可以把它调到几分钟，静默随之变长。
 - **方案**：runner 把 `[LLM Retry]` 行识别成结构化事件（或给内核加一个 emit-only 的 retry hook，走 0007 一类的补丁），经 IPC 以纯增量事件上报，GUI 在会话状态条 / 步序列里显示「服务商要求稍后重试，Ns 后重发（可停止）」。协议纯增量。
 - **实施要点**：只做 emit，不改重试决策；IM 端不必显示。
@@ -1055,8 +1050,8 @@
 
 - **状态**：暂存（2026-09-28 用户消息时间 A + B 定案时拆出）
 - **提出**：2026-09-28，[用户消息发送时间](./2026-09-28-user-message-send-time.md)讨论。
-- **启动信号**：JC 或社区第一次问「这个几点跑完的」；或出现超过 1 小时的运行（过夜 Goal、定时任务）。
-- **背景**（已核实，别重查）：v1 只给用户消息显示时间。截至 2026-09-23 的 409 轮运行（提问 → 最后一条助手行）里 281 轮不到 1 分钟、115 轮 1–5 分钟、13 轮 5–30 分钟，最长 28.9 分钟，同一套「超过 1 小时」规则套到回答上 0 处触发；回答操作栏当时是常显的，放进去就等于每条回答都有时间（同日操作栏改为悬停显示，「放进悬停的操作栏」因此成了另一个候选位置）。折叠头的「用时」不含 ask_user 等待，不能拿「提问时刻 + 用时」推完成时刻。新 Goal（09-16 合入）的长运行还没进数据。
+- **启动信号**：JC 或社区第一次问「这个几点跑完的」；或出现超过 1 小时的运行（过夜长任务、定时任务）。
+- **背景**（已核实，别重查）：v1 只给用户消息显示时间。截至 2026-09-23 的 409 轮运行（提问 → 最后一条助手行）里 281 轮不到 1 分钟、115 轮 1–5 分钟、13 轮 5–30 分钟，最长 28.9 分钟，同一套「超过 1 小时」规则套到回答上 0 处触发；回答操作栏当时是常显的，放进去就等于每条回答都有时间（同日操作栏改为悬停显示，「放进悬停的操作栏」因此成了另一个候选位置）。折叠头的「用时」不含 ask_user 等待，不能拿「提问时刻 + 用时」推完成时刻。
 - **方案**：折叠头悬停提示显示「14:32 开始 · 02:14 结束」，对话流不加元素（run-fold PRD 当初给时间戳留的位置）。完成时刻取 run 最后一条助手行的 `created_at`，需要给 `AgentTurn` 补时间字段（`rowsToTurns` 与 live `turn_end` 两条路径）。
 - **待定**：运行超过 1 小时是否在折叠头常显完成时刻，而不只是悬停。
 - **关联**：`gui/src/components/conversation/RunFoldHeader.tsx` · `gui/src/stores/messages/rowsToTurns.ts` · [用户消息发送时间](./2026-09-28-user-message-send-time.md)

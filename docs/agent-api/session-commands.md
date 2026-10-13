@@ -436,7 +436,7 @@ pauses 1 second, probes Core and reads the database again, and completes
 only if that second read still passes both conditions; the final frame is
 built from that second read. Otherwise it keeps polling as usual. The
 reason: the re-check rides over the brief gap between two runs when Core
-dispatches a Goal continuation or a queued message. (Before 2026-10-07 it
+dispatches a queued message. (Before 2026-10-07 it
 also let the last agent row land: rows were written only when a GUI page
 handled the `turn_end`. Core now writes every row itself, before it closes
 the run on `run_complete`, so an ended run's rows are already in the

@@ -6,7 +6,7 @@ command and workflow details.
 CANONICAL SOURCE: docs/integrations/galley-supervisor-reference.md in the
 github.com/wangjc683/galley repository.
 
-Last synced: 2026-10-12 (`session show --around` / time window row).
+Last synced: 2026-10-13 (Goal removed; target schemaVersion 3).
 
 If you find divergence between this copy and the canonical file, the
 canonical version wins except for agent-runtime identity strings.
@@ -18,16 +18,15 @@ This is the detailed reference for people maintaining or auditing the
 [Galley Supervisor SOP](./galley-supervisor-sop.md). The SOP is the copy-first
 document shown in Settings and should stay short. This reference can be longer.
 
-Target: Agent API `schemaVersion: 2` (since `v0.5.0`; only the `goal` family is
-`2`-only, every other command still answers `1`; additive-only within a version;
-this text reflects the CLI surface on `main` as of the review date). Last
-reviewed: 2026-09-09.
+Target: Agent API `schemaVersion: 3` (since 2026-10-13; `1` / `2` still answer
+every unchanged command; additive-only within a version; this text reflects the
+CLI surface on `main` as of the review date). Last reviewed: 2026-09-09.
 
 ## Operating Model
 
 Galley is a local agent-session orchestrator. Supervisor agents should operate
 through the Galley CLI and let Rust Galley Core remain authoritative for
-session lifecycle, command dispatch, SQLite writes, Projects, Goals, and runner
+session lifecycle, command dispatch, SQLite writes, Projects, and runner
 ownership.
 
 The Supervisor's job is to select the lightest orchestration mode that preserves
@@ -39,7 +38,7 @@ the user's intent:
 | Add one requirement to one known thread | Existing-session follow-up |
 | One bounded task with one obvious owner | Single new session |
 | Independent angles, evidence gathering, review, or synthesis | Project-backed session group |
-| One objective the agent should keep pushing on its own until done | Galley Goal (one session, auto-continues) |
+| One objective the agent should keep pushing on until done | Single session with the end state in the prompt (see Long Tasks) |
 | Implementation or fixes with multiple concerns | Single writer plus read-only reviewers |
 | Destructive, external, credential, payment, or ambiguous work | Ask or narrow first |
 
@@ -118,8 +117,6 @@ Read commands:
 | `"$GALLEY" project brief <id>` | Project status counts and running sessions |
 | `"$GALLEY" project show <id> --tail=20` | Project sessions plus transcript tails |
 | `"$GALLEY" project follow <id> --tail=10 --until-idle --final-show` | Follow Project group until child sessions are idle |
-| `"$GALLEY" goal status <id>` | One Goal: status, ceiling, elapsed, latest summary |
-| `"$GALLEY" goal active` | Open Goals (active / paused / blocked); `[]` = none |
 | `"$GALLEY" llm list` | LLM names `llm set` accepts, for the current runtime (`--runtime=managed` / `--runtime=external` to pick one) |
 | `"$GALLEY" health` | Troubleshooting |
 
@@ -137,9 +134,6 @@ Write commands:
 | `"$GALLEY" session move <id> --to=<project-id> --supervisor=<id> --reason=<why>` | Move session to Project; omit `--to` to unassign |
 | `"$GALLEY" project create "<name>" --supervisor=<id> --reason=<why>` | Create a Project |
 | `"$GALLEY" project delete <id> --supervisor=<id> --reason=<why>` | Delete Project; sessions survive but become unassigned |
-| `"$GALLEY" goal start <session-id> "<objective>" --budget-minutes=60 --supervisor=<id> --reason=<why>` | Set a Goal on a session and dispatch its opening turn; `--no-budget` removes the ceiling |
-| `"$GALLEY" goal stop <id> --supervisor=<id> --reason=<why>` | Stop a Goal now (aborts the current turn; no wrap-up) |
-| `"$GALLEY" goal extend <id> --minutes=30 --supervisor=<id> --reason=<why>` | Give a Goal more time; reopens a `budget_limited` Goal and continues it |
 | `"$GALLEY" llm set <session-id> "<llm-name>"` | Switch a session's LLM |
 
 ## Live State
@@ -335,55 +329,21 @@ For implementation or fix requests, prefer single writer, multiple reviewers:
 Create multiple writer sessions only when ownership is non-overlapping and
 explicit in every child prompt.
 
-## Goal
+## Long Tasks
 
-A Galley Goal is one persistent objective on one session (schemaVersion 2).
-Once set, Galley Core re-prompts that session to keep working whenever it
-goes idle, until the model declares the objective complete or blocked, the
-time ceiling is reached, or the user stops it. There are no workers,
-proposals, confirm tokens, task boards or deliverable anchors; the session's
-thread is the record and the completing run's final answer is the result.
+For work the user wants carried through to the end, use one session and put
+what "done" looks like into the task itself: the end state, how to check it,
+and what to hand back. Then watch it:
 
-Do not use Goal just because a task has two obvious subtasks. Use it when
-the user explicitly wants sustained autonomous work toward a verifiable end
-state.
+- `session wait --until-idle` for a bounded check (keep `--timeout` at or
+  below ~600 seconds, see Result Retrieval), or `session follow` to observe.
+- If a run stops before the end state (`lastExit` is `MAX_TURNS_EXCEEDED`,
+  or the answer is a milestone rather than the result), send the next
+  instruction on the same session and wait again with `--after-turn`.
+- A pending question (`live.askPending`) needs an answer, not a nudge; see
+  Live State.
 
-```bash
-"$GALLEY" goal start <session-id> "<objective>" \
-  --budget-minutes=60 \
-  --supervisor=my-agent/v1 \
-  --reason="user asked Galley to keep working on this until done"
-```
-
-- The session must be idle and carry no open Goal; otherwise
-  `invalid_args` (wait with `session wait` / stop the open Goal). Sessions
-  may each run their own Goal.
-- `--budget-minutes` is a ceiling (default 60); `--no-budget` removes it.
-  When it is reached the model gets one wrap-up turn and the Goal ends as
-  `budget_limited` — distinct from failure.
-- Summarize for the user: objective, session, ceiling, and that any message
-  they send to the session steers the Goal.
-
-During a Goal:
-
-```bash
-"$GALLEY" goal status <goal-id>
-"$GALLEY" goal active
-"$GALLEY" goal stop <goal-id> --supervisor=<id> --reason=<why>
-"$GALLEY" goal extend <goal-id> --minutes=30 --supervisor=<id> --reason=<why>
-```
-
-Statuses: `active` / `paused` / `blocked` are open; `completed` /
-`budget_limited` / `stopped` / `failed` are terminal (`budget_limited` can
-be reopened with `goal extend` when the user wants more). `paused` follows a
-stopped turn or a Galley restart; `blocked` follows a repeated blocker the
-model reported (or a runtime error) — read `latestSummary`, get what it
-needs from the user, and send that to the session: the next user-initiated
-run resumes the Goal. `goal stop` is immediate.
-
-Attach/external GA safety is unchanged: external GA only participates
-through ordinary Galley session prompts. Goal state lives in Galley Core;
-nothing about it is written to GA memory/SOP.
+There is no command that keeps a session going on its own.
 
 ## User-Facing Copy
 
@@ -470,16 +430,11 @@ queued messages or answer a pending question; answer with `session send`.
 may still finish later. `status:"session_error"` / `"session_cancelled"`
 mean the session died or was cancelled; see Result Retrieval.
 
-`goal start` rejects a session that is mid-run or already has an open Goal
-with `invalid_args` (the message names the open Goal); check `goal active`
-or `session brief` first.
-
 ## Boundaries
 
 Do not:
 
 - modify external GA memory, SOP, skills, config, venv, or runtime state
-- store Goal state in GA memory/SOP (Galley Core owns it)
 - pretend to inspect a session without a read command
 - create many sessions without a clear split
 - create multiple writer sessions for the same files
@@ -494,7 +449,6 @@ You may:
 - write clear task prompts for Galley sessions
 - split work into parallel sessions
 - create small Project-backed groups and synthesize their results
-- start a Galley Goal after the user explicitly asks for autonomous work
 - ask clarifying questions when the split is uncertain
 - summarize and merge results for the user
 

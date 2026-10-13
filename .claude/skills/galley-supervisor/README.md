@@ -3,9 +3,8 @@
 A Claude Code skill that lets Claude manage your local Galley desktop
 orchestrator through the `galley` CLI: inspect what is running, start or
 continue sessions, split work into a Project-backed group, wait for
-results, archive / restore / move sessions, switch a session's model, or
-run a Galley Goal after your confirmation — all from a Claude
-conversation.
+results, archive / restore / move sessions, or switch a session's model —
+all from a Claude conversation.
 
 > **Need Galley first.** This skill assumes you have Galley installed and
 > have launched it at least once (so the CLI discovery file at
@@ -65,12 +64,12 @@ and wait for your approval first.
 |---|---|
 | `SKILL.md` | The thin skill body Claude reads on trigger: identity, host-specific notes, and a pointer to the SOP. The procedure itself is not restated here. |
 | `references/galley-supervisor-sop.md` | The operating procedure (verbatim copy of `docs/integrations/galley-supervisor-sop.md`, CI-checked). |
-| `references/galley-supervisor-reference.md` | Detailed commands, Goal (v2), origin fields, boundaries (verbatim copy of `docs/integrations/galley-supervisor-reference.md`, CI-checked). |
+| `references/galley-supervisor-reference.md` | Detailed commands, origin fields, boundaries (verbatim copy of `docs/integrations/galley-supervisor-reference.md`, CI-checked). |
 
 ## Schema + stability
 
-This skill targets **Galley CLI `schemaVersion: 2`** (since `v0.5.0`). Only
-the `goal` family is `2`-only; every other command still answers `1`.
+This skill targets **Galley CLI `schemaVersion: 3`** (since 2026-10-13).
+`1` and `2` still answer every command that did not change.
 Changes within a version are additive-only; a breaking change bumps the
 version and ships as a new skill version.
 

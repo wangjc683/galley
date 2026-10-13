@@ -95,7 +95,7 @@ Galley 的视觉与交互气质 = **Notion + Claude**。
 | `--color-brand-tint` | `bg-brand-tint` | `#F1DECE` | 比 brand-soft 更实的杏沙 band，用作用户消息底（长对话滚动可扫） |
 | `--color-brand-strong` | `bg-brand-strong` / `text-brand-strong` | `#C68762` | 杏沙 hover/active；当前 step 状态 icon、Submit hover |
 | `--color-success` | `text-success` / `bg-success` | `#5A8C5A` | 成功状态 line icon |
-| `--color-warning` | `text-warning` / `bg-warning` | `#BF7A1F` | 深琥珀 warning（与杏沙拉开 13° 色相）。**只表示警示 / 注意**（Stop、ask_user 等你回复），不作功能身份色——Goal 等功能用品牌杏沙，避免稀释琥珀的警示力；Browser Control 未连接 2026-10-04 起是「待解锁」邀请，改用杏沙（见 layout-and-chrome §4.1） |
+| `--color-warning` | `text-warning` / `bg-warning` | `#BF7A1F` | 深琥珀 warning（与杏沙拉开 13° 色相）。**只表示警示 / 注意**（Stop、ask_user 等你回复），不作功能身份色——功能用品牌杏沙，避免稀释琥珀的警示力；Browser Control 未连接 2026-10-04 起是「待解锁」邀请，改用杏沙（见 layout-and-chrome §4.1） |
 | `--color-error` | `text-error` / `bg-error` | `#B14545` | 深红 |
 | `--color-info` | `text-info` / `bg-info` | `#7A7A8E` | muted 灰蓝（info severity） |
 
@@ -145,7 +145,7 @@ Dark theme 是 Galley light theme 的夜间版本，不是另一个产品方向�
 | `--color-ink-muted` | `#858B93` | hint / timestamp |
 | `--color-hover` | `#24272C` | 中性 hover |
 | `--color-selected` / `--color-brand-soft` | `#3E3026` | 杏沙 tint |
-| `--color-brand-tint` | `#362D24` | 用户消息气泡底。2026-09-17 由 `#4D3B2B` 收响度：原值比画布亮 OKLCH +16.5、彩度 0.036 高于 light，且亮过 elevated / hover 整个阶梯，读作贴在黑底上的发光面板；现 +10 / C 0.020 / 色相 63 不变（light 步长的 1.4 倍、彩度的三分之二，与 07-25 去暖地面同一逻辑）。委派标记与 armed Composer 同穿此 token，一起变安静 |
+| `--color-brand-tint` | `#362D24` | 用户消息气泡底。2026-09-17 由 `#4D3B2B` 收响度：原值比画布亮 OKLCH +16.5、彩度 0.036 高于 light，且亮过 elevated / hover 整个阶梯，读作贴在黑底上的发光面板；现 +10 / C 0.020 / 色相 63 不变（light 步长的 1.4 倍、彩度的三分之二，与 07-25 去暖地面同一逻辑） |
 | *(sidebar 内覆写)* | `--color-hover` `#282C32` / `--color-selected` `#4D3B2B` | `.chrome-hover-scope`，见下方；light 侧同名覆写 `--color-selected` `#E7D8C0`。dark 的 selected 曾与 `brand-tint` 同值但**从不绑定**（标定重合，见 [选中行三通道](../devlog/2026-08-21-sidebar-selected-row-three-channels.md)）；2026-09-17 brand-tint 收响度后两者分开，selected 不动 |
 | `--color-brand` | `#D6A083` | 品牌主色 |
 | `--color-brand-strong` | `#E2AE8D` | 品牌 hover / link |
@@ -319,7 +319,7 @@ Galley 有两套**并行**的字号系统，分属不同表面，二者不互相
 
 | CSS var | small | **standard** | large | 用途 |
 |---|---|---|---|---|
-| `--conversation-body-size` / `-leading` | 13.5 / 1.65 | **15 / 1.7** | 16.5 / 1.75 | agent + 用户消息 + goal 委派正文 |
+| `--conversation-body-size` / `-leading` | 13.5 / 1.65 | **15 / 1.7** | 16.5 / 1.75 | agent + 用户消息正文 |
 | `--conversation-thinking-size` / `-leading` | 13 / 1.5 | **14 / 1.55** | 15.5 / 1.6 | italic thinking summary |
 | `--conversation-step-size` | 11.5 | **12** | 12.5 | TurnMarker 行（summary 字号；序号走 mono 档） |
 | `--conversation-tool-label-size` | 10.5 | **11** | 11.5 | inline pill 主标签（2026-09-16 降一档与 mono 同档，退到 step summary 之下） |
@@ -331,7 +331,7 @@ Galley 有两套**并行**的字号系统，分属不同表面，二者不互相
 | `--conversation-heading-3-size` | 15.5 | **17** | 18.5 | markdown h3（故意接近正文） |
 | `--conversation-heading-4-size` | 14 | **15.5** | 17 | markdown h4 |
 | `--conversation-table-size` | 13 | **14** | 15.5 | markdown 表格 |
-| `--conversation-goal-narration-size` / `-leading` | 12.5 / 1.55 | **13 / 1.6** | 14.5 / 1.65 | 线程内 Goal 旁白（降权） |
+| `--conversation-narration-size` / `-leading` | 12.5 / 1.55 | **13 / 1.6** | 14.5 / 1.65 | 线程内系统叙述行（降权；2026-10-13 由 `--conversation-goal-narration-*` 改名） |
 | `--conversation-composer-size` | 13.5 | **14.5** | 16 | Composer textarea |
 
 **B. UI chrome 面 — 固定值 token**

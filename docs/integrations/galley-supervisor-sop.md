@@ -4,16 +4,15 @@
 > When the user asks you to inspect, create, continue, split, wait for, or
 > manage Galley work, you are acting as a **Galley Supervisor**.
 >
-> Target: Agent API `schemaVersion: 2` (since `v0.5.0`; only the `goal`
-> family is `2`-only, every other command still answers `1`; additive-only
-> within a version; this text reflects the CLI surface on `main` as of the
-> review date).
+> Target: Agent API `schemaVersion: 3` (since 2026-10-13; `1` / `2` still
+> answer every unchanged command; additive-only within a version; this text
+> reflects the CLI surface on `main` as of the review date).
 > Last reviewed: 2026-09-09.
 
 ## Trigger
 
-Use this SOP when the user asks you to operate Galley sessions, Projects, Goals,
-or model choices on this machine.
+Use this SOP when the user asks you to operate Galley sessions, Projects, or
+model choices on this machine.
 
 Do not use this SOP for ordinary chat, ordinary coding in your own workspace, or
 any cloud-only agent that cannot run local commands on the user's machine.
@@ -85,7 +84,7 @@ $GALLEY = Get-Content $Discovery | Select-Object -First 1
 ```
 
 Use `"$GALLEY"` on macOS / Linux and `& $GALLEY` in PowerShell. If you need a
-schema guard, add `--schema=2` (the `goal` family exists only under `2`).
+schema guard, add `--schema=3`.
 
 ## Choose Mode
 
@@ -95,7 +94,7 @@ schema guard, add `--schema=2` (the `goal` family exists only under `2`).
 | "Continue that session" | Existing-session follow-up |
 | One clear bounded task | Single new session |
 | Several independent angles, review, or synthesis | Project-backed session group |
-| "Keep working until it's done", "Goal", one objective the agent should keep pushing on its own | Galley Goal (one session, keeps continuing by itself) |
+| "Keep working until it's done", one long objective | Single session with the end state in the prompt (see Long Tasks) |
 | Implementation/fix across multiple concerns | One writer session plus read-only reviewers |
 | Ambiguous split, irreversible or external action, credentials, payment | Ask first |
 
@@ -243,54 +242,14 @@ same Project.
 For implementation tasks, prefer one writer and one or more read-only review or
 verification sessions. Never create multiple writers for the same files.
 
-### Start A Goal
+### Long Tasks
 
-A Goal is one persistent objective on one session: Galley re-prompts that
-session to keep working every time it goes idle, until the model declares
-the objective complete (or blocked), the time ceiling is reached, or the
-user stops it. There are no workers or proposals. Use it only when the
-user wants sustained autonomous work toward a verifiable end state; a task
-with two obvious steps is a normal session.
-
-Start it on the session that holds the context (an existing thread, or a
-fresh `session new` if none fits — then wait for that first run to settle):
-
-```bash
-"$GALLEY" goal start <session-id> "<objective>" \
-  --budget-minutes=60 \
-  --supervisor=my-agent/v1 \
-  --reason="user asked Galley to keep working on this until done"
-```
-
-`--budget-minutes` is a ceiling, not a target (default 60; `--no-budget`
-removes it). Starting a Goal still requires the user's explicit, unambiguous
-ask for autonomous work in their own language; do not infer it from a big
-task. The command fails with `invalid_args` if the session is mid-run (wait
-with `session wait`, then retry) or already carries an open Goal (the message
-names it). Different sessions may each run their own Goal.
-
-Tell the user the objective, the ceiling, and how to steer: any message they
-send to that session is picked up as guidance, and a stopped run pauses the
-Goal until their next message resumes it.
-
-During a Goal:
-
-```bash
-"$GALLEY" goal status <goal-id>
-"$GALLEY" goal active
-"$GALLEY" goal stop <goal-id> --supervisor=<id> --reason=<why>
-"$GALLEY" goal extend <goal-id> --minutes=30 --supervisor=<id> --reason=<why>
-```
-
-`status.status` is one of `active`, `paused`, `blocked` (open) or
-`completed`, `budget_limited`, `stopped`, `failed` (terminal). `blocked`
-means the model reported the same blocker for several turns and needs
-something from the user — relay `latestSummary` and send their answer to
-the session; that resumes the Goal. `budget_limited` is the ceiling, not a
-failure: the last turn wrapped up and `latestSummary` says what remains —
-if the user wants it to keep going, `goal extend <goal-id> --minutes=30`
-reopens it with that much time from now and Galley continues at once. `goal stop` is immediate (it
-aborts the current turn; no wrap-up). Only stop when the user asks.
+For work that should run until it is done, use one session and put what
+"done" looks like into the task itself: the end state, how to check it, and
+what to hand back. Watch it with `session wait --until-idle` or
+`session follow`. If a run stops early (for example `MAX_TURNS_EXCEEDED`, or
+an answer that is only a milestone), send the next instruction on the same
+session and wait again with `--after-turn`.
 
 ### Risky Actions
 

@@ -183,32 +183,11 @@ V1.0 优先服务：
 |---|---|---|
 | Follow-up Queue | `v0.4.6`（2026-08-12） | 会话消息队列：运行中 / stopping 中发送默认排队，`run_complete` 自动发出，chips 可取消或取回编辑，一键插队；CLI 增 `dispatch: "queued"` 与 `--jump`（additive）。见 [devlog](./devlog/2026-08-12-session-message-queue.md) |
 
-### 6.4 Goal 模式定位（2026-09-16 重定，取代 2026-07-06 定案）
+### 6.4 Goal 模式定位（已退役）
 
-Goal 是**挂在一个 session 上的持久目标**：设了 goal 的 session 每轮跑完若
-空闲就由 Core 自动续跑，直到模型宣告完成或受阻、到达时间上限、被停止或被
-暂停。没有 master / worker、任务板、工作区目录、收尾汇总轮；对话线程就是
-记录，完成那一轮的最终答案就是结果。形态参照 Codex `/goal`，契约见
-[agent-api §5.19](./agent-api/goal-commands.md)（`schemaVersion: 2`），决策
-过程见 [goal-simplify PRD](../.scratch/goal-simplify/PRD.md) 与 devlog。
-
-**为什么重做**：v1 的 hive / solo 双引擎三个月零使用，且把时间预算当目标
-（「不能宣告完成，用满预算」）是效果差的根源；v2 把预算改成上限、完成判定
-交给模型、循环放进 Core。
-
-**受众**：GUI 与 CLI 走同一条命令路径（`start_session_goal` /
-`goal.start` 都经 `GoalEngine`），不分先后。桌面侧保留 Composer 入口（armed
-态即穿委派正装，eyebrow 行带上限 pill，Enter 直接启动；确认框 2026-09-17
-拆除）、顶栏 pill、委派 / 收口标记、暂停 / 受阻尾标；不做专门 Goal 屏幕。
-
-**Goal ↔ Project**：无关系。goal 在它的 session 里跑，session 属不属于
-project 与 goal 无关；每个 session 至多一个 open goal，不同 session 可各跑
-一个。
-
-**何时用 Goal**（判断规则，同 Supervisor SOP）：用户明确要「自己干到干完」
-且目标有可验证终态时用 Goal；任务只是「有两个明显子步骤」不构成使用理由。
-多视角交叉验证不再是 Goal 的能力，需要时走 Project + 多 session 由
-Supervisor 编排。
+（2026-10-13 移除，见 [devlog](./devlog/2026-10-13-remove-goal.md)）Galley 不再有 Goal：
+要一直干到底的活，在任务里写清什么算做完，交给模型在一个对话里推进；中途停了，
+就在同一对话里接着发一条。2026-07-06 与 2026-09-16 两版定位的原文留在 git 历史里。
 
 ## 7. 术语表
 

@@ -81,10 +81,8 @@ rename existing ones.
 
 ### `Origin`
 
-Records the source of ordinary human/Supervisor writes, `goal start` /
-`goal stop` included. Older rows from before migration 006 may omit Origin on
-read responses. (The v1 Goal task / event writes that used `ownerSessionId` /
-`authorSessionId` instead were retired with schemaVersion 2.)
+Records the source of ordinary human/Supervisor writes. Older rows from
+before migration 006 may omit Origin on read responses.
 
 | Field         | Type            | Notes                                                                  |
 | ------------- | --------------- | ---------------------------------------------------------------------- |

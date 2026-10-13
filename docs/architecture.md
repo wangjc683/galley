@@ -49,9 +49,9 @@ subscribes to events.
 A conversation is read a page of whole turns at a time (Tauri
 `session_message_turns_page` → `SqliteGalley::persisted_message_turns_page`,
 main-chat ticket 12): the latest 50 turns on opening, the page before as the
-reader scrolls up. Core cuts the pages, never inside a turn, a run or a Goal
-episode, so the GUI rebuilds the same turns from pages as from the whole
-transcript. The phone pages by rows instead (`persisted_message_rows_page`).
+reader scrolls up. Core cuts the pages, never inside a turn or a run, so the
+GUI rebuilds the same turns from pages as from the whole transcript. The
+phone pages by rows instead (`persisted_message_rows_page`).
 
 Local file references use `LocalFileWorkspace` for session-scoped transient
 preview state. Rust `local_file` validates paths, bounds reads, and invokes the
@@ -75,8 +75,8 @@ sessions, inspect context, create sessions, send messages, move sessions,
 switch LLMs, and archive or restore work.
 
 The CLI contract is documented in [agent-api](./agent-api.md).
-`schemaVersion: 2` is current (since v0.5.0, for the Goal v2 family);
-`1` stays frozen and is still served for every command that did not change.
+`schemaVersion: 3` is current (since 2026-10-13, when Goal was removed);
+`1` (frozen) and `2` are still served for every command that did not change.
 Changes within a version are additive-only; a breaking change requires the
 next version. Since 2026-07-11 the schema's single code home is
 `core/src/protocol/` — command args, envelopes, and error tags shared
@@ -106,8 +106,7 @@ single-flight per session, and never over a running runner
 (`RunnerManager::spawn` shuts an existing one down first, which would kill
 its run). The GUI calls it through the Tauri command
 `ensure_session_runner` when it activates a session, and Core's send
-(below) calls it before every dispatch; Goal dispatch through the socket
-layer's wrapper;
+(below) calls it before every dispatch;
 socket `session.new` uses its spawn half (`spawn_and_attach`) for the
 session it just created. Every runner started this way gets the
 `runner-event` emit task, the auto-title watcher and a
@@ -133,12 +132,11 @@ is announced as `runner-history-replay` (`started`, then `done` /
 `failed`); the GUI shows "restoring" on it. The restart is quiet: while
 it replays, Core holds the runner's close, and a runner it replaces is
 retired, so neither reaches the drain task as `RunSignal::Closed` (which
-would release the run gate a Goal reserved before calling ensure and
-park the goal as paused) nor a page as `runner-closed` (which would tear
-down the listeners of the page waiting on this ensure). A held runner
-that exits and is not replaced is announced when the ensure lets go. A
-Goal on a cold session therefore gets the session's history before its
-objective. Socket `session send` is unchanged: with no runner it only
+would release the run gate Core's send reserved before calling ensure)
+nor a page as `runner-closed` (which would tear down the listeners of the
+page waiting on this ensure). A held runner that exits and is not
+replaced is announced when the ensure lets go. Socket `session send` is
+unchanged: with no runner it only
 persists (ADR-0002, ruling 1 of the ticket).
 
 The main chat is the one session whose runner holds less than its whole
@@ -192,8 +190,8 @@ turn is going.
 Socket `session send` keeps its own contract next to this one;
 [ADR-0003](./adr/0003-gui-and-phone-send-through-core.md) records why. The
 first-message title is shared: every path that persists a user message
-(this send, socket `session send` and `session new`, the queue drain, a
-Goal's objective) derives it in Core, once, and the auto-title may upgrade
+(this send, socket `session send` and `session new`, the queue drain)
+derives it in Core, once, and the auto-title may upgrade
 it after the first finished run.
 
 #### Every write is broadcast by Core
@@ -252,7 +250,7 @@ arrive first, and the page's own bump would then count the turn twice —
 the guard above only covers a row that is behind.
 
 Every event a `TauriNotifier` emits — these, `runner-event`,
-`user-message-persisted`, `runner-history-replay`, `goal-updated`,
+`user-message-persisted`, `runner-history-replay`,
 `session-queue:changed`, `session-run-state` — is also handed, after the
 webview, to the process-wide remote sink when one is registered
 (`notify::register_remote_sink`, ticket 05c): the remote module's single
@@ -271,7 +269,7 @@ does not listen yet.
 
 A message or session a human created through an app also records which
 app: `messages.client` / `sessions.client` (migration 043), `desktop` from
-the GUI's Tauri send, create and Goal start, `ios` from the remote module,
+the GUI's Tauri send and create, `ios` from the remote module,
 NULL otherwise. It rides on `Origin.client`, which is never serialized, so
 the CLI's JSON is unchanged.
 
@@ -281,7 +279,7 @@ Each runner's stdout becomes a broadcast inside Core, with two kinds of
 subscribers:
 
 - **Core's runner watcher**, attached in `RunnerManager::spawn` so every
-  spawn path (GUI, CLI `session new`, Goal, scheduler) gets one. It writes
+  spawn path (GUI, CLI `session new`, scheduler) gets one. It writes
   every `turn_end` as an assistant `messages` row and, for visible turns,
   bumps the session (`turn_count`, `summary`, `last_activity_at`) and
   announces the bumped row (`session-updated-external`, `via:

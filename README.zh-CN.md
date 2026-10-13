@@ -60,7 +60,6 @@ Galley 是一个跑在你自己电脑上的个人 AI 助手，能真正做事—
 Galley 的编排层。你在 GUI 操作，Supervisor Agent 走稳定的 `galley` CLI；两边都是一等操作者，共享同一份会话与历史，不是各开各的。
 
 - 🧭 **项目 + 并行会话**——把项目指向一个文件夹，代码仓库或资料夹都行，多条会话围绕它并行推进。
-- 🎯 **Galley Goal**——给对话一个目标，它便自己一轮接一轮推进，直到模型宣告完成、到了时间上限，或你叫停。
 - 🔧 **透明运行**——思考过程实时可见；每一步都能展开看完整参数与结果，跑完整轮折叠成一行。
 - ⏰ **定时任务**——每天、每周或每月到点开一条新会话跑一段提示词，结果在侧栏等你；需要 Galley 处于运行中，可设为开机自动启动。
 - 💬 **聊天软件**——微信、飞书、Telegram 或 Discord：在手机上找的就是同一个助手，长任务交给桌面端的会话。
@@ -75,10 +74,9 @@ Galley 的编排层。你在 GUI 操作，Supervisor Agent 走稳定的 `galley`
   </tr>
   <tr>
     <td width="50%" valign="top"><img src="docs/screenshots/zh/projects.png" alt="项目视图" /><br/><sub>项目视图 · 多条会话围绕同一项目并行</sub></td>
-    <td width="50%" valign="top"><img src="docs/screenshots/zh/goal.png" alt="Goal" /><br/><sub>Goal · 长期目标带章节标记地推进</sub></td>
+    <td width="50%" valign="top"><img src="docs/screenshots/zh/scheduled.png" alt="定时任务" /><br/><sub>定时任务 · 每天早上自己跑的一段提示词</sub></td>
   </tr>
   <tr>
-    <td width="50%" valign="top"><img src="docs/screenshots/zh/scheduled.png" alt="定时任务" /><br/><sub>定时任务 · 每天早上自己跑的一段提示词</sub></td>
     <td width="50%" valign="top"><img src="docs/screenshots/zh/search.png" alt="全文搜索" /><br/><sub>⌘K · 历史会话全文可搜，直达命中的那一行</sub></td>
   </tr>
 </table>
@@ -127,8 +125,7 @@ GUI 启动后进 **设置 → 智能体接入**：
 任务的大小对应不同的承载方式，而不是堆成一个巨型 prompt：
 
 - **简单问题**——直接读或跟进某个 session；
-- **项目 / 资料夹任务**——用 Project Workspace 绑定工作区，多会话并行；
-- **长期目标**——你明确要的时候，给一个 session 开 Goal、定好时间上限，让它自己推进到完成。
+- **项目 / 资料夹任务**——用 Project Workspace 绑定工作区，多会话并行。
 
 也可以在 **设置 → 聊天软件** 接入微信 / 飞书 / Telegram / Discord，在手机上找到同一个助手；长任务它会交给桌面端的会话。
 
@@ -160,15 +157,6 @@ galley session new "只读检查 packaging、release workflow、bundled resource
 
 galley project follow <project-id> --tail=80 --until-idle --final-show
 
-# 长目标（用户明确要求时才开）：session 自己一直推进，
-# 直到模型宣告完成、到时间上限，或被叫停
-galley goal start <session-id> "发布下一个 patch 版本" --budget-minutes=60 \
-  --supervisor=ga-claude-1 --reason="用户要求一直做到完成"
-
-galley goal status <goal-id>
-galley goal extend <goal-id> --minutes=30
-galley goal stop <goal-id>
-
 # 跟进一个 session，或等它这一轮跑完
 galley session follow <id>
 galley session wait <id> --until-idle --timeout=600
@@ -187,13 +175,13 @@ galley session restore <id>
 
 ## 架构
 
-GUI 和 CLI 是**对等前端**——不是 GUI 套壳 CLI，而是两端各自直连同一个 **Rust Core**：GUI 在应用内部直连，CLI 走本地 socket。Core 是唯一权威层，掌管 session / Project / Goal 状态、Goal 循环、定时任务、SQLite 写入，以及 Galley 运行的每一个 Python 进程；默认都跑在内置内核上，开箱即用。
+GUI 和 CLI 是**对等前端**——不是 GUI 套壳 CLI，而是两端各自直连同一个 **Rust Core**：GUI 在应用内部直连，CLI 走本地 socket。Core 是唯一权威层，掌管 session / Project 状态、定时任务、SQLite 写入，以及 Galley 运行的每一个 Python 进程；默认都跑在内置内核上，开箱即用。
 
 ```mermaid
 flowchart TB
   GUI["Galley GUI<br/>Tauri · React"] -- in-process --> Core
   CLI["Galley CLI<br/>Rust"] -- "local socket · named pipe<br/>no TCP · no token" --> Core
-  Core["Galley Core<br/>Rust<br/>sessions<br/>projects · goals<br/>scheduled tasks<br/>SQLite"]
+  Core["Galley Core<br/>Rust<br/>sessions<br/>projects<br/>scheduled tasks<br/>SQLite"]
   Core --> R["Session runners<br/>one per session"]
   Core --> IM["IM channels<br/>one per app"]
   Core --> BB["Browser bridge<br/>resident"]
@@ -218,11 +206,11 @@ flowchart TB
 
 - **对等前端，不是 GUI 套壳 CLI。** GUI 和 CLI 各自直连 Rust Core，互不依赖。关掉窗口，Core、正在跑的 session 和 CLI 都照常在后台工作。聊天软件也没有另起一套协议：每个 IM 渠道里的助手，用的就是 Supervisor 用的那套 CLI 来调度 Galley。
 
-- **Rust Core 是唯一权威。** session / Project / Goal 的状态机、Goal 循环、定时任务、SQLite 写入和所有子进程全部收敛到 Core 一处。前端只读投影、发意图，不持有可写状态，从根上避免了多端状态漂移。
+- **Rust Core 是唯一权威。** session / Project 的状态机、定时任务、SQLite 写入和所有子进程全部收敛到 Core 一处。前端只读投影、发意图，不持有可写状态，从根上避免了多端状态漂移。
 
 - **本地优先的安全模型。** 进程间走 Unix socket（`0600` 权限）或 Windows named pipe，仅 localhost、no token、no TLS——因为信任边界就是「同一台机器的同一个用户」。不把本地工具硬塞进一套网络鉴权，是有意识的减法。
 
-- **Agent API 是有版本的公开契约。** CLI 输出带 `schemaVersion`；同一版本内只做增量，破坏性改动必须升版本——`2` 随 Goal v2 在 v0.5.0 引入，没改过的命令仍回答 `1`。写命令会记下谁让做的、为什么（`via` / `supervisor` / `reason`）。Supervisor 可以放心把它当 API 来编程。
+- **Agent API 是有版本的公开契约。** CLI 输出带 `schemaVersion`；同一版本内只做增量，破坏性改动必须升版本——现行是 `3`，没改过的命令仍回答 `1` 和 `2`。写命令会记下谁让做的、为什么（`via` / `supervisor` / `reason`）。Supervisor 可以放心把它当 API 来编程。
 
 - **双 runtime 的边界纪律。** 默认用内置内核（含 CPython 3.11 与依赖，开箱即用）；接入外部 GenericAgent 时，Galley 严格只读——不改外部 GA 的代码、memory、SOP 或 `mykey.py`，你的现有环境不会被污染。
 

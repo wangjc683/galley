@@ -51,20 +51,20 @@
 - **Session title menu**：有 active session 时 title + `CaretDown` 是一个按钮，打开 session-scoped 菜单（Rename / Reinject Tools / Desktop Pet）。空状态渲染 italic muted "新对话"，不可点。Rename 进入 inline edit（Enter 提交 / Esc 取消）。
 - **子任务的面包屑**（2026-10-13，主聊天票 06a）：主区开着一个还没升级的子任务时，标题前多一段「主对话 ›」：「主对话」是一个按钮，与标题按钮同样的命中区与悬停底（`px-2 py-1`、`rounded-md`、悬停 `bg-hover`），墨色低一档（`ink-muted`，悬停 `ink-soft`）——标题是你所在的那一页；中间的 `CaretRight` 11px bold `ink-muted` 是 chrome，不可点。点它回主对话（`openMainChat`）。子任务没有自己的侧栏行，这是回去的路；侧栏选中仍停在主对话行（§4.2「有主对话时」）。从 ⌘K 打开子任务也是这个形态。挤压时面包屑先让宽（`shrink-[2]`），标题后让。升级后的子任务是普通对话，没有面包屑。外置运行时没有主对话，也就没有子任务。
 - 右：两个清晰 group，最后才是 Windows window controls（不属于工具簇）：
-  - **状态簇**（aria label：`运行状态`）：Goal（条件渲染）→ 内核（2026-10-03 从 SidebarHeader 移入）→ Browser Control → Channels → 应用更新。只放有状态的东西。Browser Control 与 Channels 就绪后是「灯」（见下「两 header 共通视觉规约」），点开状态菜单（菜单式浮层）。
+  - **状态簇**（aria label：`运行状态`）：内核（2026-10-03 从 SidebarHeader 移入）→ Browser Control → Channels → 应用更新。只放有状态的东西。Browser Control 与 Channels 就绪后是「灯」（见下「两 header 共通视觉规约」），点开状态菜单（菜单式浮层）。
   - **工具簇**（aria label：`视图与设置`）：改动（`GitDiff`，条件渲染，见下）→ 显示（`TextAa`，popover 内三行：阅读宽度 / 字号 / 主题，2026-10-04 由三个按钮合并）→ Supervisor SOP（`PlugsConnected` thin，tooltip 只写名字「Supervisor SOP」，2026-10-03 从 SidebarHeader 移入）→ Settings 入口（Phosphor `Gear` thin，中文 UI tooltip "设置 · ⌘ + ,"）。按钮共用 `TopBarIconButton`，图标一律 16px thin（原宽度箭头的 14px 视觉补偿随宽度按钮退役）。SOP 放这里而不进状态簇：它没有状态，本质是「设置 → 智能体接入」的深链，挨着齿轮读作「设置里一个常用页」；不按状态隐藏，两种运行时模式都在。
   - **改动按钮只在知道仓库时出现**（2026-10-04）：当前会话所属项目（空状态取当前项目）有根目录，或本窗口审阅过某个仓库，才显示；改动面板开着时一直显示（要能关掉它）。否则不显示——不知道仓库时它只能打开一个「选择仓库」空面板。始终可用的入口是命令面板「查看仓库改动」。行为细节见 [conversation.md](./conversation.md#本地文件引用与-markdown-预览)。
   - 两组之间用 1px 竖向分隔线；没有任何状态项时不显示状态簇和分隔线。
 - Windows window controls（min / max-restore / close）贴 MainHeader 最右端 = 窗口右上；macOS 不渲染（由左上 overlay traffic light 接管窗口控制）。
 
 **两 header 共通视觉规约**
-- 状态控件统一视觉语法：文字 badge 统一 28px 高度、6px 圆角、12px 字号、border / hover / press 节奏；icon-only 状态统一 28px 方形按钮、Radix tooltip，且不显示浏览器默认 focus outline。色调只表达**状态类别**，不给某个功能单独造身份视觉：`brand` = Galley 在为你做事或邀请你开始（Goal 运行中、浏览器控制待解锁）；`warning` = 要你动手（如等扫码）；`error` = 坏了；`success` = 做完待看；`neutral` = 过渡中或安静的设置缺口。（2026-10-04 把 `brand` 写进这条：此前条文只列四色，Goal 运行中早已用 `brand`；浏览器控制待解锁从 `warning` 改 `brand`，见下。）
+- 状态控件统一视觉语法：文字 badge 统一 28px 高度、6px 圆角、12px 字号、border / hover / press 节奏；icon-only 状态统一 28px 方形按钮、Radix tooltip，且不显示浏览器默认 focus outline。色调只表达**状态类别**，不给某个功能单独造身份视觉：`brand` = Galley 在为你做事或邀请你开始（浏览器控制待解锁）；`warning` = 要你动手（如等扫码）；`error` = 坏了；`success` = 做完待看；`neutral` = 过渡中或安静的设置缺口。（2026-10-04 把 `brand` 写进这条：此前条文只列四色，Goal 运行中早已用 `brand`；浏览器控制待解锁从 `warning` 改 `brand`，见下。）
 - **灯（lamp）**（2026-10-04，Browser Control 与 Channels）：macOS 菜单栏语法（蓝牙关掉时的样子）——单色，状态画在字形本身。**亮** = 此刻有活连接：就是普通的 16px thin 图标，和相邻工具图标完全一样；**不亮** = 同一图标 50% 不透明度。极性是刻意的：在线是常态，所以融进整排，只有掉线才偏离。墨色与其他顶栏图标相同，亮灭切换无过渡，悬停照常给按钮底板。实现只有一处：`header/TopBarLampIcon.tsx`。当日真机修订：初版把「亮」画成 thin 轮廓下垫一层淡填充（`fill` 字重、`--opacity-medium`），两颗实心图标在细线行里重了一档、不统一，JC 改为现行反转极性；同时否掉的还有斜线 / 叉变体（带斜线的气泡读作「通知已静音」，拼图也没有斜线版）、图标下短线（16px 下看不见）、描边加粗一档（仍不同族）。50% 而非更低：要读作「关着」，不是「不可点」。
 - **禁止**（勿回退）：状态点（05-31：聊天图标上的点读作未读消息；05-27：浏览器控制就绪后「无状态点、无动效」）；健康状态用颜色或动效；按钮面显示已定型的偏好。颜色只给 warning / error 文字 badge 和 `brand` 邀请 badge。
 - Topbar 内会打开 menu / popover 的 trigger，打开态需要保留轻微下沉 + press shadow，帮助用户把浮层和来源按钮对应起来。打开态按 `aria-expanded="true"` 取（`TopBarIconButton` 与 `TOPBAR_POPOVER_OPEN_STATE`）：每个 trigger 都套着 `TooltipLabel`，Tooltip trigger 自己的 `data-state` 会盖掉 popover 的 `data-state="open"`，只认后者时打开态从没显示过（2026-10-04 查出，显示 / Goal / 更新 popover 一并修好）。
 - **顶栏浮层两套形态，按用途分工**（2026-10-04）：**入口类用菜单式，决策类用卡片式。**
   - **菜单式**（「显示」、Browser Control、Channels，与会话标题菜单、Composer ＋ 菜单同一套）：`galley-pop-in`、`z-[70]`、`align="end"`、6px 偏移、`p-1` 紧凑容器、宽度随内容（最小 200px；Browser Control / Channels 两个灯菜单 168px，见下；最大 300px）、13px 行；状态行不可点、与菜单项同内边距（`px-2 py-1.5`）；动作是整行悬停高亮的菜单项（14px thin 图标 + 文字），分隔线 `my-1 h-px bg-line`。Browser Control / Channels 用 Radix DropdownMenu（有方向键导航），样式常量在 `header/status-menu.ts`；「显示」用 Popover 是因为选后不关。macOS 菜单栏图标的先例：状态在上、分隔线、最后一行「Wi‑Fi 设置…」是菜单项不是按钮。
-  - **卡片式**（Goal、应用更新）：Radix Popover、`z-50`、8px 偏移、`p-3`／`p-4`、标题 13px medium + 说明正文 + 明确按钮（停止 / 延长 / 重启）。它们是带决定的通知，需要说明文字和按钮，塞进菜单行会挤。
+  - **卡片式**（应用更新）：Radix Popover、`z-50`、8px 偏移、`p-4`、标题 13px medium + 说明正文 + 明确按钮（下载更新 / 重启）。它是带决定的通知，需要说明文字和按钮，塞进菜单行会挤。
   - 曾经四个状态浮层统一用卡片式（16px 留白 + 凸起的「XX 设置…」secondary 按钮），JC 真机指出 Browser Control / Channels 与「显示」字体和样式不统一，当日改为上面的分工。
 - **外观类偏好控件的标准形态**（2026-07-05 定形，2026-10-04 合并为一个「显示」按钮）：一个 28px 图标按钮（`TopBarIconButton` + `TextAa`，tooltip「显示」）→ 一个小 popover → 每个偏好一行：左列 muted 小标签（`text-ui-tertiary`），右列共享 `SegmentedControl`，三个控件左缘对齐。现有三行：阅读宽度「紧凑 / 宽松」、字号「小 / 标准 / 大」、主题「跟随系统 / 浅色 / 深色」。用 Popover 而非 DropdownMenu 是刻意的：选后**不自动关闭**，用户可来回切档、看着背后的对话即时重排。按钮面**不用 brand tint 表达「偏离默认」**——已定型的偏好不是可行动信息，常驻高亮是安静工作台的噪音；当前状态只放在 popover 内（「跟随系统」的解析结果做主题分段下方 caption，只在选中「跟随系统」时出现）。新增外观偏好时加一行，不再加按钮、不再发明新样式。合并的理由与被否方案见 [devlog 2026-10-04](../devlog/2026-10-04-topbar-display-popover.md)。
 - `SegmentedControl` 选中态（全局，`ui/segmented-control.tsx`）：`bg-hover` 轨道上的白色浮起块 + `text-brand-strong` medium 文字。轨道不用 `bg-surface`——它和 `bg-elevated` 在浅色下几乎同白，放进 elevated 父容器（popover）时选中态会不可读。
@@ -125,7 +125,7 @@ Browser Control 是 managed GA 的核心能力，位于状态簇的内核后、C
 
 #### 内核 Indicator
 
-2026-10-03 从 SidebarHeader 移入状态簇，位于 Goal 后、Browser Control 前（内核是后面那些能力的前提）。没就绪时文字 badge，就绪后收成安静图标或不显示。
+2026-10-03 从 SidebarHeader 移入状态簇，排在最前、Browser Control 之前（内核是后面那些能力的前提）。没就绪时文字 badge，就绪后收成安静图标或不显示。
 
 | 状态 | 形态 | 点击 |
 |---|---|---|
@@ -200,7 +200,7 @@ Browser Control 是 managed GA 的核心能力，位于状态簇的内核后、C
 - **侧栏网格**（2026-10-08 补齐）：三条竖线——左 18px（新对话加号、状态图标、时间桶标题、「项目」分区头与「更早」入口、项目组行的文件夹图标）、文字列 42px（新对话文字、会话标题与状态行、已归档）、右 18px（顶行新建项目图标、⌘N、时间桶计数与「项目」分区头 / 「更早」入口的计数、项目组行的总数、「更多项目」的计数、会话行文字边）。时间桶标题此前是 `px-4`（16px，05-18 遗留），比网格左右各外凸 2px，计数与 ⌘N 差约 2.5px；新对话文字此前起于 43px。**Windows 的代价**：列表有 10px 常驻滚动条通道（`scrollbar-stable`），列表里的右缘比 ⌘N 所在的新对话行再往里 10px，对齐只在 mac 成立；没有为此让列表内容吃进滚动条通道。
 - **Archived 不叫 Trash**：archive 是保留数据；真正永久删除只在 Archived dialog 里出现。底部「已归档」行对齐会话行网格（2026-10-03）：图标中心 26px、文字起点 42px（`pl-4.5` + 12px 图标居中于 `w-4` + `gap-2`），按钮仍满宽。
 - Sidebar 有主对话时可收起（见下「有主对话时」），外置运行时不可折叠；两者都可拖拽调整宽度。`⌘K` 全局 Command Palette。对象级低频操作由右键菜单和 row hover `⋯` 共同承载：session row 提供 pin / rename / move to project / archive（2026-09-16 置顶提到首项：本机 111 个 session 零置顶，按可发现性问题处理；行内专属 hover 图钉按钮被否，理由见 deferred「session 行 hover 置顶按钮」；项目子菜单 2026-10-09 起：会话已在项目里时叫「移到项目」，否则「加入项目」；项目列表之后一条分隔线，接「新建项目…」（建一个项目并把这条会话移进去）与「从项目移除」，零项目时子菜单只有「新建项目…」，不再是一句「还没有项目」的死胡同），project row 提供 新建项目对话 / pin / edit / archive all / delete。右键是熟练用户快捷入口，`⋯` 是可发现入口；两者必须共享同一组动作、排序和 destructive 样式，菜单视觉与 MainHeader 会话菜单同语域（`galley-pop-in` / 200px / 13px）。row contextual actions 使用 overlay，不在非 hover 状态制造额外右侧 gutter；hover / menu open 时文字临时让位给操作按钮。重命名进行中右键菜单禁用（右击边距会 blur-commit 编辑，再叠一个菜单是双重歧义）。
-- **归档运行中的会话需确认**（2026-07-05 决策）：会话自身 running 或作为 goal master 时，归档前弹 alertdialog——归档不停止运行，但会把还在跑的工作从状态板上藏起来；对话框文案如实陈述这两点。已结算会话保持一键归档（可逆，无需确认）。
+- **归档运行中的会话需确认**（2026-07-05 决策）：会话自身 running 时，归档前弹 alertdialog——归档不停止运行，但会把还在跑的工作从状态板上藏起来；对话框文案如实陈述这两点。已结算会话保持一键归档（可逆，无需确认）。
 - **交互输入模型：鼠标优先**（2026-07-05 决策）：Galley 以鼠标 / 触控板为交互方式，键盘可达性（Tab 遍历行与菜单、focus reveal 等）明确不在当前范围。全局快捷键（`⌘K` / `⌘N` / `⌘,`，有主对话时还有 `⌘\`）保留；不要为满足审计逐个补 tabIndex / role——若未来翻案，应整体设计键盘故事而非零星修补。
 - WebView 默认右键菜单在非编辑区禁用，避免空白处出现 `Reload / Inspect Element`。输入框、textarea、contenteditable、`role="textbox"` 等可编辑区域保留系统编辑菜单。
 
@@ -264,9 +264,9 @@ motion 语义专属于 running：静态彩条表示「卡在这、需要你」�
 
 行最左 14px Phosphor 图标，颜色随状态（见 `status-icon.tsx` `STATUS_MAP`）：
 
-- 静止且跑完（`idle` 与 `completed` 同画）`CheckCircle` muted / 静止但没跑完（步数上限暂停、Goal 暂停或受阻、没有摘要；`StatusIcon` 的 `incomplete`）`Circle` muted / connecting `CircleNotch` 旋转 / running `CircleNotch` **bold** 杏沙旋转 / ask_user `PauseCircle` 深琥珀（「停下等你」）/ error `XCircle` 深红 / cancelled `Prohibit` muted（区别于 error：用户主动）/ archived `Archive` muted。
+- 静止且跑完（`idle` 与 `completed` 同画）`CheckCircle` muted / 静止但没跑完（步数上限暂停、没有摘要；`StatusIcon` 的 `incomplete`）`Circle` muted / connecting `CircleNotch` 旋转 / running `CircleNotch` **bold** 杏沙旋转 / ask_user `PauseCircle` 深琥珀（「停下等你」）/ error `XCircle` 深红 / cancelled `Prohibit` muted（区别于 error：用户主动）/ archived `Archive` muted。
 - **「已完成」由图标承担**（2026-10-03，JC 真机裁决，[devlog](../devlog/2026-10-03-sidebar-polish-selection-visibility.md)）：`completed` 枚举只由 CLI / Supervisor 面写入（`galley session` 收尾），GUI 本地跑完的会话结算为 `idle`（07-05 澄清）；两者都画成 muted 细线对勾圈，看过的完成行不分来源。此前本地完成行是空心环，靠副行 `已完成 · ` 前缀补说完成——空心环在待办类通用语法里恰是「没完成」，前缀又在几乎每一行重复成噪音。空心环从此只留给「停着但不算完成」的静止行。对勾是 muted 不是杏沙：它是几乎每一行的静止态，必须是最安静的那个；杏色只给它的未读形态。同一个 `StatusIcon` 也画 ⌘K 命令面板与「更早」对话框的会话列表，三处一致（那两处不传 `incomplete`，静止会话一律对勾）。
-- **三信号优先级必须一致**（rail / icon / 状态行同序）：error > ask_user > running / goal-running > unread > idle。任何一路擅自换序都会让同一行「自相矛盾」。
+- **三信号优先级必须一致**（rail / icon / 状态行同序）：error > ask_user > running > unread > idle。任何一路擅自换序都会让同一行「自相矛盾」。
 - **未读并入左图标，不再用右侧独立点**。旧方案的右侧静点在 hover 时会被 `⋯` 菜单顶替而消失，体验割裂；现在「完成未读」= 把左侧那个本就存在的图标渲染成 `weight="fill"` + `text-brand`（细线对勾圈→杏色实心对勾圈；没跑完的行仍是空心环→实心点），无需新增元素。实心对勾圈与 ask_user 的实心暂停圈同为 14px，靠字形与色相区分（深色模式下两色亮度接近，2026-10-03 真机看过可分辨）；整行还有琥珀竖条、琥珀副行与底色兜底。
 - **光学权重而非几何直径对齐**：plain `Circle`（只剩「没跑完」的静止行）是整列唯一的实心盘 / 空心环，按视觉重量调尺寸——实心未读点 `size*0.7`（≈10px，填充墨量重），空心环 `size*0.78`（≈11px），让环略大于点但两者视觉重量相当。其它有内部结构的图标（spinner / check / pause / x）保持 14px。
 - 未读优先级低于进行中状态：`showUnread` 仅在 settled（非 active、非 running、非 ask_user、非 error）时为真。
@@ -276,7 +276,6 @@ motion 语义专属于 running：静态彩条表示「卡在这、需要你」�
 第二行直接当状态行用，始终状态着色、**直立不斜体**，blocking 状态给显式文案，扫一眼即读懂、不靠解码图标：
 
 - running：`第 N 步 · {summary}`（brand-strong，N=最近完成步 `lastStepIndex`，故意比实时滞后一步）或首步未完成时 `思考中…`。N 是 run 内按位置的连续序号（2026-09-18）：GA 每次 `put_task` 步号从 1 重数，ask_user 回复也是一次 `put_task`，侧栏把 GA 步号加上回复前已完成的步数（messages `runStepBase`），与主视图序号栏同源，不再在回答后跳回「第 1 步」。
-- goal 态（2026-09-16 起 goal v2）：会话自身在跑 goal 时就是普通 running；goal `paused` / `blocked` 而会话空闲时，行上挂静态（不呼吸）的 goal 副线 `Goal · 已暂停` / `Goal · 受阻`（复用 TopBar goal pill 语言）。让位于本会话自己的 running / 一切 blocking 状态。
 - ask_user：`等你回复`（warning，copy key `waitingForYou`）。
 - error：`出错 · N`（error，`errored`；N=1 时不显示计数）。
 - settled：只留 `{summary}`（muted）——「已完成」由左侧对勾圈说（2026-10-03；05-12 选的 `已完成 · ` 前缀当时只与「第 N 步 · 」和完成徽章比过，没测过不加前缀）。只有没跑完的才带词：cancelled `已中止 · {summary}`——用户主动中止的会话不得声称完成；步数上限暂停 `已暂停 · {summary}`（空心环）。标记例外、不标记常态，同「· 1 是噪音」。
@@ -318,7 +317,7 @@ motion 语义专属于 running：静态彩条表示「卡在这、需要你」�
 - **「显示更多」行的样式**：列表行，不是小节头——图标列一个 10px ⌄ / ⌃（regular、60% 不透明度），文字列 11px `ink-muted`「显示更多 / 收起 / 更多项目」，右侧隐藏条数，行高 28px（JC 嫌 12px / 32px 那版不够安静；颜色不再降，10.5px + 75% 淡墨曾被社区反馈看不清，汉字最小 11px）。侧栏里于是只剩两种折叠形态，各管一件事：小节头样式（「项目」可折叠、「更早」开对话框）、列表末行（「显示更多 / 收起」，就地接续）。
 - **子会话单行，引导线从文件夹图标接下来**（2026-10-09，JC 真机定，[devlog](../devlog/2026-10-09-project-group-show-more-and-one-line-rows.md)）：组内的子会话（展开的抽屉、组折叠时挂出的、借位露出的）只留状态图标 + 标题，行高 32px；分区头折叠时挂在分区头下的会话、时间桶里的会话仍是双行。引导线在 25.5px（文件夹图标中心），展开且有会话或有挂出行时从图标下方接到组行底；子会话的状态图标对齐父行项目名的 42px 线。此前（Project Review 抽屉原样）是 `ml-6` + `border-l`：线在 24px、子会话图标在 47px，都没对上网格，三种行同为 48px 双行、同字号同字色，展开后看不出组从哪开始到哪结束。真机比了四档：对齐（V1）/ 对齐 + 整组淡底托（V2）/ 对齐 + 子会话单行（V3）/ 有状态的子会话保留副行（V3′）。JC 定 V3。代价：子会话丢掉状态行，「第 N 步 · …」「等你回复」「出错」的字看不到，状态靠图标、竖条、底色、字重；V3′ 落选的理由是行高随状态伸缩（一条会话跑完就从 48px 缩到 32px，下面整片跟着跳），状态板上更难受。
 - **单行 + 右侧总数**（2026-10-09，JC 真机定，[devlog](../devlog/2026-10-09-project-group-show-more-and-one-line-rows.md)；10-08 两轮真机定的是双行）：与会话行同网格（16px 图标列、42px 文字列），行高 36px（比单行子会话高一档）。`Folder`（展开时 `FolderOpen` + `text-brand-strong`）+ 项目名 + 置顶图钉，右侧 11px 淡色总会话数（含尾部的旧会话），落在右侧 18px 文字边上，悬停 / 菜单打开时让位给 `+` 与 `⋯`。Mail 在邮箱名右侧放数字是同一类 mac 写法。为什么翻 10-08：空闲是常态，第二行这时只有「共 19 个对话」；等你回复 / 出错的会话本来就挂在组行下面，第二行的「1 个等你回复」与它重复。10-08 第二轮否掉的正是「单行 + 右侧计数」，但那时子会话是 48px 双行，单行项目行比自己的子会话还矮、层级倒挂；子会话改单行后条件变了，重比。代价：收起的组里「几个正在工作 / 几个未读」的数字没了，只剩呼吸竖条与加粗的项目名（JC 开演示状态真机看过，够用）。落选：右侧数字随状态换成状态图标 + 计数（B′，同一位置的数字含义会变）、双行但空闲时第二行写「最近：某会话」（D，加字而不是减字）、空闲单行有状态双行（行高伸缩，同 V3′ 的理由）。
-- **状态汇总**：优先级 出错 > 等你回复 > 正在工作（含 Goal 运行中）> 未读 > 空闲。左侧 3px 状态条同会话行（running 呼吸 / waiting 琥珀 / error 红），有任何非空闲状态时项目名 semibold；进入 error / ask / unread 时文件夹图标 pop 一次，挂载不 pop。2026-10-09 起没有文字汇总行（见上一条）。
+- **状态汇总**：优先级 出错 > 等你回复 > 正在工作 > 未读 > 空闲。左侧 3px 状态条同会话行（running 呼吸 / waiting 琥珀 / error 红），有任何非空闲状态时项目名 semibold；进入 error / ask / unread 时文件夹图标 pop 一次，挂载不 pop。2026-10-09 起没有文字汇总行（见上一条）。
 - **组行永远不用 `bg-selected`**：侧栏里恰好一行在说「你在这里」，那是选中的会话、新对话行，或有主对话时分区顶部的占位行；展开只靠 `FolderOpen` 表达。悬停 `bg-hover`。
 - **折叠时，需要你的会话露出来**：出错或等你回复的子会话、以及选中的子会话，作为普通会话行挂在组行正下方（同样的缩进与引导线），每个只挂这一份——折叠的抽屉里不再挂它。正在工作与未读不露，交给组行的竖条与字重。规则：需要你处理的会话永远不会被折叠藏起来。展开时「显示更多」收着，尾部里出错 / 等你回复的会话与选中的会话借位挂在「显示更多」上方（同「更早」入口的借位；2026-10-09 起不只选中的——尾部也是折叠，分界改成第 5 条之后，最近几天的子会话也会落进尾部）。
 - 行内动作：悬停显现 `+`（在项目里新建对话，32px 透明 hit area、裸 `+`、hover 只给 `bg-hover` + 文字色）与 `⋯`；右键菜单与 `⋯` 同一组：新建项目对话（2026-10-09，与 `+` 同一动作，不靠悬停）、置顶 / 取消置顶、编辑项目、归档全部对话、分隔线、删除项目（destructive）。删除走 confirm dialog，规则见下方「删除项目」。

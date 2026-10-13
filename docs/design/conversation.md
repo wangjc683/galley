@@ -1,6 +1,6 @@
 # Conversation 主区与 Composer
 
-> Galley 设计系统 · 原 DESIGN.md §4.3–§4.4 与 §7（2026-07-04 拆分）：turn 结构、Goal 章节框、Markdown / 代码块渲染、滚动与流式行为、Composer、Empty State。
+> Galley 设计系统 · 原 DESIGN.md §4.3–§4.4 与 §7（2026-07-04 拆分）：turn 结构、Markdown / 代码块渲染、滚动与流式行为、Composer、Empty State。
 
 ### 4.3 Conversation 主区
 
@@ -46,7 +46,7 @@
 - **文字左缘随内边距缩进 14px**，不再与 agent 散文栏对齐（那是高亮笔时代靠偏移 box-shadow 出头换来的性质，随笔触一起退出）；
 - 粘贴内容里的空行留在容器内（高亮笔不给空行上色，一条消息在视觉上碎成几截，是气泡补上的具体缺口之一）；
 - `line-clamp-6` 折叠、copy chip 横向位（`left-full ml-1.5`，气泡的绘制边就是布局边，6px 是真 6px）、附件缩略图、`data-role` / submit 置顶 / Rail 机制全部不变；chip 的纵向锚 09-18 由右上改到右下，见下方「复制入口统一」；
-- **不给普通消息加 eyebrow / 图标**——会稀释 GoalCommissionMarker 加冠行的对比度。断点发送时间行不算，见下方「发送时间」。
+- **不给普通消息加 eyebrow / 图标**。断点发送时间行不算，见下方「发送时间」。（2026-08-06 定这条时的理由是不稀释 Goal 委派标记的加冠行；Goal 已于 2026-10-13 移除，再有给消息加装饰行的提议时，先重审这条。）
 
 随之继承 / 消解的旧决定：
 
@@ -54,17 +54,15 @@
 - **2026-08-06 高亮笔的方法资产保留**：「滚动回找靠色彩面积、静读辨声靠排印」的任务拆分与 A/B 结论仍成立，气泡是在这个结论上换了形状；「人的声音不穿机器外衣」的寄存器论证仍成立，所以气泡无投影。
 - **2026-08-21「不给抬升」仍有效**：以后再有「让用户消息更立体 / 更有卡片感」的提案，先回到那一条。
 
-**`GoalRunMarkers` 的 objective 框故意不同步**（2026-08-06 裁决，2026-09-17 沿用）：委派标记保留竖条 + 色板 + 硬边块形态作**加冠正装**——平民 = 圆角平涂气泡、加冠 = 带竖条的硬角色板，这个对比本身成为「Goal 委派 vs 普通消息」辨识度的一部分。气泡世界里硬直角反而读作刻意的正式；若真机里两者混淆，加冠行的 eyebrow 与竖条是下一步的调节旋钮，不动普通消息。
-
 #### 发送时间（2026-09-28 起：只在断点常显）
 
 用户消息只在**断点**显示发送时间，其余消息不显示，也没有悬停时间。讨论、数据与两轮真机见 [devlog](../devlog/2026-09-28-user-message-send-time.md)。
 
-- **断点**：会话第一条用户消息；距上一条用户消息**超过 60 分钟**；与上一条用户消息跨了本地日期（兜底，保证「今天 / 昨天」不缺席）；Supervisor 来源消息（图标行本来就在）。ask_user 回复和 Goal 委派都算用户消息、参与比较。规则与格式在 `lib/message-time.ts`，Conversation 算一次、往下传字符串。历史分页加载时（见[长对话按轮分页](#长对话按轮分页2026-10-13)），第一条已加载的用户消息与 Core 给出的「页前最后一条用户消息」的时间比较，断点与整段加载时相同，往上翻加载更多不会让时间行出现或消失。
+- **断点**：会话第一条用户消息；距上一条用户消息**超过 60 分钟**；与上一条用户消息跨了本地日期（兜底，保证「今天 / 昨天」不缺席）；Supervisor 来源消息（图标行本来就在）。ask_user 回复也算用户消息、参与比较。规则与格式在 `lib/message-time.ts`，Conversation 算一次、往下传字符串。历史分页加载时（见[长对话按轮分页](#长对话按轮分页2026-10-13)），第一条已加载的用户消息与 Core 给出的「页前最后一条用户消息」的时间比较，断点与整段加载时相同，往上翻加载更多不会让时间行出现或消失。
 - **格式**：精确到分钟的绝对时间，不用「3 小时前」（会漂移、截图失真）。当天 `16:05`；当天但上一条在之前某天 `今天 09:10`；`昨天 21:14`；今年更早 `9月21日 14:32`；往年 `2025年9月21日 14:32`。中文 24 小时制补零，英文按 en-US 12 小时制。「今天 / 昨天」过零点经 `useDayStamp` 刷新。
-- **位置**：气泡上方独占一行，左对齐，占真实布局高度（`mb-1`），与 Supervisor 图标同一行（图标 + 时间）。Goal 委派标记同样在 eyebrow 上方一行。
+- **位置**：气泡上方独占一行，左对齐，占真实布局高度（`mb-1`），与 Supervisor 图标同一行（图标 + 时间）。
 - **样式**：`text-ui-micro`（10.5px）+ `text-ink-muted/70`，sans、tabular、`select-none`、`<time dateTime>`；悬停给带星期的完整时间。对比度约 2.3:1（浅）/ 3.2:1（深），低于 AA——只因它是可有可无的辅助信息、tooltip 兜底才成立，**不是正文元数据降透明度的先例**（09-23 折叠头气味段降到 70% 就因不可读被否）。
-- **与「不给普通消息加 eyebrow / 图标」的关系**：那条防的是每条消息都戴的装饰行稀释委派标记的加冠行；时间行稀疏（首条 + 断点）、最浅墨色、无品牌色与大写字距，不算。
+- **与「不给普通消息加 eyebrow / 图标」的关系**：那条防的是每条消息都戴的装饰行；时间行稀疏（首条 + 断点）、最浅墨色、无品牌色与大写字距，不算。
 - **不做**：悬停时间（真机「有点吵，也没有必要」）；助手回答的时刻（长运行完成时刻见 [deferred](../devlog/deferred.md)「长时间运行的完成时刻」）；问题轨卡片里的时间。
 
 #### Right Question Rail
@@ -113,20 +111,15 @@
 - 与流式期的 [Live Thinking Preview](#live-thinking-preview实时思考预览)
   同寄存器、同一列：实时看过的文字，落定后在 caret 后面以同一样式找回
 
-#### Goal 叙述 callout（SystemMessageBubble `variant="goal"`，legacy）
+#### Goal 章节框（已退役）与叙述 callout
 
-Goal v1 时 Galley 在 master 线程里讲述 run 进展的旁白（system row）。**goal v2（2026-09-16）不再写叙述行**——续跑提示是 internal 行，线程里只有目标行、普通 agent 步和两端的标记；此变体只为渲染升级前的历史线程保留。当年的降权决策仍是它的形态：一条细 brand 左规线（`border-l-[3px] border-brand-strong/30` + `pl-4`，无底色）+ 一个无字的小 `Target` 图标（thin 11px），正文 `[&_p]/[&_li]` 降到 `text-ink-soft`；「Galley」不逐条显示，归属挂在图标的 `aria-label`；连续叙述簇只在首条显示图标（`annotateGoalThread` 的 `narrationLeading`）。
+（2026-10-13 Goal 移除，见 [devlog](../devlog/2026-10-13-remove-goal.md)）委派标记、收口标记与暂停 / 受阻尾标随 Goal 一起删除，历史 Goal 会话按普通的用户 / 智能体轮次显示。
 
-#### Goal run = 线程内插曲（章节框）
+叙述 callout 保留：系统行（`session.checkpoint` 写的叙述，以及 Goal v1 留在历史线程里的旁白）走 `SystemMessageBubble` `variant="narration"`（原名 `goal`），形态不变——细 brand 左规线（`border-l-[3px] border-brand-strong/30` + `pl-4`，无底色）+ 无字的小 `Target` 图标（thin 11px），正文 `[&_p]/[&_li]` 降到 `text-ink-soft`、字号走 `--conversation-narration-size`；「Galley」不逐条显示，归属挂在图标的 `aria-label`；连续叙述簇只在首条显示图标。
 
-一条 session 的线程可先后承载**多个 Goal run**（同一时间至多一个 open），中间还会夹普通对话。所以不做"会话级 Header"，而是把每个 run 括成一段**插曲**：开场 = 委派标记，结尾 = 收口标记，中间是该 run 的普通 agent 步（v2 起不再有旁白行）。单 goal 就是一段干净的头尾，多 goal 自动分段，同一套规则。
+#### 停在步数上限 = 可恢复态（2026-10-01，[galley#29](https://github.com/wangjc683/galley/issues/29)）
 
-- **委派标记（`GoalCommissionMarker`）= objective user message 的加冠版**：它本就是用户在 Goal 模式下发送的第一条消息，穿着**加冠正装**（4px brand 竖条 + `bg-brand-tint` 色板 + 硬右边 + Inter medium——2026-08-06 前的 user register，普通消息先改高亮笔触、2026-09-17 再改圆角气泡后，被委派标记专属保留），头上加一行 eyebrow：`Target + Goal`（brand 大写字距）+ 右侧直立 tabular 参数（v2：`上限 N 分钟` 或 `无上限`）+ 一个粗粒度状态徽标。这同时解决了"objective 被当普通气泡"和"Composer 两种寄存器结果不可辨"——普通发送=圆角气泡，Goal 发送=委派标记的竖条硬角正装。
-- **收口标记（`GoalTerminalMarker`）= run 终态留痕**：`✓ 已完成 / ⏱ 到达上限 / ⏸ 已停止 / ✕ 失败` + `用时 Xm · 续跑 N 轮` + 一条 hairline；`失败` 与 `到达上限` 下方带 `latestSummary`。`到达上限` 用中性墨（与已停止同），它是上限不是失败。让结果沉淀在对话里，而非划过即逝的 toast；goal 即使已 `result_seen` 从活跃列表移除，回看仍在。
-- **可恢复态不出收口标记**：goal `paused` / `blocked` 时线程尾挂 `GoalPausedTail`（「Goal 已暂停 · 发消息继续」/「Goal 受阻」+ `latestSummary` + 停止），用户发一条消息即恢复；它只在会话空闲时出现。
-- **普通运行停在步数上限，同样按可恢复态处理**（2026-10-01，[galley#29](https://github.com/wangjc683/galley/issues/29)）：一次运行跑满 GA 的单次步数上限（180，计划模式 100）时，引擎停在半途。线程尾挂 `StepLimitTail`（「已达步数上限 · 回复「继续」接着跑」），视觉照抄 `GoalPausedTail`（12px `ink-muted` + 粗体 12px `Pause`）；不带停止按钮，因为没有在跑的东西。同样只在会话空闲时出现，会话有 open Goal 时让给 Goal 的界面。配套三处：输入框灰字预填「继续」；侧栏写「已暂停 · {摘要}」，不说「已完成」，与中止会话写「已中止」同理；系统通知标题用同一句「已达步数上限」。状态只存在内存里，重启后消失。撞上限的运行最后一步不是收口答案，按 run-groups 规则不折叠、整段平铺，与中止一致。
-- **live 归外围**：状态、耗时、停止在 TopBar pill；章节框只在粗粒度状态转变时变，不做每秒 ticker（与 §2.7、sidebar/epigraph 的"live 归外围 chrome"一致）。
-- **数据与关联**：标记数据来自只读命令 `list_goals_for_session(sessionId)`（全状态，含已读终态）。`annotateGoalThread`（`lib/goal-thread.ts`）按目标行的 `goalId`（`messages.goal_id`，迁移 031）精确匹配，无 id 的老行退回 objective 文本 + `startedAt ≈ createdAt` 启发式。**goal 段的结束**（2026-09-16 修正）：到下一个委派、或 `createdAt` 晚于 `goal.endedAt` 的非回复 user turn 之前——run 中用户发的引导消息留在括号内；v1 的「第一条非叙述 turn 即结束」在单线程 run 里会把收口标记插到工作之前，是本次修掉的 bug。
+一次运行跑满 GA 的单次步数上限（180，计划模式 100）时，引擎停在半途。线程尾挂 `StepLimitTail`（「已达步数上限 · 回复「继续」接着跑」），12px `ink-muted` + 粗体 12px `Pause`；不带停止按钮，因为没有在跑的东西。只在会话空闲时出现。配套三处：输入框灰字预填「继续」；侧栏写「已暂停 · {摘要}」，不说「已完成」，与中止会话写「已中止」同理；系统通知标题用同一句「已达步数上限」。状态只存在内存里，重启后消失。撞上限的运行最后一步不是收口答案，按 run-groups 规则不折叠、整段平铺，与中止一致。
 
 #### ask_user 提问气泡（`AskUserBubble` / `AnsweredAskUser`）
 
@@ -134,7 +127,7 @@ Agent 经 `ask_user` 停下来问人的那条：实时态是 warning 左条 + `P
 
 - **问题正文走 `MarkdownView variant="agent"`，不再是裸 `<div>`**（2026-09-14）。直接原因是社区反馈「AskUser 界面不能复制文字」：`body` 全局 `user-select: none`（foundations.md §2.6），内容面靠 `select-text` 逐个开回来，用户消息 / agent 正文 / 工具输出都开了，唯独 ask_user 问题漏了。顺带收益：GA 提问里常见的编号选项、路径、行内代码得到与正文相同的 markdown 排版（暖褐行内代码、列表缩进），字体寄存也与同一黄框里的 side_question 一致（CJK 衬线）。
 - **单换行保留为换行（`softBreaks`，remark-breaks）**。GA 的 `ask_user(question)` 只是透传字符串，TUI / Telegram 前端按纯文本打印，从没承诺过 markdown；LLM 写「第一行\n第二行」时若按 markdown 软换行合并，两个问句会并成一句、改变问题意思。remark-breaks 只碰段落内的软换行，列表 / 代码块 / 空行分段不受影响，所以 markdown 形状的问题仍得到完整处理。这是 `MarkdownView` 上的 opt-in prop，**只给 ask_user 用**——agent 回答是按 markdown 写的，软换行就该是折行。
-- **回显与实时态同一条渲染路径**：`AnsweredAskUser` 同样走 `MarkdownView` + `softBreaks`，用 `[&_p]/[&_li]` 覆盖到 echo 字号 + ink-soft（沿用 Goal 叙述 callout 的降权手法），同一段文字实时与回显只差大小和墨色。
+- **回显与实时态同一条渲染路径**：`AnsweredAskUser` 同样走 `MarkdownView` + `softBreaks`，用 `[&_p]/[&_li]` 覆盖到 echo 字号 + ink-soft，同一段文字实时与回显只差大小和墨色。
 - **Composer 占位随候选数变**：有 chip 时「回复，或选择上方候选」，无 chip 时「回复上方提问」（`composer-register.ts` 的 `reply` / `replyOpen`）。`candidates` 是可选参数，模型对开放式问题常不给；无条件的「选择上方候选」会让人去找不存在的选项（2026-09-14 真机验收即如此）。
 - **候选两种排布，由 `candidateLayout` 按内容定**（2026-09-14）：短标签（是 / 否 / 方案 A）走行内 chip，句子级选项（单条超 20 字、合计超 60 字）或 5 条以上走**竖排列表**，每行全文不截断、左对齐；列宽取最长一条（容器 `inline-flex` 收缩、各行拉齐），不撑满对话列——撑满时短选项后面留一整片空白（2026-09-14 真机）。横排一行句子会折成标签云，丢掉模型写的 A / B / C 顺序。阈值是导出常量，dogfood 后可调。同一函数同时喂实时气泡和回显，两处永远做同一个判断。
 - **chip 两条路径**：点击 = 直接发送（快路径，保留）；右键「填入输入框」或 ⌘ / Ctrl + 点击 = 填进 Composer 不发送（慢路径），给「选 B 但改两个字」留出口。走 `ComposerHandle.prefillText`，不加新的 store 状态。chip 仍是按钮、不可选中（foundations §2.6 chrome 不可选）；复制 chip 文字的需求由填入路径覆盖。
@@ -395,7 +388,7 @@ Conversation 主区是 `overflow-y-auto` 的列。用户提交新消息时**不*
 
 主聊天是首页、一直累积，一次读出、渲染全部消息迟早拖慢打开（主聊天 PRD 裁决 51，`.scratch/main-chat/issues/12-paged-conversation-history.md`）。所有对话（主聊天与普通对话、内置与外置运行时）走同一条路径：
 
-- **按轮切页**：打开对话（上面的「转录进内存」）只读最近 50 轮（Tauri `session_message_turns_page`，常量 `MESSAGE_TURN_PAGE`）。一轮 = 一个 `turn_index`（用户消息与回复第一步同轮，主聊天问候是 -1），一轮的所有行在同一页。页界不切断 run：页首落在 run 中间（多步 run 的后续步、ask_user 回答续接的段）就往前补到该 run 的开头那条用户消息；开头是发进某个 Goal 段里的消息（Goal 进行中，或在它结束前发的），再补到该 Goal 的委派。所以一页可能多于 50 轮；进行中的 Goal 段总是从委派整段读出。每页由 Core 判定，规则与 `run-groups` / `goal-thread` 同一套，页拼起来与整段读出的 turns 完全一样。
+- **按轮切页**：打开对话（上面的「转录进内存」）只读最近 50 轮（Tauri `session_message_turns_page`，常量 `MESSAGE_TURN_PAGE`）。一轮 = 一个 `turn_index`（用户消息与回复第一步同轮，主聊天问候是 -1），一轮的所有行在同一页。页界不切断 run：页首落在 run 中间（多步 run 的后续步、ask_user 回答续接的段）就往前补到该 run 的开头那条用户消息。所以一页可能多于 50 轮。每页由 Core 判定，规则与 `run-groups` 同一套，页拼起来与整段读出的 turns 完全一样。
 - **往上翻自动加载**：滚到距顶部一屏以内就读上一页、前插（`hooks/useEarlierTurns.ts`）；已加载的内容本身不比这段距离长（页太短、滚不动）时，不等滚动直接接着读。**前插后视口内容不动**：WebKit 没有 CSS `overflow-anchor`，前插的那次 commit 在绘制前把视口顶部那一行放回原位（`lib/scroll-anchor.ts`），之后 1.5 秒内新页的代码高亮、图片解码在上方长高也照此压住，读者自己的滚动照常。没有加载提示、没有「加载更早」按钮、没有更早的了也什么都不显示（真机看出停顿再议）。
 - **行不重挂载**：Conversation 的行 key、折叠开关、live 窗口状态都按「下标 − 已前插轮数」记，前插一页不会让已渲染的行重挂载，也不会把用户展开的折叠挪到别的 run 上。
 - **⌘K 跳转**：目标还没加载就一页页往上读，直到包含它，再照常定位、高亮。
@@ -479,7 +472,7 @@ Composer 状态同步：`agentRunning = true` 时 Submit 按钮切到 Stop 模�
 - AgentTurn type 持有 `turnIndex`（一个 user message 在 conversation 里可能产生多个 AgentTurn）
 - 渲染（2026-09-16 序号栏形态）：每个 AgentTurn 的 thinking summary 之上一行，左侧是**两位补零序号**（`01`…，`lib/step-numeral.ts`）占一格固定宽度的 **`--step-gutter`（24px）**，**JetBrains Mono、`--conversation-tool-mono-size`（标准档 11px，与行右端的工具名同一寄存器）**、regular、`text-ink-muted`，行高钉到 summary 的行框（`calc(step-size * 1.6)`）让两者基线同高；summary（ink-soft，12px 档，**行高 1.6、自动换行不截断**）从 gutter 右缘起笔。序号与 summary 之间**没有分隔符**——固定列宽本身就是分隔。DetailPanel 的 caret **紧跟 summary 文字末尾**（inline-block，随末行换行；裸数字步则单独立在 gutter 右侧），不停在列右缘——披露 caret 贴着它所属的文字，与 pill 行、折叠头同一条规则（2026-09-16）。**不用 italic、不用 serif、不用 uppercase tracking**——结构 metadata 冷静直立，与下方 Newsreader 衬线正文形成对比张力
   - **可展开行的应答**（2026-09-23，[devlog](../devlog/2026-09-23-step-marker-hover-affordance.md)）：有 DetailPanel 内容的 marker 行是 `role=button` 披露控件（Tab 可达、Enter / Space、`aria-expanded`，可访问名取行内容，不设 `aria-label`），与 pill 行、折叠头同族：hover / focus-visible 在**内容列**（summary + caret）画 `bg-hover` 并提墨到 ink，即时无过渡；序号在框外，但悬停整行任一处都点亮内容框（`group-hover`）。框左缘 = 内容列 −10px，与 inline pill 的 hover 框同一条边，负 margin 抵消、文字 x 不变；上下不外溢，框即行框（live 窗口的裁剪框顶边贴着 marker 行，上溢会被切平）。summary 保留可选中，行内拖选不触发展开。提墨必须落在自带墨色的子元素上——行级 `hover:text-ink` 继承不到它们，此前正是这样悄悄失效的
-  - **过程区 = StepRegion（缩进 + rail）**（2026-09-16 第二轮）：一个 run 的整个过程体（marker、narration、inline pill、block 卡片、ask_user 回显与用户回复、DetailPanel 原文）包在 `StepRegion` 里，整体缩进一格 `--step-gutter`，左侧 x=5（折叠头 caret 中心）有一条 1px `bg-line` 竖向 rail 贯穿全高。于是序号落在 24–48、内容从 48 起笔，和折叠头文字（起于 19）形成「把手在左、列表在右」——与参考 trace 组件的 24 / 47 同比例。**live 与 settled 同构**：未完成的 run（以及 Goal run、/btw 等不可折 run）走 flat 的 StepRegion，rail 从第一步顶起；settled 可折 run 的 StepRegion 在 RunFoldSection 内，rail 从折叠头下缘（`-top-2.5`）挂下来。run 完成被重新包进折叠段时 x 不动。MainView 的 in-flight marker 也包一层 StepRegion（与上方 rail 之间有一小段断口，已知）。
+  - **过程区 = StepRegion（缩进 + rail）**（2026-09-16 第二轮）：一个 run 的整个过程体（marker、narration、inline pill、block 卡片、ask_user 回显与用户回复、DetailPanel 原文）包在 `StepRegion` 里，整体缩进一格 `--step-gutter`，左侧 x=5（折叠头 caret 中心）有一条 1px `bg-line` 竖向 rail 贯穿全高。于是序号落在 24–48、内容从 48 起笔，和折叠头文字（起于 19）形成「把手在左、列表在右」——与参考 trace 组件的 24 / 47 同比例。**live 与 settled 同构**：未完成的 run（以及 /btw 等不可折 run）走 flat 的 StepRegion，rail 从第一步顶起；settled 可折 run 的 StepRegion 在 RunFoldSection 内，rail 从折叠头下缘（`-top-2.5`）挂下来。run 完成被重新包进折叠段时 x 不动。MainView 的 in-flight marker 也包一层 StepRegion（与上方 rail 之间有一小段断口，已知）。
   - **最终回答满宽**：StrongHr 之后的回答不在 StepRegion 里。为此 `answerOnly` 拆分扩展到**所有**有收口 turn 的 group（原只对可折 group）：收口 turn 的 marker 以 `markerOnly` 进区域，回答 flat 渲染。StrongHr 自己 `-ml-(--step-gutter)` 从缩进里破出来铺满列宽——「行动 → 结论」的横线属于回答的宽度。
   - **内容列 x 的两处细节**：pill 按钮保留 `px-2` hover 外溢，外层 `-ml-2.5` 拉回 8px 外溢 + 2px Phosphor 字形内留白，图标可见笔画正好落在 summary 首字的 x；裸步合并的 pill 行自画 gutter。
   - **锚点靠对齐，不靠墨量，层级为 头 → summary → 序号**：summary 是这一行的句子，序号是页边序号栏，是这一步里最轻的元素（第一轮曾保留 medium 以保 Windows 可扫性，真机看后层级比可扫性重要，改 regular 并降 1px）。RunFoldHeader 的「N 步」是计数、sidebar 的「第 N 步 · summary」是独立语境需要单位，均不跟随；「第 N 步」文案（`copy.conversation.step`）保留为序号旁的 sr-only 文本，屏幕阅读器仍念完整语义。序号栏在 `index` 未知的 pre-turn_start 窗口也占位（`··`），步落地时状态文字不右跳。
@@ -492,7 +485,7 @@ Composer 状态同步：`agentRunning = true` 时 Submit 按钮切到 Stop 模�
 - **旁白回声步：旁白当 marker 小字**（2026-09-23，[devlog](../devlog/2026-09-23-step-heading-narration-echo.md)）：模型没写 `<summary>` 时 GA 拿整段回复当 summary，于是带旁白的工具步里 summary 就是旁白本身（`summaryEchoesAnswer`；2026-09 起带旁白的步 80% 是这种）。此前 marker 退回「调用了 X」（`stepCalledTools`），只是在复述正下方的工具 pill，真正概括这一步的那句话反而不在标题位。现在这类步的 marker summary = 旁白（`cleanSessionSummary` 去 markdown 标记、压空白、不截断，12px ink-soft 照常换行），旁白正文行不再单独渲染；caret 与 DetailPanel 不变。判定在 `lib/step-heading.ts` `isEchoNarrationStep`；模型自己写了 summary 的步、没旁白的步、裸步合并、最终回答都不受影响。代价：流式期旁白按正文寄存器流出，落定时缩成 marker 小字（PROSE_NARRATION 当初为避免的那一下），真机 A/B/C 对比后接受。`stepCalledTools` 只剩清理后为空时的兜底
 - **流式正文与思考行之间留一个段落间距**（2026-09-18，`--conversation-block-gap`，随字号档走）：思考行按步内节奏没有下边距（工具行要贴着它），但流式正文是 15px 衬线正文而非工具行，零间距贴着 12px 状态行、又满宽压过缩进的标记左缘，JC 真机嫌挤。三案：A 流式态直接套最终回答的 StrongHr（同构零跳动，但中间步叙述也会顶一条假结论线）、B 只加段落级上边距、C 加边距并缩进到内容列（翻 09-16「流式正文满宽」案）。裁 B：不押注流式正文最终落成叙述（6px 缩进）还是回答（StrongHr），两种结局都语义中性；取 12px 段落档而非 16px 的 StrongHr 档，避免暗示一条不存在的线。落定时的跳动与此前相同，只是起点不再贴着。
 - in-flight 状态：`currentTurnIndex` 从 `turn_start` 读取，用于给 thinking 占位 `key`（每步时钟归零）与 `mt-*` 档位；**thinking 行不显序号，序号位放 `··`**（2026-09-16）——序号是落定的盖章，in-flight 行挂「01」等于宣告一个项目还不存在的单项列表；用户感知跑到第几迭代由上方已落定的 01、02 承担，turn_end 替换时序号在原位出现。此前「占位顶部显示 Turn N」的要求废止
-- **live 两行窗口**（2026-09-16，[PRD](../../.scratch/live-run-window/PRD.md)）：正在进行的 run 不是越长越长的清单，而是固定大小的状态面板——最后一个落定的步以阅读形态留在 MainView 思考行之上，之前的步折进 `RunFoldHeader` 的 live 变体「已完成 N 步 · 气味段」（不带用时，步时钟与 HUD 已够两只表；第一步折进去时才出现，单步 run 不受影响）。点头展开是 opt-in，之后落定的步继续追加，完成时保持展开；中止（既不 running 也不 askUserPending）则窗口撤掉、整个 run 平铺。rail 从头 caret 中心贯到思考行（MainView in-flight 区从第 2 步起 `railFrom="header"`）。窗口包在自己的 ExpandSection 里并承担头到窗口的间距（marker `mt-*` 经 `data-role="step-marker"` 归零；折叠头下 `-mt-2.5` + `pt-2.5`，padding 在 overflow 盒内让 rail 穿过间隙），因为挂着的 0fr 折叠段会阻断 margin 穿透。**完成瞬间**：run 完成的那次渲染保持 live 结构一次 sweep（窗口收合、头换 settled 文案、答案平铺），300ms 后切到 settled 结构。**步完成的窗口滑动**：被顶掉的步留一次 sweep 关闭（出场）、新步 0fr 展开（入场）、头首次出现淡入、思考行不重挂载只原地归零时钟（run 开始首次出现淡入一次）；展开态不做出场。每步 `pb-2.5` 自带步间距，region `-mb-2.5` 抵消末步。普通 run 只对可折 run（`foldEligible`）生效；**Goal run 自 2026-09-16 起也进窗口**（`lib/goal-run-groups.ts` 在形状分组之上盖 goal 规则：goal `active` 且是最后一组即 live，不看 `agentRunning`，续跑边界不拆窗口；paused / blocked / 终态与引导消息前的旧段一律折叠；只有 `completed / budget_limited` 的最后一组把 deliverable 平铺在头下；续跑轮的进展说明降为叙述体留在窗口里当步；步号按组内位置连续编号；goal 组的折叠头不显示用时，用时归收口标记）。
+- **live 两行窗口**（2026-09-16，[PRD](../../.scratch/live-run-window/PRD.md)）：正在进行的 run 不是越长越长的清单，而是固定大小的状态面板——最后一个落定的步以阅读形态留在 MainView 思考行之上，之前的步折进 `RunFoldHeader` 的 live 变体「已完成 N 步 · 气味段」（不带用时，步时钟与 HUD 已够两只表；第一步折进去时才出现，单步 run 不受影响）。点头展开是 opt-in，之后落定的步继续追加，完成时保持展开；中止（既不 running 也不 askUserPending）则窗口撤掉、整个 run 平铺。rail 从头 caret 中心贯到思考行（MainView in-flight 区从第 2 步起 `railFrom="header"`）。窗口包在自己的 ExpandSection 里并承担头到窗口的间距（marker `mt-*` 经 `data-role="step-marker"` 归零；折叠头下 `-mt-2.5` + `pt-2.5`，padding 在 overflow 盒内让 rail 穿过间隙），因为挂着的 0fr 折叠段会阻断 margin 穿透。**完成瞬间**：run 完成的那次渲染保持 live 结构一次 sweep（窗口收合、头换 settled 文案、答案平铺），300ms 后切到 settled 结构。**步完成的窗口滑动**：被顶掉的步留一次 sweep 关闭（出场）、新步 0fr 展开（入场）、头首次出现淡入、思考行不重挂载只原地归零时钟（run 开始首次出现淡入一次）；展开态不做出场。每步 `pb-2.5` 自带步间距，region `-mb-2.5` 抵消末步。只对可折 run（`foldEligible`）生效。
 - `run_complete` / `error` 时清空 currentTurnIndex
 - **没有 turn 之间的 SoftHr**——TurnMarker 自带 chapter-break 视觉重量，水平横线已删除
 
@@ -519,60 +512,9 @@ Composer 状态同步：`agentRunning = true` 时 Submit 按钮切到 Stop 模�
 - 附件：左下 ＋ 菜单 + 拖放 + 粘贴三路收口，**三路同一条分流规则**——图片进附件条（模型能看到），其余文件与文件夹在光标处插入路径引用（2026-10-03 起 ＋ 菜单也按扩展名分流，见下方「＋ 菜单」）
 - 草稿按 session 驻留内存（切会话不丢半截消息）；进入会话自动聚焦
 
-#### Goal 模式（armed）= Composer 穿委派正装（2026-09-17，goal-simplify 票 09）
+#### Goal 模式（armed）（已退役）
 
-点 Target 进入 armed 后，Composer **整框换成委派标记的正装**：brand-tint 底
-（**70% 混 elevated**——真机三档实测 tint / 70% mix / brand-soft，JC 裁 mix：
-全 tint 给打字面用重了一丢丢）+ 4px `brand-strong` 左条（`border-l-4`，外框
-仍 `rounded-md`），armed 的 × 切换钮改 `bg-elevated` 底（brand-soft 圆底会
-沉进色板）。顶部多一行
-eyebrow，与 `GoalCommissionMarker` 的 eyebrow 同构——左 `Target + GOAL`
-（11px 大写字距 brand-strong），右侧是**上限 pill**「上限 60 分钟 ▾」（armed
-才出现，退出即收）。所见即所发：输入框此刻长得就是 Enter 之后线程里那条委派
-标记。placeholder 换「写下要完成的目标…」，右下发送钮变实心 `Target`，切换钮
-变 ×；右侧不再有「Goal 模式」文字提示，右对齐行的几何在 armed 前后不动。
-
-- **未 armed 的切换钮是无底色图标钮**（2026-10-03，G1）：与 ＋ 同族
-  （`COMPOSER_TERTIARY_ICON_BUTTON`，`Target` thin 17px），静止无底色、无描边、
-  无投影，hover 才出 `hover` 底。此前是 `bg-surface` + 描边 + 投影的凸起键，
-  空草稿时发送钮是未点亮的灰圆，于是整行最像「能按」的是 Goal——低频重武器
-  压过了主动作（真机截图实测）。规则：**Composer 里凸起的键只留给发送位**
-  （发送 / 停止 / 去配置模型），凸起即「这会把东西发出去」；armed 的 × 是唯一
-  例外，保持 `bg-elevated` 圆（09-17：放在 tint 色板上要有自己的底）。
-  tooltip 用「名称 · 结果」句式，与上限 pill 同腔：「Goal · 让 Galley 自己
-  一直做到完成」。Rejected：**G2 带字开关**「◎ Goal」（armed 时按下锁住）——
-  能顺带解决图标难认，JC 取更安静的 G1。
-- **无确认框**：armed + Enter 直接启动，footer hint「Enter 启动 Goal · Esc
-  取消」，启动中显示「启动中…」。v2 的 Goal 在当前对话里跑、顶栏一键停，
-  armed 正装就是全部的「你确定吗」。v1 的确认框（目标回显 + 上限 + 说明
-  正文）随之退役，tooltip「预览 Goal」一并消失。
-- **上限 pill popover = 闹钟式滚轮**（2026-09-17 票 10，取代票 09 的六档
-  对数菜单）：`GoalCeilingWheel`，10 → 240 每 10 分钟一格再加「无上限」共
-  25 档，**五行可视**（行高 28px，共 140px）、上下各一行 mask 渐隐、中间一格
-  `bg-hover` 高亮带画在列表之后、CSS `snap-y snap-mandatory` 吸附、滚动停稳
-  90ms 即选中、点某行滚过去。三行曾被真机否掉：三行完整等距在桌面语法里就是
-  「三项菜单」，用户不会想到滚；iOS 靠斜面 + 多行给出「上下还有」的信号，
-  渐隐是斜面的平面翻译。pill 尾部箭头 `CaretUp`（thin 10px）——**箭头指向
-  弹层打开的方向**，Composer 贴底、弹层一律往上；模型 / 强度短语 2026-10-03
-  起不带箭头，上限 pill 保留：它夹在 eyebrow 的标签字中间，不带箭头就和
-  「GOAL」这类标签分不开；
-  60 带「推荐」尾标。**为什么是滚轮**：上限是一个「量」，且常对应外部截止
-  时间（配额窗口 135 分钟后 reset，用户要设 130 / 140），六档对数菜单读起来
-  像设置项且表达不了这种值；真机三变体（menu / stepper pill / wheel）实测，
-  macOS 触控板下滚轮「不输 iPhone」，JC 裁 wheel。这也部分回收了票 09 砍
-  自定义分钟框的动机——问题在形式不在需求。popover **不放任何说明行**——
-  任何一句话都会把它撑宽（先放两句 43 字撑到 260px，缩成一句 16 字仍要
-  200px，JC 两次嫌宽）；上限语义放 pill 的 tooltip「时间上限 · 到上限前
-  Galley 会一直自己推进」，点之前必经悬停。**不记忆**：每次 armed 回到 60，
-  「无上限」永远是当次手选。
-  原确认框那段两句话的新用户说明**不再有家**：「随时可发消息引导或停止」是
-  运行态知识，顶栏停止钮与暂停 / 受阻尾标已在教，启动前预告是重复；曾考虑
-  塞进 placeholder，按 07-04 空状态 austerity 先例否掉（placeholder 是
-  affordance 不是阅读区，且首字符即消失）。
-- 空状态里 Composer 因 eyebrow 长高时重新居中，不固定底边。
-- Rejected：**方案 A**（有草稿时点 Target 直接弹确认框、空草稿才 armed）——
-  少一步但框还在，JC 直接选了拆框；**启动后 toast 带「停止」当兜底**——
-  与「不加任何确认」相悖，顶栏停止已够。
+（2026-10-13 移除，见 [devlog](../devlog/2026-10-13-remove-goal.md)）输入框不再有 Goal 入口：`Target` 切换钮、armed 正装、上限 pill 与滚轮、「Enter 启动 Goal」提示一并删除，普通发送不变。原在这里的「凸起的键只留给发送位」与 Goal 无关，移到下方「Submit 按钮」。
 
 #### Submit 按钮（杏沙 CTA 例外）
 
@@ -580,12 +522,13 @@ eyebrow，与 `GoalCommissionMarker` 的 eyebrow 同构——左 `Target + GOAL`
 - Phosphor `ArrowUp` **bold** / 32px circle / 杏沙填充 / charcoal icon（thin 在 16px 实心圆上过细，落地时升 bold——刻意，勿"修"回 thin）
 - Enter 触发，Shift+Enter 换行；**输入法组字中的 Enter 交给 IME**（`isImeCompositionKeydown` 守卫，中文优先产品的硬约束）
 - agent running 时**位置替换为 Stop 按钮**（深琥珀填充 / Phosphor `Stop` **fill**，同上刻意加重），点击触发 abort；此时 footer hint 教 `/btw`（「Enter 发送」在运行态是谎言）
+- **Composer 里凸起的键只留给发送位**（2026-10-03）：发送 / 停止 / 去配置模型，凸起即「这会把东西发出去」。其余按钮（＋ 等）是无底色图标钮（`COMPOSER_TERTIARY_ICON_BUTTON`），静止无底色、无描边、无投影，hover 才出 `hover` 底。
 
 #### ＋ 菜单（2026-10-03）
 
 位置：**Composer 按钮行最左**，紧贴模型短语（两者之间不留行间距——留 8px
 时 ＋ 与模型名的视觉空白约 31px，读作一个离群的控件）。左边是「放进什么、
-谁来回答」，右边只剩「怎么发」（Goal 切换钮 + 发送位）。与 ChatGPT /
+谁来回答」，右边只剩「怎么发」（发送位）。与 ChatGPT /
 Claude.ai 的 ＋ 同位，借用户已有的肌肉记忆。
 
 - 形态：Phosphor `Plus` thin 17px，`COMPOSER_TERTIARY_ICON_BUTTON`（无底色
@@ -637,7 +580,6 @@ Claude.ai 的 ＋ 同位，借用户已有的肌肉记忆。
   审阅草稿、**多源调研对比**、整理表格、执行前检查清单——三条差异化项
   交错在 3 / 5 / 7 位，而非按频率堆在末尾（改了此前「严格按频率排序」的
   约定；理由：920 dialog 一屏看全 9 张，交错让惊喜卡片在动线里更显眼）。
-  刻意不含 Goal——重武器，避免新用户初期心智负荷。
 - 每条预设带一个面向用户的 `description`（一句话，「Galley 用这条能替你做
   什么」），随 UI 语言本地化；数据模型上 `description` 是 `PromptPreset` /
   `ResolvedSavedPrompt` 的可选字段，只有预设携带，自定义不带。
@@ -764,7 +706,7 @@ quick prompt 建议**——能力发现靠"用户主动打开库时看到能力�
   JC 指出不统一。两个都加（「gpt-6.1-sol ⌃ · high ⌃」）在短短一句里挤三个小记号，
   且是 09-22 被否的两箭头形态；故两个都去。可点的提示交给悬停框 + tooltip（模型
   名自 09-22 起本就如此）。风险知情：成熟产品的模型选择器几乎都带箭头，这里是
-  少数派，首次使用要悬停才知道可点；同一行的 ＋ / ◎ / ↑ 都是明确的按钮，文字
+  少数派，首次使用要悬停才知道可点；同一行的 ＋ / ↑ 都是明确的按钮，文字
   在工具栏里本身暗示可操作。
 - **中间一个「·」**（2026-10-03，JC 裁）：「gpt-6.1-sol high」两个词同字号同字体、
   只差一级墨色，强度词读起来像型号后缀——low / high / mini / max 本来就常出现在

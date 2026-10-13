@@ -297,7 +297,7 @@ Section 标签（2026-10-07 JC 裁）：
 | 模型 subtitle | `为 Galley 配置模型服务商和模型` |
 | 智能体接入 subtitle | `把 Galley 交给本地 Agent 调度` |
 | 智能体接入 section | `Supervisor SOP`（此前 `Galley Supervisor SOP`）；2026-10-08 起中文 UI 正文、提示也一律写 `Supervisor SOP`（05-27「只用一个名字」在中文里落成短名），英文 UI 保留 `Galley Supervisor SOP`，被复制的文档本身不改名 |
-| 智能体接入正文 | session / sessions / Project / repo 在中文 UI 写「对话 / 项目 / 仓库」，例句也不例外（Agent 拿到 SOP 后能对上）；`Goal` 保留；`Discovery file` 写「CLI 路径文件」（2026-10-08 起） |
+| 智能体接入正文 | session / sessions / Project / repo 在中文 UI 写「对话 / 项目 / 仓库」，例句也不例外（Agent 拿到 SOP 后能对上）；`Discovery file` 写「CLI 路径文件」（2026-10-08 起） |
 | 聊天软件 subtitle | `在聊天软件里和 Galley 对话` |
 | 聊天软件正文 | 四个渠道同一套词与句式（2026-10-08 起）：运行中且已绑定「已接入」，飞书运行中未绑定「服务已启动」；配好后暂停「已暂停 / 已暂停接收{平台}消息。/ 恢复接收」；保存按钮只写「保存」，不说「凭证」；安全说明一个模板 +「其他人（{平台场景}）」插槽；解除接入确认写全删什么（凭据、绑定、接回的对话） |
 | 浏览器控制 subtitle | `让 Galley 读取和操作你的浏览器，并沿用你的登录态` |

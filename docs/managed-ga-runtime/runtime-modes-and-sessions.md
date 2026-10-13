@@ -142,8 +142,7 @@ is unaffected.
   message's `turn_index` before that message exists; it is the same
   boundary, since the gap only grows until the message comes. Socket
   `session send` and the queue drain dispatch to a live runner as before and
-  never cut; a Goal persists its objective before its ensure, so a Goal on an
-  idle main chat continues the current segment.
+  never cut.
 - **The database keeps everything**: messages are not touched, the desktop
   shows the whole thread, and there is no segment marker in the UI.
 - **Earlier segments are looked up, not replayed** (ticket 03b): the main
