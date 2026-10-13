@@ -66,7 +66,10 @@ fn js_regex(pattern: &str) -> Regex {
     Regex::new(&pattern.replace(r"\s", JS_SPACE_CLASS)).expect("turn derivation regex compiles")
 }
 
-/// `GA_TAG_PATTERNS`, in the same order.
+/// `GA_TAG_PATTERNS`, in the same order. The TS list keeps `goal-status`:
+/// answers written before Goal was removed (2026-10-13) end with it, and
+/// a reply in such a session can echo it from the replayed history. Its
+/// `extractPreamble` no longer strips it, hence [`GOAL_STATUS_BLOCK`].
 static GA_TAG_BLOCKS: LazyLock<[Regex; 7]> = LazyLock::new(|| {
     [
         js_regex(r"(?s)<thinking>.*?</thinking>"),
@@ -78,6 +81,10 @@ static GA_TAG_BLOCKS: LazyLock<[Regex; 7]> = LazyLock::new(|| {
         js_regex(r"(?s)<subtask>.*?</subtask>"),
     ]
 });
+
+/// Index of `goal-status` in [`GA_TAG_BLOCKS`]: the one block
+/// `extractPreamble` does not strip.
+const GOAL_STATUS_BLOCK: usize = 5;
 
 /// `SUBTASK_OPEN`: an unclosed `<subtask>` and everything after it are
 /// instructions that never went anywhere (main chat ticket 06a), not
@@ -104,9 +111,7 @@ static TOOL_DISPATCH_VERBOSE_PARTIAL: LazyLock<Regex> =
 /// flag `$` is end of input in both engines, and `[\s\S]*` always runs
 /// there, so only the match start matters.
 static UNCLOSED_GA_TAG: LazyLock<Regex> = LazyLock::new(|| {
-    js_regex(
-        r"<(?:thinking|summary|tool_use|file_content|next-suggestion|goal-status|subtask)(?:\s[^>]*)?>",
-    )
+    js_regex(r"<(?:thinking|summary|tool_use|file_content|next-suggestion|subtask)(?:\s[^>]*)?>")
 });
 
 /// `extractThinking`'s `/<thinking>([\s\S]*?)<\/thinking>/`.
@@ -263,10 +268,13 @@ fn dispatch_marker_line_at(text: &str, p: usize) -> Option<usize> {
         .then_some(line_end)
 }
 
-fn strip_ga_tag_blocks(text: &str) -> String {
+/// Strip every [`GA_TAG_BLOCKS`] entry in order, except index `skip`.
+fn strip_ga_tag_blocks(text: &str, skip: Option<usize>) -> String {
     let mut out = text.to_string();
-    for re in GA_TAG_BLOCKS.iter() {
-        out = re.replace_all(&out, "").into_owned();
+    for (i, re) in GA_TAG_BLOCKS.iter().enumerate() {
+        if Some(i) != skip {
+            out = re.replace_all(&out, "").into_owned();
+        }
     }
     out
 }
@@ -278,7 +286,7 @@ pub(crate) fn clean_final_answer(text: &str) -> String {
     if text.is_empty() {
         return String::new();
     }
-    let mut out = strip_ga_tag_blocks(text);
+    let mut out = strip_ga_tag_blocks(text, None);
     if let Some(open) = out.find(SUBTASK_OPEN) {
         out.truncate(open);
     }
@@ -295,7 +303,7 @@ pub(crate) fn extract_preamble(text: &str) -> Option<String> {
     if text.is_empty() {
         return None;
     }
-    let mut segment = strip_ga_tag_blocks(text);
+    let mut segment = strip_ga_tag_blocks(text, Some(GOAL_STATUS_BLOCK));
     segment = replace_line_anchored(&segment, llm_running_marker_at);
     segment = replace_line_anchored(&segment, dispatch_marker_line_at);
     segment = TOOL_DISPATCH_VERBOSE_BLOCK

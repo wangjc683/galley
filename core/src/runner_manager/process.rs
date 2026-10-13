@@ -548,7 +548,7 @@ impl RunnerProcess {
     ///
     /// The whole write is bounded by [`STDIN_WRITE_TIMEOUT`]. A healthy
     /// runner drains stdin on a dedicated reader thread, so even multi-MB
-    /// payloads (`LoadHistory`, goal synthesis prompts) complete in well
+    /// payloads (`LoadHistory`) complete in well
     /// under a second; the only way to hit the timeout is a wedged-but-alive
     /// child with a full pipe buffer. Without the bound, that wedge would
     /// hold this session's manager Mutex forever and pile up every later

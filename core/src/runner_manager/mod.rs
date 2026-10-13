@@ -45,6 +45,6 @@ pub use manager::{
     SpawnArgs,
 };
 pub use process::{BroadcastItem, HeldClose, RunnerProcess};
-pub use queue::{QueueJump, QueueOffer, RunKind, RunOutcome};
+pub use queue::{QueueJump, QueueOffer};
 pub use ready::ReadySnapshot;
 pub use run_state_events::{publish_run_states, SessionRunStatePayload, SESSION_RUN_STATE_EVENT};

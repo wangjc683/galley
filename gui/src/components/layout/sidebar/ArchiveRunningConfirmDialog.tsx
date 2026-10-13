@@ -6,8 +6,8 @@ import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
- * Confirm dialog for archiving a session that is still running (its
- * own run, or a goal it masters). Mirrors ConfirmDeleteProjectDialog's
+ * Confirm dialog for archiving a session that is still running.
+ * Mirrors ConfirmDeleteProjectDialog's
  * alertdialog shape; warning tone (not error) because archiving is
  * reversible — the risk is losing SIGHT of live work, not losing data.
  */

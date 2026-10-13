@@ -11,7 +11,6 @@
 //! `create_session`, `archive_session`, …) land in B2 once runner
 //! ownership migrates into Rust.
 
-pub mod goal;
 pub mod health;
 pub mod message;
 pub mod model;
@@ -25,7 +24,6 @@ pub mod status;
 pub mod subtask;
 pub mod transcript_window;
 
-pub use goal::{CreateGoalInput, GoalBrief, GoalId, GoalStatus, DEFAULT_GOAL_BUDGET_SECONDS};
 pub use health::{HealthCheck, HealthReport, HealthStatus};
 pub use message::{
     AskUserBrief, MessageAttachmentBrief, MessageBrief, MessageId, MessageRole, MessageTelemetry,
@@ -148,7 +146,7 @@ pub trait GalleyApi: Send + Sync {
     ) -> Result<MessageBrief>;
 
     /// Write a Galley-authored `system`-role visible message into a
-    /// session (e.g. Goal master narration). Distinct from
+    /// session (e.g. a `session.checkpoint` narration). Distinct from
     /// `send_message`, which always writes a `user` row: system rows
     /// render as neutral narration, not as the human operator's input,
     /// and never dispatch to the runner.
@@ -157,28 +155,6 @@ pub trait GalleyApi: Send + Sync {
         session_id: SessionId,
         content: String,
         origin: Origin,
-    ) -> Result<MessageBrief>;
-
-    /// [`Self::send_message`] variant that stamps the row with the Goal
-    /// it belongs to (`messages.goal_id`), used for the objective turn
-    /// of a Goal launch. Frontends bracket Goal episodes by this id
-    /// instead of matching objective text.
-    async fn send_message_for_goal(
-        &self,
-        session_id: SessionId,
-        content: String,
-        origin: Origin,
-        goal_id: GoalId,
-    ) -> Result<MessageBrief>;
-
-    /// [`Self::send_system_message`] variant that stamps the row with
-    /// the Goal it narrates (launch ack, controller checkpoints).
-    async fn send_system_message_for_goal(
-        &self,
-        session_id: SessionId,
-        content: String,
-        origin: Origin,
-        goal_id: GoalId,
     ) -> Result<MessageBrief>;
 
     // ---------------- session writes (B3 M4a) ----------------
@@ -429,59 +405,6 @@ pub trait GalleyApi: Send + Sync {
         fired_at_iso: String,
         session_id: Option<SessionId>,
     ) -> Result<ScheduledTaskBrief>;
-
-    // ---------------- goals (v2) ----------------
-    //
-    // One persistent objective per session (.scratch/goal-simplify/PRD.md).
-    // The continuation loop lives in `message_queue`; these are its
-    // state reads / writes plus the surfaces the GUI and CLI list.
-
-    /// Set a goal on a session. `invalid_args` when the session already
-    /// has an open (active / paused / blocked) goal; `not_found` when the
-    /// session does not exist. Persists only — dispatching the objective
-    /// turn is the caller's job.
-    async fn create_goal(&self, input: CreateGoalInput, origin: Origin) -> Result<GoalBrief>;
-
-    async fn get_goal(&self, id: GoalId) -> Result<GoalBrief>;
-
-    /// Open goals (active / paused / blocked), oldest first.
-    async fn list_active_goals(&self) -> Result<Vec<GoalBrief>>;
-
-    /// Open goals plus terminal ones whose result has not been seen —
-    /// what the top-bar pill and sidebar render.
-    async fn list_visible_goals(&self) -> Result<Vec<GoalBrief>>;
-
-    /// All goals ever set on `session_id`, any status, oldest first.
-    /// Read-only; powers the in-thread commission / terminal markers,
-    /// which must persist after a goal leaves the visible list so
-    /// reopening a finished run is not amnesiac.
-    async fn list_goals_for_session(&self, session_id: SessionId) -> Result<Vec<GoalBrief>>;
-
-    async fn mark_goal_result_seen(&self, id: GoalId, origin: Origin) -> Result<GoalBrief>;
-
-    /// Move a goal to `status`. Terminal statuses stamp `ended_at` once;
-    /// `Paused` / `Blocked` stamp `paused_at`; `Active` clears it. A blank
-    /// `latest_summary` keeps the stored one.
-    async fn update_goal_status(
-        &self,
-        id: GoalId,
-        status: GoalStatus,
-        latest_summary: Option<String>,
-    ) -> Result<GoalBrief>;
-
-    /// Record one dispatched continuation; `wrap_up` marks the budget-limit
-    /// wrap-up so the next idle lands `BudgetLimited`.
-    async fn bump_goal_continuation(&self, id: GoalId, wrap_up: bool) -> Result<GoalBrief>;
-
-    /// Add `extra_seconds` to a goal's ceiling. An `active` goal keeps
-    /// running with more room; a `budget_limited` one reopens as
-    /// `active` (the caller then dispatches the next continuation).
-    /// `invalid_args` for a goal with no ceiling or in any other status.
-    async fn extend_goal_budget(&self, id: GoalId, extra_seconds: u32) -> Result<GoalBrief>;
-
-    /// Core restart: every `active` goal becomes `paused` (nothing is
-    /// running any more). Returns the number of goals moved.
-    async fn pause_open_goals(&self) -> Result<u64>;
 
     // ---------------- B4 M1 · transaction-aware variants ----------------
     //

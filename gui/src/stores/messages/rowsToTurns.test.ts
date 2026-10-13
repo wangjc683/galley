@@ -12,7 +12,7 @@ import type {
 } from "@/types/conversation";
 
 describe("rowsToTurns", () => {
-  it("restores user, assistant, and goal system turns", () => {
+  it("restores user, assistant, and narration system turns", () => {
     const turns = rowsToTurns([
       makeMessageRow({
         role: "user",
@@ -55,7 +55,7 @@ describe("rowsToTurns", () => {
       makeMessageRow({
         role: "system",
         turn_index: 7,
-        content: "Goal checkpoint",
+        content: "Checkpoint",
       }),
     ]);
 
@@ -94,8 +94,8 @@ describe("rowsToTurns", () => {
     });
     expect(turns[3]).toEqual({
       role: "system",
-      content: "Goal checkpoint",
-      variant: "goal",
+      content: "Checkpoint",
+      variant: "narration",
     });
   });
 
@@ -328,7 +328,7 @@ describe("derivePendingAskUser", () => {
   const systemTurn = (): SystemTurn => ({
     role: "system",
     content: "checkpoint",
-    variant: "goal",
+    variant: "narration",
   });
 
   it("rebuilds pending state from an unanswered trailing ask_user, stripping GA tags", () => {
@@ -365,7 +365,7 @@ describe("derivePendingAskUser", () => {
     ).toBeNull();
   });
 
-  it("skips trailing system turns (goal narration / btw bystanders)", () => {
+  it("skips trailing system turns (narration / btw bystanders)", () => {
     expect(
       derivePendingAskUser([askUserTurn({ question: "Q?" }), systemTurn()]),
     ).toEqual({ question: "Q?", candidates: [] });

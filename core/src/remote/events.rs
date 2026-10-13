@@ -24,7 +24,6 @@ use crate::api::{
 };
 use crate::db::SqliteGalley;
 use crate::error::GalleyError;
-use crate::goal_engine::GOAL_UPDATED_EVENT;
 use crate::notify::RemoteEventSink;
 use crate::runner_manager::{SessionRunStatePayload, SESSION_RUN_STATE_EVENT};
 use crate::session_runner::{HistoryReplayPayload, RUNNER_HISTORY_REPLAY_EVENT};
@@ -68,7 +67,6 @@ const FORWARDED: &[&str] = &[
     RUNNER_EVENT,
     SESSION_RUN_STATE_EVENT,
     RUNNER_HISTORY_REPLAY_EVENT,
-    GOAL_UPDATED_EVENT,
     SESSION_QUEUE_CHANGED_EVENT,
 ];
 
@@ -212,12 +210,6 @@ struct UserMessagePersistedIn {
 struct RunnerEventIn {
     session_id: String,
     event: Value,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct GoalUpdatedIn {
-    goal: Value,
 }
 
 /// The conversion task's state.
@@ -504,21 +496,6 @@ impl Mapper {
                 }
                 let session_id = replay.session_id.clone();
                 let event = AppEvent::HistoryReplay(convert::history_replay(replay));
-                Mapped::State(Some(session_id), event)
-            }
-            GOAL_UPDATED_EVENT => {
-                let GoalUpdatedIn { goal } = serde_json::from_value(payload)?;
-                let Some(session_id) = goal
-                    .get("sessionId")
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-                else {
-                    return Ok(Mapped::Nothing);
-                };
-                if !self.is_shown(&session_id).await {
-                    return Ok(Mapped::Nothing);
-                }
-                let event = AppEvent::GoalUpdated(phone::GoalUpdatedEvent { goal });
                 Mapped::State(Some(session_id), event)
             }
             SESSION_QUEUE_CHANGED_EVENT => {

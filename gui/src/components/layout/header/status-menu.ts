@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
  * they open a menu, on the same compact surface as the session title
  * menu, the Composer ＋ menu and 显示: p-1, 13px rows, whole-row items
  * that highlight on hover, hairline separators. Decision popovers with
- * real buttons and explanatory text (Goal, Update) stay cards
+ * real buttons and explanatory text (Update) stay cards
  * (2026-10-04: entry surfaces are menus, decision surfaces are cards).
  *
  * Both menus lay a status row out the same way: a 14px mark in the

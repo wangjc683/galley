@@ -185,7 +185,6 @@ pub struct Message {
     /// The question this row asked through `ask_user`, if any.
     pub ask_user: Option<AskUser>,
     pub telemetry: Option<MessageTelemetry>,
-    pub goal_id: Option<String>,
     pub origin: Option<Origin>,
     pub attachments: Vec<Attachment>,
     pub created_at: String,

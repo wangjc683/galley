@@ -142,20 +142,12 @@ interface PrefsState {
   themePreference: ThemePreference;
 
   /**
-   * System notification when a goal reaches a terminal state
-   * (completed / failed / stopped). Only fires when the window is
-   * unfocused — the in-app toast covers the focused case (gating
-   * lives in lib/notify.ts). Persisted to pref `notify_on_goal_end`.
-   */
-  notifyOnGoalEnd: boolean;
-
-  /**
    * System notification when a run the user started from this GUI
-   * (Composer submit) completes its final turn. Goal- and CLI-driven
-   * runs never notify — the pending flag is only set on GUI submit
-   * (see lib/notify.ts `markReplyNotifyPending`). Same unfocused-only
-   * gating as the other kinds. Persisted to pref
-   * `notify_on_reply_done`.
+   * (Composer submit) completes its final turn. CLI-driven runs never
+   * notify — the pending flag is only set on GUI submit (see
+   * lib/notify.ts `markReplyNotifyPending`). Only fires when the window
+   * is unfocused — the in-app toast covers the focused case (gating
+   * lives in lib/notify.ts). Persisted to pref `notify_on_reply_done`.
    */
   notifyOnReplyDone: boolean;
 
@@ -205,7 +197,6 @@ interface PrefsActions {
   setThemePreference: (preference: ThemePreference) => Promise<void>;
 
   // ---- Notifications ----
-  setNotifyOnGoalEnd: (enabled: boolean) => Promise<void>;
   setNotifyOnReplyDone: (enabled: boolean) => Promise<void>;
   setNotifySound: (enabled: boolean) => Promise<void>;
 
@@ -269,7 +260,6 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   conversationFontSize: "standard",
   languagePreference: "system",
   themePreference: readCachedThemePreference(),
-  notifyOnGoalEnd: true,
   notifyOnReplyDone: true,
   notifySound: true,
   keepInBackgroundOnClose: true,
@@ -333,15 +323,6 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   },
 
   // ---- Notifications ----
-  setNotifyOnGoalEnd: async (enabled) => {
-    set({ notifyOnGoalEnd: enabled });
-    try {
-      await setPref("notify_on_goal_end", enabled);
-    } catch (e) {
-      console.warn("[prefs] setNotifyOnGoalEnd: pref persistence failed.", e);
-    }
-  },
-
   setNotifyOnReplyDone: async (enabled) => {
     set({ notifyOnReplyDone: enabled });
     try {
@@ -537,17 +518,6 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
     } catch (e) {
       console.warn(
         "[prefs] hydratePrefs: theme_preference pref load failed.",
-        e,
-      );
-    }
-    try {
-      const notifyGoalEnd = await getPref<boolean>("notify_on_goal_end");
-      if (typeof notifyGoalEnd === "boolean") {
-        set({ notifyOnGoalEnd: notifyGoalEnd });
-      }
-    } catch (e) {
-      console.warn(
-        "[prefs] hydratePrefs: notify_on_goal_end pref load failed.",
         e,
       );
     }

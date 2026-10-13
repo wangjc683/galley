@@ -7,14 +7,14 @@
 //! ([`crate::auto_title`]) may upgrade after the first finished run.
 //!
 //! Until 02c the GUI derived it: on every user message it rendered —
-//! including the ones CLI, Goal or the queue had persisted — it truncated
+//! including the ones CLI or the queue had persisted — it truncated
 //! the text and wrote the title back with `rename_session`. A database
 //! write triggered by an event broke the [`crate::notify`] rule (Core
 //! writes everything durable itself), and a phone-created session would
 //! have had no page to do it. Core now derives it wherever it persists a
 //! user message: its own send ([`crate::session_send`]), socket
-//! `session.send` and `session.new`, the queue drain, and a Goal's
-//! objective row. One rule, one write ([`derive_title_if_seed`], a
+//! `session.send` and `session.new`, and the queue drain. One rule, one
+//! write ([`derive_title_if_seed`], a
 //! compare-and-swap on `seed`), so it happens once.
 //!
 //! The truncation is the GUI's `deriveTitleFromText` to the letter, JS

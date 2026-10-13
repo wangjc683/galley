@@ -203,12 +203,6 @@ pub struct TurnEndEvent {
     /// run, and only when the model chose to emit one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_suggestion: Option<String>,
-    /// Goal v2 completion tag extracted from the final answer's
-    /// `<goal-status>` element: `"complete"` or `"blocked"`. Only present
-    /// on the final turn_end of a run, and only when the model emitted
-    /// one (.scratch/goal-simplify/PRD.md §3.4).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub goal_status: Option<String>,
     /// The turn's reasoning, read from GA's `response.thinking`: native
     /// model reasoning (thinking blocks), or a prompted `<thinking>` block
     /// GA moved out of `content`. Present on any turn_end (not only the
@@ -728,30 +722,6 @@ mod tests {
         let event: IpcEvent = serde_json::from_str(new).unwrap();
         if let IpcEvent::TurnEnd(t) = event {
             assert_eq!(t.next_suggestion.as_deref(), Some("帮我跑一下测试"));
-        } else {
-            panic!("wrong variant");
-        }
-    }
-
-    #[test]
-    fn parse_turn_end_goal_status_optional() {
-        // Old bridge without the field → None; new bridge carries it.
-        let old = r#"{"kind":"turn_end","sessionId":"s1","turnIndex":1,"summary":"","toolCalls":[],"toolResults":[],"responseContent":"ok","timestamp":"t"}"#;
-        let event: IpcEvent = serde_json::from_str(old).unwrap();
-        if let IpcEvent::TurnEnd(t) = event {
-            assert!(t.goal_status.is_none());
-            let out = serde_json::to_string(&t).unwrap();
-            assert!(
-                !out.contains("goalStatus"),
-                "None must be omitted, not null: {out}"
-            );
-        } else {
-            panic!("wrong variant");
-        }
-        let new = r#"{"kind":"turn_end","sessionId":"s1","turnIndex":1,"summary":"","toolCalls":[],"toolResults":[],"responseContent":"ok","goalStatus":"complete","timestamp":"t"}"#;
-        let event: IpcEvent = serde_json::from_str(new).unwrap();
-        if let IpcEvent::TurnEnd(t) = event {
-            assert_eq!(t.goal_status.as_deref(), Some("complete"));
         } else {
             panic!("wrong variant");
         }

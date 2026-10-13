@@ -4,7 +4,6 @@ import type { ComposerReasoningEffortState } from "@/components/conversation/Eff
 import type { ComposerLLMOption } from "@/components/conversation/LLMPill";
 import type { ImageBlockReason } from "@/lib/composer-images";
 import type { PendingImageAttachment } from "@/types/conversation";
-import type { GoalBrief, GoalLaunchConfig } from "@/types/goal";
 
 /**
  * Imperative handle exposed via `ref` on Composer. Lets callers
@@ -37,12 +36,6 @@ export interface ComposerProps {
     text: string,
     attachments: PendingImageAttachment[],
   ) => boolean | void;
-  /** Start the current text as a Goal on this session instead of
-   * sending it as an ordinary message. */
-  onGoalSubmit?: (
-    text: string,
-    config: GoalLaunchConfig,
-  ) => void | Promise<void>;
 
   /** When true, hide submit and show the deep-amber stop button. */
   stopMode?: boolean;
@@ -112,13 +105,6 @@ export interface ComposerProps {
    * model picker). Undefined hides the pill — e.g. a dev harness with
    * no session context, or before any model is selected. */
   reasoningEffort?: ComposerReasoningEffortState;
-  /** This session's open Goal (active / paused / blocked), if any. */
-  goal?: GoalBrief;
-  /** True when this session already has an open Goal. A session runs at
-   * most one Goal at a time, so the Goal entry is disabled here (with an
-   * explanatory tooltip) unless this Composer is the one already showing
-   * that Goal via `goal`. */
-  hasActiveGoal?: boolean;
   /** Show the compact keyboard/state hint below the Composer. */
   showFooterHint?: boolean;
   /** Caller-supplied content for the same footer slot, shown when the
@@ -136,11 +122,9 @@ export interface ComposerProps {
   imagesEnabled?: boolean;
   /** Called when an image is rejected at intake or submit. `reason`
    * selects the toast copy:
-   *   - `"goal"`: image present on a Goal / /btw / reply path
    *   - `"external"`: image intake on a non-image-capable runtime
    *   - `"too-large"`: single image exceeds the client size cap
-   *   - `"unsupported"`: mime not in the supported set (HEIC, GIF, …)
-   * Replaces the old `onImageSubmitBlocked` (only carried `"goal"`). */
+   *   - `"unsupported"`: mime not in the supported set (HEIC, GIF, …) */
   onImageBlocked?: (reason: ImageBlockReason) => void;
   /** Called when a native drop carries no filesystem paths (text / URL
    * drag). The interception loses the dragged content, so the app-level

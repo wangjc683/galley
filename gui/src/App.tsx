@@ -34,8 +34,6 @@ import { useChannelsStatus } from "@/hooks/useChannelsStatus";
 import { useExternalCoreEvents } from "@/hooks/useExternalCoreEvents";
 import { useSessionQueueEvents } from "@/hooks/useSessionQueueEvents";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
-import { useGoalActions } from "@/hooks/useGoalActions";
-import { useGoalEffects } from "@/hooks/useGoalEffects";
 import { useImageBlockedToast } from "@/hooks/useImageBlockedToast";
 import { useLLMDisplay } from "@/hooks/useLLMDisplay";
 import { useMessageSend } from "@/hooks/useMessageSend";
@@ -67,7 +65,6 @@ import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { useUiStore } from "@/stores/ui";
-import { isOpenGoalStatus, type GoalBrief } from "@/types/goal";
 
 /**
  * V0.1 Stage 2 #8 — App entry.
@@ -105,9 +102,6 @@ function App() {
   // frequent non-sidebar updates like turn_progress streaming.
   const sessions = useSessionsStore((s) => s.sessions);
   const activeSessionId = useSessionsStore((s) => s.activeSessionId);
-  const createSessionPersisted = useSessionsStore(
-    (s) => s.createSessionPersisted,
-  );
   // activateSession is the orchestrator — moved to sessionsStore in
   // B3 M5 so it sits next to active id ownership.
   const activateSession = useSessionsStore((s) => s.activateSession);
@@ -244,12 +238,6 @@ function App() {
   const pendingAskUser = useActiveMessages((m) => m.pendingAskUser, null);
 
   useAppHydrationEffects();
-  const { activeGoals, sessionGoals, setActiveGoals } = useGoalEffects({
-    activeSessionId,
-    copy,
-    pushToast,
-    screen,
-  });
   useBrowserControlLiveStatus(activeRuntimeKind);
   useGlobalShortcuts({ setEmptyComposerFocusTick, setSettingsTab });
   useExternalCoreEvents();
@@ -302,16 +290,6 @@ function App() {
         : "quiet";
   const effectiveActiveId = screen === "main" ? activeSessionId : undefined;
   const activeSession = visibleSessions.find((s) => s.id === effectiveActiveId);
-  // Map of session-id -> that session's OPEN goal, so the Sidebar can
-  // show the goal state on the row (a goal-carrying session sits idle
-  // between continuations, and indefinitely while parked).
-  const sessionGoalStatus = useMemo(() => {
-    const map = new Map<string, GoalBrief>();
-    for (const goal of activeGoals) {
-      if (isOpenGoalStatus(goal.status)) map.set(goal.sessionId, goal);
-    }
-    return map;
-  }, [activeGoals]);
   // Effort pill state (conversation.md §4.4). The "model configuration
   // value" resolves without waiting for the bridge; the effective tier
   // is derived from the override + configured pair rather than the
@@ -360,20 +338,6 @@ function App() {
           }),
       }
     : undefined;
-  // This session's OPEN goal, if any — the Composer's context badge and
-  // the thread's parked tail both key off it.
-  const activeSessionGoal = activeSession
-    ? activeGoals.find(
-        (goal) =>
-          goal.sessionId === activeSession.id && isOpenGoalStatus(goal.status),
-      )
-    : undefined;
-  // Gate for starting a NEW Goal: per-session now (PRD §6 裁决 3), and
-  // only an OPEN goal occupies the slot. `activeGoals` also carries
-  // terminal goals whose result hasn't been seen (they keep the pill's
-  // "view result" entry alive) — one of those must not dead-button the
-  // Composer.
-  const goalSlotOccupied = Boolean(activeSessionGoal);
   const activeSessionBusy =
     screen === "main" && (isRunning || pendingAskUser !== null);
   const {
@@ -417,25 +381,6 @@ function App() {
     setEmptyComposerFocusTick,
     setScreen,
     visibleSessions,
-  });
-  const {
-    startGoalFromComposer,
-    openGoal,
-    stopGoalFromTopbar,
-    extendGoalFromTopbar,
-  } = useGoalActions({
-    activeGoals,
-    activeSession,
-    activeProjectFilter,
-    requiresManagedModelConfig,
-    copy,
-    createSessionPersisted,
-    setScreen,
-    setActiveProjectFilter,
-    activateSession,
-    setActiveGoals,
-    pushToast,
-    openModelsForMissingConfig,
   });
 
   // Archived dialog open state — local UI state, no need to live in
@@ -608,7 +553,6 @@ function App() {
             onDeleteProject={(id) => setDeletingProjectId(id)}
             onArchiveSessions={(ids) => archiveSessionsBulk(ids)}
             petAttachedSessionId={petAttachedSessionId}
-            sessionGoalStatus={sessionGoalStatus}
           />
         }
         main={
@@ -649,24 +593,13 @@ function App() {
                         onToggle={toggleSidebar}
                         sessions={visibleSessions}
                         activeId={effectiveActiveId}
-                        sessionGoalStatus={sessionGoalStatus}
                       />
                     ) : undefined
                   }
-                  activeGoals={activeGoals}
                   channelStatuses={channelStatuses}
                   channelsLoadError={channelsLoadError}
                   onRestartChannels={() => {
                     void restartChannels();
-                  }}
-                  onOpenGoal={(goalId) => {
-                    void openGoal(goalId);
-                  }}
-                  onStopGoal={(goalId) => {
-                    void stopGoalFromTopbar(goalId);
-                  }}
-                  onExtendGoal={(goalId) => {
-                    void extendGoalFromTopbar(goalId);
                   }}
                   runtimeIndicator={runtimeIndicator}
                   openSettings={openSettings}
@@ -706,8 +639,6 @@ function App() {
                     }}
                     onOpenLLMSwitcher={openLLMSwitcherFallback}
                     reasoningEffort={emptyReasoningEffortState}
-                    onGoalSubmit={startGoalFromComposer}
-                    hasActiveGoal={goalSlotOccupied}
                     // Optimistic: no bridge exists yet on the empty
                     // screen, so no runtime has reported its image
                     // capability. The runner reports on `ready`, and the
@@ -737,12 +668,6 @@ function App() {
                     }}
                     onOpenLLMSwitcher={openLLMSwitcherFallback}
                     reasoningEffort={mainReasoningEffortState}
-                    goal={activeSessionGoal}
-                    hasActiveGoal={goalSlotOccupied}
-                    sessionGoals={sessionGoals}
-                    onStopGoal={(goalId) => void stopGoalFromTopbar(goalId)}
-                    onExtendGoal={(goalId) => void extendGoalFromTopbar(goalId)}
-                    onGoalSubmit={startGoalFromComposer}
                     imagesEnabled={
                       activeSession?.gaRuntimeKind === "managed" ||
                       (activeSession?.imagesSupported ?? true)
@@ -905,7 +830,6 @@ function App() {
         key={deletingProject?.id ?? "closed"}
         project={deletingProject}
         sessions={deletingProjectSessions}
-        sessionGoalStatus={sessionGoalStatus}
         onCancel={() => setDeletingProjectId(null)}
         onConfirm={async (archiveSessions) => {
           if (!deletingProject) return;
@@ -922,7 +846,6 @@ function App() {
         toasts={toasts}
         onDismiss={dismissToast}
         onViewProject={openProjectInSidebar}
-        onViewGoal={openGoal}
         onRestartChannels={() => {
           void restartChannels();
         }}

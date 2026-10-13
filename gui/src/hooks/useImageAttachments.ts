@@ -22,7 +22,7 @@ import type { PendingImageAttachment } from "@/types/conversation";
  * Owns the Composer's image-attachment concern: pending tiles, the
  * preview-dialog index, and the three intake paths (paste / drop / file
  * picker) that all funnel through `acceptImageFiles`. Pulled out of
- * Composer so the textarea / paste-fold / goal logic isn't tangled with
+ * Composer so the textarea / paste-fold logic isn't tangled with
  * object-URL lifetime bookkeeping.
  *
  * Drop and picker intake both arrive as filesystem paths (the drop via

@@ -11,7 +11,6 @@ import { isMac } from "@/lib/platform";
 import { formatShortcut } from "@/lib/shortcuts";
 import { isUnpromotedSubtask, unpromotedSubtasksOf } from "@/lib/subtasks";
 import { cn } from "@/lib/utils";
-import type { GoalBrief } from "@/types/goal";
 import type { Session } from "@/types/session";
 
 /** ⌘\ on macOS, Ctrl+\ elsewhere — free in Galley (useGlobalShortcuts,
@@ -45,13 +44,11 @@ export function SidebarCollapseToggle({
   onToggle,
   sessions,
   activeId,
-  sessionGoalStatus,
 }: {
   collapsed: boolean;
   onToggle: () => void;
   sessions: Session[];
   activeId?: string;
-  sessionGoalStatus?: Map<string, GoalBrief>;
 }) {
   const copy = useCopy();
 
@@ -81,11 +78,10 @@ export function SidebarCollapseToggle({
     (s) =>
       s.id !== activeId && s.status !== "archived" && !isUnpromotedSubtask(s),
   );
-  const attention = useSessionsAttention(others, activeId, sessionGoalStatus);
+  const attention = useSessionsAttention(others, activeId);
   const subtaskAttention = useSessionsAttention(
     mainChatOpen ? [] : subtasks,
     activeId,
-    sessionGoalStatus,
   );
   const subtasksNeedYou =
     !!mainChat &&

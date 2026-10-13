@@ -56,16 +56,14 @@ pub const KIND_MAX_BYTES: usize = 32;
 pub const PLACEHOLDER_TITLE: &str = "Galley";
 pub const PLACEHOLDER_BODY: &str = "有新消息";
 
-/// Known `kind` values: the four "needs attention" events of PRD ruling
-/// 17, decided by Core (ticket 08). Open set: an extension shows unknown
+/// Known `kind` values: the "needs attention" events of PRD ruling 17,
+/// decided by Core (ticket 08). Open set: an extension shows unknown
 /// kinds like any other push.
 pub mod kind {
     /// A turn the human started finished.
     pub const REPLY_DONE: &str = "reply_done";
     /// The agent asks the human (`ask_user`).
     pub const ASK_USER: &str = "ask_user";
-    /// A Goal finished or needs the human.
-    pub const GOAL: &str = "goal";
     /// A scheduled task failed to fire.
     pub const SCHEDULE_FAILED: &str = "schedule_failed";
 }
@@ -338,7 +336,7 @@ mod tests {
 
     #[test]
     fn open_rejects_wrong_key_tampering_and_bad_input() {
-        let content = PushContent::new(1, None, kind::GOAL, "t", "b").unwrap();
+        let content = PushContent::new(1, None, kind::REPLY_DONE, "t", "b").unwrap();
         let sealed = seal(&key(1), &content).unwrap();
         assert_eq!(open(&key(2), &sealed), Err(PushError::Decrypt));
         for i in [0, NONCE_LEN, SEALED_LEN - 1] {
@@ -368,7 +366,7 @@ mod tests {
 
     #[test]
     fn aad_binds_the_version() {
-        let content = PushContent::new(1, None, kind::GOAL, "t", "b").unwrap();
+        let content = PushContent::new(1, None, kind::REPLY_DONE, "t", "b").unwrap();
         let plaintext = content.to_padded_plaintext().unwrap();
         let cipher = ChaCha20Poly1305::new(Key::from_slice(key(1).expose_secret()));
         let nonce = [7u8; NONCE_LEN];
@@ -390,13 +388,13 @@ mod tests {
     fn fields_are_validated() {
         for id in ["", "a\"b", "a\\b", "a b", "é"] {
             assert_eq!(
-                PushContent::new(1, Some(id.into()), kind::GOAL, "", "").unwrap_err(),
+                PushContent::new(1, Some(id.into()), kind::REPLY_DONE, "", "").unwrap_err(),
                 PushError::BadField("sessionId"),
                 "{id:?}"
             );
         }
-        assert!(PushContent::new(1, Some("x".repeat(129)), kind::GOAL, "", "").is_err());
-        for k in ["", "Goal", "goal-x", &"k".repeat(33)] {
+        assert!(PushContent::new(1, Some("x".repeat(129)), kind::REPLY_DONE, "", "").is_err());
+        for k in ["", "Reply", "reply-done", &"k".repeat(33)] {
             assert_eq!(
                 PushContent::new(1, None, k, "", "").unwrap_err(),
                 PushError::BadField("kind"),
@@ -478,7 +476,7 @@ mod tests {
         let content = PushContent {
             seq: 1,
             session_id: None,
-            kind: "goal".into(),
+            kind: "reply_done".into(),
             title: String::new(),
             body: "a".repeat(PADDED_LEN),
         };

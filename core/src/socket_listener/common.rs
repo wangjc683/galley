@@ -88,8 +88,7 @@ impl SocketResponseLite {
     /// the socket transport always has. The texts below are the frozen
     /// Agent API wording from before the path moved out of this module
     /// (`spawn_config.rs` / `session_cmds::ensure_session_runner`) —
-    /// change none of them; the `session.new` wording appears on the
-    /// Goal path too, as it always did.
+    /// change none of them.
     pub(super) fn from_session_runner(
         e: crate::session_runner::SessionRunnerError,
         via: &str,
@@ -123,7 +122,8 @@ impl SocketResponseLite {
             E::SubscribeFailed => SocketResponseLite::runner_error(format!(
                 "{via}: runner subscribe failed after spawn"
             )),
-            // New with ticket 02b; only the Goal path can meet it.
+            // New with ticket 02b. `session.new`, the one caller left,
+            // never meets it: a session it just created has no history.
             E::HistoryReplay(reason) => SocketResponseLite::runner_error(format!(
                 "{via}: history replay failed: {reason}"
             )),

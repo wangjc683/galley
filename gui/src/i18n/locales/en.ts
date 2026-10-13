@@ -369,32 +369,6 @@ export const enCopy: AppCopy = {
     updateNewVersionTitle: (version: string) => `New version v${version}`,
     updateDownloadingTitle: "Downloading the new version",
     updateCurrentVersion: (version: string) => `Current version v${version}`,
-    goalTooltip: "Galley Goal",
-    goalStageRunning: "Running",
-    goalStagePaused: "Paused",
-    goalStageBlocked: "Blocked",
-    goalStageDone: "Done",
-    goalStageBudgetLimited: "Time's up",
-    goalStageStopped: "Stopped",
-    goalStageFailed: "Failed",
-    goalElapsed: (minutes: number) => `${minutes}m elapsed`,
-    goalElapsedOfCeiling: (minutes: number, ceiling: number) =>
-      `${minutes} / ${ceiling} min`,
-    goalContinuationCount: (rounds: number) =>
-      `${rounds} ${rounds === 1 ? "continuation" : "continuations"} so far`,
-    goalPausedHint: "Paused · send a message to continue",
-    goalBlockedHint: "Blocked · needs you",
-    goalSectionInProgress: "In progress",
-    goalSectionToReview: "To review",
-    openGoal: "View progress",
-    openGoalResult: "Open result",
-    viewGoalDetails: "View details",
-    stopGoal: "Stop",
-    confirmStopGoal: "Confirm stop",
-    stopGoalConsequence:
-      "Stopping aborts the current turn; the Goal will not continue",
-    extendGoalAtCeiling: (minutes) => `Give it ${minutes} more minutes`,
-    extendGoal: (minutes) => `Add ${minutes} minutes`,
     moreConversationActions: (title) => `${title} · More conversation actions`,
     rename: "Rename",
     reinjectTools: "Reinject tools",
@@ -536,25 +510,6 @@ export const enCopy: AppCopy = {
     removeImage: "Remove image",
     dropToAttach: "Drop to add images or files",
     dropFilesOnly: "Drop to add files (images aren't supported on this runtime)",
-    goalButton: "Goal",
-    goalTooltip: "Goal · Galley keeps going on its own until it's done",
-    goalBlockedByRunning:
-      "Wait for the current reply to finish, then start the Goal.",
-    goalBlockedByActive:
-      "This conversation already has a Goal. Stop it or wait for it to finish.",
-    cancelGoalMode: "Cancel Goal mode",
-    startGoal: "Start Goal",
-    startGoalTooltip: "Start Goal · Enter",
-    startGoalWithEnter: "Enter starts the Goal · Esc cancels",
-    goalPlaceholder: "Write the goal to complete…",
-    goalContextBadgeTooltip: "This conversation has a Goal",
-    goalStarting: "Starting…",
-    goalCeilingLabel: "Time ceiling",
-    goalCeilingTooltip:
-      "Time ceiling · Galley keeps going on its own until it arrives",
-    goalDurationOption: (minutes) => `${minutes} minutes`,
-    goalDurationRecommended: "Recommended",
-    goalDurationNoCeiling: "No ceiling",
     cannotSwitchRunning: "Can't switch models while running",
     switchLlm: "Switch model",
     reasoningEffort: {
@@ -765,9 +720,6 @@ export const enCopy: AppCopy = {
       launchAtLoginUnavailable:
         "Couldn't read the launch-at-login state, so it can't be changed here for now.",
       notificationsSectionTitle: "Notifications",
-      notifyGoalEndTitle: "When a Goal ends or needs you",
-      notifyGoalEndDescription:
-        "System notification when a Goal completes, hits its time ceiling, gets blocked, or fails while the window is in the background",
       notifyReplyDoneTitle: "When a reply finishes",
       notifyReplyDoneDescription:
         "System notification when a conversation you started finishes its reply or waits for your answer while the window is in the background",
@@ -1088,7 +1040,6 @@ export const enCopy: AppCopy = {
       composer: "Input",
       sendMessage: "Send message",
       newline: "New line without sending",
-      cancelGoalMode: "Cancel Goal mode",
       acceptSuggestion:
         "Fill in the suggested next step (when the input is empty)",
       conversation: "Conversation",
@@ -1147,7 +1098,6 @@ export const enCopy: AppCopy = {
         "Continue an existing session",
         "Start one focused session",
         "Run a Project-backed group of sessions, then synthesize the results",
-        "Start a Goal so Galley keeps working toward the objective",
       ],
       tryPrompts: "Try Saying",
       promptExamples: [
@@ -1662,15 +1612,7 @@ export const enCopy: AppCopy = {
   conversation: {
     system: "System",
     sideQuestion: "Side question",
-    goalNarration: "Galley",
-    goalEyebrow: "Goal",
-    goalBudgetCeiling: (minutes) => `${minutes}m ceiling`,
-    goalNoBudget: "No ceiling",
-    goalRunElapsed: (minutes) => `${minutes}m elapsed`,
-    goalContinuations: (rounds: number) =>
-      `${rounds} ${rounds === 1 ? "continuation" : "continuations"}`,
-    goalPausedTail: "Goal paused · send a message to continue",
-    goalBlockedTail: "Goal blocked · send a message to continue",
+    narration: "Galley",
     stepLimitTail: "Step limit reached · reply “Continue” to keep going",
     result: "Result",
     diffLinesAdded: (n: number) => `+${n} lines`,
@@ -1852,22 +1794,6 @@ export const enCopy: AppCopy = {
     browserControlReadyMessage:
       "Start a chat where Galley checks the weather in your browser.",
     tryBrowserControl: "Try it",
-    goalStarted: "Goal started",
-    goalStartedMessage: (minutes: number) =>
-      `Galley will push this goal forward on its own, for up to ${minutes} minutes.`,
-    goalStartedMessageNoBudget:
-      "Galley will push this goal forward on its own until it judges it done.",
-    goalStartFailed: "Could not start Goal",
-    goalExtended: "Goal has more time",
-    goalExtendedMessage: (minutes) =>
-      `${minutes} more minutes — Galley picks the goal back up.`,
-    goalExtendFailed: "Could not extend the Goal",
-    goalCompleted: "Goal done",
-    goalBudgetLimited: "Goal hit its time ceiling",
-    goalBlocked: "Goal blocked",
-    goalFailed: "Goal failed",
-    viewGoalResult: "View result",
-    viewGoalDetails: "View details",
     modelSelectionChanged: "Switched to the default model",
     modelSelectionChangedMessage:
       "The model this conversation used is no longer available; Galley will switch to the default.",
@@ -1880,8 +1806,8 @@ export const enCopy: AppCopy = {
     imageOpenFailed: "Open failed",
     imageOpenFailedMessage: "Galley could not open this image.",
     imageBlocked: "Images are not available here",
-    imageBlockedGoal:
-      "Goal, /btw, and replies to Agent questions do not support images yet. Send a normal message first.",
+    imageBlockedSideOrReply:
+      "/btw and replies to Agent questions do not support images yet. Send a normal message first.",
     imageBlockedQueue:
       "Queued messages are text-only while a run is in progress. Send images after this run finishes; text can queue now.",
     imageBlockedExternal:

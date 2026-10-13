@@ -1032,10 +1032,9 @@ def _finished_turn_ctx(turn: int = 1) -> dict[str, Any]:
 def test_task_done_without_exit_closes_the_run(capsys: pytest.CaptureFixture[str]) -> None:
     """galley#29 safety net: GA's task ended (here a `_stop` file break)
     without any turn_end reporting an exit. Its task-level `done` must
-    close the run, or the spinner, Core's message queue and the Goal
-    engine wait forever. A runtime error goes out first: it tells the user
-    why, and Core turns it into a Blocked Goal instead of another
-    continuation."""
+    close the run, or the spinner and Core's message queue wait forever.
+    A runtime error goes out first: it tells the user why the run
+    stopped."""
     bridge, agent = _queue_bridge()
     display_queue, drain = _open_run_with_drain(bridge, agent)
     assert [e["kind"] for e in _events(bridge)] == ["turn_start"]
@@ -1211,8 +1210,8 @@ def test_late_system_done_after_abort_leaves_the_next_run_open() -> None:
 
 def test_done_while_abort_is_in_flight_leaves_completion_to_abort() -> None:
     """GA puts `done` as soon as abort() breaks its task loop, which can
-    reach the drain before Abort emits its own run_complete. Core pauses a
-    Goal only on ABORTED, so the safety net must stand back."""
+    reach the drain before Abort emits its own run_complete. A user stop
+    must still end as ABORTED, so the safety net must stand back."""
     bridge, agent = _queue_bridge()
     display_queue, drain = _open_run_with_drain(bridge, agent)
     agent.on_abort = lambda: _finish_task(display_queue, drain)
@@ -1416,57 +1415,9 @@ def test_strip_side_question_thinking_leaves_plain_reply_alone() -> None:
     assert _strip_side_question_thinking(raw) == raw
 
 
-def test_extract_goal_status_recognized_values() -> None:
-    from runner.workbench_bridge import _extract_goal_status
-
-    raw = "目标已经做完了。\n\n<goal-status>complete</goal-status>"
-    assert _extract_goal_status(raw) == "complete"
-    assert (
-        _extract_goal_status("缺少凭据，走不下去。<goal-status>blocked</goal-status>")
-        == "blocked"
-    )
-    # Case and surrounding whitespace are normalized.
-    assert (
-        _extract_goal_status("done\n<goal-status>\n  COMPLETE\n</goal-status>")
-        == "complete"
-    )
-    # The tag does not have to be the last thing in the answer.
-    assert (
-        _extract_goal_status("<goal-status>complete</goal-status>\n收尾说明。")
-        == "complete"
-    )
-    assert _extract_goal_status("no tag here") is None
-    assert _extract_goal_status("") is None
-
-
-def test_extract_goal_status_unknown_value_warns_and_returns_none(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    from runner.workbench_bridge import _extract_goal_status
-
-    assert _extract_goal_status("<goal-status>in-progress</goal-status>") is None
-    assert _extract_goal_status("<goal-status></goal-status>") is None
-    err = capsys.readouterr().err
-    assert "goal-status" in err
-    assert "in-progress" in err
-
-
-def test_clean_response_strips_goal_status_tag() -> None:
-    from runner.workbench_bridge import _clean_response_for_display
-
-    raw = "答案正文。\n\n<goal-status>complete</goal-status>"
-    cleaned = _clean_response_for_display(raw)
-    assert "goal-status" not in cleaned
-    assert cleaned == "答案正文。"
-    # An unrecognized value is still not display prose.
-    assert "goal-status" not in _clean_response_for_display(
-        "正文。<goal-status>in-progress</goal-status>"
-    )
-
-
-def test_turn_end_extracts_goal_status_only_on_the_final_turn() -> None:
+def test_turn_end_extracts_next_suggestion_only_on_the_final_turn() -> None:
     class FakeResponse:
-        content = "阶段结果。<goal-status>complete</goal-status>"
+        content = "阶段结果。<next-suggestion>帮我跑一下测试</next-suggestion>"
 
     bridge = _new_test_bridge()
 
@@ -1481,7 +1432,7 @@ def test_turn_end_extracts_goal_status_only_on_the_final_turn() -> None:
     # Mid-run turn: the tag is prose the model emitted early, not a signal.
     bridge._on_turn_end({"response": FakeResponse(), "turn": 1, "exit_reason": None})
     (mid,) = _turn_end_events()
-    assert mid.get("goalStatus") is None
+    assert mid.get("nextSuggestion") is None
 
     bridge._on_turn_end(
         {
@@ -1491,7 +1442,7 @@ def test_turn_end_extracts_goal_status_only_on_the_final_turn() -> None:
         }
     )
     (final,) = _turn_end_events()
-    assert final["goalStatus"] == "complete"
+    assert final["nextSuggestion"] == "帮我跑一下测试"
 
 
 @pytest.mark.parametrize(

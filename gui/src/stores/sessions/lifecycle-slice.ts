@@ -186,7 +186,8 @@ export interface SessionLifecycleSlice {
    * happens fire-and-forget; in-memory state updates immediately. */
   createSession: (projectId?: string) => string;
   /** Create and await the Rust row. Used when another Core command must
-   * reference the session immediately, such as desktop Goal master launch. */
+   * reference the session immediately, such as the empty screen's first
+   * send. */
   createSessionPersisted: (
     projectId?: string,
     title?: string,
@@ -387,8 +388,8 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       //     (even if it hasn't flipped yet — flipping here would land
       //     the user on the older click).
       //   - pointer: a non-activation path moved it directly
-      //     (createSession, session delete, goal flows write
-      //     activeSessionId without going through activateSession).
+      //     (createSession, session delete write activeSessionId
+      //     without going through activateSession).
       // Either way we skip: the turns are already restored into
       // messagesStore, so the superseding action (or a later revisit)
       // gets them for free. Bridge spawn below still proceeds,

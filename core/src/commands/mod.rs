@@ -1,7 +1,7 @@
 use crate::api::CreateScheduledTaskInput;
 use crate::api::{
-    self, CreateProjectInput, CreateSessionInput, GalleyApi, GoalBrief, GoalId,
-    ManagedModelAuthKind, ManagedModelProbeInput, Origin, ProjectBrief, ProjectId, ProjectPatch,
+    self, CreateProjectInput, CreateSessionInput, GalleyApi, ManagedModelAuthKind,
+    ManagedModelProbeInput, Origin, ProjectBrief, ProjectId, ProjectPatch,
     ReorderManagedModelsInput, RuntimeKind, SaveManagedModelInput, SaveManagedProviderInput,
     ScheduledTaskBrief, ScheduledTaskId, ScheduledTaskPatch, SessionBrief, SessionFilter,
     SessionId, SetManagedModelDefaultsInput,
@@ -25,7 +25,6 @@ use serde::Deserialize;
 // `SqliteGalley::open()` per invocation.
 pub(crate) use tauri::State;
 
-mod goal;
 mod managed_model;
 mod project;
 mod queue;
@@ -35,7 +34,6 @@ mod send;
 mod session;
 mod system;
 
-pub(crate) use goal::*;
 pub(crate) use managed_model::*;
 pub(crate) use project::*;
 pub(crate) use queue::*;

@@ -18,7 +18,6 @@ import {
 import { IconButton } from "@/components/ui/button";
 import { IconTooltip } from "@/components/ui/tooltip";
 import { useSessionStatusView } from "@/hooks/useSessionStatusView";
-import { goalStageLabel } from "@/lib/goals";
 import { useCopy } from "@/lib/i18n";
 import { SCHEDULER_SUPERVISOR } from "@/lib/scheduled-tasks";
 import {
@@ -29,7 +28,6 @@ import { StatusIcon } from "@/lib/status-icon";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { truncationFadeRef } from "@/lib/truncation-fade";
 import { cn } from "@/lib/utils";
-import type { GoalBrief } from "@/types/goal";
 import type { Project, Session } from "@/types/session";
 
 import { SessionTitleEditor } from "../SessionTitleEditor";
@@ -41,7 +39,6 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   session,
   active,
   petAttached = false,
-  sessionGoal,
   projects,
   onClick,
   onArchive,
@@ -62,14 +59,6 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
    * Cat icon next to the title — status only, not clickable (the
    * row itself is the click target for switching sessions). */
   petAttached?: boolean;
-  /** This session's open goal (active / paused / blocked), if any.
-   * Between continuations an `active` goal leaves the session briefly
-   * idle, and `paused` / `blocked` leave it idle indefinitely — without
-   * this the row would read as a finished conversation. When present
-   * (and the session isn't in its own running / blocking state) the row
-   * shows a goal state: breathing brand rail for `active`, a static
-   * rail for the two parked states, plus a goal subline. */
-  sessionGoal?: GoalBrief;
   /** Full project list — used to populate the "Move to project"
    * submenu. Caller passes navigation-sorted projects so the menu
    * matches the Projects section order. */
@@ -131,9 +120,9 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   // Row state model (current spec: layout-and-chrome.md §4.2 Session
   // Row) — three independent signals, same priority order in each:
   // status rail (left 3px channel) → status icon → subline text.
-  // Priority: error > ask_user > running/goal-running >
-  // unread > idle. Unread folds into the left icon (filled brand
-  // circle); there is no right-side dot.
+  // Priority: error > ask_user > running > unread > idle. Unread
+  // folds into the left icon (filled brand circle); there is no
+  // right-side dot.
   //
   // Active row is always treated as read (the user is looking at
   // it); even if the final turn_end fires there, bumpSessionAfterTurn
@@ -154,17 +143,6 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   const hasPendingAsk = hasPendingAskUser || subtaskAsking;
   const isRunning = status === "running";
   const hasBlockingError = status === "error";
-  // A session carrying an open goal: its own bridge status can be idle
-  // between continuations (or indefinitely, when the goal is parked).
-  // Surface the goal state on the row so the board doesn't read it as a
-  // finished conversation. Yields to the session's own running /
-  // blocking states if any.
-  const goalOwned =
-    !!sessionGoal && !isRunning && !hasPendingAsk && !hasBlockingError;
-  // `active` breathes like a run in progress; `paused` / `blocked` are
-  // waiting on the user and must not pretend to be working.
-  const goalRunning = goalOwned && sessionGoal?.status === "active";
-  const goalParked = goalOwned && sessionGoal?.status !== "active";
   const showRunningActivity = isRunning && !hasPendingAsk && !hasBlockingError;
   // Unread renders as the left icon's filled-brand form, and only for
   // fully settled rows — every live/blocking state outranks it.
@@ -173,9 +151,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     !active &&
     !hasPendingAsk &&
     !hasBlockingError &&
-    !isRunning &&
-    !goalRunning &&
-    !goalParked;
+    !isRunning;
   // Scheduler-created sessions carry via=supervisor on the wire but
   // must not read as "Supervisor 创建" — the user configured a
   // scheduled task, not a supervisor; explain provenance in their own
@@ -191,13 +167,9 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     ? "error"
     : hasPendingAsk
       ? "waiting"
-      : showRunningActivity || goalRunning
+      : showRunningActivity
         ? "running"
-        : // A parked goal (paused / blocked) is waiting on the user —
-          // the static "needs you" rail, not the breathing one.
-          goalParked
-          ? "waiting"
-          : null;
+        : null;
   // Subline composition:
   //
   //   running + last completed step known → "第 N 步 · {summary}"
@@ -239,14 +211,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   // check circle (or hollow ring); live and blocking states replace it.
   const mainChatResting =
     mainChatLabel !== undefined &&
-    !goalRunning &&
     (status === "idle" || status === "completed");
-  // Goal subline — the same stage word the TopBar pill uses, prefixed
-  // so the row says WHICH kind of work is open ("Goal · 已暂停"). Null
-  // unless this session carries a goal.
-  const goalSubline = sessionGoal
-    ? `Goal · ${goalStageLabel(sessionGoal.status, copy.topbar)}`
-    : null;
   // Subline doubles as the status line — always state-colored, upright
   // (no italic), text-explicit for the blocking states so a glance
   // reads "等你回复 / 出错" without decoding an icon.
@@ -264,29 +229,27 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
         ? session.lastStepIndex != null && cleanSummary
           ? copy.sidebar.stepSummary(session.lastStepIndex, cleanSummary)
           : copy.sidebar.thinking
-        : goalRunning || goalParked
-          ? goalSubline
-          : cleanSummary
-            ? // A completed run shows its recap bare — the check-circle
-              // icon says done. A user-aborted session must not read
-              // as done: its icon is Prohibit and the words say
-              // 已中止. Nor must a run paused at the step cap (#29):
-              // hollow ring, 已暂停, muted tone.
-              settledSessionSubline(
-                cleanSummary,
-                { cancelled: status === "cancelled", pausedAtStepLimit },
-                copy.sidebar,
-              )
-            : null;
+        : cleanSummary
+          ? // A completed run shows its recap bare — the check-circle
+            // icon says done. A user-aborted session must not read
+            // as done: its icon is Prohibit and the words say
+            // 已中止. Nor must a run paused at the step cap (#29):
+            // hollow ring, 已暂停, muted tone.
+            settledSessionSubline(
+              cleanSummary,
+              { cancelled: status === "cancelled", pausedAtStepLimit },
+              copy.sidebar,
+            )
+          : null;
   // A single-line row renders no subline and centers like a row that
   // has none.
   const subline = singleLine ? null : sublineText;
   const sublineTone: "running" | "warning" | "error" | "muted" =
     hasBlockingError
       ? "error"
-      : hasPendingAsk || goalParked
+      : hasPendingAsk
         ? "warning"
-        : showRunningActivity || goalRunning
+        : showRunningActivity
           ? "running"
           : "muted";
   // One-shot pop on entering an attention / unread state. Keyed on the
@@ -297,11 +260,9 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
       ? "ask"
       : showUnread
         ? "unread"
-        : isRunning || goalRunning
+        : isRunning
           ? "running"
-          : goalParked
-            ? "goal-parked"
-            : "idle";
+          : "idle";
   const shouldPopIcon = hasBlockingError || hasPendingAsk || showUnread;
   // Suppress the pop for the state the row MOUNTED in: app launch and
   // opening a project group must not fire a simultaneous burst
@@ -377,12 +338,11 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     }
     activateRow();
   };
-  // Archiving a running session (own run or goal-master) hides live
-  // work from the status board, so it asks for an explicit confirm
-  // (2026-07-05 decision). Archive does NOT stop the run — the dialog
-  // copy says exactly that. Settled sessions keep the one-click,
-  // reversible archive.
-  const archiveNeedsConfirm = isRunning || goalRunning || goalParked;
+  // Archiving a running session hides live work from the status board,
+  // so it asks for an explicit confirm (2026-07-05 decision). Archive
+  // does NOT stop the run — the dialog copy says exactly that. Settled
+  // sessions keep the one-click, reversible archive.
+  const archiveNeedsConfirm = isRunning;
   const handleArchiveSelect = () => {
     if (!onArchive) return;
     if (archiveNeedsConfirm) {
@@ -464,12 +424,12 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
           />
         ) : (
           <StatusIcon
-            status={goalRunning ? "running" : status}
+            status={status}
             size={14}
             unread={showUnread}
             // Settled but not done: no check circle for a run paused at
-            // the step cap, a parked goal, or a row with no recap.
-            incomplete={pausedAtStepLimit || goalParked || !cleanSummary}
+            // the step cap or a row with no recap.
+            incomplete={pausedAtStepLimit || !cleanSummary}
           />
         )}
       </span>
@@ -511,12 +471,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                 active || mainChatLabel !== undefined
                   ? "text-ink"
                   : "text-ink-soft",
-                isRunning ||
-                  goalRunning ||
-                  goalParked ||
-                  showUnread ||
-                  hasPendingAsk ||
-                  hasBlockingError
+                isRunning || showUnread || hasPendingAsk || hasBlockingError
                   ? "font-semibold"
                   : "font-medium",
               )}

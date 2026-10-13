@@ -85,26 +85,6 @@ public struct HistoryReplayEvent: Codable, Sendable, Hashable {
     public var phase: ReplayPhase
 }
 
-/// `goal.updated`: Core's `GoalBrief`, passed through (the Goal family's
-/// shape belongs to the Agent API, schema 2).
-public struct GoalUpdatedEvent: Codable, Sendable, Hashable {
-    public var goal: JSONValue
-
-    public init(goal: JSONValue) {
-        self.goal = goal
-    }
-
-    public init(from decoder: any Decoder) throws {
-        // Rust `goal: Value`: required, but `null` is a value.
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        guard c.contains(.goal) else {
-            throw DecodingError.keyNotFound(
-                CodingKeys.goal, .init(codingPath: c.codingPath, debugDescription: "missing goal"))
-        }
-        goal = try c.decodeNil(forKey: .goal) ? .null : c.decode(JSONValue.self, forKey: .goal)
-    }
-}
-
 /// `queue.changed`: the whole queue.
 public struct QueueChangedEvent: Codable, Sendable, Hashable {
     public var sessionId: String
@@ -138,7 +118,6 @@ public enum AppEvent: Sendable, Hashable {
     case runnerEvent(RunnerEventBatch)
     case sessionRunState(SessionRunState)
     case historyReplay(HistoryReplayEvent)
-    case goalUpdated(GoalUpdatedEvent)
     case queueChanged(QueueChangedEvent)
     case syncRequired(SyncRequiredEvent)
 
@@ -147,7 +126,7 @@ public enum AppEvent: Sendable, Hashable {
         "session.created", "session.updated", "session.archived", "session.unarchived",
         "session.moved", "session.deleted", "project.created", "project.updated",
         "project.deleted", "message.persisted", "runner.event", "session.runState",
-        "history.replay", "goal.updated", "queue.changed", "sync.required",
+        "history.replay", "queue.changed", "sync.required",
     ]
 
     public var name: String {
@@ -165,7 +144,6 @@ public enum AppEvent: Sendable, Hashable {
         case .runnerEvent: "runner.event"
         case .sessionRunState: "session.runState"
         case .historyReplay: "history.replay"
-        case .goalUpdated: "goal.updated"
         case .queueChanged: "queue.changed"
         case .syncRequired: "sync.required"
         }
@@ -184,7 +162,6 @@ public enum AppEvent: Sendable, Hashable {
         case .runnerEvent(let p): p
         case .sessionRunState(let p): p
         case .historyReplay(let p): p
-        case .goalUpdated(let p): p
         case .queueChanged(let p): p
         case .syncRequired(let p): p
         }
@@ -218,7 +195,6 @@ public enum AppEvent: Sendable, Hashable {
         case "runner.event": self = .runnerEvent(try decode(RunnerEventBatch.self))
         case "session.runState": self = .sessionRunState(try decode(SessionRunState.self))
         case "history.replay": self = .historyReplay(try decode(HistoryReplayEvent.self))
-        case "goal.updated": self = .goalUpdated(try decode(GoalUpdatedEvent.self))
         case "queue.changed": self = .queueChanged(try decode(QueueChangedEvent.self))
         case "sync.required": self = .syncRequired(try decode(SyncRequiredEvent.self))
         default: return nil

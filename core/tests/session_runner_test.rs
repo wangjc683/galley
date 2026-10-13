@@ -1,13 +1,14 @@
 //! Core's shared "ensure a runner" path (`galley_core_lib::session_runner`,
 //! ticket 02a), driven against an in-memory DB and a scripted fake runner
 //! registry: single-flight per session, liveness, spawn-argument parity
-//! between the GUI's and the socket's entry points, the frozen socket
-//! error wording, and the auto-title watcher on socket-started runners.
+//! between the GUI's options and the stored-pref ones (Core's send for the
+//! phone, a subtask's dispatch), the frozen socket error wording, and the
+//! auto-title watcher on Core-started runners.
 //!
 //! Since ticket 02b also history replay: what ensure sends as
 //! `load_history`, the one quiet restart, the `HistoryReplay` error, the
-//! live-runner rules, the `runner-history-replay` events, and a Goal on a
-//! cold session getting its history before its objective.
+//! live-runner rules, the `runner-history-replay` events, and Core's send
+//! on a cold session getting its history before its message.
 //!
 //! The real `RunnerManager` + mock bridge side (ready cache, concurrent
 //! ensure on real processes, replay end to end, the run-gate race) lives
@@ -31,6 +32,7 @@ use galley_core_lib::session_runner::{
     ensure_session_runner, resolve_user_python, EnsureOptions, GaConfigPref, ReplayTimeouts,
     RunnerHost, SessionRunnerError, SpawnEnv,
 };
+use galley_core_lib::session_send::{send_user_message, SendOutcome, SendRequest};
 use galley_core_lib::socket_listener::{
     dispatch_line_with, DbSource, DispatchResult, HandlerCtx, RunnerPort, SocketResponse,
 };
@@ -595,6 +597,20 @@ fn gui_options(ga_config: Option<GaConfigPref>) -> EnsureOptions<'static> {
     }
 }
 
+/// What Core's send without a page config (the phone) and a subtask's
+/// dispatch ensure with: the stored pref, the session itself protected,
+/// the run gate already held by the caller.
+fn stored_pref_options(session_id: &'static str) -> EnsureOptions<'static> {
+    EnsureOptions {
+        via: "subtask",
+        active_session_id: Some(session_id),
+        llm_override: None,
+        ga_config: None,
+        holds_run_gate: true,
+        timeouts: Default::default(),
+    }
+}
+
 fn ready_event(session_id: &str) -> ReadyEvent {
     ReadyEvent {
         session_id: session_id.into(),
@@ -756,7 +772,7 @@ async fn ensures_for_different_sessions_never_wait_on_each_other() {
 // ---------------- spawn-argument parity ----------------
 
 #[tokio::test]
-async fn gui_and_socket_resolve_the_same_spawn_args_external() {
+async fn gui_and_stored_pref_options_resolve_the_same_spawn_args_external() {
     let dir = tempfile::tempdir().unwrap();
     let workspace = tempfile::tempdir().unwrap();
     let galley = fresh_galley().await;
@@ -791,29 +807,23 @@ async fn gui_and_socket_resolve_the_same_spawn_args_external() {
         .await
         .expect("seed effort");
 
-    // Socket: the Goal engine's dispatch goes through the socket layer's
-    // ensure wrapper (headless, so the stored pref supplies bridgeCwd).
-    let socket_runner = ScriptedRunner::default();
-    let db = DbSource::Pool(galley.clone());
-    let ctx = HandlerCtx {
-        db: &db,
-        runner: &socket_runner,
+    // Stored pref, headless (so the pref supplies bridgeCwd).
+    let headless_runner = ScriptedRunner::default();
+    let headless_host = RunnerHost {
+        galley: &galley,
+        runner: &headless_runner,
         notifier: Arc::new(RecordingNotifier::default()),
-        app: None,
+        env: None,
     };
-    let resp = dispatch(
-        &ctx,
-        json!({"command": "goal.start", "args": {"sessionId": "s-ext", "objective": "o"},
-               "schemaVersion": 2, "requestId": "g"}),
-    )
-    .await;
-    assert!(resp.ok, "goal.start: {resp:?}");
-    let socket_args = socket_runner.spawned_args();
-    assert_eq!(socket_args.len(), 1);
+    ensure_session_runner(&headless_host, "s-ext", stored_pref_options("s-ext"))
+        .await
+        .expect("stored-pref ensure");
+    let headless_args = headless_runner.spawned_args();
+    assert_eq!(headless_args.len(), 1);
     assert_eq!(
-        socket_runner.spawns.lock().unwrap()[0].1.as_deref(),
+        headless_runner.spawns.lock().unwrap()[0].1.as_deref(),
         Some("s-ext"),
-        "the socket path protects the session it spawns for"
+        "the session it spawns for is the protected one"
     );
 
     // GUI: the Tauri command's options, with the page's in-memory
@@ -830,7 +840,7 @@ async fn gui_and_socket_resolve_the_same_spawn_args_external() {
         .expect("gui ensure");
     let gui_args = gui_runner.spawned_args();
 
-    assert_eq!(socket_args, gui_args);
+    assert_eq!(headless_args, gui_args);
     // And both are what the GUI's own TypeScript spawn produced.
     let args = &gui_args[0];
     let home = std::env::var("HOME").unwrap_or_default();
@@ -851,7 +861,7 @@ async fn gui_and_socket_resolve_the_same_spawn_args_external() {
 }
 
 #[tokio::test]
-async fn gui_and_socket_resolve_the_same_spawn_args_managed() {
+async fn gui_and_stored_pref_options_resolve_the_same_spawn_args_managed() {
     let dir = tempfile::tempdir().unwrap();
     let galley = fresh_galley().await;
     let config = seed_ga_config(&galley, dir.path()).await;
@@ -870,30 +880,17 @@ async fn gui_and_socket_resolve_the_same_spawn_args_managed() {
         bridge_cwd: dir.path().to_path_buf(),
     };
 
-    // The socket wrapper's options (Goal dispatch): stored pref, protect
-    // the session itself. Managed needs the app, so this runs the shared
-    // path with the wrapper's options rather than the headless wrapper.
-    let socket_runner = ScriptedRunner::default();
-    let socket_host = RunnerHost {
+    // The stored-pref options; managed needs the app, so the host has one.
+    let stored_runner = ScriptedRunner::default();
+    let stored_host = RunnerHost {
         galley: &galley,
-        runner: &socket_runner,
+        runner: &stored_runner,
         notifier: Arc::new(RecordingNotifier::default()),
         env: Some(&env),
     };
-    ensure_session_runner(
-        &socket_host,
-        "s-man",
-        EnsureOptions {
-            via: "goal",
-            active_session_id: Some("s-man"),
-            llm_override: None,
-            ga_config: None,
-            holds_run_gate: true,
-            timeouts: Default::default(),
-        },
-    )
-    .await
-    .expect("socket ensure");
+    ensure_session_runner(&stored_host, "s-man", stored_pref_options("s-man"))
+        .await
+        .expect("stored-pref ensure");
 
     let gui_runner = ScriptedRunner::default();
     let gui_host = RunnerHost {
@@ -906,9 +903,9 @@ async fn gui_and_socket_resolve_the_same_spawn_args_managed() {
         .await
         .expect("gui ensure");
 
-    let socket_args = socket_runner.spawned_args();
-    assert_eq!(socket_args, gui_runner.spawned_args());
-    let args = &socket_args[0];
+    let stored_args = stored_runner.spawned_args();
+    assert_eq!(stored_args, gui_runner.spawned_args());
+    let args = &stored_args[0];
     // Dev build: the configured interpreter, as the GUI's dev spawn used
     // (before 02a the socket path handed managed spawns `python3`).
     assert_eq!(args.python, "/usr/local/bin/python3");
@@ -1112,33 +1109,7 @@ async fn socket_spawn_config_errors_keep_their_tags_and_wording() {
     );
 }
 
-#[tokio::test]
-async fn goal_dispatch_ensure_failures_keep_their_recorded_wording() {
-    let galley = fresh_galley().await;
-    seed_session(&galley, SessionSeed::external("s-goal-cold")).await;
-    let runner = ScriptedRunner::default();
-    let db = DbSource::Pool(galley.clone());
-    let ctx = HandlerCtx {
-        db: &db,
-        runner: &runner,
-        notifier: Arc::new(RecordingNotifier::default()),
-        app: None,
-    };
-    let resp = dispatch(
-        &ctx,
-        json!({"command": "goal.start", "args": {"sessionId": "s-goal-cold", "objective": "o"},
-               "schemaVersion": 2, "requestId": "g"}),
-    )
-    .await;
-    let v = serde_json::to_value(&resp).unwrap();
-    assert_eq!(v["error"], "runner_error");
-    assert_eq!(
-        v["message"],
-        "runner spawn: RunnerError(\"session.new runner config is missing; open Galley Settings once to save runtime paths\")"
-    );
-}
-
-// ---------------- auto-title on socket-started runners ----------------
+// ---------------- auto-title on Core-started runners ----------------
 
 async fn wait_for_generate_title(sink: &RecordingSink) -> Option<(String, IpcCommand)> {
     for _ in 0..100 {
@@ -1211,28 +1182,24 @@ async fn session_new_runner_gets_the_auto_title_watcher() {
 }
 
 #[tokio::test]
-async fn goal_dispatch_runner_gets_the_auto_title_watcher() {
+async fn a_runner_ensured_for_an_existing_session_gets_the_auto_title_watcher() {
     let dir = tempfile::tempdir().unwrap();
     let galley = fresh_galley().await;
     seed_ga_config(&galley, dir.path()).await;
-    seed_session(&galley, SessionSeed::external("s-goal-title")).await;
+    seed_session(&galley, SessionSeed::external("s-title")).await;
     let (runner, _sink) = ScriptedRunner::with_sink();
-    let db = DbSource::Pool(galley.clone());
-    let ctx = HandlerCtx {
-        db: &db,
+    let host = RunnerHost {
+        galley: &galley,
         runner: &runner,
         notifier: Arc::new(RecordingNotifier::default()),
-        app: None,
+        env: None,
     };
-    let resp = dispatch(
-        &ctx,
-        json!({"command": "goal.start", "args": {"sessionId": "s-goal-title", "objective": "o"},
-               "schemaVersion": 2, "requestId": "g"}),
-    )
-    .await;
-    assert!(resp.ok, "{resp:?}");
+    ensure_session_runner(&host, "s-title", stored_pref_options("s-title"))
+        .await
+        .expect("ensure");
     assert_eq!(runner.spawn_count(), 1);
-    assert_eq!(runner.subscribe_count("s-goal-title"), 2);
+    // Emit task + auto-title watcher.
+    assert_eq!(runner.subscribe_count("s-title"), 2);
 }
 
 // ---------------- history replay (ticket 02b) ----------------
@@ -1702,7 +1669,8 @@ async fn an_open_gate_the_caller_holds_does_not_block_the_replay() {
         .lock()
         .unwrap()
         .insert("s-rp-gate".into(), tx);
-    // The Goal engine reserved the gate before calling ensure.
+    // The caller (Core's send, a subtask's dispatch) reserved the gate
+    // before calling ensure.
     runner.set_run_state(
         "s-rp-gate",
         RunState {
@@ -1774,35 +1742,40 @@ async fn concurrent_ensures_wait_for_the_replay_to_finish() {
 }
 
 #[tokio::test]
-async fn goal_on_a_cold_session_gets_its_history_before_the_objective() {
-    let (_dir, galley) = session_with_history("s-rp-goal").await;
+async fn a_send_on_a_cold_session_gets_its_history_before_the_message() {
+    let (_dir, galley) = session_with_history("s-rp-send").await;
     let runner = ScriptedRunner::ready_on_spawn();
-    let db = DbSource::Pool(galley.clone());
-    let ctx = HandlerCtx {
-        db: &db,
-        runner: &runner,
-        notifier: Arc::new(RecordingNotifier::default()),
-        app: None,
-    };
+    let notifier = Arc::new(RecordingNotifier::default());
 
-    let resp = dispatch(
-        &ctx,
-        json!({"command": "goal.start",
-               "args": {"sessionId": "s-rp-goal", "objective": "暗号是什么？"},
-               "schemaVersion": 2, "requestId": "g"}),
+    let outcome = send_user_message(
+        &host(&galley, &runner, &notifier),
+        SendRequest {
+            session_id: "s-rp-send".into(),
+            text: "暗号是什么？".into(),
+            images: Vec::new(),
+            client_request_id: None,
+            origin: Origin::desktop(),
+            via: "gui",
+            llm_override: None,
+            ga_config: None,
+            timeouts: fast(),
+        },
     )
-    .await;
-    assert!(resp.ok, "{resp:?}");
-    assert_eq!(resp.result.unwrap()["dispatch"], "dispatched");
+    .await
+    .expect("send");
+    assert!(
+        matches!(outcome, SendOutcome::Dispatched { .. }),
+        "{outcome:?}"
+    );
 
     assert_eq!(
         runner.timeline(),
         ["load_history", "history_loaded", "user_message"],
-        "the objective goes out only after the runner confirmed the history"
+        "the message goes out only after the runner confirmed the history"
     );
-    // The objective row is persisted before the dispatch, but it is the
+    // The message row is persisted before the dispatch, but it is the
     // turn being started, not history.
-    let history = runner.load_histories("s-rp-goal");
+    let history = runner.load_histories("s-rp-send");
     assert_eq!(history, vec![expected_history()]);
     assert!(!serde_json::to_string(&history)
         .unwrap()

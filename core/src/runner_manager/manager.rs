@@ -10,7 +10,7 @@ use crate::notify::Notifier;
 use crate::runner_manager::error::{RunnerSpawnError, SendCommandError, ShutdownError};
 use crate::runner_manager::process::{BroadcastItem, HeldClose, RunnerProcess};
 use crate::runner_manager::queue::{
-    mint_queue_id, now_iso, QueueJump, QueueOffer, RunKind, RunOutcome, SessionQueueState,
+    mint_queue_id, now_iso, QueueJump, QueueOffer, SessionQueueState,
 };
 use crate::runner_manager::ready::ReadySnapshot;
 use crate::runner_manager::run_state_events::RunStateFeed;
@@ -111,12 +111,6 @@ pub enum RunSignal {
     /// gate but HOLD the queue (PRD 定案 4 — no auto-respawn; the user
     /// resumes via jump / a fresh send).
     Closed { session_id: String },
-    /// A user-initiated run (not a goal continuation) emitted its first
-    /// `TurnStart`. Goal v2 resumes a paused / blocked goal on this —
-    /// the user's message IS the intervention, and waiting for the run
-    /// to settle would leave the goal looking parked for the whole run
-    /// it is being resumed by.
-    UserRunStarted { session_id: String },
 }
 
 impl Default for RunnerManager {
@@ -251,8 +245,8 @@ impl RunnerManager {
         // Attach the runner watcher: persists every turn_end (Core-owned
         // turn persistence) and keeps the queue state + global drain
         // task informed (galley#19/#20). Attached HERE so every spawn
-        // path (GUI, socket session.new, goal, scheduler) is covered by
-        // construction.
+        // path (GUI, socket session.new, Core's send, subtasks, scheduler)
+        // is covered by construction.
         self.attach_runner_watcher(&session_id).await;
 
         // Now enforce the cap. The just-spawned session is at the END of
@@ -273,8 +267,8 @@ impl RunnerManager {
     ///   the drain), RunComplete / close go to the global drain task via
     ///   [`RunSignal`]. A quiet close (a runner Core retired, or one that
     ///   closed while held — see [`BroadcastItem::Closed`]) sends no
-    ///   `Closed`: the run gate and an active goal belong to whoever is
-    ///   replacing the runner, and a held close is announced on release;
+    ///   `Closed`: the run gate belongs to whoever is replacing the
+    ///   runner, and a held close is announced on release;
     /// - a run-state report after each event and the close, when the
     ///   run-state feed is wired: these are where `agent_running`,
     ///   `ask_pending` and `last_exit` change.
@@ -484,8 +478,8 @@ impl RunnerManager {
     }
 
     /// Shut runner `pid` down to replace it, without announcing the
-    /// close: no `RunSignal::Closed` (the run gate and an active goal are
-    /// the replacing caller's) and no `runner-closed` (a listening page
+    /// close: no `RunSignal::Closed` (the run gate is the replacing
+    /// caller's) and no `runner-closed` (a listening page
     /// keeps its listeners for the replacement). `false` when `pid` is
     /// not the session's registered runner.
     pub async fn retire(&self, session_id: &str, pid: u32) -> bool {
@@ -866,8 +860,6 @@ impl RunnerManager {
         let (session_id, may_pop) = match signal {
             RunSignal::RunComplete { session_id } => (session_id, true),
             RunSignal::Closed { session_id } => (session_id, false),
-            // A run starting changes nothing about the gate or the queue.
-            RunSignal::UserRunStarted { .. } => return None,
         };
         let item = {
             let mut q = self.queues.lock().await;
@@ -887,53 +879,11 @@ impl RunnerManager {
         item
     }
 
-    /// Reserve the run gate ONLY if the session is fully idle: no open
-    /// run, empty queue, and no ask_user question pending (a goal
-    /// continuation must not talk over a question the agent asked the
-    /// user). The queue-less sibling of [`Self::queue_offer`] for the
-    /// Goal v2 engine, whose continuation is regenerated fresh each time
-    /// — a stale queued copy is worse than no copy. On `false` the
-    /// caller sends nothing; on `true` the caller must dispatch or
-    /// release via [`Self::queue_release_run`].
-    pub async fn try_reserve_run(&self, session_id: &str) -> bool {
-        let reserved = {
-            let mut q = self.queues.lock().await;
-            let state = q.entry(session_id.to_string()).or_default();
-            if state.open_run || state.ask_pending || !state.items.is_empty() {
-                false
-            } else {
-                state.open_run = true;
-                true
-            }
-        };
-        if reserved {
-            self.run_state_feed.touch(session_id);
-        }
-        reserved
-    }
-
-    /// Stamp the run just opened on `session_id` as a Goal continuation
-    /// (the engine calls this right after its dispatch succeeded), so the
-    /// settled [`RunOutcome`] reports `continuation: true` and a user
-    /// turn can be told apart from the engine's own.
-    pub async fn mark_goal_continuation(&self, session_id: &str) {
-        let mut q = self.queues.lock().await;
-        q.entry(session_id.to_string()).or_default().run_kind = RunKind::GoalContinuation;
-    }
-
-    /// Take the outcome of the most recently settled run (cleared on
-    /// read). `None` when no run has completed since the last take — or
-    /// ever.
-    pub async fn take_run_outcome(&self, session_id: &str) -> Option<RunOutcome> {
-        let mut q = self.queues.lock().await;
-        q.get_mut(session_id).and_then(|s| s.last_outcome.take())
-    }
-
     /// Live run-state snapshot for one session — the truthful busy
     /// signal `sessions.status` in SQLite cannot provide (transient
     /// statuses are in-memory only; the DB column persists as `idle`).
-    /// Serves the `session.run_state` socket command the Goal controller
-    /// polls between working turns.
+    /// Serves the `session.run_state` socket command a Supervisor polls
+    /// between turns.
     pub async fn run_state(&self, session_id: &str) -> RunState {
         let (open_run, queued_count, ask_pending, last_exit) = {
             let q = self.queues.lock().await;
@@ -1049,10 +999,6 @@ async fn send_command_via(
             state.ask_pending = false;
             // `last_exit` is deliberately left alone: it keeps saying why
             // the previous run ended until this one completes (galley#30).
-            // Every gate-opening dispatch is a user turn until the Goal
-            // engine says otherwise (`mark_goal_continuation`).
-            state.run_kind = RunKind::UserTurn;
-            state.draft = Default::default();
         }
         run_state_feed.touch(session_id);
     }
@@ -1157,7 +1103,7 @@ fn pump_watched_events(
     out
 }
 
-/// Queue-side handling of one watched event (galley#19/#20, Goal v2).
+/// Queue-side handling of one watched event (galley#19/#20).
 /// Returns `false` once the drain task's channel is gone.
 async fn queue_bookkeeping(
     queues: &Mutex<HashMap<String, SessionQueueState>>,
@@ -1170,43 +1116,8 @@ async fn queue_bookkeeping(
             let mut q = queues.lock().await;
             q.entry(sid.to_string()).or_default().ask_pending = true;
         }
-        IpcEvent::TurnStart(_) => {
-            let announce = {
-                let mut q = queues.lock().await;
-                let state = q.entry(sid.to_string()).or_default();
-                if state.run_kind == RunKind::UserTurn && !state.started_notified {
-                    state.started_notified = true;
-                    true
-                } else {
-                    false
-                }
-            };
-            if announce
-                && tx
-                    .send(RunSignal::UserRunStarted {
-                        session_id: sid.to_string(),
-                    })
-                    .is_err()
-            {
-                return false;
-            }
-        }
-        // Goal v2 bookkeeping: remember the final turn's
-        // `<goal-status>` tag and any fatal error so the drain task can
-        // judge the run once it settles.
-        IpcEvent::TurnEnd(e) if e.exit_reason.is_some() => {
-            let mut q = queues.lock().await;
-            let draft = &mut q.entry(sid.to_string()).or_default().draft;
-            draft.goal_tag = e.goal_status;
-            draft.summary = Some(e.summary).filter(|s| !s.trim().is_empty());
-        }
-        IpcEvent::Error(e) if e.category != "business" && e.severity == "error" => {
-            let mut q = queues.lock().await;
-            q.entry(sid.to_string()).or_default().draft.errored = Some(e.message);
-        }
         IpcEvent::RunComplete(e) => {
-            // Settles the RunOutcome and records `last_exit`
-            // (galley#30) in one step.
+            // Records `last_exit` (galley#30).
             queues
                 .lock()
                 .await
@@ -1483,13 +1394,7 @@ mod tests {
         let state = mgr.run_state("s").await;
         assert!(state.open_run);
         assert_eq!(state.last_exit.as_deref(), Some("MAX_TURNS_EXCEEDED"));
-        // The Goal engine taking the outcome does not clear it either.
-        assert!(mgr.take_run_outcome("s").await.is_some());
-        assert_eq!(
-            mgr.run_state("s").await.last_exit.as_deref(),
-            Some("MAX_TURNS_EXCEEDED")
-        );
-        // The next RunComplete replaces it (and still settles the outcome).
+        // The next RunComplete replaces it.
         settle(
             &mgr,
             "s",
@@ -1500,7 +1405,6 @@ mod tests {
             mgr.run_state("s").await.last_exit.as_deref(),
             Some("ABORTED")
         );
-        assert!(mgr.take_run_outcome("s").await.expect("outcome").aborted);
     }
 
     #[tokio::test]
@@ -1591,74 +1495,6 @@ mod tests {
         for text in ["/btwx", "/BTW x", "x /btw", "", "/bt w", "/btw\nx"] {
             assert!(!is_side_question(text), "{text:?}");
         }
-    }
-
-    #[tokio::test]
-    async fn try_reserve_run_only_when_fully_idle() {
-        let mgr = RunnerManager::new();
-        // Idle session: reserved; a second attempt sees the open gate.
-        assert!(mgr.try_reserve_run("s").await);
-        assert!(!mgr.try_reserve_run("s").await);
-        // RunComplete closes the gate: reservable again.
-        assert!(mgr.queue_take_next(&rc_signal("s")).await.is_none());
-        assert!(mgr.try_reserve_run("s").await);
-        // Release (failed dispatch) also reopens.
-        mgr.queue_release_run("s").await;
-        assert!(mgr.try_reserve_run("s").await);
-    }
-
-    #[tokio::test]
-    async fn try_reserve_run_refuses_while_an_ask_user_is_pending() {
-        let mgr = RunnerManager::new();
-        mgr.queues
-            .lock()
-            .await
-            .entry("s".into())
-            .or_default()
-            .ask_pending = true;
-        assert!(
-            !mgr.try_reserve_run("s").await,
-            "never talk over a pending question"
-        );
-        mgr.queues.lock().await.get_mut("s").unwrap().ask_pending = false;
-        assert!(mgr.try_reserve_run("s").await);
-    }
-
-    #[tokio::test]
-    async fn run_outcome_is_taken_once_and_carries_the_continuation_mark() {
-        let mgr = RunnerManager::new();
-        assert!(mgr.take_run_outcome("s").await.is_none());
-        mgr.mark_goal_continuation("s").await;
-        {
-            // Stand in for the forwarder's RunComplete handling.
-            let mut q = mgr.queues.lock().await;
-            let state = q.entry("s".into()).or_default();
-            assert_eq!(state.run_kind, RunKind::GoalContinuation);
-            state.last_outcome = Some(RunOutcome {
-                continuation: state.run_kind == RunKind::GoalContinuation,
-                goal_tag: Some("complete".into()),
-                ..RunOutcome::default()
-            });
-            state.run_kind = RunKind::UserTurn;
-        }
-        let taken = mgr.take_run_outcome("s").await.expect("outcome");
-        assert!(taken.continuation);
-        assert_eq!(taken.goal_tag.as_deref(), Some("complete"));
-        assert!(mgr.take_run_outcome("s").await.is_none(), "cleared on read");
-    }
-
-    #[tokio::test]
-    async fn try_reserve_run_refuses_when_items_queued() {
-        let mgr = RunnerManager::new();
-        let _ = offer(&mgr, "s", "a").await; // DispatchNow, gate open
-        let _ = offer(&mgr, "s", "b").await; // queued
-        assert!(!mgr.try_reserve_run("s").await);
-        // Gate closes on RunComplete but "b" pops with the gate
-        // re-reserved — still not reservable until the queue drains dry.
-        assert!(mgr.queue_take_next(&rc_signal("s")).await.is_some());
-        assert!(!mgr.try_reserve_run("s").await);
-        assert!(mgr.queue_take_next(&rc_signal("s")).await.is_none());
-        assert!(mgr.try_reserve_run("s").await);
     }
 
     #[tokio::test]
@@ -1809,7 +1645,7 @@ mod tests {
         assert_eq!(states.len(), 4, "no repeated snapshot: {states:#?}");
 
         // A second session is tracked on its own.
-        assert!(mgr.try_reserve_run("t").await);
+        assert!(mgr.queue_try_reserve("t").await);
         let states = notifier.wait_for(5).await;
         assert_eq!(states[4]["sessionId"], "t");
         assert_eq!(gate(&states[4]), (true, 0, false));

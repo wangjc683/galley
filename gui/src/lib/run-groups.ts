@@ -79,21 +79,19 @@ export interface RunGroup {
   finalTurnIndex: number | null;
   /** True when the run ended with a real final answer. */
   complete: boolean;
-  /** True when the conversation may render this run folded: complete,
-   * not a Goal run, and free of system turns (/btw exchanges must not
-   * be swallowed). Single-step runs fold too (2026-08-06, reversing
-   * the launch decision): the header became the only home of settled
+  /** True when the conversation may render this run folded: complete
+   * and free of system turns (/btw exchanges must not be swallowed).
+   * Single-step runs fold too (2026-08-06, reversing the launch
+   * decision): the header became the only home of settled
    * run duration when the footer ⏱ was removed — absence now loses
    * data, not just uniformity — and since the folded render dropped
    * its StrongHr, header + answer is quieter than the unfolded
    * marker + rule + answer, so the fold pays even with nothing to
    * hide. */
   foldable: boolean;
-  /** The run-shape half of `foldable` (user-opened, not a Goal run,
-   * no system turns). Goal runs are excluded HERE only: goal-run-groups
-   * re-derives their fold / live state from the goal's own status on
-   * top of this grouping (goal-simplify issue 08, 2026-09-16). While the run is still live this is what lets
-   * the conversation render it as the live window — completed steps
+  /** The run-shape half of `foldable` (user-opened, no system turns).
+   * While the run is still live this is what lets the conversation
+   * render it as the live window — completed steps
    * folded behind a live header, the last one plus the in-flight row
    * left open (live-run-window PRD, 2026-09-16). `foldable` is
    * `complete && foldEligible`. */
@@ -232,10 +230,7 @@ export function buildRunGroups(turns: Turn[]): RunGroup[] {
       }
     }
 
-    const opener = g.openerIndex >= 0 ? turns[g.openerIndex] : null;
-    const isGoalRun =
-      opener?.role === "user" && typeof opener.goalId === "string";
-    const foldEligible = g.openerIndex >= 0 && !isGoalRun && !g.hasSystem;
+    const foldEligible = g.openerIndex >= 0 && !g.hasSystem;
     const telemetry = complete
       ? mergeRunTelemetry(segmentClosers(g.memberIndices, g.openerIndex, turns))
       : null;
@@ -276,8 +271,8 @@ export function buildRunGroups(turns: Turn[]): RunGroup[] {
       return;
     }
     if (!current) {
-      // Orphan leading turns (restored history, goal narration before
-      // the first user message) — collected into a headless group.
+      // Orphan leading turns (restored history, narration before the
+      // first user message) — collected into a headless group.
       current = {
         openerIndex: -1,
         memberIndices: [],
@@ -295,13 +290,71 @@ export function buildRunGroups(turns: Turn[]): RunGroup[] {
 }
 
 /**
+ * The run the conversation renders as the live window, or null: the
+ * last run, while it is still open (no answer yet), window-eligible,
+ * and being worked on — the agent running, or waiting on an ask_user
+ * reply, so the pause does not flicker the window away and back. An
+ * open run that is neither (aborted, or a restored tail) gets no
+ * window: a run without an answer is never hidden.
+ */
+export function liveRunGroup(
+  groups: RunGroup[],
+  agentRunning: boolean,
+  askUserPending: boolean,
+): RunGroup | null {
+  const last = groups[groups.length - 1];
+  if (!last || last.complete || !last.foldEligible) return null;
+  return agentRunning || askUserPending ? last : null;
+}
+
+/**
+ * Turn index → display step number for every agent turn in a
+ * user-opened run: 1-based, by position within the run (2026-09-18).
+ * GA restarts its turn counter at every `put_task`, which is each
+ * ask_user reply, so an ordinary run's steps would read 1 2 3 1 2
+ * around a question; position numbering hides the restart and the
+ * internal-row gaps restore would otherwise show. Headless leading
+ * groups are absent and fall back to GA's own step.
+ */
+export function runStepNumbers(
+  groups: RunGroup[],
+  turns: Turn[],
+): Map<number, number> {
+  const stepNumberOf = new Map<number, number>();
+  for (const g of groups) {
+    if (g.openerIndex < 0) continue;
+    let step = 0;
+    for (const i of g.memberIndices) {
+      if (turns[i].role === "agent") stepNumberOf.set(i, ++step);
+    }
+  }
+  return stepNumberOf;
+}
+
+/** True when the live window already holds a settled step above the
+ * in-flight row — the signal MainView uses to run the in-flight rail
+ * up through the gap to the window instead of starting fresh. */
+export function liveWindowHasSettledStep(
+  liveGroup: RunGroup | null,
+  turns: Turn[],
+): boolean {
+  if (!liveGroup) return false;
+  return liveGroup.memberIndices.some(
+    (i) =>
+      i !== liveGroup.openerIndex &&
+      i !== liveGroup.finalTurnIndex &&
+      turns[i].role === "agent",
+  );
+}
+
+/**
  * Display-step base for the GA loop the next user turn starts: the
  * number of steps the trailing run already holds when that turn is an
  * ask_user reply, 0 when it opens a new run. Call BEFORE appending the
  * user turn. The live path adds this to GA's per-loop step (which
  * restarts at 1 on every `put_task`) so the in-flight marker and the
  * sidebar's "第 N 步" continue the run's numbering the way
- * `planGoalRuns` numbers settled steps by position.
+ * `runStepNumbers` numbers settled steps by position.
  */
 export function pendingReplyStepBase(turns: Turn[]): number {
   for (let i = turns.length - 1; i >= 0; i--) {

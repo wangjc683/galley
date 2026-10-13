@@ -310,7 +310,7 @@ interface MessagesActions {
   /**
    * Apply Core's `user-message-persisted` for a user row — this page's
    * own sends through `send_user_message`, and rows other writers
-   * persisted (CLI / supervisor `session send`, queue drain, Goal):
+   * persisted (CLI / supervisor `session send`, queue drain):
    *
    *   - a row already shown (same `message.id`) only moves its run state
    *     along (`dispatched` → working; `persisted_only` / `spawn_failed`
@@ -812,7 +812,6 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     }
     if (message.origin) userTurn.origin = message.origin;
     if (message.createdAt) userTurn.createdAt = message.createdAt;
-    if (message.goalId) userTurn.goalId = message.goalId;
     const running = dispatch === "pending" || dispatch === "dispatched";
     const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
@@ -838,8 +837,8 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       pausedAtStepLimit: false,
     }));
     // Only the ACTIVE session's submit moves the viewport: external
-    // submits into background sessions (supervisor / CLI / goal
-    // workers) used to bump the global tick too, yanking the current
+    // submits into background sessions (supervisor / CLI) used to
+    // bump the global tick too, yanking the current
     // conversation to its own last user message with a spurious ack
     // animation.
     const isActiveSession =

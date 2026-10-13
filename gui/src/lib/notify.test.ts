@@ -44,7 +44,7 @@ describe("reply-notify pending flag", () => {
     expect(consumeReplyNotifyPending("s1")).toBe(false);
   });
 
-  it("unmarked sessions (Goal / CLI-driven runs) never consume", () => {
+  it("unmarked sessions (CLI-driven runs) never consume", () => {
     expect(consumeReplyNotifyPending("never-marked")).toBe(false);
   });
 
@@ -105,23 +105,15 @@ describe("sendGatedSystemNotification", () => {
   });
 
   it("sends when the pref is on, window unfocused, permission granted", async () => {
-    await sendGatedSystemNotification("goalEnd", {
+    await sendGatedSystemNotification("replyDone", {
       title: "done",
-      body: "objective",
+      body: "answer",
     });
 
     expect(notificationMocks.sendNotification).toHaveBeenCalledWith({
       title: "done",
-      body: "objective",
+      body: "answer",
     });
-  });
-
-  it("skips when the matching pref is off", async () => {
-    usePrefsStore.setState({ notifyOnGoalEnd: false });
-
-    await sendGatedSystemNotification("goalEnd", { title: "t", body: "b" });
-
-    expect(notificationMocks.sendNotification).not.toHaveBeenCalled();
   });
 
   it("gates replyDone notifications on the replyDone pref", async () => {
@@ -138,13 +130,23 @@ describe("sendGatedSystemNotification", () => {
     expect(notificationMocks.sendNotification).toHaveBeenCalledTimes(1);
   });
 
-  it("gates askUser notifications on the replyDone pref, not the goal pref", async () => {
-    usePrefsStore.setState({ notifyOnGoalEnd: false, notifyOnReplyDone: true });
+  it("gates askUser notifications on the replyDone pref", async () => {
+    usePrefsStore.setState({ notifyOnReplyDone: false });
 
     await sendGatedSystemNotification("askUser", {
       title: "t",
       body: "b",
-      throttleKey: "askUser:pref-split",
+      throttleKey: "askUser:pref-off",
+    });
+
+    expect(notificationMocks.sendNotification).not.toHaveBeenCalled();
+
+    usePrefsStore.setState({ notifyOnReplyDone: true });
+
+    await sendGatedSystemNotification("askUser", {
+      title: "t",
+      body: "b",
+      throttleKey: "askUser:pref-on",
     });
 
     expect(notificationMocks.sendNotification).toHaveBeenCalledTimes(1);
@@ -153,7 +155,7 @@ describe("sendGatedSystemNotification", () => {
   it("skips when the window is focused (toast already covers it)", async () => {
     windowMocks.isFocused.mockResolvedValue(true);
 
-    await sendGatedSystemNotification("goalEnd", { title: "t", body: "b" });
+    await sendGatedSystemNotification("replyDone", { title: "t", body: "b" });
 
     expect(notificationMocks.sendNotification).not.toHaveBeenCalled();
   });
@@ -162,7 +164,7 @@ describe("sendGatedSystemNotification", () => {
     notificationMocks.isPermissionGranted.mockResolvedValue(false);
     notificationMocks.requestPermission.mockResolvedValue("granted");
 
-    await sendGatedSystemNotification("goalEnd", { title: "t", body: "b" });
+    await sendGatedSystemNotification("replyDone", { title: "t", body: "b" });
 
     expect(notificationMocks.requestPermission).toHaveBeenCalled();
     expect(notificationMocks.sendNotification).toHaveBeenCalledTimes(1);
@@ -172,7 +174,7 @@ describe("sendGatedSystemNotification", () => {
     notificationMocks.isPermissionGranted.mockResolvedValue(false);
     notificationMocks.requestPermission.mockResolvedValue("denied");
 
-    await sendGatedSystemNotification("goalEnd", { title: "t", body: "b" });
+    await sendGatedSystemNotification("replyDone", { title: "t", body: "b" });
 
     expect(notificationMocks.sendNotification).not.toHaveBeenCalled();
   });
@@ -198,12 +200,12 @@ describe("sendGatedSystemNotification", () => {
     });
   });
 
-  it("honors a tone override (failed goal sounds like an alert)", async () => {
+  it("honors a tone override", async () => {
     vi.stubGlobal("navigator", {
       userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     });
     try {
-      await sendGatedSystemNotification("goalEnd", {
+      await sendGatedSystemNotification("replyDone", {
         title: "t",
         body: "b",
         tone: "alert",
@@ -225,7 +227,7 @@ describe("sendGatedSystemNotification", () => {
       userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     });
     try {
-      await sendGatedSystemNotification("goalEnd", { title: "t", body: "b" });
+      await sendGatedSystemNotification("replyDone", { title: "t", body: "b" });
     } finally {
       vi.unstubAllGlobals();
     }
@@ -255,7 +257,7 @@ describe("sendGatedSystemNotification", () => {
     windowMocks.isFocused.mockRejectedValue(new Error("no tauri runtime"));
 
     await expect(
-      sendGatedSystemNotification("goalEnd", { title: "t", body: "b" }),
+      sendGatedSystemNotification("replyDone", { title: "t", body: "b" }),
     ).resolves.toBeUndefined();
     expect(notificationMocks.sendNotification).not.toHaveBeenCalled();
   });

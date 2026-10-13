@@ -469,10 +469,9 @@ html[data-theme="dark"] {
      hover 27.2 vs 36.7), so a content-layer flat fill read as a lit
      panel on black. Now L +10 / C 0.020 / hue 63 unchanged: 1.4× light's
      step (fills read weaker on dark), chroma at two thirds of light's,
-     same logic as the de-warmed ground. Ink contrast 11:1. The Goal
-     commission slab and the armed Composer wear this token too and move
-     with it on purpose; the sidebar's selected override does not (see
-     the note on --color-selected below). */
+     same logic as the de-warmed ground. Ink contrast 11:1. The
+     sidebar's selected override does not move with this token (see the
+     note on --color-selected below). */
   --color-brand-tint: #362d24;
 
   --color-success: #8fbf8f;
@@ -1349,8 +1348,8 @@ code {
   }
 }
 
-/* Shared quiet entrance for popovers / dropdown menus (TopBar Goal /
-   Theme, and any Radix Popover|DropdownMenu content). Radix
+/* Shared quiet entrance for popovers / dropdown menus (TopBar Theme,
+   and any Radix Popover|DropdownMenu content). Radix
    mounts content on open and unmounts on close, so applying the class
    directly animates on open; close stays instant. The transform-origin
    falls through whichever Radix primitive var is set, so the surface

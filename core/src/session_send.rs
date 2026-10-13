@@ -38,8 +38,8 @@
 //! nothing is running it.
 //!
 //! Because the gate is reserved before the ensure, anyone else sending
-//! meanwhile (socket `session.send`, the queue drain, a Goal) sees a run
-//! open and queues or backs off: the window 02b left between a runner's
+//! meanwhile (socket `session.send`, the queue drain) sees a run open and
+//! queues or backs off: the window 02b left between a runner's
 //! spawn and its replay is closed on this path.
 //!
 //! Socket `session.send` does not come through here. Its contract is
@@ -62,9 +62,9 @@ use crate::session_runner::{
 use crate::socket_listener::RunnerPort;
 use serde::Serialize;
 
-/// Tauri event announcing a persisted user message. The socket handlers,
-/// the queue drain and the Goal engine send it too, with the same shape
-/// minus `clientRequestId`.
+/// Tauri event announcing a persisted user message. The socket handlers
+/// and the queue drain send it too, with the same shape minus
+/// `clientRequestId`.
 pub const USER_MESSAGE_PERSISTED_EVENT: &str = "user-message-persisted";
 
 /// Payload of [`USER_MESSAGE_PERSISTED_EVENT`] on this path. One message

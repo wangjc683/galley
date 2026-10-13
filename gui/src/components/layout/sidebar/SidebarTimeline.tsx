@@ -247,7 +247,7 @@ function SidebarProjectsSection({
   groupWiring: SidebarProjectGroupWiring;
 } & SidebarTimelineRowWiring) {
   const copy = useCopy();
-  const { activeId, sessionGoalStatus } = rowWiring;
+  const { activeId } = rowWiring;
   const sessionsOf = (items: SidebarProjectGroupItem[]) =>
     items.flatMap((g) => [...g.sessions, ...g.olderSessions]);
   const listedSessions = sessionsOf(groups);
@@ -255,7 +255,6 @@ function SidebarProjectsSection({
   const attention = useSessionsAttention(
     [...listedSessions, ...otherSessions],
     activeId,
-    sessionGoalStatus,
   );
   if (groups.length === 0 && otherGroups.length === 0) return null;
   const hangs = (sessions: Session[]) =>

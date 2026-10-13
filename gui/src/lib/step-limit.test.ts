@@ -30,7 +30,6 @@ describe("stepLimitTailVisible", () => {
     pausedAtStepLimit: true,
     isRunning: false,
     waitingAskUser: false,
-    hasOpenGoal: false,
   };
 
   it("shows for an idle session whose latest run hit the cap", () => {
@@ -46,9 +45,5 @@ describe("stepLimitTailVisible", () => {
   it("hides while anything else signals activity", () => {
     expect(stepLimitTailVisible({ ...idle, isRunning: true })).toBe(false);
     expect(stepLimitTailVisible({ ...idle, waitingAskUser: true })).toBe(false);
-  });
-
-  it("yields to an open Goal", () => {
-    expect(stepLimitTailVisible({ ...idle, hasOpenGoal: true })).toBe(false);
   });
 });

@@ -3,8 +3,8 @@
 //! list, plus the Tauri event payloads and id minting shared with the
 //! sibling command modules. Session creation lives in
 //! `session_new_cmds`. Starting a runner — spawn-config resolution,
-//! "ensure a runner" for Goal dispatch, the `runner-spawned-external`
-//! broadcast — moved to Core's shared path, [`crate::session_runner`]
+//! "ensure a runner", the `runner-spawned-external` broadcast — moved
+//! to Core's shared path, [`crate::session_runner`]
 //! (ticket 02a); `common::SocketResponseLite::from_session_runner` keeps
 //! its errors worded as before.
 //!
@@ -271,24 +271,10 @@ pub(super) async fn dispatch_session_checkpoint(
     // operator's input — persist them as a `system` row so the GUI
     // renders neutral narration instead of a user bubble. Still
     // `persisted_only`: never dispatched to the runner.
-    let send = match parsed.goal_id.as_deref().map(str::trim) {
-        Some(goal_id) if !goal_id.is_empty() => {
-            galley
-                .send_system_message_for_goal(
-                    session_id,
-                    content,
-                    origin,
-                    GoalId(goal_id.to_string()),
-                )
-                .await
-        }
-        _ => {
-            galley
-                .send_system_message(session_id, content, origin)
-                .await
-        }
-    };
-    let brief = match send {
+    let brief = match galley
+        .send_system_message(session_id, content, origin)
+        .await
+    {
         Ok(b) => b,
         Err(e) => return map_galley_err(request_id, e),
     };
@@ -461,7 +447,7 @@ pub(super) async fn dispatch_session_stop(
 
 /// `session.run_state` — the live busy signal for one session, read
 /// straight from the RunnerManager (runner registry + outbound-queue run
-/// gate). Poll target for the Goal controller's turn-completion waits:
+/// gate). Poll target for a Supervisor's turn-completion waits:
 /// `sessions.status` in SQLite persists transient statuses as `idle`, so
 /// a DB read can never answer "is the dispatched run still open".
 pub(super) async fn dispatch_session_run_state(
@@ -499,9 +485,8 @@ pub(super) async fn dispatch_session_run_state(
 
 /// One session's live state as the wire object shared by
 /// `session.run_state` and `sessions.run_state`. `busy` is the derived
-/// verdict the CLI's Goal controller already computes
-/// (`openRun || agentRunning || queuedCount > 0`) — exposed so Supervisors
-/// don't each re-derive it. `askPending` / `lastExit` (additive,
+/// verdict `openRun || agentRunning || queuedCount > 0`, exposed so
+/// Supervisors don't each re-derive it. `askPending` / `lastExit` (additive,
 /// galley#30) let a Supervisor see that the run ended on a question it
 /// should answer, and why the last run ended at all.
 pub(super) fn run_state_json(session_id: &str, state: RunState) -> Value {

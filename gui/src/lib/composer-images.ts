@@ -20,7 +20,6 @@ export const IMAGE_MAX_LONG_EDGE = 1568;
 export const IMAGE_RESAMPLE_QUALITY = 0.92;
 
 export type ImageBlockReason =
-  | "goal"
   | "external"
   | "too-large"
   | "unsupported"
@@ -29,12 +28,12 @@ export type ImageBlockReason =
 /** Thrown by {@link readImageFile} for failures the caller can surface to
  * the user as a toast (rather than a silent `console.warn`). The `reason`
  * maps 1:1 onto {@link ImageBlockReason} minus the intake-time gates
- * (`"goal"`, `"external"`, `"too-many"`) handled before `readImageFile`
- * runs — so it narrows to the per-file decode failures. */
+ * (`"external"`, `"too-many"`) handled before `readImageFile` runs — so
+ * it narrows to the per-file decode failures. */
 export class ImageError extends Error {
-  reason: Exclude<ImageBlockReason, "goal" | "external" | "too-many">;
+  reason: Exclude<ImageBlockReason, "external" | "too-many">;
   constructor(
-    reason: Exclude<ImageBlockReason, "goal" | "external" | "too-many">,
+    reason: Exclude<ImageBlockReason, "external" | "too-many">,
     message: string,
   ) {
     super(message);

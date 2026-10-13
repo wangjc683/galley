@@ -125,7 +125,7 @@ pub(crate) async fn call_print<C: SocketCommand>(args: C) -> Result<(), GalleyEr
 
 /// Read + classify the next watch frame under the STRICT policy: an
 /// `Unparseable` line is an internal error. This is the programmatic-
-/// consumer path (`session follow`, goal loops). `galley session watch`
+/// consumer path (`session follow`). `galley session watch`
 /// deliberately does NOT use this — it passes raw lines through so agents
 /// can stream-parse the NDJSON themselves.
 pub(crate) async fn next_watch_frame_strict(
@@ -244,7 +244,7 @@ mod tests {
         let sent = client.transport.sent.lock().unwrap();
         let req: serde_json::Value = serde_json::from_str(&sent[0]).unwrap();
         assert_eq!(req["command"], "session.send");
-        assert_eq!(req["schemaVersion"], 2);
+        assert_eq!(req["schemaVersion"], 3);
         assert_eq!(req["args"]["sessionId"], "s1");
     }
 

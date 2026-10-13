@@ -2,8 +2,9 @@
 //! (`SqliteGalley::persisted_message_turns_page`, main-chat ticket 12 —
 //! the desktop conversation): a turn's rows stay on one page, the main
 //! chat's greeting (turn -1) is a turn of its own, a page never starts
-//! inside a run (multi-step, `ask_user`-continued, Goal), `has_more`, the
-//! previous user message's send time, and the empty session.
+//! inside a run (multi-step, `ask_user`-continued, continued by internal
+//! user rows), `has_more`, the previous user message's send time, and the
+//! empty session.
 
 use galley_core_lib::api::{CreateSessionInput, GalleyApi, Origin, RuntimeKind, SessionId};
 use galley_core_lib::db::{PersistedMessageRow, PersistedTurnPage, SqliteGalley};
@@ -59,7 +60,6 @@ struct Row<'a> {
     role: &'a str,
     visibility: &'a str,
     tool_calls: Option<&'a str>,
-    goal_id: Option<&'a str>,
     created_at: &'a str,
 }
 
@@ -72,7 +72,6 @@ fn user(turn: i64) -> Row<'static> {
         role: "user",
         visibility: "visible",
         tool_calls: None,
-        goal_id: None,
         created_at: SENT,
     }
 }
@@ -84,7 +83,6 @@ fn step(turn: i64) -> Row<'static> {
         role: "assistant",
         visibility: "visible",
         tool_calls: None,
-        goal_id: None,
         created_at: SENT,
     }
 }
@@ -95,8 +93,8 @@ const READ_FILE: &str = r#"[{"toolName":"file_read","args":{"path":"ask_user.md"
 async fn insert(pool: &SqlitePool, sid: &str, row: Row<'_>) {
     sqlx::query(
         "INSERT INTO messages (id, session_id, turn_index, sequence, role, content, \
-            tool_calls, visibility, goal_id, created_at) \
-         VALUES (?, ?, ?, ?, ?, 'x', ?, ?, ?, ?)",
+            tool_calls, visibility, created_at) \
+         VALUES (?, ?, ?, ?, ?, 'x', ?, ?, ?)",
     )
     .bind(format!("m_{sid}_{}_{}", row.turn, row.sequence))
     .bind(sid)
@@ -105,7 +103,6 @@ async fn insert(pool: &SqlitePool, sid: &str, row: Row<'_>) {
     .bind(row.role)
     .bind(row.tool_calls)
     .bind(row.visibility)
-    .bind(row.goal_id)
     .bind(row.created_at)
     .execute(pool)
     .await
@@ -116,29 +113,6 @@ async fn insert(pool: &SqlitePool, sid: &str, row: Row<'_>) {
 async fn exchange(pool: &SqlitePool, sid: &str, turn: i64) {
     insert(pool, sid, user(turn)).await;
     insert(pool, sid, step(turn)).await;
-}
-
-async fn goal(pool: &SqlitePool, sid: &str, id: &str, ended_at: Option<&str>) {
-    let status = if ended_at.is_some() {
-        "completed"
-    } else {
-        "active"
-    };
-    sqlx::query(
-        "INSERT INTO goals (id, session_id, objective, status, started_at, ended_at, \
-            created_at, updated_at) \
-         VALUES (?, ?, 'objective', ?, ?, ?, ?, ?)",
-    )
-    .bind(id)
-    .bind(sid)
-    .bind(status)
-    .bind(SENT)
-    .bind(ended_at)
-    .bind(SENT)
-    .bind(SENT)
-    .execute(pool)
-    .await
-    .expect("insert goal");
 }
 
 async fn page(
@@ -387,23 +361,15 @@ async fn an_ask_user_reply_never_starts_a_page() {
     assert_eq!(turns_of(&hidden), vec![0, 1]);
 }
 
+/// Continuation turns the transcript never shows — internal user rows,
+/// each followed by visible steps, as older Galley versions wrote them —
+/// open no run: the page reaches back to the visible message they continue.
 #[tokio::test]
-async fn a_goal_run_stays_whole_with_its_commission() {
+async fn internal_user_rows_never_open_a_page() {
     let (_dir, pool, galley) = db().await;
     session(&galley, "s").await;
     exchange(&pool, "s", 0).await;
-    goal(&pool, "s", "g1", None).await;
-    // The commission, then continuations: internal user rows the
-    // transcript never shows, each followed by visible steps.
-    insert(
-        &pool,
-        "s",
-        Row {
-            goal_id: Some("g1"),
-            ..user(1)
-        },
-    )
-    .await;
+    insert(&pool, "s", user(1)).await;
     insert(&pool, "s", step(1)).await;
     for turn in 2..5 {
         insert(
@@ -422,92 +388,13 @@ async fn a_goal_run_stays_whole_with_its_commission() {
     assert_eq!(turns_of(&tail), vec![1, 2, 3, 4]);
     assert!(tail.has_more);
     assert_eq!(
-        tail.rows.first().and_then(|r| r.goal_id.as_deref()),
-        Some("g1")
+        positions(&tail.rows[..1]),
+        vec![(1, 0)],
+        "opens at the visible row"
     );
-}
-
-#[tokio::test]
-async fn a_message_sent_into_a_goal_reaches_back_to_its_commission() {
-    let (_dir, pool, galley) = db().await;
-    session(&galley, "open").await;
-    exchange(&pool, "open", 0).await;
-    goal(&pool, "open", "g_open", None).await;
-    insert(
-        &pool,
-        "open",
-        Row {
-            goal_id: Some("g_open"),
-            ..user(1)
-        },
-    )
-    .await;
-    insert(&pool, "open", step(1)).await;
-    insert(&pool, "open", step(2)).await;
-    // The operator steers the open goal mid-run.
-    exchange(&pool, "open", 3).await;
-    insert(&pool, "open", step(4)).await;
-    let tail = page(&galley, "open", None, 2).await;
-    assert_eq!(turns_of(&tail), vec![1, 2, 3, 4]);
-
-    // A goal that ended before the next message: that message opens a
-    // run of its own outside the episode, and the page may start there.
-    session(&galley, "ended").await;
-    exchange(&pool, "ended", 0).await;
-    goal(&pool, "ended", "g_done", Some("2026-10-13T09:00:00.000Z")).await;
-    insert(
-        &pool,
-        "ended",
-        Row {
-            goal_id: Some("g_done"),
-            ..user(1)
-        },
-    )
-    .await;
-    insert(&pool, "ended", step(1)).await;
-    // Sent before the goal ended: still inside.
-    insert(
-        &pool,
-        "ended",
-        Row {
-            created_at: "2026-10-13T08:30:00.000Z",
-            ..user(2)
-        },
-    )
-    .await;
-    insert(&pool, "ended", step(2)).await;
-    // Sent after: outside.
-    insert(
-        &pool,
-        "ended",
-        Row {
-            created_at: "2026-10-13T10:00:00.000Z",
-            ..user(3)
-        },
-    )
-    .await;
-    insert(&pool, "ended", step(3)).await;
-    let after = page(&galley, "ended", None, 1).await;
-    assert_eq!(turns_of(&after), vec![3]);
-    let inside = page(&galley, "ended", Some(3), 1).await;
-    assert_eq!(turns_of(&inside), vec![1, 2]);
-    assert!(inside.has_more);
-
-    // A stamp whose goal is not this session's is no commission.
-    session(&galley, "stray").await;
-    exchange(&pool, "stray", 0).await;
-    insert(
-        &pool,
-        "stray",
-        Row {
-            goal_id: Some("g_open"),
-            ..user(1)
-        },
-    )
-    .await;
-    insert(&pool, "stray", step(1)).await;
-    exchange(&pool, "stray", 2).await;
-    assert_eq!(turns_of(&page(&galley, "stray", None, 1).await), vec![2]);
+    let rest = page(&galley, "s", Some(1), 2).await;
+    assert_eq!(turns_of(&rest), vec![0]);
+    assert!(!rest.has_more);
 }
 
 #[tokio::test]

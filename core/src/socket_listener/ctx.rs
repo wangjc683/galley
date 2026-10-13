@@ -24,8 +24,8 @@ use crate::error::GalleyError;
 use crate::ipc::IpcCommand;
 use crate::notify::{notify, Notifier};
 use crate::runner_manager::{
-    BroadcastItem, HeldClose, QueueJump, QueueOffer, ReadySnapshot, RunOutcome, RunState,
-    RunnerCommandSink, RunnerManager, RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
+    BroadcastItem, HeldClose, QueueJump, QueueOffer, ReadySnapshot, RunState, RunnerCommandSink,
+    RunnerManager, RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
 };
 use crate::session_runner::{RunnerHost, SpawnEnv};
 use async_trait::async_trait;
@@ -155,12 +155,6 @@ pub trait RunnerPort: Send + Sync {
     async fn queue_snapshot(&self, _session_id: &str) -> Vec<QueuedMessage> {
         Vec::new()
     }
-    /// Reserve the run gate only when the session is idle with an empty
-    /// queue (Goal-turn dispatch gate). Default says "reserved" so
-    /// queue-less test fakes keep pre-gate behavior for free.
-    async fn try_reserve_run(&self, _session_id: &str) -> bool {
-        true
-    }
     /// Live run-state snapshot (`session.run_state`). Default reads as
     /// fully idle, matching the no-queue-support fakes.
     async fn run_state(&self, _session_id: &str) -> RunState {
@@ -170,14 +164,6 @@ pub trait RunnerPort: Send + Sync {
     /// explicit ids). Default: none, matching the idle fakes.
     async fn known_session_ids(&self) -> Vec<String> {
         Vec::new()
-    }
-    /// Goal v2: stamp the run just opened as an engine continuation.
-    /// Default no-op for queue-less fakes.
-    async fn mark_goal_continuation(&self, _session_id: &str) {}
-    /// Goal v2: outcome of the most recently settled run, cleared on
-    /// read. Default `None` for fakes that never observe a bridge.
-    async fn take_run_outcome(&self, _session_id: &str) -> Option<RunOutcome> {
-        None
     }
 }
 
@@ -273,20 +259,11 @@ impl RunnerPort for RunnerManager {
     async fn queue_snapshot(&self, session_id: &str) -> Vec<QueuedMessage> {
         RunnerManager::queue_snapshot(self, session_id).await
     }
-    async fn try_reserve_run(&self, session_id: &str) -> bool {
-        RunnerManager::try_reserve_run(self, session_id).await
-    }
     async fn run_state(&self, session_id: &str) -> RunState {
         RunnerManager::run_state(self, session_id).await
     }
     async fn known_session_ids(&self) -> Vec<String> {
         RunnerManager::known_session_ids(self).await
-    }
-    async fn mark_goal_continuation(&self, session_id: &str) {
-        RunnerManager::mark_goal_continuation(self, session_id).await
-    }
-    async fn take_run_outcome(&self, session_id: &str) -> Option<RunOutcome> {
-        RunnerManager::take_run_outcome(self, session_id).await
     }
 }
 

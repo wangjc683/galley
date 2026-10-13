@@ -305,7 +305,7 @@ async fn core_and_a_phone_talk_through_the_real_relay_and_pushes_reach_apns() {
     // No device left: the next push has nobody to go to.
     assert_eq!(
         core.module
-            .send_push(kind::GOAL, None, "t", "b")
+            .send_push(kind::SCHEDULE_FAILED, None, "t", "b")
             .await
             .unwrap(),
         0

@@ -59,8 +59,6 @@ export function SettingsGeneral({
   onChangeConversationFontSize,
   conversationWidth,
   onChangeConversationWidth,
-  notifyOnGoalEnd,
-  onChangeNotifyOnGoalEnd,
   notifyOnReplyDone,
   onChangeNotifyOnReplyDone,
   notifySound,
@@ -80,8 +78,6 @@ export function SettingsGeneral({
   onChangeConversationFontSize: (size: ConversationFontSize) => void;
   conversationWidth: "compact" | "wide";
   onChangeConversationWidth: (width: "compact" | "wide") => void;
-  notifyOnGoalEnd: boolean;
-  onChangeNotifyOnGoalEnd: (enabled: boolean) => void;
   notifyOnReplyDone: boolean;
   onChangeNotifyOnReplyDone: (enabled: boolean) => void;
   notifySound: boolean;
@@ -167,7 +163,7 @@ export function SettingsGeneral({
   // never asked.
   const [notifyPermissionMissing, setNotifyPermissionMissing] =
     useState(false);
-  const anyNotifyEnabled = notifyOnGoalEnd || notifyOnReplyDone;
+  const anyNotifyEnabled = notifyOnReplyDone;
   useEffect(() => {
     // No sync state reset here: the hint's render condition already
     // carries `anyNotifyEnabled`, so a stale `true` stays invisible
@@ -368,19 +364,7 @@ export function SettingsGeneral({
               ariaLabel={generalCopy.notifyReplyDoneTitle}
             />
           </PreferenceRow>
-          <PreferenceRow
-            title={generalCopy.notifyGoalEndTitle}
-            description={generalCopy.notifyGoalEndDescription}
-          >
-            <Switch
-              checked={notifyOnGoalEnd}
-              onCheckedChange={(next) =>
-                handleToggleNotify(onChangeNotifyOnGoalEnd, next)
-              }
-              ariaLabel={generalCopy.notifyGoalEndTitle}
-            />
-          </PreferenceRow>
-          {/* Sound is a modifier on the kinds above, not a third
+          {/* Sound is a modifier on the kind above, not another
               kind — plain onChange, no permission round-trip. */}
           <PreferenceRow
             title={generalCopy.notifySoundTitle}

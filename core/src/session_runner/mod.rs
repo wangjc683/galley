@@ -10,7 +10,8 @@
 //! - the GUI, via the Tauri command `runner_commands::ensure_session_runner`;
 //! - Core's send for the GUI and the phone ([`crate::session_send`],
 //!   ticket 02c), with the run gate already reserved;
-//! - Goal dispatch, via `socket_listener::ensure_runner_for_session`;
+//! - the main chat's subtasks ([`crate::subtask`], ticket 06a), with the
+//!   run gate already reserved;
 //! - socket `session.new`, via [`spawn_and_attach`] (it always spawns: the
 //!   session did not exist a moment ago);
 //! - next, the remote module.
@@ -45,8 +46,8 @@
 //! that runner's close (`RunnerPort::spawn_held` / `hold_close`), and a
 //! runner it replaces is retired (`RunnerPort::retire`): neither close
 //! reaches the drain task as `RunSignal::Closed` — which would release the
-//! run gate a Goal reserved before calling ensure and park its goal as
-//! paused — nor the GUI as `runner-closed`, which would tear down the
+//! run gate its caller reserved before calling ensure — nor the GUI as
+//! `runner-closed`, which would tear down the
 //! listeners of the page waiting on this very ensure. A held runner that
 //! exits and is not replaced has its close announced when ensure lets go
 //! (`RunnerPort::release_close`).
@@ -89,7 +90,7 @@ use std::sync::Arc;
 
 /// Tauri event broadcast whenever Core starts a session runner, so a page
 /// that did not start it attaches listeners (`runner-spawned-external`).
-/// `via` names the caller: `gui`, `goal`, `session.new`.
+/// `via` names the caller: `gui`, `ios`, `subtask`, `session.new`.
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RunnerSpawnedExternalPayload {
@@ -128,10 +129,10 @@ pub struct EnsureOptions<'a> {
     /// Config to resolve with instead of the stored `ga_config` pref
     /// (GUI transition, see [`SpawnRequest::ga_config`]).
     pub ga_config: Option<GaConfigPref>,
-    /// The caller reserved the session's run gate before calling (Goal
-    /// dispatch, Core's send). An open gate is then the caller's own, not
-    /// a run going on the runner, so it does not keep an idle live runner
-    /// from being replayed into or restarted.
+    /// The caller reserved the session's run gate before calling (Core's
+    /// send, a subtask's dispatch). An open gate is then the caller's
+    /// own, not a run going on the runner, so it does not keep an idle
+    /// live runner from being replayed into or restarted.
     pub holds_run_gate: bool,
     /// Bounds of each replay attempt.
     pub timeouts: ReplayTimeouts,

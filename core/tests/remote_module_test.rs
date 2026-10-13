@@ -1055,7 +1055,11 @@ async fn an_unpaired_desktop_does_not_connect() {
     tokio::time::sleep(QUIET).await;
     assert_eq!(fx.relay.host_connects(), 0);
     assert!(!fx.module.status().paired);
-    assert!(fx.module.send_push("goal", None, "t", "b").await.is_err());
+    assert!(fx
+        .module
+        .send_push("reply_done", None, "t", "b")
+        .await
+        .is_err());
     // And with no relay URL anywhere there is no module at all.
     assert_eq!(resolve_relay_url(None, None), Ok(None));
 }

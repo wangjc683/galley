@@ -23,7 +23,7 @@
       "name": "roles other than user and assistant are dropped",
       "completedTurnCount": 2,
       "rows": [
-        { "role": "system", "turn_index": 1, "content": "goal commissioned", "attachments": [] },
+        { "role": "system", "turn_index": 1, "content": "checkpoint narration", "attachments": [] },
         { "role": "user", "turn_index": 1, "content": "q1", "attachments": [] },
         { "role": "agent", "turn_index": 1, "content": "not a stored role", "attachments": [] },
         { "role": "assistant", "turn_index": 1, "content": "a1", "attachments": [] },
@@ -46,7 +46,7 @@
         { "role": "assistant", "turn_index": 1, "content": "a1", "attachments": [] },
         { "role": "user", "turn_index": 2, "content": "q2", "attachments": [] },
         { "role": "assistant", "turn_index": 2, "content": "a2", "attachments": [] },
-        { "role": "user", "turn_index": 3, "content": "the goal objective just persisted", "attachments": [] }
+        { "role": "user", "turn_index": 3, "content": "the message just persisted", "attachments": [] }
       ],
       "messages": [
         { "role": "user", "content": "q1" },

@@ -50,8 +50,6 @@ export function SettingsHost({
   );
   const conversationWidth = usePrefsStore((s) => s.conversationWidth);
   const setConversationWidth = usePrefsStore((s) => s.setConversationWidth);
-  const notifyOnGoalEnd = usePrefsStore((s) => s.notifyOnGoalEnd);
-  const setNotifyOnGoalEnd = usePrefsStore((s) => s.setNotifyOnGoalEnd);
   const notifyOnReplyDone = usePrefsStore((s) => s.notifyOnReplyDone);
   const setNotifyOnReplyDone = usePrefsStore((s) => s.setNotifyOnReplyDone);
   const notifySound = usePrefsStore((s) => s.notifySound);
@@ -143,10 +141,6 @@ export function SettingsHost({
       conversationWidth={conversationWidth}
       onChangeConversationWidth={(width) => {
         void setConversationWidth(width);
-      }}
-      notifyOnGoalEnd={notifyOnGoalEnd}
-      onChangeNotifyOnGoalEnd={(enabled) => {
-        void setNotifyOnGoalEnd(enabled);
       }}
       notifyOnReplyDone={notifyOnReplyDone}
       onChangeNotifyOnReplyDone={(enabled) => {

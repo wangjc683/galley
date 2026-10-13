@@ -1,4 +1,4 @@
-import { ArrowUp, Gear, Stop, Target } from "@phosphor-icons/react";
+import { ArrowUp, Gear, Stop } from "@phosphor-icons/react";
 
 import {
   COMPOSER_CONFIG_BUTTON,
@@ -17,8 +17,6 @@ interface ComposerActionSlotProps {
   submitAckTick: number;
   disabled: boolean;
   hasSendableContent: boolean;
-  goalSubmitting: boolean;
-  effectiveGoalArmed: boolean;
   requiresModelConfig: boolean;
   hasConfigureModels: boolean;
   onStop?: () => void;
@@ -27,13 +25,8 @@ interface ComposerActionSlotProps {
 
 /**
  * The send / stop control at the right edge of the Composer's button
- * row. Fixed 32px circle in EVERY state. The armed state used to
- * morph this into a 116px "启动 Goal" pill, which shoved the
- * Goal toggle ~84px left in this right-aligned row — the
- * pointer then hovered the (often unlit) pill, so a second
- * press to cancel hit a dead control. Geometry stability
- * beats the wide-label emphasis: armed is conveyed by the
- * Target icon morph + hint + tooltip instead.
+ * row. Fixed 32px circle in EVERY state: geometry stability beats a
+ * morphing affordance (see the Stop branch below).
  */
 export function ComposerActionSlot({
   stopMode,
@@ -42,8 +35,6 @@ export function ComposerActionSlot({
   submitAckTick,
   disabled,
   hasSendableContent,
-  goalSubmitting,
-  effectiveGoalArmed,
   requiresModelConfig,
   hasConfigureModels,
   onStop,
@@ -99,9 +90,7 @@ export function ComposerActionSlot({
           text={
             requiresModelConfig
               ? copy.composer.configureModelBeforeSending
-              : effectiveGoalArmed
-                ? copy.composer.startGoalTooltip
-                : copy.composer.sendWithEnter
+              : copy.composer.sendWithEnter
           }
         >
           <button
@@ -115,7 +104,6 @@ export function ComposerActionSlot({
               if (
                 disabled ||
                 !hasSendableContent ||
-                goalSubmitting ||
                 (requiresModelConfig && !hasConfigureModels)
               ) {
                 return;
@@ -125,16 +113,13 @@ export function ComposerActionSlot({
             aria-disabled={
               disabled ||
               !hasSendableContent ||
-              goalSubmitting ||
               (requiresModelConfig && !hasConfigureModels) ||
               undefined
             }
             aria-label={
               requiresModelConfig
                 ? copy.composer.configureModelBeforeSending
-                : effectiveGoalArmed
-                  ? copy.composer.startGoal
-                  : copy.composer.send
+                : copy.composer.send
             }
             className={cn(
               requiresModelConfig
@@ -142,7 +127,6 @@ export function ComposerActionSlot({
                 : COMPOSER_SEND_BUTTON,
               (disabled ||
                 !hasSendableContent ||
-                goalSubmitting ||
                 (requiresModelConfig && !hasConfigureModels)) &&
                 // Empty/disabled = a quiet neutral "unlit" circle, not a
                 // faded brand fill (50% of pale apricot still read as a
@@ -166,8 +150,6 @@ export function ComposerActionSlot({
           >
             {requiresModelConfig ? (
               <Gear size={15} weight="thin" />
-            ) : effectiveGoalArmed ? (
-              <Target size={16} weight="fill" />
             ) : (
               <ArrowUp size={16} weight="bold" />
             )}

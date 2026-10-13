@@ -19,8 +19,6 @@ pub mod im_supervisor;
 pub mod ipc;
 pub mod local_file;
 pub mod git_review;
-pub mod goal_engine;
-pub mod goal_prompts;
 pub mod managed_model_config;
 pub mod managed_model_layers;
 pub mod managed_model_probe;
@@ -81,9 +79,8 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init())
         // System notifications (Settings -> General). Fired from the
-        // GUI only when the window is unfocused — goal terminal states,
-        // finished replies and ask_user prompts (gui/src/lib/notify.ts
-        // owns the gating).
+        // GUI only when the window is unfocused — finished replies and
+        // ask_user prompts (gui/src/lib/notify.ts owns the gating).
         .plugin(tauri_plugin_notification::init())
         // Launch at login (Settings -> General). Default off; the OS is
         // the single source of truth — the GUI reads `isEnabled()` live
@@ -248,14 +245,6 @@ pub fn run() {
             preview_scheduled_fire,
             run_scheduled_task_now,
             delete_scheduled_task,
-            list_active_goals,
-            list_visible_goals,
-            list_goals_for_session,
-            goal_status,
-            mark_goal_result_seen,
-            request_goal_stop,
-            start_session_goal,
-            extend_goal,
             // B2 runner commands
             runner_commands::spawn_runner,
             runner_commands::send_to_runner,

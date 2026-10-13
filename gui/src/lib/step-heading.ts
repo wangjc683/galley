@@ -15,8 +15,7 @@ export interface StepHeadingFacts {
    * folded run's closing turn, not a merged bare-number pill row. */
   hasMarker: boolean;
   /** Closing-shaped turn — nothing but `no_tool` placeholders. Its
-   * prose is an answer (or a goal continuation's progress note), not a
-   * step's narration. */
+   * prose is an answer, not a step's narration. */
   closingShaped: boolean;
   /** The step's narration: `finalAnswer` on a turn with real tools. */
   narration: string | null | undefined;

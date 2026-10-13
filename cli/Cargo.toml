@@ -40,12 +40,6 @@ serde = { version = "1", features = ["derive"] }
 # keys sorted alphabetically (`createdAt` first, `id` buried mid-line).
 serde_json = { version = "1", features = ["preserve_order"] }
 
-# Advisory file lock for the per-goal controller lock: prevents two
-# controller processes (e.g. startup auto-resume racing a manual
-# `goal run --resume`) from driving the same Goal concurrently. Mirrors
-# the Python IM launcher's `supervisor.lock` (fcntl.flock) precedent.
-fs2 = "0.4"
-
 [dev-dependencies]
 # Same sqlx version as galley-core so the integration tests can
 # seed the temp DB with the production migration SQL.

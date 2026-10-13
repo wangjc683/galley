@@ -302,7 +302,7 @@ export function AnsweredAskUser({
           var (13px at standard — the historical value). Same MarkdownView
           + softBreaks path as the live bubble so the echo is the same
           text rendered the same way, just smaller and softer — the size
-          / colour overrides mirror the Goal narration pattern in
+          / colour overrides mirror the narration pattern in
           SystemMessageBubble. */}
       <MarkdownView
         source={cleaned}

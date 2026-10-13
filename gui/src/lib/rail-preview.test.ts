@@ -117,7 +117,7 @@ describe("buildRailExchanges", () => {
   it("skips system turns", () => {
     const turns: Turn[] = [
       user("问题"),
-      system("Goal 叙述"),
+      system("叙述"),
       agent("回答"),
       system("收口"),
     ];
@@ -159,18 +159,6 @@ describe("buildRailExchanges", () => {
     const exchanges = buildRailExchanges(turns);
     expect(exchanges).toHaveLength(1);
     expect(exchanges[0]).toEqual({ question: "问题", answer: "结论" });
-  });
-
-  it("skips goal commission openers — they render as markers, not user-msgs", () => {
-    const turns: Turn[] = [
-      { ...user("目标"), goalId: "goal-1" },
-      agent("执行"),
-      user("普通问题"),
-      agent("回答"),
-    ];
-    const exchanges = buildRailExchanges(turns);
-    expect(exchanges).toHaveLength(1);
-    expect(exchanges[0].question).toBe("普通问题");
   });
 
   it("returns an empty question preview for a whitespace-only message", () => {

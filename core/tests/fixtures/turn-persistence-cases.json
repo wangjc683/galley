@@ -132,7 +132,6 @@
         "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
         "visibility": "internal",
         "absoluteTurnIndex": 30,
-        "goalStatus": "blocked",
         "timestamp": "2026-10-07T08:00:07+00:00"
       }
     },
@@ -303,7 +302,6 @@
         "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
         "absoluteTurnIndex": 18,
         "nextSuggestion": "再跑一遍测试",
-        "goalStatus": "complete",
         "timestamp": "2026-10-07T08:00:19+00:00"
       }
     },

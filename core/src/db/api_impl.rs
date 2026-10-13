@@ -76,28 +76,6 @@ impl GalleyApi for SqliteGalley {
             .await
     }
 
-    async fn send_message_for_goal(
-        &self,
-        session_id: SessionId,
-        content: String,
-        origin: crate::api::Origin,
-        goal_id: GoalId,
-    ) -> Result<MessageBrief> {
-        self.send_message_for_goal_db(session_id, content, origin, goal_id)
-            .await
-    }
-
-    async fn send_system_message_for_goal(
-        &self,
-        session_id: SessionId,
-        content: String,
-        origin: crate::api::Origin,
-        goal_id: GoalId,
-    ) -> Result<MessageBrief> {
-        self.send_system_message_for_goal_db(session_id, content, origin, goal_id)
-            .await
-    }
-
     async fn create_session(
         &self,
         input: CreateSessionInput,
@@ -255,51 +233,6 @@ impl GalleyApi for SqliteGalley {
     ) -> Result<ScheduledTaskBrief> {
         self.mark_scheduled_task_fired_db(id, fired_at_iso, session_id)
             .await
-    }
-
-    async fn create_goal(&self, input: CreateGoalInput, origin: Origin) -> Result<GoalBrief> {
-        self.create_goal_db(input, origin).await
-    }
-
-    async fn get_goal(&self, id: GoalId) -> Result<GoalBrief> {
-        self.fetch_goal(id.as_str()).await
-    }
-
-    async fn list_active_goals(&self) -> Result<Vec<GoalBrief>> {
-        self.list_active_goals_db().await
-    }
-
-    async fn list_visible_goals(&self) -> Result<Vec<GoalBrief>> {
-        self.list_visible_goals_db().await
-    }
-
-    async fn list_goals_for_session(&self, session_id: SessionId) -> Result<Vec<GoalBrief>> {
-        self.list_goals_for_session_db(session_id).await
-    }
-
-    async fn mark_goal_result_seen(&self, id: GoalId, _origin: Origin) -> Result<GoalBrief> {
-        self.mark_goal_result_seen_db(id, _origin).await
-    }
-
-    async fn update_goal_status(
-        &self,
-        id: GoalId,
-        status: GoalStatus,
-        latest_summary: Option<String>,
-    ) -> Result<GoalBrief> {
-        self.update_goal_status_db(id, status, latest_summary).await
-    }
-
-    async fn bump_goal_continuation(&self, id: GoalId, wrap_up: bool) -> Result<GoalBrief> {
-        self.bump_goal_continuation_db(id, wrap_up).await
-    }
-
-    async fn extend_goal_budget(&self, id: GoalId, extra_seconds: u32) -> Result<GoalBrief> {
-        self.extend_goal_budget_db(id, extra_seconds).await
-    }
-
-    async fn pause_open_goals(&self) -> Result<u64> {
-        self.pause_open_goals_db().await
     }
 
     async fn create_session_in_tx<'c>(

@@ -1,8 +1,8 @@
 /**
  * System notifications — the "user isn't looking" channel.
  *
- * Galley hides to the background on window close, and long-running
- * goals / ask_user waits routinely outlive the user's attention. The
+ * Galley hides to the background on window close, and long runs /
+ * ask_user waits routinely outlive the user's attention. The
  * in-app toast covers the focused window; this module covers the rest
  * via `tauri-plugin-notification`, gated so it never duplicates the
  * toast and never surprises the user:
@@ -35,7 +35,6 @@ import {
 import { usePrefsStore } from "@/stores/prefs";
 
 export type SystemNotifyKind =
-  | "goalEnd"
   | "replyDone"
   | "askUser"
   | "scheduleFailed"
@@ -50,7 +49,6 @@ export type SystemNotifyKind =
 export type NotifyTone = "done" | "needsYou" | "alert";
 
 const KIND_TONE: Record<SystemNotifyKind, NotifyTone> = {
-  goalEnd: "done",
   replyDone: "done",
   askUser: "needsYou",
   scheduleFailed: "alert",
@@ -103,8 +101,8 @@ export function resolveNotifySound(
 /**
  * Reply-done gating: sessions with a GUI-submitted run awaiting its
  * final turn. Set on Composer submit, consumed at the final `turn_end`
- * — so Goal-nudge and CLI/Supervisor-driven runs (which never pass
- * through the GUI submit path) stay silent. Module-level because it
+ * — so CLI/Supervisor-driven runs (which never pass through the GUI
+ * submit path) stay silent. Module-level because it
  * never renders: ipc-handlers and useMessageSend are the only readers.
  * Best-effort by design — a GUI restart mid-run drops the flag and
  * skips one notification, same failure mode as the rest of this file.
@@ -175,7 +173,7 @@ export async function ensureNotificationPermission(): Promise<boolean> {
 /**
  * Fire-and-forget gated system notification. `throttleKey` collapses
  * bursts sharing the key into one notification per 5s window; omit it
- * for events that are naturally sparse (goal terminal states).
+ * for events that are naturally sparse.
  */
 export async function sendGatedSystemNotification(
   kind: SystemNotifyKind,
@@ -188,8 +186,7 @@ export async function sendGatedSystemNotification(
     title: string;
     body: string;
     throttleKey?: string;
-    /** Override the kind's default tone — e.g. a failed goal is a
-     * `goalEnd` event but should sound like an alert, not a "done". */
+    /** Override the kind's default tone. */
     tone?: NotifyTone;
   },
 ): Promise<void> {
@@ -207,11 +204,9 @@ export async function sendGatedSystemNotification(
     // register (finished vs asking) — a separate toggle would be
     // Settings noise for a distinction users don't configure apart.
     const enabled =
-      kind === "goalEnd"
-        ? prefs.notifyOnGoalEnd
-        : kind === "replyDone" || kind === "askUser"
-          ? prefs.notifyOnReplyDone
-          : true;
+      kind === "replyDone" || kind === "askUser"
+        ? prefs.notifyOnReplyDone
+        : true;
     if (!enabled) {
       console.debug("[notify] skipped: pref off.", { kind });
       return;

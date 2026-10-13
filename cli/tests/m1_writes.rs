@@ -443,7 +443,7 @@ async fn project_brief_counts_active_sessions_and_running_subset() {
     let (stdout, code) = run_galley_isolated(&db, td.path(), &["project", "brief", "proj_batch"]);
     assert_eq!(code, Some(0), "stdout: {stdout}");
     let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
-    assert_eq!(payload["schemaVersion"], 2);
+    assert_eq!(payload["schemaVersion"], 3);
     assert_eq!(payload["project"]["id"], "proj_batch");
     assert_eq!(payload["sessionCount"], 2);
     assert_eq!(payload["statusCounts"]["running"], 1);
@@ -479,7 +479,7 @@ async fn project_show_includes_tail_messages_per_session() {
     );
     assert_eq!(code, Some(0), "stdout: {stdout}");
     let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
-    assert_eq!(payload["schemaVersion"], 2);
+    assert_eq!(payload["schemaVersion"], 3);
     assert_eq!(payload["sessionCount"], 1);
     assert_eq!(payload["sessions"].as_array().unwrap().len(), 1);
     assert_eq!(payload["sessions"][0]["session"]["id"], "s_review");

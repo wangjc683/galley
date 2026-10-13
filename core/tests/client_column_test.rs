@@ -1,12 +1,12 @@
 //! `messages.client` / `sessions.client` (migration 043, iOS PRD ruling
 //! 9, ticket 05c): which app a human used. Written from `Origin.client`
-//! — `desktop` by the GUI's Tauri send / create / Goal start
-//! (`Origin::desktop()`), `ios` by the remote module — NULL for every
+//! — `desktop` by the GUI's Tauri send / create (`Origin::desktop()`),
+//! `ios` by the remote module — NULL for every
 //! other writer, and never part of the CLI's JSON (Rule 3).
 
 use galley_core_lib::api::{
-    CreateSessionInput, GalleyApi, GoalId, MessageVisibility, Origin, OriginClient, OriginVia,
-    RuntimeKind, SessionId,
+    CreateSessionInput, GalleyApi, MessageVisibility, Origin, OriginClient, OriginVia, RuntimeKind,
+    SessionId,
 };
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::message_queue::dispatch_queued_message;
@@ -160,39 +160,6 @@ async fn messages_record_the_app_a_human_sent_them_from() {
         .await
         .unwrap();
     assert_eq!(via, "gui");
-}
-
-#[tokio::test]
-async fn a_goal_objective_typed_at_the_desktop_is_desktop() {
-    let (pool, galley) = db().await;
-    galley
-        .create_session(input("s"), Origin::cli(None, None))
-        .await
-        .unwrap();
-    let goal = galley
-        .create_goal(
-            galley_core_lib::api::CreateGoalInput {
-                session_id: SessionId("s".into()),
-                objective: "做完它".into(),
-                budget_seconds: None,
-            },
-            Origin::desktop(),
-        )
-        .await
-        .unwrap();
-    let objective = galley
-        .send_message_for_goal(
-            SessionId("s".into()),
-            "做完它".into(),
-            Origin::desktop(),
-            GoalId(goal.id.0.clone()),
-        )
-        .await
-        .unwrap();
-    assert_eq!(
-        message_client(&pool, &objective.id.0).await.as_deref(),
-        Some("desktop")
-    );
 }
 
 #[tokio::test]

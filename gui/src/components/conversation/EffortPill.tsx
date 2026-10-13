@@ -59,9 +59,7 @@ export interface ComposerReasoningEffortState {
  *     the same day: 09-22 put ONE caret at the phrase end (Codex-style)
  *     and rejected zero carets, but once the dot split the phrase into
  *     two items that caret sat inside this pill's hover box and read as
- *     the tier's own arrow while the model had none. The Goal ceiling
- *     pill keeps its caret: in the eyebrow it must stand apart from the
- *     label text around it.
+ *     the tier's own arrow while the model had none.
  *   - Usable mid-run: the engine reads the value per request, so a
  *     change applies to the next call. The LLM switch lock does not
  *     reach here.

@@ -103,13 +103,9 @@ export function SidebarProjectGroup({
   onArchiveAll?: (sessionIds: string[]) => void;
 } & SidebarTimelineRowWiring) {
   const copy = useCopy();
-  const { activeId, sessionGoalStatus } = rowWiring;
+  const { activeId } = rowWiring;
   const allSessions = [...sessions, ...olderSessions];
-  const attention = useSessionsAttention(
-    allSessions,
-    activeId,
-    sessionGoalStatus,
-  );
+  const attention = useSessionsAttention(allSessions, activeId);
   const [olderOpen, setOlderOpen] = useState(defaultOlderOpen);
   const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
 

@@ -9,7 +9,6 @@ import type { ConversationFontSize } from "@/lib/conversation-font-size";
 import type { ImSupervisorStatus } from "@/lib/im-supervisor";
 import type { ResolvedTheme, ThemePreference } from "@/lib/theme";
 import type { AppUpdateStatus } from "@/stores/app-update";
-import type { GoalBrief } from "@/types/goal";
 
 import { WindowControls } from "./WindowControls";
 import type { BrowserControlIndicatorInput } from "./header/browser-control-indicator-status";
@@ -53,10 +52,6 @@ export interface MainHeaderProps {
   onOpenModelsSettings?: () => void;
   /** Supervisor SOP entry in the utility cluster → Settings → Agent. */
   onOpenSupervisorSop?: () => void;
-  activeGoals?: GoalBrief[];
-  onOpenGoal?: (goalId: string) => void;
-  onStopGoal?: (goalId: string) => void;
-  onExtendGoal?: (goalId: string) => void;
   /**
    * App-update awareness (`.scratch/topbar-update-indicator/PRD.md`).
    * available / downloading / ready render an UpdateIndicator badge at
@@ -138,7 +133,7 @@ export interface MainHeaderProps {
  * Layout — title left-aligned against the column's left gutter, the
  * action cluster pinned right, and draggable empty space between them.
  * The right group is split into two child clusters:
- *   - TopBarStatusCluster — state-of-the-world badges (Goal / engine /
+ *   - TopBarStatusCluster — state-of-the-world badges (engine /
  *     Browser Control / Channels / Update), gated on
  *     `hasTopBarStatusItems`.
  *   - TopBarUtilityCluster — Changes (while a repository is known), the
@@ -189,10 +184,6 @@ export function MainHeader({
   onOpenRuntimeSettings,
   onOpenModelsSettings,
   onOpenSupervisorSop,
-  activeGoals = [],
-  onOpenGoal,
-  onStopGoal,
-  onExtendGoal,
   appUpdateStatus = { kind: "idle" },
   hasRunningSessions = false,
   onRestartAppUpdate,
@@ -212,7 +203,6 @@ export function MainHeader({
 }: MainHeaderProps) {
   const copy = useCopy();
   const hasTopBarStatusItems =
-    activeGoals.length > 0 ||
     runtimeIndicator !== "hidden" ||
     browserControl !== null ||
     Boolean(onOpenChannelsSettings) ||
@@ -329,10 +319,6 @@ export function MainHeader({
       <div className="flex shrink-0 items-center gap-2">
         {hasTopBarStatusItems && (
           <TopBarStatusCluster
-            activeGoals={activeGoals}
-            onOpenGoal={onOpenGoal}
-            onStopGoal={onStopGoal}
-            onExtendGoal={onExtendGoal}
             runtimeIndicator={runtimeIndicator}
             onOpenRuntimeSettings={onOpenRuntimeSettings}
             onOpenModelsSettings={onOpenModelsSettings}

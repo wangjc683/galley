@@ -59,9 +59,8 @@ Galley's features, and where the user finds them:
 - Sidebar: conversations, Projects (conversations grouped around a folder),
   and scheduled tasks ("定时" / "Scheduled"). ⌘K (Ctrl+K on Windows)
   searches every past conversation.
-- Message box: this conversation's model and reasoning effort; Goal, which
-  keeps working on a long objective in the background until it is done; the ＋
-  menu for files, folders, and saved prompts.
+- Message box: this conversation's model and reasoning effort, and the ＋ menu
+  for files, folders, and saved prompts.
 - Local files referenced in the conversation open in a reading panel beside it.
 - Settings: General (appearance, language, startup), Models (providers, API
   keys), Channels (WeChat, Feishu, Telegram, Discord), Browser Control,
@@ -414,7 +413,7 @@ what is running, use plain `sessions list`; add `--all` or `--runtime all`
 only when the user asks about archived or older sessions.
 
 Your Galley supervisor identity is `{supervisor_id}`. On every CLI write
-command (session new / session send / project create / goal / llm set) pass
+command (session new / session send / project create / llm set) pass
 exactly `--supervisor={supervisor_id}` plus a short `--reason=<why>`. Galley
 uses this identity to route a finished session's report request back to this
 chat; follow that request when it arrives."#
@@ -533,13 +532,14 @@ mod tests {
     /// workbench suggestion section, exactly what `prompt_hash` covers).
     /// Set with no headroom at the 2026-10-06 budget pass, on the larger
     /// platform variant (Windows), then raised by exactly 167 bytes on
-    /// 2026-10-07 for the Chinese Settings labels in the feature map. To
+    /// 2026-10-07 for the Chinese Settings labels in the feature map, and
+    /// lowered by 80 on 2026-10-13 when Goal left the feature map. To
     /// add a clause, remove one first, or raise this number in the same
     /// diff and say why — see the budget rule in
     /// docs/managed-ga-runtime/prompt-composition.md. Bytes, not tokens:
     /// there is no tokenizer in CI. `\r` is not counted: a Windows
     /// checkout (`core.autocrlf`) puts CRLF into the raw string literals.
-    const STATIC_PROMPT_BUDGET_BYTES: usize = 6855;
+    const STATIC_PROMPT_BUDGET_BYTES: usize = 6775;
 
     #[test]
     fn static_prompt_stays_within_budget() {
@@ -902,8 +902,9 @@ mod tests {
     /// template with an empty SOP path so the user's state-root path does not
     /// count. `\r` is not counted. 1503 at the 2026-10-06 slimming, when
     /// WeChat carried a link note; lowered when the 2026-10-10 WeChat pass
-    /// dropped it.
-    const IM_PROMPT_BUDGET_BYTES: usize = 1383;
+    /// dropped it, and again (1383 → 1376) when Goal left the CLI write
+    /// list on 2026-10-13.
+    const IM_PROMPT_BUDGET_BYTES: usize = 1376;
 
     #[test]
     fn im_supervisor_prompt_stays_within_budget() {

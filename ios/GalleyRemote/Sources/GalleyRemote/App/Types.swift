@@ -233,7 +233,6 @@ public struct Message: Codable, Sendable, Hashable {
     public var toolResults: JSONValue?
     public var askUser: AskUser?
     public var telemetry: MessageTelemetry?
-    public var goalId: String?
     public var origin: Origin?
     public var attachments: [Attachment]
     public var createdAt: String
@@ -254,7 +253,6 @@ public struct Message: Codable, Sendable, Hashable {
         try c.encode(toolResults, forKey: .toolResults)
         try c.encode(askUser, forKey: .askUser)
         try c.encode(telemetry, forKey: .telemetry)
-        try c.encode(goalId, forKey: .goalId)
         try c.encode(origin, forKey: .origin)
         try c.encode(attachments, forKey: .attachments)
         try c.encode(createdAt, forKey: .createdAt)

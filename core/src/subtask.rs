@@ -90,14 +90,13 @@ pub enum SubtaskTag {
 /// GA's and Galley's other tag blocks, which may quote `<subtask>` (a
 /// model thinking about the tag it is about to write) without meaning
 /// it. Complete blocks only, as the turn derivation strips them.
-static OTHER_TAG_BLOCKS: LazyLock<[Regex; 6]> = LazyLock::new(|| {
+static OTHER_TAG_BLOCKS: LazyLock<[Regex; 5]> = LazyLock::new(|| {
     [
         r"(?s)<thinking>.*?</thinking>",
         r"(?s)<summary>.*?</summary>",
         r"(?s)<tool_use>.*?</tool_use>",
         r"(?s)<file_content[^>]*>.*?</file_content>",
         r"(?s)<next-suggestion>.*?</next-suggestion>",
-        r"(?s)<goal-status>.*?</goal-status>",
     ]
     .map(|pattern| Regex::new(pattern).expect("tag pattern compiles"))
 });
@@ -771,7 +770,6 @@ mod tests {
             origin_note: None,
             visibility: "visible".into(),
             telemetry: None,
-            goal_id: None,
             created_at: "t".into(),
             attachments: Vec::new(),
         }

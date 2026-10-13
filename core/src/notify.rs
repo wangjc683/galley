@@ -237,7 +237,7 @@ mod tests {
         let _turn = lock();
         register_remote_sink(Arc::new(PanickingSink));
         let mut webview = 0;
-        emit_and_forward("goal-updated", json!({}), |_, _| webview += 1);
+        emit_and_forward("session-updated-external", json!({}), |_, _| webview += 1);
         clear_remote_sink();
         assert_eq!(webview, 1);
     }

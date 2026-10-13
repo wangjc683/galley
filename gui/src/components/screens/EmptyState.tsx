@@ -20,7 +20,6 @@ import type { EpigraphCondition } from "@/lib/epigraphs";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { PendingImageAttachment } from "@/types/conversation";
-import type { GoalLaunchConfig } from "@/types/goal";
 
 /** Shared new-conversation draft key — the Composer parks its draft
  * here (write-through) and the epigraph click-guard reads it back. */
@@ -32,15 +31,6 @@ export interface EmptyStateProps {
     text: string,
     attachments: PendingImageAttachment[],
   ) => boolean | void;
-  onGoalSubmit?: (
-    text: string,
-    config: GoalLaunchConfig,
-  ) => void | Promise<void>;
-  /** Gate for the Goal entry. The empty state has no session yet, so
-   * there is no open Goal to collide with and this is always false —
-   * the prop stays only because the Composer's gating is per-session
-   * (MainView is where it can be true). */
-  hasActiveGoal?: boolean;
   /** LLM list for the Composer's inline picker. Drives the popover
    * under the model pill — see Composer's LLMPill. */
   llms?: ComposerLLMOption[];
@@ -114,8 +104,6 @@ export interface EmptyStateProps {
 export function EmptyState({
   llmDisplayName,
   onSubmit,
-  onGoalSubmit,
-  hasActiveGoal,
   llms,
   onSelectLLM,
   llmConfigHint,
@@ -190,8 +178,6 @@ export function EmptyState({
           llmDisplayName={llmDisplayName}
           placeholder={composerPlaceholder}
           onSubmit={onSubmit}
-          onGoalSubmit={onGoalSubmit}
-          hasActiveGoal={hasActiveGoal}
           // One shared new-conversation draft: typing here, glancing at a
           // session, and coming back must not lose the text. Submit hands
           // the text to the new session and drops the parked copy.

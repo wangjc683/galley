@@ -105,7 +105,6 @@ _TAG_PATS = [
         "tool_use",
         "file_content",
         "next-suggestion",
-        "goal-status",
     )
 ]
 _FILE_REF_RE = re.compile(r"\[FILE:[^\]]+\]")
@@ -131,37 +130,6 @@ def _extract_next_suggestion(text: str) -> str | None:
     if not suggestion:
         return None
     return suggestion[:_NEXT_SUGGESTION_MAX_CHARS]
-
-
-# <goal-status> — the Goal dispatch prompt asks the model to close its
-# final answer with `<goal-status>complete</goal-status>` (or `blocked`)
-# when the goal is done. Extracted into TurnEndEvent.goalStatus (and
-# stripped from display via _TAG_PATS above); Core decides whether the
-# session has a goal that cares. Any other value is the model
-# improvising, so it degrades to "no status" instead of guessing.
-_GOAL_STATUS_RE = re.compile(
-    r"<goal-status>\s*(complete|blocked)\s*</goal-status>", re.I | re.DOTALL
-)
-# Permissive twin, used only to notice a tag we deliberately ignored.
-_GOAL_STATUS_TAG_RE = re.compile(
-    r"<goal-status>\s*(.*?)\s*</goal-status>", re.I | re.DOTALL
-)
-
-
-def _extract_goal_status(text: str) -> str | None:
-    if not text:
-        return None
-    m = _GOAL_STATUS_RE.search(text)
-    if m is not None:
-        return m.group(1).lower()
-    other = _GOAL_STATUS_TAG_RE.search(text)
-    if other is not None:
-        print(
-            "[goal-status] ignoring unknown value "
-            f"{' '.join(other.group(1).split())[:80]!r}",
-            file=sys.stderr,
-        )
-    return None
 
 
 def _clean_response_for_display(text: str) -> str:
@@ -718,8 +686,8 @@ class Bridge:
         # takes over a run's completion; each drain captures the value of
         # the run it belongs to. Core dispatches the next message right
         # after run_complete, so a late `done` from an earlier task must
-        # not close the newer run, nor pre-empt Abort's ABORTED (Core
-        # pauses a Goal only on ABORTED).
+        # not close the newer run, nor pre-empt Abort's ABORTED (a user
+        # stop must reach Core as ABORTED, e.g. `live.lastExit`).
         self._run_generation: int = 0
         # The parent watchdog exits with os._exit, which skips finally
         # blocks and atexit — an attached pet would survive as an orphan
@@ -1426,17 +1394,14 @@ class Bridge:
         (galley#29): the task loop raised, a `_stop` file broke it, or any
         future path that skips the final turn_end. GA's task-level `done`
         is the last thing it puts, so a run still open when it arrives
-        would otherwise spin forever (GUI spinner, Core's message queue and
-        Goal engine all wait for run_complete). A normal finish, ask_user
-        and the max-turns cap have already closed the run by then, and
-        Abort retires the generation before GA unwinds, so this only fires
-        for a run nothing else will close.
+        would otherwise spin forever (the GUI spinner and Core's message
+        queue both wait for run_complete). A normal finish, ask_user and
+        the max-turns cap have already closed the run by then, and Abort
+        retires the generation before GA unwinds, so this only fires for a
+        run nothing else will close.
 
         A runtime error goes out first, carrying GA's backend error when
-        `done_text` has one: it tells the user why the run stopped, and
-        Core records it on the run (forwarder `draft.errored`, taken by
-        the run_complete right after it), so an active Goal lands on
-        Blocked instead of dispatching another continuation."""
+        `done_text` has one: it tells the user why the run stopped."""
         with self._run_complete_lock:
             if self._run_generation != run_generation or not self.run_in_progress.is_set():
                 return
@@ -1540,9 +1505,6 @@ class Bridge:
             next_suggestion = (
                 _extract_next_suggestion(response_content) if exit_reason else None
             )
-            goal_status = (
-                _extract_goal_status(response_content) if exit_reason else None
-            )
             # Read-only attribute on the response GA hands its turn-end
             # hooks (allowed in attach mode too). Native sessions fill it
             # from thinking blocks, or from a prompted <thinking> block
@@ -1572,7 +1534,6 @@ class Bridge:
                     visibility=self._current_message_visibility,
                     absoluteTurnIndex=self._current_absolute_turn_index(turn),
                     nextSuggestion=next_suggestion,
-                    goalStatus=goal_status,
                     responseThinking=response_thinking,
                 )
             )

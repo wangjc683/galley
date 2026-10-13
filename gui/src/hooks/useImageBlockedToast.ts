@@ -2,7 +2,6 @@ import type { AppCopy } from "@/lib/i18n";
 import { makeAppError, type AppError } from "@/types/app-error";
 
 export type ImageBlockedReason =
-  | "goal"
   | "external"
   | "too-large"
   | "unsupported"
@@ -37,15 +36,13 @@ export function useImageBlockedToast({
   };
   const handleImageBlocked = (reason: ImageBlockedReason) => {
     const message =
-      reason === "goal"
-        ? copy.toasts.imageBlockedGoal
-        : reason === "external"
-          ? copy.toasts.imageBlockedExternal
-          : reason === "too-large"
-            ? copy.toasts.imageTooLarge
-            : reason === "too-many"
-              ? copy.toasts.imageTooMany
-              : copy.toasts.imageUnsupported;
+      reason === "external"
+        ? copy.toasts.imageBlockedExternal
+        : reason === "too-large"
+          ? copy.toasts.imageTooLarge
+          : reason === "too-many"
+            ? copy.toasts.imageTooMany
+            : copy.toasts.imageUnsupported;
     showImageBlockedToast(message);
   };
   /** A native drop carried no filesystem paths (text / URL drag). The

@@ -135,11 +135,6 @@ class TurnEndEvent:
     # non-None on the final turn_end (exitReason != None); None when the
     # model emitted no tag — the desktop then simply shows no ghost text.
     nextSuggestion: str | None = None
-    # Goal completion signal extracted from the final answer's
-    # <goal-status> tag: "complete" or "blocked", None when the model
-    # emitted no (or an unrecognized) tag. Only ever non-None on the
-    # final turn_end; Core decides whether the session has a goal.
-    goalStatus: str | None = None
     # The turn's reasoning, read from GA's `response.thinking`: native model
     # reasoning (thinking blocks), or a prompted <thinking> block that GA
     # moved out of `content`. Any turn, not only the final one; None when

@@ -142,11 +142,6 @@ struct FakeRunner {
     subscribe_some: bool,
     running: bool,
     sent_commands: Mutex<Vec<(String, String)>>,
-    /// What `try_reserve_run` answers (Goal-turn idle gate). Default true
-    /// mirrors the trait default so pre-gate tests keep their behavior.
-    reserve_result: bool,
-    /// Sessions whose run-gate reservation was released after a failure.
-    released: Mutex<Vec<String>>,
     /// Fixed `run_state` answer; None falls back to a running-derived one.
     run_state: Option<RunState>,
 }
@@ -159,8 +154,6 @@ impl Default for FakeRunner {
             subscribe_some: true,
             running: true,
             sent_commands: Mutex::new(Vec::new()),
-            reserve_result: true,
-            released: Mutex::new(Vec::new()),
             run_state: None,
         }
     }
@@ -184,12 +177,6 @@ impl FakeRunner {
     fn subscribe_none() -> Self {
         Self {
             subscribe_some: false,
-            ..Self::default()
-        }
-    }
-    fn reserve_busy() -> Self {
-        Self {
-            reserve_result: false,
             ..Self::default()
         }
     }
@@ -270,12 +257,6 @@ impl RunnerPort for FakeRunner {
                 session_id: session_id.to_string(),
             })
         }
-    }
-    async fn try_reserve_run(&self, _session_id: &str) -> bool {
-        self.reserve_result
-    }
-    async fn queue_release_run(&self, session_id: &str) {
-        self.released.lock().unwrap().push(session_id.to_string());
     }
     async fn run_state(&self, _session_id: &str) -> RunState {
         self.run_state.clone().unwrap_or(RunState {
@@ -596,7 +577,7 @@ for line in sys.stdin:
 }
 
 /// Stand-in for the global drain task: wait for the forwarder's next
-/// `RunComplete` signal (skipping `UserRunStarted`).
+/// `RunComplete` signal (skipping any other).
 async fn next_run_complete(signals: &mut mpsc::UnboundedReceiver<RunSignal>) -> RunSignal {
     loop {
         let signal = tokio::time::timeout(std::time::Duration::from_secs(5), signals.recv())
@@ -724,6 +705,36 @@ async fn session_checkpoint_persists_system_row_never_dispatches() {
     // Checkpoint never touches the runner.
     assert!(h.runner.sent_commands.lock().unwrap().is_empty());
     assert!(h.notifier.payload_of("user-message-persisted").is_some());
+}
+
+/// `goalId` left the args with Goal (2026-10-13). An old caller that
+/// still sends it is not refused (the args carry no
+/// `deny_unknown_fields`); the row is written unstamped and the answer
+/// carries no goal id.
+#[tokio::test]
+async fn session_checkpoint_ignores_a_stale_goal_id() {
+    let h = Harness::new(FakeRunner::default()).await;
+    h.seed_session("s-cp").await;
+
+    let resp = h
+        .dispatch(req(
+            "session.checkpoint",
+            json!({"sessionId": "s-cp", "content": "阶段小结", "goalId": "goal_old"}),
+        ))
+        .await;
+
+    assert!(resp.ok, "{resp:?}");
+    let result = resp.result.unwrap();
+    assert_eq!(result["message"]["role"], "system");
+    assert!(result["message"].get("goalId").is_none(), "{result}");
+    // The column is still in the schema (no migration); nothing fills it.
+    let mut tx = h.galley.begin_tx().await.unwrap();
+    let stamp: Option<String> =
+        sqlx::query_scalar("SELECT goal_id FROM messages WHERE session_id = 's-cp'")
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+    assert_eq!(stamp, None);
 }
 
 // ---------------- session.new (the rollback-narration branches) ----------------
@@ -1084,225 +1095,88 @@ async fn llm_set_resolves_every_managed_llm_list_name() {
     assert_eq!(resp.error.as_deref(), Some("invalid_args"));
 }
 
-// ---------------- schemaVersion 2 policy + goal.* (Goal v2) ----------------
+// ---------------- schemaVersion 3 policy (Goal removed) ----------------
 
-fn req_v2(command: &str, args: Value) -> Value {
-    json!({ "command": command, "args": args, "schemaVersion": 2, "requestId": "t2" })
+fn req_at(schema: u32, command: &str, args: Value) -> Value {
+    json!({ "command": command, "args": args, "schemaVersion": schema, "requestId": "tv" })
 }
 
 #[tokio::test]
-async fn schema_v1_still_serves_unchanged_commands() {
+async fn version_reports_schema_3() {
     let h = Harness::new(FakeRunner::default()).await;
-    h.seed_session("s1").await;
-    let resp = h
-        .dispatch(req(
-            "session.send",
-            json!({"sessionId": "s1", "content": "hi"}),
-        ))
-        .await;
-    assert!(resp.ok, "v1 request on an unchanged command: {resp:?}");
+    let resp = h.dispatch(req_at(3, "version", json!({}))).await;
+    assert!(resp.ok, "{resp:?}");
+    assert_eq!(resp.result.unwrap(), json!({"schemaVersion": 3}));
 }
 
 #[tokio::test]
-async fn schema_v1_sees_the_goal_family_as_unknown() {
+async fn schemas_1_and_2_still_serve_unchanged_commands() {
     let h = Harness::new(FakeRunner::default()).await;
     h.seed_session("s1").await;
-    for (command, args) in [
-        ("goal.start", json!({"sessionId": "s1", "objective": "o"})),
-        ("goal.active", json!({})),
-        // Retired v1 names are gone under every version.
-        (
-            "session.goal_solo_turn",
-            json!({"sessionId": "s1", "dispatchContent": "x"}),
-        ),
-        ("session.new_goal_worker", json!({"taskTemplate": "x"})),
-    ] {
-        let resp = h.dispatch(req(command, args)).await;
-        assert!(!resp.ok, "{command} under v1 must fail");
-        assert_eq!(
-            resp.error.as_deref(),
-            Some("unknown_command"),
-            "{command}: {resp:?}"
+    for schema in [1, 2, 3] {
+        let resp = h
+            .dispatch(req_at(
+                schema,
+                "session.send",
+                json!({"sessionId": "s1", "content": "hi"}),
+            ))
+            .await;
+        assert!(
+            resp.ok,
+            "schemaVersion {schema} on an unchanged command: {resp:?}"
         );
     }
-    let resp = h
-        .dispatch(req_v2("session.goal_solo_turn", json!({"sessionId": "s1"})))
-        .await;
-    assert_eq!(
-        resp.error.as_deref(),
-        Some("unknown_command"),
-        "retired name under v2 too"
-    );
+}
+
+/// The goal family is gone under every accepted version, with nothing
+/// persisted or dispatched (2026-10-13, .scratch/remove-goal).
+#[tokio::test]
+async fn the_goal_family_is_unknown_under_every_version() {
+    let h = Harness::new(FakeRunner::default()).await;
+    h.seed_session("s1").await;
+    for schema in [1, 2, 3] {
+        for (command, args) in [
+            ("goal.start", json!({"sessionId": "s1", "objective": "o"})),
+            ("goal.status", json!({"goalId": "goal_1"})),
+            ("goal.active", json!({})),
+            ("goal.stop", json!({"goalId": "goal_1"})),
+            (
+                "goal.extend",
+                json!({"goalId": "goal_1", "extraSeconds": 60}),
+            ),
+            // Names retired with Goal v1.
+            (
+                "session.goal_solo_turn",
+                json!({"sessionId": "s1", "dispatchContent": "x"}),
+            ),
+            ("session.new_goal_worker", json!({"taskTemplate": "x"})),
+        ] {
+            let resp = h.dispatch(req_at(schema, command, args)).await;
+            assert!(!resp.ok, "{command} under {schema} must fail");
+            assert_eq!(
+                resp.error.as_deref(),
+                Some("unknown_command"),
+                "{command} under {schema}: {resp:?}"
+            );
+        }
+    }
+    assert!(h.runner.sent_commands.lock().unwrap().is_empty());
+    let rows = h
+        .galley
+        .session_messages_including_internal(SessionId("s1".into()), None)
+        .await
+        .unwrap();
+    assert!(rows.is_empty(), "an unknown command persists nothing");
 }
 
 #[tokio::test]
 async fn schema_outside_the_accepted_set_is_a_mismatch() {
     let h = Harness::new(FakeRunner::default()).await;
-    let resp = h
-        .dispatch(json!({ "command": "ping", "args": {}, "schemaVersion": 3, "requestId": "t3" }))
-        .await;
-    assert!(!resp.ok);
-    assert_eq!(resp.error.as_deref(), Some("schema_mismatch"));
-}
-
-#[tokio::test]
-async fn goal_start_status_active_stop_round_trip() {
-    let h = Harness::new(FakeRunner::default()).await;
-    h.seed_session("s-goal").await;
-
-    let resp = h
-        .dispatch(req_v2(
-            "goal.start",
-            json!({"sessionId": "s-goal", "objective": "Ship it", "budgetSeconds": 1800,
-                   "supervisor": "sup-1", "reason": "user asked"}),
-        ))
-        .await;
-    assert!(resp.ok, "goal.start: {resp:?}");
-    let result = resp.result.clone().unwrap();
-    assert_eq!(result["dispatch"], "dispatched");
-    assert_eq!(result["goal"]["status"], "active");
-    assert_eq!(result["goal"]["sessionId"], "s-goal");
-    assert_eq!(result["goal"]["budgetSeconds"], 1800);
-    assert_eq!(result["goal"]["origin"]["supervisor"], "sup-1");
-    assert_eq!(result["message"]["content"], "Ship it");
-    assert_eq!(result["message"]["goalId"], result["goal"]["id"]);
-    let goal_id = result["goal"]["id"].as_str().unwrap().to_string();
-    // The opening turn went to the runner as the wrapped prompt, not the raw row.
-    let sent = h.runner.sent_commands.lock().unwrap();
-    assert_eq!(sent.len(), 1);
-    assert!(sent[0].1.contains("<objective>"), "{}", sent[0].1);
-    drop(sent);
-    // The objective row is announced to the GUI like a CLI send would be.
-    let persisted = h
-        .notifier
-        .payload_of("user-message-persisted")
-        .expect("user-message-persisted emitted");
-    assert_eq!(persisted["message"]["goalId"], goal_id);
-    assert!(h.notifier.names().iter().any(|n| n == "goal-updated"));
-
-    let resp = h
-        .dispatch(req_v2("goal.status", json!({"goalId": goal_id})))
-        .await;
-    assert!(resp.ok, "goal.status: {resp:?}");
-    assert_eq!(resp.result.unwrap()["goal"]["id"], goal_id);
-
-    let resp = h.dispatch(req_v2("goal.active", json!({}))).await;
-    assert!(resp.ok, "goal.active: {resp:?}");
-    let list = resp.result.unwrap();
-    assert_eq!(list.as_array().map(|a| a.len()), Some(1));
-    assert_eq!(list[0]["id"], goal_id);
-
-    // A second open goal on the same session is refused with the id of the first.
-    let resp = h
-        .dispatch(req_v2(
-            "goal.start",
-            json!({"sessionId": "s-goal", "objective": "Another"}),
-        ))
-        .await;
-    assert!(!resp.ok);
-    assert_eq!(resp.error.as_deref(), Some("invalid_args"));
-    assert!(resp.message.as_deref().unwrap_or("").contains(&goal_id));
-
-    let resp = h
-        .dispatch(req_v2(
-            "goal.stop",
-            json!({"goalId": goal_id, "reason": "enough"}),
-        ))
-        .await;
-    assert!(resp.ok, "goal.stop: {resp:?}");
-    assert_eq!(resp.result.unwrap()["goal"]["status"], "stopped");
-    let resp = h.dispatch(req_v2("goal.active", json!({}))).await;
-    assert_eq!(resp.result.unwrap().as_array().map(|a| a.len()), Some(0));
-}
-
-#[tokio::test]
-async fn goal_extend_raises_the_ceiling_and_refuses_open_ended_goals() {
-    let h = Harness::new(FakeRunner::default()).await;
-    h.seed_session("s-ext").await;
-    let resp = h
-        .dispatch(req_v2(
-            "goal.start",
-            json!({"sessionId": "s-ext", "objective": "o", "budgetSeconds": 600}),
-        ))
-        .await;
-    let goal_id = resp.result.unwrap()["goal"]["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    let resp = h
-        .dispatch(req_v2(
-            "goal.extend",
-            json!({"goalId": goal_id, "extraSeconds": 1800}),
-        ))
-        .await;
-    assert!(resp.ok, "goal.extend: {resp:?}");
-    let goal = resp.result.unwrap();
-    assert_eq!(goal["goal"]["budgetSeconds"], 2400);
-    assert_eq!(goal["goal"]["status"], "active");
-
-    h.seed_session("s-open").await;
-    let resp = h
-        .dispatch(req_v2(
-            "goal.start",
-            json!({"sessionId": "s-open", "objective": "o"}),
-        ))
-        .await;
-    let open_id = resp.result.unwrap()["goal"]["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    let resp = h
-        .dispatch(req_v2(
-            "goal.extend",
-            json!({"goalId": open_id, "extraSeconds": 60}),
-        ))
-        .await;
-    assert_eq!(resp.error.as_deref(), Some("invalid_args"), "{resp:?}");
-    let resp = h
-        .dispatch(req_v2(
-            "goal.extend",
-            json!({"goalId": "goal_missing", "extraSeconds": 60}),
-        ))
-        .await;
-    assert_eq!(resp.error.as_deref(), Some("not_found"), "{resp:?}");
-}
-
-#[tokio::test]
-async fn goal_start_on_a_busy_session_is_invalid_args_with_no_side_effects() {
-    let h = Harness::new(FakeRunner::reserve_busy()).await;
-    h.seed_session("s-busy").await;
-    let resp = h
-        .dispatch(req_v2(
-            "goal.start",
-            json!({"sessionId": "s-busy", "objective": "o"}),
-        ))
-        .await;
-    assert!(!resp.ok);
-    assert_eq!(resp.error.as_deref(), Some("invalid_args"));
-    assert!(h.runner.sent_commands.lock().unwrap().is_empty());
-    assert!(h.galley.list_active_goals().await.unwrap().is_empty());
-    let rows = h
-        .galley
-        .session_messages_including_internal(SessionId("s-busy".into()), None)
-        .await
-        .unwrap();
-    assert!(rows.is_empty(), "busy must persist nothing");
-}
-
-#[tokio::test]
-async fn goal_start_unknown_session_is_not_found_and_goal_status_unknown_id_too() {
-    let h = Harness::new(FakeRunner::default()).await;
-    let resp = h
-        .dispatch(req_v2(
-            "goal.start",
-            json!({"sessionId": "nope", "objective": "o"}),
-        ))
-        .await;
-    assert_eq!(resp.error.as_deref(), Some("not_found"), "{resp:?}");
-    let resp = h
-        .dispatch(req_v2("goal.status", json!({"goalId": "goal_missing"})))
-        .await;
-    assert_eq!(resp.error.as_deref(), Some("not_found"), "{resp:?}");
+    for schema in [0, 4] {
+        let resp = h.dispatch(req_at(schema, "ping", json!({}))).await;
+        assert!(!resp.ok);
+        assert_eq!(resp.error.as_deref(), Some("schema_mismatch"), "{schema}");
+    }
 }
 
 // ---------------- session.run_state ----------------

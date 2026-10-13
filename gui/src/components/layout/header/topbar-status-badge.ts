@@ -2,13 +2,13 @@ import { cn } from "@/lib/utils";
 
 /**
  * Shared visual vocabulary for the MainHeader status cluster — the
- * text-badge status indicators (Goal / engine / Channels / Browser
- * Control) all key off the same tone map so a colour or motion tweak
+ * text-badge status indicators (engine / Channels / Browser Control)
+ * all key off the same tone map so a colour or motion tweak
  * lands in one place instead of drifting across the call sites.
  *
  * Every tone names a kind of state, never a feature's identity: `brand`
- * = Galley is working for you or invites you to start (a running Goal,
- * Browser Control 待解锁); `warning` / `error` = needs your hands / is
+ * = Galley is working for you or invites you to start (Browser Control
+ * 待解锁); `warning` / `error` = needs your hands / is
  * broken; `success` = done, waiting to be seen; `neutral` = in
  * transition or a quiet setup gap.
  *

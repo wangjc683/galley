@@ -105,15 +105,6 @@ pub struct HistoryReplayEvent {
     pub phase: ReplayPhase,
 }
 
-/// `goal.updated` (Core `goal-updated`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GoalUpdatedEvent {
-    /// Core's `GoalBrief` as it serializes (camelCase), passed through:
-    /// the Goal family's shape belongs to the Agent API (schema 2).
-    pub goal: Value,
-}
-
 /// `queue.changed` (Core `session-queue:changed`): the whole queue.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -192,7 +183,6 @@ events! {
     RunnerEvent = "runner.event" (RunnerEventBatch);
     SessionRunState = "session.runState" (SessionRunState);
     HistoryReplay = "history.replay" (HistoryReplayEvent);
-    GoalUpdated = "goal.updated" (GoalUpdatedEvent);
     QueueChanged = "queue.changed" (QueueChangedEvent);
     SyncRequired = "sync.required" (SyncRequiredEvent);
 }

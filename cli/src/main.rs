@@ -20,7 +20,6 @@
 mod args;
 mod client;
 mod common;
-mod goal;
 mod llm;
 mod project;
 mod session;
@@ -29,7 +28,7 @@ mod transport;
 
 use std::process::ExitCode;
 
-use args::{Cli, Command, GoalCmd, LlmCmd, ProjectCmd, SessionCmd, SessionsCmd};
+use args::{Cli, Command, LlmCmd, ProjectCmd, SessionCmd, SessionsCmd};
 use clap::Parser;
 use common::{emit_line, exit_code_for, ACCEPTED_SCHEMA_VERSIONS, SCHEMA_VERSION};
 use galley_core_lib::error::GalleyError;
@@ -62,24 +61,16 @@ async fn main() -> ExitCode {
         }
     };
     // §1.2 schema pin: if the caller pinned --schema=N, verify this binary
-    // answers that schema. v1 is still accepted for every command that
-    // survived unchanged; the goal family is v2-only (stability §1, v2
-    // policy). Mismatch exits 2 (`invalid_args`) with the stable
-    // `schema_mismatch:` prefix.
+    // answers that schema. Every accepted version still answers every
+    // command that survived unchanged (stability §1). Mismatch exits 2
+    // (`invalid_args`) with the stable `schema_mismatch:` prefix.
     if let Some(pinned) = cli.schema {
-        let mismatch = if !ACCEPTED_SCHEMA_VERSIONS.contains(&pinned) {
-            Some(format!(
-                "schema_mismatch: client requested schema {pinned}, server speaks {SCHEMA_VERSION} (accepts {ACCEPTED_SCHEMA_VERSIONS:?})"
-            ))
-        } else if pinned < SCHEMA_VERSION && matches!(cli.command, Command::Goal(_)) {
-            Some(format!(
-                "schema_mismatch: `goal` commands exist only under schema {SCHEMA_VERSION}; the caller pinned {pinned}"
-            ))
-        } else {
-            None
-        };
-        if let Some(message) = mismatch {
-            let err = GalleyError::InvalidArgs { message };
+        if !ACCEPTED_SCHEMA_VERSIONS.contains(&pinned) {
+            let err = GalleyError::InvalidArgs {
+                message: format!(
+                    "schema_mismatch: client requested schema {pinned}, server speaks {SCHEMA_VERSION} (accepts {ACCEPTED_SCHEMA_VERSIONS:?})"
+                ),
+            };
             emit_line(&serde_json::to_string(&err).expect("serialize GalleyError"));
             return ExitCode::from(exit_code_for(&err));
         }
@@ -223,37 +214,6 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
             supervisor,
             reason,
         }) => project::project_delete(project_id, supervisor, reason).await,
-        Command::Goal(GoalCmd::Start {
-            session_id,
-            objective,
-            budget_minutes,
-            no_budget,
-            supervisor,
-            reason,
-        }) => {
-            goal::goal_start(
-                session_id,
-                objective,
-                budget_minutes,
-                no_budget,
-                supervisor,
-                reason,
-            )
-            .await
-        }
-        Command::Goal(GoalCmd::Status { goal_id }) => goal::goal_status(goal_id).await,
-        Command::Goal(GoalCmd::Active) => goal::goal_active().await,
-        Command::Goal(GoalCmd::Stop {
-            goal_id,
-            supervisor,
-            reason,
-        }) => goal::goal_stop(goal_id, supervisor, reason).await,
-        Command::Goal(GoalCmd::Extend {
-            goal_id,
-            minutes,
-            supervisor,
-            reason,
-        }) => goal::goal_extend(goal_id, minutes, supervisor, reason).await,
         Command::Llm(LlmCmd::List { runtime }) => llm::llm_list(runtime).await,
         Command::Llm(LlmCmd::Set {
             session_id,

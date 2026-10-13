@@ -74,8 +74,8 @@ export function firstProseLine(markdown: string): string {
 /** One user question plus the answer that closed it. One entry per
  * run-opening user turn, in turn order — so indices align with the
  * rail's `[data-role="user-msg"]` DOM nodes (run openers only:
- * ask_user replies render as `user-msg-reply` and goal commissions
- * render as markers; neither carries the anchor role). */
+ * ask_user replies render as `user-msg-reply`, which does not carry the
+ * anchor role). */
 export interface RailExchange {
   /** Preview of the user's message. "" when the message was
    * whitespace-only; the rail renders a placeholder for that. */
@@ -88,15 +88,13 @@ export interface RailExchange {
 
 /**
  * Pair each run-opening question with its answer, one exchange per
- * `buildRunGroups` group that has a non-goal user opener.
+ * `buildRunGroups` group that has a user opener.
  *
  * Grouping via run-groups (2026-08-06, conversation-run-fold) replaced
- * the old "every user turn is an exchange" walk for two reasons:
- * ask_user replies are process, not questions (and their MessageUser
- * no longer carries the `user-msg` anchor role, so counting them here
- * would desync data from DOM); and goal commissions render as markers
- * without the anchor role at all — the old walk miscounted them in
- * goal master sessions.
+ * the old "every user turn is an exchange" walk: ask_user replies are
+ * process, not questions (and their MessageUser no longer carries the
+ * `user-msg` anchor role, so counting them here would desync data from
+ * DOM).
  *
  * The answer is the **last** agent turn in the group carrying a
  * non-null `finalAnswer`. "Last" rather than "the one whose tools are
@@ -107,9 +105,9 @@ export interface RailExchange {
  * last one keeps a preview in the interrupted-run case instead of
  * showing nothing.
  *
- * Agent turns that precede the first user message (restored history,
- * Goal narration opening a session) land in the headless group and are
- * skipped. System turns are skipped everywhere.
+ * Agent turns that precede the first user message (restored history)
+ * land in the headless group and are skipped. System turns are skipped
+ * everywhere.
  */
 export function buildRailExchanges(turns: Turn[]): RailExchange[] {
   const exchanges: RailExchange[] = [];
@@ -118,9 +116,6 @@ export function buildRailExchanges(turns: Turn[]): RailExchange[] {
     if (group.openerIndex < 0) continue;
     const opener = turns[group.openerIndex];
     if (opener.role !== "user") continue;
-    // Goal commissions render as GoalCommissionMarker, not MessageUser
-    // — no anchor node in the DOM, so no exchange here either.
-    if (opener.goalId) continue;
 
     let answer: string | null = null;
     for (const i of group.memberIndices) {

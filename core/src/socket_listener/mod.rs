@@ -58,15 +58,14 @@
 use crate::api::message::MessageBrief;
 use crate::api::project::{CreateProjectInput, ProjectId};
 use crate::api::session::CreateSessionInput;
-use crate::api::{GalleyApi, GoalId, Origin, OriginVia, RuntimeKind, SessionFilter, SessionId};
+use crate::api::{GalleyApi, Origin, OriginVia, RuntimeKind, SessionFilter, SessionId};
 use crate::db::SqliteGalley;
 use crate::ipc::{IpcCommand, SetLlmCommand, UserMessageCommand};
 use crate::protocol::{
-    goal_family_requires_v2, GoalActiveArgs, GoalExtendArgs, GoalStartArgs, GoalStatusArgs,
-    GoalStopArgs,
     LlmSetArgs, ProjectCreateArgs, ProjectDeleteArgs, SessionArchiveArgs, SessionBtwArgs,
-    SessionCheckpointArgs, SessionMoveArgs, SessionNewArgs, SessionNewResult, SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs,
-    SessionShutdownRunnerArgs, SessionStopArgs, SessionWatchArgs, SessionsRunStateArgs,
+    SessionCheckpointArgs, SessionMoveArgs, SessionNewArgs, SessionNewResult, SessionRestoreArgs,
+    SessionRunStateArgs, SessionSendArgs, SessionShutdownRunnerArgs, SessionStopArgs,
+    SessionWatchArgs, SessionsRunStateArgs,
 };
 use crate::runner_manager::{
     BroadcastItem, RunnerManager, RunnerSpawnError, SendCommandError, ShutdownError,
@@ -98,7 +97,6 @@ use tokio::time::timeout;
 
 mod common;
 mod ctx;
-mod goal_cmds;
 mod llm_cmds;
 mod project_cmds;
 mod session_cmds;
@@ -107,7 +105,6 @@ mod wire;
 
 use crate::notify::{NullNotifier, TauriNotifier};
 pub use ctx::{DbSource, HandlerCtx, RunnerPort};
-use goal_cmds::*;
 use llm_cmds::*;
 use project_cmds::*;
 use session_cmds::*;
@@ -118,47 +115,6 @@ pub use wire::{ErrorTag, SocketRequest, SocketResponse, ACCEPTED_SCHEMA_VERSIONS
 #[allow(unused_imports)]
 pub(crate) use llm_cmds::{resolve_llm_selection_for_runtime, ResolvedLlmSelection};
 pub(crate) use session_cmds::mint_session_id;
-
-/// Make sure `session_id` has a live runner with its history restored,
-/// through Core's shared path
-/// ([`crate::session_runner::ensure_session_runner`]): a session nobody
-/// has opened since Core started (or whose runner the LRU cap reclaimed)
-/// has no process to receive a dispatch, and a fresh one has an empty GA
-/// history until Core replays the session into it (ticket 02b). The Goal
-/// v2 engine dispatches every objective / continuation turn through
-/// this, always holding the session's run gate (`holds_run_gate`).
-/// Errors are flattened to the message the engine always recorded on the
-/// goal (the `Debug` form of the socket error carrier); it never answers
-/// a wire request.
-pub(crate) async fn ensure_runner_for_session(
-    ctx: &HandlerCtx<'_>,
-    galley: &SqliteGalley,
-    session_id: &str,
-    via: &'static str,
-) -> Result<(), String> {
-    crate::session_runner::ensure_session_runner(
-        &ctx.runner_host(galley),
-        session_id,
-        crate::session_runner::EnsureOptions {
-            via,
-            // The socket path protects the session it spawns for.
-            active_session_id: Some(session_id),
-            llm_override: None,
-            ga_config: None,
-            holds_run_gate: true,
-            timeouts: Default::default(),
-        },
-    )
-    .await
-    .map(|_| ())
-    .map_err(|e| {
-        format!(
-            "{:?}",
-            common::SocketResponseLite::from_session_runner(e, via)
-        )
-    })
-}
-
 
 /// Resolve the per-user socket path.
 ///
@@ -600,19 +556,6 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
             ),
         ));
     }
-    // v1 callers see the goal family as absent, not as a different
-    // contract (see `ACCEPTED_SCHEMA_VERSIONS`).
-    if req.schema_version < SCHEMA_VERSION && goal_family_requires_v2(&req.command) {
-        return DispatchResult::Unary(SocketResponse::err(
-            req.request_id,
-            ErrorTag::UnknownCommand,
-            format!(
-                "'{}' exists only under schemaVersion {SCHEMA_VERSION}; the caller pinned {}",
-                req.command, req.schema_version
-            ),
-        ));
-    }
-
     let request_id = req.request_id.clone();
     match req.command.as_str() {
         "git.review" => {
@@ -730,18 +673,6 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
             DispatchResult::Unary(dispatch_project_delete(request_id, req.args, ctx).await)
         }
         "llm.set" => DispatchResult::Unary(dispatch_llm_set(request_id, req.args, ctx).await),
-        // ---- Goal v2 (schemaVersion 2) ----
-        "goal.start" => DispatchResult::Unary(dispatch_goal_start(request_id, req.args, ctx).await),
-        "goal.status" => {
-            DispatchResult::Unary(dispatch_goal_status(request_id, req.args, ctx).await)
-        }
-        "goal.active" => {
-            DispatchResult::Unary(dispatch_goal_active(request_id, req.args, ctx).await)
-        }
-        "goal.stop" => DispatchResult::Unary(dispatch_goal_stop(request_id, req.args, ctx).await),
-        "goal.extend" => {
-            DispatchResult::Unary(dispatch_goal_extend(request_id, req.args, ctx).await)
-        }
         other => DispatchResult::Unary(SocketResponse::err(
             request_id,
             ErrorTag::UnknownCommand,

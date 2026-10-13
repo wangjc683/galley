@@ -230,7 +230,7 @@ fn parse_ndjson(stdout: &str) -> Vec<serde_json::Value> {
 }
 
 #[tokio::test]
-async fn version_subcommand_prints_schema_v2() {
+async fn version_subcommand_prints_schema_v3() {
     let td = tempdir();
     let db = td.path().join("workbench.db");
     let _pool = seeded_db_at(&db).await;
@@ -238,39 +238,55 @@ async fn version_subcommand_prints_schema_v2() {
     assert_eq!(code, Some(0));
     let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
     // B4 M6 freeze: version output uses camelCase to align with the rest
-    // of the wire format (sessions/projects/etc all camelCase). v2 since
-    // the Goal v2 rework (.scratch/goal-simplify).
-    assert_eq!(payload["schemaVersion"], 2);
+    // of the wire format (sessions/projects/etc all camelCase). v3 since
+    // Goal was removed (.scratch/remove-goal).
+    assert_eq!(payload["schemaVersion"], 3);
     assert!(payload.get("galleyVersion").is_some());
 }
 
 #[tokio::test]
-async fn schema_pin_v1_and_v2_pass_through_for_unchanged_commands() {
+async fn schema_pins_1_2_and_3_pass_through_for_unchanged_commands() {
     let td = tempdir();
     let db = td.path().join("workbench.db");
     let _pool = seeded_db_at(&db).await;
-    // v2 policy: an old SOP pinning `--schema=1` keeps working for every
-    // command that survived unchanged; `--schema=2` is the current pin.
-    for pin in ["1", "2"] {
+    // An old SOP pinning `--schema=1` or `--schema=2` keeps working for
+    // every command that survived unchanged; `--schema=3` is the current
+    // pin.
+    for pin in ["1", "2", "3"] {
         let (stdout, code) = run_galley(&db, &["--schema", pin, "version"]);
         assert_eq!(code, Some(0), "pin {pin}: stdout: {stdout}");
         let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
-        assert_eq!(payload["schemaVersion"], 2);
+        assert_eq!(payload["schemaVersion"], 3);
     }
 }
 
+/// Goal was removed in schemaVersion 3 (2026-10-13): `galley goal …` is
+/// an unknown subcommand under every pin — the parse-failure path, one
+/// `invalid_args` envelope on stdout, exit 2 — not a schema mismatch.
 #[tokio::test]
-async fn schema_pin_v1_rejects_the_goal_family() {
+async fn the_goal_subcommands_are_gone_under_every_pin() {
     let td = tempdir();
     let db = td.path().join("workbench.db");
     let _pool = seeded_db_at(&db).await;
-    // The goal family is v2-only: a v1 pin must not reach the socket.
-    let (stdout, code) = run_galley(&db, &["--schema", "1", "goal", "active"]);
-    assert_eq!(code, Some(2), "stdout: {stdout}");
-    let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
-    assert_eq!(payload["error"], "invalid_args");
-    let msg = payload["message"].as_str().expect("message string");
-    assert!(msg.starts_with("schema_mismatch:"), "got {msg}");
+    for pin in [
+        None,
+        Some("--schema=1"),
+        Some("--schema=2"),
+        Some("--schema=3"),
+    ] {
+        for args in [&["goal", "start", "x", "y"][..], &["goal", "active"][..]] {
+            let mut full: Vec<&str> = pin.into_iter().collect();
+            full.extend_from_slice(args);
+            let (stdout, code) = run_galley(&db, &full);
+            assert_eq!(code, Some(2), "{full:?}: stdout: {stdout}");
+            assert_eq!(stdout.trim().lines().count(), 1, "{full:?}: {stdout}");
+            let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+            assert_eq!(payload["error"], "invalid_args", "{full:?}");
+            let msg = payload["message"].as_str().expect("message string");
+            assert!(!msg.starts_with("schema_mismatch:"), "{full:?}: {msg}");
+            assert!(msg.contains("goal"), "{full:?}: {msg}");
+        }
+    }
 }
 
 #[tokio::test]
@@ -279,16 +295,19 @@ async fn schema_pin_mismatch_exits_2_invalid_args() {
     let db = td.path().join("workbench.db");
     let _pool = seeded_db_at(&db).await;
     // B4 M6: pinning to an unknown schema → exit 2 invalid_args with
-    // `schema_mismatch:` prefix in the message.
-    let (stdout, code) = run_galley(&db, &["--schema", "99", "version"]);
-    assert_eq!(code, Some(2), "stdout: {stdout}");
-    let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
-    assert_eq!(payload["error"], "invalid_args");
-    let msg = payload["message"].as_str().expect("message string");
-    assert!(
-        msg.starts_with("schema_mismatch:"),
-        "message should start with schema_mismatch: — got {msg}"
-    );
+    // `schema_mismatch:` prefix in the message. `4` is the first version
+    // past the current one.
+    for pin in ["4", "99"] {
+        let (stdout, code) = run_galley(&db, &["--schema", pin, "version"]);
+        assert_eq!(code, Some(2), "pin {pin}: stdout: {stdout}");
+        let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+        assert_eq!(payload["error"], "invalid_args");
+        let msg = payload["message"].as_str().expect("message string");
+        assert!(
+            msg.starts_with("schema_mismatch:"),
+            "message should start with schema_mismatch: — got {msg}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -516,7 +535,7 @@ async fn session_wait_completed_returns_final_payload() {
     assert_eq!(code, Some(0), "stdout was: {stdout}");
     let lines = parse_ndjson(&stdout);
     assert_eq!(lines.len(), 3, "stdout was: {stdout}");
-    assert_eq!(lines[0]["schemaVersion"], 2);
+    assert_eq!(lines[0]["schemaVersion"], 3);
     assert_eq!(lines[0]["stream"], "wait");
     assert_eq!(lines[0]["phase"], "initial");
     assert_eq!(lines[1]["stream"], "wait");
@@ -1118,21 +1137,21 @@ async fn session_wait_until_idle_waits_for_the_run_to_end() {
     );
 }
 
-/// galley#30: an ended run is re-checked after the grace. Here a Goal
-/// continuation (or the next queued run) reopened the gate in between,
-/// so the wait keeps polling and completes on a later confirmed read.
+/// galley#30: an ended run is re-checked after the grace. Here the next
+/// queued run reopened the gate in between, so the wait keeps polling
+/// and completes on a later confirmed read.
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn session_wait_until_idle_keeps_polling_when_the_recheck_sees_a_new_run() {
     let td = tempdir();
     let db = td.path().join("test.db");
     let pool = seeded_db_at(&db).await;
-    seed_session(&pool, "s-goal", "goal", "idle", "2026-05-18T00:00:00Z").await;
-    seed_message_with_role(&pool, "m1", "s-goal", 4, 0, "user", "go", None).await;
+    seed_session(&pool, "s-next", "next", "idle", "2026-05-18T00:00:00Z").await;
+    seed_message_with_role(&pool, "m1", "s-next", 4, 0, "user", "go", None).await;
     seed_message_with_role(
         &pool,
         "m2",
-        "s-goal",
+        "s-next",
         4,
         1,
         "assistant",
@@ -1146,9 +1165,9 @@ async fn session_wait_until_idle_keeps_polling_when_the_recheck_sees_a_new_run()
     let (server, seen) = fake_run_state_server_seq(
         socket_path,
         vec![
-            run_state_answer("s-goal", false, false, 0), // initial: ended
-            run_state_answer("s-goal", true, false, 0),  // recheck: reopened
-            run_state_answer("s-goal", false, false, 0), // poll 1, then confirmed
+            run_state_answer("s-next", false, false, 0), // initial: ended
+            run_state_answer("s-next", true, false, 0),  // recheck: reopened
+            run_state_answer("s-next", false, false, 0), // poll 1, then confirmed
         ],
     );
     let (stdout, code) = run_galley_with_tmpdir(
@@ -1157,7 +1176,7 @@ async fn session_wait_until_idle_keeps_polling_when_the_recheck_sees_a_new_run()
         &[
             "session",
             "wait",
-            "s-goal",
+            "s-next",
             "--after-turn=4",
             "--until-idle",
             "--timeout=20",
@@ -1626,7 +1645,7 @@ async fn seed_golden_transcript(pool: &SqlitePool) {
 /// Ticket 03b is additive: `session show` without the new flags prints
 /// exactly what it printed before (lines captured from the pre-03b
 /// binary), and a search hit keeps its four fields, in order and with
-/// the same values, ahead of the three new ones — under both schema pins.
+/// the same values, ahead of the three new ones — under every schema pin.
 #[tokio::test]
 async fn existing_show_and_search_output_is_unchanged() {
     let td = tempdir();
@@ -1638,7 +1657,12 @@ async fn existing_show_and_search_output_is_unchanged() {
     let g1 = r#"{"id":"g1","sessionId":"s-g","role":"user","content":"找一下上周的“方案”","createdAt":"2026-05-18T00:00:00Z","turnIndex":0,"visibility":"visible","origin":{"via":"gui"}}"#;
     let g2 = r#"{"id":"g2","sessionId":"s-g","role":"agent","content":"<summary>查</summary>正在找","finalAnswer":"好的，方案在这里","createdAt":"2026-05-18T00:00:01Z","summary":"查方案","turnIndex":0,"visibility":"visible","origin":{"via":"gui"}}"#;
     let g3 = r#"{"id":"g3","sessionId":"s-g","role":"user","content":"谢谢","createdAt":"2026-05-18T00:00:02Z","turnIndex":1,"visibility":"visible","origin":{"via":"gui"}}"#;
-    for pin in [None, Some("--schema=1"), Some("--schema=2")] {
+    for pin in [
+        None,
+        Some("--schema=1"),
+        Some("--schema=2"),
+        Some("--schema=3"),
+    ] {
         let with_pin = |args: &[&str]| {
             let mut full: Vec<&str> = pin.into_iter().collect();
             full.extend_from_slice(args);
@@ -1729,7 +1753,7 @@ async fn sessions_search_session_filter_and_hit_fields() {
     assert_eq!(code, Some(0), "stdout = {stdout}");
     assert_search_session_ids(&stdout, &["s-w", "s-x"]);
 
-    for pin in ["--schema=1", "--schema=2"] {
+    for pin in ["--schema=1", "--schema=2", "--schema=3"] {
         let (stdout, code) = run_galley_with_tmpdir(
             &db,
             td.path(),

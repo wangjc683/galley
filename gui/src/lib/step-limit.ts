@@ -20,21 +20,12 @@ export interface StepLimitTailInput {
   pausedAtStepLimit: boolean;
   isRunning: boolean;
   waitingAskUser: boolean;
-  /** The session has an open Goal (active / paused / blocked). */
-  hasOpenGoal: boolean;
 }
 
 /**
- * Whether MainView shows the step-limit thread tail. Same idle rule as
- * GoalPausedTail (only when nothing else signals activity), and an open
- * Goal wins outright: the Goal engine continues or parks the run on its
- * own, and a parked Goal already has its own tail.
+ * Whether MainView shows the step-limit thread tail: only while the
+ * session idles and nothing else signals activity.
  */
 export function stepLimitTailVisible(input: StepLimitTailInput): boolean {
-  return (
-    input.pausedAtStepLimit &&
-    !input.isRunning &&
-    !input.waitingAskUser &&
-    !input.hasOpenGoal
-  );
+  return input.pausedAtStepLimit && !input.isRunning && !input.waitingAskUser;
 }

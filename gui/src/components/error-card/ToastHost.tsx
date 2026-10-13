@@ -43,7 +43,7 @@ interface ToastHostProps extends ErrorCardActions {
  *
  * The countdown pauses while the pointer is over a toast or focus is
  * inside it — these toasts carry action buttons (restart channels, view
- * project, view goal, restart update, try browser control), and a flat
+ * project, restart update, try browser control), and a flat
  * timer lets one vanish while the user is reading it or on the way to
  * clicking it.
  */

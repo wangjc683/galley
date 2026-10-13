@@ -52,7 +52,6 @@
     "runner.event",
     "session.runState",
     "history.replay",
-    "goal.updated",
     "queue.changed",
     "sync.required"
   ],
@@ -233,7 +232,6 @@
               "content": "把三份周报合成一份",
               "createdAt": "2026-10-10T08:29:58.000Z",
               "finalAnswer": null,
-              "goalId": null,
               "id": "msg_01",
               "origin": {
                 "reason": null,
@@ -263,7 +261,6 @@
               "content": "已合并。",
               "createdAt": "2026-10-10T08:30:16.000Z",
               "finalAnswer": "已合并为 weekly.md。要不要把附件也发给 Alice？",
-              "goalId": null,
               "id": "msg_02",
               "origin": null,
               "preamble": null,
@@ -366,7 +363,6 @@
             "content": "把三份周报合成一份",
             "createdAt": "2026-10-10T08:29:58.000Z",
             "finalAnswer": null,
-            "goalId": null,
             "id": "msg_01",
             "origin": {
               "reason": null,
@@ -924,7 +920,6 @@
             "content": "把三份周报合成一份",
             "createdAt": "2026-10-10T08:29:58.000Z",
             "finalAnswer": null,
-            "goalId": null,
             "id": "msg_01",
             "origin": {
               "reason": null,
@@ -1016,24 +1011,6 @@
       },
       "name": "event.history.replay",
       "type": "HistoryReplayEvent"
-    },
-    {
-      "event": "goal.updated",
-      "kind": "event",
-      "message": {
-        "n": "goal.updated",
-        "p": {
-          "goal": {
-            "id": "goal_01",
-            "objective": "把周报发出去",
-            "sessionId": "ses_7f3a9c",
-            "status": "active"
-          }
-        },
-        "t": "evt"
-      },
-      "name": "event.goal.updated",
-      "type": "GoalUpdatedEvent"
     },
     {
       "event": "queue.changed",

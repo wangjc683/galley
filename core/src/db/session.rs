@@ -42,7 +42,7 @@ impl RenameTitleSource {
 const PERSISTED_MESSAGE_COLS: &str = "id, session_id, turn_index, sequence, role, content, \
     tool_calls, tool_results, thinking, final_answer, summary, \
     preamble, created_via, supervisor, origin_note, visibility, \
-    telemetry_json, goal_id, created_at";
+    telemetry_json, created_at";
 
 /// Largest page [`SqliteGalley::persisted_message_rows_page`] returns.
 pub const MESSAGE_PAGE_MAX: usize = 500;
@@ -127,15 +127,6 @@ pub struct PersistedTurnPage {
     /// break against it (`gui/src/lib/message-time.ts`), as it would with
     /// the whole transcript loaded.
     pub previous_user_created_at: Option<String>,
-}
-
-/// The visible user row a run opens at (see
-/// [`SqliteGalley::run_opener_at_or_before`]).
-struct RunOpener {
-    turn_index: i64,
-    sequence: i64,
-    created_at: String,
-    goal_id: Option<String>,
 }
 
 /// Whether persisted `tool_calls` hold an `ask_user` call — the GUI's
@@ -336,58 +327,41 @@ impl SqliteGalley {
     /// Where a page whose oldest turn would be `turn` starts so it splits
     /// no run: the turn of the opener of the run `turn` belongs to
     /// ([`Self::run_opener_at_or_before`]), or the transcript's first
-    /// turn when no run opens before it. When that opener is a message
-    /// sent into a Goal's episode, the page goes back to the Goal's
-    /// commission ([`Self::goal_commission_before`]): the conversation
-    /// brackets an episode from its commission (`gui/src/lib/goal-thread.ts`).
-    /// Repeats until it settles, since a commission can be an `ask_user`
-    /// reply inside an earlier run.
+    /// turn when no run opens before it.
     async fn turn_page_start(&self, session_id: &SessionId, turn: i64) -> Result<i64> {
-        let mut start = turn;
-        loop {
-            let next = match self.run_opener_at_or_before(session_id, start).await? {
-                Some(opener) => self
-                    .goal_commission_before(session_id, &opener)
-                    .await?
-                    .unwrap_or(opener.turn_index),
-                None => {
-                    let first: Option<i64> = sqlx::query_scalar(
-                        "SELECT MIN(turn_index) FROM messages \
-                         WHERE session_id = ? AND visibility = 'visible'",
-                    )
-                    .bind(session_id.as_str())
-                    .fetch_one(&self.pool)
-                    .await
-                    .map_err(map_sqlx_err)?;
-                    first.unwrap_or(start)
-                }
-            };
-            if next >= start {
-                return Ok(start);
-            }
-            start = next;
+        if let Some(opener) = self.run_opener_at_or_before(session_id, turn).await? {
+            return Ok(opener);
         }
+        let first: Option<i64> = sqlx::query_scalar(
+            "SELECT MIN(turn_index) FROM messages \
+             WHERE session_id = ? AND visibility = 'visible'",
+        )
+        .bind(session_id.as_str())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(first.unwrap_or(turn))
     }
 
-    /// The visible user row that opens the run turn `turn` belongs to:
-    /// the latest user row at or before it that does not answer an
-    /// `ask_user`. The rule is `buildRunGroups` (`gui/src/lib/run-groups.ts`)
-    /// read backwards: a user row answers when the last user or assistant
-    /// row before it (system rows are bystanders) is an assistant row
-    /// with an `ask_user` call. `None` when no run opens at or before
-    /// `turn` — it sits in the transcript's headless lead-in (the main
-    /// chat's greeting).
+    /// The turn of the visible user row that opens the run turn `turn`
+    /// belongs to: the latest user row at or before it that does not
+    /// answer an `ask_user`. The rule is `buildRunGroups`
+    /// (`gui/src/lib/run-groups.ts`) read backwards: a user row answers
+    /// when the last user or assistant row before it (system rows are
+    /// bystanders) is an assistant row with an `ask_user` call. `None`
+    /// when no run opens at or before `turn` — it sits in the
+    /// transcript's headless lead-in (the main chat's greeting).
     async fn run_opener_at_or_before(
         &self,
         session_id: &SessionId,
         turn: i64,
-    ) -> Result<Option<RunOpener>> {
+    ) -> Result<Option<i64>> {
         // `(turn_index, sequence) < (turn + 1, i64::MIN)` is "at or before
         // `turn`"; after a reply it is "before that reply".
         let mut bound = (turn.saturating_add(1), i64::MIN);
         loop {
-            let user: Option<(i64, i64, String, Option<String>)> = sqlx::query_as(
-                "SELECT turn_index, sequence, created_at, goal_id FROM messages \
+            let user: Option<(i64, i64)> = sqlx::query_as(
+                "SELECT turn_index, sequence FROM messages \
                  WHERE session_id = ? AND visibility = 'visible' AND role = 'user' \
                    AND (turn_index, sequence) < (?, ?) \
                  ORDER BY turn_index DESC, sequence DESC \
@@ -399,7 +373,7 @@ impl SqliteGalley {
             .fetch_optional(&self.pool)
             .await
             .map_err(map_sqlx_err)?;
-            let Some((turn_index, sequence, created_at, goal_id)) = user else {
+            let Some((turn_index, sequence)) = user else {
                 return Ok(None);
             };
             let sql = format!(
@@ -422,73 +396,10 @@ impl SqliteGalley {
                 Some((role, Some(calls))) if role == "assistant" && tool_calls_ask_user(calls)
             );
             if !answers_ask_user {
-                return Ok(Some(RunOpener {
-                    turn_index,
-                    sequence,
-                    created_at,
-                    goal_id,
-                }));
+                return Ok(Some(turn_index));
             }
             bound = (turn_index, sequence);
         }
-    }
-
-    /// The turn of the commission whose Goal episode `opener` was sent
-    /// into, if it was: the latest earlier user row stamped with one of
-    /// this session's Goals (`messages.goal_id`), when that Goal is still
-    /// open or `opener` was sent before it ended. That is where
-    /// `annotateGoalThread` (`gui/src/lib/goal-thread.ts`) ends an episode:
-    /// at the next commission, or at the first run opened after the Goal
-    /// ended. A commission opens its own episode, so it gets `None`;
-    /// so does an unreadable time, which the GUI also reads as "after".
-    async fn goal_commission_before(
-        &self,
-        session_id: &SessionId,
-        opener: &RunOpener,
-    ) -> Result<Option<i64>> {
-        if let Some(goal_id) = &opener.goal_id {
-            let commission: bool = sqlx::query_scalar(
-                "SELECT EXISTS (SELECT 1 FROM goals WHERE id = ? AND session_id = ?)",
-            )
-            .bind(goal_id)
-            .bind(session_id.as_str())
-            .fetch_one(&self.pool)
-            .await
-            .map_err(map_sqlx_err)?;
-            if commission {
-                return Ok(None);
-            }
-        }
-        let commission: Option<(i64, Option<String>)> = sqlx::query_as(
-            "SELECT m.turn_index, g.ended_at FROM messages m \
-             JOIN goals g ON g.id = m.goal_id AND g.session_id = m.session_id \
-             WHERE m.session_id = ? AND m.visibility = 'visible' AND m.role = 'user' \
-               AND (m.turn_index, m.sequence) < (?, ?) \
-             ORDER BY m.turn_index DESC, m.sequence DESC \
-             LIMIT 1",
-        )
-        .bind(session_id.as_str())
-        .bind(opener.turn_index)
-        .bind(opener.sequence)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(map_sqlx_err)?;
-        let Some((turn_index, ended_at)) = commission else {
-            return Ok(None);
-        };
-        let inside = match ended_at {
-            None => true,
-            Some(ended_at) => {
-                match (
-                    chrono::DateTime::parse_from_rfc3339(&opener.created_at),
-                    chrono::DateTime::parse_from_rfc3339(&ended_at),
-                ) {
-                    (Ok(sent), Ok(ended)) => sent <= ended,
-                    _ => false,
-                }
-            }
-        };
-        Ok(inside.then_some(turn_index))
     }
 
     /// The paging position of visible message `message_id` of
@@ -556,7 +467,7 @@ impl SqliteGalley {
             let limit = i64::try_from(n).unwrap_or(i64::MAX);
             let sql = format!(
                 "SELECT id, session_id, turn_index, role, content, final_answer, summary, \
-                        created_via, supervisor, origin_note, visibility, goal_id, created_at, \
+                        created_via, supervisor, origin_note, visibility, created_at, \
                         {ASK_USER_TOOL_CALLS_COL} \
                  FROM messages \
                  WHERE session_id = ?{visibility_clause} \
@@ -574,7 +485,7 @@ impl SqliteGalley {
         } else {
             let sql = format!(
                 "SELECT id, session_id, turn_index, role, content, final_answer, summary, \
-                        created_via, supervisor, origin_note, visibility, goal_id, created_at, \
+                        created_via, supervisor, origin_note, visibility, created_at, \
                         {ASK_USER_TOOL_CALLS_COL} \
                  FROM messages \
                  WHERE session_id = ?{visibility_clause} \
@@ -607,7 +518,7 @@ impl SqliteGalley {
     ) -> Result<Vec<MessageBrief>> {
         let select = format!(
             "SELECT id, session_id, turn_index, role, content, final_answer, summary, \
-                    created_via, supervisor, origin_note, visibility, goal_id, created_at, \
+                    created_via, supervisor, origin_note, visibility, created_at, \
                     {ASK_USER_TOOL_CALLS_COL} \
              FROM messages \
              WHERE session_id = ? AND visibility = 'visible'"
@@ -1062,36 +973,6 @@ impl SqliteGalley {
             content,
             origin,
             MessageVisibility::Visible,
-            None,
-        )
-        .await?;
-        tx.commit().await.map_err(map_sqlx_err)?;
-        Ok(msg)
-    }
-
-    /// Same as [`Self::send_message_db`] but stamps the row with the
-    /// Goal it belongs to (the objective turn of a Goal launch), so the
-    /// GUI can bracket Goal episodes by exact id instead of the
-    /// objective-text heuristic.
-    pub(super) async fn send_message_for_goal_db(
-        &self,
-        session_id: SessionId,
-        content: String,
-        origin: crate::api::Origin,
-        goal_id: GoalId,
-    ) -> Result<MessageBrief> {
-        let mut tx = self
-            .pool
-            .begin_with("BEGIN IMMEDIATE")
-            .await
-            .map_err(map_sqlx_err)?;
-        let msg = insert_user_message_inner(
-            &mut tx,
-            session_id,
-            content,
-            origin,
-            MessageVisibility::Visible,
-            Some(goal_id.as_str()),
         )
         .await?;
         tx.commit().await.map_err(map_sqlx_err)?;
@@ -1120,7 +1001,6 @@ impl SqliteGalley {
             content,
             origin,
             MessageVisibility::Visible,
-            None,
         )
         .await?;
 
@@ -1160,8 +1040,8 @@ impl SqliteGalley {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(map_sqlx_err)?;
-        let msg = insert_user_message_inner(&mut tx, session_id, content, origin, visibility, None)
-            .await?;
+        let msg =
+            insert_user_message_inner(&mut tx, session_id, content, origin, visibility).await?;
         tx.commit().await.map_err(map_sqlx_err)?;
         Ok(msg)
     }
@@ -1184,35 +1064,6 @@ impl SqliteGalley {
             content,
             origin,
             MessageVisibility::Visible,
-            None,
-        )
-        .await?;
-        tx.commit().await.map_err(map_sqlx_err)?;
-        Ok(msg)
-    }
-
-    /// Same as [`Self::send_system_message_db`] but stamps the row with
-    /// the Goal it narrates (launch ack, controller checkpoints).
-    pub(super) async fn send_system_message_for_goal_db(
-        &self,
-        session_id: SessionId,
-        content: String,
-        origin: crate::api::Origin,
-        goal_id: GoalId,
-    ) -> Result<MessageBrief> {
-        let mut tx = self
-            .pool
-            .begin_with("BEGIN IMMEDIATE")
-            .await
-            .map_err(map_sqlx_err)?;
-        let msg = insert_message_inner(
-            &mut tx,
-            session_id,
-            MessageRole::System,
-            content,
-            origin,
-            MessageVisibility::Visible,
-            Some(goal_id.as_str()),
         )
         .await?;
         tx.commit().await.map_err(map_sqlx_err)?;
@@ -1822,15 +1673,7 @@ impl SqliteGalley {
         content: String,
         origin: Origin,
     ) -> Result<MessageBrief> {
-        insert_user_message_inner(
-            tx,
-            session_id,
-            content,
-            origin,
-            MessageVisibility::Visible,
-            None,
-        )
-        .await
+        insert_user_message_inner(tx, session_id, content, origin, MessageVisibility::Visible).await
     }
 
     pub(super) async fn begin_tx_db(&self) -> Result<Transaction<'_, Sqlite>> {

@@ -70,7 +70,7 @@ pub const SUBTASK_STORED_SUPERVISOR: &str = "galley-subtask";
 /// `messages.client` / `sessions.client` (migration 043), next to `via`,
 /// which keeps saying who acted (`gui` = a human). `None` — and the
 /// column NULL — for everything no app stands behind: CLI, IM, agents,
-/// schedules, Goal continuations, and rows older than the column. The
+/// schedules, and rows older than the column. The
 /// column has no CHECK, so a new client needs no table rebuild.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OriginClient {

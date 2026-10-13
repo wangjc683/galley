@@ -66,9 +66,6 @@ SETTLED_DEAD = ("error", "cancelled")
 # (DiscordChannel renders via _strip_discord_transcript only) — so the
 # reporter strips it before any outbound push.
 NEXT_SUGGESTION_RE = re.compile(r"<next-suggestion>.*?</next-suggestion>", re.DOTALL)
-# goal-status is Galley's Goal v2 completion tag on a final answer; Core
-# consumes it from the turn_end event, so IM pushes strip it the same way.
-GOAL_STATUS_RE = re.compile(r"<goal-status>.*?</goal-status>", re.DOTALL)
 
 
 class ReporterCliError(RuntimeError):
@@ -584,8 +581,7 @@ DISCORD_EMBED_DESCRIPTION_LIMIT = 4096
 # Report-card accent per outcome, from the light tokens in
 # docs/design/foundations.md (success / error / info). An embed has one
 # color for both Discord themes, so the light values are used as-is.
-# Cancelled is neutral like the desktop's "stopped" Goal marker: the
-# user asked for it, it is not a failure.
+# Cancelled is neutral: the user asked for it, it is not a failure.
 DISCORD_REPORT_COLOR_COMPLETED = 0x5A8C5A
 DISCORD_REPORT_COLOR_ERROR = 0xB14545
 DISCORD_REPORT_COLOR_CANCELLED = 0x7A7A8E
@@ -1004,7 +1000,7 @@ class ImReporter:
         # catch-all — an uncounted crash here re-burned the synthetic
         # report turn on every tick, forever.
         try:
-            text = GOAL_STATUS_RE.sub("", NEXT_SUGGESTION_RE.sub("", channel.render(raw))).strip()
+            text = NEXT_SUGGESTION_RE.sub("", channel.render(raw)).strip()
             if not text or is_skip_reply(text):
                 return "delivered"
             channel.send_report(owner, text, raw, report)

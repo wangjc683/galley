@@ -62,8 +62,8 @@ const TYPOGRAPHY_VARS: Record<
     "--conversation-heading-3-size": "15.5px",
     "--conversation-heading-4-size": "14px",
     "--conversation-table-size": "13px",
-    "--conversation-goal-narration-size": "12.5px",
-    "--conversation-goal-narration-leading": "1.55",
+    "--conversation-narration-size": "12.5px",
+    "--conversation-narration-leading": "1.55",
   },
   standard: {
     "--conversation-body-size": "15px",
@@ -82,8 +82,8 @@ const TYPOGRAPHY_VARS: Record<
     "--conversation-heading-3-size": "17px",
     "--conversation-heading-4-size": "15.5px",
     "--conversation-table-size": "14px",
-    "--conversation-goal-narration-size": "13px",
-    "--conversation-goal-narration-leading": "1.6",
+    "--conversation-narration-size": "13px",
+    "--conversation-narration-leading": "1.6",
   },
   large: {
     "--conversation-body-size": "16.5px",
@@ -102,8 +102,8 @@ const TYPOGRAPHY_VARS: Record<
     "--conversation-heading-3-size": "18.5px",
     "--conversation-heading-4-size": "17px",
     "--conversation-table-size": "15.5px",
-    "--conversation-goal-narration-size": "14.5px",
-    "--conversation-goal-narration-leading": "1.65",
+    "--conversation-narration-size": "14.5px",
+    "--conversation-narration-leading": "1.65",
   },
 };
 

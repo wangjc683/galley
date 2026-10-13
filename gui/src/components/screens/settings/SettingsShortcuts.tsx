@@ -72,7 +72,6 @@ function buildGroups(copy: ReturnType<typeof useCopy>): ShortcutGroup[] {
         { combo: "Enter", action: shortcuts.sendMessage },
         { combo: "Shift+Enter", action: shortcuts.newline },
         { combo: "→", action: shortcuts.acceptSuggestion },
-        { combo: "Esc", action: shortcuts.cancelGoalMode },
       ],
     },
     {

@@ -20,22 +20,22 @@
 //! exchanged before this module existed. Response and stream-envelope
 //! bytes are pinned by the golden tests in [`envelope`]; per-command field
 //! names are pinned by the legacy-equivalence tests in [`commands`].
-//! Breaking either requires `schemaVersion: 2` (see Rule 3 in AGENTS.md
-//! and docs/agent-api/stability-and-versioning.md).
+//! Breaking either requires the next `schemaVersion` (see Rule 3 in
+//! AGENTS.md and docs/agent-api/stability-and-versioning.md).
 
 mod commands;
 mod envelope;
 mod error_tag;
 
 pub use commands::{
-    GitReviewRequest, GoalActiveArgs, GoalExtendArgs, GoalStartArgs, GoalStatusArgs, GoalStopArgs,
-    LlmSetArgs, LocalFileRequest, ProjectCreateArgs, ProjectDeleteArgs, SessionArchiveArgs,
-    SessionBtwArgs, SessionCheckpointArgs, SessionMoveArgs, SessionNewArgs, SessionNewResult,
-    SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs, SessionShutdownRunnerArgs,
-    SessionStopArgs, SessionWatchArgs, SessionsRunStateArgs, SocketCommand,
+    GitReviewRequest, LlmSetArgs, LocalFileRequest, ProjectCreateArgs, ProjectDeleteArgs,
+    SessionArchiveArgs, SessionBtwArgs, SessionCheckpointArgs, SessionMoveArgs, SessionNewArgs,
+    SessionNewResult, SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs,
+    SessionShutdownRunnerArgs, SessionStopArgs, SessionWatchArgs, SessionsRunStateArgs,
+    SocketCommand,
 };
 pub use envelope::{
-    goal_family_requires_v2, SocketRequest, SocketResponse, StreamEnvelope, WatchFrame,
-    ACCEPTED_SCHEMA_VERSIONS, SCHEMA_VERSION,
+    SocketRequest, SocketResponse, StreamEnvelope, WatchFrame, ACCEPTED_SCHEMA_VERSIONS,
+    SCHEMA_VERSION,
 };
 pub use error_tag::ErrorTag;

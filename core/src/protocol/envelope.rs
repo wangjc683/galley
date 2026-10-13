@@ -3,24 +3,17 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Wire-level schema version. Stable across additive changes; bumped on
-/// breaking schema changes. `2` since Goal v2 (.scratch/goal-simplify):
-/// the v1 `goal` command family was removed and replaced.
-pub const SCHEMA_VERSION: u32 = 2;
+/// breaking schema changes. `3` since Goal was removed
+/// (.scratch/remove-goal, 2026-10-13): the `goal` command family is gone.
+pub const SCHEMA_VERSION: u32 = 3;
 
-/// Schema versions the server still answers. v1 requests keep working for
-/// every command that survived unchanged; only the goal family is v2-only
-/// (a v1 request for it is `unknown_command`, see
-/// [`goal_family_requires_v2`]). This is not dual-serving — no command has
-/// two meanings — it is "removed" spelled honestly as "not found" so an
-/// old SOP that never used Goal keeps running.
-pub const ACCEPTED_SCHEMA_VERSIONS: [u32; 2] = [1, 2];
-
-/// True for command names that exist only under schemaVersion 2: the
-/// Goal v2 family (`goal.*`). Retired v1 goal commands (`session.goal_*`,
-/// `session.new_goal_worker`) are simply unknown under every version.
-pub fn goal_family_requires_v2(command: &str) -> bool {
-    command.starts_with("goal.")
-}
+/// Schema versions the server still answers. `1` and `2` requests keep
+/// working for every command that survived unchanged; a removed command
+/// is `unknown_command` under every version. This is not dual-serving —
+/// no command has two meanings — it is "removed" spelled honestly as
+/// "not found", so an old SOP that never used a removed command keeps
+/// running.
+pub const ACCEPTED_SCHEMA_VERSIONS: [u32; 3] = [1, 2, 3];
 
 /// One request line. The CLI serializes this; Core deserializes it.
 #[derive(Debug, Serialize, Deserialize)]
@@ -127,8 +120,8 @@ impl StreamEnvelope {
 /// - `galley session watch` passes `Unparseable` raw lines through and
 ///   continues (agents stream-parse the NDJSON themselves; frozen
 ///   behavior).
-/// - Programmatic consumers (`session follow`, goal loops) treat
-///   `Unparseable` as an internal error.
+/// - Programmatic consumers (`session follow`) treat `Unparseable` as an
+///   internal error.
 ///
 /// Both policies are explicit at the call sites; neither is hidden in the
 /// parser. See ADR-0002 for why contract-bound policy stays per-caller.
@@ -174,7 +167,7 @@ impl WatchFrame {
 /// migration (2026-07-11) against the then-current `socket_listener::wire`
 /// types. These byte-exact strings are the schemaVersion 1 response
 /// contract as served on that day; any edit that breaks one is a breaking
-/// wire change and requires `schemaVersion: 2`. Requests are asserted at
+/// wire change and requires the next `schemaVersion`. Requests are asserted at
 /// `Value` level in [`super::commands`] (JSON object key order is not part
 /// of the contract).
 #[cfg(test)]
@@ -249,7 +242,7 @@ mod golden {
         };
         assert_eq!(
             serde_json::to_string(&req).unwrap(),
-            r#"{"command":"session.send","args":{"sessionId":"s1"},"schemaVersion":2}"#
+            r#"{"command":"session.send","args":{"sessionId":"s1"},"schemaVersion":3}"#
         );
     }
 }

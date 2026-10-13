@@ -9,9 +9,9 @@ pub(crate) struct ResolvedLlmSelection {
 }
 
 /// Crate-visible by-name LLM resolution for callers outside the socket
-/// layer (e.g. `start_desktop_goal` applying the launch model to the
-/// goal's master session). Maps the internal `SocketResponseLite` error
-/// back to `GalleyError` so non-socket callers get a normal error.
+/// layer (the scheduler resolving a task's model, `crate::scheduler`).
+/// Maps the internal `SocketResponseLite` error back to `GalleyError` so
+/// non-socket callers get a normal error.
 pub(crate) async fn resolve_llm_selection_for_runtime(
     galley: &SqliteGalley,
     name: Option<String>,

@@ -14,7 +14,7 @@ import {
  * collapses to a `[Pasted text #N +M lines]` placeholder so a wall of
  * pasted text doesn't bury the composer; submit re-expands it via
  * `expandPastePlaceholders`. Pulled out of Composer so the textarea /
- * goal / image logic isn't tangled with the registry bookkeeping.
+ * image logic isn't tangled with the registry bookkeeping.
  *
  * Uncontrolled mode only — controlled callers own their value and we
  * can't intercept paste without their cooperation, so `handleTextPaste`

@@ -26,9 +26,9 @@ import { useCopy } from "@/lib/i18n";
  */
 interface SystemMessageBubbleProps {
   content: string;
-  variant: "side_question" | "system" | "goal";
+  variant: "side_question" | "system" | "narration";
   /**
-   * Goal-narration only: show the Galley register glyph. The renderer
+   * Narration only: show the Galley register glyph. The renderer
    * passes `false` for the 2nd+ callout in a consecutive narration
    * cluster so a multi-beat run shows the marker once, not on every
    * line. Default true (any standalone narration keeps its glyph).
@@ -56,19 +56,17 @@ export function SystemMessageBubble({
       </div>
     );
   }
-  if (variant === "goal") {
-    // Galley Goal narration is secondary running commentary, not the
-    // answer to read. Now that the commission / terminal markers carry
-    // the brand "this is a Goal" identity at the run's boundaries, the
-    // narration in between can recede: drop the brand-soft fill + banner
-    // header (which made it the heaviest block in the thread, inverting
-    // hierarchy), keep only a thin brand left rule + a single small
-    // Target glyph as a wordless register marker, and soften the body to
-    // ink-soft. The "Galley" attribution moves to the glyph's
-    // aria-label — repeating the word on every beat was redundant chrome
-    // with no per-callout information; the glyph still disambiguates
-    // narration from an agent-answer blockquote (same brand-rule look).
-    // See DESIGN.md §4.3.
+  if (variant === "narration") {
+    // Galley narration is secondary running commentary, not the answer
+    // to read, so it recedes: no brand-soft fill or banner header (which
+    // made it the heaviest block in the thread, inverting hierarchy),
+    // only a thin brand left rule + a single small Target glyph as a
+    // wordless register marker, and the body softened to ink-soft. The
+    // "Galley" attribution lives in the glyph's aria-label — repeating
+    // the word on every beat was redundant chrome with no per-callout
+    // information; the glyph still disambiguates narration from an
+    // agent-answer blockquote (same brand-rule look). See DESIGN.md
+    // §4.3.
     return (
       <div
         data-role="system-bubble"
@@ -79,14 +77,14 @@ export function SystemMessageBubble({
             <Target
               size={11}
               weight="thin"
-              aria-label={copy.conversation.goalNarration}
+              aria-label={copy.conversation.narration}
             />
           </div>
         )}
         <MarkdownView
           source={content}
           variant="agent"
-          className="[&_li]:[font-size:var(--conversation-goal-narration-size)] [&_li]:text-ink-soft [&_p]:[font-size:var(--conversation-goal-narration-size)] [&_p]:[line-height:var(--conversation-goal-narration-leading)] [&_p]:text-ink-soft"
+          className="[&_li]:[font-size:var(--conversation-narration-size)] [&_li]:text-ink-soft [&_p]:[font-size:var(--conversation-narration-size)] [&_p]:[line-height:var(--conversation-narration-leading)] [&_p]:text-ink-soft"
         />
       </div>
     );

@@ -34,7 +34,7 @@ export function useExternalCoreEvents(): void {
             appendSystemTurn(sessionId, {
               role: "system",
               content: message.content,
-              variant: "goal",
+              variant: "narration",
             });
             return;
           }

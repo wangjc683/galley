@@ -192,15 +192,10 @@ export interface UserTurn {
   origin?: Origin;
   /** ISO send time: `messages.created_at` on a persisted row, the
    * client clock on an optimistic / transient turn. Drives the user
-   * message time label (lib/message-time, 2026-09-28) and goal-thread's
-   * commission and segment matching. Optional so existing UserTurn
-   * constructions in tests / demo data don't need to change; an undated
-   * turn gets no label. */
+   * message time label (lib/message-time, 2026-09-28). Optional so
+   * existing UserTurn constructions in tests / demo data don't need to
+   * change; an undated turn gets no label. */
   createdAt?: string;
-  /** Goal this turn commissioned (`messages.goal_id`, migration 031).
-   * When present, goal-thread.ts matches the commission marker by exact
-   * id instead of the objective-text + timestamp heuristic. */
-  goalId?: string;
 }
 
 /**
@@ -212,14 +207,14 @@ export interface UserTurn {
  * Rendered as a callout block distinct from agent turns:
  *   - "side_question": yellow AskUserBubble-family chrome
  *   - "system": neutral muted register
- *   - "goal": Galley Goal narration (Target glyph, "Galley" label)
+ *   - "narration": Galley narration (Target glyph, "Galley" label)
  */
 export interface SystemTurn {
   role: "system";
   /** Markdown source — rendered via the same MarkdownView pipeline
    * as agent final answers. */
   content: string;
-  variant: "side_question" | "system" | "goal";
+  variant: "side_question" | "system" | "narration";
 }
 
 export interface AgentTurn {

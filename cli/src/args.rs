@@ -8,10 +8,10 @@ use clap::{Parser, Subcommand, ValueEnum};
 )]
 pub(crate) struct Cli {
     /// Pin the schema version this caller expects. Current binaries speak
-    /// `2` and still accept `1` for every command that survived unchanged;
-    /// the `goal` family exists only under `2`. A mismatch exits 2
-    /// (`invalid_args`) with a message prefixed `schema_mismatch:`. Omit to
-    /// use the binary's default (currently `2`).
+    /// `3` and still accept `1` and `2` for every command that survived
+    /// unchanged. A mismatch exits 2 (`invalid_args`) with a message
+    /// prefixed `schema_mismatch:`. Omit to use the binary's default
+    /// (currently `3`).
     #[arg(long = "schema", value_name = "N", global = true)]
     pub(crate) schema: Option<u32>,
 
@@ -45,13 +45,6 @@ pub(crate) enum Command {
     /// ungrouped and survive; there is no reversible project archive.
     #[command(subcommand)]
     Project(ProjectCmd),
-
-    /// Goal v2 (schemaVersion 2): one persistent objective on a session.
-    /// Galley keeps prompting the session to continue until the model
-    /// declares the goal complete (or blocked), the time ceiling is hit,
-    /// or you stop it.
-    #[command(subcommand)]
-    Goal(GoalCmd),
 
     /// LLM commands. `llm list` prints the model list of the current
     /// runtime (Galley model store for managed, the GUI's warmup cache for
@@ -143,53 +136,6 @@ pub(crate) enum ProjectCmd {
     Delete {
         /// Project id.
         project_id: String,
-        #[arg(long)]
-        supervisor: Option<String>,
-        #[arg(long)]
-        reason: Option<String>,
-    },
-}
-
-#[derive(Subcommand, Debug)]
-pub(crate) enum GoalCmd {
-    /// Set a goal on a session and dispatch its opening turn. Fails with
-    /// `invalid_args` if the session already has an open goal or is
-    /// mid-run (wait with `session wait`, then retry).
-    Start {
-        session_id: String,
-        objective: String,
-        /// Time ceiling in minutes. Default 60 when neither this nor
-        /// --no-budget is given.
-        #[arg(long)]
-        budget_minutes: Option<u32>,
-        /// No time ceiling: the goal runs until the model declares it
-        /// complete or blocked, or you stop it.
-        #[arg(long)]
-        no_budget: bool,
-        #[arg(long)]
-        supervisor: Option<String>,
-        #[arg(long)]
-        reason: Option<String>,
-    },
-    /// Print one goal.
-    Status { goal_id: String },
-    /// List open goals (active / paused / blocked). Read-only.
-    Active,
-    /// Stop a goal: terminal `stopped`, aborting the session's in-flight run.
-    Stop {
-        goal_id: String,
-        #[arg(long)]
-        supervisor: Option<String>,
-        #[arg(long)]
-        reason: Option<String>,
-    },
-    /// Give a goal more time: reopens a `budget_limited` goal (and
-    /// continues it), or raises an `active` goal's ceiling.
-    Extend {
-        goal_id: String,
-        /// Minutes to add. Default 30.
-        #[arg(long, default_value_t = 30)]
-        minutes: u32,
         #[arg(long)]
         supervisor: Option<String>,
         #[arg(long)]

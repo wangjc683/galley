@@ -249,8 +249,8 @@ fn live_run_ended(live: &Value) -> bool {
 }
 
 /// How long `--until-idle` waits before confirming a run it saw ended.
-/// The re-check rides over the brief gap between runs when a Goal
-/// continuation or a queued message is dispatched. (It once also let the
+/// The re-check rides over the brief gap between runs when a queued
+/// message is dispatched. (It once also let the
 /// final assistant row land, back when the GUI wrote rows on `turn_end`;
 /// since 2026-10-07 Core writes them before it closes the run.) Best
 /// effort, not a guarantee.
@@ -287,8 +287,8 @@ fn wait_verdict(
 }
 
 /// The second read of a [`WaitVerdict::Confirm`]: still output past
-/// `--after-turn` and the run still ended (a Goal continuation or the
-/// next queued run may have reserved the gate in the meantime).
+/// `--after-turn` and the run still ended (the next queued run may have
+/// reserved the gate in the meantime).
 fn confirm_completed(
     messages: &[MessageBrief],
     after_turn: Option<u32>,
@@ -657,7 +657,6 @@ mod tests {
             final_answer: None,
             created_at: "2026-07-03T00:00:00Z".into(),
             visibility: None,
-            goal_id: None,
             attachments: Vec::new(),
             origin: None,
             ask_user: None,
@@ -796,8 +795,8 @@ mod tests {
         // Still ended (and the late final row landed): complete.
         let ended = live(false, false, false, 0);
         assert!(confirm_completed(&done, Some(4), Some(&ended)));
-        // A Goal continuation / the next queued run reserved the gate
-        // during the grace: keep polling.
+        // The next queued run reserved the gate during the grace: keep
+        // polling.
         let reopened = live(true, false, false, 0);
         assert!(!confirm_completed(&done, Some(4), Some(&reopened)));
         assert!(!confirm_completed(

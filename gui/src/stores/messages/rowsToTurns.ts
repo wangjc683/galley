@@ -56,7 +56,6 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
       };
       const origin = originFromRow(row);
       if (origin) userTurn.origin = origin;
-      if (row.goal_id) userTurn.goalId = row.goal_id;
       turns.push(userTurn);
     } else if (row.role === "assistant") {
       // Construction rules shared with the live turn_end path live in
@@ -92,14 +91,14 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
       if (isMainChatGreeting(row)) turn.greeting = true;
       turns.push(turn);
     } else if (row.role === "system") {
-      // The only `system` rows persisted to `messages` are Galley Goal
-      // master-session narration (launch + checkpoints). /btw and other
-      // bridge system messages are transient and never hit SQLite, so a
-      // restored system row is always Goal narration → "goal" variant.
+      // The only `system` rows persisted to `messages` are Galley
+      // narration (`session.checkpoint`). /btw and other bridge system
+      // messages are transient and never hit SQLite, so a restored
+      // system row is always narration → "narration" variant.
       const systemTurn: SystemTurn = {
         role: "system",
         content: row.content,
-        variant: "goal",
+        variant: "narration",
       };
       turns.push(systemTurn);
     }
@@ -127,7 +126,7 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
  * agent turn decides. A user turn means it was answered (replies
  * append a user turn before anything else); a later agent turn means
  * a newer run superseded the question (e.g. a Supervisor/CLI-driven
- * run); system turns (/btw exchanges, Goal narration) are bystanders
+ * run); system turns (/btw exchanges, narration) are bystanders
  * and skipped. Args come through `mergedAskUserArgs`, which mirrors the
  * bridge's coercion and merges split same-question calls.
  */

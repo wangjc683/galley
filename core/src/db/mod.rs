@@ -23,14 +23,13 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, S
 use sqlx::{FromRow, Sqlite, SqliteConnection, SqlitePool, Transaction};
 
 use crate::api::{
-    CreateGoalInput, CreateProjectInput, CreateScheduledTaskInput, CreateSessionInput, GalleyApi,
-    GoalBrief, GoalId, GoalStatus, HealthCheck, HealthReport, HealthStatus, ManagedModelAuthKind,
-    ManagedModelCredentialStatus, ManagedModelProtocol, ManagedModelProviderRecord,
-    ManagedModelRecord, MessageAttachmentBrief, MessageBrief, MessageId, MessageRole,
-    MessageTelemetry, MessageVisibility, MessageWindow, Origin, OriginVia, ProjectBrief, ProjectId,
-    ProjectPatch, RuntimeKind, ScheduledTaskBrief, ScheduledTaskId, ScheduledTaskPatch,
-    ScheduledTaskRepeat, SearchHit, SearchScope, SessionBrief, SessionFilter, SessionId,
-    SessionStatus, StatusSummary,
+    CreateProjectInput, CreateScheduledTaskInput, CreateSessionInput, GalleyApi, HealthCheck,
+    HealthReport, HealthStatus, ManagedModelAuthKind, ManagedModelCredentialStatus,
+    ManagedModelProtocol, ManagedModelProviderRecord, ManagedModelRecord, MessageAttachmentBrief,
+    MessageBrief, MessageId, MessageRole, MessageTelemetry, MessageVisibility, MessageWindow,
+    Origin, OriginVia, ProjectBrief, ProjectId, ProjectPatch, RuntimeKind, ScheduledTaskBrief,
+    ScheduledTaskId, ScheduledTaskPatch, ScheduledTaskRepeat, SearchHit, SearchScope, SessionBrief,
+    SessionFilter, SessionId, SessionStatus, StatusSummary,
 };
 use crate::app_paths;
 use crate::error::{GalleyError, Result};
@@ -128,7 +127,7 @@ impl SqliteGalley {
     }
 
     /// Raw pool for in-crate tests that need to poke rows the API does
-    /// not expose (e.g. backdating a goal's `started_at`).
+    /// not expose (e.g. seeding an attachment row).
     #[cfg(test)]
     pub(crate) fn pool(&self) -> &SqlitePool {
         &self.pool
@@ -136,7 +135,6 @@ impl SqliteGalley {
 }
 
 mod api_impl;
-mod goal;
 mod helpers;
 mod main_chat;
 mod managed_model;

@@ -747,7 +747,6 @@ fn user_message() -> Message {
         tool_results: None,
         ask_user: None,
         telemetry: None,
-        goal_id: None,
         origin: Some(Origin {
             via: OriginVia::Gui,
             supervisor: None,
@@ -799,7 +798,6 @@ fn agent_message() -> Message {
             context_used_chars: None,
             context_limit_chars: None,
         }),
-        goal_id: None,
         origin: None,
         attachments: vec![],
         created_at: "2026-10-10T08:30:16.000Z".into(),
@@ -1007,9 +1005,6 @@ fn golden_app_messages() {
             phase: ReplayPhase::Started,
         },
     );
-    s.event(AppEvent::GoalUpdated, GoalUpdatedEvent {
-        goal: json!({"id": "goal_01", "objective": "把周报发出去", "sessionId": "ses_7f3a9c", "status": "active"}),
-    });
     s.event(
         AppEvent::QueueChanged,
         QueueChangedEvent {

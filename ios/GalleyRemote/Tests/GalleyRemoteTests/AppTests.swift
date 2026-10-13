@@ -363,12 +363,6 @@ private func entry<M: RemoteMethod>(_ method: M.Type) -> MethodEntry {
         #expect(Set(AppEvent.names).count == AppEvent.names.count)
     }
 
-    @Test func goalPayloadIsRequiredButMayBeNull() throws {
-        let null = try AppEvent(event: Event(name: "goal.updated", payload: json(#"{"goal":null}"#)))
-        #expect(null == .goalUpdated(GoalUpdatedEvent(goal: .null)))
-        #expect(thrown { () throws(AppError) in try AppEvent(event: Event(name: "goal.updated", payload: .object([:]))) } != nil)
-    }
-
     // MARK: Mirrors of `src/app/chunk.rs`
 
     func bigResponse(_ bytes: Int) -> Envelope {

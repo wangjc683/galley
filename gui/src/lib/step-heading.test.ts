@@ -60,7 +60,7 @@ describe("isEchoNarrationStep", () => {
     expect(isEchoNarrationStep(facts({ summary: "" }))).toBe(false);
   });
 
-  it("leaves closing-shaped turns alone (final answer, goal progress note)", () => {
+  it("leaves closing-shaped turns alone (final answer)", () => {
     expect(isEchoNarrationStep(facts({ closingShaped: true }))).toBe(false);
   });
 

@@ -389,7 +389,7 @@ describe("dispatchIPCEvent", () => {
         ?.lastStepIndex,
     ).toBe(3);
     // The stored turn keeps GA's raw step — restore recovers the same
-    // value; display numbering is by position (goal-run-groups).
+    // value; display numbering is by position (run-groups).
     const turns = useMessagesStore.getState().byId["s-test"].turns;
     expect(turns[turns.length - 1]).toMatchObject({
       role: "agent",

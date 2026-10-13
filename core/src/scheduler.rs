@@ -54,9 +54,8 @@ use crate::socket_listener::{dispatch_line_with, DbSource, DispatchResult, Handl
 
 const TICK_SECONDS: u64 = 60;
 
-/// Supervisor label stamped on scheduler-created sessions, following
-/// the `galley-desktop` / `galley-core` convention of the Goal
-/// controller spawns. Mirrored as `SCHEDULER_SUPERVISOR` in
+/// Supervisor label stamped on scheduler-created sessions, in the
+/// `galley-<source>` form. Mirrored as `SCHEDULER_SUPERVISOR` in
 /// `gui/src/lib/scheduled-tasks.ts` (badge + sidebar marker) and pinned
 /// by `gui/src/lib/scheduled-tasks.test.ts` — a rename must land on
 /// both sides.
@@ -64,9 +63,8 @@ const SCHEDULER_SUPERVISOR: &str = "galley-scheduler";
 
 pub(crate) fn start(app: &tauri::App) {
     let handle = app.handle().clone();
-    // Same injection as `resume_active_goals`: the pool is managed
-    // state by setup time — the loop holds it instead of re-opening the
-    // global on every tick.
+    // The pool is managed state by setup time — the loop holds it
+    // instead of re-opening the global on every tick.
     let galley: SqliteGalley = app.state::<SqliteGalley>().inner().clone();
     tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(TICK_SECONDS));
@@ -220,8 +218,7 @@ pub fn preview_fire<Tz: TimeZone>(
 /// against the active runtime so an unresolvable pin (model deleted,
 /// runtime switched) degrades to the default model instead of failing
 /// the whole fire inside `session.new` — a digest on the wrong model
-/// beats a digest that silently never ran. Same contract as the Goal
-/// launch LLM selection.
+/// beats a digest that silently never ran.
 async fn resolve_task_llm(galley: &SqliteGalley, task: &ScheduledTaskBrief) -> Option<String> {
     let name = task
         .llm_name

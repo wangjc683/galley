@@ -18,7 +18,7 @@ What the seed produces (per language, see content_zh / content_en):
     move (life admin), and galley-site (dev; pairs with the demo repo)
   - 17 sessions across knowledge / life / dev, with states: running
     ("Thinking..."), completed, unread, pinned, supervisor-created,
-    scheduler-created, one completed Goal with chapter markers
+    scheduler-created
   - 3 scheduled tasks (daily / weekly / monthly, one disabled)
   - telemetry on every final message (the "N 步 · 用时" footer)
 
@@ -29,8 +29,6 @@ Persistence facts this script relies on (verified 2026-07-03, re-checked
     "Thinking..." (lastStepIndex is transient) and must not be clicked
     during the shoot (opening it derives the row back to idle)
   - ask_user is in-memory only and cannot be seeded — produce it live
-  - Goal chapter markers read goals.master_session_id + message rows
-    (turn_index, sequence) and require sessions.turn_count > 0
   - the sidebar "scheduled task" marker keys off
     sessions.created_by_supervisor == 'galley-scheduler'
   - messages_fts has no triggers; hydrate backfills it when empty, so a
@@ -123,7 +121,6 @@ def tele(elapsed_s: int, inp: int, out: int, requests: int) -> dict:
 #   sessions: [dict] — see fields in insert_sessions(); "turns" holds the
 #     conversation as a list of row dicts consumed by insert_messages().
 #     origin = (created_via, supervisor, note) for supervisor / scheduler rows.
-#   goal: the completed book-club goal (chapter markers for goal.png).
 #   scheduled: [dict] — rows for the scheduled_tasks table.
 # Keyword placement: zh titles contain 「整理」×3, en titles contain "sort"×3
 # (search.png types that word).
@@ -311,7 +308,7 @@ def content_zh() -> dict:
                 "ago": 30,
                 "turns": [
                     {
-                        "user": "给文档站加一个 /tour 页面，把 README 里的六张截图按「助手 → 团队」的顺序排成网格，再接进顶部导航。改完先别提交。",
+                        "user": "给文档站加一个 /tour 页面，把 README 里的五张截图按「助手 → 团队」的顺序排成网格，再接进顶部导航。改完先别提交。",
                         "thinking": "先看导航和页面的现有写法，照同一套模式加，不引入新依赖。",
                         "steps": [
                             {
@@ -342,7 +339,7 @@ def content_zh() -> dict:
                                 "summary": "构建通过",
                             },
                         ],
-                        "final": "改好了，未提交：\n\n- `src/nav.ts` 新增 **Tour** 条目，排在 Docs 之后\n- `src/pages/tour.ts` 新文件，六张截图两列网格，顺序为助手四张、团队两张\n- `src/styles.css` 补了 `.tour-grid` 两列布局与图注样式\n- `README.md` 加了指向 /tour 的一行\n\n打开右侧「工作区改动」可以逐个文件看 diff，确认后我再提交。",
+                        "final": "改好了，未提交：\n\n- `src/nav.ts` 新增 **Tour** 条目，排在 Docs 之后\n- `src/pages/tour.ts` 新文件，五张截图两列网格，顺序为助手四张、团队一张\n- `src/styles.css` 补了 `.tour-grid` 两列布局与图注样式\n- `README.md` 加了指向 /tour 的一行\n\n打开右侧「工作区改动」可以逐个文件看 diff，确认后我再提交。",
                         "summary": "改动 3 个文件，新增 1 个，待审阅",
                         "telemetry": tele(87, 14200, 2260, 5),
                     }
@@ -520,8 +517,15 @@ def content_zh() -> dict:
                 "status": "completed",
                 "summary": "场地、书单、邀请文案三项产出齐备",
                 "ago": 24 * 60,
-                "goal_session": True,
-                "turns": [],  # built by goal seeding below
+                "turns": [
+                    {
+                        "user": "帮我筹备下个月的《哲学研究》读书会：找 3 个候选场地、拟一份书单、写好邀请文案。",
+                        "thinking": "拆成场地、书单、文案三条线，逐条推进。",
+                        "final": "三项产出齐备：候选场地 3 处（含容纳人数与报价）、书单 8 本（按难度梯度排序）、邀请文案正式版与轻松版各一。",
+                        "summary": "场地、书单、邀请文案三项产出齐备",
+                        "telemetry": tele(196, 30400, 2300, 8),
+                    }
+                ],
             },
             {
                 "id": "sess_mcp",
@@ -541,20 +545,6 @@ def content_zh() -> dict:
                 ],
             },
         ],
-        "goal": {
-            "id": "goal_bookclub",
-            "session": "sess_bookclub",
-            "project": "proj_wittgenstein",
-            "objective": "帮我筹备下个月的《哲学研究》读书会：找 3 个候选场地、拟一份书单、写好邀请文案。",
-            "budget_seconds": 30 * 60,
-            "elapsed_minutes": 26,
-            "latest_summary": "三项产出齐备：候选场地 3 处（含报价）、书单 8 本、邀请文案两版。",
-            "narrations": [
-                "已接收目标，拆解为场地、书单、文案三条线，预算 30 分钟，开始并行推进。",
-                "场地线完成：3 处候选已连同容纳人数与报价整理入表；书单线进行中。",
-                "全部完成：书单 8 本按难度梯度排序，邀请文案正式版与轻松版各一，产出已汇总。",
-            ],
-        },
         "scheduled": [
             {
                 "id": "sched_daily_spend",
@@ -778,7 +768,7 @@ def content_en() -> dict:
                 "ago": 30,
                 "turns": [
                     {
-                        "user": "Add a /tour page to the docs site: the six README screenshots in a grid, assistant first then team, and link it from the top nav. Don't commit yet.",
+                        "user": "Add a /tour page to the docs site: the five README screenshots in a grid, assistant first then team, and link it from the top nav. Don't commit yet.",
                         "thinking": "Read how nav and pages are written, then follow the same pattern with no new dependencies.",
                         "steps": [
                             {
@@ -809,7 +799,7 @@ def content_en() -> dict:
                                 "summary": "Build passes",
                             },
                         ],
-                        "final": "Done, uncommitted:\n\n- `src/nav.ts` — new **Tour** entry after Docs\n- `src/pages/tour.ts` — new file, six screenshots in a two-column grid, four assistant shots then two team shots\n- `src/styles.css` — `.tour-grid` two-column layout and caption style\n- `README.md` — one line pointing at /tour\n\nOpen **Worktree changes** on the right to walk the diff file by file; I'll commit once you're happy.",
+                        "final": "Done, uncommitted:\n\n- `src/nav.ts` — new **Tour** entry after Docs\n- `src/pages/tour.ts` — new file, five screenshots in a two-column grid, four assistant shots then one team shot\n- `src/styles.css` — `.tour-grid` two-column layout and caption style\n- `README.md` — one line pointing at /tour\n\nOpen **Worktree changes** on the right to walk the diff file by file; I'll commit once you're happy.",
                         "summary": "3 files changed, 1 added — ready for review",
                         "telemetry": tele(87, 14200, 2260, 5),
                     }
@@ -987,8 +977,15 @@ def content_en() -> dict:
                 "status": "completed",
                 "summary": "Venue, list, and invites all delivered",
                 "ago": 24 * 60,
-                "goal_session": True,
-                "turns": [],  # built by goal seeding below
+                "turns": [
+                    {
+                        "user": "Help me prep next month's Philosophical Investigations book club: shortlist 3 venues, draft a reading list, and write the invitation.",
+                        "thinking": "Split into venue, reading list, and invitation; work through each in turn.",
+                        "final": "All three delivered: 3 venue candidates with capacity and quotes, an 8-book list ordered by difficulty, and the invitation in a formal and a casual version.",
+                        "summary": "Venue, list, and invites all delivered",
+                        "telemetry": tele(196, 30400, 2300, 8),
+                    }
+                ],
             },
             {
                 "id": "sess_mcp",
@@ -1008,20 +1005,6 @@ def content_en() -> dict:
                 ],
             },
         ],
-        "goal": {
-            "id": "goal_bookclub",
-            "session": "sess_bookclub",
-            "project": "proj_wittgenstein",
-            "objective": "Help me prep next month's Philosophical Investigations book club: shortlist 3 venues, draft a reading list, and write the invitation.",
-            "budget_seconds": 30 * 60,
-            "elapsed_minutes": 26,
-            "latest_summary": "All three delivered: 3 venue candidates with quotes, an 8-book list, and two versions of the invitation.",
-            "narrations": [
-                "Goal received. Split into venue, reading list, and invitation; 30-minute budget; running in parallel.",
-                "Venue track done: 3 candidates tabled with capacity and quotes. Reading list in progress.",
-                "All done: 8 books ordered by difficulty, invitation in a formal and a casual version. Deliverables collected.",
-            ],
-        },
         "scheduled": [
             {
                 "id": "sched_daily_spend",
@@ -1130,16 +1113,12 @@ def message_rows_for_turns(session_id: str, turns: list) -> list[tuple]:
     return rows
 
 
-def insert_sessions(cur: sqlite3.Cursor, sessions: list, goal: dict) -> None:
+def insert_sessions(cur: sqlite3.Cursor, sessions: list) -> None:
     for s in sessions:
         ago = s["ago"]
         origin = s.get("origin")
         turns = s["turns"]
-        if s.get("goal_session"):
-            # objective user row + narration system rows; turn_count covers them
-            turn_count = 1 + len(goal["narrations"])
-        else:
-            turn_count = sum(1 + len(t.get("steps", [])) + (1 if "final" in t else 0) for t in turns)
+        turn_count = sum(1 + len(t.get("steps", [])) + (1 if "final" in t else 0) for t in turns)
         cur.execute(
             """INSERT INTO sessions
                (id, project_id, title, status, summary, turn_count, pinned,
@@ -1171,51 +1150,6 @@ def insert_message(cur: sqlite3.Cursor, row: tuple) -> None:
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'gui', 'visible')""",
         row,
     )
-
-
-def insert_goal(cur: sqlite3.Cursor, goal: dict, sessions: list) -> None:
-    session = next(s for s in sessions if s["id"] == goal["session"])
-    ago = session["ago"]
-    started = iso(ago)
-    ended = iso(ago - goal["elapsed_minutes"])
-    cur.execute(
-        """INSERT INTO goals
-           (id, project_id, objective, status, budget_seconds, worker_limit,
-            runtime_kind, write_mode, started_at, deadline_at, ended_at,
-            latest_summary, stop_requested, created_at, updated_at,
-            master_session_id, result_seen_at)
-           VALUES (?, ?, ?, 'completed', ?, 3, 'managed', 'autonomous',
-                   ?, ?, ?, ?, 0, ?, ?, ?, ?)""",
-        (
-            goal["id"], goal["project"], goal["objective"], goal["budget_seconds"],
-            started, iso(ago - goal["budget_seconds"] / 60), ended,
-            goal["latest_summary"], started, ended, goal["session"], ended,
-        ),
-    )
-    # Conversation: objective user row (created_at == goal.started_at so the
-    # commission-marker heuristic matches), then narration system rows.
-    insert_message(
-        cur,
-        (
-            f"msg_{goal['session']}_0_user",
-            goal["session"], 0, 0, "user", goal["objective"],
-            None, None, None, None, started, None, None, None,
-        ),
-    )
-    for i, text in enumerate(goal["narrations"], start=1):
-        minutes_into_run = i * goal["elapsed_minutes"] / len(goal["narrations"])
-        cur.execute(
-            """INSERT INTO messages
-               (id, session_id, turn_index, sequence, role, content,
-                tool_calls, tool_results, thinking, final_answer, created_at,
-                summary, preamble, created_via, visibility)
-               VALUES (?, ?, ?, 0, 'system', ?, NULL, NULL, NULL, NULL, ?,
-                       NULL, NULL, 'system', 'visible')""",
-            (
-                f"msg_{goal['session']}_{i}_system",
-                goal["session"], i, text, iso(ago - minutes_into_run),
-            ),
-        )
 
 
 def insert_scheduled(cur: sqlite3.Cursor, tasks: list) -> None:
@@ -1400,7 +1334,6 @@ const ASSISTANT: Shot[] = [
 
 const TEAM: Shot[] = [
   { src: "/shots/projects.png", caption: "Project view — sessions advancing around one folder" },
-  { src: "/shots/goal.png", caption: "Goal — a long-running objective with chapter markers" },
 ];
 
 function figure(shot: Shot): string {
@@ -1524,19 +1457,17 @@ def main() -> int:
         content = content_zh() if args.lang == "zh" else content_en()
         cur = conn.cursor()
         insert_projects(cur, content["projects"])
-        insert_sessions(cur, content["sessions"], content["goal"])
-        insert_goal(cur, content["goal"], content["sessions"])
+        insert_sessions(cur, content["sessions"])
         insert_scheduled(cur, content["scheduled"])
         conn.commit()
 
         n_sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
         n_messages = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
-        n_goals = conn.execute("SELECT COUNT(*) FROM goals").fetchone()[0]
         n_sched = conn.execute("SELECT COUNT(*) FROM scheduled_tasks").fetchone()[0]
         print(
             f"seeded [{args.lang}] -> {args.db}\n"
             f"  projects: {len(content['projects'])}, sessions: {n_sessions}, "
-            f"messages: {n_messages}, goals: {n_goals}, scheduled tasks: {n_sched}\n"
+            f"messages: {n_messages}, scheduled tasks: {n_sched}\n"
             "reminders: do NOT click the running row during the shoot "
             "(it derives back to idle); ask_user must be produced live; "
             "FTS backfills itself on next launch."

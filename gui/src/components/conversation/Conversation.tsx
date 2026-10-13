@@ -2,10 +2,6 @@ import { CaretDown } from "@phosphor-icons/react";
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { AnsweredAskUser } from "@/components/conversation/AskUserBubble";
-import {
-  GoalCommissionMarker,
-  GoalTerminalMarker,
-} from "@/components/conversation/GoalRunMarkers";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import {
   MessageAgent,
@@ -27,8 +23,6 @@ import {
   WrittenFilesContext,
   buildWrittenFileResolver,
 } from "@/lib/written-files";
-import { planGoalRuns } from "@/lib/goal-run-groups";
-import { annotateGoalThread } from "@/lib/goal-thread";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import {
   formatMessageTime,
@@ -43,26 +37,18 @@ import {
   askUserReplyContent,
   mergedAskUserArgs,
 } from "@/lib/ask-user-candidates";
-import { buildRunGroups, replyUserIndices, type RunGroup } from "@/lib/run-groups";
+import {
+  buildRunGroups,
+  liveRunGroup,
+  replyUserIndices,
+  runStepNumbers,
+  type RunGroup,
+} from "@/lib/run-groups";
 import { cn } from "@/lib/utils";
 import type { AgentTurn, MessageTelemetry, Turn } from "@/types/conversation";
-import type { GoalBrief } from "@/types/goal";
 
 export interface ConversationProps {
   turns: Turn[];
-  /**
-   * Goals whose master session is the one being viewed (any status,
-   * from `list_goals_for_session`). When present, the objective user
-   * turns render as Goal commission markers and each run gets a
-   * terminal marker — bracketing each run as an in-thread episode.
-   */
-  goals?: GoalBrief[];
-  /**
-   * Give a goal that ended `budget_limited` more time — surfaced on its
-   * terminal marker, which is the place the reader learns the run hit
-   * the ceiling. Same command the TopBar pill popover issues.
-   */
-  onExtendGoal?: (goalId: string) => void;
   /** True while the active session has a live `pendingAskUser`. The
    * tail AskUserBubble is already showing the question, so the turn
    * it came from must suppress its static AnsweredAskUser echo —
@@ -120,15 +106,12 @@ const SETTLE_SWEEP_MS = 300;
 
 export function Conversation({
   turns,
-  goals,
-  onExtendGoal,
   askUserPending = false,
   agentRunning = false,
   keyBase = 0,
   previousUserCreatedAt = null,
   renderAfterAnswer,
 }: ConversationProps) {
-  const items = annotateGoalThread(turns, goals ?? []);
   // A turn's place that survives a prepend (see `keyBase`): every key
   // and every piece of per-run state below is held in these, never in
   // raw indices.
@@ -155,25 +138,14 @@ export function Conversation({
   // process section behind a RunFoldHeader. Grouping is the shared
   // run-groups pass — the same one the question rail builds its
   // exchanges from, so fold visibility can never desync the rail's
-  // data↔DOM index contract.
-  // Goal rules on top of the shape grouping (goal-simplify issue 08):
-  // a goal group is live while its goal is `active`, folds whenever it
-  // is not, shows a flat answer only for a terminal goal's deliverable,
-  // and numbers its steps by position. Ordinary runs pass through
-  // untouched.
-  const shapeGroups = useMemo(() => buildRunGroups(turns), [turns]);
-  const plan = useMemo(
-    () =>
-      planGoalRuns(
-        turns,
-        goals ?? [],
-        shapeGroups,
-        agentRunning,
-        askUserPending,
-      ),
-    [turns, goals, shapeGroups, agentRunning, askUserPending],
+  // data↔DOM index contract. Steps are numbered by position within
+  // their run, not by GA's per-loop counter (run-groups
+  // `runStepNumbers`).
+  const groups = useMemo(() => buildRunGroups(turns), [turns]);
+  const stepNumberOf = useMemo(
+    () => runStepNumbers(groups, turns),
+    [groups, turns],
   );
-  const groups = plan.groups;
   const replySet = useMemo(
     () => replyUserIndices(groups, turns),
     [groups, turns],
@@ -188,20 +160,12 @@ export function Conversation({
     }
     return m;
   }, [groups]);
-  // Turn identity → turns index. annotateGoalThread reorders nothing
-  // and each Turn object appears at most once, so object identity is
-  // a safe join key between its items and the grouping's indices.
-  const turnIndexOf = useMemo(() => {
-    const m = new Map<Turn, number>();
-    turns.forEach((t, i) => m.set(t, i));
-    return m;
-  }, [turns]);
 
   // User message send time (message-timestamps PRD, 2026-09-28): which
   // user turns sit at a break, and their label text, computed once here
-  // so MessageUser (a memo component) and GoalCommissionMarker only
-  // receive strings. Only a break shows a time, so only those turns
-  // are formatted. `dayStamp` is local midnight and moves at the day
+  // so MessageUser (a memo component) only receives strings. Only a
+  // break shows a time, so only those turns are formatted.
+  // `dayStamp` is local midnight and moves at the day
   // rollover, so 「今天 / 昨天」 re-label without a data change; no
   // Date.now() in render.
   const copy = useCopy();
@@ -256,7 +220,7 @@ export function Conversation({
   // no answer, nothing to stand in for the process) unfolds in full
   // for inspection, and the ask_user pause does not flicker the
   // window away and back.
-  const liveGroup = plan.liveGroup;
+  const liveGroup = liveRunGroup(groups, agentRunning, askUserPending);
 
   // Settling: the sweep between live and settled. The two structures
   // share no keys for the window, so switching in the render where
@@ -368,7 +332,7 @@ export function Conversation({
   // alone, expanded or not — the fold toggle is then purely the
   // section's height sweep, with nothing popping in or out beside it.
   // regionOwner is the flat counterpart of sectionOwner: members of a
-  // non-foldable group (Goal run, /btw exchange, aborted run) gather
+  // non-foldable group (/btw exchange, aborted run) gather
   // into a plain StepRegion instead of an animated RunFoldSection, so
   // the process inset + rail apply to every run and nothing shifts
   // when a live run completes and moves to a fold (2026-09-16).
@@ -450,18 +414,6 @@ export function Conversation({
     }
   }
 
-  // Agent turns inside goal groups other than the deliverable: a
-  // continuation's progress note is closing-shaped but is a step, so it
-  // renders in the narration register instead of as an answer.
-  const goalStepTurns = new Set<number>();
-  for (const g of groups) {
-    if (!plan.goalOfGroup.has(g.openerIndex)) continue;
-    for (const i of g.memberIndices) {
-      if (i !== g.finalTurnIndex && turns[i].role === "agent")
-        goalStepTurns.add(i);
-    }
-  }
-
   const toggleFold = (openerIndex: number, currentlyFolded: boolean) => {
     setFoldOverrides((prev) => ({
       ...prev,
@@ -469,68 +421,24 @@ export function Conversation({
     }));
   };
 
-  const renderItem = (
-    item: (typeof items)[number],
-    i: number,
-    turnIndex: number | undefined,
-  ) => {
-    const header =
-      turnIndex !== undefined ? headerFor.get(turnIndex) : undefined;
-    const pinned =
-      turnIndex !== undefined ? pinnedTimes.get(turnIndex) : undefined;
-    // Keyed by the turn's ordinal (a terminal marker, which is no turn,
-    // by its goal): an earlier page or a marker landing in front moves
-    // no key.
-    const key =
-      turnIndex !== undefined
-        ? `turn-${ordinal(turnIndex)}`
-        : item.kind === "terminal"
-          ? `terminal-${item.goal.id}`
-          : `item-${i}`;
+  const renderItem = (turn: Turn, turnIndex: number) => {
+    const header = headerFor.get(turnIndex);
+    const pinned = pinnedTimes.get(turnIndex);
+    // Keyed by the turn's ordinal: an earlier page landing in front
+    // moves no key.
     return (
-      <Fragment key={key}>
-        {item.kind === "commission" ? (
-          <>
-            {/* A commission takes part in the break sequence and shows
-                the time at a break, like any user message. */}
-            <GoalCommissionMarker
-              goal={item.goal}
-              content={item.content}
-              createdAt={item.createdAt}
-              pinnedTime={pinned?.label}
-              pinnedTimeFull={pinned?.full}
-            />
-            {/* The objective turn opens a run like any user turn; its
-                fold / live header sits right under the commission. */}
-            {header && (!header.live || header.foldedSteps > 0) && (
-              <RunFoldHeader
-                stats={header.group.stats}
-                open={!header.folded}
-                live={header.live}
-                onToggle={() =>
-                  toggleFold(header.group.openerIndex, header.folded)
-                }
-              />
-            )}
-          </>
-        ) : item.kind === "terminal" ? (
-          <GoalTerminalMarker
-            goal={item.goal}
-            onExtend={
-              onExtendGoal ? () => onExtendGoal(item.goal.id) : undefined
-            }
-          />
-        ) : item.turn.role === "user" ? (
+      <Fragment key={`turn-${ordinal(turnIndex)}`}>
+        {turn.role === "user" ? (
           <>
             <MessageUser
-              content={item.turn.content}
-              attachments={item.turn.attachments}
-              origin={item.turn.origin}
-              createdAt={item.turn.createdAt}
+              content={turn.content}
+              attachments={turn.attachments}
+              origin={turn.origin}
+              createdAt={turn.createdAt}
               pinnedTime={pinned?.label}
               pinnedTimeFull={pinned?.full}
-              askUserReply={turnIndex !== undefined && replySet.has(turnIndex)}
-              messageId={item.turn.messageId}
+              askUserReply={replySet.has(turnIndex)}
+              messageId={turn.messageId}
             />
             {/* The live header appears once a step has folded behind
                 it (the third step landing, for a two-row window);
@@ -546,45 +454,31 @@ export function Conversation({
               />
             )}
           </>
-        ) : item.turn.role === "system" ? (
+        ) : turn.role === "system" ? (
           <SystemMessageBubble
-            content={item.turn.content}
-            variant={item.turn.variant}
-            showGlyph={item.narrationLeading}
+            content={turn.content}
+            variant={turn.variant}
+            // A run of narration beats shows the glyph once, on its
+            // first line.
+            showGlyph={!isNarrationTurn(turns[turnIndex - 1])}
           />
         ) : (
           <AgentTurnView
-            turn={item.turn}
-            hideMarker={turnIndex !== undefined && answerOnly.has(turnIndex)}
-            stepNumber={
-              turnIndex !== undefined
-                ? plan.stepNumberOf.get(turnIndex)
-                : undefined
-            }
-            intermediateAnswer={
-              turnIndex !== undefined && goalStepTurns.has(turnIndex)
-            }
-            suppressAskUserEcho={item.turn === pendingAskUserTurn}
-            askUserAnswer={
-              turnIndex !== undefined
-                ? askUserReplyContent(turns, turnIndex, replySet)
-                : undefined
-            }
-            runTelemetry={
-              turnIndex !== undefined
-                ? runTelemetryOf.get(turnIndex)
-                : undefined
-            }
+            turn={turn}
+            hideMarker={answerOnly.has(turnIndex)}
+            stepNumber={stepNumberOf.get(turnIndex)}
+            suppressAskUserEcho={turn === pendingAskUserTurn}
+            askUserAnswer={askUserReplyContent(turns, turnIndex, replySet)}
+            runTelemetry={runTelemetryOf.get(turnIndex)}
           />
         )}
         {/* Under the reply that dispatched them: the main chat's
             subtask cards (ticket 06a), keyed on the reply's row id —
             only that reply's final turn matches one, even one whose
             answer was nothing but tags. */}
-        {item.kind === "turn" &&
-          item.turn.role === "agent" &&
-          item.turn.messageId &&
-          renderAfterAnswer?.(item.turn.messageId)}
+        {turn.role === "agent" &&
+          turn.messageId &&
+          renderAfterAnswer?.(turn.messageId)}
         {/* No divider between turns — the TurnMarker on each
             AgentTurn carries the chapter-break feel via its own
             top-margin and visual weight. Earlier iterations had
@@ -679,21 +573,14 @@ export function Conversation({
     }
     section = null;
   };
-  items.forEach((item, i) => {
-    const turnIndex =
-      item.kind === "turn" || item.kind === "commission"
-        ? turnIndexOf.get(item.turn)
-        : undefined;
-    const foldOwner =
-      turnIndex !== undefined ? sectionOwner.get(turnIndex) : undefined;
-    const flatOwner =
-      turnIndex !== undefined ? regionOwner.get(turnIndex) : undefined;
-    const windowOf =
-      turnIndex !== undefined ? windowOwner.get(turnIndex) : undefined;
+  turns.forEach((turn, turnIndex) => {
+    const foldOwner = sectionOwner.get(turnIndex);
+    const flatOwner = regionOwner.get(turnIndex);
+    const windowOf = windowOwner.get(turnIndex);
     const owner = foldOwner ?? flatOwner ?? windowOf;
     if (owner === undefined) {
       flushSection();
-      rendered.push(renderItem(item, i, turnIndex));
+      rendered.push(renderItem(turn, turnIndex));
       return;
     }
     const kind: SectionKind =
@@ -702,7 +589,7 @@ export function Conversation({
       flushSection();
     }
     if (!section) section = { opener: owner, kind, nodes: [] };
-    if (kind === "window" && turnIndex !== undefined) {
+    if (kind === "window") {
       // Per-step sweep in the window: mounts growing from 0fr and
       // closes when the step departs (see `departing`).
       section.nodes.push(
@@ -711,34 +598,25 @@ export function Conversation({
           open={!departing.includes(ordinal(turnIndex))}
           animateMount
         >
-          <div className="pb-2.5">{renderItem(item, i, turnIndex)}</div>
+          <div className="pb-2.5">{renderItem(turn, turnIndex)}</div>
         </ExpandSection>,
       );
       return;
     }
-    if (
-      turnIndex !== undefined &&
-      answerOnly.has(turnIndex) &&
-      item.kind === "turn" &&
-      item.turn.role === "agent"
-    ) {
+    if (answerOnly.has(turnIndex) && turn.role === "agent") {
       section.nodes.push(
         <AgentTurnView
           key={`marker-${ordinal(turnIndex)}`}
-          turn={item.turn}
+          turn={turn}
           markerOnly
-          stepNumber={
-            turnIndex !== undefined
-              ? plan.stepNumberOf.get(turnIndex)
-              : undefined
-          }
+          stepNumber={stepNumberOf.get(turnIndex)}
         />,
       );
       flushSection();
-      rendered.push(renderItem(item, i, turnIndex));
+      rendered.push(renderItem(turn, turnIndex));
       return;
     }
-    section.nodes.push(renderItem(item, i, turnIndex));
+    section.nodes.push(renderItem(turn, turnIndex));
   });
   flushSection();
 
@@ -771,7 +649,6 @@ function AgentTurnView({
   suppressAskUserEcho = false,
   askUserAnswer,
   stepNumber: stepNumberProp,
-  intermediateAnswer = false,
   runTelemetry,
 }: {
   turn: AgentTurn;
@@ -798,19 +675,13 @@ function AgentTurnView({
    * candidate. */
   askUserAnswer?: string;
   /** Display step number overriding GA's `turn.turnIndex`: position
-   * within the run (goal-run-groups `stepNumberOf`), because GA
-   * restarts its counter at every put_task — each goal continuation
-   * and each ask_user reply. */
+   * within the run (run-groups `runStepNumbers`), because GA restarts
+   * its counter at every put_task — each ask_user reply. */
   stepNumber?: number;
   /** Whole-run telemetry for a closing turn's answer footer (run-groups
    * `RunStats.telemetry`). The turn's own telemetry only covers the
    * last GA loop; undefined for turns that close no run. */
   runTelemetry?: MessageTelemetry | null;
-  /** True for a closing-shaped turn that is NOT the run's answer — a
-   * goal continuation's progress note. Its answer body renders in the
-   * narration register (no StrongHr, no answer footer), keeping the
-   * live window's "last settled step" a step. */
-  intermediateAnswer?: boolean;
 }) {
   const stepNumber = stepNumberProp ?? turn.turnIndex;
   // `finalAnswer` is what's left of GA's responseContent after the
@@ -1008,12 +879,7 @@ function AgentTurnView({
           header→answer distance (33px) past the question→header
           distance (24px) — proximity binding the process summary to
           the wrong neighbour (2026-08-06). */}
-      {answerText && isFinalTurn && intermediateAnswer && (
-        <div className={cn(showMarker && "pl-(--step-gutter)")}>
-          <MessageAgentNarration>{answerText}</MessageAgentNarration>
-        </div>
-      )}
-      {answerText && isFinalTurn && !intermediateAnswer && (
+      {answerText && isFinalTurn && (
         <>
           {!hideMarker && <StrongHr />}
           <MessageAgent
@@ -1030,6 +896,12 @@ function AgentTurnView({
 
 function normalizedInlineText(value?: string | null): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
+}
+
+/** Galley narration: a persisted system row (SystemMessageBubble's
+ * `narration` register). */
+function isNarrationTurn(turn: Turn | undefined): boolean {
+  return turn?.role === "system" && turn.variant === "narration";
 }
 
 /**

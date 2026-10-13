@@ -64,7 +64,7 @@ export function StatusIcon({
    * leftmost icon carries the unread signal (no separate dot). */
   unread?: boolean;
   /** A settled `idle` row that must not claim "done" — paused at the
-   * step cap, a parked goal, no recap. It keeps the hollow ring; every
+   * step cap, no recap. It keeps the hollow ring; every
    * other `idle` row draws the `completed` check circle. */
   incomplete?: boolean;
 }) {

@@ -1,4 +1,3 @@
-import type { GoalBrief } from "@/types/goal";
 import type { Project, Session } from "@/types/session";
 
 import { SidebarSessionRow } from "./SidebarSessionRow";
@@ -10,9 +9,6 @@ export type SidebarTimelineRowWiring = {
   activeId?: string;
   projects: Project[];
   petAttachedSessionId?: string | null;
-  /** Map of session-id -> that session's open goal, so a row carrying
-   * a goal shows its state instead of reading as a finished chat. */
-  sessionGoalStatus?: Map<string, GoalBrief>;
   onSelectSession?: (id: string) => void;
   onArchiveSession?: (id: string) => void;
   onTogglePinSession?: (id: string) => void;
@@ -40,7 +36,6 @@ export function SidebarTimelineRow({
   activeId,
   projects,
   petAttachedSessionId,
-  sessionGoalStatus,
   onSelectSession,
   onArchiveSession,
   onTogglePinSession,
@@ -61,7 +56,6 @@ export function SidebarTimelineRow({
       session={s}
       active={s.id === activeId}
       petAttached={s.id === petAttachedSessionId}
-      sessionGoal={sessionGoalStatus?.get(s.id)}
       projects={projects}
       onClick={() => onSelectSession?.(s.id)}
       onArchive={onArchiveSession ? () => onArchiveSession(s.id) : undefined}

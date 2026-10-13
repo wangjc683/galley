@@ -57,7 +57,7 @@ export function chosenCandidateIndex(
  * or undefined when it was never answered (still pending, or superseded
  * by a later agent run). Mirrors run-groups' membership rule: the next
  * user turn after an ask_user agent turn is its reply; system turns
- * (/btw, Goal narration) are bystanders. `replySet` is the run-groups
+ * (/btw, narration) are bystanders. `replySet` is the run-groups
  * reply index set, passed in so the two views can never disagree.
  */
 export function askUserReplyContent(

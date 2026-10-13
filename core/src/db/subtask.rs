@@ -75,7 +75,6 @@ impl SqliteGalley {
                     content,
                     origin,
                     MessageVisibility::Visible,
-                    None,
                 )
                 .await?,
             ),

@@ -60,8 +60,6 @@ export interface SettingsProps {
   onChangeConversationFontSize: (size: ConversationFontSize) => void;
   conversationWidth: "compact" | "wide";
   onChangeConversationWidth: (width: "compact" | "wide") => void;
-  notifyOnGoalEnd: boolean;
-  onChangeNotifyOnGoalEnd: (enabled: boolean) => void;
   notifyOnReplyDone: boolean;
   onChangeNotifyOnReplyDone: (enabled: boolean) => void;
   notifySound: boolean;
@@ -125,8 +123,6 @@ export function Settings({
   onChangeConversationFontSize,
   conversationWidth,
   onChangeConversationWidth,
-  notifyOnGoalEnd,
-  onChangeNotifyOnGoalEnd,
   notifyOnReplyDone,
   onChangeNotifyOnReplyDone,
   notifySound,
@@ -235,8 +231,6 @@ export function Settings({
                   onChangeConversationFontSize={onChangeConversationFontSize}
                   conversationWidth={conversationWidth}
                   onChangeConversationWidth={onChangeConversationWidth}
-                  notifyOnGoalEnd={notifyOnGoalEnd}
-                  onChangeNotifyOnGoalEnd={onChangeNotifyOnGoalEnd}
                   notifyOnReplyDone={notifyOnReplyDone}
                   onChangeNotifyOnReplyDone={onChangeNotifyOnReplyDone}
                   notifySound={notifySound}

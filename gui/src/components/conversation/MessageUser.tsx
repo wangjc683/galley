@@ -59,11 +59,6 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *     split a pasted message into pieces — one of the concrete gaps
  *     the bubble closes).
  *
- * GoalCommissionMarker does NOT follow: the crowned objective keeps
- * the 4px bar + sharp-cornered tint slab as its formal dress. Plain
- * rounded bubble vs barred sharp slab is what marks a Goal commission
- * apart from an ordinary message (see GoalRunMarkers).
- *
  * Long-content collapse (≥7 lines or >500 chars):
  *   Collapsed by default to 6 lines via `line-clamp` — a clean
  *   line-boundary truncation, no fade-out gradient mask. Toggle
@@ -96,8 +91,8 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *   bar was always visible when this was decided, so a time there
  *   would have meant a time on every answer (the bar went hover-only
  *   later the same day); and the gaps all come from the user leaving
- *   and coming back. The completion time of long unattended runs (overnight
- *   Goal, scheduled tasks) is deferred.
+ *   and coming back. The completion time of long unattended runs
+ *   (overnight runs, scheduled tasks) is deferred.
  *
  * Message actions:
  *   Supervisor provenance renders as a small icon in the row above the
@@ -145,11 +140,10 @@ const MESSAGE_TIME_TEXT =
   "text-ui-micro text-ink-muted/70 select-none leading-none [font-variant-numeric:tabular-nums]";
 
 /**
- * Always-visible send time at a break (see the header note). Shared
- * with GoalCommissionMarker, whose objective shows the same row when
- * it sits at a break. The tooltip carries the full date + weekday.
+ * Always-visible send time at a break (see the header note). The
+ * tooltip carries the full date + weekday.
  */
-export function PinnedMessageTime({
+function PinnedMessageTime({
   label,
   full,
   iso,

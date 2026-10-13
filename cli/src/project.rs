@@ -510,9 +510,9 @@ async fn project_follow_until_idle(
 }
 
 /// `only_sessions` restricts the follow to those session ids (watch
-/// targets, idle detection, and snapshots). The goal controller passes
-/// its master + worker sessions so user chatter in unrelated sessions
-/// of the same project cannot reset the until-idle quiet window.
+/// targets, idle detection, and snapshots), so chatter in unrelated
+/// sessions of the same project cannot reset the until-idle quiet
+/// window. `galley project follow` passes `None`: the whole project.
 pub(crate) async fn project_follow(
     project_id: String,
     tail: usize,

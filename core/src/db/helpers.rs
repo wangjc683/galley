@@ -93,38 +93,6 @@ pub(super) fn runtime_kind_sql(kind: RuntimeKind) -> &'static str {
     }
 }
 
-pub(super) fn parse_goal_status(s: &str) -> Result<GoalStatus> {
-    Ok(match s {
-        "active" => GoalStatus::Active,
-        "paused" => GoalStatus::Paused,
-        "blocked" => GoalStatus::Blocked,
-        "completed" => GoalStatus::Completed,
-        "budget_limited" => GoalStatus::BudgetLimited,
-        "stopped" => GoalStatus::Stopped,
-        "failed" => GoalStatus::Failed,
-        other => {
-            return Err(GalleyError::Internal {
-                message: format!("unknown goal status: {other}"),
-            })
-        }
-    })
-}
-
-pub(super) fn goal_status_sql(s: GoalStatus) -> &'static str {
-    match s {
-        GoalStatus::Active => "active",
-        GoalStatus::Paused => "paused",
-        GoalStatus::Blocked => "blocked",
-        GoalStatus::Completed => "completed",
-        GoalStatus::BudgetLimited => "budget_limited",
-        GoalStatus::Stopped => "stopped",
-        GoalStatus::Failed => "failed",
-    }
-}
-
-/// Max stored deliverable content size in bytes. 256 KiB is far beyond
-/// any reasonable text deliverable; exceeding it signals runaway output,
-/// so we truncate on a char boundary rather than fail the master's write.
 pub(super) fn parse_managed_model_protocol(s: &str) -> Result<ManagedModelProtocol> {
     Ok(match s {
         "anthropic" => ManagedModelProtocol::Anthropic,
@@ -422,7 +390,6 @@ pub(super) async fn insert_user_message_inner(
     content: String,
     origin: Origin,
     visibility: MessageVisibility,
-    goal_id: Option<&str>,
 ) -> Result<MessageBrief> {
     insert_message_inner(
         conn,
@@ -431,7 +398,6 @@ pub(super) async fn insert_user_message_inner(
         content,
         origin,
         visibility,
-        goal_id,
     )
     .await
 }
@@ -449,7 +415,6 @@ pub(super) async fn insert_message_inner(
     content: String,
     origin: Origin,
     visibility: MessageVisibility,
-    goal_id: Option<&str>,
 ) -> Result<MessageBrief> {
     let role_sql = match role {
         MessageRole::User => "user",
@@ -486,8 +451,8 @@ pub(super) async fn insert_message_inner(
     sqlx::query(
         "INSERT INTO messages \
          (id, session_id, turn_index, sequence, role, content, created_at, \
-          created_via, supervisor, origin_note, client, visibility, goal_id) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          created_via, supervisor, origin_note, client, visibility) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&msg_id)
     .bind(&session_id.0)
@@ -501,7 +466,6 @@ pub(super) async fn insert_message_inner(
     .bind(&origin.reason)
     .bind(origin.client.map(|c| c.as_sql()))
     .bind(message_visibility_sql(visibility))
-    .bind(goal_id)
     .execute(&mut *conn)
     .await
     .map_err(map_sqlx_err)?;
@@ -546,7 +510,6 @@ pub(super) async fn insert_message_inner(
         summary: None,
         turn_index: Some(next_turn.max(0) as u32),
         visibility: Some(visibility),
-        goal_id: goal_id.map(str::to_string),
         attachments: Vec::new(),
         origin: Some(origin),
         ask_user: None,
@@ -631,24 +594,6 @@ pub(super) fn iso_from_unix_secs(total_secs: i64) -> String {
         "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}+00:00",
         y, m, d, hour, min, sec
     )
-}
-
-pub(super) fn mint_goal_id(prefix: &str) -> String {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
-    static GOAL_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-    let dur = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    let counter = GOAL_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let mut x = (dur.as_nanos() as u64)
-        ^ counter.rotate_left(21)
-        ^ (u64::from(std::process::id())).rotate_left(32);
-    x ^= x.wrapping_mul(0x9E3779B97F4A7C15);
-    x ^= x >> 33;
-    x ^= x.wrapping_mul(0xC4CEB9FE1A85EC53);
-    format!("{prefix}_{x:016x}")
 }
 
 pub(super) fn into_search_hit(r: SearchHitRow) -> Result<SearchHit> {

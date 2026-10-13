@@ -8,11 +8,10 @@
 //! `tests/common/mod.rs` scaffold that adds noise for two test files.
 
 use galley_core_lib::api::{
-    CreateGoalInput, CreateProjectInput, CreateScheduledTaskInput, CreateSessionInput, GalleyApi,
-    GoalId, GoalStatus, ManagedModelAuthKind, ManagedModelCredentialStatus, ManagedModelProtocol,
-    MessageTelemetry, MessageVisibility, Origin, ProjectId, ProjectPatch, RuntimeKind,
-    ScheduledTaskId, ScheduledTaskPatch, ScheduledTaskRepeat, SessionFilter, SessionId,
-    SessionStatus, DEFAULT_GOAL_BUDGET_SECONDS,
+    CreateProjectInput, CreateScheduledTaskInput, CreateSessionInput, GalleyApi,
+    ManagedModelAuthKind, ManagedModelCredentialStatus, ManagedModelProtocol, MessageTelemetry,
+    MessageVisibility, Origin, ProjectId, ProjectPatch, RuntimeKind, ScheduledTaskId,
+    ScheduledTaskPatch, ScheduledTaskRepeat, SessionFilter, SessionId, SessionStatus,
 };
 use galley_core_lib::credential_store;
 use galley_core_lib::db::{
@@ -221,335 +220,69 @@ async fn assistant_message_telemetry_round_trips() {
     assert_eq!(telemetry.context_limit_chars, Some(300_000));
 }
 
-// ---------------- Goal v2 ----------------
+// ---------------- Goal removed (schemaVersion 3) ----------------
 
-fn goal_input(session: &str, objective: &str, budget: Option<u32>) -> CreateGoalInput {
-    CreateGoalInput {
-        session_id: sid(session),
-        objective: objective.into(),
-        budget_seconds: budget,
-    }
-}
-
+/// Goal was removed on 2026-10-13 without a migration: `messages.goal_id`
+/// stays in the schema, but no write fills it and no read returns it, so
+/// a row an older Galley stamped reads like any other.
 #[tokio::test]
-async fn goal_create_defaults_and_lists() {
+async fn a_legacy_goal_id_is_neither_written_nor_read_back() {
     let pool = fresh_pool().await;
     let galley = SqliteGalley::from_pool(pool.clone());
     seed_session_idle(&pool, "s1").await;
+    let sent = galley
+        .send_message(sid("s1"), "plain".into(), Origin::gui())
+        .await
+        .expect("send");
+    let narrated = galley
+        .send_system_message(sid("s1"), "narration".into(), Origin::gui())
+        .await
+        .expect("system row");
+    // A row written before the removal still carries its stamp.
+    sqlx::query(
+        "INSERT INTO messages (id, session_id, turn_index, sequence, role, content, \
+            created_at, visibility, goal_id) \
+         VALUES ('m_legacy', 's1', 9, 0, 'user', 'objective', '2026-09-16T00:00:00Z', \
+            'visible', 'goal_legacy')",
+    )
+    .execute(&pool)
+    .await
+    .expect("seed legacy row");
 
-    let goal = galley
-        .create_goal(
-            goal_input("s1", "  Ship goal v2  ", Some(DEFAULT_GOAL_BUDGET_SECONDS)),
-            Origin::cli(Some("sup-1".into()), Some("user asked".into())),
-        )
-        .await
-        .expect("create goal");
-    assert_eq!(goal.session_id, sid("s1"));
-    assert_eq!(goal.objective, "Ship goal v2");
-    assert_eq!(goal.status, GoalStatus::Active);
-    assert_eq!(goal.budget_seconds, Some(DEFAULT_GOAL_BUDGET_SECONDS));
-    assert_eq!(goal.continuation_count, 0);
-    assert!(!goal.wrap_up_dispatched);
-    assert!(goal.ended_at.is_none());
-    assert!(goal.paused_at.is_none());
-    let origin = goal.origin.as_ref().expect("cli origin kept");
-    assert_eq!(origin.supervisor.as_deref(), Some("sup-1"));
-    assert_eq!(origin.reason.as_deref(), Some("user asked"));
-
-    let active = galley.list_active_goals().await.expect("active");
-    assert_eq!(active.len(), 1);
-    assert_eq!(active[0].id, goal.id);
-    let for_session = galley
-        .list_goals_for_session(sid("s1"))
-        .await
-        .expect("for session");
-    assert_eq!(for_session.len(), 1);
-    assert_eq!(
-        galley.get_goal(goal.id.clone()).await.expect("get").id,
-        goal.id
-    );
-
-    // No ceiling is an explicit choice, and GUI origin is elided like
-    // SessionBrief does.
-    seed_session_idle(&pool, "s2").await;
-    let open_ended = galley
-        .create_goal(goal_input("s2", "Keep improving", None), Origin::gui())
-        .await
-        .expect("create open-ended goal");
-    assert_eq!(open_ended.budget_seconds, None);
-    assert!(open_ended.origin.is_none());
-}
-
-#[tokio::test]
-async fn goal_create_rejects_empty_objective_missing_session_and_second_open_goal() {
-    let pool = fresh_pool().await;
-    let galley = SqliteGalley::from_pool(pool.clone());
-    seed_session_idle(&pool, "s1").await;
-
-    let err = galley
-        .create_goal(goal_input("s1", "   ", None), Origin::gui())
-        .await
-        .expect_err("blank objective");
-    assert!(matches!(err, GalleyError::InvalidArgs { .. }), "{err:?}");
-
-    let err = galley
-        .create_goal(goal_input("nope", "x", None), Origin::gui())
-        .await
-        .expect_err("missing session");
-    assert!(matches!(err, GalleyError::NotFound { .. }), "{err:?}");
-
-    let first = galley
-        .create_goal(goal_input("s1", "first", None), Origin::gui())
-        .await
-        .expect("first goal");
-    let err = galley
-        .create_goal(goal_input("s1", "second", None), Origin::gui())
-        .await
-        .expect_err("second open goal on the same session");
-    match err {
-        GalleyError::InvalidArgs { message } => {
-            assert!(message.contains(first.id.as_str()), "{message}")
-        }
-        other => panic!("expected invalid_args, got {other:?}"),
-    }
-
-    // A paused / blocked goal still occupies the session's slot …
-    galley
-        .update_goal_status(
-            first.id.clone(),
-            GoalStatus::Blocked,
-            Some("need key".into()),
-        )
-        .await
-        .expect("block");
-    assert!(galley
-        .create_goal(goal_input("s1", "third", None), Origin::gui())
-        .await
-        .is_err());
-    // … a terminal one frees it.
-    galley
-        .update_goal_status(first.id.clone(), GoalStatus::Stopped, None)
-        .await
-        .expect("stop");
-    galley
-        .create_goal(goal_input("s1", "third", None), Origin::gui())
-        .await
-        .expect("slot freed after terminal status");
-}
-
-#[tokio::test]
-async fn goal_status_transitions_stamp_timestamps_and_keep_summary() {
-    let pool = fresh_pool().await;
-    let galley = SqliteGalley::from_pool(pool.clone());
-    seed_session_idle(&pool, "s1").await;
-    let goal = galley
-        .create_goal(goal_input("s1", "objective", Some(120)), Origin::gui())
-        .await
-        .expect("create");
-
-    let paused = galley
-        .update_goal_status(goal.id.clone(), GoalStatus::Paused, None)
-        .await
-        .expect("pause");
-    assert_eq!(paused.status, GoalStatus::Paused);
-    assert!(paused.paused_at.is_some());
-    assert!(paused.ended_at.is_none());
-
-    let resumed = galley
-        .update_goal_status(goal.id.clone(), GoalStatus::Active, Some("  ".into()))
-        .await
-        .expect("resume");
-    assert_eq!(resumed.status, GoalStatus::Active);
-    assert!(resumed.paused_at.is_none(), "resume clears paused_at");
-    assert!(
-        resumed.latest_summary.is_none(),
-        "blank summary keeps stored None"
-    );
-
-    let bumped = galley
-        .bump_goal_continuation(goal.id.clone(), false)
-        .await
-        .expect("bump");
-    assert_eq!(bumped.continuation_count, 1);
-    assert!(!bumped.wrap_up_dispatched);
-    let wrapped = galley
-        .bump_goal_continuation(goal.id.clone(), true)
-        .await
-        .expect("bump wrap-up");
-    assert_eq!(wrapped.continuation_count, 2);
-    assert!(wrapped.wrap_up_dispatched);
-
-    let done = galley
-        .update_goal_status(
-            goal.id.clone(),
-            GoalStatus::BudgetLimited,
-            Some("delivered current best".into()),
-        )
-        .await
-        .expect("budget limited");
-    assert_eq!(done.status, GoalStatus::BudgetLimited);
-    assert!(done.ended_at.is_some());
-    assert_eq!(
-        done.latest_summary.as_deref(),
-        Some("delivered current best")
-    );
-    assert!(galley.list_active_goals().await.expect("active").is_empty());
-
-    let err = galley
-        .update_goal_status(GoalId("goal_missing".into()), GoalStatus::Stopped, None)
-        .await
-        .expect_err("unknown goal");
-    assert!(matches!(err, GalleyError::NotFound { .. }));
-}
-
-#[tokio::test]
-async fn visible_goals_include_unseen_terminals_and_rank_attention_first() {
-    let pool = fresh_pool().await;
-    let galley = SqliteGalley::from_pool(pool.clone());
-    for s in ["s-active", "s-blocked", "s-done", "s-seen"] {
-        seed_session_idle(&pool, s).await;
-    }
-    let active = galley
-        .create_goal(goal_input("s-active", "a", None), Origin::gui())
-        .await
-        .unwrap();
-    let blocked = galley
-        .create_goal(goal_input("s-blocked", "b", None), Origin::gui())
-        .await
-        .unwrap();
-    galley
-        .update_goal_status(
-            blocked.id.clone(),
-            GoalStatus::Blocked,
-            Some("stuck".into()),
-        )
-        .await
-        .unwrap();
-    let done = galley
-        .create_goal(goal_input("s-done", "c", None), Origin::gui())
-        .await
-        .unwrap();
-    galley
-        .update_goal_status(done.id.clone(), GoalStatus::Completed, Some("ok".into()))
-        .await
-        .unwrap();
-    let seen = galley
-        .create_goal(goal_input("s-seen", "d", None), Origin::gui())
-        .await
-        .unwrap();
-    galley
-        .update_goal_status(seen.id.clone(), GoalStatus::Stopped, None)
-        .await
-        .unwrap();
-    galley
-        .mark_goal_result_seen(seen.id.clone(), Origin::gui())
-        .await
-        .unwrap();
-
-    let visible = galley.list_visible_goals().await.expect("visible");
-    let ids: Vec<&str> = visible.iter().map(|g| g.id.as_str()).collect();
-    assert_eq!(
-        ids,
-        vec![blocked.id.as_str(), active.id.as_str(), done.id.as_str()]
-    );
-
-    // Seeing the completed result removes it from the list; the open ones stay.
-    galley
-        .mark_goal_result_seen(done.id.clone(), Origin::gui())
-        .await
-        .unwrap();
-    let visible = galley.list_visible_goals().await.expect("visible");
-    assert_eq!(visible.len(), 2);
-    assert!(visible.iter().all(|g| g.status.is_open()));
-}
-
-#[tokio::test]
-async fn pause_open_goals_parks_active_only() {
-    let pool = fresh_pool().await;
-    let galley = SqliteGalley::from_pool(pool.clone());
-    for s in ["s1", "s2", "s3"] {
-        seed_session_idle(&pool, s).await;
-    }
-    let a = galley
-        .create_goal(goal_input("s1", "a", None), Origin::gui())
-        .await
-        .unwrap();
-    let b = galley
-        .create_goal(goal_input("s2", "b", None), Origin::gui())
-        .await
-        .unwrap();
-    galley
-        .update_goal_status(b.id.clone(), GoalStatus::Blocked, None)
-        .await
-        .unwrap();
-    let c = galley
-        .create_goal(goal_input("s3", "c", None), Origin::gui())
-        .await
-        .unwrap();
-    galley
-        .update_goal_status(c.id.clone(), GoalStatus::Completed, None)
-        .await
-        .unwrap();
-
-    assert_eq!(galley.pause_open_goals().await.expect("pause"), 1);
-    assert_eq!(
-        galley.get_goal(a.id).await.unwrap().status,
-        GoalStatus::Paused
-    );
-    assert_eq!(
-        galley.get_goal(b.id).await.unwrap().status,
-        GoalStatus::Blocked
-    );
-    assert_eq!(
-        galley.get_goal(c.id).await.unwrap().status,
-        GoalStatus::Completed
-    );
-}
-
-/// The objective turn is stamped with the goal it opens (`messages.goal_id`,
-/// migration 031) so the GUI brackets the episode by exact id; ordinary
-/// sends stay unstamped.
-#[tokio::test]
-async fn goal_scoped_message_rows_carry_goal_id() {
-    let pool = fresh_pool().await;
-    let galley = SqliteGalley::from_pool(pool.clone());
-    seed_session_idle(&pool, "s1").await;
-    let goal = galley
-        .create_goal(goal_input("s1", "objective", None), Origin::gui())
-        .await
-        .unwrap();
-
-    galley
-        .send_message_for_goal(
-            sid("s1"),
-            "objective".into(),
-            Origin::gui(),
-            goal.id.clone(),
-        )
-        .await
-        .expect("objective row");
-    galley
-        .send_message(sid("s1"), "plain follow-up".into(), Origin::gui())
-        .await
-        .expect("plain row");
-
-    let stamped: Vec<(String, Option<String>)> = sqlx::query_as(
-        "SELECT content, goal_id FROM messages WHERE session_id = 's1' ORDER BY turn_index",
+    let stamps: Vec<(String, Option<String>)> = sqlx::query_as(
+        "SELECT id, goal_id FROM messages WHERE session_id = 's1' ORDER BY turn_index",
     )
     .fetch_all(&pool)
     .await
-    .expect("read rows");
+    .expect("read stamps");
     assert_eq!(
-        stamped,
+        stamps,
         vec![
-            ("objective".to_string(), Some(goal.id.0.clone())),
-            ("plain follow-up".to_string(), None),
+            (sent.id.0.clone(), None),
+            (narrated.id.0.clone(), None),
+            ("m_legacy".to_string(), Some("goal_legacy".to_string())),
         ]
     );
+
+    let briefs = galley
+        .session_messages(sid("s1"), None)
+        .await
+        .expect("briefs");
+    assert_eq!(briefs.len(), 3);
+    let rows = galley
+        .persisted_message_rows(&sid("s1"))
+        .await
+        .expect("rows");
+    assert_eq!(rows.len(), 3);
+    let wire = serde_json::to_string(&(briefs, rows)).expect("serialize");
+    assert!(!wire.contains("goal"), "{wire}");
 }
 
 /// Migration 039 carries v1 rows over: finished goals keep their status,
 /// mid-run ones land as `stopped` and already seen, headless ones drop.
+/// The migration still runs for anyone upgrading from before 2026-09-16,
+/// so it stays pinned; with Goal removed (2026-10-13) the carried rows are
+/// read straight from the table.
 #[tokio::test]
 async fn migration_039_carries_v1_goals_onto_their_sessions() {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -631,31 +364,52 @@ async fn migration_039_carries_v1_goals_onto_their_sessions() {
         .await
         .expect("apply 040");
 
-    let galley = SqliteGalley::from_pool(pool.clone());
-    let done = galley
-        .get_goal(GoalId("g-done".into()))
-        .await
-        .expect("carried");
-    assert_eq!(done.status, GoalStatus::Completed);
-    assert_eq!(done.session_id, sid("s1"));
-    assert_eq!(done.budget_seconds, Some(600));
-    assert_eq!(done.latest_summary.as_deref(), Some("shipped"));
-    assert!(done.result_seen_at.is_some());
-    assert_eq!(done.elapsed_seconds, 9 * 60);
-
-    let live = galley
-        .get_goal(GoalId("g-live".into()))
-        .await
-        .expect("carried");
-    assert_eq!(live.status, GoalStatus::Stopped);
-    assert_eq!(live.ended_at.as_deref(), Some("2026-07-01T10:20:00+00:00"));
-    assert!(
-        live.result_seen_at.is_some(),
-        "mid-run rows must not resurface as unseen"
+    type Carried = (
+        String,
+        String,
+        Option<i64>,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
     );
-
-    assert!(galley.get_goal(GoalId("g-headless".into())).await.is_err());
-    assert!(galley.list_visible_goals().await.unwrap().is_empty());
+    let carried: Vec<Carried> = sqlx::query_as(
+        "SELECT id, session_id, budget_seconds, status, started_at, ended_at, latest_summary \
+         FROM goals ORDER BY id",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("read carried rows");
+    assert_eq!(
+        carried,
+        vec![
+            (
+                "g-done".to_string(),
+                "s1".to_string(),
+                Some(600),
+                "completed".to_string(),
+                Some("2026-07-01T10:00:00+00:00".to_string()),
+                Some("2026-07-01T10:09:00+00:00".to_string()),
+                Some("shipped".to_string()),
+            ),
+            (
+                "g-live".to_string(),
+                "s2".to_string(),
+                Some(600),
+                "stopped".to_string(),
+                Some("2026-07-01T10:00:00+00:00".to_string()),
+                Some("2026-07-01T10:20:00+00:00".to_string()),
+                Some("mid-step".to_string()),
+            ),
+        ],
+        "g-headless had no thread to land in and is dropped"
+    );
+    // Neither carried row may resurface as an unseen result.
+    let unseen: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM goals WHERE result_seen_at IS NULL")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(unseen, 0, "mid-run rows must not resurface as unseen");
     for table in [
         "goal_tasks",
         "goal_events",

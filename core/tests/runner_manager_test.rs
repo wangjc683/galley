@@ -1068,7 +1068,7 @@ async fn dispatch(
     base
 }
 
-/// The next `RunComplete` signal, skipping `UserRunStarted`.
+/// The next `RunComplete` signal, skipping any other.
 async fn next_run_complete(signals: &mut mpsc::UnboundedReceiver<RunSignal>) -> String {
     loop {
         let signal = timeout(Duration::from_secs(10), signals.recv())
@@ -1702,12 +1702,10 @@ async fn concurrent_ensures_start_one_real_runner_and_later_ones_get_its_ready()
 // `load_history` / `user_message` it receives, so a test can see what a
 // restarted runner got.
 
-use galley_core_lib::api::{GoalId, GoalStatus};
 use galley_core_lib::db::PersistAssistantMessage;
-use galley_core_lib::goal_engine::GoalEngine;
 use galley_core_lib::notify::Notifier;
 use galley_core_lib::session_runner::SessionRunnerError;
-use galley_core_lib::socket_listener::{DbSource, HandlerCtx};
+use galley_core_lib::session_send::{send_user_message, SendOutcome, SendRequest};
 use std::sync::{Arc, Mutex};
 
 fn write_replaying_runner(dir: &std::path::Path, plan: &str) {
@@ -2049,39 +2047,17 @@ async fn a_real_runner_that_keeps_refusing_is_a_history_replay_error() {
 }
 
 /// What the app's drain task does with one signal
-/// (`message_queue::spawn_queue_drain_task`): close / reopen the gate,
-/// then let the Goal engine react.
-async fn drain_like_the_app(
-    galley: &SqliteGalley,
-    mgr: &RunnerManager,
-    notifier: Arc<dyn Notifier>,
-    signal: RunSignal,
-) {
-    let session_id = match &signal {
-        RunSignal::RunComplete { session_id }
-        | RunSignal::Closed { session_id }
-        | RunSignal::UserRunStarted { session_id } => session_id.clone(),
-    };
-    if mgr.queue_take_next(&signal).await.is_some() {
-        return;
-    }
-    let db = DbSource::Pool(galley.clone());
-    let ctx = HandlerCtx {
-        db: &db,
-        runner: mgr,
-        notifier,
-        app: None,
-    };
-    let engine = GoalEngine { galley, ctx: &ctx };
-    match signal {
-        RunSignal::RunComplete { .. } => engine.on_run_settled(&session_id).await,
-        RunSignal::Closed { .. } => engine.on_runner_closed(&session_id).await,
-        RunSignal::UserRunStarted { .. } => engine.on_user_run_started(&session_id).await,
-    }
+/// (`message_queue::spawn_queue_drain_task`): close the run gate, or
+/// reopen it for the next queued message.
+async fn drain_like_the_app(mgr: &RunnerManager, signal: RunSignal) {
+    let _ = mgr.queue_take_next(&signal).await;
 }
 
+/// Core's send holds the run gate across its ensure; the runner the
+/// replay retires closes quietly, so nothing releases that gate and the
+/// message goes to the restarted runner as the open run.
 #[tokio::test]
-async fn a_goal_survives_the_quiet_restart_of_its_runner() {
+async fn a_send_survives_the_quiet_restart_of_its_runner() {
     let Some(python) = mock_python_path() else {
         eprintln!("[skip] no python on this machine");
         return;
@@ -2089,45 +2065,44 @@ async fn a_goal_survives_the_quiet_restart_of_its_runner() {
     let bridge = TempDir::new().expect("tempdir");
     write_replaying_runner(bridge.path(), "refuse,loaded");
     let (_db_dir, pool, galley) = persistence_db().await;
-    replay_session(&pool, &galley, "s_goal_race", &python, bridge.path()).await;
+    replay_session(&pool, &galley, "s_send_race", &python, bridge.path()).await;
     let (mgr, mut signals) = persisting_manager(&galley);
     let notifier: Arc<dyn Notifier> = Arc::new(RecordingNotifier::default());
-    let db = DbSource::Pool(galley.clone());
-    let ctx = HandlerCtx {
-        db: &db,
-        runner: &mgr,
-        notifier: notifier.clone(),
-        app: None,
-    };
-    let engine = GoalEngine {
+    let host = RunnerHost {
         galley: &galley,
-        ctx: &ctx,
+        runner: &mgr,
+        notifier,
+        env: None,
     };
 
-    let started = engine
-        .start(
-            SessionId("s_goal_race".into()),
-            "暗号是什么？".into(),
-            None,
-            Origin {
-                via: OriginVia::Cli,
-                supervisor: None,
-                reason: None,
-                client: None,
-            },
-        )
-        .await
-        .expect("goal start");
-    assert_eq!(started.dispatch, "dispatched");
-    let goal_id: GoalId = started.goal.id.clone();
+    let outcome = send_user_message(
+        &host,
+        SendRequest {
+            session_id: "s_send_race".into(),
+            text: "暗号是什么？".into(),
+            images: Vec::new(),
+            client_request_id: None,
+            origin: Origin::desktop(),
+            via: "gui",
+            llm_override: None,
+            ga_config: None,
+            timeouts: Default::default(),
+        },
+    )
+    .await
+    .expect("send");
+    assert!(
+        matches!(outcome, SendOutcome::Dispatched { .. }),
+        "{outcome:?}"
+    );
 
-    // The objective reached the restarted runner, after its history.
+    // The message reached the restarted runner, after its history.
     let attempts = read_log(bridge.path(), "load_history.jsonl");
     assert_eq!(attempts.len(), 2);
     let sent = wait_for_log(bridge.path(), "user_messages.jsonl", 1).await;
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0]["pid"], attempts[1]["pid"]);
-    assert!(sent[0]["text"].as_str().unwrap().contains("暗号是什么？"));
+    assert_eq!(sent[0]["text"], "暗号是什么？");
 
     // Feed whatever the watchers reported through the drain, as the app
     // would. The retired runner must have reported nothing.
@@ -2139,20 +2114,15 @@ async fn a_goal_survives_the_quiet_restart_of_its_runner() {
         "the quiet restart sent no Closed: {reported:?}"
     );
     for signal in reported {
-        drain_like_the_app(&galley, &mgr, notifier.clone(), signal).await;
+        drain_like_the_app(&mgr, signal).await;
     }
 
-    // The gate the goal reserved is still the open run, and the goal is
-    // still active — not paused by the runner it replaced.
-    let state = mgr.run_state("s_goal_race").await;
+    // The gate the send reserved is still the open run.
+    let state = mgr.run_state("s_send_race").await;
     assert!(state.open_run, "{state:?}");
-    assert_eq!(
-        galley.get_goal(goal_id).await.expect("goal").status,
-        GoalStatus::Active
-    );
-    // A user message offered now queues behind the goal's run.
+    // A user message offered now queues behind the send's run.
     assert!(matches!(
-        mgr.queue_offer("s_goal_race", "插话".into(), None).await,
+        mgr.queue_offer("s_send_race", "插话".into(), None).await,
         galley_core_lib::runner_manager::QueueOffer::Queued { .. }
     ));
 

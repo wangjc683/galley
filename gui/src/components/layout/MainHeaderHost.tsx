@@ -16,25 +16,20 @@ import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { useUiStore } from "@/stores/ui";
-import type { GoalBrief } from "@/types/goal";
 
 /**
  * Self-subscribing wrapper around the MainHeader, extracted from
  * `App.tsx`. Header-only concerns (the 显示 popover's width / font /
  * theme, reinject, the pet toggle, app-update restart) select their
  * stores here; App passes down only what must stay single-instance at its
- * level (goal state from `useGoalEffects`, per-platform channel
- * statuses and the restart action from `useChannelsStatus`, the engine
- * indicator from `useLLMDisplay`, the settings opener).
+ * level (per-platform channel statuses and the restart action from
+ * `useChannelsStatus`, the engine indicator from `useLLMDisplay`, the
+ * settings opener).
  */
 export function MainHeaderHost({
-  activeGoals,
   channelStatuses,
   channelsLoadError,
   onRestartChannels,
-  onOpenGoal,
-  onStopGoal,
-  onExtendGoal,
   runtimeIndicator,
   openSettings,
   onOpenSettings,
@@ -44,13 +39,9 @@ export function MainHeaderHost({
   leading,
   breadcrumb,
 }: {
-  activeGoals: GoalBrief[];
   channelStatuses: ReadonlyArray<ImSupervisorStatus | null>;
   channelsLoadError: string | null;
   onRestartChannels: () => void;
-  onOpenGoal: (goalId: string) => void;
-  onStopGoal: (goalId: string) => void;
-  onExtendGoal: (goalId: string) => void;
   runtimeIndicator: RuntimeIndicator;
   /** Open Settings on a specific tab (engine / browser-control /
    * channels / Supervisor SOP entries). */
@@ -139,10 +130,6 @@ export function MainHeaderHost({
       onOpenRuntimeSettings={() => openSettings("runtime")}
       onOpenModelsSettings={() => openSettings("models")}
       onOpenSupervisorSop={() => openSettings("integration")}
-      activeGoals={activeGoals}
-      onOpenGoal={onOpenGoal}
-      onStopGoal={onStopGoal}
-      onExtendGoal={onExtendGoal}
       appUpdateStatus={appUpdateStatus}
       hasRunningSessions={hasRunningSessions}
       onRestartAppUpdate={() => {

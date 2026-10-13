@@ -93,7 +93,7 @@ export interface BridgeSlice {
   ) => Promise<SendUserMessageResult>;
   /**
    * Attach JS listeners to a runner started elsewhere (`galley session
-   * new`, a Goal turn, another page). The process already exists in Rust;
+   * new`, another page). The process already exists in Rust;
    * this action just registers event handlers and tracks the client
    * locally, then fills in the runner's ready state — from `ready` when
    * the caller already has it, else from `list_live_runners` — since its

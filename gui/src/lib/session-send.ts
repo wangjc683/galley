@@ -57,9 +57,6 @@ export interface PersistedMessageBrief {
   content: string;
   createdAt?: string;
   turnIndex?: number;
-  /** Set on a Goal's objective row (goal v2), so the in-thread
-   * commission marker matches by id, not by objective text. */
-  goalId?: string;
   attachments?: MessageAttachment[];
   origin?: Origin;
 }
@@ -82,8 +79,8 @@ export interface SendUserMessageResult {
  * `pending` right after the write (before Core starts / restores /
  * dispatches), then `dispatched` — or `persisted_only` when the runner
  * could not start, restore or take the message (the row stays, no run
- * opened). Both carry the send's `clientRequestId`. Socket sends (CLI),
- * queue drains and Goal broadcast once, with `dispatched`,
+ * opened). Both carry the send's `clientRequestId`. Socket sends (CLI)
+ * and queue drains broadcast once, with `dispatched`,
  * `persisted_only` or `spawn_failed` and no `clientRequestId`. Absent
  * `dispatch` (older Cores) means dispatched.
  */

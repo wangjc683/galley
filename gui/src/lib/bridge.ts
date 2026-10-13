@@ -524,7 +524,7 @@ export async function listenThenInvoke<T>(
  * invoke so a freshly started runner's `ready` cannot slip past.
  *
  * Core never replaces a live runner here, so this is safe to call for a
- * session that may be mid-run elsewhere (CLI, Goal, a reloaded page).
+ * session that may be mid-run elsewhere (CLI, a reloaded page).
  */
 export async function ensureBridge(
   args: EnsureBridgeArgs,

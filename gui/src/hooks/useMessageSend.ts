@@ -177,7 +177,7 @@ export function useMessageSend({
           ? copy.toasts.imageBlockedExternal
           : refused === "images_not_queueable"
             ? copy.toasts.imageBlockedQueue
-            : copy.toasts.imageBlockedGoal,
+            : copy.toasts.imageBlockedSideOrReply,
       );
       return;
     }
@@ -273,7 +273,7 @@ export function useMessageSend({
         return false;
       }
       if (isSideQuestion(t) || pendingAskUser !== null) {
-        showImageBlockedToast(copy.toasts.imageBlockedGoal);
+        showImageBlockedToast(copy.toasts.imageBlockedSideOrReply);
         return false;
       }
     }

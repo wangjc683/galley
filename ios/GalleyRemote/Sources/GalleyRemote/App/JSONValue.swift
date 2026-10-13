@@ -3,7 +3,7 @@ import Foundation
 /// Untyped JSON, the counterpart of Rust's `serde_json::Value`: the raw
 /// `p` / `r` of an envelope before it is decoded by method, and the
 /// pass-through blocks the phone does not type (tool calls, runner
-/// events, goals; design §6.6).
+/// events; design §6.6).
 public enum JSONValue: Sendable, Hashable {
     case null
     case bool(Bool)

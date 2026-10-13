@@ -67,7 +67,7 @@ import Testing
     }
 
     @Test func openRejectsWrongKeyTamperingAndBadInput() throws {
-        let content = try PushContent(seq: 1, sessionId: nil, kind: Push.Kind.goal, title: "t", body: "b")
+        let content = try PushContent(seq: 1, sessionId: nil, kind: Push.Kind.replyDone, title: "t", body: "b")
         let sealed = try Push.seal(key: key(1), content: content)
         #expect(thrown { () throws(PushError) in try Push.open(key: key(2), sealed: sealed) } == .decrypt)
         for i in [0, Push.nonceLength, Push.sealedLength - 1] {
@@ -92,7 +92,7 @@ import Testing
     }
 
     @Test func aadBindsTheVersion() throws {
-        let content = try PushContent(seq: 1, sessionId: nil, kind: Push.Kind.goal, title: "t", body: "b")
+        let content = try PushContent(seq: 1, sessionId: nil, kind: Push.Kind.replyDone, title: "t", body: "b")
         let plaintext = try content.paddedPlaintext()
         let box = try ChaChaPoly.seal(
             plaintext, using: key(1).symmetricKey, nonce: ChaChaPoly.Nonce(data: Data(repeating: 7, count: 12)),
@@ -104,7 +104,7 @@ import Testing
         func seal(_ plaintext: Data) throws -> Data {
             try ChaChaPoly.seal(plaintext, using: key(1).symmetricKey, authenticating: Push.aad).combined
         }
-        var nonzero = try PushContent(seq: 1, sessionId: nil, kind: "goal", title: "", body: "").paddedPlaintext()
+        var nonzero = try PushContent(seq: 1, sessionId: nil, kind: "reply_done", title: "", body: "").paddedPlaintext()
         nonzero[Push.paddedLength - 1] = 1
         let sealedNonzero = try seal(nonzero)
         #expect(thrown { () throws(PushError) in try Push.open(key: key(1), sealed: sealedNonzero) } == .padding(.nonZeroPadding))
@@ -114,18 +114,18 @@ import Testing
             return
         }
         // Unknown fields are ignored; an absent sessionId is nil.
-        let extra = try Padding.pad(Data(#"{"seq":5,"kind":"goal","title":"t","body":"b","new":1}"#.utf8), to: Push.paddedLength)
+        let extra = try Padding.pad(Data(#"{"seq":5,"kind":"reply_done","title":"t","body":"b","new":1}"#.utf8), to: Push.paddedLength)
         let opened = try Push.open(key: key(1), sealed: seal(extra))
-        #expect(opened == PushContent(unchecked: 5, sessionId: nil, kind: "goal", title: "t", body: "b"))
+        #expect(opened == PushContent(unchecked: 5, sessionId: nil, kind: "reply_done", title: "t", body: "b"))
     }
 
     @Test func fieldsAreValidated() {
         for id in ["", "a\"b", "a\\b", "a b", "é", String(repeating: "x", count: 129)] {
             #expect(
-                thrown { () throws(PushError) in try PushContent(seq: 1, sessionId: id, kind: Push.Kind.goal, title: "", body: "") }
+                thrown { () throws(PushError) in try PushContent(seq: 1, sessionId: id, kind: Push.Kind.replyDone, title: "", body: "") }
                     == .badField("sessionId"), "\(id)")
         }
-        for k in ["", "Goal", "goal-x", String(repeating: "k", count: 33)] {
+        for k in ["", "Reply", "reply-done", String(repeating: "k", count: 33)] {
             #expect(
                 thrown { () throws(PushError) in try PushContent(seq: 1, sessionId: nil, kind: k, title: "", body: "") }
                     == .badField("kind"), "\(k)")
@@ -184,7 +184,7 @@ import Testing
 
     @Test func handBuiltOversizedContentIsRefused() {
         let content = PushContent(
-            unchecked: 1, sessionId: nil, kind: "goal", title: "", body: String(repeating: "a", count: Push.paddedLength))
+            unchecked: 1, sessionId: nil, kind: "reply_done", title: "", body: String(repeating: "a", count: Push.paddedLength))
         #expect(thrown { () throws(PushError) in try Push.seal(key: key(1), content: content) } == .tooLarge)
     }
 }

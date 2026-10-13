@@ -11,7 +11,6 @@ import { useSessionsAttention } from "@/hooks/useSessionsAttention";
 import { useCopy } from "@/lib/i18n";
 import { pickFolder } from "@/lib/pick-folder";
 import { cn } from "@/lib/utils";
-import type { GoalBrief } from "@/types/goal";
 import type { Project, RuntimeKind, Session } from "@/types/session";
 
 export interface EditProjectDialogProps {
@@ -242,7 +241,6 @@ export interface ConfirmDeleteProjectDialogProps {
    * what 「同时归档」 archives, and what otherwise returns to the time
    * buckets. Pinned sessions stay in 置顶 either way. */
   sessions: Session[];
-  sessionGoalStatus?: Map<string, GoalBrief>;
   onCancel: () => void;
   /** `archiveSessions`: the 「同时归档」 box was ticked. */
   onConfirm: (archiveSessions: boolean) => Promise<void>;
@@ -262,17 +260,12 @@ export interface ConfirmDeleteProjectDialogProps {
 export function ConfirmDeleteProjectDialog({
   project,
   sessions,
-  sessionGoalStatus,
   onCancel,
   onConfirm,
 }: ConfirmDeleteProjectDialogProps) {
   const copy = useCopy();
   const [archiveSessions, setArchiveSessions] = useState(true);
-  const { runningCount } = useSessionsAttention(
-    sessions,
-    undefined,
-    sessionGoalStatus,
-  );
+  const { runningCount } = useSessionsAttention(sessions, undefined);
   const count = sessions.length;
   return (
     <Dialog.Root

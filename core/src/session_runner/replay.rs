@@ -4,8 +4,8 @@
 //! session that already has a conversation, Core sends it the session's
 //! persisted messages as `load_history` (`docs/ipc-protocol.md` §5.5, §7) and
 //! waits for the runner to confirm with `history_loaded`. Until 02b the GUI
-//! did this on every `ready` it saw, so a runner Core started on its own —
-//! a Goal turn on a cold session, the phone — ran on an empty history.
+//! did this on every `ready` it saw, so a runner Core started on its own
+//! ran on an empty history.
 //!
 //! This module holds the two halves [`super::ensure_session_runner`] uses:
 //!

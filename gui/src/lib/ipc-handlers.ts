@@ -364,10 +364,10 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // UI: AgentTurn.turnIndex = per-message step (raw GA value),
       // kept raw so live and restored turns agree (rowsToTurns
       // recovers the same number). What the user SEES is numbered by
-      // position within the run (goal-run-groups `stepNumberOf`), so
-      // an ask_user reply — a fresh GA loop, step 1 again — does not
-      // restart the count. Internal turns (goal master-plan traffic)
-      // are not rendered; Core persists them all the same.
+      // position within the run (run-groups `runStepNumbers`), so an
+      // ask_user reply — a fresh GA loop, step 1 again — does not
+      // restart the count. Internal turns are not rendered; Core
+      // persists them all the same.
       const turn = turnFromTurnEnd(event);
       // Same primary key Core mints for the row below — lets a palette
       // hit on this reply locate the live node without a restore.
@@ -429,7 +429,7 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       }
       // Reply-done system notification: only for the final turn of a
       // run the user started from this GUI (`consume` returns false
-      // for Goal-nudge / CLI-driven runs — they never marked). Fires
+      // for CLI-driven runs — they never marked). Fires
       // alongside the unread badge; notify.ts gates pref / focus /
       // permission so a focused window stays silent.
       //

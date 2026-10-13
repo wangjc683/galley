@@ -1,4 +1,3 @@
-import { Target } from "@phosphor-icons/react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import {
   forwardRef,
@@ -14,8 +13,6 @@ import { ComposerActionSlot } from "@/components/conversation/ComposerActionSlot
 import { ComposerAddMenu } from "@/components/conversation/ComposerAddMenu";
 import { ComposerDropOverlay } from "@/components/conversation/ComposerDropOverlay";
 import { ComposerFooterHint } from "@/components/conversation/ComposerFooterHint";
-import { ComposerGoalControls } from "@/components/conversation/ComposerGoalControls";
-import { ComposerGoalEyebrow } from "@/components/conversation/ComposerGoalEyebrow";
 import { ComposerImageStrip } from "@/components/conversation/ComposerImageStrip";
 import { ComposerQueueStrip } from "@/components/conversation/ComposerQueueStrip";
 import { ImagePreviewDialog } from "@/components/conversation/ImagePreviewDialog";
@@ -30,9 +27,7 @@ import {
 } from "@/components/conversation/LLMPill";
 import { SavedPromptDialogs } from "@/components/conversation/SavedPromptDialogs";
 import { COMPOSER_MAX_HEIGHT_PX } from "@/components/conversation/composer-styles";
-import { TooltipLabel } from "@/components/ui/tooltip";
 import { useComposerFocus } from "@/hooks/useComposerFocus";
-import { useComposerGoal } from "@/hooks/useComposerGoal";
 import { useFileReferences } from "@/hooks/useFileReferences";
 import { useImageAttachments } from "@/hooks/useImageAttachments";
 import { usePasteFold } from "@/hooks/usePasteFold";
@@ -43,7 +38,6 @@ import {
   saveComposerDraft,
 } from "@/lib/composer-draft";
 import { useCopy } from "@/lib/i18n";
-import { goalPillLabel } from "@/lib/goals";
 import { isImeCompositionKeydown } from "@/lib/ime";
 import { findPromptFillSlot } from "@/lib/saved-prompts";
 import { isSideQuestion } from "@/lib/side-question";
@@ -51,7 +45,6 @@ import { cn } from "@/lib/utils";
 import { useQueueStore } from "@/stores/queue";
 import { useSessionsStore } from "@/stores/sessions";
 import type { PendingImageAttachment } from "@/types/conversation";
-import type { GoalBrief } from "@/types/goal";
 
 import type {
   ComposerHandle,
@@ -100,9 +93,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       requiresModelConfig = false,
       onOpenLLMSwitcher,
       reasoningEffort,
-      goal,
-      hasActiveGoal = false,
-      onGoalSubmit,
       showFooterHint = false,
       staticHint,
       imagesEnabled = true,
@@ -374,36 +364,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       activeSessionId ? (s.bySession[activeSessionId] ?? EMPTY_QUEUE) : EMPTY_QUEUE,
     );
 
-    const {
-      canShowGoalEntry,
-      goalBlockedByActive,
-      goalEntryDisabled,
-      goalSubmitting,
-      effectiveGoalArmed,
-      goalBudgetMinutes,
-      goalBlockedHintVisible,
-      setGoalBudgetMinutes,
-      handleGoalArmToggle,
-      launchGoal,
-      disarmGoal,
-    } = useComposerGoal({
-      onGoalSubmit,
-      goal,
-      hasActiveGoal,
-      disabled,
-      stopMode,
-      requiresModelConfig,
-      onConfigureModels,
-      hasText,
-      hasPendingImages,
-      onImageBlocked,
-      getSubmittableText: () => expandComposerPlaceholders(text).trim(),
-      resetDraftAfterSubmit,
-      focusTextarea: () => {
-        requestAnimationFrame(() => textareaRef.current?.focus());
-      },
-    });
-
     // Ghost text (next-step suggestion): a derived condition, not a
     // one-shot event — typing hides it, deleting everything brings it
     // back, IME composition (non-empty text) hides it. No dismissed
@@ -413,15 +373,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         text === "" &&
         !disabled &&
         !stopMode &&
-        !effectiveGoalArmed &&
         !hasPendingImages,
     );
 
-    const resolvedPlaceholder = effectiveGoalArmed
-      ? copy.composer.goalPlaceholder
-      : ghostVisible
-        ? "" // the ghost overlay occupies the placeholder's visual slot
-        : (placeholder ?? copy.composer.askAnything);
+    const resolvedPlaceholder = ghostVisible
+      ? "" // the ghost overlay occupies the placeholder's visual slot
+      : (placeholder ?? copy.composer.askAnything);
 
     // Main chat busy (ticket 02): the 排队 / 开旁聊 choice a send opens.
     // Closes on its own once the run ends (the prop goes away) — guarded
@@ -468,10 +425,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // onSubmit's owner (useMessageSend) routes a mid-run send into
       // Core's queue. /btw keeps its immediate side-question path there
       // too; images are toast-blocked there and keep the draft.
-      if (effectiveGoalArmed) {
-        void launchGoal();
-        return;
-      }
       if (mainChatBusy && !sideQuestionStaged) {
         setBusyChoiceOpen(true);
         return;
@@ -485,13 +438,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       // IME guard: Enter confirming a pinyin candidate (or Escape
       // dismissing the candidate window) belongs to the IME — it must
-      // not submit the draft or disarm Goal mode.
+      // not submit the draft.
       if (isImeCompositionKeydown(e)) return;
-      if (e.key === "Escape" && effectiveGoalArmed) {
-        e.preventDefault();
-        disarmGoal();
-        return;
-      }
       // Accept the ghost suggestion. Only reachable while the textarea
       // is empty (ghostVisible), so this never steals ArrowRight from
       // caret movement over typed text.
@@ -533,17 +481,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           className={cn(
             "relative rounded-md border border-line bg-elevated px-3.5 pb-2 pt-3.5 shadow-card transition-[border-color,box-shadow,background-color] duration-(--motion-fast) ease-firm",
             "focus-within:border-brand focus-within:ring-[3px] focus-within:ring-brand/20",
-            // Armed = the Composer wears the commission marker's dress
-            // (GoalRunMarkers: 4px brand bar + brand-tint slab), so the
-            // draft already looks like the marker Enter will produce.
-            // That, not a confirm dialog, is the "you are in Goal mode"
-            // signal (ticket 09). The slab is 70% brand-tint over
-            // elevated, not full tint: on the live app full tint read a
-            // shade too heavy for a surface you type into (JC, three-way
-            // variant test 2026-09-17). Left bar stays brand-strong under
-            // focus: `border-l-*` outranks the shorthand `border-brand`.
-            effectiveGoalArmed &&
-              "border-l-4 border-l-brand-strong bg-[color-mix(in_oklab,var(--color-brand-tint)_70%,var(--color-elevated))] focus-within:border-l-brand-strong",
             disabled && "opacity-60",
           )}
           // No HTML5 drag handlers: with dragDropEnabled true, drops
@@ -551,13 +488,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           // useImageAttachments; `isDropActive` below is fed from there.
         >
           {isDropActive && <ComposerDropOverlay imagesEnabled={imagesEnabled} />}
-          {effectiveGoalArmed && (
-            <ComposerGoalEyebrow
-              budgetMinutes={goalBudgetMinutes}
-              disabled={goalSubmitting}
-              onBudgetMinutesChange={setGoalBudgetMinutes}
-            />
-          )}
           {ghostVisible && (
             <div
               aria-hidden
@@ -680,18 +610,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 </>
               )}
             </div>
-            {goal && <GoalContextBadge goal={goal} />}
 
             <div className="ml-auto flex shrink-0 items-center gap-1.5">
-              <ComposerGoalControls
-                canShowGoalEntry={canShowGoalEntry}
-                effectiveGoalArmed={effectiveGoalArmed}
-                goalBlockedByActive={goalBlockedByActive}
-                goalEntryDisabled={goalEntryDisabled}
-                requiresModelConfig={requiresModelConfig}
-                stopMode={stopMode}
-                onArmToggle={handleGoalArmToggle}
-              />
               <ComposerActionSlot
                 stopMode={stopMode}
                 isSideQuestion={sideQuestionStaged}
@@ -699,8 +619,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 submitAckTick={submitAckTick}
                 disabled={disabled}
                 hasSendableContent={hasSendableContent}
-                goalSubmitting={goalSubmitting}
-                effectiveGoalArmed={effectiveGoalArmed}
                 requiresModelConfig={requiresModelConfig}
                 hasConfigureModels={Boolean(onConfigureModels)}
                 onStop={onStop}
@@ -716,9 +634,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           hasQueuedMessages={queueItems.length > 0}
           hasText={hasText}
           isSideQuestion={sideQuestionStaged}
-          effectiveGoalArmed={effectiveGoalArmed}
-          goalSubmitting={goalSubmitting}
-          goalBlockedHintVisible={goalBlockedHintVisible}
           staticHint={staticHint}
           mainChatBusy={mainChatBusy !== undefined}
         />
@@ -746,21 +661,3 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
 );
 
 const EMPTY_QUEUE: never[] = [];
-
-function GoalContextBadge({ goal }: { goal: GoalBrief }) {
-  const copy = useCopy();
-  const label = goalPillLabel(goal.status, copy.topbar);
-  return (
-    <TooltipLabel text={copy.composer.goalContextBadgeTooltip}>
-      <span
-        className={cn(
-          "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-brand/25 bg-brand-soft px-2",
-          "text-[12px] font-medium text-ink-soft",
-        )}
-      >
-        <Target size={13} weight="thin" className="text-brand-strong" />
-        {label}
-      </span>
-    </TooltipLabel>
-  );
-}

@@ -3,8 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildRunGroups,
   liveRunElapsedBaseMs,
+  liveRunGroup,
+  liveWindowHasSettledStep,
   pendingReplyStepBase,
   replyUserIndices,
+  runStepNumbers,
 } from "@/lib/run-groups";
 import type {
   AgentTurn,
@@ -15,10 +18,8 @@ import type {
   UserTurn,
 } from "@/types/conversation";
 
-function user(content: string, goalId?: string): UserTurn {
-  const t: UserTurn = { role: "user", content };
-  if (goalId) t.goalId = goalId;
-  return t;
+function user(content: string): UserTurn {
+  return { role: "user", content };
 }
 
 let toolSeq = 0;
@@ -65,7 +66,7 @@ function closingWith(telemetry: MessageTelemetry, answer = "结论"): AgentTurn 
 }
 
 function system(): SystemTurn {
-  return { role: "system", content: "叙述", variant: "goal" };
+  return { role: "system", content: "叙述", variant: "narration" };
 }
 
 describe("buildRunGroups", () => {
@@ -121,17 +122,6 @@ describe("buildRunGroups", () => {
     expect(groups[0].foldable).toBe(false);
   });
 
-  it("excludes Goal runs from folding", () => {
-    const turns: Turn[] = [
-      user("目标", "goal-1"),
-      step(tool("web_scan")),
-      closing(),
-    ];
-    const groups = buildRunGroups(turns);
-    expect(groups[0].complete).toBe(true);
-    expect(groups[0].foldable).toBe(false);
-  });
-
   it("excludes runs containing system turns from folding", () => {
     const turns: Turn[] = [
       user("q"),
@@ -146,16 +136,16 @@ describe("buildRunGroups", () => {
     // live-run-window (2026-09-16): an incomplete user-opened run is
     // not foldable (no answer to stand in for the process) but IS
     // eligible — that is what lets its completed steps fold behind
-    // the live header while it runs. Goal runs and /btw runs stay
-    // out, live or settled.
+    // the live header while it runs. /btw runs stay out, live or
+    // settled.
     const live = buildRunGroups([user("q"), step(tool("web_fetch")), step(tool("web_fetch"))])[0];
     expect(live.complete).toBe(false);
     expect(live.foldable).toBe(false);
     expect(live.foldEligible).toBe(true);
     expect(live.stats.stepCount).toBe(2);
 
-    const goal = buildRunGroups([user("q", "g1"), step(tool("web_fetch"))])[0];
-    expect(goal.foldEligible).toBe(false);
+    const btw = buildRunGroups([user("q"), step(tool("a")), system()])[0];
+    expect(btw.foldEligible).toBe(false);
   });
 
   it("folds single-step runs (the header is the run's only settled duration surface)", () => {
@@ -360,5 +350,59 @@ describe("buildRunGroups", () => {
       // A fresh run starts from zero.
       expect(liveRunElapsedBaseMs([user("q")])).toBe(0);
     });
+  });
+});
+
+describe("live window and step numbering", () => {
+  it("windows the last open run only while it is worked on", () => {
+    const turns: Turn[] = [user("q"), step(tool("a"))];
+    const groups = buildRunGroups(turns);
+    expect(liveRunGroup(groups, true, false)).toBe(groups[0]);
+    // Paused on ask_user: the window stays.
+    expect(liveRunGroup(groups, false, true)).toBe(groups[0]);
+    // Aborted or a restored tail: no window, the run renders flat.
+    expect(liveRunGroup(groups, false, false)).toBeNull();
+    // A settled run is never the live window.
+    const settled = buildRunGroups([user("q"), step(tool("a")), closing("答")]);
+    expect(liveRunGroup(settled, true, false)).toBeNull();
+    // Nor is a /btw exchange (not window-eligible).
+    const btw = buildRunGroups([user("q"), step(tool("a")), system()]);
+    expect(liveRunGroup(btw, true, false)).toBeNull();
+  });
+
+  it("liveWindowHasSettledStep: true once a step has landed above the in-flight row", () => {
+    const first: Turn[] = [user("q")];
+    const firstLive = liveRunGroup(buildRunGroups(first), true, false);
+    expect(liveWindowHasSettledStep(firstLive, first)).toBe(false);
+    const second: Turn[] = [user("q"), step(tool("a"))];
+    const secondLive = liveRunGroup(buildRunGroups(second), true, false);
+    expect(liveWindowHasSettledStep(secondLive, second)).toBe(true);
+    expect(liveWindowHasSettledStep(null, second)).toBe(false);
+  });
+
+  it("runStepNumbers: numbers a run's steps by position across an ask_user reply", () => {
+    // GA restarts its counter at the reply's put_task (turnIndex 1
+    // again on turns[4]); the display continues the run's count.
+    const turns: Turn[] = [
+      user("q"),
+      step(tool("a")),
+      step(tool("ask_user")),
+      user("选 A"),
+      step(tool("b")),
+      closing("答"),
+    ];
+    const steps = runStepNumbers(buildRunGroups(turns), turns);
+    expect([...steps.entries()]).toEqual([
+      [1, 1],
+      [2, 2],
+      [4, 3],
+      [5, 4],
+    ]);
+  });
+
+  it("runStepNumbers: leaves a headless leading group on GA's own step", () => {
+    const turns: Turn[] = [step(tool("a")), user("q"), step(tool("b"))];
+    const steps = runStepNumbers(buildRunGroups(turns), turns);
+    expect([...steps.entries()]).toEqual([[2, 1]]);
   });
 });

@@ -89,7 +89,6 @@ pub(super) struct MessageRow {
     pub(super) supervisor: Option<String>,
     pub(super) origin_note: Option<String>,
     pub(super) visibility: String,
-    pub(super) goal_id: Option<String>,
     pub(super) created_at: String,
     /// `tool_calls`, selected only when it may hold an `ask_user` call
     /// (SQL pre-filter in `session_messages_inner`); NULL otherwise, so
@@ -117,7 +116,6 @@ impl MessageRow {
             summary: self.summary,
             turn_index: Some(self.turn_index.max(0) as u32),
             visibility: Some(parse_message_visibility(&self.visibility)?),
-            goal_id: self.goal_id,
             attachments: Vec::new(),
             origin: self
                 .created_via
@@ -147,7 +145,6 @@ pub(super) struct PersistedMessageRowRecord {
     pub origin_note: Option<String>,
     pub visibility: String,
     pub telemetry_json: Option<String>,
-    pub goal_id: Option<String>,
     pub created_at: String,
 }
 
@@ -170,7 +167,6 @@ pub struct PersistedMessageRow {
     pub origin_note: Option<String>,
     pub visibility: String,
     pub telemetry: Option<MessageTelemetry>,
-    pub goal_id: Option<String>,
     pub created_at: String,
     pub attachments: Vec<MessageAttachmentBrief>,
 }
@@ -206,7 +202,6 @@ impl PersistedMessageRowRecord {
             telemetry: self
                 .telemetry_json
                 .and_then(|raw| serde_json::from_str::<MessageTelemetry>(&raw).ok()),
-            goal_id: self.goal_id,
             created_at: self.created_at,
             attachments: Vec::new(),
         }
@@ -473,69 +468,4 @@ impl ProjectRow {
             updated_at: self.updated_at,
         }
     }
-}
-
-#[derive(Debug, FromRow)]
-pub(super) struct GoalRow {
-    pub(super) id: String,
-    pub(super) session_id: String,
-    pub(super) objective: String,
-    pub(super) status: String,
-    pub(super) budget_seconds: Option<i64>,
-    pub(super) started_at: String,
-    pub(super) ended_at: Option<String>,
-    pub(super) paused_at: Option<String>,
-    pub(super) latest_summary: Option<String>,
-    pub(super) result_seen_at: Option<String>,
-    pub(super) continuation_count: i64,
-    pub(super) wrap_up_dispatched: i64,
-    pub(super) created_via: String,
-    pub(super) supervisor: Option<String>,
-    pub(super) origin_note: Option<String>,
-    pub(super) created_at: String,
-    pub(super) updated_at: String,
-}
-
-impl GoalRow {
-    pub(super) fn into_brief(self) -> Result<GoalBrief> {
-        let elapsed_seconds = elapsed_seconds_between(&self.started_at, self.ended_at.as_deref());
-        let origin = origin_from_stored(&self.created_via, self.supervisor, self.origin_note)?;
-        Ok(GoalBrief {
-            id: GoalId(self.id),
-            session_id: SessionId(self.session_id),
-            objective: self.objective,
-            status: parse_goal_status(&self.status)?,
-            budget_seconds: self.budget_seconds.map(|n| n.max(0) as u32),
-            started_at: self.started_at,
-            ended_at: self.ended_at,
-            paused_at: self.paused_at,
-            latest_summary: self.latest_summary,
-            result_seen_at: self.result_seen_at,
-            continuation_count: self.continuation_count.max(0) as u32,
-            wrap_up_dispatched: self.wrap_up_dispatched != 0,
-            elapsed_seconds,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-            origin: Some(origin).filter(|o| o.via != OriginVia::Gui),
-        })
-    }
-}
-
-/// Wall-clock seconds between two ISO-8601 stamps (`ended_at` defaults to
-/// now). Unparseable input degrades to 0 rather than failing the read:
-/// elapsed time is a display figure, not a state field.
-pub(super) fn elapsed_seconds_between(started_at: &str, ended_at: Option<&str>) -> u64 {
-    let Ok(start) = chrono::DateTime::parse_from_rfc3339(started_at) else {
-        return 0;
-    };
-    let end = match ended_at {
-        Some(e) => match chrono::DateTime::parse_from_rfc3339(e) {
-            Ok(t) => t.with_timezone(&chrono::Utc),
-            Err(_) => return 0,
-        },
-        None => chrono::Utc::now(),
-    };
-    (end - start.with_timezone(&chrono::Utc))
-        .num_seconds()
-        .max(0) as u64
 }

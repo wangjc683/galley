@@ -13,10 +13,13 @@ import {
   TurnMarker,
 } from "@/components/conversation/Conversation";
 import { ConversationSkeleton } from "@/components/conversation/ConversationSkeleton";
-import { GoalPausedTail } from "@/components/conversation/GoalRunMarkers";
 import { StepLimitTail } from "@/components/conversation/StepLimitTail";
-import { liveWindowHasSettledStep, planGoalRuns } from "@/lib/goal-run-groups";
-import { buildRunGroups, liveRunElapsedBaseMs } from "@/lib/run-groups";
+import {
+  buildRunGroups,
+  liveRunElapsedBaseMs,
+  liveRunGroup,
+  liveWindowHasSettledStep,
+} from "@/lib/run-groups";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToolbar";
@@ -55,11 +58,6 @@ import type {
   SendPhase,
   Turn,
 } from "@/types/conversation";
-import {
-  isOpenGoalStatus,
-  type GoalBrief,
-  type GoalLaunchConfig,
-} from "@/types/goal";
 import type { ComposerHandle } from "@/components/conversation/composer-props";
 
 export interface MainViewProps {
@@ -74,10 +72,6 @@ export interface MainViewProps {
     text: string,
     attachments: PendingImageAttachment[],
   ) => boolean | void;
-  onGoalSubmit?: (
-    text: string,
-    config: GoalLaunchConfig,
-  ) => void | Promise<void>;
   onStop?: () => void;
   /** This is the main chat (主聊天, ticket 02): a send while it works
    * first offers 排队 / 开旁聊 (see `offersBusyChoice`). */
@@ -120,29 +114,6 @@ export interface MainViewProps {
   /** Reasoning-effort pill state for this session's Composer (the
    * independent pill right of the model picker). */
   reasoningEffort?: ComposerReasoningEffortState;
-  /** This session's open Goal (active / paused / blocked), if any. */
-  goal?: GoalBrief;
-  /** True when this session already has an open Goal — gates the
-   * Composer's Goal entry (one open Goal per session). */
-  hasActiveGoal?: boolean;
-  /**
-   * Every goal ever set on this session (any status), powering the
-   * in-thread Goal commission / terminal markers. Forwarded to
-   * Conversation.
-   */
-  sessionGoals?: GoalBrief[];
-  /**
-   * Stop this session's Goal from inside the thread (the
-   * GoalPausedTail's inline control) — same command the TopBar pill
-   * popover issues.
-   */
-  onStopGoal?: (goalId: string) => void;
-  /**
-   * Give this session's Goal more time after it hit its ceiling (the
-   * GoalTerminalMarker's inline control) — same command the TopBar pill
-   * popover issues.
-   */
-  onExtendGoal?: (goalId: string) => void;
   /**
    * GA-initiated question waiting for a user reply. When non-null,
    * the AskUserBubble renders at the conversation tail (with chip
@@ -197,7 +168,6 @@ function MainViewContent({
   llmDisplayName,
   activeSessionId,
   onSubmit,
-  onGoalSubmit,
   onStop,
   isMainChat = false,
   onOpenSideChat,
@@ -210,11 +180,6 @@ function MainViewContent({
   requiresModelConfig = false,
   onOpenLLMSwitcher,
   reasoningEffort,
-  goal,
-  hasActiveGoal,
-  sessionGoals,
-  onStopGoal,
-  onExtendGoal,
   pendingAskUser,
   conversationWidth = "compact",
   conversationFontSize = "standard",
@@ -223,19 +188,8 @@ function MainViewContent({
   onTextDropBlocked,
 }: MainViewProps) {
   const copy = useCopy();
-  // The two RECOVERABLE goal states get a thread tail (see
-  // GoalPausedTail): `paused` says how to resume, `blocked` says what
-  // the model needs. `active` gets nothing — Core bridges the gaps
-  // between continuations in-process, so the steps are the liveness.
-  // Only when the session isn't itself mid-turn and nothing else
-  // already signals activity, so we never double up.
-  const parkedGoal = sessionGoals?.find(
-    (g) => g.status === "paused" || g.status === "blocked",
-  );
-  const goalPausedTailVisible = !!parkedGoal && !isRunning && !pendingAskUser;
-  // The latest run stopped at GA's per-run step cap (#29): same idle
-  // rule as the parked-goal tail, and an open Goal (active / paused /
-  // blocked) wins outright — its engine continues or parks the run.
+  // The latest run stopped at GA's per-run step cap (#29): a thread
+  // tail, only while nothing else signals activity.
   const pausedAtStepLimit = useActiveMessages(
     (m) => m.pausedAtStepLimit,
     false,
@@ -244,8 +198,6 @@ function MainViewContent({
     pausedAtStepLimit,
     isRunning,
     waitingAskUser: !!pendingAskUser,
-    hasOpenGoal:
-      !!goal || !!sessionGoals?.some((g) => isOpenGoalStatus(g.status)),
   });
 
   // The main chat's subtask cards (ticket 06a), by the reply that
@@ -277,22 +229,19 @@ function MainViewContent({
   // conversation's live window; from the second step on its rail
   // reaches up through that gap so header → window → thinking row
   // read as one line (live-run-window PRD, 2026-09-16).
-  // For a goal group GA's counter restarts at every continuation, so
-  // "step > 1" is wrong there; the goal-aware plan knows whether the
-  // window above already holds a settled step. Ordinary runs that are
+  // While the run has a live window, the window itself says whether a
+  // settled step already sits above the in-flight row. Runs that are
   // not window-eligible (a /btw exchange) keep the step-count rule so
   // their flat region still connects.
   const inRunRail = useMemo(() => {
-    const plan = planGoalRuns(
-      turns,
-      sessionGoals ?? [],
+    const liveGroup = liveRunGroup(
       buildRunGroups(turns),
       isRunning,
       Boolean(pendingAskUser),
     );
-    if (plan.liveGroup) return liveWindowHasSettledStep(plan, turns);
+    if (liveGroup) return liveWindowHasSettledStep(liveGroup, turns);
     return currentTurnIndex != null && currentTurnIndex > 1;
-  }, [turns, sessionGoals, isRunning, pendingAskUser, currentTurnIndex]);
+  }, [turns, isRunning, pendingAskUser, currentTurnIndex]);
   const currentRunStartedAtMs = useActiveMessages(
     (m) => m.currentRunStartedAtMs,
     null,
@@ -303,7 +252,7 @@ function MainViewContent({
   // Latest final reply's next-step suggestion (managed runtime). The
   // session-level half of the ghost predicate lives here: idle and not
   // waiting on an ask_user reply. The Composer derives the rest
-  // (empty textarea, no goal armed) at render time.
+  // (empty textarea, no image attached) at render time.
   const nextSuggestion = useActiveMessages((m) => m.nextSuggestion, null);
   const ghostSuggestion = !isRunning && !pendingAskUser ? nextSuggestion : null;
   // Imperative Composer handle for the ask_user fill-in slow path
@@ -480,8 +429,6 @@ function MainViewContent({
                 turns={turns}
                 keyBase={prependedTurns}
                 previousUserCreatedAt={previousUserCreatedAt}
-                goals={sessionGoals}
-                onExtendGoal={onExtendGoal}
                 askUserPending={Boolean(pendingAskUser)}
                 agentRunning={isRunning}
                 renderAfterAnswer={
@@ -619,17 +566,6 @@ function MainViewContent({
                 }
               />
             )}
-            {/* A parked Goal (paused / blocked) waiting on the user:
-                the thread's own "what now" line, shown only when
-                nothing else already signals activity. */}
-            {goalPausedTailVisible && parkedGoal && (
-              <GoalPausedTail
-                goal={parkedGoal}
-                onStop={
-                  onStopGoal ? () => onStopGoal(parkedGoal.id) : undefined
-                }
-              />
-            )}
             {/* The run paused at GA's step cap; one reply continues it. */}
             {showStepLimitTail && <StepLimitTail />}
           </div>
@@ -752,7 +688,6 @@ function MainViewContent({
             }
             ghostSuggestion={ghostSuggestion}
             onSubmit={onSubmit}
-            onGoalSubmit={onGoalSubmit}
             stopMode={isRunning}
             isStopping={isStopping}
             onStop={onStop}
@@ -765,8 +700,6 @@ function MainViewContent({
             requiresModelConfig={requiresModelConfig}
             onOpenLLMSwitcher={onOpenLLMSwitcher}
             reasoningEffort={reasoningEffort}
-            goal={goal}
-            hasActiveGoal={hasActiveGoal}
             showFooterHint
             imagesEnabled={imagesEnabled}
             onImageBlocked={onImageBlocked}

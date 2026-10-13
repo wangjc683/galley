@@ -43,8 +43,8 @@ function localDayStart(ms: number): number {
 
 /**
  * Turn index → time mark, for every user turn with a usable
- * `createdAt`. ask_user replies and Goal commission turns are user
- * turns and take part like any other.
+ * `createdAt`. ask_user replies are user turns and take part like any
+ * other.
  *
  * Pinned when the turn is:
  *   - the session's first dated user message;

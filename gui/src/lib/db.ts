@@ -166,7 +166,7 @@ export interface MessageTurnPage {
  * `session_message_turns_page`): the latest page without
  * `beforeTurnIndex`, else the page that ends just before that turn.
  * A page holds every row of its turns and never starts inside a run
- * (Goal or ask_user-continued), so `rowsToTurns` over pages joined
+ * (ask_user-continued), so `rowsToTurns` over pages joined
  * oldest first builds the same turns as over the whole transcript.
  * Restoring GA's history into a runner is Core's own read (ticket 02b).
  */

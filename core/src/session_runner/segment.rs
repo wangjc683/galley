@@ -28,7 +28,7 @@
 //!   block the runner was spawned with.
 //!
 //! Where the rule is applied: [`super::ensure_session_runner`] (every
-//! caller: the GUI opening the main chat, a `/btw`, a Goal) and Core's
+//! caller: the GUI opening the main chat, a `/btw`) and Core's
 //! send ([`crate::session_send`]) just before it persists the message —
 //! after that the message has moved `last_activity_at`, so the ensure
 //! that follows finds nothing to do. Judging at ensure time records the
@@ -37,9 +37,7 @@
 //! next message and the next message gets the recorded `turn_index`.
 //! Not applied: socket `session send` and the queue drain dispatch to a
 //! live runner as they always did (the drain runs right after a run
-//! ends, so it is never idle), and a Goal persists its objective before
-//! its ensure, so a Goal started on an idle main chat continues the
-//! current segment.
+//! ends, so it is never idle).
 
 use super::RunnerHost;
 use crate::api::{GalleyApi, SessionId};

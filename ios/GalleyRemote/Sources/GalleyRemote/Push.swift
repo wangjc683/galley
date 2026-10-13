@@ -41,7 +41,6 @@ public enum Push {
     public enum Kind {
         public static let replyDone = "reply_done"
         public static let askUser = "ask_user"
-        public static let goal = "goal"
         public static let scheduleFailed = "schedule_failed"
     }
 

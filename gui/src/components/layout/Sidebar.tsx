@@ -14,7 +14,6 @@ import {
 } from "@/lib/sidebar-timeline";
 import { isUnpromotedSubtask, unpromotedSubtasksOf } from "@/lib/subtasks";
 import { cn } from "@/lib/utils";
-import type { GoalBrief } from "@/types/goal";
 import type { Project, Session } from "@/types/session";
 
 import { SidebarFooter } from "./sidebar/SidebarFooter";
@@ -109,9 +108,6 @@ export interface SidebarProps {
    * row so users see "where the pet lives" at a glance — non-
    * interactive status, not a click target. */
   petAttachedSessionId?: string | null;
-  /** Map of session-id -> that session's open goal, so a row carrying
-   * a goal shows its state instead of reading as a finished chat. */
-  sessionGoalStatus?: Map<string, GoalBrief>;
 }
 
 /**
@@ -182,7 +178,6 @@ export function Sidebar({
   onOpenArchived,
   archivedCount = 0,
   petAttachedSessionId,
-  sessionGoalStatus,
 }: SidebarProps) {
   const copy = useCopy();
   const mainChat = useMemo(() => findMainChat(sessions), [sessions]);
@@ -201,11 +196,7 @@ export function Sidebar({
   );
   // Their asks and errors, in the row's own priority (error first). The
   // open one counts too: its row is the main chat's.
-  const subtaskAttention = useSessionsAttention(
-    mainChatSubtasks,
-    undefined,
-    sessionGoalStatus,
-  );
+  const subtaskAttention = useSessionsAttention(mainChatSubtasks, undefined);
   const mainChatSubtaskState =
     subtaskAttention.kind === "error" || subtaskAttention.kind === "ask"
       ? subtaskAttention.kind
@@ -381,7 +372,6 @@ export function Sidebar({
     activeId,
     projects: navigationProjects,
     petAttachedSessionId,
-    sessionGoalStatus,
     onSelectSession: handleSelectSession,
     onArchiveSession,
     onTogglePinSession,
@@ -415,7 +405,6 @@ export function Sidebar({
       session={mainChat}
       active={mainChatSelected}
       petAttached={petAttachedSessionId === mainChat.id}
-      sessionGoal={sessionGoalStatus?.get(mainChat.id)}
       projects={navigationProjects}
       onClick={() => handleSelectSession(mainChat.id)}
       mainChatLabel={copy.sidebar.mainChat}

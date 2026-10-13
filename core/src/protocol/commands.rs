@@ -54,11 +54,6 @@ socket_command!(SessionSendArgs, "session.send");
 pub struct SessionCheckpointArgs {
     pub session_id: String,
     pub content: String,
-    /// Goal this checkpoint narrates. Optional and additive
-    /// (schemaVersion 1): older callers omit it and the row persists
-    /// un-stamped, exactly as before 031.
-    #[serde(default)]
-    pub goal_id: Option<String>,
     #[serde(default)]
     pub supervisor: Option<String>,
     #[serde(default)]
@@ -73,10 +68,10 @@ pub struct SessionWatchArgs {
 }
 socket_command!(SessionWatchArgs, "session.watch");
 
-/// Live busy probe for one session (additive since v1). The Goal
-/// controller polls this between working turns — the DB `sessions.status`
-/// column persists transient statuses as `idle`, so it cannot answer
-/// "is a run still open".
+/// Live busy probe for one session (additive since v1). A Supervisor
+/// polls this between turns — the DB `sessions.status` column persists
+/// transient statuses as `idle`, so it cannot answer "is a run still
+/// open".
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionRunStateArgs {
@@ -132,61 +127,6 @@ pub struct SessionNewResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warning: Option<serde_json::Value>,
 }
-
-// ---- Goal v2 (schemaVersion 2) ----
-
-/// `goal.start`: set a goal on a session and dispatch its opening turn.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GoalStartArgs {
-    pub session_id: String,
-    pub objective: String,
-    /// `None` = no time ceiling. The CLI resolves its own default before
-    /// sending, so the wire shape carries the caller's explicit choice.
-    #[serde(default)]
-    pub budget_seconds: Option<u32>,
-    #[serde(default)]
-    pub supervisor: Option<String>,
-    #[serde(default)]
-    pub reason: Option<String>,
-}
-socket_command!(GoalStartArgs, "goal.start");
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GoalStatusArgs {
-    pub goal_id: String,
-}
-socket_command!(GoalStatusArgs, "goal.status");
-
-#[derive(Debug, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct GoalActiveArgs {}
-socket_command!(GoalActiveArgs, "goal.active");
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GoalStopArgs {
-    pub goal_id: String,
-    #[serde(default)]
-    pub supervisor: Option<String>,
-    #[serde(default)]
-    pub reason: Option<String>,
-}
-socket_command!(GoalStopArgs, "goal.stop");
-
-/// `goal.extend`: more time for an `active` or `budget_limited` goal.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GoalExtendArgs {
-    pub goal_id: String,
-    pub extra_seconds: u32,
-    #[serde(default)]
-    pub supervisor: Option<String>,
-    #[serde(default)]
-    pub reason: Option<String>,
-}
-socket_command!(GoalExtendArgs, "goal.extend");
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -334,11 +274,10 @@ mod legacy_equivalence {
             &SessionCheckpointArgs {
                 session_id: "s1".into(),
                 content: "cp".into(),
-                goal_id: Some("g1".into()),
                 supervisor: None,
                 reason: None,
             },
-            json!({"sessionId": "s1", "content": "cp", "goalId": "g1", "supervisor": null, "reason": null}),
+            json!({"sessionId": "s1", "content": "cp", "supervisor": null, "reason": null}),
         );
     }
 
@@ -478,11 +417,6 @@ mod legacy_equivalence {
         assert_eq!(SessionWatchArgs::NAME, "session.watch");
         assert_eq!(SessionNewArgs::NAME, "session.new");
         assert_eq!(SessionBtwArgs::NAME, "session.btw");
-        assert_eq!(GoalStartArgs::NAME, "goal.start");
-        assert_eq!(GoalStatusArgs::NAME, "goal.status");
-        assert_eq!(GoalActiveArgs::NAME, "goal.active");
-        assert_eq!(GoalStopArgs::NAME, "goal.stop");
-        assert_eq!(GoalExtendArgs::NAME, "goal.extend");
         assert_eq!(SessionStopArgs::NAME, "session.stop");
         assert_eq!(SessionShutdownRunnerArgs::NAME, "session.shutdown_runner");
         assert_eq!(SessionArchiveArgs::NAME, "session.archive");

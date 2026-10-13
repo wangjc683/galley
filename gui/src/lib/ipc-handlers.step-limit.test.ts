@@ -165,7 +165,7 @@ describe("step-limit stop (#29)", () => {
     expect(slice().pausedAtStepLimit).toBe(false);
   });
 
-  it("clears on turn_start (queue / CLI / goal-driven run start)", () => {
+  it("clears on turn_start (queue / CLI-driven run start)", () => {
     startRun();
     dispatchIPCEvent(finalTurnEnd(STEP_LIMIT));
     dispatchIPCEvent(runComplete(STEP_LIMIT));
@@ -245,7 +245,7 @@ describe("step-limit stop (#29)", () => {
 
   it("does not notify a step-limit stop of a run the GUI did not start", () => {
     startRun();
-    // No markReplyNotifyPending — a Goal-nudge / CLI-driven run.
+    // No markReplyNotifyPending — a CLI-driven run.
     dispatchIPCEvent(finalTurnEnd(STEP_LIMIT));
 
     expect(notifyMocks.sendGatedSystemNotification).not.toHaveBeenCalled();
