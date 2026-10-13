@@ -139,8 +139,9 @@ conversation (ticket 03a, [`segment.rs`](../core/src/session_runner/segment.rs))
 after more than N idle hours its next message starts a new segment. Ensure
 (and Core's send, just before it persists) applies the rule first; a boundary
 it records retires the live runner, and replay gives a cold runner only the
-current segment. Boundaries are recorded in `main_chat_segments`, never
-re-derived. See
+current segment, opened by the last few turns before it (ticket 11,
+[`carry.rs`](../core/src/session_runner/carry.rs)). Boundaries are recorded
+in `main_chat_segments`, never re-derived. See
 [runtime modes and sessions](./managed-ga-runtime/runtime-modes-and-sessions.md#main-chat-segments).
 
 Each runner keeps a **ready snapshot** — its latest `ready`, folded with

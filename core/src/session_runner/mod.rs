@@ -53,14 +53,17 @@
 //!
 //! The main chat is the one session whose history is not all of its
 //! conversation (ticket 03a, [`segment`]): its runner holds the current
-//! segment only. Ensure applies the segment rule first — a boundary it
+//! segment, opened by the last few turns before it (ticket 11,
+//! [`carry`]). Ensure applies the segment rule first — a boundary it
 //! records retires the live runner — and replays from the current
-//! segment's start; a segment with no reply yet needs no replay at all.
+//! segment's start; a segment with nothing to carry over and no reply
+//! yet needs no replay at all.
 //!
 //! Dependencies are seams, not transports: [`RunnerPort`] (the registry,
 //! faked in tests), [`Notifier`], and [`SpawnEnv`] (the Tauri app). No
 //! socket wire types, no Tauri `State`.
 
+pub mod carry;
 mod replay;
 pub mod segment;
 mod spawn_config;
@@ -379,7 +382,8 @@ fn completed_turns(session: &SessionBrief) -> u32 {
 
 /// Whether a runner for `session` has history to be given: completed
 /// turns — for the main chat, a reply in the current segment
-/// ([`segment`]). Every other session reads exactly as before 03a.
+/// ([`segment`]) or a turn before it to carry over ([`carry`]). Every
+/// other session reads exactly as before 03a.
 async fn has_history(
     host: &RunnerHost<'_>,
     session: &SessionBrief,
@@ -398,11 +402,23 @@ async fn has_history(
         .map_err(SessionRunnerError::Db)?
     {
         None => Ok(true),
-        Some(start) => host
-            .galley
-            .has_reply_from(sid, start)
-            .await
-            .map_err(SessionRunnerError::Db),
+        Some(start) => {
+            if host
+                .galley
+                .has_reply_from(sid, start)
+                .await
+                .map_err(SessionRunnerError::Db)?
+            {
+                return Ok(true);
+            }
+            // The window is never empty while a complete turn precedes
+            // the start: the cap cuts the latest turn, it never drops it.
+            host.galley
+                .main_chat_carry_from(sid, start, 1)
+                .await
+                .map(|from| from.is_some())
+                .map_err(SessionRunnerError::Db)
+        }
     }
 }
 

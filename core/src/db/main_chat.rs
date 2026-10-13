@@ -356,6 +356,39 @@ impl SqliteGalley {
         )
     }
 
+    /// Where reading the turns a segment starting at `before` carries
+    /// over begins (ticket 11, `crate::session_runner` carry): the
+    /// `turn_index` of the oldest of the last `turns` complete turns
+    /// before it — a visible user message with a visible reply that is
+    /// not the greeting — whichever segment they are in. `None` when
+    /// there is none. This only bounds the read; which turns are carried
+    /// is decided from the rows themselves.
+    pub async fn main_chat_carry_from(
+        &self,
+        session_id: &SessionId,
+        before: i64,
+        turns: i64,
+    ) -> Result<Option<i64>> {
+        sqlx::query_scalar(
+            "SELECT MIN(turn_index) FROM ( \
+               SELECT DISTINCT u.turn_index FROM messages u \
+               WHERE u.session_id = ? AND u.visibility = 'visible' AND u.role = 'user' \
+                 AND u.turn_index < ? \
+                 AND EXISTS (SELECT 1 FROM messages a \
+                   WHERE a.session_id = u.session_id AND a.turn_index = u.turn_index \
+                     AND a.visibility = 'visible' AND a.role = 'assistant' \
+                     AND NOT (a.created_via IS 'system' AND a.supervisor IS ?)) \
+               ORDER BY u.turn_index DESC LIMIT ?)",
+        )
+        .bind(session_id.as_str())
+        .bind(before)
+        .bind(MAIN_CHAT_GREETING_SUPERVISOR)
+        .bind(turns)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_err)
+    }
+
     /// Every boundary of `session_id`, oldest first.
     pub async fn main_chat_segment_starts(&self, session_id: &SessionId) -> Result<Vec<i64>> {
         sqlx::query_scalar(
@@ -389,9 +422,10 @@ impl SqliteGalley {
     }
 
     /// Whether a visible reply was written at or after `from_turn_index`:
-    /// without one, a history replay from there converts to nothing
-    /// (`crate::session_runner::rows_to_conversation_messages` drops a
-    /// trailing user message).
+    /// without one (and with no turn to carry over,
+    /// [`Self::main_chat_carry_from`]), a history replay from there
+    /// converts to nothing (`crate::session_runner::rows_to_conversation_messages`
+    /// drops a trailing user message).
     pub async fn has_reply_from(
         &self,
         session_id: &SessionId,

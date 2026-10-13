@@ -17,6 +17,7 @@
 //! - [`replay_once`]: one attempt — wait for `ready`, send, wait for the
 //!   runner's answer — announced to the GUI as `runner-history-replay`.
 
+use super::carry::{self, CarriedWindow};
 use super::RunnerHost;
 use crate::api::{GalleyApi, SessionId};
 use crate::db::PersistedMessageRow;
@@ -94,6 +95,36 @@ pub struct ReplayRow {
     /// greeting (PRD ruling 47, [`crate::db::is_main_chat_greeting`]).
     #[serde(default)]
     pub shown_only: bool,
+    /// When the row was written (as stored): when a turn a new main chat
+    /// segment carries over was said ([`super::carry`]).
+    #[serde(default)]
+    pub created_at: String,
+}
+
+impl ReplayRow {
+    /// Whether the history reads this row at all: a `user` or
+    /// `assistant` row that is not shown only.
+    pub(super) fn is_conversation(&self) -> bool {
+        !self.shown_only && (self.role == "user" || self.role == "assistant")
+    }
+
+    /// The row as one history message: a user row's image attachments
+    /// ride along as `images` (present, maybe empty, when it had any
+    /// attachment).
+    pub(super) fn into_message(self) -> ConversationMessage {
+        let images = (self.role == "user" && !self.attachments.is_empty()).then(|| {
+            self.attachments
+                .into_iter()
+                .filter(|a| a.kind == "image")
+                .map(|a| a.path)
+                .collect::<Vec<_>>()
+        });
+        ConversationMessage {
+            role: self.role,
+            content: self.content,
+            images,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -113,6 +144,7 @@ impl From<PersistedMessageRow> for ReplayRow {
             role: row.role,
             turn_index: row.turn_index,
             content: row.content,
+            created_at: row.created_at,
             attachments: row
                 .attachments
                 .into_iter()
@@ -144,40 +176,42 @@ pub fn rows_to_conversation_messages(
     rows: impl IntoIterator<Item = ReplayRow>,
     completed_turn_count: i64,
 ) -> Vec<ConversationMessage> {
-    let mut messages: Vec<ConversationMessage> = Vec::new();
+    continue_conversation(Vec::new(), rows, completed_turn_count)
+}
+
+/// [`rows_to_conversation_messages`] after `opening`: the turns a main
+/// chat segment carries over ([`super::carry`]). The rules run on as if
+/// the opening's messages had been read just before these rows.
+pub(super) fn continue_conversation(
+    opening: Vec<ConversationMessage>,
+    rows: impl IntoIterator<Item = ReplayRow>,
+    completed_turn_count: i64,
+) -> Vec<ConversationMessage> {
+    let mut messages = opening;
     for row in rows {
-        if row.shown_only || (row.role != "user" && row.role != "assistant") {
+        if !row.is_conversation() || row.turn_index > completed_turn_count {
             continue;
         }
-        if row.turn_index > completed_turn_count {
-            continue;
-        }
-        let images = (row.role == "user" && !row.attachments.is_empty()).then(|| {
-            row.attachments
-                .into_iter()
-                .filter(|a| a.kind == "image")
-                .map(|a| a.path)
-                .collect::<Vec<_>>()
-        });
+        let message = row.into_message();
         match messages.last_mut() {
-            Some(prev) if prev.role == row.role => {
-                prev.content.push_str("\n\n");
-                prev.content.push_str(&row.content);
-                if let Some(images) = images.filter(|images| !images.is_empty()) {
-                    prev.images.get_or_insert_with(Vec::new).extend(images);
-                }
-            }
-            _ => messages.push(ConversationMessage {
-                role: row.role,
-                content: row.content,
-                images,
-            }),
+            Some(prev) if prev.role == message.role => merge_into(prev, message),
+            _ => messages.push(message),
         }
     }
     if messages.last().is_some_and(|m| m.role == "user") {
         messages.pop();
     }
     messages
+}
+
+/// Two adjacent messages of one role as one: content joined by a blank
+/// line, images concatenated.
+pub(super) fn merge_into(prev: &mut ConversationMessage, next: ConversationMessage) {
+    prev.content.push_str("\n\n");
+    prev.content.push_str(&next.content);
+    if let Some(images) = next.images.filter(|images| !images.is_empty()) {
+        prev.images.get_or_insert_with(Vec::new).extend(images);
+    }
 }
 
 /// How one replay attempt ended.
@@ -223,18 +257,27 @@ pub(super) async fn replay_once(
     let sid = SessionId(session_id.to_string());
     let session = host.galley.session_brief(sid.clone()).await?;
     let completed = i64::from(session.turn_count.unwrap_or(0));
-    // The main chat's runner gets its current segment only (ticket 03a,
-    // `super::segment`); every other session its whole conversation.
+    // The main chat's runner gets its current segment (ticket 03a,
+    // `super::segment`), opened by the last turns before it (ticket 11,
+    // `super::carry`); every other session its whole conversation.
     let segment_start = if session.main_chat == Some(true) {
         host.galley.main_chat_segment_start(&sid).await?
     } else {
         None
     };
-    let rows = match segment_start {
-        Some(start) => host.galley.persisted_message_rows_from(&sid, start).await?,
-        None => host.galley.persisted_message_rows(&sid).await?,
+    let (carried, rows) = match segment_start {
+        Some(start) => carry::read(host.galley, &sid, start).await?,
+        None => (
+            CarriedWindow::default(),
+            host.galley.persisted_message_rows(&sid).await?,
+        ),
     };
-    let messages = rows_to_conversation_messages(rows.into_iter().map(ReplayRow::from), completed);
+    let carried_turns = carried.turns.len();
+    let messages = continue_conversation(
+        carried.into_messages(),
+        rows.into_iter().map(ReplayRow::from),
+        completed,
+    );
     if messages.is_empty() {
         return Ok(Attempt::Confirmed);
     }
@@ -253,8 +296,12 @@ pub(super) async fn replay_once(
         Err(e) => Attempt::Failed(format!("load_history was not delivered: {e}")),
     };
     eprintln!(
-        "[session_runner {session_id}] load_history ({} messages) into pid {pid}: {} in {:.1}ms",
+        "[session_runner {session_id}] load_history ({} messages{}) into pid {pid}: {} in {:.1}ms",
         messages.len(),
+        match carried_turns {
+            0 => String::new(),
+            n => format!(", opening with {n} turns carried over"),
+        },
         match &outcome {
             Attempt::Confirmed => "confirmed".to_string(),
             Attempt::Failed(reason) => format!("failed ({reason})"),

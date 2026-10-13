@@ -21,10 +21,11 @@
 //!   segment has nothing in it yet.
 //! - **Fresh context = a fresh runner.** Recording a boundary retires a
 //!   live runner (quietly, like ensure's own restart): the next ensure
-//!   spawns one whose GA history holds nothing from earlier segments and
-//!   whose session-start state block is composed anew. `load_history`
-//!   with nothing would empty the history but keep the state block the
-//!   runner was spawned with.
+//!   spawns one whose GA history holds nothing from before the boundary
+//!   but the last few turns the segment carries over ([`super::carry`],
+//!   ticket 11) and whose session-start state block is composed anew.
+//!   `load_history` alone would replace the history but keep the state
+//!   block the runner was spawned with.
 //!
 //! Where the rule is applied: [`super::ensure_session_runner`] (every
 //! caller: the GUI opening the main chat, a `/btw`, a Goal) and Core's
@@ -163,8 +164,9 @@ pub(super) async fn open_if_due(
 /// conversation (ticket 03b): it is the main chat, its id, and where the
 /// segment its runner holds begins — so the model can tell a search hit
 /// from an earlier segment (`turnIndex` below the start) and look it up
-/// instead of guessing. Read at spawn: a new segment retires the runner,
-/// so the start never changes under a live one.
+/// instead of guessing — and, since ticket 11, which turns from before
+/// the start its context opens with. Read at spawn: a new segment
+/// retires the runner, so neither changes under a live one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MainChatPromptState {
     pub session_id: String,
@@ -173,6 +175,22 @@ pub struct MainChatPromptState {
     pub segment_start_turn: i64,
     /// The local calendar day (`YYYY-MM-DD`) the segment began.
     pub segment_start_date: String,
+    /// The turns the segment's context opens with from before it
+    /// (ticket 11, [`super::carry`]); `None` when none are carried —
+    /// the first segment, or no complete turn before the boundary.
+    pub carried: Option<CarriedPromptState>,
+}
+
+/// What the state block says about the turns a segment carries over, so
+/// the model does not take something said hours ago ("I'm heading out")
+/// for something said just now.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CarriedPromptState {
+    /// How many turns are carried (1 to [`super::carry::CARRY_TURNS`]).
+    pub turns: usize,
+    /// When the last of them was said: local time to the minute
+    /// (`YYYY-MM-DD HH:MM`).
+    pub last_said_at: String,
 }
 
 /// [`MainChatPromptState`] for a runner of `session_id`, in this
@@ -220,6 +238,49 @@ pub async fn prompt_state_in<Tz: chrono::TimeZone>(
         session_id: session_id.to_string(),
         segment_start_turn: start.start_turn_index,
         segment_start_date,
+        carried: carried_prompt_state(galley, session_id, tz).await,
+    })
+}
+
+/// [`CarriedPromptState`] for the main chat's current segment: the
+/// window its replay opens with, read the same way
+/// ([`super::carry::read`]; the segment's own rows come along unused —
+/// the replay right after this spawn reads them again). Nothing in the
+/// first segment. A database error is logged and leaves the sentence
+/// out.
+async fn carried_prompt_state<Tz: chrono::TimeZone>(
+    galley: &crate::db::SqliteGalley,
+    session_id: &str,
+    tz: &Tz,
+) -> Option<CarriedPromptState> {
+    let sid = SessionId(session_id.to_string());
+    let window = match galley.main_chat_segment_start(&sid).await {
+        Ok(Some(start)) => super::carry::read(galley, &sid, start)
+            .await
+            .map(|(window, _)| window),
+        Ok(None) => return None,
+        Err(e) => Err(e),
+    };
+    let window = match window {
+        Ok(window) => window,
+        Err(e) => {
+            eprintln!("[segment {session_id}] reading the carried turns failed: {e}");
+            return None;
+        }
+    };
+    let last = window.last_said_at()?;
+    // As for the start date: an unreadable time is kept as written.
+    let last_said_at = DateTime::parse_from_rfc3339(last)
+        .map(|at| {
+            at.with_timezone(tz)
+                .naive_local()
+                .format("%Y-%m-%d %H:%M")
+                .to_string()
+        })
+        .unwrap_or_else(|_| last.chars().take(16).collect::<String>().replace('T', " "));
+    Some(CarriedPromptState {
+        turns: window.turns.len(),
+        last_said_at,
     })
 }
 

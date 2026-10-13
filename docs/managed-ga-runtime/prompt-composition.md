@@ -167,6 +167,22 @@ parts are not in your context: when the user refers to them, look them up
 with the Galley CLI (search, then `session show <id> --around=<messageId>`).
 ```
 
+Since ticket 11 (`.scratch/main-chat/issues/11-carry-last-turns-into-new-segment.md`)
+a segment with a recorded boundary opens with the last few turns before it
+([runtime modes](./runtime-modes-and-sessions.md#main-chat-segments)), and
+the section then reads instead (`<k> exchanges`, or `1 exchange`):
+
+```text
+## Main Chat
+
+This conversation is the user's main chat, session `<id>`. Your context
+holds it from turnIndex <N> on, a segment that began <YYYY-MM-DD>, and opens
+with <k> exchanges from before it, the last said <YYYY-MM-DD HH:MM>: time has passed
+since. Anything older is not in your context: when the user refers to it,
+look it up with the Galley CLI (search, then
+`session show <id> --around=<messageId>`).
+```
+
 - **Facts**: the session id (a search hit with this `sessionId` and a
   `turnIndex` below N is from an earlier segment), the segment's first
   `turnIndex`, and the local day it began. Source:
@@ -176,15 +192,24 @@ with the Galley CLI (search, then `session show <id> --around=<messageId>`).
   are fixed once written, so a runner respawned mid-segment (Core restart,
   crash) is told the same start; a new segment retires the runner, so the
   start never changes under a live one (admission rule 3).
+- **Carried turns** (ticket 11): how many turns the segment opens with and
+  when the last was said — its reply's `created_at`, local time to the
+  minute — so a carried 「我出门了」 is not read as said just now. Source:
+  `session_runner::carry::read`, the same read the replay opens with, from
+  the rows before the boundary only, so it is fixed for the segment too.
+  No carried turns (the first segment, or no complete turn before the
+  boundary): the 03b text, byte for byte.
 - **Routing sentence**: search, then `--around`. Search scope stays every
   conversation. When to bring old context up unprompted is the entry
   layer's (ticket 03d).
 - **Switch**: none. Every managed main chat runner gets it; every other
   session, IM, and attach mode never do.
-- **Bounded**: `MAIN_CHAT_SECTION_BUDGET_BYTES` = 327, measured on the
+- **Bounded**: `MAIN_CHAT_SECTION_BUDGET_BYTES` = 421, measured on the
   longest values in practice (a Core-minted 19-character session id, a
-  six-digit turn index), no headroom, `\r` not counted. Data: outside the
-  static budget and the prompt hash.
+  six-digit turn index, the carried variant with 3 exchanges), no
+  headroom, `\r` not counted. It was 327 for the 03b text, which is
+  unchanged; ticket 11 added 94 bytes for the carried turns' count and
+  time. Data: outside the static budget and the prompt hash.
 
 ## IM Entry Layer
 
@@ -254,6 +279,7 @@ row.
 | Scheduled Tasks: no `sche_tasks` files, point to sidebar「定时」 (merged into What Only The User Changes, 2026-10-06; the sidebar pointer now comes from the About map) | galley#31 (2026-09-28): a user migrating from external GA copied `sche_tasks/` into the managed state root and nothing fired. Reading the seeded `scheduled_task_sop.md` (`../sche_tasks/`) against the agent's cwd (`managed-ga-state/temp`) shows the managed agent would write the same dead files itself; that path is inferred, not yet seen in a transcript. Devlog [2026-10-01 GA scheduler in managed mode](../devlog/2026-10-01-ga-scheduler-managed-mode.md) |
 | State block | 2026-07-07 session: replace "don't invent metadata, go check Settings" deflection with injected facts |
 | State block: Main Chat (id, segment start, "search, then `--around`") | main chat PRD rulings 18 and 41, ticket 03b (2026-10-12): segments leave earlier parts out of context, and the decided lookup path is the existing CLI rather than a new GA tool. Own cap `MAIN_CHAT_SECTION_BUDGET_BYTES` |
+| State block: Main Chat, carried turns (「opens with <k> exchanges from before it, the last said <time>」, 「Anything older」) | main chat PRD ruling 50, ticket 11 (2026-10-13): a new segment opens with the last 3 turns before it, and without their time the model would take what the user said hours ago as said just now. Cap raised 327 → 421 (+94 bytes) in the same diff; the text without carried turns is unchanged |
 | Past Galley Conversations: `--around` example; coverage sentence reworded to 「This reaches every Galley session, but not direct IM chats …」 | ticket 03b (2026-10-12): `session show` gained `--around`, and `--tail=20` reads the end of a session, not where a search hit is. Paid for in the same diff: the two coverage sentences became one (−51 bytes against the +51-byte line on both platforms), so the static text stays at 6855 bytes (Windows) / 6837 (POSIX) and the cap is unchanged |
 
 ## Dogfood Regression Checklist
@@ -305,11 +331,16 @@ in a real managed session after any prompt change:
     `--reason`; the completion report arrives in the same chat.
 17. WeChat: a reply with a link or numbered steps → the link and the `1.`
     numbers arrive intact (Galley's handler passes Markdown through).
-18. Main chat, after a segment cut: ask about something said only in an
-    earlier segment (「我们上次说的 X 后来定了吗？」) → runs `sessions search`,
-    then `session show <id> --around=<messageId>` on a hit, and answers from
-    it; does not say it has no record, and does not read the whole
-    transcript. Asked 「这个对话从哪天开始的？你现在记得哪些？」 → answers from the
-    Main Chat section (this segment's start), not by guessing.
+18. Main chat, after a segment cut: ask about something said in an earlier
+    segment before the last few turns carried over (「我们上次说的 X 后来定了吗？」)
+    → runs `sessions search`, then `session show <id> --around=<messageId>`
+    on a hit, and answers from it; does not say it has no record, and does
+    not read the whole transcript. Asked 「这个对话从哪天开始的？你现在记得哪些？」
+    → answers from the Main Chat section (this segment's start, the turns
+    carried over), not by guessing.
 19. Any managed session: 「找一下我们之前聊 X 的那次，当时怎么说的」 → after the
     search, reads the hit with `--around`, not the session's `--tail`.
+20. Main chat: say 「我出门了，晚点回来再说那个报价」, wait past the idle
+    threshold, then 「我们刚才聊到哪了？」 → answers from the carried turns
+    without a search, and treats 「我出门了」 as said at that earlier time,
+    not just now.

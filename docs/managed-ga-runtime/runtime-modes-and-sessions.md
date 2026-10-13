@@ -112,9 +112,30 @@ is unaffected.
   message after the fact.
 - **Fresh context = fresh runner**: recording a boundary retires a live
   runner (quietly, like ensure's own restart); the next ensure spawns one
-  with an empty GA history and a newly composed state block. A cold runner
-  is given back only the current segment (`persisted_message_rows_from`); a
-  segment with no reply yet needs no replay.
+  with a newly composed state block and gives it back the current segment,
+  opened by the turns it carries over (next point) — nothing else from
+  before the boundary. A segment with nothing to carry and no reply yet
+  needs no replay.
+- **The last turns carry over** (ticket 11,
+  `.scratch/main-chat/issues/11-carry-last-turns-into-new-segment.md`;
+  `core/src/session_runner/carry.rs`): otherwise a user who writes again
+  after the gap finds the assistant has forgotten the exchange still on
+  screen. The replay of a segment with a recorded boundary opens with the
+  last 3 complete turns before it — a user message and its reply, read by
+  the replay's own rules; never the greeting, never a message whose reply
+  never came — whichever segment they are in, at most 6,000 Unicode
+  characters together (images ride along uncounted). Over the cap, whole
+  turns go, oldest first. When the latest turn alone is over it, its user
+  message and its reply are each sure of half the cap and lend the other
+  what they do not need: a cut reply keeps its end (the final answer), a
+  cut user message its start and its end (a long one is mostly a paste
+  with the request at one end), with `[… cut for length …]` where text
+  went. 3 and 6,000 are constants, not prefs. The window is computed from
+  the rows before the boundary and nothing else, so the replay after a
+  Core restart opens the same way, and the state block, which reads it
+  through the same function, says how many turns it carries and when the
+  last was said (last point). The first segment, every other
+  session, and attach mode are unchanged.
 - **Where the rule runs**: in `ensure_session_runner` (the GUI opening the
   main chat, `/btw`) and in Core's send just before it persists the message.
   Opening the main chat after the gap records the boundary at the next
@@ -127,8 +148,10 @@ is unaffected.
   shows the whole thread, and there is no segment marker in the UI.
 - **Earlier segments are looked up, not replayed** (ticket 03b): the main
   chat's state block says it is the main chat, gives its id and where the
-  current segment begins (first `turnIndex`, local day), and sends the
-  model to the Galley CLI for anything earlier — `sessions search`, then
+  current segment begins (first `turnIndex`, local day) — and, when turns
+  are carried over, how many and when the last was said (local time to
+  the minute, ticket 11) — and sends the model to the Galley CLI for
+  anything older — `sessions search`, then
   `session show <id> --around=<messageId>`, or a `--since` / `--until`
   window ([prompt composition](./prompt-composition.md#main-chat-main-chat-only),
   [session commands](../agent-api/session-commands.md) §5.3, §5.5).

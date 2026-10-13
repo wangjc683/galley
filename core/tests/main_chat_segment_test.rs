@@ -10,9 +10,12 @@
 //!   main chat opened after the gap starts the segment before it;
 //! - a cold runner gets only the current segment back, the same after a
 //!   "restart" (a new registry on the same database) and after N changes;
+//! - a new segment opens with the last three complete turns before it,
+//!   from any earlier segment, held to the character cap (ticket 11);
 //! - the database keeps the whole thread;
 //! - side chats — managed or attached — are untouched;
-//! - what the main chat's state block says about its segment (03b).
+//! - what the main chat's state block says about its segment (03b) and
+//!   about the turns it carries over (11).
 //!
 //! The pure rule (exactly N hours, empty segments, the pref fallback)
 //! is unit-tested in `core/src/session_runner/segment.rs`.
@@ -518,6 +521,14 @@ async fn main_chat_with_history(sid: &str) -> (SqlitePool, SqliteGalley) {
     (pool, galley)
 }
 
+/// What a segment cut after [`main_chat_with_history`] opens with: both
+/// exchanges, carried over (ticket 11).
+fn carried_history() -> Vec<Value> {
+    let mut carried = turn("记住暗号：蓝鲸 4721", "好");
+    carried.extend(turn("复述一遍", "蓝鲸 4721"));
+    carried
+}
+
 // ---------------- the warm runner ----------------
 
 #[tokio::test]
@@ -535,14 +546,16 @@ async fn after_an_idle_gap_the_warm_runner_is_swapped_before_the_message() {
 
     let start = dispatched_turn(&outcome);
     // The old runner goes before anything reaches a runner; the fresh one
-    // has nothing to restore, so it gets the message and nothing else.
+    // gets the turns the segment carries over (ticket 11), then the
+    // message.
     let log = runner.log();
-    assert_eq!(log.len(), 3, "{log:?}");
+    assert_eq!(log.len(), 4, "{log:?}");
     assert_eq!(log[0], "retire:4242");
     assert!(log[1].starts_with("spawn:"), "{log:?}");
     let fresh_pid = log[1].trim_start_matches("spawn:");
-    assert_eq!(log[2], format!("user_message:{fresh_pid}"));
-    assert!(runner.load_histories().is_empty());
+    assert_eq!(log[2], format!("load_history:{fresh_pid}"));
+    assert_eq!(log[3], format!("user_message:{fresh_pid}"));
+    assert_eq!(runner.load_histories(), vec![carried_history()]);
     // The boundary is the message's own turn.
     assert_eq!(boundaries(&galley, sid).await, vec![start]);
     // The database keeps the whole thread (the greeting, two exchanges,
@@ -610,9 +623,7 @@ async fn opening_an_idle_main_chat_starts_the_segment_before_its_first_message()
     let sid = "s-main-open";
     let (pool, galley) = main_chat_with_history(sid).await;
     idle_for(&pool, sid, 9.0).await;
-    // Its runners never report ready: had the ensure gone to replay, it
-    // would fail.
-    let runner = SegRunner::silent();
+    let runner = SegRunner::default();
     let env = FakeEnv;
     let h = host(&galley, &runner, &env);
 
@@ -620,7 +631,8 @@ async fn opening_an_idle_main_chat_starts_the_segment_before_its_first_message()
         .await
         .expect("open");
     assert!(opened.spawned);
-    assert!(runner.load_histories().is_empty(), "nothing to restore");
+    // The new segment has no reply yet; what it holds is what it carries.
+    assert_eq!(runner.load_histories(), vec![carried_history()]);
     // The next message's turn (two exchanges: turns 0 and 1).
     assert_eq!(boundaries(&galley, sid).await, vec![2]);
 
@@ -634,6 +646,7 @@ async fn opening_an_idle_main_chat_starts_the_segment_before_its_first_message()
         runner.log(),
         vec![
             format!("spawn:{}", opened.pid),
+            format!("load_history:{}", opened.pid),
             format!("user_message:{}", opened.pid),
         ]
     );
@@ -657,15 +670,19 @@ async fn opening_a_warm_idle_main_chat_retires_its_runner() {
     assert_ne!(opened.pid, 4242);
     assert_eq!(
         runner.log(),
-        vec!["retire:4242".to_string(), format!("spawn:{}", opened.pid)]
+        vec![
+            "retire:4242".to_string(),
+            format!("spawn:{}", opened.pid),
+            format!("load_history:{}", opened.pid),
+        ]
     );
-    assert!(runner.load_histories().is_empty());
+    assert_eq!(runner.load_histories(), vec![carried_history()]);
 }
 
 // ---------------- the cold runner ----------------
 
 #[tokio::test]
-async fn a_cold_main_chat_gets_only_the_current_segment_back_also_after_a_restart() {
+async fn a_cold_main_chat_gets_its_segment_and_the_turns_it_carries_also_after_a_restart() {
     let sid = "s-main-cold";
     let (pool, galley) = main_chat_with_history(sid).await;
     idle_for(&pool, sid, 6.0).await;
@@ -694,7 +711,8 @@ async fn a_cold_main_chat_gets_only_the_current_segment_back_also_after_a_restar
         ensure_session_runner(&host(&galley, &after, &env), sid, opening())
             .await
             .expect("restore");
-        let mut expected = turn("新的一天", "早");
+        let mut expected = carried_history();
+        expected.extend(turn("新的一天", "早"));
         expected.extend(turn("今天先做什么", "先回邮件"));
         assert_eq!(after.load_histories(), vec![expected]);
     }
@@ -841,6 +859,214 @@ async fn side_chats_are_never_cut() {
     assert!(boundaries(&galley, sid).await.is_empty());
 }
 
+// ---------------- what a new segment carries over (ticket 11) ----------------
+
+#[tokio::test]
+async fn a_new_segment_opens_with_the_last_three_turns_also_after_a_restart() {
+    let sid = "s-main-carry";
+    let (pool, galley) = fresh().await;
+    main_chat(&galley, sid).await;
+    for i in 0..5 {
+        seed_exchange(&galley, sid, &format!("问{i}"), &format!("答{i}")).await;
+    }
+    idle_for(&pool, sid, 5.0).await;
+    let env = FakeEnv;
+
+    let runner = SegRunner::default();
+    let outcome = send_user_message(&host(&galley, &runner, &env), request(sid, "接着说"))
+        .await
+        .expect("send");
+    let start = dispatched_turn(&outcome);
+    assert_eq!(boundaries(&galley, sid).await, vec![5]);
+    // The last three of five, never the greeting; the message just sent
+    // is input, not history.
+    let mut carried = turn("问2", "答2");
+    carried.extend(turn("问3", "答3"));
+    carried.extend(turn("问4", "答4"));
+    assert_eq!(runner.load_histories(), vec![carried.clone()]);
+
+    // The turn completes; "Core restarts": the same opening, then the
+    // segment.
+    reply_to(&galley, sid, start as u32, "好", None).await;
+    let after = SegRunner::default();
+    ensure_session_runner(&host(&galley, &after, &env), sid, opening())
+        .await
+        .expect("restore");
+    let mut expected = carried;
+    expected.extend(turn("接着说", "好"));
+    assert_eq!(after.load_histories(), vec![expected]);
+}
+
+#[tokio::test]
+async fn a_short_previous_segment_is_topped_up_from_the_one_before() {
+    let sid = "s-main-carry-back";
+    let (pool, galley) = main_chat_with_history(sid).await;
+    let env = FakeEnv;
+    // Segment two: one exchange.
+    idle_for(&pool, sid, 5.0).await;
+    let first = SegRunner::default();
+    let outcome = send_user_message(&host(&galley, &first, &env), request(sid, "午饭吃什么"))
+        .await
+        .expect("send");
+    reply_to(&galley, sid, dispatched_turn(&outcome) as u32, "面", None).await;
+    // Segment three.
+    idle_for(&pool, sid, 5.0).await;
+    let second = SegRunner::default();
+    send_user_message(&host(&galley, &second, &env), request(sid, "晚饭呢"))
+        .await
+        .expect("send");
+
+    assert_eq!(boundaries(&galley, sid).await, vec![2, 3]);
+    let mut expected = carried_history();
+    expected.extend(turn("午饭吃什么", "面"));
+    assert_eq!(second.load_histories(), vec![expected]);
+}
+
+#[tokio::test]
+async fn a_message_that_got_no_reply_is_not_carried() {
+    let sid = "s-main-carry-skip";
+    let (pool, galley) = fresh().await;
+    main_chat(&galley, sid).await;
+    seed_exchange(&galley, sid, "第一问", "第一答").await;
+    // Persisted, never answered.
+    galley
+        .send_message(SessionId(sid.into()), "没人回的一句".into(), gui_origin())
+        .await
+        .expect("user row");
+    idle_for(&pool, sid, 5.0).await;
+    let runner = SegRunner::default();
+    let env = FakeEnv;
+
+    ensure_session_runner(&host(&galley, &runner, &env), sid, opening())
+        .await
+        .expect("open");
+
+    assert_eq!(boundaries(&galley, sid).await, vec![2]);
+    assert_eq!(runner.load_histories(), vec![turn("第一问", "第一答")]);
+}
+
+#[tokio::test]
+async fn with_nothing_complete_before_the_boundary_there_is_nothing_to_replay() {
+    use chrono_tz::Asia::Shanghai;
+    use galley_core_lib::session_runner::segment::prompt_state_in;
+
+    let sid = "s-main-carry-none";
+    let (pool, galley) = fresh().await;
+    main_chat(&galley, sid).await;
+    // A turn that ended with no visible reply.
+    galley
+        .send_message(SessionId(sid.into()), "在吗".into(), gui_origin())
+        .await
+        .expect("user row");
+    galley
+        .bump_session_after_turn(SessionId(sid.into()), None, None, false)
+        .await
+        .expect("bump");
+    idle_for(&pool, sid, 5.0).await;
+    // Its runners never report ready: had the ensure gone to replay, it
+    // would fail.
+    let runner = SegRunner::silent();
+    let env = FakeEnv;
+
+    let opened = ensure_session_runner(&host(&galley, &runner, &env), sid, opening())
+        .await
+        .expect("open");
+
+    assert!(opened.spawned);
+    assert_eq!(boundaries(&galley, sid).await, vec![1]);
+    assert!(runner.load_histories().is_empty());
+    let state = prompt_state_in(&galley, sid, &Shanghai)
+        .await
+        .expect("state");
+    assert_eq!(state.segment_start_turn, 1);
+    assert_eq!(state.carried, None);
+}
+
+#[tokio::test]
+async fn the_cap_holds_in_the_replay() {
+    use galley_core_lib::session_runner::carry::{CARRY_MAX_CHARS, CUT_MARKER};
+
+    let sid = "s-main-carry-cap";
+    let (pool, galley) = fresh().await;
+    main_chat(&galley, sid).await;
+    seed_exchange(&galley, sid, "短问", "短答").await;
+    let long = format!("开头{}结论在最后", "长".repeat(8_000));
+    seed_exchange(&galley, sid, "写一篇长文", &long).await;
+    idle_for(&pool, sid, 5.0).await;
+    let runner = SegRunner::default();
+    let env = FakeEnv;
+
+    ensure_session_runner(&host(&galley, &runner, &env), sid, opening())
+        .await
+        .expect("open");
+
+    let histories = runner.load_histories();
+    assert_eq!(histories.len(), 1);
+    let messages = &histories[0];
+    // The older turn goes whole; the latest keeps its question and the
+    // end of its reply.
+    assert_eq!(messages.len(), 2, "{messages:?}");
+    assert_eq!(messages[0]["content"], "写一篇长文");
+    let reply = messages[1]["content"].as_str().expect("reply");
+    assert!(
+        reply.starts_with(CUT_MARKER),
+        "{}",
+        reply.chars().take(40).collect::<String>()
+    );
+    assert!(reply.ends_with("结论在最后"));
+    let chars: usize = messages
+        .iter()
+        .map(|m| m["content"].as_str().unwrap().chars().count())
+        .sum();
+    assert_eq!(chars, CARRY_MAX_CHARS);
+}
+
+/// The state block names what the replay opens with, from the same read:
+/// how many turns and, in local time to the minute, when the last was
+/// said. The first segment carries nothing and says nothing.
+#[tokio::test]
+async fn the_state_block_and_the_replay_agree_on_what_is_carried() {
+    use chrono_tz::Asia::Shanghai;
+    use galley_core_lib::session_runner::segment::{prompt_state_in, CarriedPromptState};
+
+    let sid = "s-main-carry-state";
+    let (pool, galley) = main_chat_with_history(sid).await;
+    // The last reply was written at 09:41:30 in Shanghai.
+    sqlx::query(
+        "UPDATE messages SET created_at = '2026-10-12T01:41:30Z' \
+         WHERE session_id = ? AND role = 'assistant' AND turn_index = 1",
+    )
+    .bind(sid)
+    .execute(&pool)
+    .await
+    .expect("reply time");
+    let first = prompt_state_in(&galley, sid, &Shanghai)
+        .await
+        .expect("state");
+    assert_eq!(first.carried, None, "first segment");
+
+    idle_for(&pool, sid, 5.0).await;
+    let runner = SegRunner::default();
+    let env = FakeEnv;
+    ensure_session_runner(&host(&galley, &runner, &env), sid, opening())
+        .await
+        .expect("open");
+
+    assert_eq!(runner.load_histories(), vec![carried_history()]);
+    let state = prompt_state_in(&galley, sid, &Shanghai)
+        .await
+        .expect("state");
+    assert_eq!(
+        state.carried,
+        Some(CarriedPromptState {
+            turns: 2,
+            last_said_at: "2026-10-12 09:41".into(),
+        })
+    );
+    // A runner respawned mid-segment is told the same.
+    assert_eq!(prompt_state_in(&galley, sid, &Shanghai).await, Some(state));
+}
+
 // ---------------- the main chat's state block (ticket 03b) ----------------
 
 /// What a main chat runner is told about the conversation at spawn: its
@@ -871,6 +1097,7 @@ async fn main_chat_prompt_state_names_the_current_segment() {
             session_id: sid.into(),
             segment_start_turn: 0,
             segment_start_date: "2026-10-02".into(),
+            carried: None,
         }),
         "first segment"
     );
@@ -897,6 +1124,8 @@ async fn main_chat_prompt_state_names_the_current_segment() {
             session_id: sid.into(),
             segment_start_turn: 9,
             segment_start_date: "2026-10-12".into(),
+            // Boundaries with no complete turn before them carry nothing.
+            carried: None,
         }),
         "the latest boundary, on its local day"
     );

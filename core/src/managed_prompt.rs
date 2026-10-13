@@ -219,17 +219,43 @@ pub(crate) fn compose_im_runtime_prompt(app_version: &str) -> String {
 /// segment's search hit (same session, `turnIndex` below the start) and
 /// to fetch it. Data plus one routing sentence: when to bring old context
 /// up belongs to the entry layer (ticket 03d).
+///
+/// When the segment opens with turns carried over from before it
+/// (ticket 11, `session_runner::carry`), the section says how many and
+/// when the last was said, so the model does not take something said
+/// hours ago for something said just now; "earlier parts" then becomes
+/// "anything older". Nothing carried, nothing said.
 fn main_chat_section(state: &MainChatPromptState) -> String {
-    format!(
-        r#"## Main Chat
+    let Some(carried) = &state.carried else {
+        return format!(
+            r#"## Main Chat
 
 This conversation is the user's main chat, session `{id}`. Your context
 holds it from turnIndex {turn} on, a segment that began {date}. Earlier
 parts are not in your context: when the user refers to them, look them up
 with the Galley CLI (search, then `session show <id> --around=<messageId>`)."#,
+            id = state.session_id,
+            turn = state.segment_start_turn,
+            date = state.segment_start_date,
+        );
+    };
+    format!(
+        r#"## Main Chat
+
+This conversation is the user's main chat, session `{id}`. Your context
+holds it from turnIndex {turn} on, a segment that began {date}, and opens
+with {exchanges} from before it, the last said {at}: time has passed
+since. Anything older is not in your context: when the user refers to it,
+look it up with the Galley CLI (search, then
+`session show <id> --around=<messageId>`)."#,
         id = state.session_id,
         turn = state.segment_start_turn,
         date = state.segment_start_date,
+        exchanges = match carried.turns {
+            1 => "1 exchange".to_string(),
+            n => format!("{n} exchanges"),
+        },
+        at = carried.last_said_at,
     )
 }
 
@@ -370,6 +396,7 @@ fn short_hex(bytes: &[u8], chars: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::session_runner::segment::CarriedPromptState;
 
     #[test]
     fn prompt_hash_is_short_stable_hex() {
@@ -483,6 +510,7 @@ mod tests {
             session_id: "s-mgn4k2x1-7q3z9w0e".into(),
             segment_start_turn: 42,
             segment_start_date: "2026-10-12".into(),
+            carried: None,
         }
     }
 
@@ -525,12 +553,56 @@ mod tests {
         assert_eq!(prompt_hash(), hash);
     }
 
+    /// Ticket 11: a segment that opens with turns carried over from
+    /// before it says how many and when the last was said, and "earlier
+    /// parts" becomes "anything older". Without carried turns the
+    /// section reads exactly as 03b wrote it.
+    #[test]
+    fn main_chat_section_says_what_the_segment_carries_over() {
+        let plain = main_chat_section(&main_chat_state());
+        assert!(!plain.contains("from before it"));
+        assert!(plain.contains("parts are not in your context"));
+
+        let mut state = main_chat_state();
+        state.carried = Some(CarriedPromptState {
+            turns: 3,
+            last_said_at: "2026-10-12 09:41".into(),
+        });
+        let carried = main_chat_section(&state);
+        // Single-line fragments only (a Windows checkout makes the raw
+        // string CRLF).
+        assert!(carried.contains("session `s-mgn4k2x1-7q3z9w0e`"));
+        assert!(carried
+            .contains("holds it from turnIndex 42 on, a segment that began 2026-10-12, and opens"));
+        assert!(carried.contains(
+            "with 3 exchanges from before it, the last said 2026-10-12 09:41: time has passed"
+        ));
+        assert!(carried.contains("Anything older is not in your context:"));
+        assert!(!carried.contains("Earlier"));
+        assert!(carried.contains("`session show <id> --around=<messageId>`"));
+
+        state.carried = Some(CarriedPromptState {
+            turns: 1,
+            last_said_at: "2026-10-12 09:41".into(),
+        });
+        assert!(main_chat_section(&state).contains("with 1 exchange from before it, the last said"));
+    }
+
     /// Byte cap on the main chat section, rendered with the longest
     /// values it takes in practice: a Core-minted session id (19
-    /// characters until 2059; `mint_session_id`), a six-digit turn index
-    /// and a date. No headroom, `\r` not counted. It rides every request
-    /// of the main chat, and the static budget does not cover it.
-    const MAIN_CHAT_SECTION_BUDGET_BYTES: usize = 327;
+    /// characters until 2059; `mint_session_id`), a six-digit turn index,
+    /// a date, and — since ticket 11 — the longer variant that says what
+    /// the segment carries over, with the most turns it carries
+    /// (`CARRY_TURNS`, one digit) and a minute-precise local time. No
+    /// headroom, `\r` not counted. It rides every request of the main
+    /// chat, and the static budget does not cover it. Raised from 327
+    /// (03b; the variant without carried turns is unchanged) to 421 by
+    /// ticket 11: +94 bytes for "and opens with N exchanges from before
+    /// it, the last said <time>: time has passed since", with "Earlier
+    /// parts … them" reworded to "Anything older … it". The count tells
+    /// the model where the carried turns end; the time keeps it from
+    /// reading a carried "I'm heading out" as said just now.
+    const MAIN_CHAT_SECTION_BUDGET_BYTES: usize = 421;
 
     #[test]
     fn main_chat_section_stays_within_budget() {
@@ -538,15 +610,28 @@ mod tests {
             session_id: "s-zzzzzzzz-zzzzzzzz".into(),
             segment_start_turn: 999_999,
             segment_start_date: "2026-10-12".into(),
+            carried: Some(CarriedPromptState {
+                turns: crate::session_runner::carry::CARRY_TURNS,
+                last_said_at: "2026-10-12 23:59".into(),
+            }),
         };
-        let len = main_chat_section(&longest)
-            .bytes()
-            .filter(|&byte| byte != b'\r')
-            .count();
+        let bytes = |state: &MainChatPromptState| {
+            main_chat_section(state)
+                .bytes()
+                .filter(|&byte| byte != b'\r')
+                .count()
+        };
+        let len = bytes(&longest);
         assert!(
             len <= MAIN_CHAT_SECTION_BUDGET_BYTES,
             "main chat section is {len} bytes, budget {MAIN_CHAT_SECTION_BUDGET_BYTES}"
         );
+        // The variant without carried turns is the shorter one.
+        let plain = MainChatPromptState {
+            carried: None,
+            ..longest
+        };
+        assert!(bytes(&plain) < len);
     }
 
     /// The `--around` read pairs with search in the static history
