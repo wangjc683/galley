@@ -88,7 +88,7 @@ read responses. (The v1 Goal task / event writes that used `ownerSessionId` /
 
 | Field         | Type            | Notes                                                                  |
 | ------------- | --------------- | ---------------------------------------------------------------------- |
-| `via`         | string enum     | `gui` / `cli` / `supervisor` / `system`. Matches the SQL CHECK constraint on `messages.created_via` and `sessions.created_via` |
+| `via`         | string enum     | `gui` / `cli` / `supervisor` / `system` / `subtask`. The first four match the SQL CHECK constraint on `messages.created_via` and `sessions.created_via`; `subtask` (additive, 2026-10-13) is stored as `system` with the reserved supervisor label `galley-subtask` and read back as `subtask` with no `supervisor` |
 | `supervisor`  | string?         | Supervisor label / agent identity (e.g. `"ga-claude-1"`). Required when `via=supervisor`; absent for `via=gui` / `via=system`; optional for `via=cli` (presence with `via=cli` would indicate a manual terminal user impersonating a supervisor — Galley doesn't reject it but supervisors should prefer `via=supervisor` to claim identity) |
 | `reason`      | string?         | Free-text rationale. Shows up in audit / activity-log views. Recommended on destructive operations + autonomous (non-user-relayed) judgments |
 
@@ -96,6 +96,8 @@ The CLI auto-elevates `via` based on `--supervisor`: pass `--supervisor=<id>`
 on any write command → stored `via = supervisor`; omit it → `via = cli`.
 The GUI always writes `via = gui`. `via = system` is reserved for
 internal Galley triggers (auto-clear-unread, lifecycle events, etc.).
+`via = subtask` marks a session the main chat dispatched and the
+instructions it starts with (no agent writes it).
 
 Wire example:
 

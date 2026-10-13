@@ -229,9 +229,19 @@ that finishes a task and restates the result. The layer says three things:
   the core prompt's reply shape as the IM layer).
 - **Pick up what a break left open** (ticket 11's carried turns) when the
   user comes back to it, without recapping it unasked.
-
-Delegation is not in it yet: the subtask clause (ticket 06, ruling 52's
-`<subtask>` tag) lands with the subtasks themselves.
+- **Hand long work to a subtask** (ticket 06a, PRD rulings 52, 53): work
+  that would keep the chat busy for a long time (many steps, several
+  websites, a long batch of files) ends the reply with
+  `<subtask>what to do</subtask>`; the instructions carry the goal, the
+  facts the user gave and what to hand back, since the subtask cannot see
+  the main chat; one sentence tells the user it is on its way; quick work
+  stays in the main chat. One more sentence: use this, not the file-based
+  subagent in GA's memory (`subagent.md`), which the user cannot see.
+  Core reads the tag when the run settles and starts each one as a
+  session (`core/src/subtask.rs`); the tag never shows in the reply, the
+  desktop draws a card under it, and the replayed history names each
+  subtask by id (`[subtask <id>: <title>]`, or
+  `[subtask not started: <why>]`) for `session show <id>`.
 
 - **Evidence**: compared with and without on the main chat's own model
   (`.scratch/main-chat/entry-layer-eval/`, 15 messages, tools intercepted).
@@ -241,9 +251,19 @@ Delegation is not in it yet: the subtask clause (ticket 06, ruling 52's
   Rust explanation) kept its length; tool calls got a one-line heads-up.
 - **Not covered**: the next-step suggestion still follows its own mandate
   after small talk (「早」 → 「帮我梳理一下今天要做的事」).
-- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 827, no headroom, `\r`
-  not counted. Behavior, but main chat only, so it stays out of the static
-  budget and the prompt hash.
+- **Dispatch evidence**: the clause is the `T` text of the 06 comparison
+  (`.scratch/main-chat/entry-layer-eval/dispatch-clauses.md`, results in
+  that directory's README): on the main chat's model, tag / CLI command /
+  native tool all dispatched the two big jobs, did the two quick ones
+  themselves and asked first on the ambiguous one; every instruction
+  carried goal, facts, scope and what to hand back; none waited on the
+  subtask after dispatching. Models read `subagent.md` on their own in
+  that comparison, hence the extra sentence.
+- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 1446, no headroom,
+  `\r` not counted. 827 for the 03d layer; ticket 06a added 619 for the
+  dispatch clause (the `T` text 522, the subagent sentence 94, breaks 3).
+  Behavior, but main chat only, so it stays out of the static budget and
+  the prompt hash.
 
 ## IM Entry Layer
 
@@ -315,6 +335,7 @@ row.
 | State block: Main Chat (id, segment start, "search, then `--around`") | main chat PRD rulings 18 and 41, ticket 03b (2026-10-12): segments leave earlier parts out of context, and the decided lookup path is the existing CLI rather than a new GA tool. Own cap `MAIN_CHAT_SECTION_BUDGET_BYTES` |
 | State block: Main Chat, carried turns (「opens with <k> exchanges from before it, the last said <time>」, 「Anything older」) | main chat PRD ruling 50, ticket 11 (2026-10-13): a new segment opens with the last 3 turns before it, and without their time the model would take what the user said hours ago as said just now. Cap raised 327 → 421 (+94 bytes) in the same diff; the text without carried turns is unchanged |
 | Main chat entry layer: ongoing relationship, reply at the weight of the message, pick up what a break left open, `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` | ticket 03d (2026-10-13): JC found the main chat read as a pinned ordinary session; the draft was compared with and without on the main chat's model (`.scratch/main-chat/entry-layer-eval/`) before it went in |
+| Main chat entry layer: dispatch clause (long work → `<subtask>` tag, self-contained instructions, quick work stays; Galley's subtask, not GA's `subagent.md`) | ticket 06a, PRD rulings 52, 53 (2026-10-13): the main chat must not be occupied by one long job, and JC chose a tag in the reply over a native GA tool or a CLI command after the three were compared on the main chat's model (`dispatch-clauses.md`); models read GA's file-based subagent SOP unprompted in that comparison. Cap raised 827 → 1446 (+619 bytes) in the same diff |
 | Past Galley Conversations: `--around` example; coverage sentence reworded to 「This reaches every Galley session, but not direct IM chats …」 | ticket 03b (2026-10-12): `session show` gained `--around`, and `--tail=20` reads the end of a session, not where a search hit is. Paid for in the same diff: the two coverage sentences became one (−51 bytes against the +51-byte line on both platforms), so the static text stays at 6855 bytes (Windows) / 6837 (POSIX) and the cap is unchanged |
 
 ## Dogfood Regression Checklist
@@ -382,3 +403,14 @@ in a real managed session after any prompt change:
 21. Main chat: 「早」 and 「我妈明天做手术，有点紧张。」 → a short, plain
     reply each; no checklist, no plan, no 「今天要先搞定什么」. Then
     「帮我写一封邮件给客户，说明交付要推迟一周」 → a full email, not cut short.
+22. Main chat, big job: 「把下载文件夹里的 PDF 按内容分类」 → a sentence that it
+    is on its way and a card under the reply (the tag itself never shows);
+    the subtask's first message carries the goal, what the user said and
+    what to hand back; the main chat does not read `subagent.md` or start a
+    file-based subagent.
+23. Main chat, quick job: 「下载文件夹里有几个 PDF？」 → answers itself, no
+    card.
+24. Main chat, after dispatching: the reply ends there — no waiting on the
+    subtask, no `session wait`, no polling. Later 「刚才那个分类做完了吗？」
+    → looks it up with the Galley CLI (after a replay the reply names the
+    subtask's id for `session show <id>`) instead of guessing.

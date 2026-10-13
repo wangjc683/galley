@@ -151,6 +151,14 @@ current segment, opened by the last few turns before it (ticket 11,
 in `main_chat_segments`, never re-derived. See
 [runtime modes and sessions](./managed-ga-runtime/runtime-modes-and-sessions.md#main-chat-segments).
 
+The main chat hands long work to subtasks (ticket 06a,
+[`subtask.rs`](../core/src/subtask.rs)): when its run settles, the queue drain
+task reads the reply's `<subtask>` tags and starts each as an ordinary managed
+session through Core's own send, records them in `subtask_dispatches`, and
+replays the main chat with a line naming each subtask instead of its
+instructions. See
+[runtime modes and sessions](./managed-ga-runtime/runtime-modes-and-sessions.md#main-chat-subtasks).
+
 Each runner keeps a **ready snapshot** — its latest `ready`, folded with
 later `llm_changed` / `reasoning_effort_changed` — which Core hands to a
 page that attaches after `ready` went by (`ensure_session_runner`,

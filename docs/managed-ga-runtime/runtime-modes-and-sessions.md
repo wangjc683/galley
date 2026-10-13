@@ -156,6 +156,58 @@ is unaffected.
   window ([prompt composition](./prompt-composition.md#main-chat-main-chat-only),
   [session commands](../agent-api/session-commands.md) §5.3, §5.5).
 
+### Main Chat Subtasks
+
+The main chat hands long work to **subtasks** (ticket 06a,
+`.scratch/main-chat/issues/06a-subtask-dispatch-and-cards.md`, PRD rulings
+52, 53; `core/src/subtask.rs`). Its entry layer tells the model to end such a
+reply with `<subtask>what to do</subtask>`
+([prompt composition](./prompt-composition.md#main-chat-entry-layer)); nothing
+about the tag reaches GA, which keeps no subtask tool and no patch for it.
+
+- **When**: the queue drain task, on the main chat's `RunComplete` and
+  before it hands the session a queued message, reads the latest visible
+  assistant row. A final answer (no real tool call; a reply ending on
+  `ask_user` is not one) with `<subtask>` in it and no records yet is
+  claimed and dispatched in the background. Any other session's tag is
+  text.
+- **What**: each tag, in reply order, becomes an ordinary managed session:
+  `parent_session_id` = the main chat, origin `subtask` (stored as
+  `system` + supervisor `galley-subtask`, migration 048), titled by the
+  instructions' first line, on the main chat's model. The instructions go
+  are its first message, written with the row in one transaction; then
+  its run starts as Core's send starts one (the run gate, a runner on the
+  shared path, the dispatch). The tags start concurrently.
+- **Records**: `subtask_dispatches` keeps one row per tag, including an
+  empty one (`empty`), an unclosed one (`unclosed`) and one whose session
+  could not be created or started (`start_failed` with the error; with a
+  `session_id` when the row exists). Nothing is retried. Core announces
+  each record as `subtask-dispatched` (desktop only) the moment it exists —
+  a subtask's once its session and first message do, before its runner is
+  up, and again if the runner then fails to start; the desktop reads them
+  with `list_subtask_dispatches` and draws a card per record under the
+  reply.
+- **Text**: the turn derivation strips the tag from the persisted final
+  answer and preamble, an unclosed one with everything after it; the raw
+  reply keeps it. In the main chat's replayed history (the segment and the
+  turns it carries over) assistant rows lose their `<subtask>` blocks, and
+  the dispatching reply ends with one line per tag:
+  `[subtask <id>: <title>]` or `[subtask not started: <why>]`. A warm
+  runner keeps what the model wrote.
+- **Promotion**: a person's message sent through Core's send (desktop or
+  phone, `via: gui`) that is not the answer to a pending question promotes
+  a subtask to an ordinary conversation (`promoted_at`,
+  `session-updated-external` via `subtask-promoted`), a queued one included.
+  Socket `session send` (CLI, supervisor) and scheduled tasks never come
+  through Core's send, and a subtask's own first message has origin
+  `subtask`, so none of them promotes.
+- **Listings**: the Agent API lists subtasks like any session, with
+  `parentSessionId` and `promoted`; the desktop sidebar leaves out the
+  ones not promoted, and so does the phone — its session list and the
+  events it is sent (`remote::convert::shows_on_phone`); a promotion
+  reaches the phone as the session appearing.
+- Attach mode has no main chat, so nothing here runs there.
+
 ## CLI Runtime Contract
 
 Galley has not shipped a stable CLI release before managed runtime, so the CLI

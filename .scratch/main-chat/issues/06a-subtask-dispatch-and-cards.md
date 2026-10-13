@@ -57,3 +57,51 @@ Status: ready-for-agent
 - 格式化只动自己的文件或 hunk（core 不是 rustfmt-clean，gui 不是 prettier-clean）。
 
 ## Comments
+
+2026-10-13 实现回报（Opus 子代理，基于 `62c68552`，三个提交：Core 与入口层、界面、文档）：
+
+- **表结构（迁移 048）**：`sessions` 加 `parent_session_id`（指向主对话，`ON DELETE SET NULL`）与 `promoted_at`（用户第一次在里面说话的时间，空 = 没升级）；新表 `subtask_dispatches`，主键 `(parent_session_id, turn_index, ordinal)`，一行一个标签，按回复里的顺序：`session_id`（没建出会话时为空）、`title`、`failure`（`empty` / `unclosed` / `start_failed`，CHECK 限定）、`failure_detail`、`created_at`。回复就是 `msg_{主对话}_{turn_index}_assistant` 那一行，卡片按它挂。
+  理由：父会话与升级是会话自己的事实，CLI 要读，所以进 `sessions`；「哪条回复派了哪个子任务、没派出去为什么」是一次派活的记录，一个标签一行，主键同时挡住同一条回复派两次。六处手写迁移列表与 `db_migrations.rs` 都补了。
+- **`origin.via` 的新值叫 `subtask`**：子任务会话与它的第一条消息（派活说明）都是 `{"via":"subtask"}`。`created_via` 的 CHECK（006、007、021）只认四个值，加第五个要重建 `sessions` 和 `messages`，正是 021 / 023 / 033 预检要防的外键级联删除风险，所以库里存成 `system` + 保留的 supervisor 标签 `galley-subtask`，读回时（会话、消息、原始消息行）一律还原成 `subtask`、不带 supervisor。Agent API 文档里 `Origin.via` 加上这个值（稳定标识集合，新增不算破坏）。
+- **派活**（`core/src/subtask.rs`）：队列 drain 任务收到主对话的 `RunComplete` 时，在把下一条排队消息交出去之前，读主对话最新一条可见回复；是最终回答（没有真实工具调用，以 `ask_user` 结束的不算）、里面有 `<subtask>`、还没有记录的，先在进程内认领，再放到后台去派。每个标签并发处理：
+  - 空标签记 `empty`，没闭合的记 `unclosed`（标题取它已写的第一行），都不建会话、不重试。
+  - 有说明的：建会话（内置运行时、父会话 = 主对话、来源 `subtask`、标题 = 说明第一行去掉 `#`、`-`、`**` 之类的 markdown 记号后按派生标题的规则截断、用主对话当前选的模型），第一条消息就是说明，与会话在同一个事务里写入；随即广播 `session-created-external`（via `subtask`）与 `user-message-persisted`（`pending`），写记录并广播 `subtask-dispatched`（卡片这时就出现），然后照 Core 发送的做法起跑：占运行闸、共用路径起 runner、发出 `user_message`，再广播 `dispatched`。
+  - 建会话失败：记 `start_failed`、没有 `session_id`；会话建好了但 runner 没起来：记录改成 `start_failed` 带原因（保留 `session_id`，可以打开），消息广播为 `persisted_only`，再广播一次 `subtask-dispatched`。
+  - 其他会话（包括外置运行时的会话）里的标签只是文字，不派活。
+  - 没有走 `session.new` 的 socket 路径：它不占运行闸、也不能带父会话和新来源；也没有直接调 `send_user_message`：那样记录要等 runner 就绪（几秒）才能写，卡片会晚出现。
+- **标签不进正文**：Core 的派生（`turn_persistence/derive.rs`）与 GUI 的 `ga-output-cleaning.ts` 同步改：完整的 `<subtask>…</subtask>` 从最终回答、preamble、ask_user 参数里去掉；没闭合的连同后面全部截掉；流式时按未闭合标签截断、标签名写到一半也截。共享黄金用例加了 3 条，两边逐字节一致。库里 `content` 原样保留（派活要读）。
+- **回放**：主对话的 runner 拿回历史时（当前段与票 11 带过去的几轮都算），助手行去掉 `<subtask>` 块，派过活的那条回复末尾空一行后每个标签一行：
+  - `[subtask <子会话 id>: <标题>]`（会话建出来了，哪怕 runner 没起来）
+  - `[subtask not started: the tag was empty]`
+  - `[subtask not started: the tag was not closed]`
+  - `[subtask not started: it could not be started (<原因>)]`
+  说明正文不回放。热的 runner 里是模型自己写的原文，不改。
+- **升级**：Core 的发送（桌面与手机都走它）里，`via: gui` 的消息、且不是对待回答提问的回答（排队的也算），就把还没升级的子任务升级，广播 `session-updated-external`（via `subtask-promoted`）。CLI、supervisor 的 `session send` 和定时任务不走这条路；子任务自己的第一条消息来源是 `subtask`；回答提问是在帮它干活。所以这些都不升级。
+- **入口层派活条款**：接在 `MAIN_CHAT_ENTRY_LAYER` 末尾，原文是 `dispatch-clauses.md` 的 T 段，再加一句「Use this, not the file-based subagent in your memory (subagent.md), which the user cannot see.」。`MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` 827 → 1446（+619：T 段 522、新句 94、分段 3），理由写在测试注释与 `prompt-composition.md`；入口层一节、条款台账、回归清单（第 22–24 条：大活派出去、快活自己做、派完不守着）同步改。测试只用单行片段、字节数不计 `\r`。
+- **CLI / Agent API**：会话 JSON 加 `parentSessionId`（子任务才有）与 `promoted`（升级后才有 `true`），`origin.via` 多了 `subtask`；`sessions list` 默认结果不变，子任务照样列出。写进 `docs/agent-api/` 三个文件。派活记录不进 Agent API（只有桌面用的 Tauri 命令 `list_subtask_dispatches` 与事件 `subtask-dispatched`）。
+- **手机**：远程会话列表与侧栏一致，不列没升级的子任务；发给手机的事件（会话行、消息、运行状态等）也按同一规则过滤；升级那一下以 `session.created` 发给手机。手机协议没有 `subtask` 来源，升级后的子任务在手机上来源是 `system`。卡片留给 iOS 07。
+- **通知落在 GUI**（`gui/src/lib/subtask-notify.ts`，接在 `ipc-handlers.ts` 与 runner 关闭处）：现有通知路径就在 GUI（焦点、偏好、权限、声音），Core 的轮次落库模块写明「通知留在 GUI」；手机推送的判定是 iOS 票 08 的事，Core 里 `send_push` 还没有调用方；规则要的运行起点与实时状态 GUI 都有。规则只管还没升级的子任务：在问你一律通知；完成只在这次运行跑满 2 分钟才通知（起点取 `currentRunStartedAtMs`，没有时取会话创建时间）；出错一律通知（运行以错误结束、runner 异常退出、派活记录带失败），走新的 `subtaskFailed` 类别，照 `scheduleFailed` 不受偏好开关管；在问你与完成跟「回复完成」同一个偏好开关。子任务会吃掉原来的「回复完成 / 在问你」标记，不会重复通知；升级后照普通对话。
+- **界面**（明细见 `docs/design/conversation.md`「子任务卡片」、`layout-and-chrome.md` MainHeader 与「有主对话时」）：
+  - 卡片挂在派活回复下面，一个标签一张，借工具块外框（hairline、`rounded-md`、左 3px 状态竖条，不加投影）；在跑：与侧栏状态行同源的「第 N 步 · 摘要」/「思考中」；在问你：卡片里就是 `AskUserBubble`（chip、右键 / ⌘ 点填入）加一行输入框（验证码这类自由回答，Enter 发送），走同一个 Core 发送发到子任务；完成：一行结果（子任务摘要，没有时取回答第一行）+「打开」；失败：原因 +「打开」；没派出去：原因，没有「打开」。旧子任务的历史没读到时先只显示标题，读最近一页再定状态。
+  - 顶栏面包屑「主对话 ›」，点它回主对话；侧栏选中停在主对话行；⌘K 搜索能搜到子任务，打开同样是面包屑形态（不搜索时的最近列表不列它，与侧栏一致）。
+  - 侧栏任何分区都不列没升级的子任务；它们的「在问你 / 出错」汇到主对话行，状态行写「子任务在问你」「子任务出错」；升级后按人开的对话进时间桶，不进「其他来源」。侧栏收起时的徽标把子任务算作主对话这一个。
+  - 子任务第一条消息（主对话写的说明）上方放主对话的房子图标，提示「主对话派来的」。
+  - 文案：卡片「子任务」「打开」「已完成」「回复…」「发送」；没派出去「没有开始：主对话没写要做什么」「没有开始：主对话没写完要做什么」；失败「没能启动：…」「出错：…」「没有跑完」「这个子任务已经删除」；面包屑无障碍名「回到主对话」；通知标题「子任务在问你」「子任务完成」「子任务出错」。界面只说「子任务」，不说「派活」「标签」，`copy-language-guidelines.md` 补了一行。
+- **外置运行时**：没有主对话，所以不派活、没有子任务、不加载卡片，侧栏、通知、⌘K、顶栏都照旧；Core 里外置会话的回复带这个标签也只是文字（有测试）。
+- **测试**：Rust 新增 `core/tests/subtask_test.rs` 9 个（多标签各开一个；空、没闭合、建会话失败、runner 起不来；父会话、来源、标题、第一条消息、模型、起跑与广播顺序；只有主对话的最终回答派、只派一次；回放补行且说明不回放、带过去的几轮也一样；界面发送升级、排队也升级、回答 / 子任务自己 / CLI / socket 发送不升级），`subtask.rs` 单元 7 个，`origin.rs`、`managed_prompt.rs` 各加 1 个，`remote_module_test.rs` 加 1 个（手机只在升级后看到它），`cli_test.rs` 加 1 个（`sessions list` / `session brief` 的新字段）。vitest 新增卡片状态、卡片里回答、面包屑、侧栏不列 / 升级后列出 / 选中停在主对话行 / 主对话行汇总、通知判定、`rowsToTurns` 认 `subtask`、流式与落库不显示标签。
+  结果：`cargo test --workspace` 本机时区与 `TZ=UTC` 各 955 个通过（32 组）；vitest 本机时区与 `TZ=UTC` 各 116 个文件 1136 个通过；typecheck、lint、六个门禁、`git diff --check` 通过。只格式化了自己的文件或 hunk。
+- **真机复现（主会话在 tauri dev 里做）**：
+  1. 合入后重启 `pnpm --dir gui tauri dev`（Core 是 Rust，不热更），内置运行时，启动落在主对话。
+  2. 主对话里发「把下载文件夹里的 PDF 按内容分类：发票、合同、论文各一类，其他放「杂项」。」→ 回复一句「交给子任务了」之类，正文里看不到 `<subtask>`；回复下面出现一张卡片，先「思考中」，再「第 N 步 · …」；侧栏没有新行。终端有 `[subtask <主对话 id>] reply turn …: 1 tag(s), 1 started`。
+  3. 让子任务问你：再发「这件事交给子任务：整理下载文件夹里的截图。动手之前先用提问问我要按什么分类，等我回答再动。」→ 卡片变成「在问你」，里面是提问、候选和一行输入框；窗口不在前台时有「子任务在问你」通知；侧栏主对话行变成等你回复的样子，状态行「子任务在问你」。在卡片里点候选或打字回车 → 卡片回到「在跑」，子任务仍不进侧栏。
+  4. 跑完：卡片「完成」一行结果 +「打开」；跑满 2 分钟、窗口不在前台时有「子任务完成」通知。点「打开」→ 主区是子任务的完整过程，顶栏「主对话 ›」，侧栏选中仍是主对话行；点「主对话」回到主对话。
+  5. 在打开的子任务里发一句不是回答的话（如「顺便把图片也分一下」）→ 它出现在侧栏「其他对话」今天桶，面包屑消失。
+  6. 可选：`galley sessions list` 看到子任务带 `parentSessionId`、升级的带 `promoted: true`、`origin.via` 是 `subtask`；主对话空闲切段后（或重启后）问「刚才那个分类做完了吗？」，模型按回放里的 `[subtask <id>: …]` 用 `galley session show <id>` 去查。
+- **拿不准 / 有意没做**：
+  - 「在子任务里发出一句话」按「不是回答提问的一句话」实现：回答提问不管在卡片里还是打开子任务后在输入框里，都不升级。若要「打开后回答也算」，需要发送时带上来源位置，Core 现在分不出来。
+  - 卡片的「失败」包括运行以错误结束（只在内存里），重启后这类子任务显示「没有跑完」；主对话行只汇总 runner 出错与在问你（侧栏「出错」的原定义），所以额度之类的运行错误只在卡片上是失败，不点亮主对话行。子任务停在步数上限时不通知，卡片显示「没有跑完」。
+  - 热的主对话 runner 里没有子任务编号（只有回放才补行）；模型要查，可以用 `sessions list` 按 `parentSessionId` 找。
+  - 子任务用主对话当前选的模型，不继承推理强度。
+  - runner 的 `finalContent`（Python 侧清洗，用于自动标题）没去掉标签：主对话不自动起标题，看不到影响，按「不碰 runner」没改。
+  - 卡片用了 hairline 外框，按代码块、工具块的先例；对话区「不要边框」那条说的是用户气泡。请真机时一起看。
+  - 不做：定时任务改卡片（06b）、浏览器「已看 3 / 7」、多活合一卡、手机端卡片、派活失败重试。

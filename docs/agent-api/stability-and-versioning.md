@@ -69,7 +69,7 @@ get a clean error path; the JSON envelope carries the original tag.
 | `SessionBrief.status`      | `idle / connecting / running / waiting_approval / error / completed / cancelled / archived` (`waiting_approval` is kept as a stable value but is no longer produced since approval was removed (2026-10-05)) |
 | `MessageBrief.role`        | `user / agent / system` (DB `tool` rows normalize to `agent`)                         |
 | `HealthCheck.status`       | `ok / warn / fail / deferred_b4` (`deferred_b4` is a legacy stable value; new `deferred_<phase>` values are additive) |
-| `Origin.via`               | `gui / cli / supervisor / system`                                                     |
+| `Origin.via`               | `gui / cli / supervisor / system / subtask` (`subtask` additive 2026-10-13: a session the main chat dispatched and its first message) |
 | `GoalBrief.status`         | `active / paused / blocked / completed / budget_limited / stopped / failed` (schemaVersion 2; open = the first three) |
 
 #### `dispatch` values (per-command)

@@ -143,6 +143,27 @@ Agent 经 `ask_user` 停下来问人的那条：实时态是 warning 左条 + `P
 - **不接的东西**：不开 `selectionCopyScope`（浮动复制工具栏语义是「复制回答」），不挂 `MessageActions` 的 Copy；不给候选加数字键（暂不考虑键盘用户，2026-09-14 JC 裁决）。
 - **提问不切断 run 的计数**（2026-09-18，[devlog](../devlog/2026-09-18-ask-user-run-continuity.md)）：ask_user 让 GA 循环退出、回答再起一个循环，引擎侧步号与计时都按「段」重来；GUI 把段合回一个 run——序号栏与侧栏「第 N 步」按 run 内位置连续编号，折叠头用时、答案脚注的 token 数、右下角运行中 HUD 都是各段之和（等待回答的时间不计，只算 agent 在跑的时间）。settled 数字缺任一段的 telemetry 就整体留空，不显示部分和；HUD 是活体信号例外，缺段按 0 继续走。
 
+#### 子任务卡片（2026-10-13，主聊天票 06a）
+
+主对话把要跑很久的活派给子任务（[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 25、52、53）：回复里每个 `<subtask>` 标签开一个子任务，派活的那条回复下面一个子任务一张卡，按标签顺序叠放（`SubtaskCards`，`gap-2`，离回复 12px）。卡片只给人看，不进模型上下文；模型要知道子任务怎样了，按编号用 CLI 去查。
+
+- **形态借工具块，不另立一套**：attention block 的外框（[tools-and-approvals.md](./tools-and-approvals.md)「双层形态」）——hairline `border-line`、`rounded-md`、左侧 3px 状态竖条；里面是会话行的三个信号：状态图标（`StatusIcon`，与侧栏同一套）、标题（13px medium `ink`，子任务的标题，没有标题时写「子任务」）、一行状态（12px，照侧栏状态行的色调），右侧「打开」（`ghost` 小按钮）。不加投影、不抬升——对话区是纸（上文「不要边框、不要投影」说的是用户气泡；卡片的 hairline 与代码块、工具块同族）。
+- **四种状态各一行**（裁决 53），加一种没派出去：
+
+  | 状态 | 竖条 / 底 | 图标 | 那一行 | 打开 |
+  |---|---|---|---|---|
+  | 在跑 | `brand` / `surface` | 旋转 `CircleNotch` | 与侧栏状态行同源：「第 N 步 · 摘要」，还没有一步做完时「思考中」 | 有 |
+  | 在问你 | `warning` / `warning` 淡底 | 实心 `PauseCircle` | 不写这一行；卡片里直接是提问（下条） | 有 |
+  | 完成 | 淡 `brand` / 页面底 | `CheckCircle`（muted） | 一行结果：子任务的摘要，没有摘要时取回答第一行 | 有 |
+  | 失败 | `error` / `error` 淡底 | `XCircle` | 原因：「出错：……」「没能启动：……」「没有跑完」 | 有 |
+  | 没派出去 | 淡 `error` / 页面底 | `XCircle` | 「没有开始：主对话没写要做什么 / 没写完要做什么」「没能启动：……」 | 没有 |
+
+  完成与没派出去用淡竖条、落在页面底上，读作已结算的档案，与工具块 `success-historical` / `failed-historical` 同一个降调；在跑、在问你、失败是需要看的，用满色竖条。不做浏览器的「已看 3 / 7」与网站图标（裁决 53）。没读到历史的旧子任务先只显示标题，读完最近一页再定状态。
+- **在问你时卡片里直接答**：复用 `AskUserBubble`——问题、候选 chip、右键 / ⌘ 点击填入——它以无边框的形态坐在卡片里，卡片本身穿 warning 竖条与淡底；下面一行输入框（「回复…」，Enter 发送，旁边纸飞机按钮），给验证码这类自由回答。点 chip 或回车走的是输入框回答提问的同一条 Core 发送（`send_user_message`），发到子任务，作为它的回答；回答不算「在子任务里说话」，子任务不会因此升级进侧栏。
+- **「打开」**：在主区打开子任务，顶栏标题前出现「主对话 ›」面包屑，侧栏选中停在主对话行（[layout-and-chrome.md](./layout-and-chrome.md)「有主对话时」）。
+- **子任务里的第一条消息**是主对话写的说明（来源 `subtask`），不是用户打的字：气泡上方的元信息行放主对话的 `House` 图标（12px thin），提示「主对话派来的」，与 Supervisor 来源图标同一个位置。
+- **状态从哪来**：派活记录由 Core 写（哪条回复派了哪个子任务，或为什么没派出去），页面读一次（`list_subtask_dispatches`）、之后听 `subtask-dispatched`；卡片状态由 `deriveSubtaskCard`（`lib/subtasks.ts`）从侧栏行读的同几份状态算出：运行时出错或这一轮以错误结束 → 失败；有待回答的提问 → 在问你；在跑 → 在跑；最后一步是回答 → 完成；其余 → 没有跑完。
+
 #### Markdown 渲染
 
 Final answer 跟 Thinking summary 都通过 `react-markdown` + `remark-gfm` + `remark-cjk-friendly`（`**标签：**正文` 这类紧贴全角标点的加粗，CommonMark 会原样漏星号）+ Shiki 渲染。LLM 输出的 markdown（标题 / 列表 / 表格 / 代码块 / 引用 / 链接 / 删除线）全部解析成对应 DOM，没解析的纯文本走默认段落。
