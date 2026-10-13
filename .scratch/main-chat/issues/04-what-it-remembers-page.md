@@ -1,8 +1,8 @@
 # 04（D）「它记得我什么」页面
 
-Status: 04a、04b、04c 本地合入（`2b9d985d`、`a90a15d9`、`d4103c38`、`2a9856cb`，2026-10-12–13），随 session 收尾推送；待：JC 真机看「记忆」页与问候（问候要干净数据目录才看得到）
+Status: 04a–04c done（`2b9d985d`、`a90a15d9`、`d4103c38`、`2a9856cb`，已推送）；04d ready-for-agent（裁决 48，三区简化）
 
-来源：主聊天 PRD 裁决 11、20、22、43–46（2026-10-09、10-12）。依赖 01。01 与 03 对外发版必须和本票同版。
+来源：主聊天 PRD 裁决 11、20、22、43–48（2026-10-09、10-12、10-13）。依赖 01。01 与 03 对外发版必须和本票同版。
 
 ## 目标
 
@@ -266,6 +266,58 @@ interface MemoryOverview {
 - Core：建出主对话时开关与第一次整理时间（04:00 前后两种）、已存在开关不动、从归档恢复不写问候、问候不回放、状态块那一行的有无与字节上限、外置运行时什么都不做。
 - 界面：询问与切换器的代码与测试都删干净（`grep -rn "MemoryAsk\|memory-ask-trial\|memoryDemo" gui/src` 为空），开关不弹选择框、关掉弹对话框，问候显示。
 - `cargo test --workspace`、六个门禁脚本、`pnpm --dir gui typecheck`、`lint`、vitest、`git diff --check`。
+
+### 04d 「记忆」页简化为三区（ready-for-agent，裁决 48）
+
+2026-10-13 JC：七个区域对用户心智负担太重。四点 JC 逐条选定（PRD 裁决 48）：情绪挂到所属的事下面；「不用于了解我」整个去掉（含对话与项目菜单的勾）；「不再记的事」整个去掉；进行中与已结束合成一区。
+页面只剩三区：开关 /「记下的事」/ AI 的长期记忆。这三样都没发过版（v0.6.2 不含迁移 045），不做旧格式迁移，只清掉开发机上的残留。
+
+**Core**
+
+- **产物格式**：情绪不再是单独的文件，写进它所属事项的块里，一行一条（可多条）：
+  `- 情绪（`会话标识`，YYYY-MM-DD HH:MM）：焦急、不安——“用户原话”`
+  整理任务（`core/src/ledger/batch.rs` `task_prompt`）第 7 步改成只有 `activities.md` 一个文件，加上这一行的格式；写明对应不到任何事项的情绪不记（情绪只为把事办好时引用，对应不上就用不上），SOP 里「标什么、不标什么」的情绪标准照旧；明确不写 `emotional_events.md`。
+  第 8 步「用户删掉过……」整段删掉，最后一步编号前移。任务仍要在 2000 字内（现有测试）。
+- **解析**（`entries.rs`）：事项块认出情绪行，放进 `LedgerEntry` 的新字段（会话、时间、标签、原话，加上整行原文供删除定位）；`emotional_events.md` 的解析、`LedgerEmotion`、overview 的 `emotions` 字段删掉。认不出的情绪行照现有规则落进 `extra`。
+- **删除**：`delete_ledger_entry { id }` 照旧删整块，情绪行随块一起删，短清单那一行照旧连带删。新加一个删单条情绪的命令，按「事项 id + 那一行的原文」定位，不按序号（防止行挪位删错）；找不到返回 `not_found`，整理进行中返回 `ledger_busy`，删完发 `memory-changed`。外置运行时返回 `managed_only`。
+- **去掉「不再记的事」**：`forgotten.rs`、`galley/forgotten.json` 的读写、`unforget_ledger_entry` 命令、overview 的 `forgotten` 字段、任务里的清单。删除就只是删除。
+- **去掉「不用于了解我」**：新迁移删 `ledger_exclusions` 表（045 已在开发机上跑过，tauri-plugin-sql 校验已跑迁移的校验和，不能改 045 或删文件）。加迁移要补六处手写迁移列表（`grep -rn "MIG_0" core/tests cli/tests -l`：core/tests 四处、cli/tests 两处）。
+  还要删 `sources.rs` / `db/ledger.rs` 里的排除条件与读写、`set_ledger_excluded` / `list_ledger_exclusions` 命令、overview 的 `exclusions` 字段、`LedgerTarget` 等只为它存在的类型。这些命令都不在 CLI / Agent API 里（已核对）。
+- **残留清理**：Core 启动时（账本的启动路径里）发现 `history_insight/emotional_events.md` 或 `history_insight/galley/forgotten.json` 就删掉。这两样都没发过版，只有开发机和评测目录有；留着就是用户看不到也删不掉的记录，违背 Rule 4 补句。外置运行时不碰。
+- **回滚**（`rollback.rs`）只剩 `activities.md` 与 `ongoing_affairs.md`。「清空」不变（删整个目录）。
+- `ledger/mod.rs` 等模块头注释里的文件树和职责同步改。
+
+**界面**
+
+- **三区**：开关 /「记下的事」/ AI 的长期记忆。删掉「情绪时刻」「不再记的事」「不用于了解我的对话」三区及其文案。
+- **记下的事**：进行中的按「最近」倒序；末尾一行「已经结束的 N 件」，点开才显示已结束的（行样式按设计文档定，回报你的做法）。解析失败照旧退回只读原文，标题仍是「记下的事」。开着但还没有内容时一句空状态。
+- **情绪**：在事项展开后显示，一行一条：日期、标签、原话；每条能删（确认框沿用现有的删除确认形态）。
+  情绪的用法说明（「只在把事办好需要时引用，不会单独评论你的情绪」）在有情绪显示的地方出现一次，位置你定、回报。
+- **删除确认**：删一件事的说明改成「「X」会从记录里删掉。以后再聊到这件事，可能会再记下。」，这件事带情绪时加一句情绪会一起删。英文同步。
+- **关掉对话框**：「一起清空」的说明只说已记下的内容会删除（去掉「不再记的事」和「不用于了解我」两句）。
+- **菜单**：对话标题菜单与侧栏项目菜单里的「不用于了解我」勾选项、它的提示与出错文案全部删掉（`SessionTitleMenu.tsx`、`SidebarProjectGroup.tsx`、`MainHeader*.tsx`、`gui/src/lib/memory-exclusion.ts`、`memory.ts` 里的封装）。主对话标题菜单的「它记得我什么」保留。
+- `gui/src/types/ipc.ts` 镜像同步（`check-ipc-protocol-drift` 门禁）。演示 fixture（`memory-overview.fixture.ts`）改成新形状：林晓那份里的情绪挂到对应事项下，对应不到的去掉。
+
+**文档**
+
+- `docs/design/overlays-and-settings.md`「记忆」页改成三区；标题菜单、项目菜单的设计文档若写了「不用于了解我」一并删。
+- 描述现行行为的地方都要改：grep 中英文 `不用于了解我`、`exclusion`、`forgotten`、`不再记`、`emotional_events`、`情绪时刻`、`Not used to`，范围是 `docs/`、`CONTEXT.md`、模块注释。devlog、已完成的票、PRD 历史裁决不改。
+
+**评测**
+
+- 改了整理提示词，要用真模型重跑（`.scratch/main-chat/ledger-eval/run_eval.py run`，三次挖掘，做法见票 01 Comments 与 04a 回报）。检查器同步改：
+  - 产物只有 `activities.md` 与短清单，没有 `emotional_events.md`；
+  - 每条情绪行都在某个事项块里，并且能被解析器认出；
+  - 去掉「删后不重建」那一项。
+- 回报：情绪行样例与条数，并和上一轮评测的情绪事件条数对比（对应不上而没记的大概有几条、是什么）。
+
+**验收**
+
+- `grep -rn "ledger_exclusions\|unforget\|forgotten\|emotional_events\|notUsedToLearn\|LedgerEmotion" core/src gui/src cli/src` 只剩迁移文件与启动残留清理两处。
+- `cargo test --manifest-path core/Cargo.toml --workspace`，并在 `TZ=UTC` 下再跑一遍。
+- `pnpm --dir gui exec vitest run`，本机时区、`TZ=UTC`、`TZ=America/Los_Angeles` 各跑一遍；`pnpm --dir gui typecheck`、`lint`。
+- 六个门禁脚本，`git diff --check`。
+- 格式化：core 只用 `rustfmt` 格式化自己动过的文件，gui 只格式化自己的 hunk（两边都不是整仓 clean）。
 
 ## 宪法 Rule 4 补句（2026-10-12 JC 定措辞；与本票同版落地）
 
