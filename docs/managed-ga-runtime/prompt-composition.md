@@ -25,7 +25,7 @@ prompt value. The runner appends it as `extra_sys_prompt` and needs no
 knowledge of the composition. The main chat gets one more state-block
 section (below): `compose_main_chat_runtime_prompt`, chosen in
 `runner_commands::prepare_managed_spawn_args` by session id, adds
-`## Main Chat`.
+`## Main Chat` and, after it, the main chat entry layer (below).
 
 ## Admission Test For Static Clauses
 
@@ -211,6 +211,40 @@ look it up with the Galley CLI (search, then
   unchanged; ticket 11 added 94 bytes for the carried turns' count and
   time. Data: outside the static budget and the prompt hash.
 
+## Main Chat Entry Layer
+
+Since ticket 03d (`.scratch/main-chat/issues/03-segments-and-injection.md`)
+the main chat's prompt ends with `## Galley Main Chat Entry Layer`
+(`MAIN_CHAT_ENTRY_LAYER` in `core/src/managed_prompt.rs`), right after the
+`## Main Chat` section. Positioning (JC, 2026-10-13): without it the main chat
+was a pinned ordinary session; GA's core prompt is written for an executor
+that finishes a task and restates the result. The layer says three things:
+
+- **What this conversation is**: the one conversation that is always here;
+  one ongoing relationship, not a queue of tasks; the turns above and the
+  parts it can look up are shared history.
+- **Reply at the weight of what the user said**: a remark or quick question
+  gets a short, plain reply; no plan, options or next steps unless they
+  help; open with the answer, no closing restatement (the same override of
+  the core prompt's reply shape as the IM layer).
+- **Pick up what a break left open** (ticket 11's carried turns) when the
+  user comes back to it, without recapping it unasked.
+
+Delegation is not in it yet: the subtask clause (ticket 06, ruling 52's
+`<subtask>` tag) lands with the subtasks themselves.
+
+- **Evidence**: compared with and without on the main chat's own model
+  (`.scratch/main-chat/entry-layer-eval/`, 15 messages, tools intercepted).
+  Remarks and personal news got shorter, plainer replies (「早」 no longer
+  asks what to get done today; 「我妈明天做手术」 got two sentences of
+  empathy and a question instead of a checklist); real work (an email, a
+  Rust explanation) kept its length; tool calls got a one-line heads-up.
+- **Not covered**: the next-step suggestion still follows its own mandate
+  after small talk (「早」 → 「帮我梳理一下今天要做的事」).
+- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 827, no headroom, `\r`
+  not counted. Behavior, but main chat only, so it stays out of the static
+  budget and the prompt hash.
+
 ## IM Entry Layer
 
 IM channels (WeChat, Feishu, Telegram, Discord; managed runtime only) compose
@@ -280,6 +314,7 @@ row.
 | State block | 2026-07-07 session: replace "don't invent metadata, go check Settings" deflection with injected facts |
 | State block: Main Chat (id, segment start, "search, then `--around`") | main chat PRD rulings 18 and 41, ticket 03b (2026-10-12): segments leave earlier parts out of context, and the decided lookup path is the existing CLI rather than a new GA tool. Own cap `MAIN_CHAT_SECTION_BUDGET_BYTES` |
 | State block: Main Chat, carried turns (「opens with <k> exchanges from before it, the last said <time>」, 「Anything older」) | main chat PRD ruling 50, ticket 11 (2026-10-13): a new segment opens with the last 3 turns before it, and without their time the model would take what the user said hours ago as said just now. Cap raised 327 → 421 (+94 bytes) in the same diff; the text without carried turns is unchanged |
+| Main chat entry layer: ongoing relationship, reply at the weight of the message, pick up what a break left open, `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` | ticket 03d (2026-10-13): JC found the main chat read as a pinned ordinary session; the draft was compared with and without on the main chat's model (`.scratch/main-chat/entry-layer-eval/`) before it went in |
 | Past Galley Conversations: `--around` example; coverage sentence reworded to 「This reaches every Galley session, but not direct IM chats …」 | ticket 03b (2026-10-12): `session show` gained `--around`, and `--tail=20` reads the end of a session, not where a search hit is. Paid for in the same diff: the two coverage sentences became one (−51 bytes against the +51-byte line on both platforms), so the static text stays at 6855 bytes (Windows) / 6837 (POSIX) and the cap is unchanged |
 
 ## Dogfood Regression Checklist
@@ -344,3 +379,6 @@ in a real managed session after any prompt change:
     threshold, then 「我们刚才聊到哪了？」 → answers from the carried turns
     without a search, and treats 「我出门了」 as said at that earlier time,
     not just now.
+21. Main chat: 「早」 and 「我妈明天做手术，有点紧张。」 → a short, plain
+    reply each; no checklist, no plan, no 「今天要先搞定什么」. Then
+    「帮我写一封邮件给客户，说明交付要推迟一周」 → a full email, not cut short.

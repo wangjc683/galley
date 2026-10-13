@@ -259,6 +259,32 @@ look it up with the Galley CLI (search, then
     )
 }
 
+/// The main chat's entry layer (ticket 03d): how the one conversation
+/// that is always there replies — an ongoing relationship rather than a
+/// queue of tasks, at the weight of what the user said, picking up what a
+/// break left open. Behavior, so it stands after the `## Main Chat` data
+/// section; main chat only. Compared with and without on the main chat's
+/// own model before it went in (`.scratch/main-chat/entry-layer-eval/`):
+/// remarks and personal news got short, plain replies, real work kept its
+/// length.
+const MAIN_CHAT_ENTRY_LAYER: &str = r#"## Galley Main Chat Entry Layer
+
+This is the user's main chat: the one conversation with you that is always
+here. They bring anything to it, a question, a passing remark, something to
+get done, without first choosing a conversation. It is one ongoing
+relationship, not a queue of tasks: the turns above, and the earlier parts
+you can look up, are history you share.
+
+Reply at the weight of what they said:
+- A remark or a quick question gets a short, plain reply, the way a person
+  would answer. Not every message is a task: offer no plan, options or next
+  steps unless they help.
+- Open with the answer or outcome, and do not restate it as a closing
+  summary.
+- When your context opens with turns from before a break and something there
+  was left open, pick it up when they come back to it, without recapping it
+  unasked."#;
+
 fn compose(
     app_version: &str,
     with_suggestion: bool,
@@ -270,7 +296,12 @@ fn compose(
         RUNTIME_PROMPT_STATIC.to_string()
     };
     let main_chat = main_chat
-        .map(|state| format!("\n\n{}", main_chat_section(state)))
+        .map(|state| {
+            format!(
+                "\n\n{}\n\n{MAIN_CHAT_ENTRY_LAYER}",
+                main_chat_section(state)
+            )
+        })
         .unwrap_or_default();
     format!(
         r#"{static_rules}
@@ -526,8 +557,12 @@ mod tests {
         let main = compose_main_chat_runtime_prompt("t", &state);
         assert_eq!(
             main,
-            format!("{ordinary}\n\n{}", main_chat_section(&state)),
-            "the section is appended after the state block, nothing else moves"
+            format!(
+                "{ordinary}\n\n{}\n\n{MAIN_CHAT_ENTRY_LAYER}",
+                main_chat_section(&state)
+            ),
+            "the section and the entry layer are appended after the state block, \
+             nothing else moves"
         );
         assert!(main.contains("## Next-Step Suggestion"));
         assert!(main.find("## Galley State") < main.find("## Main Chat"));
@@ -603,6 +638,46 @@ mod tests {
     /// the model where the carried turns end; the time keeps it from
     /// reading a carried "I'm heading out" as said just now.
     const MAIN_CHAT_SECTION_BUDGET_BYTES: usize = 421;
+
+    /// Ticket 03d: the entry layer follows the Main Chat section in the
+    /// main chat and nowhere else.
+    #[test]
+    fn main_chat_entry_layer_is_main_chat_only() {
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state());
+        let section = main.find("## Main Chat").expect("the Main Chat section");
+        let layer = main
+            .find("## Galley Main Chat Entry Layer")
+            .expect("the entry layer");
+        assert!(section < layer);
+        // Single-line fragments only (a Windows checkout makes the raw
+        // string CRLF).
+        assert!(main.contains("relationship, not a queue of tasks"));
+        assert!(main.contains("Reply at the weight of what they said:"));
+        assert!(main.contains("Open with the answer or outcome"));
+        assert!(main.ends_with("unasked."));
+        for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
+            assert!(!prompt.contains("Main Chat Entry Layer"));
+        }
+    }
+
+    /// Byte cap on the main chat entry layer: no headroom, `\r` not
+    /// counted. It rides every request of the main chat, outside the
+    /// static budget. Set at 03d to the draft compared on the main chat's
+    /// model; grow it only with a reason, as for the static budget.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 827;
+
+    #[test]
+    fn main_chat_entry_layer_stays_within_budget() {
+        let len = MAIN_CHAT_ENTRY_LAYER
+            .bytes()
+            .filter(|&byte| byte != b'\r')
+            .count();
+        assert!(
+            len <= MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES,
+            "main chat entry layer is {len} bytes, budget {MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES}: \
+             remove a clause first, or raise the budget with a reason"
+        );
+    }
 
     #[test]
     fn main_chat_section_stays_within_budget() {
