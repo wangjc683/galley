@@ -148,6 +148,9 @@ README「dense context instead of long」（`README.md:54`）。
     6 份派活说明都写全了目标、用户给的信息、范围和交回什么；派完都直接收尾，没有回头守着子任务；派之前查的步数原生工具 0–1、标签 1、命令 2–3。
     没选原生工具：会是第一个给 GA 加工具的补丁，还要一条三端都改的 IPC；没选命令：最慢，还要长期维护一条公开 CLI 命令。
     标签的代价由 06 接住：界面藏起标签、回放时把说明换成一行带子任务编号的标记、写坏或没派出去时界面露出来。模型会去读 GA 自带的 `subagent.md`，派活条款要写明用 Galley 的子任务。
+53. **06 的五点**（JC 按建议定）：一条回复里一个标签一个子任务、一张卡（不做「能并行的活合成一张卡」）；子任务是普通对话，派活说明作为它的第一条消息（不是 Goal）；
+    卡片第一版四种状态各一行（在跑 / 在问你 / 完成 / 失败），不做浏览器「已看 3 / 7」；子任务在问你一律通知、完成只在跑了 2 分钟以上时通知；定时任务改卡片拆到 06b，排在派活之后。
+    同日入口层按草稿接入（票 03d，`0cec6d94`），派活条款随 06a 补上。
 
 ## 事实依据（2026-10-12 核对）
 
@@ -198,7 +201,9 @@ README「dense context instead of long」（`README.md:54`）。
 | [02](./issues/02-main-chat-form.md) | B | 主聊天形态 + A1 / A2 切换器 + 排队 / 开旁聊 | — | done（侧栏形态见 07–09） |
 | [03](./issues/03-segments-and-injection.md) | C | 切段、注入、入口层提示词 | 02 | 03a、03b、03d done（事项清单注入由票 10 拆掉；03d `0cec6d94`）；03c needs-triage（按 deferred 的启动信号） |
 | [04](./issues/04-what-it-remembers-page.md) | D | 「它记得我什么」页面 | 01 | 撤销（裁决 49）：04a–04d 合入后整页由票 10 拆掉，问候只留第一段 |
-| [06](./issues/06-subtasks.md) | F | 子任务：父会话、派活标签（裁决 52）、卡片、定时任务改卡片 | 02 | needs-triage（派活方式已定，余项讨论中） |
+| [06](./issues/06-subtasks.md) | F | 子任务：父会话、派活标签（裁决 52）、卡片、定时任务改卡片 | 02 | 拆为 06a、06b（裁决 53） |
+| [06a](./issues/06a-subtask-dispatch-and-cards.md) | — | 派活标签、子会话、卡片、面包屑、升级、通知、入口层派活条款 | 03d | ready-for-agent |
+| [06b](./issues/06b-scheduled-results-as-cards.md) | — | 定时任务的结果改为主对话里的卡片 | 06a | needs-triage |
 | [07](./issues/07-sidebar-structure-trial.md) | — | 侧栏结构试验：A3 / B / B′ + 演示状态 | 02 | done（JC 定 B′ + 其他对话） |
 | [08](./issues/08-sidebar-finalize.md) | — | 侧栏收尾：B′ 转正、删试验代码、改设计文档 | 07 | done（`a3d7254b`） |
 | [09](./issues/09-section-belonging-trial.md) | — | 「其他对话」归属感试验：C1 / C2 / C3 | 08 | done（JC 定 C3 + 常显 + 加重） |
