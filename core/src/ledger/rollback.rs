@@ -1,6 +1,6 @@
 //! A failed run leaves nothing behind (ticket 04).
 //!
-//! The model edits the ledger's three files in place over many tool
+//! The model edits the ledger's two files in place over many tool
 //! calls; a run that fails, times out or is stopped (the user switching
 //! the ledger off) can stop between two of them. So before the model
 //! starts, [`snapshot`] copies the files into `galley/rollback/`; when
@@ -24,8 +24,9 @@ use serde::{Deserialize, Serialize};
 
 use super::{write_atomic, LedgerPaths};
 
-/// The files a run may change.
-pub const FILES: [&str; 3] = ["activities.md", "emotional_events.md", "ongoing_affairs.md"];
+/// The files a run may change (one fewer since ticket 04d moved emotions
+/// into their affairs' blocks).
+pub const FILES: [&str; 2] = ["activities.md", "ongoing_affairs.md"];
 
 const MANIFEST: &str = "manifest.json";
 
@@ -115,10 +116,9 @@ mod tests {
         fs::write(paths.affairs_file(), "- A001｜原来的\n").unwrap();
         snapshot(&paths).unwrap();
 
-        // The run rewrites one file, empties another, creates the third.
+        // The run rewrites one file and empties the other.
         fs::write(paths.activities_file(), "写了一半").unwrap();
         fs::write(paths.affairs_file(), "").unwrap();
-        fs::write(paths.emotions_file(), "# 情绪事件\n").unwrap();
 
         assert!(restore(&paths).unwrap());
         assert_eq!(
@@ -129,10 +129,20 @@ mod tests {
             read(&paths, "ongoing_affairs.md").as_deref(),
             Some("- A001｜原来的\n")
         );
-        assert_eq!(read(&paths, "emotional_events.md"), None);
         assert!(!paths.rollback_dir().exists());
         // Nothing left to undo.
         assert!(!restore(&paths).unwrap());
+    }
+
+    #[test]
+    fn restore_removes_a_file_the_run_created() {
+        let (_dir, paths) = setup();
+        snapshot(&paths).unwrap();
+        fs::write(paths.activities_file(), "新建的一半").unwrap();
+        fs::write(paths.affairs_file(), "- A001｜").unwrap();
+        assert!(restore(&paths).unwrap());
+        assert_eq!(read(&paths, "activities.md"), None);
+        assert_eq!(read(&paths, "ongoing_affairs.md"), None);
     }
 
     #[test]

@@ -1,0 +1,13 @@
+-- 047_drop_ledger_exclusions.sql · retire "not used to understand me"
+-- (.scratch/main-chat/issues/04-what-it-remembers-page.md, 04d; PRD
+-- ruling 48)
+--
+-- 045 let the user take a session or a project out of the affairs
+-- ledger's reading. Ruling 48 removed the feature whole (the title and
+-- project menus' check item, the Memory page's area, the commands): the
+-- one way to keep the ledger from reading is its switch. 045 stays as
+-- it is — tauri-plugin-sql checksums applied migrations — and this one
+-- drops what it made. The feature never shipped (v0.6.2 carries no 045),
+-- so only development databases hold rows; they go with the table, and
+-- its two partial indexes with it.
+DROP TABLE IF EXISTS ledger_exclusions;

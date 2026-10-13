@@ -8,9 +8,9 @@
 //! `ledger::run::begin` (IM archive, source selection, batch file,
 //! pending position) at a chosen local time, and writes the mining task
 //! to `<workdir>/task.txt`; `commit` / `fail` are `ledger::run::finish`
-//! with the run's verdict; `delete` is the Memory page's delete
-//! (`LedgerControl::delete_entry`, ticket 04). The model run in between
-//! is `run_eval.py`'s, against the same state root.
+//! with the run's verdict; `delete` is the Memory page's delete of an
+//! entry (`LedgerControl::delete_entry`, ticket 04). The model run in
+//! between is `run_eval.py`'s, against the same state root.
 //!
 //! ```text
 //! cargo run --manifest-path core/Cargo.toml -p galley-core --example ledger_eval_prepare -- \
@@ -31,7 +31,7 @@ use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::ledger::im_archive::FILE_HINT;
 use galley_core_lib::ledger::run::{begin, finish, Begun};
 use galley_core_lib::ledger::state::LedgerState;
-use galley_core_lib::ledger::{LedgerConfig, LedgerControl, LedgerPaths, LedgerTarget};
+use galley_core_lib::ledger::{LedgerConfig, LedgerControl, LedgerPaths};
 use serde::Deserialize;
 use serde_json::json;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool};
@@ -53,8 +53,6 @@ struct Corpus {
 struct Project {
     id: String,
     name: String,
-    #[serde(default)]
-    exclude_from_ledger: bool,
 }
 
 #[derive(Deserialize)]
@@ -67,8 +65,6 @@ struct Session {
     runtime: String,
     #[serde(default)]
     project: Option<String>,
-    #[serde(default)]
-    exclude_from_ledger: bool,
     messages: Vec<Message>,
 }
 
@@ -150,12 +146,6 @@ async fn seed_db(pool: &SqlitePool, galley: &SqliteGalley, corpus: &Corpus, tz: 
         .execute(pool)
         .await
         .unwrap_or_else(|e| fail(format!("project {}: {e}", p.id)));
-        if p.exclude_from_ledger {
-            galley
-                .set_ledger_excluded(&LedgerTarget::Project(p.id.clone()), true)
-                .await
-                .unwrap_or_else(|e| fail(e));
-        }
     }
     for s in &corpus.sessions {
         let first = s
@@ -196,12 +186,6 @@ async fn seed_db(pool: &SqlitePool, galley: &SqliteGalley, corpus: &Corpus, tz: 
             .execute(pool)
             .await
             .unwrap_or_else(|e| fail(format!("message {}#{i}: {e}", s.id)));
-        }
-        if s.exclude_from_ledger {
-            galley
-                .set_ledger_excluded(&LedgerTarget::Session(s.id.clone()), true)
-                .await
-                .unwrap_or_else(|e| fail(e));
         }
     }
 }
@@ -377,7 +361,7 @@ async fn main() {
             // The Memory page's delete, production code.
             let id = entry_id.unwrap_or_else(|| fail("delete needs --id"));
             LedgerControl::new()
-                .delete_entry(&galley, &paths, &id, Utc::now())
+                .delete_entry(&galley, &paths, &id)
                 .await
                 .unwrap_or_else(|e| fail(format!("delete {id}: {e}")));
             println!("{}", json!({"status": "deleted", "id": id}));

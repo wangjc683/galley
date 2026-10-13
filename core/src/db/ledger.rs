@@ -1,9 +1,8 @@
-//! Affairs-ledger storage (`crate::ledger`): the "not used to
-//! understand me" marks of migration 045, and the read of what humans
-//! typed into Galley sessions.
+//! Affairs-ledger storage (`crate::ledger`): the read of what humans
+//! typed into Galley sessions. The ledger keeps nothing else in the
+//! database (Rule 4).
 
 use super::*;
-use crate::ledger::{LedgerExclusion, LedgerTarget, TitledExclusion};
 
 /// One user message as `ledger_human_turns` reads it.
 #[derive(Debug, Clone, FromRow)]
@@ -15,107 +14,9 @@ pub struct LedgerHumanTurnRow {
 }
 
 impl SqliteGalley {
-    /// Mark (`excluded = true`) or unmark one session or one project as
-    /// "not used to understand me". Idempotent both ways.
-    ///
-    /// **Errors**: `not_found` when the session / project does not exist.
-    pub async fn set_ledger_excluded(&self, target: &LedgerTarget, excluded: bool) -> Result<()> {
-        let (table, column, id) = match target {
-            LedgerTarget::Session(id) => ("sessions", "session_id", id.as_str()),
-            LedgerTarget::Project(id) => ("projects", "project_id", id.as_str()),
-        };
-        let exists: Option<i64> =
-            sqlx::query_scalar(&format!("SELECT 1 FROM {table} WHERE id = ? LIMIT 1"))
-                .bind(id)
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(map_sqlx_err)?;
-        if exists.is_none() {
-            let kind = if table == "sessions" {
-                "session"
-            } else {
-                "project"
-            };
-            return Err(GalleyError::NotFound {
-                message: format!("{kind} {id} not found"),
-            });
-        }
-        if excluded {
-            sqlx::query(&format!(
-                "INSERT OR IGNORE INTO ledger_exclusions ({column}, created_at) VALUES (?, ?)"
-            ))
-            .bind(id)
-            .bind(chrono_now_iso())
-            .execute(&self.pool)
-            .await
-            .map_err(map_sqlx_err)?;
-        } else {
-            sqlx::query(&format!("DELETE FROM ledger_exclusions WHERE {column} = ?"))
-                .bind(id)
-                .execute(&self.pool)
-                .await
-                .map_err(map_sqlx_err)?;
-        }
-        Ok(())
-    }
-
-    /// Every mark, oldest first.
-    pub async fn list_ledger_exclusions(&self) -> Result<Vec<LedgerExclusion>> {
-        let rows: Vec<(Option<String>, Option<String>, String)> = sqlx::query_as(
-            "SELECT session_id, project_id, created_at FROM ledger_exclusions ORDER BY id",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(map_sqlx_err)?;
-        Ok(rows
-            .into_iter()
-            .filter_map(|(session, project, created_at)| {
-                let target = match (session, project) {
-                    (Some(id), None) => LedgerTarget::Session(id),
-                    (None, Some(id)) => LedgerTarget::Project(id),
-                    _ => return None, // the CHECK rules this out
-                };
-                Some(LedgerExclusion { target, created_at })
-            })
-            .collect())
-    }
-
-    /// Every mark with its session's title or project's name, oldest
-    /// first (the Memory page, ticket 04). Archived sessions keep their
-    /// title; a deleted session or project took its mark with it.
-    pub async fn list_ledger_exclusions_titled(&self) -> Result<Vec<TitledExclusion>> {
-        let rows: Vec<(Option<String>, Option<String>, String, Option<String>)> = sqlx::query_as(
-            "SELECT e.session_id, e.project_id, e.created_at, \
-                        COALESCE(s.title, p.name) \
-                 FROM ledger_exclusions e \
-                 LEFT JOIN sessions s ON s.id = e.session_id \
-                 LEFT JOIN projects p ON p.id = e.project_id \
-                 ORDER BY e.id",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(map_sqlx_err)?;
-        Ok(rows
-            .into_iter()
-            .filter_map(|(session, project, created_at, title)| {
-                let target = match (session, project) {
-                    (Some(id), None) => LedgerTarget::Session(id),
-                    (None, Some(id)) => LedgerTarget::Project(id),
-                    _ => return None, // the CHECK rules this out
-                };
-                Some(TitledExclusion {
-                    target,
-                    created_at,
-                    title,
-                })
-            })
-            .collect())
-    }
-
     /// User messages a human typed into a GUI-created managed session,
     /// visible, created on or after `created_at_floor` (string compare on
-    /// the `YYYY-MM-DD` prefix; the caller cuts the exact window), from
-    /// sessions and projects not marked "not used to understand me".
+    /// the `YYYY-MM-DD` prefix; the caller cuts the exact window).
     /// See `crate::ledger::sources` for why each condition is there.
     pub async fn ledger_human_turns(
         &self,
@@ -132,9 +33,6 @@ impl SqliteGalley {
                AND s.created_via = 'gui' \
                AND s.ga_runtime_kind = 'managed' \
                AND m.created_at >= ? \
-               AND NOT EXISTS (SELECT 1 FROM ledger_exclusions e WHERE e.session_id = s.id) \
-               AND NOT EXISTS (SELECT 1 FROM ledger_exclusions e \
-                               WHERE e.project_id IS NOT NULL AND e.project_id = s.project_id) \
              ORDER BY m.created_at, m.session_id, m.turn_index",
         )
         .bind(created_at_floor)

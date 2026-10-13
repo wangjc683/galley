@@ -3,9 +3,10 @@
 //!
 //! The rule is the ticket's: read user messages a human typed —
 //! `created_via = 'gui'` on the message AND on its session (the phone
-//! writes `gui` too, with `client = 'ios'`), managed runtime, visible,
-//! not marked "not used to understand me" (session or project, migration
-//! 045). Never CLI, supervisor, scheduler, Goal or `system` sessions —
+//! writes `gui` too, with `client = 'ios'`), managed runtime, visible.
+//! (Ticket 04d retired the per-session / per-project opt-out of
+//! migration 045: the switch is the one way to stop the reading.)
+//! Never CLI, supervisor, scheduler, Goal or `system` sessions —
 //! their "user" messages are another agent's or an automation's — never
 //! the mining session itself (`system`), never assistant text. The SQL
 //! is `SqliteGalley::ledger_human_turns`; this module adds the time

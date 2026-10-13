@@ -12,10 +12,9 @@
 //! can evict it), and a caller-chosen title (no auto-title model call).
 //! Once the run settles — success, failure or stop alike — its runner is
 //! shut down and the session is deleted through the ordinary session
-//! delete (messages, attachments, search index): its task names what
-//! the user asked not to be recorded, its tool calls carry the ledger,
-//! its tool results the batch. The ledger never stays in Galley's
-//! database (Rule 4); nothing records the session's id.
+//! delete (messages, attachments, search index): its tool calls carry
+//! the ledger, its tool results the batch. The ledger never stays in
+//! Galley's database (Rule 4); nothing records the session's id.
 //!
 //! "Completed successfully" is exact: the run's `run_complete` arrives
 //! with GA's `CURRENT_TASK_DONE`, no fatal error was reported during the
@@ -51,7 +50,7 @@ use super::batch::{build_batch, render_batch, task_prompt, Batch};
 use super::im_archive::{self, read_archive_entries, ArchiveOutcome, ImRecord};
 use super::sources::{self, GuiTurn};
 use super::state::{LastRun, LedgerState, MinedCursor};
-use super::{forgotten, rollback, LedgerConfig, LedgerPaths, LEDGER_SUPERVISOR};
+use super::{rollback, LedgerConfig, LedgerPaths, LEDGER_SUPERVISOR};
 use crate::api::{CreateSessionInput, GalleyApi, Origin, OriginVia, RuntimeKind, SessionId};
 use crate::db::SqliteGalley;
 use crate::ipc::{IpcCommand, IpcEvent, UserMessageCommand};
@@ -475,8 +474,7 @@ pub enum Begun {
 /// position (nothing new) or write the batch file and record its position
 /// as pending and snapshot the files the run may change
 /// ([`super::rollback`]). A snapshot an interrupted run left behind is
-/// restored first. The task lists the entries the user deleted
-/// (`forgotten.json`). The production run and the eval harness
+/// restored first. The production run and the eval harness
 /// (`examples/ledger_eval_prepare.rs`) share it.
 pub async fn begin<Tz: TimeZone>(
     galley: &SqliteGalley,
@@ -518,10 +516,6 @@ where
         return Ok(Begun::Empty);
     }
 
-    let deleted = forgotten::load(&paths.forgotten_file()).unwrap_or_else(|e| {
-        eprintln!("[ledger] the deletion list is unreadable, the task goes without it: {e}");
-        Vec::new()
-    });
     let generated_at = local_now.format("%Y-%m-%d %H:%M").to_string();
     fs::create_dir_all(paths.galley_dir())
         .and_then(|()| {
@@ -541,7 +535,7 @@ where
         turns,
     });
     save(state)?;
-    let task = task_prompt(paths, &prepared.batch, &deleted);
+    let task = task_prompt(paths, &prepared.batch);
     Ok(Begun::Ready {
         batch: prepared.batch,
         task,

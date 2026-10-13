@@ -5,8 +5,10 @@
 //!
 //! - **One run at a time** (`run` lock): the resident tick and
 //!   `run_ledger_now` take it with `try_lock` and skip when it is held.
-//! - **Deletes do not queue behind a run.** A delete while a run is going
-//!   answers [`LEDGER_BUSY`]: the model is rewriting the same files.
+//! - **Deletes do not queue behind a run.** A delete — an entry, or one
+//!   emotion of an entry — while a run is going answers [`LEDGER_BUSY`]:
+//!   the model is rewriting the same file. A delete is only a delete
+//!   (ticket 04d): nothing asks the model not to record the thing again.
 //! - **Switching off stops the run in flight.** The switch is written
 //!   first, then the stop generation is raised ([`super::run::StopSignal`]);
 //!   a run takes its generation *before* it reads the switch, so it
@@ -16,9 +18,9 @@
 //!   remove `history_insight/` — nothing the run does can write it back —
 //!   and delete every mining session left in the database (so does
 //!   every launch, [`LedgerControl::sweep_mining_sessions`]).
-//! - **Galley's own files** (`forgotten.json`, `state.json` outside a
-//!   run, the global-memory files) are changed under the `files` lock,
-//!   so a clear and an "unforget" never interleave.
+//! - **Galley's own writes** outside a run (`state.json`, a delete, the
+//!   global-memory files, the launch sweep of retired files) happen under
+//!   the `files` lock, so a clear never interleaves with one.
 //! - **Managed runtime only** (Rule 1): every page operation first checks
 //!   the active runtime and answers [`MANAGED_ONLY`] in attach mode,
 //!   having read and written nothing.
@@ -35,12 +37,11 @@ use serde::Serialize;
 use tokio::sync::{watch, Mutex, MutexGuard};
 
 use super::config::{read_switch, LedgerSwitch, SWITCH_PREF};
-use super::entries::{self, Activities, Emotions, EntryKind, Parsed};
-use super::forgotten::{self, Forgotten};
+use super::entries::{self, Activities, Parsed};
 use super::global_memory::{self, GlobalMemoryFile};
 use super::run::{self, MiningDeps, RunHooks, RunReport, StopSignal, Trigger};
 use super::state::LedgerState;
-use super::{affairs, is_mining_session, write_atomic, LedgerPaths, TitledExclusion};
+use super::{affairs, is_mining_session, write_atomic, LedgerPaths, RETIRED_FILES};
 use crate::api::{GalleyApi, RuntimeKind, SessionFilter, SessionId};
 use crate::db::SqliteGalley;
 
@@ -94,10 +95,8 @@ pub struct LedgerOverview {
     /// RFC 3339; while on and not running.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_run_at: Option<String>,
+    /// The affairs, each with its emotions.
     pub activities: Parsed<Activities>,
-    pub emotions: Parsed<Emotions>,
-    pub forgotten: Vec<Forgotten>,
-    pub exclusions: Vec<TitledExclusion>,
 }
 
 /// `get_memory_overview`'s answer.
@@ -287,72 +286,92 @@ impl LedgerControl {
         delete_mining_sessions(galley).await
     }
 
-    /// `delete_ledger_entry`: remove entry `id`'s block from its file,
-    /// its line from the short list, and put it on the "do not record
-    /// again" list.
+    /// Delete every file of [`RETIRED_FILES`] still under
+    /// `history_insight/` — formats before ticket 04d that nothing shows
+    /// or reads anymore, so the user could neither see nor delete them
+    /// (Rule 4). At launch (`super::start`), managed runtime only:
+    /// attach mode touches nothing. Returns how many went.
+    pub async fn sweep_retired_files(
+        &self,
+        galley: &SqliteGalley,
+        paths: &LedgerPaths,
+    ) -> Result<usize, String> {
+        match require_managed(galley).await {
+            Ok(()) => {}
+            Err(e) if e == MANAGED_ONLY => return Ok(0),
+            Err(e) => return Err(e),
+        }
+        let _run = self.run.lock().await;
+        let _files = self.files.lock().await;
+        let mut removed = 0;
+        let mut failed = Vec::new();
+        for name in RETIRED_FILES {
+            match fs::remove_file(paths.insight_dir().join(name)) {
+                Ok(()) => removed += 1,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                Err(e) => failed.push(format!("{name}: {e}")),
+            }
+        }
+        if failed.is_empty() {
+            Ok(removed)
+        } else {
+            Err(failed.join("; "))
+        }
+    }
+
+    /// `delete_ledger_entry`: remove entry `id`'s block — its emotions
+    /// with it — from `activities.md`, and its line from the short list.
     pub async fn delete_entry(
         &self,
         galley: &SqliteGalley,
         paths: &LedgerPaths,
         id: &str,
-        now: DateTime<Utc>,
     ) -> Result<(), String> {
         require_managed(galley).await?;
-        let kind = EntryKind::of_id(id).ok_or(NOT_FOUND)?;
+        if !entries::is_entry_id(id) {
+            return Err(NOT_FOUND.into());
+        }
         let Some(_run) = self.lock_run_briefly().await else {
             return Err(LEDGER_BUSY.into());
         };
         let _files = self.files.lock().await;
-        let file = match kind {
-            EntryKind::Activity => paths.activities_file(),
-            EntryKind::Emotion => paths.emotions_file(),
-        };
-        let text = match fs::read(&file) {
-            Ok(bytes) => {
-                String::from_utf8(bytes).map_err(|_| format!("{} is not UTF-8", file.display()))?
-            }
-            Err(e) if e.kind() == io::ErrorKind::NotFound => return Err(NOT_FOUND.into()),
-            Err(e) => return Err(io_error("reading the ledger", e)),
-        };
-        let removed = entries::remove_entry(&text, id).ok_or(NOT_FOUND)?;
-        // The list first: should the rest fail, the entry is at worst
-        // still shown, never rebuilt unasked.
-        forgotten::add(
-            &paths.forgotten_file(),
-            Forgotten {
-                id: id.to_string(),
-                kind,
-                title: removed.title,
-                deleted_at: now.to_rfc3339(),
-            },
-        )
-        .map_err(|e| io_error("updating the deletion list", e))?;
-        write_atomic(&file, removed.text.as_bytes())
-            .map_err(|e| io_error("writing the ledger", e))?;
-        if kind == EntryKind::Activity {
-            let list = paths.affairs_file();
-            if let Ok(raw) = fs::read_to_string(&list) {
-                if let Some(rest) = affairs::remove_affair(&raw, id) {
-                    write_atomic(&list, rest.as_bytes())
-                        .map_err(|e| io_error("writing the affairs list", e))?;
-                }
+        let file = paths.activities_file();
+        let text = read_ledger(&file)?;
+        let rest = entries::remove_entry(&text, id).ok_or(NOT_FOUND)?;
+        write_atomic(&file, rest.as_bytes()).map_err(|e| io_error("writing the ledger", e))?;
+        let list = paths.affairs_file();
+        if let Ok(raw) = fs::read_to_string(&list) {
+            if let Some(rest) = affairs::remove_affair(&raw, id) {
+                write_atomic(&list, rest.as_bytes())
+                    .map_err(|e| io_error("writing the affairs list", e))?;
             }
         }
         Ok(())
     }
 
-    /// `unforget_ledger_entry`: take `id` off the "do not record again"
-    /// list (it may be recorded again; nothing deleted comes back).
-    pub async fn unforget(
+    /// `delete_ledger_emotion`: remove one emotion of entry `id`, named by
+    /// its text as the overview gave it ([`entries::EntryEmotion::line`]),
+    /// not by position — a run in between may have moved it. The entry
+    /// and everything else in the file stay as they are.
+    pub async fn delete_emotion(
         &self,
         galley: &SqliteGalley,
         paths: &LedgerPaths,
         id: &str,
+        line: &str,
     ) -> Result<(), String> {
         require_managed(galley).await?;
+        if !entries::is_entry_id(id) {
+            return Err(NOT_FOUND.into());
+        }
+        let Some(_run) = self.lock_run_briefly().await else {
+            return Err(LEDGER_BUSY.into());
+        };
         let _files = self.files.lock().await;
-        forgotten::remove(&paths.forgotten_file(), id)
-            .map_err(|e| io_error("updating the deletion list", e))
+        let file = paths.activities_file();
+        let text = read_ledger(&file)?;
+        let rest = entries::remove_emotion(&text, id, line).ok_or(NOT_FOUND)?;
+        write_atomic(&file, rest.as_bytes()).map_err(|e| io_error("writing the ledger", e))
     }
 
     /// `write_global_memory`: returns the new revision.
@@ -413,14 +432,6 @@ impl LedgerControl {
             (Some(config), false) => Some(run::next_run_at(&state, &config, now, tz).to_rfc3339()),
             _ => None,
         };
-        let forgotten = forgotten::load(&paths.forgotten_file()).unwrap_or_else(|e| {
-            eprintln!("[ledger] {e}");
-            Vec::new()
-        });
-        let exclusions = galley
-            .list_ledger_exclusions_titled()
-            .await
-            .map_err(|e| e.to_string())?;
         Ok(MemoryOverview {
             ledger: LedgerOverview {
                 switch,
@@ -428,12 +439,20 @@ impl LedgerControl {
                 last_run,
                 next_run_at,
                 activities: entries::read_activities(&paths.activities_file()),
-                emotions: entries::read_emotions(&paths.emotions_file()),
-                forgotten,
-                exclusions,
             },
             global_memory: global_memory::read_all(paths),
         })
+    }
+}
+
+/// `activities.md` for a delete: [`NOT_FOUND`] when there is none.
+fn read_ledger(file: &std::path::Path) -> Result<String, String> {
+    match fs::read(file) {
+        Ok(bytes) => {
+            String::from_utf8(bytes).map_err(|_| format!("{} is not UTF-8", file.display()))
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Err(NOT_FOUND.into()),
+        Err(e) => Err(io_error("reading the ledger", e)),
     }
 }
 

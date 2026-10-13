@@ -3,9 +3,8 @@
 //! fake runner registry:
 //!
 //! - which turns are read: GUI-created managed sessions only, the
-//!   human's messages only, from `since`, minus "not used to understand
-//!   me" sessions and projects; never CLI / supervisor / system sessions;
-//! - the marks themselves (migration 045);
+//!   human's messages only, from `since`; never CLI / supervisor /
+//!   system sessions (migration 047 dropped 045's per-session opt-out);
 //! - one run end to end: attach mode does nothing, nothing new costs no
 //!   model call, the hidden session, and the processed position moving
 //!   only after a run that completed successfully.
@@ -27,8 +26,8 @@ use galley_core_lib::ledger::control::{
 use galley_core_lib::ledger::im_archive::FILE_HINT;
 use galley_core_lib::ledger::state::LedgerState;
 use galley_core_lib::ledger::{
-    forgotten, global_memory, is_mining_session, run, sources, LedgerConfig, LedgerPaths,
-    LedgerSwitch, LedgerTarget, MiningDeps, RunReport, Trigger, LEDGER_SUPERVISOR,
+    global_memory, is_mining_session, run, sources, LedgerConfig, LedgerPaths, LedgerSwitch,
+    MiningDeps, RunReport, Trigger, LEDGER_SUPERVISOR, RETIRED_FILES,
 };
 use galley_core_lib::runner_manager::{
     BroadcastItem, RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
@@ -143,14 +142,11 @@ fn utc(s: &str) -> DateTime<Utc> {
 
 /// The full mix of sessions the selection rule has to sort out.
 async fn seed_mix(pool: &SqlitePool) {
-    project(pool, "p-private").await;
     session(pool, "s-gui", "gui", "managed", None).await;
     session(pool, "s-external", "gui", "external", None).await;
     session(pool, "s-cli", "cli", "managed", None).await;
     session(pool, "s-supervisor", "supervisor", "managed", None).await;
     session(pool, "s-system", "system", "managed", None).await;
-    session(pool, "s-excluded", "gui", "managed", None).await;
-    session(pool, "s-in-private", "gui", "managed", Some("p-private")).await;
 
     said(
         pool,
@@ -236,33 +232,6 @@ async fn seed_mix(pool: &SqlitePool) {
         "系统建的会话",
     )
     .await;
-    said(
-        pool,
-        "s-excluded",
-        0,
-        "2026-10-10T01:00:00+00:00",
-        "这段不要用来了解我",
-    )
-    .await;
-    said(
-        pool,
-        "s-in-private",
-        0,
-        "2026-10-10T01:00:00+00:00",
-        "私人项目里的话",
-    )
-    .await;
-}
-
-/// [`seed_mix`] with its two "not used to understand me" marks set.
-async fn seed_mix_marked(pool: &SqlitePool, galley: &SqliteGalley) {
-    seed_mix(pool).await;
-    for target in [
-        LedgerTarget::Session("s-excluded".into()),
-        LedgerTarget::Project("p-private".into()),
-    ] {
-        galley.set_ledger_excluded(&target, true).await.unwrap();
-    }
 }
 
 fn texts(turns: &[sources::GuiTurn]) -> Vec<&str> {
@@ -275,75 +244,47 @@ fn texts(turns: &[sources::GuiTurn]) -> Vec<&str> {
 async fn reads_only_what_a_human_typed_into_gui_managed_sessions_since() {
     let (pool, galley) = fresh().await;
     seed_mix(&pool).await;
-    galley
-        .set_ledger_excluded(&LedgerTarget::Session("s-excluded".into()), true)
-        .await
-        .unwrap();
-    galley
-        .set_ledger_excluded(&LedgerTarget::Project("p-private".into()), true)
-        .await
-        .unwrap();
+    // A session in a project is read like any other (ticket 04d: no
+    // per-project opt-out).
+    project(&pool, "p-work").await;
+    session(&pool, "s-in-project", "gui", "managed", Some("p-work")).await;
+    said(
+        &pool,
+        "s-in-project",
+        0,
+        "2026-10-10T01:30:00+00:00",
+        "项目里说的",
+    )
+    .await;
 
     let since = config().since;
     let turns = sources::gui_turns(&galley, since, utc("2026-10-11T00:00:00Z"))
         .await
         .unwrap();
-    assert_eq!(texts(&turns), vec!["我在准备十一月的半马", "周六去看房"]);
-    assert!(turns.iter().all(|t| t.session_id == "s-gui"));
-    assert_eq!(turns[1].at, utc("2026-10-10T02:00:00.123Z"));
+    assert_eq!(
+        texts(&turns),
+        vec!["我在准备十一月的半马", "项目里说的", "周六去看房"]
+    );
+    assert_eq!(turns[2].at, utc("2026-10-10T02:00:00.123Z"));
 
     // `until` is exclusive.
     let turns = sources::gui_turns(&galley, since, utc("2026-10-10T02:00:00.123Z"))
         .await
         .unwrap();
-    assert_eq!(texts(&turns), vec!["我在准备十一月的半马"]);
-
-    // Unmarking brings them back.
-    galley
-        .set_ledger_excluded(&LedgerTarget::Session("s-excluded".into()), false)
-        .await
-        .unwrap();
-    galley
-        .set_ledger_excluded(&LedgerTarget::Project("p-private".into()), false)
-        .await
-        .unwrap();
-    let turns = sources::gui_turns(&galley, since, utc("2026-10-11T00:00:00Z"))
-        .await
-        .unwrap();
-    assert_eq!(turns.len(), 4);
+    assert_eq!(texts(&turns), vec!["我在准备十一月的半马", "项目里说的"]);
 }
 
+/// Migration 047 dropped 045's table: nothing of the opt-out is left.
 #[tokio::test]
-async fn exclusion_marks_are_idempotent_listed_and_go_with_their_target() {
-    let (pool, galley) = fresh().await;
-    project(&pool, "p1").await;
-    session(&pool, "s1", "gui", "managed", Some("p1")).await;
-    let s1 = LedgerTarget::Session("s1".into());
-    let p1 = LedgerTarget::Project("p1".into());
-    galley.set_ledger_excluded(&s1, true).await.unwrap();
-    galley.set_ledger_excluded(&s1, true).await.unwrap();
-    galley.set_ledger_excluded(&p1, true).await.unwrap();
-    let marks = galley.list_ledger_exclusions().await.unwrap();
-    assert_eq!(
-        marks.iter().map(|m| m.target.clone()).collect::<Vec<_>>(),
-        vec![s1.clone(), p1.clone()]
-    );
-
-    let missing = galley
-        .set_ledger_excluded(&LedgerTarget::Session("nope".into()), true)
-        .await
-        .unwrap_err();
-    assert!(missing.to_string().contains("not found"), "{missing}");
-
-    // Deleting the session takes its mark; unmarking an unmarked target
-    // is fine.
-    sqlx::query("DELETE FROM sessions WHERE id = 's1'")
-        .execute(&pool)
-        .await
-        .unwrap();
-    galley.set_ledger_excluded(&p1, false).await.unwrap();
-    galley.set_ledger_excluded(&p1, false).await.unwrap();
-    assert!(galley.list_ledger_exclusions().await.unwrap().is_empty());
+async fn the_opt_out_table_is_gone() {
+    let (pool, _galley) = fresh().await;
+    let left: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'ledger_exclusions%'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(left, 0);
 }
 
 // ---------------- one run ----------------
@@ -569,7 +510,7 @@ async fn nothing_new_moves_the_position_without_a_model_call() {
 #[tokio::test]
 async fn a_successful_run_reads_the_batch_in_a_hidden_session_and_then_moves_the_position() {
     let (pool, galley) = fresh().await;
-    seed_mix_marked(&pool, &galley).await;
+    seed_mix(&pool).await;
     let dir = tempfile::tempdir().unwrap();
     let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
     write_im_log(
@@ -612,8 +553,6 @@ async fn a_successful_run_reads_the_batch_in_a_hidden_session_and_then_moves_the
         "CLI 会话的任务",
         "supervisor 派的活",
         "系统建的会话",
-        "这段不要用来了解我",
-        "私人项目里的话",
         FILE_HINT,
     ] {
         assert!(!batch.contains(absent), "{absent} leaked:\n{batch}");
@@ -706,7 +645,7 @@ async fn a_successful_run_reads_the_batch_in_a_hidden_session_and_then_moves_the
 #[tokio::test]
 async fn a_failed_run_leaves_the_position_so_the_next_batch_repeats_it() {
     let (pool, galley) = fresh().await;
-    seed_mix_marked(&pool, &galley).await;
+    seed_mix(&pool).await;
     let dir = tempfile::tempdir().unwrap();
     let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
     write_im_log(
@@ -942,11 +881,15 @@ async fn the_external_runtime_gets_managed_only_from_every_page_command() {
             only
         );
     }
+    assert_eq!(control.delete_entry(&galley, &paths, "A001").await, only);
     assert_eq!(
-        control.delete_entry(&galley, &paths, "A001", now).await,
+        control
+            .delete_emotion(&galley, &paths, "A001", "- 情绪：焦急")
+            .await,
         only
     );
-    assert_eq!(control.unforget(&galley, &paths, "A001").await, only);
+    // The launch sweep of retired files touches nothing either.
+    assert_eq!(control.sweep_retired_files(&galley, &paths).await, Ok(0));
     assert_eq!(
         control
             .write_global_memory(&galley, &paths, "global_mem.txt", "x", "r")
@@ -1029,7 +972,7 @@ async fn turning_on_from_now_skips_what_was_said_before_and_waits_for_four() {
 #[tokio::test]
 async fn turning_on_with_look_back_reads_everything_within_a_minute() {
     let (pool, galley) = fresh().await;
-    seed_mix_marked(&pool, &galley).await;
+    seed_mix(&pool).await;
     said(
         &pool,
         "s-gui",
@@ -1076,8 +1019,6 @@ async fn turning_on_with_look_back_reads_everything_within_a_minute() {
     let batch = std::fs::read_to_string(paths.batch_file()).unwrap();
     assert!(batch.contains("很久以前说的"));
     assert!(batch.contains("since 之前的一句"));
-    // Exclusions still hold with no lower bound.
-    assert!(!batch.contains("私人项目里的话"));
     assert_eq!(state(&paths).due_at, None);
 }
 
@@ -1222,10 +1163,15 @@ async fn switching_off_mid_run_stops_it_and_clearing_leaves_nothing_behind() {
             assert_eq!(origin.via, OriginVia::System);
             assert_eq!(origin.supervisor.as_deref(), Some(LEDGER_SUPERVISOR));
             assert!(is_mining_session(&brief));
-            // A delete does not queue behind the run.
-            let busy = control
-                .delete_entry(&galley, &paths, "A001", utc("2026-10-11T01:00:01Z"))
-                .await;
+            // A delete does not queue behind the run, an emotion's
+            // neither.
+            let busy = control.delete_entry(&galley, &paths, "A001").await;
+            assert_eq!(
+                control
+                    .delete_emotion(&galley, &paths, "A001", "- 情绪：焦急")
+                    .await,
+                Err(LEDGER_BUSY.into())
+            );
             let switch = control
                 .set_switch(
                     &galley,
@@ -1271,14 +1217,10 @@ async fn switching_off_mid_run_stops_it_and_clearing_leaves_nothing_behind() {
     );
 }
 
-/// What a run "writes" mid-way: one file rewritten, two created.
+/// What a run "writes" mid-way: one file rewritten, one created.
 fn half_written(paths: &LedgerPaths) -> Vec<(PathBuf, String)> {
     vec![
         (paths.activities_file(), "# 活动知识层\n\n## 持续".into()),
-        (
-            paths.emotions_file(),
-            "# 情绪事件\n\n## E001｜写了一".into(),
-        ),
         (paths.affairs_file(), "- A001｜".into()),
     ]
 }
@@ -1377,7 +1319,6 @@ async fn switching_off_and_keeping_leaves_the_files_and_the_position() {
         std::fs::read_to_string(paths.activities_file()).unwrap(),
         before
     );
-    assert!(!paths.emotions_file().exists());
     assert!(!paths.affairs_file().exists());
     assert!(!paths.rollback_dir().exists());
 
@@ -1409,33 +1350,26 @@ const ACTIVITIES: &str = "# 活动知识层
 - 现状：这周落后，下周补两课。
 - 最近：2026-09-27
 - 会话：`s-gui`
+- 情绪（`s-gui`，2026-09-16 21:00）：焦虑——“语法第三课还没看，有点焦虑。”
 
 ## 已消失事项
 
-### A003｜中秋活动页
-- 现状：9 月 16 日上线。
+### A003｜母亲的膝关节置换手术
+- 现状：9 月 10 日手术顺利。
+- 情绪（`s-gui`，2026-09-10 15:40）：焦急、不安——“手术还没出来”
+- 情绪（`s-gui`，2026-09-10 17:05）：如释重负——“出来了！”
 ";
 
-const EMOTIONS: &str = "# 情绪事件
-
-## E001｜手术等待时的焦急
-- 时间：2026-09-10 15:40
-- 原文：“手术还没出来”
-";
+const AFFAIRS: &str = "- A001｜半马备赛：离比赛八周\n- A002｜日语 N3：下周补两课\n";
 
 fn write_outputs(paths: &LedgerPaths) {
     std::fs::create_dir_all(paths.insight_dir()).unwrap();
     std::fs::write(paths.activities_file(), ACTIVITIES).unwrap();
-    std::fs::write(paths.emotions_file(), EMOTIONS).unwrap();
-    std::fs::write(
-        paths.affairs_file(),
-        "- A001｜半马备赛：离比赛八周\n- A002｜日语 N3：下周补两课\n",
-    )
-    .unwrap();
+    std::fs::write(paths.affairs_file(), AFFAIRS).unwrap();
 }
 
 #[tokio::test]
-async fn deleting_an_entry_is_exact_and_the_next_task_lists_it() {
+async fn deleting_an_entry_takes_its_emotions_and_is_only_a_delete() {
     let (pool, galley) = fresh().await;
     seed_mix(&pool).await;
     switch_on(&galley, config()).await;
@@ -1443,12 +1377,8 @@ async fn deleting_an_entry_is_exact_and_the_next_task_lists_it() {
     let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
     write_outputs(&paths);
     let control = LedgerControl::new();
-    let now = utc("2026-10-11T01:00:00Z");
 
-    control
-        .delete_entry(&galley, &paths, "A002", now)
-        .await
-        .unwrap();
+    control.delete_entry(&galley, &paths, "A002").await.unwrap();
     let start = ACTIVITIES.find("### A002").unwrap();
     let end = ACTIVITIES.find("## 已消失事项").unwrap();
     assert_eq!(
@@ -1459,32 +1389,23 @@ async fn deleting_an_entry_is_exact_and_the_next_task_lists_it() {
         std::fs::read_to_string(paths.affairs_file()).unwrap(),
         "- A001｜半马备赛：离比赛八周\n"
     );
-    let list = forgotten::load(&paths.forgotten_file()).unwrap();
-    assert_eq!(list.len(), 1);
+    // Nothing kept to remember it by (ruling 48).
     assert_eq!(
-        (list[0].id.as_str(), list[0].title.as_str()),
-        ("A002", "日语 N3 备考")
+        files_under(&paths.galley_dir()),
+        Vec::<String>::new(),
+        "a delete writes nothing of Galley's own"
     );
-    assert_eq!(list[0].deleted_at, "2026-10-11T01:00:00+00:00");
 
     // Gone is gone; ids that are no entry are not found.
-    for id in ["A002", "A999", "X1", ""] {
+    for id in ["A002", "A999", "E001", "X1", ""] {
         assert_eq!(
-            control.delete_entry(&galley, &paths, id, now).await,
+            control.delete_entry(&galley, &paths, id).await,
             Err(NOT_FOUND.into()),
             "{id}"
         );
     }
-    control
-        .delete_entry(&galley, &paths, "E001", now)
-        .await
-        .unwrap();
-    assert_eq!(
-        std::fs::read_to_string(paths.emotions_file()).unwrap(),
-        "# 情绪事件\n\n"
-    );
 
-    // The next run's task tells the model what not to rebuild.
+    // The next run's task asks nothing about what was deleted.
     let runner = FakeRunner::new(vec![run_complete("CURRENT_TASK_DONE")]);
     let report = control_run(
         &control,
@@ -1498,30 +1419,139 @@ async fn deleting_an_entry_is_exact_and_the_next_task_lists_it() {
     .await;
     assert!(matches!(report, RunReport::Succeeded { .. }), "{report:?}");
     let task = runner.tasks.lock().unwrap()[0].1.clone();
-    assert!(task.contains("用户删掉过下面这些条目"), "{task}");
-    assert!(task.contains("\nA002｜日语 N3 备考\n"), "{task}");
-    assert!(task.contains("\nE001｜手术等待时的焦急\n"), "{task}");
+    assert!(!task.contains("用户删掉过"), "{task}");
+    assert!(!task.contains("日语 N3 备考"), "{task}");
+}
 
-    // "Unforget" takes it off the list, and only that.
-    control.unforget(&galley, &paths, "A002").await.unwrap();
-    control.unforget(&galley, &paths, "A002").await.unwrap();
-    let list = forgotten::load(&paths.forgotten_file()).unwrap();
+#[tokio::test]
+async fn deleting_one_emotion_takes_that_line_by_its_text() {
+    let (pool, galley) = fresh().await;
+    seed_mix(&pool).await;
+    switch_on(&galley, config()).await;
+    let dir = tempfile::tempdir().unwrap();
+    let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
+    write_outputs(&paths);
+    let control = LedgerControl::new();
+    let now = utc("2026-10-11T02:00:00Z");
+
+    // The page names the line as the overview gave it.
+    let overview = serde_json::to_value(
+        control
+            .overview(&galley, &paths, now, &shanghai())
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let surgery = &overview["ledger"]["activities"]["ended"][0];
+    assert_eq!(surgery["id"], json!("A003"));
+    let relief = surgery["emotions"][1]["line"].as_str().unwrap().to_string();
     assert_eq!(
-        list.iter().map(|f| f.id.as_str()).collect::<Vec<_>>(),
-        ["E001"]
+        relief,
+        "- 情绪（`s-gui`，2026-09-10 17:05）：如释重负——“出来了！”"
+    );
+
+    control
+        .delete_emotion(&galley, &paths, "A003", &relief)
+        .await
+        .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(paths.activities_file()).unwrap(),
+        ACTIVITIES.replacen(&format!("{relief}\n"), "", 1)
+    );
+    // The short list is not touched; the entry and its other emotion stay.
+    assert_eq!(
+        std::fs::read_to_string(paths.affairs_file()).unwrap(),
+        AFFAIRS
+    );
+    let after = control
+        .overview(&galley, &paths, now, &shanghai())
+        .await
+        .unwrap();
+    let after = serde_json::to_value(after).unwrap();
+    assert_eq!(
+        after["ledger"]["activities"]["ended"][0]["emotions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+
+    // A line that is no longer there, under another entry, or not an
+    // emotion is not found.
+    for (id, line) in [
+        ("A003", relief.as_str()),
+        (
+            "A001",
+            "- 情绪（`s-gui`，2026-09-10 15:40）：焦急、不安——“手术还没出来”",
+        ),
+        ("A003", "- 现状：9 月 10 日手术顺利。"),
+        ("E001", relief.as_str()),
+    ] {
+        assert_eq!(
+            control.delete_emotion(&galley, &paths, id, line).await,
+            Err(NOT_FOUND.into()),
+            "{id} {line}"
+        );
+    }
+    // No ledger at all: not found either.
+    std::fs::remove_file(paths.activities_file()).unwrap();
+    assert_eq!(
+        control
+            .delete_emotion(&galley, &paths, "A003", &relief)
+            .await,
+        Err(NOT_FOUND.into())
     );
 }
 
 #[tokio::test]
-async fn the_overview_shows_the_switch_the_entries_the_marks_and_the_global_memory() {
+async fn the_launch_sweep_deletes_the_retired_files_only() {
+    let (_pool, galley) = fresh().await;
+    let dir = tempfile::tempdir().unwrap();
+    let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
+    write_outputs(&paths);
+    for name in RETIRED_FILES {
+        let path = paths.insight_dir().join(name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "旧格式").unwrap();
+    }
+    std::fs::write(paths.state_file(), "{}").unwrap();
+    let control = LedgerControl::new();
+
+    // Attach mode: untouched.
+    galley
+        .set_pref_json("active_runtime_kind", json!("external"))
+        .await
+        .unwrap();
+    assert_eq!(control.sweep_retired_files(&galley, &paths).await, Ok(0));
+    assert!(RETIRED_FILES
+        .iter()
+        .all(|name| paths.insight_dir().join(name).exists()));
+
+    galley
+        .set_pref_json("active_runtime_kind", json!("managed"))
+        .await
+        .unwrap();
+    assert_eq!(control.sweep_retired_files(&galley, &paths).await, Ok(2));
+    assert!(RETIRED_FILES
+        .iter()
+        .all(|name| !paths.insight_dir().join(name).exists()));
+    // The ledger itself and Galley's state stay.
+    assert_eq!(
+        std::fs::read_to_string(paths.activities_file()).unwrap(),
+        ACTIVITIES
+    );
+    assert_eq!(
+        std::fs::read_to_string(paths.affairs_file()).unwrap(),
+        AFFAIRS
+    );
+    assert!(paths.state_file().exists());
+    assert_eq!(control.sweep_retired_files(&galley, &paths).await, Ok(0));
+}
+
+#[tokio::test]
+async fn the_overview_shows_the_switch_the_entries_and_the_global_memory() {
     let (pool, galley) = fresh().await;
-    seed_mix_marked(&pool, &galley).await;
-    sqlx::query(
-        "UPDATE sessions SET title = '私密会话', status = 'archived' WHERE id = 's-excluded'",
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
+    seed_mix(&pool).await;
     let dir = tempfile::tempdir().unwrap();
     let paths = LedgerPaths::new(dir.path().join("managed-ga-state"));
     let control = LedgerControl::new();
@@ -1538,20 +1568,17 @@ async fn the_overview_shows_the_switch_the_entries_the_marks_and_the_global_memo
     assert_eq!(overview["ledger"]["switch"], json!({"state": "undecided"}));
     assert_eq!(overview["ledger"]["running"], json!(false));
     assert_eq!(overview["ledger"]["activities"], json!({"kind": "absent"}));
-    assert_eq!(overview["ledger"]["emotions"], json!({"kind": "absent"}));
     assert!(overview["ledger"].get("nextRunAt").is_none());
     assert!(overview["ledger"].get("lastRun").is_none());
-    assert_eq!(
-        overview["ledger"]["exclusions"],
-        json!([
-            {"target": {"kind": "session", "id": "s-excluded"},
-             "createdAt": overview["ledger"]["exclusions"][0]["createdAt"],
-             "title": "私密会话"},
-            {"target": {"kind": "project", "id": "p-private"},
-             "createdAt": overview["ledger"]["exclusions"][1]["createdAt"],
-             "title": "p-private"},
-        ])
-    );
+    // Ruling 48: three areas; nothing else in the ledger's half.
+    let mut keys: Vec<&str> = overview["ledger"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(keys, ["activities", "running", "switch"]);
     assert_eq!(
         overview["globalMemory"]
             .as_array()
@@ -1605,13 +1632,24 @@ async fn the_overview_shows_the_switch_the_entries_the_marks_and_the_global_memo
     assert_eq!(ledger["activities"]["ongoing"][1]["id"], json!("A002"));
     assert_eq!(
         ledger["activities"]["ended"][0]["title"],
-        json!("中秋活动页")
+        json!("母亲的膝关节置换手术")
+    );
+    // Emotions come inside their affair (ticket 04d).
+    assert_eq!(
+        ledger["activities"]["ongoing"][1]["emotions"][0]["tags"],
+        json!(["焦虑"])
     );
     assert_eq!(
-        ledger["emotions"]["entries"][0]["at"],
-        json!("2026-09-10 15:40")
+        ledger["activities"]["ended"][0]["emotions"][0],
+        json!({
+            "session": "s-gui", "at": "2026-09-10 15:40", "tags": ["焦急", "不安"],
+            "text": "手术还没出来",
+            "line": "- 情绪（`s-gui`，2026-09-10 15:40）：焦急、不安——“手术还没出来”"
+        })
     );
-    assert_eq!(ledger["forgotten"], json!([]));
+    assert!(ledger.get("emotions").is_none());
+    assert!(ledger.get("forgotten").is_none());
+    assert!(ledger.get("exclusions").is_none());
     let gm = &overview["globalMemory"][0];
     assert_eq!(gm["exists"], json!(true));
     assert_eq!(gm["content"], json!("# [Global Memory - L2]\n"));
@@ -1672,7 +1710,6 @@ async fn a_failed_run_puts_the_files_back_and_a_successful_one_keeps_them() {
             std::fs::read_to_string(paths.activities_file()).unwrap(),
             before
         );
-        assert!(!paths.emotions_file().exists());
         assert!(!paths.affairs_file().exists());
         assert!(!paths.rollback_dir().exists());
         assert!(state(&paths).mined.is_none());
@@ -1696,7 +1733,6 @@ async fn a_failed_run_puts_the_files_back_and_a_successful_one_keeps_them() {
         std::fs::read_to_string(paths.affairs_file()).unwrap(),
         "- A001｜"
     );
-    assert!(paths.emotions_file().exists());
     assert!(!paths.rollback_dir().exists());
 }
 
@@ -1731,7 +1767,6 @@ async fn an_interrupted_runs_snapshot_is_restored_before_the_next_run() {
         std::fs::read_to_string(paths.activities_file()).unwrap(),
         before
     );
-    assert!(!paths.emotions_file().exists());
     assert!(!paths.affairs_file().exists());
 }
 

@@ -24,10 +24,13 @@
 //!   archive ([`archive_before_prune`]) and both injections read it too.
 //!   While off nothing here creates a file or a directory.
 //! - **The user's say** ([`control`], ticket 04): the page shows every
-//!   entry, deletes one deterministically (the "do not record again"
-//!   list, [`forgotten`], asks the model not to rebuild it), switches the
-//!   ledger off (keeping or clearing everything, stopping a run in
-//!   flight), and edits GA's global memory ([`global_memory`]).
+//!   entry with the emotions recorded under it, deletes an entry or one
+//!   of its emotions deterministically, switches the ledger off (keeping
+//!   or clearing everything, stopping a run in flight), and edits GA's
+//!   global memory ([`global_memory`]). A delete is only a delete: the
+//!   same thing said again later may be recorded again (PRD ruling 48,
+//!   ticket 04d). Not reading at all is the switch's job; there is no
+//!   per-conversation opt-out (migration 047 dropped 045's table).
 //! - **Managed runtime only** (Rule 1): every entry point does nothing —
 //!   and every page command answers `managed_only` — while the active
 //!   runtime is attach mode, and nothing here reads or writes outside the
@@ -43,8 +46,8 @@
 //!
 //! ```text
 //! history_insight/            the SOP's outputs (the model's; user state)
-//!   activities.md             ongoing and ended affairs (`entries`)
-//!   emotional_events.md       emotional events (`entries`)
+//!   activities.md             ongoing and ended affairs, each with its
+//!                             emotional moments (`entries`)
 //!   ongoing_affairs.md        the short list each run ends with: ongoing
 //!                             affairs only, one numbered line each
 //!                             (`affairs`); written by the model, read
@@ -53,10 +56,13 @@
 //!     state.json              positions + last run (`state`)
 //!     im_archive.jsonl        archived IM user turns (`im_archive`)
 //!     batch.md                the current run's input (`batch`)
-//!     forgotten.json          entries the user deleted (`forgotten`)
-//!     rollback/               the three files as a running run found
+//!     rollback/               the two files as a running run found
 //!                             them; restored if it fails (`rollback`)
 //! ```
+//!
+//! Two files of development builds before ticket 04d — a separate
+//! emotions file and a "do not record again" list — are deleted at
+//! launch ([`RETIRED_FILES`]): nobody could see or delete them anymore.
 //!
 //! Nothing of the ledger stays in Galley's database: the hidden mining
 //! session is deleted — messages, attachments, search index — as soon as
@@ -68,7 +74,6 @@ pub mod batch;
 pub mod config;
 pub mod control;
 pub mod entries;
-pub mod forgotten;
 pub mod global_memory;
 pub mod im_archive;
 pub mod rollback;
@@ -81,7 +86,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{Local, Utc};
-use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
 
 use crate::api::{OriginVia, RuntimeKind, SessionBrief};
@@ -98,9 +102,9 @@ pub use run::{MiningDeps, RunReport, Trigger};
 pub const LEDGER_SUPERVISOR: &str = "galley-ledger";
 
 /// Tauri event (no payload) after anything the Memory page shows
-/// changed: the switch, a run starting or settling, a delete, an
-/// "unforget", an exclusion, a global-memory write. The page refetches
-/// the overview.
+/// changed: the switch, a run starting or settling, a delete (an entry
+/// or one emotion), a global-memory write. The page refetches the
+/// overview.
 pub const MEMORY_CHANGED_EVENT: &str = "memory-changed";
 
 const TICK_SECONDS: u64 = 60;
@@ -113,31 +117,16 @@ pub fn is_mining_session(session: &SessionBrief) -> bool {
     })
 }
 
-/// What a "not used to understand me" mark is on (migration 045). Wire
-/// shape: `{"kind": "session" | "project", "id": "…"}`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "id", rename_all = "camelCase")]
-pub enum LedgerTarget {
-    Session(String),
-    Project(String),
-}
+/// The emotions file of development builds before ticket 04d: emotions
+/// now live in their affair's block (`entries`). The mining task names it
+/// so the model does not keep it up (`batch::task_prompt`).
+pub(crate) const RETIRED_EMOTIONS_FILE: &str = "emotional_events.md";
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LedgerExclusion {
-    pub target: LedgerTarget,
-    pub created_at: String,
-}
-
-/// A mark with its session's title or project's name (archived sessions
-/// included; a deleted target takes its mark with it).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TitledExclusion {
-    pub target: LedgerTarget,
-    pub created_at: String,
-    pub title: Option<String>,
-}
+/// What development builds before ticket 04d kept under
+/// `history_insight/` and nothing reads or shows anymore: the emotions
+/// file and the "do not record again" list. Deleted at launch
+/// ([`LedgerControl::sweep_retired_files`]). Neither shipped.
+pub const RETIRED_FILES: [&str; 2] = [RETIRED_EMOTIONS_FILE, "galley/forgotten.json"];
 
 /// Where the ledger's inputs and outputs live, from the managed state
 /// root.
@@ -178,13 +167,10 @@ impl LedgerPaths {
     pub fn insight_dir(&self) -> PathBuf {
         self.memory_dir().join("history_insight")
     }
-    /// Ongoing and ended affairs, in the pinned format ([`entries`]).
+    /// Ongoing and ended affairs with their emotions, in the pinned
+    /// format ([`entries`]).
     pub fn activities_file(&self) -> PathBuf {
         self.insight_dir().join("activities.md")
-    }
-    /// Emotional events, in the pinned format ([`entries`]).
-    pub fn emotions_file(&self) -> PathBuf {
-        self.insight_dir().join("emotional_events.md")
     }
     /// The ongoing-affairs short list ([`affairs`]): beside the SOP's
     /// own outputs, since the model writes it.
@@ -202,10 +188,6 @@ impl LedgerPaths {
     }
     pub fn batch_file(&self) -> PathBuf {
         self.galley_dir().join("batch.md")
-    }
-    /// The "do not record again" list ([`forgotten`]).
-    pub fn forgotten_file(&self) -> PathBuf {
-        self.galley_dir().join("forgotten.json")
     }
     /// A running run's snapshot of the files it may change ([`rollback`]).
     pub fn rollback_dir(&self) -> PathBuf {
@@ -307,6 +289,19 @@ pub(crate) fn start(app: &tauri::App) {
             Ok(n) => eprintln!("[ledger] deleted {n} leftover mining session(s)"),
             Err(e) => eprintln!("[ledger] deleting leftover mining sessions failed: {e}"),
         }
+        // Files of the ledger's retired formats (ticket 04d), managed
+        // runtime only.
+        match paths_for_app(&handle) {
+            Ok(paths) => match LedgerControl::global()
+                .sweep_retired_files(&galley, &paths)
+                .await
+            {
+                Ok(0) => {}
+                Ok(n) => eprintln!("[ledger] deleted {n} retired ledger file(s)"),
+                Err(e) => eprintln!("[ledger] deleting retired ledger files failed: {e}"),
+            },
+            Err(e) => eprintln!("[ledger] retired ledger files not checked: {e}"),
+        }
         let mut interval = tokio::time::interval(Duration::from_secs(TICK_SECONDS));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
@@ -403,17 +398,6 @@ mod tests {
     }
 
     #[test]
-    fn target_wire_shape() {
-        assert_eq!(
-            serde_json::to_value(LedgerTarget::Project("p1".into())).unwrap(),
-            serde_json::json!({"kind": "project", "id": "p1"})
-        );
-        let t: LedgerTarget =
-            serde_json::from_value(serde_json::json!({"kind": "session", "id": "s1"})).unwrap();
-        assert_eq!(t, LedgerTarget::Session("s1".into()));
-    }
-
-    #[test]
     fn paths_hang_off_the_state_root() {
         let p = LedgerPaths::new(PathBuf::from("/x/managed-ga-state"));
         assert_eq!(
@@ -433,12 +417,8 @@ mod tests {
             PathBuf::from("/x/managed-ga-state/memory/history_insight/ongoing_affairs.md")
         );
         assert_eq!(
-            p.forgotten_file(),
-            PathBuf::from("/x/managed-ga-state/memory/history_insight/galley/forgotten.json")
-        );
-        assert_eq!(
-            p.emotions_file(),
-            PathBuf::from("/x/managed-ga-state/memory/history_insight/emotional_events.md")
+            p.activities_file(),
+            PathBuf::from("/x/managed-ga-state/memory/history_insight/activities.md")
         );
     }
 

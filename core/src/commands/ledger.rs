@@ -1,8 +1,7 @@
 use super::*;
 use crate::ledger::control::{self, LedgerControl, MemoryOverview, SwitchChange};
 use crate::ledger::{
-    emit_memory_changed, paths_for_app, read_switch, LedgerExclusion, LedgerSwitch, LedgerTarget,
-    RunReport, Trigger,
+    emit_memory_changed, paths_for_app, read_switch, LedgerSwitch, RunReport, Trigger,
 };
 
 // Affairs ledger (.scratch/main-chat/issues/01-affairs-ledger.md) and the
@@ -11,34 +10,6 @@ use crate::ledger::{
 // (`managed_only`, `ledger_busy`, `not_found`, `changed_on_disk`) as
 // bare strings; the GUI words them. Every change the page shows is
 // followed by `memory-changed`.
-
-/// Mark (`excluded: true`) or unmark one session or project as "not used
-/// to understand me". `target` is `{"kind": "session" | "project", "id"}`.
-/// Stored whatever the runtime and the switch.
-#[tauri::command]
-pub(crate) async fn set_ledger_excluded(
-    app: tauri::AppHandle,
-    galley: State<'_, SqliteGalley>,
-    target: LedgerTarget,
-    excluded: bool,
-) -> std::result::Result<(), String> {
-    galley
-        .set_ledger_excluded(&target, excluded)
-        .await
-        .map_err(stringify_error)?;
-    emit_memory_changed(&app);
-    Ok(())
-}
-
-#[tauri::command]
-pub(crate) async fn list_ledger_exclusions(
-    galley: State<'_, SqliteGalley>,
-) -> std::result::Result<Vec<LedgerExclusion>, String> {
-    galley
-        .list_ledger_exclusions()
-        .await
-        .map_err(stringify_error)
-}
 
 /// Run the mining now, whatever the day's schedule says; resolves when
 /// the run has settled. `ledger_off` while the switch is not on.
@@ -107,7 +78,7 @@ pub(crate) async fn set_ledger_switch(
     Ok(switch)
 }
 
-/// Delete one activity (`A…`) or emotional event (`E…`).
+/// Delete one affair (`A…`), the emotions recorded under it with it.
 #[tauri::command]
 pub(crate) async fn delete_ledger_entry(
     app: tauri::AppHandle,
@@ -117,23 +88,26 @@ pub(crate) async fn delete_ledger_entry(
     control::require_managed(&galley).await?;
     let paths = ledger_paths(&app)?;
     LedgerControl::global()
-        .delete_entry(&galley, &paths, &id, chrono::Utc::now())
+        .delete_entry(&galley, &paths, &id)
         .await?;
     emit_memory_changed(&app);
     Ok(())
 }
 
-/// Take an entry off the "do not record again" list.
+/// Delete one emotion of affair `id` (ticket 04d): `line` is that
+/// emotion's `line` from the overview, its text as written — never a
+/// position. `not_found` when no emotion of the affair reads so anymore.
 #[tauri::command]
-pub(crate) async fn unforget_ledger_entry(
+pub(crate) async fn delete_ledger_emotion(
     app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     id: String,
+    line: String,
 ) -> std::result::Result<(), String> {
     control::require_managed(&galley).await?;
     let paths = ledger_paths(&app)?;
     LedgerControl::global()
-        .unforget(&galley, &paths, &id)
+        .delete_emotion(&galley, &paths, &id, &line)
         .await?;
     emit_memory_changed(&app);
     Ok(())
