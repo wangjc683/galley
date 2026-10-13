@@ -91,7 +91,7 @@ describe("Settings → Memory", () => {
     const html = page(withLedger(EMPTY_LEDGER));
     const out = text(html);
     expect(out).toContain("从对话里了解我");
-    expect(out).toContain("包括以前的对话，不读 AI 的回复");
+    expect(out).toContain("新说的话，第一次会连以前的对话一起读（不读 AI 的回复）");
     expect(out).toContain("再经过一次模型服务商");
     expect(out).toContain("只存在这台电脑上");
     expect(html).toMatch(/role="switch" aria-checked="false"/);

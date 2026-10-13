@@ -692,7 +692,7 @@ export const enCopy: AppCopy = {
         "What Galley has noted from your conversations — view it, delete it, or turn it off",
       switchTitle: "Learn from my conversations",
       switchDescription:
-        "Once a day, Galley reads what you said on the desktop and in IM direct messages (earlier conversations included, never the AI's replies) and has your default model sort it, so it passes through your model provider once more. What it notes stays on this computer and carries over when you switch models.",
+        "Once a day, Galley reads what you have newly said on the desktop and in IM direct messages — the first time, your earlier conversations too (never the AI's replies) — and has your default model sort it, so it passes through your model provider once more. What it notes stays on this computer and carries over when you switch models.",
       sinceFrom: (time) => `Since ${time}`,
       sinceEarliest: "From your earliest conversations",
       running: "Sorting now",
