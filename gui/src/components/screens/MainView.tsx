@@ -24,6 +24,7 @@ import { StepRegion } from "@/components/conversation/StepRegion";
 import { ThinkingPreview } from "@/components/conversation/ThinkingPreview";
 import { UserQuestionRail } from "@/components/conversation/UserQuestionRail";
 import { useActiveMessages } from "@/hooks/useActiveSession";
+import { useEarlierTurns } from "@/hooks/useEarlierTurns";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { useMarkdownStream } from "@/hooks/useMarkdownStream";
@@ -255,6 +256,14 @@ function MainViewContent({
   // the old one via the sessions.ts atomic swap). Ghost turns instead
   // of a blank column that would misread as an empty session.
   const restoring = useActiveMessages((m) => m.restoring, false);
+  // Paged history (main-chat ticket 12): how many turns earlier pages
+  // put in front (Conversation keys rows past them), and the send time
+  // the first loaded user message measures its break against.
+  const prependedTurns = useActiveMessages((m) => m.prependedTurns, 0);
+  const previousUserCreatedAt = useActiveMessages(
+    (m) => m.earlier?.previousUserCreatedAt ?? null,
+    null,
+  );
   const currentTurnIndex = useActiveMessages((m) => m.currentTurnIndex, null);
   // The in-flight region sits one in-run gap (mt-2.5) below the
   // conversation's live window; from the second step on its rail
@@ -387,6 +396,14 @@ function MainViewContent({
     pendingAskUser,
     restoring,
   });
+  // Earlier pages of the conversation: read near the top, prepended
+  // without moving what is on screen. See useEarlierTurns.
+  useEarlierTurns({
+    sessionId: activeSessionId,
+    scrollContainerRef,
+    turnsLength: turns.length,
+    prependedTurns,
+  });
 
   // Unread-final-answer tracking for the scroll-to-bottom button's
   // static dot. Edge-triggered, not `!isRunning`: the dot means "a
@@ -453,6 +470,8 @@ function MainViewContent({
                 // folded (conversation-run-fold PRD 定案 2).
                 key={activeSessionId ?? "conversation"}
                 turns={turns}
+                keyBase={prependedTurns}
+                previousUserCreatedAt={previousUserCreatedAt}
                 goals={sessionGoals}
                 onExtendGoal={onExtendGoal}
                 askUserPending={Boolean(pendingAskUser)}

@@ -79,6 +79,18 @@ export interface ConversationProps {
    * full — a run without an answer is never hidden.
    */
   agentRunning?: boolean;
+  /**
+   * Turns put in front of `turns` since they were loaded (paged
+   * history, main-chat ticket 12; messages store `prependedTurns`).
+   * Rows are keyed, and fold / live-window state kept, by
+   * `index - keyBase`: loading an earlier page then remounts no row and
+   * moves no fold onto another run.
+   */
+  keyBase?: number;
+  /** Send time of the last user message before `turns` while earlier
+   * history is not loaded (messages store `earlier`): the first loaded
+   * user message's send-time break measures against it. */
+  previousUserCreatedAt?: string | null;
 }
 
 /**
@@ -105,8 +117,14 @@ export function Conversation({
   onExtendGoal,
   askUserPending = false,
   agentRunning = false,
+  keyBase = 0,
+  previousUserCreatedAt = null,
 }: ConversationProps) {
   const items = annotateGoalThread(turns, goals ?? []);
+  // A turn's place that survives a prepend (see `keyBase`): every key
+  // and every piece of per-run state below is held in these, never in
+  // raw indices.
+  const ordinal = (index: number) => index - keyBase;
 
   // The turn whose ask_user question is currently live in the tail
   // AskUserBubble. Positional match (last agent turn carrying an
@@ -181,7 +199,10 @@ export function Conversation({
   const copy = useCopy();
   const language = useLanguage();
   const dayStamp = useDayStamp();
-  const timeMarks = useMemo(() => userTimeMarks(turns), [turns]);
+  const timeMarks = useMemo(
+    () => userTimeMarks(turns, { previousUserCreatedAt }),
+    [turns, previousUserCreatedAt],
+  );
   const pinnedTimes = useMemo(() => {
     const words = {
       today: copy.conversation.messageTimeToday,
@@ -205,7 +226,7 @@ export function Conversation({
     return labels;
   }, [timeMarks, turns, dayStamp, language, copy]);
 
-  // Manual toggles, keyed by opener index: true = user expanded,
+  // Manual toggles, keyed by the opener's ordinal: true = user expanded,
   // false = user collapsed, absent = default. Ephemeral per mount —
   // a reopened session folds everything (Conversation is keyed per
   // session in MainView). The same map serves the live window's
@@ -241,15 +262,18 @@ export function Conversation({
   // live header (the run settles open, no window to sweep) and when
   // the run did not complete (aborts unfold in full). Guarded
   // setState-in-render: the decision has to land in THIS render, an
-  // effect would commit the settled structure first.
-  const liveOpenerNow = liveGroup?.openerIndex ?? null;
+  // effect would commit the settled structure first. Openers here are
+  // ordinals, like every index this component keeps across renders.
+  const liveOpenerNow = liveGroup ? ordinal(liveGroup.openerIndex) : null;
   const [watchedOpener, setWatchedOpener] = useState<number | null>(null);
   const [settlingOpener, setSettlingOpener] = useState<number | null>(null);
   if (liveOpenerNow !== null && liveOpenerNow !== watchedOpener) {
     setWatchedOpener(liveOpenerNow);
   }
   if (liveOpenerNow === null && watchedOpener !== null) {
-    const watched = groups.find((g) => g.openerIndex === watchedOpener);
+    const watched = groups.find(
+      (g) => ordinal(g.openerIndex) === watchedOpener,
+    );
     if (watched?.complete && foldOverrides[watchedOpener] !== true) {
       setSettlingOpener(watchedOpener);
     }
@@ -265,8 +289,9 @@ export function Conversation({
   }, [settlingOpener]);
   const settlingGroup =
     settlingOpener !== null
-      ? (groups.find((g) => g.openerIndex === settlingOpener && g.complete) ??
-        null)
+      ? (groups.find(
+          (g) => ordinal(g.openerIndex) === settlingOpener && g.complete,
+        ) ?? null)
       : null;
 
   // Departing steps: when a new step lands, the step it displaces
@@ -278,13 +303,14 @@ export function Conversation({
   // used while the live header is expanded: there the displaced step
   // simply moves into the open fold section above, same place, same
   // content, and a sweep would show it twice. Guarded
-  // setState-in-render, as the settling detection above.
+  // setState-in-render, as the settling detection above. Steps and
+  // openers are ordinals.
   const liveLastAgent = (() => {
-    if (!liveGroup) return -1;
-    let last = -1;
+    if (!liveGroup) return null;
+    let last: number | null = null;
     for (const i of liveGroup.memberIndices) {
       if (i === liveGroup.openerIndex || i === liveGroup.finalTurnIndex) continue;
-      if (turns[i].role === "agent") last = i;
+      if (turns[i].role === "agent") last = ordinal(i);
     }
     return last;
   })();
@@ -293,22 +319,22 @@ export function Conversation({
     index: number;
   } | null>(null);
   const [departing, setDeparting] = useState<number[]>([]);
-  if (liveGroup && liveLastAgent !== -1) {
+  if (liveOpenerNow !== null && liveLastAgent !== null) {
     if (
       watchedStep === null ||
-      watchedStep.opener !== liveGroup.openerIndex ||
+      watchedStep.opener !== liveOpenerNow ||
       watchedStep.index !== liveLastAgent
     ) {
       if (
         watchedStep !== null &&
-        watchedStep.opener === liveGroup.openerIndex &&
+        watchedStep.opener === liveOpenerNow &&
         watchedStep.index < liveLastAgent &&
-        foldOverrides[liveGroup.openerIndex] !== true &&
+        foldOverrides[liveOpenerNow] !== true &&
         !departing.includes(watchedStep.index)
       ) {
         setDeparting([...departing, watchedStep.index]);
       }
-      setWatchedStep({ opener: liveGroup.openerIndex, index: liveLastAgent });
+      setWatchedStep({ opener: liveOpenerNow, index: liveLastAgent });
     }
   } else if (watchedStep !== null) {
     setWatchedStep(null);
@@ -373,7 +399,7 @@ export function Conversation({
           // that sweep — but stays a window member until its sweep
           // ends.
           if (turns[i].role === "agent") foldedSteps++;
-          if (departing.includes(i)) windowOwner.set(i, g.openerIndex);
+          if (departing.includes(ordinal(i))) windowOwner.set(i, g.openerIndex);
           else sectionOwner.set(i, g.openerIndex);
         } else {
           windowOwner.set(i, g.openerIndex);
@@ -381,7 +407,7 @@ export function Conversation({
       }
       headerFor.set(g.openerIndex, {
         group: g,
-        folded: foldOverrides[g.openerIndex] !== true,
+        folded: foldOverrides[ordinal(g.openerIndex)] !== true,
         live: g === liveGroup,
         foldedSteps,
       });
@@ -402,7 +428,7 @@ export function Conversation({
     // Settled runs fold on completion (2026-09-16, reversing the
     // 08-06 keep-expanded window): the header's step / duration /
     // tool-count digest stands in for the process, one click away.
-    const override = foldOverrides[g.openerIndex];
+    const override = foldOverrides[ordinal(g.openerIndex)];
     const folded = override !== undefined ? !override : true;
     headerFor.set(g.openerIndex, {
       group: g,
@@ -429,7 +455,10 @@ export function Conversation({
   }
 
   const toggleFold = (openerIndex: number, currentlyFolded: boolean) => {
-    setFoldOverrides((prev) => ({ ...prev, [openerIndex]: currentlyFolded }));
+    setFoldOverrides((prev) => ({
+      ...prev,
+      [ordinal(openerIndex)]: currentlyFolded,
+    }));
   };
 
   const renderItem = (
@@ -441,8 +470,17 @@ export function Conversation({
       turnIndex !== undefined ? headerFor.get(turnIndex) : undefined;
     const pinned =
       turnIndex !== undefined ? pinnedTimes.get(turnIndex) : undefined;
+    // Keyed by the turn's ordinal (a terminal marker, which is no turn,
+    // by its goal): an earlier page or a marker landing in front moves
+    // no key.
+    const key =
+      turnIndex !== undefined
+        ? `turn-${ordinal(turnIndex)}`
+        : item.kind === "terminal"
+          ? `terminal-${item.goal.id}`
+          : `item-${i}`;
     return (
-      <Fragment key={i}>
+      <Fragment key={key}>
         {item.kind === "commission" ? (
           <>
             {/* A commission takes part in the break sequence and shows
@@ -556,8 +594,10 @@ export function Conversation({
   const flushSection = () => {
     if (!section) return;
     if (section.kind === "flat") {
+      // A headless lead-in group (opener -1) is always the first.
+      const regionKey = section.opener < 0 ? "lead" : ordinal(section.opener);
       rendered.push(
-        <StepRegion key={`region-${section.opener}`}>{section.nodes}</StepRegion>,
+        <StepRegion key={`region-${regionKey}`}>{section.nodes}</StepRegion>,
       );
     } else if (section.kind === "window") {
       // The live window's open tail, in an ExpandSection so it can
@@ -588,8 +628,8 @@ export function Conversation({
       const expanded = hasHeader && !h.folded;
       rendered.push(
         <ExpandSection
-          key={`window-${section.opener}`}
-          open={section.opener !== settlingOpener}
+          key={`window-${ordinal(section.opener)}`}
+          open={ordinal(section.opener) !== settlingOpener}
           openClassName={!hasHeader ? "mt-6" : expanded ? "mt-0" : "-mt-2.5"}
           closedClassName="mt-0"
         >
@@ -613,7 +653,10 @@ export function Conversation({
     } else {
       const h = headerFor.get(section.opener);
       rendered.push(
-        <RunFoldSection key={`fold-${section.opener}`} open={h ? !h.folded : true}>
+        <RunFoldSection
+          key={`fold-${ordinal(section.opener)}`}
+          open={h ? !h.folded : true}
+        >
           {section.nodes}
         </RunFoldSection>,
       );
@@ -648,8 +691,8 @@ export function Conversation({
       // closes when the step departs (see `departing`).
       section.nodes.push(
         <ExpandSection
-          key={`step-${turnIndex}`}
-          open={!departing.includes(turnIndex)}
+          key={`step-${ordinal(turnIndex)}`}
+          open={!departing.includes(ordinal(turnIndex))}
           animateMount
         >
           <div className="pb-2.5">{renderItem(item, i, turnIndex)}</div>
@@ -665,7 +708,7 @@ export function Conversation({
     ) {
       section.nodes.push(
         <AgentTurnView
-          key={`marker-${i}`}
+          key={`marker-${ordinal(turnIndex)}`}
           turn={item.turn}
           markerOnly
           stepNumber={
@@ -686,15 +729,20 @@ export function Conversation({
   // Names the model repeats for files this session wrote resolve to the
   // bridge-recorded absolute path (lib/written-files.ts), so a delivery
   // like `./汕尾旅游指南.md` opens even when the reply skipped the full path.
+  // Over the loaded turns only (paged history, ticket 12): a write in a
+  // page not loaded yet resolves once that page is.
   const writtenFiles = useMemo(() => buildWrittenFileResolver(turns), [turns]);
   // A script step names its tab only by id; the site comes from the
   // session's most recent tab list (lib/browser-site.ts), so the
-  // resolution is a whole-session pass, not a per-pill one.
+  // resolution is a whole-session pass, not a per-pill one — over the
+  // loaded turns, like the file names above.
   const browserSites = useMemo(() => buildBrowserSiteResolver(turns), [turns]);
   return (
     <WrittenFilesContext.Provider value={writtenFiles}>
       <BrowserSitesContext.Provider value={browserSites}>
-        <div>{rendered}</div>
+        {/* `data-role` names the rows a prepend keeps still
+            (lib/scroll-anchor). */}
+        <div data-role="conversation">{rendered}</div>
       </BrowserSitesContext.Provider>
     </WrittenFilesContext.Provider>
   );

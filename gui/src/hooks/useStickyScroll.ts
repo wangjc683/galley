@@ -4,7 +4,8 @@ import {
   USER_MSG_ANCHOR_TOLERANCE_PX,
   USER_MSG_ANCHOR_TOP_PX,
 } from "@/lib/conversation-anchor";
-import { useUiStore } from "@/stores/ui";
+import { turnsHoldMessage, useMessagesStore } from "@/stores/messages";
+import { type LocateRequest, useUiStore } from "@/stores/ui";
 import type { PendingAskUser } from "@/types/conversation";
 
 /** How long the located message keeps its wash (matches the CSS
@@ -469,12 +470,40 @@ export function useStickyScroll({
   // otherwise shift the parked message off the anchor line.
   const locateRequest = useUiStore((s) => s.locateRequest);
   const clearLocate = useUiStore((s) => s.clearLocate);
+  // The request whose target this hook is reading earlier pages for.
+  const pagingForRef = useRef<LocateRequest | null>(null);
   useEffect(() => {
     if (!locateRequest) return;
     if (locateRequest.sessionId !== activeSessionId) return;
     if (restoring || turnsLength === 0) return;
     const container = scrollContainerRef.current;
     if (!container) return;
+
+    // A target in history not loaded yet (paged history, main-chat
+    // ticket 12): read earlier pages until it is in — each page landing
+    // re-runs this effect — then locate it as below. Nothing earlier
+    // left and still absent: give up as for a node that never appears.
+    const messages = useMessagesStore.getState();
+    const slice = messages.byId[locateRequest.sessionId];
+    if (
+      slice?.earlier &&
+      !turnsHoldMessage(slice.turns, locateRequest.messageId)
+    ) {
+      if (pagingForRef.current !== locateRequest) {
+        pagingForRef.current = locateRequest;
+        void messages
+          .loadEarlierThrough(locateRequest.sessionId, locateRequest.messageId)
+          .then((held) => {
+            if (
+              !held &&
+              useUiStore.getState().locateRequest === locateRequest
+            ) {
+              clearLocate();
+            }
+          });
+      }
+      return;
+    }
 
     let frames = 0;
     let rafId: number | null = null;

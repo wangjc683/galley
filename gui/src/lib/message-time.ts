@@ -58,13 +58,22 @@ function localDayStart(ms: number): number {
  * baseline either: the next dated turn compares against the dated one
  * before it, and a dated turn with no dated predecessor counts as the
  * first.
+ *
+ * `previousUserCreatedAt` is the send time of the last user message
+ * before `turns` when the conversation holds only its later part
+ * (paged history, main-chat ticket 12): the first user turn here
+ * measures against it, so a break reads the same before and after the
+ * earlier page loads.
  */
 export function userTimeMarks(
   turns: readonly Turn[],
-  thresholdMs: number = USER_TIME_BREAK_MS,
+  {
+    previousUserCreatedAt = null,
+    thresholdMs = USER_TIME_BREAK_MS,
+  }: { previousUserCreatedAt?: string | null; thresholdMs?: number } = {},
 ): Map<number, UserTimeMark> {
   const marks = new Map<number, UserTimeMark>();
-  let prevMs: number | null = null;
+  let prevMs: number | null = parseTime(previousUserCreatedAt ?? undefined);
   for (let index = 0; index < turns.length; index++) {
     const turn = turns[index];
     if (turn.role !== "user") continue;

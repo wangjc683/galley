@@ -207,3 +207,41 @@ describe("Conversation browser step site", () => {
     expect(html).not.toContain("douban.com");
   });
 });
+
+describe("Conversation paged history (main-chat ticket 12)", () => {
+  // The loaded part of a longer conversation: its first user message
+  // was sent half an hour after the last one before the page.
+  const loaded: Turn[] = [
+    {
+      role: "user",
+      content: "接着说",
+      createdAt: "2026-10-13T08:30:00.000Z",
+    },
+    { role: "agent", tools: [], finalAnswer: "好的", turnIndex: 1 },
+  ];
+  const html = (props: {
+    keyBase?: number;
+    previousUserCreatedAt?: string | null;
+  }) =>
+    renderToStaticMarkup(
+      <Tooltip.Provider>
+        <LocalFilesContext.Provider value={() => undefined}>
+          <Conversation turns={loaded} {...props} />
+        </LocalFilesContext.Provider>
+      </Tooltip.Provider>,
+    );
+
+  it("measures the first loaded message's send time against the one before the page", () => {
+    // No earlier message known: it is the first, so it shows its time.
+    expect(html({})).toContain("<time");
+    // Half an hour after the previous one: no break, as with the whole
+    // conversation loaded.
+    expect(
+      html({ previousUserCreatedAt: "2026-10-13T08:00:00.000Z" }),
+    ).not.toContain("<time");
+  });
+
+  it("renders the same whatever the key base", () => {
+    expect(html({ keyBase: 37 })).toBe(html({}));
+  });
+});

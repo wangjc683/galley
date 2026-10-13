@@ -149,22 +149,35 @@ export async function searchMessages(
   });
 }
 
+/** One page of a session's transcript cut at whole turns (Core
+ * `PersistedTurnPage`, main-chat ticket 12). */
+export interface MessageTurnPage {
+  /** The page's rows in conversation order. */
+  rows: MessageRow[];
+  /** Older turns exist before `rows[0].turn_index`. */
+  hasMore: boolean;
+  /** Send time of the last user message before the page, while
+   * `hasMore` (null otherwise, or when no user message precedes it). */
+  previousUserCreatedAt: string | null;
+}
+
 /**
- * Load all messages for a session in conversation order. Returns
- * persisted message rows; callers convert to either `Turn[]` (for UI
- * hydration via `restoreSessionTurns`) or `ConversationMessage[]`
- * (for GA `load_history` IPC). The two consumers need slightly
- * different shapes — keep the conversion out of this primitive.
+ * Read a session's conversation a page of whole turns at a time (Core
+ * `session_message_turns_page`): the latest page without
+ * `beforeTurnIndex`, else the page that ends just before that turn.
+ * A page holds every row of its turns and never starts inside a run
+ * (Goal or ask_user-continued), so `rowsToTurns` over pages joined
+ * oldest first builds the same turns as over the whole transcript.
+ * Restoring GA's history into a runner is Core's own read (ticket 02b).
  */
-/**
- * @deprecated B1 M3 — Rust port available at `galley_core_lib::db::SqliteGalley::session_messages`.
- * Migrate call sites to `invoke("session_messages", {...})` then delete this
- * once no callers remain. Kept alive in parallel per refactor/invariants.md §I1.
- */
-export async function loadMessagesBySession(
+export async function loadMessageTurnsPage(
   sessionId: string,
-): Promise<MessageRow[]> {
-  return invoke<MessageRow[]>("session_message_rows", { sessionId });
+  beforeTurnIndex?: number,
+): Promise<MessageTurnPage> {
+  return invoke<MessageTurnPage>("session_message_turns_page", {
+    sessionId,
+    beforeTurnIndex,
+  });
 }
 
 // ---------------- prefs ----------------

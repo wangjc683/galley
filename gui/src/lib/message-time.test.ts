@@ -135,9 +135,35 @@ describe("userTimeMarks", () => {
   it("honours a custom threshold", () => {
     const marks = userTimeMarks(
       [user(local(2026, 9, 28, 9, 0)), user(local(2026, 9, 28, 9, 2))],
-      60_000,
+      { thresholdMs: 60_000 },
     );
     expect(marks.get(1)?.pinned).toBe(true);
+  });
+
+  it("measures the first loaded message against the one before the page", () => {
+    // Paged history: only the later part is loaded, Core supplies the
+    // previous user message's time.
+    const loaded = [agent(), user(local(2026, 9, 28, 9, 40)), agent()];
+    const whole = [user(local(2026, 9, 28, 9, 0)), agent(), ...loaded];
+    expect(
+      userTimeMarks(loaded, {
+        previousUserCreatedAt: iso(local(2026, 9, 28, 9, 0)),
+      }).get(1),
+    ).toEqual(userTimeMarks(whole).get(3));
+    expect(userTimeMarks(whole).get(3)).toEqual({
+      pinned: false,
+      withTodayWord: false,
+    });
+    // Across a day, as with the whole transcript.
+    expect(
+      userTimeMarks(loaded, {
+        previousUserCreatedAt: iso(local(2026, 9, 27, 23, 50)),
+      }).get(1),
+    ).toEqual({ pinned: true, withTodayWord: true });
+    // Without one the first loaded message is the first.
+    expect(
+      userTimeMarks(loaded, { previousUserCreatedAt: null }).get(1),
+    ).toEqual({ pinned: true, withTodayWord: false });
   });
 });
 

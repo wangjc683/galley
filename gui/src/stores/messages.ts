@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import { loadMessagesBySession } from "@/lib/db";
+import { loadMessageTurnsPage, type MessageTurnPage } from "@/lib/db";
 import { logPerf, perfNow } from "@/lib/perf";
 import { pendingReplyStepBase } from "@/lib/run-groups";
 import type { UserMessagePersistedPayload } from "@/lib/session-send";
@@ -19,7 +19,6 @@ import type {
   Turn,
   UserTurn,
 } from "@/types/conversation";
-import type { MessageRow } from "@/types/db";
 
 // ============================================================
 // Module-level singletons
@@ -48,6 +47,31 @@ function sessionCompletedTurnCount(sid: string): number {
       ?.turnCount ?? 0
   );
 }
+
+/** Whether `turns` hold the persisted message `messageId` (a user or
+ * agent turn carrying it). */
+export function turnsHoldMessage(turns: Turn[], messageId: string): boolean {
+  return turns.some(
+    (turn) =>
+      (turn.role === "user" || turn.role === "agent") &&
+      turn.messageId === messageId,
+  );
+}
+
+/** The transcript before a page, as `PerSessionMessages.earlier` keeps
+ * it: null once the page reaches the first turn. */
+function earlierThan(page: MessageTurnPage): EarlierTurns | null {
+  const first = page.rows[0];
+  if (!page.hasMore || !first) return null;
+  return {
+    beforeTurnIndex: first.turn_index,
+    previousUserCreatedAt: page.previousUserCreatedAt,
+  };
+}
+
+/** The `loadEarlierTurns` read in flight per session: a second call
+ * joins it instead of reading the same page again. */
+const earlierReads = new Map<string, Promise<boolean>>();
 
 // ============================================================
 // Per-session conversation state
@@ -86,6 +110,21 @@ export interface PerSessionMessages {
    * defers the active-pointer flip until turns are in memory).
    */
   restoring: boolean;
+  /**
+   * The transcript before `turns`, while some of it is not loaded
+   * (main-chat ticket 12): `restoreSessionTurns` reads only the latest
+   * page of whole turns, `loadEarlierTurns` prepends the page before.
+   * null once the first turn is in — and for a session never restored,
+   * whose turns all arrived live.
+   */
+  earlier: EarlierTurns | null;
+  /**
+   * Turns `loadEarlierTurns` put in front of `turns` since they were
+   * last replaced. The conversation keys its rows, and the state it
+   * keeps per run, by `index - prependedTurns`, so a prepend moves no
+   * key.
+   */
+  prependedTurns: number;
   turnIndexOffset: number;
   /**
    * Display-step base for the GA loop the latest user turn started:
@@ -126,6 +165,17 @@ export interface PerSessionMessages {
   pausedAtStepLimit: boolean;
 }
 
+/** `PerSessionMessages.earlier`: where the loaded turns begin. */
+export interface EarlierTurns {
+  /** `turn_index` of the first loaded turn; the next page ends
+   * before it. */
+  beforeTurnIndex: number;
+  /** Send time of the last user message before the loaded turns
+   * (Core's `previousUserCreatedAt`): the first loaded user message's
+   * send-time break measures against it (lib/message-time). */
+  previousUserCreatedAt: string | null;
+}
+
 export const EMPTY_MESSAGES: PerSessionMessages = Object.freeze({
   turns: EMPTY_TURNS,
   agentRunning: false,
@@ -136,6 +186,8 @@ export const EMPTY_MESSAGES: PerSessionMessages = Object.freeze({
   sendPhase: null,
   isStopping: false,
   restoring: false,
+  earlier: null,
+  prependedTurns: 0,
   turnIndexOffset: 0,
   runStepBase: 0,
   optimisticRequestId: null,
@@ -156,6 +208,8 @@ function emptyMessages(): PerSessionMessages {
     sendPhase: null,
     isStopping: false,
     restoring: false,
+    earlier: null,
+    prependedTurns: 0,
     turnIndexOffset: 0,
     runStepBase: 0,
     optimisticRequestId: null,
@@ -203,6 +257,10 @@ interface MessagesActions {
    * (no in-memory turns yet) and the session has prior turn history
    * on disk. Idempotent: safe to call when there are no rows.
    *
+   * Reads the latest page of whole turns only (main-chat ticket 12);
+   * `earlier` says where it begins, `loadEarlierTurns` reads further
+   * back.
+   *
    * Only writes to `byId[sid].turns`; does NOT touch GA
    * `backend.history`. The bridge-side history injection happens in
    * the IPC `ready` handler, which reads the same messages table and
@@ -211,6 +269,21 @@ interface MessagesActions {
    * touch the UI state.
    */
   restoreSessionTurns: (sid: string) => Promise<void>;
+  /**
+   * Prepend the page of whole turns before the loaded ones, if there
+   * is one (main-chat ticket 12). Resolves true when a page was read
+   * and applied. One read per session at a time — a call while one is
+   * in flight joins it — and a page that lands after `turns` were
+   * replaced (a restore, a clear) is dropped. Live turns keep
+   * appending at the tail meanwhile.
+   */
+  loadEarlierTurns: (sid: string) => Promise<boolean>;
+  /**
+   * Load earlier pages until `turns` hold message `messageId` or
+   * nothing earlier remains (⌘K locate into history not loaded yet).
+   * Resolves whether they hold it.
+   */
+  loadEarlierThrough: (sid: string, messageId: string) => Promise<boolean>;
 
   // ---- conversation writes ----
   /**
@@ -452,24 +525,27 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     const startedAt = perfNow();
     set({ byId: patchMessages(get(), sid, (m) => ({ ...m, restoring: true })).byId });
     try {
-      let rows: MessageRow[];
+      let page: MessageTurnPage;
       try {
-        rows = await loadMessagesBySession(sid);
+        page = await loadMessageTurnsPage(sid);
       } catch (e) {
         console.debug("[messages] restoreSessionTurns: SQLite unavailable.", e);
         return;
       }
       logPerf("messages.restoreSessionTurns", startedAt, {
         sessionId: sid,
-        rowCount: rows.length,
+        rowCount: page.rows.length,
+        hasMore: page.hasMore,
         completedTurnCount: sessionCompletedTurnCount(sid),
       });
-      if (rows.length === 0) return;
-      const turns = rowsToTurns(rows);
+      if (page.rows.length === 0) return;
+      const turns = rowsToTurns(page.rows);
       const state = get();
       const { byId } = patchMessages(state, sid, (m) => ({
         ...m,
         turns,
+        earlier: earlierThan(page),
+        prependedTurns: 0,
         // A restart (or bridge death) while a GA question was pending
         // dropped the transient pendingAskUser — rebuild it from the
         // persisted tool args so the live bubble / chips / sidebar dot
@@ -484,6 +560,54 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       set({
         byId: patchMessages(get(), sid, (m) => ({ ...m, restoring: false })).byId,
       });
+    }
+  },
+
+  loadEarlierTurns: (sid) => {
+    const inFlight = earlierReads.get(sid);
+    if (inFlight) return inFlight;
+    const earlier = get().byId[sid]?.earlier;
+    if (!earlier) return Promise.resolve(false);
+    const read = (async () => {
+      const startedAt = perfNow();
+      let page: MessageTurnPage;
+      try {
+        page = await loadMessageTurnsPage(sid, earlier.beforeTurnIndex);
+      } catch (e) {
+        console.debug("[messages] loadEarlierTurns: SQLite unavailable.", e);
+        return false;
+      }
+      logPerf("messages.loadEarlierTurns", startedAt, {
+        sessionId: sid,
+        rowCount: page.rows.length,
+        hasMore: page.hasMore,
+      });
+      // The turns this page goes in front of were replaced meanwhile.
+      if (get().byId[sid]?.earlier !== earlier) return false;
+      // A page starts where a run opens (Core), so its turns rebuild on
+      // their own exactly as they would inside the whole transcript.
+      const older = rowsToTurns(page.rows);
+      const next = earlierThan(page);
+      const { byId } = patchMessages(get(), sid, (m) => ({
+        ...m,
+        turns: older.length > 0 ? [...older, ...m.turns] : m.turns,
+        // Paging only ever moves back; anything else ends it.
+        earlier:
+          next && next.beforeTurnIndex < earlier.beforeTurnIndex ? next : null,
+        prependedTurns: m.prependedTurns + older.length,
+      }));
+      set({ byId });
+      return true;
+    })().finally(() => earlierReads.delete(sid));
+    earlierReads.set(sid, read);
+    return read;
+  },
+
+  loadEarlierThrough: async (sid, messageId) => {
+    for (;;) {
+      const turns = get().byId[sid]?.turns ?? EMPTY_TURNS;
+      if (turnsHoldMessage(turns, messageId)) return true;
+      if (!(await get().loadEarlierTurns(sid))) return false;
     }
   },
 
@@ -883,6 +1007,8 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       turns: [],
+      earlier: null,
+      prependedTurns: 0,
       agentRunning: false,
       currentRunStartedAtMs: null,
       currentTurnIndex: null,
