@@ -1,5 +1,6 @@
 import type { ResolvedLanguage } from "@/lib/language";
 import type {
+  EntryEmotion,
   LedgerEntry,
   LedgerRun,
   LedgerSwitch,
@@ -9,29 +10,20 @@ import type {
 import { formatMessageDateTime } from "@/lib/message-time";
 
 /**
- * Pure view logic for Settings → Memory (ticket 04b): which areas show,
- * the order of entries, how a source id reads, and the dates. The page
- * (SettingsMemory.tsx) only renders what these return.
+ * Pure view logic for Settings → Memory (tickets 04b, 04d): whether the
+ * 「记下的事」 area shows, the order of entries, how a source id reads,
+ * and the dates. The page (SettingsMemory.tsx) only renders what these
+ * return.
  */
 
 /**
- * Areas 2–6 (activities, emotions, the do-not-record list, the
- * exclusions) show unless the ledger is not on AND there is nothing to
- * show: no ledger file, nothing on the do-not-record list, and no
- * exclusion mark. The ticket's rule is 「undecided / off 而且文件都不在」;
- * exclusions live in Galley's database, not a file, and are kept
- * whether or not the ledger is on, so a mark left from an earlier "on"
- * keeps area 6 reachable (it is the only place to lift it).
+ * The 「记下的事」 area (between the switch and the AI's memory) shows
+ * unless the ledger is not on AND there is no ledger file: undecided, or
+ * off with nothing kept, leaves the switch and the AI's memory alone.
  */
-export function showsLedgerAreas(overview: MemoryOverview): boolean {
+export function showsLedgerArea(overview: MemoryOverview): boolean {
   const { ledger } = overview;
-  if (ledger.switch.state === "on") return true;
-  return (
-    ledger.activities.kind !== "absent" ||
-    ledger.emotions.kind !== "absent" ||
-    ledger.forgotten.length > 0 ||
-    ledger.exclusions.length > 0
-  );
+  return ledger.switch.state === "on" || ledger.activities.kind !== "absent";
 }
 
 /** Newest 「最近」 first; entries without one keep their file order
@@ -52,20 +44,41 @@ export function sortByLastSeen(entries: readonly LedgerEntry[]): LedgerEntry[] {
     .map(({ entry }) => entry);
 }
 
-/** The sessions behind an entry: its `sessions` plus any quote's
- * session not already listed, in that order, without repeats. */
+/** The sessions behind an entry: its `sessions`, then any quote's or
+ * emotion's session not already listed, in that order, without
+ * repeats. */
 export function entrySources(entry: {
   sessions: readonly string[];
   quotes: readonly { session?: string }[];
+  emotions?: readonly { session?: string }[];
 }): string[] {
   const out: string[] = [];
   for (const id of entry.sessions) {
     if (id && !out.includes(id)) out.push(id);
   }
-  for (const quote of entry.quotes) {
-    if (quote.session && !out.includes(quote.session)) out.push(quote.session);
+  for (const cited of [...entry.quotes, ...(entry.emotions ?? [])]) {
+    if (cited.session && !out.includes(cited.session)) out.push(cited.session);
   }
   return out;
+}
+
+/**
+ * What leads an emotion's line, before the user's words: its time and
+ * its tags, 「9月10日 15:40 · 焦急、不安」. Either may be missing.
+ */
+export function emotionMeta(
+  emotion: Pick<EntryEmotion, "at" | "tags">,
+  todayStartMs: number,
+  language: ResolvedLanguage,
+): string {
+  const parts: string[] = [];
+  if (emotion.at) {
+    parts.push(formatLedgerMinute(emotion.at, todayStartMs, language));
+  }
+  if (emotion.tags.length > 0) {
+    parts.push(emotion.tags.join(language === "zh-CN" ? "、" : ", "));
+  }
+  return parts.join(" · ");
 }
 
 const IM_SOURCE = /^im-(.+)-(\d{4}-\d{2}-\d{2})$/;

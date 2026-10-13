@@ -3,14 +3,12 @@ import { describe, expect, it } from "vitest";
 import { getTauriMocks } from "@/test/setup";
 
 import {
+  deleteEntryEmotion,
   deleteLedgerEntry,
   getLedgerSwitch,
   getMemoryOverview,
-  listLedgerExclusions,
   memoryErrorId,
-  setLedgerExcluded,
   setLedgerSwitch,
-  unforgetLedgerEntry,
   writeGlobalMemory,
 } from "./memory";
 
@@ -39,26 +37,19 @@ describe("command wrappers (interface of ticket 04)", () => {
     await setLedgerSwitch({ action: "enable", lookBack: true });
     await setLedgerSwitch({ action: "disable", clear: false });
     await deleteLedgerEntry("A001");
-    await unforgetLedgerEntry("E002");
+    await deleteEntryEmotion("A001", "- 情绪：焦急——“一”");
     await writeGlobalMemory("global_mem.txt", "text", "rev1");
-    await setLedgerExcluded({ kind: "project", id: "p1" }, true);
-    await listLedgerExclusions();
     expect(invoke.mock.calls).toEqual([
       ["get_ledger_switch"],
       ["get_memory_overview"],
       ["set_ledger_switch", { action: "enable", lookBack: true }],
       ["set_ledger_switch", { action: "disable", clear: false }],
       ["delete_ledger_entry", { id: "A001" }],
-      ["unforget_ledger_entry", { id: "E002" }],
+      ["delete_ledger_emotion", { id: "A001", line: "- 情绪：焦急——“一”" }],
       [
         "write_global_memory",
         { name: "global_mem.txt", content: "text", revision: "rev1" },
       ],
-      [
-        "set_ledger_excluded",
-        { target: { kind: "project", id: "p1" }, excluded: true },
-      ],
-      ["list_ledger_exclusions"],
     ]);
   });
 });

@@ -3,8 +3,6 @@ import {
   ArrowsClockwise,
   CaretDown,
   Cat,
-  Check,
-  EyeSlash,
   Notebook,
   PencilSimple,
 } from "@phosphor-icons/react";
@@ -33,11 +31,8 @@ import { SessionTitleEditor } from "../SessionTitleEditor";
  * discussion thread 2026-05-13.
  *
  * Memory (main chat ticket 04b; lib/memory-entry.ts decides when):
- *
- *   - 它记得我什么: the main chat only, first in its menu → Settings →
- *     Memory.
- *   - 不用于了解我: other managed sessions while the ledger is on; a
- *     check item, last, apart from the session tools.
+ * 它记得我什么, the main chat only, first in its menu → Settings →
+ * Memory. (Ticket 04d removed the other sessions' 「不用于了解我」.)
  *
  * Why title-as-trigger instead of a sibling `⋯` button: a bare title +
  * trailing dots reads as CSS text-overflow ellipsis. The whole-block
@@ -51,7 +46,6 @@ export function SessionTitleMenu({
   currentSessionHasPet,
   onRename,
   onOpenMemory,
-  ledgerExclusion,
 }: {
   title: string;
   onReinjectTools?: () => void;
@@ -60,11 +54,6 @@ export function SessionTitleMenu({
   onRename?: (newTitle: string) => void;
   /** 「它记得我什么」 (the main chat's menu). */
   onOpenMemory?: () => void;
-  /** 「不用于了解我」 and its check state. */
-  ledgerExclusion?: {
-    checked: boolean;
-    onCheckedChange: (checked: boolean) => void;
-  };
 }) {
   const copy = useCopy();
   const petHere = !!currentSessionHasPet;
@@ -252,25 +241,6 @@ export function SessionTitleMenu({
               {petHere ? copy.topbar.closeDesktopPet : copy.topbar.desktopPet}
             </span>
           </DropdownMenu.Item>
-          {ledgerExclusion && (
-            <>
-              <DropdownMenu.Separator className="my-1 h-px bg-line" />
-              <DropdownMenu.CheckboxItem
-                checked={ledgerExclusion.checked}
-                onCheckedChange={ledgerExclusion.onCheckedChange}
-                className={cn(
-                  "flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none",
-                  "data-[highlighted]:bg-hover",
-                )}
-              >
-                <EyeSlash size={14} weight="thin" className="text-ink-soft" />
-                <span className="flex-1">{copy.memory.notUsedToLearn}</span>
-                <DropdownMenu.ItemIndicator className="inline-flex">
-                  <Check size={13} weight="bold" className="text-ink-soft" />
-                </DropdownMenu.ItemIndicator>
-              </DropdownMenu.CheckboxItem>
-            </>
-          )}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>

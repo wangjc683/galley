@@ -1,20 +1,14 @@
-import { CaretRight, ChatCircle, Folder, Trash } from "@phosphor-icons/react";
+import { CaretRight, Trash } from "@phosphor-icons/react";
 import { useState, type ReactNode } from "react";
 
-import { Button, IconButton } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy, useLanguage } from "@/lib/i18n";
-import type {
-  ForgottenEntry,
-  LedgerEmotion,
-  LedgerEntry,
-  LedgerExclusionWithTitle,
-  LedgerQuote,
-} from "@/lib/memory";
-import { formatMessageDateTime } from "@/lib/message-time";
+import type { EntryEmotion, LedgerEntry, LedgerQuote } from "@/lib/memory";
 import { cn } from "@/lib/utils";
 
 import {
+  emotionMeta,
   entrySources,
   formatLedgerDay,
   formatLedgerMinute,
@@ -126,16 +120,21 @@ function ExpandableRow({
 }
 
 function DeleteButton({
-  title,
+  ariaLabel,
   busy,
+  small = false,
   onDelete,
 }: {
-  title: string;
+  ariaLabel: string;
   /** A run is going: deleting waits (ledger_busy). */
   busy: boolean;
+  /** An emotion line's: a step below its entry's. */
+  small?: boolean;
   onDelete: () => void;
 }) {
   const copy = useCopy().settings.memory;
+  const size = small ? "xs" : "sm";
+  const icon = <Trash size={small ? 12 : 14} weight="thin" />;
   if (busy) {
     return (
       <TooltipLabel text={copy.deleteBusy}>
@@ -143,11 +142,12 @@ function DeleteButton({
             pointer events. */}
         <span className="inline-flex">
           <IconButton
-            ariaLabel={copy.deleteAria(title)}
+            ariaLabel={ariaLabel}
+            size={size}
             tooltip={false}
             disabled
           >
-            <Trash size={14} weight="thin" />
+            {icon}
           </IconButton>
         </span>
       </TooltipLabel>
@@ -155,11 +155,12 @@ function DeleteButton({
   }
   return (
     <IconButton
-      ariaLabel={copy.deleteAria(title)}
+      ariaLabel={ariaLabel}
+      size={size}
       tooltip={copy.deleteConfirm}
       onClick={onDelete}
     >
-      <Trash size={14} weight="thin" />
+      {icon}
     </IconButton>
   );
 }
@@ -307,16 +308,77 @@ function ExtraLines({ lines }: { lines: readonly string[] }) {
   );
 }
 
+/**
+ * The emotions recorded under an entry (ticket 04d): one line each —
+ * time, tags, the user's words — each with its own delete. How they are
+ * used is said once, above them, wherever an entry's emotions show.
+ */
+export function EmotionLines({
+  emotions,
+  entryTitle,
+  busy,
+  wiring,
+  onDelete,
+}: {
+  emotions: readonly EntryEmotion[];
+  entryTitle: string;
+  busy: boolean;
+  wiring: MemorySourceWiring;
+  onDelete: (emotion: EntryEmotion) => void;
+}) {
+  const copy = useCopy().settings.memory;
+  const language = useLanguage();
+  if (emotions.length === 0) return null;
+  return (
+    <div className="space-y-1">
+      <p className="m-0 text-ui-tertiary text-ink-muted">
+        {copy.emotionsLabel} · {copy.emotionsUsage}
+      </p>
+      {emotions.map((emotion, index) => {
+        const meta = emotionMeta(emotion, wiring.todayStartMs, language);
+        return (
+          <div
+            key={`${index}-${emotion.line}`}
+            className="flex items-start justify-between gap-2"
+          >
+            <p className="m-0 min-w-0 select-text text-ui-secondary leading-secondary text-ink-soft">
+              {meta && (
+                <span className="mr-2 text-ui-tertiary tabular-nums text-ink-muted">
+                  {meta}
+                </span>
+              )}
+              {emotion.text && <span>{copy.emotionWords(emotion.text)}</span>}
+            </p>
+            <div className="shrink-0">
+              <DeleteButton
+                ariaLabel={copy.deleteEmotionAria(
+                  entryTitle,
+                  meta || emotion.text || emotion.line,
+                )}
+                busy={busy}
+                small
+                onDelete={() => onDelete(emotion)}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ActivityRow({
   entry,
   busy,
   wiring,
   onDelete,
+  onDeleteEmotion,
 }: {
   entry: LedgerEntry;
   busy: boolean;
   wiring: MemorySourceWiring;
-  onDelete: (entry: { id: string; title: string; kind: "activity" }) => void;
+  onDelete: (entry: LedgerEntry) => void;
+  onDeleteEmotion: (entry: LedgerEntry, emotion: EntryEmotion) => void;
 }) {
   const copy = useCopy().settings.memory;
   const language = useLanguage();
@@ -351,181 +413,23 @@ export function ActivityRow({
       }
       actions={
         <DeleteButton
-          title={entry.title}
+          ariaLabel={copy.deleteAria(entry.title)}
           busy={busy}
-          onDelete={() =>
-            onDelete({ id: entry.id, title: entry.title, kind: "activity" })
-          }
+          onDelete={() => onDelete(entry)}
         />
       }
     >
       <Quotes quotes={entry.quotes} wiring={wiring} />
+      <EmotionLines
+        emotions={entry.emotions}
+        entryTitle={entry.title}
+        busy={busy}
+        wiring={wiring}
+        onDelete={(emotion) => onDeleteEmotion(entry, emotion)}
+      />
       <ExtraLines lines={entry.extra} />
       <SourceChips ids={sources} wiring={wiring} />
     </ExpandableRow>
-  );
-}
-
-export function EmotionRow({
-  entry,
-  relatedTitle,
-  busy,
-  wiring,
-  onDelete,
-}: {
-  entry: LedgerEmotion;
-  /** The related activity's title, when the page knows it. */
-  relatedTitle: string | null;
-  busy: boolean;
-  wiring: MemorySourceWiring;
-  onDelete: (entry: { id: string; title: string; kind: "emotion" }) => void;
-}) {
-  const copy = useCopy().settings.memory;
-  const language = useLanguage();
-  const meta: string[] = [];
-  if (entry.at) {
-    meta.push(formatLedgerMinute(entry.at, wiring.todayStartMs, language));
-  }
-  if (entry.tags.length > 0) {
-    meta.push(entry.tags.join(language === "zh-CN" ? "、" : ", "));
-  }
-  return (
-    <ExpandableRow
-      title={entry.title}
-      lines={
-        meta.length > 0 && (
-          <span className="mt-0.5 block text-ui-tertiary tabular-nums text-ink-muted">
-            {meta.join(" · ")}
-          </span>
-        )
-      }
-      actions={
-        <DeleteButton
-          title={entry.title}
-          busy={busy}
-          onDelete={() =>
-            onDelete({ id: entry.id, title: entry.title, kind: "emotion" })
-          }
-        />
-      }
-    >
-      <Quotes quotes={entry.quotes} wiring={wiring} />
-      {entry.related && (
-        <p className="m-0 text-ui-meta leading-dense text-ink-muted">
-          {copy.related(relatedTitle ?? entry.related)}
-        </p>
-      )}
-      <ExtraLines lines={entry.extra} />
-      <SourceChips ids={entrySources(entry)} wiring={wiring} />
-    </ExpandableRow>
-  );
-}
-
-/** A plain row: text on the left, one control on the right. */
-function PlainRow({
-  icon,
-  title,
-  detail,
-  children,
-}: {
-  icon?: ReactNode;
-  title: string;
-  detail?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 px-3 py-2.5">
-      <div className="flex min-w-0 items-start gap-2">
-        {icon}
-        <div className="min-w-0">
-          <div className="truncate text-ui-compact font-medium text-ink">
-            {title}
-          </div>
-          {detail && (
-            <div className="mt-0.5 text-ui-tertiary tabular-nums text-ink-muted">
-              {detail}
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="shrink-0">{children}</div>
-    </div>
-  );
-}
-
-export function ForgottenRow({
-  entry,
-  todayStartMs,
-  pending,
-  onUnforget,
-}: {
-  entry: ForgottenEntry;
-  todayStartMs: number;
-  pending: boolean;
-  onUnforget: () => void;
-}) {
-  const copy = useCopy().settings.memory;
-  const language = useLanguage();
-  const deletedAt = formatMessageDateTime(
-    entry.deletedAt,
-    todayStartMs,
-    language,
-  );
-  return (
-    <PlainRow
-      title={entry.title}
-      detail={deletedAt ? copy.deletedAt(deletedAt) : undefined}
-    >
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        disabled={pending}
-        onClick={onUnforget}
-      >
-        {copy.unforget}
-      </Button>
-    </PlainRow>
-  );
-}
-
-export function ExclusionRow({
-  row,
-  pending,
-  onRestore,
-}: {
-  row: LedgerExclusionWithTitle;
-  pending: boolean;
-  onRestore: () => void;
-}) {
-  const copy = useCopy().settings.memory;
-  const Icon = row.target.kind === "project" ? Folder : ChatCircle;
-  return (
-    <PlainRow
-      icon={
-        <Icon
-          size={14}
-          weight="thin"
-          className="mt-[3px] shrink-0 text-ink-soft"
-        />
-      }
-      title={row.title?.trim() || copy.untitled}
-      detail={
-        row.target.kind === "project"
-          ? copy.exclusionProject
-          : copy.exclusionSession
-      }
-    >
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        disabled={pending}
-        onClick={onRestore}
-      >
-        {copy.restore}
-      </Button>
-    </PlainRow>
   );
 }
 

@@ -10,6 +10,7 @@ import {
   MEMORY_FIXTURE_SESSION_TITLES,
   MEMORY_OVERVIEW_FIXTURE,
 } from "./memory/memory-overview.fixture";
+import { EmotionLines } from "./memory/MemoryRows";
 import { MemoryPage } from "./SettingsMemory";
 import { SettingsSidebar } from "./SettingsSidebar";
 
@@ -17,8 +18,7 @@ const noop = async () => {};
 const actions: MemoryActions = {
   setSwitch: noop,
   deleteEntry: noop,
-  unforget: noop,
-  restoreExclusion: noop,
+  deleteEmotion: noop,
   writeGlobal: async () => "rev",
   reload: () => {},
 };
@@ -61,10 +61,19 @@ const EMPTY_LEDGER: Partial<MemoryOverview["ledger"]> = {
   lastRun: undefined,
   nextRunAt: undefined,
   activities: { kind: "absent" },
-  emotions: { kind: "absent" },
-  forgotten: [],
-  exclusions: [],
 };
+
+/** The 「记下的事」 area's own label (the page subtitle says 记下的事 too). */
+const NOTED = "\u0001记下的事\u0001";
+
+/** Areas and copy that ruling 48 (ticket 04d) took off the page. */
+const RETIRED = [
+  "正在进行的事",
+  "已经结束的事",
+  "情绪时刻",
+  "不再记的事",
+  "不用于了解我",
+];
 
 /** The `disabled` attribute (class names carry `disabled:` variants). */
 const DISABLED_ATTRIBUTE = /\sdisabled=""/;
@@ -95,13 +104,7 @@ describe("Settings → Memory", () => {
     expect(out).toContain("再经过一次模型服务商");
     expect(out).toContain("只存在这台电脑上");
     expect(html).toMatch(/role="switch" aria-checked="false"/);
-    for (const area of [
-      "正在进行的事",
-      "已经结束的事",
-      "情绪时刻",
-      "不再记的事",
-      "不用于了解我的对话",
-    ]) {
+    for (const area of [NOTED, ...RETIRED]) {
       expect(out).not.toContain(area);
     }
     expect(out).toContain("AI 的长期记忆");
@@ -112,40 +115,47 @@ describe("Settings → Memory", () => {
     expect(out).not.toContain("上次整理");
   });
 
-  it("off, files gone: the same, but a kept list brings the areas back", () => {
+  it("off, file gone: the same, but a kept file brings 记下的事 back", () => {
     const off = { ...EMPTY_LEDGER, switch: { state: "off" } as const };
-    expect(text(page(withLedger(off)))).not.toContain("正在进行的事");
+    expect(text(page(withLedger(off)))).not.toContain(NOTED);
     const kept = text(
       page(
         withLedger({
           ...off,
-          forgotten: MEMORY_OVERVIEW_FIXTURE.ledger.forgotten,
+          activities: MEMORY_OVERVIEW_FIXTURE.ledger.activities,
         }),
       ),
     );
-    expect(kept).toContain("不再记的事");
-    expect(kept).toContain("Galley 留着它们的标题");
+    expect(kept).toContain(NOTED);
+    expect(kept).toContain("杭州半程马拉松备赛");
   });
 
-  it("on: the status line and all seven areas", () => {
+  it("on: the status line and three areas", () => {
     const html = page(MEMORY_OVERVIEW_FIXTURE);
     const out = text(html);
     expect(html).toMatch(/role="switch" aria-checked="true"/);
     expect(out).toContain(
       "从最早的对话开始 · 上次整理 今天 04:00，已更新 · 下次 明天 04:00",
     );
-    for (const area of [
-      "正在进行的事",
-      "已经结束的事",
-      "情绪时刻",
-      "只在把事办好需要时引用，不会单独评论你的情绪。",
-      "不再记的事",
-      "不用于了解我的对话",
-      "AI 的长期记忆",
-      "其他内容",
-    ]) {
+    for (const area of ["从对话里了解我", NOTED, "AI 的长期记忆", "其他内容"]) {
       expect(out).toContain(area);
     }
+    for (const area of RETIRED) {
+      expect(out).not.toContain(area);
+    }
+  });
+
+  it("on with nothing noted yet: one empty line", () => {
+    const out = text(
+      page(
+        withLedger({
+          activities: { kind: "parsed", ongoing: [], ended: [] },
+        }),
+      ),
+    );
+    expect(out).toContain(NOTED);
+    expect(out).toContain("还没有记下什么，整理过后会出现在这里。");
+    expect(out).not.toContain("已经结束的");
   });
 
   it("lists ongoing activities newest first, with status and meta", () => {
@@ -166,18 +176,23 @@ describe("Settings → Memory", () => {
     expect(out).toContain("最近提到：9月27日 · 4 个对话");
   });
 
-  it("folds ended activities and emotions by default", () => {
-    const out = text(page(MEMORY_OVERVIEW_FIXTURE));
+  it("folds the ended ones behind one last row, emotions inside their affair", () => {
+    const html = page(MEMORY_OVERVIEW_FIXTURE);
+    const out = text(html);
+    expect(out).toContain("已经结束的 4 件");
+    expect(html).toMatch(
+      /aria-expanded="false"[^>]*>(<[^>]+>)*已经结束的 4 件/,
+    );
     expect(out).not.toContain("9 月搬家准备与搬入");
-    expect(out).not.toContain("手术等待超预期时的明显焦急");
-    expect(out).not.toContain("与阿杰在西溪湿地附近找房");
-    // Exclusions stay open, each with 恢复.
-    expect(out).toContain("上下文记忆测试");
-    expect(out).toContain("公司周报");
-    expect(out).toContain("恢复");
+    // The last row of the list: after every ongoing affair.
+    expect(out.indexOf("已经结束的 4 件")).toBeGreaterThan(
+      out.indexOf("双十一项目的后续安排"),
+    );
+    // Emotions show only once their affair is open.
+    expect(out).not.toContain("只在把事办好需要时引用");
   });
 
-  it("an unreadable activities file shows read-only as one area", () => {
+  it("an unreadable activities file shows read-only under the same title", () => {
     const out = text(
       page(
         withLedger({
@@ -185,10 +200,10 @@ describe("Settings → Memory", () => {
         }),
       ),
     );
-    expect(out).toContain("记下的事");
+    expect(out).toContain(NOTED);
     expect(out).toContain("格式没认出来，先显示原文。");
     expect(out).toContain("随手写的段落");
-    expect(out).not.toContain("正在进行的事");
+    expect(out).not.toContain("已经结束的");
   });
 
   it("while a run is going: 正在整理, and deleting waits", () => {
@@ -205,6 +220,57 @@ describe("Settings → Memory", () => {
     expect(buttonWithLabel(html, "删除「杭州半程马拉松备赛」")).not.toMatch(
       DISABLED_ATTRIBUTE,
     );
+  });
+
+  it("an affair's emotions: how they are used once, then one line each", () => {
+    const surgery = MEMORY_OVERVIEW_FIXTURE.ledger.activities;
+    if (surgery.kind !== "parsed") throw new Error("fixture");
+    const entry = surgery.ended.find((e) => e.id === "A006");
+    if (!entry) throw new Error("fixture");
+    const lines = (busy: boolean) =>
+      markup(
+        <EmotionLines
+          emotions={entry.emotions}
+          entryTitle={entry.title}
+          busy={busy}
+          wiring={{
+            lookupSession: () => null,
+            todayStartMs: new Date(2026, 9, 12).getTime(),
+          }}
+          onDelete={() => {}}
+        />,
+      );
+    const html = lines(false);
+    const out = text(html);
+    expect(
+      out.split("只在把事办好需要时引用，不会单独评论你的情绪。").length - 1,
+    ).toBe(1);
+    expect(out).toContain("9月10日 15:40 · 焦急、不安");
+    expect(out).toContain("“出来了！医生说很顺利，我刚刚哭了一场。”");
+    const deleteAnxious = buttonWithLabel(
+      html,
+      "删除「母亲的膝关节置换手术」下的情绪：9月10日 15:40 · 焦急、不安",
+    );
+    expect(deleteAnxious).not.toMatch(DISABLED_ATTRIBUTE);
+    // While a run is going, deleting an emotion waits too.
+    expect(
+      buttonWithLabel(
+        lines(true),
+        "删除「母亲的膝关节置换手术」下的情绪：9月10日 17:05 · 释然",
+      ),
+    ).toMatch(DISABLED_ATTRIBUTE);
+    // An affair without emotions shows nothing of them.
+    expect(
+      markup(
+        <EmotionLines
+          emotions={[]}
+          entryTitle="x"
+          busy={false}
+          wiring={{ lookupSession: () => null, todayStartMs: 0 }}
+          onDelete={() => {}}
+        />,
+      ),
+    ).toBe("");
   });
 
   it("a failed read says so and offers a retry", () => {

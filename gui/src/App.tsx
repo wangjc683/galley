@@ -38,7 +38,6 @@ import { useGoalActions } from "@/hooks/useGoalActions";
 import { useGoalEffects } from "@/hooks/useGoalEffects";
 import { useImageBlockedToast } from "@/hooks/useImageBlockedToast";
 import { useLLMDisplay } from "@/hooks/useLLMDisplay";
-import { useMemorySync } from "@/hooks/useMemorySync";
 import { useMessageSend } from "@/hooks/useMessageSend";
 import { useOnboardingFlow } from "@/hooks/useOnboardingFlow";
 import { useProjectNavigation } from "@/hooks/useProjectNavigation";
@@ -251,7 +250,6 @@ function App() {
     screen,
   });
   useBrowserControlLiveStatus(activeRuntimeKind);
-  useMemorySync(activeRuntimeKind);
   useGlobalShortcuts({ setEmptyComposerFocusTick, setSettingsTab });
   useExternalCoreEvents();
   useSessionQueueEvents(activeSessionId ?? null);

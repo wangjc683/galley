@@ -5,13 +5,14 @@ import type { LedgerEntry, LedgerQuote, MemoryOverview } from "@/lib/memory";
 
 import { MEMORY_OVERVIEW_FIXTURE } from "./memory-overview.fixture";
 import {
+  emotionMeta,
   entrySources,
   formatLedgerDay,
   formatLedgerMinute,
   formatScheduleTime,
   parseImSource,
   resolveSource,
-  showsLedgerAreas,
+  showsLedgerArea,
   sortByLastSeen,
   switchStatus,
   switchToggle,
@@ -26,9 +27,6 @@ function overview(ledger: Partial<MemoryOverview["ledger"]>): MemoryOverview {
       switch: { state: "undecided" },
       running: false,
       activities: { kind: "absent" },
-      emotions: { kind: "absent" },
-      forgotten: [],
-      exclusions: [],
       ...ledger,
     },
     globalMemory: [],
@@ -36,20 +34,26 @@ function overview(ledger: Partial<MemoryOverview["ledger"]>): MemoryOverview {
 }
 
 function entry(id: string, lastSeen?: string): LedgerEntry {
-  return { id, title: id, lastSeen, sessions: [], quotes: [], extra: [] };
+  return {
+    id,
+    title: id,
+    lastSeen,
+    sessions: [],
+    quotes: [],
+    emotions: [],
+    extra: [],
+  };
 }
 
-describe("showsLedgerAreas", () => {
-  it("leaves areas 2–6 out while not on and nothing is there", () => {
-    expect(showsLedgerAreas(overview({}))).toBe(false);
-    expect(showsLedgerAreas(overview({ switch: { state: "off" } }))).toBe(
-      false,
-    );
+describe("showsLedgerArea", () => {
+  it("leaves 记下的事 out while not on and no file is there", () => {
+    expect(showsLedgerArea(overview({}))).toBe(false);
+    expect(showsLedgerArea(overview({ switch: { state: "off" } }))).toBe(false);
   });
 
-  it("shows them while on, even before the first run", () => {
+  it("shows it while on, even before the first run", () => {
     expect(
-      showsLedgerAreas(
+      showsLedgerArea(
         overview({
           switch: {
             state: "on",
@@ -61,34 +65,18 @@ describe("showsLedgerAreas", () => {
     ).toBe(true);
   });
 
-  it("shows them when off but something was kept", () => {
+  it("shows it when off but the file was kept, read or not", () => {
     const off = { switch: { state: "off" } as const };
     expect(
-      showsLedgerAreas(
-        overview({ ...off, emotions: { kind: "raw", text: "x" } }),
+      showsLedgerArea(
+        overview({ ...off, activities: { kind: "raw", text: "x" } }),
       ),
     ).toBe(true);
     expect(
-      showsLedgerAreas(
+      showsLedgerArea(
         overview({
           ...off,
-          forgotten: [
-            { id: "A1", kind: "activity", title: "t", deletedAt: "2026-10-01" },
-          ],
-        }),
-      ),
-    ).toBe(true);
-    expect(
-      showsLedgerAreas(
-        overview({
-          ...off,
-          exclusions: [
-            {
-              target: { kind: "session", id: "s1" },
-              createdAt: "2026-10-01",
-              title: "x",
-            },
-          ],
+          activities: { kind: "parsed", ongoing: [], ended: [] },
         }),
       ),
     ).toBe(true);
@@ -123,7 +111,7 @@ describe("sortByLastSeen", () => {
 });
 
 describe("sources", () => {
-  it("lists sessions, then quote sessions not listed, without repeats", () => {
+  it("lists sessions, then quote and emotion sessions not listed, without repeats", () => {
     const quotes: LedgerQuote[] = [
       { session: "s2", text: "" },
       { session: "s1", text: "" },
@@ -133,8 +121,9 @@ describe("sources", () => {
       entrySources({
         sessions: ["s1", "im-feishu-2026-09-21", "s1"],
         quotes,
+        emotions: [{ session: "s3" }, { session: "s2" }, {}],
       }),
-    ).toEqual(["s1", "im-feishu-2026-09-21", "s2"]);
+    ).toEqual(["s1", "im-feishu-2026-09-21", "s2", "s3"]);
   });
 
   it("reads IM source ids", () => {
@@ -181,6 +170,23 @@ describe("dates", () => {
     expect(formatLedgerDay("2025-09-27", TODAY, "zh-CN")).toBe("2025年9月27日");
     expect(formatLedgerDay("2026-09-27", TODAY, "en-US")).toBe("Sep 27");
     expect(formatLedgerDay("soon", TODAY, "zh-CN")).toBe("soon");
+  });
+
+  it("leads an emotion's line with its time and tags", () => {
+    expect(
+      emotionMeta(
+        { at: "2026-09-10 15:40", tags: ["焦急", "不安"] },
+        TODAY,
+        "zh-CN",
+      ),
+    ).toBe("9月10日 15:40 · 焦急、不安");
+    expect(emotionMeta({ tags: ["anxious", "uneasy"] }, TODAY, "en-US")).toBe(
+      "anxious, uneasy",
+    );
+    expect(
+      emotionMeta({ at: "2026-09-10 15:40", tags: [] }, TODAY, "zh-CN"),
+    ).toBe("9月10日 15:40");
+    expect(emotionMeta({ tags: [] }, TODAY, "zh-CN")).toBe("");
   });
 
   it("writes a ledger minute the app's way", () => {

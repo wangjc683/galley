@@ -5,7 +5,10 @@ import {
   SettingsPanelHeader,
   SettingsSectionLabel,
 } from "@/components/screens/settings/settings-ui";
-import { SettingsDisclosureCard } from "@/components/screens/settings/settings-disclosure";
+import {
+  SettingsDisclosureCard,
+  SettingsDisclosureRow,
+} from "@/components/screens/settings/settings-disclosure";
 import { SettingsTag } from "@/components/screens/settings/settings-badges";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
@@ -15,8 +18,8 @@ import { useCopy, useLanguage } from "@/lib/i18n";
 import {
   memoryErrorId,
   memoryErrorText,
+  type EntryEmotion,
   type LedgerEntry,
-  type LedgerTarget,
   type MemoryOverview,
   type SetLedgerSwitchArgs,
 } from "@/lib/memory";
@@ -30,16 +33,13 @@ import { coreMemoryActions, type MemoryActions } from "./memory/memory-actions";
 import { MemoryChoiceDialog } from "./memory/MemoryChoiceDialog";
 import {
   ActivityRow,
-  EmotionRow,
-  ExclusionRow,
-  ForgottenRow,
   MemoryEmptyLine,
   MemoryRowList,
   RawText,
   type MemorySourceWiring,
 } from "./memory/MemoryRows";
 import {
-  showsLedgerAreas,
+  showsLedgerArea,
   sortByLastSeen,
   switchToggle,
   switchStatus,
@@ -48,9 +48,10 @@ import {
 import { useMemoryOverview } from "./memory/useMemoryOverview";
 
 /**
- * Settings → Memory (「记忆」, main chat ticket 04b; managed runtime
- * only). What the affairs ledger has written about the user, and the
- * engine's own global memory, top to bottom:
+ * Settings → Memory (「记忆」, main chat tickets 04b and 04d; managed
+ * runtime only). What the affairs ledger has written about the user, and
+ * the engine's own global memory — three areas, top to bottom (PRD
+ * ruling 48):
  *
  *   1. the switch 「从对话里了解我」 with where the words come from and go
  *      (read daily, earlier conversations included, through the model
@@ -59,21 +60,20 @@ import { useMemoryOverview } from "./memory/useMemoryOverview";
  *      (ticket 04c, PRD ruling 47): turning it on asks nothing and reads
  *      earlier conversations too; turning it off asks 「保留 / 清空」
  *      about what was already noted;
- *   2. 正在进行的事 — ongoing activities, newest 「最近」 first;
- *   3. 已经结束的事 — ended ones, folded;
- *   4. 情绪时刻 — emotional events, folded, with how they are used;
- *   5. 不再记的事 — the do-not-record list, folded, each 「移出」;
- *   6. 不用于了解我的对话 — the exclusion marks, each 「恢复」;
- *   7. AI 的长期记忆 — the two global memory files, editable, outside the
+ *   2. 记下的事 — ongoing affairs, newest 「最近」 first, then one last row
+ *      「已经结束的 N 件」 that unfolds the ended ones. An affair opens to
+ *      its words, its emotions (each deletable, with how they are used
+ *      said once above them) and its sources;
+ *   3. AI 的长期记忆 — the two global memory files, editable, outside the
  *      switch.
  *
- * Areas 2–6 are left out while the ledger is not on and there is
- * nothing in them (memory-view.ts `showsLedgerAreas`). A file the parser
- * could not read shows read-only (`raw`); a remainder it did not
- * recognize follows its area as 其他内容. Deleting waits while a run is
- * going (`ledger_busy`). Core owns everything: the page reads the
- * overview on open and on `memory-changed`, and every change is a Core
- * command.
+ * Area 2 is left out while the ledger is not on and there is no ledger
+ * file (memory-view.ts `showsLedgerArea`). A file the parser could not
+ * read shows read-only (`raw`); a remainder it did not recognize follows
+ * as 其他内容. Deleting waits while a run is going (`ledger_busy`), and is
+ * only a delete: said again later, a thing may be noted again. Core owns
+ * everything: the page reads the overview on open and on
+ * `memory-changed`, and every change is a Core command.
  */
 export function SettingsMemory({
   onOpenSession,
@@ -105,11 +105,9 @@ export function SettingsMemory({
   );
 }
 
-type PendingDelete = {
-  id: string;
-  title: string;
-  kind: "activity" | "emotion";
-};
+type PendingDelete =
+  | { kind: "entry"; entry: LedgerEntry }
+  | { kind: "emotion"; entry: LedgerEntry; emotion: EntryEmotion };
 
 /** The page from an overview (static-renderable; SettingsMemory feeds
  * it). `overview` null: still reading, or the read failed. */
@@ -133,10 +131,7 @@ export function MemoryPage({
     null,
   );
   const [deleting, setDeleting] = useState(false);
-  // Rows whose 移出 / 恢复 is in flight.
-  const [pendingRows, setPendingRows] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  const [endedOpen, setEndedOpen] = useState(false);
 
   const wiring: MemorySourceWiring = {
     lookupSession,
@@ -159,26 +154,16 @@ export function MemoryPage({
     );
   };
 
-  const withPendingRow = async (key: string, run: () => Promise<void>) => {
-    setPendingRows((current) => new Set(current).add(key));
-    try {
-      await run();
-    } catch (e) {
-      toastError(copy.actionFailed, e, "memory");
-    } finally {
-      setPendingRows((current) => {
-        const next = new Set(current);
-        next.delete(key);
-        return next;
-      });
-    }
-  };
-
   const confirmDelete = async () => {
     if (!pendingDelete) return;
     setDeleting(true);
+    const target = pendingDelete;
     try {
-      await actions.deleteEntry(pendingDelete.id);
+      if (target.kind === "emotion") {
+        await actions.deleteEmotion(target.entry.id, target.emotion.line);
+      } else {
+        await actions.deleteEntry(target.entry.id);
+      }
       setPendingDelete(null);
     } catch (e) {
       setPendingDelete(null);
@@ -190,7 +175,9 @@ export function MemoryPage({
           : id === "not_found"
             ? copy.deleteFailedGone
             : e,
-        "delete_ledger_entry",
+        target.kind === "emotion"
+          ? "delete_ledger_emotion"
+          : "delete_ledger_entry",
       );
     } finally {
       setDeleting(false);
@@ -223,31 +210,32 @@ export function MemoryPage({
 
   const { ledger } = overview;
   const busy = ledger.running;
-  const activityTitles = new Map<string, string>();
-  if (ledger.activities.kind === "parsed") {
-    for (const entry of [
-      ...ledger.activities.ongoing,
-      ...ledger.activities.ended,
-    ]) {
-      activityTitles.set(entry.id, entry.title);
-    }
-  }
-  const requestDelete = (entry: PendingDelete) => setPendingDelete(entry);
+  const activities = ledger.activities;
+  const ongoing = activities.kind === "parsed" ? activities.ongoing : [];
+  const ended = activities.kind === "parsed" ? activities.ended : [];
 
-  const activityRows = (entries: readonly LedgerEntry[], empty: string) =>
-    entries.length === 0 ? (
-      <MemoryEmptyLine>{empty}</MemoryEmptyLine>
-    ) : (
-      sortByLastSeen(entries).map((entry) => (
-        <ActivityRow
-          key={entry.id}
-          entry={entry}
-          busy={busy}
-          wiring={wiring}
-          onDelete={requestDelete}
-        />
-      ))
-    );
+  const activityRow = (entry: LedgerEntry) => (
+    <ActivityRow
+      key={entry.id}
+      entry={entry}
+      busy={busy}
+      wiring={wiring}
+      onDelete={(target) => setPendingDelete({ kind: "entry", entry: target })}
+      onDeleteEmotion={(target, emotion) =>
+        setPendingDelete({ kind: "emotion", entry: target, emotion })
+      }
+    />
+  );
+
+  const deleteBody = (target: PendingDelete): string => {
+    if (target.kind === "emotion") {
+      return copy.deleteEmotionBody(target.entry.title);
+    }
+    const body = copy.deleteBody(target.entry.title);
+    return target.entry.emotions.length > 0
+      ? `${body}${copy.deleteBodyEmotions}`
+      : body;
+  };
 
   return (
     <div className="space-y-7">
@@ -258,162 +246,48 @@ export function MemoryPage({
 
       <MemorySwitchArea overview={overview} actions={actions} />
 
-      {showsLedgerAreas(overview) && (
-        <>
-          {/* 2–3. Activities. A file the parser could not read at all
-              cannot be split into ongoing / ended: one read-only area. */}
-          {ledger.activities.kind === "raw" ? (
-            <MemoryArea title={copy.activitiesRawTitle}>
-              <MemoryRowList className="px-3 py-2.5">
-                <p className="m-0 mb-2 text-ui-tertiary text-ink-muted">
-                  {copy.rawNote}
-                </p>
-                <RawText text={ledger.activities.text} />
-              </MemoryRowList>
-            </MemoryArea>
+      {/* 2. What it noted: ongoing first, the ended ones behind one last
+          row. A file the parser could not read at all shows read-only
+          under the same title. */}
+      {showsLedgerArea(overview) && (
+        <MemoryArea title={copy.notedTitle}>
+          {activities.kind === "raw" ? (
+            <MemoryRowList className="px-3 py-2.5">
+              <p className="m-0 mb-2 text-ui-tertiary text-ink-muted">
+                {copy.rawNote}
+              </p>
+              <RawText text={activities.text} />
+            </MemoryRowList>
           ) : (
-            <>
-              <MemoryArea title={copy.ongoingTitle}>
-                <MemoryRowList>
-                  {activityRows(
-                    ledger.activities.kind === "parsed"
-                      ? ledger.activities.ongoing
-                      : [],
-                    copy.emptyOngoing,
-                  )}
-                </MemoryRowList>
-              </MemoryArea>
-              <FoldedArea
-                title={copy.endedTitle}
-                count={
-                  ledger.activities.kind === "parsed"
-                    ? ledger.activities.ended.length
-                    : 0
-                }
-              >
-                <MemoryRowList flat>
-                  {activityRows(
-                    ledger.activities.kind === "parsed"
-                      ? ledger.activities.ended
-                      : [],
-                    copy.emptyEnded,
-                  )}
-                </MemoryRowList>
-              </FoldedArea>
-              {ledger.activities.kind === "parsed" &&
-                ledger.activities.other?.trim() && (
-                  <OtherText text={ledger.activities.other} />
-                )}
-            </>
-          )}
-
-          {/* 4. Emotional events: folded, with how they are used. */}
-          <FoldedArea
-            title={copy.emotionsTitle}
-            note={copy.emotionsUsage}
-            count={
-              ledger.emotions.kind === "parsed"
-                ? ledger.emotions.entries.length
-                : null
-            }
-          >
-            {ledger.emotions.kind === "raw" ? (
-              <MemoryRowList flat className="px-3 py-2.5">
-                <p className="m-0 mb-2 text-ui-tertiary text-ink-muted">
-                  {copy.rawNote}
-                </p>
-                <RawText text={ledger.emotions.text} />
-              </MemoryRowList>
-            ) : (
-              <MemoryRowList flat>
-                {ledger.emotions.kind === "parsed" &&
-                ledger.emotions.entries.length > 0 ? (
-                  ledger.emotions.entries.map((entry) => (
-                    <EmotionRow
-                      key={entry.id}
-                      entry={entry}
-                      relatedTitle={
-                        entry.related
-                          ? (activityTitles.get(entry.related) ?? null)
-                          : null
-                      }
-                      busy={busy}
-                      wiring={wiring}
-                      onDelete={requestDelete}
-                    />
-                  ))
-                ) : (
-                  <MemoryEmptyLine>{copy.emptyEmotions}</MemoryEmptyLine>
-                )}
-              </MemoryRowList>
-            )}
-            {ledger.emotions.kind === "parsed" &&
-              ledger.emotions.other?.trim() && (
-                <div className="border-t border-line px-3 py-2.5">
-                  <p className="m-0 mb-2 text-ui-tertiary text-ink-muted">
-                    {copy.otherTitle} · {copy.otherNote}
-                  </p>
-                  <RawText text={ledger.emotions.other} />
-                </div>
-              )}
-          </FoldedArea>
-
-          {/* 5. The do-not-record list. */}
-          <FoldedArea
-            title={copy.forgottenTitle}
-            note={copy.forgottenNote}
-            count={ledger.forgotten.length}
-          >
-            <MemoryRowList flat>
-              {ledger.forgotten.length === 0 ? (
-                <MemoryEmptyLine>{copy.emptyForgotten}</MemoryEmptyLine>
-              ) : (
-                ledger.forgotten.map((entry) => (
-                  <ForgottenRow
-                    key={entry.id}
-                    entry={entry}
-                    todayStartMs={todayStartMs}
-                    pending={pendingRows.has(`forgotten:${entry.id}`)}
-                    onUnforget={() =>
-                      void withPendingRow(`forgotten:${entry.id}`, () =>
-                        actions.unforget(entry.id),
-                      )
-                    }
-                  />
-                ))
-              )}
-            </MemoryRowList>
-          </FoldedArea>
-
-          {/* 6. Sessions and projects marked "not used to understand me". */}
-          <MemoryArea title={copy.exclusionsTitle} note={copy.exclusionsNote}>
             <MemoryRowList>
-              {ledger.exclusions.length === 0 ? (
-                <MemoryEmptyLine>{copy.emptyExclusions}</MemoryEmptyLine>
-              ) : (
-                ledger.exclusions.map((row) => {
-                  const key = `exclusion:${row.target.kind}:${row.target.id}`;
-                  const target: LedgerTarget = row.target;
-                  return (
-                    <ExclusionRow
-                      key={key}
-                      row={row}
-                      pending={pendingRows.has(key)}
-                      onRestore={() =>
-                        void withPendingRow(key, () =>
-                          actions.restoreExclusion(target),
-                        )
-                      }
-                    />
-                  );
-                })
+              {ongoing.length === 0 && ended.length === 0 && (
+                <MemoryEmptyLine>{copy.emptyNoted}</MemoryEmptyLine>
+              )}
+              {sortByLastSeen(ongoing).map(activityRow)}
+              {ended.length > 0 && (
+                <SettingsDisclosureRow
+                  title={copy.endedFold(ended.length)}
+                  open={endedOpen}
+                  onToggle={() => setEndedOpen((open) => !open)}
+                >
+                  {/* Flat inside the row's body (no list in a list):
+                      the ended affairs sit indented under their row. */}
+                  <MemoryRowList flat>
+                    {sortByLastSeen(ended).map(activityRow)}
+                  </MemoryRowList>
+                </SettingsDisclosureRow>
               )}
             </MemoryRowList>
-          </MemoryArea>
-        </>
+          )}
+          {activities.kind === "parsed" && activities.other?.trim() && (
+            <div className="mt-2">
+              <OtherText text={activities.other} />
+            </div>
+          )}
+        </MemoryArea>
       )}
 
-      {/* 7. The engine's global memory: not under the switch. */}
+      {/* 3. The engine's global memory: not under the switch. */}
       <MemoryArea title={copy.globalTitle} note={copy.globalNote}>
         <div className="space-y-2">
           {overview.globalMemory.map((file) => (
@@ -434,7 +308,7 @@ export function MemoryPage({
             ? copy.deleteEmotionTitle
             : copy.deleteTitle
         }
-        body={pendingDelete ? copy.deleteBody(pendingDelete.title) : ""}
+        body={pendingDelete ? deleteBody(pendingDelete) : ""}
         confirmLabel={copy.deleteConfirm}
         onConfirm={() => void confirmDelete()}
       />

@@ -381,12 +381,6 @@ export const enCopy: AppCopy = {
   },
   memory: {
     whatItRemembers: "What it remembers about me",
-    notUsedToLearn: "Don't use to learn about me",
-    excludedSessionTitle: "This conversation won't be read from now on",
-    excludedProjectTitle:
-      "Conversations in this project won't be read from now on",
-    excludedBody: "To delete what's already noted, go to Settings → Memory.",
-    excludeFailed: "Couldn't change “Don't use to learn about me”",
   },
   browserControlAttention: {
     message:
@@ -716,20 +710,14 @@ export const enCopy: AppCopy = {
       disableKeepDetail:
         "What it noted stays on this computer, and you can turn it back on later.",
       disableClear: "Clear everything",
-      disableClearDetail:
-        "Deletes what it noted and the do-not-record list. Conversations marked “Don't use to learn about me” still aren't read.",
-      ongoingTitle: "Ongoing",
-      endedTitle: "Finished",
-      activitiesRawTitle: "What it noted",
-      emotionsTitle: "Moments of feeling",
+      disableClearDetail: "Deletes what it noted.",
+      notedTitle: "What it noted",
+      endedFold: (count) =>
+        `${count} finished ${count === 1 ? "item" : "items"}`,
+      emotionsLabel: "Feelings",
       emotionsUsage:
         "Used only when it helps get something done; it never comments on your feelings on its own.",
-      forgottenTitle: "Not to be recorded",
-      forgottenNote:
-        "Things you deleted. Galley keeps their titles so it won't record them again. Remove one and it may be recorded again; what you deleted doesn't come back.",
-      exclusionsTitle: "Not used to learn about me",
-      exclusionsNote:
-        "What you say in these conversations and projects isn't read.",
+      emotionWords: (text) => `“${text}”`,
       globalTitle: "The AI's long-term memory",
       globalNote:
         "The AI writes this itself during conversations; the switch above doesn't control it.",
@@ -737,7 +725,6 @@ export const enCopy: AppCopy = {
       conversationCount: (count) =>
         `${count} ${count === 1 ? "conversation" : "conversations"}`,
       sources: "Sources",
-      related: (title) => `Related: ${title}`,
       deletedSession: "Deleted conversation",
       archivedSuffix: " (archived)",
       openSession: "Open this conversation",
@@ -745,27 +732,21 @@ export const enCopy: AppCopy = {
       imSource: (channel, day) => `${channel} · ${day}`,
       imUnknown: "IM",
       deleteAria: (title) => `Delete “${title}”`,
+      deleteEmotionAria: (title, what) =>
+        `Delete the feeling under “${title}”: ${what}`,
       deleteBusy: "Sorting now; you can delete once it's done",
       deleteTitle: "Delete this?",
-      deleteEmotionTitle: "Delete this moment?",
+      deleteEmotionTitle: "Delete this feeling?",
       deleteBody: (title) =>
-        `“${title}” is deleted, and later runs won't record it again.`,
+        `“${title}” is deleted from what it noted. If it comes up again later, it may be noted again.`,
+      deleteBodyEmotions: " The feelings noted under it are deleted too.",
+      deleteEmotionBody: (title) =>
+        `This feeling is deleted from “${title}”; the item itself stays.`,
       deleteConfirm: "Delete",
       deleteFailedBusy: "Sorting now. Delete it once that's done.",
       deleteFailedGone: "This one is already gone.",
       deleteFailed: "Delete failed",
-      unforget: "Remove",
-      deletedAt: (time) => `Deleted ${time}`,
-      restore: "Use again",
-      exclusionSession: "Conversation",
-      exclusionProject: "Project",
-      untitled: "Untitled",
-      emptyOngoing: "Nothing ongoing noted yet.",
-      emptyEnded: "None yet.",
-      emptyEmotions: "None yet.",
-      emptyForgotten: "You haven't deleted anything.",
-      emptyExclusions:
-        "None yet. Choose “Don't use to learn about me” in a conversation's title menu or a project's menu.",
+      emptyNoted: "Nothing noted yet. It shows up here after a run.",
       rawNote: "Couldn't read the format, so here is the original text.",
       otherTitle: "Other notes",
       otherNote: "Other paragraphs written while sorting, as they are.",

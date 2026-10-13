@@ -1,22 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
 
 /**
- * Settings → Memory and its entry points (main chat ticket 04, 04b): what
- * the affairs ledger has written about the user, the switch that lets it
- * read at all, the "not used to understand me" marks, and the engine's
- * two global memory files. Core owns all of it (ticket 04a); this module
- * is the wire types and the command wrappers, word for word the
- * interface in `.scratch/main-chat/issues/04-what-it-remembers-page.md`
- * 「接口」. Tauri commands only, not part of the Agent API, and not in
- * `types/ipc.ts` (that file mirrors the runner bridge protocol).
+ * Settings → Memory (main chat ticket 04, 04b, 04d): what the affairs
+ * ledger has written about the user — each affair with the emotions
+ * recorded under it — the switch that lets it read at all, and the
+ * engine's two global memory files. Core owns all of it (ticket 04a);
+ * this module is the wire types and the command wrappers, the interface
+ * in `.scratch/main-chat/issues/04-what-it-remembers-page.md` 「接口」 as
+ * 04d reshaped it. Tauri commands only, not part of the Agent API, and
+ * not in `types/ipc.ts` (that file mirrors the runner bridge protocol).
  *
  * The new commands answer `managed_only` on the external runtime; the
  * GUI never calls them there.
  */
 
 /** Core emits it (no payload) after the switch changes, a run starts or
- * ends, an entry is deleted or taken off the do-not-record list, and a
- * global memory file is written. Listeners read again. */
+ * ends, an entry or one of its emotions is deleted, and a global memory
+ * file is written. Listeners read again. */
 export const MEMORY_CHANGED_EVENT = "memory-changed";
 
 /** Core prefs key `affairs_ledger`; no key = undecided (never set — Core
@@ -35,6 +35,19 @@ export interface LedgerQuote {
   text: string;
 }
 
+/** One 「情绪」 line of an affair (ticket 04d: emotions live inside the
+ * affair they belong to). */
+export interface EntryEmotion {
+  session?: string;
+  /** "YYYY-MM-DD HH:MM", local time. */
+  at?: string;
+  tags: string[];
+  /** The user's words. */
+  text?: string;
+  /** The line as the file has it; deleting this emotion names it. */
+  line: string;
+}
+
 /** One ongoing or ended activity. */
 export interface LedgerEntry {
   /** "A001" */
@@ -47,20 +60,9 @@ export interface LedgerEntry {
   /** Galley session ids, or `im-<channel>-<YYYY-MM-DD>`. */
   sessions: string[];
   quotes: LedgerQuote[];
+  /** Its emotions, in file order. */
+  emotions: EntryEmotion[];
   /** The other 「- 键：值」 lines, verbatim. */
-  extra: string[];
-}
-
-export interface LedgerEmotion {
-  /** "E001" */
-  id: string;
-  title: string;
-  at?: string;
-  sessions: string[];
-  tags: string[];
-  quotes: LedgerQuote[];
-  /** The related activity's id. */
-  related?: string;
   extra: string[];
 }
 
@@ -78,42 +80,11 @@ export type LedgerActivities = Parsed<{
   other?: string;
 }>;
 
-export type LedgerEmotions = Parsed<{
-  entries: LedgerEmotion[];
-  other?: string;
-}>;
-
 export interface LedgerRun {
   startedAt: string;
   outcome: "running" | "succeeded" | "failed" | "empty";
   turns: number;
   detail?: string;
-}
-
-export interface ForgottenEntry {
-  id: string;
-  kind: "activity" | "emotion";
-  title: string;
-  deletedAt: string;
-}
-
-/** Wire shape of core/src/ledger/mod.rs `LedgerTarget`. */
-export interface LedgerTarget {
-  kind: "session" | "project";
-  id: string;
-}
-
-/** `list_ledger_exclusions` row (core/src/ledger/mod.rs
- * `LedgerExclusion`). */
-export interface LedgerExclusion {
-  target: LedgerTarget;
-  createdAt: string;
-}
-
-/** An overview exclusion: the same row with the session / project title
- * (archived sessions included). */
-export interface LedgerExclusionWithTitle extends LedgerExclusion {
-  title: string | null;
 }
 
 export type GlobalMemoryName = "global_mem.txt" | "global_mem_insight.txt";
@@ -133,10 +104,8 @@ export interface MemoryOverview {
     lastRun?: LedgerRun;
     /** RFC3339; while on, when the next run is due. */
     nextRunAt?: string;
+    /** The affairs, each with its emotions. */
     activities: LedgerActivities;
-    emotions: LedgerEmotions;
-    forgotten: ForgottenEntry[];
-    exclusions: LedgerExclusionWithTitle[];
   };
   globalMemory: GlobalMemoryFile[];
 }
@@ -204,25 +173,28 @@ export async function getMemoryOverview(): Promise<MemoryOverview> {
   return invoke<MemoryOverview>("get_memory_overview");
 }
 
-/** Turn the ledger on (from now / with earlier conversations) or off
- * (keep / clear). Answers the new switch. */
+/** Turn the ledger on (the page always reads earlier conversations
+ * too) or off (keep / clear). Answers the new switch. */
 export async function setLedgerSwitch(
   args: SetLedgerSwitchArgs,
 ): Promise<LedgerSwitch> {
   return invoke<LedgerSwitch>("set_ledger_switch", { ...args });
 }
 
-/** Delete one activity or emotional event and put its title on the
- * do-not-record list. `ledger_busy` while a run is going, `not_found`
- * when it is already gone. */
+/** Delete one affair, the emotions recorded under it with it. Only a
+ * delete: said again later, it may be recorded again. `ledger_busy` while
+ * a run is going, `not_found` when it is already gone. */
 export async function deleteLedgerEntry(id: string): Promise<void> {
   await invoke("delete_ledger_entry", { id });
 }
 
-/** Take an entry off the do-not-record list (it may be recorded again;
- * the deleted text does not come back). */
-export async function unforgetLedgerEntry(id: string): Promise<void> {
-  await invoke("unforget_ledger_entry", { id });
+/** Delete one emotion of affair `id`, named by its `line` (its text,
+ * never a position a run could have moved). Errors as above. */
+export async function deleteEntryEmotion(
+  id: string,
+  line: string,
+): Promise<void> {
+  await invoke("delete_ledger_emotion", { id, line });
 }
 
 /** Write one global memory file. Answers the new revision;
@@ -233,17 +205,4 @@ export async function writeGlobalMemory(
   revision: string,
 ): Promise<string> {
   return invoke<string>("write_global_memory", { name, content, revision });
-}
-
-/** Mark (`excluded: true`) or unmark a session / project as "not used to
- * understand me" (existing command, ticket 01). */
-export async function setLedgerExcluded(
-  target: LedgerTarget,
-  excluded: boolean,
-): Promise<void> {
-  await invoke("set_ledger_excluded", { target, excluded });
-}
-
-export async function listLedgerExclusions(): Promise<LedgerExclusion[]> {
-  return invoke<LedgerExclusion[]>("list_ledger_exclusions");
 }

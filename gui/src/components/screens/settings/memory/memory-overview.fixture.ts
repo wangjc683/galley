@@ -4,10 +4,12 @@ import type { MemoryOverview } from "@/lib/memory";
  * A filled-in Settings → Memory, for the page's tests (it also fed the
  * ticket 04b trial's 「演示数据」, removed with 04c). Hand-converted
  * into the 04 interface shape from the ledger eval's output
- * (`galley-ledger-eval-sanafxuv/…/history_insight/activities.md` and
- * `emotional_events.md`): the user is 林晓, a made-up person in a
- * synthetic corpus — not anyone's real data. A selection, trimmed; the
- * eval's 口径 / 证据边界 paragraphs stand in for the parser's `other`.
+ * (`galley-ledger-eval-sanafxuv/…/history_insight/`): the user is 林晓, a
+ * made-up person in a synthetic corpus — not anyone's real data. A
+ * selection, trimmed; the eval's 口径 / 证据边界 paragraphs stand in for
+ * the parser's `other`. Since ticket 04d each emotion sits in the affair
+ * it belongs to (all four of the selection had one; the deleted
+ * 房东加价 one went with the do-not-record list).
  *
  * Session ids are the eval's; they exist in no database, so the titles
  * below stand in for the session list.
@@ -40,6 +42,15 @@ export const MEMORY_OVERVIEW_FIXTURE: MemoryOverview = {
               text: "我说了三遍了，是 750 宽 1000 高！你能不能认真看一下我说的话？",
             },
           ],
+          emotions: [
+            {
+              session: "s-0917-banner",
+              at: "2026-09-17 14:35",
+              tags: ["责备", "质问"],
+              text: "我说了三遍了，是 750 宽 1000 高！你能不能认真看一下我说的话？",
+              line: `- 情绪（\`s-0917-banner\`，2026-09-17 14:35）：责备、质问——“我说了三遍了，是 750 宽 1000 高！你能不能认真看一下我说的话？”`,
+            },
+          ],
           extra: ["频次：1 会话 / 3 消息"],
         },
         {
@@ -70,6 +81,7 @@ export const MEMORY_OVERVIEW_FIXTURE: MemoryOverview = {
               text: "今天长距离跑了 15 公里，最后两公里膝盖外侧有点酸，是不是跑姿有问题？",
             },
           ],
+          emotions: [],
           extra: ["频次：4 会话 / 5 消息"],
         },
         {
@@ -95,6 +107,7 @@ export const MEMORY_OVERVIEW_FIXTURE: MemoryOverview = {
               text: "我妈今天第一次复查，医生说恢复得比预期好，可以开始扶着助行器走了。",
             },
           ],
+          emotions: [],
           extra: [
             "频次：5 会话 / 5 消息",
             "日期冲突：首次复查是周四，和「每周三复查」对不上，周期待核实。",
@@ -123,6 +136,7 @@ export const MEMORY_OVERVIEW_FIXTURE: MemoryOverview = {
               text: "N3 的听力好难，帮我找几个适合通勤时听的日语播客。",
             },
           ],
+          emotions: [],
           extra: ["频次：4 会话 / 4 消息"],
         },
         {
@@ -138,6 +152,7 @@ export const MEMORY_OVERVIEW_FIXTURE: MemoryOverview = {
               text: "带豆包打了第二针猫三联，医生说它有点胖，要换低卡猫粮。",
             },
           ],
+          emotions: [],
           extra: [],
         },
         {
@@ -147,6 +162,7 @@ export const MEMORY_OVERVIEW_FIXTURE: MemoryOverview = {
           lastSeen: "2026-09-16",
           sessions: ["s-0916-page"],
           quotes: [],
+          emotions: [],
           extra: [],
         },
       ],
@@ -169,6 +185,7 @@ export const MEMORY_OVERVIEW_FIXTURE: MemoryOverview = {
               text: "周五搬家，提醒我前一天把豆包的猫砂盆和航空箱准备好。",
             },
           ],
+          emotions: [],
           extra: ["频次：3 会话 / 3 消息"],
         },
         {
@@ -184,6 +201,7 @@ export const MEMORY_OVERVIEW_FIXTURE: MemoryOverview = {
               text: "中秋活动页上线了，首日点击率 4.2%，还行。这个项目总算结束了。双十一的事下个月才开始。",
             },
           ],
+          emotions: [],
           extra: [],
         },
         {
@@ -197,6 +215,15 @@ export const MEMORY_OVERVIEW_FIXTURE: MemoryOverview = {
               session: "s-0914-driving",
               at: "2026-09-14 11:15",
               text: "科目三过了！！！第三次终于过了，考官说我靠边停车特别稳，太开心了！",
+            },
+          ],
+          emotions: [
+            {
+              session: "s-0914-driving",
+              at: "2026-09-14 11:15",
+              tags: ["喜悦"],
+              text: "科目三过了！！！第三次终于过了，考官说我靠边停车特别稳，太开心了！",
+              line: `- 情绪（\`s-0914-driving\`，2026-09-14 11:15）：喜悦——“科目三过了！！！第三次终于过了，考官说我靠边停车特别稳，太开心了！”`,
             },
           ],
           extra: [],
@@ -214,6 +241,22 @@ export const MEMORY_OVERVIEW_FIXTURE: MemoryOverview = {
               text: "出来了！医生说很顺利，我刚刚哭了一场。",
             },
           ],
+          emotions: [
+            {
+              session: "s-0910-surgery",
+              at: "2026-09-10 15:40",
+              tags: ["焦急", "不安"],
+              text: "手术还没出来，已经三个多小时了，医生说两个半小时就好……我在走廊坐着，手一直在抖。",
+              line: `- 情绪（\`s-0910-surgery\`，2026-09-10 15:40）：焦急、不安——“手术还没出来，已经三个多小时了，医生说两个半小时就好……我在走廊坐着，手一直在抖。”`,
+            },
+            {
+              session: "s-0910-surgery",
+              at: "2026-09-10 17:05",
+              tags: ["释然"],
+              text: "出来了！医生说很顺利，我刚刚哭了一场。",
+              line: `- 情绪（\`s-0910-surgery\`，2026-09-10 17:05）：释然——“出来了！医生说很顺利，我刚刚哭了一场。”`,
+            },
+          ],
           extra: [],
         },
       ],
@@ -226,89 +269,6 @@ export const MEMORY_OVERVIEW_FIXTURE: MemoryOverview = {
         "- 排除：`s-0923-test`「我刚才问的第一个问题是什么？」为上下文记忆测试，不建立条目。",
       ].join("\n"),
     },
-    emotions: {
-      kind: "parsed",
-      entries: [
-        {
-          id: "E001",
-          title: "手术等待超预期时的明显焦急",
-          at: "2026-09-10 15:40",
-          sessions: ["s-0910-surgery"],
-          tags: ["焦急", "不安"],
-          quotes: [
-            {
-              text: "手术还没出来，已经三个多小时了，医生说两个半小时就好……我在走廊坐着，手一直在抖。",
-            },
-          ],
-          related: "A006",
-          extra: [],
-        },
-        {
-          id: "E002",
-          title: "得知手术顺利后的释然",
-          at: "2026-09-10 17:05",
-          sessions: ["s-0910-surgery"],
-          tags: ["释然"],
-          quotes: [{ text: "出来了！医生说很顺利，我刚刚哭了一场。" }],
-          related: "A006",
-          extra: [],
-        },
-        {
-          id: "E003",
-          title: "科目三通过、拿到驾照的喜悦",
-          at: "2026-09-14 11:15",
-          sessions: ["s-0914-driving"],
-          tags: ["喜悦"],
-          quotes: [
-            {
-              text: "科目三过了！！！第三次终于过了，考官说我靠边停车特别稳，太开心了！",
-            },
-          ],
-          related: "A007",
-          extra: [],
-        },
-        {
-          id: "E004",
-          title: "banner 宽高反复纠正后的责备",
-          at: "2026-09-17 14:35",
-          sessions: ["s-0917-banner"],
-          tags: ["责备", "质问"],
-          quotes: [
-            {
-              text: "我说了三遍了，是 750 宽 1000 高！你能不能认真看一下我说的话？",
-            },
-          ],
-          related: "A010",
-          extra: [],
-        },
-      ],
-    },
-    forgotten: [
-      {
-        id: "A003",
-        kind: "activity",
-        title: "与阿杰在西溪湿地附近找房",
-        deletedAt: "2026-10-11T21:12:00+08:00",
-      },
-      {
-        id: "E005",
-        kind: "emotion",
-        title: "房东临签加价引发的愤怒",
-        deletedAt: "2026-10-11T21:13:00+08:00",
-      },
-    ],
-    exclusions: [
-      {
-        target: { kind: "session", id: "s-0923-test" },
-        createdAt: "2026-10-10T12:11:00+08:00",
-        title: "上下文记忆测试",
-      },
-      {
-        target: { kind: "project", id: "p-weekly" },
-        createdAt: "2026-10-11T09:30:00+08:00",
-        title: "公司周报",
-      },
-    ],
   },
   globalMemory: [
     {

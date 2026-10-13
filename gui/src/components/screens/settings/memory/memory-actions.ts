@@ -1,20 +1,20 @@
 import {
+  deleteEntryEmotion,
   deleteLedgerEntry,
-  unforgetLedgerEntry,
+  setLedgerSwitch,
   writeGlobalMemory,
   type GlobalMemoryName,
-  type LedgerTarget,
   type SetLedgerSwitchArgs,
 } from "@/lib/memory";
-import { useMemoryStore } from "@/stores/memory";
 
 /** What Settings → Memory can ask for. Each resolves when done and
  * rejects with Core's error (the page words the identifier). */
 export interface MemoryActions {
   setSwitch: (args: SetLedgerSwitchArgs) => Promise<void>;
+  /** Delete an affair, its emotions with it. */
   deleteEntry: (id: string) => Promise<void>;
-  unforget: (id: string) => Promise<void>;
-  restoreExclusion: (target: LedgerTarget) => Promise<void>;
+  /** Delete one emotion of affair `id`, named by its `line`. */
+  deleteEmotion: (id: string, line: string) => Promise<void>;
   /** Answers the file's new revision. */
   writeGlobal: (
     name: GlobalMemoryName,
@@ -33,7 +33,7 @@ export interface MemoryActions {
 export function coreMemoryActions(reload: () => void): MemoryActions {
   return {
     setSwitch: async (args) => {
-      await useMemoryStore.getState().setSwitch(args);
+      await setLedgerSwitch(args);
       reload();
     },
     deleteEntry: async (id) => {
@@ -43,13 +43,12 @@ export function coreMemoryActions(reload: () => void): MemoryActions {
         reload();
       }
     },
-    unforget: async (id) => {
-      await unforgetLedgerEntry(id);
-      reload();
-    },
-    restoreExclusion: async (target) => {
-      await useMemoryStore.getState().setExcluded(target, false);
-      reload();
+    deleteEmotion: async (id, line) => {
+      try {
+        await deleteEntryEmotion(id, line);
+      } finally {
+        reload();
+      }
     },
     writeGlobal: async (name, content, revision) => {
       const next = await writeGlobalMemory(name, content, revision);
