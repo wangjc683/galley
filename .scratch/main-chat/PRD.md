@@ -285,7 +285,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [15](./issues/15-reset-main-chat.md) | — | 重置主对话：设置深处、长按 5 秒 | 02、06a | done（裁决 59，`71f2323e`–`8d7c655f`，JC 真机验收通过） |
 | [16](./issues/16-assistant-spaces-shell-trial.md) | — | 助手与工作台两个空间的壳：现状 / 乙 左上开关 / 甲 左侧图标栏 | 08、06a | done（JC 真机看过甲、乙，都不要，裁决 62；试验代码由票 17 撤掉） |
 | [17](./issues/17-sidebar-assistant-region-trial.md) | — | 侧栏上半块：现状 / 方案 2 书眉就是助手 / 方案 3 助手卡片 / 3′ 大头像 | 16 | done（JC 真机比完选 3，裁决 64；按赢家撤由票 18 做） |
-| [18](./issues/18-assistant-card-final.md) | — | 助手卡片定稿：方案 3、书眉三个图标、IM 列表的一行 | 17 | ready-for-agent（裁决 64、65） |
+| [18](./issues/18-assistant-card-final.md) | — | 助手卡片定稿：方案 3、书眉三个图标、IM 列表的一行 | 17 | ready-for-human（裁决 64、65；已合入 main，等 JC 真机验收） |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 
