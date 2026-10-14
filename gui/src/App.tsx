@@ -6,7 +6,6 @@ import { MainHeaderHost } from "@/components/layout/MainHeaderHost";
 import { browserControlInviteVisible } from "@/components/layout/header/browser-control-indicator-status";
 import { SidebarCollapseToggle } from "@/components/layout/header/SidebarCollapseToggle";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { NewChatTrialSwitcher } from "@/components/layout/sidebar/NewChatTrialSwitcher";
 import { CommandPalette } from "@/components/overlay/CommandPalette";
 import { ThemeProvider } from "@/components/theme/ThemeContext";
 import { BrowserControlAttentionSurface } from "@/components/screens/BrowserControlAttentionBanner";
@@ -509,8 +508,9 @@ function App() {
             sessions={visibleSessions}
             activeId={effectiveActiveId}
             newChatActive={screen === "empty"}
-            // TEMPORARY (ticket 13): where the new chat's "you are here"
-            // goes on trial.
+            // Which + is pressed while the empty composer is up, and the
+            // first send's session taking the selection before the
+            // screen flips (main chat ticket 13).
             newChatProjectId={
               screen === "empty" ? activeProjectFilter : undefined
             }
@@ -873,8 +873,6 @@ function App() {
           void resolveFirstClose(keepInBackground);
         }}
       />
-      {/* TEMPORARY (ticket 13): the new-chat placeholder trial's pill. */}
-      <NewChatTrialSwitcher />
     </CopyProvider>
   );
 }

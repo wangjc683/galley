@@ -48,8 +48,10 @@ import {
  * - The row sums its sessions' states in the session row's priority
  *   order (D5) on the same left rail and title weight a session row
  *   uses. It never takes `bg-selected`: the sidebar has exactly one
- *   "you are here" row, and that is a session or 新对话; expansion is
- *   said by FolderOpen alone.
+ *   "you are here", and that is a session, 新对话, or — with a main
+ *   chat, while the empty new-chat composer is up — the + that opened
+ *   it, which can be this row's own (shown and pressed, ticket 13);
+ *   expansion is said by FolderOpen alone.
  * - Collapsed, sessions that need the user (erroring / waiting for a
  *   reply, D6) and the selected session (D7) hang under the row as
  *   ordinary rows. Each is then mounted ONLY there — the collapsed
@@ -81,18 +83,12 @@ export function SidebarProjectGroup({
   onEdit,
   onDelete,
   onArchiveAll,
-  draft,
   plusPressed = false,
   ...rowWiring
 }: {
   project: Project;
-  /** On trial (ticket 13, A): the empty new-chat composer is this
-   * project's — its draft row goes first, in the open drawer (in place
-   * of the empty project's CTA) or hanging under the folded row like the
-   * selected session. */
-  draft?: React.ReactNode;
-  /** On trial (ticket 13, B): this row's + opened the empty new-chat
-   * composer — it stays shown and pressed. */
+  /** This row's + opened the empty new-chat composer (with a main
+   * chat): it stays shown and pressed. */
   plusPressed?: boolean;
   /** The newest sessions (PROJECT_GROUP_RECENT_COUNT), newest first. */
   sessions: Session[];
@@ -149,21 +145,13 @@ export function SidebarProjectGroup({
     <SidebarTimelineRow key={s.id} session={s} singleLine {...rowWiring} />
   );
 
-  // On trial (ticket 13, A): folded, the draft hangs with the rest.
-  const hangingDraft = expanded ? undefined : draft;
-  const drawerDraft = expanded ? draft : undefined;
-
   return (
     <div data-project-id={project.id}>
       <ProjectGroupRow
         project={project}
         groupIcon={groupIcon}
         expanded={expanded}
-        connector={
-          (expanded && (total > 0 || !!drawerDraft)) ||
-          hanging.length > 0 ||
-          !!hangingDraft
-        }
+        connector={(expanded && total > 0) || hanging.length > 0}
         attention={attention}
         total={total}
         onClick={onToggleExpanded}
@@ -176,15 +164,12 @@ export function SidebarProjectGroup({
       />
       <ProjectGroupDrawer expanded={expanded}>
         {total === 0 ? (
-          (drawerDraft ?? (
-            <ProjectEmptyHint
-              project={project}
-              onStartConversation={onStartConversation}
-            />
-          ))
+          <ProjectEmptyHint
+            project={project}
+            onStartConversation={onStartConversation}
+          />
         ) : (
           <>
-            {drawerDraft}
             {sessions.filter(notHanging).map(renderRow)}
             {olderOpen
               ? olderSessions.filter(notHanging).map(renderRow)
@@ -212,9 +197,8 @@ export function SidebarProjectGroup({
           </>
         )}
       </ProjectGroupDrawer>
-      {(hanging.length > 0 || hangingDraft) && (
+      {hanging.length > 0 && (
         <div className={cn(GROUP_CHILDREN_CLASS, "pb-1")}>
-          {hangingDraft}
           {hanging.map(renderRow)}
         </div>
       )}
@@ -264,7 +248,7 @@ function ProjectGroupRow({
   project: Project;
   groupIcon?: { closed: Icon; open: Icon };
   expanded: boolean;
-  /** On trial (ticket 13, B): see SidebarProjectGroup. */
+  /** See SidebarProjectGroup. */
   plusPressed?: boolean;
   /** Draw the guide line up into the row from under the folder icon,
    * so the children's line hangs from the project (open with
@@ -441,8 +425,7 @@ function ProjectGroupRow({
                     tooltip={false}
                     size="xs"
                     active={actionsOpen}
-                    // On trial (ticket 13, B): a pressed + shows alone;
-                    // the ⋯ keeps to hover.
+                    // A pressed + shows alone; the ⋯ keeps to hover.
                     className={cn(
                       plusPressed &&
                         !actionsOpen &&

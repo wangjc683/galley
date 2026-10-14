@@ -160,6 +160,11 @@ README「dense context instead of long」（`README.md:54`）。
     现状是票 08 的占位行（分区顶上 40px 的选中行，在「项目」之上，对话却落在「今天」）；B 不要这一行，按的那个 `+` 保持按下；
     A 是放在落点（「今天」第一行或项目组第一行）的单行草稿行，首句发出后真会话行原地接替。主会话推荐 A：只有 A 让「你在这里」与「它会出现在哪」重合，
     也守住 10-08「列表里的一行」；代价是今天还没有对话时按 `+` 多出「今天」标题，发出前约 67px（现状约 48px）。票 [13](./issues/13-new-chat-placeholder-trial.md)。
+56. **新对话的「你在这里」定 B：按下的加号**（JC 2026-10-14 真机比后选 B，主会话推荐的 A 被推翻）：有主对话时不画占位行，打开空输入框的那个加号保持按下
+    （分区头的，或项目组行的；项目藏在「更多项目」后面时把组借出来）；首句发出后，新会话一进列表它的行就接替选中。
+    A 输在主区已经说了会落在哪（标题「新对话」、项目新对话的「在 {项目} 里交代什么？」），而 A 每按一次加号列表都要动、不发又动回去。
+    「侧栏恰好一行说『你在这里』」改为「恰好一处」。手动收起「项目」分区后不亮、空项目的「新建项目对话」与按下的加号并存，都不处理。外置不变（裁决 42）。
+    见 [devlog](../../docs/devlog/2026-10-14-new-chat-pressed-plus.md)。
 
 ## 事实依据（2026-10-12 核对）
 
@@ -220,7 +225,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [10](./issues/10-remove-affairs-ledger.md) | — | 拆掉事项账本与「记忆」页，问候只留第一段 | — | done（裁决 49，`fa6f9127`–`36affec8`） |
 | [11](./issues/11-carry-last-turns-into-new-segment.md) | — | 新段带上段首之前的最近 3 轮 | 03a | done（裁决 50，`b9c1eef8`） |
 | [12](./issues/12-paged-conversation-history.md) | — | 对话历史按轮分页加载（所有对话） | — | done（裁决 51，`0d086e2a`–`acc3559a`） |
-| [13](./issues/13-new-chat-placeholder-trial.md) | — | 新对话占位试验：现状 / B 亮加号 / A 落点 | 08 | ready-for-human（裁决 55，等 JC 真机比） |
+| [13](./issues/13-new-chat-placeholder-trial.md) | — | 新对话占位试验：现状 / B 亮加号 / A 落点 | 08 | done（裁决 56：JC 定 B，试验 `27635f3a`） |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 

@@ -1,5 +1,4 @@
 import { Plus, Tray } from "@phosphor-icons/react";
-import { useEffect, useRef } from "react";
 
 import { IconTooltip } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
@@ -18,9 +17,9 @@ import type { SidebarTimelineRowWiring } from "./SidebarTimelineRow";
  * conversation sits in one section under it —
  *
  *   ⌂ 主对话
- *   其他对话              +   ← SidebarSideChatHeader
- *     (新对话)                ← SidebarNewSideChatRow, while the empty
- *                               new-chat composer is up
+ *   其他对话              +   ← SidebarSideChatHeader; the + stays
+ *                               pressed while the empty new-chat
+ *                               composer it opened is up
  *     置顶 / 项目 / 今天 …
  *     其他来源 N             ← SidebarOtherSources
  *     更早 N
@@ -40,14 +39,21 @@ import type { SidebarTimelineRowWiring } from "./SidebarTimelineRow";
  * element and sticks to its top (Sidebar.tsx, ticket 09: it went from
  * the main chat's pinned block to its children), so the new-chat +
  * never scrolls away.
+ *
+ * While the empty new-chat composer it opened is up, the + is the
+ * sidebar's one "you are here" (ticket 13, PRD ruling 56): pressed in
+ * the selected row's fill and lift, until the first send's row takes
+ * over. No row stands in for the conversation before it exists — the
+ * main pane already says where it will go. Pressing it again
+ * refocuses the composer.
  */
 export function SidebarSideChatHeader({
   onNewChat,
   plusPressed = false,
 }: {
   onNewChat?: () => void;
-  /** On trial (ticket 13, B): the empty new-chat composer is up and
-   * this + opened it — it stays pressed in the selected fill. */
+  /** The empty new-chat composer is up and this + opened it (not a
+   * project's +): it stays pressed. */
   plusPressed?: boolean;
 }) {
   const copy = useCopy();
@@ -85,84 +91,6 @@ export function SidebarSideChatHeader({
         </button>
       </IconTooltip>
     </div>
-  );
-}
-
-/**
- * "You are here" for the empty new-chat composer: the sectioned sidebar
- * has no 新对话 row to select, so while the composer is up the
- * section's top holds this one selected row (the session row's
- * selected fill and lift, full ink), and the sidebar still has exactly
- * one row saying where you are
- * (layout-and-chrome.md, 「新对话是列表的开头」). The first message's
- * session row takes over. Like the 新对话 row it is an action: clicking
- * it refocuses the composer, so it answers the pointer.
- */
-export function SidebarNewSideChatRow({ onClick }: { onClick?: () => void }) {
-  const copy = useCopy();
-  return (
-    <div className="pt-1">
-      <button
-        type="button"
-        onClick={onClick}
-        aria-current="page"
-        className={cn(
-          "mx-1.5 grid min-h-9 w-[calc(100%-12px)] grid-cols-[16px_minmax(0,1fr)] items-center gap-2 rounded-sm px-3 text-left",
-          "bg-selected shadow-[var(--shadow-selected)] hover:bg-(--color-selected-hover)",
-          "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm active:translate-y-px",
-          "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-        )}
-      >
-        <span className="flex justify-center">
-          <Plus size={13} weight="regular" className="text-ink-muted" />
-        </span>
-        <span className="truncate text-[13px] font-medium text-ink">
-          {copy.sidebar.newConversation}
-        </span>
-      </button>
-    </div>
-  );
-}
-
-/**
- * On trial (ticket 13, A): the empty new-chat composer's "you are here"
- * as a draft of the row it will become, placed where that row will land
- * — the first row of 今天, or of its project's group. One line on the
- * session rows' grid (the single-line row's 32px), the selected
- * session row's fill, lift and full ink. The first send's row takes its
- * place. Like the 新对话 row it is an action: clicking it refocuses the
- * composer. Mounting is the composer opening (or moving to another
- * project), so it brings itself into view the way the active row is
- * revealed (`nearest`), with what it sits under — the 今天 label or the
- * group row, both under 44px — kept in view above it (scroll-mt-11).
- */
-export function SidebarNewChatDraftRow({ onClick }: { onClick?: () => void }) {
-  const copy = useCopy();
-  const ref = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    ref.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
-  }, []);
-  return (
-    <button
-      ref={ref}
-      type="button"
-      onClick={onClick}
-      aria-current="page"
-      data-new-chat-draft=""
-      className={cn(
-        "mx-1.5 grid min-h-8 w-[calc(100%-12px)] scroll-mt-11 scroll-mb-2 grid-cols-[16px_minmax(0,1fr)] items-center gap-2 rounded-sm px-3 py-1.5 text-left",
-        "bg-selected shadow-[var(--shadow-selected)] hover:bg-(--color-selected-hover)",
-        "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm active:translate-y-px",
-        "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-      )}
-    >
-      <span className="flex justify-center">
-        <Plus size={13} weight="regular" className="text-ink-muted" />
-      </span>
-      <span className="truncate text-[13px] font-medium text-ink">
-        {copy.sidebar.newConversation}
-      </span>
-    </button>
   );
 }
 
@@ -214,8 +142,8 @@ export function SidebarOtherSources({
   };
   // pt-2: the 更早 entry's gap — the row closes the time buckets, it
   // is not the last bucket's last session. First under the header
-  // (nothing a person started is listed above it), the placeholder
-  // row's pt-1 (ticket 09).
+  // (nothing a person started is listed above it) it drops to pt-1,
+  // the small gap that says whose it is (ticket 09).
   return (
     <div className="pt-2 [[data-sidebar-section-body]>&:first-child]:pt-1">
       <SidebarProjectGroup

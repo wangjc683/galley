@@ -87,6 +87,8 @@ function render(
   opts: {
     activeId?: string;
     newChatActive?: boolean;
+    newChatProjectId?: string;
+    newChatSessionId?: string;
     projects?: Project[];
     language?: "zh-CN" | "en-US";
   } = {},
@@ -99,9 +101,12 @@ function render(
           projects={opts.projects}
           activeId={opts.activeId}
           newChatActive={opts.newChatActive}
+          newChatProjectId={opts.newChatProjectId}
+          newChatSessionId={opts.newChatSessionId}
           expandedProjectIds={[]}
           onNewChat={() => {}}
           onSelectSession={() => {}}
+          onStartProjectConversation={() => {}}
           onArchiveSession={() => {}}
           onRenameSession={() => {}}
           onTogglePinSession={() => {}}
@@ -115,6 +120,8 @@ const count = (html: string, needle: string) => html.split(needle).length - 1;
 const at = (html: string, id: string) =>
   html.indexOf(`data-session-id="${id}"`);
 const OTHER_SOURCES = 'data-project-id="galley:other-sources"';
+const HEADER_PLUS = 'aria-label="新对话"';
+const PROJECT_PLUS = 'aria-label="在 回归 里新建对话"';
 const SECTION = ">其他对话<";
 const HINT = "另开一个对话聊一件事，主对话不受打扰。";
 
@@ -244,14 +251,65 @@ describe("with a main chat: the sectioned sidebar", () => {
     expect(at(selected, "s-cli")).toBeGreaterThan(at(selected, "s-sup"));
   });
 
-  it("selects a 新对话 placeholder at the section's top while the new-chat composer is up", () => {
+  it("presses the + that opened the new-chat composer, with no row for it (ticket 13)", () => {
     const html = render([mainChat, sideChat], { newChatActive: true });
     expect(count(html, 'aria-current="page"')).toBe(1);
-    const placeholder = html.indexOf('aria-current="page"');
-    expect(placeholder).toBeGreaterThan(html.indexOf(SECTION));
-    expect(placeholder).toBeLessThan(html.indexOf(">今天<"));
-    expect(html.slice(placeholder, placeholder + 800)).toContain(">新对话<");
+    const plus = tagWith(html, HEADER_PLUS);
+    expect(plus).toContain('aria-current="page"');
+    expect(plus).toContain("bg-selected");
+    // Nothing stands in for the conversation before it exists: the
+    // section opens on its first label, as at rest.
+    expect(firstChildOf(html, SECTION_BODY)).toContain(
+      "[[data-sidebar-section-body]&gt;&amp;:first-child]:pt-1.5",
+    );
     expect(render([mainChat, sideChat])).not.toContain('aria-current="page"');
+  });
+
+  it("presses a project's + instead, shown without hover, when the composer is that project's", () => {
+    const html = render([mainChat, sideChat, projectCliChat], {
+      newChatActive: true,
+      projects: [project],
+      newChatProjectId: "p",
+    });
+    expect(count(html, 'aria-current="page"')).toBe(1);
+    expect(tagWith(html, PROJECT_PLUS)).toContain('aria-current="page"');
+    expect(tagWith(html, HEADER_PLUS)).not.toContain("aria-current");
+    const overlay = html.lastIndexOf("<div", html.indexOf(PROJECT_PLUS));
+    expect(html.slice(overlay, html.indexOf(">", overlay))).toContain(
+      "pointer-events-auto opacity-100",
+    );
+  });
+
+  it("borrows the pressed project's group from behind 更多项目", () => {
+    // Empty and created past the window: listed behind 更多项目.
+    const quiet = {
+      ...project,
+      id: "q",
+      name: "旧项目",
+      createdAt: new Date(Date.now() - 90 * 86_400_000).toISOString(),
+    };
+    const shut = render([mainChat, sideChat], { projects: [project, quiet] });
+    expect(shut).not.toContain('data-project-id="q"');
+    const html = render([mainChat, sideChat], {
+      newChatActive: true,
+      projects: [project, quiet],
+      newChatProjectId: "q",
+    });
+    expect(tagWith(html, 'aria-label="在 旧项目 里新建对话"')).toContain(
+      'aria-current="page"',
+    );
+  });
+
+  it("hands the selection to the first send's session at once", () => {
+    // createSessionPersisted lists it and makes it the store's active
+    // session before the screen flips from the empty composer.
+    const fresh = managed("s-new", { title: "新对话", origin: { via: "gui" } });
+    const html = render([mainChat, sideChat, fresh], {
+      newChatActive: true,
+      newChatSessionId: "s-new",
+    });
+    expect(tagWith(html, HEADER_PLUS)).not.toContain("aria-current");
+    expect(tagWith(html, 'data-session-id="s-new"')).toContain("bg-selected");
   });
 
   it("explains the section until a person starts a conversation", () => {
@@ -318,9 +376,7 @@ describe("with a main chat: the section owns its list (ticket 09)", () => {
     expect(firstChildOf(html, SECTION_BODY)).toContain(
       "[[data-sidebar-section-body]&gt;&amp;:first-child]:pt-1.5",
     );
-    // The placeholder row and the empty hint sit under the header.
-    const composing = render([mainChat, sideChat], { newChatActive: true });
-    expect(firstChildOf(composing, SECTION_BODY)).toContain('class="pt-1"');
+    // The empty hint sits under the header too.
     const empty = render([mainChat]);
     expect(empty.indexOf(HINT)).toBeGreaterThan(empty.indexOf(SECTION_BODY));
   });
@@ -361,6 +417,15 @@ describe("without a main chat (external runtime)", () => {
       html.indexOf('aria-current="page"'),
     );
     expect(html.slice(row, row + 400)).toContain('aria-label="新对话"');
+    // A project's new chat too: no pressed + here (ticket 13 is the
+    // main chat's sidebar only).
+    const inProject = render([sideChat], {
+      newChatActive: true,
+      projects: [project],
+      newChatProjectId: "p",
+    });
+    expect(count(inProject, 'aria-current="page"')).toBe(1);
+    expect(tagWith(inProject, PROJECT_PLUS)).not.toContain("aria-current");
   });
 });
 

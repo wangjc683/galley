@@ -23,32 +23,28 @@ import {
   SidebarQuickActions,
 } from "./sidebar/SidebarQuickActions";
 import { SidebarSessionRow } from "./sidebar/SidebarSessionRow";
-import { useNewChatTrialStore } from "./sidebar/new-chat-trial";
 import {
-  SidebarNewChatDraftRow,
-  SidebarNewSideChatRow,
   SidebarOtherSources,
   SidebarSideChatEmptyHint,
   SidebarSideChatHeader,
 } from "./sidebar/SidebarSideChats";
-import {
-  type SidebarNewChatDraft,
-  SidebarSectionsList,
-} from "./sidebar/SidebarTimeline";
+import { SidebarSectionsList } from "./sidebar/SidebarTimeline";
 
 export interface SidebarProps {
   sessions: Session[];
   projects?: Project[];
   activeId?: string;
-  /** The main area shows the empty new-chat composer; the 新对话 row
-   * is then the sidebar's selected row. */
+  /** The main area shows the empty new-chat composer: the external
+   * runtime's 新对话 row is then the sidebar's selected row; with a main
+   * chat, the + that opened it is pressed. */
   newChatActive?: boolean;
-  /** On trial (ticket 13): while the empty composer is up, the project
-   * it is for (opened from a group's + / menu / CTA, or a new project). */
+  /** While the empty composer is up, the project it is for (opened from
+   * a group's + / menu / CTA, or a new project): with a main chat, that
+   * group row's + is the pressed one. */
   newChatProjectId?: string;
-  /** On trial (ticket 13): while the empty composer is up, the session
-   * the store has active — the one its first send just created
-   * (createSessionPersisted lists it before the screen flips). */
+  /** While the empty composer is up, the session the store has active
+   * — the one its first send just created (createSessionPersisted lists
+   * it before the screen flips). Its row takes the selection at once. */
   newChatSessionId?: string;
   /** Project ids whose 项目 section groups are expanded (this run only).
    * Several can be open, to watch work across projects. */
@@ -225,38 +221,20 @@ export function Sidebar({
   // The sectioned sidebar is the main chat's (its collapse lives in
   // AppShell); the external runtime keeps the 新对话 row.
   const sectioned = mainChat !== undefined;
-  // TEMPORARY (ticket 13, sidebar/new-chat-trial.ts): which "you are
-  // here" the empty new-chat composer gets in the sectioned sidebar.
-  const trialVariant = useNewChatTrialStore((s) => s.variant);
-  const newChat = sectioned && newChatActive ? trialVariant : undefined;
-  // B / A: the first send's session is listed (and the store's active
-  // one) a beat before the screen flips; it takes over at once,
-  // selected, so the draft never stands beside it.
-  const handoffId =
-    newChat === "B" || newChat === "A"
-      ? listSessions.find((s) => s.id === newChatSessionId)?.id
-      : undefined;
+  // With a main chat, the empty new-chat composer's "you are here" is
+  // the + that opened it, pressed: the section header's, or its
+  // project's group row's (main chat ticket 13, PRD ruling 56). The
+  // first send's session is listed (and the store's active one) a beat
+  // before the screen flips; it takes over at once, selected, so the
+  // pressed + never stands beside its unselected row.
+  const newChatUp = sectioned && newChatActive;
+  const handoffId = newChatUp
+    ? listSessions.find((s) => s.id === newChatSessionId)?.id
+    : undefined;
   const rowActiveId = activeId ?? handoffId;
-  const headerPlusPressed = newChat === "B" && !handoffId && !newChatProjectId;
-  const pressedPlusProjectId =
-    newChat === "B" && !handoffId ? newChatProjectId : undefined;
-  const newChatDraft: SidebarNewChatDraft | undefined =
-    newChat === "A" && !handoffId
-      ? {
-          projectId: newChatProjectId,
-          row: (
-            <SidebarNewChatDraftRow
-              // Refocus without dropping the project: 新对话 (onNewChat)
-              // would clear it.
-              onClick={
-                newChatProjectId && onStartProjectConversation
-                  ? () => onStartProjectConversation(newChatProjectId)
-                  : onNewChat
-              }
-            />
-          ),
-        }
-      : undefined;
+  const plusPressed = newChatUp && !handoffId;
+  const headerPlusPressed = plusPressed && !newChatProjectId;
+  const pressedPlusProjectId = plusPressed ? newChatProjectId : undefined;
   // Memoised: building the list walks every session; without memo it
   // re-runs on every Sidebar render, and Sidebar re-renders whenever
   // App does (which can be triggered by lower-frequency state like
@@ -475,7 +453,6 @@ export function Sidebar({
         />
       }
       groupWiring={groupWiring}
-      newChatDraft={newChatDraft}
       pressedPlusProjectId={pressedPlusProjectId}
       {...rowWiring}
     />
@@ -544,8 +521,8 @@ export function Sidebar({
                 rows (their ⋯ / + overlays are z-10), so its + never
                 scrolls away. pt-3 + the main-chat block's pb-1 and border
                 = 17px over the header; to its first child it is 4–8px
-                (the first-child rules on the labels, the placeholder
-                row's pt-1, the hint's py-2): the space says whose it is. */}
+                (the first-child rules on the labels and 其他来源, the
+                hint's py-2): the space says whose it is. */}
             <div
               data-sidebar-section-header=""
               className="sticky top-0 z-20 bg-app pt-3"
@@ -577,13 +554,9 @@ export function Sidebar({
             {/* SidebarTimeline's labels and 其他来源 key their first-child
                 spacing on this attribute. */}
             <div data-sidebar-section-body="">
-              {newChat === "现状" && (
-                <SidebarNewSideChatRow onClick={onNewChat} />
-              )}
               {!hasHumanChats && <SidebarSideChatEmptyHint />}
-              {/* Empty, the section's line above already says it — but
-                  on trial (ticket 13, A) the draft still needs 今天. */}
-              {(!listEmpty || newChatDraft) && sectionsList}
+              {/* Empty, the section's line above already says it. */}
+              {!listEmpty && sectionsList}
             </div>
           </div>
         ) : listEmpty ? (
