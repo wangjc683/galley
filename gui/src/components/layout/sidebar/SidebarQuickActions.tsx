@@ -128,13 +128,25 @@ export function SidebarNarrowNavRow({
  * rule built for the project view, which 10-08 removed — so leaving a
  * project took this row plus the composer hint's ×. A project's new
  * chat is its group row's + (and its menu).
+ *
+ * Exported with `display` for ticket 17's sidebar-top trial (TEMPORARY):
+ * 2 / 3 / 3′ open their list on this button with 定时 / 新建项目 always
+ * beside it (SidebarAssistant.tsx), so the label and the ⌘N hide on
+ * their own widths. Omitted, this platform's rules.
  */
-function NewChatButton({
+export function NewChatButton({
   active = false,
   onClick,
+  display,
 }: {
   active?: boolean;
   onClick?: () => void;
+  display?: {
+    /** Where the label hides, by UI language. */
+    label: { zh: string; en: string };
+    /** Where the ⌘N shows. */
+    hint: string;
+  };
 }) {
   const copy = useCopy();
   const language = useLanguage();
@@ -185,8 +197,8 @@ function NewChatButton({
           className={cn(
             "flex min-w-0 flex-1 pr-2 font-medium",
             language === "en-US"
-              ? NEW_CHAT_LABEL_HIDDEN.en
-              : NEW_CHAT_LABEL_HIDDEN.zh,
+              ? (display?.label.en ?? NEW_CHAT_LABEL_HIDDEN.en)
+              : (display?.label.zh ?? NEW_CHAT_LABEL_HIDDEN.zh),
           )}
         >
           <span className="shrink-0">{label}</span>
@@ -198,7 +210,7 @@ function NewChatButton({
         <span
           aria-hidden="true"
           className={cn(
-            NEW_CHAT_HINT_DISPLAY,
+            display?.hint ?? NEW_CHAT_HINT_DISPLAY,
             "shrink-0 pr-3",
             SHORTCUT_TEXT_CLASS,
           )}

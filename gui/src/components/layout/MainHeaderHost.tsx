@@ -38,6 +38,7 @@ export function MainHeaderHost({
   canRenameSession = true,
   leading,
   breadcrumb,
+  identity,
 }: {
   channelStatuses: ReadonlyArray<ImSupervisorStatus | null>;
   channelsLoadError: string | null;
@@ -56,6 +57,8 @@ export function MainHeaderHost({
   leading?: ReactNode;
   /** 「主对话 ›」 before the title while a subtask is open (ticket 06a). */
   breadcrumb?: MainHeaderProps["breadcrumb"];
+  /** The assistant's identity in the title's place (ticket 17). */
+  identity?: MainHeaderProps["identity"];
 }) {
   const browserControlStatus = useBrowserControlStore((s) => s.status);
   const browserControlVerified = useBrowserControlStore((s) => s.verified);
@@ -204,6 +207,7 @@ export function MainHeaderHost({
       onOpenSettings={onOpenSettings}
       leading={leading}
       breadcrumb={breadcrumb}
+      identity={identity}
     />
   );
 }

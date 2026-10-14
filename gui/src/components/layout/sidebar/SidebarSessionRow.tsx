@@ -17,7 +17,10 @@ import {
 
 import { IconButton } from "@/components/ui/button";
 import { IconTooltip } from "@/components/ui/tooltip";
-import { useSessionStatusView } from "@/hooks/useSessionStatusView";
+import {
+  type SessionStatusView,
+  useSessionStatusView,
+} from "@/hooks/useSessionStatusView";
 import { useCopy } from "@/lib/i18n";
 import { SCHEDULER_SUPERVISOR } from "@/lib/scheduled-tasks";
 import {
@@ -52,6 +55,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   singleLine = false,
   mainChatLabel,
   subtaskState,
+  statusOverride,
 }: {
   session: Session;
   active?: boolean;
@@ -107,6 +111,10 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
    * (「子任务出错」/「子任务在问你」); the main chat's own error or
    * question keeps its usual words. */
   subtaskState?: "error" | "ask";
+  /** TEMPORARY (ticket 17): the sidebar-top trial's 「演示」 on the
+   * control's main chat row — a live state shown over the store's,
+   * never written. */
+  statusOverride?: Partial<SessionStatusView>;
 }) {
   const copy = useCopy();
   const hasRowActions = !!(
@@ -131,11 +139,12 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   // skips the unread mark for sessionId === activeSessionId.
   // Effective status is derived at read time from live conversation +
   // bridge state (replaces the old fireSessionMirror push onto the row).
+  const liveView = useSessionStatusView(session);
   const {
     status: ownStatus,
     hasPendingAskUser,
     pausedAtStepLimit,
-  } = useSessionStatusView(session);
+  } = statusOverride ? { ...liveView, ...statusOverride } : liveView;
   // A subtask's error or question reaches the main chat's row as if it
   // were the row's own (ticket 06a), the words aside (subline below).
   const subtaskErrored = subtaskState === "error" && ownStatus !== "error";

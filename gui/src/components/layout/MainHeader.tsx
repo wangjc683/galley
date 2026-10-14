@@ -116,6 +116,12 @@ export interface MainHeaderProps {
    * this is the way back. Clicking it opens `onClick`'s target.
    */
   breadcrumb?: { label: string; ariaLabel: string; onClick: () => void };
+  /**
+   * Stands in for the title: the assistant's identity while it is open
+   * (main chat ticket 17, the sidebar-top trial's 2 / 3 / 3′ — avatar,
+   * 「Galley」, what it is doing). No title menu then.
+   */
+  identity?: ReactNode;
 }
 
 /**
@@ -200,6 +206,7 @@ export function MainHeader({
   onRenameSession,
   leading,
   breadcrumb,
+  identity,
 }: MainHeaderProps) {
   const copy = useCopy();
   const hasTopBarStatusItems =
@@ -268,7 +275,8 @@ export function MainHeader({
         )}
       >
         {leading}
-        {breadcrumb && sessionTitle && (
+        {identity}
+        {!identity && breadcrumb && sessionTitle && (
           // The crumb wears the title button's hit area and hover, one
           // ink step down (the title is the page you are on), and the
           // chevron between them is chrome: the crumb gives up width
@@ -294,7 +302,7 @@ export function MainHeader({
             />
           </span>
         )}
-        {sessionTitle ? (
+        {identity ? null : sessionTitle ? (
           <SessionTitleMenu
             title={sessionTitle}
             onReinjectTools={onReinjectTools}

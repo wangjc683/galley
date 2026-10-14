@@ -270,6 +270,14 @@ export const zhCopy = {
     notifyDone: "子任务完成",
     notifyFailed: "子任务出错",
   },
+  /** TEMPORARY（票 17）：侧栏上半块试验里的助手（裁决 62、63），只在方案
+   * 2、3、3′ 出现。定稿时随赢家留下，或整个删掉。 */
+  assistant: {
+    /** 助手的名字：侧栏入口、主区顶栏的身份行、子任务面包屑、⌘K 共用。 */
+    name: "Galley",
+    /** 子任务开在主区时，标题前面包屑「Galley ›」的无障碍名。 */
+    backTo: "回到 Galley",
+  },
   topbar: {
     newConversation: "新对话",
     statusGroupLabel: "运行状态",

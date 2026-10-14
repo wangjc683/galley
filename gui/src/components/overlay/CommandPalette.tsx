@@ -26,6 +26,7 @@ import { isUnpromotedSubtask } from "@/lib/subtasks";
 import { cn } from "@/lib/utils";
 import type { RuntimeKind, Session } from "@/types/session";
 
+import { paletteSessionMatches, paletteSessionValue } from "./palette-search";
 import "./command-palette.css";
 
 export interface LLMOption {
@@ -41,6 +42,10 @@ export interface CommandPaletteProps {
   onOpenChange: (open: boolean) => void;
 
   sessions: Session[];
+  /** Extra words a session is found by, keyed by its id, never shown —
+   * ticket 17's sidebar-top trial titles the main chat 「Galley」 and
+   * keeps 主对话 / 助手 findable (TEMPORARY). */
+  sessionKeywords?: Record<string, string>;
   runtimeKind: RuntimeKind;
   llms?: LLMOption[];
 
@@ -188,6 +193,7 @@ export function CommandPalette(props: CommandPaletteProps) {
           <RootPage
             search={search}
             sessions={props.sessions}
+            sessionKeywords={props.sessionKeywords}
             messageHits={messageHits}
             onOpenMessage={(sessionId, messageId, query) => {
               if (props.onOpenMessage) {
@@ -251,6 +257,7 @@ export function CommandPalette(props: CommandPaletteProps) {
 function RootPage({
   search,
   sessions,
+  sessionKeywords,
   messageHits,
   onNewChat,
   onNewProject,
@@ -266,6 +273,7 @@ function RootPage({
 }: {
   search: string;
   sessions: Session[];
+  sessionKeywords?: Record<string, string>;
   messageHits: MessageSearchHit[];
   onOpenMessage: (sessionId: string, messageId: string, query: string) => void;
   onNewChat: () => void;
@@ -300,15 +308,14 @@ function RootPage({
         ? displaySessionSummary(s.summary, copy.sidebar.turnProtocolFailure)
         : "";
       if (
-        s.title.toLowerCase().includes(query) ||
-        preview.toLowerCase().includes(query)
+        paletteSessionMatches(query, s.title, preview, sessionKeywords?.[s.id])
       ) {
         matches.push(s);
         if (matches.length >= 8) break;
       }
     }
     return matches;
-  }, [sessions, query, copy.sidebar.turnProtocolFailure]);
+  }, [sessions, query, copy.sidebar.turnProtocolFailure, sessionKeywords]);
 
   return (
     <>
@@ -358,7 +365,11 @@ function RootPage({
             return (
               <Command.Item
                 key={s.id}
-                value={`session ${s.title} ${preview ?? ""}`}
+                value={paletteSessionValue(
+                  s.title,
+                  preview,
+                  sessionKeywords?.[s.id],
+                )}
                 onSelect={() => onOpenSession(s.id)}
               >
                 <PaletteRow

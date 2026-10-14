@@ -2,10 +2,17 @@ import { useMemo, useState } from "react";
 
 import { ToastHost } from "@/components/error-card/ToastHost";
 import { AppShell } from "@/components/layout/AppShell";
+import { AssistantIdentity } from "@/components/layout/assistant/AssistantIdentity";
 import { MainHeaderHost } from "@/components/layout/MainHeaderHost";
 import { browserControlInviteVisible } from "@/components/layout/header/browser-control-indicator-status";
 import { SidebarCollapseToggle } from "@/components/layout/header/SidebarCollapseToggle";
 import { Sidebar } from "@/components/layout/Sidebar";
+import {
+  mainChatNaming,
+  sidebarTopActive,
+  useSidebarTopTrialStore,
+} from "@/components/layout/sidebar/sidebar-top-trial";
+import { SidebarTopTrialSwitcher } from "@/components/layout/sidebar/SidebarTopTrialSwitcher";
 import { CommandPalette } from "@/components/overlay/CommandPalette";
 import { ThemeProvider } from "@/components/theme/ThemeContext";
 import { BrowserControlAttentionSurface } from "@/components/screens/BrowserControlAttentionBanner";
@@ -56,7 +63,11 @@ import {
 } from "@/lib/reasoning-effort";
 import { backfillRecentSessions, groupSessions } from "@/lib/sessions";
 import { archivableProjectSessions } from "@/lib/sidebar-timeline";
-import { isUnpromotedSubtask, subtaskBreadcrumb } from "@/lib/subtasks";
+import {
+  isUnpromotedSubtask,
+  subtaskBreadcrumb,
+  unpromotedSubtasksOf,
+} from "@/lib/subtasks";
 import type { EpigraphCondition } from "@/lib/epigraphs";
 import { useBrowserControlStore } from "@/stores/browser-control";
 import { useManagedModelsStore } from "@/stores/managed-models";
@@ -410,8 +421,8 @@ function App() {
       ).earlier,
     [visibleSessions],
   );
-  // ⌘K lists the main chat under its label, not its stored title (the
-  // sidebar and the header do the same).
+  // The header titles the main chat by its label, not its stored title
+  // (the sidebar and ⌘K do the same; see mainChatNaming below).
   const mainChatLabel = copy.sidebar.mainChat;
   // With a main chat the sidebar can collapse, by the toggle at the main
   // header's left or ⌘\ (ticket 08); the external runtime has neither.
@@ -421,13 +432,28 @@ function App() {
   );
   const { collapsed: sidebarCollapsed, toggle: toggleSidebar } =
     useSidebarCollapse(hasMainChat);
+  // TEMPORARY (ticket 17): the sidebar-top trial
+  // (sidebar/sidebar-top-trial.ts). In 2 / 3 / 3′ the main chat is the
+  // assistant, Galley — the sidebar's entry, the header's identity, the
+  // crumb's and ⌘K's name; the control (现状) and the external runtime
+  // keep 主对话.
+  const topVariant = useSidebarTopTrialStore((s) => s.variant);
+  const topDemo = useSidebarTopTrialStore((s) => s.demo);
+  const assistantTop = sidebarTopActive(topVariant, hasMainChat);
+  const mainChatName = mainChatNaming(assistantTop, copy);
   const paletteSessions = useMemo(
     () =>
       visibleSessions.map((s) =>
-        s.mainChat ? { ...s, title: mainChatLabel } : s,
+        s.mainChat ? { ...s, title: mainChatName.label } : s,
       ),
-    [visibleSessions, mainChatLabel],
+    [visibleSessions, mainChatName.label],
   );
+  const paletteKeywords = useMemo(() => {
+    const mainChat = findMainChat(visibleSessions);
+    return mainChat && mainChatName.searchKeywords
+      ? { [mainChat.id]: mainChatName.searchKeywords }
+      : undefined;
+  }, [visibleSessions, mainChatName.searchKeywords]);
   // What the delete-project dialog's 「同时归档」 would archive — the
   // same set as the project group's 归档全部对话.
   const deletingProjectSessions = useMemo(
@@ -560,6 +586,9 @@ function App() {
             onDeleteProject={(id) => setDeletingProjectId(id)}
             onArchiveSessions={(ids) => archiveSessionsBulk(ids)}
             petAttachedSessionId={petAttachedSessionId}
+            // TEMPORARY (ticket 17): the sidebar-top trial.
+            topVariant={topVariant}
+            topDemo={topDemo}
           />
         }
         main={
@@ -585,14 +614,29 @@ function App() {
                   canRenameSession={!activeSession?.mainChat}
                   // A subtask the user has not written in has no sidebar
                   // row; 「主对话 ›」 before its title is the way back
-                  // (ticket 06a). Its parent is the main chat.
+                  // (ticket 06a). Its parent is the main chat — 「Galley ›」
+                  // in the sidebar-top trial's 2 / 3 / 3′ (ticket 17).
                   breadcrumb={subtaskBreadcrumb(activeSession, {
-                    label: mainChatLabel,
-                    ariaLabel: copy.subtask.backToMainChat,
+                    label: mainChatName.label,
+                    ariaLabel: mainChatName.crumbAria,
                     openParent: () => {
                       void openMainChat();
                     },
                   })}
+                  // TEMPORARY (ticket 17): in 2 / 3 / 3′ the open main
+                  // chat shows the assistant in the title's place.
+                  identity={
+                    assistantTop && activeSession?.mainChat ? (
+                      <AssistantIdentity
+                        mainChat={activeSession}
+                        subtasks={unpromotedSubtasksOf(
+                          visibleSessions,
+                          activeSession.id,
+                        )}
+                        demo={topDemo}
+                      />
+                    ) : undefined
+                  }
                   leading={
                     hasMainChat ? (
                       <SidebarCollapseToggle
@@ -703,6 +747,7 @@ function App() {
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
         sessions={paletteSessions}
+        sessionKeywords={paletteKeywords}
         runtimeKind={activeRuntimeKind}
         llms={llms}
         onNewChat={() => {
@@ -873,6 +918,8 @@ function App() {
           void resolveFirstClose(keepInBackground);
         }}
       />
+      {/* TEMPORARY (ticket 17): the sidebar-top trial's pill. */}
+      <SidebarTopTrialSwitcher />
     </CopyProvider>
   );
 }

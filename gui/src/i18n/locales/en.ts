@@ -265,6 +265,10 @@ export const enCopy: AppCopy = {
     notifyDone: "Subtask done",
     notifyFailed: "Subtask failed",
   },
+  assistant: {
+    name: "Galley",
+    backTo: "Back to Galley",
+  },
   topbar: {
     newConversation: "New chat",
     statusGroupLabel: "Operational status",

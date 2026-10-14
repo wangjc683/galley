@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { useSessionsAttention } from "@/hooks/useSessionsAttention";
 import { useSidebarProjectsCollapsed } from "@/hooks/useSidebarProjectsCollapsed";
-import { useCopy } from "@/lib/i18n";
+import { useCopy, useLanguage } from "@/lib/i18n";
 import { findMainChat } from "@/lib/main-chat";
 import { sortProjectsForNavigation } from "@/lib/projects";
 import {
@@ -16,6 +16,13 @@ import { isUnpromotedSubtask, unpromotedSubtasksOf } from "@/lib/subtasks";
 import { cn } from "@/lib/utils";
 import type { Project, Session } from "@/types/session";
 
+import {
+  SidebarAssistantButton,
+  SidebarAssistantCard,
+  SidebarAssistantEmptyHint,
+  SidebarAssistantMasthead,
+  SidebarNewChatRow,
+} from "./sidebar/SidebarAssistant";
 import { SidebarFooter } from "./sidebar/SidebarFooter";
 import { SidebarHeader } from "./sidebar/SidebarHeader";
 import {
@@ -29,6 +36,12 @@ import {
   SidebarSideChatHeader,
 } from "./sidebar/SidebarSideChats";
 import { SidebarSectionsList } from "./sidebar/SidebarTimeline";
+import {
+  ASSISTANT_TOP_WIDTHS,
+  demoMainChatRow,
+  type SidebarTopDemo,
+  type SidebarTopVariant,
+} from "./sidebar/sidebar-top-trial";
 
 export interface SidebarProps {
   sessions: Session[];
@@ -116,6 +129,13 @@ export interface SidebarProps {
    * row so users see "where the pet lives" at a glance — non-
    * interactive status, not a click target. */
   petAttachedSessionId?: string | null;
+  /** TEMPORARY (ticket 17): the sidebar-top trial's variant
+   * (sidebar/sidebar-top-trial.ts). 现状, the default, is the sidebar
+   * described below; 2 / 3 / 3′ replace the sectioned sidebar's top half
+   * with the assistant's entry and open the list on 「＋ 新对话」. */
+  topVariant?: SidebarTopVariant;
+  /** TEMPORARY (ticket 17): the trial's 「演示」 state, display only. */
+  topDemo?: SidebarTopDemo;
 }
 
 /**
@@ -188,8 +208,11 @@ export function Sidebar({
   onOpenArchived,
   archivedCount = 0,
   petAttachedSessionId,
+  topVariant = "现状",
+  topDemo = "无",
 }: SidebarProps) {
   const copy = useCopy();
+  const language = useLanguage();
   const mainChat = useMemo(() => findMainChat(sessions), [sessions]);
   // The list never holds the main chat (its row stands above it) nor a
   // subtask the user has not written in yet (ticket 06a): that one is a
@@ -221,6 +244,10 @@ export function Sidebar({
   // The sectioned sidebar is the main chat's (its collapse lives in
   // AppShell); the external runtime keeps the 新对话 row.
   const sectioned = mainChat !== undefined;
+  // TEMPORARY (ticket 17): a sidebar-top trial variant other than the
+  // control, which only the sectioned sidebar has.
+  const assistantTop =
+    mainChat !== undefined && topVariant !== "现状" ? topVariant : null;
   // With a main chat, the empty new-chat composer's "you are here" is
   // the + that opened it, pressed: the section header's, or its
   // project's group row's (main chat ticket 13, PRD ruling 56). The
@@ -234,7 +261,11 @@ export function Sidebar({
   const rowActiveId = activeId ?? handoffId;
   const plusPressed = newChatUp && !handoffId;
   const headerPlusPressed = plusPressed && !newChatProjectId;
-  const pressedPlusProjectId = plusPressed ? newChatProjectId : undefined;
+  // TEMPORARY (ticket 17): in 2 / 3 / 3′ the 「＋ 新对话」 row is the
+  // "you are here" for every empty composer, a project's too — no
+  // pressed + anywhere.
+  const pressedPlusProjectId =
+    plusPressed && !assistantTop ? newChatProjectId : undefined;
   // Memoised: building the list walks every session; without memo it
   // re-runs on every Sidebar render, and Sidebar re-renders whenever
   // App does (which can be triggered by lower-frequency state like
@@ -425,17 +456,60 @@ export function Sidebar({
   // its resting house glyph, its full ink, a subline that speaks only of
   // a state and its missing menu (no pin, rename, project, archive).
   // Same wiring as a list row otherwise.
+  // TEMPORARY (ticket 17): 「演示」 on the control's main chat row.
+  const rowDemo = demoMainChatRow(topDemo, language);
   const mainChatRow = mainChat ? (
     <SidebarSessionRow
-      session={mainChat}
+      session={rowDemo.patch ? { ...mainChat, ...rowDemo.patch } : mainChat}
       active={mainChatSelected}
       petAttached={petAttachedSessionId === mainChat.id}
       projects={navigationProjects}
       onClick={() => handleSelectSession(mainChat.id)}
       mainChatLabel={copy.sidebar.mainChat}
       subtaskState={mainChatSubtaskState}
+      statusOverride={rowDemo.statusOverride}
     />
   ) : null;
+
+  // TEMPORARY (ticket 17): 2 / 3 / 3′'s top half — the masthead, with
+  // 2's entry in it, then 3 / 3′'s card on the chrome above the strong
+  // line (the main chat row's block and line, ticket 09).
+  const assistantHead =
+    mainChat && assistantTop ? (
+      <>
+        <SidebarAssistantMasthead
+          entry={
+            assistantTop === "2" ? (
+              <SidebarAssistantButton
+                mainChat={mainChat}
+                subtasks={mainChatSubtasks}
+                open={mainChatSelected}
+                demo={topDemo}
+                onOpen={() => handleSelectSession(mainChat.id)}
+              />
+            ) : undefined
+          }
+          searchDisplay={
+            assistantTop === "2"
+              ? ASSISTANT_TOP_WIDTHS.mastheadSearch
+              : undefined
+          }
+          onSearch={onSearch}
+        />
+        {assistantTop !== "2" && (
+          <div className="border-b border-line-strong py-1.5">
+            <SidebarAssistantCard
+              variant={assistantTop}
+              mainChat={mainChat}
+              subtasks={mainChatSubtasks}
+              open={mainChatSelected}
+              demo={topDemo}
+              onOpen={() => handleSelectSession(mainChat.id)}
+            />
+          </div>
+        )}
+      </>
+    ) : null;
 
   const sectionsList = (
     <SidebarSectionsList
@@ -464,13 +538,17 @@ export function Sidebar({
     // both query to decide where 搜索 / 定时 / 项目 go
     // (sidebar/sidebar-width.ts).
     <div className="@container/sidebar flex h-full flex-col bg-chrome text-[13px] text-ink">
-      <SidebarHeader
-        onSearch={onSearch}
-        onOpenScheduled={onOpenScheduled}
-        scheduledActionCount={scheduledActionCount}
-        onNewProject={onNewProject}
-      />
-      {sectioned ? (
+      {assistantTop ? (
+        assistantHead
+      ) : (
+        <SidebarHeader
+          onSearch={onSearch}
+          onOpenScheduled={onOpenScheduled}
+          scheduledActionCount={scheduledActionCount}
+          onNewProject={onNewProject}
+        />
+      )}
+      {assistantTop ? null : sectioned ? (
         <>
           <SidebarNarrowNavRow
             onSearch={onSearch}
@@ -506,8 +584,9 @@ export function Sidebar({
         className={cn(
           "scrollbar-stable min-h-0 flex-1 overflow-y-auto pb-2",
           // scrollIntoView clears the sticky section header (44px:
-          // pt-3 + the header's h-8).
-          sectioned && "scroll-pt-11",
+          // pt-3 + the header's h-8; 2 / 3 / 3′'s new-chat row, 42px:
+          // pt-1.5 + h-8 + pb-1).
+          sectioned && (assistantTop ? "scroll-pt-[42px]" : "scroll-pt-11"),
         )}
       >
         {sectioned ? (
@@ -526,12 +605,33 @@ export function Sidebar({
                 hint's py-2): the space says whose it is. */}
             <div
               data-sidebar-section-header=""
-              className="sticky top-0 z-20 bg-app pt-3"
+              // TEMPORARY (ticket 17): 2 / 3 / 3′ open on 「＋ 新对话」
+              // instead, inset 6px from the ground's top like the rows
+              // from its sides; under it the list keeps the old
+              // sidebar's spacing (no data-sidebar-section-body: the
+              // first label is 18px off the button, as under the
+              // external runtime's new-chat row).
+              className={cn(
+                "sticky top-0 z-20 bg-app",
+                assistantTop ? "pb-1 pt-1.5" : "pt-3",
+              )}
             >
-              <SidebarSideChatHeader
-                onNewChat={onNewChat}
-                plusPressed={headerPlusPressed}
-              />
+              {assistantTop ? (
+                <SidebarNewChatRow
+                  variant={assistantTop}
+                  lit={plusPressed}
+                  onNewChat={onNewChat}
+                  onSearch={onSearch}
+                  onOpenScheduled={onOpenScheduled}
+                  scheduledActionCount={scheduledActionCount}
+                  onNewProject={onNewProject}
+                />
+              ) : (
+                <SidebarSideChatHeader
+                  onNewChat={onNewChat}
+                  plusPressed={headerPlusPressed}
+                />
+              )}
               {/* Rows sliding under the stuck header fade into its ground
                   instead of being cut by an invisible edge (rejected
                   10-08) — not a line, which would split the header from
@@ -554,8 +654,13 @@ export function Sidebar({
             </div>
             {/* SidebarTimeline's labels and 其他来源 key their first-child
                 spacing on this attribute. */}
-            <div data-sidebar-section-body="">
-              {!hasHumanChats && <SidebarSideChatEmptyHint />}
+            <div data-sidebar-section-body={assistantTop ? undefined : ""}>
+              {!hasHumanChats &&
+                (assistantTop ? (
+                  <SidebarAssistantEmptyHint />
+                ) : (
+                  <SidebarSideChatEmptyHint />
+                ))}
               {/* Empty, the section's line above already says it. */}
               {!listEmpty && sectionsList}
             </div>
