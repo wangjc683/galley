@@ -165,6 +165,11 @@ README「dense context instead of long」（`README.md:54`）。
     A 输在主区已经说了会落在哪（标题「新对话」、项目新对话的「在 {项目} 里交代什么？」），而 A 每按一次加号列表都要动、不发又动回去。
     「侧栏恰好一行说『你在这里』」改为「恰好一处」。手动收起「项目」分区后不亮、空项目的「新建项目对话」与按下的加号并存，都不处理。外置不变（裁决 42）。
     见 [devlog](../../docs/devlog/2026-10-14-new-chat-pressed-plus.md)。
+57. **主对话行的第二行真机比 A / A′ / 现状**（JC 2026-10-14 按建议推进；JC 问「目前 sidebar 主对话第二行设计的是什么内容？是不是最佳方案呢？」）：
+    现状照会话行，静止时写 GA 最后一步的摘要；A 只在在跑、等你回复、出错（含子任务的）时写；A′ 再加上有新回复（未读）时写那一轮的摘要。
+    主会话推荐 A′：静止时的摘要用处不在（主对话只有一条，标签、位置固定，启动就开着它），对话里的摘要常是第三人称讲用户或讲流程，又在侧栏最显眼处；
+    有新回复那一刻是摘要对主对话唯一有用的时候。A、A′ 的行固定 50px，下面的列表不动，标题在行内移 9px。
+    B（写最后一句回复）不上切换器：回复开头常带 markdown 或开场白，侧栏会有两种第二行，静止时照样重复主区。票 [14](./issues/14-main-chat-subline-trial.md)。
 
 ## 事实依据（2026-10-12 核对）
 
@@ -226,6 +231,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [11](./issues/11-carry-last-turns-into-new-segment.md) | — | 新段带上段首之前的最近 3 轮 | 03a | done（裁决 50，`b9c1eef8`） |
 | [12](./issues/12-paged-conversation-history.md) | — | 对话历史按轮分页加载（所有对话） | — | done（裁决 51，`0d086e2a`–`acc3559a`） |
 | [13](./issues/13-new-chat-placeholder-trial.md) | — | 新对话占位试验：现状 / B 亮加号 / A 落点 | 08 | done（裁决 56：JC 定 B，试验 `27635f3a`） |
+| [14](./issues/14-main-chat-subline-trial.md) | — | 主对话行第二行试验：A 只写状态 / A′ 有事才写 / 现状 | 08 | ready-for-human（裁决 57，等 JC 真机比） |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 

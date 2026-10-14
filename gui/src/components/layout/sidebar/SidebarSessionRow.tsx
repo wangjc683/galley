@@ -32,6 +32,7 @@ import type { Project, Session } from "@/types/session";
 
 import { SessionTitleEditor } from "../SessionTitleEditor";
 import { ArchiveRunningConfirmDialog } from "./ArchiveRunningConfirmDialog";
+import { useMainChatSublineTrialStore } from "./main-chat-subline-trial";
 import { SidebarRowMenuContent, SidebarRowMenuPortal } from "./SidebarRowMenu";
 import { SidebarSessionMenuItems } from "./SidebarSessionMenuItems";
 
@@ -134,6 +135,9 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     hasPendingAskUser,
     pausedAtStepLimit,
   } = useSessionStatusView(session);
+  // TEMPORARY (ticket 14): the main chat row's second line is on trial
+  // (main-chat-subline-trial.ts).
+  const sublineVariant = useMainChatSublineTrialStore((s) => s.variant);
   // A subtask's error or question reaches the main chat's row as if it
   // were the row's own (ticket 06a), the words aside (subline below).
   const subtaskErrored = subtaskState === "error" && ownStatus !== "error";
@@ -241,9 +245,20 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
               copy.sidebar,
             )
           : null;
+  // TEMPORARY (ticket 14): on trial, the main chat's row says nothing
+  // once settled (A, A′) — A′ keeps an unread turn's recap, what it said
+  // while you were away — and holds the two-line height (row below).
+  const mainChatSublineTrial =
+    mainChatLabel !== undefined && sublineVariant !== "现状";
+  const quietSubline =
+    mainChatSublineTrial &&
+    !hasBlockingError &&
+    !hasPendingAsk &&
+    !showRunningActivity &&
+    !(sublineVariant === "A′" && showUnread);
   // A single-line row renders no subline and centers like a row that
   // has none.
-  const subline = singleLine ? null : sublineText;
+  const subline = singleLine || quietSubline ? null : sublineText;
   const sublineTone: "running" | "warning" | "error" | "muted" =
     hasBlockingError
       ? "error"
@@ -362,7 +377,14 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
       onClick={handleRowClick}
       className={cn(
         "group relative mx-1.5 grid scroll-my-2 grid-cols-[16px_minmax(0,1fr)] items-start gap-2 overflow-hidden rounded-sm px-3 py-1.5",
-        singleLine ? "min-h-8" : "min-h-[48px]",
+        singleLine
+          ? "min-h-8"
+          : // TEMPORARY (ticket 14): the main chat's row on trial keeps
+            // the two-line height (6 + 20 + 2 + 15.4 + 6 = 49.4px) when
+            // its line goes, so the list under it never moves.
+            mainChatSublineTrial
+            ? "min-h-[50px]"
+            : "min-h-[48px]",
         // No row-level ring while editing — the input inside carries
         // its own brand ring; two nested rings for one focus state
         // was noisier than the app's quiet register.
