@@ -6,7 +6,6 @@ import { MainHeaderHost } from "@/components/layout/MainHeaderHost";
 import { browserControlInviteVisible } from "@/components/layout/header/browser-control-indicator-status";
 import { SidebarCollapseToggle } from "@/components/layout/header/SidebarCollapseToggle";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { MainChatSublineTrialSwitcher } from "@/components/layout/sidebar/MainChatSublineTrialSwitcher";
 import { CommandPalette } from "@/components/overlay/CommandPalette";
 import { ThemeProvider } from "@/components/theme/ThemeContext";
 import { BrowserControlAttentionSurface } from "@/components/screens/BrowserControlAttentionBanner";
@@ -874,8 +873,6 @@ function App() {
           void resolveFirstClose(keepInBackground);
         }}
       />
-      {/* TEMPORARY (ticket 14): the main chat row's second-line trial pill. */}
-      <MainChatSublineTrialSwitcher />
     </CopyProvider>
   );
 }

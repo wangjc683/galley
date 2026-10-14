@@ -2,6 +2,7 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { SessionStatusView } from "@/hooks/useSessionStatusView";
 import { CopyProvider } from "@/lib/i18n";
 import { makeSession } from "@/test/factories";
 import type { Project, Session } from "@/types/session";
@@ -9,6 +10,22 @@ import type { Project, Session } from "@/types/session";
 import { Sidebar } from "./Sidebar";
 
 // useCopy falls back to the zh copy without a CopyProvider.
+
+// A row's live state (running, a pending question, a runtime error) is
+// store-derived and can't be seeded under static rendering; override
+// the view by session id on top of the real hook.
+const live = vi.hoisted(() => new Map<string, Partial<SessionStatusView>>());
+vi.mock("@/hooks/useSessionStatusView", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/hooks/useSessionStatusView")>();
+  return {
+    ...actual,
+    useSessionStatusView: (session: Session) => ({
+      ...actual.useSessionStatusView(session),
+      ...live.get(session.id),
+    }),
+  };
+});
 
 // A session's erroring bridge can't be seeded in a store under static
 // rendering; mark ids as needing the user on top of the real hook.
@@ -128,6 +145,7 @@ const HINT = "另开一个对话聊一件事，主对话不受打扰。";
 afterEach(() => {
   needsYou.clear();
   attentionKind.clear();
+  live.clear();
 });
 
 /** The opening tag of the element carrying `needle`. */
@@ -176,18 +194,71 @@ describe("the main chat's row", () => {
     const main = html.slice(at(html, "s-main"));
     expect(main.slice(0, 1600)).toMatch(/text-\[13px\] text-ink font-medium/);
   });
+});
 
-  it("has no subline of its own before its first message", () => {
-    const html = render([mainChat]);
-    const main = html.slice(
+describe("the main chat's subline speaks only of a state (ticket 14)", () => {
+  const RECAP = "花市要顺便买一袋营养土";
+  const used = { ...mainChat, turnCount: 3, summary: RECAP };
+  /** The main chat's row, up to the 其他对话 header under it. */
+  const mainRow = (html: string) =>
+    html.slice(
       html.lastIndexOf("<", at(html, "s-main")),
       html.lastIndexOf("<", html.indexOf(SECTION)),
     );
-    // The row's only text is its label.
-    expect(main.replace(/<[^>]*>/g, "")).toBe("主对话");
-    // Its status reads like any row's once it has one.
-    const used = { ...mainChat, turnCount: 3, summary: "订好了" };
-    expect(render([used])).toContain(">订好了<");
+  /** A row's opening tag. */
+  const rowTag = (html: string, id: string) =>
+    html.slice(
+      html.lastIndexOf("<div", at(html, id)),
+      html.indexOf(">", at(html, id)) + 1,
+    );
+
+  it("says nothing once settled, first message or not, in a 50px row", () => {
+    for (const session of [mainChat, used]) {
+      const html = render([session, sideChat]);
+      // The row's only text is its label: no recap.
+      expect(mainRow(html).replace(/<[^>]*>/g, "")).toBe("主对话");
+      expect(rowTag(html, "s-main")).toContain("min-h-[50px]");
+      // The icon and the title both sit in the middle of the row.
+      expect(mainRow(html).split("self-center").length - 1).toBe(2);
+    }
+    // Open, too.
+    const open = render([used], { activeId: "s-main" });
+    expect(mainRow(open)).not.toContain(RECAP);
+  });
+
+  it("leaves a new reply to the filled house and the weight", () => {
+    const row = mainRow(render([{ ...used, hasUnread: true }, sideChat]));
+    expect(row).not.toContain(RECAP);
+    expect(row).toContain("text-brand");
+    expect(row).toContain("font-semibold");
+  });
+
+  it("leaves a stopped reply to its icon", () => {
+    const html = render([{ ...used, status: "cancelled" }]);
+    expect(mainRow(html)).not.toContain("已中止");
+  });
+
+  it("speaks of every state, in the same 50px row", () => {
+    live.set("s-main", { status: "running" });
+    const thinking = render([used]);
+    expect(mainRow(thinking)).toContain(">思考中<");
+    expect(rowTag(thinking, "s-main")).toContain("min-h-[50px]");
+    expect(mainRow(render([{ ...used, lastStepIndex: 2 }]))).toContain(
+      `第 2 步 · ${RECAP}`,
+    );
+
+    live.set("s-main", { hasPendingAskUser: true });
+    expect(mainRow(render([used]))).toContain(">等你回复<");
+
+    live.set("s-main", { status: "error" });
+    expect(mainRow(render([used]))).toContain(">出错<");
+  });
+
+  it("leaves every other row's recap alone", () => {
+    const side = { ...sideChat, summary: "已订好周五的机票" };
+    const html = render([used, side]);
+    expect(html.slice(at(html, "s-side"))).toContain(">已订好周五的机票<");
+    expect(rowTag(html, "s-side")).toContain("min-h-[48px]");
   });
 });
 

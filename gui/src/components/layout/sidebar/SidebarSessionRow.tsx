@@ -32,7 +32,6 @@ import type { Project, Session } from "@/types/session";
 
 import { SessionTitleEditor } from "../SessionTitleEditor";
 import { ArchiveRunningConfirmDialog } from "./ArchiveRunningConfirmDialog";
-import { useMainChatSublineTrialStore } from "./main-chat-subline-trial";
 import { SidebarRowMenuContent, SidebarRowMenuPortal } from "./SidebarRowMenu";
 import { SidebarSessionMenuItems } from "./SidebarSessionMenuItems";
 
@@ -89,15 +88,17 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
    * are and state still rides the rail, the icon and the title weight,
    * so an open group stays compact. */
   singleLine?: boolean;
-  /** The main chat's row (主聊天, tickets 02 / 08): this label instead
-   * of the stored title, and a house in the icon column while the row
-   * rests. It is the home, so its title keeps full-strength ink even
-   * when another row is selected — the subtractive dimming below skips
-   * it. Everything else is a session row's — rail, subline, weight, the
-   * selected style — and every state outranks the house exactly as it
-   * outranks the check circle; unread fills it brand. No brand colour
-   * of its own (layout-and-chrome.md: tone is for state, not identity).
-   * The caller wires no row actions: it has no menu. */
+  /** The main chat's row (主聊天, tickets 02 / 08 / 14): this label
+   * instead of the stored title, and a house in the icon column while
+   * the row rests. It is the home, so its title keeps full-strength ink
+   * even when another row is selected — the subtractive dimming below
+   * skips it. Its subline speaks only of a state (running, waiting,
+   * error), never of a settled run, in a row that keeps the two-line
+   * height either way. Everything else is a session row's — rail,
+   * weight, the selected style — and every state outranks the house
+   * exactly as it outranks the check circle; unread fills it brand. No
+   * brand colour of its own (layout-and-chrome.md: tone is for state,
+   * not identity). The caller wires no row actions: it has no menu. */
   mainChatLabel?: string;
   /** The main chat's row only (ticket 06a, PRD ruling 30): one of its
    * unpromoted subtasks has errored or is asking the user. It reaches
@@ -135,9 +136,6 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     hasPendingAskUser,
     pausedAtStepLimit,
   } = useSessionStatusView(session);
-  // TEMPORARY (ticket 14): the main chat row's second line is on trial
-  // (main-chat-subline-trial.ts).
-  const sublineVariant = useMainChatSublineTrialStore((s) => s.variant);
   // A subtask's error or question reaches the main chat's row as if it
   // were the row's own (ticket 06a), the words aside (subline below).
   const subtaskErrored = subtaskState === "error" && ownStatus !== "error";
@@ -245,17 +243,18 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
               copy.sidebar,
             )
           : null;
-  // TEMPORARY (ticket 14): on trial, the main chat's row says nothing
-  // once settled (A, A′) — A′ keeps an unread turn's recap, what it said
-  // while you were away — and holds the two-line height (row below).
-  const mainChatSublineTrial =
-    mainChatLabel !== undefined && sublineVariant !== "现状";
+  // The main chat's row says nothing once settled (main chat ticket 14,
+  // PRD ruling 58): its subline speaks only of a state — running,
+  // waiting, an error, a subtask's too. A new reply is the filled house
+  // and the weight; a stopped one, the icon. The recap a settled row
+  // shows tells rows apart and recalls how a task ended — the home has
+  // neither need, usually stands open beside it, and in a conversation
+  // the recap often narrates the user in the third person.
   const quietSubline =
-    mainChatSublineTrial &&
+    mainChatLabel !== undefined &&
     !hasBlockingError &&
     !hasPendingAsk &&
-    !showRunningActivity &&
-    !(sublineVariant === "A′" && showUnread);
+    !showRunningActivity;
   // A single-line row renders no subline and centers like a row that
   // has none.
   const subline = singleLine || quietSubline ? null : sublineText;
@@ -379,10 +378,10 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
         "group relative mx-1.5 grid scroll-my-2 grid-cols-[16px_minmax(0,1fr)] items-start gap-2 overflow-hidden rounded-sm px-3 py-1.5",
         singleLine
           ? "min-h-8"
-          : // TEMPORARY (ticket 14): the main chat's row on trial keeps
-            // the two-line height (6 + 20 + 2 + 15.4 + 6 = 49.4px) when
-            // its line goes, so the list under it never moves.
-            mainChatSublineTrial
+          : // The main chat's row keeps the two-line height (6 + 20 + 2 +
+            // 15.4 + 6 = 49.4px) when its line goes, so the list under it
+            // never moves as a run starts and settles.
+            mainChatLabel !== undefined
             ? "min-h-[50px]"
             : "min-h-[48px]",
         // No row-level ring while editing — the input inside carries

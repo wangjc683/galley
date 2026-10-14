@@ -170,6 +170,9 @@ README「dense context instead of long」（`README.md:54`）。
     主会话推荐 A′：静止时的摘要用处不在（主对话只有一条，标签、位置固定，启动就开着它），对话里的摘要常是第三人称讲用户或讲流程，又在侧栏最显眼处；
     有新回复那一刻是摘要对主对话唯一有用的时候。A、A′ 的行固定 50px，下面的列表不动，标题在行内移 9px。
     B（写最后一句回复）不上切换器：回复开头常带 markdown 或开场白，侧栏会有两种第二行，静止时照样重复主区。票 [14](./issues/14-main-chat-subline-trial.md)。
+58. **主对话行的第二行定 A：只说状态**（JC 2026-10-14：「希望简洁一点、用户心智负担小一点」，主会话推荐的 A′ 被推翻）：在跑、等你回复、出错（含子任务在问你、子任务出错）照会话行写；
+    静止时什么都不写，有新回复也不写（实心杏色房子与加粗标题在说），中止、停在步数上限也不写。行高固定 50px，第二行出没时下面的列表不动。
+    A′ 输在它的字看过就消失，是一条要另学的例外；A 一句话说得完。外置运行时没有主对话，不变。见 [devlog](../../docs/devlog/2026-10-14-main-chat-row-states-only.md)。
 
 ## 事实依据（2026-10-12 核对）
 
@@ -231,7 +234,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [11](./issues/11-carry-last-turns-into-new-segment.md) | — | 新段带上段首之前的最近 3 轮 | 03a | done（裁决 50，`b9c1eef8`） |
 | [12](./issues/12-paged-conversation-history.md) | — | 对话历史按轮分页加载（所有对话） | — | done（裁决 51，`0d086e2a`–`acc3559a`） |
 | [13](./issues/13-new-chat-placeholder-trial.md) | — | 新对话占位试验：现状 / B 亮加号 / A 落点 | 08 | done（裁决 56：JC 定 B，试验 `27635f3a`） |
-| [14](./issues/14-main-chat-subline-trial.md) | — | 主对话行第二行试验：A 只写状态 / A′ 有事才写 / 现状 | 08 | ready-for-human（裁决 57，等 JC 真机比） |
+| [14](./issues/14-main-chat-subline-trial.md) | — | 主对话行第二行试验：A 只写状态 / A′ 有事才写 / 现状 | 08 | done（裁决 58：JC 定 A，试验 `76820c32`） |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 

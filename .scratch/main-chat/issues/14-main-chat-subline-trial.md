@@ -1,6 +1,6 @@
 # 14 主对话行第二行试验：A / A′ / 现状
 
-Status: ready-for-human（等 JC 真机比）
+Status: done（2026-10-14 JC 定 A，裁决 58；试验 `76820c32`，收尾删掉切换器与另两档）
 
 来源：主聊天 PRD 裁决 57（2026-10-14，JC：「目前 sidebar 主对话第二行设计的是什么内容？是不是最佳方案呢？」，之后按建议推进）。依赖 08。只改 GUI，不碰 Rust。
 
@@ -39,3 +39,6 @@ Status: ready-for-human（等 JC 真机比）
 ## Comments
 
 2026-10-14 实现（主会话直接做）：typecheck、lint 通过；新增 18 条用例（三档的静止、开着、未读、中止、各状态、其他行、刚建好）。把 A′ 的未读例外改坏挂 2 条，把 50px 改回 48px 挂 4 条。harness 自查（Chrome，浅色与深色）：A、A′ 六种情形主对话行都是 50px，「其他对话」分区头位置不变；标题居中时距行顶 15.25px，出第二行时 6.25px；现状双行 49.39px。
+
+2026-10-14 JC 思考后定 A（「希望简洁一点、用户心智负担小一点」），主会话推荐的 A′ 被推翻。认的理由：A′ 买到的只是新回复那一刻能先看一眼，它的字看过就消失，是一条要另学的例外；A 的规则一句话说得完。
+收尾（主会话直接做）：删切换器、`main-chat-subline-trial.ts` 与试验测试；`SidebarSessionRow` 里主对话行静止时不出第二行、行高固定 50px；`Sidebar.main-chat.test.tsx` 原来断言「有了摘要照常显示」的用例换成五条；改 `layout-and-chrome.md` 主对话行与「状态行文案」的例外；devlog `docs/devlog/2026-10-14-main-chat-row-states-only.md`。

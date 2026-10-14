@@ -422,8 +422,9 @@ export function Sidebar({
   };
 
   // The main chat's row: a session row in every respect but its label,
-  // its resting house glyph, its full ink and its missing menu (no pin,
-  // rename, project, archive). Same wiring as a list row otherwise.
+  // its resting house glyph, its full ink, a subline that speaks only of
+  // a state and its missing menu (no pin, rename, project, archive).
+  // Same wiring as a list row otherwise.
   const mainChatRow = mainChat ? (
     <SidebarSessionRow
       session={mainChat}
