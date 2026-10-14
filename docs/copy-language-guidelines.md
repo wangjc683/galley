@@ -311,6 +311,27 @@ Section 标签（2026-10-07 JC 裁）：
 | 更新状态 | 版本号写进说明行：`发现新版本 vX`、`vX 已下载，重启 Galley 后生效`；动作词统一「下载更新」，不写「准备更新」；dev 构建写「开发版」（此前 `Dev 构建`）（2026-10-08 起） |
 | 关于 subtitle | `极简 harness 的本地全能 AI 助手`（2026-10-07 起与 GitHub 仓库 About 的中文句同字，此前 `开源的本地 Agent 工作台`；`harness` 是品牌 tagline 用语，保留英文）；section `链接`（此前 `Links`） |
 
+#### 重置主对话（2026-10-14，主聊天票 15、裁决 59）
+
+运行环境「更多」的最后一行与它的长按确认弹窗。中文是票里定稿的原文；英文按英文语气重写。说「它」、
+「长期记忆」，不说内核或 GA（内置运行时语境，见「内核 / Engine」）；列表项不带句末标点。
+
+| 位置 | 中文 | English |
+|---|---|---|
+| 行标题 | 重置主对话 | Reset main chat |
+| 行说明 | 清空主对话和它的长期记忆，回到刚装好时 | Clear the main chat and its long-term memory, back to a fresh install |
+| 有对话在跑（行说明、弹窗里） | 有对话正在运行，结束后才能重置主对话 | A conversation is running; reset the main chat after it finishes |
+| 弹窗标题 | 重置主对话？ | Reset the main chat? |
+| 正文 | 主对话会清空，从问候重新开始；它记住的关于你的事、学会的做事方法也会清掉，回到刚装好时。 | The main chat is emptied and starts over from its greeting. What it remembers about you and the ways of working it has learned are cleared too, back to a fresh install. |
+| 分组 | 会删除 / 不会删除 | Deleted / Kept |
+| 会删除 | 主对话的全部记录，包括它派出去、还没变成普通对话的子任务和附件 · 它的长期记忆（所有对话和 IM 共用，其他对话里的它也会一起忘） · 迁移前的自动备份 | Everything in the main chat, including its attachments and the subtasks it sent out that haven't become ordinary conversations · Its long-term memory (shared by every conversation and IM chat, so it forgets in those too) · The automatic backups made before data migrations |
+| 不会删除 | 其他对话和 IM 里接回的对话（还在侧栏里，它以后翻历史仍可能读到） · 它替你做出来的文件 · 模型、渠道和其他设置 | Other conversations and the IM chats it picked back up (they stay in the sidebar, and it may still read them when it looks back through history) · Files it made for you · Models, channels and other settings |
+| 末行 | 已经发给模型服务商的内容收不回来。 | What was already sent to model providers can't be taken back. |
+| 确认键 / 执行中 | 按住 5 秒重置 / 正在重置… | Hold 5 s to reset / Resetting… |
+| 不到 5 秒松手 | 要按住不放 | Keep holding |
+| 失败 | 有对话正在运行，结束后才能重置主对话。 / 没能重置主对话。 | A conversation is running. You can reset the main chat after it finishes. / Couldn't reset the main chat. |
+| 失败详情 | 复制详情 / 已复制 | Copy details / Copied |
+
 ### 命令面板
 
 用户可见文案叫「命令面板」。

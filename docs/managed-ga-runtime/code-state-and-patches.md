@@ -67,7 +67,7 @@ Application Support/app.galley/
 > are vestigial layout shells and may be removed; do not treat them as a target
 > for SOP content.
 
-> **`temp/` is not backed up and is the only state Galley deletes.** Upstream
+> **`temp/` is not backed up and is the only state Galley prunes on its own.** Upstream
 > `llmcore._write_llm_log` appends the full prompt and raw response of every
 > LLM call to `temp/model_responses/model_responses_<pid>.txt`, and upstream
 > never deletes those files. Galley Core's startup step
@@ -77,6 +77,21 @@ Application Support/app.galley/
 > pre-migration backup (`app.galley.backup.*`) skips `managed-ga-state/temp/`
 > for the same reason: a schema rollback never needs engine scratch. Both
 > are managed-runtime only; attach mode never touches a user-owned `temp/`.
+
+> **`memory/` is rewritten whole on one path only: the user resetting the main
+> chat** (Settings → 运行环境 → 更多 → 重置主对话, main chat ticket 15,
+> `core/src/main_chat_reset.rs`). It puts `memory/` back to the installed seed
+> (`managed_runtime::stage_memory_reset`): the old directory is renamed aside,
+> the seed is copied into a fresh one, and the old one is deleted only after the
+> reset's database transaction commits; a failed copy or a failed transaction
+> puts it back. GA writes `global_mem.txt` and `global_mem_insight.txt` anew from
+> its templates the next time a runner starts, as on a fresh install. The same
+> reset deletes every pre-migration backup (`app.galley.backup.*`), since each
+> is a whole copy of the database and of `memory/`. It leaves `temp/` alone (the
+> files the engine made, `model_responses/`): the logs cannot be told apart by
+> session (a random id per engine process, nothing in Galley maps a session to
+> its file), and IM channels resume their context from theirs. Upgrades still
+> never overwrite `memory/`; they only copy missing seed files.
 
 Initial setup may seed default state only when the target file or directory is
 missing. Existing state must not be overwritten:
