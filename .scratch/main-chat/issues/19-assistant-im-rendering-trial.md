@@ -1,6 +1,6 @@
 # 19 主区的 IM 画法：气泡 / 过程 / 时间 / 滚动
 
-Status: ready-for-agent
+Status: ready-for-human（2026-10-15 合入 main，`a945378e`、`01a68548`；等 JC 在 tauri dev 里比）
 
 来源：主聊天 PRD 裁决 66（2026-10-14，JC 按建议推进：「我们来讨论主对话的 IM 化改造，之前这个 session 你有提到的一些方向我就觉得不错」）。方向见裁决 60（助手像 IM，工作台照旧）、65（侧栏卡片是 IM 列表的一行）。依赖 18。只改 GUI，不碰 Rust。
 
