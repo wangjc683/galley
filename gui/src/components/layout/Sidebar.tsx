@@ -23,13 +23,18 @@ import {
   SidebarQuickActions,
 } from "./sidebar/SidebarQuickActions";
 import { SidebarSessionRow } from "./sidebar/SidebarSessionRow";
+import { useNewChatTrialStore } from "./sidebar/new-chat-trial";
 import {
+  SidebarNewChatDraftRow,
   SidebarNewSideChatRow,
   SidebarOtherSources,
   SidebarSideChatEmptyHint,
   SidebarSideChatHeader,
 } from "./sidebar/SidebarSideChats";
-import { SidebarSectionsList } from "./sidebar/SidebarTimeline";
+import {
+  type SidebarNewChatDraft,
+  SidebarSectionsList,
+} from "./sidebar/SidebarTimeline";
 
 export interface SidebarProps {
   sessions: Session[];
@@ -38,6 +43,13 @@ export interface SidebarProps {
   /** The main area shows the empty new-chat composer; the 新对话 row
    * is then the sidebar's selected row. */
   newChatActive?: boolean;
+  /** On trial (ticket 13): while the empty composer is up, the project
+   * it is for (opened from a group's + / menu / CTA, or a new project). */
+  newChatProjectId?: string;
+  /** On trial (ticket 13): while the empty composer is up, the session
+   * the store has active — the one its first send just created
+   * (createSessionPersisted lists it before the screen flips). */
+  newChatSessionId?: string;
   /** Project ids whose 项目 section groups are expanded (this run only).
    * Several can be open, to watch work across projects. */
   expandedProjectIds?: string[];
@@ -155,6 +167,8 @@ export function Sidebar({
   projects = [],
   activeId,
   newChatActive = false,
+  newChatProjectId,
+  newChatSessionId,
   expandedProjectIds = [],
   projectReveal,
   onSelectSession,
@@ -211,6 +225,38 @@ export function Sidebar({
   // The sectioned sidebar is the main chat's (its collapse lives in
   // AppShell); the external runtime keeps the 新对话 row.
   const sectioned = mainChat !== undefined;
+  // TEMPORARY (ticket 13, sidebar/new-chat-trial.ts): which "you are
+  // here" the empty new-chat composer gets in the sectioned sidebar.
+  const trialVariant = useNewChatTrialStore((s) => s.variant);
+  const newChat = sectioned && newChatActive ? trialVariant : undefined;
+  // B / A: the first send's session is listed (and the store's active
+  // one) a beat before the screen flips; it takes over at once,
+  // selected, so the draft never stands beside it.
+  const handoffId =
+    newChat === "B" || newChat === "A"
+      ? listSessions.find((s) => s.id === newChatSessionId)?.id
+      : undefined;
+  const rowActiveId = activeId ?? handoffId;
+  const headerPlusPressed = newChat === "B" && !handoffId && !newChatProjectId;
+  const pressedPlusProjectId =
+    newChat === "B" && !handoffId ? newChatProjectId : undefined;
+  const newChatDraft: SidebarNewChatDraft | undefined =
+    newChat === "A" && !handoffId
+      ? {
+          projectId: newChatProjectId,
+          row: (
+            <SidebarNewChatDraftRow
+              // Refocus without dropping the project: 新对话 (onNewChat)
+              // would clear it.
+              onClick={
+                newChatProjectId && onStartProjectConversation
+                  ? () => onStartProjectConversation(newChatProjectId)
+                  : onNewChat
+              }
+            />
+          ),
+        }
+      : undefined;
   // Memoised: building the list walks every session; without memo it
   // re-runs on every Sidebar render, and Sidebar re-renders whenever
   // App does (which can be triggered by lower-frequency state like
@@ -369,7 +415,7 @@ export function Sidebar({
   }, [projectReveal]);
 
   const rowWiring = {
-    activeId,
+    activeId: rowActiveId,
     projects: navigationProjects,
     petAttachedSessionId,
     onSelectSession: handleSelectSession,
@@ -429,6 +475,8 @@ export function Sidebar({
         />
       }
       groupWiring={groupWiring}
+      newChatDraft={newChatDraft}
+      pressedPlusProjectId={pressedPlusProjectId}
       {...rowWiring}
     />
   );
@@ -502,7 +550,10 @@ export function Sidebar({
               data-sidebar-section-header=""
               className="sticky top-0 z-20 bg-app pt-3"
             >
-              <SidebarSideChatHeader onNewChat={onNewChat} />
+              <SidebarSideChatHeader
+                onNewChat={onNewChat}
+                plusPressed={headerPlusPressed}
+              />
               {/* Rows sliding under the stuck header fade into its ground
                   instead of being cut by an invisible edge (rejected
                   10-08) — not a line, which would split the header from
@@ -526,10 +577,13 @@ export function Sidebar({
             {/* SidebarTimeline's labels and 其他来源 key their first-child
                 spacing on this attribute. */}
             <div data-sidebar-section-body="">
-              {newChatActive && <SidebarNewSideChatRow onClick={onNewChat} />}
+              {newChat === "现状" && (
+                <SidebarNewSideChatRow onClick={onNewChat} />
+              )}
               {!hasHumanChats && <SidebarSideChatEmptyHint />}
-              {/* Empty, the section's line above already says it. */}
-              {!listEmpty && sectionsList}
+              {/* Empty, the section's line above already says it — but
+                  on trial (ticket 13, A) the draft still needs 今天. */}
+              {(!listEmpty || newChatDraft) && sectionsList}
             </div>
           </div>
         ) : listEmpty ? (

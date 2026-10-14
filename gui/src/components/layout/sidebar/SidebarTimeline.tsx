@@ -29,14 +29,26 @@ export type SidebarProjectGroupWiring = {
   onArchiveSessions?: (ids: string[]) => void;
 };
 
+/** On trial (ticket 13, A): the empty new-chat composer's draft row
+ * and whose it is — a project's goes first in that project's group, any
+ * other first in 今天. */
+export type SidebarNewChatDraft = {
+  projectId?: string;
+  row: React.ReactNode;
+};
+
 /** A project group with the sidebar's wiring bound to its project. */
 function WiredProjectGroup({
   item,
   groupWiring,
+  draft,
+  plusPressed,
   ...rowWiring
 }: {
   item: SidebarProjectGroupItem;
   groupWiring: SidebarProjectGroupWiring;
+  draft?: React.ReactNode;
+  plusPressed?: boolean;
 } & SidebarTimelineRowWiring) {
   const {
     expandedProjectIds,
@@ -68,6 +80,8 @@ function WiredProjectGroup({
       onEdit={onEditProject ? () => onEditProject(id) : undefined}
       onDelete={onDeleteProject ? () => onDeleteProject(id) : undefined}
       onArchiveAll={onArchiveSessions}
+      draft={draft}
+      plusPressed={plusPressed}
       {...rowWiring}
     />
   );
@@ -135,6 +149,8 @@ export function SidebarSectionsList({
   onOpenEarlier,
   otherSourcesSlot,
   groupWiring,
+  newChatDraft,
+  pressedPlusProjectId,
   ...rowWiring
 }: {
   sections: SidebarSections;
@@ -145,6 +161,11 @@ export function SidebarSectionsList({
   onOpenEarlier?: () => void;
   otherSourcesSlot?: React.ReactNode;
   groupWiring: SidebarProjectGroupWiring;
+  /** On trial (ticket 13, A): see SidebarNewChatDraft. */
+  newChatDraft?: SidebarNewChatDraft;
+  /** On trial (ticket 13, B): the project whose group row's + opened
+   * the empty new-chat composer — it stays pressed. */
+  pressedPlusProjectId?: string;
 } & SidebarTimelineRowWiring) {
   const copy = useCopy();
   const labels: Record<SidebarTimeBucket, string> = {
@@ -153,6 +174,19 @@ export function SidebarSectionsList({
     month: copy.sidebar.bucketMonth,
     recent: copy.sidebar.bucketRecent,
   };
+  // A project the sections don't know lands its first session as a
+  // plain row (lib/sidebar-timeline.ts), so its draft goes to 今天 too.
+  const draftProjectId = [...sections.projects, ...sections.otherProjects].some(
+    (item) => item.project.id === newChatDraft?.projectId,
+  )
+    ? newChatDraft?.projectId
+    : undefined;
+  const projectDraft =
+    newChatDraft && draftProjectId
+      ? { projectId: draftProjectId, row: newChatDraft.row }
+      : undefined;
+  const todayDraft =
+    newChatDraft && !draftProjectId ? newChatDraft.row : undefined;
   return (
     <>
       <SidebarSessionBucket
@@ -168,6 +202,8 @@ export function SidebarSectionsList({
         othersOpen={othersOpen}
         onToggleOthers={onToggleOthers}
         groupWiring={groupWiring}
+        draft={projectDraft}
+        pressedPlusProjectId={pressedPlusProjectId}
         {...rowWiring}
       />
       {SIDEBAR_TIME_BUCKETS.map((bucket) => (
@@ -175,6 +211,7 @@ export function SidebarSectionsList({
           key={bucket}
           label={labels[bucket]}
           sessions={sections.buckets[bucket]}
+          draft={bucket === "today" ? todayDraft : undefined}
           {...rowWiring}
         />
       ))}
@@ -192,15 +229,22 @@ export function SidebarSectionsList({
 function SidebarSessionBucket({
   label,
   sessions,
+  draft,
   ...rowWiring
 }: {
   label: string;
   sessions: Session[];
+  /** On trial (ticket 13, A): the new chat's draft row, first and
+   * counted — it is the row the first send will put there. */
+  draft?: React.ReactNode;
 } & SidebarTimelineRowWiring) {
-  if (sessions.length === 0) return null;
+  if (sessions.length === 0 && !draft) return null;
   return (
     <>
-      <SidebarSectionLabel count={sessions.length}>{label}</SidebarSectionLabel>
+      <SidebarSectionLabel count={sessions.length + (draft ? 1 : 0)}>
+        {label}
+      </SidebarSectionLabel>
+      {draft}
       {sessions.map((s) => (
         <SidebarTimelineRow key={s.id} session={s} {...rowWiring} />
       ))}
@@ -236,6 +280,8 @@ function SidebarProjectsSection({
   othersOpen,
   onToggleOthers,
   groupWiring,
+  draft,
+  pressedPlusProjectId,
   ...rowWiring
 }: {
   groups: SidebarProjectGroupItem[];
@@ -245,6 +291,12 @@ function SidebarProjectsSection({
   othersOpen: boolean;
   onToggleOthers: () => void;
   groupWiring: SidebarProjectGroupWiring;
+  /** On trial (ticket 13, A): a project's draft row, which hangs like
+   * the selected session — first under the header while the section is
+   * folded, in its group otherwise (borrowed from behind 更多项目). */
+  draft?: { projectId: string; row: React.ReactNode };
+  /** On trial (ticket 13, B): see SidebarSectionsList. */
+  pressedPlusProjectId?: string;
 } & SidebarTimelineRowWiring) {
   const copy = useCopy();
   const { activeId } = rowWiring;
@@ -271,12 +323,19 @@ function SidebarProjectsSection({
         key={`project:${item.project.id}`}
         item={item}
         groupWiring={groupWiring}
+        draft={draft?.projectId === item.project.id ? draft.row : undefined}
+        plusPressed={pressedPlusProjectId === item.project.id}
         {...rowWiring}
       />
     ));
   const borrowedOthers = othersOpen
     ? []
-    : otherGroups.filter((g) => hangs(sessionsOf([g])).length > 0);
+    : otherGroups.filter(
+        (g) =>
+          hangs(sessionsOf([g])).length > 0 ||
+          g.project.id === draft?.projectId ||
+          g.project.id === pressedPlusProjectId,
+      );
   const hiddenOthers = otherGroups.length - borrowedOthers.length;
   return (
     <>
@@ -287,7 +346,10 @@ function SidebarProjectsSection({
         onToggle={onToggleCollapsed}
       />
       {collapsed ? (
-        renderRows(hangs([...listedSessions, ...otherSessions]))
+        <>
+          {draft?.row}
+          {renderRows(hangs([...listedSessions, ...otherSessions]))}
+        </>
       ) : (
         <>
           {renderGroups(groups)}

@@ -81,9 +81,19 @@ export function SidebarProjectGroup({
   onEdit,
   onDelete,
   onArchiveAll,
+  draft,
+  plusPressed = false,
   ...rowWiring
 }: {
   project: Project;
+  /** On trial (ticket 13, A): the empty new-chat composer is this
+   * project's — its draft row goes first, in the open drawer (in place
+   * of the empty project's CTA) or hanging under the folded row like the
+   * selected session. */
+  draft?: React.ReactNode;
+  /** On trial (ticket 13, B): this row's + opened the empty new-chat
+   * composer — it stays shown and pressed. */
+  plusPressed?: boolean;
   /** The newest sessions (PROJECT_GROUP_RECENT_COUNT), newest first. */
   sessions: Session[];
   /** The rest, newest first — behind the drawer's closing 「显示更多」. */
@@ -139,13 +149,21 @@ export function SidebarProjectGroup({
     <SidebarTimelineRow key={s.id} session={s} singleLine {...rowWiring} />
   );
 
+  // On trial (ticket 13, A): folded, the draft hangs with the rest.
+  const hangingDraft = expanded ? undefined : draft;
+  const drawerDraft = expanded ? draft : undefined;
+
   return (
     <div data-project-id={project.id}>
       <ProjectGroupRow
         project={project}
         groupIcon={groupIcon}
         expanded={expanded}
-        connector={(expanded && total > 0) || hanging.length > 0}
+        connector={
+          (expanded && (total > 0 || !!drawerDraft)) ||
+          hanging.length > 0 ||
+          !!hangingDraft
+        }
         attention={attention}
         total={total}
         onClick={onToggleExpanded}
@@ -154,15 +172,19 @@ export function SidebarProjectGroup({
         onEdit={onEdit}
         onArchiveAll={archiveAll}
         onDelete={onDelete}
+        plusPressed={plusPressed}
       />
       <ProjectGroupDrawer expanded={expanded}>
         {total === 0 ? (
-          <ProjectEmptyHint
-            project={project}
-            onStartConversation={onStartConversation}
-          />
+          (drawerDraft ?? (
+            <ProjectEmptyHint
+              project={project}
+              onStartConversation={onStartConversation}
+            />
+          ))
         ) : (
           <>
+            {drawerDraft}
             {sessions.filter(notHanging).map(renderRow)}
             {olderOpen
               ? olderSessions.filter(notHanging).map(renderRow)
@@ -190,8 +212,9 @@ export function SidebarProjectGroup({
           </>
         )}
       </ProjectGroupDrawer>
-      {hanging.length > 0 && (
+      {(hanging.length > 0 || hangingDraft) && (
         <div className={cn(GROUP_CHILDREN_CLASS, "pb-1")}>
+          {hangingDraft}
           {hanging.map(renderRow)}
         </div>
       )}
@@ -236,10 +259,13 @@ function ProjectGroupRow({
   onEdit,
   onArchiveAll,
   onDelete,
+  plusPressed = false,
 }: {
   project: Project;
   groupIcon?: { closed: Icon; open: Icon };
   expanded: boolean;
+  /** On trial (ticket 13, B): see SidebarProjectGroup. */
+  plusPressed?: boolean;
   /** Draw the guide line up into the row from under the folder icon,
    * so the children's line hangs from the project (open with
    * sessions, or collapsed with hung rows). */
@@ -333,7 +359,7 @@ function ProjectGroupRow({
         className={cn(
           "min-w-0",
           showActions && "group-hover:pr-16",
-          actionsOpen && "pr-16",
+          (actionsOpen || plusPressed) && "pr-16",
         )}
       >
         <div className="flex min-h-5 min-w-0 items-center gap-1.5">
@@ -361,7 +387,7 @@ function ProjectGroupRow({
               className={cn(
                 "shrink-0 text-[11px] tabular-nums text-ink-muted",
                 showActions && "group-hover:invisible",
-                actionsOpen && "invisible",
+                (actionsOpen || plusPressed) && "invisible",
               )}
             >
               {total}
@@ -374,7 +400,7 @@ function ProjectGroupRow({
           className={cn(
             "pointer-events-none absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 opacity-0",
             "group-hover:pointer-events-auto group-hover:opacity-100",
-            actionsOpen && "pointer-events-auto opacity-100",
+            (actionsOpen || plusPressed) && "pointer-events-auto opacity-100",
           )}
         >
           {onStartConversation && (
@@ -388,14 +414,17 @@ function ProjectGroupRow({
                   onStartConversation();
                 }}
                 aria-label={newConversationTitle}
+                aria-current={plusPressed ? "page" : undefined}
                 className={cn(
                   // 32px hit area + 14/regular plus per the shared
                   // light-button rules (layout-and-chrome.md §4.2
                   // Project 行).
                   "inline-flex size-[32px] shrink-0 items-center justify-center rounded-sm",
-                  "text-ink-muted transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
-                  "group-hover:text-ink-soft",
-                  "hover:bg-hover hover:text-ink active:translate-y-px active:bg-selected/60",
+                  "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+                  plusPressed
+                    ? "bg-selected text-ink shadow-[var(--shadow-selected)] hover:bg-(--color-selected-hover)"
+                    : "text-ink-muted group-hover:text-ink-soft hover:bg-hover hover:text-ink active:bg-selected/60",
+                  "active:translate-y-px",
                   "outline-none",
                 )}
               >
@@ -412,6 +441,13 @@ function ProjectGroupRow({
                     tooltip={false}
                     size="xs"
                     active={actionsOpen}
+                    // On trial (ticket 13, B): a pressed + shows alone;
+                    // the ⋯ keeps to hover.
+                    className={cn(
+                      plusPressed &&
+                        !actionsOpen &&
+                        "opacity-0 group-hover:opacity-100",
+                    )}
                     tabIndex={-1}
                     onPointerDown={(e) => {
                       e.stopPropagation();

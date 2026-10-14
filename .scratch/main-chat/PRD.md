@@ -156,6 +156,10 @@ README「dense context instead of long」（`README.md:54`）。
     依据：到 10-13 主对话只有 10-12 的 5 条用户消息，入口层、票 11、12、06a 都还没真实用过；JC 自己没有定时任务（`scheduled_tasks` 为空），06b 排后。
     发版前的自由不是无限的：tauri dev 用真实数据目录，迁移 048 已应用在 JC 的库上，改已应用的迁移要手修这一个库，但不用给所有用户写迁移。
     代价：`v0.6.2` 之后 112 个提交（含微信对话对齐、Core 发送接管）用户暂时拿不到；急需修的问题从 `v0.6.2` 标签单出补丁，不带主对话。
+55. **新对话占位真机比现状 / B / A**（JC 2026-10-14 按建议推进；JC：「其他对话的新对话，占位太大，位置也不合理」）：
+    现状是票 08 的占位行（分区顶上 40px 的选中行，在「项目」之上，对话却落在「今天」）；B 不要这一行，按的那个 `+` 保持按下；
+    A 是放在落点（「今天」第一行或项目组第一行）的单行草稿行，首句发出后真会话行原地接替。主会话推荐 A：只有 A 让「你在这里」与「它会出现在哪」重合，
+    也守住 10-08「列表里的一行」；代价是今天还没有对话时按 `+` 多出「今天」标题，发出前约 67px（现状约 48px）。票 [13](./issues/13-new-chat-placeholder-trial.md)。
 
 ## 事实依据（2026-10-12 核对）
 
@@ -216,6 +220,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [10](./issues/10-remove-affairs-ledger.md) | — | 拆掉事项账本与「记忆」页，问候只留第一段 | — | done（裁决 49，`fa6f9127`–`36affec8`） |
 | [11](./issues/11-carry-last-turns-into-new-segment.md) | — | 新段带上段首之前的最近 3 轮 | 03a | done（裁决 50，`b9c1eef8`） |
 | [12](./issues/12-paged-conversation-history.md) | — | 对话历史按轮分页加载（所有对话） | — | done（裁决 51，`0d086e2a`–`acc3559a`） |
+| [13](./issues/13-new-chat-placeholder-trial.md) | — | 新对话占位试验：现状 / B 亮加号 / A 落点 | 08 | ready-for-human（裁决 55，等 JC 真机比） |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 

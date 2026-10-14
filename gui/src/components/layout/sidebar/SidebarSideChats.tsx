@@ -1,4 +1,5 @@
 import { Plus, Tray } from "@phosphor-icons/react";
+import { useEffect, useRef } from "react";
 
 import { IconTooltip } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
@@ -42,8 +43,12 @@ import type { SidebarTimelineRowWiring } from "./SidebarTimelineRow";
  */
 export function SidebarSideChatHeader({
   onNewChat,
+  plusPressed = false,
 }: {
   onNewChat?: () => void;
+  /** On trial (ticket 13, B): the empty new-chat composer is up and
+   * this + opened it — it stays pressed in the selected fill. */
+  plusPressed?: boolean;
 }) {
   const copy = useCopy();
   const newChatLabel = copy.sidebar.newConversation;
@@ -65,10 +70,14 @@ export function SidebarSideChatHeader({
           type="button"
           onClick={onNewChat}
           aria-label={newChatLabel}
+          aria-current={plusPressed ? "page" : undefined}
           className={cn(
-            "inline-flex size-7 shrink-0 items-center justify-center rounded-sm text-ink-soft",
+            "inline-flex size-7 shrink-0 items-center justify-center rounded-sm",
             "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
-            "hover:bg-hover hover:text-ink active:translate-y-px active:bg-selected/60",
+            plusPressed
+              ? "bg-selected text-ink shadow-[var(--shadow-selected)] hover:bg-(--color-selected-hover)"
+              : "text-ink-soft hover:bg-hover hover:text-ink active:bg-selected/60",
+            "active:translate-y-px",
             "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
           )}
         >
@@ -112,6 +121,48 @@ export function SidebarNewSideChatRow({ onClick }: { onClick?: () => void }) {
         </span>
       </button>
     </div>
+  );
+}
+
+/**
+ * On trial (ticket 13, A): the empty new-chat composer's "you are here"
+ * as a draft of the row it will become, placed where that row will land
+ * — the first row of 今天, or of its project's group. One line on the
+ * session rows' grid (the single-line row's 32px), the selected
+ * session row's fill, lift and full ink. The first send's row takes its
+ * place. Like the 新对话 row it is an action: clicking it refocuses the
+ * composer. Mounting is the composer opening (or moving to another
+ * project), so it brings itself into view the way the active row is
+ * revealed (`nearest`), with what it sits under — the 今天 label or the
+ * group row, both under 44px — kept in view above it (scroll-mt-11).
+ */
+export function SidebarNewChatDraftRow({ onClick }: { onClick?: () => void }) {
+  const copy = useCopy();
+  const ref = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    ref.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
+  }, []);
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={onClick}
+      aria-current="page"
+      data-new-chat-draft=""
+      className={cn(
+        "mx-1.5 grid min-h-8 w-[calc(100%-12px)] scroll-mt-11 scroll-mb-2 grid-cols-[16px_minmax(0,1fr)] items-center gap-2 rounded-sm px-3 py-1.5 text-left",
+        "bg-selected shadow-[var(--shadow-selected)] hover:bg-(--color-selected-hover)",
+        "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm active:translate-y-px",
+        "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
+      )}
+    >
+      <span className="flex justify-center">
+        <Plus size={13} weight="regular" className="text-ink-muted" />
+      </span>
+      <span className="truncate text-[13px] font-medium text-ink">
+        {copy.sidebar.newConversation}
+      </span>
+    </button>
   );
 }
 
