@@ -243,7 +243,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [12](./issues/12-paged-conversation-history.md) | — | 对话历史按轮分页加载（所有对话） | — | done（裁决 51，`0d086e2a`–`acc3559a`） |
 | [13](./issues/13-new-chat-placeholder-trial.md) | — | 新对话占位试验：现状 / B 亮加号 / A 落点 | 08 | done（裁决 56：JC 定 B，试验 `27635f3a`） |
 | [14](./issues/14-main-chat-subline-trial.md) | — | 主对话行第二行试验：A 只写状态 / A′ 有事才写 / 现状 | 08 | done（裁决 58：JC 定 A，试验 `76820c32`） |
-| [15](./issues/15-reset-main-chat.md) | — | 重置主对话：设置深处、长按 5 秒 | 02、06a | done（裁决 59，`71f2323e`–`8d7c655f`；真机验收待做） |
+| [15](./issues/15-reset-main-chat.md) | — | 重置主对话：设置深处、长按 5 秒 | 02、06a | done（裁决 59，`71f2323e`–`8d7c655f`，JC 真机验收通过） |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 

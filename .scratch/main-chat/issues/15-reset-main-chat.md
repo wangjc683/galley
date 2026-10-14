@@ -1,6 +1,6 @@
 # 15 重置主对话：设置深处、长按 5 秒
 
-Status: done（`71f2323e`–`8d7c655f` 六个提交，2026-10-14 合入本地 main，未推送；JC 真机验收待做，步骤见「验收」与 Comments）
+Status: done（`71f2323e`–`8d7c655f` 六个提交，2026-10-14 合入本地 main，未推送；同日 JC 真机验收通过，见 Comments 末条与 [devlog](../../../docs/devlog/2026-10-14-main-chat-reset.md)）
 
 来源：主聊天 PRD 裁决 59（2026-10-14，JC：「主对话是一个持续的、长久存在的。那如果用户想要删除某条信息，甚至整个主对话重置清空，是不是可以给用户这一个选项？……重置整个主对话的按钮应该要放的比较深，然后要多重防护」，按建议推进；确认方式 JC 由「输入『重置』」改为长按 5 秒）。依赖 02、06a。跨 Core 与 GUI。
 
@@ -140,3 +140,5 @@ Status: done（`71f2323e`–`8d7c655f` 六个提交，2026-10-14 合入本地 ma
 - **D 正文**：「已定」加第 7 条；「界面」两个列表改成 A 版；验收的备份改用 `sqlite3 ... ".backup"` 在线快照，第 5 步换成确定式核对；上面的真机复现步骤 0、1、5、6 同步。
 - **E**：IM 并发写记忆只写进 `code-state-and-patches.md` 的已知限制，不加机制，界面不提。
 - **验证**：`cargo test --manifest-path core/Cargo.toml --workspace` 本机时区与 `TZ=UTC` 各 932 个通过（33 组）；`pnpm --dir gui typecheck`、`lint` 通过；`TZ=UTC pnpm --dir gui test` 116 个文件 1140 个通过；六个门禁、`git diff --check` 通过；全角扫描 0 行。
+
+2026-10-14 真机验收（JC 13:31 重置，主会话只读核对）：重置前在仓库外做了备份。`memory/` 从 51 个文件变成种子的 43 个加 `global_mem.txt`、`global_mem_insight.txt`，种子文件内容一致，多出来的（`verify_sop.md`、`skill_search/`、原 `global_mem*`）都没了（`file_access_stats.json` 是之后聊天时新建的）；没有 `memory.reset-*`；三份迁移备份已删；旧主对话在 `sessions`、`messages`、`messages_fts` 都是 0 行；新主对话从问候开始；`temp/` 在；库从 17.8 MB 降到 16.6 MB。重建的 insight 是英文模板：GA 按 runner 的 locale 选语言（`agentmain.py:2`），JC 开发环境 `LANG=en_US.UTF-8`，与重置无关。
