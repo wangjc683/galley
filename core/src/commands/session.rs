@@ -71,11 +71,13 @@ pub(crate) async fn get_or_create_main_chat(
 /// delete it with its unpromoted subtasks, put the engine's memory back
 /// to the seed, delete the pre-migration backups, and hand back the new
 /// main chat, opening with the greeting in `language` (as for
-/// [`get_or_create_main_chat`]). Desktop only — no socket command, no
-/// CLI, no phone method; the page asks after a five-second hold. The
-/// steps and refusals are [`crate::main_chat_reset`]'s; errors go over
-/// the wire as `{"error": "running" | "not_managed" | "no_main_chat" |
-/// "failed", "detail": "..."}`.
+/// [`get_or_create_main_chat`]), its runner already starting (so GA
+/// writes its memory files from the templates). Desktop only — no
+/// socket command, no CLI, no phone method; the page asks after a
+/// five-second hold. The steps and refusals are
+/// [`crate::main_chat_reset`]'s; errors go over the wire as
+/// `{"error": "running" | "not_managed" | "no_main_chat" | "failed",
+/// "detail": "..."}`.
 #[tauri::command]
 pub(crate) async fn reset_main_chat(
     app: tauri::AppHandle,
@@ -83,17 +85,23 @@ pub(crate) async fn reset_main_chat(
     manager: State<'_, std::sync::Arc<crate::runner_manager::RunnerManager>>,
     language: Option<String>,
 ) -> std::result::Result<SessionBrief, String> {
-    use crate::main_chat_reset::{ResetMainChatError, ResetPaths};
+    use crate::main_chat_reset::{AppRunnerStarter, ResetMainChatError, ResetPaths};
     let wire = |e: ResetMainChatError| serde_json::to_string(&e).unwrap_or_else(|_| e.to_string());
     let paths = ResetPaths::for_app(&app).map_err(|e| {
         wire(ResetMainChatError::Failed {
             detail: format!("resolving the data paths failed, nothing changed: {e}"),
         })
     })?;
+    let starter = AppRunnerStarter {
+        app: app.clone(),
+        galley: galley.inner().clone(),
+        manager: manager.inner().clone(),
+    };
     let notifier = TauriNotifier::new(app);
     crate::main_chat_reset::reset_main_chat(
         &galley,
         manager.inner().as_ref(),
+        &starter,
         notifier.as_ref(),
         &paths,
         language.as_deref(),

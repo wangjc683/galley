@@ -41,7 +41,19 @@
 //! 6. **Broadcast** each deletion, then **create** the new main chat
 //!    through the usual path, which announces it — deletions first, so no
 //!    page ever holds two main chats.
-//! 7. **Delete every pre-migration backup**, then **compact** the
+//! 7. **Start the new main chat's runner**, in the background
+//!    ([`RunnerStarter`]). GA writes `global_mem.txt` and
+//!    `global_mem_insight.txt` from its templates only when a runner
+//!    imports `agentmain`, while every live runner and IM process reads
+//!    them on each turn: until a runner starts, those turns carry no
+//!    memory section at all, and a model that wrote its own
+//!    `global_mem_insight.txt` meanwhile would keep GA from ever writing
+//!    the template one. The desktop lands on the new main chat without
+//!    starting one (its first send would), so Core starts it here through
+//!    the shared path (the one the desktop's `ensure_session_runner`
+//!    takes; the page attaches on `runner-spawned-external`). Not
+//!    awaited: the reset answers at once, a failure is logged.
+//! 8. **Delete every pre-migration backup**, then **compact** the
 //!    database ([`SqliteGalley::compact`]).
 //!
 //! Steps 3–4 swap the ticket's order (rows, then memory) on purpose:
@@ -54,8 +66,11 @@
 //! `get_or_create_main_chat` creates one).
 
 use std::fmt;
+use std::future::Future;
 use std::io;
 use std::path::{Component, Path, PathBuf};
+use std::pin::Pin;
+use std::sync::Arc;
 
 use serde::Serialize;
 
@@ -64,8 +79,13 @@ use crate::db::{MainChatEnsured, SqliteGalley};
 use crate::managed_runtime;
 use crate::migration_backup;
 use crate::notify::Notifier;
+use crate::runner_manager::RunnerManager;
+use crate::session_runner::{ensure_session_runner, EnsureOptions, RunnerHost};
 use crate::session_writes::{announce_session_deleted, Writes, VIA_GUI};
 use crate::socket_listener::RunnerPort;
+
+/// `via` of the new main chat's `runner-spawned-external`.
+pub const VIA_MAIN_CHAT_RESET: &str = "main-chat-reset";
 
 /// Why a reset did not happen, or did not finish. On the Tauri wire it
 /// is `{"error": "<tag>", "detail": "..."}`, like the runner errors: the
@@ -142,13 +162,66 @@ impl ResetPaths {
     }
 }
 
+/// A runner start the reset spawns and does not wait for.
+pub type StartRunner = Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'static>>;
+
+/// Starts the new main chat's runner after a reset (step 7). Behind a
+/// trait so a test can see the ask without spawning an engine.
+pub trait RunnerStarter: Send + Sync {
+    /// The start of `session_id`'s runner, as a future the reset spawns
+    /// in the background; its error is logged, never returned.
+    fn start(&self, session_id: SessionId) -> StartRunner;
+}
+
+/// The app's [`RunnerStarter`]: the shared path the desktop's
+/// `ensure_session_runner` command takes (spawn from the session's
+/// persisted configuration, announce `runner-spawned-external`).
+pub struct AppRunnerStarter {
+    pub app: tauri::AppHandle,
+    pub galley: SqliteGalley,
+    pub manager: Arc<RunnerManager>,
+}
+
+impl RunnerStarter for AppRunnerStarter {
+    fn start(&self, session_id: SessionId) -> StartRunner {
+        let app = self.app.clone();
+        let galley = self.galley.clone();
+        let manager = self.manager.clone();
+        Box::pin(async move {
+            let host = RunnerHost {
+                galley: &galley,
+                runner: manager.as_ref(),
+                notifier: crate::notify::TauriNotifier::new(app.clone()),
+                env: Some(&app),
+            };
+            ensure_session_runner(
+                &host,
+                session_id.as_str(),
+                EnsureOptions {
+                    via: VIA_MAIN_CHAT_RESET,
+                    active_session_id: Some(session_id.as_str()),
+                    llm_override: None,
+                    ga_config: None,
+                    holds_run_gate: false,
+                    timeouts: Default::default(),
+                },
+            )
+            .await
+            .map(|_| ())
+            .map_err(|e| format!("{e:?}"))
+        })
+    }
+}
+
 /// Reset the main chat (see the module docs for the steps). Returns the
 /// new main chat, which opens with the greeting in `language` (the UI
 /// language the page resolved; English without one, as for
-/// `get_or_create_main_chat`).
+/// `get_or_create_main_chat`); its runner is being started by `starter`
+/// when this returns.
 pub async fn reset_main_chat(
     galley: &SqliteGalley,
     runner: &dyn RunnerPort,
+    starter: &dyn RunnerStarter,
     notifier: &dyn Notifier,
     paths: &ResetPaths,
     language: Option<&str>,
@@ -232,7 +305,16 @@ pub async fn reset_main_chat(
             ))
         })?;
 
-    // 7. Backups, then the database file.
+    // 7. Its runner, in the background.
+    let start = starter.start(created.id.clone());
+    let new_id = created.id.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = start.await {
+            eprintln!("[main-chat-reset] starting the runner of {new_id} failed: {e}");
+        }
+    });
+
+    // 8. Backups, then the database file.
     let backups = migration_backup::delete_all_backups_in(&paths.data_dir);
     for (path, e) in &backups.failed {
         eprintln!(

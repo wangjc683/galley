@@ -16,7 +16,9 @@
 //!   nothing either. A held queue is not a run; a deleted session's
 //!   queued drafts are dropped.
 //! - Broadcast: each deletion, then the new main chat; runners closed for
-//!   the deleted sessions only.
+//!   the deleted sessions only; the new main chat's runner asked for once
+//!   (so GA writes its memory files from its templates), never on a
+//!   refusal or failure, and a start that fails or hangs holds nothing up.
 
 use async_trait::async_trait;
 use galley_core_lib::api::{
@@ -27,7 +29,9 @@ use galley_core_lib::db::{
     PersistAssistantMessage, SqliteGalley, MAIN_CHAT_GREETING_EN, MAIN_CHAT_GREETING_ZH,
 };
 use galley_core_lib::ipc::IpcCommand;
-use galley_core_lib::main_chat_reset::{reset_main_chat, ResetMainChatError, ResetPaths};
+use galley_core_lib::main_chat_reset::{
+    reset_main_chat, ResetMainChatError, ResetPaths, RunnerStarter, StartRunner,
+};
 use galley_core_lib::notify::Notifier;
 use galley_core_lib::runner_manager::{
     BroadcastItem, RunState, RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
@@ -202,6 +206,45 @@ impl RunnerPort for Runner {
             .unwrap()
             .push((session_id.to_string(), queue_id.to_string()));
         Some(queue.remove(at))
+    }
+}
+
+/// How the fake start of a runner ends.
+#[derive(Default, Clone, Copy)]
+enum StartEnds {
+    #[default]
+    Started,
+    Fails,
+    Hangs,
+}
+
+/// Records each runner start a reset asks for.
+#[derive(Default)]
+struct Starter {
+    started: Mutex<Vec<String>>,
+    ends: StartEnds,
+}
+
+impl Starter {
+    fn ending(ends: StartEnds) -> Self {
+        Self {
+            ends,
+            ..Self::default()
+        }
+    }
+    fn started(&self) -> Vec<String> {
+        self.started.lock().unwrap().clone()
+    }
+}
+
+impl RunnerStarter for Starter {
+    fn start(&self, session_id: SessionId) -> StartRunner {
+        self.started.lock().unwrap().push(session_id.0);
+        match self.ends {
+            StartEnds::Started => Box::pin(async { Ok(()) }),
+            StartEnds::Fails => Box::pin(async { Err("python not found".to_string()) }),
+            StartEnds::Hangs => Box::pin(std::future::pending()),
+        }
     }
 }
 
@@ -525,7 +568,19 @@ async fn reset(
     disk: &Disk,
     language: Option<&str>,
 ) -> Result<galley_core_lib::api::SessionBrief, ResetMainChatError> {
-    reset_main_chat(galley, runner, rec, &disk.paths, language).await
+    reset_seen(galley, runner, &Starter::default(), rec, disk, language).await
+}
+
+/// [`reset`], with the runner starts it asks for recorded in `starter`.
+async fn reset_seen(
+    galley: &SqliteGalley,
+    runner: &Runner,
+    starter: &Starter,
+    rec: &Recorder,
+    disk: &Disk,
+    language: Option<&str>,
+) -> Result<galley_core_lib::api::SessionBrief, ResetMainChatError> {
+    reset_main_chat(galley, runner, starter, rec, &disk.paths, language).await
 }
 
 // ---------------- what goes, what stays ----------------
@@ -552,7 +607,8 @@ async fn a_reset_clears_the_main_chat_its_subtasks_its_memory_and_the_backups() 
     runner.queue(&main, "qm_main");
     runner.queue(OTHER, "qm_other");
     let rec = Recorder::default();
-    let created = reset(&galley, &runner, &rec, &disk, Some("zh-CN"))
+    let starter = Starter::default();
+    let created = reset_seen(&galley, &runner, &starter, &rec, &disk, Some("zh-CN"))
         .await
         .expect("reset");
 
@@ -672,6 +728,10 @@ async fn a_reset_clears_the_main_chat_its_subtasks_its_memory_and_the_backups() 
         .unwrap()
         .iter()
         .all(|(_, payload)| payload["via"] == VIA_GUI));
+
+    // The new main chat's runner, asked for once: GA writes its memory
+    // files from the templates when a runner starts.
+    assert_eq!(starter.started(), [created.id.0.clone()]);
 }
 
 #[tokio::test]
@@ -754,7 +814,8 @@ async fn a_reset_is_refused_while_any_conversation_runs() {
     ] {
         let runner = Runner::with_state(OTHER, state);
         let rec = Recorder::default();
-        let err = reset(&galley, &runner, &rec, &disk, None)
+        let starter = Starter::default();
+        let err = reset_seen(&galley, &runner, &starter, &rec, &disk, None)
             .await
             .expect_err("refused");
         assert!(
@@ -762,6 +823,7 @@ async fn a_reset_is_refused_while_any_conversation_runs() {
             "{err:?}"
         );
         assert!(runner.closed().is_empty());
+        assert!(starter.started().is_empty());
         assert!(rec.sessions().is_empty());
         assert_unchanged(&before, &snapshot(&pool, &galley, &disk).await);
     }
@@ -795,7 +857,8 @@ async fn a_reset_is_refused_on_the_external_runtime() {
 
     let runner = Runner::default();
     let rec = Recorder::default();
-    let err = reset(&galley, &runner, &rec, &disk, None)
+    let starter = Starter::default();
+    let err = reset_seen(&galley, &runner, &starter, &rec, &disk, None)
         .await
         .expect_err("refused");
 
@@ -804,6 +867,7 @@ async fn a_reset_is_refused_on_the_external_runtime() {
         "{err:?}"
     );
     assert!(runner.closed().is_empty());
+    assert!(starter.started().is_empty());
     assert!(rec.sessions().is_empty());
     assert_unchanged(&before, &snapshot(&pool, &galley, &disk).await);
 }
@@ -814,9 +878,11 @@ async fn a_reset_without_a_main_chat_is_refused() {
     let disk = Disk::new();
     let before = snapshot(&pool, &galley, &disk).await;
 
-    let err = reset(
+    let starter = Starter::default();
+    let err = reset_seen(
         &galley,
         &Runner::default(),
+        &starter,
         &Recorder::default(),
         &disk,
         None,
@@ -828,6 +894,7 @@ async fn a_reset_without_a_main_chat_is_refused() {
         matches!(err, ResetMainChatError::NoMainChat { .. }),
         "{err:?}"
     );
+    assert!(starter.started().is_empty());
     assert_unchanged(&before, &snapshot(&pool, &galley, &disk).await);
 }
 
@@ -840,7 +907,8 @@ async fn a_reset_with_a_broken_seed_changes_nothing() {
     let before = snapshot(&pool, &galley, &disk).await;
 
     let rec = Recorder::default();
-    let err = reset(&galley, &Runner::default(), &rec, &disk, None)
+    let starter = Starter::default();
+    let err = reset_seen(&galley, &Runner::default(), &starter, &rec, &disk, None)
         .await
         .expect_err("failed");
 
@@ -849,6 +917,7 @@ async fn a_reset_with_a_broken_seed_changes_nothing() {
         "{err:?}"
     );
     assert!(rec.sessions().is_empty());
+    assert!(starter.started().is_empty());
     assert_unchanged(&before, &snapshot(&pool, &galley, &disk).await);
 }
 
@@ -873,7 +942,8 @@ async fn a_failed_memory_copy_changes_nothing() {
     let before = snapshot(&pool, &galley, &disk).await;
 
     let rec = Recorder::default();
-    let err = reset(&galley, &Runner::default(), &rec, &disk, None)
+    let starter = Starter::default();
+    let err = reset_seen(&galley, &Runner::default(), &starter, &rec, &disk, None)
         .await
         .expect_err("failed");
     fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o644)).unwrap();
@@ -883,6 +953,7 @@ async fn a_failed_memory_copy_changes_nothing() {
         "{err:?}"
     );
     assert!(rec.sessions().is_empty());
+    assert!(starter.started().is_empty());
     assert_unchanged(&before, &snapshot(&pool, &galley, &disk).await);
     let mut state: Vec<String> = fs::read_dir(disk.paths.memory_dir.parent().unwrap())
         .unwrap()
@@ -890,6 +961,40 @@ async fn a_failed_memory_copy_changes_nothing() {
         .collect();
     state.sort();
     assert_eq!(state, ["memory", "temp"]);
+}
+
+/// The runner start is the reset's last ask, not part of its answer: one
+/// that fails or never ends neither fails nor holds up the reset.
+#[tokio::test]
+async fn a_runner_start_that_fails_or_hangs_holds_nothing_up() {
+    for ends in [StartEnds::Fails, StartEnds::Hangs] {
+        let (pool, galley) = fresh("managed").await;
+        let disk = Disk::new();
+        main_chat(&pool, &galley, &disk).await;
+        let starter = Starter::ending(ends);
+
+        let created = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            reset_seen(
+                &galley,
+                &Runner::default(),
+                &starter,
+                &Recorder::default(),
+                &disk,
+                None,
+            ),
+        )
+        .await
+        .expect("the reset answers without waiting for the runner")
+        .expect("reset");
+
+        assert_eq!(starter.started(), [created.id.0.clone()]);
+        assert_eq!(
+            galley.main_chat_id().await.unwrap(),
+            Some(created.id.clone())
+        );
+        assert!(disk.backups.iter().all(|b| !b.exists()));
+    }
 }
 
 #[tokio::test]
