@@ -740,10 +740,20 @@ main-chat planning docs, main has:
   [2026-10-12-main-chat-concept-review](./devlog/2026-10-12-main-chat-concept-review.md),
   [2026-10-12-main-chat-sidebar-trial](./devlog/2026-10-12-main-chat-sidebar-trial.md),
   [2026-10-12-affairs-ledger-and-memory-page](./devlog/2026-10-12-affairs-ledger-and-memory-page.md),
-  [2026-10-13-drop-affairs-ledger](./devlog/2026-10-13-drop-affairs-ledger.md)).
+  [2026-10-13-drop-affairs-ledger](./devlog/2026-10-13-drop-affairs-ledger.md),
+  [2026-10-14-main-chat-reset](./devlog/2026-10-14-main-chat-reset.md),
+  [2026-10-14-assistant-card-in-sidebar](./devlog/2026-10-14-assistant-card-in-sidebar.md)).
   Managed runtime only; the external runtime's sidebar is frozen. One
-  persistent main chat (migration **044**) opened at launch, the sidebar
-  regrouped under it (主对话 / 其他对话, collapsible with ⌘\). A new main
+  persistent main chat (migration **044**) opened at launch. Since
+  2026-10-14 (PRD rulings 60–65, tickets 16–18) the sidebar draws it as the
+  assistant, Galley: a card under a masthead that has lost its wordmark,
+  read as one row of an IM chat list (40px avatar, the time, the last
+  message or the state, an unsent draft), then the external runtime's own
+  new-chat row and list; the sidebar collapses with ⌘\, the open main chat's
+  header is an identity row over its title menu, and it has no question
+  rail. Settings can reset it with a five-second hold (ticket 15): its rows
+  go, long-term memory returns to factory, the migration backups are
+  deleted. A new main
   chat opens with a fixed one-paragraph greeting in the UI language (shown
   only: never replayed to the model, not a turn). The main chat cuts a new
   context segment after 4 idle hours (migration **046**); its state block
@@ -760,7 +770,7 @@ main-chat planning docs, main has:
   turns a page, a run never split (ticket 12, new Tauri command
   `session_message_turns_page`, `session_message_rows` dropped); and the
   main chat hands long work to subtasks through a `<subtask>` tag in its
-  reply (ticket 06a, migration **048**): a card under the reply, 「主对话 ›」
+  reply (ticket 06a, migration **048**): a card under the reply, 「Galley ›」
   breadcrumb, no sidebar row until the user writes in it, notifications for
   asking / failed / done after 2 minutes; the CLI session JSON gains
   `parentSessionId` and `promoted`, and `origin.via` can be `subtask`
