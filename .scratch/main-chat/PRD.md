@@ -178,6 +178,8 @@ README「dense context instead of long」（`README.md:54`）。
     这是数据出口，不翻裁决 14：日常仍然没有重开键。入口在设置 → 运行环境 → 更多，只在内置运行时出现，有对话在跑时不可用；
     弹窗写清删什么、留什么、收不回什么（已经发给模型服务商的）；迁移前的自动备份一起删。不做撤销，不进 CLI，模型触发不了。
     长按而不是打字：Galley 鼠标优先，打字要绕去键盘；误触不会超过一两秒，余下的时间是松手就能反悔的时间。
+    内核的运行日志（`temp/model_responses/`）不删：认不出哪份属于主对话，JC 同日裁定新主对话翻旧日志没问题（「翻旧对话的原始日志我觉得没有啥问题」）；
+    弹窗「会删除」写「聊天记录」而不是「全部记录」，「不会删除」写明日志留 30 天、这之前它翻历史仍可能读到（JC 选 A）。
     删单条消息不做：删掉记录，当前这一段的上下文、长期记忆、模型服务商那里都还在，等于许诺做不到的事；进 deferred。票 [15](./issues/15-reset-main-chat.md)。
 
 ## 事实依据（2026-10-12 核对）
@@ -241,7 +243,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [12](./issues/12-paged-conversation-history.md) | — | 对话历史按轮分页加载（所有对话） | — | done（裁决 51，`0d086e2a`–`acc3559a`） |
 | [13](./issues/13-new-chat-placeholder-trial.md) | — | 新对话占位试验：现状 / B 亮加号 / A 落点 | 08 | done（裁决 56：JC 定 B，试验 `27635f3a`） |
 | [14](./issues/14-main-chat-subline-trial.md) | — | 主对话行第二行试验：A 只写状态 / A′ 有事才写 / 现状 | 08 | done（裁决 58：JC 定 A，试验 `76820c32`） |
-| [15](./issues/15-reset-main-chat.md) | — | 重置主对话：设置深处、长按 5 秒 | 02、06a | ready-for-agent（裁决 59） |
+| [15](./issues/15-reset-main-chat.md) | — | 重置主对话：设置深处、长按 5 秒 | 02、06a | done（裁决 59，`71f2323e`–`8d7c655f`；真机验收待做） |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 
