@@ -103,6 +103,23 @@ describe("sessions store · activateSession atomic swap", () => {
     await done;
   });
 
+  it("reads a fresh main chat back: its greeting is no turn, but it is there", async () => {
+    const restored: string[] = [];
+    useSessionsStore.setState({
+      sessions: [makeSession({ id: "s-main", turnCount: 0, mainChat: true })],
+      activeSessionId: undefined,
+    });
+    useMessagesStore.setState({
+      restoreSessionTurns: async (sid: string) => {
+        restored.push(sid);
+      },
+    });
+
+    await useSessionsStore.getState().activateSession("s-main");
+    expect(restored).toEqual(["s-main"]);
+    expect(activeId()).toBe("s-main");
+  });
+
   it("a superseded activation never flips the pointer back", async () => {
     const restoreB = deferred();
     const restoreC = deferred();

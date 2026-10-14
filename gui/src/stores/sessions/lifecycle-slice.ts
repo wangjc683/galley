@@ -348,7 +348,12 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     // empty SQLite history won't keep turns at zero.
     const msgs = useMessagesStore.getState().byId[id];
     const looksFresh = !msgs || msgs.turns.length === 0;
-    const hasHistory = (session?.turnCount ?? 0) > 0;
+    // The main chat's greeting is shown but is no turn (Core keeps its
+    // turn_count at 0, ticket 04c): a fresh main chat has a transcript
+    // to read back all the same, or it opens blank — at first launch
+    // and after a reset — while the sidebar's card quotes the greeting.
+    const hasHistory =
+      (session?.turnCount ?? 0) > 0 || session?.mainChat === true;
     const needsRestore = looksFresh && hasHistory;
     // Atomic swap: when another conversation is on screen and this one
     // still needs its SQLite restore, keep the old transcript visible
