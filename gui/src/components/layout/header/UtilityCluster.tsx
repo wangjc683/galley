@@ -30,7 +30,6 @@ export function TopBarUtilityCluster({
   onChangeThemePreference,
   onOpenSupervisorSop,
   onOpenSettings,
-  showSettings = true,
 }: {
   changesOpen?: boolean;
   onToggleChanges?: (source: HTMLElement) => void;
@@ -44,9 +43,6 @@ export function TopBarUtilityCluster({
   /** Opens Settings → Agent, where the Supervisor SOP is copied. */
   onOpenSupervisorSop?: () => void;
   onOpenSettings?: () => void;
-  /** TEMPORARY (ticket 16): false while the 甲 trial's rail holds the
-   * gear. */
-  showSettings?: boolean;
 }) {
   const copy = useCopy().topbar;
 
@@ -80,18 +76,16 @@ export function TopBarUtilityCluster({
           <PlugsConnected size={16} weight="thin" />
         </TopBarIconButton>
       </TooltipLabel>
-      {showSettings && (
-        <TooltipLabel
-          text={copy.settingsShortcut(formatShortcutReadable("Mod+,"))}
+      <TooltipLabel
+        text={copy.settingsShortcut(formatShortcutReadable("Mod+,"))}
+      >
+        <TopBarIconButton
+          onClick={onOpenSettings}
+          aria-label={copy.openSettings}
         >
-          <TopBarIconButton
-            onClick={onOpenSettings}
-            aria-label={copy.openSettings}
-          >
-            <Gear size={16} weight="thin" />
-          </TopBarIconButton>
-        </TooltipLabel>
-      )}
+          <Gear size={16} weight="thin" />
+        </TopBarIconButton>
+      </TooltipLabel>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { useSessionsAttention } from "@/hooks/useSessionsAttention";
@@ -116,15 +116,6 @@ export interface SidebarProps {
    * row so users see "where the pet lives" at a glance — non-
    * interactive status, not a click target. */
   petAttachedSessionId?: string | null;
-  /** TEMPORARY (ticket 16, the spaces trial): the workbench's sidebar.
-   * With a main chat it still takes the unsectioned path — no main-chat
-   * row, no 「其他对话」 header or ground, no 「其他来源」 — while the
-   * main chat and the subtasks nobody wrote in stay out of the list:
-   * they belong to the assistant space. */
-  workbench?: boolean;
-  /** TEMPORARY (ticket 16): stands in the masthead wordmark's place —
-   * the 乙 trial's space switch. */
-  mastheadLead?: ReactNode;
 }
 
 /**
@@ -197,8 +188,6 @@ export function Sidebar({
   onOpenArchived,
   archivedCount = 0,
   petAttachedSessionId,
-  workbench = false,
-  mastheadLead,
 }: SidebarProps) {
   const copy = useCopy();
   const mainChat = useMemo(() => findMainChat(sessions), [sessions]);
@@ -230,9 +219,8 @@ export function Sidebar({
     (activeId === mainChat.id ||
       mainChatSubtasks.some((s) => s.id === activeId));
   // The sectioned sidebar is the main chat's (its collapse lives in
-  // AppShell); the external runtime keeps the 新对话 row, and so does
-  // the spaces trial's workbench (TEMPORARY, ticket 16).
-  const sectioned = mainChat !== undefined && !workbench;
+  // AppShell); the external runtime keeps the 新对话 row.
+  const sectioned = mainChat !== undefined;
   // With a main chat, the empty new-chat composer's "you are here" is
   // the + that opened it, pressed: the section header's, or its
   // project's group row's (main chat ticket 13, PRD ruling 56). The
@@ -481,7 +469,6 @@ export function Sidebar({
         onOpenScheduled={onOpenScheduled}
         scheduledActionCount={scheduledActionCount}
         onNewProject={onNewProject}
-        lead={mastheadLead}
       />
       {sectioned ? (
         <>

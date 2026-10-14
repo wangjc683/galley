@@ -8,7 +8,10 @@ import { type AppCopy, useCopy } from "@/lib/i18n";
 import { formatShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 
-import { useSidebarWidthClasses } from "./sidebar-width";
+import {
+  HEADER_NAV_ICONS_DISPLAY,
+  ROW_NAV_ICONS_DISPLAY,
+} from "./sidebar-width";
 
 /** Mono, muted shortcut text — the tooltip's "⌘K" and the new-chat
  * row's ⌘N hint. Render the text through `ShortcutGlyphs` so the
@@ -53,7 +56,6 @@ export function SidebarNavIcons({
   onNewProject?: () => void;
 }) {
   const copy = useCopy();
-  const widths = useSidebarWidthClasses();
   const inHeader = placement === "header";
   const NavButton = inHeader ? HeaderIconButton : QuickIconButton;
   const iconSize = inHeader ? 16 : 14;
@@ -63,11 +65,11 @@ export function SidebarNavIcons({
       className={cn(
         "items-center",
         inHeader
-          ? cn(widths.headerNavIcons, "shrink-0 gap-1")
+          ? cn(HEADER_NAV_ICONS_DISPLAY, "shrink-0 gap-1")
           : // min-w-0: lets the row squeeze the icons at the narrowest
             // widths (their own 32px widths would otherwise pin this
             // wrapper's minimum at 100px and overflow the row).
-            cn(widths.rowNavIcons, "min-w-0 gap-0.5"),
+            cn(ROW_NAV_ICONS_DISPLAY, "min-w-0 gap-0.5"),
       )}
     >
       <NavButton

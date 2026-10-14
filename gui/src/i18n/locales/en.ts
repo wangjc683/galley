@@ -265,15 +265,6 @@ export const enCopy: AppCopy = {
     notifyDone: "Subtask done",
     notifyFailed: "Subtask failed",
   },
-  spaces: {
-    assistant: "Assistant",
-    workbench: "Workbench",
-    switchLabel: "Switch space",
-    assistantName: "Galley",
-    waitingForYou: "Waiting for your reply",
-    backToAssistant: "Back to the assistant",
-    assistantUnread: "New reply",
-  },
   topbar: {
     newConversation: "New chat",
     statusGroupLabel: "Operational status",

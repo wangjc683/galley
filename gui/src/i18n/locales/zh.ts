@@ -270,23 +270,6 @@ export const zhCopy = {
     notifyDone: "子任务完成",
     notifyFailed: "子任务出错",
   },
-  /** TEMPORARY（票 16）：助手与工作台两个空间的壳试验（裁决 60、61）。
-   * 叫法暂定，定稿时赢家的文案并进正式的命名空间，其余删掉。 */
-  spaces: {
-    /** 两个空间的名字：乙的开关、甲的图标栏、面包屑共用。 */
-    assistant: "助手",
-    workbench: "工作台",
-    /** 乙的两段开关、甲的图标栏的无障碍名。 */
-    switchLabel: "切换空间",
-    /** 助手顶栏写的名字。 */
-    assistantName: "Galley",
-    /** 助手顶栏名字下一行：它在等你回复时。 */
-    waitingForYou: "在等你回复",
-    /** 子任务开在工作台时，标题前的面包屑「助手 ›」的无障碍名。 */
-    backToAssistant: "回到助手",
-    /** 助手的未读徽标读作的提示与无障碍名称。 */
-    assistantUnread: "有新回复",
-  },
   topbar: {
     newConversation: "新对话",
     statusGroupLabel: "运行状态",

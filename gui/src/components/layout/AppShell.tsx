@@ -13,13 +13,7 @@ import {
   resetWindowLayout,
 } from "@/lib/layout-reset";
 import { useCopy } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
 import { TooltipLabel } from "@/components/ui/tooltip";
-
-import {
-  SidebarWidthContext,
-  type SidebarWidthClasses,
-} from "./sidebar/sidebar-width";
 
 /**
  * Full app shell:
@@ -100,29 +94,15 @@ import {
  * changes, so the main panel — alone in the group — takes the whole
  * width, and expanding brings back the width it had. Nothing remounts
  * either way (the conversation keeps its scroll and draft).
- *
- * TEMPORARY (ticket 16, the spaces trial): `rail` is the 甲 trial's
- * icon rail, a fixed-width column left of the group (the traffic lights
- * sit on it); the assistant space hides the sidebar through
- * `sidebarCollapsed`; `sidebarMinSize` is the 乙 trial's floor, wide
- * enough for its masthead switch; `sidebarWidths` is the set the
- * sidebar's top rows lay out by (sidebar-width.ts) when the masthead's
- * contents move. Without them the shell is as above.
  */
 export function AppShell({
   sidebar,
   main,
   sidebarCollapsed = false,
-  rail,
-  sidebarMinSize = "14%",
-  sidebarWidths,
 }: {
   sidebar: ReactNode;
   main: ReactNode;
   sidebarCollapsed?: boolean;
-  rail?: ReactNode;
-  sidebarMinSize?: string;
-  sidebarWidths?: SidebarWidthClasses;
 }) {
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: "ga-workbench-layout-2col-v2",
@@ -141,13 +121,7 @@ export function AppShell({
     [groupRef],
   );
   return (
-    <div
-      className={cn(
-        "flex h-screen min-h-[600px] w-screen min-w-[960px] bg-app text-ink",
-        rail === undefined ? "flex-col" : "flex-row",
-      )}
-    >
-      {rail}
+    <div className="flex h-screen min-h-[600px] w-screen min-w-[960px] flex-col bg-app text-ink">
       <Group
         id="ga-workbench-layout-2col-v2"
         orientation="horizontal"
@@ -155,12 +129,12 @@ export function AppShell({
         disabled={sidebarCollapsed}
         defaultLayout={defaultLayout}
         onLayoutChanged={onLayoutChanged}
-        className={cn("flex min-h-0 flex-1", rail !== undefined && "min-w-0")}
+        className="flex min-h-0 flex-1"
       >
         <Panel
           id="sidebar"
           defaultSize="20%"
-          minSize={sidebarMinSize}
+          minSize="14%"
           maxSize="30%"
           hidden={sidebarCollapsed}
         >
@@ -170,13 +144,7 @@ export function AppShell({
               — interaction fills inherit the retune across the whole
               sidebar column. */}
           <aside className="chrome-hover-scope flex h-full flex-col overflow-hidden border-r border-line/70 bg-chrome">
-            {sidebarWidths ? (
-              <SidebarWidthContext.Provider value={sidebarWidths}>
-                {sidebar}
-              </SidebarWidthContext.Provider>
-            ) : (
-              sidebar
-            )}
+            {sidebar}
           </aside>
         </Panel>
         <ResizeSeparator hidden={sidebarCollapsed} />

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { ToastHost } from "@/components/error-card/ToastHost";
 import { AppShell } from "@/components/layout/AppShell";
@@ -6,11 +6,6 @@ import { MainHeaderHost } from "@/components/layout/MainHeaderHost";
 import { browserControlInviteVisible } from "@/components/layout/header/browser-control-indicator-status";
 import { SidebarCollapseToggle } from "@/components/layout/header/SidebarCollapseToggle";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { sidebarWidthClasses } from "@/components/layout/sidebar/sidebar-width";
-import { AssistantIdentity } from "@/components/layout/spaces/AssistantIdentity";
-import { SpaceSwitch } from "@/components/layout/spaces/SpaceSwitch";
-import { SpacesRail } from "@/components/layout/spaces/SpacesRail";
-import { SpacesTrialSwitcher } from "@/components/layout/spaces/SpacesTrialSwitcher";
 import { CommandPalette } from "@/components/overlay/CommandPalette";
 import { ThemeProvider } from "@/components/theme/ThemeContext";
 import { BrowserControlAttentionSurface } from "@/components/screens/BrowserControlAttentionBanner";
@@ -45,7 +40,6 @@ import { useMessageSend } from "@/hooks/useMessageSend";
 import { useOnboardingFlow } from "@/hooks/useOnboardingFlow";
 import { useProjectNavigation } from "@/hooks/useProjectNavigation";
 import { useSidebarCollapse } from "@/hooks/useSidebarCollapse";
-import { useSpacesTrial } from "@/hooks/useSpacesTrial";
 import {
   useSchedulerActionCount,
   useScheduledFireFailedNotification,
@@ -71,12 +65,6 @@ import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { useUiStore } from "@/stores/ui";
-
-// TEMPORARY (ticket 16): the sidebar's top rows in the spaces-trial
-// shells — the masthead icons kept in the new-chat row under 乙's switch,
-// no traffic lights to clear beside 甲's rail.
-const SWITCH_SIDEBAR_WIDTHS = sidebarWidthClasses({ navIconsInRow: true });
-const RAIL_SIDEBAR_WIDTHS = sidebarWidthClasses({ trafficLights: false });
 
 /**
  * V0.1 Stage 2 #8 — App entry.
@@ -433,44 +421,12 @@ function App() {
   );
   const { collapsed: sidebarCollapsed, toggle: toggleSidebar } =
     useSidebarCollapse(hasMainChat);
-  // TEMPORARY (ticket 16): the assistant / workbench shell trial
-  // (lib/spaces-trial.ts). `spacesLayout` is null for the control and
-  // wherever there are no spaces (the external runtime, no main chat).
-  const focusEmptyComposer = useCallback(
-    () => setEmptyComposerFocusTick((tick) => tick + 1),
-    [],
-  );
-  const spaces = useSpacesTrial({
-    sessions: visibleSessions,
-    shown: activeSession,
-    screen,
-    activeSessionId,
-    activeProjectFilter,
-    focusEmptyComposer,
-    copy,
-    language: resolvedLanguage,
-  });
-  const spacesLayout = spaces.layout;
-  const spaceSwitch = (placement: "masthead" | "header") => (
-    <SpaceSwitch
-      placement={placement}
-      space={spaces.space}
-      badges={spaces.badges}
-      assistantWords={spaces.assistantWords}
-      workbenchWords={spaces.workbenchWords}
-      onSwitch={spaces.switchTo}
-    />
-  );
-  // The spaces trial names the main chat 助手 (ticket 16).
-  const paletteMainChatLabel = spacesLayout
-    ? copy.spaces.assistant
-    : mainChatLabel;
   const paletteSessions = useMemo(
     () =>
       visibleSessions.map((s) =>
-        s.mainChat ? { ...s, title: paletteMainChatLabel } : s,
+        s.mainChat ? { ...s, title: mainChatLabel } : s,
       ),
-    [visibleSessions, paletteMainChatLabel],
+    [visibleSessions, mainChatLabel],
   );
   // What the delete-project dialog's 「同时归档」 would archive — the
   // same set as the project group's 归档全部对话.
@@ -546,32 +502,7 @@ function App() {
   return (
     <CopyProvider language={resolvedLanguage}>
       <AppShell
-        // TEMPORARY (ticket 16): in the spaces trial the assistant space
-        // hides the sidebar and the workbench never collapses it; 甲 adds
-        // its rail, 乙 its floor.
-        sidebarCollapsed={
-          spacesLayout ? spacesLayout.sidebarHidden : sidebarCollapsed
-        }
-        rail={
-          spacesLayout?.rail ? (
-            <SpacesRail
-              space={spaces.space}
-              badges={spaces.badges}
-              assistantWords={spaces.assistantWords}
-              workbenchWords={spaces.workbenchWords}
-              onSwitch={spaces.switchTo}
-              onOpenSettings={() => openSettings()}
-            />
-          ) : undefined
-        }
-        sidebarMinSize={spacesLayout?.sidebarMinSize}
-        sidebarWidths={
-          spacesLayout
-            ? spacesLayout.rail
-              ? RAIL_SIDEBAR_WIDTHS
-              : SWITCH_SIDEBAR_WIDTHS
-            : undefined
-        }
+        sidebarCollapsed={sidebarCollapsed}
         sidebar={
           <Sidebar
             sessions={visibleSessions}
@@ -629,14 +560,6 @@ function App() {
             onDeleteProject={(id) => setDeletingProjectId(id)}
             onArchiveSessions={(ids) => archiveSessionsBulk(ids)}
             petAttachedSessionId={petAttachedSessionId}
-            // TEMPORARY (ticket 16): the workbench's sidebar, and 乙's
-            // switch in its masthead.
-            workbench={spacesLayout !== null}
-            mastheadLead={
-              spacesLayout?.switchIn === "masthead"
-                ? spaceSwitch("masthead")
-                : undefined
-            }
           />
         }
         main={
@@ -662,25 +585,16 @@ function App() {
                   canRenameSession={!activeSession?.mainChat}
                   // A subtask the user has not written in has no sidebar
                   // row; 「主对话 ›」 before its title is the way back
-                  // (ticket 06a). Its parent is the main chat. The spaces
-                  // trial reads 「助手 ›」 (ticket 16).
+                  // (ticket 06a). Its parent is the main chat.
                   breadcrumb={subtaskBreadcrumb(activeSession, {
-                    label: spacesLayout ? copy.spaces.assistant : mainChatLabel,
-                    ariaLabel: spacesLayout
-                      ? copy.spaces.backToAssistant
-                      : copy.subtask.backToMainChat,
+                    label: mainChatLabel,
+                    ariaLabel: copy.subtask.backToMainChat,
                     openParent: () => {
                       void openMainChat();
                     },
                   })}
                   leading={
-                    // TEMPORARY (ticket 16): 乙's switch heads the
-                    // assistant's header; the trial has no sidebar toggle.
-                    spacesLayout ? (
-                      spacesLayout.switchIn === "header" ? (
-                        spaceSwitch("header")
-                      ) : undefined
-                    ) : hasMainChat ? (
+                    hasMainChat ? (
                       <SidebarCollapseToggle
                         collapsed={sidebarCollapsed}
                         onToggle={toggleSidebar}
@@ -689,15 +603,6 @@ function App() {
                       />
                     ) : undefined
                   }
-                  // TEMPORARY (ticket 16): the assistant's avatar, name and
-                  // what it is doing, in the title's place; 甲's gear is on
-                  // its rail.
-                  titleSlot={
-                    spacesLayout?.identity ? (
-                      <AssistantIdentity line={spaces.statusLine} />
-                    ) : undefined
-                  }
-                  hideSettings={spacesLayout?.rail}
                   channelStatuses={channelStatuses}
                   channelsLoadError={channelsLoadError}
                   onRestartChannels={() => {
@@ -968,8 +873,6 @@ function App() {
           void resolveFirstClose(keepInBackground);
         }}
       />
-      {/* TEMPORARY (ticket 16): the spaces trial's pill. */}
-      <SpacesTrialSwitcher />
     </CopyProvider>
   );
 }

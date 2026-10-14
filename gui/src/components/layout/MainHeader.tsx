@@ -116,14 +116,6 @@ export interface MainHeaderProps {
    * this is the way back. Clicking it opens `onClick`'s target.
    */
   breadcrumb?: { label: string; ariaLabel: string; onClick: () => void };
-  /**
-   * TEMPORARY (ticket 16, the spaces trial): stands in for the title —
-   * the assistant space's avatar, name and what it is doing now. No
-   * title menu then.
-   */
-  titleSlot?: ReactNode;
-  /** TEMPORARY (ticket 16): the 甲 trial moves the gear to its rail. */
-  hideSettings?: boolean;
 }
 
 /**
@@ -208,8 +200,6 @@ export function MainHeader({
   onRenameSession,
   leading,
   breadcrumb,
-  titleSlot,
-  hideSettings = false,
 }: MainHeaderProps) {
   const copy = useCopy();
   const hasTopBarStatusItems =
@@ -278,8 +268,7 @@ export function MainHeader({
         )}
       >
         {leading}
-        {titleSlot}
-        {!titleSlot && breadcrumb && sessionTitle && (
+        {breadcrumb && sessionTitle && (
           // The crumb wears the title button's hit area and hover, one
           // ink step down (the title is the page you are on), and the
           // chevron between them is chrome: the crumb gives up width
@@ -305,7 +294,7 @@ export function MainHeader({
             />
           </span>
         )}
-        {titleSlot ? null : sessionTitle ? (
+        {sessionTitle ? (
           <SessionTitleMenu
             title={sessionTitle}
             onReinjectTools={onReinjectTools}
@@ -359,7 +348,6 @@ export function MainHeader({
           onChangeThemePreference={onChangeThemePreference}
           onOpenSupervisorSop={onOpenSupervisorSop}
           onOpenSettings={onOpenSettings}
-          showSettings={!hideSettings}
         />
         {/* Windows-only custom chrome: min / max-restore / close. Hugs
             the window's right edge (TopBar drops pr-3 on Win for this).
