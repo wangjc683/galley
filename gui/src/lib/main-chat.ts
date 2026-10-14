@@ -64,9 +64,14 @@ export function openMainChat(): Promise<boolean> {
   return opening;
 }
 
-async function landOnMainChat(): Promise<boolean> {
+/**
+ * Ask Core for the main chat and put its row in the list, without
+ * opening it. Undefined when there is none to have (the external
+ * runtime is active, or Core failed — logged).
+ */
+async function listMainChat(): Promise<SessionBriefWire | undefined> {
   const prefs = usePrefsStore.getState();
-  if (prefs.activeRuntimeKind !== "managed") return false;
+  if (prefs.activeRuntimeKind !== "managed") return undefined;
   let brief: SessionBriefWire | undefined;
   try {
     // The UI language picks the greeting a new main chat opens with
@@ -76,14 +81,31 @@ async function landOnMainChat(): Promise<boolean> {
     });
   } catch (e) {
     console.warn("[main-chat] get_or_create_main_chat failed.", e);
-    return false;
+    return undefined;
   }
-  if (!brief?.id) return false;
+  if (!brief?.id) return undefined;
   const sessions = useSessionsStore.getState();
   // Core broadcasts a creation (and a restore from the archive); the
   // row may land here first. Both mirrors are idempotent.
   sessions.applyExternalSessionCreated(brief);
   sessions.applyExternalSessionUpdated(brief);
+  return brief;
+}
+
+/**
+ * TEMPORARY (ticket 16): the spaces trial's launch into the workbench —
+ * the main chat's row is listed (the assistant space and its badge need
+ * it) but the main area stays on the empty composer. Resolves whether
+ * there is a main chat.
+ */
+export async function ensureMainChatListed(): Promise<boolean> {
+  return (await listMainChat()) !== undefined;
+}
+
+async function landOnMainChat(): Promise<boolean> {
+  const brief = await listMainChat();
+  if (!brief) return false;
+  const sessions = useSessionsStore.getState();
   const ui = useUiStore.getState();
   if (
     ui.screen === "main" &&

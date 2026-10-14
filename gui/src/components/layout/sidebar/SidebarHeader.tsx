@@ -1,9 +1,10 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import type { ReactNode } from "react";
 
 import { isMac, isWindowActionTarget } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
-import { SIDEBAR_HEADER_PR } from "./sidebar-width";
+import { SIDEBAR_HEADER_PR, useSidebarWidthClasses } from "./sidebar-width";
 import { SidebarNavIcons } from "./SidebarNavIcons";
 
 export function SidebarHeader({
@@ -11,12 +12,17 @@ export function SidebarHeader({
   onOpenScheduled,
   scheduledActionCount,
   onNewProject,
+  lead,
 }: {
   onSearch?: () => void;
   onOpenScheduled?: () => void;
   scheduledActionCount?: number;
   onNewProject?: () => void;
+  /** TEMPORARY (ticket 16): what stands in the wordmark's place — the
+   * 乙 trial's space switch. Omitted, the wordmark. */
+  lead?: ReactNode;
 }) {
+  const widths = useSidebarWidthClasses();
   // Masthead row (2026-10-03): the "Galley" wordmark left, 搜索 / 定时 /
   // 新建项目 as 28px icons right — the same TopBarIconButton rhythm as
   // MainHeader's utility cluster, so the two column headers read as one
@@ -67,11 +73,12 @@ export function SidebarHeader({
       className={cn(
         "flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line/60",
         SIDEBAR_HEADER_PR,
-        // macOS: clear the traffic-light cluster (right edge ~68px) with
-        // ~20px of breathing room so the wordmark reads as a deliberate
-        // brand mark, not something crowding the OS lights. Non-mac has
-        // no native left chrome, so a normal 16px gutter.
-        isMac ? "pl-[88px]" : "pl-4",
+        // macOS: pl-[88px] clears the traffic-light cluster (right edge
+        // ~68px) with ~20px of breathing room so the wordmark reads as a
+        // deliberate brand mark, not something crowding the OS lights.
+        // Non-mac has no native left chrome, so a normal 16px gutter
+        // (sidebar-width.ts).
+        widths.headerPadding,
       )}
     >
       {/* Product mark: sentence-case Galley keeps the name legible as
@@ -80,12 +87,14 @@ export function SidebarHeader({
           mousedown target), so the wordmark carries it explicitly —
           grabbing "Galley" next to the traffic lights is the most
           natural window-drag spot in this column. */}
-      <div
-        data-tauri-drag-region
-        className="shrink-0 font-serif text-[17px] font-medium italic tracking-[0.005em] text-ink"
-      >
-        Galley
-      </div>
+      {lead ?? (
+        <div
+          data-tauri-drag-region
+          className="shrink-0 font-serif text-[17px] font-medium italic tracking-[0.005em] text-ink"
+        >
+          Galley
+        </div>
+      )}
       <SidebarNavIcons
         placement="header"
         onSearch={onSearch}

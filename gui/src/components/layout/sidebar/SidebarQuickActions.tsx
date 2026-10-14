@@ -6,11 +6,7 @@ import { useCopy, useLanguage } from "@/lib/i18n";
 import { formatShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 
-import {
-  NEW_CHAT_HINT_DISPLAY,
-  NEW_CHAT_LABEL_HIDDEN,
-  ROW_NAV_ICONS_DISPLAY,
-} from "./sidebar-width";
+import { useSidebarWidthClasses } from "./sidebar-width";
 import {
   SHORTCUT_TEXT_CLASS,
   ShortcutTooltipText,
@@ -96,8 +92,9 @@ export function SidebarNarrowNavRow({
   scheduledActionCount?: number;
   onNewProject?: () => void;
 }) {
+  const widths = useSidebarWidthClasses();
   return (
-    <div className={cn(ROW_NAV_ICONS_DISPLAY, "mx-1.5 justify-end py-1")}>
+    <div className={cn(widths.rowNavIcons, "mx-1.5 justify-end py-1")}>
       <SidebarNavIcons
         placement="row"
         onSearch={onSearch}
@@ -138,6 +135,7 @@ function NewChatButton({
 }) {
   const copy = useCopy();
   const language = useLanguage();
+  const widths = useSidebarWidthClasses();
   const label = copy.sidebar.newConversation;
   const shortcut = formatShortcut("Mod+N");
   return (
@@ -176,7 +174,7 @@ function NewChatButton({
         {/* The action text shows whole or not at all — never cut in
             half. It can only run out of room in the narrow state, with
             the icons beside it; the thresholds and their arithmetic
-            are in sidebar-width.ts (NEW_CHAT_LABEL_HIDDEN). Below them
+            are in sidebar-width.ts (newChatLabelHidden). Below them
             the whole label goes and only the plus stays, its tooltip
             carrying the full label. pr-2 sits on the label so it vanishes with it:
             at the 134px minimum the plus needs 28px and the icons
@@ -185,8 +183,8 @@ function NewChatButton({
           className={cn(
             "flex min-w-0 flex-1 pr-2 font-medium",
             language === "en-US"
-              ? NEW_CHAT_LABEL_HIDDEN.en
-              : NEW_CHAT_LABEL_HIDDEN.zh,
+              ? widths.newChatLabelHidden.en
+              : widths.newChatLabelHidden.zh,
           )}
         >
           <span className="shrink-0">{label}</span>
@@ -198,7 +196,7 @@ function NewChatButton({
         <span
           aria-hidden="true"
           className={cn(
-            NEW_CHAT_HINT_DISPLAY,
+            widths.newChatHint,
             "shrink-0 pr-3",
             SHORTCUT_TEXT_CLASS,
           )}

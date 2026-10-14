@@ -38,6 +38,8 @@ export function MainHeaderHost({
   canRenameSession = true,
   leading,
   breadcrumb,
+  titleSlot,
+  hideSettings,
 }: {
   channelStatuses: ReadonlyArray<ImSupervisorStatus | null>;
   channelsLoadError: string | null;
@@ -56,6 +58,10 @@ export function MainHeaderHost({
   leading?: ReactNode;
   /** 「主对话 ›」 before the title while a subtask is open (ticket 06a). */
   breadcrumb?: MainHeaderProps["breadcrumb"];
+  /** TEMPORARY (ticket 16): the assistant space's header identity. */
+  titleSlot?: MainHeaderProps["titleSlot"];
+  /** TEMPORARY (ticket 16): the 甲 trial's gear lives on its rail. */
+  hideSettings?: boolean;
 }) {
   const browserControlStatus = useBrowserControlStore((s) => s.status);
   const browserControlVerified = useBrowserControlStore((s) => s.verified);
@@ -204,6 +210,8 @@ export function MainHeaderHost({
       onOpenSettings={onOpenSettings}
       leading={leading}
       breadcrumb={breadcrumb}
+      titleSlot={titleSlot}
+      hideSettings={hideSettings}
     />
   );
 }

@@ -45,8 +45,8 @@ import {
 } from "@/lib/db";
 import { copyForLanguage } from "@/lib/i18n";
 import { resolveLanguagePreference } from "@/lib/language";
-import { openMainChat } from "@/lib/main-chat";
 import { applyManagedRuntimeDiagnostics } from "@/lib/managed-runtime-diagnostics";
+import { landAtLaunch } from "@/lib/spaces-trial";
 import { useAppUpdateStore } from "@/stores/app-update";
 import { useManagedModelsStore } from "@/stores/managed-models";
 import { usePrefsStore } from "@/stores/prefs";
@@ -109,7 +109,10 @@ export async function hydrateApp(): Promise<void> {
     activeRuntimeKind === "managed" &&
     (managedConfig.loadError || managedConfig.models.length > 0)
   ) {
-    await openMainChat();
+    // TEMPORARY (ticket 16): the spaces trial lands in the space last
+    // used (lib/spaces-trial.ts); the control (现状) and no record land
+    // on the main chat as before. Back to `openMainChat()` after it.
+    await landAtLaunch();
   }
 
   // 6. Startup-critical state: sessions/projects. Route through Rust
