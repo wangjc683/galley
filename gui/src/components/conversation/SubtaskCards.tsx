@@ -109,6 +109,27 @@ function SubtaskCard({ dispatch }: { dispatch: SubtaskDispatch }) {
   }, [needsRestore, sid]);
 
   const title = session?.title || dispatch.title || copy.subtask.label;
+  return <SubtaskCardView state={state} title={title} sessionId={sid} />;
+}
+
+/**
+ * One card as drawn from its state — the store-reading SubtaskCard above
+ * hands it the derived state. TEMPORARY export for the IM rendering
+ * trial's demo conversation (ticket 19), which draws cards from fixed
+ * states with `onOpen` doing nothing.
+ */
+export function SubtaskCardView({
+  state,
+  title,
+  sessionId: sid,
+  onOpen = openSubtask,
+}: {
+  state: SubtaskCardState;
+  title: string;
+  sessionId: string | null;
+  onOpen?: (sessionId: string) => void;
+}) {
+  const copy = useCopy();
   const line = subtaskCardLine(state, copy);
   const canOpen =
     sid !== null && state.kind !== "notStarted" && state.kind !== "gone";
@@ -159,7 +180,7 @@ function SubtaskCard({ dispatch }: { dispatch: SubtaskDispatch }) {
             variant="ghost"
             size="sm"
             className="shrink-0"
-            onClick={() => openSubtask(sid)}
+            onClick={() => onOpen(sid)}
           >
             {copy.subtask.open}
           </Button>

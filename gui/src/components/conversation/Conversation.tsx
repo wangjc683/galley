@@ -2,6 +2,18 @@ import { CaretDown } from "@phosphor-icons/react";
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { AnsweredAskUser } from "@/components/conversation/AskUserBubble";
+import {
+  IM_AGENT_MAX,
+  type ImConversationOptions,
+  type ImRowSide,
+  imLinePlan,
+  imRowGap,
+} from "@/components/conversation/im-trial/im-trial";
+import {
+  ImRunEntry,
+  ImRunSteps,
+  ImTimeDivider,
+} from "@/components/conversation/im-trial/ImTrialParts";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import {
   MessageAgent,
@@ -45,7 +57,12 @@ import {
   type RunGroup,
 } from "@/lib/run-groups";
 import { cn } from "@/lib/utils";
-import type { AgentTurn, MessageTelemetry, Turn } from "@/types/conversation";
+import type {
+  AgentTurn,
+  MessageTelemetry,
+  Turn,
+  UserTurn,
+} from "@/types/conversation";
 
 export interface ConversationProps {
   turns: Turn[];
@@ -84,6 +101,13 @@ export interface ConversationProps {
    * nothing here reaches the model.
    */
   renderAfterAnswer?: (messageId: string) => ReactNode;
+  /**
+   * TEMPORARY (ticket 19, IM rendering trial; see im-trial.ts): how the
+   * main chat is drawn — bubbles, the one-line process, the centred
+   * time. Absent everywhere else, and for the main chat while every
+   * piece is current: the render below is then today's, untouched.
+   */
+  im?: ImConversationOptions;
 }
 
 /**
@@ -111,6 +135,7 @@ export function Conversation({
   keyBase = 0,
   previousUserCreatedAt = null,
   renderAfterAnswer,
+  im,
 }: ConversationProps) {
   // A turn's place that survives a prepend (see `keyBase`): every key
   // and every piece of per-run state below is held in these, never in
@@ -198,6 +223,32 @@ export function Conversation({
     return labels;
   }, [timeMarks, turns, dayStamp, language, copy]);
 
+  // TEMPORARY (ticket 19, IM rendering trial): the pieces MainView chose
+  // for the main chat; all off without `im`.
+  const sideBubbles = im !== undefined && im.bubble !== "current";
+  const agentBubble = im?.bubble === "c";
+  const centeredTime = im?.time === "centered";
+  const imProcess = im?.process;
+  const greetingAt = im?.greetingAt ?? null;
+  // The centred time's line above the greeting, when its time is known
+  // (the demo's; the page carries none for the real greeting).
+  const greetingTime = useMemo(() => {
+    if (!centeredTime || !greetingAt) return null;
+    const label = formatMessageTime(greetingAt, dayStamp, language, {
+      withTodayWord: false,
+      words: {
+        today: copy.conversation.messageTimeToday,
+        yesterday: copy.conversation.messageTimeYesterday,
+      },
+    });
+    return label
+      ? {
+          label,
+          full: formatMessageTimeFull(greetingAt, language) ?? undefined,
+        }
+      : null;
+  }, [centeredTime, greetingAt, dayStamp, language, copy]);
+
   // Manual toggles, keyed by the opener's ordinal: true = user expanded,
   // false = user collapsed, absent = default. Ephemeral per mount —
   // a reopened session folds everything (Conversation is keyed per
@@ -221,6 +272,11 @@ export function Conversation({
   // for inspection, and the ask_user pause does not flicker the
   // window away and back.
   const liveGroup = liveRunGroup(groups, agentRunning, askUserPending);
+  // TEMPORARY (ticket 19): line mode's plan (im-trial.ts imLinePlan).
+  const linePlan = useMemo(
+    () => (imProcess === "line" ? imLinePlan(groups, turns, liveGroup) : null),
+    [imProcess, groups, turns, liveGroup],
+  );
 
   // Settling: the sweep between live and settled. The two structures
   // share no keys for the window, so switching in the render where
@@ -352,6 +408,8 @@ export function Conversation({
   const answerOnly = new Set<number>();
   for (const g of groups) {
     if (g.finalTurnIndex != null) answerOnly.add(g.finalTurnIndex);
+    // Line mode (ticket 19) draws its runs from linePlan below.
+    if (linePlan) continue;
     if (g === liveGroup || g === settlingGroup) {
       // While settling, the closing turn is not a window candidate:
       // its answer body renders flat below (answerOnly) and its
@@ -413,6 +471,11 @@ export function Conversation({
       sectionOwner.set(i, g.openerIndex);
     }
   }
+  // Line mode: runs drawn the current way gather into flat regions, as
+  // the non-foldable branch above does.
+  if (linePlan) {
+    for (const [i, opener] of linePlan.flat) regionOwner.set(i, opener);
+  }
 
   const toggleFold = (openerIndex: number, currentlyFolded: boolean) => {
     setFoldOverrides((prev) => ({
@@ -421,25 +484,84 @@ export function Conversation({
     }));
   };
 
-  const renderItem = (turn: Turn, turnIndex: number) => {
-    const header = headerFor.get(turnIndex);
+  // A user message. TEMPORARY (ticket 19): with the centred time on, its
+  // send time is a line of its own before it; in B / C the bubble sits
+  // on the right with the IM row gap (`previous`: the side of the
+  // message row right above).
+  const userRow = (
+    turn: UserTurn,
+    turnIndex: number,
+    previous: ImRowSide | null,
+  ) => {
     const pinned = pinnedTimes.get(turnIndex);
+    const divided = centeredTime && pinned !== undefined;
+    return (
+      <>
+        {divided && (
+          <ImTimeDivider
+            label={pinned.label}
+            full={pinned.full}
+            iso={turn.createdAt}
+            afterReply={sideBubbles && previous === "agent-bar"}
+          />
+        )}
+        <MessageUser
+          content={turn.content}
+          attachments={turn.attachments}
+          origin={turn.origin}
+          createdAt={turn.createdAt}
+          pinnedTime={divided ? undefined : pinned?.label}
+          pinnedTimeFull={divided ? undefined : pinned?.full}
+          askUserReply={replySet.has(turnIndex)}
+          messageId={turn.messageId}
+          align={sideBubbles ? "end" : undefined}
+          rowClassName={
+            sideBubbles
+              ? divided
+                ? "mt-5"
+                : imRowGap(previous, "user")
+              : undefined
+          }
+        />
+      </>
+    );
+  };
+
+  // What hangs under a reply (the subtask cards). TEMPORARY (ticket 19):
+  // in C they sit right under the reply bubble (before its action row),
+  // on the left, at most the bubble's width.
+  const afterAnswer = (messageId: string) => {
+    const node = renderAfterAnswer?.(messageId);
+    return agentBubble && node ? (
+      <div className={IM_AGENT_MAX}>{node}</div>
+    ) : (
+      node
+    );
+  };
+
+  // TEMPORARY (ticket 19): the centred time's line above the greeting.
+  const greetingDivider = (turn: AgentTurn) =>
+    turn.greeting && greetingTime ? (
+      <ImTimeDivider
+        label={greetingTime.label}
+        full={greetingTime.full}
+        iso={greetingAt ?? undefined}
+      />
+    ) : null;
+
+  const renderItem = (
+    turn: Turn,
+    turnIndex: number,
+    previous: ImRowSide | null = null,
+  ) => {
+    const header = headerFor.get(turnIndex);
     // Keyed by the turn's ordinal: an earlier page landing in front
     // moves no key.
     return (
       <Fragment key={`turn-${ordinal(turnIndex)}`}>
         {turn.role === "user" ? (
           <>
-            <MessageUser
-              content={turn.content}
-              attachments={turn.attachments}
-              origin={turn.origin}
-              createdAt={turn.createdAt}
-              pinnedTime={pinned?.label}
-              pinnedTimeFull={pinned?.full}
-              askUserReply={replySet.has(turnIndex)}
-              messageId={turn.messageId}
-            />
+            {userRow(turn, turnIndex, previous)}
             {/* The live header appears once a step has folded behind
                 it (the third step landing, for a two-row window);
                 before that the run is its own short list. */}
@@ -463,28 +585,122 @@ export function Conversation({
             showGlyph={!isNarrationTurn(turns[turnIndex - 1])}
           />
         ) : (
-          <AgentTurnView
-            turn={turn}
-            hideMarker={answerOnly.has(turnIndex)}
-            stepNumber={stepNumberOf.get(turnIndex)}
-            suppressAskUserEcho={turn === pendingAskUserTurn}
-            askUserAnswer={askUserReplyContent(turns, turnIndex, replySet)}
-            runTelemetry={runTelemetryOf.get(turnIndex)}
-          />
+          <>
+            {greetingDivider(turn)}
+            <AgentTurnView
+              turn={turn}
+              hideMarker={answerOnly.has(turnIndex)}
+              stepNumber={stepNumberOf.get(turnIndex)}
+              suppressAskUserEcho={turn === pendingAskUserTurn}
+              askUserAnswer={askUserReplyContent(turns, turnIndex, replySet)}
+              runTelemetry={runTelemetryOf.get(turnIndex)}
+              bubble={agentBubble}
+              attachment={
+                agentBubble && turn.messageId
+                  ? afterAnswer(turn.messageId)
+                  : undefined
+              }
+            />
+          </>
         )}
         {/* Under the reply that dispatched them: the main chat's
             subtask cards (ticket 06a), keyed on the reply's row id —
             only that reply's final turn matches one, even one whose
-            answer was nothing but tags. */}
+            answer was nothing but tags. (In C the reply holds them —
+            ticket 19.) */}
         {turn.role === "agent" &&
           turn.messageId &&
-          renderAfterAnswer?.(turn.messageId)}
+          !agentBubble &&
+          afterAnswer(turn.messageId)}
         {/* No divider between turns — the TurnMarker on each
             AgentTurn carries the chapter-break feel via its own
             top-margin and visual weight. Earlier iterations had
             a SoftHr here (my-9 → my-6 → my-5); even at 40px the
             hr-plus-marker stack felt like wasted vertical space.
             Removed in favour of marker-only separation. */}
+      </Fragment>
+    );
+  };
+
+  // TEMPORARY (ticket 19, line mode): a message row — a user message, a
+  // question it asked (answered: a pending one is the live bubble at the
+  // tail), the greeting, or a run's answer with its 「N 步 ›」 entry, the
+  // steps that entry opens, and the subtask cards. `previous` is the
+  // side of the message row right above, for the IM gap.
+  const renderLineRow = (
+    turn: Turn,
+    turnIndex: number,
+    previous: ImRowSide | null,
+  ): ReactNode => {
+    const key = `turn-${ordinal(turnIndex)}`;
+    if (turn.role === "user") {
+      return (
+        <Fragment key={key}>{userRow(turn, turnIndex, previous)}</Fragment>
+      );
+    }
+    if (turn.role !== "agent") return renderItem(turn, turnIndex);
+    const gap = sideBubbles ? imRowGap(previous, "agent") : undefined;
+    if (linePlan?.question.has(turnIndex)) {
+      const args = mergedAskUserArgs(turn.tools);
+      if (turn === pendingAskUserTurn || !args) return null;
+      return (
+        <Fragment key={key}>
+          <AnsweredAskUser
+            question={args.question}
+            candidates={args.candidates}
+            answer={askUserReplyContent(turns, turnIndex, replySet)}
+            bubble={agentBubble}
+            className={agentBubble ? gap : undefined}
+          />
+        </Fragment>
+      );
+    }
+    const steps = linePlan?.steps.get(turnIndex);
+    const open = steps
+      ? (foldOverrides[ordinal(steps.opener)] ?? im?.stepsOpen === true)
+      : false;
+    const divider = greetingDivider(turn);
+    return (
+      <Fragment key={key}>
+        {divider}
+        <AgentTurnView
+          turn={turn}
+          hideMarker
+          stepNumber={stepNumberOf.get(turnIndex)}
+          runTelemetry={runTelemetryOf.get(turnIndex)}
+          bubble={agentBubble}
+          answerClassName={divider && sideBubbles ? "mt-5" : gap}
+          attachment={
+            agentBubble && turn.messageId
+              ? afterAnswer(turn.messageId)
+              : undefined
+          }
+          entry={
+            steps ? (
+              <ImRunEntry
+                stats={steps.stats}
+                open={open}
+                onToggle={() => toggleFold(steps.opener, !open)}
+              />
+            ) : undefined
+          }
+        />
+        {steps && (
+          <ImRunSteps open={open}>
+            {steps.members.map((m) => (
+              <AgentTurnView
+                key={`step-${ordinal(m)}`}
+                turn={turns[m] as AgentTurn}
+                stepNumber={stepNumberOf.get(m)}
+                markerOnly={m === turnIndex}
+                noRule
+                suppressAskUserEcho
+                bubble={agentBubble}
+              />
+            ))}
+          </ImRunSteps>
+        )}
+        {turn.messageId && !agentBubble && afterAnswer(turn.messageId)}
       </Fragment>
     );
   };
@@ -573,16 +789,46 @@ export function Conversation({
     }
     section = null;
   };
+  // The side of the last flat message row, for the IM row gap (ticket
+  // 19; in the current process mode only a user row counts).
+  let prevSide: ImRowSide | null = null;
   turns.forEach((turn, turnIndex) => {
+    // Line mode: a run's steps show only under its entry, and not at all
+    // while it runs.
+    if (
+      linePlan &&
+      !linePlan.message.has(turnIndex) &&
+      !linePlan.flat.has(turnIndex)
+    ) {
+      return;
+    }
     const foldOwner = sectionOwner.get(turnIndex);
     const flatOwner = regionOwner.get(turnIndex);
     const windowOf = windowOwner.get(turnIndex);
     const owner = foldOwner ?? flatOwner ?? windowOf;
     if (owner === undefined) {
       flushSection();
-      rendered.push(renderItem(turn, turnIndex));
+      if (linePlan) {
+        const row = renderLineRow(turn, turnIndex, prevSide);
+        if (row) {
+          rendered.push(row);
+          prevSide =
+            turn.role === "user"
+              ? "user"
+              : turn.role !== "agent"
+                ? null
+                : linePlan.question.has(turnIndex)
+                  ? "agent"
+                  : "agent-bar";
+        }
+        return;
+      }
+      rendered.push(renderItem(turn, turnIndex, prevSide));
+      prevSide =
+        turn.role === "user" && !headerFor.has(turnIndex) ? "user" : null;
       return;
     }
+    prevSide = null;
     const kind: SectionKind =
       foldOwner !== undefined ? "fold" : flatOwner !== undefined ? "flat" : "window";
     if (section && (section.opener !== owner || section.kind !== kind)) {
@@ -614,6 +860,8 @@ export function Conversation({
       );
       flushSection();
       rendered.push(renderItem(turn, turnIndex));
+      // The answer ends with its action row (ticket 19's row gap).
+      prevSide = "agent-bar";
       return;
     }
     section.nodes.push(renderItem(turn, turnIndex));
@@ -650,6 +898,11 @@ function AgentTurnView({
   askUserAnswer,
   stepNumber: stepNumberProp,
   runTelemetry,
+  bubble = false,
+  answerClassName,
+  entry,
+  noRule = false,
+  attachment,
 }: {
   turn: AgentTurn;
   /** Fold mode for a foldable run's closing turn: its marker and
@@ -682,6 +935,20 @@ function AgentTurnView({
    * `RunStats.telemetry`). The turn's own telemetry only covers the
    * last GA loop; undefined for turns that close no run. */
   runTelemetry?: MessageTelemetry | null;
+  /** TEMPORARY (ticket 19, IM rendering trial C): the answer and the
+   * answered question are left bubbles. */
+  bubble?: boolean;
+  /** TEMPORARY (ticket 19): the answer's row margin (IM grouping). */
+  answerClassName?: string;
+  /** TEMPORARY (ticket 19, line mode): the 「N 步 ›」 entry, leading the
+   * answer's action row. */
+  entry?: ReactNode;
+  /** TEMPORARY (ticket 19, line mode): `markerOnly` without the
+   * StrongHr — the step region sits under the answer, not before it. */
+  noRule?: boolean;
+  /** TEMPORARY (ticket 19, C): the subtask cards, held right under the
+   * answer bubble (after the turn's content when it has no answer). */
+  attachment?: ReactNode;
 }) {
   const stepNumber = stepNumberProp ?? turn.turnIndex;
   // `finalAnswer` is what's left of GA's responseContent after the
@@ -790,7 +1057,7 @@ function AgentTurnView({
             preamble={detailPreamble}
           />
         )}
-        {answerText && <StrongHr />}
+        {answerText && !noRule && <StrongHr />}
       </div>
     );
   }
@@ -865,6 +1132,7 @@ function AgentTurnView({
             question={askUserQuestion}
             candidates={askUserCandidates}
             answer={askUserAnswer}
+            bubble={bubble}
           />
         )}
       </div>
@@ -885,11 +1153,16 @@ function AgentTurnView({
           <MessageAgent
             telemetry={runTelemetry ?? turn.telemetry}
             messageId={turn.messageId}
+            bubble={bubble}
+            className={answerClassName}
+            leading={entry}
+            attachment={attachment}
           >
             {answerText}
           </MessageAgent>
         </>
       )}
+      {!(answerText && isFinalTurn) && attachment}
     </div>
   );
 }

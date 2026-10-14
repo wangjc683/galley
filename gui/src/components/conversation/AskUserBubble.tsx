@@ -2,6 +2,7 @@ import * as ContextMenu from "@radix-ui/react-context-menu";
 import { ChatCircleDots, Check, PauseCircle } from "@phosphor-icons/react";
 import type { MouseEvent, ReactNode } from "react";
 
+import { IM_AGENT_BUBBLE } from "@/components/conversation/im-trial/im-trial";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
@@ -46,6 +47,10 @@ export interface AskUserBubbleProps {
   /** Rendered under the candidates: the subtask card's one-line reply
    * (its question is answered in the card, not the Composer). */
   children?: ReactNode;
+  /** TEMPORARY (ticket 19, IM rendering trial C): the question is a
+   * plain left bubble with the candidates under it — no warning bar, no
+   * 「等你回复」 (the sidebar card and the composer placeholder say it). */
+  bubble?: boolean;
 }
 
 /**
@@ -91,9 +96,41 @@ export function AskUserBubble({
   disabled = false,
   className,
   children,
+  bubble = false,
 }: AskUserBubbleProps) {
   const copy = useCopy();
   const layout = candidateLayout(pending.candidates);
+  if (bubble) {
+    return (
+      <div data-role="ask-user-bubble" className={cn("my-5", className)}>
+        <div className={IM_AGENT_BUBBLE}>
+          <MarkdownView source={pending.question} variant="agent" softBreaks />
+        </div>
+        {pending.candidates.length > 0 && (
+          <div
+            data-candidate-layout={layout}
+            className={
+              layout === "list"
+                ? "mt-2 inline-flex max-w-full flex-col items-stretch gap-1.5"
+                : "mt-2 flex flex-wrap gap-1.5"
+            }
+          >
+            {pending.candidates.map((c, i) => (
+              <CandidateChip
+                key={`${i}-${c}`}
+                text={c}
+                layout={layout}
+                onPick={() => onPickCandidate(c)}
+                onFill={onFillCandidate ? () => onFillCandidate(c) : undefined}
+                disabled={disabled}
+              />
+            ))}
+          </div>
+        )}
+        {children}
+      </div>
+    );
+  }
   return (
     <div
       data-role="ask-user-bubble"
@@ -276,18 +313,73 @@ export function AnsweredAskUser({
   question,
   candidates = [],
   answer,
+  bubble = false,
+  className,
 }: {
   question: string;
   /** The candidates as offered (persisted tool args). */
   candidates?: string[];
   /** The reply user turn's content, when the question was answered. */
   answer?: string;
+  /** TEMPORARY (ticket 19, IM rendering trial C): a plain left bubble at
+   * the answer register, the candidates listed under it as before. */
+  bubble?: boolean;
+  /** TEMPORARY (ticket 19): the bubble's row margin (IM grouping). */
+  className?: string;
 }) {
   const copy = useCopy();
   const cleaned = stripGATags(question);
   const options = candidates.map(stripGATags);
   const chosen = chosenCandidateIndex(options, answer);
   const layout = candidateLayout(options);
+  const optionList = options.length > 0 && (
+    <ul
+      data-candidate-layout={layout}
+      className={cn(
+        "m-0 mt-1.5 list-none p-0",
+        layout === "list"
+          ? "flex flex-col gap-0.5"
+          : "flex flex-wrap gap-x-3 gap-y-0.5",
+      )}
+    >
+      {options.map((o, i) => {
+        const picked = i === chosen;
+        return (
+          <li
+            key={`${i}-${o}`}
+            data-picked={picked || undefined}
+            className={cn(
+              "flex items-start gap-1 [font-size:var(--conversation-echo-size)] leading-[1.55]",
+              picked ? "text-ink-soft" : "text-ink-muted",
+            )}
+          >
+            {(picked || layout === "list") && (
+              <span className="mt-[0.35em] inline-flex size-3 shrink-0 items-center justify-center">
+                {picked && (
+                  <Check
+                    size={10}
+                    weight="bold"
+                    aria-label={copy.conversation.chosenOption}
+                  />
+                )}
+              </span>
+            )}
+            <span className="select-text">{o}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+  if (bubble) {
+    return (
+      <div data-role="answered-ask-user" className={className ?? "my-4"}>
+        <div className={IM_AGENT_BUBBLE}>
+          <MarkdownView source={cleaned} variant="agent" softBreaks />
+        </div>
+        {optionList}
+      </div>
+    );
+  }
   return (
     <div
       data-role="answered-ask-user"
@@ -310,44 +402,7 @@ export function AnsweredAskUser({
         softBreaks
         className="[&_li]:[font-size:var(--conversation-echo-size)] [&_li]:text-ink-soft [&_p]:[font-size:var(--conversation-echo-size)] [&_p]:leading-[1.55] [&_p]:text-ink-soft"
       />
-      {options.length > 0 && (
-        <ul
-          data-candidate-layout={layout}
-          className={cn(
-            "m-0 mt-1.5 list-none p-0",
-            layout === "list"
-              ? "flex flex-col gap-0.5"
-              : "flex flex-wrap gap-x-3 gap-y-0.5",
-          )}
-        >
-          {options.map((o, i) => {
-            const picked = i === chosen;
-            return (
-              <li
-                key={`${i}-${o}`}
-                data-picked={picked || undefined}
-                className={cn(
-                  "flex items-start gap-1 [font-size:var(--conversation-echo-size)] leading-[1.55]",
-                  picked ? "text-ink-soft" : "text-ink-muted",
-                )}
-              >
-                {(picked || layout === "list") && (
-                  <span className="mt-[0.35em] inline-flex size-3 shrink-0 items-center justify-center">
-                    {picked && (
-                      <Check
-                        size={10}
-                        weight="bold"
-                        aria-label={copy.conversation.chosenOption}
-                      />
-                    )}
-                  </span>
-                )}
-                <span className="select-text">{o}</span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {optionList}
     </div>
   );
 }

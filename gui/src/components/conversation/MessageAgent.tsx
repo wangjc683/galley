@@ -1,6 +1,7 @@
 import { CaretDown, XCircle } from "@phosphor-icons/react";
 import { isValidElement, memo, useState, type ReactNode } from "react";
 
+import { IM_AGENT_BUBBLE } from "@/components/conversation/im-trial/im-trial";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { MessageActions } from "@/components/conversation/MessageActions";
 import { useCopy } from "@/lib/i18n";
@@ -35,6 +36,10 @@ export const MessageAgent = memo(function MessageAgent({
   showActions = true,
   telemetry,
   messageId,
+  bubble = false,
+  className,
+  leading,
+  attachment,
 }: {
   children: ReactNode;
   showActions?: boolean;
@@ -42,6 +47,17 @@ export const MessageAgent = memo(function MessageAgent({
   /** Persisted `messages.id`; rendered as `data-message-id` so a
    * palette full-text hit on this answer can scroll to it. */
   messageId?: string;
+  /** TEMPORARY (ticket 19, IM rendering trial C): the answer sits in a
+   * left bubble on the neutral ground; the action bar stays under it. */
+  bubble?: boolean;
+  /** TEMPORARY (ticket 19): the answer's row margin (IM grouping). */
+  className?: string;
+  /** TEMPORARY (ticket 19, line mode): always shown at the start of the
+   * action row — the 「N 步 ›」 entry. */
+  leading?: ReactNode;
+  /** TEMPORARY (ticket 19, C): between the bubble and its action row —
+   * the reply's subtask cards. */
+  attachment?: ReactNode;
 }) {
   if (typeof children === "string") {
     // #22: a "final answer" that is really leaked tool-call markup
@@ -50,14 +66,43 @@ export const MessageAgent = memo(function MessageAgent({
     // and looks broken; there is also no deliverable to Copy/Save.
     // Render an explanatory notice with the raw markup one click away.
     if (isLeakedToolCallMarkup(children)) {
-      return <ProtocolFailureNotice markup={children} />;
+      return leading === undefined &&
+        attachment === undefined &&
+        className === undefined ? (
+        <ProtocolFailureNotice markup={children} />
+      ) : (
+        <div className={className}>
+          <ProtocolFailureNotice markup={children} />
+          {attachment}
+          {leading !== undefined && <div className="mt-1.5">{leading}</div>}
+        </div>
+      );
     }
+    const body = (
+      <MarkdownView source={children} variant="agent" selectionCopyScope />
+    );
     // `group/answer`: the hover region that reveals MessageActions —
     // the answer body plus its bar (2026-09-28).
     return (
-      <div data-message-id={messageId} className="group/answer">
-        <MarkdownView source={children} variant="agent" selectionCopyScope />
-        {showActions && <MessageActions source={children} telemetry={telemetry} />}
+      <div
+        data-message-id={messageId}
+        className={cn("group/answer", className)}
+      >
+        {bubble ? (
+          <div data-role="im-agent-bubble" className={IM_AGENT_BUBBLE}>
+            {body}
+          </div>
+        ) : (
+          body
+        )}
+        {attachment}
+        {showActions && (
+          <MessageActions
+            source={children}
+            telemetry={telemetry}
+            leading={leading}
+          />
+        )}
       </div>
     );
   }

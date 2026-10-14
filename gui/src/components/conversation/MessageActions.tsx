@@ -76,9 +76,17 @@ interface MessageActionsProps {
   /** Markdown source to operate on. */
   source: string;
   telemetry?: MessageTelemetry;
+  /** TEMPORARY (ticket 19, IM rendering trial line mode): shown at the
+   * row's start at all times — the reply's 「N 步 ›」 entry — with the
+   * hover-revealed chips after it. */
+  leading?: ReactNode;
 }
 
-export function MessageActions({ source, telemetry }: MessageActionsProps) {
+export function MessageActions({
+  source,
+  telemetry,
+  leading,
+}: MessageActionsProps) {
   const copy = useCopy();
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -135,15 +143,12 @@ export function MessageActions({ source, telemetry }: MessageActionsProps) {
     }
   };
 
-  return (
-    <div
-      className={cn(
-        "mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1",
-        !copied &&
-          !saved &&
-          "pointer-events-none opacity-0 group-hover/answer:pointer-events-auto group-hover/answer:opacity-100",
-      )}
-    >
+  const hidden =
+    !copied &&
+    !saved &&
+    "pointer-events-none opacity-0 group-hover/answer:pointer-events-auto group-hover/answer:opacity-100";
+  const chips = (
+    <>
       <div className="flex items-center gap-0.5">
         <ActionChip
           active={copied}
@@ -163,6 +168,32 @@ export function MessageActions({ source, telemetry }: MessageActionsProps) {
         />
       </div>
       <AnswerTelemetry telemetry={telemetry} />
+    </>
+  );
+
+  if (leading !== undefined) {
+    return (
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+        {leading}
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-x-1.5 gap-y-1",
+            hidden,
+          )}
+        >
+          {chips}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div
+      className={cn(
+        "mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1",
+        hidden,
+      )}
+    >
+      {chips}
     </div>
   );
 }

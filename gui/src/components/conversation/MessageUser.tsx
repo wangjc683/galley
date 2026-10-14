@@ -14,6 +14,7 @@ import {
   ImagePreviewDialog,
   type ImagePreviewItem,
 } from "@/components/conversation/ImagePreviewDialog";
+import { IM_USER_BUBBLE_MAX } from "@/components/conversation/im-trial/im-trial";
 import { IconTooltip, TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
 import { preventMouseFocus } from "@/lib/pointer-focus";
@@ -199,6 +200,13 @@ export interface MessageUserProps {
   /** Persisted `messages.id`; rendered as `data-message-id` on the
    * anchor block so a palette full-text hit can scroll to it. */
   messageId?: string;
+  /** TEMPORARY (ticket 19, IM rendering trial B / C): the bubble sits on
+   * the right, width by content up to IM_USER_BUBBLE_MAX; the meta row
+   * and the expand toggle follow it, the hover copy moves to its left. */
+  align?: "end";
+  /** TEMPORARY (ticket 19): the row's vertical margin in place of
+   * `my-5` (the bubble modes' IM grouping). */
+  rowClassName?: string;
 }
 
 export const MessageUser = memo(function MessageUser({
@@ -210,6 +218,8 @@ export const MessageUser = memo(function MessageUser({
   pinnedTimeFull,
   askUserReply = false,
   messageId,
+  align,
+  rowClassName,
 }: MessageUserProps) {
   const copy = useCopy();
   const lineCount = useMemo(() => content.split("\n").length, [content]);
@@ -271,6 +281,7 @@ export const MessageUser = memo(function MessageUser({
   };
 
   const copyVisible = actionsVisible || copied;
+  const end = align === "end";
 
   const copyChip = (
     <ActionChip
@@ -287,7 +298,7 @@ export const MessageUser = memo(function MessageUser({
 
   return (
     <div
-      className="group relative my-5"
+      className={cn("group relative", rowClassName ?? "my-5")}
       onMouseEnter={showActions}
       onMouseLeave={scheduleHideActions}
     >
@@ -295,7 +306,9 @@ export const MessageUser = memo(function MessageUser({
           pinned send time, whichever applies. In flow — it takes its
           real height, like the icon-only row it grew out of. */}
       {(isSupervisor || fromMainChat || pinnedTime) && (
-        <div className="mb-1 flex items-center gap-1.5">
+        <div
+          className={cn("mb-1 flex items-center gap-1.5", end && "justify-end")}
+        >
           {fromMainChat && (
             <IconTooltip text={copy.subtask.fromMainChat} side="top">
               <span
@@ -341,6 +354,7 @@ export const MessageUser = memo(function MessageUser({
         className={cn(
           "relative w-fit max-w-full rounded-md bg-brand-tint px-3.5 py-2.5 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink",
           "select-text",
+          end && cn("ml-auto", IM_USER_BUBBLE_MAX),
         )}
       >
         <span
@@ -380,12 +394,17 @@ export const MessageUser = memo(function MessageUser({
             centre at every font tier. The old `top-1.5` (6px) left
             the chip ~5px above the first line's centre, riding high
             (2026-09-18). */}
-        <div className="absolute left-full bottom-[calc(10px+(var(--conversation-body-size)*var(--conversation-body-leading)-24px)/2)] z-10 ml-1.5">
+        <div
+          className={cn(
+            "absolute left-full bottom-[calc(10px+(var(--conversation-body-size)*var(--conversation-body-leading)-24px)/2)] z-10 ml-1.5",
+            end && "left-auto right-full ml-0 mr-1.5",
+          )}
+        >
           {copyChip}
         </div>
       </div>
       {isLong && (
-        <div className="mt-1">
+        <div className={cn("mt-1", end && "flex justify-end")}>
           <button
             type="button"
             tabIndex={-1}
