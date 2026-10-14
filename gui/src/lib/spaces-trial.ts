@@ -41,8 +41,8 @@ import type { Session } from "@/types/session";
  *   - The space is the open session's: the main chat is the assistant;
  *     anything else — another session, a subtask opened from its card,
  *     the empty new-chat composer — is the workbench (`spaceOf`). Every
- *     way in (⌘K, a subtask card, 开旁聊, ⌘N, a notification) lands in
- *     the right space without knowing that spaces exist.
+ *     way in (⌘K, a subtask card, 开旁聊, ⌘N, the reset in Settings)
+ *     lands in the right space without knowing that spaces exist.
  *   - Assistant: no sidebar; the header is the avatar, 「Galley」 and
  *     what it is doing now (AssistantIdentity), with no title menu.
  *   - Workbench: the unsectioned sidebar (Sidebar `workbench`), never
