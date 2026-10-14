@@ -84,14 +84,24 @@ Application Support/app.galley/
 > (`managed_runtime::stage_memory_reset`): the old directory is renamed aside,
 > the seed is copied into a fresh one, and the old one is deleted only after the
 > reset's database transaction commits; a failed copy or a failed transaction
-> puts it back. GA writes `global_mem.txt` and `global_mem_insight.txt` anew from
-> its templates the next time a runner starts, as on a fresh install. The same
-> reset deletes every pre-migration backup (`app.galley.backup.*`), since each
-> is a whole copy of the database and of `memory/`. It leaves `temp/` alone (the
-> files the engine made, `model_responses/`): the logs cannot be told apart by
-> session (a random id per engine process, nothing in Galley maps a session to
-> its file), and IM channels resume their context from theirs. Upgrades still
-> never overwrite `memory/`; they only copy missing seed files.
+> puts it back. GA writes `global_mem.txt` and `global_mem_insight.txt` from its
+> templates only when a runner starts (`agentmain.py`), while every live runner
+> and IM process reads them on each turn: until one starts, their turns carry no
+> memory section, and a model that wrote its own `global_mem_insight.txt`
+> meanwhile would keep GA from ever writing the template one. So Core starts the
+> new main chat's runner right after the reset, in the background, and the two
+> files are back within seconds (Core never writes them itself). The same reset
+> deletes every pre-migration backup (`app.galley.backup.*`), since each is a
+> whole copy of the database and of `memory/`. It leaves `temp/` alone (the files
+> the engine made, `model_responses/`): the logs cannot be told apart by session
+> (a random id per engine process, nothing in Galley maps a session to its file),
+> and IM channels resume their context from theirs. The reset dialog tells the
+> user the engine's logs stay up to 30 days and the new main chat may still read
+> them; JC ruled on 2026-10-14 that it reading old logs is fine, so they are not
+> deleted. Known limitation: IM turns are invisible to Core, so if an IM channel
+> happens to be consolidating memory while the reset runs, it can write part of
+> the old memory back into the new directory; the UI does not mention this.
+> Upgrades still never overwrite `memory/`; they only copy missing seed files.
 
 Initial setup may seed default state only when the target file or directory is
 missing. Existing state must not be overwritten:

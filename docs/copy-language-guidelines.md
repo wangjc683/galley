@@ -313,8 +313,9 @@ Section 标签（2026-10-07 JC 裁）：
 
 #### 重置主对话（2026-10-14，主聊天票 15、裁决 59）
 
-运行环境「更多」的最后一行与它的长按确认弹窗。中文是票里定稿的原文；英文按英文语气重写。说「它」、
-「长期记忆」，不说内核或 GA（内置运行时语境，见「内核 / Engine」）；列表项不带句末标点。
+运行环境「更多」的最后一行与它的长按确认弹窗。中文是票里的原文，加上 JC 10-14 定的 A 版修改（「会删除」
+第一条改说「聊天记录」，「不会删除」加内核运行日志一条）；英文按英文语气重写。说「它」「长期记忆」；指引擎本身
+时用「内核」（见「内核 / Engine」），不说 GA；列表项不带句末标点。
 
 | 位置 | 中文 | English |
 |---|---|---|
@@ -324,8 +325,8 @@ Section 标签（2026-10-07 JC 裁）：
 | 弹窗标题 | 重置主对话？ | Reset the main chat? |
 | 正文 | 主对话会清空，从问候重新开始；它记住的关于你的事、学会的做事方法也会清掉，回到刚装好时。 | The main chat is emptied and starts over from its greeting. What it remembers about you and the ways of working it has learned are cleared too, back to a fresh install. |
 | 分组 | 会删除 / 不会删除 | Deleted / Kept |
-| 会删除 | 主对话的全部记录，包括它派出去、还没变成普通对话的子任务和附件 · 它的长期记忆（所有对话和 IM 共用，其他对话里的它也会一起忘） · 迁移前的自动备份 | Everything in the main chat, including its attachments and the subtasks it sent out that haven't become ordinary conversations · Its long-term memory (shared by every conversation and IM chat, so it forgets in those too) · The automatic backups made before data migrations |
-| 不会删除 | 其他对话和 IM 里接回的对话（还在侧栏里，它以后翻历史仍可能读到） · 它替你做出来的文件 · 模型、渠道和其他设置 | Other conversations and the IM chats it picked back up (they stay in the sidebar, and it may still read them when it looks back through history) · Files it made for you · Models, channels and other settings |
+| 会删除 | 主对话的聊天记录，包括它派出去、还没变成普通对话的子任务和附件 · 它的长期记忆（所有对话和 IM 共用，其他对话里的它也会一起忘） · 迁移前的自动备份 | The main chat's messages, including its attachments and the subtasks it sent out that haven't become ordinary conversations · Its long-term memory (shared by every conversation and IM chat, so it forgets in those too) · The automatic backups made before data migrations |
+| 不会删除 | 其他对话和 IM 里接回的对话（还在侧栏里，它以后翻历史仍可能读到） · 它替你做出来的文件 · 内核的运行日志（30 天后自动清掉，这之前它翻历史仍可能读到） · 模型、渠道和其他设置 | Other conversations and the IM chats it picked back up (they stay in the sidebar, and it may still read them when it looks back through history) · Files it made for you · The engine's logs (deleted automatically after 30 days; until then it may still read them when it looks back through history) · Models, channels and other settings |
 | 末行 | 已经发给模型服务商的内容收不回来。 | What was already sent to model providers can't be taken back. |
 | 确认键 / 执行中 | 按住 5 秒重置 / 正在重置… | Hold 5 s to reset / Resetting… |
 | 不到 5 秒松手 | 要按住不放 | Keep holding |
