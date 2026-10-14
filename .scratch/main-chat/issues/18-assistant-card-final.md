@@ -113,3 +113,60 @@ o o o                Q  T  +       书眉：红绿灯；搜索、定时、新建
   7. 把侧栏拖到最窄，再收起侧栏。
 
 ## Comments
+
+2026-10-14 实现（子代理，分支 `assistant-card-18`，基于 `1e1d0cd5`，未合入、未推送）：
+
+提交：`21a0487a` 代码与测试（撤试验、书眉、新对话行、助手卡片、顶栏身份行）；`932340c5` 新主对话打开时把问候读回主区（票外的一处修复，单独一个提交，见「与票的出入」1）；`4c3a4ac9` 设计文档；本条报告另一个提交。
+
+撤掉了什么、留下了什么：
+- 撤掉：`sidebar-top-trial.ts`、`SidebarTopTrialSwitcher.tsx`、`Sidebar.top-trial.test.tsx`（赢家的用例并进 `Sidebar.main-chat.test.tsx`、新的 `Sidebar.mac.test.tsx`、`MainHeader.identity.test.tsx`、`palette-search.test.ts`、`lib/assistant.test.ts`）；`galley.tmp.sidebarTopTrial.*`、「演示」与它的参数（`statusOverride`、hooks 的 `demo`）、App 的 `topVariant` / `topDemo` 与按档位换名字；方案 2、3′ 的部件（书眉里的入口按钮、大头像、`ASSISTANT_TOP_WIDTHS`），头像只留 28 与 40 两种尺寸。内置运行时的侧栏撤掉主对话行与 `SidebarSessionRow` 里只为它写的分支（房子图标、`mainChatLabel`、固定 50px、`subtaskState`）、`SidebarNarrowNavRow`、「其他对话」分区头与它的提示、按下的加号（分区头的、项目组行的，连同把被按下的组从「更多项目」后面借出来的逻辑），以及只为分区头写的首行收紧（`data-sidebar-section-body` 与它的 first-child 规则）。`SidebarSessionRow` 回到加主对话行之前的样子（Goal 已删的部分除外）。不再有人用的 `SidebarNavIcons` 的 `items` 参数也删了；文案删掉 `sidebar.mainChat`、`sidebar.otherChats`、`sidebar.otherChatsHint`、`subtask.backToMainChat`。
+- 保留：票 08 的侧栏收起（⌘\、顶栏开关、收起时的徽标）；票 09 下面那块铺 `bg-app`、吸顶后的渐隐、卡片下的 `line-strong`；主对话不显示问题轨；子任务面包屑「Galley ›」（无障碍名「回到 Galley」）；⌘K 里叫「Galley」，「主对话」「助手」「main chat」「assistant」也能找到（`ASSISTANT_SEARCH_KEYWORDS` 挪到 `lib/assistant.ts`）；列表里还没有人开的对话时那句「你的对话会出现在这里。」。代码里不再有「ticket 17」「TEMPORARY」与试验的标识，`Sidebar.main-chat.test.tsx` 里有一条扫源码的测试守着（票 16、17 的试验标识与主对话行、分区头、按下加号的标识）。
+
+票里交给我定的地方：
+- 时间：11px、`ink-muted`、等宽数字，右缘落在 18px 文字边、与时间桶计数同列。它是元数据，跟侧栏里的计数（项目组总数、时间桶计数都是 11px `ink-muted`）同一档安静；IM 列表的时间也比名字小一号、偏灰。未读时不变色（只有头像角标和名字字重说未读）。
+- 第二行：12px、行高 1.4、`ink-muted`。11px 和 12px 浅深各截了一组对照（总览 `10-line-size.png`）：40px 头像、14px 名字旁边 11px 像注脚，文字块 36.4px 比头像矮一截；12px 文字块 38.8px 与圆盘齐，12 / 14 也守住会话行副行与标题 11 / 13 的比例。代价是每行少显示约两个字。
+- 卡片高度：58px，没有用到 ±2px。卡片块 71px（上下 6px 加 1px 线），与票 17 方案 3 相同，列表起点不变。
+- 取数：先用界面的消息缓存（`useMessagesStore` 的 `byId`），找到的现成读取路径是激活时用的 `session_message_turns_page`（`loadMessageTurnsPage` + `rowsToTurns`）。缓存里还没有主对话的消息时，卡片自己读最新一页，读到的结果只留在卡片里：不写缓存（不用 `restoreSessionTurns`，它会写缓存、改 `restoring`、推导 `pendingAskUser`，还可能和实时事件抢着覆盖 turns）、不激活、不标已读、不动滚动；缓存一有消息就以缓存为准；会话的 `lastActivityAt` 变了而缓存仍空时重读。浏览器里把缓存清掉验证过这条路（总览 `11-read-paths.png`）。
+- 草稿订阅：`composer-draft.ts` 加了 `subscribeComposerDrafts`，保存、删除时通知（只在真有变化时）；卡片用 `useSyncExternalStore` 读主对话那个键。助手开着时卡片传空键，在助手输入框里打字不会让卡片重画；别的键写入不改这个键的对象，也不会重画。输入框本身的保存时机与行为没动。
+- 身份行菜单：`SessionTitleMenu` 加了可选的 `label`（触发器里显示它，不显示标题字），小箭头抽成 `SessionTitleCaret`，身份行把它放在「Galley」后面而不是整块后面（有状态行时，放在整块后面会离名字很远）。菜单就是原来那个，主对话不传 `onRename`，所以只有重新注入工具、桌面宠物。触发器内边距收成 `py-0.5 pl-1.5 pr-2`（标题按钮是 `px-2 py-1`）：身份行有两行，照标题按钮的内边距，填色会贴到 44px 顶栏的上下边。身份行里的元素不再带拖窗属性：它们在按钮里，带着的话按下就成了拖窗。
+
+与票的出入：
+1. 多修了一处：新主对话（第一次启动、重置之后）打开时主区是空的。问候不算一轮，Core 让新主对话的 `turn_count` 是 0（票 04c），而 `activateSession` 只在 `turn_count > 0` 时读回 transcript，所以问候从没进过主区；卡片自己读页，会显示问候，两边对不上。改为主对话缓存为空时一律读回（`lifecycle-slice.ts`，其他会话不变），单独提交 `932340c5`，不要可以直接去掉（`conversation.md` 与 `layout-and-chrome.md` 里提到这处修复的两句也要跟着改）。票 15 的验收「新主对话从问候开始」是查库确认的，主区当时多半是空的。
+2. 回复里的 `[FILE:路径]`：桌面这条路上三处都会把标记清掉（runner `_clean_response_for_display`、Core `clean_final_answer`、界面 `cleanFinalAnswer`），卡片拿到的正文里已经没有了。为了照票写「[文件] 文件名」，给 `AgentTurn` 加了可选的 `files`（只在界面里：实时从 `responseContent`、读回从行的 `content` 取，跳过 IM 提示里的占位写法），实时与读回的结果有往返测试守着。名字接在这句话末尾，不在原位置。桌面主对话的提示词不要求写这个标记，实际很少见。
+3. 名字那一行放不下名字和时间时，时间整个让位（换到被裁掉的第二排），「Galley」不截断，时间也不会只剩半截：中文「11:50」在侧栏 167px 以上显示，英文「11:50 AM」188px 以上。票里没写，第一版在英文 185px 上把名字截成「Gall…」。
+4. 「项目的空白新对话不亮」的反向检查：侧栏不再区分空白新对话属于哪个项目（`newChatProjectId` 随按下的加号一起删了），侧栏这一层写不出这个 bug；能把它改坏的只有 App 的接线。我在 App 里改成「有项目时不亮」，单元测试渲染不了 App，是浏览器 harness 抓到的（项目新对话的 `aria-current` 从「新对话」变成空），恢复后逐字节一致。
+5. 开着助手的子任务也算「开着」：卡片选中、不写草稿、不挂未读，三件事同一个条件（未读与选中本来就是这样，草稿照「和未读同理」）。
+6. 回复的时间用会话的 `lastActivityAt`：`AgentTurn` 没有时间字段，回复最后一步写下的就是这个值；你说的话用消息自己的 `createdAt`。没有为了时间再给 `AgentTurn` 加字段。
+7. Windows / Linux 书眉左边用 16px 常规边距（`pl-4`，与外置书眉相同）。票里的算式写 8（票 17 试验的 `pl-2`）；两种都放得下最窄的 133.4px（130 / 120px）。
+8. 「你：」也加在 CLI、Supervisor 发进主对话的消息前（都是用户那一侧）；它用 ask_user 问过的问题算它说的话；判断不了而跳过的：只调了工具的步骤、`/btw` 旁问与回答（不入库）、旁白行、只剩派活标签没有正文的回复（写它前一句）。
+
+实测（Chrome harness：真 App 加模拟 Core，1480×920 窗口，侧栏 20% 为 294.8px；单位 CSS px，`measure.json` 在 scratchpad 的 `s18/shots/`）：
+- 书眉 y0–44；搜索、定时、新建项目 28×28，x189.8 / 221.8 / 253.8，y7.5（新建项目右缘离侧栏边 12px，落在会话行 `⋯` 那一列）。
+- 卡片 x6 y50，281.8×58；卡片块 y44–115（含 1px `line-strong`）；头像 x18 y59，40×40；名字 x68 y59.6，14px；时间右缘 275.8（离边 18px），11px；第二行 x68 y81.6，12px，高 16.8；角标 16×16，x44 y57。
+- 新对话行 y121–153（按钮 32 高），字从 x42 起，⌘N 右缘连 pr-3 到 287.8；第一个标题（这组数据里是「项目」分区头）的按钮盒子从 y165 起，字在 y171，离新对话按钮下缘 18px，同外置。卡片、新对话行、第一个标题的位置与票 17 方案 3 一致。
+- Windows：书眉图标整体左移 10px（新建项目 x243.8）；新对话行与列表宽 271.8（让出 10px 滚动条通道），卡片仍通栏。
+- 顶栏身份行：静止时触发器 105.5×32（y5.5），有状态行时 182.1×35.4（y3.8）。
+- 门槛逐个在两侧验证（容器宽 = 门槛 −0.6 / +0.2）：mac 183.4px 时三个图标在新对话行、184.2px 回书眉；Windows Ctrl+N 157.5 / 158.2、177.4 / 178.2；Linux 147.4 / 148.2、167.4 / 168.3；都不溢出（Chrome 实测 ⌘N 16.6px、Ctrl+N 39.4px）。134px 时 mac 是加号加三个挤窄的图标，Windows / Linux 是「新对话」不带 Ctrl+N。
+
+外置运行时不变：在 `1e1d0cd5` 的 gui 上起同一个 harness（`git archive` 出的副本，各自装依赖，两个 Vite 端口），只关动画，比了 54 个画面：mac / Windows × 浅色 / 深色 × 中 / 英 × 开着会话 / 空白新对话 / 项目新对话 / 1480 最窄 / 960 最窄，加 960 滚动、长列表滚动（浅、深）、空列表、悬停会话行、悬停标题、标题菜单展开，全部逐像素一致。
+
+验证：`pnpm --dir gui typecheck`、`pnpm --dir gui lint`、`TZ=UTC` 与 `TZ=America/Los_Angeles` 各跑一遍全量测试（121 个文件、1179 条，全过）、`git diff --check` 通过；时间测试另在上海、Lord Howe、伦敦跑过。全角标点扫描只剩英文注释与英文测试标题里夹的中文词。反向检查 21 处，每处都有测试挂掉，恢复后 sha256 一致：静止时第二行不写、开着时也写草稿、昨天写成日期、一周前写成星期、mac 窄态时图标不挪、mac 书眉不让出图标、空白新对话不亮、发出第一句后仍亮、有主对话时字标回来、开着时也显示未读、在问你不接原文、草稿压过在跑、最后一句不加「你：」、问候不算消息、不去 markdown 强调、附件不写 [图片]、身份行菜单里有改名、身份行静止时也写最后一句、新主对话不读回问候、回复里的 [FILE:] 不留、草稿不通知订阅者；外加上面第 4 条在 App 里做、由 harness 抓到的那一处。
+
+截图：scratchpad 的 `s18/shots/`（92 张，2x）。总览在 `shots/overview/`：`01-card-light.png`、`02-card-dark.png`（八种情形）、`03-card-more.png`（你说的、在问你没原文、思考中、只有图的草稿、子任务出错）、`04-assistant-open.png`（卡片选中、身份行、菜单展开、子任务面包屑、收起侧栏、Windows）、`05-new-chat.png`、`06-widths.png`（mac / Windows × 中 / 英 × 五种宽度）、`07-english.png`、`08-english-open.png`、`09-hover-scroll-windows.png`、`10-line-size.png`、`11-read-paths.png`。外置运行时的对比图在 `s18/cmp/`。harness 文件已从两棵 gui 树删掉，脚本留在 `s18/harness/`、`s18/shoot/`。
+
+风险：
+- 门槛按 Chrome 实测，给 WebKit 留了约 1.5px；时间让位靠 `flex-wrap` 加 20px 高的裁切盒，WebKit 的表现要真机看。
+- `AgentTurn.files` 是读回与实时 `turn_end` 两条热路径上新加的字段（只在有 `[FILE:]` 的最终回答上出现），往返测试与黄金样例都过。
+- 卡片自己读页只在缓存没有主对话的消息时发生；`lastActivityAt` 每变一次重读一次，缓存一有消息就停。
+- 草稿订阅是一个新的全局监听，每次按键都会通知；卡片只读主对话的键，开着助手时不订阅具体键，代价很小。
+- 侧栏以外还叫「主对话」的地方没动（输入框忙时、子任务卡片与第一条消息的来源提示和它的房子图标、设置里的重置），叫法与形象另议；`docs/project-status.md` 的未发布摘要里还写着「主对话 / 其他对话」，留给收尾同步。
+- 英文 134px 时「Waiting for you: 」占满第二行，看不到问题原文。
+
+真机要看的（票里七步之外）：
+- 卡片第二行 12px、时间 11px 的轻重，和 58px 卡片里两行的位置；
+- 把侧栏拖到 188px 以下（英文）或 167px 以下（中文），时间整个让位、名字不截断；
+- 身份行悬停的填色高度（静止 32px、有状态 35.4px）与名字后面小箭头的位置，菜单居中对齐触发器；
+- 1x 屏上头像右上角 16px 的角标；
+- 重置主对话（或用新的数据目录）后，主区现在会显示问候，卡片第二行也是这句；
+- ⌘K 输入「主对话」「助手」，应列出 Galley；
+- 有新回复又有草稿时，第二行写草稿（票里的优先级：草稿在最后一句之上），头像仍挂未读点、名字仍加粗，那一刻看不到新回复的字，看是否要调。
