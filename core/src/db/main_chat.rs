@@ -205,6 +205,117 @@ impl SqliteGalley {
     }
 }
 
+/// What [`SqliteGalley::delete_main_chat_for_reset`] took out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MainChatDeletion {
+    /// The main chat.
+    pub main_chat: SessionId,
+    /// The subtasks it dispatched that the user never wrote in,
+    /// whatever their status.
+    pub subtasks: Vec<SessionId>,
+}
+
+impl MainChatDeletion {
+    /// Every deleted session: the subtasks, then the main chat.
+    pub fn session_ids(&self) -> impl Iterator<Item = &SessionId> {
+        self.subtasks.iter().chain(std::iter::once(&self.main_chat))
+    }
+}
+
+/// The main chat's subtasks the user never wrote in: the main chat's own
+/// records (ticket 06a). A promoted one is an ordinary conversation.
+const UNPROMOTED_SUBTASKS_SQL: &str = "SELECT id FROM sessions \
+     WHERE parent_session_id = ? AND promoted_at IS NULL ORDER BY created_at, id";
+
+impl SqliteGalley {
+    /// The subtasks `parent` dispatched that the user never wrote in
+    /// (`promoted_at` unset), archived ones included.
+    pub async fn unpromoted_subtask_ids(&self, parent: &SessionId) -> Result<Vec<SessionId>> {
+        let ids: Vec<String> = sqlx::query_scalar(UNPROMOTED_SUBTASKS_SQL)
+            .bind(parent.as_str())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        Ok(ids.into_iter().map(SessionId).collect())
+    }
+
+    /// The database half of resetting the main chat (ticket 15, PRD
+    /// ruling 59): delete the main chat `id` and the subtasks it
+    /// dispatched that the user never wrote in, in one transaction.
+    /// CASCADE takes their messages, tool events, attachment rows,
+    /// segments (`main_chat_segments`, 046) and dispatch records
+    /// (`subtask_dispatches`, 048); their search-index rows go alongside
+    /// (`messages_fts` is a standalone FTS5 table, no foreign key, no
+    /// trigger). A promoted subtask stays, an ordinary conversation whose
+    /// `parent_session_id` falls to NULL (SET NULL, 048); so do
+    /// `scheduled_tasks.last_run_session_id` and the retired Goal tables'
+    /// session references. Attachment files live outside the database and
+    /// are the caller's.
+    ///
+    /// The subtasks are read inside the transaction, so one dispatched
+    /// after the caller last looked is deleted too (and listed). Refused
+    /// (`not_found`) when `id` is not the main chat.
+    pub async fn delete_main_chat_for_reset(&self, id: &SessionId) -> Result<MainChatDeletion> {
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        let flag: Option<i64> = sqlx::query_scalar("SELECT main_chat FROM sessions WHERE id = ?")
+            .bind(id.as_str())
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+        if flag != Some(1) {
+            return Err(GalleyError::NotFound {
+                message: format!("session {id} is not the main chat"),
+            });
+        }
+        let subtasks: Vec<String> = sqlx::query_scalar(UNPROMOTED_SUBTASKS_SQL)
+            .bind(id.as_str())
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+        let doomed: Vec<&str> = subtasks
+            .iter()
+            .map(String::as_str)
+            .chain(std::iter::once(id.as_str()))
+            .collect();
+        let placeholders = vec!["?"; doomed.len()].join(",");
+        for sql in [
+            format!("DELETE FROM messages_fts WHERE session_id IN ({placeholders})"),
+            format!("DELETE FROM sessions WHERE id IN ({placeholders})"),
+        ] {
+            let mut q = sqlx::query(&sql);
+            for doomed_id in &doomed {
+                q = q.bind(*doomed_id);
+            }
+            q.execute(&mut *tx).await.map_err(map_sqlx_err)?;
+        }
+        tx.commit().await.map_err(map_sqlx_err)?;
+        Ok(MainChatDeletion {
+            main_chat: id.clone(),
+            subtasks: subtasks.into_iter().map(SessionId).collect(),
+        })
+    }
+
+    /// Rewrite the database file after a reset (ticket 15) so the rows it
+    /// deleted leave nothing behind: merge the search index (FTS5 keeps
+    /// deleted text in its old segments until they merge), `VACUUM`
+    /// (freed pages still hold old rows), then checkpoint and truncate
+    /// the WAL (it holds the pages the delete replaced). Takes the write
+    /// lock for as long as it runs; nothing should be running.
+    pub async fn compact(&self) -> Result<()> {
+        for sql in [
+            "INSERT INTO messages_fts(messages_fts) VALUES('optimize')",
+            "VACUUM",
+            "PRAGMA wal_checkpoint(TRUNCATE)",
+        ] {
+            sqlx::query(sql)
+                .execute(&self.pool)
+                .await
+                .map_err(map_sqlx_err)?;
+        }
+        Ok(())
+    }
+}
+
 /// The creation half of [`MainChatSeed`], inside the creating
 /// transaction. The greeting is indexed for search like any reply: the
 /// launch backfill counts every visible assistant row with an answer

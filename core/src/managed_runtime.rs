@@ -147,6 +147,172 @@ pub fn prune_model_responses_for_app(
     crate::model_responses_prune::prune_model_responses(&paths.model_responses_dir)
 }
 
+/// The bundled memory seed and the managed `memory/`, resolved as
+/// [`ensure_for_app`] resolves them (the repo's `managed-ga/` in a debug
+/// build, the app resources in a release one).
+pub fn memory_paths_for_app(app: &AppHandle) -> io::Result<(PathBuf, PathBuf)> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| io::Error::new(io::ErrorKind::NotFound, e))?;
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|e| io::Error::new(io::ErrorKind::NotFound, e))?;
+    let paths = layout_paths(resolve_resource_root(&resource_dir), app_data_dir);
+    Ok((paths.memory_seed_dir, paths.memory_dir))
+}
+
+/// `memory/` swapped for the seed but not final yet
+/// ([`stage_memory_reset`]): the old one waits beside it until
+/// [`Self::commit`] deletes it or [`Self::rollback`] puts it back.
+#[derive(Debug)]
+#[must_use = "a staged memory reset must be committed or rolled back"]
+pub struct StagedMemoryReset {
+    memory_dir: PathBuf,
+    /// Where the old `memory/` waits; `None` when there was none.
+    set_aside: Option<PathBuf>,
+}
+
+impl StagedMemoryReset {
+    /// Keep the seeded `memory/`: delete the old one.
+    pub fn commit(self) -> io::Result<()> {
+        match &self.set_aside {
+            Some(old) => fs::remove_dir_all(old),
+            None => Ok(()),
+        }
+    }
+
+    /// Put the old `memory/` back as it was, dropping the seeded one.
+    pub fn rollback(self) -> io::Result<()> {
+        restore_memory(&self.memory_dir, self.set_aside.as_deref())
+    }
+
+    /// Where the old `memory/` waits until a commit or a rollback.
+    pub fn set_aside(&self) -> Option<&Path> {
+        self.set_aside.as_deref()
+    }
+}
+
+/// Put `memory_dir` back to the installed seed: the only path that
+/// rewrites the managed `memory/` whole (resetting the main chat, main
+/// chat ticket 15). Upgrades never do — they only add missing seed files
+/// ([`ensure_memory_seed`]), so the user's memory survives them.
+///
+/// Staged, so the caller can still undo it: `memory_dir` is renamed to a
+/// sibling `memory.reset-<stamp>`, a fresh `memory_dir` gets a full copy
+/// of the seed, and the old one waits for
+/// [`StagedMemoryReset::commit`] / [`StagedMemoryReset::rollback`].
+/// Nothing moves when the seed is missing or lacks a critical file. When
+/// the copy fails, the partial copy is removed and the old `memory/`
+/// renamed back before the error returns.
+///
+/// GA writes `global_mem.txt` and `global_mem_insight.txt` itself, from
+/// its templates, the next time a runner starts and finds them missing
+/// (`agentmain.py`), as on a fresh install.
+pub fn stage_memory_reset(
+    memory_seed_dir: &Path,
+    memory_dir: &Path,
+) -> io::Result<StagedMemoryReset> {
+    stage_memory_reset_with(memory_seed_dir, memory_dir, |seed, target| {
+        copy_missing_tree(seed, target, seed, &mut Vec::new())
+    })
+}
+
+/// [`stage_memory_reset`] with the copy step passed in, so a test can
+/// make it fail.
+fn stage_memory_reset_with(
+    memory_seed_dir: &Path,
+    memory_dir: &Path,
+    copy: impl FnOnce(&Path, &Path) -> io::Result<()>,
+) -> io::Result<StagedMemoryReset> {
+    let missing: Vec<&str> = CRITICAL_MEMORY_SEED_FILES
+        .iter()
+        .copied()
+        .filter(|rel| !memory_seed_dir.join(rel_to_path(rel)).is_file())
+        .collect();
+    if !memory_seed_dir.is_dir() || !missing.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!(
+                "memory seed {} is missing or incomplete (missing: {}); memory/ was not touched",
+                memory_seed_dir.display(),
+                missing.join(", ")
+            ),
+        ));
+    }
+    let set_aside = if fs::symlink_metadata(memory_dir).is_ok() {
+        let aside = set_aside_path(memory_dir)?;
+        fs::rename(memory_dir, &aside)?;
+        Some(aside)
+    } else {
+        None
+    };
+    let copied = fs::create_dir(memory_dir).and_then(|()| copy(memory_seed_dir, memory_dir));
+    if let Err(copy_err) = copied {
+        return Err(match restore_memory(memory_dir, set_aside.as_deref()) {
+            Ok(()) => io::Error::new(
+                copy_err.kind(),
+                format!("copying the memory seed failed, memory/ is back as it was: {copy_err}"),
+            ),
+            Err(restore_err) => io::Error::new(
+                restore_err.kind(),
+                format!(
+                    "copying the memory seed failed ({copy_err}), and putting memory/ back \
+                     failed too ({restore_err}); the old memory is at {}",
+                    set_aside
+                        .as_deref()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|| "(there was none)".into())
+                ),
+            ),
+        });
+    }
+    Ok(StagedMemoryReset {
+        memory_dir: memory_dir.to_path_buf(),
+        set_aside,
+    })
+}
+
+/// Drop whatever is at `memory_dir` and move `set_aside` back there.
+fn restore_memory(memory_dir: &Path, set_aside: Option<&Path>) -> io::Result<()> {
+    if fs::symlink_metadata(memory_dir).is_ok() {
+        fs::remove_dir_all(memory_dir)?;
+    }
+    if let Some(old) = set_aside {
+        fs::rename(old, memory_dir)?;
+    }
+    Ok(())
+}
+
+/// A free sibling of `memory_dir` to move it aside to:
+/// `memory.reset-<UTC stamp>`, with `-2`, `-3`… when taken.
+fn set_aside_path(memory_dir: &Path) -> io::Result<PathBuf> {
+    let (Some(parent), Some(name)) = (memory_dir.parent(), memory_dir.file_name()) else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("memory dir {} has no parent", memory_dir.display()),
+        ));
+    };
+    let base = format!(
+        "{}.reset-{}",
+        name.to_string_lossy(),
+        chrono::Utc::now().format("%Y%m%dT%H%M%SZ")
+    );
+    (1..=100)
+        .map(|n| match n {
+            1 => parent.join(&base),
+            n => parent.join(format!("{base}-{n}")),
+        })
+        .find(|candidate| fs::symlink_metadata(candidate).is_err())
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("no free name to set {} aside", memory_dir.display()),
+            )
+        })
+}
+
 pub fn bridge_cwd_for_app(app: &AppHandle) -> std::io::Result<PathBuf> {
     if cfg!(debug_assertions) {
         Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -611,6 +777,161 @@ mod tests {
                 "managed GA memory seed missing critical file: {rel}"
             );
         }
+    }
+
+    // ---------------- resetting memory/ (main chat ticket 15) ----------------
+
+    /// Every file under `root`, by slash path, with its bytes.
+    fn tree(root: &Path) -> std::collections::BTreeMap<String, Vec<u8>> {
+        let mut out = std::collections::BTreeMap::new();
+        let mut pending = vec![root.to_path_buf()];
+        while let Some(dir) = pending.pop() {
+            for entry in fs::read_dir(&dir).expect("read dir") {
+                let path = entry.expect("entry").path();
+                if path.is_dir() {
+                    pending.push(path);
+                } else {
+                    let rel = path_to_slash(path.strip_prefix(root).expect("under root"));
+                    out.insert(rel, fs::read(&path).expect("read file"));
+                }
+            }
+        }
+        out
+    }
+
+    /// Names in `memory_dir`'s parent other than `memory` itself: a
+    /// set-aside copy left behind would show here.
+    fn siblings(memory_dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = fs::read_dir(memory_dir.parent().expect("parent"))
+            .expect("read parent")
+            .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+            .filter(|name| name != "memory")
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// A seed (every critical file plus one extra) and a used `memory/`
+    /// under one temp dir: GA's own files, an edited seed file, a SOP the
+    /// engine wrote, a nested note.
+    fn used_memory(tmp: &tempfile::TempDir) -> (PathBuf, PathBuf) {
+        let resource_root = tmp.path().join("resources").join("managed-ga");
+        write_critical_memory_seed(&resource_root, b"seed");
+        write_memory_seed_file(&resource_root, "custom/custom_sop.md", b"extra");
+        let seed = resource_root.join(rel_to_path(MEMORY_SEED_REL));
+        let memory = tmp
+            .path()
+            .join("app-data")
+            .join("managed-ga-state")
+            .join("memory");
+        for (rel, body) in [
+            (
+                "global_mem.txt",
+                b"# [Global Memory - L2]\nuser likes tea" as &[u8],
+            ),
+            ("global_mem_insight.txt", b"insight"),
+            ("memory_management_sop.md", b"edited by the engine"),
+            ("learned_sop.md", b"a way of working"),
+            ("notes/about_user.md", b"facts"),
+        ] {
+            let path = memory.join(rel_to_path(rel));
+            fs::create_dir_all(path.parent().expect("parent")).expect("memory dir");
+            fs::write(path, body).expect("memory file");
+        }
+        // Everything these tests move or delete is in the temp dir.
+        assert!(seed.starts_with(tmp.path()) && memory.starts_with(tmp.path()));
+        (seed, memory)
+    }
+
+    #[test]
+    fn a_memory_reset_puts_memory_back_to_the_seed() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let (seed, memory) = used_memory(&tmp);
+        let before = tree(&memory);
+
+        let staged = stage_memory_reset(&seed, &memory).expect("stage");
+
+        // memory/ is exactly the seed: its files all there, the edited one
+        // back to the seed's, everything else gone (GA's global_mem*
+        // included — it writes them anew from its templates).
+        assert_eq!(tree(&memory), tree(&seed));
+        assert!(!memory.join("global_mem.txt").exists());
+        assert!(!memory.join("global_mem_insight.txt").exists());
+        // The old one waits beside it until the commit.
+        let aside = staged.set_aside().expect("set aside").to_path_buf();
+        assert_eq!(tree(&aside), before);
+        assert_eq!(siblings(&memory).len(), 1);
+
+        staged.commit().expect("commit");
+        assert!(!aside.exists());
+        assert!(siblings(&memory).is_empty());
+        assert_eq!(tree(&memory), tree(&seed));
+    }
+
+    #[test]
+    fn a_rolled_back_memory_reset_leaves_memory_as_it_was() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let (seed, memory) = used_memory(&tmp);
+        let before = tree(&memory);
+
+        let staged = stage_memory_reset(&seed, &memory).expect("stage");
+        // Something the engine wrote into the fresh memory/ meanwhile goes
+        // with it.
+        fs::write(memory.join("global_mem.txt"), b"new").expect("write");
+        staged.rollback().expect("rollback");
+
+        assert_eq!(tree(&memory), before);
+        assert!(siblings(&memory).is_empty());
+    }
+
+    #[test]
+    fn a_failed_seed_copy_leaves_memory_as_it_was() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let (seed, memory) = used_memory(&tmp);
+        let before = tree(&memory);
+
+        // The copy gets one file in, then fails (a full disk, say).
+        let err = stage_memory_reset_with(&seed, &memory, |seed, target| {
+            fs::copy(seed.join("plan_sop.md"), target.join("plan_sop.md"))?;
+            Err(io::Error::other("disk full"))
+        })
+        .expect_err("copy fails");
+
+        assert!(err.to_string().contains("disk full"), "{err}");
+        assert!(err.to_string().contains("back as it was"), "{err}");
+        assert_eq!(tree(&memory), before);
+        assert!(siblings(&memory).is_empty());
+    }
+
+    #[test]
+    fn an_incomplete_seed_moves_nothing() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let (seed, memory) = used_memory(&tmp);
+        let before = tree(&memory);
+        fs::remove_file(seed.join("plan_sop.md")).expect("remove a critical seed file");
+
+        let err = stage_memory_reset(&seed, &memory).expect_err("refused");
+
+        assert!(err.to_string().contains("plan_sop.md"), "{err}");
+        assert_eq!(tree(&memory), before);
+        assert!(siblings(&memory).is_empty());
+        // No seed at all: the same.
+        let err = stage_memory_reset(&tmp.path().join("nowhere"), &memory).expect_err("refused");
+        assert!(err.to_string().contains("not touched"), "{err}");
+        assert_eq!(tree(&memory), before);
+    }
+
+    #[test]
+    fn a_memory_reset_without_a_memory_dir_seeds_one() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let (seed, memory) = used_memory(&tmp);
+        fs::remove_dir_all(&memory).expect("no memory yet");
+
+        let staged = stage_memory_reset(&seed, &memory).expect("stage");
+        assert!(staged.set_aside().is_none());
+        assert_eq!(tree(&memory), tree(&seed));
+        staged.rollback().expect("rollback");
+        assert!(!memory.exists());
     }
 
     fn assert_no_generated_artifacts(root: &Path) {

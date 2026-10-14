@@ -19,6 +19,7 @@ pub mod im_supervisor;
 pub mod ipc;
 pub mod local_file;
 pub mod git_review;
+pub mod main_chat_reset;
 pub mod managed_model_config;
 pub mod managed_model_layers;
 pub mod managed_model_probe;
@@ -202,6 +203,8 @@ pub fn run() {
             get_or_create_main_chat,
             // The main chat's subtasks (.scratch/main-chat ticket 06a)
             list_subtask_dispatches,
+            // Resetting the main chat (.scratch/main-chat ticket 15), desktop only
+            reset_main_chat,
             archive_session,
             unarchive_session,
             rename_session,

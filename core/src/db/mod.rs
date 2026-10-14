@@ -150,9 +150,10 @@ use helpers::*;
 use rows::*;
 
 pub use main_chat::{
-    is_main_chat_greeting, main_chat_greeting, MainChatEnsured, MainChatSeed, MainChatSegmentFacts,
-    MainChatSegmentStart, MAIN_CHAT_GREETING_EN, MAIN_CHAT_GREETING_SUPERVISOR,
-    MAIN_CHAT_GREETING_TURN_INDEX, MAIN_CHAT_GREETING_ZH, MAIN_CHAT_TITLE,
+    is_main_chat_greeting, main_chat_greeting, MainChatDeletion, MainChatEnsured, MainChatSeed,
+    MainChatSegmentFacts, MainChatSegmentStart, MAIN_CHAT_GREETING_EN,
+    MAIN_CHAT_GREETING_SUPERVISOR, MAIN_CHAT_GREETING_TURN_INDEX, MAIN_CHAT_GREETING_ZH,
+    MAIN_CHAT_TITLE,
 };
 pub use rows::{
     ManagedModelSecretRow, MessageAttachmentCreate, MessageSearchHit, PersistAssistantMessage,

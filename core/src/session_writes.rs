@@ -18,6 +18,7 @@
 //! | rename, pin, reasoning effort, unread, model | `session-updated-external` |
 //! | archive / unarchive (bulk: one event per session it changed); an archived main chat's ask | `session-archived-external` / `session-unarchived-external` |
 //! | delete, bulk delete, empty-session and demo sweeps (one per session) | `session-deleted-external` `{ sessionId, via }` |
+//! | reset the main chat (`crate::main_chat_reset`): the old one and its unpromoted subtasks, then the new one | `session-deleted-external` per session, then `session-created-external` |
 //! | move to a project | `session-moved-external` |
 //! | create / update / delete a project | `project-created-external` / `project-updated-external` / `project-deleted-external` |
 //! | create / update / delete a scheduled task | `scheduled-tasks:changed` (empty payload) |
@@ -267,6 +268,24 @@ pub fn announce_session(
     );
 }
 
+/// Broadcast a session's deletion (`session-deleted-external`) — for a
+/// writer outside [`Writes`] that owns its own delete: resetting the main
+/// chat (`crate::main_chat_reset`, ticket 15).
+pub fn announce_session_deleted(
+    notifier: &dyn Notifier,
+    session_id: &SessionId,
+    via: &'static str,
+) {
+    notify(
+        notifier,
+        SESSION_DELETED_EXTERNAL_EVENT,
+        &SessionDeletedPayload {
+            session_id: session_id.0.clone(),
+            via,
+        },
+    );
+}
+
 /// The write path: one method per write, each writing the database and
 /// then broadcasting the result once. Failures broadcast nothing.
 pub struct Writes<'a> {
@@ -324,14 +343,7 @@ impl<'a> Writes<'a> {
     }
 
     fn session_deleted(&self, id: &SessionId) {
-        notify(
-            self.notifier,
-            SESSION_DELETED_EXTERNAL_EVENT,
-            &SessionDeletedPayload {
-                session_id: id.0.clone(),
-                via: self.via,
-            },
-        );
+        announce_session_deleted(self.notifier, id, self.via);
     }
 
     fn project_event(&self, event: &str, project: ProjectBrief) {

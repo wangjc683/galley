@@ -616,8 +616,23 @@ pub fn ensure_backup_before_migrate_in(
 /// sort lexicographically = chronologically. Best-effort: a failed
 /// removal is logged and skipped — pruning never blocks startup.
 fn prune_old_backups(parent: &Path, keep: usize) {
-    let Ok(entries) = fs::read_dir(parent) else {
+    let backups = backup_dirs(parent);
+    if backups.len() <= keep {
         return;
+    }
+    for path in backups.iter().take(backups.len() - keep) {
+        match fs::remove_dir_all(path) {
+            Ok(()) => eprintln!("[backup] pruned old backup {}", path.display()),
+            Err(e) => eprintln!("[backup] pruning {} failed: {e}", path.display()),
+        }
+    }
+}
+
+/// The migration backups in `parent` (directories named
+/// `app.galley.backup.*`), oldest first.
+fn backup_dirs(parent: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(parent) else {
+        return Vec::new();
     };
     let mut backups: Vec<PathBuf> = entries
         .flatten()
@@ -630,16 +645,35 @@ fn prune_old_backups(parent: &Path, keep: usize) {
         .map(|entry| entry.path())
         .filter(|path| path.is_dir())
         .collect();
-    if backups.len() <= keep {
-        return;
-    }
     backups.sort();
-    for path in backups.iter().take(backups.len() - keep) {
-        match fs::remove_dir_all(path) {
-            Ok(()) => eprintln!("[backup] pruned old backup {}", path.display()),
-            Err(e) => eprintln!("[backup] pruning {} failed: {e}", path.display()),
+    backups
+}
+
+/// What [`delete_all_backups_in`] did.
+#[derive(Debug, Default)]
+pub struct BackupsDeleted {
+    pub removed: Vec<PathBuf>,
+    /// Backups that could not be removed, with why.
+    pub failed: Vec<(PathBuf, String)>,
+}
+
+/// Delete every pre-migration backup next to `data_dir`
+/// (`app.galley.backup.*`). Resetting the main chat (main chat ticket
+/// 15) takes them along: each one is a whole copy of the database and of
+/// the engine's memory as they were. Best-effort per backup — one that
+/// cannot be removed is reported and the others still go.
+pub fn delete_all_backups_in(data_dir: &Path) -> BackupsDeleted {
+    let mut out = BackupsDeleted::default();
+    let Some(parent) = data_dir.parent() else {
+        return out;
+    };
+    for path in backup_dirs(parent) {
+        match fs::remove_dir_all(&path) {
+            Ok(()) => out.removed.push(path),
+            Err(e) => out.failed.push((path, e.to_string())),
         }
     }
+    out
 }
 
 /// Probe `_sqlx_migrations` for the highest successfully-applied
@@ -1330,6 +1364,40 @@ mod tests {
         // The two oldest were pruned; the just-created backup survives.
         assert_eq!(remaining[0], format!("{BACKUP_DIR_PREFIX}20260301T000000Z"));
         assert!(new_backup.is_dir());
+    }
+
+    #[test]
+    fn deleting_all_backups_takes_every_backup_and_nothing_else() {
+        let tmp = TempDir::new().unwrap();
+        let data = make_parent_with_data_dir(&tmp);
+        let parent = data.parent().unwrap().to_path_buf();
+        // Everything this test deletes lives in its own temp dir.
+        assert!(parent.starts_with(tmp.path()));
+        fs::write(data.join(DB_FILENAME), b"live").unwrap();
+        let backups: Vec<PathBuf> = ["20260101T000000Z", "20260201T000000Z"]
+            .iter()
+            .map(|stamp| parent.join(format!("{BACKUP_DIR_PREFIX}{stamp}")))
+            .collect();
+        for backup in &backups {
+            fs::create_dir_all(backup.join("managed-ga-state/memory")).unwrap();
+            fs::write(backup.join(DB_FILENAME), b"old").unwrap();
+        }
+        // Not backups: a file with the prefix, and an unrelated sibling.
+        fs::write(parent.join(format!("{BACKUP_DIR_PREFIX}notes.txt")), b"x").unwrap();
+        fs::create_dir(parent.join("app.galley.other")).unwrap();
+
+        let out = delete_all_backups_in(&data);
+
+        assert_eq!(out.removed, backups);
+        assert!(out.failed.is_empty());
+        assert!(backups.iter().all(|b| !b.exists()));
+        assert_eq!(fs::read(data.join(DB_FILENAME)).unwrap(), b"live");
+        assert!(parent
+            .join(format!("{BACKUP_DIR_PREFIX}notes.txt"))
+            .is_file());
+        assert!(parent.join("app.galley.other").is_dir());
+        // None left: a second pass finds nothing.
+        assert!(delete_all_backups_in(&data).removed.is_empty());
     }
 
     #[test]
