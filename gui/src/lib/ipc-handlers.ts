@@ -4,6 +4,7 @@ import {
   cleanFinalAnswer,
   extractPreamble,
   extractThinking,
+  finalAnswerFileRefs,
   stripGATags,
 } from "@/lib/ipc/ga-output-cleaning";
 import { resolveLanguagePreference } from "@/lib/language";
@@ -815,5 +816,6 @@ export function turnFromTurnEnd(event: {
     turnIndex: event.turnIndex,
     summary: event.summary,
     telemetry: event.telemetry,
+    files: finalAnswerFileRefs(event.responseContent),
   });
 }

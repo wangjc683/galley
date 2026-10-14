@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  cleanFinalAnswer,
   cleanPartialContent,
   extractLiveThinking,
   extractPreamble,
+  finalAnswerFileRefs,
   isLeakedToolCallMarkup,
   summaryEchoesAnswer,
 } from "@/lib/ipc/ga-output-cleaning";
@@ -316,5 +318,25 @@ describe("extractLiveThinking", () => {
     expect(
       extractLiveThinking(`<thinking>unterminated\n${dispatch}output`),
     ).toEqual({ text: "unterminated", open: false });
+  });
+});
+
+describe("finalAnswerFileRefs (the assistant card's [文件] names)", () => {
+  it("lists the [FILE:] paths the cleaned answer drops, in order, once", () => {
+    const raw =
+      "<thinking>写到 [FILE:/tmp/draft.md]</thinking>图做好了：[FILE: /tmp/out/x.png ]\n报告在 [FILE:report.pdf]，图再看一次 [FILE:/tmp/out/x.png]";
+    expect(cleanFinalAnswer(raw)).toBe("图做好了：\n报告在 ，图再看一次");
+    expect(finalAnswerFileRefs(raw)).toEqual(["/tmp/out/x.png", "report.pdf"]);
+  });
+
+  it("skips the hint's placeholders and an unsent subtask's text", () => {
+    expect(
+      finalAnswerFileRefs("用 [FILE:filepath] 或 [FILE:<path>] 或 [FILE:...]"),
+    ).toEqual([]);
+    expect(
+      finalAnswerFileRefs("好 [FILE:a.txt]<subtask>写 [FILE:b.txt]"),
+    ).toEqual(["a.txt"]);
+    expect(finalAnswerFileRefs("")).toEqual([]);
+    expect(finalAnswerFileRefs("没有文件")).toEqual([]);
   });
 });

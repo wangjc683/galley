@@ -10,17 +10,13 @@ import {
   Cat,
   Clock,
   DotsThree,
-  House,
   PauseCircle,
   PlugsConnected,
 } from "@phosphor-icons/react";
 
 import { IconButton } from "@/components/ui/button";
 import { IconTooltip } from "@/components/ui/tooltip";
-import {
-  type SessionStatusView,
-  useSessionStatusView,
-} from "@/hooks/useSessionStatusView";
+import { useSessionStatusView } from "@/hooks/useSessionStatusView";
 import { useCopy } from "@/lib/i18n";
 import { SCHEDULER_SUPERVISOR } from "@/lib/scheduled-tasks";
 import {
@@ -53,9 +49,6 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   onConfirmRename,
   onCancelRename,
   singleLine = false,
-  mainChatLabel,
-  subtaskState,
-  statusOverride,
 }: {
   session: Session;
   active?: boolean;
@@ -92,29 +85,6 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
    * are and state still rides the rail, the icon and the title weight,
    * so an open group stays compact. */
   singleLine?: boolean;
-  /** The main chat's row (主聊天, tickets 02 / 08 / 14): this label
-   * instead of the stored title, and a house in the icon column while
-   * the row rests. It is the home, so its title keeps full-strength ink
-   * even when another row is selected — the subtractive dimming below
-   * skips it. Its subline speaks only of a state (running, waiting,
-   * error), never of a settled run, in a row that keeps the two-line
-   * height either way. Everything else is a session row's — rail,
-   * weight, the selected style — and every state outranks the house
-   * exactly as it outranks the check circle; unread fills it brand. No
-   * brand colour of its own (layout-and-chrome.md: tone is for state,
-   * not identity). The caller wires no row actions: it has no menu. */
-  mainChatLabel?: string;
-  /** The main chat's row only (ticket 06a, PRD ruling 30): one of its
-   * unpromoted subtasks has errored or is asking the user. It reaches
-   * this row in the row's own priority — error, then ask, over running
-   * and unread — with the subline naming the subtask
-   * (「子任务出错」/「子任务在问你」); the main chat's own error or
-   * question keeps its usual words. */
-  subtaskState?: "error" | "ask";
-  /** TEMPORARY (ticket 17): the sidebar-top trial's 「演示」 on the
-   * control's main chat row — a live state shown over the store's,
-   * never written. */
-  statusOverride?: Partial<SessionStatusView>;
 }) {
   const copy = useCopy();
   const hasRowActions = !!(
@@ -139,19 +109,9 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
   // skips the unread mark for sessionId === activeSessionId.
   // Effective status is derived at read time from live conversation +
   // bridge state (replaces the old fireSessionMirror push onto the row).
-  const liveView = useSessionStatusView(session);
-  const {
-    status: ownStatus,
-    hasPendingAskUser,
-    pausedAtStepLimit,
-  } = statusOverride ? { ...liveView, ...statusOverride } : liveView;
-  // A subtask's error or question reaches the main chat's row as if it
-  // were the row's own (ticket 06a), the words aside (subline below).
-  const subtaskErrored = subtaskState === "error" && ownStatus !== "error";
-  const subtaskAsking =
-    subtaskState === "ask" && !hasPendingAskUser && ownStatus !== "error";
-  const status = subtaskErrored ? "error" : ownStatus;
-  const hasPendingAsk = hasPendingAskUser || subtaskAsking;
+  const { status, hasPendingAskUser, pausedAtStepLimit } =
+    useSessionStatusView(session);
+  const hasPendingAsk = hasPendingAskUser;
   const isRunning = status === "running";
   const hasBlockingError = status === "error";
   const showRunningActivity = isRunning && !hasPendingAsk && !hasBlockingError;
@@ -217,25 +177,15 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     ? displaySessionSummary(session.summary, copy.sidebar.turnProtocolFailure)
     : null;
   const errorCount = session.errorCount || 0;
-  const title = mainChatLabel ?? session.title;
-  // The main chat's resting glyph stands where a settled row draws its
-  // check circle (or hollow ring); live and blocking states replace it.
-  const mainChatResting =
-    mainChatLabel !== undefined &&
-    (status === "idle" || status === "completed");
   // Subline doubles as the status line — always state-colored, upright
   // (no italic), text-explicit for the blocking states so a glance
   // reads "等你回复 / 出错" without decoding an icon.
   const sublineText = hasBlockingError
-    ? subtaskErrored
-      ? copy.subtask.sidebarErrored
-      : errorCount > 1
-        ? `${copy.sidebar.errored} · ${errorCount}`
-        : copy.sidebar.errored
+    ? errorCount > 1
+      ? `${copy.sidebar.errored} · ${errorCount}`
+      : copy.sidebar.errored
     : hasPendingAsk
-      ? subtaskAsking
-        ? copy.subtask.sidebarWaiting
-        : copy.sidebar.waitingForYou
+      ? copy.sidebar.waitingForYou
       : showRunningActivity
         ? session.lastStepIndex != null && cleanSummary
           ? copy.sidebar.stepSummary(session.lastStepIndex, cleanSummary)
@@ -252,21 +202,9 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
               copy.sidebar,
             )
           : null;
-  // The main chat's row says nothing once settled (main chat ticket 14,
-  // PRD ruling 58): its subline speaks only of a state — running,
-  // waiting, an error, a subtask's too. A new reply is the filled house
-  // and the weight; a stopped one, the icon. The recap a settled row
-  // shows tells rows apart and recalls how a task ended — the home has
-  // neither need, usually stands open beside it, and in a conversation
-  // the recap often narrates the user in the third person.
-  const quietSubline =
-    mainChatLabel !== undefined &&
-    !hasBlockingError &&
-    !hasPendingAsk &&
-    !showRunningActivity;
   // A single-line row renders no subline and centers like a row that
   // has none.
-  const subline = singleLine || quietSubline ? null : sublineText;
+  const subline = singleLine ? null : sublineText;
   const sublineTone: "running" | "warning" | "error" | "muted" =
     hasBlockingError
       ? "error"
@@ -385,14 +323,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
       onClick={handleRowClick}
       className={cn(
         "group relative mx-1.5 grid scroll-my-2 grid-cols-[16px_minmax(0,1fr)] items-start gap-2 overflow-hidden rounded-sm px-3 py-1.5",
-        singleLine
-          ? "min-h-8"
-          : // The main chat's row keeps the two-line height (6 + 20 + 2 +
-            // 15.4 + 6 = 49.4px) when its line goes, so the list under it
-            // never moves as a run starts and settles.
-            mainChatLabel !== undefined
-            ? "min-h-[50px]"
-            : "min-h-[48px]",
+        singleLine ? "min-h-8" : "min-h-[48px]",
         // No row-level ring while editing — the input inside carries
         // its own brand ring; two nested rings for one focus state
         // was noisier than the app's quiet register.
@@ -446,12 +377,6 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             an amber pause icon next to a red rail read as two states. */}
         {hasPendingAsk && !hasBlockingError ? (
           <PauseCircle size={14} weight="fill" className="text-warning" />
-        ) : mainChatResting ? (
-          <House
-            size={14}
-            weight={showUnread ? "fill" : "thin"}
-            className={showUnread ? "text-brand" : "text-ink-muted"}
-          />
         ) : (
           <StatusIcon
             status={status}
@@ -489,7 +414,9 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
               // syncTruncatedTitle); a fully visible title gets no OS
               // tooltip repeating it.
               ref={truncationFadeRef}
-              onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, title)}
+              onPointerEnter={(e) =>
+                syncTruncatedTitle(e.currentTarget, session.title)
+              }
               className={cn(
                 "truncate-fade min-w-0 flex-1 text-[13px]",
                 // Subtractive focus: the selected row keeps full-strength
@@ -498,15 +425,13 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
                 // with the selected row itself, and it costs no channel —
                 // title COLOUR was unused, while title WEIGHT belongs to
                 // running/unread and is left alone here.
-                active || mainChatLabel !== undefined
-                  ? "text-ink"
-                  : "text-ink-soft",
+                active ? "text-ink" : "text-ink-soft",
                 isRunning || showUnread || hasPendingAsk || hasBlockingError
                   ? "font-semibold"
                   : "font-medium",
               )}
             >
-              {title}
+              {session.title}
             </div>
           )}
           {petAttached && (

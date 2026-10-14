@@ -7,12 +7,6 @@ import { MainHeaderHost } from "@/components/layout/MainHeaderHost";
 import { browserControlInviteVisible } from "@/components/layout/header/browser-control-indicator-status";
 import { SidebarCollapseToggle } from "@/components/layout/header/SidebarCollapseToggle";
 import { Sidebar } from "@/components/layout/Sidebar";
-import {
-  mainChatNaming,
-  sidebarTopActive,
-  useSidebarTopTrialStore,
-} from "@/components/layout/sidebar/sidebar-top-trial";
-import { SidebarTopTrialSwitcher } from "@/components/layout/sidebar/SidebarTopTrialSwitcher";
 import { CommandPalette } from "@/components/overlay/CommandPalette";
 import { ThemeProvider } from "@/components/theme/ThemeContext";
 import { BrowserControlAttentionSurface } from "@/components/screens/BrowserControlAttentionBanner";
@@ -33,6 +27,7 @@ import {
   ConfirmDeleteProjectDialog,
   EditProjectDialog,
 } from "@/components/screens/project/EditProjectDialog";
+import { ASSISTANT_SEARCH_KEYWORDS } from "@/lib/assistant";
 import { CopyProvider, copyForLanguage } from "@/lib/i18n";
 import { findMainChat, openMainChat } from "@/lib/main-chat";
 import { useAppHydrationEffects } from "@/hooks/useAppHydrationEffects";
@@ -409,7 +404,7 @@ function App() {
   // Uses the same grouping+backfill as the sidebar timeline so the
   // dialog holds exactly what the "更早 N" row counts — sessions
   // promoted into 最近 by backfillRecentSessions are excluded here too.
-  // The main chat is never under 更早 (its row stands above the list),
+  // The main chat is never under 更早 (its card stands above the list),
   // nor is a subtask the user has not written in (ticket 06a: it is a
   // card in the main chat, not a row).
   const earlierSessions = useMemo(
@@ -421,9 +416,10 @@ function App() {
       ).earlier,
     [visibleSessions],
   );
-  // The header titles the main chat by its label, not its stored title
-  // (the sidebar and ⌘K do the same; see mainChatNaming below).
-  const mainChatLabel = copy.sidebar.mainChat;
+  // The main chat is the assistant, Galley (main chat PRD rulings 60–65):
+  // the sidebar's card, the header's identity, the subtask crumb and ⌘K
+  // all call it by that name, never its stored title.
+  const assistantName = copy.assistant.name;
   // With a main chat the sidebar can collapse, by the toggle at the main
   // header's left or ⌘\ (ticket 08); the external runtime has neither.
   const hasMainChat = useMemo(
@@ -432,28 +428,18 @@ function App() {
   );
   const { collapsed: sidebarCollapsed, toggle: toggleSidebar } =
     useSidebarCollapse(hasMainChat);
-  // TEMPORARY (ticket 17): the sidebar-top trial
-  // (sidebar/sidebar-top-trial.ts). In 2 / 3 / 3′ the main chat is the
-  // assistant, Galley — the sidebar's entry, the header's identity, the
-  // crumb's and ⌘K's name; the control (现状) and the external runtime
-  // keep 主对话.
-  const topVariant = useSidebarTopTrialStore((s) => s.variant);
-  const topDemo = useSidebarTopTrialStore((s) => s.demo);
-  const assistantTop = sidebarTopActive(topVariant, hasMainChat);
-  const mainChatName = mainChatNaming(assistantTop, copy);
   const paletteSessions = useMemo(
     () =>
       visibleSessions.map((s) =>
-        s.mainChat ? { ...s, title: mainChatName.label } : s,
+        s.mainChat ? { ...s, title: assistantName } : s,
       ),
-    [visibleSessions, mainChatName.label],
+    [visibleSessions, assistantName],
   );
+  // ⌘K still finds it by 主对话 / 助手 / main chat / assistant.
   const paletteKeywords = useMemo(() => {
     const mainChat = findMainChat(visibleSessions);
-    return mainChat && mainChatName.searchKeywords
-      ? { [mainChat.id]: mainChatName.searchKeywords }
-      : undefined;
-  }, [visibleSessions, mainChatName.searchKeywords]);
+    return mainChat ? { [mainChat.id]: ASSISTANT_SEARCH_KEYWORDS } : undefined;
+  }, [visibleSessions]);
   // What the delete-project dialog's 「同时归档」 would archive — the
   // same set as the project group's 归档全部对话.
   const deletingProjectSessions = useMemo(
@@ -534,12 +520,8 @@ function App() {
             sessions={visibleSessions}
             activeId={effectiveActiveId}
             newChatActive={screen === "empty"}
-            // Which + is pressed while the empty composer is up, and the
-            // first send's session taking the selection before the
+            // The first send's session taking the selection before the
             // screen flips (main chat ticket 13).
-            newChatProjectId={
-              screen === "empty" ? activeProjectFilter : undefined
-            }
             newChatSessionId={screen === "empty" ? activeSessionId : undefined}
             onNewChat={() => {
               // Lazy: New Chat just clears the active selection and
@@ -586,9 +568,6 @@ function App() {
             onDeleteProject={(id) => setDeletingProjectId(id)}
             onArchiveSessions={(ids) => archiveSessionsBulk(ids)}
             petAttachedSessionId={petAttachedSessionId}
-            // TEMPORARY (ticket 17): the sidebar-top trial.
-            topVariant={topVariant}
-            topDemo={topDemo}
           />
         }
         main={
@@ -607,33 +586,31 @@ function App() {
                 <MainHeaderHost
                   sessionTitle={
                     activeSession?.mainChat
-                      ? mainChatLabel
+                      ? assistantName
                       : activeSession?.title
                   }
                   // The main chat keeps its name (ticket 02).
                   canRenameSession={!activeSession?.mainChat}
                   // A subtask the user has not written in has no sidebar
-                  // row; 「主对话 ›」 before its title is the way back
-                  // (ticket 06a). Its parent is the main chat — 「Galley ›」
-                  // in the sidebar-top trial's 2 / 3 / 3′ (ticket 17).
+                  // row; 「Galley ›」 before its title is the way back to
+                  // the main chat (ticket 06a).
                   breadcrumb={subtaskBreadcrumb(activeSession, {
-                    label: mainChatName.label,
-                    ariaLabel: mainChatName.crumbAria,
+                    label: assistantName,
+                    ariaLabel: copy.assistant.backTo,
                     openParent: () => {
                       void openMainChat();
                     },
                   })}
-                  // TEMPORARY (ticket 17): in 2 / 3 / 3′ the open main
-                  // chat shows the assistant in the title's place.
+                  // The open main chat shows the assistant's identity as
+                  // the title menu's trigger (ticket 18).
                   identity={
-                    assistantTop && activeSession?.mainChat ? (
+                    activeSession?.mainChat ? (
                       <AssistantIdentity
                         mainChat={activeSession}
                         subtasks={unpromotedSubtasksOf(
                           visibleSessions,
                           activeSession.id,
                         )}
-                        demo={topDemo}
                       />
                     ) : undefined
                   }
@@ -918,8 +895,6 @@ function App() {
           void resolveFirstClose(keepInBackground);
         }}
       />
-      {/* TEMPORARY (ticket 17): the sidebar-top trial's pill. */}
-      <SidebarTopTrialSwitcher />
     </CopyProvider>
   );
 }

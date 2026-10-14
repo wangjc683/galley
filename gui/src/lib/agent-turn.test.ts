@@ -236,6 +236,20 @@ describe("live → persist → restore round trip", () => {
     expect(live.tools[0].resultPreview).toBeUndefined();
     expect(restored.tools[0].resultPreview).toBeUndefined();
   });
+
+  it("a final answer's [FILE:] paths survive the round trip identically", async () => {
+    const { live, restored } = await roundTrip({
+      turnIndex: 1,
+      summary: "做好了",
+      toolCalls: [{ toolName: "no_tool", args: {} }],
+      toolResults: [{ content: null }],
+      responseContent: "图做好了：[FILE:/tmp/out/x.png]",
+    });
+    // The answer drops the marker; the card names the file from here.
+    expect(live.finalAnswer).toBe("图做好了：");
+    expect(live.files).toEqual(["/tmp/out/x.png"]);
+    expect(restored.files).toEqual(live.files);
+  });
 });
 
 describe("resolvedPath hydration", () => {

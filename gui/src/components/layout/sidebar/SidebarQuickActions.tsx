@@ -6,11 +6,7 @@ import { useCopy, useLanguage } from "@/lib/i18n";
 import { formatShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 
-import {
-  NEW_CHAT_HINT_DISPLAY,
-  NEW_CHAT_LABEL_HIDDEN,
-  ROW_NAV_ICONS_DISPLAY,
-} from "./sidebar-width";
+import { NEW_CHAT_HINT_DISPLAY, NEW_CHAT_LABEL_HIDDEN } from "./sidebar-width";
 import {
   SHORTCUT_TEXT_CLASS,
   ShortcutTooltipText,
@@ -77,39 +73,6 @@ export function SidebarQuickActions({
 }
 
 /**
- * The sectioned sidebar's narrow fallback (with a main chat; main chat
- * tickets 07 / 08): it has no new-chat row, so when the masthead cannot
- * hold the wordmark and the three icons (sidebar-width.ts), 搜索 / 定时 /
- * 新建项目 come down into this row of their own — right-aligned, in the
- * masthead's order and column — above the main-chat row. The 「其他对话」
- * section header and its + stay put. In the wide state the row is not
- * there at all.
- */
-export function SidebarNarrowNavRow({
-  onSearch,
-  onOpenScheduled,
-  scheduledActionCount = 0,
-  onNewProject,
-}: {
-  onSearch?: () => void;
-  onOpenScheduled?: () => void;
-  scheduledActionCount?: number;
-  onNewProject?: () => void;
-}) {
-  return (
-    <div className={cn(ROW_NAV_ICONS_DISPLAY, "mx-1.5 justify-end py-1")}>
-      <SidebarNavIcons
-        placement="row"
-        onSearch={onSearch}
-        onOpenScheduled={onOpenScheduled}
-        scheduledActionCount={scheduledActionCount}
-        onNewProject={onNewProject}
-      />
-    </div>
-  );
-}
-
-/**
  * 新对话 with its text. Spans the row, or the space left of the icons
  * in the narrow state.
  *
@@ -129,10 +92,10 @@ export function SidebarNarrowNavRow({
  * project took this row plus the composer hint's ×. A project's new
  * chat is its group row's + (and its menu).
  *
- * Exported with `display` for ticket 17's sidebar-top trial (TEMPORARY):
- * 2 / 3 / 3′ open their list on this button with 定时 / 新建项目 always
- * beside it (SidebarAssistant.tsx), so the label and the ⌘N hide on
- * their own widths. Omitted, this platform's rules.
+ * With a main chat the same button heads the list under the assistant's
+ * card (SidebarAssistant.tsx), its label and ⌘N under that masthead's
+ * width rules (`display`, sidebar-width.ts `ASSISTANT_*`). Omitted,
+ * this platform's rules.
  */
 export function NewChatButton({
   active = false,

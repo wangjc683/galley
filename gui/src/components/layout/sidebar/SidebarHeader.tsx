@@ -3,15 +3,23 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isMac, isWindowActionTarget } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
-import { SIDEBAR_HEADER_PR } from "./sidebar-width";
+import {
+  ASSISTANT_HEADER_NAV_ICONS_DISPLAY,
+  SIDEBAR_HEADER_PR,
+} from "./sidebar-width";
 import { SidebarNavIcons } from "./SidebarNavIcons";
 
 export function SidebarHeader({
+  wordmark = true,
   onSearch,
   onOpenScheduled,
   scheduledActionCount,
   onNewProject,
 }: {
+  /** False with a main chat (main chat ticket 18): 「Galley」 is the
+   * assistant's name on the card below, so the masthead is the traffic
+   * lights' zone and the three icons, under its own width rule. */
+  wordmark?: boolean;
   onSearch?: () => void;
   onOpenScheduled?: () => void;
   scheduledActionCount?: number;
@@ -46,9 +54,13 @@ export function SidebarHeader({
   // (Windows adds the list's scrollbar lane). Narrow widths: once the
   // wordmark and the icons no longer fit (251px on mac, 189 / 179px
   // elsewhere — sidebar-width.ts), the icons drop into the new-chat row
-  // below and this header is the wordmark alone. The sectioned sidebar
-  // (with a main chat) has no new-chat row; there they drop into a row
-  // of their own.
+  // below and this header is the wordmark alone.
+  //
+  // With a main chat there is no wordmark (main chat ticket 18): the
+  // left keeps clear of the traffic lights (80px, as the collapse
+  // toggle does) or the regular gutter, and everything but the icons
+  // drags the window. The icons drop into the new-chat row only on
+  // macOS, below 184px.
   return (
     <div
       data-tauri-drag-region
@@ -65,13 +77,15 @@ export function SidebarHeader({
         }
       }}
       className={cn(
-        "flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line/60",
+        "flex h-11 shrink-0 items-center",
+        wordmark ? "justify-between" : "justify-end",
+        "gap-3 border-b border-line/60",
         SIDEBAR_HEADER_PR,
         // macOS: clear the traffic-light cluster (right edge ~68px) with
         // ~20px of breathing room so the wordmark reads as a deliberate
         // brand mark, not something crowding the OS lights. Non-mac has
         // no native left chrome, so a normal 16px gutter.
-        isMac ? "pl-[88px]" : "pl-4",
+        isMac ? (wordmark ? "pl-[88px]" : "pl-20") : "pl-4",
       )}
     >
       {/* Product mark: sentence-case Galley keeps the name legible as
@@ -80,14 +94,17 @@ export function SidebarHeader({
           mousedown target), so the wordmark carries it explicitly —
           grabbing "Galley" next to the traffic lights is the most
           natural window-drag spot in this column. */}
-      <div
-        data-tauri-drag-region
-        className="shrink-0 font-serif text-[17px] font-medium italic tracking-[0.005em] text-ink"
-      >
-        Galley
-      </div>
+      {wordmark && (
+        <div
+          data-tauri-drag-region
+          className="shrink-0 font-serif text-[17px] font-medium italic tracking-[0.005em] text-ink"
+        >
+          Galley
+        </div>
+      )}
       <SidebarNavIcons
         placement="header"
+        display={wordmark ? undefined : ASSISTANT_HEADER_NAV_ICONS_DISPLAY}
         onSearch={onSearch}
         onOpenScheduled={onOpenScheduled}
         scheduledActionCount={scheduledActionCount}

@@ -5,12 +5,30 @@ import {
   Cat,
   PencilSimple,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { SessionTitleEditor } from "../SessionTitleEditor";
+
+/** The title button's caret: muted, a step up on hover, turned while
+ * the menu is open. Reads the trigger's `group` state, so a custom
+ * label can place it (the assistant's identity puts it after the name,
+ * not after its status line). */
+export function SessionTitleCaret() {
+  return (
+    <CaretDown
+      size={11}
+      weight="bold"
+      className={cn(
+        "shrink-0 text-ink-muted transition-transform duration-(--motion-fast)",
+        "group-hover:text-ink-soft",
+        "group-data-[state=open]:rotate-180 group-data-[state=open]:text-ink-soft",
+      )}
+    />
+  );
+}
 
 /**
  * Title-as-dropdown trigger for session-scoped actions. The session
@@ -33,15 +51,23 @@ import { SessionTitleEditor } from "../SessionTitleEditor";
  * trailing dots reads as CSS text-overflow ellipsis. The whole-block
  * trigger removes that ambiguity and gives the rename affordance a
  * natural home (V0.1 #3).
+ *
+ * `label` replaces the title text and its caret inside the same button:
+ * the assistant's identity row (avatar, name, status) while the main
+ * chat is open (main chat ticket 18) — like tapping a contact's name in
+ * an IM chat. It brings its own `SessionTitleCaret`, and the main chat
+ * has no rename.
  */
 export function SessionTitleMenu({
   title,
+  label,
   onReinjectTools,
   onTogglePet,
   currentSessionHasPet,
   onRename,
 }: {
   title: string;
+  label?: ReactNode;
   onReinjectTools?: () => void;
   onTogglePet?: () => void;
   currentSessionHasPet?: boolean;
@@ -132,21 +158,21 @@ export function SessionTitleMenu({
             beginRename();
           }}
           className={cn(
-            "group inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-2 py-1",
+            "group inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md",
+            // The identity's 28px avatar and two lines get a slimmer
+            // vertical pad, so its fill keeps clear of the 44px header's
+            // edges; a little less on the left, where the disc is round.
+            label ? "py-0.5 pl-1.5 pr-2 text-left" : "px-2 py-1",
             "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover data-[state=open]:bg-hover active:translate-y-px",
             "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
           )}
         >
-          <span className="truncate font-medium text-ink">{title}</span>
-          <CaretDown
-            size={11}
-            weight="bold"
-            className={cn(
-              "shrink-0 text-ink-muted transition-transform duration-(--motion-fast)",
-              "group-hover:text-ink-soft",
-              "group-data-[state=open]:rotate-180 group-data-[state=open]:text-ink-soft",
-            )}
-          />
+          {label ?? (
+            <>
+              <span className="truncate font-medium text-ink">{title}</span>
+              <SessionTitleCaret />
+            </>
+          )}
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>

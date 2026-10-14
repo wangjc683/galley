@@ -198,6 +198,44 @@ export function cleanFinalAnswer(text: string): string {
   return out.trim();
 }
 
+const FILE_REF_PATH_PATTERN = /\[FILE:([^\]]+)\]/g;
+
+/** The IM channels' file hint shows `[FILE:filepath]` as its example
+ * and models echo it: placeholders, not files (runner/im_wechat.py's
+ * `_PLACEHOLDER_FILES`). */
+const FILE_REF_PLACEHOLDERS = new Set([
+  "filepath",
+  "<filepath>",
+  "path",
+  "<path>",
+  "file_path",
+  "<file_path>",
+  "...",
+]);
+
+/**
+ * The paths of the `[FILE:path]` markers `cleanFinalAnswer` drops from
+ * the same text — markers inside the tags and the unclosed `<subtask>`
+ * it removes do not count, nor the hint's placeholders — in order,
+ * duplicates once. For the assistant card's 「[文件] 名字」 (main chat
+ * ticket 18); the conversation itself keeps showing the cleaned answer.
+ */
+export function finalAnswerFileRefs(text: string): string[] {
+  if (!text || !text.includes("[FILE:")) return [];
+  let out = text;
+  for (const p of GA_TAG_PATTERNS) out = out.replace(p, "");
+  const subtaskOpen = out.indexOf(SUBTASK_OPEN);
+  if (subtaskOpen !== -1) out = out.slice(0, subtaskOpen);
+  const paths: string[] = [];
+  for (const match of out.matchAll(FILE_REF_PATH_PATTERN)) {
+    const path = match[1].trim();
+    if (path && !FILE_REF_PLACEHOLDERS.has(path) && !paths.includes(path)) {
+      paths.push(path);
+    }
+  }
+  return paths;
+}
+
 const GA_TAG_NAMES = [
   "thinking",
   "summary",

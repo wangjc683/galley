@@ -48,10 +48,9 @@ import {
  * - The row sums its sessions' states in the session row's priority
  *   order (D5) on the same left rail and title weight a session row
  *   uses. It never takes `bg-selected`: the sidebar has exactly one
- *   "you are here", and that is a session, 新对话, or — with a main
- *   chat, while the empty new-chat composer is up — the + that opened
- *   it, which can be this row's own (shown and pressed, ticket 13);
- *   expansion is said by FolderOpen alone.
+ *   "you are here", and that is a session, 新对话 (a project's empty
+ *   composer too) or the assistant's card; expansion is said by
+ *   FolderOpen alone.
  * - Collapsed, sessions that need the user (erroring / waiting for a
  *   reply, D6) and the selected session (D7) hang under the row as
  *   ordinary rows. Each is then mounted ONLY there — the collapsed
@@ -83,13 +82,9 @@ export function SidebarProjectGroup({
   onEdit,
   onDelete,
   onArchiveAll,
-  plusPressed = false,
   ...rowWiring
 }: {
   project: Project;
-  /** This row's + opened the empty new-chat composer (with a main
-   * chat): it stays shown and pressed. */
-  plusPressed?: boolean;
   /** The newest sessions (PROJECT_GROUP_RECENT_COUNT), newest first. */
   sessions: Session[];
   /** The rest, newest first — behind the drawer's closing 「显示更多」. */
@@ -160,7 +155,6 @@ export function SidebarProjectGroup({
         onEdit={onEdit}
         onArchiveAll={archiveAll}
         onDelete={onDelete}
-        plusPressed={plusPressed}
       />
       <ProjectGroupDrawer expanded={expanded}>
         {total === 0 ? (
@@ -243,13 +237,10 @@ function ProjectGroupRow({
   onEdit,
   onArchiveAll,
   onDelete,
-  plusPressed = false,
 }: {
   project: Project;
   groupIcon?: { closed: Icon; open: Icon };
   expanded: boolean;
-  /** See SidebarProjectGroup. */
-  plusPressed?: boolean;
   /** Draw the guide line up into the row from under the folder icon,
    * so the children's line hangs from the project (open with
    * sessions, or collapsed with hung rows). */
@@ -343,7 +334,7 @@ function ProjectGroupRow({
         className={cn(
           "min-w-0",
           showActions && "group-hover:pr-16",
-          (actionsOpen || plusPressed) && "pr-16",
+          actionsOpen && "pr-16",
         )}
       >
         <div className="flex min-h-5 min-w-0 items-center gap-1.5">
@@ -371,7 +362,7 @@ function ProjectGroupRow({
               className={cn(
                 "shrink-0 text-[11px] tabular-nums text-ink-muted",
                 showActions && "group-hover:invisible",
-                (actionsOpen || plusPressed) && "invisible",
+                actionsOpen && "invisible",
               )}
             >
               {total}
@@ -384,7 +375,7 @@ function ProjectGroupRow({
           className={cn(
             "pointer-events-none absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 opacity-0",
             "group-hover:pointer-events-auto group-hover:opacity-100",
-            (actionsOpen || plusPressed) && "pointer-events-auto opacity-100",
+            actionsOpen && "pointer-events-auto opacity-100",
           )}
         >
           {onStartConversation && (
@@ -398,17 +389,14 @@ function ProjectGroupRow({
                   onStartConversation();
                 }}
                 aria-label={newConversationTitle}
-                aria-current={plusPressed ? "page" : undefined}
                 className={cn(
                   // 32px hit area + 14/regular plus per the shared
                   // light-button rules (layout-and-chrome.md §4.2
                   // Project 行).
                   "inline-flex size-[32px] shrink-0 items-center justify-center rounded-sm",
-                  "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
-                  plusPressed
-                    ? "bg-selected text-ink shadow-[var(--shadow-selected)] hover:bg-(--color-selected-hover)"
-                    : "text-ink-muted group-hover:text-ink-soft hover:bg-hover hover:text-ink active:bg-selected/60",
-                  "active:translate-y-px",
+                  "text-ink-muted transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+                  "group-hover:text-ink-soft",
+                  "hover:bg-hover hover:text-ink active:translate-y-px active:bg-selected/60",
                   "outline-none",
                 )}
               >
@@ -425,12 +413,6 @@ function ProjectGroupRow({
                     tooltip={false}
                     size="xs"
                     active={actionsOpen}
-                    // A pressed + shows alone; the ⋯ keeps to hover.
-                    className={cn(
-                      plusPressed &&
-                        !actionsOpen &&
-                        "opacity-0 group-hover:opacity-100",
-                    )}
                     tabIndex={-1}
                     onPointerDown={(e) => {
                       e.stopPropagation();

@@ -8,27 +8,26 @@ import {
 import type { AssistantStateKind } from "@/lib/assistant";
 import { cn } from "@/lib/utils";
 
-/** The disc's sizes: 20 in 方案 2's masthead button, 28 in the main
- * header's identity, 32 on 方案 3's card, 48 on 3′'s. */
-export type AssistantAvatarSize = 20 | 28 | 32 | 48;
+/** The disc's sizes: 28 in the main header's identity row, 40 on the
+ * sidebar's assistant card. */
+export type AssistantAvatarSize = 28 | 40;
 
-// The letter keeps the 28px disc's 17px (the old wordmark's size).
+// The letter keeps the 28px disc's 17px (the old wordmark's size) and
+// the same share of the disc at 40.
 const DISC: Record<AssistantAvatarSize, string> = {
-  20: "size-5 text-[12px]",
   28: "size-7 text-[17px]",
-  32: "size-8 text-[19px]",
-  48: "size-12 text-[29px]",
+  40: "size-10 text-[24px]",
 };
 
 /**
  * The assistant's mark until it has a real likeness (main chat ticket
- * 17; first drawn for ticket 16): a brand-apricot disc carrying the
- * retired masthead wordmark's italic Newsreader 「G」, no image asset.
- * The letter is a deep shade of the same apricot rather than ink, so it
- * reads in both themes (brand stays light in dark mode, where ink turns
- * light). The italic leans right and the cap sits high: a nudge back
- * and down, in em so it scales with the disc, centres its ink (measured
- * on screen at 28px: one pixel back, two down).
+ * 18, PRD ruling 65): a brand-apricot disc carrying the retired masthead
+ * wordmark's italic Newsreader 「G」, no image asset. The letter is a
+ * deep shade of the same apricot rather than ink, so it reads in both
+ * themes (brand stays light in dark mode, where ink turns light). The
+ * italic leans right and the cap sits high: a nudge back and down, in
+ * em so it scales with the disc, centres its ink (measured on screen at
+ * 28px: one pixel back, two down).
  */
 export function AssistantAvatar({
   size = 28,
@@ -55,28 +54,27 @@ export function AssistantAvatar({
 }
 
 // Badge diameter and glyph size per disc, and where the badge sits: its
-// centre on the disc's 45° point, r(1 − 1/√2) in from the box corner.
+// centre on the disc's 45° point, r(1 − 1/√2) in from the box corner
+// (28: 4.1px, 40: 5.86px), a 1.5px ring around the glyph.
 const BADGE: Record<
   AssistantAvatarSize,
   { box: string; glyph: number; at: string }
 > = {
-  20: { box: "size-3", glyph: 10, at: "-right-[3px] -top-[3px]" },
   28: { box: "size-[15px]", glyph: 12, at: "-right-[3px] -top-[3px]" },
-  32: { box: "size-[15px]", glyph: 12, at: "-right-[3px] -top-[3px]" },
-  48: { box: "size-[18px]", glyph: 15, at: "-right-0.5 -top-0.5" },
+  40: { box: "size-4", glyph: 13, at: "-right-[2px] -top-[2px]" },
 };
 
 /**
- * The avatar's mark for a state: the main chat row's status icon in
- * the badge corner (layout-and-chrome.md, Session Row) — the spinning
- * bold brand ring while it runs, the filled amber pause of a question,
- * the red x of an error (filled: the row's thin one is illegible this
- * small, and the row has a rail, a tint and words to carry it), the
- * filled apricot dot of unread (a step stronger than the row's, to
- * stand off the apricot disc). Nothing at rest.
+ * The avatar's mark for a state: a session row's status icon in the
+ * badge corner (layout-and-chrome.md, Session Row) — the spinning bold
+ * brand ring while it runs, the filled amber pause of a question, the
+ * red x of an error (filled: the row's thin one is illegible this
+ * small), the filled apricot dot of a new reply (a step stronger than
+ * the row's, to stand off the apricot disc; WeChat's corner dot).
+ * Nothing at rest, or for a draft.
  *
- * Ringed in what the entry is filled with right now, so it reads as cut
- * into the disc's corner: the entry sets `--assistant-ground` (chrome,
+ * Ringed in what the card is filled with right now, so it reads as cut
+ * into the disc's corner: the card sets `--assistant-ground` (chrome,
  * hover, selected) and the ring follows.
  *
  * The header bans status dots (§4.1 禁止) because a dot reads as an

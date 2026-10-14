@@ -267,6 +267,14 @@ export interface AgentTurn {
   /** Optional metadata shown in the final-answer footer. */
   telemetry?: MessageTelemetry;
   /**
+   * Paths of the `[FILE:path]` markers in the final answer, in order —
+   * the cleaned `finalAnswer` drops the markers (cleanFinalAnswer, and
+   * Core's port of it). Only the sidebar's assistant card reads them,
+   * to say 「[文件] 名字」 (main chat ticket 18). Absent when there are
+   * none.
+   */
+  files?: string[];
+  /**
    * The main chat's greeting (ticket 04c, PRD ruling 47): Core writes it
    * as the AI's first message when it creates the main chat. Rendered
    * as a plain answer — no run fold, step marker or duration; it was no

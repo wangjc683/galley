@@ -30,6 +30,9 @@ import { isMac, isWindows } from "@/lib/platform";
  * Every class is written out in full so Tailwind emits it. The
  * defaults (no container-query support) are the narrow state, which
  * is the old one-row layout.
+ *
+ * This is the external runtime's masthead; with a main chat it has no
+ * wordmark and its own numbers (`ASSISTANT_*`, at the end).
  */
 
 /** SidebarHeader right padding: 项目 sits over the rows' `⋯` column
@@ -43,11 +46,7 @@ export const HEADER_NAV_ICONS_DISPLAY = isMac
     ? "hidden @min-[189px]/sidebar:flex"
     : "hidden @min-[179px]/sidebar:flex";
 
-/** The icon group's copy in the new-chat row — the complement. The
- * sectioned sidebar (with a main chat) has no new-chat row: below the
- * threshold the three icons get a row of their own under the masthead
- * (SidebarNarrowNavRow), which exists only in the narrow state —
- * crossing the threshold there moves the list by one row height. */
+/** The icon group's copy in the new-chat row — the complement. */
 export const ROW_NAV_ICONS_DISPLAY = isMac
   ? "flex @min-[251px]/sidebar:hidden"
   : isWindows
@@ -79,3 +78,65 @@ export const NEW_CHAT_LABEL_HIDDEN = isMac
   : isWindows
     ? { zh: "@max-[189px]/sidebar:hidden", en: "@max-[189px]/sidebar:hidden" }
     : { zh: "@max-[179px]/sidebar:hidden", en: "@max-[179px]/sidebar:hidden" };
+
+/**
+ * With a main chat (the managed runtime, main chat ticket 18) the
+ * masthead has no wordmark — 「Galley」 is the assistant's name on the
+ * card under it — and the new-chat row under the card is the scrolling
+ * list's sticky first row. Same one-threshold rule as above, new
+ * numbers.
+ *
+ * Masthead: pl (80 under the macOS traffic lights, the collapse
+ * toggle's 80; 16 elsewhere) + icons 92 + pr (12; Windows 22).
+ *   mac      80 + 92 + 12 = 184px
+ *   Windows  16 + 92 + 22 = 130px, under the 133.4px narrowest content
+ *   other    16 + 92 + 12 = 120px  (14% of a 960 window, minus 1px)
+ * so only macOS has a narrow state: below 184px the three icons move
+ * into the new-chat row, the external runtime's one-row layout.
+ *
+ * New-chat row, alone: mx-1.5 12 + pl-3 12 + plus 16 + gap-2 8 + label
+ * + pr-2 8 = 56 + label (新对话 39, New chat 58.84), and the hint adds
+ * itself + its pr-3 12 (Chrome: ⌘N 16.6px, Ctrl+N 39.4px; ~1.5px over
+ * for WebKit). On Windows the row gives up the list's 10px scrollbar
+ * lane.
+ *   mac      zh 123.6 / en 143.4 — under 184: the hint shows whenever
+ *            the row is alone; in the narrow state the label alone
+ *            needs zh 197 / en 216.8 beside the icons (above), so the
+ *            row is the plus and the icons.
+ *   Windows  label: zh 105 / en 124.8, always fits; hint: zh 156.4 +
+ *            1.5 -> 158px, en 176.2 + 1.5 -> 178px
+ *   other    label always fits; hint: zh 146.4 + 1.5 -> 148px, en
+ *            166.2 + 1.5 -> 168px
+ */
+
+/** The masthead's icon group, with a main chat. */
+export const ASSISTANT_HEADER_NAV_ICONS_DISPLAY = isMac
+  ? "hidden @min-[184px]/sidebar:flex"
+  : "flex";
+
+/** The new-chat row's icon group, with a main chat — the complement. */
+export const ASSISTANT_ROW_NAV_ICONS_DISPLAY = isMac
+  ? "flex @min-[184px]/sidebar:hidden"
+  : "hidden";
+
+/** The new-chat row's ⌘N, by UI language, with a main chat. */
+export const ASSISTANT_NEW_CHAT_HINT_DISPLAY: { zh: string; en: string } = isMac
+  ? {
+      zh: "hidden @min-[184px]/sidebar:block",
+      en: "hidden @min-[184px]/sidebar:block",
+    }
+  : isWindows
+    ? {
+        zh: "hidden @min-[158px]/sidebar:block",
+        en: "hidden @min-[178px]/sidebar:block",
+      }
+    : {
+        zh: "hidden @min-[148px]/sidebar:block",
+        en: "hidden @min-[168px]/sidebar:block",
+      };
+
+/** Where 新对话's text hides, with a main chat: only in the macOS
+ * narrow state, beside the icons. */
+export const ASSISTANT_NEW_CHAT_LABEL_HIDDEN: { zh: string; en: string } = isMac
+  ? { zh: "@max-[184px]/sidebar:hidden", en: "@max-[184px]/sidebar:hidden" }
+  : { zh: "", en: "" };

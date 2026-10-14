@@ -1,61 +1,57 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { type ReactNode, useState } from "react";
+import {
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import {
   AssistantAvatar,
   AssistantAvatarBadge,
 } from "@/components/layout/assistant/AssistantAvatar";
-import { IconTooltip } from "@/components/ui/tooltip";
-import { useAssistantState } from "@/hooks/useAssistantState";
 import {
-  type AssistantState,
+  useAssistantLastMessage,
+  useAssistantState,
+  useComposerDraft,
+  usePendingQuestion,
+} from "@/hooks/useAssistantState";
+import { useDayStamp } from "@/hooks/useDayStamp";
+import {
+  type AssistantCardLine,
   type AssistantStateKind,
-  assistantLabel,
+  assistantCardLine,
 } from "@/lib/assistant";
 import { useCopy, useLanguage } from "@/lib/i18n";
-import { isMac, isWindowActionTarget } from "@/lib/platform";
+import { formatListTime } from "@/lib/message-time";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { truncationFadeRef } from "@/lib/truncation-fade";
 import { cn } from "@/lib/utils";
 import type { Session } from "@/types/session";
 
-import { SidebarNavIcons, type SidebarNavItem } from "./SidebarNavIcons";
+import {
+  ASSISTANT_NEW_CHAT_HINT_DISPLAY,
+  ASSISTANT_NEW_CHAT_LABEL_HIDDEN,
+  ASSISTANT_ROW_NAV_ICONS_DISPLAY,
+} from "./sidebar-width";
+import { SidebarNavIcons } from "./SidebarNavIcons";
 import { NewChatButton } from "./SidebarQuickActions";
-import { SIDEBAR_HEADER_PR } from "./sidebar-width";
-import { ASSISTANT_TOP_WIDTHS, type SidebarTopDemo } from "./sidebar-top-trial";
 
 /**
- * The sidebar's top half in ticket 17's variants 2 / 3 / 3′ (TEMPORARY
- * until the ruling; sidebar-top-trial.ts has the variants and removal
- * steps). With a main chat, the assistant — Galley — is the entry on
- * top, and the conversations below open on 「＋ 新对话」:
- *
- *   2   SidebarAssistantMasthead with SidebarAssistantButton in it
- *   3   SidebarAssistantMasthead, then SidebarAssistantCard
- *   3′  the same with the card's big form
- *   all SidebarNewChatRow as the list's sticky first row (Sidebar.tsx)
- *
- * The entry obeys the sidebar's selection language and nothing else:
- * no fill, lift or line at rest; `bg-hover` under the pointer; the three
- * channels of a selected row while the assistant (or one of its
- * subtasks) is open — the selected fill, the lift, full ink (its name
- * is full ink always, like the main chat row's: it is the home).
- * Selection never takes the weight, which a state owns. A selected entry
- * does not answer hover, as a selected session row does not.
+ * The managed runtime's sidebar top, with a main chat (main chat PRD
+ * rulings 60–65, ticket 18). Under the masthead (SidebarHeader
+ * without its wordmark) the assistant, Galley, is one row of an IM chat
+ * list — SidebarAssistantCard, on the chrome above the strong line —
+ * and the conversations below open on SidebarNewChatRow, the scrolling
+ * list's sticky first row on the app ground (Sidebar.tsx).
  */
 
-const SEARCH_ONLY: readonly SidebarNavItem[] = ["search"];
-const ROW_ITEMS: readonly SidebarNavItem[] = ["scheduled", "newProject"];
-
-/** The entry's fill, and the ground its avatar badge is ringed in. */
-function entryFill(open: boolean): string {
+/** The card's fill, and the ground its avatar badge is ringed in. A
+ * selected card does not answer hover, as a selected session row does
+ * not. */
+function cardFill(open: boolean): string {
   return open
     ? "bg-selected shadow-[var(--shadow-selected)] [--assistant-ground:var(--color-selected)]"
     : "[--assistant-ground:var(--color-chrome)] hover:bg-hover hover:[--assistant-ground:var(--color-hover)]";
 }
-
-const ENTRY_PRESS =
-  "transition-none active:translate-y-px active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm";
 
 /** The badge pops when the state becomes news — a question, an error, a
  * new reply — never on mount (SidebarSessionRow's latch). */
@@ -71,221 +67,196 @@ function useBadgePop(kind: AssistantStateKind): boolean {
   );
 }
 
-/** The name: full ink always; semibold while it has something to say,
- * as a row's title is for running, unread and the blocking states. */
-function nameWeight(state: AssistantState): string {
-  return state.kind === "idle" ? "font-medium" : "font-semibold";
+/** The second line's prefix, in its state's colour: the amber of 「等你
+ * 回复：」, the brand of 「草稿：」 (red is for errors), the line's own
+ * muted ink for 「你：」. */
+function prefixTone(line: AssistantCardLine): string {
+  return line.kind === "ask"
+    ? "font-medium text-warning"
+    : line.kind === "draft"
+      ? "font-medium text-brand-strong"
+      : "";
 }
 
-/** The line under the name: the row subline's register and tones. */
-function lineTone(state: AssistantState): string {
-  return state.line?.tone === "error"
-    ? "font-medium text-error"
-    : state.line?.tone === "warning"
-      ? "font-medium text-warning"
-      : "sidebar-step-tick text-brand-strong/85";
+/** A line without a prefix takes its state's colour whole — a session
+ * row subline's tones; a quoted question, a draft or a message reads in
+ * the line's muted ink. */
+function lineTone(line: AssistantCardLine): string {
+  switch (line.kind) {
+    case "error":
+      return "font-medium text-error";
+    case "running":
+      return "sidebar-step-tick text-brand-strong/85";
+    case "ask":
+      return line.prefix ? "text-ink-muted" : "font-medium text-warning";
+    default:
+      return "text-ink-muted";
+  }
 }
 
-interface EntryProps {
+function lineText(line: AssistantCardLine): string {
+  return "prefix" in line && line.prefix
+    ? `${line.prefix}${line.text}`
+    : line.text;
+}
+
+/**
+ * The assistant's card: one row of an IM chat list (ruling 65). A 40px
+ * avatar on the rows' 18px line (the brand disc and its 「G」); 「Galley」
+ * at 14px with the time of the last message on the right, 11px muted
+ * like the list's counts; under them one line —
+ *
+ *   error > a question (「等你回复：」 + the question itself) > running >
+ *   an unsent draft (「草稿：」, only while the assistant is not open) >
+ *   the last message (「你：」 for the user's own)
+ *
+ * (lib/assistant.ts). The avatar wears a session row's status glyph in
+ * its corner for running, a question, an error and a new reply, and the
+ * name goes semibold for those; a draft and the resting card stay
+ * medium. A new reply shows only while the assistant is not open.
+ *
+ * The time is the last message's (lib/message-time.ts `formatListTime`:
+ * 11:50 / 昨天 / 周一 / 10月7日 / 2025年10月7日), the session's last
+ * activity when no message is at hand, re-dated at midnight
+ * (`useDayStamp`).
+ *
+ * Fixed 58px, so a line that changes or goes never moves the list.
+ * No border, and no fill or lift at rest — fill and lift are selection's
+ * channels in the sidebar; `bg-hover` under the pointer; the three
+ * selected channels while the assistant or one of its subtasks is open;
+ * the 12px card radius where rows have 6px. It opens on pointerdown
+ * like a session row (the click that follows is swallowed); Enter and
+ * Space open it as any button.
+ */
+export function SidebarAssistantCard({
+  mainChat,
+  subtasks,
+  open,
+  onOpen,
+}: {
   mainChat: Session;
   /** Its unpromoted subtasks. */
   subtasks: Session[];
   /** The main chat, or one of its subtasks, is open. */
   open: boolean;
-  demo?: SidebarTopDemo;
   onOpen: () => void;
-}
-
-/**
- * 2 and 3 / 3′'s masthead. 2: the entry where the wordmark stood, its
- * box from 80px under the macOS traffic lights so the avatar sits on
- * the wordmark's 88px line (8px box / 16px avatar elsewhere), and 搜索
- * alone on the right, over the rows' `⋯` column; only below 168px under
- * the macOS lights does 搜索 step down into the new-chat row. 3 / 3′:
- * only 搜索. Everything but the buttons drags the window; double-click
- * maximizes off macOS, as on SidebarHeader.
- */
-export function SidebarAssistantMasthead({
-  entry,
-  searchDisplay = "flex",
-  onSearch,
-}: {
-  entry?: ReactNode;
-  searchDisplay?: string;
-  onSearch?: () => void;
 }) {
-  return (
-    <div
-      data-tauri-drag-region
-      data-role="assistant-masthead"
-      onDoubleClick={(e) => {
-        if (isMac) return;
-        if (!isWindowActionTarget(e.target)) return;
-        try {
-          void getCurrentWindow().toggleMaximize();
-        } catch {
-          // No Tauri host (plain Vite browser dev) — ignore.
-        }
-      }}
-      className={cn(
-        "flex h-11 shrink-0 items-center gap-3 border-b border-line/60",
-        SIDEBAR_HEADER_PR,
-        isMac ? "pl-20" : "pl-2",
-      )}
-    >
-      {entry}
-      <SidebarNavIcons
-        placement="header"
-        items={SEARCH_ONLY}
-        display={cn(searchDisplay, "ml-auto")}
-        onSearch={onSearch}
-      />
-    </div>
-  );
-}
-
-/**
- * 2's entry: avatar and 「Galley」 on one line, one button, 28px tall
- * like the header's other controls. No room for words: every state
- * hangs on the avatar, and the tooltip and the accessible name say it.
- * When the masthead gets too narrow (mac 214px) the name goes first and
- * the avatar stays (sidebar-top-trial.ts).
- */
-export function SidebarAssistantButton({
-  mainChat,
-  subtasks,
-  open,
-  demo,
-  onOpen,
-}: EntryProps) {
   const copy = useCopy();
-  const state = useAssistantState({ mainChat, subtasks, open, demo });
-  const pop = useBadgePop(state.kind);
-  const label = assistantLabel(copy.assistant.name, state);
-  return (
-    <IconTooltip text={label} side="bottom">
-      <button
-        type="button"
-        data-role="assistant-entry"
-        data-variant="2"
-        data-state={state.kind}
-        aria-label={label}
-        aria-current={open ? "page" : undefined}
-        onClick={onOpen}
-        className={cn(
-          "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[13px] leading-4 text-ink",
-          ENTRY_PRESS,
-          "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-          entryFill(open),
-        )}
-      >
-        <span className="relative inline-flex">
-          <AssistantAvatar size={20} />
-          <AssistantAvatarBadge
-            key={state.kind}
-            kind={state.kind}
-            size={20}
-            pop={pop}
-          />
-        </span>
-        <span className={cn(ASSISTANT_TOP_WIDTHS.entryName, nameWeight(state))}>
-          {copy.assistant.name}
-        </span>
-      </button>
-    </IconTooltip>
+  const language = useLanguage();
+  const dayStamp = useDayStamp();
+  const state = useAssistantState({ mainChat, subtasks, open });
+  const question = usePendingQuestion(mainChat.id);
+  // No key while it is open: its draft is in the composer right there,
+  // and typing there then never re-renders the card.
+  const draft = useComposerDraft(open ? undefined : mainChat.id);
+  const lastMessage = useAssistantLastMessage(mainChat);
+  const line = assistantCardLine(
+    state,
+    { question, draft, lastMessage, open },
+    copy,
   );
-}
-
-/**
- * 3 / 3′'s card, the one thing in the sidebar with an avatar. 3: a
- * 32px avatar on the rows' 18px line, 「Galley」 (14px, a step over a
- * row's 13px) and the line under it; at rest the name alone, centred
- * on the avatar. 3′: a 48px avatar centred, the name under it, the line
- * under that. Fixed heights (58px, 112px) so the list below never moves
- * as the line comes and goes; the contents re-centre instead, as the
- * main chat row's title does.
- *
- * What keeps it from reading as a session row is its own anatomy — an
- * avatar where rows have a 14px status glyph, a bigger name, more
- * height, the 12px card radius where rows have 6px — and its place:
- * on the chrome above the strong line, the list below on the app
- * ground. Not a border or a resting fill / shadow: fill and lift are
- * selection's channels in the sidebar, so a card that wore them at rest
- * would read as selected, and a border is one more line between the
- * masthead's and the strong one.
- */
-export function SidebarAssistantCard({
-  variant,
-  mainChat,
-  subtasks,
-  open,
-  demo,
-  onOpen,
-}: EntryProps & { variant: "3" | "3′" }) {
-  const copy = useCopy();
-  const state = useAssistantState({ mainChat, subtasks, open, demo });
+  const time = formatListTime(
+    lastMessage?.sentAt ?? mainChat.lastActivityAt,
+    dayStamp,
+    language,
+    { yesterday: copy.assistant.timeYesterday },
+  );
   const pop = useBadgePop(state.kind);
-  const label = assistantLabel(copy.assistant.name, state);
-  const big = variant === "3′";
-  const avatarSize = big ? 48 : 32;
+  const fullLine = line ? lineText(line) : null;
+  const label = [
+    copy.assistant.name,
+    state.kind === "unread" ? copy.sidebar.newReplyTitle : null,
+    fullLine,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  // Opens on pointerdown, as a session row does; the click that press
+  // produces is swallowed. A plain flag: every click follows a
+  // pointerdown that re-arms it (SidebarSessionRow).
+  const ignoreNextClickRef = useRef(false);
+  const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    // macOS Ctrl-click is the context-menu gesture.
+    if (event.button !== 0 || event.ctrlKey) return;
+    ignoreNextClickRef.current = true;
+    onOpen();
+  };
+  const handleClick = () => {
+    if (ignoreNextClickRef.current) {
+      ignoreNextClickRef.current = false;
+      return;
+    }
+    onOpen();
+  };
   return (
     <button
       type="button"
-      data-role="assistant-entry"
-      data-variant={variant}
+      data-role="assistant-card"
       data-state={state.kind}
       aria-label={label}
       aria-current={open ? "page" : undefined}
-      onClick={onOpen}
+      onPointerDown={handlePointerDown}
+      onClick={handleClick}
       className={cn(
-        "mx-1.5 flex w-[calc(100%-12px)] rounded-md px-3 text-left text-ink",
-        big
-          ? "h-[112px] flex-col items-center justify-center"
-          : "h-[58px] items-center gap-2.5",
-        ENTRY_PRESS,
+        "mx-1.5 flex h-[58px] w-[calc(100%-12px)] items-center gap-2.5 rounded-md px-3 text-left text-ink",
+        "transition-none active:translate-y-px active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
         "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-        entryFill(open),
+        cardFill(open),
       )}
     >
       <span className="relative inline-flex shrink-0">
-        <AssistantAvatar size={avatarSize} />
+        <AssistantAvatar size={40} />
         <AssistantAvatarBadge
           key={state.kind}
           kind={state.kind}
-          size={avatarSize}
+          size={40}
           pop={pop}
         />
       </span>
-      <span
-        className={cn(
-          "flex min-w-0 flex-col",
-          big ? "mt-1.5 max-w-full items-center" : "flex-1",
-        )}
-      >
-        <span
-          className={cn(
-            "max-w-full truncate text-[14px] leading-5",
-            nameWeight(state),
-          )}
-        >
-          {copy.assistant.name}
-        </span>
-        {state.line && (
+      <span className="flex min-w-0 flex-1 flex-col">
+        {/* The time yields whole: when one line cannot hold the name and
+            the time, the time wraps onto a second row this 20px box
+            clips, so 「Galley」 is never cut for it, nor the time in
+            half. The line is the sidebar less 86px (mx-1.5, px-3, the
+            avatar, gap-2.5): 「11:50」 shows from a 167px sidebar, an
+            English 「11:50 AM」 from 188px (Chrome). */}
+        <span className="flex h-5 min-w-0 flex-wrap items-baseline justify-between gap-x-2 overflow-hidden">
           <span
-            key={`${state.kind}:${state.line.text}`}
-            data-role="assistant-status-line"
-            ref={truncationFadeRef}
-            // A cut line gets its full text as a native title, as a row's
-            // subline does (only while it is actually cut).
-            onPointerEnter={(e) =>
-              syncTruncatedTitle(e.currentTarget, state.line?.text ?? "")
-            }
             className={cn(
-              "truncate-fade mt-0.5 max-w-full text-[11px] leading-[1.4] tabular-nums",
-              lineTone(state),
+              "min-w-0 truncate text-[14px] leading-5",
+              state.kind === "idle" ? "font-medium" : "font-semibold",
             )}
           >
-            {state.line.text}
+            {copy.assistant.name}
+          </span>
+          {time && (
+            <span
+              data-role="assistant-time"
+              className="shrink-0 text-[11px] leading-5 tabular-nums text-ink-muted"
+            >
+              {time}
+            </span>
+          )}
+        </span>
+        {line && (
+          <span
+            key={`${line.kind}:${fullLine}`}
+            data-role="assistant-card-line"
+            data-kind={line.kind}
+            // Cut lines fade like a row's subline and get their full
+            // text as a native title, only while actually cut.
+            ref={truncationFadeRef}
+            onPointerEnter={(e) =>
+              syncTruncatedTitle(e.currentTarget, fullLine ?? "")
+            }
+            className={cn(
+              "truncate-fade mt-0.5 text-[12px] leading-[1.4] tabular-nums",
+              lineTone(line),
+            )}
+          >
+            {"prefix" in line && line.prefix && (
+              <span className={prefixTone(line)}>{line.prefix}</span>
+            )}
+            {line.text}
           </span>
         )}
       </span>
@@ -294,17 +265,16 @@ export function SidebarAssistantCard({
 }
 
 /**
- * The list's first row in 2 / 3 / 3′: the external runtime's 「＋ 新对话
- * ⌘N」 button (NewChatButton) with 定时 and 新建项目 at the row's end —
- * 2 adds 搜索 before them once its masthead cannot hold it (mac under
- * 168px). pr-1 puts the last icon's centre over the rows' `⋯` column
- * (26px from the edge), under the masthead's 搜索. `lit` while the empty
- * new-chat composer is up: the sidebar's one "you are here", until the
- * first send's row takes over. The label and the ⌘N hide whole on their
- * own widths (sidebar-top-trial.ts).
+ * The list's first row with a main chat: the external runtime's 「＋ 新
+ * 对话 ⌘N」 button alone (NewChatButton), the conversations' one way in
+ * (ruling 64). `lit` while the empty new-chat composer is up — a
+ * project's too — until the first send's row takes over: the selected
+ * row's channels, the sidebar's one "you are here". On macOS below the
+ * masthead's 184px the masthead's three icons come down into this row,
+ * the external runtime's one-row layout; the row is there either way,
+ * so the list never moves (sidebar-width.ts).
  */
 export function SidebarNewChatRow({
-  variant,
   lit,
   onNewChat,
   onSearch,
@@ -312,7 +282,6 @@ export function SidebarNewChatRow({
   scheduledActionCount = 0,
   onNewProject,
 }: {
-  variant: "2" | "3" | "3′";
   lit: boolean;
   onNewChat?: () => void;
   onSearch?: () => void;
@@ -321,29 +290,25 @@ export function SidebarNewChatRow({
   onNewProject?: () => void;
 }) {
   const language = useLanguage();
-  const widths = ASSISTANT_TOP_WIDTHS;
   return (
     <div
       data-role="sidebar-new-chat-row"
-      className="mx-1.5 flex items-center gap-0.5 pr-1"
+      className="mx-1.5 flex items-center gap-0.5"
     >
       <NewChatButton
         active={lit}
         onClick={onNewChat}
-        display={{ label: widths.label, hint: widths.hint[language] }}
+        display={{
+          label: ASSISTANT_NEW_CHAT_LABEL_HIDDEN,
+          hint: ASSISTANT_NEW_CHAT_HINT_DISPLAY[
+            language === "en-US" ? "en" : "zh"
+          ],
+        }}
       />
-      {variant === "2" && widths.rowSearch !== "hidden" && (
-        <SidebarNavIcons
-          placement="row"
-          items={SEARCH_ONLY}
-          display={widths.rowSearch}
-          onSearch={onSearch}
-        />
-      )}
       <SidebarNavIcons
         placement="row"
-        items={ROW_ITEMS}
-        display="flex"
+        display={ASSISTANT_ROW_NAV_ICONS_DISPLAY}
+        onSearch={onSearch}
         onOpenScheduled={onOpenScheduled}
         scheduledActionCount={scheduledActionCount}
         onNewProject={onNewProject}
@@ -353,8 +318,8 @@ export function SidebarNewChatRow({
 }
 
 /** The list's line while nobody has started a conversation: the old
- * sidebar's words (「你的对话会出现在这里。」) in the section hint's
- * place — 2 / 3 / 3′ no longer say 主对话 anywhere in the sidebar. */
+ * sidebar's words (「你的对话会出现在这里。」); agent-started sessions
+ * in 「其他来源」 do not count. */
 export function SidebarAssistantEmptyHint() {
   const copy = useCopy();
   return (

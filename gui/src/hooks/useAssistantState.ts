@@ -1,39 +1,43 @@
-import {
-  demoAssistantState,
-  type SidebarTopDemo,
-} from "@/components/layout/sidebar/sidebar-top-trial";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+
 import { useSessionStatusView } from "@/hooks/useSessionStatusView";
 import { useSessionsAttention } from "@/hooks/useSessionsAttention";
-import { assistantState, type AssistantState } from "@/lib/assistant";
-import { useCopy, useLanguage } from "@/lib/i18n";
+import {
+  type AssistantDraft,
+  type AssistantLastMessage,
+  assistantState,
+  type AssistantState,
+  lastVisibleMessage,
+} from "@/lib/assistant";
+import {
+  readComposerDraft,
+  subscribeComposerDrafts,
+} from "@/lib/composer-draft";
+import { loadMessageTurnsPage } from "@/lib/db";
+import { useCopy } from "@/lib/i18n";
+import { EMPTY_TURNS, useMessagesStore } from "@/stores/messages";
+import { rowsToTurns } from "@/stores/messages/rowsToTurns";
 import type { Session } from "@/types/session";
 
 /**
- * The assistant's state for its sidebar entry and its header identity
- * (main chat ticket 17, lib/assistant.ts): the main chat's live status,
- * its unpromoted subtasks' questions and errors, its unread mark.
- * `subtasks` are the main chat's unpromoted subtasks — an open one
- * counts too, as it does on the main chat row. `open` is the main chat
- * or one of them being on screen. `demo` is the sidebar-top trial's
- * 「演示」 (TEMPORARY): it replaces what is shown, never what is stored.
+ * The assistant's state for its sidebar card and its header identity
+ * (lib/assistant.ts): the main chat's live status, its unpromoted
+ * subtasks' questions and errors, its unread mark. `subtasks` are the
+ * main chat's unpromoted subtasks — an open one counts too. `open` is
+ * the main chat or one of them being on screen.
  */
 export function useAssistantState({
   mainChat,
   subtasks,
   open,
-  demo = "无",
 }: {
   mainChat: Session;
   subtasks: Session[];
   open: boolean;
-  demo?: SidebarTopDemo;
 }): AssistantState {
   const copy = useCopy();
-  const language = useLanguage();
   const view = useSessionStatusView(mainChat);
   const subtaskAttention = useSessionsAttention(subtasks, undefined);
-  const demoState = demoAssistantState(demo, open, copy, language);
-  if (demoState) return demoState;
   return assistantState(
     {
       status: view.status,
@@ -50,4 +54,85 @@ export function useAssistantState({
     },
     copy,
   );
+}
+
+/** The question the main chat is asking, if the page has it. */
+export function usePendingQuestion(sessionId: string): string | null {
+  return useMessagesStore(
+    (s) => s.byId[sessionId]?.pendingAskUser?.question ?? null,
+  );
+}
+
+/**
+ * The unsent draft in a session's composer (lib/composer-draft.ts), or
+ * null — and null for no key: the card passes none while the assistant
+ * is open, so typing in its composer never re-renders the card.
+ */
+export function useComposerDraft(
+  key: string | undefined,
+): AssistantDraft | null {
+  const snapshot = () => (key ? readComposerDraft(key) : undefined);
+  const draft = useSyncExternalStore(
+    subscribeComposerDrafts,
+    snapshot,
+    snapshot,
+  );
+  return useMemo(
+    () =>
+      draft ? { text: draft.text, imageCount: draft.images.length } : null,
+    [draft],
+  );
+}
+
+/**
+ * The main chat's last visible message (lib/assistant.ts), from the
+ * page's message cache — the main chat opens at launch, so it is
+ * normally there. When the cache holds no turns for it (the launch did
+ * not open it, or a fresh main chat whose greeting is no turn and was
+ * never read back), the latest page is read once with the transcript
+ * reader activation uses (`session_message_turns_page`), straight into
+ * this hook: the cache, the active session, the unread flag and every
+ * scroll position stay as they were. It is read again only when the
+ * session's activity moves while the cache still holds nothing; once
+ * the cache has turns, they win.
+ */
+export function useAssistantLastMessage(
+  mainChat: Session,
+): AssistantLastMessage | null {
+  const copy = useCopy();
+  const turns = useMessagesStore((s) => s.byId[mainChat.id]?.turns);
+  const restoring = useMessagesStore(
+    (s) => s.byId[mainChat.id]?.restoring ?? false,
+  );
+  const cached = turns ?? EMPTY_TURNS;
+  const fromCache = useMemo(
+    () => lastVisibleMessage(cached, copy),
+    [cached, copy],
+  );
+  const readKey = `${mainChat.id}@${mainChat.lastActivityAt}`;
+  const needsRead = cached.length === 0 && !restoring;
+  const [read, setRead] = useState<{
+    key: string;
+    message: AssistantLastMessage | null;
+  } | null>(null);
+  useEffect(() => {
+    if (!needsRead) return;
+    let cancelled = false;
+    loadMessageTurnsPage(mainChat.id)
+      .then((page) => {
+        if (cancelled) return;
+        setRead({
+          key: readKey,
+          message: lastVisibleMessage(rowsToTurns(page.rows), copy),
+        });
+      })
+      .catch((e: unknown) => {
+        console.debug("[assistant] reading the last message failed.", e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsRead, readKey, mainChat.id, copy]);
+  if (cached.length > 0) return fromCache;
+  return read?.key === readKey ? read.message : null;
 }

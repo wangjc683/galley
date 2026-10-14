@@ -165,10 +165,6 @@ export const enCopy: AppCopy = {
   },
   sidebar: {
     newConversation: "New chat",
-    mainChat: "Main chat",
-    otherChats: "Chats",
-    otherChatsHint:
-      "Give one thing its own chat. The main chat stays uncluttered.",
     otherSources: "Other sources",
     search: "Search",
     projects: "Projects",
@@ -257,7 +253,6 @@ export const enCopy: AppCopy = {
     failed: (message: string) => `Failed: ${message}`,
     failedBare: "Failed",
     didNotFinish: "Did not finish",
-    backToMainChat: "Back to the main chat",
     fromMainChat: "Sent by the main chat",
     sidebarWaiting: "A subtask is asking you",
     sidebarErrored: "A subtask failed",
@@ -268,6 +263,12 @@ export const enCopy: AppCopy = {
   assistant: {
     name: "Galley",
     backTo: "Back to Galley",
+    askPrefix: "Waiting for you: ",
+    draftPrefix: "Draft: ",
+    youPrefix: "You: ",
+    image: "[Image]",
+    file: (name) => `[File] ${name}`,
+    timeYesterday: "Yesterday",
   },
   topbar: {
     newConversation: "New chat",

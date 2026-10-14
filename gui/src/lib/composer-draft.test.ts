@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   dropComposerDraft,
   readComposerDraft,
   saveComposerDraft,
+  subscribeComposerDrafts,
 } from "./composer-draft";
 
 import type { PendingImageAttachment } from "@/types/conversation";
@@ -45,5 +46,29 @@ describe("composer-draft", () => {
     dropComposerDraft("a");
     expect(readComposerDraft("b")?.text).toBe("B 的草稿");
     dropComposerDraft("b");
+  });
+
+  it("tells subscribers about saves and drops, and only real changes", () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeComposerDrafts(listener);
+    saveComposerDraft("main", { text: "下周三", images: [] });
+    expect(listener).toHaveBeenCalledTimes(1);
+    const first = readComposerDraft("main");
+    // Another key's write leaves this key's entry as it was.
+    saveComposerDraft("other", { text: "别处", images: [] });
+    expect(readComposerDraft("main")).toBe(first);
+    expect(listener).toHaveBeenCalledTimes(2);
+    // Emptying an absent key, or dropping one, changes nothing to hear.
+    saveComposerDraft("absent", { text: " ", images: [] });
+    dropComposerDraft("absent");
+    expect(listener).toHaveBeenCalledTimes(2);
+    dropComposerDraft("main");
+    expect(listener).toHaveBeenCalledTimes(3);
+    saveComposerDraft("other", { text: "", images: [] });
+    expect(listener).toHaveBeenCalledTimes(4);
+    unsubscribe();
+    saveComposerDraft("main", { text: "听不到了", images: [] });
+    expect(listener).toHaveBeenCalledTimes(4);
+    dropComposerDraft("main");
   });
 });

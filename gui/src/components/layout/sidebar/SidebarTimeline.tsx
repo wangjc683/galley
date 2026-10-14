@@ -33,12 +33,10 @@ export type SidebarProjectGroupWiring = {
 function WiredProjectGroup({
   item,
   groupWiring,
-  plusPressed,
   ...rowWiring
 }: {
   item: SidebarProjectGroupItem;
   groupWiring: SidebarProjectGroupWiring;
-  plusPressed?: boolean;
 } & SidebarTimelineRowWiring) {
   const {
     expandedProjectIds,
@@ -70,7 +68,6 @@ function WiredProjectGroup({
       onEdit={onEditProject ? () => onEditProject(id) : undefined}
       onDelete={onDeleteProject ? () => onDeleteProject(id) : undefined}
       onArchiveAll={onArchiveSessions}
-      plusPressed={plusPressed}
       {...rowWiring}
     />
   );
@@ -138,7 +135,6 @@ export function SidebarSectionsList({
   onOpenEarlier,
   otherSourcesSlot,
   groupWiring,
-  pressedPlusProjectId,
   ...rowWiring
 }: {
   sections: SidebarSections;
@@ -149,9 +145,6 @@ export function SidebarSectionsList({
   onOpenEarlier?: () => void;
   otherSourcesSlot?: React.ReactNode;
   groupWiring: SidebarProjectGroupWiring;
-  /** The project whose group row's + opened the empty new-chat
-   * composer, with a main chat: that + stays pressed (ticket 13). */
-  pressedPlusProjectId?: string;
 } & SidebarTimelineRowWiring) {
   const copy = useCopy();
   const labels: Record<SidebarTimeBucket, string> = {
@@ -175,7 +168,6 @@ export function SidebarSectionsList({
         othersOpen={othersOpen}
         onToggleOthers={onToggleOthers}
         groupWiring={groupWiring}
-        pressedPlusProjectId={pressedPlusProjectId}
         {...rowWiring}
       />
       {SIDEBAR_TIME_BUCKETS.map((bucket) => (
@@ -244,7 +236,6 @@ function SidebarProjectsSection({
   othersOpen,
   onToggleOthers,
   groupWiring,
-  pressedPlusProjectId,
   ...rowWiring
 }: {
   groups: SidebarProjectGroupItem[];
@@ -254,11 +245,6 @@ function SidebarProjectsSection({
   othersOpen: boolean;
   onToggleOthers: () => void;
   groupWiring: SidebarProjectGroupWiring;
-  /** See SidebarSectionsList. Folded, no group row shows a +; that only
-   * happens when the user folds the section after pressing one: every
-   * way into a project's new chat starts from its group row, or (a new
-   * project) unfolds the section first. */
-  pressedPlusProjectId?: string;
 } & SidebarTimelineRowWiring) {
   const copy = useCopy();
   const { activeId } = rowWiring;
@@ -285,18 +271,12 @@ function SidebarProjectsSection({
         key={`project:${item.project.id}`}
         item={item}
         groupWiring={groupWiring}
-        plusPressed={pressedPlusProjectId === item.project.id}
         {...rowWiring}
       />
     ));
-  // 更多项目, shut, also lends its slot to the group whose + is pressed.
   const borrowedOthers = othersOpen
     ? []
-    : otherGroups.filter(
-        (g) =>
-          hangs(sessionsOf([g])).length > 0 ||
-          g.project.id === pressedPlusProjectId,
-      );
+    : otherGroups.filter((g) => hangs(sessionsOf([g])).length > 0);
   const hiddenOthers = otherGroups.length - borrowedOthers.length;
   return (
     <>
@@ -353,11 +333,9 @@ function SidebarCollapsibleSectionLabel({
   onToggle: () => void;
 }) {
   // pt-2 + py-1.5 = the plain label's pt-3.5 / pb-1.5, with the hover
-  // fill hugging the text the way the 更早 entry's does. First under the
-  // 「其他对话」 header (Sidebar.tsx, ticket 09) the pt-2 goes: 6px to
-  // the text, as the plain label's pt-1.5 there.
+  // fill hugging the text the way the 更早 entry's does.
   return (
-    <div className="pt-2 [[data-sidebar-section-body]>&:first-child]:pt-0">
+    <div className="pt-2">
       <button
         type="button"
         onClick={onToggle}
@@ -399,11 +377,8 @@ export function SidebarSectionLabel({
   // mx-1.5 + px-3 puts the label on the session rows' grid (2026-10-08):
   // it starts on the 18px status-icon edge and the count ends on the
   // 18px text edge, under the new-chat row's ⌘N. It was px-4 (16px).
-  // Directly under the sectioned sidebar's 「其他对话」 header (ticket 09)
-  // pt-3.5 drops to pt-1.5: the header is what it belongs to, so the
-  // gap is the small one. The attribute exists only there.
   return (
-    <div className="mx-1.5 flex items-center gap-1.5 px-3 pb-1.5 pt-3.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted [[data-sidebar-section-body]>&:first-child]:pt-1.5">
+    <div className="mx-1.5 flex items-center gap-1.5 px-3 pb-1.5 pt-3.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
       <span className="min-w-0 flex-1 truncate">{children}</span>
       {count != null && (
         <span className="shrink-0 tabular-nums normal-case tracking-normal text-ink-muted">

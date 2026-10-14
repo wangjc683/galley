@@ -21,14 +21,6 @@ export const SHORTCUT_TEXT_CLASS =
 
 type NavIconsPlacement = "header" | "row";
 
-export type SidebarNavItem = "search" | "scheduled" | "newProject";
-
-const ALL_NAV_ITEMS: readonly SidebarNavItem[] = [
-  "search",
-  "scheduled",
-  "newProject",
-];
-
 /**
  * 搜索 / 定时 / 新建项目 as icons, name and shortcut in their tooltips. The
  * group renders twice — once in SidebarHeader, once in the new-chat row
@@ -45,10 +37,10 @@ const ALL_NAV_ITEMS: readonly SidebarNavItem[] = [
  * (2026-10-09; it was the 项目 menu): the projects themselves are all in
  * the 项目 section, the quiet ones behind its 「更多项目」 row.
  *
- * `items` / `display` (TEMPORARY, ticket 17's sidebar-top trial): a
- * subset of the three in that order, under another width rule — 2 / 3 /
- * 3′ keep 搜索 on the masthead and 定时 / 新建项目 in the new-chat row
- * (SidebarAssistant.tsx). Omitted, all three under this platform's rule.
+ * `display` puts the group under another width rule: with a main chat
+ * the masthead and the new-chat row trade the icons at their own
+ * threshold (sidebar-width.ts, `ASSISTANT_*`). Omitted, this
+ * platform's rule.
  */
 export function SidebarNavIcons({
   placement,
@@ -56,7 +48,6 @@ export function SidebarNavIcons({
   onOpenScheduled,
   scheduledActionCount = 0,
   onNewProject,
-  items = ALL_NAV_ITEMS,
   display,
 }: {
   placement: NavIconsPlacement;
@@ -69,7 +60,6 @@ export function SidebarNavIcons({
    * meaningful (a number here always means "handle something"). */
   scheduledActionCount?: number;
   onNewProject?: () => void;
-  items?: readonly SidebarNavItem[];
   /** The group's display rule, instead of this platform's. */
   display?: string;
 }) {
@@ -90,39 +80,33 @@ export function SidebarNavIcons({
             cn(display ?? ROW_NAV_ICONS_DISPLAY, "min-w-0 gap-0.5"),
       )}
     >
-      {items.includes("search") && (
-        <NavButton
-          label={copy.sidebar.search}
-          tooltip={
-            <ShortcutTooltipText
-              label={copy.sidebar.search}
-              shortcut={formatShortcut("Mod+K")}
-            />
-          }
-          onClick={onSearch}
-        >
-          <MagnifyingGlass size={iconSize} weight="thin" />
-        </NavButton>
-      )}
-      {items.includes("scheduled") && (
-        <NavButton
-          label={scheduledLabel}
-          tooltip={scheduledLabel}
-          onClick={onOpenScheduled}
-        >
-          <Clock size={iconSize} weight="thin" />
-          <ScheduledBadge count={scheduledActionCount} placement={placement} />
-        </NavButton>
-      )}
-      {items.includes("newProject") && (
-        <NavButton
-          label={copy.sidebar.newProject}
-          tooltip={copy.sidebar.newProject}
-          onClick={onNewProject}
-        >
-          <FolderPlus size={iconSize} weight="thin" />
-        </NavButton>
-      )}
+      <NavButton
+        label={copy.sidebar.search}
+        tooltip={
+          <ShortcutTooltipText
+            label={copy.sidebar.search}
+            shortcut={formatShortcut("Mod+K")}
+          />
+        }
+        onClick={onSearch}
+      >
+        <MagnifyingGlass size={iconSize} weight="thin" />
+      </NavButton>
+      <NavButton
+        label={scheduledLabel}
+        tooltip={scheduledLabel}
+        onClick={onOpenScheduled}
+      >
+        <Clock size={iconSize} weight="thin" />
+        <ScheduledBadge count={scheduledActionCount} placement={placement} />
+      </NavButton>
+      <NavButton
+        label={copy.sidebar.newProject}
+        tooltip={copy.sidebar.newProject}
+        onClick={onNewProject}
+      >
+        <FolderPlus size={iconSize} weight="thin" />
+      </NavButton>
     </div>
   );
 }

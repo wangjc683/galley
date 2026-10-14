@@ -6,7 +6,7 @@
 
 import { buildAgentTurn, toolEventsFromRaw } from "@/lib/agent-turn";
 import { mergedAskUserArgs } from "@/lib/ask-user-candidates";
-import { stripGATags } from "@/lib/ipc/ga-output-cleaning";
+import { finalAnswerFileRefs, stripGATags } from "@/lib/ipc/ga-output-cleaning";
 import { makeMessageStepper } from "@/lib/turn-index";
 import type {
   Origin,
@@ -86,6 +86,9 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
         turnIndex: stepper.stepFor(row.turn_index),
         summary: row.summary,
         telemetry: row.telemetry,
+        // The persisted answer is cleaned of its [FILE:] markers; the raw
+        // reply in `content` still has them.
+        files: finalAnswerFileRefs(row.content),
       });
       turn.messageId = row.id;
       if (isMainChatGreeting(row)) turn.greeting = true;

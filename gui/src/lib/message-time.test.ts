@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatListTime,
   formatMessageDateTime,
   formatMessageTime,
   formatMessageTimeFull,
@@ -280,5 +281,81 @@ describe("formatMessageTimeFull", () => {
 
   it("returns null for an unparseable timestamp", () => {
     expect(formatMessageTimeFull("", "en-US")).toBeNull();
+  });
+});
+
+describe("formatListTime (the assistant card's time, IM-list style)", () => {
+  // Tuesday 2026-10-13, today.
+  const today = local(2026, 10, 13).getTime();
+  const zh = (at: Date, todayMs = today) =>
+    formatListTime(iso(at), todayMs, "zh-CN", { yesterday: "昨天" });
+  const en = (at: Date, todayMs = today) =>
+    plain(
+      formatListTime(iso(at), todayMs, "en-US", { yesterday: "Yesterday" }),
+    );
+
+  it("writes today's messages as a clock", () => {
+    expect(zh(local(2026, 10, 13, 11, 50))).toBe("11:50");
+    expect(zh(local(2026, 10, 13, 0, 0))).toBe("00:00");
+    expect(zh(local(2026, 10, 13, 23, 59))).toBe("23:59");
+    expect(en(local(2026, 10, 13, 11, 50))).toBe("11:50 AM");
+    expect(en(local(2026, 10, 13, 21, 5))).toBe("9:05 PM");
+  });
+
+  it("writes yesterday's as the word alone", () => {
+    expect(zh(local(2026, 10, 12, 23, 59))).toBe("昨天");
+    expect(zh(local(2026, 10, 12, 0, 0))).toBe("昨天");
+    expect(en(local(2026, 10, 12, 8, 0))).toBe("Yesterday");
+  });
+
+  it("writes the weekday for two to six days back", () => {
+    expect(zh(local(2026, 10, 11, 9))).toBe("周日");
+    expect(zh(local(2026, 10, 7, 9))).toBe("周三");
+    expect(en(local(2026, 10, 11, 9))).toBe("Sun");
+    expect(en(local(2026, 10, 7, 9))).toBe("Wed");
+  });
+
+  it("writes the date a week back and earlier this year", () => {
+    // Seven days back would share today's weekday: a date instead.
+    expect(zh(local(2026, 10, 6, 9))).toBe("10月6日");
+    expect(zh(local(2026, 1, 1, 0, 0))).toBe("1月1日");
+    expect(en(local(2026, 10, 6, 9))).toBe("Oct 6");
+  });
+
+  it("adds the year for an earlier year", () => {
+    expect(zh(local(2025, 10, 7, 9))).toBe("2025年10月7日");
+    expect(en(local(2025, 10, 7, 9))).toBe("Oct 7, 2025");
+    // Across New Year: the 31st is yesterday, not last year's date.
+    const newYear = local(2027, 1, 1).getTime();
+    expect(zh(local(2026, 12, 31, 22), newYear)).toBe("昨天");
+    expect(zh(local(2026, 12, 28, 22), newYear)).toBe("周一");
+    expect(zh(local(2026, 12, 20, 22), newYear)).toBe("2026年12月20日");
+    expect(en(local(2026, 12, 20, 22), newYear)).toBe("Dec 20, 2026");
+  });
+
+  it("re-dates when the day stamp moves past midnight", () => {
+    const late = local(2026, 10, 13, 23, 58);
+    expect(zh(late)).toBe("23:58");
+    const tomorrow = local(2026, 10, 14).getTime();
+    expect(zh(late, tomorrow)).toBe("昨天");
+    expect(zh(late, local(2026, 10, 15).getTime())).toBe("周二");
+    expect(zh(late, local(2026, 10, 19).getTime())).toBe("周二");
+    expect(zh(late, local(2026, 10, 20).getTime())).toBe("10月13日");
+  });
+
+  it("counts calendar days across a daylight-saving change", () => {
+    // Whatever zone the suite runs in, two local midnights a day apart
+    // are one day apart, even when that day has 23 or 25 hours.
+    const sunday = local(2026, 11, 1, 12).getTime();
+    expect(zh(local(2026, 10, 31, 23, 30), sunday)).toBe("昨天");
+    const spring = local(2026, 3, 9, 12).getTime();
+    expect(zh(local(2026, 3, 8, 0, 30), spring)).toBe("昨天");
+  });
+
+  it("reads a future time as today's, and nothing for garbage", () => {
+    expect(zh(local(2026, 10, 14, 1, 0))).toBe("01:00");
+    expect(formatListTime("nope", today, "zh-CN", { yesterday: "昨天" })).toBe(
+      null,
+    );
   });
 });

@@ -43,8 +43,8 @@ export interface CommandPaletteProps {
 
   sessions: Session[];
   /** Extra words a session is found by, keyed by its id, never shown —
-   * ticket 17's sidebar-top trial titles the main chat 「Galley」 and
-   * keeps 主对话 / 助手 findable (TEMPORARY). */
+   * the main chat, titled 「Galley」, is still found as 主对话 / 助手
+   * (palette-search.ts). */
   sessionKeywords?: Record<string, string>;
   runtimeKind: RuntimeKind;
   llms?: LLMOption[];

@@ -202,6 +202,79 @@ export function formatMessageDateTime(
   return dateWithClock(date, localDayStart(todayStartMs), zh, clock);
 }
 
+const ZH_WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+const EN_WEEKDAY = new Intl.DateTimeFormat("en-US", { weekday: "short" });
+const EN_DATE = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+});
+const EN_YEAR_DATE = new Intl.DateTimeFormat("en-US", {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+});
+
+/** How many calendar days `ms` falls before the local day `today`
+ * starts on (0 = today). Counted on dates, not 24-hour spans, so a
+ * daylight-saving day still counts as one. */
+function daysBefore(ms: number, today: number): number {
+  const day = new Date(localDayStart(ms));
+  const start = new Date(today);
+  const utcDay = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate());
+  const utcStart = Date.UTC(
+    start.getFullYear(),
+    start.getMonth(),
+    start.getDate(),
+  );
+  return Math.round((utcStart - utcDay) / 86_400_000);
+}
+
+/**
+ * A chat list's time (main chat ticket 18: the sidebar's assistant card
+ * dates its last message the way an IM list does) — one word, never a
+ * clock and a date together:
+ *
+ *   today                       11:50        11:50 AM
+ *   yesterday                   昨天          Yesterday
+ *   2–6 days back               周一          Mon
+ *   earlier this year           10月7日       Oct 7
+ *   an earlier year             2025年10月7日  Oct 7, 2025
+ *
+ * Shapes as in `formatMessageTime` (Chinese built by hand, English from
+ * Intl's en-US); the day word comes from the locale. A time later than
+ * today (a skewed clock) reads as today's. Pure: `todayStartMs` is
+ * `useDayStamp()`'s, so a list kept open past midnight re-dates when
+ * the stamp moves. Null for an unparseable timestamp.
+ */
+export function formatListTime(
+  iso: string,
+  todayStartMs: number,
+  language: ResolvedLanguage,
+  words: { yesterday: string },
+): string | null {
+  const ms = parseTime(iso);
+  if (ms === null) return null;
+  const date = new Date(ms);
+  const today = localDayStart(todayStartMs);
+  const zh = language === "zh-CN";
+  const days = daysBefore(ms, today);
+  if (days <= 0) {
+    return zh
+      ? `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+      : EN_TIME.format(date);
+  }
+  if (days === 1) return words.yesterday;
+  if (days <= 6) {
+    return zh ? ZH_WEEKDAYS[date.getDay()] : EN_WEEKDAY.format(date);
+  }
+  const sameYear = date.getFullYear() === new Date(today).getFullYear();
+  if (zh) {
+    const monthDay = `${date.getMonth() + 1}月${date.getDate()}日`;
+    return sameYear ? monthDay : `${date.getFullYear()}年${monthDay}`;
+  }
+  return (sameYear ? EN_DATE : EN_YEAR_DATE).format(date);
+}
+
 const FULL_FORMATS: Record<ResolvedLanguage, Intl.DateTimeFormat> = {
   "zh-CN": new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "full",

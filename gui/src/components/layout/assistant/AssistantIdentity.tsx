@@ -1,4 +1,4 @@
-import type { SidebarTopDemo } from "@/components/layout/sidebar/sidebar-top-trial";
+import { SessionTitleCaret } from "@/components/layout/header/SessionTitleMenu";
 import { useAssistantState } from "@/hooks/useAssistantState";
 import { useCopy } from "@/lib/i18n";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
@@ -9,56 +9,51 @@ import type { Session } from "@/types/session";
 import { AssistantAvatar } from "./AssistantAvatar";
 
 /**
- * The assistant in the main header's title place while it is open
- * (main chat ticket 17; first drawn for ticket 16): its avatar, its
- * name 「Galley」 and, under the name, what it is doing now — the line
- * its sidebar entry shows (lib/assistant.ts): running, a question, an
- * error, a subtask's too, and nothing at rest. No title menu: there is
- * nothing to rename and no session to act on.
+ * The assistant in the main header while it is open (main chat ticket
+ * 18): its avatar, its name 「Galley」 with the title button's
+ * caret, and under the name what it is doing now. MainHeader renders it
+ * as the label of the title menu's trigger (SessionTitleMenu), so the
+ * whole row hovers like the title button and opens the main chat's
+ * menu — 重新注入工具, 桌面宠物, no rename — the way tapping a
+ * contact's name opens their page in an IM app.
+ *
+ * The second line is a chat title bar's (lib/assistant.ts): only a
+ * state — running 「第 N 步 · 摘要」 / 「思考中」, 「等你回复」, an error,
+ * a subtask's question or error — and nothing at rest. Unlike the
+ * sidebar card it never quotes the question, the last message or a
+ * draft: here they are all on screen, in the conversation and the
+ * composer below.
  *
  * The name is the session title's register (Inter 13px medium); the
- * line takes the row subline's (11px, brand while running, warning,
- * error) and its fade when cut. Every piece carries the drag region (it
- * does not bubble), so the header still drags the window from its left.
+ * line takes a row subline's (11px, brand while running, warning,
+ * error) and its fade when cut. Nothing here carries the window drag
+ * region: it sits inside a button.
  */
 export function AssistantIdentity({
   mainChat,
   subtasks,
-  demo,
 }: {
   mainChat: Session;
   /** Its unpromoted subtasks. */
   subtasks: Session[];
-  /** TEMPORARY (ticket 17): the trial's 「演示」. */
-  demo?: SidebarTopDemo;
 }) {
   const copy = useCopy();
-  const { line } = useAssistantState({
-    mainChat,
-    subtasks,
-    open: true,
-    demo,
-  });
+  const { line } = useAssistantState({ mainChat, subtasks, open: true });
   return (
     <span
-      data-tauri-drag-region
       data-role="assistant-identity"
       className="flex min-w-0 items-center gap-2"
     >
       <AssistantAvatar size={28} />
-      <span
-        data-tauri-drag-region
-        className="flex min-w-0 flex-col justify-center"
-      >
-        <span
-          data-tauri-drag-region
-          className="truncate text-[13px] font-medium leading-4 text-ink"
-        >
-          {copy.assistant.name}
+      <span className="flex min-w-0 flex-col justify-center">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-[13px] font-medium leading-4 text-ink">
+            {copy.assistant.name}
+          </span>
+          <SessionTitleCaret />
         </span>
         {line && (
           <span
-            data-tauri-drag-region
             data-role="assistant-status-line"
             ref={truncationFadeRef}
             onPointerEnter={(e) =>

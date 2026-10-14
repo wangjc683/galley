@@ -55,9 +55,9 @@ export function MainHeaderHost({
   canRenameSession?: boolean;
   /** MainHeader's leftmost slot (the sidebar toggle, with a main chat). */
   leading?: ReactNode;
-  /** 「主对话 ›」 before the title while a subtask is open (ticket 06a). */
+  /** 「Galley ›」 before the title while a subtask is open (ticket 06a). */
   breadcrumb?: MainHeaderProps["breadcrumb"];
-  /** The assistant's identity in the title's place (ticket 17). */
+  /** The assistant's identity as the title menu's trigger (ticket 18). */
   identity?: MainHeaderProps["identity"];
 }) {
   const browserControlStatus = useBrowserControlStore((s) => s.status);

@@ -111,15 +111,17 @@ export interface MainHeaderProps {
    */
   leading?: ReactNode;
   /**
-   * A crumb before the title — 「主对话 ›」 while an unpromoted subtask
+   * A crumb before the title — 「Galley ›」 while an unpromoted subtask
    * is open (main chat ticket 06a): the subtask has no sidebar row, so
    * this is the way back. Clicking it opens `onClick`'s target.
    */
   breadcrumb?: { label: string; ariaLabel: string; onClick: () => void };
   /**
-   * Stands in for the title: the assistant's identity while it is open
-   * (main chat ticket 17, the sidebar-top trial's 2 / 3 / 3′ — avatar,
-   * 「Galley」, what it is doing). No title menu then.
+   * Shown in the title's place as the title menu's trigger: the
+   * assistant's identity while it is open (main chat ticket 18 —
+   * avatar, 「Galley」 and its caret, what it is doing). The menu is the
+   * session's (no rename for the main chat); `sessionTitle` still names
+   * the trigger for assistive tech.
    */
   identity?: ReactNode;
 }
@@ -275,7 +277,6 @@ export function MainHeader({
         )}
       >
         {leading}
-        {identity}
         {!identity && breadcrumb && sessionTitle && (
           // The crumb wears the title button's hit area and hover, one
           // ink step down (the title is the page you are on), and the
@@ -302,9 +303,10 @@ export function MainHeader({
             />
           </span>
         )}
-        {identity ? null : sessionTitle ? (
+        {sessionTitle ? (
           <SessionTitleMenu
             title={sessionTitle}
+            label={identity}
             onReinjectTools={onReinjectTools}
             onTogglePet={onTogglePet}
             currentSessionHasPet={currentSessionHasPet}

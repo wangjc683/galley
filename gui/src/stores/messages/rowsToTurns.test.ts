@@ -259,6 +259,26 @@ describe("rowsToTurns", () => {
 
   // Ticket 04c: Core writes the main chat's greeting as an assistant
   // row with origin system / galley-greeting; only that row is flagged.
+  it("keeps the [FILE:] paths of a final answer from the raw reply", () => {
+    const [answer, step] = rowsToTurns([
+      makeMessageRow({
+        role: "assistant",
+        turn_index: 1,
+        content: "图做好了：[FILE:/tmp/out/x.png]",
+        final_answer: "图做好了：",
+      }),
+      makeMessageRow({
+        role: "assistant",
+        turn_index: 2,
+        content: "先看看 [FILE:/tmp/a.md]",
+        final_answer: null,
+      }),
+    ]) as AgentTurn[];
+    expect(answer.files).toEqual(["/tmp/out/x.png"]);
+    // A step without a final answer keeps none.
+    expect(step.files).toBeUndefined();
+  });
+
   it("flags the main chat's greeting by its origin", () => {
     const turns = rowsToTurns([
       makeMessageRow({

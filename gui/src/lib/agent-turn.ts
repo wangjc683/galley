@@ -149,6 +149,10 @@ export interface AgentTurnFields {
   turnIndex: number;
   summary?: string | null;
   telemetry?: AgentTurn["telemetry"] | null;
+  /** `finalAnswerFileRefs` of the raw response — live: responseContent;
+   * restore: the row's `content`. Kept only on a turn with a final
+   * answer. */
+  files?: string[];
 }
 
 /** Assemble the one true AgentTurn shape. All presence normalization
@@ -166,5 +170,8 @@ export function buildAgentTurn(fields: AgentTurnFields): AgentTurn {
     summary: trimmedSummary ? trimmedSummary : undefined,
   };
   if (fields.telemetry) turn.telemetry = fields.telemetry;
+  if (turn.finalAnswer !== null && fields.files && fields.files.length > 0) {
+    turn.files = fields.files;
+  }
   return turn;
 }

@@ -11,8 +11,11 @@ import type { PendingImageAttachment } from "@/types/conversation";
  * re-seeds from here on mount.
  *
  * Deliberately NOT persisted (drafts die with the app — same contract
- * as every chat client) and deliberately not a reactive store: nothing
- * renders from it; it's a mount-time read + change-time write.
+ * as every chat client) and deliberately not a reactive store: the
+ * Composer only reads it at mount and writes it on change. One reader
+ * renders from it: the sidebar's assistant card says 「草稿：…」 while
+ * the main chat is not open (main chat ticket 18), so writes notify
+ * `subscribeComposerDrafts` listeners — nothing else changes.
  *
  * Ownership notes:
  * - `text` is stored fully expanded (paste-fold placeholders resolved).
@@ -34,14 +37,35 @@ export interface ComposerDraft {
 
 const drafts = new Map<string, ComposerDraft>();
 
+const listeners = new Set<() => void>();
+
+function notifyListeners(): void {
+  for (const listener of listeners) listener();
+}
+
+/**
+ * Hear about every save and drop, in the `useSyncExternalStore`
+ * contract: returns the unsubscribe. A listener re-reads the key it
+ * cares about with `readComposerDraft`; an entry keeps its identity
+ * until its own key is written again, so a snapshot of one key stays
+ * equal while other keys change.
+ */
+export function subscribeComposerDrafts(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 /** Write-through save. An empty draft (no text, no images) deletes the
  * entry so the map only holds real drafts. */
 export function saveComposerDraft(key: string, draft: ComposerDraft): void {
   if (draft.text.trim().length === 0 && draft.images.length === 0) {
-    drafts.delete(key);
+    if (drafts.delete(key)) notifyListeners();
     return;
   }
   drafts.set(key, draft);
+  notifyListeners();
 }
 
 export function readComposerDraft(key: string): ComposerDraft | undefined {
@@ -56,5 +80,5 @@ export function readComposerDraft(key: string): ComposerDraft | undefined {
  * otherwise resurrect the just-sent text as a draft.
  */
 export function dropComposerDraft(key: string): void {
-  drafts.delete(key);
+  if (drafts.delete(key)) notifyListeners();
 }
