@@ -574,13 +574,22 @@ function MainViewContent({
         {/* Right-edge question index — one dot per user-msg, click to
             jump. Sibling of the scroll container (not inside it) so
             it doesn't scroll with content. Shows from the first
-            user-msg (jump-back anchor role; see UserQuestionRail). */}
-        <UserQuestionRail
-          turns={turns}
-          scrollContainerRef={scrollContainerRef}
-          tailStatus={pendingAskUser ? "waiting" : isRunning ? "running" : null}
-          onJump={() => setAtBottom(false)}
-        />
+            user-msg (jump-back anchor role; see UserQuestionRail).
+            Not in the main chat (main chat PRD ruling 60): the dots sit
+            at their share of the loaded content, so in a conversation
+            with no end most of them fold into capsules, and loading an
+            earlier page moves every dot and renumbers it. ⌥↑ / ⌥↓ still
+            step through its questions. */}
+        {!isMainChat && (
+          <UserQuestionRail
+            turns={turns}
+            scrollContainerRef={scrollContainerRef}
+            tailStatus={
+              pendingAskUser ? "waiting" : isRunning ? "running" : null
+            }
+            onJump={() => setAtBottom(false)}
+          />
+        )}
         <SelectionCopyToolbar scrollContainerRef={scrollContainerRef} />
         {isRunning && currentRunStartedAtMs != null && (
           <div className="pointer-events-none absolute inset-x-8 bottom-4 z-10">
