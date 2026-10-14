@@ -822,7 +822,7 @@ export const enCopy: AppCopy = {
           "The main chat is emptied and starts over from its greeting. What it remembers about you and the ways of working it has learned are cleared too, back to a fresh install.",
         deletesLabel: "Deleted",
         deletes: [
-          "Everything in the main chat, including its attachments and the subtasks it sent out that haven't become ordinary conversations",
+          "The main chat's messages, including its attachments and the subtasks it sent out that haven't become ordinary conversations",
           "Its long-term memory (shared by every conversation and IM chat, so it forgets in those too)",
           "The automatic backups made before data migrations",
         ],
@@ -830,6 +830,7 @@ export const enCopy: AppCopy = {
         keeps: [
           "Other conversations and the IM chats it picked back up (they stay in the sidebar, and it may still read them when it looks back through history)",
           "Files it made for you",
+          "The engine's logs (deleted automatically after 30 days; until then it may still read them when it looks back through history)",
           "Models, channels and other settings",
         ],
         unrecoverable:

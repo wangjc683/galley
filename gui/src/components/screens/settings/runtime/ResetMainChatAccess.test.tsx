@@ -35,9 +35,14 @@ vi.mock("@radix-ui/react-dialog", async () => {
   };
 });
 
-/** Visible text of a static render, tags as separators. */
+/** Visible text of a static render, tags as separators, entities
+ * decoded (an apostrophe renders as `&#x27;`). */
 function text(node: ReactNode): string {
-  return renderToStaticMarkup(node).replace(/<[^>]+>/g, "\u0001");
+  return renderToStaticMarkup(node)
+    .replace(/<[^>]+>/g, "\u0001")
+    .replace(/&#x27;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&");
 }
 
 function runtime(overrides: Partial<SettingsRuntimeProps> = {}): string {
@@ -70,13 +75,14 @@ function isDisabled(button: string): boolean {
 }
 
 const DELETES = [
-  "主对话的全部记录，包括它派出去、还没变成普通对话的子任务和附件",
+  "主对话的聊天记录，包括它派出去、还没变成普通对话的子任务和附件",
   "它的长期记忆（所有对话和 IM 共用，其他对话里的它也会一起忘）",
   "迁移前的自动备份",
 ];
 const KEEPS = [
   "其他对话和 IM 里接回的对话（还在侧栏里，它以后翻历史仍可能读到）",
   "它替你做出来的文件",
+  "内核的运行日志（30 天后自动清掉，这之前它翻历史仍可能读到）",
   "模型、渠道和其他设置",
 ];
 
@@ -154,6 +160,26 @@ describe("the confirm", () => {
     expect(out).not.toContain("有对话正在运行");
   });
 
+  it("reads in English, with the engine's logs among what stays", () => {
+    const out = text(
+      <CopyProvider language="en-US">
+        <ResetMainChatDialog
+          open
+          onOpenChange={() => {}}
+          hasRunningSessions={false}
+        />
+      </CopyProvider>,
+    );
+    for (const line of [
+      "Reset the main chat?",
+      "The main chat's messages, including its attachments and the subtasks it sent out that haven't become ordinary conversations",
+      "The engine's logs (deleted automatically after 30 days; until then it may still read them when it looks back through history)",
+      "Hold 5 s to reset",
+    ]) {
+      expect(out).toContain(line);
+    }
+  });
+
   it("deletes before keeps, the unrecoverable line last", () => {
     const out = text(
       <ResetMainChatDialog
@@ -162,7 +188,7 @@ describe("the confirm", () => {
         hasRunningSessions={false}
       />,
     );
-    const order = ["会删除", DELETES[2], "不会删除", KEEPS[2], "收不回来"].map(
+    const order = ["会删除", DELETES[2], "不会删除", ...KEEPS, "收不回来"].map(
       (line) => out.indexOf(line),
     );
     expect([...order].sort((a, b) => a - b)).toEqual(order);
