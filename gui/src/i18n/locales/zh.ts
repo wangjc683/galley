@@ -802,6 +802,35 @@ export const zhCopy = {
       pendingPackage: "待打包",
       uninitialized: "未初始化",
       notGenerated: "未生成",
+      // 「更多」最后一行与它的确认弹窗（2026-10-14，主聊天票 15、裁决 59）。
+      resetMainChat: {
+        title: "重置主对话",
+        description: "清空主对话和它的长期记忆，回到刚装好时",
+        runningBlock: "有对话正在运行，结束后才能重置主对话",
+        dialogTitle: "重置主对话？",
+        dialogBody:
+          "主对话会清空，从问候重新开始；它记住的关于你的事、学会的做事方法也会清掉，回到刚装好时。",
+        deletesLabel: "会删除",
+        deletes: [
+          "主对话的全部记录，包括它派出去、还没变成普通对话的子任务和附件",
+          "它的长期记忆（所有对话和 IM 共用，其他对话里的它也会一起忘）",
+          "迁移前的自动备份",
+        ],
+        keepsLabel: "不会删除",
+        keeps: [
+          "其他对话和 IM 里接回的对话（还在侧栏里，它以后翻历史仍可能读到）",
+          "它替你做出来的文件",
+          "模型、渠道和其他设置",
+        ],
+        unrecoverable: "已经发给模型服务商的内容收不回来。",
+        hold: "按住 5 秒重置",
+        holdHint: "要按住不放",
+        resetting: "正在重置…",
+        failedRunning: "有对话正在运行，结束后才能重置主对话。",
+        failed: "没能重置主对话。",
+        copyDetails: "复制详情",
+        copied: "已复制",
+      },
     },
     models: {
       subtitle: "为 Galley 配置模型服务商和模型",

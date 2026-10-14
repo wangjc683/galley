@@ -17,6 +17,7 @@ export function AdvancedRuntimeSettings({
   hasRunningSessions,
   highlighted,
   managedDiagnosticsSlot,
+  resetMainChatSlot,
   onOpenSetupAssistant,
   onToggleExpanded,
   onActivate,
@@ -29,6 +30,8 @@ export function AdvancedRuntimeSettings({
   hasRunningSessions: boolean;
   highlighted: boolean;
   managedDiagnosticsSlot?: ReactNode;
+  /** 重置主对话, the group's last row: destructive things go last. */
+  resetMainChatSlot?: ReactNode;
   onOpenSetupAssistant?: () => void;
   onToggleExpanded: () => void;
   onActivate?: () => void;
@@ -66,6 +69,8 @@ export function AdvancedRuntimeSettings({
         </ExternalRuntimeAccess>
 
         {managedDiagnosticsSlot}
+
+        {resetMainChatSlot}
       </SettingsDisclosureList>
     </div>
   );

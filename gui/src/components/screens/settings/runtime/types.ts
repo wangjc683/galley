@@ -4,6 +4,9 @@ import type { RuntimeKind } from "@/types/session";
 export interface SettingsRuntimeProps {
   info: RuntimeInfo;
   hasRunningSessions: boolean;
+  /** The managed runtime's main chat exists: Settings offers to reset
+   * it (main chat ticket 15). */
+  hasMainChat: boolean;
   activeRuntimeKind: RuntimeKind;
   hasManagedRuntimeConfigured: boolean;
   hasExternalRuntimeConfigured: boolean;

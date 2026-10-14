@@ -6,6 +6,26 @@ import { Button, DialogActionRow } from "@/components/ui/button";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+/** The confirm control: the usual button, or — for a confirm that cannot
+ * be taken back — a control of the caller's own in its place (resetting
+ * the main chat holds a button for five seconds). */
+type ConfirmControl =
+  | {
+      confirmLabel: string;
+      confirmVariant?: "destructive-soft" | "destructive" | "warning";
+      /** Leading icon on the confirm button; swapped for a spinner while busy. */
+      confirmIcon?: ReactNode;
+      onConfirm: () => void;
+      confirmSlot?: never;
+    }
+  | {
+      confirmSlot: ReactNode;
+      confirmLabel?: never;
+      confirmVariant?: never;
+      confirmIcon?: never;
+      onConfirm?: never;
+    };
+
 /**
  * Shared light-confirm dialog (started life in Settings → Channels;
  * promoted to ui/ once the archived-sessions browser needed the same
@@ -20,10 +40,13 @@ export function ConfirmActionDialog({
   icon,
   title,
   body,
+  className,
+  onEscapeKeyDown,
   confirmLabel,
   confirmVariant = "destructive-soft",
   confirmIcon,
   onConfirm,
+  confirmSlot,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -32,13 +55,13 @@ export function ConfirmActionDialog({
    * (plain title-only confirms, e.g. row deletes). */
   icon?: ReactNode | null;
   title: string;
+  /** Text, or blocks (paragraphs, lists): the body is a `div`. */
   body: ReactNode;
-  confirmLabel: string;
-  confirmVariant?: "destructive-soft" | "destructive" | "warning";
-  /** Leading icon on the confirm button; swapped for a spinner while busy. */
-  confirmIcon?: ReactNode;
-  onConfirm: () => void;
-}) {
+  /** Extra classes on the dialog panel. */
+  className?: string;
+  /** Radix's Esc hook: `preventDefault()` keeps the dialog open. */
+  onEscapeKeyDown?: (event: KeyboardEvent) => void;
+} & ConfirmControl) {
   const copy = useCopy();
   const descId = useId();
   const headerIcon =
@@ -54,9 +77,11 @@ export function ConfirmActionDialog({
         <Dialog.Content
           role="alertdialog"
           aria-describedby={descId}
+          onEscapeKeyDown={onEscapeKeyDown}
           className={cn(
             "galley-pop-in fixed left-1/2 top-1/2 z-[60] w-[420px] -translate-x-1/2 -translate-y-1/2",
             "max-w-[calc(100vw-32px)] rounded-lg border border-line bg-elevated p-5 shadow-elevated",
+            className,
           )}
         >
           <div className="flex items-center gap-2">
@@ -65,12 +90,12 @@ export function ConfirmActionDialog({
               {title}
             </Dialog.Title>
           </div>
-          <p
+          <div
             id={descId}
             className="mt-2 text-ui-secondary leading-secondary text-ink-soft"
           >
             {body}
-          </p>
+          </div>
           <DialogActionRow>
             <Button
               variant="secondary"
@@ -80,20 +105,22 @@ export function ConfirmActionDialog({
             >
               {copy.common.cancel}
             </Button>
-            <Button
-              variant={confirmVariant}
-              disabled={busy}
-              leadingIcon={
-                busy ? (
-                  <CircleNotch size={13} className="spin" />
-                ) : (
-                  confirmIcon
-                )
-              }
-              onClick={onConfirm}
-            >
-              {confirmLabel}
-            </Button>
+            {confirmSlot ?? (
+              <Button
+                variant={confirmVariant}
+                disabled={busy}
+                leadingIcon={
+                  busy ? (
+                    <CircleNotch size={13} className="spin" />
+                  ) : (
+                    confirmIcon
+                  )
+                }
+                onClick={onConfirm}
+              >
+                {confirmLabel}
+              </Button>
+            )}
           </DialogActionRow>
         </Dialog.Content>
       </Dialog.Portal>

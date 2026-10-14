@@ -8,6 +8,7 @@ import { useManagedModelsStore } from "@/stores/managed-models";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
+import { useSessionsStore } from "@/stores/sessions";
 
 /**
  * Self-subscribing wrapper around the Settings dialog, extracted from
@@ -74,6 +75,10 @@ export function SettingsHost({
   const hasRunningSessions = useMessagesStore((s) =>
     Object.values(s.byId).some((messages) => messages.agentRunning),
   );
+  // Archived or not: a reset deletes it either way.
+  const hasMainChat = useSessionsStore((s) =>
+    s.sessions.some((session) => session.mainChat),
+  );
 
   return (
     <Settings
@@ -83,6 +88,7 @@ export function SettingsHost({
       onTabChange={onTabChange}
       runtimeInfo={runtimeInfo}
       hasRunningSessions={hasRunningSessions}
+      hasMainChat={hasMainChat}
       activeRuntimeKind={activeRuntimeKind}
       hasManagedRuntimeConfigured={hasConfiguredManagedModel}
       hasExternalRuntimeConfigured={isExternalGAConfigured(gaConfig)}

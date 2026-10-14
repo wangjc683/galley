@@ -29,6 +29,8 @@ export interface SettingsProps {
 
   runtimeInfo: RuntimeInfo;
   hasRunningSessions: boolean;
+  /** The managed runtime's main chat exists (运行环境 offers its reset). */
+  hasMainChat: boolean;
   activeRuntimeKind: RuntimeKind;
   hasManagedRuntimeConfigured: boolean;
   hasExternalRuntimeConfigured: boolean;
@@ -100,6 +102,7 @@ export function Settings({
   onOpenChange,
   runtimeInfo,
   hasRunningSessions,
+  hasMainChat,
   activeRuntimeKind,
   hasManagedRuntimeConfigured,
   hasExternalRuntimeConfigured,
@@ -247,6 +250,7 @@ export function Settings({
                 <SettingsRuntime
                   info={runtimeInfo}
                   hasRunningSessions={hasRunningSessions}
+                  hasMainChat={hasMainChat}
                   activeRuntimeKind={activeRuntimeKind}
                   hasManagedRuntimeConfigured={hasManagedRuntimeConfigured}
                   hasExternalRuntimeConfigured={hasExternalRuntimeConfigured}

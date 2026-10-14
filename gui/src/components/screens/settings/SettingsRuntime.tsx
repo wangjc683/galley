@@ -20,6 +20,7 @@ import {
 } from "@/components/screens/settings/runtime/external-access-intent";
 import { GAVersionCard } from "@/components/screens/settings/runtime/GAVersionCard";
 import { HealthCheckSection } from "@/components/screens/settings/runtime/HealthCheckSection";
+import { ResetMainChatAccess } from "@/components/screens/settings/runtime/ResetMainChatAccess";
 import { SettingsDisclosureRow } from "@/components/screens/settings/settings-disclosure";
 import type { SettingsRuntimeProps } from "@/components/screens/settings/runtime/types";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,7 @@ import type { RuntimeKind } from "@/types/session";
 export function SettingsRuntime({
   info,
   hasRunningSessions,
+  hasMainChat,
   activeRuntimeKind,
   hasManagedRuntimeConfigured,
   hasExternalRuntimeConfigured,
@@ -164,6 +166,11 @@ export function SettingsRuntime({
         managedDiagnosticsSlot={
           activeRuntimeKind === "managed" ? (
             <ManagedRuntimeCard diagnostics={info.managedRuntime} />
+          ) : undefined
+        }
+        resetMainChatSlot={
+          activeRuntimeKind === "managed" && hasMainChat ? (
+            <ResetMainChatAccess hasRunningSessions={hasRunningSessions} />
           ) : undefined
         }
         onOpenSetupAssistant={onOpenSetupAssistant}

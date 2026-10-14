@@ -811,6 +811,38 @@ export const enCopy: AppCopy = {
       pendingPackage: "pending package",
       uninitialized: "not initialized",
       notGenerated: "not generated",
+      resetMainChat: {
+        title: "Reset main chat",
+        description:
+          "Clear the main chat and its long-term memory, back to a fresh install",
+        runningBlock:
+          "A conversation is running; reset the main chat after it finishes",
+        dialogTitle: "Reset the main chat?",
+        dialogBody:
+          "The main chat is emptied and starts over from its greeting. What it remembers about you and the ways of working it has learned are cleared too, back to a fresh install.",
+        deletesLabel: "Deleted",
+        deletes: [
+          "Everything in the main chat, including its attachments and the subtasks it sent out that haven't become ordinary conversations",
+          "Its long-term memory (shared by every conversation and IM chat, so it forgets in those too)",
+          "The automatic backups made before data migrations",
+        ],
+        keepsLabel: "Kept",
+        keeps: [
+          "Other conversations and the IM chats it picked back up (they stay in the sidebar, and it may still read them when it looks back through history)",
+          "Files it made for you",
+          "Models, channels and other settings",
+        ],
+        unrecoverable:
+          "What was already sent to model providers can't be taken back.",
+        hold: "Hold 5 s to reset",
+        holdHint: "Keep holding",
+        resetting: "Resetting…",
+        failedRunning:
+          "A conversation is running. You can reset the main chat after it finishes.",
+        failed: "Couldn't reset the main chat.",
+        copyDetails: "Copy details",
+        copied: "Copied",
+      },
     },
     models: {
       subtitle: "Configure model providers and models for Galley",

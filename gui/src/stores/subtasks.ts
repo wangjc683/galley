@@ -31,6 +31,10 @@ interface SubtasksState {
   /** Apply Core's `subtask-dispatched`. */
   applyDispatched: (payload: SubtaskDispatchedPayload) => void;
   setRunError: (sessionId: string, message: string | null) => void;
+  /** Drop what is kept for deleted sessions: their dispatch records as
+   * a parent, and their last run error (resetting the main chat,
+   * ticket 15). */
+  forgetSessions: (sessionIds: readonly string[]) => void;
 }
 
 export const useSubtasksStore = create<SubtasksState>()((set, get) => ({
@@ -84,6 +88,25 @@ export const useSubtasksStore = create<SubtasksState>()((set, get) => ({
       if (message === null) delete runErrors[sessionId];
       else runErrors[sessionId] = message;
       return { runErrors };
+    });
+  },
+  forgetSessions: (sessionIds) => {
+    const state = get();
+    const known = sessionIds.filter(
+      (id) =>
+        id in state.byParent || id in state.requested || id in state.runErrors,
+    );
+    if (known.length === 0) return;
+    set((s) => {
+      const byParent = { ...s.byParent };
+      const requested = { ...s.requested };
+      const runErrors = { ...s.runErrors };
+      for (const id of known) {
+        delete byParent[id];
+        delete requested[id];
+        delete runErrors[id];
+      }
+      return { byParent, requested, runErrors };
     });
   },
 }));
