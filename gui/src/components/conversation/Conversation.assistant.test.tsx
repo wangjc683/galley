@@ -216,8 +216,17 @@ describe("the assistant's conversation: bubbles", () => {
     expect(html).toContain("bg-assistant-tint");
     const first = html.indexOf('data-role="assistant-bubble"');
     expect(html.indexOf("你好。以后有什么事")).toBeGreaterThan(first);
-    // The hover copy moves to the bubble's left.
-    expect(html).toContain("left-auto right-full ml-0 mr-1.5");
+    // No hover copy on the user's bubbles (ruling 73): each is a
+    // selection-copy scope instead, and no copy chip rides beside it.
+    expect(count(html, 'data-selection-copy-scope="user-message"')).toBe(5);
+    expect(html).not.toContain("right-full ml-0 mr-1.5");
+    expect(html).not.toContain("left-full bottom-[calc(10px");
+  });
+
+  it("keeps the hover copy and no selection scope on the workbench's user messages", () => {
+    const html = render(conversation());
+    expect(html).toContain("left-full bottom-[calc(10px");
+    expect(html).not.toContain('data-selection-copy-scope="user-message"');
   });
 
   it("groups one side's messages 4px apart and restores the gap across sides", () => {

@@ -4,10 +4,9 @@ import { createPortal } from "react-dom";
 
 import { ActionChip } from "@/components/conversation/ActionChip";
 import { useCopy } from "@/lib/i18n";
+import { SELECTION_COPY_SCOPE as ASSISTANT_SELECTION_SCOPE } from "@/lib/selection-copy";
 import { cn } from "@/lib/utils";
 
-const ASSISTANT_SELECTION_SCOPE =
-  '[data-selection-copy-scope="assistant-answer"]';
 const TOOLBAR_SELECTOR = "[data-selection-copy-toolbar]";
 const TOOLBAR_WIDTH = 28;
 const VIEWPORT_GAP = 12;

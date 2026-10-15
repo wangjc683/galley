@@ -209,9 +209,12 @@ export interface MessageUserProps {
    * by content up to `min(80%, 560px)` — about 37 CJK characters a
    * line, a phone-IM measure; in the 1200px wide mode it keeps the same
    * 560px instead of stretching, and the 80% only bites in a column
-   * under 700px. The meta row and the expand toggle follow it, the
-   * hover copy moves to its left (6px off, mirroring the right side's
-   * 6px). */
+   * under 700px. The meta row and the expand toggle follow it. No
+   * hover copy here (main chat PRD ruling 73): a chip floating in the
+   * empty left gutter belonged to nothing, and the replies' actions sit
+   * under their bubbles; selecting the bubble's text brings up the
+   * floating copy instead (SelectionCopyToolbar, scope `user-message`),
+   * which copies exactly this plain text. */
   align?: "end";
   /** The row's vertical margin in place of `my-5` (the assistant's IM
    * grouping, lib/assistant-conversation.ts `assistantRowGap`). */
@@ -360,6 +363,7 @@ export const MessageUser = memo(function MessageUser({
       <div
         data-role={askUserReply ? "user-msg-reply" : "user-msg"}
         data-message-id={messageId}
+        data-selection-copy-scope={end ? "user-message" : undefined}
         className={cn(
           "relative w-fit max-w-full rounded-md bg-brand-tint px-3.5 py-2.5 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink",
           "select-text",
@@ -403,14 +407,11 @@ export const MessageUser = memo(function MessageUser({
             centre at every font tier. The old `top-1.5` (6px) left
             the chip ~5px above the first line's centre, riding high
             (2026-09-18). */}
-        <div
-          className={cn(
-            "absolute left-full bottom-[calc(10px+(var(--conversation-body-size)*var(--conversation-body-leading)-24px)/2)] z-10 ml-1.5",
-            end && "left-auto right-full ml-0 mr-1.5",
-          )}
-        >
-          {copyChip}
-        </div>
+        {!end && (
+          <div className="absolute left-full bottom-[calc(10px+(var(--conversation-body-size)*var(--conversation-body-leading)-24px)/2)] z-10 ml-1.5">
+            {copyChip}
+          </div>
+        )}
       </div>
       {isLong && (
         <div className={cn("mt-1", end && "flex justify-end")}>
