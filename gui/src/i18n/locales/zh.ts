@@ -1103,7 +1103,7 @@ export const zhCopy = {
       healthUnavailable: "健康检查不可用，本次报告将不包含",
     },
     about: {
-      subtitle: "极简 harness 的本地全能 AI 助手",
+      subtitle: "极简 harness 的本地全能 AI 助理",
       version: "版本",
       links: "链接",
       origin:
@@ -1465,7 +1465,7 @@ export const zhCopy = {
       ownerBoundAt: "绑定于",
       ownerUnbind: "解绑",
       ownerSecurityNote: (others: string) =>
-        `Galley 是个人助手：出于安全考虑，机器人只响应绑定的使用者，其他人（${others}）的消息会被忽略，也不会收到回复。`,
+        `Galley 是私人助理：出于安全考虑，机器人只响应绑定的使用者，其他人（${others}）的消息会被忽略，也不会收到回复。`,
       feishuBindWaitingLead: "在飞书私聊中向机器人发送配对码：",
       feishuBindWaitingAfterCode:
         "发送配对码的人将成为机器人唯一响应的使用者。",

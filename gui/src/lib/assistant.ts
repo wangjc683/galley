@@ -370,4 +370,4 @@ export function plainLine(markdown: string, copy: AppCopy): string {
 
 /** ⌘K finds the assistant by its old name and its role too, in either
  * UI language (palette-search.ts). */
-export const ASSISTANT_SEARCH_KEYWORDS = "主对话 助手 main chat assistant";
+export const ASSISTANT_SEARCH_KEYWORDS = "主对话 助理 助手 main chat assistant";

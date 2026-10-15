@@ -30,7 +30,7 @@ describe("⌘K finds the assistant", () => {
   it("gives cmdk the same words", () => {
     expect(
       paletteSessionValue("Galley", undefined, ASSISTANT_SEARCH_KEYWORDS),
-    ).toBe("session Galley 主对话 助手 main chat assistant ");
+    ).toBe("session Galley 主对话 助理 助手 main chat assistant ");
     // Without keywords the value is what it always was.
     expect(paletteSessionValue("订机票", "已订好")).toBe(
       "session 订机票 已订好",

@@ -9,9 +9,10 @@ pub const MAIN_CHAT_TITLE: &str = "主聊天";
 
 /// The main chat's first message, said by the AI the moment Core
 /// creates it (PRD ruling 47, ticket 04c; ruling 49 kept its first
-/// paragraph only): it teaches how to use the main chat. Fixed text,
+/// paragraph only): it says who it is and how to use it. Fixed text,
 /// chosen by the UI language ([`main_chat_greeting`]); the Chinese is
-/// JC's (2026-10-12), word for word.
+/// JC's, word for word (2026-10-15, assistant PRD ruling 7: it opens by
+/// naming its role, which the sidebar card shows on first launch).
 ///
 /// Shown only. It is an assistant row Core writes itself, marked by its
 /// origin ([`is_main_chat_greeting`]): the history replay skips it, so
@@ -19,12 +20,12 @@ pub const MAIN_CHAT_TITLE: &str = "主聊天";
 /// `turn_count` stays 0 and it sits at [`MAIN_CHAT_GREETING_TURN_INDEX`],
 /// before the first one.
 pub const MAIN_CHAT_GREETING_ZH: &str =
-    "你好。以后有什么事，直接在这里跟我说就行，不用再想是开新对话还是接着哪个旧的。";
+    "你好，我是你的私人助理。以后有什么事，直接在这里跟我说就行。费时间的活我派出去办，办完回来告诉你。";
 
 /// [`MAIN_CHAT_GREETING_ZH`] for every other UI language.
 pub const MAIN_CHAT_GREETING_EN: &str = concat!(
-    "Hi. From now on, whatever comes up, just tell me here. No need to decide ",
-    "whether to start a new conversation or pick up an old one.",
+    "Hi, I'm your personal assistant. Whatever comes up, just tell me here. ",
+    "Longer jobs I'll hand off, and come back to you when they're done.",
 );
 
 /// Origin supervisor label of the greeting row (with `created_via =

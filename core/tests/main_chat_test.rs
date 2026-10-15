@@ -359,20 +359,21 @@ async fn prefs(pool: &sqlx::SqlitePool) -> i64 {
         .unwrap()
 }
 
-/// The Chinese greeting is JC's wording (ticket 04, 04c, 2026-10-12),
-/// word for word; ruling 49 kept its first paragraph only. One paragraph
-/// each, with no `\r` on any checkout.
+/// The Chinese greeting is JC's wording, word for word (2026-10-15,
+/// assistant PRD ruling 7: it opens by naming its role; before that, the
+/// 2026-10-12 wording of ticket 04c, cut to one paragraph by ruling 49).
+/// One paragraph each, with no `\r` on any checkout.
 #[test]
 fn the_greeting_text_is_the_approved_wording() {
     assert_eq!(
         MAIN_CHAT_GREETING_ZH,
-        "你好。以后有什么事，直接在这里跟我说就行，不用再想是开新对话还是接着哪个旧的。"
+        "你好，我是你的私人助理。以后有什么事，直接在这里跟我说就行。费时间的活我派出去办，办完回来告诉你。"
     );
     assert_eq!(
         MAIN_CHAT_GREETING_EN,
         concat!(
-            "Hi. From now on, whatever comes up, just tell me here. No need to decide ",
-            "whether to start a new conversation or pick up an old one.",
+            "Hi, I'm your personal assistant. Whatever comes up, just tell me here. ",
+            "Longer jobs I'll hand off, and come back to you when they're done.",
         )
     );
     for text in [MAIN_CHAT_GREETING_ZH, MAIN_CHAT_GREETING_EN] {
