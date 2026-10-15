@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import type { ComposerTrialView } from "@/components/conversation/composer-trial/composer-trial";
 import type { ComposerReasoningEffortState } from "@/components/conversation/EffortPill";
 import type { ComposerLLMOption } from "@/components/conversation/LLMPill";
 import type { ImageBlockReason } from "@/lib/composer-images";
@@ -131,4 +132,11 @@ export interface ComposerProps {
    * handler toasts "use copy & paste" — the accepted trade-off of native
    * drag-drop (PRD 定案 8). */
   onTextDropBlocked?: () => void;
+  /**
+   * TEMPORARY (ticket 24, composer-trial/): the main chat's composer
+   * trial — the one-line form, and 「演示在跑」's made-up queue (display
+   * only: the strip does nothing while it shows). MainView sets it only
+   * for the main chat.
+   */
+  trial?: ComposerTrialView;
 }

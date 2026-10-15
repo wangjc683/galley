@@ -483,6 +483,8 @@ export const zhCopy = {
   composer: {
     askAnything: "问点什么…",
     continueConversation: "继续…",
+    /** 主对话的占位（裁决 71 第 5 条）：空闲与在跑时都是这句，不写 /btw。 */
+    writeMessage: "发消息…",
     ghostAcceptHint: "按 → 填入",
     // 运行停在步数上限时替换模型建议的幽灵文字；须与
     // conversation.stepLimitTail 里引号中的词一致。

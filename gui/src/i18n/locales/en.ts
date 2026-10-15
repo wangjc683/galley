@@ -476,6 +476,7 @@ export const enCopy: AppCopy = {
   composer: {
     askAnything: "Ask anything…",
     continueConversation: "Continue…",
+    writeMessage: "Message…",
     ghostAcceptHint: "→ to fill in",
     stepLimitContinue: "Continue",
     ghostSrDescription: (suggestion: string) =>

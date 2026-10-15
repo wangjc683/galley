@@ -20,10 +20,15 @@ import { cn } from "@/lib/utils";
 export function ComposerQueueStrip({
   sessionId,
   items,
+  heading,
   onRefill,
 }: {
   sessionId: string;
   items: QueuedMessage[];
+  /** A sentence in place of the 「排队中 · N」 count: the main chat's
+   * one-line trial form (TEMPORARY, ticket 24) says 「正在停止，排队的消息
+   * 会自动发出」 here, having no hint row to say it in. */
+  heading?: string;
   /** Put removed text back into the composer draft (edit flow). */
   onRefill: (text: string) => void;
 }) {
@@ -45,9 +50,20 @@ export function ComposerQueueStrip({
 
   return (
     <div className="mb-1.5 flex flex-col gap-1" data-role="composer-queue">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
-        {copy.composer.queueStripLabel(items.length)}
-      </div>
+      {heading === undefined ? (
+        <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+          {copy.composer.queueStripLabel(items.length)}
+        </div>
+      ) : (
+        // The hint row's register (11px, ink-muted), one line high like
+        // the count it stands in for.
+        <div
+          data-role="composer-queue-heading"
+          className="truncate text-[11px] leading-[15px] text-ink-muted"
+        >
+          {heading}
+        </div>
+      )}
       {items.map((item, i) => (
         <div
           key={item.queueId}
