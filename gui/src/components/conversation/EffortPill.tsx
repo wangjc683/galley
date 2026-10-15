@@ -69,7 +69,12 @@ export function EffortPill({
   configured,
   override,
   onSelect,
-}: ComposerReasoningEffortState) {
+  popoverAlign = "start",
+}: ComposerReasoningEffortState & {
+  /** As LLMPill's: `end` in the main chat's one-line trial form
+   * (TEMPORARY, ticket 24). */
+  popoverAlign?: "start" | "end";
+}) {
   const copy = useCopy();
   const effortCopy = copy.composer.reasoningEffort;
   const tierCopy = copy.settings.models;
@@ -160,7 +165,7 @@ export function EffortPill({
       </TooltipLabel>
       <Popover.Portal>
         <Popover.Content
-          align="start"
+          align={popoverAlign}
           side="top"
           sideOffset={6}
           onOpenAutoFocus={(event) => {

@@ -44,6 +44,7 @@ export function LLMPill({
   disabled,
   stopMode,
   phraseLead = false,
+  popoverAlign = "start",
 }: {
   llmDisplayName: string;
   llms?: ComposerLLMOption[];
@@ -62,6 +63,10 @@ export function LLMPill({
    * effort twin 10px right (JC: 两边多了一块).
    */
   phraseLead?: boolean;
+  /** Which edge the popover lines up with: the start (the card's
+   * phrase sits left), or the end — the main chat's one-line trial
+   * form (TEMPORARY, ticket 24) has the phrase at the row's right. */
+  popoverAlign?: "start" | "end";
 }) {
   const copy = useCopy();
   const footerHint = llmConfigHint ?? copy.app.externalModelHint;
@@ -142,7 +147,7 @@ export function LLMPill({
       </TooltipLabel>
       <Popover.Portal>
         <Popover.Content
-          align="start"
+          align={popoverAlign}
           side="top"
           sideOffset={6}
           onOpenAutoFocus={(event) => {

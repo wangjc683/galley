@@ -10,6 +10,9 @@ interface ComposerImageStripProps {
   images: PendingImageAttachment[];
   onPreview: (index: number) => void;
   onRemove: (image: PendingImageAttachment, index: number) => void;
+  /** Replaces the row's own classes: the main chat's one-line trial
+   * form (TEMPORARY, ticket 24) puts the tiles above the input. */
+  className?: string;
 }
 
 /**
@@ -20,10 +23,11 @@ export function ComposerImageStrip({
   images,
   onPreview,
   onRemove,
+  className,
 }: ComposerImageStripProps) {
   const copy = useCopy();
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
+    <div className={className ?? "mt-3 flex flex-wrap gap-2"}>
       {images.map((image, imageIndex) => (
         <div
           key={image.id}

@@ -19,7 +19,8 @@ export type ComposerRegister =
   | "continuing"
   | "reply"
   | "replyOpen"
-  | "byTheWay";
+  | "byTheWay"
+  | "messaging";
 
 export interface ComposerRegisterState {
   /** Agent is mid-run (`stopMode`). */
@@ -34,26 +35,39 @@ export interface ComposerRegisterState {
    * hint as "the options failed to render").
    */
   askUserHasCandidates: boolean;
+  /**
+   * The main chat (主对话): an IM with one person, where the box just
+   * says 「发消息…」 at rest and while it works — no `/btw` lesson (main
+   * chat ruling 71, item 5; `/btw` itself still works). Its questions
+   * keep the reply registers.
+   */
+  mainChat?: boolean;
 }
 
 /**
  * Pure, total, deterministic. Maps in-session Composer state to a
  * register. Running takes priority: while the agent runs, the only
  * input that passes the stop gate is `/btw`, so the by-the-way register
- * is correct regardless of other flags.
+ * is correct regardless of other flags — except in the main chat, whose
+ * box says 「发消息…」 whether it works or not.
  */
 export function resolveComposerRegister(
   s: ComposerRegisterState,
 ): Exclude<ComposerRegister, "commissioning"> {
-  if (s.isRunning) return "byTheWay";
+  if (s.isRunning) return s.mainChat ? "messaging" : "byTheWay";
   if (s.pendingAskUser) return s.askUserHasCandidates ? "reply" : "replyOpen";
-  return "continuing";
+  return s.mainChat ? "messaging" : "continuing";
 }
 
 /** i18n `composer` key for a resolved in-session register. */
 export function composerRegisterCopyKey(
   register: Exclude<ComposerRegister, "commissioning">,
-): "byTheWay" | "replyToContinue" | "replyOpen" | "continueConversation" {
+):
+  | "byTheWay"
+  | "replyToContinue"
+  | "replyOpen"
+  | "continueConversation"
+  | "writeMessage" {
   switch (register) {
     case "byTheWay":
       return "byTheWay";
@@ -63,5 +77,7 @@ export function composerRegisterCopyKey(
       return "replyOpen";
     case "continuing":
       return "continueConversation";
+    case "messaging":
+      return "writeMessage";
   }
 }

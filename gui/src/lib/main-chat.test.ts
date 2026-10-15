@@ -11,12 +11,11 @@ import { makeSession } from "@/test/factories";
 import { getTauriMocks } from "@/test/setup";
 import { resetStores } from "@/test/store-reset";
 
-import { findMainChat, offersBusyChoice, openMainChat } from "./main-chat";
+import { findMainChat, openMainChat } from "./main-chat";
 
 /**
- * The main chat (ticket 02): Core creates it (`get_or_create_main_chat`),
- * the page lands on it in managed mode, and a send while it works first
- * offers 排队 / 开旁聊.
+ * The main chat (ticket 02): Core creates it (`get_or_create_main_chat`)
+ * and the page lands on it in managed mode.
  */
 
 const tauriMocks = getTauriMocks();
@@ -67,40 +66,6 @@ describe("the wire", () => {
     ];
     expect(findMainChat(sessions)?.id).toBe("b");
     expect(findMainChat([makeSession({ id: "a" })])).toBeUndefined();
-  });
-});
-
-describe("offersBusyChoice", () => {
-  it("only for the main chat, mid-run, with nothing asking the user", () => {
-    expect(
-      offersBusyChoice({
-        isMainChat: true,
-        runOpen: true,
-        waitingAskUser: false,
-      }),
-    ).toBe(true);
-    expect(
-      offersBusyChoice({
-        isMainChat: false,
-        runOpen: true,
-        waitingAskUser: false,
-      }),
-    ).toBe(false);
-    expect(
-      offersBusyChoice({
-        isMainChat: true,
-        runOpen: false,
-        waitingAskUser: false,
-      }),
-    ).toBe(false);
-    // A reply to an ask_user question is an answer, not a new message.
-    expect(
-      offersBusyChoice({
-        isMainChat: true,
-        runOpen: true,
-        waitingAskUser: true,
-      }),
-    ).toBe(false);
   });
 });
 

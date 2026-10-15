@@ -36,25 +36,6 @@ describe("resolveComposerHint", () => {
     );
   });
 
-  it("main chat working + typing: Enter offers 排队 / 开旁聊 (ticket 02)", () => {
-    expect(
-      resolveComposerHint(
-        state({ stopMode: true, hasText: true, mainChatBusy: true }),
-      ),
-    ).toBe("mainChatBusyEnterHint");
-    // /btw still goes straight out.
-    expect(
-      resolveComposerHint(
-        state({
-          stopMode: true,
-          hasText: true,
-          isSideQuestion: true,
-          mainChatBusy: true,
-        }),
-      ),
-    ).toBe("enterHint");
-  });
-
   it("running + /btw staged: Enter sends immediately, plain legend", () => {
     expect(
       resolveComposerHint(

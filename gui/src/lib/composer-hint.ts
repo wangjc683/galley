@@ -33,7 +33,6 @@
 /** i18n `composer` key of the hint to show; null collapses the slot. */
 export type ComposerHintKey =
   | "queueEnterHint"
-  | "mainChatBusyEnterHint"
   | "stoppingQueueHint"
   | "newlineHint"
   | "enterHint"
@@ -52,9 +51,6 @@ export interface ComposerHintState {
   hasText: boolean;
   /** Draft is a staged `/btw` side question (`lib/side-question.ts`). */
   isSideQuestion: boolean;
-  /** The main chat is working: Enter opens the 排队 / 开旁聊 choice
-   * instead of queueing (ticket 02). */
-  mainChatBusy?: boolean;
 }
 
 export function resolveComposerHint(s: ComposerHintState): ComposerHintKey | null {
@@ -64,8 +60,7 @@ export function resolveComposerHint(s: ComposerHintState): ComposerHintKey | nul
     // Stop in flight with messages parked: the status line outranks
     // the keyboard legend — it answers "did my send get lost?".
     if (s.isStopping && s.hasQueuedMessages) return "stoppingQueueHint";
-    if (!s.hasText) return "newlineHint";
-    return s.mainChatBusy ? "mainChatBusyEnterHint" : "queueEnterHint";
+    return s.hasText ? "queueEnterHint" : "newlineHint";
   }
   // Idle hand-off on hasText: with an empty draft there is nothing to
   // send, so the Enter legend is at its least useful — that gap is where

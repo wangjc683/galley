@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AssistantLiveLine } from "@/components/conversation/AssistantParts";
 import { zhCopy } from "@/i18n/locales/zh";
+import { dropComposerDraft, saveComposerDraft } from "@/lib/composer-draft";
 import { LocalFilesContext } from "@/lib/local-files";
 import type { PerSessionMessages } from "@/stores/messages";
 import type {
@@ -235,5 +236,24 @@ describe("the assistant's live line", () => {
       );
     expect(line(10_400)).toContain("· 10 秒");
     expect(line(1_000)).not.toContain("·");
+  });
+});
+
+describe("the main chat's composer", () => {
+  afterEach(() => {
+    dropComposerDraft("s-1");
+  });
+
+  it("queues a send while it works, as every session does (ruling 71: no 排队 / 开新对话 choice)", () => {
+    // A typed draft (the Composer seeds from the parked one): the hint
+    // row says what Enter does now.
+    saveComposerDraft("s-1", { text: "顺便查下周五的天气", images: [] });
+    const QUEUE_HINT = `<span class="font-mono text-ink-soft">Enter</span>${zhCopy.composer.queueEnterHint.slice("Enter".length)}`;
+    const main = render({ isMainChat: true, isRunning: true });
+    expect(main).toContain(QUEUE_HINT);
+    expect(main).not.toContain("main-chat-busy-choice");
+    expect(main).not.toContain("开新对话");
+    const other = render({ isMainChat: false, isRunning: true });
+    expect(other).toContain(QUEUE_HINT);
   });
 });

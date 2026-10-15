@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import type { ComposerTrialView } from "@/components/conversation/composer-trial/composer-trial";
 import type { ComposerReasoningEffortState } from "@/components/conversation/EffortPill";
 import type { ComposerLLMOption } from "@/components/conversation/LLMPill";
 import type { ImageBlockReason } from "@/lib/composer-images";
@@ -132,17 +133,10 @@ export interface ComposerProps {
    * drag-drop (PRD 定案 8). */
   onTextDropBlocked?: () => void;
   /**
-   * Set while this is the main chat (主聊天, ticket 02) and it is
-   * working with nothing asking the user. A send then opens a two-way
-   * choice above the box instead of going out (MainChatBusyChoice):
-   * 排队 hands the draft to `onSubmit` — the ordinary mid-run send into
-   * Core's queue — and 开旁聊 to `onOpenSideChat`. The draft stays in
-   * the box until the user picks. `/btw` side questions skip the choice.
+   * TEMPORARY (ticket 24, composer-trial/): the main chat's composer
+   * trial — the one-line form, and 「演示在跑」's made-up queue (display
+   * only: the strip does nothing while it shows). MainView sets it only
+   * for the main chat.
    */
-  mainChatBusy?: {
-    onOpenSideChat: (
-      text: string,
-      attachments: PendingImageAttachment[],
-    ) => void;
-  };
+  trial?: ComposerTrialView;
 }

@@ -32,4 +32,37 @@ describe("resolveComposerRegister", () => {
       }),
     ).toBe("continuing");
   });
+  it("the main chat says 「发消息…」 at rest and while it works; its questions keep the reply registers (ruling 71)", () => {
+    const main = { mainChat: true, askUserHasCandidates: false };
+    expect(
+      resolveComposerRegister({
+        ...main,
+        isRunning: false,
+        pendingAskUser: false,
+      }),
+    ).toBe("messaging");
+    expect(
+      resolveComposerRegister({
+        ...main,
+        isRunning: true,
+        pendingAskUser: false,
+      }),
+    ).toBe("messaging");
+    expect(
+      resolveComposerRegister({
+        ...main,
+        isRunning: false,
+        pendingAskUser: true,
+      }),
+    ).toBe("replyOpen");
+    expect(
+      resolveComposerRegister({
+        ...main,
+        isRunning: false,
+        pendingAskUser: true,
+        askUserHasCandidates: true,
+      }),
+    ).toBe("reply");
+    expect(composerRegisterCopyKey("messaging")).toBe("writeMessage");
+  });
 });

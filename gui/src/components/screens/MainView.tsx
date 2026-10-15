@@ -14,6 +14,10 @@ import {
 } from "@/components/conversation/Conversation";
 import { AssistantLiveLine } from "@/components/conversation/AssistantParts";
 import { ConversationSkeleton } from "@/components/conversation/ConversationSkeleton";
+import {
+  type ComposerTrialChoice,
+  useComposerTrialOverrides,
+} from "@/components/conversation/composer-trial/composer-trial";
 import { StepLimitTail } from "@/components/conversation/StepLimitTail";
 import {
   buildRunGroups,
@@ -49,7 +53,6 @@ import {
   extractLiveThinking,
   extractPreamble,
 } from "@/lib/ipc/ga-output-cleaning";
-import { offersBusyChoice } from "@/lib/main-chat";
 import { mendStreamingMarkdown } from "@/lib/mend-streaming-markdown";
 import { stepLimitTailVisible } from "@/lib/step-limit";
 import { cn } from "@/lib/utils";
@@ -75,15 +78,10 @@ export interface MainViewProps {
     attachments: PendingImageAttachment[],
   ) => boolean | void;
   onStop?: () => void;
-  /** This is the main chat (主聊天, ticket 02): a send while it works
-   * first offers 排队 / 开旁聊 (see `offersBusyChoice`), and the
-   * conversation is drawn as the assistant's (see MainViewContent). */
+  /** This is the main chat (主聊天, ticket 02): the conversation is
+   * drawn as the assistant's (see MainViewContent). A send while it
+   * works queues, as in every session (ruling 71). */
   isMainChat?: boolean;
-  /** 开旁聊: start a new ordinary session with this message. */
-  onOpenSideChat?: (
-    text: string,
-    attachments: PendingImageAttachment[],
-  ) => void;
   /** When true, the agent is mid-run; the Composer hides Submit and
    * shows Stop, the LLM switcher disables. */
   isRunning?: boolean;
@@ -148,6 +146,9 @@ export interface MainViewProps {
   imagesEnabled?: boolean;
   onImageBlocked?: (reason: ImageBlockReason) => void;
   onTextDropBlocked?: () => void;
+  /** TEMPORARY (ticket 24; composer-trial.ts): the composer trial's
+   * choice, set by App only while the main chat is open. */
+  composerTrial?: ComposerTrialChoice;
 }
 
 /**
@@ -173,7 +174,6 @@ function MainViewContent({
   onSubmit,
   onStop,
   isMainChat = false,
-  onOpenSideChat,
   isRunning = false,
   isStopping = false,
   llms,
@@ -189,8 +189,14 @@ function MainViewContent({
   imagesEnabled = true,
   onImageBlocked,
   onTextDropBlocked,
+  composerTrial,
 }: MainViewProps) {
   const copy = useCopy();
+  // TEMPORARY (ticket 24): what the composer trial sets on the Composer
+  // — nothing outside the main chat.
+  const composerTrialProps = useComposerTrialOverrides(
+    isMainChat ? composerTrial : undefined,
+  );
   // The main chat is the assistant (main chat PRD rulings 60, 66, 67):
   // its conversation reads as an IM with one person, not as the
   // workbench's task record (lib/assistant-conversation.ts).
@@ -198,8 +204,9 @@ function MainViewContent({
   // `assistant` (bubbles on both sides, the quiet 「N 步 ›」, the centred
   // time lines); the one live line in place of the in-flight row, with
   // no streaming prose and no corner clock; the question as a bubble;
-  // and 贴底 (useStickyScroll's `stickBottom`, the column stacked up
-  // from the composer). Every other conversation — the workbench's, a
+  // 贴底 (useStickyScroll's `stickBottom`, the column stacked up from
+  // the composer); and the composer's 「发消息…」 (ruling 71) and its
+  // trial (above). Every other conversation — the workbench's, a
   // subtask, the external runtime's — renders as before.
   //
   // The latest run stopped at GA's per-run step cap (#29): a thread
@@ -742,6 +749,7 @@ function MainViewContent({
                     pendingAskUser: Boolean(pendingAskUser),
                     askUserHasCandidates:
                       (pendingAskUser?.candidates.length ?? 0) > 0,
+                    mainChat: isMainChat,
                   }),
                 )
               ]
@@ -764,16 +772,8 @@ function MainViewContent({
             imagesEnabled={imagesEnabled}
             onImageBlocked={onImageBlocked}
             onTextDropBlocked={onTextDropBlocked}
-            mainChatBusy={
-              onOpenSideChat &&
-              offersBusyChoice({
-                isMainChat,
-                runOpen: isRunning || isStopping,
-                waitingAskUser: Boolean(pendingAskUser),
-              })
-                ? { onOpenSideChat }
-                : undefined
-            }
+            // TEMPORARY (ticket 24): last, so the trial's choices win.
+            {...composerTrialProps}
           />
         </div>
       </div>

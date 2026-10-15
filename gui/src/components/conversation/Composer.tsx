@@ -16,7 +16,6 @@ import { ComposerFooterHint } from "@/components/conversation/ComposerFooterHint
 import { ComposerImageStrip } from "@/components/conversation/ComposerImageStrip";
 import { ComposerQueueStrip } from "@/components/conversation/ComposerQueueStrip";
 import { ImagePreviewDialog } from "@/components/conversation/ImagePreviewDialog";
-import { MainChatBusyChoice } from "@/components/conversation/MainChatBusyChoice";
 import {
   EffortPill,
   type ComposerReasoningEffortState,
@@ -27,6 +26,16 @@ import {
 } from "@/components/conversation/LLMPill";
 import { SavedPromptDialogs } from "@/components/conversation/SavedPromptDialogs";
 import { COMPOSER_MAX_HEIGHT_PX } from "@/components/conversation/composer-styles";
+import {
+  ONE_LINE_GHOST_CLASS,
+  ONE_LINE_GHOST_STYLE,
+  ONE_LINE_IMAGE_STRIP_CLASS,
+  ONE_LINE_TEXTAREA_CLASS,
+  ONE_LINE_TEXTAREA_STYLE,
+  oneLineMaxHeightPx,
+} from "@/components/conversation/composer-trial/composer-trial";
+import { ComposerDemoInert } from "@/components/conversation/composer-trial/ComposerDemoInert";
+import { ComposerOneLine } from "@/components/conversation/composer-trial/ComposerOneLine";
 import { useComposerFocus } from "@/hooks/useComposerFocus";
 import { useFileReferences } from "@/hooks/useFileReferences";
 import { useImageAttachments } from "@/hooks/useImageAttachments";
@@ -44,7 +53,6 @@ import { isSideQuestion } from "@/lib/side-question";
 import { cn } from "@/lib/utils";
 import { useQueueStore } from "@/stores/queue";
 import { useSessionsStore } from "@/stores/sessions";
-import type { PendingImageAttachment } from "@/types/conversation";
 
 import type {
   ComposerHandle,
@@ -98,11 +106,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       imagesEnabled = true,
       onImageBlocked,
       onTextDropBlocked,
-      mainChatBusy,
+      trial,
     },
     ref,
   ) {
     const copy = useCopy();
+    // TEMPORARY (ticket 24): the main chat's one-line trial form.
+    const oneLine = trial?.oneLine ?? false;
     // Hybrid controlled / uncontrolled. When `value` prop is provided
     // we render it directly; otherwise we maintain an internal copy.
     // Avoid syncing prop -> internal in an effect (React 19 / Compiler
@@ -278,14 +288,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // at COMPOSER_MAX_HEIGHT_PX — beyond that the textarea scrolls
     // internally. ChatGPT / Claude / Notion all do this pattern; users
     // expect multi-line input to expand the composer rather than
-    // disappear behind a fixed-height window.
+    // disappear behind a fixed-height window. The one-line trial form
+    // (ticket 24) caps at eight lines instead.
     useEffect(() => {
       const el = textareaRef.current;
       if (!el) return;
       el.style.height = "auto";
-      const next = Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT_PX);
+      const cap = oneLine ? oneLineMaxHeightPx(el) : COMPOSER_MAX_HEIGHT_PX;
+      const next = Math.min(el.scrollHeight, cap);
       el.style.height = `${next}px`;
-    }, [text]);
+    }, [text, oneLine]);
 
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const next = e.target.value;
@@ -360,9 +372,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // through every host (MainView / EmptyState) buys no reuse: the
     // empty screen has no active session and renders no strip.
     const activeSessionId = useSessionsStore((s) => s.activeSessionId);
-    const queueItems = useQueueStore((s) =>
+    const sessionQueue = useQueueStore((s) =>
       activeSessionId ? (s.bySession[activeSessionId] ?? EMPTY_QUEUE) : EMPTY_QUEUE,
     );
+    // TEMPORARY (ticket 24): 「演示在跑」 shows two made-up messages.
+    const queueItems = trial?.demoQueue ?? sessionQueue;
 
     // Ghost text (next-step suggestion): a derived condition, not a
     // one-shot event — typing hides it, deleting everything brings it
@@ -380,39 +394,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       ? "" // the ghost overlay occupies the placeholder's visual slot
       : (placeholder ?? copy.composer.askAnything);
 
-    // Main chat busy (ticket 02): the 排队 / 开旁聊 choice a send opens.
-    // Closes on its own once the run ends (the prop goes away) — guarded
-    // reset during render, not an effect.
-    const [busyChoiceOpen, setBusyChoiceOpen] = useState(false);
-    if (busyChoiceOpen && !mainChatBusy) setBusyChoiceOpen(false);
-    const closeBusyChoice = () => {
-      setBusyChoiceOpen(false);
-      focusTextarea();
-    };
-    // The chosen route takes the draft as a plain send would.
-    const submitDraftTo = (
-      route: (
-        text: string,
-        attachments: PendingImageAttachment[],
-      ) => boolean | void,
-    ) => {
-      setBusyChoiceOpen(false);
-      const trimmed = expandComposerPlaceholders(text).trim();
-      if ((!trimmed && !hasPendingImages) || disabled) {
-        focusTextarea();
-        return;
-      }
-      const accepted = route(
-        trimmed || copy.composer.imageOnlyFallback,
-        pendingImages,
-      );
-      if (accepted === false) {
-        focusTextarea();
-        return;
-      }
-      resetDraftAfterSubmit();
-    };
-
     const handleSubmit = () => {
       const expanded = expandComposerPlaceholders(text);
       const trimmed = expanded.trim();
@@ -425,10 +406,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // onSubmit's owner (useMessageSend) routes a mid-run send into
       // Core's queue. /btw keeps its immediate side-question path there
       // too; images are toast-blocked there and keep the draft.
-      if (mainChatBusy && !sideQuestionStaged) {
-        setBusyChoiceOpen(true);
-        return;
-      }
       const submittedText = trimmed || copy.composer.imageOnlyFallback;
       const accepted = onSubmit?.(submittedText, pendingImages);
       if (accepted === false) return;
@@ -454,179 +431,238 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       }
     };
 
+    // The pieces the card arranges below. The main chat's one-line trial
+    // form (TEMPORARY, ticket 24; composer-trial/) arranges the same
+    // pieces in ComposerOneLine, with its own textarea and ghost metrics.
+    const queueStrip = activeSessionId && (
+      <ComposerQueueStrip
+        sessionId={activeSessionId}
+        items={queueItems}
+        // One-line form: the hint row is gone, so the strip's heading
+        // says what the stopping hint said (ticket 24).
+        heading={
+          oneLine && isStopping && queueItems.length > 0
+            ? copy.composer.stoppingQueueHint
+            : undefined
+        }
+        onRefill={(t) => {
+          applyComposerText(t, { clearImagesAfterPrefill: false });
+          requestAnimationFrame(() => textareaRef.current?.focus());
+        }}
+      />
+    );
+    const dropOverlay = isDropActive && (
+      <ComposerDropOverlay imagesEnabled={imagesEnabled} line={oneLine} />
+    );
+    const ghost = ghostVisible && (
+      <div
+        aria-hidden
+        // Mirrors the textarea's box exactly (container padding +
+        // font metrics) so the ghost sits where typed text would.
+        // pointer-events-none keeps clicks landing in the textarea;
+        // only the accept hint below opts back in.
+        className={
+          oneLine
+            ? ONE_LINE_GHOST_CLASS
+            : "pointer-events-none absolute inset-x-3.5 top-3.5 flex items-baseline gap-2 overflow-hidden [font-size:var(--conversation-composer-size)] leading-[1.55]"
+        }
+        style={oneLine ? ONE_LINE_GHOST_STYLE : undefined}
+      >
+        <span className="truncate text-ink-muted/50">{ghostSuggestion}</span>
+        {/* Mouse users' accept path (keyboard has ArrowRight).
+            tabIndex -1: the parent is aria-hidden, so the button
+            must stay out of the tab order — AT users get the
+            same action via ArrowRight, announced through the
+            textarea's aria-describedby. */}
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() =>
+            ghostSuggestion &&
+            applyComposerText(ghostSuggestion, {
+              clearImagesAfterPrefill: false,
+            })
+          }
+          className="pointer-events-auto shrink-0 cursor-pointer text-[11px] text-ink-muted/40 transition-colors duration-(--motion-fast) hover:text-ink-muted"
+        >
+          {copy.composer.ghostAcceptHint}
+        </button>
+      </div>
+    );
+    const ghostDescription = ghostVisible && ghostSuggestion && (
+      <span id={ghostDescId} className="sr-only">
+        {copy.composer.ghostSrDescription(ghostSuggestion)}
+      </span>
+    );
+    const textarea = (
+      <textarea
+        ref={textareaRef}
+        rows={oneLine ? 1 : 2}
+        disabled={disabled}
+        value={text}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
+        placeholder={resolvedPlaceholder}
+        // Ghost affordances that the overlay can't carry itself:
+        // native tooltip reveals a truncated suggestion in full
+        // (the overlay is pointer-events-none, so hover lands
+        // here), and aria-describedby announces it to AT.
+        title={ghostVisible && ghostSuggestion ? ghostSuggestion : undefined}
+        aria-describedby={
+          ghostVisible && ghostSuggestion ? ghostDescId : undefined
+        }
+        style={
+          oneLine
+            ? ONE_LINE_TEXTAREA_STYLE
+            : { maxHeight: COMPOSER_MAX_HEIGHT_PX }
+        }
+        // `resize-none` keeps the corner grab handle hidden — the
+        // height auto-grows via the effect above, so manual resize
+        // would just fight it. `overflow-y-auto` handles the rare
+        // case where content exceeds the max-height cap.
+        className={
+          oneLine
+            ? ONE_LINE_TEXTAREA_CLASS
+            : "block w-full resize-none overflow-y-auto border-0 bg-transparent p-0 [font-size:var(--conversation-composer-size)] leading-[1.55] text-ink outline-none placeholder:text-ink-muted/50"
+        }
+      />
+    );
+    const imageStrip = pendingImages.length > 0 && (
+      <ComposerImageStrip
+        images={pendingImages}
+        onPreview={setPreviewIndex}
+        onRemove={removeImage}
+        className={oneLine ? ONE_LINE_IMAGE_STRIP_CLASS : undefined}
+      />
+    );
+    const addMenu = (
+      <ComposerAddMenu
+        disabled={disabled}
+        imagesEnabled={imagesEnabled}
+        onPickFiles={() => void handlePickPaths("files")}
+        onPickFolders={() => void handlePickPaths("folders")}
+        onOpenPrompts={() => setPromptsOpen(true)}
+        onReturnFocus={focusTextarea}
+      />
+    );
+    // At the row's right end in the one-line form, so its popovers open
+    // right-aligned there.
+    const popoverAlign = oneLine ? "end" : undefined;
+    const modelPhrase = (
+      <>
+        <LLMPill
+          llmDisplayName={llmDisplayName}
+          llms={llms}
+          onSelectLLM={onSelectLLM}
+          llmConfigHint={llmConfigHint}
+          onConfigureModels={onConfigureModels}
+          onOpenLLMSwitcher={onOpenLLMSwitcher}
+          disabled={disabled || stopMode}
+          stopMode={stopMode}
+          phraseLead={reasoningEffort !== undefined}
+          popoverAlign={popoverAlign}
+        />
+        {reasoningEffort && (
+          <>
+            <span
+              aria-hidden
+              className="shrink-0 select-none px-0.5 text-[12.5px] text-ink-muted/60"
+            >
+              ·
+            </span>
+            <EffortPill {...reasoningEffort} popoverAlign={popoverAlign} />
+          </>
+        )}
+      </>
+    );
+    const actionSlot = (
+      <ComposerActionSlot
+        stopMode={stopMode}
+        isSideQuestion={sideQuestionStaged}
+        isStopping={isStopping}
+        submitAckTick={submitAckTick}
+        disabled={disabled}
+        hasSendableContent={hasSendableContent}
+        requiresModelConfig={requiresModelConfig}
+        hasConfigureModels={Boolean(onConfigureModels)}
+        onStop={onStop}
+        onSubmit={handleSubmit}
+      />
+    );
+
     return (
       <>
-        {busyChoiceOpen && mainChatBusy && (
-          <MainChatBusyChoice
-            imagesAttached={hasPendingImages}
-            onQueue={() => {
-              if (onSubmit) submitDraftTo(onSubmit);
-            }}
-            onOpenSideChat={() => submitDraftTo(mainChatBusy.onOpenSideChat)}
-            onDismiss={closeBusyChoice}
-          />
+        {trial?.demoQueue ? (
+          <ComposerDemoInert>{queueStrip}</ComposerDemoInert>
+        ) : (
+          queueStrip
         )}
-        {activeSessionId && (
-          <ComposerQueueStrip
-            sessionId={activeSessionId}
-            items={queueItems}
-            onRefill={(t) => {
-              applyComposerText(t, { clearImagesAfterPrefill: false });
-              requestAnimationFrame(() => textareaRef.current?.focus());
-            }}
-          />
-        )}
-        <div
-          ref={composerRootRef}
-          className={cn(
-            "relative rounded-md border border-line bg-elevated px-3.5 pb-2 pt-3.5 shadow-card transition-[border-color,box-shadow,background-color] duration-(--motion-fast) ease-firm",
-            "focus-within:border-brand focus-within:ring-[3px] focus-within:ring-brand/20",
-            disabled && "opacity-60",
-          )}
-          // No HTML5 drag handlers: with dragDropEnabled true, drops
-          // arrive through the native onDragDropEvent subscription inside
-          // useImageAttachments; `isDropActive` below is fed from there.
-        >
-          {isDropActive && <ComposerDropOverlay imagesEnabled={imagesEnabled} />}
-          {ghostVisible && (
-            <div
-              aria-hidden
-              // Mirrors the textarea's box exactly (container padding +
-              // font metrics) so the ghost sits where typed text would.
-              // pointer-events-none keeps clicks landing in the textarea;
-              // only the accept hint below opts back in.
-              className="pointer-events-none absolute inset-x-3.5 top-3.5 flex items-baseline gap-2 overflow-hidden [font-size:var(--conversation-composer-size)] leading-[1.55]"
-            >
-              <span className="truncate text-ink-muted/50">
-                {ghostSuggestion}
-              </span>
-              {/* Mouse users' accept path (keyboard has ArrowRight).
-                  tabIndex -1: the parent is aria-hidden, so the button
-                  must stay out of the tab order — AT users get the
-                  same action via ArrowRight, announced through the
-                  textarea's aria-describedby. */}
-              <button
-                type="button"
-                tabIndex={-1}
-                onClick={() =>
-                  ghostSuggestion &&
-                  applyComposerText(ghostSuggestion, {
-                    clearImagesAfterPrefill: false,
-                  })
-                }
-                className="pointer-events-auto shrink-0 cursor-pointer text-[11px] text-ink-muted/40 transition-colors duration-(--motion-fast) hover:text-ink-muted"
-              >
-                {copy.composer.ghostAcceptHint}
-              </button>
-            </div>
-          )}
-          {ghostVisible && ghostSuggestion && (
-            <span id={ghostDescId} className="sr-only">
-              {copy.composer.ghostSrDescription(ghostSuggestion)}
-            </span>
-          )}
-          <textarea
-            ref={textareaRef}
-            rows={2}
+        {oneLine ? (
+          <ComposerOneLine
+            rootRef={composerRootRef}
             disabled={disabled}
-            value={text}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            placeholder={resolvedPlaceholder}
-            // Ghost affordances that the overlay can't carry itself:
-            // native tooltip reveals a truncated suggestion in full
-            // (the overlay is pointer-events-none, so hover lands
-            // here), and aria-describedby announces it to AT.
-            title={ghostVisible && ghostSuggestion ? ghostSuggestion : undefined}
-            aria-describedby={
-              ghostVisible && ghostSuggestion ? ghostDescId : undefined
+            dropOverlay={dropOverlay}
+            imageStrip={imageStrip}
+            addMenu={addMenu}
+            input={
+              <>
+                {ghost}
+                {ghostDescription}
+                {textarea}
+              </>
             }
-            style={{ maxHeight: COMPOSER_MAX_HEIGHT_PX }}
-            // `resize-none` keeps the corner grab handle hidden — the
-            // height auto-grows via the effect above, so manual resize
-            // would just fight it. `overflow-y-auto` handles the rare
-            // case where content exceeds the max-height cap.
-            className="block w-full resize-none overflow-y-auto border-0 bg-transparent p-0 [font-size:var(--conversation-composer-size)] leading-[1.55] text-ink outline-none placeholder:text-ink-muted/50"
+            modelPhrase={modelPhrase}
+            actionSlot={actionSlot}
           />
+        ) : (
+          <div
+            ref={composerRootRef}
+            className={cn(
+              "relative rounded-md border border-line bg-elevated px-3.5 pb-2 pt-3.5 shadow-card transition-[border-color,box-shadow,background-color] duration-(--motion-fast) ease-firm",
+              "focus-within:border-brand focus-within:ring-[3px] focus-within:ring-brand/20",
+              disabled && "opacity-60",
+            )}
+            // No HTML5 drag handlers: with dragDropEnabled true, drops
+            // arrive through the native onDragDropEvent subscription inside
+            // useImageAttachments; `isDropActive` below is fed from there.
+          >
+            {dropOverlay}
+            {ghost}
+            {ghostDescription}
+            {textarea}
+            {imageStrip}
+            <div className="mt-2 flex items-center gap-2">
+              {/* ＋ opens left, like the chat apps people already know:
+                  the left side says what goes in and who answers, the
+                  right side only how it's sent (2026-10-03). It sits
+                  flush against the model phrase (no row gap): with the
+                  gap, ＋ read as a stray control 31px away from the
+                  model name. Files aren't gated on stopMode — a
+                  reference is plain text and queues like any message,
+                  same as a drop.
 
-          {pendingImages.length > 0 && (
-            <ComposerImageStrip
-              images={pendingImages}
-              onPreview={setPreviewIndex}
-              onRemove={removeImage}
-            />
-          )}
+                  Model + effort form ONE phrase (「grok-4.7 · high」): no
+                  row gap between them and no caret on either half
+                  (2026-10-03). The middle dot (same day) keeps
+                  the tier from reading as part of the model id — tier
+                  words double as model-name suffixes (o3-mini-high). It
+                  is plain text, not a target; each pill keeps its own
+                  hover box. The effort pill is deliberately NOT gated on
+                  `stopMode` / `disabled`: the engine reads the tier per
+                  request, so dialing it mid-run is legitimate and lands
+                  on the next call. */}
+              <div className="flex min-w-0 items-center">
+                {addMenu}
+                {modelPhrase}
+              </div>
 
-          <div className="mt-2 flex items-center gap-2">
-            {/* ＋ opens left, like the chat apps people already know:
-                the left side says what goes in and who answers, the
-                right side only how it's sent (2026-10-03). It sits
-                flush against the model phrase (no row gap): with the
-                gap, ＋ read as a stray control 31px away from the
-                model name. Files aren't gated on stopMode — a
-                reference is plain text and queues like any message,
-                same as a drop.
-
-                Model + effort form ONE phrase (「grok-4.7 · high」): no
-                row gap between them and no caret on either half
-                (2026-10-03). The middle dot (same day) keeps
-                the tier from reading as part of the model id — tier
-                words double as model-name suffixes (o3-mini-high). It
-                is plain text, not a target; each pill keeps its own
-                hover box. The effort pill is deliberately NOT gated on
-                `stopMode` / `disabled`: the engine reads the tier per
-                request, so dialing it mid-run is legitimate and lands
-                on the next call. */}
-            <div className="flex min-w-0 items-center">
-              <ComposerAddMenu
-                disabled={disabled}
-                imagesEnabled={imagesEnabled}
-                onPickFiles={() => void handlePickPaths("files")}
-                onPickFolders={() => void handlePickPaths("folders")}
-                onOpenPrompts={() => setPromptsOpen(true)}
-                onReturnFocus={focusTextarea}
-              />
-              <LLMPill
-                llmDisplayName={llmDisplayName}
-                llms={llms}
-                onSelectLLM={onSelectLLM}
-                llmConfigHint={llmConfigHint}
-                onConfigureModels={onConfigureModels}
-                onOpenLLMSwitcher={onOpenLLMSwitcher}
-                disabled={disabled || stopMode}
-                stopMode={stopMode}
-                phraseLead={reasoningEffort !== undefined}
-              />
-              {reasoningEffort && (
-                <>
-                  <span
-                    aria-hidden
-                    className="shrink-0 select-none px-0.5 text-[12.5px] text-ink-muted/60"
-                  >
-                    ·
-                  </span>
-                  <EffortPill {...reasoningEffort} />
-                </>
-              )}
-            </div>
-
-            <div className="ml-auto flex shrink-0 items-center gap-1.5">
-              <ComposerActionSlot
-                stopMode={stopMode}
-                isSideQuestion={sideQuestionStaged}
-                isStopping={isStopping}
-                submitAckTick={submitAckTick}
-                disabled={disabled}
-                hasSendableContent={hasSendableContent}
-                requiresModelConfig={requiresModelConfig}
-                hasConfigureModels={Boolean(onConfigureModels)}
-                onStop={onStop}
-                onSubmit={handleSubmit}
-              />
+              <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                {actionSlot}
+              </div>
             </div>
           </div>
-        </div>
+        )}
         <ComposerFooterHint
           showFooterHint={showFooterHint}
           stopMode={stopMode}
@@ -635,7 +671,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           hasText={hasText}
           isSideQuestion={sideQuestionStaged}
           staticHint={staticHint}
-          mainChatBusy={mainChatBusy !== undefined}
         />
         <SavedPromptDialogs
           open={promptsOpen}

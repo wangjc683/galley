@@ -483,6 +483,8 @@ export const zhCopy = {
   composer: {
     askAnything: "问点什么…",
     continueConversation: "继续…",
+    /** 主对话的占位（裁决 71 第 5 条）：空闲与在跑时都是这句，不写 /btw。 */
+    writeMessage: "发消息…",
     ghostAcceptHint: "按 → 填入",
     // 运行停在步数上限时替换模型建议的幽灵文字；须与
     // conversation.stepLimitTail 里引号中的词一致。
@@ -501,21 +503,12 @@ export const zhCopy = {
     newlineHint: "Shift+Enter 换行",
     /** 消息队列（galley#19/#20）：运行中 Enter 不再被闸，改为排队。 */
     queueEnterHint: "Enter 排队 · 本轮结束后自动发送",
-    mainChatBusyEnterHint: "Enter 后选择排队或开新对话",
     stoppingQueueHint: "正在停止，排队的消息会自动发出",
     queueStripLabel: (count: number) => `排队中 · ${count}`,
     queueJump: "立即执行",
     queueJumpTooltip: "打断当前任务，优先执行这条",
     queueRemove: "删除",
     queueEditTooltip: "取回编辑（从队列移除并填回输入框）",
-    /** 主聊天在跑时发消息（票 02）：排队进正在跑的任务，或用这句话开旁聊（界面叫「开新对话」）。 */
-    mainChatBusyLabel: "主对话正在忙",
-    mainChatBusyQueue: "排队",
-    mainChatBusyQueueTooltip: "本轮结束后接着交给主对话",
-    mainChatBusyQueueImages: "带图的消息不能排队，可以开新对话",
-    mainChatBusySideChat: "开新对话",
-    mainChatBusySideChatTooltip: "用这句话开一个新对话，马上开始",
-    mainChatBusyKeepEditing: "继续编辑",
     imageOnlyFallback: "请看这张图片。",
     pastedImage: "已粘贴图片",
     addMenuTooltip: "添加文件或提示词",

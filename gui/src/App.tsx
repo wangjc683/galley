@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { ToastHost } from "@/components/error-card/ToastHost";
 import { AppShell } from "@/components/layout/AppShell";
@@ -13,6 +14,11 @@ import { BrowserControlAttentionSurface } from "@/components/screens/BrowserCont
 import { EmptyState } from "@/components/screens/EmptyState";
 import { MainView } from "@/components/screens/MainView";
 import { LocalFileWorkspace } from "@/components/conversation/LocalFileWorkspace";
+import {
+  composerTrialFor,
+  useComposerTrialStore,
+} from "@/components/conversation/composer-trial/composer-trial";
+import { ComposerTrialSwitcher } from "@/components/conversation/composer-trial/ComposerTrialSwitcher";
 import { OnboardingScreen } from "@/components/screens/onboarding/OnboardingScreen";
 import { SettingsHost } from "@/components/screens/settings/SettingsHost";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
@@ -346,19 +352,14 @@ function App() {
     : undefined;
   const activeSessionBusy =
     screen === "main" && (isRunning || pendingAskUser !== null);
-  const {
-    sendUserMessage,
-    submitFromEmpty,
-    openSideChat,
-    stopRun,
-    runBrowserControlDemo,
-  } = useMessageSend({
-    activeSession,
-    requiresManagedModelConfig,
-    copy,
-    showImageBlockedToast,
-    openModelsForMissingConfig,
-  });
+  const { sendUserMessage, submitFromEmpty, stopRun, runBrowserControlDemo } =
+    useMessageSend({
+      activeSession,
+      requiresManagedModelConfig,
+      copy,
+      showImageBlockedToast,
+      openModelsForMissingConfig,
+    });
   const {
     activeProject,
     assignSessionToProjectWithToast,
@@ -428,6 +429,17 @@ function App() {
   );
   const { collapsed: sidebarCollapsed, toggle: toggleSidebar } =
     useSidebarCollapse(hasMainChat);
+  // TEMPORARY (ticket 24, the main chat's composer trial; see
+  // composer-trial.ts): the pill's choice reaches MainView only while the
+  // main chat is open in the main area (the managed runtime's alone).
+  const composerChoice = useComposerTrialStore(
+    useShallow((s) => ({ shape: s.shape, demoRunning: s.demoRunning })),
+  );
+  const mainChatOpen =
+    screen === "main" &&
+    activeRuntimeKind === "managed" &&
+    Boolean(activeSession?.mainChat);
+  const composerTrial = composerTrialFor(composerChoice, { mainChatOpen });
   const paletteSessions = useMemo(
     () =>
       visibleSessions.map((s) =>
@@ -705,13 +717,13 @@ function App() {
                     onSubmit={sendUserMessage}
                     onStop={stopRun}
                     isMainChat={Boolean(activeSession?.mainChat)}
-                    onOpenSideChat={openSideChat}
                     isRunning={isRunning}
                     isStopping={isStopping}
                     pendingAskUser={pendingAskUser}
                     conversationWidth={conversationWidth}
                     conversationFontSize={conversationFontSize}
                     activeSessionId={activeSessionId}
+                    composerTrial={composerTrial}
                   />
                 )}
               </BrowserControlAttentionSurface>
@@ -719,6 +731,8 @@ function App() {
           </ThemeProvider>
         }
       />
+
+      {mainChatOpen && <ComposerTrialSwitcher />}
 
       <CommandPalette
         open={paletteOpen}
