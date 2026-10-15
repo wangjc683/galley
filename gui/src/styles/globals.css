@@ -113,6 +113,10 @@
      Same value as --color-hover, which the bubble borrowed at first;
      its own token so retuning the hover leaves the bubble alone. */
   --color-assistant-tint: #f0f0f0;
+  /* The assistant's avatar ring (main chat PRD ruling 70): a 1px ring
+     inside the app icon's circle crop, so its pale ground (L* 89) has an
+     edge on the light sidebar's fills (L* 87–94). */
+  --color-avatar-ring: rgba(0, 0, 0, 0.12);
 
   /* --- semantic states --- */
   --color-success: #5a8c5a;
@@ -484,6 +488,9 @@ html[data-theme="dark"] {
      over app, ΔE ~12 from brand-tint); its own token for the same
      reason. */
   --color-assistant-tint: #24272c;
+  /* Dark avatar ring: white 10% (ruling 70). The pale icon already stands
+     off the dark sidebar; the ring keeps its rim drawn in both themes. */
+  --color-avatar-ring: rgba(255, 255, 255, 0.1);
 
   --color-success: #8fbf8f;
   --color-warning: #d6a250;
