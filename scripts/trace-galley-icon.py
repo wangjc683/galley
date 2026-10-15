@@ -15,6 +15,11 @@ that is not ground, filled with ink) and the wood on top of it. The ink
 outline is what shows between them. The output's viewBox is the scaled-up
 size (4096 for a 1024 bitmap), its width and height the bitmap's.
 
+The figure is then centred on the canvas: both layers move together so the
+silhouette's bounding box has equal margins on all four sides (the image
+model does not centre its drawing; JC's F1 sat 30px high, 124px of ground
+above and 185px below). The ground rectangle stays put.
+
 Needs Pillow, numpy and potracer (a pure-Python port of potrace). They are
 not in any of the repo's dependency lists; use a throwaway venv:
 
@@ -47,6 +52,7 @@ DEFAULTS = {
     "turdsize": 200,  # potrace: drop specks smaller than this (px²)
     "alphamax": 1.15,  # potrace: corner threshold
     "opttolerance": 0.6,  # potrace: curve optimisation tolerance
+    "centre": True,  # move the figure so its margins are equal
 }
 
 
@@ -87,10 +93,18 @@ def trace(src: str, out: str, opt: dict) -> int:
 
     silhouette, wood = smooth(cls != 0), smooth(cls == 1)
     n = w0 * k
+    figure = (f'<path d="{to_path(silhouette)}" fill="{o["ink"]}" fill-rule="evenodd"/>'
+              f'<path d="{to_path(wood)}" fill="{o["wood"]}" fill-rule="evenodd"/>')
+    if o["centre"]:
+        # Pixel (i) spans [i, i + 1) in path units, so the box's edges are
+        # x0 and x1 + 1; centre it on n / 2.
+        ys, xs = np.nonzero(silhouette)
+        dx = round(n / 2 - (xs.min() + xs.max() + 1) / 2)
+        dy = round(n / 2 - (ys.min() + ys.max() + 1) / 2)
+        if dx or dy:
+            figure = f'<g transform="translate({dx} {dy})">{figure}</g>'
     svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{w0}" height="{w0}" viewBox="0 0 {n} {n}">'
-           f'<rect width="{n}" height="{n}" fill="{o["bg"]}"/>'
-           f'<path d="{to_path(silhouette)}" fill="{o["ink"]}" fill-rule="evenodd"/>'
-           f'<path d="{to_path(wood)}" fill="{o["wood"]}" fill-rule="evenodd"/></svg>')
+           f'<rect width="{n}" height="{n}" fill="{o["bg"]}"/>{figure}</svg>')
     with open(out, "w") as f:
         f.write(svg)
     return len(svg)
