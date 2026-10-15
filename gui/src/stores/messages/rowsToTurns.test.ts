@@ -313,6 +313,42 @@ describe("rowsToTurns", () => {
     expect(agents[0].finalAnswer).toBe("你好。");
   });
 
+  // Ticket 20: the greeting carries its row's time (the assistant's time
+  // line above it, the first user message's baseline); no other reply
+  // does, live or restored.
+  it("carries the greeting's time, and only the greeting's", () => {
+    const turns = rowsToTurns([
+      makeMessageRow({
+        id: "msg_s-main_greeting",
+        role: "assistant",
+        turn_index: -1,
+        content: "你好。",
+        final_answer: "你好。",
+        created_via: "system",
+        supervisor: "galley-greeting",
+        created_at: "2026-10-12T00:40:00.000Z",
+      }),
+      makeMessageRow({
+        role: "user",
+        turn_index: 0,
+        content: "早",
+        created_at: "2026-10-12T01:00:00.000Z",
+      }),
+      makeMessageRow({
+        role: "assistant",
+        turn_index: 0,
+        final_answer: "早上好",
+        created_at: "2026-10-12T01:00:05.000Z",
+      }),
+    ]);
+    const agents = turns.filter((t): t is AgentTurn => t.role === "agent");
+    expect(agents.map((t) => t.createdAt)).toEqual([
+      "2026-10-12T00:40:00.000Z",
+      undefined,
+    ]);
+    expect((turns[1] as UserTurn).createdAt).toBe("2026-10-12T01:00:00.000Z");
+  });
+
   // Ticket 06a: a subtask's first message is the main chat's
   // instructions, stamped `subtask` — the same origin the live
   // `user-message-persisted` row carries.

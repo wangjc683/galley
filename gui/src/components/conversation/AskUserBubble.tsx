@@ -2,7 +2,7 @@ import * as ContextMenu from "@radix-ui/react-context-menu";
 import { ChatCircleDots, Check, PauseCircle } from "@phosphor-icons/react";
 import type { MouseEvent, ReactNode } from "react";
 
-import { IM_AGENT_BUBBLE } from "@/components/conversation/im-trial/im-trial";
+import { AssistantBubble } from "@/components/conversation/AssistantParts";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
@@ -47,9 +47,9 @@ export interface AskUserBubbleProps {
   /** Rendered under the candidates: the subtask card's one-line reply
    * (its question is answered in the card, not the Composer). */
   children?: ReactNode;
-  /** TEMPORARY (ticket 19, IM rendering trial C): the question is a
-   * plain left bubble with the candidates under it — no warning bar, no
-   * 「等你回复」 (the sidebar card and the composer placeholder say it). */
+  /** The assistant's conversation: the question is a plain left bubble
+   * with the candidates under it — no warning bar, no 「等你回复」 (the
+   * sidebar card and the composer placeholder say it). */
   bubble?: boolean;
 }
 
@@ -62,7 +62,9 @@ export interface AskUserBubbleProps {
  * understands "the agent has stopped, the ball is in your court".
  * Candidates render as clickable chips; the Composer below remains
  * fully open for free-form replies (the caller wires both paths into
- * the same `ask_user_response` IPC command).
+ * the same `ask_user_response` IPC command). The assistant's
+ * conversation drops the bar and the label (`bubble`): its question is
+ * a plain left bubble like any reply, the chips under it.
  *
  * Question rendering (2026-09-14): goes through `MarkdownView` like
  * the sibling side-question bubble, for two reasons. ① Selectable
@@ -103,9 +105,9 @@ export function AskUserBubble({
   if (bubble) {
     return (
       <div data-role="ask-user-bubble" className={cn("my-5", className)}>
-        <div className={IM_AGENT_BUBBLE}>
+        <AssistantBubble>
           <MarkdownView source={pending.question} variant="agent" softBreaks />
-        </div>
+        </AssistantBubble>
         {pending.candidates.length > 0 && (
           <div
             data-candidate-layout={layout}
@@ -304,6 +306,10 @@ function CandidateChip({
  *     secondary-register type. Sits between TurnMarker (structure) and
  *     body prose (reading) in visual weight.
  *
+ * In the assistant's conversation (`bubble`) the echo is a plain left
+ * bubble at the reply register instead, the candidates listed under it
+ * the same way.
+ *
  * The question text is stripped of GA internal tags defensively: the
  * live IPC path already strips via `stripGATags`, but this component
  * also runs on the restore path (`rowsToTurns`), which rebuilds turns
@@ -321,10 +327,10 @@ export function AnsweredAskUser({
   candidates?: string[];
   /** The reply user turn's content, when the question was answered. */
   answer?: string;
-  /** TEMPORARY (ticket 19, IM rendering trial C): a plain left bubble at
-   * the answer register, the candidates listed under it as before. */
+  /** The assistant's conversation: a plain left bubble at the answer
+   * register, the candidates listed under it as before. */
   bubble?: boolean;
-  /** TEMPORARY (ticket 19): the bubble's row margin (IM grouping). */
+  /** The bubble's row margin (the assistant's IM grouping). */
   className?: string;
 }) {
   const copy = useCopy();
@@ -373,9 +379,9 @@ export function AnsweredAskUser({
   if (bubble) {
     return (
       <div data-role="answered-ask-user" className={className ?? "my-4"}>
-        <div className={IM_AGENT_BUBBLE}>
+        <AssistantBubble>
           <MarkdownView source={cleaned} variant="agent" softBreaks />
-        </div>
+        </AssistantBubble>
         {optionList}
       </div>
     );

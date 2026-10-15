@@ -76,9 +76,8 @@ interface MessageActionsProps {
   /** Markdown source to operate on. */
   source: string;
   telemetry?: MessageTelemetry;
-  /** TEMPORARY (ticket 19, IM rendering trial line mode): shown at the
-   * row's start at all times — the reply's 「N 步 ›」 entry — with the
-   * hover-revealed chips after it. */
+  /** Shown at the row's start at all times, with the hover-revealed
+   * chips after it: the assistant's 「N 步 ›」 entry under a reply. */
   leading?: ReactNode;
 }
 

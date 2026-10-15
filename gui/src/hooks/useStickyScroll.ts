@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import {
-  imFollowBottom,
-  imScrollToBottom,
-} from "@/components/conversation/im-trial/im-trial";
+  assistantFollowBottom,
+  assistantScrollToBottom,
+} from "@/lib/assistant-conversation";
 import {
   USER_MSG_ANCHOR_TOLERANCE_PX,
   USER_MSG_ANCHOR_TOP_PX,
@@ -87,7 +87,8 @@ function clearLocateHighlight(): void {
  *   - the floating scroll-to-bottom button + its smooth-scroll monitor
  *   - scroll-to-bottom on session switch (race-hardened against async
  *     SQLite restore, Shiki reflow, and WKWebView repaint skips)
- *   - stick-to-user-message-top on submit
+ *   - stick-to-user-message-top on submit (the assistant's
+ *     conversation sticks to the bottom instead, `stickBottom`)
  *   - ⌥↑ / ⌥↓ keyboard jump between user messages
  *
  * Inputs are the bottom-anchored growth / navigation triggers the
@@ -120,11 +121,11 @@ export function useStickyScroll({
   /** GA-initiated question; its appearance grows the doc tail. */
   pendingAskUser?: PendingAskUser | null;
   /**
-   * TEMPORARY (ticket 19, IM rendering trial 「贴底」; the main chat
-   * only): a send goes to the bottom instead of parking the message at
-   * the top, and following the growth stops before the reply's start
-   * leaves the viewport (im-trial.ts `imFollowTop`). Session switches
-   * and 「回到底部」 still land on the bottom itself.
+   * The assistant's 贴底 (the main chat only, lib/assistant-
+   * conversation.ts): a send goes to the bottom instead of parking the
+   * message at the top, and following the growth stops before the
+   * reply's start leaves the viewport (`assistantFollowTop`). Session
+   * switches and 「回到底部」 still land on the bottom itself.
    */
   stickBottom?: boolean;
 }) {
@@ -183,7 +184,7 @@ export function useStickyScroll({
     if (stickBottom) {
       // Parked short of the bottom: the scroll listener drops follow
       // mode (a scroll event, since setState stays out of effects).
-      if (imFollowBottom(el, USER_MSG_ANCHOR_TOP_PX)) {
+      if (assistantFollowBottom(el, USER_MSG_ANCHOR_TOP_PX)) {
         el.dispatchEvent(new Event("scroll"));
       }
       return;
@@ -298,7 +299,9 @@ export function useStickyScroll({
     const observer = new ResizeObserver(() => {
       if (!atBottomRef.current) return;
       if (stickBottomRef.current) {
-        if (imFollowBottom(el, USER_MSG_ANCHOR_TOP_PX)) setAtBottom(false);
+        if (assistantFollowBottom(el, USER_MSG_ANCHOR_TOP_PX)) {
+          setAtBottom(false);
+        }
         return;
       }
       el.scrollTop = el.scrollHeight;
@@ -402,10 +405,10 @@ export function useStickyScroll({
     // `user-msg-reply` (excluded from the rail / ⌥-nav index), but it
     // is still the just-submitted message this snap must target.
     const handle = requestAnimationFrame(() => {
-      // 「贴底」 (ticket 19): the message lands right above the composer
-      // and following picks up from there.
+      // 贴底: the message lands right above the composer and following
+      // picks up from there.
       if (stickBottomRef.current) {
-        imScrollToBottom(container);
+        assistantScrollToBottom(container);
         setAtBottom(true);
         return;
       }

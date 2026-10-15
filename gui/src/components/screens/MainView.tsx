@@ -12,14 +12,8 @@ import {
   Conversation,
   TurnMarker,
 } from "@/components/conversation/Conversation";
+import { AssistantLiveLine } from "@/components/conversation/AssistantParts";
 import { ConversationSkeleton } from "@/components/conversation/ConversationSkeleton";
-import {
-  type ImRendering,
-  imLineSentence,
-} from "@/components/conversation/im-trial/im-trial";
-import { imDemoComposerCopy } from "@/components/conversation/im-trial/im-trial-demo";
-import { ImLiveLine } from "@/components/conversation/im-trial/ImTrialParts";
-import { useImDemo } from "@/components/conversation/im-trial/useImDemo";
 import { StepLimitTail } from "@/components/conversation/StepLimitTail";
 import {
   buildRunGroups,
@@ -31,10 +25,7 @@ import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToolbar";
 import { StepRegion } from "@/components/conversation/StepRegion";
-import {
-  SubtaskCards,
-  SubtaskCardView,
-} from "@/components/conversation/SubtaskCards";
+import { SubtaskCards } from "@/components/conversation/SubtaskCards";
 import { ThinkingPreview } from "@/components/conversation/ThinkingPreview";
 import { UserQuestionRail } from "@/components/conversation/UserQuestionRail";
 import { useActiveMessages } from "@/hooks/useActiveSession";
@@ -43,6 +34,7 @@ import { useStickyScroll } from "@/hooks/useStickyScroll";
 import { useSubtaskDispatchesByMessage } from "@/hooks/useSubtaskCards";
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { useMarkdownStream } from "@/hooks/useMarkdownStream";
+import { assistantLineSentence } from "@/lib/assistant-conversation";
 import {
   composerRegisterCopyKey,
   resolveComposerRegister,
@@ -51,7 +43,7 @@ import {
   conversationTypographyStyle,
   type ConversationFontSize,
 } from "@/lib/conversation-font-size";
-import { useCopy, useLanguage } from "@/lib/i18n";
+import { useCopy } from "@/lib/i18n";
 import {
   cleanPartialContent,
   extractLiveThinking,
@@ -84,7 +76,8 @@ export interface MainViewProps {
   ) => boolean | void;
   onStop?: () => void;
   /** This is the main chat (主聊天, ticket 02): a send while it works
-   * first offers 排队 / 开旁聊 (see `offersBusyChoice`). */
+   * first offers 排队 / 开旁聊 (see `offersBusyChoice`), and the
+   * conversation is drawn as the assistant's (see MainViewContent). */
   isMainChat?: boolean;
   /** 开旁聊: start a new ordinary session with this message. */
   onOpenSideChat?: (
@@ -155,13 +148,6 @@ export interface MainViewProps {
   imagesEnabled?: boolean;
   onImageBlocked?: (reason: ImageBlockReason) => void;
   onTextDropBlocked?: () => void;
-  /**
-   * TEMPORARY (ticket 19, IM rendering trial; see im-trial.ts): how the
-   * main chat is drawn and whether the demo shows. Read only when
-   * `isMainChat`; App passes none elsewhere, and none while every piece
-   * is current with the demo off.
-   */
-  im?: ImRendering;
 }
 
 /**
@@ -181,14 +167,14 @@ export function MainView(props: MainViewProps) {
 }
 
 function MainViewContent({
-  turns: chatTurns,
+  turns,
   llmDisplayName,
   activeSessionId,
   onSubmit,
   onStop,
   isMainChat = false,
   onOpenSideChat,
-  isRunning: chatRunning = false,
+  isRunning = false,
   isStopping = false,
   llms,
   onSelectLLM,
@@ -197,34 +183,31 @@ function MainViewContent({
   requiresModelConfig = false,
   onOpenLLMSwitcher,
   reasoningEffort,
-  pendingAskUser: chatPendingAskUser,
+  pendingAskUser,
   conversationWidth = "compact",
   conversationFontSize = "standard",
   imagesEnabled = true,
   onImageBlocked,
   onTextDropBlocked,
-  im: imProp,
 }: MainViewProps) {
   const copy = useCopy();
-  const language = useLanguage();
-  // TEMPORARY (ticket 19): the IM rendering trial, the main chat only.
-  // While 「演示」 shows, its fixed conversation stands in for the chat's
-  // turns and live state on screen; the composer stays with the real
-  // chat (and is off). Display only.
-  const im = isMainChat ? imProp : undefined;
-  const demo = useImDemo(im?.demo ?? "off", language);
-  const turns = demo ? demo.turns : chatTurns;
-  const isRunning = demo ? demo.running : chatRunning;
-  const pendingAskUser = demo ? demo.pendingAskUser : chatPendingAskUser;
-  const lineMode = im?.process === "line";
-  const stickBottom = im?.scroll === "bottom";
+  // The main chat is the assistant (main chat PRD rulings 60, 66, 67):
+  // its conversation reads as an IM with one person, not as the
+  // workbench's task record (lib/assistant-conversation.ts).
+  // `isMainChat` is the one gate, in these places below: Conversation's
+  // `assistant` (bubbles on both sides, the quiet 「N 步 ›」, the centred
+  // time lines); the one live line in place of the in-flight row, with
+  // no streaming prose and no corner clock; the question as a bubble;
+  // and 贴底 (useStickyScroll's `stickBottom`, the column stacked up
+  // from the composer). Every other conversation — the workbench's, a
+  // subtask, the external runtime's — renders as before.
+  //
   // The latest run stopped at GA's per-run step cap (#29): a thread
   // tail, only while nothing else signals activity.
-  const chatPausedAtStepLimit = useActiveMessages(
+  const pausedAtStepLimit = useActiveMessages(
     (m) => m.pausedAtStepLimit,
     false,
   );
-  const pausedAtStepLimit = demo ? false : chatPausedAtStepLimit;
   const showStepLimitTail = stepLimitTailVisible({
     pausedAtStepLimit,
     isRunning,
@@ -240,28 +223,22 @@ function MainViewContent({
   // Streaming state, subscribed locally so token churn stays inside
   // this subtree instead of re-rendering the whole app. These were
   // previously passed as props from App; see MainViewProps docs above.
-  const chatInFlightContent = useActiveMessages((m) => m.inFlightContent, "");
-  const inFlightContent = demo ? demo.inFlight : chatInFlightContent;
-  const chatSendPhase = useActiveMessages((m) => m.sendPhase, null);
-  const sendPhase = demo ? null : chatSendPhase;
+  const inFlightContent = useActiveMessages((m) => m.inFlightContent, "");
+  const sendPhase = useActiveMessages((m) => m.sendPhase, null);
   // Cold-start restore: turns are still being read back from SQLite
   // and there is no previous transcript on screen (warm switches keep
   // the old one via the sessions.ts atomic swap). Ghost turns instead
   // of a blank column that would misread as an empty session.
-  const chatRestoring = useActiveMessages((m) => m.restoring, false);
-  const restoring = demo ? false : chatRestoring;
+  const restoring = useActiveMessages((m) => m.restoring, false);
   // Paged history (main-chat ticket 12): how many turns earlier pages
   // put in front (Conversation keys rows past them), and the send time
   // the first loaded user message measures its break against.
-  const chatPrependedTurns = useActiveMessages((m) => m.prependedTurns, 0);
-  const prependedTurns = demo ? 0 : chatPrependedTurns;
-  const chatPreviousUserCreatedAt = useActiveMessages(
+  const prependedTurns = useActiveMessages((m) => m.prependedTurns, 0);
+  const previousUserCreatedAt = useActiveMessages(
     (m) => m.earlier?.previousUserCreatedAt ?? null,
     null,
   );
-  const previousUserCreatedAt = demo ? null : chatPreviousUserCreatedAt;
-  const chatTurnIndex = useActiveMessages((m) => m.currentTurnIndex, null);
-  const currentTurnIndex = demo ? demo.currentTurnIndex : chatTurnIndex;
+  const currentTurnIndex = useActiveMessages((m) => m.currentTurnIndex, null);
   // The in-flight region sits one in-run gap (mt-2.5) below the
   // conversation's live window; from the second step on its rail
   // reaches up through that gap so header → window → thinking row
@@ -279,11 +256,10 @@ function MainViewContent({
     if (liveGroup) return liveWindowHasSettledStep(liveGroup, turns);
     return currentTurnIndex != null && currentTurnIndex > 1;
   }, [turns, isRunning, pendingAskUser, currentTurnIndex]);
-  const chatRunStartedAtMs = useActiveMessages(
+  const currentRunStartedAtMs = useActiveMessages(
     (m) => m.currentRunStartedAtMs,
     null,
   );
-  const currentRunStartedAtMs = demo ? demo.runStartedAtMs : chatRunStartedAtMs;
   // Segments an ask_user reply already closed keep their time on the
   // HUD (see RunElapsedHud.baseMs).
   const runElapsedBaseMs = useMemo(() => liveRunElapsedBaseMs(turns), [turns]);
@@ -292,8 +268,7 @@ function MainViewContent({
   // waiting on an ask_user reply. The Composer derives the rest
   // (empty textarea, no image attached) at render time.
   const nextSuggestion = useActiveMessages((m) => m.nextSuggestion, null);
-  const ghostSuggestion =
-    !demo && !isRunning && !pendingAskUser ? nextSuggestion : null;
+  const ghostSuggestion = !isRunning && !pendingAskUser ? nextSuggestion : null;
   // Imperative Composer handle for the ask_user fill-in slow path
   // (candidate text → textarea, not sent).
   const composerRef = useRef<ComposerHandle>(null);
@@ -356,9 +331,10 @@ function MainViewContent({
   // rationale. If the GA-side throttle is eventually reduced enough,
   // this hook becomes a no-op (reveal already keeps pace with
   // arrivals) and can be removed without behavior change.
-  // Line mode (ticket 19) shows no streaming prose: the typewriter and
-  // the markdown pipeline get nothing to chew on.
-  const typedPartial = useTypewriter(lineMode ? "" : visiblePartial);
+  // The assistant shows no streaming prose (its one line stands for the
+  // round): the typewriter and the markdown pipeline get nothing to
+  // chew on.
+  const typedPartial = useTypewriter(isMainChat ? "" : visiblePartial);
   // Markdown-parse throttle: `useTypewriter` reveals chars at ~60 Hz
   // and each revealed value would trigger a full `react-markdown`
   // re-parse of the growing buffer (O(n²) across a turn). This holds
@@ -375,19 +351,19 @@ function MainViewContent({
     () => mendStreamingMarkdown(throttledPartial),
     [throttledPartial],
   );
-  // TEMPORARY (ticket 19, line mode): the one line's sentence — the
-  // first line of what streams, else this stretch's latest narration —
-  // and whether the round already has its answer (the line then goes,
-  // the answer stands whole in the conversation).
+  // The assistant's live line: its sentence — the first line of what
+  // streams, else this stretch's latest narration — and whether the
+  // round already has its answer (the line then goes, the answer stands
+  // whole in the conversation, before run_complete).
   const lineSentence = useMemo(
-    () => (lineMode ? imLineSentence(turns, visiblePartial) : null),
-    [lineMode, turns, visiblePartial],
+    () => (isMainChat ? assistantLineSentence(turns, visiblePartial) : null),
+    [isMainChat, turns, visiblePartial],
   );
   const lineRoundSettled = useMemo(() => {
-    if (!lineMode) return false;
+    if (!isMainChat) return false;
     const groups = buildRunGroups(turns);
     return groups[groups.length - 1]?.complete ?? false;
-  }, [lineMode, turns]);
+  }, [isMainChat, turns]);
 
   // Conversation scroll behavior — sticky-bottom follow, the
   // scroll-to-bottom button, session-switch snap, stick-to-user-message,
@@ -400,24 +376,18 @@ function MainViewContent({
     isScrollingToBottom,
     onClickScrollToBottom,
   } = useStickyScroll({
-    // Opening or switching the demo lands at its bottom like a session
-    // switch (ticket 19).
-    activeSessionId:
-      demo && activeSessionId
-        ? `${activeSessionId}#im-demo-${im?.demo}`
-        : activeSessionId,
+    activeSessionId,
     userSubmitTick,
     streamingContent: markdownPartial,
     turnsLength: turns.length,
     pendingAskUser,
     restoring,
-    stickBottom,
+    stickBottom: isMainChat,
   });
   // Earlier pages of the conversation: read near the top, prepended
-  // without moving what is on screen. See useEarlierTurns. Not while
-  // the demo stands in (ticket 19).
+  // without moving what is on screen. See useEarlierTurns.
   useEarlierTurns({
-    sessionId: demo ? undefined : activeSessionId,
+    sessionId: activeSessionId,
     scrollContainerRef,
     turnsLength: turns.length,
     prependedTurns,
@@ -472,18 +442,18 @@ function MainViewContent({
           ref={scrollContainerRef}
           className={cn(
             "scrollbar-stable absolute inset-0 overflow-y-auto px-8 py-6",
-            // TEMPORARY (ticket 19, scroll 贴底): a short conversation
-            // stacks up from the composer — the column is pushed down
-            // by its auto top margin and keeps its own block flow, so
-            // the rows' margins collapse as before.
-            stickBottom && "flex flex-col",
+            // The assistant's 贴底: a short conversation stacks up from
+            // the composer — the column is pushed down by its auto top
+            // margin and keeps its own block flow, so the rows' margins
+            // collapse as before.
+            isMainChat && "flex flex-col",
           )}
         >
           <div
             className={cn(
               "mx-auto",
               conversationWidth === "wide" ? "max-w-[1200px]" : "max-w-[760px]",
-              stickBottom && "mt-auto w-full",
+              isMainChat && "mt-auto w-full",
             )}
           >
             {restoring && turns.length === 0 ? (
@@ -494,54 +464,23 @@ function MainViewContent({
                 // pointer + manual toggles) resets on switch — a
                 // reopened session starts with every settled run
                 // folded (conversation-run-fold PRD 定案 2).
-                key={
-                  demo
-                    ? `im-demo-${im?.demo}`
-                    : (activeSessionId ?? "conversation")
-                }
+                key={activeSessionId ?? "conversation"}
                 turns={turns}
                 keyBase={prependedTurns}
                 previousUserCreatedAt={previousUserCreatedAt}
                 askUserPending={Boolean(pendingAskUser)}
                 agentRunning={isRunning}
                 renderAfterAnswer={
-                  demo
+                  subtaskDispatches.size > 0
                     ? (messageId) => {
-                        const cards = demo.cards.get(messageId);
-                        return cards ? (
-                          <div
-                            data-role="subtask-cards"
-                            className="mt-3 flex flex-col gap-2"
-                          >
-                            {cards.map((card) => (
-                              <SubtaskCardView
-                                key={card.key}
-                                state={card.state}
-                                title={card.title}
-                                sessionId={`im-demo-${card.key}`}
-                                onOpen={() => {}}
-                              />
-                            ))}
-                          </div>
+                        const dispatches = subtaskDispatches.get(messageId);
+                        return dispatches ? (
+                          <SubtaskCards dispatches={dispatches} />
                         ) : null;
                       }
-                    : subtaskDispatches.size > 0
-                      ? (messageId) => {
-                          const dispatches = subtaskDispatches.get(messageId);
-                          return dispatches ? (
-                            <SubtaskCards dispatches={dispatches} />
-                          ) : null;
-                        }
-                      : undefined
+                    : undefined
                 }
-                im={
-                  im && {
-                    bubble: im.bubble,
-                    process: im.process,
-                    time: im.time,
-                    greetingAt: demo?.greetingAt,
-                  }
-                }
+                assistant={isMainChat}
               />
             )}
             {/* In-flight placeholder. User sent a message; the bridge
@@ -560,17 +499,17 @@ function MainViewContent({
               thinking content, not a one-liner "still working"
               line. Sharing visual register with TurnMarker collapses
               the before/after into one per-step rhythm. */}
-            {/* TEMPORARY (ticket 19, line mode): one line instead of the
-                in-flight row, its reasoning and the streaming prose —
-                gone once the round has its answer. */}
-            {isRunning && lineMode && !lineRoundSettled && (
-              <ImLiveLine
+            {/* The assistant: one line instead of the in-flight row, its
+                reasoning and the streaming prose — gone once the round
+                has its answer. */}
+            {isRunning && isMainChat && !lineRoundSettled && (
+              <AssistantLiveLine
                 sentence={lineSentence}
                 startedAtMs={currentRunStartedAtMs}
                 baseMs={runElapsedBaseMs}
               />
             )}
-            {isRunning && !lineMode && (
+            {isRunning && !isMainChat && (
               // The elapsed clock inside TurnMarker resets whenever
               // `index` changes — step 1 took 30s; step 2's clock
               // starts at 0 again — including the first `turn_start`
@@ -671,14 +610,11 @@ function MainViewContent({
             {pendingAskUser && (
               <AskUserBubble
                 pending={pendingAskUser}
-                // The demo's question answers nothing (ticket 19).
-                onPickCandidate={(text) => {
-                  if (!demo) onSubmit?.(text, []);
-                }}
-                onFillCandidate={(text) => {
-                  if (!demo) composerRef.current?.prefillText(text);
-                }}
-                bubble={im?.bubble === "c"}
+                onPickCandidate={(text) => onSubmit?.(text, [])}
+                onFillCandidate={(text) =>
+                  composerRef.current?.prefillText(text)
+                }
+                bubble={isMainChat}
               />
             )}
             {/* The run paused at GA's step cap; one reply continues it. */}
@@ -706,7 +642,7 @@ function MainViewContent({
           />
         )}
         <SelectionCopyToolbar scrollContainerRef={scrollContainerRef} />
-        {isRunning && currentRunStartedAtMs != null && !lineMode && (
+        {isRunning && currentRunStartedAtMs != null && !isMainChat && (
           <div className="pointer-events-none absolute inset-x-8 bottom-4 z-10">
             <div
               className={cn(
@@ -799,28 +735,24 @@ function MainViewContent({
             draftKey={activeSessionId ?? "main-composer"}
             llmDisplayName={llmDisplayName}
             placeholder={
-              // While the demo shows, the composer is off: a message
-              // would land in the real chat out of sight (ticket 19).
-              demo
-                ? imDemoComposerCopy(language).placeholder
-                : copy.composer[
-                    composerRegisterCopyKey(
-                      resolveComposerRegister({
-                        isRunning: chatRunning,
-                        pendingAskUser: Boolean(chatPendingAskUser),
-                        askUserHasCandidates:
-                          (chatPendingAskUser?.candidates.length ?? 0) > 0,
-                      }),
-                    )
-                  ]
+              copy.composer[
+                composerRegisterCopyKey(
+                  resolveComposerRegister({
+                    isRunning,
+                    pendingAskUser: Boolean(pendingAskUser),
+                    askUserHasCandidates:
+                      (pendingAskUser?.candidates.length ?? 0) > 0,
+                  }),
+                )
+              ]
             }
             ghostSuggestion={ghostSuggestion}
             onSubmit={onSubmit}
-            stopMode={chatRunning}
+            stopMode={isRunning}
             isStopping={isStopping}
             onStop={onStop}
             submitAckTick={userSubmitTick}
-            disabled={Boolean(demo)}
+            disabled={false}
             llms={llms}
             onSelectLLM={onSelectLLM}
             llmConfigHint={llmConfigHint}
@@ -828,8 +760,7 @@ function MainViewContent({
             requiresModelConfig={requiresModelConfig}
             onOpenLLMSwitcher={onOpenLLMSwitcher}
             reasoningEffort={reasoningEffort}
-            showFooterHint={!demo}
-            staticHint={demo ? imDemoComposerCopy(language).hint : undefined}
+            showFooterHint
             imagesEnabled={imagesEnabled}
             onImageBlocked={onImageBlocked}
             onTextDropBlocked={onTextDropBlocked}
@@ -837,8 +768,8 @@ function MainViewContent({
               onOpenSideChat &&
               offersBusyChoice({
                 isMainChat,
-                runOpen: chatRunning || isStopping,
-                waitingAskUser: Boolean(chatPendingAskUser),
+                runOpen: isRunning || isStopping,
+                waitingAskUser: Boolean(pendingAskUser),
               })
                 ? { onOpenSideChat }
                 : undefined

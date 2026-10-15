@@ -1,7 +1,7 @@
 import { CaretDown, XCircle } from "@phosphor-icons/react";
 import { isValidElement, memo, useState, type ReactNode } from "react";
 
-import { IM_AGENT_BUBBLE } from "@/components/conversation/im-trial/im-trial";
+import { AssistantBubble } from "@/components/conversation/AssistantParts";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { MessageActions } from "@/components/conversation/MessageActions";
 import { useCopy } from "@/lib/i18n";
@@ -12,7 +12,9 @@ import type { MessageTelemetry } from "@/types/conversation";
 /**
  * Final agent answer — uses the conversation body typography vars,
  * no callout chrome, and "floats in the document". Per DESIGN.md
- * §4.3 + the prototype's msg-agent style.
+ * §4.3 + the prototype's msg-agent style. The assistant's conversation
+ * puts the same answer in a left bubble (`bubble`; see
+ * lib/assistant-conversation.ts).
  *
  * Markdown rendering: a `string` child is parsed via react-markdown
  * + remark-gfm + Shiki (see MarkdownView). A pre-built ReactNode
@@ -47,16 +49,16 @@ export const MessageAgent = memo(function MessageAgent({
   /** Persisted `messages.id`; rendered as `data-message-id` so a
    * palette full-text hit on this answer can scroll to it. */
   messageId?: string;
-  /** TEMPORARY (ticket 19, IM rendering trial C): the answer sits in a
-   * left bubble on the neutral ground; the action bar stays under it. */
+  /** The assistant's conversation: the answer sits in a left bubble on
+   * the neutral ground; the action bar stays under it. */
   bubble?: boolean;
-  /** TEMPORARY (ticket 19): the answer's row margin (IM grouping). */
+  /** The answer's row margin (the assistant's IM grouping). */
   className?: string;
-  /** TEMPORARY (ticket 19, line mode): always shown at the start of the
-   * action row — the 「N 步 ›」 entry. */
+  /** Always shown at the start of the action row: the assistant's
+   * 「N 步 ›」 entry. */
   leading?: ReactNode;
-  /** TEMPORARY (ticket 19, C): between the bubble and its action row —
-   * the reply's subtask cards. */
+  /** Between the bubble and its action row: the reply's subtask cards,
+   * in the assistant's conversation. */
   attachment?: ReactNode;
 }) {
   if (typeof children === "string") {
@@ -88,13 +90,7 @@ export const MessageAgent = memo(function MessageAgent({
         data-message-id={messageId}
         className={cn("group/answer", className)}
       >
-        {bubble ? (
-          <div data-role="im-agent-bubble" className={IM_AGENT_BUBBLE}>
-            {body}
-          </div>
-        ) : (
-          body
-        )}
+        {bubble ? <AssistantBubble>{body}</AssistantBubble> : body}
         {attachment}
         {showActions && (
           <MessageActions

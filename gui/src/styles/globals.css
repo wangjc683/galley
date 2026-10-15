@@ -106,6 +106,13 @@
      fill so it stays scannable in long conversations (a "highlighted
      passage", not a barely-tinted one). */
   --color-brand-tint: #f1dece;
+  /* The assistant's bubble (its replies, questions and greeting in the
+     main chat, main chat PRD ruling 67), the user's apricot band's
+     neutral counterpart: ΔL* −3.2 under the page, ΔE ~12 from
+     brand-tint, so the two sides differ in hue, not just lightness.
+     Same value as --color-hover, which the bubble borrowed at first;
+     its own token so retuning the hover leaves the bubble alone. */
+  --color-assistant-tint: #f0f0f0;
 
   /* --- semantic states --- */
   --color-success: #5a8c5a;
@@ -473,6 +480,10 @@ html[data-theme="dark"] {
      sidebar's selected override does not move with this token (see the
      note on --color-selected below). */
   --color-brand-tint: #362d24;
+  /* Dark assistant bubble: --color-hover's value, as in light (ΔL* +8.0
+     over app, ΔE ~12 from brand-tint); its own token for the same
+     reason. */
+  --color-assistant-tint: #24272c;
 
   --color-success: #8fbf8f;
   --color-warning: #d6a250;

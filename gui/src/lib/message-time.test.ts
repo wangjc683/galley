@@ -168,6 +168,74 @@ describe("userTimeMarks", () => {
   });
 });
 
+// Main chat ticket 20: the assistant's conversation draws the greeting's
+// time, and the first user message measures against it.
+describe("userTimeMarks after the main chat's greeting", () => {
+  function greeting(at: Date | undefined): AgentTurn {
+    return {
+      role: "agent",
+      turnIndex: -1,
+      tools: [],
+      finalAnswer: "你好。",
+      greeting: true,
+      createdAt: at ? iso(at) : undefined,
+    };
+  }
+  const hello = local(2026, 10, 12, 8, 40);
+  const firstAfter = (minutes: number) =>
+    userTimeMarks([
+      greeting(hello),
+      user(new Date(hello.getTime() + minutes * 60_000)),
+      agent(),
+    ]).get(1);
+
+  it("adds no time to a first message within the hour on the same day", () => {
+    expect(firstAfter(59)).toEqual({ pinned: false, withTodayWord: false });
+    // Exactly 60 minutes is not a break either.
+    expect(firstAfter(60)).toEqual({ pinned: false, withTodayWord: false });
+  });
+
+  it("pins a first message more than an hour after it", () => {
+    expect(firstAfter(61)).toEqual({ pinned: true, withTodayWord: false });
+  });
+
+  it("pins a first message on another day, with the today word", () => {
+    const marks = userTimeMarks([
+      greeting(local(2026, 10, 12, 23, 50)),
+      user(local(2026, 10, 13, 0, 10)),
+    ]);
+    expect(marks.get(1)).toEqual({ pinned: true, withTodayWord: true });
+  });
+
+  it("leaves the later breaks as they were", () => {
+    const marks = userTimeMarks([
+      greeting(hello),
+      user(local(2026, 10, 12, 9, 0)),
+      agent(),
+      user(local(2026, 10, 12, 9, 30)),
+      agent(),
+      user(local(2026, 10, 12, 11, 0)),
+    ]);
+    expect(marks.get(1)?.pinned).toBe(false);
+    expect(marks.get(3)?.pinned).toBe(false);
+    // 90 minutes after the previous user message, not the greeting.
+    expect(marks.get(5)?.pinned).toBe(true);
+  });
+
+  it("keeps the first message pinned while the greeting's time is unknown or its page not loaded", () => {
+    const first = user(local(2026, 10, 12, 9, 0));
+    expect(userTimeMarks([greeting(undefined), first]).get(1)).toEqual({
+      pinned: true,
+      withTodayWord: false,
+    });
+    // Paged history: the greeting is on the earlier page, and Core names
+    // no user message before the first.
+    expect(
+      userTimeMarks([first, agent()], { previousUserCreatedAt: null }).get(0),
+    ).toEqual({ pinned: true, withTodayWord: false });
+  });
+});
+
 describe("formatMessageTime", () => {
   const today = local(2026, 9, 28).getTime();
   const zh = (at: Date, withTodayWord = false, todayStart = today) =>

@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { useShallow } from "zustand/react/shallow";
 
 import { ToastHost } from "@/components/error-card/ToastHost";
 import { AppShell } from "@/components/layout/AppShell";
@@ -14,11 +13,6 @@ import { BrowserControlAttentionSurface } from "@/components/screens/BrowserCont
 import { EmptyState } from "@/components/screens/EmptyState";
 import { MainView } from "@/components/screens/MainView";
 import { LocalFileWorkspace } from "@/components/conversation/LocalFileWorkspace";
-import {
-  imRenderingFor,
-  useImTrialStore,
-} from "@/components/conversation/im-trial/im-trial";
-import { ImTrialSwitcher } from "@/components/conversation/im-trial/ImTrialSwitcher";
 import { OnboardingScreen } from "@/components/screens/onboarding/OnboardingScreen";
 import { SettingsHost } from "@/components/screens/settings/SettingsHost";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
@@ -434,24 +428,6 @@ function App() {
   );
   const { collapsed: sidebarCollapsed, toggle: toggleSidebar } =
     useSidebarCollapse(hasMainChat);
-  // TEMPORARY (ticket 19, IM rendering trial; see im-trial.ts): the
-  // pill's choices reach MainView only while the main chat is open in
-  // the main area (the managed runtime's alone), and not at all while
-  // every piece is current with the demo off.
-  const imChoice = useImTrialStore(
-    useShallow((s) => ({
-      bubble: s.bubble,
-      process: s.process,
-      time: s.time,
-      scroll: s.scroll,
-      demo: s.demo,
-    })),
-  );
-  const mainChatOpen =
-    screen === "main" &&
-    activeRuntimeKind === "managed" &&
-    Boolean(activeSession?.mainChat);
-  const imTrial = imRenderingFor(imChoice, { mainChatOpen });
   const paletteSessions = useMemo(
     () =>
       visibleSessions.map((s) =>
@@ -736,7 +712,6 @@ function App() {
                     conversationWidth={conversationWidth}
                     conversationFontSize={conversationFontSize}
                     activeSessionId={activeSessionId}
-                    im={imTrial}
                   />
                 )}
               </BrowserControlAttentionSurface>
@@ -744,8 +719,6 @@ function App() {
           </ThemeProvider>
         }
       />
-
-      {mainChatOpen && <ImTrialSwitcher />}
 
       <CommandPalette
         open={paletteOpen}

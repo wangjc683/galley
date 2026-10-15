@@ -11,10 +11,10 @@ import type { Turn } from "@/types/conversation";
  * — "today" arrives as `todayStartMs` from `useDayStamp()`, never from
  * `Date.now()` during render.
  *
- * A break is measured against the previous USER message. On the
- * dogfood data (workbench.db, 2026-05-15 → 09-23) that and "the
- * previous message of any kind" found the same 21 breaks, not one
- * apart.
+ * A break is measured against the previous USER message (the main
+ * chat's first one against its greeting). On the dogfood data
+ * (workbench.db, 2026-05-15 → 09-23) that and "the previous message of
+ * any kind" found the same 21 breaks, not one apart.
  */
 
 /** Gap that makes a user message a break: strictly MORE than an hour
@@ -47,7 +47,9 @@ function localDayStart(ms: number): number {
  * other.
  *
  * Pinned when the turn is:
- *   - the session's first dated user message;
+ *   - the session's first dated user message (in the main chat, when
+ *     more than `thresholdMs` after the greeting or on another day —
+ *     see below);
  *   - more than `thresholdMs` after the previous user message;
  *   - on a different local day than the previous user message — a
  *     backstop (0 cases in the data) so a 「今天 / 昨天」 label never
@@ -64,6 +66,16 @@ function localDayStart(ms: number): number {
  * (paged history, main-chat ticket 12): the first user turn here
  * measures against it, so a break reads the same before and after the
  * earlier page loads.
+ *
+ * The main chat's greeting opens its conversation, and the assistant's
+ * conversation draws the greeting's time too (main chat ticket 20): the
+ * first user message measures against the greeting as against a
+ * previous user message, so a first word within the hour, on the same
+ * day, adds no second time right under the greeting's. Other
+ * conversations have no greeting. While paged history has not loaded
+ * the greeting yet, the first user message is the first as before (Core
+ * names no user message before it) and stays pinned until the
+ * greeting's page loads.
  */
 export function userTimeMarks(
   turns: readonly Turn[],
@@ -76,6 +88,10 @@ export function userTimeMarks(
   let prevMs: number | null = parseTime(previousUserCreatedAt ?? undefined);
   for (let index = 0; index < turns.length; index++) {
     const turn = turns[index];
+    if (turn.role === "agent" && turn.greeting) {
+      if (prevMs === null) prevMs = parseTime(turn.createdAt);
+      continue;
+    }
     if (turn.role !== "user") continue;
     const ms = parseTime(turn.createdAt);
     if (ms === null) continue;

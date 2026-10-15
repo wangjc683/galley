@@ -14,7 +14,6 @@ import {
   ImagePreviewDialog,
   type ImagePreviewItem,
 } from "@/components/conversation/ImagePreviewDialog";
-import { IM_USER_BUBBLE_MAX } from "@/components/conversation/im-trial/im-trial";
 import { IconTooltip, TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
 import { preventMouseFocus } from "@/lib/pointer-focus";
@@ -40,7 +39,11 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *     alignment is the one IM ingredient that breaks it (and would
  *     crowd the Question Rail). Text indents by the padding like a
  *     callout — the text edge no longer lines up with the agent prose
- *     column (that was a highlighter-era property).
+ *     column (that was a highlighter-era property). The assistant's
+ *     conversation is the exception (`align="end"`, main chat PRD
+ *     rulings 66, 67): it reads as an IM, not a document, and has no
+ *     rail, so there the bubble sits on the right (see
+ *     lib/assistant-conversation.ts).
  *   - NO border, NO shadow. Content is paper, chrome is material
  *     (2026-08-21): elevation is control vocabulary in Galley. Flat
  *     fill is what keeps this a callout, not a card.
@@ -142,9 +145,11 @@ const MESSAGE_TIME_TEXT =
 
 /**
  * Always-visible send time at a break (see the header note). The
- * tooltip carries the full date + weekday.
+ * tooltip carries the full date + weekday. The assistant's
+ * conversation centres the same label on a line of its own
+ * (AssistantTimeDivider).
  */
-function PinnedMessageTime({
+export function PinnedMessageTime({
   label,
   full,
   iso,
@@ -200,12 +205,16 @@ export interface MessageUserProps {
   /** Persisted `messages.id`; rendered as `data-message-id` on the
    * anchor block so a palette full-text hit can scroll to it. */
   messageId?: string;
-  /** TEMPORARY (ticket 19, IM rendering trial B / C): the bubble sits on
-   * the right, width by content up to IM_USER_BUBBLE_MAX; the meta row
-   * and the expand toggle follow it, the hover copy moves to its left. */
+  /** The assistant's conversation: the bubble sits on the right, width
+   * by content up to `min(80%, 560px)` — about 37 CJK characters a
+   * line, a phone-IM measure; in the 1200px wide mode it keeps the same
+   * 560px instead of stretching, and the 80% only bites in a column
+   * under 700px. The meta row and the expand toggle follow it, the
+   * hover copy moves to its left (6px off, mirroring the right side's
+   * 6px). */
   align?: "end";
-  /** TEMPORARY (ticket 19): the row's vertical margin in place of
-   * `my-5` (the bubble modes' IM grouping). */
+  /** The row's vertical margin in place of `my-5` (the assistant's IM
+   * grouping, lib/assistant-conversation.ts `assistantRowGap`). */
   rowClassName?: string;
 }
 
@@ -354,7 +363,7 @@ export const MessageUser = memo(function MessageUser({
         className={cn(
           "relative w-fit max-w-full rounded-md bg-brand-tint px-3.5 py-2.5 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink",
           "select-text",
-          end && cn("ml-auto", IM_USER_BUBBLE_MAX),
+          end && "ml-auto max-w-[min(80%,560px)]",
         )}
       >
         <span

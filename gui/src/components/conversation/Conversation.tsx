@@ -1,19 +1,13 @@
 import { CaretDown } from "@phosphor-icons/react";
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 
+import {
+  ASSISTANT_BUBBLE_MAX,
+  AssistantRunEntry,
+  AssistantRunSteps,
+  AssistantTimeDivider,
+} from "@/components/conversation/AssistantParts";
 import { AnsweredAskUser } from "@/components/conversation/AskUserBubble";
-import {
-  IM_AGENT_MAX,
-  type ImConversationOptions,
-  type ImRowSide,
-  imLinePlan,
-  imRowGap,
-} from "@/components/conversation/im-trial/im-trial";
-import {
-  ImRunEntry,
-  ImRunSteps,
-  ImTimeDivider,
-} from "@/components/conversation/im-trial/ImTrialParts";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import {
   MessageAgent,
@@ -27,6 +21,11 @@ import { StepRegion } from "@/components/conversation/StepRegion";
 import { SystemMessageBubble } from "@/components/conversation/SystemMessageBubble";
 import { ToolCallout } from "@/components/conversation/ToolCallout";
 import { useDayStamp } from "@/hooks/useDayStamp";
+import {
+  type AssistantRowSide,
+  assistantLinePlan,
+  assistantRowGap,
+} from "@/lib/assistant-conversation";
 import {
   BrowserSitesContext,
   buildBrowserSiteResolver,
@@ -102,12 +101,17 @@ export interface ConversationProps {
    */
   renderAfterAnswer?: (messageId: string) => ReactNode;
   /**
-   * TEMPORARY (ticket 19, IM rendering trial; see im-trial.ts): how the
-   * main chat is drawn — bubbles, the one-line process, the centred
-   * time. Absent everywhere else, and for the main chat while every
-   * piece is current: the render below is then today's, untouched.
+   * Draw the assistant's conversation (the main chat, MainView's
+   * `isMainChat`; main chat PRD rulings 66, 67; rules in
+   * lib/assistant-conversation.ts): an IM with one person rather than
+   * the workbench's task record. Bubbles on both sides with IM grouping
+   * gaps; a settled reply keeps only a quiet 「N 步 · 用时 ›」 (two steps
+   * or more) that opens its steps in place, its questions and the
+   * user's answers staying out as messages; the send times at breaks
+   * as centred lines, one above the greeting too. Off for every other
+   * conversation: the workbench's, a subtask, the external runtime's.
    */
-  im?: ImConversationOptions;
+  assistant?: boolean;
 }
 
 /**
@@ -135,7 +139,7 @@ export function Conversation({
   keyBase = 0,
   previousUserCreatedAt = null,
   renderAfterAnswer,
-  im,
+  assistant = false,
 }: ConversationProps) {
   // A turn's place that survives a prepend (see `keyBase`): every key
   // and every piece of per-run state below is held in these, never in
@@ -223,18 +227,17 @@ export function Conversation({
     return labels;
   }, [timeMarks, turns, dayStamp, language, copy]);
 
-  // TEMPORARY (ticket 19, IM rendering trial): the pieces MainView chose
-  // for the main chat; all off without `im`.
-  const sideBubbles = im !== undefined && im.bubble !== "current";
-  const agentBubble = im?.bubble === "c";
-  const centeredTime = im?.time === "centered";
-  const imProcess = im?.process;
-  const greetingAt = im?.greetingAt ?? null;
-  // The centred time's line above the greeting, when its time is known
-  // (the demo's; the page carries none for the real greeting).
+  // The assistant's conversation puts a time line above the greeting
+  // too: the greeting opens the conversation (main chat ticket 20).
+  // rowsToTurns carries its row's `created_at`.
   const greetingTime = useMemo(() => {
-    if (!centeredTime || !greetingAt) return null;
-    const label = formatMessageTime(greetingAt, dayStamp, language, {
+    if (!assistant) return null;
+    const greeting = turns.find(
+      (t): t is AgentTurn => t.role === "agent" && t.greeting === true,
+    );
+    const iso = greeting?.createdAt;
+    if (!iso) return null;
+    const label = formatMessageTime(iso, dayStamp, language, {
       withTodayWord: false,
       words: {
         today: copy.conversation.messageTimeToday,
@@ -242,12 +245,9 @@ export function Conversation({
       },
     });
     return label
-      ? {
-          label,
-          full: formatMessageTimeFull(greetingAt, language) ?? undefined,
-        }
+      ? { label, full: formatMessageTimeFull(iso, language) ?? undefined, iso }
       : null;
-  }, [centeredTime, greetingAt, dayStamp, language, copy]);
+  }, [assistant, turns, dayStamp, language, copy]);
 
   // Manual toggles, keyed by the opener's ordinal: true = user expanded,
   // false = user collapsed, absent = default. Ephemeral per mount —
@@ -272,10 +272,12 @@ export function Conversation({
   // for inspection, and the ask_user pause does not flicker the
   // window away and back.
   const liveGroup = liveRunGroup(groups, agentRunning, askUserPending);
-  // TEMPORARY (ticket 19): line mode's plan (im-trial.ts imLinePlan).
+  // The assistant's conversation draws its runs from its own plan
+  // (lib/assistant-conversation.ts `assistantLinePlan`): the messages
+  // out in the conversation, the steps behind a quiet entry.
   const linePlan = useMemo(
-    () => (imProcess === "line" ? imLinePlan(groups, turns, liveGroup) : null),
-    [imProcess, groups, turns, liveGroup],
+    () => (assistant ? assistantLinePlan(groups, turns, liveGroup) : null),
+    [assistant, groups, turns, liveGroup],
   );
 
   // Settling: the sweep between live and settled. The two structures
@@ -408,7 +410,7 @@ export function Conversation({
   const answerOnly = new Set<number>();
   for (const g of groups) {
     if (g.finalTurnIndex != null) answerOnly.add(g.finalTurnIndex);
-    // Line mode (ticket 19) draws its runs from linePlan below.
+    // The assistant's conversation draws its runs from linePlan below.
     if (linePlan) continue;
     if (g === liveGroup || g === settlingGroup) {
       // While settling, the closing turn is not a window candidate:
@@ -471,8 +473,8 @@ export function Conversation({
       sectionOwner.set(i, g.openerIndex);
     }
   }
-  // Line mode: runs drawn the current way gather into flat regions, as
-  // the non-foldable branch above does.
+  // The assistant's runs drawn the workbench way gather into flat
+  // regions, as the non-foldable branch above does.
   if (linePlan) {
     for (const [i, opener] of linePlan.flat) regionOwner.set(i, opener);
   }
@@ -484,25 +486,25 @@ export function Conversation({
     }));
   };
 
-  // A user message. TEMPORARY (ticket 19): with the centred time on, its
-  // send time is a line of its own before it; in B / C the bubble sits
+  // A user message. In the assistant's conversation its send time at a
+  // break is a centred line of its own before it, and the bubble sits
   // on the right with the IM row gap (`previous`: the side of the
   // message row right above).
   const userRow = (
     turn: UserTurn,
     turnIndex: number,
-    previous: ImRowSide | null,
+    previous: AssistantRowSide | null,
   ) => {
     const pinned = pinnedTimes.get(turnIndex);
-    const divided = centeredTime && pinned !== undefined;
+    const divided = assistant && pinned !== undefined;
     return (
       <>
         {divided && (
-          <ImTimeDivider
+          <AssistantTimeDivider
             label={pinned.label}
             full={pinned.full}
             iso={turn.createdAt}
-            afterReply={sideBubbles && previous === "agent-bar"}
+            afterReply={previous === "agent-bar"}
           />
         )}
         <MessageUser
@@ -514,12 +516,12 @@ export function Conversation({
           pinnedTimeFull={divided ? undefined : pinned?.full}
           askUserReply={replySet.has(turnIndex)}
           messageId={turn.messageId}
-          align={sideBubbles ? "end" : undefined}
+          align={assistant ? "end" : undefined}
           rowClassName={
-            sideBubbles
+            assistant
               ? divided
                 ? "mt-5"
-                : imRowGap(previous, "user")
+                : assistantRowGap(previous, "user")
               : undefined
           }
         />
@@ -527,33 +529,19 @@ export function Conversation({
     );
   };
 
-  // What hangs under a reply (the subtask cards). TEMPORARY (ticket 19):
-  // in C they sit right under the reply bubble (before its action row),
-  // on the left, at most the bubble's width.
+  // What hangs under a reply (the subtask cards). In the assistant's
+  // conversation they sit right under the reply bubble (before its
+  // action row), on the left, at most the bubble's width.
   const afterAnswer = (messageId: string) => {
     const node = renderAfterAnswer?.(messageId);
-    return agentBubble && node ? (
-      <div className={IM_AGENT_MAX}>{node}</div>
+    return assistant && node ? (
+      <div className={ASSISTANT_BUBBLE_MAX}>{node}</div>
     ) : (
       node
     );
   };
 
-  // TEMPORARY (ticket 19): the centred time's line above the greeting.
-  const greetingDivider = (turn: AgentTurn) =>
-    turn.greeting && greetingTime ? (
-      <ImTimeDivider
-        label={greetingTime.label}
-        full={greetingTime.full}
-        iso={greetingAt ?? undefined}
-      />
-    ) : null;
-
-  const renderItem = (
-    turn: Turn,
-    turnIndex: number,
-    previous: ImRowSide | null = null,
-  ) => {
+  const renderItem = (turn: Turn, turnIndex: number) => {
     const header = headerFor.get(turnIndex);
     // Keyed by the turn's ordinal: an earlier page landing in front
     // moves no key.
@@ -561,7 +549,7 @@ export function Conversation({
       <Fragment key={`turn-${ordinal(turnIndex)}`}>
         {turn.role === "user" ? (
           <>
-            {userRow(turn, turnIndex, previous)}
+            {userRow(turn, turnIndex, null)}
             {/* The live header appears once a step has folded behind
                 it (the third step landing, for a two-row window);
                 before that the run is its own short list. */}
@@ -585,32 +573,29 @@ export function Conversation({
             showGlyph={!isNarrationTurn(turns[turnIndex - 1])}
           />
         ) : (
-          <>
-            {greetingDivider(turn)}
-            <AgentTurnView
-              turn={turn}
-              hideMarker={answerOnly.has(turnIndex)}
-              stepNumber={stepNumberOf.get(turnIndex)}
-              suppressAskUserEcho={turn === pendingAskUserTurn}
-              askUserAnswer={askUserReplyContent(turns, turnIndex, replySet)}
-              runTelemetry={runTelemetryOf.get(turnIndex)}
-              bubble={agentBubble}
-              attachment={
-                agentBubble && turn.messageId
-                  ? afterAnswer(turn.messageId)
-                  : undefined
-              }
-            />
-          </>
+          <AgentTurnView
+            turn={turn}
+            hideMarker={answerOnly.has(turnIndex)}
+            stepNumber={stepNumberOf.get(turnIndex)}
+            suppressAskUserEcho={turn === pendingAskUserTurn}
+            askUserAnswer={askUserReplyContent(turns, turnIndex, replySet)}
+            runTelemetry={runTelemetryOf.get(turnIndex)}
+            bubble={assistant}
+            attachment={
+              assistant && turn.messageId
+                ? afterAnswer(turn.messageId)
+                : undefined
+            }
+          />
         )}
         {/* Under the reply that dispatched them: the main chat's
             subtask cards (ticket 06a), keyed on the reply's row id —
             only that reply's final turn matches one, even one whose
-            answer was nothing but tags. (In C the reply holds them —
-            ticket 19.) */}
+            answer was nothing but tags. (In the assistant's
+            conversation the reply holds them, under its bubble.) */}
         {turn.role === "agent" &&
           turn.messageId &&
-          !agentBubble &&
+          !assistant &&
           afterAnswer(turn.messageId)}
         {/* No divider between turns — the TurnMarker on each
             AgentTurn carries the chapter-break feel via its own
@@ -622,15 +607,16 @@ export function Conversation({
     );
   };
 
-  // TEMPORARY (ticket 19, line mode): a message row — a user message, a
+  // A message row of the assistant's conversation: a user message, a
   // question it asked (answered: a pending one is the live bubble at the
-  // tail), the greeting, or a run's answer with its 「N 步 ›」 entry, the
-  // steps that entry opens, and the subtask cards. `previous` is the
-  // side of the message row right above, for the IM gap.
+  // tail), the greeting with its time, or a run's answer with its
+  // 「N 步 ›」 entry, the steps that entry opens, and the subtask cards.
+  // `previous` is the side of the message row right above, for the IM
+  // gap.
   const renderLineRow = (
     turn: Turn,
     turnIndex: number,
-    previous: ImRowSide | null,
+    previous: AssistantRowSide | null,
   ): ReactNode => {
     const key = `turn-${ordinal(turnIndex)}`;
     if (turn.role === "user") {
@@ -639,7 +625,7 @@ export function Conversation({
       );
     }
     if (turn.role !== "agent") return renderItem(turn, turnIndex);
-    const gap = sideBubbles ? imRowGap(previous, "agent") : undefined;
+    const gap = assistantRowGap(previous, "agent");
     if (linePlan?.question.has(turnIndex)) {
       const args = mergedAskUserArgs(turn.tools);
       if (turn === pendingAskUserTurn || !args) return null;
@@ -649,17 +635,25 @@ export function Conversation({
             question={args.question}
             candidates={args.candidates}
             answer={askUserReplyContent(turns, turnIndex, replySet)}
-            bubble={agentBubble}
-            className={agentBubble ? gap : undefined}
+            bubble
+            className={gap}
           />
         </Fragment>
       );
     }
+    // The steps under the entry open on its toggle (the run fold's
+    // overrides, keyed the same way) and start closed.
     const steps = linePlan?.steps.get(turnIndex);
-    const open = steps
-      ? (foldOverrides[ordinal(steps.opener)] ?? im?.stepsOpen === true)
-      : false;
-    const divider = greetingDivider(turn);
+    const open =
+      steps !== undefined && foldOverrides[ordinal(steps.opener)] === true;
+    const divider =
+      turn.greeting && greetingTime ? (
+        <AssistantTimeDivider
+          label={greetingTime.label}
+          full={greetingTime.full}
+          iso={greetingTime.iso}
+        />
+      ) : null;
     return (
       <Fragment key={key}>
         {divider}
@@ -668,16 +662,12 @@ export function Conversation({
           hideMarker
           stepNumber={stepNumberOf.get(turnIndex)}
           runTelemetry={runTelemetryOf.get(turnIndex)}
-          bubble={agentBubble}
-          answerClassName={divider && sideBubbles ? "mt-5" : gap}
-          attachment={
-            agentBubble && turn.messageId
-              ? afterAnswer(turn.messageId)
-              : undefined
-          }
+          bubble
+          answerClassName={divider ? "mt-5" : gap}
+          attachment={turn.messageId ? afterAnswer(turn.messageId) : undefined}
           entry={
             steps ? (
-              <ImRunEntry
+              <AssistantRunEntry
                 stats={steps.stats}
                 open={open}
                 onToggle={() => toggleFold(steps.opener, !open)}
@@ -686,7 +676,7 @@ export function Conversation({
           }
         />
         {steps && (
-          <ImRunSteps open={open}>
+          <AssistantRunSteps open={open}>
             {steps.members.map((m) => (
               <AgentTurnView
                 key={`step-${ordinal(m)}`}
@@ -695,12 +685,11 @@ export function Conversation({
                 markerOnly={m === turnIndex}
                 noRule
                 suppressAskUserEcho
-                bubble={agentBubble}
+                bubble
               />
             ))}
-          </ImRunSteps>
+          </AssistantRunSteps>
         )}
-        {turn.messageId && !agentBubble && afterAnswer(turn.messageId)}
       </Fragment>
     );
   };
@@ -789,12 +778,12 @@ export function Conversation({
     }
     section = null;
   };
-  // The side of the last flat message row, for the IM row gap (ticket
-  // 19; in the current process mode only a user row counts).
-  let prevSide: ImRowSide | null = null;
+  // The assistant's conversation: the side of the last message row,
+  // for the IM row gap.
+  let prevSide: AssistantRowSide | null = null;
   turns.forEach((turn, turnIndex) => {
-    // Line mode: a run's steps show only under its entry, and not at all
-    // while it runs.
+    // The assistant's conversation shows a run's steps only under its
+    // entry, and not at all while it runs.
     if (
       linePlan &&
       !linePlan.message.has(turnIndex) &&
@@ -823,9 +812,7 @@ export function Conversation({
         }
         return;
       }
-      rendered.push(renderItem(turn, turnIndex, prevSide));
-      prevSide =
-        turn.role === "user" && !headerFor.has(turnIndex) ? "user" : null;
+      rendered.push(renderItem(turn, turnIndex));
       return;
     }
     prevSide = null;
@@ -860,7 +847,7 @@ export function Conversation({
       );
       flushSection();
       rendered.push(renderItem(turn, turnIndex));
-      // The answer ends with its action row (ticket 19's row gap).
+      // The answer ends with its action row (the assistant's row gap).
       prevSide = "agent-bar";
       return;
     }
@@ -935,19 +922,18 @@ function AgentTurnView({
    * `RunStats.telemetry`). The turn's own telemetry only covers the
    * last GA loop; undefined for turns that close no run. */
   runTelemetry?: MessageTelemetry | null;
-  /** TEMPORARY (ticket 19, IM rendering trial C): the answer and the
-   * answered question are left bubbles. */
+  /** The assistant's conversation: the answer and the answered question
+   * are left bubbles. */
   bubble?: boolean;
-  /** TEMPORARY (ticket 19): the answer's row margin (IM grouping). */
+  /** The answer's row margin (the assistant's IM grouping). */
   answerClassName?: string;
-  /** TEMPORARY (ticket 19, line mode): the 「N 步 ›」 entry, leading the
-   * answer's action row. */
+  /** The assistant's 「N 步 ›」 entry, leading the answer's action row. */
   entry?: ReactNode;
-  /** TEMPORARY (ticket 19, line mode): `markerOnly` without the
-   * StrongHr — the step region sits under the answer, not before it. */
+  /** `markerOnly` without the StrongHr: the assistant's step region sits
+   * under the answer, not before it. */
   noRule?: boolean;
-  /** TEMPORARY (ticket 19, C): the subtask cards, held right under the
-   * answer bubble (after the turn's content when it has no answer). */
+  /** The subtask cards in the assistant's conversation, held right under
+   * the answer bubble (after the turn's content when it has no answer). */
   attachment?: ReactNode;
 }) {
   const stepNumber = stepNumberProp ?? turn.turnIndex;

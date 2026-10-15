@@ -282,6 +282,14 @@ export interface AgentTurn {
    * supervisor `galley-greeting`), see rowsToTurns.
    */
   greeting?: true;
+  /**
+   * When Core wrote the greeting (its row's `created_at`; main chat
+   * ticket 20). The assistant's conversation draws a centred time line
+   * above it, and the first user message's break measures against it
+   * (lib/message-time `userTimeMarks`). Only the greeting carries one:
+   * a reply's time is not in the page.
+   */
+  createdAt?: string;
 }
 
 export type Turn = UserTurn | AgentTurn | SystemTurn;

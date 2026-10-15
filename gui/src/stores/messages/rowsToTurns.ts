@@ -91,7 +91,13 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
         files: finalAnswerFileRefs(row.content),
       });
       turn.messageId = row.id;
-      if (isMainChatGreeting(row)) turn.greeting = true;
+      if (isMainChatGreeting(row)) {
+        turn.greeting = true;
+        // The time line above it in the assistant's conversation, and
+        // the baseline the first user message's break measures against
+        // (main chat ticket 20).
+        turn.createdAt = row.created_at;
+      }
       turns.push(turn);
     } else if (row.role === "system") {
       // The only `system` rows persisted to `messages` are Galley

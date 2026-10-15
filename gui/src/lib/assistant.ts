@@ -142,8 +142,9 @@ export interface AssistantLastMessage {
   /** One line of plain text. */
   text: string;
   /** When the user sent it. The assistant's replies carry no time in
-   * the page (`AgentTurn` has none): the card dates them by the
-   * session's `lastActivityAt`, which the reply's last step set. */
+   * the page (of its messages only the greeting does): the card dates
+   * them by the session's `lastActivityAt`, which the reply's last
+   * step set. */
   sentAt?: string;
 }
 
