@@ -346,19 +346,14 @@ function App() {
     : undefined;
   const activeSessionBusy =
     screen === "main" && (isRunning || pendingAskUser !== null);
-  const {
-    sendUserMessage,
-    submitFromEmpty,
-    openSideChat,
-    stopRun,
-    runBrowserControlDemo,
-  } = useMessageSend({
-    activeSession,
-    requiresManagedModelConfig,
-    copy,
-    showImageBlockedToast,
-    openModelsForMissingConfig,
-  });
+  const { sendUserMessage, submitFromEmpty, stopRun, runBrowserControlDemo } =
+    useMessageSend({
+      activeSession,
+      requiresManagedModelConfig,
+      copy,
+      showImageBlockedToast,
+      openModelsForMissingConfig,
+    });
   const {
     activeProject,
     assignSessionToProjectWithToast,
@@ -705,7 +700,6 @@ function App() {
                     onSubmit={sendUserMessage}
                     onStop={stopRun}
                     isMainChat={Boolean(activeSession?.mainChat)}
-                    onOpenSideChat={openSideChat}
                     isRunning={isRunning}
                     isStopping={isStopping}
                     pendingAskUser={pendingAskUser}

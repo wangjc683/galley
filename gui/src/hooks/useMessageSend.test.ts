@@ -764,52 +764,47 @@ describe("useMessageSend handlers", () => {
     expect(consumeReplyNotifyPending(sid)).toBe(true);
   });
 
-  // Main chat busy (ticket 02): 排队 is the ordinary mid-run send above
-  // ("a send into an open run shows no echo; Core queues it"); 开旁聊 is
-  // this one.
-  it("openSideChat: a new plain session gets the message; the main chat keeps its run", async () => {
+  // The main chat queues like any session (ruling 71, ticket 24): its
+  // 排队 / 开新对话 choice (ticket 02) is gone, and no new session opens.
+  it("the main chat mid-run: a send queues like any session's, no new session", async () => {
     const main = seed("s-main", {
       mainChat: true,
       gaRuntimeKind: "managed",
       runtimeKind: "managed",
     });
     useMessagesStore.getState().setAgentRunning("s-main", true);
-    useSessionsStore.getState().setActiveProjectFilter("p-left-over");
-    core((args) => {
-      const message = row(args.sessionId, 1, "顺便查下周五的天气");
-      broadcast({
-        sessionId: args.sessionId,
-        message,
-        dispatch: "pending",
-        clientRequestId: args.clientRequestId,
-      });
-      return dispatched(message);
-    });
-    const { api } = mountSend(main);
+    core(() => QUEUED);
+    const { api, imageToasts } = mountSend(main);
 
-    api.openSideChat("顺便查下周五的天气", []);
+    api.sendUserMessage("顺便查下周五的天气", []);
     await settle();
 
-    const create = calls("create_session")[0] as {
-      input: { id: string; projectId?: string };
-    };
-    expect(create.input.projectId).toBeUndefined();
-    const sid = useSessionsStore.getState().activeSessionId!;
-    expect(sid).toBe(create.input.id);
-    expect(sid).not.toBe("s-main");
+    expect(calls("create_session")).toHaveLength(0);
     expect(calls("send_user_message")).toHaveLength(1);
     expect(calls("send_user_message")[0]).toMatchObject({
-      sessionId: sid,
+      sessionId: "s-main",
       text: "顺便查下周五的天气",
+      clientRequestId: undefined,
     });
-    expect(userTurns(sid)).toHaveLength(1);
-    expect(useUiStore.getState().screen).toBe("main");
-    // Nothing went to the main chat, whose run goes on.
+    expect(useSessionsStore.getState().activeSessionId).toBe("s-main");
     expect(userTurns("s-main")).toHaveLength(0);
     expect(slice("s-main").agentRunning).toBe(true);
-    expect(
-      useSessionsStore.getState().sessions.find((s) => s.id === sid)?.mainChat,
-    ).toBeUndefined();
+
+    // With an image it is held back as in every session (the queue is
+    // text only): the toast, and the Composer keeps the draft.
+    const kept = api.sendUserMessage("看图", [
+      {
+        id: "img-1",
+        dataUrl: "data:image/png;base64,AAAA",
+        previewUrl: "blob:x",
+        mimeType: "image/png",
+        byteSize: 10,
+      },
+    ]);
+    await settle();
+    expect(kept).toBe(false);
+    expect(imageToasts).toEqual([copy.toasts.imageBlockedQueue]);
+    expect(calls("send_user_message")).toHaveLength(1);
   });
 
   describe("stopRun → stop_session_run", () => {

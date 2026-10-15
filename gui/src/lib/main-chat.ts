@@ -24,24 +24,6 @@ export function findMainChat(
   return sessions.find((session) => session.mainChat);
 }
 
-/**
- * Whether a send should first ask 排队 or 开旁聊 (ticket 02, PRD ruling
- * 12): only in the main chat, only while a run is open (working, or
- * stopping), and not while it asks the user something — a reply is an
- * answer, not a new message. Everywhere else a send goes as before.
- */
-export function offersBusyChoice({
-  isMainChat,
-  runOpen,
-  waitingAskUser,
-}: {
-  isMainChat: boolean;
-  runOpen: boolean;
-  waitingAskUser: boolean;
-}): boolean {
-  return isMainChat && runOpen && !waitingAskUser;
-}
-
 let opening: Promise<boolean> | null = null;
 
 /**

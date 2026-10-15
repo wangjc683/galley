@@ -16,7 +16,6 @@ import { ComposerFooterHint } from "@/components/conversation/ComposerFooterHint
 import { ComposerImageStrip } from "@/components/conversation/ComposerImageStrip";
 import { ComposerQueueStrip } from "@/components/conversation/ComposerQueueStrip";
 import { ImagePreviewDialog } from "@/components/conversation/ImagePreviewDialog";
-import { MainChatBusyChoice } from "@/components/conversation/MainChatBusyChoice";
 import {
   EffortPill,
   type ComposerReasoningEffortState,
@@ -44,7 +43,6 @@ import { isSideQuestion } from "@/lib/side-question";
 import { cn } from "@/lib/utils";
 import { useQueueStore } from "@/stores/queue";
 import { useSessionsStore } from "@/stores/sessions";
-import type { PendingImageAttachment } from "@/types/conversation";
 
 import type {
   ComposerHandle,
@@ -98,7 +96,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       imagesEnabled = true,
       onImageBlocked,
       onTextDropBlocked,
-      mainChatBusy,
     },
     ref,
   ) {
@@ -380,39 +377,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       ? "" // the ghost overlay occupies the placeholder's visual slot
       : (placeholder ?? copy.composer.askAnything);
 
-    // Main chat busy (ticket 02): the 排队 / 开旁聊 choice a send opens.
-    // Closes on its own once the run ends (the prop goes away) — guarded
-    // reset during render, not an effect.
-    const [busyChoiceOpen, setBusyChoiceOpen] = useState(false);
-    if (busyChoiceOpen && !mainChatBusy) setBusyChoiceOpen(false);
-    const closeBusyChoice = () => {
-      setBusyChoiceOpen(false);
-      focusTextarea();
-    };
-    // The chosen route takes the draft as a plain send would.
-    const submitDraftTo = (
-      route: (
-        text: string,
-        attachments: PendingImageAttachment[],
-      ) => boolean | void,
-    ) => {
-      setBusyChoiceOpen(false);
-      const trimmed = expandComposerPlaceholders(text).trim();
-      if ((!trimmed && !hasPendingImages) || disabled) {
-        focusTextarea();
-        return;
-      }
-      const accepted = route(
-        trimmed || copy.composer.imageOnlyFallback,
-        pendingImages,
-      );
-      if (accepted === false) {
-        focusTextarea();
-        return;
-      }
-      resetDraftAfterSubmit();
-    };
-
     const handleSubmit = () => {
       const expanded = expandComposerPlaceholders(text);
       const trimmed = expanded.trim();
@@ -425,10 +389,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // onSubmit's owner (useMessageSend) routes a mid-run send into
       // Core's queue. /btw keeps its immediate side-question path there
       // too; images are toast-blocked there and keep the draft.
-      if (mainChatBusy && !sideQuestionStaged) {
-        setBusyChoiceOpen(true);
-        return;
-      }
       const submittedText = trimmed || copy.composer.imageOnlyFallback;
       const accepted = onSubmit?.(submittedText, pendingImages);
       if (accepted === false) return;
@@ -456,16 +416,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
 
     return (
       <>
-        {busyChoiceOpen && mainChatBusy && (
-          <MainChatBusyChoice
-            imagesAttached={hasPendingImages}
-            onQueue={() => {
-              if (onSubmit) submitDraftTo(onSubmit);
-            }}
-            onOpenSideChat={() => submitDraftTo(mainChatBusy.onOpenSideChat)}
-            onDismiss={closeBusyChoice}
-          />
-        )}
         {activeSessionId && (
           <ComposerQueueStrip
             sessionId={activeSessionId}
@@ -635,7 +585,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           hasText={hasText}
           isSideQuestion={sideQuestionStaged}
           staticHint={staticHint}
-          mainChatBusy={mainChatBusy !== undefined}
         />
         <SavedPromptDialogs
           open={promptsOpen}

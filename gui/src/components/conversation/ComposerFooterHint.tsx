@@ -29,7 +29,6 @@ interface ComposerFooterHintProps {
   hasText: boolean;
   isSideQuestion: boolean;
   staticHint?: ReactNode;
-  mainChatBusy?: boolean;
 }
 
 /**
@@ -48,7 +47,6 @@ export function ComposerFooterHint({
   hasText,
   isSideQuestion,
   staticHint,
-  mainChatBusy = false,
 }: ComposerFooterHintProps) {
   const copy = useCopy();
   const hintKey = resolveComposerHint({
@@ -58,7 +56,6 @@ export function ComposerFooterHint({
     hasQueuedMessages,
     hasText,
     isSideQuestion,
-    mainChatBusy,
   });
   const keyboardHint = hintKey ? copy.composer[hintKey] : null;
   // Keyboard hints get kbd-token styling; a caller-supplied staticHint
