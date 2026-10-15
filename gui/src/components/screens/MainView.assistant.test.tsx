@@ -1,4 +1,6 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
 import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +10,8 @@ import { zhCopy } from "@/i18n/locales/zh";
 import { dropComposerDraft, saveComposerDraft } from "@/lib/composer-draft";
 import { LocalFilesContext } from "@/lib/local-files";
 import type { PerSessionMessages } from "@/stores/messages";
+import { useQueueStore } from "@/stores/queue";
+import { useSessionsStore } from "@/stores/sessions";
 import type {
   AgentTurn,
   ConversationToolEvent,
@@ -38,8 +42,34 @@ vi.mock("@/hooks/useActiveSession", async (importOriginal) => {
   };
 });
 
+// The composer's queue strip needs the active session and its queue; a
+// static render reads a zustand store's initial state, so these two read
+// their current state here (unset, that is the initial state).
+vi.mock("@/stores/queue", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/stores/queue")>();
+  const store = actual.useQueueStore;
+  const current = Object.assign(
+    (select?: (state: ReturnType<typeof store.getState>) => unknown) =>
+      select ? select(store.getState()) : store.getState(),
+    store,
+  );
+  return { ...actual, useQueueStore: current };
+});
+vi.mock("@/stores/sessions", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/stores/sessions")>();
+  const store = actual.useSessionsStore;
+  const current = Object.assign(
+    (select?: (state: ReturnType<typeof store.getState>) => unknown) =>
+      select ? select(store.getState()) : store.getState(),
+    store,
+  );
+  return { ...actual, useSessionsStore: current };
+});
+
 afterEach(() => {
   live.slice = {};
+  useSessionsStore.setState({ activeSessionId: undefined });
+  useQueueStore.setState({ bySession: {} });
 });
 
 function tool(name: string, args: Record<string, unknown> = {}) {
@@ -240,20 +270,155 @@ describe("the assistant's live line", () => {
 });
 
 describe("the main chat's composer", () => {
+  const ONE_LINE = 'data-role="composer-one-line"';
+  const CARD = "relative rounded-md border border-line bg-elevated px-3.5";
+  const HINT_ROW = '<div class="mt-1.5 text-[11px] text-ink-muted">';
+  const QUEUE_HEADING = 'data-role="composer-queue-heading"';
+
   afterEach(() => {
     dropComposerDraft("s-1");
   });
 
+  /** The two the stopping sentence needs: the session, one queued message. */
+  function queueOne() {
+    useSessionsStore.setState({ activeSessionId: "s-1" });
+    useQueueStore.setState({
+      bySession: {
+        "s-1": [
+          {
+            queueId: "q-1",
+            text: "顺便看看周六的船票",
+            queuedAt: "2026-10-15T08:00:00.000Z",
+          },
+        ],
+      },
+    });
+  }
+
+  it("is one line in the main chat, the card in every other conversation (a subtask, the external runtime)", () => {
+    for (const state of [
+      {},
+      { isRunning: true },
+      { pendingAskUser: { question: "订哪一班？", candidates: ["8:30"] } },
+    ]) {
+      const main = render({ isMainChat: true, ...state });
+      expect(main).toContain(ONE_LINE);
+      expect(main).not.toContain(CARD);
+      const other = render({ isMainChat: false, ...state });
+      expect(other).toContain(CARD);
+      expect(other).not.toContain(ONE_LINE);
+    }
+  });
+
+  it("has no hint row in the main chat; every other conversation keeps it", () => {
+    const main = render({ isMainChat: true });
+    expect(main).not.toContain(HINT_ROW);
+    expect(main).not.toContain(zhCopy.composer.dragToReferenceHint);
+    const other = render({ isMainChat: false });
+    expect(other).toContain(
+      `${HINT_ROW}${zhCopy.composer.dragToReferenceHint}`,
+    );
+  });
+
+  it("sits 24px off the window's bottom edge in the main chat, 16 elsewhere (ruling 72)", () => {
+    expect(render({ isMainChat: true })).toContain(
+      '<div class="bg-app px-8 pb-6">',
+    );
+    const other = render({ isMainChat: false });
+    expect(other).toContain('<div class="bg-app px-8 pb-4">');
+    expect(other).not.toContain("pb-6");
+  });
+
+  it("says 「发消息…」 at rest and while it works (no /btw), and 「回复上方提问」 while it asks", () => {
+    const rest = render({ isMainChat: true });
+    expect(rest).toContain(`placeholder="${zhCopy.composer.writeMessage}"`);
+    const running = render({ isMainChat: true, isRunning: true });
+    expect(running).toContain(`placeholder="${zhCopy.composer.writeMessage}"`);
+    expect(running).not.toContain("/btw");
+    const asking = render({
+      isMainChat: true,
+      pendingAskUser: { question: "订哪一班？", candidates: [] },
+    });
+    expect(asking).toContain(`placeholder="${zhCopy.composer.replyOpen}"`);
+  });
+
+  it("says 「正在停止，排队的消息会自动发出」 in the queue strip's heading while a stop waits on queued messages", () => {
+    queueOne();
+    const stopping = render({
+      isMainChat: true,
+      isRunning: true,
+      isStopping: true,
+    });
+    const heading = stopping.indexOf(QUEUE_HEADING);
+    expect(heading).toBeGreaterThan(-1);
+    expect(stopping.slice(heading, heading + 200)).toContain(
+      zhCopy.composer.stoppingQueueHint,
+    );
+    expect(heading).toBeLessThan(stopping.indexOf(ONE_LINE));
+    expect(stopping).not.toContain(HINT_ROW);
+    // Still working, not stopping: the count, as before.
+    const running = render({ isMainChat: true, isRunning: true });
+    expect(running).not.toContain(zhCopy.composer.stoppingQueueHint);
+    expect(running).toContain(zhCopy.composer.queueStripLabel(1));
+    // Every other conversation says it in the hint row, as before.
+    const other = render({
+      isMainChat: false,
+      isRunning: true,
+      isStopping: true,
+    });
+    expect(other).toContain(`${HINT_ROW}${zhCopy.composer.stoppingQueueHint}`);
+    expect(other).not.toContain(QUEUE_HEADING);
+  });
+
   it("queues a send while it works, as every session does (ruling 71: no 排队 / 开新对话 choice)", () => {
-    // A typed draft (the Composer seeds from the parked one): the hint
-    // row says what Enter does now.
+    // A typed draft (the Composer seeds from the parked one). Enter's
+    // own path is in Composer.test.tsx; the main chat has no hint row
+    // to teach it, every other conversation's says 「Enter 排队」.
     saveComposerDraft("s-1", { text: "顺便查下周五的天气", images: [] });
     const QUEUE_HINT = `<span class="font-mono text-ink-soft">Enter</span>${zhCopy.composer.queueEnterHint.slice("Enter".length)}`;
     const main = render({ isMainChat: true, isRunning: true });
-    expect(main).toContain(QUEUE_HINT);
+    expect(main).toContain("顺便查下周五的天气");
+    expect(main).not.toContain(QUEUE_HINT);
     expect(main).not.toContain("main-chat-busy-choice");
     expect(main).not.toContain("开新对话");
     const other = render({ isMainChat: false, isRunning: true });
     expect(other).toContain(QUEUE_HINT);
+  });
+});
+
+describe("the composer trial is gone", () => {
+  const SRC = path.resolve(__dirname, "../..");
+  function sources(dir: string): string[] {
+    return readdirSync(dir).flatMap((name) => {
+      const full = path.join(dir, name);
+      if (statSync(full).isDirectory()) return sources(full);
+      return /\.(ts|tsx|css)$/.test(name) ? [full] : [];
+    });
+  }
+
+  it("leaves no switcher, demo, storage key or trial prop behind", () => {
+    const self = path.resolve(__filename);
+    const leftovers = [
+      "galley.tmp.composerTrial",
+      "composer-trial",
+      "ComposerTrialSwitcher",
+      "ComposerDemoInert",
+      "useComposerTrialOverrides",
+      "composerTrial",
+      "ComposerTrialView",
+      "demoQueue",
+      "trial?.",
+      "ticket 24",
+      "票 24",
+    ];
+    const hits = sources(SRC)
+      .filter((file) => file !== self && !file.includes("zz-harness"))
+      .flatMap((file) => {
+        const text = readFileSync(file, "utf8");
+        return leftovers
+          .filter((needle) => text.includes(needle))
+          .map((needle) => `${path.relative(SRC, file)}: ${needle}`);
+      });
+    expect(hits).toEqual([]);
   });
 });

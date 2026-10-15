@@ -764,7 +764,7 @@ describe("useMessageSend handlers", () => {
     expect(consumeReplyNotifyPending(sid)).toBe(true);
   });
 
-  // The main chat queues like any session (ruling 71, ticket 24): its
+  // The main chat queues like any session (ruling 71, item 4): its
   // 排队 / 开新对话 choice (ticket 02) is gone, and no new session opens.
   it("the main chat mid-run: a send queues like any session's, no new session", async () => {
     const main = seed("s-main", {

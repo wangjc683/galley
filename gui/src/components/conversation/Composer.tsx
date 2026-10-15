@@ -25,17 +25,16 @@ import {
   type ComposerLLMOption,
 } from "@/components/conversation/LLMPill";
 import { SavedPromptDialogs } from "@/components/conversation/SavedPromptDialogs";
-import { COMPOSER_MAX_HEIGHT_PX } from "@/components/conversation/composer-styles";
+import { ComposerOneLine } from "@/components/conversation/ComposerOneLine";
 import {
+  COMPOSER_MAX_HEIGHT_PX,
   ONE_LINE_GHOST_CLASS,
   ONE_LINE_GHOST_STYLE,
   ONE_LINE_IMAGE_STRIP_CLASS,
   ONE_LINE_TEXTAREA_CLASS,
   ONE_LINE_TEXTAREA_STYLE,
   oneLineMaxHeightPx,
-} from "@/components/conversation/composer-trial/composer-trial";
-import { ComposerDemoInert } from "@/components/conversation/composer-trial/ComposerDemoInert";
-import { ComposerOneLine } from "@/components/conversation/composer-trial/ComposerOneLine";
+} from "@/components/conversation/composer-styles";
 import { useComposerFocus } from "@/hooks/useComposerFocus";
 import { useFileReferences } from "@/hooks/useFileReferences";
 import { useImageAttachments } from "@/hooks/useImageAttachments";
@@ -77,7 +76,8 @@ export type { ComposerHandle, ComposerProps };
  * Apricot focus ring is the brand moment; submit button is the only
  * place we use apricot as a CTA fill. When the agent is running,
  * stopMode replaces submit with a deep-amber Stop button at the same
- * position.
+ * position. The main chat arranges the same pieces in one row
+ * (`oneLine`, ComposerOneLine.tsx).
  */
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(
   function Composer(
@@ -106,13 +106,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       imagesEnabled = true,
       onImageBlocked,
       onTextDropBlocked,
-      trial,
+      oneLine = false,
     },
     ref,
   ) {
     const copy = useCopy();
-    // TEMPORARY (ticket 24): the main chat's one-line trial form.
-    const oneLine = trial?.oneLine ?? false;
     // Hybrid controlled / uncontrolled. When `value` prop is provided
     // we render it directly; otherwise we maintain an internal copy.
     // Avoid syncing prop -> internal in an effect (React 19 / Compiler
@@ -288,8 +286,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // at COMPOSER_MAX_HEIGHT_PX — beyond that the textarea scrolls
     // internally. ChatGPT / Claude / Notion all do this pattern; users
     // expect multi-line input to expand the composer rather than
-    // disappear behind a fixed-height window. The one-line trial form
-    // (ticket 24) caps at eight lines instead.
+    // disappear behind a fixed-height window. The main chat's one-line
+    // form caps at eight lines instead.
     useEffect(() => {
       const el = textareaRef.current;
       if (!el) return;
@@ -372,11 +370,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // through every host (MainView / EmptyState) buys no reuse: the
     // empty screen has no active session and renders no strip.
     const activeSessionId = useSessionsStore((s) => s.activeSessionId);
-    const sessionQueue = useQueueStore((s) =>
+    const queueItems = useQueueStore((s) =>
       activeSessionId ? (s.bySession[activeSessionId] ?? EMPTY_QUEUE) : EMPTY_QUEUE,
     );
-    // TEMPORARY (ticket 24): 「演示在跑」 shows two made-up messages.
-    const queueItems = trial?.demoQueue ?? sessionQueue;
 
     // Ghost text (next-step suggestion): a derived condition, not a
     // one-shot event — typing hides it, deleting everything brings it
@@ -431,15 +427,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       }
     };
 
-    // The pieces the card arranges below. The main chat's one-line trial
-    // form (TEMPORARY, ticket 24; composer-trial/) arranges the same
-    // pieces in ComposerOneLine, with its own textarea and ghost metrics.
+    // The pieces the card arranges below. The main chat's one-line form
+    // arranges the same pieces in ComposerOneLine, with its own textarea
+    // and ghost metrics (ONE_LINE_* in composer-styles.ts).
     const queueStrip = activeSessionId && (
       <ComposerQueueStrip
         sessionId={activeSessionId}
         items={queueItems}
-        // One-line form: the hint row is gone, so the strip's heading
-        // says what the stopping hint said (ticket 24).
+        // One-line form: there is no hint row, so the strip's heading
+        // says what the stopping hint says under the card (ruling 71).
         heading={
           oneLine && isStopping && queueItems.length > 0
             ? copy.composer.stoppingQueueHint
@@ -593,11 +589,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
 
     return (
       <>
-        {trial?.demoQueue ? (
-          <ComposerDemoInert>{queueStrip}</ComposerDemoInert>
-        ) : (
-          queueStrip
-        )}
+        {queueStrip}
         {oneLine ? (
           <ComposerOneLine
             rootRef={composerRootRef}

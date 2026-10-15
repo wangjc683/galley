@@ -14,10 +14,6 @@ import {
 } from "@/components/conversation/Conversation";
 import { AssistantLiveLine } from "@/components/conversation/AssistantParts";
 import { ConversationSkeleton } from "@/components/conversation/ConversationSkeleton";
-import {
-  type ComposerTrialChoice,
-  useComposerTrialOverrides,
-} from "@/components/conversation/composer-trial/composer-trial";
 import { StepLimitTail } from "@/components/conversation/StepLimitTail";
 import {
   buildRunGroups,
@@ -146,9 +142,6 @@ export interface MainViewProps {
   imagesEnabled?: boolean;
   onImageBlocked?: (reason: ImageBlockReason) => void;
   onTextDropBlocked?: () => void;
-  /** TEMPORARY (ticket 24; composer-trial.ts): the composer trial's
-   * choice, set by App only while the main chat is open. */
-  composerTrial?: ComposerTrialChoice;
 }
 
 /**
@@ -189,14 +182,8 @@ function MainViewContent({
   imagesEnabled = true,
   onImageBlocked,
   onTextDropBlocked,
-  composerTrial,
 }: MainViewProps) {
   const copy = useCopy();
-  // TEMPORARY (ticket 24): what the composer trial sets on the Composer
-  // — nothing outside the main chat.
-  const composerTrialProps = useComposerTrialOverrides(
-    isMainChat ? composerTrial : undefined,
-  );
   // The main chat is the assistant (main chat PRD rulings 60, 66, 67):
   // its conversation reads as an IM with one person, not as the
   // workbench's task record (lib/assistant-conversation.ts).
@@ -205,9 +192,10 @@ function MainViewContent({
   // time lines); the one live line in place of the in-flight row, with
   // no streaming prose and no corner clock; the question as a bubble;
   // 贴底 (useStickyScroll's `stickBottom`, the column stacked up from
-  // the composer); and the composer's 「发消息…」 (ruling 71) and its
-  // trial (above). Every other conversation — the workbench's, a
-  // subtask, the external runtime's — renders as before.
+  // the composer); and the composer (rulings 71, 72): one line, no hint
+  // row, 「发消息…」, 24px off the window's bottom edge. Every other
+  // conversation — the workbench's, a subtask, the external runtime's —
+  // renders as before.
   //
   // The latest run stopped at GA's per-run step cap (#29): a thread
   // tail, only while nothing else signals activity.
@@ -724,8 +712,12 @@ function MainViewContent({
 
       {/* Bottom stack: composer + hint. Matches the conversation
           column width in lockstep — see MainViewProps `conversationWidth`
-          doc for why we don't keep this narrower. */}
-      <div className="bg-app px-8 pb-4">
+          doc for why we don't keep this narrower. The main chat's
+          one-line composer has no hint row under it and sits 24px off
+          the window's bottom edge (ruling 72): with the hint row gone,
+          16 sat it too low; 24 is half its 48px height, its own corner
+          radius. */}
+      <div className={cn("bg-app px-8", isMainChat ? "pb-6" : "pb-4")}>
         <div
           className={cn(
             "mx-auto",
@@ -768,12 +760,12 @@ function MainViewContent({
             requiresModelConfig={requiresModelConfig}
             onOpenLLMSwitcher={onOpenLLMSwitcher}
             reasoningEffort={reasoningEffort}
-            showFooterHint
+            // The main chat: one line, no hint row (ruling 71, item 3).
+            oneLine={isMainChat}
+            showFooterHint={!isMainChat}
             imagesEnabled={imagesEnabled}
             onImageBlocked={onImageBlocked}
             onTextDropBlocked={onTextDropBlocked}
-            // TEMPORARY (ticket 24): last, so the trial's choices win.
-            {...composerTrialProps}
           />
         </div>
       </div>

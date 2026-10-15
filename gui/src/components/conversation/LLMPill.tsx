@@ -64,8 +64,8 @@ export function LLMPill({
    */
   phraseLead?: boolean;
   /** Which edge the popover lines up with: the start (the card's
-   * phrase sits left), or the end — the main chat's one-line trial
-   * form (TEMPORARY, ticket 24) has the phrase at the row's right. */
+   * phrase sits left), or the end — the main chat's one-line composer
+   * has the phrase at the row's right. */
   popoverAlign?: "start" | "end";
 }) {
   const copy = useCopy();
