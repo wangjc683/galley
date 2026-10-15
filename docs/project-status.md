@@ -770,7 +770,8 @@ main-chat planning docs, main has:
   ring, and the app icon itself is the flat wooden robot G drawn from a
   vector master (`core/icons/master/`), on Apple's grid for macOS; it ships
   with the next release. Workbench conversations and subtasks are
-  unchanged (JC's live acceptance of tickets 20–23 is owed). Settings can reset it with a five-second hold (ticket 15): its rows
+  unchanged. JC accepted tickets 21–23 live on 2026-10-15; ticket 20's own
+  acceptance is still recorded as owed. Settings can reset it with a five-second hold (ticket 15): its rows
   go, long-term memory returns to factory, the migration backups are
   deleted. A new main
   chat opens with a fixed one-paragraph greeting in the UI language (shown
