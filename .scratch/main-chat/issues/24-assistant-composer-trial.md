@@ -1,6 +1,6 @@
 # 24 主对话的输入框试验：现状 / 一行式
 
-Status: ready-for-human（2026-10-15 合入 main，合并提交 `45c13508`；等 JC 在 tauri dev 里比两档、选赢家）
+Status: done（2026-10-15 合入 main，合并提交 `45c13508`；同日 JC 真机比完选一行式，并定离底边 24px，见 PRD 裁决 72；试验代码由票 [25](./25-assistant-composer-final.md) 撤）
 
 来源：主聊天 PRD 裁决 71（2026-10-15，JC：「按你推荐的 A，其余照调整推进」）。依赖 22。只改 GUI，不碰 Rust。
 
