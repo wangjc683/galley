@@ -694,6 +694,21 @@ Post-release follow-up:
 Release-scope truth is `git log v0.6.2..HEAD`; besides the iOS-client and
 main-chat planning docs, main has:
 
+**Do at release** (outward-facing, so ask JC before each; the release SOP's
+Pre-Flight checks this list):
+
+- GitHub repo About, the Chinese sentence `极简 harness 的本地全能 AI 助手。`
+  becomes `极简 harness 的本地全能 AI 助理。` (`gh repo edit --description`),
+  matching the About page subtitle changed on main in `115a55b5`
+  (`.scratch/assistant/PRD.md` ruling 7). Not before: the released app still
+  says 助手.
+- README (en + zh): the role words 「全能助手」「同一个助手」 become 助理 /
+  personal assistant, and the Supervisor narrative (「Supervisor Agent 在 CLI
+  里编排同一支团队」, the Why Galley paragraph) is rewritten for the assistant
+  foundation: Galley is your personal assistant and runs the team itself;
+  Supervisor stays the integration term for outside agents
+  (`.scratch/assistant/PRD.md` rulings 1, 7).
+
 - **Core send takeover and remote-access groundwork** (2026-10-10,
   `.scratch/ios-client/`, devlog
   [2026-10-10-remote-access-protocol-and-first-tickets](./devlog/2026-10-10-remote-access-protocol-and-first-tickets.md)).

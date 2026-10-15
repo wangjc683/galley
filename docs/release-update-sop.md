@@ -76,6 +76,10 @@ Replace the example value before every release.
       `v0.5.3` both shipped without this check being raised.)
 - [ ] `docs/devlog/` has the durable release narrative if this is more than a
       tiny hotfix.
+- [ ] Every item under **Do at release** in
+      [project status](./project-status.md) "Unreleased On Main" is done or
+      explicitly moved to the next release. They are outward-facing (GitHub
+      About, README), so ask JC before each.
 - [ ] Version is bumped consistently — run
       `node scripts/check-version-consistency.mjs --tag="${RELEASE_TAG}"`.
       The script owns the version-file list; `release.yml` re-runs the same
