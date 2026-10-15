@@ -364,6 +364,50 @@
       "preamble": "先看一下下载文件夹。",
       "telemetry": null,
       "visibility": "visible"
+    },
+    "no-reply-leaves-no-answer": {
+      "content": "<thinking>结果缺了确认号，打回去。</thinking>\n<no-reply/>",
+      "toolCalls": "[]",
+      "toolResults": "[]",
+      "thinking": "结果缺了确认号，打回去。",
+      "finalAnswer": null,
+      "summary": "打回子任务",
+      "preamble": null,
+      "telemetry": null,
+      "visibility": "visible"
+    },
+    "no-reply-any-case-and-spacing": {
+      "content": "  < No-Reply />\n",
+      "toolCalls": "[]",
+      "toolResults": "[]",
+      "thinking": null,
+      "finalAnswer": null,
+      "summary": null,
+      "preamble": null,
+      "telemetry": null,
+      "visibility": "visible"
+    },
+    "no-reply-keeps-the-text-around-it": {
+      "content": "已经转告用户。\n<NO-REPLY></no-reply>",
+      "toolCalls": "[]",
+      "toolResults": "[]",
+      "thinking": null,
+      "finalAnswer": "已经转告用户。",
+      "summary": "转告",
+      "preamble": null,
+      "telemetry": null,
+      "visibility": "visible"
+    },
+    "no-reply-stays-out-of-a-preamble": {
+      "content": "先把它打回去。<no-reply/>",
+      "toolCalls": "[{\"args\":{\"code\":\"galley session send s-sub 缺确认号\"},\"toolName\":\"code_run\"}]",
+      "toolResults": "[{\"content\":\"ok\"}]",
+      "thinking": null,
+      "finalAnswer": "先把它打回去。",
+      "summary": "打回子任务",
+      "preamble": "先把它打回去。",
+      "telemetry": null,
+      "visibility": "visible"
     }
   }
 }

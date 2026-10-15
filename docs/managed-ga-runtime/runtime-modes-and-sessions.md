@@ -207,6 +207,72 @@ about the tag reaches GA, which keeps no subtask tool and no patch for it.
   reaches the phone as the session appearing.
 - Attach mode has no main chat, so nothing here runs there.
 
+### Subtask Reports
+
+A subtask's result comes back to the main chat by itself (ticket 29,
+`.scratch/main-chat/issues/29-subtask-wake-core.md`, assistant PRD rulings 2
+and 8; `core/src/subtask_report.rs`): each run of a subtask that ends
+**reports** to its main chat, which gets one turn (a **wake**) to check the
+result, send the subtask back, answer its question, or tell the user.
+
+- **Which runs**: the queue drain task, for every run signal and before the
+  queue step, reads how the run ended. Only an unpromoted subtask of the
+  current main chat reports: finished (`CURRENT_TASK_DONE` and any other
+  exit, with its final answer), asking (`ask_pending`, with the question and
+  candidates), at the step limit (`MAX_TURNS_EXCEEDED`, with its last
+  words), failed (`DONE_WITHOUT_EXIT` with the engine's last error event, or
+  `Closed` while its run was open). A stopped run (`ABORTED`) and a slash
+  command (`SLASH_COMMAND_COMPLETED`) do not report. A reply whose tag
+  started nothing (`empty`, `unclosed`, `start_failed`) reports once too.
+- **Once, in memory**: a report is keyed by the subtask and the user message
+  that started its run; a subtask's newer report replaces one still
+  waiting. Nothing is persisted: a report waiting while Galley quits is lost
+  (ruling 8).
+- **When**: at once when the main chat is idle (run gate free, nothing
+  queued, no `ask_user` of its own waiting); otherwise after its run
+  completes, behind the user's queued messages. While it waits for the
+  user's answer the report waits, since any message would be taken as the
+  answer.
+- **What**: with the run gate reserved (never the visible queue) the waiting
+  reports are read again — a subtask running again, answered, promoted or
+  deleted drops out — and the rest go as one message: a visible user row in
+  the main chat with `created_via = 'system'`, supervisor `galley-report`,
+  the subtask ids comma-separated in `origin_note`, and its replay form (one
+  line per subtask) in `summary`; announced as `user-message-persisted`
+  (`pending`, then `dispatched` / `persisted_only`) and dispatched after the
+  shared runner path (segments and carried turns as for any message). No
+  migration: the same pattern as `galley-greeting` and `galley-subtask`.
+  The CLI shows the row as `via: "system"`.
+- **Silent reply**: when the assistant only sent the subtask back or
+  answered for the user, it ends the reply with `<no-reply/>`. The turn
+  derivation strips any `no-reply` tag (self-closing, opening or closing,
+  any letter case, whitespace inside the brackets); a reply left empty has
+  no final answer, like one that only dispatched subtasks. The raw reply
+  keeps it.
+- **Replay**: the main chat's replayed history and the turns a new segment
+  carries show a report as its lines,
+  `[Galley: subtask <id> "<title>" finished — details: session show <id>]`
+  (`is asking`, `stopped at the step limit`, `failed`, `could not be
+  started`); the reply to it stays as written.
+- **Not delivered**: when the runner does not start or does not take the
+  message, or the main chat is waiting for its answer, Core broadcasts
+  `subtask-report-undelivered` `{ mainChatId, subtaskIds }` (desktop only,
+  each subtask once per report) and keeps the reports for the main chat's
+  next run signal or the next report; the desktop falls back to the
+  subtask's own notification.
+- **Send-backs**: `SubtaskDispatch.sendBacks` (always written) counts the
+  subtask's user messages from supervisor `galley-assistant` whose previous
+  reply did not end on `ask_user`, from the rows. The report names the round
+  (`sendBacks + 1`); from two send-backs on it tells the assistant not to
+  send it back again. Core refuses no send. The record is announced again as
+  `subtask-dispatched` when the assistant writes into the subtask. The
+  report's `session send` commands carry `--ensure-runner`, so a send-back
+  or an answer still runs when the subtask's runner is gone (evicted, or
+  after a restart).
+- **Search**: the desktop's search (⌘K, 查找聊天记录) leaves out report rows
+  and main chat replies left empty by `<no-reply/>`; the Agent API's
+  `sessions search` is unchanged.
+
 ## CLI Runtime Contract
 
 Galley has not shipped a stable CLI release before managed runtime, so the CLI

@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { copyForLanguage } from "@/lib/i18n";
+import { buildRunGroups } from "@/lib/run-groups";
 import {
   deriveSubtaskCard,
+  endsInSilentReport,
+  hiddenReportTurns,
+  inReportRound,
+  isSilentReport,
+  isSubtaskReportTurn,
   isUnpromotedSubtask,
   mergeDispatches,
   subtaskBreadcrumb,
@@ -94,6 +100,17 @@ describe("merging dispatch records", () => {
     ]);
     expect(updated.find((d) => d.ordinal === 1)?.failure).toBe("start_failed");
   });
+
+  // Ticket 31: Core announces a record again when the assistant sent the
+  // subtask back; a missing count (an older payload) is 0.
+  it("takes a changed send-back count, and reads a missing one as 0", () => {
+    const merged = mergeDispatches([], [dispatch()]);
+    expect(mergeDispatches(merged, [dispatch({ sendBacks: 0 })])).toEqual(
+      merged,
+    );
+    const sentBack = mergeDispatches(merged, [dispatch({ sendBacks: 1 })]);
+    expect(sentBack[0].sendBacks).toBe(1);
+  });
 });
 
 describe("the card's state", () => {
@@ -152,6 +169,65 @@ describe("the card's state", () => {
       deriveSubtaskCard(dispatch(), subtask, live({ bridgeStatus: "spawning" }))
         .kind,
     ).toBe("running");
+  });
+
+  // Ticket 31: sent back, the running line says which round first.
+  it("says which round it runs once the assistant sent it back", () => {
+    const stepping = {
+      ...subtask,
+      lastStepIndex: 3,
+      summary: "补查了 2 个 PDF",
+    };
+    const running = live({ agentRunning: true, turns: [userTurn, agent()] });
+    const second = deriveSubtaskCard(
+      dispatch({ sendBacks: 1 }),
+      stepping,
+      running,
+    );
+    expect(second).toEqual({
+      kind: "running",
+      step: 3,
+      summary: "补查了 2 个 PDF",
+      round: 2,
+    });
+    expect(subtaskCardLine(second, zh)).toBe(
+      "第 2 轮 · 第 3 步 · 补查了 2 个 PDF",
+    );
+    expect(subtaskCardLine(second, en)).toMatch(/^Round 2 · /);
+    const thinking = deriveSubtaskCard(
+      dispatch({ sendBacks: 2 }),
+      subtask,
+      live({ agentRunning: true, turns: [userTurn] }),
+    );
+    expect(subtaskCardLine(thinking, zh)).toBe("第 3 轮 · 思考中");
+    // The first round says none, and no other state does.
+    expect(
+      subtaskCardLine(
+        deriveSubtaskCard(dispatch({ sendBacks: 0 }), stepping, running),
+        zh,
+      ),
+    ).toBe("第 3 步 · 补查了 2 个 PDF");
+    const done = deriveSubtaskCard(
+      dispatch({ sendBacks: 1 }),
+      { ...subtask, summary: "30 个 PDF 分成 5 类" },
+      live({ turns: [userTurn, agent({ finalAnswer: "分好了。" })] }),
+    );
+    expect(subtaskCardLine(done, zh)).toBe("30 个 PDF 分成 5 类");
+    const asking = deriveSubtaskCard(
+      dispatch({ sendBacks: 1 }),
+      subtask,
+      live({
+        pendingAskUser: { question: "要单独放吗？", candidates: [] },
+        turns: [userTurn, agent()],
+      }),
+    );
+    expect(subtaskCardLine(asking, zh)).toBeNull();
+    const failed = deriveSubtaskCard(
+      dispatch({ sendBacks: 1 }),
+      subtask,
+      live({ runError: "quota exceeded", turns: [userTurn] }),
+    );
+    expect(subtaskCardLine(failed, zh)).toBe("出错：quota exceeded");
   });
 
   it("asks: the question goes to the card", () => {
@@ -262,5 +338,83 @@ describe("the header's crumb", () => {
       subtaskBreadcrumb(makeSession({ mainChat: true }), args),
     ).toBeUndefined();
     expect(subtaskBreadcrumb(undefined, args)).toBeUndefined();
+  });
+});
+
+// Ticket 31: the rows of the main chat a subtask report round hides.
+describe("report rounds", () => {
+  const reportRow: Turn = {
+    role: "user",
+    content: "[Galley — not a message from the user] …",
+    messageId: "u-report",
+    origin: { via: "system", supervisor: "galley-report", reason: "s-sub" },
+  };
+  const said = (text: string) =>
+    agent({
+      finalAnswer: text,
+      tools: [{ id: "n", name: "no_tool", status: "success-historical" }],
+    });
+  const sendBack = agent({
+    finalAnswer: "我让它再查一家。",
+    tools: [{ id: "c", name: "code_run", status: "success-historical" }],
+  });
+  const silent = agent({ silent: true });
+  const asked = agent({
+    tools: [
+      {
+        id: "a",
+        name: "ask_user",
+        status: "success-historical",
+        args: { question: "要付定金吗？", candidates: [] },
+      },
+    ],
+  });
+  const you: Turn = { role: "user", content: "早", messageId: "u-1" };
+
+  it("knows a report row by its origin, and nothing else", () => {
+    expect(isSubtaskReportTurn(reportRow)).toBe(true);
+    expect(isSubtaskReportTurn(you)).toBe(false);
+    expect(
+      isSubtaskReportTurn({
+        ...reportRow,
+        origin: { via: "supervisor", supervisor: "galley-report" },
+      }),
+    ).toBe(false);
+    expect(isSubtaskReportTurn(said("x"))).toBe(false);
+  });
+
+  it("hides the report row, and the whole of a round that said nothing", () => {
+    const turns: Turn[] = [you, said("早。"), reportRow, sendBack, silent];
+    const groups = buildRunGroups(turns);
+    expect(isSilentReport(groups[1], turns)).toBe(true);
+    expect(endsInSilentReport(turns)).toBe(true);
+    expect(inReportRound(turns)).toBe(true);
+    expect([...hiddenReportTurns(turns)].sort()).toEqual([2, 3, 4]);
+  });
+
+  it("hides only the row of a round that answered", () => {
+    const turns: Turn[] = [
+      you,
+      said("早。"),
+      reportRow,
+      sendBack,
+      said("查好了。"),
+    ];
+    expect(isSilentReport(buildRunGroups(turns)[1], turns)).toBe(false);
+    expect(endsInSilentReport(turns)).toBe(false);
+    expect([...hiddenReportTurns(turns)]).toEqual([2]);
+  });
+
+  it("keeps a silent round's question to the user and their answer", () => {
+    const answer: Turn = { role: "user", content: "付", messageId: "u-2" };
+    const turns: Turn[] = [reportRow, asked, answer, sendBack, silent];
+    expect([...hiddenReportTurns(turns)].sort()).toEqual([0, 3, 4]);
+  });
+
+  it("is no report round for the user's own message, silent reply or not", () => {
+    const turns: Turn[] = [you, silent];
+    expect(inReportRound(turns)).toBe(false);
+    expect(endsInSilentReport(turns)).toBe(false);
+    expect(hiddenReportTurns(turns).size).toBe(0);
   });
 });

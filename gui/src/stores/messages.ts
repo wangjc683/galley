@@ -4,6 +4,7 @@ import { loadMessageTurnsPage, type MessageTurnPage } from "@/lib/db";
 import { logPerf, perfNow } from "@/lib/perf";
 import { pendingReplyStepBase } from "@/lib/run-groups";
 import type { UserMessagePersistedPayload } from "@/lib/session-send";
+import { isSubtaskReport } from "@/lib/subtasks";
 import { useSessionsStore } from "@/stores/sessions";
 import {
   derivePendingAskUser,
@@ -813,6 +814,11 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     if (message.origin) userTurn.origin = message.origin;
     if (message.createdAt) userTurn.createdAt = message.createdAt;
     const running = dispatch === "pending" || dispatch === "dispatched";
+    // A subtask report (main chat ticket 31) is Core waking the main
+    // chat, not the user sending: it moves no viewport and keeps the
+    // last reply's ghost suggestion, which a reply that says nothing
+    // leaves in place.
+    const report = isSubtaskReport(message.origin);
     const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       turns: [...m.turns, userTurn],
@@ -833,7 +839,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       runStepBase: pendingReplyStepBase(m.turns),
       // This row owns the run state now, not an earlier optimistic echo.
       optimisticRequestId: null,
-      nextSuggestion: null,
+      nextSuggestion: report ? m.nextSuggestion : null,
       pausedAtStepLimit: false,
     }));
     // Only the ACTIVE session's submit moves the viewport: external
@@ -844,7 +850,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     const isActiveSession =
       useSessionsStore.getState().activeSessionId === sid;
     set(
-      isActiveSession
+      isActiveSession && !report
         ? { byId, userSubmitTick: state.userSubmitTick + 1 }
         : { byId },
     );

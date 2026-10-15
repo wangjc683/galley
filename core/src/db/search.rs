@@ -1,4 +1,16 @@
 use super::*;
+use crate::api::SUBTASK_REPORT_SUPERVISOR;
+
+/// The desktop search's filter for rows the desktop does not show (main
+/// chat ticket 29), over `m` (messages) and `s` (sessions), with one
+/// placeholder for [`SUBTASK_REPORT_SUPERVISOR`]: a subtask report (the
+/// user row Core wakes the main chat with), and a main chat reply with no
+/// answer left whose raw text has the silent reply's tag (`<no-reply/>`,
+/// stripped by the turn derivation). `IS` keeps rows with NULL origins.
+const HIDDEN_FROM_GUI_SEARCH: &str = "NOT (m.role = 'user' AND m.created_via IS 'system' \
+         AND m.supervisor IS ?) \
+     AND NOT (s.main_chat = 1 AND m.role = 'assistant' \
+         AND TRIM(COALESCE(m.final_answer, '')) = '' AND m.content LIKE '%no-reply%')";
 
 impl SqliteGalley {
     /// Sweep the GUI's abandoned "新对话" rows at hydrate. A row counts
@@ -179,6 +191,11 @@ impl SqliteGalley {
     /// replacing them, like the Agent API's `--session`. Without it the
     /// rows and their order are what they always were: every
     /// conversation, the most recently active first.
+    ///
+    /// What the desktop never shows is never a hit ([`HIDDEN_FROM_GUI_SEARCH`],
+    /// ticket 29): the main chat's subtask reports, and its replies that
+    /// were only `<no-reply/>`. The Agent API's search
+    /// (`search_messages_db`) keeps finding them.
     pub async fn search_message_hits(
         &self,
         query: String,
@@ -225,12 +242,15 @@ impl SqliteGalley {
                  JOIN messages m ON m.id = fts.message_id \
                  JOIN sessions s ON s.id = fts.session_id \
                  WHERE messages_fts MATCH ? \
+                   AND {HIDDEN_FROM_GUI_SEARCH} \
                    AND m.visibility = 'visible' \
                    AND s.status != 'archived'{runtime_clause}{session_clause} \
                  ORDER BY {order} \
                  LIMIT ?"
             );
-            let mut query = sqlx::query_as::<_, MessageSearchHit>(&sql).bind(&phrase);
+            let mut query = sqlx::query_as::<_, MessageSearchHit>(&sql)
+                .bind(&phrase)
+                .bind(SUBTASK_REPORT_SUPERVISOR);
             if let Some(kind) = runtime_kind {
                 query = query.bind(runtime_kind_sql(kind));
             }
@@ -268,13 +288,15 @@ impl SqliteGalley {
                AND ( \
                  m.content LIKE ? ESCAPE '\\' \
                  OR m.final_answer LIKE ? ESCAPE '\\' \
-               ){runtime_clause}{session_clause} \
+               ) \
+               AND {HIDDEN_FROM_GUI_SEARCH}{runtime_clause}{session_clause} \
              ORDER BY {order} \
              LIMIT ?"
         );
         let mut query = sqlx::query_as::<_, MessageSearchHit>(&sql)
             .bind(&like)
-            .bind(&like);
+            .bind(&like)
+            .bind(SUBTASK_REPORT_SUPERVISOR);
         if let Some(kind) = runtime_kind {
             query = query.bind(runtime_kind_sql(kind));
         }

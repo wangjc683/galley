@@ -1,10 +1,13 @@
 //! Subtask storage (main chat ticket 06a, migration 048): a subtask's
 //! session row with its parent, its promotion to an ordinary
 //! conversation, and `subtask_dispatches`. What dispatches and when is
-//! [`crate::subtask`]'s.
+//! [`crate::subtask`]'s. Ticket 29 adds what a subtask report reads (the
+//! latest run's replies, the send-back count) and the report row itself;
+//! when to report is [`crate::subtask_report`]'s.
 
 use super::*;
-use crate::api::{SubtaskDispatch, SubtaskFailure};
+use crate::api::{SubtaskDispatch, SubtaskFailure, ASSISTANT_SUPERVISOR};
+use std::collections::HashMap;
 
 /// A main chat reply as the dispatch reads it: the latest visible
 /// assistant row of a session.
@@ -42,8 +45,77 @@ impl SubtaskDispatchRow {
             failure: self.failure.as_deref().and_then(SubtaskFailure::from_sql),
             failure_detail: self.failure_detail,
             created_at: self.created_at,
+            // Counted by the caller ([`SqliteGalley::subtask_send_backs`]).
+            send_backs: 0,
         }
     }
+}
+
+/// Columns of a [`SubtaskDispatchRow`].
+const SUBTASK_DISPATCH_COLS: &str = "parent_session_id, turn_index, ordinal, session_id, title, \
+    failure, failure_detail, created_at";
+
+/// One visible assistant row of a subtask's latest run, as its report
+/// reads it ([`SqliteGalley::latest_run_replies`]).
+#[derive(Debug, Clone, PartialEq, Eq, FromRow)]
+pub struct RunReply {
+    pub turn_index: i64,
+    /// The derived final answer (tags and markers stripped); `None` when
+    /// nothing was left.
+    pub final_answer: Option<String>,
+    /// The text before a tool call, on a step that called one.
+    pub preamble: Option<String>,
+    /// `tool_calls` as stored (JSON).
+    pub tool_calls: Option<String>,
+}
+
+/// One row the send-back count reads, in transcript order: an assistant
+/// row (with its `tool_calls` only when it may hold `ask_user`) or one of
+/// the assistant's user messages.
+#[derive(Debug, FromRow)]
+struct SendBackRow {
+    session_id: String,
+    role: String,
+    ask_user_tool_calls: Option<String>,
+}
+
+/// Rows the send-back count reads, for the sessions `{filter}` selects
+/// (a `session_id` condition with one placeholder): the visible assistant
+/// rows, and the visible user rows from [`ASSISTANT_SUPERVISOR`] (second
+/// placeholder), in transcript order per session.
+fn send_back_rows_sql(filter: &str) -> String {
+    format!(
+        "SELECT session_id, role, \
+                CASE WHEN role = 'assistant' AND tool_calls LIKE '%ask_user%' \
+                     THEN tool_calls END AS ask_user_tool_calls \
+         FROM messages \
+         WHERE {filter} AND visibility = 'visible' \
+           AND (role = 'assistant' OR (role = 'user' AND supervisor = ?)) \
+         ORDER BY session_id, turn_index, sequence"
+    )
+}
+
+/// Send-backs per session: an assistant user message counts unless the
+/// reply before it ended on `ask_user` (then it is the answer).
+fn count_send_backs(rows: Vec<SendBackRow>) -> HashMap<String, u32> {
+    let mut counts: HashMap<String, u32> = HashMap::new();
+    let mut session: Option<String> = None;
+    let mut asked = false;
+    for row in rows {
+        if session.as_deref() != Some(row.session_id.as_str()) {
+            session = Some(row.session_id.clone());
+            asked = false;
+        }
+        if row.role == "assistant" {
+            asked = row
+                .ask_user_tool_calls
+                .as_deref()
+                .is_some_and(super::session::tool_calls_ask_user);
+        } else if !asked {
+            *counts.entry(row.session_id).or_default() += 1;
+        }
+    }
+    counts
 }
 
 impl SqliteGalley {
@@ -186,24 +258,137 @@ impl SqliteGalley {
         Ok(())
     }
 
-    /// Every dispatch a parent's replies made, in reply order.
+    /// Every dispatch a parent's replies made, in reply order, each with
+    /// its subtask's send-back count.
     pub async fn subtask_dispatches(
         &self,
         parent_session_id: &SessionId,
     ) -> Result<Vec<SubtaskDispatch>> {
-        let rows = sqlx::query_as::<_, SubtaskDispatchRow>(
-            "SELECT parent_session_id, turn_index, ordinal, session_id, title, failure, \
-                    failure_detail, created_at \
+        let rows = sqlx::query_as::<_, SubtaskDispatchRow>(&format!(
+            "SELECT {SUBTASK_DISPATCH_COLS} \
              FROM subtask_dispatches WHERE parent_session_id = ? \
-             ORDER BY turn_index, ordinal",
-        )
+             ORDER BY turn_index, ordinal"
+        ))
         .bind(parent_session_id.as_str())
         .fetch_all(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
+        let counts = count_send_backs(
+            sqlx::query_as::<_, SendBackRow>(&send_back_rows_sql(
+                "session_id IN (SELECT session_id FROM subtask_dispatches \
+                                WHERE parent_session_id = ? AND session_id IS NOT NULL)",
+            ))
+            .bind(parent_session_id.as_str())
+            .bind(ASSISTANT_SUPERVISOR)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?,
+        );
         Ok(rows
             .into_iter()
-            .map(SubtaskDispatchRow::into_dispatch)
+            .map(|row| {
+                let mut dispatch = row.into_dispatch();
+                if let Some(id) = &dispatch.session_id {
+                    dispatch.send_backs = counts.get(id).copied().unwrap_or(0);
+                }
+                dispatch
+            })
             .collect())
+    }
+
+    /// The dispatch record that created `session_id`, with its send-back
+    /// count; `None` for a session no reply dispatched.
+    pub async fn subtask_dispatch_for_session(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<Option<SubtaskDispatch>> {
+        let row = sqlx::query_as::<_, SubtaskDispatchRow>(&format!(
+            "SELECT {SUBTASK_DISPATCH_COLS} \
+             FROM subtask_dispatches WHERE session_id = ? \
+             ORDER BY created_at LIMIT 1"
+        ))
+        .bind(session_id.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let mut dispatch = row.into_dispatch();
+        dispatch.send_backs = self.subtask_send_backs(session_id).await?;
+        Ok(Some(dispatch))
+    }
+
+    /// How many times the assistant sent `session_id` back (ticket 29):
+    /// its user messages from [`ASSISTANT_SUPERVISOR`] whose previous
+    /// reply did not end on `ask_user` — an answer to the subtask's
+    /// question is part of its work. From the rows, so the same after a
+    /// restart.
+    pub async fn subtask_send_backs(&self, session_id: &SessionId) -> Result<u32> {
+        let rows = sqlx::query_as::<_, SendBackRow>(&send_back_rows_sql("session_id = ?"))
+            .bind(session_id.as_str())
+            .bind(ASSISTANT_SUPERVISOR)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        Ok(count_send_backs(rows)
+            .get(session_id.as_str())
+            .copied()
+            .unwrap_or(0))
+    }
+
+    /// The visible assistant rows of a session's latest run — from its
+    /// latest user message on — oldest first.
+    pub async fn latest_run_replies(&self, session_id: &SessionId) -> Result<Vec<RunReply>> {
+        sqlx::query_as::<_, RunReply>(
+            "SELECT turn_index, final_answer, preamble, tool_calls FROM messages \
+             WHERE session_id = ? AND role = 'assistant' AND visibility = 'visible' \
+               AND turn_index >= COALESCE( \
+                 (SELECT MAX(turn_index) FROM messages WHERE session_id = ? AND role = 'user'), \
+                 0) \
+             ORDER BY turn_index, sequence",
+        )
+        .bind(session_id.as_str())
+        .bind(session_id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)
+    }
+
+    /// Write a subtask report into the main chat (ticket 29): a visible
+    /// user row with `origin` ([`Origin::subtask_report`]), its text for
+    /// the model as `content`, and `replay` — the one line per subtask the
+    /// main chat's replayed history shows instead
+    /// ([`crate::subtask::mark_rows`]) — as its `summary`, a column user
+    /// rows do not otherwise use. One transaction.
+    pub async fn persist_subtask_report(
+        &self,
+        main_chat_id: &SessionId,
+        content: String,
+        origin: Origin,
+        replay: &str,
+    ) -> Result<MessageBrief> {
+        let mut tx = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(map_sqlx_err)?;
+        let mut message = insert_user_message_inner(
+            &mut tx,
+            main_chat_id.clone(),
+            content,
+            origin,
+            MessageVisibility::Visible,
+        )
+        .await?;
+        sqlx::query("UPDATE messages SET summary = ? WHERE id = ?")
+            .bind(replay)
+            .bind(&message.id.0)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+        tx.commit().await.map_err(map_sqlx_err)?;
+        message.summary = Some(replay.to_string());
+        Ok(message)
     }
 }

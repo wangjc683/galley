@@ -70,7 +70,16 @@ fn js_regex(pattern: &str) -> Regex {
 /// answers written before Goal was removed (2026-10-13) end with it, and
 /// a reply in such a session can echo it from the replayed history. Its
 /// `extractPreamble` no longer strips it, hence [`GOAL_STATUS_BLOCK`].
-static GA_TAG_BLOCKS: LazyLock<[Regex; 7]> = LazyLock::new(|| {
+///
+/// The last entry is the silent reply's tag (main chat ticket 29): the
+/// assistant ends a reply to a subtask report with `<no-reply/>` when it
+/// only sent the subtask back or answered its question. Any `no-reply`
+/// tag goes — self-closing, opening or closing, any letter case, with
+/// whitespace inside the brackets (`< No-Reply />`) — and the text
+/// around it stays; a reply with nothing else reads as one with no
+/// answer, like a reply that only dispatched subtasks. The raw `content`
+/// keeps it.
+static GA_TAG_BLOCKS: LazyLock<[Regex; 8]> = LazyLock::new(|| {
     [
         js_regex(r"(?s)<thinking>.*?</thinking>"),
         js_regex(r"(?s)<summary>.*?</summary>"),
@@ -79,6 +88,7 @@ static GA_TAG_BLOCKS: LazyLock<[Regex; 7]> = LazyLock::new(|| {
         js_regex(r"(?s)<next-suggestion>.*?</next-suggestion>"),
         js_regex(r"(?s)<goal-status>.*?</goal-status>"),
         js_regex(r"(?s)<subtask>.*?</subtask>"),
+        js_regex(r"(?i)<\s*/?\s*no-reply\s*/?\s*>"),
     ]
 });
 
@@ -494,6 +504,26 @@ mod tests {
         assert_eq!(
             js_json_stringify(&v),
             r#"{"2":4,"10":2,"01":5,"4294967295":6,"a":3,"b":1}"#
+        );
+    }
+
+    #[test]
+    fn the_no_reply_tag_leaves_no_answer() {
+        assert_eq!(clean_final_answer("<no-reply/>"), "");
+        assert_eq!(clean_final_answer("  < No-Reply />\n"), "");
+        assert_eq!(clean_final_answer("<NO-REPLY>"), "");
+        assert_eq!(clean_final_answer("<no-reply></no-reply>"), "");
+        assert_eq!(
+            clean_final_answer("<thinking>先打回</thinking>\n<no-reply/>"),
+            ""
+        );
+        // Text around it stays: only the tag goes.
+        assert_eq!(clean_final_answer("已转告。<no-reply/>"), "已转告。");
+        // Not the tag.
+        assert_eq!(clean_final_answer("<no-replying>"), "<no-replying>");
+        assert_eq!(
+            extract_preamble("先打回去。<no-reply/>"),
+            Some("先打回去。".into())
         );
     }
 

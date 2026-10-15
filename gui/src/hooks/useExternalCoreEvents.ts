@@ -6,11 +6,17 @@ import {
   applyRunnerHistoryReplay,
   type RunnerHistoryReplayPayload,
 } from "@/lib/ipc/history-replay";
-import { applySubtaskDispatched } from "@/lib/ipc-handlers";
+import {
+  applySubtaskDispatched,
+  applySubtaskReportUndelivered,
+  noteSubtaskReportPersisted,
+} from "@/lib/ipc-handlers";
 import type { UserMessagePersistedPayload } from "@/lib/session-send";
 import {
   SUBTASK_DISPATCHED_EVENT,
+  SUBTASK_REPORT_UNDELIVERED_EVENT,
   type SubtaskDispatchedPayload,
+  type SubtaskReportUndeliveredPayload,
 } from "@/lib/subtasks";
 import { useMessagesStore } from "@/stores/messages";
 import { useRuntimeStore } from "@/stores/runtime";
@@ -41,6 +47,9 @@ export function useExternalCoreEvents(): void {
           // Claims this page's own optimistic echo, dedupes a row's
           // second broadcast, appends anyone else's (ticket 02c).
           applyUserMessagePersisted(e.payload);
+          // A subtask report woke the main chat (ticket 31): its reply
+          // notifies like a reply to the user's own message.
+          noteSubtaskReportPersisted(e.payload);
         },
       );
       if (cancelled) {
@@ -111,6 +120,28 @@ export function useExternalCoreEvents(): void {
       const fn = await listen<SubtaskDispatchedPayload>(
         SUBTASK_DISPATCHED_EVENT,
         (e) => applySubtaskDispatched(e.payload),
+      );
+      if (cancelled) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  // A subtask report that could not wake the main chat (ticket 31): the
+  // subtasks it covered notify on their own instead.
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    void (async () => {
+      const fn = await listen<SubtaskReportUndeliveredPayload>(
+        SUBTASK_REPORT_UNDELIVERED_EVENT,
+        (e) => applySubtaskReportUndelivered(e.payload),
       );
       if (cancelled) {
         fn();

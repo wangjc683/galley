@@ -268,6 +268,43 @@ describe("the assistant's live line", () => {
     expect(line(10_400)).toContain("· 10 秒");
     expect(line(1_000)).not.toContain("·");
   });
+
+  // Ticket 31: a round Core woke it for runs like any other — the line
+  // says what it does — and a reply that said nothing settles it: the
+  // line goes and nothing is left.
+  it("runs a subtask report's round on the line, and leaves nothing when its reply says nothing", () => {
+    const woken: Turn[] = [
+      ...conversation(),
+      {
+        role: "user",
+        content: "[Galley — not a message from the user] …",
+        messageId: "u-report",
+        origin: { via: "system", supervisor: "galley-report", reason: "s-2" },
+      },
+      step("我让它再查一家。", 1),
+    ];
+    const running = render({ isMainChat: true, isRunning: true, turns: woken });
+    const line = running.indexOf('data-role="assistant-live-line"');
+    expect(line).toBeGreaterThan(-1);
+    expect(running.slice(line, line + 400)).toContain("我让它再查一家。");
+    expect(running).not.toContain("not a message from the user");
+    const silent: AgentTurn = {
+      role: "agent",
+      turnIndex: 2,
+      finalAnswer: null,
+      tools: [tool("no_tool")],
+      silent: true,
+    };
+    // Before run_complete: the silent reply already settled the round.
+    const settled = render({
+      isMainChat: true,
+      isRunning: true,
+      turns: [...woken, silent],
+    });
+    expect(settled).not.toContain('data-role="assistant-live-line"');
+    expect(settled).not.toContain("我让它再查一家。");
+    expect(settled).not.toContain('data-role="step-marker"');
+  });
 });
 
 describe("the composer: one line in every session, the card on the empty state", () => {

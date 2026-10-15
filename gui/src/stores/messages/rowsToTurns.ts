@@ -6,7 +6,11 @@
 
 import { buildAgentTurn, toolEventsFromRaw } from "@/lib/agent-turn";
 import { mergedAskUserArgs } from "@/lib/ask-user-candidates";
-import { finalAnswerFileRefs, stripGATags } from "@/lib/ipc/ga-output-cleaning";
+import {
+  finalAnswerFileRefs,
+  isSilentReply,
+  stripGATags,
+} from "@/lib/ipc/ga-output-cleaning";
 import { makeMessageStepper } from "@/lib/turn-index";
 import type {
   Origin,
@@ -89,6 +93,9 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
         // The persisted answer is cleaned of its [FILE:] markers; the raw
         // reply in `content` still has them.
         files: finalAnswerFileRefs(row.content),
+        // Likewise `<no-reply/>` (ticket 29 strips it from the answer).
+        silent: isSilentReply(row.content),
+        settledAt: row.created_at,
       });
       turn.messageId = row.id;
       if (isMainChatGreeting(row)) {

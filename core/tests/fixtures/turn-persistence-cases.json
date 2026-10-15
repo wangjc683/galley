@@ -498,6 +498,62 @@
         "absoluteTurnIndex": 31,
         "timestamp": "2026-10-07T08:00:31+00:00"
       }
+    },
+    {
+      "name": "no-reply-leaves-no-answer",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "打回子任务",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "<thinking>结果缺了确认号，打回去。</thinking>\n<no-reply/>",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 32,
+        "timestamp": "2026-10-07T08:00:32+00:00"
+      }
+    },
+    {
+      "name": "no-reply-any-case-and-spacing",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "  < No-Reply />\n",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 33,
+        "timestamp": "2026-10-07T08:00:33+00:00"
+      }
+    },
+    {
+      "name": "no-reply-keeps-the-text-around-it",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "转告",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "已经转告用户。\n<NO-REPLY></no-reply>",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 34,
+        "timestamp": "2026-10-07T08:00:34+00:00"
+      }
+    },
+    {
+      "name": "no-reply-stays-out-of-a-preamble",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 2,
+        "summary": "打回子任务",
+        "toolCalls": [{ "toolName": "code_run", "args": { "code": "galley session send s-sub 缺确认号" } }],
+        "toolResults": [{ "content": "ok" }],
+        "responseContent": "先把它打回去。<no-reply/>",
+        "exitReason": null,
+        "absoluteTurnIndex": 35,
+        "timestamp": "2026-10-07T08:00:35+00:00"
+      }
     }
   ]
 }

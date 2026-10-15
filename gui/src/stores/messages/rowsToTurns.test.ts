@@ -151,6 +151,7 @@ describe("rowsToTurns", () => {
         finalAnswer: "Recovered answer",
         turnIndex: 3,
         summary: undefined,
+        settledAt: "2026-06-18T08:00:00.000Z",
       },
     ]);
   });
@@ -238,6 +239,7 @@ describe("rowsToTurns", () => {
         finalAnswer: null,
         turnIndex: 1,
         summary: "ask_user, args: {...}",
+        settledAt: "2026-06-18T08:00:00.000Z",
       },
     ]);
     // The raw args (incl. GA tags) survive intact here; AnsweredAskUser
@@ -362,6 +364,48 @@ describe("rowsToTurns", () => {
       }),
     ]);
     expect((turns[0] as UserTurn).origin).toEqual({ via: "subtask" });
+  });
+
+  // Ticket 31: Core wakes the main chat with a report row (ticket 29);
+  // it reads back as a user turn with its origin — the plan, the card and
+  // the time marks recognise it from there — and a reply that said only
+  // `<no-reply/>` reads back silent, its raw tag still in `content`.
+  it("reads a subtask report back as a marked user turn, and a <no-reply/> reply as silent", () => {
+    const turns = rowsToTurns([
+      makeMessageRow({
+        role: "user",
+        turn_index: 7,
+        content: "[Galley — not a message from the user] …",
+        created_via: "system",
+        supervisor: "galley-report",
+        origin_note: "s-a,s-b",
+      }),
+      makeMessageRow({
+        role: "assistant",
+        turn_index: 8,
+        content: "  <No-Reply />\n",
+        tool_calls: JSON.stringify([{ toolName: "no_tool", args: {} }]),
+        final_answer: null,
+        created_at: "2026-10-15T09:00:05.000Z",
+      }),
+      makeMessageRow({
+        role: "assistant",
+        turn_index: 9,
+        content: "<subtask>再查一家</subtask><no-reply/>",
+        final_answer: null,
+      }),
+    ]);
+    expect((turns[0] as UserTurn).origin).toEqual({
+      via: "system",
+      supervisor: "galley-report",
+      reason: "s-a,s-b",
+    });
+    const silent = turns[1] as AgentTurn;
+    expect(silent.finalAnswer).toBeNull();
+    expect(silent.silent).toBe(true);
+    expect(silent.settledAt).toBe("2026-10-15T09:00:05.000Z");
+    // One that also dispatched is no silent reply: its cards must show.
+    expect((turns[2] as AgentTurn).silent).toBeUndefined();
   });
 });
 

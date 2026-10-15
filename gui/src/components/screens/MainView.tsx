@@ -35,6 +35,7 @@ import { useSubtaskDispatchesByMessage } from "@/hooks/useSubtaskCards";
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { useMarkdownStream } from "@/hooks/useMarkdownStream";
 import { assistantLineSentence } from "@/lib/assistant-conversation";
+import { endsInSilentReport } from "@/lib/subtasks";
 import {
   composerRegisterCopyKey,
   resolveComposerRegister,
@@ -350,16 +351,22 @@ function MainViewContent({
   // The assistant's live line: its sentence — the first line of what
   // streams, else this stretch's latest narration — and whether the
   // round already has its answer (the line then goes, the answer stands
-  // whole in the conversation, before run_complete).
+  // whole in the conversation, before run_complete). A report round
+  // whose reply said nothing (`<no-reply/>`, main chat ticket 31)
+  // settles too: the line goes and nothing takes its place.
   const lineSentence = useMemo(
     () => (isMainChat ? assistantLineSentence(turns, visiblePartial) : null),
     [isMainChat, turns, visiblePartial],
   );
+  const silentReport = useMemo(
+    () => isMainChat && endsInSilentReport(turns),
+    [isMainChat, turns],
+  );
   const lineRoundSettled = useMemo(() => {
     if (!isMainChat) return false;
     const groups = buildRunGroups(turns);
-    return groups[groups.length - 1]?.complete ?? false;
-  }, [isMainChat, turns]);
+    return (groups[groups.length - 1]?.complete ?? false) || silentReport;
+  }, [isMainChat, turns, silentReport]);
 
   // Conversation scroll behavior — sticky-bottom follow, the
   // scroll-to-bottom button, session-switch snap, stick-to-user-message,
@@ -412,7 +419,8 @@ function MainViewContent({
     setHasUnseenFinal(false);
   } else if (prevRunning !== isRunning) {
     setPrevRunning(isRunning);
-    if (prevRunning && !atBottom) setHasUnseenFinal(true);
+    // A report round that said nothing landed nothing to read.
+    if (prevRunning && !atBottom && !silentReport) setHasUnseenFinal(true);
   } else if (hasUnseenFinal && atBottom) {
     setHasUnseenFinal(false);
   }

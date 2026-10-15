@@ -62,7 +62,10 @@ open and queues, instead of reaching the runner before its history does.
 - When a Supervisor needs "send to a cold session and run it", socket
   `session send` gains an optional argument (for example `ensureRunner`),
   defaulting to today's behavior. Additive only; nothing is removed or
-  renamed (Rule 3).
+  renamed (Rule 3). 2026-10-16: it exists — `ensureRunner` /
+  `--ensure-runner` (main chat ticket 29: the assistant sends its
+  subtasks back with it); the gate is held across the ensure as on the
+  new send, and without it the contract above is unchanged.
 - Two sends exist on purpose. A review that finds them "duplicated" should
   read this ADR and ADR-0002 first: their difference is the contract, not
   an accident of history.

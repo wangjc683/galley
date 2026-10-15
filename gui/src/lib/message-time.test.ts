@@ -236,6 +236,26 @@ describe("userTimeMarks after the main chat's greeting", () => {
   });
 });
 
+// Main chat ticket 31: the turns a conversation does not draw and nothing
+// measures against (a subtask report whose round said nothing).
+describe("userTimeMarks with skipped turns", () => {
+  it("leaves a skipped turn unmarked and out of the baseline", () => {
+    const turns: Turn[] = [
+      user(local(2026, 10, 15, 9, 0)),
+      agent(),
+      user(local(2026, 10, 15, 14, 0)),
+      agent(),
+      user(local(2026, 10, 15, 14, 30)),
+    ];
+    const whole = userTimeMarks(turns);
+    expect(whole.get(4)?.pinned).toBe(false);
+    const skipped = userTimeMarks(turns, { skip: new Set([2]) });
+    expect(skipped.has(2)).toBe(false);
+    // 14:30 now measures against 09:00.
+    expect(skipped.get(4)?.pinned).toBe(true);
+  });
+});
+
 describe("formatMessageTime", () => {
   const today = local(2026, 9, 28).getTime();
   const zh = (at: Date, withTodayWord = false, todayStart = today) =>

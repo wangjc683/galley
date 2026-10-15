@@ -2,6 +2,7 @@ import type { AppCopy } from "@/i18n/types";
 import { cleanPartialContent } from "@/lib/ipc/ga-output-cleaning";
 import type { RunGroup, RunStats } from "@/lib/run-groups";
 import { cleanSessionSummary } from "@/lib/session-summary";
+import { isReportRound, isSilentReport } from "@/lib/subtasks";
 import type { Turn } from "@/types/conversation";
 
 /**
@@ -35,6 +36,10 @@ import type { Turn } from "@/types/conversation";
  *             without an answer unfolds in full (`assistantLinePlan`).
  *   time      the send time at a break as a centred line between two
  *             messages, and one above the greeting.
+ *   reports   a round Core woke it for (a subtask finished, asks or
+ *             failed; tickets 29 / 31) draws no row of yours: its reply
+ *             stands alone, dated by the report at a break, and a reply
+ *             that said nothing (`<no-reply/>`) draws nothing at all.
  *   scroll    贴底: a short conversation stacks up from the composer, a
  *             send lands at the bottom, and following the growth stops
  *             before the reply's start leaves the viewport
@@ -207,15 +212,27 @@ export interface AssistantProcessToggle {
  *   flat      turns of runs drawn the workbench way, by opener: runs
  *             without an answer that are not live, /btw exchanges,
  *             headless lead-ins (the greeting excepted).
+ *   reports   report row → the first row its round draws (lib/subtasks
+ *             report rounds, tickets 29 / 31). The report row itself is
+ *             never drawn: the reply after it is a left bubble with no
+ *             bubble of yours before it, and the report's time, at a
+ *             break, is the line above that first row (as the
+ *             greeting's is above the greeting). A round that draws
+ *             nothing — a silent reply (`<no-reply/>`) without a
+ *             question to the user — has no entry: its report counts
+ *             for no time either (`userTimeMarks`' `skip`).
  *
  * A live run shows its opener and its answered questions and their
- * answers; its steps show nothing (the line stands for them).
+ * answers; its steps show nothing (the line stands for them). A report
+ * round's opener is no message; a silent one settles with its questions
+ * and their answers alone — no answer, no process button, no steps.
  */
 export interface AssistantLinePlan {
   message: Set<number>;
   question: Set<number>;
   steps: Map<number, { opener: number; members: number[]; stats: RunStats }>;
   flat: Map<number, number>;
+  reports: Map<number, number>;
 }
 
 function asksUser(turn: Turn): boolean {
@@ -234,13 +251,27 @@ export function assistantLinePlan(
     question: new Set(),
     steps: new Map(),
     flat: new Map(),
+    reports: new Map(),
   };
   for (const g of groups) {
-    if (g === liveGroup || g.foldable) {
+    // A report round: Core's row opens it, and nobody sees that row.
+    const report = isReportRound(g, turns);
+    const firstDrawn = () => {
+      if (!report) return;
+      const first = g.memberIndices.find(
+        (i) => plan.message.has(i) || plan.flat.has(i),
+      );
+      if (first !== undefined) plan.reports.set(g.openerIndex, first);
+    };
+    if (g === liveGroup || g.foldable || isSilentReport(g, turns)) {
       const members: number[] = [];
       for (const i of g.memberIndices) {
         const turn = turns[i];
-        if (i === g.openerIndex || turn.role === "user") {
+        if (i === g.openerIndex) {
+          if (!report) plan.message.add(i);
+          continue;
+        }
+        if (turn.role === "user") {
           plan.message.add(i);
           continue;
         }
@@ -259,12 +290,13 @@ export function assistantLinePlan(
           stats: g.stats,
         });
       }
+      firstDrawn();
       continue;
     }
     for (const i of g.memberIndices) {
       const turn = turns[i];
       if (i === g.openerIndex) {
-        plan.message.add(i);
+        if (!report) plan.message.add(i);
         continue;
       }
       // The greeting heads a headless group of its own and renders as
@@ -275,6 +307,7 @@ export function assistantLinePlan(
       }
       plan.flat.set(i, g.openerIndex);
     }
+    firstDrawn();
   }
   return plan;
 }

@@ -76,13 +76,26 @@ function localDayStart(ms: number): number {
  * the greeting yet, the first user message is the first as before (Core
  * names no user message before it) and stays pinned until the
  * greeting's page loads.
+ *
+ * `skip`: user turns nothing draws and nothing measures against. In the
+ * assistant's conversation a subtask report row (main chat ticket 31)
+ * is never drawn either, but it dates the reply that answers it, which
+ * has no user message before it — as the greeting does: it takes part
+ * like a user message and its mark is drawn above its round's first
+ * row. A round that draws nothing (a reply that said nothing) passes
+ * its report in `skip`.
  */
 export function userTimeMarks(
   turns: readonly Turn[],
   {
     previousUserCreatedAt = null,
     thresholdMs = USER_TIME_BREAK_MS,
-  }: { previousUserCreatedAt?: string | null; thresholdMs?: number } = {},
+    skip,
+  }: {
+    previousUserCreatedAt?: string | null;
+    thresholdMs?: number;
+    skip?: ReadonlySet<number>;
+  } = {},
 ): Map<number, UserTimeMark> {
   const marks = new Map<number, UserTimeMark>();
   let prevMs: number | null = parseTime(previousUserCreatedAt ?? undefined);
@@ -92,7 +105,7 @@ export function userTimeMarks(
       if (prevMs === null) prevMs = parseTime(turn.createdAt);
       continue;
     }
-    if (turn.role !== "user") continue;
+    if (turn.role !== "user" || skip?.has(index)) continue;
     const ms = parseTime(turn.createdAt);
     if (ms === null) continue;
     const newDay =

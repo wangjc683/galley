@@ -801,3 +801,157 @@ describe("the assistant's conversation: the time", () => {
     expect(html.slice(0, html.indexOf("你好。"))).not.toContain("<time");
   });
 });
+
+// ---- Subtask reports (ticket 31) -----------------------------------------
+
+/** Core's row waking the main chat when a subtask's run ended (ticket
+ * 29): never drawn. */
+function reportRow(createdAt?: string): UserTurn {
+  return {
+    role: "user",
+    content: "[Galley — not a message from the user] A subtask you started…",
+    createdAt,
+    messageId: `u-report-${createdAt}`,
+    origin: { via: "system", supervisor: "galley-report", reason: "s-sub" },
+  };
+}
+
+/** The reply that said nothing (`<no-reply/>`): it sent the subtask back. */
+function silentReply(index: number): AgentTurn {
+  return {
+    role: "agent",
+    turnIndex: index,
+    finalAnswer: null,
+    tools: [tool("no_tool")],
+    silent: true,
+    messageId: `a-silent-${index}`,
+  };
+}
+
+describe("the assistant's conversation: subtask reports", () => {
+  const before: Turn[] = [
+    user("帮我比三家报价", at(9)),
+    answer("好，交给子任务去比。", 1),
+  ];
+
+  it("draws no bubble of yours for a report: its reply stands alone on the left", () => {
+    const turns: Turn[] = [
+      ...before,
+      reportRow(at(9, 20)),
+      answer("比好了：第二家最便宜。", 1),
+    ];
+    const html = assistant(turns);
+    expect(html).not.toContain("A subtask you started");
+    // The one user bubble is the user's own.
+    expect(count(html, "ml-auto max-w-[min(80%,560px)]")).toBe(1);
+    expect(count(html, 'data-role="assistant-bubble"')).toBe(2);
+    expect(html).toContain("比好了：第二家最便宜。");
+    // Twenty minutes on: no time line for it.
+    expect(count(html, 'data-role="assistant-time-divider"')).toBe(1);
+    // The workbench rendering would draw the row (it never gets one: the
+    // main chat is always the assistant's).
+    expect(render(turns)).toContain("A subtask you started");
+  });
+
+  it("dates the report's reply at a break, and the next message measures against it", () => {
+    const turns: Turn[] = [
+      ...before,
+      reportRow(at(14)),
+      answer("比好了：第二家最便宜。", 1),
+      user("那就订第二家", at(14, 5)),
+      answer("订好了。", 1),
+    ];
+    const html = assistant(turns);
+    const reply = html.indexOf("比好了");
+    const lines = [...html.matchAll(/data-role="assistant-time-divider"/g)].map(
+      (m) => m.index,
+    );
+    // 09:00 above the user's first message, 14:00 above the reply — and
+    // none above 14:05, five minutes after the report.
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toBeLessThan(reply);
+    expect(text(html.slice(lines[1], reply))).toContain("14:00");
+    // Right under the earlier reply, whose action row is the gap above.
+    expect(html.slice(lines[1], reply)).toContain(
+      'class="flex justify-center mb-4"',
+    );
+    expect(html.slice(reply, html.indexOf("那就订第二家"))).not.toContain(
+      'data-role="assistant-time-divider"',
+    );
+  });
+
+  it("draws nothing of a round that said nothing, and no time for it", () => {
+    const turns: Turn[] = [
+      ...before,
+      reportRow(at(14)),
+      step("我让它再查一家。", 1),
+      silentReply(2),
+      user("比得怎么样了", at(14, 30)),
+    ];
+    const html = assistant(turns);
+    expect(html).not.toContain("我让它再查一家。");
+    expect(html).not.toContain("A subtask you started");
+    expect(count(html, 'data-role="assistant-bubble"')).toBe(1);
+    expect(html).not.toContain('data-role="step-marker"');
+    expect(buttons(html, zhCopy.conversation.foldExpand).length).toBe(0);
+    // 14:30 measures against 09:00, not the silent report at 14:00.
+    const lines = [...html.matchAll(/data-role="assistant-time-divider"/g)];
+    expect(lines).toHaveLength(2);
+    expect(text(html.slice(lines[1].index))).toContain("14:30");
+  });
+
+  it("keeps a silent round's question to you and your answer", () => {
+    const turns: Turn[] = [
+      ...before,
+      reportRow(at(9, 30)),
+      ask("要付定金吗？", ["付", "不付"], 1),
+      user("付", at(9, 31)),
+      step("我替你回了它。", 2),
+      silentReply(3),
+    ];
+    const html = assistant(turns);
+    expect(html).toContain("要付定金吗？");
+    expect(count(html, "ml-auto max-w-[min(80%,560px)]")).toBe(2);
+    expect(html).not.toContain("我替你回了它。");
+  });
+
+  it("draws a report round with no answer the workbench way, minus the report", () => {
+    const turns: Turn[] = [
+      ...before,
+      reportRow(at(14)),
+      step("我让它再查一家。", 1),
+    ];
+    const html = assistant(turns);
+    expect(html).toContain("我让它再查一家。");
+    expect(html).not.toContain("A subtask you started");
+    // Its time sits above the region.
+    const lines = [...html.matchAll(/data-role="assistant-time-divider"/g)];
+    expect(lines).toHaveLength(2);
+    expect(lines[1].index).toBeLessThan(html.indexOf("我让它再查一家。"));
+  });
+
+  it("keeps the report's time above a question still waiting for you", () => {
+    const turns: Turn[] = [
+      ...before,
+      reportRow(at(14)),
+      ask("要付定金吗？", ["付", "不付"], 1),
+    ];
+    const html = assistant(turns, { askUserPending: true });
+    // The question itself is the live bubble at the tail (MainView).
+    expect(html).not.toContain("要付定金吗？");
+    const lines = [...html.matchAll(/data-role="assistant-time-divider"/g)];
+    expect(lines).toHaveLength(2);
+    expect(text(html.slice(lines[1].index))).toContain("14:00");
+  });
+
+  it("shows nothing of a report round while it runs: the line stands for it", () => {
+    const turns: Turn[] = [
+      ...before,
+      reportRow(at(14)),
+      step("我看看结果。", 1),
+    ];
+    const html = assistant(turns, { agentRunning: true });
+    expect(html).not.toContain("我看看结果。");
+    expect(html).not.toContain("A subtask you started");
+  });
+});

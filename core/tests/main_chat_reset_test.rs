@@ -524,6 +524,7 @@ async fn subtask(
             failure: None,
             failure_detail: None,
             created_at: "2026-10-14T00:00:00Z".into(),
+            send_backs: 0,
         })
         .await
         .expect("dispatch record");

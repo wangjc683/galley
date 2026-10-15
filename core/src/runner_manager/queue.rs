@@ -49,6 +49,12 @@ pub(super) struct SessionQueueState {
     /// polling after `session wait` must still see why that run ended.
     /// Replaced only by the next `RunComplete`.
     pub(super) last_exit: Option<String>,
+    /// `message` of the latest `error`-severity `error` event of the
+    /// current or last run (the bridge sends one with `context:
+    /// "task_end"` right before a `DONE_WITHOUT_EXIT`). Cleared when a
+    /// run opens. What a subtask report says went wrong (ticket 29,
+    /// `crate::subtask_report`).
+    pub(super) last_error: Option<String>,
 }
 
 impl SessionQueueState {

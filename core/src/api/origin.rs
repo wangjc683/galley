@@ -66,6 +66,23 @@ impl OriginVia {
 /// "subtask"` with no supervisor ([`Origin::is_stored_subtask`]).
 pub const SUBTASK_STORED_SUPERVISOR: &str = "galley-subtask";
 
+/// Supervisor label of a **subtask report**: the user row with which Core
+/// wakes the main chat when one of its subtasks finished, asks or failed
+/// (main chat ticket 29, [`crate::subtask_report`]). Stored with
+/// `created_via = 'system'` and the subtask ids in `origin_note`, the way
+/// the greeting (`galley-greeting`) and [`SUBTASK_STORED_SUPERVISOR`]
+/// mark their rows, so no migration. Unlike the subtask label it is not
+/// rewritten on read: the row reads back as `via: "system"` with this
+/// supervisor.
+pub const SUBTASK_REPORT_SUPERVISOR: &str = "galley-report";
+
+/// Supervisor label the assistant (the main chat) writes into its
+/// subtasks with: `session send <id> … --supervisor=galley-assistant`,
+/// to send one back or to answer its question (ticket 29). How many
+/// times a subtask was sent back is counted from the rows with it
+/// ([`crate::db::SqliteGalley::subtask_send_backs`]).
+pub const ASSISTANT_SUPERVISOR: &str = "galley-assistant";
+
 /// Which app a human used for a write (iOS PRD ruling 9): stored in
 /// `messages.client` / `sessions.client` (migration 043), next to `via`,
 /// which keeps saying who acted (`gui` = a human). `None` — and the
@@ -170,6 +187,24 @@ impl Origin {
         created_via == Some("system") && supervisor == Some(SUBTASK_STORED_SUPERVISOR)
     }
 
+    /// A subtask report waking the main chat (ticket 29): Galley itself,
+    /// [`SUBTASK_REPORT_SUPERVISOR`], and the ids of the subtasks it
+    /// covers, comma-separated, as the reason (`origin_note`).
+    pub fn subtask_report(subtask_ids: &[String]) -> Self {
+        Self {
+            via: OriginVia::System,
+            supervisor: Some(SUBTASK_REPORT_SUPERVISOR.to_string()),
+            reason: (!subtask_ids.is_empty()).then(|| subtask_ids.join(",")),
+            client: None,
+        }
+    }
+
+    /// Whether stored origin columns name a subtask report: `system`
+    /// with [`SUBTASK_REPORT_SUPERVISOR`].
+    pub fn is_stored_subtask_report(created_via: Option<&str>, supervisor: Option<&str>) -> bool {
+        created_via == Some("system") && supervisor == Some(SUBTASK_REPORT_SUPERVISOR)
+    }
+
     /// CLI-originated write. `supervisor` is the label the agent
     /// declared (`--supervisor=<x>`); `reason` is the `--reason=<y>`
     /// note.
@@ -226,6 +261,28 @@ mod tests {
                 serde_json::json!(via.wire_name())
             );
         }
+    }
+
+    #[test]
+    fn a_subtask_report_is_system_with_its_label_and_the_ids() {
+        let o = Origin::subtask_report(&["s-1".into(), "s-2".into()]);
+        assert_eq!(o.via.as_sql(), "system");
+        assert_eq!(o.stored_supervisor(), Some(SUBTASK_REPORT_SUPERVISOR));
+        assert_eq!(o.reason.as_deref(), Some("s-1,s-2"));
+        assert_eq!(o.client, None);
+        assert_eq!(Origin::subtask_report(&[]).reason, None);
+        assert!(Origin::is_stored_subtask_report(
+            Some("system"),
+            Some(SUBTASK_REPORT_SUPERVISOR)
+        ));
+        assert!(!Origin::is_stored_subtask_report(
+            Some("cli"),
+            Some(SUBTASK_REPORT_SUPERVISOR)
+        ));
+        assert!(!Origin::is_stored_subtask(
+            Some("system"),
+            Some(SUBTASK_REPORT_SUPERVISOR)
+        ));
     }
 
     #[test]

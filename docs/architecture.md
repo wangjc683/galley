@@ -156,6 +156,11 @@ session through Core's own send, records them in `subtask_dispatches`, and
 replays the main chat with a line naming each subtask instead of its
 instructions. See
 [runtime modes and sessions](./managed-ga-runtime/runtime-modes-and-sessions.md#main-chat-subtasks).
+When a subtask's run ends, the same task reports it to the main chat and
+wakes it for a turn ([`subtask_report.rs`](../core/src/subtask_report.rs),
+ticket 29): a report row taken through the run gate and the shared runner
+path, kept in memory until the main chat is free. See
+[subtask reports](./managed-ga-runtime/runtime-modes-and-sessions.md#subtask-reports).
 
 Each runner keeps a **ready snapshot** — its latest `ready`, folded with
 later `llm_changed` / `reasoning_effort_changed` — which Core hands to a

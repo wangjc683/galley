@@ -130,6 +130,7 @@ pub(super) async fn dispatch_session_send(
                             &parsed.session_id,
                             item.text,
                             origin,
+                            parsed.ensure_runner,
                         )
                         .await;
                     }
@@ -145,7 +146,16 @@ pub(super) async fn dispatch_session_send(
             SocketResponse::ok(request_id, result)
         }
         QueueOffer::DispatchNow => {
-            send_now(request_id, ctx, &galley, &parsed.session_id, parsed.content, origin).await
+            send_now(
+                request_id,
+                ctx,
+                &galley,
+                &parsed.session_id,
+                parsed.content,
+                origin,
+                parsed.ensure_runner,
+            )
+            .await
         }
     }
 }
@@ -155,6 +165,16 @@ pub(super) async fn dispatch_session_send(
 /// (QueueOffer::DispatchNow / QueueJump::DispatchNow); a failed
 /// dispatch releases it so the queue never waits on a run that never
 /// started.
+///
+/// `ensure_runner` (`ensureRunner`, ADR-0003's consequence, 2026-10-16):
+/// with no live runner, one is ensured first on Core's shared path
+/// ([`crate::session_runner::ensure_session_runner`]: spawned from the
+/// session row, history replayed) while the caller's reservation holds
+/// the gate, as Core's send does — so nothing else reaches the runner
+/// before its history. If that fails the message is persisted and
+/// answered `persisted_only`, as without the flag; it is never
+/// dispatched to a runner whose history was not restored. A live runner
+/// is used as it is.
 async fn send_now(
     request_id: Option<String>,
     ctx: &HandlerCtx<'_>,
@@ -162,9 +182,38 @@ async fn send_now(
     session_id: &str,
     content: String,
     origin: crate::api::Origin,
+    ensure_runner: bool,
 ) -> SocketResponse {
+    let runner_ready = if ensure_runner && ctx.runner.live_pid(session_id).await.is_none() {
+        match crate::session_runner::ensure_session_runner(
+            &ctx.runner_host(galley),
+            session_id,
+            crate::session_runner::EnsureOptions {
+                via: "session.send",
+                active_session_id: Some(session_id),
+                llm_override: None,
+                ga_config: None,
+                holds_run_gate: true,
+                timeouts: crate::session_runner::ReplayTimeouts::default(),
+            },
+        )
+        .await
+        {
+            Ok(_) => true,
+            Err(e) => {
+                eprintln!("[session.send {session_id}] ensureRunner: no runner ({e:?})");
+                false
+            }
+        }
+    } else {
+        true
+    };
     let brief = match galley
-        .send_message(SessionId(session_id.to_string()), content.clone(), origin)
+        .send_message(
+            SessionId(session_id.to_string()),
+            content.clone(),
+            origin.clone(),
+        )
         .await
     {
         Ok(b) => b,
@@ -180,24 +229,27 @@ async fn send_now(
     // for a future spawn / replay path. We surface the runner result in
     // the response so callers know whether the message reached the
     // subprocess this turn.
-    let dispatch_status = match ctx
-        .runner
-        .send_command(
-            session_id,
-            &IpcCommand::UserMessage(UserMessageCommand {
-                text: content,
-                images: vec![],
-                visibility: None,
-                absolute_turn_index: brief.turn_index.map(i64::from),
-            }),
-        )
-        .await
-    {
-        Ok(()) => "dispatched",
-        Err(_) => {
-            ctx.runner.queue_release_run(session_id).await;
-            "persisted_only"
-        }
+    let sent = if runner_ready {
+        ctx.runner
+            .send_command(
+                session_id,
+                &IpcCommand::UserMessage(UserMessageCommand {
+                    text: content,
+                    images: vec![],
+                    visibility: None,
+                    absolute_turn_index: brief.turn_index.map(i64::from),
+                }),
+            )
+            .await
+            .is_ok()
+    } else {
+        false
+    };
+    let dispatch_status = if sent {
+        "dispatched"
+    } else {
+        ctx.runner.queue_release_run(session_id).await;
+        "persisted_only"
     };
 
     // Notify GUI so the conversation view picks up the new user row.
@@ -215,6 +267,9 @@ async fn send_now(
         &brief.content,
     )
     .await;
+    // The assistant sending a subtask back: its card shows the round
+    // (ticket 29). A broadcast only; the response is unchanged.
+    crate::subtask::announce_send_back(galley, ctx.notifier.as_ref(), session_id, &origin).await;
 
     let result = serde_json::json!({
         "message": brief,

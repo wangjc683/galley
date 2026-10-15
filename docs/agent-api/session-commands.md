@@ -222,7 +222,7 @@ Invocations without the new flags print exactly what they printed before
 | `height`    | int?            | image height when provided by the GUI                                       |
 | `createdAt` | string (ISO8601)|                                                                             |
 
-### 5.5a · `galley session send <id> "<content>" [--supervisor=<x>] [--reason=<y>] [--jump]`
+### 5.5a · `galley session send <id> "<content>" [--supervisor=<x>] [--reason=<y>] [--jump] [--ensure-runner]`
 
 **Write command** — persists a user message into a session and dispatches
 it to the live runner subprocess. Requires Galley Core to be running
@@ -252,6 +252,26 @@ does. Before the fix, such a send queued behind the held messages and
 nothing ever released them. A send that arrives while the asking run is
 still open (`live.openRun` is `true`) queues as usual.
 
+**Starting a runner (`--ensure-runner`, additive since 2026-10-16)**:
+without it, a send to a session with no live runner (never started,
+LRU-evicted, crashed, or every session after a Galley restart) persists
+the message and answers `dispatch: "persisted_only"` — nothing runs it.
+With it, when the message dispatches now and no runner is alive, Galley
+Core first starts one from the session's own configuration and restores
+its history into it, holding the session's run gate the whole time (a
+concurrent send queues behind it, so nothing reaches the runner before its
+history), then dispatches: the answer is `dispatch: "dispatched"`. An
+answer to a pending question (above) is dispatched the same way after the
+start. When a runner is alive, or the message is queued, the flag changes
+nothing. If the runner cannot be started or its history cannot be
+restored, the message is saved and the answer is `persisted_only`, as
+without the flag; it is never sent to a runner that lacks the
+conversation. The call then returns only after the start and the
+restore, which can take seconds. Socket callers pass `"ensureRunner":
+true` in `session.send`'s args; leaving it out (or `false`) is today's
+behavior. The response body is unchanged: `dispatch` can now be
+`dispatched` where it would have been `persisted_only`.
+
 V1 is text-only for CLI writes. Image attachments may appear in read
 metadata when created from the GUI, but `galley session send` does not
 accept or dispatch images inside `schemaVersion: 1`.
@@ -261,6 +281,7 @@ accept or dispatch images inside `schemaVersion: 1`.
 | `--supervisor` | (none → `origin.via = cli`)              | Supervisor label. When set, `origin.via` upgrades to `supervisor`.   |
 | `--reason`     | (none)                                   | Free-text rationale. Stored on `messages.origin_note`; appears in audit views. |
 | `--jump`       | off                                      | 插队: mid-run, abort the current task and run this message first (moves to queue front + sends abort; the dequeue happens on `run_complete`). With no run open nothing is aborted: the message dispatches at once, ahead of any messages already queued. |
+| `--ensure-runner` | off                                   | **Additive (2026-10-16).** When the message dispatches now and the session has no live runner, start one (history restored first) and dispatch to it instead of answering `persisted_only`. Wire: `"ensureRunner": true`. No effect on a live runner or a queued message. |
 
 ```bash
 $ galley session send sess_abc "summarize the last turn" \
@@ -275,7 +296,7 @@ Response shape:
 | Field      | Type          | Notes                                                                             |
 | ---------- | ------------- | --------------------------------------------------------------------------------- |
 | `message`  | `MessageBrief \| null` | The persisted row, including server-assigned `id` + `createdAt`. **`null` when `dispatch == "queued"`** — the row is minted at dequeue time. |
-| `dispatch` | string enum   | `"dispatched"` if the runner received the command on stdin; `"persisted_only"` if no runner is alive (LRU-evicted / crashed / never spawned) — the row is in SQLite either way; `"queued"` if a run is open or older messages are queued, and the message is held in Core's queue (additive value — handle unknowns per §stability) |
+| `dispatch` | string enum   | `"dispatched"` if the runner received the command on stdin; `"persisted_only"` if no runner is alive (LRU-evicted / crashed / never spawned) and `--ensure-runner` was not given or could not start one — the row is in SQLite either way; `"queued"` if a run is open or older messages are queued, and the message is held in Core's queue (additive value — handle unknowns per §stability) |
 | `queue`    | object        | Present only when `dispatch == "queued"`: `{ "queueId": "qm_…", "position": 0 }` (0-based; `--jump` yields position 0) |
 
 **Semantics**: fire-and-forget. The CLI returns as soon as the message

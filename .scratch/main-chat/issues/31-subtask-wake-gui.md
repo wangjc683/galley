@@ -109,3 +109,63 @@ git diff --check
 同样的内容写进本票 `## Comments`。
 
 ## Comments
+
+### 实现回报（界面，2026-10-16）
+
+**改了哪些文件**
+
+- `gui/src/lib/ipc/ga-output-cleaning.ts`：`<no-reply/>` 进标签组（`/<\s*\/?\s*no-reply\s*\/?\s*>/gi`，与 Core `derive.rs` 同一个式子），`extractPreamble` 同剥，流式时扣住它的前缀（`NO_REPLY_PARTIAL`）；新 `isSilentReply(raw)`。
+- `gui/src/lib/agent-turn.ts`、`gui/src/types/conversation.ts`：`AgentTurn.silent`（只剩 `<no-reply/>` 的收口回复）与 `AgentTurn.settledAt`（这一步落定的时间）。
+- `gui/src/stores/messages/rowsToTurns.ts`：读回时从 `content` 认 `silent`，带 `settledAt`。
+- `gui/src/lib/subtasks.ts`：契约名（见下表）、`sendBacks`、卡片在跑那一行的轮次、报告轮的判定（`isReportRound`、`isSilentReport`、`hiddenReportTurns`、`inReportRound`、`endsInSilentReport`）。
+- `gui/src/lib/assistant-conversation.ts`：`assistantLinePlan` 不画叫醒行；不出声的一轮只留它问你的问题与你的回答；新增 `reports`（叫醒行 → 这一轮第一条画出来的行）。
+- `gui/src/components/conversation/Conversation.tsx`：时间条跳过画不出来的叫醒行；叫醒行的时间画在这一轮第一条看得见的行上方（回复、提问、平铺的一轮、还在等你回答的提问都算）。
+- `gui/src/lib/message-time.ts`：`userTimeMarks` 加 `skip`。
+- `gui/src/components/screens/MainView.tsx`：不出声的回复一落定，那一行就消失；它也不点亮「回到底部」的未读点。
+- `gui/src/lib/assistant.ts`：`lastVisibleMessage` 跳过叫醒行与不出声的一轮；回复与提问带自己的时间（`settledAt`）。
+- `gui/src/lib/ipc-handlers.ts`：未升级子任务的在问你、完成、出错、没派出去都不再自己通知；新 `applySubtaskReportUndelivered`（退路）与 `noteSubtaskReportPersisted`（叫醒行 `pending` / `dispatched` 时对主对话 `markReplyNotifyPending`，`persisted_only` 时清掉）；turn_end 认出叫醒那一轮不出声的回复：清标志、不通知、不置未读、不改写幽灵建议；实时的 turn 带 `silent`、`settledAt`。`notifySubtaskRunnerCrash` 删掉。
+- `gui/src/lib/subtask-notify.ts`：`dispatchFailureNotifications` 换成 `subtaskFallbackNotification`：按 `deriveSubtaskCard` 此刻的状态出今天那条通知，完成仍要跑满 2 分钟（用这一轮的 telemetry 量，没有就从会话创建算，同旧规则）。
+- `gui/src/stores/runtime/bridge-slice.ts`：去掉崩溃时的子任务通知调用。
+- `gui/src/stores/messages.ts`：叫醒行不加 `userSubmitTick`（不挪视口），也不清幽灵建议。
+- `gui/src/hooks/useExternalCoreEvents.ts`：听 `subtask-report-undelivered`；`user-message-persisted` 后调 `noteSubtaskReportPersisted`。
+- `gui/src/i18n/locales/zh.ts`、`en.ts`：`subtask.roundPrefix`（「第 N 轮 · 」/「Round N · 」）。
+- `docs/design/conversation.md`：「助手的对话」加「子任务叫醒助手」一条；子任务卡片表「在跑」加轮次；助手发进子任务的消息怎么显示。`docs/design/layout-and-chrome.md`：助手卡片「最后一句」「时间」两条。
+- 测试：`ga-output-cleaning`、`rowsToTurns`、`agent-turn`（往返）、`subtasks`、`subtask-notify`、`ipc-handlers.subtask`（重写）、`assistant`、`assistant-conversation`、`message-time`、`Conversation.assistant`、`MainView.assistant`、`SubtaskCards`。
+
+**契约名落在哪**
+
+| 名字 | 位置 |
+|---|---|
+| `SUBTASK_REPORT_SUPERVISOR = "galley-report"` | `gui/src/lib/subtasks.ts`，附 `isSubtaskReport(origin)`、`isSubtaskReportTurn(turn)` |
+| `<no-reply/>` 剥离 | `gui/src/lib/ipc/ga-output-cleaning.ts`：`GA_TAG_PATTERNS` 末项、`extractPreamble`、`cleanPartialContent` 第 3 步；判定 `isSilentReply` |
+| `SubtaskDispatch.sendBacks?: number` | `gui/src/lib/subtasks.ts`；`mergeDispatches` 比较它，缺省当 0 |
+| `SUBTASK_REPORT_UNDELIVERED_EVENT`、`SubtaskReportUndeliveredPayload { mainChatId; subtaskIds }` | `gui/src/lib/subtasks.ts`；处理在 `ipc-handlers.ts` 的 `applySubtaskReportUndelivered` |
+| `galley-assistant` | 界面不需要常量，显示照 Supervisor 来源（见下第 6 条） |
+
+**门禁的最后输出**
+
+- `pnpm --dir gui typecheck`：`tsc --noEmit`，exit 0。
+- `pnpm --dir gui lint`：`eslint src --max-warnings 0`，exit 0。
+- `pnpm --dir gui exec vitest run`：`Test Files 135 passed (135)`，`Tests 1351 passed (1351)`；`TZ=UTC` 与 `TZ=America/Los_Angeles` 各跑一遍都全过。本地时区 00:03 跑时 `Sidebar.main-chat.test.tsx` 有一条挂：它的夹具用 `minutesAgo(5)`，零点后几分钟「今天」桶是空的，与本票无关，23:54 那一次全过。
+- golden：`turn-persistence.golden.test.ts` 37 条全过，含票 29 加的 4 条 `no-reply-*`；Core 用的正是同一个式子。
+- `node scripts/check-ipc-protocol-drift.mjs`：aligned。`subtask-report-undelivered` 是 Tauri 广播事件，不在 runner IPC 门禁里（`subtask-dispatched` 也不在），`types/ipc.ts` 不用改。
+- `git diff --check`：无输出。只格式化了自己的 hunk（HEAD 时就 prettier-clean 的测试文件整篇格式化，其余逐 hunk 对过）。
+
+**票面写错或我改了主意的地方**
+
+1. 票面说 `user-message-persisted` 的处理在 `ipc-handlers.ts`；实际在 `hooks/useExternalCoreEvents.ts` → `stores/messages.ts` 的 `applyUserMessagePersisted`。叫醒行照常进 turns（它是这一轮的开头，分组、步数、计时都靠它），不画放在 `assistantLinePlan` 里做，读回与实时走同一条路。
+2. 「时间条只按看得见的行算，参照问候」：我照问候的做法让叫醒行带时间：断点时它的时间画在这一轮第一条看得见的行上方，下一条你的消息也跟它比；不出声、又没问你什么的一轮，它的叫醒行不算（`skip`）。若本意只是「叫醒行不算」，把 `reports` 清空即可。
+3. 「时间也取那一条的」需要回复自己的时间，界面原来没有（只有问候带 `createdAt`，票 20 有测试钉着别的回复不带）。我另加了 `AgentTurn.settledAt`（读回是那一行的 `created_at`，实时是 turn_end 的 `timestamp`），只给卡片用，没动 `createdAt`。卡片对回复一律用它，取不到才用 `lastActivityAt`；两者平时只差毫秒。
+4. 回复同时带 `<subtask>` 与 `<no-reply/>` 时不算不出声（`isSilentReply` 排除），否则新派的子任务卡片会跟着藏起来。
+5. 不出声的一轮也不清幽灵建议：叫醒行到达时不清，不出声的 turn_end 不改写，上一条看得见的回复的建议照留。
+6. 第 6 点：来源标记显示的不是原字符串，是 `PlugsConnected` 图标、提示「Supervisor」、读屏「Supervisor 添加的消息」，所以没改代码，只在设计文档记了一句。
+7. 「没派出去」（标签为空、没写完、没能启动）原来在 `subtask-dispatched` 时就通知；现在也只走助手（票 29 生成 NotStarted 待报）。
+
+**拿不准、要主会话定的事**
+
+1. Core 的 `subtaskIds` 只带有会话的子任务（`mark_announced` 滤掉了 `subtask_id` 为空的）：空标签、没写完的标签叫不醒助手时，界面没有 id 可补发，用户就听不到。要不要让 Core 带上派活键（`main#turn#ordinal`），还是接受。
+2. 「第 2 轮」刚开始时，卡片会写「第 2 轮 · 第 5 步 · 上一轮的摘要」，直到这一轮第一步落定：`session.lastStepIndex` 在新一轮开头不清，工作台侧栏行对第二条消息也是这样（旧行为，没改）。
+3. 贴底的「这一轮回复的开头」（`assistantReplyStart`）按你最后一条气泡找；叫醒的一轮没有你的气泡，量到的是上一轮。叫醒的回复照指令只有一两句，影响小，没改。
+4. 分页边界：Core 给的 `previousUserCreatedAt` 可能是一条叫醒行的时间；只在页界正好落在那里时影响一条时间条，属 Core，留给主会话判断。
+5. 外置运行时的界面行为零变化，但 `<no-reply/>` 的剥离与 Core 一样对所有会话生效（golden 夹具要求两边一致），外置会话里有人真打这个字面量才看得出差别。
+6. 没跑真机（按约定不跑 `tauri dev`），视觉验收留给 JC。

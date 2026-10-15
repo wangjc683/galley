@@ -250,6 +250,8 @@ export const zhCopy = {
     failed: (message: string) => `出错：${message}`,
     failedBare: "出错",
     didNotFinish: "没有跑完",
+    /** 卡片在跑那一行：助手打回过（票 29、31），前面写第几轮，后面照旧。 */
+    roundPrefix: (round: number) => `第 ${round} 轮 · `,
     /** 子任务第一条消息（主对话写的说明）上方的来源图标提示。 */
     fromMainChat: "主对话派来的",
     /** 子任务在问你、出错时，状态汇到侧栏的助手卡片与顶栏的身份行（裁决 30）。 */

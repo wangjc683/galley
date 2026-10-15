@@ -108,6 +108,27 @@ describe("a subtask card", () => {
     expect(html).toContain("bg-brand");
   });
 
+  // Ticket 31: sent back by the assistant, it runs its second round.
+  it("runs a later round: 「第 2 轮 · 」 before the step line, and only while it runs", () => {
+    state.sessions = [
+      { ...subtask, lastStepIndex: 3, summary: "补查了 2 个 PDF" },
+    ];
+    liveMessages({ agentRunning: true });
+    expect(render([dispatch({ sendBacks: 1 })])).toContain(
+      ">第 2 轮 · 第 3 步 · 补查了 2 个 PDF<",
+    );
+    liveMessages({
+      agentRunning: false,
+      turns: [
+        { role: "user", content: "x" },
+        { role: "agent", tools: [], finalAnswer: "补好了。" },
+      ],
+    });
+    const done = render([dispatch({ sendBacks: 1 })]);
+    expect(done).toContain('data-subtask-state="done"');
+    expect(done).not.toContain("第 2 轮");
+  });
+
   it("asks: the question, its candidates and a reply line in the card", () => {
     liveMessages({
       pendingAskUser: {

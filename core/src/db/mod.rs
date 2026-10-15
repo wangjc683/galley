@@ -163,4 +163,4 @@ pub use session::{
     MessageCursor, PersistedMessagePage, PersistedTurnPage, RenameTitleSource, MESSAGE_PAGE_MAX,
     MESSAGE_TURN_PAGE,
 };
-pub use subtask::LatestReply;
+pub use subtask::{LatestReply, RunReply};

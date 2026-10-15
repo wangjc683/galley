@@ -352,6 +352,57 @@ describe("the last visible message", () => {
       lastVisibleMessage([user("订票"), asked, user("周五")], zh)?.text,
     ).toBe("周五");
   });
+
+  // Ticket 31: a subtask report wakes the main chat with a row of its
+  // own, and the reply may say nothing (`<no-reply/>`). Neither is a
+  // message: the card says the one before, with its own time.
+  it("skips a subtask report and a reply that said nothing, keeping that message's time", () => {
+    const report = user("[Galley — not a message from the user] …", {
+      messageId: "u-report",
+      createdAt: "2026-10-14T06:00:00.000Z",
+      origin: { via: "system", supervisor: "galley-report", reason: "s-sub" },
+    });
+    const sendBack = reply("我让它再查一家。", {
+      tools: [{ id: "c", name: "code_run", status: "success-historical" }],
+      settledAt: "2026-10-14T06:00:20.000Z",
+    });
+    const silent = reply(null, {
+      silent: true,
+      settledAt: "2026-10-14T06:00:30.000Z",
+    });
+    const earlier = reply("好，交给子任务了。", {
+      settledAt: "2026-10-14T03:51:00.000Z",
+    });
+    expect(
+      lastVisibleMessage(
+        [user("帮我比价"), earlier, report, sendBack, silent],
+        zh,
+      ),
+    ).toEqual({
+      fromUser: false,
+      text: "好，交给子任务了。",
+      sentAt: "2026-10-14T03:51:00.000Z",
+    });
+    // The user's own message before it, with its send time.
+    expect(
+      lastVisibleMessage([user("帮我比价"), report, sendBack, silent], zh),
+    ).toEqual({
+      fromUser: true,
+      text: "帮我比价",
+      sentAt: "2026-10-14T03:50:00.000Z",
+    });
+    // A report round that answered: its reply is the last message.
+    const told = reply("查好了：第二家最便宜。", {
+      settledAt: "2026-10-14T06:01:00.000Z",
+    });
+    expect(
+      lastVisibleMessage([user("帮我比价"), earlier, report, told], zh),
+    ).toEqual({
+      fromUser: false,
+      text: "查好了：第二家最便宜。",
+      sentAt: "2026-10-14T06:01:00.000Z",
+    });
+  });
 });
 
 describe("markdown as one plain line", () => {

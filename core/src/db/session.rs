@@ -133,7 +133,7 @@ pub struct PersistedTurnPage {
 /// test for "the next user message answers it" (`hasAskUserTool` in
 /// `gui/src/lib/run-groups.ts` over `toolEventsFromRaw`): any entry
 /// named `ask_user`, whatever its args. Malformed JSON holds none.
-fn tool_calls_ask_user(raw: &str) -> bool {
+pub(super) fn tool_calls_ask_user(raw: &str) -> bool {
     serde_json::from_str::<Vec<serde_json::Value>>(raw).is_ok_and(|calls| {
         calls
             .iter()

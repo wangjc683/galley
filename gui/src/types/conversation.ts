@@ -290,6 +290,25 @@ export interface AgentTurn {
    * a reply's time is not in the page.
    */
   createdAt?: string;
+  /**
+   * When this step landed: the row's `created_at` restored, turn_end's
+   * `timestamp` live. Not a time the conversation draws (that stays
+   * `createdAt`, the greeting's alone): the sidebar card dates its last
+   * message with it (lib/assistant.ts `lastVisibleMessage`), so a
+   * report round that said nothing after a reply does not lend the
+   * reply its time (main chat ticket 31). Absent on turns built
+   * without it (tests, demo data).
+   */
+  settledAt?: string;
+  /**
+   * The closing turn said only `<no-reply/>` (main chat tickets 29 /
+   * 31): its answer cleans to nothing and the raw reply carries the tag
+   * (`isSilentReply`). In a round Core woke the main chat for, the
+   * reply is not drawn, notifies nobody and is no last message
+   * (lib/subtasks.ts `isSilentReport`); anywhere else it reads as a
+   * reply that was only tags.
+   */
+  silent?: true;
 }
 
 export type Turn = UserTurn | AgentTurn | SystemTurn;

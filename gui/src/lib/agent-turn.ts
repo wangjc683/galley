@@ -153,6 +153,13 @@ export interface AgentTurnFields {
    * restore: the row's `content`. Kept only on a turn with a final
    * answer. */
   files?: string[];
+  /** `isSilentReply` of the raw response — live: responseContent;
+   * restore: the row's `content`. Kept only on a closing turn left with
+   * no answer (main chat tickets 29 / 31). */
+  silent?: boolean;
+  /** When the step landed — live: turn_end's `timestamp`; restore: the
+   * row's `created_at`. */
+  settledAt?: string;
 }
 
 /** Assemble the one true AgentTurn shape. All presence normalization
@@ -173,5 +180,13 @@ export function buildAgentTurn(fields: AgentTurnFields): AgentTurn {
   if (turn.finalAnswer !== null && fields.files && fields.files.length > 0) {
     turn.files = fields.files;
   }
+  if (
+    fields.silent &&
+    turn.finalAnswer === null &&
+    isFinalAnswerTurn(turn.tools)
+  ) {
+    turn.silent = true;
+  }
+  if (fields.settledAt) turn.settledAt = fields.settledAt;
   return turn;
 }

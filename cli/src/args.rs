@@ -289,6 +289,13 @@ pub(crate) enum SessionCmd {
         /// mid-run send waits its turn (`dispatch: "queued"`).
         #[arg(long)]
         jump: bool,
+        /// Start the session's runner when it has none (its history
+        /// restored first), so the message runs (`dispatch:
+        /// "dispatched"`) instead of only being saved (`dispatch:
+        /// "persisted_only"`). No effect when a runner is alive or the
+        /// message is queued.
+        #[arg(long)]
+        ensure_runner: bool,
     },
     /// Stream live runner events from a session. NDJSON on stdout, one
     /// event per line, no backlog. Exits cleanly when the runner exits

@@ -781,7 +781,7 @@ bridge:   { kind: "turn_start", ... }
 - 每次发送前后经 Tauri 事件 `runner-history-replay` 广播 `{ sessionId, phase: "started" | "done" | "failed" }`，GUI 据此显示「恢复中」。
 - socket `session send` 不走这条路：runner 不在时只落库（`persisted_only`）。
 - 02c 起，GUI（以后的手机端）的发送也由 Core 驱动（`core/src/session_send.rs`）：先预留运行闸门再 ensure，回放期间到达的 socket `session send` 因此排队，不会抢在 `load_history` 之前派发；有待回答的 `ask_user` 时 Core 发 `ask_user_response`，否则发 `user_message`。见 [ADR-0003](./adr/0003-gui-and-phone-send-through-core.md)。
-- 主聊天只回放当前段（票 03a，`core/src/session_runner/segment.rs`）：空闲超过 N 小时后的下一条消息开新段，Core 把段界记进 `main_chat_segments`，冷 runner 的 `load_history` 只含从段界起的消息，前面垫上段界之前最近 3 个完整轮次（票 11，`core/src/session_runner/carry.rs`，合计不超过 6,000 字）；开新段时还开着的 runner 被静默替换（同上面的重启，不发 `runner-closed`），段界之前没有完整轮次、新段也还没有回复时不发 `load_history`。线上格式不变，其他会话照旧。主聊天回放里的回复不带 `<subtask>` 派活说明，派过活的那条回复末尾补一行一个子任务（`[subtask <id>: <标题>]`，没派出去的是 `[subtask not started: <原因>]`，票 06a，`core/src/subtask.rs`）。
+- 主聊天只回放当前段（票 03a，`core/src/session_runner/segment.rs`）：空闲超过 N 小时后的下一条消息开新段，Core 把段界记进 `main_chat_segments`，冷 runner 的 `load_history` 只含从段界起的消息，前面垫上段界之前最近 3 个完整轮次（票 11，`core/src/session_runner/carry.rs`，合计不超过 6,000 字）；开新段时还开着的 runner 被静默替换（同上面的重启，不发 `runner-closed`），段界之前没有完整轮次、新段也还没有回复时不发 `load_history`。线上格式不变，其他会话照旧。主聊天回放里的回复不带 `<subtask>` 派活说明，派过活的那条回复末尾补一行一个子任务（`[subtask <id>: <标题>]`，没派出去的是 `[subtask not started: <原因>]`，票 06a，`core/src/subtask.rs`）；子任务叫醒主对话的那条用户行（`supervisor = 'galley-report'`）回放成每个子任务一行 `[Galley: subtask <id> "<标题>" finished — details: session show <id>]`，回复原样保留（票 29，`core/src/subtask_report.rs`）。
 
 ## 8. Error Handling
 

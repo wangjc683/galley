@@ -58,6 +58,7 @@ import {
   runStepNumbers,
   type RunGroup,
 } from "@/lib/run-groups";
+import { isSubtaskReportTurn } from "@/lib/subtasks";
 import { cn } from "@/lib/utils";
 import type {
   AgentTurn,
@@ -175,6 +176,15 @@ export function Conversation({
   // their run, not by GA's per-loop counter (run-groups
   // `runStepNumbers`).
   const groups = useMemo(() => buildRunGroups(turns), [turns]);
+  // The live window's run (see 「Live window」 below).
+  const liveGroup = liveRunGroup(groups, agentRunning, askUserPending);
+  // The assistant's conversation draws its runs from its own plan
+  // (lib/assistant-conversation.ts `assistantLinePlan`): the messages
+  // out in the conversation, the steps behind a quiet entry.
+  const linePlan = useMemo(
+    () => (assistant ? assistantLinePlan(groups, turns, liveGroup) : null),
+    [assistant, groups, turns, liveGroup],
+  );
   const stepNumberOf = useMemo(
     () => runStepNumbers(groups, turns),
     [groups, turns],
@@ -204,9 +214,21 @@ export function Conversation({
   const copy = useCopy();
   const language = useLanguage();
   const dayStamp = useDayStamp();
+  // A subtask report row (main chat ticket 31) dates its round in the
+  // assistant's conversation; a round that draws nothing dates nothing.
+  const reportSkip = useMemo(() => {
+    if (!linePlan) return undefined;
+    const skip = new Set<number>();
+    turns.forEach((turn, index) => {
+      if (isSubtaskReportTurn(turn) && !linePlan.reports.has(index)) {
+        skip.add(index);
+      }
+    });
+    return skip;
+  }, [linePlan, turns]);
   const timeMarks = useMemo(
-    () => userTimeMarks(turns, { previousUserCreatedAt }),
-    [turns, previousUserCreatedAt],
+    () => userTimeMarks(turns, { previousUserCreatedAt, skip: reportSkip }),
+    [turns, previousUserCreatedAt, reportSkip],
   );
   const pinnedTimes = useMemo(() => {
     const words = {
@@ -253,6 +275,26 @@ export function Conversation({
       : null;
   }, [assistant, turns, dayStamp, language, copy]);
 
+  // A report round's time at a break (main chat ticket 31): the report
+  // row is not drawn, so its time is the line above the first row its
+  // round draws — the reply, or a question it asked — as the greeting's
+  // is above the greeting. By that row's index.
+  const reportTimeAbove = useMemo(() => {
+    const above = new Map<
+      number,
+      { label: string; full?: string; iso?: string }
+    >();
+    if (!linePlan) return above;
+    for (const [report, first] of linePlan.reports) {
+      const pinned = pinnedTimes.get(report);
+      const turn = turns[report];
+      if (pinned && turn.role === "user") {
+        above.set(first, { ...pinned, iso: turn.createdAt });
+      }
+    }
+    return above;
+  }, [linePlan, pinnedTimes, turns]);
+
   // Manual toggles, keyed by the opener's ordinal: true = user expanded,
   // false = user collapsed, absent = default. Ephemeral per mount —
   // a reopened session folds everything (Conversation is keyed per
@@ -275,14 +317,8 @@ export function Conversation({
   // no answer, nothing to stand in for the process) unfolds in full
   // for inspection, and the ask_user pause does not flicker the
   // window away and back.
-  const liveGroup = liveRunGroup(groups, agentRunning, askUserPending);
-  // The assistant's conversation draws its runs from its own plan
-  // (lib/assistant-conversation.ts `assistantLinePlan`): the messages
-  // out in the conversation, the steps behind a quiet entry.
-  const linePlan = useMemo(
-    () => (assistant ? assistantLinePlan(groups, turns, liveGroup) : null),
-    [assistant, groups, turns, liveGroup],
-  );
+  // (`liveGroup` and the assistant's `linePlan` are computed above, with
+  // the run groups: the send times need the plan.)
 
   // Settling: the sweep between live and settled. The two structures
   // share no keys for the window, so switching in the render where
@@ -631,17 +667,34 @@ export function Conversation({
     }
     if (turn.role !== "agent") return renderItem(turn, turnIndex);
     const gap = assistantRowGap(previous, "agent");
+    // A report round's time at a break, above its first row.
+    const reportTime = reportTimeAbove.get(turnIndex);
+    const reportDivider = reportTime ? (
+      <AssistantTimeDivider
+        label={reportTime.label}
+        full={reportTime.full}
+        iso={reportTime.iso}
+        afterReply={previous === "agent-bar"}
+      />
+    ) : null;
     if (linePlan?.question.has(turnIndex)) {
       const args = mergedAskUserArgs(turn.tools);
-      if (turn === pendingAskUserTurn || !args) return null;
+      if (turn === pendingAskUserTurn || !args) {
+        // The pending question is the live bubble at the tail; a report
+        // round's time still goes right above it.
+        return reportDivider ? (
+          <Fragment key={key}>{reportDivider}</Fragment>
+        ) : null;
+      }
       return (
         <Fragment key={key}>
+          {reportDivider}
           <AnsweredAskUser
             question={args.question}
             candidates={args.candidates}
             answer={askUserReplyContent(turns, turnIndex, replySet)}
             bubble
-            className={gap}
+            className={reportDivider ? "mt-5" : gap}
           />
         </Fragment>
       );
@@ -658,7 +711,9 @@ export function Conversation({
           full={greetingTime.full}
           iso={greetingTime.iso}
         />
-      ) : null;
+      ) : (
+        reportDivider
+      );
     return (
       <Fragment key={key}>
         {divider}
@@ -814,12 +869,26 @@ export function Conversation({
       rendered.push(renderItem(turn, turnIndex));
       return;
     }
-    prevSide = null;
     const kind: SectionKind =
       foldOwner !== undefined ? "fold" : flatOwner !== undefined ? "flat" : "window";
     if (section && (section.opener !== owner || section.kind !== kind)) {
       flushSection();
     }
+    // A report round drawn the workbench way: its time above the region.
+    const reportTime = reportTimeAbove.get(turnIndex);
+    if (reportTime) {
+      flushSection();
+      rendered.push(
+        <AssistantTimeDivider
+          key={`report-time-${ordinal(turnIndex)}`}
+          label={reportTime.label}
+          full={reportTime.full}
+          iso={reportTime.iso}
+          afterReply={prevSide === "agent-bar"}
+        />,
+      );
+    }
+    prevSide = null;
     if (!section) section = { opener: owner, kind, nodes: [] };
     if (kind === "window") {
       // Per-step sweep in the window: mounts growing from 0fr and

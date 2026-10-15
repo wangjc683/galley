@@ -1,8 +1,14 @@
 import type { AppCopy } from "@/i18n/types";
 import { isFinalAnswerTurn } from "@/lib/agent-turn";
+import { buildRunGroups, type RunGroup } from "@/lib/run-groups";
 import { displaySessionSummary } from "@/lib/session-summary";
 import type { BridgeStatus } from "@/stores/runtime/shared";
-import type { PendingAskUser, Turn } from "@/types/conversation";
+import type {
+  Origin,
+  PendingAskUser,
+  Turn,
+  UserTurn,
+} from "@/types/conversation";
 import type { Session } from "@/types/session";
 
 /**
@@ -16,8 +22,15 @@ import type { Session } from "@/types/session";
  * shows each as a card under that reply; the subtask itself stays out
  * of the sidebar until the user writes in it (promoted).
  *
+ * When a subtask's run ends, Core wakes the main chat with a report
+ * (tickets 29 / 31): a user row of its own the assistant reads, then
+ * tells the user, sends the subtask back, or answers it and says
+ * nothing (`<no-reply/>`). The report row is never drawn, nor is a
+ * reply that said nothing; the user hears from the assistant alone.
+ *
  * Everything here is pure: the wire shape, which sessions count as an
- * unpromoted subtask, and the card's state.
+ * unpromoted subtask, the card's state, and which rows of the main
+ * chat belong to a report round.
  */
 
 /** Mirror of Core's dispatch record (`list_subtask_dispatches`, the
@@ -39,6 +52,11 @@ export interface SubtaskDispatch {
   /** For `start_failed`: Core's error text (English). */
   failureDetail: string | null;
   createdAt: string;
+  /** How many times the assistant sent the subtask back (ticket 29):
+   * its messages in the subtask, answers to the subtask's questions
+   * aside. Core counts it from the rows and announces the record again
+   * when it changes. Missing on an older payload: read as 0. */
+  sendBacks?: number;
 }
 
 /** Payload of Core's `subtask-dispatched`: records of one reply, sent as
@@ -51,6 +69,36 @@ export interface SubtaskDispatchedPayload {
 }
 
 export const SUBTASK_DISPATCHED_EVENT = "subtask-dispatched";
+
+/** Core's `subtask-report-undelivered` (ticket 29): the reports of these
+ * subtasks could not wake the main chat — its runner did not start or
+ * did not take the message, or it is waiting for the user's answer. The
+ * page falls back to each subtask's own notification. */
+export const SUBTASK_REPORT_UNDELIVERED_EVENT = "subtask-report-undelivered";
+
+/** Payload of {@link SUBTASK_REPORT_UNDELIVERED_EVENT}. */
+export interface SubtaskReportUndeliveredPayload {
+  mainChatId: string;
+  subtaskIds: string[];
+}
+
+/** Origin supervisor of the report row Core writes into the main chat to
+ * wake it (Core `SUBTASK_REPORT_SUPERVISOR`, `core/src/api/origin.rs`),
+ * with `via: "system"` and the subtask ids, comma-separated, as the
+ * reason. */
+export const SUBTASK_REPORT_SUPERVISOR = "galley-report";
+
+/** Whether an origin is a subtask report's. */
+export function isSubtaskReport(origin: Origin | undefined): boolean {
+  return (
+    origin?.via === "system" && origin.supervisor === SUBTASK_REPORT_SUPERVISOR
+  );
+}
+
+/** Whether a turn is a subtask report row (never drawn). */
+export function isSubtaskReportTurn(turn: Turn | undefined): turn is UserTurn {
+  return turn?.role === "user" && isSubtaskReport(turn.origin);
+}
 
 /** A subtask the user has not written in yet: no sidebar row, a card
  * under the reply that dispatched it, its states reach the main chat's
@@ -106,7 +154,8 @@ function sameDispatch(a: SubtaskDispatch, b: SubtaskDispatch): boolean {
     a.title === b.title &&
     a.failure === b.failure &&
     a.failureDetail === b.failureDetail &&
-    a.messageId === b.messageId
+    a.messageId === b.messageId &&
+    (a.sendBacks ?? 0) === (b.sendBacks ?? 0)
   );
 }
 
@@ -139,8 +188,15 @@ export type SubtaskCardState =
   | { kind: "failed"; failure: SubtaskFailure }
   | { kind: "asking"; pending: PendingAskUser }
   /** `step`/`summary`: the sidebar's running subline (the last finished
-   * step and its recap); both null before the first step ends. */
-  | { kind: "running"; step: number | null; summary: string | null }
+   * step and its recap); both null before the first step ends. `round`:
+   * which round this is once the assistant sent it back (2 after one
+   * send-back), absent in the first. */
+  | {
+      kind: "running";
+      step: number | null;
+      summary: string | null;
+      round?: number;
+    }
   /** `line`: one line of result, null when there is none to show. */
   | { kind: "done"; line: string | null }
   /** The session has history this page has not read yet. */
@@ -189,10 +245,12 @@ export function deriveSubtaskCard(
     return { kind: "asking", pending: live.pendingAskUser };
   }
   if (live.agentRunning || live.bridgeStatus === "spawning") {
+    const sendBacks = dispatch.sendBacks ?? 0;
     return {
       kind: "running",
       step: session.lastStepIndex ?? null,
       summary: session.lastStepIndex != null ? (session.summary ?? null) : null,
+      ...(sendBacks >= 1 ? { round: sendBacks + 1 } : {}),
     };
   }
   const lastAgent = [...live.turns].reverse().find((t) => t.role === "agent");
@@ -254,9 +312,13 @@ export function subtaskCardLine(
       const summary = state.summary
         ? displaySessionSummary(state.summary, copy.sidebar.turnProtocolFailure)
         : null;
-      return state.step != null && summary
-        ? copy.sidebar.stepSummary(state.step, summary)
-        : copy.sidebar.thinking;
+      const line =
+        state.step != null && summary
+          ? copy.sidebar.stepSummary(state.step, summary)
+          : copy.sidebar.thinking;
+      // Sent back: which round, then the step as before (ruling 68
+      // keeps a subtask's steps). Only while it runs.
+      return state.round ? copy.subtask.roundPrefix(state.round) + line : line;
     }
     case "done": {
       const line = state.line
@@ -308,4 +370,84 @@ export function subtaskBreadcrumb(
 ): { label: string; ariaLabel: string; onClick: () => void } | undefined {
   if (!isUnpromotedSubtask(active)) return undefined;
   return { label, ariaLabel, onClick: openParent };
+}
+
+// ---- Report rounds -------------------------------------------------------
+
+/** A report round: a run Core opened by waking the main chat — its
+ * opener is a report row. */
+export function isReportRound(
+  group: RunGroup,
+  turns: readonly Turn[],
+): boolean {
+  return (
+    group.openerIndex >= 0 && isSubtaskReportTurn(turns[group.openerIndex])
+  );
+}
+
+/**
+ * A report round whose reply said nothing (`<no-reply/>`, the closing
+ * turn's `silent`): the assistant sent the subtask back or answered it.
+ * Nothing of it is drawn but the questions it asked the user and their
+ * answers; it notifies nobody, marks nothing unread and is no last
+ * message. Once its silent reply lands it counts as settled, before
+ * run_complete. A `<no-reply/>` outside a report round is a misuse and
+ * reads as a reply that was only tags.
+ */
+export function isSilentReport(
+  group: RunGroup,
+  turns: readonly Turn[],
+): boolean {
+  if (group.complete || !isReportRound(group, turns)) return false;
+  for (let k = group.memberIndices.length - 1; k >= 0; k -= 1) {
+    const turn = turns[group.memberIndices[k]];
+    if (turn.role === "agent") return turn.silent === true;
+    if (turn.role === "user") return false;
+  }
+  return false;
+}
+
+/** Whether `turns` end in a silent report round (the line goes, nothing
+ * landed to read). */
+export function endsInSilentReport(turns: readonly Turn[]): boolean {
+  if (!turns.some(isSubtaskReportTurn)) return false;
+  const groups = buildRunGroups(turns as Turn[]);
+  const last = groups[groups.length - 1];
+  return !!last && isSilentReport(last, turns);
+}
+
+/** Whether the latest run of `turns` is a report round (a reply to it
+ * notifies like a reply the user asked for). */
+export function inReportRound(turns: readonly Turn[]): boolean {
+  if (!turns.some(isSubtaskReportTurn)) return false;
+  const groups = buildRunGroups(turns as Turn[]);
+  const last = groups[groups.length - 1];
+  return !!last && isReportRound(last, turns);
+}
+
+function asksUser(turn: Turn): boolean {
+  return (
+    turn.role === "agent" && turn.tools.some((tool) => tool.name === "ask_user")
+  );
+}
+
+/**
+ * The indices of the main chat's rows the user never sees as a
+ * message: every report row, and the agent turns of a silent report
+ * round but its questions. The sidebar card's last message skips them
+ * (lib/assistant.ts); the conversation's plan draws none of them
+ * (lib/assistant-conversation.ts).
+ */
+export function hiddenReportTurns(turns: readonly Turn[]): Set<number> {
+  const hidden = new Set<number>();
+  if (!turns.some(isSubtaskReportTurn)) return hidden;
+  for (const group of buildRunGroups(turns as Turn[])) {
+    if (!isReportRound(group, turns)) continue;
+    hidden.add(group.openerIndex);
+    if (!isSilentReport(group, turns)) continue;
+    for (const i of group.memberIndices) {
+      if (turns[i].role === "agent" && !asksUser(turns[i])) hidden.add(i);
+    }
+  }
+  return hidden;
 }

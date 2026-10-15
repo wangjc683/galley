@@ -1,10 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import {
-  applyReadySnapshot,
-  dispatchIPCEvent,
-  notifySubtaskRunnerCrash,
-} from "@/lib/ipc-handlers";
+import { applyReadySnapshot, dispatchIPCEvent } from "@/lib/ipc-handlers";
 import {
   attachBridge as attachBridgeProcess,
   ensureBridge as ensureBridgeProcess,
@@ -429,9 +425,11 @@ function makeBridgeHandlers(sessionId: string): BridgeHandlers {
             traceback: tail.join("\n"),
           }),
         );
-        // A subtask that crashes is a failed subtask: always notified
-        // (main chat ticket 06a); a no-op for every other session.
-        notifySubtaskRunnerCrash(sessionId, message);
+        // A subtask that crashes is a failed subtask: Core reports it to
+        // the assistant, which tells the user (main chat ticket 31); its
+        // own notification is the fallback when that report could not
+        // be delivered (ipc-handlers `applySubtaskReportUndelivered`,
+        // reading the `error` status set below).
       }
       _stderrTails.delete(sessionId);
       _bridgeClients.delete(sessionId);

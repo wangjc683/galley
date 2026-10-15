@@ -909,6 +909,15 @@ impl RunnerManager {
         }
     }
 
+    /// `message` of the latest `error`-severity error event since the
+    /// session's run last opened (the bridge's `task_end` error before a
+    /// `DONE_WITHOUT_EXIT`), for a subtask report (ticket 29). In memory
+    /// only; `None` when there was none.
+    pub async fn last_run_error(&self, session_id: &str) -> Option<String> {
+        let q = self.queues.lock().await;
+        q.get(session_id).and_then(|s| s.last_error.clone())
+    }
+
     /// Every session id the manager holds state for: a registered runner
     /// process or a queue entry (open run gate / queued messages). This is
     /// the scope of the bulk `sessions.run_state` probe when the caller
@@ -997,6 +1006,7 @@ async fn send_command_via(
             let state = q.entry(session_id.to_string()).or_default();
             state.open_run = true;
             state.ask_pending = false;
+            state.last_error = None;
             // `last_exit` is deliberately left alone: it keeps saying why
             // the previous run ended until this one completes (galley#30).
         }
@@ -1115,6 +1125,11 @@ async fn queue_bookkeeping(
         IpcEvent::AskUser(_) => {
             let mut q = queues.lock().await;
             q.entry(sid.to_string()).or_default().ask_pending = true;
+        }
+        IpcEvent::Error(e) if e.severity == "error" => {
+            // What went wrong, for a subtask report (ticket 29).
+            let mut q = queues.lock().await;
+            q.entry(sid.to_string()).or_default().last_error = Some(e.message);
         }
         IpcEvent::RunComplete(e) => {
             // Records `last_exit` (galley#30).
@@ -1404,6 +1419,33 @@ mod tests {
         assert_eq!(
             mgr.run_state("s").await.last_exit.as_deref(),
             Some("ABORTED")
+        );
+    }
+
+    #[tokio::test]
+    async fn an_error_event_is_kept_for_a_subtask_report() {
+        let mgr = RunnerManager::new();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let error = |severity: &str, message: &str| {
+            IpcEvent::Error(
+                serde_json::from_value(serde_json::json!({
+                    "sessionId": "s",
+                    "message": message,
+                    "category": "runtime",
+                    "severity": severity,
+                    "context": "task_end",
+                    "timestamp": "t",
+                }))
+                .expect("error event"),
+            )
+        };
+        assert_eq!(mgr.last_run_error("s").await, None);
+        assert!(queue_bookkeeping(&mgr.queues, "s", &tx, error("warning", "slow")).await);
+        assert_eq!(mgr.last_run_error("s").await, None, "a warning is not one");
+        assert!(queue_bookkeeping(&mgr.queues, "s", &tx, error("error", "429 Too Many")).await);
+        assert_eq!(
+            mgr.last_run_error("s").await.as_deref(),
+            Some("429 Too Many")
         );
     }
 

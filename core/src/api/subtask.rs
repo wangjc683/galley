@@ -66,6 +66,15 @@ pub struct SubtaskDispatch {
     /// What went wrong, for [`SubtaskFailure::StartFailed`].
     pub failure_detail: Option<String>,
     pub created_at: String,
+    /// How many times the assistant sent the subtask back (ticket 29):
+    /// its user messages from [`crate::api::ASSISTANT_SUPERVISOR`] whose
+    /// previous reply did not end on a question — answering the
+    /// subtask's question is not sending it back. Counted from the rows
+    /// on every read, so it survives a restart; 0 without a session.
+    /// Always written; read as 0 when missing (an older payload). A
+    /// change is announced again as [`SUBTASK_DISPATCHED_EVENT`].
+    #[serde(default)]
+    pub send_backs: u32,
 }
 
 impl SubtaskDispatch {
@@ -82,4 +91,22 @@ impl SubtaskDispatch {
 pub struct SubtaskDispatchedPayload {
     pub parent_session_id: String,
     pub dispatches: Vec<SubtaskDispatch>,
+}
+
+/// Tauri event, payload [`SubtaskReportUndeliveredPayload`]: reports of
+/// these subtasks could not wake the main chat (ticket 29,
+/// [`crate::subtask_report`]) — its runner did not start or did not take
+/// the message, or the main chat is waiting for the user's answer. The
+/// desktop falls back to the subtasks' own notifications. Each subtask is
+/// named once per report, however often it is retried; the report stays
+/// and goes out on a later try. Desktop only, like
+/// [`SUBTASK_DISPATCHED_EVENT`].
+pub const SUBTASK_REPORT_UNDELIVERED_EVENT: &str = "subtask-report-undelivered";
+
+/// Payload of [`SUBTASK_REPORT_UNDELIVERED_EVENT`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtaskReportUndeliveredPayload {
+    pub main_chat_id: String,
+    pub subtask_ids: Vec<String>,
 }

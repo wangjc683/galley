@@ -253,6 +253,7 @@ export const enCopy: AppCopy = {
     failed: (message: string) => `Failed: ${message}`,
     failedBare: "Failed",
     didNotFinish: "Did not finish",
+    roundPrefix: (round) => `Round ${round} · `,
     fromMainChat: "Sent by the main chat",
     sidebarWaiting: "A subtask is asking you",
     sidebarErrored: "A subtask failed",

@@ -38,13 +38,20 @@
 //!   ordinary conversation. CLI, supervisor and scheduled sends never
 //!   reach Core's send path, and an answer to the subtask's own question
 //!   is part of its work, so neither counts.
+//! - **Reports** (ticket 29, [`crate::subtask_report`]): each run of a
+//!   subtask that ends, and each tag that started nothing, wakes the main
+//!   chat with a report; its replayed history shows a report as one line
+//!   per subtask ([`mark_rows`]). A record carries how many times the
+//!   assistant sent its subtask back (`send_backs`), announced again when
+//!   the assistant writes into it ([`announce_send_back`]).
 //!
 //! Attach mode has no main chat (PRD ruling 3), so none of this runs
 //! there.
 
 use crate::api::{
     CreateSessionInput, GalleyApi, MessageBrief, Origin, OriginVia, RuntimeKind, SessionBrief,
-    SessionId, SubtaskDispatch, SubtaskDispatchedPayload, SubtaskFailure, SUBTASK_DISPATCHED_EVENT,
+    SessionId, SubtaskDispatch, SubtaskDispatchedPayload, SubtaskFailure, ASSISTANT_SUPERVISOR,
+    SUBTASK_DISPATCHED_EVENT,
 };
 use crate::db::{PersistedMessageRow, SqliteGalley};
 use crate::error::GalleyError;
@@ -58,6 +65,7 @@ use crate::session_send::{UserMessagePersistedPayload, USER_MESSAGE_PERSISTED_EV
 use crate::session_writes::{
     announce_session, SESSION_CREATED_EXTERNAL_EVENT, SESSION_UPDATED_EXTERNAL_EVENT,
 };
+use crate::subtask_report::SubtaskReports;
 use regex::Regex;
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -199,8 +207,23 @@ pub fn strip_subtask_tags(content: &str) -> String {
 /// keeps its `<subtask>` instructions, and a reply that carried tags ends
 /// with one [`replay_marker`] line per tag. `dispatches` are the main
 /// chat's ([`SqliteGalley::subtask_dispatches`]); a reply's are the ones
-/// on its `turn_index`.
+/// on its `turn_index`. A subtask report (ticket 29) is its replay lines,
+/// one per subtask (stored as its `summary`,
+/// [`crate::subtask_report::replay_lines`]); the reply to it, a
+/// `<no-reply/>` included, stays as it is.
 pub fn mark_rows(rows: &mut [PersistedMessageRow], dispatches: &[SubtaskDispatch]) {
+    for row in rows.iter_mut().filter(|row| {
+        row.role == "user"
+            && Origin::is_stored_subtask_report(
+                row.created_via.as_deref(),
+                row.supervisor.as_deref(),
+            )
+    }) {
+        row.content = match row.summary.as_deref().filter(|s| !s.trim().is_empty()) {
+            Some(lines) => lines.to_string(),
+            None => crate::subtask_report::replay_fallback(row.origin_note.as_deref()),
+        };
+    }
     for row in rows.iter_mut().filter(|row| row.role == "assistant") {
         let markers: Vec<String> = dispatches
             .iter()
@@ -244,7 +267,7 @@ pub struct PendingReply {
 
 /// A final answer: no tool, or only GA's synthetic `no_tool` (the turn
 /// derivation's rule). A reply that ends on `ask_user` is not one.
-fn is_final_answer(tool_calls: Option<&str>) -> bool {
+pub(crate) fn is_final_answer(tool_calls: Option<&str>) -> bool {
     let Some(raw) = tool_calls else {
         return true;
     };
@@ -310,11 +333,13 @@ pub async fn claim_pending_reply(
 /// The drain task's hook, called on every `RunComplete` before the
 /// session's next queued message is dispatched: a main chat reply with
 /// tags is claimed here and dispatched in the background, so starting
-/// runners never holds up the queue.
+/// runners never holds up the queue. Tags that started nothing are
+/// reported to the main chat (ticket 29, `reports`).
 pub async fn after_run_complete(
     galley: &SqliteGalley,
     manager: &Arc<RunnerManager>,
     notifier: &Arc<dyn Notifier>,
+    reports: &Arc<SubtaskReports>,
     app: Option<&AppHandle>,
     session_id: &str,
 ) {
@@ -329,6 +354,7 @@ pub async fn after_run_complete(
     let galley = galley.clone();
     let manager = manager.clone();
     let notifier = notifier.clone();
+    let reports = reports.clone();
     let app = app.cloned();
     let parent = session_id.to_string();
     // `tauri::async_runtime::spawn`, like the drain task itself: no
@@ -340,7 +366,10 @@ pub async fn after_run_complete(
             notifier,
             env: app.as_ref().map(|app| app as &dyn SpawnEnv),
         };
-        dispatch_reply(&host, &parent, &reply).await;
+        let dispatches = dispatch_reply(&host, &parent, &reply).await;
+        if let Some(main) = crate::subtask_report::record_not_started(&reports, &dispatches) {
+            crate::subtask_report::wake_if_due(&reports, &host, &main).await;
+        }
     });
 }
 
@@ -412,6 +441,7 @@ async fn dispatch_tag(
         failure,
         failure_detail,
         created_at: crate::runner_manager::queue::now_iso(),
+        send_backs: 0,
     };
     let (title, instructions) = match tag {
         SubtaskTag::Empty => {
@@ -601,6 +631,40 @@ fn announce_message(
     );
 }
 
+// ---------------- send-backs ----------------
+
+/// After a user message from the assistant ([`ASSISTANT_SUPERVISOR`]) was
+/// written into `session_id` — socket `session send`, or the queue
+/// dispatching one: a subtask's dispatch record is announced again with
+/// its send-back count ([`SUBTASK_DISPATCHED_EVENT`], ticket 29), so its
+/// card shows the round. An answer to the subtask's question leaves the
+/// count as it was and announces the same record.
+pub async fn announce_send_back(
+    galley: &SqliteGalley,
+    notifier: &dyn Notifier,
+    session_id: &str,
+    origin: &Origin,
+) {
+    if origin.supervisor.as_deref() != Some(ASSISTANT_SUPERVISOR) {
+        return;
+    }
+    match galley
+        .subtask_dispatch_for_session(&SessionId(session_id.to_string()))
+        .await
+    {
+        Ok(Some(dispatch)) => notify(
+            notifier,
+            SUBTASK_DISPATCHED_EVENT,
+            &SubtaskDispatchedPayload {
+                parent_session_id: dispatch.parent_session_id.clone(),
+                dispatches: vec![dispatch],
+            },
+        ),
+        Ok(None) => {}
+        Err(e) => eprintln!("[subtask {session_id}] reading its send-backs failed: {e}"),
+    }
+}
+
 // ---------------- promotion ----------------
 
 /// After the user sent a message in `session_id` through Core's send:
@@ -710,6 +774,7 @@ mod tests {
             failure,
             failure_detail: detail.map(str::to_string),
             created_at: "t".into(),
+            send_backs: 0,
         }
     }
 
@@ -807,6 +872,49 @@ mod tests {
         assert_eq!(rows[3].content, "不客气。");
         // Tags with nothing recorded are still left out.
         assert_eq!(rows[4].content, "提到 ，只剩这句。");
+    }
+
+    #[test]
+    fn a_report_replays_as_its_lines_and_its_reply_stays() {
+        let lines =
+            "[Galley: subtask s-sub-1 \"把 PDF 分类\" finished — details: session show s-sub-1]";
+        let report = |turn: i64, note: &str, summary: Option<&str>| {
+            let mut r = row(
+                turn,
+                "user",
+                "[Galley — not a message from the user] 长长的说明",
+            );
+            r.created_via = Some("system".into());
+            r.supervisor = Some(crate::api::SUBTASK_REPORT_SUPERVISOR.into());
+            r.origin_note = Some(note.into());
+            r.summary = summary.map(str::to_string);
+            r
+        };
+        let mut someone = row(10, "user", "别人发的");
+        someone.created_via = Some("cli".into());
+        someone.supervisor = Some(crate::api::SUBTASK_REPORT_SUPERVISOR.into());
+        let mut rows = vec![
+            report(6, "s-sub-1", Some(lines)),
+            row(6, "assistant", "<no-reply/>"),
+            report(8, "s-sub-2,s-sub-3", None),
+            row(8, "assistant", "两件都好了。"),
+            row(9, "user", "谢谢"),
+            someone,
+        ];
+        mark_rows(&mut rows, &[]);
+        assert_eq!(rows[0].content, lines);
+        // The silent reply stays, so user and assistant still pair up.
+        assert_eq!(rows[1].content, "<no-reply/>");
+        // A row without its lines names the subtasks in its note.
+        assert_eq!(
+            rows[2].content,
+            "[Galley: subtask s-sub-2 has an update — details: session show s-sub-2]\n\
+             [Galley: subtask s-sub-3 has an update — details: session show s-sub-3]"
+        );
+        assert_eq!(rows[3].content, "两件都好了。");
+        assert_eq!(rows[4].content, "谢谢");
+        // Only Galley's own rows are reports.
+        assert_eq!(rows[5].content, "别人发的");
     }
 
     #[test]

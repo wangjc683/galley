@@ -2,15 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import { copyForLanguage } from "@/lib/i18n";
 import {
-  dispatchFailureNotifications,
   SUBTASK_DONE_NOTIFY_AFTER_MS,
   subtaskAskingNotification,
   subtaskDoneNotification,
   subtaskFailedNotification,
+  subtaskFallbackNotification,
   usesSubtaskNotifications,
 } from "@/lib/subtask-notify";
-import type { SubtaskDispatch } from "@/lib/subtasks";
+import type { SubtaskDispatch, SubtaskLiveView } from "@/lib/subtasks";
 import { makeSession } from "@/test/factories";
+import type { AgentTurn, Turn } from "@/types/conversation";
 
 const zh = copyForLanguage("zh-CN");
 
@@ -117,39 +118,168 @@ describe("failed", () => {
       throttleKey: "subtask-failed:s-sub",
     });
   });
+});
 
-  it("notifies each dispatch that did not start, and none that did", () => {
-    const base: SubtaskDispatch = {
-      parentSessionId: "s-main",
-      turnIndex: 4,
-      ordinal: 0,
-      messageId: "msg_s-main_4_assistant",
-      sessionId: "s-a",
-      title: "查三家报价",
-      failure: null,
-      failureDetail: null,
-      createdAt: "2026-10-13T08:00:00.000Z",
-    };
-    const ns = dispatchFailureNotifications(
-      [
-        base,
-        { ...base, ordinal: 1, sessionId: null, title: "", failure: "empty" },
-        {
-          ...base,
-          ordinal: 2,
-          sessionId: "s-c",
-          title: "订机票",
-          failure: "start_failed",
-          failureDetail: "spawn failed",
-        },
-      ],
+// Ticket 31: one voice. A subtask's own notification is the fallback
+// for a report Core could not deliver to the assistant, sent from how
+// the subtask stands now, with the same rules and words.
+describe("the fallback for an undelivered report", () => {
+  const base: SubtaskDispatch = {
+    parentSessionId: "s-main",
+    turnIndex: 4,
+    ordinal: 0,
+    messageId: "msg_s-main_4_assistant",
+    sessionId: "s-sub",
+    title: "整理 PDF",
+    failure: null,
+    failureDetail: null,
+    createdAt: "2026-10-13T08:00:00.000Z",
+  };
+  const opener: Turn = {
+    role: "user",
+    content: "把下载文件夹里的 PDF 按内容分类",
+    messageId: "u-1",
+  };
+  const answer = (elapsedMs?: number): AgentTurn => ({
+    role: "agent",
+    tools: [],
+    finalAnswer: "分好了。",
+    ...(elapsedMs !== undefined ? { telemetry: { elapsedMs } } : {}),
+  });
+  const live = (extra: Partial<SubtaskLiveView> = {}): SubtaskLiveView => ({
+    agentRunning: false,
+    pendingAskUser: null,
+    turns: [],
+    ...extra,
+  });
+  const NOW = T0 + 60 * 60_000;
+
+  it("asks when it stopped on a question", () => {
+    const n = subtaskFallbackNotification(
+      base,
+      subtask,
+      live({
+        pendingAskUser: { question: "要把发票单独放吗？", candidates: [] },
+        turns: [opener, { role: "agent", tools: [], finalAnswer: null }],
+      }),
+      NOW,
       zh,
     );
-    expect(ns.map((n) => n.body)).toEqual([
-      "子任务 · 没有开始：主对话没写要做什么",
-      "订机票 · 没能启动：spawn failed",
-    ]);
-    expect(ns.every((n) => n.kind === "subtaskFailed")).toBe(true);
-    expect(new Set(ns.map((n) => n.throttleKey)).size).toBe(2);
+    expect(n).toEqual(
+      subtaskAskingNotification(subtask, "要把发票单独放吗？", zh),
+    );
+  });
+
+  it("is done only after two minutes of running, by the run's telemetry", () => {
+    const summarized = { ...subtask, summary: "30 个 PDF 分成 5 类" };
+    const long = subtaskFallbackNotification(
+      base,
+      summarized,
+      live({ turns: [opener, answer(3 * 60_000)] }),
+      NOW,
+      zh,
+    );
+    expect(long).toMatchObject({
+      kind: "replyDone",
+      title: "子任务完成",
+      body: "整理 PDF · 30 个 PDF 分成 5 类",
+      throttleKey: "reply:s-sub",
+    });
+    expect(
+      subtaskFallbackNotification(
+        base,
+        summarized,
+        live({ turns: [opener, answer(30_000)] }),
+        NOW,
+        zh,
+      ),
+    ).toBeNull();
+  });
+
+  it("fails on an error, a crash or a dispatch that never started", () => {
+    expect(
+      subtaskFallbackNotification(
+        base,
+        subtask,
+        live({ runError: "quota exceeded", turns: [opener] }),
+        NOW,
+        zh,
+      ),
+    ).toEqual(
+      subtaskFailedNotification(
+        "整理 PDF",
+        "s-sub",
+        { kind: "error", message: "quota exceeded" },
+        zh,
+      ),
+    );
+    expect(
+      subtaskFallbackNotification(
+        base,
+        subtask,
+        live({ bridgeStatus: "error", bridgeError: "Bridge exited" }),
+        NOW,
+        zh,
+      )?.body,
+    ).toBe("整理 PDF · 出错：Bridge exited");
+    const notStarted = subtaskFallbackNotification(
+      { ...base, sessionId: null, title: "", failure: "empty" },
+      undefined,
+      live(),
+      NOW,
+      zh,
+    );
+    expect(notStarted).toMatchObject({
+      kind: "subtaskFailed",
+      body: "子任务 · 没有开始：主对话没写要做什么",
+      throttleKey: "subtask-failed:s-main:4:0",
+    });
+  });
+
+  it("says nothing while it runs again, when it was cut short, promoted or unknown", () => {
+    expect(
+      subtaskFallbackNotification(
+        base,
+        subtask,
+        live({ agentRunning: true, turns: [opener] }),
+        NOW,
+        zh,
+      ),
+    ).toBeNull();
+    expect(
+      subtaskFallbackNotification(
+        base,
+        subtask,
+        live({
+          turns: [opener, { role: "agent", tools: [], finalAnswer: null }],
+        }),
+        NOW,
+        zh,
+      ),
+    ).toBeNull();
+    expect(
+      subtaskFallbackNotification(
+        base,
+        { ...subtask, promoted: true },
+        live({ runError: "x", turns: [opener] }),
+        NOW,
+        zh,
+      ),
+    ).toBeNull();
+    expect(
+      subtaskFallbackNotification(undefined, undefined, live(), NOW, zh),
+    ).toBeNull();
+  });
+
+  it("reads the session alone when the page has no dispatch record", () => {
+    expect(
+      subtaskFallbackNotification(
+        undefined,
+        subtask,
+        live({ runError: "quota exceeded", turns: [opener] }),
+        NOW,
+        zh,
+      )?.body,
+    ).toBe("整理 PDF · 出错：quota exceeded");
   });
 });

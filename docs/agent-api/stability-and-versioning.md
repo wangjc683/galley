@@ -163,6 +163,21 @@ looks like into the task itself, watch it with
 `session wait --until-idle` or `session follow`, and if a run stops
 early, send the next message on the same session.
 
+**Changes inside `3`** (additive flags, fields and behavior; exit codes
+and error discriminants unchanged):
+
+- 2026-10-16 — `session send` gained `--ensure-runner` (socket
+  `session.send` arg `ensureRunner`, default `false`). With it, a send
+  that dispatches now to a session with no live runner first starts one
+  and restores its history, holding the run gate, then dispatches:
+  `dispatch` is `dispatched` where it would have been `persisted_only`.
+  Without it nothing changes; a live runner or a queued message is
+  handled as before; a runner that cannot be started or restored still
+  answers `persisted_only`. The response body is unchanged. Also served
+  under `--schema=1` and `--schema=2`. See §5.5a in
+  [session-commands.md](./session-commands.md) and
+  [ADR-0003](../adr/0003-gui-and-phone-send-through-core.md).
+
 ### 7.2 `schemaVersion: 2` (served for unchanged commands, since 2026-09-16)
 
 > The record of the `2` bump as it shipped. The goal family it describes

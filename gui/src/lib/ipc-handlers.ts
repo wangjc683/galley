@@ -5,6 +5,7 @@ import {
   extractPreamble,
   extractThinking,
   finalAnswerFileRefs,
+  isSilentReply,
   stripGATags,
 } from "@/lib/ipc/ga-output-cleaning";
 import { resolveLanguagePreference } from "@/lib/language";
@@ -12,6 +13,7 @@ import { managedModelsToLLMs } from "@/lib/managed-model-options";
 import {
   clearReplyNotifyPending,
   consumeReplyNotifyPending,
+  markReplyNotifyPending,
   sendGatedSystemNotification,
 } from "@/lib/notify";
 import {
@@ -20,15 +22,18 @@ import {
   toolEventsFromRaw,
 } from "@/lib/agent-turn";
 import { isStepLimitExit } from "@/lib/step-limit";
+import type { UserMessagePersistedPayload } from "@/lib/session-send";
 import {
-  dispatchFailureNotifications,
-  subtaskAskingNotification,
-  subtaskDoneNotification,
-  subtaskFailedNotification,
+  subtaskFallbackNotification,
   usesSubtaskNotifications,
   type SubtaskNotification,
 } from "@/lib/subtask-notify";
-import type { SubtaskDispatchedPayload } from "@/lib/subtasks";
+import {
+  inReportRound,
+  isSubtaskReport,
+  type SubtaskDispatchedPayload,
+  type SubtaskReportUndeliveredPayload,
+} from "@/lib/subtasks";
 import { resolveAbsoluteTurnIndex } from "@/lib/turn-index";
 import { fromIPCError, makeAppError } from "@/types/app-error";
 import type { AgentTurn } from "@/types/conversation";
@@ -79,41 +84,73 @@ function sendSubtaskNotification(n: SubtaskNotification): void {
 
 /**
  * Core's `subtask-dispatched` (main chat ticket 06a): the records of
- * one main chat reply's subtasks go to the cards' store, and every one
- * that did not start notifies — a failed subtask always does
- * (lib/subtask-notify.ts).
+ * one main chat reply's subtasks go to the cards' store — a new one,
+ * and again when one did not start or was sent back (`sendBacks`).
+ * Nothing notifies here: since ticket 31 a subtask that did not start is
+ * one more thing Core reports to the assistant, and the assistant tells
+ * the user.
  */
 export function applySubtaskDispatched(
   payload: SubtaskDispatchedPayload,
 ): void {
   useSubtasksStore.getState().applyDispatched(payload);
-  for (const n of dispatchFailureNotifications(
-    payload.dispatches,
-    currentCopy(),
-  )) {
-    sendSubtaskNotification(n);
+}
+
+/**
+ * Core's `subtask-report-undelivered` (main chat tickets 29 / 31): the
+ * reports of these subtasks could not wake the main chat (its runner did
+ * not start or take the message, or it is waiting for the user's
+ * answer). One voice is the rule — the assistant's — and this is its
+ * fallback: each subtask notifies as it did before ticket 31, from how
+ * it stands now (lib/subtask-notify.ts `subtaskFallbackNotification`:
+ * asking, failed, done after two minutes, with the same words).
+ */
+export function applySubtaskReportUndelivered(
+  payload: SubtaskReportUndeliveredPayload,
+): void {
+  const copy = currentCopy();
+  const nowMs = Date.now();
+  const dispatches =
+    useSubtasksStore.getState().byParent[payload.mainChatId] ?? [];
+  for (const id of payload.subtaskIds) {
+    const m = useMessagesStore.getState().byId[id];
+    const r = useRuntimeStore.getState().byId[id];
+    const n = subtaskFallbackNotification(
+      dispatches.find((d) => d.sessionId === id),
+      findSession(id),
+      {
+        agentRunning: m?.agentRunning ?? false,
+        pendingAskUser: m?.pendingAskUser ?? null,
+        bridgeStatus: r?.bridgeStatus,
+        bridgeError: r?.bridgeError ?? null,
+        turns: m?.turns ?? [],
+        runError: useSubtasksStore.getState().runErrors[id] ?? null,
+      },
+      nowMs,
+      copy,
+    );
+    if (n) sendSubtaskNotification(n);
   }
 }
 
 /**
- * A runner closed abnormally (the bridge slice's `onClose`). An
- * unpromoted subtask's crash notifies like any of its failures; every
- * other session keeps the in-app toast only.
+ * A `user-message-persisted` for a subtask report (ticket 29): Core woke
+ * the main chat. The reply that follows is the one voice the user hears
+ * about the subtask, so it notifies like a reply to a message the user
+ * sent from here (`replyDone`, the window gate as ever); a reply that
+ * says nothing drops the flag at its turn_end. A report that did not
+ * get dispatched opens no run and leaves no flag.
  */
-export function notifySubtaskRunnerCrash(
-  sessionId: string,
-  message: string,
+export function noteSubtaskReportPersisted(
+  payload: UserMessagePersistedPayload,
 ): void {
-  const session = findSession(sessionId);
-  if (!usesSubtaskNotifications(session)) return;
-  sendSubtaskNotification(
-    subtaskFailedNotification(
-      session.title,
-      session.id,
-      { kind: "error", message },
-      currentCopy(),
-    ),
-  );
+  if (!isSubtaskReport(payload.message.origin)) return;
+  const dispatch = payload.dispatch ?? "dispatched";
+  if (dispatch === "pending" || dispatch === "dispatched") {
+    markReplyNotifyPending(payload.sessionId);
+  } else {
+    clearReplyNotifyPending(payload.sessionId);
+  }
 }
 
 /**
@@ -325,7 +362,9 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // would mis-fire on the session's next non-GUI-driven run.
       clearReplyNotifyPending(event.sessionId);
       // An unpromoted subtask's run that ends on an error is a failed
-      // subtask: its card says so, and it always notifies (ticket 06a).
+      // subtask: its card says so (ticket 06a). It notifies through the
+      // assistant (ticket 31), or on its own if that report could not
+      // be delivered (`applySubtaskReportUndelivered`).
       const errored = findSession(event.sessionId);
       if (
         usesSubtaskNotifications(errored) &&
@@ -333,14 +372,6 @@ export function dispatchIPCEvent(event: IPCEvent): void {
         event.category !== "business"
       ) {
         useSubtasksStore.getState().setRunError(event.sessionId, event.message);
-        sendSubtaskNotification(
-          subtaskFailedNotification(
-            errored.title,
-            errored.id,
-            { kind: "error", message: event.message },
-            currentCopy(),
-          ),
-        );
       }
       return;
     }
@@ -376,6 +407,18 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       if (visibility === "visible") {
         messages.appendAgentTurn(event.sessionId, turn);
       }
+      // The reply of a round Core woke the main chat for that said
+      // nothing (`<no-reply/>`, tickets 29 / 31): the assistant sent the
+      // subtask back or answered it. Drawn nowhere, so nothing else of
+      // it shows either: no unread mark, no notification, and the last
+      // reply's ghost suggestion stays.
+      const silentReport =
+        event.exitReason != null &&
+        visibility === "visible" &&
+        turn.silent === true &&
+        inReportRound(
+          useMessagesStore.getState().byId[event.sessionId]?.turns ?? [],
+        );
       // GA stopped this run at its per-run step cap (#29): a pause,
       // not a finished reply — the last step is usually a half-done
       // tool step. Drives the ghost text, the thread tail and the
@@ -389,7 +432,11 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // any) was written mid-work, and continuing is the one move.
       // The tail flag is rewritten on the same beat, so a newer
       // final turn that ended normally drops a stale tail.
-      if (event.exitReason != null && visibility === "visible") {
+      if (
+        event.exitReason != null &&
+        visibility === "visible" &&
+        !silentReport
+      ) {
         messages.setNextSuggestion(
           event.sessionId,
           hitStepLimit
@@ -425,7 +472,7 @@ export function dispatchIPCEvent(event: IPCEvent): void {
             event.summary,
             (messages.byId[event.sessionId]?.runStepBase ?? 0) +
               event.turnIndex,
-            event.exitReason != null,
+            event.exitReason != null && !silentReport,
           );
       }
       // Reply-done system notification: only for the final turn of a
@@ -443,10 +490,12 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       const endsInAskUser = event.toolCalls.some(
         (tc) => tc.toolName === "ask_user",
       );
-      // An unpromoted subtask (main chat ticket 06a) has its own rule:
-      // its runs are Core's, so the GUI-started gate below would keep
-      // them silent. Done notifies only after two minutes of running
-      // (lib/subtask-notify.ts); its question has its own handler below.
+      // An unpromoted subtask (main chat ticket 06a) is heard through
+      // the assistant (ticket 31): when its run ends Core wakes the main
+      // chat, and the assistant's reply is the notification. Its own
+      // come back only when that report could not be delivered
+      // (`applySubtaskReportUndelivered`). A flag a card answer marked
+      // is dropped here.
       const subtask = findSession(event.sessionId);
       if (usesSubtaskNotifications(subtask)) {
         if (
@@ -455,21 +504,9 @@ export function dispatchIPCEvent(event: IPCEvent): void {
           !endsInAskUser
         ) {
           consumeReplyNotifyPending(event.sessionId);
-          const done = hitStepLimit
-            ? null
-            : subtaskDoneNotification(
-                subtask,
-                {
-                  runStartedAtMs:
-                    messages.byId[event.sessionId]?.currentRunStartedAtMs ??
-                    null,
-                  nowMs: Date.now(),
-                  summary: event.summary,
-                },
-                currentCopy(),
-              );
-          if (done) sendSubtaskNotification(done);
         }
+      } else if (silentReport) {
+        clearReplyNotifyPending(event.sessionId);
       } else if (
         event.exitReason != null &&
         visibility === "visible" &&
@@ -606,14 +643,12 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // (same GUI-started-run gating) and send the question itself.
       // `reply:` throttleKey shared with replyDone: they're the same
       // run-terminus channel, never both firing for one run.
-      // An unpromoted subtask asking you always notifies (ticket 06a),
-      // whoever started its run.
+      // An unpromoted subtask asking you is heard through the assistant
+      // (ticket 31: Core reports the question to it), or on its own when
+      // that report could not be delivered.
       const asker = findSession(event.sessionId);
       if (usesSubtaskNotifications(asker)) {
         consumeReplyNotifyPending(event.sessionId);
-        sendSubtaskNotification(
-          subtaskAskingNotification(asker, question, currentCopy()),
-        );
       } else if (consumeReplyNotifyPending(event.sessionId)) {
         const sessionTitle = useSessionsStore
           .getState()
@@ -797,6 +832,7 @@ export function turnFromTurnEnd(event: {
   responseContent: string;
   responseThinking?: string | null;
   telemetry?: TurnTelemetry | null;
+  timestamp?: string;
 }): AgentTurn {
   const tools = toolEventsFromRaw(event.toolCalls, event.toolResults, "t-");
   return buildAgentTurn({
@@ -817,5 +853,7 @@ export function turnFromTurnEnd(event: {
     summary: event.summary,
     telemetry: event.telemetry,
     files: finalAnswerFileRefs(event.responseContent),
+    silent: isSilentReply(event.responseContent),
+    settledAt: event.timestamp,
   });
 }

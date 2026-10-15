@@ -18,11 +18,42 @@ const GA_TAG_PATTERNS: RegExp[] = [
   // a subtask. Core starts it when the reply's run ends and shows it as
   // a card under the reply — never as answer prose.
   /<subtask>[\s\S]*?<\/subtask>/g,
+  // Galley's own tag (main chat tickets 29 / 31): a round Core woke the
+  // main chat for (a subtask finished, asks or failed) whose only reply
+  // is this says nothing to the user — it sent the subtask back or
+  // answered it. NO_REPLY_TAG has the shapes it takes.
+  /<\s*\/?\s*no-reply\s*\/?\s*>/gi,
 ];
 
 /** An unclosed `<subtask>`: everything from it on is instructions that
  * never went anywhere, not answer prose (`cleanFinalAnswer`). */
 const SUBTASK_OPEN = "<subtask>";
+
+/** The silent-reply tag `<no-reply/>` (main chat tickets 29 / 31), as
+ * models write it: any case, spaces inside, `<no-reply>` and a stray
+ * `</no-reply>` too. The same pattern as its GA_TAG_PATTERNS entry. */
+const NO_REPLY_TAG = /<\s*\/?\s*no-reply\s*\/?\s*>/i;
+
+/** What a trailing, still-unclosed `<no-reply/>` can look like while it
+ * streams (the text after the last `<`, lowercased): `<`, `<no-re`,
+ * `<no-reply`, `<no-reply /`, `</no-rep` … — held back so the line
+ * never flashes it (`cleanPartialContent`). */
+const NO_REPLY_PARTIAL =
+  /^\s*\/?\s*(?:n(?:o(?:-(?:r(?:e(?:p(?:l(?:y\s*\/?\s*)?)?)?)?)?)?)?)?$/;
+
+/**
+ * Whether a raw reply is a silent one (main chat tickets 29 / 31): it
+ * carries `<no-reply/>`. Read from the raw text, not the cleaned
+ * answer: cleaning strips the tag, and an empty answer alone cannot
+ * tell a silent reply from one that only dispatched subtasks. A reply
+ * that also opens a `<subtask>` is not silent: the cards of what it
+ * dispatched must show. Only a reply in a round Core woke the main chat
+ * for goes unseen (lib/subtasks.ts `isSilentReport`); anywhere else the
+ * tag is a misuse and the reply reads as one that was only tags.
+ */
+export function isSilentReply(text: string): boolean {
+  return !!text && NO_REPLY_TAG.test(text) && !text.includes(SUBTASK_OPEN);
+}
 
 const FILE_REF_PATTERN = /\[FILE:[^\]]+\]/g;
 
@@ -372,7 +403,10 @@ export function cleanPartialContent(text: string): string {
           n.startsWith(tail) ||
           // closing form like "</thi" → tail = "/thi"
           (tail.startsWith("/") && n.startsWith(tail.slice(1))),
-      );
+      ) ||
+      // `<no-reply/>` on its way, spaces and the slash included
+      // ("<no-re", "<no-reply /").
+      NO_REPLY_PARTIAL.test(tail);
     if (couldBeTag) out = out.slice(0, lastLt);
   }
 
@@ -618,6 +652,7 @@ export function extractPreamble(text: string): string | undefined {
   segment = segment.replace(/<file_content[^>]*>[\s\S]*?<\/file_content>/g, "");
   segment = segment.replace(/<next-suggestion>[\s\S]*?<\/next-suggestion>/g, "");
   segment = segment.replace(/<subtask>[\s\S]*?<\/subtask>/g, "");
+  segment = segment.replace(/<\s*\/?\s*no-reply\s*\/?\s*>/gi, "");
   // Frontend / dispatch markers that occasionally leak into raw
   // response content (see cleanPartialContent for the full set; we
   // care about the ones that produce text noise).

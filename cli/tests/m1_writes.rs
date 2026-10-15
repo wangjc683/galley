@@ -244,6 +244,42 @@ async fn session_new_passes_through_optional_flags() {
 }
 
 #[tokio::test]
+async fn session_send_accepts_ensure_runner() {
+    // `--ensure-runner` (2026-10-16) parses beside the other send flags
+    // and reaches the socket: exit 4 with no Core, not a parser error
+    // (exit 2).
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    drop(seeded_db_at(&db).await);
+    let (stdout, code) = run_galley_isolated(
+        &db,
+        td.path(),
+        &[
+            "session",
+            "send",
+            "s1",
+            "缺确认号",
+            "--supervisor",
+            "galley-assistant",
+            "--reason",
+            "send back",
+            "--ensure-runner",
+            "--jump",
+        ],
+    );
+    assert_eq!(code, Some(4), "stdout: {stdout}");
+    let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+    assert_eq!(parsed["error"], "db_unavailable");
+    // A misspelt flag is still a parser error.
+    let (_, code) = run_galley_isolated(
+        &db,
+        td.path(),
+        &["session", "send", "s1", "x", "--ensure-runners"],
+    );
+    assert_eq!(code, Some(2));
+}
+
+#[tokio::test]
 async fn session_new_rejects_runtime_all() {
     let td = tempdir();
     let db = td.path().join("test.db");

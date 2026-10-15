@@ -228,6 +228,7 @@ mod tests {
             supervisor: None,
             reason: None,
             jump: false,
+            ensure_runner: false,
         }
     }
 
@@ -246,6 +247,23 @@ mod tests {
         assert_eq!(req["command"], "session.send");
         assert_eq!(req["schemaVersion"], 3);
         assert_eq!(req["args"]["sessionId"], "s1");
+        // Off by default: the legacy wire shape, no `ensureRunner` key.
+        assert!(req["args"].get("ensureRunner").is_none());
+    }
+
+    #[tokio::test]
+    async fn ensure_runner_goes_on_the_wire_when_set() {
+        let fake = FakeTransport::replying(&[r#"{"ok":true,"result":{"dispatch":"dispatched"}}"#]);
+        let client = SocketClient::with_transport(fake);
+        let args = SessionSendArgs {
+            ensure_runner: true,
+            ..send_args()
+        };
+        client.call(args).await.unwrap();
+        let sent = client.transport.sent.lock().unwrap();
+        let req: serde_json::Value = serde_json::from_str(&sent[0]).unwrap();
+        assert_eq!(req["args"]["ensureRunner"], true);
+        assert!(req["args"].get("jump").is_none());
     }
 
     #[tokio::test]

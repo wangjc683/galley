@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { zhCopy } from "@/i18n/locales/zh";
 import {
+  assistantCachedSentence,
   assistantFirstLine,
   assistantFollowBottom,
   assistantFollowTop,
@@ -131,6 +132,23 @@ describe("the live line", () => {
     );
   });
 
+  // Ticket 31: the line and the card clean the stream alike; a
+  // `<no-reply/>` on its way never shows, not even half of it.
+  it("never says the silent-reply tag, whole or half-written", () => {
+    const run: Turn[] = [user("比三家报价")];
+    for (const stream of [
+      "<no-re",
+      "<no-reply",
+      "<no-reply/>",
+      "<No-Reply />",
+    ]) {
+      expect(assistantCachedSentence(run, stream)).toBeNull();
+    }
+    expect(assistantCachedSentence(run, "我打回去了。<no-rep")).toBe(
+      "我打回去了。",
+    );
+  });
+
   it("shows the round's clock only past 3 seconds, in the corner clock's words", () => {
     expect(assistantLineClock(2_999, zhCopy)).toBeNull();
     expect(assistantLineClock(3_000, zhCopy)).toBe("3 秒");
@@ -179,6 +197,62 @@ describe("assistantLinePlan", () => {
     const stopped = assistantLinePlan(groups, turns, null);
     expect([...stopped.flat.keys()]).toEqual([1, 2, 3, 4]);
     expect(stopped.steps.size).toBe(0);
+  });
+
+  // Ticket 31: a round Core woke it for opens with a report row nobody
+  // sees; a reply that said nothing (`<no-reply/>`) leaves nothing but
+  // the questions it asked you.
+  it("never draws a report row, and draws a silent report round's questions alone", () => {
+    const report: UserTurn = {
+      role: "user",
+      content: "[Galley — not a message from the user] …",
+      messageId: "u-report",
+      origin: { via: "system", supervisor: "galley-report", reason: "s-1" },
+    };
+    const silent: AgentTurn = {
+      role: "agent",
+      turnIndex: 4,
+      finalAnswer: null,
+      tools: [tool("no_tool")],
+      silent: true,
+    };
+    const turns: Turn[] = [
+      user("比三家报价"),
+      answer("好，交给子任务。", 1),
+      report,
+      step("我看一下它的结果。", 1),
+      answer("比好了：第二家最便宜。", 2),
+      report,
+      ask("要付定金吗？", ["付"], 1),
+      user("付"),
+      step("我替你回了它。", 3),
+      silent,
+    ];
+    const plan = assistantLinePlan(buildRunGroups(turns), turns, null);
+    expect(plan.message.has(2)).toBe(false);
+    expect(plan.message.has(5)).toBe(false);
+    // The answered round: its reply, with its two steps behind the button.
+    expect(plan.message.has(4)).toBe(true);
+    expect(plan.steps.get(4)?.members).toEqual([3, 4]);
+    // The silent one: the question and your answer, nothing else.
+    expect([...plan.message].filter((i) => i > 5)).toEqual([6, 7]);
+    expect(plan.flat.size).toBe(0);
+    expect(plan.steps.has(9)).toBe(false);
+    // Each report's time goes above its round's first row.
+    expect([...plan.reports]).toEqual([
+      [2, 4],
+      [5, 6],
+    ]);
+    // A silent round with no question draws nothing and dates nothing.
+    const quiet: Turn[] = [
+      user("比三家报价"),
+      report,
+      step("打回。", 1),
+      silent,
+    ];
+    const none = assistantLinePlan(buildRunGroups(quiet), quiet, null);
+    expect([...none.message]).toEqual([0]);
+    expect(none.reports.size).toBe(0);
   });
 });
 

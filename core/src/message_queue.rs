@@ -12,7 +12,8 @@
 //!   [`RunSignal`]s wired at app init. On `RunComplete` it pops the
 //!   next allowed item and dispatches it; on `Closed` it just lets the
 //!   manager close the run gate (queue held for manual resume — PRD
-//!   定案 4, no auto-respawn).
+//!   定案 4, no auto-respawn). Around that step it runs the main chat's
+//!   subtask hooks ([`crate::subtask`], [`crate::subtask_report`]).
 //!
 //! Queued items are persisted only HERE, at dispatch time (定案 5):
 //! transcript order always matches execution order and a removed item
@@ -139,6 +140,10 @@ pub async fn dispatch_queued_message(
     // Core derives the title wherever it persists a user message).
     crate::session_title::derive_and_announce(galley, notifier.as_ref(), session_id, &item.text)
         .await;
+    // The assistant's send-back that waited behind a run (ticket 29).
+    if let Some(origin) = &item.origin {
+        crate::subtask::announce_send_back(galley, notifier.as_ref(), session_id, origin).await;
+    }
     notify_queue_changed(manager, notifier, session_id).await;
 }
 
@@ -147,6 +152,16 @@ pub async fn dispatch_queued_message(
 /// One task for all sessions keeps pop + dispatch strictly serialized
 /// per signal, so two RunCompletes can never double-dispatch a
 /// session's queue.
+///
+/// Per signal, in order: the main chat's reply dispatches its subtasks
+/// ([`crate::subtask::after_run_complete`]); a subtask's run that ended
+/// is reported to its main chat
+/// ([`crate::subtask_report::record_run_end`], read while the run gate
+/// still shows the run); the queue step; then the main chat is woken for
+/// waiting reports — the one just reported to, and this session if it is
+/// a main chat that took no queued message, so the user's queued
+/// messages go before a report ([`crate::subtask_report::spawn_wake_if_due`]).
+/// The reports live as long as this task.
 ///
 /// `tauri::async_runtime::spawn`, NOT `tokio::spawn`: the caller is
 /// the synchronous setup hook, where no ambient tokio runtime exists —
@@ -160,6 +175,7 @@ pub fn spawn_queue_drain_task(
     app: Option<AppHandle>,
     mut rx: mpsc::UnboundedReceiver<RunSignal>,
 ) {
+    let reports = Arc::new(crate::subtask_report::SubtaskReports::new());
     tauri::async_runtime::spawn(async move {
         while let Some(signal) = rx.recv().await {
             let session_id = match &signal {
@@ -175,13 +191,44 @@ pub fn spawn_queue_drain_task(
                     &galley,
                     &manager,
                     &notifier,
+                    &reports,
                     app.as_ref(),
                     &session_id,
                 )
                 .await;
             }
-            if let Some(item) = manager.queue_take_next(&signal).await {
+            // A subtask's run that ended reports to its main chat
+            // (ticket 29), read before the queue step closes its gate.
+            let report_to =
+                crate::subtask_report::record_run_end(&reports, &galley, manager.as_ref(), &signal)
+                    .await;
+            let next = manager.queue_take_next(&signal).await;
+            let took_next = next.is_some();
+            if let Some(item) = next {
                 dispatch_queued_message(&galley, &manager, &notifier, &session_id, item).await;
+            }
+            if let Some(main) = report_to {
+                crate::subtask_report::spawn_wake_if_due(
+                    &reports,
+                    &galley,
+                    &manager,
+                    &notifier,
+                    app.as_ref(),
+                    &main,
+                )
+                .await;
+            }
+            if !took_next {
+                // A main chat whose run ended, with reports waiting.
+                crate::subtask_report::spawn_wake_if_due(
+                    &reports,
+                    &galley,
+                    &manager,
+                    &notifier,
+                    app.as_ref(),
+                    &session_id,
+                )
+                .await;
             }
         }
     });

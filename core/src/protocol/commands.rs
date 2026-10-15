@@ -46,6 +46,16 @@ pub struct SessionSendArgs {
     /// skipped when false so the legacy wire shape is unchanged.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub jump: bool,
+    /// Start a runner when the session has none (ADR-0003's consequence,
+    /// additive since 2026-10-16): when the message dispatches now and no
+    /// runner is alive, Core ensures one on its shared path — history
+    /// replayed, the run gate held across the spawn and the replay — and
+    /// then dispatches, so a send to a cold session answers `dispatched`
+    /// instead of `persisted_only`. A live runner, or a message that is
+    /// queued, is handled exactly as without it. Skipped when false so the
+    /// legacy wire shape is unchanged.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ensure_runner: bool,
 }
 socket_command!(SessionSendArgs, "session.send");
 
@@ -263,9 +273,27 @@ mod legacy_equivalence {
                 supervisor: Some("sup".into()),
                 reason: None,
                 jump: false,
+                ensure_runner: false,
             },
             json!({"sessionId": "s1", "content": "hello", "supervisor": "sup", "reason": null}),
         );
+        // The additive flags appear only when set.
+        assert_matches_legacy(
+            &SessionSendArgs {
+                session_id: "s1".into(),
+                content: "hello".into(),
+                supervisor: None,
+                reason: None,
+                jump: false,
+                ensure_runner: true,
+            },
+            json!({"sessionId": "s1", "content": "hello", "supervisor": null, "reason": null,
+                   "ensureRunner": true}),
+        );
+        // An older client that never sends it gets today's behavior.
+        let parsed: SessionSendArgs =
+            serde_json::from_value(json!({"sessionId": "s1", "content": "hello"})).unwrap();
+        assert!(!parsed.ensure_runner && !parsed.jump);
     }
 
     #[test]

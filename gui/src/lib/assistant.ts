@@ -2,6 +2,7 @@ import type { AppCopy } from "@/i18n/types";
 import { mergedAskUserArgs } from "@/lib/ask-user-candidates";
 import { dropPathBasename } from "@/lib/file-drop";
 import { stripGATags } from "@/lib/ipc/ga-output-cleaning";
+import { hiddenReportTurns } from "@/lib/subtasks";
 import type { MessageAttachment, Turn } from "@/types/conversation";
 import type { SessionStatus } from "@/types/session";
 
@@ -141,10 +142,12 @@ export interface AssistantLastMessage {
   fromUser: boolean;
   /** One line of plain text. */
   text: string;
-  /** When the user sent it. The assistant's replies carry no time in
-   * the page (of its messages only the greeting does): the card dates
-   * them by the session's `lastActivityAt`, which the reply's last
-   * step set. */
+  /** When it was said: the user's send time; for the assistant's reply
+   * or question, when that step landed (`AgentTurn.settledAt`). Absent
+   * when the page has no time for it: the card then dates it by the
+   * session's `lastActivityAt`, which the reply's last step set — but a
+   * report round after it moves that too (main chat ticket 31), hence
+   * the reply's own time first. */
   sentAt?: string;
 }
 
@@ -225,16 +228,20 @@ export function assistantCardLine(
  * for the files it pointed at) — its greeting included, which is a
  * message too. What is not a message is skipped: steps that only ran
  * tools, `/btw` side questions and their replies (transient, kept off
- * the record), and Galley's narration rows. A question the assistant
- * asked counts as what it said.
+ * the record), Galley's narration rows, and what a report round hides
+ * (main chat ticket 31, `hiddenReportTurns`): the report row Core woke
+ * it with, and the whole of a round that said nothing (`<no-reply/>`)
+ * but a question it asked you. A question the assistant asked counts
+ * as what it said.
  */
 export function lastVisibleMessage(
   turns: readonly Turn[],
   copy: AppCopy,
 ): AssistantLastMessage | null {
+  const hidden = hiddenReportTurns(turns);
   for (let i = turns.length - 1; i >= 0; i -= 1) {
     const turn = turns[i];
-    if (turn.role === "system") continue;
+    if (turn.role === "system" || hidden.has(i)) continue;
     if (turn.role === "user") {
       // A `/btw` question carries neither key (messages.ts's
       // isLatestRunTurn rule): it is not part of the conversation.
@@ -259,13 +266,13 @@ export function lastVisibleMessage(
       ]
         .filter(Boolean)
         .join(" ");
-      if (text) return { fromUser: false, text };
+      if (text) return { fromUser: false, text, sentAt: turn.settledAt };
       continue;
     }
     const asked = mergedAskUserArgs(turn.tools);
     if (asked) {
       const text = plainLine(stripGATags(asked.question), copy);
-      if (text) return { fromUser: false, text };
+      if (text) return { fromUser: false, text, sentAt: turn.settledAt };
     }
   }
   return null;

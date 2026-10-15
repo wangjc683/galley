@@ -165,6 +165,12 @@ pub trait RunnerPort: Send + Sync {
     async fn known_session_ids(&self) -> Vec<String> {
         Vec::new()
     }
+    /// What the session's last run reported going wrong
+    /// (`RunnerManager::last_run_error`), for a subtask report. Default:
+    /// nothing known.
+    async fn last_run_error(&self, _session_id: &str) -> Option<String> {
+        None
+    }
 }
 
 #[async_trait]
@@ -264,6 +270,9 @@ impl RunnerPort for RunnerManager {
     }
     async fn known_session_ids(&self) -> Vec<String> {
         RunnerManager::known_session_ids(self).await
+    }
+    async fn last_run_error(&self, session_id: &str) -> Option<String> {
+        RunnerManager::last_run_error(self, session_id).await
     }
 }
 

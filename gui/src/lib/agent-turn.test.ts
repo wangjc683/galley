@@ -250,6 +250,24 @@ describe("live → persist → restore round trip", () => {
     expect(live.files).toEqual(["/tmp/out/x.png"]);
     expect(restored.files).toEqual(live.files);
   });
+
+  // Main chat tickets 29 / 31: a reply that said only `<no-reply/>`
+  // cleans to nothing and is silent, live and reopened alike.
+  it("a silent reply survives the round trip identically", async () => {
+    const { live, restored } = await roundTrip({
+      turnIndex: 1,
+      summary: "打回子任务",
+      toolCalls: [{ toolName: "no_tool", args: {} }],
+      toolResults: [{ content: null }],
+      responseContent: "<thinking>它漏了一家</thinking>\n<no-reply/>",
+    });
+    expect(live.finalAnswer).toBeNull();
+    expect(live.silent).toBe(true);
+    expect(restored.finalAnswer).toBeNull();
+    expect(restored.silent).toBe(true);
+    // The live step is dated by its turn_end.
+    expect(live.settledAt).toBe("2026-06-18T08:01:02.000Z");
+  });
 });
 
 describe("resolvedPath hydration", () => {

@@ -1,16 +1,21 @@
 import type { AppCopy } from "@/i18n/types";
 import type { NotifyTone, SystemNotifyKind } from "@/lib/notify";
+import { buildRunGroups } from "@/lib/run-groups";
 import { displaySessionSummary } from "@/lib/session-summary";
 import {
+  deriveSubtaskCard,
   failureText,
   isUnpromotedSubtask,
   type SubtaskDispatch,
   type SubtaskFailure,
+  type SubtaskLiveView,
 } from "@/lib/subtasks";
+import type { Turn } from "@/types/conversation";
 import type { Session } from "@/types/session";
 
 /**
- * When a subtask notifies (main chat ticket 06a, the ticket's point 4):
+ * A subtask's own notifications (main chat ticket 06a, the ticket's
+ * point 4):
  *
  *   - asking you: always;
  *   - done: only when the run took at least
@@ -19,13 +24,13 @@ import type { Session } from "@/types/session";
  *   - failed (the run ended on an error, its runner crashed, or it could
  *     not be started): always.
  *
- * Same principle as the sidebar, which hangs a row out when it is
- * waiting for you or errored. These replace the reply notifications
- * for an unpromoted subtask: its runs are Core's, not ones the user
- * started from this page, so the "only runs you started" rule of
- * `replyDone` (and iOS PRD ruling 17) would leave them silent — the
- * main chat PRD's design constraints make them the exception. A
- * promoted subtask is an ordinary conversation and notifies like one.
+ * Since ticket 31 they are a fallback, not the rule: one voice. When a
+ * subtask's run ends Core wakes the main chat with a report, and the
+ * assistant's reply is what notifies (as a reply to the user's own
+ * message would). A subtask notifies on its own only when that report
+ * could not be delivered (Core's `subtask-report-undelivered`), from
+ * how it stands then (`subtaskFallbackNotification`). A promoted
+ * subtask is an ordinary conversation and notifies like one.
  *
  * Pure: the caller checks the window, prefs and permission
  * (`sendGatedSystemNotification`).
@@ -118,25 +123,90 @@ export function subtaskFailedNotification(
   };
 }
 
-/** The failures among one reply's dispatches, one notification each:
- * a tag Core could not use, a session it could not create, a runner it
- * could not start. */
-export function dispatchFailureNotifications(
-  dispatches: readonly SubtaskDispatch[],
+/** A dispatch's key when it has no session: reply and tag position. */
+function dispatchKey(d: SubtaskDispatch): string {
+  return d.sessionId ?? `${d.parentSessionId}:${d.turnIndex}:${d.ordinal}`;
+}
+
+/** The latest run's length from its telemetry (run-groups' whole-run
+ * elapsed, ask_user pauses excluded), or null when the page has none. */
+function lastRunElapsedMs(turns: readonly Turn[]): number | null {
+  const groups = buildRunGroups(turns as Turn[]);
+  return groups[groups.length - 1]?.stats.elapsedMs ?? null;
+}
+
+/**
+ * The notification a subtask would have sent itself, from how it stands
+ * now (`deriveSubtaskCard`, the card's own state): the fallback when its
+ * report could not wake the main chat (ticket 31). Asking → asking;
+ * failed — an error, a crash, a runner that never started, a tag Core
+ * could not use — → failed; done → done, only after two minutes of
+ * running (measured by the run's telemetry, else from the session's
+ * creation, as before); anything else — running again, cut short, gone,
+ * promoted, unknown — → none. Rules, words and throttle keys are the
+ * ones these notifications always had.
+ */
+export function subtaskFallbackNotification(
+  dispatch: SubtaskDispatch | undefined,
+  session: Session | undefined,
+  live: SubtaskLiveView,
+  nowMs: number,
   copy: AppCopy,
-): SubtaskNotification[] {
-  return dispatches
-    .filter((d) => d.failure !== null)
-    .map((d) =>
-      subtaskFailedNotification(
-        d.title,
-        d.sessionId ?? `${d.parentSessionId}:${d.turnIndex}:${d.ordinal}`,
-        d.failure === "empty"
-          ? { kind: "empty" }
-          : d.failure === "unclosed"
-            ? { kind: "unclosed" }
-            : { kind: "startFailed", detail: d.failureDetail },
+): SubtaskNotification | null {
+  // A promoted subtask is an ordinary conversation.
+  if (session && !usesSubtaskNotifications(session)) return null;
+  const record: SubtaskDispatch | undefined =
+    dispatch ??
+    (session && {
+      // The page has no record (the main chat's were never read): the
+      // session alone says enough.
+      parentSessionId: session.parentSessionId ?? "",
+      turnIndex: 0,
+      ordinal: 0,
+      messageId: "",
+      sessionId: session.id,
+      title: session.title,
+      failure: null,
+      failureDetail: null,
+      createdAt: session.createdAt,
+    });
+  if (!record) return null;
+  const state = deriveSubtaskCard(record, session, live);
+  switch (state.kind) {
+    case "asking":
+      return session
+        ? subtaskAskingNotification(session, state.pending.question, copy)
+        : null;
+    case "notStarted":
+      return subtaskFailedNotification(
+        record.title,
+        dispatchKey(record),
+        state.failure,
         copy,
-      ),
-    );
+      );
+    case "failed":
+      // 「没有跑完」 (cut short, the step cap) never notified.
+      if (state.failure.kind === "didNotFinish") return null;
+      return subtaskFailedNotification(
+        session?.title || record.title,
+        dispatchKey(record),
+        state.failure,
+        copy,
+      );
+    case "done": {
+      if (!session) return null;
+      const elapsedMs = lastRunElapsedMs(live.turns);
+      return subtaskDoneNotification(
+        session,
+        {
+          runStartedAtMs: elapsedMs != null ? nowMs - elapsedMs : null,
+          nowMs,
+          summary: session.summary,
+        },
+        copy,
+      );
+    }
+    default:
+      return null;
+  }
 }

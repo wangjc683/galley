@@ -7,6 +7,7 @@ import {
   extractPreamble,
   finalAnswerFileRefs,
   isLeakedToolCallMarkup,
+  isSilentReply,
   summaryEchoesAnswer,
 } from "@/lib/ipc/ga-output-cleaning";
 
@@ -176,6 +177,61 @@ describe("subtask tag stripping", () => {
       "先看一下。",
     );
     expect(extractPreamble("先看一下。<subtask>没写完")).toBe("先看一下。");
+  });
+});
+
+// Main chat tickets 29 / 31: a report round's reply that says nothing
+// to the user is exactly `<no-reply/>`. Core's turn derivation strips it
+// (derive.rs, like <subtask>); this is the mirror, live and streaming.
+describe("no-reply tag stripping", () => {
+  it("strips the tag in every shape models write it, leaving nothing", async () => {
+    const { stripGATags } = await import("@/lib/ipc/ga-output-cleaning");
+    for (const reply of [
+      "<no-reply/>",
+      "  <no-reply/>\n",
+      "<No-Reply />",
+      "<NO-REPLY/>",
+      "< no-reply / >",
+      "<no-reply>",
+      "<no-reply></no-reply>",
+    ]) {
+      expect(cleanFinalAnswer(reply)).toBe("");
+      expect(cleanPartialContent(reply).trim()).toBe("");
+      expect(stripGATags(reply)).toBe("");
+      expect(isSilentReply(reply)).toBe(true);
+    }
+    // Prose around it stays; it is still the tag.
+    expect(cleanFinalAnswer("已打回。<no-reply/>")).toBe("已打回。");
+    expect(isSilentReply("已打回。<no-reply/>")).toBe(true);
+  });
+
+  it("is no silent reply without the tag, or with a dispatch", () => {
+    expect(isSilentReply("")).toBe(false);
+    expect(isSilentReply("好的，已经订好了。")).toBe(false);
+    expect(isSilentReply("<no-replying>")).toBe(false);
+    expect(isSilentReply("<subtask>再查一家</subtask><no-reply/>")).toBe(false);
+  });
+
+  it("holds every prefix of the tag back while it streams", () => {
+    const tag = "<no-reply/>";
+    for (let end = 1; end <= tag.length; end++) {
+      expect(cleanPartialContent(`我打回了。${tag.slice(0, end)}`)).toBe(
+        "我打回了。",
+      );
+    }
+    for (const partial of ["<no-reply /", "< no-rep", "</no-re", "<NO-RE"]) {
+      expect(cleanPartialContent(partial)).toBe("");
+    }
+    // Not a prefix of it: shown as written.
+    expect(cleanPartialContent("a <nob")).toBe("a <nob");
+    expect(cleanPartialContent("1 <2")).toBe("1 <2");
+  });
+
+  it("keeps the tag out of the extracted preamble", () => {
+    expect(extractPreamble("我把它打回去了。<no-reply/>")).toBe(
+      "我把它打回去了。",
+    );
+    expect(extractPreamble("<no-reply/>")).toBeUndefined();
   });
 });
 
