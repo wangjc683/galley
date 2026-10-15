@@ -63,7 +63,7 @@ export const COMPOSER_CONFIG_BUTTON = cn(
   "active:shadow-[var(--shadow-control-press)]",
 );
 
-// ---- The main chat's one-line composer (ComposerOneLine.tsx) -----------
+// ---- A session's one-line composer (ComposerOneLine.tsx) ----------------
 
 /**
  * The input's padding centres one line in the 32px row of round buttons
@@ -97,6 +97,12 @@ export const ONE_LINE_GHOST_CLASS =
  * outer edge, so a tile's 12px corner sits concentric in the box's 24px
  * one. */
 export const ONE_LINE_IMAGE_STRIP_CLASS = "flex flex-wrap gap-2 px-1 pb-2 pt-1";
+
+/** The hint row under the one-line form (the workbench's; the main chat
+ * has none) starts where the input's text does, on the placeholder's
+ * line: the 1px border, the 7px padding, the 32px ＋ and the row's 4px
+ * gap (ruling 74, item 3). Under the card it is flush with the card. */
+export const ONE_LINE_HINT_CLASS = "pl-[44px]";
 
 /** The auto-grow cap: the textarea's own max-height (eight lines at the
  * current font size). */

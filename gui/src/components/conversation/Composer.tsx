@@ -30,6 +30,7 @@ import {
   COMPOSER_MAX_HEIGHT_PX,
   ONE_LINE_GHOST_CLASS,
   ONE_LINE_GHOST_STYLE,
+  ONE_LINE_HINT_CLASS,
   ONE_LINE_IMAGE_STRIP_CLASS,
   ONE_LINE_TEXTAREA_CLASS,
   ONE_LINE_TEXTAREA_STYLE,
@@ -76,8 +77,8 @@ export type { ComposerHandle, ComposerProps };
  * Apricot focus ring is the brand moment; submit button is the only
  * place we use apricot as a CTA fill. When the agent is running,
  * stopMode replaces submit with a deep-amber Stop button at the same
- * position. The main chat arranges the same pieces in one row
- * (`oneLine`, ComposerOneLine.tsx).
+ * position. A session (MainView) arranges the same pieces in one row
+ * (`oneLine`, ComposerOneLine.tsx); the empty state keeps the card.
  */
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(
   function Composer(
@@ -286,8 +287,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // at COMPOSER_MAX_HEIGHT_PX — beyond that the textarea scrolls
     // internally. ChatGPT / Claude / Notion all do this pattern; users
     // expect multi-line input to expand the composer rather than
-    // disappear behind a fixed-height window. The main chat's one-line
-    // form caps at eight lines instead.
+    // disappear behind a fixed-height window. The one-line form caps at
+    // eight lines instead.
     useEffect(() => {
       const el = textareaRef.current;
       if (!el) return;
@@ -427,17 +428,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       }
     };
 
-    // The pieces the card arranges below. The main chat's one-line form
-    // arranges the same pieces in ComposerOneLine, with its own textarea
-    // and ghost metrics (ONE_LINE_* in composer-styles.ts).
+    // The pieces the card arranges below. The one-line form arranges the
+    // same pieces in ComposerOneLine, with its own textarea and ghost
+    // metrics (ONE_LINE_* in composer-styles.ts).
     const queueStrip = activeSessionId && (
       <ComposerQueueStrip
         sessionId={activeSessionId}
         items={queueItems}
-        // One-line form: there is no hint row, so the strip's heading
-        // says what the stopping hint says under the card (ruling 71).
+        // One line and no hint row (the main chat's): the strip's heading
+        // says what the stopping hint says in the row (ruling 71). With a
+        // hint row (the workbench's) the row says it, once (ticket 27).
         heading={
-          oneLine && isStopping && queueItems.length > 0
+          oneLine && !showFooterHint && isStopping && queueItems.length > 0
             ? copy.composer.stoppingQueueHint
             : undefined
         }
@@ -542,9 +544,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         onReturnFocus={focusTextarea}
       />
     );
-    // At the row's right end in the one-line form, so its popovers open
-    // right-aligned there.
-    const popoverAlign = oneLine ? "end" : undefined;
+    // At the row's right end in the one-line form: its popovers open
+    // centred on the pill they belong to (ruling 76; lined up by their
+    // right edge they reached out to the left, off the pill).
+    const popoverAlign = oneLine ? "center" : undefined;
     const modelPhrase = (
       <>
         <LLMPill
@@ -663,6 +666,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           hasText={hasText}
           isSideQuestion={sideQuestionStaged}
           staticHint={staticHint}
+          className={oneLine ? ONE_LINE_HINT_CLASS : undefined}
         />
         <SavedPromptDialogs
           open={promptsOpen}

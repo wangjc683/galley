@@ -8,6 +8,7 @@ import {
   USER_MSG_ANCHOR_TOLERANCE_PX,
   USER_MSG_ANCHOR_TOP_PX,
 } from "@/lib/conversation-anchor";
+import { keepBottomOnViewportResize } from "@/lib/viewport-resize";
 import { turnsHoldMessage, useMessagesStore } from "@/stores/messages";
 import { type LocateRequest, useUiStore } from "@/stores/ui";
 import type { PendingAskUser } from "@/types/conversation";
@@ -83,7 +84,8 @@ function clearLocateHighlight(): void {
  * Responsibilities, all reading/writing the same scroll position +
  * bottom-tracking state:
  *   - sticky-bottom follow while streaming (don't yank a user who
- *     scrolled up to read older content)
+ *     scrolled up to read older content), and while the composer
+ *     below grows or shrinks
  *   - the floating scroll-to-bottom button + its smooth-scroll monitor
  *   - scroll-to-bottom on session switch (race-hardened against async
  *     SQLite restore, Shiki reflow, and WKWebView repaint skips)
@@ -308,6 +310,21 @@ export function useStickyScroll({
     });
     observer.observe(inner);
     return () => observer.disconnect();
+  }, []);
+
+  // Follow-the-bottom when the viewport itself changes height: the
+  // composer under it grows a line at a time as the user types (a
+  // session's one-line composer starts at 48px), image tiles or the
+  // queue strip come in, the window gets shorter. The content does not
+  // change size, so neither follow above fires, and a conversation that
+  // sat at the bottom would lose its last lines under the composer. A
+  // bottom that was in view stays in view; a reader who scrolled up is
+  // left alone (lib/viewport-resize.ts, ticket 27). Both conversations:
+  // the assistant's follow limit is for a growing reply, not this.
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    return keepBottomOnViewportResize(el, () => atBottomRef.current);
   }, []);
 
   // Scroll-to-bottom on session switch. Three compounding races make

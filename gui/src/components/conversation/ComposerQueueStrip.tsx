@@ -25,9 +25,9 @@ export function ComposerQueueStrip({
 }: {
   sessionId: string;
   items: QueuedMessage[];
-  /** A sentence in place of the 「排队中 · N」 count: the main chat's
-   * one-line composer says 「正在停止，排队的消息会自动发出」 here, having
-   * no hint row to say it in. */
+  /** A sentence in place of the 「排队中 · N」 count: a one-line composer
+   * without a hint row (the main chat's) says
+   * 「正在停止，排队的消息会自动发出」 here, having no row to say it in. */
   heading?: string;
   /** Put removed text back into the composer draft (edit flow). */
   onRefill: (text: string) => void;

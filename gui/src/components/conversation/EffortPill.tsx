@@ -71,8 +71,8 @@ export function EffortPill({
   onSelect,
   popoverAlign = "start",
 }: ComposerReasoningEffortState & {
-  /** As LLMPill's: `end` in the main chat's one-line composer. */
-  popoverAlign?: "start" | "end";
+  /** As LLMPill's: `center` in the one-line composer (ruling 76). */
+  popoverAlign?: "start" | "center";
 }) {
   const copy = useCopy();
   const effortCopy = copy.composer.reasoningEffort;
