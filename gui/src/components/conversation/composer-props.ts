@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-import type { ComposerTrialView } from "@/components/conversation/composer-trial/composer-trial";
 import type { ComposerReasoningEffortState } from "@/components/conversation/EffortPill";
 import type { ComposerLLMOption } from "@/components/conversation/LLMPill";
 import type { ImageBlockReason } from "@/lib/composer-images";
@@ -133,10 +132,12 @@ export interface ComposerProps {
    * drag-drop (PRD 定案 8). */
   onTextDropBlocked?: () => void;
   /**
-   * TEMPORARY (ticket 24, composer-trial/): the main chat's composer
-   * trial — the one-line form, and 「演示在跑」's made-up queue (display
-   * only: the strip does nothing while it shows). MainView sets it only
-   * for the main chat.
+   * The main chat's form (main chat PRD rulings 71, 72): ＋, the input,
+   * 「模型 · 强度」 and send / stop in one row (ComposerOneLine), the input
+   * growing to eight lines; the model phrase's popovers open
+   * right-aligned. The stopping-with-a-queue sentence moves into the
+   * queue strip's heading, since this form goes without the hint row
+   * (MainView turns `showFooterHint` off with it). Off: the card.
    */
-  trial?: ComposerTrialView;
+  oneLine?: boolean;
 }

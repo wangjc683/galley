@@ -71,8 +71,7 @@ export function EffortPill({
   onSelect,
   popoverAlign = "start",
 }: ComposerReasoningEffortState & {
-  /** As LLMPill's: `end` in the main chat's one-line trial form
-   * (TEMPORARY, ticket 24). */
+  /** As LLMPill's: `end` in the main chat's one-line composer. */
   popoverAlign?: "start" | "end";
 }) {
   const copy = useCopy();

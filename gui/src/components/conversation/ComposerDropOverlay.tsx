@@ -13,8 +13,8 @@ export function ComposerDropOverlay({
   line = false,
 }: {
   imagesEnabled: boolean;
-  /** The main chat's one-line trial form (TEMPORARY, ticket 24): one
-   * row in a 48px box, rounded like it. */
+  /** The main chat's one-line composer: one row in a 48px box, rounded
+   * like it. */
   line?: boolean;
 }) {
   const copy = useCopy();
