@@ -333,6 +333,8 @@ README「dense context instead of long」（`README.md:54`）。
 81. **问候改为先说它是谁；卡片名字行不挂职位**（JC 2026-10-15，上层 [助手 PRD](../assistant/PRD.md) 裁决 7 定名字时一起定）：
     问候改为「你好，我是你的私人助理。以后有什么事，直接在这里跟我说就行。费时间的活我派出去办，办完回来告诉你。」（英文同义，见 `core/src/db/main_chat.rs`），取代裁决 47 / 49 留下的那一段；
     侧栏卡片照裁决 65 只写「Galley」，它是谁靠第一次打开时第二行的这句问候说。已建出的主对话不变。
+82. **上层次序第 1 步「闭环」开工**（JC 2026-10-15「按建议推进」）：打回最多两次、打回与替你答题时不出声（卡片写「第 N 轮 · 」）、叫醒在对话里不留痕迹；
+    机制与取舍见 [助手 PRD](../assistant/PRD.md) 裁决 8。票 [29](./issues/29-subtask-wake-core.md)、[30](./issues/30-assistant-manual-and-entry-layer.md)、[31](./issues/31-subtask-wake-gui.md)。
 
 ## 事实依据（2026-10-12 核对）
 
@@ -408,6 +410,9 @@ README「dense context instead of long」（`README.md:54`）。
 | [25](./issues/25-assistant-composer-final.md) | — | 主对话输入框定稿：一行式转正、离底边 24px、撤切换器与演示、设计文档 | 24 | done（裁决 72；合并提交 `ffd7f9b2`，JC 真机验收；弹层偏左另记裁决 76） |
 | [27](./issues/27-workbench-one-line-composer.md) | — | 工作台会话的输入框也改一行式、保留提示行，输入框长高时保持贴底 | 25 | done（裁决 74、76；合并提交 `61fc3b15`，JC 真机验收通过） |
 | [28](./issues/28-header-menu-find-and-reset.md) | — | 顶栏菜单：查找聊天记录（⌘K 面板带范围、⌘F）、重置主对话 | 27 | done（裁决 77；合并提交 `7541197a`，JC 真机验收通过） |
+| [29](./issues/29-subtask-wake-core.md) | — | 子任务叫醒助手（Core）：触发、待报与时机、叫醒行、打回次数、`<no-reply/>`、回放压缩、搜索排除、送不出去的退路 | 06a | ready-for-agent（裁决 82） |
+| [30](./issues/30-assistant-manual-and-entry-layer.md) | — | 入口层派活条款改写、助手手册（内嵌、写进内置状态）、真模型评测叫醒措辞 | 03d | ready-for-agent（裁决 82） |
+| [31](./issues/31-subtask-wake-gui.md) | — | 界面：藏起叫醒行与不出声的回复、卡片最后一句、通知一个声音、子任务卡片「第 N 轮 · 」 | 29 | ready-for-agent（裁决 82） |
 | [26](./issues/26-user-bubble-selection-copy.md) | — | 你的气泡不挂悬停复制，选中文字时弹浮动复制 | 20 | done（裁决 73，`3b029e56`，JC 真机验收；工作台有意不跟） |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
