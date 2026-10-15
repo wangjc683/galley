@@ -13,7 +13,7 @@ export function ComposerDropOverlay({
   line = false,
 }: {
   imagesEnabled: boolean;
-  /** The main chat's one-line composer: one row in a 48px box, rounded
+  /** A session's one-line composer: one row in a 48px box, rounded
    * like it. */
   line?: boolean;
 }) {

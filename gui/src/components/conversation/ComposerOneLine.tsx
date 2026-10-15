@@ -3,8 +3,10 @@ import type { ReactNode, RefObject } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * The main chat's composer: one row of ＋, the input, 「模型 · 强度」 and
- * send / stop, the way IM apps draw it (main chat PRD rulings 71, 72).
+ * A session's composer: one row of ＋, the input, 「模型 · 强度」 and
+ * send / stop, the way IM apps draw it (main chat PRD rulings 71, 72; the
+ * workbench's sessions too since ruling 74, the new-chat empty state
+ * keeps the card).
  *
  *   ┌──────────────────────────────────────────────────────────┐
  *   │ ＋  发消息…                     gpt-6.1-sol · 默认   (↑)  │
@@ -16,8 +18,9 @@ import { cn } from "@/lib/utils";
  * send 8px in from its edge (7px padding + the 1px border), so the row's
  * ends read as one shape. As the input grows the buttons stay at the
  * bottom (items-end), level with its last line. The image tiles sit
- * above the input, inside the box. Measures: `ONE_LINE_*` in
- * composer-styles.ts.
+ * above the input, inside the box. The workbench's hint row sits under
+ * the box, inset to the input's text (the Composer renders it; the main
+ * chat has none). Measures: `ONE_LINE_*` in composer-styles.ts.
  *
  * The model phrase takes at most 40% of the row: past that the model
  * name truncates (the tier, the dot and send never shrink), so a long

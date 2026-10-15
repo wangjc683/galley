@@ -132,12 +132,14 @@ export interface ComposerProps {
    * drag-drop (PRD 定案 8). */
   onTextDropBlocked?: () => void;
   /**
-   * The main chat's form (main chat PRD rulings 71, 72): ＋, the input,
-   * 「模型 · 强度」 and send / stop in one row (ComposerOneLine), the input
-   * growing to eight lines; the model phrase's popovers open
-   * right-aligned. The stopping-with-a-queue sentence moves into the
-   * queue strip's heading, since this form goes without the hint row
-   * (MainView turns `showFooterHint` off with it). Off: the card.
+   * A session's form (main chat PRD rulings 71, 72, 74; MainView sets it
+   * in every session): ＋, the input, 「模型 · 强度」 and send / stop in one
+   * row (ComposerOneLine), the input growing to eight lines; the model
+   * phrase's popovers open centred on their pill (ruling 76). With the
+   * hint row (the workbench's) the row sits under it, inset to the
+   * input's text; without one (the main chat turns `showFooterHint` off)
+   * the stopping-with-a-queue sentence moves into the queue strip's
+   * heading. Off: the card (the new-chat empty state).
    */
   oneLine?: boolean;
 }

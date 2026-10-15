@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { resolveComposerHint } from "@/lib/composer-hint";
 import { useCopy } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 const COMPOSER_HINT_KBD = new Set(["Shift+Enter", "Enter", "/btw"]);
 
@@ -29,10 +30,14 @@ interface ComposerFooterHintProps {
   hasText: boolean;
   isSideQuestion: boolean;
   staticHint?: ReactNode;
+  /** The one-line form insets the row to the input's text
+   * (`ONE_LINE_HINT_CLASS`); under the card it is flush with the card. */
+  className?: string;
 }
 
 /**
- * The single hint slot under every Composer (mt-1.5 / 11px / left).
+ * The single hint slot under every Composer (mt-1.5 / 11px / left:
+ * flush with the card, at the input's text under the one-line form).
  * Renders, in priority order: the keyboard / state hint, or the
  * caller's staticHint. Returns null when empty so
  * the slot collapses. Which keyboard hint applies is policy, not
@@ -47,6 +52,7 @@ export function ComposerFooterHint({
   hasText,
   isSideQuestion,
   staticHint,
+  className,
 }: ComposerFooterHintProps) {
   const copy = useCopy();
   const hintKey = resolveComposerHint({
@@ -64,5 +70,9 @@ export function ComposerFooterHint({
     ? renderComposerHintWithKbd(keyboardHint)
     : (staticHint ?? null);
   if (!footerHint) return null;
-  return <div className="mt-1.5 text-[11px] text-ink-muted">{footerHint}</div>;
+  return (
+    <div className={cn("mt-1.5 text-[11px] text-ink-muted", className)}>
+      {footerHint}
+    </div>
+  );
 }

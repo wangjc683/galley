@@ -10,7 +10,7 @@ interface ComposerImageStripProps {
   images: PendingImageAttachment[];
   onPreview: (index: number) => void;
   onRemove: (image: PendingImageAttachment, index: number) => void;
-  /** Replaces the row's own classes: the main chat's one-line composer
+  /** Replaces the row's own classes: a session's one-line composer
    * puts the tiles above the input. */
   className?: string;
 }

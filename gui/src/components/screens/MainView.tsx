@@ -192,10 +192,11 @@ function MainViewContent({
   // time lines); the one live line in place of the in-flight row, with
   // no streaming prose and no corner clock; the question as a bubble;
   // 贴底 (useStickyScroll's `stickBottom`, the column stacked up from
-  // the composer); and the composer (rulings 71, 72): one line, no hint
-  // row, 「发消息…」, 24px off the window's bottom edge. Every other
+  // the composer); and the composer (rulings 71, 72): no hint row,
+  // 「发消息…」, 24px off the window's bottom edge. Every other
   // conversation — the workbench's, a subtask, the external runtime's —
-  // renders as before.
+  // renders as before. The one-line composer itself is every session's
+  // (ruling 74); the workbench's keeps its hint row under it.
   //
   // The latest run stopped at GA's per-run step cap (#29): a thread
   // tail, only while nothing else signals activity.
@@ -712,11 +713,11 @@ function MainViewContent({
 
       {/* Bottom stack: composer + hint. Matches the conversation
           column width in lockstep — see MainViewProps `conversationWidth`
-          doc for why we don't keep this narrower. The main chat's
+          doc for why we don't keep this narrower. The workbench's hint
+          row sits 16px off the window's bottom edge. The main chat's
           one-line composer has no hint row under it and sits 24px off
-          the window's bottom edge (ruling 72): with the hint row gone,
-          16 sat it too low; 24 is half its 48px height, its own corner
-          radius. */}
+          the edge (ruling 72): with the hint row gone, 16 sat it too
+          low; 24 is half its 48px height, its own corner radius. */}
       <div className={cn("bg-app px-8", isMainChat ? "pb-6" : "pb-4")}>
         <div
           className={cn(
@@ -760,8 +761,11 @@ function MainViewContent({
             requiresModelConfig={requiresModelConfig}
             onOpenLLMSwitcher={onOpenLLMSwitcher}
             reasoningEffort={reasoningEffort}
-            // The main chat: one line, no hint row (ruling 71, item 3).
-            oneLine={isMainChat}
+            // One line in every session (rulings 72, 74); the empty
+            // state keeps the card. The main chat has no hint row
+            // (ruling 71, item 3); the workbench's stays, the live legend
+            // of drop / Enter / queue (ruling 74, item 2).
+            oneLine
             showFooterHint={!isMainChat}
             imagesEnabled={imagesEnabled}
             onImageBlocked={onImageBlocked}

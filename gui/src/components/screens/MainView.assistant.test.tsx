@@ -18,6 +18,7 @@ import type {
   Turn,
 } from "@/types/conversation";
 
+import { EmptyState } from "./EmptyState";
 import { MainView } from "./MainView";
 
 // The live state MainView reads off the active session (its run clock):
@@ -269,11 +270,20 @@ describe("the assistant's live line", () => {
   });
 });
 
-describe("the main chat's composer", () => {
+describe("the composer: one line in every session, the card on the empty state", () => {
   const ONE_LINE = 'data-role="composer-one-line"';
   const CARD = "relative rounded-md border border-line bg-elevated px-3.5";
-  const HINT_ROW = '<div class="mt-1.5 text-[11px] text-ink-muted">';
+  // Under the one-line form the hint row starts at the input's text, 44px
+  // in (ruling 74, item 3); under the card it is flush with the card.
+  const HINT_ROW = '<div class="mt-1.5 text-[11px] text-ink-muted pl-[44px]">';
+  const CARD_HINT_ROW = '<div class="mt-1.5 text-[11px] text-ink-muted">';
+  const ANY_HINT_ROW = '<div class="mt-1.5 text-[11px] text-ink-muted';
   const QUEUE_HEADING = 'data-role="composer-queue-heading"';
+  const STATES = [
+    {},
+    { isRunning: true },
+    { pendingAskUser: { question: "订哪一班？", candidates: ["8:30"] } },
+  ];
 
   afterEach(() => {
     dropComposerDraft("s-1");
@@ -295,32 +305,61 @@ describe("the main chat's composer", () => {
     });
   }
 
-  it("is one line in the main chat, the card in every other conversation (a subtask, the external runtime)", () => {
-    for (const state of [
-      {},
-      { isRunning: true },
-      { pendingAskUser: { question: "订哪一班？", candidates: ["8:30"] } },
-    ]) {
-      const main = render({ isMainChat: true, ...state });
-      expect(main).toContain(ONE_LINE);
-      expect(main).not.toContain(CARD);
-      const other = render({ isMainChat: false, ...state });
-      expect(other).toContain(CARD);
-      expect(other).not.toContain(ONE_LINE);
+  function emptyState(props: Partial<ComponentProps<typeof EmptyState>> = {}) {
+    return renderToStaticMarkup(
+      <Tooltip.Provider>
+        <EmptyState llmDisplayName="model" {...props} />
+      </Tooltip.Provider>,
+    );
+  }
+
+  it("is one line in every session (the main chat, a workbench session, a subtask, the external runtime), at rest, running and asking (ruling 74)", () => {
+    for (const state of STATES) {
+      // A subtask and the external runtime's sessions take the workbench
+      // path (isMainChat false); the external runtime takes no images.
+      for (const props of [
+        { isMainChat: true },
+        { isMainChat: false },
+        { isMainChat: false, imagesEnabled: false },
+      ]) {
+        const html = render({ ...props, ...state });
+        expect(html).toContain(ONE_LINE);
+        expect(html).not.toContain(CARD);
+      }
     }
   });
 
-  it("has no hint row in the main chat; every other conversation keeps it", () => {
+  it("keeps the card on the new-chat empty state, its hint row flush with the card", () => {
+    const html = emptyState();
+    expect(html).toContain(CARD);
+    expect(html).not.toContain(ONE_LINE);
+    expect(html).toContain('rows="2"');
+    // The global empty state has no hint row; a project's says where the
+    // conversation goes, in the card's row.
+    expect(html).not.toContain(ANY_HINT_ROW);
+    const project = emptyState({ projectName: "读书会" });
+    expect(project).toContain(CARD);
+    expect(project).toContain(CARD_HINT_ROW);
+    expect(project).not.toContain("pl-[44px]");
+    expect(project).toContain(zhCopy.composer.willCreateIn("读书会"));
+  });
+
+  it("has no hint row in the main chat; a workbench session's sits under the one line, at the input's text", () => {
     const main = render({ isMainChat: true });
-    expect(main).not.toContain(HINT_ROW);
+    expect(main).not.toContain(ANY_HINT_ROW);
     expect(main).not.toContain(zhCopy.composer.dragToReferenceHint);
-    const other = render({ isMainChat: false });
-    expect(other).toContain(
+    for (const state of STATES) {
+      const other = render({ isMainChat: false, ...state });
+      const row = other.indexOf(HINT_ROW);
+      expect(row).toBeGreaterThan(other.indexOf(ONE_LINE));
+      expect(count(other, ANY_HINT_ROW)).toBe(1);
+    }
+    expect(render({ isMainChat: false })).toContain(
       `${HINT_ROW}${zhCopy.composer.dragToReferenceHint}`,
     );
   });
 
-  it("sits 24px off the window's bottom edge in the main chat, 16 elsewhere (ruling 72)", () => {
+  it("sits 24px off the window's bottom edge in the main chat, 16 under the hint row elsewhere (ruling 72)", () => {
     expect(render({ isMainChat: true })).toContain(
       '<div class="bg-app px-8 pb-6">',
     );
@@ -329,45 +368,58 @@ describe("the main chat's composer", () => {
     expect(other).not.toContain("pb-6");
   });
 
-  it("says 「发消息…」 at rest and while it works (no /btw), and 「回复上方提问」 while it asks", () => {
+  it("says 「发消息…」 in the main chat at rest and while it works (no /btw); the workbench keeps 「继续…」 and the /btw lesson; both 「回复上方提问」 while it asks", () => {
     const rest = render({ isMainChat: true });
     expect(rest).toContain(`placeholder="${zhCopy.composer.writeMessage}"`);
     const running = render({ isMainChat: true, isRunning: true });
     expect(running).toContain(`placeholder="${zhCopy.composer.writeMessage}"`);
     expect(running).not.toContain("/btw");
-    const asking = render({
-      isMainChat: true,
+    const asking = {
       pendingAskUser: { question: "订哪一班？", candidates: [] },
-    });
-    expect(asking).toContain(`placeholder="${zhCopy.composer.replyOpen}"`);
+    };
+    expect(render({ isMainChat: true, ...asking })).toContain(
+      `placeholder="${zhCopy.composer.replyOpen}"`,
+    );
+    expect(render({ isMainChat: false })).toContain(
+      `placeholder="${zhCopy.composer.continueConversation}"`,
+    );
+    expect(render({ isMainChat: false, isRunning: true })).toContain(
+      `placeholder="${zhCopy.composer.byTheWay}"`,
+    );
+    expect(render({ isMainChat: false, ...asking })).toContain(
+      `placeholder="${zhCopy.composer.replyOpen}"`,
+    );
   });
 
-  it("says 「正在停止，排队的消息会自动发出」 in the queue strip's heading while a stop waits on queued messages", () => {
+  it("says 「正在停止，排队的消息会自动发出」 once while a stop waits on queued messages: in the main chat's queue strip heading, in a workbench session's hint row", () => {
     queueOne();
     const stopping = render({
       isMainChat: true,
       isRunning: true,
       isStopping: true,
     });
+    expect(count(stopping, zhCopy.composer.stoppingQueueHint)).toBe(1);
     const heading = stopping.indexOf(QUEUE_HEADING);
     expect(heading).toBeGreaterThan(-1);
     expect(stopping.slice(heading, heading + 200)).toContain(
       zhCopy.composer.stoppingQueueHint,
     );
     expect(heading).toBeLessThan(stopping.indexOf(ONE_LINE));
-    expect(stopping).not.toContain(HINT_ROW);
+    expect(stopping).not.toContain(ANY_HINT_ROW);
     // Still working, not stopping: the count, as before.
     const running = render({ isMainChat: true, isRunning: true });
     expect(running).not.toContain(zhCopy.composer.stoppingQueueHint);
     expect(running).toContain(zhCopy.composer.queueStripLabel(1));
-    // Every other conversation says it in the hint row, as before.
+    // A workbench session's one line has the hint row, and the row says it.
     const other = render({
       isMainChat: false,
       isRunning: true,
       isStopping: true,
     });
+    expect(count(other, zhCopy.composer.stoppingQueueHint)).toBe(1);
     expect(other).toContain(`${HINT_ROW}${zhCopy.composer.stoppingQueueHint}`);
     expect(other).not.toContain(QUEUE_HEADING);
+    expect(other).toContain(zhCopy.composer.queueStripLabel(1));
   });
 
   it("queues a send while it works, as every session does (ruling 71: no 排队 / 开新对话 choice)", () => {
@@ -382,7 +434,7 @@ describe("the main chat's composer", () => {
     expect(main).not.toContain("main-chat-busy-choice");
     expect(main).not.toContain("开新对话");
     const other = render({ isMainChat: false, isRunning: true });
-    expect(other).toContain(QUEUE_HINT);
+    expect(other).toContain(`${HINT_ROW}${QUEUE_HINT}`);
   });
 });
 

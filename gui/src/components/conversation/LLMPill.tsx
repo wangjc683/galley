@@ -63,10 +63,13 @@ export function LLMPill({
    * effort twin 10px right (JC: 两边多了一块).
    */
   phraseLead?: boolean;
-  /** Which edge the popover lines up with: the start (the card's
-   * phrase sits left), or the end — the main chat's one-line composer
-   * has the phrase at the row's right. */
-  popoverAlign?: "start" | "end";
+  /** How the popover lines up with the pill: its start (the card's
+   * phrase sits left), or centred on it — the one-line composer's
+   * phrase sits at the row's right, and a popover much wider than the
+   * pill, lined up by its right edge, reached out to the left and did
+   * not read as hanging from the pill (ruling 76; centred, it stays
+   * inside the row on both sides). */
+  popoverAlign?: "start" | "center";
 }) {
   const copy = useCopy();
   const footerHint = llmConfigHint ?? copy.app.externalModelHint;

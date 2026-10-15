@@ -114,7 +114,7 @@ describe("Enter in the Composer", () => {
   }
 });
 
-describe("the one-line form (the main chat's)", () => {
+describe("the one-line form (every session's; the empty state keeps the card)", () => {
   function markup(props: Partial<ComposerProps>): string {
     return renderToStaticMarkup(
       <Tooltip.Provider>
@@ -156,7 +156,21 @@ describe("the one-line form (the main chat's)", () => {
     expect(html).toContain('rows="2"');
   });
 
-  it("opens the model phrase's popovers right-aligned (the card keeps them left)", () => {
+  it("puts the hint row under the box, at the input's text (44px in); under the card it is flush", () => {
+    const ROW = '<div class="mt-1.5 text-[11px] text-ink-muted';
+    const line = markup({ oneLine: true, showFooterHint: true });
+    const box = line.indexOf('data-role="composer-one-line"');
+    const row = line.indexOf(`${ROW} pl-[44px]">`);
+    expect(row).toBeGreaterThan(box);
+    expect(line.slice(row)).toContain(zhCopy.composer.dragToReferenceHint);
+    // No hint row asked for (the main chat): none.
+    expect(markup({ oneLine: true })).not.toContain(ROW);
+    const card = markup({ showFooterHint: true });
+    expect(card).toContain(`${ROW}">${zhCopy.composer.dragToReferenceHint}`);
+    expect(card).not.toContain("pl-[44px]");
+  });
+
+  it("opens the model phrase's popovers centred on their pill (ruling 76; the card keeps them at its start)", () => {
     const aligns = (oneLine: boolean) =>
       composerTree({
         llms: [{ index: 0, displayName: "gpt-6.1-sol", isCurrent: true }],
@@ -172,7 +186,7 @@ describe("the one-line form (the main chat's)", () => {
           (element) =>
             (element.props as { popoverAlign?: string }).popoverAlign,
         );
-    expect(aligns(true)).toEqual(["end", "end"]);
+    expect(aligns(true)).toEqual(["center", "center"]);
     expect(aligns(false)).toEqual([undefined, undefined]);
   });
 });
