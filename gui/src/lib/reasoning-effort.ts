@@ -44,6 +44,22 @@ export const COMPOSER_EFFORT_TIERS = [
 export type ComposerEffortTier = (typeof COMPOSER_EFFORT_TIERS)[number];
 
 /**
+ * The effort popover's rows, top to bottom: the highest tier first, down
+ * to `low`, then `默认` (only when the model configuration leaves the
+ * tier empty) last (main chat PRD ruling 78). The popover always opens
+ * upward (`side="top"`), so the row next to the button is `默认`, the
+ * state nearly every session stays in, and moving up the list moves up
+ * in effort: up is more, as on any vertical scale. Listed low to high,
+ * the most expensive tier sat right against the button.
+ */
+export function composerEffortMenu(
+  showDefaultRow: boolean,
+): (ComposerEffortTier | typeof EFFORT_DEFAULT_ROW)[] {
+  const tiers = [...COMPOSER_EFFORT_TIERS].reverse();
+  return showDefaultRow ? [...tiers, EFFORT_DEFAULT_ROW] : tiers;
+}
+
+/**
  * Every tier the DB / IPC layer accepts. Used to validate what we read
  * out of a model's free-form `advancedOptions` bag.
  */

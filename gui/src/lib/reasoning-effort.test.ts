@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   COMPOSER_EFFORT_TIERS,
+  composerEffortMenu,
   EFFORT_DEFAULT_ROW,
   effortPillState,
   modelConfiguredEffort,
@@ -229,5 +230,28 @@ describe("resolveConfiguredEffort", () => {
         managedModels,
       }),
     ).toBeNull();
+  });
+});
+
+describe("composerEffortMenu", () => {
+  it("lists the highest tier on top and 默认 last, next to the button", () => {
+    expect(composerEffortMenu(true)).toEqual([
+      "max",
+      "xhigh",
+      "high",
+      "medium",
+      "low",
+      EFFORT_DEFAULT_ROW,
+    ]);
+  });
+
+  it("ends at low when the model configuration names a tier", () => {
+    expect(composerEffortMenu(false)).toEqual([
+      "max",
+      "xhigh",
+      "high",
+      "medium",
+      "low",
+    ]);
   });
 });

@@ -5,7 +5,7 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import {
-  COMPOSER_EFFORT_TIERS,
+  composerEffortMenu,
   EFFORT_DEFAULT_ROW,
   effortPillState,
 } from "@/lib/reasoning-effort";
@@ -111,23 +111,14 @@ export function EffortPill({
 
   // `默认` only appears when the model configuration has no explicit
   // tier — with one there is nothing to "follow" that isn't already a
-  // row below.
-  const rows: { key: string; value: string | null; label: string }[] = [
-    ...(showDefaultRow
-      ? [
-          {
-            key: EFFORT_DEFAULT_ROW,
-            value: null,
-            label: effortCopy.default,
-          },
-        ]
-      : []),
-    ...COMPOSER_EFFORT_TIERS.map((tier) => ({
-      key: tier,
-      value: tier,
-      label: tierLabels[tier],
-    })),
-  ];
+  // row. Highest tier on top, `默认` last, next to the button (the
+  // popover opens upward; `composerEffortMenu`, ruling 78).
+  const rows: { key: string; value: string | null; label: string }[] =
+    composerEffortMenu(showDefaultRow).map((row) =>
+      row === EFFORT_DEFAULT_ROW
+        ? { key: EFFORT_DEFAULT_ROW, value: null, label: effortCopy.default }
+        : { key: row, value: row, label: tierLabels[row] },
+    );
 
   return (
     <Popover.Root>
