@@ -1,6 +1,6 @@
 # 21 助手回复的过程按钮：步数、用时、token 收进展开区，卡片与顶栏说主区那一句
 
-Status: ready-for-agent
+Status: ready-for-human（2026-10-15 合入 main，`dfd43968`–`294c27cc`；等 JC 在 tauri dev 里验收，并在 `Footprints` 与 `ListChecks` 里挑一个）
 
 来源：主聊天 PRD 裁决 68（2026-10-15，JC：「按你推荐和建议推进」）。依赖 20。只改 GUI，不碰 Rust。
 

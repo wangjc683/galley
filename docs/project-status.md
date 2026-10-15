@@ -755,11 +755,15 @@ main-chat planning docs, main has:
   rail. Since 2026-10-15 (rulings 66–67, tickets 19–20) the open main chat
   is drawn as an IM with one person: bubbles on both sides (the user's
   apricot on the right, the assistant's neutral `--color-assistant-tint`
-  on the left), one live line while it works and a quiet 「N 步 ›」 under a
-  reply of two steps or more, send times as centred lines (one above the
-  greeting), and the column stacked up from the composer; workbench
-  conversations and subtasks are unchanged (JC's live acceptance of
-  ticket 20 is owed). Settings can reset it with a five-second hold (ticket 15): its rows
+  on the left), one live line while it works, send times as centred lines
+  (one above the greeting), and the column stacked up from the composer.
+  Since ruling 68 (ticket 21) nothing shows under a reply at rest: the
+  hover bar is icons only (copy, save, and a process button for a reply of
+  two steps or more, whose opened steps are headed by 「N 步 · 用时 · ↑ ↓」);
+  no context percentage is drawn there, and the sidebar card and the header
+  say the live line's own sentence while it runs instead of 「第 N 步 ·
+  摘要」. Workbench conversations and subtasks are unchanged (JC's live
+  acceptance of tickets 20 and 21 is owed). Settings can reset it with a five-second hold (ticket 15): its rows
   go, long-term memory returns to factory, the migration backups are
   deleted. A new main
   chat opens with a fixed one-paragraph greeting in the UI language (shown
