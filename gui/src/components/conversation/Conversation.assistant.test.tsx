@@ -9,6 +9,7 @@ import { LocalFilesContext } from "@/lib/local-files";
 import { userTimeMarks } from "@/lib/message-time";
 import type {
   AgentTurn,
+  BrowserFacts,
   ConversationToolEvent,
   Turn,
   UserTurn,
@@ -16,8 +17,10 @@ import type {
 
 // The steps under a reply open on its process button, which a static
 // render cannot press: with `expand.all` set, every ExpandSection renders
-// as open (the button's own pressed state: MessageActions.test.tsx).
-const expand = vi.hoisted(() => ({ all: false }));
+// as open (the button's own pressed state: MessageActions.test.tsx);
+// with `expand.cards`, only the sections that sweep a margin with them —
+// the process card — and not a step's detail inside it.
+const expand = vi.hoisted(() => ({ all: false, cards: false }));
 vi.mock("@/components/conversation/ExpandSection", async (importOriginal) => {
   const actual =
     await importOriginal<
@@ -25,13 +28,21 @@ vi.mock("@/components/conversation/ExpandSection", async (importOriginal) => {
     >();
   return {
     ExpandSection: (props: ComponentProps<typeof actual.ExpandSection>) => (
-      <actual.ExpandSection {...props} open={props.open || expand.all} />
+      <actual.ExpandSection
+        {...props}
+        open={
+          props.open ||
+          expand.all ||
+          (expand.cards && props.openClassName !== undefined)
+        }
+      />
     ),
   };
 });
 
 afterEach(() => {
   expand.all = false;
+  expand.cards = false;
 });
 
 function tool(name: string, args: Record<string, unknown> = {}) {
@@ -328,7 +339,7 @@ describe("the assistant's conversation: the process", () => {
     }
   });
 
-  it("heads the opened steps with the round's numbers: steps, duration, ↑ ↓, no context", () => {
+  it("heads the card with the round's numbers: steps, duration, ↑ ↓, no context", () => {
     expand.all = true;
     const html = assistant(conversation());
     const summaries = html
@@ -362,12 +373,18 @@ describe("the assistant's conversation: the process", () => {
         '<svg class="shrink-0 transition-transform',
       );
     }
-    // It sits above the rail, which hangs from under it.
-    const steps = html.indexOf('data-role="assistant-run-steps"');
-    const region = html.slice(steps);
-    expect(region.indexOf('data-role="assistant-run-summary"')).toBeLessThan(
-      region.indexOf("absolute bottom-0 left-[5px] w-px bg-line -top-2.5"),
-    );
+    // The card's first line, above its steps; no rail anywhere.
+    for (const card of html
+      .split('data-role="assistant-process-card"')
+      .slice(1)) {
+      expect(card.indexOf('data-role="assistant-run-summary"')).toBeGreaterThan(
+        -1,
+      );
+      expect(card.indexOf('data-role="assistant-run-summary"')).toBeLessThan(
+        card.indexOf('data-role="assistant-process-steps"'),
+      );
+    }
+    expect(html).not.toContain("absolute bottom-0 left-[5px] w-px bg-line");
   });
 
   it("keeps the workbench's reply bar: copy, save | ↑ ↓ and the context", () => {
@@ -380,21 +397,25 @@ describe("the assistant's conversation: the process", () => {
     expect(html).not.toContain('data-role="assistant-run-summary"');
   });
 
-  it("opens the steps in place without repeating the question or the answer", () => {
+  it("opens a card without the question's step, the answer's step, the question or the answer", () => {
     expand.all = true;
     const html = assistant(conversation());
-    expect(count(html, 'data-role="assistant-run-steps"')).toBe(2);
+    expect(count(html, 'data-role="assistant-process-card"')).toBe(2);
     const last = html.slice(
-      html.lastIndexOf('data-role="assistant-run-steps"'),
+      html.lastIndexOf('data-role="assistant-process-card"'),
     );
-    const steps = last.slice(0, last.indexOf("谢谢"));
-    expect(steps).toContain("我先看看评分高的晚饭。");
-    expect(steps).toContain("我挑几家闽南菜馆。");
-    // The four markers (the question's step and the answer's included)…
-    expect(count(steps, 'data-role="step-marker"')).toBe(4);
-    // …but not the question's echo nor the user's answer.
-    expect(steps).not.toContain('data-role="answered-ask-user"');
-    expect(steps).not.toContain("user-msg-reply");
+    const card = last.slice(0, last.indexOf("谢谢"));
+    // Four steps (「4 步」), two rows: the question's step and the
+    // answer's are out.
+    expect(rowsOf(card)).toEqual([
+      ["我先看看评分高的晚饭。", null],
+      ["我挑几家闽南菜馆。", null],
+    ]);
+    expect(text(card)).not.toContain("问用户");
+    expect(text(card)).not.toContain(zhCopy.conversation.stepDirectAnswer);
+    expect(card).not.toContain('data-role="answered-ask-user"');
+    expect(card).not.toContain("user-msg-reply");
+    expect(card).not.toContain('data-role="step-marker"');
     expect(count(html, 'data-role="answered-ask-user"')).toBe(1);
   });
 
@@ -412,6 +433,319 @@ describe("the assistant's conversation: the process", () => {
     expect(count(html, 'data-role="step-marker"')).toBe(3);
     expect(html).toContain("我去下单。");
     expect(buttons(html, zhCopy.conversation.foldExpand).length).toBe(0);
+    expect(html).not.toContain('data-role="assistant-process-card"');
+    // The workbench's step region: numerals, the rail, the tool pills.
+    expect(html).toContain(">01</span>");
+    expect(html).toContain("absolute bottom-0 left-[5px] w-px bg-line");
+    expect(html).toContain(zhCopy.tools.web_scan);
+  });
+});
+
+// ---- The process card (ruling 69) ----------------------------------------
+
+const SHIPS: BrowserFacts = {
+  kind: "scan",
+  tabsOnly: false,
+  activeTabId: "7",
+  tabs: [
+    { id: "7", url: "https://www.ctrip.com/ferry?day=sat", title: "携程船票" },
+    { id: "8", url: "https://www.weather.com.cn/xiamen", title: "厦门天气" },
+  ],
+};
+
+function did(
+  narration: string,
+  index: number,
+  ...tools: ConversationToolEvent[]
+): AgentTurn {
+  return {
+    role: "agent",
+    turnIndex: index,
+    finalAnswer: narration,
+    summary: narration,
+    tools,
+  };
+}
+
+function browsed(facts?: BrowserFacts, name = "web_scan") {
+  return { ...tool(name), ...(facts ? { browser: facts } : {}) };
+}
+
+/** A round of nine steps: two browser steps that resolve to a site and
+ * one that does not, a file read, a script whose model wrote its own
+ * summary, the question, a file write, a step that is only a sentence,
+ * the answer. */
+function round(): Turn[] {
+  return [
+    user("帮我订周六去鼓浪屿的船票", at(9)),
+    did("我先打开携程看周六的船班。", 1, browsed(SHIPS)),
+    did(
+      "我点进 8:30 那一班看余票。",
+      2,
+      browsed({ kind: "script", tabId: "7", newTabs: [] }, "web_execute_js"),
+    ),
+    did(
+      "我再确认一下那个页面。",
+      3,
+      browsed({ kind: "script", tabId: "42", newTabs: [] }, "web_execute_js"),
+    ),
+    did(
+      "我读一下你的行程文件。",
+      4,
+      tool("file_read", { path: "~/Documents/行程/鼓浪屿.md" }),
+    ),
+    {
+      ...did(
+        "我算一下往返要多久。",
+        5,
+        tool("code_run", { script: "python3 plan.py" }),
+      ),
+      summary: "算往返时间",
+    },
+    ask("订哪一班？", ["8:30", "9:00"], 6),
+    user("8:30", at(9, 2)),
+    did("我把船票信息写进清单。", 7, {
+      ...tool("file_write", { path: "./清单.md" }),
+      resolvedPath: "/Users/me/Documents/清单.md",
+    }),
+    {
+      role: "agent",
+      turnIndex: 8,
+      finalAnswer: null,
+      summary: "想好怎么回你",
+      tools: [tool("no_tool")],
+    },
+    answer("订好了 8:30 的船。", 9),
+  ];
+}
+
+/** The card's rows as [sentence, what it touched]: each row's line, up
+ * to its end (a step's detail follows it). */
+function rowsOf(html: string): [string, string | null][] {
+  return html
+    .split('data-role="assistant-process-step"')
+    .slice(1)
+    .map((rest) => {
+      const line = rest.slice(0, rest.indexOf("</div>"));
+      const object = /data-role="assistant-process-object"[^>]*>([^<]*)/.exec(
+        line,
+      );
+      const sentence = /<span title="[^"]*" class="min-w-0[^"]*">([^<]*)/.exec(
+        line,
+      );
+      return [sentence?.[1] ?? "", object ? object[1] : null];
+    });
+}
+
+/** The card (first one) in a render. */
+function cardOf(html: string): string {
+  const at = html.indexOf('data-role="assistant-process-card"');
+  return html.slice(at, html.indexOf('data-role="assistant-process-fade"', at));
+}
+
+describe("the assistant's conversation: the process card", () => {
+  it("is closed at rest", () => {
+    const html = assistant(round());
+    expect(buttons(html, zhCopy.conversation.foldExpand).length).toBe(1);
+    expect(html).not.toContain('data-role="assistant-process-card"');
+  });
+
+  it("writes one line a step: its sentence and the site or file it touched, no numerals, no tool names", () => {
+    expand.cards = true;
+    const card = cardOf(assistant(round()));
+    expect(rowsOf(card)).toEqual([
+      ["我先打开携程看周六的船班。", "ctrip.com"],
+      ["我点进 8:30 那一班看余票。", "ctrip.com"],
+      // A tab it cannot place: nothing, not a guess.
+      ["我再确认一下那个页面。", null],
+      ["我读一下你的行程文件。", "鼓浪屿.md"],
+      // The model's own summary; code_run names nothing.
+      ["算往返时间", null],
+      ["我把船票信息写进清单。", "清单.md"],
+      ["想好怎么回你", null],
+    ]);
+    const words = text(card);
+    // No numerals, no tool names or their labels, no arguments.
+    expect(card).not.toMatch(/>0\d</);
+    expect(card).not.toContain('data-role="step-marker"');
+    for (const name of [
+      "web_scan",
+      "web_execute_js",
+      "file_read",
+      "file_write",
+      "code_run",
+    ]) {
+      expect(words).not.toContain(name);
+      expect(words).not.toContain(
+        (zhCopy.tools as Record<string, string>)[name],
+      );
+    }
+    expect(words).not.toContain("python3 plan.py");
+    expect(words).not.toContain("~/Documents");
+    // No answer step, no question step, no caret, no rail.
+    expect(words).not.toContain(zhCopy.conversation.stepDirectAnswer);
+    expect(words).not.toContain("订好了 8:30 的船。");
+    expect(words).not.toContain("订哪一班？");
+    expect(card).not.toContain("<svg");
+    expect(card).not.toContain("left-[5px]");
+    // The sentence ink-soft and cut to its line with the whole of it on
+    // hover; the object ink-muted and never pushed out.
+    expect(card).toContain(
+      '<span title="我先打开携程看周六的船班。" class="min-w-0 select-text truncate text-ink-soft',
+    );
+    expect(card).toContain(
+      'class="ml-2 max-w-[40%] shrink-0 truncate text-ink-muted"',
+    );
+    // 24px rows at the step size.
+    expect(count(card, "flex h-6 min-w-0 items-center rounded-sm px-2")).toBe(
+      7,
+    );
+    expect(card).toContain("[font-size:var(--conversation-step-size)]");
+  });
+
+  it("writes the first of several things a step touched and 「+N」 for the rest", () => {
+    expand.cards = true;
+    const turns: Turn[] = [
+      user("比一下", at(9)),
+      did(
+        "我把两个页面和两份笔记对一下。",
+        1,
+        browsed(SHIPS),
+        tool("file_read", { path: "/a/笔记.md" }),
+        tool("file_read", { path: "/b/笔记.md" }),
+        tool("file_read", { path: "/c/船票.md" }),
+      ),
+      answer("对好了。", 2),
+    ];
+    const card = cardOf(assistant(turns));
+    expect(rowsOf(card)).toEqual([
+      ["我把两个页面和两份笔记对一下。", "ctrip.com +2"],
+    ]);
+    expect(card).toContain('title="ctrip.com · 笔记.md · 船票.md"');
+  });
+
+  it("makes a row with something to show a disclosure, and one without plain text", () => {
+    expand.cards = true;
+    const card = cardOf(assistant(round()));
+    const lines = card
+      .split('data-role="assistant-process-step"')
+      .slice(1)
+      .map((rest) => rest.slice(0, rest.indexOf(">") + 1));
+    const [first] = card
+      .split('data-role="assistant-process-step"')
+      .slice(1)
+      .map((rest) => rest.slice(rest.indexOf("<div"), rest.indexOf("<span")));
+    expect(first).toContain('role="button"');
+    expect(first).toContain('tabindex="0"');
+    expect(first).toContain('aria-expanded="false"');
+    expect(first).toContain("hover:bg-hover");
+    expect(first).toContain("focus-visible:bg-hover");
+    expect(lines).toHaveLength(7);
+    // 「想好怎么回你」: only a sentence.
+    const plain = card.slice(
+      card.lastIndexOf('data-role="assistant-process-step"'),
+    );
+    const head = plain.slice(plain.indexOf("<div"), plain.indexOf("<span"));
+    expect(head).not.toContain("role=");
+    expect(head).not.toContain("tabindex");
+    expect(head).not.toContain("hover:bg-hover");
+    expect(count(card, 'role="button"')).toBe(6);
+  });
+
+  it("opens a step in place, inside the card: its narration, its tools, its reasoning", () => {
+    expand.all = true;
+    const turns = round();
+    (turns[5] as AgentTurn).thinking = "往返要算上排队。";
+    const html = assistant(turns);
+    const card = cardOf(html);
+    const box = card.slice(card.indexOf('data-role="assistant-process-steps"'));
+    // Six details (the plain row has none), inside the scroll box.
+    expect(count(box, 'data-role="assistant-process-detail"')).toBe(6);
+    const script = box.slice(
+      box.indexOf("算往返时间"),
+      box.indexOf("我把船票信息写进清单。"),
+    );
+    // The model wrote its own summary: the narration is the detail's.
+    expect(script).toContain("我算一下往返要多久。");
+    expect(script).toContain(zhCopy.tools.code_run);
+    expect(script.indexOf(zhCopy.tools.code_run)).toBeLessThan(
+      script.indexOf("往返要算上排队。"),
+    );
+    // An echo step: its narration is the row, not repeated under it.
+    const read = box.slice(
+      box.indexOf("我读一下你的行程文件。"),
+      box.indexOf("算往返时间"),
+    );
+    expect(count(read, "我读一下你的行程文件。")).toBe(2); // title + text
+    expect(read).toContain(zhCopy.tools.file_read);
+  });
+
+  it("is a card at the bubble's cap: hairline, its radius, no shadow, no status bar", () => {
+    expand.cards = true;
+    const html = assistant(round());
+    const tag = html.slice(
+      html.lastIndexOf(
+        "<div",
+        html.indexOf('data-role="assistant-process-card"'),
+      ),
+    );
+    const open = tag.slice(0, tag.indexOf(">") + 1);
+    expect(open).toContain("rounded-md border border-line bg-app");
+    expect(open).toContain("max-w-[min(88%,680px)]");
+    expect(open).not.toContain("shadow");
+    expect(cardOf(html)).not.toContain("w-[3px]");
+    // 6px under the action row, 20px of its own under it.
+    expect(html).toContain(
+      'class="grid transition-[grid-template-rows,margin-top,opacity] duration-(--motion-slow) ease-firm motion-reduce:transition-none grid-rows-[1fr] opacity-100 mt-1.5"><div class="overflow-hidden"><div class="pb-5">',
+    );
+  });
+
+  it("holds eight rows and scrolls the rest inside, the fade only while more is below", () => {
+    expand.cards = true;
+    const short = cardOf(assistant(round()));
+    const steps = (n: number): Turn[] => [
+      user("把这一周的船票都查一遍", at(9)),
+      ...Array.from({ length: n }, (_, i) =>
+        did(`我查第 ${i + 1} 天的船班。`, i + 1, browsed(SHIPS)),
+      ),
+      answer("都查完了。", n + 1),
+    ];
+    const eight = cardOf(assistant(steps(8)));
+    const twelve = cardOf(assistant(steps(12)));
+    expect(rowsOf(eight)).toHaveLength(8);
+    expect(rowsOf(twelve)).toHaveLength(12);
+    for (const card of [short, eight, twelve]) {
+      // The cap: eight 24px rows and half of the ninth.
+      expect(card).toContain("overflow-y-auto px-1 max-h-[204px]");
+    }
+    expect(short).toContain('data-overflow="false"');
+    expect(eight).toContain('data-overflow="false"');
+    expect(twelve).toContain('data-overflow="true"');
+    const fade = (n: number) => {
+      const html = assistant(steps(n));
+      const at = html.indexOf('data-role="assistant-process-fade"');
+      return html.slice(at, html.indexOf(">", at));
+    };
+    expect(fade(8)).toContain("opacity-0");
+    expect(fade(12)).toContain("opacity-100");
+    expect(fade(12)).toContain("h-3");
+    // Nothing above at the first step.
+    expect(twelve).toContain('data-role="assistant-process-fade-top"');
+  });
+
+  it("leaves the workbench's step region as it was", () => {
+    expand.all = true;
+    const html = render(round());
+    expect(html).not.toContain('data-role="assistant-process-card"');
+    expect(html).not.toContain('data-role="assistant-process-step"');
+    expect(html).toContain('data-role="run-fold"');
+    expect(count(html, 'data-role="step-marker"')).toBeGreaterThan(0);
+    expect(html).toContain(">01</span>");
+    expect(html).toContain("absolute bottom-0 left-[5px] w-px bg-line");
+    expect(html).toContain(zhCopy.tools.file_read);
+    // The question's step and its echo are in the region too.
+    expect(html).toContain('data-role="answered-ask-user"');
+    expect(html).toContain("问用户");
   });
 });
 

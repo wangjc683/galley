@@ -292,8 +292,8 @@ function AnswerTelemetry({
 
 /**
  * The ↑ ↓ token counts with their tooltips: the machine invoice's
- * first two metrics, and the token segment of the assistant's opened
- * steps (AssistantParts). Nothing when neither count is known.
+ * first two metrics, and the token segment of the assistant's process
+ * card's first line (AssistantProcessCard). Nothing when neither count is known.
  * `valueClassName` inks the counts (the steps' first line lifts its
  * figures a rung).
  */

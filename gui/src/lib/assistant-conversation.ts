@@ -5,7 +5,7 @@ import { cleanSessionSummary } from "@/lib/session-summary";
 import type { Turn } from "@/types/conversation";
 
 /**
- * The assistant's conversation (main chat PRD rulings 66–68; spec:
+ * The assistant's conversation (main chat PRD rulings 66–69; spec:
  * docs/design/conversation.md 「助手的对话」): the main chat, open in the
  * main area, reads as a long IM with one person rather than as the
  * workbench's task record. MainView's `isMainChat` is the gate; every
@@ -26,9 +26,11 @@ import type { Turn } from "@/types/conversation";
  *             the round has its answer. Under it nothing shows at rest:
  *             the action bar comes in on hover, icons only (copy, save,
  *             and for a reply of two steps or more the process button,
- *             which opens its steps in place, headed by the round's
- *             numbers — 「4 步 · 用时 45 秒 · ↑33k ↓1.1k」; no context
- *             percentage anywhere). Its questions and the user's
+ *             which opens its steps in place as a card: the round's
+ *             numbers — 「4 步 · 用时 45 秒 · ↑33k ↓1.1k」 — then one
+ *             line a step, eight at most before it scrolls
+ *             (lib/assistant-process.ts); no context percentage
+ *             anywhere). Its questions and the user's
  *             answers stay in the conversation as messages; a run
  *             without an answer unfolds in full (`assistantLinePlan`).
  *   time      the send time at a break as a centred line between two
@@ -197,10 +199,10 @@ export interface AssistantProcessToggle {
  *             (openers and ask_user answers), the greeting, a run's
  *             questions and its answer.
  *   question  agent turns drawn as their ask_user question only.
- *   steps     closing turn → its run's agent turns (the step region
- *             the process button opens), for runs of two steps or more.
- *             The question steps are in it too (minus the echo); the
- *             answers are not.
+ *   steps     closing turn → its run's agent turns, for runs of two
+ *             steps or more: the process card the button opens draws
+ *             them, minus the answer and the steps that only asked
+ *             (lib/assistant-process.ts `assistantProcessSteps`).
  *   flat      turns of runs drawn the workbench way, by opener: runs
  *             without an answer that are not live, /btw exchanges,
  *             headless lead-ins (the greeting excepted).

@@ -9,6 +9,7 @@
 // Every other step keeps its summary and its narration row.
 
 import { summaryEchoesAnswer } from "@/lib/ipc/ga-output-cleaning";
+import { cleanSessionSummary } from "@/lib/session-summary";
 
 export interface StepHeadingFacts {
   /** A TurnMarker row renders for this step: settled, numbered, not a
@@ -35,4 +36,48 @@ export function isEchoNarrationStep(facts: StepHeadingFacts): boolean {
   const narration = facts.narration ?? "";
   if (narration.trim() === "") return false;
   return summaryEchoesAnswer(facts.summary, narration);
+}
+
+/** The marker's two fallback lines (`copy.conversation`). */
+export interface StepMarkerWords {
+  stepDirectAnswer: string;
+  stepCalledTools: (names: string[]) => string;
+}
+
+/**
+ * The marker's summary before the echo-narration swap: GA's turn
+ * summary, unless it only echoes the step's prose (GA's fallback when
+ * the model wrote no `<summary>`); then GA's own two-way fallback
+ * (ga.py:599) — the direct-answer line for a step without real tools,
+ * 「调用了 X」 otherwise. Undefined when GA wrote no summary at all (a
+ * bare step). The step marker (Conversation's AgentTurnView) and the
+ * assistant's process card (lib/assistant-process.ts) both read it.
+ */
+export function stepMarkerSummary(
+  summary: string | undefined,
+  prose: string | null,
+  realToolNames: string[],
+  words: StepMarkerWords,
+): string | undefined {
+  if (!summaryEchoesAnswer(summary, prose)) return summary;
+  return realToolNames.length === 0
+    ? words.stepDirectAnswer
+    : words.stepCalledTools(realToolNames);
+}
+
+/**
+ * The marker line's words: on an echo-narration step
+ * (`isEchoNarrationStep`) the narration itself, run through the
+ * sidebar's recap cleaner (markdown markers out, whitespace collapsed),
+ * not GA's summary, which may be middle-elided past 80 characters;
+ * otherwise the marker summary (`stepMarkerSummary`).
+ */
+export function stepMarkerLine(
+  markerSummary: string | undefined,
+  narration: string | null,
+  narrationIsHeading: boolean,
+): string | undefined {
+  return narrationIsHeading && narration
+    ? cleanSessionSummary(narration) || markerSummary
+    : markerSummary;
 }

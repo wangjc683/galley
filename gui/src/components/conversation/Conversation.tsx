@@ -3,9 +3,9 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   ASSISTANT_BUBBLE_MAX,
-  AssistantRunSteps,
   AssistantTimeDivider,
 } from "@/components/conversation/AssistantParts";
+import { AssistantProcessCard } from "@/components/conversation/AssistantProcessCard";
 import { AnsweredAskUser } from "@/components/conversation/AskUserBubble";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import {
@@ -26,6 +26,7 @@ import {
   assistantLinePlan,
   assistantRowGap,
 } from "@/lib/assistant-conversation";
+import { assistantProcessSteps } from "@/lib/assistant-process";
 import {
   BrowserSitesContext,
   buildBrowserSiteResolver,
@@ -41,9 +42,11 @@ import {
   userTimeMarks,
 } from "@/lib/message-time";
 import { PENDING_STEP_NUMERAL, formatStepNumeral } from "@/lib/step-numeral";
-import { summaryEchoesAnswer } from "@/lib/ipc/ga-output-cleaning";
-import { cleanSessionSummary } from "@/lib/session-summary";
-import { isEchoNarrationStep } from "@/lib/step-heading";
+import {
+  isEchoNarrationStep,
+  stepMarkerLine,
+  stepMarkerSummary,
+} from "@/lib/step-heading";
 import {
   askUserReplyContent,
   mergedAskUserArgs,
@@ -102,12 +105,13 @@ export interface ConversationProps {
   renderAfterAnswer?: (messageId: string) => ReactNode;
   /**
    * Draw the assistant's conversation (the main chat, MainView's
-   * `isMainChat`; main chat PRD rulings 66, 67; rules in
+   * `isMainChat`; main chat PRD rulings 66–69; rules in
    * lib/assistant-conversation.ts): an IM with one person rather than
    * the workbench's task record. Bubbles on both sides with IM grouping
-   * gaps; a settled reply keeps only a quiet 「N 步 · 用时 ›」 (two steps
-   * or more) that opens its steps in place, its questions and the
-   * user's answers staying out as messages; the send times at breaks
+   * gaps; under a settled reply of two steps or more, a process button
+   * in its hover action bar opens its steps in place as a card, one line
+   * a step (AssistantProcessCard), its questions and the user's answers
+   * staying out as messages; the send times at breaks
    * as centred lines, one above the greeting too. Off for every other
    * conversation: the workbench's, a subtask, the external runtime's.
    */
@@ -673,23 +677,17 @@ export function Conversation({
           }
         />
         {steps && (
-          <AssistantRunSteps
+          <AssistantProcessCard
             open={open}
             stats={steps.stats}
             telemetry={runTelemetryOf.get(turnIndex) ?? turn.telemetry}
-          >
-            {steps.members.map((m) => (
-              <AgentTurnView
-                key={`step-${ordinal(m)}`}
-                turn={turns[m] as AgentTurn}
-                stepNumber={stepNumberOf.get(m)}
-                markerOnly={m === turnIndex}
-                noRule
-                suppressAskUserEcho
-                bubble
-              />
-            ))}
-          </AssistantRunSteps>
+            steps={assistantProcessSteps(steps.members, turns, turnIndex).map(
+              (m) => ({
+                key: `step-${ordinal(m)}`,
+                turn: turns[m] as AgentTurn,
+              }),
+            )}
+          />
         )}
       </Fragment>
     );
@@ -889,7 +887,6 @@ function AgentTurnView({
   bubble = false,
   answerClassName,
   process,
-  noRule = false,
   attachment,
 }: {
   turn: AgentTurn;
@@ -931,9 +928,6 @@ function AgentTurnView({
   /** The assistant's process button, last in the answer's action bar
    * (a run of two steps or more). */
   process?: AssistantProcessToggle;
-  /** `markerOnly` without the StrongHr: the assistant's step region sits
-   * under the answer, not before it. */
-  noRule?: boolean;
   /** The subtask cards in the assistant's conversation, held right under
    * the answer bubble (after the turn's content when it has no answer). */
   attachment?: ReactNode;
@@ -1003,13 +997,13 @@ function AgentTurnView({
   // its narration, and a marked step shows that narration as its
   // marker line instead (`narrationIsHeading` below); the tool name is
   // left for narration that cleans to nothing.
-  const summaryIsEcho = summaryEchoesAnswer(turn.summary, answerText);
   const realTools = visibleTools.filter((t) => t.name !== "no_tool");
-  const markerSummary = !summaryIsEcho
-    ? turn.summary
-    : realTools.length === 0
-      ? copy.conversation.stepDirectAnswer
-      : copy.conversation.stepCalledTools(realTools.map((t) => t.name));
+  const markerSummary = stepMarkerSummary(
+    turn.summary,
+    answerText,
+    realTools.map((t) => t.name),
+    copy.conversation,
+  );
 
   // Bare-marker merge (2026-08-23 density pass): when GA emitted no
   // summary at all (summaryEchoesAnswer(undefined, …) is false, so the
@@ -1045,7 +1039,7 @@ function AgentTurnView({
             preamble={detailPreamble}
           />
         )}
-        {answerText && !noRule && <StrongHr />}
+        {answerText && <StrongHr />}
       </div>
     );
   }
@@ -1071,10 +1065,11 @@ function AgentTurnView({
     narration: answerText,
     summary: turn.summary,
   });
-  const markerLine =
-    narrationIsHeading && answerText
-      ? cleanSessionSummary(answerText) || markerSummary
-      : markerSummary;
+  const markerLine = stepMarkerLine(
+    markerSummary,
+    answerText,
+    narrationIsHeading,
+  );
 
   return (
     <div>

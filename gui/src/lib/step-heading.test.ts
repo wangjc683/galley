@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { isEchoNarrationStep, type StepHeadingFacts } from "./step-heading";
+import {
+  isEchoNarrationStep,
+  stepMarkerLine,
+  stepMarkerSummary,
+  type StepHeadingFacts,
+} from "./step-heading";
+import { zhCopy } from "@/i18n/locales/zh";
 
 const NARRATION =
   "营业时间只出现在搜索摘要里，我去厦门网原文核对，地铁站也一起确认。";
@@ -66,5 +72,43 @@ describe("isEchoNarrationStep", () => {
 
   it("leaves steps without a marker row alone", () => {
     expect(isEchoNarrationStep(facts({ hasMarker: false }))).toBe(false);
+  });
+});
+
+describe("stepMarkerSummary / stepMarkerLine (the marker's words)", () => {
+  const words = zhCopy.conversation;
+
+  it("keeps a summary the model wrote", () => {
+    expect(
+      stepMarkerSummary("核对营业时间", NARRATION, ["web_scan"], words),
+    ).toBe("核对营业时间");
+    expect(stepMarkerLine("核对营业时间", NARRATION, false)).toBe(
+      "核对营业时间",
+    );
+  });
+
+  it("falls back to GA's two lines when the summary only echoes", () => {
+    expect(stepMarkerSummary(NARRATION, NARRATION, ["web_scan"], words)).toBe(
+      "调用了 web_scan",
+    );
+    expect(stepMarkerSummary(NARRATION, NARRATION, [], words)).toBe(
+      "直接回答了用户问题",
+    );
+  });
+
+  it("leaves a bare step bare", () => {
+    expect(stepMarkerSummary(undefined, NARRATION, ["web_scan"], words)).toBe(
+      undefined,
+    );
+  });
+
+  it("writes an echo step's narration, cleaned, as the line", () => {
+    expect(
+      stepMarkerLine("调用了 web_scan", "**先看** 配置。\n\n再跑", true),
+    ).toBe("先看 配置。 再跑");
+    // Narration that cleans to nothing keeps the fallback.
+    expect(stepMarkerLine("调用了 web_scan", "**", true)).toBe(
+      "调用了 web_scan",
+    );
   });
 });
