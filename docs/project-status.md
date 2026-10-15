@@ -784,8 +784,7 @@ main-chat planning docs, main has:
   popover lists the highest tier first (ruling 78); in the wide reading
   width the reply bubble grows with the column instead of stopping at
   680px (ruling 79). JC accepted tickets
-  21–28 live on 2026-10-15;
-  ticket 20's own acceptance is still recorded as owed. Settings can reset it with a five-second hold (ticket 15): its rows
+  20–28 live on 2026-10-15. Settings can reset the main chat with a five-second hold (ticket 15): its rows
   go, long-term memory returns to factory, the migration backups are
   deleted. A new main
   chat opens with a fixed one-paragraph greeting in the UI language (shown
