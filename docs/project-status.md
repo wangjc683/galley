@@ -782,7 +782,7 @@ main-chat planning docs, main has:
   widens to everything), every title menu has 「查找聊天记录」, and the main
   chat's also 「重置主对话…」, opening the hold-to-confirm dialog; the effort
   popover lists the highest tier first (ruling 78). JC accepted tickets
-  21–27 live on 2026-10-15 (28 is owed);
+  21–28 live on 2026-10-15;
   ticket 20's own acceptance is still recorded as owed. Settings can reset it with a five-second hold (ticket 15): its rows
   go, long-term memory returns to factory, the migration backups are
   deleted. A new main
