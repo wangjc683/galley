@@ -345,7 +345,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [21](./issues/21-assistant-process-button.md) | — | 助手回复的过程按钮：步数、用时、token 收进展开区，不画上下文；卡片与顶栏在跑时说主区那一句 | 20 | done（裁决 68；`dfd43968`–`294c27cc`，JC 真机验收通过，图标留 `Footprints`） |
 | [22](./issues/22-assistant-process-card.md) | — | 展开的过程改成卡片：每步一行（那句话 + 网站或文件名），最多 8 行、超出内滚，单步可点开细节 | 21 | done（裁决 69；`94cdb8a7`–`8f1d9fde`，JC 真机验收通过） |
 | [23](./issues/23-galley-icon-and-avatar.md) | — | 新应用图标（扁平的木头机器人 G）与助手头像：矢量母图、各平台导出、头像裁圆加描边、README 资源 | — | done（裁决 70；合并提交 `4fc4ed53`，JC 真机验收通过） |
-| [24](./issues/24-assistant-composer-trial.md) | — | 主对话输入框试验：现状 / 一行式（模型短语在发送键左边），切换器；直接排队、去提示行、「发消息…」直接做 | 22 | ready-for-agent（裁决 71） |
+| [24](./issues/24-assistant-composer-trial.md) | — | 主对话输入框试验：现状 / 一行式（模型短语在发送键左边），切换器；直接排队、去提示行、「发消息…」直接做 | 22 | ready-for-human（裁决 71；合并提交 `45c13508`，等 JC 真机比两档） |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 
