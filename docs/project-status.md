@@ -769,9 +769,16 @@ main-chat planning docs, main has:
   assistant's avatar is the app icon cropped to a circle with a 1px inner
   ring, and the app icon itself is the flat wooden robot G drawn from a
   vector master (`core/icons/master/`), on Apple's grid for macOS; it ships
-  with the next release. Workbench conversations and subtasks are
-  unchanged. JC accepted tickets 21–23 live on 2026-10-15; ticket 20's own
-  acceptance is still recorded as owed. Settings can reset it with a five-second hold (ticket 15): its rows
+  with the next release. Since rulings 71–76 (tickets 24–27) every
+  session's composer is one line (＋, input, 「模型 · 强度」, send; popovers
+  centred on their buttons): the main chat's has no hint row, sits 24px off
+  the window's bottom edge, queues mid-run Enter directly and says
+  「发消息…」; the workbench's keeps its hint row under it; the new-chat
+  empty state keeps its card. In the main chat the user's bubbles copy by
+  selection, not a hover chip (the workbench keeps its chip on purpose),
+  and the assistant card no longer shows the last message as a hover
+  title. JC accepted tickets 21–26 live on 2026-10-15 (27 is owed);
+  ticket 20's own acceptance is still recorded as owed. Settings can reset it with a five-second hold (ticket 15): its rows
   go, long-term memory returns to factory, the migration backups are
   deleted. A new main
   chat opens with a fixed one-paragraph greeting in the UI language (shown
