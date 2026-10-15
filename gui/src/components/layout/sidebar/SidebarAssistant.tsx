@@ -22,7 +22,6 @@ import {
 } from "@/lib/assistant";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { formatListTime } from "@/lib/message-time";
-import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { truncationFadeRef } from "@/lib/truncation-fade";
 import { cn } from "@/lib/utils";
 import type { Session } from "@/types/session";
@@ -242,12 +241,12 @@ export function SidebarAssistantCard({
             key={`${line.kind}:${fullLine}`}
             data-role="assistant-card-line"
             data-kind={line.kind}
-            // Cut lines fade like a row's subline and get their full
-            // text as a native title, only while actually cut.
+            // Cut lines fade like a row's subline. No title with the full
+            // text (main chat PRD ruling 75): it is the last message, often
+            // hundreds of characters, and the card opens it in full one
+            // click away; IM chat lists don't preview on hover. The card's
+            // aria-label still carries the whole line.
             ref={truncationFadeRef}
-            onPointerEnter={(e) =>
-              syncTruncatedTitle(e.currentTarget, fullLine ?? "")
-            }
             className={cn(
               "truncate-fade mt-0.5 text-[12px] leading-[1.4] tabular-nums",
               lineTone(line),
