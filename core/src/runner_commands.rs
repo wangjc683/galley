@@ -382,6 +382,15 @@ pub(crate) async fn prepare_managed_spawn_args(
     )
     .await;
     if let Some(main_chat) = main_chat {
+        // The assistant manual its entry layer names (ticket 30), written
+        // at every main chat spawn as IM writes its SOP copy. A failed
+        // write is logged and the runner still starts: the main chat
+        // without the manual beats no main chat.
+        let state_root = PathBuf::from(&context.diagnostics.paths.state_root);
+        if let Err(e) = crate::assistant_manual::materialize(&state_root) {
+            eprintln!("[main chat] writing the assistant manual failed: {e}");
+        }
+        let manual = crate::assistant_manual::manual_path(&state_root);
         if let Some(entry) = context
             .env
             .iter_mut()
@@ -390,6 +399,7 @@ pub(crate) async fn prepare_managed_spawn_args(
             entry.1 = managed_prompt::compose_main_chat_runtime_prompt(
                 &app.package_info().version.to_string(),
                 &main_chat,
+                &manual.to_string_lossy(),
             );
         }
     }

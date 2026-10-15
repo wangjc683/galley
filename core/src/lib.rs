@@ -4,6 +4,7 @@ mod auto_title;
 mod app_paths;
 mod app_setup;
 pub mod app_update;
+mod assistant_manual;
 pub mod attachment_read;
 pub mod browser_bridge;
 pub mod browser_control;

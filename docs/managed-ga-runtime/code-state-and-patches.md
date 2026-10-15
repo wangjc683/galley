@@ -53,6 +53,8 @@ Application Support/app.galley/
     skills/                   # vestigial: created but GA never reads it
     temp/                     # engine scratch: code_run cwd, reflect logs
       model_responses/        # LLM call logs; pruned at startup (30 d / 500 MB)
+    im/reference/             # Galley-owned: Supervisor SOP copy, rewritten at each IM start
+    assistant/reference/      # Galley-owned: assistant manual, rewritten at each main chat spawn
   managed-model-config/
     generated-mykey.py          # or model-config.json
 ```

@@ -79,10 +79,45 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --render-only        # 只从 res
 - 结果：`dispatch-results.json` / `.md`，md 开头有一张每次运行的一览表。big-pdfs / C 重跑过一次：第一次运行里假 `galley` 把 `subtask start --help` 也当成启动、回了「已启动」，脚本也把它算成派活；修正为 `--help` 只回一行用法、不算派活后只重跑了这一条，被替换的那次原样留在 `meta.superseded_runs`。
 - 怎么跑：`run.py --suite dispatch`（`--mode firststop` 重现第一轮），可加 `--variant C,P`、`--cases big-pdfs`、`--render-only`。`--dry-test` 覆盖两轮的路径；沙盒部分验证：`code_run` 读、列真实 HOME，读 `app.galley` 与 `~/Documents/GenericAgent`，连沙盒外一个真实在监听的 Unix socket，连 TCP、查 DNS，往沙盒外和真实 HOME 写文件，启动 `/bin/ls`，全部失败；假 HOME 与假 `galley` 可用；文件工具越界被拒；浏览器工具、`inline_eval` 与第 9 次调用都不执行。
 
+## 叫醒措辞评测（票 30）
+
+评测票 29 的叫醒消息：子任务完成、提问、停在步数上限或出错时，Core 叫醒主对话一轮，助手照消息里的指令验收、打回、替用户答或给用户交代。同一套脚本与沙盒，`run.py --suite wake`。
+
+- **输入**（都在 `wake/`）：
+  - `cases.json`：9 个用例（票 30 列的那 9 条），每条有当前段的一小段历史、子任务的固定数据、放进假 `~/Downloads` 的证据文件、这次叫醒的几件，以及自动判定用的 `expect`。由 `cases.json` 的 `_note` 说明各字段。
+  - `wording.md`：叫醒措辞。`draft` 是票 29「措辞草稿」原文，逐字；改字建议另起一版（`--variant <名字>`）。拼法照草稿：开头一次，各件依次排，不止一件时末尾加一句。
+  - `galley-prompt/main_chat.plain.txt`：真实 Rust 代码 `compose_main_chat_runtime_prompt` 生成的主对话提示词（版本 0.6.2、macOS），含票 30 改过的入口层；会话 id、分段起点、日期、手册路径留成 `__…__` 占位。生成方法同上（测试模块里临时加一个测试写出文件，跑完删掉）。
+  - `cli-help.json`：真实 CLI 各命令 `--help` 的原文（用开发版 `galley` 二进制、假 HOME 只跑 `--help` 取得），假 CLI 照它回答帮助。
+- **组成**：GA 核心提示词与记忆照常，Galley 那段是上面的提示词；手册是仓库里的 `docs/managed-ga-runtime/galley-assistant-manual.md`，拷到这次运行状态根下的 `assistant/reference/galley-assistant-manual.md`（Core 写它的位置），提示词里的路径指向它。历史经 `set_history` 装入，新消息是拼好的叫醒消息。
+- **假 CLI**：`~/.config/galley/cli-path` 指向一个按固定数据回答的假 `galley`：`sessions list`（主对话、本例的子任务、用户自己的一个对话、外部 agent 开的一个会话）、`session brief` / `show`（子任务的派活说明、步骤、最终回答、提问的 `askUser`）、`project`、`llm list` 等读命令照 Agent API 的形状回答；`session send`、`stop`、`archive`、`restore`、`move`、`project create`、`llm set` 只改假 CLI 自己的状态（之后再读看得到），`session wait` / `follow` / `watch`、`project follow` 立即回一个结束帧。真实 CLI 不认的参数照样拒绝（`invalid_args`，退出码 2），例如 `llm set` 带 `--supervisor`。每次调用连同 argv 记日志。
+- **沙盒**：同派活对照第二轮，另允许 `sed`、`cat`、`head`、`tail`、`ls`、`grep`、`wc`、`sleep` 这几个系统程序（仍然只能读写沙盒、没有网络），因为 Galley 提示词里读 CLI 路径的写法要用 `sed`，模型核对证据会用 `ls` / `cat`；`PATH` 最前面是一个指向同一解释器的 `python3`。每次运行最多 10 次工具调用。
+- **判定**：脚本按 `expect` 自动判：该不该 `session send`、发的话里有没有写明要什么、带没带 `--supervisor=galley-assistant`、回复是不是只有 `<no-reply/>`（去掉 `<summary>`、`<next-suggestion>` 之后）、该交代时点没点到证据、字数上限、有没有用会卡住主对话的命令、有没有自己重开活。`ask_user` 停下算问了用户。另记有没有在第一次写命令之前读手册。
+- **结果**：`wake/results.json`（原始结果）、`wake/results.md`（一览表加每条的叫醒消息、工具调用、回复）；`wake/composed/` 是两个用例第一遍的完整首个请求。
+- **怎么跑**：`run.py --suite wake`（默认 `draft`，每条两遍；结果总是与已有的合并）、`--variant draft,v2 --cases ask-known,step-limit` 只跑几条、`--repeats N`、`--render-only`。`--dry-test` 覆盖这条路径：提示词里的手册路径指向状态根里的手册、叫醒消息逐字是最后一条用户消息；模型的 shell 用 `sed` 读到 CLI 路径，读、写、被拒的参数、会卡住的命令都到了假 CLI 并被记下；读真实 HOME、`/etc`、启动名单外的程序（`/usr/bin/python3`、`curl`、`touch`）、往沙盒外写都失败；`ask_user` 停下。
+
+### 结果（2026-10-15，gpt-6.1-sol，推理强度 high）
+
+保留的 20 次运行里 19 次判为过（`wake/results.md` 开头的一览表）：
+
+- **打回**：说「订好了」却没交确认号和截图的，两遍都 `session send` 打回，写明要什么（确认号、存到 `~/Downloads` 的截图完整路径），并叮嘱不要重复下单；回复只有 `<no-reply/>`。
+- **替答与问用户**：用户说过喜欢靠窗，两遍都答「靠窗（A/F）」并附「付款前仍须先询问用户」，`<no-reply/>`；要短信验证码、要确认付款的四遍都问用户（三遍用 `ask_user`，一遍直接问），不替答。
+- **出错**：一句话说浏览器没连上、建议去「设置 → 浏览器控制」，不重开。
+- **两件一起**：一条回复先交代报价（点名表格路径和三家单价），再说笔记没做成和建议。
+- **已打回两次**：不再打回，交代表格路径、现有 3 家和还差 2 家。
+- **结果够好**：一遍过；另一遍内容对、点名了表格路径，但 177 字超过脚本定的 160 字上限，判为不过。
+- **全程**：每次写命令都带 `--supervisor=galley-assistant`，第一次写之前都读了手册；没有一次用 `session wait` / `follow` / `watch`；`<no-reply/>` 的回复都没有附建议标签。
+
+改过的地方：
+
+- **固定数据**：第一批 14 次运行作废重跑。截图原是几十字节的文字占位，模型读文件头识破后打回；日期按星期写错（运行当天周四），模型也指了出来。
+- **手册**（本票自己的，评测不过可以直接改）：「Checking a result」一节改了两次。证据齐全时模型先是回源头重查（开浏览器、想 OCR 截图、要派活说明没要的链接）后打回，助手 PRD 反方 2 的对策是「核对证据在不在，核不了就明说没核实到」；第三版写明这就是验收的全部。被替换的运行与原因都留在 `results.json` 的 `meta.superseded_runs`，每次运行记了读的是哪一版手册（`manual_sha`）。
+- **叫醒措辞**：`draft` 在所有用例上行为都对，只有 Step limit 一件看得出缺口：消息里没有子任务停下时的文字，两遍都先去翻引擎的 `model_responses` 日志再 `session show`（4～5 次模型调用）。`v2` 补上这段文字、把「the same way」写成完整命令，两遍都直接 `session send … "continue"`（3 次调用）。
+- **用量**：50 次运行（保留 20 次，作废 30 次），166 次模型调用。
+
 ## 安全措施
 
 - 拦截点在 GA 的工具分发：worker 把 `agentmain` 里的 `GenericAgentHandler` 换成子类（runner 自己装处理器子类用的也是这个接口 `GaSession.install_handler`）。子类的 `dispatch` 遇到任何真实工具就记录并返回 `should_exit`，一次模型调用后整个运行结束；只有 GA 自己判断最终回答的 `no_tool`（只读回复文本）和格式错误的重试提示 `bad_json` 走原路。子类上除 `do_no_tool` 外的所有 `do_*` 方法都换成一调用就报错的版本，作为第二道保险。
-- 第三道保险是进程级护栏：worker 里启动子进程、`os.system` / `exec` / `spawn`、打开浏览器、连本地 socket（Galley Core 与 CLI）、解析模型 API 以外的域名、往临时目录以外写文件，一律拒绝并记录。唯一的例外是派活对照第二轮（沙盒）里 `code_run` 启动解释器：只能在执行 `code_run` 的那一刻、只能经 `sandbox-exec` 套上该次运行的沙盒配置、只能带沙盒里的环境变量、工作目录必须在沙盒里。
+- 第三道保险是进程级护栏：worker 里启动子进程、`os.system` / `exec` / `spawn`、打开浏览器、连本地 socket（Galley Core 与 CLI）、解析模型 API 以外的域名、往临时目录以外写文件，一律拒绝并记录。唯一的例外是沙盒模式（派活对照第二轮、叫醒评测）里 `code_run` 启动解释器：只能在执行 `code_run` 的那一刻、只能经 `sandbox-exec` 套上该次运行的沙盒配置、只能带沙盒里的环境变量、工作目录必须在沙盒里。
 - `--dry-test` 在任何真调用之前验证这些：用假的模型流返回一个先说话、再调 `code_run`（`touch` 一个金丝雀文件）和 `file_write` 的回复，以及一个带建议标签的普通回复，检查只发生一次模型调用、没有进入任何工具方法、护栏无记录、金丝雀文件不存在、护栏确实拒绝子进程 / 域名 / 外部写入，并检查请求的拼装（GA 核心、Galley 段、Main Chat、WITH 的草案位置、历史顺序、带过来的那句）。
 - 不碰真实数据：Galley 数据库先拷到权限 700 的临时目录再读，读完即删；不写 `~/Library/Application Support/app.galley`、真实 GA 记忆或 `~/Documents/GenericAgent`；状态根路径若像真实数据目录就拒绝运行。
 - 不留 key：key 只在内存里，经 stdin 交给 worker；请求记录只存请求体不存请求头；写结果前把 key 字符串整体替换掉；worker 日志随临时目录删除。

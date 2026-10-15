@@ -107,3 +107,73 @@ git diff --check
 同样的内容写进本票 `## Comments`。
 
 ## Comments
+
+### 回报（2026-10-16，worktree `assistant-manual-30`，未提交）
+
+**改了哪些文件**
+
+- `core/src/managed_prompt.rs`：入口层派活条款改写（要交回的证据、Galley 会叫醒你、写命令前读手册）；原常量拆成 `MAIN_CHAT_ENTRY_LAYER_HEAD` 加函数 `main_chat_entry_layer(manual_path)`；`compose_main_chat_runtime_prompt` 多一个参数 `manual_path: &str`；预算闸 1446 → 1699，测试改写并新增 `main_chat_entry_layer_sends_the_model_to_the_manual`。
+- `core/src/assistant_manual.rs`（新）：`include_str!` 内嵌手册；`manual_path(state_root)` 与 `materialize(state_root)`；3 条测试（写出、路径、链接解析、重写覆盖；硬规矩；命令拼写）。
+- `core/src/lib.rs`：一行 `mod assistant_manual;`（在 `app_update` 之后）。
+- `core/src/runner_commands.rs`：只动 `prepare_managed_spawn_args` 里主对话那一支：先写手册（失败只记日志、照常启动），再把路径交给 compose。`session_runner/` 没动。
+- `docs/managed-ga-runtime/galley-assistant-manual.md`（新）：手册全文，英文。
+- `docs/managed-ga-runtime/prompt-composition.md`：入口层一节（证据、叫醒、读手册）、预算、叫醒评测证据、条款台账一行、回归清单第 24 条改写并新增 25–27 条。
+- `docs/managed-ga-runtime/README.md`、`docs/managed-ga-runtime/code-state-and-patches.md`、`docs/README.md`：手册的路由行、状态目录布局两行（`im/reference/`、`assistant/reference/`）、更新触发一行。
+- `.scratch/main-chat/entry-layer-eval/run.py`、`README.md`：新增 `--suite wake`（同一套沙盒，按固定数据回答的假 CLI，干跑测试覆盖）；`wake/`（新）：用例、措辞、真实 Rust 生成的提示词、真实 CLI 的 `--help` 原文、结果。
+
+**入口层字节数**：旧 1446，新 1699（+253：证据 90；叫醒一句替掉「its card shows the progress, and you can look it up when they ask」+58；读手册一段 105，路径不计，同 IM 的算法）。
+
+**手册**：全文在 `docs/managed-ga-runtime/galley-assistant-manual.md`，运行时写到 `<state_root>/assistant/reference/galley-assistant-manual.md`，入口层末段写的就是这个绝对路径。六节对应票面六条：身份、三级授权、CLI（读写命令全列，写命令带 `--supervisor=galley-assistant --reason="<why>"`，`llm set` 例外；主对话里不用 `session wait` / `follow` / `watch`、`project follow`；新活用 `<subtask>` 不用 `session new`）、叫醒（打回最多两次，`<no-reply/>` 整条回复就是它、不带建议标签，替答与问用户的界线）、验收与交代、别碰别人的。
+
+**评测**：结果表在 `.scratch/main-chat/entry-layer-eval/wake/results.md`（开头一览表：用例、期望、措辞、遍次、调了什么命令、回复原文、是否 `<no-reply/>`、字数、读手册、过 / 不过），原始结果在 `results.json`，方法与摘要在该目录 `README.md` 的「叫醒措辞评测（票 30）」。模型是 JC 主对话现在用的 gpt-6.1-sol（只读查 `sessions.llm_key`，`main_chat = 1`），推理强度 high。
+
+- 保留的 20 次运行 19 次过。9 条都按期望做了：打回没有确认号的「订好了」并写明要什么、回复只有 `<no-reply/>`；替用户答「靠窗」；验证码与付款都问用户；出错一句话加建议、不重开；步数上限发 `continue`；两件一条说完；打回两次后不再打回、交代缺什么。唯一不过是「结果够好」第 2 遍：内容对、点名了表格路径，但 177 字超过脚本定的 160 字上限。
+- 全部 50 次运行（含作废的）里：每次 `session send` 都带 `--supervisor=galley-assistant`，第一次写命令之前都读了手册，没有一次用 `session wait` / `follow` / `watch`，`<no-reply/>` 回复都没带建议标签。
+- 作废重跑了 30 次，原因都写在 `results.json` 的 `meta.superseded_runs`：第一批固定数据有错（截图是文字占位、日期星期写错），14 次；手册验收一节改了两次，16 次。手册改动的起因：证据齐全时模型回源头重查（开浏览器、想 OCR 截图、要派活说明没要的链接）后打回。按助手 PRD 反方 2「核对证据在不在，核不了就明说没核实到」改写后不再这样。每次运行记了读的是哪版手册（`manual_sha`）。
+- 用量：50 次运行，166 次模型调用。超出票面「约 20 次」，多出来的都是上面两类重跑和 `v2` 的 2 次。
+
+**叫醒措辞的改字建议**（对票 29「措辞草稿」，只改 Step limit 一件，其余逐字不变）
+
+草稿在 9 条上行为都对，只有 Step limit 看得出缺口。消息里没有子任务停下时的文字（票 29 第 3 条要它带说明，草稿没留填空），「the same way」单独来时也没有可以照着的命令。`draft` 两遍都先去翻引擎的 `model_responses` 日志找进度，再 `session show`，用了 4～5 次模型调用。改成下面这样后，`v2` 两遍都直接 `session send … "continue"`，3 次调用，`<no-reply/>`，过：
+
+1. 在「paused at the engine's step limit, mid-work.」之后插入：
+
+   ```text
+    Its last message:
+   <<<
+   {last_text}
+   >>>
+   ```
+
+   （`{last_text}` 即票 29 第 1 条 StepLimit 的「最后一段看得见的文字」，换行同 Done 的 `<<<` / `>>>` 写法。）
+2. 把 `send it "continue" the same way` 换成 `` send it "continue" with `session send {id} "continue" --supervisor=galley-assistant --reason="continue"` ``。
+
+改后全文（与 `wake/wording.md` 的 `v2` 一致）：
+
+```text
+Subtask `{id}` "{title}" (round {round}) paused at the engine's step limit, mid-work. Its last message:
+<<<
+{last_text}
+>>>
+If it is getting somewhere, send it "continue" with `session send {id} "continue" --supervisor=galley-assistant --reason="continue"` and end your reply with exactly <no-reply/>; this counts as a round. Otherwise tell the user how far it got.
+```
+
+**门禁的最后输出**
+
+- `cargo test --manifest-path core/Cargo.toml --workspace`：exit 0；33 组，937 passed，0 failed（最后一组 `test result: ok. 0 passed; 0 failed; …`）。
+- `cargo check --manifest-path core/Cargo.toml --workspace`：`Finished dev profile`；唯一的警告在 `relay/src/channels.rs`（`fetch_update` 弃用），不是本票的。
+- `rustfmt --edition 2021 --check core/src/assistant_manual.rs core/src/managed_prompt.rs core/src/runner_commands.rs`：exit 0（`managed_prompt.rs` 在 HEAD 是 rustfmt 干净的，只动了自己的 hunk）。
+- `git diff --check`：exit 0；新文件另扫过行尾空白，无。
+- `run.py --dry-test`：`DRY TEST PASSED`（含叫醒路径：手册路径、叫醒消息逐字、`sed` 读 CLI 路径、读写都到假 CLI、`llm set --supervisor` 被拒、`session wait` 被判出，读真实 HOME、`/etc`、名单外的程序、往沙盒外写都失败）。
+- 公开仓库检查：`wake/` 下 grep `http`、`api_host`、`apibase`、`/Users/`、用户名、`/var/folders` 均无本机或 API 信息。`http` 只命中项目主页、release 链接、`example.com`，以及模型在沙盒里读到的 GA 种子记忆 `vision_sop.md` 里的 modelscope 链接（仓库里本来就有）。
+
+**拿不准、要主会话定的事**
+
+1. **`llm set` 不收 `--supervisor` / `--reason`**（`cli/src/args.rs` 的 `LlmCmd::Set`；Agent API §5.18「No Origin flags」；用开发版二进制只跑解析验证过，带上就 exit 2 `invalid_args`）。票面「每条都带」对它不成立，手册写成唯一例外。另外 IM 入口层（`im_supervisor_prompt`）写着「On every CLI write command (session new / session send / project create / llm set) pass exactly --supervisor」，对 `llm set` 是错的。本票没动它，要不要另开票修？
+2. **改名没有 CLI 命令**（Core 有 `rename_session`，CLI 没有）。票面把改名放在「自己做」，手册只能写「说从这里改不了」。要不要加 `session rename`（Rule 3 只加不改）？
+3. **Done 的 `session show {id} --tail=40`**：子任务超过 39 步时，派活说明（第一条消息）不在最后 40 条里。评测的子任务都短，没测到。可选做法：叫醒里带派活说明的头几行，或让 `session show` 能取开头。
+4. **`<no-reply/>` 与建议标签**：手册写了不带建议标签，50 次运行也都没带。万一带了，票 29 的推导与票 31 的界面要定怎么处理；建议是剥完只剩建议也算空回复、不显示建议。
+5. **Step limit 的打回上限**：草稿写「this counts as a round」，但 `send_backs ≥ 2` 的替换句只给了 Done。第 3 轮停在步数上限时还续不续，归票 29 定。
+6. **手册写出失败**：我选了记日志、照常启动主对话（IM 那边是启动失败）。理由是没有手册的主对话好过没有主对话；主会话可以改。
+7. **合入冲突**：`core/src/lib.rs` 加了一行（在文件开头附近，和票 29 的 `subtask_report` 不相邻）；`core/src/runner_commands.rs` 只动了 `prepare_managed_spawn_args` 的主对话分支。
+8. **其他**：清理 `__pycache__` 时顺手删了本 worktree `core/python-bundle/` 下的字节码缓存。那是 worktree 自己的构建产物副本，会自动重新生成，主工作树没碰。

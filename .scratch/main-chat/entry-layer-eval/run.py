@@ -113,6 +113,31 @@ SUBTASK_TAG_RE = re.compile(r"<subtask>([\s\S]*?)</subtask>")
 DISPATCH_FIRSTSTOP_JSON = HERE / "dispatch-results-firststop.json"
 DISPATCH_FIRSTSTOP_MD = HERE / "dispatch-results-firststop.md"
 
+# Ticket 30: Galley wakes the main chat when a subtask settles (wake/).
+# Sandbox mode with a fixture-driven fake galley; the prompt is the real
+# Rust composition with the ticket 30 entry layer, the manual is the
+# repo's, written where Core writes it.
+WAKE_DIR = HERE / "wake"
+WAKE_CASES = WAKE_DIR / "cases.json"
+WAKE_WORDING = WAKE_DIR / "wording.md"
+WAKE_PROMPT = WAKE_DIR / "galley-prompt" / "main_chat.plain.txt"
+WAKE_CLI_HELP = WAKE_DIR / "cli-help.json"
+WAKE_JSON = WAKE_DIR / "results.json"
+WAKE_MD = WAKE_DIR / "results.md"
+WAKE_COMPOSED_DIR = WAKE_DIR / "composed"
+WAKE_DUMP_CASES = ("done-evidence", "two-at-once")
+MANUAL = REPO / "docs" / "managed-ga-runtime" / "galley-assistant-manual.md"
+WAKE_TOOL_CAP = 10
+WAKE_REPEATS = 2
+# Besides the interpreters and the fake galley, the model's shell code may
+# start these (still inside the sandbox's file and network rules): Galley's
+# own CLI discovery line uses sed, and a model checks evidence with ls / cat.
+WAKE_EXTRA_EXEC = ("/usr/bin/sed", "/bin/cat", "/usr/bin/head", "/usr/bin/tail", "/bin/ls",
+                   "/usr/bin/grep", "/usr/bin/wc", "/bin/sleep")
+HOLDING_COMMANDS = ("session wait", "session follow", "session watch", "project follow")
+WRITE_COMMANDS = ("session send", "session stop", "session archive", "session restore", "session move",
+                  "session new", "session btw", "project create", "project delete", "llm set")
+
 # Sandbox mode (dispatch suite, second run): read-only lookups and file
 # work are answered for real inside a per-run sandbox instead of ending
 # the run. See build_sandbox and the worker's sandbox dispatch.
@@ -201,6 +226,249 @@ out({{"schemaVersion": 2, "ok": False, "error": {{"code": "unknown_command",
     "message": "unknown command: " + " ".join(argv)}}}}, 1)
 '''
 
+# The wake suite's fake galley: answers from the run's fixture (sessions,
+# transcripts, projects, models; the real CLI's --help texts), keeps a
+# little state (sends, archives, moves) so a later read sees them, and
+# logs every call. Flags it does not know for a command are refused the
+# way the real CLI refuses them (invalid_args, exit 2): `llm set` takes
+# no --supervisor. Placeholders are filled by build_sandbox.
+FAKE_GALLEY_WAKE = r'''#!__PYTHON__
+"""Fake Galley CLI for the wake eval (ticket 30): fixture answers, every
+call logged. Not the real CLI; it never touches Galley."""
+import json, sys, time
+FIXTURE, STATE, LOG, HELP = "__FIXTURE__", "__STATE__", "__LOG__", "__HELP__"
+argv = sys.argv[1:]
+with open(LOG, "a", encoding="utf-8") as f:
+    f.write(json.dumps({"at": time.time(), "argv": argv}, ensure_ascii=False) + "\n")
+fx = json.load(open(FIXTURE, encoding="utf-8"))
+try:
+    state = json.load(open(STATE, encoding="utf-8"))
+except (OSError, ValueError):
+    state = {"sent": [], "status": {}, "project": {}, "projects": [], "llm": {}}
+
+def save():
+    with open(STATE, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False)
+
+def out(*objs):
+    for o in objs:
+        print(json.dumps(o, ensure_ascii=False))
+    save()
+    sys.exit(0)
+
+def fail(code, message, exit_code):
+    print(json.dumps({"error": code, "message": message}, ensure_ascii=False))
+    save()
+    sys.exit(exit_code)
+
+VALUE = {"tail", "around", "context", "since", "until", "supervisor", "reason", "to", "project",
+         "runtime", "status", "timeout", "poll", "after-turn", "llm", "session", "root-path",
+         "icon", "color", "schema"}
+words, flags, i = [], {}, 0
+while i < len(argv):
+    a = argv[i]
+    if a.startswith("--") and len(a) > 2:
+        k, eq, v = a[2:].partition("=")
+        if eq:
+            flags[k] = v
+        elif k in VALUE and i + 1 < len(argv):
+            flags[k] = argv[i + 1]
+            i += 1
+        else:
+            flags[k] = True
+    elif a in ("-h", "-V"):
+        flags["help" if a == "-h" else "version"] = True
+    else:
+        words.append(a)
+    i += 1
+
+helps = json.load(open(HELP, encoding="utf-8"))
+if flags.get("help") or words[:1] == ["help"]:
+    key = " ".join(words[1:] if words[:1] == ["help"] else words)
+    while key and key not in helps:
+        key = " ".join(key.split()[:-1])
+    print(helps.get(key, helps[""]), end="")
+    sys.exit(0)
+
+ALLOWED = {
+    ("sessions", "list"): {"runtime", "project", "status", "archived", "all"},
+    ("sessions", "search"): {"runtime", "all", "session"},
+    ("session", "brief"): set(), ("session", "watch"): set(),
+    ("session", "show"): {"tail", "around", "context", "since", "until"},
+    ("session", "send"): {"supervisor", "reason", "jump"},
+    ("session", "follow"): {"tail"},
+    ("session", "wait"): {"timeout", "poll", "tail", "final-show", "after-turn", "until-idle"},
+    ("session", "new"): {"project", "llm", "runtime", "supervisor", "reason"},
+    ("session", "btw"): {"supervisor", "reason"},
+    ("session", "stop"): {"supervisor", "reason"}, ("session", "archive"): {"supervisor", "reason"},
+    ("session", "restore"): {"supervisor", "reason"},
+    ("session", "move"): {"to", "supervisor", "reason"},
+    ("project", "create"): {"root-path", "enable-workspace", "icon", "color", "supervisor", "reason"},
+    ("project", "list"): set(), ("project", "brief"): {"all"}, ("project", "show"): {"tail", "all"},
+    ("project", "follow"): {"tail", "all", "until-idle", "final-show"},
+    ("project", "delete"): {"supervisor", "reason"},
+    ("llm", "list"): {"runtime"}, ("llm", "set"): set(),
+    ("status",): set(), ("version",): set(), ("health",): set(),
+}
+cmd = tuple(words[:1]) if words[:1] in (["status"], ["version"], ["health"]) else tuple(words[:2])
+rest = words[len(cmd):]
+if flags.get("version") and not cmd:
+    print("galley 0.6.2")
+    sys.exit(0)
+if cmd not in ALLOWED:
+    fail("invalid_args", "error: unrecognized subcommand '" + " ".join(words) + "'\n\nUsage: galley [OPTIONS] <COMMAND>\n\nFor more information, try '--help'.\n", 2)
+for k in flags:
+    if k not in ALLOWED[cmd] and k != "schema":
+        fail("invalid_args", "error: unexpected argument '--" + k + "' found\n\nUsage: galley " + " ".join(cmd) + "\n\nFor more information, try '--help'.\n", 2)
+
+sessions = fx["sessions"]
+
+def brief(sid):
+    s = dict(sessions[sid])
+    if sid in state["status"]:
+        s["status"] = state["status"][sid]
+    if sid in state["project"]:
+        if state["project"][sid]:
+            s["projectId"] = state["project"][sid]
+        else:
+            s.pop("projectId", None)
+    if sid in state["llm"]:
+        s["selectedLlmKey"], s["selectedLlmDisplayName"] = state["llm"][sid]
+    live = dict(s.get("live") or {})
+    if any(m["sessionId"] == sid for m in state["sent"]):
+        live.update(busy=True, openRun=True, agentRunning=True, askPending=False)
+    s["live"] = live
+    return s
+
+def rows(sid):
+    return list(fx["messages"].get(sid, [])) + [m for m in state["sent"] if m["sessionId"] == sid]
+
+def need(n, what):
+    if len(rest) < n:
+        fail("invalid_args", "error: the following required arguments were not provided:\n  " + what + "\n", 2)
+
+def known(sid):
+    if sid not in sessions:
+        fail("not_found", "session " + sid + " not found", 3)
+
+if cmd == ("sessions", "list"):
+    show = [sid for sid in fx["order"]
+            if flags.get("all") or (brief(sid)["status"] == "archived") == bool(flags.get("archived"))]
+    if flags.get("project"):
+        show = [sid for sid in show if brief(sid).get("projectId") == flags["project"]]
+    out(*[brief(sid) for sid in show])
+if cmd == ("sessions", "search"):
+    need(1, "<QUERY>")
+    out()
+if cmd == ("session", "brief"):
+    need(1, "<ID>")
+    known(rest[0])
+    out(brief(rest[0]))
+if cmd == ("session", "show"):
+    need(1, "<ID>")
+    r = rows(rest[0])
+    if flags.get("around"):
+        ids = [m["id"] for m in r]
+        if flags["around"] not in ids:
+            fail("not_found", "message " + str(flags["around"]) + " not found in session " + rest[0], 3)
+        n, c = ids.index(flags["around"]), int(flags.get("context") or 10)
+        r = r[max(0, n - c): n + c + 1]
+    elif flags.get("tail"):
+        r = r[-int(flags["tail"]):]
+    out(*r)
+if cmd == ("session", "send"):
+    need(2, "<ID> <CONTENT>")
+    known(rest[0])
+    sid = rest[0]
+    origin = {"via": "supervisor", "supervisor": flags["supervisor"]} if flags.get("supervisor") else {"via": "cli"}
+    if flags.get("reason"):
+        origin["reason"] = flags["reason"]
+    turn = 1 + max([m.get("turnIndex", 0) for m in rows(sid)] or [0])
+    msg = {"id": "msg_" + sid + "_" + str(turn) + "_user", "sessionId": sid, "role": "user",
+           "content": rest[1], "createdAt": fx["now"], "turnIndex": turn, "origin": origin,
+           "visibility": "visible"}
+    state["sent"].append(msg)
+    out({"message": msg, "dispatch": "dispatched"})
+if cmd == ("session", "stop"):
+    need(1, "<ID>")
+    known(rest[0])
+    out({"dispatch": "abort_sent" if brief(rest[0])["live"].get("busy") else "already_stopped"})
+if cmd in (("session", "archive"), ("session", "restore")):
+    need(1, "<ID>")
+    known(rest[0])
+    state["status"][rest[0]] = "archived" if cmd[1] == "archive" else "idle"
+    out({"session": brief(rest[0])})
+if cmd == ("session", "move"):
+    need(1, "<ID>")
+    known(rest[0])
+    to = flags.get("to")
+    if to and to not in [p["id"] for p in fx["projects"] + state["projects"]]:
+        fail("invalid_args", "project " + str(to) + " does not exist", 2)
+    state["project"][rest[0]] = to or None
+    out({"session": brief(rest[0])})
+if cmd == ("session", "new"):
+    need(1, "<TASK>")
+    sid = "s-new" + str(len(state["sent"]) + 1).zfill(4)
+    out({"session": {"id": sid, "title": "新对话", "status": "idle", "runtimeKind": "managed"},
+         "message": {"id": "msg_" + sid + "_0_user", "sessionId": sid, "role": "user", "content": rest[0]},
+         "dispatch": "dispatched"})
+if cmd == ("session", "btw"):
+    need(2, "<ID> <QUESTION>")
+    out({"dispatch": "dispatched"})
+if cmd == ("session", "wait"):
+    need(1, "<ID>")
+    known(rest[0])
+    tail = rows(rest[0])[-int(flags.get("tail") or 20):]
+    out({"schemaVersion": 3, "stream": "wait", "phase": "initial", "session": brief(rest[0]), "messages": tail},
+        {"schemaVersion": 3, "stream": "wait", "phase": "final", "status": "completed", "session": brief(rest[0]), "messages": tail},
+        {"schemaVersion": 3, "stream": "end", "reason": "completed"})
+if cmd == ("session", "follow"):
+    need(1, "<ID>")
+    known(rest[0])
+    tail = rows(rest[0])[-int(flags.get("tail") or 20):]
+    out({"schemaVersion": 3, "stream": "snapshot", "phase": "initial", "session": brief(rest[0]), "messages": tail},
+        {"schemaVersion": 3, "stream": "end", "reason": "not_live"})
+if cmd == ("session", "watch"):
+    need(1, "<ID>")
+    fail("not_found", "no live runner for session " + rest[0], 3)
+if cmd == ("project", "create"):
+    need(1, "<NAME>")
+    p = {"id": "proj_" + ("5f0c2a9d81e34b6" + str(len(state["projects"])))[:16], "name": rest[0].strip(),
+         "workspaceEnabled": False, "pinned": False, "createdAt": fx["now"], "updatedAt": fx["now"]}
+    state["projects"].append(p)
+    out({"project": p})
+if cmd == ("project", "list"):
+    out(*(fx["projects"] + state["projects"]))
+if cmd in (("project", "brief"), ("project", "show"), ("project", "follow"), ("project", "delete")):
+    need(1, "<PROJECT_ID>")
+    match = [p for p in fx["projects"] + state["projects"] if p["id"] == rest[0]]
+    if not match:
+        fail("not_found", "project " + rest[0] + " not found", 3)
+    members = [brief(s) for s in fx["order"] if brief(s).get("projectId") == rest[0]]
+    if cmd[1] == "delete":
+        out({"deleted": rest[0], "detachedSessions": len(members), "sessionIds": [m["id"] for m in members]})
+    if cmd[1] == "follow":
+        out({"schemaVersion": 3, "stream": "snapshot", "phase": "initial", "project": match[0], "sessions": members},
+            {"schemaVersion": 3, "stream": "end", "reason": "idle"})
+    out({"project": match[0], "sessions": members})
+if cmd == ("llm", "list"):
+    out(*fx["models"])
+if cmd == ("llm", "set"):
+    need(2, "<SESSION_ID> <LLM_NAME>")
+    known(rest[0])
+    hit = [m for m in fx["models"] if m["name"].lower() == rest[1].lower()]
+    if not hit:
+        fail("invalid_args", "unknown LLM name: " + rest[1], 2)
+    state["llm"][rest[0]] = [hit[0]["key"], hit[0]["name"]]
+    out({"session": brief(rest[0]), "dispatch": "persisted_only"})
+if cmd == ("status",):
+    busy = sum(1 for s in fx["order"] if brief(s)["live"].get("busy"))
+    out({"total": len(fx["order"]), "running": 0, "waitingInput": 0, "errored": 0, "live": {"busy": busy, "queued": 0}})
+if cmd == ("version",):
+    out({"galleyVersion": "0.6.2", "schemaVersion": 3})
+out({"checks": [{"id": "db_readable", "status": "ok", "detail": "workbench.db"}]})
+'''
+
 SUGGESTION_RE = re.compile(r"<next-suggestion>([\s\S]*?)</next-suggestion>")
 SUMMARY_RE = re.compile(r"<summary>[\s\S]*?</summary>")
 THINKING_RE = re.compile(r"<thinking>[\s\S]*?</thinking>")
@@ -271,6 +539,167 @@ def dispatch_prompt(case: dict[str, Any], variant: str, now: datetime, draft: st
     """WITH (draft after `## Main Chat`) plus the variant's clause right
     after the draft."""
     return galley_runtime_prompt(case, "with", now, draft) + "\n\n" + clauses[variant]
+
+
+WAKE_KEYS = ("header", "done", "done_send_back", "done_capped", "asking", "step_limit", "error",
+             "not_started", "footer")
+
+
+def load_wording() -> dict[str, dict[str, str]]:
+    """The wake-note wordings of wake/wording.md: per `## <name>`, the
+    ```text block under each `### <key>`."""
+    text = WAKE_WORDING.read_text(encoding="utf-8")
+    out: dict[str, dict[str, str]] = {}
+    for m in re.finditer(r"^## (\S+)\n([\s\S]*?)(?=^## |\Z)", text, re.MULTILINE):
+        parts = {k.group(1): k.group(2) for k in re.finditer(
+            r"^### (\S+)\n\n```text\n([\s\S]*?)\n```", m.group(2), re.MULTILINE)}
+        missing = [k for k in WAKE_KEYS if k not in parts]
+        if missing:
+            fail(f"wording.md: {m.group(1)} lacks {missing}")
+        out[m.group(1)] = parts
+    if not out:
+        fail("wording.md: no wording found")
+    return out
+
+
+def wake_note(case: dict[str, Any], words: dict[str, str]) -> str:
+    """The wake message for a case, filled from one wording as ticket 29's
+    draft says: the header once, the items in order with a blank line
+    between, the footer when there is more than one."""
+    subs = {s["id"]: s for s in case["subtasks"]}
+    items = []
+    for w in case["wake"]:
+        s = subs[w["subtask"]]
+        send_backs = int(w.get("send_backs") or 0)
+        values = {"id": s["id"], "title": s["title"], "round": str(1 + send_backs),
+                  "send_backs": str(send_backs), "detail": w.get("detail", ""), "why": w.get("why", ""),
+                  "last_text": w.get("last_text", "")}
+        kind = w["kind"]
+        if kind == "done":
+            final = [m for m in s["messages"] if m.get("final")][-1]["content"]
+            values["answer"] = final
+            tail = words["done_capped"] if send_backs >= 2 else words["done_send_back"]
+            template = words["done"] + " " + tail
+        elif kind == "asking":
+            ask = [m for m in s["messages"] if m.get("ask")][-1]["ask"]
+            values["question"] = ask["question"]
+            values["options"] = (" Options: " + ", ".join(f'"{c}"' for c in ask["candidates"])
+                                 if ask["candidates"] else "")
+            template = words["asking"]
+        else:
+            template = words[kind]
+        text = template
+        for k, v in values.items():
+            text = text.replace("{" + k + "}", v)
+        leftover = re.findall(r"\{[a-z_]+\}", text)
+        if leftover:
+            fail(f"{case['id']}: unfilled {leftover} in {kind}")
+        items.append(text)
+    parts = [words["header"]] + items + ([words["footer"]] if len(items) > 1 else [])
+    return "\n\n".join(parts)
+
+
+def wake_prompt(now: datetime) -> str:
+    """The main chat's runtime prompt with the ticket 30 entry layer, as the
+    real Rust code produced it (wake/galley-prompt/), segment facts filled;
+    the manual path is filled per run (run_job), where the run's state
+    root is."""
+    text = WAKE_PROMPT.read_text(encoding="utf-8")
+    text = (text.replace("__SESSION_ID__", SESSION_ID)
+            .replace("__SEGMENT_START_TURN__", str(SEGMENT_START_TURN))
+            .replace("__SEGMENT_START_DATE__", now.strftime("%Y-%m-%d")))
+    if "__MANUAL_PATH__" not in text:
+        fail("wake prompt: no __MANUAL_PATH__ placeholder")
+    return text
+
+
+def wake_fixture(case: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """What the fake galley answers for one case: session rows (the main
+    chat, the case's subtasks, a conversation of the user's own and one an
+    outside agent started), transcripts, projects, models."""
+    tz = now.astimezone().strftime("%z")
+    tz = tz[:3] + ":" + tz[3:]
+
+    def at(minutes_ago: float) -> str:
+        return (now - timedelta(minutes=minutes_ago)).strftime("%Y-%m-%dT%H:%M:%S") + tz
+
+    base = {"pinned": False, "hasUnread": False, "runtimeKind": "managed", "runtimeLabel": "Galley",
+            "gaRuntimeKind": "managed", "promptProfile": "galley-runtime-v1",
+            "selectedLlmKey": "mm_1790734996114", "selectedLlmDisplayName": "gpt-6.1-sol"}
+    idle = {"runnerAlive": True, "agentRunning": False, "openRun": False, "queuedCount": 0,
+            "busy": False, "askPending": False, "lastExit": None}
+    sessions: dict[str, Any] = {}
+    messages: dict[str, list[dict[str, Any]]] = {}
+    sessions[SESSION_ID] = dict(base, id=SESSION_ID, title="Galley", status="idle", mainChat=True,
+                                turnCount=SEGMENT_START_TURN + len(case["history"]) // 2 + 1,
+                                lastActivityAt=at(0), createdAt=at(60 * 24 * 9), updatedAt=at(0),
+                                live=dict(idle, runnerAlive=True, agentRunning=True, openRun=True,
+                                          busy=True, lastExit="CURRENT_TASK_DONE"))
+    main_rows = []
+    for n, m in enumerate(case["history"]):
+        turn = SEGMENT_START_TURN + n // 2
+        main_rows.append({"id": f"msg_{SESSION_ID}_{turn}_{m['role']}", "sessionId": SESSION_ID,
+                          "role": "user" if m["role"] == "user" else "agent", "content": m["content"],
+                          "createdAt": at(40 - n), "turnIndex": turn, "visibility": "visible"})
+    messages[SESSION_ID] = main_rows
+    order = []
+    for k, s in enumerate(case["subtasks"]):
+        sid = s["id"]
+        start = 35 - 3 * k
+        rows = [{"id": f"msg_{sid}_0_user", "sessionId": sid, "role": "user", "content": s["instructions"],
+                 "createdAt": at(start), "turnIndex": 0, "origin": {"via": "subtask"},
+                 "visibility": "visible"}]
+        for n, m in enumerate(s["messages"], 1):
+            turn = int(m.get("turn") or 0)
+            row: dict[str, Any] = {"id": f"msg_{sid}_{turn}_{n}", "sessionId": sid,
+                                   "role": m["role"], "content": m["content"],
+                                   "createdAt": at(start - n * (start - 1) / (len(s["messages"]) + 1)),
+                                   "turnIndex": turn, "visibility": "visible"}
+            if m["role"] == "user":
+                row["origin"] = m.get("origin") or {"via": "gui"}
+            if m.get("summary"):
+                row["summary"] = m["summary"]
+            if m.get("final"):
+                row["finalAnswer"] = m["content"]
+            if m.get("ask"):
+                row["askUser"] = m["ask"]
+            rows.append(row)
+        messages[sid] = rows
+        turns = 1 + max(int(m.get("turn") or 0) for m in s["messages"])
+        sessions[sid] = dict(base, id=sid, title=s["title"], status="idle", turnCount=turns,
+                             lastActivityAt=rows[-1]["createdAt"], createdAt=rows[0]["createdAt"],
+                             updatedAt=rows[-1]["createdAt"], hasUnread=True, origin={"via": "subtask"},
+                             parentSessionId=SESSION_ID, live=dict(idle, **s.get("live", {})))
+        order.append(sid)
+    others = [
+        ("s-mgc2v8h3-6t1q4n7z", "这周周报：登录 bug 修复进展", {"via": "gui"}, 60 * 5),
+        ("s-mgd7k1p9-3x8w2b5m", "MyApp 依赖升级检查",
+         {"via": "supervisor", "supervisor": "claude-code", "reason": "user asked for a dependency audit"}, 60 * 26),
+    ]
+    for sid, title, origin, ago in others:
+        sessions[sid] = dict(base, id=sid, title=title, status="idle", turnCount=3, lastActivityAt=at(ago),
+                             createdAt=at(ago + 30), updatedAt=at(ago), origin=origin, live=dict(idle))
+        if origin["via"] == "gui":
+            del sessions[sid]["origin"]
+        messages[sid] = []
+        order.append(sid)
+    order.insert(0, SESSION_ID)
+    return {
+        "now": at(0),
+        "sessions": sessions,
+        "messages": messages,
+        "order": order,
+        "projects": [{"id": "proj_2b7e91c04d5a6f38", "name": "上海出差", "workspaceEnabled": False,
+                      "pinned": False, "createdAt": at(60 * 30), "updatedAt": at(60 * 30)}],
+        "models": [
+            {"index": 0, "name": "gpt-6.1-sol", "key": "mm_1790734996114", "displayName": "gpt-6.1-sol",
+             "isCurrent": True},
+            {"index": 1, "name": "glm-5.3", "key": "mm_1786688624397", "displayName": "glm-5.3",
+             "isCurrent": False},
+            {"index": 2, "name": "deepseek-flash", "key": "mm_1789025687188", "displayName": "deepseek-flash",
+             "isCurrent": False},
+        ],
+    }
 
 
 def read_galley_log(path: str) -> list[dict[str, Any]]:
@@ -592,6 +1021,28 @@ def install_guards(write_roots: list[str], allowed_hosts: set[str]) -> None:
 
 
 DRY_CLI_BRIEF = "把下载文件夹里的 PDF 按内容分类，完成后汇报"
+# Wake dry test: the discovery line from Galley's prompt, reads and writes
+# through the fake galley, a flag the real CLI refuses, a holding command,
+# and things the sandbox must refuse (the real HOME, /etc, a program not on
+# the list, the network, a file outside).
+WAKE_DRY_BASH = r'''GALLEY="$(sed -n '1p' "${XDG_CONFIG_HOME:-$HOME/.config}/galley/cli-path")"
+echo "cli=${GALLEY##*/}"
+"$GALLEY" session show s-mgq3c1d8-2k7v4p0a --tail=40 | head -2
+"$GALLEY" session send s-mgq3c1d8-2k7v4p0a "截图路径再给一下" --supervisor=galley-assistant --reason="send back"
+"$GALLEY" session brief s-mgq3c1d8-2k7v4p0a
+"$GALLEY" llm set s-mgq3c1d8-2k7v4p0a glm-5.3 --supervisor=galley-assistant; echo "llm_set=$?"
+"$GALLEY" session wait s-mgq3c1d8-2k7v4p0a --until-idle --timeout=5 | tail -1
+ls ~/Downloads
+cat ~/Downloads/螺纹钢报价_本周.csv | wc -l
+python3 -c 'print("py", 6*7)'
+sed -n 1p "REAL/.zshrc" >/dev/null 2>&1; echo "read_real=$?"
+cat /etc/hosts >/dev/null 2>&1; echo "cat_etc=$?"
+ls "REAL" >/dev/null 2>&1; echo "ls_real=$?"
+/usr/bin/python3 -c 1 >/dev/null 2>&1; echo "usr_python=$?"
+curl -s https://example.com >/dev/null 2>&1; echo "curl=$?"
+touch "CANARY-wake" 2>/dev/null; echo "touch=$?"
+echo "x" > "CANARY-wake-redirect" 2>/dev/null; echo "redirect=$?"
+'''
 DRY_TOOL_BRIEF = "去华立、东辰、明光三家官网抓本周钢材报价，整理成对比表交回"
 
 
@@ -693,6 +1144,16 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                                "    shutil.move(os.path.join(d, n), os.path.join(d, '发票', n))\nprint('moved')"})),
             call("<summary>Dispatch the rest</summary>\n剩下的交给子任务。\n"
                  "<subtask>把 ~/Downloads 里其余 PDF 按内容分类</subtask>")],
+        # Wake suite.
+        "wake-bash": [
+            call("<summary>Read the manual</summary>\n先看手册。", ("file_read", {"path": ctx.get("manual", "")})),
+            call("<summary>Check the subtask</summary>\n核对一下。",
+                 ("code_run", {"type": "bash", "script": WAKE_DRY_BASH.replace("REAL", real_home)
+                               .replace("CANARY", canary)})),
+            call("<summary>Sent back</summary>\n<no-reply/>")],
+        "wake-ask": [
+            call("<summary>Ask the user</summary>\n要验证码。",
+                 ("ask_user", {"question": "12306 发到你手机尾号 3821 的验证码是多少？", "candidates": []}))],
         "sbx-inline": [
             call("<summary>Inline</summary>\n直接算。",
                  ("code_run", {"script": f"open({canary + '-inline'!r}, 'w').write('x')", "inline_eval": True}))],
@@ -734,7 +1195,7 @@ def worker() -> int:
         os.environ["TMPDIR"] = os.path.join(sandbox["root"], "tmp")
         SANDBOX_EXEC.update(profile=sandbox["profile"], root=sandbox["root"], env={
             "HOME": sandbox["home"], "XDG_CONFIG_HOME": os.path.join(sandbox["home"], ".config"),
-            "TMPDIR": os.path.join(sandbox["root"], "tmp"), "PATH": "/usr/bin:/bin",
+            "TMPDIR": os.path.join(sandbox["root"], "tmp"), "PATH": sandbox.get("path_env", "/usr/bin:/bin"),
             "LANG": "en_US.UTF-8", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8",
             "GALLEY_GA_STATE_ROOT": str(state_root), "SHELL": "/bin/bash", "TERM": "dumb",
             "USER": os.environ.get("USER", ""), "LOGNAME": os.environ.get("LOGNAME", ""),
@@ -767,7 +1228,9 @@ def worker() -> int:
     # Record exactly what is sent (the request payload; headers carry the
     # key and are not kept) and the usage the stream reports.
     real_stream = llmcore._stream_with_retry
-    fake = (fake_llm(job["dry"], {"real_home": real_home, "sock": job.get("dry_sock")})
+    manual_m = re.search(r"read your manual at `([^`]+)`", job["galley_prompt"])
+    fake = (fake_llm(job["dry"], {"real_home": real_home, "sock": job.get("dry_sock"),
+                                  "manual": manual_m.group(1) if manual_m else ""})
             if job.get("dry") else None)
 
     def stream(sess: Any, url: str, headers: Any, payload: Any, parse_fn: Any) -> Any:
@@ -864,8 +1327,9 @@ def worker() -> int:
             rec["intercepted"] = {"name": tool_name, "args": clean, "turn": handler.current_turn}
             return StepOutcome(None, should_exit=True)
 
-        if n > SANDBOX_TOOL_CAP:
-            return stop("cap_reached", f"not run: cap of {SANDBOX_TOOL_CAP} tool calls reached")
+        cap = int(job.get("tool_cap") or SANDBOX_TOOL_CAP)
+        if n > cap:
+            return stop("cap_reached", f"not run: cap of {cap} tool calls reached")
         if tool_name == "start_subtask" and dispatch_variant == "P":
             result = json.loads(json.dumps(FAKE_DISPATCH_RESULTS["P"]))
             entry.update(outcome="fake result", result=result)
@@ -1099,6 +1563,23 @@ def build_result(job: dict[str, Any], rec: dict[str, Any], done: Any, latency: f
             "final_reply": reply,
             "first_reply": responses[0]["content"] if responses else "",
         })
+    elif job.get("wake"):
+        if rec["stop_reason"]:
+            stop = rec["stop_reason"]
+        elif done is None:
+            stop = "timeout"
+        elif responses and not responses[-1]["tool_calls"]:
+            stop = "final_reply"
+        else:
+            stop = "other"
+        result.update({
+            "wording": job["wording"],
+            "repeat": job["repeat"],
+            "message": job["message"],
+            "calls": rec["calls"],
+            "stop_reason": stop,
+            "final_reply": reply,
+        })
     elif variant:
         call = rec["dispatch_call"]
         tag = SUBTASK_TAG_RE.search(responses[0]["content"]) if responses else None
@@ -1147,13 +1628,14 @@ def path_parents(path: str) -> list[str]:
         path = nxt
 
 
-def sandbox_profile(sandbox: str, py_root: str, galley: str) -> str:
+def sandbox_profile(sandbox: str, py_root: str, galley: str, extra_exec: tuple[str, ...] = ()) -> str:
     """A deny-by-default macOS sandbox (sandbox-exec) for the model's code:
     it may run the Python interpreter and bash / sh (what code_run itself
     starts) and the fake galley, and no other program; read and write
     only inside the sandbox (plus the system libraries and the
     interpreter it needs to start); no network at all (TCP, DNS and Unix
-    sockets, so not Galley Core either)."""
+    sockets, so not Galley Core either). extra_exec (wake suite): a few
+    more system programs, under the same file and network rules."""
     def lit(p: str) -> str:
         return '(literal "' + p + '")'
 
@@ -1163,58 +1645,130 @@ def sandbox_profile(sandbox: str, py_root: str, galley: str) -> str:
     meta = sorted(set(path_parents(sandbox) + path_parents(py_root)
                       + ["/private/var", "/var", "/private/etc", "/etc", "/tmp", "/private/tmp",
                          "/bin", "/usr", "/dev", "/private/var/select"]))
+    extra = "".join(" " + lit(p) for p in extra_exec)
     return "\n".join([
         "(version 1)",
         "(deny default)",
         "(allow process-fork)",
         "(allow signal (target same-sandbox))",
         "(allow sysctl-read)",
-        f"(allow process-exec {sub(py_root)} {lit('/bin/bash')} {lit('/bin/sh')} {lit(galley)})",
+        f"(allow process-exec {sub(py_root)} {lit('/bin/bash')} {lit('/bin/sh')} {lit(galley)}{extra})",
         f"(allow file-read* {lit('/')} {sub(sandbox)} {sub(py_root)} {sub('/System')} {sub('/usr/lib')}"
         f" {sub('/usr/share')} {sub('/private/var/db/timezone')} {lit('/private/etc/localtime')}"
         f" {lit('/private/var/select/sh')} {lit('/bin/bash')} {lit('/bin/sh')} {lit('/dev/null')}"
-        f" {lit('/dev/urandom')} {lit('/dev/random')} {lit('/dev/zero')})",
+        f" {lit('/dev/urandom')} {lit('/dev/random')} {lit('/dev/zero')}{extra})",
         "(allow file-read-metadata " + " ".join(lit(p) for p in meta) + ")",
         f"(allow file-map-executable {sub('/System')} {sub('/usr/lib')} {sub(py_root)}"
-        f" {lit('/bin/bash')} {lit('/bin/sh')})",
+        f" {lit('/bin/bash')} {lit('/bin/sh')}{extra})",
         f"(allow file-write* {sub(sandbox)} {lit('/dev/null')})",
         f"(allow file-ioctl {lit('/dev/null')})",
         "",
     ])
 
 
-def build_sandbox(run_dir: Path, python: str) -> dict[str, Any]:
+def manual_sha() -> str:
+    """Which version of the assistant manual a wake run read (first 8 hex
+    of its SHA-256); results.json keeps it per run."""
+    import hashlib
+
+    return hashlib.sha256(MANUAL.read_bytes()).hexdigest()[:8]
+
+
+def write_screenshot(path: Path, lines: list[str]) -> None:
+    """A real PNG that looks like a 1440 x 900 page capture with the given
+    lines of text (Pillow), so a model checking the evidence finds a valid
+    image of plausible size; without Pillow, a valid blank one."""
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        import struct
+        import zlib
+
+        w, h = 1440, 900
+        raw = b"".join(b"\x00" + b"\xf4\xf4\xf4" * w for _ in range(h))
+
+        def chunk(kind: bytes, data: bytes) -> bytes:
+            return (struct.pack(">I", len(data)) + kind + data
+                    + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF))
+
+        path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+                         + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+        return
+    img = Image.new("RGB", (1440, 900), (244, 244, 244))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((0, 0, 1440, 72), fill=(32, 48, 80))
+    try:
+        font = ImageFont.load_default(size=30)
+    except TypeError:
+        font = ImageFont.load_default()
+    for i, line in enumerate(lines):
+        draw.text((60, 18 if i == 0 else 160 + 70 * i), line, fill=(255, 255, 255) if i == 0 else (20, 20, 20),
+                  font=font)
+    img.save(path, "PNG")
+
+
+def build_sandbox(run_dir: Path, python: str, wake: dict[str, Any] | None = None) -> dict[str, Any]:
     """One run's sandbox: a fake HOME with fixture files in ~/Downloads and
     ~/.config/galley/cli-path pointing at the fake galley, a tmp dir, a
-    log for the fake CLI, and (outside the sandbox) the profile."""
+    log for the fake CLI, and (outside the sandbox) the profile.
+
+    wake (wake suite): the case's evidence files instead of the dispatch
+    fixtures, the fixture-driven fake galley, `python3` on PATH (a link
+    to this interpreter) and the extra system programs."""
     root = Path(os.path.realpath(run_dir)) / "sandbox"
     home = root / "home"
     downloads = home / "Downloads"
     downloads.mkdir(parents=True)
-    for name, text in FIXTURE_PDFS.items():
-        (downloads / name).write_bytes(
-            f"%PDF-1.4\n% placeholder fixture\n% {text}\n%%EOF\n".encode())
-    for name, data in FIXTURE_OTHER.items():
-        (downloads / name).write_bytes(data)
-    for name, size in FIXTURE_SPARSE.items():
-        with open(downloads / name, "wb") as f:
-            f.truncate(size)
+    if wake is None:
+        for name, text in FIXTURE_PDFS.items():
+            (downloads / name).write_bytes(
+                f"%PDF-1.4\n% placeholder fixture\n% {text}\n%%EOF\n".encode())
+        for name, data in FIXTURE_OTHER.items():
+            (downloads / name).write_bytes(data)
+        for name, size in FIXTURE_SPARSE.items():
+            with open(downloads / name, "wb") as f:
+                f.truncate(size)
+    else:
+        for name, content in wake["files"].items():
+            (downloads / name).parent.mkdir(parents=True, exist_ok=True)
+            if isinstance(content, dict) and "png" in content:
+                write_screenshot(downloads / name, content["png"])
+            else:
+                (downloads / name).write_text(content, encoding="utf-8")
     (root / "tmp").mkdir()
     (root / "log").mkdir()
     (root / "bin").mkdir()
     galley = root / "bin" / "galley"
     log = root / "log" / "galley-calls.jsonl"
     py_real = os.path.realpath(python)
-    galley.write_text(FAKE_GALLEY.format(python=py_real, log=str(log),
-                                         fake_start=repr(FAKE_SUBTASK_STDOUT)), encoding="utf-8")
+    info: dict[str, Any] = {}
+    if wake is None:
+        galley.write_text(FAKE_GALLEY.format(python=py_real, log=str(log),
+                                             fake_start=repr(FAKE_SUBTASK_STDOUT)), encoding="utf-8")
+    else:
+        data = root / "galley-data"
+        data.mkdir()
+        (data / "fixture.json").write_text(json.dumps(wake["fixture"], ensure_ascii=False), encoding="utf-8")
+        shutil.copyfile(WAKE_CLI_HELP, data / "help.json")
+        galley.write_text(FAKE_GALLEY_WAKE.replace("__PYTHON__", py_real)
+                          .replace("__FIXTURE__", str(data / "fixture.json"))
+                          .replace("__STATE__", str(data / "state.json"))
+                          .replace("__LOG__", str(log)).replace("__HELP__", str(data / "help.json")),
+                          encoding="utf-8")
+        pybin = root / "pybin"
+        pybin.mkdir()
+        (pybin / "python3").symlink_to(py_real)
+        info["path_env"] = f"{pybin}:/usr/bin:/bin"
+        info["fake_state"] = str(data / "state.json")
     galley.chmod(0o755)
     (home / ".config" / "galley").mkdir(parents=True)
     (home / ".config" / "galley" / "cli-path").write_text(str(galley) + "\n", encoding="utf-8")
     py_root = str(Path(py_real).parents[1])
     profile = Path(os.path.realpath(run_dir)) / "sandbox.sb"
-    profile.write_text(sandbox_profile(str(root), py_root, str(galley)), encoding="utf-8")
-    return {"root": str(root), "home": str(home), "profile": str(profile), "galley": str(galley),
-            "galley_log": str(log), "py_root": py_root}
+    profile.write_text(sandbox_profile(str(root), py_root, str(galley),
+                                       WAKE_EXTRA_EXEC if wake is not None else ()), encoding="utf-8")
+    return dict(info, root=str(root), home=str(home), profile=str(profile), galley=str(galley),
+                galley_log=str(log), py_root=py_root)
 
 
 def downloads_snapshot(home: Path) -> dict[str, int]:
@@ -1239,9 +1793,18 @@ def run_job(job: dict[str, Any], python: str, workdir: Path) -> dict[str, Any]:
     job = dict(job)
     sandbox = None
     if job.get("sandbox"):
-        sandbox = build_sandbox(run_dir, python)
+        sandbox = build_sandbox(run_dir, python, job.get("wake"))
         job["sandbox_info"] = sandbox
-        job["state_root"] = str(seeded_state_root(Path(sandbox["root"])))
+        state_root = seeded_state_root(Path(sandbox["root"]))
+        job["state_root"] = str(state_root)
+        if job.get("wake"):
+            # Where Core writes it (assistant_manual::materialize), and the
+            # path the entry layer names.
+            manual = state_root / "assistant" / "reference" / "galley-assistant-manual.md"
+            manual.parent.mkdir(parents=True)
+            shutil.copyfile(MANUAL, manual)
+            job["manual_sha"] = manual_sha()
+            job["galley_prompt"] = job["galley_prompt"].replace("__MANUAL_PATH__", str(manual))
         before = downloads_snapshot(Path(sandbox["home"]))
     else:
         job["state_root"] = str(seeded_state_root(run_dir))
@@ -1272,6 +1835,8 @@ def run_job(job: dict[str, Any], python: str, workdir: Path) -> dict[str, Any]:
         result = {"id": job["case_id"], "variant": job["variant"], "status": "error",
                   "reply": "", "error": f"worker exit {code}: {tail}"}
     result["canaries"] = sorted(p.name for p in run_dir.glob("canary*"))
+    if job.get("manual_sha"):
+        result["manual_sha"] = job["manual_sha"]
     if sandbox:
         after = downloads_snapshot(Path(sandbox["home"]))
         result["downloads_changes"] = {
@@ -1282,8 +1847,9 @@ def run_job(job: dict[str, Any], python: str, workdir: Path) -> dict[str, Any]:
         log_path = Path(sandbox["galley_log"])
         result["galley_log"] = ([json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()
                                  if line.strip()] if log_path.is_file() else [])
-        result["fixtures"] = {"pdfs": len(FIXTURE_PDFS), "other": sorted(FIXTURE_OTHER),
-                              "sparse": FIXTURE_SPARSE}
+        if not job.get("wake"):
+            result["fixtures"] = {"pdfs": len(FIXTURE_PDFS), "other": sorted(FIXTURE_OTHER),
+                                  "sparse": FIXTURE_SPARSE}
     return result
 
 
@@ -1340,6 +1906,41 @@ def make_dispatch_jobs(cases: list[dict[str, Any]], variants: list[str], now: da
     return jobs
 
 
+def make_wake_jobs(cases: list[dict[str, Any]], wordings: list[str], now: datetime,
+                   mykeys: dict[str, Any], ga_lang: str, allowed_hosts: set[str], repeats: int,
+                   dry: str | None = None) -> list[dict[str, Any]]:
+    """Ticket 30: each case under each wording, `repeats` times. Sandbox
+    mode: the model's tool calls run in the run's sandbox, its CLI calls
+    reach only the fixture-driven fake galley."""
+    words = load_wording()
+    prompt = wake_prompt(now)
+    jobs = []
+    for case in cases:
+        for wording in wordings:
+            if wording not in words:
+                fail(f"no wording {wording!r} in wording.md ({', '.join(words)})")
+            message = wake_note(case, words[wording])
+            for n in range(1, repeats + 1):
+                jobs.append({
+                    "case_id": case["id"],
+                    "variant": f"{wording}-{n}",
+                    "wording": wording,
+                    "repeat": n,
+                    "message": message,
+                    "history": [{"role": m["role"], "content": m["content"]} for m in case["history"]],
+                    "galley_prompt": prompt,
+                    "mykeys": mykeys,
+                    "ga_lang": ga_lang,
+                    "allowed_hosts": sorted(allowed_hosts),
+                    "keep_request": (case["id"] in WAKE_DUMP_CASES and n == 1) or bool(dry),
+                    "dry": dry,
+                    "sandbox": True,
+                    "tool_cap": WAKE_TOOL_CAP,
+                    "wake": {"fixture": wake_fixture(case, now), "files": case.get("files") or {}},
+                })
+    return jobs
+
+
 def run_jobs(jobs: list[dict[str, Any]], python: str, parallel: int,
              keep_temp: bool) -> list[dict[str, Any]]:
     workdir = Path(tempfile.mkdtemp(prefix="entry-layer-eval-"))
@@ -1369,14 +1970,14 @@ def run_jobs(jobs: list[dict[str, Any]], python: str, parallel: int,
     return results
 
 
-def write_composed(result: dict[str, Any], prefix: str = "") -> None:
+def write_composed(result: dict[str, Any], prefix: str = "", directory: Path = COMPOSED_DIR) -> None:
     """The full (first) request of one run, as sent: system prompt,
     history, the new message, and the tools offered (names only, plus the
     full schema of the harness's own start_subtask when offered)."""
     req = result.get("request") or {}
     if not req:
         return
-    COMPOSED_DIR.mkdir(exist_ok=True)
+    directory.mkdir(exist_ok=True)
     names = [t.get("function", t).get("name") for t in req.get("tools", [])]
     lines = [
         f"# Request sent to the model: {result['id']} / {result['variant']}",
@@ -1394,7 +1995,7 @@ def write_composed(result: dict[str, Any], prefix: str = "") -> None:
             content = "\n".join(b.get("text", f"[{b.get('type')}]") for b in content
                                 if isinstance(b, dict))
         lines += [f"======== {msg.get('role')} ========", str(content), ""]
-    path = COMPOSED_DIR / f"{prefix}{result['id']}.{result['variant']}.txt"
+    path = directory / f"{prefix}{result['id']}.{result['variant']}.txt"
     path.write_text(scrub("\n".join(lines)), encoding="utf-8")
 
 
@@ -1757,6 +2358,231 @@ def render_sandbox_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     return "\n".join(out).rstrip() + "\n"
 
 
+CLI_VALUE_FLAGS = {"tail", "around", "context", "since", "until", "supervisor", "reason", "to", "project",
+                   "runtime", "status", "timeout", "poll", "after-turn", "llm", "session", "root-path",
+                   "icon", "color", "schema"}
+NO_REPLY_RE = re.compile(r"<\s*no-reply\s*/\s*>", re.IGNORECASE)
+
+
+def parse_cli(argv: list[str]) -> tuple[list[str], dict[str, Any]]:
+    """Positional words and flags of a galley call, as the fake galley
+    reads them."""
+    words: list[str] = []
+    flags: dict[str, Any] = {}
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a.startswith("--") and len(a) > 2:
+            k, eq, v = a[2:].partition("=")
+            if eq:
+                flags[k] = v
+            elif k in CLI_VALUE_FLAGS and i + 1 < len(argv):
+                flags[k] = argv[i + 1]
+                i += 1
+            else:
+                flags[k] = True
+        elif a in ("-h", "-V"):
+            flags["help"] = True
+        else:
+            words.append(a)
+        i += 1
+    return words, flags
+
+
+def cli_name(argv: list[str]) -> str:
+    words, flags = parse_cli(argv)
+    if flags.get("help") or words[:1] == ["help"]:
+        return "help"
+    return " ".join(words[:1] if words[:1] in (["status"], ["version"], ["health"]) else words[:2])
+
+
+def wake_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
+    """What a wake run did, and whether it met the case's expectations
+    (wake/cases.json `expect`). Facts and a verdict with its reasons."""
+    exp = case["expect"]
+    subtask_ids = {s["id"] for s in case["subtasks"]}
+    log = [c.get("argv") or [] for c in r.get("galley_log") or []]
+    names = [cli_name(a) for a in log]
+    sends = []
+    for argv in log:
+        words, flags = parse_cli(argv)
+        if words[:2] == ["session", "send"] and len(words) > 2 and words[2] in subtask_ids:
+            sends.append({"id": words[2], "content": words[3] if len(words) > 3 else "",
+                          "supervisor": flags.get("supervisor"), "reason": flags.get("reason"),
+                          "jump": bool(flags.get("jump"))})
+    held = [n for n in names if n in HOLDING_COMMANDS]
+    writes = [n for n in names if n in WRITE_COMMANDS]
+    reply = r.get("final_reply") or ""
+    body = strip_for_display(reply)
+    is_no_reply = bool(NO_REPLY_RE.fullmatch(body.strip()))
+    has_no_reply = bool(NO_REPLY_RE.search(reply))
+    stop = r.get("stop_reason")
+    asked = (r.get("tool_call") or {}).get("args") if stop == "ask_user" else None
+    said = body + ("\n" + json.dumps(asked, ensure_ascii=False) if asked else "")
+    calls = r.get("calls") or []
+    manual_at = next((c["n"] for c in calls if "galley-assistant-manual" in json.dumps(c.get("args"), ensure_ascii=False)), None)
+    write_at = next((c["n"] for c in calls
+                     if any(cli_name(a) in WRITE_COMMANDS for a in c.get("galley_calls") or [])), None)
+    if manual_at is None:
+        manual = "没读" if write_at else "没读（没写）"
+    elif write_at is None or manual_at < write_at:
+        manual = f"读了（第 {manual_at} 次调用）"
+    else:
+        manual = f"写之后才读（第 {manual_at} 次）"
+    reasons = []
+    if r.get("status") != "ok":
+        reasons.append(f"运行失败：{r.get('status')}")
+    if stop not in ("final_reply", "ask_user"):
+        reasons.append("没走到最终回复：" + STOP_LABELS.get(stop, str(stop)))
+    if held:
+        reasons.append("用了会卡住主对话的命令：" + "、".join(sorted(set(held))))
+    if "session new" in names or "<subtask>" in reply:
+        if exp.get("no_subtask_tag", True):
+            reasons.append("自己重开了活（session new 或 <subtask>）")
+    if exp["send"]:
+        if not sends:
+            reasons.append("该 session send 却没有")
+        else:
+            if not any(any(w.lower() in s["content"].lower() for w in exp.get("send_mentions_any", [""]))
+                       for s in sends):
+                reasons.append("发给子任务的话没写明要什么（" + "、".join(exp.get("send_mentions_any", [])) + "）")
+            if any(s["supervisor"] != "galley-assistant" for s in sends):
+                reasons.append("session send 没带 --supervisor=galley-assistant")
+    elif sends:
+        reasons.append("不该 session send 却发了")
+    if exp["no_reply"]:
+        if not is_no_reply:
+            reasons.append("回复不是只有 <no-reply/>")
+    else:
+        if has_no_reply:
+            reasons.append("不该写 <no-reply/>")
+        if exp.get("mentions_any") and not any(w in said for w in exp["mentions_any"]):
+            reasons.append("没点到：" + " / ".join(exp["mentions_any"]))
+        for group in exp.get("mentions_groups") or []:
+            if not any(w in said for w in group):
+                reasons.append("漏了一件：" + " / ".join(group))
+        if exp.get("max_chars") and len(body) > exp["max_chars"]:
+            reasons.append(f"太长：{len(body)} 字，上限 {exp['max_chars']}")
+    return {
+        "commands": [" ".join(a) for a in log],
+        "names": names,
+        "sends": sends,
+        "writes": writes,
+        "held": held,
+        "body": body,
+        "no_reply": is_no_reply,
+        "has_no_reply_tag": has_no_reply,
+        "chars": len(body),
+        "suggestion": r.get("next_suggestion"),
+        "asked_via_tool": asked,
+        "manual": manual,
+        "stop": stop,
+        "pass": not reasons,
+        "reasons": reasons,
+    }
+
+
+def short_cmd(cmd: str, limit: int = 160) -> str:
+    """A galley call for the table: subtask ids shortened, long text cut."""
+    cmd = re.sub(r"\bs-mg[a-z0-9]{6}-([a-z0-9]{8})\b", lambda m: "s-…" + m.group(1)[-4:], cmd)
+    return cmd if len(cmd) <= limit else cmd[:limit] + "…"
+
+
+def one_line(text: str) -> str:
+    return re.sub(r"\s*\n\s*", " ⏎ ", text.strip()).replace("|", "\\|")
+
+
+def render_wake_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
+    meta = data["meta"]
+    by_case: dict[str, list[dict[str, Any]]] = {}
+    for r in data["results"]:
+        by_case.setdefault(r["id"], []).append(r)
+    order = {w: i for i, w in enumerate(meta.get("wordings_order") or [])}
+    out = [
+        "# 叫醒措辞评测结果（票 30）",
+        "",
+        f"模型：{meta['model']['name']}（{meta['model_source']}，即 JC 主对话现在用的模型），推理强度 "
+        f"{meta['model']['options'].get('reasoning_effort', '默认')}；首次运行于 {meta['ran_at']}。",
+        "",
+        "- **提示词**：真实 Rust 代码 `compose_main_chat_runtime_prompt` 生成的主对话提示词，含票 30 改过的入口层（`galley-prompt/`），"
+        "手册路径填成这次运行状态根下的 `assistant/reference/galley-assistant-manual.md`，那里放着仓库里的手册原文（Core 写的位置）。",
+        "- **历史**：一段很短的当前段对话：用户的要求，助手派了子任务（回复末尾是回放标记 `[subtask <id>: <title>]`）；"
+        "打回过的一轮按票 29 的回放写法压成一行，助手那轮是 `<no-reply/>`。",
+        "- **新消息**：按 `wording.md` 的措辞逐字拼出的叫醒消息（`draft` 是票 29「措辞草稿」原文）。",
+        "- **工具**：`code_run` 与文件工具在每次运行自己的 macOS 沙盒里真的执行（同派活对照第二轮的沙盒，另允许 `sed`、`cat`、`ls` 等几个系统程序，"
+        "`python3` 指向同一个解释器）；Galley CLI 是假的，按 `cases.json` 的固定数据回答（会话行、子任务的对话、项目、模型、真实 CLI 的 `--help` 原文），"
+        "记下每次调用的参数，`session send` 等写命令只改假 CLI 自己的状态。浏览器工具、`ask_user` 不执行，运行停在那里。"
+        f"每次运行最多 {WAKE_TOOL_CAP} 次工具调用。",
+        f"- **判定**：按 `cases.json` 每条的 `expect` 自动判（下面「判定」一栏写不过的原因）；字数是去掉 `<summary>`、`<next-suggestion>` 后的正文字符数。",
+        "",
+    ]
+    sup = meta.get("superseded_runs") or []
+    for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
+        out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
+                f"`meta.superseded_runs[{n - 1}]` 里。", ""]
+    out += [
+        "## 一览",
+        "",
+        "| # | 用例 | 期望 | 措辞 | 遍 | 调了什么命令 | 回复原文 | `<no-reply/>` | 字数 | 读手册 | 判定 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for case in cases:
+        runs = sorted(by_case.get(case["id"], []), key=lambda r: (order.get(r.get("wording"), 99), r.get("repeat", 0)))
+        for r in runs:
+            f = wake_facts(r, case)
+            cmds = "；".join(short_cmd(c) for c in f["commands"] if cli_name(c.split()) != "help") or "—"
+            if f["asked_via_tool"]:
+                reply = one_line(f["body"] + "（ask_user：" + str(f["asked_via_tool"].get("question", "")) + "）")
+            else:
+                reply = one_line(f["body"]) or "（空）"
+            verdict = "过" if f["pass"] else "不过：" + "；".join(f["reasons"])
+            out.append(f"| {case['no']} | {case['id']} | {case['expect_text'].replace('|', '/')} | {r['wording']} | "
+                       f"{r['repeat']} | {cmds.replace('|', '/')} | {reply} | {'是' if f['no_reply'] else '否'} | "
+                       f"{f['chars']} | {f['manual']} | {verdict.replace('|', '/')} |")
+    out.append("")
+    for case in cases:
+        runs = sorted(by_case.get(case["id"], []), key=lambda r: (order.get(r.get("wording"), 99), r.get("repeat", 0)))
+        if not runs:
+            continue
+        out += [f"## {case['no']}. {case['id']}", "", f"**期望**：{case['expect_text']}", "", "上下文："]
+        out.append("")
+        for m in case["history"]:
+            who = "用户" if m["role"] == "user" else "助手"
+            out.append(f"> {who}：" + m["content"].replace("\n", "\n> "))
+            out.append(">")
+        if out[-1] == ">":
+            out.pop()
+        out.append("")
+        seen_messages: set[str] = set()
+        for r in runs:
+            if r.get("message") and r["message"] not in seen_messages:
+                seen_messages.add(r["message"])
+                out += [f"叫醒消息（{r['wording']}）：", ""] + fenced(r["message"])
+        for r in runs:
+            f = wake_facts(r, case)
+            out += [f"### {r['wording']} 第 {r['repeat']} 遍：{'过' if f['pass'] else '不过'}", ""]
+            if not f["pass"]:
+                out += ["不过的原因：" + "；".join(f["reasons"]), ""]
+            calls = r.get("calls") or []
+            if calls:
+                out += ["工具调用："]
+                out.append("")
+                for c in calls:
+                    line = f"{c['n']}. {call_gist(c)}"
+                    for argv in c.get("galley_calls") or []:
+                        line += "；galley " + " ".join(argv).replace("`", "'")
+                    out.append(line.replace("\n", " "))
+                out.append("")
+            out += [f"结束：{STOP_LABELS.get(f['stop'], f['stop'])}；读手册：{f['manual']}；"
+                    f"手册版本：`{r.get('manual_sha', '?')}`。", ""]
+            if f["asked_via_tool"]:
+                out += ["ask_user 的问题：", ""] + fenced(json.dumps(f["asked_via_tool"], ensure_ascii=False, indent=1), "json")
+            out += ["回复（去掉 summary 与建议标签）：", ""] + fenced(f["body"] or "（空）")
+            if f["suggestion"]:
+                out += [f"建议标签：{f['suggestion']}", ""]
+    return "\n".join(line.rstrip() for line in "\n".join(out).split("\n")).rstrip() + "\n"
+
+
 def summarize_usage(results: list[dict[str, Any]]) -> dict[str, int]:
     total = {"prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0, "reasoning_tokens": 0}
     for r in results:
@@ -1827,6 +2653,13 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
             job["case_id"] = f"sbx-{case_id}"  # its own run dir
             job["dry_sock"] = sock_path
             jobs.append(job)
+    wcases = {c["id"]: c for c in json.loads(WAKE_CASES.read_text(encoding="utf-8"))["cases"]}
+    wake_scripts = {"wake-done-evidence": "wake-bash", "wake-ask-sms": "wake-ask"}
+    for wake_id, script in wake_scripts.items():
+        for job in make_wake_jobs([wcases[wake_id[len("wake-"):]]], ["draft"], now, mykeys, ga_lang,
+                                  set(), 1, script):
+            job["case_id"] = wake_id
+            jobs.append(job)
     real_home = os.path.expanduser("~")
     home_canary = os.path.join(real_home, "entry-layer-eval-sbx-canary")
     results = run_jobs(jobs, python, 3, keep_temp)
@@ -1840,6 +2673,7 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
         print(("  PASS " if cond else "  FAIL ") + what)
         ok = ok and cond
 
+    dry_test_wake([r for r in results if r["id"].startswith("wake-")], wake_scripts, wcases, check)
     sbx_results = [r for r in results if r["id"].startswith("sbx-")]
     entry_results = [r for r in results if r["variant"] in VARIANTS]
     dispatch_results = [r for r in results if r["variant"] in DISPATCH_VARIANTS
@@ -1981,6 +2815,69 @@ def dry_test_sandbox(results: list[dict[str, Any]], scripts: dict[tuple[str, str
                   "inline_eval is not run")
 
 
+def dry_test_wake(results: list[dict[str, Any]], scripts: dict[str, str],
+                  cases: dict[str, dict[str, Any]], check: Any) -> None:
+    """Wake suite: the prompt names the manual where the run's state root
+    has it; the wake note is the new user message after the history; the
+    model's shell reaches the fake galley (discovery line with sed, reads,
+    a send, state kept, a refused flag, a holding command) and nothing
+    outside the sandbox; ask_user ends the run; the judge reads it."""
+    words = load_wording()["draft"]
+    for r in sorted(results, key=lambda r: r["id"]):
+        script = scripts[r["id"]]
+        case = cases[r["id"][len("wake-"):]]
+        print(f"wake {r['id']} / {r['variant']} ({script})")
+        check(r["status"] == "ok", f"run completed (status {r['status']} {r.get('error', '')[:300]})")
+        if r["status"] != "ok":
+            continue
+        check(not r["blocked"], f"nothing in the engine process tried to leave ({r['blocked']})")
+        check(not r["do_calls"], f"no blocked GA tool method was entered ({r['do_calls']})")
+        check(not r["canaries"], f"no canary file outside the sandbox ({r['canaries']})")
+        check(all(r["guard_selftest"].values()), f"engine-process guards refuse ({r['guard_selftest']})")
+        req = r["requests"][0]
+        msgs = req["messages"]
+        system = msgs[0]["content"] if msgs[0]["role"] == "system" else ""
+        m = re.search(r"read your manual at `([^`]+)`", system)
+        check(bool(m) and m.group(1).endswith("/managed-ga-state/assistant/reference/galley-assistant-manual.md"),
+              "the prompt names the manual in the run's state root")
+        check(system.index("## Main Chat\n") < system.index("## Galley Main Chat Entry Layer") < system.index("[Peer]")
+              and "Galley wakes you" in system and "you can look it up when they ask" not in system,
+              "the ticket 30 entry layer follows the Main Chat section")
+        roles = [x["role"] for x in msgs]
+        check(roles == ["system"] + [h["role"] for h in case["history"]] + ["user"], f"history, then the note ({roles})")
+        last = msgs[-1]["content"]
+        if not isinstance(last, str):
+            last = "\n".join(b.get("text", "") for b in last if isinstance(b, dict))
+        note = wake_note(case, words)
+        check(note in last and r["message"] == note, "the new message is the wake note, verbatim")
+        f = wake_facts(r, case)
+        if script == "wake-bash":
+            calls = r["calls"]
+            check(calls[0]["name"] == "file_read" and "# Galley Assistant Manual" in str(calls[0].get("result")),
+                  "file_read reads the manual where the prompt says")
+            out = str((calls[1].get("result") or {}).get("stdout", ""))
+            for want in ("cli=galley", "查华立、东辰、明光三家本周螺纹钢报价", '"dispatch": "dispatched"',
+                         '"busy": true', "invalid_args", "unexpected argument '--supervisor'", "llm_set=2",
+                         '"reason": "completed"', "螺纹钢报价_本周.csv", "报价截图", "py 42"):
+                check(want in out, f"shell output has {want!r}")
+            for denied in ("read_real", "cat_etc", "ls_real", "usr_python", "curl", "touch", "redirect"):
+                check(re.search(rf"^{denied}=[1-9]", out, re.MULTILINE) is not None,
+                      f"sandbox refuses {denied} ({re.search(rf'^{denied}=.*$', out, re.MULTILINE)})")
+            check(f["names"] == ["session show", "session send", "session brief", "llm set", "session wait"],
+                  f"fake galley logged every call ({f['names']})")
+            check(len(f["sends"]) == 1 and f["sends"][0]["supervisor"] == "galley-assistant"
+                  and f["sends"][0]["content"] == "截图路径再给一下", f"the send is read back ({f['sends']})")
+            check(f["held"] == ["session wait"] and not f["pass"]
+                  and any("卡住" in x for x in f["reasons"]), "the judge flags the holding command")
+            check(f["no_reply"] and f["manual"].startswith("读了"), "no-reply and manual read are recognized")
+            check(r["stop_reason"] == "final_reply" and r["llm_calls"] == 3, "three model calls, final reply")
+        else:
+            check(r["stop_reason"] == "ask_user" and r["llm_calls"] == 1 and not r.get("galley_log"),
+                  "ask_user ends the run, nothing reached the CLI")
+            check(f["asked_via_tool"] and "验证码" in f["asked_via_tool"]["question"] and f["pass"],
+                  f"the judge reads the ask_user question ({f['reasons']})")
+
+
 def dry_test_dispatch(results: list[dict[str, Any]], scripts: dict[tuple[str, str], str],
                       check: Any) -> None:
     """Ticket 06 paths: T's tag, C's CLI dispatch answered with a fake
@@ -2058,10 +2955,13 @@ def main() -> int:
     ap.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--dry-test", action="store_true", help="verify interception, no model")
     ap.add_argument("--render-only", action="store_true", help="rebuild the .md from the .json")
-    ap.add_argument("--suite", choices=("entry", "dispatch"), default="entry",
-                    help="entry: cases.json WITHOUT / WITH; dispatch: dispatch-cases.json T / C / P")
+    ap.add_argument("--suite", choices=("entry", "dispatch", "wake"), default="entry",
+                    help="entry: cases.json WITHOUT / WITH; dispatch: dispatch-cases.json T / C / P; "
+                         "wake: wake/cases.json under the wordings of wake/wording.md")
     ap.add_argument("--variant", default="all",
-                    help="entry: without | with | both; dispatch: comma list of T,C,P; or all")
+                    help="entry: without | with | both; dispatch: comma list of T,C,P; "
+                         "wake: comma list of wording names; or all")
+    ap.add_argument("--repeats", type=int, default=WAKE_REPEATS, help="wake: runs per case and wording")
     ap.add_argument("--mode", choices=("sandbox", "firststop"), default="sandbox",
                     help="dispatch suite: sandbox (lookups answered from a per-run sandbox, "
                          "dispatch-results.*) or firststop (the first run: any non-dispatch tool "
@@ -2084,8 +2984,11 @@ def main() -> int:
         return dry_test(args.python, args.ga_lang, args.keep_temp)
 
     dispatch = args.suite == "dispatch"
+    wake = args.suite == "wake"
     sandbox_mode = dispatch and args.mode == "sandbox"
-    if sandbox_mode:
+    if wake:
+        suite_files = (WAKE_CASES, WAKE_JSON, WAKE_MD, tuple(load_wording()), render_wake_md)
+    elif sandbox_mode:
         suite_files = (DISPATCH_CASES, DISPATCH_JSON, DISPATCH_MD, DISPATCH_VARIANTS,
                        render_sandbox_md)
     elif dispatch:
@@ -2104,7 +3007,9 @@ def main() -> int:
     cases = [c for c in all_cases if wanted is None or c["id"] in wanted]
     if wanted and len(cases) != len(wanted):
         fail(f"unknown case ids: {sorted(wanted - {c['id'] for c in cases})}")
-    if args.variant in ("all", "both"):
+    if wake and args.variant == "all":
+        variants = ["draft"]
+    elif args.variant in ("all", "both"):
         variants = list(all_variants)
     else:
         variants = [v.strip() for v in args.variant.split(",")]
@@ -2134,7 +3039,9 @@ def main() -> int:
 
     now = datetime.now()
     draft = DRAFT.read_text(encoding="utf-8")
-    if dispatch:
+    if wake:
+        jobs = make_wake_jobs(cases, variants, now, mykeys, args.ga_lang, allowed, args.repeats)
+    elif dispatch:
         jobs = make_dispatch_jobs(cases, variants, now, draft, mykeys, args.ga_lang, allowed,
                                   sandbox=sandbox_mode)
     else:
@@ -2148,18 +3055,25 @@ def main() -> int:
         results = json.loads(json.dumps(results, ensure_ascii=False).replace(secret, "<redacted>"))
     for r in results:
         if r.get("request") and r["status"] == "ok":
-            write_composed(r, "dispatch." if dispatch else "")
+            if wake:
+                write_composed(r, "", WAKE_COMPOSED_DIR)
+            else:
+                write_composed(r, "dispatch." if dispatch else "")
         r.pop("request", None)
 
     merged: list[dict[str, Any]] = []
     previous_meta: dict[str, Any] = {}
-    if wanted and results_json.is_file():
+    if (wanted or wake) and results_json.is_file():
         previous = json.loads(results_json.read_text(encoding="utf-8"))
         merged, previous_meta = previous["results"], previous.get("meta", {})
     fresh = {(r["id"], r["variant"]) for r in results}
     merged = [r for r in merged if (r["id"], r["variant"]) not in fresh] + results
     order = {c["id"]: i for i, c in enumerate(all_cases)}
-    merged.sort(key=lambda r: (order.get(r["id"], 99), all_variants.index(r["variant"])))
+    if wake:
+        merged.sort(key=lambda r: (order.get(r["id"], 99), list(all_variants).index(r["wording"])
+                                   if r.get("wording") in all_variants else 99, r.get("repeat", 0)))
+    else:
+        merged.sort(key=lambda r: (order.get(r["id"], 99), all_variants.index(r["variant"])))
     reruns = list(previous_meta.get("partial_reruns", []))
     if previous_meta:
         reruns.append({"at": now.strftime("%Y-%m-%d %H:%M"),
@@ -2187,6 +3101,18 @@ def main() -> int:
             "start_subtask_tool": START_SUBTASK_TOOL,
             "mode": args.mode,
         })
+    if wake:
+        data["meta"].update({
+            "suite": "wake (ticket 30): the main chat prompt with the ticket 30 entry layer, the "
+                     "assistant manual in the state root, a wake note filled from wording.md",
+            "wordings_order": list(all_variants),
+            "repeats": args.repeats,
+            "tool_cap": WAKE_TOOL_CAP,
+            "extra_exec": list(WAKE_EXTRA_EXEC),
+            "manual": "docs/managed-ga-runtime/galley-assistant-manual.md",
+        })
+        if previous_meta.get("superseded_runs"):
+            data["meta"]["superseded_runs"] = previous_meta["superseded_runs"]
     if sandbox_mode:
         data["meta"]["sandbox"] = {
             "tool_cap": SANDBOX_TOOL_CAP,

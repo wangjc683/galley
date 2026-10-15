@@ -197,12 +197,16 @@ pub(crate) fn compose_runtime_prompt(app_version: &str) -> String {
 /// The main chat's variant: the workbench prompt, its state block
 /// followed by a "Main Chat" section (ticket 03b: this is the main chat,
 /// its id, where the segment its runner holds begins, and how to look up
-/// earlier parts). Every other session gets [`compose_runtime_prompt`].
+/// earlier parts) and the main chat entry layer, which names the
+/// assistant manual at `manual_path` (ticket 30,
+/// [`crate::assistant_manual`]). Every other session gets
+/// [`compose_runtime_prompt`].
 pub(crate) fn compose_main_chat_runtime_prompt(
     app_version: &str,
     main_chat: &MainChatPromptState,
+    manual_path: &str,
 ) -> String {
-    compose(app_version, true, Some(main_chat))
+    compose(app_version, true, Some((main_chat, manual_path)))
 }
 
 /// IM-supervisor variant: same runtime rules WITHOUT the suggestion
@@ -274,7 +278,37 @@ look it up with the Galley CLI (search, then
 /// and a native tool (`dispatch-clauses.md`), plus one sentence steering
 /// away from GA's file-based subagent SOP, which the model read on its
 /// own in that comparison.
-const MAIN_CHAT_ENTRY_LAYER: &str = r#"## Galley Main Chat Entry Layer
+///
+/// Ticket 30 (assistant PRD rulings 2, 3, 8) closed the loop: the
+/// instructions also name the evidence to hand back, Galley wakes the
+/// model when a subtask finishes, asks or fails (instead of "look it up
+/// when they ask"), and a last paragraph sends the model to the assistant
+/// manual at `manual_path` before its first CLI write. The manual carries
+/// the details (authority, commands, wake notes, reporting); the wake
+/// note itself carries what to do at that moment.
+fn main_chat_entry_layer(manual_path: &str) -> String {
+    format!(
+        r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
+
+Work that would keep this chat busy for a long time (many steps, several
+websites, a long batch of files) goes to a subtask, so the main chat stays
+free: end your reply with <subtask>what to do</subtask>. Galley starts it
+after this reply, as a separate conversation that cannot see this one, so
+write everything it needs: the goal, the facts the user gave, and what to
+hand back, with the evidence for it (a confirmation number, a file path, a
+link, a screenshot path). Tell the user in a sentence that it is on its way.
+When it finishes, asks something or fails, Galley wakes you to check it and
+tell the user, so do not wait on it or watch it. Do quick work yourself.
+Use this, not the file-based subagent in your memory (subagent.md), which
+the user cannot see.
+
+Before your first Galley CLI write (send, stop, archive, move, project,
+model), read your manual at `{manual_path}`."#
+    )
+}
+
+/// The entry layer up to the dispatch clause (ticket 03d's text).
+const MAIN_CHAT_ENTRY_LAYER_HEAD: &str = r#"## Galley Main Chat Entry Layer
 
 This is the user's main chat: the one conversation with you that is always
 here. They bring anything to it, a question, a passing remark, something to
@@ -290,22 +324,12 @@ Reply at the weight of what they said:
   summary.
 - When your context opens with turns from before a break and something there
   was left open, pick it up when they come back to it, without recapping it
-  unasked.
-
-Work that would keep this chat busy for a long time (many steps, several
-websites, a long batch of files) goes to a subtask, so the main chat stays
-free: end your reply with <subtask>what to do</subtask>. Galley starts it
-after this reply, as a separate conversation that cannot see this one, so
-write everything it needs: the goal, the facts the user gave, and what to
-hand back. Tell the user in a sentence that it is on its way; its card shows
-the progress, and you can look it up when they ask. Do quick work yourself.
-Use this, not the file-based subagent in your memory (subagent.md), which
-the user cannot see."#;
+  unasked."#;
 
 fn compose(
     app_version: &str,
     with_suggestion: bool,
-    main_chat: Option<&MainChatPromptState>,
+    main_chat: Option<(&MainChatPromptState, &str)>,
 ) -> String {
     let static_rules = if with_suggestion {
         workbench_static_prompt()
@@ -313,10 +337,11 @@ fn compose(
         RUNTIME_PROMPT_STATIC.to_string()
     };
     let main_chat = main_chat
-        .map(|state| {
+        .map(|(state, manual_path)| {
             format!(
-                "\n\n{}\n\n{MAIN_CHAT_ENTRY_LAYER}",
-                main_chat_section(state)
+                "\n\n{}\n\n{}",
+                main_chat_section(state),
+                main_chat_entry_layer(manual_path)
             )
         })
         .unwrap_or_default();
@@ -554,6 +579,11 @@ mod tests {
         );
     }
 
+    /// A manual path as Core passes it: absolute, with a space in it
+    /// (`Application Support` on macOS).
+    const MANUAL: &str =
+        "/Users/u/Library/Application Support/app.galley/managed-ga-state/assistant/reference/galley-assistant-manual.md";
+
     fn main_chat_state() -> MainChatPromptState {
         MainChatPromptState {
             session_id: "s-mgn4k2x1-7q3z9w0e".into(),
@@ -572,12 +602,13 @@ mod tests {
     fn main_chat_section_names_the_conversation_and_its_segment() {
         let state = main_chat_state();
         let ordinary = compose_runtime_prompt("t");
-        let main = compose_main_chat_runtime_prompt("t", &state);
+        let main = compose_main_chat_runtime_prompt("t", &state, MANUAL);
         assert_eq!(
             main,
             format!(
-                "{ordinary}\n\n{}\n\n{MAIN_CHAT_ENTRY_LAYER}",
-                main_chat_section(&state)
+                "{ordinary}\n\n{}\n\n{}",
+                main_chat_section(&state),
+                main_chat_entry_layer(MANUAL)
             ),
             "the section and the entry layer are appended after the state block, \
              nothing else moves"
@@ -602,7 +633,7 @@ mod tests {
 
         // Data, not behavior: the prompt generation does not change.
         let hash = prompt_hash();
-        let _ = compose_main_chat_runtime_prompt("t", &state);
+        let _ = compose_main_chat_runtime_prompt("t", &state, MANUAL);
         assert_eq!(prompt_hash(), hash);
     }
 
@@ -661,7 +692,7 @@ mod tests {
     /// main chat and nowhere else.
     #[test]
     fn main_chat_entry_layer_is_main_chat_only() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state());
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), MANUAL);
         let section = main.find("## Main Chat").expect("the Main Chat section");
         let layer = main
             .find("## Galley Main Chat Entry Layer")
@@ -673,7 +704,7 @@ mod tests {
         assert!(main.contains("Reply at the weight of what they said:"));
         assert!(main.contains("Open with the answer or outcome"));
         assert!(main.contains("without recapping it"));
-        assert!(main.ends_with("the user cannot see."));
+        assert!(main.ends_with(&format!("read your manual at `{MANUAL}`.")));
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(!prompt.contains("Main Chat Entry Layer"));
         }
@@ -682,15 +713,25 @@ mod tests {
     /// Ticket 06a: the entry layer ends with the dispatch clause — the
     /// tag Core reads ([`crate::subtask`]), what the instructions must
     /// carry, no waiting, and Galley's subtask over GA's file-based
-    /// subagent. Main chat only, like the rest of the layer.
+    /// subagent. Main chat only, like the rest of the layer. Ticket 30:
+    /// the instructions name the evidence to hand back, and Galley wakes
+    /// the model instead of it looking the subtask up when asked.
     #[test]
     fn main_chat_entry_layer_dispatches_long_work_to_a_subtask() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state());
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), MANUAL);
         // Single-line fragments only (a Windows checkout makes the raw
         // string CRLF).
         assert!(main.contains("free: end your reply with <subtask>what to do</subtask>. Galley"));
         assert!(main.contains("write everything it needs: the goal, the facts the user gave, and"));
-        assert!(main.contains("the progress, and you can look it up when they ask."));
+        assert!(main.contains(
+            "hand back, with the evidence for it (a confirmation number, a file path, a"
+        ));
+        assert!(main.contains(
+            "When it finishes, asks something or fails, Galley wakes you to check it and"
+        ));
+        assert!(main
+            .contains("tell the user, so do not wait on it or watch it. Do quick work yourself."));
+        assert!(!main.contains("look it up when they ask"));
         assert!(main.contains("Use this, not the file-based subagent in your memory (subagent.md)"));
         let layer = main.find("Main Chat Entry Layer").unwrap();
         let clause = main.find("goes to a subtask").unwrap();
@@ -700,20 +741,45 @@ mod tests {
         }
     }
 
+    /// Ticket 30: before its first CLI write the model reads the
+    /// assistant manual, at the path Core wrote it to; every other
+    /// session and IM never hear of it.
+    #[test]
+    fn main_chat_entry_layer_sends_the_model_to_the_manual() {
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), MANUAL);
+        // Single-line fragments only (a Windows checkout makes the raw
+        // string CRLF).
+        assert!(main
+            .contains("Before your first Galley CLI write (send, stop, archive, move, project,"));
+        assert!(main.contains(&format!("read your manual at `{MANUAL}`.")));
+        assert_eq!(main.matches(MANUAL).count(), 1);
+        for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
+            assert!(!prompt.contains("your manual"));
+            assert!(!prompt.contains("galley-assistant-manual"));
+        }
+    }
+
     /// Byte cap on the main chat entry layer: no headroom, `\r` not
-    /// counted. It rides every request of the main chat, outside the
-    /// static budget. Set at 03d to the draft compared on the main chat's
-    /// model (827); grow it only with a reason, as for the static budget.
-    /// Raised 827 → 1446 by ticket 06a: +619 bytes for the dispatch
-    /// clause — the compared `T` text (522), the sentence away from GA's
-    /// file-based subagent (94), and the breaks before them (3). Without
-    /// the clause the main chat has no way to hand off long work and
-    /// stays busy for the whole of it (PRD rulings 25, 52).
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 1446;
+    /// counted, measured with an empty manual path (the user's state
+    /// root does not count, as for `IM_PROMPT_BUDGET_BYTES`). It rides
+    /// every request of the main chat, outside the static budget. Set at
+    /// 03d to the draft compared on the main chat's model (827); grow it
+    /// only with a reason, as for the static budget. Raised 827 → 1446
+    /// by ticket 06a: +619 bytes for the dispatch clause — the compared
+    /// `T` text (522), the sentence away from GA's file-based subagent
+    /// (94), and the breaks before them (3). Without the clause the main
+    /// chat has no way to hand off long work and stays busy for the
+    /// whole of it (PRD rulings 25, 52). Raised 1446 → 1699 by ticket 30
+    /// (assistant PRD rulings 2, 8): +253 bytes for the evidence to hand
+    /// back (90), Galley waking the model in place of "its card shows the
+    /// progress, and you can look it up when they ask" (+58), and the
+    /// paragraph sending it to the assistant manual (105, the path not
+    /// counted), which carries the rest.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 1699;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {
-        let len = MAIN_CHAT_ENTRY_LAYER
+        let len = main_chat_entry_layer("")
             .bytes()
             .filter(|&byte| byte != b'\r')
             .count();

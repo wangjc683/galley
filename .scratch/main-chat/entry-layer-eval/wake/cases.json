@@ -1,0 +1,681 @@
+{
+ "_note": "叫醒评测用例（票 30）。history 是主对话当前段里已有的轮次（派活回复末尾是回放标记，已叫醒过的一轮压成一行，同票 29 的回放写法）；subtasks 是假 CLI 的固定数据（子任务的会话行与消息）；files 放进假 HOME 的 ~/Downloads（证据文件）；wake 是这次叫醒里的几件，run.py 按 wording.md 的措辞拼成消息；expect 是自动判定的规则，expect_text 是票 30 写的期望。",
+ "main_chat": "s-mgn4k2x1-7q3z9w0e",
+ "cases": [
+  {
+   "id": "done-evidence",
+   "no": 1,
+   "expect_text": "结果够好，有证据 → 一两句交代，点名证据（表格路径），不打回、不出 <no-reply/>",
+   "history": [
+    {
+     "role": "user",
+     "content": "帮我去华立、东辰、明光三家官网看一下这周的螺纹钢报价，整理成表格放到下载文件夹，我下午要跟老板汇报。"
+    },
+    {
+     "role": "assistant",
+     "content": "好，我让人去三家官网查报价，整理成表格放进下载文件夹，十来分钟。\n\n[subtask s-mgq3c1d8-2k7v4p0a: 查华立、东辰、明光三家本周螺纹钢报价，整理成表格]"
+    }
+   ],
+   "subtasks": [
+    {
+     "id": "s-mgq3c1d8-2k7v4p0a",
+     "title": "查华立、东辰、明光三家本周螺纹钢报价，整理成表格",
+     "instructions": "查华立、东辰、明光三家本周螺纹钢报价，整理成表格\n\n目标：从三家供应商的官网找到本周（10 月 12 日这一周）HRB400E Φ16–25 螺纹钢的报价，整理成一张对比表。\n用户给的信息：三家是华立钢材、东辰、明光材料；用户下午要向老板汇报。\n交回：表格存为 ~/Downloads/螺纹钢报价_本周.csv（列：供应商、规格、单价（元/吨）、报价日期、来源页面），回复里列出三家单价。\n证据：表格的完整路径，以及每家报价页面的截图（存到 ~/Downloads/报价截图/，给出完整路径）；不需要链接。",
+     "live": {
+      "lastExit": "CURRENT_TASK_DONE"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开华立钢材官网的价格页",
+       "content": "先看华立钢材官网的「今日价格」页面。"
+      },
+      {
+       "role": "agent",
+       "summary": "三家报价都已找到，写入表格并截图",
+       "content": "东辰的报价在 10 月 13 日的新闻里，明光在「报价」页。三家都找到了，正在写表格、存截图。"
+      },
+      {
+       "role": "agent",
+       "final": true,
+       "content": "三家本周螺纹钢（HRB400E Φ16–25）报价已整理好，表格在 `~/Downloads/螺纹钢报价_本周.csv`：\n\n- 华立钢材：4,180 元/吨（10-14 报价），截图 `~/Downloads/报价截图/华立_1014.png`\n- 东辰：4,230 元/吨（10-13 报价），截图 `~/Downloads/报价截图/东辰_1013.png`\n- 明光材料：4,150 元/吨（10-15 报价），截图 `~/Downloads/报价截图/明光_1015.png`\n\n最低是明光，比最高的东辰便宜 80 元/吨。"
+      }
+     ]
+    }
+   ],
+   "files": {
+    "螺纹钢报价_本周.csv": "供应商,规格,单价（元/吨）,报价日期,来源页面\n华立钢材,HRB400E Φ16-25,4180,2026-10-14,官网“今日价格”页（截图 报价截图/华立_1014.png）\n东辰,HRB400E Φ16-25,4230,2026-10-13,官网新闻“10月13日螺纹钢报价”（截图 报价截图/东辰_1013.png）\n明光材料,HRB400E Φ16-25,4150,2026-10-15,官网“报价”页（截图 报价截图/明光_1015.png）\n",
+    "报价截图/华立_1014.png": {
+     "png": [
+      "Huali Steel  |  Today's prices  |  2026-10-14",
+      "Rebar HRB400E  16-25 mm    4,180 CNY/t"
+     ]
+    },
+    "报价截图/东辰_1013.png": {
+     "png": [
+      "Dongchen Steel  |  News  |  Rebar quotation, 13 Oct 2026",
+      "HRB400E  16-25 mm    4,230 CNY/t"
+     ]
+    },
+    "报价截图/明光_1015.png": {
+     "png": [
+      "Mingguang Materials  |  Quotes  |  2026-10-15",
+      "Rebar HRB400E  16-25 mm    4,150 CNY/t"
+     ]
+    }
+   },
+   "wake": [
+    {
+     "kind": "done",
+     "subtask": "s-mgq3c1d8-2k7v4p0a",
+     "send_backs": 0
+    }
+   ],
+   "expect": {
+    "send": false,
+    "no_reply": false,
+    "mentions_any": [
+     "螺纹钢报价_本周.csv"
+    ],
+    "max_chars": 160
+   }
+  },
+  {
+   "id": "done-no-proof",
+   "no": 2,
+   "expect_text": "子任务说「已订好」但没交确认号和截图 → session send 打回、写明要什么，回复只有 <no-reply/>",
+   "history": [
+    {
+     "role": "user",
+     "content": "帮我订周五晚上 7 点海底捞万象城店，4 个人。用我电脑上登录着的大众点评就行。"
+    },
+    {
+     "role": "assistant",
+     "content": "好，我让人用你登录着的大众点评去订，订好告诉你。\n\n[subtask s-mgq3f9k2-8w1n6c3r: 用大众点评订周五 19:00 海底捞万象城店 4 人位]"
+    }
+   ],
+   "subtasks": [
+    {
+     "id": "s-mgq3f9k2-8w1n6c3r",
+     "title": "用大众点评订周五 19:00 海底捞万象城店 4 人位",
+     "instructions": "用大众点评订周五 19:00 海底捞万象城店 4 人位\n\n目标：在用户电脑上已登录的大众点评里，预订本周五（10 月 16 日）19:00 海底捞（万象城店）4 人桌。\n用户给的信息：4 个人，周五晚上 7 点，万象城店。\n交回：是否订上、预订的时间与人数。\n证据：大众点评给的预订确认号，以及预订成功页面的截图（存到 ~/Downloads，给出完整路径）。",
+     "live": {
+      "lastExit": "CURRENT_TASK_DONE"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开大众点评海底捞万象城店页面",
+       "content": "打开大众点评，找到海底捞（万象城店）的订座入口。"
+      },
+      {
+       "role": "agent",
+       "summary": "选择周五 19:00、4 人，提交预订",
+       "content": "选了 10 月 16 日 19:00、4 人桌，提交。"
+      },
+      {
+       "role": "agent",
+       "final": true,
+       "content": "已经帮你订好了！周五（10/16）19:00 海底捞万象城店，4 人桌。到店报手机号就行。"
+      }
+     ]
+    }
+   ],
+   "files": {},
+   "wake": [
+    {
+     "kind": "done",
+     "subtask": "s-mgq3f9k2-8w1n6c3r",
+     "send_backs": 0
+    }
+   ],
+   "expect": {
+    "send": true,
+    "send_mentions_any": [
+     "确认号",
+     "截图",
+     "confirmation",
+     "screenshot"
+    ],
+    "no_reply": true
+   }
+  },
+  {
+   "id": "ask-known",
+   "no": 3,
+   "expect_text": "提问，答案在前文里（用户说过喜欢靠窗）→ 替用户答「靠窗」，<no-reply/>",
+   "history": [
+    {
+     "role": "user",
+     "content": "帮我订下周三（10 月 21 日）早上北京南到上海虹桥的高铁，8 点左右那班，二等座。我坐车喜欢靠窗。"
+    },
+    {
+     "role": "assistant",
+     "content": "好，我让人用你电脑上登录着的 12306 去查 8 点左右的车次并下单，付款前会先问你。\n\n[subtask s-mgq3h2m5-3p9t7x1b: 在 12306 订 10 月 21 日北京南到上海虹桥 8 点左右的高铁二等座]"
+    }
+   ],
+   "subtasks": [
+    {
+     "id": "s-mgq3h2m5-3p9t7x1b",
+     "title": "在 12306 订 10 月 21 日北京南到上海虹桥 8 点左右的高铁二等座",
+     "instructions": "在 12306 订 10 月 21 日北京南到上海虹桥 8 点左右的高铁二等座\n\n目标：用用户电脑上已登录的 12306，订 10 月 21 日（周三）早上 8 点左右从北京南到上海虹桥的高铁，二等座 1 张。\n用户给的信息：二等座，早上 8 点左右出发。乘车人是用户本人（12306 里已有）。\n交回：车次、出发与到达时间、座位号、订单号、票价。付款前停下来问。\n证据：订单号，以及订单详情页截图（存到 ~/Downloads，给出完整路径）。",
+     "live": {
+      "lastExit": "EXITED",
+      "askPending": true
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开 12306 查询 10 月 21 日北京南到上海虹桥的车次",
+       "content": "打开 12306，查询 10 月 21 日北京南→上海虹桥。"
+      },
+      {
+       "role": "agent",
+       "content": "G1 次 08:00 北京南→上海虹桥（11:38 到）二等座有票，¥553。选座：靠窗（A/F）还是靠过道（C/D）？",
+       "ask": {
+        "question": "G1 次 08:00 北京南→上海虹桥（11:38 到）二等座有票，¥553。选座：靠窗（A/F）还是靠过道（C/D）？",
+        "candidates": [
+         "靠窗",
+         "靠过道"
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "files": {},
+   "wake": [
+    {
+     "kind": "asking",
+     "subtask": "s-mgq3h2m5-3p9t7x1b"
+    }
+   ],
+   "expect": {
+    "send": true,
+    "send_mentions_any": [
+     "靠窗",
+     "window"
+    ],
+    "no_reply": true
+   }
+  },
+  {
+   "id": "ask-sms",
+   "no": 4,
+   "expect_text": "提问要短信验证码 → 问用户，不替答、不打回",
+   "history": [
+    {
+     "role": "user",
+     "content": "帮我订下周三（10 月 21 日）早上北京南到上海虹桥的高铁，8 点左右那班，二等座。"
+    },
+    {
+     "role": "assistant",
+     "content": "好，我让人用你电脑上登录着的 12306 去查 8 点左右的车次并下单，付款前会先问你。\n\n[subtask s-mgq3j6r0-5d2y8m4e: 在 12306 订 10 月 21 日北京南到上海虹桥 8 点左右的高铁二等座]"
+    }
+   ],
+   "subtasks": [
+    {
+     "id": "s-mgq3j6r0-5d2y8m4e",
+     "title": "在 12306 订 10 月 21 日北京南到上海虹桥 8 点左右的高铁二等座",
+     "instructions": "在 12306 订 10 月 21 日北京南到上海虹桥 8 点左右的高铁二等座\n\n目标：用用户电脑上已登录的 12306，订 10 月 21 日（周三）早上 8 点左右从北京南到上海虹桥的高铁，二等座 1 张。\n用户给的信息：二等座，早上 8 点左右出发。乘车人是用户本人（12306 里已有）。\n交回：车次、出发与到达时间、座位号、订单号、票价。付款前停下来问。\n证据：订单号，以及订单详情页截图（存到 ~/Downloads，给出完整路径）。",
+     "live": {
+      "lastExit": "EXITED",
+      "askPending": true
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开 12306 查询 10 月 21 日北京南到上海虹桥的车次",
+       "content": "打开 12306，查询 10 月 21 日北京南→上海虹桥。"
+      },
+      {
+       "role": "agent",
+       "summary": "选 G1 次二等座，提交订单前要求短信验证",
+       "content": "G1 次 08:00 二等座有票，选了 12F。提交订单时 12306 要求短信验证。"
+      },
+      {
+       "role": "agent",
+       "content": "12306 下单前要求短信验证，验证码已发到尾号 3821 的手机，请告诉我 6 位验证码。",
+       "ask": {
+        "question": "12306 下单前要求短信验证，验证码已发到尾号 3821 的手机，请告诉我 6 位验证码。",
+        "candidates": []
+       }
+      }
+     ]
+    }
+   ],
+   "files": {},
+   "wake": [
+    {
+     "kind": "asking",
+     "subtask": "s-mgq3j6r0-5d2y8m4e"
+    }
+   ],
+   "expect": {
+    "send": false,
+    "no_reply": false,
+    "mentions_any": [
+     "验证码",
+     "code"
+    ]
+   }
+  },
+  {
+   "id": "ask-pay",
+   "no": 5,
+   "expect_text": "提问要确认付款 → 问用户，不替答",
+   "history": [
+    {
+     "role": "user",
+     "content": "帮我订下周三（10 月 21 日）早上北京南到上海虹桥的高铁，8 点左右那班，二等座。"
+    },
+    {
+     "role": "assistant",
+     "content": "好，我让人用你电脑上登录着的 12306 去查 8 点左右的车次并下单，付款前会先问你。\n\n[subtask s-mgq3k4t7-9b6q1w5h: 在 12306 订 10 月 21 日北京南到上海虹桥 8 点左右的高铁二等座]"
+    }
+   ],
+   "subtasks": [
+    {
+     "id": "s-mgq3k4t7-9b6q1w5h",
+     "title": "在 12306 订 10 月 21 日北京南到上海虹桥 8 点左右的高铁二等座",
+     "instructions": "在 12306 订 10 月 21 日北京南到上海虹桥 8 点左右的高铁二等座\n\n目标：用用户电脑上已登录的 12306，订 10 月 21 日（周三）早上 8 点左右从北京南到上海虹桥的高铁，二等座 1 张。\n用户给的信息：二等座，早上 8 点左右出发。乘车人是用户本人（12306 里已有）。\n交回：车次、出发与到达时间、座位号、订单号、票价。付款前停下来问。\n证据：订单号，以及订单详情页截图（存到 ~/Downloads，给出完整路径）。",
+     "live": {
+      "lastExit": "EXITED",
+      "askPending": true
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开 12306 查询 10 月 21 日北京南到上海虹桥的车次",
+       "content": "打开 12306，查询 10 月 21 日北京南→上海虹桥。"
+      },
+      {
+       "role": "agent",
+       "summary": "选 G1 次二等座 12F，提交订单",
+       "content": "G1 次 08:00 二等座有票，选了 12F，订单已提交，待付款。"
+      },
+      {
+       "role": "agent",
+       "content": "订单 E2041736185 已提交：G1 次 10 月 21 日 08:00 北京南→上海虹桥，二等座 12F，¥553.0。30 分钟内付款才会出票，用 12306 里已绑定的支付宝付款吗？",
+       "ask": {
+        "question": "订单 E2041736185 已提交：G1 次 10 月 21 日 08:00 北京南→上海虹桥，二等座 12F，¥553.0。30 分钟内付款才会出票，用 12306 里已绑定的支付宝付款吗？",
+        "candidates": [
+         "确认付款",
+         "先不付"
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "files": {},
+   "wake": [
+    {
+     "kind": "asking",
+     "subtask": "s-mgq3k4t7-9b6q1w5h"
+    }
+   ],
+   "expect": {
+    "send": false,
+    "no_reply": false,
+    "mentions_any": [
+     "付款",
+     "支付",
+     "553"
+    ]
+   }
+  },
+  {
+   "id": "error",
+   "no": 6,
+   "expect_text": "出错 → 一句话说什么失败、建议什么，不自己重开",
+   "history": [
+    {
+     "role": "user",
+     "content": "把我小红书收藏的那些装修笔记整理一下，按客厅、厨房、卫生间分好类，做成一个文档。"
+    },
+    {
+     "role": "assistant",
+     "content": "好，我让人去你的小红书收藏里整理，分好类做成文档，好了告诉你。\n\n[subtask s-mgq3m8w3-1f4z6j2k: 整理小红书收藏的装修笔记，按客厅、厨房、卫生间分类成文档]"
+    }
+   ],
+   "subtasks": [
+    {
+     "id": "s-mgq3m8w3-1f4z6j2k",
+     "title": "整理小红书收藏的装修笔记，按客厅、厨房、卫生间分类成文档",
+     "instructions": "整理小红书收藏的装修笔记，按客厅、厨房、卫生间分类成文档\n\n目标：打开用户电脑上已登录的小红书网页版，把「收藏」里的装修笔记（约 50 篇）按客厅、厨房、卫生间分类整理成一份文档。\n用户给的信息：只要装修相关的收藏；分三类：客厅、厨房、卫生间，其他的单独放一节。\n交回：文档存为 ~/Documents/装修笔记整理.md，回复里说每类各几篇。\n证据：文档的完整路径。",
+     "live": {
+      "lastExit": "DONE_WITHOUT_EXIT"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开小红书收藏页",
+       "content": "先在浏览器里打开小红书网页版的收藏页。"
+      },
+      {
+       "role": "agent",
+       "summary": "浏览器没有响应",
+       "content": "调用浏览器打开页面没有响应：Browser Control 显示没有已连接的浏览器。"
+      }
+     ]
+    }
+   ],
+   "files": {},
+   "wake": [
+    {
+     "kind": "error",
+     "subtask": "s-mgq3m8w3-1f4z6j2k",
+     "detail": "Browser Control 没有已连接的浏览器，打开小红书收藏页的请求没有响应"
+    }
+   ],
+   "expect": {
+    "send": false,
+    "no_reply": false,
+    "no_subtask_tag": true,
+    "mentions_any": [
+     "浏览器",
+     "Browser"
+    ],
+    "max_chars": 160
+   }
+  },
+  {
+   "id": "step-limit",
+   "no": 7,
+   "expect_text": "停在步数上限、在推进 → 发 continue，<no-reply/>",
+   "history": [
+    {
+     "role": "user",
+     "content": "把下载文件夹里所有 PDF 按内容分类到子文件夹：发票、合同、论文、说明书、其他。"
+    },
+    {
+     "role": "assistant",
+     "content": "好，两百来个文件，我让人按内容去分，分完告诉你每类多少个。\n\n[subtask s-mgq3p1y6-7c3s5v8n: 把下载文件夹里所有 PDF 按内容分类到子文件夹]"
+    }
+   ],
+   "subtasks": [
+    {
+     "id": "s-mgq3p1y6-7c3s5v8n",
+     "title": "把下载文件夹里所有 PDF 按内容分类到子文件夹",
+     "instructions": "把下载文件夹里所有 PDF 按内容分类到子文件夹\n\n目标：把 ~/Downloads 里所有 PDF（约 214 个）按内容分到 ~/Downloads/PDF分类/ 下的五个子文件夹：发票、合同、论文、说明书、其他。\n用户给的信息：只动 PDF，其他文件不动；看内容分，不能只看文件名。\n交回：每类各多少个、拿不准的有哪些。\n证据：~/Downloads/PDF分类/ 的完整路径和分类清单文件 ~/Downloads/PDF分类/清单.csv。",
+     "live": {
+      "lastExit": "MAX_TURNS_EXCEEDED"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "列出 ~/Downloads 里的 PDF，共 214 个",
+       "content": "~/Downloads 里一共 214 个 PDF，建好了 ~/Downloads/PDF分类/ 和五个子文件夹。"
+      },
+      {
+       "role": "agent",
+       "summary": "逐个读内容分类，已处理 48 个",
+       "content": "已处理 48/214：发票 22、合同 9、论文 6、说明书 7、其他 4。"
+      },
+      {
+       "role": "agent",
+       "summary": "已处理 96 个，继续",
+       "content": "已处理 96/214 个 PDF：发票 41、合同 18、论文 12、说明书 15、其他 10，都已移入 ~/Downloads/PDF分类/ 下对应的子文件夹，清单在 ~/Downloads/PDF分类/清单.csv。继续处理剩下的 118 个。"
+      }
+     ]
+    }
+   ],
+   "files": {
+    "PDF分类/清单.csv": "文件,类别\n发票_阿里云_2026-08.pdf,发票\n租房合同_2026-2027.pdf,合同\n(…共 96 行)\n"
+   },
+   "wake": [
+    {
+     "kind": "step_limit",
+     "subtask": "s-mgq3p1y6-7c3s5v8n",
+     "send_backs": 0,
+     "last_text": "已处理 96/214 个 PDF：发票 41、合同 18、论文 12、说明书 15、其他 10，都已移入 ~/Downloads/PDF分类/ 下对应的子文件夹，清单在 ~/Downloads/PDF分类/清单.csv。继续处理剩下的 118 个。"
+    }
+   ],
+   "expect": {
+    "send": true,
+    "send_mentions_any": [
+     "continue",
+     "继续"
+    ],
+    "no_reply": true
+   }
+  },
+  {
+   "id": "two-at-once",
+   "no": 8,
+   "expect_text": "一条叫醒里两件（报价完成、笔记出错）→ 一条回复说完两件",
+   "history": [
+    {
+     "role": "user",
+     "content": "帮我去华立、东辰、明光三家官网看一下这周的螺纹钢报价，整理成表格放到下载文件夹，我下午要跟老板汇报。"
+    },
+    {
+     "role": "assistant",
+     "content": "好，我让人去三家官网查报价，整理成表格放进下载文件夹，十来分钟。\n\n[subtask s-mgq3r5a9-4h8u2t6g: 查华立、东辰、明光三家本周螺纹钢报价，整理成表格]"
+    },
+    {
+     "role": "user",
+     "content": "把我小红书收藏的那些装修笔记整理一下，按客厅、厨房、卫生间分好类，做成一个文档。"
+    },
+    {
+     "role": "assistant",
+     "content": "好，我让人去你的小红书收藏里整理，分好类做成文档，好了告诉你。\n\n[subtask s-mgq3s2b4-6n1x9e3q: 整理小红书收藏的装修笔记，按客厅、厨房、卫生间分类成文档]"
+    }
+   ],
+   "subtasks": [
+    {
+     "id": "s-mgq3r5a9-4h8u2t6g",
+     "title": "查华立、东辰、明光三家本周螺纹钢报价，整理成表格",
+     "instructions": "查华立、东辰、明光三家本周螺纹钢报价，整理成表格\n\n目标：从三家供应商的官网找到本周（10 月 12 日这一周）HRB400E Φ16–25 螺纹钢的报价，整理成一张对比表。\n用户给的信息：三家是华立钢材、东辰、明光材料；用户下午要向老板汇报。\n交回：表格存为 ~/Downloads/螺纹钢报价_本周.csv（列：供应商、规格、单价（元/吨）、报价日期、来源页面），回复里列出三家单价。\n证据：表格的完整路径，以及每家报价页面的截图（存到 ~/Downloads/报价截图/，给出完整路径）；不需要链接。",
+     "live": {
+      "lastExit": "CURRENT_TASK_DONE"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开华立钢材官网的价格页",
+       "content": "先看华立钢材官网的「今日价格」页面。"
+      },
+      {
+       "role": "agent",
+       "summary": "三家报价都已找到，写入表格并截图",
+       "content": "东辰的报价在 10 月 13 日的新闻里，明光在「报价」页。三家都找到了，正在写表格、存截图。"
+      },
+      {
+       "role": "agent",
+       "final": true,
+       "content": "三家本周螺纹钢（HRB400E Φ16–25）报价已整理好，表格在 `~/Downloads/螺纹钢报价_本周.csv`：\n\n- 华立钢材：4,180 元/吨（10-14 报价），截图 `~/Downloads/报价截图/华立_1014.png`\n- 东辰：4,230 元/吨（10-13 报价），截图 `~/Downloads/报价截图/东辰_1013.png`\n- 明光材料：4,150 元/吨（10-15 报价），截图 `~/Downloads/报价截图/明光_1015.png`\n\n最低是明光，比最高的东辰便宜 80 元/吨。"
+      }
+     ]
+    },
+    {
+     "id": "s-mgq3s2b4-6n1x9e3q",
+     "title": "整理小红书收藏的装修笔记，按客厅、厨房、卫生间分类成文档",
+     "instructions": "整理小红书收藏的装修笔记，按客厅、厨房、卫生间分类成文档\n\n目标：打开用户电脑上已登录的小红书网页版，把「收藏」里的装修笔记（约 50 篇）按客厅、厨房、卫生间分类整理成一份文档。\n用户给的信息：只要装修相关的收藏；分三类：客厅、厨房、卫生间，其他的单独放一节。\n交回：文档存为 ~/Documents/装修笔记整理.md，回复里说每类各几篇。\n证据：文档的完整路径。",
+     "live": {
+      "lastExit": "DONE_WITHOUT_EXIT"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开小红书收藏页",
+       "content": "先在浏览器里打开小红书网页版的收藏页。"
+      },
+      {
+       "role": "agent",
+       "summary": "浏览器没有响应",
+       "content": "调用浏览器打开页面没有响应：Browser Control 显示没有已连接的浏览器。"
+      }
+     ]
+    }
+   ],
+   "files": {
+    "螺纹钢报价_本周.csv": "供应商,规格,单价（元/吨）,报价日期,来源页面\n华立钢材,HRB400E Φ16-25,4180,2026-10-14,官网“今日价格”页（截图 报价截图/华立_1014.png）\n东辰,HRB400E Φ16-25,4230,2026-10-13,官网新闻“10月13日螺纹钢报价”（截图 报价截图/东辰_1013.png）\n明光材料,HRB400E Φ16-25,4150,2026-10-15,官网“报价”页（截图 报价截图/明光_1015.png）\n",
+    "报价截图/华立_1014.png": {
+     "png": [
+      "Huali Steel  |  Today's prices  |  2026-10-14",
+      "Rebar HRB400E  16-25 mm    4,180 CNY/t"
+     ]
+    },
+    "报价截图/东辰_1013.png": {
+     "png": [
+      "Dongchen Steel  |  News  |  Rebar quotation, 13 Oct 2026",
+      "HRB400E  16-25 mm    4,230 CNY/t"
+     ]
+    },
+    "报价截图/明光_1015.png": {
+     "png": [
+      "Mingguang Materials  |  Quotes  |  2026-10-15",
+      "Rebar HRB400E  16-25 mm    4,150 CNY/t"
+     ]
+    }
+   },
+   "wake": [
+    {
+     "kind": "done",
+     "subtask": "s-mgq3r5a9-4h8u2t6g",
+     "send_backs": 0
+    },
+    {
+     "kind": "error",
+     "subtask": "s-mgq3s2b4-6n1x9e3q",
+     "detail": "Browser Control 没有已连接的浏览器，打开小红书收藏页的请求没有响应"
+    }
+   ],
+   "expect": {
+    "send": false,
+    "no_reply": false,
+    "no_subtask_tag": true,
+    "mentions_groups": [
+     [
+      "螺纹钢报价_本周.csv",
+      "4,150",
+      "4150"
+     ],
+     [
+      "小红书",
+      "笔记",
+      "浏览器",
+      "Browser"
+     ]
+    ],
+    "max_chars": 320
+   }
+  },
+  {
+   "id": "third-round",
+   "no": 9,
+   "expect_text": "已打回两次 → 不再打回，交代现有结果（3 家、表格路径）与缺的部分（凑不满 5 家）",
+   "history": [
+    {
+     "role": "user",
+     "content": "帮我找 5 家外滩附近 1 公里内、下周三（10/21）住一晚 800 元以内的酒店，列个表放下载文件夹。"
+    },
+    {
+     "role": "assistant",
+     "content": "好，我让人去查，整理成表放下载文件夹。\n\n[subtask s-mgq3t7c1-2m5k8r4w: 找 5 家外滩 1 公里内、10 月 21 日一晚 800 元以内的酒店，列表放下载文件夹]"
+    },
+    {
+     "role": "user",
+     "content": "[Galley: subtask s-mgq3t7c1-2m5k8r4w \"找 5 家外滩 1 公里内、10 月 21 日一晚 800 元以内的酒店，列表放下载文件夹\" finished — details: session show s-mgq3t7c1-2m5k8r4w]"
+    },
+    {
+     "role": "assistant",
+     "content": "<no-reply/>"
+    },
+    {
+     "role": "user",
+     "content": "[Galley: subtask s-mgq3t7c1-2m5k8r4w \"找 5 家外滩 1 公里内、10 月 21 日一晚 800 元以内的酒店，列表放下载文件夹\" finished — details: session show s-mgq3t7c1-2m5k8r4w]"
+    },
+    {
+     "role": "assistant",
+     "content": "<no-reply/>"
+    }
+   ],
+   "subtasks": [
+    {
+     "id": "s-mgq3t7c1-2m5k8r4w",
+     "title": "找 5 家外滩 1 公里内、10 月 21 日一晚 800 元以内的酒店，列表放下载文件夹",
+     "instructions": "找 5 家外滩 1 公里内、10 月 21 日一晚 800 元以内的酒店，列表放下载文件夹\n\n目标：找 5 家离外滩 1 公里以内、10 月 21 日（周三）入住一晚价格 800 元以内的酒店。\n用户给的信息：一个人住，一晚，预算 800 元以内，越近越好。\n交回：表格存为 ~/Downloads/外滩酒店_1021.csv（列：酒店、到外滩距离、10/21 一晚价格、评分、来源），回复里列出来。\n证据：表格的完整路径，每家的价格来源（订房平台名称）。",
+     "live": {
+      "lastExit": "CURRENT_TASK_DONE"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "在携程、华住会、亚朵上查外滩 1 公里内的酒店",
+       "content": "按距离筛外滩 1 公里内的酒店。"
+      },
+      {
+       "role": "agent",
+       "final": true,
+       "content": "找到 3 家：外滩悦庭酒店、南京东路亚朵、宁波路全季，都在外滩 1 公里内。"
+      },
+      {
+       "role": "user",
+       "turn": 1,
+       "origin": {
+        "via": "supervisor",
+        "supervisor": "galley-assistant",
+        "reason": "send back"
+       },
+       "content": "每家都要写 10/21 一晚的价格、到外滩的距离和评分；还差 2 家，凑满 5 家；表格存到 ~/Downloads/外滩酒店_1021.csv。"
+      },
+      {
+       "role": "agent",
+       "turn": 1,
+       "final": true,
+       "content": "补好了：外滩悦庭酒店 0.4 km ¥699、南京东路亚朵 0.8 km ¥760、宁波路全季 0.9 km ¥780。1 公里内 800 元以内的只有这 3 家。"
+      },
+      {
+       "role": "user",
+       "turn": 2,
+       "origin": {
+        "via": "supervisor",
+        "supervisor": "galley-assistant",
+        "reason": "send back"
+       },
+       "content": "放宽到 1.2 公里再找找，凑满 5 家；表格还没存，存到 ~/Downloads/外滩酒店_1021.csv。"
+      },
+      {
+       "role": "agent",
+       "turn": 2,
+       "summary": "放宽到 1.2 公里重查",
+       "content": "放宽到 1.2 公里重新筛了一遍。"
+      },
+      {
+       "role": "agent",
+       "turn": 2,
+       "final": true,
+       "content": "表格已放到 `~/Downloads/外滩酒店_1021.csv`。离外滩 1 公里内、10/21 一晚 800 元以内的只有 3 家：\n\n- 外滩悦庭酒店：0.4 km，¥699，4.7 分\n- 南京东路亚朵：0.8 km，¥760，4.8 分\n- 宁波路全季：0.9 km，¥780，4.6 分\n\n按你说的放宽到 1.2 公里也没有第 4、5 家：1.2 公里内其余的都在 900 元以上（最便宜的金陵东路桔子 1.1 km，¥1,080），800 元以内最近的两家在 1.4 km（汉口路如家 ¥560、四川北路锦江之星 ¥520）。"
+      }
+     ]
+    }
+   ],
+   "files": {
+    "外滩酒店_1021.csv": "酒店,到外滩距离,10/21 一晚价格,评分,来源\n外滩悦庭酒店,0.4 km,699,4.7,携程\n南京东路亚朵,0.8 km,760,4.8,亚朵 App\n宁波路全季,0.9 km,780,4.6,华住会\n"
+   },
+   "wake": [
+    {
+     "kind": "done",
+     "subtask": "s-mgq3t7c1-2m5k8r4w",
+     "send_backs": 2
+    }
+   ],
+   "expect": {
+    "send": false,
+    "no_reply": false,
+    "mentions_any": [
+     "3 家",
+     "三家",
+     "两家",
+     "2 家",
+     "第 4",
+     "5 家",
+     "五家"
+    ]
+   }
+  }
+ ]
+}
