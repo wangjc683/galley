@@ -200,9 +200,15 @@ describe("no-reply tag stripping", () => {
       expect(stripGATags(reply)).toBe("");
       expect(isSilentReply(reply)).toBe(true);
     }
-    // Prose around it stays; it is still the tag.
+    // Prose beside it stays and shows: only a reply with nothing left is
+    // silent, as Core's derivation keeps it (a misplaced tag after a real
+    // account must not swallow the account).
     expect(cleanFinalAnswer("已打回。<no-reply/>")).toBe("已打回。");
-    expect(isSilentReply("已打回。<no-reply/>")).toBe(true);
+    expect(isSilentReply("已打回。<no-reply/>")).toBe(false);
+    // A suggestion tag after it is stripped too: still silent.
+    expect(
+      isSilentReply("<no-reply/>\n<next-suggestion>帮我看看结果</next-suggestion>"),
+    ).toBe(true);
   });
 
   it("is no silent reply without the tag, or with a dispatch", () => {

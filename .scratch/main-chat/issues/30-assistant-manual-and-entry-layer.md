@@ -1,6 +1,6 @@
 # 30 助手手册、入口层改写与叫醒措辞的真模型评测
 
-Status: ready-for-agent
+Status: done（2026-10-16 合入，待 JC 真机验收）
 
 来源：[助手 PRD](../../assistant/PRD.md) 裁决 2、3、8；[主对话 PRD](../PRD.md) 裁决 80、82。
 同批：[29](./29-subtask-wake-core.md)（Core 叫醒，另一个 worktree）、[31](./31-subtask-wake-gui.md)（界面）。
@@ -177,3 +177,17 @@ If it is getting somewhere, send it "continue" with `session send {id} "continue
 6. **手册写出失败**：我选了记日志、照常启动主对话（IM 那边是启动失败）。理由是没有手册的主对话好过没有主对话；主会话可以改。
 7. **合入冲突**：`core/src/lib.rs` 加了一行（在文件开头附近，和票 29 的 `subtask_report` 不相邻）；`core/src/runner_commands.rs` 只动了 `prepare_managed_spawn_args` 的主对话分支。
 8. **其他**：清理 `__pycache__` 时顺手删了本 worktree `core/python-bundle/` 下的字节码缓存。那是 worktree 自己的构建产物副本，会自动重新生成，主工作树没碰。
+
+### 集成（主会话，2026-10-16）
+
+三张票在一个分支上合起来，主会话补了五处：
+
+1. **Done 指向派活说明**：子任务超过 39 步时说明不在 `--tail=40` 里（票 30 的问题 3），叫醒改为写明第一条消息 `session show {id} --around=msg_{id}_0_user`，最后几步照旧 `--tail=40`。没选把说明整段塞进叫醒：同一段里助手的上下文本来就有它，只在冷启动后才缺，按需查更省。
+2. **步数上限写明续跑命令**：采纳票 30 的评测建议，「the same way」换成完整的 `session send … "continue" … --ensure-runner`（票 29 已补上最后一段文字，与建议 1 同义）。
+3. **「不出声」只认剥完为空**：界面原先只要带了标签就藏（「已打回。<no-reply/>」也藏），Core 的推导是剥完为空才算。改成两边一致：剥完还有字就照常显示。理由：模型把交代写完又误加标签时，丢掉交代比多一句「已打回。」代价大。后面跟着建议标签的仍算不出声（票 30 的问题 4）。
+4. **手册补 `--ensure-runner`**：手册写在这个参数出现之前，补上用法与一句为什么；测试照新拼写。
+5. **IM 入口层的 `llm set`**：它不收 `--supervisor` / `--reason`，带了就 exit 2（票 30 的问题 1），IM 入口层却要求带，删掉它在那串命令里的名字。
+
+没改、记下的：改名没有 CLI 命令（助手 PRD 次序第 3 步补）；派活本身失败且叫醒送不出去时没有通知（票 31 问题 1）；打回后新一轮第一步落定前卡片还写上一轮的步数摘要（旧行为）；手机端要按来源藏起叫醒行与 `<no-reply/>`（手机开工时）；叫醒在等回答时按住会有两个声音（裁决 8 本来如此）；手册写失败只记日志、照常启动（票 30 的问题 6，可改）。
+
+门禁：`cargo test --workspace` 35 组 974 条（本机时区与 `TZ=UTC` 各一遍），`cargo check`；`pnpm --dir gui typecheck`、`lint`、vitest 1351 条（本机与 UTC 各一遍）；文档链接、Supervisor SOP 漂移、IPC 漂移、`git diff --check` 都过。

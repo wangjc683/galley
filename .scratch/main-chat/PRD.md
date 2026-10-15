@@ -410,9 +410,9 @@ README「dense context instead of long」（`README.md:54`）。
 | [25](./issues/25-assistant-composer-final.md) | — | 主对话输入框定稿：一行式转正、离底边 24px、撤切换器与演示、设计文档 | 24 | done（裁决 72；合并提交 `ffd7f9b2`，JC 真机验收；弹层偏左另记裁决 76） |
 | [27](./issues/27-workbench-one-line-composer.md) | — | 工作台会话的输入框也改一行式、保留提示行，输入框长高时保持贴底 | 25 | done（裁决 74、76；合并提交 `61fc3b15`，JC 真机验收通过） |
 | [28](./issues/28-header-menu-find-and-reset.md) | — | 顶栏菜单：查找聊天记录（⌘K 面板带范围、⌘F）、重置主对话 | 27 | done（裁决 77；合并提交 `7541197a`，JC 真机验收通过） |
-| [29](./issues/29-subtask-wake-core.md) | — | 子任务叫醒助手（Core）：触发、待报与时机、叫醒行、打回次数、`<no-reply/>`、回放压缩、搜索排除、送不出去的退路 | 06a | ready-for-agent（裁决 82） |
-| [30](./issues/30-assistant-manual-and-entry-layer.md) | — | 入口层派活条款改写、助手手册（内嵌、写进内置状态）、真模型评测叫醒措辞 | 03d | ready-for-agent（裁决 82） |
-| [31](./issues/31-subtask-wake-gui.md) | — | 界面：藏起叫醒行与不出声的回复、卡片最后一句、通知一个声音、子任务卡片「第 N 轮 · 」 | 29 | ready-for-agent（裁决 82） |
+| [29](./issues/29-subtask-wake-core.md) | — | 子任务叫醒助手（Core）：触发、待报与时机、叫醒行、打回次数、`<no-reply/>`、回放压缩、搜索排除、送不出去的退路 | 06a | done（裁决 82；2026-10-16 合入，待 JC 真机验收） |
+| [30](./issues/30-assistant-manual-and-entry-layer.md) | — | 入口层派活条款改写、助手手册（内嵌、写进内置状态）、真模型评测叫醒措辞 | 03d | done（裁决 82；2026-10-16 合入，待 JC 真机验收） |
+| [31](./issues/31-subtask-wake-gui.md) | — | 界面：藏起叫醒行与不出声的回复、卡片最后一句、通知一个声音、子任务卡片「第 N 轮 · 」 | 29 | done（裁决 82；2026-10-16 合入，待 JC 真机验收） |
 | [26](./issues/26-user-bubble-selection-copy.md) | — | 你的气泡不挂悬停复制，选中文字时弹浮动复制 | 20 | done（裁决 73，`3b029e56`，JC 真机验收；工作台有意不跟） |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）

@@ -199,8 +199,9 @@ fn report_paragraph(report: &SubtaskReport) -> String {
             format!(
                 "Subtask `{id}` \"{title}\" (round {round}) finished. Its final answer:\n\
                  <<<\n{}\n>>>\n\
-                 Check it against what you asked for in its instructions \
-                 (`session show {id} --tail=40` shows them and its steps). If it holds, \
+                 Check it against what you asked for in its instructions (its first \
+                 message: `session show {id} --around=msg_{id}_0_user`; its last steps: \
+                 `session show {id} --tail=40`). If it holds, \
                  tell the user the result in a sentence or two and name the evidence \
                  (a confirmation number, a file path, a link). {next}",
                 cut(answer, id)
@@ -241,9 +242,10 @@ fn report_paragraph(report: &SubtaskReport) -> String {
                 enough_said
             } else {
                 format!(
-                    "If it is getting somewhere, send it \"continue\" the same way and \
-                     {NO_REPLY_END}; this counts as a round. Otherwise tell the user how far \
-                     it got."
+                    "If it is getting somewhere, send it on with `session send {id} \
+                     \"continue\" --supervisor=galley-assistant --reason=\"continue\" \
+                     --ensure-runner` and {NO_REPLY_END}; this counts as a round. Otherwise \
+                     tell the user how far it got."
                 )
             };
             let sep = if said.is_empty() { " " } else { "" };
@@ -1044,6 +1046,9 @@ mod tests {
         );
         assert!(text.contains("<<<\n分好了：发票 3 份。\n>>>"));
         assert!(text.contains("`session show s-1 --tail=40`"));
+        // The instructions are the subtask's first message (turn 0), which
+        // a long run pushes out of the last 40 (ticket 30's eval).
+        assert!(text.contains("its first message: `session show s-1 --around=msg_s-1_0_user`"));
         assert!(text.contains(
             "send it back with `session send s-1 \"<what is missing>\" \
              --supervisor=galley-assistant --reason=\"send back\" --ensure-runner` and end \
@@ -1166,7 +1171,8 @@ mod tests {
         assert!(step.contains(
             "Subtask `s-1` \"把 PDF 分类\" (round 1) paused at the engine's step limit, mid-work. \
              The last thing it said:\n<<<\n已经分完一半。\n>>>\nIf it is getting somewhere, \
-             send it \"continue\" the same way"
+             send it on with `session send s-1 \"continue\" --supervisor=galley-assistant \
+             --reason=\"continue\" --ensure-runner` and end your reply with exactly <no-reply/>"
         ));
         let quiet = report_text(&[report(
             Some("s-1"),

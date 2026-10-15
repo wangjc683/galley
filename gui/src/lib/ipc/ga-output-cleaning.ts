@@ -43,16 +43,25 @@ const NO_REPLY_PARTIAL =
 
 /**
  * Whether a raw reply is a silent one (main chat tickets 29 / 31): it
- * carries `<no-reply/>`. Read from the raw text, not the cleaned
- * answer: cleaning strips the tag, and an empty answer alone cannot
- * tell a silent reply from one that only dispatched subtasks. A reply
- * that also opens a `<subtask>` is not silent: the cards of what it
- * dispatched must show. Only a reply in a round Core woke the main chat
- * for goes unseen (lib/subtasks.ts `isSilentReport`); anywhere else the
- * tag is a misuse and the reply reads as one that was only tags.
+ * carries `<no-reply/>` and nothing is left once the tags are stripped
+ * (`cleanFinalAnswer`), the rule Core's turn derivation keeps too. Read
+ * from the raw text: an empty answer alone cannot tell a silent reply
+ * from one that only dispatched subtasks. Prose beside the tag shows
+ * (integration of tickets 29–31): a model that wrote the account and
+ * then the tag by mistake must not lose the account; an extra
+ * 「已打回。」 is the cheaper failure. A reply that also opens a
+ * `<subtask>` is not silent: the cards of what it dispatched must show.
+ * Only a reply in a round Core woke the main chat for goes unseen
+ * (lib/subtasks.ts `isSilentReport`); anywhere else the tag is a misuse
+ * and the reply reads as one that was only tags.
  */
 export function isSilentReply(text: string): boolean {
-  return !!text && NO_REPLY_TAG.test(text) && !text.includes(SUBTASK_OPEN);
+  return (
+    !!text &&
+    NO_REPLY_TAG.test(text) &&
+    !text.includes(SUBTASK_OPEN) &&
+    cleanFinalAnswer(text).trim() === ""
+  );
 }
 
 const FILE_REF_PATTERN = /\[FILE:[^\]]+\]/g;

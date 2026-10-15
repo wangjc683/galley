@@ -438,7 +438,7 @@ what is running, use plain `sessions list`; add `--all` or `--runtime all`
 only when the user asks about archived or older sessions.
 
 Your Galley supervisor identity is `{supervisor_id}`. On every CLI write
-command (session new / session send / project create / llm set) pass
+command (session new / session send / project create) pass
 exactly `--supervisor={supervisor_id}` plus a short `--reason=<why>`. Galley
 uses this identity to route a finished session's report request back to this
 chat; follow that request when it arrives."#

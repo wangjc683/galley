@@ -57,7 +57,11 @@ with it. Output is JSON, one object per line.
 Every write command carries your identity and a short reason, so Galley
 can tell your messages from the user's and count your send-backs:
 
-    session send <id> "<message>" --supervisor=galley-assistant --reason="<why>"
+    session send <id> "<message>" --supervisor=galley-assistant --reason="<why>" --ensure-runner
+
+`--ensure-runner` on `session send` starts the subtask again if Galley
+was restarted since it last ran; without it the message would only be
+saved (`dispatch: "persisted_only"`) and nothing would run.
 
 The one exception is `llm set`: it takes no `--supervisor` or `--reason`
 and fails if given them.
@@ -78,9 +82,9 @@ Read:
 
 Write:
 
-- `session send <id> "<message>"`: continue a subtask, send it back, or
-  answer its question (while `live.askPending` is true, a send is the
-  answer). Sent mid-run, it waits its turn; add `--jump` to stop the
+- `session send <id> "<message>" --ensure-runner`: continue a subtask,
+  send it back, or answer its question (while `live.askPending` is true, a
+  send is the answer). Sent mid-run, it waits its turn; add `--jump` to stop the
   current task and run this first.
 - `session stop <id>`: stops its current run; a later send continues it.
 - `session archive <id>`, `session restore <id>`

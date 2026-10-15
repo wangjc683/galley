@@ -128,7 +128,9 @@ mod tests {
             "`project brief <project-id>`",
             "`project show <project-id>`",
             "`llm list`",
-            "`session send <id> \"<message>\"`",
+            // `--ensure-runner`: a send reaches a subtask whose runner is
+            // gone (socket `ensureRunner`, ADR-0003; tickets 29 / 30).
+            "`session send <id> \"<message>\" --ensure-runner`",
             "`--jump`",
             "`session stop <id>`",
             "`session archive <id>`",

@@ -694,6 +694,20 @@ Post-release follow-up:
 Release-scope truth is `git log v0.6.2..HEAD`; besides the iOS-client and
 main-chat planning docs, main has:
 
+- **The assistant runs the team; subtasks wake it** (2026-10-15 / 16,
+  `.scratch/assistant/PRD.md`, devlogs
+  [2026-10-15-assistant-runs-the-team](./devlog/2026-10-15-assistant-runs-the-team.md),
+  [2026-10-16-closed-loop-subtask-wake](./devlog/2026-10-16-closed-loop-subtask-wake.md)).
+  The main chat's greeting now says who it is (「你好，我是你的私人助理。…」);
+  a subtask's finished / asking / failed run wakes the main chat for one
+  hidden turn (rows `galley-report`, no migration), which checks it,
+  sends it back (at most twice, silently with `<no-reply/>`) or reports;
+  the assistant's manual lives under `<state_root>/assistant/reference/`.
+  **Agent API, additive inside `3`:** socket `session send` takes
+  `ensureRunner` (CLI `--ensure-runner`, default off), and
+  `SubtaskDispatch` carries `sendBacks`; a CLI `session show` of the main
+  chat shows report rows as `via: "system"` with a `summary`.
+
 **Do at release** (outward-facing, so ask JC before each; the release SOP's
 Pre-Flight checks this list):
 
