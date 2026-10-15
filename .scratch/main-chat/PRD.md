@@ -385,7 +385,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [23](./issues/23-galley-icon-and-avatar.md) | — | 新应用图标（扁平的木头机器人 G）与助手头像：矢量母图、各平台导出、头像裁圆加描边、README 资源 | — | done（裁决 70；合并提交 `4fc4ed53`，JC 真机验收通过） |
 | [24](./issues/24-assistant-composer-trial.md) | — | 主对话输入框试验：现状 / 一行式（模型短语在发送键左边），切换器；直接排队、去提示行、「发消息…」直接做 | 22 | done（裁决 71、72：JC 真机比完选一行式；试验 `45c13508`，由票 25 撤） |
 | [25](./issues/25-assistant-composer-final.md) | — | 主对话输入框定稿：一行式转正、离底边 24px、撤切换器与演示、设计文档 | 24 | done（裁决 72；合并提交 `ffd7f9b2`，JC 真机验收；弹层偏左另记裁决 76） |
-| [27](./issues/27-workbench-one-line-composer.md) | — | 工作台会话的输入框也改一行式、保留提示行，输入框长高时保持贴底 | 25 | ready-for-human（裁决 74、76；合并提交 `61fc3b15`，等 JC 真机验收） |
+| [27](./issues/27-workbench-one-line-composer.md) | — | 工作台会话的输入框也改一行式、保留提示行，输入框长高时保持贴底 | 25 | done（裁决 74、76；合并提交 `61fc3b15`，JC 真机验收通过） |
 | [28](./issues/28-header-menu-find-and-reset.md) | — | 顶栏菜单：查找聊天记录（⌘K 面板带范围、⌘F）、重置主对话 | 27 | ready-for-agent（裁决 77） |
 | [26](./issues/26-user-bubble-selection-copy.md) | — | 你的气泡不挂悬停复制，选中文字时弹浮动复制 | 20 | done（裁决 73，`3b029e56`，JC 真机验收；工作台有意不跟） |
 
