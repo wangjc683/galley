@@ -13,6 +13,7 @@
 - **状态**：暂缓（2026-10-09 JC 按推荐：先把主聊天在桌面和手机上做出来，IM 并不并进去放到后面谈）。
   2026-10-12 细化为三级（[devlog](./2026-10-12-main-chat-concept-review.md)、主聊天 PRD 裁决 27）：L0「同一个大脑、线分开」随主聊天票 01 / 03、L1「IM 当出口」随票 05，都不在本节；只有 L2「并入主聊天」仍暂缓。
   2026-10-13 主聊天 PRD 裁决 49 撤掉事项账本：L0 随之撤掉，L1 随票 05 暂缓（见下一节）。
+  2026-10-15 [助手 PRD](../../.scratch/assistant/PRD.md) 裁决 6（D5）：「一个人」的原则已定，对口只有一个，以后的设计都按这个走；实现排在桌面闭环（次序第 1 步）之后，到时再和 iOS 排先后（次序第 4 步）。票 05 被上层取代，L1「IM 当出口」随之归入第 4 步。
 - **提出**：2026-10-09 iOS 客户端与主聊天讨论（[devlog](./2026-10-09-ios-client-and-main-chat-direction.md)、[主聊天 PRD](../../.scratch/main-chat/PRD.md)）。
   今天每个 IM 渠道各有一条长期对话（[09-30](./2026-09-30-im-restart-continuity.md) 起重启续接），但不在 Galley 库里，桌面和手机看不到，也不是「一个」助手。
 - **启动信号**：桌面主聊天票 02、03 上线后，重排 L2 与 iOS 的先后（2026-10-12 改）。原信号「手机 P0 落地后仍有用户主要从 IM 用」低估了它：iOS 只覆盖 iPhone，安卓用户、不装 App 的用户要在手机上用主聊天只有 IM 一条路。
@@ -40,6 +41,7 @@
 - **实施要点**：第 3 级要绕开 `ga.py:559` 的 10 轮门槛（托管补丁，或在隐藏会话里跑），先读 03 票 Comments。
   不再做账本式的第二套记忆：主动提醒（票 05）若重启，从 GA 的记忆和查历史出发重新定范围。
 - **待定**：第 3 级的整理结果要不要让用户看见（上游不显示 GA 记忆）。
+- **2026-10-15 补**：[助手 PRD](../../.scratch/assistant/PRD.md) 裁决 5（D4）给「没人提起时也想得到」另补了一条路：每段开头由 Core 从库里确定式地拼几行「在办的事」（子任务、项目、提醒、定时任务），不调模型、不另起记忆，排在次序第 2 步；只覆盖落成了记录的事，只说过一嘴的仍靠本节的三级。
 - **关联**：主聊天 PRD 裁决 18、49，票 [03](../../.scratch/main-chat/issues/03-segments-and-injection.md)、[05](../../.scratch/main-chat/issues/05-proactive-cards.md)、[10](../../.scratch/main-chat/issues/10-remove-affairs-ledger.md)；
   账本代码在 git 历史里（`82e1d674` 起，到 04d 的 `d8df038b`）。
 
@@ -77,9 +79,10 @@
 ## 设置 Agent 页去掉 Supervisor 叙事（SOP 降级）
 
 - **状态**：暂缓（2026-10-09 JC 按推荐：Supervisor 分三层——退远程叙事、降 SOP、留 CLI 契约；降 SOP 这一层不急）。
+  **2026-10-15 改写**（[助手 PRD](../../.scratch/assistant/PRD.md)，[devlog](./2026-10-15-assistant-runs-the-team.md)）：Supervisor 不再降级，而是进门：主对话的助手就是内置的 Supervisor，SOP 成为助手自己的岗位手册（第 1 步「闭环」随助手手册落地，照 IM 的先例由 Core 写进内置状态）；「复制 SOP」留给接外部 agent 的高级用户与开发者，本节的「改说法」仍成立，但不再是「退出产品叙事」。退的只是 10-09 的远程叙事。
 - **提出**：2026-10-09（[devlog](./2026-10-09-ios-client-and-main-chat-direction.md)）。移动端替代了「人在外面 → IM → Supervisor → CLI」的远程用法；
   本机 161 个会话里 CLI / supervisor 建的 42 个，带标签的几乎全是试用和测试；社区 galley#29 / #30 作者仍在用 `session send --supervisor` 派活。
-- **启动信号**：票 01 改写 PRD 远程叙事时顺手做；或主聊天的原生派活工具落地、IM 委派换过去之后。
+- **启动信号**：~~票 01 改写 PRD 远程叙事时顺手做；或主聊天的原生派活工具落地、IM 委派换过去之后。~~ 助手 PRD 次序第 1 步的助手手册落地之后（10-15 改）。
 - **方案**：设置 → Agent 的「复制 Supervisor SOP」改为「让其他 Agent 操作 Galley」的说法，面向高级用户与开发者；
   `docs/integrations/galley-supervisor-sop.md` 保留为外部 agent 的参考，不再当产品主叙事。CLI 与 Agent API 契约不动（Rule 3）。
 - **实施要点**：CLAUDE.md / AGENTS.md「Supervisor SOP is copy-first」一段要同步；中英文案按文案规范；galley-supervisor skill 不受影响。
