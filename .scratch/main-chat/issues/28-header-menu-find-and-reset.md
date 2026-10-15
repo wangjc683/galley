@@ -1,6 +1,6 @@
 # 28 顶栏菜单：查找聊天记录（⌘F）与重置主对话
 
-Status: ready-for-agent
+Status: ready-for-human（2026-10-15 合入 main，合并提交 `7541197a`；等 JC 在 tauri dev 里验收）
 
 来源：主聊天 PRD 裁决 77（2026-10-15，JC：「按建议推进」）。依赖 27。改 GUI，Core 只给界面用的搜索命令加参数；CLI 与 Agent API 不动。
 

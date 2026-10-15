@@ -777,7 +777,12 @@ main-chat planning docs, main has:
   empty state keeps its card. In the main chat the user's bubbles copy by
   selection, not a hover chip (the workbench keeps its chip on purpose),
   and the assistant card no longer shows the last message as a hover
-  title. JC accepted tickets 21–27 live on 2026-10-15;
+  title. Since ruling 77 (ticket 28) ⌘F (Ctrl+F) finds in the open
+  conversation through the ⌘K palette scoped to it (dated hits, Backspace
+  widens to everything), every title menu has 「查找聊天记录」, and the main
+  chat's also 「重置主对话…」, opening the hold-to-confirm dialog; the effort
+  popover lists the highest tier first (ruling 78). JC accepted tickets
+  21–27 live on 2026-10-15 (28 is owed);
   ticket 20's own acceptance is still recorded as owed. Settings can reset it with a five-second hold (ticket 15): its rows
   go, long-term memory returns to factory, the migration backups are
   deleted. A new main
