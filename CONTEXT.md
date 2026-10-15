@@ -204,6 +204,28 @@ silently dropped argument (2026-07-11 decision; see devlog).
   replace it, a `user` title is never touched. Derived in Core on every
   path that persists a user message; never written from a page.
 
+## Subtask reports
+
+- **Subtask** — a session the main chat's reply dispatched with a
+  `<subtask>` tag (`core/src/subtask.rs`): `parentSessionId` is the main
+  chat; **promoted** (an ordinary conversation) once the user writes in it.
+- **Subtask report** (a **wake**) — Core waking the main chat for one turn
+  when a subtask's run ends: finished, asking, at the step limit, failed,
+  or never started; not when stopped (`core/src/subtask_report.rs`,
+  main chat tickets 29–31). Sent as a hidden user row (`created_via =
+  'system'`, `supervisor = 'galley-report'`) when the main chat is idle,
+  never while it waits for the user's answer; merged and re-read before
+  sending. Not a send: the GUI never draws the row.
+- **Send-back** — the assistant's message into its subtask
+  (`supervisor = 'galley-assistant'`) when the reply before it did not end
+  on `ask_user`; an answer to the subtask's question is not one.
+  `SubtaskDispatch.sendBacks`; the wake asks it to stop at two.
+- **Silent reply** — the assistant's reply to a wake that is only
+  `<no-reply/>` (stripped like `<subtask>`); nothing is drawn or notified.
+- **Undelivered** — a report that could not be sent
+  (`subtask-report-undelivered`); the desktop falls back to the subtask's
+  own notification.
+
 ## Writes
 
 - **Write broadcast** — every session, project and scheduled-task write is

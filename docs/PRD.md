@@ -11,6 +11,8 @@
 >
 > **2026-09-09 主叙事更新**：门面从「agent team 编排」切到「**轻量的本地个人全能助手，极简 harness，靠模型本身的能力，押注模型进化**」，英文 tagline「Less harness. More model.」。团队编排不删，降为第二层（一个助手不够用时它就是一支团队）；宪法、README、GitHub description 同步。决策叙事见 [2026-09-09 定位调整 devlog](./devlog/2026-09-09-positioning-less-harness-more-model.md)。
 >
+> **2026-10-15 助手地基**：两层产品形态由助手本人连起来——「**你只跟一个人说话；它替你带一支团队，事事给你交代**」。内置运行时的主对话就是这个人（名字 Galley，角色词「私人助理」）：它派子任务、在子任务结束或提问时被叫醒来验收与交代、按三级授权动 Galley 的工作状态；Supervisor 从门外的外部 agent 变成助手本人，外部 agent 经 CLI 接入照旧。tagline「Less harness. More model.」不变：管理交给模型，Galley 只造手（派活标签与 CLI）、账（库里的记录）与办公室（工作台）。上层 PRD 见 [助手 PRD](../.scratch/assistant/PRD.md)，决策叙事见 [2026-10-15 devlog](./devlog/2026-10-15-assistant-runs-the-team.md)。
+>
 > **本文件与 DESIGN.md 的关系**：DESIGN.md 继续负责 GUI 视觉与交互设计规则。CLI 设计契约见独立的 [docs/agent-api.md](./agent-api.md)（v0.2 ship 时 publish）。
 
 ## 1. 一句话定位

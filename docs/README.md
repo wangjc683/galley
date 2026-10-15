@@ -22,7 +22,7 @@ subset of the task table below; when the two disagree, this index wins and
 |---|---|
 | Understand current project state | [project status](./project-status.md) — current version, release gates, phase state |
 | Understand the architecture | [architecture](./architecture.md) — external-facing system overview |
-| Change product behavior or roadmap | [PRD](./PRD.md) — product definition and roadmap |
+| Change product behavior or roadmap | [PRD](./PRD.md) — product definition and roadmap; for the assistant / main chat, the [assistant PRD](../.scratch/assistant/PRD.md) (the foundation, above the main chat and mobile PRDs) |
 | Change CLI output or Agent API | [agent-api](./agent-api/README.md) — stable CLI / socket contract; v1 is frozen, additive-only |
 | Change the Core ↔ runner wire protocol | [IPC protocol](./ipc-protocol.md) — change docs first, then code |
 | Change remote access (phone ↔ relay ↔ Core) | [remote protocol design](../.scratch/ios-client/issues/05-remote-protocol-design.md), then the [remote-protocol](../remote-protocol/README.md), [relay](../relay/README.md) and [GalleyRemote](../ios/GalleyRemote/README.md) READMEs — Rule 2; the Rust golden fixtures are the contract |
