@@ -212,7 +212,7 @@ describe("the assistant's conversation: bubbles", () => {
     expect(count(html, "ml-auto max-w-[min(80%,560px)]")).toBe(5);
     // The greeting, four answers and the answered question.
     expect(count(html, 'data-role="assistant-bubble"')).toBe(6);
-    expect(html).toContain("max-w-[min(88%,680px)]");
+    expect(html).toContain("max-w-[88%]");
     expect(html).toContain("bg-assistant-tint");
     const first = html.indexOf('data-role="assistant-bubble"');
     expect(html.indexOf("你好。以后有什么事")).toBeGreaterThan(first);
@@ -266,7 +266,7 @@ describe("the assistant's conversation: bubbles", () => {
     expect(group).toBeGreaterThan(-1);
     expect(html.slice(group, at)).toContain("排好了。");
     expect(html.slice(group, at)).not.toContain(zhCopy.conversation.copy);
-    expect(html.slice(at - 80, at)).toContain("max-w-[min(88%,680px)]");
+    expect(html.slice(at - 80, at)).toContain("max-w-[88%]");
     // The workbench hangs them after the whole reply, action row and all.
     const today = render(conversation(), { renderAfterAnswer: cards });
     expect(
@@ -700,7 +700,7 @@ describe("the assistant's conversation: the process card", () => {
     );
     const open = tag.slice(0, tag.indexOf(">") + 1);
     expect(open).toContain("rounded-md border border-line bg-app");
-    expect(open).toContain("max-w-[min(88%,680px)]");
+    expect(open).toContain("max-w-[88%]");
     expect(open).not.toContain("shadow");
     expect(cardOf(html)).not.toContain("w-[3px]");
     // 6px under the action row, 20px of its own under it.

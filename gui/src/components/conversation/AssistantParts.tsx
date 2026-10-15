@@ -16,10 +16,13 @@ import { cn } from "@/lib/utils";
 /** The reply bubble's width cap: wider than the user's (its content is
  * markdown, lists and tables), but always leaving a visible margin on
  * the right (12% of a 760px column is 91px) so it still reads as the
- * left side; in the 1200px wide mode it stops at 680 instead of
- * stretching. 680px holds a 5-column table with wrapped cells. The
- * subtask cards under a reply and its process card take the same cap. */
-export const ASSISTANT_BUBBLE_MAX = "max-w-[min(88%,680px)]";
+ * left side. No pixel stop (ruling 79): the reply is what the wide
+ * reading width is for (code blocks, tables), so it grows with the
+ * column, to 1056 in the 1200px wide mode; the compact column never
+ * reached the old 680 stop (88% of 760 is 669), so it only cancelled
+ * the wide mode. The subtask cards under a reply and its process card
+ * take the same cap. */
+export const ASSISTANT_BUBBLE_MAX = "max-w-[88%]";
 
 /*
  * The neutral ground is its own token, `--color-assistant-tint` (light

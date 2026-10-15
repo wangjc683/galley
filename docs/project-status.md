@@ -781,7 +781,9 @@ main-chat planning docs, main has:
   conversation through the ⌘K palette scoped to it (dated hits, Backspace
   widens to everything), every title menu has 「查找聊天记录」, and the main
   chat's also 「重置主对话…」, opening the hold-to-confirm dialog; the effort
-  popover lists the highest tier first (ruling 78). JC accepted tickets
+  popover lists the highest tier first (ruling 78); in the wide reading
+  width the reply bubble grows with the column instead of stopping at
+  680px (ruling 79). JC accepted tickets
   21–28 live on 2026-10-15;
   ticket 20's own acceptance is still recorded as owed. Settings can reset it with a five-second hold (ticket 15): its rows
   go, long-term memory returns to factory, the migration backups are

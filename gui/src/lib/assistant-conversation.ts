@@ -94,8 +94,9 @@ export function assistantLineClock(ms: number, copy: AppCopy): string | null {
 }
 
 const BLOCK_MARKER = /^\s*(?:#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)+/;
-/** More than the widest line shows (a 680px row of 12px text). */
-const LINE_MAX_CHARS = 160;
+/** More than the widest line shows (a row of 12px text across the 1200px
+ * wide column). */
+const LINE_MAX_CHARS = 240;
 
 /** The first line of `text` that says something, as one plain line:
  * block markers (heading, quote, list) and inline markdown out. */
