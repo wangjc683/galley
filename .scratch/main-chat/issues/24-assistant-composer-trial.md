@@ -69,3 +69,74 @@ Status: ready-for-agent
   6. 选赢家。
 
 ## Comments
+
+2026-10-15 实现（子代理，分支 `assistant-composer-24`，基于 `55e076ee`，未合入）：
+
+提交：`b11e0c3c` 直接排队（去掉三选一）；`ef9fa3db` 一行式、切换器与「演示在跑」，含占位文字；本条记录随后单独提交。
+
+**代码在哪**：试验代码在新目录 `gui/src/components/conversation/composer-trial/`——`composer-trial.ts`（两档的类型、选择的 store 与 localStorage、App 的门 `composerTrialFor`、MainView 叠在 Composer 上的 `useComposerTrialOverrides`、演示的两条假排队、一行式的尺寸常量；头部注释写了删除步骤，分「总要删」「现状赢」「一行式赢」三种）、`ComposerOneLine.tsx`（一行式的排法）、`ComposerDemoInert.tsx`（演示时吞掉队列条的点击）、`ComposerTrialSwitcher.tsx`（pill）、`composer-trial.test.tsx`（试验测试，12 条）。旧文件只加默认不生效的可选参数：Composer（`trial`；把卡片里的零件抽成变量，卡片照原顺序摆、一行式交给 `ComposerOneLine` 摆）、ComposerQueueStrip（`heading`）、ComposerImageStrip（`className`）、ComposerDropOverlay（`line`）、LLMPill 与 EffortPill（`popoverAlign`）、MainView（`composerTrial`）、App（读选择、挂 pill）。
+
+**生效范围**：App 只在主区开着主对话（`screen` 是 main、内置运行时、当前会话是主对话）时把选择交给 MainView，MainView 再按 `isMainChat` 门一次；「现状」且演示关时连覆盖的 props 也不给，Composer 走今天的代码。工作台的会话、子任务、外置运行时、新对话的空状态都不受影响（见下「逐像素」）。占位文字与直接排队不进切换器，两档都生效。
+
+**一、切换器**
+
+- **位置（我定）**：同票 17、19，主区顶栏下沿的右端（`fixed right-3 top-[50px]`，顶栏到 44px），不压顶栏按钮、输入框和「回到底部」。两档加一个开关，一行放得下，所以不做展开面板：「临时 · 输入框　现状｜一行式 · 演示在跑」，量得 248.5 × 26.5px。portal 到 body，`pointer-events: auto`，z 1000；只在内置运行时、主区开着主对话时出现。960 × 600 小窗口里它盖住对话栏右上角一小块（同票 19）。
+- 选择存 localStorage `galley.tmp.composerTrial.shape`（`current` / `line`）与 `.demo`（`on` / `off`），读写都包了 try/catch；默认一行式、演示关。pill 的字只有中文（同票 17、19）。
+- **演示在跑**：两档都能开。只换输入框的显示：发送位换成停止键，输入框上方的队列条里两条假的排队消息（中英两版，按界面语言）；模型短语照在跑时的样子封锁换模型；幽灵文字照在跑时不出。不写 store、不发消息、不调模型：点停止什么都不做；队列条的点击（取回编辑、立即执行、删除）在外层被吞掉，悬停照旧能看到按钮；按 Enter 不发出，草稿留在框里。现状档开着演示时，提示行照在跑时的说（空草稿「Shift+Enter 换行」，打了字「Enter 排队 · 本轮结束后自动发送」）。
+
+**二、一行式**
+
+- **排法**：一条里从左到右是 ＋、输入、「模型 · 强度」、发送 / 停止；行内 `items-end`，输入长高时 ＋、模型短语、发送贴底，与最后一行齐平。
+- **高度（量得）**：一行时 48px（7px 内边距 + 1px 边框，上下各一，中间是 32px 的按钮行）。输入的上下内边距按 `calc((32px - 1.55 * var(--conversation-composer-size)) / 2)` 算，三档对话字号下一行都正好 48（小、标准、大都量过）。三行 93px（字号小 90、大 98）。
+- **最多几行（我定 8 行）**：照票面的「约 8 行」，8 行后在框里滚动。标准字号下输入 189.3px、整个框 205.3px；现状的卡片上限照旧是 280px 的输入（约 12 行）。
+- **圆角（我定 24px）**：一行高度的一半，又正好和 ＋、发送这两个 32px 的圆同心（离框外缘 8px，16 + 8 = 24），两端读成一个形状。长高到 8 行时四角仍是 24（截图 `c-long`）。底色、边框、投影、杏沙 focus ring 照卡片。现状的卡片照旧 12px。
+- **附件条**：在输入上方、框内，缩略图离框外缘 12px，和 24px 的角同心；下面留 8px 再接输入那一行（两张图时框 124px）。
+- **幽灵文字**：照旧在输入里。「按 → 填入」原来就不在提示行里，它是幽灵文字末尾那个按钮（`ghostAcceptHint`），一行式里照旧跟在幽灵文字后面（截图 `e-ghost`），没改做法。
+- **拖放浮层**：一行式里画成一行（16px 回形针 + 字），圆角 23px 贴着框；现状照旧是两行。
+- **模型短语的弹层**：向上开、右对齐。`LLMPill`、`EffortPill` 加了 `popoverAlign`，一行式传 `end`：模型的弹层右缘对齐模型名的右缘，强度的对齐强度的右缘（量得模型名右缘 1185.7、弹层右缘 1185.9，弹层底在模型名上方 6px）。运行中照旧封锁换模型，强度照旧可点。
+- **宽屏**：照旧满栏宽（1480 窗口宽屏模式下框 1115px）。
+- **小窗口里模型短语怎么让位（我定）**：短语最多占这一行的 40%，超出时截断模型名（省略号），「·」、强度、发送键、＋ 都不收缩。960 × 600 下一个 42 个字符的模型名截成 232.7px，输入还有 333.9px，发送键在框内右端不动。不设上限的话，输入是 `flex-1`，会先被挤到 0 再轮到模型名。
+- **不显示提示行**：一行式下 MainView 关掉 `showFooterHint`，那一行整个不渲染，框下面直接是 16px 的底边距。
+- **「正在停止，排队的消息会自动发出」的新位置（我定）**：队列条的标题。停止中且有排队时，标题「排队中 · N」换成这句，用提示行原来的字号与墨色（11px、`ink-muted`，不用标题的大写字距），行高 15px 与原标题一样，不跳。理由：这句回答「我发的丢没丢」，放在排着的那几条正上方最近；标题本来就在说这几条的状态。停下来、队列发出后标题回到「排队中 · N」或整条消失。现状档照旧在提示行里说。
+- **占位文字**（两档都改）：主对话空闲与在跑时都是「发消息…」（en「Message…」），新文案键 `writeMessage`；不写 `/btw`，`/btw` 本身照旧可用。在问你时照旧：有候选「回复，或选择上方候选」，没有「回复上方提问」。做法是 `lib/composer-register.ts` 加一个 `messaging` 语域（`mainChat` 为真时取代 `continuing` 与 `byTheWay`）。
+
+**三、直接排队**（两档都生效，不进切换器）
+
+- 主对话在跑时按 Enter 与普通会话一样，交给 `sendUserMessage`，Core 排进队列，输入框上方的队列条显示；不再弹三选一。带图的消息照普通会话的规则：在跑时排不了队（队列只收文字），弹图片提示，草稿留着。
+- 删掉的代码：`MainChatBusyChoice.tsx` 整个文件；Composer 的 `mainChatBusy` 参数、`busyChoiceOpen` 状态、`submitDraftTo`、`closeBusyChoice` 与渲染；ComposerFooterHint 与 `lib/composer-hint.ts` 的 `mainChatBusy`、提示键 `mainChatBusyEnterHint`；`lib/main-chat.ts` 的 `offersBusyChoice`（连同测试）；`useMessageSend` 的 `openSideChat`（连同它的报错上下文 `create_session_for_side_chat` 与测试）；MainView 的 `onOpenSideChat`、App 的接线。
+- 删掉的文案键（中英各 8 个）：`mainChatBusyEnterHint`、`mainChatBusyLabel`、`mainChatBusyQueue`、`mainChatBusyQueueTooltip`、`mainChatBusyQueueImages`、`mainChatBusySideChat`、`mainChatBusySideChatTooltip`、`mainChatBusyKeepEditing`。
+- **设计文档里要在定稿票改的位置**（没改，只列出）：中英都搜了「排队 / 开新对话」「排队 / 开旁聊」「开旁聊」「三选一」「继续编辑」「mainChatBusy」「MainChatBusyChoice」「busy choice」「side chat」。`docs/` 下的现行文档（design、PRD、architecture、CONTEXT、agent-api、integrations）没有一处写过三选一；写过的只有：
+  - `.scratch/main-chat/PRD.md:49`（裁决 12 的 10-12 补：「排队 / 开旁聊」两个选择）、`:324`（票表 02 那一行的「+ 排队 / 开旁聊」）、`:385`（待定：「排队 / 开旁聊」只覆盖在跑时）；
+  - `.scratch/main-chat/issues/02-main-chat-form.md:9`、`:24`–`25`（票 02 本身，历史，按惯例可以只加一句指向裁决 71）；
+  - `docs/devlog/2026-10-12-main-chat-concept-review.md:74`（历史，不改）。
+  另外跟着这张票要改的设计文档：`docs/design/conversation.md:591`（「Submit 按钮」：在跑时提示行教 `/btw`；主对话的占位不再写 `/btw`，一行式没有提示行）、`:577`（「视觉」：圆角 12、上方留白；一行式若赢是 24 与一条）、`:596` 与 `:696`（＋ 菜单「Composer 按钮行最左，紧贴模型短语」、LLM 切换器「Composer 内部左下角」：一行式里模型短语在发送键左边、弹层右对齐）、`:127`（「助手的对话」的「不做：输入框」）。
+
+**测试**：`TZ=UTC pnpm --dir gui test`（129 个文件、1263 条）与 `TZ=America/Los_Angeles` 全量各一遍，typecheck、lint、`git diff --check` 通过；全角扫描（自写脚本扫两个提交的新增行，先用坏例子自测）只剩英文注释与英文测试名里夹着的中文词（「」紧挨英文标点）和 `ComposerOneLine.tsx` 头部那张字符画。gui 只格式化了自己的 hunk，新文件整篇格式化。
+- 正式测试（定稿后留下）：`Composer.test.tsx`（新文件：在跑时 Enter 把草稿交给发送；输入法组字时的 Enter 交给输入法。静态渲染点不了键，测试在一个探针组件里跑 Composer 的 render 函数，从它返回的元素树里拿到 textarea 的 keydown 处理器来调）；`useMessageSend.test.ts`（主对话在跑时发一句：排进队列、不新建会话；带图的被拦、草稿留着；替换了原来 `openSideChat` 那条）；`MainView.assistant.test.tsx`（主对话在跑时打了字，提示行说「Enter 排队」，没有三选一，普通会话同样）；`composer-register.test.ts`（主对话的占位）。
+- 试验测试 `composer-trial.test.tsx`：只在主对话生效（普通会话、子任务在两档 × 演示开关 × 静止 / 在跑 / 在问你下与不给试验时逐字节一致；App 的门；默认一行式、演示关；现状且演示关时主对话也逐字节同不给试验）；一行式一条里依次有 ＋、输入、模型、强度、发送，没有提示行，`rows=1`、8 行上限；占位「发消息…」、在跑时不写 `/btw`、在问你时「回复上方提问」；停止中且有排队时队列条标题是那句、不在提示行；现状照旧是卡片加提示行（停止中那句仍在提示行）；演示在跑两档都是停止键加两条假排队、包在吞点击的外层里，停止与 Enter 不做事；一行式里在跑时 Enter 交给发送；弹层一行式右对齐、卡片照旧左对齐。队列条要会话与队列，这个文件让两个 store 在静态渲染里读当前状态（`vi.mock`）。
+- **反向检查** 6 处，都挂了，恢复后 sha256 逐字节一致：普通会话也变一行式（挂 1 条）、一行式又出提示行（2）、主对话又弹三选一（在跑时 Enter 不交给发送，2：正式与试验各 1）、停止中排队的那句丢了（1）、占位退回「继续…」（3）、弹层又左对齐（1）。
+
+**逐像素**（Chrome harness：真 App 加模拟 Core，从票 22 的复制到会话草稿目录的 `s24/` 再改；`55e076ee` 用 `git archive` 放在 `s24/base/`；两个 Vite 各占一个非 1420 的端口；关动画、冻结时钟，1x，藏掉 pill）：81 个画面全部逐像素一致。
+- 工作台的会话、子任务、外置运行时（63 个）：三处各自静止、在跑、在问你 × 浅 / 深，每个再存一份「一行式 + 演示在跑」的选择各比一次；打了三行、在跑且有排队、停止中且有排队 × 浅 / 深；英文、英文深色停止中、带两张图、幽灵文字、宽屏、小窗口在跑、模型弹层打开、子任务深色英文在问你、从助手点开的子任务。
+- 新对话的空状态（10 个）：浅 / 深 × 中 / 英，打了两行（浅、深），带两张图、宽屏、小窗口、外置运行时。
+- 对照（8 个）：主对话的现状档，把占位文字涂透明后与 `55e076ee` 比，静止、在跑、在问你、停止中且有排队 × 浅 / 深，全部一致——现状档在主对话里只差「继续…」→「发消息…」这几个字。
+
+**自查截图**（2x，会话草稿目录的 `s24/shots/`，81 张）与总览（`s24/overview/`）：
+- `01-light-zh.png`、`02-dark-zh.png`：现状对一行式，九种状态：空闲、三行、很长（滚到底）、两张图、幽灵文字、在问你、演示在跑、停止中且有排队、模型弹层；
+- `03-english.png`：英文，浅深 × 两档，空闲、三行、演示在跑、停止中、弹层；
+- `04-small-wide-font.png`：960 × 600 小窗口（空闲、42 个字符的模型名、演示在跑）、宽屏（空闲、三行）、对话字号小与大；
+- `05-drag-and-pill.png`：拖入文件的浮层（浅、深），整窗看切换器的位置（默认窗口两档、小窗口演示在跑）；
+- `06-unchanged.png`：工作台会话停止中、子任务在问你、外置在跑、空状态，左本票右 `55e076ee`；
+- 量测在 `s24/shots/measure.json`，比对结论在 `s24/cmp-result.txt`，反向检查在 `s24/mutate24.json`。harness 已从两棵树删掉，`git status` 干净。
+
+**与票的出入、留意**
+
+1. 「按 → 填入」原来就不在提示行里（票面是「若在提示行里」），一行式里照旧在幽灵文字末尾，没换做法。
+2. 演示在跑时强度照旧可点、会真的改这个会话的强度（它在跑时本来就可点，不是演示要画的东西）；＋ 菜单也照旧能用（只往草稿里加东西，不发）。票里「不写 store」我理解为不造假的运行状态、不发消息，这两处没拦。
+3. 「停止中」那句只有在一行式里挪进队列条标题；现状档照旧在提示行。演示在跑不模拟停止中，那个状态看截图 `h-stopping`，真机要真发一句、排一句再点停止。
+4. 一行式里输入框比卡片窄（1480 窗口 556.7px，卡片 730px），长句会早一点折行；模型名越长输入越窄（短语最多占 40%）。
+5. 两档切换时 Composer 本身不重挂载，草稿、图片都在；外层换了，输入框是新挂上的一个，高度当即按新的上限重算（自动长高的 effect 依赖里有 `oneLine`）。点 pill 时焦点本来就离开了输入框，切完要再点一下输入框。
+6. 宽度与高度都是 Chrome 里量的，WebKit 由 JC 真机看。
+7. 新增的正式测试 `Composer.test.tsx` 用了「在探针里跑 forwardRef 的 render 函数」取 keydown 处理器的写法（gui 没有 DOM 测试环境），写在文件头。
+
+**给 JC 的真机步骤补充**（票里六步之外）：这票没动 Rust，dev 热更就行；画面没变就 `touch gui/index.html` 整页重载。pill 在主区顶栏下沿的右端，只在开着主对话时出现。第 4 步要看「停止中」那句：真发一句要跑一会儿的话、跑的时候再发一句排队、然后点停止，一行式里队列条的标题会换成那句。第 2 步拖图时也可以留意拖放浮层在一行式里是一条。
