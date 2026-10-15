@@ -1,6 +1,6 @@
 # 25 主对话的输入框定稿：一行式，离窗口底边 24px
 
-Status: ready-for-agent
+Status: ready-for-human（2026-10-15 合入 main，合并提交 `ffd7f9b2`；等 JC 在 tauri dev 里验收）
 
 来源：主聊天 PRD 裁决 72（2026-10-15，JC 在 tauri dev 里比完票 24：「一行式明显更好」；底边距：「直接定 24」）。依赖 24。只改 GUI 与文档，不碰 Rust。
 
