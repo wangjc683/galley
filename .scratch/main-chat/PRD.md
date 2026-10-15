@@ -327,7 +327,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [19](./issues/19-assistant-im-rendering-trial.md) | — | 主区的 IM 画法：气泡 / 过程 / 时间 / 滚动四件，切换器加演示对话 | 18 | done（裁决 66、67：JC 真机比完，四件都取推荐档；试验 `a945378e`，由票 20 撤） |
 | [20](./issues/20-assistant-im-rendering-final.md) | — | 主区的 IM 画法定稿：C、一行、居中、贴底，问候的时间条，气泡底的 token | 19 | ready-for-human（裁决 67；合入 `01214080`，等 JC 真机验收） |
 | [21](./issues/21-assistant-process-button.md) | — | 助手回复的过程按钮：步数、用时、token 收进展开区，不画上下文；卡片与顶栏在跑时说主区那一句 | 20 | ready-for-human（裁决 68；合入 `dfd43968`–`294c27cc`，等 JC 真机验收与选图标） |
-| [22](./issues/22-assistant-process-card.md) | — | 展开的过程改成卡片：每步一行（那句话 + 网站或文件名），最多 8 行、超出内滚，单步可点开细节 | 21 | ready-for-agent（裁决 69） |
+| [22](./issues/22-assistant-process-card.md) | — | 展开的过程改成卡片：每步一行（那句话 + 网站或文件名），最多 8 行、超出内滚，单步可点开细节 | 21 | ready-for-human（裁决 69；合入 `94cdb8a7`–`8f1d9fde`，等 JC 真机验收） |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 

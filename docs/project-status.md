@@ -759,11 +759,14 @@ main-chat planning docs, main has:
   (one above the greeting), and the column stacked up from the composer.
   Since ruling 68 (ticket 21) nothing shows under a reply at rest: the
   hover bar is icons only (copy, save, and a process button for a reply of
-  two steps or more, whose opened steps are headed by 「N 步 · 用时 · ↑ ↓」);
-  no context percentage is drawn there, and the sidebar card and the header
-  say the live line's own sentence while it runs instead of 「第 N 步 ·
-  摘要」. Workbench conversations and subtasks are unchanged (JC's live
-  acceptance of tickets 20 and 21 is owed). Settings can reset it with a five-second hold (ticket 15): its rows
+  two steps or more); no context percentage is drawn there, and the sidebar
+  card and the header say the live line's own sentence while it runs
+  instead of 「第 N 步 · 摘要」. Since ruling 69 (ticket 22) the process
+  button opens a card, not the workbench step region: 「N 步 · 用时 · ↑ ↓」
+  on top, then one line a step (its sentence and the site or file it
+  touched), eight and a half lines tall with the rest scrolling inside; a
+  line opens that step as it was. Workbench conversations and subtasks are
+  unchanged (JC's live acceptance of tickets 20–22 is owed). Settings can reset it with a five-second hold (ticket 15): its rows
   go, long-term memory returns to factory, the migration backups are
   deleted. A new main
   chat opens with a fixed one-paragraph greeting in the UI language (shown
