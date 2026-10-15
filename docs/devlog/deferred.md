@@ -57,6 +57,23 @@
 
 ---
 
+## 回复正文的拉丁字体（Newsreader 没生效）
+
+- **状态**：暂缓（2026-10-15 主聊天 PRD 裁决 67 第 5 条，JC 按推荐：先不动，免得字体混进 IM 画法的比较）。
+- **提出**：2026-10-15 票 19 子代理在 harness 里量到，主会话在 JC 正在跑的 dev 的 CSS 里核实。`MarkdownView.tsx` 里有 8 处 `font-[var(--galley-prose-serif)]`（`caf1c1a4`，2026-06-09 起）。Tailwind v4 推断不出任意值的类型时默认当字重，于是编译成 `font-weight: var(--galley-prose-serif)`，字体族没设，继承父级的 Inter。设计文档写的是 Newsreader（`docs/design/foundations.md` 的 Serif 一行、`conversation.md` 的回复字体与 markdown 字表）。
+- **影响**：回复正文、markdown 标题与引用、思考预览，以及其他走 MarkdownView 的地方。中文不受影响：`--font-serif` 有意让中文落到苹方 / 雅黑（foundations.md 2026-06-20 注记）。受影响的是拉丁字母和数字；英文界面的回复整段都是无衬线。06-09 以来 JC 的视觉裁决都是在 Inter 上做的。
+- **启动信号**：主区的 IM 画法定稿（主聊天票 20）合入，JC 用过几天之后。
+- **方案**：二选一，真机比。
+  1. 修好：8 处一起改成 `font-[family-name:var(--galley-prose-serif)]`，或者 `[font-family:var(--galley-prose-serif)]`。做一个临时切换器比「现状 Inter」与「修好 Newsreader」，工作台的回复和助手的气泡都看，中英文各一组。
+  2. 认现状：把设计文档里回复、markdown、思考预览的字体改成 Inter。
+- **实施要点**：
+  - 修好会动所有对话的拉丁字形、字宽和行长。字号档、行高、`tracking-[0.005em]`、h1–h4 的 medium、引用的 italic 都是照 Newsreader 写的，要一起看。中文段落里的数字和英文词会变成衬线，混排也要看。
+  - 动手前先查别处有没有同样的写法（`font-[var(…)]`、`font-(--…)`）。2026-10-15 只在 MarkdownView 里找到。
+- **待定**：思考预览（italic）跟不跟。
+- **关联**：主聊天 PRD 裁决 66、67；票 [19](../../.scratch/main-chat/issues/19-assistant-im-rendering-trial.md)、[20](../../.scratch/main-chat/issues/20-assistant-im-rendering-final.md)；`gui/src/components/conversation/MarkdownView.tsx`。
+
+---
+
 ## 设置 Agent 页去掉 Supervisor 叙事（SOP 降级）
 
 - **状态**：暂缓（2026-10-09 JC 按推荐：Supervisor 分三层——退远程叙事、降 SOP、留 CLI 契约；降 SOP 这一层不急）。

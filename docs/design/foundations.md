@@ -308,6 +308,8 @@ TN 10.59）。翻转必然让长文阅读面变暗；若日后读着发刺，解
 | **Sans（默认 UI）** | `--font-sans` | Inter / 苹方 / 思源黑体 | app chrome、按钮、菜单、metadata、session row、Settings / Dialog / Onboarding 功能标题 |
 | **Mono（技术 ID）** | `--font-mono` | JetBrains Mono | shell 命令、路径、JSON、tool 名 |
 
+> 2026-10-15 发现：回复正文这一处的 Newsreader 没生效，拉丁字母和数字实际是 Inter。原因是 `MarkdownView` 里的 `font-[var(--galley-prose-serif)]` 在 Tailwind v4 下被编译成了字重。修不修见 [deferred](../devlog/deferred.md)「回复正文的拉丁字体」。
+
 #### 字号 scale
 
 Galley 有两套**并行**的字号系统，分属不同表面，二者不互相引用：
