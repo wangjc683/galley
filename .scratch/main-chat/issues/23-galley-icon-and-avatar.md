@@ -1,6 +1,6 @@
 # 23 新应用图标与助手头像
 
-Status: ready-for-agent
+Status: ready-for-human（2026-10-15 合入 main，合并提交 `4fc4ed53`；等 JC 真机看头像与 Dock，发版时手动上传社交预览）
 
 来源：主聊天 PRD 裁决 70（2026-10-15，JC 定稿：「没问题了，推进」）。不依赖别的票。改图标资源、GUI 的头像与文档，不改 Core 的逻辑。
 

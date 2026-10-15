@@ -765,8 +765,12 @@ main-chat planning docs, main has:
   button opens a card, not the workbench step region: 「N 步 · 用时 · ↑ ↓」
   on top, then one line a step (its sentence and the site or file it
   touched), eight and a half lines tall with the rest scrolling inside; a
-  line opens that step as it was. Workbench conversations and subtasks are
-  unchanged (JC's live acceptance of tickets 20–22 is owed). Settings can reset it with a five-second hold (ticket 15): its rows
+  line opens that step as it was. Since ruling 70 (ticket 23) the
+  assistant's avatar is the app icon cropped to a circle with a 1px inner
+  ring, and the app icon itself is the flat wooden robot G drawn from a
+  vector master (`core/icons/master/`), on Apple's grid for macOS; it ships
+  with the next release. Workbench conversations and subtasks are
+  unchanged (JC's live acceptance of tickets 20–23 is owed). Settings can reset it with a five-second hold (ticket 15): its rows
   go, long-term memory returns to factory, the migration backups are
   deleted. A new main
   chat opens with a fixed one-paragraph greeting in the UI language (shown
