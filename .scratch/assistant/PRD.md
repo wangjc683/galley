@@ -176,6 +176,9 @@ JC 同日按推荐定。
 | 3 | **授权补全**：定时任务 CLI（[scheduled-tasks 票 06](../scheduled-tasks/issues/06-cli-schedule-commands.md) 本来就有）、`session rename`（裁决 3 把改名放在「自己做」，CLI 还没有，票 30 查出）等新的手；「What Only The User Changes」随之对助手改 | 3 | open |
 | 4 | **一个人**：IM 并入，和手机排先后 | 6 | open |
 
+2026-10-16 JC 定第 1 步之后的先后（「按建议推进，先 A」）：**A 验收并刻意用几天**（闭环从没在真实派活上跑过：`subtask_dispatches` 0 行，主对话重置后 5 句）→ **C 发版**（v0.6.2 之后积压 222 个提交，先做 project-status 的「Do at release」）→ **B 第 2 步「承诺」**（发版后做，四处设计在试用期间讨论：提醒到点原话说还是现场组织、电脑睡着时补发并明说晚了多久、提醒卡片、「在办的事」放什么）。
+试用期的数字用 `.scratch/assistant/closed-loop-snapshot.py`（只读）：你说了几句、派了几件、叫醒几次与结果、打回与代答各几次、不出声几次、你接手了几个。
+
 ## 待定
 
 - 一句话的措辞；宪法 Product Shape 要不要补「团队由助手本人带」（本文稳了再拿措辞给 JC）。
