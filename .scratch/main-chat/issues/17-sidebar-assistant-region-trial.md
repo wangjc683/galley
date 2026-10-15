@@ -115,7 +115,7 @@ o o o                  Q     o o o                  Q
 - 3 / 3′：书眉与卡片在 134px 都放得下，卡片的状态行截断时渐隐（悬停给全文）。
 - 截到的形态：1480 最窄时方案 2 是「红绿灯、头像 … 搜索」加「＋ 新对话 ⌘N、定时、新建项目」（英文无 ⌘N）；134px 时 mac 方案 2 是「红绿灯、头像」加「＋、搜索、定时、新建项目」。四档在所有截图里都没有横向溢出（现状在 134px 的 mac 上字标溢出 1px，试验前就是这样）。
 
-截图：`/private/tmp/claude-501/-Users-inkstone-Documents-genericagent-webui/ab7a31ac-a0f8-4206-b6ee-0c4affeea868/scratchpad/s17/shots/`（181 张，2x；量测在 `measure.json`）。总览在 `shots/overview/`：`01-states-light.png`、`02-states-dark.png`（四档 × 演示四种状态，开着别的对话）、`03-assistant-open.png`（开着助手，入口选中）、`04-widths-mac.png`、`05-widths-win.png`（默认宽与最窄、中英文）、`06-min-134.png`、`07-windows.png`、`08-flows.png`（空白新对话、项目新对话、子任务面包屑、空列表）、`09-real-states.png`（真实状态，不是演示）、`10-hover-scroll.png`（悬停、长列表吸顶）、`11-english-external.png`（英文、外置运行时）、`12-pill-collapsed.png`（切换器位置、收起侧栏后的身份行）。harness 文件已从工作树删掉，脚本留在同目录 `harness/`、`shoot/`。
+截图：会话草稿目录的 `s17/shots/`（181 张，2x；量测在 `measure.json`）。总览在 `shots/overview/`：`01-states-light.png`、`02-states-dark.png`（四档 × 演示四种状态，开着别的对话）、`03-assistant-open.png`（开着助手，入口选中）、`04-widths-mac.png`、`05-widths-win.png`（默认宽与最窄、中英文）、`06-min-134.png`、`07-windows.png`、`08-flows.png`（空白新对话、项目新对话、子任务面包屑、空列表）、`09-real-states.png`（真实状态，不是演示）、`10-hover-scroll.png`（悬停、长列表吸顶）、`11-english-external.png`（英文、外置运行时）、`12-pill-collapsed.png`（切换器位置、收起侧栏后的身份行）。harness 文件已从工作树删掉，脚本留在同目录 `harness/`、`shoot/`。
 
 现状不变：在 `701bcb66` 上起同一个 harness（藏掉两个切换器、关动画），与本分支「现状」逐像素比 46 个画面（mac / Windows × 浅色 / 深色 × 开着主对话 / 别的对话 / 子任务 / 空白新对话 / 项目新对话，加在跑、子任务在问你、出错、未读、英文、207px、134px、滚动、收起、外置运行时、空列表、长列表滚动、深色最窄英文），全部一致。
 

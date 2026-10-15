@@ -87,7 +87,7 @@ Status: done（2026-10-14 JC 真机看过甲、乙，都不要，回到侧栏做
 实测（Chrome harness：真 App 加模拟 Core，mac 的红绿灯按 {16, 22}、12px 圆点间隔 8px 画上去）：
 - 甲：栏宽 80px。红绿灯簇 16–68px，右缘离栏边 12px，簇中心 42 与栏中心 40 差 2px（完全居中要 84px）。最宽的标签「Workbench」（Inter 500 11px，字体文件实测 60.9px）放进 68px 的格子；76px 只剩 64px 格子、两侧各 1.5px，所以取 80。960 窗口下侧栏 175px，是窄宽态（新对话只剩加号）。
 - 乙：开关在 x=88、y=7.5（Windows x=16），中文 100×28、英文 157×28，两个空间里位置完全一致，离红绿灯右缘 20px。工作台书眉只剩开关，三个图标在新对话行（y=48）；960 窗口下侧栏停在 204px（英文 261px）。
-- 截图：`/private/tmp/claude-501/-Users-inkstone-Documents-genericagent-webui/ab7a31ac-a0f8-4206-b6ee-0c4affeea868/scratchpad/s16/shots-final/`（`xz-*` 现状、`yi-*` 乙、`jia-*` 甲；`-demo` 带演示徽标，`-dark` 深色，`win-*` Windows 顶栏，`min-*` 与 `minwin-*` 是 960×600，`*-running` 与 `*-asking` 是状态行，`*-subtask` 是面包屑；`sheet-light.png`、`sheet-dark.png` 是六格总览）。
+- 截图：会话草稿目录的 `s16/shots-final/`（`xz-*` 现状、`yi-*` 乙、`jia-*` 甲；`-demo` 带演示徽标，`-dark` 深色，`win-*` Windows 顶栏，`min-*` 与 `minwin-*` 是 960×600，`*-running` 与 `*-asking` 是状态行，`*-subtask` 是面包屑；`sheet-light.png`、`sheet-dark.png` 是六格总览）。
 
 快捷键：加了 ⌘1 助手、⌘2 工作台（Windows / Linux 为 Ctrl+1 / Ctrl+2），只在乙、甲有两个空间时生效。查过：`useGlobalShortcuts`（⌘K、⌘N、⌘,、⌘= / ⌘- / ⌘0）、页面里所有 keydown（Composer、⌥↑ / ⌥↓、⌘\ 等）、macOS 原生菜单（⌘, ⌘Q ⌘N ⌘0 ⌘= ⌘- 与系统预置项）都不用数字键，WebView 也不绑 ⌘1–9；微信 Mac 版「聊天 / 通讯录」就是 ⌘1 / ⌘2，顺序与图标栏一致。只写在两个入口的悬停提示里，设置 → 快捷键没加，定稿时加。
 
