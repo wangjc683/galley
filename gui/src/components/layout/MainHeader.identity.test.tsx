@@ -136,6 +136,9 @@ describe("the open main chat's header", () => {
     );
     expect(trigger).toContain('aria-label="Galley · 更多对话操作"');
     expect(trigger).toContain('data-role="assistant-avatar"');
+    // The app icon at 28 (ticket 23).
+    expect(trigger).toMatch(/data-role="assistant-avatar" class="[^"]*size-7/);
+    expect(trigger).toMatch(/<img src="[^"]*\/galley-icon\.svg"/);
     expect(trigger).toMatch(/>Galley<\/span><svg/);
     // It hovers like the title button.
     expect(trigger).toContain("hover:bg-hover data-[state=open]:bg-hover");

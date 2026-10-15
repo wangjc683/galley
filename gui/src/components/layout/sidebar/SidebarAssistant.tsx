@@ -102,7 +102,7 @@ function lineText(line: AssistantCardLine): string {
 
 /**
  * The assistant's card: one row of an IM chat list (ruling 65). A 40px
- * avatar on the rows' 18px line (the brand disc and its 「G」); 「Galley」
+ * avatar on the rows' 18px line (the app icon in a circle, ruling 70); 「Galley」
  * at 14px with the time of the last message on the right, 11px muted
  * like the list's counts; under them one line —
  *

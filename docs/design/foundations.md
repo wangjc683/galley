@@ -94,6 +94,7 @@ Galley 的视觉与交互气质 = **Notion + Claude**。
 | `--color-brand-soft` | `bg-brand-soft` | `#F8EDDA` | 杏沙最浅 tint |
 | `--color-brand-tint` | `bg-brand-tint` | `#F1DECE` | 比 brand-soft 更实的杏沙 band，用作用户消息底（长对话滚动可扫） |
 | `--color-assistant-tint` | `bg-assistant-tint` | `#F0F0F0` | 助手的气泡底（主对话里它的回复、提问与问候，[conversation「助手的对话」](./conversation.md#助手的对话2026-10-15)），与 brand-tint 对称的中性灰：离 app ΔL* −3.2、离杏沙 ΔE 约 12，两边靠色相分开。值同 `--color-hover`（试用时借的它），2026-10-15 单立 token，调悬停色时气泡不跟着变（主聊天 PRD 裁决 67）。气泡里的行内代码、代码块与表头另走 `bg-line` / 透明 |
+| `--color-avatar-ring` | `shadow-[inset_0_0_0_1px_var(--color-avatar-ring)]` | `rgba(0,0,0,0.12)` | 助手头像（应用图标裁成圆）里侧的 1px 描边，压在图上、不改外尺寸：图标的浅底（L* 89）和浅色侧栏的底只差 L* 1–5，没有它就没有边界（主聊天 PRD 裁决 70，[layout-and-chrome](./layout-and-chrome.md)「助手卡片」的「头像」）。画法是盖在图上的一层 inset 阴影，不用 `border` / `ring`：那两种画在盒子外缘或要改盒子尺寸 |
 | `--color-brand-strong` | `bg-brand-strong` / `text-brand-strong` | `#C68762` | 杏沙 hover/active；当前 step 状态 icon、Submit hover |
 | `--color-success` | `text-success` / `bg-success` | `#5A8C5A` | 成功状态 line icon |
 | `--color-warning` | `text-warning` / `bg-warning` | `#BF7A1F` | 深琥珀 warning（与杏沙拉开 13° 色相）。**只表示警示 / 注意**（Stop、ask_user 等你回复），不作功能身份色——功能用品牌杏沙，避免稀释琥珀的警示力；Browser Control 未连接 2026-10-04 起是「待解锁」邀请，改用杏沙（见 layout-and-chrome §4.1） |
@@ -148,6 +149,7 @@ Dark theme 是 Galley light theme 的夜间版本，不是另一个产品方向�
 | `--color-selected` / `--color-brand-soft` | `#3E3026` | 杏沙 tint |
 | `--color-brand-tint` | `#362D24` | 用户消息气泡底。2026-09-17 由 `#4D3B2B` 收响度：原值比画布亮 OKLCH +16.5、彩度 0.036 高于 light，且亮过 elevated / hover 整个阶梯，读作贴在黑底上的发光面板；现 +10 / C 0.020 / 色相 63 不变（light 步长的 1.4 倍、彩度的三分之二，与 07-25 去暖地面同一逻辑） |
 | `--color-assistant-tint` | `#24272C` | 助手的气泡底，值同 dark `--color-hover`（离 app ΔL* +8.0、离杏沙 ΔE 约 12），与 brand-tint 对称 |
+| `--color-avatar-ring` | `rgba(255,255,255,0.1)` | 助手头像里侧的 1px 描边（裁决 70）：浅色图标在深色侧栏上本来就分得开，白 10% 让两个主题都有一道收边 |
 | *(sidebar 内覆写)* | `--color-hover` `#282C32` / `--color-selected` `#4D3B2B` | `.chrome-hover-scope`，见下方；light 侧同名覆写 `--color-selected` `#E7D8C0`。dark 的 selected 曾与 `brand-tint` 同值但**从不绑定**（标定重合，见 [选中行三通道](../devlog/2026-08-21-sidebar-selected-row-three-channels.md)）；2026-09-17 brand-tint 收响度后两者分开，selected 不动 |
 | `--color-brand` | `#D6A083` | 品牌主色 |
 | `--color-brand-strong` | `#E2AE8D` | 品牌 hover / link |

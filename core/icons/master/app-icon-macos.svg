@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- macOS (icon.icns): the master on Apple's icon grid. An 824 x 824
+       continuous-corner square centred on the 1024 canvas (100px gutters),
+       corner radius 185.4, drawn with Figma's corner smoothing at 60%
+       (each corner runs 1.6 r along its edges: two cubics around a circular
+       arc), with a drop shadow of black at 50%, 12px down, blur 28 (a
+       Gaussian of standard deviation 14). See README.md. -->
+  <defs>
+    <clipPath id="shape">
+      <path d="M396.64 100H627.36c103.83 0 155.75 0 195.41 20.21a185.4 185.4 0 0 1 81.02 81.02c20.21 39.66 20.21 91.58 20.21 195.41V627.36c0 103.83 0 155.75 -20.21 195.41a185.4 185.4 0 0 1 -81.02 81.02c-39.66 20.21 -91.58 20.21 -195.41 20.21H396.64c-103.83 0 -155.75 0 -195.41 -20.21a185.4 185.4 0 0 1 -81.02 -81.02c-20.21 -39.66 -20.21 -91.58 -20.21 -195.41V396.64c0 -103.83 0 -155.75 20.21 -195.41a185.4 185.4 0 0 1 81.02 -81.02c39.66 -20.21 91.58 -20.21 195.41 -20.21Z"/>
+    </clipPath>
+    <filter id="shadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <image href="galley-icon.svg" x="100" y="100" width="824" height="824" clip-path="url(#shape)"/>
+  </g>
+</svg>

@@ -5,29 +5,38 @@ import {
   XCircle,
 } from "@phosphor-icons/react";
 
+import galleyIconUrl from "@/assets/galley-icon.svg";
 import type { AssistantStateKind } from "@/lib/assistant";
 import { cn } from "@/lib/utils";
 
-/** The disc's sizes: 28 in the main header's identity row, 40 on the
+/** The avatar's sizes: 28 in the main header's identity row, 40 on the
  * sidebar's assistant card. */
 export type AssistantAvatarSize = 28 | 40;
 
-// The letter keeps the 28px disc's 17px (the old wordmark's size) and
-// the same share of the disc at 40.
 const DISC: Record<AssistantAvatarSize, string> = {
-  28: "size-7 text-[17px]",
-  40: "size-10 text-[24px]",
+  28: "size-7",
+  40: "size-10",
 };
 
 /**
- * The assistant's mark until it has a real likeness (main chat ticket
- * 18, PRD ruling 65): a brand-apricot disc carrying the retired masthead
- * wordmark's italic Newsreader 「G」, no image asset. The letter is a
- * deep shade of the same apricot rather than ink, so it reads in both
- * themes (brand stays light in dark mode, where ink turns light). The
- * italic leans right and the cap sits high: a nudge back and down, in
- * em so it scales with the disc, centres its ink (measured on screen at
- * 28px: one pixel back, two down).
+ * The assistant's face is the app icon (main chat PRD ruling 70, ticket
+ * 23). It is called Galley, like the app, and when it is not in front of
+ * you it reaches you through system notifications, whose picture macOS
+ * fixes to the app icon, as the Dock does: one name, one face. The icon
+ * is itself a character with a face (a wooden robot whose long tongue
+ * makes the G), so it reads as an IM avatar.
+ *
+ * One drawing, two crops: the asset is the icon's vector master
+ * (core/icons/master/galley-icon.svg, kept identical by a test), a full
+ * square whose figure sits inside the centre circle; the app icons round
+ * it into a square, the avatar into a circle. SVG rather than an
+ * exported PNG: sharp at both sizes on any display scale.
+ *
+ * A 1px ring is drawn inside the circle, over the picture, so the outer
+ * size stays 28 / 40: black 12% in light, white 10% in dark (the
+ * `--color-avatar-ring` token follows the theme). The icon's pale ground
+ * (L* 89) sits within L* 1–5 of the light sidebar's fills (chrome 94,
+ * hover 90, selected 87), so without the ring the avatar has no edge.
  */
 export function AssistantAvatar({
   size = 28,
@@ -41,14 +50,21 @@ export function AssistantAvatar({
       aria-hidden
       data-role="assistant-avatar"
       className={cn(
-        "inline-flex shrink-0 select-none items-center justify-center rounded-full bg-brand",
-        "font-serif font-medium italic leading-none",
-        "text-[color-mix(in_oklab,var(--color-brand)_22%,black)]",
+        "relative inline-flex shrink-0 select-none overflow-hidden rounded-full",
         DISC[size],
         className,
       )}
     >
-      <span className="translate-x-[-0.06em] translate-y-[0.12em]">G</span>
+      <img
+        src={galleyIconUrl}
+        alt=""
+        draggable={false}
+        className="pointer-events-none size-full"
+      />
+      <span
+        data-role="assistant-avatar-ring"
+        className="pointer-events-none absolute inset-0 rounded-full shadow-[inset_0_0_0_1px_var(--color-avatar-ring)]"
+      />
     </span>
   );
 }
@@ -70,11 +86,12 @@ const BADGE: Record<
  * brand ring while it runs, the filled amber pause of a question, the
  * red x of an error (filled: the row's thin one is illegible this
  * small), the filled apricot dot of a new reply (a step stronger than
- * the row's, to stand off the apricot disc; WeChat's corner dot).
+ * the row's, to stand off the icon's apricot ground; WeChat's corner
+ * dot).
  * Nothing at rest, or for a draft.
  *
  * Ringed in what the card is filled with right now, so it reads as cut
- * into the disc's corner: the card sets `--assistant-ground` (chrome,
+ * into the avatar's corner: the card sets `--assistant-ground` (chrome,
  * hover, selected) and the ring follows.
  *
  * The header bans status dots (§4.1 禁止) because a dot reads as an
