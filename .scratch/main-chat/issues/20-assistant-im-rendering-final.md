@@ -1,6 +1,6 @@
 # 20 主区的 IM 画法定稿：C 气泡、一行过程、居中时间、贴底滚动
 
-Status: ready-for-agent
+Status: ready-for-human（2026-10-15 合入 main，`01214080`–`f804fb96`；等 JC 在 tauri dev 里验收）
 
 来源：主聊天 PRD 裁决 67（2026-10-15，JC 在 tauri dev 里比完票 19：「真机看了，全部按你推荐」）。依赖 19。只改 GUI，不碰 Rust。
 

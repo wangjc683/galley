@@ -307,7 +307,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [17](./issues/17-sidebar-assistant-region-trial.md) | — | 侧栏上半块：现状 / 方案 2 书眉就是助手 / 方案 3 助手卡片 / 3′ 大头像 | 16 | done（JC 真机比完选 3，裁决 64；按赢家撤由票 18 做） |
 | [18](./issues/18-assistant-card-final.md) | — | 助手卡片定稿：方案 3、书眉三个图标、IM 列表的一行 | 17 | done（裁决 64、65；JC 真机验收通过，三处出入全保留） |
 | [19](./issues/19-assistant-im-rendering-trial.md) | — | 主区的 IM 画法：气泡 / 过程 / 时间 / 滚动四件，切换器加演示对话 | 18 | done（裁决 66、67：JC 真机比完，四件都取推荐档；试验 `a945378e`，由票 20 撤） |
-| [20](./issues/20-assistant-im-rendering-final.md) | — | 主区的 IM 画法定稿：C、一行、居中、贴底，问候的时间条，气泡底的 token | 19 | ready-for-agent（裁决 67） |
+| [20](./issues/20-assistant-im-rendering-final.md) | — | 主区的 IM 画法定稿：C、一行、居中、贴底，问候的时间条，气泡底的 token | 19 | ready-for-human（裁决 67；合入 `01214080`，等 JC 真机验收） |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 
