@@ -577,15 +577,20 @@ pub(crate) async fn backfill_fts_if_empty(
         .map_err(stringify_error)
 }
 
+/// The GUI's full-text search (⌘K). `session_id` searches one
+/// conversation (查找聊天记录 / ⌘F, main chat ticket 28). The CLI's
+/// `sessions search` does not come through here: it reads Core's
+/// `GalleyApi::search_messages` (Rule 3).
 #[tauri::command]
 pub(crate) async fn search_messages(
     galley: State<'_, SqliteGalley>,
     query: String,
     limit: u32,
     runtime_kind: Option<RuntimeKind>,
+    session_id: Option<SessionId>,
 ) -> std::result::Result<Vec<MessageSearchHit>, String> {
     galley
-        .search_message_hits(query, limit, runtime_kind)
+        .search_message_hits(query, limit, runtime_kind, session_id)
         .await
         .map_err(stringify_error)
 }
