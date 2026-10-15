@@ -165,3 +165,14 @@
 [cmdk-empty] {
   /* The empty slot just renders whatever children we pass; no chrome. */
 }
+
+/* Scoped (⌘F, main chat ticket 28): the scope's tag stands between the
+   glass and the text, so the input shares a flex row with it and takes
+   the rest; the tag's cell carries the same 48px and bottom rule, so
+   the line under the row runs on unbroken. */
+[cmdk-input].cmdk-input-scoped {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  padding-left: 8px;
+}

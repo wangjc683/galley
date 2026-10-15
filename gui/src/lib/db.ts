@@ -117,6 +117,10 @@ export interface MessageSearchHit {
   snippet: string;
   /** Session's last activity, used for ordering and rendering. */
   sessionActivityAt: string;
+  /** When the message was written (ISO 8601). The first line of a hit
+   * found inside one conversation (main chat ticket 28), where every
+   * hit carries the same session title. */
+  createdAt: string;
 }
 
 /**
@@ -134,11 +138,15 @@ export interface MessageSearchHit {
  * Results JOIN sessions for the title + recency ordering. Hits are
  * deduped at the message level — one message produces one hit even
  * if its body matches multiple times.
+ *
+ * `sessionId` searches one conversation only (查找聊天记录 / ⌘F, main
+ * chat ticket 28), its hits the latest first in transcript order.
  */
 export async function searchMessages(
   query: string,
   limit = 20,
   runtimeKind?: RuntimeKind,
+  sessionId?: string,
 ): Promise<MessageSearchHit[]> {
   const q = query.trim();
   if (q.length < 2) return [];
@@ -146,6 +154,7 @@ export async function searchMessages(
     query: q,
     limit,
     runtimeKind,
+    ...(sessionId ? { sessionId } : {}),
   });
 }
 

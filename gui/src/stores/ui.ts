@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import { paletteAfterFind, type PaletteScope } from "@/lib/palette-scope";
 import type { AppError } from "@/types/app-error";
 
 export type Screen = "onboarding" | "empty" | "main";
@@ -7,6 +8,12 @@ export type Screen = "onboarding" | "empty" | "main";
 interface UiState {
   screen: Screen;
   paletteOpen: boolean;
+  /**
+   * The conversation the palette searches in (⌘F, the title menu's
+   * 查找聊天记录; main chat ticket 28); null = everywhere, ⌘K. Every
+   * other way of opening the palette, and every close, clears it.
+   */
+  paletteScope: PaletteScope | null;
   settingsOpen: boolean;
 
   toasts: AppError[];
@@ -53,6 +60,11 @@ interface UiActions {
   setScreen: (s: Screen) => void;
   setPaletteOpen: (o: boolean) => void;
   togglePalette: () => void;
+  /** ⌘F / 查找聊天记录: the palette inside `target`, or ⌘K's toggle
+   * when no conversation is open (`paletteAfterFind`). */
+  findInConversation: (target: PaletteScope | null) => void;
+  /** Backspace in the empty input, or the scope's ×: back to ⌘K. */
+  dropPaletteScope: () => void;
   setSettingsOpen: (o: boolean) => void;
   toggleSettings: () => void;
 
@@ -72,6 +84,7 @@ export type UiStore = UiState & UiActions;
 export const useUiStore = create<UiStore>((set, get) => ({
   screen: "empty",
   paletteOpen: false,
+  paletteScope: null,
   settingsOpen: false,
   toasts: [],
   pendingPetMigrationTo: null,
@@ -79,8 +92,18 @@ export const useUiStore = create<UiStore>((set, get) => ({
   reviewRequest: 0,
 
   setScreen: (s) => set({ screen: s }),
-  setPaletteOpen: (o) => set({ paletteOpen: o }),
-  togglePalette: () => set({ paletteOpen: !get().paletteOpen }),
+  setPaletteOpen: (o) => set({ paletteOpen: o, paletteScope: null }),
+  togglePalette: () =>
+    set({ paletteOpen: !get().paletteOpen, paletteScope: null }),
+  findInConversation: (target) => {
+    const { paletteOpen, paletteScope } = get();
+    const next = paletteAfterFind(
+      { open: paletteOpen, scope: paletteScope },
+      target,
+    );
+    set({ paletteOpen: next.open, paletteScope: next.scope });
+  },
+  dropPaletteScope: () => set({ paletteScope: null }),
   setSettingsOpen: (o) => set({ settingsOpen: o }),
   toggleSettings: () => set({ settingsOpen: !get().settingsOpen }),
 

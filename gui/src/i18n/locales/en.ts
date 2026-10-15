@@ -375,10 +375,12 @@ export const enCopy: AppCopy = {
     updateDownloadingTitle: "Downloading the new version",
     updateCurrentVersion: (version: string) => `Current version v${version}`,
     moreConversationActions: (title) => `${title} · More conversation actions`,
+    findInChat: "Find in chat…",
     rename: "Rename",
     reinjectTools: "Reinject tools",
     desktopPet: "Desktop Pet",
     closeDesktopPet: "Close Desktop Pet",
+    resetMainChat: "Reset main chat…",
   },
   browserControlAttention: {
     message:
@@ -632,6 +634,12 @@ export const enCopy: AppCopy = {
     notFound: "No match found.",
     askDirectly: "Ask directly with Enter?",
     noLLMs: "No models configured.",
+    scopeMainChat: "In main chat",
+    scopeThisChat: "In this chat",
+    findInMainChat: "Find in main chat…",
+    findInThisChat: "Find in this chat…",
+    dropScope: "Search everywhere",
+    findHint: "Type two or more characters to find",
   },
   settings: {
     title: "Settings",
@@ -1063,6 +1071,9 @@ export const enCopy: AppCopy = {
       subtitle: "View only for now — shortcuts can't be changed yet",
       navigation: "Navigation",
       openCommandPalette: "Search / command palette",
+      findInConversation: "Find in the open chat",
+      findInConversationNote: (palette) =>
+        `With no chat open, the same as ${palette}.`,
       newConversation: "New chat",
       toggleSidebar: "Hide / show sidebar",
       toggleSidebarNote: "Not available with an external GA.",

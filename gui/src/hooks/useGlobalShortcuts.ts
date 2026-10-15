@@ -3,6 +3,8 @@ import { type Dispatch, type SetStateAction, useEffect } from "react";
 
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
 import { stepConversationFontSize } from "@/lib/conversation-font-size";
+import { findInOpenConversation } from "@/lib/find-in-conversation";
+import { isImeCompositionKeydown } from "@/lib/ime";
 import { resetWindowLayout } from "@/lib/layout-reset";
 import { isMac } from "@/lib/platform";
 import { useAppUpdateStore } from "@/stores/app-update";
@@ -103,6 +105,16 @@ export function useGlobalShortcuts({
       } else if (e.key === "k" || e.key === "K") {
         e.preventDefault();
         togglePalette();
+      } else if (!e.altKey && (e.key === "f" || e.key === "F")) {
+        // ⌘F (main chat ticket 28): find in the open conversation — the
+        // palette with it as the scope; with none open (the new-chat
+        // empty state, Settings) it is ⌘K. Like ⌘K it acts from any
+        // focused field; a key an IME is composing with stays the IME's.
+        // preventDefault: the webview's own find (WebView2's Ctrl+F bar)
+        // must not open as well.
+        if (isImeCompositionKeydown({ nativeEvent: e })) return;
+        e.preventDefault();
+        findInOpenConversation();
       } else if (e.key === ",") {
         e.preventDefault();
         // Same landing tab as the menu item, gear and palette entry.

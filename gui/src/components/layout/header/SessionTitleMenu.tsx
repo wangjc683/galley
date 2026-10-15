@@ -3,14 +3,24 @@ import {
   ArrowsClockwise,
   CaretDown,
   Cat,
+  Eraser,
+  MagnifyingGlass,
   PencilSimple,
 } from "@phosphor-icons/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import { ShortcutGlyphs } from "@/components/ui/shortcut-glyphs";
 import { useCopy } from "@/lib/i18n";
+import { formatShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 
 import { SessionTitleEditor } from "../SessionTitleEditor";
+import { SHORTCUT_TEXT_CLASS } from "../sidebar/SidebarNavIcons";
+
+const MENU_ITEM = cn(
+  "flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none",
+  "data-[highlighted]:bg-hover",
+);
 
 /** The title button's caret: muted, a step up on hover, turned while
  * the menu is open. Reads the trigger's `group` state, so a custom
@@ -57,21 +67,39 @@ export function SessionTitleCaret() {
  * chat is open (main chat ticket 18) — like tapping a contact's name in
  * an IM chat. It brings its own `SessionTitleCaret`, and the main chat
  * has no rename.
+ *
+ * Like an IM contact's profile page (main chat ticket 28, PRD ruling
+ * 77: WeChat's 查找聊天记录 / 清空聊天记录), the menu opens with
+ * 查找聊天记录… ⌘F — ⌘K's palette inside this conversation — and the
+ * main chat's ends with 重置主对话…, Settings' hold-to-confirm dialog,
+ * greyed with the reason while a conversation runs. The groups:
+ *
+ *   main chat:  查找 ─ 重新注入工具 / 桌面宠物 ─ 重置主对话
+ *   others:     查找 / 重命名 ─ 重新注入工具 / 桌面宠物
  */
 export function SessionTitleMenu({
   title,
   label,
+  onFind,
   onReinjectTools,
   onTogglePet,
   currentSessionHasPet,
   onRename,
+  onResetMainChat,
+  resetMainChatBlocked = false,
 }: {
   title: string;
   label?: ReactNode;
+  /** 查找聊天记录…: the palette scoped to this conversation. */
+  onFind?: () => void;
   onReinjectTools?: () => void;
   onTogglePet?: () => void;
   currentSessionHasPet?: boolean;
   onRename?: (newTitle: string) => void;
+  /** 重置主对话…: only the main chat on the managed runtime has it. */
+  onResetMainChat?: () => void;
+  /** A conversation runs: the reset item is greyed, the reason under it. */
+  resetMainChatBlocked?: boolean;
 }) {
   const copy = useCopy();
   const petHere = !!currentSessionHasPet;
@@ -85,6 +113,12 @@ export function SessionTitleMenu({
   // the about-to-unmount button and the input never wins focus on
   // mount — user has to click again.
   const renameRequestedRef = useRef(false);
+  // 查找聊天记录 and 重置主对话 open a modal that takes the focus (the
+  // palette's input, the confirm's Cancel). Opened while the menu is
+  // still up, that focus lands inside the menu's trap and is lost when
+  // the menu goes; so the item files its action here and it runs once
+  // the menu has closed, in place of the focus going back to the trigger.
+  const afterCloseRef = useRef<(() => void) | null>(null);
 
   const clearTitleClickTimer = () => {
     if (!titleClickTimerRef.current) return;
@@ -184,6 +218,12 @@ export function SessionTitleMenu({
               renameRequestedRef.current = false;
               e.preventDefault();
             }
+            const afterClose = afterCloseRef.current;
+            if (afterClose) {
+              afterCloseRef.current = null;
+              e.preventDefault();
+              afterClose();
+            }
           }}
           className={cn(
             // z-[70] is above the dev-toggle panel (z-[60] in
@@ -195,24 +235,43 @@ export function SessionTitleMenu({
             "text-[13px] text-ink shadow-elevated",
           )}
         >
-          {onRename && (
-            <>
-              <DropdownMenu.Item
-                onSelect={beginRename}
-                className={cn(
-                  "flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none",
-                  "data-[highlighted]:bg-hover",
-                )}
+          {onFind && (
+            <DropdownMenu.Item
+              onSelect={() => {
+                afterCloseRef.current = onFind;
+              }}
+              className={MENU_ITEM}
+            >
+              <MagnifyingGlass
+                size={14}
+                weight="thin"
+                className="text-ink-soft"
+              />
+              <span>{copy.topbar.findInChat}</span>
+              {/* The sidebar new-chat row's ⌘N hint; the item's text
+                  is its name. */}
+              <span
+                aria-hidden="true"
+                className={cn("ml-auto pl-6", SHORTCUT_TEXT_CLASS)}
               >
-                <PencilSimple
-                  size={14}
-                  weight="thin"
-                  className="text-ink-soft"
-                />
-                <span>{copy.topbar.rename}</span>
-              </DropdownMenu.Item>
-              <DropdownMenu.Separator className="my-1 h-px bg-line" />
-            </>
+                <ShortcutGlyphs text={formatShortcut("Mod+F")} />
+              </span>
+            </DropdownMenu.Item>
+          )}
+          {onRename && (
+            <DropdownMenu.Item
+              onSelect={beginRename}
+              className={cn(
+                "flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none",
+                "data-[highlighted]:bg-hover",
+              )}
+            >
+              <PencilSimple size={14} weight="thin" className="text-ink-soft" />
+              <span>{copy.topbar.rename}</span>
+            </DropdownMenu.Item>
+          )}
+          {(onFind || onRename) && (
+            <DropdownMenu.Separator className="my-1 h-px bg-line" />
           )}
           <DropdownMenu.Item
             onSelect={() => onReinjectTools?.()}
@@ -244,6 +303,52 @@ export function SessionTitleMenu({
               {petHere ? copy.topbar.closeDesktopPet : copy.topbar.desktopPet}
             </span>
           </DropdownMenu.Item>
+          {onResetMainChat && (
+            <>
+              <DropdownMenu.Separator className="my-1 h-px bg-line" />
+              <DropdownMenu.Item
+                disabled={resetMainChatBlocked}
+                onSelect={() => {
+                  afterCloseRef.current = onResetMainChat;
+                }}
+                className={cn(
+                  MENU_ITEM,
+                  "data-[disabled]:cursor-not-allowed",
+                  resetMainChatBlocked && "items-start",
+                )}
+              >
+                {/* Greyed like Settings' row (SettingsNavRow): the icon
+                    and the name dim, the reason under them does not —
+                    it is the one line worth reading. */}
+                <Eraser
+                  size={14}
+                  weight="thin"
+                  className={cn(
+                    "shrink-0 text-ink-soft",
+                    resetMainChatBlocked && "mt-[3px] opacity-60",
+                  )}
+                />
+                <span className="min-w-0">
+                  <span
+                    className={cn(
+                      "block",
+                      resetMainChatBlocked && "opacity-60",
+                    )}
+                  >
+                    {copy.topbar.resetMainChat}
+                  </span>
+                  {resetMainChatBlocked && (
+                    <span
+                      data-role="reset-main-chat-blocked"
+                      className="mt-0.5 block max-w-[232px] text-ui-tertiary leading-notice text-ink-muted"
+                    >
+                      {copy.settings.runtime.resetMainChat.runningBlock}
+                    </span>
+                  )}
+                </span>
+              </DropdownMenu.Item>
+            </>
+          )}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
