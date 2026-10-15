@@ -4,6 +4,7 @@ import { isValidElement, memo, useState, type ReactNode } from "react";
 import { AssistantBubble } from "@/components/conversation/AssistantParts";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { MessageActions } from "@/components/conversation/MessageActions";
+import type { AssistantProcessToggle } from "@/lib/assistant-conversation";
 import { useCopy } from "@/lib/i18n";
 import { isLeakedToolCallMarkup } from "@/lib/ipc/ga-output-cleaning";
 import { cn } from "@/lib/utils";
@@ -40,7 +41,7 @@ export const MessageAgent = memo(function MessageAgent({
   messageId,
   bubble = false,
   className,
-  leading,
+  process,
   attachment,
 }: {
   children: ReactNode;
@@ -50,13 +51,14 @@ export const MessageAgent = memo(function MessageAgent({
    * palette full-text hit on this answer can scroll to it. */
   messageId?: string;
   /** The assistant's conversation: the answer sits in a left bubble on
-   * the neutral ground; the action bar stays under it. */
+   * the neutral ground; the action bar under it is the assistant's,
+   * icons only. */
   bubble?: boolean;
   /** The answer's row margin (the assistant's IM grouping). */
   className?: string;
-  /** Always shown at the start of the action row: the assistant's
-   * 「N 步 ›」 entry. */
-  leading?: ReactNode;
+  /** The assistant's process button, last in the action bar: a reply of
+   * two steps or more. */
+  process?: AssistantProcessToggle;
   /** Between the bubble and its action row: the reply's subtask cards,
    * in the assistant's conversation. */
   attachment?: ReactNode;
@@ -68,15 +70,22 @@ export const MessageAgent = memo(function MessageAgent({
     // and looks broken; there is also no deliverable to Copy/Save.
     // Render an explanatory notice with the raw markup one click away.
     if (isLeakedToolCallMarkup(children)) {
-      return leading === undefined &&
+      return process === undefined &&
         attachment === undefined &&
         className === undefined ? (
         <ProtocolFailureNotice markup={children} />
       ) : (
-        <div className={className}>
+        // No copy or save (nothing to deliver); the process button
+        // alone, hovered in as the bar is.
+        <div className={cn("group/answer", className)}>
           <ProtocolFailureNotice markup={children} />
           {attachment}
-          {leading !== undefined && <div className="mt-1.5">{leading}</div>}
+          {process !== undefined && (
+            <MessageActions
+              source={children}
+              assistant={{ process, processOnly: true }}
+            />
+          )}
         </div>
       );
     }
@@ -96,7 +105,7 @@ export const MessageAgent = memo(function MessageAgent({
           <MessageActions
             source={children}
             telemetry={telemetry}
-            leading={leading}
+            assistant={bubble ? { process } : undefined}
           />
         )}
       </div>

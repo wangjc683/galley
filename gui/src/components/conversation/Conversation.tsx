@@ -3,7 +3,6 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   ASSISTANT_BUBBLE_MAX,
-  AssistantRunEntry,
   AssistantRunSteps,
   AssistantTimeDivider,
 } from "@/components/conversation/AssistantParts";
@@ -22,6 +21,7 @@ import { SystemMessageBubble } from "@/components/conversation/SystemMessageBubb
 import { ToolCallout } from "@/components/conversation/ToolCallout";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import {
+  type AssistantProcessToggle,
   type AssistantRowSide,
   assistantLinePlan,
   assistantRowGap,
@@ -609,8 +609,9 @@ export function Conversation({
 
   // A message row of the assistant's conversation: a user message, a
   // question it asked (answered: a pending one is the live bubble at the
-  // tail), the greeting with its time, or a run's answer with its
-  // 「N 步 ›」 entry, the steps that entry opens, and the subtask cards.
+  // tail), the greeting with its time, or a run's answer with the
+  // subtask cards, the process button in its action bar and the steps
+  // that button opens.
   // `previous` is the side of the message row right above, for the IM
   // gap.
   const renderLineRow = (
@@ -641,8 +642,8 @@ export function Conversation({
         </Fragment>
       );
     }
-    // The steps under the entry open on its toggle (the run fold's
-    // overrides, keyed the same way) and start closed.
+    // The steps under the action bar open on the process button (the
+    // run fold's overrides, keyed the same way) and start closed.
     const steps = linePlan?.steps.get(turnIndex);
     const open =
       steps !== undefined && foldOverrides[ordinal(steps.opener)] === true;
@@ -665,18 +666,18 @@ export function Conversation({
           bubble
           answerClassName={divider ? "mt-5" : gap}
           attachment={turn.messageId ? afterAnswer(turn.messageId) : undefined}
-          entry={
-            steps ? (
-              <AssistantRunEntry
-                stats={steps.stats}
-                open={open}
-                onToggle={() => toggleFold(steps.opener, !open)}
-              />
-            ) : undefined
+          process={
+            steps
+              ? { open, onToggle: () => toggleFold(steps.opener, !open) }
+              : undefined
           }
         />
         {steps && (
-          <AssistantRunSteps open={open}>
+          <AssistantRunSteps
+            open={open}
+            stats={steps.stats}
+            telemetry={runTelemetryOf.get(turnIndex) ?? turn.telemetry}
+          >
             {steps.members.map((m) => (
               <AgentTurnView
                 key={`step-${ordinal(m)}`}
@@ -783,7 +784,7 @@ export function Conversation({
   let prevSide: AssistantRowSide | null = null;
   turns.forEach((turn, turnIndex) => {
     // The assistant's conversation shows a run's steps only under its
-    // entry, and not at all while it runs.
+    // answer's process button, and not at all while it runs.
     if (
       linePlan &&
       !linePlan.message.has(turnIndex) &&
@@ -887,7 +888,7 @@ function AgentTurnView({
   runTelemetry,
   bubble = false,
   answerClassName,
-  entry,
+  process,
   noRule = false,
   attachment,
 }: {
@@ -927,8 +928,9 @@ function AgentTurnView({
   bubble?: boolean;
   /** The answer's row margin (the assistant's IM grouping). */
   answerClassName?: string;
-  /** The assistant's 「N 步 ›」 entry, leading the answer's action row. */
-  entry?: ReactNode;
+  /** The assistant's process button, last in the answer's action bar
+   * (a run of two steps or more). */
+  process?: AssistantProcessToggle;
   /** `markerOnly` without the StrongHr: the assistant's step region sits
    * under the answer, not before it. */
   noRule?: boolean;
@@ -1141,7 +1143,7 @@ function AgentTurnView({
             messageId={turn.messageId}
             bubble={bubble}
             className={answerClassName}
-            leading={entry}
+            process={process}
             attachment={attachment}
           >
             {answerText}

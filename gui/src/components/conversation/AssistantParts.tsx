@@ -1,19 +1,22 @@
-import { CaretRight } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { ExpandSection } from "@/components/conversation/ExpandSection";
+import { TokenMetrics } from "@/components/conversation/MessageActions";
 import { PinnedMessageTime } from "@/components/conversation/MessageUser";
 import { StepRegion } from "@/components/conversation/StepRegion";
 import { assistantLineClock } from "@/lib/assistant-conversation";
 import { useCopy } from "@/lib/i18n";
 import type { RunStats } from "@/lib/run-groups";
+import { formatCompactCount, telemetryInputTotal } from "@/lib/telemetry";
 import { cn } from "@/lib/utils";
+import type { MessageTelemetry } from "@/types/conversation";
 
 /*
  * The pieces only the assistant's conversation draws (rules in
  * lib/assistant-conversation.ts; spec: conversation.md 「助手的对话」):
- * its bubble, the centred time, the 「N 步 ›」 entry and the steps it
- * opens, and the one line while it works.
+ * its bubble, the centred time, the steps its process button opens
+ * (the button itself is a chip of the reply's action bar,
+ * MessageActions), and the one line while it works.
  */
 
 /** The reply bubble's width cap: wider than the user's (its content is
@@ -104,93 +107,99 @@ function durationText(
   return copy.conversation.foldDurationMinutes(Math.floor(sec / 60), sec % 60);
 }
 
+/** Its figures one ink rung up. */
+function inkFigures(text: string): ReactNode {
+  return text.split(/(\d+)/).map((part, i) =>
+    i % 2 === 1 ? (
+      <span key={i} className="text-ink-soft">
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
+}
+
 /**
- * Under a reply of two steps or more: 「9 步 · 用时 1 分 21 秒 ›」, the
- * fold header's structure segment alone — no tool scent — in the same
- * quiet ink (words ink-muted, digits one rung up), a trailing › that
- * turns down while open. It leads the reply's action row, so it sits
- * right under the reply and the hover-only copy / save chips come in
- * after it. Same disclosure grammar as the fold header: a button row,
- * Enter / Space, hover paint bleeding 8px left of the text.
+ * The opened steps' first line, the round in numbers (ruling 68):
+ * 「4 步 · 用时 45 秒 · ↑33k ↓1.1k」 — the fold header's structure
+ * segment (the old 「N 步 ›」 entry's words) and the action bar's ↑ ↓
+ * with their tips (TokenMetrics, the cache split included). It heads
+ * the region as the fold header heads the workbench's steps, a summary
+ * over the detail, the rail hanging from under its first figure, but
+ * it is no control: no hover ground, no caret, no click. Words
+ * ink-muted, figures ink-soft (the token counts whole), at the step
+ * size, on the old entry's 24px row. No context percentage, here or
+ * anywhere in the assistant's conversation. Without a duration (a
+ * segment that has no telemetry) it reads the step count alone;
+ * without tokens, no token segment.
  */
-export function AssistantRunEntry({
+function AssistantRunSummary({
   stats,
-  open,
-  onToggle,
+  telemetry,
 }: {
   stats: RunStats;
-  open: boolean;
-  onToggle: () => void;
+  telemetry?: MessageTelemetry | null;
 }) {
   const copy = useCopy();
   const steps = copy.conversation.foldSteps(stats.stepCount);
   const duration = durationText(stats.elapsedMs, copy);
-  const text = duration ? `${steps} · ${duration}` : steps;
+  const tokens = Boolean(
+    formatCompactCount(telemetryInputTotal(telemetry)) ||
+    formatCompactCount(telemetry?.outputTokens),
+  );
   return (
     <div
-      role="button"
-      tabIndex={0}
-      aria-expanded={open}
-      aria-label={
-        open ? copy.conversation.foldCollapse : copy.conversation.foldExpand
-      }
-      onClick={onToggle}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onToggle();
-        }
-      }}
-      data-role="assistant-run-entry"
-      className={cn(
-        "group/entry -ml-2 inline-flex h-6 cursor-default select-none items-center gap-1 rounded-sm px-2 tabular-nums tracking-[0.01em] text-ink-muted outline-none [font-size:var(--conversation-step-size)]",
-        "hover:bg-hover hover:text-ink focus-visible:bg-hover focus-visible:text-ink",
-      )}
+      data-role="assistant-run-summary"
+      className="h-6 whitespace-nowrap leading-6 tabular-nums tracking-[0.01em] text-ink-muted [font-size:var(--conversation-step-size)]"
     >
-      <span>
-        {text.split(/(\d+)/).map((part, i) =>
-          i % 2 === 1 ? (
-            <span
-              key={i}
-              className="text-ink-soft group-hover/entry:text-ink group-focus-visible/entry:text-ink"
-            >
-              {part}
-            </span>
-          ) : (
-            part
-          ),
-        )}
-      </span>
-      <CaretRight
-        size={11}
-        weight="thin"
-        className={cn(
-          "shrink-0 transition-transform duration-(--motion-slow)",
-          open && "rotate-90",
-        )}
-      />
+      {inkFigures(duration ? `${steps} · ${duration}` : steps)}
+      {tokens && (
+        <>
+          {" · "}
+          <span className="inline-flex items-center gap-1.5 align-middle">
+            <TokenMetrics
+              telemetry={telemetry}
+              valueClassName="text-ink-soft"
+            />
+          </span>
+        </>
+      )}
     </div>
   );
 }
 
 /**
- * The steps of a settled reply, opened in place under its entry: the
- * fold section's contents — markers, narration, tools — in the same
- * inset region with its rail, minus the questions and answers that
- * stay outside as messages. The first marker's 24px run gap is pulled
- * back to 8px so the list hangs from the entry.
+ * The steps of a settled reply, opened in place under its action row
+ * by the process button: the round's first line (AssistantRunSummary),
+ * then the fold section's contents — markers, narration, tools — in
+ * the same inset region with its rail, minus the questions and answers
+ * that stay outside as messages. 4px under the action row; the first
+ * marker's 24px run gap is pulled back to the fold header's 12px, the
+ * rail reaching up to just under the first line (StepRegion
+ * `railFrom="header"`). Coupling, as RunFoldSection's: a TurnMarker
+ * (mt-6) opens the region.
  */
 export function AssistantRunSteps({
   open,
+  stats,
+  telemetry,
   children,
 }: {
   open: boolean;
+  stats: RunStats;
+  /** The whole round's (run-groups `RunStats.telemetry`, else the
+   * answer turn's): what the action bar's ↑ ↓ read. */
+  telemetry?: MessageTelemetry | null;
   children: ReactNode;
 }) {
   return (
-    <ExpandSection open={open} openClassName="-mt-4" closedClassName="mt-0">
+    <ExpandSection open={open} openClassName="mt-1" closedClassName="mt-0">
       <div data-role="assistant-run-steps" className="pb-1">
-        <StepRegion>{children}</StepRegion>
+        <AssistantRunSummary stats={stats} telemetry={telemetry} />
+        <StepRegion railFrom="header" className="-mt-3">
+          {children}
+        </StepRegion>
       </div>
     </ExpandSection>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
+import { useAssistantSentence } from "@/hooks/useAssistantSentence";
 import { useSessionStatusView } from "@/hooks/useSessionStatusView";
 import { useSessionsAttention } from "@/hooks/useSessionsAttention";
 import {
@@ -21,10 +22,11 @@ import type { Session } from "@/types/session";
 
 /**
  * The assistant's state for its sidebar card and its header identity
- * (lib/assistant.ts): the main chat's live status, its unpromoted
- * subtasks' questions and errors, its unread mark. `subtasks` are the
- * main chat's unpromoted subtasks — an open one counts too. `open` is
- * the main chat or one of them being on screen.
+ * (lib/assistant.ts): the main chat's live status (while it runs, with
+ * the sentence its conversation's line says: useAssistantSentence), its
+ * unpromoted subtasks' questions and errors, its unread mark.
+ * `subtasks` are the main chat's unpromoted subtasks — an open one
+ * counts too. `open` is the main chat or one of them being on screen.
  */
 export function useAssistantState({
   mainChat,
@@ -37,6 +39,7 @@ export function useAssistantState({
 }): AssistantState {
   const copy = useCopy();
   const view = useSessionStatusView(mainChat);
+  const sentence = useAssistantSentence(mainChat.id, view.status === "running");
   const subtaskAttention = useSessionsAttention(subtasks, undefined);
   return assistantState(
     {
@@ -48,8 +51,7 @@ export function useAssistantState({
           : undefined,
       hasUnread: mainChat.hasUnread,
       open,
-      lastStepIndex: mainChat.lastStepIndex,
-      summary: mainChat.summary,
+      sentence,
       errorCount: mainChat.errorCount,
     },
     copy,

@@ -63,13 +63,15 @@ vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
   };
 });
 
-// The card reads the pending question and the last message from the
-// messages store, which static rendering only sees in its initial state
-// (lib/assistant.test.ts covers how they are worked out); seed them
-// here. Drafts come from the real composer-draft module.
+// The card reads the pending question, the last message and, while it
+// runs, the conversation line's sentence from the messages store, which
+// static rendering only sees in its initial state (lib/assistant.test.ts
+// and hooks/useAssistantSentence.test.ts cover how they are worked
+// out); seed them here. Drafts come from the real composer-draft module.
 const card = vi.hoisted(() => ({
   question: null as string | null,
   lastMessage: null as AssistantLastMessage | null,
+  sentence: null as string | null,
 }));
 vi.mock("@/hooks/useAssistantState", async (importOriginal) => {
   const actual =
@@ -78,6 +80,15 @@ vi.mock("@/hooks/useAssistantState", async (importOriginal) => {
     ...actual,
     usePendingQuestion: () => card.question,
     useAssistantLastMessage: () => card.lastMessage,
+  };
+});
+vi.mock("@/hooks/useAssistantSentence", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/hooks/useAssistantSentence")>();
+  return {
+    ...actual,
+    useAssistantSentence: (_id: string, running: boolean) =>
+      running ? card.sentence : null,
   };
 });
 
@@ -188,6 +199,7 @@ afterEach(() => {
   live.clear();
   card.question = null;
   card.lastMessage = null;
+  card.sentence = null;
   dropComposerDraft("s-main");
 });
 
@@ -383,9 +395,15 @@ describe("the assistant's card", () => {
     expect(asking).toMatch(/text-warning[^>]*>等你回复：</);
     expect(asking).toContain("text-ink-muted");
 
+    // Running: the conversation line's sentence, 「思考中」 before it
+    // says anything (ruling 68) — never 「第 N 步 · 摘要」.
     live.set("s-main", { status: "running" });
-    expect(textOf(say())).toBe(`第 2 步 · ${RECAP}`);
+    expect(textOf(say())).toBe("思考中");
+    card.sentence = "我先查一下花市几点开门。";
+    expect(textOf(say())).toBe("我先查一下花市几点开门。");
     expect(say()).toContain("text-brand-strong/85");
+    expect(say()).toContain("sidebar-step-tick");
+    card.sentence = null;
 
     live.clear();
     const draft = say();
@@ -394,6 +412,19 @@ describe("the assistant's card", () => {
 
     dropComposerDraft("s-main");
     expect(textOf(say())).toBe("好的");
+  });
+
+  it("reports no steps, while a workbench session running beside it keeps its 「第 N 步」", () => {
+    card.sentence = "我先查一下花市几点开门。";
+    const stepping = { ...sideChat, summary: "比较两班车", lastStepIndex: 3 };
+    live.set("s-main", { status: "running" });
+    live.set("s-side", { status: "running" });
+    const html = render([used, stepping]);
+    expect(textOf(lineOf(html))).toBe("我先查一下花市几点开门。");
+    expect(between(html, CARD, "</button>")).not.toMatch(/第 \d+ 步/);
+    expect(between(html, 'data-session-id="s-side"', "</button>")).toContain(
+      "第 3 步 · 比较两班车",
+    );
   });
 
   it("says 「等你回复」 alone when the question is not at hand, and a subtask's in its words", () => {

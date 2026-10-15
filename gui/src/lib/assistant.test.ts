@@ -23,11 +23,10 @@ const base: AssistantStateInput = {
   status: "idle",
   hasPendingAskUser: false,
   open: false,
-  summary: "查厦门明天的天气",
-  lastStepIndex: 4,
+  sentence: "我查一下厦门明天的天气。",
 };
-const state = (input: Partial<AssistantStateInput> = {}) =>
-  assistantState({ ...base, ...input }, zh);
+const state = (input: Partial<AssistantStateInput> = {}, copy = zh) =>
+  assistantState({ ...base, ...input }, copy);
 
 const user = (content: string, extra: Partial<UserTurn> = {}): UserTurn => ({
   role: "user",
@@ -74,12 +73,20 @@ describe("the assistant's state, in a session row's priority", () => {
   });
 
   it("words the state for the header: its own ahead of a subtask's, nothing at rest", () => {
+    // Running: the sentence the conversation's line says, else 「思考中」
+    // (ruling 68) — never a step count.
     expect(state({ status: "running" }).line).toEqual({
-      text: "第 4 步 · 查厦门明天的天气",
+      text: "我查一下厦门明天的天气。",
       tone: "running",
     });
-    expect(state({ status: "running", lastStepIndex: undefined }).line).toEqual(
-      { text: "思考中", tone: "running" },
+    for (const sentence of [null, undefined, ""]) {
+      expect(state({ status: "running", sentence }).line).toEqual({
+        text: "思考中",
+        tone: "running",
+      });
+    }
+    expect(state({ status: "running", sentence: null }, en).line?.text).toBe(
+      "Thinking",
     );
     expect(state({ status: "error", errorCount: 3 }).line?.text).toBe(
       "出错 · 3",
@@ -154,10 +161,14 @@ describe("the card's second line: error > question > running > draft > last mess
     ).toMatchObject({ text: "哪天出发？ 周五 周六" });
   });
 
-  it("says what it is doing while it runs", () => {
+  it("says what the conversation's line says while it runs, 「思考中」 before it says anything", () => {
     expect(line({ status: "running" })).toEqual({
       kind: "running",
-      text: "第 4 步 · 查厦门明天的天气",
+      text: "我查一下厦门明天的天气。",
+    });
+    expect(line({ status: "running", sentence: null })).toEqual({
+      kind: "running",
+      text: "思考中",
     });
   });
 

@@ -18,11 +18,12 @@ import { AssistantAvatar } from "./AssistantAvatar";
  * contact's name opens their page in an IM app.
  *
  * The second line is a chat title bar's (lib/assistant.ts): only a
- * state — running 「第 N 步 · 摘要」 / 「思考中」, 「等你回复」, an error,
- * a subtask's question or error — and nothing at rest. Unlike the
- * sidebar card it never quotes the question, the last message or a
- * draft: here they are all on screen, in the conversation and the
- * composer below.
+ * state — running, the sentence the line at the end of the conversation
+ * says, or 「思考中」 (ruling 68: the same words, on screen together);
+ * 「等你回复」, an error, a subtask's question or error — and nothing at
+ * rest. Unlike the sidebar card it never quotes the question, the last
+ * message or a draft: here they are all on screen, in the conversation
+ * and the composer below.
  *
  * The name is the session title's register (Inter 13px medium); the
  * line takes a row subline's (11px, brand while running, warning,

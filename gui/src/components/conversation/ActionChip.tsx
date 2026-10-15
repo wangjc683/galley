@@ -36,6 +36,12 @@ import { blurAfterClick, preventMouseFocus } from "@/lib/pointer-focus";
  *
  * Presentational only — callers own the copied / saved state and its
  * reset timer, and (for the hover row) the `revealed` flag.
+ *
+ * One chip is a disclosure, not a one-shot action: the assistant's
+ * process button (`expanded`; conversation.md 「助手的对话」). Same size,
+ * ink, hover ground and pointer-first focus as copy and save; open, it
+ * holds the hover ground with the ink one rung up (the pressed look),
+ * never the green Check, which means done.
  */
 const ACTION_CHIP_BASE = cn(
   "inline-flex select-none items-center justify-center rounded-sm",
@@ -58,6 +64,9 @@ export interface ActionChipProps {
    * it never shifts surrounding content.
    */
   revealed?: boolean;
+  /** A disclosure chip: its `aria-expanded`, and the pressed look while
+   * open. Undefined for copy / save. */
+  expanded?: boolean;
   tooltipSide?: TooltipSide;
   className?: string;
 }
@@ -71,6 +80,7 @@ export function ActionChip({
   onClick,
   variant = "inline",
   revealed = true,
+  expanded,
   tooltipSide,
   className,
 }: ActionChipProps) {
@@ -82,6 +92,7 @@ export function ActionChip({
       type="button"
       aria-label={label}
       aria-hidden={!revealed || undefined}
+      aria-expanded={expanded}
       tabIndex={-1}
       // Floating chip lives on a transient selection; every chip also
       // avoids mouse focus so hover-only UI doesn't stick after click.
@@ -97,7 +108,9 @@ export function ActionChip({
           : "size-6 border border-transparent",
         active
           ? "text-success"
-          : "text-ink-muted hover:bg-hover hover:text-ink-soft",
+          : expanded
+            ? "bg-hover text-ink"
+            : "text-ink-muted hover:bg-hover hover:text-ink-soft",
         !revealed && "pointer-events-none opacity-0",
         className,
       )}

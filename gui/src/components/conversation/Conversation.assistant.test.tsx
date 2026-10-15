@@ -14,8 +14,9 @@ import type {
   UserTurn,
 } from "@/types/conversation";
 
-// The steps under 「N 步 ›」 open on a click, which a static render cannot
-// make: with `expand.all` set, every ExpandSection renders as open.
+// The steps under a reply open on its process button, which a static
+// render cannot press: with `expand.all` set, every ExpandSection renders
+// as open (the button's own pressed state: MessageActions.test.tsx).
 const expand = vi.hoisted(() => ({ all: false }));
 vi.mock("@/components/conversation/ExpandSection", async (importOriginal) => {
   const actual =
@@ -62,7 +63,14 @@ function answer(text: string, index: number): AgentTurn {
     turnIndex: index,
     finalAnswer: text,
     tools: [tool("no_tool")],
-    telemetry: { elapsedMs: 9_000 },
+    // ↑33k ↓1.1k, the context 13% (13k of a 100k window).
+    telemetry: {
+      elapsedMs: 9_000,
+      inputTokens: 33_000,
+      outputTokens: 1_100,
+      contextUsedChars: 39_000,
+      contextLimitChars: 300_000,
+    },
     messageId: `a-${text}`,
   };
 }
@@ -143,6 +151,21 @@ function text(html: string): string {
   return html.replace(/<[^>]+>/g, "");
 }
 
+/** The `<button>` tags named `label` (the workbench's fold header is a
+ * div with the same words). */
+function buttons(html: string, label: string): string[] {
+  return [...html.matchAll(/<button[^>]*>/g)]
+    .map((m) => m[0])
+    .filter((tag) => tag.includes(`aria-label="${label}"`));
+}
+
+const BAR = 'class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1';
+const HIDDEN =
+  "pointer-events-none opacity-0 group-hover/answer:pointer-events-auto group-hover/answer:opacity-100";
+const INPUT = `aria-label="${zhCopy.conversation.telemetryInputTip("33k")}"`;
+const OUTPUT = `aria-label="${zhCopy.conversation.telemetryOutputTip("1.1k")}"`;
+const CONTEXT = zhCopy.conversation.telemetryContextTip("13k", "100k", "13%");
+
 const cards = (id: string): ReactNode =>
   id === "a-排好了。" ? <div data-role="subtask-cards">cards</div> : null;
 
@@ -153,7 +176,8 @@ describe("the assistant's conversation: only where asked", () => {
     // replies as prose, the times above the bubbles.
     expect(count(html, 'data-role="run-fold"')).toBeGreaterThan(0);
     expect(html).not.toContain('data-role="assistant-bubble"');
-    expect(html).not.toContain('data-role="assistant-run-entry"');
+    expect(html).not.toContain('data-role="assistant-run-summary"');
+    expect(buttons(html, zhCopy.conversation.foldExpand).length).toBe(0);
     expect(html).not.toContain('data-role="assistant-time-divider"');
     expect(html).not.toContain("ml-auto");
     expect(html).not.toContain("right-full");
@@ -235,27 +259,125 @@ describe("the assistant's conversation: bubbles", () => {
 });
 
 describe("the assistant's conversation: the process", () => {
-  it("leaves a quiet 「N 步」 entry under replies of two steps or more, and nothing under one-step ones", () => {
+  it("shows nothing under a reply at rest: its bar comes in on hover, icons only, no numbers", () => {
     const html = assistant(conversation());
-    expect(count(html, 'data-role="assistant-run-entry"')).toBe(2);
-    expect(text(html)).toContain("3 步 · 用时 9 秒");
-    expect(text(html)).toContain("4 步 · 用时 14 秒");
-    expect(text(html)).not.toContain("1 步");
-    // Closed: named as the fold header's toggle, the steps not drawn.
-    const entry = html.indexOf('data-role="assistant-run-entry"');
-    const tag = html.slice(
-      html.lastIndexOf("<", entry),
-      html.indexOf(">", entry) + 1,
-    );
-    expect(tag).toContain('role="button"');
-    expect(tag).toContain('aria-expanded="false"');
-    expect(tag).toContain(`aria-label="${zhCopy.conversation.foldExpand}"`);
+    // Every reply's bar (the greeting's and four answers') holds its place,
+    // hidden.
+    const bars = html.split(BAR).slice(1);
+    expect(bars.length).toBe(5);
+    for (const bar of bars) expect(bar.startsWith(` ${HIDDEN}"`)).toBe(true);
+    // No step count, no duration, no tokens, no context.
+    expect(text(html)).not.toMatch(/\d+ 步/);
+    expect(text(html)).not.toContain("用时");
+    expect(html).not.toContain(INPUT);
+    expect(html).not.toContain(OUTPUT);
+    expect(html).not.toContain(CONTEXT);
+    expect(html).not.toContain("13%");
+    expect(html).not.toContain('class="h-3 w-px bg-line"');
     expect(html).not.toContain('data-role="assistant-run-steps"');
     expect(html).not.toContain('data-role="step-marker"');
     expect(html).not.toContain("我先查一下船票。");
     // The question and the answer are out in the conversation.
     expect(count(html, 'data-role="answered-ask-user"')).toBe(1);
     expect(count(html, 'data-role="user-msg-reply"')).toBe(1);
+  });
+
+  it("gives replies of two steps or more a process button after copy and save, and one-step replies none", () => {
+    const html = assistant(conversation());
+    const process = buttons(html, zhCopy.conversation.foldExpand);
+    expect(process.length).toBe(2);
+    // Each bar: copy and save (the user's bubbles have a copy of their
+    // own, outside any bar).
+    const bars = html
+      .split(BAR)
+      .slice(1)
+      .map((rest) => rest.slice(0, rest.indexOf("</div></div>")));
+    expect(bars.length).toBe(5);
+    for (const bar of bars) {
+      expect(buttons(bar, zhCopy.conversation.copy).length).toBe(1);
+      expect(buttons(bar, zhCopy.conversation.save).length).toBe(1);
+    }
+    expect(
+      bars.filter((bar) => bar.includes(zhCopy.conversation.foldExpand)),
+    ).toHaveLength(2);
+    for (const tag of process) {
+      // The chips' family: pointer-first, closed, no number.
+      expect(tag).toContain('tabindex="-1"');
+      expect(tag).toContain('aria-expanded="false"');
+      expect(tag).toContain("size-6 border border-transparent text-ink-muted");
+      expect(tag).not.toMatch(/\d+ 步/);
+    }
+    // Last in its bar: copy, save, then it.
+    for (const tag of process) {
+      const at = html.indexOf(tag);
+      const bar = html.slice(html.lastIndexOf(BAR, at), at);
+      expect(
+        bar.indexOf(`aria-label="${zhCopy.conversation.copy}"`),
+      ).toBeLessThan(bar.indexOf(`aria-label="${zhCopy.conversation.save}"`));
+      expect(bar).toContain(`aria-label="${zhCopy.conversation.save}"`);
+      expect(
+        html.slice(at + tag.length, html.indexOf("</div>", at)),
+      ).not.toContain("<button");
+    }
+    // Under the one-step answers: copy and save only.
+    for (const reply of ["多云，记得带伞。", "不客气。"]) {
+      const at = html.indexOf(reply);
+      const bar = html.slice(html.indexOf(BAR, at));
+      const end = bar.indexOf("</div></div>");
+      expect(bar.slice(0, end)).not.toContain(zhCopy.conversation.foldExpand);
+    }
+  });
+
+  it("heads the opened steps with the round's numbers: steps, duration, ↑ ↓, no context", () => {
+    expand.all = true;
+    const html = assistant(conversation());
+    const summaries = html
+      .split('data-role="assistant-run-summary"')
+      .slice(1)
+      .map((rest) => rest.slice(0, rest.indexOf("</div>")));
+    expect(summaries.length).toBe(2);
+    // One segment with tokens: 「3 步 · 用时 9 秒 · ↑33k ↓1.1k」, the
+    // figures one rung up, ↑ ↓ with the action bar's tips.
+    const [three, four] = summaries;
+    expect(text(`<x ${three}`)).toMatch(/^3 步 · 用时 9 秒 · 33k1.1k/);
+    expect(three).toContain(INPUT);
+    expect(three).toContain(OUTPUT);
+    expect(three).toContain('<span class="text-ink-soft">3</span>');
+    expect(three).toContain(
+      '<span class="leading-none text-ink-soft">33k</span>',
+    );
+    expect(three).toContain(
+      "text-ink-muted [font-size:var(--conversation-step-size)]",
+    );
+    // The question's segment has no tokens: the steps and duration alone.
+    expect(text(`<x ${four}`)).toMatch(/^4 步 · 用时 14 秒$/);
+    expect(four).not.toContain("aria-label=");
+    // No context percentage, opened or not; not a control.
+    expect(html).not.toContain(CONTEXT);
+    expect(html).not.toContain("13%");
+    for (const summary of summaries) {
+      expect(summary).not.toContain('role="button"');
+      expect(summary).not.toContain("hover:bg-hover");
+      expect(summary).not.toContain(
+        '<svg class="shrink-0 transition-transform',
+      );
+    }
+    // It sits above the rail, which hangs from under it.
+    const steps = html.indexOf('data-role="assistant-run-steps"');
+    const region = html.slice(steps);
+    expect(region.indexOf('data-role="assistant-run-summary"')).toBeLessThan(
+      region.indexOf("absolute bottom-0 left-[5px] w-px bg-line -top-2.5"),
+    );
+  });
+
+  it("keeps the workbench's reply bar: copy, save | ↑ ↓ and the context", () => {
+    const html = render(conversation());
+    expect(html).toContain(INPUT);
+    expect(html).toContain(OUTPUT);
+    expect(html).toContain(CONTEXT);
+    expect(html).toContain('class="h-3 w-px bg-line"');
+    expect(buttons(html, zhCopy.conversation.foldExpand).length).toBe(0);
+    expect(html).not.toContain('data-role="assistant-run-summary"');
   });
 
   it("opens the steps in place without repeating the question or the answer", () => {
@@ -289,7 +411,7 @@ describe("the assistant's conversation: the process", () => {
     const html = assistant(turns);
     expect(count(html, 'data-role="step-marker"')).toBe(3);
     expect(html).toContain("我去下单。");
-    expect(html).not.toContain('data-role="assistant-run-entry"');
+    expect(buttons(html, zhCopy.conversation.foldExpand).length).toBe(0);
   });
 });
 

@@ -1,10 +1,11 @@
 import type { AppCopy } from "@/i18n/types";
+import { cleanPartialContent } from "@/lib/ipc/ga-output-cleaning";
 import type { RunGroup, RunStats } from "@/lib/run-groups";
 import { cleanSessionSummary } from "@/lib/session-summary";
 import type { Turn } from "@/types/conversation";
 
 /**
- * The assistant's conversation (main chat PRD rulings 66, 67; spec:
+ * The assistant's conversation (main chat PRD rulings 66–68; spec:
  * docs/design/conversation.md 「助手的对话」): the main chat, open in the
  * main area, reads as a long IM with one person rather than as the
  * workbench's task record. MainView's `isMainChat` is the gate; every
@@ -19,10 +20,15 @@ import type { Turn } from "@/types/conversation";
  *             (`assistantRowGap`).
  *   process   while it works, one line at the conversation's end: the
  *             latest sentence it wrote (`assistantLineSentence`), with
- *             the round's clock past 3s, and nothing else. The reply
- *             appears whole once the round has its answer. A reply of
- *             two steps or more keeps a quiet 「N 步 · 用时 … ›」 that
- *             opens its steps in place; its questions and the user's
+ *             the round's clock past 3s, and nothing else; the sidebar
+ *             card and the header say the same sentence
+ *             (`assistantCachedSentence`). The reply appears whole once
+ *             the round has its answer. Under it nothing shows at rest:
+ *             the action bar comes in on hover, icons only (copy, save,
+ *             and for a reply of two steps or more the process button,
+ *             which opens its steps in place, headed by the round's
+ *             numbers — 「4 步 · 用时 45 秒 · ↑33k ↓1.1k」; no context
+ *             percentage anywhere). Its questions and the user's
  *             answers stay in the conversation as messages; a run
  *             without an answer unfolds in full (`assistantLinePlan`).
  *   time      the send time at a break as a centred line between two
@@ -45,7 +51,7 @@ import type { Turn } from "@/types/conversation";
 
 /** The side of the message row above, for the row gap: a reply row
  * (`agent-bar`) ends with its action row's reserved 30px (the
- * hover-only copy / save, and the 「N 步 ›」 entry). */
+ * hover-only copy, save and process button). */
 export type AssistantRowSide = "user" | "agent" | "agent-bar";
 
 /**
@@ -139,6 +145,51 @@ export function assistantLineSentence(
   return null;
 }
 
+let sentenceCache: {
+  turns: readonly Turn[];
+  inFlightContent: string;
+  sentence: string | null;
+} | null = null;
+
+/**
+ * The line's sentence from the main chat's message cache, raw stream and
+ * all: the sidebar card and the header say it while the assistant runs,
+ * so all three say one sentence (ruling 68). The stream is cleaned as
+ * MainView cleans it (`cleanPartialContent`, trimmed), then
+ * `assistantLineSentence` — the same edges as the line.
+ *
+ * Kept for the last (turns, stream) pair: their selectors run on every
+ * store write (any session's, every chunk), and the card and the header
+ * read the same pair, so the regex passes over the stream run once per
+ * chunk, and not at all for a write that leaves the pair as it was.
+ * The string result is what keeps the two from re-rendering per chunk:
+ * a selector that returns an equal string updates nothing.
+ */
+export function assistantCachedSentence(
+  turns: readonly Turn[],
+  inFlightContent: string,
+): string | null {
+  if (
+    sentenceCache?.turns === turns &&
+    sentenceCache.inFlightContent === inFlightContent
+  ) {
+    return sentenceCache.sentence;
+  }
+  const streaming = inFlightContent
+    ? cleanPartialContent(inFlightContent).trim()
+    : "";
+  const sentence = assistantLineSentence(turns, streaming);
+  sentenceCache = { turns, inFlightContent, sentence };
+  return sentence;
+}
+
+/** The process button under a reply of two steps or more: whether its
+ * steps are open, and the toggle (Conversation's run-fold overrides). */
+export interface AssistantProcessToggle {
+  open: boolean;
+  onToggle: () => void;
+}
+
 /**
  * What the conversation draws of each run (Conversation renders it):
  *
@@ -147,7 +198,7 @@ export function assistantLineSentence(
  *             questions and its answer.
  *   question  agent turns drawn as their ask_user question only.
  *   steps     closing turn → its run's agent turns (the step region
- *             under the 「N 步 ›」 entry), for runs of two steps or more.
+ *             the process button opens), for runs of two steps or more.
  *             The question steps are in it too (minus the echo); the
  *             answers are not.
  *   flat      turns of runs drawn the workbench way, by opener: runs

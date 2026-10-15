@@ -4,6 +4,7 @@ import {
   Check,
   Copy,
   FloppyDisk,
+  Footprints,
   Gauge,
 } from "@phosphor-icons/react";
 import { save } from "@tauri-apps/plugin-dialog";
@@ -19,6 +20,7 @@ import {
 
 import { ActionChip } from "@/components/conversation/ActionChip";
 import { TooltipLabel } from "@/components/ui/tooltip";
+import type { AssistantProcessToggle } from "@/lib/assistant-conversation";
 import { useCopy } from "@/lib/i18n";
 import {
   contextUsagePercentLabel,
@@ -70,21 +72,31 @@ import type { MessageTelemetry } from "@/types/conversation";
  *
  * State machine per button: idle → done (1.5s) → idle. Two refs
  * so timers can be cleared on unmount or rapid re-clicks.
+ *
+ * The assistant's replies take this bar their own way (`assistant`;
+ * conversation.md 「助手的对话」, main chat PRD ruling 68): icons only —
+ * copy, save and, under a reply of two steps or more, the process
+ * button last — and no numbers: no tokens (they head the opened steps)
+ * and no context percentage (not drawn in the assistant's conversation
+ * at all). While the steps are open the whole bar stays visible, the
+ * process button pressed.
  */
 
 interface MessageActionsProps {
   /** Markdown source to operate on. */
   source: string;
   telemetry?: MessageTelemetry;
-  /** Shown at the row's start at all times, with the hover-revealed
-   * chips after it: the assistant's 「N 步 ›」 entry under a reply. */
-  leading?: ReactNode;
+  /** A reply in the assistant's conversation: icons only, `process`
+   * for a reply of two steps or more (`processOnly` under leaked
+   * tool-call markup, which has nothing to copy or save). Without it,
+   * the workbench's bar. */
+  assistant?: { process?: AssistantProcessToggle; processOnly?: boolean };
 }
 
 export function MessageActions({
   source,
   telemetry,
-  leading,
+  assistant,
 }: MessageActionsProps) {
   const copy = useCopy();
   const [copied, setCopied] = useState(false);
@@ -142,49 +154,15 @@ export function MessageActions({
     }
   };
 
+  const process = assistant?.process;
+  // The process button pressed keeps the bar up, as a copied / saved
+  // flash does: pinning the button alone would leave it floating right
+  // of two transparent chips that still hold their place.
   const hidden =
     !copied &&
     !saved &&
+    !process?.open &&
     "pointer-events-none opacity-0 group-hover/answer:pointer-events-auto group-hover/answer:opacity-100";
-  const chips = (
-    <>
-      <div className="flex items-center gap-0.5">
-        <ActionChip
-          active={copied}
-          idleIcon={<Copy size={14} weight="thin" />}
-          activeIcon={<Check size={14} weight="bold" />}
-          idleLabel={copy.conversation.copy}
-          activeLabel={copy.conversation.copied}
-          onClick={() => void onCopy()}
-        />
-        <ActionChip
-          active={saved}
-          idleIcon={<FloppyDisk size={14} weight="thin" />}
-          activeIcon={<Check size={14} weight="bold" />}
-          idleLabel={copy.conversation.save}
-          activeLabel={copy.conversation.saved}
-          onClick={() => void onSave()}
-        />
-      </div>
-      <AnswerTelemetry telemetry={telemetry} />
-    </>
-  );
-
-  if (leading !== undefined) {
-    return (
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
-        {leading}
-        <div
-          className={cn(
-            "flex flex-wrap items-center gap-x-1.5 gap-y-1",
-            hidden,
-          )}
-        >
-          {chips}
-        </div>
-      </div>
-    );
-  }
   return (
     <div
       className={cn(
@@ -192,7 +170,47 @@ export function MessageActions({
         hidden,
       )}
     >
-      {chips}
+      <div className="flex items-center gap-0.5">
+        {!assistant?.processOnly && (
+          <>
+            <ActionChip
+              active={copied}
+              idleIcon={<Copy size={14} weight="thin" />}
+              activeIcon={<Check size={14} weight="bold" />}
+              idleLabel={copy.conversation.copy}
+              activeLabel={copy.conversation.copied}
+              onClick={() => void onCopy()}
+            />
+            <ActionChip
+              active={saved}
+              idleIcon={<FloppyDisk size={14} weight="thin" />}
+              activeIcon={<Check size={14} weight="bold" />}
+              idleLabel={copy.conversation.save}
+              activeLabel={copy.conversation.saved}
+              onClick={() => void onSave()}
+            />
+          </>
+        )}
+        {process && (
+          // The steps' disclosure (a chip, `tabIndex={-1}` like its
+          // two neighbours): the fold header's words for its tooltip,
+          // no numbers.
+          <ActionChip
+            active={false}
+            expanded={process.open}
+            idleIcon={<Footprints size={14} weight="thin" />}
+            activeIcon={<Footprints size={14} weight="thin" />}
+            idleLabel={
+              process.open
+                ? copy.conversation.foldCollapse
+                : copy.conversation.foldExpand
+            }
+            activeLabel={copy.conversation.foldCollapse}
+            onClick={process.onToggle}
+          />
+        )}
+      </div>
+      {!assistant && <AnswerTelemetry telemetry={telemetry} />}
     </div>
   );
 }
@@ -205,6 +223,11 @@ export function MessageActions({
  * counter already ticks. This line is what the run COST the machine;
  * the fold header is how LONG the run lived. Territory table in
  * `.scratch/conversation-run-fold/PRD.md`.
+ *
+ * Not under the assistant's replies (ruling 68): their ↑ ↓ head the
+ * opened steps (TokenMetrics, in AssistantParts' first line), and the
+ * context percentage is not drawn there — the assistant has no action
+ * for it, and it would show the segment breaks the conversation hides.
  */
 function AnswerTelemetry({
   telemetry,
@@ -219,15 +242,6 @@ function AnswerTelemetry({
 
   if (!hasTelemetry) return null;
 
-  // The `↑` total folds cache reads in, which bill at ~0.1x fresh input —
-  // without the split a cache-heavy turn reads as expensive when it is not.
-  const cached = formatCompactCount(telemetryCachedInput(telemetry));
-  const inputTip =
-    input && cached
-      ? copy.conversation.telemetryInputCachedTip(input, cached)
-      : input
-        ? copy.conversation.telemetryInputTip(input)
-        : "";
   const contextTokens = contextUsageTokens(telemetry);
   const contextTipText = contextTokens
     ? copy.conversation.telemetryContextTip(
@@ -260,26 +274,7 @@ function AnswerTelemetry({
           "[font-variant-numeric:tabular-nums]",
         ].join(" ")}
       >
-        {input && (
-          <TooltipLabel text={inputTip}>
-            <Metric
-              ariaLabel={inputTip}
-              icon={<ArrowUp size={12} weight="thin" />}
-            >
-              {input}
-            </Metric>
-          </TooltipLabel>
-        )}
-        {output && (
-          <TooltipLabel text={copy.conversation.telemetryOutputTip(output)}>
-            <Metric
-              ariaLabel={copy.conversation.telemetryOutputTip(output)}
-              icon={<ArrowDown size={12} weight="thin" />}
-            >
-              {output}
-            </Metric>
-          </TooltipLabel>
-        )}
+        <TokenMetrics telemetry={telemetry} />
         {context && (
           <TooltipLabel text={contextTip}>
             <Metric
@@ -295,6 +290,61 @@ function AnswerTelemetry({
   );
 }
 
+/**
+ * The ↑ ↓ token counts with their tooltips: the machine invoice's
+ * first two metrics, and the token segment of the assistant's opened
+ * steps (AssistantParts). Nothing when neither count is known.
+ * `valueClassName` inks the counts (the steps' first line lifts its
+ * figures a rung).
+ */
+export function TokenMetrics({
+  telemetry,
+  valueClassName,
+}: {
+  telemetry?: MessageTelemetry | null;
+  valueClassName?: string;
+}) {
+  const copy = useCopy();
+  const input = formatCompactCount(telemetryInputTotal(telemetry));
+  const output = formatCompactCount(telemetry?.outputTokens);
+  if (!input && !output) return null;
+  // The `↑` total folds cache reads in, which bill at ~0.1x fresh input —
+  // without the split a cache-heavy turn reads as expensive when it is not.
+  const cached = formatCompactCount(telemetryCachedInput(telemetry));
+  const inputTip =
+    input && cached
+      ? copy.conversation.telemetryInputCachedTip(input, cached)
+      : input
+        ? copy.conversation.telemetryInputTip(input)
+        : "";
+  return (
+    <>
+      {input && (
+        <TooltipLabel text={inputTip}>
+          <Metric
+            ariaLabel={inputTip}
+            icon={<ArrowUp size={12} weight="thin" />}
+            valueClassName={valueClassName}
+          >
+            {input}
+          </Metric>
+        </TooltipLabel>
+      )}
+      {output && (
+        <TooltipLabel text={copy.conversation.telemetryOutputTip(output)}>
+          <Metric
+            ariaLabel={copy.conversation.telemetryOutputTip(output)}
+            icon={<ArrowDown size={12} weight="thin" />}
+            valueClassName={valueClassName}
+          >
+            {output}
+          </Metric>
+        </TooltipLabel>
+      )}
+    </>
+  );
+}
+
 /** forwardRef + prop spread so Radix Tooltip's `asChild` trigger can
  * attach its ref and pointer/focus handlers — without them the tooltip
  * silently never opens. */
@@ -304,8 +354,9 @@ const Metric = forwardRef<
     ariaLabel: string;
     icon: ReactNode;
     children: ReactNode;
+    valueClassName?: string;
   } & HTMLAttributes<HTMLSpanElement>
->(function Metric({ ariaLabel, icon, children, ...rest }, ref) {
+>(function Metric({ ariaLabel, icon, children, valueClassName, ...rest }, ref) {
   return (
     <span
       ref={ref}
@@ -319,7 +370,7 @@ const Metric = forwardRef<
       >
         {icon}
       </span>
-      <span className="leading-none">{children}</span>
+      <span className={cn("leading-none", valueClassName)}>{children}</span>
     </span>
   );
 });

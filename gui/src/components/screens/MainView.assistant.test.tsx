@@ -124,14 +124,17 @@ const CORNER_CLOCK = `aria-label="${zhCopy.conversation.runWorking}`;
 
 describe("the main chat is the assistant's conversation", () => {
   it("draws the main chat as the assistant's and every other conversation (a subtask, the external runtime) as before", () => {
+    // The process button: a <button> chip (the fold header is a div
+    // with the same words).
+    const PROCESS = `<button type="button" aria-label="${zhCopy.conversation.foldExpand}"`;
     const main = render({ isMainChat: true });
     expect(main).toContain('data-role="assistant-bubble"');
     expect(main).toContain("ml-auto max-w-[min(80%,560px)]");
-    expect(main).toContain('data-role="assistant-run-entry"');
+    expect(count(main, PROCESS)).toBe(1);
     const other = render({ isMainChat: false });
     expect(other).not.toContain('data-role="assistant-bubble"');
     expect(other).not.toContain("max-w-[min(80%,560px)]");
-    expect(other).not.toContain('data-role="assistant-run-entry"');
+    expect(other).not.toContain(PROCESS);
     expect(other).toContain('data-role="run-fold"');
   });
 

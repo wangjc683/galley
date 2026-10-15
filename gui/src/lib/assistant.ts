@@ -2,7 +2,6 @@ import type { AppCopy } from "@/i18n/types";
 import { mergedAskUserArgs } from "@/lib/ask-user-candidates";
 import { dropPathBasename } from "@/lib/file-drop";
 import { stripGATags } from "@/lib/ipc/ga-output-cleaning";
-import { displaySessionSummary } from "@/lib/session-summary";
 import type { MessageAttachment, Turn } from "@/types/conversation";
 import type { SessionStatus } from "@/types/session";
 
@@ -24,6 +23,13 @@ import type { SessionStatus } from "@/types/session";
  *     (not the question: it is right below, in the conversation), an
  *     error, a subtask's — and nothing at rest. The last message and
  *     the draft are both on screen there already.
+ *
+ * Running, both say what the line at the end of the conversation says
+ * (ruling 68): the sentence it is writing, else its latest narration
+ * since your last message (`assistantLineSentence`), else 「思考中」 —
+ * never a step count. The assistant reports no steps anywhere; the
+ * subtasks it sends off are task conversations and keep their 「第 N 步」
+ * (lib/subtasks.ts), as the workbench's session rows do.
  */
 
 export type AssistantStateKind =
@@ -60,8 +66,9 @@ export interface AssistantStateInput {
   hasUnread?: boolean;
   /** The main chat, or one of its subtasks, is open: nothing is unread. */
   open: boolean;
-  lastStepIndex?: number;
-  summary?: string;
+  /** While it runs: the line's sentence (`assistantCachedSentence`),
+   * null for 「思考中」. */
+  sentence?: string | null;
   errorCount?: number;
 }
 
@@ -114,16 +121,9 @@ export function assistantState(
     };
   }
   if (input.status === "running") {
-    const summary = input.summary
-      ? displaySessionSummary(input.summary, copy.sidebar.turnProtocolFailure)
-      : null;
-    const text =
-      input.lastStepIndex != null && summary
-        ? copy.sidebar.stepSummary(input.lastStepIndex, summary)
-        : copy.sidebar.thinking;
     return {
       kind: "running",
-      line: { text, tone: "running" },
+      line: { text: input.sentence || copy.sidebar.thinking, tone: "running" },
       fromSubtask: false,
     };
   }
@@ -154,7 +154,7 @@ export interface AssistantLastMessage {
  *   error    「出错」 / 「出错 · N」 / 「子任务出错」          red
  *   ask      「等你回复：」 + the question, or 「等你回复」,   amber prefix
  *            or 「子任务在问你」
- *   running  「第 N 步 · 摘要」 / 「思考中」                   brand
+ *   running  the line's sentence / 「思考中」                   brand
  *   draft    「草稿：」 + the draft, or 「[图片]」             brand prefix
  *   message  「你：」 for the user's own, then the message      muted
  */

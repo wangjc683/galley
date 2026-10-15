@@ -63,9 +63,24 @@ vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
   };
 });
 
+// While it runs, the line says the conversation line's sentence, which
+// the store holds and a static render cannot see; seed it here
+// (hooks/useAssistantSentence.test.ts covers how it is worked out).
+const running = vi.hoisted(() => ({ sentence: null as string | null }));
+vi.mock("@/hooks/useAssistantSentence", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/hooks/useAssistantSentence")>();
+  return {
+    ...actual,
+    useAssistantSentence: (_id: string, isRunning: boolean) =>
+      isRunning ? running.sentence : null,
+  };
+});
+
 afterEach(() => {
   live.clear();
   subtaskAsking.on = false;
+  running.sentence = null;
 });
 
 const mainChat = makeSession({
@@ -149,8 +164,16 @@ describe("the open main chat's header", () => {
   });
 
   it("says only a state: running, waiting without the question, an error, a subtask's", () => {
+    // Running: the conversation line's sentence (ruling 68), 「思考中」
+    // before it says anything — not 「第 N 步 · 摘要」, though the main
+    // chat has both.
     live.set("s-main", { status: "running" });
-    expect(statusLine(header())).toBe("第 2 步 · 查厦门明天的天气");
+    expect(statusLine(header())).toBe("思考中");
+    running.sentence = "我按 10 月 17 日和 18 日这两天查。";
+    expect(statusLine(header())).toBe("我按 10 月 17 日和 18 日这两天查。");
+    expect(header()).toMatch(
+      /data-role="assistant-status-line"[^>]*text-brand-strong\/85/,
+    );
 
     live.set("s-main", { status: "running", hasPendingAskUser: true });
     const asking = header();
