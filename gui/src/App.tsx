@@ -90,6 +90,8 @@ function App() {
 
   const paletteOpen = useUiStore((s) => s.paletteOpen);
   const setPaletteOpen = useUiStore((s) => s.setPaletteOpen);
+  const paletteScope = useUiStore((s) => s.paletteScope);
+  const dropPaletteScope = useUiStore((s) => s.dropPaletteScope);
   const requestLocate = useUiStore((s) => s.requestLocate);
   const requestReview = useUiStore((s) => s.requestReview);
 
@@ -586,6 +588,8 @@ function App() {
                   }
                   // The main chat keeps its name (ticket 02).
                   canRenameSession={!activeSession?.mainChat}
+                  // …and its menu ends with 重置主对话… (ticket 28).
+                  isMainChat={Boolean(activeSession?.mainChat)}
                   // A subtask the user has not written in has no sidebar
                   // row; 「Galley ›」 before its title is the way back to
                   // the main chat (ticket 06a).
@@ -717,6 +721,9 @@ function App() {
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
+        // ⌘F / the title menu's 查找聊天记录: one conversation (ticket 28).
+        scope={paletteScope}
+        onDropScope={dropPaletteScope}
         sessions={paletteSessions}
         sessionKeywords={paletteKeywords}
         runtimeKind={activeRuntimeKind}

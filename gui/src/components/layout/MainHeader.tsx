@@ -105,6 +105,18 @@ export interface MainHeaderProps {
    */
   onRenameSession?: (newTitle: string) => void;
   /**
+   * The title menu's first item, 查找聊天记录… ⌘F: the command palette
+   * searching only this conversation (main chat ticket 28).
+   */
+  onFindInChat?: () => void;
+  /**
+   * 重置主对话…, the main chat's last item (ticket 28): opens Settings'
+   * hold-to-confirm dialog. Passed only for the main chat on the managed
+   * runtime; `resetMainChatBlocked` greys it while a conversation runs.
+   */
+  onResetMainChat?: () => void;
+  resetMainChatBlocked?: boolean;
+  /**
    * The leftmost slot, before the title — the sidebar toggle while
    * there is a main chat (SidebarCollapseToggle, which clears the macOS
    * traffic lights itself while the sidebar is collapsed).
@@ -206,6 +218,9 @@ export function MainHeader({
   onTogglePet,
   currentSessionHasPet = false,
   onRenameSession,
+  onFindInChat,
+  onResetMainChat,
+  resetMainChatBlocked = false,
   leading,
   breadcrumb,
   identity,
@@ -307,10 +322,13 @@ export function MainHeader({
           <SessionTitleMenu
             title={sessionTitle}
             label={identity}
+            onFind={onFindInChat}
             onReinjectTools={onReinjectTools}
             onTogglePet={onTogglePet}
             currentSessionHasPet={currentSessionHasPet}
             onRename={onRenameSession}
+            onResetMainChat={onResetMainChat}
+            resetMainChatBlocked={resetMainChatBlocked}
           />
         ) : (
           <span

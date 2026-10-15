@@ -1027,31 +1027,198 @@ async fn gui_search_message_hits_runtime_filter_limits_fts_and_like() {
 
     let galley = SqliteGalley::from_pool(pool);
     let managed_hits = galley
-        .search_message_hits("guitoken".into(), 20, Some(RuntimeKind::Managed))
+        .search_message_hits("guitoken".into(), 20, Some(RuntimeKind::Managed), None)
         .await
         .expect("managed gui fts search");
     assert_eq!(managed_hits.len(), 1);
     assert_eq!(managed_hits[0].session_id, "sess_managed");
 
     let external_hits = galley
-        .search_message_hits("guitoken".into(), 20, Some(RuntimeKind::External))
+        .search_message_hits("guitoken".into(), 20, Some(RuntimeKind::External), None)
         .await
         .expect("external gui fts search");
     assert_eq!(external_hits.len(), 1);
     assert_eq!(external_hits[0].session_id, "sess_external");
 
     let all_runtime_hits = galley
-        .search_message_hits("guitoken".into(), 20, None)
+        .search_message_hits("guitoken".into(), 20, None, None)
         .await
         .expect("all-runtime gui fts search");
     assert_eq!(all_runtime_hits.len(), 2);
 
     let managed_like_hits = galley
-        .search_message_hits("猫猫".into(), 20, Some(RuntimeKind::Managed))
+        .search_message_hits("猫猫".into(), 20, Some(RuntimeKind::Managed), None)
         .await
         .expect("managed gui like search");
     assert_eq!(managed_like_hits.len(), 1);
     assert_eq!(managed_like_hits[0].session_id, "sess_managed");
+}
+
+/// The GUI search inside one conversation (main chat ticket 28: 查找聊天
+/// 记录 and ⌘F): `session_id` keeps that conversation's hits, the latest
+/// first in transcript order; every hit carries its message's time;
+/// without `session_id` the hits are every conversation's, the most
+/// recently active first, as before.
+#[tokio::test]
+async fn gui_search_message_hits_filter_by_session_and_carry_created_at() {
+    let pool = fresh_pool().await;
+    // The main chat is the less recently active one, so an unfiltered
+    // search lists the other conversation's hit first.
+    seed_session_with_runtime(
+        &pool,
+        "sess_main",
+        "main",
+        "idle",
+        "2026-10-15T09:00:00Z",
+        "managed",
+    )
+    .await;
+    seed_session_with_runtime(
+        &pool,
+        "sess_other",
+        "other",
+        "idle",
+        "2026-10-15T10:00:00Z",
+        "managed",
+    )
+    .await;
+    // Written out of id order on purpose: the order is the transcript's,
+    // not the ids'.
+    seed_message(
+        &pool,
+        "m_c",
+        "sess_main",
+        0,
+        0,
+        "user",
+        "findword 花市 first",
+        "2026-10-13T13:40:00Z",
+    )
+    .await;
+    seed_message(
+        &pool,
+        "m_a",
+        "sess_main",
+        0,
+        1,
+        "assistant",
+        "findword 花市 answer",
+        "2026-10-13T13:41:00Z",
+    )
+    .await;
+    seed_message(
+        &pool,
+        "m_b",
+        "sess_main",
+        3,
+        0,
+        "user",
+        "findword 花市 again",
+        "2026-10-15T08:30:00Z",
+    )
+    .await;
+    seed_message(
+        &pool,
+        "o1",
+        "sess_other",
+        0,
+        0,
+        "user",
+        "findword 花市 elsewhere",
+        "2026-10-15T09:59:00Z",
+    )
+    .await;
+    let galley = SqliteGalley::from_pool(pool);
+    let ids = |hits: &[galley_core_lib::db::MessageSearchHit]| {
+        hits.iter()
+            .map(|h| (h.session_id.clone(), h.message_id.clone()))
+            .collect::<Vec<_>>()
+    };
+    let pair = |s: &str, m: &str| (s.to_string(), m.to_string());
+
+    // FTS path (>= 3 chars) and LIKE path (2 chars) alike.
+    for query in ["findword", "花市"] {
+        let scoped = galley
+            .search_message_hits(
+                query.into(),
+                20,
+                Some(RuntimeKind::Managed),
+                Some(SessionId("sess_main".into())),
+            )
+            .await
+            .expect("search in one conversation");
+        assert_eq!(
+            ids(&scoped),
+            vec![
+                pair("sess_main", "m_b"),
+                pair("sess_main", "m_a"),
+                pair("sess_main", "m_c"),
+            ],
+            "{query}: only the conversation's hits, latest first",
+        );
+        let created: Vec<&str> = scoped.iter().map(|h| h.created_at.as_str()).collect();
+        assert_eq!(
+            created,
+            vec![
+                "2026-10-15T08:30:00Z",
+                "2026-10-13T13:41:00Z",
+                "2026-10-13T13:40:00Z",
+            ],
+            "{query}: each hit carries its message's time",
+        );
+
+        let everywhere = galley
+            .search_message_hits(query.into(), 20, Some(RuntimeKind::Managed), None)
+            .await
+            .expect("search everywhere");
+        assert_eq!(everywhere.len(), 4, "{query}");
+        assert_eq!(
+            everywhere[0].message_id, "o1",
+            "{query}: unfiltered, the most recently active conversation first",
+        );
+        assert!(everywhere[1..].iter().all(|h| h.session_id == "sess_main"));
+        assert_eq!(everywhere[0].created_at, "2026-10-15T09:59:00Z");
+
+        // A conversation with no such message, or none at all: no hits.
+        assert!(galley
+            .search_message_hits(
+                query.into(),
+                20,
+                None,
+                Some(SessionId("sess_missing".into())),
+            )
+            .await
+            .expect("unknown conversation")
+            .is_empty());
+    }
+
+    // The wire shape: today's fields plus `createdAt`, nothing renamed.
+    let hit = galley
+        .search_message_hits("findword".into(), 1, None, None)
+        .await
+        .expect("one hit")
+        .remove(0);
+    let json = serde_json::to_value(&hit).expect("serialize hit");
+    let mut keys: Vec<&str> = json
+        .as_object()
+        .expect("object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(
+        keys,
+        vec![
+            "createdAt",
+            "messageId",
+            "role",
+            "sessionActivityAt",
+            "sessionId",
+            "sessionTitle",
+            "snippet",
+            "turnIndex",
+        ],
+    );
 }
 
 #[tokio::test]

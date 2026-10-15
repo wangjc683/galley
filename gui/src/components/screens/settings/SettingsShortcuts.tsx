@@ -55,6 +55,13 @@ function buildGroups(copy: ReturnType<typeof useCopy>): ShortcutGroup[] {
           combo: formatShortcut("Mod+K"),
           action: shortcuts.openCommandPalette,
         },
+        // ⌘F: the same palette inside the open conversation (main chat
+        // ticket 28); with none open it is ⌘K, which the note says.
+        {
+          combo: formatShortcut("Mod+F"),
+          action: shortcuts.findInConversation,
+          note: shortcuts.findInConversationNote(formatShortcut("Mod+K")),
+        },
         { combo: formatShortcut("Mod+N"), action: shortcuts.newConversation },
         // Only the managed runtime's sidebar collapses (it has the main
         // chat); the row stays on both, its note names the exception.

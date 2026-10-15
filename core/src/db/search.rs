@@ -172,11 +172,19 @@ impl SqliteGalley {
         Ok(total)
     }
 
+    /// The GUI's full-text search (⌘K, the `search_messages` Tauri
+    /// command). `session_id` keeps only that conversation's hits, the
+    /// latest first in transcript order (main chat ticket 28: 查找聊天记录
+    /// and ⌘F); it narrows the runtime and archive filters rather than
+    /// replacing them, like the Agent API's `--session`. Without it the
+    /// rows and their order are what they always were: every
+    /// conversation, the most recently active first.
     pub async fn search_message_hits(
         &self,
         query: String,
         limit: u32,
         runtime_kind: Option<RuntimeKind>,
+        session_id: Option<SessionId>,
     ) -> Result<Vec<MessageSearchHit>> {
         let q = query.trim();
         if q.chars().count() < 2 {
@@ -187,6 +195,18 @@ impl SqliteGalley {
             " AND s.ga_runtime_kind = ?"
         } else {
             ""
+        };
+        let session_clause = if session_id.is_some() {
+            " AND s.id = ?"
+        } else {
+            ""
+        };
+        // One conversation's hits share its activity time; order them by
+        // where they sit in it instead.
+        let order = if session_id.is_some() {
+            "m.turn_index DESC, m.sequence DESC, m.id DESC"
+        } else {
+            "s.last_activity_at DESC"
         };
 
         if q.chars().count() >= 3 {
@@ -199,19 +219,23 @@ impl SqliteGalley {
                    fts.turn_index AS turn_index, \
                    snippet(messages_fts, 4, '«', '»', '…', 16) AS snippet, \
                    s.title AS session_title, \
-                   s.last_activity_at AS session_activity_at \
+                   s.last_activity_at AS session_activity_at, \
+                   m.created_at AS created_at \
                  FROM messages_fts fts \
                  JOIN messages m ON m.id = fts.message_id \
                  JOIN sessions s ON s.id = fts.session_id \
                  WHERE messages_fts MATCH ? \
                    AND m.visibility = 'visible' \
-                   AND s.status != 'archived'{runtime_clause} \
-                 ORDER BY s.last_activity_at DESC \
+                   AND s.status != 'archived'{runtime_clause}{session_clause} \
+                 ORDER BY {order} \
                  LIMIT ?"
             );
             let mut query = sqlx::query_as::<_, MessageSearchHit>(&sql).bind(&phrase);
             if let Some(kind) = runtime_kind {
                 query = query.bind(runtime_kind_sql(kind));
+            }
+            if let Some(id) = &session_id {
+                query = query.bind(id.as_str());
             }
             let res = query.bind(limit).fetch_all(&self.pool).await;
             match res {
@@ -234,7 +258,8 @@ impl SqliteGalley {
                  WHEN m.role = 'assistant' THEN COALESCE(m.final_answer, m.content) \
                END, 1, 200) AS snippet, \
                s.title AS session_title, \
-               s.last_activity_at AS session_activity_at \
+               s.last_activity_at AS session_activity_at, \
+               m.created_at AS created_at \
              FROM messages m \
              JOIN sessions s ON s.id = m.session_id \
              WHERE m.role IN ('user','assistant') \
@@ -243,8 +268,8 @@ impl SqliteGalley {
                AND ( \
                  m.content LIKE ? ESCAPE '\\' \
                  OR m.final_answer LIKE ? ESCAPE '\\' \
-               ){runtime_clause} \
-             ORDER BY s.last_activity_at DESC \
+               ){runtime_clause}{session_clause} \
+             ORDER BY {order} \
              LIMIT ?"
         );
         let mut query = sqlx::query_as::<_, MessageSearchHit>(&sql)
@@ -252,6 +277,9 @@ impl SqliteGalley {
             .bind(&like);
         if let Some(kind) = runtime_kind {
             query = query.bind(runtime_kind_sql(kind));
+        }
+        if let Some(id) = &session_id {
+            query = query.bind(id.as_str());
         }
         let rows = query
             .bind(limit)

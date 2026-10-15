@@ -392,10 +392,14 @@ export const zhCopy = {
     updateDownloadingTitle: "正在下载新版本",
     updateCurrentVersion: (version: string) => `当前版本 v${version}`,
     moreConversationActions: (title: string) => `${title} · 更多对话操作`,
+    /** 标题菜单第一项：⌘K 面板只搜这个对话（票 28，裁决 77）。 */
+    findInChat: "查找聊天记录…",
     rename: "重命名",
     reinjectTools: "重新注入工具",
     desktopPet: "桌面宠物",
     closeDesktopPet: "关闭桌面宠物",
+    /** 主对话标题菜单的最后一项，弹出设置里那个按住 5 秒的确认框（票 28）。 */
+    resetMainChat: "重置主对话…",
   },
   browserControlAttention: {
     message: "让 Galley 用你已登录的浏览器办事：查资料、填表单、操作网页后台。",
@@ -643,6 +647,14 @@ export const zhCopy = {
     notFound: "没找到。",
     askDirectly: "Enter 直接发问？",
     noLLMs: "没有可用的模型配置。",
+    // 只搜一个对话（⌘F、标题菜单的「查找聊天记录」，票 28）：输入框前的范围
+    // 标签、占位文字、标签上 × 的无障碍名，与不到两个字时的提示。
+    scopeMainChat: "在主对话里",
+    scopeThisChat: "在这个对话里",
+    findInMainChat: "查找主对话…",
+    findInThisChat: "查找这个对话…",
+    dropScope: "改为搜索全部",
+    findHint: "输入至少两个字开始查找",
   },
   settings: {
     title: "设置",
@@ -1053,6 +1065,9 @@ export const zhCopy = {
       subtitle: "目前只能查看，暂不支持自定义",
       navigation: "导航",
       openCommandPalette: "搜索 / 命令面板",
+      findInConversation: "在当前对话里查找",
+      findInConversationNote: (palette: string) =>
+        `没有打开对话时同 ${palette}`,
       newConversation: "新对话",
       toggleSidebar: "收起 / 展开侧栏",
       // 外部 GA 没有主对话，侧栏不可收起（票 08）。

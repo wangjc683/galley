@@ -16,6 +16,16 @@ describe("Settings → Shortcuts", () => {
     expect(html.slice(html.lastIndexOf("<li", row), row)).toContain(">\\<");
   });
 
+  it("lists ⌘F right after ⌘K, saying it is ⌘K with no chat open (ticket 28)", () => {
+    const html = renderToStaticMarkup(<SettingsShortcuts />);
+    const row = html.indexOf("在当前对话里查找");
+    expect(row).toBeGreaterThan(html.indexOf("搜索 / 命令面板"));
+    expect(row).toBeLessThan(html.indexOf(">新对话<"));
+    // The key: ⌘ F on macOS, Ctrl F elsewhere; the note names ⌘K / Ctrl+K.
+    expect(html.slice(html.lastIndexOf("<li", row), row)).toContain(">F<");
+    expect(html).toMatch(/没有打开对话时同 (⌘K|Ctrl\+K)/);
+  });
+
   it("names it in English too", () => {
     const html = renderToStaticMarkup(
       <CopyProvider language="en-US">

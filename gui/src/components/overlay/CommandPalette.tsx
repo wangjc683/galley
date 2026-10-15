@@ -11,13 +11,23 @@ import {
   MagnifyingGlass,
   Plus,
   User,
+  X,
   type Icon as PhosphorIcon,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 
 import { ShortcutGlyphs } from "@/components/ui/shortcut-glyphs";
-import { searchMessages, type MessageSearchHit } from "@/lib/db";
-import { useCopy } from "@/lib/i18n";
+import { useDayStamp } from "@/hooks/useDayStamp";
+import type { MessageSearchHit } from "@/lib/db";
+import { useCopy, useLanguage } from "@/lib/i18n";
+import { isImeCompositionKeydown } from "@/lib/ime";
+import {
+  dropsScope,
+  paletteSearch,
+  scopedHitDate,
+  scopedListView,
+  type PaletteScope,
+} from "@/lib/palette-scope";
 import { displaySessionSummary } from "@/lib/session-summary";
 import { resetWindowLayout } from "@/lib/layout-reset";
 import { formatShortcut, formatShortcutReadable } from "@/lib/shortcuts";
@@ -65,6 +75,13 @@ export interface CommandPaletteProps {
    * (DESIGN.md §8 "Empty state") — typically: open new chat with this
    * text as the first message. */
   onSubmitFreeText?: (text: string) => void;
+
+  /** One conversation to search (⌘F, the title menu's 查找聊天记录;
+   * main chat ticket 28): its label stands before the input and the
+   * list holds only its message hits, each dated. null / absent: ⌘K. */
+  scope?: PaletteScope | null;
+  /** The scope's ×, or Backspace in the empty input: ⌘K again. */
+  onDropScope?: () => void;
 }
 
 /**
@@ -93,6 +110,11 @@ export interface CommandPaletteProps {
  * Command.Group — the root list mixes four semantic kinds, so
  * headers always show (DESIGN.md §8, 2026-08-13 adjudication).
  *
+ * With a `scope` (⌘F, the title menu's 查找聊天记录; main chat ticket
+ * 28) it searches one conversation: the scope's tag before the input,
+ * that conversation's message hits only, each dated (`ScopedResults`).
+ * Backspace in the empty input drops the scope: ⌘K again.
+ *
  * Deliberately excluded: theme switcher, quick prompt insertion,
  * destructive actions. See DESIGN.md §8 "故意排除".
  */
@@ -101,6 +123,10 @@ export function CommandPalette(props: CommandPaletteProps) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState<"root" | "switch-llm">("root");
   const [messageHits, setMessageHits] = useState<MessageSearchHit[]>([]);
+  // The query `messageHits` answers (null: none yet) — the scoped list
+  // tells 「没找到」 from a query still out.
+  const [hitsFor, setHitsFor] = useState<string | null>(null);
+  const scope = props.scope ?? null;
 
   // Reset internal state every time the palette opens — feels less
   // surprising than persisting across opens (DESIGN.md §8: no recent-
@@ -112,6 +138,7 @@ export function CommandPalette(props: CommandPaletteProps) {
       setSearch("");
       setPage("root");
       setMessageHits([]);
+      setHitsFor(null);
     }, 0);
     return () => clearTimeout(t);
   }, [props.open]);
@@ -134,34 +161,53 @@ export function CommandPalette(props: CommandPaletteProps) {
       // Defer clearing so this effect doesn't setState synchronously
       // (react-hooks/set-state-in-effect). Same pattern as the
       // open-reset effect above.
-      const clear = setTimeout(() => setMessageHits([]), 0);
+      const clear = setTimeout(() => {
+        setMessageHits([]);
+        setHitsFor(null);
+      }, 0);
       return () => clearTimeout(clear);
     }
     let cancelled = false;
     const handle = setTimeout(() => {
-      void searchMessages(q, 8, props.runtimeKind)
+      // ⌘K: 8 hits beside sessions and actions; scoped: that
+      // conversation's only (paletteSearchRequest).
+      void paletteSearch(q, scope, props.runtimeKind)
         .then((hits) => {
-          if (!cancelled) setMessageHits(hits);
+          if (cancelled) return;
+          setMessageHits(hits);
+          setHitsFor(q);
         })
         .catch((e) => {
           console.debug("[palette] message search failed.", e);
-          if (!cancelled) setMessageHits([]);
+          if (cancelled) return;
+          setMessageHits([]);
+          setHitsFor(q);
         });
     }, 180);
     return () => {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [search, props.open, page, props.runtimeKind]);
+  }, [search, props.open, page, props.runtimeKind, scope]);
 
   const close = () => props.onOpenChange(false);
+  const openMessage = (sessionId: string, messageId: string, query: string) => {
+    if (props.onOpenMessage) {
+      props.onOpenMessage(sessionId, messageId, query);
+    } else {
+      props.onOpenSession?.(sessionId);
+    }
+    close();
+  };
 
   return (
     <Command.Dialog
       open={props.open}
       onOpenChange={props.onOpenChange}
       label={copy.command.label}
-      shouldFilter={page === "root"}
+      // Scoped, the list is Core's hits in Core's order: nothing for
+      // cmdk to filter or re-sort.
+      shouldFilter={page === "root" && !scope}
       // Substring, not cmdk's fuzzy subsequence: the row highlight
       // marks the literal query, and a fuzzy hit ("部署文档" matching
       // "文档部署方案") would show a matched row with nothing lit up.
@@ -169,17 +215,46 @@ export function CommandPalette(props: CommandPaletteProps) {
       // groups follow one rule.
       filter={substringFilter}
     >
-      <div className="relative shrink-0">
+      {/* Scoped, the row is a flex line: glass, the scope's tag, then
+          the input taking the rest (`.cmdk-input-scoped`). */}
+      <div className={cn("relative shrink-0", scope && "flex")}>
         <MagnifyingGlass
           size={16}
           weight="thin"
           className="pointer-events-none absolute left-4 top-4 text-ink-muted"
         />
+        {scope && (
+          <ScopeTag scope={scope} onDrop={() => props.onDropScope?.()} />
+        )}
         <Command.Input
           value={search}
           onValueChange={setSearch}
+          onKeyDown={
+            scope
+              ? (e) => {
+                  if (
+                    dropsScope({
+                      scoped: true,
+                      key: e.key,
+                      value: search,
+                      composing: isImeCompositionKeydown(e),
+                    })
+                  ) {
+                    e.preventDefault();
+                    props.onDropScope?.();
+                  }
+                }
+              : undefined
+          }
+          className={scope ? "cmdk-input-scoped" : undefined}
           placeholder={
-            page === "switch-llm" ? copy.command.searchLLM : copy.command.search
+            scope
+              ? scope.mainChat
+                ? copy.command.findInMainChat
+                : copy.command.findInThisChat
+              : page === "switch-llm"
+                ? copy.command.searchLLM
+                : copy.command.search
           }
           autoFocus
         />
@@ -189,20 +264,20 @@ export function CommandPalette(props: CommandPaletteProps) {
       </div>
 
       <Command.List>
-        {page === "root" ? (
+        {scope ? (
+          <ScopedResults
+            search={search}
+            hits={messageHits}
+            hitsFor={hitsFor}
+            onOpenMessage={openMessage}
+          />
+        ) : page === "root" ? (
           <RootPage
             search={search}
             sessions={props.sessions}
             sessionKeywords={props.sessionKeywords}
             messageHits={messageHits}
-            onOpenMessage={(sessionId, messageId, query) => {
-              if (props.onOpenMessage) {
-                props.onOpenMessage(sessionId, messageId, query);
-              } else {
-                props.onOpenSession?.(sessionId);
-              }
-              close();
-            }}
+            onOpenMessage={openMessage}
             onNewChat={() => {
               props.onNewChat?.();
               close();
@@ -476,6 +551,111 @@ function EmptyHint({
   );
 }
 
+// ---------------- Scoped: one conversation ----------------
+
+/**
+ * The scope before the input: 「在主对话里」 / 「在这个对话里」 and a ×
+ * that drops it (Backspace in the empty input does too). Its cell takes
+ * the input's 48px and bottom rule, so the line under the row runs on.
+ * The × keeps the focus in the input.
+ */
+function ScopeTag({
+  scope,
+  onDrop,
+}: {
+  scope: PaletteScope;
+  onDrop: () => void;
+}) {
+  const copy = useCopy();
+  return (
+    <div className="flex h-12 shrink-0 items-center border-b border-line pl-11">
+      <span
+        data-role="palette-scope"
+        className="inline-flex h-6 items-center gap-1 rounded-sm border border-line bg-app pl-2 pr-1 text-[12.5px] text-ink"
+      >
+        {scope.mainChat
+          ? copy.command.scopeMainChat
+          : copy.command.scopeThisChat}
+        <button
+          type="button"
+          aria-label={copy.command.dropScope}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={onDrop}
+          className={cn(
+            "flex size-4 shrink-0 items-center justify-center rounded-full text-ink-muted",
+            "hover:bg-hover hover:text-ink",
+            "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
+          )}
+        >
+          <X size={10} weight="bold" />
+        </button>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The scoped list (main chat ticket 28): the conversation's message
+ * hits only, no recent sessions or actions. Each hit's first line is
+ * when it was said (`scopedHitDate`) — every hit would carry the same
+ * session title — the second its snippet. Under two characters a quiet
+ * hint; while a query is out, nothing (not 「没找到」); a query that
+ * found nothing, 「没找到」 without 「Enter 直接发问」 — Enter here finds,
+ * it does not start a chat.
+ */
+export function ScopedResults({
+  search,
+  hits,
+  hitsFor,
+  onOpenMessage,
+}: {
+  search: string;
+  hits: MessageSearchHit[];
+  hitsFor: string | null;
+  onOpenMessage: (sessionId: string, messageId: string, query: string) => void;
+}) {
+  const copy = useCopy();
+  const language = useLanguage();
+  const dayStamp = useDayStamp();
+  const query = search.trim();
+  const view = scopedListView(search, hitsFor, hits.length);
+  if (view === "pending") return null;
+  if (view === "hint" || view === "empty") {
+    return (
+      <div
+        data-role="palette-scoped-note"
+        className="px-4 py-6 text-center text-[12.5px] italic text-ink-muted"
+      >
+        {view === "hint" ? copy.command.findHint : copy.command.notFound}
+      </div>
+    );
+  }
+  const words = {
+    today: copy.conversation.messageTimeToday,
+    yesterday: copy.conversation.messageTimeYesterday,
+  };
+  return (
+    <Command.Group heading={copy.command.inConversationContent}>
+      {hits.map((h) => (
+        <Command.Item
+          key={h.messageId}
+          className="cmdk-message-hit"
+          value={`msg-hit ${h.messageId}`}
+          onSelect={() => onOpenMessage(h.sessionId, h.messageId, query)}
+        >
+          <MessageHitRow
+            hit={h}
+            query={query}
+            date={
+              scopedHitDate(h.createdAt, dayStamp, language, words) ?? undefined
+            }
+          />
+        </Command.Item>
+      ))}
+    </Command.Group>
+  );
+}
+
 // ---------------- Switch LLM page ----------------
 
 function SwitchLLMPage({
@@ -565,7 +745,16 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
 
 // ---------------- Message hit row ----------------
 
-function MessageHitRow({ hit, query }: { hit: MessageSearchHit; query: string }) {
+function MessageHitRow({
+  hit,
+  query,
+  date,
+}: {
+  hit: MessageSearchHit;
+  query: string;
+  /** Shown in the session title's place (a scoped hit, ticket 28). */
+  date?: string;
+}) {
   const copy = useCopy();
   return (
     <div className="flex min-w-0 w-full items-start gap-2.5">
@@ -585,7 +774,7 @@ function MessageHitRow({ hit, query }: { hit: MessageSearchHit; query: string })
       </span>
       <div className="min-w-0 flex-1 overflow-hidden">
         <div className="truncate text-[12.5px] text-ink-soft">
-          <HighlightedText text={hit.sessionTitle} query={query} />
+          {date ?? <HighlightedText text={hit.sessionTitle} query={query} />}
         </div>
         <div className="mt-0.5 line-clamp-2 break-words text-[12px] leading-[1.45] text-ink">
           <HighlightedSnippet raw={hit.snippet} />

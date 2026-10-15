@@ -415,6 +415,10 @@ pub struct MessageSearchHit {
     pub turn_index: i64,
     pub snippet: String,
     pub session_activity_at: String,
+    /// When the message was written (ISO 8601), as `SearchHit.created_at`.
+    /// Additive (2026-10-15, main chat ticket 28): a hit found inside one
+    /// conversation is told apart by its date, not the session's title.
+    pub created_at: String,
 }
 
 #[derive(Debug, FromRow)]
