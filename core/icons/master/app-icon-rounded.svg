@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Windows, Linux and the Store tiles (icon.ico and the PNGs): the master
+       as a rounded square filling the canvas, circular corners of radius 23%
+       of the side, the proportion of the icon this one replaced (measured
+       235.8 / 1024). See README.md. -->
+  <clipPath id="shape">
+    <rect width="1024" height="1024" rx="235.5"/>
+  </clipPath>
+  <image href="galley-icon.svg" width="1024" height="1024" clip-path="url(#shape)"/>
+</svg>
