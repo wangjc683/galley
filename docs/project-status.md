@@ -742,7 +742,8 @@ main-chat planning docs, main has:
   [2026-10-12-affairs-ledger-and-memory-page](./devlog/2026-10-12-affairs-ledger-and-memory-page.md),
   [2026-10-13-drop-affairs-ledger](./devlog/2026-10-13-drop-affairs-ledger.md),
   [2026-10-14-main-chat-reset](./devlog/2026-10-14-main-chat-reset.md),
-  [2026-10-14-assistant-card-in-sidebar](./devlog/2026-10-14-assistant-card-in-sidebar.md)).
+  [2026-10-14-assistant-card-in-sidebar](./devlog/2026-10-14-assistant-card-in-sidebar.md),
+  [2026-10-15-assistant-im-rendering](./devlog/2026-10-15-assistant-im-rendering.md)).
   Managed runtime only; the external runtime's sidebar is frozen. One
   persistent main chat (migration **044**) opened at launch. Since
   2026-10-14 (PRD rulings 60–65, tickets 16–18) the sidebar draws it as the
@@ -751,7 +752,14 @@ main-chat planning docs, main has:
   message or the state, an unsent draft), then the external runtime's own
   new-chat row and list; the sidebar collapses with ⌘\, the open main chat's
   header is an identity row over its title menu, and it has no question
-  rail. Settings can reset it with a five-second hold (ticket 15): its rows
+  rail. Since 2026-10-15 (rulings 66–67, tickets 19–20) the open main chat
+  is drawn as an IM with one person: bubbles on both sides (the user's
+  apricot on the right, the assistant's neutral `--color-assistant-tint`
+  on the left), one live line while it works and a quiet 「N 步 ›」 under a
+  reply of two steps or more, send times as centred lines (one above the
+  greeting), and the column stacked up from the composer; workbench
+  conversations and subtasks are unchanged (JC's live acceptance of
+  ticket 20 is owed). Settings can reset it with a five-second hold (ticket 15): its rows
   go, long-term memory returns to factory, the migration backups are
   deleted. A new main
   chat opens with a fixed one-paragraph greeting in the UI language (shown
