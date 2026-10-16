@@ -170,7 +170,11 @@ moves the attachment files aside, retires the live runner and deletes the
 rows with their search rows. Turn indices are not handed out again
 (`turn_count` is the floor of the next one). It then broadcasts
 `message-deleted` and starts the runner again, whose replay leaves the rows
-out; no new segment.
+out; no new segment. The page asks only once the deletion's undo toast has
+gone (ticket 38, `gui/src/stores/message-delete.ts`): until then it hides
+the bubble itself and Core hears nothing, and a send into the main chat
+waits for the deletion first. Quitting within those five seconds deletes
+nothing.
 
 Each runner keeps a **ready snapshot** — its latest `ready`, folded with
 later `llm_changed` / `reasoning_effort_changed` — which Core hands to a

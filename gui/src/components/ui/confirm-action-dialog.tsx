@@ -56,9 +56,10 @@ export function ConfirmActionDialog({
   icon?: ReactNode | null;
   title: string;
   /** Text, or blocks (paragraphs, lists): the body is a `div`. Left out
-   * (or null) when the title says it all — deleting one message (main
-   * chat ticket 32): no empty paragraph then, the actions sit under the
-   * title. */
+   * (or null) when the title says it all: no empty paragraph then, the
+   * actions sit under the title. (Deleting one message of the main chat
+   * was the one such confirm, ticket 32; since ticket 38 it asks
+   * nothing and offers an undo instead.) */
   body?: ReactNode;
   /** Extra classes on the dialog panel. */
   className?: string;

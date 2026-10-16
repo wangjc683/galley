@@ -43,9 +43,13 @@ interface ToastHostProps extends ErrorCardActions {
  *
  * The countdown pauses while the pointer is over a toast or focus is
  * inside it — these toasts carry action buttons (restart channels, view
- * project, restart update, try browser control), and a flat
+ * project, restart update, try browser control, undo), and a flat
  * timer lets one vanish while the user is reading it or on the way to
  * clicking it.
+ *
+ * A toast that goes by itself — time, or its × — runs its `onClose`
+ * first: the undo toast of a deleted message (main chat ticket 38)
+ * deletes for real only then.
  */
 export function ToastHost({
   toasts,
@@ -89,12 +93,18 @@ function ToastFrame({
 
   const dismissMs =
     toast.autoDismissMs ?? (toast.severity === "info" ? autoDismissMs : 0);
+  // Gone by itself (time, or its ×): what an undo toast held back now
+  // happens (`AppError.onClose`).
+  const onClose = toast.onClose;
 
   useEffect(() => {
     if (dismissMs <= 0 || held) return;
     const wait = resumeDelay(remainingRef.current, dismissMs);
     startedAtRef.current = performance.now();
-    const timer = window.setTimeout(() => onDismiss(toast.id), wait);
+    const timer = window.setTimeout(() => {
+      onClose?.();
+      onDismiss(toast.id);
+    }, wait);
     return () => {
       window.clearTimeout(timer);
       // Bank what was left so the next run resumes rather than restarts.
@@ -104,7 +114,7 @@ function ToastFrame({
         wait - (performance.now() - startedAtRef.current),
       );
     };
-  }, [toast.id, dismissMs, held, onDismiss]);
+  }, [toast.id, dismissMs, held, onDismiss, onClose]);
 
   return (
     <div
@@ -121,7 +131,10 @@ function ToastFrame({
       <ErrorCard
         error={toast}
         variant="toast"
-        onDismiss={() => onDismiss(toast.id)}
+        onDismiss={() => {
+          onClose?.();
+          onDismiss(toast.id);
+        }}
         {...actions}
         onRestartChannels={
           actions.onRestartChannels

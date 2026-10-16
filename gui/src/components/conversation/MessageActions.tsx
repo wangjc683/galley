@@ -7,8 +7,6 @@ import {
   Footprints,
   Gauge,
 } from "@phosphor-icons/react";
-import { save } from "@tauri-apps/plugin-dialog";
-import { writeTextFile } from "@tauri-apps/plugin-fs";
 import {
   forwardRef,
   type HTMLAttributes,
@@ -19,6 +17,7 @@ import {
 } from "react";
 
 import { ActionChip } from "@/components/conversation/ActionChip";
+import { MessageMenuButton } from "@/components/conversation/MessageMenu";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import type { AssistantProcessToggle } from "@/lib/assistant-conversation";
 import { useCopy } from "@/lib/i18n";
@@ -29,6 +28,7 @@ import {
   telemetryCachedInput,
   telemetryInputTotal,
 } from "@/lib/telemetry";
+import { saveReplyMarkdown } from "@/lib/reply-save";
 import { cn } from "@/lib/utils";
 import type { MessageTelemetry } from "@/types/conversation";
 
@@ -80,6 +80,12 @@ import type { MessageTelemetry } from "@/types/conversation";
  * and no context percentage (not drawn in the assistant's conversation
  * at all). While the steps are open the whole bar stays visible, the
  * process button pressed.
+ *
+ * The assistant's bar ends in ⋯ (main chat ticket 38, PRD ruling 85):
+ * the reply's message menu, the same one a right-click on it opens
+ * (MessageMenu) — copy, quote, save, the process, then delete. It is the
+ * menu's findable door; right-click is the quick one. While the menu is
+ * open the bar stays visible, as it does for the open steps.
  */
 
 interface MessageActionsProps {
@@ -91,16 +97,21 @@ interface MessageActionsProps {
    * tool-call markup, which has nothing to copy or save). Without it,
    * the workbench's bar. */
   assistant?: { process?: AssistantProcessToggle; processOnly?: boolean };
+  /** The reply's answer row: in the assistant's conversation, the ⋯ at
+   * the bar's end opens its message menu. */
+  messageId?: string;
 }
 
 export function MessageActions({
   source,
   telemetry,
   assistant,
+  messageId,
 }: MessageActionsProps) {
   const copy = useCopy();
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const copyTimer = useRef<number | null>(null);
   const saveTimer = useRef<number | null>(null);
 
@@ -124,28 +135,9 @@ export function MessageActions({
   };
 
   const onSave = async () => {
-    // Default filename `galley-{timestamp}.md` — the product name, not
-    // "ga" (GA is reserved for the engine per the naming rules; image
-    // saves already used galley-). Timestamp keeps successive saves
-    // from clobbering each other; user can edit in the dialog before
-    // confirming.
-    const stamp = new Date()
-      .toISOString()
-      .slice(0, 19)
-      .replace(/[-:T]/g, "")
-      // YYYYMMDDhhmmss is hard to scan; insert one dash between date
-      // and time so the default name reads cleanly.
-      .replace(/^(\d{8})(\d{6})$/, "$1-$2");
-    const defaultName = `galley-${stamp}.md`;
-
     try {
-      const path = await save({
-        defaultPath: defaultName,
-        filters: [{ name: "Markdown", extensions: ["md"] }],
-      });
-      // User cancelled: save() resolves to null. Silently noop.
-      if (!path) return;
-      await writeTextFile(path, source);
+      // Cancelled in the dialog: silently noop.
+      if (!(await saveReplyMarkdown(source))) return;
       setSaved(true);
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
       saveTimer.current = window.setTimeout(() => setSaved(false), 1500);
@@ -162,6 +154,7 @@ export function MessageActions({
     !copied &&
     !saved &&
     !process?.open &&
+    !menuOpen &&
     "pointer-events-none opacity-0 group-hover/answer:pointer-events-auto group-hover/answer:opacity-100";
   return (
     <div
@@ -207,6 +200,13 @@ export function MessageActions({
             }
             activeLabel={copy.conversation.foldCollapse}
             onClick={process.onToggle}
+          />
+        )}
+        {assistant && messageId && (
+          <MessageMenuButton
+            messageId={messageId}
+            open={menuOpen}
+            onOpenChange={setMenuOpen}
           />
         )}
       </div>

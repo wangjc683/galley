@@ -1,4 +1,5 @@
 import { useManagedModelsStore } from "@/stores/managed-models";
+import { useMessageDeleteStore } from "@/stores/message-delete";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
@@ -16,6 +17,7 @@ function resetStore<T>(store: ResettableStore<T>): void {
 }
 
 export function resetStores(): void {
+  resetStore(useMessageDeleteStore);
   resetStore(useMessagesStore);
   resetStore(useSessionsStore);
   resetStore(useRuntimeStore);

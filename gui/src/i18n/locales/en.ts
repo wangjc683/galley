@@ -1702,23 +1702,25 @@ export const enCopy: AppCopy = {
     copySelection: "Copy selection",
     quoteSelection: "Quote",
     copied: "Copied",
-    // Right-click a bubble of the main chat to delete it (main chat ticket
-    // 32). The confirm is a title and its button only (JC, 2026-10-16).
+    // Delete in a main chat bubble's message menu (main chat tickets 32,
+    // 38). No confirm: the bubble goes at once, the toast offers Undo for
+    // five seconds, and only then is it deleted; a refusal puts it back.
     deleteMessage: {
       menuItem: "Delete",
       blockedRunning: "Wait until it finishes replying",
       blockedAsking: "Answer its question first",
       blockedSubtasks:
         "This reply started subtasks, so it can't be deleted for now",
-      title: "Delete this message?",
-      confirm: "Delete",
+      deleted: "Message deleted",
+      deletedCount: (n: number) => `${n} messages deleted`,
+      undo: "Undo",
+      failedTitle: "Couldn't delete this message",
+      failedTitleCount: (n: number) => `Couldn't delete ${n} messages`,
       failedBusy:
         "It's replying or waiting for your answer, so this can't be deleted right now.",
       failedSubtasks:
         "This reply started subtasks, so it can't be deleted for now.",
-      failed: "Couldn't delete this message.",
-      copyDetails: "Copy details",
-      copied: "Copied",
+      failed: "It's back where it was.",
     },
     // Telemetry tooltips. The meter is prefixed "~" because its number is
     // converted from GA's char budget by a ×3 heuristic, while input /

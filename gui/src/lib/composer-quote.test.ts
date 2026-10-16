@@ -6,6 +6,7 @@ import {
   quotedMessagePreview,
   snippetQuoteSegments,
   splitQuotedMessage,
+  wholeMessageQuote,
 } from "./composer-quote";
 
 describe("markdownQuote", () => {
@@ -169,5 +170,80 @@ describe("snippetQuoteSegments", () => {
     expect(snippetQuoteSegments("…普通的«话»…")).toEqual([
       { quote: false, text: "…普通的«话»…" },
     ]);
+  });
+});
+
+describe("wholeMessageQuote", () => {
+  it("quotes a short message whole", () => {
+    expect(wholeMessageQuote("明天几点出发？", false)).toBe("明天几点出发？");
+    expect(wholeMessageQuote("第一行\n\n第二行", false)).toBe("第一行\n第二行");
+  });
+
+  it("takes three lines at most, then 「…」", () => {
+    expect(wholeMessageQuote("一\n二\n三\n四", false)).toBe("一\n二\n三…");
+  });
+
+  it("takes about 120 CJK characters (240 columns), then 「…」", () => {
+    const quote = wholeMessageQuote("字".repeat(200), false);
+    expect(quote).toBe(`${"字".repeat(120)}…`);
+    // Latin counts one column a character.
+    expect(wholeMessageQuote("a".repeat(300), false)).toBe(
+      `${"a".repeat(240)}…`,
+    );
+    // The budget runs across lines: 100 + 20 characters.
+    expect(
+      wholeMessageQuote(`${"甲".repeat(100)}\n${"乙".repeat(50)}`, false),
+    ).toBe(`${"甲".repeat(100)}\n${"乙".repeat(20)}…`);
+  });
+
+  it("leaves no separator dangling before 「…」", () => {
+    expect(wholeMessageQuote(`${"字".repeat(119)}，后面`, false)).toBe(
+      `${"字".repeat(119)}…`,
+    );
+  });
+
+  it("your message: your words, not the quotes at their head", () => {
+    expect(wholeMessageQuote("> 它说的\n\n我的问题", false)).toBe("我的问题");
+    expect(wholeMessageQuote("> 只有引用", false)).toBe("只有引用");
+  });
+
+  it("a reply reads as it shows: Markdown markers off", () => {
+    expect(
+      wholeMessageQuote(
+        "## 结论\n\n**周五**去，见[行程](https://example.com)。",
+        true,
+      ),
+    ).toBe("结论\n周五去，见行程。");
+    expect(
+      wholeMessageQuote("- 第一项 `code`\n- [x] 第二项\n1. 第三项", true),
+    ).toBe("• 第一项 code\n• 第二项\n1. 第三项");
+    expect(wholeMessageQuote("![图](a.png)\n\n> 引一句", true)).toBe("引一句");
+  });
+
+  it("stops at a code block or a table: the prose before it", () => {
+    expect(
+      wholeMessageQuote("运行这个：\n\n```bash\nls -la\n```\n\n就好。", true),
+    ).toBe("运行这个…");
+    expect(
+      wholeMessageQuote(
+        "对比如下\n\n| 日期 | 天气 |\n|---|---|\n| 周五 | 晴 |",
+        true,
+      ),
+    ).toBe("对比如下…");
+  });
+
+  it("a reply opening with one: its first line", () => {
+    expect(wholeMessageQuote("```bash\n\nls -la\ncd ~\n```", true)).toBe(
+      "ls -la…",
+    );
+    expect(wholeMessageQuote("```\nls -la\n```", true)).toBe("ls -la");
+    expect(
+      wholeMessageQuote("| 日期 | 天气 |\n| --- | --- |\n| 周五 | 晴 |", true),
+    ).toBe("日期 | 天气…");
+  });
+
+  it("nothing to quote: empty", () => {
+    expect(wholeMessageQuote("   \n ", false)).toBe("");
+    expect(wholeMessageQuote("![图](a.png)", true)).toBe("");
   });
 });
