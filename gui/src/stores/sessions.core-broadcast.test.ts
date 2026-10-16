@@ -4,6 +4,11 @@ import { fileURLToPath } from "node:url";
 
 import { beforeEach, describe, expect, it } from "vitest";
 
+import {
+  dropComposerDraft,
+  readComposerDraft,
+  saveComposerDraft,
+} from "@/lib/composer-draft";
 import { listenCoreRowEvents, VIA_TURN_PERSIST } from "@/lib/core-row-events";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
@@ -329,9 +334,11 @@ describe("applyExternalSessionCreated / Deleted", () => {
     expect(row("s-mine")).toBe(local);
   });
 
-  it("a delete forgets the row, the open session and its messages, idempotently", () => {
+  it("a delete forgets the row, the open session, its messages and draft, idempotently", () => {
     seed([makeSession({ id: "a" }), makeSession({ id: "b" })], "a");
     useMessagesStore.getState().ensureMessages("a");
+    saveComposerDraft("a", { text: "没发出去的话", images: [] });
+    saveComposerDraft("b", { text: "b 的草稿", images: [] });
 
     useSessionsStore.getState().applyExternalSessionDeleted("a");
     useSessionsStore.getState().applyExternalSessionDeleted("a");
@@ -341,6 +348,9 @@ describe("applyExternalSessionCreated / Deleted", () => {
     expect(state.sessions.map((s) => s.id)).toEqual(["b"]);
     expect(state.activeSessionId).toBeUndefined();
     expect(useMessagesStore.getState().byId.a).toBeUndefined();
+    expect(readComposerDraft("a")).toBeUndefined();
+    expect(readComposerDraft("b")?.text).toBe("b 的草稿");
+    dropComposerDraft("b");
     expect(tauriMocks.invoke).not.toHaveBeenCalled();
   });
 

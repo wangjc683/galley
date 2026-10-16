@@ -5,6 +5,7 @@ import type { StateCreator } from "zustand";
 // in Vite / ES modules as long as accesses happen at action-body time
 // rather than module evaluation time — exactly the case here
 // (everything is `useFooStore.getState()` inside an async action).
+import { dropComposerDraft } from "@/lib/composer-draft";
 import { copyForLanguage } from "@/lib/i18n";
 import { resolveLanguagePreference } from "@/lib/language";
 import { toDurableStatus } from "@/lib/sessions";
@@ -243,8 +244,9 @@ export function clearSessionMessages(sid: string): void {
 
 /**
  * Forget deleted sessions in memory: their rows, the active pointer when
- * it named one of them, and their conversation state. Writes nothing to
- * Core. Idempotent, because a delete arrives twice: the delete action
+ * it named one of them, their conversation state, and their unsent
+ * drafts (which also live on disk — lib/composer-draft.ts — and would
+ * otherwise pile up). Writes nothing to Core. Idempotent, because a delete arrives twice: the delete action
  * applies it once Core confirms, and Core's `session-deleted-external`
  * broadcast of the same delete applies it again (ticket 02d) — as it
  * does for a delete made anywhere else.
@@ -264,5 +266,8 @@ export function forgetDeletedSessions(
     }
     return out;
   });
-  ids.forEach((id) => clearSessionMessages(id));
+  ids.forEach((id) => {
+    clearSessionMessages(id);
+    dropComposerDraft(id);
+  });
 }
