@@ -733,8 +733,10 @@ Pre-Flight checks this list):
 - Release notes: the details learnt from Telegram, both conversations,
   both runtimes — drafts survive a restart (text only), select text and
   「引用」 it into the composer (drawn as a quote block in your bubble),
-  typing anywhere in the conversation goes to the composer, and the
-  conversation's smooth scrolling honours Reduce Motion
+  clicking a button or blank space in the conversation keeps the
+  composer focused, the conversation's smooth scrolling honours Reduce
+  Motion, and the assistant's bubbles read a little denser (line height
+  only)
   (`.scratch/telegram-details/PRD.md`, devlog
   [2026-10-16-telegram-details](./devlog/2026-10-16-telegram-details.md)).
 
