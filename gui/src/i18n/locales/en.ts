@@ -2022,11 +2022,13 @@ export const enCopy: AppCopy = {
     repeatSummaryWeekly: (days: string, time: string) => `${days} ${time}`,
     repeatSummaryMonthly: (days: string, time: string) =>
       `Monthly ${days} · ${time}`,
+    repeatSummaryOnce: (time: string) => `Once ${time}`,
     nextFire: (time: string) => `Next ${time}`,
     previewFirst: (time: string) => `First fire: ${time}`,
     previewNext: (time: string) => `Next fire: ${time}`,
     previewImmediate: (time: string) =>
       `Fires once right after saving · next fire ${time}`,
+    reminderNotifyTitle: "Reminder",
     fireFailedNotifyTitle: "Scheduled task failed to fire",
     fireFailedNotifyBody: (prompt: string) =>
       `“${prompt}” could not start a session — open Galley to check.`,

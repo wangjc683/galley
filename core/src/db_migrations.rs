@@ -299,5 +299,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/048_subtasks.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 49,
+            description: "scheduled tasks: one-off, wake the assistant, origin, soft cancel",
+            sql: include_str!("../migrations/049_scheduled_tasks_once_and_wake.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

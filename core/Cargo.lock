@@ -1644,6 +1644,7 @@ dependencies = [
 name = "galley-cli"
 version = "0.6.2"
 dependencies = [
+ "chrono",
  "clap",
  "galley-core",
  "serde",

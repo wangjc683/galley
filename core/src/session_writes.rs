@@ -690,6 +690,22 @@ impl<'a> Writes<'a> {
         Ok(brief)
     }
 
+    /// [`Self::create_scheduled_task`], recording the main chat run it
+    /// was made in ([`SqliteGalley::create_scheduled_task_in`]).
+    pub async fn create_scheduled_task_in(
+        &self,
+        input: CreateScheduledTaskInput,
+        origin: Origin,
+        created_in: Option<(SessionId, i64)>,
+    ) -> Result<ScheduledTaskBrief> {
+        let brief = self
+            .galley
+            .create_scheduled_task_in(input, origin, created_in)
+            .await?;
+        self.scheduled_tasks_changed();
+        Ok(brief)
+    }
+
     pub async fn update_scheduled_task(
         &self,
         id: ScheduledTaskId,

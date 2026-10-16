@@ -57,10 +57,37 @@
 //!
 //! Managed runtime only, and only for the main chat's subtasks: attach
 //! mode has no main chat, and no other session has a parent.
+//!
+//! **Scheduled tasks** use the same pipeline (main chat ticket 33,
+//! assistant PRD ruling 9):
+//!
+//! - A task that wakes the assistant (`target = assistant`) came due: a
+//!   [`ReportOutcome::Due`] report carrying the words it noted, when it
+//!   was planned for and when it went off. Unlike a subtask's report it
+//!   is durable: the scheduler stamps the fire `last_wake = 'pending'` in
+//!   `scheduled_tasks`, and [`restore_pending_reminders`] reads every
+//!   pending fire back into the waiting reports — on every scheduler
+//!   tick, so after a restart too. It is consumed only when delivered or
+//!   when it could not be: while the main chat waits for the user's
+//!   answer, when its runner does not start or take the message, or when
+//!   the turn it woke ends on an error without a reply
+//!   ([`record_wake_run_end`]). Then the desktop is told to notify with
+//!   the task's own words ([`SCHEDULED_REMINDER_UNDELIVERED_EVENT`]) and
+//!   it is not tried again.
+//! - A session a task started (`target = session`) reports each run that
+//!   ends, like a subtask, while the managed runtime has a main chat and
+//!   nobody wrote in that session from an app (main chat PRD ruling 80).
+//!   It stays an ordinary session in the sidebar.
 
+use crate::api::schedule::{
+    ReminderUndeliveredReason, ScheduledReminderUndelivered, ScheduledTaskBrief,
+    ScheduledTaskRepeat, ScheduledWake, SCHEDULED_REMINDER_UNDELIVERED_EVENT,
+    SCHEDULED_TASKS_CHANGED_EVENT,
+};
 use crate::api::{
-    AskUserBrief, GalleyApi, MessageBrief, Origin, SessionId, SubtaskDispatch, SubtaskFailure,
-    SubtaskReportUndeliveredPayload, SUBTASK_REPORT_UNDELIVERED_EVENT,
+    AskUserBrief, GalleyApi, MessageBrief, Origin, RuntimeKind, SessionBrief, SessionId,
+    SubtaskDispatch, SubtaskFailure, SubtaskReportUndeliveredPayload,
+    SUBTASK_REPORT_UNDELIVERED_EVENT,
 };
 use crate::db::{RunReply, SqliteGalley};
 use crate::error::GalleyError;
@@ -72,6 +99,7 @@ use crate::session_runner::{
 };
 use crate::session_send::{UserMessagePersistedPayload, USER_MESSAGE_PERSISTED_EVENT};
 use crate::socket_listener::RunnerPort;
+use chrono::{DateTime, TimeZone};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 use tauri::AppHandle;
@@ -96,6 +124,17 @@ pub const SEND_BACK_LIMIT: u32 = 2;
 
 const OPENING: &str = "[Galley — not a message from the user] A subtask you started has an update. Act on it, then reply to the user. Do not mention this note.";
 
+const OPENING_REMINDER: &str = "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.";
+
+const OPENING_SCHEDULED: &str = "[Galley — not a message from the user] A scheduled task ran. Act on it, then reply to the user. Do not mention this note.";
+
+const OPENING_MIXED: &str = "[Galley — not a message from the user] Things you are looking after have updates. Act on them, then reply to the user. Do not mention this note.";
+
+/// From this much lateness on, a reminder's report says how late it is
+/// and asks the assistant to say so (the computer slept, Galley was
+/// closed). Less is on time: the scheduler ticks once a minute.
+pub const LATE_AFTER_SECS: i64 = 120;
+
 const CLOSING_MANY: &str = "Reply once, covering all of them.";
 
 const NO_REPLY_END: &str = "end your reply with exactly <no-reply/>";
@@ -118,6 +157,109 @@ pub enum ReportOutcome {
     Error { detail: String },
     /// The tag started nothing, or its session's runner did not start.
     NotStarted { why: String },
+    /// A scheduled task that wakes the assistant came due (ticket 33).
+    Due(DueReminder),
+}
+
+/// A scheduled task that came due, as its report tells it. The times are
+/// rendered when the report is made, in this machine's zone
+/// ([`DueReminder::from_task`]), so the wording itself is pure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DueReminder {
+    pub task_id: String,
+    /// What the assistant noted when it set the task.
+    pub prompt: String,
+    pub once: bool,
+    /// The rule in words: `one-off`, `every day at 09:00`, …
+    pub rule: String,
+    /// The planned instant and when it went off, UTC ISO — the fire's
+    /// identity in `scheduled_tasks` (`last_due_at`, `last_fired_at`).
+    pub due_at: String,
+    pub fired_at: String,
+    /// The same two in local time, as people read them.
+    pub due_local: String,
+    pub fired_local: String,
+    /// How late it went off, in words; `None` within [`LATE_AFTER_SECS`].
+    pub late: Option<String>,
+}
+
+impl DueReminder {
+    /// The report of `task`'s last fire, when it has one (`last_fired_at`;
+    /// a fire without its planned instant counts as on time).
+    pub fn from_task<Tz: TimeZone>(task: &ScheduledTaskBrief, tz: &Tz) -> Option<Self>
+    where
+        Tz::Offset: std::fmt::Display,
+    {
+        let fired_at = task.last_fired_at.clone()?;
+        let due_at = task.last_due_at.clone().unwrap_or_else(|| fired_at.clone());
+        let fired = DateTime::parse_from_rfc3339(&fired_at).ok()?;
+        let due = DateTime::parse_from_rfc3339(&due_at).ok()?;
+        let late_secs = fired.timestamp() - due.timestamp();
+        Some(Self {
+            task_id: task.id.as_str().to_string(),
+            prompt: task.prompt.clone(),
+            once: task.repeat.is_once(),
+            rule: rule_words(&task.repeat, &task.time_of_day),
+            due_local: local_words(&due.with_timezone(tz)),
+            fired_local: local_words(&fired.with_timezone(tz)),
+            late: (late_secs >= LATE_AFTER_SECS).then(|| lateness_words(late_secs)),
+            due_at,
+            fired_at,
+        })
+    }
+}
+
+/// `2026-10-20 20:00 (Tue)`.
+fn local_words<Tz: TimeZone>(at: &DateTime<Tz>) -> String
+where
+    Tz::Offset: std::fmt::Display,
+{
+    at.format("%Y-%m-%d %H:%M (%a)").to_string()
+}
+
+/// `3 minutes`, `2 hours 5 minutes`, `1 day 13 hours`.
+pub fn lateness_words(secs: i64) -> String {
+    fn unit(n: i64, one: &str) -> String {
+        if n == 1 {
+            format!("1 {one}")
+        } else {
+            format!("{n} {one}s")
+        }
+    }
+    let minutes = secs.max(0) / 60;
+    let (days, hours, mins) = (minutes / 1440, (minutes % 1440) / 60, minutes % 60);
+    match (days, hours, mins) {
+        (0, 0, m) => unit(m, "minute"),
+        (0, h, 0) => unit(h, "hour"),
+        (0, h, m) => format!("{} {}", unit(h, "hour"), unit(m, "minute")),
+        (d, 0, _) => unit(d, "day"),
+        (d, h, _) => format!("{} {}", unit(d, "day"), unit(h, "hour")),
+    }
+}
+
+/// A rule in words, for the model.
+fn rule_words(repeat: &ScheduledTaskRepeat, time_of_day: &str) -> String {
+    fn days(list: &[u8]) -> String {
+        list.iter()
+            .map(u8::to_string)
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+    const WEEKDAYS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    match repeat {
+        ScheduledTaskRepeat::Once => "one-off".into(),
+        ScheduledTaskRepeat::Daily => format!("every day at {time_of_day}"),
+        ScheduledTaskRepeat::Weekly { weekdays } => {
+            let names: Vec<&str> = weekdays
+                .iter()
+                .filter_map(|d| WEEKDAYS.get(usize::from(*d).wrapping_sub(1)).copied())
+                .collect();
+            format!("every {} at {time_of_day}", names.join(", "))
+        }
+        ScheduledTaskRepeat::Monthly { monthdays } => {
+            format!("monthly on day {} at {time_of_day}", days(monthdays))
+        }
+    }
 }
 
 impl ReportOutcome {
@@ -129,6 +271,7 @@ impl ReportOutcome {
             Self::StepLimit { .. } => "stopped at the step limit",
             Self::Error { .. } => "failed",
             Self::NotStarted { .. } => "could not be started",
+            Self::Due(_) => "came due",
         }
     }
 }
@@ -147,20 +290,52 @@ pub struct SubtaskReport {
     pub outcome: ReportOutcome,
     /// Which end this reports, so it is reported once: the subtask and
     /// the turn of the user message that started the run
-    /// (`<subtask>#<turn>`), or the tag (`<main>#<turn>#<ordinal>`).
+    /// (`<subtask>#<turn>`), or the tag (`<main>#<turn>#<ordinal>`); for a
+    /// scheduled task's fire, `sched:<task>@<fired at>`.
     pub key: String,
+    /// The scheduled task behind it (ticket 33): the task that came due
+    /// ([`ReportOutcome::Due`]), or the task whose session this is — then
+    /// `subtask_id` is that session, which is no subtask.
+    pub scheduled_task_id: Option<String>,
 }
 
 impl SubtaskReport {
     fn round(&self) -> u32 {
         self.send_backs + 1
     }
+
+    /// The due task, when this reports one.
+    pub fn due(&self) -> Option<&DueReminder> {
+        match &self.outcome {
+            ReportOutcome::Due(due) => Some(due),
+            _ => None,
+        }
+    }
+
+    /// A report about a scheduled task's session (not a subtask's).
+    fn is_scheduled_session(&self) -> bool {
+        self.scheduled_task_id.is_some() && self.due().is_none()
+    }
+
+    /// The report of `task`'s last fire, for `main_chat_id`.
+    pub fn reminder(main_chat_id: &str, task: &ScheduledTaskBrief) -> Option<Self> {
+        let due = DueReminder::from_task(task, &chrono::Local)?;
+        Some(Self {
+            main_chat_id: main_chat_id.to_string(),
+            subtask_id: None,
+            title: task.prompt.clone(),
+            send_backs: 0,
+            key: format!("sched:{}@{}", due.task_id, due.fired_at),
+            scheduled_task_id: Some(due.task_id.clone()),
+            outcome: ReportOutcome::Due(due),
+        })
+    }
 }
 
 /// The message a wake sends: the opening, each report in turn, and — for
 /// more than one — the closing.
 pub fn report_text(reports: &[SubtaskReport]) -> String {
-    let mut parts = vec![OPENING.to_string()];
+    let mut parts = vec![opening(reports).to_string()];
     parts.extend(reports.iter().map(report_paragraph));
     if reports.len() > 1 {
         parts.push(CLOSING_MANY.to_string());
@@ -168,7 +343,101 @@ pub fn report_text(reports: &[SubtaskReport]) -> String {
     parts.join("\n\n")
 }
 
+/// The opening for what the wake carries: one kind names it, a mix is
+/// general.
+fn opening(reports: &[SubtaskReport]) -> &'static str {
+    let kind = |r: &SubtaskReport| {
+        if r.due().is_some() {
+            OPENING_REMINDER
+        } else if r.is_scheduled_session() {
+            OPENING_SCHEDULED
+        } else {
+            OPENING
+        }
+    };
+    let mut kinds = reports.iter().map(kind);
+    let first = kinds.next().unwrap_or(OPENING);
+    if kinds.all(|k| k == first) {
+        first
+    } else {
+        OPENING_MIXED
+    }
+}
+
+fn due_paragraph(due: &DueReminder) -> String {
+    let id = &due.task_id;
+    let what = if due.once {
+        format!("Reminder `{id}` (one-off) came due.")
+    } else {
+        format!("Scheduled reminder `{id}` ({}) came due.", due.rule)
+    };
+    let when = match &due.late {
+        None => format!("Planned for {}, local time.", due.due_local),
+        Some(late) => format!(
+            "Planned for {}, local time; it went off at {}, {late} late (the computer was \
+             asleep or Galley was closed). Tell the user it comes late, and how late.",
+            due.due_local, due.fired_local
+        ),
+    };
+    format!(
+        "{what} {when} What you noted when you set it:\n<<<\n{}\n>>>\n\
+         Act on it now: tell the user in a sentence or two, look something up first, or \
+         start a subtask. If it no longer applies (the user already did it), {NO_REPLY_END}.",
+        due.prompt.trim()
+    )
+}
+
+fn scheduled_session_paragraph(report: &SubtaskReport, id: &str) -> String {
+    let task = report.scheduled_task_id.as_deref().unwrap_or_default();
+    let title = &report.title;
+    let subject = format!("Scheduled task `{task}` ran in session `{id}` (\"{title}\")");
+    match &report.outcome {
+        ReportOutcome::Done { answer } => format!(
+            "{subject} and finished. Its final answer:\n<<<\n{}\n>>>\n\
+             Tell the user the result in a sentence or two. The session stays in their \
+             sidebar (`session show {id}`).",
+            cut(answer, id)
+        ),
+        ReportOutcome::Asking {
+            question,
+            candidates,
+        } => {
+            let options = if candidates.is_empty() {
+                String::new()
+            } else {
+                let quoted: Vec<String> = candidates.iter().map(|c| format!("\"{c}\"")).collect();
+                format!(" Options: {}", quoted.join(", "))
+            };
+            format!(
+                "{subject} and is asking: \"{question}\"{options}.\n\
+                 Ask the user in a sentence, and pass their answer on with `session send {id} \
+                 \"<answer>\" --supervisor=galley-assistant --reason=\"answer\" --ensure-runner` \
+                 when they reply."
+            )
+        }
+        ReportOutcome::StepLimit { .. } => format!(
+            "{subject} and paused at the engine's step limit, mid-work. Tell the user how far it \
+             got (`session show {id} --tail=40`)."
+        ),
+        ReportOutcome::Error { detail } => format!(
+            "{subject} and stopped on an error: {}. Tell the user in a sentence what failed.",
+            one_line(detail).trim_end_matches('.')
+        ),
+        ReportOutcome::NotStarted { why } => format!(
+            "{subject} but could not be started: {}. Tell the user in a sentence.",
+            one_line(why).trim_end_matches('.')
+        ),
+        ReportOutcome::Due(due) => due_paragraph(due),
+    }
+}
+
 fn report_paragraph(report: &SubtaskReport) -> String {
+    if let Some(due) = report.due() {
+        return due_paragraph(due);
+    }
+    if let (true, Some(id)) = (report.is_scheduled_session(), report.subtask_id.as_deref()) {
+        return scheduled_session_paragraph(report, id);
+    }
     let title = &report.title;
     let round = report.round();
     let enough = report.send_backs >= SEND_BACK_LIMIT;
@@ -260,6 +529,7 @@ fn report_paragraph(report: &SubtaskReport) -> String {
             one_line(detail).trim_end_matches('.')
         ),
         ReportOutcome::NotStarted { why } => not_started_paragraph(title, why),
+        ReportOutcome::Due(due) => due_paragraph(due),
     }
 }
 
@@ -302,6 +572,30 @@ pub fn replay_lines(reports: &[SubtaskReport]) -> String {
         .map(|report| {
             let phrase = report.outcome.replay_phrase();
             let title = &report.title;
+            if let Some(due) = report.due() {
+                let id = &due.task_id;
+                return match &due.late {
+                    None => format!(
+                        "[Galley: reminder {id} came due ({}) — details: schedule show {id}]",
+                        due.due_local
+                    ),
+                    Some(late) => format!(
+                        "[Galley: reminder {id} came due (planned {}, went off {}, {late} \
+                         late) — details: schedule show {id}]",
+                        due.due_local, due.fired_local
+                    ),
+                };
+            }
+            if let (true, Some(id), Some(task)) = (
+                report.is_scheduled_session(),
+                report.subtask_id.as_deref(),
+                report.scheduled_task_id.as_deref(),
+            ) {
+                return format!(
+                    "[Galley: scheduled task {task} ran in session {id} \"{title}\": {phrase} — \
+                     details: session show {id}]"
+                );
+            }
             match (&report.subtask_id, title.is_empty()) {
                 (Some(id), _) => format!(
                     "[Galley: subtask {id} \"{title}\" {phrase} — details: session show {id}]"
@@ -322,7 +616,13 @@ pub fn replay_fallback(origin_note: Option<&str>) -> String {
         .split(',')
         .map(str::trim)
         .filter(|id| !id.is_empty())
-        .map(|id| format!("[Galley: subtask {id} has an update — details: session show {id}]"))
+        .map(|id| {
+            if id.starts_with("sched_") {
+                format!("[Galley: scheduled task {id} came due — details: schedule show {id}]")
+            } else {
+                format!("[Galley: subtask {id} has an update — details: session show {id}]")
+            }
+        })
         .collect();
     if lines.is_empty() {
         "[Galley: a subtask has an update]".into()
@@ -395,7 +695,8 @@ fn asked(rows: &[RunReply]) -> (String, Vec<String>) {
 }
 
 /// The report of `session_id`'s run that ended as `end`, when the session
-/// is a subtask of the current main chat the user never wrote in.
+/// is a subtask of the current main chat the user never wrote in, or a
+/// session a scheduled task started ([`scheduled_session_report`]).
 pub async fn report_for_run_end(
     galley: &SqliteGalley,
     runner: &dyn RunnerPort,
@@ -409,7 +710,7 @@ pub async fn report_for_run_end(
         Err(e) => return Err(e),
     };
     let Some(parent) = session.parent_session_id.clone() else {
-        return Ok(None);
+        return scheduled_session_report(galley, runner, &session, end).await;
     };
     if session.promoted == Some(true) {
         return Ok(None);
@@ -429,8 +730,83 @@ pub async fn report_for_run_end(
         .latest_user_turn_index(session_id)
         .await?
         .unwrap_or(-1);
-    let rows = galley.latest_run_replies(&sid).await?;
-    let outcome = match end {
+    let outcome = run_outcome(galley, runner, session_id, end).await?;
+    Ok(Some(SubtaskReport {
+        main_chat_id: parent,
+        subtask_id: Some(session_id.to_string()),
+        title,
+        send_backs,
+        outcome,
+        key: format!("{session_id}#{turn}"),
+        scheduled_task_id: None,
+    }))
+}
+
+/// The report of a run of a session a scheduled task started
+/// (`target = session`, ticket 33, main chat PRD ruling 80): while the
+/// managed runtime is active and has a main chat, the session is a
+/// managed one, and nobody wrote in it from an app — once someone did,
+/// it is theirs. The task is read off the session's origin, which the
+/// scheduler stamps ([`crate::scheduler::SCHEDULER_SUPERVISOR`]).
+async fn scheduled_session_report(
+    galley: &SqliteGalley,
+    runner: &dyn RunnerPort,
+    session: &SessionBrief,
+    end: RunEnd,
+) -> Result<Option<SubtaskReport>, GalleyError> {
+    let Some(task_id) = session
+        .origin
+        .as_ref()
+        .filter(|o| o.supervisor.as_deref() == Some(crate::scheduler::SCHEDULER_SUPERVISOR))
+        .and_then(|o| o.reason.as_deref())
+        .and_then(crate::scheduler::task_id_from_reason)
+        .map(str::to_string)
+    else {
+        return Ok(None);
+    };
+    if session.ga_runtime_kind != RuntimeKind::Managed
+        || galley.active_runtime_kind().await? != RuntimeKind::Managed
+    {
+        return Ok(None);
+    }
+    let Some(main) = galley.main_chat_id().await? else {
+        return Ok(None);
+    };
+    if galley.has_user_written(&session.id).await? {
+        return Ok(None);
+    }
+    let session_id = session.id.as_str();
+    let title = match galley.scheduled_task(&task_id).await {
+        Ok(task) => task.prompt,
+        Err(_) => session.title.clone(),
+    };
+    let turn = galley
+        .latest_user_turn_index(session_id)
+        .await?
+        .unwrap_or(-1);
+    let outcome = run_outcome(galley, runner, session_id, end).await?;
+    Ok(Some(SubtaskReport {
+        main_chat_id: main.0,
+        subtask_id: Some(session_id.to_string()),
+        title,
+        send_backs: 0,
+        outcome,
+        key: format!("{session_id}#{turn}"),
+        scheduled_task_id: Some(task_id),
+    }))
+}
+
+/// What a run of `session_id` that ended as `end` says.
+async fn run_outcome(
+    galley: &SqliteGalley,
+    runner: &dyn RunnerPort,
+    session_id: &str,
+    end: RunEnd,
+) -> Result<ReportOutcome, GalleyError> {
+    let rows = galley
+        .latest_run_replies(&SessionId(session_id.to_string()))
+        .await?;
+    Ok(match end {
         RunEnd::Done => ReportOutcome::Done {
             answer: last_words(&rows),
         },
@@ -453,15 +829,7 @@ pub async fn report_for_run_end(
         RunEnd::RunnerExited => ReportOutcome::Error {
             detail: "its engine process exited before the run finished".into(),
         },
-    };
-    Ok(Some(SubtaskReport {
-        main_chat_id: parent,
-        subtask_id: Some(session_id.to_string()),
-        title,
-        send_backs,
-        outcome,
-        key: format!("{session_id}#{turn}"),
-    }))
+    })
 }
 
 /// The report of a tag that started nothing, or whose session's runner
@@ -486,6 +854,7 @@ pub fn not_started_report(dispatch: &SubtaskDispatch) -> Option<SubtaskReport> {
             "{}#{}#{}",
             dispatch.parent_session_id, dispatch.turn_index, dispatch.ordinal
         ),
+        scheduled_task_id: None,
     })
 }
 
@@ -504,6 +873,9 @@ struct State {
     waiting: HashMap<String, Vec<Waiting>>,
     /// Keys reported in this process.
     seen: HashSet<String>,
+    /// Per main chat, the due tasks a delivered wake carried, until the
+    /// turn it started ends ([`record_wake_run_end`]).
+    in_flight: HashMap<String, Vec<SubtaskReport>>,
 }
 
 /// The reports waiting for their main chat, in memory. One per process,
@@ -536,6 +908,10 @@ impl SubtaskReports {
         if let Some(id) = &report.subtask_id {
             waiting.retain(|w| w.report.subtask_id.as_ref() != Some(id));
         }
+        // A task's newer fire replaces its older one still waiting.
+        if let Some(task) = report.due().map(|d| d.task_id.clone()) {
+            waiting.retain(|w| w.report.due().map(|d| &d.task_id) != Some(&task));
+        }
         waiting.push(Waiting {
             report,
             announced: false,
@@ -561,6 +937,43 @@ impl SubtaskReports {
 
     fn take(&self, main_chat_id: &str) -> Vec<Waiting> {
         self.lock().waiting.remove(main_chat_id).unwrap_or_default()
+    }
+
+    /// Take the due tasks waiting for `main_chat_id`, leaving the rest.
+    fn take_due_tasks(&self, main_chat_id: &str) -> Vec<SubtaskReport> {
+        let mut state = self.lock();
+        let Some(list) = state.waiting.get_mut(main_chat_id) else {
+            return Vec::new();
+        };
+        let (due, rest): (Vec<Waiting>, Vec<Waiting>) =
+            list.drain(..).partition(|w| w.report.due().is_some());
+        *list = rest;
+        due.into_iter().map(|w| w.report).collect()
+    }
+
+    fn set_in_flight(&self, main_chat_id: &str, reports: Vec<SubtaskReport>) {
+        let mut state = self.lock();
+        if reports.is_empty() {
+            state.in_flight.remove(main_chat_id);
+        } else {
+            state.in_flight.insert(main_chat_id.to_string(), reports);
+        }
+    }
+
+    fn take_in_flight(&self, main_chat_id: &str) -> Vec<SubtaskReport> {
+        self.lock()
+            .in_flight
+            .remove(main_chat_id)
+            .unwrap_or_default()
+    }
+
+    /// The due tasks a delivered wake carried whose turn has not ended.
+    pub fn in_flight(&self, main_chat_id: &str) -> Vec<SubtaskReport> {
+        self.lock()
+            .in_flight
+            .get(main_chat_id)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Put reports back after a failed delivery, ahead of any that came
@@ -704,8 +1117,9 @@ pub enum WakeOutcome {
 
 /// Take `main_chat_id`'s run gate for its waiting reports, when it has
 /// any and is idle. While it waits for the user's answer the reports
-/// stay, and the desktop is told they could not be delivered. `None`
-/// when there is nothing to send now.
+/// stay, and the desktop is told they could not be delivered — except a
+/// due task's, which is consumed and handed to a notification instead
+/// ([`return_due_tasks`]). `None` when there is nothing to send now.
 pub async fn take_due(
     reports: &SubtaskReports,
     host: &RunnerHost<'_>,
@@ -718,6 +1132,13 @@ pub async fn take_due(
     // be its answer. A run cannot start while the gate is free, so the
     // flag holds until the reservation below.
     if host.runner.run_state(main_chat_id).await.ask_pending {
+        return_due_tasks(
+            host.galley,
+            host.notifier.as_ref(),
+            reports.take_due_tasks(main_chat_id),
+            ReminderUndeliveredReason::Asking,
+        )
+        .await;
         announce_undelivered(
             host.notifier.as_ref(),
             main_chat_id,
@@ -744,7 +1165,9 @@ pub async fn take_due(
 /// Send the wake `job` carries, with its run gate held: read the reports
 /// again, then ensure the main chat's runner, write the message and
 /// dispatch it. Every way out but delivery releases the gate; a failure
-/// keeps the reports for the next try and tells the desktop.
+/// keeps the reports for the next try and tells the desktop, except due
+/// tasks, which are consumed and handed to a notification. Due tasks
+/// that went out wait for the turn they start ([`record_wake_run_end`]).
 pub async fn deliver(reports: &SubtaskReports, host: &RunnerHost<'_>, job: WakeJob) -> WakeOutcome {
     let WakeJob {
         main_chat_id: main,
@@ -759,6 +1182,20 @@ pub async fn deliver(reports: &SubtaskReports, host: &RunnerHost<'_>, job: WakeJ
     let subtask_ids: Vec<String> = carried
         .iter()
         .filter_map(|r| r.subtask_id.clone())
+        .collect();
+    // The row's note names every session and every due task it covers.
+    let note_ids: Vec<String> = carried
+        .iter()
+        .filter_map(|r| {
+            r.subtask_id
+                .clone()
+                .or_else(|| r.due().map(|d| d.task_id.clone()))
+        })
+        .collect();
+    let due_tasks: Vec<SubtaskReport> = carried
+        .iter()
+        .filter(|r| r.due().is_some())
+        .cloned()
         .collect();
     let text = report_text(&carried);
 
@@ -787,7 +1224,7 @@ pub async fn deliver(reports: &SubtaskReports, host: &RunnerHost<'_>, job: WakeJ
         .persist_subtask_report(
             &SessionId(main.clone()),
             text.clone(),
-            Origin::subtask_report(&subtask_ids),
+            Origin::subtask_report(&note_ids),
             &replay_lines(&carried),
         )
         .await
@@ -796,6 +1233,8 @@ pub async fn deliver(reports: &SubtaskReports, host: &RunnerHost<'_>, job: WakeJ
         Err(e) => return keep_for_later(reports, host, &main, due, e.to_string()).await,
     };
     announce_message(host, &main, &message, "pending");
+    // Before the dispatch, so the turn's end cannot outrun it.
+    reports.set_in_flight(&main, due_tasks);
     let dispatched = host
         .runner
         .send_command(
@@ -809,6 +1248,7 @@ pub async fn deliver(reports: &SubtaskReports, host: &RunnerHost<'_>, job: WakeJ
         )
         .await;
     if let Err(e) = dispatched {
+        reports.set_in_flight(&main, Vec::new());
         announce_message(host, &main, &message, "persisted_only");
         return keep_for_later(reports, host, &main, due, e.to_string()).await;
     }
@@ -881,11 +1321,27 @@ pub async fn spawn_wake_if_due(
 /// The reports still worth sending, read again with the gate held: the
 /// main chat must still be the main chat; a subtask that is running
 /// again, whose question was answered, that the user promoted or that
-/// was deleted drops out.
+/// was deleted drops out; so does a due task cancelled or fired again
+/// since. Due tasks for a main chat that is gone are consumed and handed
+/// to a notification.
 async fn still_due(host: &RunnerHost<'_>, main: &str, taken: Vec<Waiting>) -> Vec<Waiting> {
     match host.galley.main_chat_id().await {
         Ok(Some(id)) if id.as_str() == main => {}
-        Ok(_) => return Vec::new(),
+        Ok(_) => {
+            let due_tasks = taken
+                .into_iter()
+                .map(|w| w.report)
+                .filter(|r| r.due().is_some())
+                .collect();
+            return_due_tasks(
+                host.galley,
+                host.notifier.as_ref(),
+                due_tasks,
+                ReminderUndeliveredReason::NoMainChat,
+            )
+            .await;
+            return Vec::new();
+        }
         Err(e) => eprintln!("[subtask-report {main}] reading the main chat failed: {e}"),
     }
     let mut due = Vec::with_capacity(taken.len());
@@ -898,6 +1354,23 @@ async fn still_due(host: &RunnerHost<'_>, main: &str, taken: Vec<Waiting>) -> Ve
 }
 
 async fn is_still_due(host: &RunnerHost<'_>, report: &SubtaskReport) -> bool {
+    if let Some(due) = report.due() {
+        return match host.galley.scheduled_task(&due.task_id).await {
+            Ok(task) => {
+                task.cancelled_at.is_none()
+                    && task.last_wake == Some(ScheduledWake::Pending)
+                    && task.last_fired_at.as_deref() == Some(due.fired_at.as_str())
+            }
+            Err(GalleyError::NotFound { .. }) => false,
+            Err(e) => {
+                eprintln!(
+                    "[subtask-report {}] reading the task failed: {e}",
+                    due.task_id
+                );
+                true
+            }
+        };
+    }
     let Some(id) = report.subtask_id.as_deref() else {
         return true;
     };
@@ -915,20 +1388,170 @@ async fn is_still_due(host: &RunnerHost<'_>, report: &SubtaskReport) -> bool {
 }
 
 /// A delivery that failed: release the gate, keep the reports for the
-/// next try, tell the desktop about the ones it has not heard of.
+/// next try, tell the desktop about the ones it has not heard of. Due
+/// tasks are not kept: they are consumed and handed to a notification.
 async fn keep_for_later(
     reports: &SubtaskReports,
     host: &RunnerHost<'_>,
     main: &str,
-    mut due: Vec<Waiting>,
+    due: Vec<Waiting>,
     why: String,
 ) -> WakeOutcome {
     host.runner.queue_release_run(main).await;
     eprintln!("[subtask-report {main}] could not wake the main chat: {why}");
-    let ids = mark_announced(&mut due);
-    reports.restore(main, due);
+    let (due_tasks, mut kept): (Vec<Waiting>, Vec<Waiting>) =
+        due.into_iter().partition(|w| w.report.due().is_some());
+    return_due_tasks(
+        host.galley,
+        host.notifier.as_ref(),
+        due_tasks.into_iter().map(|w| w.report).collect(),
+        ReminderUndeliveredReason::NotStarted,
+    )
+    .await;
+    let ids = mark_announced(&mut kept);
+    reports.restore(main, kept);
     announce_undelivered(host.notifier.as_ref(), main, ids);
     WakeOutcome::Failed(why)
+}
+
+// ---------------- scheduled tasks (ticket 33) ----------------
+
+/// Consume due tasks that could not reach the assistant: their fire is
+/// settled as notified and the desktop is told to show the task's own
+/// words ([`SCHEDULED_REMINDER_UNDELIVERED_EVENT`]). A fire that is no
+/// longer pending (cancelled, fired again, settled) says nothing.
+pub async fn return_due_tasks(
+    galley: &SqliteGalley,
+    notifier: &dyn Notifier,
+    due_tasks: Vec<SubtaskReport>,
+    reason: ReminderUndeliveredReason,
+) {
+    if due_tasks.is_empty() {
+        return;
+    }
+    for report in &due_tasks {
+        let Some(due) = report.due() else {
+            continue;
+        };
+        match galley
+            .settle_scheduled_wake(&due.task_id, &due.fired_at, ScheduledWake::Notified)
+            .await
+        {
+            Ok(true) => {
+                eprintln!(
+                    "[subtask-report {}] reminder {} not delivered ({reason:?}), notified",
+                    report.main_chat_id, due.task_id
+                );
+                notify(
+                    notifier,
+                    SCHEDULED_REMINDER_UNDELIVERED_EVENT,
+                    &ScheduledReminderUndelivered {
+                        task_id: crate::api::ScheduledTaskId(due.task_id.clone()),
+                        prompt: due.prompt.clone(),
+                        reason,
+                    },
+                );
+            }
+            Ok(false) => {}
+            Err(e) => eprintln!(
+                "[subtask-report {}] settling reminder {} failed: {e}",
+                report.main_chat_id, due.task_id
+            ),
+        }
+    }
+    notify(notifier, SCHEDULED_TASKS_CHANGED_EVENT, &());
+}
+
+/// The drain task's hook for a run signal of the main chat, before the
+/// queue step: when a delivered wake carried due tasks, the turn it
+/// started has ended. A turn that ended on an error or lost its runner
+/// before replying did not deliver them — they are handed to a
+/// notification; any other end delivered them (a `<no-reply/>`, a stop
+/// by the user included).
+pub async fn record_wake_run_end(
+    reports: &SubtaskReports,
+    galley: &SqliteGalley,
+    runner: &dyn RunnerPort,
+    notifier: &dyn Notifier,
+    signal: &RunSignal,
+) {
+    let session_id = match signal {
+        RunSignal::RunComplete { session_id } | RunSignal::Closed { session_id } => session_id,
+    };
+    let carried = reports.take_in_flight(session_id);
+    if carried.is_empty() {
+        return;
+    }
+    let state = runner.run_state(session_id).await;
+    if matches!(
+        run_end(signal, &state),
+        Some(RunEnd::NoExit | RunEnd::RunnerExited)
+    ) {
+        return_due_tasks(
+            galley,
+            notifier,
+            carried,
+            ReminderUndeliveredReason::NoReply,
+        )
+        .await;
+        return;
+    }
+    for report in &carried {
+        let Some(due) = report.due() else {
+            continue;
+        };
+        if let Err(e) = galley
+            .settle_scheduled_wake(&due.task_id, &due.fired_at, ScheduledWake::Delivered)
+            .await
+        {
+            eprintln!(
+                "[subtask-report {session_id}] settling reminder {} failed: {e}",
+                due.task_id
+            );
+        }
+    }
+    notify(notifier, SCHEDULED_TASKS_CHANGED_EVENT, &());
+}
+
+/// Read the fires still pending in `scheduled_tasks` into the waiting
+/// reports — every scheduler tick, so a fire the scheduler just stamped
+/// and one left over from before a restart travel the same way. A fire
+/// already reported in this process is not added again. Returns the main
+/// chat to wake when any was added; nothing while the managed runtime is
+/// not active or has no main chat (the fires stay pending).
+pub async fn restore_pending_reminders(
+    reports: &SubtaskReports,
+    galley: &SqliteGalley,
+) -> Option<String> {
+    let main = match galley.active_runtime_kind().await {
+        Ok(RuntimeKind::Managed) => match galley.main_chat_id().await {
+            Ok(Some(main)) => main.0,
+            Ok(None) => return None,
+            Err(e) => {
+                eprintln!("[subtask-report] reading the main chat failed: {e}");
+                return None;
+            }
+        },
+        Ok(_) => return None,
+        Err(e) => {
+            eprintln!("[subtask-report] reading the runtime failed: {e}");
+            return None;
+        }
+    };
+    let pending = match galley.pending_scheduled_wakes().await {
+        Ok(pending) => pending,
+        Err(e) => {
+            eprintln!("[subtask-report] reading pending reminders failed: {e}");
+            return None;
+        }
+    };
+    let mut added = false;
+    for task in &pending {
+        if let Some(report) = SubtaskReport::reminder(&main, task) {
+            added |= reports.add(report);
+        }
+    }
+    added.then_some(main)
 }
 
 fn announce_message(
@@ -961,7 +1584,184 @@ mod tests {
             send_backs,
             outcome,
             key: format!("{}#1", id.unwrap_or("tag")),
+            scheduled_task_id: None,
         }
+    }
+
+    fn due(once: bool, late: Option<&str>) -> DueReminder {
+        DueReminder {
+            task_id: "sched_a".into(),
+            prompt: "提醒他喝水".into(),
+            once,
+            rule: if once {
+                "one-off".into()
+            } else {
+                "every day at 09:00".into()
+            },
+            due_at: "2026-10-20T12:00:00+00:00".into(),
+            fired_at: "2026-10-20T12:00:30+00:00".into(),
+            due_local: "2026-10-20 20:00 (Tue)".into(),
+            fired_local: "2026-10-22 09:15 (Thu)".into(),
+            late: late.map(str::to_string),
+        }
+    }
+
+    fn due_report(d: DueReminder) -> SubtaskReport {
+        SubtaskReport {
+            main_chat_id: "s-main".into(),
+            subtask_id: None,
+            title: d.prompt.clone(),
+            send_backs: 0,
+            key: format!("sched:{}@{}", d.task_id, d.fired_at),
+            scheduled_task_id: Some(d.task_id.clone()),
+            outcome: ReportOutcome::Due(d),
+        }
+    }
+
+    #[test]
+    fn a_due_reminder_carries_its_words_and_when() {
+        let text = report_text(&[due_report(due(true, None))]);
+        assert!(text.starts_with(OPENING_REMINDER));
+        assert!(text.contains(
+            "Reminder `sched_a` (one-off) came due. Planned for 2026-10-20 20:00 (Tue), local \
+             time. What you noted when you set it:\n<<<\n提醒他喝水\n>>>\n"
+        ));
+        assert!(text.contains(
+            "If it no longer applies (the user already did it), end your reply with exactly \
+             <no-reply/>."
+        ));
+        assert!(!text.contains("late"));
+        let late = report_text(&[due_report(due(false, Some("1 day 13 hours")))]);
+        assert!(late.contains(
+            "Scheduled reminder `sched_a` (every day at 09:00) came due. Planned for \
+             2026-10-20 20:00 (Tue), local time; it went off at 2026-10-22 09:15 (Thu), 1 day \
+             13 hours late (the computer was asleep or Galley was closed). Tell the user it \
+             comes late, and how late."
+        ));
+        assert_eq!(
+            replay_lines(&[due_report(due(true, None))]),
+            "[Galley: reminder sched_a came due (2026-10-20 20:00 (Tue)) — details: schedule \
+             show sched_a]"
+        );
+        assert_eq!(
+            replay_lines(&[due_report(due(true, Some("3 minutes")))]),
+            "[Galley: reminder sched_a came due (planned 2026-10-20 20:00 (Tue), went off \
+             2026-10-22 09:15 (Thu), 3 minutes late) — details: schedule show sched_a]"
+        );
+        assert_eq!(
+            replay_fallback(Some("s-1,sched_a")),
+            "[Galley: subtask s-1 has an update — details: session show s-1]\n\
+             [Galley: scheduled task sched_a came due — details: schedule show sched_a]"
+        );
+    }
+
+    #[test]
+    fn a_mix_of_kinds_opens_in_general() {
+        let mut scheduled = report(Some("s-9"), 0, done("今天的摘要"));
+        scheduled.scheduled_task_id = Some("sched_b".into());
+        scheduled.title = "每天早上的摘要".into();
+        let alone = report_text(std::slice::from_ref(&scheduled));
+        assert!(alone.starts_with(OPENING_SCHEDULED));
+        assert!(alone.contains(
+            "Scheduled task `sched_b` ran in session `s-9` (\"每天早上的摘要\") and finished. \
+             Its final answer:\n<<<\n今天的摘要\n>>>\nTell the user the result in a sentence \
+             or two."
+        ));
+        assert!(!alone.contains("send it back"));
+        assert_eq!(
+            replay_lines(std::slice::from_ref(&scheduled)),
+            "[Galley: scheduled task sched_b ran in session s-9 \"每天早上的摘要\": finished — \
+             details: session show s-9]"
+        );
+        let mixed = report_text(&[
+            report(Some("s-1"), 0, done("x")),
+            due_report(due(true, None)),
+            scheduled,
+        ]);
+        assert!(mixed.starts_with(OPENING_MIXED));
+        assert!(mixed.ends_with(CLOSING_MANY));
+        let only_subtasks = report_text(&[report(Some("s-1"), 0, done("x"))]);
+        assert!(only_subtasks.starts_with(OPENING));
+    }
+
+    #[test]
+    fn lateness_and_rules_in_words() {
+        assert_eq!(lateness_words(180), "3 minutes");
+        assert_eq!(lateness_words(60), "1 minute");
+        assert_eq!(lateness_words(3600), "1 hour");
+        assert_eq!(lateness_words(2 * 3600 + 5 * 60), "2 hours 5 minutes");
+        assert_eq!(
+            lateness_words(86_400 + 13 * 3600 + 40 * 60),
+            "1 day 13 hours"
+        );
+        assert_eq!(lateness_words(2 * 86_400), "2 days");
+        assert_eq!(rule_words(&ScheduledTaskRepeat::Once, "20:00"), "one-off");
+        assert_eq!(
+            rule_words(&ScheduledTaskRepeat::Daily, "09:00"),
+            "every day at 09:00"
+        );
+        assert_eq!(
+            rule_words(
+                &ScheduledTaskRepeat::Weekly {
+                    weekdays: vec![1, 5]
+                },
+                "09:00"
+            ),
+            "every Mon, Fri at 09:00"
+        );
+        assert_eq!(
+            rule_words(
+                &ScheduledTaskRepeat::Monthly {
+                    monthdays: vec![1, 15]
+                },
+                "08:30"
+            ),
+            "monthly on day 1, 15 at 08:30"
+        );
+    }
+
+    #[test]
+    fn a_due_report_reads_its_fire_in_the_given_zone() {
+        use crate::api::schedule::{ScheduleTarget, ScheduledTaskBrief};
+        use crate::api::ScheduledTaskId;
+        let task = ScheduledTaskBrief {
+            id: ScheduledTaskId("sched_x".into()),
+            project_id: None,
+            prompt: "带身份证".into(),
+            repeat: ScheduledTaskRepeat::Once,
+            time_of_day: "20:00".into(),
+            fire_at: Some("2026-10-20T12:00:00+00:00".into()),
+            target: ScheduleTarget::Assistant,
+            llm_name: None,
+            enabled: true,
+            last_fired_at: Some("2026-10-22T01:15:00+00:00".into()),
+            last_run_session_id: None,
+            next_fire_at: None,
+            last_due_at: Some("2026-10-20T12:00:00+00:00".into()),
+            last_wake: Some(ScheduledWake::Pending),
+            origin: None,
+            created_in: None,
+            cancelled_at: None,
+            created_at: "2026-10-16T00:00:00+00:00".into(),
+            updated_at: "2026-10-16T00:00:00+00:00".into(),
+        };
+        let shanghai = chrono::FixedOffset::east_opt(8 * 3600).unwrap();
+        let due = DueReminder::from_task(&task, &shanghai).unwrap();
+        assert_eq!(due.due_local, "2026-10-20 20:00 (Tue)");
+        assert_eq!(due.fired_local, "2026-10-22 09:15 (Thu)");
+        assert_eq!(due.late.as_deref(), Some("1 day 13 hours"));
+        assert!(due.once);
+        // Within two minutes it is on time.
+        let mut on_time = task.clone();
+        on_time.last_fired_at = Some("2026-10-20T12:01:59+00:00".into());
+        assert_eq!(
+            DueReminder::from_task(&on_time, &shanghai).unwrap().late,
+            None
+        );
+        // Never fired: nothing to report.
+        let mut never = task;
+        never.last_fired_at = None;
+        assert!(DueReminder::from_task(&never, &shanghai).is_none());
     }
 
     fn done(answer: &str) -> ReportOutcome {

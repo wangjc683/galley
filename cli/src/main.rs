@@ -22,6 +22,7 @@ mod client;
 mod common;
 mod llm;
 mod project;
+mod schedule;
 mod session;
 mod system;
 mod transport;
@@ -220,5 +221,6 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
             session_id,
             llm_name,
         }) => llm::llm_set(session_id, llm_name).await,
+        Command::Schedule(cmd) => schedule::run(cmd).await,
     }
 }

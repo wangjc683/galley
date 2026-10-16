@@ -15,8 +15,8 @@
 //! today and today's at 09:00 — two digests a minute apart. Periods
 //! that predate the task's creation never fire.
 //!
-//! Firing goes through the production `session.new` socket dispatch
-//! (`dispatch_line_with`) — the same create + persist + spawn +
+//! Firing goes through the production `session.new` socket handler
+//! (`dispatch_session_new_with`) — the same create + persist + spawn +
 //! dispatch + GUI-event path a supervisor uses; no scheduler-private
 //! session plumbing. A fire whose session creation fails still consumes
 //! its period (`last_fired_at` stamped, `last_run_session_id` NULL) so
@@ -35,6 +35,24 @@
 //!   disabled for a week and re-enabled at 10:00 fires today's 09:00
 //!   immediately — its period is unconsumed and still inside its local
 //!   day. `updated_at` is deliberately not consulted.
+//!
+//! Main chat ticket 33 adds:
+//!
+//! - **One-offs** fire once, at `fireAt`, when no fire at or after it is
+//!   recorded ([`due_at`]). They are **not** bound to the local day: a
+//!   computer asleep for two days fires a missed reminder when it wakes —
+//!   a lost reminder is worse than a late one. A manual run before
+//!   `fireAt` does not consume it; a later `fireAt` arms it again.
+//! - **Cancelled** tasks never fire.
+//! - **Waking the assistant** (`target = assistant`): no session. The fire
+//!   is stamped `last_wake = 'pending'` ([`fire_reminder`]) and every tick
+//!   reads the pending fires into the main chat's waiting reports
+//!   (`crate::subtask_report::restore_pending_reminders`) and wakes it —
+//!   the database is the queue, so a restart loses nothing. While the
+//!   active runtime is not the managed one, or has no main chat, these
+//!   tasks do not fire (a one-off fires late once the main chat is back).
+//! - A session a `target = session` task started reports its runs to the
+//!   main chat like a subtask (`crate::subtask_report`).
 
 use std::sync::Arc;
 
@@ -42,15 +60,20 @@ use chrono::{DateTime, Local, TimeZone};
 use tauri::Manager;
 
 use crate::api::schedule::{
-    instant_to_utc_iso, next_fire_after, parse_time_of_day, prev_fire_at_or_before,
-    resolve_wall_clock, FirePreview, ScheduledFireFailed, ScheduledTaskBrief,
+    instant_to_utc_iso, next_fire_after, parse_time_of_day, parse_utc_secs, prev_fire_at_or_before,
+    resolve_wall_clock, FirePreview, ScheduleTarget, ScheduledFireFailed, ScheduledTaskBrief,
     SCHEDULED_TASKS_CHANGED_EVENT, SCHEDULED_TASK_FIRE_FAILED_EVENT,
 };
 use crate::api::{GalleyApi, ScheduledTaskId};
 use crate::db::SqliteGalley;
-use crate::protocol::{SessionNewArgs, SessionNewResult, SocketRequest, SCHEMA_VERSION};
+use crate::error::GalleyError;
+use crate::notify::{notify, Notifier};
+use crate::protocol::{SessionNewArgs, SessionNewResult};
 use crate::runner_manager::RunnerManager;
-use crate::socket_listener::{dispatch_line_with, DbSource, DispatchResult, HandlerCtx};
+use crate::socket_listener::{dispatch_session_new_with, DbSource, HandlerCtx};
+use crate::subtask_report::{
+    restore_pending_reminders, spawn_wake_if_due, wake_if_due, SubtaskReports,
+};
 
 const TICK_SECONDS: u64 = 60;
 
@@ -58,8 +81,21 @@ const TICK_SECONDS: u64 = 60;
 /// `galley-<source>` form. Mirrored as `SCHEDULER_SUPERVISOR` in
 /// `gui/src/lib/scheduled-tasks.ts` (badge + sidebar marker) and pinned
 /// by `gui/src/lib/scheduled-tasks.test.ts` — a rename must land on
-/// both sides.
-const SCHEDULER_SUPERVISOR: &str = "galley-scheduler";
+/// both sides. `crate::subtask_report` reads it back to find the task
+/// behind a session ([`task_id_from_reason`]).
+pub const SCHEDULER_SUPERVISOR: &str = "galley-scheduler";
+
+/// The `reason` a scheduler-created session is stamped with, followed by
+/// the task id.
+const REASON_PREFIX: &str = "scheduled task ";
+
+/// The task id in a scheduler-created session's origin reason.
+pub fn task_id_from_reason(reason: &str) -> Option<&str> {
+    reason
+        .strip_prefix(REASON_PREFIX)
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+}
 
 pub(crate) fn start(app: &tauri::App) {
     let handle = app.handle().clone();
@@ -91,24 +127,146 @@ async fn tick(app: &tauri::AppHandle, galley: &SqliteGalley) {
     let now = Local::now();
     let due: Vec<_> = tasks
         .into_iter()
-        .filter(|t| due_fire(t, &Local, &now))
+        .filter_map(|t| due_at(&t, &Local, &now).map(|planned| (t, planned)))
         .collect();
-    if due.is_empty() {
+    let notifier = crate::notify::TauriNotifier::new(app.clone());
+    let mut sessions = Vec::new();
+    // Read once per tick, only when a task wakes the assistant.
+    let mut assistant: Option<bool> = None;
+    for (task, planned) in due {
+        match task.target {
+            ScheduleTarget::Session => sessions.push(task),
+            ScheduleTarget::Assistant => {
+                let available = match assistant {
+                    Some(available) => available,
+                    None => {
+                        let available =
+                            galley.ensure_assistant_available("scheduler").await.is_ok();
+                        assistant = Some(available);
+                        available
+                    }
+                };
+                if available {
+                    fire_reminder(galley, notifier.as_ref(), &task, &planned, &now).await;
+                }
+            }
+        }
+    }
+    if !sessions.is_empty() {
+        // Compose the production adapters behind the HandlerCtx seam once
+        // per tick; `fire` itself never touches Tauri directly.
+        let db = DbSource::Pool(galley.clone());
+        let manager: Arc<RunnerManager> = app.state::<Arc<RunnerManager>>().inner().clone();
+        let ctx = HandlerCtx {
+            db: &db,
+            runner: manager.as_ref(),
+            notifier: notifier.clone(),
+            app: Some(app),
+        };
+        for task in &sessions {
+            fire(&ctx, task, &now).await;
+        }
+    }
+    // Every pending fire — this tick's and any a restart left — goes to
+    // the main chat.
+    if let Some(reports) = app.try_state::<Arc<SubtaskReports>>() {
+        wake_for_pending(app, galley, reports.inner()).await;
+    }
+}
+
+/// Read the pending fires into the waiting reports and, when any was
+/// new, wake the main chat in the background (the drain task's way).
+async fn wake_for_pending(
+    app: &tauri::AppHandle,
+    galley: &SqliteGalley,
+    reports: &Arc<SubtaskReports>,
+) {
+    let Some(main) = restore_pending_reminders(reports, galley).await else {
         return;
-    }
-    // Compose the production adapters behind the HandlerCtx seam once
-    // per tick; `fire` itself never touches Tauri directly.
-    let db = DbSource::Pool(galley.clone());
-    let manager: Arc<RunnerManager> = app.state::<Arc<RunnerManager>>().inner().clone();
-    let ctx = HandlerCtx {
-        db: &db,
-        runner: manager.as_ref(),
-        notifier: crate::notify::TauriNotifier::new(app.clone()),
-        app: Some(app),
     };
-    for task in &due {
-        fire(&ctx, task, &now).await;
+    let manager: Arc<RunnerManager> = app.state::<Arc<RunnerManager>>().inner().clone();
+    let notifier = crate::notify::TauriNotifier::new(app.clone());
+    spawn_wake_if_due(reports, galley, &manager, &notifier, Some(app), &main).await;
+}
+
+/// Record the fire of a task that wakes the assistant (`target =
+/// assistant`): no session; the fire is stamped pending with the period
+/// it was due for, and the desktop is told the task changed. The main
+/// chat hears of it through the pending fires
+/// (`crate::subtask_report::restore_pending_reminders`). `false` when the
+/// stamp failed.
+pub async fn fire_reminder<Tz: TimeZone>(
+    galley: &SqliteGalley,
+    notifier: &dyn Notifier,
+    task: &ScheduledTaskBrief,
+    due_at: &DateTime<Tz>,
+    now: &DateTime<Tz>,
+) -> bool {
+    match galley
+        .mark_scheduled_reminder_fired(
+            &task.id,
+            &instant_to_utc_iso(now),
+            &instant_to_utc_iso(due_at),
+        )
+        .await
+    {
+        Ok(_) => {
+            notify(notifier, SCHEDULED_TASKS_CHANGED_EVENT, &());
+            true
+        }
+        Err(e) => {
+            eprintln!("[scheduler] task {} mark fired failed: {e:?}", task.id);
+            false
+        }
     }
+}
+
+/// Run a task once, now — the GUI's "run now" and the CLI's `schedule
+/// run`, through the scheduled path ([`run_task_now`]'s contract): a
+/// `session` task fires through [`fire`]; an `assistant` task is stamped
+/// like a due fire planned for now and the main chat is woken, in the
+/// background when there is an app, inline otherwise. Refused for a
+/// cancelled task (`not_found`) and, for an `assistant` task, when there
+/// is no assistant to wake (`invalid_args`,
+/// [`crate::api::ASSISTANT_UNAVAILABLE`]). Returns the task as it stands
+/// after the fire.
+pub async fn run_now(
+    ctx: &HandlerCtx<'_>,
+    reports: Option<&Arc<SubtaskReports>>,
+    id: &str,
+) -> crate::error::Result<ScheduledTaskBrief> {
+    let galley = ctx.db.get().await?;
+    let task = galley.scheduled_task(id).await?;
+    if task.cancelled_at.is_some() {
+        return Err(GalleyError::NotFound {
+            message: format!("scheduled task {id} is cancelled"),
+        });
+    }
+    let now = Local::now();
+    match task.target {
+        ScheduleTarget::Session => fire(ctx, &task, &now).await,
+        ScheduleTarget::Assistant => {
+            galley
+                .ensure_assistant_available("run_scheduled_task")
+                .await?;
+            if !fire_reminder(&galley, ctx.notifier.as_ref(), &task, &now, &now).await {
+                return Err(GalleyError::Internal {
+                    message: format!("scheduled task {id}: recording the fire failed"),
+                });
+            }
+            if let Some(reports) = reports {
+                match ctx.app {
+                    Some(app) => wake_for_pending(app, &galley, reports).await,
+                    None => {
+                        if let Some(main) = restore_pending_reminders(reports, &galley).await {
+                            wake_if_due(reports, &ctx.runner_host(&galley), &main).await;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    galley.scheduled_task(id).await
 }
 
 /// Manual "run now" from the GUI (issue 13): fire this task once,
@@ -128,14 +286,6 @@ pub(crate) async fn run_task_now(
     galley: &SqliteGalley,
     id: &str,
 ) -> crate::error::Result<()> {
-    let task = galley
-        .list_scheduled_tasks()
-        .await?
-        .into_iter()
-        .find(|t| t.id.as_str() == id)
-        .ok_or_else(|| crate::error::GalleyError::NotFound {
-            message: format!("scheduled task {id} not found"),
-        })?;
     // Same production-adapter composition as `tick`.
     let db = DbSource::Pool(galley.clone());
     let manager: Arc<RunnerManager> = app.state::<Arc<RunnerManager>>().inner().clone();
@@ -145,33 +295,59 @@ pub(crate) async fn run_task_now(
         notifier: crate::notify::TauriNotifier::new(app.clone()),
         app: Some(app),
     };
-    fire(&ctx, &task, &Local::now()).await;
-    Ok(())
+    let reports = app
+        .try_state::<Arc<SubtaskReports>>()
+        .map(|r| r.inner().clone());
+    run_now(&ctx, reports.as_ref(), id).await.map(|_| ())
 }
 
 /// Pure due check: is this task's most recent planned fire still
 /// unconsumed? Generic over the timezone so DST behavior is unit-tested
 /// with real tz data (production passes `chrono::Local`).
 fn due_fire<Tz: TimeZone>(task: &ScheduledTaskBrief, tz: &Tz, now: &DateTime<Tz>) -> bool {
-    if !task.enabled {
-        return false;
+    due_at(task, tz, now).is_some()
+}
+
+/// The planned instant of the fire this task owes now, if any — the
+/// due check behind [`due_fire`], with the instant a reminder's report
+/// measures its lateness from. A one-off owes its `fireAt` from then on,
+/// whatever day it is now, until a fire at or after it is recorded.
+pub fn due_at<Tz: TimeZone>(
+    task: &ScheduledTaskBrief,
+    tz: &Tz,
+    now: &DateTime<Tz>,
+) -> Option<DateTime<Tz>> {
+    if !task.enabled || task.cancelled_at.is_some() {
+        return None;
+    }
+    if task.repeat.is_once() {
+        let fire_at = DateTime::parse_from_rfc3339(task.fire_at.as_deref()?).ok()?;
+        if fire_at.timestamp() > now.timestamp() {
+            return None;
+        }
+        if let Some(last) = task.last_fired_at.as_deref().and_then(parse_utc_secs) {
+            if last >= fire_at.timestamp() {
+                return None;
+            }
+        }
+        return Some(fire_at.with_timezone(tz));
     }
     let Ok(tod) = parse_time_of_day(&task.time_of_day) else {
         // Normally unreachable — the list read already skips (and logs)
         // corrupt rows. Fail closed for any other caller.
-        return false;
+        return None;
     };
     let prev = prev_fire_at_or_before(&task.repeat, tod, now.naive_local());
     // Catch-up is bounded to the planned fire's own local day — a
     // missed run older than that is dropped, not fired retroactively.
     if prev.date() != now.naive_local().date() {
-        return false;
+        return None;
     }
     let prev_instant = resolve_wall_clock(tz, prev);
     // A DST spring-forward gap can resolve "02:30" to an instant a few
     // minutes in the future; that fire belongs to a later tick.
     if prev_instant > *now {
-        return false;
+        return None;
     }
     // Baseline: whatever is later of "last consumed period" and "task
     // exists since" — periods before creation, and re-fires within a
@@ -181,17 +357,11 @@ fn due_fire<Tz: TimeZone>(task: &ScheduledTaskBrief, tz: &Tz, now: &DateTime<Tz>
     // lexicographically `'Z' > '+'` flips exact-second ties.
     let Some(created) = parse_utc_secs(&task.created_at) else {
         // Unparseable created_at (manual DB edit): fail closed.
-        return false;
+        return None;
     };
     let last = task.last_fired_at.as_deref().and_then(parse_utc_secs);
     let baseline = last.map_or(created, |l| l.max(created));
-    prev_instant.timestamp() > baseline
-}
-
-/// Second-resolution UTC instant of an ISO-8601 timestamp; `None` when
-/// unparseable (callers fail closed).
-fn parse_utc_secs(iso: &str) -> Option<i64> {
-    DateTime::parse_from_rfc3339(iso).ok().map(|dt| dt.timestamp())
+    (prev_instant.timestamp() > baseline).then_some(prev_instant)
 }
 
 /// Preview what saving a task shaped like `task` would do: whether it
@@ -206,6 +376,11 @@ pub fn preview_fire<Tz: TimeZone>(
     tz: &Tz,
     now: &DateTime<Tz>,
 ) -> crate::error::Result<FirePreview> {
+    if task.repeat.is_once() {
+        return Err(GalleyError::InvalidArgs {
+            message: "preview_scheduled_fire: a one-off has no rule to preview".into(),
+        });
+    }
     let tod = parse_time_of_day(&task.time_of_day)?;
     let next = next_fire_after(&task.repeat, tod, now.naive_local());
     Ok(FirePreview {
@@ -266,24 +441,20 @@ pub async fn fire<Tz: TimeZone>(ctx: &HandlerCtx<'_>, task: &ScheduledTaskBrief,
             return;
         }
     };
-    let request = SocketRequest {
-        command: "session.new".into(),
-        args: serde_json::to_value(SessionNewArgs {
-            task: task.prompt.clone(),
-            project_id: task.project_id.as_ref().map(|p| p.as_str().to_string()),
-            llm_name: resolve_task_llm(&galley, task).await,
-            runtime_kind: None,
-            supervisor: Some(SCHEDULER_SUPERVISOR.into()),
-            reason: Some(format!("scheduled task {}", task.id)),
-        })
-        .expect("SessionNewArgs serializes"),
-        request_id: None,
-        schema_version: SCHEMA_VERSION,
+    let args = SessionNewArgs {
+        task: task.prompt.clone(),
+        project_id: task.project_id.as_ref().map(|p| p.as_str().to_string()),
+        llm_name: resolve_task_llm(&galley, task).await,
+        runtime_kind: None,
+        supervisor: Some(SCHEDULER_SUPERVISOR.into()),
+        reason: Some(format!("{REASON_PREFIX}{}", task.id)),
     };
-    let line = serde_json::to_string(&request).expect("SocketRequest serializes");
 
-    let session_id = match dispatch_line_with(ctx, &line).await {
-        DispatchResult::Unary(resp) if resp.ok => resp.result.and_then(|r| {
+    // The `session.new` handler itself, not the line router: the CLI's
+    // `schedule run` reaches this through the router, which must not
+    // contain itself (ticket 34).
+    let session_id = match dispatch_session_new_with(ctx, args).await {
+        resp if resp.ok => resp.result.and_then(|r| {
             match serde_json::from_value::<SessionNewResult>(r) {
                 Ok(result) => Some(result.session.id),
                 // Unreachable while both ends build `SessionNewResult`;
@@ -294,18 +465,13 @@ pub async fn fire<Tz: TimeZone>(ctx: &HandlerCtx<'_>, task: &ScheduledTaskBrief,
                 }
             }
         }),
-        DispatchResult::Unary(resp) => {
+        resp => {
             eprintln!(
                 "[scheduler] task {} fire failed: {} {}",
                 task.id,
                 resp.error.as_deref().unwrap_or("?"),
                 resp.message.as_deref().unwrap_or("")
             );
-            None
-        }
-        // session.new never streams; treat it like a failed fire.
-        DispatchResult::Stream { .. } => {
-            eprintln!("[scheduler] task {} fire returned a stream", task.id);
             None
         }
     };
@@ -364,9 +530,119 @@ mod tests {
             last_fired_at: last_fired_at.map(str::to_string),
             last_run_session_id: None,
             next_fire_at: None,
+            fire_at: None,
+            target: ScheduleTarget::Session,
+            last_due_at: None,
+            last_wake: None,
+            origin: None,
+            created_in: None,
+            cancelled_at: None,
             created_at: created_at.into(),
             updated_at: created_at.into(),
         }
+    }
+
+    fn once(fire_at: &str, last_fired_at: Option<&str>) -> ScheduledTaskBrief {
+        let mut t = task(
+            ScheduledTaskRepeat::Once,
+            "20:00",
+            true,
+            CREATED_LONG_AGO,
+            last_fired_at,
+        );
+        t.fire_at = Some(fire_at.into());
+        t.target = ScheduleTarget::Assistant;
+        t
+    }
+
+    // 2026-07-22T20:00 America/New_York (EDT) = 2026-07-23T00:00Z.
+    const ONCE_AT: &str = "2026-07-23T00:00:00+00:00";
+
+    #[test]
+    fn a_one_off_fires_at_its_time_and_once() {
+        let t = once(ONCE_AT, None);
+        assert_eq!(due_at(&t, &New_York, &ny(2026, 7, 22, 19, 59)), None);
+        let at = due_at(&t, &New_York, &ny(2026, 7, 22, 20, 0)).expect("due");
+        assert_eq!(instant_to_utc_iso(&at), ONCE_AT);
+        // Fired (on time): never again.
+        let fired = once(ONCE_AT, Some("2026-07-23T00:00:20Z"));
+        assert!(!due_fire(&fired, &New_York, &ny(2026, 7, 22, 20, 1)));
+        assert!(!due_fire(&fired, &New_York, &ny(2026, 7, 25, 9, 0)));
+    }
+
+    #[test]
+    fn a_missed_one_off_fires_days_later_with_its_planned_instant() {
+        // Asleep across midnight, and across two: still owed, unlike a
+        // repeating task's catch-up, and its planned instant is kept for
+        // the report's "how late".
+        let t = once(ONCE_AT, None);
+        for now in [ny(2026, 7, 23, 0, 30), ny(2026, 7, 24, 23, 59)] {
+            let at = due_at(&t, &New_York, &now).expect("still due");
+            assert_eq!(instant_to_utc_iso(&at), ONCE_AT);
+        }
+    }
+
+    #[test]
+    fn a_manual_run_before_the_time_leaves_the_one_off_due() {
+        // "Run now" at 19:00 stamps last_fired_at before fireAt: the
+        // planned fire at 20:00 still happens.
+        let t = once(ONCE_AT, Some("2026-07-22T23:00:00Z"));
+        assert!(!due_fire(&t, &New_York, &ny(2026, 7, 22, 19, 30)));
+        assert!(due_fire(&t, &New_York, &ny(2026, 7, 22, 20, 0)));
+        // A later fireAt arms a fired one-off again.
+        let mut again = once(ONCE_AT, Some("2026-07-23T00:00:10Z"));
+        again.fire_at = Some("2026-07-23T02:00:00+00:00".into());
+        assert!(!due_fire(&again, &New_York, &ny(2026, 7, 22, 21, 0)));
+        assert!(due_fire(&again, &New_York, &ny(2026, 7, 22, 22, 0)));
+    }
+
+    #[test]
+    fn cancelled_and_disabled_one_offs_never_fire() {
+        let mut cancelled = once(ONCE_AT, None);
+        cancelled.cancelled_at = Some("2026-07-22T12:00:00Z".into());
+        assert!(!due_fire(&cancelled, &New_York, &ny(2026, 7, 22, 21, 0)));
+        let mut paused = once(ONCE_AT, None);
+        paused.enabled = false;
+        assert!(!due_fire(&paused, &New_York, &ny(2026, 7, 22, 21, 0)));
+        // A cancelled repeating task too.
+        let mut daily = task(
+            ScheduledTaskRepeat::Daily,
+            "09:00",
+            true,
+            CREATED_LONG_AGO,
+            None,
+        );
+        daily.cancelled_at = Some("2026-07-21T12:00:00Z".into());
+        assert!(!due_fire(&daily, &New_York, &ny(2026, 7, 22, 9, 30)));
+    }
+
+    #[test]
+    fn a_repeating_task_reports_the_period_it_owes() {
+        let t = task(
+            ScheduledTaskRepeat::Daily,
+            "09:00",
+            true,
+            CREATED_LONG_AGO,
+            None,
+        );
+        let at = due_at(&t, &New_York, &ny(2026, 7, 22, 9, 40)).expect("due");
+        assert_eq!(instant_to_utc_iso(&at), "2026-07-22T13:00:00+00:00");
+    }
+
+    #[test]
+    fn the_task_id_reads_back_from_a_session_reason() {
+        assert_eq!(
+            task_id_from_reason("scheduled task sched_1"),
+            Some("sched_1")
+        );
+        assert_eq!(task_id_from_reason("scheduled task "), None);
+        assert_eq!(task_id_from_reason("weekly review"), None);
+    }
+
+    #[test]
+    fn preview_refuses_a_one_off() {
+        let t = once(ONCE_AT, None);
+        assert!(preview_fire(&t, &New_York, &ny(2026, 7, 22, 8, 0)).is_err());
     }
 
     fn ny(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> DateTime<Tz> {

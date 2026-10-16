@@ -438,11 +438,17 @@ fn start_background_services(app: &tauri::App) {
             .clone();
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         manager.set_run_signal(tx);
+        // The reports waiting for the main chat (ticket 29), one store
+        // for the drain task and the scheduler, which adds due tasks
+        // (ticket 33). Managed before the scheduler starts.
+        let reports = std::sync::Arc::new(crate::subtask_report::SubtaskReports::new());
+        app.manage(reports.clone());
         crate::message_queue::spawn_queue_drain_task(
             app.state::<SqliteGalley>().inner().clone(),
             manager,
             crate::notify::TauriNotifier::new(app.handle().clone()),
             Some(app.handle().clone()),
+            reports,
             rx,
         );
     }

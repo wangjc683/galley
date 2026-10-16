@@ -6,9 +6,11 @@ import {
   countFailedTasks,
   formatFireTime,
   formDaysValid,
+  formFromTask,
   repeatFromForm,
   repeatSummary,
   EMPTY_SCHEDULED_TASK_FORM,
+  SCHEDULED_REMINDER_UNDELIVERED_EVENT,
   SCHEDULED_TASK_FIRE_FAILED_EVENT,
   SCHEDULER_SUPERVISOR,
   type ScheduledTask,
@@ -71,6 +73,7 @@ describe("repeatSummary", () => {
     expect(
       repeatSummary(zhCopy, { kind: "monthly", monthdays: [1, 15] }, "09:30"),
     ).toBe("每月 1·15 日 09:30");
+    expect(repeatSummary(zhCopy, { kind: "once" }, "20:00")).toBe("一次 20:00");
   });
 });
 
@@ -99,6 +102,12 @@ describe("SCHEDULER_SUPERVISOR", () => {
   it("pins the fire-failed event name Core emits in api/schedule.rs", () => {
     expect(SCHEDULED_TASK_FIRE_FAILED_EVENT).toBe(
       "scheduled-tasks:fire-failed",
+    );
+  });
+
+  it("pins the reminder-undelivered event name Core emits", () => {
+    expect(SCHEDULED_REMINDER_UNDELIVERED_EVENT).toBe(
+      "scheduled-tasks:reminder-undelivered",
     );
   });
 });
@@ -139,5 +148,51 @@ describe("countFailedTasks", () => {
         task({ lastFiredAt: "2026-07-30T01:00:00+00:00", enabled: false }),
       ]),
     ).toBe(0);
+  });
+
+  it("excludes tasks that wake the assistant — they start no session", () => {
+    expect(
+      countFailedTasks([
+        task({
+          lastFiredAt: "2026-07-30T01:00:00+00:00",
+          target: "assistant",
+        }),
+      ]),
+    ).toBe(0);
+  });
+});
+
+describe("formFromTask", () => {
+  const base: ScheduledTask = {
+    id: "sched_x",
+    prompt: "p",
+    repeat: { kind: "weekly", weekdays: [1, 5] },
+    timeOfDay: "09:00",
+    enabled: true,
+    createdAt: "2026-07-01T00:00:00+00:00",
+    updatedAt: "2026-07-01T00:00:00+00:00",
+  };
+
+  it("fills the form for a repeating task", () => {
+    expect(formFromTask(base)).toEqual({
+      id: "sched_x",
+      prompt: "p",
+      projectId: "",
+      repeatKind: "weekly",
+      weekdays: [1, 5],
+      monthdays: [],
+      timeOfDay: "09:00",
+      llmName: "",
+    });
+  });
+
+  it("has no form for a one-off", () => {
+    expect(
+      formFromTask({
+        ...base,
+        repeat: { kind: "once" },
+        fireAt: "2026-10-20T12:00:00+00:00",
+      }),
+    ).toBeNull();
   });
 });

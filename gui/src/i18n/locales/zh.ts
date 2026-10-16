@@ -1999,11 +1999,13 @@ export const zhCopy = {
     repeatSummaryWeekly: (days: string, time: string) => `每周${days} ${time}`,
     repeatSummaryMonthly: (days: string, time: string) =>
       `每月 ${days} 日 ${time}`,
+    repeatSummaryOnce: (time: string) => `一次 ${time}`,
     nextFire: (time: string) => `下次 ${time}`,
     previewFirst: (time: string) => `首次触发：${time}`,
     previewNext: (time: string) => `下次触发：${time}`,
     previewImmediate: (time: string) =>
       `保存后将立即触发一次 · 下次触发：${time}`,
+    reminderNotifyTitle: "提醒",
     fireFailedNotifyTitle: "定时任务触发失败",
     fireFailedNotifyBody: (prompt: string) =>
       `「${prompt}」未能创建会话，打开 Galley 查看。`,

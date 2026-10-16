@@ -7,6 +7,7 @@
 //! matching the byte shape the CLI's `json!` builders produced before this
 //! module existed.
 
+use crate::api::schedule::{ScheduleTarget, ScheduledTaskRepeat};
 use crate::api::{MessageBrief, RuntimeKind, SessionBrief};
 use serde::{Deserialize, Serialize};
 
@@ -251,6 +252,122 @@ pub struct LlmSetArgs {
 }
 socket_command!(LlmSetArgs, "llm.set");
 
+// ---- scheduled tasks (main chat ticket 34, additive inside 3) ----
+//
+// New commands, so their optional fields skip when absent: there is no
+// legacy shape to keep byte-for-byte.
+
+/// `schedule.list`: the tasks that may still fire, or every one.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduleListArgs {
+    /// Fired one-offs, disabled and cancelled tasks too.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub all: bool,
+}
+socket_command!(ScheduleListArgs, "schedule.list");
+
+/// `schedule.show`: one task, cancelled or not.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduleShowArgs {
+    pub task_id: String,
+}
+socket_command!(ScheduleShowArgs, "schedule.show");
+
+/// `schedule.create`. Exactly one of `fireAt` (a one-off) and `repeat` (a
+/// daily / weekly / monthly rule, with `timeOfDay`).
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduleCreateArgs {
+    pub prompt: String,
+    /// A one-off's time: RFC 3339, or local `YYYY-MM-DDTHH:MM[:SS]` read
+    /// in the zone of the machine Galley runs on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fire_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat: Option<ScheduledTaskRepeat>,
+    /// `HH:MM`, local, for a repeating rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_of_day: Option<String>,
+    /// `session` when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<ScheduleTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervisor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+socket_command!(ScheduleCreateArgs, "schedule.create");
+
+/// `schedule.update`: only the fields given change. An empty `projectId`
+/// or `llmName` clears it.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduleUpdateArgs {
+    pub task_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fire_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat: Option<ScheduledTaskRepeat>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_of_day: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<ScheduleTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervisor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+socket_command!(ScheduleUpdateArgs, "schedule.update");
+
+macro_rules! schedule_task_command {
+    ($(#[$doc:meta])* $ty:ident, $name:literal) => {
+        $(#[$doc])*
+        #[derive(Debug, Serialize, Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        pub struct $ty {
+            pub task_id: String,
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            pub supervisor: Option<String>,
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            pub reason: Option<String>,
+        }
+        socket_command!($ty, $name);
+    };
+}
+
+schedule_task_command!(
+    /// `schedule.delete`: cancel the task (a soft delete).
+    ScheduleDeleteArgs,
+    "schedule.delete"
+);
+schedule_task_command!(
+    /// `schedule.enable`.
+    ScheduleEnableArgs,
+    "schedule.enable"
+);
+schedule_task_command!(
+    /// `schedule.disable`.
+    ScheduleDisableArgs,
+    "schedule.disable"
+);
+schedule_task_command!(
+    /// `schedule.run`: fire it once now, through the scheduled path.
+    ScheduleRunArgs,
+    "schedule.run"
+);
+
 /// Legacy-equivalence pins: each args struct must serialize to the same
 /// `Value` the CLI's hand-written `json!` literal produced before this
 /// module existed (2026-07-11). These tests are what makes a field rename
@@ -453,5 +570,58 @@ mod legacy_equivalence {
         assert_eq!(ProjectCreateArgs::NAME, "project.create");
         assert_eq!(ProjectDeleteArgs::NAME, "project.delete");
         assert_eq!(LlmSetArgs::NAME, "llm.set");
+        assert_eq!(ScheduleListArgs::NAME, "schedule.list");
+        assert_eq!(ScheduleShowArgs::NAME, "schedule.show");
+        assert_eq!(ScheduleCreateArgs::NAME, "schedule.create");
+        assert_eq!(ScheduleUpdateArgs::NAME, "schedule.update");
+        assert_eq!(ScheduleDeleteArgs::NAME, "schedule.delete");
+        assert_eq!(ScheduleEnableArgs::NAME, "schedule.enable");
+        assert_eq!(ScheduleDisableArgs::NAME, "schedule.disable");
+        assert_eq!(ScheduleRunArgs::NAME, "schedule.run");
+    }
+
+    #[test]
+    fn schedule_commands_wire_shape() {
+        assert_matches_legacy(&ScheduleListArgs::default(), json!({}));
+        assert_matches_legacy(&ScheduleListArgs { all: true }, json!({"all": true}));
+        assert_matches_legacy(
+            &ScheduleCreateArgs {
+                prompt: "带身份证".into(),
+                fire_at: Some("2026-10-20T20:00".into()),
+                target: Some(ScheduleTarget::Assistant),
+                supervisor: Some("galley-assistant".into()),
+                ..ScheduleCreateArgs::default()
+            },
+            json!({"prompt": "带身份证", "fireAt": "2026-10-20T20:00", "target": "assistant",
+                   "supervisor": "galley-assistant"}),
+        );
+        assert_matches_legacy(
+            &ScheduleCreateArgs {
+                prompt: "早报".into(),
+                repeat: Some(ScheduledTaskRepeat::Weekly {
+                    weekdays: vec![1, 5],
+                }),
+                time_of_day: Some("09:00".into()),
+                ..ScheduleCreateArgs::default()
+            },
+            json!({"prompt": "早报", "repeat": {"kind": "weekly", "weekdays": [1, 5]},
+                   "timeOfDay": "09:00"}),
+        );
+        assert_matches_legacy(
+            &ScheduleUpdateArgs {
+                task_id: "sched_1".into(),
+                project_id: Some(String::new()),
+                ..ScheduleUpdateArgs::default()
+            },
+            json!({"taskId": "sched_1", "projectId": ""}),
+        );
+        assert_matches_legacy(
+            &ScheduleRunArgs {
+                task_id: "sched_1".into(),
+                supervisor: None,
+                reason: Some("try it".into()),
+            },
+            json!({"taskId": "sched_1", "reason": "try it"}),
+        );
     }
 }

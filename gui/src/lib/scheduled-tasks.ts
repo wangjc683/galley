@@ -26,6 +26,22 @@ export interface ScheduledFireFailedPayload {
   prompt: string;
 }
 
+/** Tauri event emitted by Core when a task that wakes the assistant came
+ * due but could not reach it — the main chat was waiting for an answer,
+ * its runner did not start, or the turn ended on an error (main chat
+ * ticket 33). The fire is consumed; the GUI shows a system notification
+ * with the task's own words instead. */
+export const SCHEDULED_REMINDER_UNDELIVERED_EVENT =
+  "scheduled-tasks:reminder-undelivered";
+
+/** Payload of {@link SCHEDULED_REMINDER_UNDELIVERED_EVENT} (Rust
+ * `ScheduledReminderUndelivered`). */
+export interface ScheduledReminderUndeliveredPayload {
+  taskId: string;
+  prompt: string;
+  reason: "asking" | "not_started" | "no_reply" | "no_main_chat";
+}
+
 /** Supervisor label Core stamps on scheduler-created sessions
  * (core/src/scheduler.rs). Used to mark scheduler-created sessions.
  * The literal is pinned on both sides of the language seam by
@@ -38,7 +54,17 @@ export const SCHEDULER_SUPERVISOR = "galley-scheduler";
 export type ScheduledTaskRepeat =
   | { kind: "daily" }
   | { kind: "weekly"; weekdays: number[] }
-  | { kind: "monthly"; monthdays: number[] };
+  | { kind: "monthly"; monthdays: number[] }
+  /** A one-off at `fireAt` (main chat ticket 33). */
+  | { kind: "once" };
+
+/** What a fire does (Rust `ScheduleTarget`): start a session, or wake
+ * the assistant (the main chat). */
+export type ScheduledTaskTarget = "session" | "assistant";
+
+/** How an `assistant` task's last fire reached the main chat (Rust
+ * `ScheduledWake`). */
+export type ScheduledTaskWake = "pending" | "delivered" | "notified";
 
 /** Mirror of Rust `ScheduledTaskBrief`. */
 export interface ScheduledTask {
@@ -57,8 +83,23 @@ export interface ScheduledTask {
   /** Session created by the last fire. Fired-but-unset = that fire
    * failed to create a session; may also dangle after a delete. */
   lastRunSessionId?: string;
-  /** UTC ISO instant of the next fire; unset when disabled. */
+  /** UTC ISO instant of the next fire; unset when disabled, cancelled,
+   * or a one-off that already fired. */
   nextFireAt?: string;
+  /** A one-off's fire instant, UTC ISO. */
+  fireAt?: string;
+  /** What a fire does; Core always sends it (`session` for old rows). */
+  target?: ScheduledTaskTarget;
+  /** Planned instant of the last fire (UTC ISO). */
+  lastDueAt?: string;
+  lastWake?: ScheduledTaskWake;
+  /** Who made it: `{ via: "gui" }`, the assistant (`supervisor` +
+   * `galley-assistant`), another agent. */
+  origin?: { via: string; supervisor?: string; reason?: string };
+  /** The main chat turn the assistant made it in. */
+  createdIn?: { sessionId: string; turnIndex?: number };
+  /** Set once cancelled (deleted); the default list leaves these out. */
+  cancelledAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -78,8 +119,14 @@ export function mintScheduledTaskId(): string {
   return `sched_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
 }
 
-export async function listScheduledTasks(): Promise<ScheduledTask[]> {
-  return invoke<ScheduledTask[]>("list_scheduled_tasks");
+/** The tasks that are not cancelled; `all` adds the cancelled ones. */
+export async function listScheduledTasks(
+  all?: boolean,
+): Promise<ScheduledTask[]> {
+  return invoke<ScheduledTask[]>(
+    "list_scheduled_tasks",
+    all ? { all } : undefined,
+  );
 }
 
 export async function createScheduledTask(input: {
@@ -147,9 +194,33 @@ export async function previewScheduledFire(input: {
  * clears when the next fire succeeds; there is deliberately no manual
  * dismiss. */
 export function countFailedTasks(tasks: ScheduledTask[]): number {
+  // A task that wakes the assistant starts no session by design.
   return tasks.filter(
-    (t) => t.enabled && t.lastFiredAt !== undefined && !t.lastRunSessionId,
+    (t) =>
+      t.enabled &&
+      t.target !== "assistant" &&
+      t.lastFiredAt !== undefined &&
+      !t.lastRunSessionId,
   ).length;
+}
+
+/** The edit form for `task`; `null` for a one-off, which the form (daily
+ * / weekly / monthly) cannot express. */
+export function formFromTask(
+  task: ScheduledTask,
+): ScheduledTaskFormState | null {
+  const repeat = task.repeat;
+  if (repeat.kind === "once") return null;
+  return {
+    id: task.id,
+    prompt: task.prompt,
+    projectId: task.projectId ?? "",
+    repeatKind: repeat.kind,
+    weekdays: repeat.kind === "weekly" ? repeat.weekdays : [],
+    monthdays: repeat.kind === "monthly" ? repeat.monthdays : [],
+    timeOfDay: task.timeOfDay,
+    llmName: task.llmName ?? "",
+  };
 }
 
 /** Create/edit form state — the GUI half of the form ↔ wire repeat
@@ -226,6 +297,8 @@ export function repeatSummary(
         repeat.monthdays.join("·"),
         timeOfDay,
       );
+    case "once":
+      return copy.scheduled.repeatSummaryOnce(timeOfDay);
   }
 }
 

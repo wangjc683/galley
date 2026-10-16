@@ -17,4 +17,5 @@ Section map (original § numbers preserved inside each file):
 | §5.1–§5.13 version / status / health / sessions | [agent-api/session-commands.md](./agent-api/session-commands.md) |
 | §5.14–§5.18 project / llm | [agent-api/project-and-llm-commands.md](./agent-api/project-and-llm-commands.md) |
 | §5.19 goal (retired in `schemaVersion: 3`) | [agent-api/goal-commands.md](./agent-api/goal-commands.md) |
+| §5.20–§5.27 schedule | [agent-api/schedule-commands.md](./agent-api/schedule-commands.md) |
 | §8 Deferred additions, §8A trait surface, §9 See also | [agent-api/roadmap-and-references.md](./agent-api/roadmap-and-references.md) |

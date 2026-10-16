@@ -709,6 +709,8 @@ async fn scheduled_task_writes_broadcast_changed_once_each() {
             time_of_day: "09:00".into(),
             llm_name: None,
             enabled: true,
+            fire_at: None,
+            target: Default::default(),
         },
         gui(),
     )
