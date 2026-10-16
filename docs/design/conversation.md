@@ -430,7 +430,7 @@ ReactNode children（非 markdown string）的 reply 不渲染 actions——demo
 
 #### Scroll behaviour（stick to user message top）
 
-Conversation 主区是 `overflow-y-auto` 的列。用户提交新消息时**不**滚到底部（reply 还没生成，跳到一片空地）；**也不**被动什么都不做（user message 出现在视口外，看不到反馈）。**正确做法**：把刚 submit 的 user message 顶端贴到 viewport 顶部下方 32px 处。
+Conversation 主区是 `overflow-y-auto` 的列。用户提交新消息时**不**滚到底部（reply 还没生成，跳到一片空地）；**也不**被动什么都不做（user message 出现在视口外，看不到反馈）。**正确做法**：把刚 submit 的 user message 顶端贴到 viewport 顶部下方 32px 处；它正上方挨着一条时间条时，停的是时间条（见下「停一条你的消息」）。
 
 助手的对话不这样：对话贴着输入框，发出后滚到底，跟随到回复的开头为止（贴底），见「[助手的对话](#助手的对话2026-10-15)」。本节讲工作台的对话。
 
@@ -448,7 +448,7 @@ Conversation 主区是 `overflow-y-auto` 的列。用户提交新消息时**不*
 - RAF 推迟到 `<MessageUser data-role="user-msg">` 真实 mount 后
 - 找最后一个 `[data-role="user-msg"]`，算 offset (`top - container.top - 32`)，`container.scrollBy({ top: delta, behavior: "smooth" })`
 - 不用 `scrollIntoView({block: "start"})`：它没法控 padding
-- 2026-10-16 气泡靠右后锚不变：仍是气泡本身（`data-role="user-msg"`）的上缘，提交贴顶、⌥↑ / ⌥↓、问题轨跳转都量它。断点处的时间条在你这一行之前另起一行（下面 20px），贴顶后落在视口顶部下方约 1.5px，看得见、但贴边；原来时间在气泡上方 4px，落在 17.5px。
+- **停一条你的消息**（2026-10-16，工作台对话票 01）：一条规则，提交贴顶、⌥↑ / ⌥↓、问题轨的点击与高亮的点、⌘K / ⌘F 定位到你的消息都走它，两种对话都是：它正上方挨着一条时间条时，时间条上缘停在视口顶下 16px，气泡在它下面 30.5px（时间 10.5px、间距 20px），落在 46.5px；没有时间条，气泡上缘照旧停在 32px。规则在 `lib/conversation-anchor.ts` 的 `userMsgParkOffset`，哪个节点是锚不变（气泡的 `data-role="user-msg"`），时间条靠「气泡所在那一行的前一个兄弟」认出来。起因：时间改成两条消息之间居中的一行后，照旧把气泡停在 32px，时间条只剩视口顶下 1.5px，半露不露；原来时间行在气泡上方 4px，停在 17.5px，16px 是挨着它的 4px 一档。⌥↑ / ⌥↓ 判断「上一条 / 下一条」和问题轨判断当前的点都按同一个落点算，停在这里的消息算「已停住」，不会卡住或认错。实测（主区 1220 宽）：有时间条的消息从「时间条 1.5px、气泡 32px」变成「时间条 16px、气泡 46.5px」（滚动位置取整，个别差 0.5px），没有时间条的照旧 32px；助手的对话里 ⌥↑ / ⌥↓ 与定位同样变（助手没有提交贴顶和问题轨）。
 
 边界：
 
