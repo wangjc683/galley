@@ -64,7 +64,7 @@ JC：「1，做；2，刚试了，目前新消息是停在底部附近，如果�
 | [04](./issues/04-scroll-rules.md) | 远跳先瞬移、平滑滚动认减少动态、四处小出入（裁决 5） | merged，等真机 |
 | [05](./issues/05-variants-composer-corners.md) | 切换器：输入框长高动画、主对话连发组内圆角（裁决 6） | merged，等切档裁决 |
 | [06](./issues/06-workbench-live-tail.md) | 工作台发出后留白、你的话停在顶上、回复超出一屏不跟随（裁决 2） | merged，等真机 |
-| [07](./issues/07-quote-strip-and-bubble.md) | 引用改成输入框上方的一条，气泡里单独画引用（裁决 3a），切换器与 05 合用 | ready-for-agent |
+| [07](./issues/07-quote-strip-and-bubble.md) | 引用改成输入框上方的一条，气泡里单独画引用（裁决 3a），切换器与 05 合用 | merged，等真机与切档 |
 
 01–03 都动输入框，同一个子代理按序做；04、05 各一个子代理，并行；06 接在 04 后面（用它的滚动函数）。
 
