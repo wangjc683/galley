@@ -1,6 +1,6 @@
 # 01 草稿存到磁盘
 
-Status: ready-for-agent
+Status: merged（2026-10-16 合入 main，`3a088ad7`，合并提交 `7eefcd48`；等 JC 真机验收）
 
 来源：[PRD](../PRD.md) 裁决 1（2026-10-16，JC：「1，做」）。只改 GUI，不碰 Rust。
 与票 02、03 同一个子代理按序做（都动输入框），本票先。

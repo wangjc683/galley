@@ -53,9 +53,9 @@ JC：「1，做；2，刚试了，目前新消息是停在底部附近，如果�
 
 | 票 | 内容 | 状态 |
 |---|---|---|
-| [01](./issues/01-drafts-persist.md) | 草稿存盘（裁决 1） | ready-for-agent |
-| [02](./issues/02-quote-selection.md) | 选中文字引用进输入框（裁决 3） | ready-for-agent |
-| [03](./issues/03-type-to-focus.md) | 打字即聚焦、点按钮与空白不失焦（裁决 4） | ready-for-agent |
+| [01](./issues/01-drafts-persist.md) | 草稿存盘（裁决 1） | merged，等真机 |
+| [02](./issues/02-quote-selection.md) | 选中文字引用进输入框（裁决 3） | merged，等真机 |
+| [03](./issues/03-type-to-focus.md) | 打字即聚焦、点按钮与空白不失焦（裁决 4） | merged，等真机 |
 | [04](./issues/04-scroll-rules.md) | 远跳先瞬移、平滑滚动认减少动态、四处小出入（裁决 5） | merged，等真机 |
 | [05](./issues/05-variants-composer-corners.md) | 切换器：输入框长高动画、主对话连发组内圆角（裁决 6） | ready-for-agent |
 | [06](./issues/06-workbench-live-tail.md) | 工作台发出后留白、你的话停在顶上、回复超出一屏不跟随（裁决 2） | in-progress |
