@@ -1,5 +1,5 @@
 import { assistantProcessSteps } from "@/lib/assistant-process";
-import type { RunGroup } from "@/lib/run-groups";
+import { answeredInOneStep, type RunGroup } from "@/lib/run-groups";
 import type { Turn } from "@/types/conversation";
 
 /*
@@ -29,6 +29,11 @@ import type { Turn } from "@/types/conversation";
  *   settling  the sweep between the two (Conversation's settling): the
  *             live shape, its questions and answers already out before
  *             the header, where the settled run has them.
+ *   one step  a run that answered in one step is its answer alone (PRD
+ *             ruling 7, lib/run-groups.ts `answeredInOneStep`): no
+ *             header, no card, no step marker, no StrongHr; settling, the
+ *             in-flight row's place closes above the answer
+ *             (`settleGapAbove`, Conversation's SettleGap).
  *   flat      a run without an answer that is not being worked on
  *             (stopped, failed, at the step cap), a /btw exchange, a
  *             headless lead-in: the step region in full, its questions
@@ -74,6 +79,9 @@ export interface WorkbenchFoldPlan {
   /** ask_user turns whose question is out before the header: a step
    * region drawing the turn leaves its echo out. */
   echoOutside: Set<number>;
+  /** The answer of a one-step run settling right now: the in-flight
+   * row's place closes above it. */
+  settleGapAbove: number | null;
 }
 
 function asksUser(turn: Turn): boolean {
@@ -107,8 +115,16 @@ export function workbenchFoldPlan({
     regionOwner: new Map(),
     elsewhere: new Set(),
     echoOutside: new Set(),
+    settleGapAbove: null,
   };
   for (const g of groups) {
+    // A run that answered in one step is its answer alone: the closing
+    // turn renders flat as the answer (Conversation's answerOnly), its
+    // tokens in the answer's hover row.
+    if (g.foldable && answeredInOneStep(g)) {
+      if (g === settlingGroup) plan.settleGapAbove = g.finalTurnIndex;
+      continue;
+    }
     const folded = !isOpened(g.openerIndex);
     if (g === liveGroup || g === settlingGroup) {
       const live = g === liveGroup;
@@ -176,9 +192,10 @@ export function workbenchFoldPlan({
       }
       continue;
     }
-    // Settled runs fold on completion (2026-09-16, reversing the 08-06
-    // keep-expanded window): the header's step / duration / tool-count
-    // digest stands in for the process, one click away.
+    // Settled runs of two steps or more fold on completion (2026-09-16,
+    // reversing the 08-06 keep-expanded window): the header's step /
+    // duration / tool-count digest stands in for the process, one
+    // click away.
     const final = g.finalTurnIndex;
     if (final === null) continue;
     const outside: number[] = [];

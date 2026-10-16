@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-import { PinnedMessageTime } from "@/components/conversation/MessageUser";
 import { assistantLineClock } from "@/lib/assistant-conversation";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -8,9 +7,10 @@ import { cn } from "@/lib/utils";
 /*
  * The pieces only the assistant's conversation draws (rules in
  * lib/assistant-conversation.ts; spec: conversation.md 「助手的对话」):
- * its bubble, the centred time and the one line while it works. The
- * card its process button opens is AssistantProcessCard (the button
- * itself is a chip of the reply's action bar, MessageActions).
+ * its bubble and the one line while it works. The card its process
+ * button opens is AssistantProcessCard (the button itself is a chip of
+ * the reply's action bar, MessageActions). The centred time it drew
+ * first is both conversations' now (MessageTimeDivider).
  */
 
 /** The reply bubble's width cap: wider than the user's (its content is
@@ -57,37 +57,6 @@ export function AssistantBubble({ children }: { children: ReactNode }) {
   return (
     <div data-role="assistant-bubble" className={BUBBLE}>
       {children}
-    </div>
-  );
-}
-
-/**
- * The send time at a break as a line of its own, centred between two
- * messages: it belongs to the conversation, not to the bubble under it.
- * The workbench's label, moved (same type and ink, no chip behind it,
- * the way iMessage and WeChat draw it), hover still gives the full
- * date. 16px above it, 20px under it (the message after it keeps its
- * own 20px, collapsing with this); right under a reply, whose reserved
- * action row already leaves 30px, it adds nothing above.
- */
-export function AssistantTimeDivider({
-  label,
-  full,
-  iso,
-  afterReply = false,
-}: {
-  label: string;
-  full?: string;
-  iso?: string;
-  /** Right under a reply row (its action row is the gap above). */
-  afterReply?: boolean;
-}) {
-  return (
-    <div
-      data-role="assistant-time-divider"
-      className={cn("flex justify-center", afterReply ? "mb-4" : "my-4")}
-    >
-      <PinnedMessageTime label={label} full={full} iso={iso} />
     </div>
   );
 }

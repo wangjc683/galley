@@ -183,19 +183,22 @@ const cards = (id: string): ReactNode =>
 describe("the assistant's conversation: only where asked", () => {
   it("leaves every other conversation in the workbench rendering", () => {
     const html = render(conversation());
-    // Folded runs behind their headers, the user's words on the left,
-    // replies as prose, the times above the bubbles.
+    // Folded runs behind their headers, replies as prose, no IM row
+    // gaps. Since the workbench's ticket 01 the two share the grammar:
+    // the user's words on the right, the times as centred lines.
     expect(count(html, 'data-role="run-fold"')).toBeGreaterThan(0);
     expect(html).not.toContain('data-role="assistant-bubble"');
     expect(html).not.toContain('data-role="assistant-run-summary"');
     expect(buttons(html, zhCopy.conversation.foldExpand).length).toBe(0);
-    expect(html).not.toContain('data-role="assistant-time-divider"');
-    expect(html).not.toContain("ml-auto");
     expect(html).not.toContain("right-full");
-    expect(html).toContain('class="group relative my-5"');
+    // Five user messages: four openers and the answer to the question,
+    // out before its run's header (workbench ticket 02).
+    expect(count(html, "ml-auto max-w-[min(80%,560px)]")).toBe(5);
+    expect(count(html, 'class="group relative mt-5 mb-7.5 mr-[')).toBe(5);
     const pinned = [...userTimeMarks(conversation()).values()].filter(
       (m) => m.pinned,
     );
+    expect(count(html, 'data-role="message-time-divider"')).toBe(pinned.length);
     expect(count(html, "<time")).toBe(pinned.length);
     // The same turns, as the assistant's.
     const im = assistant(conversation());
@@ -225,8 +228,16 @@ describe("the assistant's conversation: bubbles", () => {
 
   it("keeps the hover copy and no selection scope on the workbench's user messages", () => {
     const html = render(conversation());
-    expect(html).toContain("left-full bottom-[calc(10px");
+    // Under each bubble (workbench ticket 01), not beside it; the answer
+    // to the question is out too (ticket 02).
+    expect(count(html, "absolute top-full right-0 z-10 mt-1.5")).toBe(5);
+    expect(html).not.toContain("left-full bottom-[calc(10px");
     expect(html).not.toContain('data-selection-copy-scope="user-message"');
+    // The assistant's bubbles have neither the chip row nor the inset
+    // the question rail asks for (it has no rail).
+    const im = assistant(conversation());
+    expect(im).not.toContain("absolute top-full right-0 z-10 mt-1.5");
+    expect(im).not.toContain("100cqw");
   });
 
   it("groups one side's messages 4px apart and restores the gap across sides", () => {
@@ -752,9 +763,7 @@ describe("the assistant's conversation: the time", () => {
     const turns = conversation();
     const pinned = [...userTimeMarks(turns).values()].filter((m) => m.pinned);
     const html = assistant(turns);
-    expect(count(html, 'data-role="assistant-time-divider"')).toBe(
-      pinned.length,
-    );
+    expect(count(html, 'data-role="message-time-divider"')).toBe(pinned.length);
     // No time is left on a bubble.
     expect(count(html, "<time")).toBe(pinned.length);
     expect(html).toContain("flex justify-center");
@@ -763,7 +772,7 @@ describe("the assistant's conversation: the time", () => {
   it("puts a line above the greeting, and the first message within the hour adds none", () => {
     const withTime = [greeting(at(8, 40)), ...conversation().slice(1)];
     const html = assistant(withTime);
-    const line = html.indexOf('data-role="assistant-time-divider"');
+    const line = html.indexOf('data-role="message-time-divider"');
     expect(line).toBeLessThan(html.indexOf("你好。以后有什么事"));
     expect(text(html.slice(line, html.indexOf("你好。")))).toContain("08:40");
     // 09:00 is 20 minutes after the greeting: no second line before it.
@@ -771,18 +780,18 @@ describe("the assistant's conversation: the time", () => {
       html.indexOf("你好。"),
       html.indexOf("早，天气怎么样？"),
     );
-    expect(between).not.toContain('data-role="assistant-time-divider"');
+    expect(between).not.toContain('data-role="message-time-divider"');
     // Without the greeting's time the first message keeps its line.
     const without = assistant(conversation());
     expect(without.slice(0, without.indexOf("你好。"))).not.toContain(
-      'data-role="assistant-time-divider"',
+      'data-role="message-time-divider"',
     );
     expect(
       without.slice(
         without.indexOf("你好。"),
         without.indexOf("早，天气怎么样？"),
       ),
-    ).toContain('data-role="assistant-time-divider"');
+    ).toContain('data-role="message-time-divider"');
   });
 
   it("draws no greeting line outside the assistant's conversation", () => {
@@ -836,7 +845,7 @@ describe("the assistant's conversation: subtask reports", () => {
     expect(count(html, 'data-role="assistant-bubble"')).toBe(2);
     expect(html).toContain("比好了：第二家最便宜。");
     // Twenty minutes on: no time line for it.
-    expect(count(html, 'data-role="assistant-time-divider"')).toBe(1);
+    expect(count(html, 'data-role="message-time-divider"')).toBe(1);
     // The workbench rendering would draw the row (it never gets one: the
     // main chat is always the assistant's).
     expect(render(turns)).toContain("A subtask you started");
@@ -852,7 +861,7 @@ describe("the assistant's conversation: subtask reports", () => {
     ];
     const html = assistant(turns);
     const reply = html.indexOf("比好了");
-    const lines = [...html.matchAll(/data-role="assistant-time-divider"/g)].map(
+    const lines = [...html.matchAll(/data-role="message-time-divider"/g)].map(
       (m) => m.index,
     );
     // 09:00 above the user's first message, 14:00 above the reply — and
@@ -865,7 +874,7 @@ describe("the assistant's conversation: subtask reports", () => {
       'class="flex justify-center mb-4"',
     );
     expect(html.slice(reply, html.indexOf("那就订第二家"))).not.toContain(
-      'data-role="assistant-time-divider"',
+      'data-role="message-time-divider"',
     );
   });
 
@@ -884,7 +893,7 @@ describe("the assistant's conversation: subtask reports", () => {
     expect(html).not.toContain('data-role="step-marker"');
     expect(buttons(html, zhCopy.conversation.foldExpand).length).toBe(0);
     // 14:30 measures against 09:00, not the silent report at 14:00.
-    const lines = [...html.matchAll(/data-role="assistant-time-divider"/g)];
+    const lines = [...html.matchAll(/data-role="message-time-divider"/g)];
     expect(lines).toHaveLength(2);
     expect(text(html.slice(lines[1].index))).toContain("14:30");
   });
@@ -914,7 +923,7 @@ describe("the assistant's conversation: subtask reports", () => {
     expect(html).toContain("我让它再查一家。");
     expect(html).not.toContain("A subtask you started");
     // Its time sits above the region.
-    const lines = [...html.matchAll(/data-role="assistant-time-divider"/g)];
+    const lines = [...html.matchAll(/data-role="message-time-divider"/g)];
     expect(lines).toHaveLength(2);
     expect(lines[1].index).toBeLessThan(html.indexOf("我让它再查一家。"));
   });
@@ -928,7 +937,7 @@ describe("the assistant's conversation: subtask reports", () => {
     const html = assistant(turns, { askUserPending: true });
     // The question itself is the live bubble at the tail (MainView).
     expect(html).not.toContain("要付定金吗？");
-    const lines = [...html.matchAll(/data-role="assistant-time-divider"/g)];
+    const lines = [...html.matchAll(/data-role="message-time-divider"/g)];
     expect(lines).toHaveLength(2);
     expect(text(html.slice(lines[1].index))).toContain("14:00");
   });

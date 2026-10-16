@@ -451,6 +451,17 @@ function MainViewContent({
             // margin and keeps its own block flow, so the rows' margins
             // collapse as before.
             isMainChat && "flex flex-col",
+            // Beside the question rail, the user's bubble keeps off the
+            // rail when the column fills the area (MessageUser
+            // RAIL_CLEARANCE): it reads this box's content width as
+            // `100cqw` and the column's cap. Only where the rail is.
+            !isMainChat &&
+              cn(
+                "@container/conversation",
+                conversationWidth === "wide"
+                  ? "[--conversation-column:1200px]"
+                  : "[--conversation-column:760px]",
+              ),
           )}
         >
           <div

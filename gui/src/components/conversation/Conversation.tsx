@@ -1,10 +1,7 @@
 import { CaretDown } from "@phosphor-icons/react";
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import {
-  ASSISTANT_BUBBLE_MAX,
-  AssistantTimeDivider,
-} from "@/components/conversation/AssistantParts";
+import { ASSISTANT_BUBBLE_MAX } from "@/components/conversation/AssistantParts";
 import { AssistantProcessCard } from "@/components/conversation/AssistantProcessCard";
 import { AnsweredAskUser } from "@/components/conversation/AskUserBubble";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
@@ -12,6 +9,7 @@ import {
   MessageAgent,
   MessageAgentNarration,
 } from "@/components/conversation/MessageAgent";
+import { MessageTimeDivider } from "@/components/conversation/MessageTimeDivider";
 import { MessageUser } from "@/components/conversation/MessageUser";
 import { RunFoldHeader } from "@/components/conversation/RunFoldHeader";
 import { ExpandSection } from "@/components/conversation/ExpandSection";
@@ -112,9 +110,11 @@ export interface ConversationProps {
    * gaps; under a settled reply of two steps or more, a process button
    * in its hover action bar opens its steps in place as a card, one line
    * a step (AssistantProcessCard), its questions and the user's answers
-   * staying out as messages; the send times at breaks
-   * as centred lines, one above the greeting too. Off for every other
-   * conversation: the workbench's, a subtask, the external runtime's.
+   * staying out as messages; a time line above the greeting too. Off
+   * for every other conversation: the workbench's, a subtask, the
+   * external runtime's. The two share their grammar (workbench
+   * conversation PRD): the user's words on the right, the send times
+   * at breaks as centred lines, a one-step reply with nothing over it.
    */
   assistant?: boolean;
 }
@@ -334,10 +334,14 @@ export function Conversation({
   // them: lib/run-fold-plan.ts). Skipped when the reader had opened the
   // live header (the run settles open: its card stays, the window's
   // steps join it as rows, the answer comes in under it) and when
-  // the run did not complete (aborts unfold in full). Guarded
-  // setState-in-render: the decision has to land in THIS render, an
-  // effect would commit the settled structure first. Openers here are
-  // ordinals, like every index this component keeps across renders.
+  // the run did not complete (aborts unfold in full). A run that
+  // answered in one step has no window and settles to its answer
+  // alone; its sweep closes the in-flight row's place above the answer
+  // instead (SettleGap), so the answer glides up rather than jumps.
+  // Guarded setState-in-render: the decision has to land in THIS
+  // render, an effect would commit the settled structure first.
+  // Openers here are ordinals, like every index this component keeps
+  // across renders.
   const liveOpenerNow = liveGroup ? ordinal(liveGroup.openerIndex) : null;
   const [watchedOpener, setWatchedOpener] = useState<number | null>(null);
   const [settlingOpener, setSettlingOpener] = useState<number | null>(null);
@@ -450,6 +454,9 @@ export function Conversation({
         isOpened: (opener) => foldOverrides[ordinal(opener)] === true,
       });
   const windowOwner = foldPlan?.windowOwner ?? new Map<number, number>();
+  // The answer of a one-step run settling right now: the in-flight
+  // row's place closes above it (SettleGap).
+  const settleGapAbove = foldPlan?.settleGapAbove ?? null;
   const regionOwner = new Map<number, number>(foldPlan?.regionOwner);
   // The assistant's runs drawn the workbench way gather into flat
   // regions too.
@@ -470,21 +477,23 @@ export function Conversation({
     }));
   };
 
-  // A user message. In the assistant's conversation its send time at a
-  // break is a centred line of its own before it, and the bubble sits
-  // on the right with the IM row gap (`previous`: the side of the
-  // message row right above).
+  // A user message, on the right (both conversations since the
+  // workbench's ticket 01). Its send time at a break is a centred line
+  // of its own before it, with nothing above it right under a reply,
+  // whose action row is the gap (`previous`: the side of the row right
+  // above). The assistant's adds its IM row gap and copies by
+  // selection; the workbench's keeps the hover copy, its row under the
+  // bubble the gap to what follows.
   const userRow = (
     turn: UserTurn,
     turnIndex: number,
     previous: AssistantRowSide | null,
   ) => {
     const pinned = pinnedTimes.get(turnIndex);
-    const divided = assistant && pinned !== undefined;
     return (
       <>
-        {divided && (
-          <AssistantTimeDivider
+        {pinned && (
+          <MessageTimeDivider
             label={pinned.label}
             full={pinned.full}
             iso={turn.createdAt}
@@ -495,15 +504,12 @@ export function Conversation({
           content={turn.content}
           attachments={turn.attachments}
           origin={turn.origin}
-          createdAt={turn.createdAt}
-          pinnedTime={divided ? undefined : pinned?.label}
-          pinnedTimeFull={divided ? undefined : pinned?.full}
           askUserReply={replySet.has(turnIndex)}
           messageId={turn.messageId}
-          align={assistant ? "end" : undefined}
+          selectionCopy={assistant}
           rowClassName={
             assistant
-              ? divided
+              ? pinned
                 ? "mt-5"
                 : assistantRowGap(previous, "user")
               : undefined
@@ -525,13 +531,20 @@ export function Conversation({
     );
   };
 
-  const renderItem = (turn: Turn, turnIndex: number) => {
+  // `previous`: the side of the row right above, for a user message's
+  // time line (the workbench; the assistant's rows come through
+  // renderLineRow).
+  const renderItem = (
+    turn: Turn,
+    turnIndex: number,
+    previous: AssistantRowSide | null = null,
+  ) => {
     // Keyed by the turn's ordinal: an earlier page landing in front
     // moves no key.
     return (
       <Fragment key={`turn-${ordinal(turnIndex)}`}>
         {turn.role === "user" ? (
-          userRow(turn, turnIndex, null)
+          userRow(turn, turnIndex, previous)
         ) : turn.role === "system" ? (
           <SystemMessageBubble
             content={turn.content}
@@ -601,7 +614,7 @@ export function Conversation({
     // A report round's time at a break, above its first row.
     const reportTime = reportTimeAbove.get(turnIndex);
     const reportDivider = reportTime ? (
-      <AssistantTimeDivider
+      <MessageTimeDivider
         label={reportTime.label}
         full={reportTime.full}
         iso={reportTime.iso}
@@ -637,7 +650,7 @@ export function Conversation({
       steps !== undefined && foldOverrides[ordinal(steps.opener)] === true;
     const divider =
       turn.greeting && greetingTime ? (
-        <AssistantTimeDivider
+        <MessageTimeDivider
           label={greetingTime.label}
           full={greetingTime.full}
           iso={greetingTime.iso}
@@ -706,12 +719,19 @@ export function Conversation({
   // renders flat right after.
   type SectionKind = "flat" | "window";
   const rendered: ReactNode[] = [];
-  const renderHead = (head: FoldHead) => {
+  // `previous`: the side of the row right above, for an answer's time
+  // line.
+  const renderHead = (head: FoldHead, previous: AssistantRowSide | null) => {
+    let side = previous;
     for (const i of head.outside) {
       const turn = turns[i];
-      rendered.push(
-        turn.role === "agent" ? renderQuestion(turn, i) : renderItem(turn, i),
-      );
+      if (turn.role === "agent") {
+        rendered.push(renderQuestion(turn, i));
+        side = "agent";
+      } else {
+        rendered.push(renderItem(turn, i, side));
+        side = "user";
+      }
     }
     // The live header appears once a step has folded behind it (the
     // third step landing, for a two-row window); before that the run
@@ -810,8 +830,9 @@ export function Conversation({
     }
     section = null;
   };
-  // The assistant's conversation: the side of the last message row,
-  // for the IM row gap.
+  // The side of the last message row: the assistant's IM row gap, and
+  // in both conversations whether a time line sits right under a
+  // reply's action row.
   let prevSide: AssistantRowSide | null = null;
   turns.forEach((turn, turnIndex) => {
     // The assistant's conversation shows a run's steps only under its
@@ -828,7 +849,8 @@ export function Conversation({
     const head = foldPlan?.heads.get(turnIndex);
     if (head) {
       flushSection();
-      renderHead(head);
+      renderHead(head, prevSide);
+      prevSide = null;
     }
     if (foldPlan?.elsewhere.has(turnIndex)) return;
     const flatOwner = regionOwner.get(turnIndex);
@@ -851,7 +873,18 @@ export function Conversation({
         }
         return;
       }
-      rendered.push(renderItem(turn, turnIndex));
+      // The in-flight row's place closing above a one-step answer that
+      // just settled.
+      if (turnIndex === settleGapAbove) {
+        rendered.push(<SettleGap key={`settle-${ordinal(turnIndex)}`} />);
+      }
+      rendered.push(renderItem(turn, turnIndex, prevSide));
+      prevSide =
+        turn.role === "user"
+          ? "user"
+          : turn.role === "agent" && answerOnly.has(turnIndex)
+            ? "agent-bar"
+            : null;
       return;
     }
     const kind: SectionKind = flatOwner !== undefined ? "flat" : "window";
@@ -863,7 +896,7 @@ export function Conversation({
     if (reportTime) {
       flushSection();
       rendered.push(
-        <AssistantTimeDivider
+        <MessageTimeDivider
           key={`report-time-${ordinal(turnIndex)}`}
           label={reportTime.label}
           full={reportTime.full}
@@ -1671,6 +1704,41 @@ function StrongHr() {
       className="my-4 -ml-(--step-gutter) border-0 border-t border-line-strong"
       aria-hidden
     />
+  );
+}
+
+/**
+ * The settling sweep of a run that answered in one step (workbench
+ * conversation ticket 01). Such a run has no window to close and
+ * settles to its answer alone, while the answer it streamed sat under
+ * MainView's in-flight row: one step line (step size × 1.6) and the
+ * paragraph gap the streaming prose keeps from it. Drawn flat straight
+ * away, the answer would jump up by that much; this holds the place
+ * for one frame and sweeps it shut with the rest of the settle
+ * (ExpandSection, --motion-slow), so it glides. Gone with the settle.
+ * (The in-flight row itself stays under the answer until run_complete,
+ * as it does for every run.)
+ */
+function SettleGap() {
+  const [open, setOpen] = useState(true);
+  useEffect(() => {
+    // Two frames: the open state must paint before the sweep starts.
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => setOpen(false));
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+    };
+  }, []);
+  return (
+    <ExpandSection open={open}>
+      <div
+        aria-hidden
+        className="h-[calc(var(--conversation-step-size)*1.6+var(--conversation-block-gap))]"
+      />
+    </ExpandSection>
   );
 }
 

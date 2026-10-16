@@ -14,7 +14,7 @@ import {
   ImagePreviewDialog,
   type ImagePreviewItem,
 } from "@/components/conversation/ImagePreviewDialog";
-import { IconTooltip, TooltipLabel } from "@/components/ui/tooltip";
+import { IconTooltip } from "@/components/ui/tooltip";
 import { useCopy } from "@/lib/i18n";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { cn } from "@/lib/utils";
@@ -34,16 +34,19 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *     form itself had never been A/B'd. 2026-09-17 live test:
  *     highlighter vs left bubble vs right bubble, 12 vs 16px radius —
  *     left bubble at 12 won.
- *   - LEFT-aligned, flush with the column, `w-fit max-w-full`. The
- *     conversation is one document with one reading edge; right
- *     alignment is the one IM ingredient that breaks it (and would
- *     crowd the Question Rail). Text indents by the padding like a
- *     callout — the text edge no longer lines up with the agent prose
- *     column (that was a highlighter-era property). The assistant's
- *     conversation is the exception (`align="end"`, main chat PRD
- *     rulings 66, 67): it reads as an IM, not a document, and has no
- *     rail, so there the bubble sits on the right (see
- *     lib/assistant-conversation.ts).
+ *   - RIGHT-aligned, width by content up to `min(80%, 560px)` — about
+ *     37 CJK characters a line, a phone-IM measure; in the 1200px wide
+ *     mode it keeps the same 560px instead of stretching, and the 80%
+ *     only bites in a column under 700px. The assistant's conversation
+ *     put it there first (main chat PRD rulings 66, 67); the workbench
+ *     follows since 2026-10-16 (workbench conversation PRD ruling 2:
+ *     one grammar, density by relationship). Until then the workbench
+ *     kept it left, flush with the column, for one reading edge and to
+ *     stay off the question rail. Neither holds up: the user's words
+ *     run 19 characters at the median, so the eye's trip across is
+ *     short, and the bubble keeps off the rail by its own inset
+ *     (RAIL_CLEARANCE). Text indents by the padding like a callout.
+ *     The provenance row and the expand toggle follow it right.
  *   - NO border, NO shadow. Content is paper, chrome is material
  *     (2026-08-21): elevation is control vocabulary in Galley. Flat
  *     fill is what keeps this a callout, not a card.
@@ -80,13 +83,12 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *   (workbench.db, 2026-05-15 → 09-23): 95% of sessions asked every
  *   question on one day, and 21 of 285 gaps between questions ran past
  *   an hour. Rules and label format live in lib/message-time.ts;
- *   Conversation computes them once and hands down plain strings.
- *   The time takes its own row above the bubble, left-aligned, with
- *   real layout height — the row the Supervisor icon already used, so
- *   a Supervisor message reads icon + time. The tooltip gives the full
- *   date with the weekday. Type is the quietest step the spec allows
- *   (see MESSAGE_TIME_TEXT): round one's 11.5px ink-muted was
- *   「稍微有点吵」, and round two picked 10.5px at 70% ink.
+ *   Conversation computes them once and draws the time as a centred
+ *   line of its own before the message (MessageTimeDivider): it
+ *   belongs to the conversation, not to the bubble. Until 2026-10-16
+ *   the workbench put it on a row above the bubble, left-aligned,
+ *   shared with the Supervisor icon; the icon stays above the bubble,
+ *   on the right.
  *   A time on hover for every other message, riding the copy chip,
  *   was cut in the first live test (2026-09-28) — JC:
  *   「有点吵，也没有必要」.
@@ -102,22 +104,20 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *   Supervisor provenance renders as a small icon in the row above the
  *   block; its tooltip names the source only (the relative time it
  *   used to carry retired with the pinned send time, 2026-09-28).
- *   Copy is a transient chip that fades in on hover just outside the
- *   bubble's BOTTOM-right corner, centred on the last line of text
- *   (2026-09-18; top-right until then) — the reading end of a
- *   multi-line message, so the eye finishes the last line and the
- *   chip is right there, on the same band as the expand / collapse
- *   toggle. Anchored on the bubble's corner, not the last line's
- *   text end, so it never jumps with content. It sat inside the
- *   block until 2026-08-05, when shrink-to-fit made the `pr-10` it
- *   needed show up as dead fill on short messages. It never touches
- *   the inter-turn gap, and shares the block's hover region. The model: bar
- *   actions live in the assistant reply bar (shown while its answer
- *   is hovered, 2026-09-28); transient copy surfaces on a user action
- *   (hover / select). It wears the BARE chip skin,
- *   not the bordered one — see the render site. Mouse leave delays
- *   hiding briefly so the user can move from the message body to the
- *   action without chasing it.
+ *   Copy is a transient chip that fades in on hover UNDER the bubble,
+ *   its right edge on the bubble's right edge, 6px below it — the
+ *   reply's action row geometry (2026-10-16; until then it hung just
+ *   outside the bubble's bottom-right corner, and the top-right before
+ *   2026-09-18). With the bubble on the right, that corner faced the
+ *   question rail. Hidden, it keeps its place, and that row (6 + 24 =
+ *   30px) is the gap to whatever comes next — see the render site. It
+ *   copies the full text, a collapsed long message included: that is
+ *   why the workbench keeps it (main chat ruling 73 item 4; the
+ *   workbench is where long documents and prompts get pasted). The
+ *   assistant's conversation has none (`selectionCopy`). It wears the
+ *   BARE chip skin, not the bordered one. Mouse leave delays hiding
+ *   briefly so the user can move from the message body to the action
+ *   without chasing it.
  *
  * `data-role="user-msg"` is a stable anchor that MainView's scroll
  * effect uses to find the just-submitted user message and snap its
@@ -132,67 +132,36 @@ const COLLAPSE_CHAR_THRESHOLD = 500;
 const ACTION_HIDE_DELAY_MS = 600;
 const COPY_FEEDBACK_MS = 1500;
 
-// Send-time type (second live test, 2026-09-28): text-ui-micro
-// (10.5px, the spec's timestamp tier) at 70% of ink-muted, one step
-// below every ink token — JC found round one's 11.5px ink-muted
-// 「稍微有点吵」, and picked this over 10.5px at full ink-muted. At 70%
-// the label sits at ~2.3:1 on the light canvas (~3.2:1 dark), under
-// AA; acceptable only because the time is auxiliary and its tooltip
-// carries the full date. Size class before `leading-none`:
-// tailwind-merge drops a `leading-*` that precedes a font-size class.
-const MESSAGE_TIME_TEXT =
-  "text-ui-micro text-ink-muted/70 select-none leading-none [font-variant-numeric:tabular-nums]";
-
 /**
- * Always-visible send time at a break (see the header note). The
- * tooltip carries the full date + weekday. The assistant's
- * conversation centres the same label on a line of its own
- * (AssistantTimeDivider).
+ * The bubble keeps 8px off the question rail's hit area (12–32px from
+ * the main area's right edge, the scroll container's `px-8` gutter):
+ * when the column fills the area — a small window, or the wide reading
+ * width in one not wide enough — its right edge would otherwise land
+ * on the rail's edge. `100cqw` is the scroll container's content width
+ * (MainView makes it the `conversation` container in the workbench) and
+ * `--conversation-column` the column's cap, so `(100cqw − cap) / 2` is
+ * the column's own margin: the inset makes up whatever of 8px it lacks
+ * and is 0 once the window is 16px wider than the column needs. The
+ * reply prose keeps the full column. On Windows the scrollbar lane
+ * already sits between the content edge and the rail, so there the
+ * bubble keeps 18px. Only where there is a rail: the assistant's
+ * conversation has none and takes its row from `rowClassName`.
  */
-export function PinnedMessageTime({
-  label,
-  full,
-  iso,
-}: {
-  label: string;
-  full?: string;
-  iso?: string;
-}) {
-  const time = (
-    <time dateTime={iso} className={MESSAGE_TIME_TEXT}>
-      {label}
-    </time>
-  );
-  return full ? <TooltipLabel text={full}>{time}</TooltipLabel> : time;
-}
+const RAIL_CLEARANCE =
+  "mr-[clamp(0px,calc(8px-(100cqw-var(--conversation-column,100cqw))/2),8px)]";
 
 export interface MessageUserProps {
   content: string;
   attachments?: MessageAttachment[];
   /**
    * Audit origin for this user message (B4 M7). When `origin.via ===
-   * "supervisor"`, a small robot provenance icon renders by the left
-   * identity bar; `subtask` (a subtask's instructions, written by the
-   * main chat — ticket 06a) gets the main chat's house there. Other via
+   * "supervisor"`, a small provenance icon renders above the bubble;
+   * `subtask` (a subtask's instructions, written by the main chat —
+   * ticket 06a) gets the main chat's house there. Other via
    * values (gui / cli / system) render no annotation — the default
    * Galley-driven origin shouldn't interrupt the reading flow.
    */
   origin?: Origin;
-  /**
-   * ISO timestamp from `messages.created_at` — the `dateTime` of the
-   * send-time label. Optional so tests / demo data don't have to plumb
-   * it.
-   */
-  createdAt?: string;
-  /**
-   * Send time when this message sits at a break (lib/message-time
-   * `userTimeMarks`): rendered always-visible above the bubble.
-   * Formatted by Conversation so this memo component only ever sees
-   * strings.
-   */
-  pinnedTime?: string;
-  /** Full date + weekday for the pinned time's tooltip. */
-  pinnedTimeFull?: string;
   /**
    * True for a mid-run reply to an agent ask_user question
    * (conversation-run-fold). Switches the DOM anchor to
@@ -205,19 +174,18 @@ export interface MessageUserProps {
   /** Persisted `messages.id`; rendered as `data-message-id` on the
    * anchor block so a palette full-text hit can scroll to it. */
   messageId?: string;
-  /** The assistant's conversation: the bubble sits on the right, width
-   * by content up to `min(80%, 560px)` — about 37 CJK characters a
-   * line, a phone-IM measure; in the 1200px wide mode it keeps the same
-   * 560px instead of stretching, and the 80% only bites in a column
-   * under 700px. The meta row and the expand toggle follow it. No
-   * hover copy here (main chat PRD ruling 73): a chip floating in the
-   * empty left gutter belonged to nothing, and the replies' actions sit
-   * under their bubbles; selecting the bubble's text brings up the
+  /** The assistant's conversation: no hover copy (main chat PRD ruling
+   * 73): a chip floating in the empty gutter beside the bubble belonged
+   * to nothing, and under it a chip would cover the next message of a
+   * burst, 4px below. Selecting the bubble's text brings up the
    * floating copy instead (SelectionCopyToolbar, scope `user-message`),
-   * which copies exactly this plain text. */
-  align?: "end";
-  /** The row's vertical margin in place of `my-5` (the assistant's IM
-   * grouping, lib/assistant-conversation.ts `assistantRowGap`). */
+   * which copies exactly this plain text. The workbench keeps the hover
+   * copy: long pastes collapse there, and a selection cannot reach the
+   * collapsed text. */
+  selectionCopy?: boolean;
+  /** The row's vertical margin in place of the workbench's `mt-5` and
+   * copy row (the assistant's IM grouping,
+   * lib/assistant-conversation.ts `assistantRowGap`). */
   rowClassName?: string;
 }
 
@@ -225,12 +193,9 @@ export const MessageUser = memo(function MessageUser({
   content,
   attachments = [],
   origin,
-  createdAt,
-  pinnedTime,
-  pinnedTimeFull,
   askUserReply = false,
   messageId,
-  align,
+  selectionCopy = false,
   rowClassName,
 }: MessageUserProps) {
   const copy = useCopy();
@@ -293,34 +258,45 @@ export const MessageUser = memo(function MessageUser({
   };
 
   const copyVisible = actionsVisible || copied;
-  const end = align === "end";
 
-  const copyChip = (
-    <ActionChip
-      variant="inline"
-      active={copied}
-      idleIcon={<Copy size={14} weight="thin" />}
-      activeIcon={<Check size={14} weight="bold" />}
-      idleLabel={copy.conversation.copy}
-      activeLabel={copy.conversation.copied}
-      onClick={() => void handleCopy()}
-      revealed={copyVisible}
-    />
-  );
+  const toggle = isLong ? (
+    <button
+      type="button"
+      tabIndex={-1}
+      onMouseDown={preventMouseFocus}
+      onClick={() => setCollapsed((c) => !c)}
+      aria-expanded={!collapsed}
+      className="inline-flex h-6 items-center gap-1 rounded-sm px-1 text-[11.5px] text-ink-muted underline-offset-2 transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink hover:underline active:translate-y-px"
+    >
+      {collapsed ? (
+        <>
+          {expandLabel}
+          <CaretDown size={10} weight="thin" />
+        </>
+      ) : (
+        <>
+          {copy.conversation.collapse}
+          <CaretUp size={10} weight="thin" />
+        </>
+      )}
+    </button>
+  ) : null;
 
   return (
     <div
-      className={cn("group relative", rowClassName ?? "my-5")}
-      onMouseEnter={showActions}
-      onMouseLeave={scheduleHideActions}
+      className={cn(
+        "group relative",
+        rowClassName ?? cn("mt-5 mb-7.5", RAIL_CLEARANCE),
+      )}
+      onMouseEnter={selectionCopy ? undefined : showActions}
+      onMouseLeave={selectionCopy ? undefined : scheduleHideActions}
     >
-      {/* Meta row above the bubble: Supervisor provenance and / or the
-          pinned send time, whichever applies. In flow — it takes its
-          real height, like the icon-only row it grew out of. */}
-      {(isSupervisor || fromMainChat || pinnedTime) && (
-        <div
-          className={cn("mb-1 flex items-center gap-1.5", end && "justify-end")}
-        >
+      {/* Provenance above the bubble, on its side: Supervisor, or the
+          main chat for a subtask's instructions. In flow — it takes its
+          real height. The send time is no longer here: it is a centred
+          line before the message (MessageTimeDivider). */}
+      {(isSupervisor || fromMainChat) && (
+        <div className="mb-1 flex items-center gap-1.5 justify-end">
           {fromMainChat && (
             <IconTooltip text={copy.subtask.fromMainChat} side="top">
               <span
@@ -351,23 +327,16 @@ export const MessageUser = memo(function MessageUser({
               </span>
             </IconTooltip>
           )}
-          {pinnedTime && (
-            <PinnedMessageTime
-              label={pinnedTime}
-              full={pinnedTimeFull}
-              iso={createdAt}
-            />
-          )}
         </div>
       )}
       <div
         data-role={askUserReply ? "user-msg-reply" : "user-msg"}
         data-message-id={messageId}
-        data-selection-copy-scope={end ? "user-message" : undefined}
+        data-selection-copy-scope={selectionCopy ? "user-message" : undefined}
         className={cn(
-          "relative w-fit max-w-full rounded-md bg-brand-tint px-3.5 py-2.5 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink",
+          "relative w-fit rounded-md bg-brand-tint px-3.5 py-2.5 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink",
           "select-text",
-          end && "ml-auto max-w-[min(80%,560px)]",
+          "ml-auto max-w-[min(80%,560px)]",
         )}
       >
         <span
@@ -381,60 +350,46 @@ export const MessageUser = memo(function MessageUser({
         {attachments.length > 0 && (
           <UserImageAttachments attachments={attachments} />
         )}
-        {/* Transient copy — fades in on hover just outside the bubble's
-            bottom-right corner, centred on the last line of text.
-            Sat *inside* the block until 2026-08-05, which is why the
-            block reserved `pr-10`. Shrink-to-fit made that reservation
-            visible: a two-character message would have rendered as a
-            small block trailing 40px of empty fill. Moving the chip out
-            lets the box track its content exactly; it still rides the
-            block's own hover region, so ownership survives.
+      </div>
+      {selectionCopy ? (
+        toggle && <div className="mt-1 flex justify-end">{toggle}</div>
+      ) : (
+        /* Under the bubble, right edges flush, 6px down: the reply's
+            action row (mt-1.5, 24px chips), mirrored. It sits in the
+            row's bottom margin (mb-7.5, 30px) rather than in flow, so
+            that row IS the gap to whatever comes next — a fold header,
+            the live row, a reply, a question — whose own top margin
+            (mt-6 at most) collapses into it; in flow it would stack on
+            top of theirs. The idea of the assistant's 「它 → 你 30px
+            由行动条占着」 (assistantRowGap), here on the user's side.
+            The chip hides with opacity and keeps its box, so nothing
+            moves when it shows.
 
-            `ml-1.5`: the bubble's painted edge IS its layout edge (the
-            highlighter era needed `ml-3` to clear a box-shadow overhang
-            that didn't take layout space), so 6px is a real 6px gap.
+            A long message's 「展开 / 收起」 shares the row, outermost
+            on the right where the assistant puts it: always there, so
+            it keeps the bubble's edge, and the chip comes in to its
+            left on hover. Two rows would make a long message's gap
+            58px; the chip outermost would leave the toggle hanging 28px
+            short of the edge at rest.
 
             `inline`, not `floating`: the bordered, solid-background chip
             exists so the selection toolbar can portal itself on top of
-            arbitrary text. This one sits in clean canvas margin and needs
-            no such armour — and a bordered control box pressed against
-            the user's own words inverts the register (machine parts
-            crisp, the human voice plain).
-
-            Vertical anchor: the bubble's `py-2.5` (10px) plus half the
-            difference between one line box (body size × leading) and
-            the 24px chip puts the chip's centre on the last line's
-            centre at every font tier. The old `top-1.5` (6px) left
-            the chip ~5px above the first line's centre, riding high
-            (2026-09-18). */}
-        {!end && (
-          <div className="absolute left-full bottom-[calc(10px+(var(--conversation-body-size)*var(--conversation-body-leading)-24px)/2)] z-10 ml-1.5">
-            {copyChip}
-          </div>
-        )}
-      </div>
-      {isLong && (
-        <div className={cn("mt-1", end && "flex justify-end")}>
-          <button
-            type="button"
-            tabIndex={-1}
-            onMouseDown={preventMouseFocus}
-            onClick={() => setCollapsed((c) => !c)}
-            aria-expanded={!collapsed}
-            className="inline-flex h-6 items-center gap-1 rounded-sm px-1 text-[11.5px] text-ink-muted underline-offset-2 transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink hover:underline active:translate-y-px"
-          >
-            {collapsed ? (
-              <>
-                {expandLabel}
-                <CaretDown size={10} weight="thin" />
-              </>
-            ) : (
-              <>
-                {copy.conversation.collapse}
-                <CaretUp size={10} weight="thin" />
-              </>
-            )}
-          </button>
+            arbitrary text. This one sits in clean canvas margin and
+            needs no such armour — and a bordered control box pressed
+            against the user's own words inverts the register (machine
+            parts crisp, the human voice plain). */
+        <div className="absolute top-full right-0 z-10 mt-1.5 flex h-6 items-center gap-1">
+          <ActionChip
+            variant="inline"
+            active={copied}
+            idleIcon={<Copy size={14} weight="thin" />}
+            activeIcon={<Check size={14} weight="bold" />}
+            idleLabel={copy.conversation.copy}
+            activeLabel={copy.conversation.copied}
+            onClick={() => void handleCopy()}
+            revealed={copyVisible}
+          />
+          {toggle}
         </div>
       )}
     </div>

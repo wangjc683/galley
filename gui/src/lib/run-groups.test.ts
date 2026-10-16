@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  answeredInOneStep,
   buildRunGroups,
   liveRunElapsedBaseMs,
   liveRunGroup,
@@ -148,17 +149,41 @@ describe("buildRunGroups", () => {
     expect(btw.foldEligible).toBe(false);
   });
 
-  it("folds single-step runs (the header is the run's only settled duration surface)", () => {
-    // Reversed 2026-08-06: launch shipped stepCount >= 2 ("nothing to
-    // hide"), but the footer-⏱ removal made the fold header the sole
-    // home of settled elapsed time, and the folded render (header +
-    // answer, no StrongHr) is quieter than the unfolded single-step
-    // stack — so the fold pays even when the hidden set is empty.
+  it("keeps a single-step run foldable; the workbench draws it as its answer alone", () => {
+    // Folding single-step runs (2026-08-06) made the header the home of
+    // their duration; since 2026-10-16 the workbench draws them with no
+    // header at all (answeredInOneStep), and the assistant's plan still
+    // reads `foldable` to tell a settled run from a flat one.
     const turns: Turn[] = [user("q"), closing()];
     const groups = buildRunGroups(turns);
     expect(groups[0].complete).toBe(true);
     expect(groups[0].foldable).toBe(true);
     expect(groups[0].stats.stepCount).toBe(1);
+    expect(answeredInOneStep(groups[0])).toBe(true);
+  });
+
+  it("answeredInOneStep: only a settled run whose closing turn is its only step", () => {
+    const [one, two, open, asked] = buildRunGroups([
+      user("q1"),
+      closing(),
+      user("q2"),
+      step(tool("web_scan")),
+      closing(),
+      user("q3"),
+      step(tool("web_scan")),
+      user("q4"),
+      askStep(),
+      user("a"),
+      closing(),
+    ]);
+    expect(answeredInOneStep(one)).toBe(true);
+    expect(answeredInOneStep(two)).toBe(false);
+    // No answer yet: one step, but not settled.
+    expect(open.stats.stepCount).toBe(1);
+    expect(answeredInOneStep(open)).toBe(false);
+    // A question before the answer is a step of its own.
+    expect(asked.stats.stepCount).toBe(2);
+    expect(answeredInOneStep(asked)).toBe(false);
   });
 
   it("collects orphan leading agent turns into an unfoldable headless group", () => {
