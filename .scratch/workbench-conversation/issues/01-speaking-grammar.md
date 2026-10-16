@@ -1,6 +1,6 @@
 # 01 工作台里你的话在右、时间居中，一步就答完的回复不画折叠头
 
-Status: open
+Status: 合入 main（2026-10-16，`34250e50`–`4acfe732`，含主会话追加的时间条落点与骨架屏），待 JC 真机验收
 
 来源：[工作台对话 PRD](../PRD.md) 裁决 2、3、7（2026-10-16，JC：「按建议推进」）。只改 GUI 与文档，不碰 Rust。
 与票 [02](./02-process-one-line-per-step.md)（折叠头后面的步骤）并行，两张都会动 `Conversation.tsx` 与 `conversation.md`，本票先合。

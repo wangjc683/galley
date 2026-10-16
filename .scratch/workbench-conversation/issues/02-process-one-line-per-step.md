@@ -1,6 +1,6 @@
 # 02 工作台折叠头后面一行一步，中途提问留在外面
 
-Status: open
+Status: 合入 main（2026-10-16，`78194b9e`–`8056dd7f`，合并提交 `fea5ba13` 接住票 01），待 JC 真机验收
 
 来源：[工作台对话 PRD](../PRD.md) 裁决 6（2026-10-16，JC：「按你推荐，P1，不用切换器」「按建议推进」）。只改 GUI 与文档，不碰 Rust。
 与票 [01](./01-speaking-grammar.md)（你的话在右、时间居中、一步的回复不画折叠头）并行，两张都会动 `Conversation.tsx` 与 `conversation.md`；01 先合，合进 main 后主会话会通知你把 main 合进本分支、解冲突。
