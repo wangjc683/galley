@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PauseCircle } from "@phosphor-icons/react";
 
+import { animateScroll } from "@/lib/animate-scroll";
 import { useCopy } from "@/lib/i18n";
 import {
   USER_MSG_ANCHOR_TOLERANCE_PX,
@@ -31,9 +32,11 @@ import type { Turn } from "@/types/conversation";
  *     on the line, or the time line right above it at its own — the
  *     same rule MainView uses for submit-snap and ⌥↑/⌥↓).
  *
- * Click jumps to that user-msg via the same scrollBy delta pattern as
- * MainView's keyboard nav (no jarring instant jump, no scroll-into-view
- * blocked-by-flex-parent gotcha).
+ * Click jumps to that user-msg the way the keyboard nav does
+ * (useStickyScroll ⌥↑ / ⌥↓): the park delta, scrolled by the
+ * conversation's own smooth scroll (lib/animate-scroll.ts — a far dot
+ * jumps most of the way first, reduced motion lands at once), no
+ * scroll-into-view blocked-by-flex-parent gotcha.
  *
  * Hover reveals a tooltip on the left with two lines — the question,
  * and the first prose line of the answer that closed that exchange
@@ -390,13 +393,7 @@ export function UserQuestionRail({
       target,
       container.getBoundingClientRect().top,
     );
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    container.scrollBy({
-      top: delta,
-      behavior: prefersReducedMotion ? "auto" : "smooth",
-    });
+    animateScroll(container, container.scrollTop + delta);
     // Break follow-the-bottom so an incoming streaming chunk doesn't
     // snap the jump straight back down (mirrors MainView's ⌥↑/⌥↓ nav).
     onJump?.();
