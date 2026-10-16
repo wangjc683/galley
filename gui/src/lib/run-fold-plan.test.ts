@@ -196,6 +196,31 @@ describe("workbenchFoldPlan: settling", () => {
   });
 });
 
+describe("workbenchFoldPlan: a run that answered in one step", () => {
+  const oneStep = (): Turn[] => [user("早"), closing()];
+
+  it("is its answer alone: no header, no card, nothing drawn elsewhere", () => {
+    const p = plan(oneStep());
+    expect(p.heads.size).toBe(0);
+    expect(p.elsewhere.size).toBe(0);
+    expect(p.windowOwner.size).toBe(0);
+    expect(p.regionOwner.size).toBe(0);
+    expect(p.settleGapAbove).toBeNull();
+  });
+
+  it("closes the in-flight row's place above its answer while it settles", () => {
+    const p = plan(oneStep(), { settling: true });
+    expect(p.heads.size).toBe(0);
+    expect(p.settleGapAbove).toBe(1);
+  });
+
+  it("leaves a run of two steps behind its header", () => {
+    const p = plan([user("排个行程"), step(), closing()]);
+    expect(onlyHead(p)[1].rows).toEqual([1]);
+    expect(p.settleGapAbove).toBeNull();
+  });
+});
+
 describe("workbenchFoldPlan: runs drawn flat", () => {
   it("draws a run without an answer that is not running in full, its question inside", () => {
     const p = plan(asked().slice(0, 5));

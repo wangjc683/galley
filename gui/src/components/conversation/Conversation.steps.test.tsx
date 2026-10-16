@@ -450,6 +450,33 @@ describe("the workbench's questions mid-run: out before the header", () => {
     );
   });
 
+  it("keeps an answer's send time right above its bubble's row, out before the header", () => {
+    // Answered an hour and a half later: a break. The time line is the
+    // row's previous sibling (lib/conversation-anchor.ts
+    // `timeLineAbove`), out here as anywhere.
+    const at = (h: number, m = 0) => new Date(2026, 9, 12, h, m).toISOString();
+    const turns: Turn[] = [
+      { ...user("订船票"), createdAt: at(9) },
+      did("我先看船班。", 1),
+      ask("订哪一班？", ["8:30", "9:00"], 2),
+      { ...user("8:30"), createdAt: at(10, 30) },
+      did("我去下单。", 3),
+      answer("订好了。", 4),
+    ];
+    const html = render(turns);
+    expect(count(html, 'data-role="message-time-divider"')).toBe(2);
+    const line = html.lastIndexOf('data-role="message-time-divider"');
+    const bubble = html.indexOf('data-role="user-msg-reply"');
+    expect(line).toBeGreaterThan(html.indexOf("订哪一班？"));
+    expect(bubble).toBeLessThan(html.indexOf('data-role="run-fold"'));
+    // Between the line and the bubble: the line's own end and the row's
+    // opening tag, nothing else.
+    const between = html.slice(line, bubble);
+    expect(between).toMatch(
+      /^data-role="message-time-divider"[^>]*>.*?<\/time><\/div><div class="group relative[^"]*"[^>]*><div $/,
+    );
+  });
+
   it("leaves a question and its answer in the live window while they are its tail", () => {
     const turns: Turn[] = [
       user("订船票"),
