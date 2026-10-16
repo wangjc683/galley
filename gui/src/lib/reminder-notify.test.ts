@@ -24,12 +24,11 @@ function deps(focused: boolean) {
     windowFocused: vi.fn(async () => focused),
     pushToast: vi.fn(),
     notify: vi.fn(async () => {}),
-    openAssistant: vi.fn(async () => true),
   } satisfies ReminderFallbackDeps;
 }
 
 describe("remindUndelivered", () => {
-  it("in the background: notifies with its words and lands on the assistant", async () => {
+  it("in the background: notifies with its words and leaves the view alone", async () => {
     const d = deps(false);
     await expect(remindUndelivered(PAYLOAD, zhCopy, d)).resolves.toBe(
       "notification",
@@ -40,7 +39,6 @@ describe("remindUndelivered", () => {
       throttleKey: "schedule-reminder:sched_water",
       tone: "needsYou",
     });
-    expect(d.openAssistant).toHaveBeenCalledTimes(1);
     expect(d.pushToast).not.toHaveBeenCalled();
   });
 
@@ -48,7 +46,6 @@ describe("remindUndelivered", () => {
     const d = deps(true);
     await expect(remindUndelivered(PAYLOAD, zhCopy, d)).resolves.toBe("toast");
     expect(d.notify).not.toHaveBeenCalled();
-    expect(d.openAssistant).not.toHaveBeenCalled();
     expect(d.pushToast).toHaveBeenCalledTimes(1);
     const toast = d.pushToast.mock.calls[0][0];
     expect(toast).toMatchObject({

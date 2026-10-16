@@ -14,10 +14,13 @@ import { makeAppError, type AppError } from "@/types/app-error";
  *
  *   - Window in the background: a system notification titled 「提醒」
  *     with the words it noted (the `scheduleFailed` kind: no pref, it
- *     needs the user; the "needs you" tone), and the main area goes to
- *     the assistant, so the window clicking the notification brings
- *     forward shows it. The desktop notification plugin reports no
- *     clicks, so the landing happens when the notification is sent.
+ *     needs the user; the "needs you" tone). The view is left alone
+ *     (main chat PRD ruling 88): you may have left the window on other
+ *     work, and the assistant's card already wears its 「等你回复」
+ *     badge — the main chat was asking you, that is why the reminder
+ *     could not get in; its words stay in the notification centre and
+ *     in 待办's 「最近做完」. (The desktop notification plugin reports
+ *     no clicks, so a click cannot land anywhere either.)
  *   - Window in front: no system notification (the gate's rule, as for
  *     a subtask's fallback, ticket 31), and the words as an in-app toast
  *     that stays until closed — a subtask's state is on its card, a
@@ -36,8 +39,6 @@ export interface ReminderFallbackDeps {
       tone?: NotifyTone;
     },
   ) => Promise<void>;
-  /** Land on the assistant; resolves false where there is none. */
-  openAssistant: () => Promise<boolean>;
 }
 
 /** Tell the user about an undelivered reminder where they are; which
@@ -72,6 +73,5 @@ export async function remindUndelivered(
     throttleKey: `schedule-reminder:${payload.taskId}`,
     tone: "needsYou",
   });
-  await deps.openAssistant();
   return "notification";
 }

@@ -113,3 +113,7 @@ Status: merged（2026-10-16 合入 main，分支提交 `98e5bd8d`、`fa4b0b01`�
 - `rustfmt --check`：新文件与 `db/subtask.rs`、`commands/schedule.rs` 干净；`lib.rs`、`db/mod.rs` 原本不干净，只加了一行。gui 新文件整篇 prettier；原本干净的旧文件整篇干净，原本不干净的（`App.tsx`、`CommandPalette.tsx`、`ScheduledTasksDialog.tsx`、`zh.ts`、`en.ts`）prettier 差异条数与 HEAD 相同。
 - 看界面：临时 Vite + Chrome（playwright，假的 Tauri 桥）跑了真的 `MainView`、`TodoDialog`、`Sidebar`、`ToastHost`：卡片四种状态与子任务卡片同在、待办三组与悬停动作、最近做完展开、取消失败的那一行、编辑打开原表单、空状态、托管与外置的书眉、前台的提醒提示条；浅色深色、中英文。harness 已删，截图不进仓库。
 - 没验：真机 `tauri dev`（按约定不跑）；macOS 打包版点系统通知是否把隐藏的窗口带出来；Windows。
+
+### 2026-10-16 主会话：后台不切到助理（裁决 88）
+
+JC 定后台时不切。`remindUndelivered` 去掉 `openAssistant`，只发系统通知；前台的提示条不变。卡片此时挂「等你回复」（提醒没进主对话，不是未读），原话在系统通知中心与待办「最近做完」。另两条拿不准的（英文每周规则的写法、Core 重启后子任务结束原因只在内存）先不动。

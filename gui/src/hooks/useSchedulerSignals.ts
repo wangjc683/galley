@@ -3,7 +3,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
 
 import { useCopy } from "@/lib/i18n";
-import { openMainChat } from "@/lib/main-chat";
 import { sendGatedSystemNotification } from "@/lib/notify";
 import { remindUndelivered } from "@/lib/reminder-notify";
 import {
@@ -100,7 +99,6 @@ export function useScheduledFireFailedNotification(): void {
           },
           pushToast: (toast) => useUiStore.getState().pushToast(toast),
           notify: sendGatedSystemNotification,
-          openAssistant: openMainChat,
         });
       },
     ).then(keep);
