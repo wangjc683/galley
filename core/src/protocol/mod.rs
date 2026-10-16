@@ -29,10 +29,11 @@ mod error_tag;
 
 pub use commands::{
     GitReviewRequest, LlmSetArgs, LocalFileRequest, ProjectCreateArgs, ProjectDeleteArgs,
-    SessionArchiveArgs, SessionBtwArgs, SessionCheckpointArgs, SessionMoveArgs, SessionNewArgs,
-    SessionNewResult, SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs,
-    SessionShutdownRunnerArgs, SessionStopArgs, SessionWatchArgs, SessionsRunStateArgs,
-    SocketCommand,
+    ScheduleCreateArgs, ScheduleDeleteArgs, ScheduleDisableArgs, ScheduleEnableArgs,
+    ScheduleListArgs, ScheduleRunArgs, ScheduleShowArgs, ScheduleUpdateArgs, SessionArchiveArgs,
+    SessionBtwArgs, SessionCheckpointArgs, SessionMoveArgs, SessionNewArgs, SessionNewResult,
+    SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs, SessionShutdownRunnerArgs,
+    SessionStopArgs, SessionWatchArgs, SessionsRunStateArgs, SocketCommand,
 };
 pub use envelope::{
     SocketRequest, SocketResponse, StreamEnvelope, WatchFrame, ACCEPTED_SCHEMA_VERSIONS,

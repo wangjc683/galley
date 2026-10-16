@@ -99,6 +99,7 @@ mod common;
 mod ctx;
 mod llm_cmds;
 mod project_cmds;
+mod schedule_cmds;
 mod session_cmds;
 mod session_new_cmds;
 mod wire;
@@ -107,6 +108,7 @@ use crate::notify::{NullNotifier, TauriNotifier};
 pub use ctx::{DbSource, HandlerCtx, RunnerPort};
 use llm_cmds::*;
 use project_cmds::*;
+use schedule_cmds::*;
 use session_cmds::*;
 use session_new_cmds::*;
 use wire::{write_stream_line, StreamEnvelope, CONNECTION_IDLE_TIMEOUT};
@@ -673,6 +675,31 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
             DispatchResult::Unary(dispatch_project_delete(request_id, req.args, ctx).await)
         }
         "llm.set" => DispatchResult::Unary(dispatch_llm_set(request_id, req.args, ctx).await),
+        // ---- scheduled tasks (main chat ticket 34, additive inside 3) ----
+        "schedule.list" => {
+            DispatchResult::Unary(dispatch_schedule_list(request_id, req.args, ctx).await)
+        }
+        "schedule.show" => {
+            DispatchResult::Unary(dispatch_schedule_show(request_id, req.args, ctx).await)
+        }
+        "schedule.create" => {
+            DispatchResult::Unary(dispatch_schedule_create(request_id, req.args, ctx).await)
+        }
+        "schedule.update" => {
+            DispatchResult::Unary(dispatch_schedule_update(request_id, req.args, ctx).await)
+        }
+        "schedule.delete" => {
+            DispatchResult::Unary(dispatch_schedule_delete(request_id, req.args, ctx).await)
+        }
+        "schedule.enable" => {
+            DispatchResult::Unary(dispatch_schedule_enable(request_id, req.args, ctx).await)
+        }
+        "schedule.disable" => {
+            DispatchResult::Unary(dispatch_schedule_disable(request_id, req.args, ctx).await)
+        }
+        "schedule.run" => {
+            DispatchResult::Unary(dispatch_schedule_run(request_id, req.args, ctx).await)
+        }
         other => DispatchResult::Unary(SocketResponse::err(
             request_id,
             ErrorTag::UnknownCommand,

@@ -62,6 +62,18 @@ get a clean error path; the JSON envelope carries the original tag.
 | `not_implemented`  | exit 1      | Reserved — no emitter exists today; do not expect it |
 | `idle_timeout`     | exit 1      | Long-lived stream sat idle past 90s                  |
 
+#### Stable message prefixes (on `invalid_args`)
+
+Some `invalid_args` refusals name their reason with a fixed prefix at the
+start of `message`, so an SOP can branch without a new exit code. The prefix
+is stable; the text after it is not.
+
+| Prefix                   | Where                                             | When |
+| ------------------------ | ------------------------------------------------- | ---- |
+| `schema_mismatch:`       | any command, `--schema=N`                         | `N` is outside the accepted set (§1.2) |
+| `time_in_past:`          | `schedule create` / `update` `--at`               | The one-off's time is already past (additive 2026-10-16) |
+| `assistant_unavailable:` | `schedule create` / `update` / `run`, target `assistant` | The active runtime is the external one, or the managed runtime has no main chat (additive 2026-10-16) |
+
 #### Status enums
 
 | Enum                       | Values                                                                                |
@@ -70,6 +82,9 @@ get a clean error path; the JSON envelope carries the original tag.
 | `MessageBrief.role`        | `user / agent / system` (DB `tool` rows normalize to `agent`)                         |
 | `HealthCheck.status`       | `ok / warn / fail / deferred_b4` (`deferred_b4` is a legacy stable value; new `deferred_<phase>` values are additive) |
 | `Origin.via`               | `gui / cli / supervisor / system / subtask` (`subtask` additive 2026-10-13: a session the main chat dispatched and its first message) |
+| `ScheduledTask.repeat.kind` | `daily / weekly / monthly / once` (2026-10-16, [schedule-commands](./schedule-commands.md)) |
+| `ScheduledTask.target`     | `session / assistant` (2026-10-16) |
+| `ScheduledTask.lastWake`   | `pending / delivered / notified` (2026-10-16) |
 
 Retired in `3` (§7.1): `GoalBrief.status` (`active / paused / blocked /
 completed / budget_limited / stopped / failed`), with the rest of the
@@ -177,6 +192,13 @@ and error discriminants unchanged):
   under `--schema=1` and `--schema=2`. See §5.5a in
   [session-commands.md](./session-commands.md) and
   [ADR-0003](../adr/0003-gui-and-phone-send-through-core.md).
+- 2026-10-16 — The `schedule` family (main chat ticket 34): `schedule list
+  / show / create / update / delete / enable / disable / run` (socket
+  `schedule.*`), the `ScheduledTask` shape with its enum values above, and
+  the `time_in_past:` / `assistant_unavailable:` message prefixes on
+  `invalid_args`. New commands only; no existing command, field or exit
+  code changed. Also served under `--schema=1` and `--schema=2`. See
+  [schedule-commands.md](./schedule-commands.md).
 
 ### 7.2 `schemaVersion: 2` (served for unchanged commands, since 2026-09-16)
 

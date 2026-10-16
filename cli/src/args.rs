@@ -52,6 +52,152 @@ pub(crate) enum Command {
     /// live runner.
     #[command(subcommand)]
     Llm(LlmCmd),
+
+    /// Scheduled tasks: one-off or repeating, that start a session or wake
+    /// the assistant (the main chat). `list` / `show` read SQLite
+    /// directly; the writes go through Galley Core. `delete` cancels: the
+    /// task stays readable with `cancelledAt`.
+    #[command(subcommand)]
+    Schedule(ScheduleCmd),
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum ScheduleCmd {
+    /// List scheduled tasks, NDJSON, enabled first then most recently
+    /// updated. Default: the ones that may still fire (enabled, not
+    /// cancelled, not a one-off that already fired). Read-only — opens
+    /// SQLite directly.
+    List {
+        /// Also fired one-offs, disabled and cancelled tasks.
+        #[arg(long)]
+        all: bool,
+    },
+    /// One task, cancelled or not. Read-only — opens SQLite directly.
+    Show {
+        /// Task id (`sched_<16-hex>`).
+        task_id: String,
+    },
+    /// Create a task. Give exactly one of `--at` (a one-off) and
+    /// `--daily` / `--weekly` / `--monthly` (with `--time`).
+    #[command(group(
+        clap::ArgGroup::new("when")
+            .required(true)
+            .args(["at", "daily", "weekly", "monthly"])
+    ))]
+    Create {
+        /// What to do: for `--target=assistant` the words the assistant
+        /// gets when it comes due; for `--target=session` the new
+        /// session's first message.
+        prompt: String,
+        /// A one-off, at this time: RFC 3339 (`2026-10-20T20:00:00+08:00`)
+        /// or local `YYYY-MM-DDTHH:MM`, read in this machine's time zone.
+        /// A time already past is refused (`time_in_past:`, exit 2).
+        #[arg(long, value_name = "TIME")]
+        at: Option<String>,
+        #[command(flatten)]
+        rule: RepeatArgs,
+        /// What a fire does. `assistant` needs the managed runtime with
+        /// its main chat (`assistant_unavailable:`, exit 2).
+        #[arg(long, value_enum, default_value = "session")]
+        target: ScheduleTargetArg,
+        /// Project for the sessions it starts (target session only).
+        #[arg(long)]
+        project: Option<String>,
+        /// Model display name for the sessions it starts (target session
+        /// only).
+        #[arg(long)]
+        llm: Option<String>,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Change a task; only the fields given change. `--at` makes it a
+    /// one-off (a later time arms a fired one again); `--daily` /
+    /// `--weekly` / `--monthly` make it repeating. An empty `--project=`
+    /// or `--llm=` clears it.
+    Update {
+        task_id: String,
+        /// The new words / first message.
+        #[arg(long)]
+        prompt: Option<String>,
+        #[arg(long, value_name = "TIME")]
+        at: Option<String>,
+        #[command(flatten)]
+        rule: RepeatArgs,
+        #[arg(long, value_enum)]
+        target: Option<ScheduleTargetArg>,
+        #[arg(long)]
+        project: Option<String>,
+        #[arg(long)]
+        llm: Option<String>,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Cancel a task (a soft delete): it never fires again and leaves
+    /// the default list; `show` and `list --all` still read it.
+    Delete {
+        task_id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Turn a task back on.
+    Enable {
+        task_id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Pause a task.
+    Disable {
+        task_id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Fire a task once, now, through the scheduled path (the desktop's
+    /// "run now"): a session task starts its session; an assistant task
+    /// wakes the main chat. Planned fires are not consumed.
+    Run {
+        task_id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+}
+
+/// A repeating rule's flags, shared by `schedule create` and `update`.
+#[derive(clap::Args, Debug)]
+pub(crate) struct RepeatArgs {
+    /// Every day, at `--time`.
+    #[arg(long, conflicts_with_all = ["at", "weekly", "monthly"])]
+    pub(crate) daily: bool,
+    /// On these ISO weekdays (Mon=1 … Sun=7, comma-separated), at
+    /// `--time`.
+    #[arg(long, value_name = "DAYS", conflicts_with_all = ["at", "monthly"])]
+    pub(crate) weekly: Option<String>,
+    /// On these days of the month (1-31, comma-separated; short months
+    /// fire on their last day), at `--time`.
+    #[arg(long, value_name = "DAYS", conflicts_with = "at")]
+    pub(crate) monthly: Option<String>,
+    /// Local wall-clock time `HH:MM` for a repeating rule.
+    #[arg(long, value_name = "HH:MM", conflicts_with = "at")]
+    pub(crate) time: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum ScheduleTargetArg {
+    /// Wake the assistant (the main chat) with the words.
+    Assistant,
+    /// Start a new session that runs the prompt.
+    Session,
 }
 
 #[derive(Subcommand, Debug)]
