@@ -371,18 +371,33 @@ fn due_paragraph(due: &DueReminder) -> String {
     } else {
         format!("Scheduled reminder `{id}` ({}) came due.", due.rule)
     };
-    let when = match &due.late {
-        None => format!("Planned for {}, local time.", due.due_local),
-        Some(late) => format!(
-            "Planned for {}, local time; it went off at {}, {late} late (the computer was \
-             asleep or Galley was closed). Tell the user it comes late, and how late.",
-            due.due_local, due.fired_local
+    // Late: the lateness sits in the sentence the model acts on, and is
+    // for the reply itself. Ticket 36's eval: the model put 「晚了 9 小时」
+    // in GA's `<summary>`, which the main chat does not show, and the
+    // reply only relayed the words (one run in three with "Tell the user
+    // it comes late, and how late." after the times; two in two with
+    // "say first", the summary being what comes first).
+    let (when, act) = match &due.late {
+        None => (
+            format!("Planned for {}, local time.", due.due_local),
+            "Act on it now:".to_string(),
+        ),
+        Some(late) => (
+            format!(
+                "Planned for {}, local time; it went off at {}, {late} late (the computer was \
+                 asleep or Galley was closed).",
+                due.due_local, due.fired_local
+            ),
+            format!(
+                "Act on it now, and say in the reply itself (the user does not see your \
+                 summary) that it comes {late} late:"
+            ),
         ),
     };
     format!(
         "{what} {when} What you noted when you set it:\n<<<\n{}\n>>>\n\
-         Act on it now: tell the user in a sentence or two, look something up first, or \
-         start a subtask. If it no longer applies (the user already did it), {NO_REPLY_END}.",
+         {act} tell the user in a sentence or two, look something up first, or start a \
+         subtask. If it no longer applies (the user already did it), {NO_REPLY_END}.",
         due.prompt.trim()
     )
 }
@@ -1635,9 +1650,13 @@ mod tests {
         assert!(late.contains(
             "Scheduled reminder `sched_a` (every day at 09:00) came due. Planned for \
              2026-10-20 20:00 (Tue), local time; it went off at 2026-10-22 09:15 (Thu), 1 day \
-             13 hours late (the computer was asleep or Galley was closed). Tell the user it \
-             comes late, and how late."
+             13 hours late (the computer was asleep or Galley was closed). What you noted"
         ));
+        assert!(late.contains(
+            ">>>\nAct on it now, and say in the reply itself (the user does not see your summary) \
+             that it comes 1 day 13 hours late: tell the user in a sentence or two"
+        ));
+        assert!(text.contains(">>>\nAct on it now: tell the user in a sentence or two"));
         assert_eq!(
             replay_lines(&[due_report(due(true, None))]),
             "[Galley: reminder sched_a came due (2026-10-20 20:00 (Tue)) — details: schedule \
