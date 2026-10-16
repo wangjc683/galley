@@ -83,7 +83,7 @@ Before adding, also check whether an existing section already says it: the
   can recite. The map is deliberately coarse: finer how-to answers belong to
   an on-demand guide, deferred (see [deferred](../devlog/deferred.md)).
 - **What Only The User Changes In Galley** — configuration (model providers
-  and API keys, Channels, scheduled tasks, Browser Control and its
+  and API keys, Channels, Browser Control and its
   extension, the runtime, updates, display) changes only in Galley's
   interface: the model does not attempt it through files, scripts, or the
   browser, never says it is done, and instead says where it is and prepares
@@ -91,10 +91,15 @@ Before adding, also check whether an existing section already says it: the
   session. The boundary covers configuration only — the IM entry layer
   deliberately has the agent drive sessions, projects, and `llm set`
   through the CLI. Since 2026-10-06 it also carries what used to
-  be the Scheduled Tasks section: a prepared scheduled-task prompt must
-  stand on its own (each run opens a new conversation), and GenericAgent's
-  own scheduler (`sche_tasks/*.json`) never runs in Galley, so the model
-  never writes those files or says a schedule is set up that way. The seeded
+  be the Scheduled Tasks section: GenericAgent's own scheduler
+  (`sche_tasks/*.json`) never runs in Galley, so the model never writes
+  those files or says a schedule is set up that way. Since 2026-10-16
+  (main chat PRD ruling 90) reminders and scheduled tasks are the
+  assistant's: every session but the main chat sends the user to the
+  Galley conversation at the top of the sidebar and never says one is set
+  (until then it prepared a stand-alone prompt for the user to enter in a
+  form the managed runtime no longer has, ruling 84). The About map's
+  sidebar entry reads 「待办」 / To-do (ruling 86). The seeded
   `scheduled_task_sop` and the memory index still teach that scheduler and
   are copied missing-only, so the prompt is the only layer that reaches
   existing users.
@@ -488,7 +493,7 @@ row.
 | Browser Control: tab protocol / no `window.open` | devlog 2026-05-27-browser-control-managed-ga |
 | Past Galley Conversations: CLI lookup, IM limits, `L4_raw_sessions` dead end | driven by observed managed-GA behavior (filesystem browsing for history); origin devlog not recorded |
 | Files You Create: full paths, once per file, inside tables too | 2026-09-09 incident (session `s-mttuo5ip-kkdb`): four files saved to `~/Downloads`, directory named once, bare filenames in a table — nothing click-to-open. Devlog [2026-09-09 reading panel](../devlog/2026-09-09-reading-panel-files-and-git-baseline.md) §补 |
-| Scheduled Tasks: no `sche_tasks` files, point to sidebar「定时」 (merged into What Only The User Changes, 2026-10-06; the sidebar pointer now comes from the About map) | galley#31 (2026-09-28): a user migrating from external GA copied `sche_tasks/` into the managed state root and nothing fired. Reading the seeded `scheduled_task_sop.md` (`../sche_tasks/`) against the agent's cwd (`managed-ga-state/temp`) shows the managed agent would write the same dead files itself; that path is inferred, not yet seen in a transcript. Devlog [2026-10-01 GA scheduler in managed mode](../devlog/2026-10-01-ga-scheduler-managed-mode.md) |
+| Scheduled Tasks: no `sche_tasks` files, point to sidebar「定时」 (merged into What Only The User Changes, 2026-10-06; the sidebar pointer now comes from the About map; 2026-10-16 ruling 90: the map says 「待办」, and outside the main chat the paragraph sends the user to the assistant) | galley#31 (2026-09-28): a user migrating from external GA copied `sche_tasks/` into the managed state root and nothing fired. Reading the seeded `scheduled_task_sop.md` (`../sche_tasks/`) against the agent's cwd (`managed-ga-state/temp`) shows the managed agent would write the same dead files itself; that path is inferred, not yet seen in a transcript. Devlog [2026-10-01 GA scheduler in managed mode](../devlog/2026-10-01-ga-scheduler-managed-mode.md) |
 | State block | 2026-07-07 session: replace "don't invent metadata, go check Settings" deflection with injected facts |
 | State block: Main Chat (id, segment start, "search, then `--around`") | main chat PRD rulings 18 and 41, ticket 03b (2026-10-12): segments leave earlier parts out of context, and the decided lookup path is the existing CLI rather than a new GA tool. Own cap `MAIN_CHAT_SECTION_BUDGET_BYTES` |
 | State block: Main Chat, carried turns (「opens with <k> exchanges from before it, the last said <time>」, 「Anything older」) | main chat PRD ruling 50, ticket 11 (2026-10-13): a new segment opens with the last 3 turns before it, and without their time the model would take what the user said hours ago as said just now. Cap raised 327 → 421 (+94 bytes) in the same diff; the text without carried turns is unchanged |

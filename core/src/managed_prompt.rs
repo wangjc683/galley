@@ -48,13 +48,13 @@ macro_rules! history_cli_commands {
 macro_rules! user_only_configuration {
     () => {
         r#"Galley's configuration belongs to the user and changes only in Galley's
-interface: model providers and API keys, Channels, scheduled tasks, Browser
-Control and its browser extension, the runtime, updates, and display. When
-asked to change one of these, do not attempt it through files, scripts, or the
-browser, and never say it is done. Tell the user where it is, and prepare what
-they need: the values to fill in, or the prompt and time for a scheduled task
-(it runs daily, on chosen weekdays, or on chosen days of the month, each time
-in a new conversation, so the prompt must stand on its own)."#
+interface: model providers and API keys, Channels, Browser Control and its
+browser extension, the runtime, updates, and display. When asked to change one
+of these, do not attempt it through files, scripts, or the browser, and
+never say it is done. Tell the user where it is, and prepare what they need:
+the values to fill in. Reminders and scheduled tasks are set by the assistant,
+in the Galley conversation at the top of the sidebar: ask the user to tell it
+there, and never say one is set."#
     };
 }
 
@@ -99,8 +99,8 @@ open-source GenericAgent.
 
 Galley's features, and where the user finds them:
 - Sidebar: conversations, Projects (conversations grouped around a folder),
-  and scheduled tasks ("定时" / "Scheduled"). ⌘K (Ctrl+K on Windows)
-  searches every past conversation.
+  and the assistant's to-do ("待办" / "To-do": reminders, scheduled tasks,
+  subtasks). ⌘K (Ctrl+K on Windows) searches every past conversation.
 - Message box: this conversation's model and reasoning effort, and the ＋ menu
   for files, folders, and saved prompts.
 - Local files referenced in the conversation open in a reading panel beside it.
@@ -723,8 +723,11 @@ mod tests {
         // the correction.
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(prompt.contains("never write `sche_tasks`"));
-            assert!(prompt.contains("\"定时\" / \"Scheduled\""));
-            assert!(prompt.contains("the prompt must stand on its own"));
+            // Since tickets 36–37 the assistant sets them, from the
+            // main chat; the sidebar entry is its to-do (main chat PRD
+            // rulings 84, 86).
+            assert!(prompt.contains("\"待办\" / \"To-do\""));
+            assert!(prompt.contains("in the Galley conversation at the top of the sidebar"));
         }
     }
 
@@ -1088,6 +1091,7 @@ mod tests {
         assert!(!main.contains("Channels, scheduled tasks, Browser"));
         assert!(!main.contains("the prompt and time for a scheduled task"));
         assert!(!main.contains("so the prompt must stand on its own"));
+        assert!(!main.contains("ask the user to tell it"));
         // galley#31 and the capability rule stay for the main chat too.
         assert!(main.contains("never write `sche_tasks`"));
         assert!(main.contains("Do not"));
@@ -1097,12 +1101,9 @@ mod tests {
 
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(prompt.contains(
-                "interface: model providers and API keys, Channels, scheduled tasks, Browser"
+                "the values to fill in. Reminders and scheduled tasks are set by the assistant,"
             ));
-            assert!(prompt.contains(
-                "they need: the values to fill in, or the prompt and time for a scheduled task"
-            ));
-            assert!(prompt.contains("in a new conversation, so the prompt must stand on its own)."));
+            assert!(prompt.contains("there, and never say one is set."));
             assert!(!prompt.contains("Reminders and scheduled tasks are not on this list"));
             assert!(!prompt.contains("your manual"));
         }
