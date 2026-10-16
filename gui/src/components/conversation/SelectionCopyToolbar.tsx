@@ -1,4 +1,4 @@
-import { Check, Copy } from "@phosphor-icons/react";
+import { Check, Copy, Quotes } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
@@ -11,10 +11,18 @@ const TOOLBAR_SELECTOR = "[data-selection-copy-toolbar]";
 const TOOLBAR_WIDTH = 28;
 const VIEWPORT_GAP = 12;
 const TOOLBAR_GUTTER_GAP = 10;
-const TOOLBAR_HEIGHT = 28;
+/** One floating chip (`size-7`). */
+const CHIP_SIZE = 28;
+/** Between copy and quote (`gap-1`). */
+const CHIP_GAP = 4;
 
 interface SelectionCopyToolbarProps {
   scrollContainerRef: RefObject<HTMLDivElement | null>;
+  /**
+   * 「引用」 (telegram-details ticket 02): hand the selected text to the
+   * composer as a quote. Without it the toolbar is copy alone.
+   */
+  onQuote?: (text: string) => void;
 }
 
 interface ToolbarState {
@@ -24,10 +32,18 @@ interface ToolbarState {
   side: "left" | "right" | "viewport-left";
 }
 
+/**
+ * Floating chips beside a selection in a reply (or, in the assistant's
+ * conversation, in your bubble): copy, and quote into the composer. A
+ * column in the gutter, copy on top where it always sat (its middle on
+ * the selection's last line), quote 4px under it.
+ */
 export function SelectionCopyToolbar({
   scrollContainerRef,
+  onQuote,
 }: SelectionCopyToolbarProps) {
   const copy = useCopy();
+  const toolbarHeight = onQuote ? CHIP_SIZE * 2 + CHIP_GAP : CHIP_SIZE;
   const [toolbar, setToolbar] = useState<ToolbarState | null>(null);
   const [copied, setCopied] = useState(false);
   const rafRef = useRef<number | null>(null);
@@ -41,7 +57,7 @@ export function SelectionCopyToolbar({
       rafRef.current = window.requestAnimationFrame(() => {
         rafRef.current = null;
         setCopied(false);
-        setToolbar(readAssistantSelection());
+        setToolbar(readAssistantSelection(toolbarHeight));
       });
     };
 
@@ -52,7 +68,7 @@ export function SelectionCopyToolbar({
         window.cancelAnimationFrame(rafRef.current);
       }
     };
-  }, []);
+  }, [toolbarHeight]);
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -113,6 +129,14 @@ export function SelectionCopyToolbar({
     }
   };
 
+  const onQuoteClick = () => {
+    if (!toolbar || !onQuote) return;
+    onQuote(toolbar.text);
+    // The composer takes the caret; the selection and the chips go.
+    window.getSelection()?.removeAllRanges();
+    setToolbar(null);
+  };
+
   if (!toolbar) return null;
 
   const tooltipSide = toolbar.side === "left" ? "left" : "right";
@@ -121,7 +145,7 @@ export function SelectionCopyToolbar({
     <div
       data-selection-copy-toolbar
       className={cn(
-        "pointer-events-none fixed z-[70]",
+        "pointer-events-none fixed z-[70] flex flex-col gap-1",
         toolbar.side === "left" && "-translate-x-full",
       )}
       style={{ left: toolbar.left, top: toolbar.top }}
@@ -137,12 +161,25 @@ export function SelectionCopyToolbar({
         tooltipSide={tooltipSide}
         className="pointer-events-auto"
       />
+      {onQuote && (
+        <ActionChip
+          variant="floating"
+          active={false}
+          idleIcon={<Quotes size={14} weight="thin" />}
+          activeIcon={<Quotes size={14} weight="thin" />}
+          idleLabel={copy.conversation.quoteSelection}
+          activeLabel={copy.conversation.quoteSelection}
+          onClick={onQuoteClick}
+          tooltipSide={tooltipSide}
+          className="pointer-events-auto"
+        />
+      )}
     </div>,
     document.body,
   );
 }
 
-function readAssistantSelection(): ToolbarState | null {
+function readAssistantSelection(toolbarHeight: number): ToolbarState | null {
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
     return null;
@@ -166,7 +203,10 @@ function readAssistantSelection(): ToolbarState | null {
       : side === "right"
         ? scopeRect.right + TOOLBAR_GUTTER_GAP
         : VIEWPORT_GAP;
-  const top = clampToolbarTop(rect.top + rect.height / 2 - TOOLBAR_HEIGHT / 2);
+  const top = clampToolbarTop(
+    rect.top + rect.height / 2 - CHIP_SIZE / 2,
+    toolbarHeight,
+  );
 
   return { text, left, top, side };
 }
@@ -211,8 +251,8 @@ function toolbarSide(scopeRect: DOMRect): ToolbarState["side"] {
   return "viewport-left";
 }
 
-function clampToolbarTop(top: number): number {
+function clampToolbarTop(top: number, toolbarHeight: number): number {
   const min = VIEWPORT_GAP;
-  const max = Math.max(min, window.innerHeight - VIEWPORT_GAP - TOOLBAR_HEIGHT);
+  const max = Math.max(min, window.innerHeight - VIEWPORT_GAP - toolbarHeight);
   return Math.min(max, Math.max(min, top));
 }

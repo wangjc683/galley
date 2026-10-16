@@ -656,7 +656,10 @@ function MainViewContent({
             onJump={() => setAtBottom(false)}
           />
         )}
-        <SelectionCopyToolbar scrollContainerRef={scrollContainerRef} />
+        <SelectionCopyToolbar
+          scrollContainerRef={scrollContainerRef}
+          onQuote={(text) => composerRef.current?.quote(text)}
+        />
         {isRunning && currentRunStartedAtMs != null && !isMainChat && (
           <div className="pointer-events-none absolute inset-x-8 bottom-4 z-10">
             <div

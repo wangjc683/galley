@@ -46,6 +46,7 @@ import {
   readComposerDraft,
   saveComposerDraft,
 } from "@/lib/composer-draft";
+import { textWithQuote } from "@/lib/composer-quote";
 import { useCopy } from "@/lib/i18n";
 import { isImeCompositionKeydown } from "@/lib/ime";
 import { findPromptFillSlot } from "@/lib/saved-prompts";
@@ -233,6 +234,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           /** Select this range instead of parking the caret at the end
            * (a saved prompt's trailing `[…]` slot). */
           selection?: { start: number; end: number } | null;
+          /** `next` still holds the current text's paste-fold and file
+           * placeholders (a quote appended to the draft): keep their
+           * registries. */
+          keepPlaceholders?: boolean;
         } = {},
       ) => {
         if (isControlled) {
@@ -243,8 +248,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         // Programmatic prefill is not a user paste or drop — reset both
         // placeholder registries so counters start at #1 and no stale
         // entries linger.
-        resetPasteRegistry();
-        resetFileRefRegistry();
+        if (!options.keepPlaceholders) {
+          resetPasteRegistry();
+          resetFileRefRegistry();
+        }
         if (options.clearImagesAfterPrefill) clearImages();
         // Focus + caret at end (or the requested selection) on the
         // next frame, after React has committed the new textarea value.
@@ -275,11 +282,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         prefillText(next: string) {
           applyComposerText(next, { clearImagesAfterPrefill: true });
         },
+        quote(selected: string) {
+          // Appended, not replacing: the draft, its folds and its
+          // images stay (lib/composer-quote.ts).
+          applyComposerText(textWithQuote(text, selected), {
+            keepPlaceholders: true,
+          });
+        },
         focus() {
           textareaRef.current?.focus();
         },
       }),
-      [applyComposerText],
+      [applyComposerText, text],
     );
 
     // Auto-grow: reset height to `auto` (so scrollHeight reflects
