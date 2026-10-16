@@ -3,7 +3,11 @@ import {
   type ScrollAnimation,
   type ScrollBox,
 } from "@/lib/animate-scroll";
-import { userMsgParkOffset } from "@/lib/conversation-anchor";
+import {
+  USER_MSG_ANCHOR_TOLERANCE_PX,
+  USER_MSG_ANCHOR_TOP_PX,
+  userMsgParkOffset,
+} from "@/lib/conversation-anchor";
 
 /**
  * The workbench's live tail (telegram-details ticket 06, PRD ruling 2):
@@ -31,6 +35,11 @@ import { userMsgParkOffset } from "@/lib/conversation-anchor";
  *
  * The workbench only: the main chat is an IM that sticks to the bottom
  * (main chat PRD ruling 67) and never gets here.
+ *
+ * One exception to not following (ticket 09, PRD ruling 2a): a question
+ * the run asks you (ask_user) that lands out of view is scrolled into
+ * view — it holds the round until you answer, unseen it waits forever.
+ * See `askUserRevealTop` and the tail's `reveal`.
  */
 
 /** Within this of the bottom counts as at the bottom (useStickyScroll's
@@ -167,6 +176,72 @@ export function submitScroll(
   }
 }
 
+// ---- A question while it runs (ticket 09) ------------------------------------
+
+/** The floating 「回到底部」 button's band at the conversation's bottom
+ * (MainView: `bottom-4`, 16px, under its 32px circle): a question
+ * under it is not in view. */
+export const ASK_USER_COVERED_PX = 48;
+/** Room left under a question scrolled into view, over that band: the
+ * conversation's own `py-6`. */
+export const ASK_USER_GAP_PX = 24;
+/** How long after a question appears it is kept in view while the
+ * round settles around it (the run's region re-rendering above it as
+ * the run stops, a 240ms sweep) (ms). */
+export const ASK_USER_SETTLE_MS = 600;
+
+/**
+ * Whether you have scrolled up past this round: `parkOffset` is
+ * `userMsgParkOffset` of the round's last user message (the one you
+ * sent, or your last answer), positive when it sits below its line —
+ * the viewport is above where it parks. Within the anchor tolerance it
+ * counts as parked, the same as ⌥↑ / ⌥↓ and the question rail read it.
+ * A deterministic line, not a guess at what you are reading: above it
+ * you are reading something earlier, at or below it this round.
+ */
+export function scrolledAboveRound(parkOffset: number): boolean {
+  return parkOffset > USER_MSG_ANCHOR_TOLERANCE_PX;
+}
+
+/**
+ * Where to scroll so a question is in full view, or null when it already
+ * is. `top` / `bottom` are its edges from the container's top edge; in
+ * view means between the top edge and the button's band. Scrolled to,
+ * its bottom edge sits ASK_USER_GAP_PX over that band; a question taller
+ * than the room puts its top edge on the anchor line instead.
+ */
+export function askUserRevealTop({
+  scrollTop,
+  clientHeight,
+  top,
+  bottom,
+}: {
+  scrollTop: number;
+  clientHeight: number;
+  top: number;
+  bottom: number;
+}): number | null {
+  const visibleBottom = clientHeight - ASK_USER_COVERED_PX;
+  if (top >= 0 && bottom <= visibleBottom) return null;
+  const restsAt = visibleBottom - ASK_USER_GAP_PX;
+  return bottom - top <= restsAt - USER_MSG_ANCHOR_TOP_PX
+    ? scrollTop + bottom - restsAt
+    : scrollTop + top - USER_MSG_ANCHOR_TOP_PX;
+}
+
+/** What `reveal` did. */
+export type AskUserReveal =
+  /** Following is on: the follow rules show it, or leave it. */
+  | "following"
+  /** You are above this round: left alone. */
+  | "above"
+  /** Already in full view (or as far as the content scrolls). */
+  | "visible"
+  /** On its way. */
+  | "scrolling"
+  /** You scrolled while it was on its way: yours now. */
+  | "taken-over";
+
 // ---- The tail itself ------------------------------------------------------
 
 /** The scroll container as the running tail uses it. */
@@ -201,6 +276,16 @@ export interface LiveTail {
   /** After every scroll: whether it sits parked; reaching the content's
    * real end attaches following again. */
   onScroll(): void;
+  /**
+   * Scroll a question the run just asked (`question`, the ask_user block)
+   * into full view (`askUserRevealTop`), unless you are above this round
+   * (`round`: its last user message; `scrolledAboveRound`). `key` names
+   * the question: called again for the same one it re-aims (the layout
+   * around it can still move), and stands down once you scrolled during
+   * the scroll. Following stays off: landing at the content's end this
+   * way does not attach it.
+   */
+  reveal(question: Element, round: Element, key: unknown): AskUserReveal;
   /** Stop its scroll, if still on the way; the blank stays (a newer
    * tail takes the column over). */
   stop(): void;
@@ -228,6 +313,9 @@ export function startLiveTail(
   let noFollow = true;
   let parked = false;
   let animation: ScrollAnimation | null = null;
+  /** The scroll that brought a question into view, and which question. */
+  let revealing: ScrollAnimation | null = null;
+  let revealKey: unknown = null;
 
   const setMinHeight = (value: number) => {
     minHeight = Math.max(0, Math.ceil(value));
@@ -293,6 +381,17 @@ export function startLiveTail(
     },
     onScroll() {
       parked = Math.abs(el.scrollTop - parkTop) <= 1;
+      if (revealing) {
+        // Our own scroll to a question (or still where it left you):
+        // not you reaching the end.
+        if (
+          revealing.ended === null ||
+          Math.abs(el.scrollTop - revealing.target) <= 1
+        ) {
+          return;
+        }
+        revealing = null;
+      }
       if (
         noFollow &&
         liveTailReattaches({
@@ -303,6 +402,48 @@ export function startLiveTail(
       ) {
         noFollow = false;
       }
+    },
+    reveal(question, round, key) {
+      if (!noFollow) return "following";
+      if (key !== revealKey) {
+        revealKey = key;
+        revealing = null;
+      } else if (
+        revealing?.ended === "interrupted" ||
+        revealing?.ended === "superseded" ||
+        revealing?.ended === "cancelled"
+      ) {
+        // You scrolled, or jumped (⌥↑, the rail, the button): yours now.
+        // Moved by other code ("displaced", the layout settling) it is
+        // re-aimed.
+        return "taken-over";
+      }
+      const containerTop = el.getBoundingClientRect().top;
+      if (scrolledAboveRound(userMsgParkOffset(round, containerTop))) {
+        return "above";
+      }
+      const rect = question.getBoundingClientRect();
+      const wanted = askUserRevealTop({
+        scrollTop: el.scrollTop,
+        clientHeight: el.clientHeight,
+        top: rect.top - containerTop,
+        bottom: rect.bottom - containerTop,
+      });
+      if (wanted === null) return "visible";
+      const target = Math.min(
+        Math.max(0, wanted),
+        Math.max(0, el.scrollHeight - el.clientHeight),
+      );
+      if (revealing && revealing.ended === null) {
+        if (Math.abs(target - revealing.target) >= 1) {
+          revealing.retarget(target);
+        }
+        return "scrolling";
+      }
+      if (Math.abs(target - el.scrollTop) < 1) return "visible";
+      animation?.cancel();
+      revealing = animateScroll(el, target);
+      return "scrolling";
     },
     stop() {
       animation?.cancel();

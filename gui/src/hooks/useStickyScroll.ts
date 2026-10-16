@@ -13,7 +13,12 @@ import {
   timeLineAbove,
   userMsgParkOffset,
 } from "@/lib/conversation-anchor";
-import { type LiveTail, startLiveTail, submitScroll } from "@/lib/live-tail";
+import {
+  ASK_USER_SETTLE_MS,
+  type LiveTail,
+  startLiveTail,
+  submitScroll,
+} from "@/lib/live-tail";
 import { keepBottomOnViewportResize } from "@/lib/viewport-resize";
 import { turnsHoldMessage, useMessagesStore } from "@/stores/messages";
 import { type LocateRequest, useUiStore } from "@/stores/ui";
@@ -114,7 +119,8 @@ function clearLocateHighlight(): void {
  *     conversation sticks to the bottom instead, `stickBottom`)
  *   - ⌥↑ / ⌥↓ keyboard jump between user messages
  *   - the workbench's live tail after a send (lib/live-tail.ts): the
- *     message parked on its line with a blank under it, not followed
+ *     message parked on its line with a blank under it, not followed —
+ *     except a question the run asks, scrolled into view
  *
  * Every smooth scroll here goes through lib/animate-scroll.ts (its
  * durations, the far-jump rule, reduced motion), never the engine's
@@ -513,6 +519,48 @@ export function useStickyScroll({
     });
     return () => cancelAnimationFrame(handle);
   }, [userSubmitTick]);
+
+  // A question the run asks while the workbench's live tail holds
+  // following off (ticket 09, PRD ruling 2a): it holds the round until
+  // you answer, so one that lands out of view is scrolled into view —
+  // unless you are above this round reading something earlier
+  // (`LiveTail.reveal`). Kept in view for ASK_USER_SETTLE_MS while the
+  // round settles around it (the run stops right after it asks and its
+  // region re-renders above it), unless you scroll meanwhile. Following
+  // stays off. A question already on screen when this mounts (a session
+  // opened at it) is not new; the main chat and a round that follows
+  // (a CLI or supervisor send, or after you re-attached) keep the
+  // follow rules. The question seen is written when the frame runs:
+  // StrictMode runs a mount's effect twice and cancels the first frame.
+  const askedRef = useRef(pendingAskUser);
+  useEffect(() => {
+    if (!pendingAskUser || pendingAskUser === askedRef.current) return;
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const asked = pendingAskUser;
+    let frame: number | null = null;
+    let until = 0;
+    const keep = () => {
+      frame = null;
+      const tail = tailRef.current;
+      if (stickBottomRef.current || !tail) return;
+      const question = el.querySelector('[data-role="ask-user-bubble"]');
+      const rounds = el.querySelectorAll(USER_MSG_SELECTOR);
+      const round = rounds[rounds.length - 1];
+      if (!question || !round) return;
+      const outcome = tail.reveal(question, round, asked);
+      if (outcome !== "scrolling" && outcome !== "visible") return;
+      if (performance.now() < until) frame = requestAnimationFrame(keep);
+    };
+    frame = requestAnimationFrame(() => {
+      askedRef.current = asked;
+      until = performance.now() + ASK_USER_SETTLE_MS;
+      keep();
+    });
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, [pendingAskUser]);
 
   // ⌥↑ / ⌥↓ jump to previous / next user message. The user-msg
   // block is now a strong visual anchor (apricot fill, see 2026-05-14
