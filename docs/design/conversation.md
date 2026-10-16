@@ -286,7 +286,7 @@ px 值是三档字号系统的 **standard 档**——所有阅读面尺寸都由
 | 块代码 ` ```python ` | 详见下方 Shiki 段 |
 | `blockquote` | 左 3px brand 竖线 + italic + ink-soft |
 | `a` | text-ink + ink-muted 1px 下划线，hover 才转 brand-strong + 安全 _blank（暖色预算让给行内代码，2026-08-12） |
-| `table` (GFM) | `overflow-x-auto` 容器 + border-collapse + th `bg-surface` + 单元格 padding 12px×8px |
+| `table` (GFM) | `overflow-x-auto` 容器 + border-collapse + th `bg-surface` + 单元格 padding 12px×8px；单元格 `overflow-wrap: break-word`，单元格里的行内代码与链接 `anywhere`（2026-10-16：整格 `anywhere` 会把列的最小宽度算成一个字，序号列被长地址列挤到「10」拆成上下两行） |
 | `hr` | 1px line + my-5 |
 | `strong` | font-medium（正文 normal 400，strong 500，一档可见加粗） |
 | `em` | italic |

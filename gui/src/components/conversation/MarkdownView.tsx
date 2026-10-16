@@ -276,8 +276,14 @@ const PROSE_BASE = cn(
   // the table used to be max-content wide and scroll sideways, which
   // clipped any long-text column at compact reading width — the way
   // GitHub / Notion render, long prose cells grow taller, not wider.
+  // Cells are `break-word`, not `anywhere` (2026-10-16): `anywhere`
+  // also lowers a cell's min-content width to one character, so a
+  // column of short numbers next to a column of long addresses got
+  // squeezed until 「10」 stood as 1 over 0. `break-word` keeps a word
+  // whole when sizing the column; only inline code and links inside a
+  // cell (the long unbroken addresses and paths) may break anywhere.
   "[&_th]:border [&_th]:border-line [&_th]:bg-surface [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-medium [&_th]:text-ink",
-  "[&_td]:border [&_td]:border-line [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_td]:text-ink [&_td]:[overflow-wrap:anywhere]",
+  "[&_td]:border [&_td]:border-line [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_td]:text-ink [&_td]:[overflow-wrap:break-word] [&_td_code]:[overflow-wrap:anywhere] [&_td_a]:[overflow-wrap:anywhere]",
   // hr inside markdown.
   "[&_hr]:[margin-block:calc(var(--conversation-block-gap)*1.6667)] [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-line",
   // Strong / em — keep weight in line with the prose body. Body is normal
