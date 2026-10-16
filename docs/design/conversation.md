@@ -6,21 +6,36 @@
 
 #### Turn 结构
 
+落定的运行（点开折叠头之后）：
+
 ```
-▸ 3 步 · 用时 42 秒 · …                          ← RunFoldHeader（settled run 完成即折；live 时是「已完成 N 步」）
+[你的消息]
+┃ 曾向你提问 · 问题 · ✓ 候选                      ← 中途提问的回显与你的回答，按时间顺序留在外面（见「ask_user 提问气泡」）
+[你的回答]
+▾ 9 步 · 用时 1 分 21 秒 │ 气味段                 ← RunFoldHeader（settled run 完成即折；live 时是「已完成 N 步」）；收着时贴着回复 10px
+╭────────────────────────────────────────╮
+│ 那一句话   ctrip.com                      │     ← 过程卡片：一行一步（24px），句子 + 浅色对象；满栏宽，没有数字行，不设行数上限
+│ 那一句话   清单.md                         │        点一行原地展开那一步原来的样子（见「过程卡片」）
+╰────────────────────────────────────────╯     ← 头到卡片 10px，卡片到回复 16px，不画 StrongHr
+[Final answer，浮在文档里]                       ← 满宽，不放 callout
+```
+
+不在折叠头后面的照原样，仍是步骤区：在跑时的 live 窗口（最近完成的一步 + 在跑那一行）、没有回答的运行（中止、出错、停在步数上限）的整段平铺、`/btw`：
+
+```
 │ 01 summary ›                                   ← 序号栏（mono 补零）+ 12px ink-soft summary；› = DetailPanel（推理 / preamble）
 │    旁白                                         ← 模型另写了 summary 时才单独成行；回声步的旁白就是 summary 行
 │    [Tool pill / callout]                       ← 行动序列
 │ 02 …                                           ← run 内步间 mt-2.5
-─────────────────                                ← 稍深 1px 全宽 hr（行动 → 结论）
-[Final answer，浮在文档里]                       ← 满宽，不放 callout
+─────────────────                                ← 稍深 1px 全宽 hr（行动 → 结论；平铺的运行有回答时才有，如 /btw）
+[Final answer]
 ```
 
-2026-09-23 按现状重画（此前的示意仍是「第 N 步 │」+ 独立 Thinking callout 的旧形态）。过程区的缩进、rail、live 两行窗口、裸步合并、旁白回声步见下文 TurnMarker 与 Thinking Summary 各节。
+2026-09-23 按现状重画（此前的示意仍是「第 N 步 │」+ 独立 Thinking callout 的旧形态）。2026-10-16 折叠头后面换成一行一步（[工作台对话 PRD](../../.scratch/workbench-conversation/PRD.md) 裁决 6，票 02）：此前点开折叠头是上面这段步骤区，提问与回答也折在里面。规则一句话：折叠头后面的一律一行一步，不在折叠头后面的照原样。过程区的缩进、rail、live 两行窗口、裸步合并、旁白回声步见下文 TurnMarker 与 Thinking Summary 各节。
 
 **没有 turn 之间的 SoftHr** —— TurnMarker 自带视觉重量 + 上方间距，承担 turn-to-turn 的章节分隔。不再有水平横线。
 
-助手的对话不画折叠头和步骤区：在跑时只有一行，落定后两步以上的回复，悬停行里有一个「过程」按钮，点开是一张过程卡片，头一行是这一轮的步数、用时与 token，下面每步一行，点一行才展开那一步在本节步骤区里的样子，见「[助手的对话](#助手的对话2026-10-15)」。
+助手的对话不画折叠头和步骤区：在跑时只有一行，落定后两步以上的回复，悬停行里有一个「过程」按钮，点开是一张过程卡片，头一行是这一轮的步数、用时与 token，下面每步一行，点一行才展开那一步在本节步骤区里的样子，见「[助手的对话](#助手的对话2026-10-15)」。工作台折叠头点开的是同一张卡片，没有数字行、不设上限，见「过程卡片」的「工作台也用这张卡片」。
 
 #### User vs Agent 三重区分（单侧容器，不是 IM 双侧气泡）
 
@@ -72,7 +87,7 @@
 
 #### 助手的对话（2026-10-15）
 
-内置运行时、主区开着助手（主对话）时，对话画成和一个人的长期 IM，不再是工作台的任务记录（[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 60、66）。JC 在 tauri dev 里比完四件各自可切的试验（票 19），四件都取推荐档（裁决 67）：气泡 C、过程一行、时间居中、滚动贴底；定稿是票 20。随后裁决 68（票 21）把看过程的入口从常显的「N 步 ›」改成悬停行里的一个按钮，步数、用时与 token 收进展开区的第一行，上下文百分比不画，卡片与顶栏在跑时说主区那一行的同一句；裁决 69（票 22）把点开后的步骤区换成一张过程卡片：每步一行，最多 8 行，超出在卡片里滚动。工作台的会话、从助手点开的子任务、外置运行时照本文其余各节，一处不变。门只有一个，`MainView` 的 `isMainChat`；规则在 `lib/assistant-conversation.ts`（过程卡片的在 `lib/assistant-process.ts`），部件在 `components/conversation/AssistantParts.tsx`（过程卡片在 `AssistantProcessCard.tsx`）。
+内置运行时、主区开着助手（主对话）时，对话画成和一个人的长期 IM，不再是工作台的任务记录（[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 60、66）。JC 在 tauri dev 里比完四件各自可切的试验（票 19），四件都取推荐档（裁决 67）：气泡 C、过程一行、时间居中、滚动贴底；定稿是票 20。随后裁决 68（票 21）把看过程的入口从常显的「N 步 ›」改成悬停行里的一个按钮，步数、用时与 token 收进展开区的第一行，上下文百分比不画，卡片与顶栏在跑时说主区那一行的同一句；裁决 69（票 22）把点开后的步骤区换成一张过程卡片：每步一行，最多 8 行，超出在卡片里滚动。工作台的会话、从助手点开的子任务、外置运行时照本文其余各节，一处不变。门只有一个，`MainView` 的 `isMainChat`；规则在 `lib/assistant-conversation.ts`（过程卡片的在 `lib/assistant-process.ts`），部件在 `components/conversation/AssistantParts.tsx`（过程卡片在 `AssistantProcessCard.tsx`，卡片本身 2026-10-16 起与工作台共用 `ProcessCard.tsx`）。
 
 **为什么这里是双侧气泡**：上面「User vs Agent 三重区分」的「单侧容器」「不要 right-align」只管工作台的对话（裁决 66）。两条理由在助手这里都不成立：它们的前提是「对话是一份文档、一个阅读左缘」，而助手要改掉的正是这一点（裁决 60：像跟一个真人助理的长期对话）；气泡右缘会和问题轨的点挤在一起，而主对话没有问题轨（见下「Right Question Rail」）。「不要边框、不要投影、不要小尾巴」照守，助手也守。
 
@@ -112,6 +127,16 @@
     - **间距**：卡片在行动条下面 6px（气泡到行动条的 6px 再来一次）；下面有自己的 20px，下一条消息或时间条不再贴着它（票 21 遗留：展开后到下一条是 0）。20px 照 `assistantRowGap` 的思路取换边的那一档（你 → 它的 `mt-5`）：回复下面那 30px 是行动条占着的，卡片接在行动条下面之后，卡片的底边就是这一行的底，到下一条该是一次普通的换边。两段间距都在展开动画里，跟着卡片一起开合。量得（1480 窗口）：行动条底到卡片 6px，卡片底到下一条 20px；卡片 669px 宽（760 栏的 88%）。
     - **高度**（1480 窗口，量得）：每行 24px；2 步的卡片 58px，9 步（8 行）226px，到上限（20 步、50 步）都是 234px。票 21 的展开区同一批轮次：2 步 113px、9 步 526px、20 步 1142px、50 步 2691px。
     - **风险与退路**（裁决 69 第 4 条）：鼠标滚对话经过卡片时，滚动先被卡片吃掉（嵌套滚动）；真机嫌被抢，退路是卡片里不滚、超过 8 行时底部写「其余 N 步」，点开全部。浮层不选：会盖住回复，点别处就没了，几十条步骤读成菜单。
+    - **工作台也用这张卡片**（2026-10-16，[工作台对话 PRD](../../.scratch/workbench-conversation/PRD.md) 裁决 6，票 02）：工作台折叠头点开的就是它。行与列表两边共用（`ProcessCard.tsx`：每步一行、对象、单步细节、披露语法与键盘；规则同在 `lib/assistant-process.ts`，工作台怎么放在 `lib/run-fold-plan.ts`），不复制。差别只在三处参数，加一处分隔：
+      - **没有数字行**：折叠头已经写了步数、用时、工具计数；token 与上下文照旧在回复的悬停行里。
+      - **不设行数上限、不内滚、没有渐隐**：工作台读过程是正事，p90 11 步、最多 52，嵌套滚动是负担；每步都在页面上。
+      - **宽度撑满栏**：工作台回复是满栏散文，卡片与它对齐。容器同上（hairline `border-line`、`rounded-md`、`bg-app`，不加投影、不抬升）。
+      - **不画 StrongHr**：卡片的边框已经把「行动」和「结论」分开，再加一道全宽线是两层分隔。
+      - **间距**：折叠头到卡片 10px，就是折叠头原来的 `mb-2.5`（头是卡片的把手，贴着它；收着时同一个 10px 贴着回复）；卡片到回复 16px，是原来 StrongHr 到回复的距离（`my-4`），卡片的底边站在原来那道线的位置。16px 在开合动画里（`RunFoldSection` 的 `pb-4`），跟着卡片一起开合。
+      - **去掉的**同上：序号、工具名与参数、箭头、竖线、收口那一步（推理与开场白随之看不到，同助手）、只做了提问的那一步。一行只有一个点击目标，没有 caret（不是 09-16 否掉的 B「全面单行合并」：那一刀把工具标签挤进 summary 那一行、同行两个披露 caret；这里工具标签收进点开，点开后的阅读形态与原来一样）。
+      - **live 头**「已完成 N 步」点开同样是这张卡片，下面照旧是 live 窗口（最近完成的一步 + 在跑那一行）；新的一步落定时，被顶掉的那一步作为一行追加进卡片。窗口的竖线这时从它自己那一步起（卡片不是挂竖线的线），卡片底到那一步 16px。落定后照旧开着（`foldOverrides`），折叠头与卡片同一个 key，不重挂载，已有的行（连同点开的细节）不动，窗口那一步作为一行接上，回复出现在卡片下面。
+      - **什么都没有的卡片不画**：除了回答，折叠头后面的步都只做了提问（如两步的运行：一步提问、一步回答），点开什么都不出现，折叠头照旧。
+      - 量得（1480 窗口，同一批轮次点开后折叠头下缘到回复上缘）：2 步 118 → 60px，9 步 488 → 228px，20 步 1072 → 492px，50 步 2658 → 1212px；每行 24px，卡片 24n + 10px。
   - **没有回答的运行**（中止、出错、停在步数上限）照工作台整段平铺，出错提示与步数上限的续跑照旧；带 `/btw` 的运行也照工作台。
 - **上下文与 token**（裁决 68 第 3 条）：
   - **上下文百分比不画**，回复下面哪里都没有：它没有对应的动作（主对话不能 `/new`，裁决 14；按规则切段，GA 到上限自己从最早的消息裁，裁决 39）；还会露出界面刻意藏起的段界（裁决 18）：同一段对话里一条回复是 13%，隔夜的下一条是 1%，看上去像「它忘干净了」。
@@ -167,7 +192,8 @@
 - 展开 / 收起走 `ExpandSection`（2026-09-16）：与 RunFoldSection 同一套
   grid-rows 0fr ↔ 1fr 过渡、同一 `--motion-slow`，过程区只有一种「展开」
   手感；此前是硬挂载 + fade-in keyframe。RunFoldSection 自 2026-09-16
-  起也是 ExpandSection 的薄包装，只保留自己的 margin 编排。
+  起也是 ExpandSection 的薄包装（2026-10-16 起它开合的是过程卡片，
+  卡片里点开一步也走 ExpandSection）。
 - 内容 = 该步的推理（无则 caret 不出现）+ 中间轮 preamble（当其未作为旁白
   单独渲染时）。推理来源（2026-09-23）：`turn_end.responseThinking`，即
   GA 的 `response.thinking`——原生推理（thinking block / `reasoning_content`），
@@ -192,6 +218,11 @@
 #### ask_user 提问气泡（`AskUserBubble` / `AnsweredAskUser`）
 
 Agent 经 `ask_user` 停下来问人的那条：实时态是 warning 左条 + `PauseCircle` +「等你回复」+ 候选 chip；回答后（或重启恢复后）退成 `AnsweredAskUser` 回显——2px 30% warning 细规线、无底色、echo 字号 ink-soft、无 chip（交互已结束，再摆 chip 会暗示可重答）。助手的对话里两种状态都是普通的左侧气泡，提问与回答不折进步骤，见「[助手的对话](#助手的对话2026-10-15)」。
+
+- **落定后留在外面**（2026-10-16，[工作台对话 PRD](../../.scratch/workbench-conversation/PRD.md) 裁决 6，票 02；助手的对话同一条）：提问与你的回答是你和它的对话，不是步骤。落定的运行里，每一组回显与你的回答按时间顺序留在对话里、在折叠头之前（折叠头是回复的眉头，要贴着回复）：你的消息 → 回显 → 你的回答 →（再一组）→ 折叠头 → 回复。回显贴栏左缘，与回复同一个左缘。点开折叠头的卡片里没有只做了提问的那一步；同一步还跑了别的工具时那一行留着，点开是那些工具，问题仍在外面。
+  - **只改画在哪里**：运行的分组、步数（照旧算提问那一步）、用时、token、问题轨的 replySet（回答仍是 `user-msg-reply`，问题轨与 ⌥↑ / ⌥↓ 不索引它）、`askUserReplyContent`、`chosenCandidateIndex`、侧栏「第 N 步」都不变。
+  - **在跑时照今天**：没答时是对话末尾的实时气泡；答完接着跑，回显与回答在 live 窗口里，后续步骤落定后随它折进 live 头后面（收着时看不到，点开的卡片里也没有它们：它们不是步骤）；运行落定时出现在折叠头之前（收合的那一下就到位）。代价：live 头点开着落定时，折叠头与卡片会被往下推一组提问的高度。同期库里 `ask_user` 只有 7 次。
+  - **没有回答的运行**（中止、出错、停在步数上限）照旧整段平铺，回显与回答在步骤区里原来的位置。
 
 - **问题正文走 `MarkdownView variant="agent"`，不再是裸 `<div>`**（2026-09-14）。直接原因是社区反馈「AskUser 界面不能复制文字」：`body` 全局 `user-select: none`（foundations.md §2.6），内容面靠 `select-text` 逐个开回来，用户消息 / agent 正文 / 工具输出都开了，唯独 ask_user 问题漏了。顺带收益：GA 提问里常见的编号选项、路径、行内代码得到与正文相同的 markdown 排版（暖褐行内代码、列表缩进），字体寄存也与同一黄框里的 side_question 一致（CJK 衬线）。
 - **单换行保留为换行（`softBreaks`，remark-breaks）**。GA 的 `ask_user(question)` 只是透传字符串，TUI / Telegram 前端按纯文本打印，从没承诺过 markdown；LLM 写「第一行\n第二行」时若按 markdown 软换行合并，两个问句会并成一句、改变问题意思。remark-breaks 只碰段落内的软换行，列表 / 代码块 / 空行分段不受影响，所以 markdown 形状的问题仍得到完整处理。这是 `MarkdownView` 上的 opt-in prop，**只给 ask_user 用**——agent 回答是按 markdown 写的，软换行就该是折行。
@@ -546,20 +577,20 @@ Composer 状态同步：`agentRunning = true` 时 Submit 按钮切到 Stop 模�
 - AgentTurn type 持有 `turnIndex`（一个 user message 在 conversation 里可能产生多个 AgentTurn）
 - 渲染（2026-09-16 序号栏形态）：每个 AgentTurn 的 thinking summary 之上一行，左侧是**两位补零序号**（`01`…，`lib/step-numeral.ts`）占一格固定宽度的 **`--step-gutter`（24px）**，**JetBrains Mono、`--conversation-tool-mono-size`（标准档 11px，与行右端的工具名同一寄存器）**、regular、`text-ink-muted`，行高钉到 summary 的行框（`calc(step-size * 1.6)`）让两者基线同高；summary（ink-soft，12px 档，**行高 1.6、自动换行不截断**）从 gutter 右缘起笔。序号与 summary 之间**没有分隔符**——固定列宽本身就是分隔。DetailPanel 的 caret **紧跟 summary 文字末尾**（inline-block，随末行换行；裸数字步则单独立在 gutter 右侧），不停在列右缘——披露 caret 贴着它所属的文字，与 pill 行、折叠头同一条规则（2026-09-16）。**不用 italic、不用 serif、不用 uppercase tracking**——结构 metadata 冷静直立，与下方 Newsreader 衬线正文形成对比张力
   - **可展开行的应答**（2026-09-23，[devlog](../devlog/2026-09-23-step-marker-hover-affordance.md)）：有 DetailPanel 内容的 marker 行是 `role=button` 披露控件（Tab 可达、Enter / Space、`aria-expanded`，可访问名取行内容，不设 `aria-label`），与 pill 行、折叠头同族：hover / focus-visible 在**内容列**（summary + caret）画 `bg-hover` 并提墨到 ink，即时无过渡；序号在框外，但悬停整行任一处都点亮内容框（`group-hover`）。框左缘 = 内容列 −10px，与 inline pill 的 hover 框同一条边，负 margin 抵消、文字 x 不变；上下不外溢，框即行框（live 窗口的裁剪框顶边贴着 marker 行，上溢会被切平）。summary 保留可选中，行内拖选不触发展开。提墨必须落在自带墨色的子元素上——行级 `hover:text-ink` 继承不到它们，此前正是这样悄悄失效的
-  - **过程区 = StepRegion（缩进 + rail）**（2026-09-16 第二轮）：一个 run 的整个过程体（marker、narration、inline pill、block 卡片、ask_user 回显与用户回复、DetailPanel 原文）包在 `StepRegion` 里，整体缩进一格 `--step-gutter`，左侧 x=5（折叠头 caret 中心）有一条 1px `bg-line` 竖向 rail 贯穿全高。于是序号落在 24–48、内容从 48 起笔，和折叠头文字（起于 19）形成「把手在左、列表在右」——与参考 trace 组件的 24 / 47 同比例。**live 与 settled 同构**：未完成的 run（以及 /btw 等不可折 run）走 flat 的 StepRegion，rail 从第一步顶起；settled 可折 run 的 StepRegion 在 RunFoldSection 内，rail 从折叠头下缘（`-top-2.5`）挂下来。run 完成被重新包进折叠段时 x 不动。MainView 的 in-flight marker 也包一层 StepRegion（与上方 rail 之间有一小段断口，已知）。
-  - **最终回答满宽**：StrongHr 之后的回答不在 StepRegion 里。为此 `answerOnly` 拆分扩展到**所有**有收口 turn 的 group（原只对可折 group）：收口 turn 的 marker 以 `markerOnly` 进区域，回答 flat 渲染。StrongHr 自己 `-ml-(--step-gutter)` 从缩进里破出来铺满列宽——「行动 → 结论」的横线属于回答的宽度。
+  - **过程区 = StepRegion（缩进 + rail）**（2026-09-16 第二轮）：一个 run 的整个过程体（marker、narration、inline pill、block 卡片、ask_user 回显与用户回复、DetailPanel 原文）包在 `StepRegion` 里，整体缩进一格 `--step-gutter`，左侧 x=5（折叠头 caret 中心）有一条 1px `bg-line` 竖向 rail 贯穿全高。于是序号落在 24–48、内容从 48 起笔，和折叠头文字（起于 19）形成「把手在左、列表在右」——与参考 trace 组件的 24 / 47 同比例。**live 与 settled 同构**：未完成的 run（以及 /btw 等不可折 run）走 flat 的 StepRegion，rail 从第一步顶起；settled 可折 run 的 StepRegion 在 RunFoldSection 内，rail 从折叠头下缘（`-top-2.5`）挂下来。run 完成被重新包进折叠段时 x 不动。（2026-10-16 起折叠头后面不再是 StepRegion，而是一行一步的过程卡片，见「过程卡片」的「工作台也用这张卡片」；StepRegion 只剩不在折叠头后面的：live 窗口、in-flight 行、平铺的运行。）MainView 的 in-flight marker 也包一层 StepRegion（与上方 rail 之间有一小段断口，已知）。
+  - **最终回答满宽**：StrongHr 之后的回答不在 StepRegion 里。为此 `answerOnly` 拆分扩展到**所有**有收口 turn 的 group（原只对可折 group）：收口 turn 的 marker 以 `markerOnly` 进区域，回答 flat 渲染。StrongHr 自己 `-ml-(--step-gutter)` 从缩进里破出来铺满列宽——「行动 → 结论」的横线属于回答的宽度。2026-10-16 起折叠的运行不再画 StrongHr（点开是卡片，卡片的边框已经分开行动与结论），它只剩平铺的运行有回答时（如 /btw）。
   - **内容列 x 的两处细节**：pill 按钮保留 `px-2` hover 外溢，外层 `-ml-2.5` 拉回 8px 外溢 + 2px Phosphor 字形内留白，图标可见笔画正好落在 summary 首字的 x；裸步合并的 pill 行自画 gutter。
   - **锚点靠对齐，不靠墨量，层级为 头 → summary → 序号**：summary 是这一行的句子，序号是页边序号栏，是这一步里最轻的元素（第一轮曾保留 medium 以保 Windows 可扫性，真机看后层级比可扫性重要，改 regular 并降 1px）。RunFoldHeader 的「N 步」是计数、sidebar 的「第 N 步 · summary」是独立语境需要单位，均不跟随；「第 N 步」文案（`copy.conversation.step`）保留为序号旁的 sr-only 文本，屏幕阅读器仍念完整语义。序号栏在 `index` 未知的 pre-turn_start 窗口也占位（`··`），步落地时状态文字不右跳。
   - **真机 A/B 裁决（2026-09-16，临时切换器已拆）**：序号字体 **mono 胜** Inter tabular——行的左右两端都是机器元数据说得通，mono 序号读作页边序号而非数量；折叠头计数段**保持 ink-muted regular**，ink-soft medium 的「把手比列表深」方案被否，08-06「安静眉头」定案维持。
   - **折叠头行内分层（2026-09-23，[devlog](../devlog/2026-09-23-run-fold-header-hierarchy.md)）**：整行不加深，只让**数字**（步数、用时的 9 / 2 / 27）走 ink-soft，「步」「用时」「分」「秒」仍 muted regular——与 09-16 被否的整段加深加粗是两回事，行仍是安静眉头，视线在数字上有落点；数字 span 自带墨色，靠具名 `group/fold` 跟随整行悬停提墨。气味段、提问数、拒绝徽标降到 `--conversation-tool-label-size`（与它们概括的 pill 标签同档），`×N` 等宽；竖线两侧各 12px，行按基线对齐，读作「结构 | 气味」两组。气味段里 `file_write` / `file_patch` 排最前，其余仍按次数降序，省略号只吃泛泛的尾巴。live 变体同样适用。
   - **before/after 一致的新口径**（2026-09-16 二改）：thinking 态是「`··` 思考中 · 12.3 秒」，落定后是「03 summary」——同一组件、同一位置、同一寄存器，序号是落定时才出现的唯一差异（盖章）。这与外部 ReasoningTrace 参考组件（thinking 态无号、只给 settled 列表编号）同构；第一版曾让 thinking 态也带号，真机看 in-flight 的「01 正在处理」像提前盖章而改。**序号位的 `··`**（2026-09-16 三改，`PENDING_STEP_NUMERAL`）：同列同 mono 同 muted、两个中点正好两位序号宽，读作「下一项待落定」的空章。参考组件那一格放的是 Sparkles 脉冲，Galley 按 §2.7 不加动效源；空 gutter 曾是第一版答案，真机看是一段洞（刚提交、尚无落定步时最明显），三态真机 A/B（空档 / `··` / 无 gutter 齐序号列起笔）JC 明确选 `··`——守住网格，而无 gutter 的「状态行不是步」叙事要靠寄存器差异撑一整行。
   - **裁决史**：2026-06-09 瑞士化定「第 N 步 │ summary」（hairline 取代中点）；2026-08-23 裁「裸数字永久否决」；2026-09-16 JC 真机看过淡一档版本仍嫌繁琐，翻案为补零序号 + 去 hairline + gutter 对齐（见 [devlog](../devlog/2026-09-16-step-marker-recede-and-reference-audit.md)：08-23 的「读者只扫数字」论据其实在替裸数字辩护；「3 │ 思考中 · 12.3s 两个数字打架」由补零 + 计数器带单位化解）。明知代价：run 边界处第 1 步的 chapter-break 分隔力略弱，靠 `mt-6` 与 settled run 折叠兜住；ink-muted 约 3.4:1 低于 AA，是既有的元数据档位。
-- 上方间距**两档**（2026-08-23 密度 pass）：run 边界（第 1 步）`mt-6`（24px）承担章节分隔；run 内第 2 步起 `mt-2.5`（10px；2026-09-16 前是 `mt-3` 12px）。判据直接用 `index === 1`——序号按 run 内位置连续编号（2026-09-18 起 ask_user 回复后的第一步不再是 1），步号即 run 边界，无需穿 run-group 数据。**marker 下方 0、pill 无外边距**（2026-09-16 节奏 pass）：真机量得步内 marker→pill 行心距 25.5、步间 34，比例 1.3 分组不成立，四步七行看着像七行；步内收到 0 后步内约 22、步间约 34，比例 1.5+，每步净减 6px。**同日第二刀（数值微调）**：JC 看十步 run 截图仍嫌占地，量得一步行心距 55（summary 19 + pill 24 + 步间 12），留白约 58%，与 08-23 改前几乎持平——结构没动所以天花板还在。试了两刀都撤回：数值刀（pill `py-0.5` + 步间 `mt-2`，55→47）「太密集不舒服」；结构刀（pill 上 summary 行、放不下才折，一行步 31）「单个步骤的阅读体验变差」。结论：密度与阅读体验在同一套静态排版里无解，**按状态分**——两行 55px 附近是「阅读形态」，给 live 与主动展开排查的人；空间问题靠折叠解决（完成即折，见 [run fold PRD](../../.scratch/conversation-run-fold/PRD.md) §2 修订），不靠挤压。最终数值：pill `py-1`、步间 `mt-2.5`，一步 53px。**折叠头→第一步 12px**（原 24）：头是列表的把手要贴住列表，24px 属于头上方的 run 边界（RunFoldSection `-mt-5.5` 编排）。
+- 上方间距**两档**（2026-08-23 密度 pass）：run 边界（第 1 步）`mt-6`（24px）承担章节分隔；run 内第 2 步起 `mt-2.5`（10px；2026-09-16 前是 `mt-3` 12px）。判据直接用 `index === 1`——序号按 run 内位置连续编号（2026-09-18 起 ask_user 回复后的第一步不再是 1），步号即 run 边界，无需穿 run-group 数据。**marker 下方 0、pill 无外边距**（2026-09-16 节奏 pass）：真机量得步内 marker→pill 行心距 25.5、步间 34，比例 1.3 分组不成立，四步七行看着像七行；步内收到 0 后步内约 22、步间约 34，比例 1.5+，每步净减 6px。**同日第二刀（数值微调）**：JC 看十步 run 截图仍嫌占地，量得一步行心距 55（summary 19 + pill 24 + 步间 12），留白约 58%，与 08-23 改前几乎持平——结构没动所以天花板还在。试了两刀都撤回：数值刀（pill `py-0.5` + 步间 `mt-2`，55→47）「太密集不舒服」；结构刀（pill 上 summary 行、放不下才折，一行步 31）「单个步骤的阅读体验变差」。结论：密度与阅读体验在同一套静态排版里无解，**按状态分**——两行 55px 附近是「阅读形态」，给 live 与主动展开排查的人；空间问题靠折叠解决（完成即折，见 [run fold PRD](../../.scratch/conversation-run-fold/PRD.md) §2 修订），不靠挤压。最终数值：pill `py-1`、步间 `mt-2.5`，一步 53px。**折叠头→第一步 12px**（原 24）：头是列表的把手要贴住列表，24px 属于头上方的 run 边界（RunFoldSection `-mt-5.5` 编排）。2026-10-16 起折叠头后面是过程卡片，头到卡片 10px（头自己的 `mb-2.5`），`-mt-5.5` 编排撤掉。
 - **裸步合并**（同一 pass）：GA 未产出 summary 的步，marker 行只剩纯数字——此时若该步恰好只有一个 settled-success 的 inline 工具、且无 DetailPanel 内容 / 无 narration，则 marker 整行取消，由 InlineToolPill 自渲染序号 gutter 前缀（`Conversation.tsx` `mergedStepTool` → `ToolCallout` `stepIndex`）。前缀在 button 之外，保住序号栏对齐、hover 目标仍是工具区。任一条件不满足（有 summary / 有 detail / 多工具 / block 态）都维持两行——两行形态仍是常态
 - **旁白回声步：旁白当 marker 小字**（2026-09-23，[devlog](../devlog/2026-09-23-step-heading-narration-echo.md)）：模型没写 `<summary>` 时 GA 拿整段回复当 summary，于是带旁白的工具步里 summary 就是旁白本身（`summaryEchoesAnswer`；2026-09 起带旁白的步 80% 是这种）。此前 marker 退回「调用了 X」（`stepCalledTools`），只是在复述正下方的工具 pill，真正概括这一步的那句话反而不在标题位。现在这类步的 marker summary = 旁白（`cleanSessionSummary` 去 markdown 标记、压空白、不截断，12px ink-soft 照常换行），旁白正文行不再单独渲染；caret 与 DetailPanel 不变。判定在 `lib/step-heading.ts` `isEchoNarrationStep`；模型自己写了 summary 的步、没旁白的步、裸步合并、最终回答都不受影响。代价：流式期旁白按正文寄存器流出，落定时缩成 marker 小字（PROSE_NARRATION 当初为避免的那一下），真机 A/B/C 对比后接受。`stepCalledTools` 只剩清理后为空时的兜底
 - **流式正文与思考行之间留一个段落间距**（2026-09-18，`--conversation-block-gap`，随字号档走）：思考行按步内节奏没有下边距（工具行要贴着它），但流式正文是 15px 衬线正文而非工具行，零间距贴着 12px 状态行、又满宽压过缩进的标记左缘，JC 真机嫌挤。三案：A 流式态直接套最终回答的 StrongHr（同构零跳动，但中间步叙述也会顶一条假结论线）、B 只加段落级上边距、C 加边距并缩进到内容列（翻 09-16「流式正文满宽」案）。裁 B：不押注流式正文最终落成叙述（6px 缩进）还是回答（StrongHr），两种结局都语义中性；取 12px 段落档而非 16px 的 StrongHr 档，避免暗示一条不存在的线。落定时的跳动与此前相同，只是起点不再贴着。
 - in-flight 状态：`currentTurnIndex` 从 `turn_start` 读取，用于给 thinking 占位 `key`（每步时钟归零）与 `mt-*` 档位；**thinking 行不显序号，序号位放 `··`**（2026-09-16）——序号是落定的盖章，in-flight 行挂「01」等于宣告一个项目还不存在的单项列表；用户感知跑到第几迭代由上方已落定的 01、02 承担，turn_end 替换时序号在原位出现。此前「占位顶部显示 Turn N」的要求废止
-- **live 两行窗口**（2026-09-16，[PRD](../../.scratch/live-run-window/PRD.md)）：正在进行的 run 不是越长越长的清单，而是固定大小的状态面板——最后一个落定的步以阅读形态留在 MainView 思考行之上，之前的步折进 `RunFoldHeader` 的 live 变体「已完成 N 步 · 气味段」（不带用时，步时钟与 HUD 已够两只表；第一步折进去时才出现，单步 run 不受影响）。点头展开是 opt-in，之后落定的步继续追加，完成时保持展开；中止（既不 running 也不 askUserPending）则窗口撤掉、整个 run 平铺。rail 从头 caret 中心贯到思考行（MainView in-flight 区从第 2 步起 `railFrom="header"`）。窗口包在自己的 ExpandSection 里并承担头到窗口的间距（marker `mt-*` 经 `data-role="step-marker"` 归零；折叠头下 `-mt-2.5` + `pt-2.5`，padding 在 overflow 盒内让 rail 穿过间隙），因为挂着的 0fr 折叠段会阻断 margin 穿透。**完成瞬间**：run 完成的那次渲染保持 live 结构一次 sweep（窗口收合、头换 settled 文案、答案平铺），300ms 后切到 settled 结构。**步完成的窗口滑动**：被顶掉的步留一次 sweep 关闭（出场）、新步 0fr 展开（入场）、头首次出现淡入、思考行不重挂载只原地归零时钟（run 开始首次出现淡入一次）；展开态不做出场。每步 `pb-2.5` 自带步间距，region `-mb-2.5` 抵消末步。只对可折 run（`foldEligible`）生效。
+- **live 两行窗口**（2026-09-16，[PRD](../../.scratch/live-run-window/PRD.md)）：正在进行的 run 不是越长越长的清单，而是固定大小的状态面板——最后一个落定的步以阅读形态留在 MainView 思考行之上，之前的步折进 `RunFoldHeader` 的 live 变体「已完成 N 步 · 气味段」（不带用时，步时钟与 HUD 已够两只表；第一步折进去时才出现，单步 run 不受影响）。点头展开是 opt-in（2026-10-16 起展开的是一行一步的过程卡片，之后落定的步作为行追加，下面照旧是窗口；窗口的 rail 这时从它自己那一步起，见「过程卡片」），完成时保持展开；中止（既不 running 也不 askUserPending）则窗口撤掉、整个 run 平铺。rail 从头 caret 中心贯到思考行（MainView in-flight 区从第 2 步起 `railFrom="header"`）。窗口包在自己的 ExpandSection 里并承担头到窗口的间距（marker `mt-*` 经 `data-role="step-marker"` 归零；折叠头下 `-mt-2.5` + `pt-2.5`，padding 在 overflow 盒内让 rail 穿过间隙），因为挂着的 0fr 折叠段会阻断 margin 穿透。**完成瞬间**：run 完成的那次渲染保持 live 结构一次 sweep（窗口收合、头换 settled 文案、答案平铺），300ms 后切到 settled 结构。**步完成的窗口滑动**：被顶掉的步留一次 sweep 关闭（出场）、新步 0fr 展开（入场）、头首次出现淡入、思考行不重挂载只原地归零时钟（run 开始首次出现淡入一次）；展开态不做出场。每步 `pb-2.5` 自带步间距，region `-mb-2.5` 抵消末步。只对可折 run（`foldEligible`）生效。
 - `run_complete` / `error` 时清空 currentTurnIndex
 - **没有 turn 之间的 SoftHr**——TurnMarker 自带 chapter-break 视觉重量，水平横线已删除
 
@@ -573,6 +604,8 @@ Composer 状态同步：`agentRunning = true` 时 Submit 按钮切到 Stop 模�
 4. 删除 SoftHr，TurnMarker `mt-7`（28px）+ tracking 加大承担分隔
 5. 2026-06-09 瑞士化：直立 sans + tabular 数字 + 竖向 hairline 分隔，去掉 italic 与 uppercase tracking。间距曾短暂提到 `mt-9`（36px），但实测 turn 间隙 ≈ 42px 又触到当年被拒的 SoftHr `my-5`（40px）量级；dogfood 后一路收到 `mt-6`（24px）。结论：瑞士 marker 自带分隔力，结构清晰度承担分隔，不需要靠大留白
 6. **现行（2026-08-23 密度 pass）**：`mt-6` 的适用域重新限定为 **run 边界**；run 内步间收到 `mt-3`（12px），marker `mb-2.5`→`mb-1`，inline pill `my-1.5`→`my-0.5`。动因：第 5 条的 24px 裁决隐含「章节有正文」的前提，多步工具 run 里一步只有两根细线（marker + pill），叠上 24px 后留白占一步高度 ~55%，13 步的 live run 超过一屏——纵向体量本身是层级信号，过程日志的体量压过 final answer 把主次滚反了。提密度即降层级。第 5 条「结构承担分隔」的论证方向不变，恰好支持 run 内更紧
+
+7. 2026-10-16 折叠头后面换成过程卡片（[工作台对话 PRD](../../.scratch/workbench-conversation/PRD.md) 裁决 6）：头到卡片 10px（头的 `mb-2.5`），卡片到回复 16px（原 StrongHr 的 `my-4`），不再画 StrongHr。同一批轮次点开后（折叠头下缘到回复上缘）2 / 9 / 20 / 50 步从 118 / 488 / 1072 / 2658px 到 60 / 228 / 492 / 1212px。
 
 教训：当用户反复反馈"间距大"时，缩 hr 到极小已经不是答案；该思考"分隔信号"是不是必须靠 hr 承担。结果：TurnMarker 的章节标识 + 间距 + 字号已经足够。第二层教训（2026-08-23）：一条间距裁决要连同它的内容前提一起记——「turn 间 24px」在 turn 有正文时成立，turn 退化成日志行时同一个值就是另一个设计。
 
