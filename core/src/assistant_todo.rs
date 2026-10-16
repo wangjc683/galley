@@ -1,31 +1,39 @@
-//! The assistant's to-do list (main chat ticket 37; assistant PRD
-//! rulings 5 and 9, main chat PRD ruling 86): what it has coming up,
-//! what it is working on, and what it finished lately. One read, two
-//! readers — the desktop's 「待办」 list behind the sidebar masthead, and
-//! the 「在办的事」 lines Core writes at the start of each segment of the
-//! main chat (ticket 36). "What you see is what it sees": both read the
-//! same groups in the same order.
+//! The assistant's to-do list (main chat ticket 37, regrouped by ticket
+//! 39; main chat PRD rulings 86 and 91, assistant PRD rulings 5 and 9):
+//! the user's to-dos, what Galley is on, its routines, and what was done
+//! lately. One read, two readers — the desktop's 「待办」 and the
+//! 「在办的事」 lines Core writes at the start of each segment of the main
+//! chat (ticket 36). "What you see is what it sees": both read the same groups
+//! in the same order.
 //!
-//! - **Upcoming** ([`AssistantTodo::upcoming`]): every scheduled task not
-//!   cancelled that may still fire — one-offs not yet fired, repeating
-//!   tasks — made by the assistant, by the user's form, or by another
-//!   agent. Enabled ones by their next fire, soonest first; paused ones
-//!   after them.
-//! - **Active** ([`AssistantTodo::active`]): the main chat's subtasks not
-//!   promoted, not archived and not finished — running, asking, failed,
-//!   paused at the step limit, or stopped short — most recent activity
-//!   first. One that is not running and has not moved for
-//!   [`RECENT_WINDOW_DAYS`] drops out: it was reported to the assistant
-//!   when its run ended, and a stale failure carried forever is noise in
-//!   both readers.
-//! - **Recent** ([`AssistantTodo::recent`]): within the last
+//! - **Yours** ([`AssistantTodo::yours`], 你的事): the user's to-dos not
+//!   done (`crate::api::todo`), in three parts by their due date read in
+//!   this machine's zone: **today** (due today or before: overdue ones
+//!   first, marked, then by when they are due), **later** (due after
+//!   today, soonest first), **any time** (no due date, in the order they
+//!   were noted). [`AssistantTodo::today_count`] counts today's: the
+//!   sidebar's 「今天 N」.
+//! - **Galley's** ([`AssistantTodo::assistant`], Galley 在办): the main
+//!   chat's subtasks not promoted, not archived and not finished —
+//!   running, asking, failed, paused at the step limit, or stopped short
+//!   — most recent activity first; then the one-off tasks on no to-do
+//!   still to go off (its own reminders to come back to something, either
+//!   target), soonest first, paused ones last. A subtask that is not
+//!   running and has not moved for [`RECENT_WINDOW_DAYS`] drops out: it
+//!   was reported to the assistant when its run ended, and a stale
+//!   failure carried forever is noise in both readers.
+//! - **Routine** ([`AssistantTodo::routine`], 例行): the repeating tasks,
+//!   either target, by their next fire; paused ones after them.
+//! - **Done** ([`AssistantTodo::done`], 已完成): within the last
 //!   [`RECENT_WINDOW_DAYS`] (a rolling window, not calendar days) — a
-//!   one-off that fired, a repeating task's last fire, a finished
-//!   subtask; newest first, at most [`RECENT_LIMIT`].
+//!   to-do ticked off, a one-off on no to-do that went off, a routine's
+//!   last fire, a finished subtask; newest first, at most
+//!   [`RECENT_LIMIT`].
 //!
-//! A cancelled task is in no group (its card in the conversation says
-//! 已取消). A repeating task can be in two: its next fire in upcoming,
-//! its last one in recent.
+//! A to-do's reminder is part of its to-do ([`TodoItem::reminder`]), in no
+//! group of its own. A cancelled to-do or task is in no group (a task's
+//! card in the conversation says 已取消). A routine can be in two: its
+//! next fire in routine, its last one in done.
 //!
 //! A subtask's state comes from its live run state (Core's run gate)
 //! and its latest run's last reply in the database: running while a run
@@ -34,41 +42,91 @@
 //! end (the step limit, an error), or stopped short. Deterministic, no
 //! model call. Times are UTC ISO; formatting is the reader's.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::api::schedule::{
     parse_utc_secs, ScheduleTarget, ScheduledTaskBrief, ScheduledTaskCreatedIn, ScheduledTaskRepeat,
 };
-use crate::api::{OriginVia, SessionId, ASSISTANT_SUPERVISOR};
-use crate::db::{LastRunReply, ScheduleListScope, SqliteGalley, TodoSubtaskRow};
+use crate::api::{
+    Origin, OriginVia, SessionId, TodoBrief, TodoDue, TodoReminder, TodoStatus,
+    ASSISTANT_SUPERVISOR,
+};
+use crate::db::{LastRunReply, ScheduleListScope, SqliteGalley, TodoListScope, TodoSubtaskRow};
 use crate::error::Result;
 use crate::runner_manager::{RunState, RunnerManager};
 
-/// How far back 「最近做完」 reaches, and how long a subtask that is not
-/// running stays in 「在办」 without moving.
+/// How far back 「已完成」 reaches, and how long a subtask that is not
+/// running stays in 「Galley 在办」 without moving.
 pub const RECENT_WINDOW_DAYS: i64 = 7;
 
-/// At most this many items in [`AssistantTodo::recent`]; the rest are
-/// counted in [`AssistantTodo::recent_omitted`].
+/// At most this many items in [`AssistantTodo::done`]; the rest are
+/// counted in [`AssistantTodo::done_omitted`].
 pub const RECENT_LIMIT: usize = 50;
 
-/// The three groups (Tauri `list_assistant_todo`).
+/// The four groups and the day's count (Tauri `list_assistant_todo`).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AssistantTodo {
-    pub upcoming: Vec<TodoItem>,
-    pub active: Vec<TodoItem>,
-    pub recent: Vec<TodoItem>,
-    /// Finished within the window but past [`RECENT_LIMIT`]: left out.
-    pub recent_omitted: u32,
+    /// 你的事: the user's to-dos not done.
+    pub yours: YourTodos,
+    /// Galley 在办: subtasks not finished, then its own one-off tasks.
+    pub assistant: Vec<TodoItem>,
+    /// 例行: the repeating tasks.
+    pub routine: Vec<TodoItem>,
+    /// 已完成: the last seven days.
+    pub done: Vec<TodoItem>,
+    /// Done within the window but past [`RECENT_LIMIT`]: left out.
+    pub done_omitted: u32,
+    /// 「今天 N」: the to-dos due today or overdue, not done
+    /// (`yours.today`'s length).
+    pub today_count: u32,
+}
+
+/// The user's to-dos not done, by when they are due.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct YourTodos {
+    /// Due today or before, overdue ones first.
+    pub today: Vec<TodoItem>,
+    /// Due after today.
+    pub later: Vec<TodoItem>,
+    /// No due date.
+    pub anytime: Vec<TodoItem>,
+}
+
+impl YourTodos {
+    /// All three parts, in order.
+    pub fn iter(&self) -> impl Iterator<Item = &TodoItem> {
+        self.today.iter().chain(&self.later).chain(&self.anytime)
+    }
+
+    pub fn len(&self) -> usize {
+        self.today.len() + self.later.len() + self.anytime.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl AssistantTodo {
+    /// Nothing in any group.
+    pub fn is_empty(&self) -> bool {
+        self.yours.is_empty()
+            && self.assistant.is_empty()
+            && self.routine.is_empty()
+            && self.done.is_empty()
+    }
 }
 
 /// What an item is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TodoKind {
-    /// A scheduled task: a reminder that wakes the assistant
+    /// One of the user's to-dos (ticket 39).
+    Todo,
+    /// A scheduled task on no to-do: a reminder that wakes the assistant
     /// (`target = assistant`) or a task that starts a session.
     Task,
     /// A subtask the main chat dispatched.
@@ -79,12 +137,14 @@ pub enum TodoKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TodoState {
+    /// A to-do not done.
+    Open,
     /// A task that will fire.
     Scheduled,
     /// A task switched off: it will not fire until resumed.
     Paused,
-    /// A task's fire (recent): a one-off that went off, a repeating
-    /// task's last run.
+    /// A task's fire (done): a one-off that went off, a routine's last
+    /// run.
     Fired,
     /// A subtask with a run open.
     Running,
@@ -98,19 +158,20 @@ pub enum TodoState {
     /// A subtask whose run stopped short of an answer — stopped, its
     /// runner gone, or ended before this Core process started.
     Stopped,
-    /// A subtask that finished with an answer (recent).
+    /// A to-do ticked off, or a subtask that finished with an answer
+    /// (done).
     Done,
 }
 
-/// Who made an item. The assistant's own and the ones the user asked it
-/// for are one (main chat PRD ruling 86 point 4: Core cannot tell them
-/// apart; the words where it was made can).
+/// Who made an item (or ticked a to-do off). The assistant's own and the
+/// ones the user asked it for are one (main chat PRD ruling 86 point 4:
+/// Core cannot tell them apart; the words where it was made can).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TodoCreator {
     /// The assistant (`--supervisor=galley-assistant`); every subtask.
     Assistant,
-    /// The user, with the desktop's form.
+    /// The user: the desktop's form, or their tick on a to-do.
     User,
     /// Another agent ([`TodoItem::agent`] names it when it said).
     Agent,
@@ -121,16 +182,18 @@ pub enum TodoCreator {
 #[serde(rename_all = "camelCase")]
 pub struct TodoItem {
     pub kind: TodoKind,
-    /// The task id, or the subtask's session id (where it leads).
+    /// The to-do's or task's id, or the subtask's session id (where it
+    /// leads).
     pub id: String,
-    /// The words the task carries, or the subtask's title. Uncut: the
-    /// reader truncates.
+    /// A to-do's title, the words a task carries, or the subtask's title.
+    /// Uncut: the reader truncates.
     pub text: String,
     pub state: TodoState,
-    /// The instant the group orders by (UTC ISO): the next fire
-    /// (upcoming; a paused one-off's planned fire; absent for a paused
-    /// repeating task), the latest activity (active), the fire or the
-    /// finish (recent).
+    /// The instant the item orders by (UTC ISO): a task's next fire (a
+    /// paused one-off's planned fire; absent for a paused routine), a
+    /// subtask's latest activity, a fire or a finish (done), when a to-do
+    /// was ticked off (done). Absent for an open to-do: its `due` says
+    /// when.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<String>,
     pub created_by: TodoCreator,
@@ -147,13 +210,30 @@ pub struct TodoItem {
     /// Tasks: local `HH:MM` (a one-off's is read off its fire time).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time_of_day: Option<String>,
-    /// Tasks the assistant made in a main chat turn: that turn — the reply
-    /// its card hangs under, and where the list jumps to.
+    /// To-dos and tasks the assistant made in a main chat turn: that turn
+    /// — the reply its card hangs under, and where the list jumps to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_in: Option<ScheduledTaskCreatedIn>,
-    /// Recent tasks that start a session: the session that run made.
+    /// Done tasks that start a session: the session that run made.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_session_id: Option<String>,
+    /// To-dos: the notes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    /// To-dos: when it is due (its day read in this machine's zone).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due: Option<TodoDue>,
+    /// To-dos not done: past due (its time passed, or its day is before
+    /// today).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub overdue: bool,
+    /// To-dos: the reminder on it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reminder: Option<TodoReminder>,
+    /// To-dos ticked off: who ticked it — the user at the desktop
+    /// ([`TodoCreator::User`]), Galley, another agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub done_by: Option<TodoCreator>,
 }
 
 /// What [`build_todo`] knows of one subtask: its row, its live run state
@@ -166,13 +246,15 @@ pub struct SubtaskFacts {
     pub last_reply: Option<LastRunReply>,
 }
 
-/// Read the list: the tasks not cancelled, and the main chat's subtasks
-/// with their run states. `now` decides the window.
+/// Read the list: the to-dos not cancelled, the tasks not cancelled, and
+/// the main chat's subtasks with their run states. `now` decides the
+/// window and, in this machine's zone, what today is.
 pub async fn assistant_todo(
     galley: &SqliteGalley,
     runners: &RunnerManager,
     now: DateTime<Utc>,
 ) -> Result<AssistantTodo> {
+    let todos = galley.list_todos(TodoListScope::Live).await?;
     let tasks = galley
         .list_scheduled_tasks_in(ScheduleListScope::Live)
         .await?;
@@ -197,49 +279,103 @@ pub async fn assistant_todo(
             });
         }
     }
-    Ok(build_todo(&tasks, &subtasks, now))
+    Ok(build_todo(&todos, &tasks, &subtasks, now, &chrono::Local))
 }
 
 fn window_start(now: DateTime<Utc>) -> i64 {
     now.timestamp() - RECENT_WINDOW_DAYS * 86_400
 }
 
-/// The three groups from what was read. Pure: `now` decides the window.
-pub fn build_todo(
+/// The four groups from what was read. Pure: `now` decides the window,
+/// and with `tz` (production passes this machine's zone) what today is.
+pub fn build_todo<Tz: TimeZone>(
+    todos: &[TodoBrief],
     tasks: &[ScheduledTaskBrief],
     subtasks: &[SubtaskFacts],
     now: DateTime<Utc>,
-) -> AssistantTodo {
+    tz: &Tz,
+) -> AssistantTodo
+where
+    Tz::Offset: std::fmt::Display,
+{
     let since = window_start(now);
-    let mut upcoming = Vec::new();
-    let mut active = Vec::new();
-    let mut recent = Vec::new();
+    let today = now.with_timezone(tz).date_naive();
+    // (overdue, due by, noted at, id) orders today's and later's.
+    let mut today_items: Vec<((bool, i64, String, String), TodoItem)> = Vec::new();
+    let mut later: Vec<((i64, String, String), TodoItem)> = Vec::new();
+    let mut anytime: Vec<((String, String), TodoItem)> = Vec::new();
+    let mut assistant_tasks = Vec::new();
+    let mut subtasks_on = Vec::new();
+    let mut routine = Vec::new();
+    let mut done = Vec::new();
+
+    for todo in todos {
+        match todo.status {
+            TodoStatus::Cancelled => {}
+            TodoStatus::Done => {
+                let at = todo.done_at.as_deref();
+                if at.and_then(parse_utc_secs).is_some_and(|t| t >= since) {
+                    let item = todo_item(todo, TodoState::Done, at.map(str::to_string), false, tz);
+                    done.push(item);
+                }
+            }
+            TodoStatus::Open => {
+                let noted = todo.created_at.clone();
+                let id = todo.id.as_str().to_string();
+                match todo.stored_due() {
+                    None => anytime.push((
+                        (noted, id),
+                        todo_item(todo, TodoState::Open, None, false, tz),
+                    )),
+                    Some(due) => {
+                        let overdue = due.overdue(now, tz);
+                        let by = due.deadline(tz).timestamp();
+                        let item = todo_item(todo, TodoState::Open, None, overdue, tz);
+                        if due.local_date(tz) <= today {
+                            today_items.push(((!overdue, by, noted, id), item));
+                        } else {
+                            later.push(((by, noted, id), item));
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     for task in tasks {
-        if task.cancelled_at.is_some() {
+        // A to-do's reminder shows on its to-do.
+        if task.cancelled_at.is_some() || task.todo_id.is_some() {
             continue;
         }
+        let once = task.repeat.is_once();
         let fired_once = task.once_fired();
         if !fired_once {
             let (state, at) = if task.enabled {
                 (TodoState::Scheduled, task.next_fire_at.clone())
-            } else {
-                // A paused one-off keeps its planned time; a paused
-                // repeating task has no next fire (its rule is shown).
+            } else if once {
+                // A paused one-off keeps its planned time.
                 (TodoState::Paused, task.fire_at.clone())
+            } else {
+                // A paused routine has no next fire (its rule is shown).
+                (TodoState::Paused, None)
             };
-            upcoming.push(task_item(task, state, at, None));
+            let item = task_item(task, state, at, None);
+            if once {
+                assistant_tasks.push(item);
+            } else {
+                routine.push(item);
+            }
         }
         // A one-off's fire counts once it fired for its time (a manual
-        // run before it does not); a repeating task's last fire counts.
-        let counts = fired_once || !task.repeat.is_once();
+        // run before it does not); a routine's last fire counts.
+        let counts = fired_once || !once;
         if let Some(fired) = task.last_fired_at.as_deref() {
             if counts && parse_utc_secs(fired).is_some_and(|at| at >= since) {
                 let run = (task.target == ScheduleTarget::Session)
                     .then(|| task.last_run_session_id.as_ref())
                     .flatten()
                     .map(|id| id.as_str().to_string());
-                recent.push(task_item(
+                done.push(task_item(
                     task,
                     TodoState::Fired,
                     Some(fired.to_string()),
@@ -254,35 +390,51 @@ pub fn build_todo(
         let moved = parse_utc_secs(&facts.row.last_activity_at).is_some_and(|at| at >= since);
         let item = subtask_item(facts, state);
         match state {
-            TodoState::Done if moved => recent.push(item),
+            TodoState::Done if moved => done.push(item),
             TodoState::Done => {}
-            TodoState::Running => active.push(item),
-            _ if moved => active.push(item),
+            TodoState::Running => subtasks_on.push(item),
+            _ if moved => subtasks_on.push(item),
             _ => {}
         }
     }
 
-    upcoming.sort_by(|a, b| {
+    today_items.sort_by(|a, b| a.0.cmp(&b.0));
+    later.sort_by(|a, b| a.0.cmp(&b.0));
+    // In the order they were noted: a notebook adds at the bottom.
+    anytime.sort_by(|a, b| a.0.cmp(&b.0));
+    let soonest_paused_last = |a: &TodoItem, b: &TodoItem| {
         (a.state == TodoState::Paused)
             .cmp(&(b.state == TodoState::Paused))
             .then_with(|| secs_or_last(a).cmp(&secs_or_last(b)))
             .then_with(|| a.id.cmp(&b.id))
-    });
+    };
+    assistant_tasks.sort_by(soonest_paused_last);
+    routine.sort_by(soonest_paused_last);
     let newest_first = |a: &TodoItem, b: &TodoItem| {
         secs_or_first(b)
             .cmp(&secs_or_first(a))
             .then_with(|| a.id.cmp(&b.id))
     };
-    active.sort_by(newest_first);
-    recent.sort_by(newest_first);
-    let recent_omitted = recent.len().saturating_sub(RECENT_LIMIT) as u32;
-    recent.truncate(RECENT_LIMIT);
+    subtasks_on.sort_by(newest_first);
+    done.sort_by(newest_first);
+    let done_omitted = done.len().saturating_sub(RECENT_LIMIT) as u32;
+    done.truncate(RECENT_LIMIT);
 
+    let today: Vec<TodoItem> = today_items.into_iter().map(|(_, item)| item).collect();
+    let today_count = today.len() as u32;
+    let mut assistant = subtasks_on;
+    assistant.extend(assistant_tasks);
     AssistantTodo {
-        upcoming,
-        active,
-        recent,
-        recent_omitted,
+        yours: YourTodos {
+            today,
+            later: later.into_iter().map(|(_, item)| item).collect(),
+            anytime: anytime.into_iter().map(|(_, item)| item).collect(),
+        },
+        assistant,
+        routine,
+        done,
+        done_omitted,
+        today_count,
     }
 }
 
@@ -322,9 +474,10 @@ pub fn subtask_state(facts: &SubtaskFacts) -> TodoState {
     }
 }
 
-fn creator(task: &ScheduledTaskBrief) -> (TodoCreator, Option<String>) {
-    // A row that cannot say predates the column: the form made it.
-    let Some(origin) = task.origin.as_ref() else {
+/// Who an origin is. A row that cannot say predates the column: the
+/// desktop's form made it.
+fn creator(origin: Option<&Origin>) -> (TodoCreator, Option<String>) {
+    let Some(origin) = origin else {
         return (TodoCreator::User, None);
     };
     if origin.via == OriginVia::Gui {
@@ -336,18 +489,66 @@ fn creator(task: &ScheduledTaskBrief) -> (TodoCreator, Option<String>) {
     }
 }
 
+fn blank(kind: TodoKind, id: String, text: String, state: TodoState) -> TodoItem {
+    TodoItem {
+        kind,
+        id,
+        text,
+        state,
+        at: None,
+        created_by: TodoCreator::Assistant,
+        agent: None,
+        target: None,
+        repeat: None,
+        time_of_day: None,
+        created_in: None,
+        run_session_id: None,
+        notes: None,
+        due: None,
+        overdue: false,
+        reminder: None,
+        done_by: None,
+    }
+}
+
+fn todo_item<Tz: TimeZone>(
+    todo: &TodoBrief,
+    state: TodoState,
+    at: Option<String>,
+    overdue: bool,
+    tz: &Tz,
+) -> TodoItem
+where
+    Tz::Offset: std::fmt::Display,
+{
+    let (created_by, agent) = creator(Some(&todo.origin));
+    TodoItem {
+        at,
+        created_by,
+        agent,
+        created_in: todo.created_in.clone(),
+        notes: todo.notes.clone(),
+        due: todo.stored_due().map(|due| due.to_wire(tz)),
+        overdue,
+        reminder: todo.reminder.clone(),
+        done_by: todo.done_by.as_ref().map(|by| creator(Some(by)).0),
+        ..blank(
+            TodoKind::Todo,
+            todo.id.as_str().to_string(),
+            todo.title.clone(),
+            state,
+        )
+    }
+}
+
 fn task_item(
     task: &ScheduledTaskBrief,
     state: TodoState,
     at: Option<String>,
     run_session_id: Option<String>,
 ) -> TodoItem {
-    let (created_by, agent) = creator(task);
+    let (created_by, agent) = creator(task.origin.as_ref());
     TodoItem {
-        kind: TodoKind::Task,
-        id: task.id.as_str().to_string(),
-        text: task.prompt.clone(),
-        state,
         at,
         created_by,
         agent,
@@ -356,6 +557,12 @@ fn task_item(
         time_of_day: (!task.time_of_day.is_empty()).then(|| task.time_of_day.clone()),
         created_in: task.created_in.clone(),
         run_session_id,
+        ..blank(
+            TodoKind::Task,
+            task.id.as_str().to_string(),
+            task.prompt.clone(),
+            state,
+        )
     }
 }
 
@@ -367,18 +574,8 @@ fn subtask_item(facts: &SubtaskFacts, state: TodoState) -> TodoItem {
         row.title.clone()
     };
     TodoItem {
-        kind: TodoKind::Subtask,
-        id: row.session_id.clone(),
-        text,
-        state,
         at: (!row.last_activity_at.is_empty()).then(|| row.last_activity_at.clone()),
-        created_by: TodoCreator::Assistant,
-        agent: None,
-        target: None,
-        repeat: None,
-        time_of_day: None,
-        created_in: None,
-        run_session_id: None,
+        ..blank(TodoKind::Subtask, row.session_id.clone(), text, state)
     }
 }
 
@@ -386,12 +583,25 @@ fn subtask_item(facts: &SubtaskFacts, state: TodoState) -> TodoItem {
 mod tests {
     use super::*;
     use crate::api::schedule::ScheduledTaskId;
-    use crate::api::Origin;
+    use crate::api::todo::StoredDue;
+    use crate::api::{TodoId, TodoReminderState};
+    use chrono::NaiveDate;
+    use chrono_tz::America::Los_Angeles;
+    use chrono_tz::Asia::Shanghai;
 
     fn now() -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339("2026-10-16T12:00:00Z")
+        utc("2026-10-16T12:00:00Z")
+    }
+
+    fn utc(iso: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(iso)
             .unwrap()
             .with_timezone(&Utc)
+    }
+
+    /// The tasks and subtasks alone, read in UTC.
+    fn build(tasks: &[ScheduledTaskBrief], subtasks: &[SubtaskFacts]) -> AssistantTodo {
+        build_todo(&[], tasks, subtasks, now(), &Utc)
     }
 
     fn supervisor(label: &str) -> Origin {
@@ -425,6 +635,7 @@ mod tests {
                 turn_index: Some(7),
             }),
             cancelled_at: None,
+            todo_id: None,
             created_at: "2026-10-16T10:00:00+00:00".into(),
             updated_at: "2026-10-16T10:00:00+00:00".into(),
         }
@@ -462,12 +673,237 @@ mod tests {
         })
     }
 
-    fn ids(items: &[TodoItem]) -> Vec<&str> {
-        items.iter().map(|i| i.id.as_str()).collect()
+    fn date(y: i32, m: u32, d: u32) -> StoredDue {
+        StoredDue::Date(NaiveDate::from_ymd_opt(y, m, d).unwrap())
+    }
+
+    /// An open to-do Galley noted, due `due`, noted at `noted`.
+    fn todo(id: &str, due: Option<StoredDue>, noted: &str) -> TodoBrief {
+        TodoBrief {
+            id: TodoId(id.into()),
+            title: format!("title of {id}"),
+            notes: None,
+            due: due.map(|due| due.to_wire(&Utc)),
+            reminder: None,
+            status: TodoStatus::Open,
+            done_at: None,
+            done_by: None,
+            origin: supervisor(ASSISTANT_SUPERVISOR),
+            created_in: Some(ScheduledTaskCreatedIn {
+                session_id: SessionId("s-main".into()),
+                turn_index: Some(3),
+            }),
+            cancelled_at: None,
+            created_at: noted.into(),
+            updated_at: noted.into(),
+        }
+    }
+
+    fn done_todo(id: &str, done_at: &str, by: Origin) -> TodoBrief {
+        TodoBrief {
+            status: TodoStatus::Done,
+            done_at: Some(done_at.into()),
+            done_by: Some(by),
+            ..todo(id, None, "2026-10-01T00:00:00+00:00")
+        }
+    }
+
+    fn ids<'a>(items: impl IntoIterator<Item = &'a TodoItem>) -> Vec<&'a str> {
+        items.into_iter().map(|i| i.id.as_str()).collect()
+    }
+
+    // ---- the user's to-dos (ticket 39) ----
+
+    #[test]
+    fn yours_today_later_and_any_time() {
+        // Now: Fri 2026-10-16 12:00 UTC.
+        let noted = "2026-10-10T00:00:00+00:00";
+        let todos = [
+            todo("t-anytime-new", None, "2026-10-12T00:00:00+00:00"),
+            todo("t-anytime-old", None, "2026-10-11T00:00:00+00:00"),
+            todo("t-later-day", Some(date(2026, 10, 20)), noted),
+            todo(
+                "t-later-time",
+                Some(StoredDue::At(utc("2026-10-17T09:00:00Z"))),
+                noted,
+            ),
+            todo("t-today-day", Some(date(2026, 10, 16)), noted),
+            todo(
+                "t-today-time",
+                Some(StoredDue::At(utc("2026-10-16T15:00:00Z"))),
+                noted,
+            ),
+            todo(
+                "t-today-passed",
+                Some(StoredDue::At(utc("2026-10-16T09:00:00Z"))),
+                noted,
+            ),
+            todo("t-last-week", Some(date(2026, 10, 9)), noted),
+        ];
+        let got = build_todo(&todos, &[], &[], now(), &Utc);
+        // Overdue first (the oldest first), then today by when it is due;
+        // a day without a time is due by its end.
+        assert_eq!(
+            ids(&got.yours.today),
+            [
+                "t-last-week",
+                "t-today-passed",
+                "t-today-time",
+                "t-today-day"
+            ]
+        );
+        let overdue: Vec<bool> = got.yours.today.iter().map(|i| i.overdue).collect();
+        assert_eq!(overdue, [true, true, false, false]);
+        assert_eq!(ids(&got.yours.later), ["t-later-time", "t-later-day"]);
+        // Any time: in the order they were noted.
+        assert_eq!(ids(&got.yours.anytime), ["t-anytime-old", "t-anytime-new"]);
+        assert_eq!(got.today_count, 4);
+        assert!(got.yours.iter().all(|i| i.kind == TodoKind::Todo));
+        assert!(got.yours.iter().all(|i| i.state == TodoState::Open));
+        assert!(got.assistant.is_empty() && got.routine.is_empty() && got.done.is_empty());
     }
 
     #[test]
-    fn upcoming_by_next_fire_paused_last() {
+    fn today_and_overdue_are_this_machines_days() {
+        // 2026-10-16 23:30 in Shanghai is 08:30 the same day in Los
+        // Angeles (UTC 15:30).
+        let now = utc("2026-10-16T15:30:00Z");
+        let noted = "2026-10-10T00:00:00+00:00";
+        let todos = [
+            // Saturday 01:00 in Shanghai; Friday 10:00 in Los Angeles.
+            todo(
+                "t-instant",
+                Some(StoredDue::At(utc("2026-10-16T17:00:00Z"))),
+                noted,
+            ),
+            // A day stays that day everywhere: Friday.
+            todo("t-friday", Some(date(2026, 10, 16)), noted),
+            // Thursday: overdue in both.
+            todo("t-thursday", Some(date(2026, 10, 15)), noted),
+        ];
+        let shanghai = build_todo(&todos, &[], &[], now, &Shanghai);
+        assert_eq!(ids(&shanghai.yours.today), ["t-thursday", "t-friday"]);
+        assert_eq!(ids(&shanghai.yours.later), ["t-instant"]);
+        assert_eq!(shanghai.today_count, 2);
+        let la = build_todo(&todos, &[], &[], now, &Los_Angeles);
+        assert_eq!(
+            ids(&la.yours.today),
+            ["t-thursday", "t-instant", "t-friday"]
+        );
+        assert_eq!(la.today_count, 3);
+        // The wire's day is read in the zone too.
+        let instant = &la.yours.today[1];
+        let due = instant.due.as_ref().unwrap();
+        assert_eq!(due.date, "2026-10-16");
+        assert_eq!(due.time.as_deref(), Some("10:00"));
+        assert!(due.has_time && !instant.overdue);
+        let sh_due = shanghai.yours.later[0].due.as_ref().unwrap();
+        assert_eq!(sh_due.date, "2026-10-17");
+        assert_eq!(sh_due.time.as_deref(), Some("01:00"));
+    }
+
+    #[test]
+    fn done_to_dos_within_seven_days_cancelled_nowhere() {
+        let mut cancelled = todo(
+            "t-cancelled",
+            Some(date(2026, 10, 16)),
+            "2026-10-10T00:00:00Z",
+        );
+        cancelled.status = TodoStatus::Cancelled;
+        cancelled.cancelled_at = Some("2026-10-16T11:00:00+00:00".into());
+        let todos = [
+            done_todo("t-by-user", "2026-10-16T11:00:00+00:00", Origin::desktop()),
+            done_todo(
+                "t-edge",
+                "2026-10-09T12:00:00+00:00",
+                supervisor(ASSISTANT_SUPERVISOR),
+            ),
+            done_todo(
+                "t-old",
+                "2026-10-09T11:59:59+00:00",
+                supervisor(ASSISTANT_SUPERVISOR),
+            ),
+            cancelled,
+        ];
+        let got = build_todo(&todos, &[], &[], now(), &Utc);
+        assert!(got.yours.is_empty());
+        assert_eq!(got.today_count, 0);
+        // Exactly seven days back is in; a second more is out.
+        assert_eq!(ids(&got.done), ["t-by-user", "t-edge"]);
+        assert!(got.done.iter().all(|i| i.state == TodoState::Done));
+        assert_eq!(got.done[0].done_by, Some(TodoCreator::User));
+        assert_eq!(got.done[1].done_by, Some(TodoCreator::Assistant));
+        assert_eq!(got.done[0].at.as_deref(), Some("2026-10-16T11:00:00+00:00"));
+    }
+
+    #[test]
+    fn a_to_dos_reminder_is_on_it_and_in_no_group() {
+        let mut on_todo = task("sched_on");
+        on_todo.todo_id = Some("t-1".into());
+        let mut fired = task("sched_fired_on");
+        fired.todo_id = Some("t-2".into());
+        fired.last_fired_at = fired.fire_at.clone();
+        let mut t1 = todo("t-1", None, "2026-10-10T00:00:00Z");
+        t1.reminder = Some(TodoReminder {
+            task_id: ScheduledTaskId("sched_on".into()),
+            at: "2026-10-17T01:00:00+00:00".into(),
+            state: TodoReminderState::Scheduled,
+        });
+        let todos = [
+            t1,
+            done_todo("t-2", "2026-10-16T11:00:00Z", Origin::desktop()),
+        ];
+        let got = build_todo(
+            &todos,
+            &[on_todo, fired, task("sched_own")],
+            &[],
+            now(),
+            &Utc,
+        );
+        // Only the assistant's own reminder is Galley's.
+        assert_eq!(ids(&got.assistant), ["sched_own"]);
+        assert_eq!(ids(&got.done), ["t-2"]);
+        let reminder = got.yours.anytime[0].reminder.as_ref().unwrap();
+        assert_eq!(reminder.task_id.as_str(), "sched_on");
+    }
+
+    #[test]
+    fn a_to_do_on_the_wire() {
+        let mut t = todo(
+            "t-1",
+            Some(StoredDue::At(utc("2026-10-16T09:00:00Z"))),
+            "2026-10-10T00:00:00Z",
+        );
+        t.notes = Some("A 座 3 楼".into());
+        let got = build_todo(
+            &[t, todo("t-2", None, "2026-10-11T00:00:00Z")],
+            &[],
+            &[],
+            now(),
+            &Utc,
+        );
+        let json = serde_json::to_value(&got).unwrap();
+        assert_eq!(json["todayCount"], 1);
+        assert_eq!(json["doneOmitted"], 0);
+        let item = &json["yours"]["today"][0];
+        assert_eq!(item["kind"], "todo");
+        assert_eq!(item["state"], "open");
+        assert_eq!(item["overdue"], true);
+        assert_eq!(item["notes"], "A 座 3 楼");
+        assert_eq!(item["due"]["hasTime"], true);
+        assert_eq!(item["due"]["date"], "2026-10-16");
+        assert_eq!(item["createdIn"]["turnIndex"], 3);
+        assert_eq!(item["createdBy"], "assistant");
+        assert!(item.get("at").is_none());
+        // Not overdue: no field at all.
+        assert!(json["yours"]["anytime"][0].get("overdue").is_none());
+        assert!(json["yours"]["anytime"][0].get("due").is_none());
+    }
+
+    // ---- tasks and subtasks (ticket 37's rules, regrouped) ----
+
+    #[test]
+    fn one_offs_are_galleys_and_repeating_tasks_routine() {
         let mut later = task("t-later");
         later.next_fire_at = Some("2026-10-20T01:00:00+00:00".into());
         later.fire_at = later.next_fire_at.clone();
@@ -476,30 +912,43 @@ mod tests {
         paused.enabled = false;
         paused.next_fire_at = None;
         let mut overdue = task("t-overdue");
-        // Asleep past its time: still upcoming (it fires on the next
+        // Asleep past its time: still to go off (it fires on the next
         // tick), first.
         overdue.fire_at = Some("2026-10-16T08:00:00+00:00".into());
         overdue.next_fire_at = overdue.fire_at.clone();
-        let todo = build_todo(&[later, paused, soon, overdue, task("t-once")], &[], now());
-        assert_eq!(
-            ids(&todo.upcoming),
-            ["t-overdue", "t-daily", "t-once", "t-later", "t-paused"]
+        let mut session_once = task("t-session-once");
+        session_once.target = ScheduleTarget::Session;
+        session_once.fire_at = Some("2026-10-18T01:00:00+00:00".into());
+        session_once.next_fire_at = session_once.fire_at.clone();
+        let todo = build(
+            &[later, paused, soon, overdue, task("t-once"), session_once],
+            &[],
         );
-        let paused = todo.upcoming.last().unwrap();
+        // Either target of a one-off is Galley's.
+        assert_eq!(
+            ids(&todo.assistant),
+            ["t-overdue", "t-once", "t-session-once", "t-later"]
+        );
+        assert_eq!(ids(&todo.routine), ["t-daily", "t-paused"]);
+        let paused = todo.routine.last().unwrap();
         assert_eq!(paused.state, TodoState::Paused);
         assert_eq!(paused.at, None);
-        assert!(todo.active.is_empty() && todo.recent.is_empty());
+        assert!(todo.yours.is_empty() && todo.done.is_empty());
     }
 
     #[test]
-    fn a_paused_one_off_keeps_its_time() {
+    fn a_paused_one_off_keeps_its_time_and_goes_last() {
         let mut t = task("t-1");
         t.enabled = false;
         t.next_fire_at = None;
-        let todo = build_todo(&[t], &[], now());
-        assert_eq!(todo.upcoming[0].state, TodoState::Paused);
+        let mut sooner = task("t-0");
+        sooner.fire_at = Some("2026-10-18T01:00:00+00:00".into());
+        sooner.next_fire_at = sooner.fire_at.clone();
+        let todo = build(&[t, sooner], &[]);
+        assert_eq!(ids(&todo.assistant), ["t-0", "t-1"]);
+        assert_eq!(todo.assistant[1].state, TodoState::Paused);
         assert_eq!(
-            todo.upcoming[0].at.as_deref(),
+            todo.assistant[1].at.as_deref(),
             Some("2026-10-17T01:00:00+00:00")
         );
     }
@@ -511,11 +960,11 @@ mod tests {
         let mut d = daily("t-2", "2026-10-17T01:00:00+00:00");
         d.last_fired_at = Some("2026-10-16T01:00:00+00:00".into());
         d.cancelled_at = Some("2026-10-16T11:00:00+00:00".into());
-        assert_eq!(build_todo(&[t, d], &[], now()), AssistantTodo::default());
+        assert_eq!(build(&[t, d], &[]), AssistantTodo::default());
     }
 
     #[test]
-    fn a_fired_one_off_moves_to_recent_within_seven_days() {
+    fn a_fired_one_off_is_done_within_seven_days() {
         let fired = |id: &str, at: &str| {
             let mut t = task(id);
             t.fire_at = Some(at.into());
@@ -524,47 +973,46 @@ mod tests {
             t.next_fire_at = None;
             t
         };
-        let todo = build_todo(
+        let todo = build(
             &[
                 fired("t-edge", "2026-10-09T12:00:00+00:00"),
                 fired("t-old", "2026-10-09T11:59:59+00:00"),
                 fired("t-new", "2026-10-16T11:00:00+00:00"),
             ],
             &[],
-            now(),
         );
-        assert!(todo.upcoming.is_empty());
+        assert!(todo.assistant.is_empty());
         // Exactly seven days back is in; a second more is out.
-        assert_eq!(ids(&todo.recent), ["t-new", "t-edge"]);
-        assert!(todo.recent.iter().all(|i| i.state == TodoState::Fired));
+        assert_eq!(ids(&todo.done), ["t-new", "t-edge"]);
+        assert!(todo.done.iter().all(|i| i.state == TodoState::Fired));
         assert_eq!(
-            todo.recent[0].at.as_deref(),
+            todo.done[0].at.as_deref(),
             Some("2026-10-16T11:00:00+00:00")
         );
     }
 
     #[test]
-    fn a_manual_run_before_its_time_leaves_a_one_off_upcoming() {
+    fn a_manual_run_before_its_time_leaves_a_one_off_to_go_off() {
         let mut t = task("t-1");
         t.target = ScheduleTarget::Session;
         t.last_fired_at = Some("2026-10-16T11:00:00+00:00".into());
         t.last_run_session_id = Some(SessionId("s-run".into()));
-        let todo = build_todo(&[t], &[], now());
-        assert_eq!(ids(&todo.upcoming), ["t-1"]);
-        assert!(todo.recent.is_empty());
+        let todo = build(&[t], &[]);
+        assert_eq!(ids(&todo.assistant), ["t-1"]);
+        assert!(todo.done.is_empty());
     }
 
     #[test]
-    fn a_repeating_task_is_upcoming_and_its_last_run_recent() {
+    fn a_routine_and_its_last_run() {
         let mut d = daily("t-daily", "2026-10-17T01:00:00+00:00");
         d.last_fired_at = Some("2026-10-16T01:00:00+00:00".into());
         d.last_run_session_id = Some(SessionId("s-run".into()));
         let mut stale = daily("t-stale", "2026-10-17T02:00:00+00:00");
         stale.last_fired_at = Some("2026-10-01T02:00:00+00:00".into());
-        let todo = build_todo(&[d, stale], &[], now());
-        assert_eq!(ids(&todo.upcoming), ["t-daily", "t-stale"]);
-        assert_eq!(ids(&todo.recent), ["t-daily"]);
-        let run = &todo.recent[0];
+        let todo = build(&[d, stale], &[]);
+        assert_eq!(ids(&todo.routine), ["t-daily", "t-stale"]);
+        assert_eq!(ids(&todo.done), ["t-daily"]);
+        let run = &todo.done[0];
         assert_eq!(run.state, TodoState::Fired);
         assert_eq!(run.run_session_id.as_deref(), Some("s-run"));
         assert_eq!(run.created_by, TodoCreator::User);
@@ -580,9 +1028,9 @@ mod tests {
         legacy.origin = None;
         let mut gui = task("t-gui");
         gui.origin = Some(Origin::gui());
-        let todo = build_todo(&[agent, cli, legacy, gui, task("t-assistant")], &[], now());
+        let todo = build(&[agent, cli, legacy, gui, task("t-assistant")], &[]);
         let by = |id: &str| {
-            let item = todo.upcoming.iter().find(|i| i.id == id).unwrap();
+            let item = todo.assistant.iter().find(|i| i.id == id).unwrap();
             (item.created_by, item.agent.clone())
         };
         assert_eq!(
@@ -597,8 +1045,8 @@ mod tests {
 
     #[test]
     fn an_item_carries_where_it_leads() {
-        let todo = build_todo(&[task("t-1")], &[], now());
-        let item = &todo.upcoming[0];
+        let todo = build(&[task("t-1")], &[]);
+        let item = &todo.assistant[0];
         assert_eq!(item.kind, TodoKind::Task);
         assert_eq!(item.text, "words of t-1");
         assert_eq!(item.target, Some(ScheduleTarget::Assistant));
@@ -616,6 +1064,7 @@ mod tests {
         assert_eq!(json["state"], "scheduled");
         assert_eq!(json["repeat"]["kind"], "once");
         assert!(json.get("runSessionId").is_none());
+        assert!(json.get("overdue").is_none() && json.get("doneBy").is_none());
     }
 
     #[test]
@@ -687,7 +1136,7 @@ mod tests {
     }
 
     #[test]
-    fn active_by_latest_activity_done_in_recent() {
+    fn galleys_subtasks_by_latest_activity_then_its_tasks() {
         let running_old = SubtaskFacts {
             live: RunState {
                 open_run: true,
@@ -709,18 +1158,18 @@ mod tests {
             last_reply: reply(None),
             ..subtask("s-done-old", "2026-10-09T11:59:59+00:00")
         };
-        let todo = build_todo(
-            &[],
+        let todo = build(
+            &[task("t-wake")],
             &[running_old, asking, stopped, stale, done, done_old],
-            now(),
         );
-        // Running whatever its age; not running only within the window.
+        // Running whatever its age; not running only within the window;
+        // the subtasks before the tasks.
         assert_eq!(
-            ids(&todo.active),
-            ["s-asking", "s-stopped", "s-running-old"]
+            ids(&todo.assistant),
+            ["s-asking", "s-stopped", "s-running-old", "t-wake"]
         );
-        assert_eq!(ids(&todo.recent), ["s-done"]);
-        let item = &todo.recent[0];
+        assert_eq!(ids(&todo.done), ["s-done"]);
+        let item = &todo.done[0];
         assert_eq!(item.kind, TodoKind::Subtask);
         assert_eq!(item.state, TodoState::Done);
         assert_eq!(item.created_by, TodoCreator::Assistant);
@@ -732,12 +1181,12 @@ mod tests {
         let mut facts = subtask("s-1", "2026-10-16T11:00:00+00:00");
         facts.row.title = String::new();
         facts.row.dispatch_title = Some("查物流".into());
-        let todo = build_todo(&[], &[facts], now());
-        assert_eq!(todo.active[0].text, "查物流");
+        let todo = build(&[], &[facts]);
+        assert_eq!(todo.assistant[0].text, "查物流");
     }
 
     #[test]
-    fn recent_mixes_kinds_newest_first_and_is_capped() {
+    fn done_mixes_kinds_newest_first_and_is_capped() {
         let mut tasks = Vec::new();
         for i in 0..(RECENT_LIMIT + 3) {
             let mut t = task(&format!("t-{i:03}"));
@@ -755,10 +1204,28 @@ mod tests {
             last_reply: reply(None),
             ..subtask("s-done", "2026-10-16T11:00:00+00:00")
         };
-        let todo = build_todo(&tasks, &[done], now());
-        assert_eq!(todo.recent.len(), RECENT_LIMIT);
-        assert_eq!(todo.recent_omitted, 4);
-        assert_eq!(todo.recent[0].id, "s-done");
-        assert_eq!(todo.recent[1].id, "t-052");
+        let todos = [done_todo(
+            "todo-done",
+            "2026-10-16T11:30:00+00:00",
+            Origin::desktop(),
+        )];
+        let got = build_todo(&todos, &tasks, &[done], now(), &Utc);
+        assert_eq!(got.done.len(), RECENT_LIMIT);
+        assert_eq!(got.done_omitted, 5);
+        assert_eq!(ids(&got.done[..3]), ["todo-done", "s-done", "t-052"]);
+    }
+
+    #[test]
+    fn empty_is_every_group() {
+        assert!(AssistantTodo::default().is_empty());
+        assert!(!build(&[task("t-1")], &[]).is_empty());
+        let only_yours = build_todo(
+            &[todo("t-1", None, "2026-10-10T00:00:00Z")],
+            &[],
+            &[],
+            now(),
+            &Utc,
+        );
+        assert!(!only_yours.is_empty());
     }
 }

@@ -316,34 +316,81 @@ ruling 9; `core/src/scheduler.rs`, `core/src/subtask_report.rs`, migration
   and that run's starting turn; when the run ends Core fills its reply's
   `turn_index` (`createdIn`).
 
+### The User's To-Dos
+
+Main chat ticket 39 (PRD ruling 91; `core/src/api/todo.rs`,
+`core/src/db/todo.rs`, migration 050): a to-do is something the user has to
+do, which Galley notes in the conversation (through the CLI, ticket 40) —
+title, notes, a due date, a reminder. The user only ticks it off, unticks it
+or cancels its reminder at the desktop (Tauri `complete_todo`,
+`reopen_todo`, `cancel_todo_reminder`); everything else they say to Galley.
+Managed runtime with a main chat only: every write is refused with
+`assistant_unavailable:` otherwise.
+
+- **Due date**: a day without a time (`due_date`, `YYYY-MM-DD`, a floating
+  local date) or a day with a time (`due_at`, a UTC instant); never both.
+  Readers group by day in this machine's zone.
+- **Reminder**: a scheduled task (one-off, `target = assistant`) linked to
+  its to-do (`scheduled_tasks.todo_id`); at most one not cancelled. Setting a
+  time updates that task (arming a fired one again) or makes one; removing
+  it cancels the task. Ticking off or cancelling the to-do cancels a
+  reminder that has not reached the assistant (not gone off, or gone off
+  with its wake still pending); one that reached it stays. Unticking brings
+  none back. A reminder whose to-do is no longer open never wakes the
+  assistant: the scheduler cancels it instead of firing it, the restart read
+  of pending wakes leaves it out, and the wake drops it when it reads its
+  reports again. Its wake says which to-do, its title and notes, when it is
+  due, with the reminder's planned and actual times
+  (`[Galley: reminder <id> for to-do <todo> came due (…)]` in replay).
+- **State**: open, done (`done_at` and who ticked it: `gui` is the user,
+  `supervisor` + `galley-assistant` is Galley), cancelled (`cancelled_at`, a
+  soft delete: every write then answers `not_found`).
+- **Where it was noted**: as for a task — the main chat and the run's
+  starting turn when the CLI call comes in, the reply's `turn_index` when
+  the run ends.
+- **Reset**: resetting the main chat deletes every to-do and the tasks that
+  were their reminders; the assistant's own tasks stay.
+- Every write broadcasts `todos:changed` (and `scheduled-tasks:changed` when
+  a reminder moved). The remote module forwards neither.
+
 ### The Assistant's To-Do List
 
-Main chat ticket 37 (`core/src/assistant_todo.rs`): one read of what the
-assistant has coming up, is working on, and finished lately. The desktop's
+Main chat ticket 37, regrouped by ticket 39 (`core/src/assistant_todo.rs`):
+one read of the user's to-dos and what the assistant is on. The desktop's
 「待办」 (Tauri `list_assistant_todo`) shows it, and the main chat's 「在办的事」
 lines (ticket 36: the state block's "In Hand" subsection, written at every
 main chat runner spawn, [prompt composition](./prompt-composition.md#in-hand-main-chat-only))
-are written from the same read — its upcoming and active groups — so both
-list the same things in the same order.
+are written from the same read — every group but done — so both list the
+same things in the same order.
 
-- **Upcoming**: scheduled tasks not cancelled that may still fire, whoever
-  made them; enabled ones by next fire, paused ones last.
-- **Active**: the main chat's subtasks not promoted, not archived and not
-  finished — running (run gate open), asking (`ask_user` pending, or the
-  latest run's last reply asks), failed, paused at the step limit, stopped
-  short. Not running and quiet for 7 days: dropped.
-- **Recent**: within 7 days (rolling), a one-off that fired, a repeating
-  task's last fire, a finished subtask; newest first, at most 50.
+- **Yours** (你的事): to-dos not done, in three parts by their due date read
+  in this machine's zone — today (due today or before; overdue ones first,
+  marked), later (due after today, soonest first), any time (no due date,
+  in the order they were noted). `todayCount` counts today's (the
+  sidebar's 「今天 N」).
+- **Galley's** (Galley 在办, `assistant`): the main chat's subtasks not
+  promoted, not archived and not finished — running (run gate open), asking
+  (`ask_user` pending, or the latest run's last reply asks), failed, paused
+  at the step limit, stopped short — newest activity first; not running and
+  quiet for 7 days: dropped. Then the one-off tasks on no to-do still to go
+  off (either target), soonest first, paused last.
+- **Routine** (例行): the repeating tasks (either target) by next fire,
+  paused last.
+- **Done** (已完成): within 7 days (rolling), a to-do ticked off, a one-off
+  on no to-do that fired, a routine's last fire, a finished subtask; newest
+  first, at most 50 (`doneOmitted` counts the rest).
 
-Each item carries its kind, id, words or title, state, the instant it is
-ordered by (UTC), who made it (the assistant, the user's form, another
-agent), and where it leads (the reply a task was made in, a subtask's
-session, a scheduled run's session). Deterministic and read-only; the
-desktop reads it again on the existing events (`scheduled-tasks:changed`,
-`subtask-dispatched`, `session-run-state`, session updates). Core's
-subtask state after a restart comes from the rows alone: a step-limit or
-error ending is known only while the Core process that saw it runs, and
-reads as stopped short afterwards.
+A to-do's reminder shows on its to-do, in no group of its own. Each item
+carries its kind (`todo`, `task`, `subtask`), id, title or words, state,
+the instant it is ordered by (UTC), who made it (the assistant, the user's
+form, another agent), where it leads (the reply it was noted or set in, a
+subtask's session, a scheduled run's session), and for a to-do its notes,
+due date, overdue mark, reminder and who ticked it. Deterministic and
+read-only; the desktop reads it again on the existing events
+(`todos:changed`, `scheduled-tasks:changed`, `subtask-dispatched`,
+`session-run-state`, session updates). Core's subtask state after a restart
+comes from the rows alone: a step-limit or error ending is known only while
+the Core process that saw it runs, and reads as stopped short afterwards.
 
 ## CLI Runtime Contract
 

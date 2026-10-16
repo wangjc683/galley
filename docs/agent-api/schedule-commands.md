@@ -53,6 +53,7 @@ Every command prints this shape (`list` one per line, `show` alone, writes as
 | `origin`          | `Origin`         | Who made it: `{"via":"gui"}` for the desktop form, `{"via":"supervisor","supervisor":"galley-assistant",…}` for the assistant |
 | `createdIn`       | object?          | `{sessionId, turnIndex?}`: the main chat run the assistant made it in. Recorded when the write carries `--supervisor=galley-assistant` while a main chat run is open; `turnIndex` (the run's reply) is filled when that run ends |
 | `cancelledAt`     | string?          | Set by `delete`. A cancelled task never fires and is gone for every write |
+| `todoId`          | string?          | Added 2026-10-17 (main chat ticket 39). The to-do this task is the reminder of (`todo_<16-hex>`); absent for the assistant's own tasks. Core keeps it in step with its to-do: ticking the to-do off or cancelling it cancels the task while it has not reached the assistant, and a task whose to-do is no longer open does not go off |
 | `createdAt`       | string (ISO8601) | |
 | `updatedAt`       | string (ISO8601) | |
 

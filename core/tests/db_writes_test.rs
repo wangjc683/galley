@@ -74,6 +74,7 @@ const MIG_046: &str = include_str!("../migrations/046_main_chat_segments.sql");
 const MIG_047: &str = include_str!("../migrations/047_drop_ledger_exclusions.sql");
 const MIG_048: &str = include_str!("../migrations/048_subtasks.sql");
 const MIG_049: &str = include_str!("../migrations/049_scheduled_tasks_once_and_wake.sql");
+const MIG_050: &str = include_str!("../migrations/050_todos.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -115,7 +116,7 @@ async fn run_migrations(pool: &SqlitePool) {
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
         MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
         MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037, MIG_038, MIG_039, MIG_040,
-        MIG_042, MIG_043, MIG_044, MIG_045, MIG_046, MIG_047, MIG_048, MIG_049,
+        MIG_042, MIG_043, MIG_044, MIG_045, MIG_046, MIG_047, MIG_048, MIG_049, MIG_050,
     ] {
         sqlx::raw_sql(sql)
             .execute(pool)
@@ -2904,6 +2905,11 @@ async fn migration_049_keeps_old_tasks_as_desktop_session_tasks() {
         .execute(&pool)
         .await
         .expect("migration 049");
+    // Read with today's columns (050 adds `todo_id`).
+    sqlx::raw_sql(MIG_050)
+        .execute(&pool)
+        .await
+        .expect("migration 050");
 
     let galley = SqliteGalley::from_pool(pool.clone());
     let task = galley.scheduled_task("sched_old").await.expect("read");
@@ -2936,6 +2942,70 @@ async fn migration_049_keeps_old_tasks_as_desktop_session_tasks() {
          VALUES ('b2', 'x', 'daily', 't', 't')",
         "INSERT INTO scheduled_tasks (id, prompt, repeat_kind, time_of_day, target, \
             created_at, updated_at) VALUES ('b3', 'x', 'daily', '09:00', 'robot', 't', 't')",
+    ] {
+        assert!(sqlx::query(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+}
+
+#[tokio::test]
+async fn migration_050_adds_todos_and_leaves_tasks_on_no_to_do() {
+    // Tasks made before 050 are the assistant's own (no to-do); the new
+    // table's CHECKs hold (main chat ticket 39).
+    let pool = SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("open in-memory sqlite");
+    sqlx::raw_sql("PRAGMA foreign_keys = ON;")
+        .execute(&pool)
+        .await
+        .expect("enable foreign keys");
+    for sql in [
+        MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
+        MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
+        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
+        MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037, MIG_038, MIG_039, MIG_040,
+        MIG_042, MIG_043, MIG_044, MIG_045, MIG_046, MIG_047, MIG_048, MIG_049,
+    ] {
+        sqlx::raw_sql(sql).execute(&pool).await.expect("migration");
+    }
+    sqlx::query(
+        "INSERT INTO scheduled_tasks (id, prompt, repeat_kind, fire_at, target, created_via, \
+            created_by_supervisor, created_at, updated_at) \
+         VALUES ('sched_before', '提醒用户喝水', 'once', '2026-10-16T12:00:00+00:00', \
+                 'assistant', 'supervisor', 'galley-assistant', \
+                 '2026-10-16T00:00:00+00:00', '2026-10-16T00:00:00+00:00')",
+    )
+    .execute(&pool)
+    .await
+    .expect("seed pre-050 row");
+    sqlx::raw_sql(MIG_050)
+        .execute(&pool)
+        .await
+        .expect("migration 050");
+    let galley = SqliteGalley::from_pool(pool.clone());
+    let task = galley.scheduled_task("sched_before").await.expect("read");
+    assert_eq!(task.prompt, "提醒用户喝水");
+    assert!(task.todo_id.is_none());
+    let todos: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM todos")
+        .fetch_one(&pool)
+        .await
+        .expect("todos table");
+    assert_eq!(todos, 0);
+    let ok = "INSERT INTO todos (id, title, due_date, created_via, created_at, updated_at) \
+              VALUES ('todo_ok', '交材料', '2026-10-23', 'supervisor', 't', 't')";
+    sqlx::query(ok).execute(&pool).await.expect("a to-do");
+    for bad in [
+        // A due date in both forms.
+        "INSERT INTO todos (id, title, due_date, due_at, created_via, created_at, updated_at) \
+         VALUES ('b1', 'x', '2026-10-23', '2026-10-23T07:00:00+00:00', 'cli', 't', 't')",
+        // Done without who.
+        "INSERT INTO todos (id, title, done_at, created_via, created_at, updated_at) \
+         VALUES ('b2', 'x', 't', 'cli', 't', 't')",
+        // An origin the CHECK does not name.
+        "INSERT INTO todos (id, title, created_via, created_at, updated_at) \
+         VALUES ('b3', 'x', 'robot', 't', 't')",
+        // A title is required.
+        "INSERT INTO todos (id, created_via, created_at, updated_at) \
+         VALUES ('b4', 'cli', 't', 't')",
     ] {
         assert!(sqlx::query(bad).execute(&pool).await.is_err(), "{bad}");
     }

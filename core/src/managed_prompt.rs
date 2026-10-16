@@ -5,7 +5,8 @@
 //! content in the managed runtime resource directory.
 
 use crate::api::schedule::{ScheduleTarget, ScheduledTaskRepeat};
-use crate::assistant_todo::{AssistantTodo, TodoCreator, TodoItem, TodoState};
+use crate::api::TodoReminderState;
+use crate::assistant_todo::{AssistantTodo, TodoCreator, TodoItem, TodoKind, TodoState};
 use crate::session_runner::segment::MainChatPromptState;
 use ring::digest::{Context, SHA256};
 use std::fmt::Write;
@@ -447,27 +448,32 @@ fn main_chat_static_prompt() -> String {
 /// ([`in_hand_section`]); the rest are counted on one more line.
 const IN_HAND_MAX_PER_GROUP: usize = 5;
 
-/// A task's words or a subtask's title is cut at this many characters in
-/// the "In Hand" block (`schedule show` / `session brief` read all of it).
+/// A to-do's title, a task's words or a subtask's title is cut at this
+/// many characters in the "In Hand" block (`todo show`, `schedule show`
+/// and `session brief` read all of it).
 const IN_HAND_TEXT_CHARS: usize = 40;
 
 /// Another agent's label is cut at this many characters.
 const IN_HAND_AGENT_CHARS: usize = 24;
 
-/// The main chat's "In Hand" lines (ticket 36; assistant PRD rulings 5
-/// and 9, main chat PRD ruling 86): the reminders and scheduled tasks
-/// coming up and the subtasks not finished, from the read behind the
-/// desktop's 「待办」 ([`crate::assistant_todo::assistant_todo`]) — its
-/// upcoming and active groups, in its order ("what you see is what it
-/// sees"); the recently finished group stays out. Deterministic, no model
-/// call. Core writes it into the main chat's state block at every runner
-/// spawn — each segment's start, and a respawn mid-segment — so it is a
-/// snapshot: it says when it was read, and which commands read it now.
+/// The main chat's "In Hand" lines (ticket 36, regrouped by ticket 39;
+/// assistant PRD rulings 5 and 9, main chat PRD rulings 86 and 91): the
+/// user's to-dos not done, what the main chat is on (its subtasks not
+/// finished, then its one-off reminders and tasks to come) and the
+/// routines, from the read behind the desktop's 「待办」
+/// ([`crate::assistant_todo::assistant_todo`]) — its yours, Galley's and
+/// routine groups, in its order ("what you see is what it sees"); the
+/// done group stays out. Deterministic, no model call. Core writes it
+/// into the main chat's state block at every runner spawn — each
+/// segment's start, and a respawn mid-segment — so it is a snapshot: it
+/// says when it was read, and which commands read it now (`todo list`
+/// only when there are to-dos: without them the first line reads as it
+/// did before ticket 39).
 ///
 /// Bounded: [`IN_HAND_MAX_PER_GROUP`] lines per group, then "and N more";
-/// words and titles cut at [`IN_HAND_TEXT_CHARS`] characters. `None` when
-/// both groups are empty: no section at all. Times are local (`tz`), in
-/// the wake note's format (`2026-10-20 20:00 (Tue)`).
+/// titles and words cut at [`IN_HAND_TEXT_CHARS`] characters. `None` when
+/// all three groups are empty: no section at all. Times are local (`tz`),
+/// in the wake note's format (`2026-10-20 20:00 (Tue)`).
 pub(crate) fn in_hand_section<Tz: chrono::TimeZone>(
     todo: &AssistantTodo,
     now: chrono::DateTime<chrono::Utc>,
@@ -476,16 +482,20 @@ pub(crate) fn in_hand_section<Tz: chrono::TimeZone>(
 where
     Tz::Offset: std::fmt::Display,
 {
-    if todo.upcoming.is_empty() && todo.active.is_empty() {
+    if todo.yours.is_empty() && todo.assistant.is_empty() && todo.routine.is_empty() {
         return None;
     }
+    let readers = if todo.yours.is_empty() {
+        "`schedule list` and `session brief <id>`"
+    } else {
+        "`todo list`, `schedule list` and `session brief <id>`"
+    };
     let mut out = format!(
-        "### In Hand\n\nAs of {}, local time (it may have changed since: `schedule list` \
-         and `session brief <id>` read it now).",
+        "### In Hand\n\nAs of {}, local time (it may have changed since: {readers} read it now).",
         now.with_timezone(tz).format("%Y-%m-%d %H:%M")
     );
     let mut group =
-        |title: &str, items: &[TodoItem], more: &str, line: &dyn Fn(&TodoItem) -> String| {
+        |title: &str, items: &[&TodoItem], more: &str, line: &dyn Fn(&TodoItem) -> String| {
             if items.is_empty() {
                 return;
             }
@@ -501,19 +511,75 @@ where
                 );
             }
         };
+    let yours: Vec<&TodoItem> = todo.yours.iter().collect();
     group(
-        "Coming up (reminders and scheduled tasks):",
-        &todo.upcoming,
+        "The user's to-dos (not done):",
+        &yours,
+        "`todo list`",
+        &|item| in_hand_todo_line(item, tz),
+    );
+    let on: Vec<&TodoItem> = todo.assistant.iter().collect();
+    group(
+        "What you are on (subtasks not finished, then one-off reminders and tasks to come):",
+        &on,
+        "`sessions list`, `schedule list`",
+        &|item| match item.kind {
+            TodoKind::Subtask => in_hand_subtask_line(item),
+            _ => in_hand_task_line(item, tz),
+        },
+    );
+    let routine: Vec<&TodoItem> = todo.routine.iter().collect();
+    group(
+        "Routine (repeating tasks):",
+        &routine,
         "`schedule list`",
         &|item| in_hand_task_line(item, tz),
     );
-    group(
-        "Subtasks not finished:",
-        &todo.active,
-        "`sessions list`",
-        &in_hand_subtask_line,
-    );
     Some(out)
+}
+
+/// A local time in the wake note's format, `2026-10-20 20:00 (Tue)`.
+fn in_hand_time<Tz: chrono::TimeZone>(iso: &str, tz: &Tz) -> Option<String>
+where
+    Tz::Offset: std::fmt::Display,
+{
+    chrono::DateTime::parse_from_rfc3339(iso).ok().map(|at| {
+        at.with_timezone(tz)
+            .format("%Y-%m-%d %H:%M (%a)")
+            .to_string()
+    })
+}
+
+/// `` `todo_…` due 2026-10-21 15:00 (Wed), overdue, reminder 2026-10-21
+/// 14:00 (Wed): <title> ``; `due 2026-10-23 (Fri)` for a day without a
+/// time; `no due date`; `reminded …` once the reminder went off.
+fn in_hand_todo_line<Tz: chrono::TimeZone>(item: &TodoItem, tz: &Tz) -> String
+where
+    Tz::Offset: std::fmt::Display,
+{
+    let mut facts: Vec<String> = Vec::new();
+    match item.due.as_ref().and_then(crate::api::TodoDue::stored) {
+        Some(due) => facts.push(format!("due {}", due.words(tz))),
+        None => facts.push("no due date".into()),
+    }
+    if item.overdue {
+        facts.push("overdue".into());
+    }
+    if let Some(reminder) = &item.reminder {
+        if let Some(at) = in_hand_time(&reminder.at, tz) {
+            facts.push(match reminder.state {
+                TodoReminderState::Scheduled => format!("reminder {at}"),
+                TodoReminderState::Paused => format!("reminder {at} (paused)"),
+                TodoReminderState::Fired => format!("reminded {at}"),
+            });
+        }
+    }
+    format!(
+        "`{}` {}: {}",
+        item.id,
+        facts.join(", "),
+        in_hand_cut(&item.text, IN_HAND_TEXT_CHARS)
+    )
 }
 
 /// `` `sched_…` 2026-10-20 20:00 (Tue), one-off, set by you: <words> ``.
@@ -575,9 +641,9 @@ fn in_hand_subtask_line(item: &TodoItem) -> String {
         TodoState::Failed => "failed",
         TodoState::StepLimit => "paused at the step limit",
         TodoState::Stopped => "stopped before it finished",
-        // Not in the active group; named in case that changes.
+        // Not in the group; named in case that changes.
         TodoState::Done => "done",
-        TodoState::Scheduled | TodoState::Paused | TodoState::Fired => "waiting",
+        TodoState::Scheduled | TodoState::Paused | TodoState::Fired | TodoState::Open => "waiting",
     };
     let title = in_hand_cut(&item.text, IN_HAND_TEXT_CHARS);
     let title = if title.is_empty() {
@@ -1178,9 +1244,13 @@ mod tests {
         }
     }
 
-    use crate::api::schedule::{ScheduleTarget, ScheduledTaskRepeat};
-    use crate::assistant_todo::{AssistantTodo, TodoCreator, TodoItem, TodoKind, TodoState};
-    use chrono::{DateTime, FixedOffset, Utc};
+    use crate::api::schedule::{ScheduleTarget, ScheduledTaskId, ScheduledTaskRepeat};
+    use crate::api::todo::StoredDue;
+    use crate::api::TodoReminder;
+    use crate::assistant_todo::{
+        AssistantTodo, TodoCreator, TodoItem, TodoKind, TodoState, YourTodos,
+    };
+    use chrono::{DateTime, FixedOffset, NaiveDate, Utc};
 
     fn shanghai() -> FixedOffset {
         FixedOffset::east_opt(8 * 3600).unwrap()
@@ -1190,30 +1260,13 @@ mod tests {
         DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc)
     }
 
-    fn task(id: &str, text: &str, at: Option<&str>, repeat: ScheduledTaskRepeat) -> TodoItem {
+    fn item(kind: TodoKind, id: &str, text: &str, state: TodoState) -> TodoItem {
         TodoItem {
-            kind: TodoKind::Task,
+            kind,
             id: id.into(),
             text: text.into(),
-            state: TodoState::Scheduled,
-            at: at.map(str::to_string),
-            created_by: TodoCreator::Assistant,
-            agent: None,
-            target: Some(ScheduleTarget::Assistant),
-            repeat: Some(repeat),
-            time_of_day: None,
-            created_in: None,
-            run_session_id: None,
-        }
-    }
-
-    fn subtask(id: &str, title: &str, state: TodoState) -> TodoItem {
-        TodoItem {
-            kind: TodoKind::Subtask,
-            id: id.into(),
-            text: title.into(),
             state,
-            at: Some("2026-10-16T05:00:00+00:00".into()),
+            at: None,
             created_by: TodoCreator::Assistant,
             agent: None,
             target: None,
@@ -1221,12 +1274,61 @@ mod tests {
             time_of_day: None,
             created_in: None,
             run_session_id: None,
+            notes: None,
+            due: None,
+            overdue: false,
+            reminder: None,
+            done_by: None,
         }
     }
 
-    /// Ticket 36: the format, item by item — when (local, the wake
-    /// note's format), one-off or repeating, paused, who set it, whether
-    /// it starts a conversation, the words; a subtask's title and state.
+    fn task(id: &str, text: &str, at: Option<&str>, repeat: ScheduledTaskRepeat) -> TodoItem {
+        TodoItem {
+            at: at.map(str::to_string),
+            target: Some(ScheduleTarget::Assistant),
+            repeat: Some(repeat),
+            ..item(TodoKind::Task, id, text, TodoState::Scheduled)
+        }
+    }
+
+    fn subtask(id: &str, title: &str, state: TodoState) -> TodoItem {
+        TodoItem {
+            at: Some("2026-10-16T05:00:00+00:00".into()),
+            ..item(TodoKind::Subtask, id, title, state)
+        }
+    }
+
+    /// A to-do not done, due `due`, with a reminder `(at, state)`.
+    fn open_todo(
+        id: &str,
+        title: &str,
+        due: Option<StoredDue>,
+        overdue: bool,
+        reminder: Option<(&str, TodoReminderState)>,
+    ) -> TodoItem {
+        TodoItem {
+            due: due.map(|due| due.to_wire(&shanghai())),
+            overdue,
+            reminder: reminder.map(|(at, state)| TodoReminder {
+                task_id: ScheduledTaskId(format!("sched_of_{id}")),
+                at: at.into(),
+                state,
+            }),
+            ..item(TodoKind::Todo, id, title, TodoState::Open)
+        }
+    }
+
+    fn day(y: i32, m: u32, d: u32) -> StoredDue {
+        StoredDue::Date(NaiveDate::from_ymd_opt(y, m, d).unwrap())
+    }
+
+    /// Tickets 36 and 39: the format, item by item — a to-do's due date
+    /// (a day, or a day and a time), overdue, its reminder, its title;
+    /// a task's time (local, the wake note's format), one-off or
+    /// repeating, paused, who set it, whether it starts a conversation,
+    /// the words; a subtask's title and state. The groups in the list's
+    /// order: the user's to-dos, what the main chat is on (subtasks, then
+    /// one-off tasks), the routines.
     #[test]
     fn in_hand_lines_say_what_when_and_who() {
         let mut weekly = task(
@@ -1247,17 +1349,39 @@ mod tests {
         paused.created_by = TodoCreator::Agent;
         paused.agent = Some("claude-code".into());
         let todo = AssistantTodo {
-            upcoming: vec![
-                task(
-                    "sched_3f9a0c1d2e4b5a69",
-                    "提醒用户带身份证：明早 8:05 虹桥的高铁\n去上海出差",
-                    Some("2026-10-16T12:00:00+00:00"),
-                    ScheduledTaskRepeat::Once,
-                ),
-                weekly,
-                paused,
-            ],
-            active: vec![
+            yours: YourTodos {
+                today: vec![open_todo(
+                    "todo_1a2b3c4d5e6f7a8b",
+                    "回房东电话",
+                    Some(StoredDue::At(at("2026-10-16T02:00:00Z"))),
+                    true,
+                    None,
+                )],
+                later: vec![
+                    open_todo(
+                        "todo_2b3c4d5e6f7a8b9c",
+                        "交季度报告",
+                        Some(StoredDue::At(at("2026-10-21T07:00:00Z"))),
+                        false,
+                        Some(("2026-10-21T06:00:00+00:00", TodoReminderState::Scheduled)),
+                    ),
+                    open_todo(
+                        "todo_3c4d5e6f7a8b9c0d",
+                        "交材料",
+                        Some(day(2026, 10, 23)),
+                        false,
+                        Some(("2026-10-16T01:00:00+00:00", TodoReminderState::Fired)),
+                    ),
+                ],
+                anytime: vec![open_todo(
+                    "todo_4d5e6f7a8b9c0d1e",
+                    "买营养土",
+                    None,
+                    false,
+                    None,
+                )],
+            },
+            assistant: vec![
                 subtask(
                     "s-mgq3c1d8-2k7v4p0a",
                     "查三家本周螺纹钢报价",
@@ -1269,35 +1393,51 @@ mod tests {
                     TodoState::Asking,
                 ),
                 subtask("s-mgs1q9w3-8c2v6n4m", "", TodoState::Failed),
+                task(
+                    "sched_3f9a0c1d2e4b5a69",
+                    "提醒用户带身份证：明早 8:05 虹桥的高铁\n去上海出差",
+                    Some("2026-10-16T12:00:00+00:00"),
+                    ScheduledTaskRepeat::Once,
+                ),
             ],
-            recent: vec![subtask("s-done", "做完的", TodoState::Done)],
-            recent_omitted: 0,
+            routine: vec![weekly, paused],
+            done: vec![subtask("s-done", "做完的", TodoState::Done)],
+            done_omitted: 0,
+            today_count: 1,
         };
         let text = in_hand_section(&todo, at("2026-10-16T06:05:00Z"), &shanghai()).unwrap();
         let want = [
             "### In Hand",
             "",
-            "As of 2026-10-16 14:05, local time (it may have changed since: `schedule list` and `session brief <id>` read it now).",
+            "As of 2026-10-16 14:05, local time (it may have changed since: `todo list`, `schedule list` and `session brief <id>` read it now).",
             "",
-            "Coming up (reminders and scheduled tasks):",
-            "- `sched_3f9a0c1d2e4b5a69` 2026-10-16 20:00 (Fri), one-off, set by you: 提醒用户带身份证：明早 8:05 虹桥的高铁 去上海出差",
-            "- `sched_41d0aa5e9b3c2f17` 2026-10-17 17:00 (Sat), weekly, set by the user, starts a new conversation: 整理下载文件夹",
-            "- `sched_9b2c7e1f0a3d4c58` daily, paused, set by the outside agent claude-code: 看一眼 MyApp 的依赖更新",
+            "The user's to-dos (not done):",
+            "- `todo_1a2b3c4d5e6f7a8b` due 2026-10-16 10:00 (Fri), overdue: 回房东电话",
+            "- `todo_2b3c4d5e6f7a8b9c` due 2026-10-21 15:00 (Wed), reminder 2026-10-21 14:00 (Wed): 交季度报告",
+            "- `todo_3c4d5e6f7a8b9c0d` due 2026-10-23 (Fri), reminded 2026-10-16 09:00 (Fri): 交材料",
+            "- `todo_4d5e6f7a8b9c0d1e` no due date: 买营养土",
             "",
-            "Subtasks not finished:",
+            "What you are on (subtasks not finished, then one-off reminders and tasks to come):",
             "- `s-mgq3c1d8-2k7v4p0a` 查三家本周螺纹钢报价: working",
             "- `s-mgr8x2k1-5b9d3f7h` 订周三去上海的高铁: asking a question",
             "- `s-mgs1q9w3-8c2v6n4m` (untitled): failed",
+            "- `sched_3f9a0c1d2e4b5a69` 2026-10-16 20:00 (Fri), one-off, set by you: 提醒用户带身份证：明早 8:05 虹桥的高铁 去上海出差",
+            "",
+            "Routine (repeating tasks):",
+            "- `sched_41d0aa5e9b3c2f17` 2026-10-17 17:00 (Sat), weekly, set by the user, starts a new conversation: 整理下载文件夹",
+            "- `sched_9b2c7e1f0a3d4c58` daily, paused, set by the outside agent claude-code: 看一眼 MyApp 的依赖更新",
         ]
         .join("\n");
         assert_eq!(text, want);
-        // The recently finished group stays out.
+        // The done group stays out.
         assert!(!text.contains("做完的"));
     }
 
-    /// Ticket 36: at most five lines a group, then "and N more" with the
-    /// command that lists them all; long words cut with an ellipsis; one
-    /// group alone when the other is empty; nothing at all when both are.
+    /// Tickets 36 and 39: at most five lines a group, then "and N more"
+    /// with the command that lists them all; long titles and words cut
+    /// with an ellipsis; a group alone when the others are empty, and the
+    /// first line names `todo list` only when there are to-dos; nothing at
+    /// all when every group is empty (done ones alone included).
     #[test]
     fn in_hand_lines_are_bounded_and_absent_when_empty() {
         let now = at("2026-10-16T06:05:00Z");
@@ -1305,9 +1445,14 @@ mod tests {
             in_hand_section(&AssistantTodo::default(), now, &shanghai()),
             None
         );
+        let only_done = AssistantTodo {
+            done: vec![subtask("s-done", "做完的", TodoState::Done)],
+            ..AssistantTodo::default()
+        };
+        assert_eq!(in_hand_section(&only_done, now, &shanghai()), None);
 
         let long = "一二三四五六七八九十".repeat(5);
-        let upcoming: Vec<TodoItem> = (0..7)
+        let tasks: Vec<TodoItem> = (0..7)
             .map(|n| {
                 task(
                     &format!("sched_{n:016x}"),
@@ -1318,28 +1463,60 @@ mod tests {
             })
             .collect();
         let todo = AssistantTodo {
-            upcoming,
+            assistant: tasks,
             ..AssistantTodo::default()
         };
         let text = in_hand_section(&todo, now, &shanghai()).unwrap();
         assert_eq!(text.matches("\n- `sched_").count(), IN_HAND_MAX_PER_GROUP);
-        assert!(text.contains("\n- and 2 more: `schedule list`"));
-        assert!(!text.contains("Subtasks not finished"));
+        assert!(text.contains("\n- and 2 more: `sessions list`, `schedule list`"));
+        assert!(!text.contains("to-dos") && !text.contains("Routine"));
+        assert!(!text.contains("`todo list`"));
+        assert!(text.contains("since: `schedule list` and `session brief <id>` read it now"));
         let cut: String = long.chars().take(IN_HAND_TEXT_CHARS).collect();
         assert!(text.contains(&format!(": {cut}…\n")));
         assert!(!text.contains(&long));
 
-        let active: Vec<TodoItem> = (0..6)
-            .map(|n| subtask(&format!("s-{n:08}-aaaaaaaa"), "查", TodoState::Running))
-            .collect();
+        // Seven to-dos over the three parts: five lines in the list's
+        // order, then the count.
+        let todos = |n: usize, prefix: &str| -> Vec<TodoItem> {
+            (0..n)
+                .map(|k| open_todo(&format!("todo_{prefix}{k:015x}"), "事", None, false, None))
+                .collect()
+        };
         let todo = AssistantTodo {
-            active,
+            yours: YourTodos {
+                today: todos(2, "a"),
+                later: todos(2, "b"),
+                anytime: todos(3, "c"),
+            },
             ..AssistantTodo::default()
         };
         let text = in_hand_section(&todo, now, &shanghai()).unwrap();
-        assert!(!text.contains("Coming up"));
-        assert_eq!(text.matches(": working").count(), IN_HAND_MAX_PER_GROUP);
-        assert!(text.ends_with("\n- and 1 more: `sessions list`"));
+        assert_eq!(text.matches("\n- `todo_").count(), IN_HAND_MAX_PER_GROUP);
+        assert!(
+            text.contains("- `todo_c000000000000000` no due date: 事\n- and 2 more: `todo list`")
+        );
+        assert!(text.ends_with("\n- and 2 more: `todo list`"));
+        assert!(text.contains("since: `todo list`, `schedule list`"));
+
+        let routine: Vec<TodoItem> = (0..6)
+            .map(|n| {
+                task(
+                    &format!("sched_{n:016x}"),
+                    "看新闻",
+                    Some("2026-10-17T00:00:00+00:00"),
+                    ScheduledTaskRepeat::Daily,
+                )
+            })
+            .collect();
+        let todo = AssistantTodo {
+            routine,
+            ..AssistantTodo::default()
+        };
+        let text = in_hand_section(&todo, now, &shanghai()).unwrap();
+        assert!(!text.contains("What you are on"));
+        assert_eq!(text.matches(", daily, ").count(), IN_HAND_MAX_PER_GROUP);
+        assert!(text.ends_with("\n- and 1 more: `schedule list`"));
     }
 
     /// Ticket 36: the lines sit in the main chat's prompt between the
@@ -1349,7 +1526,17 @@ mod tests {
     fn in_hand_lines_are_main_chat_only() {
         let state = main_chat_state();
         let todo = AssistantTodo {
-            upcoming: vec![task(
+            yours: YourTodos {
+                anytime: vec![open_todo(
+                    "todo_1a2b3c4d5e6f7a8b",
+                    "买营养土",
+                    None,
+                    false,
+                    None,
+                )],
+                ..YourTodos::default()
+            },
+            assistant: vec![task(
                 "sched_3f9a0c1d2e4b5a69",
                 "提醒用户带身份证",
                 Some("2026-10-16T12:00:00+00:00"),
@@ -1372,20 +1559,24 @@ mod tests {
         assert!(!without.contains("In Hand"));
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(!prompt.contains("In Hand"));
+            assert!(!prompt.contains("The user's to-dos"));
         }
     }
 
-    /// Ticket 36 against a database: the lines come from the read behind
-    /// the desktop's 「待办」 ([`crate::assistant_todo::assistant_todo`])
-    /// and list its "coming up" and "in progress" groups in its order
-    /// (main chat PRD ruling 86: what the user sees is what the main chat
-    /// is told). A cancelled reminder is in neither; a database with no
-    /// main chat (attach mode never has one) has no subtasks to list.
+    /// Tickets 36 and 39 against a database: the lines come from the
+    /// read behind the desktop's 「待办」
+    /// ([`crate::assistant_todo::assistant_todo`]) and list its yours,
+    /// Galley's and routine groups in its order (main chat PRD ruling 86:
+    /// what the user sees is what the main chat is told). A to-do's
+    /// reminder shows on the to-do, not as a task of its own; a cancelled
+    /// reminder is nowhere; a database with no main chat (attach mode
+    /// never has one) has no subtasks and no to-dos to list.
     #[tokio::test]
     async fn in_hand_lines_read_what_the_todo_list_reads() {
-        use crate::api::schedule::{instant_to_utc_iso, CreateScheduledTaskInput, ScheduledTaskId};
+        use crate::api::schedule::{instant_to_utc_iso, CreateScheduledTaskInput};
         use crate::api::{
-            CreateSessionInput, GalleyApi, Origin, OriginVia, RuntimeKind, SessionId,
+            CreateSessionInput, CreateTodoInput, GalleyApi, Origin, OriginVia, RuntimeKind,
+            SessionId,
         };
         use crate::api::{SubtaskDispatch, ASSISTANT_SUPERVISOR};
         use crate::db::{MainChatSeed, SqliteGalley};
@@ -1406,6 +1597,7 @@ mod tests {
             .await
             .expect("managed runtime");
         let now = Utc::now();
+        let later = |hours: i64| instant_to_utc_iso(&(now + chrono::Duration::hours(hours)));
         let once = |id: &str, words: &str, hours: i64| CreateScheduledTaskInput {
             id: id.into(),
             project_id: None,
@@ -1414,7 +1606,7 @@ mod tests {
             time_of_day: String::new(),
             llm_name: None,
             enabled: true,
-            fire_at: Some(instant_to_utc_iso(&(now + chrono::Duration::hours(hours)))),
+            fire_at: Some(later(hours)),
             target: ScheduleTarget::Assistant,
         };
         let assistant = Origin {
@@ -1423,11 +1615,14 @@ mod tests {
             reason: None,
             client: None,
         };
-        // No main chat yet: a task from the desktop's form, and no
-        // subtask to list.
+        // No main chat yet: a routine from the desktop's form, and no
+        // subtask or to-do to list.
         galley
             .create_scheduled_task(
                 CreateScheduledTaskInput {
+                    repeat: ScheduledTaskRepeat::Daily,
+                    time_of_day: "08:00".into(),
+                    fire_at: None,
                     target: ScheduleTarget::Session,
                     ..once("sched_form", "整理下载文件夹", 10)
                 },
@@ -1439,10 +1634,10 @@ mod tests {
         let todo = crate::assistant_todo::assistant_todo(&galley, &runners, now)
             .await
             .expect("todo");
-        assert!(todo.active.is_empty());
+        assert!(todo.assistant.is_empty() && todo.yours.is_empty());
         let text = in_hand_section(&todo, now, &shanghai()).expect("lines");
-        assert!(!text.contains("Subtasks not finished"));
-        assert!(text.contains("set by the user, starts a new conversation: 整理下载文件夹"));
+        assert!(!text.contains("What you are on") && !text.contains("to-dos"));
+        assert!(text.contains("daily, set by the user, starts a new conversation: 整理下载文件夹"));
 
         galley
             .get_or_create_main_chat("s-main", Origin::desktop(), &MainChatSeed::default())
@@ -1453,17 +1648,41 @@ mod tests {
             .await
             .expect("later reminder");
         galley
-            .create_scheduled_task(once("sched_soon", "提醒用户喝水", 1), assistant.clone())
+            .create_scheduled_task(once("sched_soon", "回头查物流", 1), assistant.clone())
             .await
             .expect("sooner reminder");
         galley
-            .create_scheduled_task(once("sched_gone", "取消的", 2), assistant)
+            .create_scheduled_task(once("sched_gone", "取消的", 2), assistant.clone())
             .await
             .expect("to cancel");
         galley
             .delete_scheduled_task(ScheduledTaskId("sched_gone".into()), Origin::gui())
             .await
             .expect("cancel");
+        let report = galley
+            .create_todo(
+                CreateTodoInput {
+                    title: "交季度报告".into(),
+                    due: Some(later(48)),
+                    remind_at: Some(later(47)),
+                    ..CreateTodoInput::default()
+                },
+                assistant.clone(),
+                None,
+            )
+            .await
+            .expect("to-do with a reminder");
+        let soil = galley
+            .create_todo(
+                CreateTodoInput {
+                    title: "买营养土".into(),
+                    ..CreateTodoInput::default()
+                },
+                assistant,
+                None,
+            )
+            .await
+            .expect("to-do");
         let input = CreateSessionInput {
             id: "s-sub".into(),
             title: "查物流".into(),
@@ -1505,12 +1724,23 @@ mod tests {
             .expect("todo");
         let text = in_hand_section(&todo, now, &shanghai()).expect("lines");
         let listed: Vec<&str> = todo
-            .upcoming
+            .yours
             .iter()
-            .chain(&todo.active)
+            .chain(&todo.assistant)
+            .chain(&todo.routine)
             .map(|item| item.id.as_str())
             .collect();
-        assert_eq!(listed, ["sched_soon", "sched_form", "sched_late", "s-sub"]);
+        assert_eq!(
+            listed,
+            [
+                report.id.as_str(),
+                soil.id.as_str(),
+                "s-sub",
+                "sched_soon",
+                "sched_late",
+                "sched_form"
+            ]
+        );
         let at: Vec<usize> = listed
             .iter()
             .map(|id| text.find(&format!("`{id}`")).expect("listed"))
@@ -1520,40 +1750,75 @@ mod tests {
             "in the list's order"
         );
         assert!(!text.contains("sched_gone"));
-        assert!(text.contains("set by you: 提醒用户喝水"));
+        // The to-do's reminder is on its line, not a task of its own.
+        let reminder = report.reminder.as_ref().expect("reminder").task_id.clone();
+        assert!(!text.contains(reminder.as_str()));
+        assert!(text.contains(", reminder "));
+        assert!(text.contains("set by you: 回头查物流"));
         assert!(text.contains("- `s-sub` 查物流: "));
+        assert!(text.contains(&format!("- `{}` no due date: 买营养土", soil.id)));
     }
 
-    /// Byte cap on the "In Hand" lines (ticket 36), measured on the
-    /// longest they get: five tasks and five subtasks, each with words
-    /// cut at the limit in three-byte characters, a dated repeating task
-    /// set by an outside agent with a label past its cut that starts a
-    /// conversation, the longest subtask state, and three-digit "more"
-    /// counts. No headroom, `\r` not counted. Data, main chat only:
-    /// outside the static budget and the prompt hash. Typical is far
-    /// less (nothing at all when there is nothing in hand); ten lines
-    /// cap what rides every request of a busy main chat.
-    const IN_HAND_BUDGET_BYTES: usize = 2467;
+    /// Byte cap on the "In Hand" lines (tickets 36 and 39), measured on
+    /// the longest they get: five lines in each of the three groups, each
+    /// with titles and words cut at the limit in three-byte characters —
+    /// to-dos overdue, with a time and a paused reminder; one-off tasks
+    /// paused with their time, set by an outside agent with a label past
+    /// its cut, that start a conversation; routines the same with their
+    /// next fire — and three-digit "more" counts. No headroom, `\r` not
+    /// counted. Data, main chat only: outside the static budget and the
+    /// prompt hash. Typical is far less (nothing at all when there is
+    /// nothing in hand); fifteen lines cap what rides every request of a
+    /// busy main chat.
+    ///
+    /// Ticket 39 raised it from 2467 to 4230 (ticket 36: two groups of
+    /// five, tasks and subtasks). The same rule — five lines a group, cut
+    /// at the same lengths — now covers three groups: the user's to-dos
+    /// are new, and the tasks split between what the main chat is on (with
+    /// its subtasks) and the routines. Fifteen lines instead of ten, a
+    /// to-do's line (due date, overdue, reminder) about as long as a
+    /// task's, and `todo list` named on the first line.
+    const IN_HAND_BUDGET_BYTES: usize = 4230;
 
     #[test]
     fn in_hand_lines_stay_within_budget() {
         let long = "一".repeat(IN_HAND_TEXT_CHARS + 10);
-        let mut longest_task = task(
-            "sched_ffffffffffffffff",
+        let agent_task = |repeat: ScheduledTaskRepeat, state: TodoState| {
+            let mut t = task(
+                "sched_ffffffffffffffff",
+                &long,
+                Some("2026-10-20T12:00:00+00:00"),
+                repeat,
+            );
+            t.state = state;
+            t.created_by = TodoCreator::Agent;
+            t.agent = Some("x".repeat(IN_HAND_AGENT_CHARS + 10));
+            t.target = Some(ScheduleTarget::Session);
+            t
+        };
+        let longest_todo = open_todo(
+            "todo_ffffffffffffffff",
             &long,
-            Some("2026-10-20T12:00:00+00:00"),
-            ScheduledTaskRepeat::Monthly {
-                monthdays: (1..=31).collect(),
-            },
+            Some(StoredDue::At(at("2026-10-15T12:00:00Z"))),
+            true,
+            Some(("2026-10-20T12:00:00+00:00", TodoReminderState::Paused)),
         );
-        longest_task.created_by = TodoCreator::Agent;
-        longest_task.agent = Some("x".repeat(IN_HAND_AGENT_CHARS + 10));
-        longest_task.target = Some(ScheduleTarget::Session);
-        let mut longest_subtask = subtask("s-zzzzzzzz-zzzzzzzz", &long, TodoState::Stopped);
-        longest_subtask.at = Some("2026-10-16T05:00:00+00:00".into());
+        let many = IN_HAND_MAX_PER_GROUP + 999;
         let todo = AssistantTodo {
-            upcoming: vec![longest_task; IN_HAND_MAX_PER_GROUP + 999],
-            active: vec![longest_subtask; IN_HAND_MAX_PER_GROUP + 999],
+            yours: YourTodos {
+                today: vec![longest_todo; many],
+                ..YourTodos::default()
+            },
+            assistant: vec![agent_task(ScheduledTaskRepeat::Once, TodoState::Paused); many],
+            routine: vec![
+                agent_task(
+                    ScheduledTaskRepeat::Monthly {
+                        monthdays: (1..=31).collect(),
+                    },
+                    TodoState::Scheduled,
+                );
+                many
+            ],
             ..AssistantTodo::default()
         };
         let len = in_hand_section(&todo, at("2026-10-16T06:05:00Z"), &shanghai())

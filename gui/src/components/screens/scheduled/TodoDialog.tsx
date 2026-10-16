@@ -27,6 +27,7 @@ import {
   todoCanEdit,
   todoCanPause,
   todoCanResume,
+  legacyTodoGroups,
   todoIsEmpty,
   todoRowTarget,
   todoStateLabel,
@@ -277,7 +278,9 @@ function TodoBody({
   );
 }
 
-/** The three groups, or the empty state once the list has been read. */
+/** The three groups, or the empty state once the list has been read.
+ * Core's four groups come in (ticket 39); this dialog draws its three
+ * from them and no to-dos (`legacyTodoGroups`) until ticket 42. */
 export function TodoGroups({
   todo,
   loaded,
@@ -293,6 +296,7 @@ export function TodoGroups({
   defaultRecentOpen?: boolean;
 }) {
   const copy = useCopy();
+  const groups = legacyTodoGroups(todo);
   const [recentOpen, setRecentOpen] = useState(defaultRecentOpen);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Record<string, true>>({});
@@ -322,7 +326,7 @@ export function TodoGroups({
 
   return (
     <>
-      {loaded && todoIsEmpty(todo) ? (
+      {loaded && todoIsEmpty(groups) ? (
         <div className="px-3 py-8 text-center">
           <p className="text-[13px] text-ink-soft">{copy.todo.empty}</p>
           <p className="mt-1.5 text-[12px] text-ink-muted">
@@ -336,44 +340,44 @@ export function TodoGroups({
         </div>
       ) : (
         <>
-          {todo.upcoming.length > 0 && (
+          {groups.upcoming.length > 0 && (
             <section data-todo-group="upcoming">
               <GroupLabel
                 label={copy.todo.groupUpcoming}
-                count={todo.upcoming.length}
+                count={groups.upcoming.length}
               />
-              {todo.upcoming.map((item) => (
+              {groups.upcoming.map((item) => (
                 <TodoRow key={`u:${item.id}`} item={item} {...rowProps} />
               ))}
             </section>
           )}
-          {todo.active.length > 0 && (
+          {groups.active.length > 0 && (
             <section data-todo-group="active">
               <GroupLabel
                 label={copy.todo.groupActive}
-                count={todo.active.length}
+                count={groups.active.length}
               />
-              {todo.active.map((item) => (
+              {groups.active.map((item) => (
                 <TodoRow key={`a:${item.id}`} item={item} {...rowProps} />
               ))}
             </section>
           )}
-          {todo.recent.length > 0 && (
+          {groups.recent.length > 0 && (
             <section data-todo-group="recent">
               <GroupLabel
                 label={copy.todo.groupRecent}
-                count={todo.recent.length + todo.recentOmitted}
+                count={groups.recent.length + groups.recentOmitted}
                 open={recentOpen}
                 onToggle={() => setRecentOpen((o) => !o)}
               />
               {recentOpen && (
                 <>
-                  {todo.recent.map((item) => (
+                  {groups.recent.map((item) => (
                     <TodoRow key={`r:${item.id}`} item={item} {...rowProps} />
                   ))}
-                  {todo.recentOmitted > 0 && (
+                  {groups.recentOmitted > 0 && (
                     <p className="px-3 py-2 text-[12px] text-ink-muted">
-                      {copy.todo.recentOmitted(todo.recentOmitted)}
+                      {copy.todo.recentOmitted(groups.recentOmitted)}
                     </p>
                   )}
                 </>

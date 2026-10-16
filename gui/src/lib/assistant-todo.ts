@@ -16,7 +16,11 @@ import { SUBTASK_DISPATCHED_EVENT } from "@/lib/subtasks";
 
 /**
  * The assistant's to-do list and its reminder cards (main chat ticket
- * 37; main chat PRD rulings 84 and 86, assistant PRD ruling 9).
+ * 37; main chat PRD rulings 84 and 86, assistant PRD ruling 9). Core
+ * regrouped the list into four groups and added the user's to-dos
+ * (ticket 39, ruling 91); this dialog keeps its three groups from them
+ * (`legacyTodoGroups`) and leaves the to-dos out until the panel of
+ * ticket 42 replaces it.
  *
  * On the managed runtime there is no 「定时任务」 feature for the user:
  * scheduled tasks are the assistant's hands. It sets a reminder when it
@@ -33,10 +37,11 @@ import { SUBTASK_DISPATCHED_EVENT } from "@/lib/subtasks";
  */
 
 /** Mirror of Core `TodoKind`. */
-export type TodoKind = "task" | "subtask";
+export type TodoKind = "todo" | "task" | "subtask";
 
 /** Mirror of Core `TodoState`. */
 export type TodoState =
+  | "open"
   | "scheduled"
   | "paused"
   | "fired"
@@ -52,16 +57,41 @@ export type TodoState =
  * another agent. */
 export type TodoCreator = "assistant" | "user" | "agent";
 
+/** Mirror of Core `TodoDue` (core/src/api/todo.rs): a day, or a day and
+ * a time. */
+export interface TodoDue {
+  /** The local day, `YYYY-MM-DD` (read in Core's zone). */
+  date: string;
+  hasTime: boolean;
+  /** UTC ISO, when it has a time. */
+  at?: string;
+  /** Local "HH:MM", when it has a time. */
+  time?: string;
+}
+
+/** Mirror of Core `TodoReminderState`. */
+export type TodoReminderState = "scheduled" | "paused" | "fired";
+
+/** Mirror of Core `TodoReminder`: the scheduled task a to-do's reminder
+ * is. */
+export interface TodoReminder {
+  taskId: string;
+  /** UTC ISO. */
+  at: string;
+  state: TodoReminderState;
+}
+
 /** Mirror of Core `TodoItem`. */
 export interface TodoItem {
   kind: TodoKind;
-  /** Task id, or the subtask's session id. */
+  /** To-do or task id, or the subtask's session id. */
   id: string;
-  /** The task's words or the subtask's title, uncut. */
+  /** The to-do's title, the task's words or the subtask's title, uncut. */
   text: string;
   state: TodoState;
-  /** UTC ISO: next fire (upcoming), latest activity (active), the fire
-   * or the finish (recent). Absent for a paused repeating task. */
+  /** UTC ISO: a task's next fire, a subtask's latest activity, a fire, a
+   * finish or a tick (done). Absent for a paused repeating task and for
+   * an open to-do (its `due` says when). */
   at?: string;
   createdBy: TodoCreator;
   /** The other agent's supervisor label. */
@@ -72,38 +102,146 @@ export interface TodoItem {
   timeOfDay?: string;
   /** The main chat turn the assistant made the task in. */
   createdIn?: { sessionId: string; turnIndex?: number };
-  /** Recent session tasks: the session that run made. */
+  /** Done session tasks: the session that run made. */
   runSessionId?: string;
+  /** To-dos: the notes. */
+  notes?: string;
+  /** To-dos: when it is due. */
+  due?: TodoDue;
+  /** To-dos not done: past due (absent when not). */
+  overdue?: boolean;
+  /** To-dos: the reminder on it. */
+  reminder?: TodoReminder;
+  /** To-dos ticked off: who ticked it (the user at the desktop is
+   * `user`). */
+  doneBy?: TodoCreator;
 }
 
-/** Mirror of Core `AssistantTodo`. */
+/** Mirror of Core `YourTodos`: the user's to-dos not done. */
+export interface YourTodos {
+  /** Due today or before, overdue ones first. */
+  today: TodoItem[];
+  /** Due after today. */
+  later: TodoItem[];
+  /** No due date. */
+  anytime: TodoItem[];
+}
+
+/** Mirror of Core `AssistantTodo` (ticket 39's four groups). */
 export interface AssistantTodo {
-  upcoming: TodoItem[];
-  active: TodoItem[];
-  recent: TodoItem[];
-  /** Finished within the window past Core's cap: left out. */
-  recentOmitted: number;
+  /** 你的事. */
+  yours: YourTodos;
+  /** Galley 在办: subtasks not finished, then its one-off tasks. */
+  assistant: TodoItem[];
+  /** 例行: repeating tasks. */
+  routine: TodoItem[];
+  /** 已完成: the last seven days. */
+  done: TodoItem[];
+  /** Done within the window past Core's cap: left out. */
+  doneOmitted: number;
+  /** 「今天 N」: to-dos due today or overdue, not done. */
+  todayCount: number;
 }
 
 export const EMPTY_TODO: AssistantTodo = {
-  upcoming: [],
-  active: [],
-  recent: [],
-  recentOmitted: 0,
+  yours: { today: [], later: [], anytime: [] },
+  assistant: [],
+  routine: [],
+  done: [],
+  doneOmitted: 0,
+  todayCount: 0,
 };
 
 export async function listAssistantTodo(): Promise<AssistantTodo> {
   return invoke<AssistantTodo>("list_assistant_todo");
 }
 
+/** The dialog's three groups (ticket 37) from Core's four (ticket 39),
+ * until the panel of ticket 42: 接下来 is Galley's one-off tasks and the
+ * routines, soonest first and paused ones last, as it was; 在办 the
+ * subtasks; 最近做完 what was done but the to-dos. The to-dos are left
+ * out: this dialog has no row for them. */
+export interface LegacyTodoGroups {
+  upcoming: TodoItem[];
+  active: TodoItem[];
+  recent: TodoItem[];
+  recentOmitted: number;
+}
+
+function atMs(item: TodoItem, absent: number): number {
+  const ms = item.at ? Date.parse(item.at) : NaN;
+  return Number.isNaN(ms) ? absent : ms;
+}
+
+export function legacyTodoGroups(todo: AssistantTodo): LegacyTodoGroups {
+  const upcoming = [
+    ...todo.assistant.filter((i) => i.kind === "task"),
+    ...todo.routine,
+  ].sort(
+    (a, b) =>
+      Number(a.state === "paused") - Number(b.state === "paused") ||
+      atMs(a, Infinity) - atMs(b, Infinity) ||
+      a.id.localeCompare(b.id),
+  );
+  return {
+    upcoming,
+    active: todo.assistant.filter((i) => i.kind === "subtask"),
+    recent: todo.done.filter((i) => i.kind !== "todo"),
+    recentOmitted: todo.doneOmitted,
+  };
+}
+
+/** Mirror of Core `TodoStatus`. */
+export type TodoStatus = "open" | "done" | "cancelled";
+
+/** Mirror of Core `TodoBrief`: the record the to-do commands return. */
+export interface TodoBrief {
+  id: string;
+  title: string;
+  notes?: string;
+  due?: TodoDue;
+  reminder?: TodoReminder;
+  status: TodoStatus;
+  doneAt?: string;
+  doneBy?: { via: string; supervisor?: string; reason?: string };
+  origin: { via: string; supervisor?: string; reason?: string };
+  createdIn?: { sessionId: string; turnIndex?: number };
+  cancelledAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Tick a to-do off (Core's `complete_todo`): its reminder goes with it
+ * while it has not reached Galley. Core sends `todos:changed`. */
+export async function completeTodo(id: string): Promise<TodoBrief> {
+  return invoke<TodoBrief>("complete_todo", { id });
+}
+
+/** Untick a to-do (`reopen_todo`); a reminder the tick cancelled stays
+ * cancelled. */
+export async function reopenTodo(id: string): Promise<TodoBrief> {
+  return invoke<TodoBrief>("reopen_todo", { id });
+}
+
+/** Cancel a to-do's reminder, the to-do left as it is
+ * (`cancel_todo_reminder`). */
+export async function cancelTodoReminder(id: string): Promise<TodoBrief> {
+  return invoke<TodoBrief>("cancel_todo_reminder", { id });
+}
+
+/** Core's event after any to-do change (`TODOS_CHANGED_EVENT`, ticket
+ * 39); empty payload, read again. */
+export const TODOS_CHANGED_EVENT = "todos:changed";
+
 /**
- * Core events after which the open list reads again: a task changed or
- * fired (`scheduled-tasks:changed`), a subtask was dispatched, a run
- * started or ended (`session-run-state`), a subtask was promoted,
- * archived, restored or deleted, a reply was deleted. Already emitted;
- * the list adds none.
+ * Core events after which the open list reads again: a to-do changed
+ * (`todos:changed`), a task changed or fired (`scheduled-tasks:changed`),
+ * a subtask was dispatched, a run started or ended
+ * (`session-run-state`), a subtask was promoted, archived, restored or
+ * deleted, a reply was deleted.
  */
 export const TODO_REFRESH_EVENTS: readonly string[] = [
+  TODOS_CHANGED_EVENT,
   SCHEDULED_TASKS_CHANGED_EVENT,
   SUBTASK_DISPATCHED_EVENT,
   SESSION_RUN_STATE_EVENT,
@@ -116,12 +254,12 @@ export const TODO_REFRESH_EVENTS: readonly string[] = [
   "message-deleted",
 ];
 
-/** Whether the list has nothing at all (its empty state). */
-export function todoIsEmpty(todo: AssistantTodo): boolean {
+/** Whether the dialog's groups have nothing at all (its empty state). */
+export function todoIsEmpty(groups: LegacyTodoGroups): boolean {
   return (
-    todo.upcoming.length === 0 &&
-    todo.active.length === 0 &&
-    todo.recent.length === 0
+    groups.upcoming.length === 0 &&
+    groups.active.length === 0 &&
+    groups.recent.length === 0
   );
 }
 
@@ -173,6 +311,9 @@ export function todoTimeLabel(
 export function todoStateLabel(item: TodoItem, copy: AppCopy): string {
   const session = item.target === "session";
   switch (item.state) {
+    // A to-do not done: the dialog shows none (ticket 42 words it).
+    case "open":
+      return "";
     case "scheduled":
       return session
         ? copy.todo.stateScheduledSession
@@ -287,15 +428,22 @@ function isRepeating(item: TodoItem): boolean {
 }
 
 /** The hint at the top of the list (scheduled-tasks ticket 14's rule):
- * launch at login is off and something is set to go off. Unknown
- * (`null`) never warns. */
+ * launch at login is off and something is set to go off — a task, or a
+ * to-do's reminder. Unknown (`null`) never warns. */
 export function todoAutostartHintVisible(
   autostartEnabled: boolean | null,
   todo: AssistantTodo,
 ): boolean {
+  if (autostartEnabled !== false) return false;
+  const tasks = [...todo.assistant, ...todo.routine];
+  const yours = [
+    ...todo.yours.today,
+    ...todo.yours.later,
+    ...todo.yours.anytime,
+  ];
   return (
-    autostartEnabled === false &&
-    todo.upcoming.some((item) => item.state === "scheduled")
+    tasks.some((item) => item.kind === "task" && item.state === "scheduled") ||
+    yours.some((item) => item.reminder?.state === "scheduled")
   );
 }
 

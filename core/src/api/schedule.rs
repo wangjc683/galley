@@ -190,6 +190,32 @@ pub struct FirePreview {
 #[serde(transparent)]
 pub struct ScheduledTaskId(pub String);
 
+/// Mint a task id in the GUI's `sched_<16-hex>` shape
+/// (`gui/src/lib/scheduled-tasks.ts` `mintScheduledTaskId`): the CLI's
+/// `schedule create` (ticket 34) and a to-do's reminder (ticket 39).
+pub fn mint_scheduled_task_id() -> String {
+    format!("sched_{}", mint_hex16())
+}
+
+/// 16 hex digits, apart for two mints in the same tick: the time stirred
+/// with a counter, as `mint_project_id` does.
+pub(crate) fn mint_hex16() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let counter = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let mut x: u128 = ts ^ u128::from(counter.rotate_left(29));
+    x ^= x.wrapping_mul(0x9E3779B97F4A7C15_9E3779B97F4A7C15);
+    x ^= x >> 64;
+    x ^= x.wrapping_mul(0xC4CEB9FE1A85EC53_C4CEB9FE1A85EC53);
+    let hex = format!("{x:032x}");
+    hex[..16].to_string()
+}
+
 impl ScheduledTaskId {
     pub fn as_str(&self) -> &str {
         &self.0
@@ -462,6 +488,11 @@ pub struct ScheduledTaskBrief {
     /// default lists skip it, the row stays.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cancelled_at: Option<String>,
+    /// The to-do this task reminds the user of (main chat ticket 39):
+    /// set when the task is a to-do's reminder, absent for the
+    /// assistant's own tasks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub todo_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

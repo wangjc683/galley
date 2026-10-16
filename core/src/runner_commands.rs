@@ -391,10 +391,11 @@ pub(crate) async fn prepare_managed_spawn_args(
             eprintln!("[main chat] writing the assistant manual failed: {e}");
         }
         let manual = crate::assistant_manual::manual_path(&state_root);
-        // What it has in hand (ticket 36): the reminders and scheduled
-        // tasks coming up and the subtasks not finished, read as the
-        // desktop's 「待办」 reads them. A failed read is logged and the
-        // lines are left out; the runner still starts.
+        // What it has in hand (ticket 36, regrouped by ticket 39): the
+        // user's to-dos not done, the subtasks not finished with its own
+        // one-off reminders, and the routines, read as the desktop's
+        // 「待办」 reads them. A failed read is logged and the lines are
+        // left out; the runner still starts.
         let now = chrono::Utc::now();
         let in_hand = match crate::assistant_todo::assistant_todo(
             &app.state::<SqliteGalley>(),

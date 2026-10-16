@@ -165,7 +165,8 @@ pub async fn dispatch_queued_message(
 /// scheduled tasks started settles them
 /// ([`crate::subtask_report::record_wake_run_end`]), and the tasks the
 /// assistant made in the run get its reply's turn
-/// ([`SqliteGalley::settle_scheduled_created_in`], ticket 33).
+/// ([`SqliteGalley::settle_scheduled_created_in`], ticket 33), as do the
+/// to-dos it noted ([`SqliteGalley::settle_todo_created_in`], ticket 39).
 /// `reports` is the app's one store, shared with the scheduler, which
 /// adds due tasks to it.
 ///
@@ -226,6 +227,14 @@ pub fn spawn_queue_drain_task(
                     &(),
                 ),
                 Err(e) => eprintln!("[queue {session_id}] settling scheduled tasks failed: {e}"),
+            }
+            // And the to-dos it noted (ticket 39).
+            match galley.settle_todo_created_in(&session_id).await {
+                Ok(0) => {}
+                Ok(_) => {
+                    crate::notify::notify(notifier.as_ref(), crate::api::TODOS_CHANGED_EVENT, &())
+                }
+                Err(e) => eprintln!("[queue {session_id}] settling to-dos failed: {e}"),
             }
             let next = manager.queue_take_next(&signal).await;
             let took_next = next.is_some();

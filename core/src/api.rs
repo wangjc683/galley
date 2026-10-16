@@ -22,6 +22,7 @@ pub mod search;
 pub mod session;
 pub mod status;
 pub mod subtask;
+pub mod todo;
 pub mod transcript_window;
 
 pub use health::{HealthCheck, HealthReport, HealthStatus};
@@ -57,6 +58,10 @@ pub use status::StatusSummary;
 pub use subtask::{
     SubtaskDispatch, SubtaskDispatchedPayload, SubtaskFailure, SubtaskReportUndeliveredPayload,
     SUBTASK_DISPATCHED_EVENT, SUBTASK_REPORT_UNDELIVERED_EVENT,
+};
+pub use todo::{
+    CreateTodoInput, TodoBrief, TodoDue, TodoId, TodoPatch, TodoReminder, TodoReminderState,
+    TodoStatus, TODOS_CHANGED_EVENT,
 };
 pub use transcript_window::{
     parse_local_time_bound, parse_time_bound, MessageWindow, TimeBound, DEFAULT_AROUND_CONTEXT,

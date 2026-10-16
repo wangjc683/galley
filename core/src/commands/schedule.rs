@@ -99,6 +99,7 @@ pub(crate) async fn preview_scheduled_fire(
         origin: None,
         created_in: None,
         cancelled_at: None,
+        todo_id: None,
         created_at: base
             .as_ref()
             .map(|t| t.created_at.clone())
@@ -140,11 +141,12 @@ pub(crate) async fn delete_scheduled_task(
         .map_err(stringify_error)
 }
 
-/// The assistant's to-do list (main chat ticket 37): what it has coming
-/// up, what it is working on, what it finished lately — the desktop's
-/// 「待办」 behind the sidebar masthead on the managed runtime. Read-only;
-/// the page reads it again on the events that change it
-/// (`scheduled-tasks:changed`, `subtask-dispatched`, `session-run-state`,
+/// The assistant's to-do list (main chat ticket 37, regrouped by ticket
+/// 39): the user's to-dos (today, later, any time), what Galley is on,
+/// the routines, what was done lately, and the 「今天 N」 count — the
+/// desktop's 「待办」 on the managed runtime. Read-only; the page reads it
+/// again on the events that change it (`todos:changed`,
+/// `scheduled-tasks:changed`, `subtask-dispatched`, `session-run-state`,
 /// session updates). The same read feeds the main chat's 「在办的事」
 /// (ticket 36), so both show one list in one order.
 #[tauri::command]
@@ -153,6 +155,60 @@ pub(crate) async fn list_assistant_todo(
     manager: State<'_, std::sync::Arc<crate::runner_manager::RunnerManager>>,
 ) -> std::result::Result<crate::assistant_todo::AssistantTodo, String> {
     crate::assistant_todo::assistant_todo(&galley, &manager, chrono::Utc::now())
+        .await
+        .map_err(stringify_error)
+}
+
+// ---------------- to-dos (main chat ticket 39) ----------------
+//
+// The desktop's three direct actions on a to-do (PRD ruling 91 point 3):
+// tick it off, untick it, cancel its reminder. Everything else the user
+// says to Galley, which writes through the CLI. Each is the user at the
+// desktop (`Origin::desktop()`: `done_via = 'gui'`), goes through Core's
+// write path, broadcasts `todos:changed` (and `scheduled-tasks:changed`
+// when a reminder moved), and returns the to-do as it now stands. Errors
+// are Core's JSON (`not_found` for a to-do cancelled or gone, or without a
+// reminder to cancel).
+
+/// Tick a to-do off. Its reminder is cancelled while it has not reached
+/// the assistant.
+#[tauri::command]
+pub(crate) async fn complete_todo(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+    id: crate::api::TodoId,
+) -> std::result::Result<crate::api::TodoBrief, String> {
+    let notifier = TauriNotifier::new(app);
+    Writes::new(&galley, notifier.as_ref(), VIA_GUI)
+        .complete_todo(&id, Origin::desktop())
+        .await
+        .map_err(stringify_error)
+}
+
+/// Untick a to-do. A reminder the tick cancelled stays cancelled.
+#[tauri::command]
+pub(crate) async fn reopen_todo(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+    id: crate::api::TodoId,
+) -> std::result::Result<crate::api::TodoBrief, String> {
+    let notifier = TauriNotifier::new(app);
+    Writes::new(&galley, notifier.as_ref(), VIA_GUI)
+        .reopen_todo(&id, Origin::desktop())
+        .await
+        .map_err(stringify_error)
+}
+
+/// Cancel a to-do's reminder; the to-do stays as it is.
+#[tauri::command]
+pub(crate) async fn cancel_todo_reminder(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+    id: crate::api::TodoId,
+) -> std::result::Result<crate::api::TodoBrief, String> {
+    let notifier = TauriNotifier::new(app);
+    Writes::new(&galley, notifier.as_ref(), VIA_GUI)
+        .cancel_todo_reminder(&id, Origin::desktop())
         .await
         .map_err(stringify_error)
 }

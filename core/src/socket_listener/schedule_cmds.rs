@@ -1,7 +1,8 @@
 use super::common::{map_galley_err, origin_from_args};
 use super::*;
 use crate::api::schedule::{
-    CreateScheduledTaskInput, ScheduledTaskBrief, ScheduledTaskPatch, ScheduledTaskRepeat,
+    mint_scheduled_task_id, CreateScheduledTaskInput, ScheduledTaskBrief, ScheduledTaskPatch,
+    ScheduledTaskRepeat,
 };
 use crate::api::{ScheduledTaskId, ASSISTANT_SUPERVISOR};
 use crate::db::ScheduleListScope;
@@ -86,27 +87,6 @@ async fn created_in(
         .ok()
         .flatten()?;
     Some((main, turn))
-}
-
-/// Mint a task id in the GUI's `sched_<16-hex>` shape
-/// (`gui/src/lib/scheduled-tasks.ts` `mintScheduledTaskId`).
-fn mint_scheduled_task_id() -> String {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
-    // Same stir as `mint_project_id`: a counter keeps two creates in the
-    // same tick apart.
-    static SCHEDULE_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let counter = SCHEDULE_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let mut x: u128 = ts ^ u128::from(counter.rotate_left(29));
-    x ^= x.wrapping_mul(0x9E3779B97F4A7C15_9E3779B97F4A7C15);
-    x ^= x >> 64;
-    x ^= x.wrapping_mul(0xC4CEB9FE1A85EC53_C4CEB9FE1A85EC53);
-    let hex = format!("{x:032x}");
-    format!("sched_{}", &hex[..16])
 }
 
 pub(super) async fn dispatch_schedule_list(

@@ -1,10 +1,11 @@
-//! The assistant's to-do list (main chat ticket 37) against an
-//! in-memory database: which tasks and which of the main chat's
-//! subtasks land in which group, read the way the desktop and the
+//! The assistant's to-do list (main chat ticket 37, regrouped by ticket
+//! 39) against an in-memory database: which tasks and which of the main
+//! chat's subtasks land in which group, read the way the desktop and the
 //! 「在办的事」 lines read them (`galley_core_lib::assistant_todo`). The
 //! ordering, the window's edge and the live run states are pinned by the
 //! module's unit tests; here the database half — what a subtask's rows
-//! say after a restart, which subtasks count, cancelled tasks.
+//! say after a restart, which subtasks count, cancelled tasks. The
+//! to-dos' own groups are in `todo_test.rs`.
 
 use chrono::{DateTime, Duration, Utc};
 use galley_core_lib::api::schedule::{
@@ -206,27 +207,27 @@ async fn subtask_groups_from_their_rows() {
     set_activity(&pool, "s-nostart", now - Duration::minutes(40)).await;
 
     let todo = read(&galley).await;
-    assert!(todo.upcoming.is_empty());
+    assert!(todo.routine.is_empty() && todo.yours.is_empty());
     // No runner in this process: the rows say asking, done, stopped
     // short; a runner that never started says failed.
-    assert_eq!(ids(&todo.active), ["s-asking", "s-cut", "s-nostart"]);
-    let states: Vec<TodoState> = todo.active.iter().map(|i| i.state).collect();
+    assert_eq!(ids(&todo.assistant), ["s-asking", "s-cut", "s-nostart"]);
+    let states: Vec<TodoState> = todo.assistant.iter().map(|i| i.state).collect();
     assert_eq!(
         states,
         [TodoState::Asking, TodoState::Stopped, TodoState::Failed]
     );
-    assert_eq!(ids(&todo.recent), ["s-done"]);
-    assert_eq!(todo.recent[0].state, TodoState::Done);
-    assert_eq!(todo.recent[0].kind, TodoKind::Subtask);
-    assert_eq!(todo.recent[0].text, "整理下载");
-    assert_eq!(todo.recent[0].created_by, TodoCreator::Assistant);
+    assert_eq!(ids(&todo.done), ["s-done"]);
+    assert_eq!(todo.done[0].state, TodoState::Done);
+    assert_eq!(todo.done[0].kind, TodoKind::Subtask);
+    assert_eq!(todo.done[0].text, "整理下载");
+    assert_eq!(todo.done[0].created_by, TodoCreator::Assistant);
 
     // A week without moving: out of both groups.
     set_activity(&pool, "s-cut", now - Duration::days(8)).await;
     set_activity(&pool, "s-done", now - Duration::days(8)).await;
     let todo = read(&galley).await;
-    assert_eq!(ids(&todo.active), ["s-asking", "s-nostart"]);
-    assert!(todo.recent.is_empty());
+    assert_eq!(ids(&todo.assistant), ["s-asking", "s-nostart"]);
+    assert!(todo.done.is_empty());
 }
 
 #[tokio::test]
@@ -240,13 +241,13 @@ async fn a_new_run_after_a_finished_one_is_not_done() {
         .await
         .expect("send back");
     let todo = read(&galley).await;
-    assert_eq!(ids(&todo.active), ["s-1"]);
-    assert_eq!(todo.active[0].state, TodoState::Stopped);
-    assert!(todo.recent.is_empty());
+    assert_eq!(ids(&todo.assistant), ["s-1"]);
+    assert_eq!(todo.assistant[0].state, TodoState::Stopped);
+    assert!(todo.done.is_empty());
 }
 
 #[tokio::test]
-async fn tasks_upcoming_and_cancelled() {
+async fn tasks_galleys_routine_and_cancelled() {
     let (pool, galley) = with_main_chat().await;
     let soon = Utc::now() + Duration::minutes(10);
     let made = galley
@@ -291,14 +292,10 @@ async fn tasks_upcoming_and_cancelled() {
         .expect("cancel");
 
     let todo = read(&galley).await;
-    let mut got = ids(&todo.upcoming);
-    got.sort_unstable();
-    assert_eq!(got, ["sched_news", "sched_water"]);
-    let water = todo
-        .upcoming
-        .iter()
-        .find(|i| i.id == "sched_water")
-        .unwrap();
+    // A one-off is Galley's; a repeating task a routine.
+    assert_eq!(ids(&todo.assistant), ["sched_water"]);
+    assert_eq!(ids(&todo.routine), ["sched_news"]);
+    let water = &todo.assistant[0];
     assert_eq!(water.kind, TodoKind::Task);
     assert_eq!(water.state, TodoState::Scheduled);
     assert_eq!(water.created_by, TodoCreator::Assistant);
@@ -310,7 +307,7 @@ async fn tasks_upcoming_and_cancelled() {
     let anchor = water.created_in.as_ref().expect("made in a turn");
     assert_eq!(anchor.session_id.as_str(), MAIN);
     assert_eq!(anchor.turn_index, Some(4));
-    let news = todo.upcoming.iter().find(|i| i.id == "sched_news").unwrap();
+    let news = &todo.routine[0];
     assert_eq!(news.created_by, TodoCreator::User);
     assert_eq!(news.time_of_day.as_deref(), Some("08:00"));
 }
@@ -338,6 +335,6 @@ async fn without_a_main_chat_tasks_only() {
         .await
         .expect("form task");
     let todo = read(&galley).await;
-    assert_eq!(ids(&todo.upcoming), ["sched_news"]);
-    assert!(todo.active.is_empty() && todo.recent.is_empty());
+    assert_eq!(ids(&todo.routine), ["sched_news"]);
+    assert!(todo.assistant.is_empty() && todo.done.is_empty() && todo.yours.is_empty());
 }

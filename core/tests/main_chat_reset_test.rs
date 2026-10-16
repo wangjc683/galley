@@ -7,9 +7,11 @@
 //!
 //! - What goes: the main chat, its unpromoted subtasks (archived ones
 //!   too) with their messages, attachment rows and files, segments,
-//!   dispatch records and search rows; the memory beyond the seed; every
-//!   pre-migration backup. What stays: promoted subtasks (now ordinary
-//!   conversations), other sessions, `temp/`, the data directory.
+//!   dispatch records and search rows; every to-do and its reminder
+//!   (ticket 39); the memory beyond the seed; every pre-migration backup.
+//!   What stays: promoted subtasks (now ordinary conversations), other
+//!   sessions, the assistant's own scheduled tasks, `temp/`, the data
+//!   directory.
 //! - The new main chat opens with the greeting in the UI language.
 //! - Refused, with nothing changed, while a conversation runs, on the
 //!   external runtime, without a main chat; a failed memory copy changes
@@ -733,6 +735,76 @@ async fn a_reset_clears_the_main_chat_its_subtasks_its_memory_and_the_backups() 
     // The new main chat's runner, asked for once: GA writes its memory
     // files from the templates when a runner starts.
     assert_eq!(starter.started(), [created.id.0.clone()]);
+}
+
+#[tokio::test]
+async fn a_reset_clears_every_to_do_and_its_reminder() {
+    use galley_core_lib::api::schedule::{
+        instant_to_utc_iso, CreateScheduledTaskInput, ScheduleTarget, ScheduledTaskRepeat,
+    };
+    use galley_core_lib::api::{CreateTodoInput, OriginVia, ASSISTANT_SUPERVISOR};
+    use galley_core_lib::db::TodoListScope;
+    let (pool, galley) = fresh("managed").await;
+    let disk = Disk::new();
+    populated(&pool, &galley, &disk).await;
+    let galley_said = Origin {
+        via: OriginVia::Supervisor,
+        supervisor: Some(ASSISTANT_SUPERVISOR.into()),
+        reason: None,
+        client: None,
+    };
+    let in_an_hour = instant_to_utc_iso(&(chrono::Utc::now() + chrono::Duration::hours(1)));
+    let todo = galley
+        .create_todo(
+            CreateTodoInput {
+                title: "交季度报告".into(),
+                remind_at: Some(in_an_hour.clone()),
+                ..CreateTodoInput::default()
+            },
+            galley_said.clone(),
+            None,
+        )
+        .await
+        .expect("to-do");
+    let reminder = todo.reminder.expect("reminder").task_id;
+    galley
+        .create_scheduled_task(
+            CreateScheduledTaskInput {
+                id: "sched_own".into(),
+                project_id: None,
+                prompt: "回头查物流".into(),
+                repeat: ScheduledTaskRepeat::Once,
+                time_of_day: String::new(),
+                llm_name: None,
+                enabled: true,
+                fire_at: Some(in_an_hour),
+                target: ScheduleTarget::Assistant,
+            },
+            galley_said,
+        )
+        .await
+        .expect("its own reminder");
+    let runner = Runner::default();
+    let rec = Recorder::default();
+    reset(&galley, &runner, &rec, &disk, None)
+        .await
+        .expect("reset");
+    assert!(galley
+        .list_todos(TodoListScope::All)
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(galley.scheduled_task(reminder.as_str()).await.is_err());
+    assert!(galley.scheduled_task("sched_own").await.is_ok());
+    let names: Vec<String> = rec
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect();
+    assert!(names.contains(&"todos:changed".to_string()), "{names:?}");
+    assert!(names.contains(&"scheduled-tasks:changed".to_string()));
 }
 
 #[tokio::test]

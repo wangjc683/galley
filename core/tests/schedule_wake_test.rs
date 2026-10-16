@@ -19,7 +19,9 @@
 //! - a session a `target = session` task started reports its run to the
 //!   main chat and stays an ordinary session; not once someone wrote in it,
 //!   and not under the external runtime;
-//! - the turn the assistant made a task in is settled to its reply.
+//! - the turn the assistant made a task in is settled to its reply;
+//! - a to-do's reminder (ticket 39) says which to-do and when it is due,
+//!   and a to-do ticked off is not reminded of, whenever it is ticked.
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration as ChronoDuration, Local, Utc};
@@ -1114,4 +1116,208 @@ async fn reading_a_one_off_on_the_wire() {
     );
     assert!(wire.get("lastWake").is_none());
     assert!(wire.get("cancelledAt").is_none());
+}
+
+// ---------------- to-dos' reminders (ticket 39) ----------------
+
+/// A to-do Galley noted with a reminder ten minutes from now.
+async fn todo_with_reminder(
+    galley: &SqliteGalley,
+    title: &str,
+    notes: Option<&str>,
+    due: Option<&str>,
+) -> galley_core_lib::api::TodoBrief {
+    galley
+        .create_todo(
+            galley_core_lib::api::CreateTodoInput {
+                title: title.into(),
+                notes: notes.map(str::to_string),
+                due: due.map(str::to_string),
+                remind_at: Some(instant_to_utc_iso(
+                    &(Utc::now() + ChronoDuration::minutes(10)),
+                )),
+            },
+            assistant(),
+            None,
+        )
+        .await
+        .expect("to-do with a reminder")
+}
+
+fn reminder_of(todo: &galley_core_lib::api::TodoBrief) -> String {
+    todo.reminder
+        .as_ref()
+        .expect("reminder")
+        .task_id
+        .as_str()
+        .to_string()
+}
+
+#[tokio::test]
+async fn a_to_dos_reminder_says_which_to_do_and_when_it_is_due() {
+    let (pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let reports = SubtaskReports::new();
+    let todo =
+        todo_with_reminder(&galley, "交季度报告", Some("发给王总"), Some("2026-10-21")).await;
+    let task = reminder_of(&todo);
+    slept_through(&pool, &task, ChronoDuration::seconds(30)).await;
+    assert_eq!(tick(&galley, &rec).await, 1);
+    assert_eq!(
+        restore_pending_reminders(&reports, &galley)
+            .await
+            .as_deref(),
+        Some(MAIN)
+    );
+    let host = host(&galley, &runner, &env, rec.clone());
+    let Some(WakeOutcome::Delivered { message, .. }) = wake_if_due(&reports, &host, MAIN).await
+    else {
+        panic!("not delivered");
+    };
+    let sent = runner.user_messages(MAIN);
+    assert_eq!(sent.len(), 1);
+    let text = &sent[0];
+    assert!(text.starts_with("[Galley — not a message from the user] A reminder you set came due."));
+    assert!(
+        text.contains(&format!(
+            "Reminder `{task}` on the user's to-do `{}` came due. Planned for ",
+            todo.id
+        )),
+        "{text}"
+    );
+    assert!(text.contains(
+        "The to-do is the user's own, something they have to do:\n<<<\n交季度报告\n发给王总\n>>>\n\
+         It is due 2026-10-21 (Wed), local time. Act on it now: remind the user of it"
+    ));
+    let summary: Option<String> = sqlx::query_scalar("SELECT summary FROM messages WHERE id = ?")
+        .bind(&message.id.0)
+        .fetch_one(&pool)
+        .await
+        .expect("row");
+    assert!(summary.unwrap().starts_with(&format!(
+        "[Galley: reminder {task} for to-do {} came due (",
+        todo.id
+    )));
+
+    // Without a due date it says so; its words are the title as it is
+    // now.
+    let reports = SubtaskReports::new();
+    runner.settle(MAIN);
+    let call = todo_with_reminder(&galley, "给房东回电话", None, None).await;
+    galley
+        .update_todo(
+            &call.id,
+            galley_core_lib::api::TodoPatch {
+                title: Some("明天给房东回电话".into()),
+                ..Default::default()
+            },
+            assistant(),
+        )
+        .await
+        .expect("rename");
+    slept_through(&pool, &reminder_of(&call), ChronoDuration::seconds(30)).await;
+    assert_eq!(tick(&galley, &rec).await, 1);
+    restore_pending_reminders(&reports, &galley).await;
+    assert!(matches!(
+        wake_if_due(&reports, &host, MAIN).await,
+        Some(WakeOutcome::Delivered { .. })
+    ));
+    let sent = runner.user_messages(MAIN);
+    assert!(
+        sent[1].contains("<<<\n明天给房东回电话\n>>>\nIt has no due date."),
+        "{}",
+        sent[1]
+    );
+}
+
+#[tokio::test]
+async fn a_to_do_ticked_off_is_not_reminded_of() {
+    let (pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let host = host(&galley, &runner, &env, rec.clone());
+
+    // Ticked before its time: the reminder is cancelled and never fires.
+    let early = todo_with_reminder(&galley, "交报告", None, None).await;
+    galley
+        .complete_todo(&early.id, Origin::desktop())
+        .await
+        .expect("tick");
+    slept_through(&pool, &reminder_of(&early), ChronoDuration::seconds(30)).await;
+    assert_eq!(tick(&galley, &rec).await, 0);
+
+    // Ticked between its fire and the wake: the waiting report drops
+    // out when the wake reads it again. (Closed behind the write that
+    // cancels the reminder, as a tick racing the scheduler would.)
+    let raced = todo_with_reminder(&galley, "打电话", None, None).await;
+    slept_through(&pool, &reminder_of(&raced), ChronoDuration::seconds(30)).await;
+    assert_eq!(tick(&galley, &rec).await, 1);
+    let reports = SubtaskReports::new();
+    assert!(restore_pending_reminders(&reports, &galley).await.is_some());
+    sqlx::query("UPDATE todos SET done_at = ?, done_via = 'gui' WHERE id = ?")
+        .bind(instant_to_utc_iso(&Utc::now()))
+        .bind(raced.id.as_str())
+        .execute(&pool)
+        .await
+        .expect("close");
+    assert!(matches!(
+        wake_if_due(&reports, &host, MAIN).await,
+        Some(WakeOutcome::NothingLeft)
+    ));
+    assert!(runner.user_messages(MAIN).is_empty());
+    // Nor after a restart.
+    assert!(restore_pending_reminders(&SubtaskReports::new(), &galley)
+        .await
+        .is_none());
+
+    // Due while its to-do is closed: the scheduler's check cancels it
+    // instead of firing it.
+    let late = todo_with_reminder(&galley, "取快递", None, None).await;
+    let task = reminder_of(&late);
+    slept_through(&pool, &task, ChronoDuration::seconds(30)).await;
+    sqlx::query("UPDATE todos SET cancelled_at = ? WHERE id = ?")
+        .bind(instant_to_utc_iso(&Utc::now()))
+        .bind(late.id.as_str())
+        .execute(&pool)
+        .await
+        .expect("close");
+    let now = Local::now();
+    let due: Vec<(ScheduledTaskBrief, DateTime<Local>)> = galley
+        .list_scheduled_tasks()
+        .await
+        .expect("list")
+        .into_iter()
+        .filter_map(|t| due_at(&t, &Local, &now).map(|at| (t, at)))
+        .collect();
+    assert_eq!(due.len(), 1);
+    let kept =
+        galley_core_lib::scheduler::drop_reminders_of_closed_todos(&galley, rec.as_ref(), due)
+            .await;
+    assert!(kept.is_empty());
+    assert!(galley
+        .scheduled_task(&task)
+        .await
+        .expect("task")
+        .cancelled_at
+        .is_some());
+    assert_eq!(tick(&galley, &rec).await, 0);
+
+    // A to-do still open: its reminder goes off as any.
+    let open = todo_with_reminder(&galley, "买营养土", None, None).await;
+    slept_through(&pool, &reminder_of(&open), ChronoDuration::seconds(30)).await;
+    let now = Local::now();
+    let due: Vec<(ScheduledTaskBrief, DateTime<Local>)> = galley
+        .list_scheduled_tasks()
+        .await
+        .expect("list")
+        .into_iter()
+        .filter_map(|t| due_at(&t, &Local, &now).map(|at| (t, at)))
+        .collect();
+    let kept =
+        galley_core_lib::scheduler::drop_reminders_of_closed_todos(&galley, rec.as_ref(), due)
+            .await;
+    assert_eq!(kept.len(), 1);
 }

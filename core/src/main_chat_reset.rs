@@ -2,7 +2,8 @@
 //! of a conversation that is meant to last.
 //!
 //! One action, no options. The main chat and the subtasks it dispatched
-//! that never became ordinary conversations are deleted, a new main chat
+//! that never became ordinary conversations are deleted, and with them
+//! every to-do Galley noted and its reminder (ticket 39), a new main chat
 //! starts from its greeting, the engine's long-term memory
 //! (`managed-ga-state/memory/`, shared by every conversation and IM
 //! channel) goes back to the seed it was installed with, and the
@@ -31,14 +32,17 @@
 //!    ([`managed_runtime::stage_memory_reset`]): the old one is set aside,
 //!    not deleted. A failure here changes nothing.
 //! 4. **Delete the rows** in one transaction
-//!    ([`SqliteGalley::delete_main_chat_for_reset`]). If it fails, the
+//!    ([`SqliteGalley::delete_main_chat_for_reset`]): the sessions, and
+//!    the to-dos with their reminders' tasks. If it fails, the
 //!    old `memory/` goes back and nothing changed. From here on the reset
 //!    has happened: the set-aside memory is deleted, runners are closed
 //!    once more for every deleted session (a send that slipped in
 //!    meanwhile may have started one), and anything still queued for
 //!    them is dropped.
 //! 5. **Delete the attachment files** of the deleted sessions.
-//! 6. **Broadcast** each deletion, then **create** the new main chat
+//! 6. **Broadcast** each deletion (the to-dos' too:
+//!    [`TODOS_CHANGED_EVENT`] and [`SCHEDULED_TASKS_CHANGED_EVENT`]), then
+//!    **create** the new main chat
 //!    through the usual path, which announces it — deletions first, so no
 //!    page ever holds two main chats.
 //! 7. **Start the new main chat's runner**, in the background
@@ -74,7 +78,10 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
-use crate::api::{Origin, RuntimeKind, SessionBrief, SessionId};
+use crate::api::{
+    Origin, RuntimeKind, SessionBrief, SessionId, SCHEDULED_TASKS_CHANGED_EVENT,
+    TODOS_CHANGED_EVENT,
+};
 use crate::db::{MainChatEnsured, SqliteGalley};
 use crate::managed_runtime;
 use crate::migration_backup;
@@ -299,6 +306,10 @@ pub async fn reset_main_chat(
     // 6. Deletions out, then the new main chat in.
     for id in &deleted {
         announce_session_deleted(notifier, id, VIA_GUI);
+    }
+    if deletion.todos > 0 {
+        crate::notify::notify(notifier, TODOS_CHANGED_EVENT, &());
+        crate::notify::notify(notifier, SCHEDULED_TASKS_CHANGED_EVENT, &());
     }
     let created = Writes::new(galley, notifier, VIA_GUI)
         .get_or_create_main_chat(Origin::desktop(), language)

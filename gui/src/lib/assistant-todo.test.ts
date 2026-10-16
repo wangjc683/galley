@@ -4,13 +4,17 @@ import { enCopy } from "@/i18n/locales/en";
 import { zhCopy } from "@/i18n/locales/zh";
 import {
   cancelScheduledTask,
+  cancelTodoReminder,
+  completeTodo,
   EMPTY_TODO,
+  legacyTodoGroups,
   listAssistantTodo,
   onceFired,
   reminderCardState,
   reminderStateLabel,
   reminderTimeLabel,
   remindersByMessage,
+  reopenTodo,
   replyMessageId,
   todoActionFailure,
   todoAutostartHintVisible,
@@ -280,15 +284,76 @@ describe("the list", () => {
   });
 
   it("is empty only with nothing in any group", () => {
-    expect(todoIsEmpty(EMPTY_TODO)).toBe(true);
+    expect(todoIsEmpty(legacyTodoGroups(EMPTY_TODO))).toBe(true);
     expect(
-      todoIsEmpty({ ...EMPTY_TODO, recent: [item({ state: "fired" })] }),
+      todoIsEmpty(
+        legacyTodoGroups({ ...EMPTY_TODO, done: [item({ state: "fired" })] }),
+      ),
     ).toBe(false);
+  });
+
+  it("draws its three groups from Core's four, to-dos left out", () => {
+    const todo = item({
+      kind: "todo",
+      id: "todo_1",
+      state: "open",
+      at: undefined,
+      target: undefined,
+      repeat: undefined,
+    });
+    const sub = item({ kind: "subtask", id: "s-1", state: "running" });
+    const late = item({ id: "sched_late", at: local(2026, 10, 20, 9, 0) });
+    const paused = item({
+      id: "sched_paused",
+      state: "paused",
+      at: local(2026, 10, 16, 22, 0),
+    });
+    const routine = item({
+      id: "sched_daily",
+      repeat: { kind: "daily" },
+      at: local(2026, 10, 17, 8, 0),
+    });
+    const groups = legacyTodoGroups({
+      ...EMPTY_TODO,
+      yours: { today: [todo], later: [], anytime: [] },
+      assistant: [sub, late, paused, item()],
+      routine: [routine],
+      done: [
+        item({ kind: "todo", id: "todo_done", state: "done" }),
+        item({ kind: "subtask", id: "s-done", state: "done" }),
+      ],
+      doneOmitted: 2,
+    });
+    expect(groups.upcoming.map((i) => i.id)).toEqual([
+      "sched_1",
+      "sched_daily",
+      "sched_late",
+      "sched_paused",
+    ]);
+    expect(groups.active.map((i) => i.id)).toEqual(["s-1"]);
+    expect(groups.recent.map((i) => i.id)).toEqual(["s-done"]);
+    expect(groups.recentOmitted).toBe(2);
+    expect(todoStateLabel(todo, zh)).toBe("");
+  });
+
+  it("ticks a to-do, unticks it, cancels its reminder through Core", async () => {
+    const { invoke } = getTauriMocks();
+    const brief = { id: "todo_1", status: "done" };
+    invoke.mockResolvedValue(brief);
+    await expect(completeTodo("todo_1")).resolves.toEqual(brief);
+    expect(invoke).toHaveBeenLastCalledWith("complete_todo", { id: "todo_1" });
+    await reopenTodo("todo_1");
+    expect(invoke).toHaveBeenLastCalledWith("reopen_todo", { id: "todo_1" });
+    await cancelTodoReminder("todo_1");
+    expect(invoke).toHaveBeenLastCalledWith("cancel_todo_reminder", {
+      id: "todo_1",
+    });
   });
 
   it("reads again on the events that change it", () => {
     expect(TODO_REFRESH_EVENTS).toEqual(
       expect.arrayContaining([
+        "todos:changed",
         "scheduled-tasks:changed",
         "subtask-dispatched",
         "session-run-state",
@@ -300,13 +365,28 @@ describe("the list", () => {
   });
 
   it("warns about launch at login only while something is set to go off", () => {
-    const set = { ...EMPTY_TODO, upcoming: [item()] };
+    const set = { ...EMPTY_TODO, assistant: [item()] };
     expect(todoAutostartHintVisible(false, set)).toBe(true);
     expect(todoAutostartHintVisible(true, set)).toBe(false);
     expect(todoAutostartHintVisible(null, set)).toBe(false);
     expect(todoAutostartHintVisible(false, EMPTY_TODO)).toBe(false);
-    const paused = { ...EMPTY_TODO, upcoming: [item({ state: "paused" })] };
+    const paused = { ...EMPTY_TODO, routine: [item({ state: "paused" })] };
     expect(todoAutostartHintVisible(false, paused)).toBe(false);
+    // A to-do's reminder still to go off counts.
+    const reminded = item({
+      kind: "todo",
+      id: "todo_1",
+      state: "open",
+      reminder: {
+        taskId: "sched_9",
+        at: local(2026, 10, 17, 9, 0),
+        state: "scheduled",
+      },
+    });
+    const yours = { today: [], later: [reminded], anytime: [] };
+    expect(todoAutostartHintVisible(false, { ...EMPTY_TODO, yours })).toBe(
+      true,
+    );
   });
 });
 

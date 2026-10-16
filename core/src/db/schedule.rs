@@ -35,12 +35,13 @@ pub(super) struct ScheduledTaskRow {
     pub(super) last_due_at: Option<String>,
     pub(super) last_wake: Option<String>,
     pub(super) cancelled_at: Option<String>,
+    pub(super) todo_id: Option<String>,
 }
 
 const SCHEDULED_TASK_COLUMNS: &str = "id, project_id, prompt, repeat_kind, repeat_days, \
     time_of_day, fire_at, llm_name, enabled, last_fired_at, last_run_session_id, created_at, \
     updated_at, target, created_via, created_by_supervisor, created_origin_note, \
-    created_in_session_id, created_in_turn_index, last_due_at, last_wake, cancelled_at";
+    created_in_session_id, created_in_turn_index, last_due_at, last_wake, cancelled_at, todo_id";
 
 /// Which scheduled tasks a list read returns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -136,6 +137,7 @@ impl ScheduledTaskRow {
             origin: Some(origin),
             created_in,
             cancelled_at: self.cancelled_at,
+            todo_id: self.todo_id,
             created_at: self.created_at,
             updated_at: self.updated_at,
             repeat,
@@ -183,7 +185,8 @@ fn invalid(message: impl Into<String>) -> GalleyError {
 }
 
 /// A one-off's fire time, refused when already past: [`TIME_IN_PAST`].
-fn future_fire_at(raw: &str, context: &str) -> Result<String> {
+/// A to-do's reminder time too (`db/todo.rs`, ticket 39).
+pub(super) fn future_fire_at(raw: &str, context: &str) -> Result<String> {
     let at = parse_fire_at(raw, &Local)?;
     let now = Utc::now();
     if at.timestamp() < now.timestamp() {
@@ -678,11 +681,15 @@ impl SqliteGalley {
     }
 
     /// The fires of tasks that wake the assistant still waiting to be
-    /// delivered — what a restart sends again. Cancelled tasks drop out.
+    /// delivered — what a restart sends again. Cancelled tasks drop out,
+    /// and so do the reminders of to-dos no longer open (ticket 39: a
+    /// to-do ticked off is not reminded of).
     pub async fn pending_scheduled_wakes(&self) -> Result<Vec<ScheduledTaskBrief>> {
         let sql = format!(
             "SELECT {SCHEDULED_TASK_COLUMNS} FROM scheduled_tasks \
              WHERE last_wake = 'pending' AND target = 'assistant' AND cancelled_at IS NULL \
+               AND (todo_id IS NULL OR todo_id IN ( \
+                     SELECT id FROM todos WHERE done_at IS NULL AND cancelled_at IS NULL)) \
              ORDER BY last_fired_at, id"
         );
         let rows = sqlx::query_as::<_, ScheduledTaskRow>(&sql)

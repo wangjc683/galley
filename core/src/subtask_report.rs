@@ -181,6 +181,37 @@ pub struct DueReminder {
     pub fired_local: String,
     /// How late it went off, in words; `None` within [`LATE_AFTER_SECS`].
     pub late: Option<String>,
+    /// The user's to-do it reminds of, when it is one's reminder (ticket
+    /// 39): the wake then says it is the user's own thing to do.
+    pub todo: Option<DueTodo>,
+}
+
+/// The to-do a reminder is on, as its wake tells it (ticket 39). Read when
+/// the report is made, so a title changed since the reminder was set
+/// reads as it is now.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DueTodo {
+    pub id: String,
+    pub title: String,
+    pub notes: Option<String>,
+    /// When it is due, local (`2026-10-21 15:00 (Wed)`, `2026-10-23
+    /// (Fri)`); `None` for no due date.
+    pub due: Option<String>,
+}
+
+impl DueTodo {
+    /// The to-do as `tz` reads its due date.
+    pub fn from_todo<Tz: TimeZone>(todo: &crate::api::TodoBrief, tz: &Tz) -> Self
+    where
+        Tz::Offset: std::fmt::Display,
+    {
+        Self {
+            id: todo.id.as_str().to_string(),
+            title: todo.title.clone(),
+            notes: todo.notes.clone(),
+            due: todo.stored_due().map(|due| due.words(tz)),
+        }
+    }
 }
 
 impl DueReminder {
@@ -205,6 +236,7 @@ impl DueReminder {
             late: (late_secs >= LATE_AFTER_SECS).then(|| lateness_words(late_secs)),
             due_at,
             fired_at,
+            todo: None,
         })
     }
 }
@@ -317,9 +349,15 @@ impl SubtaskReport {
         self.scheduled_task_id.is_some() && self.due().is_none()
     }
 
-    /// The report of `task`'s last fire, for `main_chat_id`.
-    pub fn reminder(main_chat_id: &str, task: &ScheduledTaskBrief) -> Option<Self> {
-        let due = DueReminder::from_task(task, &chrono::Local)?;
+    /// The report of `task`'s last fire, for `main_chat_id`; `todo` is the
+    /// to-do it reminds of, when it is one's reminder.
+    pub fn reminder(
+        main_chat_id: &str,
+        task: &ScheduledTaskBrief,
+        todo: Option<DueTodo>,
+    ) -> Option<Self> {
+        let mut due = DueReminder::from_task(task, &chrono::Local)?;
+        due.todo = todo;
         Some(Self {
             main_chat_id: main_chat_id.to_string(),
             subtask_id: None,
@@ -366,6 +404,9 @@ fn opening(reports: &[SubtaskReport]) -> &'static str {
 
 fn due_paragraph(due: &DueReminder) -> String {
     let id = &due.task_id;
+    if let Some(todo) = &due.todo {
+        return todo_due_paragraph(due, todo);
+    }
     let what = if due.once {
         format!("Reminder `{id}` (one-off) came due.")
     } else {
@@ -377,7 +418,19 @@ fn due_paragraph(due: &DueReminder) -> String {
     // reply only relayed the words (one run in three with "Tell the user
     // it comes late, and how late." after the times; two in two with
     // "say first", the summary being what comes first).
-    let (when, act) = match &due.late {
+    let (when, act) = due_when_and_act(due);
+    format!(
+        "{what} {when} What you noted when you set it:\n<<<\n{}\n>>>\n\
+         {act} tell the user in a sentence or two, look something up first, or start a \
+         subtask. If it no longer applies (the user already did it), {NO_REPLY_END}.",
+        due.prompt.trim()
+    )
+}
+
+/// The planned time, and how late it went off when it did (ticket 33's
+/// words, unchanged), with the sentence the model acts on.
+fn due_when_and_act(due: &DueReminder) -> (String, String) {
+    match &due.late {
         None => (
             format!("Planned for {}, local time.", due.due_local),
             "Act on it now:".to_string(),
@@ -393,12 +446,30 @@ fn due_paragraph(due: &DueReminder) -> String {
                  summary) that it comes {late} late:"
             ),
         ),
+    }
+}
+
+/// A reminder on one of the user's to-dos (ticket 39): which to-do, when
+/// it is due, when the reminder was planned and went off — so the model
+/// knows this is the user's own thing to do, to remind them of, not
+/// something it noted for itself.
+fn todo_due_paragraph(due: &DueReminder, todo: &DueTodo) -> String {
+    let id = &due.task_id;
+    let (when, act) = due_when_and_act(due);
+    let body = match todo.notes.as_deref().map(str::trim) {
+        Some(notes) if !notes.is_empty() => format!("{}\n{notes}", todo.title.trim()),
+        _ => todo.title.trim().to_string(),
+    };
+    let due_line = match &todo.due {
+        Some(at) => format!("It is due {at}, local time."),
+        None => "It has no due date.".to_string(),
     };
     format!(
-        "{what} {when} What you noted when you set it:\n<<<\n{}\n>>>\n\
-         {act} tell the user in a sentence or two, look something up first, or start a \
-         subtask. If it no longer applies (the user already did it), {NO_REPLY_END}.",
-        due.prompt.trim()
+        "Reminder `{id}` on the user's to-do `{}` came due. {when} The to-do is the user's own, \
+         something they have to do:\n<<<\n{body}\n>>>\n{due_line} \
+         {act} remind the user of it in a sentence or two, look something up first, or start \
+         a subtask. If it no longer applies (the user already did it), {NO_REPLY_END}.",
+        todo.id
     )
 }
 
@@ -589,13 +660,19 @@ pub fn replay_lines(reports: &[SubtaskReport]) -> String {
             let title = &report.title;
             if let Some(due) = report.due() {
                 let id = &due.task_id;
+                let on = due
+                    .todo
+                    .as_ref()
+                    .map(|todo| format!(" for to-do {}", todo.id))
+                    .unwrap_or_default();
                 return match &due.late {
                     None => format!(
-                        "[Galley: reminder {id} came due ({}) — details: schedule show {id}]",
+                        "[Galley: reminder {id}{on} came due ({}) — details: schedule show \
+                         {id}]",
                         due.due_local
                     ),
                     Some(late) => format!(
-                        "[Galley: reminder {id} came due (planned {}, went off {}, {late} \
+                        "[Galley: reminder {id}{on} came due (planned {}, went off {}, {late} \
                          late) — details: schedule show {id}]",
                         due.due_local, due.fired_local
                     ),
@@ -1375,6 +1452,7 @@ async fn is_still_due(host: &RunnerHost<'_>, report: &SubtaskReport) -> bool {
                 task.cancelled_at.is_none()
                     && task.last_wake == Some(ScheduledWake::Pending)
                     && task.last_fired_at.as_deref() == Some(due.fired_at.as_str())
+                    && todo_still_open(host.galley, task.todo_id.as_deref()).await
             }
             Err(GalleyError::NotFound { .. }) => false,
             Err(e) => {
@@ -1400,6 +1478,24 @@ async fn is_still_due(host: &RunnerHost<'_>, report: &SubtaskReport) -> bool {
         return false;
     }
     !matches!(report.outcome, ReportOutcome::Asking { .. }) || state.ask_pending
+}
+
+/// Whether the to-do a reminder is on is still open (ticket 39's second
+/// safety: a to-do ticked off is not reminded of). A task on no to-do, or
+/// a read that failed (a reminder lost is worse than one too many), says
+/// yes.
+async fn todo_still_open(galley: &SqliteGalley, todo_id: Option<&str>) -> bool {
+    let Some(todo_id) = todo_id else {
+        return true;
+    };
+    match galley.todo(todo_id).await {
+        Ok(todo) => todo.is_open(),
+        Err(GalleyError::NotFound { .. }) => false,
+        Err(e) => {
+            eprintln!("[subtask-report] reading to-do {todo_id} failed: {e}");
+            true
+        }
+    }
 }
 
 /// A delivery that failed: release the gate, keep the reports for the
@@ -1562,7 +1658,18 @@ pub async fn restore_pending_reminders(
     };
     let mut added = false;
     for task in &pending {
-        if let Some(report) = SubtaskReport::reminder(&main, task) {
+        // A to-do's reminder says which to-do (ticket 39), as it reads now.
+        let todo = match task.todo_id.as_deref() {
+            Some(todo_id) => match galley.todo(todo_id).await {
+                Ok(todo) => Some(DueTodo::from_todo(&todo, &chrono::Local)),
+                Err(e) => {
+                    eprintln!("[subtask-report] reading to-do {todo_id} failed: {e}");
+                    None
+                }
+            },
+            None => None,
+        };
+        if let Some(report) = SubtaskReport::reminder(&main, task, todo) {
             added |= reports.add(report);
         }
     }
@@ -1618,6 +1725,7 @@ mod tests {
             due_local: "2026-10-20 20:00 (Tue)".into(),
             fired_local: "2026-10-22 09:15 (Thu)".into(),
             late: late.map(str::to_string),
+            todo: None,
         }
     }
 
@@ -1671,6 +1779,58 @@ mod tests {
             replay_fallback(Some("s-1,sched_a")),
             "[Galley: subtask s-1 has an update — details: session show s-1]\n\
              [Galley: scheduled task sched_a came due — details: schedule show sched_a]"
+        );
+    }
+
+    /// Ticket 39: a reminder on one of the user's to-dos says which to-do,
+    /// its title and notes, when it is due, with ticket 33's times and
+    /// lateness unchanged; its replay line names the to-do.
+    #[test]
+    fn a_to_dos_reminder_says_it_is_the_users_own() {
+        let mut on_todo = due(true, None);
+        on_todo.todo = Some(DueTodo {
+            id: "todo_1".into(),
+            title: "交季度报告".into(),
+            notes: Some("发给王总".into()),
+            due: Some("2026-10-21 15:00 (Wed)".into()),
+        });
+        let text = report_text(&[due_report(on_todo.clone())]);
+        assert!(text.starts_with(OPENING_REMINDER));
+        assert!(text.contains(
+            "Reminder `sched_a` on the user's to-do `todo_1` came due. Planned for 2026-10-20 \
+             20:00 (Tue), local time. The to-do is the user's own, something they have to \
+             do:\n<<<\n交季度报告\n发给王总\n>>>\nIt is due 2026-10-21 15:00 (Wed), local time. \
+             Act on it now: remind the user of it in a sentence or two"
+        ));
+        assert!(text.ends_with(
+            "If it no longer applies (the user already did it), end your reply with exactly \
+             <no-reply/>."
+        ));
+        // Not the words it noted: the to-do's title is.
+        assert!(!text.contains("提醒他喝水") && !text.contains("What you noted"));
+        let mut late = on_todo.clone();
+        late.late = Some("9 hours".into());
+        late.todo.as_mut().unwrap().due = None;
+        late.todo.as_mut().unwrap().notes = None;
+        let text = report_text(&[due_report(late.clone())]);
+        assert!(text.contains(
+            "it went off at 2026-10-22 09:15 (Thu), 9 hours late (the computer was asleep or \
+             Galley was closed). The to-do"
+        ));
+        assert!(text.contains(
+            "<<<\n交季度报告\n>>>\nIt has no due date. Act on it now, and say in the reply \
+             itself (the user does not see your summary) that it comes 9 hours late: remind"
+        ));
+        assert_eq!(
+            replay_lines(&[due_report(on_todo)]),
+            "[Galley: reminder sched_a for to-do todo_1 came due (2026-10-20 20:00 (Tue)) — \
+             details: schedule show sched_a]"
+        );
+        assert_eq!(
+            replay_lines(&[due_report(late)]),
+            "[Galley: reminder sched_a for to-do todo_1 came due (planned 2026-10-20 20:00 \
+             (Tue), went off 2026-10-22 09:15 (Thu), 9 hours late) — details: schedule show \
+             sched_a]"
         );
     }
 
@@ -1761,6 +1921,7 @@ mod tests {
             origin: None,
             created_in: None,
             cancelled_at: None,
+            todo_id: None,
             created_at: "2026-10-16T00:00:00+00:00".into(),
             updated_at: "2026-10-16T00:00:00+00:00".into(),
         };

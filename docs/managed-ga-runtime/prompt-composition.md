@@ -241,52 +241,66 @@ look it up with the Galley CLI (search, then
 ### In Hand (main chat only)
 
 Since ticket 36 (assistant PRD rulings 5 and 9, main chat PRD rulings 84,
-86) the main chat's state block carries what the assistant has in hand,
-as a `### In Hand` subsection right after the Main Chat paragraph
-(`in_hand_section` in `core/src/managed_prompt.rs`):
+86), regrouped by ticket 39 (ruling 91), the main chat's state block
+carries what is in hand, as a `### In Hand` subsection right after the
+Main Chat paragraph (`in_hand_section` in `core/src/managed_prompt.rs`):
 
 ```text
 ### In Hand
 
-As of 2026-10-16 14:05, local time (it may have changed since: `schedule list` and `session brief <id>` read it now).
+As of 2026-10-16 14:05, local time (it may have changed since: `todo list`, `schedule list` and `session brief <id>` read it now).
 
-Coming up (reminders and scheduled tasks):
+The user's to-dos (not done):
+- `todo_1a2b3c4d5e6f7a8b` due 2026-10-16 10:00 (Fri), overdue: 回房东电话
+- `todo_2b3c4d5e6f7a8b9c` due 2026-10-21 15:00 (Wed), reminder 2026-10-21 14:00 (Wed): 交季度报告
+- `todo_3c4d5e6f7a8b9c0d` due 2026-10-23 (Fri), reminded 2026-10-16 09:00 (Fri): 交材料
+- `todo_4d5e6f7a8b9c0d1e` no due date: 买营养土
+
+What you are on (subtasks not finished, then one-off reminders and tasks to come):
+- `s-mgq3c1d8-2k7v4p0a` 查三家本周螺纹钢报价: working
+- `s-mgr8x2k1-5b9d3f7h` 订周三去上海的高铁: asking a question
 - `sched_3f9a0c1d2e4b5a69` 2026-10-16 20:00 (Fri), one-off, set by you: 提醒用户带身份证：明早 8:05 虹桥的高铁 去上海出差
+
+Routine (repeating tasks):
 - `sched_41d0aa5e9b3c2f17` 2026-10-17 17:00 (Sat), weekly, set by the user, starts a new conversation: 整理下载文件夹
 - `sched_9b2c7e1f0a3d4c58` daily, paused, set by the outside agent claude-code: 看一眼 MyApp 的依赖更新
 - and 2 more: `schedule list`
-
-Subtasks not finished:
-- `s-mgq3c1d8-2k7v4p0a` 查三家本周螺纹钢报价: working
-- `s-mgr8x2k1-5b9d3f7h` 订周三去上海的高铁: asking a question
 ```
 
 - **Source**: the read behind the desktop's 「待办」,
-  `assistant_todo::assistant_todo(galley, runners, now)` (ticket 37): its
-  upcoming and active groups, in its order, so what the user sees under
-  接下来 and 在办 is what the main chat is told; the recently finished
-  group stays out. Deterministic, no model call.
+  `assistant_todo::assistant_todo(galley, runners, now)` (tickets 37, 39):
+  its yours, Galley's and routine groups, in its order, so what the user
+  sees is what the main chat is told; the done group stays out. A to-do's
+  reminder is on its to-do's line, not a task line of its own.
+  Deterministic, no model call.
 - **When**: at every main chat runner spawn
   (`runner_commands::prepare_managed_spawn_args`), the same place the
   Main Chat section is read: each segment's start, and a respawn
   mid-segment. It changes within a segment, so against admission rule 3
   it is written as a dated snapshot: the first line says when it was read
-  and which commands read it now. A failed read is logged and leaves the
-  subsection out; the runner still starts.
-- **Per line**: a task's id, next fire in local time (the wake note's
-  `2026-10-20 20:00 (Tue)`; a paused repeating task has none), one-off /
-  daily / weekly / monthly, paused, who set it (you / the user / the
-  outside agent and its label), "starts a new conversation" for a task
-  that opens a session, and its words; a subtask's session id, title, and
-  state (working, asking a question, failed, paused at the step limit,
-  stopped before it finished).
+  and which commands read it now (`todo list` only when there are to-dos;
+  without any the line reads as before ticket 39). A failed read is logged
+  and leaves the subsection out; the runner still starts.
+- **Per line**: a to-do's id, its due date in local time (`due 2026-10-21
+  15:00 (Wed)`, `due 2026-10-23 (Fri)` for a day without a time, or `no due
+  date`), `overdue`, its reminder (`reminder …`, `reminder … (paused)`,
+  `reminded …` once it went off), and its title; a task's id, next fire in
+  local time (the wake note's `2026-10-20 20:00 (Tue)`; a paused routine
+  has none), one-off / daily / weekly / monthly, paused, who set it (you /
+  the user / the outside agent and its label), "starts a new
+  conversation" for a task that opens a session, and its words; a
+  subtask's session id, title, and state (working, asking a question,
+  failed, paused at the step limit, stopped before it finished).
 - **Bounded**: at most 5 lines a group (`IN_HAND_MAX_PER_GROUP`), then
-  "and N more" with the command that lists them all; words and titles on
+  "and N more" with the command that lists them all; titles and words on
   one line, cut at 40 characters (`IN_HAND_TEXT_CHARS`), an agent label at
-  24. `IN_HAND_BUDGET_BYTES` = 2467, measured on the longest it gets (five
-  of each at the cuts in three-byte characters, three-digit counts), no
-  headroom, `\r` not counted. Typical is a few lines; nothing in hand, no
-  subsection at all.
+  24. `IN_HAND_BUDGET_BYTES` = 4230, measured on the longest it gets (five
+  in each of the three groups at the cuts in three-byte characters, the
+  longest line forms, three-digit counts), no headroom, `\r` not counted.
+  Ticket 36 had 2467 for two groups of five; ticket 39 keeps the rule and
+  the cuts, so the cap grew with the third group (the user's to-dos) and
+  the tasks splitting between the second and third. Typical is a few
+  lines; nothing in hand, no subsection at all.
 - **Switch**: none; main chat only (attach mode has no main chat, and
   every other prompt is tested never to carry it). Data: outside the
   static budget and the prompt hash.
@@ -501,7 +515,7 @@ row.
 | Main chat entry layer: dispatch clause (long work → `<subtask>` tag, self-contained instructions, quick work stays; Galley's subtask, not GA's `subagent.md`) | ticket 06a, PRD rulings 52, 53 (2026-10-13): the main chat must not be occupied by one long job, and JC chose a tag in the reply over a native GA tool or a CLI command after the three were compared on the main chat's model (`dispatch-clauses.md`); models read GA's file-based subagent SOP unprompted in that comparison. Cap raised 827 → 1446 (+619 bytes) in the same diff |
 | Main chat entry layer: the evidence to hand back; "Galley wakes you … so do not wait on it or watch it" in place of "its card shows the progress, and you can look it up when they ask"; read the assistant manual before the first CLI write | assistant PRD rulings 2, 3, 8 and main chat PRD rulings 80, 82, ticket 30 (2026-10-15): the assistant answers for the work it hands off — Core wakes it when a subtask settles (ticket 29), the wake note says what to do then, and the manual carries authority, commands and reporting. The wake notes were run on the main chat's model with this layer and the manual (`.scratch/main-chat/entry-layer-eval/wake/`). Cap raised 1446 → 1699 (+253 bytes) in the same diff |
 | What Only The User Changes, main chat only: scheduled tasks off the list, "you set them yourself with the Galley CLI, as your manual (named below) says" | assistant PRD rulings 3 and 9, main chat PRD ruling 84, ticket 36 (2026-10-16): the CLI got the `schedule` family (ticket 34), so the assistant sets reminders itself; galley#31's failure (saying a schedule is set when nothing will run) was a model with no hands, and the command now exists. Workbench sessions, subtasks and IM keep the shared paragraph word for word. The main chat's static text got 70 bytes shorter; the static cap is unchanged |
-| State block: In Hand (reminders and scheduled tasks coming up, subtasks not finished, as of when) | assistant PRD rulings 5 and 9, main chat PRD ruling 86, ticket 36: at each segment the main chat knows what it promised and what it handed off, from the same read as the desktop's 「待办」, in the same order. Own cap `IN_HAND_BUDGET_BYTES` |
+| State block: In Hand (the user's to-dos not done, subtasks not finished and one-off reminders and tasks to come, routines, as of when) | assistant PRD rulings 5 and 9, main chat PRD rulings 86 and 91, tickets 36 and 39: at each segment the main chat knows what the user has to do, what it promised and what it handed off, from the same read as the desktop's 「待办」, in the same order. Own cap `IN_HAND_BUDGET_BYTES` |
 | Main chat entry layer: set a reminder unasked when the user mentions a date or time or the model promises a follow-up, naming the manual's section; the write list as command families | assistant PRD ruling 9, ticket 36: JC wanted reminders the user never has to ask for; without a line in the always-present layer the model would not open the manual on a remark. Run on the main chat's model with the manual's new section (`.scratch/main-chat/entry-layer-eval/schedule/`). Cap raised 1699 → 1920 (+221 bytes) in the same diff |
 | Past Galley Conversations: `--around` example; coverage sentence reworded to 「This reaches every Galley session, but not direct IM chats …」 | ticket 03b (2026-10-12): `session show` gained `--around`, and `--tail=20` reads the end of a session, not where a search hit is. Paid for in the same diff: the two coverage sentences became one (−51 bytes against the +51-byte line on both platforms), so the static text stays at 6855 bytes (Windows) / 6837 (POSIX) and the cap is unchanged |
 | Removed 2026-10-13: Goal in the feature map's message-box line, `goal` in the IM entry layer's CLI write list | Goal was removed (devlog [2026-10-13 remove Goal](../devlog/2026-10-13-remove-goal.md)). Both caps lowered in the same diff to stay at no headroom: static 6855 → 6775 bytes (Windows; POSIX 6757), IM 1383 → 1376 (Telegram) |

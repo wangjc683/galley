@@ -254,8 +254,12 @@ pub fn run() {
             preview_scheduled_fire,
             run_scheduled_task_now,
             delete_scheduled_task,
-            // The assistant's to-do list (main chat ticket 37)
+            // The assistant's to-do list (main chat ticket 37) and the
+            // three actions the desktop has on a to-do (ticket 39)
             list_assistant_todo,
+            complete_todo,
+            reopen_todo,
+            cancel_todo_reminder,
             // B2 runner commands
             runner_commands::spawn_runner,
             runner_commands::send_to_runner,

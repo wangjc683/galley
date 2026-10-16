@@ -146,6 +146,7 @@ mod schedule;
 mod search;
 mod session;
 mod subtask;
+mod todo;
 
 use helpers::*;
 use rows::*;
@@ -167,3 +168,4 @@ pub use session::{
     MESSAGE_TURN_PAGE,
 };
 pub use subtask::{LastRunReply, LatestReply, RunReply, TodoSubtaskRow};
+pub use todo::TodoListScope;

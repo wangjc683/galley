@@ -13,7 +13,8 @@ import { TodoGroups } from "./TodoDialog";
 
 /**
  * The assistant's 待办 (main chat ticket 37): the groups, the rows, the
- * empty state. Static rendering cannot open the Radix dialog (a portal),
+ * empty state. Core answers with ticket 39's four groups; the dialog
+ * draws its three from them and no to-dos until ticket 42. Static rendering cannot open the Radix dialog (a portal),
  * so the list's body is rendered with Core's answer fed in. Where a row
  * leads and which actions it has are pinned in
  * lib/assistant-todo.test.ts.
@@ -42,9 +43,49 @@ function item(extra: Partial<TodoItem>): TodoItem {
   };
 }
 
+const SUBTASK = item({
+  kind: "subtask",
+  id: "s-sub",
+  text: "查周五去上海的机票",
+  state: "asking",
+  target: undefined,
+  repeat: undefined,
+  createdIn: undefined,
+  at: inDays(0, 1),
+});
+
 const TODO: AssistantTodo = {
-  upcoming: [
+  ...EMPTY_TODO,
+  // A to-do: not drawn by this dialog (ticket 42's panel draws them).
+  yours: {
+    today: [
+      item({
+        kind: "todo",
+        id: "todo_1",
+        text: "交季度报告",
+        state: "open",
+        target: undefined,
+        repeat: undefined,
+        at: undefined,
+        due: { date: "2026-10-16", hasTime: false },
+      }),
+    ],
+    later: [],
+    anytime: [],
+  },
+  assistant: [
+    SUBTASK,
     item({}),
+    item({
+      id: "sched_agent",
+      text: "检查构建",
+      createdBy: "agent",
+      agent: "claude-code",
+      createdIn: undefined,
+      at: inDays(2, 9),
+    }),
+  ],
+  routine: [
     item({
       id: "sched_news",
       text: "整理今天的新闻",
@@ -55,28 +96,8 @@ const TODO: AssistantTodo = {
       createdIn: undefined,
       at: inDays(1, 8),
     }),
-    item({
-      id: "sched_agent",
-      text: "检查构建",
-      createdBy: "agent",
-      agent: "claude-code",
-      createdIn: undefined,
-      at: inDays(2, 9),
-    }),
   ],
-  active: [
-    item({
-      kind: "subtask",
-      id: "s-sub",
-      text: "查周五去上海的机票",
-      state: "asking",
-      target: undefined,
-      repeat: undefined,
-      createdIn: undefined,
-      at: inDays(0, 1),
-    }),
-  ],
-  recent: [
+  done: [
     item({
       kind: "subtask",
       id: "s-done",
@@ -87,8 +108,18 @@ const TODO: AssistantTodo = {
       createdIn: undefined,
       at: inDays(-1, 9),
     }),
+    item({
+      kind: "todo",
+      id: "todo_done",
+      text: "交房租",
+      state: "done",
+      target: undefined,
+      repeat: undefined,
+      at: inDays(0, 0),
+      doneBy: "user",
+    }),
   ],
-  recentOmitted: 0,
+  todayCount: 1,
 };
 
 function render(
@@ -129,6 +160,12 @@ describe("the assistant's 待办", () => {
     expect(labels).toEqual([...labels].sort((a, b) => a - b));
     expect(count(html, "data-todo-row=")).toBe(4);
     expect(html).not.toContain('data-todo-row="s-done"');
+    // 接下来: Galley's one-off tasks and the routines, soonest first.
+    const upcoming = ["sched_1", "sched_news", "sched_agent"].map((id) =>
+      html.indexOf(`data-todo-row="${id}"`),
+    );
+    expect(upcoming.every((i) => i > -1)).toBe(true);
+    expect(upcoming).toEqual([...upcoming].sort((a, b) => a - b));
     expect(html).toContain('aria-expanded="false"');
     const recent = html.slice(html.indexOf('data-todo-group="recent"'));
     expect(recent).toContain(">1<");
@@ -173,7 +210,7 @@ describe("the assistant's 待办", () => {
   });
 
   it("opens 最近做完 to its rows and says what was left out", () => {
-    const html = render({ ...TODO, recentOmitted: 3 }, { recentOpen: true });
+    const html = render({ ...TODO, doneOmitted: 3 }, { recentOpen: true });
     const done = row(html, "s-done");
     expect(done).toContain(">已完成<");
     expect(done).toContain("昨天 09:00");
@@ -182,7 +219,11 @@ describe("the assistant's 待办", () => {
   });
 
   it("leaves out an empty group", () => {
-    const html = render({ ...TODO, active: [], recent: [] });
+    const html = render({
+      ...TODO,
+      assistant: TODO.assistant.filter((i) => i.kind === "task"),
+      done: [],
+    });
     expect(html).toContain("接下来");
     expect(html).not.toContain("在办");
     expect(html).not.toContain("最近做完");
@@ -196,6 +237,16 @@ describe("the assistant's 待办", () => {
     expect(html).not.toContain("新建");
     // Before the first read: nothing, not a flash of the empty state.
     expect(render(EMPTY_TODO, { loaded: false })).toBe("");
+  });
+
+  it("leaves the to-dos out until the panel of ticket 42", () => {
+    const html = render(TODO, { recentOpen: true });
+    expect(html).not.toContain("todo_1");
+    expect(html).not.toContain("todo_done");
+    expect(html).not.toContain("交房租");
+    // To-dos alone: the dialog has nothing of its own to show.
+    const only = render({ ...EMPTY_TODO, yours: TODO.yours, todayCount: 1 });
+    expect(only).toContain(">去跟 Galley 说<");
   });
 
   it("speaks English", () => {

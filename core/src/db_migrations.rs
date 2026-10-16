@@ -305,5 +305,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/049_scheduled_tasks_once_and_wake.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 50,
+            description: "add todos (the user's to-dos Galley notes; scheduled_tasks.todo_id)",
+            sql: include_str!("../migrations/050_todos.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

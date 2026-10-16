@@ -100,6 +100,9 @@ export interface ScheduledTask {
   createdIn?: { sessionId: string; turnIndex?: number };
   /** Set once cancelled (deleted); the default list leaves these out. */
   cancelledAt?: string;
+  /** The to-do this task is the reminder of (main chat ticket 39); the
+   * to-do's card stands for it. */
+  todoId?: string;
   createdAt: string;
   updatedAt: string;
 }

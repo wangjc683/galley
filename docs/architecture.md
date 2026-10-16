@@ -235,6 +235,7 @@ frontend could have seen them.
 | create / update a project | `project-created-external` / `project-updated-external` | `{ project, via }` |
 | delete a project | `project-deleted-external` | `{ projectId, detachedSessions, detachedSessionIds }` |
 | create / update / cancel (delete) a scheduled task, a fire, a wake delivered or notified, the turn it was made in settled | `scheduled-tasks:changed` | none (pages refetch) |
+| create / update / tick off / untick / cancel a to-do, cancel its reminder, the turn it was noted in settled, a main chat reset clearing them | `todos:changed` (and `scheduled-tasks:changed` when a reminder moved) | none (pages refetch) |
 | a visible turn's session bump (turn persistence, below) | `session-updated-external`, `via: "turn-persist"` | `{ session, via }` |
 
 `via` is `"gui"` for the GUI's writes, the command name for the

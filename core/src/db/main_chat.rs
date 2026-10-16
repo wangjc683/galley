@@ -214,6 +214,9 @@ pub struct MainChatDeletion {
     /// The subtasks it dispatched that the user never wrote in,
     /// whatever their status.
     pub subtasks: Vec<SessionId>,
+    /// How many to-dos went with it (every one, ticket 39), their
+    /// reminders' tasks with them.
+    pub todos: u64,
 }
 
 impl MainChatDeletion {
@@ -250,8 +253,12 @@ impl SqliteGalley {
     /// trigger). A promoted subtask stays, an ordinary conversation whose
     /// `parent_session_id` falls to NULL (SET NULL, 048); so do
     /// `scheduled_tasks.last_run_session_id` and the retired Goal tables'
-    /// session references. Attachment files live outside the database and
-    /// are the caller's.
+    /// session references. Every to-do goes too (ticket 39: they are this
+    /// conversation's by-products, the notebook Galley kept in it), with
+    /// the scheduled tasks that were their reminders — explicitly, as no
+    /// foreign key links the two (migration 050). The assistant's own
+    /// tasks, linked to no to-do, stay. Attachment files live outside the
+    /// database and are the caller's.
     ///
     /// The subtasks are read inside the transaction, so one dispatched
     /// after the caller last looked is deleted too (and listed). Refused
@@ -289,10 +296,20 @@ impl SqliteGalley {
             }
             q.execute(&mut *tx).await.map_err(map_sqlx_err)?;
         }
+        sqlx::query("DELETE FROM scheduled_tasks WHERE todo_id IS NOT NULL")
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+        let todos = sqlx::query("DELETE FROM todos")
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?
+            .rows_affected();
         tx.commit().await.map_err(map_sqlx_err)?;
         Ok(MainChatDeletion {
             main_chat: id.clone(),
             subtasks: subtasks.into_iter().map(SessionId).collect(),
+            todos,
         })
     }
 

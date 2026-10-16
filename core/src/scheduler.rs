@@ -53,6 +53,10 @@
 //!   tasks do not fire (a one-off fires late once the main chat is back).
 //! - A session a `target = session` task started reports its runs to the
 //!   main chat like a subtask (`crate::subtask_report`).
+//!
+//! Main chat ticket 39: a task that is a to-do's reminder (`todoId`) does
+//! not go off once its to-do is ticked off or cancelled
+//! ([`drop_reminders_of_closed_todos`]); Core cancels it then anyway.
 
 use std::sync::Arc;
 
@@ -130,6 +134,7 @@ async fn tick(app: &tauri::AppHandle, galley: &SqliteGalley) {
         .filter_map(|t| due_at(&t, &Local, &now).map(|planned| (t, planned)))
         .collect();
     let notifier = crate::notify::TauriNotifier::new(app.clone());
+    let due = drop_reminders_of_closed_todos(galley, notifier.as_ref(), due).await;
     let mut sessions = Vec::new();
     // Read once per tick, only when a task wakes the assistant.
     let mut assistant: Option<bool> = None;
@@ -172,6 +177,46 @@ async fn tick(app: &tauri::AppHandle, galley: &SqliteGalley) {
     if let Some(reports) = app.try_state::<Arc<SubtaskReports>>() {
         wake_for_pending(app, galley, reports.inner()).await;
     }
+}
+
+/// The due tasks minus the reminders of to-dos no longer open (main chat
+/// ticket 39's second safety: ticking off or cancelling a to-do cancels
+/// its reminder, and should one slip through — a tick between this
+/// tick's read and its fire — it does not go off). Those are cancelled
+/// here instead, so they stop coming due. A failed read of the to-dos
+/// keeps every task: a reminder lost is worse than one too many.
+pub async fn drop_reminders_of_closed_todos<T>(
+    galley: &SqliteGalley,
+    notifier: &dyn Notifier,
+    due: Vec<(ScheduledTaskBrief, T)>,
+) -> Vec<(ScheduledTaskBrief, T)> {
+    if due.iter().all(|(task, _)| task.todo_id.is_none()) {
+        return due;
+    }
+    let open = match galley.open_todo_ids().await {
+        Ok(open) => open,
+        Err(e) => {
+            eprintln!("[scheduler] reading open to-dos failed: {e:?}");
+            return due;
+        }
+    };
+    let mut kept = Vec::with_capacity(due.len());
+    for (task, planned) in due {
+        match task.todo_id.as_deref() {
+            Some(todo) if !open.contains(todo) => {
+                eprintln!(
+                    "[scheduler] task {} reminds of to-do {todo}, no longer open: cancelled",
+                    task.id
+                );
+                match galley.cancel_scheduled_task(&task.id).await {
+                    Ok(_) => notify(notifier, SCHEDULED_TASKS_CHANGED_EVENT, &()),
+                    Err(e) => eprintln!("[scheduler] cancelling task {} failed: {e:?}", task.id),
+                }
+            }
+            _ => kept.push((task, planned)),
+        }
+    }
+    kept
 }
 
 /// Read the pending fires into the waiting reports and, when any was
@@ -537,6 +582,7 @@ mod tests {
             origin: None,
             created_in: None,
             cancelled_at: None,
+            todo_id: None,
             created_at: created_at.into(),
             updated_at: created_at.into(),
         }

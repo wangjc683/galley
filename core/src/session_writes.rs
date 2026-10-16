@@ -22,6 +22,7 @@
 //! | move to a project | `session-moved-external` |
 //! | create / update / delete a project | `project-created-external` / `project-updated-external` / `project-deleted-external` |
 //! | create / update / delete a scheduled task | `scheduled-tasks:changed` (empty payload) |
+//! | create / update / tick off / untick / cancel a to-do, cancel its reminder | `todos:changed` (empty payload), and `scheduled-tasks:changed` unless unticking |
 //!
 //! Session events carry [`SessionBriefEvent`], not [`SessionBrief`]: the
 //! brief is also the CLI's JSON output and skips `None` fields, so a
@@ -48,10 +49,11 @@
 //! the start, through [`refuse_main_chat`] and the same guard.
 
 use crate::api::{
-    CreateProjectInput, CreateScheduledTaskInput, CreateSessionInput, GalleyApi, Origin,
-    ProjectBrief, ProjectId, ProjectPatch, RuntimeKind, ScheduledTaskBrief, ScheduledTaskId,
-    ScheduledTaskPatch, SessionBrief, SessionFilter, SessionId, SessionStatus, MAIN_CHAT_PROTECTED,
-    SCHEDULED_TASKS_CHANGED_EVENT,
+    CreateProjectInput, CreateScheduledTaskInput, CreateSessionInput, CreateTodoInput, GalleyApi,
+    Origin, ProjectBrief, ProjectId, ProjectPatch, RuntimeKind, ScheduledTaskBrief,
+    ScheduledTaskId, ScheduledTaskPatch, SessionBrief, SessionFilter, SessionId, SessionStatus,
+    TodoBrief, TodoId, TodoPatch, MAIN_CHAT_PROTECTED, SCHEDULED_TASKS_CHANGED_EVENT,
+    TODOS_CHANGED_EVENT,
 };
 use crate::db::{
     main_chat_greeting, MainChatEnsured, MainChatSeed, RenameTitleSource, SqliteGalley,
@@ -781,5 +783,68 @@ impl<'a> Writes<'a> {
         self.galley.delete_scheduled_task(id, origin).await?;
         self.scheduled_tasks_changed();
         Ok(())
+    }
+
+    // ---------------- to-dos (main chat ticket 39) ----------------
+
+    /// Broadcast after a to-do write, whatever it returned: a write that
+    /// failed halfway (its reminder refused after the to-do changed) may
+    /// still have changed something, and a page that reads again only
+    /// reads the truth. `reminder`: the write may have touched the
+    /// reminder's task.
+    fn todos_changed<T>(&self, result: Result<T>, reminder: bool) -> Result<T> {
+        notify(self.notifier, TODOS_CHANGED_EVENT, &());
+        if reminder {
+            self.scheduled_tasks_changed();
+        }
+        result
+    }
+
+    /// [`SqliteGalley::create_todo`].
+    pub async fn create_todo(
+        &self,
+        input: CreateTodoInput,
+        origin: Origin,
+        created_in: Option<(SessionId, i64)>,
+    ) -> Result<TodoBrief> {
+        let reminder = input.remind_at.is_some();
+        let result = self.galley.create_todo(input, origin, created_in).await;
+        self.todos_changed(result, reminder)
+    }
+
+    /// [`SqliteGalley::update_todo`].
+    pub async fn update_todo(
+        &self,
+        id: &TodoId,
+        patch: TodoPatch,
+        origin: Origin,
+    ) -> Result<TodoBrief> {
+        let result = self.galley.update_todo(id, patch, origin).await;
+        self.todos_changed(result, true)
+    }
+
+    /// [`SqliteGalley::complete_todo`]: the desktop's tick, Galley's
+    /// `todo done`.
+    pub async fn complete_todo(&self, id: &TodoId, origin: Origin) -> Result<TodoBrief> {
+        let result = self.galley.complete_todo(id, origin).await;
+        self.todos_changed(result, true)
+    }
+
+    /// [`SqliteGalley::reopen_todo`].
+    pub async fn reopen_todo(&self, id: &TodoId, origin: Origin) -> Result<TodoBrief> {
+        let result = self.galley.reopen_todo(id, origin).await;
+        self.todos_changed(result, false)
+    }
+
+    /// [`SqliteGalley::cancel_todo`].
+    pub async fn cancel_todo(&self, id: &TodoId, origin: Origin) -> Result<TodoBrief> {
+        let result = self.galley.cancel_todo(id, origin).await;
+        self.todos_changed(result, true)
+    }
+
+    /// [`SqliteGalley::cancel_todo_reminder`].
+    pub async fn cancel_todo_reminder(&self, id: &TodoId, origin: Origin) -> Result<TodoBrief> {
+        let result = self.galley.cancel_todo_reminder(id, origin).await;
+        self.todos_changed(result, true)
     }
 }
