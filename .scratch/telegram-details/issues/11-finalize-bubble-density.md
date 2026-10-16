@@ -1,6 +1,6 @@
 # 11 拆票 10 的切换器，V1 写死
 
-Status: ready-for-agent
+Status: merged（2026-10-16 合入 main，`16711262`、`cd89fbbd`，合并提交 `e6a0ee38`；等 JC 真机看一眼）
 
 来源：[PRD](../PRD.md) 裁决 8 的切档裁决（2026-10-16，JC：「按你推荐」，取 V1）。只改 GUI 与文档。
 
