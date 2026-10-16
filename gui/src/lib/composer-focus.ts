@@ -59,15 +59,22 @@ export function yieldsToActiveElement(
 
 /**
  * Typing on the conversation goes into the composer. One switch for
- * the whole behaviour, kept for the live Chinese-IME test (a WebKit
- * IME only takes over when the key arrives at an already-focused
- * field, so the first key may land as a plain letter):
+ * the whole behaviour:
  * - `pass`: focus the composer and let the key land in it.
- * - `swallow`: focus the composer and drop the key (fallback a).
- * - `off`: no type-to-focus; presses still keep focus (fallback b).
+ * - `swallow`: focus the composer and drop the key.
+ * - `off`: no type-to-focus; presses still keep focus.
+ *
+ * Off since JC's live test (2026-10-16, telegram-details ticket 03): a
+ * WebKit IME only takes over when the key arrives at an already-focused
+ * field, so under a Chinese IME `nihao` became a stray `n` plus a wrong
+ * composition of `ihao` — worse than nothing happening, which is what
+ * `off` does until you click the composer. `swallow` loses the first
+ * syllable the same way. Telegram can pass because its users mostly
+ * don't type through an IME; Galley defaults to Chinese. The other two
+ * modes stay for a future that can tell the input source.
  */
 export type TypeToFocusMode = "pass" | "swallow" | "off";
-export const TYPE_TO_FOCUS_MODE: TypeToFocusMode = "pass";
+export const TYPE_TO_FOCUS_MODE: TypeToFocusMode = "off";
 
 /** The marker on the composer's textarea. */
 export const COMPOSER_INPUT_ATTR = "data-composer-input";

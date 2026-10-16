@@ -34,9 +34,9 @@ import {
  *    ticket 03; the rules are in lib/composer-focus.ts): with the
  *    composer focused, a press on a conversation button or on the
  *    conversation's blank backdrop has its mousedown default prevented,
- *    so the caret stays; a printable key typed while nothing that takes
- *    keys has focus focuses the composer first and lands in it
- *    (`TYPE_TO_FOCUS_MODE` switches this part off or to "focus only").
+ *    so the caret stays. Typing while nothing that takes keys has focus
+ *    could focus the composer first; `TYPE_TO_FOCUS_MODE` has that off
+ *    since JC's Chinese-IME test (the first key landed as a letter).
  *
  * Known gap: on Windows, Alt+Tab reactivation sets DOM focus correctly
  * but WebView2 can leave Win32 keyboard focus stranded outside the
