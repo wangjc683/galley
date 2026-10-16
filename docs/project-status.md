@@ -730,6 +730,13 @@ Pre-Flight checks this list):
   reaches external-runtime users too, whose whole UI is the workbench
   (`.scratch/workbench-conversation/PRD.md`, devlog
   [2026-10-16-workbench-conversation-grammar](./devlog/2026-10-16-workbench-conversation-grammar.md)).
+- Release notes: the details learnt from Telegram, both conversations,
+  both runtimes — drafts survive a restart (text only), select text and
+  「引用」 it into the composer (drawn as a quote block in your bubble),
+  typing anywhere in the conversation goes to the composer, and the
+  conversation's smooth scrolling honours Reduce Motion
+  (`.scratch/telegram-details/PRD.md`, devlog
+  [2026-10-16-telegram-details](./devlog/2026-10-16-telegram-details.md)).
 
 - **Core send takeover and remote-access groundwork** (2026-10-10,
   `.scratch/ios-client/`, devlog
