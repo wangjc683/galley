@@ -12,6 +12,7 @@ import {
   timeLineAbove,
   userMsgParkOffset,
 } from "@/lib/conversation-anchor";
+import { type LiveTail, startLiveTail, submitScroll } from "@/lib/live-tail";
 import { keepBottomOnViewportResize } from "@/lib/viewport-resize";
 import { turnsHoldMessage, useMessagesStore } from "@/stores/messages";
 import { type LocateRequest, useUiStore } from "@/stores/ui";
@@ -30,6 +31,17 @@ const LOCATE_MAX_TERM_RANGES = 200;
 /** A user message's bubble, a run opener or an ask_user reply. */
 const USER_MSG_SELECTOR =
   '[data-role="user-msg"], [data-role="user-msg-reply"]';
+
+/**
+ * The last `userSubmitTick` a mounted hook scrolled for. MainView
+ * remounts per session (App keys it by session id) and the tick is
+ * global, so a remount used to re-run the last send's scroll in the
+ * session just opened: it parked that session's last user message, and
+ * with ticket 06 it would also have put a blank under it and stopped
+ * following. Written when the frame runs, not in the effect: StrictMode
+ * runs a mount's effect twice and cancels the first frame.
+ */
+let scrolledForSubmitTick = 0;
 
 /**
  * Case-insensitive substring occurrences of `query` inside `root`'s
@@ -100,6 +112,8 @@ function clearLocateHighlight(): void {
  *   - stick-to-user-message-top on submit (the assistant's
  *     conversation sticks to the bottom instead, `stickBottom`)
  *   - ⌥↑ / ⌥↓ keyboard jump between user messages
+ *   - the workbench's live tail after a send (lib/live-tail.ts): the
+ *     message parked on its line with a blank under it, not followed
  *
  * Every smooth scroll here goes through lib/animate-scroll.ts (its
  * durations, the far-jump rule, reduced motion), never the engine's
@@ -160,12 +174,21 @@ export function useStickyScroll({
   const [isScrollingToBottom, setIsScrollingToBottom] = useState(false);
   /** Stops the running 「回到底部」 chase, if any. */
   const stopChaseRef = useRef<(() => void) | null>(null);
+  /** The workbench's live tail after a send (ticket 06); null in the
+   * main chat, after a session switch (MainView remounts) and before the
+   * first send. While it holds `noFollow`, the follow paths below stand
+   * down. */
+  const tailRef = useRef<LiveTail | null>(null);
+  /** Observes what the tail measures from (the viewport, the rows above
+   * its anchor); set up once below. */
+  const tailObserverRef = useRef<ResizeObserver | null>(null);
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
     const onScroll = () => {
       const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
       setAtBottom(distFromBottom < 24);
+      tailRef.current?.onScroll();
     };
     el.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
@@ -204,6 +227,9 @@ export function useStickyScroll({
       }
       return;
     }
+    // The workbench's live tail: the run grows into the blank and past
+    // it without moving the viewport.
+    if (tailRef.current?.noFollow) return;
     el.scrollTop = el.scrollHeight;
   }, [streamingContent, atBottom, turnsLength, pendingAskUser, stickBottom]);
 
@@ -261,6 +287,13 @@ export function useStickyScroll({
     const inner = el.firstElementChild;
     if (!(inner instanceof HTMLElement)) return;
     const observer = new ResizeObserver(() => {
+      if (tailRef.current?.noFollow) {
+        // Not following (the live tail): nothing scrolls, so no scroll
+        // event says the run has outgrown the screen. Read where the
+        // bottom is now for the 「回到底部」 button.
+        setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 24);
+        return;
+      }
       if (!atBottomRef.current) return;
       if (stickBottomRef.current) {
         if (assistantFollowBottom(el, USER_MSG_ANCHOR_TOP_PX)) {
@@ -286,7 +319,49 @@ export function useStickyScroll({
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
-    return keepBottomOnViewportResize(el, () => atBottomRef.current);
+    return keepBottomOnViewportResize(
+      el,
+      () => atBottomRef.current && !tailRef.current?.noFollow,
+    );
+  }, []);
+
+  // The live tail's own measuring (lib/live-tail.ts): when the viewport
+  // changes height (the composer, the window) the blank is refitted and
+  // a parked message stays on its line — before paint, so the frame in
+  // between never shows. When the rows above the anchor change (a page
+  // prepended, late layout above) it is refitted on the next frame: a
+  // size written from that callback would be shallower than what it
+  // observed, which ResizeObserver reports as a loop. A tail whose
+  // anchor is gone ends; the button reads where the bottom is then.
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    let frame: number | null = null;
+    const refresh = () => {
+      frame = null;
+      const tail = tailRef.current;
+      if (!tail) return;
+      if (!tail.refresh()) {
+        tailRef.current = null;
+        setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 24);
+      }
+    };
+    const observer = new ResizeObserver((entries) => {
+      if (!tailRef.current) return;
+      if (entries.some((entry) => entry.target === el)) {
+        if (frame !== null) cancelAnimationFrame(frame);
+        refresh();
+      } else if (frame === null) {
+        frame = requestAnimationFrame(refresh);
+      }
+    });
+    observer.observe(el);
+    tailObserverRef.current = observer;
+    return () => {
+      observer.disconnect();
+      tailObserverRef.current = null;
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
   }, []);
 
   // Scroll-to-bottom on session switch. Three compounding races make
@@ -340,7 +415,9 @@ export function useStickyScroll({
     const inner = el.firstElementChild;
     if (inner instanceof HTMLElement) {
       observer = new ResizeObserver(() => {
-        if (!atBottomRef.current) {
+        // A send right after the switch (the first message of a new
+        // session) starts the live tail, which follows nothing.
+        if (!atBottomRef.current || tailRef.current?.noFollow) {
           observer?.disconnect();
           observer = null;
           return;
@@ -372,6 +449,10 @@ export function useStickyScroll({
   // so the user message lands ~32px below the scroll container's
   // top edge (gives the thinking placeholder + first reply lines
   // visible breathing room without burying the prompt off-screen).
+  //
+  // In the workbench a send from the composer parks with a blank under
+  // it so that offset is always reachable, and the run is not followed
+  // (the live tail, lib/live-tail.ts `submitScroll` for who gets what).
   useEffect(() => {
     if (userSubmitTick === 0) return; // initial render — nothing to scroll
     const container = scrollContainerRef.current;
@@ -384,6 +465,8 @@ export function useStickyScroll({
     // `user-msg-reply` (excluded from the rail / ⌥-nav index), but it
     // is still the just-submitted message this snap must target.
     const handle = requestAnimationFrame(() => {
+      const fresh = userSubmitTick > scrolledForSubmitTick;
+      scrolledForSubmitTick = Math.max(scrolledForSubmitTick, userSubmitTick);
       // 贴底: the message lands right above the composer and following
       // picks up from there.
       if (stickBottomRef.current) {
@@ -391,11 +474,33 @@ export function useStickyScroll({
         setAtBottom(true);
         return;
       }
+      // A remount for a session switch: the send was scrolled for (or
+      // went to another session); the switch lands at the bottom.
+      if (!fresh) return;
       const userMsgs = container.querySelectorAll<HTMLElement>(
         '[data-role="user-msg"], [data-role="user-msg-reply"]',
       );
       const last = userMsgs[userMsgs.length - 1];
       if (!last) return;
+      const plan = submitScroll(
+        useMessagesStore.getState().lastSubmitSource,
+        atBottomRef.current,
+      );
+      if (plan === "none") return;
+      const column = container.firstElementChild;
+      if (
+        (plan === "tail" || plan === "blank") &&
+        column instanceof HTMLElement
+      ) {
+        tailRef.current?.stop();
+        tailRef.current = startLiveTail(container, column, last, {
+          park: plan === "tail",
+        });
+        const rows = last.closest('[data-role="conversation"]');
+        if (rows) tailObserverRef.current?.observe(rows);
+        return;
+      }
+      if (plan === "park-follow") tailRef.current?.resumeFollowing();
       // The bubble's top on the anchor line, or the time line right
       // above it at its own (lib/conversation-anchor.ts).
       const delta = userMsgParkOffset(

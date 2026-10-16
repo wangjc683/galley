@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import { loadMessageTurnsPage, type MessageTurnPage } from "@/lib/db";
+import type { SubmitSource } from "@/lib/live-tail";
 import { logPerf, perfNow } from "@/lib/perf";
 import { pendingReplyStepBase } from "@/lib/run-groups";
 import type { UserMessagePersistedPayload } from "@/lib/session-send";
@@ -235,6 +236,14 @@ interface MessagesState {
    * I just sent," not "I navigated and want auto-scroll."
    */
   userSubmitTick: number;
+  /**
+   * Who put the message behind the latest `userSubmitTick` there
+   * (lib/live-tail.ts `SubmitSource`): the workbench parks a composer
+   * send with the blank under it, and leaves the viewport alone for a
+   * queued message going out (telegram-details ticket 06). Set with
+   * every bump.
+   */
+  lastSubmitSource: SubmitSource;
 }
 
 interface MessagesActions {
@@ -488,6 +497,7 @@ function createdAtToMs(createdAt?: string): number | null {
 export const useMessagesStore = create<MessagesStore>((set, get) => ({
   byId: {},
   userSubmitTick: 0,
+  lastSubmitSource: "composer",
 
   // ---- lifecycle ----
 
@@ -692,7 +702,11 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       runStepBase: pendingReplyStepBase(m.turns),
       optimisticRequestId: clientRequestId,
     }));
-    set({ byId, userSubmitTick: state.userSubmitTick + 1 });
+    set({
+      byId,
+      userSubmitTick: state.userSubmitTick + 1,
+      lastSubmitSource: "composer",
+    });
   },
 
   retractUserTurn: (sid, clientRequestId) => {
@@ -849,9 +863,21 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     // animation.
     const isActiveSession =
       useSessionsStore.getState().activeSessionId === sid;
+    // A CLI, supervisor or system row keeps its old scroll; one sent as
+    // from the GUI that this page did not echo is a queued message
+    // going out (or Core's own dispatch of a send into a run that just
+    // ended, or the phone's), which leaves the viewport alone.
+    const via = message.origin?.via;
     set(
       isActiveSession && !report
-        ? { byId, userSubmitTick: state.userSubmitTick + 1 }
+        ? {
+            byId,
+            userSubmitTick: state.userSubmitTick + 1,
+            lastSubmitSource:
+              via === "cli" || via === "supervisor" || via === "system"
+                ? "external"
+                : "queued",
+          }
         : { byId },
     );
   },
@@ -874,7 +900,12 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       // currentTurnIndex / pendingAskUser — /btw is a side worker
       // path that doesn't interfere with the main agent loop.
     }));
-    set({ byId, userSubmitTick: state.userSubmitTick + 1 });  },
+    set({
+      byId,
+      userSubmitTick: state.userSubmitTick + 1,
+      lastSubmitSource: "side",
+    });
+  },
 
   appendAgentTurn: (sid, turn) => {
     const state = get();
