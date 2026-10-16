@@ -8,6 +8,7 @@ import {
   FrameCorners,
   Gear,
   GitDiff,
+  ListChecks,
   MagnifyingGlass,
   Plus,
   User,
@@ -71,6 +72,9 @@ export interface CommandPaletteProps {
    * hides while no repository is known; this entry never does). */
   onReviewChanges?: () => void;
   onOpenSettings?: () => void;
+  /** Open the assistant's 待办 (main chat ticket 37). Absent on the
+   * external runtime: no item. */
+  onOpenTodo?: () => void;
 
   /** Called when the user presses Enter on an empty/no-match palette
    * (DESIGN.md §8 "Empty state") — typically: open new chat with this
@@ -308,6 +312,14 @@ export function CommandPalette(props: CommandPaletteProps) {
               props.onOpenSettings?.();
               close();
             }}
+            onOpenTodo={
+              props.onOpenTodo
+                ? () => {
+                    props.onOpenTodo?.();
+                    close();
+                  }
+                : undefined
+            }
             onSubmitFreeText={(text) => {
               props.onSubmitFreeText?.(text);
               close();
@@ -345,6 +357,7 @@ function RootPage({
   onReviewChanges,
   onResetLayout,
   onOpenSettings,
+  onOpenTodo,
   onSubmitFreeText,
 }: {
   search: string;
@@ -361,6 +374,7 @@ function RootPage({
   onReviewChanges: () => void;
   onResetLayout: () => void;
   onOpenSettings: () => void;
+  onOpenTodo?: () => void;
   onSubmitFreeText: (text: string) => void;
 }) {
   const copy = useCopy();
@@ -482,6 +496,16 @@ function RootPage({
       )}
 
       <Command.Group heading={copy.command.groupActions}>
+        {onOpenTodo && (
+          // The masthead's second icon with a main chat (ticket 37): it
+          // is gone while the sidebar is collapsed, this one is not.
+          <Command.Item
+            value="todo to-do reminders schedule scheduled tasks 待办 提醒 定时 定时任务"
+            onSelect={onOpenTodo}
+          >
+            <PaletteRow Icon={ListChecks} label={copy.command.openTodo} />
+          </Command.Item>
+        )}
         <Command.Item
           value="switch llm 切换"
           onSelect={onEnterSwitchLLM}

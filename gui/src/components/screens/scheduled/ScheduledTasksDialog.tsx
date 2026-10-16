@@ -588,7 +588,9 @@ function LastRunCell({
   );
 }
 
-function TaskForm({
+/** The create / edit form. Also the managed runtime's 待办 opens it to
+ * edit a task the user made in it (main chat ticket 37). */
+export function TaskForm({
   form,
   projects,
   llms,

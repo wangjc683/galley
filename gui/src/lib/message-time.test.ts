@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatListTime,
   formatMessageDateTime,
+  formatScheduleTime,
   formatMessageTime,
   formatMessageTimeFull,
   userTimeMarks,
@@ -445,5 +446,68 @@ describe("formatListTime (the assistant card's time, IM-list style)", () => {
     expect(formatListTime("nope", today, "zh-CN", { yesterday: "昨天" })).toBe(
       null,
     );
+  });
+});
+
+describe("formatScheduleTime (reminder cards and the 待办 list)", () => {
+  // Friday 2026-10-16, today.
+  const today = local(2026, 10, 16).getTime();
+  const zhWords = {
+    today: (t: string) => `今天 ${t}`,
+    tomorrow: (t: string) => `明天 ${t}`,
+    yesterday: (t: string) => `昨天 ${t}`,
+  };
+  const enWords = {
+    today: (t: string) => `Today ${t}`,
+    tomorrow: (t: string) => `Tomorrow ${t}`,
+    yesterday: (t: string) => `Yesterday ${t}`,
+  };
+  const zh = (at: Date, todayMs = today) =>
+    formatScheduleTime(iso(at), todayMs, "zh-CN", zhWords);
+  const en = (at: Date, todayMs = today) =>
+    plain(formatScheduleTime(iso(at), todayMs, "en-US", enWords));
+
+  it("writes today, tomorrow and yesterday with their words", () => {
+    expect(zh(local(2026, 10, 16, 21, 40))).toBe("今天 21:40");
+    expect(zh(local(2026, 10, 16, 0, 0))).toBe("今天 00:00");
+    expect(zh(local(2026, 10, 17, 0, 0))).toBe("明天 00:00");
+    expect(zh(local(2026, 10, 17, 9, 0))).toBe("明天 09:00");
+    expect(zh(local(2026, 10, 15, 23, 59))).toBe("昨天 23:59");
+    expect(en(local(2026, 10, 16, 21, 40))).toBe("Today 9:40 PM");
+    expect(en(local(2026, 10, 17, 9, 0))).toBe("Tomorrow 9:00 AM");
+    expect(en(local(2026, 10, 15, 8, 0))).toBe("Yesterday 8:00 AM");
+  });
+
+  it("writes the weekday two to six days away, either way", () => {
+    expect(zh(local(2026, 10, 18, 9))).toBe("周日 09:00");
+    expect(zh(local(2026, 10, 22, 9))).toBe("周四 09:00");
+    expect(zh(local(2026, 10, 14, 9))).toBe("周三 09:00");
+    expect(zh(local(2026, 10, 10, 9))).toBe("周六 09:00");
+    expect(en(local(2026, 10, 20, 9))).toBe("Tue 9:00 AM");
+  });
+
+  it("writes the date a week away and further, the year when not this one", () => {
+    // Seven days away would share today's weekday: a date instead.
+    expect(zh(local(2026, 10, 23, 9))).toBe("10月23日 09:00");
+    expect(zh(local(2026, 10, 9, 9))).toBe("10月9日 09:00");
+    expect(zh(local(2027, 1, 3, 9))).toBe("2027年1月3日 09:00");
+    expect(en(local(2026, 10, 30, 9))).toBe("Oct 30, 9:00 AM");
+    expect(en(local(2027, 1, 3, 9))).toBe("Jan 3, 2027, 9:00 AM");
+  });
+
+  it("counts calendar days across midnight, a month's end and New Year", () => {
+    const late = local(2026, 10, 16, 23, 59);
+    expect(zh(late)).toBe("今天 23:59");
+    expect(zh(late, local(2026, 10, 17).getTime())).toBe("昨天 23:59");
+    expect(zh(local(2026, 11, 1, 8), local(2026, 10, 31).getTime())).toBe(
+      "明天 08:00",
+    );
+    const eve = local(2026, 12, 31).getTime();
+    expect(zh(local(2027, 1, 1, 0, 30), eve)).toBe("明天 00:30");
+    expect(zh(local(2027, 1, 2, 9), eve)).toBe("周六 09:00");
+  });
+
+  it("returns null for an unparseable timestamp", () => {
+    expect(formatScheduleTime("nope", today, "zh-CN", zhWords)).toBeNull();
   });
 });

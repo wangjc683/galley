@@ -1,4 +1,9 @@
-import { Clock, FolderPlus, MagnifyingGlass } from "@phosphor-icons/react";
+import {
+  Clock,
+  FolderPlus,
+  ListChecks,
+  MagnifyingGlass,
+} from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
 import { TopBarIconButton } from "@/components/layout/TopBarIconButton";
@@ -41,6 +46,12 @@ type NavIconsPlacement = "header" | "row";
  * the masthead and the new-chat row trade the icons at their own
  * threshold (sidebar-width.ts, `ASSISTANT_*`). Omitted, this
  * platform's rule.
+ *
+ * `todo` (main chat ticket 37, PRD ruling 86): with a main chat the
+ * second icon is the assistant's 待办 — `ListChecks`, named 「待办」, no
+ * badge (a number here only ever meant "handle something"; a subtask
+ * asking or failing already counts on the assistant card). Without it,
+ * 定时 with its badge, unchanged.
  */
 export function SidebarNavIcons({
   placement,
@@ -49,6 +60,7 @@ export function SidebarNavIcons({
   scheduledActionCount = 0,
   onNewProject,
   display,
+  todo = false,
 }: {
   placement: NavIconsPlacement;
   onSearch?: () => void;
@@ -62,12 +74,16 @@ export function SidebarNavIcons({
   onNewProject?: () => void;
   /** The group's display rule, instead of this platform's. */
   display?: string;
+  /** The second icon opens the assistant's 待办 instead of 定时. */
+  todo?: boolean;
 }) {
   const copy = useCopy();
   const inHeader = placement === "header";
   const NavButton = inHeader ? HeaderIconButton : QuickIconButton;
   const iconSize = inHeader ? 16 : 14;
-  const scheduledLabel = scheduledTooltip(copy, scheduledActionCount);
+  const scheduledLabel = todo
+    ? copy.sidebar.todo
+    : scheduledTooltip(copy, scheduledActionCount);
   return (
     <div
       className={cn(
@@ -97,8 +113,17 @@ export function SidebarNavIcons({
         tooltip={scheduledLabel}
         onClick={onOpenScheduled}
       >
-        <Clock size={iconSize} weight="thin" />
-        <ScheduledBadge count={scheduledActionCount} placement={placement} />
+        {todo ? (
+          <ListChecks size={iconSize} weight="thin" />
+        ) : (
+          <>
+            <Clock size={iconSize} weight="thin" />
+            <ScheduledBadge
+              count={scheduledActionCount}
+              placement={placement}
+            />
+          </>
+        )}
       </NavButton>
       <NavButton
         label={copy.sidebar.newProject}

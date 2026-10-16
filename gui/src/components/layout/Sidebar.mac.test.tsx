@@ -72,8 +72,8 @@ describe("on macOS, with a main chat", () => {
       );
       expect(row).toContain(ROW_ICONS);
       for (const label of language === "zh-CN"
-        ? ["搜索", "定时", "新建项目"]
-        : ["Search", "Scheduled", "New project"]) {
+        ? ["搜索", "待办", "新建项目"]
+        : ["Search", "To-do", "New project"]) {
         expect(row).toContain(`aria-label="${label}"`);
       }
       // Beside the icons the label needs more than 184px: plus only.

@@ -15,6 +15,7 @@ export function SidebarHeader({
   onOpenScheduled,
   scheduledActionCount,
   onNewProject,
+  todo = false,
 }: {
   /** False with a main chat (main chat ticket 18): 「Galley」 is the
    * assistant's name on the card below, so the masthead is the traffic
@@ -24,6 +25,9 @@ export function SidebarHeader({
   onOpenScheduled?: () => void;
   scheduledActionCount?: number;
   onNewProject?: () => void;
+  /** With a main chat the second icon is the assistant's 待办 (ticket
+   * 37); see SidebarNavIcons. */
+  todo?: boolean;
 }) {
   // Masthead row (2026-10-03): the "Galley" wordmark left, 搜索 / 定时 /
   // 新建项目 as 28px icons right — the same TopBarIconButton rhythm as
@@ -109,6 +113,7 @@ export function SidebarHeader({
         onOpenScheduled={onOpenScheduled}
         scheduledActionCount={scheduledActionCount}
         onNewProject={onNewProject}
+        todo={todo}
       />
     </div>
   );

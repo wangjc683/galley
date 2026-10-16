@@ -68,7 +68,25 @@ vi.mock("@/stores/sessions", async (importOriginal) => {
   return { ...actual, useSessionsStore: current };
 });
 
+// The cards under a reply (tickets 06a, 37): the records the two hooks
+// read from Core, handed in. Each hook gets the session id only for the
+// main chat; anything else reads nothing.
+const cards = vi.hoisted(() => ({
+  dispatches: new Map<string, unknown[]>(),
+  reminders: new Map<string, unknown[]>(),
+}));
+vi.mock("@/hooks/useSubtaskCards", () => ({
+  useSubtaskDispatchesByMessage: (id: string | undefined) =>
+    id ? cards.dispatches : new Map(),
+}));
+vi.mock("@/hooks/useReminderCards", () => ({
+  useRemindersByMessage: (id: string | undefined) =>
+    id ? cards.reminders : new Map(),
+}));
+
 afterEach(() => {
+  cards.dispatches = new Map();
+  cards.reminders = new Map();
   live.slice = {};
   useSessionsStore.setState({ activeSessionId: undefined });
   useQueueStore.setState({ bySession: {} });
@@ -180,6 +198,63 @@ describe("the main chat is the assistant's conversation", () => {
     expect(render({ isMainChat: false, conversationWidth: "wide" })).toContain(
       "[--conversation-column:1200px]",
     );
+  });
+
+  it("hangs the reminders it set under that reply, after its subtask cards; nowhere else (ticket 37)", () => {
+    const reminder = {
+      id: "sched_water",
+      prompt: "提醒用户喝水",
+      repeat: { kind: "once" },
+      timeOfDay: "21:40",
+      enabled: true,
+      fireAt: "2099-10-16T13:40:00.000Z",
+      target: "assistant",
+      createdIn: { sessionId: "s-1", turnIndex: 2 },
+      createdAt: "2026-10-16T08:00:00Z",
+      updatedAt: "2026-10-16T08:00:00Z",
+    };
+    cards.reminders = new Map([["a-排好了。", [reminder]]]);
+    const main = render({ isMainChat: true });
+    expect(count(main, 'data-role="reminder-card"')).toBe(1);
+    // Under the reply it was set in, before that reply's action row.
+    const card = main.indexOf('data-role="reminder-card"');
+    expect(main.lastIndexOf("排好了。", card)).toBeGreaterThan(
+      main.lastIndexOf("多云，记得带伞。", card),
+    );
+    expect(main).toContain(
+      'data-role="reminder-cards" class="flex flex-col gap-2 mt-3"',
+    );
+    // With the reply's subtask cards: theirs first, then 8px.
+    cards.dispatches = new Map([
+      [
+        "a-排好了。",
+        [
+          {
+            parentSessionId: "s-1",
+            turnIndex: 2,
+            ordinal: 0,
+            messageId: "a-排好了。",
+            sessionId: null,
+            title: "订船票",
+            failure: "empty",
+            failureDetail: null,
+            createdAt: "2026-10-16T08:00:00Z",
+          },
+        ],
+      ],
+    ]);
+    const both = render({ isMainChat: true });
+    expect(both.indexOf('data-role="subtask-cards"')).toBeGreaterThan(-1);
+    expect(both.indexOf('data-role="subtask-cards"')).toBeLessThan(
+      both.indexOf('data-role="reminder-cards"'),
+    );
+    expect(both).toContain(
+      'data-role="reminder-cards" class="flex flex-col gap-2 mt-2"',
+    );
+    // A workbench session, a subtask, the external runtime: none.
+    const other = render({ isMainChat: false });
+    expect(other).not.toContain('data-role="reminder-card');
+    expect(other).not.toContain('data-role="subtask-card');
   });
 
   it("stacks a short conversation up from the composer (贴底)", () => {
