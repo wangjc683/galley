@@ -4,6 +4,8 @@
 //! Core so it is versioned with the app, not treated as user-editable roleplay
 //! content in the managed runtime resource directory.
 
+use crate::api::schedule::{ScheduleTarget, ScheduledTaskRepeat};
+use crate::assistant_todo::{AssistantTodo, TodoCreator, TodoItem, TodoState};
 use crate::session_runner::segment::MainChatPromptState;
 use ring::digest::{Context, SHA256};
 use std::fmt::Write;
@@ -35,6 +37,46 @@ macro_rules! history_cli_commands {
   "$GALLEY" session show <id> --tail=20"#
     };
 }
+
+/// The configuration boundary of "What Only The User Changes In Galley",
+/// as every session but the main chat reads it: workbench sessions,
+/// subtasks and IM. The main chat reads
+/// [`MAIN_CHAT_USER_ONLY_CONFIGURATION`] in its place (ticket 36): its
+/// assistant sets reminders and scheduled tasks itself. A macro so the
+/// paragraph is written once and still sits inside
+/// [`RUNTIME_PROMPT_STATIC`]'s `concat!`.
+macro_rules! user_only_configuration {
+    () => {
+        r#"Galley's configuration belongs to the user and changes only in Galley's
+interface: model providers and API keys, Channels, scheduled tasks, Browser
+Control and its browser extension, the runtime, updates, and display. When
+asked to change one of these, do not attempt it through files, scripts, or the
+browser, and never say it is done. Tell the user where it is, and prepare what
+they need: the values to fill in, or the prompt and time for a scheduled task
+(it runs daily, on chosen weekdays, or on chosen days of the month, each time
+in a new conversation, so the prompt must stand on its own)."#
+    };
+}
+
+/// [`user_only_configuration!`] as a value: what the main chat's static
+/// rules replace.
+const USER_ONLY_CONFIGURATION: &str = user_only_configuration!();
+
+/// The main chat's configuration boundary (ticket 36; assistant PRD
+/// rulings 3 and 9): scheduled tasks leave the user-only list, because
+/// the assistant now has the CLI's `schedule` commands and sets
+/// reminders itself, and the paragraph points to its manual for how.
+/// The rest of the list (API keys, Channels, Browser Control, the
+/// runtime, updates, display) stays the user's, as before. Every other
+/// session keeps [`USER_ONLY_CONFIGURATION`]: the authority is the
+/// assistant's alone, and IM has no such hands yet (ruling 6).
+const MAIN_CHAT_USER_ONLY_CONFIGURATION: &str = r#"Galley's configuration belongs to the user and changes only in Galley's
+interface: model providers and API keys, Channels, Browser Control and its
+browser extension, the runtime, updates, and display. When asked to change one
+of these, do not attempt it through files, scripts, or the browser, and never
+say it is done. Tell the user where it is, and prepare what they need: the
+values to fill in. Reminders and scheduled tasks are not on this list: you set
+them yourself with the Galley CLI, as your manual (named below) says."#;
 
 /// Static runtime rules. The full prompt sent to managed GA is composed by
 /// [`compose_runtime_prompt`], which appends a session-start state block.
@@ -88,14 +130,9 @@ Galley, its author, source code, or product background.
 
 ## What Only The User Changes In Galley
 
-Galley's configuration belongs to the user and changes only in Galley's
-interface: model providers and API keys, Channels, scheduled tasks, Browser
-Control and its browser extension, the runtime, updates, and display. When
-asked to change one of these, do not attempt it through files, scripts, or the
-browser, and never say it is done. Tell the user where it is, and prepare what
-they need: the values to fill in, or the prompt and time for a scheduled task
-(it runs daily, on chosen weekdays, or on chosen days of the month, each time
-in a new conversation, so the prompt must stand on its own).
+"#,
+    user_only_configuration!(),
+    r#"
 
 GenericAgent's own scheduler (`sche_tasks/*.json`, described in memory files
 such as `scheduled_task_sop`) does not run in Galley: never write `sche_tasks`
@@ -197,16 +234,20 @@ pub(crate) fn compose_runtime_prompt(app_version: &str) -> String {
 /// The main chat's variant: the workbench prompt, its state block
 /// followed by a "Main Chat" section (ticket 03b: this is the main chat,
 /// its id, where the segment its runner holds begins, and how to look up
-/// earlier parts) and the main chat entry layer, which names the
+/// earlier parts), the "In Hand" lines when there are any (ticket 36,
+/// [`in_hand_section`]) and the main chat entry layer, which names the
 /// assistant manual at `manual_path` (ticket 30,
-/// [`crate::assistant_manual`]). Every other session gets
-/// [`compose_runtime_prompt`].
+/// [`crate::assistant_manual`]). Its static rules differ from the
+/// workbench's in one paragraph: scheduled tasks are no longer the
+/// user's alone ([`MAIN_CHAT_USER_ONLY_CONFIGURATION`], ticket 36).
+/// Every other session gets [`compose_runtime_prompt`].
 pub(crate) fn compose_main_chat_runtime_prompt(
     app_version: &str,
     main_chat: &MainChatPromptState,
+    in_hand: Option<&str>,
     manual_path: &str,
 ) -> String {
-    compose(app_version, true, Some((main_chat, manual_path)))
+    compose(app_version, true, Some((main_chat, in_hand, manual_path)))
 }
 
 /// IM-supervisor variant: same runtime rules WITHOUT the suggestion
@@ -286,6 +327,13 @@ look it up with the Galley CLI (search, then
 /// manual at `manual_path` before its first CLI write. The manual carries
 /// the details (authority, commands, wake notes, reporting); the wake
 /// note itself carries what to do at that moment.
+///
+/// Ticket 36 (assistant PRD ruling 9) added one sentence before it: a date
+/// or time the user mentions, or a follow-up the model promises, gets a
+/// reminder without being asked, with the manual's new section named. The
+/// write list became the command families, `schedule` among them. The
+/// rules themselves (when, when not, saying so, what to note, authority,
+/// what to do when it comes due) are the manual's.
 fn main_chat_entry_layer(manual_path: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
@@ -302,8 +350,12 @@ tell the user, so do not wait on it or watch it. Do quick work yourself.
 Use this, not the file-based subagent in your memory (subagent.md), which
 the user cannot see.
 
-Before your first Galley CLI write (send, stop, archive, move, project,
-model), read your manual at `{manual_path}`."#
+When the user mentions something with a date or time (a deadline, a
+meeting, a flight, a payment), or you promise to follow up, set a reminder
+without being asked: see "Reminders and scheduled tasks" in your manual.
+
+Before your first Galley CLI write (a session, project, model or schedule
+command), read your manual at `{manual_path}`."#
     )
 }
 
@@ -329,17 +381,22 @@ Reply at the weight of what they said:
 fn compose(
     app_version: &str,
     with_suggestion: bool,
-    main_chat: Option<(&MainChatPromptState, &str)>,
+    main_chat: Option<(&MainChatPromptState, Option<&str>, &str)>,
 ) -> String {
-    let static_rules = if with_suggestion {
+    let static_rules = if main_chat.is_some() {
+        main_chat_static_prompt()
+    } else if with_suggestion {
         workbench_static_prompt()
     } else {
         RUNTIME_PROMPT_STATIC.to_string()
     };
     let main_chat = main_chat
-        .map(|(state, manual_path)| {
+        .map(|(state, in_hand, manual_path)| {
+            let in_hand = in_hand
+                .map(|lines| format!("\n\n{lines}"))
+                .unwrap_or_default();
             format!(
-                "\n\n{}\n\n{}",
+                "\n\n{}{in_hand}\n\n{}",
                 main_chat_section(state),
                 main_chat_entry_layer(manual_path)
             )
@@ -370,6 +427,176 @@ where available; otherwise ask the user to check the relevant Settings page.{mai
 /// refactor that carved the suggestion section out for IM's sake.
 fn workbench_static_prompt() -> String {
     format!("{RUNTIME_PROMPT_STATIC}\n\n{WORKBENCH_SUGGESTION_PROMPT}")
+}
+
+/// The main chat's static rules: the workbench's, with the configuration
+/// paragraph of "What Only The User Changes In Galley" swapped for
+/// [`MAIN_CHAT_USER_ONLY_CONFIGURATION`] (ticket 36). Like everything
+/// only the main chat reads, outside `prompt_hash()`. Both paragraphs are
+/// raw strings of this file, so a CRLF checkout changes them alike and
+/// the swap still matches.
+fn main_chat_static_prompt() -> String {
+    workbench_static_prompt().replacen(
+        USER_ONLY_CONFIGURATION,
+        MAIN_CHAT_USER_ONLY_CONFIGURATION,
+        1,
+    )
+}
+
+/// At most this many lines per group in the main chat's "In Hand" block
+/// ([`in_hand_section`]); the rest are counted on one more line.
+const IN_HAND_MAX_PER_GROUP: usize = 5;
+
+/// A task's words or a subtask's title is cut at this many characters in
+/// the "In Hand" block (`schedule show` / `session brief` read all of it).
+const IN_HAND_TEXT_CHARS: usize = 40;
+
+/// Another agent's label is cut at this many characters.
+const IN_HAND_AGENT_CHARS: usize = 24;
+
+/// The main chat's "In Hand" lines (ticket 36; assistant PRD rulings 5
+/// and 9, main chat PRD ruling 86): the reminders and scheduled tasks
+/// coming up and the subtasks not finished, from the read behind the
+/// desktop's 「待办」 ([`crate::assistant_todo::assistant_todo`]) — its
+/// upcoming and active groups, in its order ("what you see is what it
+/// sees"); the recently finished group stays out. Deterministic, no model
+/// call. Core writes it into the main chat's state block at every runner
+/// spawn — each segment's start, and a respawn mid-segment — so it is a
+/// snapshot: it says when it was read, and which commands read it now.
+///
+/// Bounded: [`IN_HAND_MAX_PER_GROUP`] lines per group, then "and N more";
+/// words and titles cut at [`IN_HAND_TEXT_CHARS`] characters. `None` when
+/// both groups are empty: no section at all. Times are local (`tz`), in
+/// the wake note's format (`2026-10-20 20:00 (Tue)`).
+pub(crate) fn in_hand_section<Tz: chrono::TimeZone>(
+    todo: &AssistantTodo,
+    now: chrono::DateTime<chrono::Utc>,
+    tz: &Tz,
+) -> Option<String>
+where
+    Tz::Offset: std::fmt::Display,
+{
+    if todo.upcoming.is_empty() && todo.active.is_empty() {
+        return None;
+    }
+    let mut out = format!(
+        "### In Hand\n\nAs of {}, local time (it may have changed since: `schedule list` \
+         and `session brief <id>` read it now).",
+        now.with_timezone(tz).format("%Y-%m-%d %H:%M")
+    );
+    let mut group =
+        |title: &str, items: &[TodoItem], more: &str, line: &dyn Fn(&TodoItem) -> String| {
+            if items.is_empty() {
+                return;
+            }
+            let _ = write!(out, "\n\n{title}");
+            for item in items.iter().take(IN_HAND_MAX_PER_GROUP) {
+                let _ = write!(out, "\n- {}", line(item));
+            }
+            if items.len() > IN_HAND_MAX_PER_GROUP {
+                let _ = write!(
+                    out,
+                    "\n- and {} more: {more}",
+                    items.len() - IN_HAND_MAX_PER_GROUP
+                );
+            }
+        };
+    group(
+        "Coming up (reminders and scheduled tasks):",
+        &todo.upcoming,
+        "`schedule list`",
+        &|item| in_hand_task_line(item, tz),
+    );
+    group(
+        "Subtasks not finished:",
+        &todo.active,
+        "`sessions list`",
+        &in_hand_subtask_line,
+    );
+    Some(out)
+}
+
+/// `` `sched_…` 2026-10-20 20:00 (Tue), one-off, set by you: <words> ``.
+fn in_hand_task_line<Tz: chrono::TimeZone>(item: &TodoItem, tz: &Tz) -> String
+where
+    Tz::Offset: std::fmt::Display,
+{
+    let mut facts: Vec<String> = Vec::new();
+    if let Some(at) = item
+        .at
+        .as_deref()
+        .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+    {
+        facts.push(
+            at.with_timezone(tz)
+                .format("%Y-%m-%d %H:%M (%a)")
+                .to_string(),
+        );
+    }
+    facts.push(
+        match item.repeat {
+            Some(ScheduledTaskRepeat::Daily) => "daily",
+            Some(ScheduledTaskRepeat::Weekly { .. }) => "weekly",
+            Some(ScheduledTaskRepeat::Monthly { .. }) => "monthly",
+            Some(ScheduledTaskRepeat::Once) | None => "one-off",
+        }
+        .to_string(),
+    );
+    if item.state == TodoState::Paused {
+        facts.push("paused".into());
+    }
+    facts.push(match item.created_by {
+        TodoCreator::Assistant => "set by you".into(),
+        TodoCreator::User => "set by the user".into(),
+        TodoCreator::Agent => match item.agent.as_deref() {
+            Some(label) => format!(
+                "set by the outside agent {}",
+                in_hand_cut(label, IN_HAND_AGENT_CHARS)
+            ),
+            None => "set by an outside agent".into(),
+        },
+    });
+    if item.target == Some(ScheduleTarget::Session) {
+        facts.push("starts a new conversation".into());
+    }
+    format!(
+        "`{}` {}: {}",
+        item.id,
+        facts.join(", "),
+        in_hand_cut(&item.text, IN_HAND_TEXT_CHARS)
+    )
+}
+
+/// `` `s-…` <title>: working ``.
+fn in_hand_subtask_line(item: &TodoItem) -> String {
+    let state = match item.state {
+        TodoState::Running => "working",
+        TodoState::Asking => "asking a question",
+        TodoState::Failed => "failed",
+        TodoState::StepLimit => "paused at the step limit",
+        TodoState::Stopped => "stopped before it finished",
+        // Not in the active group; named in case that changes.
+        TodoState::Done => "done",
+        TodoState::Scheduled | TodoState::Paused | TodoState::Fired => "waiting",
+    };
+    let title = in_hand_cut(&item.text, IN_HAND_TEXT_CHARS);
+    let title = if title.is_empty() {
+        "(untitled)".to_string()
+    } else {
+        title
+    };
+    format!("`{}` {title}: {state}", item.id)
+}
+
+/// `text` on one line, whitespace collapsed, cut at `max` characters
+/// with an ellipsis.
+fn in_hand_cut(text: &str, max: usize) -> String {
+    let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if line.chars().count() <= max {
+        return line;
+    }
+    let kept: String = line.chars().take(max).collect();
+    format!("{kept}…")
 }
 
 fn platform_label() -> &'static str {
@@ -596,17 +823,24 @@ mod tests {
     /// Ticket 03b: the main chat's state block says which conversation
     /// this is and where the model's context of it begins, and sends the
     /// model to the CLI for anything earlier. The section is appended to
-    /// the state block and nothing else changes: every other workbench
-    /// session gets the prompt it always had, and IM never carries it.
+    /// the state block, and besides it the main chat's prompt differs from
+    /// the workbench's only in its configuration paragraph (ticket 36):
+    /// every other workbench session gets the prompt it always had, and IM
+    /// never carries it.
     #[test]
     fn main_chat_section_names_the_conversation_and_its_segment() {
         let state = main_chat_state();
         let ordinary = compose_runtime_prompt("t");
-        let main = compose_main_chat_runtime_prompt("t", &state, MANUAL);
+        let main = compose_main_chat_runtime_prompt("t", &state, None, MANUAL);
         assert_eq!(
             main,
             format!(
-                "{ordinary}\n\n{}\n\n{}",
+                "{}\n\n{}\n\n{}",
+                ordinary.replacen(
+                    USER_ONLY_CONFIGURATION,
+                    MAIN_CHAT_USER_ONLY_CONFIGURATION,
+                    1
+                ),
                 main_chat_section(&state),
                 main_chat_entry_layer(MANUAL)
             ),
@@ -633,7 +867,7 @@ mod tests {
 
         // Data, not behavior: the prompt generation does not change.
         let hash = prompt_hash();
-        let _ = compose_main_chat_runtime_prompt("t", &state, MANUAL);
+        let _ = compose_main_chat_runtime_prompt("t", &state, None, MANUAL);
         assert_eq!(prompt_hash(), hash);
     }
 
@@ -692,7 +926,7 @@ mod tests {
     /// main chat and nowhere else.
     #[test]
     fn main_chat_entry_layer_is_main_chat_only() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), MANUAL);
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL);
         let section = main.find("## Main Chat").expect("the Main Chat section");
         let layer = main
             .find("## Galley Main Chat Entry Layer")
@@ -718,7 +952,7 @@ mod tests {
     /// the model instead of it looking the subtask up when asked.
     #[test]
     fn main_chat_entry_layer_dispatches_long_work_to_a_subtask() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), MANUAL);
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL);
         // Single-line fragments only (a Windows checkout makes the raw
         // string CRLF).
         assert!(main.contains("free: end your reply with <subtask>what to do</subtask>. Galley"));
@@ -746,11 +980,11 @@ mod tests {
     /// session and IM never hear of it.
     #[test]
     fn main_chat_entry_layer_sends_the_model_to_the_manual() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), MANUAL);
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL);
         // Single-line fragments only (a Windows checkout makes the raw
         // string CRLF).
         assert!(main
-            .contains("Before your first Galley CLI write (send, stop, archive, move, project,"));
+            .contains("Before your first Galley CLI write (a session, project, model or schedule"));
         assert!(main.contains(&format!("read your manual at `{MANUAL}`.")));
         assert_eq!(main.matches(MANUAL).count(), 1);
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
@@ -774,8 +1008,14 @@ mod tests {
     /// back (90), Galley waking the model in place of "its card shows the
     /// progress, and you can look it up when they ask" (+58), and the
     /// paragraph sending it to the assistant manual (105, the path not
-    /// counted), which carries the rest.
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 1699;
+    /// counted), which carries the rest. Raised 1699 → 1920 by ticket 36
+    /// (assistant PRD ruling 9): +221 bytes, the paragraph asking for a
+    /// reminder unasked when the user mentions a date or time or the
+    /// model promises a follow-up, naming the manual's new section (217,
+    /// with its break), and the write list as command families, `schedule`
+    /// among them (+4). Without the paragraph the model never opens the
+    /// manual on a remark like 「周三下午要交报告」: no CLI write is in sight.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 1920;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {
@@ -818,6 +1058,512 @@ mod tests {
             ..longest
         };
         assert!(bytes(&plain) < len);
+    }
+
+    /// Ticket 36 (assistant PRD rulings 3, 9): in the main chat,
+    /// scheduled tasks leave "What Only The User Changes" and the
+    /// paragraph points to the manual; the rest of the list stays the
+    /// user's. Workbench sessions, subtasks (the workbench prompt) and IM
+    /// keep the paragraph word for word. Single-line fragments only (CRLF
+    /// on Windows).
+    #[test]
+    fn only_the_main_chat_sets_scheduled_tasks_itself() {
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL);
+        assert!(main.contains("## What Only The User Changes In Galley"));
+        assert!(main.contains(
+            "interface: model providers and API keys, Channels, Browser Control and its"
+        ));
+        assert!(main.contains(
+            "browser extension, the runtime, updates, and display. When asked to change one"
+        ));
+        assert!(main.contains(
+            "values to fill in. Reminders and scheduled tasks are not on this list: you set"
+        ));
+        assert!(
+            main.contains("them yourself with the Galley CLI, as your manual (named below) says.")
+        );
+        assert!(main.contains(
+            "say it is done. Tell the user where it is, and prepare what they need: the"
+        ));
+        assert!(!main.contains("Channels, scheduled tasks, Browser"));
+        assert!(!main.contains("the prompt and time for a scheduled task"));
+        assert!(!main.contains("so the prompt must stand on its own"));
+        // galley#31 and the capability rule stay for the main chat too.
+        assert!(main.contains("never write `sche_tasks`"));
+        assert!(main.contains("Do not"));
+        assert!(
+            main.contains("claim a capability you have not confirmed you have in this session.")
+        );
+
+        for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
+            assert!(prompt.contains(
+                "interface: model providers and API keys, Channels, scheduled tasks, Browser"
+            ));
+            assert!(prompt.contains(
+                "they need: the values to fill in, or the prompt and time for a scheduled task"
+            ));
+            assert!(prompt.contains("in a new conversation, so the prompt must stand on its own)."));
+            assert!(!prompt.contains("Reminders and scheduled tasks are not on this list"));
+            assert!(!prompt.contains("your manual"));
+        }
+
+        // The swap is the only difference, and it happened: the paragraph
+        // is in the shared rules exactly once.
+        assert_eq!(
+            RUNTIME_PROMPT_STATIC
+                .matches(USER_ONLY_CONFIGURATION)
+                .count(),
+            1
+        );
+        assert_ne!(main_chat_static_prompt(), workbench_static_prompt());
+        assert_eq!(
+            main_chat_static_prompt().replacen(
+                MAIN_CHAT_USER_ONLY_CONFIGURATION,
+                USER_ONLY_CONFIGURATION,
+                1
+            ),
+            workbench_static_prompt()
+        );
+        // IM is the shared rules plus the state block, as before.
+        assert!(compose_im_runtime_prompt("t").starts_with(RUNTIME_PROMPT_STATIC));
+        assert!(compose_runtime_prompt("t").starts_with(&workbench_static_prompt()));
+        // Not a new prompt generation for anyone else.
+        assert_eq!(
+            prompt_hash().len(),
+            8,
+            "prompt_hash still fingerprints the workbench rules"
+        );
+    }
+
+    /// Ticket 36: the main chat's static rules are the shared ones with
+    /// one paragraph swapped, and the swap may not make them longer than
+    /// everyone's: they stay inside the static budget.
+    #[test]
+    fn main_chat_static_rules_stay_within_the_static_budget() {
+        let len = main_chat_static_prompt()
+            .bytes()
+            .filter(|&byte| byte != b'\r')
+            .count();
+        let shared = workbench_static_prompt()
+            .bytes()
+            .filter(|&byte| byte != b'\r')
+            .count();
+        assert!(len <= shared, "main chat static {len} > shared {shared}");
+        assert!(len <= STATIC_PROMPT_BUDGET_BYTES);
+    }
+
+    /// Ticket 36: the entry layer asks for a reminder unasked and names
+    /// the manual's section; the write list names the command families.
+    #[test]
+    fn main_chat_entry_layer_asks_for_reminders_unasked() {
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL);
+        // Single-line fragments only (CRLF on Windows).
+        assert!(
+            main.contains("When the user mentions something with a date or time (a deadline, a")
+        );
+        assert!(main.contains(
+            "meeting, a flight, a payment), or you promise to follow up, set a reminder"
+        ));
+        assert!(main.contains(
+            "without being asked: see \"Reminders and scheduled tasks\" in your manual."
+        ));
+        assert!(crate::assistant_manual::manual_body().contains("## Reminders and scheduled tasks"));
+        let layer = main.find("## Galley Main Chat Entry Layer").unwrap();
+        let reminder = main.find("set a reminder").unwrap();
+        let manual = main.find("read your manual at").unwrap();
+        assert!(layer < reminder && reminder < manual);
+        for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
+            assert!(!prompt.contains("set a reminder"));
+        }
+    }
+
+    use crate::api::schedule::{ScheduleTarget, ScheduledTaskRepeat};
+    use crate::assistant_todo::{AssistantTodo, TodoCreator, TodoItem, TodoKind, TodoState};
+    use chrono::{DateTime, FixedOffset, Utc};
+
+    fn shanghai() -> FixedOffset {
+        FixedOffset::east_opt(8 * 3600).unwrap()
+    }
+
+    fn at(s: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc)
+    }
+
+    fn task(id: &str, text: &str, at: Option<&str>, repeat: ScheduledTaskRepeat) -> TodoItem {
+        TodoItem {
+            kind: TodoKind::Task,
+            id: id.into(),
+            text: text.into(),
+            state: TodoState::Scheduled,
+            at: at.map(str::to_string),
+            created_by: TodoCreator::Assistant,
+            agent: None,
+            target: Some(ScheduleTarget::Assistant),
+            repeat: Some(repeat),
+            time_of_day: None,
+            created_in: None,
+            run_session_id: None,
+        }
+    }
+
+    fn subtask(id: &str, title: &str, state: TodoState) -> TodoItem {
+        TodoItem {
+            kind: TodoKind::Subtask,
+            id: id.into(),
+            text: title.into(),
+            state,
+            at: Some("2026-10-16T05:00:00+00:00".into()),
+            created_by: TodoCreator::Assistant,
+            agent: None,
+            target: None,
+            repeat: None,
+            time_of_day: None,
+            created_in: None,
+            run_session_id: None,
+        }
+    }
+
+    /// Ticket 36: the format, item by item — when (local, the wake
+    /// note's format), one-off or repeating, paused, who set it, whether
+    /// it starts a conversation, the words; a subtask's title and state.
+    #[test]
+    fn in_hand_lines_say_what_when_and_who() {
+        let mut weekly = task(
+            "sched_41d0aa5e9b3c2f17",
+            "整理下载文件夹",
+            Some("2026-10-17T09:00:00+00:00"),
+            ScheduledTaskRepeat::Weekly { weekdays: vec![6] },
+        );
+        weekly.created_by = TodoCreator::User;
+        weekly.target = Some(ScheduleTarget::Session);
+        let mut paused = task(
+            "sched_9b2c7e1f0a3d4c58",
+            "看一眼 MyApp 的依赖更新",
+            None,
+            ScheduledTaskRepeat::Daily,
+        );
+        paused.state = TodoState::Paused;
+        paused.created_by = TodoCreator::Agent;
+        paused.agent = Some("claude-code".into());
+        let todo = AssistantTodo {
+            upcoming: vec![
+                task(
+                    "sched_3f9a0c1d2e4b5a69",
+                    "提醒用户带身份证：明早 8:05 虹桥的高铁\n去上海出差",
+                    Some("2026-10-16T12:00:00+00:00"),
+                    ScheduledTaskRepeat::Once,
+                ),
+                weekly,
+                paused,
+            ],
+            active: vec![
+                subtask(
+                    "s-mgq3c1d8-2k7v4p0a",
+                    "查三家本周螺纹钢报价",
+                    TodoState::Running,
+                ),
+                subtask(
+                    "s-mgr8x2k1-5b9d3f7h",
+                    "订周三去上海的高铁",
+                    TodoState::Asking,
+                ),
+                subtask("s-mgs1q9w3-8c2v6n4m", "", TodoState::Failed),
+            ],
+            recent: vec![subtask("s-done", "做完的", TodoState::Done)],
+            recent_omitted: 0,
+        };
+        let text = in_hand_section(&todo, at("2026-10-16T06:05:00Z"), &shanghai()).unwrap();
+        let want = [
+            "### In Hand",
+            "",
+            "As of 2026-10-16 14:05, local time (it may have changed since: `schedule list` and `session brief <id>` read it now).",
+            "",
+            "Coming up (reminders and scheduled tasks):",
+            "- `sched_3f9a0c1d2e4b5a69` 2026-10-16 20:00 (Fri), one-off, set by you: 提醒用户带身份证：明早 8:05 虹桥的高铁 去上海出差",
+            "- `sched_41d0aa5e9b3c2f17` 2026-10-17 17:00 (Sat), weekly, set by the user, starts a new conversation: 整理下载文件夹",
+            "- `sched_9b2c7e1f0a3d4c58` daily, paused, set by the outside agent claude-code: 看一眼 MyApp 的依赖更新",
+            "",
+            "Subtasks not finished:",
+            "- `s-mgq3c1d8-2k7v4p0a` 查三家本周螺纹钢报价: working",
+            "- `s-mgr8x2k1-5b9d3f7h` 订周三去上海的高铁: asking a question",
+            "- `s-mgs1q9w3-8c2v6n4m` (untitled): failed",
+        ]
+        .join("\n");
+        assert_eq!(text, want);
+        // The recently finished group stays out.
+        assert!(!text.contains("做完的"));
+    }
+
+    /// Ticket 36: at most five lines a group, then "and N more" with the
+    /// command that lists them all; long words cut with an ellipsis; one
+    /// group alone when the other is empty; nothing at all when both are.
+    #[test]
+    fn in_hand_lines_are_bounded_and_absent_when_empty() {
+        let now = at("2026-10-16T06:05:00Z");
+        assert_eq!(
+            in_hand_section(&AssistantTodo::default(), now, &shanghai()),
+            None
+        );
+
+        let long = "一二三四五六七八九十".repeat(5);
+        let upcoming: Vec<TodoItem> = (0..7)
+            .map(|n| {
+                task(
+                    &format!("sched_{n:016x}"),
+                    &long,
+                    Some("2026-10-20T12:00:00+00:00"),
+                    ScheduledTaskRepeat::Once,
+                )
+            })
+            .collect();
+        let todo = AssistantTodo {
+            upcoming,
+            ..AssistantTodo::default()
+        };
+        let text = in_hand_section(&todo, now, &shanghai()).unwrap();
+        assert_eq!(text.matches("\n- `sched_").count(), IN_HAND_MAX_PER_GROUP);
+        assert!(text.contains("\n- and 2 more: `schedule list`"));
+        assert!(!text.contains("Subtasks not finished"));
+        let cut: String = long.chars().take(IN_HAND_TEXT_CHARS).collect();
+        assert!(text.contains(&format!(": {cut}…\n")));
+        assert!(!text.contains(&long));
+
+        let active: Vec<TodoItem> = (0..6)
+            .map(|n| subtask(&format!("s-{n:08}-aaaaaaaa"), "查", TodoState::Running))
+            .collect();
+        let todo = AssistantTodo {
+            active,
+            ..AssistantTodo::default()
+        };
+        let text = in_hand_section(&todo, now, &shanghai()).unwrap();
+        assert!(!text.contains("Coming up"));
+        assert_eq!(text.matches(": working").count(), IN_HAND_MAX_PER_GROUP);
+        assert!(text.ends_with("\n- and 1 more: `sessions list`"));
+    }
+
+    /// Ticket 36: the lines sit in the main chat's prompt between the
+    /// Main Chat section and the entry layer; without any the prompt is
+    /// exactly what it was; no other prompt ever carries them.
+    #[test]
+    fn in_hand_lines_are_main_chat_only() {
+        let state = main_chat_state();
+        let todo = AssistantTodo {
+            upcoming: vec![task(
+                "sched_3f9a0c1d2e4b5a69",
+                "提醒用户带身份证",
+                Some("2026-10-16T12:00:00+00:00"),
+                ScheduledTaskRepeat::Once,
+            )],
+            ..AssistantTodo::default()
+        };
+        let lines = in_hand_section(&todo, at("2026-10-16T06:05:00Z"), &shanghai()).unwrap();
+        let without = compose_main_chat_runtime_prompt("t", &state, None, MANUAL);
+        let with = compose_main_chat_runtime_prompt("t", &state, Some(&lines), MANUAL);
+        let section = main_chat_section(&state);
+        assert_eq!(
+            with,
+            without.replacen(&section, &format!("{section}\n\n{lines}"), 1)
+        );
+        let main_chat = with.find("## Main Chat\n").unwrap();
+        let in_hand = with.find("### In Hand").unwrap();
+        let layer = with.find("## Galley Main Chat Entry Layer").unwrap();
+        assert!(main_chat < in_hand && in_hand < layer);
+        assert!(!without.contains("In Hand"));
+        for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
+            assert!(!prompt.contains("In Hand"));
+        }
+    }
+
+    /// Ticket 36 against a database: the lines come from the read behind
+    /// the desktop's 「待办」 ([`crate::assistant_todo::assistant_todo`])
+    /// and list its "coming up" and "in progress" groups in its order
+    /// (main chat PRD ruling 86: what the user sees is what the main chat
+    /// is told). A cancelled reminder is in neither; a database with no
+    /// main chat (attach mode never has one) has no subtasks to list.
+    #[tokio::test]
+    async fn in_hand_lines_read_what_the_todo_list_reads() {
+        use crate::api::schedule::{instant_to_utc_iso, CreateScheduledTaskInput, ScheduledTaskId};
+        use crate::api::{
+            CreateSessionInput, GalleyApi, Origin, OriginVia, RuntimeKind, SessionId,
+        };
+        use crate::api::{SubtaskDispatch, ASSISTANT_SUPERVISOR};
+        use crate::db::{MainChatSeed, SqliteGalley};
+        use crate::runner_manager::RunnerManager;
+
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("open in-memory sqlite");
+        for m in crate::db_migrations::all() {
+            sqlx::raw_sql(m.sql)
+                .execute(&pool)
+                .await
+                .expect("migration");
+        }
+        let galley = SqliteGalley::from_pool(pool);
+        galley
+            .set_pref_json("active_runtime_kind", serde_json::json!("managed"))
+            .await
+            .expect("managed runtime");
+        let now = Utc::now();
+        let once = |id: &str, words: &str, hours: i64| CreateScheduledTaskInput {
+            id: id.into(),
+            project_id: None,
+            prompt: words.into(),
+            repeat: ScheduledTaskRepeat::Once,
+            time_of_day: String::new(),
+            llm_name: None,
+            enabled: true,
+            fire_at: Some(instant_to_utc_iso(&(now + chrono::Duration::hours(hours)))),
+            target: ScheduleTarget::Assistant,
+        };
+        let assistant = Origin {
+            via: OriginVia::Supervisor,
+            supervisor: Some(ASSISTANT_SUPERVISOR.into()),
+            reason: None,
+            client: None,
+        };
+        // No main chat yet: a task from the desktop's form, and no
+        // subtask to list.
+        galley
+            .create_scheduled_task(
+                CreateScheduledTaskInput {
+                    target: ScheduleTarget::Session,
+                    ..once("sched_form", "整理下载文件夹", 10)
+                },
+                Origin::gui(),
+            )
+            .await
+            .expect("form task");
+        let runners = RunnerManager::new();
+        let todo = crate::assistant_todo::assistant_todo(&galley, &runners, now)
+            .await
+            .expect("todo");
+        assert!(todo.active.is_empty());
+        let text = in_hand_section(&todo, now, &shanghai()).expect("lines");
+        assert!(!text.contains("Subtasks not finished"));
+        assert!(text.contains("set by the user, starts a new conversation: 整理下载文件夹"));
+
+        galley
+            .get_or_create_main_chat("s-main", Origin::desktop(), &MainChatSeed::default())
+            .await
+            .expect("main chat");
+        galley
+            .create_scheduled_task(once("sched_late", "提醒用户交报告", 30), assistant.clone())
+            .await
+            .expect("later reminder");
+        galley
+            .create_scheduled_task(once("sched_soon", "提醒用户喝水", 1), assistant.clone())
+            .await
+            .expect("sooner reminder");
+        galley
+            .create_scheduled_task(once("sched_gone", "取消的", 2), assistant)
+            .await
+            .expect("to cancel");
+        galley
+            .delete_scheduled_task(ScheduledTaskId("sched_gone".into()), Origin::gui())
+            .await
+            .expect("cancel");
+        let input = CreateSessionInput {
+            id: "s-sub".into(),
+            title: "查物流".into(),
+            project_id: None,
+            selected_llm_index: None,
+            selected_llm_key: None,
+            selected_llm_display_name: None,
+            ga_runtime_kind: Some(RuntimeKind::Managed),
+            ga_runtime_id: None,
+            prompt_profile: None,
+        };
+        galley
+            .create_subtask_session(
+                input,
+                Origin::subtask(),
+                &SessionId("s-main".into()),
+                Some("查物流\n单号 JD0123456789".into()),
+            )
+            .await
+            .expect("subtask");
+        galley
+            .record_subtask_dispatch(&SubtaskDispatch {
+                parent_session_id: "s-main".into(),
+                turn_index: 0,
+                ordinal: 0,
+                message_id: SubtaskDispatch::reply_message_id("s-main", 0),
+                session_id: Some("s-sub".into()),
+                title: "查物流".into(),
+                failure: None,
+                failure_detail: None,
+                created_at: instant_to_utc_iso(&now),
+                send_backs: 0,
+            })
+            .await
+            .expect("dispatch record");
+
+        let todo = crate::assistant_todo::assistant_todo(&galley, &runners, now)
+            .await
+            .expect("todo");
+        let text = in_hand_section(&todo, now, &shanghai()).expect("lines");
+        let listed: Vec<&str> = todo
+            .upcoming
+            .iter()
+            .chain(&todo.active)
+            .map(|item| item.id.as_str())
+            .collect();
+        assert_eq!(listed, ["sched_soon", "sched_form", "sched_late", "s-sub"]);
+        let at: Vec<usize> = listed
+            .iter()
+            .map(|id| text.find(&format!("`{id}`")).expect("listed"))
+            .collect();
+        assert!(
+            at.windows(2).all(|pair| pair[0] < pair[1]),
+            "in the list's order"
+        );
+        assert!(!text.contains("sched_gone"));
+        assert!(text.contains("set by you: 提醒用户喝水"));
+        assert!(text.contains("- `s-sub` 查物流: "));
+    }
+
+    /// Byte cap on the "In Hand" lines (ticket 36), measured on the
+    /// longest they get: five tasks and five subtasks, each with words
+    /// cut at the limit in three-byte characters, a dated repeating task
+    /// set by an outside agent with a label past its cut that starts a
+    /// conversation, the longest subtask state, and three-digit "more"
+    /// counts. No headroom, `\r` not counted. Data, main chat only:
+    /// outside the static budget and the prompt hash. Typical is far
+    /// less (nothing at all when there is nothing in hand); ten lines
+    /// cap what rides every request of a busy main chat.
+    const IN_HAND_BUDGET_BYTES: usize = 2467;
+
+    #[test]
+    fn in_hand_lines_stay_within_budget() {
+        let long = "一".repeat(IN_HAND_TEXT_CHARS + 10);
+        let mut longest_task = task(
+            "sched_ffffffffffffffff",
+            &long,
+            Some("2026-10-20T12:00:00+00:00"),
+            ScheduledTaskRepeat::Monthly {
+                monthdays: (1..=31).collect(),
+            },
+        );
+        longest_task.created_by = TodoCreator::Agent;
+        longest_task.agent = Some("x".repeat(IN_HAND_AGENT_CHARS + 10));
+        longest_task.target = Some(ScheduleTarget::Session);
+        let mut longest_subtask = subtask("s-zzzzzzzz-zzzzzzzz", &long, TodoState::Stopped);
+        longest_subtask.at = Some("2026-10-16T05:00:00+00:00".into());
+        let todo = AssistantTodo {
+            upcoming: vec![longest_task; IN_HAND_MAX_PER_GROUP + 999],
+            active: vec![longest_subtask; IN_HAND_MAX_PER_GROUP + 999],
+            ..AssistantTodo::default()
+        };
+        let len = in_hand_section(&todo, at("2026-10-16T06:05:00Z"), &shanghai())
+            .unwrap()
+            .bytes()
+            .filter(|&byte| byte != b'\r')
+            .count();
+        assert!(
+            len <= IN_HAND_BUDGET_BYTES,
+            "In Hand lines are {len} bytes, budget {IN_HAND_BUDGET_BYTES}"
+        );
     }
 
     /// The `--around` read pairs with search in the static history

@@ -284,7 +284,9 @@ ruling 9; `core/src/scheduler.rs`, `core/src/subtask_report.rs`, migration
   that runs the prompt, as before; `assistant` starts no session and wakes the
   main chat with a report carrying the task's words, when it was planned for,
   when it went off and, from two minutes late on, how late (`2 days 3 hours`).
-  The assistant decides what to say or do; `<no-reply/>` is allowed.
+  The assistant decides what to say or do; `<no-reply/>` is allowed. A late
+  one asks for the lateness in the reply itself, not GA's `<summary>`, which
+  the main chat does not show (ticket 36's eval: the model put it there).
   `assistant` tasks are refused while the active runtime is not the managed
   one or it has no main chat (`invalid_args`, message prefix
   `assistant_unavailable:`), and do not fire meanwhile.
@@ -319,8 +321,10 @@ ruling 9; `core/src/scheduler.rs`, `core/src/subtask_report.rs`, migration
 Main chat ticket 37 (`core/src/assistant_todo.rs`): one read of what the
 assistant has coming up, is working on, and finished lately. The desktop's
 「待办」 (Tauri `list_assistant_todo`) shows it, and the main chat's 「在办的事」
-lines (ticket 36) are written from the same read, so both list the same
-things in the same order.
+lines (ticket 36: the state block's "In Hand" subsection, written at every
+main chat runner spawn, [prompt composition](./prompt-composition.md#in-hand-main-chat-only))
+are written from the same read — its upcoming and active groups — so both
+list the same things in the same order.
 
 - **Upcoming**: scheduled tasks not cancelled that may still fire, whoever
   made them; enabled ones by next fire, paused ones last.
