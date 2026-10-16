@@ -1,6 +1,6 @@
 # 34 CLI：`galley schedule` 命令族
 
-Status: ready-for-agent
+Status: merged（2026-10-16 合入 main，分支提交 `5ab63f0b`、`26c56879`、`edca1db4`，合并提交 `16d7f2e1`；真机随票 35–37 一起验）
 
 来源：[助手 PRD](../../assistant/PRD.md) 裁决 9，主对话 PRD 裁决 84。取代 [scheduled-tasks 票 06](../../scheduled-tasks/issues/06-cli-schedule-commands.md)（needs-triage，从没做）。依赖 33。改 Core 的 socket 处理、CLI 与 Agent API 文档；不改界面。
 

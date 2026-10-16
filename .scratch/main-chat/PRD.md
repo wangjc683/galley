@@ -451,8 +451,8 @@ README「dense context instead of long」（`README.md:54`）。
 | [31](./issues/31-subtask-wake-gui.md) | — | 界面：藏起叫醒行与不出声的回复、卡片最后一句、通知一个声音、子任务卡片「第 N 轮 · 」 | 29 | done（裁决 82；2026-10-16 合入，待 JC 真机验收） |
 | [26](./issues/26-user-bubble-selection-copy.md) | — | 你的气泡不挂悬停复制，选中文字时弹浮动复制 | 20 | done（裁决 73，`3b029e56`，JC 真机验收；工作台有意不跟） |
 | [32](./issues/32-delete-single-message.md) | — | 主对话删单条消息：右键「删除」、库与 runner、手机端事件 | 29、31 | done（裁决 83，合并提交 `57fc1853`，JC 真机验收；入口与确认框由票 38 改） |
-| [33](./issues/33-schedule-once-and-wake.md) | — | 定时任务加「一次性」与「叫醒助理」、补发、软删除、表单任务跑完也叫醒（Core） | 29、32 | ready-for-agent（裁决 84） |
-| [34](./issues/34-cli-schedule-commands.md) | — | CLI：`galley schedule` 命令族 | 33 | ready-for-agent（裁决 84） |
+| [33](./issues/33-schedule-once-and-wake.md) | — | 定时任务加「一次性」与「叫醒助理」、补发、软删除、表单任务跑完也叫醒（Core） | 29、32 | merged（裁决 84，合并提交 `16d7f2e1`） |
+| [34](./issues/34-cli-schedule-commands.md) | — | CLI：`galley schedule` 命令族 | 33 | merged（裁决 84，合并提交 `16d7f2e1`） |
 | [35](./issues/35-cli-more-hands.md) | — | CLI：补齐授权前两级的手（改名、置顶、删除、项目、默认模型） | —（与 34 同改分发表） | ready-for-agent（裁决 84） |
 | [36](./issues/36-manual-and-in-flight.md) | — | 助理手册、入口层、「在办的事」、真模型评测 | 34、35、37 | ready-for-agent（裁决 84） |
 | [37](./issues/37-reminder-card-and-schedule-list.md) | — | 界面：提醒卡片、「待办」（书眉入口与列表）、送不出去的通知 | 33 | ready-for-agent（裁决 84、86） |
