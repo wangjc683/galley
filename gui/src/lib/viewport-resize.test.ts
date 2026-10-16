@@ -136,13 +136,15 @@ describe("keepBottomOnViewportResize", () => {
 describe("useStickyScroll", () => {
   it("applies the rule to its scroll container, by its own at-bottom state", () => {
     // A static render runs no effects, so this checks the wiring in the
-    // source (the rule itself is tested above).
+    // source (the rule itself is tested above). The workbench's live
+    // tail (ticket 06) keeps its parked message on its line itself, so
+    // the rule stands down while it holds following off.
     const source = readFileSync(
       path.resolve(__dirname, "../hooks/useStickyScroll.ts"),
       "utf8",
-    );
+    ).replace(/\s+/g, " ");
     expect(source).toContain(
-      "keepBottomOnViewportResize(el, () => atBottomRef.current)",
+      "keepBottomOnViewportResize( el, () => atBottomRef.current && !tailRef.current?.noFollow, )",
     );
   });
 });

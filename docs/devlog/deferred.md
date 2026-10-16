@@ -695,7 +695,7 @@
 
 ## 自动滚动到最终答案开头（scroll-on-completion）
 
-- **状态**：暂存
+- **状态**：可能撤下（2026-10-16 telegram-details 票 06 之后回复开头本来就在眼前，JC 真机验收后撤）
 - **提出**：2026-05-13
 - **启动信号**：beta / 公测用户反馈「每次长答案出来都要手动往上滚才能开始读」是高频痛点。
 - **方案（E）**：默认 read mode；流式期间不做 stream-follow（用户可手动滚到底 opt-in watch mode）；`run_complete` 时 smooth scroll 把最终答案开头（`[data-role="final-answer"]` wrapper）定位到 viewport top + 32px。这个 scroll 动作本身同时充当「GA 完成了」的视觉信号。
