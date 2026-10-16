@@ -1722,7 +1722,7 @@ export const zhCopy = {
       undo: "撤销",
       failedTitle: "没能删除这条消息",
       failedTitleCount: (n: number) => `有 ${n} 条消息没能删除`,
-      failedBusy: "它正在回复或在等你回答，这会儿删不了。",
+      failedBusy: "Galley 正在回复或在等你回答，这会儿删不了。",
       failedSubtasks: "这条回复派出了子任务，暂时不能删。",
       failed: "已放回原处。",
     },
@@ -2035,9 +2035,9 @@ export const zhCopy = {
     groupRecent: "最近做完",
     /** 「最近做完」超过上限没列出的件数。 */
     recentOmitted: (count: number) => `还有 ${count} 件没有列出`,
-    empty: "它记下的提醒和派出去的活会出现在这里。",
-    emptyExample: "比如跟它说：「明天早上 9 点提醒我开会」",
-    emptyTalk: "去跟它说",
+    empty: "Galley 记下的提醒和派出去的活会出现在这里。",
+    emptyExample: "比如跟 Galley 说：「明天早上 9 点提醒我开会」",
+    emptyTalk: "去跟 Galley 说",
     /** 列表顶上一行（scheduled-tasks 票 14 的条件）。按钮沿用 scheduled.autostartEnable。 */
     autostartHint: "Galley 未设为开机自动启动，电脑重启后提醒不会响。",
     /** 不是它建的：你在定时任务表单里建的、外部 Agent 建的。 */

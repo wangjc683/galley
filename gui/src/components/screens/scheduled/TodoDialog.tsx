@@ -64,7 +64,7 @@ export interface TodoDialogProps {
   /** Open a session: a subtask (as its card's 「打开」 does), or the
    * session a scheduled run made. */
   onOpenSession: (sessionId: string) => void;
-  /** 「去跟它说」: open the assistant, its composer focused. */
+  /** 「去跟 Galley 说」: open the assistant, its composer focused. */
   onTalk: () => void;
 }
 

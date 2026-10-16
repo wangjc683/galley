@@ -1719,7 +1719,7 @@ export const enCopy: AppCopy = {
       failedTitle: "Couldn't delete this message",
       failedTitleCount: (n: number) => `Couldn't delete ${n} messages`,
       failedBusy:
-        "It's replying or waiting for your answer, so this can't be deleted right now.",
+        "Galley is replying or waiting for your answer, so this can't be deleted right now.",
       failedSubtasks:
         "This reply started subtasks, so it can't be deleted for now.",
       failed: "It's back where it was.",
@@ -2053,9 +2053,9 @@ export const enCopy: AppCopy = {
     groupRecent: "Done lately",
     recentOmitted: (count: number) =>
       count === 1 ? "1 more not listed" : `${count} more not listed`,
-    empty: "Reminders it sets and work it hands off show up here.",
+    empty: "Reminders Galley sets and work it hands off show up here.",
     emptyExample:
-      "Try telling it: “Remind me about the meeting at 9 tomorrow morning.”",
+      "Try telling Galley: “Remind me about the meeting at 9 tomorrow morning.”",
     emptyTalk: "Tell Galley",
     autostartHint:
       "Galley doesn't launch at login, so reminders won't go off after a restart.",

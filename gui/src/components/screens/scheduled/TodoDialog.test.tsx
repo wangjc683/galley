@@ -188,11 +188,11 @@ describe("the assistant's 待办", () => {
     expect(html).not.toContain("最近做完");
   });
 
-  it("is empty with a line, an example and 去跟它说 — once it was read", () => {
+  it("is empty with a line, an example and 去跟 Galley 说 — once it was read", () => {
     const html = render(EMPTY_TODO);
-    expect(html).toContain("它记下的提醒和派出去的活会出现在这里。");
+    expect(html).toContain("Galley 记下的提醒和派出去的活会出现在这里。");
     expect(html).toContain("明天早上 9 点提醒我开会");
-    expect(html).toContain(">去跟它说<");
+    expect(html).toContain(">去跟 Galley 说<");
     expect(html).not.toContain("新建");
     // Before the first read: nothing, not a flash of the empty state.
     expect(render(EMPTY_TODO, { loaded: false })).toBe("");
