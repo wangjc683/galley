@@ -445,7 +445,8 @@ export function Sidebar({
           <SidebarAssistantCard
             mainChat={mainChat}
             subtasks={mainChatSubtasks}
-            open={mainChatSelected}
+            selected={mainChatSelected}
+            open={activeId === mainChat.id}
             onOpen={() => handleSelectSession(mainChat.id)}
           />
         </div>

@@ -167,13 +167,13 @@ describe("the open main chat's header", () => {
   });
 
   it("says only a state: running, waiting without the question, an error, a subtask's", () => {
-    // Running: the conversation line's sentence (ruling 68), 「思考中」
-    // before it says anything — not 「第 N 步 · 摘要」, though the main
-    // chat has both.
+    // Running: 「思考中」, even once the conversation's line has a
+    // sentence — it is said right below (ruling 87; ruling 68 had it
+    // here too) — and never 「第 N 步 · 摘要」.
     live.set("s-main", { status: "running" });
     expect(statusLine(header())).toBe("思考中");
     running.sentence = "我按 10 月 17 日和 18 日这两天查。";
-    expect(statusLine(header())).toBe("我按 10 月 17 日和 18 日这两天查。");
+    expect(statusLine(header())).toBe("思考中");
     expect(header()).toMatch(
       /data-role="assistant-status-line"[^>]*text-brand-strong\/85/,
     );

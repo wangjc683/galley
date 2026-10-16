@@ -161,6 +161,12 @@ describe("the card's second line: error > question > running > draft > last mess
     ).toMatchObject({ text: "哪天出发？ 周五 周六" });
   });
 
+  it("says only 「等你回复」 with the main chat on screen: the question is right there", () => {
+    expect(
+      line({ hasPendingAskUser: true }, { question: "哪天出发？", open: true }),
+    ).toEqual({ kind: "ask", prefix: null, text: "等你回复" });
+  });
+
   it("says what the conversation's line says while it runs, 「思考中」 before it says anything", () => {
     expect(line({ status: "running" })).toEqual({
       kind: "running",

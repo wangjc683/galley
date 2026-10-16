@@ -25,8 +25,12 @@ import type { Session } from "@/types/session";
  * (lib/assistant.ts): the main chat's live status (while it runs, with
  * the sentence its conversation's line says: useAssistantSentence), its
  * unpromoted subtasks' questions and errors, its unread mark.
- * `subtasks` are the main chat's unpromoted subtasks — an open one
- * counts too. `open` is the main chat or one of them being on screen.
+ * `subtasks` are the main chat's unpromoted subtasks. `open` is the main
+ * chat itself on screen — its header identity always, the card while
+ * the main chat is the open session (one of its subtasks is not: its
+ * conversation is not in front of you there). Open, the sentence is
+ * not quoted: the line at the end of the conversation says it, and the
+ * state says 「思考中」 (main chat PRD ruling 87).
  */
 export function useAssistantState({
   mainChat,
@@ -39,7 +43,10 @@ export function useAssistantState({
 }): AssistantState {
   const copy = useCopy();
   const view = useSessionStatusView(mainChat);
-  const sentence = useAssistantSentence(mainChat.id, view.status === "running");
+  const sentence = useAssistantSentence(
+    mainChat.id,
+    view.status === "running" && !open,
+  );
   const subtaskAttention = useSessionsAttention(subtasks, undefined);
   return assistantState(
     {

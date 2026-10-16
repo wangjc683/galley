@@ -46,8 +46,8 @@ import { NewChatButton } from "./SidebarQuickActions";
 /** The card's fill, and the ground its avatar badge is ringed in. A
  * selected card does not answer hover, as a selected session row does
  * not. */
-function cardFill(open: boolean): string {
-  return open
+function cardFill(selected: boolean): string {
+  return selected
     ? "bg-selected shadow-[var(--shadow-selected)] [--assistant-ground:var(--color-selected)]"
     : "[--assistant-ground:var(--color-chrome)] hover:bg-hover hover:[--assistant-ground:var(--color-hover)]";
 }
@@ -105,14 +105,18 @@ function lineText(line: AssistantCardLine): string {
  * at 14px with the time of the last message on the right, 11px muted
  * like the list's counts; under them one line —
  *
- *   error > a question (「等你回复：」 + the question itself) > running >
- *   an unsent draft (「草稿：」, only while the assistant is not open) >
- *   the last message (「你：」 for the user's own)
+ *   error > a question (「等你回复：」 + the question itself) > running
+ *   (the sentence it is writing) > an unsent draft (「草稿：」) > the
+ *   last message (「你：」 for the user's own)
  *
- * (lib/assistant.ts). The avatar wears a session row's status glyph in
- * its corner for running, a question, an error and a new reply, and the
- * name goes semibold for those; a draft and the resting card stay
- * medium. A new reply shows only while the assistant is not open.
+ * (lib/assistant.ts). With the main chat itself on screen the question,
+ * the sentence and the draft are in front of you, so the line says only
+ * 「等你回复」 or 「思考中」 and no draft (main chat PRD ruling 87); one
+ * of its subtasks open is not the main chat on screen. The avatar wears
+ * a session row's status glyph in its corner for running, a question,
+ * an error and a new reply, and the name goes semibold for those; a
+ * draft and the resting card stay medium. A new reply shows only while
+ * the main chat is not on screen.
  *
  * The time is the last message's (lib/message-time.ts `formatListTime`:
  * 11:50 / 昨天 / 周一 / 10月7日 / 2025年10月7日), the session's last
@@ -122,7 +126,7 @@ function lineText(line: AssistantCardLine): string {
  * Fixed 58px, so a line that changes or goes never moves the list.
  * No border, and no fill or lift at rest — fill and lift are selection's
  * channels in the sidebar; `bg-hover` under the pointer; the three
- * selected channels while the assistant or one of its subtasks is open;
+ * selected channels while the main chat or one of its subtasks is open;
  * the 12px card radius where rows have 6px. It opens on pointerdown
  * like a session row (the click that follows is swallowed); Enter and
  * Space open it as any button.
@@ -130,13 +134,17 @@ function lineText(line: AssistantCardLine): string {
 export function SidebarAssistantCard({
   mainChat,
   subtasks,
+  selected,
   open,
   onOpen,
 }: {
   mainChat: Session;
   /** Its unpromoted subtasks. */
   subtasks: Session[];
-  /** The main chat, or one of its subtasks, is open. */
+  /** The main chat, or one of its subtasks, is open: the card is the
+   * selected place in the sidebar. */
+  selected: boolean;
+  /** The main chat itself is open: its conversation is on screen. */
   open: boolean;
   onOpen: () => void;
 }) {
@@ -192,14 +200,14 @@ export function SidebarAssistantCard({
       data-role="assistant-card"
       data-state={state.kind}
       aria-label={label}
-      aria-current={open ? "page" : undefined}
+      aria-current={selected ? "page" : undefined}
       onPointerDown={handlePointerDown}
       onClick={handleClick}
       className={cn(
         "mx-1.5 flex h-[58px] w-[calc(100%-12px)] items-center gap-2.5 rounded-md px-3 text-left text-ink",
         "transition-none active:translate-y-px active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
         "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-        cardFill(open),
+        cardFill(selected),
       )}
     >
       <span className="relative inline-flex shrink-0">

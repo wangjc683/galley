@@ -18,17 +18,25 @@ import type { SessionStatus } from "@/types/session";
  *
  *   - The card's second line (`assistantCardLine`) is what a chat list
  *     says: the last message, or a state when there is one — an error
- *     over a question (with the question itself) over running over an
- *     unsent draft over the last message. One rule, no exceptions.
+ *     over a question over running over an unsent draft over the last
+ *     message. Away from the main chat (in the workbench, or in one of
+ *     its subtasks) it speaks for it: the question itself, the sentence
+ *     it is writing, the draft. With the main chat on screen they are
+ *     all right there, so it says only the state: 「等你回复」,
+ *     「思考中」, no draft (main chat PRD ruling 87).
  *   - The header's second line (`AssistantState.line`) is what a chat's
  *     own title bar says: only a state — running, waiting for a reply
  *     (not the question: it is right below, in the conversation), an
  *     error, a subtask's — and nothing at rest. The last message and
  *     the draft are both on screen there already.
  *
- * Running, both say what the line at the end of the conversation says
- * (ruling 68): the sentence it is writing, else its latest narration
- * since your last message (`assistantLineSentence`), else 「思考中」 —
+ * Running, what it is saying is said once, where you can read it: the
+ * line at the end of the conversation (ruling 68: the sentence it is
+ * writing, else its latest narration since your last message,
+ * `assistantLineSentence`), and the card while the main chat is not on
+ * screen. The header, and the card with the main chat on screen, say
+ * 「思考中」 (ruling 87: the same sentence in three places was noise;
+ * the short state still tells you it works when you have scrolled up) —
  * never a step count. The assistant reports no steps anywhere; the
  * subtasks it sends off are task conversations and keep their 「第 N 步」
  * (lib/subtasks.ts), as the workbench's session rows do.
@@ -66,7 +74,8 @@ export interface AssistantStateInput {
   /** One of its unpromoted subtasks is erroring or asking (ticket 06a). */
   subtaskState?: "error" | "ask";
   hasUnread?: boolean;
-  /** The main chat, or one of its subtasks, is open: nothing is unread. */
+  /** The main chat itself is on screen (not one of its subtasks: its
+   * conversation is not in front of you there): nothing is unread. */
   open: boolean;
   /** While it runs: the line's sentence (`assistantCachedSentence`),
    * null for 「思考中」. */
@@ -192,8 +201,8 @@ export function assistantCardLine(
     question?: string | null;
     draft?: AssistantDraft | null;
     lastMessage?: AssistantLastMessage | null;
-    /** The assistant is open: its draft is in the composer right there,
-     * as a new reply is in the conversation. */
+    /** The main chat itself is on screen: its draft is in the composer
+     * right there, its question in the conversation (ruling 87). */
     open: boolean;
   },
   copy: AppCopy,
@@ -202,7 +211,8 @@ export function assistantCardLine(
     return { kind: state.kind, text: state.line.text };
   }
   if (state.kind === "ask" && state.line) {
-    const asked = state.fromSubtask ? "" : plainLine(question ?? "", copy);
+    const asked =
+      state.fromSubtask || open ? "" : plainLine(question ?? "", copy);
     return asked
       ? { kind: "ask", prefix: copy.assistant.askPrefix, text: asked }
       : { kind: "ask", prefix: null, text: state.line.text };

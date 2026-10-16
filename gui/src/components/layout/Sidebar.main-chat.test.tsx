@@ -414,6 +414,33 @@ describe("the assistant's card", () => {
     expect(textOf(say())).toBe("好的");
   });
 
+  it("says only the state with the main chat on screen, the words away from it (ruling 87)", () => {
+    card.question = "去哪个花市？";
+    card.sentence = "我先查一下花市几点开门。";
+    const onScreen = () =>
+      lineOf(render([used, subtask], { activeId: "s-main" }));
+    const inSubtask = () =>
+      lineOf(render([used, subtask], { activeId: "s-sub" }));
+
+    live.set("s-main", { status: "running" });
+    expect(textOf(onScreen())).toBe("思考中");
+    expect(textOf(inSubtask())).toBe("我先查一下花市几点开门。");
+
+    live.set("s-main", { status: "running", hasPendingAskUser: true });
+    expect(textOf(onScreen())).toBe("等你回复");
+    expect(textOf(inSubtask())).toBe("等你回复：去哪个花市？");
+    card.sentence = null;
+  });
+
+  it("stays selected but marks a new reply while one of its subtasks is open", () => {
+    card.lastMessage = { fromUser: false, text: "子任务办完了" };
+    const html = render([{ ...used, hasUnread: true }, subtask], {
+      activeId: "s-sub",
+    });
+    expect(tagWith(html, CARD)).toContain('aria-current="page"');
+    expect(tagWith(html, CARD)).toContain('data-state="unread"');
+  });
+
   it("reports no steps, while a workbench session running beside it keeps its 「第 N 步」", () => {
     card.sentence = "我先查一下花市几点开门。";
     const stepping = { ...sideChat, summary: "比较两班车", lastStepIndex: 3 };
@@ -444,12 +471,14 @@ describe("the assistant's card", () => {
     );
   });
 
-  it("shows no draft while the assistant is open: it is in the composer", () => {
+  it("shows no draft while the main chat is open: it is in the composer", () => {
     card.lastMessage = { fromUser: false, text: "好的" };
     saveComposerDraft("s-main", { text: "下周三的会", images: [] });
     expect(textOf(lineOf(render([used], { activeId: "s-main" })))).toBe("好的");
+    // One of its subtasks open is not the main chat on screen (ruling
+    // 87): the draft is not in front of you there.
     expect(textOf(lineOf(render([used, subtask], { activeId: "s-sub" })))).toBe(
-      "好的",
+      "草稿：下周三的会",
     );
     // An image-only draft, elsewhere.
     saveComposerDraft("s-main", {
