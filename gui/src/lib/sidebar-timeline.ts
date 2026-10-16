@@ -239,7 +239,10 @@ export function findSectionsSlot(
 /** The sessions a project group's 归档全部对话 archives — its listed
  * sessions plus the 显示更多 tail's: unarchived, unpinned (pinned ones sit
  * in 置顶, outside the group). The delete-project dialog's
- * 「同时归档里面的 N 个对话」 uses the same set, so both counts agree. */
+ * 「同时归档里面的 N 个对话」 uses the same set, so both counts agree.
+ * Core keeps the same rule for agents (`galley project archive-sessions`,
+ * `Writes::archive_project_sessions` in `core/src/session_writes.rs`):
+ * change one, change the other. */
 export function archivableProjectSessions(
   sessions: Session[],
   projectId: string,

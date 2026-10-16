@@ -368,6 +368,111 @@ schedule_task_command!(
     "schedule.run"
 );
 
+// ---- the remaining hands (main chat ticket 35, additive inside 3) ----
+//
+// New commands, so their optional fields skip when absent, like the
+// schedule family's.
+
+/// `session.rename`: a user-style rename (it locks the title against the
+/// auto title). An empty title gives the title back to Galley.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionRenameArgs {
+    pub session_id: String,
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervisor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+socket_command!(SessionRenameArgs, "session.rename");
+
+macro_rules! id_write_command {
+    ($(#[$doc:meta])* $ty:ident, $field:ident, $name:literal) => {
+        $(#[$doc])*
+        #[derive(Debug, Serialize, Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        pub struct $ty {
+            pub $field: String,
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            pub supervisor: Option<String>,
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            pub reason: Option<String>,
+        }
+        socket_command!($ty, $name);
+    };
+}
+
+id_write_command!(
+    /// `session.pin`.
+    SessionPinArgs,
+    session_id,
+    "session.pin"
+);
+id_write_command!(
+    /// `session.unpin`.
+    SessionUnpinArgs,
+    session_id,
+    "session.unpin"
+);
+id_write_command!(
+    /// `session.delete`: permanent — the session, its messages and its
+    /// attachments. Its runner, if any, is shut down first.
+    SessionDeleteArgs,
+    session_id,
+    "session.delete"
+);
+id_write_command!(
+    /// `project.pin`.
+    ProjectPinArgs,
+    project_id,
+    "project.pin"
+);
+id_write_command!(
+    /// `project.unpin`.
+    ProjectUnpinArgs,
+    project_id,
+    "project.unpin"
+);
+id_write_command!(
+    /// `project.archive_sessions`: the desktop's 「归档全部对话」.
+    ProjectArchiveSessionsArgs,
+    project_id,
+    "project.archive_sessions"
+);
+
+/// `project.update`: only the fields given change. An empty `icon` or
+/// `color` clears it; an empty `name` is refused.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectUpdateArgs {
+    pub project_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervisor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+socket_command!(ProjectUpdateArgs, "project.update");
+
+/// `llm.set_default`: make a managed model the default, as Settings >
+/// Models 「设为默认（移到顶部）」 does. Managed runtime only.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmSetDefaultArgs {
+    pub llm_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervisor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+socket_command!(LlmSetDefaultArgs, "llm.set_default");
+
 /// Legacy-equivalence pins: each args struct must serialize to the same
 /// `Value` the CLI's hand-written `json!` literal produced before this
 /// module existed (2026-07-11). These tests are what makes a field rename
@@ -578,6 +683,61 @@ mod legacy_equivalence {
         assert_eq!(ScheduleEnableArgs::NAME, "schedule.enable");
         assert_eq!(ScheduleDisableArgs::NAME, "schedule.disable");
         assert_eq!(ScheduleRunArgs::NAME, "schedule.run");
+        assert_eq!(SessionRenameArgs::NAME, "session.rename");
+        assert_eq!(SessionPinArgs::NAME, "session.pin");
+        assert_eq!(SessionUnpinArgs::NAME, "session.unpin");
+        assert_eq!(SessionDeleteArgs::NAME, "session.delete");
+        assert_eq!(ProjectUpdateArgs::NAME, "project.update");
+        assert_eq!(ProjectPinArgs::NAME, "project.pin");
+        assert_eq!(ProjectUnpinArgs::NAME, "project.unpin");
+        assert_eq!(ProjectArchiveSessionsArgs::NAME, "project.archive_sessions");
+        assert_eq!(LlmSetDefaultArgs::NAME, "llm.set_default");
+    }
+
+    #[test]
+    fn hands_commands_wire_shape() {
+        assert_matches_legacy(
+            &SessionRenameArgs {
+                session_id: "s1".into(),
+                title: "周报".into(),
+                supervisor: Some("galley-assistant".into()),
+                reason: None,
+            },
+            json!({"sessionId": "s1", "title": "周报", "supervisor": "galley-assistant"}),
+        );
+        assert_matches_legacy(
+            &SessionDeleteArgs {
+                session_id: "s1".into(),
+                supervisor: None,
+                reason: Some("user said so".into()),
+            },
+            json!({"sessionId": "s1", "reason": "user said so"}),
+        );
+        assert_matches_legacy(
+            &ProjectArchiveSessionsArgs {
+                project_id: "p1".into(),
+                supervisor: None,
+                reason: None,
+            },
+            json!({"projectId": "p1"}),
+        );
+        assert_matches_legacy(
+            &ProjectUpdateArgs {
+                project_id: "p1".into(),
+                name: Some("新名字".into()),
+                color: Some(String::new()),
+                ..ProjectUpdateArgs::default()
+            },
+            json!({"projectId": "p1", "name": "新名字", "color": ""}),
+        );
+        assert_matches_legacy(
+            &LlmSetDefaultArgs {
+                llm_name: "GLM Flash".into(),
+                supervisor: None,
+                reason: None,
+            },
+            json!({"llmName": "GLM Flash"}),
+        );
     }
 
     #[test]

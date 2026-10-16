@@ -141,3 +141,36 @@ describe("write actions", () => {
     expect(state).not.toHaveProperty("error");
   });
 });
+
+describe("applyExternalChange", () => {
+  it("re-lists the models after the CLI changed the default", async () => {
+    routeInvoke(loadedRoutes);
+    await useManagedModelsStore.getState().load();
+    const moved = { ...model, id: "model-2", isDefault: true };
+    routeInvoke({ ...loadedRoutes, list_managed_models: [moved, model] });
+
+    await useManagedModelsStore.getState().applyExternalChange();
+
+    expect(useManagedModelsStore.getState().models).toEqual([moved, model]);
+    expect(getTauriMocks().invoke).toHaveBeenCalledWith(
+      "ensure_managed_runtime_layout",
+    );
+  });
+
+  it("keeps the models it had when the re-list fails", async () => {
+    routeInvoke(loadedRoutes);
+    await useManagedModelsStore.getState().load();
+    routeInvoke({
+      ...loadedRoutes,
+      list_managed_models: () => {
+        throw "database is locked";
+      },
+    });
+
+    await useManagedModelsStore.getState().applyExternalChange();
+
+    const state = useManagedModelsStore.getState();
+    expect(state.models).toEqual([model]);
+    expect(state.loadError).toBeNull();
+  });
+});

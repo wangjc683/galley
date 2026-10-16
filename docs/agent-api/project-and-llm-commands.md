@@ -1,6 +1,6 @@
 # Agent API — Project & LLM Commands
 
-> Part of the [Galley Agent API](./README.md) contract. Command reference §5.14–§5.18: `project` commands and `llm list` / `llm set`.
+> Part of the [Galley Agent API](./README.md) contract. Command reference §5.14–§5.18a: `project` commands and `llm list` / `llm set` / `llm set-default`.
 
 ### 5.14 · `galley project create "<name>" [--root-path=…] [--enable-workspace] [--icon=…] [--color=…] [--supervisor=<x>] [--reason=<y>]`
 
@@ -194,6 +194,66 @@ $ galley project delete proj_demo --supervisor=ga-claude-1 --reason="merged into
 
 Exit codes: `0` success / `3 not_found` / `4 db_unavailable`.
 
+### 5.16a · `galley project update <project-id> [--name=<n>] [--icon=<i>] [--color=<c>] [--supervisor=<x>] [--reason=<y>]`
+
+**Write command** (additive inside `3`, 2026-10-16) — renames a project or
+changes its icon / colour metadata; only the flags given change. Give at
+least one of the three. The name is trimmed; an empty `--name=` is refused.
+An empty `--icon=` or `--color=` clears that field. `icon` and `color` are
+the same metadata `project create` takes (§5.14); the current desktop draws
+the standard folder whatever they hold.
+
+```bash
+$ galley project update proj_demo --name="Q3 review" --supervisor=galley-assistant
+{"project":{"id":"proj_demo","name":"Q3 review",…}}
+```
+
+Exit codes: `0` success / `2 invalid_args` (no flag given; empty name) /
+`3 not_found` / `4 db_unavailable`.
+
+### 5.16b · `galley project pin <project-id>` / `galley project unpin <project-id>` `[--supervisor=<x>] [--reason=<y>]`
+
+**Write commands** (additive inside `3`, 2026-10-16) — set or clear the
+project's `pinned` flag (the desktop's 置顶 for projects). Pinned projects lead
+`project list` and the desktop's project section, which also always shows
+them.
+
+```bash
+$ galley project pin proj_demo
+{"project":{"id":"proj_demo","pinned":true,…}}
+```
+
+Exit codes: `0` success / `3 not_found` / `4 db_unavailable`.
+
+### 5.16c · `galley project archive-sessions <project-id> [--supervisor=<x>] [--reason=<y>]`
+
+**Write command** (additive inside `3`, 2026-10-16) — archives a project's
+conversations, as the desktop's project menu 「归档全部对话」 does. It
+archives exactly what that project's sidebar group lists: the project's
+sessions of the **active runtime** (the one the desktop shows; the other
+runtime's sessions in the project stay) that are not archived already,
+**not pinned** (pinned sessions sit in the desktop's 置顶 section, outside
+the group, and stay), not the main chat, and not a subtask the user has not
+written in yet (`parentSessionId` set, `promoted` absent: it lives as a card
+in the main chat, not in the group). The project itself stays; there is no
+archive of a project (§8 keeps `project archive` for that). Each session
+comes back with `session restore` (§5.12).
+
+```bash
+$ galley project archive-sessions proj_demo --supervisor=galley-assistant --reason="wrapped up"
+{"projectId":"proj_demo","archivedSessions":3,
+ "archivedSessionIds":["sess_a","sess_b","sess_c"]}
+```
+
+| Response field       | Type     | Notes                                                    |
+| -------------------- | -------- | -------------------------------------------------------- |
+| `projectId`          | string   | Echo of the project id.                                  |
+| `archivedSessions`   | int      | Number of sessions this call archived (`0` when none).   |
+| `archivedSessionIds` | string[] | Their ids.                                               |
+
+Exit codes: `0` success (including nothing to archive) / `3 not_found` /
+`4 db_unavailable`.
+
 ### 5.17 · `galley llm list [--runtime=current|managed|external]`
 
 **Read-only** — direct SQLite, no socket. Prints the models one
@@ -295,3 +355,49 @@ not just user actions, so an audit trail wouldn't be meaningful).
 Exit codes: `0` success / `2 invalid_args` (unknown LLM name; empty
 cache) / `3 not_found` (session id) / `4 db_unavailable` /
 `5 runner_error` (live bridge present but stdin write failed).
+
+### 5.18a · `galley llm set-default <llm-name> [--supervisor=<x>] [--reason=<y>]`
+
+**Write command** (additive inside `3`, 2026-10-16) — makes a managed model
+the **default**: the model a managed session, the main chat or an IM channel
+starts on when nothing picked another. It is what Settings > Models
+「设为默认（移到顶部）」 does: the model moves to the top of the model store's
+order and becomes its default, the others move down one, and each model's
+own settings stay. Afterwards it is index `0` of
+`galley llm list --runtime=managed`, with `isCurrent: true` (§5.17). Galley
+Core rewrites the managed runtime's generated model config, as after any
+model save, and the desktop's model pickers follow. Sessions that already
+picked a model keep it (they hold its `selectedLlmKey`, §5.18).
+
+`<llm-name>` is any name `llm list --runtime=managed` prints,
+case-insensitive; the provider model id works too (the `llm set` resolver).
+A model without a credential is not in that list and is refused.
+
+**Managed runtime only.** The command follows the active runtime (the one
+the desktop shows). Under an attached GenericAgent it is refused with
+`managed_runtime_only:`: that runtime's default is the first model of
+GenericAgent's own config, which Galley does not write. To use another model
+there, pick it per session with `llm set` (§5.18), which resolves the
+external list as before.
+
+`--supervisor` / `--reason` are accepted like every write's; the model
+store keeps no origin.
+
+```bash
+$ galley llm set-default "GLM Flash" --supervisor=galley-assistant --reason="user agreed"
+{"llm":{"index":0,"name":"GLM Flash","key":"mm_1758000000001","displayName":"GLM Flash","isCurrent":true},
+ "changed":true}
+
+$ galley llm set-default "GLM Flash"     # already the default
+{"llm":{…},"changed":false}
+```
+
+| Response field | Type   | Notes                                                                                                     |
+| -------------- | ------ | --------------------------------------------------------------------------------------------------------- |
+| `llm`          | object | The default afterwards, as `llm list --runtime=managed` prints its index-0 row.                           |
+| `changed`      | bool   | `false` when the model was already at the top (nothing written).                                          |
+
+Exit codes: `0` success / `1 internal` (the default changed but the
+runtime config could not be rewritten; the next model save rewrites it) /
+`2 invalid_args` (unknown name; the external runtime:
+`managed_runtime_only:`) / `4 db_unavailable`.

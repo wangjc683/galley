@@ -25,8 +25,8 @@ This document was split into topic files on 2026-07-04. Section numbers
 | [stability-and-versioning.md](./stability-and-versioning.md) | §1, §7 | Stability rules, stable identifier sets (error discriminants, status enums, `dispatch` / `stream.reason` values), schema pinning, versioning policy |
 | [transports.md](./transports.md) | §2, §2A | Database locations / `GALLEY_DB_PATH`, direct-SQLite vs local-socket transports, NDJSON wire format, wire-level error discriminants |
 | [errors-and-exit-codes.md](./errors-and-exit-codes.md) | §3, §4, §6, §6A | Exit codes, output discipline, CLI + socket error envelopes, shared `Origin` type |
-| [session-commands.md](./session-commands.md) | §5.1–§5.13 | `version`, `status`, `health`, `sessions list / search`, `session brief / show / send / watch / follow / wait / new / btw / stop / archive / restore / move` |
-| [project-and-llm-commands.md](./project-and-llm-commands.md) | §5.14–§5.18 | `project create / list / brief / show / follow / delete`, `llm list / set` |
+| [session-commands.md](./session-commands.md) | §5.1–§5.13c | `version`, `status`, `health`, `sessions list / search`, `session brief / show / send / watch / follow / wait / new / btw / stop / archive / restore / move / rename / pin / unpin / delete` |
+| [project-and-llm-commands.md](./project-and-llm-commands.md) | §5.14–§5.18a | `project create / list / brief / show / follow / delete / update / pin / unpin / archive-sessions`, `llm list / set / set-default` |
 | [goal-commands.md](./goal-commands.md) | §5.19 | Retired in `schemaVersion: 3`: the `goal` family was removed on 2026-10-13 |
 | [schedule-commands.md](./schedule-commands.md) | §5.20–§5.27 | `schedule list / show / create / update / delete / enable / disable / run` (additive inside `3`, 2026-10-16) |
 | [roadmap-and-references.md](./roadmap-and-references.md) | §8, §8A, §9 | Deferred v1 additions, `GalleyApi` trait surface, transport notes, see-also references |

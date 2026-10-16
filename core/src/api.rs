@@ -34,7 +34,7 @@ pub use model::{
     ManagedModelConnectionResult, ManagedModelCredentialStatus, ManagedModelListResult,
     ManagedModelProbeInput, ManagedModelProtocol, ManagedModelProviderRecord, ManagedModelRecord,
     ReorderManagedModelsInput, SaveManagedModelInput, SaveManagedProviderInput,
-    SetManagedModelDefaultsInput,
+    SetManagedModelDefaultsInput, MANAGED_MODELS_CHANGED_EVENT, MANAGED_RUNTIME_ONLY,
 };
 pub use origin::{
     Origin, OriginClient, OriginVia, ASSISTANT_SUPERVISOR, SUBTASK_REPORT_SUPERVISOR,
@@ -51,6 +51,7 @@ pub use schedule::{
 pub use search::{SearchHit, SearchScope};
 pub use session::{
     CreateSessionInput, RuntimeKind, SessionBrief, SessionFilter, SessionId, SessionStatus,
+    MAIN_CHAT_PROTECTED,
 };
 pub use status::StatusSummary;
 pub use subtask::{

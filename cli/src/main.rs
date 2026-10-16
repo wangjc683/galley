@@ -20,6 +20,7 @@
 mod args;
 mod client;
 mod common;
+mod hands;
 mod llm;
 mod project;
 mod schedule;
@@ -172,6 +173,27 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
             supervisor,
             reason,
         }) => session::session_move(id, to, supervisor, reason).await,
+        Command::Session(SessionCmd::Rename {
+            id,
+            title,
+            supervisor,
+            reason,
+        }) => hands::session_rename(id, title, supervisor, reason).await,
+        Command::Session(SessionCmd::Pin {
+            id,
+            supervisor,
+            reason,
+        }) => hands::session_pin(id, true, supervisor, reason).await,
+        Command::Session(SessionCmd::Unpin {
+            id,
+            supervisor,
+            reason,
+        }) => hands::session_pin(id, false, supervisor, reason).await,
+        Command::Session(SessionCmd::Delete {
+            id,
+            supervisor,
+            reason,
+        }) => hands::session_delete(id, supervisor, reason).await,
         Command::Status => system::status().await,
         Command::Health => system::health().await,
         Command::Version => system::version().await,
@@ -216,11 +238,49 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
             supervisor,
             reason,
         }) => project::project_delete(project_id, supervisor, reason).await,
+        Command::Project(ProjectCmd::Update {
+            project_id,
+            name,
+            icon,
+            color,
+            supervisor,
+            reason,
+        }) => {
+            hands::project_update(galley_core_lib::protocol::ProjectUpdateArgs {
+                project_id,
+                name,
+                icon,
+                color,
+                supervisor,
+                reason,
+            })
+            .await
+        }
+        Command::Project(ProjectCmd::Pin {
+            project_id,
+            supervisor,
+            reason,
+        }) => hands::project_pin(project_id, true, supervisor, reason).await,
+        Command::Project(ProjectCmd::Unpin {
+            project_id,
+            supervisor,
+            reason,
+        }) => hands::project_pin(project_id, false, supervisor, reason).await,
+        Command::Project(ProjectCmd::ArchiveSessions {
+            project_id,
+            supervisor,
+            reason,
+        }) => hands::project_archive_sessions(project_id, supervisor, reason).await,
         Command::Llm(LlmCmd::List { runtime }) => llm::llm_list(runtime).await,
         Command::Llm(LlmCmd::Set {
             session_id,
             llm_name,
         }) => llm::llm_set(session_id, llm_name).await,
+        Command::Llm(LlmCmd::SetDefault {
+            llm_name,
+            supervisor,
+            reason,
+        }) => hands::llm_set_default(llm_name, supervisor, reason).await,
         Command::Schedule(cmd) => schedule::run(cmd).await,
     }
 }

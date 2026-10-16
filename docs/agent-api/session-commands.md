@@ -1,6 +1,6 @@
 # Agent API — Session Commands
 
-> Part of the [Galley Agent API](./README.md) contract. Command reference §5.1–§5.13: `version`, `status`, `health`, and all `sessions` / `session` commands.
+> Part of the [Galley Agent API](./README.md) contract. Command reference §5.1–§5.13c: `version`, `status`, `health`, and all `sessions` / `session` commands.
 
 ## 5 · Commands
 
@@ -69,7 +69,7 @@ $ galley sessions list --project=proj_demo
 | `gaRuntimeId`     | string?         | stable runtime id for future multi-runtime support                                 |
 | `promptProfile`   | string?         | managed prompt profile id, when applied                                            |
 | `reasoningEffort` | string?         | **Additive (2026-09-22).** Per-session reasoning-effort override (`none` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`); absent = the session follows the selected model's configured effort. Read-only for agents in this version: set from the composer LLM pill; Galley Core replays it to the runner on spawn and forwards changes to a live runner. An agent that wants a different tier for a session it drives can still type GA's own `/session.reasoning_effort=<tier>` as a message, but that runtime-only change is not reflected here. |
-| `mainChat`        | bool?           | **Additive (2026-10-12).** `true` on the managed runtime's main chat — the one permanent conversation the desktop opens on (at most one, managed only); absent on every other session. Read-only: Galley Core creates it when the desktop first asks. The desktop cannot archive or delete it; `session archive` is unchanged and still accepts it (the desktop restores an archived main chat at its next launch). |
+| `mainChat`        | bool?           | **Additive (2026-10-12).** `true` on the managed runtime's main chat — the one permanent conversation the desktop opens on (at most one, managed only); absent on every other session. Read-only: Galley Core creates it when the desktop first asks. The desktop cannot archive or delete it; `session archive` is unchanged and still accepts it (the desktop restores an archived main chat at its next launch). `session rename` / `pin` / `unpin` / `delete` (2026-10-16, §5.13a–c) refuse it with `main_chat_protected:`, and `project archive-sessions` leaves it alone. |
 | `parentSessionId` | string?         | **Additive (2026-10-13).** On a subtask: the main chat that dispatched it (the main chat ends a reply with a `<subtask>` tag; Galley Core starts each tag as an ordinary managed session whose first user message is the instructions, `origin.via: "subtask"`). Absent on every other session. Read-only. Subtasks are listed by default like any session (`sessions list` is unchanged); the desktop shows a subtask as a card in the main chat instead of a sidebar row until it is promoted. |
 | `promoted`        | bool?           | **Additive (2026-10-13).** `true` once a subtask was promoted to an ordinary conversation: the user sent it a message from the desktop or the phone. An answer to the subtask's own `ask_user` question does not promote it, and neither does `session send` (CLI / supervisor) or a scheduled task. Absent otherwise (on a subtask not promoted yet, and on every other session). Read-only. |
 | `live`            | `LiveRunState`? | **CLI-attached, additive (2026-09-09).** Present on `sessions list` / `session brief` rows (and, since 2026-10-01, on the `session` of `session wait` frames, §5.5d) when the CLI could reach Galley Core; absent when Core is unreachable or the probe exceeded 3s. Never absent to mean "idle": an idle session under a reachable Core carries an explicit `live` with `busy: false`. |
@@ -709,3 +709,63 @@ $ galley session move sess_abc        # no --to → detach
 
 Exit codes: `0` success / `2 invalid_args` (project id doesn't exist —
 FK violation) / `3 not_found` (session id) / `4 db_unavailable`.
+
+### 5.13a · `galley session rename <id> "<title>" [--supervisor=<x>] [--reason=<y>]`
+
+**Write command** (additive inside `3`, 2026-10-16) — renames a session the
+way the desktop does: the title is trimmed and kept; Galley's automatic
+title no longer replaces it. An empty title (after trimming) gives the
+title back to Galley: the session reads `新对话` again and the automatic
+title may name it later. Works on any session of either runtime, archived
+or not, except the main chat.
+
+```bash
+$ galley session rename sess_abc "Q3 report draft" --supervisor=galley-assistant
+{"session":{"id":"sess_abc","title":"Q3 report draft",…}}
+```
+
+Exit codes: `0` success / `2 invalid_args` (the main chat:
+`main_chat_protected:`) / `3 not_found` / `4 db_unavailable`.
+
+### 5.13b · `galley session pin <id>` / `galley session unpin <id>` `[--supervisor=<x>] [--reason=<y>]`
+
+**Write commands** (additive inside `3`, 2026-10-16) — set or clear the
+session's `pinned` flag (the desktop's 置顶 action). A pinned session leads
+`sessions list` and the desktop's list. Unpinning an unpinned session (or
+pinning a pinned one) succeeds and changes nothing.
+
+```bash
+$ galley session pin sess_abc
+{"session":{"id":"sess_abc","pinned":true,…}}
+```
+
+Exit codes: `0` success / `2 invalid_args` (an archived session, as on the
+desktop; the main chat: `main_chat_protected:`) / `3 not_found` /
+`4 db_unavailable`.
+
+### 5.13c · `galley session delete <id> [--supervisor=<x>] [--reason=<y>]`
+
+**Destructive write command** (additive inside `3`, 2026-10-16) — deletes a
+session permanently: the row, its messages, its search entries and its
+attachment files. Nothing brings it back; `session archive` (§5.11) is the
+reversible way to put a session away. A live runner for the session is
+shut down first (best effort: a session with no runner is deleted all the
+same). Any session, archived or not, of either runtime, except the main
+chat. Galley Core does not check whether the user agreed: an agent that
+deletes on someone's behalf asks first.
+
+The desktop's 永久删除 (in Archived) does the same: shut the runner down,
+then delete.
+
+```bash
+$ galley session delete sess_abc --supervisor=galley-assistant --reason="user confirmed"
+{"deleted":true,"sessionId":"sess_abc"}
+```
+
+| Response field | Type   | Notes                     |
+| -------------- | ------ | ------------------------- |
+| `deleted`      | bool   | Always `true` on success. |
+| `sessionId`    | string | Echo of the deleted id.   |
+
+Exit codes: `0` success / `2 invalid_args` (the main chat:
+`main_chat_protected:`) / `3 not_found` / `4 db_unavailable`.

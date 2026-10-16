@@ -73,6 +73,8 @@ is stable; the text after it is not.
 | `schema_mismatch:`       | any command, `--schema=N`                         | `N` is outside the accepted set (§1.2) |
 | `time_in_past:`          | `schedule create` / `update` `--at`               | The one-off's time is already past (additive 2026-10-16) |
 | `assistant_unavailable:` | `schedule create` / `update` / `run`, target `assistant` | The active runtime is the external one, or the managed runtime has no main chat (additive 2026-10-16) |
+| `main_chat_protected:`   | `session rename` / `pin` / `unpin` / `delete`      | The session is the main chat, which takes none of these (additive 2026-10-16) |
+| `managed_runtime_only:`  | `llm set-default`                                 | The active runtime is the external one: its default model is GenericAgent's own config (additive 2026-10-16) |
 
 #### Status enums
 
@@ -199,6 +201,18 @@ and error discriminants unchanged):
   `invalid_args`. New commands only; no existing command, field or exit
   code changed. Also served under `--schema=1` and `--schema=2`. See
   [schedule-commands.md](./schedule-commands.md).
+- 2026-10-16 — The remaining hands of the desktop (main chat ticket 35):
+  `session rename / pin / unpin / delete` (socket `session.rename`,
+  `session.pin`, `session.unpin`, `session.delete`), `project update / pin /
+  unpin / archive-sessions` (`project.update`, `project.pin`,
+  `project.unpin`, `project.archive_sessions`) and `llm set-default`
+  (`llm.set_default`), with the `main_chat_protected:` /
+  `managed_runtime_only:` message prefixes on `invalid_args`. New commands
+  only; no existing command, field or exit code changed (`session archive`
+  still accepts the main chat). Also served under `--schema=1` and
+  `--schema=2`. See §5.13a–c in [session-commands.md](./session-commands.md)
+  and §5.16a–c, §5.18a in
+  [project-and-llm-commands.md](./project-and-llm-commands.md).
 
 ### 7.2 `schemaVersion: 2` (served for unchanged commands, since 2026-09-16)
 

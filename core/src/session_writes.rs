@@ -40,15 +40,17 @@
 //! **The main chat** (主聊天, `.scratch/main-chat` ticket 02) cannot be
 //! archived or deleted from the desktop: [`Writes::protecting_main_chat`]
 //! turns that guard on, and the GUI's Tauri commands always use it. The
-//! socket's writes (CLI / supervisor) do not, on purpose — refusing an
-//! existing `session archive` would change what an existing command does
-//! inside a schema version (Rule 3), which is the user's call, not this
-//! module's.
+//! socket's older writes (`session archive` and the rest) do not, on
+//! purpose — refusing an existing `session archive` would change what an
+//! existing command does inside a schema version (Rule 3). The commands
+//! added with the main chat in place (ticket 35: `session rename / pin /
+//! unpin / delete`, `project archive-sessions`) refuse or spare it from
+//! the start, through [`refuse_main_chat`] and the same guard.
 
 use crate::api::{
     CreateProjectInput, CreateScheduledTaskInput, CreateSessionInput, GalleyApi, Origin,
     ProjectBrief, ProjectId, ProjectPatch, RuntimeKind, ScheduledTaskBrief, ScheduledTaskId,
-    ScheduledTaskPatch, SessionBrief, SessionFilter, SessionId, SessionStatus,
+    ScheduledTaskPatch, SessionBrief, SessionFilter, SessionId, SessionStatus, MAIN_CHAT_PROTECTED,
     SCHEDULED_TASKS_CHANGED_EVENT,
 };
 use crate::db::{
@@ -286,6 +288,22 @@ pub fn announce_session_deleted(
     );
 }
 
+/// `Err(invalid_args)`, its message prefixed [`MAIN_CHAT_PROTECTED`], when
+/// `id` is the main chat. The guard of [`Writes::protecting_main_chat`],
+/// and of the socket's own main chat refusals (`session rename / pin /
+/// unpin / delete`, main chat ticket 35), which apply whatever the
+/// caller.
+pub async fn refuse_main_chat(galley: &SqliteGalley, id: &SessionId, action: &str) -> Result<()> {
+    if galley.main_chat_id().await?.as_ref() == Some(id) {
+        return Err(GalleyError::InvalidArgs {
+            message: format!(
+                "{MAIN_CHAT_PROTECTED}: session {id} is the main chat; it cannot be {action}"
+            ),
+        });
+    }
+    Ok(())
+}
+
 /// The write path: one method per write, each writing the database and
 /// then broadcasting the result once. Failures broadcast nothing.
 pub struct Writes<'a> {
@@ -320,12 +338,7 @@ impl<'a> Writes<'a> {
         if !self.protect_main_chat {
             return Ok(());
         }
-        if self.galley.main_chat_id().await?.as_ref() == Some(id) {
-            return Err(GalleyError::InvalidArgs {
-                message: format!("session {id} is the main chat; it cannot be {action}"),
-            });
-        }
-        Ok(())
+        refuse_main_chat(self.galley, id, action).await
     }
 
     /// `ids` without the main chat when guarding.
@@ -550,6 +563,53 @@ impl<'a> Writes<'a> {
             self.session_event(SESSION_ARCHIVED_EXTERNAL_EVENT, row);
         }
         Ok(count)
+    }
+
+    /// The desktop's 「归档全部对话」 on a project, as one Core write (the
+    /// socket's `project.archive_sessions`, main chat ticket 35): archive
+    /// what that project's sidebar group lists — the project's sessions of
+    /// the active runtime that are not archived, not pinned (those sit in
+    /// the 置顶 section, outside the group), not the main chat, and not a
+    /// subtask the user has not written in (a card under the main chat,
+    /// never a sidebar row). That is the set the desktop's group hands
+    /// `bulk_archive_sessions` (`SidebarProjectGroup`; the rule is
+    /// `archivableProjectSessions` in `gui/src/lib/sidebar-timeline.ts`
+    /// over the sidebar's rows), so the two agree. One
+    /// `session-archived-external` per session; returns them, in list
+    /// order. `not_found` for an unknown project.
+    pub async fn archive_project_sessions(
+        &self,
+        project_id: ProjectId,
+        _origin: Origin,
+    ) -> Result<Vec<SessionBrief>> {
+        self.galley.fetch_project(project_id.as_str()).await?;
+        let runtime = self.galley.active_runtime_kind().await?;
+        let main_chat = self.galley.main_chat_id().await?;
+        let listed: Vec<SessionId> = self
+            .galley
+            .list_sessions(SessionFilter {
+                project_id: Some(project_id.0),
+                status: None,
+                archived: Some(false),
+                runtime_kind: Some(runtime),
+            })
+            .await?
+            .into_iter()
+            .filter(|s| {
+                let unpromoted_subtask = s.parent_session_id.is_some() && s.promoted != Some(true);
+                s.pinned != Some(true)
+                    && s.main_chat != Some(true)
+                    && main_chat.as_ref() != Some(&s.id)
+                    && !unpromoted_subtask
+            })
+            .map(|s| s.id)
+            .collect();
+        let ids = self.spare_main_chat(listed).await?;
+        let rows = self.galley.bulk_archive_session_rows(&ids).await?;
+        for row in &rows {
+            self.session_event(SESSION_ARCHIVED_EXTERNAL_EVENT, row.clone());
+        }
+        Ok(rows)
     }
 
     /// Inverse of [`Self::bulk_archive_sessions`].

@@ -144,6 +144,14 @@ pub struct SessionBrief {
     pub promoted: Option<bool>,
 }
 
+/// Stable prefix of the `invalid_args` message for a write the main chat
+/// does not take (Agent API §1.1, like `schema_mismatch:`): it cannot be
+/// renamed, pinned, unpinned or deleted (main chat PRD rulings 14, 59),
+/// and the desktop cannot archive it either. `session archive` from the
+/// socket still accepts it; that command predates the main chat and
+/// stays as it was (Rule 3).
+pub const MAIN_CHAT_PROTECTED: &str = "main_chat_protected";
+
 /// Filter / scope for `list_sessions`. All fields optional — None means
 /// "no constraint on this dimension".
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

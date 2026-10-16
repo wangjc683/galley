@@ -41,15 +41,17 @@ pub(crate) enum Command {
     Version,
 
     /// Project operations (create / list / brief / show / follow /
-    /// delete). `delete` is destructive: child sessions detach to
-    /// ungrouped and survive; there is no reversible project archive.
+    /// update / pin / unpin / archive-sessions / delete). `delete` is
+    /// destructive: child sessions detach to ungrouped and survive.
+    /// `archive-sessions` archives the conversations and keeps the
+    /// project; there is no archive of the project itself.
     #[command(subcommand)]
     Project(ProjectCmd),
 
     /// LLM commands. `llm list` prints the model list of the current
     /// runtime (Galley model store for managed, the GUI's warmup cache for
     /// external GA). `llm set` persists a per-session pick and tells any
-    /// live runner.
+    /// live runner. `llm set-default` changes the managed default model.
     #[command(subcommand)]
     Llm(LlmCmd),
 
@@ -287,6 +289,57 @@ pub(crate) enum ProjectCmd {
         #[arg(long)]
         reason: Option<String>,
     },
+    /// Rename a project or change its icon / colour; only the flags given
+    /// change. An empty `--name=` is refused (exit 2); an empty `--icon=`
+    /// or `--color=` clears it.
+    Update {
+        /// Project id.
+        project_id: String,
+        /// New name (trimmed).
+        #[arg(long)]
+        name: Option<String>,
+        /// Icon metadata (the desktop draws a folder whatever it holds).
+        #[arg(long)]
+        icon: Option<String>,
+        /// Accent colour, hex (e.g. `#7c84ff`).
+        #[arg(long)]
+        color: Option<String>,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Pin a project: the desktop lists it first, always in sight.
+    Pin {
+        /// Project id.
+        project_id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Unpin a project.
+    Unpin {
+        /// Project id.
+        project_id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Archive the project's conversations — the desktop's 「归档全部对话」:
+    /// the sessions its sidebar group lists (the active runtime's, not
+    /// archived, not pinned, not the main chat, not a subtask the user has
+    /// not written in). The project stays; `session restore` brings a
+    /// session back. Returns `archivedSessions` and their ids.
+    ArchiveSessions {
+        /// Project id.
+        project_id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -324,6 +377,20 @@ pub(crate) enum LlmCmd {
         /// Display name of the LLM as it appears in `galley llm list`
         /// (case-insensitive).
         llm_name: String,
+    },
+    /// Make a model the default — Settings > Models 「设为默认（移到顶部）」:
+    /// the model sessions and IM channels start on without a model pick,
+    /// index 0 of `llm list --runtime=managed` afterwards. Any name that
+    /// list prints (case-insensitive; the provider model id works too).
+    /// Managed runtime only: under an attached GenericAgent it exits 2
+    /// (`managed_runtime_only:`).
+    SetDefault {
+        /// Model name as `galley llm list --runtime=managed` prints it.
+        llm_name: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
     },
 }
 
@@ -595,6 +662,52 @@ pub(crate) enum SessionCmd {
         /// Target project id. Omit to detach from any project.
         #[arg(long)]
         to: Option<String>,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Rename a session, as the desktop does: the title stays, the auto
+    /// title no longer replaces it. An empty title gives it back to
+    /// Galley. The main chat cannot be renamed (`main_chat_protected:`,
+    /// exit 2).
+    Rename {
+        /// Session id.
+        id: String,
+        /// New title (trimmed).
+        title: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Pin a session to the top of the desktop's list. An archived
+    /// session cannot be pinned (exit 2), nor the main chat
+    /// (`main_chat_protected:`).
+    Pin {
+        /// Session id.
+        id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Unpin a session.
+    Unpin {
+        /// Session id.
+        id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Permanently delete a session: its messages and attachments go too,
+    /// and nothing brings it back (`session archive` is the reversible
+    /// one). A live runner is shut down first. The main chat cannot be
+    /// deleted (`main_chat_protected:`, exit 2).
+    Delete {
+        /// Session id.
+        id: String,
         #[arg(long)]
         supervisor: Option<String>,
         #[arg(long)]
