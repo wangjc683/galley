@@ -23,7 +23,7 @@ Galley 的视觉与交互气质 = **Notion + Claude**。
 | 源头 | 借用 | 不借用 |
 |---|---|---|
 | **Notion** | sidebar 树、文档留白、callout 块 | 数据库视图复杂度、cover image、emoji-heavy 页面装饰 |
-| **Claude.ai** | 暖底色、衬线正文、hero composer、对话节奏、用户消息的单侧平涂容器（2026-09-17 起） | 双侧 / 右对齐气泡（工作台；助手的对话照一对一 IM 用双侧气泡，见 [conversation「助手的对话」](./conversation.md#助手的对话2026-10-15)）、artifact 侧边栏（V0.1） |
+| **Claude.ai** | 暖底色、衬线正文、hero composer、对话节奏、用户消息的单侧平涂容器（2026-09-17 起） | 双侧气泡（工作台：回复是纸上的散文；你的话 2026-10-16 起靠右，同 ChatGPT，见 [conversation「User vs Agent 三重区分」](./conversation.md#user-vs-agent-三重区分单侧容器不是-im-双侧气泡)；助手的对话照一对一 IM 用双侧气泡，见 [conversation「助手的对话」](./conversation.md#助手的对话2026-10-15)）、artifact 侧边栏（V0.1） |
 | **Linear** | 键盘优先、Command Palette、密度 | dark-first、cyan/emerald 信号、紧凑驾驶舱感 |
 | **Raycast** | overlay Command Palette 形态 | 顶部贴边、酷炫渐变 |
 
