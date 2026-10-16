@@ -8,6 +8,7 @@ import {
   type SendOutcome,
 } from "@/lib/session-send";
 import { isSideQuestion } from "@/lib/side-question";
+import { useMessageDeleteStore } from "@/stores/message-delete";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
@@ -45,6 +46,12 @@ export type SendEcho = "turn" | "side_question" | "none";
  * `dispatched` broadcast or this command's own answer, whichever lands
  * first.
  *
+ * A message of this conversation deleted within the last five seconds
+ * (its undo toast still up; main chat ticket 38) goes to Core first, and
+ * the send waits for it, so the turn's history no longer holds it. The
+ * echo shows meanwhile; a deletion Core refuses comes back on screen and
+ * says so (stores/message-delete.ts), and the send goes on.
+ *
  * Resolves to Core's outcome; throws Core's failure
  * (`SendUserMessageError`). An echo Core persisted before failing stays
  * in the transcript, as the row does.
@@ -78,6 +85,8 @@ export async function sendThroughCore(
   } else if (echo === "side_question") {
     messages.appendSideQuestionUserTurn(sid, text);
   }
+  const deleting = useMessageDeleteStore.getState().flush(sid);
+  if (deleting) await deleting;
   const result = await runtime.deliverUserMessage({
     sessionId: sid,
     text,

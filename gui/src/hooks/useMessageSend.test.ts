@@ -13,6 +13,7 @@ import type {
   SendUserMessageResult,
   UserMessagePersistedPayload,
 } from "@/lib/session-send";
+import { useMessageDeleteStore } from "@/stores/message-delete";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
@@ -381,6 +382,53 @@ describe("a send through Core (send_user_message)", () => {
     ]);
     expect(echoed).toBe("data:image/png;base64,AAAA");
     expect(userTurns(sid)[0].attachments).toEqual([stored]);
+  });
+
+  it("a message deleted within the five seconds goes to Core first; the send waits", async () => {
+    const sid = "s-undo-window";
+    seed(sid);
+    useMessagesStore.setState((s) => ({
+      byId: {
+        ...s.byId,
+        [sid]: {
+          ...s.byId[sid],
+          turns: [{ role: "user", content: "我的密钥", messageId: "u-secret" }],
+        },
+      },
+    }));
+    const order: string[] = [];
+    tauriMocks.invoke.mockImplementation(async (command, args) => {
+      order.push(command);
+      if (command === "delete_main_chat_message") {
+        return {
+          sessionId: sid,
+          messageIds: [(args as { messageId: string }).messageId],
+          via: "gui",
+        };
+      }
+      if (command === "send_user_message") {
+        return dispatched(row(sid, 2, "我刚才说了什么？"));
+      }
+      if (command === "list_live_runners" || command === "runner_stderr_tail") {
+        return [];
+      }
+      return undefined;
+    });
+    useMessageDeleteStore.getState().stage(sid, "u-secret", ["u-secret"]);
+    expect(useUiStore.getState().toasts).toHaveLength(1);
+
+    await sendThroughCore(sid, { text: "我刚才说了什么？", echo: "turn" });
+
+    expect(order.indexOf("delete_main_chat_message")).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf("delete_main_chat_message")).toBeLessThan(
+      order.indexOf("send_user_message"),
+    );
+    // The toast went with it, and the deleted row is gone.
+    expect(useUiStore.getState().toasts).toEqual([]);
+    expect(useMessageDeleteStore.getState().staged).toEqual([]);
+    expect(userTurns(sid).map((turn) => turn.content)).toEqual([
+      "我刚才说了什么？",
+    ]);
   });
 
   it("Core queued it (the page thought the session idle): the echo is taken back", async () => {

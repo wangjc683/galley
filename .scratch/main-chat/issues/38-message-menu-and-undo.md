@@ -57,3 +57,37 @@ Status: ready-for-agent
 - 真机（JC）：右键你的一句与它的一条回复看菜单；悬停回复点「⋯」；引用一条长回复；删一条、5 秒内撤销；删一条、5 秒内马上发一句，问它刚才那句说了什么。
 
 ## Comments
+
+### 2026-10-16 实现回报（子代理，分支 `mc-message-menu`）
+
+**做了什么**
+
+- 菜单：`MessageDeleteMenu` 换成 `components/conversation/MessageMenu.tsx`：右键（`MessageContextMenu`，整个对话一个，挂在对话根上）与行动条末尾的「⋯」（`MessageMenuButton`）画同一份行（`MessageMenuRows`，走侧栏 `SidebarRowMenu` 的 context / dropdown 两用件），数据来自同一个 `wiring.model`；清单与顺序在 `lib/message-menu.ts`（`messageMenuTarget`、`messageMenuEntries`）。复制、保存与行动条同一个动作（保存抽到 `lib/reply-save.ts`，行动条也改用它）。「⋯」是 `ActionChip`（改成 `forwardRef`、把菜单触发器的属性传给按钮），`DotsThree` 14px bold，菜单开着时整条行动条常显。
+- 删除：去掉 `DeleteMessageDialog`。新 store `stores/message-delete.ts`（`stage` / `undo` / `commit` / `flush`）：点删除立刻藏起这条气泡要删的那组行（`lib/message-delete.ts` 的 `messageRowIds`，与 Core 的 `message_unit` 同一套分组，叫醒行连带），`MainView` 用 `withoutHiddenTurns` 在排序位置上照 Core 删过一样跳过；`useRemovedTurnsAnchor` 同时盯两个 store，藏起与放回都不动视口。提示条复用 `ToastHost`：`AppError` 加 `onClose`（到时或点 × 才调，代码收起不调）与 `action.kind: "undo"`（自带 `run`）。`sendThroughCore` 发送前 `flush`：你的话照常先出现，等 Core 删完再发。
+- 文案（中英）、设计文档（`conversation.md` 那节改为「消息菜单」，`overlays-and-settings.md` 的例外改写、「被否：撤销」注明是重置，`onboarding-and-cards.md` 提示条加「撤销」用法，`layout-and-chrome.md:265` 的指向，`architecture.md` 一句）。
+
+**票里留给我定的**
+
+1. **引用整条的截断**：最多 3 行、约 120 个汉字（240 列，汉字两列），截断处加「…」，句尾悬着的逗号顿号先去掉。理由：引用在你发出的气泡里本来就只显示 3 行（`MessageQuotes` 的 `line-clamp-3`），560px 气泡标准字号一行约 39 个汉字，120 个正好填满这 3 行。回复按显示的样子取（去 markdown 记号，列表写成「• 」，编号保留，空行不要）。
+2. **代码块、表格**：取它前面的文字（到它为止，后面加「…」）；一开头就是代码块时取代码的第一行，一开头就是表格时取表头（单元格之间「 | 」）。
+3. **连删**：照票里的建议，合成一条「已删除 N 条消息 · 撤销」，每删一条换一条新的提示条、5 秒从头算，撤销全部放回，到时按删除顺序一条条交给 Core。没找到更好的规则：一摞提示条要一条条撤，手在最新的那条上。
+4. **提交被拒**：气泡放回，出一条提示条：标题「没能删除这条消息」（几条一起被拒「有 N 条消息没能删除」），正文照票 32 的原因（在跑或在问、派了子任务），别的错误写「已放回原处。」；带「复制详情」（`traceback` 里是 Core 的原话）。在跑被拒是 warning、别的是 error，都不自己消失（现有错误提示条的规矩）。在跑被拒后，同一批后面的不再问 Core，直接放回、算进 N。Core 说 `not_found`（这 5 秒里重置了主对话之类）什么都不说。
+5. **英文**：「Message deleted」「N messages deleted」「Undo」「Couldn't delete this message」「Couldn't delete N messages」「It's back where it was.」；「更多」用现成的 `common.more`（More）。菜单项复用行动条与选区工具条的「复制」「引用」「保存」「展开过程 / 收起过程」（「查看过程」按票里「能复用的就复用」用了折叠头的那对字，展开时读「收起过程」）。
+
+**与票不同或票里没写的，及理由**
+
+- **它问你的问题**（答完的提问气泡）没有行动条：菜单是「复制、引用 ── 删除」，复制、引用的是问题本身；删除照票 32 删整轮。右键哪条就作用在哪条上，复制回答会让人意外。
+- **只有图片的你的气泡**只剩「删除」（没有字可复制、引用），没有分隔线。
+- **回复只剩泄漏的工具调用标记（#22）**：原来只在有过程按钮时有行动条、也不能右键。现在它在助手的对话里照样有行动条（只有过程按钮与「⋯」），右键也能开（补了 `data-message-id`），菜单只有「展开过程」与删除。顺带让它下面也有回复该有的 30px。
+- **中文的「复制详情」**：错误提示条的 `errors.copyDetails` / `copiedDetails` 中文一直是英文「Copy details」「Copied」（6 月起的遗留），被拒提示条要用它，顺手改成「复制详情」「已复制」，影响所有错误提示条的这颗按钮。
+- `ConfirmActionDialog` 的正文仍可省略（票 32 加的），现在没有调用方这样用，注释改了，没回退。
+
+**测试**
+
+- 新增：`lib/message-menu.test.ts`（两种气泡的项与顺序、没过程不出「展开过程」、删除置灰时其余照常、问题气泡、图片气泡、#22、没有菜单的行、藏起的行含叫醒行）、`composer-quote.test.ts` 加 `wholeMessageQuote` 9 条、`stores/message-delete.test.ts` 11 条（立刻藏起且不调 Core、到时与点 × 才调、撤销不调、连删合并与按序提交、发送前提交并等、被拒放回并报错、在跑只问一次、`not_found` 不说话，都不挂组件）、`MessageMenu.test.tsx` 4 条（行序、只灰删除带原因、收起过程、没有接线不出「⋯」）、`ErrorCard.test.tsx`（撤销提示条的样子）、`useMessageSend.test.ts` 加 1 条（删除先于 `send_user_message`）、`Conversation.delete.test.tsx` 改 + 加 2 条（「⋯」只在助手的对话、藏起的气泡不画且 key 不动）。
+- typecheck、lint 过；全量 gui 153 个文件 1597 条（变基到 `467ece12` 之后），本机时区与 `TZ=UTC` 各一遍全过；`git diff --check` 干净；六个门禁过；中文标点扫新增行，命中的都是英文注释里的界面词与 markdown 链接括号。
+- 临时 Vite + Chrome（playwright）跑了一遍真实的 `MainView` + `ToastHost`（假的 Tauri 桥）：「⋯」与右键同一组五项、你的气泡三项、引用进引用条（长回复截到 3 行加「…」）、从「⋯」删后 `body` 的 `pointer-events` 已复原、撤销不调 Core、连删两条合成「已删除 2 条消息」、5 秒后按序调 Core、被拒放回并出 warning。harness 已删。
+
+**没验证的**
+
+- 真机：右键、「⋯」与行动条悬停的手感、提示条在侧栏下面的位置、Core 真拒绝（子任务叫醒撞上 5 秒）、5 秒里退出后重开还在、滚动锚定在长对话里藏起与放回。

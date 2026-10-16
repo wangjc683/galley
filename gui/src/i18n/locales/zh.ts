@@ -1705,21 +1705,22 @@ export const zhCopy = {
     // 细节票 02）。
     quoteSelection: "引用",
     copied: "已复制",
-    // 主对话里右键一条气泡删除它（主对话票 32，裁决 83）。确认框只有标题与确认键：
-    // JC 2026-10-16 选不写正文（「对于用户来说，负担最小最容易理解」）。
-    // 菜单项不能点时，下面一行写原因。
+    // 主对话里一条气泡的消息菜单里的「删除」（主对话票 32、38，裁决 83、85）。
+    // 菜单项不能点时，下面一行写原因。点了不弹确认：气泡立刻藏起，底部提示条
+    // 给 5 秒「撤销」，提示条走了才真删；Core 拒绝时气泡放回，出一条错误提示。
     deleteMessage: {
       menuItem: "删除",
       blockedRunning: "它正在回复，回完才能删",
       blockedAsking: "它在等你回答，答完才能删",
       blockedSubtasks: "这条回复派出了子任务，暂时不能删",
-      title: "删除这条消息？",
-      confirm: "删除",
+      deleted: "已删除一条消息",
+      deletedCount: (n: number) => `已删除 ${n} 条消息`,
+      undo: "撤销",
+      failedTitle: "没能删除这条消息",
+      failedTitleCount: (n: number) => `有 ${n} 条消息没能删除`,
       failedBusy: "它正在回复或在等你回答，这会儿删不了。",
       failedSubtasks: "这条回复派出了子任务，暂时不能删。",
-      failed: "没能删除这条消息。",
-      copyDetails: "复制详情",
-      copied: "已复制",
+      failed: "已放回原处。",
     },
     // Telemetry tooltips. The meter says "约" because its number is
     // converted from GA's char budget by a ×3 heuristic, while input /
@@ -1809,8 +1810,8 @@ export const zhCopy = {
       brief: "可切换其他模型继续。",
     },
     details: "查看技术详情",
-    copyDetails: "Copy details",
-    copiedDetails: "Copied",
+    copyDetails: "复制详情",
+    copiedDetails: "已复制",
     switchLLM: "切换模型",
     managedModelUnavailable:
       "内置内核没有可用模型。在 设置 → 模型 添加模型，或重填 API Key。",

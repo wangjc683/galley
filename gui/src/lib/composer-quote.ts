@@ -116,6 +116,176 @@ export function splitQuotedMessage(text: string): QuotedMessage {
   return { quotes, body: head ? `${head}${body}`.trimEnd() : body };
 }
 
+/**
+ * How much of a whole message the message menu's 「引用」 takes (main
+ * chat ticket 38, ruling 85): its first lines, at most three and about
+ * 120 CJK characters (240 columns, a CJK character two), then 「…」.
+ * That is what your bubble shows of a quote anyway: MessageQuotes clamps
+ * it to three lines, and a line of your 560px bubble holds about 39 CJK
+ * characters at the standard size. The quote says which message you
+ * mean; the assistant has the whole of it in the conversation.
+ */
+export const WHOLE_QUOTE_LINES = 3;
+export const WHOLE_QUOTE_COLUMNS = 240;
+
+/** A code point that takes two columns: CJK, Hangul, fullwidth forms,
+ * emoji. */
+const WIDE =
+  /[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿ꀀ-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦\u{1F300}-\u{1FAFF}\u{20000}-\u{3FFFD}]/u;
+
+function columns(text: string): number {
+  let width = 0;
+  for (const char of text) width += WIDE.test(char) ? 2 : 1;
+  return width;
+}
+
+/** The longest head of `line` within `budget` columns, and whether that
+ * is all of it. */
+function headWithin(line: string, budget: number): [string, boolean] {
+  let width = 0;
+  let head = "";
+  for (const char of line) {
+    width += WIDE.test(char) ? 2 : 1;
+    if (width > budget) return [head, false];
+    head += char;
+  }
+  return [head, true];
+}
+
+const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+const TABLE_DELIMITER = /^ {0,3}\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+const THEMATIC_BREAK = /^ {0,3}([-*_])(\s*\1){2,}\s*$/;
+const SETEXT_UNDERLINE = /^ {0,3}=+\s*$/;
+
+/** One line of a reply as it reads: Markdown markers off (headings,
+ * quotes, emphasis, code spans, link targets, images, tags), a bullet
+ * as 「•」, a numbered item's number kept, spaces collapsed. */
+function readMarkdownLine(line: string): string {
+  return line
+    .replace(/^ {0,3}(>\s?)+/, "")
+    .replace(/^ {0,3}#{1,6}\s+/, "")
+    .replace(/\s+#+\s*$/, "")
+    .replace(/^\s*[-*+]\s+\[[ xX]\]\s+/, "• ")
+    .replace(/^\s*[-*+]\s+/, "• ")
+    .replace(/^\s+(\d+[.)]\s)/, "$1")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/<(https?:\/\/[^>\s]+)>/g, "$1")
+    .replace(/<\/?[a-zA-Z][^<>]*>/g, "")
+    .replace(/\*\*|__|~~|`+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** A table row's cells, ` | ` between them. */
+function readTableRow(line: string): string {
+  return line
+    .trim()
+    .replace(/^\||\|$/g, "")
+    .split("|")
+    .map((cell) => readMarkdownLine(cell))
+    .filter((cell) => cell !== "")
+    .join(" | ");
+}
+
+/**
+ * The lines a reply's quote is read from, and whether anything after
+ * them was left out. Prose runs until the first code block or table:
+ * neither reads as a quote, so the prose before it is the quote; a reply
+ * that opens with one is quoted by its first line (the first line of
+ * code, the table's header row).
+ */
+function markdownLines(source: string): { lines: string[]; more: boolean } {
+  const raw = source.split("\n");
+  const lines: string[] = [];
+  const hasTextFrom = (from: number) =>
+    raw.slice(from).some((line) => line.trim() !== "");
+  for (let i = 0; i < raw.length; i++) {
+    const line = raw[i];
+    if (line.trim() === "") continue;
+    const fence = FENCE.exec(line);
+    const table =
+      line.includes("|") &&
+      i + 1 < raw.length &&
+      raw[i + 1].includes("|") &&
+      TABLE_DELIMITER.test(raw[i + 1]);
+    if (fence || table) {
+      if (lines.length > 0) return { lines, more: true };
+      if (!fence) return { lines: [readTableRow(line)], more: true };
+      let close = raw.length;
+      for (let j = i + 1; j < raw.length; j++) {
+        if (raw[j].trim().startsWith(fence[1])) {
+          close = j;
+          break;
+        }
+      }
+      const code = raw
+        .slice(i + 1, close)
+        .map((codeLine) => codeLine.trim())
+        .filter((codeLine) => codeLine !== "");
+      if (code.length === 0) {
+        // An empty block says nothing: read on after it.
+        i = close;
+        continue;
+      }
+      return {
+        lines: [code[0]],
+        more: code.length > 1 || hasTextFrom(close + 1),
+      };
+    }
+    if (THEMATIC_BREAK.test(line) || SETEXT_UNDERLINE.test(line)) continue;
+    const text = readMarkdownLine(line);
+    if (text) lines.push(text);
+  }
+  return { lines, more: false };
+}
+
+/**
+ * The text the message menu's 「引用」 puts in the quote strip (main chat
+ * ticket 38): the message whole when it is short, else its first lines
+ * within {@link WHOLE_QUOTE_LINES} and {@link WHOLE_QUOTE_COLUMNS},
+ * ending 「…」 where something was left out. `markdown`: a reply (its
+ * Markdown read as it shows, up to a code block or a table); otherwise
+ * your plain words, the quotes at their head left out unless they are
+ * all there is. Blank lines go. "" when there is no text.
+ */
+export function wholeMessageQuote(text: string, markdown: boolean): string {
+  const normalized = text.replace(/\r\n?/g, "\n");
+  let lines: string[];
+  let more = false;
+  if (markdown) {
+    ({ lines, more } = markdownLines(normalized));
+  } else {
+    const { quotes, body } = splitQuotedMessage(normalized);
+    lines = (body || quotes.join("\n"))
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line !== "");
+  }
+  const out: string[] = [];
+  let left = WHOLE_QUOTE_COLUMNS;
+  for (let i = 0; i < lines.length; i++) {
+    if (out.length === WHOLE_QUOTE_LINES || left <= 0) {
+      more = true;
+      break;
+    }
+    const [head, whole] = headWithin(lines[i], left);
+    if (head !== "") out.push(head);
+    left -= columns(head);
+    if (!whole) {
+      more = true;
+      break;
+    }
+  }
+  if (out.length === 0) return "";
+  if (more) {
+    // No separator left dangling before the 「…」.
+    const last = out[out.length - 1].replace(/[\s,，、;；:：]+$/, "");
+    out[out.length - 1] = `${last}…`;
+  }
+  return out.join("\n");
+}
+
 /** One line for a preview of a message (sidebar card, question rail,
  * queue strip): the sender's own words, or with none, the quotes. */
 export function quotedMessagePreview(text: string): string {

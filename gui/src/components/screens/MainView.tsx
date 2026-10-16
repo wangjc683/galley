@@ -14,7 +14,6 @@ import {
 } from "@/components/conversation/Conversation";
 import { AssistantLiveLine } from "@/components/conversation/AssistantParts";
 import { ConversationSkeleton } from "@/components/conversation/ConversationSkeleton";
-import { DeleteMessageDialog } from "@/components/conversation/DeleteMessageDialog";
 import { StepLimitTail } from "@/components/conversation/StepLimitTail";
 import {
   buildRunGroups,
@@ -54,9 +53,11 @@ import {
   extractLiveThinking,
   extractPreamble,
 } from "@/lib/ipc/ga-output-cleaning";
+import { withoutHiddenTurns } from "@/lib/message-delete";
 import { mendStreamingMarkdown } from "@/lib/mend-streaming-markdown";
 import { stepLimitTailVisible } from "@/lib/step-limit";
 import { cn } from "@/lib/utils";
+import { hiddenRowIds, useMessageDeleteStore } from "@/stores/message-delete";
 import { EMPTY_ORDINALS, useMessagesStore } from "@/stores/messages";
 import type {
   PendingAskUser,
@@ -240,8 +241,21 @@ function MainViewContent({
     (m) => m.removedOrdinals,
     EMPTY_ORDINALS,
   );
-  // The main chat's message whose deletion awaits its confirm.
-  const [deleting, setDeleting] = useState<string | null>(null);
+  // A message deleted on the page and not yet by Core (its undo toast
+  // up, or Core still answering; ticket 38) is gone from the
+  // conversation already, its places skipped as if Core had deleted it.
+  // Only the conversation's rows: everything else reads the turns whole.
+  const stagedDeletes = useMessageDeleteStore((s) => s.staged);
+  const shown = useMemo(
+    () =>
+      withoutHiddenTurns(
+        turns,
+        prependedTurns,
+        removedOrdinals,
+        hiddenRowIds(stagedDeletes, activeSessionId),
+      ),
+    [turns, prependedTurns, removedOrdinals, stagedDeletes, activeSessionId],
+  );
   const previousUserCreatedAt = useActiveMessages(
     (m) => m.earlier?.previousUserCreatedAt ?? null,
     null,
@@ -406,11 +420,11 @@ function MainViewContent({
     turnsLength: turns.length,
     prependedTurns,
   });
-  // A deleted message leaves without moving what is on screen.
+  // A deleted message leaves (and one put back returns) without moving
+  // what is on screen.
   useRemovedTurnsAnchor({
     sessionId: activeSessionId,
     scrollContainerRef,
-    removedTurns: removedOrdinals.length,
   });
 
   // Unread-final-answer tracking for the scroll-to-bottom button's
@@ -510,9 +524,9 @@ function MainViewContent({
                 // reopened session starts with every settled run
                 // folded (conversation-run-fold PRD 定案 2).
                 key={activeSessionId ?? "conversation"}
-                turns={turns}
+                turns={shown.turns}
                 keyBase={prependedTurns}
-                removedOrdinals={removedOrdinals}
+                removedOrdinals={shown.removedOrdinals}
                 previousUserCreatedAt={previousUserCreatedAt}
                 askUserPending={Boolean(pendingAskUser)}
                 agentRunning={isRunning}
@@ -527,7 +541,7 @@ function MainViewContent({
                     : undefined
                 }
                 assistant={isMainChat}
-                messageDelete={
+                messageMenu={
                   isMainChat && activeSessionId
                     ? {
                         // A send on its way counts: the page marks the
@@ -536,17 +550,14 @@ function MainViewContent({
                         asking: Boolean(pendingAskUser),
                         hasSubtasks: (answerId) =>
                           subtaskDispatches.has(answerId),
-                        onDelete: setDeleting,
+                        onQuote: (text) => composerRef.current?.quote(text),
+                        onDelete: ({ messageId, rowIds }) =>
+                          useMessageDeleteStore
+                            .getState()
+                            .stage(activeSessionId, messageId, rowIds),
                       }
                     : undefined
                 }
-              />
-            )}
-            {deleting && activeSessionId && (
-              <DeleteMessageDialog
-                sessionId={activeSessionId}
-                messageId={deleting}
-                onClose={() => setDeleting(null)}
               />
             )}
             {/* In-flight placeholder. User sent a message; the bridge

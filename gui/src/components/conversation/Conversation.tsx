@@ -9,7 +9,11 @@ import {
   MessageAgent,
   MessageAgentNarration,
 } from "@/components/conversation/MessageAgent";
-import { MessageDeleteMenu } from "@/components/conversation/MessageDeleteMenu";
+import {
+  MessageContextMenu,
+  MessageMenuProvider,
+  type MessageMenuWiring,
+} from "@/components/conversation/MessageMenu";
 import { MessageTimeDivider } from "@/components/conversation/MessageTimeDivider";
 import { MessageUser } from "@/components/conversation/MessageUser";
 import { RunFoldHeader } from "@/components/conversation/RunFoldHeader";
@@ -34,8 +38,10 @@ import {
   WrittenFilesContext,
   buildWrittenFileResolver,
 } from "@/lib/written-files";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { useCopy, useLanguage } from "@/lib/i18n";
-import { deletableMessage, messageDeleteBlock } from "@/lib/message-delete";
+import { isMenuBubble, messageDeleteBlock } from "@/lib/message-delete";
+import { messageMenuEntries, messageMenuTarget } from "@/lib/message-menu";
 import {
   formatMessageTime,
   formatMessageTimeFull,
@@ -58,6 +64,7 @@ import {
   replyUserIndices,
   runStepNumbers,
 } from "@/lib/run-groups";
+import { saveReplyMarkdown } from "@/lib/reply-save";
 import { isSubtaskReportTurn } from "@/lib/subtasks";
 import { turnOrdinals } from "@/lib/turn-ordinals";
 import { cn } from "@/lib/utils";
@@ -128,20 +135,25 @@ export interface ConversationProps {
    */
   assistant?: boolean;
   /**
-   * The assistant's conversation: right-click a bubble to delete it (main
-   * chat ticket 32, MessageDeleteMenu). MainView supplies the main
-   * chat's state and the confirm; absent everywhere else, so no other
-   * conversation has a menu.
+   * The assistant's conversation: a bubble's message menu, on a
+   * right-click and on the ⋯ ending a reply's bar (main chat tickets 32,
+   * 38; MessageMenu, lib/message-menu). MainView supplies the main chat's
+   * state and where 引用 and 删除 go; absent everywhere else, so no other
+   * conversation has a menu. 复制, 保存 and the process are the
+   * conversation's own.
    */
-  messageDelete?: {
+  messageMenu?: {
     /** The main chat is replying (its run going, a send on its way). */
     running: boolean;
     /** It waits for the user's answer. */
     asking: boolean;
     /** Whether a reply has subtask cards, by its answer's row id. */
     hasSubtasks: (answerId: string) => boolean;
-    /** 删除 was chosen for the message row `messageId` is part of. */
-    onDelete: (messageId: string) => void;
+    /** 引用: put `text` in the composer's quote strip. */
+    onQuote: (text: string) => void;
+    /** 删除 was chosen: the row Core is asked about, and the rows the
+     * page hides until then. */
+    onDelete: (message: { messageId: string; rowIds: string[] }) => void;
   };
 }
 
@@ -175,7 +187,7 @@ export function Conversation({
   previousUserCreatedAt = null,
   renderAfterAnswer,
   assistant = false,
-  messageDelete,
+  messageMenu,
 }: ConversationProps) {
   // A turn's place that survives a prepend (see `keyBase`) and a deleted
   // message (`removedOrdinals`): every key and every piece of per-run
@@ -992,23 +1004,84 @@ export function Conversation({
   // resolution is a whole-session pass, not a per-pill one — over the
   // loaded turns, like the file names above.
   const browserSites = useMemo(() => buildBrowserSiteResolver(turns), [turns]);
+  // The bubbles' message menus (main chat ticket 38): rows by id, so the
+  // ⋯ under every reply asks in constant time whether it has one.
+  const indexById = useMemo(() => {
+    const byId = new Map<string, number>();
+    turns.forEach((turn, index) => {
+      if (turn.role !== "system" && turn.messageId) {
+        byId.set(turn.messageId, index);
+      }
+    });
+    return byId;
+  }, [turns]);
+  const menuWiring: MessageMenuWiring | null =
+    linePlan && messageMenu
+      ? {
+          has: (messageId) => {
+            const index = indexById.get(messageId);
+            return index !== undefined && isMenuBubble(turns, linePlan, index);
+          },
+          model: (messageId) => {
+            const index = indexById.get(messageId);
+            const target =
+              index === undefined
+                ? null
+                : messageMenuTarget(turns, linePlan, groups, index);
+            if (!target) return null;
+            const opener = target.processOpener;
+            const processOpen =
+              opener !== null && foldOverrides[ordinal(opener)] === true;
+            return {
+              entries: messageMenuEntries(target, {
+                processOpen,
+                block: messageDeleteBlock(target.deletable, messageMenu),
+              }),
+              onSelect: (action) => {
+                switch (action) {
+                  case "copy":
+                    if (target.copyText !== null) {
+                      void copyTextToClipboard(target.copyText);
+                    }
+                    return;
+                  case "quote":
+                    if (target.quoteText !== null) {
+                      messageMenu.onQuote(target.quoteText);
+                    }
+                    return;
+                  case "save":
+                    if (target.saveSource !== null) {
+                      saveReplyMarkdown(target.saveSource).catch((e) =>
+                        console.warn("[MessageMenu] save failed", e),
+                      );
+                    }
+                    return;
+                  case "process":
+                    if (opener !== null) toggleFold(opener, !processOpen);
+                    return;
+                  case "delete":
+                    messageMenu.onDelete({
+                      messageId: target.deletable.messageId,
+                      rowIds: target.rowIds,
+                    });
+                    return;
+                }
+              },
+            };
+          },
+        }
+      : null;
+  // `data-role` names the rows a prepend keeps still (lib/scroll-anchor).
+  const root = <div data-role="conversation">{rendered}</div>;
   return (
     <WrittenFilesContext.Provider value={writtenFiles}>
       <BrowserSitesContext.Provider value={browserSites}>
-        {/* `data-role` names the rows a prepend keeps still
-            (lib/scroll-anchor). */}
-        {linePlan && messageDelete ? (
-          <MessageDeleteMenu
-            resolve={(messageId) =>
-              deletableMessage(turns, linePlan, groups, messageId)
-            }
-            block={(message) => messageDeleteBlock(message, messageDelete)}
-            onDelete={messageDelete.onDelete}
-          >
-            <div data-role="conversation">{rendered}</div>
-          </MessageDeleteMenu>
+        {menuWiring ? (
+          <MessageMenuProvider value={menuWiring}>
+            <MessageContextMenu>{root}</MessageContextMenu>
+          </MessageMenuProvider>
         ) : (
-          <div data-role="conversation">{rendered}</div>
+          root
         )}
       </BrowserSitesContext.Provider>
     </WrittenFilesContext.Provider>

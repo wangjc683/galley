@@ -239,6 +239,7 @@ interface ActionDef {
     | "onViewProject"
     | "onRestartChannels"
     | "onTryBrowserControl"
+    | "undo"
     | "copyDetails"
     | "toggleDetails";
 }
@@ -382,6 +383,14 @@ function defaultActions(error: AppError, copy: AppCopy): ActionDef[] {
       handler: "onTryBrowserControl",
     });
   }
+  if (error.action?.kind === "undo") {
+    actions.push({
+      id: "undo",
+      label: error.action.label,
+      kind: "primary",
+      handler: "undo",
+    });
+  }
   if (error.retryable) {
     actions.push({
       id: "retry",
@@ -438,6 +447,8 @@ function isActionAvailable(
         error.action?.kind === "try_browser_control" &&
         Boolean(handlers.onTryBrowserControl)
       );
+    case "undo":
+      return error.action?.kind === "undo";
     case "copyDetails":
       return hasDiagnosticDetails(error);
     case "toggleDetails":
@@ -506,6 +517,9 @@ function ActionButton({
           return undefined;
         }
         return onTryBrowserControl;
+      case "undo":
+        // The action's own: it takes the toast away itself.
+        return error.action?.kind === "undo" ? error.action.run : undefined;
       case "copyDetails":
         return () => {
           void copyTextToClipboard(formatErrorDetails(error)).then(() => {

@@ -75,15 +75,21 @@ export const MessageAgent = memo(function MessageAgent({
         className === undefined ? (
         <ProtocolFailureNotice markup={children} />
       ) : (
-        // No copy or save (nothing to deliver); the process button
-        // alone, hovered in as the bar is.
-        <div className={cn("group/answer", className)}>
+        // No copy or save (nothing to deliver); the process button and,
+        // in the assistant's conversation, the ⋯ of its message menu
+        // (which a right-click on it opens too: `data-message-id`),
+        // hovered in as the bar is.
+        <div
+          data-message-id={bubble ? messageId : undefined}
+          className={cn("group/answer", className)}
+        >
           <ProtocolFailureNotice markup={children} />
           {attachment}
-          {process !== undefined && (
+          {(process !== undefined || bubble) && (
             <MessageActions
               source={children}
               assistant={{ process, processOnly: true }}
+              messageId={bubble ? messageId : undefined}
             />
           )}
         </div>
@@ -106,6 +112,7 @@ export const MessageAgent = memo(function MessageAgent({
             source={children}
             telemetry={telemetry}
             assistant={bubble ? { process } : undefined}
+            messageId={bubble ? messageId : undefined}
           />
         )}
       </div>

@@ -58,9 +58,23 @@ export interface AppError {
         kind: "try_browser_control";
         label: string;
       }
+    | {
+        /** 撤销 on the receipt of a user action (deleting a message of
+         * the main chat, ticket 38): `run` takes it back and the toast
+         * away. */
+        kind: "undo";
+        label: string;
+        run: () => void;
+      }
     | null;
   /** Per-toast override. Useful for short positive confirmations. */
   autoDismissMs?: number;
+  /**
+   * Runs when the toast goes by itself — its time ran out, or its × was
+   * clicked — and not when code takes it away (`dismissToast`): an undo
+   * toast does what it held back here (ToastHost).
+   */
+  onClose?: () => void;
   timestamp: string;
 }
 

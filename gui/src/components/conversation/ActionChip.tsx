@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 import { IconTooltip, type TooltipSide } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -42,6 +42,11 @@ import { blurAfterClick, preventMouseFocus } from "@/lib/pointer-focus";
  * ink, hover ground and pointer-first focus as copy and save; open, it
  * holds the hover ground with the ink one rung up (the pressed look),
  * never the green Check, which means done.
+ *
+ * And one opens a menu: the ⋯ that ends the assistant's reply bar (main
+ * chat ticket 38), a Radix menu trigger's child (`asChild`). For that the
+ * chip takes a ref and passes the trigger's props on to its button; it
+ * has no `onClick` of its own, and `expanded` is the menu open.
  */
 const ACTION_CHIP_BASE = cn(
   "inline-flex select-none items-center justify-center rounded-sm",
@@ -56,7 +61,8 @@ export interface ActionChipProps {
   activeIcon: ReactNode;
   idleLabel: string;
   activeLabel: string;
-  onClick: () => void;
+  /** The action; none for a menu trigger (the trigger's props open it). */
+  onClick?: () => void;
   variant?: "inline" | "floating";
   /**
    * Hover-reveal control for inline rows. When false the chip is
@@ -71,24 +77,39 @@ export interface ActionChipProps {
   className?: string;
 }
 
-export function ActionChip({
-  active,
-  idleIcon,
-  activeIcon,
-  idleLabel,
-  activeLabel,
-  onClick,
-  variant = "inline",
-  revealed = true,
-  expanded,
-  tooltipSide,
-  className,
-}: ActionChipProps) {
+/** A menu trigger's props (`asChild`), passed on to the button. */
+type TriggerProps = Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  keyof ActionChipProps | "children"
+>;
+
+export const ActionChip = forwardRef<
+  HTMLButtonElement,
+  ActionChipProps & TriggerProps
+>(function ActionChip(
+  {
+    active,
+    idleIcon,
+    activeIcon,
+    idleLabel,
+    activeLabel,
+    onClick,
+    variant = "inline",
+    revealed = true,
+    expanded,
+    tooltipSide,
+    className,
+    ...trigger
+  },
+  ref,
+) {
   const floating = variant === "floating";
   const label = active ? activeLabel : idleLabel;
 
   const button = (
     <button
+      {...trigger}
+      ref={ref}
       type="button"
       aria-label={label}
       aria-hidden={!revealed || undefined}
@@ -98,7 +119,7 @@ export function ActionChip({
       // avoids mouse focus so hover-only UI doesn't stick after click.
       onMouseDown={preventMouseFocus}
       onClick={(event) => {
-        onClick();
+        onClick?.();
         blurAfterClick(event);
       }}
       className={cn(
@@ -129,4 +150,4 @@ export function ActionChip({
       {button}
     </IconTooltip>
   );
-}
+});
