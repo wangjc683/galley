@@ -1,6 +1,6 @@
 # PRD: 定时任务（Scheduled Tasks）
 
-Status: ready-for-agent
+Status: done（票 01–05、07–14 已做；06 被主对话票 34 取代。2026-10-16 起托管运行时的定时归助理所有，见助手 PRD 裁决 9、主对话裁决 84、86）
 Date: 2026-07-23（同日 JC 确认通知策略，issues 已拆分，见 `issues/`）
 来源: JC 与 agent 的设计讨论（本文件是讨论结论的沉淀，尚未开始实现）
 
