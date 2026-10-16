@@ -10,7 +10,8 @@ import type { PendingImageAttachment } from "@/types/conversation";
  * message — the Composer write-through-saves here on every change and
  * re-seeds from here on mount.
  *
- * Persisted, text only (telegram-details ticket 01, 2026-10-16). The
+ * Persisted, text and quotes, not images (telegram-details ticket 01,
+ * 2026-10-16; quotes since ticket 07). The
  * old contract here was "drafts die with the app — same contract as
  * every chat client"; Telegram is the counterexample (a draft per chat,
  * saved after typing pauses, deleted the moment it empties, always
@@ -27,6 +28,10 @@ import type { PendingImageAttachment } from "@/types/conversation";
  *   app, and one base64 image can fill WebKit's ~5MB localStorage
  *   quota. A draft restored after a restart is its text alone; an
  *   image-only draft does not survive one.
+ * - Quotes (ticket 07) are persisted with the text. A draft without
+ *   quotes is stored as its bare text, as before; one with quotes as
+ *   JSON, `{"galleyDraft":2,"text":…,"quotes":[…]}`. Reading takes
+ *   either, so drafts stored before quotes existed still come back.
  * - Emptying, sending (`dropComposerDraft`) and deleting the session
  *   (`forgetDeletedSessions` in stores/sessions/shared.ts) remove the
  *   stored key at once.
@@ -58,6 +63,9 @@ import type { PendingImageAttachment } from "@/types/conversation";
 export interface ComposerDraft {
   text: string;
   images: PendingImageAttachment[];
+  /** Quoted selections waiting above the input (ticket 07), each the
+   * selected text as it was; none when absent. */
+  quotes?: string[];
 }
 
 const drafts = new Map<string, ComposerDraft>();
@@ -65,9 +73,51 @@ const drafts = new Map<string, ComposerDraft>();
 /** localStorage key prefix; the rest of the key is the draft key. */
 export const DRAFT_STORAGE_PREFIX = "galley.draft.";
 
-/** The text each key has on disk, so an unchanged text is not rewritten
- * (an image added or removed re-saves the same text). */
+/** The value each key has on disk, so an unchanged draft is not
+ * rewritten (an image added or removed re-saves the same text). */
 const stored = new Map<string, string>();
+
+/** The marker of the stored form with quotes. */
+const QUOTED_DRAFT_VERSION = 2;
+
+/** What a draft is stored as: its bare text, or with quotes, JSON.
+ * Null when there is nothing to keep across a restart. */
+function storedValue(draft: ComposerDraft): string | null {
+  const quotes = draft.quotes ?? [];
+  if (quotes.length === 0) {
+    return draft.text.trim().length === 0 ? null : draft.text;
+  }
+  return JSON.stringify({
+    galleyDraft: QUOTED_DRAFT_VERSION,
+    text: draft.text,
+    quotes,
+  });
+}
+
+/** A stored value read back: JSON with quotes, or bare text (every
+ * draft stored before ticket 07, and every one without quotes). */
+function draftFromStored(value: string): ComposerDraft | null {
+  if (value.startsWith(`{"galleyDraft":${QUOTED_DRAFT_VERSION}`)) {
+    try {
+      const parsed = JSON.parse(value) as {
+        text?: unknown;
+        quotes?: unknown;
+      };
+      const quotes = Array.isArray(parsed.quotes)
+        ? parsed.quotes.filter(
+            (quote): quote is string =>
+              typeof quote === "string" && quote.trim() !== "",
+          )
+        : [];
+      const text = typeof parsed.text === "string" ? parsed.text : "";
+      if (quotes.length > 0) return { text, images: [], quotes };
+      return text.trim() === "" ? null : { text, images: [] };
+    } catch {
+      // Not ours after all: bare text that happens to look like it.
+    }
+  }
+  return value.trim().length === 0 ? null : { text: value, images: [] };
+}
 
 function draftStorage(): Storage | null {
   if (typeof window === "undefined") return null;
@@ -93,18 +143,19 @@ function forgetStoredText(key: string): void {
   if (stored.has(key)) removeStoredText(key);
 }
 
-function storeText(key: string, text: string): void {
-  if (text.trim().length === 0) {
+function storeDraft(key: string, draft: ComposerDraft): void {
+  const value = storedValue(draft);
+  if (value === null) {
     // An image-only draft has nothing to keep across a restart.
     forgetStoredText(key);
     return;
   }
-  if (stored.get(key) === text) return;
+  if (stored.get(key) === value) return;
   const storage = draftStorage();
   if (!storage) return;
   try {
-    storage.setItem(DRAFT_STORAGE_PREFIX + key, text);
-    stored.set(key, text);
+    storage.setItem(DRAFT_STORAGE_PREFIX + key, value);
+    stored.set(key, value);
   } catch {
     // Quota or a disabled store: keep the draft in memory only, and
     // don't leave an older text on disk to come back after a restart.
@@ -124,15 +175,16 @@ function loadStoredDrafts(): void {
       if (name?.startsWith(DRAFT_STORAGE_PREFIX)) keys.push(name);
     }
     for (const name of keys) {
-      const text = storage.getItem(name);
+      const value = storage.getItem(name);
       const key = name.slice(DRAFT_STORAGE_PREFIX.length);
-      if (key === "" || text === null) continue;
-      if (text.trim().length === 0) {
+      if (key === "" || value === null) continue;
+      const draft = draftFromStored(value);
+      if (!draft) {
         storage.removeItem(name);
         continue;
       }
-      drafts.set(key, { text, images: [] });
-      stored.set(key, text);
+      drafts.set(key, draft);
+      stored.set(key, value);
     }
   } catch {
     // Whatever was read stays; the rest is memory only.
@@ -161,17 +213,21 @@ export function subscribeComposerDrafts(listener: () => void): () => void {
   };
 }
 
-/** Write-through save, in memory and (text only) on disk. An empty
- * draft (no text, no images) deletes the entry so the map only holds
- * real drafts. */
+/** Write-through save, in memory and (text and quotes) on disk. An
+ * empty draft (no text, no images, no quotes) deletes the entry so the
+ * map only holds real drafts. */
 export function saveComposerDraft(key: string, draft: ComposerDraft): void {
-  if (draft.text.trim().length === 0 && draft.images.length === 0) {
+  if (
+    draft.text.trim().length === 0 &&
+    draft.images.length === 0 &&
+    (draft.quotes?.length ?? 0) === 0
+  ) {
     forgetStoredText(key);
     if (drafts.delete(key)) notifyListeners();
     return;
   }
   drafts.set(key, draft);
-  storeText(key, draft.text);
+  storeDraft(key, draft);
   notifyListeners();
 }
 

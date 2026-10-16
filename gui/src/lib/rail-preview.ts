@@ -19,6 +19,7 @@
 // its framing does not fit. The final answer is what the user would see
 // on click, which is what a preview should be a thumbnail of.
 
+import { quotedMessagePreview } from "@/lib/composer-quote";
 import { buildRunGroups } from "@/lib/run-groups";
 import type { Turn } from "@/types/conversation";
 
@@ -127,7 +128,11 @@ export function buildRailExchanges(turns: Turn[]): RailExchange[] {
       answer = preview.length > 0 ? preview : null;
     }
 
-    exchanges.push({ question: buildPreview(opener.content), answer });
+    // Your own words, not the quotes a message opens with (ticket 07).
+    exchanges.push({
+      question: buildPreview(quotedMessagePreview(opener.content)),
+      answer,
+    });
   }
 
   return exchanges;

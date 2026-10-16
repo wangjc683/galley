@@ -6,11 +6,13 @@ import {
   type ReactNode,
 } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { zhCopy } from "@/i18n/locales/zh";
+import { dropComposerDraft, saveComposerDraft } from "@/lib/composer-draft";
 
 import { Composer, type ComposerProps } from "./Composer";
+import { ComposerActionSlot } from "./ComposerActionSlot";
 
 /**
  * Enter in the Composer, and its one-line form. A static render runs no
@@ -188,5 +190,70 @@ describe("the one-line form (every session's; the empty state keeps the card)", 
         );
     expect(aligns(true)).toEqual(["center", "center"]);
     expect(aligns(false)).toEqual([undefined, undefined]);
+  });
+});
+
+describe("quotes above the input (telegram-details ticket 07)", () => {
+  const KEY = "composer-test-quotes";
+
+  afterEach(() => dropComposerDraft(KEY));
+
+  function seed(text: string, quotes: string[]): void {
+    saveComposerDraft(KEY, { text, images: [], quotes });
+  }
+
+  it("sends the quotes ahead of your words, a blank line apart", () => {
+    seed("这两处什么意思", ["第一处", "第二处"]);
+    const onSubmit = vi.fn();
+    keydownOf({ draftKey: KEY, onSubmit, oneLine: true })(enter());
+    expect(onSubmit).toHaveBeenCalledWith(
+      "> 第一处\n\n> 第二处\n\n这两处什么意思",
+      [],
+    );
+  });
+
+  it("queues the same text while the agent runs, and keeps /btw at the head", () => {
+    seed("/btw 这句什么意思", ["这一句"]);
+    const onSubmit = vi.fn();
+    keydownOf({ draftKey: KEY, onSubmit, oneLine: true, stopMode: true })(
+      enter(),
+    );
+    expect(onSubmit).toHaveBeenCalledWith(
+      "/btw \n> 这一句\n\n这句什么意思",
+      [],
+    );
+  });
+
+  it("sends nothing with quotes alone: no words, no image — send stays off", () => {
+    seed("", ["只是引用"]);
+    const onSubmit = vi.fn();
+    keydownOf({ draftKey: KEY, onSubmit, oneLine: true })(enter());
+    expect(onSubmit).not.toHaveBeenCalled();
+    const slot = composerTree({ draftKey: KEY, oneLine: true }).find(
+      (element) => element.type === ComposerActionSlot,
+    );
+    expect(
+      (slot?.props as { hasSendableContent: boolean }).hasSendableContent,
+    ).toBe(false);
+  });
+
+  it("draws one row per quote inside the box, above the input, with a remove", () => {
+    seed("", ["第一处", "第二处"]);
+    const html = renderToStaticMarkup(
+      <Tooltip.Provider>
+        <Composer llmDisplayName="model" draftKey={KEY} oneLine />
+      </Tooltip.Provider>,
+    );
+    const box = html.indexOf('data-role="composer-one-line"');
+    const strip = html.indexOf('data-role="composer-quotes"');
+    const input = html.indexOf("<textarea");
+    expect(box).toBeGreaterThanOrEqual(0);
+    expect(strip).toBeGreaterThan(box);
+    expect(input).toBeGreaterThan(strip);
+    expect(html).toContain("第一处");
+    expect(html).toContain("第二处");
+    expect(
+      html.split(`aria-label="${zhCopy.composer.removeQuote}"`),
+    ).toHaveLength(3);
   });
 });

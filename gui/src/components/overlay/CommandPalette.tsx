@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ShortcutGlyphs } from "@/components/ui/shortcut-glyphs";
 import { useDayStamp } from "@/hooks/useDayStamp";
+import { snippetQuoteSegments } from "@/lib/composer-quote";
 import type { MessageSearchHit } from "@/lib/db";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { isImeCompositionKeydown } from "@/lib/ime";
@@ -777,7 +778,26 @@ function MessageHitRow({
           {date ?? <HighlightedText text={hit.sessionTitle} query={query} />}
         </div>
         <div className="mt-0.5 line-clamp-2 break-words text-[12px] leading-[1.45] text-ink">
-          <HighlightedSnippet raw={hit.snippet} />
+          {hit.role === "user" ? (
+            // Your message may open with quotes (ticket 07): a hit in one
+            // reads as a quote — muted, behind the quote's bar.
+            snippetQuoteSegments(hit.snippet).map((segment, i) =>
+              segment.quote ? (
+                <span
+                  key={i}
+                  className="mr-1 box-decoration-clone border-l-2 border-line-strong pl-1.5 text-ink-muted"
+                >
+                  <HighlightedSnippet raw={segment.text} />
+                </span>
+              ) : (
+                <span key={i}>
+                  <HighlightedSnippet raw={segment.text} />{" "}
+                </span>
+              ),
+            )
+          ) : (
+            <HighlightedSnippet raw={hit.snippet} />
+          )}
         </div>
       </div>
     </div>

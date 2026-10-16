@@ -10,11 +10,15 @@ import {
 import { useEffect, memo, useMemo, useRef, useState } from "react";
 
 import { ActionChip } from "@/components/conversation/ActionChip";
+import { MessageQuotes } from "@/components/conversation/MessageQuotes";
+// TEMP variant switcher (telegram-details 07)
+import { useTdVariants } from "@/components/conversation/td-variants/td-variants";
 import {
   ImagePreviewDialog,
   type ImagePreviewItem,
 } from "@/components/conversation/ImagePreviewDialog";
 import { IconTooltip } from "@/components/ui/tooltip";
+import { splitQuotedMessage } from "@/lib/composer-quote";
 import { useCopy } from "@/lib/i18n";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { cn } from "@/lib/utils";
@@ -65,6 +69,13 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *     inside the container (the highlighter left them unpainted and
  *     split a pasted message into pieces — one of the concrete gaps
  *     the bubble closes).
+ *
+ * Quotes (telegram-details ticket 07): a message that opens with
+ *   Markdown quotes (what the composer's quote strip sends) has them
+ *   drawn apart from your words by MessageQuotes — above the bubble or
+ *   at its top, per the TEMP variant switcher (telegram-details 07).
+ *   Only your words count toward the collapse below; the hover copy
+ *   copies the message whole, quotes and all.
  *
  * Long-content collapse (≥7 lines or >500 chars):
  *   Collapsed by default to 6 lines via `line-clamp` — a clean
@@ -199,10 +210,18 @@ export const MessageUser = memo(function MessageUser({
   rowClassName,
 }: MessageUserProps) {
   const copy = useCopy();
-  const lineCount = useMemo(() => content.split("\n").length, [content]);
+  const { quotes, body } = useMemo(
+    () => splitQuotedMessage(content),
+    [content],
+  );
+  // TEMP variant switcher (telegram-details 07): D1 outside / D2 inside.
+  const quotesVariant = useTdVariants((s) => s.bubble);
+  const quotesPlacement =
+    quotes.length === 0 ? null : quotesVariant === 2 ? "inside" : "outside";
+  const lineCount = useMemo(() => body.split("\n").length, [body]);
   const isLong =
     lineCount > COLLAPSE_LINE_THRESHOLD ||
-    content.length > COLLAPSE_CHAR_THRESHOLD;
+    body.length > COLLAPSE_CHAR_THRESHOLD;
   const expandLabel =
     lineCount > COLLAPSE_LINE_THRESHOLD
       ? copy.conversation.expandLines(lineCount)
@@ -329,6 +348,9 @@ export const MessageUser = memo(function MessageUser({
           )}
         </div>
       )}
+      {quotesPlacement === "outside" && (
+        <MessageQuotes quotes={quotes} placement="outside" />
+      )}
       <div
         data-role={askUserReply ? "user-msg-reply" : "user-msg"}
         data-message-id={messageId}
@@ -339,14 +361,20 @@ export const MessageUser = memo(function MessageUser({
           "ml-auto max-w-[min(80%,560px)]",
         )}
       >
-        <span
-          className={cn(
-            "block whitespace-pre-wrap break-words",
-            isLong && collapsed && "line-clamp-6",
-          )}
-        >
-          {content}
-        </span>
+        {quotesPlacement === "inside" && (
+          <MessageQuotes quotes={quotes} placement="inside" />
+        )}
+        {/* Quotes only (a hand-typed `>` message): no empty line. */}
+        {body !== "" && (
+          <span
+            className={cn(
+              "block whitespace-pre-wrap break-words",
+              isLong && collapsed && "line-clamp-6",
+            )}
+          >
+            {body}
+          </span>
+        )}
         {attachments.length > 0 && (
           <UserImageAttachments attachments={attachments} />
         )}

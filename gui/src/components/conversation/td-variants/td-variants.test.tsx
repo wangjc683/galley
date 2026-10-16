@@ -3,7 +3,10 @@ import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { Composer } from "@/components/conversation/Composer";
 import { Conversation } from "@/components/conversation/Conversation";
+import { MessageUser } from "@/components/conversation/MessageUser";
+import { dropComposerDraft, saveComposerDraft } from "@/lib/composer-draft";
 import { LocalFilesContext } from "@/lib/local-files";
 import type {
   AgentTurn,
@@ -34,7 +37,13 @@ vi.mock("./td-variants", async (importOriginal) => {
 });
 
 afterEach(() => {
-  useTdVariants.setState({ grow: 1, corners: 1, demo: false });
+  useTdVariants.setState({
+    grow: 1,
+    corners: 1,
+    demo: false,
+    strip: 1,
+    bubble: 1,
+  });
 });
 
 const at = (h: number, m = 0) =>
@@ -204,5 +213,56 @@ describe("「演示连发」", () => {
     expect(workbench).toContain("我自己的话");
     expect(workbench).not.toContain("鼓浪屿");
     expect(TD_DEMO_TURNS.filter((t) => t.role === "user")).toHaveLength(7);
+  });
+});
+
+// TEMP variant switcher (telegram-details 07): C and D, how quotes look.
+describe("C and D: quotes in the composer and in your bubble", () => {
+  function bubble(content: string): string {
+    return renderToStaticMarkup(
+      <Tooltip.Provider>
+        <MessageUser content={content} />
+      </Tooltip.Provider>,
+    );
+  }
+
+  it("start on the recommended C1 and D1", () => {
+    const state = useTdVariants.getState();
+    expect(state.strip).toBe(1);
+    expect(state.bubble).toBe(1);
+  });
+
+  it("D1 draws the quotes above the bubble, D2 inside it", () => {
+    const content = "> 那一句\n\n什么意思";
+    const outside = bubble(content);
+    expect(outside.indexOf('data-role="message-quotes"')).toBeLessThan(
+      outside.indexOf('data-role="user-msg"'),
+    );
+
+    useTdVariants.getState().setBubble(2);
+    const inside = bubble(content);
+    expect(inside).not.toContain('data-role="message-quotes"');
+    const message = inside.indexOf('data-role="user-msg"');
+    expect(inside.indexOf("那一句")).toBeGreaterThan(message);
+    expect(inside.indexOf("那一句")).toBeLessThan(inside.indexOf("什么意思"));
+  });
+
+  it("C1 draws a bar and two lines, C2 a ↳ glyph and one line", () => {
+    const key = "td-variants-quote-strip";
+    saveComposerDraft(key, { text: "", images: [], quotes: ["那一句"] });
+    const strip = () =>
+      renderToStaticMarkup(
+        <Tooltip.Provider>
+          <Composer llmDisplayName="model" draftKey={key} oneLine />
+        </Tooltip.Provider>,
+      );
+    const c1 = strip();
+    expect(c1).toContain("line-clamp-2");
+    expect(c1).toContain("border-l-2");
+    useTdVariants.getState().setStrip(2);
+    const c2 = strip();
+    expect(c2).not.toContain("line-clamp-2");
+    expect(c2).toContain("truncate");
+    dropComposerDraft(key);
   });
 });

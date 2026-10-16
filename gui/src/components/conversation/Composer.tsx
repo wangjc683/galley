@@ -15,6 +15,7 @@ import { ComposerDropOverlay } from "@/components/conversation/ComposerDropOverl
 import { ComposerFooterHint } from "@/components/conversation/ComposerFooterHint";
 import { ComposerImageStrip } from "@/components/conversation/ComposerImageStrip";
 import { ComposerQueueStrip } from "@/components/conversation/ComposerQueueStrip";
+import { ComposerQuoteStrip } from "@/components/conversation/ComposerQuoteStrip";
 import { ImagePreviewDialog } from "@/components/conversation/ImagePreviewDialog";
 import {
   EffortPill,
@@ -26,8 +27,12 @@ import {
 } from "@/components/conversation/LLMPill";
 import { SavedPromptDialogs } from "@/components/conversation/SavedPromptDialogs";
 import { ComposerOneLine } from "@/components/conversation/ComposerOneLine";
-// TEMP variant switcher (telegram-details 05)
-import { composerGrowTiming } from "@/components/conversation/td-variants/td-variants";
+// TEMP variant switcher (telegram-details 05: composerGrowTiming; 07:
+// useTdVariants for the quote rows)
+import {
+  composerGrowTiming,
+  useTdVariants,
+} from "@/components/conversation/td-variants/td-variants";
 import {
   COMPOSER_MAX_HEIGHT_PX,
   ONE_LINE_GHOST_CLASS,
@@ -49,7 +54,11 @@ import {
   readComposerDraft,
   saveComposerDraft,
 } from "@/lib/composer-draft";
-import { textWithQuote } from "@/lib/composer-quote";
+import {
+  composeQuotedMessage,
+  QUOTE_LIMIT,
+  splitQuotedMessage,
+} from "@/lib/composer-quote";
 import { useCopy } from "@/lib/i18n";
 import { isImeCompositionKeydown } from "@/lib/ime";
 import { findPromptFillSlot } from "@/lib/saved-prompts";
@@ -57,6 +66,8 @@ import { isSideQuestion } from "@/lib/side-question";
 import { cn } from "@/lib/utils";
 import { useQueueStore } from "@/stores/queue";
 import { useSessionsStore } from "@/stores/sessions";
+import { useUiStore } from "@/stores/ui";
+import { makeAppError } from "@/types/app-error";
 
 import type {
   ComposerHandle,
@@ -127,6 +138,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       draftKey && value === undefined ? readComposerDraft(draftKey) : undefined,
     );
     const [internal, setInternal] = useState(initialDraft?.text ?? "");
+    // Quoted selections waiting above the input (telegram-details ticket
+    // 07): kept apart from the text, written into the message on send.
+    const [quotes, setQuotes] = useState<string[]>(
+      () => initialDraft?.quotes ?? [],
+    );
     const isControlled = value !== undefined;
     const text = isControlled ? value : internal;
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -215,12 +231,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       saveComposerDraft(draftKey, {
         text: expandComposerPlaceholders(text),
         images: pendingImages,
+        quotes,
       });
     }, [
       draftKey,
       isControlled,
       text,
       pendingImages,
+      quotes,
       expandComposerPlaceholders,
     ]);
 
@@ -237,10 +255,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           /** Select this range instead of parking the caret at the end
            * (a saved prompt's trailing `[…]` slot). */
           selection?: { start: number; end: number } | null;
-          /** `next` still holds the current text's paste-fold and file
-           * placeholders (a quote appended to the draft): keep their
-           * registries. */
-          keepPlaceholders?: boolean;
         } = {},
       ) => {
         if (isControlled) {
@@ -251,11 +265,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         // Programmatic prefill is not a user paste or drop — reset both
         // placeholder registries so counters start at #1 and no stale
         // entries linger.
-        if (!options.keepPlaceholders) {
-          resetPasteRegistry();
-          resetFileRefRegistry();
+        resetPasteRegistry();
+        resetFileRefRegistry();
+        if (options.clearImagesAfterPrefill) {
+          // A prefill replaces the draft: its quotes go with the images.
+          clearImages();
+          setQuotes([]);
         }
-        if (options.clearImagesAfterPrefill) clearImages();
         // Focus + caret at end (or the requested selection) on the
         // next frame, after React has committed the new textarea value.
         // setSelectionRange before the commit lands at the old length.
@@ -286,17 +302,47 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           applyComposerText(next, { clearImagesAfterPrefill: true });
         },
         quote(selected: string) {
-          // Appended, not replacing: the draft, its folds and its
-          // images stay (lib/composer-quote.ts).
-          applyComposerText(textWithQuote(text, selected), {
-            keepPlaceholders: true,
+          // One more row in the quote strip; the text, its folds and
+          // the images stay as they are (lib/composer-quote.ts).
+          const quoted = selected.trim();
+          if (!quoted) return;
+          if (!quotes.includes(quoted)) {
+            if (quotes.length >= QUOTE_LIMIT) {
+              useUiStore.getState().pushToast(
+                makeAppError({
+                  category: "business",
+                  severity: "info",
+                  title: copy.composer.quoteLimit(QUOTE_LIMIT),
+                  message: "",
+                  hint: null,
+                  retryable: false,
+                  context: "quote_selection",
+                  traceback: null,
+                }),
+              );
+              return;
+            }
+            // Against the current list: two quotes in one tick both land.
+            setQuotes((current) =>
+              current.includes(quoted) || current.length >= QUOTE_LIMIT
+                ? current
+                : [...current, quoted],
+            );
+          }
+          // The caret goes back to the end of what you were writing.
+          requestAnimationFrame(() => {
+            const ta = textareaRef.current;
+            if (!ta) return;
+            ta.focus();
+            const end = ta.value.length;
+            ta.setSelectionRange(end, end);
           });
         },
         focus() {
           textareaRef.current?.focus();
         },
       }),
-      [applyComposerText, text],
+      [applyComposerText, quotes, copy],
     );
 
     // Auto-grow: reset height to `auto` (so scrollHeight reflects
@@ -335,6 +381,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       resetPasteRegistry();
       resetFileRefRegistry();
       clearImages();
+      setQuotes([]);
       // Synchronous drop: the write-through effect would clear the entry
       // on the next render, but submit can unmount this Composer first
       // (EmptyState → MainView switch) and resurrect the sent text.
@@ -406,7 +453,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         text === "" &&
         !disabled &&
         !stopMode &&
-        !hasPendingImages,
+        !hasPendingImages &&
+        // A quote says what the next message is about; the suggestion
+        // was about something else.
+        quotes.length === 0,
     );
 
     const resolvedPlaceholder = ghostVisible
@@ -425,7 +475,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // onSubmit's owner (useMessageSend) routes a mid-run send into
       // Core's queue. /btw keeps its immediate side-question path there
       // too; images are toast-blocked there and keep the draft.
-      const submittedText = trimmed || copy.composer.imageOnlyFallback;
+      // Quotes go in ahead of your words, as Markdown quote blocks (they
+      // alone are no message: the gate above wants text or an image).
+      const submittedText =
+        quotes.length > 0
+          ? composeQuotedMessage(quotes, trimmed)
+          : trimmed || copy.composer.imageOnlyFallback;
       const accepted = onSubmit?.(submittedText, pendingImages);
       if (accepted === false) return;
       resetDraftAfterSubmit();
@@ -466,7 +521,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             : undefined
         }
         onRefill={(t) => {
-          applyComposerText(t, { clearImagesAfterPrefill: false });
+          // A queued message with quotes comes back as quotes and words.
+          const refilled = splitQuotedMessage(t);
+          setQuotes(refilled.quotes);
+          applyComposerText(refilled.body, { clearImagesAfterPrefill: false });
           requestAnimationFrame(() => textareaRef.current?.focus());
         }}
       />
@@ -551,6 +609,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         }
       />
     );
+    // TEMP variant switcher (telegram-details 07): C1 / C2.
+    const quoteStripVariant = useTdVariants((s) => s.strip);
+    const quoteStrip = quotes.length > 0 && (
+      <ComposerQuoteStrip
+        quotes={quotes}
+        onRemove={(index) =>
+          setQuotes((current) => current.filter((_, i) => i !== index))
+        }
+        variant={quoteStripVariant}
+        oneLine={oneLine}
+      />
+    );
     const imageStrip = pendingImages.length > 0 && (
       <ComposerImageStrip
         images={pendingImages}
@@ -624,6 +694,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             disabled={disabled}
             dropOverlay={dropOverlay}
             imageStrip={imageStrip}
+            quoteStrip={quoteStrip}
             addMenu={addMenu}
             input={
               <>
@@ -648,6 +719,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             // useImageAttachments; `isDropActive` below is fed from there.
           >
             {dropOverlay}
+            {/* The ghost is absolute at the card's top; it never shows
+                with quotes (ghostVisible), so the strip can sit here. */}
+            {quoteStrip}
             {ghost}
             {ghostDescription}
             {textarea}

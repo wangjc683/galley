@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import type { QuoteStripVariant } from "@/components/conversation/ComposerQuoteStrip";
+import type { MessageQuotesVariant } from "@/components/conversation/MessageQuotes";
 import type { ComposerGrowTiming } from "@/lib/composer-grow";
 
 /**
@@ -48,6 +50,22 @@ import type { ComposerGrowTiming } from "@/lib/composer-grow";
  *   `assistantGroupCornerClass`.
  *   Then the design docs: conversation.md 「会话里的输入框」 and
  *   「助手的对话」 (the bubbles, the grouping gap).
+ *
+ * Two more from ticket 07 (PRD ruling 3a item 3), how quotes look —
+ * touch points say "TEMP variant switcher (telegram-details 07)":
+ * C. The quote rows in the composer (ComposerQuoteStrip):
+ *      1 a thin bar and up to two lines (recommended)
+ *      2 a ↳ glyph in the ＋ column and one line (ChatGPT's)
+ * D. The quotes in your bubble (MessageQuotes, MessageUser):
+ *      1 outside the bubble, above it (recommended)
+ *      2 inside the bubble, at its top (Telegram's)
+ * Default C1 and D1, the recommended ones (today's quotes are new, so
+ * there is no "as today" to start from).
+ * Removal: `strip` / `bubble` here and their pill rows, Composer's
+ * `quoteStripVariant` and MessageUser's `quotesVariant` reads (pass the
+ * chosen value as a constant, or drop the variant prop), and the losing
+ * branch in ComposerQuoteStrip / MessageQuotes. Then conversation.md:
+ * 「引用条」 and 「你引用的话」.
  */
 
 export type GrowVariant = 1 | 2 | 3;
@@ -55,6 +73,8 @@ export type CornerVariant = 1 | 2 | 3 | 4;
 
 export const GROW_VARIANTS: readonly GrowVariant[] = [1, 2, 3];
 export const CORNER_VARIANTS: readonly CornerVariant[] = [1, 2, 3, 4];
+export const QUOTE_STRIP_VARIANTS: readonly QuoteStripVariant[] = [1, 2];
+export const MESSAGE_QUOTES_VARIANTS: readonly MessageQuotesVariant[] = [1, 2];
 
 export const GROW_TIMING: Record<GrowVariant, ComposerGrowTiming> = {
   1: "instant",
@@ -114,9 +134,15 @@ interface TdVariantsStore {
   corners: CornerVariant;
   /** 「演示连发」: the main chat shows the demo bursts (td-demo.ts). */
   demo: boolean;
+  /** C: the composer's quote rows (ticket 07). */
+  strip: QuoteStripVariant;
+  /** D: where your bubble draws its quotes (ticket 07). */
+  bubble: MessageQuotesVariant;
   setGrow: (grow: GrowVariant) => void;
   setCorners: (corners: CornerVariant) => void;
   setDemo: (on: boolean) => void;
+  setStrip: (strip: QuoteStripVariant) => void;
+  setBubble: (bubble: MessageQuotesVariant) => void;
 }
 
 export const useTdVariants = create<TdVariantsStore>((set) => {
@@ -126,6 +152,8 @@ export const useTdVariants = create<TdVariantsStore>((set) => {
     grow: storedOption("grow", GROW_VARIANTS) ?? 1,
     corners,
     demo: readStorage("demo") === "on",
+    strip: storedOption("strip", QUOTE_STRIP_VARIANTS) ?? 1,
+    bubble: storedOption("bubble", MESSAGE_QUOTES_VARIANTS) ?? 1,
     setGrow: (grow) => {
       writeStorage("grow", String(grow));
       set({ grow });
@@ -138,6 +166,14 @@ export const useTdVariants = create<TdVariantsStore>((set) => {
     setDemo: (on) => {
       writeStorage("demo", on ? "on" : "off");
       set({ demo: on });
+    },
+    setStrip: (strip) => {
+      writeStorage("strip", String(strip));
+      set({ strip });
+    },
+    setBubble: (bubble) => {
+      writeStorage("bubble", String(bubble));
+      set({ bubble });
     },
   };
 });

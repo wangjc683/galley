@@ -281,6 +281,8 @@ export const zhCopy = {
     youPrefix: "你：",
     /** 卡片第二行：图片（附件、回复里的图、只有图的草稿）。 */
     image: "[图片]",
+    /** 卡片第二行：只有引用、没有自己的话的草稿或消息（票 07）。 */
+    quote: "[引用]",
     /** 卡片第二行：别的附件与回复里的 `[FILE:路径]`，name 是文件名。 */
     file: (name: string) => `[文件] ${name}`,
     /** 卡片名字右边的时间：昨天的消息只写这个词。 */
@@ -522,6 +524,12 @@ export const zhCopy = {
     addFiles: "文件…",
     addFolders: "文件夹…",
     removeImage: "移除图片",
+    // 输入框上方的引用条（Telegram 细节票 07）：每段一行，× 移除。
+    removeQuote: "移除引用",
+    /** 引用条的读屏名。 */
+    quotesLabel: "引用",
+    /** 引用满了还点「引用」时的提示。 */
+    quoteLimit: (limit: number) => `最多引用 ${limit} 段，先移除一段再引用`,
     dropToAttach: "拖放以添加图片或文件",
     dropFilesOnly: "拖放以添加文件（当前运行时不支持图片）",
     cannotSwitchRunning: "运行中无法切换模型",

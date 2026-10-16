@@ -268,6 +268,7 @@ export const enCopy: AppCopy = {
     draftPrefix: "Draft: ",
     youPrefix: "You: ",
     image: "[Image]",
+    quote: "[Quote]",
     file: (name) => `[File] ${name}`,
     timeYesterday: "Yesterday",
   },
@@ -508,6 +509,10 @@ export const enCopy: AppCopy = {
     addFiles: "Files…",
     addFolders: "Folders…",
     removeImage: "Remove image",
+    removeQuote: "Remove quote",
+    quotesLabel: "Quotes",
+    quoteLimit: (limit) =>
+      `Up to ${limit} quotes — remove one to quote another`,
     dropToAttach: "Drop to add images or files",
     dropFilesOnly: "Drop to add files (images aren't supported on this runtime)",
     cannotSwitchRunning: "Can't switch models while running",

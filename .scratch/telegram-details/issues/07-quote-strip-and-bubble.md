@@ -65,3 +65,59 @@ grep 所有拿用户消息文字做预览的地方（侧栏助手卡片「你：
 - 真机（JC）：两边各引用一段、两段，看输入框里的引用条与 ×；发出后看气泡（切 D1 / D2、C1 / C2）；排队、ask_user 回答带引用；写了引用不发、重开还在；侧栏预览不出现 `>`。
 
 ## Comments
+
+### 2026-10-16 实现（子代理，分支 `td-composer`）
+
+**做了什么**
+
+- `lib/composer-quote.ts`：留下 `markdownQuote`（票 02 的格式化规则）；删掉 `textWithQuote`（点「引用」不再往文字里拼，别处也没用，不留死代码），连同 Composer 里只为它加的 `keepPlaceholders` 选项。新增 `QUOTE_LIMIT`（3）、`composeQuotedMessage`（发出时拼）、`splitQuotedMessage`（从消息开头拆引用）、`quotedMessagePreview`（预览用的一行）、`snippetQuoteSegments`（搜索片段按引用 / 你的话分段）。
+- 输入框：`ComposerQuoteStrip.tsx`（新），`Composer.tsx` 加引用列表状态，`ComposerOneLine.tsx` 加一个槽。`ComposerHandle.quote` 改成往列表里加一段，文字、粘贴折叠、文件引用、图片都不动，光标回文字末尾。发出、排队、ask_user 回答都经 `composeQuotedMessage`；发出后清空。
+- 草稿：`lib/composer-draft.ts` 的 `ComposerDraft` 加 `quotes`，存盘格式见下。
+- 气泡：`MessageQuotes.tsx`（新），`MessageUser.tsx` 拆开引用与你的话；`lib/conversation-anchor.ts` 加 `quotesAbove`，D1 时停靠一条消息从引用的上缘算。
+- 预览：`lib/assistant.ts`（侧栏卡片「你：…」与草稿）、`hooks/useAssistantState.ts`（草稿带引用数）、`lib/rail-preview.ts`（问题轨悬停）、`ComposerQueueStrip.tsx`（排队条）、`CommandPalette.tsx`（⌘K / ⌘F 你的消息的命中片段）。
+- 文案：`composer.removeQuote`「移除引用」/「Remove quote」、`composer.quotesLabel`（引用条与气泡引用的读屏组名）、`composer.quoteLimit`、`assistant.quote`「[引用]」/「[Quote]」。
+- 切换器：开工时 main 上没有票 05 的切换器，先做功能、自己做了一颗；做完时票 05 已合进 main（`8be9a089`），于是把分支 rebase 到 main，C、D 两组加进它的 `td-variants.ts` 与 `TdVariantsPill.tsx`（同一颗 pill：「临时 · A1 B1 C1 D1」，展开多两行「C 引用条」「D 气泡引用」），自己那颗删了，最终提交里没有第二颗。接入点标 `TEMP variant switcher (telegram-details 07)`：Composer 的 `quoteStripVariant`、MessageUser 的 `quotesVariant`、pill 的两行；拆法写在 `td-variants.ts` 开头。默认 C1、D1。
+- 文档：`docs/design/conversation.md` 三处：「复制入口统一」里引用那段改写；「气泡」下加「你引用的话」；§4.4「会话里的输入框」加「引用条」（含发出时怎么拼、草稿、幽灵文字、预览与搜索）。
+
+**取舍（票里「你定」的）**
+
+- **与图片条、排队条的次序**：排队条照旧在框外上方；框内从上到下是图片条、引用条、输入。发出的消息是「引用，然后你的话」，引用排在离文字最近的地方，读起来就是这句话的开头；图片在气泡里本来也画在文字下面，它是附件，不是这句话在说的那一句。
+- **× 何时显**：悬停那一行才显（同附件条的 ×），隐藏时占位，不跳。
+- **上限 3 段**：建议是 3–5，取最小。C1 每段可到两行，3 段一行的框高约 134px、3 段两行约 185px（不带引用是 48px），再多就压对话了；「这两处什么意思」的场景 2 段就够。满了**拒绝并提示**（toast：「最多引用 3 段，先移除一段再引用」），不替换最早的一段，替换会悄悄丢掉你选过的。同一段再引用一次不重复加。
+- **只有引用、没有字也没有图**：发送键不亮、Enter 不发。有图没字时发出的就是引用块（不再补「请看这张图片。」，那句只在完全没字时补）。
+- **`/btw`**：按「引用 + 空行 + 你的话」拼会把 `/btw` 挤到后面，桥（`runner/workbench_bridge.py` `dispatch_command`）和 GA（`btw_cmd._strip_cmd`）都只认开头的 `/btw `，侧问就变成了主任务。所以 `/btw` 例外：`/btw ` 留在最前，引用接下一行，问题再空一行（`/btw \n> 引用\n\n问题`）；GA 去掉 `/btw` 后拿到的是「引用 + 问题」。拆的时候认这个形状，气泡里照样画引用、正文是「/btw 问题」。
+- **草稿存盘格式**：没有引用的草稿照旧存成纯文字（与票 01 一样，旧数据、旧测试都不动）；有引用的存成 `{"galleyDraft":2,"text":…,"quotes":[…]}`。读的时候只有以 `{"galleyDraft":2` 开头且能解析的才当 JSON，其余（含解析失败的）一律当纯文字，所以旧的纯文字值照样认。只有引用的草稿也算草稿（存、恢复、侧栏「草稿：[引用]」）。
+- **`textWithQuote`**：删了（见上）。
+- **省略的引用**：做了点击原地展开、再点收起。只在真被截断时才是按钮（`ResizeObserver` 量 `scrollHeight > clientHeight`，在回调里 setState，不在 effect 里同步 setState）；没截断的就是普通文字。D1 两行、D2 三行；输入框里的 C1 两行、C2 一行，用原生 `title` 给全文（输入框里不做展开，× 已经在那一行）。
+- **D1 / D2 的字号、墨色、距离**：都用 `--conversation-echo-size`（标准 13px，正文 15px，低两档；小、大字号跟着变）。D1 `ink-muted` + 2px `line-strong` 竖线，整列与气泡同一个上限 `min(80%, 560px)`、宽度取最宽那段（几段的竖线对齐；最初各自靠右时竖线参差，改了）、段间 2px、离气泡 4px（同侧连发间距）。D2 `ink-soft`、正常字重、`brand-strong` 10% 的底 + 45% 的竖线、`rounded-sm`，块间 4px、离你的话 6px。引用都不能选中（是它的话，原处可选）。回复里 Markdown 引用的样式（3px brand 竖线 + 斜体）不变；这里有意不用斜体（中文是假斜体），竖线细一档。
+- **搜索**：Core 的 FTS 照旧搜全文，引用里的字也搜得到（不碰 Rust 也改不了）。你的消息的命中片段里，以 `>` 开头的行画成灰字、前面一条竖线，看得出命中在引用里；片段从一行中间开始时认不出，当你的话显示。
+- **逐处预览**（grep 过 `role === "user"` 与 `.content` 的用处）：侧栏助手卡片「你：…」只取你的话，只有引用时写「[引用]」；草稿同理。问题轨悬停取你的话（没有就取引用）。排队条取你的话（没有就取引用），「取回编辑」时引用回到引用条、你的话回到输入框。⌘K / ⌘F 见上。会话标题由 Core 从第一句话取（Rust，没碰），第一句不会带引用：引用要先有对话。ask_user 候选的勾选（`lib/ask-user-candidates.ts` 比对回答全文）遇到带引用的回答不打勾，本来就不是点候选，对的。侧栏会话行的摘要是 GA 的每轮小结，不是你的原话，不受影响。
+- **其他**：幽灵文字（下一步建议）有引用时不出；`prefillText`（ask_user 候选「填入」、题词预填）换掉整份草稿，引用随图片一起清。连点两次「引用」在同一帧里也都加得上（按当前列表函数式更新）。
+
+**量到的（Chrome 无头，临时 harness：真 `MarkdownView` + `MessageUser` + 一行式 `Composer` + 选中工具条 + 票 05 的 pill；harness 没进提交）**
+
+- 输入框：两段一行的引用，C1、C2 框高都是 106px（不带引用 48）；一段一行加一段两行（C1）123px，行高 24 / 41px。引用文字与输入的文字同一列（x 相同，离框外缘 44px）；C1 的竖线就在这一列，字再往里 10px；C2 的 ↳ 在 ＋ 那一列居中。
+- 先打「这两处」，再用工具条引用两段：文字仍是「这两处」，光标 3（末尾），焦点在输入框。点第一段的 ×：剩一段，焦点仍在输入框。再引用到第 4 段：停在 3 段。
+- 气泡 D1：引用离气泡 4px、段间 2px，两段竖线同一个 x；长引用两行省略，`role="button"` + `aria-expanded="false"`，短的不是按钮。D2：气泡内引用块 3 行省略，点开后全文、再点收起；块的底与竖线在深色主题下也看得清。
+- 截图（会话 scratchpad，路径交给主会话，不进仓库）：C1、C2、D1、D2、D2 展开、深色两张、pill 展开两张。
+
+**测试**
+
+- `lib/composer-quote.test.ts`：拼（多段 + 你的话、格式化规则、只有话 / 只有引用、`/btw`）、拆（一段、多段隔空行、段内空行、往返、只认开头、只有引用、手打 `>`、CRLF、空引用块、`/btw`）、预览、搜索片段分段。
+- `lib/composer-draft.test.ts`：含引用的草稿存取与重启恢复（只有引用也算）、没有引用照旧存纯文字、读旧纯文字与「长得像 JSON 的纯文字」、最后一段引用和字都没了即删。
+- `Composer.test.tsx`：Enter 发出的是「引用 + 你的话」；在跑时排队同一段文字且 `/btw` 在最前；只有引用时 Enter 不发、发送键 `hasSendableContent` 为假；引用条在框内、输入之上、每段一个移除。
+- `MessageQuotes.test.tsx`：D1 引用在气泡之上、气泡里只有你的话、没有 `>`；长消息折叠只算你的话；只有引用不画空行；正文中间的 `>` 照旧；D2 的块。
+- `lib/conversation-anchor.test.ts`：D1 停靠从引用上缘算；有时间条时照旧按时间条；别的兄弟节点不算。
+- `lib/assistant.test.ts`、`lib/rail-preview.test.ts`：预览取你的话、只有引用写「[引用]」、草稿只有引用。
+- `td-variants.test.tsx`：默认 C1 D1；D1 / D2、C1 / C2 的画法。
+- typecheck、lint、`git diff --check` 通过；全量 gui 测试两遍：本机时区 146 个文件 1526 条、`TZ=UTC` 146 个文件 1526 条，全过。
+
+**JC 真机验收**
+
+1. 主对话与工作台：各引用一段、两段，看输入框里的引用条（悬停出 ×，点 × 去掉一段、焦点不丢），打字后 Enter 发出。
+2. 发出后看气泡：pill 里切 D1 / D2 比，切 C1 / C2 比输入框里的样子（「临时 · A… B… C… D…」，在顶栏下右侧；与票 05 同一颗）。
+3. 长引用：气泡里点一下展开、再点收起。
+4. 在跑时带引用按 Enter（排队条显示你的话，「取回编辑」后引用回到引用条）；ask_user 时带引用回答；`/btw` 带引用问一句（应走侧问，不打断主任务）。
+5. 写了引用不发，退出重开，引用条还在；只有引用的草稿，侧栏卡片写「草稿：[引用]」。
+6. 侧栏「你：…」、问题轨悬停预览里没有 `>`；⌘K 搜引用里的词，命中片段里那几行是灰字带竖线。
+7. 只有引用时发送键是灰的、Enter 不发；满 3 段再点「引用」出提示。
