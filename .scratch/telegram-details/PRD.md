@@ -67,7 +67,7 @@ JC：「1，做；2，刚试了，目前新消息是停在底部附近，如果�
 | [05](./issues/05-variants-composer-corners.md) | 切换器：输入框长高动画、主对话连发组内圆角（裁决 6） | merged，等切档裁决 |
 | [06](./issues/06-workbench-live-tail.md) | 工作台发出后留白、你的话停在顶上、回复超出一屏不跟随（裁决 2） | merged，等真机 |
 | [07](./issues/07-quote-strip-and-bubble.md) | 引用改成输入框上方的一条，气泡里单独画引用（裁决 3a），切换器与 05 合用 | merged，C2、D2 已定 |
-| [08](./issues/08-finalize-switcher.md) | 拆切换器定稿：A3（缓动 `--ease-firm`）、B1、C2、D2 | ready-for-agent |
+| [08](./issues/08-finalize-switcher.md) | 拆切换器定稿：A3（缓动 `--ease-firm`）、B1、C2、D2 | merged，等真机 |
 | [09](./issues/09-ask-user-into-view.md) | 工作台跑的途中问你、问题出在屏幕以下时滚过去（裁决 2a） | ready-for-agent |
 
 01–03 都动输入框，同一个子代理按序做；04、05 各一个子代理，并行；06 接在 04 后面（用它的滚动函数）。

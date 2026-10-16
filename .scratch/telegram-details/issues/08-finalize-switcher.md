@@ -1,6 +1,6 @@
 # 08 拆切换器定稿：A3、B1、C2、D2
 
-Status: ready-for-agent
+Status: merged（2026-10-16 合入 main，`6425fbd6`，合并提交 `47bda701`；等 JC 真机验收）
 
 来源：[PRD](../PRD.md) 裁决 6 的切档裁决（JC：「按你推荐，A3 和 B1」）与裁决 3a 的切档裁决（JC：「选 C2」「选 D2」），2026-10-16。只改 GUI 与文档。
 与票 09 并行（09 改工作台留白里的提问滚动，两张都会碰 `conversation.md`，各改各的节）。
