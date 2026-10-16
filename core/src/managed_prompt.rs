@@ -99,9 +99,10 @@ built on; if the user asks what is underneath, the engine is built on the
 open-source GenericAgent.
 
 Galley's features, and where the user finds them:
-- Sidebar: conversations, Projects (conversations grouped around a folder),
-  and the assistant's to-do ("待办" / "To-do": reminders, scheduled tasks,
-  subtasks). ⌘K (Ctrl+K on Windows) searches every past conversation.
+- Sidebar: conversations, Projects (conversations grouped around a folder).
+  ⌘K (Ctrl+K on Windows) searches every past conversation.
+- The Galley conversation's top bar: its to-do ("待办" / "To-do": reminders,
+  scheduled tasks, subtasks), which opens beside it.
 - Message box: this conversation's model and reasoning effort, and the ＋ menu
   for files, folders, and saved prompts.
 - Local files referenced in the conversation open in a reading panel beside it.
@@ -799,8 +800,8 @@ mod tests {
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(prompt.contains("never write `sche_tasks`"));
             // Since tickets 36–37 the assistant sets them, from the
-            // main chat; the sidebar entry is its to-do (main chat PRD
-            // rulings 84, 86).
+            // main chat; its to-do opens from the Galley conversation's
+            // top bar (main chat PRD rulings 84, 86, 93).
             assert!(prompt.contains("\"待办\" / \"To-do\""));
             assert!(prompt.contains("in the Galley conversation at the top of the sidebar"));
         }
@@ -863,13 +864,18 @@ mod tests {
     /// Set with no headroom at the 2026-10-06 budget pass, on the larger
     /// platform variant (Windows), then raised by exactly 167 bytes on
     /// 2026-10-07 for the Chinese Settings labels in the feature map, and
-    /// lowered by 80 on 2026-10-13 when Goal left the feature map. To
+    /// lowered by 80 on 2026-10-13 when Goal left the feature map, then
+    /// raised by 51 on 2026-10-17: 7 for the reminders sentence and the
+    /// to-do in the feature map (main chat PRD ruling 90, measured then on
+    /// macOS only, so Windows sat 7 over until this diff), 44 when the
+    /// to-do moved to the Galley conversation's top bar and took its own
+    /// line in the map (ruling 93). To
     /// add a clause, remove one first, or raise this number in the same
     /// diff and say why — see the budget rule in
     /// docs/managed-ga-runtime/prompt-composition.md. Bytes, not tokens:
     /// there is no tokenizer in CI. `\r` is not counted: a Windows
     /// checkout (`core.autocrlf`) puts CRLF into the raw string literals.
-    const STATIC_PROMPT_BUDGET_BYTES: usize = 6775;
+    const STATIC_PROMPT_BUDGET_BYTES: usize = 6826;
 
     #[test]
     fn static_prompt_stays_within_budget() {
