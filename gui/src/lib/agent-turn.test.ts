@@ -110,6 +110,39 @@ describe("isFinalAnswerTurn / normalizeFinalAnswer / buildAgentTurn", () => {
     });
     expect("telemetry" in turn).toBe(false);
   });
+
+  it("answers with the summary when a closing reply said everything there (ruling 89)", () => {
+    const fields = {
+      tools: toolEventsFromRaw([{ toolName: "no_tool" }], [], "t-"),
+      finalAnswer: "",
+      turnIndex: 4,
+      summary: "已取消周日的提醒",
+      summaryOnly: true,
+    };
+    expect(buildAgentTurn(fields).finalAnswer).toBe("已取消周日的提醒");
+    // Not without the flag, not for a tool step or a question.
+    expect(
+      buildAgentTurn({ ...fields, summaryOnly: false }).finalAnswer,
+    ).toBeNull();
+    expect(
+      buildAgentTurn({
+        ...fields,
+        tools: toolEventsFromRaw([{ toolName: "web_scan" }], [], "t-"),
+      }).finalAnswer,
+    ).toBeNull();
+    expect(
+      buildAgentTurn({
+        ...fields,
+        tools: toolEventsFromRaw(
+          [{ toolName: "ask_user", args: { question: "哪天？" } }],
+          [],
+          "t-",
+        ),
+      }).finalAnswer,
+    ).toBeNull();
+    // No summary to fall back on: still nothing.
+    expect(buildAgentTurn({ ...fields, summary: "" }).finalAnswer).toBeNull();
+  });
 });
 
 // ---------------- round trip: live === restored ----------------

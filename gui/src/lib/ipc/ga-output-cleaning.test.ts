@@ -8,6 +8,7 @@ import {
   finalAnswerFileRefs,
   isLeakedToolCallMarkup,
   isSilentReply,
+  isSummaryOnlyReply,
   summaryEchoesAnswer,
 } from "@/lib/ipc/ga-output-cleaning";
 
@@ -209,6 +210,26 @@ describe("no-reply tag stripping", () => {
     expect(
       isSilentReply("<no-reply/>\n<next-suggestion>帮我看看结果</next-suggestion>"),
     ).toBe(true);
+  });
+
+  it("tells a reply that said everything in its summary (ruling 89)", () => {
+    expect(isSummaryOnlyReply("<summary>已取消周日的提醒</summary>")).toBe(
+      true,
+    );
+    expect(
+      isSummaryOnlyReply(
+        "<thinking>想一下</thinking><summary>已改到 9 点</summary>",
+      ),
+    ).toBe(true);
+    // Silent on purpose, a dispatch, real prose, nothing at all: no.
+    expect(isSummaryOnlyReply("<summary>打回</summary><no-reply/>")).toBe(
+      false,
+    );
+    expect(
+      isSummaryOnlyReply("<summary>派活</summary><subtask>查报价</subtask>"),
+    ).toBe(false);
+    expect(isSummaryOnlyReply("<summary>好</summary>已取消。")).toBe(false);
+    expect(isSummaryOnlyReply("")).toBe(false);
   });
 
   it("is no silent reply without the tag, or with a dispatch", () => {

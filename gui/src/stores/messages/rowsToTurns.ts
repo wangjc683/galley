@@ -9,6 +9,7 @@ import { mergedAskUserArgs } from "@/lib/ask-user-candidates";
 import {
   finalAnswerFileRefs,
   isSilentReply,
+  isSummaryOnlyReply,
   stripGATags,
 } from "@/lib/ipc/ga-output-cleaning";
 import { makeMessageStepper } from "@/lib/turn-index";
@@ -95,6 +96,7 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
         files: finalAnswerFileRefs(row.content),
         // Likewise `<no-reply/>` (ticket 29 strips it from the answer).
         silent: isSilentReply(row.content),
+        summaryOnly: isSummaryOnlyReply(row.content),
         settledAt: row.created_at,
       });
       turn.messageId = row.id;

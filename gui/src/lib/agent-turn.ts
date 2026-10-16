@@ -157,6 +157,11 @@ export interface AgentTurnFields {
    * restore: the row's `content`. Kept only on a closing turn left with
    * no answer (main chat tickets 29 / 31). */
   silent?: boolean;
+  /** `isSummaryOnlyReply` of the raw response — live: responseContent;
+   * restore: the row's `content`. A closing turn that wrote its words
+   * only into `<summary>` shows the summary as its answer (main chat
+   * PRD ruling 89). */
+  summaryOnly?: boolean;
   /** When the step landed — live: turn_end's `timestamp`; restore: the
    * row's `created_at`. */
   settledAt?: string;
@@ -177,6 +182,17 @@ export function buildAgentTurn(fields: AgentTurnFields): AgentTurn {
     summary: trimmedSummary ? trimmedSummary : undefined,
   };
   if (fields.telemetry) turn.telemetry = fields.telemetry;
+  // A closing reply whose words went only into `<summary>` (ruling 89):
+  // no conversation draws a summary, so it would say nothing at all.
+  // Not a question (its bubble is the question) and not a tool step.
+  if (
+    fields.summaryOnly &&
+    turn.finalAnswer === null &&
+    turn.summary !== undefined &&
+    isFinalAnswerTurn(turn.tools)
+  ) {
+    turn.finalAnswer = turn.summary;
+  }
   if (turn.finalAnswer !== null && fields.files && fields.files.length > 0) {
     turn.files = fields.files;
   }

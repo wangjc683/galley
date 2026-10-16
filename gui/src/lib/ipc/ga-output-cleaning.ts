@@ -64,6 +64,24 @@ export function isSilentReply(text: string): boolean {
   );
 }
 
+/**
+ * Whether a raw reply left nothing for the reader but its tags (main
+ * chat PRD ruling 89): no `<no-reply/>` (that one is silent on
+ * purpose), no `<subtask>` (its cards are the reply), and nothing once
+ * the tags are stripped. Ticket 36's real-model eval caught the model
+ * writing its whole confirmation into `<summary>`, which no
+ * conversation draws; `buildAgentTurn` then shows the summary as the
+ * answer of a closing turn.
+ */
+export function isSummaryOnlyReply(text: string): boolean {
+  return (
+    !!text &&
+    !NO_REPLY_TAG.test(text) &&
+    !text.includes(SUBTASK_OPEN) &&
+    cleanFinalAnswer(text).trim() === ""
+  );
+}
+
 const FILE_REF_PATTERN = /\[FILE:[^\]]+\]/g;
 
 /**

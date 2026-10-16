@@ -6,6 +6,7 @@ import {
   extractThinking,
   finalAnswerFileRefs,
   isSilentReply,
+  isSummaryOnlyReply,
   stripGATags,
 } from "@/lib/ipc/ga-output-cleaning";
 import { resolveLanguagePreference } from "@/lib/language";
@@ -854,6 +855,7 @@ export function turnFromTurnEnd(event: {
     telemetry: event.telemetry,
     files: finalAnswerFileRefs(event.responseContent),
     silent: isSilentReply(event.responseContent),
+    summaryOnly: isSummaryOnlyReply(event.responseContent),
     settledAt: event.timestamp,
   });
 }
