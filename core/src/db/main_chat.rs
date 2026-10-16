@@ -368,7 +368,8 @@ pub struct MainChatSegmentFacts {
     /// or Galley message being written, by nothing else.
     pub last_activity_at: String,
     /// The `turn_index` the next message written to the session gets
-    /// (`MAX(turn_index) + 1`, `0` for an empty session).
+    /// (`MAX(turn_index) + 1`, `0` for an empty session, never below
+    /// `turn_count`: the rule `insert_message_inner` writes by, ticket 32).
     pub next_turn_index: i64,
     /// Where the current segment starts; `None` while the session is
     /// still in its first segment.
@@ -397,8 +398,8 @@ impl SqliteGalley {
     ) -> Result<MainChatSegmentFacts> {
         let row: Option<(String, i64, Option<i64>, Option<String>)> = sqlx::query_as(
             "SELECT s.last_activity_at, \
-               (SELECT COALESCE(MAX(m.turn_index), -1) + 1 FROM messages m \
-                 WHERE m.session_id = s.id), \
+               MAX((SELECT COALESCE(MAX(m.turn_index), -1) + 1 FROM messages m \
+                 WHERE m.session_id = s.id), s.turn_count), \
                (SELECT MAX(g.start_turn_index) FROM main_chat_segments g \
                  WHERE g.session_id = s.id), \
                (SELECT r.tool_calls FROM messages r \

@@ -161,6 +161,16 @@ wakes it for a turn ([`subtask_report.rs`](../core/src/subtask_report.rs),
 ticket 29): a report row taken through the run gate and the shared runner
 path, kept in memory until the main chat is free. See
 [subtask reports](./managed-ga-runtime/runtime-modes-and-sessions.md#subtask-reports).
+The desktop can delete one message of the main chat (ticket 32,
+[`message_delete.rs`](../core/src/message_delete.rs)): Core works out which
+rows the bubble is (a user row, the greeting, or every assistant row of a
+reply's run), refuses while the main chat runs or waits for an answer and
+for a reply with subtask cards, and under the session's single-flight slot
+moves the attachment files aside, retires the live runner and deletes the
+rows with their search rows. Turn indices are not handed out again
+(`turn_count` is the floor of the next one). It then broadcasts
+`message-deleted` and starts the runner again, whose replay leaves the rows
+out; no new segment.
 
 Each runner keeps a **ready snapshot** — its latest `ready`, folded with
 later `llm_changed` / `reasoning_effort_changed` — which Core hands to a
@@ -255,7 +265,7 @@ arrive first, and the page's own bump would then count the turn twice —
 the guard above only covers a row that is behind.
 
 Every event a `TauriNotifier` emits — these, `runner-event`,
-`user-message-persisted`, `runner-history-replay`,
+`user-message-persisted`, `message-deleted`, `runner-history-replay`,
 `session-queue:changed`, `session-run-state` — is also handed, after the
 webview, to the process-wide remote sink when one is registered
 (`notify::register_remote_sink`, ticket 05c): the remote module's single

@@ -49,6 +49,7 @@
     "project.updated",
     "project.deleted",
     "message.persisted",
+    "message.deleted",
     "runner.event",
     "session.runState",
     "history.replay",
@@ -943,6 +944,24 @@
       },
       "name": "event.message.persisted",
       "type": "MessagePersistedEvent"
+    },
+    {
+      "event": "message.deleted",
+      "kind": "event",
+      "message": {
+        "n": "message.deleted",
+        "p": {
+          "messageIds": [
+            "msg_02",
+            "msg_03"
+          ],
+          "sessionId": "ses_7f3a9c",
+          "via": "gui"
+        },
+        "t": "evt"
+      },
+      "name": "event.message.deleted",
+      "type": "MessageDeletedEvent"
     },
     {
       "event": "runner.event",

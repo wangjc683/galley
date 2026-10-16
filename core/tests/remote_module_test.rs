@@ -830,6 +830,30 @@ async fn create_and_mark_read_write_through_core() {
     assert_ne!(brief.has_unread, Some(true));
 }
 
+/// Deleting a main chat message (ticket 32) reaches the phone as
+/// `message.deleted`, with every row that went; a deletion in a session
+/// the phone does not list does not.
+#[tokio::test]
+async fn a_deleted_message_reaches_the_phone() {
+    let (fx, keys) = Fixture::paired(fast()).await;
+    fx.session("m1", RuntimeKind::Managed, None).await;
+    fx.session("e1", RuntimeKind::External, None).await;
+    let mut phone = fx.phone(&keys).await;
+    wait_until(|| fx.module.status().online_phones == 1).await;
+
+    let deleted = |session: &str| json!({"sessionId": session, "messageIds": ["msg_2_assistant", "msg_3_assistant"], "via": "gui"});
+    fx.forward("message-deleted", deleted("e1"));
+    fx.forward("message-deleted", deleted("m1"));
+    let events = phone.events_within(QUIET).await;
+    assert_eq!(events.len(), 1, "{events:?}");
+    let Some(AppEvent::MessageDeleted(event)) = AppEvent::from_event(&events[0]).unwrap() else {
+        panic!("message.deleted expected, got {events:?}");
+    };
+    assert_eq!(event.session_id, "m1");
+    assert_eq!(event.message_ids, ["msg_2_assistant", "msg_3_assistant"]);
+    assert_eq!(event.via, "gui");
+}
+
 #[tokio::test]
 async fn runner_events_reach_subscribed_phones_only_in_batches() {
     let (fx, keys) = Fixture::paired(fast()).await;

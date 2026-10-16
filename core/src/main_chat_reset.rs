@@ -176,10 +176,14 @@ pub trait RunnerStarter: Send + Sync {
 /// The app's [`RunnerStarter`]: the shared path the desktop's
 /// `ensure_session_runner` command takes (spawn from the session's
 /// persisted configuration, announce `runner-spawned-external`).
+/// Deleting a main chat message uses it too (`crate::message_delete`).
 pub struct AppRunnerStarter {
     pub app: tauri::AppHandle,
     pub galley: SqliteGalley,
     pub manager: Arc<RunnerManager>,
+    /// `via` of the `runner-spawned-external` it announces
+    /// ([`VIA_MAIN_CHAT_RESET`] for a reset).
+    pub via: &'static str,
 }
 
 impl RunnerStarter for AppRunnerStarter {
@@ -187,6 +191,7 @@ impl RunnerStarter for AppRunnerStarter {
         let app = self.app.clone();
         let galley = self.galley.clone();
         let manager = self.manager.clone();
+        let via = self.via;
         Box::pin(async move {
             let host = RunnerHost {
                 galley: &galley,
@@ -198,7 +203,7 @@ impl RunnerStarter for AppRunnerStarter {
                 &host,
                 session_id.as_str(),
                 EnsureOptions {
-                    via: VIA_MAIN_CHAT_RESET,
+                    via,
                     active_session_id: Some(session_id.as_str()),
                     llm_override: None,
                     ga_config: None,

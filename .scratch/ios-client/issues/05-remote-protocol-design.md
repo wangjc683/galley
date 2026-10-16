@@ -332,6 +332,7 @@ JSON，UTF-8；每条 Noise 传输消息装一条，大的经 `chunk` 重组后�
 | `session.created/updated/archived/unarchived/moved/deleted` | 02d 的 `*-external`（`session_writes.rs:52-60`），`SessionBriefEvent` 显式带 null | 只转内置会话 |
 | `project.created/updated/deleted` | 同上 | 侧栏分组 |
 | `message.persisted` | `user-message-persisted`（四处来源，见代码事实第 2 节） | 带 `clientRequestId` |
+| `message.deleted` | `message-deleted`（2026-10-16 加，主聊天票 32：桌面在主对话里删了一条消息） | `{sessionId, messageIds, via}`；一条消息可以是好几行（回复连同过程），手机把这些行都去掉。只加不改，协议版本不动 |
 | `runner.event` | `runner-event`，只转订阅的会话 | `turn_progress` 按 100ms 合批；单条最大的是 `turn_end`，带完整工具调用与结果（`core/src/ipc.rs:184-219`） |
 | `session.runState` | **新增**的 Core 事件（第 7 节缺口 3） | 「在跑 / 在问你 / 排队」 |
 | `history.replay`、`goal.updated`、`queue.changed` | 已有 | |

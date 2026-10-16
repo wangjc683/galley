@@ -15,7 +15,10 @@
 //! - the database keeps the whole thread;
 //! - side chats — managed or attached — are untouched;
 //! - what the main chat's state block says about its segment (03b) and
-//!   about the turns it carries over (11).
+//!   about the turns it carries over (11);
+//! - a message deleted from the main chat (ticket 32) is in neither the
+//!   history a warm runner's replacement gets back nor the turns a new
+//!   segment carries over.
 //!
 //! The pure rule (exactly N hours, empty segments, the pref fallback)
 //! is unit-tested in `core/src/session_runner/segment.rs`.
@@ -29,6 +32,8 @@ use galley_core_lib::db::{
     MainChatSeed, PersistAssistantMessage, SqliteGalley, MAIN_CHAT_GREETING_ZH,
 };
 use galley_core_lib::ipc::{HistoryLoadedEvent, IpcCommand, IpcEvent, ReadyEvent};
+use galley_core_lib::main_chat_reset::{RunnerStarter, StartRunner};
+use galley_core_lib::message_delete::delete_main_chat_message;
 use galley_core_lib::notify::Notifier;
 use galley_core_lib::runner_manager::{
     is_side_question, BroadcastItem, HeldClose, QueueOffer, ReadySnapshot, RunState,
@@ -943,6 +948,90 @@ async fn a_message_that_got_no_reply_is_not_carried() {
 
     assert_eq!(boundaries(&galley, sid).await, vec![2]);
     assert_eq!(runner.load_histories(), vec![turn("第一问", "第一答")]);
+}
+
+// ---------------- a deleted message (ticket 32) ----------------
+
+/// A deletion's runner start, which the test does itself.
+struct NoStart;
+
+impl RunnerStarter for NoStart {
+    fn start(&self, _: SessionId) -> StartRunner {
+        Box::pin(async { Ok(()) })
+    }
+}
+
+/// Delete the message row `message_id` is part of through Core's path.
+async fn delete_message(
+    galley: &SqliteGalley,
+    runner: &SegRunner,
+    sid: &str,
+    message_id: &str,
+) -> Vec<String> {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    delete_main_chat_message(
+        galley,
+        runner,
+        &NoStart,
+        &NullNotifier,
+        tmp.path(),
+        &SessionId(sid.into()),
+        message_id,
+    )
+    .await
+    .expect("delete")
+    .message_ids
+}
+
+#[tokio::test]
+async fn a_deleted_message_is_not_in_the_warm_runners_replacement() {
+    let sid = "s-main-deleted";
+    let (_pool, galley) = main_chat_with_history(sid).await;
+    let runner = SegRunner::default();
+    runner.live(sid, 4100);
+    let env = FakeEnv;
+
+    // The first message, the code word in it.
+    let deleted = delete_message(&galley, &runner, sid, &format!("msg_{sid}_0_user")).await;
+    assert_eq!(deleted, vec![format!("msg_{sid}_0_user")]);
+    assert_eq!(runner.log(), vec!["retire:4100".to_string()]);
+
+    // The next ensure starts one and gives it the rest of the segment: the
+    // reply stays (its question went), the code word does not. No new
+    // segment.
+    ensure_session_runner(&host(&galley, &runner, &env), sid, opening())
+        .await
+        .expect("ensure");
+    assert!(boundaries(&galley, sid).await.is_empty());
+    let mut expected = vec![json!({"role": "assistant", "content": "好"})];
+    expected.extend(turn("复述一遍", "蓝鲸 4721"));
+    assert_eq!(runner.load_histories(), vec![expected]);
+}
+
+#[tokio::test]
+async fn a_deleted_message_is_not_carried_into_a_new_segment() {
+    let sid = "s-main-deleted";
+    let (pool, galley) = fresh().await;
+    main_chat(&galley, sid).await;
+    for i in 0..4 {
+        seed_exchange(&galley, sid, &format!("问{i}"), &format!("答{i}")).await;
+    }
+    let runner = SegRunner::default();
+    // The reply of the third exchange: its question is left without one,
+    // and an unanswered message is not carried.
+    let deleted = delete_message(&galley, &runner, sid, &format!("msg_{sid}_2_assistant")).await;
+    assert_eq!(deleted, vec![format!("msg_{sid}_2_assistant")]);
+
+    idle_for(&pool, sid, 5.0).await;
+    let env = FakeEnv;
+    send_user_message(&host(&galley, &runner, &env), request(sid, "接着说"))
+        .await
+        .expect("send");
+    assert_eq!(boundaries(&galley, sid).await, vec![4]);
+    let mut carried = turn("问0", "答0");
+    carried.extend(turn("问1", "答1"));
+    carried.extend(turn("问3", "答3"));
+    assert_eq!(runner.load_histories(), vec![carried]);
 }
 
 #[tokio::test]

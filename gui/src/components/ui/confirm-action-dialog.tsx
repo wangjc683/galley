@@ -55,8 +55,11 @@ export function ConfirmActionDialog({
    * (plain title-only confirms, e.g. row deletes). */
   icon?: ReactNode | null;
   title: string;
-  /** Text, or blocks (paragraphs, lists): the body is a `div`. */
-  body: ReactNode;
+  /** Text, or blocks (paragraphs, lists): the body is a `div`. Left out
+   * (or null) when the title says it all — deleting one message (main
+   * chat ticket 32): no empty paragraph then, the actions sit under the
+   * title. */
+  body?: ReactNode;
   /** Extra classes on the dialog panel. */
   className?: string;
   /** Radix's Esc hook: `preventDefault()` keeps the dialog open. */
@@ -64,6 +67,7 @@ export function ConfirmActionDialog({
 } & ConfirmControl) {
   const copy = useCopy();
   const descId = useId();
+  const hasBody = body !== undefined && body !== null && body !== false;
   const headerIcon =
     icon === null ? null : (
       icon ?? (
@@ -76,7 +80,7 @@ export function ConfirmActionDialog({
         <Dialog.Overlay className="fixed inset-0 z-[60] bg-overlay" />
         <Dialog.Content
           role="alertdialog"
-          aria-describedby={descId}
+          aria-describedby={hasBody ? descId : undefined}
           onEscapeKeyDown={onEscapeKeyDown}
           className={cn(
             "galley-pop-in fixed left-1/2 top-1/2 z-[60] w-[420px] -translate-x-1/2 -translate-y-1/2",
@@ -90,12 +94,14 @@ export function ConfirmActionDialog({
               {title}
             </Dialog.Title>
           </div>
-          <div
-            id={descId}
-            className="mt-2 text-ui-secondary leading-secondary text-ink-soft"
-          >
-            {body}
-          </div>
+          {hasBody && (
+            <div
+              id={descId}
+              className="mt-2 text-ui-secondary leading-secondary text-ink-soft"
+            >
+              {body}
+            </div>
+          )}
           <DialogActionRow>
             <Button
               variant="secondary"

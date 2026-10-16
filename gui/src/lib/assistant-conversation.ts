@@ -226,6 +226,12 @@ export interface AssistantProcessToggle {
  * answers; its steps show nothing (the line stands for them). A report
  * round's opener is no message; a silent one settles with its questions
  * and their answers alone — no answer, no process button, no steps.
+ *
+ * A reply whose message was deleted (ticket 32) is a headless group of
+ * its own (run-groups `splitAfterAnswer`) and draws as the reply it was:
+ * its answer, its questions, the process button over its steps. Its
+ * process card's open state is keyed by its first turn, as there is no
+ * opener.
  */
 export interface AssistantLinePlan {
   message: Set<number>;
@@ -233,6 +239,16 @@ export interface AssistantLinePlan {
   steps: Map<number, { opener: number; members: number[]; stats: RunStats }>;
   flat: Map<number, number>;
   reports: Map<number, number>;
+}
+
+/** A headless group that is a whole reply: answered, agent turns only —
+ * one whose message was deleted (ticket 32), or the greeting alone. */
+function orphanReply(g: RunGroup, turns: readonly Turn[]): boolean {
+  return (
+    g.openerIndex < 0 &&
+    g.complete &&
+    g.memberIndices.every((i) => turns[i].role === "agent")
+  );
 }
 
 function asksUser(turn: Turn): boolean {
@@ -263,7 +279,12 @@ export function assistantLinePlan(
       );
       if (first !== undefined) plan.reports.set(g.openerIndex, first);
     };
-    if (g === liveGroup || g.foldable || isSilentReport(g, turns)) {
+    if (
+      g === liveGroup ||
+      g.foldable ||
+      isSilentReport(g, turns) ||
+      orphanReply(g, turns)
+    ) {
       const members: number[] = [];
       for (const i of g.memberIndices) {
         const turn = turns[i];
@@ -285,7 +306,7 @@ export function assistantLinePlan(
       }
       if (g !== liveGroup && g.finalTurnIndex != null && members.length >= 2) {
         plan.steps.set(g.finalTurnIndex, {
-          opener: g.openerIndex,
+          opener: g.openerIndex >= 0 ? g.openerIndex : g.memberIndices[0],
           members,
           stats: g.stats,
         });

@@ -138,6 +138,7 @@ mod api_impl;
 mod helpers;
 mod main_chat;
 mod managed_model;
+mod message_delete;
 mod prefs;
 mod project;
 mod rows;
@@ -155,6 +156,7 @@ pub use main_chat::{
     MAIN_CHAT_GREETING_SUPERVISOR, MAIN_CHAT_GREETING_TURN_INDEX, MAIN_CHAT_GREETING_ZH,
     MAIN_CHAT_TITLE,
 };
+pub use message_delete::{MessageUnitRow, MessagesDeletion};
 pub use rows::{
     ManagedModelSecretRow, MessageAttachmentCreate, MessageSearchHit, PersistAssistantMessage,
     PersistedMessageRow, UpsertManagedModelMetadata, UpsertManagedModelProviderMetadata,

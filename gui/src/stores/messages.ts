@@ -4,6 +4,7 @@ import { loadMessageTurnsPage, type MessageTurnPage } from "@/lib/db";
 import type { SubmitSource } from "@/lib/live-tail";
 import { logPerf, perfNow } from "@/lib/perf";
 import { pendingReplyStepBase } from "@/lib/run-groups";
+import { turnOrdinals } from "@/lib/turn-ordinals";
 import type { UserMessagePersistedPayload } from "@/lib/session-send";
 import { isSubtaskReport } from "@/lib/subtasks";
 import { useSessionsStore } from "@/stores/sessions";
@@ -42,6 +43,7 @@ import type {
 // `unknown` cast hop because `Object.freeze([])` yields
 // `readonly never[]` which doesn't overlap with `Turn[]`.
 export const EMPTY_TURNS: Turn[] = Object.freeze([] as Turn[]) as Turn[];
+export const EMPTY_ORDINALS: readonly number[] = Object.freeze([]);
 
 function sessionCompletedTurnCount(sid: string): number {
   return (
@@ -127,6 +129,14 @@ export interface PerSessionMessages {
    * key.
    */
   prependedTurns: number;
+  /**
+   * The places (lib/turn-ordinals) of turns a deleted message took out
+   * (main chat ticket 32), ascending. The conversation skips them, so
+   * no row after a deleted one is re-keyed and no turn appended later
+   * takes one. Cleared with `prependedTurns` whenever `turns` are
+   * replaced.
+   */
+  removedOrdinals: readonly number[];
   turnIndexOffset: number;
   /**
    * Display-step base for the GA loop the latest user turn started:
@@ -190,6 +200,7 @@ export const EMPTY_MESSAGES: PerSessionMessages = Object.freeze({
   restoring: false,
   earlier: null,
   prependedTurns: 0,
+  removedOrdinals: EMPTY_ORDINALS,
   turnIndexOffset: 0,
   runStepBase: 0,
   optimisticRequestId: null,
@@ -212,6 +223,7 @@ function emptyMessages(): PerSessionMessages {
     restoring: false,
     earlier: null,
     prependedTurns: 0,
+    removedOrdinals: EMPTY_ORDINALS,
     turnIndexOffset: 0,
     runStepBase: 0,
     optimisticRequestId: null,
@@ -387,6 +399,14 @@ interface MessagesActions {
    */
   setPausedAtStepLimit: (sid: string, value: boolean) => void;
   clearConversation: (sid: string) => void;
+  /**
+   * Rows Core deleted (main chat ticket 32, `message-deleted`): drop the
+   * turns holding them, remembering their places so nothing after them
+   * is re-keyed. When the latest reply goes, its ghost suggestion and
+   * step-limit tail go with it. Turns not loaded are not here to drop;
+   * a second call for the same rows changes nothing.
+   */
+  applyMessagesDeleted: (sid: string, messageIds: readonly string[]) => void;
 }
 
 export type MessagesStore = MessagesState & MessagesActions;
@@ -557,6 +577,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
         turns,
         earlier: earlierThan(page),
         prependedTurns: 0,
+        removedOrdinals: EMPTY_ORDINALS,
         // A restart (or bridge death) while a GA question was pending
         // dropped the transient pendingAskUser — rebuild it from the
         // persisted tool args so the live bubble / chips / sidebar dot
@@ -1038,6 +1059,43 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     }));
     set({ byId });  },
 
+  applyMessagesDeleted: (sid, messageIds) => {
+    const m = get().byId[sid];
+    if (!m) return;
+    const doomed = new Set(messageIds);
+    const gone = (turn: Turn) =>
+      turn.role !== "system" &&
+      turn.messageId !== undefined &&
+      doomed.has(turn.messageId);
+    if (!m.turns.some(gone)) return;
+    const ordinals = turnOrdinals(
+      m.turns.length,
+      m.prependedTurns,
+      m.removedOrdinals,
+    );
+    const removed: number[] = [];
+    const turns: Turn[] = [];
+    m.turns.forEach((turn, i) => {
+      if (gone(turn)) removed.push(ordinals[i]);
+      else turns.push(turn);
+    });
+    let lastAgent: Turn | undefined;
+    for (let i = m.turns.length - 1; i >= 0 && !lastAgent; i--) {
+      if (m.turns[i].role === "agent") lastAgent = m.turns[i];
+    }
+    const latestReplyGone = lastAgent !== undefined && gone(lastAgent);
+    const { byId } = patchMessages(get(), sid, (slice) => ({
+      ...slice,
+      turns,
+      removedOrdinals: [...slice.removedOrdinals, ...removed].sort(
+        (a, b) => a - b,
+      ),
+      nextSuggestion: latestReplyGone ? null : slice.nextSuggestion,
+      pausedAtStepLimit: latestReplyGone ? false : slice.pausedAtStepLimit,
+    }));
+    set({ byId });
+  },
+
   clearConversation: (sid) => {
     const state = get();
     const { byId } = patchMessages(state, sid, (m) => ({
@@ -1045,6 +1103,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       turns: [],
       earlier: null,
       prependedTurns: 0,
+      removedOrdinals: EMPTY_ORDINALS,
       agentRunning: false,
       currentRunStartedAtMs: null,
       currentTurnIndex: null,

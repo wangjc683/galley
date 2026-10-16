@@ -990,6 +990,14 @@ fn golden_app_messages() {
             client_request_id: Some("crq_ios_0001".into()),
         },
     );
+    s.event(
+        AppEvent::MessageDeleted,
+        MessageDeletedEvent {
+            session_id: sid(),
+            message_ids: vec!["msg_02".into(), "msg_03".into()],
+            via: "gui".into(),
+        },
+    );
     s.event(AppEvent::RunnerEvent, RunnerEventBatch {
         session_id: sid(),
         events: vec![

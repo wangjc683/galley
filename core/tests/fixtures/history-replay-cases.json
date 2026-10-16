@@ -332,6 +332,50 @@
         { "role": "user", "content": "早" },
         { "role": "assistant", "content": "早上好" }
       ]
+    },
+    {
+      "name": "a deleted user message leaves two replies side by side: they merge (main chat ticket 32)",
+      "completedTurnCount": 4,
+      "rows": [
+        { "role": "user", "turn_index": 0, "content": "q1", "attachments": [] },
+        { "role": "assistant", "turn_index": 0, "content": "a1", "attachments": [] },
+        { "role": "assistant", "turn_index": 1, "content": "a2 step", "attachments": [] },
+        { "role": "assistant", "turn_index": 2, "content": "a2", "attachments": [] },
+        { "role": "user", "turn_index": 3, "content": "q3", "attachments": [] },
+        { "role": "assistant", "turn_index": 3, "content": "a3", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "user", "content": "q1" },
+        { "role": "assistant", "content": "a1\n\na2 step\n\na2" },
+        { "role": "user", "content": "q3" },
+        { "role": "assistant", "content": "a3" }
+      ]
+    },
+    {
+      "name": "a deleted reply leaves two user messages side by side: they merge (main chat ticket 32)",
+      "completedTurnCount": 3,
+      "rows": [
+        { "role": "user", "turn_index": 0, "content": "q1", "attachments": [{ "kind": "image", "path": "/att/s1/a.png" }] },
+        { "role": "user", "turn_index": 2, "content": "q2", "attachments": [] },
+        { "role": "assistant", "turn_index": 2, "content": "a2", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "user", "content": "q1\n\nq2", "images": ["/att/s1/a.png"] },
+        { "role": "assistant", "content": "a2" }
+      ]
+    },
+    {
+      "name": "the latest reply deleted: the question it answered trails and is dropped, as after an abort (main chat ticket 32)",
+      "completedTurnCount": 3,
+      "rows": [
+        { "role": "user", "turn_index": 0, "content": "q1", "attachments": [] },
+        { "role": "assistant", "turn_index": 0, "content": "a1", "attachments": [] },
+        { "role": "user", "turn_index": 1, "content": "q2", "attachments": [] }
+      ],
+      "messages": [
+        { "role": "user", "content": "q1" },
+        { "role": "assistant", "content": "a1" }
+      ]
     }
   ]
 }

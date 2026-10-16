@@ -402,6 +402,20 @@ pub(super) async fn insert_user_message_inner(
     .await
 }
 
+/// The `turn_index` the next message written to a session gets, bound
+/// twice to the session id: one past the highest index its rows hold, and
+/// never below `turn_count`. Without deletions the two agree (each visible
+/// step bumps `turn_count` once and takes one index; an aborted message or
+/// an internal step takes an index without a bump, so the first term is
+/// the larger). Deleting the main chat's latest rows (ticket 32) lowers
+/// the first term, and [`SqliteGalley::delete_main_chat_messages`] raises
+/// `turn_count` to where it stood, so no index is handed out twice and the
+/// next message lands at `turn_count`, where the Agent API's
+/// `--after-turn` expects it.
+pub(super) const NEXT_TURN_INDEX_SQL: &str =
+    "SELECT MAX((SELECT COALESCE(MAX(turn_index), -1) + 1 FROM messages WHERE session_id = ?), \
+       COALESCE((SELECT turn_count FROM sessions WHERE id = ?), 0))";
+
 /// Shared writer for standalone (sequence=0) conversation messages.
 /// `role` selects user vs Galley system narration; both occupy their
 /// own `turn_index` so the `(turn_index, sequence)` ordering and the
@@ -439,13 +453,15 @@ pub(super) async fn insert_message_inner(
             message: format!("session {} is archived", session_id.0),
         });
     }
-    let next_turn: i64 = sqlx::query_scalar(
-        "SELECT COALESCE(MAX(turn_index), -1) + 1 FROM messages WHERE session_id = ?",
-    )
-    .bind(&session_id.0)
-    .fetch_one(&mut *conn)
-    .await
-    .map_err(map_sqlx_err)?;
+    // One past the highest index, and never below `turn_count`: deleting
+    // the main chat's latest rows (ticket 32) leaves a hole instead of
+    // handing its indices out again (`NEXT_TURN_INDEX_SQL`).
+    let next_turn: i64 = sqlx::query_scalar(NEXT_TURN_INDEX_SQL)
+        .bind(&session_id.0)
+        .bind(&session_id.0)
+        .fetch_one(&mut *conn)
+        .await
+        .map_err(map_sqlx_err)?;
     let now = chrono_now_iso();
     let msg_id = format!("msg_{}_{}_{}", session_id.0, next_turn, role_sql);
     sqlx::query(

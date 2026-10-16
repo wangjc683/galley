@@ -431,3 +431,43 @@ describe("live window and step numbering", () => {
     expect([...steps.entries()]).toEqual([[2, 1]]);
   });
 });
+
+describe("splitAfterAnswer (main chat ticket 32)", () => {
+  it("keeps two replies apart once the message between them was deleted", () => {
+    // You asked twice; your second message was deleted.
+    const turns: Turn[] = [
+      user("q1"),
+      closing("答一"),
+      step(tool("web_scan")),
+      closing("答二"),
+    ];
+    const split = buildRunGroups(turns, { splitAfterAnswer: true });
+    expect(split.map((g) => [g.openerIndex, g.memberIndices])).toEqual([
+      [0, [0, 1]],
+      [-1, [2, 3]],
+    ]);
+    expect(split[1].complete).toBe(true);
+    expect(split[1].finalTurnIndex).toBe(3);
+    // Off, the later reply would swallow the earlier answer as a step.
+    const joined = buildRunGroups(turns);
+    expect(joined).toHaveLength(1);
+    expect(joined[0].finalTurnIndex).toBe(3);
+  });
+
+  it("splits nothing else: a question's answer, a reply right after yours", () => {
+    const turns: Turn[] = [
+      user("q"),
+      askStep(),
+      user("a"),
+      step(tool("web_scan")),
+      closing(),
+      user("q2"),
+      closing(),
+    ];
+    expect(
+      buildRunGroups(turns, { splitAfterAnswer: true }).map(
+        (g) => g.memberIndices,
+      ),
+    ).toEqual(buildRunGroups(turns).map((g) => g.memberIndices));
+  });
+});

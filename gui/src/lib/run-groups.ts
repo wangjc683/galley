@@ -183,7 +183,24 @@ function isClosingTurn(turn: AgentTurn): boolean {
   return (turn.finalAnswer ?? "").trim() !== "";
 }
 
-export function buildRunGroups(turns: Turn[]): RunGroup[] {
+/**
+ * Group `turns` into runs.
+ *
+ * `splitAfterAnswer` (the main chat, ticket 32): an agent turn that
+ * follows an answer (a closing turn) with no user turn between them
+ * opens a headless group of its own instead of joining the answered
+ * run. That only happens once the user's message between two replies
+ * was deleted; without the split the later reply would swallow the
+ * earlier one, its answer turned into a step of the later run. Core
+ * groups the rows the same way when it works out which rows a deleted
+ * reply is (`core/src/message_delete.rs`). Off elsewhere: GA can go on
+ * after a turn that looks closing (it asks a reply that is only a code
+ * block to explain itself), which this would split.
+ */
+export function buildRunGroups(
+  turns: Turn[],
+  options: { splitAfterAnswer?: boolean } = {},
+): RunGroup[] {
   interface OpenGroup {
     openerIndex: number;
     memberIndices: number[];
@@ -191,6 +208,8 @@ export function buildRunGroups(turns: Turn[]): RunGroup[] {
     /** True while the group's last agent turn carries an ask_user
      * tool — the state in which the next user turn is a reply. */
     awaitingReply: boolean;
+    /** True while the group's last agent turn is an answer. */
+    answered: boolean;
   }
 
   const groups: RunGroup[] = [];
@@ -265,8 +284,19 @@ export function buildRunGroups(turns: Turn[]): RunGroup[] {
         memberIndices: [index],
         hasSystem: false,
         awaitingReply: false,
+        answered: false,
       };
       return;
+    }
+    if (
+      options.splitAfterAnswer &&
+      turn.role === "agent" &&
+      current &&
+      !current.awaitingReply &&
+      current.answered
+    ) {
+      finalize(current);
+      current = null;
     }
     if (!current) {
       // Orphan leading turns (restored history, narration before the
@@ -276,11 +306,15 @@ export function buildRunGroups(turns: Turn[]): RunGroup[] {
         memberIndices: [],
         hasSystem: false,
         awaitingReply: false,
+        answered: false,
       };
     }
     current.memberIndices.push(index);
     if (turn.role === "system") current.hasSystem = true;
-    if (turn.role === "agent") current.awaitingReply = hasAskUserTool(turn);
+    if (turn.role === "agent") {
+      current.awaitingReply = hasAskUserTool(turn);
+      current.answered = isClosingTurn(turn);
+    }
   });
   if (current) finalize(current);
 
