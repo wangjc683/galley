@@ -51,12 +51,12 @@ import {
   askUserReplyContent,
   mergedAskUserArgs,
 } from "@/lib/ask-user-candidates";
+import { type FoldHead, workbenchFoldPlan } from "@/lib/run-fold-plan";
 import {
   buildRunGroups,
   liveRunGroup,
   replyUserIndices,
   runStepNumbers,
-  type RunGroup,
 } from "@/lib/run-groups";
 import { isSubtaskReportTurn } from "@/lib/subtasks";
 import { cn } from "@/lib/utils";
@@ -169,7 +169,8 @@ export function Conversation({
   }, [askUserPending, turns]);
 
   // Run fold (conversation-run-fold PRD): settled runs collapse their
-  // process section behind a RunFoldHeader. Grouping is the shared
+  // process behind a RunFoldHeader, which opens it one line a step
+  // (workbench conversation PRD ruling 6). Grouping is the shared
   // run-groups pass — the same one the question rail builds its
   // exchanges from, so fold visibility can never desync the rail's
   // data↔DOM index contract. Steps are numbered by position within
@@ -327,9 +328,12 @@ export function Conversation({
   // sweep — window wrapped in an ExpandSection now closing, header
   // already in settled voice, the final answer flat below — and the
   // switch to the settled structure happens after the sweep, when
-  // the fold section behind the header is closed either way and
-  // nothing visible moves. Skipped when the reader had opened the
-  // live header (the run settles open, no window to sweep) and when
+  // the card behind the header is closed either way and nothing
+  // visible moves (the run's questions and answers are already out
+  // before the header while it settles, where the settled run draws
+  // them: lib/run-fold-plan.ts). Skipped when the reader had opened the
+  // live header (the run settles open: its card stays, the window's
+  // steps join it as rows, the answer comes in under it) and when
   // the run did not complete (aborts unfold in full). Guarded
   // setState-in-render: the decision has to land in THIS render, an
   // effect would commit the settled structure first. Openers here are
@@ -371,8 +375,8 @@ export function Conversation({
   // item arriving. Each departure keeps its own 300ms timer so fast
   // successive steps overlap instead of cutting each other off. Not
   // used while the live header is expanded: there the displaced step
-  // simply moves into the open fold section above, same place, same
-  // content, and a sweep would show it twice. Guarded
+  // simply moves into the open card above as its row, and a sweep
+  // would show it twice. Guarded
   // setState-in-render, as the settling detection above. Steps and
   // openers are ordinals.
   const liveLastAgent = (() => {
@@ -421,102 +425,42 @@ export function Conversation({
     // removed by an earlier effect run.
   }, [departing]);
 
-  // Per-render fold plan. headerFor: opener index → fold header data;
-  // sectionOwner: turns indices that render inside the group's
-  // RunFoldSection (every member except the opener — the final turn
-  // included, because its marker + StrongHr belong to the animated
-  // section via `markerOnly` while its answer body stays outside);
+  // Per-render plan (lib/run-fold-plan.ts): which runs fold behind a
+  // header — and where the header, the card behind it and the run's
+  // questions and answers are drawn — the live window's members, the
+  // runs drawn flat in a step region (/btw exchange, aborted run), so
+  // the process inset + rail apply to every run drawn as steps.
   // answerOnly: closing turns whose flat render is the answer body
-  // alone, expanded or not — the fold toggle is then purely the
-  // section's height sweep, with nothing popping in or out beside it.
-  // regionOwner is the flat counterpart of sectionOwner: members of a
-  // non-foldable group (/btw exchange, aborted run) gather
-  // into a plain StepRegion instead of an animated RunFoldSection, so
-  // the process inset + rail apply to every run and nothing shifts
-  // when a live run completes and moves to a fold (2026-09-16).
-  // windowOwner marks the live group's open tail (its last completed
-  // agent turn and anything after it, e.g. an ask_user reply); the
-  // members before that tail go to sectionOwner and fold behind the
-  // live header. answerOnly covers every group with a closing turn
-  // for the same reason: the final answer must render outside the
-  // region at full width.
-  const headerFor = new Map<
-    number,
-    { group: RunGroup; folded: boolean; live: boolean; foldedSteps: number }
-  >();
-  const sectionOwner = new Map<number, number>();
-  const regionOwner = new Map<number, number>();
-  const windowOwner = new Map<number, number>();
+  // alone — every group with a closing turn, so the final answer
+  // renders outside any region at full width and the fold toggle is
+  // purely the card's sweep, with nothing popping in or out beside it.
   const answerOnly = new Set<number>();
   for (const g of groups) {
     if (g.finalTurnIndex != null) answerOnly.add(g.finalTurnIndex);
-    // The assistant's conversation draws its runs from linePlan below.
-    if (linePlan) continue;
-    if (g === liveGroup || g === settlingGroup) {
-      // While settling, the closing turn is not a window candidate:
-      // its answer body renders flat below (answerOnly) and its
-      // marker would only ever live inside the closed fold section,
-      // so it gets no owner at all.
-      let lastAgent = -1;
-      for (const i of g.memberIndices) {
-        if (i === g.openerIndex || i === g.finalTurnIndex) continue;
-        if (turns[i].role === "agent") lastAgent = i;
-      }
-      let foldedSteps = 0;
-      for (const i of g.memberIndices) {
-        if (i === g.openerIndex || i === g.finalTurnIndex) continue;
-        if (lastAgent !== -1 && i < lastAgent) {
-          // A departing step counts as folded already — the header
-          // it is sweeping into must exist from the first frame of
-          // that sweep — but stays a window member until its sweep
-          // ends.
-          if (turns[i].role === "agent") foldedSteps++;
-          if (departing.includes(ordinal(i))) windowOwner.set(i, g.openerIndex);
-          else sectionOwner.set(i, g.openerIndex);
-        } else {
-          windowOwner.set(i, g.openerIndex);
-        }
-      }
-      headerFor.set(g.openerIndex, {
-        group: g,
-        folded: foldOverrides[ordinal(g.openerIndex)] !== true,
-        live: g === liveGroup,
-        foldedSteps,
-      });
-      continue;
-    }
-    if (!g.foldable) {
-      for (const i of g.memberIndices) {
-        if (i === g.openerIndex) continue;
-        // The main chat's greeting (ticket 04c) heads a headless group
-        // of its own: no region, so no step marker or rule — it renders
-        // as the plain answer it is (answerOnly hides the marker).
-        const turn = turns[i];
-        if (turn.role === "agent" && turn.greeting) continue;
-        regionOwner.set(i, g.openerIndex);
-      }
-      continue;
-    }
-    // Settled runs fold on completion (2026-09-16, reversing the
-    // 08-06 keep-expanded window): the header's step / duration /
-    // tool-count digest stands in for the process, one click away.
-    const override = foldOverrides[ordinal(g.openerIndex)];
-    const folded = override !== undefined ? !override : true;
-    headerFor.set(g.openerIndex, {
-      group: g,
-      folded,
-      live: false,
-      foldedSteps: g.stats.stepCount,
-    });
-    for (const i of g.memberIndices) {
-      if (i === g.openerIndex) continue;
-      sectionOwner.set(i, g.openerIndex);
-    }
   }
+  // The assistant's conversation draws its runs from linePlan instead.
+  const foldPlan = linePlan
+    ? null
+    : workbenchFoldPlan({
+        groups,
+        turns,
+        liveGroup,
+        settlingGroup,
+        isDeparting: (i) => departing.includes(ordinal(i)),
+        isOpened: (opener) => foldOverrides[ordinal(opener)] === true,
+      });
+  const windowOwner = foldPlan?.windowOwner ?? new Map<number, number>();
+  const regionOwner = new Map<number, number>(foldPlan?.regionOwner);
   // The assistant's runs drawn the workbench way gather into flat
-  // regions, as the non-foldable branch above does.
+  // regions too.
   if (linePlan) {
     for (const [i, opener] of linePlan.flat) regionOwner.set(i, opener);
+  }
+  // The live window's header, by opener (the window's gap choreography
+  // reads it).
+  const headOf = new Map<number, FoldHead>();
+  for (const head of foldPlan?.heads.values() ?? []) {
+    headOf.set(head.group.openerIndex, head);
   }
 
   const toggleFold = (openerIndex: number, currentlyFolded: boolean) => {
@@ -582,28 +526,12 @@ export function Conversation({
   };
 
   const renderItem = (turn: Turn, turnIndex: number) => {
-    const header = headerFor.get(turnIndex);
     // Keyed by the turn's ordinal: an earlier page landing in front
     // moves no key.
     return (
       <Fragment key={`turn-${ordinal(turnIndex)}`}>
         {turn.role === "user" ? (
-          <>
-            {userRow(turn, turnIndex, null)}
-            {/* The live header appears once a step has folded behind
-                it (the third step landing, for a two-row window);
-                before that the run is its own short list. */}
-            {header && (!header.live || header.foldedSteps > 0) && (
-              <RunFoldHeader
-                stats={header.group.stats}
-                open={!header.folded}
-                live={header.live}
-                onToggle={() =>
-                  toggleFold(header.group.openerIndex, header.folded)
-                }
-              />
-            )}
-          </>
+          userRow(turn, turnIndex, null)
         ) : turn.role === "system" ? (
           <SystemMessageBubble
             content={turn.content}
@@ -617,7 +545,10 @@ export function Conversation({
             turn={turn}
             hideMarker={answerOnly.has(turnIndex)}
             stepNumber={stepNumberOf.get(turnIndex)}
-            suppressAskUserEcho={turn === pendingAskUserTurn}
+            suppressAskUserEcho={
+              turn === pendingAskUserTurn ||
+              foldPlan?.echoOutside.has(turnIndex) === true
+            }
             askUserAnswer={askUserReplyContent(turns, turnIndex, replySet)}
             runTelemetry={runTelemetryOf.get(turnIndex)}
             bubble={assistant}
@@ -748,13 +679,63 @@ export function Conversation({
     );
   };
 
-  // Assembly: consecutive items owned by the same foldable group
-  // gather into one RunFoldSection; everything else renders flat.
-  // A foldable final turn contributes twice — its marker + StrongHr
-  // close the section (markerOnly), its answer body renders flat
-  // right after, so collapsing never removes the visible answer.
-  type SectionKind = "fold" | "flat" | "window";
+  // An ask_user question drawn out before its run's fold header (the
+  // answered echo, as the step region drew it; lib/run-fold-plan.ts).
+  const renderQuestion = (turn: AgentTurn, turnIndex: number) => {
+    const args = mergedAskUserArgs(turn.tools);
+    return args ? (
+      <AnsweredAskUser
+        key={`turn-${ordinal(turnIndex)}`}
+        question={args.question}
+        candidates={args.candidates}
+        answer={askUserReplyContent(turns, turnIndex, replySet)}
+      />
+    ) : null;
+  };
+
+  // Assembly: consecutive items owned by the same group gather into one
+  // region — the live window, or a flat StepRegion; everything else
+  // renders at its own place. A run behind a fold header is drawn right
+  // before the turn its plan anchors it at (lib/run-fold-plan.ts): its
+  // questions and the user's answers, then the header, then the card
+  // of its steps (RunFoldSection); its steps are not drawn at their own
+  // places. The header and the card keep their keys from live to
+  // settled, so a run opened while live settles open without
+  // remounting. A flat region's final turn contributes twice — its
+  // marker + StrongHr close the region (markerOnly), its answer body
+  // renders flat right after.
+  type SectionKind = "flat" | "window";
   const rendered: ReactNode[] = [];
+  const renderHead = (head: FoldHead) => {
+    for (const i of head.outside) {
+      const turn = turns[i];
+      rendered.push(
+        turn.role === "agent" ? renderQuestion(turn, i) : renderItem(turn, i),
+      );
+    }
+    // The live header appears once a step has folded behind it (the
+    // third step landing, for a two-row window); before that the run
+    // is its own short list.
+    if (head.live && head.foldedSteps === 0) return;
+    const opener = head.group.openerIndex;
+    rendered.push(
+      <RunFoldHeader
+        key={`fold-head-${ordinal(opener)}`}
+        stats={head.group.stats}
+        open={!head.folded}
+        live={head.live}
+        onToggle={() => toggleFold(opener, head.folded)}
+      />,
+      <RunFoldSection
+        key={`fold-${ordinal(opener)}`}
+        open={!head.folded}
+        steps={head.rows.map((m) => ({
+          key: `step-${ordinal(m)}`,
+          turn: turns[m] as AgentTurn,
+        }))}
+      />,
+    );
+  };
   let section: {
     opener: number;
     kind: SectionKind;
@@ -782,24 +763,30 @@ export function Conversation({
       //                      padding INSIDE the overflow box, so the
       //                      rail (top-0 of the region) runs through
       //                      the gap up to the header — a negative
-      //                      rail offset would be clipped. Same
-      //                      pattern as RunFoldSection's -mt-5.5.
-      //   header, expanded   mt-0 + pt-2.5: the open fold section
-      //                      above ends flush; the padding is the
-      //                      in-run gap, rail continuous.
+      //                      rail offset would be clipped.
+      //   header, expanded   the same margin and padding: the card
+      //                      section above ends with its own 16px
+      //                      (pb-4), which the -mt-2.5 overlaps by
+      //                      10 and the pt-2.5 gives back, so the
+      //                      window's first marker sits 16px under
+      //                      the card, as the answer does once the
+      //                      run settles. The rail starts at that
+      //                      marker (railFrom="step"): the card is
+      //                      no line to hang it from.
       //
-      // Closed, the margin goes to 0 like RunFoldSection's, so the
-      // header's hug to the answer holds while the rows sweep. The
-      // margins collapse across a mounted 0fr fold section (0 and
-      // -10 → -10), so toggling the live header does not jitter.
-      const h = headerFor.get(section.opener);
+      // Closed, the margin goes to 0, so the header's hug to the answer
+      // holds while the rows sweep. The margins collapse across a
+      // mounted 0fr card section (0 and -10 → -10), and the margin is
+      // the same open or not, so toggling the live header does not
+      // jitter.
+      const h = headOf.get(section.opener);
       const hasHeader = h !== undefined && h.foldedSteps > 0;
       const expanded = hasHeader && !h.folded;
       rendered.push(
         <ExpandSection
           key={`window-${ordinal(section.opener)}`}
           open={ordinal(section.opener) !== settlingOpener}
-          openClassName={!hasHeader ? "mt-6" : expanded ? "mt-0" : "-mt-2.5"}
+          openClassName={hasHeader ? "-mt-2.5" : "mt-6"}
           closedClassName="mt-0"
         >
           {/* Each window step carries the in-run gap as its own
@@ -810,6 +797,7 @@ export function Conversation({
               overflow box) so the gap down to MainView's in-flight
               row stays the marker's mt-2.5 alone. */}
           <StepRegion
+            railFrom={expanded ? "step" : "content"}
             className={cn(
               "-mb-2.5 [&_[data-role=step-marker]]:mt-0",
               hasHeader && "pt-2.5",
@@ -818,16 +806,6 @@ export function Conversation({
             {section.nodes}
           </StepRegion>
         </ExpandSection>,
-      );
-    } else {
-      const h = headerFor.get(section.opener);
-      rendered.push(
-        <RunFoldSection
-          key={`fold-${ordinal(section.opener)}`}
-          open={h ? !h.folded : true}
-        >
-          {section.nodes}
-        </RunFoldSection>,
       );
     }
     section = null;
@@ -845,10 +823,17 @@ export function Conversation({
     ) {
       return;
     }
-    const foldOwner = sectionOwner.get(turnIndex);
+    // A run behind a fold header: its questions and answers, header and
+    // card, right before the turn the plan anchors it at.
+    const head = foldPlan?.heads.get(turnIndex);
+    if (head) {
+      flushSection();
+      renderHead(head);
+    }
+    if (foldPlan?.elsewhere.has(turnIndex)) return;
     const flatOwner = regionOwner.get(turnIndex);
     const windowOf = windowOwner.get(turnIndex);
-    const owner = foldOwner ?? flatOwner ?? windowOf;
+    const owner = flatOwner ?? windowOf;
     if (owner === undefined) {
       flushSection();
       if (linePlan) {
@@ -869,8 +854,7 @@ export function Conversation({
       rendered.push(renderItem(turn, turnIndex));
       return;
     }
-    const kind: SectionKind =
-      foldOwner !== undefined ? "fold" : flatOwner !== undefined ? "flat" : "window";
+    const kind: SectionKind = flatOwner !== undefined ? "flat" : "window";
     if (section && (section.opener !== owner || section.kind !== kind)) {
       flushSection();
     }
@@ -959,18 +943,17 @@ function AgentTurnView({
   attachment,
 }: {
   turn: AgentTurn;
-  /** Fold mode for a foldable run's closing turn: its marker and
-   * StrongHr render inside the animated RunFoldSection (see
-   * `markerOnly`), so the flat render is the answer section alone —
-   * expanded or folded. When the section is closed the RunFoldHeader
-   * is the answer's eyebrow and hugs it (see the StrongHr call site).
-   * A closing turn has no narration / real tools / ask_user by
-   * definition (run-groups isClosingTurn). */
+  /** The answer alone, for every closing turn: a folded run's closing
+   * step is no row of its card (RunFoldSection) and the RunFoldHeader
+   * is the answer's eyebrow and hugs it (see the StrongHr call site);
+   * a flat region's closing marker + StrongHr render inside the region
+   * (see `markerOnly`). A closing turn has no narration / real tools /
+   * ask_user by definition (run-groups isClosingTurn). */
   hideMarker?: boolean;
-  /** hideMarker's other half: render ONLY the closing turn's
-   * TurnMarker + StrongHr, as the last nodes inside the RunFoldSection
-   * — they belong to the run's process chapter and must sweep away
-   * with it, not pop in and out beside the animation. */
+  /** hideMarker's other half in a flat region (a /btw run, a headless
+   * lead-in): render ONLY the closing turn's TurnMarker + StrongHr, as
+   * the last nodes inside the region — they belong to the run's
+   * process chapter. */
   markerOnly?: boolean;
   /** True when this turn's ask_user question is currently live as the
    * tail AskUserBubble — skip the AnsweredAskUser echo so the question
@@ -1198,7 +1181,9 @@ function AgentTurnView({
           user↔agent boundary above had none, and pushed the
           header→answer distance (33px) past the question→header
           distance (24px) — proximity binding the process summary to
-          the wrong neighbour (2026-08-06). */}
+          the wrong neighbour (2026-08-06). Opened, the card's edge
+          parts the action from the conclusion, and a full-width rule
+          under it would be a second line (2026-10-16). */}
       {answerText && isFinalTurn && (
         <>
           {!hideMarker && <StrongHr />}
@@ -1245,9 +1230,7 @@ function isNarrationTurn(turn: Turn | undefined): boolean {
  *     does the separating, not a big gap — cuts the other way here:
  *     the Swiss marker itself is the separator, so in-run steps can
  *     sit at half the gap without ambiguity. Chapter-scale spacing
- *     is reserved for the run boundary, which also preserves
- *     RunFoldSection's -mt-2.5 margin-collapse math (it assumes the
- *     section opens with an mt-6 marker).
+ *     is reserved for the run boundary.
  *   - Swiss structural register: upright (not italic), tabular
  *     figures, a thin vertical rule separating the step label from
  *     the summary. The cool, precise metadata deliberately contrasts

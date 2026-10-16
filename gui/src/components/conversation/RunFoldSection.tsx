@@ -1,51 +1,46 @@
-import type { ReactNode } from "react";
-
 import { ExpandSection } from "@/components/conversation/ExpandSection";
-import { StepRegion } from "@/components/conversation/StepRegion";
+import {
+  ProcessCard,
+  type ProcessCardStep,
+} from "@/components/conversation/ProcessCard";
 
 /**
- * Animated container for a folded run's process section (everything
- * between the RunFoldHeader and the final answer body, the final
- * step's marker + StrongHr included). The motion itself — grid-rows
- * sweep, mount/unmount timing, reduced-motion fallback — lives in
- * ExpandSection; this wrapper owns only the fold-specific margin
- * choreography.
+ * What a run's fold header opens (workbench conversation PRD ruling 6,
+ * 2026-10-16): the run's steps one line a step, in the process card the
+ * assistant opens too (ProcessCard) — no numbers line (the header right
+ * above says the steps, the time and the tool mix), no row cap and no
+ * scroll inside (reading the process is the work here), as wide as the
+ * column, as the answer under it is. The settled header and the live
+ * one (「已完成 N 步」) open the same section under the same key, so a
+ * run opened while live settles open without remounting: its rows stay
+ * and the steps that settle join them.
  *
- * DOM-economy cost, accepted knowingly: a run that completes while
- * expanded gets rewrapped from the flat render into this section, and
- * that remount re-initializes per-callout manual toggles made mid-run
- * (defaults re-derive identically, so only manual overrides are lost).
- *
- * The margin choreography (why `-mt-5.5 ↔ mt-0` animates with the
- * rows): a grid container is a BFC, so the first TurnMarker's mt-6
- * (24px) stops collapsing with the RunFoldHeader's mb-2.5 (10px) —
- * the naive wrapper shows 10+24=34px. The header→first-step gap is
- * 12px (2026-09-16 rhythm pass: the header is the list's handle and
- * hugs its list; 24px belongs to the run boundary above the header),
- * so the wrapper pulls 22px back. At 0fr the wrapper is an empty box
- * between header and answer, where keeping the negative margin would
- * eat the header's folded 10px hug — so the margin animates to 0
- * alongside the rows and both endpoints land seamlessly on the
- * flat/folded layouts. The bottom edge needs no counterpart: the
- * section ends with StrongHr (my-4, 16px) and the answer body opens
- * with a margin-less root, so BFC or not the gap is 16px either way.
- * Coupling: assumes RunFoldHeader (mb-2.5) directly precedes the
- * section and a TurnMarker (mt-6) opens it.
- *
- * Children render inside a StepRegion whose rail hangs from the
- * header (`railFrom="header"`), the settled twin of the live run's
- * flat region in Conversation.tsx.
+ * Opens and closes as ExpandSection sweeps. Spacing: the header's own
+ * mb-2.5 above the card, its hug for whatever is under it (the answer,
+ * when closed); 16px of its own under the card, inside the sweep, so it
+ * opens and closes with it: the answer starts as far under the card as
+ * it started under the StrongHr the old step region ended with (my-4).
+ * No StrongHr here: the card's edge already parts the action from the
+ * conclusion, and a full-width rule under it would be a second line.
+ * Nothing to show (every step behind the header only asked) opens
+ * nothing.
  */
 export function RunFoldSection({
   open,
-  children,
+  steps,
 }: {
   open: boolean;
-  children: ReactNode;
+  /** The steps with a row (lib/run-fold-plan.ts), keyed by their turn's
+   * place. */
+  steps: ProcessCardStep[];
 }) {
   return (
-    <ExpandSection open={open} openClassName="-mt-5.5" closedClassName="mt-0">
-      <StepRegion railFrom="header">{children}</StepRegion>
+    <ExpandSection open={open}>
+      {steps.length > 0 && (
+        <div className="pb-4">
+          <ProcessCard steps={steps} />
+        </div>
+      )}
     </ExpandSection>
   );
 }

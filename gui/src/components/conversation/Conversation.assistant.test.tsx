@@ -383,14 +383,12 @@ describe("the assistant's conversation: the process", () => {
       );
     }
     // The card's first line, above its steps; no rail anywhere.
-    for (const card of html
-      .split('data-role="assistant-process-card"')
-      .slice(1)) {
+    for (const card of html.split('data-role="process-card"').slice(1)) {
       expect(card.indexOf('data-role="assistant-run-summary"')).toBeGreaterThan(
         -1,
       );
       expect(card.indexOf('data-role="assistant-run-summary"')).toBeLessThan(
-        card.indexOf('data-role="assistant-process-steps"'),
+        card.indexOf('data-role="process-steps"'),
       );
     }
     expect(html).not.toContain("absolute bottom-0 left-[5px] w-px bg-line");
@@ -409,10 +407,8 @@ describe("the assistant's conversation: the process", () => {
   it("opens a card without the question's step, the answer's step, the question or the answer", () => {
     expand.all = true;
     const html = assistant(conversation());
-    expect(count(html, 'data-role="assistant-process-card"')).toBe(2);
-    const last = html.slice(
-      html.lastIndexOf('data-role="assistant-process-card"'),
-    );
+    expect(count(html, 'data-role="process-card"')).toBe(2);
+    const last = html.slice(html.lastIndexOf('data-role="process-card"'));
     const card = last.slice(0, last.indexOf("谢谢"));
     // Four steps (「4 步」), two rows: the question's step and the
     // answer's are out.
@@ -442,7 +438,7 @@ describe("the assistant's conversation: the process", () => {
     expect(count(html, 'data-role="step-marker"')).toBe(3);
     expect(html).toContain("我去下单。");
     expect(buttons(html, zhCopy.conversation.foldExpand).length).toBe(0);
-    expect(html).not.toContain('data-role="assistant-process-card"');
+    expect(html).not.toContain('data-role="process-card"');
     // The workbench's step region: numerals, the rail, the tool pills.
     expect(html).toContain(">01</span>");
     expect(html).toContain("absolute bottom-0 left-[5px] w-px bg-line");
@@ -532,13 +528,11 @@ function round(): Turn[] {
  * to its end (a step's detail follows it). */
 function rowsOf(html: string): [string, string | null][] {
   return html
-    .split('data-role="assistant-process-step"')
+    .split('data-role="process-step"')
     .slice(1)
     .map((rest) => {
       const line = rest.slice(0, rest.indexOf("</div>"));
-      const object = /data-role="assistant-process-object"[^>]*>([^<]*)/.exec(
-        line,
-      );
+      const object = /data-role="process-object"[^>]*>([^<]*)/.exec(line);
       const sentence = /<span title="[^"]*" class="min-w-0[^"]*">([^<]*)/.exec(
         line,
       );
@@ -548,15 +542,15 @@ function rowsOf(html: string): [string, string | null][] {
 
 /** The card (first one) in a render. */
 function cardOf(html: string): string {
-  const at = html.indexOf('data-role="assistant-process-card"');
-  return html.slice(at, html.indexOf('data-role="assistant-process-fade"', at));
+  const at = html.indexOf('data-role="process-card"');
+  return html.slice(at, html.indexOf('data-role="process-fade"', at));
 }
 
 describe("the assistant's conversation: the process card", () => {
   it("is closed at rest", () => {
     const html = assistant(round());
     expect(buttons(html, zhCopy.conversation.foldExpand).length).toBe(1);
-    expect(html).not.toContain('data-role="assistant-process-card"');
+    expect(html).not.toContain('data-role="process-card"');
   });
 
   it("writes one line a step: its sentence and the site or file it touched, no numerals, no tool names", () => {
@@ -637,11 +631,11 @@ describe("the assistant's conversation: the process card", () => {
     expand.cards = true;
     const card = cardOf(assistant(round()));
     const lines = card
-      .split('data-role="assistant-process-step"')
+      .split('data-role="process-step"')
       .slice(1)
       .map((rest) => rest.slice(0, rest.indexOf(">") + 1));
     const [first] = card
-      .split('data-role="assistant-process-step"')
+      .split('data-role="process-step"')
       .slice(1)
       .map((rest) => rest.slice(rest.indexOf("<div"), rest.indexOf("<span")));
     expect(first).toContain('role="button"');
@@ -651,9 +645,7 @@ describe("the assistant's conversation: the process card", () => {
     expect(first).toContain("focus-visible:bg-hover");
     expect(lines).toHaveLength(7);
     // 「想好怎么回你」: only a sentence.
-    const plain = card.slice(
-      card.lastIndexOf('data-role="assistant-process-step"'),
-    );
+    const plain = card.slice(card.lastIndexOf('data-role="process-step"'));
     const head = plain.slice(plain.indexOf("<div"), plain.indexOf("<span"));
     expect(head).not.toContain("role=");
     expect(head).not.toContain("tabindex");
@@ -667,9 +659,9 @@ describe("the assistant's conversation: the process card", () => {
     (turns[5] as AgentTurn).thinking = "往返要算上排队。";
     const html = assistant(turns);
     const card = cardOf(html);
-    const box = card.slice(card.indexOf('data-role="assistant-process-steps"'));
+    const box = card.slice(card.indexOf('data-role="process-steps"'));
     // Six details (the plain row has none), inside the scroll box.
-    expect(count(box, 'data-role="assistant-process-detail"')).toBe(6);
+    expect(count(box, 'data-role="process-detail"')).toBe(6);
     const script = box.slice(
       box.indexOf("算往返时间"),
       box.indexOf("我把船票信息写进清单。"),
@@ -693,10 +685,7 @@ describe("the assistant's conversation: the process card", () => {
     expand.cards = true;
     const html = assistant(round());
     const tag = html.slice(
-      html.lastIndexOf(
-        "<div",
-        html.indexOf('data-role="assistant-process-card"'),
-      ),
+      html.lastIndexOf("<div", html.indexOf('data-role="process-card"')),
     );
     const open = tag.slice(0, tag.indexOf(">") + 1);
     expect(open).toContain("rounded-md border border-line bg-app");
@@ -732,29 +721,29 @@ describe("the assistant's conversation: the process card", () => {
     expect(twelve).toContain('data-overflow="true"');
     const fade = (n: number) => {
       const html = assistant(steps(n));
-      const at = html.indexOf('data-role="assistant-process-fade"');
+      const at = html.indexOf('data-role="process-fade"');
       return html.slice(at, html.indexOf(">", at));
     };
     expect(fade(8)).toContain("opacity-0");
     expect(fade(12)).toContain("opacity-100");
     expect(fade(12)).toContain("h-3");
     // Nothing above at the first step.
-    expect(twelve).toContain('data-role="assistant-process-fade-top"');
+    expect(twelve).toContain('data-role="process-fade-top"');
   });
 
-  it("leaves the workbench's step region as it was", () => {
+  it("is the card the workbench's fold header opens, there without the numbers line or the cap", () => {
+    // Workbench conversation PRD ruling 6; the workbench's side is
+    // Conversation.steps.test.tsx.
     expand.all = true;
     const html = render(round());
-    expect(html).not.toContain('data-role="assistant-process-card"');
-    expect(html).not.toContain('data-role="assistant-process-step"');
+    const card = cardOf(html);
     expect(html).toContain('data-role="run-fold"');
-    expect(count(html, 'data-role="step-marker"')).toBeGreaterThan(0);
-    expect(html).toContain(">01</span>");
-    expect(html).toContain("absolute bottom-0 left-[5px] w-px bg-line");
-    expect(html).toContain(zhCopy.tools.file_read);
-    // The question's step and its echo are in the region too.
-    expect(html).toContain('data-role="answered-ask-user"');
-    expect(html).toContain("问用户");
+    expect(count(html, 'data-role="process-card"')).toBe(1);
+    expect(rowsOf(card)).toEqual(rowsOf(cardOf(assistant(round()))));
+    expect(card).not.toContain('data-role="assistant-run-summary"');
+    expect(card).not.toContain("max-h-[204px]");
+    expect(card).not.toContain("max-w-[88%]");
+    expect(html).not.toContain('data-role="process-fade"');
   });
 });
 

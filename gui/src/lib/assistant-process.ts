@@ -17,8 +17,9 @@ import type {
  * docs/design/conversation.md 「助手的对话」 → 过程): the steps of a settled
  * reply, one line a step — the step marker's sentence and, after it in
  * a lighter ink, what the step touched (a website, a file name). The
- * card draws them (components/conversation/AssistantProcessCard.tsx);
- * the rules are here.
+ * card draws them (components/conversation/ProcessCard.tsx); the rules
+ * are here. Since 2026-10-16 the workbench's run fold opens the same
+ * card (workbench conversation PRD ruling 6; lib/run-fold-plan.ts).
  */
 
 /** Step rows the card shows before it scrolls. Ruling 69 set it at the

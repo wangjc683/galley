@@ -11,7 +11,8 @@ const UNMOUNT_DELAY_MS = 300;
 
 /**
  * Animated disclosure container shared by the conversation's
- * expand/collapse surfaces (RunFoldSection, TurnMarker's DetailPanel).
+ * expand/collapse surfaces (RunFoldSection, the process card's rows,
+ * TurnMarker's DetailPanel).
  * Expand/collapse is an A-class interaction (§2.7: user-triggered,
  * start and end), so it gets real motion: the
  * `grid-template-rows: 0fr ↔ 1fr` transition — the CSS idiom for
@@ -27,7 +28,8 @@ const UNMOUNT_DELAY_MS = 300;
  * long session keeps its dozens of settled disclosures out of the DOM.
  *
  * `openClassName` / `closedClassName` let a caller animate a margin
- * alongside the rows (RunFoldSection's margin-collapse choreography);
+ * alongside the rows (the live window's and the assistant's process
+ * card's margin choreography);
  * the transition property list already includes `margin-top`.
  */
 export function ExpandSection({
