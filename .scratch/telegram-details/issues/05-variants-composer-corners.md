@@ -1,6 +1,6 @@
 # 05 切换器：输入框长高动画、主对话连发组内圆角
 
-Status: ready-for-agent
+Status: merged（2026-10-16 合入 main，`00ae635c`、`ad1a581d`，合并提交 `8be9a089`；等 JC 在 `tauri dev` 里切档裁决）
 
 来源：[PRD](../PRD.md) 裁决 6（2026-10-16，JC：「6，按推荐比」）。只改 GUI。纯视觉，做临时切换器进 `tauri dev` 真机比，JC 裁决后拆掉切换器、留下选中的档。
 独立子代理做，与 01–04 并行。
@@ -99,10 +99,10 @@ B，主对话连发的组内圆角（工作台不受影响）：B1 全 12px（�
 
 同一个 harness 放进本分支与 `06948df5`（`git archive` 出来、各起一个 Vite），1480 × 920、1x，11 个画面两边截图逐像素相同，`#root` 的 innerHTML 的 SHA-256 也相同：主对话浅、深、宽屏，工作台浅、深、960 × 600，主对话打三行、打十二行（过了上限）、发出一句之后，工作台深色打三行，工作台往上翻着打三行。harness 不渲染 MainView，所以不含 pill：真机里默认档唯一的变化就是那颗 pill。代码上：A1 时 `animateTextareaHeight` 什么都不碰就交回原来的瞬间路径；B1 时 `withCorners` 原样返回间距 class；单测 `td-variants.test.tsx` 也核对了 B1 的行 class 与现在相同、工作台在 B4 下逐字节不变。
 
-**截图**（会话草稿目录，`/private/tmp/claude-501/-Users-inkstone-Documents-genericagent-webui/38d3b87a-cb2b-4fc2-9db1-a25a28df6454/scratchpad/td05/shots/`）
+**截图**（会话草稿目录 `td05/shots/`，不进仓库）
 
-- B 各档，浅深两行：`/private/tmp/claude-501/-Users-inkstone-Documents-genericagent-webui/38d3b87a-cb2b-4fc2-9db1-a25a28df6454/scratchpad/td05/shots/overview-B-corners.png`；三连发放大：`/private/tmp/claude-501/-Users-inkstone-Documents-genericagent-webui/38d3b87a-cb2b-4fc2-9db1-a25a28df6454/scratchpad/td05/shots/detail-B-burst-light.png`；单张 `b1-light.png` … `b4-dark.png`（同目录，2x）。
-- A 逐帧曲线（三种情形 × 三档）：`/private/tmp/claude-501/-Users-inkstone-Documents-genericagent-webui/38d3b87a-cb2b-4fc2-9db1-a25a28df6454/scratchpad/td05/shots/chart-A-grow.png`；A3 长高途中的 6 帧（页面时钟放慢 20 倍拍的，字贴着下沿、上面的行从框顶滑进来、没有滚动条）：`/private/tmp/claude-501/-Users-inkstone-Documents-genericagent-webui/38d3b87a-cb2b-4fc2-9db1-a25a28df6454/scratchpad/td05/shots/slow-A3-frames.png`。
+- B 各档，浅深两行：`td05/shots/overview-B-corners.png`；三连发放大：`td05/shots/detail-B-burst-light.png`；单张 `b1-light.png` … `b4-dark.png`（同目录，2x）。
+- A 逐帧曲线（三种情形 × 三档）：`td05/shots/chart-A-grow.png`；A3 长高途中的 6 帧（页面时钟放慢 20 倍拍的，字贴着下沿、上面的行从框顶滑进来、没有滚动条）：`td05/shots/slow-A3-frames.png`。
 - pill：主对话闭合 `pill-main-closed.png`，展开并开着演示、B3（浅、深）`pill-main-open-demo-B3.png`、`pill-main-open-demo-B3-dark.png`，工作台带问题轨 `pill-workbench-rail-open.png`、960 × 600 `pill-workbench-rail-small.png`（同目录）。
 - 数据：逐像素结论 `pixels-result.txt`，逐帧记录 `grow.json`、`grow-summary.txt`（同目录）。
 
