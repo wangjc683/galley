@@ -24,6 +24,7 @@ Status: ready-for-agent
 - **到点被叫醒时**：读叫醒行里记下的话与时刻；晚了就照实说晚了多久；事情只需提醒就一两句；需要先查就查完再说；活重就派子任务（跑完闭环会叫醒它）；事情已经过时或你已经办了，可以回 `<no-reply/>`。一次叫醒里有几件，一起说。
 - 你自己建的定时任务（每次新开会话的）跑完也会叫醒它：看结果，一两句告诉你要点，不复述全文。
 - GA 自己的 `sche_tasks` 照旧不许用（galley#31）。
+- 票 35 的命令与级别：`session rename / pin / unpin / delete`、`project update / pin / unpin / archive-sessions`、`llm set-default`（授权按上面的三级）。现有的 `session archive` 仍接受主对话（Agent API 3 内不改既有命令，票 35 Comments），手册写明不许归档、改名、删除主对话。
 - 建提醒与叫醒自己一律写 `--target=assistant`：CLI 默认是 `session`（票 34 定的，两种运行时都能用），忘了写会建成每次新开会话的定时任务。评测里加一条检查它带没带。
 
 ## 二、入口层（`core/src/managed_prompt.rs`）
