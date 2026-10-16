@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   TIME_LINE_ANCHOR_TOP_PX,
   USER_MSG_ANCHOR_TOP_PX,
+  quotesAbove,
   timeLineAbove,
   userMsgParkOffset,
 } from "@/lib/conversation-anchor";
@@ -64,5 +65,38 @@ describe("userMsgParkOffset (workbench ticket 01 follow-up)", () => {
     );
     const orphan = { ...node(500), parentElement: null } as unknown as Element;
     expect(timeLineAbove(orphan)).toBeNull();
+  });
+});
+
+describe("userMsgParkOffset with quotes above the bubble (telegram-details 07)", () => {
+  it("parks the top of the quotes drawn above the bubble", () => {
+    const quotes = node(460, "message-quotes");
+    const b = {
+      ...bubble(500),
+      previousElementSibling: quotes,
+    } as unknown as Element;
+    expect(quotesAbove(b)).toBe(quotes);
+    expect(userMsgParkOffset(b, CONTAINER_TOP)).toBe(
+      460 - CONTAINER_TOP - USER_MSG_ANCHOR_TOP_PX,
+    );
+  });
+
+  it("keeps the time line's rule when there is one, and ignores other siblings", () => {
+    const line = node(420, "message-time-divider");
+    const withLine = {
+      ...bubble(500, line),
+      previousElementSibling: node(460, "message-quotes"),
+    } as unknown as Element;
+    expect(userMsgParkOffset(withLine, CONTAINER_TOP)).toBe(
+      420 - CONTAINER_TOP - TIME_LINE_ANCHOR_TOP_PX,
+    );
+    const provenance = {
+      ...bubble(500),
+      previousElementSibling: node(480),
+    } as unknown as Element;
+    expect(quotesAbove(provenance)).toBeNull();
+    expect(userMsgParkOffset(provenance, CONTAINER_TOP)).toBe(
+      500 - CONTAINER_TOP - USER_MSG_ANCHOR_TOP_PX,
+    );
   });
 });

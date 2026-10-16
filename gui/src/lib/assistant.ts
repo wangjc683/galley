@@ -1,5 +1,6 @@
 import type { AppCopy } from "@/i18n/types";
 import { mergedAskUserArgs } from "@/lib/ask-user-candidates";
+import { splitQuotedMessage } from "@/lib/composer-quote";
 import { dropPathBasename } from "@/lib/file-drop";
 import { stripGATags } from "@/lib/ipc/ga-output-cleaning";
 import { hiddenReportTurns } from "@/lib/subtasks";
@@ -158,8 +159,10 @@ export interface AssistantLastMessage {
  *   ask      「等你回复：」 + the question, or 「等你回复」,   amber prefix
  *            or 「子任务在问你」
  *   running  the line's sentence / 「思考中」                   brand
- *   draft    「草稿：」 + the draft, or 「[图片]」             brand prefix
+ *   draft    「草稿：」 + the draft, or 「[图片]」 / 「[引用]」 brand prefix
  *   message  「你：」 for the user's own, then the message      muted
+ *            (your own words: quotes it opens with are left out,
+ *            「[引用]」 when there is nothing else — ticket 07)
  */
 export type AssistantCardLine =
   | { kind: "error" | "running"; text: string }
@@ -172,6 +175,8 @@ export interface AssistantDraft {
   text: string;
   /** How many images it holds. */
   imageCount: number;
+  /** How many quotes wait above its input (ticket 07); absent is 0. */
+  quoteCount?: number;
 }
 
 export function assistantCardLine(
@@ -205,7 +210,11 @@ export function assistantCardLine(
   if (draft && !open) {
     const text =
       flattenWhitespace(draft.text) ||
-      (draft.imageCount > 0 ? copy.assistant.image : "");
+      (draft.imageCount > 0
+        ? copy.assistant.image
+        : (draft.quoteCount ?? 0) > 0
+          ? copy.assistant.quote
+          : "");
     if (text)
       return { kind: "draft", prefix: copy.assistant.draftPrefix, text };
   }
@@ -248,13 +257,23 @@ export function lastVisibleMessage(
       if (turn.messageId === undefined && turn.clientRequestId === undefined) {
         continue;
       }
+      // Your own words: the quotes a message opens with are the
+      // assistant's (ticket 07), named only when nothing else is there.
+      const { quotes, body } = splitQuotedMessage(turn.content);
       const text = [
         ...attachmentLabels(turn.attachments ?? [], copy),
-        flattenWhitespace(turn.content),
+        flattenWhitespace(body),
       ]
         .filter(Boolean)
         .join(" ");
       if (text) return { fromUser: true, text, sentAt: turn.createdAt };
+      if (quotes.length > 0) {
+        return {
+          fromUser: true,
+          text: copy.assistant.quote,
+          sentAt: turn.createdAt,
+        };
+      }
       continue;
     }
     if (turn.finalAnswer !== null) {

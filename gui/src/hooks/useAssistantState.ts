@@ -81,7 +81,13 @@ export function useComposerDraft(
   );
   return useMemo(
     () =>
-      draft ? { text: draft.text, imageCount: draft.images.length } : null,
+      draft
+        ? {
+            text: draft.text,
+            imageCount: draft.images.length,
+            quoteCount: draft.quotes?.length ?? 0,
+          }
+        : null,
     [draft],
   );
 }

@@ -1,6 +1,7 @@
 import { ArrowLineUp, X } from "@phosphor-icons/react";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
+import { quotedMessagePreview } from "@/lib/composer-quote";
 import { useCopy } from "@/lib/i18n";
 import {
   queueJumpMessage,
@@ -80,7 +81,8 @@ export function ComposerQueueStrip({
               onClick={() => void handleEdit(item)}
               className="min-w-0 flex-1 cursor-pointer truncate text-left text-[12.5px] text-ink-soft hover:text-ink"
             >
-              {item.text}
+              {/* Your words, not the quotes it opens with (ticket 07). */}
+              {quotedMessagePreview(item.text)}
             </button>
           </TooltipLabel>
           <span className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-(--motion-fast) focus-within:opacity-100 group-hover/queue:opacity-100">

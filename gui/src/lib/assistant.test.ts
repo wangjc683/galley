@@ -442,3 +442,37 @@ describe("markdown as one plain line", () => {
     expect(plainLine("```\n```", zh)).toBe("");
   });
 });
+
+describe("quotes in the card's line (telegram-details ticket 07)", () => {
+  it("says your own words, not the quotes a message opens with", () => {
+    expect(
+      lastVisibleMessage([user("> 第一处\n\n> 第二处\n\n这两处什么意思")], zh)
+        ?.text,
+    ).toBe("这两处什么意思");
+  });
+
+  it("says 「[引用]」 for a message that is quotes only", () => {
+    expect(lastVisibleMessage([user("> 只有引用")], zh)?.text).toBe("[引用]");
+    expect(lastVisibleMessage([user("> only a quote")], en)?.text).toBe(
+      "[Quote]",
+    );
+  });
+
+  it("says a draft's words, or 「[引用]」 when it holds only quotes", () => {
+    const line = (draft: Parameters<typeof assistantCardLine>[1]["draft"]) =>
+      assistantCardLine(state(), { draft, open: false }, zh);
+    expect(line({ text: "接着写", imageCount: 0, quoteCount: 2 })).toEqual({
+      kind: "draft",
+      prefix: "草稿：",
+      text: "接着写",
+    });
+    expect(line({ text: "", imageCount: 0, quoteCount: 1 })).toEqual({
+      kind: "draft",
+      prefix: "草稿：",
+      text: "[引用]",
+    });
+    expect(line({ text: "", imageCount: 1, quoteCount: 1 })?.text).toBe(
+      "[图片]",
+    );
+  });
+});

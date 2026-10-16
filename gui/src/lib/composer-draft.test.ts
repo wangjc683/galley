@@ -211,6 +211,68 @@ describe("composer-draft on disk", () => {
     expect(drafts.readComposerDraft("a")).toBeUndefined();
   });
 
+  it("keeps quotes across a restart, with the text (ticket 07)", async () => {
+    const before = await startApp();
+    before.saveComposerDraft("s-main", {
+      text: "这两处什么意思",
+      images: [image],
+      quotes: ["第一处", "第二处\n第二行"],
+    });
+    before.saveComposerDraft("s-only", {
+      text: "",
+      images: [],
+      quotes: ["只引用了，还没写"],
+    });
+    expect(storage.getItem("galley.draft.s-main")).toBe(
+      JSON.stringify({
+        galleyDraft: 2,
+        text: "这两处什么意思",
+        quotes: ["第一处", "第二处\n第二行"],
+      }),
+    );
+
+    const after = await startApp();
+    expect(after.readComposerDraft("s-main")).toEqual({
+      text: "这两处什么意思",
+      images: [],
+      quotes: ["第一处", "第二处\n第二行"],
+    });
+    expect(after.readComposerDraft("s-only")).toEqual({
+      text: "",
+      images: [],
+      quotes: ["只引用了，还没写"],
+    });
+  });
+
+  it("stores a draft without quotes as bare text, and reads old bare text", async () => {
+    // Written before quotes existed, and text that merely looks like JSON.
+    storage.setItem("galley.draft.old", "旧版存的纯文字");
+    storage.setItem("galley.draft.json", '{"galleyDraft":2,"text":');
+    const drafts = await startApp();
+    expect(drafts.readComposerDraft("old")).toEqual({
+      text: "旧版存的纯文字",
+      images: [],
+    });
+    expect(drafts.readComposerDraft("json")?.text).toBe(
+      '{"galleyDraft":2,"text":',
+    );
+    drafts.saveComposerDraft("old", {
+      text: "旧版存的纯文字，接着写",
+      images: [],
+      quotes: [],
+    });
+    expect(storage.getItem("galley.draft.old")).toBe("旧版存的纯文字，接着写");
+  });
+
+  it("deletes the stored draft when its last quote and text go", async () => {
+    const drafts = await startApp();
+    drafts.saveComposerDraft("q", { text: "", images: [], quotes: ["一段"] });
+    expect(storage.getItem("galley.draft.q")).not.toBeNull();
+    drafts.saveComposerDraft("q", { text: "", images: [], quotes: [] });
+    expect(storage.getItem("galley.draft.q")).toBeNull();
+    expect(drafts.readComposerDraft("q")).toBeUndefined();
+  });
+
   it("leaves other localStorage keys alone and drops blank stored drafts", async () => {
     storage.setItem("galley_theme_preference", "dark");
     storage.setItem("galley.draft.blank", "   ");

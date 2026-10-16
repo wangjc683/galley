@@ -18,7 +18,8 @@ import { cn } from "@/lib/utils";
  * send 8px in from its edge (7px padding + the 1px border), so the row's
  * ends read as one shape. As the input grows the buttons stay at the
  * bottom (items-end), level with its last line. The image tiles sit
- * above the input, inside the box. The workbench's hint row sits under
+ * above the input, inside the box, and the quotes between them and the
+ * input. The workbench's hint row sits under
  * the box, inset to the input's text (the Composer renders it; the main
  * chat has none). Measures: `ONE_LINE_*` in composer-styles.ts.
  *
@@ -31,6 +32,7 @@ export function ComposerOneLine({
   disabled,
   dropOverlay,
   imageStrip,
+  quoteStrip,
   addMenu,
   input,
   modelPhrase,
@@ -40,6 +42,9 @@ export function ComposerOneLine({
   disabled: boolean;
   dropOverlay: ReactNode;
   imageStrip: ReactNode;
+  /** The quotes waiting to go out (ticket 07): under the image tiles,
+   * right above the input. */
+  quoteStrip: ReactNode;
   addMenu: ReactNode;
   /** The ghost suggestion (and its screen-reader text) and the textarea. */
   input: ReactNode;
@@ -58,6 +63,7 @@ export function ComposerOneLine({
     >
       {dropOverlay}
       {imageStrip}
+      {quoteStrip}
       <div className="flex items-end gap-1">
         {addMenu}
         <div className="relative min-w-0 flex-1">{input}</div>

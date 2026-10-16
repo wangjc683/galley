@@ -165,3 +165,14 @@ describe("buildRailExchanges", () => {
     expect(buildRailExchanges([user("   ")])[0].question).toBe("");
   });
 });
+
+describe("quotes in the rail's preview (telegram-details ticket 07)", () => {
+  it("previews your own words, or the quotes when there are none", () => {
+    expect(
+      buildRailExchanges([user("> 那一句\n\n什么意思"), agent("是说……")]),
+    ).toEqual([{ question: "什么意思", answer: "是说……" }]);
+    expect(buildRailExchanges([user("> 只有引用")])[0].question).toBe(
+      "只有引用",
+    );
+  });
+});
