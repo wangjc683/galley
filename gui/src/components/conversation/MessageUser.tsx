@@ -11,8 +11,6 @@ import { useEffect, memo, useMemo, useRef, useState } from "react";
 
 import { ActionChip } from "@/components/conversation/ActionChip";
 import { MessageQuotes } from "@/components/conversation/MessageQuotes";
-// TEMP variant switcher (telegram-details 07)
-import { useTdVariants } from "@/components/conversation/td-variants/td-variants";
 import {
   ImagePreviewDialog,
   type ImagePreviewItem,
@@ -72,8 +70,8 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *
  * Quotes (telegram-details ticket 07): a message that opens with
  *   Markdown quotes (what the composer's quote strip sends) has them
- *   drawn apart from your words by MessageQuotes — above the bubble or
- *   at its top, per the TEMP variant switcher (telegram-details 07).
+ *   drawn at the top of the bubble, apart from your words, by
+ *   MessageQuotes (ticket 08 settled it inside the bubble).
  *   Only your words count toward the collapse below; the hover copy
  *   copies the message whole, quotes and all.
  *
@@ -214,10 +212,6 @@ export const MessageUser = memo(function MessageUser({
     () => splitQuotedMessage(content),
     [content],
   );
-  // TEMP variant switcher (telegram-details 07): D1 outside / D2 inside.
-  const quotesVariant = useTdVariants((s) => s.bubble);
-  const quotesPlacement =
-    quotes.length === 0 ? null : quotesVariant === 2 ? "inside" : "outside";
   const lineCount = useMemo(() => body.split("\n").length, [body]);
   const isLong =
     lineCount > COLLAPSE_LINE_THRESHOLD ||
@@ -348,9 +342,6 @@ export const MessageUser = memo(function MessageUser({
           )}
         </div>
       )}
-      {quotesPlacement === "outside" && (
-        <MessageQuotes quotes={quotes} placement="outside" />
-      )}
       <div
         data-role={askUserReply ? "user-msg-reply" : "user-msg"}
         data-message-id={messageId}
@@ -361,9 +352,7 @@ export const MessageUser = memo(function MessageUser({
           "ml-auto max-w-[min(80%,560px)]",
         )}
       >
-        {quotesPlacement === "inside" && (
-          <MessageQuotes quotes={quotes} placement="inside" />
-        )}
+        {quotes.length > 0 && <MessageQuotes quotes={quotes} />}
         {/* Quotes only (a hand-typed `>` message): no empty line. */}
         {body !== "" && (
           <span

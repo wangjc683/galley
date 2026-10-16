@@ -27,12 +27,6 @@ import {
 } from "@/components/conversation/LLMPill";
 import { SavedPromptDialogs } from "@/components/conversation/SavedPromptDialogs";
 import { ComposerOneLine } from "@/components/conversation/ComposerOneLine";
-// TEMP variant switcher (telegram-details 05: composerGrowTiming; 07:
-// useTdVariants for the quote rows)
-import {
-  composerGrowTiming,
-  useTdVariants,
-} from "@/components/conversation/td-variants/td-variants";
 import {
   COMPOSER_MAX_HEIGHT_PX,
   ONE_LINE_GHOST_CLASS,
@@ -351,15 +345,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // internally. ChatGPT / Claude / Notion all do this pattern; users
     // expect multi-line input to expand the composer rather than
     // disappear behind a fixed-height window. The one-line form caps at
-    // eight lines instead.
+    // eight lines instead, and moves to its new height (Telegram's
+    // `50 × ln|Δh|` ms, `--ease-firm`: lib/composer-grow.ts, telegram-
+    // details ticket 08); the card snaps.
     useEffect(() => {
       const el = textareaRef.current;
       if (!el) return;
-      // TEMP variant switcher (telegram-details 05): A2 / A3 animate the
-      // one-line input to its new height (lib/composer-grow.ts); A1,
-      // today's, is the instant path below.
-      const timing = oneLine ? composerGrowTiming() : "instant";
-      if (animateTextareaHeight(el, timing, oneLineMaxHeightPx)) return;
+      if (oneLine && animateTextareaHeight(el, oneLineMaxHeightPx)) return;
       el.style.height = "auto";
       const cap = oneLine ? oneLineMaxHeightPx(el) : COMPOSER_MAX_HEIGHT_PX;
       const next = Math.min(el.scrollHeight, cap);
@@ -609,15 +601,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         }
       />
     );
-    // TEMP variant switcher (telegram-details 07): C1 / C2.
-    const quoteStripVariant = useTdVariants((s) => s.strip);
     const quoteStrip = quotes.length > 0 && (
       <ComposerQuoteStrip
         quotes={quotes}
         onRemove={(index) =>
           setQuotes((current) => current.filter((_, i) => i !== index))
         }
-        variant={quoteStripVariant}
         oneLine={oneLine}
       />
     );

@@ -17,15 +17,10 @@ import { RunFoldSection } from "@/components/conversation/RunFoldSection";
 import { StepRegion } from "@/components/conversation/StepRegion";
 import { SystemMessageBubble } from "@/components/conversation/SystemMessageBubble";
 import { ToolCallout } from "@/components/conversation/ToolCallout";
-// TEMP variant switcher (telegram-details 05)
-import { TD_DEMO_TURNS } from "@/components/conversation/td-variants/td-demo";
-import { useTdVariants } from "@/components/conversation/td-variants/td-variants";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import {
   type AssistantProcessToggle,
   type AssistantRowSide,
-  assistantGroupCornerClass,
-  assistantJoinsGroup,
   assistantLinePlan,
   assistantRowGap,
 } from "@/lib/assistant-conversation";
@@ -143,24 +138,14 @@ export interface ConversationProps {
 const SETTLE_SWEEP_MS = 300;
 
 export function Conversation({
-  turns: givenTurns,
-  askUserPending: givenAskUserPending = false,
-  agentRunning: givenAgentRunning = false,
+  turns,
+  askUserPending = false,
+  agentRunning = false,
   keyBase = 0,
   previousUserCreatedAt = null,
   renderAfterAnswer,
   assistant = false,
 }: ConversationProps) {
-  // TEMP variant switcher (telegram-details 05): in the main chat,
-  // 「演示连发」 shows the demo bursts in place of its conversation, as if
-  // nothing were running (display only, td-variants/td-demo.ts), and
-  // B2–B4 round the corners inside an IM group less (`withCorners`).
-  const tdDemo = useTdVariants((s) => s.demo) && assistant;
-  const groupCorners = useTdVariants((s) => s.corners !== 1) && assistant;
-  const turns = tdDemo ? TD_DEMO_TURNS : givenTurns;
-  const askUserPending = tdDemo ? false : givenAskUserPending;
-  const agentRunning = tdDemo ? false : givenAgentRunning;
-
   // A turn's place that survives a prepend (see `keyBase`): every key
   // and every piece of per-run state below is held in these, never in
   // raw indices.
@@ -492,27 +477,6 @@ export function Conversation({
     }));
   };
 
-  // TEMP variant switcher (telegram-details 05): B2–B4 round the
-  // corners inside an IM group less (lib/assistant-conversation.ts
-  // `assistantGroupCornerClass`). A row is in the group above when it
-  // takes the 4px gap with nothing drawn in between (`joined`:
-  // `assistantJoinsGroup` and no time line); the row above learns it
-  // has a neighbour below only when this one is drawn, so the assembly
-  // draws it once more with `below` (`lastLineRow`). B1 adds nothing.
-  const groupJoins = new Set<number>();
-  const withCorners = (
-    gap: string,
-    turnIndex: number,
-    side: "user" | "agent",
-    joined: boolean,
-    below: boolean,
-  ): string => {
-    if (!groupCorners) return gap;
-    if (joined) groupJoins.add(turnIndex);
-    const corners = assistantGroupCornerClass(side, joined, below);
-    return corners ? `${gap} ${corners}` : gap;
-  };
-
   // A user message, on the right (both conversations since the
   // workbench's ticket 01). Its send time at a break is a centred line
   // of its own before it, with nothing above it right under a reply,
@@ -524,7 +488,6 @@ export function Conversation({
     turn: UserTurn,
     turnIndex: number,
     previous: AssistantRowSide | null,
-    below = false,
   ) => {
     const pinned = pinnedTimes.get(turnIndex);
     return (
@@ -546,13 +509,9 @@ export function Conversation({
           selectionCopy={assistant}
           rowClassName={
             assistant
-              ? withCorners(
-                  pinned ? "mt-5" : assistantRowGap(previous, "user"),
-                  turnIndex,
-                  "user",
-                  !pinned && assistantJoinsGroup(previous, "user"),
-                  below,
-                )
+              ? pinned
+                ? "mt-5"
+                : assistantRowGap(previous, "user")
               : undefined
           }
         />
@@ -643,14 +602,11 @@ export function Conversation({
     turn: Turn,
     turnIndex: number,
     previous: AssistantRowSide | null,
-    below = false,
   ): ReactNode => {
     const key = `turn-${ordinal(turnIndex)}`;
     if (turn.role === "user") {
       return (
-        <Fragment key={key}>
-          {userRow(turn, turnIndex, previous, below)}
-        </Fragment>
+        <Fragment key={key}>{userRow(turn, turnIndex, previous)}</Fragment>
       );
     }
     if (turn.role !== "agent") return renderItem(turn, turnIndex);
@@ -682,13 +638,7 @@ export function Conversation({
             candidates={args.candidates}
             answer={askUserReplyContent(turns, turnIndex, replySet)}
             bubble
-            className={withCorners(
-              reportDivider ? "mt-5" : gap,
-              turnIndex,
-              "agent",
-              !reportDivider && assistantJoinsGroup(previous, "agent"),
-              below,
-            )}
+            className={reportDivider ? "mt-5" : gap}
           />
         </Fragment>
       );
@@ -717,13 +667,7 @@ export function Conversation({
           stepNumber={stepNumberOf.get(turnIndex)}
           runTelemetry={runTelemetryOf.get(turnIndex)}
           bubble
-          answerClassName={withCorners(
-            divider ? "mt-5" : gap,
-            turnIndex,
-            "agent",
-            !divider && assistantJoinsGroup(previous, "agent"),
-            below,
-          )}
+          answerClassName={divider ? "mt-5" : gap}
           attachment={turn.messageId ? afterAnswer(turn.messageId) : undefined}
           process={
             steps
@@ -890,14 +834,6 @@ export function Conversation({
   // in both conversations whether a time line sits right under a
   // reply's action row.
   let prevSide: AssistantRowSide | null = null;
-  // TEMP variant switcher (telegram-details 05): the last message row of
-  // the assistant's conversation, drawn again with `below` when the next
-  // one joins its group (`withCorners`).
-  let lastLineRow: {
-    at: number;
-    index: number;
-    previous: AssistantRowSide | null;
-  } | null = null;
   turns.forEach((turn, turnIndex) => {
     // The assistant's conversation shows a run's steps only under its
     // answer's process button, and not at all while it runs.
@@ -925,19 +861,6 @@ export function Conversation({
       if (linePlan) {
         const row = renderLineRow(turn, turnIndex, prevSide);
         if (row) {
-          if (groupJoins.has(turnIndex) && lastLineRow) {
-            rendered[lastLineRow.at] = renderLineRow(
-              turns[lastLineRow.index],
-              lastLineRow.index,
-              lastLineRow.previous,
-              true,
-            );
-          }
-          lastLineRow = {
-            at: rendered.length,
-            index: turnIndex,
-            previous: prevSide,
-          };
           rendered.push(row);
           prevSide =
             turn.role === "user"

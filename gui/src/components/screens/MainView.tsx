@@ -28,8 +28,6 @@ import { StepRegion } from "@/components/conversation/StepRegion";
 import { SubtaskCards } from "@/components/conversation/SubtaskCards";
 import { ThinkingPreview } from "@/components/conversation/ThinkingPreview";
 import { UserQuestionRail } from "@/components/conversation/UserQuestionRail";
-// TEMP variant switcher (telegram-details 05)
-import { TdVariantsPill } from "@/components/conversation/td-variants/TdVariantsPill";
 import { useActiveMessages } from "@/hooks/useActiveSession";
 import { useEarlierTurns } from "@/hooks/useEarlierTurns";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
@@ -432,8 +430,6 @@ function MainViewContent({
       className="relative flex min-h-0 flex-1 flex-col bg-app"
       style={conversationTypographyStyle(conversationFontSize)}
     >
-      {/* TEMP variant switcher (telegram-details 05) */}
-      <TdVariantsPill />
       {/* Scrollable conversation column. Width follows the TopBar
           toggle: 760px (typography sweet spot) by default, 1200px
           in wide mode. Bottom stack matches — see MainViewProps doc

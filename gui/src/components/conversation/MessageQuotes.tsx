@@ -4,80 +4,39 @@ import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
- * Where a bubble draws the quotes its message opens with (TEMP variant
- * switcher (telegram-details 07), dimension D): 1 outside the bubble,
- * above it; 2 inside the bubble, at its top.
- */
-export type MessageQuotesVariant = 1 | 2;
-
-/**
  * The quotes at the head of one of your messages (telegram-details
  * ticket 07; lib/composer-quote.ts `splitQuotedMessage` reads them off
- * the text). Drawn apart from your words, a step or two smaller and
- * quieter, each behind a thin bar:
- *
- * - `outside` (D1): a column right above the bubble, on its right edge
- *   and capped like it (`min(80%, 560px)`), as wide as the widest quote
- *   so the bars line up, 4px off the bubble and 2px apart — the apricot bubble
- *   is your voice, and what you quote is the assistant's, so it stays
- *   out of the bubble (ChatGPT does the same). `data-role` marks it for
- *   parking (lib/conversation-anchor.ts): a parked message shows its
- *   quotes too. Two lines a quote at most.
- * - `inside` (D2): a block at the top of the bubble on a ground a shade
- *   deeper than the bubble's (Telegram's reply). Three lines at most.
+ * the text), drawn at the top of your bubble, apart from your words —
+ * Telegram's reply, JC's pick over a column above the bubble (PRD ruling
+ * 3a, ticket 08): the quote is part of what you sent (the assistant gets
+ * it, the hover copy copies it), so the bubble holds it, the way a mail
+ * reply holds the text it quotes. A block per quote on a ground a shade
+ * deeper than the bubble's (`brand-strong` at 10%) behind a 2px bar
+ * (45%), a step or two smaller than your words (the echo size) in
+ * `ink-soft` at normal weight, 4px between blocks and 6px above your
+ * words; three lines at most. A parked message parks by its bubble's top
+ * edge as any other (lib/conversation-anchor.ts): the quotes are in it.
  *
  * A quote cut short opens in place on a click and closes on another.
  * Not selectable: it is the assistant's text, selectable where it was
  * said; the bubble's hover copy (workbench) copies the message whole.
  */
-export function MessageQuotes({
-  quotes,
-  placement,
-}: {
-  quotes: readonly string[];
-  placement: "outside" | "inside";
-}) {
+export function MessageQuotes({ quotes }: { quotes: readonly string[] }) {
   const copy = useCopy();
-  const outside = placement === "outside";
   return (
     <div
       role="group"
       aria-label={copy.composer.quotesLabel}
-      data-role={outside ? "message-quotes" : undefined}
-      className={cn(
-        "flex flex-col",
-        // Outside: one column as wide as its widest quote, on the
-        // bubble's right edge, so the quotes' bars line up.
-        outside
-          ? "mb-1 ml-auto w-fit max-w-[min(80%,560px)] gap-0.5"
-          : "mb-1.5 gap-1",
-      )}
+      className="mb-1.5 flex flex-col gap-1"
     >
       {quotes.map((quote, index) => (
-        <QuoteText
-          key={index}
-          text={quote}
-          className={
-            outside
-              ? "border-l-2 border-line-strong pl-2 text-ink-muted"
-              : "rounded-sm border-l-2 border-brand-strong/45 bg-brand-strong/10 px-2 py-1 font-normal text-ink-soft"
-          }
-          clampClass={outside ? "line-clamp-2" : "line-clamp-3"}
-        />
+        <QuoteText key={index} text={quote} />
       ))}
     </div>
   );
 }
 
-function QuoteText({
-  text,
-  className,
-  clampClass,
-}: {
-  text: string;
-  className: string;
-  clampClass: string;
-}) {
+function QuoteText({ text }: { text: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   // Whether the clamp cut it short, measured whenever its box changes
@@ -111,8 +70,8 @@ function QuoteText({
       }
       className={cn(
         "select-none [font-size:var(--conversation-echo-size)] leading-[1.5] outline-none",
+        "rounded-sm border-l-2 border-brand-strong/45 bg-brand-strong/10 px-2 py-1 font-normal text-ink-soft",
         toggles && "focus-visible:ring-2 focus-visible:ring-brand/30",
-        className,
       )}
     >
       {/* The clamp on its own box: on the padded one, the padding
@@ -121,7 +80,7 @@ function QuoteText({
         ref={ref}
         className={cn(
           "whitespace-pre-line break-words",
-          !expanded && clampClass,
+          !expanded && "line-clamp-3",
         )}
       >
         {text}

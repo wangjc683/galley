@@ -256,4 +256,21 @@ describe("quotes above the input (telegram-details ticket 07)", () => {
       html.split(`aria-label="${zhCopy.composer.removeQuote}"`),
     ).toHaveLength(3);
   });
+
+  it("draws a row as ↳ in ＋'s column and one line of the quote (C2, ticket 08)", () => {
+    seed("", ["第一行\n第二行"]);
+    const html = renderToStaticMarkup(
+      <Tooltip.Provider>
+        <Composer llmDisplayName="model" draftKey={KEY} oneLine />
+      </Tooltip.Provider>,
+    );
+    const strip = html.slice(html.indexOf('data-role="composer-quotes"'));
+    // The glyph's column is ＋'s, 32px wide; the quote one truncated line.
+    expect(strip).toContain("w-8 justify-center");
+    expect(strip).toContain("<svg");
+    expect(strip).toContain("truncate");
+    expect(strip).toContain(">第一行 第二行<");
+    expect(strip).not.toContain("line-clamp");
+    expect(strip).not.toContain("border-l-2");
+  });
 });

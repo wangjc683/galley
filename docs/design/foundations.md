@@ -663,9 +663,16 @@ namespace）、`ease-firm`（`--ease-*` 有 namespace，直接成为 utility）�
 服务状态驱动的动效（展开 / 显隐 / 位移 / 按压）。B 类循环的周期（呼吸 2.4s
 之类）不属于这个刻度，按语义单独取值。
 
-程序发起的平滑滚动也不在这个刻度里（2026-10-16）：时长随距离变（300ms + 距离 ÷
-800px × 300ms，最长 600ms，超过 800px 先瞬移），曲线也按距离分两档，数值集中在
-`lib/animate-scroll.ts`，见 [conversation](./conversation.md)「Scroll behaviour」的「平滑滚动」。
+时长随距离变的动效不在这个刻度里（2026-10-16），两处：
+
+- 程序发起的平滑滚动：时长 300ms + 距离 ÷ 800px × 300ms，最长 600ms，超过 800px
+  先瞬移，曲线也按距离分两档，数值集中在 `lib/animate-scroll.ts`，见
+  [conversation](./conversation.md)「Scroll behaviour」的「平滑滚动」。
+- 输入框长高、变矮（人触发的交互反馈，Telegram 的 `round(50 × ln|Δh|)` ms，多一
+  行 155ms、贴满 8 行 253ms）：时长随距离变，**缓动仍用 token** `--ease-firm`。逐帧
+  写高度，所以在 JS 里按这条三次贝塞尔求值，数从 token 的定义读（`getComputedStyle`
+  读根上的 `--ease-firm`），不另抄一份；见 `lib/composer-grow.ts` 与
+  [conversation](./conversation.md)「会话里的输入框」的「长高的动画」。
 
 内容形状的加载面用 `Skeleton`（ui/skeleton.tsx）：轻呼吸占位、非 shimmer
 （shimmer 是被禁的 B 类噪动），`prefers-reduced-motion` 下静止。只用于真实
