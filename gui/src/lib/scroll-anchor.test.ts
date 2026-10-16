@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { anchorCorrection, firstRowBelow } from "@/lib/scroll-anchor";
+import {
+  anchorCorrection,
+  captureScrollAnchors,
+  firstRowBelow,
+  holdFirstScrollAnchor,
+} from "@/lib/scroll-anchor";
 
 describe("firstRowBelow", () => {
   const bottoms = [40, 120, 120, 300, 520];
@@ -54,5 +59,65 @@ describe("anchorCorrection", () => {
 
   it("is zero when nothing moved", () => {
     expect(anchorCorrection(anchor, 24, 1_000)).toBe(0);
+  });
+});
+
+describe("captureScrollAnchors / holdFirstScrollAnchor (ticket 32)", () => {
+  /** Rows stacked from `top`, `heights` tall, under a container whose
+   * viewport starts at 0 and is scrolled to `scrollTop`. */
+  function layout(heights: number[], scrollTop: number) {
+    let shift = 0;
+    const tops: number[] = [];
+    let y = -scrollTop;
+    for (const h of heights) {
+      tops.push(y);
+      y += h;
+    }
+    const rows = heights.map((h, i) => ({
+      isConnected: true,
+      getBoundingClientRect: () => ({
+        top: tops[i] - shift,
+        bottom: tops[i] + h - shift,
+      }),
+    }));
+    const container = {
+      scrollTop,
+      querySelector: () => ({ children: rows }),
+      getBoundingClientRect: () => ({ top: 0 }),
+    };
+    return {
+      rows,
+      container: container as unknown as HTMLElement,
+      /** Everything moved up by `px` (rows above it went away). */
+      moveUp: (px: number) => {
+        shift += px;
+      },
+    };
+  }
+
+  it("reads the rows from the top of the viewport down", () => {
+    const { container, rows } = layout([100, 100, 100, 100], 150);
+    const anchors = captureScrollAnchors(container, 2);
+    expect(anchors.map((a) => a.el)).toEqual([rows[1], rows[2]]);
+    expect(anchors.map((a) => a.offset)).toEqual([-50, 50]);
+  });
+
+  it("holds the first row still there where it was", () => {
+    const { container, rows, moveUp } = layout([100, 100, 100, 100], 150);
+    const anchors = captureScrollAnchors(container);
+    // The row at the top was deleted, and the one above it: what follows
+    // moved up by 200px.
+    rows[1].isConnected = false;
+    moveUp(200);
+    expect(holdFirstScrollAnchor(container, anchors)).toBe(true);
+    // Scrolled back by the 200px, so row 2 sits where it was.
+    expect(container.scrollTop).toBe(150 - 200);
+  });
+
+  it("is false when no row is left", () => {
+    const { container, rows } = layout([100], 0);
+    const anchors = captureScrollAnchors(container);
+    rows[0].isConnected = false;
+    expect(holdFirstScrollAnchor(container, anchors)).toBe(false);
   });
 });

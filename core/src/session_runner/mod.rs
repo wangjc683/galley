@@ -438,6 +438,23 @@ pub async fn open_main_chat_segment_if_due(
     segment::open_if_due(host, session_id, holds_run_gate).await
 }
 
+/// A session's single-flight slot ([`ensure_session_runner`]'s), held by
+/// a caller outside ensure that changes what a replay would read and
+/// retires the runner: deleting a main chat message (ticket 32,
+/// [`crate::message_delete`]). While it is held no ensure spawns or
+/// replays for the session, so a runner started after it is let go reads
+/// the conversation as the holder left it.
+pub struct SingleFlightSlot {
+    _guard: tokio::sync::OwnedMutexGuard<()>,
+}
+
+/// Wait for and take `session_id`'s single-flight slot.
+pub async fn enter_single_flight(session_id: &str) -> SingleFlightSlot {
+    SingleFlightSlot {
+        _guard: single_flight::enter(session_id).await,
+    }
+}
+
 async fn read_session(
     host: &RunnerHost<'_>,
     session_id: &str,

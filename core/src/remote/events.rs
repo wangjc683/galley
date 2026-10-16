@@ -24,6 +24,7 @@ use crate::api::{
 };
 use crate::db::SqliteGalley;
 use crate::error::GalleyError;
+use crate::message_delete::{MessageDeletedPayload, MESSAGE_DELETED_EVENT};
 use crate::notify::RemoteEventSink;
 use crate::runner_manager::{SessionRunStatePayload, SESSION_RUN_STATE_EVENT};
 use crate::session_runner::{HistoryReplayPayload, RUNNER_HISTORY_REPLAY_EVENT};
@@ -64,6 +65,7 @@ const FORWARDED: &[&str] = &[
     PROJECT_UPDATED_EXTERNAL_EVENT,
     PROJECT_DELETED_EXTERNAL_EVENT,
     USER_MESSAGE_PERSISTED_EVENT,
+    MESSAGE_DELETED_EVENT,
     RUNNER_EVENT,
     SESSION_RUN_STATE_EVENT,
     RUNNER_HISTORY_REPLAY_EVENT,
@@ -471,6 +473,22 @@ impl Mapper {
                     message: convert::brief_message(message),
                     dispatch: convert::dispatch(dispatch),
                     client_request_id,
+                });
+                Mapped::State(Some(session_id), event)
+            }
+            MESSAGE_DELETED_EVENT => {
+                let MessageDeletedPayload {
+                    session_id,
+                    message_ids,
+                    via,
+                } = serde_json::from_value(payload)?;
+                if !self.is_shown(&session_id).await {
+                    return Ok(Mapped::Nothing);
+                }
+                let event = AppEvent::MessageDeleted(phone::MessageDeletedEvent {
+                    session_id: session_id.clone(),
+                    message_ids,
+                    via,
                 });
                 Mapped::State(Some(session_id), event)
             }

@@ -90,3 +90,48 @@ export function holdScrollAnchor(
   if (Math.abs(delta) >= 1) container.scrollTop += delta;
   return true;
 }
+
+/** How many rows {@link captureScrollAnchors} reads: more than a
+ * deleted message can take out from the top of the viewport (its
+ * bubble, the time line above it, a process card, subtask cards). */
+const REMOVAL_ANCHOR_ROWS = 8;
+
+/**
+ * The rows from the one at the top of `container`'s viewport down, each
+ * with where it sits — for a removal (a deleted message, main chat
+ * ticket 32), which may take the first of them out of the document:
+ * {@link holdFirstScrollAnchor} then holds the first one left.
+ */
+export function captureScrollAnchors(
+  container: HTMLElement,
+  limit = REMOVAL_ANCHOR_ROWS,
+): ScrollAnchor[] {
+  const root = container.querySelector(ROWS_SELECTOR);
+  if (!root) return [];
+  const rows = root.children;
+  const top = container.getBoundingClientRect().top;
+  const first = firstRowBelow(
+    rows.length,
+    (i) => rows[i].getBoundingClientRect().bottom,
+    top,
+  );
+  if (first < 0) return [];
+  const anchors: ScrollAnchor[] = [];
+  for (let i = first; i < rows.length && anchors.length < limit; i++) {
+    anchors.push({
+      el: rows[i],
+      offset: rows[i].getBoundingClientRect().top - top,
+      scrollTop: container.scrollTop,
+    });
+  }
+  return anchors;
+}
+
+/** Hold the first of `anchors` still in the document where it was read
+ * ({@link holdScrollAnchor}). False when none is. */
+export function holdFirstScrollAnchor(
+  container: HTMLElement,
+  anchors: readonly ScrollAnchor[],
+): boolean {
+  return anchors.some((anchor) => holdScrollAnchor(container, anchor));
+}

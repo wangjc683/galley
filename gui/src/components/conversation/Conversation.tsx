@@ -9,6 +9,7 @@ import {
   MessageAgent,
   MessageAgentNarration,
 } from "@/components/conversation/MessageAgent";
+import { MessageDeleteMenu } from "@/components/conversation/MessageDeleteMenu";
 import { MessageTimeDivider } from "@/components/conversation/MessageTimeDivider";
 import { MessageUser } from "@/components/conversation/MessageUser";
 import { RunFoldHeader } from "@/components/conversation/RunFoldHeader";
@@ -34,6 +35,7 @@ import {
   buildWrittenFileResolver,
 } from "@/lib/written-files";
 import { useCopy, useLanguage } from "@/lib/i18n";
+import { deletableMessage, messageDeleteBlock } from "@/lib/message-delete";
 import {
   formatMessageTime,
   formatMessageTimeFull,
@@ -57,6 +59,7 @@ import {
   runStepNumbers,
 } from "@/lib/run-groups";
 import { isSubtaskReportTurn } from "@/lib/subtasks";
+import { turnOrdinals } from "@/lib/turn-ordinals";
 import { cn } from "@/lib/utils";
 import type {
   AgentTurn,
@@ -91,6 +94,13 @@ export interface ConversationProps {
    * moves no fold onto another run.
    */
   keyBase?: number;
+  /**
+   * Places of turns a deleted message took out (main chat ticket 32;
+   * messages store `removedOrdinals`): skipped, so the rows after them
+   * keep their keys and a process card that was open stays on its
+   * reply (lib/turn-ordinals).
+   */
+  removedOrdinals?: readonly number[];
   /** Send time of the last user message before `turns` while earlier
    * history is not loaded (messages store `earlier`): the first loaded
    * user message's send-time break measures against it. */
@@ -117,6 +127,22 @@ export interface ConversationProps {
    * at breaks as centred lines, a one-step reply with nothing over it.
    */
   assistant?: boolean;
+  /**
+   * The assistant's conversation: right-click a bubble to delete it (main
+   * chat ticket 32, MessageDeleteMenu). MainView supplies the main
+   * chat's state and the confirm; absent everywhere else, so no other
+   * conversation has a menu.
+   */
+  messageDelete?: {
+    /** The main chat is replying (its run going, a send on its way). */
+    running: boolean;
+    /** It waits for the user's answer. */
+    asking: boolean;
+    /** Whether a reply has subtask cards, by its answer's row id. */
+    hasSubtasks: (answerId: string) => boolean;
+    /** 删除 was chosen for the message row `messageId` is part of. */
+    onDelete: (messageId: string) => void;
+  };
 }
 
 /**
@@ -133,6 +159,9 @@ export interface ConversationProps {
  * color. (DESIGN.md says "稍深 1px 全宽 vs 极淡 1px 60% 居中"; opacity
  * 60% on the soft one approximates the prototype.)
  */
+/** `removedOrdinals` when nothing was deleted: one stable reference. */
+const NO_ORDINALS: readonly number[] = Object.freeze([]);
+
 /** Length of the live→settled sweep: ExpandSection's --motion-slow
  * (240ms) plus its unmount margin, the same 300ms it uses itself. */
 const SETTLE_SWEEP_MS = 300;
@@ -142,14 +171,20 @@ export function Conversation({
   askUserPending = false,
   agentRunning = false,
   keyBase = 0,
+  removedOrdinals = NO_ORDINALS,
   previousUserCreatedAt = null,
   renderAfterAnswer,
   assistant = false,
+  messageDelete,
 }: ConversationProps) {
-  // A turn's place that survives a prepend (see `keyBase`): every key
-  // and every piece of per-run state below is held in these, never in
-  // raw indices.
-  const ordinal = (index: number) => index - keyBase;
+  // A turn's place that survives a prepend (see `keyBase`) and a deleted
+  // message (`removedOrdinals`): every key and every piece of per-run
+  // state below is held in these, never in raw indices.
+  const ordinals = useMemo(
+    () => turnOrdinals(turns.length, keyBase, removedOrdinals),
+    [turns.length, keyBase, removedOrdinals],
+  );
+  const ordinal = (index: number) => ordinals[index] ?? index - keyBase;
 
   // The turn whose ask_user question is currently live in the tail
   // AskUserBubble. Positional match (last agent turn carrying an
@@ -176,7 +211,12 @@ export function Conversation({
   // data↔DOM index contract. Steps are numbered by position within
   // their run, not by GA's per-loop counter (run-groups
   // `runStepNumbers`).
-  const groups = useMemo(() => buildRunGroups(turns), [turns]);
+  // The assistant's replies stay apart when the message between two of
+  // them was deleted (run-groups `splitAfterAnswer`, ticket 32).
+  const groups = useMemo(
+    () => buildRunGroups(turns, { splitAfterAnswer: assistant }),
+    [turns, assistant],
+  );
   // The live window's run (see 「Live window」 below).
   const liveGroup = liveRunGroup(groups, agentRunning, askUserPending);
   // The assistant's conversation draws its runs from its own plan
@@ -638,6 +678,7 @@ export function Conversation({
             candidates={args.candidates}
             answer={askUserReplyContent(turns, turnIndex, replySet)}
             bubble
+            messageId={turn.messageId}
             className={reportDivider ? "mt-5" : gap}
           />
         </Fragment>
@@ -956,7 +997,19 @@ export function Conversation({
       <BrowserSitesContext.Provider value={browserSites}>
         {/* `data-role` names the rows a prepend keeps still
             (lib/scroll-anchor). */}
-        <div data-role="conversation">{rendered}</div>
+        {linePlan && messageDelete ? (
+          <MessageDeleteMenu
+            resolve={(messageId) =>
+              deletableMessage(turns, linePlan, groups, messageId)
+            }
+            block={(message) => messageDeleteBlock(message, messageDelete)}
+            onDelete={messageDelete.onDelete}
+          >
+            <div data-role="conversation">{rendered}</div>
+          </MessageDeleteMenu>
+        ) : (
+          <div data-role="conversation">{rendered}</div>
+        )}
       </BrowserSitesContext.Provider>
     </WrittenFilesContext.Provider>
   );

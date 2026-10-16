@@ -26,6 +26,7 @@ pub mod managed_model_layers;
 pub mod managed_model_probe;
 mod managed_prompt;
 pub mod managed_runtime;
+pub mod message_delete;
 pub mod message_queue;
 pub mod migration_backup;
 pub mod model_responses_prune;
@@ -207,6 +208,8 @@ pub fn run() {
             list_subtask_dispatches,
             // Resetting the main chat (.scratch/main-chat ticket 15), desktop only
             reset_main_chat,
+            // Deleting one main chat message (.scratch/main-chat ticket 32), desktop only
+            delete_main_chat_message,
             archive_session,
             unarchive_session,
             rename_session,

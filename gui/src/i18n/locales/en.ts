@@ -1702,6 +1702,24 @@ export const enCopy: AppCopy = {
     copySelection: "Copy selection",
     quoteSelection: "Quote",
     copied: "Copied",
+    // Right-click a bubble of the main chat to delete it (main chat ticket
+    // 32). The confirm is a title and its button only (JC, 2026-10-16).
+    deleteMessage: {
+      menuItem: "Delete",
+      blockedRunning: "Wait until it finishes replying",
+      blockedAsking: "Answer its question first",
+      blockedSubtasks:
+        "This reply started subtasks, so it can't be deleted for now",
+      title: "Delete this message?",
+      confirm: "Delete",
+      failedBusy:
+        "It's replying or waiting for your answer, so this can't be deleted right now.",
+      failedSubtasks:
+        "This reply started subtasks, so it can't be deleted for now.",
+      failed: "Couldn't delete this message.",
+      copyDetails: "Copy details",
+      copied: "Copied",
+    },
     // Telemetry tooltips. The meter is prefixed "~" because its number is
     // converted from GA's char budget by a ×3 heuristic, while input /
     // output come straight from the provider — same unit, different

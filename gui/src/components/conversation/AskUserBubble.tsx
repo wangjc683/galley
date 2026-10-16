@@ -320,6 +320,7 @@ export function AnsweredAskUser({
   candidates = [],
   answer,
   bubble = false,
+  messageId,
   className,
 }: {
   question: string;
@@ -332,6 +333,10 @@ export function AnsweredAskUser({
   bubble?: boolean;
   /** The bubble's row margin (the assistant's IM grouping). */
   className?: string;
+  /** Persisted `messages.id` of the turn that asked; rendered as
+   * `data-message-id` on the bubble, where the assistant's right-click
+   * menu reads it (main chat ticket 32). */
+  messageId?: string;
 }) {
   const copy = useCopy();
   const cleaned = stripGATags(question);
@@ -378,7 +383,11 @@ export function AnsweredAskUser({
   );
   if (bubble) {
     return (
-      <div data-role="answered-ask-user" className={className ?? "my-4"}>
+      <div
+        data-role="answered-ask-user"
+        data-message-id={messageId}
+        className={className ?? "my-4"}
+      >
         <AssistantBubble>
           <MarkdownView source={cleaned} variant="agent" softBreaks />
         </AssistantBubble>

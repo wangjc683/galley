@@ -53,7 +53,7 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 - 压过父 modal 的二级层（`z-60`，见 [onboarding-and-cards](./onboarding-and-cards.md)「Overlay 层级」），
   420px 宽、`bg-elevated`；不放 X，关闭走「取消」与 Esc（见上节）。
 - 「取消」默认聚焦，回车不会误触执行；确认键在它右边。
-- 正文写全删什么（例：渠道的解除接入，见「Channels」）；正文是块，可以放段落与列表。
+- 正文写全删什么（例：渠道的解除接入，见「Channels」）；正文是块，可以放段落与列表。例外：只删一条、标题已经说全时可以没有正文（主对话删一条消息，[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 83），这时不留空段落，确认键直接在标题下面。
 
 **做了收不回的，用长按确认**（2026-10-14，[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 59，票 15；
 目前只有「重置主对话」用）：确认键换成一颗要按住 5 秒的按钮（`ui/hold-to-confirm-button.tsx`；时长是

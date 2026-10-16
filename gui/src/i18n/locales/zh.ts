@@ -1705,6 +1705,22 @@ export const zhCopy = {
     // 细节票 02）。
     quoteSelection: "引用",
     copied: "已复制",
+    // 主对话里右键一条气泡删除它（主对话票 32，裁决 83）。确认框只有标题与确认键：
+    // JC 2026-10-16 选不写正文（「对于用户来说，负担最小最容易理解」）。
+    // 菜单项不能点时，下面一行写原因。
+    deleteMessage: {
+      menuItem: "删除",
+      blockedRunning: "它正在回复，回完才能删",
+      blockedAsking: "它在等你回答，答完才能删",
+      blockedSubtasks: "这条回复派出了子任务，暂时不能删",
+      title: "删除这条消息？",
+      confirm: "删除",
+      failedBusy: "它正在回复或在等你回答，这会儿删不了。",
+      failedSubtasks: "这条回复派出了子任务，暂时不能删。",
+      failed: "没能删除这条消息。",
+      copyDetails: "复制详情",
+      copied: "已复制",
+    },
     // Telemetry tooltips. The meter says "约" because its number is
     // converted from GA's char budget by a ×3 heuristic, while input /
     // output come straight from the provider — same unit, different

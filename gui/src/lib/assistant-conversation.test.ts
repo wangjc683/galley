@@ -176,6 +176,26 @@ describe("assistantLinePlan", () => {
     expect(plan.flat.size).toBe(0);
   });
 
+  it("draws a reply whose message was deleted as the reply it was (ticket 32)", () => {
+    const turns: Turn[] = [
+      user("第一问"),
+      answer("第一答", 1),
+      // Your second message went: its reply follows the first answer.
+      step("我先查一下。", 1),
+      step("再核对一处。", 2),
+      answer("第二答", 3),
+    ];
+    const groups = buildRunGroups(turns, { splitAfterAnswer: true });
+    const plan = assistantLinePlan(groups, turns, null);
+    // Both answers are messages; the second keeps its process button,
+    // keyed by its first step (there is no opener).
+    expect([...plan.message].sort()).toEqual([0, 1, 4]);
+    expect(plan.flat.size).toBe(0);
+    expect(plan.steps.get(4)?.opener).toBe(2);
+    expect(plan.steps.get(4)?.members).toEqual([2, 3, 4]);
+    expect(plan.steps.has(1)).toBe(false);
+  });
+
   it("draws a live run as its opener and its asked-and-answered pairs, and a run without an answer in full", () => {
     const turns: Turn[] = [
       user("订船票"),

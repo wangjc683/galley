@@ -85,7 +85,9 @@ pub(crate) async fn reset_main_chat(
     manager: State<'_, std::sync::Arc<crate::runner_manager::RunnerManager>>,
     language: Option<String>,
 ) -> std::result::Result<SessionBrief, String> {
-    use crate::main_chat_reset::{AppRunnerStarter, ResetMainChatError, ResetPaths};
+    use crate::main_chat_reset::{
+        AppRunnerStarter, ResetMainChatError, ResetPaths, VIA_MAIN_CHAT_RESET,
+    };
     let wire = |e: ResetMainChatError| serde_json::to_string(&e).unwrap_or_else(|_| e.to_string());
     let paths = ResetPaths::for_app(&app).map_err(|e| {
         wire(ResetMainChatError::Failed {
@@ -96,6 +98,7 @@ pub(crate) async fn reset_main_chat(
         app: app.clone(),
         galley: galley.inner().clone(),
         manager: manager.inner().clone(),
+        via: VIA_MAIN_CHAT_RESET,
     };
     let notifier = TauriNotifier::new(app);
     crate::main_chat_reset::reset_main_chat(
@@ -105,6 +108,52 @@ pub(crate) async fn reset_main_chat(
         notifier.as_ref(),
         &paths,
         language.as_deref(),
+    )
+    .await
+    .map_err(wire)
+}
+
+/// Delete one message of the main chat (`.scratch/main-chat` ticket 32,
+/// PRD ruling 83): the message row `message_id` is part of — the user's
+/// row, the greeting, or the reply's whole run — with its attachment
+/// files and search rows; the live runner is retired and started again
+/// so its history leaves it out. Desktop only — no socket command, no
+/// CLI, no phone method; the page asks after a one-click confirm. Which
+/// rows and every refusal are [`crate::message_delete`]'s; the answer is
+/// the `message-deleted` payload (the rows deleted); errors go over the
+/// wire as `{"error": "not_main_chat" | "not_found" | "busy" |
+/// "has_subtasks" | "failed", "detail": "..."}`.
+#[tauri::command]
+pub(crate) async fn delete_main_chat_message(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+    manager: State<'_, std::sync::Arc<crate::runner_manager::RunnerManager>>,
+    session_id: SessionId,
+    message_id: String,
+) -> std::result::Result<crate::message_delete::MessageDeletedPayload, String> {
+    use crate::main_chat_reset::AppRunnerStarter;
+    use crate::message_delete::{DeleteMessageError, VIA_MESSAGE_DELETE};
+    let wire = |e: DeleteMessageError| serde_json::to_string(&e).unwrap_or_else(|_| e.to_string());
+    let attachments_root = crate::app_paths::conversation_attachments_root().ok_or_else(|| {
+        wire(DeleteMessageError::Failed {
+            detail: "the attachment directory is unavailable, nothing changed".into(),
+        })
+    })?;
+    let starter = AppRunnerStarter {
+        app: app.clone(),
+        galley: galley.inner().clone(),
+        manager: manager.inner().clone(),
+        via: VIA_MESSAGE_DELETE,
+    };
+    let notifier = TauriNotifier::new(app);
+    crate::message_delete::delete_main_chat_message(
+        &galley,
+        manager.inner().as_ref(),
+        &starter,
+        notifier.as_ref(),
+        &attachments_root,
+        &session_id,
+        &message_id,
     )
     .await
     .map_err(wire)

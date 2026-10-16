@@ -70,6 +70,19 @@ pub struct MessagePersistedEvent {
     pub client_request_id: Option<String>,
 }
 
+/// `message.deleted`: messages left the database (the desktop deleted one
+/// message of the main chat, main chat ticket 32). Drop these rows; one
+/// message can be several (a reply and its process).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MessageDeletedEvent {
+    pub session_id: String,
+    /// Every row that went, in conversation order.
+    pub message_ids: Vec<String>,
+    /// Who deleted: `gui`.
+    pub via: String,
+}
+
 /// `runner.event`: runner IPC events of a subscribed session, in order.
 /// Core batches them (`turn_progress` over 100 ms), so one message may
 /// carry several.
@@ -179,6 +192,7 @@ events! {
     ProjectUpdated = "project.updated" (ProjectEvent);
     ProjectDeleted = "project.deleted" (ProjectDeletedEvent);
     MessagePersisted = "message.persisted" (MessagePersistedEvent);
+    MessageDeleted = "message.deleted" (MessageDeletedEvent);
     /// Only for subscribed sessions.
     RunnerEvent = "runner.event" (RunnerEventBatch);
     SessionRunState = "session.runState" (SessionRunState);

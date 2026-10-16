@@ -11,6 +11,11 @@ import {
   applySubtaskReportUndelivered,
   noteSubtaskReportPersisted,
 } from "@/lib/ipc-handlers";
+import {
+  applyMessageDeleted,
+  MESSAGE_DELETED_EVENT,
+  type MessageDeletedPayload,
+} from "@/lib/message-delete";
 import type { UserMessagePersistedPayload } from "@/lib/session-send";
 import {
   SUBTASK_DISPATCHED_EVENT,
@@ -142,6 +147,29 @@ export function useExternalCoreEvents(): void {
       const fn = await listen<SubtaskReportUndeliveredPayload>(
         SUBTASK_REPORT_UNDELIVERED_EVENT,
         (e) => applySubtaskReportUndelivered(e.payload),
+      );
+      if (cancelled) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  // A message of the main chat was deleted (ticket 32), from this page or
+  // another: drop its rows. The page that deleted it already has; again
+  // changes nothing.
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    void (async () => {
+      const fn = await listen<MessageDeletedPayload>(
+        MESSAGE_DELETED_EVENT,
+        (e) => applyMessageDeleted(e.payload),
       );
       if (cancelled) {
         fn();

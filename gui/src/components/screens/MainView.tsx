@@ -14,6 +14,7 @@ import {
 } from "@/components/conversation/Conversation";
 import { AssistantLiveLine } from "@/components/conversation/AssistantParts";
 import { ConversationSkeleton } from "@/components/conversation/ConversationSkeleton";
+import { DeleteMessageDialog } from "@/components/conversation/DeleteMessageDialog";
 import { StepLimitTail } from "@/components/conversation/StepLimitTail";
 import {
   buildRunGroups,
@@ -30,6 +31,7 @@ import { ThinkingPreview } from "@/components/conversation/ThinkingPreview";
 import { UserQuestionRail } from "@/components/conversation/UserQuestionRail";
 import { useActiveMessages } from "@/hooks/useActiveSession";
 import { useEarlierTurns } from "@/hooks/useEarlierTurns";
+import { useRemovedTurnsAnchor } from "@/hooks/useRemovedTurnsAnchor";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
 import { useSubtaskDispatchesByMessage } from "@/hooks/useSubtaskCards";
 import { useTypewriter } from "@/hooks/useTypewriter";
@@ -55,7 +57,7 @@ import {
 import { mendStreamingMarkdown } from "@/lib/mend-streaming-markdown";
 import { stepLimitTailVisible } from "@/lib/step-limit";
 import { cn } from "@/lib/utils";
-import { useMessagesStore } from "@/stores/messages";
+import { EMPTY_ORDINALS, useMessagesStore } from "@/stores/messages";
 import type {
   PendingAskUser,
   PendingImageAttachment,
@@ -233,6 +235,13 @@ function MainViewContent({
   // put in front (Conversation keys rows past them), and the send time
   // the first loaded user message measures its break against.
   const prependedTurns = useActiveMessages((m) => m.prependedTurns, 0);
+  // Places of turns a deleted message took out (main chat ticket 32).
+  const removedOrdinals = useActiveMessages(
+    (m) => m.removedOrdinals,
+    EMPTY_ORDINALS,
+  );
+  // The main chat's message whose deletion awaits its confirm.
+  const [deleting, setDeleting] = useState<string | null>(null);
   const previousUserCreatedAt = useActiveMessages(
     (m) => m.earlier?.previousUserCreatedAt ?? null,
     null,
@@ -397,6 +406,12 @@ function MainViewContent({
     turnsLength: turns.length,
     prependedTurns,
   });
+  // A deleted message leaves without moving what is on screen.
+  useRemovedTurnsAnchor({
+    sessionId: activeSessionId,
+    scrollContainerRef,
+    removedTurns: removedOrdinals.length,
+  });
 
   // Unread-final-answer tracking for the scroll-to-bottom button's
   // static dot. Edge-triggered, not `!isRunning`: the dot means "a
@@ -497,6 +512,7 @@ function MainViewContent({
                 key={activeSessionId ?? "conversation"}
                 turns={turns}
                 keyBase={prependedTurns}
+                removedOrdinals={removedOrdinals}
                 previousUserCreatedAt={previousUserCreatedAt}
                 askUserPending={Boolean(pendingAskUser)}
                 agentRunning={isRunning}
@@ -511,6 +527,26 @@ function MainViewContent({
                     : undefined
                 }
                 assistant={isMainChat}
+                messageDelete={
+                  isMainChat && activeSessionId
+                    ? {
+                        // A send on its way counts: the page marks the
+                        // run started when it sends.
+                        running: isRunning,
+                        asking: Boolean(pendingAskUser),
+                        hasSubtasks: (answerId) =>
+                          subtaskDispatches.has(answerId),
+                        onDelete: setDeleting,
+                      }
+                    : undefined
+                }
+              />
+            )}
+            {deleting && activeSessionId && (
+              <DeleteMessageDialog
+                sessionId={activeSessionId}
+                messageId={deleting}
+                onClose={() => setDeleting(null)}
               />
             )}
             {/* In-flight placeholder. User sent a message; the bridge

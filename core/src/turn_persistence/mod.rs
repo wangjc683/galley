@@ -33,6 +33,10 @@
 
 mod derive;
 
+/// `String.prototype.trim`, for code that mirrors the desktop's reading of
+/// a row (deleting a main chat message, `crate::message_delete`).
+pub(crate) use derive::js_trim;
+
 use crate::api::{GalleyApi, MessageTelemetry, MessageVisibility, SessionId};
 use crate::db::{PersistAssistantMessage, SqliteGalley};
 use crate::error::GalleyError;

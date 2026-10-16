@@ -62,6 +62,17 @@ public struct MessagePersistedEvent: Codable, Sendable, Hashable {
     }
 }
 
+/// `message.deleted`: messages left the database (the desktop deleted one
+/// message of the main chat). Drop these rows; one message can be several
+/// (a reply and its process).
+public struct MessageDeletedEvent: Codable, Sendable, Hashable {
+    public var sessionId: String
+    /// Every row that went, in conversation order.
+    public var messageIds: [String]
+    /// Who deleted: `gui`.
+    public var via: String
+}
+
 /// `runner.event`: runner IPC events of a subscribed session, in order,
 /// each exactly as Core's `IpcEvent` serializes it (passed through untyped).
 public struct RunnerEventBatch: Codable, Sendable, Hashable {
@@ -114,6 +125,7 @@ public enum AppEvent: Sendable, Hashable {
     case projectUpdated(ProjectEvent)
     case projectDeleted(ProjectDeletedEvent)
     case messagePersisted(MessagePersistedEvent)
+    case messageDeleted(MessageDeletedEvent)
     /// Only for subscribed sessions.
     case runnerEvent(RunnerEventBatch)
     case sessionRunState(SessionRunState)
@@ -125,8 +137,8 @@ public enum AppEvent: Sendable, Hashable {
     public static let names = [
         "session.created", "session.updated", "session.archived", "session.unarchived",
         "session.moved", "session.deleted", "project.created", "project.updated",
-        "project.deleted", "message.persisted", "runner.event", "session.runState",
-        "history.replay", "queue.changed", "sync.required",
+        "project.deleted", "message.persisted", "message.deleted", "runner.event",
+        "session.runState", "history.replay", "queue.changed", "sync.required",
     ]
 
     public var name: String {
@@ -141,6 +153,7 @@ public enum AppEvent: Sendable, Hashable {
         case .projectUpdated: "project.updated"
         case .projectDeleted: "project.deleted"
         case .messagePersisted: "message.persisted"
+        case .messageDeleted: "message.deleted"
         case .runnerEvent: "runner.event"
         case .sessionRunState: "session.runState"
         case .historyReplay: "history.replay"
@@ -159,6 +172,7 @@ public enum AppEvent: Sendable, Hashable {
         case .projectCreated(let p), .projectUpdated(let p): p
         case .projectDeleted(let p): p
         case .messagePersisted(let p): p
+        case .messageDeleted(let p): p
         case .runnerEvent(let p): p
         case .sessionRunState(let p): p
         case .historyReplay(let p): p
@@ -192,6 +206,7 @@ public enum AppEvent: Sendable, Hashable {
         case "project.updated": self = .projectUpdated(try decode(ProjectEvent.self))
         case "project.deleted": self = .projectDeleted(try decode(ProjectDeletedEvent.self))
         case "message.persisted": self = .messagePersisted(try decode(MessagePersistedEvent.self))
+        case "message.deleted": self = .messageDeleted(try decode(MessageDeletedEvent.self))
         case "runner.event": self = .runnerEvent(try decode(RunnerEventBatch.self))
         case "session.runState": self = .sessionRunState(try decode(SessionRunState.self))
         case "history.replay": self = .historyReplay(try decode(HistoryReplayEvent.self))
