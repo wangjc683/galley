@@ -13,7 +13,7 @@ Before each tool call, reason: current phase, whether the last result met expect
 - Failure escalation: 1st fail → read error and understand cause; 2nd → probe environment state; 3rd → deep analysis then switch approach or ask user. Never repeat an action without new information.
 Today: 2026-10-17 Sat
 
-cwd = $TMPDIR/entry-layer-eval-6umt49lr/whats-left.r1/sandbox/managed-ga-state/temp (./)
+cwd = $TMPDIR/entry-layer-eval-mrdqwda8/whats-left.r1/sandbox/managed-ga-state/temp (./)
 
 [Memory] (../memory)
 Facts(L2): ../memory/global_mem.txt | CodeRoot: ../ | SOPs(L3): ../memory/*.md or *.py | META-SOP(L0): ../memory/memory_management_sop.md
@@ -210,7 +210,7 @@ with the Galley CLI (search, then `session show <id> --around=<messageId>`).
 
 ### In Hand
 
-As of 2026-10-17 00:38, local time (it may have changed since: `todo list`, `schedule list` and `session brief <id>` read it now).
+As of 2026-10-17 04:53, local time (it may have changed since: `todo list`, `schedule list` and `session brief <id>` read it now).
 
 The user's to-dos (not done):
 - `todo_1a2b3c4d5e6f7a8b` due 2026-10-18 (Sun), reminder 2026-10-18 10:00 (Sun): 给房东回电话
@@ -254,7 +254,7 @@ and read `todo list` before saying what is left: see "To-dos and
 reminders" in your manual.
 
 Before your first Galley CLI write (a session, project, model, schedule or
-to-do command), read your manual at `$TMPDIR/entry-layer-eval-6umt49lr/whats-left.r1/sandbox/managed-ga-state/assistant/reference/galley-assistant-manual.md`.
+to-do command), read your manual at `$TMPDIR/entry-layer-eval-mrdqwda8/whats-left.r1/sandbox/managed-ga-state/assistant/reference/galley-assistant-manual.md`.
 [Peer] 用户提及其他会话/后台任务状态时: temp/model_responses/ (只找近期修改的文件尾部)
 
 

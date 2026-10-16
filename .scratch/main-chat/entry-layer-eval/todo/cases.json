@@ -1,5 +1,5 @@
 {
- "_note": "待办评测用例（票 41）。history 是主对话当前段里已有的轮次；todos 是假 CLI 里已有的待办：due 是时间（next_weekday 是今天之后第一个星期几，days 是今天之后第几天，in_minutes 是几分钟后，带 date_only 的只有日期），reminder 是挂在它上面的提醒（fired 表示已经到点、等着叫醒），in_hand 默认为真，即分段开始时就有、写在提示词的「In Hand」一节（为假的是这一段里刚记的），done_since 表示分段开始后用户在面板上勾掉了（快照里还是没做）；tasks 是它自己的定时任务（同 schedule/cases.json）；message 是用户这句，wake 列出这次叫醒里到点的提醒，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。",
+ "_note": "待办评测用例（票 41）。history 是主对话当前段里已有的轮次；todos 是假 CLI 里已有的待办：due 是时间（next_weekday 是今天之后第一个星期几，days 是今天之后第几天，in_minutes 是几分钟后，带 date_only 的只有日期），reminder 是挂在它上面的提醒（fired 表示已经到点、等着叫醒），in_hand 默认为真，即分段开始时就有、写在提示词的「In Hand」一节（为假的是这一段里刚记的），done_since 表示分段开始后用户在面板上勾掉了（快照里还是没做）；tasks 是它自己的定时任务（同 schedule/cases.json）；message 是用户这句，wake 列出这次叫醒里到点的提醒，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 44：expect.reminder.clock 是提醒必须落在的钟点（用户说了几点提醒）。",
  "cases": [
   {
    "id": "note-report",
@@ -101,8 +101,49 @@
    }
   },
   {
-   "id": "logistics-mon",
+   "id": "remind-landlord-8am",
    "no": 4,
+   "group": "该记待办",
+   "expect_text": "「明天早上 8 点提醒我给房东回电话」（票 44）→ 要办完的事加一个时刻：todo add，截止明天（凌晨说的「明天」两天都算），提醒挂在待办上、就在说的 8 点；不用 schedule create；回复说出几点提醒",
+   "history": [],
+   "message": "明天早上 8 点提醒我给房东回电话",
+   "expect": {
+    "todo": "one",
+    "title_any": [
+     "房东"
+    ],
+    "due": {
+     "window": {
+      "from": {
+       "days": 0,
+       "time": "00:00"
+      },
+      "to": {
+       "days": 1,
+       "time": "23:59"
+      }
+     }
+    },
+    "reminder": {
+     "window": {
+      "from": {
+       "days": 0,
+       "time": "08:00"
+      },
+      "to": {
+       "days": 1,
+       "time": "08:00"
+      }
+     },
+     "clock": "08:00"
+    },
+    "mentions_time": true,
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "logistics-mon",
+   "no": 5,
    "group": "它自己的提醒",
    "expect_text": "让它回头查的事 → schedule create --target=assistant 在下周一，记下的话里带单号；不记待办；回复说出时间",
    "history": [
@@ -138,7 +179,7 @@
   },
   {
    "id": "guitar",
-   "no": 5,
+   "no": 6,
    "group": "不该记",
    "expect_text": "没有可办的事 → 不记待办、不建提醒，不动任何东西",
    "history": [],
@@ -150,7 +191,7 @@
   },
   {
    "id": "flight-number",
-   "no": 6,
+   "no": 7,
    "group": "不该记",
    "expect_text": "信息（航班号）→ 不记成待办、不建提醒（可以记进记忆）",
    "history": [],
@@ -162,7 +203,7 @@
   },
   {
    "id": "tick-soil",
-   "no": 7,
+   "no": 8,
    "group": "勾掉",
    "expect_text": "「在办的事」里有「买营养土」，说「营养土买好了」→ todo done 那一件；一句话说已勾掉，不复述清单",
    "history": [],
@@ -218,7 +259,7 @@
   },
   {
    "id": "quote-move",
-   "no": 8,
+   "no": 9,
    "group": "引用改",
    "expect_text": "输入框带引用块「交季度报告」，说「改到周四」→ todo update 那一件：截止挪到周四、提醒跟着挪（在周四截止之前）；不新建；回复说出新时间",
    "history": [],
@@ -270,7 +311,7 @@
   },
   {
    "id": "whats-left",
-   "no": 9,
+   "no": 10,
    "group": "问还有什么没办",
    "expect_text": "「In Hand」是段首快照（买营养土那时还没做；续签合同是这段里刚记的、不在快照里），之后用户在面板上勾掉了营养土 → 先 todo list 读最新的，答季度报告、房东、续签合同，不把营养土当成没办",
    "history": [
@@ -373,7 +414,7 @@
   },
   {
    "id": "already-noted",
-   "no": 10,
+   "no": 11,
    "group": "已有同一件",
    "expect_text": "清单上已有「交季度报告」（带提醒）→ 不再记第二件、不再挂第二个提醒；回复说已经记着、几点提醒",
    "history": [],
@@ -407,7 +448,7 @@
   },
   {
    "id": "wake-todo",
-   "no": 11,
+   "no": 12,
    "group": "待办的提醒到点",
    "expect_text": "待办「交季度报告」的提醒按时到点（Core 的待办叫醒措辞）→ 一两句提醒（季度报告、几点截止），不勾掉、不动任何东西，不出 <no-reply/>",
    "history": [],

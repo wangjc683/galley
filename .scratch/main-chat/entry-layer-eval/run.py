@@ -2139,6 +2139,33 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
             call("<summary>Set it</summary>\n建一个。", ("code_run", {"type": "bash", "script": SCHED_DRY_BASH})),
             call("<summary>Set</summary>\n好，十分钟后提醒你喝水。")],
         "sched-no-reply": [call("<summary>Already done</summary>\n<no-reply/>")],
+        # Ticket 44: a nudge noted as a to-do (wrong), a nudge as its own
+        # reminder (right), a thing to get done as its own reminder
+        # (wrong) and as a to-do with its reminder (right).
+        "sched-nudge-todo": [
+            call("<summary>Note it</summary>\n记一下。", ("code_run", {"type": "bash", "script":
+                 'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; AT="$(date -v+10M +%Y-%m-%dT%H:%M)"; '
+                 '"$G" todo list >/dev/null; "$G" todo add "喝水" --due="$AT" --remind-at="$AT" '
+                 '--supervisor=galley-assistant --reason="user asked"'})),
+            call("<summary>Noted</summary>\n好，十分钟后提醒你喝水。")],
+        "sched-nudge": [
+            call("<summary>Set it</summary>\n设一个。", ("code_run", {"type": "bash", "script":
+                 'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; AT="$(date -v+30M +%Y-%m-%dT%H:%M)"; '
+                 '"$G" schedule list >/dev/null; "$G" schedule create "提醒用户关火" --at="$AT" --target=assistant '
+                 '--supervisor=galley-assistant --reason="user asked"'})),
+            call("<summary>Set</summary>\n好，半小时后提醒你关火。")],
+        "sched-own-for-todo": [
+            call("<summary>Set it</summary>\n设一个。", ("code_run", {"type": "bash", "script":
+                 'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; AT="$(date -v+1d +%Y-%m-%d)T10:00"; '
+                 '"$G" schedule list >/dev/null; "$G" schedule create "提醒用户周三下午交报告" --at="$AT" '
+                 '--target=assistant --supervisor=galley-assistant --reason="user mentioned it"'})),
+            call("<summary>Set</summary>\n好，明天上午 10 点提醒你交报告。")],
+        "sched-todo": [
+            call("<summary>Note it</summary>\n记一下。", ("code_run", {"type": "bash", "script":
+                 'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; D="$(date -v+1d +%Y-%m-%d)"; '
+                 '"$G" todo list >/dev/null; "$G" todo add "交报告" --due="$(date -v+3d +%Y-%m-%d)" '
+                 '--remind-at="${D}T10:00" --supervisor=galley-assistant --reason="user mentioned it"'})),
+            call("<summary>Noted</summary>\n记下了：周三下午交报告，明天上午 10 点提醒你。")],
         # To-do suite.
         "todo-cli": [
             call("<summary>Read the manual</summary>\n先看手册。", ("file_read", {"path": ctx.get("manual", "")})),
@@ -2150,6 +2177,20 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                  '"$G" todo done todo_4d5e6f7a8b9c0d1e --supervisor=galley-assistant --reason="user bought it"'})),
             call("<summary>Ticked</summary>\n好，已勾掉。")],
         "todo-remind": [call("<summary>Remind</summary>\n提醒一下：季度报告三小时后截止，记得交给王经理。")],
+        # Ticket 44: reminded at the time the user named, and half an hour
+        # early (wrong).
+        "todo-at-named": [
+            call("<summary>Note it</summary>\n记一下。", ("code_run", {"type": "bash", "script":
+                 'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; D="$(date -v+1d +%Y-%m-%d)"; '
+                 '"$G" todo list >/dev/null; "$G" todo add "给房东回电话" --due="$D" --remind-at="${D}T08:00" '
+                 '--supervisor=galley-assistant --reason="user asked"'})),
+            call("<summary>Noted</summary>\n记下了：明天给房东回电话，明早 8 点提醒你。")],
+        "todo-early": [
+            call("<summary>Note it</summary>\n记一下。", ("code_run", {"type": "bash", "script":
+                 'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; D="$(date -v+1d +%Y-%m-%d)"; '
+                 '"$G" todo list >/dev/null; "$G" todo add "给房东回电话" --due="$D" --remind-at="${D}T07:30" '
+                 '--supervisor=galley-assistant --reason="user asked"'})),
+            call("<summary>Noted</summary>\n记下了：明天给房东回电话，明早 7 点半提醒你。")],
         "sbx-inline": [
             call("<summary>Inline</summary>\n直接算。",
                  ("code_run", {"script": f"open({canary + '-inline'!r}, 'w').write('x')", "inline_eval": True}))],
@@ -3642,7 +3683,8 @@ def cn_number(n: int) -> str:
 def says_time(text: str, at: datetime, now: datetime, started: datetime) -> bool:
     """Whether a reply names a time: the hour (24- or 12-hour, digits or
     Chinese, `:mm`, 点, 半) and, unless it is today, the day (明天, 周三,
-    21 号 …); or, within three hours, how many minutes from now."""
+    21 号 …); or, within three hours, how many minutes from now (or, since
+    ticket 44, 半小时 / N 小时 when it is that far)."""
     text = text.replace("：", ":")
     h, m = at.hour, at.minute
     hours = {h, h % 12 or 12}
@@ -3663,6 +3705,15 @@ def says_time(text: str, at: datetime, now: datetime, started: datetime) -> bool
         for k in range(max(1, minutes - 3), minutes + 4):
             if any(f"{w}分钟" in text or f"{w} 分钟" in text for w in (str(k), cn_number(k))):
                 return True
+        relative: list[str] = []
+        if abs(minutes - 30) <= 3:
+            relative += ["半小时", "半个小时", "半个钟"]
+        hours_away = round(minutes / 60)
+        if hours_away and abs(minutes - 60 * hours_away) <= 3:
+            for w in [str(hours_away), cn_number(hours_away)] + (["两"] if hours_away == 2 else []):
+                relative += [f"{w}小时", f"{w} 小时", f"{w}个小时", f"{w} 个小时", f"{w}个钟"]
+        if any(w in text for w in relative):
+            return True
     day, today = at.date(), now.date()
     if day == today:
         day_ok = True
@@ -3686,7 +3737,9 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     Since ticket 41 a reminder for the user's own thing may hang on a
     to-do (`todo add --remind-at`): with `via: either` such a reminder
     counts as the one to set, with `via: schedule` (the default) only
-    `schedule create` does."""
+    `schedule create` does. Ticket 44 (main chat PRD ruling 92) split the
+    two: `via: todo` (something to get done) takes only a reminder on a
+    to-do, and a nudge with nothing to finish keeps the default."""
     exp = case["expect"]
     now = datetime.fromisoformat(r["now"])
     tz = now.tzinfo
@@ -3767,8 +3820,9 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     allowed = set(exp.get("allow") or [])
     mode = exp.get("create", "none")
     if mode in ("one", "any"):
-        allowed.add("schedule create")
-        if via == "either":
+        if via != "todo":
+            allowed.add("schedule create")
+        if via in ("either", "todo"):
             allowed.add("todo add")
     if exp.get("delete"):
         allowed.add("schedule delete")
@@ -3787,6 +3841,8 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
                 reasons.append("建成了每次新开会话的任务（target 不是 assistant）")
             if via == "schedule" and timed.get("todoId"):
                 reasons.append("该是它自己的提醒（schedule create），却记成了待办")
+            if via == "todo" and not timed.get("todoId"):
+                reasons.append("该记成待办挂提醒（todo add --remind-at），却建成了它自己的提醒")
             if exp.get("window") and not in_window(timed, exp["window"]):
                 reasons.append("时间不对：" + local_words(local(timed["fireAt"])) if timed.get("fireAt")
                                else "不是一次性提醒")
@@ -3800,6 +3856,9 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         reasons.append("不该建却建了（或试着建）")
     if via == "schedule" and mode != "none" and made_todos:
         reasons.append("记了待办：" + "、".join(t["title"] for t in made_todos))
+    live_todos = [t for t in made_todos if not t.get("cancelledAt")]
+    if via == "todo" and mode == "one" and len(live_todos) != 1:
+        reasons.append(f"该记 1 件待办，记了 {len(live_todos)} 件")
     want_cancel = sorted(exp.get("delete") or [])
     move = exp.get("move")
     if move:
@@ -3895,7 +3954,7 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     facts = {(r["id"], r["variant"]): sched_facts(r, next(c for c in cases if c["id"] == r["id"]))
              for r in data["results"] if any(c["id"] == r["id"] for c in cases)}
     out = [
-        "# 定时与提醒评测结果（票 36，票 41 重跑）",
+        "# 定时与提醒评测结果（票 36，票 44 重跑）",
         "",
         f"模型：{meta['model']['name']}（{meta['model_source']}，即 JC 主对话现在用的模型），推理强度 "
         f"{meta['model']['options'].get('reasoning_effort', '默认')}；首次运行于 {meta['ran_at']}。",
@@ -3903,9 +3962,12 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         "- **提示词**：真实 Rust 代码 `compose_main_chat_runtime_prompt` 生成的主对话提示词（`galley-prompt/`）：票 41 改过的入口层、"
         "主对话自己的「What Only The User Changes」一段；用例里分段开始前就有的定时任务照 `in_hand_section` 的格式（票 39 的三组）写进「In Hand」一节"
         "（`run.py` 的 `in_hand_block`，干跑测试逐字对过 Rust 的输出）。手册是仓库里的 `docs/managed-ga-runtime/galley-assistant-manual.md`"
-        "（票 41 的「To-dos and reminders」），放在这次运行状态根下 Core 写它的位置。",
-        "- **票 41 的改动**：用户自己的事带时间的，提醒可以挂在待办上（`todo add --remind-at`），`via: either` 的用例两种都算；"
+        "（票 44 改过的「To-dos and reminders」），放在这次运行状态根下 Core 写它的位置。",
+        "- **票 41 的改动**：用户自己的事带时间的，提醒可以挂在待办上（`todo add --remind-at`）；"
         "物流这种它自己回头查的只认 `schedule create`。假 CLI 多了 `todo` 命令族。",
+        "- **票 44 的改动**（主对话 PRD 裁决 92）：要办完的事（交报告、航班，`via: todo`）只认挂在待办上的提醒，建成它自己的提醒算错；"
+        "只要提醒一下、没有要办完的事（喝水、关火）只认 `schedule create`，记成待办算错。「已有同一件」照票 41（`via: either`）。"
+        "加了「半小时后提醒我关火」。",
         "- **新消息**：用户这句；叫醒用例是照 Core 措辞（`subtask_report::report_text`，同样逐字对过）拼出的叫醒消息。",
         "- **工具**：`code_run` 与文件工具在每次运行自己的 macOS 沙盒里真的执行（同票 30 的沙盒，另允许 `date`）；Galley CLI 是假的："
         "`schedule` 命令族按 Agent API §5.20–§5.27 的形状回答、照真实 CLI 校验参数（过去的时刻报 `time_in_past:`，`--target` 默认 `session`），"
@@ -4139,8 +4201,11 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
                 timed = rem
                 at = local(rem["fireAt"])
                 end = due_end(t)
+                clock = exp["reminder"].get("clock")
                 if not in_window(at, exp["reminder"]["window"]):
                     reasons.append("提醒时间不对：" + local_words(at))
+                elif clock and at.strftime("%H:%M") != clock:
+                    reasons.append(f"提醒不在说的 {clock}：" + local_words(at))
                 elif end and at > end:
                     reasons.append("提醒在截止之后：" + local_words(at))
     elif adds or made_todos:
@@ -4266,7 +4331,7 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     facts = {(r["id"], r["variant"]): todo_facts(r, next(c for c in cases if c["id"] == r["id"]))
              for r in data["results"] if any(c["id"] == r["id"] for c in cases)}
     out = [
-        "# 待办评测结果（票 41）",
+        "# 待办评测结果（票 41，票 44 重跑）",
         "",
         f"模型：{meta['model']['name']}（{meta['model_source']}，即 JC 主对话现在用的模型），推理强度 "
         f"{meta['model']['options'].get('reasoning_effort', '默认')}；首次运行于 {meta['ran_at']}。",
@@ -4274,7 +4339,8 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         "- **提示词**：真实 Rust 代码 `compose_main_chat_runtime_prompt` 生成的主对话提示词（与定时评测共用 "
         "`../schedule/galley-prompt/`）：票 41 改过的入口层；用例里分段开始前就有的待办与定时任务照 `in_hand_section` 的格式"
         "（票 39 的三组）写进「In Hand」一节，时间写成消息前一小时（`run.py` 的 `in_hand_block`，干跑测试逐字对过 Rust 的输出）。"
-        "手册是仓库里的 `docs/managed-ga-runtime/galley-assistant-manual.md`，放在这次运行状态根下 Core 写它的位置。",
+        "手册是仓库里的 `docs/managed-ga-runtime/galley-assistant-manual.md`（票 44 改过的「To-dos and reminders」），"
+        "放在这次运行状态根下 Core 写它的位置。票 44 加了「明天早上 8 点提醒我给房东回电话」：待办，提醒就在说的 8 点。",
         "- **新消息**：用户这句（「说说这件」是引用块加一句话，照 `composer-quote.ts` 的写法）；叫醒用例是照 Core 措辞"
         "（`subtask_report::report_text` 的待办一段，同样逐字对过）拼出的叫醒消息。",
         "- **工具**：`code_run` 与文件工具在每次运行自己的 macOS 沙盒里真的执行（同票 36 的沙盒）；Galley CLI 是假的："
@@ -4461,15 +4527,22 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
             job["case_id"] = wake_id
             jobs.append(job)
     scases = {c["id"]: c for c in json.loads(SCHED_CASES.read_text(encoding="utf-8"))["cases"]}
-    sched_scripts = {"sched-water-10min": "sched-create", "sched-wake-obsolete": "sched-no-reply"}
+    sched_scripts = {"sched-water-10min": ("water-10min", "sched-create"),
+                     "sched-wake-obsolete": ("wake-obsolete", "sched-no-reply"),
+                     "sched-water-todo": ("water-10min", "sched-nudge-todo"),
+                     "sched-stove-30min": ("stove-30min", "sched-nudge"),
+                     "sched-report-own": ("report-wed", "sched-own-for-todo"),
+                     "sched-report-todo": ("report-wed", "sched-todo")}
     snow = now.astimezone()
-    for sched_id, script in sched_scripts.items():
-        for job in make_sched_jobs([scases[sched_id[len("sched-"):]]], snow, mykeys, ga_lang, set(), 1, script):
-            job["case_id"] = sched_id
+    for run_id, (case_id, script) in sched_scripts.items():
+        for job in make_sched_jobs([scases[case_id]], snow, mykeys, ga_lang, set(), 1, script):
+            job["case_id"] = run_id
             jobs.append(job)
     tcases = {c["id"]: c for c in json.loads(TODO_CASES.read_text(encoding="utf-8"))["cases"]}
     todo_scripts = {"todo-tick-soil": ("tick-soil", "todo-cli"), "todo-tick-ok": ("tick-soil", "todo-tick"),
-                    "todo-wake-todo": ("wake-todo", "todo-remind")}
+                    "todo-wake-todo": ("wake-todo", "todo-remind"),
+                    "todo-landlord-8am": ("remind-landlord-8am", "todo-at-named"),
+                    "todo-landlord-early": ("remind-landlord-8am", "todo-early")}
     for run_id, (case_id, script) in todo_scripts.items():
         for job in make_sched_jobs([tcases[case_id]], snow, mykeys, ga_lang, set(), 1, script, suite="todo"):
             job["case_id"] = run_id
@@ -4694,14 +4767,16 @@ def dry_test_wake(results: list[dict[str, Any]], scripts: dict[str, str],
                   f"the judge reads the ask_user question ({f['reasons']})")
 
 
-def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, str],
+def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, str]],
                    cases: dict[str, dict[str, Any]], now: datetime, check: Any) -> None:
     """Schedule suite: the Python ports reproduce Rust's In Hand lines and
     reminder notes byte for byte; the prompt carries the main chat's own
     configuration paragraph, the ticket 36 entry layer and, only when a
     case has tasks from before the segment, the In Hand lines; the fake
     galley's schedule family answers, refuses and keeps state as the real
-    CLI does; the judge reads it."""
+    CLI does; the judge reads it, and since ticket 44 tells a nudge noted
+    as a to-do and a thing to get done set as a plain reminder from the
+    right way round."""
     from datetime import timezone
 
     print("schedule: ports against Rust (rust-samples.json)")
@@ -4725,8 +4800,8 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, str],
     check(held.index("### In Hand") < held.index("What you are on (") and "The user's to-dos" not in held,
           "a case's own reminder is in the What-you-are-on group")
     for r in sorted(results, key=lambda r: r["id"]):
-        script = scripts[r["id"]]
-        case = cases[r["id"][len("sched-"):]]
+        case_id, script = scripts[r["id"]]
+        case = cases[case_id]
         print(f"schedule {r['id']} / {r['variant']} ({script})")
         check(r["status"] == "ok", f"run completed (status {r['status']} {r.get('error', '')[:300]})")
         if r["status"] != "ok":
@@ -4760,6 +4835,27 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, str],
             check(says_time("好，十分钟后提醒你喝水。", datetime.fromisoformat(f["made"][0]["fireAt"]).astimezone(),
                             datetime.fromisoformat(r["now"]), datetime.fromtimestamp(r["started_at"]).astimezone()),
                   "a relative time counts as saying the time")
+        elif script == "sched-nudge-todo":
+            check(f["names"] == ["todo list", "todo add"] and len(f["made_todos"]) == 1,
+                  f"the nudge went onto the list ({f['names']})")
+            check(not f["pass"] and any("却记成了待办" in x for x in f["reasons"])
+                  and any("记了待办" in x for x in f["reasons"])
+                  and any("多余的写命令" in x and "todo add" in x for x in f["reasons"]),
+                  f"the judge flags a nudge noted as a to-do ({f['reasons']})")
+        elif script == "sched-nudge":
+            check(f["names"] == ["schedule list", "schedule create"] and not f["made_todos"],
+                  f"its own one-off reminder ({f['names']})")
+            check(f["pass"], f"a nudge as its own reminder, 「半小时后」 said, passes ({f['reasons']})")
+        elif script == "sched-own-for-todo":
+            check(not f["pass"] and any("却建成了它自己的提醒" in x for x in f["reasons"])
+                  and any("该记 1 件待办，记了 0 件" in x for x in f["reasons"])
+                  and any("多余的写命令" in x and "schedule create" in x for x in f["reasons"]),
+                  f"the judge flags a thing to get done set as a plain reminder ({f['reasons']})")
+        elif script == "sched-todo":
+            check(f["names"] == ["todo list", "todo add"] and len(f["made_todos"]) == 1
+                  and (f["timed"] or {}).get("todoId") == f["made_todos"][0]["id"],
+                  f"a to-do with its reminder ({f['names']})")
+            check(f["pass"], f"a thing to get done as a to-do with its reminder passes ({f['reasons']})")
         else:
             check("### In Hand" not in system, "no In Hand lines without tasks from before")
             check(f["pass"] and f["no_reply"] and not f["names"], f"<no-reply/>, nothing touched ({f['reasons']})")
@@ -4801,7 +4897,10 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
             last = "\n".join(b.get("text", "") for b in last if isinstance(b, dict))
         want = case.get("message") or sched_note(case, datetime.fromisoformat(r["now"]))
         check(want in last and r["message"] == want, "the new message is the case's")
-        check("### In Hand" in system and "The user's to-dos (not done):" in system, "In Hand with the to-dos")
+        if case.get("todos"):
+            check("### In Hand" in system and "The user's to-dos (not done):" in system, "In Hand with the to-dos")
+        else:
+            check("### In Hand" not in system, "no In Hand lines without to-dos")
         f = todo_facts(r, case)
         if script == "todo-cli":
             out = str((r["calls"][1].get("result") or {}).get("stdout", ""))
@@ -4828,6 +4927,12 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
             check(f["manual"].startswith("读了") and f["listed"] == "查了", "manual read, list read before writing")
         elif script == "todo-tick":
             check(f["pass"] and f["names"] == ["todo list", "todo done"], f"ticked off, passes ({f['reasons']})")
+        elif script == "todo-at-named":
+            check(f["pass"] and f["names"] == ["todo list", "todo add"],
+                  f"reminded at the time named (08:00), passes ({f['reasons']})")
+        elif script == "todo-early":
+            check(not f["pass"] and any("提醒不在说的 08:00" in x for x in f["reasons"]),
+                  f"the judge flags a reminder off the time named ({f['reasons']})")
         else:
             check(f["pass"] and not f["names"] and "on the user's to-do" in r["message"],
                   f"a to-do's reminder: a sentence, nothing touched ({f['reasons']})")
@@ -5095,13 +5200,14 @@ def main() -> int:
         data["meta"]["history_note"] = previous_meta["history_note"]
     if sched:
         data["meta"].update({
-            "suite": ("todo (ticket 41): the main chat prompt with the ticket 41 entry layer, In Hand lines (ticket "
-                      "39's three groups) for to-dos and tasks from before the segment, the assistant manual in the "
-                      "state root, the case's to-dos and tasks in the fake galley" if todo else
-                      "schedule (ticket 36, rerun for ticket 41): the main chat prompt with the ticket 41 entry layer "
-                      "and its own configuration paragraph, In Hand lines (ticket 39's three groups) for tasks from "
-                      "before the segment, the assistant manual in the state root, the case's tasks in the fake "
-                      "galley"),
+            "suite": ("todo (ticket 41, rerun for ticket 44): the main chat prompt with the ticket 41 entry layer, "
+                      "In Hand lines (ticket 39's three groups) for to-dos and tasks from before the segment, the "
+                      "assistant manual (ticket 44's text) in the state root, the case's to-dos and tasks in the "
+                      "fake galley" if todo else
+                      "schedule (ticket 36, rerun for tickets 41 and 44): the main chat prompt with the ticket 41 "
+                      "entry layer and its own configuration paragraph, In Hand lines (ticket 39's three groups) for "
+                      "tasks from before the segment, the assistant manual (ticket 44's text) in the state root, the "
+                      "case's tasks in the fake galley"),
             "repeats": args.repeats,
             "tool_cap": SCHED_TOOL_CAP,
             "extra_exec": list(SCHED_EXTRA_EXEC),

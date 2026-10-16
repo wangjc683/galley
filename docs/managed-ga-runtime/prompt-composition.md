@@ -373,17 +373,23 @@ that finishes a task and restates the result. The layer says three things:
   deleting for good and the default model are asked first; and the main
   chat itself is never archived, renamed, pinned or deleted. Ticket 41
   (main chat PRD ruling 91) rewrote that section as "To-dos and
-  reminders": what the user has to do (with a time or without, a request
-  to be reminded included) is noted as a to-do with `todo add`, a reminder
-  on it when it has a due date and never through `schedule`; information
-  is memory, not a to-do; no suggesting or tidying unasked (a tidy-up on
-  request is shown before it is noted); it is changed when the user says
+  reminders": what the user has to do (with a time or without) is noted
+  as a to-do with `todo add`, a reminder on it when it has a due date and
+  never through `schedule`; information is memory, not a to-do; no
+  suggesting or tidying unasked (a tidy-up on request is shown before it
+  is noted); it is changed when the user says
   so, found by its title when quoted from the list (「说说这件」), ticked off
   when done, and `todo list` is read before saying what is left; the
   user's only controls on the list are tick, untick and cancelling a
   reminder. The assistant's own reminders keep ticket 36's rules (a
   follow-up it promised, something waiting on the outside world), and a
-  to-do's reminder, when it comes due, only reminds.
+  to-do's reminder, when it comes due, only reminds. Ticket 44 (main chat
+  PRD ruling 92) split a request to be reminded by one question: if the
+  user ignored the reminder, would the thing still need to be on the
+  list? No (water, the stove, leaving the house) is a nudge, the
+  assistant's own one-off `schedule create`, not a to-do, so nothing is
+  left to tick once it has gone off; yes (the landlord, the report, the
+  flight) is a to-do, its reminder at the time the user named.
 - **Note what the user has to do, unasked** (ticket 36, rewritten by
   ticket 41; assistant PRD ruling 9, main chat PRD ruling 91): before the
   manual paragraph, "Note what the user has to do (a deadline, a call, a
@@ -468,7 +474,12 @@ that finishes a task and restates the result. The layer says three things:
   only reminded. Ticket 36's reminder eval was rerun on the same text
   (26 of 26): the user's own timed things now get a to-do with a reminder
   (judged as setting the one reminder), its own follow-ups and the older
-  plain reminders keep the `schedule` commands.
+  plain reminders keep the `schedule` commands. Ticket 44 reran both
+  suites on the manual's nudge rule, with the judge split (28 of 28 and
+  24 of 24, no wording changed, no entry-layer words added): 「十分钟后提醒我喝水」
+  and 「半小时后提醒我关火」 became its own `schedule create` and no to-do,
+  a deadline or a flight stayed a to-do with its reminder, and
+  「明天早上 8 点提醒我给房东回电话」 a to-do reminded at 8.
 - **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 2026, no headroom,
   `\r` not counted, measured with an empty manual path (the user's state
   root does not count, as for the IM layer). 827 for the 03d layer;
@@ -661,9 +672,14 @@ in a real managed session after any prompt change:
     reply and the to-do shows in 「待办」. 「我最近想学吉他」 and
     「昨天开会挺累的」 → nothing noted, nothing set. (Since ticket 41; ticket
     36 made a plain reminder here.)
-29. Main chat: 「十分钟后提醒我喝水」 → reads the clock, notes 「喝水」 with
-    a reminder ten minutes out and says when; ten minutes later it says so
-    in the main chat, with a notification.
+29. Main chat: 「十分钟后提醒我喝水」 → reads the clock, `schedule create
+    "…" --at=<ten minutes out> --target=assistant`, no to-do, and says
+    when; it shows under 「Galley 在办」 in 「待办」, and ten minutes later
+    it says so in the main chat, with a notification, and moves to done
+    with nothing to tick. 「明天早上 8 点提醒我给房东回电话」 → `todo add`
+    with `--remind-at=<tomorrow>T08:00`, and the to-do stays open after
+    the reminder until the user says it is done. (Since ticket 44; ticket
+    41 noted 「喝水」 as a to-do.)
 30. Main chat: 「以后每天早上给我看看新闻」 → asks first, in one question
     (the time, what to look at), and sets nothing until the user says yes;
     then a `--daily --time=… --target=assistant` task.

@@ -1,11 +1,11 @@
 {
- "_note": "定时与提醒评测用例（票 36）。history 是主对话当前段里已有的轮次；tasks 是假 CLI 里已有的定时任务（时间按运行那一刻算：next_weekday 是今天之后第一个星期几，days 是今天之后第几天，minutes_ago 是几分钟前；in_hand 为真的在提示词的「In Hand」一节里列出，即分段开始时就有；fired 表示已经到点、等着叫醒）；message 是用户这句，wake 列出这次叫醒里到点的任务，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 41：expect.via 为 either 的，挂在待办上的提醒（todo add --remind-at）也算建了那一个；不写 via 的只认 schedule create；keep_or_replace 是已有的那个留着、或删了换成一个在窗口里的。",
+ "_note": "定时与提醒评测用例（票 36）。history 是主对话当前段里已有的轮次；tasks 是假 CLI 里已有的定时任务（时间按运行那一刻算：next_weekday 是今天之后第一个星期几，days 是今天之后第几天，minutes_ago 是几分钟前；in_hand 为真的在提示词的「In Hand」一节里列出，即分段开始时就有；fired 表示已经到点、等着叫醒）；message 是用户这句，wake 列出这次叫醒里到点的任务，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 41：expect.via 为 either 的，挂在待办上的提醒（todo add --remind-at）也算建了那一个；不写 via 的只认 schedule create；票 44 起两边分开：via 为 todo 的（要办完的事：交报告、航班）只认挂在待办上的提醒，建成它自己的提醒算错；只要提醒一下、没有要办完的事（喝水、关火）不写 via，只认 schedule create，记成待办算错；keep_or_replace 是已有的那个留着、或删了换成一个在窗口里的。",
  "cases": [
   {
    "id": "report-wed",
    "no": 1,
-   "group": "该建",
-   "expect_text": "提到带时间的事（没说「提醒我」）→ 自己建一个叫醒自己的提醒，时间在周三下午之前；票 41 起挂在待办上（todo add --remind-at）或 schedule create --target=assistant 都算；回复一句话说出时间",
+   "group": "该记待办",
+   "expect_text": "提到带时间的事（没说「提醒我」）→ 记成待办并挂提醒，提醒在周三下午之前；票 44 起只认 todo add --remind-at，建成它自己的提醒（schedule create）算错；回复一句话说出时间",
    "history": [],
    "tasks": [],
    "message": "周三下午要交报告",
@@ -25,14 +25,14 @@
     ],
     "mentions_time": true,
     "max_chars": 150,
-    "via": "either"
+    "via": "todo"
    }
   },
   {
    "id": "flight-fri",
    "no": 2,
-   "group": "该建",
-   "expect_text": "订了航班（没说「提醒我」）→ 自己建提醒，时间在航班之前（挂在待办上或独立的都算）；回复说出时间",
+   "group": "该记待办",
+   "expect_text": "订了航班（没说「提醒我」）→ 记成待办并挂提醒，提醒在航班之前；票 44 起只认挂在待办上的提醒；回复说出时间",
    "history": [],
    "tasks": [],
    "message": "我订了周五早上 7 点的航班",
@@ -56,13 +56,13 @@
     ],
     "mentions_time": true,
     "max_chars": 150,
-    "via": "either"
+    "via": "todo"
    }
   },
   {
    "id": "logistics-mon",
    "no": 3,
-   "group": "该建",
+   "group": "它自己的提醒",
    "expect_text": "要等外部结果的后续 → 建周一它自己的提醒（schedule create，不是待办），记下的话里带上单号（写给到点的自己）；回复说出时间",
    "history": [
     {
@@ -98,8 +98,8 @@
   {
    "id": "water-10min",
    "no": 4,
-   "group": "该建",
-   "expect_text": "「十分钟后提醒我喝水」→ 先看现在几点，建十分钟后的提醒（挂在待办上或独立的都算）；回复说出时间",
+   "group": "只要提醒",
+   "expect_text": "「十分钟后提醒我喝水」→ 先看现在几点，建十分钟后它自己的一次性提醒（schedule create --target=assistant）；票 44 起记成待办算错；回复说出时间",
    "history": [],
    "tasks": [],
    "message": "十分钟后提醒我喝水",
@@ -117,13 +117,37 @@
      "水"
     ],
     "mentions_time": true,
-    "max_chars": 120,
-    "via": "either"
+    "max_chars": 120
+   }
+  },
+  {
+   "id": "stove-30min",
+   "no": 5,
+   "group": "只要提醒",
+   "expect_text": "「半小时后提醒我关火」（票 44）→ 先看现在几点，建半小时后它自己的一次性提醒（schedule create --target=assistant），不记待办；回复说出时间",
+   "history": [],
+   "tasks": [],
+   "message": "半小时后提醒我关火",
+   "expect": {
+    "create": "one",
+    "window": {
+     "from": {
+      "started_plus_minutes": 27
+     },
+     "to": {
+      "started_plus_minutes": 35
+     }
+    },
+    "words_any": [
+     "火"
+    ],
+    "mentions_time": true,
+    "max_chars": 120
    }
   },
   {
    "id": "guitar",
-   "no": 5,
+   "no": 6,
    "group": "不该建",
    "expect_text": "没有时间点的事 → 不建，不动任何东西，正常聊",
    "history": [],
@@ -136,7 +160,7 @@
   },
   {
    "id": "tired-meeting",
-   "no": 6,
+   "no": 7,
    "group": "不该建",
    "expect_text": "说过去的事 → 不建，不动任何东西，短回复",
    "history": [],
@@ -150,7 +174,7 @@
   },
   {
    "id": "daily-news",
-   "no": 7,
+   "no": 8,
    "group": "该先问",
    "expect_text": "重复且每次都要干活（花钱）→ 先在对话里问一句（时间、看什么），不建",
    "history": [],
@@ -164,7 +188,7 @@
   },
   {
    "id": "already-set",
-   "no": 8,
+   "no": 9,
    "group": "已有同一件",
    "expect_text": "「在办的事」里已有同一件（票 41 之前建的独立提醒）→ 不再建第二个提醒；留着它，或换成挂在待办上的一个（删旧建新、时间仍在周三下午 3 点前）；可以只记一件不带提醒的待办；回复说已经记着、几点提醒",
    "history": [],
@@ -206,7 +230,7 @@
   },
   {
    "id": "no-need",
-   "no": 9,
+   "no": 10,
    "group": "不用了",
    "expect_text": "你说不用了 → schedule delete 那一个（先 schedule list 找 id），不建新的；回复一句确认",
    "history": [
@@ -242,7 +266,7 @@
   },
   {
    "id": "move-time",
-   "no": 10,
+   "no": 11,
    "group": "改时间",
    "expect_text": "「改到 9 点」→ schedule update 那一个到明天 9:00（或删了重建），不留两个；回复说出新时间",
    "history": [
@@ -288,7 +312,7 @@
   },
   {
    "id": "wake-on-time",
-   "no": 11,
+   "no": 12,
    "group": "叫醒",
    "expect_text": "按时叫醒 → 照记下的话一两句提醒（带身份证、几点出门），不说晚了，不出 <no-reply/>",
    "history": [],
@@ -325,7 +349,7 @@
   },
   {
    "id": "wake-late",
-   "no": 12,
+   "no": 13,
    "group": "叫醒",
    "expect_text": "晚了 9 小时（电脑睡着）→ 照实说晚了多久，再说事情（给王经理回电话）",
    "history": [],
@@ -366,7 +390,7 @@
   },
   {
    "id": "wake-obsolete",
-   "no": 13,
+   "no": 14,
    "group": "叫醒",
    "expect_text": "事情已经办了（前面用户说过快递拿了）→ 回复只有 <no-reply/>，不动任何东西",
    "history": [

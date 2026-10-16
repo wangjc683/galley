@@ -13,7 +13,7 @@ Before each tool call, reason: current phase, whether the last result met expect
 - Failure escalation: 1st fail → read error and understand cause; 2nd → probe environment state; 3rd → deep analysis then switch approach or ask user. Never repeat an action without new information.
 Today: 2026-10-17 Sat
 
-cwd = $TMPDIR/entry-layer-eval-aj6s2x56/wake-late.r1/sandbox/managed-ga-state/temp (./)
+cwd = $TMPDIR/entry-layer-eval-mmvtko6y/wake-late.r1/sandbox/managed-ga-state/temp (./)
 
 [Memory] (../memory)
 Facts(L2): ../memory/global_mem.txt | CodeRoot: ../ | SOPs(L3): ../memory/*.md or *.py | META-SOP(L0): ../memory/memory_management_sop.md
@@ -245,7 +245,7 @@ and read `todo list` before saying what is left: see "To-dos and
 reminders" in your manual.
 
 Before your first Galley CLI write (a session, project, model, schedule or
-to-do command), read your manual at `$TMPDIR/entry-layer-eval-aj6s2x56/wake-late.r1/sandbox/managed-ga-state/assistant/reference/galley-assistant-manual.md`.
+to-do command), read your manual at `$TMPDIR/entry-layer-eval-mmvtko6y/wake-late.r1/sandbox/managed-ga-state/assistant/reference/galley-assistant-manual.md`.
 [Peer] 用户提及其他会话/后台任务状态时: temp/model_responses/ (只找近期修改的文件尾部)
 
 
@@ -257,7 +257,7 @@ The reply body should first include a minimal one-line (<30 words) physical snap
 ======== user ========
 [Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.
 
-Reminder `sched_7b3d9e0f1a2c6548` (one-off) came due. Planned for 2026-10-16 16:41 (Fri), local time; it went off at 2026-10-17 01:41 (Sat), 9 hours late (the computer was asleep or Galley was closed). What you noted when you set it:
+Reminder `sched_7b3d9e0f1a2c6548` (one-off) came due. Planned for 2026-10-16 20:50 (Fri), local time; it went off at 2026-10-17 05:50 (Sat), 9 hours late (the computer was asleep or Galley was closed). What you noted when you set it:
 <<<
 提醒用户给王经理回电话，确认下周合同签约的时间。
 >>>

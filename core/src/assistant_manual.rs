@@ -204,8 +204,10 @@ mod tests {
             assert!(body.contains(heading), "manual lost: {heading}");
         }
         for rule in [
-            // When: unasked, promises, waiting on the outside world.
-            "Set one without being asked when:",
+            // When: a nudge the user asks for (ticket 44); unasked,
+            // promises, waiting on the outside world.
+            "Set one when the user asks for a nudge with nothing to finish (see",
+            "\"Noting a to-do\"), and without being asked when:",
             "- You promise a follow-up",
             "- Something waits on the outside world (a delivery, a review, a reply),",
             "later (「下周一帮我看下物流」): set a time to check again.",
@@ -254,7 +256,9 @@ mod tests {
     /// says so, found by its title when quoted from the list; ticked off
     /// when done; `todo list` before saying what is left; no suggesting or
     /// tidying unasked; the list's own few controls; a to-do's reminder
-    /// only reminds. Single-line fragments only (CRLF on Windows).
+    /// only reminds. Ticket 44 moved the request for a nudge out (see
+    /// [`manual_tells_a_nudge_from_a_to_do`]). Single-line fragments only
+    /// (CRLF on Windows).
     #[test]
     fn manual_covers_the_users_to_dos() {
         let body = manual_body();
@@ -274,15 +278,16 @@ mod tests {
             "Neither holds information: an address, a flight number or a preference",
             "belongs in your memory. Do not suggest to-dos or tidy the list on your",
             "history if you need to), show them the list first, and note them once",
-            // When: unasked, with a time or without; a reminder request.
+            // When: unasked, with a time or without.
             "Note one without being asked when the user mentions something they have",
-            "to be reminded (「十分钟后提醒我喝水」) is one too, with its reminder.",
             // When not, and list first.
             "Not for a wish with nothing to do yet (「我最近想学吉他」), a remark about",
             "something already there: run `todo list` before you add; when it is",
             // Due, reminder, notes; never `schedule` for a to-do's reminder.
-            "- When it has a due date, hang one reminder on it with `--remind-at`,",
-            "a deadline, half an hour before a call. Without a due date, no reminder.",
+            "- When it has a due date, hang one reminder on it with `--remind-at`: at",
+            "the time they named, or else ahead by what it is: the evening before an",
+            "early flight, the day before a deadline, half an hour before a call.",
+            "Without a due date, no reminder.",
             "- `--notes`: what you will need when the reminder comes (names, places,",
             "- A to-do's reminder is set, moved and removed only with `todo add` and",
             "commands: a reminder made with `schedule create` is not on the to-do.",
@@ -305,5 +310,44 @@ mod tests {
             assert!(body.contains(rule), "manual lost: {rule}");
         }
         assert!(!body.contains("## Reminders and scheduled tasks"));
+    }
+
+    /// Ticket 44 (main chat PRD ruling 92): a request to be reminded is
+    /// told apart by one question — ignored, would it still need to be on
+    /// the list? No (water, the stove) is a nudge: the model's own one-off
+    /// reminder, not a to-do. Yes (the landlord, the report, the flight) is
+    /// a to-do, its reminder at the time named. Ticket 41's line making
+    /// every request to be reminded a to-do is gone. Single-line fragments
+    /// only (CRLF on Windows).
+    #[test]
+    fn manual_tells_a_nudge_from_a_to_do() {
+        let body = manual_body();
+        for rule in [
+            // Your own reminders take a nudge.
+            "such as checking on a delivery, or to nudge the user when there is",
+            "nothing for them to finish (「十分钟后提醒我喝水」). These are scheduled",
+            "a time, and you set your own reminders for what you promised and for a",
+            // The question.
+            "When the user asks to be reminded, ask yourself: if they ignored the",
+            "reminder, would the thing still need to be on their list?",
+            // No: a nudge, its own one-off reminder.
+            "- No (drink water, turn off the stove, leave the house, get up and",
+            "stretch): it is a nudge, not a to-do. Set your own one-off reminder",
+            "(「半小时后提醒我关火」, see \"Your own reminders\"); once it has gone off",
+            "there is nothing left to tick.",
+            // Yes: a to-do, reminded at the time named.
+            "- Yes (call the landlord back, hand in the report, catch the flight): it",
+            "is a to-do with its reminder at the time they named",
+            "(「明天早上 8 点提醒我给房东回电话」: the call, due that day, reminded at",
+        ] {
+            assert!(body.contains(rule), "manual lost: {rule}");
+        }
+        assert!(!body.contains("is one too, with its reminder"));
+        // The question comes after the to-do's "when" and "not for", the
+        // nudge's examples sit on the reminders' side.
+        let note = body.find("### Noting a to-do").unwrap();
+        let question = body.find("When the user asks to be reminded").unwrap();
+        let own = body.find("### Your own reminders").unwrap();
+        assert!(note < question && question < own);
     }
 }
