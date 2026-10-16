@@ -509,6 +509,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const textarea = (
       <textarea
         ref={textareaRef}
+        // Found by ⌥↑ / ⌥↓, which jump from an empty composer
+        // (lib/composer-focus.ts `altArrowBelongsToField`).
+        data-composer-input=""
         rows={oneLine ? 1 : 2}
         disabled={disabled}
         value={text}

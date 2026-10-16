@@ -441,9 +441,13 @@ function MainViewContent({
           scrollContainerRef takes the flex extent via `absolute
           inset-0` — same scroll behavior as before; the wrapper just
           gives the rail a fixed-height parent to position against. */}
-      <div className="relative min-h-0 flex-1">
+      {/* The conversation area: with the composer focused, pressing a
+          button in it (or the scroller's blank backdrop) keeps the
+          caret in the composer (useComposerFocus, ticket 03). */}
+      <div data-conversation-area="" className="relative min-h-0 flex-1">
         <div
           ref={scrollContainerRef}
+          data-conversation-backdrop=""
           className={cn(
             "scrollbar-stable absolute inset-0 overflow-y-auto px-8 py-6",
             // The assistant's 贴底: a short conversation stacks up from

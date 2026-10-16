@@ -42,3 +42,50 @@ Status: ready-for-agent
 - 真机（JC）：点回复下面的复制后直接打字进输入框；点对话空白处后打字进输入框；输入框为空时 ⌥↑ 能跳；中文输入法按上面的测法。
 
 ## Comments
+
+### 2026-10-16 实现（子代理，分支 `td-composer`）
+
+**做了什么**
+
+- 规则都放进 `gui/src/lib/composer-focus.ts`（「输入框什么时候拿焦点」本来就只在这一处定），接线在 `hooks/useComposerFocus.ts` 新的第 4 条（每个 Composer 挂一份，空状态与 `MainView` 互斥，同一时刻只有一套监听）：
+  - `typeToFocusAction`：document 上 capture 阶段的 keydown，焦点不在收字的地方、没有打开的层、按键是一个可打印字符且没有 ⌘ / Ctrl / Alt，就 `textarea.focus({ preventScroll: true })`，不 `preventDefault`。
+  - `pressKeepsComposerFocus`：document 上 capture 阶段的 mousedown，输入框有焦点时，按在对话区的按钮或滚动容器本身上就 `preventDefault`。
+  - `altArrowBelongsToField`：`useStickyScroll` 里 ⌥↑ / ⌥↓ 原来的「可编辑元素就让」换成它：空的输入框不让。只改了那个判断（加一行 import、换掉 6 行），票 04 改的平滑滚动那一行没碰。
+- 标记：Composer 的 textarea 加 `data-composer-input`；`MainView` 里对话区外层加 `data-conversation-area`（含滚动容器、问题轨、回到底部），滚动容器加 `data-conversation-backdrop`。选中工具条是 portal 出去的，按它已有的 `data-selection-copy-toolbar` 认。
+- `useComposerFocus` 第 3 条（为 WebView 吞点击做的「外面按下先失焦、80ms 没等到 click 就补发」）对上面这些不失焦的按下直接跳过：焦点不动就没有要绕的坑。
+- 文档：`docs/design/conversation.md` §4.4 加「焦点留在输入框」一条（打字即聚焦、点按钮与空白、⌥↑ / ⌥↓）；`docs/design/overlays-and-settings.md` 快捷键表 ⌥↑ / ⌥↓ 那一行改成「空着照样跳，有字让给输入框」。设置里「快捷键」的文案（「跳到上 / 下一条提问」）没写焦点条件，不用改。
+
+**取舍（票里「你定」的）**
+
+- **空格不算**：不会有消息以空格开头；在对话上空格是读者的往下翻一页（滚动容器是最后点过的可滚动区时），抢走它等于拿掉一个阅读键。Telegram 不分空格，我们的门更窄，代价是「先按空格再打字」不会进输入框，没人这样起句。
+- **开关做成三档** `TYPE_TO_FOCUS_MODE: "pass" | "swallow" | "off"`（`lib/composer-focus.ts` 一行）：`pass` 现行；`swallow` 就是退路 a（只聚焦、吞掉第一键）；`off` 就是退路 b（只留第 2、3 条）。JC 选哪条退路都只改这一个值，测试三档都覆盖。
+- **弹层判断**：仓库里没有现成的「有没有打开的弹层」，按打开态的 DOM 做：页面上有 `role="dialog"` / `alertdialog` / `menu` 或 `aria-modal="true"` 就不抢。Radix 的 Dialog（设置、⌘K 的 cmdk、提示词管理、归档、图片预览、文件工作区的窄屏弹窗）、Popover（模型 / 强度弹层，`role="dialog"`）、DropdownMenu / ContextMenu（`role="menu"`）关着时都不挂在 DOM 上；手写的确认框是 `role="alertdialog"`。Tooltip（`role="tooltip"`）不算。另外焦点在 `listbox` / `menu` / `tree` / `grid` / `combobox` / `textbox` 里也不抢（这类控件自己读字，例如改动面板的文件列表 `GitFileList` 是常驻的 `listbox`，所以它只按焦点算、不算弹层）。
+- **按钮不失焦用一条规则，不逐个加 `onMouseDown`**：对话区里的 `<button>` 一律算（新加的按钮自动跟上），排除 `aria-haspopup`（打开菜单 / 对话框的，交给那一层拿焦点）；`role="button"` 的行（折叠头、过程卡片与步骤标记的行）也算，但按在可选中的文字上不算（看计算样式 `user-select`，步骤摘要是 `select-text`，要能拖选）。逐个列一遍现在落在规则里的：回复行动条的复制 / 保存 / 过程（`ActionChip`）、工作台你的消息的悬停复制与「展开 / 收起」（`MessageUser`）、选中工具条的复制 / 引用、折叠头（`RunFoldHeader`，`role="button"` 且 `tabIndex=0`，原来点了会把焦点拿走）、过程卡片的步骤行（`ProcessCard`）与步骤标记行（`Conversation`）的非文字部分、代码块的按钮（`CodeBlock`）、工具行的打开按钮（`ToolCallout`）、文件引用（`LocalFileReference`，右键菜单不受影响）、文档 / 回复里的图片按钮（打开预览对话框，对话框自己拿焦点，关掉后 Radix 把焦点还给输入框）、提问候选（`AskUserBubble` 的 `Button`，⌘ 点击填入照旧，右键菜单照旧）、子任务卡片的按钮（`SubtaskCards`）、问题轨的点（`UserQuestionRail`）、回到底部。不在规则里：正文链接 `<a href>`、侧栏与顶栏、输入框自己的按钮（本来就在输入框根节点里，不经这条）。
+- **票里「现状：两样都没有」的补充**：`ActionChip`、`CodeBlock`、`MessageUser`、`UserQuestionRail`、ui `Button` 早就在 mousedown 上 `preventMouseFocus`，但 `useComposerFocus` 第 3 条在更早的 pointerdown 上先把输入框失焦了，所以效果上确实是「没有」。这次的改动主要是让第 3 条对这些按下让路，再补上没有 `preventMouseFocus` 的（回到底部、折叠头、步骤行、文件引用、工具行按钮……）。
+- **空白处只认滚动容器本身**（照票）：栏外两侧的留白、主对话短对话上方的空白都是容器本身；两条消息之间的空隙落在栏里的元素上，不算，照旧失焦（之后打字仍会被打字即聚焦接住）。
+
+**量到的（Chrome，临时 harness：真 `MarkdownView` + `ActionChip` + 仿折叠头与步骤行 + 一行式 `Composer` + 选中工具条；harness 没进提交）**
+
+- 输入框有焦点时：点复制 chip、点折叠头、点步骤行的序号、点滚动容器左侧留白，四次之后焦点都还在输入框，每个按钮的 onClick 各触发一次。
+- 在步骤行的可选中摘要上拖选：选中了「步骤摘要可以选中」，焦点离开输入框（对的）。
+- 接着打 `ab`：焦点回到输入框，值是 `ab`（Chromium 下这一键确实落进去了）。
+- 点正文后按空格：不抢（焦点仍在 body）；按 Shift+C：进输入框成 `abC`；⌘A：照旧全选页面，不抢；开着一个 `role="dialog"` 时打 `x`：不抢。
+- 滚轮滚动：焦点不动。经典滚动条（模拟 Windows：`data-platform="windows"`，10px 宽）下，输入框有焦点时拖滚动条照样滚（`scrollTop` 0 → 311），焦点不动；macOS 的浮动滚动条在无头 Chrome 里宽 0、拖不到，只能真机看。
+
+**测试**
+
+- `lib/composer-focus.test.ts` 新增 14 条（原 5 条不动）：打字即聚焦的条件（可打印、Shift 可以、⌘ / Ctrl / Alt 不行、空格与非可打印键、输入框 / 可编辑 / listbox / 打开的层、输入法 `isComposing` 与 229、已被处理的键、三档开关）；弹层选择器（含 dialog / alertdialog / menu、不含 tooltip）；按下不失焦（容器本身算、里面的元素不算、对话区与工具条里的按钮算、侧栏按钮不算、`aria-haspopup` 不算、`role="button"` 行在文字上不算、真按钮在可选中正文里也算）；⌥↑ / ⌥↓（空输入框接管、有字不接管、换行也算有字、别的输入框不接管）。
+- `pnpm --dir gui typecheck`、`lint`、`git diff --check` 通过；三张票做完后全量 gui 测试两遍：本机时区 140 个文件 1424 条、`TZ=UTC` 140 个文件 1424 条，全过。
+
+**JC 真机验收**
+
+1. 输入框有焦点时点回复下面的复制 → 直接打字进输入框；点对话两侧空白 → 直接打字进输入框；点折叠头展开 / 收起 → 直接打字进输入框。每个按钮点一次只动作一次。
+2. 选中一段回复（输入框失焦）→ 直接打英文 `ok` → 进输入框。
+3. 输入框为空时 ⌥↑ / ⌥↓ 在你的消息之间跳；输入框有字时 ⌥↑ 是移光标、不跳。
+4. **中文输入法**（定去留）：拼音输入法开着，选中对话里一段文字让输入框失焦 → 直接打 `nihao` → 看输入框里是「你好」，还是「n」+「ihao」的组字。测不过就选退路：a 改 `TYPE_TO_FOCUS_MODE = "swallow"`（第一键吞掉、只聚焦，快打时第一个音节会错），b 改 `"off"`（去掉打字即聚焦，只留按钮与空白不失焦和 ⌥↑ / ⌥↓）。
+5. 开着设置、⌘K、模型弹层、提示词管理时打字，字不会跑进输入框。
+6. 输入框有焦点时，从对话左侧留白按下往右拖进正文想整行选中：**这一下选不中**（容器本身的按下被拦了，Telegram 同样如此），要从文字上开始拖；觉得别扭就告诉主会话，可改成「按下不拦、松手时没选中字再把焦点还给输入框」（代价是按下那一刻输入框的焦点环会闪一下）。
+7. macOS 浮动滚动条：输入框有焦点时拖对话的滚动条能拖动。
+8. Windows 冒烟（有空时）：点了侧栏按钮（Windows 下按钮会拿焦点）之后直接打字也进输入框。
+
+**顺手发现（没改）**：`useComposerFocus` 第 3 条的补发 click 在「按住超过 80ms 再松开」时会和原生 click 各触发一次（80ms 时补发一次，松手时原生一次）。harness 里在可选中文字上慢拖步骤行就触发了两次切换（真实的步骤行有「拖选不切换」的保护，所以不显形）。对话区的按钮这次都不再走第 3 条，侧栏、顶栏的按钮还在走；没见过报告，先记一笔。
