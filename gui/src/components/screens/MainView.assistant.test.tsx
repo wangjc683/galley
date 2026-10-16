@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AssistantLiveLine } from "@/components/conversation/AssistantParts";
 import { zhCopy } from "@/i18n/locales/zh";
 import { dropComposerDraft, saveComposerDraft } from "@/lib/composer-draft";
+import { ASSISTANT_BUBBLE_TEXT_CLASS } from "@/lib/conversation-font-size";
 import { LocalFilesContext } from "@/lib/local-files";
 import type { PerSessionMessages } from "@/stores/messages";
 import { useQueueStore } from "@/stores/queue";
@@ -188,6 +189,36 @@ describe("the main chat is the assistant's conversation", () => {
     const other = render({ isMainChat: false, turns: [GREETING] });
     expect(other).not.toContain("flex flex-col");
     expect(other).not.toContain("mt-auto w-full");
+  });
+
+  it("sets the text in its bubbles a step tighter, at the tier; the workbench as before (telegram-details ruling 8)", () => {
+    const COLUMN_CLASS = ASSISTANT_BUBBLE_TEXT_CLASS.replace(/&/g, "&amp;");
+    const main = render({ isMainChat: true });
+    expect(main).toContain(COLUMN_CLASS);
+    expect(main).toContain(
+      'style="--conversation-bubble-leading:1.55;--conversation-bubble-block-gap:10.5px"',
+    );
+    // ⌘= / ⌘−: the column follows the tier.
+    expect(
+      render({ isMainChat: true, conversationFontSize: "large" }),
+    ).toContain(
+      'style="--conversation-bubble-leading:1.6;--conversation-bubble-block-gap:12.5px"',
+    );
+    expect(
+      render({ isMainChat: true, conversationFontSize: "small" }),
+    ).toContain(
+      'style="--conversation-bubble-leading:1.5;--conversation-bubble-block-gap:9.5px"',
+    );
+    // The workbench's column carries nothing of it.
+    for (const conversationFontSize of [
+      "small",
+      "standard",
+      "large",
+    ] as const) {
+      const other = render({ isMainChat: false, conversationFontSize });
+      expect(other).not.toContain("--conversation-bubble-");
+      expect(other).not.toContain("data-role=assistant-bubble]]");
+    }
   });
 
   it("asks as a plain left bubble with the candidates under it", () => {
@@ -510,6 +541,41 @@ describe("the composer trial is gone", () => {
       "trial?.",
       "ticket 24",
       "票 24",
+    ];
+    const hits = sources(SRC)
+      .filter((file) => file !== self && !file.includes("zz-harness"))
+      .flatMap((file) => {
+        const text = readFileSync(file, "utf8");
+        return leftovers
+          .filter((needle) => text.includes(needle))
+          .map((needle) => `${path.relative(SRC, file)}: ${needle}`);
+      });
+    expect(hits).toEqual([]);
+  });
+});
+
+describe("the bubble text switcher is gone (telegram-details 10)", () => {
+  const SRC = path.resolve(__dirname, "../..");
+  function sources(dir: string): string[] {
+    return readdirSync(dir).flatMap((name) => {
+      const full = path.join(dir, name);
+      if (statSync(full).isDirectory()) return sources(full);
+      return /\.(ts|tsx|css)$/.test(name) ? [full] : [];
+    });
+  }
+
+  it("leaves no pill, store, storage key or marker behind", () => {
+    const self = path.resolve(__filename);
+    // Spelled in pieces, so a grep of the tree for them finds none (the
+    // ticket's check), this file included.
+    const leftovers = [
+      ["td", "density"].join("-"),
+      ["td", "Density"].join(""),
+      ["Td", "Density"].join(""),
+      ["bubble", "Density"].join(""),
+      ["BUBBLE", "DENSITY"].join("_"),
+      ["--bubble", "body-"].join("-"),
+      ["TEMP variant", "switcher (telegram-details 10)"].join(" "),
     ];
     const hits = sources(SRC)
       .filter((file) => file !== self && !file.includes("zz-harness"))
