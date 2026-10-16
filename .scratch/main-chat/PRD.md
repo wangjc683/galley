@@ -455,7 +455,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [34](./issues/34-cli-schedule-commands.md) | — | CLI：`galley schedule` 命令族 | 33 | merged（裁决 84，合并提交 `16d7f2e1`） |
 | [35](./issues/35-cli-more-hands.md) | — | CLI：补齐授权前两级的手（改名、置顶、删除、项目、默认模型） | —（与 34 同改分发表） | merged（裁决 84，合并提交 `20cf949c`） |
 | [36](./issues/36-manual-and-in-flight.md) | — | 助理手册、入口层、「在办的事」、真模型评测 | 34、35、37 | ready-for-agent（裁决 84） |
-| [37](./issues/37-reminder-card-and-schedule-list.md) | — | 界面：提醒卡片、「待办」（书眉入口与列表）、送不出去的通知 | 33 | ready-for-agent（裁决 84、86） |
+| [37](./issues/37-reminder-card-and-schedule-list.md) | — | 界面：提醒卡片、「待办」（书眉入口与列表）、送不出去的通知 | 33 | merged（裁决 84、86） |
 | [38](./issues/38-message-menu-and-undo.md) | — | 消息菜单（右键与回复的「⋯」）、删除改为撤销提示条 | 32 | merged（裁决 85，合并提交 `ab4b0783`），待 JC 真机验收 |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
