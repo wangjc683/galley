@@ -558,8 +558,9 @@ onboarding hero）。这是 serif register 的签名，sans / mono 不加。
   不加厚阴影，避免页面里所有东西都漂起来。
 - disabled 控件必须静止，不保留 hover lift。
 
-长任务反馈同样克制：普通等待不立刻读秒，3 秒后才在原状态行补充
-elapsed 计数；60 秒后再补充 `仍在运行` / `Still running`。不要 toast，不要
+长任务反馈同样克制：读秒就在原状态行里（工作台每步从 0.0 起跳、一分钟内
+带十分位；助手的那一行过 3 秒才接上用时；见 conversation「Thinking
+Placeholder」），不加「仍在运行」之类的安抚文案。不要 toast，不要
 banner，不要额外提示“可停止 / 可切后台继续”。
 
 例外：Composer submit / stop、window controls、复杂 row trigger、Radix menu item 这类强语义控件可以保留局部实现，但颜色、字号、按下节奏仍应对齐 token。
@@ -608,6 +609,13 @@ Galley 的动效按“是不是用户触发”分两类，取向相反：
 循环动效；每一处保留的 B 类动效都要能用一句话说清它传达的状态（“motion conveys
 state, not decoration”）。`prefers-reduced-motion` 下 A/B 动效一律退化为静止或瞬时。
 
+减少动态的底线是**只淡不移**（2026-10-16，[向 Telegram 学的对话细节](../../.scratch/telegram-details/PRD.md)
+裁决 5；Telegram Web K `src/scss/mixins/_animationLevel.scss` 的分档：开了减少动态，只剩
+淡入淡出、颜色与原地缩放，屏幕上没有东西在移动）：位移、展开扫动、程序发起的平滑滚动
+一律瞬时；淡入淡出、颜色变化、原地缩放可以留（不强求，已经退成静止的不必改回）。系统
+设置要实时读，不缓存到启动时：对话的平滑滚动（`lib/animate-scroll.ts`）每次调用读
+`matchMedia`，CSS 侧本来就是实时的 `@media`。
+
 **唯一豁免（2026-08-12）：in-flight 状态文字的 shimmer。** thinking 行的工作
 指示由三点改为状态文字上的扫光（`thinking-shimmer`），真机 A/B 裁决（见
 devlog [thinking 计时器与 shimmer 裁决](../devlog/2026-08-12-thinking-timer-and-shimmer-verdict.md)）。
@@ -654,6 +662,10 @@ namespace）、`ease-firm`（`--ease-*` 有 namespace，直接成为 utility）�
 核心原则：**hover 驱动的变化没有时长**——hover 瞬时翻转（§2.5），token 只
 服务状态驱动的动效（展开 / 显隐 / 位移 / 按压）。B 类循环的周期（呼吸 2.4s
 之类）不属于这个刻度，按语义单独取值。
+
+程序发起的平滑滚动也不在这个刻度里（2026-10-16）：时长随距离变（300ms + 距离 ÷
+800px × 300ms，最长 600ms，超过 800px 先瞬移），曲线也按距离分两档，数值集中在
+`lib/animate-scroll.ts`，见 [conversation](./conversation.md)「Scroll behaviour」的「平滑滚动」。
 
 内容形状的加载面用 `Skeleton`（ui/skeleton.tsx）：轻呼吸占位、非 shimmer
 （shimmer 是被禁的 B 类噪动），`prefers-reduced-motion` 下静止。只用于真实

@@ -477,9 +477,18 @@ Conversation 主区是 `overflow-y-auto` 的列。用户提交新消息时**不*
 - store 加 `userSubmitTick` 计数器，`appendUserTurn` 时 +1
 - MainView `useEffect` 监听 `userSubmitTick` 变化（不监听 `turns.length`——避免 `turn_end` 也触发滚）
 - RAF 推迟到 `<MessageUser data-role="user-msg">` 真实 mount 后
-- 找最后一个 `[data-role="user-msg"]`，算 offset (`top - container.top - 32`)，`container.scrollBy({ top: delta, behavior: "smooth" })`
+- 找最后一个 `[data-role="user-msg"]`，算它离停靠位置差多少（`userMsgParkOffset`，见下「停一条你的消息」），交给 `animateScroll(container, scrollTop + delta)`（见下「平滑滚动」）
 - 不用 `scrollIntoView({block: "start"})`：它没法控 padding
 - **停一条你的消息**（2026-10-16，工作台对话票 01）：一条规则，提交贴顶、⌥↑ / ⌥↓、问题轨的点击与高亮的点、⌘K / ⌘F 定位到你的消息都走它，两种对话都是：它正上方挨着一条时间条时，时间条上缘停在视口顶下 16px，气泡在它下面 30.5px（时间 10.5px、间距 20px），落在 46.5px；没有时间条，气泡上缘照旧停在 32px。规则在 `lib/conversation-anchor.ts` 的 `userMsgParkOffset`，哪个节点是锚不变（气泡的 `data-role="user-msg"`），时间条靠「气泡所在那一行的前一个兄弟」认出来。起因：时间改成两条消息之间居中的一行后，照旧把气泡停在 32px，时间条只剩视口顶下 1.5px，半露不露；原来时间行在气泡上方 4px，停在 17.5px，16px 是挨着它的 4px 一档。⌥↑ / ⌥↓ 判断「上一条 / 下一条」和问题轨判断当前的点都按同一个落点算，停在这里的消息算「已停住」，不会卡住或认错。实测（主区 1220 宽）：有时间条的消息从「时间条 1.5px、气泡 32px」变成「时间条 16px、气泡 46.5px」（滚动位置取整，个别差 0.5px），没有时间条的照旧 32px；助手的对话里 ⌥↑ / ⌥↓ 与定位同样变（助手没有提交贴顶和问题轨）。
+- **平滑滚动**（2026-10-16，[向 Telegram 学的对话细节](../../.scratch/telegram-details/PRD.md) 裁决 5，票 04）：对话里程序发起的平滑滚动只走一个函数，`lib/animate-scroll.ts` 的 `animateScroll`，不再用引擎的 `behavior: "smooth"`（时长与曲线由引擎定，也不认「减少动态效果」）。走它的四处：提交贴顶、⌥↑ / ⌥↓、问题轨的点击、「回到底部」（下面「Sticky-bottom」一节）。数值学 Telegram Web A（`src/util/animateScroll.ts` 与 `config.ts`，只学思路与数值，代码自写）：
+  - **远跳先瞬移**：目标超过 800px 时，先瞬移到离目标 800px 处，只动画最后 800px。远处的一条消息是一次跳转，不是一路刷过去的几十条消息。
+  - **时长**：300ms + 动画距离 ÷ 800px × 300ms，最长 600ms（100px 约 338ms，300px 约 413ms）。
+  - **曲线**：ease-out。300px 以内 `1 − (1 − t)^3.5`；更远用更陡的 `1 − (1 − t)^6`，前段走完大半、收尾放慢。
+  - **减少动态效果**：系统开着时直接写 `scrollTop`，没有动画。每次调用实时读 `matchMedia`，不缓存，改了设置立即生效（[foundations](./foundations.md) §2.7「只淡不移」）。
+  - **谁说了算**：用户中途滚轮、触控板、触摸、按住滚动条、按滚动键（方向键、Page Up / Down、Home / End、空格；在输入框里打字不算）立刻放手，不和人抢。两帧之间 `scrollTop` 被别的代码挪了（跟随贴底、切换会话、往上加载一页的保位）也放手：那是别人的决定，同原生平滑滚动被一次 `scrollTop` 写入打断一样。同一容器上新的请求接替旧的。
+  - **中途改目标**：`retarget` 从当前位置按同一套规则重新起步，「回到底部」追移动靶用它。
+  - **⌥↑ / ⌥↓ 连按**：动画途中再按，从这次跳转的目的地（`scrollDestination`）算上一条 / 下一条，每按一下多走一条，不会重瞄同一条。
+  - **不走它的**：⌘K / ⌘F 定位照旧硬写 `scrollTop`（新挂载的会话要靠一次真实的 `scrollTop` 变化触发 WKWebView 重绘，落定后 500ms 内还要按停靠位置重停，见 [overlays-and-settings](./overlays-and-settings.md)「关键交互」的「对话内容命中 → 定位到那条消息」与 `useStickyScroll` 里的注释）；切换会话落到底、跟随贴底、视口变矮保持贴底、往上加载保位、助手发出后到底，本来就是瞬时写。对话区以外的列表内滚（侧栏、设置页、提示词管理、文件预览里的标题跳转、diff 的 hunk 跳转）不在这条规则里。
 
 边界：
 
@@ -538,12 +547,12 @@ Bridge 订阅 GA 的 `display_queue`（`agentmain.put_task` 返回），把每�
 - **视口自己变矮或变高**（2026-10-15，票 27）：输入框长高、附件条或队列条出现、窗口变矮时内容没变，下面两条都不触发；滚动容器自身的 ResizeObserver 接住，原本在底部就钉底，往回翻着时不动，主对话与工作台都是。见「[会话里的输入框](#会话里的输入框2026-10-15)」的「长高时保持贴底」。
 - 流式过程中**默认跟随**：`atBottom` flag 通过 scroll listener 维护（24px tolerance），在底部时 `useLayoutEffect` 把 `scrollTop = scrollHeight`——依赖覆盖**所有底部锚定增长源**（streaming partial、turn_end 落定、AskUserBubble），不只 streaming buffer；**提交之间的增长**（2026-09-16：live 窗口的入场 / 出场 / 完成收合 sweep、DetailPanel 与 pill 展开、Shiki 回流）由内容列上的常驻 ResizeObserver 接住，仍在底部时每次尺寸变化重新钉底，否则新步比被顶掉的步高时底部会被作曲区盖住：tool-heavy 多步 run 的 partial 长期为空，只看 buffer 会让每步落定悄悄沉到折叠线下
 - **用户向上滚 → 不跟随**：`atBottom = false`，stream 继续但视图不动
-- **浮动按钮**：`atBottom = false` 时出现 32px 圆形 ghost 按钮（⬇ ArrowDown thin），**水平居中、贴对话列底部 16px**——实现时从"右下角"改为居中（代码注释记录了理由：右下角与 Composer 动作簇视觉打架），2026-07-05 回写
+- **浮动按钮**：`atBottom = false` 时出现。32px 圆形**浮起按钮**，不是 ghost（2026-10-16 按代码回写，`MainView.tsx` 的「Scroll-to-bottom floating button」）：1px `line` 边框、`elevated` 92% 底加 `backdrop-blur-md`、`--shadow-float` 投影，图标 ⬇ ArrowDown thin 14px、`ink-soft`；悬停上浮 2px、边框换 `line-strong`、底变实、字色 `ink`、投影换 `--shadow-float-hover`（瞬时，无过渡）；按下回落并缩到 95%（`--motion-press` + `--ease-firm`）。它浮在对话上，与右下角的运行计时同一套材质。读屏念「回到最新」 / "Scroll to latest"（`copy.conversation.scrollLatest`；2026-10-16 前中文界面也念英文）。**水平居中、贴对话列底部 16px**——实现时从"右下角"改为居中（代码注释记录了理由：右下角与 Composer 动作簇视觉打架），2026-07-05 回写
 - **双态信号**（2026-08-07，[devlog](../devlog/2026-08-07-scroll-button-two-state-signal.md)）：箭头永不变（永远回答"点了去哪"），按钮上叠加状态信号，两种视觉语法各自自解释——
   - **运行中**：圆周向外扩散的 pulse ring（`scroll-live-ring`，动 = 内容正在下方落地）；run 结束 200ms 淡出
   - **完成且未读**：右上 45° 静态杏色小圆点，pop 弹入后落定（`scroll-unread-pop`，静态徽标 = 有完整答案在下面等你）——**边沿触发的真未读**：仅在 run 结束瞬间用户不在底部时置位，回底即清，全程看着答案生成的用户永远不会见到它
   - reduced-motion：ring 退化为静态低透明度光环、dot 跳过弹入，语义靠存在本身承载
-- 点按钮 → smooth scroll + 监视器**追移动靶**：流式增长时对新 `scrollHeight` 重发 `scrollTo`，1600ms 超时则瞬时 snap；除用户中途主动上拉外，点击的结局必然是 `atBottom = true`（重新挂上跟随）——点击语义是"挂上尾部"，不是"滚到某个坐标"（2026-08-07 修复追不上快流式的 bug）
+- 点按钮 → 平滑滚到底（`animateScroll`，规则见「[Scroll behaviour](#scroll-behaviourstick-to-user-message-top)」的「平滑滚动」）+ 每帧一个监视器**追移动靶**（`lib/chase-bottom.ts`）：底部变了（`scrollHeight − clientHeight` 变了）就让动画改瞄新的底部；离底部 24px 以内即挂上跟随；用户中途往上拉（`scrollTop` 比上一帧少 2px 以上）就放手、不挂上；1600ms 还没到就瞬时写到底并挂上。用户中途滚轮接手后不再改瞄，结局仍按这三条；减少动态效果下瞬时到底、下一帧挂上。除用户中途主动上拉外，点击的结局必然是 `atBottom = true`（重新挂上跟随）——点击语义是"挂上尾部"，不是"滚到某个坐标"（2026-08-07 修复追不上快流式的 bug；2026-10-16 从原生 `scrollTo` smooth 换成自己的滚动函数，三条不变）
 - ESC / 任何手动 wheel 不影响按钮可见性（仅 scroll position 决定）
 
 #### Thinking Placeholder（in-flight 占位）
@@ -554,13 +563,11 @@ Bridge 订阅 GA 的 `display_queue`（`agentmain.put_task` 返回），把每�
 - conversation 末尾立即渲染 `TurnMarker` 的 thinking 态：单行直立 12px ink-soft，内容「序号栏 `··` + 思考中」（2026-09-16 前是「第 N 步 │ 思考中」；同日先试过空 gutter，真机看是个洞）+ 状态文字 shimmer（2026-08-12 前是三点 `LiveDots`）；不再用逐字 opacity 波浪
 - 触发条件：`agentRunning && !visiblePartial`
 - `turn_end` 到达时，落定的 AgentTurn（同一 step number 的 TurnMarker + tools）在占位行**上方**以 0fr 展开长出，占位行本身不重挂载、留在原地等下一步的 `turn_start` 原地归零时钟（2026-09-16 live 窗口）。**before/after 视觉一致**——同一个 TurnMarker 组件的两态，用户感受到的是一个步骤的进展，不是两个独立的 UI
-- **等待 ≥ 3 秒时显示 elapsed 计数，≥ 60 秒后追加仍在运行**——立即显示读秒会
-  太机械，但 5 秒空等又明显让人产生等待感；3 秒是当前 dogfood 后的中点。
-  `仍在运行` 是更强的长等待确认，只在 60 秒后出现，避免前一分钟显得啰嗦。
-  Caller 用 `key={currentTurnIndex}` 让每步独立计时（step 1 等 40s，step 2 时钟归零）
-  - `0-2s` → `思考中` + 三点指示
-  - `3-59s` → `思考中` + 三点 · `32 秒`（tabular 等宽）
-  - `60s+` → `思考中` + 三点 · `已 1 分 23 秒` · `仍在运行`
+- **计时从 0.0 立即起跳**（2026-08-12 起，[devlog](../devlog/2026-08-12-thinking-timer-and-shimmer-verdict.md)；2026-10-16 按代码回写，此前这里写的「3 秒后才读秒、60 秒后追加仍在运行、三点」是 08-12 之前的样子）：状态文字后面接 ` · ` 和这一步的计时，`ink-muted`、tabular 等宽。一分钟内带十分位，跳动的十分位本身就是「还在动」的证明，所以不等 3 秒；满一分钟改整秒（整分也写 `1 分 0 秒`，每秒都在跳），不加「已」，也没有「仍在运行」。在动的指示是状态文字上的扫光（[foundations](./foundations.md) §2.7 的豁免），没有三点。每步独立计时：live 行整个运行只挂一个实例，换步时按 `index` 原地归零（2026-09-16 起，不再靠 `key` 重挂载）。代码在 `Conversation.tsx` 的 `ThinkingStatus`、`useElapsedDeciseconds`、`formatElapsedDeciseconds`。
+  - `0–59.9s` → `思考中 · 12.3 秒`（状态文字也可能是「正在回答…」或这一步的说明，见下「状态行优先级」）
+  - `60s+` → `思考中 · 1 分 23 秒`
+  - 整个运行的用时另在对话右下角的浮起计时（`RunElapsedHud`）：`工作中 1 分 23 秒`，整秒，没有动画。
+  - 助手的对话没有这一行和右下角计时：在跑时的那一行（`AssistantParts.tsx` 的 `AssistantLiveLine`）超过 3 秒才在句子后面接这一轮的用时，整秒（`· 12 秒`、`· 1 分 23 秒`），与右下角计时同一个数、同一种写法，见「[助手的对话](#助手的对话2026-10-15)」。
 
 历史设计（已废弃）：原本占位走 ThinkingSummary callout（bg-surface + 左竖条 + 💭 emoji），跟正式 ThinkingSummary 块视觉同款。问题是 callout chrome 是给"GA 真实 emit `<thinking>` 多段内容"设计的容器，套在 10 字占位上视觉权重严重失衡。2026-05-14 改成 TurnMarker thinking 态。
 
