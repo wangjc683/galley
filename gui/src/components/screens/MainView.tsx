@@ -28,6 +28,12 @@ import { StepRegion } from "@/components/conversation/StepRegion";
 import { SubtaskCards } from "@/components/conversation/SubtaskCards";
 import { ThinkingPreview } from "@/components/conversation/ThinkingPreview";
 import { UserQuestionRail } from "@/components/conversation/UserQuestionRail";
+// TEMP variant switcher (telegram-details 10)
+import { TdDensityPill } from "@/components/conversation/td-density/TdDensityPill";
+import {
+  bubbleDensity,
+  useTdDensity,
+} from "@/components/conversation/td-density/td-density";
 import { useActiveMessages } from "@/hooks/useActiveSession";
 import { useEarlierTurns } from "@/hooks/useEarlierTurns";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
@@ -368,6 +374,14 @@ function MainViewContent({
     return (groups[groups.length - 1]?.complete ?? false) || silentReport;
   }, [isMainChat, turns, silentReport]);
 
+  // TEMP variant switcher (telegram-details 10): the main chat's bubbles
+  // take the chosen option's size, leading and gap at this tier; V0 (and
+  // every other conversation) carries nothing.
+  const densityVariant = useTdDensity((s) => s.variant);
+  const density = isMainChat
+    ? bubbleDensity(densityVariant, conversationFontSize)
+    : null;
+
   // Conversation scroll behavior — sticky-bottom follow, the
   // scroll-to-bottom button, session-switch snap, stick-to-user-message,
   // and ⌥↑/↓ jump — lives in its own hook so this
@@ -430,6 +444,8 @@ function MainViewContent({
       className="relative flex min-h-0 flex-1 flex-col bg-app"
       style={conversationTypographyStyle(conversationFontSize)}
     >
+      {/* TEMP variant switcher (telegram-details 10) */}
+      {isMainChat && <TdDensityPill tier={conversationFontSize} />}
       {/* Scrollable conversation column. Width follows the TopBar
           toggle: 760px (typography sweet spot) by default, 1200px
           in wide mode. Bottom stack matches — see MainViewProps doc
@@ -473,7 +489,10 @@ function MainViewContent({
               "mx-auto",
               conversationWidth === "wide" ? "max-w-[1200px]" : "max-w-[760px]",
               isMainChat && "mt-auto w-full",
+              // TEMP variant switcher (telegram-details 10)
+              density?.className,
             )}
+            style={density?.style}
           >
             {restoring && turns.length === 0 ? (
               <ConversationSkeleton />
