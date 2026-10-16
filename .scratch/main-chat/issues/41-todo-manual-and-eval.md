@@ -1,6 +1,6 @@
 # 41 手册与评测：什么时候记待办、「办好了」去勾、改时间
 
-Status: ready-for-agent
+Status: merged（2026-10-17 快进合入 main，提交 `c3ed1604`、`05a72bf6`；真模型 gpt-6.1-sol：待办 22/22、定时重跑 26/26；「只要提醒、没有可勾的事」记成待办还是独立提醒，待 JC 定）
 
 来源：主聊天 PRD 裁决 91（第 1、3、4 条）。依赖 40（命令名定了）。改 Core 里的手册与提示词、评测；不改界面。照票 36 的做法（手册 `core/src/assistant_manual.rs`，评测 `.scratch/main-chat/entry-layer-eval/` 的 `run.py`）。
 
