@@ -259,8 +259,9 @@ async fn a_write_is_tied_to_a_run_only_when_the_assistant_writes_during_one() {
 #[tokio::test]
 async fn a_local_time_reads_in_this_machines_zone() {
     let h = Harness::new().await;
+    // Noon two days on: never inside a daylight-saving gap.
     let local = (Local::now() + ChronoDuration::days(2))
-        .format("%Y-%m-%dT%H:%M")
+        .format("%Y-%m-%dT12:00")
         .to_string();
     let task = h
         .task("schedule.create", json!({"prompt": "x", "fireAt": local}))

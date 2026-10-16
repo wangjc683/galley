@@ -315,23 +315,40 @@ impl SqliteGalley {
             parse_time_of_day(tod)?;
             (Some(tod.to_string()), None)
         };
-        if target == ScheduleTarget::Assistant {
-            if target_changed {
-                self.ensure_assistant_available(context).await?;
-            }
-            if project_id.is_some() || llm_name.is_some() {
-                return Err(invalid(format!(
-                    "{context}: a project and a model apply to target session only; clear them \
-                     for target assistant"
-                )));
-            }
-        }
+        self.check_target(target, target_changed, project_id, llm_name, context)
+            .await?;
         Ok(Shape {
             repeat,
             time_of_day,
             fire_at,
             target,
         })
+    }
+
+    /// The target's rules: `assistant` needs an assistant to wake when it
+    /// is newly chosen, and takes no project or model (they apply to the
+    /// sessions a `session` task starts).
+    async fn check_target(
+        &self,
+        target: ScheduleTarget,
+        target_changed: bool,
+        project_id: Option<&str>,
+        llm_name: Option<&str>,
+        context: &str,
+    ) -> Result<()> {
+        if target != ScheduleTarget::Assistant {
+            return Ok(());
+        }
+        if target_changed {
+            self.ensure_assistant_available(context).await?;
+        }
+        if project_id.is_some() || llm_name.is_some() {
+            return Err(invalid(format!(
+                "{context}: a project and a model apply to target session only; clear them for \
+                 target assistant"
+            )));
+        }
+        Ok(())
     }
 
     pub(super) async fn create_scheduled_task_db(
@@ -486,23 +503,19 @@ impl SqliteGalley {
 
         let shape = if repeat.is_once() && fire_at_input.is_none() {
             // Unchanged one-off fire time: only the target rules apply.
-            let unchanged = self
-                .checked_shape(
-                    ScheduledTaskRepeat::Daily,
-                    Some("00:00"),
-                    None,
-                    target,
-                    target_changed,
-                    project_id.as_deref(),
-                    llm_name.as_deref(),
-                    "update_scheduled_task",
-                )
-                .await?;
+            self.check_target(
+                target,
+                target_changed,
+                project_id.as_deref(),
+                llm_name.as_deref(),
+                "update_scheduled_task",
+            )
+            .await?;
             Shape {
                 repeat: ScheduledTaskRepeat::Once,
                 time_of_day: None,
                 fire_at: row.fire_at.clone(),
-                target: unchanged.target,
+                target,
             }
         } else {
             self.checked_shape(
