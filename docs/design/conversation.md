@@ -461,7 +461,7 @@ ReactNode children（非 markdown string）的 reply 不渲染 actions——demo
 
 #### Scroll behaviour（stick to user message top）
 
-Conversation 主区是 `overflow-y-auto` 的列。用户提交新消息时**不**滚到底部（reply 还没生成，跳到一片空地）；**也不**被动什么都不做（user message 出现在视口外，看不到反馈）。**正确做法**：把刚 submit 的 user message 顶端贴到 viewport 顶部下方 32px 处；它正上方挨着一条时间条时，停的是时间条（见下「停一条你的消息」）。
+Conversation 主区是 `overflow-y-auto` 的列。用户提交新消息时**不**滚到底部（reply 还没生成，跳到一片空地）；**也不**被动什么都不做（user message 出现在视口外，看不到反馈）。**正确做法**：把刚 submit 的 user message 顶端贴到 viewport 顶部下方 32px 处；它正上方挨着一条时间条时，停的是时间条（见下「停一条你的消息」）。下面留白到输入框，live 窗口与回复在留白里往下长，视口不动；回复超出一屏也不跟随（2026-10-16 起才真正做到，见下「发出后留白」）。
 
 助手的对话不这样：对话贴着输入框，发出后滚到底，跟随到回复的开头为止（贴底），见「[助手的对话](#助手的对话2026-10-15)」。本节讲工作台的对话。
 
@@ -472,12 +472,13 @@ Conversation 主区是 `overflow-y-auto` 的列。用户提交新消息时**不*
 - 短 reply 用户也不必往下找答案——它就在问题正下方
 - 阅读 reply 期间**不被打扰**（不跟随）
 
-实现细节：
+实现细节（`hooks/useStickyScroll.ts`）：
 
-- store 加 `userSubmitTick` 计数器，`appendUserTurn` 时 +1
-- MainView `useEffect` 监听 `userSubmitTick` 变化（不监听 `turns.length`——避免 `turn_end` 也触发滚）
-- RAF 推迟到 `<MessageUser data-role="user-msg">` 真实 mount 后
-- 找最后一个 `[data-role="user-msg"]`，算它离停靠位置差多少（`userMsgParkOffset`，见下「停一条你的消息」），交给 `animateScroll(container, scrollTop + delta)`（见下「平滑滚动」）
+- messages store 的 `userSubmitTick` 计数器在三处 +1：`appendUserTurn`（输入框发出、ask_user 的回答）、`appendSideQuestionUserTurn`（`/btw`）、`applyUserMessagePersisted` 第一次见到别处写下的一行（只限当前会话，子任务汇报除外）；同时记 `lastSubmitSource`，决定这次怎么滚（见下「发出后留白」的表）
+- effect 监听 `userSubmitTick` 变化（不监听 `turns.length`——避免 `turn_end` 也触发滚）
+- RAF 推迟到 `<MessageUser>` 真实 mount 后
+- 找最后一个 `[data-role="user-msg"]` / `[data-role="user-msg-reply"]`，落点是 `userMsgParkOffset`（见下「停一条你的消息」），滚动交给 `animateScroll`（见下「平滑滚动」）
+- 只认没处理过的 tick（模块级的 `scrolledForSubmitTick`，在 RAF 里记，StrictMode 第一次执行的 effect 被取消也不会漏）：MainView 按会话重挂载（App 用会话 id 给它 key），tick 是全局的，2026-10-16 前每次切换会话都会重放上一次发出，把那个会话最后一条你的消息停到顶上，而不是落到底部。主对话那一支照旧每次都走（它本来就是到底）
 - 不用 `scrollIntoView({block: "start"})`：它没法控 padding
 - **停一条你的消息**（2026-10-16，工作台对话票 01）：一条规则，提交贴顶、⌥↑ / ⌥↓、问题轨的点击与高亮的点、⌘K / ⌘F 定位到你的消息都走它，两种对话都是：它正上方挨着一条时间条时，时间条上缘停在视口顶下 16px，气泡在它下面 30.5px（时间 10.5px、间距 20px），落在 46.5px；没有时间条，气泡上缘照旧停在 32px。规则在 `lib/conversation-anchor.ts` 的 `userMsgParkOffset`，哪个节点是锚不变（气泡的 `data-role="user-msg"`），时间条靠「气泡所在那一行的前一个兄弟」认出来。起因：时间改成两条消息之间居中的一行后，照旧把气泡停在 32px，时间条只剩视口顶下 1.5px，半露不露；原来时间行在气泡上方 4px，停在 17.5px，16px 是挨着它的 4px 一档。⌥↑ / ⌥↓ 判断「上一条 / 下一条」和问题轨判断当前的点都按同一个落点算，停在这里的消息算「已停住」，不会卡住或认错。实测（主区 1220 宽）：有时间条的消息从「时间条 1.5px、气泡 32px」变成「时间条 16px、气泡 46.5px」（滚动位置取整，个别差 0.5px），没有时间条的照旧 32px；助手的对话里 ⌥↑ / ⌥↓ 与定位同样变（助手没有提交贴顶和问题轨）。
 - **平滑滚动**（2026-10-16，[向 Telegram 学的对话细节](../../.scratch/telegram-details/PRD.md) 裁决 5，票 04）：对话里程序发起的平滑滚动只走一个函数，`lib/animate-scroll.ts` 的 `animateScroll`，不再用引擎的 `behavior: "smooth"`（时长与曲线由引擎定，也不认「减少动态效果」）。走它的四处：提交贴顶、⌥↑ / ⌥↓、问题轨的点击、「回到底部」（下面「Sticky-bottom」一节）。数值学 Telegram Web A（`src/util/animateScroll.ts` 与 `config.ts`，只学思路与数值，代码自写）：
@@ -489,15 +490,34 @@ Conversation 主区是 `overflow-y-auto` 的列。用户提交新消息时**不*
   - **中途改目标**：`retarget` 从当前位置按同一套规则重新起步，「回到底部」追移动靶用它。
   - **⌥↑ / ⌥↓ 连按**：动画途中再按，从这次跳转的目的地（`scrollDestination`）算上一条 / 下一条，每按一下多走一条，不会重瞄同一条。
   - **不走它的**：⌘K / ⌘F 定位照旧硬写 `scrollTop`（新挂载的会话要靠一次真实的 `scrollTop` 变化触发 WKWebView 重绘，落定后 500ms 内还要按停靠位置重停，见 [overlays-and-settings](./overlays-and-settings.md)「关键交互」的「对话内容命中 → 定位到那条消息」与 `useStickyScroll` 里的注释）；切换会话落到底、跟随贴底、视口变矮保持贴底、往上加载保位、助手发出后到底，本来就是瞬时写。对话区以外的列表内滚（侧栏、设置页、提示词管理、文件预览里的标题跳转、diff 的 hunk 跳转）不在这条规则里。
+- **发出后留白（live tail）**（2026-10-16，[向 Telegram 学的对话细节](../../.scratch/telegram-details/PRD.md) 裁决 2，票 06）：只在工作台。起因：列表底下没有留白，你的话后面内容不够一屏时滚到底就停了，消息停在靠底的位置（JC 真机确认）；随后在底部、跟随把它一路推上去，长回复的开头也被推出视口。规则与实现在 `lib/live-tail.ts`。
+  - **留白**：对话列（滚动容器的第一个子元素）上的 `min-height`：列至少要从停靠线往下够一个视口，`scrollHeight − clientHeight` 才到得了停靠位置。内容不够时补足，超过时不起作用。不用列后面的 spacer：`min-height` 只取决于锚点上方的内容和视口高度，这一轮自己的变化（换步、思考预览、流式回复、落定收合）都不用重算，浏览器也就没有机会在变化与重算之间把 `scrollTop` 夹回去；spacer 要随下面的内容一起伸缩，落定收合先发生、夹住滚动位置，消息就会跳收掉的那段高度。Telegram 也是给最后一段 `min-height`（Web A `MessageList.scss`）。
+  - **实时更新**：视口变高变矮（输入框长高、发出后缩回一行、排队条、窗口）在 ResizeObserver 回调里当帧重算，停在线上的那条留在线上，中间那帧不会画出来；锚点上方的行变了（加载更早一页、上方迟到的排版）下一帧重算：在那个回调里改更浅一层元素的尺寸，ResizeObserver 会报 loop。
+  - **停靠**：`animateScroll` 到 `userMsgParkOffset` 的落点；减少动态效果时瞬时。
+  - **不跟随（A）**：跟随贴底的四条路（每次提交后的 layout effect、内容列的 ResizeObserver、视口变高变矮保持贴底、切换会话后 500ms 的窗口）在留白期间都不动。内容还在留白里时视口本来就在底部，「回到底部」不出现；超出一屏后视口不动、按钮出现（在跑带脉冲圈，跑完未读有圆点，规则照旧）——没有滚动事件告诉它，所以由内容列的 ResizeObserver 重读一次离底距离。
+  - **重新挂上跟随**：你自己滚到、或点「回到底部」到**内容真正的末尾**（内容已超过留白）时挂上，此后照旧「在底部就跟」。留白还露着时，底部就是停靠位置本身，到那里不算要跟随。往上翻过照旧不跟。
+  - **落定**：过程收成折叠头时 `min-height` 不变，你的话不动，回复往上挪收掉的那段高度；内容缩回留白里也不会夹住 `scrollTop`。滚动锚定（`overflow-anchor`）不用关：Chrome（与 Windows 的 WebView2 同内核）里 `auto` 和 `none` 量出来一样（停住时、往下读到步骤里 150px 时各落定一次，`scrollTop` 都不变，锚点选在收合的那段上方）；WKWebView 没有滚动锚定（`lib/scroll-anchor.ts`）。
+  - **寿命**：切到别的会话再回来就没有了（MainView 重挂载，照旧落到底部）；下一次发出跟着新的那条走；不落盘。加载更早一页时留白不变、视口照旧不跳（保位之后锚点跟着下移，`min-height` 跟着加）。锚点那条被重新渲染成新节点时按 `data-message-id` 找回；那条没了（Core 把它排进了队列、撤掉了回显）留白就撤掉。
+  - **谁发的**（`submitScroll`，来源记在 `lastSubmitSource`）：
+
+    | 来源 | 怎么滚 |
+    |---|---|
+    | 输入框发出、ask_user 的回答（`composer`） | 停靠，留白，不跟随 |
+    | 排队的消息在上一轮跑完后自动发出（`queued`：Core 发出的、来源记为 GUI、本页没有回显的一行，也包括 Core 自己发出的「发进刚结束的那一轮」、手机发的） | 在底部：留白挪到它下面，视口不动，不跟随——你多半正在读上一轮刚落定的回答；往下滚或点「回到底部」它就停到线上。不在底部：什么都不动 |
+    | `/btw`（`side`） | 照旧：朝它的停靠位置滚（没留白时夹在底部），留白与跟随状态不变 |
+    | CLI、Supervisor、system 发进来的（`external`） | 照旧：同上，且跟随回到「在底部就跟」 |
+
+  - **主对话不走这里**：`stickBottom` 时提交那一步在最前面就返回，留白永远不会开始，主对话的跟随路都不读它。
+  - **实测**（Chrome 临时 harness，真实的 `useStickyScroll` 与 `Conversation`，StrictMode，窗口 1220 × 900、输入框 48px，前面四轮旧对话）：发出后约 0.6 秒停住，隔了时间断点的气泡在 46px、同一分钟内的在 32px，此时正好在底部、按钮不出现；思考行、换步、live 区长到 120px 视口不动；长到超出一屏（900、1600px）`scrollTop` 不变、按钮出现；输入框长高 45px 再缩回，留白 2015 → 1970 → 2015px，消息一直在 46px；落定（过程收合、回答 3 段或 40 段）消息不动；读到内容末尾后再长，跟着走；排队的消息在底部到来，视口不动、留白挪到它下面，往下滚它停在 32px；往上读 400px 时到来，什么都没动；重挂载（切换会话）落到底部、没有留白；减少动态效果下两帧内就停住。
 
 边界：
 
 | 场景 | 行为 |
 |---|---|
-| 第一次提交（EmptyState → MainView 切换） | 同样滚一次（保险，user message 已经在顶部时 delta 接近 0，相当于 noop） |
+| 第一次提交（EmptyState → MainView 切换） | 同样停靠并留白（MainView 先挂载还是 tick 先到都一样：只认没处理过的 tick） |
 | `turn_progress` chunk 流入 / `turn_end` 来 | 不触发（store 状态变了但 tick 没变） |
 | 用户主动向上翻历史 | 不打断（仅 submit 触发） |
-| 切换历史 session（multi-session 后） | 默认滚到底（看到最后 turn）；不属于此 spec 范畴 |
+| 切换历史 session（multi-session 后） | 落到底（看到最后 turn），没有留白；重挂载不重放上一次发出 |
 
 #### 会话切换：原子换入，不做 skeleton（2026-07-15）
 
@@ -547,6 +567,7 @@ Bridge 订阅 GA 的 `display_queue`（`agentmain.put_task` 返回），把每�
 - **视口自己变矮或变高**（2026-10-15，票 27）：输入框长高、附件条或队列条出现、窗口变矮时内容没变，下面两条都不触发；滚动容器自身的 ResizeObserver 接住，原本在底部就钉底，往回翻着时不动，主对话与工作台都是。见「[会话里的输入框](#会话里的输入框2026-10-15)」的「长高时保持贴底」。
 - 流式过程中**默认跟随**：`atBottom` flag 通过 scroll listener 维护（24px tolerance），在底部时 `useLayoutEffect` 把 `scrollTop = scrollHeight`——依赖覆盖**所有底部锚定增长源**（streaming partial、turn_end 落定、AskUserBubble），不只 streaming buffer；**提交之间的增长**（2026-09-16：live 窗口的入场 / 出场 / 完成收合 sweep、DetailPanel 与 pill 展开、Shiki 回流）由内容列上的常驻 ResizeObserver 接住，仍在底部时每次尺寸变化重新钉底，否则新步比被顶掉的步高时底部会被作曲区盖住：tool-heavy 多步 run 的 partial 长期为空，只看 buffer 会让每步落定悄悄沉到折叠线下
 - **用户向上滚 → 不跟随**：`atBottom = false`，stream 继续但视图不动
+- **工作台发出之后 → 不跟随**（2026-10-16，票 06）：你的话停在顶上，这一轮在下面的留白里长、长出一屏也不拉视口，直到你到内容真正的末尾；见上「Scroll behaviour」的「发出后留白」
 - **浮动按钮**：`atBottom = false` 时出现。32px 圆形**浮起按钮**，不是 ghost（2026-10-16 按代码回写，`MainView.tsx` 的「Scroll-to-bottom floating button」）：1px `line` 边框、`elevated` 92% 底加 `backdrop-blur-md`、`--shadow-float` 投影，图标 ⬇ ArrowDown thin 14px、`ink-soft`；悬停上浮 2px、边框换 `line-strong`、底变实、字色 `ink`、投影换 `--shadow-float-hover`（瞬时，无过渡）；按下回落并缩到 95%（`--motion-press` + `--ease-firm`）。它浮在对话上，与右下角的运行计时同一套材质。读屏念「回到最新」 / "Scroll to latest"（`copy.conversation.scrollLatest`；2026-10-16 前中文界面也念英文）。**水平居中、贴对话列底部 16px**——实现时从"右下角"改为居中（代码注释记录了理由：右下角与 Composer 动作簇视觉打架），2026-07-05 回写
 - **双态信号**（2026-08-07，[devlog](../devlog/2026-08-07-scroll-button-two-state-signal.md)）：箭头永不变（永远回答"点了去哪"），按钮上叠加状态信号，两种视觉语法各自自解释——
   - **运行中**：圆周向外扩散的 pulse ring（`scroll-live-ring`，动 = 内容正在下方落地）；run 结束 200ms 淡出

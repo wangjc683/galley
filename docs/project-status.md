@@ -724,7 +724,9 @@ Pre-Flight checks this list):
   (`.scratch/assistant/PRD.md` rulings 1, 7).
 - Release notes: one line that workbench conversations now share the
   assistant's grammar (your words on the right, time centred, a fold
-  opens one line a step, one-step replies without a fold header). It
+  opens one line a step, one-step replies without a fold header), and that
+  after you send, your words stay at the top while the reply grows below
+  them, not followed (telegram-details ticket 06). It
   reaches external-runtime users too, whose whole UI is the workbench
   (`.scratch/workbench-conversation/PRD.md`, devlog
   [2026-10-16-workbench-conversation-grammar](./devlog/2026-10-16-workbench-conversation-grammar.md)).
