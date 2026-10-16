@@ -282,6 +282,20 @@ pub async fn assistant_todo(
     Ok(build_todo(&todos, &tasks, &subtasks, now, &chrono::Local))
 }
 
+/// What `todo list` prints (main chat ticket 40), read for the socket's
+/// `todo.list` and the CLI's direct read alike: the to-dos not done, or
+/// with `all` every one (done and cancelled too), in
+/// [`todo_list_order`] — read now, in this machine's zone.
+pub async fn todo_list(galley: &SqliteGalley, all: bool) -> Result<Vec<TodoBrief>> {
+    let scope = if all {
+        TodoListScope::All
+    } else {
+        TodoListScope::Open
+    };
+    let todos = galley.list_todos(scope).await?;
+    Ok(todo_list_order(todos, Utc::now(), &chrono::Local))
+}
+
 fn window_start(now: DateTime<Utc>) -> i64 {
     now.timestamp() - RECENT_WINDOW_DAYS * 86_400
 }
@@ -436,6 +450,49 @@ where
         done_omitted,
         today_count,
     }
+}
+
+/// The order `todo list` prints (main chat ticket 40): the to-dos not
+/// done in the order 你的事 lists them ([`build_todo`]'s today, later and
+/// any time, read in `tz` at `now`), then the done ones, most recently
+/// ticked off first, then the cancelled ones, most recently cancelled
+/// first. The order is the list's alone; it decides no membership.
+pub fn todo_list_order<Tz: TimeZone>(
+    todos: Vec<TodoBrief>,
+    now: DateTime<Utc>,
+    tz: &Tz,
+) -> Vec<TodoBrief>
+where
+    Tz::Offset: std::fmt::Display,
+{
+    let position: std::collections::HashMap<String, usize> = build_todo(&todos, &[], &[], now, tz)
+        .yours
+        .iter()
+        .enumerate()
+        .map(|(at, item)| (item.id.clone(), at))
+        .collect();
+    let (mut open, mut done, mut cancelled) = (Vec::new(), Vec::new(), Vec::new());
+    for todo in todos {
+        match todo.status {
+            TodoStatus::Open => open.push(todo),
+            TodoStatus::Done => done.push(todo),
+            TodoStatus::Cancelled => cancelled.push(todo),
+        }
+    }
+    open.sort_by_key(|todo| {
+        position
+            .get(todo.id.as_str())
+            .copied()
+            .unwrap_or(usize::MAX)
+    });
+    let newest_first = |a: &Option<String>, b: &Option<String>| {
+        b.as_deref()
+            .and_then(parse_utc_secs)
+            .cmp(&a.as_deref().and_then(parse_utc_secs))
+    };
+    done.sort_by(|a, b| newest_first(&a.done_at, &b.done_at));
+    cancelled.sort_by(|a, b| newest_first(&a.cancelled_at, &b.cancelled_at));
+    open.into_iter().chain(done).chain(cancelled).collect()
 }
 
 fn secs_or_last(item: &TodoItem) -> i64 {
@@ -761,6 +818,41 @@ mod tests {
         assert!(got.yours.iter().all(|i| i.kind == TodoKind::Todo));
         assert!(got.yours.iter().all(|i| i.state == TodoState::Open));
         assert!(got.assistant.is_empty() && got.routine.is_empty() && got.done.is_empty());
+    }
+
+    #[test]
+    fn todo_list_prints_yours_in_order_then_done_then_cancelled() {
+        let noted = "2026-10-10T00:00:00+00:00";
+        let cancelled = |id: &str, at: &str| TodoBrief {
+            status: TodoStatus::Cancelled,
+            cancelled_at: Some(at.into()),
+            ..todo(id, None, noted)
+        };
+        let todos = vec![
+            cancelled("t-cancelled-old", "2026-10-12T00:00:00+00:00"),
+            done_todo("t-done-old", "2026-10-13T00:00:00+00:00", Origin::gui()),
+            todo("t-anytime", None, "2026-10-11T00:00:00+00:00"),
+            cancelled("t-cancelled-new", "2026-10-15T00:00:00+00:00"),
+            todo("t-later", Some(date(2026, 10, 20)), noted),
+            done_todo("t-done-new", "2026-10-15T00:00:00+00:00", Origin::gui()),
+            todo("t-overdue", Some(date(2026, 10, 9)), noted),
+            todo("t-today", Some(date(2026, 10, 16)), noted),
+        ];
+        let got = todo_list_order(todos, now(), &Utc);
+        let order: Vec<&str> = got.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(
+            order,
+            [
+                "t-overdue",
+                "t-today",
+                "t-later",
+                "t-anytime",
+                "t-done-new",
+                "t-done-old",
+                "t-cancelled-new",
+                "t-cancelled-old",
+            ]
+        );
     }
 
     #[test]

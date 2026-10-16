@@ -68,8 +68,9 @@ fn clearable(value: Option<String>) -> Option<Option<String>> {
 /// writer with that label, and a run of the main chat is the only place it
 /// acts. Then the main chat and the turn of the user row that started that
 /// run. Anything else (no main chat, no run open, another label) records
-/// nothing; the task is made all the same.
-async fn created_in(
+/// nothing; the task is made all the same. The `todo` family ties a
+/// to-do the same way (main chat ticket 40).
+pub(super) async fn created_in(
     galley: &crate::db::SqliteGalley,
     ctx: &HandlerCtx<'_>,
     supervisor: Option<&str>,

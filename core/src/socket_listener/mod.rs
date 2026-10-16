@@ -103,6 +103,7 @@ mod project_cmds;
 mod schedule_cmds;
 mod session_cmds;
 mod session_new_cmds;
+mod todo_cmds;
 mod wire;
 
 use crate::notify::{NullNotifier, TauriNotifier};
@@ -113,6 +114,7 @@ use project_cmds::*;
 use schedule_cmds::*;
 use session_cmds::*;
 use session_new_cmds::*;
+use todo_cmds::*;
 use wire::{write_stream_line, StreamEnvelope, CONNECTION_IDLE_TIMEOUT};
 pub use wire::{ErrorTag, SocketRequest, SocketResponse, ACCEPTED_SCHEMA_VERSIONS, SCHEMA_VERSION};
 
@@ -729,6 +731,20 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
         ),
         "llm.set_default" => {
             DispatchResult::Unary(dispatch_llm_set_default(request_id, req.args, ctx).await)
+        }
+        // ---- to-dos (main chat ticket 40, additive inside 3) ----
+        "todo.list" => DispatchResult::Unary(dispatch_todo_list(request_id, req.args, ctx).await),
+        "todo.show" => DispatchResult::Unary(dispatch_todo_show(request_id, req.args, ctx).await),
+        "todo.add" => DispatchResult::Unary(dispatch_todo_add(request_id, req.args, ctx).await),
+        "todo.update" => {
+            DispatchResult::Unary(dispatch_todo_update(request_id, req.args, ctx).await)
+        }
+        "todo.done" => DispatchResult::Unary(dispatch_todo_done(request_id, req.args, ctx).await),
+        "todo.reopen" => {
+            DispatchResult::Unary(dispatch_todo_reopen(request_id, req.args, ctx).await)
+        }
+        "todo.cancel" => {
+            DispatchResult::Unary(dispatch_todo_cancel(request_id, req.args, ctx).await)
         }
         other => DispatchResult::Unary(SocketResponse::err(
             request_id,

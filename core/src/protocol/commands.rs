@@ -473,6 +473,92 @@ pub struct LlmSetDefaultArgs {
 }
 socket_command!(LlmSetDefaultArgs, "llm.set_default");
 
+// ---- to-dos (main chat ticket 40, additive inside 3) ----
+//
+// New commands, so their optional fields skip when absent, like the
+// schedule family's.
+
+/// `todo.list`: the to-dos not done, or every one.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoListArgs {
+    /// Done and cancelled ones too.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub all: bool,
+}
+socket_command!(TodoListArgs, "todo.list");
+
+/// `todo.show`: one to-do, cancelled or not.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoShowArgs {
+    pub todo_id: String,
+}
+socket_command!(TodoShowArgs, "todo.show");
+
+/// `todo.add`: note a to-do. `due` is a local date `YYYY-MM-DD` (no time)
+/// or a time in `schedule.create`'s `fireAt` forms; `remindAt` hangs a
+/// reminder on it (a one-off that wakes the assistant).
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoAddArgs {
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remind_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervisor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+socket_command!(TodoAddArgs, "todo.add");
+
+/// `todo.update`: only the fields given change. An empty `notes` clears
+/// the notes, an empty `due` the due date, an empty `remindAt` the
+/// reminder (its task is cancelled) — as an empty value clears a field on
+/// `schedule.update`.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoUpdateArgs {
+    pub todo_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remind_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervisor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+socket_command!(TodoUpdateArgs, "todo.update");
+
+id_write_command!(
+    /// `todo.done`: tick it off (its reminder is cancelled while it has
+    /// not reached the assistant).
+    TodoDoneArgs,
+    todo_id,
+    "todo.done"
+);
+id_write_command!(
+    /// `todo.reopen`: untick it (a cancelled reminder stays cancelled).
+    TodoReopenArgs,
+    todo_id,
+    "todo.reopen"
+);
+id_write_command!(
+    /// `todo.cancel`: a soft delete, its reminder cancelled with it.
+    TodoCancelArgs,
+    todo_id,
+    "todo.cancel"
+);
+
 /// Legacy-equivalence pins: each args struct must serialize to the same
 /// `Value` the CLI's hand-written `json!` literal produced before this
 /// module existed (2026-07-11). These tests are what makes a field rename
@@ -692,6 +778,62 @@ mod legacy_equivalence {
         assert_eq!(ProjectUnpinArgs::NAME, "project.unpin");
         assert_eq!(ProjectArchiveSessionsArgs::NAME, "project.archive_sessions");
         assert_eq!(LlmSetDefaultArgs::NAME, "llm.set_default");
+        assert_eq!(TodoListArgs::NAME, "todo.list");
+        assert_eq!(TodoShowArgs::NAME, "todo.show");
+        assert_eq!(TodoAddArgs::NAME, "todo.add");
+        assert_eq!(TodoUpdateArgs::NAME, "todo.update");
+        assert_eq!(TodoDoneArgs::NAME, "todo.done");
+        assert_eq!(TodoReopenArgs::NAME, "todo.reopen");
+        assert_eq!(TodoCancelArgs::NAME, "todo.cancel");
+    }
+
+    #[test]
+    fn todo_commands_wire_shape() {
+        assert_matches_legacy(&TodoListArgs::default(), json!({}));
+        assert_matches_legacy(&TodoListArgs { all: true }, json!({"all": true}));
+        assert_matches_legacy(
+            &TodoShowArgs {
+                todo_id: "todo_1".into(),
+            },
+            json!({"todoId": "todo_1"}),
+        );
+        assert_matches_legacy(
+            &TodoAddArgs {
+                title: "交季度报告".into(),
+                due: Some("2026-10-21T15:00".into()),
+                remind_at: Some("2026-10-21T14:00".into()),
+                supervisor: Some("galley-assistant".into()),
+                ..TodoAddArgs::default()
+            },
+            json!({"title": "交季度报告", "due": "2026-10-21T15:00",
+                   "remindAt": "2026-10-21T14:00", "supervisor": "galley-assistant"}),
+        );
+        assert_matches_legacy(
+            &TodoUpdateArgs {
+                todo_id: "todo_1".into(),
+                notes: Some("带合同".into()),
+                due: Some(String::new()),
+                remind_at: Some(String::new()),
+                ..TodoUpdateArgs::default()
+            },
+            json!({"todoId": "todo_1", "notes": "带合同", "due": "", "remindAt": ""}),
+        );
+        assert_matches_legacy(
+            &TodoDoneArgs {
+                todo_id: "todo_1".into(),
+                supervisor: Some("galley-assistant".into()),
+                reason: None,
+            },
+            json!({"todoId": "todo_1", "supervisor": "galley-assistant"}),
+        );
+        assert_matches_legacy(
+            &TodoCancelArgs {
+                todo_id: "todo_1".into(),
+                supervisor: None,
+                reason: Some("user said so".into()),
+            },
+            json!({"todoId": "todo_1", "reason": "user said so"}),
+        );
     }
 
     #[test]

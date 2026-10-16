@@ -35,7 +35,8 @@ pub use commands::{
     SessionBtwArgs, SessionCheckpointArgs, SessionDeleteArgs, SessionMoveArgs, SessionNewArgs,
     SessionNewResult, SessionPinArgs, SessionRenameArgs, SessionRestoreArgs, SessionRunStateArgs,
     SessionSendArgs, SessionShutdownRunnerArgs, SessionStopArgs, SessionUnpinArgs,
-    SessionWatchArgs, SessionsRunStateArgs, SocketCommand,
+    SessionWatchArgs, SessionsRunStateArgs, SocketCommand, TodoAddArgs, TodoCancelArgs,
+    TodoDoneArgs, TodoListArgs, TodoReopenArgs, TodoShowArgs, TodoUpdateArgs,
 };
 pub use envelope::{
     SocketRequest, SocketResponse, StreamEnvelope, WatchFrame, ACCEPTED_SCHEMA_VERSIONS,

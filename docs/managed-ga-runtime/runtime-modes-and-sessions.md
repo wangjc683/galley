@@ -320,7 +320,8 @@ ruling 9; `core/src/scheduler.rs`, `core/src/subtask_report.rs`, migration
 
 Main chat ticket 39 (PRD ruling 91; `core/src/api/todo.rs`,
 `core/src/db/todo.rs`, migration 050): a to-do is something the user has to
-do, which Galley notes in the conversation (through the CLI, ticket 40) —
+do, which Galley notes in the conversation (through the CLI `galley todo`,
+ticket 40, [todo-commands](../agent-api/todo-commands.md)) —
 title, notes, a due date, a reminder. The user only ticks it off, unticks it
 or cancels its reminder at the desktop (Tauri `complete_todo`,
 `reopen_todo`, `cancel_todo_reminder`); everything else they say to Galley.

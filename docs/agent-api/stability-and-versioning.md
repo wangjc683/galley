@@ -71,8 +71,8 @@ is stable; the text after it is not.
 | Prefix                   | Where                                             | When |
 | ------------------------ | ------------------------------------------------- | ---- |
 | `schema_mismatch:`       | any command, `--schema=N`                         | `N` is outside the accepted set (§1.2) |
-| `time_in_past:`          | `schedule create` / `update` `--at`               | The one-off's time is already past (additive 2026-10-16) |
-| `assistant_unavailable:` | `schedule create` / `update` / `run`, target `assistant` | The active runtime is the external one, or the managed runtime has no main chat (additive 2026-10-16) |
+| `time_in_past:`          | `schedule create` / `update` `--at`; `todo add` / `update` `--remind-at` | The one-off's or the reminder's time is already past (additive 2026-10-16; `todo` 2026-10-17) |
+| `assistant_unavailable:` | `schedule create` / `update` / `run`, target `assistant`; every `todo` write | The active runtime is the external one, or the managed runtime has no main chat (additive 2026-10-16; `todo` 2026-10-17) |
 | `main_chat_protected:`   | `session rename` / `pin` / `unpin` / `delete`      | The session is the main chat, which takes none of these (additive 2026-10-16) |
 | `managed_runtime_only:`  | `llm set-default`                                 | The active runtime is the external one: its default model is GenericAgent's own config (additive 2026-10-16) |
 
@@ -87,6 +87,8 @@ is stable; the text after it is not.
 | `ScheduledTask.repeat.kind` | `daily / weekly / monthly / once` (2026-10-16, [schedule-commands](./schedule-commands.md)) |
 | `ScheduledTask.target`     | `session / assistant` (2026-10-16) |
 | `ScheduledTask.lastWake`   | `pending / delivered / notified` (2026-10-16) |
+| `Todo.status`              | `open / done / cancelled` (2026-10-17, [todo-commands](./todo-commands.md)) |
+| `Todo.reminder.state`      | `scheduled / paused / fired` (2026-10-17) |
 
 Retired in `3` (§7.1): `GoalBrief.status` (`active / paused / blocked /
 completed / budget_limited / stopped / failed`), with the rest of the
@@ -213,6 +215,14 @@ and error discriminants unchanged):
   `--schema=2`. See §5.13a–c in [session-commands.md](./session-commands.md)
   and §5.16a–c, §5.18a in
   [project-and-llm-commands.md](./project-and-llm-commands.md).
+- 2026-10-17 — The `todo` family (main chat ticket 40): `todo list / show
+  / add / update / done / reopen / cancel` (socket `todo.*`), the `Todo`
+  shape with its enum values above; the `time_in_past:` and
+  `assistant_unavailable:` prefixes now also mark `todo` refusals. New
+  commands only; no existing command, field or exit code changed (the
+  `ScheduledTask.todoId` field that names a reminder's to-do came with
+  ticket 39, 2026-10-17). Also served under `--schema=1` and
+  `--schema=2`. See [todo-commands.md](./todo-commands.md).
 
 ### 7.2 `schemaVersion: 2` (served for unchanged commands, since 2026-09-16)
 

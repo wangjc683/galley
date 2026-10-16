@@ -26,6 +26,7 @@ mod project;
 mod schedule;
 mod session;
 mod system;
+mod todo;
 mod transport;
 
 use std::process::ExitCode;
@@ -282,5 +283,6 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
             reason,
         }) => hands::llm_set_default(llm_name, supervisor, reason).await,
         Command::Schedule(cmd) => schedule::run(cmd).await,
+        Command::Todo(cmd) => todo::run(cmd).await,
     }
 }

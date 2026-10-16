@@ -1,3 +1,4 @@
+use clap::builder::NonEmptyStringValueParser;
 use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser, Debug)]
@@ -61,6 +62,123 @@ pub(crate) enum Command {
     /// task stays readable with `cancelledAt`.
     #[command(subcommand)]
     Schedule(ScheduleCmd),
+
+    /// The user's to-dos, Galley's notebook: things the user has to do,
+    /// with a due date or without, a reminder optional. `list` / `show`
+    /// read SQLite directly; the writes go through Galley Core and need
+    /// the managed runtime with its main chat. `cancel` is a soft delete:
+    /// the to-do stays readable with `cancelledAt`.
+    #[command(subcommand)]
+    Todo(TodoCmd),
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum TodoCmd {
+    /// List to-dos, NDJSON. Default: the ones not done, in the order the
+    /// desktop's to-do list shows them (due today or overdue, then later,
+    /// then no due date). Read-only — opens SQLite directly.
+    List {
+        /// Also done ones (most recently ticked off first) and cancelled
+        /// ones, after the open ones.
+        #[arg(long)]
+        all: bool,
+    },
+    /// One to-do, done or cancelled or not. Read-only — opens SQLite
+    /// directly.
+    Show {
+        /// To-do id (`todo_<16-hex>`).
+        todo_id: String,
+    },
+    /// Note a to-do.
+    Add {
+        /// What the user has to do.
+        title: String,
+        #[arg(long)]
+        notes: Option<String>,
+        /// When it is due: a local date `YYYY-MM-DD` (a day with no time),
+        /// or a time as `schedule create --at` takes it (local
+        /// `YYYY-MM-DDTHH:MM`, or RFC 3339). A past date is fine.
+        #[arg(long, value_name = "DATE|TIME", value_parser = NonEmptyStringValueParser::new())]
+        due: Option<String>,
+        /// Hang a reminder on it at this time (`schedule create --at`'s
+        /// forms): it wakes Galley. A time already past is refused
+        /// (`time_in_past:`, exit 2).
+        #[arg(long, value_name = "TIME", value_parser = NonEmptyStringValueParser::new())]
+        remind_at: Option<String>,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Change a to-do; only what is given changes. An empty `--notes=`
+    /// clears the notes.
+    #[command(group(
+        clap::ArgGroup::new("change")
+            .required(true)
+            .multiple(true)
+            .args(["title", "notes", "due", "no_due", "remind_at", "no_remind"])
+    ))]
+    Update {
+        todo_id: String,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long)]
+        notes: Option<String>,
+        /// The new due date (`add --due`'s forms).
+        #[arg(
+            long,
+            value_name = "DATE|TIME",
+            conflicts_with = "no_due",
+            value_parser = NonEmptyStringValueParser::new()
+        )]
+        due: Option<String>,
+        /// No due date any more.
+        #[arg(long)]
+        no_due: bool,
+        /// Set the reminder, or move it (one that went off is armed
+        /// again). Refused on a done to-do: reopen it first.
+        #[arg(
+            long,
+            value_name = "TIME",
+            conflicts_with = "no_remind",
+            value_parser = NonEmptyStringValueParser::new()
+        )]
+        remind_at: Option<String>,
+        /// Remove the reminder (its scheduled task is cancelled).
+        #[arg(long)]
+        no_remind: bool,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Tick a to-do off. Its reminder is cancelled if it has not reminded
+    /// the user yet. Ticking off a done one changes nothing.
+    Done {
+        todo_id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Untick a to-do. A reminder cancelled when it was ticked off stays
+    /// cancelled (`update --remind-at` sets a new one).
+    Reopen {
+        todo_id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Cancel a to-do (a soft delete), and its reminder with it: it leaves
+    /// the lists; `show` and `list --all` still read it.
+    Cancel {
+        todo_id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
