@@ -138,9 +138,95 @@ mod tests {
             "`session move <id> --to=<project-id>`",
             "`project create \"<name>\"`",
             "`llm set <session-id> \"<model name>\"`",
+            // Ticket 35's hands (ticket 36).
+            "`session rename <id> \"<title>\"`",
+            "`session pin <id>`, `session unpin <id>`",
+            "`session delete <id>`",
+            "`project update <project-id> --name=\"<name>\"`",
+            "`project pin <project-id>`, `project unpin <project-id>`",
+            "`project archive-sessions <project-id>`",
+            "`llm set-default \"<model name>\"`",
+            // Ticket 34's `schedule` family (ticket 36).
+            "`schedule list`",
+            "`schedule show <task-id>`",
+            "`schedule update <task-id> --at=<time>`",
+            "`--prompt=\"<words>\"`",
+            "`schedule delete <task-id>`",
+            "`schedule disable <task-id>`",
+            "`schedule run <task-id>`",
+            "`--weekly=<days>`",
+            "`--monthly=<days>`",
+            "`--time=HH:MM`",
         ] {
             assert!(body.contains(command), "manual lost: {command}");
         }
         assert!(!body.contains("--project="));
+        // The create line as the CLI parses it (`cli/src/args.rs`
+        // `ScheduleCmd::Create`): the words, `--at`, the target.
+        assert!(body.contains(
+            "schedule create \"<your words>\" --at=<YYYY-MM-DDTHH:MM> --target=assistant \
+             --supervisor=galley-assistant --reason=\"<why>\""
+        ));
+    }
+
+    /// Ticket 36: the section on reminders and scheduled tasks — when to
+    /// set one unasked, when not, saying so, the words for later,
+    /// changing and cancelling, the target the CLI does not default to,
+    /// and what to do when one comes due — and the authority the new
+    /// hands carry. Single-line fragments only (CRLF on Windows).
+    #[test]
+    fn manual_covers_reminders_and_the_new_hands() {
+        let body = manual_body();
+        for heading in [
+            "## Reminders and scheduled tasks",
+            "### When to set one",
+            "### Setting one",
+            "### Changing and cancelling",
+            "### When one comes due",
+        ] {
+            assert!(body.contains(heading), "manual lost: {heading}");
+        }
+        for rule in [
+            // When: unasked, promises, waiting on the outside world.
+            "Set one without being asked when:",
+            "- You promise a follow-up",
+            "- Work you handed off waits on something outside",
+            // When not: no time, said no, already there.
+            "Do not set one for something with no time to it",
+            "`schedule list` before you create; when the thing is already there, keep",
+            // Say so, every time; no silent wake-ups.
+            "Each time you set one, say in your reply, in one sentence, when and what",
+            "Never set one without saying so.",
+            // The words are for its later self.
+            "Write the words for yourself at that moment, when this conversation may",
+            // The CLI defaults to `session`.
+            "- Always pass `--target=assistant`, repeating ones too. The CLI's default",
+            // An ambiguous day: the next one still ahead, named, not
+            // asked (the eval's first round, ticket 36 Comments).
+            "- When a day could mean two dates, take the next one still ahead",
+            "date in your sentence so the user can correct it; do not ask first.",
+            // Ask before a repeating task that works each time.
+            "costs money every day, so ask first, in one question, with the time and",
+            // Coming due: late, act, no longer applies.
+            "the user it comes late, and how late.",
+            "reply with exactly `<no-reply/>`.",
+            // galley#31.
+            "GenericAgent's own scheduler (`sche_tasks`) does not run in Galley: use",
+        ] {
+            assert!(body.contains(rule), "manual lost: {rule}");
+        }
+        // Authority: scheduled tasks left the user-only level, the main
+        // chat itself is off limits, deleting for good is asked first.
+        assert!(!body.contains("there is no command for them yet"));
+        assert!(!body.contains("Renaming a session or project has no CLI command"));
+        assert!(
+            body.contains("- Set a one-off reminder, or a one-off time to wake yourself and do")
+        );
+        assert!(
+            body.contains("- Changing, pausing or cancelling a scheduled task someone else made:")
+        );
+        assert!(body.contains("- Deleting anything for good, such as `session delete` or"));
+        assert!(body.contains("Never archive, rename, pin or delete the main chat itself (this"));
+        assert!(body.contains("these, but `session archive` would still go through."));
     }
 }

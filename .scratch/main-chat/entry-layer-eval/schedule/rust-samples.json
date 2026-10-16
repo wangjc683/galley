@@ -1,0 +1,229 @@
+{
+  "in_hand": {
+    "now": "2026-10-16T06:05:00Z",
+    "text": "### In Hand\n\nAs of 2026-10-16 14:05, local time (it may have changed since: `schedule list` and `session brief <id>` read it now).\n\nComing up (reminders and scheduled tasks):\n- `sched_3f9a0c1d2e4b5a69` 2026-10-16 20:00 (Fri), one-off, set by you: 提醒用户带身份证：明早 8:05 虹桥的高铁 去上海出差\n- `sched_0a1b2c3d4e5f6a7b` 2026-10-21 14:00 (Wed), one-off, set by you: 提醒用户周三下午 3 点前把季度报告交给王经理，报告在 ~/Documents/…\n- `sched_41d0aa5e9b3c2f17` 2026-10-17 17:00 (Sat), weekly, set by the user, starts a new conversation: 整理下载文件夹\n- `sched_9b2c7e1f0a3d4c58` daily, paused, set by the outside agent claude-code: 看一眼 MyApp 的依赖更新\n- `sched_0000000000000000` 2026-10-25 14:00 (Sun), monthly, set by you: 多的\n- and 2 more: `schedule list`\n\nSubtasks not finished:\n- `s-mgq3c1d8-2k7v4p0a` 查三家本周螺纹钢报价: working\n- `s-mgr8x2k1-5b9d3f7h` 订周三去上海的高铁: asking a question\n- `s-mgs1q9w3-8c2v6n4m` (untitled): failed\n- `s-mgs1q9w3-8c2v6n4n` 核对发票: paused at the step limit\n- `s-mgs1q9w3-8c2v6n4o` 比价: stopped before it finished\n- and 1 more: `sessions list`",
+    "todo": {
+      "active": [
+        {
+          "at": "2026-10-16T05:00:00+00:00",
+          "createdBy": "assistant",
+          "id": "s-mgq3c1d8-2k7v4p0a",
+          "kind": "subtask",
+          "state": "running",
+          "text": "查三家本周螺纹钢报价"
+        },
+        {
+          "at": "2026-10-16T05:00:00+00:00",
+          "createdBy": "assistant",
+          "id": "s-mgr8x2k1-5b9d3f7h",
+          "kind": "subtask",
+          "state": "asking",
+          "text": "订周三去上海的高铁"
+        },
+        {
+          "at": "2026-10-16T05:00:00+00:00",
+          "createdBy": "assistant",
+          "id": "s-mgs1q9w3-8c2v6n4m",
+          "kind": "subtask",
+          "state": "failed",
+          "text": ""
+        },
+        {
+          "at": "2026-10-16T05:00:00+00:00",
+          "createdBy": "assistant",
+          "id": "s-mgs1q9w3-8c2v6n4n",
+          "kind": "subtask",
+          "state": "step_limit",
+          "text": "核对发票"
+        },
+        {
+          "at": "2026-10-16T05:00:00+00:00",
+          "createdBy": "assistant",
+          "id": "s-mgs1q9w3-8c2v6n4o",
+          "kind": "subtask",
+          "state": "stopped",
+          "text": "比价"
+        },
+        {
+          "at": "2026-10-16T05:00:00+00:00",
+          "createdBy": "assistant",
+          "id": "s-mgs1q9w3-8c2v6n4p",
+          "kind": "subtask",
+          "state": "running",
+          "text": "再一个"
+        }
+      ],
+      "recent": [],
+      "recentOmitted": 0,
+      "upcoming": [
+        {
+          "at": "2026-10-16T12:00:00+00:00",
+          "createdBy": "assistant",
+          "id": "sched_3f9a0c1d2e4b5a69",
+          "kind": "task",
+          "repeat": {
+            "kind": "once"
+          },
+          "state": "scheduled",
+          "target": "assistant",
+          "text": "提醒用户带身份证：明早 8:05 虹桥的高铁\n去上海出差"
+        },
+        {
+          "at": "2026-10-21T06:00:00+00:00",
+          "createdBy": "assistant",
+          "id": "sched_0a1b2c3d4e5f6a7b",
+          "kind": "task",
+          "repeat": {
+            "kind": "once"
+          },
+          "state": "scheduled",
+          "target": "assistant",
+          "text": "提醒用户周三下午 3 点前把季度报告交给王经理，报告在 ~/Documents/Q3 报告.docx，交之前再核对一遍数据"
+        },
+        {
+          "at": "2026-10-17T09:00:00+00:00",
+          "createdBy": "user",
+          "id": "sched_41d0aa5e9b3c2f17",
+          "kind": "task",
+          "repeat": {
+            "kind": "weekly",
+            "weekdays": [
+              6
+            ]
+          },
+          "state": "scheduled",
+          "target": "session",
+          "text": "整理下载文件夹"
+        },
+        {
+          "agent": "claude-code",
+          "createdBy": "agent",
+          "id": "sched_9b2c7e1f0a3d4c58",
+          "kind": "task",
+          "repeat": {
+            "kind": "daily"
+          },
+          "state": "paused",
+          "target": "assistant",
+          "text": "看一眼 MyApp 的依赖更新"
+        },
+        {
+          "at": "2026-10-25T06:00:00+00:00",
+          "createdBy": "assistant",
+          "id": "sched_0000000000000000",
+          "kind": "task",
+          "repeat": {
+            "kind": "monthly",
+            "monthdays": [
+              1,
+              15
+            ]
+          },
+          "state": "scheduled",
+          "target": "assistant",
+          "text": "多的"
+        },
+        {
+          "at": "2026-10-25T06:00:00+00:00",
+          "createdBy": "assistant",
+          "id": "sched_0000000000000001",
+          "kind": "task",
+          "repeat": {
+            "kind": "monthly",
+            "monthdays": [
+              1,
+              15
+            ]
+          },
+          "state": "scheduled",
+          "target": "assistant",
+          "text": "多的"
+        },
+        {
+          "at": "2026-10-25T06:00:00+00:00",
+          "createdBy": "assistant",
+          "id": "sched_0000000000000002",
+          "kind": "task",
+          "repeat": {
+            "kind": "monthly",
+            "monthdays": [
+              1,
+              15
+            ]
+          },
+          "state": "scheduled",
+          "target": "assistant",
+          "text": "多的"
+        }
+      ]
+    },
+    "tz_offset_minutes": 480
+  },
+  "lateness_words": [
+    [
+      32400,
+      "9 hours"
+    ],
+    [
+      180,
+      "3 minutes"
+    ],
+    [
+      90061,
+      "1 day 1 hour"
+    ]
+  ],
+  "wake": [
+    {
+      "reports": [
+        {
+          "due_local": "2026-10-16 13:00 (Fri)",
+          "fired_local": "2026-10-16 22:00 (Fri)",
+          "late": null,
+          "once": true,
+          "prompt": "提醒用户带身份证\n明早 8:05 的高铁",
+          "rule": "one-off",
+          "task_id": "sched_aaaaaaaaaaaaaaaa"
+        }
+      ],
+      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_aaaaaaaaaaaaaaaa` (one-off) came due. Planned for 2026-10-16 13:00 (Fri), local time. What you noted when you set it:\n<<<\n提醒用户带身份证\n明早 8:05 的高铁\n>>>\nAct on it now: tell the user in a sentence or two, look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>."
+    },
+    {
+      "reports": [
+        {
+          "due_local": "2026-10-16 13:00 (Fri)",
+          "fired_local": "2026-10-16 22:00 (Fri)",
+          "late": "9 hours",
+          "once": true,
+          "prompt": "提醒用户给王经理回电话",
+          "rule": "one-off",
+          "task_id": "sched_bbbbbbbbbbbbbbbb"
+        }
+      ],
+      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_bbbbbbbbbbbbbbbb` (one-off) came due. Planned for 2026-10-16 13:00 (Fri), local time; it went off at 2026-10-16 22:00 (Fri), 9 hours late (the computer was asleep or Galley was closed). What you noted when you set it:\n<<<\n提醒用户给王经理回电话\n>>>\nAct on it now, and say in the reply itself (the user does not see your summary) that it comes 9 hours late: tell the user in a sentence or two, look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>."
+    },
+    {
+      "reports": [
+        {
+          "due_local": "2026-10-16 13:00 (Fri)",
+          "fired_local": "2026-10-16 22:00 (Fri)",
+          "late": null,
+          "once": true,
+          "prompt": "提醒用户带身份证\n明早 8:05 的高铁",
+          "rule": "one-off",
+          "task_id": "sched_aaaaaaaaaaaaaaaa"
+        },
+        {
+          "due_local": "2026-10-16 13:00 (Fri)",
+          "fired_local": "2026-10-16 22:00 (Fri)",
+          "late": null,
+          "once": false,
+          "prompt": "提醒用户吃药",
+          "rule": "every day at 09:00",
+          "task_id": "sched_cccccccccccccccc"
+        }
+      ],
+      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_aaaaaaaaaaaaaaaa` (one-off) came due. Planned for 2026-10-16 13:00 (Fri), local time. What you noted when you set it:\n<<<\n提醒用户带身份证\n明早 8:05 的高铁\n>>>\nAct on it now: tell the user in a sentence or two, look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.\n\nScheduled reminder `sched_cccccccccccccccc` (every day at 09:00) came due. Planned for 2026-10-16 13:00 (Fri), local time. What you noted when you set it:\n<<<\n提醒用户吃药\n>>>\nAct on it now: tell the user in a sentence or two, look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.\n\nReply once, covering all of them."
+    }
+  ]
+}

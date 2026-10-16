@@ -391,6 +391,24 @@ pub(crate) async fn prepare_managed_spawn_args(
             eprintln!("[main chat] writing the assistant manual failed: {e}");
         }
         let manual = crate::assistant_manual::manual_path(&state_root);
+        // What it has in hand (ticket 36): the reminders and scheduled
+        // tasks coming up and the subtasks not finished, read as the
+        // desktop's 「待办」 reads them. A failed read is logged and the
+        // lines are left out; the runner still starts.
+        let now = chrono::Utc::now();
+        let in_hand = match crate::assistant_todo::assistant_todo(
+            &app.state::<SqliteGalley>(),
+            &app.state::<std::sync::Arc<crate::runner_manager::RunnerManager>>(),
+            now,
+        )
+        .await
+        {
+            Ok(todo) => managed_prompt::in_hand_section(&todo, now, &chrono::Local),
+            Err(e) => {
+                eprintln!("[main chat] reading what it has in hand failed: {e}");
+                None
+            }
+        };
         if let Some(entry) = context
             .env
             .iter_mut()
@@ -399,6 +417,7 @@ pub(crate) async fn prepare_managed_spawn_args(
             entry.1 = managed_prompt::compose_main_chat_runtime_prompt(
                 &app.package_info().version.to_string(),
                 &main_chat,
+                in_hand.as_deref(),
                 &manual.to_string_lossy(),
             );
         }

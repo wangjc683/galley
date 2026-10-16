@@ -1,0 +1,392 @@
+{
+ "_note": "定时与提醒评测用例（票 36）。history 是主对话当前段里已有的轮次；tasks 是假 CLI 里已有的定时任务（时间按运行那一刻算：next_weekday 是今天之后第一个星期几，days 是今天之后第几天，minutes_ago 是几分钟前；in_hand 为真的在提示词的「In Hand」一节里列出，即分段开始时就有；fired 表示已经到点、等着叫醒）；message 是用户这句，wake 列出这次叫醒里到点的任务，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。",
+ "cases": [
+  {
+   "id": "report-wed",
+   "no": 1,
+   "group": "该建",
+   "expect_text": "提到带时间的事（没说「提醒我」）→ 自己建一个叫醒自己的一次性提醒（--target=assistant），时间在周三下午之前；回复一句话说出时间",
+   "history": [],
+   "tasks": [],
+   "message": "周三下午要交报告",
+   "expect": {
+    "create": "one",
+    "window": {
+     "from": {
+      "now": true
+     },
+     "to": {
+      "next_weekday": 3,
+      "time": "18:00"
+     }
+    },
+    "words_any": [
+     "报告"
+    ],
+    "mentions_time": true,
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "flight-fri",
+   "no": 2,
+   "group": "该建",
+   "expect_text": "订了航班（没说「提醒我」）→ 自己建提醒，时间在航班之前；回复说出时间",
+   "history": [],
+   "tasks": [],
+   "message": "我订了周五早上 7 点的航班",
+   "expect": {
+    "create": "one",
+    "window": {
+     "from": {
+      "now": true
+     },
+     "to": {
+      "next_weekday": 5,
+      "time": "07:00"
+     }
+    },
+    "words_any": [
+     "航班",
+     "飞机",
+     "机场",
+     "起飞",
+     "7"
+    ],
+    "mentions_time": true,
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "logistics-mon",
+   "no": 3,
+   "group": "该建",
+   "expect_text": "要等外部结果的后续 → 建周一的提醒，记下的话里带上单号（写给到点的自己）；回复说出时间",
+   "history": [
+    {
+     "role": "user",
+     "content": "我在京东买了台显示器，单号 JD8812345678，说下周一前能到。"
+    },
+    {
+     "role": "assistant",
+     "content": "好的，到了记得验一下屏幕有没有坏点。"
+    }
+   ],
+   "tasks": [],
+   "message": "下周一记得帮我看下物流",
+   "expect": {
+    "create": "one",
+    "window": {
+     "from": {
+      "next_weekday": 1,
+      "time": "00:00"
+     },
+     "to": {
+      "next_weekday": 1,
+      "time": "23:59"
+     }
+    },
+    "words_any": [
+     "JD8812345678"
+    ],
+    "mentions_time": true,
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "water-10min",
+   "no": 4,
+   "group": "该建",
+   "expect_text": "「十分钟后提醒我喝水」→ 先看现在几点，建十分钟后的提醒；回复说出时间",
+   "history": [],
+   "tasks": [],
+   "message": "十分钟后提醒我喝水",
+   "expect": {
+    "create": "one",
+    "window": {
+     "from": {
+      "started_plus_minutes": 7
+     },
+     "to": {
+      "started_plus_minutes": 15
+     }
+    },
+    "words_any": [
+     "水"
+    ],
+    "mentions_time": true,
+    "max_chars": 120
+   }
+  },
+  {
+   "id": "guitar",
+   "no": 5,
+   "group": "不该建",
+   "expect_text": "没有时间点的事 → 不建，不动任何东西，正常聊",
+   "history": [],
+   "tasks": [],
+   "message": "我最近想学吉他",
+   "expect": {
+    "create": "none",
+    "no_writes": true
+   }
+  },
+  {
+   "id": "tired-meeting",
+   "no": 6,
+   "group": "不该建",
+   "expect_text": "说过去的事 → 不建，不动任何东西，短回复",
+   "history": [],
+   "tasks": [],
+   "message": "昨天开会挺累的",
+   "expect": {
+    "create": "none",
+    "no_writes": true,
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "daily-news",
+   "no": 7,
+   "group": "该先问",
+   "expect_text": "重复且每次都要干活（花钱）→ 先在对话里问一句（时间、看什么），不建",
+   "history": [],
+   "tasks": [],
+   "message": "以后每天早上给我看看新闻",
+   "expect": {
+    "create": "none",
+    "no_writes": true,
+    "asks": true
+   }
+  },
+  {
+   "id": "already-set",
+   "no": 8,
+   "group": "已有同一件",
+   "expect_text": "「在办的事」里已有同一件 → 不再建第二个、不删；回复说已经记着、几点提醒",
+   "history": [],
+   "tasks": [
+    {
+     "id": "sched_6c1f0e9a2b7d4385",
+     "in_hand": true,
+     "origin": "assistant",
+     "prompt": "提醒用户周三下午 3 点前把季度报告交给王经理。报告在 ~/Documents/Q3 季度报告.docx，交之前再核对一遍第 4 页的数据。",
+     "at": {
+      "next_weekday": 3,
+      "time": "10:00"
+     }
+    }
+   ],
+   "message": "对了，周三下午我得交季度报告",
+   "expect": {
+    "create": "none",
+    "allow": [
+     "schedule update"
+    ],
+    "keep": [
+     "sched_6c1f0e9a2b7d4385"
+    ],
+    "mentions_time_of": "sched_6c1f0e9a2b7d4385",
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "no-need",
+   "no": 9,
+   "group": "不用了",
+   "expect_text": "你说不用了 → schedule delete 那一个（先 schedule list 找 id），不建新的；回复一句确认",
+   "history": [
+    {
+     "role": "user",
+     "content": "周日晚上 9 点提醒我给我妈打电话"
+    },
+    {
+     "role": "assistant",
+     "content": "好，周日晚上 9 点提醒你给妈妈打电话。"
+    }
+   ],
+   "tasks": [
+    {
+     "id": "sched_2d8e5a1c9f0b7364",
+     "in_hand": false,
+     "origin": "assistant",
+     "prompt": "提醒用户给妈妈打电话（用户周五说的，周日晚上 9 点）。",
+     "at": {
+      "next_weekday": 7,
+      "time": "21:00"
+     }
+    }
+   ],
+   "message": "刚给我妈打过了，周日那个不用提醒了",
+   "expect": {
+    "create": "none",
+    "delete": [
+     "sched_2d8e5a1c9f0b7364"
+    ],
+    "max_chars": 120
+   }
+  },
+  {
+   "id": "move-time",
+   "no": 10,
+   "group": "改时间",
+   "expect_text": "「改到 9 点」→ schedule update 那一个到明天 9:00（或删了重建），不留两个；回复说出新时间",
+   "history": [
+    {
+     "role": "user",
+     "content": "明天上午 10 点提醒我给房东转房租"
+    },
+    {
+     "role": "assistant",
+     "content": "好，明天上午 10 点提醒你给房东转房租。"
+    }
+   ],
+   "tasks": [
+    {
+     "id": "sched_9a4b2c7e1d0f5836",
+     "in_hand": false,
+     "origin": "assistant",
+     "prompt": "提醒用户给房东转这个月的房租。",
+     "at": {
+      "days": 1,
+      "time": "10:00"
+     }
+    }
+   ],
+   "message": "改到 9 点吧",
+   "expect": {
+    "move": {
+     "id": "sched_9a4b2c7e1d0f5836",
+     "window": {
+      "from": {
+       "days": 1,
+       "time": "09:00"
+      },
+      "to": {
+       "days": 1,
+       "time": "09:00"
+      }
+     }
+    },
+    "mentions_time": true,
+    "max_chars": 120
+   }
+  },
+  {
+   "id": "wake-on-time",
+   "no": 11,
+   "group": "叫醒",
+   "expect_text": "按时叫醒 → 照记下的话一两句提醒（带身份证、几点出门），不说晚了，不出 <no-reply/>",
+   "history": [],
+   "tasks": [
+    {
+     "id": "sched_4e7a1b9c2d3f0685",
+     "in_hand": false,
+     "origin": "assistant",
+     "prompt": "提醒用户：明早 8:05 虹桥站的 G7 次高铁去北京出差。今晚把行李收好、身份证放进包里，明早 7 点前出门。",
+     "at": {
+      "minutes_ago": 0
+     },
+     "fired": {
+      "late_minutes": 0
+     }
+    }
+   ],
+   "wake": [
+    "sched_4e7a1b9c2d3f0685"
+   ],
+   "expect": {
+    "create": "any",
+    "mentions_any": [
+     "身份证"
+    ],
+    "forbid_any": [
+     "晚了",
+     "迟了",
+     "晚到",
+     "延迟"
+    ],
+    "max_chars": 160
+   }
+  },
+  {
+   "id": "wake-late",
+   "no": 12,
+   "group": "叫醒",
+   "expect_text": "晚了 9 小时（电脑睡着）→ 照实说晚了多久，再说事情（给王经理回电话）",
+   "history": [],
+   "tasks": [
+    {
+     "id": "sched_7b3d9e0f1a2c6548",
+     "in_hand": false,
+     "origin": "assistant",
+     "prompt": "提醒用户给王经理回电话，确认下周合同签约的时间。",
+     "at": {
+      "minutes_ago": 540
+     },
+     "fired": {
+      "late_minutes": 540
+     }
+    }
+   ],
+   "wake": [
+    "sched_7b3d9e0f1a2c6548"
+   ],
+   "expect": {
+    "create": "any",
+    "mentions_any": [
+     "王经理"
+    ],
+    "mentions_groups": [
+     [
+      "晚",
+      "迟"
+     ],
+     [
+      "9",
+      "九"
+     ]
+    ],
+    "max_chars": 200
+   }
+  },
+  {
+   "id": "wake-obsolete",
+   "no": 13,
+   "group": "叫醒",
+   "expect_text": "事情已经办了（前面用户说过快递拿了）→ 回复只有 <no-reply/>，不动任何东西",
+   "history": [
+    {
+     "role": "user",
+     "content": "我刚下楼顺路把快递拿了，晚上不用再跑一趟了"
+    },
+    {
+     "role": "assistant",
+     "content": "好嘞，省一趟。"
+    }
+   ],
+   "tasks": [
+    {
+     "id": "sched_0f5c8a3e6b1d2947",
+     "in_hand": false,
+     "origin": "assistant",
+     "prompt": "提醒用户去菜鸟驿站取快递（取件码 8-3-2041）。",
+     "at": {
+      "minutes_ago": 0
+     },
+     "fired": {
+      "late_minutes": 0
+     }
+    }
+   ],
+   "wake": [
+    "sched_0f5c8a3e6b1d2947"
+   ],
+   "expect": {
+    "create": "none",
+    "no_writes": true,
+    "no_reply": true
+   }
+  }
+ ]
+}

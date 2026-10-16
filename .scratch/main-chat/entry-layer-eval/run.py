@@ -138,6 +138,37 @@ HOLDING_COMMANDS = ("session wait", "session follow", "session watch", "project 
 WRITE_COMMANDS = ("session send", "session stop", "session archive", "session restore", "session move",
                   "session new", "session btw", "project create", "project delete", "llm set")
 
+# Ticket 36: reminders and scheduled tasks (schedule/). The wake suite's
+# sandbox and fake galley, which also answers the `schedule` family and
+# ticket 35's other hands from the case's tasks. The prompt is the real
+# Rust composition with the ticket 36 entry layer and the main chat's own
+# configuration paragraph; a case's tasks from before the segment go into
+# its "In Hand" lines (in_hand_block); a reminder that came due is a wake
+# note in Core's words (reminder_note). Both ports are checked against
+# Rust's own output (schedule/rust-samples.json) by the dry test.
+SCHED_DIR = HERE / "schedule"
+SCHED_CASES = SCHED_DIR / "cases.json"
+SCHED_PROMPT = SCHED_DIR / "galley-prompt" / "main_chat.plain.txt"
+SCHED_CLI_HELP = SCHED_DIR / "cli-help.json"
+SCHED_SAMPLES = SCHED_DIR / "rust-samples.json"
+SCHED_JSON = SCHED_DIR / "results.json"
+SCHED_MD = SCHED_DIR / "results.md"
+SCHED_COMPOSED_DIR = SCHED_DIR / "composed"
+SCHED_DUMP_CASES = ("already-set", "wake-late")
+SCHED_TOOL_CAP = 10
+SCHED_REPEATS = 2
+# The wake suite's programs, plus `date`: the manual tells the model to read
+# the clock for a time relative to now.
+SCHED_EXTRA_EXEC = WAKE_EXTRA_EXEC + ("/bin/date",)
+SCHEDULE_WRITES = ("schedule create", "schedule update", "schedule delete", "schedule enable",
+                   "schedule disable", "schedule run")
+HAND_WRITES = ("session rename", "session pin", "session unpin", "session delete", "project update",
+               "project pin", "project unpin", "project archive-sessions", "llm set-default")
+ALL_WRITES = WRITE_COMMANDS + SCHEDULE_WRITES + HAND_WRITES
+# The In Hand lines' "as of": the runner started an hour before the
+# message (the segment's start).
+SCHED_IN_HAND_HOURS_BEFORE = 1
+
 # Sandbox mode (dispatch suite, second run): read-only lookups and file
 # work are answered for real inside a per-run sandbox instead of ending
 # the run. See build_sandbox and the worker's sandbox dispatch.
@@ -233,8 +264,10 @@ out({{"schemaVersion": 2, "ok": False, "error": {{"code": "unknown_command",
 # way the real CLI refuses them (invalid_args, exit 2): `llm set` takes
 # no --supervisor. Placeholders are filled by build_sandbox.
 FAKE_GALLEY_WAKE = r'''#!__PYTHON__
-"""Fake Galley CLI for the wake eval (ticket 30): fixture answers, every
-call logged. Not the real CLI; it never touches Galley."""
+"""Fake Galley CLI for the wake eval (ticket 30) and the schedule eval
+(ticket 36): fixture answers, every call logged. Not the real CLI; it never
+touches Galley."""
+import datetime as _dt
 import json, sys, time
 FIXTURE, STATE, LOG, HELP = "__FIXTURE__", "__STATE__", "__LOG__", "__HELP__"
 argv = sys.argv[1:]
@@ -245,6 +278,11 @@ try:
     state = json.load(open(STATE, encoding="utf-8"))
 except (OSError, ValueError):
     state = {"sent": [], "status": {}, "project": {}, "projects": [], "llm": {}}
+for key, empty in (("tasks", None), ("titles", {}), ("pins", {}), ("deleted", []), ("project_edits", {}),
+                   ("default_llm", None)):
+    state.setdefault(key, empty)
+if state["tasks"] is None:
+    state["tasks"] = [dict(t) for t in fx.get("tasks") or []]
 
 def save():
     with open(STATE, "w", encoding="utf-8") as f:
@@ -263,7 +301,7 @@ def fail(code, message, exit_code):
 
 VALUE = {"tail", "around", "context", "since", "until", "supervisor", "reason", "to", "project",
          "runtime", "status", "timeout", "poll", "after-turn", "llm", "session", "root-path",
-         "icon", "color", "schema"}
+         "icon", "color", "schema", "at", "weekly", "monthly", "time", "target", "prompt", "name"}
 words, flags, i = [], {}, 0
 while i < len(argv):
     a = argv[i]
@@ -309,6 +347,21 @@ ALLOWED = {
     ("project", "delete"): {"supervisor", "reason"},
     ("llm", "list"): {"runtime"}, ("llm", "set"): set(),
     ("status",): set(), ("version",): set(), ("health",): set(),
+    # Ticket 34: the schedule family.
+    ("schedule", "list"): {"all"}, ("schedule", "show"): set(),
+    ("schedule", "create"): {"at", "daily", "weekly", "monthly", "time", "target", "project", "llm",
+                             "supervisor", "reason"},
+    ("schedule", "update"): {"prompt", "at", "daily", "weekly", "monthly", "time", "target", "project",
+                             "llm", "supervisor", "reason"},
+    ("schedule", "delete"): {"supervisor", "reason"}, ("schedule", "enable"): {"supervisor", "reason"},
+    ("schedule", "disable"): {"supervisor", "reason"}, ("schedule", "run"): {"supervisor", "reason"},
+    # Ticket 35: the other hands.
+    ("session", "rename"): {"supervisor", "reason"}, ("session", "pin"): {"supervisor", "reason"},
+    ("session", "unpin"): {"supervisor", "reason"}, ("session", "delete"): {"supervisor", "reason"},
+    ("project", "update"): {"name", "icon", "color", "supervisor", "reason"},
+    ("project", "pin"): {"supervisor", "reason"}, ("project", "unpin"): {"supervisor", "reason"},
+    ("project", "archive-sessions"): {"supervisor", "reason"},
+    ("llm", "set-default"): {"supervisor", "reason"},
 }
 cmd = tuple(words[:1]) if words[:1] in (["status"], ["version"], ["health"]) else tuple(words[:2])
 rest = words[len(cmd):]
@@ -327,6 +380,10 @@ def brief(sid):
     s = dict(sessions[sid])
     if sid in state["status"]:
         s["status"] = state["status"][sid]
+    if sid in state["titles"]:
+        s["title"] = state["titles"][sid]
+    if sid in state["pins"]:
+        s["pinned"] = state["pins"][sid]
     if sid in state["project"]:
         if state["project"][sid]:
             s["projectId"] = state["project"][sid]
@@ -348,8 +405,140 @@ def need(n, what):
         fail("invalid_args", "error: the following required arguments were not provided:\n  " + what + "\n", 2)
 
 def known(sid):
-    if sid not in sessions:
+    if sid not in sessions or sid in state["deleted"]:
         fail("not_found", "session " + sid + " not found", 3)
+
+# ---- schedule (ticket 34), answered from the case's tasks ----
+TZ = _dt.timezone(_dt.timedelta(minutes=int(fx.get("tz_minutes") or 0)))
+UTC = _dt.timezone.utc
+
+def now_utc():
+    return _dt.datetime.now(UTC).replace(microsecond=0)
+
+def iso(t):
+    return t.astimezone(UTC).isoformat(timespec="seconds")
+
+def parse_at(v):
+    v = str(v).strip()
+    if "T" not in v and " " not in v:
+        return None
+    try:
+        t = _dt.datetime.fromisoformat(v[:-1] + "+00:00" if v.endswith("Z") else v)
+    except ValueError:
+        return None
+    return t.replace(tzinfo=TZ) if t.tzinfo is None else t
+
+def hhmm(v):
+    try:
+        h, m = str(v).split(":")
+        if len(m) != 2 or not (0 <= int(h) < 24 and 0 <= int(m) < 60):
+            raise ValueError
+        return "%02d:%02d" % (int(h), int(m))
+    except ValueError:
+        fail("invalid_args", "scheduled task: time_of_day must be HH:MM, got " + json.dumps(str(v)), 2)
+
+def day_list(v, top, what):
+    try:
+        ds = sorted({int(x) for x in str(v).split(",") if x.strip()})
+    except ValueError:
+        fail("invalid_args", "scheduled task: " + what + " days must be 1..=" + str(top), 2)
+    if not ds:
+        fail("invalid_args", "scheduled task: " + what + " repeat needs at least one day", 2)
+    if any(d < 1 or d > top for d in ds):
+        fail("invalid_args", "scheduled task: " + what + " days must be 1..=" + str(top), 2)
+    return ds
+
+def next_fire(t):
+    if t.get("cancelledAt") or not t.get("enabled", True):
+        return None
+    kind = t["repeat"]["kind"]
+    if kind == "once":
+        return None if t.get("lastDueAt") == t["fireAt"] else t["fireAt"]
+    h, m = (int(x) for x in t["timeOfDay"].split(":"))
+    local = now_utc().astimezone(TZ)
+    for add in range(0, 63):
+        day = (local + _dt.timedelta(days=add)).replace(hour=h, minute=m, second=0)
+        if day <= local:
+            continue
+        if kind == "weekly" and day.isoweekday() not in t["repeat"]["weekdays"]:
+            continue
+        if kind == "monthly" and day.day not in t["repeat"]["monthdays"]:
+            continue
+        return iso(day)
+    return None
+
+def task_out(t):
+    t = dict(t)
+    t.pop("_in_hand", None)
+    nf = next_fire(t)
+    if nf:
+        t["nextFireAt"] = nf
+    else:
+        t.pop("nextFireAt", None)
+    return t
+
+def find_task(tid, live=True):
+    for t in state["tasks"]:
+        if t["id"] == tid and not (live and t.get("cancelledAt")):
+            return t
+    fail("not_found", "scheduled task " + tid + " not found", 3)
+
+def origin_of():
+    o = {"via": "supervisor", "supervisor": flags["supervisor"]} if flags.get("supervisor") else {"via": "cli"}
+    if flags.get("reason"):
+        o["reason"] = flags["reason"]
+    return o
+
+def apply_rule(t, creating):
+    timing = [k for k in ("at", "daily", "weekly", "monthly") if flags.get(k)]
+    if creating and not timing:
+        fail("invalid_args", "error: the following required arguments were not provided:\n  "
+             "<--at <TIME>|--daily|--weekly <DAYS>|--monthly <DAYS>>\n", 2)
+    if len(timing) > 1:
+        fail("invalid_args", "error: the argument '--" + timing[0] + "' cannot be used with '--" + timing[1] + "'\n", 2)
+    if flags.get("at") and flags.get("time"):
+        fail("invalid_args", "error: the argument '--at <TIME>' cannot be used with '--time <HH:MM>'\n", 2)
+    if flags.get("at"):
+        at = parse_at(flags["at"])
+        if at is None:
+            fail("invalid_args", "scheduled task: fire time must be an RFC 3339 instant or a local "
+                 "YYYY-MM-DDTHH:MM, got " + json.dumps(str(flags["at"])), 2)
+        if at < now_utc():
+            fail("invalid_args", "time_in_past: " + ("create_scheduled_task" if creating else "update_scheduled_task")
+                 + ": " + iso(at) + " is in the past (now " + iso(now_utc()) + ")", 2)
+        t["repeat"] = {"kind": "once"}
+        t["fireAt"] = iso(at)
+        t["timeOfDay"] = at.astimezone(TZ).strftime("%H:%M")
+    elif timing:
+        if not flags.get("time") and (creating or t["repeat"]["kind"] == "once"):
+            fail("invalid_args", "scheduled task: a repeating rule needs --time", 2)
+        kind = timing[0]
+        if kind == "daily":
+            t["repeat"] = {"kind": "daily"}
+        elif kind == "weekly":
+            t["repeat"] = {"kind": "weekly", "weekdays": day_list(flags["weekly"], 7, "weekly")}
+        else:
+            t["repeat"] = {"kind": "monthly", "monthdays": day_list(flags["monthly"], 31, "monthly")}
+        if flags.get("time"):
+            t["timeOfDay"] = hhmm(flags["time"])
+        t.pop("fireAt", None)
+    elif flags.get("time"):
+        if t["repeat"]["kind"] == "once":
+            fail("invalid_args", "scheduled task: --time needs a repeating rule", 2)
+        t["timeOfDay"] = hhmm(flags["time"])
+    if "target" in flags:
+        if flags["target"] not in ("assistant", "session"):
+            fail("invalid_args", "error: invalid value '" + str(flags["target"]) + "' for '--target <TARGET>'\n"
+                 "  [possible values: assistant, session]\n", 2)
+        t["target"] = flags["target"]
+    for k, field in (("project", "projectId"), ("llm", "llmName")):
+        if k in flags:
+            if flags[k] and flags[k] is not True:
+                t[field] = flags[k]
+            else:
+                t.pop(field, None)
+    if t.get("target") == "assistant" and (t.get("projectId") or t.get("llmName")):
+        fail("invalid_args", "scheduled task: a task that wakes the assistant takes no project or model", 2)
 
 if cmd == ("sessions", "list"):
     show = [sid for sid in fx["order"]
@@ -461,6 +650,106 @@ if cmd == ("llm", "set"):
         fail("invalid_args", "unknown LLM name: " + rest[1], 2)
     state["llm"][rest[0]] = [hit[0]["key"], hit[0]["name"]]
     out({"session": brief(rest[0]), "dispatch": "persisted_only"})
+if cmd == ("schedule", "list"):
+    rows = [t for t in state["tasks"]
+            if flags.get("all") or (not t.get("cancelledAt") and t.get("enabled", True)
+                                    and not (t["repeat"]["kind"] == "once" and not next_fire(t)))]
+    rows.sort(key=lambda t: t.get("updatedAt", ""), reverse=True)
+    rows.sort(key=lambda t: not t.get("enabled", True))
+    out(*[task_out(t) for t in rows])
+if cmd == ("schedule", "show"):
+    need(1, "<ID>")
+    out(task_out(find_task(rest[0], live=False)))
+if cmd == ("schedule", "create"):
+    need(1, "<PROMPT>")
+    if not rest[0].strip():
+        fail("invalid_args", "scheduled task: prompt is empty", 2)
+    t = {"id": "sched_%016x" % (0x5eed000000000000 + len(state["tasks"])), "prompt": rest[0].strip(),
+         "enabled": True, "target": "session", "repeat": {"kind": "once"}}
+    apply_rule(t, True)
+    t["origin"] = origin_of()
+    if flags.get("supervisor") == "galley-assistant":
+        t["createdIn"] = {"sessionId": fx["main_chat_id"]}
+    t["createdAt"] = t["updatedAt"] = iso(now_utc())
+    state["tasks"].append(t)
+    out({"task": task_out(t)})
+if cmd == ("schedule", "update"):
+    need(1, "<ID>")
+    t = find_task(rest[0])
+    new = json.loads(json.dumps(t))
+    if "prompt" in flags:
+        if flags["prompt"] is True or not str(flags["prompt"]).strip():
+            fail("invalid_args", "scheduled task: prompt is empty", 2)
+        new["prompt"] = str(flags["prompt"]).strip()
+    apply_rule(new, False)
+    new["updatedAt"] = iso(now_utc())
+    t.clear()
+    t.update(new)
+    out({"task": task_out(t)})
+if cmd == ("schedule", "delete"):
+    need(1, "<ID>")
+    t = find_task(rest[0])
+    t["cancelledAt"] = t["updatedAt"] = iso(now_utc())
+    out({"task": task_out(t)})
+if cmd in (("schedule", "enable"), ("schedule", "disable")):
+    need(1, "<ID>")
+    t = find_task(rest[0])
+    t["enabled"] = cmd[1] == "enable"
+    t["updatedAt"] = iso(now_utc())
+    out({"task": task_out(t)})
+if cmd == ("schedule", "run"):
+    need(1, "<ID>")
+    t = find_task(rest[0])
+    t["lastFiredAt"] = iso(now_utc())
+    out({"task": task_out(t)})
+if cmd in (("session", "rename"), ("session", "pin"), ("session", "unpin"), ("session", "delete")):
+    need(2 if cmd[1] == "rename" else 1, "<ID> <TITLE>" if cmd[1] == "rename" else "<ID>")
+    known(rest[0])
+    if sessions[rest[0]].get("mainChat"):
+        fail("invalid_args", "main_chat_protected: the main chat cannot be "
+             + {"rename": "renamed", "pin": "pinned", "unpin": "unpinned", "delete": "deleted"}[cmd[1]], 2)
+    if cmd[1] == "delete":
+        state["deleted"].append(rest[0])
+        out({"deleted": True, "sessionId": rest[0]})
+    if cmd[1] == "rename":
+        state["titles"][rest[0]] = rest[1].strip() or "新对话"
+    else:
+        state["pins"][rest[0]] = cmd[1] == "pin"
+    out({"session": brief(rest[0])})
+if cmd in (("project", "update"), ("project", "pin"), ("project", "unpin"), ("project", "archive-sessions")):
+    need(1, "<PROJECT_ID>")
+    match = [p for p in fx["projects"] + state["projects"] if p["id"] == rest[0]]
+    if not match:
+        fail("not_found", "project " + rest[0] + " not found", 3)
+    p = dict(match[0], **state["project_edits"].get(rest[0], {}))
+    if cmd[1] == "archive-sessions":
+        ids = [s for s in fx["order"] if brief(s).get("projectId") == rest[0] and brief(s)["status"] != "archived"
+               and not brief(s).get("pinned") and not brief(s).get("mainChat")]
+        for s in ids:
+            state["status"][s] = "archived"
+        out({"projectId": rest[0], "archivedSessions": len(ids), "archivedSessionIds": ids})
+    edit = state["project_edits"].setdefault(rest[0], {})
+    if cmd[1] == "update":
+        if not any(k in flags for k in ("name", "icon", "color")):
+            fail("invalid_args", "project update: give at least one of --name, --icon, --color", 2)
+        if "name" in flags:
+            if flags["name"] is True or not str(flags["name"]).strip():
+                fail("invalid_args", "project name is empty", 2)
+            edit["name"] = str(flags["name"]).strip()
+        for k in ("icon", "color"):
+            if k in flags:
+                edit[k] = flags[k] if flags[k] is not True else None
+    else:
+        edit["pinned"] = cmd[1] == "pin"
+    out({"project": dict(match[0], **edit)})
+if cmd == ("llm", "set-default"):
+    need(1, "<LLM_NAME>")
+    hit = [m for m in fx["models"] if m["name"].lower() == rest[0].lower()]
+    if not hit:
+        fail("invalid_args", "unknown LLM name: " + rest[0], 2)
+    changed = hit[0]["index"] != 0 and state["default_llm"] != hit[0]["name"]
+    state["default_llm"] = hit[0]["name"]
+    out({"llm": dict(hit[0], index=0, isCurrent=True), "changed": changed})
 if cmd == ("status",):
     busy = sum(1 for s in fx["order"] if brief(s)["live"].get("busy"))
     out({"total": len(fx["order"]), "running": 0, "waitingInput": 0, "errored": 0, "live": {"busy": busy, "queued": 0}})
@@ -702,6 +991,225 @@ def wake_fixture(case: dict[str, Any], now: datetime) -> dict[str, Any]:
     }
 
 
+# ----------------------------------------------------------------------
+# Schedule suite (ticket 36)
+# ----------------------------------------------------------------------
+
+WEEKDAYS_EN = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+OPENING_REMINDER = ("[Galley — not a message from the user] A reminder you set came due. Act on it, then "
+                    "reply to the user. Do not mention this note.")
+CLOSING_MANY = "Reply once, covering all of them."
+LATE_AFTER_SECS = 120
+IN_HAND_MAX_PER_GROUP, IN_HAND_TEXT_CHARS, IN_HAND_AGENT_CHARS = 5, 40, 24
+IN_HAND_STATES = {"running": "working", "asking": "asking a question", "failed": "failed",
+                  "step_limit": "paused at the step limit", "stopped": "stopped before it finished",
+                  "done": "done"}
+
+
+def iso_utc(t: datetime) -> str:
+    """Core's UTC ISO shape (`instant_to_utc_iso`): `2026-10-20T12:00:00+00:00`."""
+    from datetime import timezone
+
+    return t.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+def local_words(t: datetime) -> str:
+    """`2026-10-20 20:00 (Tue)`, as subtask_report::local_words writes it."""
+    return t.strftime("%Y-%m-%d %H:%M") + f" ({WEEKDAYS_EN[t.weekday()]})"
+
+
+def lateness_words(secs: int) -> str:
+    """subtask_report::lateness_words."""
+    def unit(n: int, one: str) -> str:
+        return f"1 {one}" if n == 1 else f"{n} {one}s"
+
+    minutes = max(secs, 0) // 60
+    days, hours, mins = minutes // 1440, (minutes % 1440) // 60, minutes % 60
+    if days == 0 and hours == 0:
+        return unit(mins, "minute")
+    if days == 0 and mins == 0:
+        return unit(hours, "hour")
+    if days == 0:
+        return f"{unit(hours, 'hour')} {unit(mins, 'minute')}"
+    if hours == 0:
+        return unit(days, "day")
+    return f"{unit(days, 'day')} {unit(hours, 'hour')}"
+
+
+def due_paragraph(d: dict[str, Any]) -> str:
+    """subtask_report::due_paragraph, word for word."""
+    tid = d["task_id"]
+    what = (f"Reminder `{tid}` (one-off) came due." if d["once"]
+            else f"Scheduled reminder `{tid}` ({d['rule']}) came due.")
+    if d.get("late") is None:
+        when = f"Planned for {d['due_local']}, local time."
+        act = "Act on it now:"
+    else:
+        when = (f"Planned for {d['due_local']}, local time; it went off at {d['fired_local']}, {d['late']} late "
+                "(the computer was asleep or Galley was closed).")
+        act = (f"Act on it now, and say in the reply itself (the user does not see your summary) that it comes "
+               f"{d['late']} late:")
+    return (f"{what} {when} What you noted when you set it:\n<<<\n{d['prompt'].strip()}\n>>>\n"
+            f"{act} tell the user in a sentence or two, look something up first, or start a subtask. "
+            "If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.")
+
+
+def reminder_note(dues: list[dict[str, Any]]) -> str:
+    """subtask_report::report_text for reminders that came due."""
+    parts = [OPENING_REMINDER] + [due_paragraph(d) for d in dues]
+    if len(dues) > 1:
+        parts.append(CLOSING_MANY)
+    return "\n\n".join(parts)
+
+
+def in_hand_cut(text: str, limit: int) -> str:
+    line = " ".join(str(text).split())
+    return line if len(line) <= limit else line[:limit] + "…"
+
+
+def in_hand_block(todo: dict[str, Any], now: datetime, tz: Any) -> str | None:
+    """managed_prompt::in_hand_section, from the to-do read's JSON shape
+    (`upcoming` / `active` items, camelCase)."""
+    upcoming, active = todo.get("upcoming") or [], todo.get("active") or []
+    if not upcoming and not active:
+        return None
+    out = [f"### In Hand\n\nAs of {now.astimezone(tz):%Y-%m-%d %H:%M}, local time (it may have changed since: "
+           "`schedule list` and `session brief <id>` read it now)."]
+
+    def task_line(it: dict[str, Any]) -> str:
+        facts = []
+        if it.get("at"):
+            facts.append(local_words(datetime.fromisoformat(it["at"]).astimezone(tz)))
+        kind = (it.get("repeat") or {}).get("kind", "once")
+        facts.append({"daily": "daily", "weekly": "weekly", "monthly": "monthly"}.get(kind, "one-off"))
+        if it.get("state") == "paused":
+            facts.append("paused")
+        by = it.get("createdBy")
+        if by == "assistant":
+            facts.append("set by you")
+        elif by == "user":
+            facts.append("set by the user")
+        elif it.get("agent"):
+            facts.append("set by the outside agent " + in_hand_cut(it["agent"], IN_HAND_AGENT_CHARS))
+        else:
+            facts.append("set by an outside agent")
+        if it.get("target") == "session":
+            facts.append("starts a new conversation")
+        return f"`{it['id']}` {', '.join(facts)}: {in_hand_cut(it.get('text', ''), IN_HAND_TEXT_CHARS)}"
+
+    def subtask_line(it: dict[str, Any]) -> str:
+        title = in_hand_cut(it.get("text", ""), IN_HAND_TEXT_CHARS) or "(untitled)"
+        return f"`{it['id']}` {title}: {IN_HAND_STATES.get(it.get('state', ''), 'waiting')}"
+
+    for title, items, more, line in (("Coming up (reminders and scheduled tasks):", upcoming, "`schedule list`",
+                                      task_line),
+                                     ("Subtasks not finished:", active, "`sessions list`", subtask_line)):
+        if not items:
+            continue
+        out.append(f"\n\n{title}")
+        out += ["\n- " + line(it) for it in items[:IN_HAND_MAX_PER_GROUP]]
+        if len(items) > IN_HAND_MAX_PER_GROUP:
+            out.append(f"\n- and {len(items) - IN_HAND_MAX_PER_GROUP} more: {more}")
+    return "".join(out)
+
+
+def sched_time(spec: dict[str, Any], now: datetime, started: datetime | None = None) -> datetime:
+    """A case's time spec (schedule/cases.json `_note`), local and aware."""
+    if spec.get("now"):
+        return now
+    if "minutes_ago" in spec:
+        return now - timedelta(minutes=spec["minutes_ago"])
+    if "in_minutes" in spec:
+        return now + timedelta(minutes=spec["in_minutes"])
+    if "started_plus_minutes" in spec:
+        return (started or now) + timedelta(minutes=spec["started_plus_minutes"])
+    if "next_weekday" in spec:
+        day = now.date() + timedelta(days=1)
+        while day.isoweekday() != spec["next_weekday"]:
+            day += timedelta(days=1)
+    else:
+        day = now.date() + timedelta(days=int(spec["days"]))
+    h, m = (int(x) for x in spec["time"].split(":"))
+    return datetime(day.year, day.month, day.day, h, m, tzinfo=now.tzinfo)
+
+
+def sched_task(t: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """One of a case's tasks as `schedule show` prints it (Agent API §5.20)."""
+    at = sched_time(t["at"], now)
+    mine = t.get("origin", "assistant") == "assistant"
+    made = now - timedelta(hours=SCHED_IN_HAND_HOURS_BEFORE + 1) if t.get("in_hand") else now - timedelta(minutes=20)
+    task: dict[str, Any] = {
+        "id": t["id"], "prompt": t["prompt"], "repeat": {"kind": "once"}, "timeOfDay": at.strftime("%H:%M"),
+        "fireAt": iso_utc(at), "target": "assistant", "enabled": True,
+        "origin": ({"via": "supervisor", "supervisor": "galley-assistant", "reason": "user mentioned it"}
+                   if mine else {"via": "gui"}),
+        "createdAt": iso_utc(made), "updatedAt": iso_utc(made),
+    }
+    if mine:
+        task["createdIn"] = {"sessionId": SESSION_ID, "turnIndex": SEGMENT_START_TURN - 3 if t.get("in_hand")
+                             else SEGMENT_START_TURN}
+    if t.get("fired"):
+        fired = at + timedelta(minutes=t["fired"]["late_minutes"])
+        task.update(lastFiredAt=iso_utc(fired), lastDueAt=task["fireAt"], lastWake="pending")
+    return task
+
+
+def sched_in_hand(case: dict[str, Any], now: datetime) -> str | None:
+    """The case's In Hand lines: its tasks from before the segment, as the
+    to-do read lists them (upcoming, by next fire), read an hour before
+    the message."""
+    items = []
+    for t in case["tasks"]:
+        if not t.get("in_hand") or t.get("fired"):
+            continue
+        task = sched_task(t, now)
+        items.append({"kind": "task", "id": task["id"], "text": task["prompt"], "state": "scheduled",
+                      "at": task["fireAt"], "createdBy": "assistant" if task["origin"]["via"] == "supervisor" else "user",
+                      "target": task["target"], "repeat": task["repeat"]})
+    items.sort(key=lambda it: (it["at"], it["id"]))
+    return in_hand_block({"upcoming": items, "active": []}, now - timedelta(hours=SCHED_IN_HAND_HOURS_BEFORE),
+                         now.tzinfo)
+
+
+def sched_prompt(case: dict[str, Any], now: datetime) -> str:
+    """The main chat prompt as the real Rust code composed it
+    (schedule/galley-prompt/, with placeholders), segment facts and the
+    case's In Hand lines filled; the manual path is filled per run."""
+    text = SCHED_PROMPT.read_text(encoding="utf-8")
+    text = (text.replace("__SESSION_ID__", SESSION_ID)
+            .replace("__SEGMENT_START_TURN__", str(SEGMENT_START_TURN))
+            .replace("__SEGMENT_START_DATE__", now.strftime("%Y-%m-%d")))
+    if text.count("\n\n__IN_HAND__") != 1 or "__MANUAL_PATH__" not in text:
+        fail("schedule prompt: placeholders missing")
+    lines = sched_in_hand(case, now)
+    return text.replace("\n\n__IN_HAND__", "\n\n" + lines if lines else "")
+
+
+def sched_note(case: dict[str, Any], now: datetime) -> str:
+    """The wake note for the case's reminders that came due."""
+    dues = []
+    for tid in case["wake"]:
+        t = next(x for x in case["tasks"] if x["id"] == tid)
+        due = sched_time(t["at"], now)
+        fired = due + timedelta(minutes=t["fired"]["late_minutes"])
+        late = int((fired - due).total_seconds())
+        dues.append({"task_id": tid, "prompt": t["prompt"], "once": True, "rule": "one-off",
+                     "due_local": local_words(due), "fired_local": local_words(fired),
+                     "late": lateness_words(late) if late >= LATE_AFTER_SECS else None})
+    return reminder_note(dues)
+
+
+def sched_fixture(case: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """The wake suite's fixture (main chat, a conversation of the user's,
+    one an outside agent started, the case's history) plus the case's
+    tasks and this machine's offset for local times."""
+    fx = wake_fixture(dict(case, subtasks=[]), now)
+    fx["tasks"] = [sched_task(t, now) for t in case["tasks"]]
+    fx["tz_minutes"] = int(now.utcoffset().total_seconds() // 60) if now.utcoffset() else 0
+    fx["main_chat_id"] = SESSION_ID
+    return fx
+
+
 def read_galley_log(path: str) -> list[dict[str, Any]]:
     """The fake galley's invocation log (JSON lines); unreadable lines are
     kept as text."""
@@ -777,8 +1285,10 @@ def cli_brief(command: str | None) -> str | None:
 def model_from_galley_db(db_path: Path, model_id: str) -> dict[str, Any]:
     """One managed model as Core hands it to the runner
     (runner_commands::prepare_managed_runtime_context ->
-    GALLEY_MANAGED_MODEL_CONFIG_JSON), read from a temp copy of Galley's
-    database. Advanced options are merged like
+    GALLEY_MANAGED_MODEL_CONFIG_JSON), read from Galley's database opened
+    read-only and immutable (`mode=ro&immutable=1`: nothing is written,
+    not even a lock or a WAL index; since ticket 36, instead of a temp
+    copy). Advanced options are merged like
     managed_model_layers::effective_advanced_options (preset, then the
     defaults pref, then the model's overrides with null as a tombstone).
     The API key is decrypted like credential_store::get_secret
@@ -790,60 +1300,55 @@ def model_from_galley_db(db_path: Path, model_id: str) -> dict[str, Any]:
              "run with an interpreter that has it, or use --mykey")
     if not db_path.is_file():
         fail(f"Galley database not found: {db_path}")
-    with tempfile.TemporaryDirectory(prefix="entry-layer-eval-db-") as td:
-        os.chmod(td, 0o700)
-        copy = Path(td) / "workbench.db"
-        shutil.copyfile(db_path, copy)
-        wal = Path(str(db_path) + "-wal")
-        if wal.is_file():
-            shutil.copyfile(wal, Path(str(copy) + "-wal"))
-        con = sqlite3.connect(str(copy))
-        try:
-            row = con.execute(
-                "SELECT m.display_name, p.protocol, p.auth_kind, p.api_base, m.model, "
-                "p.api_key_ref, m.preset_options, m.advanced_options "
-                "FROM managed_models m JOIN managed_model_providers p ON p.id = m.provider_id "
-                "WHERE m.id = ?",
-                (model_id,),
+    from urllib.parse import quote
+
+    con = sqlite3.connect(f"file:{quote(str(db_path))}?mode=ro&immutable=1", uri=True)
+    try:
+        row = con.execute(
+            "SELECT m.display_name, p.protocol, p.auth_kind, p.api_base, m.model, "
+            "p.api_key_ref, m.preset_options, m.advanced_options "
+            "FROM managed_models m JOIN managed_model_providers p ON p.id = m.provider_id "
+            "WHERE m.id = ?",
+            (model_id,),
+        ).fetchone()
+        if row is None:
+            fail(f"managed model {model_id} not found")
+        display, protocol, auth_kind, api_base, model, key_ref, preset, overrides = row
+        pref = con.execute(
+            "SELECT value FROM prefs WHERE key = 'managed_model_defaults'"
+        ).fetchone()
+        defaults = json.loads(pref[0]) if pref else {}
+        if not isinstance(defaults, dict):
+            defaults = {}
+        options: dict[str, Any] = {}
+        for layer in (json.loads(preset or "{}"), defaults):
+            if isinstance(layer, dict):
+                options.update(layer)
+        for k, v in (json.loads(overrides or "{}") or {}).items():
+            if v is None:
+                options.pop(k, None)
+            else:
+                options[k] = v
+        api_key = ""
+        if auth_kind == "api_key":
+            secret = con.execute(
+                "SELECT s.nonce, s.ciphertext, s.algorithm, s.encryption_version, k.key_material "
+                "FROM managed_model_secrets s JOIN managed_model_secret_keys k ON k.key_id = s.key_id "
+                "WHERE s.api_key_ref = ?",
+                (key_ref,),
             ).fetchone()
-            if row is None:
-                fail(f"managed model {model_id} not found")
-            display, protocol, auth_kind, api_base, model, key_ref, preset, overrides = row
-            pref = con.execute(
-                "SELECT value FROM prefs WHERE key = 'managed_model_defaults'"
-            ).fetchone()
-            defaults = json.loads(pref[0]) if pref else {}
-            if not isinstance(defaults, dict):
-                defaults = {}
-            options: dict[str, Any] = {}
-            for layer in (json.loads(preset or "{}"), defaults):
-                if isinstance(layer, dict):
-                    options.update(layer)
-            for k, v in (json.loads(overrides or "{}") or {}).items():
-                if v is None:
-                    options.pop(k, None)
-                else:
-                    options[k] = v
-            api_key = ""
-            if auth_kind == "api_key":
-                secret = con.execute(
-                    "SELECT s.nonce, s.ciphertext, s.algorithm, s.encryption_version, k.key_material "
-                    "FROM managed_model_secrets s JOIN managed_model_secret_keys k ON k.key_id = s.key_id "
-                    "WHERE s.api_key_ref = ?",
-                    (key_ref,),
-                ).fetchone()
-                if secret is None:
-                    fail(f"no stored credential for {model_id}")
-                nonce, ciphertext, algorithm, version, key_material = secret
-                if algorithm != "aes-256-gcm" or version != 1:
-                    fail("unsupported credential encryption")
-                api_key = AESGCM(bytes(key_material)).decrypt(
-                    bytes(nonce), bytes(ciphertext), key_ref.encode()
-                ).decode("utf-8")
-            elif auth_kind != "none":
-                fail(f"auth kind {auth_kind} is not supported here (needs Core's credential IPC)")
-        finally:
-            con.close()
+            if secret is None:
+                fail(f"no stored credential for {model_id}")
+            nonce, ciphertext, algorithm, version, key_material = secret
+            if algorithm != "aes-256-gcm" or version != 1:
+                fail("unsupported credential encryption")
+            api_key = AESGCM(bytes(key_material)).decrypt(
+                bytes(nonce), bytes(ciphertext), key_ref.encode()
+            ).decode("utf-8")
+        elif auth_kind != "none":
+            fail(f"auth kind {auth_kind} is not supported here (needs Core's credential IPC)")
+    finally:
+        con.close()
     return {
         "displayName": display,
         "protocol": protocol,
@@ -1044,6 +1549,20 @@ touch "CANARY-wake" 2>/dev/null; echo "touch=$?"
 echo "x" > "CANARY-wake-redirect" 2>/dev/null; echo "redirect=$?"
 '''
 DRY_TOOL_BRIEF = "去华立、东辰、明光三家官网抓本周钢材报价，整理成对比表交回"
+# Schedule dry test (ticket 36): the clock, the list, a time in the past,
+# a reminder, one without --target (the CLI's default, session), the main
+# chat refused, a help page.
+SCHED_DRY_BASH = r'''GALLEY="$(sed -n '1p' "${XDG_CONFIG_HOME:-$HOME/.config}/galley/cli-path")"
+date +%H:%M >/dev/null; echo "date=$?"
+AT="$(date -v+10M +%Y-%m-%dT%H:%M)"
+"$GALLEY" schedule list | wc -l | sed 's/ //g; s/^/listed=/'
+"$GALLEY" schedule create "提醒用户喝水" --at=2020-01-01T08:00 --target=assistant --supervisor=galley-assistant --reason=asked; echo "past=$?"
+"$GALLEY" schedule create "提醒用户喝水" --at="$AT" --target=assistant --supervisor=galley-assistant --reason="user asked"
+"$GALLEY" schedule create "提醒用户喝水" --at="$AT" --supervisor=galley-assistant; echo "notarget=$?"
+"$GALLEY" schedule list | wc -l | sed 's/ //g; s/^/listed=/'
+"$GALLEY" session rename s-mgn4k2x1-7q3z9w0e "主对话" --supervisor=galley-assistant; echo "rename=$?"
+"$GALLEY" schedule create --help | head -1
+'''
 
 
 SANDBOX_PROBE = r'''import json, os, socket, subprocess
@@ -1154,6 +1673,12 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
         "wake-ask": [
             call("<summary>Ask the user</summary>\n要验证码。",
                  ("ask_user", {"question": "12306 发到你手机尾号 3821 的验证码是多少？", "candidates": []}))],
+        # Schedule suite.
+        "sched-create": [
+            call("<summary>Read the manual</summary>\n先看手册。", ("file_read", {"path": ctx.get("manual", "")})),
+            call("<summary>Set it</summary>\n建一个。", ("code_run", {"type": "bash", "script": SCHED_DRY_BASH})),
+            call("<summary>Set</summary>\n好，十分钟后提醒你喝水。")],
+        "sched-no-reply": [call("<summary>Already done</summary>\n<no-reply/>")],
         "sbx-inline": [
             call("<summary>Inline</summary>\n直接算。",
                  ("code_run", {"script": f"open({canary + '-inline'!r}, 'w').write('x')", "inline_eval": True}))],
@@ -1439,6 +1964,7 @@ def worker() -> int:
 
     threading.Thread(target=agent.run, daemon=True).start()
     started = time.time()
+    rec["started_at"] = started
     dq = agent.put_task(job["message"], source="workbench")
     done = None
     limit = SANDBOX_RUN_TIMEOUT_S if sandbox else RUN_TIMEOUT_S
@@ -1580,6 +2106,8 @@ def build_result(job: dict[str, Any], rec: dict[str, Any], done: Any, latency: f
             "stop_reason": stop,
             "final_reply": reply,
         })
+        if job.get("suite") == "schedule":
+            result.update({"suite": "schedule", "now": job["now"], "started_at": rec.get("started_at")})
     elif variant:
         call = rec["dispatch_call"]
         tag = SUBTASK_TAG_RE.search(responses[0]["content"]) if responses else None
@@ -1749,7 +2277,7 @@ def build_sandbox(run_dir: Path, python: str, wake: dict[str, Any] | None = None
         data = root / "galley-data"
         data.mkdir()
         (data / "fixture.json").write_text(json.dumps(wake["fixture"], ensure_ascii=False), encoding="utf-8")
-        shutil.copyfile(WAKE_CLI_HELP, data / "help.json")
+        shutil.copyfile(wake.get("help") or WAKE_CLI_HELP, data / "help.json")
         galley.write_text(FAKE_GALLEY_WAKE.replace("__PYTHON__", py_real)
                           .replace("__FIXTURE__", str(data / "fixture.json"))
                           .replace("__STATE__", str(data / "state.json"))
@@ -1765,8 +2293,8 @@ def build_sandbox(run_dir: Path, python: str, wake: dict[str, Any] | None = None
     (home / ".config" / "galley" / "cli-path").write_text(str(galley) + "\n", encoding="utf-8")
     py_root = str(Path(py_real).parents[1])
     profile = Path(os.path.realpath(run_dir)) / "sandbox.sb"
-    profile.write_text(sandbox_profile(str(root), py_root, str(galley),
-                                       WAKE_EXTRA_EXEC if wake is not None else ()), encoding="utf-8")
+    extra_exec = tuple(wake.get("extra_exec") or WAKE_EXTRA_EXEC) if wake is not None else ()
+    profile.write_text(sandbox_profile(str(root), py_root, str(galley), extra_exec), encoding="utf-8")
     return dict(info, root=str(root), home=str(home), profile=str(profile), galley=str(galley),
                 galley_log=str(log), py_root=py_root)
 
@@ -1837,6 +2365,13 @@ def run_job(job: dict[str, Any], python: str, workdir: Path) -> dict[str, Any]:
     result["canaries"] = sorted(p.name for p in run_dir.glob("canary*"))
     if job.get("manual_sha"):
         result["manual_sha"] = job["manual_sha"]
+    if job.get("suite") == "schedule":
+        # What the fake galley ended with (tasks made, changed, cancelled),
+        # and what it started with.
+        state_path = Path(sandbox["fake_state"]) if sandbox and sandbox.get("fake_state") else None
+        if state_path and state_path.is_file():
+            result["fake_state"] = json.loads(state_path.read_text(encoding="utf-8"))
+        result["fixture_tasks"] = job["wake"]["fixture"]["tasks"]
     if sandbox:
         after = downloads_snapshot(Path(sandbox["home"]))
         result["downloads_changes"] = {
@@ -1938,6 +2473,40 @@ def make_wake_jobs(cases: list[dict[str, Any]], wordings: list[str], now: dateti
                     "tool_cap": WAKE_TOOL_CAP,
                     "wake": {"fixture": wake_fixture(case, now), "files": case.get("files") or {}},
                 })
+    return jobs
+
+
+def make_sched_jobs(cases: list[dict[str, Any]], now: datetime, mykeys: dict[str, Any], ga_lang: str,
+                    allowed_hosts: set[str], repeats: int, dry: str | None = None,
+                    first: int = 1) -> list[dict[str, Any]]:
+    """Ticket 36: each case `repeats` times, numbered from `first`. The
+    wake suite's sandbox, with the case's tasks in the fake galley; the
+    user's message, or the wake note for the reminders that came due.
+    `now` is local and aware."""
+    jobs = []
+    for case in cases:
+        message = case.get("message") or sched_note(case, now)
+        for n in range(first, first + repeats):
+            jobs.append({
+                "case_id": case["id"],
+                "variant": f"r{n}",
+                "wording": "manual",
+                "repeat": n,
+                "suite": "schedule",
+                "now": now.isoformat(timespec="seconds"),
+                "message": message,
+                "history": [{"role": m["role"], "content": m["content"]} for m in case["history"]],
+                "galley_prompt": sched_prompt(case, now),
+                "mykeys": mykeys,
+                "ga_lang": ga_lang,
+                "allowed_hosts": sorted(allowed_hosts),
+                "keep_request": (case["id"] in SCHED_DUMP_CASES and n == 1) or bool(dry),
+                "dry": dry,
+                "sandbox": True,
+                "tool_cap": SCHED_TOOL_CAP,
+                "wake": {"fixture": sched_fixture(case, now), "files": {}, "help": str(SCHED_CLI_HELP),
+                         "extra_exec": list(SCHED_EXTRA_EXEC)},
+            })
     return jobs
 
 
@@ -2360,7 +2929,7 @@ def render_sandbox_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
 
 CLI_VALUE_FLAGS = {"tail", "around", "context", "since", "until", "supervisor", "reason", "to", "project",
                    "runtime", "status", "timeout", "poll", "after-turn", "llm", "session", "root-path",
-                   "icon", "color", "schema"}
+                   "icon", "color", "schema", "at", "weekly", "monthly", "time", "target", "prompt", "name"}
 NO_REPLY_RE = re.compile(r"<\s*no-reply\s*/\s*>", re.IGNORECASE)
 
 
@@ -2583,6 +3152,349 @@ def render_wake_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     return "\n".join(line.rstrip() for line in "\n".join(out).split("\n")).rstrip() + "\n"
 
 
+CN_DIGITS = "零一二三四五六七八九"
+
+
+def cn_number(n: int) -> str:
+    """1–99 in Chinese numerals (十二, 二十五)."""
+    if n < 10:
+        return CN_DIGITS[n]
+    tens, ones = divmod(n, 10)
+    return ("" if tens == 1 else CN_DIGITS[tens]) + "十" + (CN_DIGITS[ones] if ones else "")
+
+
+def says_time(text: str, at: datetime, now: datetime, started: datetime) -> bool:
+    """Whether a reply names a time: the hour (24- or 12-hour, digits or
+    Chinese, `:mm`, 点, 半) and, unless it is today, the day (明天, 周三,
+    21 号 …); or, within three hours, how many minutes from now."""
+    text = text.replace("：", ":")
+    h, m = at.hour, at.minute
+    hours = {h, h % 12 or 12}
+    pats: list[str] = []
+    for x in hours:
+        names = [str(x), f"{x:02d}", cn_number(x)] + (["两"] if x == 2 else [])
+        pats += [f"{x}:{m:02d}", f"{x:02d}:{m:02d}"]
+        for name in names:
+            if m == 0:
+                pats += [f"{name}点", f"{name} 点", f"{name}时"]
+            elif m == 30:
+                pats += [f"{name}点半", f"{name} 点半", f"{name}点 30", f"{name} 点 30", f"{name}点30"]
+            else:
+                pats += [f"{name}点{m}", f"{name} 点 {m}", f"{name}点{cn_number(m)}"]
+    hour_ok = any(p in text for p in pats)
+    minutes = round((at - started).total_seconds() / 60)
+    if 0 < minutes <= 180:
+        for k in range(max(1, minutes - 3), minutes + 4):
+            if any(f"{w}分钟" in text or f"{w} 分钟" in text for w in (str(k), cn_number(k))):
+                return True
+    day, today = at.date(), now.date()
+    if day == today:
+        day_ok = True
+    elif day == today + timedelta(days=1):
+        day_ok = any(w in text for w in ("明天", "明早", "明晚", "明日", "明儿", "明上午", "明下午"))
+    else:
+        wd = "一二三四五六日"[day.weekday()]
+        words = [f"周{wd}", f"星期{wd}", f"礼拜{wd}"] + (["周天", "星期天", "礼拜天"] if wd == "日" else [])
+        words += [f"{day.month}月{day.day}", f"{day.month} 月 {day.day}", f"{day.day}号", f"{day.day} 号",
+                  f"{day.day}日", f"{day.month}-{day.day}", f"{day.month}/{day.day}", f"{day.month:02d}-{day.day:02d}"]
+        if day == today + timedelta(days=2):
+            words.append("后天")
+        day_ok = any(w in text for w in words)
+    return hour_ok and day_ok
+
+
+def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
+    """What a schedule run did, and whether it met the case's
+    expectations (schedule/cases.json `expect`). Commands from the fake
+    galley's log; tasks made, changed and cancelled from its final state."""
+    exp = case["expect"]
+    now = datetime.fromisoformat(r["now"])
+    tz = now.tzinfo
+    started = datetime.fromtimestamp(r["started_at"], tz) if r.get("started_at") else now
+    log = [c.get("argv") or [] for c in r.get("galley_log") or []]
+    names = [cli_name(a) for a in log]
+    fixture = {t["id"]: t for t in r.get("fixture_tasks") or []}
+    final = (r.get("fake_state") or {}).get("tasks")
+    if final is None:
+        final = list(fixture.values())
+    by_id = {t["id"]: t for t in final}
+    made = [t for t in final if t["id"] not in fixture]
+    made_live = [t for t in made if not t.get("cancelledAt")]
+    cancelled = sorted(t["id"] for t in final if t["id"] in fixture and t.get("cancelledAt"))
+    changed = sorted(t["id"] for t in final if t["id"] in fixture and not t.get("cancelledAt")
+                     and {k: v for k, v in t.items() if k != "updatedAt"}
+                     != {k: v for k, v in fixture[t["id"]].items() if k != "updatedAt"})
+    creates = [parse_cli(a) for a in log if cli_name(a) == "schedule create"]
+    sched_writes = [(cli_name(a), parse_cli(a)) for a in log if cli_name(a) in SCHEDULE_WRITES]
+    writes = [n for n in names if n in ALL_WRITES]
+    held = [n for n in names if n in HOLDING_COMMANDS]
+    reply = r.get("final_reply") or ""
+    body = strip_for_display(reply)
+    is_no_reply = bool(NO_REPLY_RE.fullmatch(body.strip()))
+    has_no_reply = bool(NO_REPLY_RE.search(reply))
+    stop = r.get("stop_reason")
+    asked = (r.get("tool_call") or {}).get("args") if stop == "ask_user" else None
+    said = body + ("\n" + json.dumps(asked, ensure_ascii=False) if asked else "")
+    calls = r.get("calls") or []
+    manual_at = next((c["n"] for c in calls
+                      if "galley-assistant-manual" in json.dumps(c.get("args"), ensure_ascii=False)), None)
+    write_at = next((c["n"] for c in calls
+                     if any(cli_name(a) in ALL_WRITES for a in c.get("galley_calls") or [])), None)
+    if manual_at is None:
+        manual = "没读" if write_at else "没读（没写）"
+    elif write_at is None or manual_at < write_at:
+        manual = f"读了（第 {manual_at} 次调用）"
+    else:
+        manual = f"写之后才读（第 {manual_at} 次）"
+    first_list = next((i for i, n in enumerate(names) if n == "schedule list"), None)
+    first_create = next((i for i, n in enumerate(names) if n == "schedule create"), None)
+    if first_create is None:
+        listed = "—"
+    else:
+        listed = "查了" if first_list is not None and first_list < first_create else "没查"
+
+    def local(iso: str) -> datetime:
+        return datetime.fromisoformat(iso).astimezone(tz)
+
+    def in_window(t: dict[str, Any], window: dict[str, Any]) -> bool:
+        if not t.get("fireAt"):
+            return False
+        at = local(t["fireAt"])
+        lo = now if window["from"].get("now") else sched_time(window["from"], now, started)
+        hi = sched_time(window["to"], now, started)
+        return lo - timedelta(seconds=59) <= at <= hi + timedelta(seconds=59)
+
+    reasons = []
+    if r.get("status") != "ok":
+        reasons.append(f"运行失败：{r.get('status')}")
+    if stop not in ("final_reply", "ask_user"):
+        reasons.append("没走到最终回复：" + STOP_LABELS.get(stop, str(stop)))
+    if held:
+        reasons.append("用了会卡住主对话的命令：" + "、".join(sorted(set(held))))
+    if "session new" in names or "<subtask>" in reply:
+        reasons.append("开了子任务或新会话")
+    for words, flags in creates:
+        if flags.get("target") != "assistant":
+            reasons.append("schedule create 没带 --target=assistant")
+            break
+    for name, (words, flags) in sched_writes:
+        if flags.get("supervisor") != "galley-assistant":
+            reasons.append(f"{name} 没带 --supervisor=galley-assistant")
+            break
+    allowed = set(exp.get("allow") or [])
+    mode = exp.get("create", "none")
+    if mode in ("one", "any"):
+        allowed.add("schedule create")
+    if exp.get("delete"):
+        allowed.add("schedule delete")
+    if exp.get("move"):
+        allowed |= {"schedule update", "schedule delete", "schedule create"}
+    extra = sorted({n for n in writes if n not in allowed})
+    if extra:
+        reasons.append("多余的写命令：" + "、".join(extra))
+    timed: dict[str, Any] | None = None
+    if mode == "one":
+        if len(made_live) != 1:
+            reasons.append(f"该建 1 个提醒，建了 {len(made_live)} 个")
+        else:
+            timed = made_live[0]
+            if timed.get("target") != "assistant":
+                reasons.append("建成了每次新开会话的任务（target 不是 assistant）")
+            if exp.get("window") and not in_window(timed, exp["window"]):
+                reasons.append("时间不对：" + local_words(local(timed["fireAt"])) if timed.get("fireAt")
+                               else "不是一次性提醒")
+            if exp.get("words_any") and not any(w in timed["prompt"] for w in exp["words_any"]):
+                reasons.append("记下的话里没有：" + " / ".join(exp["words_any"]))
+    elif mode == "any":
+        if len(made_live) > 1:
+            reasons.append(f"建了 {len(made_live)} 个提醒")
+        timed = made_live[0] if made_live else None
+    elif made or creates:
+        reasons.append("不该建却建了（或试着建）")
+    want_cancel = sorted(exp.get("delete") or [])
+    move = exp.get("move")
+    if move:
+        target = by_id.get(move["id"], {})
+        if not target.get("cancelledAt"):
+            timed = target
+            if not in_window(target, move["window"]):
+                reasons.append("没改到新时间：" + (local_words(local(target["fireAt"])) if target.get("fireAt") else "?"))
+            if made_live:
+                reasons.append("改时间时多建了一个")
+        else:
+            if len(made_live) != 1 or not in_window(made_live[0], move["window"]):
+                reasons.append("删了原来的，但没有在新时间重建一个")
+            else:
+                timed = made_live[0]
+                if timed.get("target") != "assistant":
+                    reasons.append("重建的不是叫醒自己的提醒")
+        if [c for c in cancelled if c != move["id"]]:
+            reasons.append("删了不该删的：" + "、".join(c for c in cancelled if c != move["id"]))
+    elif cancelled != want_cancel:
+        if want_cancel and not set(want_cancel) <= set(cancelled):
+            reasons.append("该删没删：" + "、".join(sorted(set(want_cancel) - set(cancelled))))
+        if set(cancelled) - set(want_cancel):
+            reasons.append("删了不该删的：" + "、".join(sorted(set(cancelled) - set(want_cancel))))
+    for keep in exp.get("keep") or []:
+        if by_id.get(keep, {}).get("cancelledAt"):
+            reasons.append(f"不该删 {keep}")
+    if exp.get("no_writes") and writes:
+        reasons.append("不该动任何东西：" + "、".join(writes))
+    if exp.get("no_reply"):
+        if not is_no_reply:
+            reasons.append("回复不是只有 <no-reply/>")
+    else:
+        if has_no_reply:
+            reasons.append("不该写 <no-reply/>")
+        if stop == "final_reply" and not body.strip():
+            reasons.append("回复正文是空的（话只写在 <summary> 里，主对话不显示）")
+        if exp.get("mentions_time") and timed and timed.get("fireAt"):
+            if not says_time(said, local(timed["fireAt"]), now, started):
+                reasons.append("回复没说出时间（" + local_words(local(timed["fireAt"])) + "）")
+        if exp.get("mentions_time_of"):
+            t = by_id.get(exp["mentions_time_of"], {})
+            if t.get("fireAt") and not says_time(said, local(t["fireAt"]), now, started):
+                reasons.append("没说已有的那个是什么时候（" + local_words(local(t["fireAt"])) + "）")
+        if exp.get("mentions_any") and not any(w in said for w in exp["mentions_any"]):
+            reasons.append("没点到：" + " / ".join(exp["mentions_any"]))
+        for group in exp.get("mentions_groups") or []:
+            if not any(w in said for w in group):
+                reasons.append("漏了：" + " / ".join(group))
+        if exp.get("forbid_any") and any(w in said for w in exp["forbid_any"]):
+            reasons.append("不该说：" + " / ".join(w for w in exp["forbid_any"] if w in said))
+        if exp.get("asks") and not (asked or "？" in body or "?" in body):
+            reasons.append("该先问一句，没问")
+        if exp.get("max_chars") and len(body) > exp["max_chars"]:
+            reasons.append(f"太长：{len(body)} 字，上限 {exp['max_chars']}")
+    return {
+        "commands": [" ".join(a) for a in log],
+        "names": names,
+        "writes": writes,
+        "made": made,
+        "cancelled": cancelled,
+        "changed": changed,
+        "timed": timed,
+        "held": held,
+        "body": body,
+        "no_reply": is_no_reply,
+        "chars": len(body),
+        "suggestion": r.get("next_suggestion"),
+        "asked_via_tool": asked,
+        "manual": manual,
+        "listed": listed,
+        "stop": stop,
+        "pass": not reasons,
+        "reasons": reasons,
+    }
+
+
+def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
+    meta = data["meta"]
+    by_case: dict[str, list[dict[str, Any]]] = {}
+    for r in data["results"]:
+        by_case.setdefault(r["id"], []).append(r)
+    facts = {(r["id"], r["variant"]): sched_facts(r, next(c for c in cases if c["id"] == r["id"]))
+             for r in data["results"] if any(c["id"] == r["id"] for c in cases)}
+    out = [
+        "# 定时与提醒评测结果（票 36）",
+        "",
+        f"模型：{meta['model']['name']}（{meta['model_source']}，即 JC 主对话现在用的模型），推理强度 "
+        f"{meta['model']['options'].get('reasoning_effort', '默认')}；首次运行于 {meta['ran_at']}。",
+        "",
+        "- **提示词**：真实 Rust 代码 `compose_main_chat_runtime_prompt` 生成的主对话提示词（`galley-prompt/`）：票 36 改过的入口层、"
+        "主对话自己的「What Only The User Changes」一段；用例里分段开始前就有的定时任务照 `in_hand_section` 的格式写进「In Hand」一节"
+        "（`run.py` 的 `in_hand_block`，干跑测试逐字对过 Rust 的输出）。手册是仓库里的 `docs/managed-ga-runtime/galley-assistant-manual.md`，"
+        "放在这次运行状态根下 Core 写它的位置。",
+        "- **新消息**：用户这句；叫醒用例是照 Core 措辞（`subtask_report::report_text`，同样逐字对过）拼出的叫醒消息。",
+        "- **工具**：`code_run` 与文件工具在每次运行自己的 macOS 沙盒里真的执行（同票 30 的沙盒，另允许 `date`）；Galley CLI 是假的："
+        "`schedule` 命令族按 Agent API §5.20–§5.27 的形状回答、照真实 CLI 校验参数（过去的时刻报 `time_in_past:`，`--target` 默认 `session`），"
+        "票 35 的手（改名、置顶、删除、项目、默认模型）也接着；`--help` 是真实 CLI 的原文。每次调用都记下，写命令只改假 CLI 自己的状态。"
+        f"每次运行最多 {SCHED_TOOL_CAP} 次工具调用。",
+        "- **判定**：按 `cases.json` 每条的 `expect` 自动判，看它发出的命令（假 CLI 的日志与最后的状态）和回复里有没有说出时间。"
+        "每条都查：`schedule create` 带没带 `--target=assistant`，`schedule` 写命令带没带 `--supervisor=galley-assistant`。",
+        "",
+    ]
+    sup = meta.get("superseded_runs") or []
+    for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
+        out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
+                f"`meta.superseded_runs[{n - 1}]` 里。", ""]
+    total = passed = 0
+    out += ["## 通过率", "", "| # | 用例 | 分组 | 期望 | 遍数 | 过 | 通过率 |", "| --- | --- | --- | --- | --- | --- | --- |"]
+    for case in cases:
+        runs = by_case.get(case["id"], [])
+        if not runs:
+            continue
+        ok = sum(1 for r in runs if facts[(r["id"], r["variant"])]["pass"])
+        total, passed = total + len(runs), passed + ok
+        out.append(f"| {case['no']} | {case['id']} | {case['group']} | {case['expect_text'].replace('|', '/')} | "
+                   f"{len(runs)} | {ok} | {round(100 * ok / len(runs))}% |")
+    if total:
+        out.append(f"| | 合计 | | | {total} | {passed} | {round(100 * passed / total)}% |")
+    out += ["", "## 一览", "",
+            "| # | 用例 | 遍 | 调了什么命令 | 回复原文 | 字数 | 读手册 | 建前查过 | 判定 |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for case in cases:
+        for r in sorted(by_case.get(case["id"], []), key=lambda r: r.get("repeat", 0)):
+            f = facts[(r["id"], r["variant"])]
+            cmds = "；".join(short_cmd(c, 220) for c in f["commands"] if cli_name(c.split()) != "help") or "—"
+            if f["asked_via_tool"]:
+                reply = one_line(f["body"] + "（ask_user：" + str(f["asked_via_tool"].get("question", "")) + "）")
+            else:
+                reply = one_line(f["body"]) or "（空）"
+            verdict = "过" if f["pass"] else "不过：" + "；".join(f["reasons"])
+            out.append(f"| {case['no']} | {case['id']} | {r['repeat']} | {cmds.replace('|', '/')} | {reply} | "
+                       f"{f['chars']} | {f['manual']} | {f['listed']} | {verdict.replace('|', '/')} |")
+    out.append("")
+    for case in cases:
+        runs = sorted(by_case.get(case["id"], []), key=lambda r: r.get("repeat", 0))
+        if not runs:
+            continue
+        out += [f"## {case['no']}. {case['id']}（{case['group']}）", "", f"**期望**：{case['expect_text']}", ""]
+        if case["history"]:
+            out += ["上下文：", ""]
+            for m in case["history"]:
+                who = "用户" if m["role"] == "user" else "助手"
+                out += [f"> {who}：" + m["content"].replace("\n", "\n> "), ">"]
+            out.pop()
+            out.append("")
+        if case["tasks"]:
+            out += ["已有的定时任务（运行那一刻的时间）："]
+            out.append("")
+            for t in runs[0].get("fixture_tasks") or []:
+                spec = next((x for x in case["tasks"] if x["id"] == t["id"]), {})
+                where = "，在「In Hand」里" if spec.get("in_hand") else ""
+                fired = "，已到点" if t.get("lastFiredAt") else ""
+                out.append(f"- `{t['id']}` {t['fireAt']}{where}{fired}：{t['prompt']}")
+            out.append("")
+        first = runs[0]
+        out += [("叫醒消息：" if case.get("wake") else "用户：")] + [""] + fenced(first.get("message") or "")
+        for r in runs:
+            f = facts[(r["id"], r["variant"])]
+            out += [f"### 第 {r['repeat']} 遍：{'过' if f['pass'] else '不过'}", ""]
+            if not f["pass"]:
+                out += ["不过的原因：" + "；".join(f["reasons"]), ""]
+            calls = r.get("calls") or []
+            if calls:
+                out += ["工具调用：", ""]
+                for c in calls:
+                    line = f"{c['n']}. {call_gist(c)}"
+                    for argv in c.get("galley_calls") or []:
+                        line += "；galley " + " ".join(argv).replace("`", "'")
+                    out.append(line.replace("\n", " "))
+                out.append("")
+            made = "；".join(f"`{t['id']}` {t.get('fireAt', '')} target={t.get('target')}：{t['prompt']}"
+                            for t in f["made"]) or "无"
+            out += [f"结束：{STOP_LABELS.get(f['stop'], f['stop'])}；读手册：{f['manual']}；建前查过：{f['listed']}；"
+                    f"手册版本：`{r.get('manual_sha', '?')}`。", "",
+                    f"新建：{made}；删除：{'、'.join(f['cancelled']) or '无'}；改动：{'、'.join(f['changed']) or '无'}。", ""]
+            if f["asked_via_tool"]:
+                out += ["ask_user 的问题：", ""] + fenced(json.dumps(f["asked_via_tool"], ensure_ascii=False, indent=1), "json")
+            out += ["回复（去掉 summary 与建议标签）：", ""] + fenced(f["body"] or "（空）")
+            if f["suggestion"]:
+                out += [f"建议标签：{f['suggestion']}", ""]
+    return "\n".join(line.rstrip() for line in "\n".join(out).split("\n")).rstrip() + "\n"
+
+
 def summarize_usage(results: list[dict[str, Any]]) -> dict[str, int]:
     total = {"prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0, "reasoning_tokens": 0}
     for r in results:
@@ -2660,6 +3572,13 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
                                   set(), 1, script):
             job["case_id"] = wake_id
             jobs.append(job)
+    scases = {c["id"]: c for c in json.loads(SCHED_CASES.read_text(encoding="utf-8"))["cases"]}
+    sched_scripts = {"sched-water-10min": "sched-create", "sched-wake-obsolete": "sched-no-reply"}
+    snow = now.astimezone()
+    for sched_id, script in sched_scripts.items():
+        for job in make_sched_jobs([scases[sched_id[len("sched-"):]]], snow, mykeys, ga_lang, set(), 1, script):
+            job["case_id"] = sched_id
+            jobs.append(job)
     real_home = os.path.expanduser("~")
     home_canary = os.path.join(real_home, "entry-layer-eval-sbx-canary")
     results = run_jobs(jobs, python, 3, keep_temp)
@@ -2674,6 +3593,7 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
         ok = ok and cond
 
     dry_test_wake([r for r in results if r["id"].startswith("wake-")], wake_scripts, wcases, check)
+    dry_test_sched([r for r in results if r["id"].startswith("sched-")], sched_scripts, scases, snow, check)
     sbx_results = [r for r in results if r["id"].startswith("sbx-")]
     entry_results = [r for r in results if r["variant"] in VARIANTS]
     dispatch_results = [r for r in results if r["variant"] in DISPATCH_VARIANTS
@@ -2878,6 +3798,74 @@ def dry_test_wake(results: list[dict[str, Any]], scripts: dict[str, str],
                   f"the judge reads the ask_user question ({f['reasons']})")
 
 
+def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, str],
+                   cases: dict[str, dict[str, Any]], now: datetime, check: Any) -> None:
+    """Schedule suite: the Python ports reproduce Rust's In Hand lines and
+    reminder notes byte for byte; the prompt carries the main chat's own
+    configuration paragraph, the ticket 36 entry layer and, only when a
+    case has tasks from before the segment, the In Hand lines; the fake
+    galley's schedule family answers, refuses and keeps state as the real
+    CLI does; the judge reads it."""
+    from datetime import timezone
+
+    print("schedule: ports against Rust (rust-samples.json)")
+    samples = json.loads(SCHED_SAMPLES.read_text(encoding="utf-8"))
+    ih = samples["in_hand"]
+    tz = timezone(timedelta(minutes=ih["tz_offset_minutes"]))
+    check(in_hand_block(ih["todo"], datetime.fromisoformat(ih["now"].replace("Z", "+00:00")), tz) == ih["text"],
+          "in_hand_block == managed_prompt::in_hand_section")
+    for n, w in enumerate(samples["wake"], 1):
+        check(reminder_note(w["reports"]) == w["text"], f"reminder_note == subtask_report::report_text ({n})")
+    check(all(lateness_words(a) == b for a, b in samples["lateness_words"]), "lateness_words matches")
+    plain = sched_prompt(cases["report-wed"], now)
+    held = sched_prompt(cases["already-set"], now)
+    check("### In Hand" not in plain and "### In Hand" in held, "In Hand only when a case has tasks from before")
+    check(held.index("## Main Chat\n") < held.index("### In Hand") < held.index("## Galley Main Chat Entry Layer")
+          and "`sched_6c1f0e9a2b7d4385` " in held, "In Hand sits between Main Chat and the entry layer")
+    check("Reminders and scheduled tasks are not on this list" in plain
+          and "Channels, scheduled tasks, Browser" not in plain
+          and 'see "Reminders and scheduled tasks" in your manual' in plain, "the ticket 36 prompt")
+    for r in sorted(results, key=lambda r: r["id"]):
+        script = scripts[r["id"]]
+        case = cases[r["id"][len("sched-"):]]
+        print(f"schedule {r['id']} / {r['variant']} ({script})")
+        check(r["status"] == "ok", f"run completed (status {r['status']} {r.get('error', '')[:300]})")
+        if r["status"] != "ok":
+            continue
+        check(not r["blocked"] and not r["do_calls"] and not r["canaries"],
+              f"nothing left the sandbox ({r['blocked']} {r['do_calls']} {r['canaries']})")
+        system = r["requests"][0]["messages"][0]["content"]
+        m = re.search(r"read your manual at `([^`]+)`", system)
+        check(bool(m) and m.group(1).endswith("/managed-ga-state/assistant/reference/galley-assistant-manual.md"),
+              "the prompt names the manual in the run's state root")
+        last = r["requests"][0]["messages"][-1]["content"]
+        if not isinstance(last, str):
+            last = "\n".join(b.get("text", "") for b in last if isinstance(b, dict))
+        want = case.get("message") or sched_note(case, datetime.fromisoformat(r["now"]))
+        check(want in last and r["message"] == want, "the new message is the case's (a wake note in Core's words)")
+        f = sched_facts(r, case)
+        if script == "sched-create":
+            out = str((r["calls"][1].get("result") or {}).get("stdout", ""))
+            for piece in ("date=0", "listed=0", "time_in_past:", "past=2", '"target": "assistant"',
+                          "notarget=0", "listed=2", "main_chat_protected:", "rename=2", "Create a task."):
+                check(piece in out, f"shell output has {piece!r}")
+            check(f["names"][:5] == ["schedule list", "schedule create", "schedule create", "schedule create",
+                                     "schedule list"], f"fake galley logged the calls ({f['names']})")
+            check(len(f["made"]) == 2 and {t["target"] for t in f["made"]} == {"assistant", "session"},
+                  f"two tasks made, one wakes the assistant ({[t.get('target') for t in f['made']]})")
+            check(any("没带 --target=assistant" in x for x in f["reasons"])
+                  and any("建了 2 个" in x for x in f["reasons"])
+                  and any("多余的写命令" in x for x in f["reasons"]) and not f["pass"],
+                  f"the judge flags the missing target, the second task and the rename ({f['reasons']})")
+            check(f["listed"] == "查了" and f["manual"].startswith("读了"), "list-before-create and manual read")
+            check(says_time("好，十分钟后提醒你喝水。", datetime.fromisoformat(f["made"][0]["fireAt"]).astimezone(),
+                            datetime.fromisoformat(r["now"]), datetime.fromtimestamp(r["started_at"]).astimezone()),
+                  "a relative time counts as saying the time")
+        else:
+            check("### In Hand" not in system, "no In Hand lines without tasks from before")
+            check(f["pass"] and f["no_reply"] and not f["names"], f"<no-reply/>, nothing touched ({f['reasons']})")
+
+
 def dry_test_dispatch(results: list[dict[str, Any]], scripts: dict[tuple[str, str], str],
                       check: Any) -> None:
     """Ticket 06 paths: T's tag, C's CLI dispatch answered with a fake
@@ -2955,13 +3943,20 @@ def main() -> int:
     ap.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--dry-test", action="store_true", help="verify interception, no model")
     ap.add_argument("--render-only", action="store_true", help="rebuild the .md from the .json")
-    ap.add_argument("--suite", choices=("entry", "dispatch", "wake"), default="entry",
+    ap.add_argument("--suite", choices=("entry", "dispatch", "wake", "schedule"), default="entry",
                     help="entry: cases.json WITHOUT / WITH; dispatch: dispatch-cases.json T / C / P; "
-                         "wake: wake/cases.json under the wordings of wake/wording.md")
+                         "wake: wake/cases.json under the wordings of wake/wording.md; "
+                         "schedule: schedule/cases.json (ticket 36)")
     ap.add_argument("--variant", default="all",
                     help="entry: without | with | both; dispatch: comma list of T,C,P; "
                          "wake: comma list of wording names; or all")
-    ap.add_argument("--repeats", type=int, default=WAKE_REPEATS, help="wake: runs per case and wording")
+    ap.add_argument("--repeats", type=int, default=WAKE_REPEATS,
+                    help="wake / schedule: runs per case (and wording)")
+    ap.add_argument("--first-repeat", type=int, default=1,
+                    help="schedule: number the runs from here (add runs without redoing the earlier ones)")
+    ap.add_argument("--supersede", metavar="REASON",
+                    help="wake / schedule: keep the results these runs replace in meta.superseded_runs, "
+                         "with this reason")
     ap.add_argument("--mode", choices=("sandbox", "firststop"), default="sandbox",
                     help="dispatch suite: sandbox (lookups answered from a per-run sandbox, "
                          "dispatch-results.*) or firststop (the first run: any non-dispatch tool "
@@ -2985,8 +3980,11 @@ def main() -> int:
 
     dispatch = args.suite == "dispatch"
     wake = args.suite == "wake"
+    sched = args.suite == "schedule"
     sandbox_mode = dispatch and args.mode == "sandbox"
-    if wake:
+    if sched:
+        suite_files = (SCHED_CASES, SCHED_JSON, SCHED_MD, ("manual",), render_sched_md)
+    elif wake:
         suite_files = (WAKE_CASES, WAKE_JSON, WAKE_MD, tuple(load_wording()), render_wake_md)
     elif sandbox_mode:
         suite_files = (DISPATCH_CASES, DISPATCH_JSON, DISPATCH_MD, DISPATCH_VARIANTS,
@@ -3007,7 +4005,9 @@ def main() -> int:
     cases = [c for c in all_cases if wanted is None or c["id"] in wanted]
     if wanted and len(cases) != len(wanted):
         fail(f"unknown case ids: {sorted(wanted - {c['id'] for c in cases})}")
-    if wake and args.variant == "all":
+    if sched:
+        variants = ["manual"]
+    elif wake and args.variant == "all":
         variants = ["draft"]
     elif args.variant in ("all", "both"):
         variants = list(all_variants)
@@ -3024,7 +4024,7 @@ def main() -> int:
     else:
         model = model_from_galley_db(Path(args.galley_db).expanduser(), args.model_id)
         mykeys = ga_mykeys_from_galley_model(model)
-        source = f"Galley 托管模型 {args.model_id}，从 Galley 数据库副本只读取得"
+        source = f"Galley 托管模型 {args.model_id}，从 Galley 数据库只读取得"
     if len(mykeys) != 1:
         fail("expected exactly one model config")
     host = urlparse(str(next(iter(mykeys.values())).get("apibase", ""))).hostname
@@ -3039,7 +4039,10 @@ def main() -> int:
 
     now = datetime.now()
     draft = DRAFT.read_text(encoding="utf-8")
-    if wake:
+    if sched:
+        jobs = make_sched_jobs(cases, now.astimezone(), mykeys, args.ga_lang, allowed, args.repeats,
+                               first=args.first_repeat)
+    elif wake:
         jobs = make_wake_jobs(cases, variants, now, mykeys, args.ga_lang, allowed, args.repeats)
     elif dispatch:
         jobs = make_dispatch_jobs(cases, variants, now, draft, mykeys, args.ga_lang, allowed,
@@ -3055,7 +4058,9 @@ def main() -> int:
         results = json.loads(json.dumps(results, ensure_ascii=False).replace(secret, "<redacted>"))
     for r in results:
         if r.get("request") and r["status"] == "ok":
-            if wake:
+            if sched:
+                write_composed(r, "", SCHED_COMPOSED_DIR)
+            elif wake:
                 write_composed(r, "", WAKE_COMPOSED_DIR)
             else:
                 write_composed(r, "dispatch." if dispatch else "")
@@ -3063,13 +4068,16 @@ def main() -> int:
 
     merged: list[dict[str, Any]] = []
     previous_meta: dict[str, Any] = {}
-    if (wanted or wake) and results_json.is_file():
+    if (wanted or wake or sched) and results_json.is_file():
         previous = json.loads(results_json.read_text(encoding="utf-8"))
         merged, previous_meta = previous["results"], previous.get("meta", {})
     fresh = {(r["id"], r["variant"]) for r in results}
+    replaced = [r for r in merged if (r["id"], r["variant"]) in fresh]
     merged = [r for r in merged if (r["id"], r["variant"]) not in fresh] + results
     order = {c["id"]: i for i, c in enumerate(all_cases)}
-    if wake:
+    if sched:
+        merged.sort(key=lambda r: (order.get(r["id"], 99), r.get("repeat", 0)))
+    elif wake:
         merged.sort(key=lambda r: (order.get(r["id"], 99), list(all_variants).index(r["wording"])
                                    if r.get("wording") in all_variants else 99, r.get("repeat", 0)))
     else:
@@ -3113,6 +4121,23 @@ def main() -> int:
         })
         if previous_meta.get("superseded_runs"):
             data["meta"]["superseded_runs"] = previous_meta["superseded_runs"]
+    if sched:
+        data["meta"].update({
+            "suite": "schedule (ticket 36): the main chat prompt with the ticket 36 entry layer and its own "
+                     "configuration paragraph, In Hand lines for tasks from before the segment, the assistant "
+                     "manual in the state root, the case's tasks in the fake galley",
+            "repeats": args.repeats,
+            "tool_cap": SCHED_TOOL_CAP,
+            "extra_exec": list(SCHED_EXTRA_EXEC),
+            "manual": "docs/managed-ga-runtime/galley-assistant-manual.md",
+            "manual_sha": manual_sha(),
+        })
+    if (wake or sched) and (previous_meta.get("superseded_runs") or (args.supersede and replaced)):
+        groups = previous_meta.get("superseded_runs") or []
+        groups = [groups] if isinstance(groups, dict) else list(groups)
+        if args.supersede and replaced:
+            groups.append({"reason": args.supersede, "at": now.strftime("%Y-%m-%d %H:%M"), "runs": replaced})
+        data["meta"]["superseded_runs"] = groups
     if sandbox_mode:
         data["meta"]["sandbox"] = {
             "tool_cap": SANDBOX_TOOL_CAP,
