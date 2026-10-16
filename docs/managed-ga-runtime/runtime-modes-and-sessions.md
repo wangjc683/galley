@@ -314,6 +314,33 @@ ruling 9; `core/src/scheduler.rs`, `core/src/subtask_report.rs`, migration
   and that run's starting turn; when the run ends Core fills its reply's
   `turn_index` (`createdIn`).
 
+### The Assistant's To-Do List
+
+Main chat ticket 37 (`core/src/assistant_todo.rs`): one read of what the
+assistant has coming up, is working on, and finished lately. The desktop's
+「待办」 (Tauri `list_assistant_todo`) shows it, and the main chat's 「在办的事」
+lines (ticket 36) are written from the same read, so both list the same
+things in the same order.
+
+- **Upcoming**: scheduled tasks not cancelled that may still fire, whoever
+  made them; enabled ones by next fire, paused ones last.
+- **Active**: the main chat's subtasks not promoted, not archived and not
+  finished — running (run gate open), asking (`ask_user` pending, or the
+  latest run's last reply asks), failed, paused at the step limit, stopped
+  short. Not running and quiet for 7 days: dropped.
+- **Recent**: within 7 days (rolling), a one-off that fired, a repeating
+  task's last fire, a finished subtask; newest first, at most 50.
+
+Each item carries its kind, id, words or title, state, the instant it is
+ordered by (UTC), who made it (the assistant, the user's form, another
+agent), and where it leads (the reply a task was made in, a subtask's
+session, a scheduled run's session). Deterministic and read-only; the
+desktop reads it again on the existing events (`scheduled-tasks:changed`,
+`subtask-dispatched`, `session-run-state`, session updates). Core's
+subtask state after a restart comes from the rows alone: a step-limit or
+error ending is known only while the Core process that saw it runs, and
+reads as stopped short afterwards.
+
 ## CLI Runtime Contract
 
 Galley has not shipped a stable CLI release before managed runtime, so the CLI
