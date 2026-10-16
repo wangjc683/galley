@@ -347,6 +347,9 @@ README「dense context instead of long」（`README.md:54`）。
     确认框只有标题「删除这条消息？」、不写正文（JC 在三版里选最短的：「对于用户来说，负担最小最容易理解」；主会话原推荐写一句收不回的代价）。
     另一个理由：主对话长久存在，今天只有连长期记忆一起清空的重置一个出口；对话越长久越需要单条删。不做「只隐藏」（库里现成的 `visibility` 列）：它仍在上下文、库、搜索与查历史里，助手可能接着提起你看不见的话，误发密钥恰恰解决不了。
     预防性：没有用户提过，JC 库里 10-14 重置后的 12 句没有敏感内容。票 [32](./issues/32-delete-single-message.md)。
+84. **上层次序第 2、3 步合并、提前到发版前：主动提醒与「替你管 Galley」的手**（JC 2026-10-16：「一，B；二，按你推荐，写票吧」）：
+    它听到带时间的事就自己建提醒、当场说、回复下挂卡片；到点叫醒它一轮；CLI 给定时任务全套与授权前两级缺的手；每段开头带「在办的事」。机制与取舍见 [助手 PRD](../assistant/PRD.md) 裁决 9。
+    票 [33](./issues/33-schedule-once-and-wake.md)、[34](./issues/34-cli-schedule-commands.md)、[35](./issues/35-cli-more-hands.md)、[36](./issues/36-manual-and-in-flight.md)、[37](./issues/37-reminder-card-and-schedule-list.md)。
 
 ## 事实依据（2026-10-12 核对）
 
@@ -427,6 +430,11 @@ README「dense context instead of long」（`README.md:54`）。
 | [31](./issues/31-subtask-wake-gui.md) | — | 界面：藏起叫醒行与不出声的回复、卡片最后一句、通知一个声音、子任务卡片「第 N 轮 · 」 | 29 | done（裁决 82；2026-10-16 合入，待 JC 真机验收） |
 | [26](./issues/26-user-bubble-selection-copy.md) | — | 你的气泡不挂悬停复制，选中文字时弹浮动复制 | 20 | done（裁决 73，`3b029e56`，JC 真机验收；工作台有意不跟） |
 | [32](./issues/32-delete-single-message.md) | — | 主对话删单条消息：右键「删除」、库与 runner、手机端事件 | 29、31 | ready-for-agent（裁决 83） |
+| [33](./issues/33-schedule-once-and-wake.md) | — | 定时任务加「一次性」与「叫醒助理」、补发、软删除、表单任务跑完也叫醒（Core） | 29、32 | ready-for-agent（裁决 84） |
+| [34](./issues/34-cli-schedule-commands.md) | — | CLI：`galley schedule` 命令族 | 33 | ready-for-agent（裁决 84） |
+| [35](./issues/35-cli-more-hands.md) | — | CLI：补齐授权前两级的手（改名、置顶、删除、项目、默认模型） | —（与 34 同改分发表） | ready-for-agent（裁决 84） |
+| [36](./issues/36-manual-and-in-flight.md) | — | 助理手册、入口层、「在办的事」、真模型评测 | 34、35 | ready-for-agent（裁决 84） |
+| [37](./issues/37-reminder-card-and-schedule-list.md) | — | 界面：提醒卡片、「定时」列表、送不出去的通知 | 33 | ready-for-agent（裁决 84） |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 

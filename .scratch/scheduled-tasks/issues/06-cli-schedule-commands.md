@@ -1,6 +1,6 @@
 # 06: CLI `galley schedule` 命令面（additive）
 
-Status: needs-triage
+Status: 被取代（2026-10-16，[主对话票 34](../../main-chat/issues/34-cli-schedule-commands.md)：助手 PRD 裁决 9 把定时任务给了助理，CLI 连同一次性与叫醒助理一起做）
 Blocked by: 01, 02
 PRD: ../PRD.md（决策 1；v1 非目标节）
 
