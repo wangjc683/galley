@@ -5,21 +5,24 @@ import {
   completeTodo,
   EMPTY_TODO,
   listAssistantTodo,
+  listNotedTodos,
   reopenTodo,
   todoFailureKind,
   type AssistantTodo,
   type TodoFailure,
   type TodoItem,
 } from "@/lib/assistant-todo";
-import { TODO_SETTLE_MS, type TodoFlip } from "@/lib/todo-panel";
+import { TODO_SETTLE_MS, todoCancelled, type TodoFlip } from "@/lib/todo-panel";
 
 /**
  * The assistant's to-do list on the desktop (main chat ticket 42): one
- * copy of Core's read for the sidebar's 「待办 · 今天 N」, the panel
- * beside the main chat and the cards under its replies, so the three
- * always agree. `useAssistantTodoSync` (App, with a main chat) reads it
- * and reads it again on Core's events, at midnight, and when a to-do
- * falls due.
+ * copy of Core's read for the sidebar's 「待办 · 今天 N」 and the panel
+ * beside the main chat, and beside it every to-do noted in the main chat
+ * for the cards under its replies (`noted`, ticket 43: a card stays done
+ * however long ago, or cancelled), read together so the three always
+ * agree. `useAssistantTodoSync` (App, with a main chat) reads them and
+ * reads them again on Core's events, at midnight, and when a to-do falls
+ * due.
  *
  * The two writes the user has here (PRD ruling 91 point 3) go through
  * it too:
@@ -42,6 +45,8 @@ import { TODO_SETTLE_MS, type TodoFlip } from "@/lib/todo-panel";
  */
 interface AssistantTodoState {
   todo: AssistantTodo;
+  /** Every to-do noted in the main chat, in the order noted: the cards. */
+  noted: TodoItem[];
   /** Read once at least: the empty state is not drawn before. */
   loaded: boolean;
   /** Ticks and unticks on their way, by to-do id. */
@@ -50,9 +55,9 @@ interface AssistantTodoState {
   failures: Record<string, TodoFailure>;
   /** Reminders being cancelled, by to-do id. */
   cancelling: Record<string, true>;
-  /** Read the list from Core. */
+  /** Read the list and the noted to-dos from Core. */
   load: () => Promise<void>;
-  /** The box was clicked. */
+  /** The box was clicked (a cancelled to-do's box does nothing). */
   toggle: (item: TodoItem) => void;
   cancelReminder: (id: string) => void;
 }
@@ -70,15 +75,21 @@ function without<T>(record: Record<string, T>, id: string): Record<string, T> {
   return rest;
 }
 
-/** Read the list; null when a later read has already landed or it
- * failed. */
-async function read(): Promise<AssistantTodo | null> {
+/** Read the list and the noted to-dos, together; null when a later
+ * read has already landed or either failed. */
+async function read(): Promise<{
+  todo: AssistantTodo;
+  noted: TodoItem[];
+} | null> {
   const ticket = ++issued;
   try {
-    const todo = await listAssistantTodo();
+    const [todo, noted] = await Promise.all([
+      listAssistantTodo(),
+      listNotedTodos(),
+    ]);
     if (ticket <= applied) return null;
     applied = ticket;
-    return todo;
+    return { todo, noted };
   } catch (e) {
     console.warn("[todo] list failed.", e);
     return null;
@@ -100,27 +111,28 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
       return;
     }
     // The row moves with the fresh list, not a beat before it.
-    const todo = await read();
+    const lists = await read();
     set((s) => ({
-      ...(todo ? { todo, loaded: true } : {}),
+      ...(lists ? { ...lists, loaded: true } : {}),
       flips: without(s.flips, id),
     }));
   };
 
   return {
     todo: EMPTY_TODO,
+    noted: [],
     loaded: false,
     flips: {},
     failures: {},
     cancelling: {},
 
     load: async () => {
-      const todo = await read();
-      if (todo) set({ todo, loaded: true });
+      const lists = await read();
+      if (lists) set({ ...lists, loaded: true });
     },
 
     toggle: (item) => {
-      if (item.kind !== "todo") return;
+      if (item.kind !== "todo" || todoCancelled(item)) return;
       const id = item.id;
       const flip = get().flips[id];
       if (flip?.phase === "saving") return;

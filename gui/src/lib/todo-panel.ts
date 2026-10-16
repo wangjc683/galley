@@ -12,8 +12,8 @@ import {
 import type { ResolvedLanguage } from "@/lib/language";
 import {
   calendarDaysBefore,
+  formatMessageDay,
   formatScheduleDay,
-  localDayMs,
 } from "@/lib/message-time";
 import { repeatSummary } from "@/lib/scheduled-tasks";
 
@@ -48,9 +48,16 @@ export interface TodoFlip {
   phase: "settling" | "saving";
 }
 
+/** Whether a to-do was cancelled (main chat ticket 43): only the cards
+ * under the replies hold one, from `listNotedTodos`. */
+export function todoCancelled(item: TodoItem): boolean {
+  return item.kind === "todo" && Boolean(item.cancelledAt);
+}
+
 /** Whether a to-do's box shows checked: its tick on the way, else what
- * Core says. */
+ * Core says. A cancelled one is never checked, whatever it stood at. */
 export function todoChecked(item: TodoItem, flip?: TodoFlip): boolean {
+  if (todoCancelled(item)) return false;
   return flip ? flip.done : item.state === "done";
 }
 
@@ -99,10 +106,13 @@ export function todoOverdueDays(
 /**
  * The second line of one of the user's to-dos: when it is due (「截止
  * 周三 15:00」, 「截止 周五」; 「逾期 2 天」 in warning once past), then
- * its reminder (「提醒 周三 14:00」, 「已提醒 …」). A checked one shows
- * its due date quietly and no reminder: a tick cancels a reminder that
- * has not gone off (Core), and a tick still settling hides it as the
- * tick will.
+ * its reminder (「提醒 周三 14:00」, 「已提醒 …」), then with `noted` (the
+ * panel's 你的事, main chat ticket 43) the day it was noted (「10月16日
+ * 记下」, `formatMessageDay`) — last, so a narrow panel cuts it before
+ * the reminder. A checked one shows its due date quietly and no
+ * reminder: a tick cancels a reminder that has not gone off (Core), and
+ * a tick still settling hides it as the tick will. A card under the
+ * reply that noted it needs no day: the reply is dated.
  */
 export function todoMetaParts(
   item: TodoItem,
@@ -110,6 +120,7 @@ export function todoMetaParts(
   todayStartMs: number,
   language: ResolvedLanguage,
   copy: AppCopy,
+  { noted = false }: { noted?: boolean } = {},
 ): TodoMetaPart[] {
   const parts: TodoMetaPart[] = [];
   if (item.due) {
@@ -136,6 +147,14 @@ export function todoMetaParts(
       tone: "muted",
     });
   }
+  const day =
+    noted && item.createdAt
+      ? formatMessageDay(item.createdAt, todayStartMs, language, {
+          today: copy.todo.notedToday,
+          yesterday: copy.todo.notedYesterday,
+        })
+      : null;
+  if (day) parts.push({ text: copy.todo.noted(day), tone: "muted" });
   return parts;
 }
 
@@ -237,54 +256,36 @@ export function todoPanelEmpty(todo: AssistantTodo): boolean {
   );
 }
 
-/** Every to-do the list holds: the user's not done, then the done ones. */
-export function allTodos(todo: AssistantTodo): TodoItem[] {
-  return [
-    ...todo.yours.today,
-    ...todo.yours.later,
-    ...todo.yours.anytime,
-    ...todo.done.filter((item) => item.kind === "todo"),
-  ];
-}
-
-function dueOrder(item: TodoItem): number {
-  const due = item.due;
-  if (!due) return Infinity;
-  if (due.hasTime && due.at) {
-    const ms = Date.parse(due.at);
-    if (!Number.isNaN(ms)) return ms;
-  }
-  // A day without a time counts to that day's end, as Core orders it.
-  const day = localDayMs(due.date);
-  return day === null ? Infinity : day + 86_400_000 - 1;
-}
-
 /**
  * The to-dos Galley noted in `mainChatId`'s replies, by the reply they
- * hang under (`AgentTurn.messageId`), soonest due first, no due date
- * last. The list carries no time a to-do was noted, so a reply's cards
- * go by due date; a reply notes one or two.
+ * hang under (`AgentTurn.messageId`), each reply's in the order they
+ * were noted (Core's order: `createdAt`, then id), as the reminder cards
+ * go (`remindersByMessage`).
  *
- * From the list, so a card shows what the list holds: a to-do not done,
- * or done within the last seven days. One done longer ago, or cancelled
- * by Galley, is not in it, and its card goes (Core has no read of every
- * to-do for the desktop yet; `TodoListScope::All` serves the CLI). One
- * whose reply has not settled (`turnIndex` absent) has no card until it
- * does.
+ * From every to-do noted in the main chat (`listNotedTodos`, main chat
+ * ticket 43), not the list: a card stays under its reply done however
+ * long ago, or cancelled (it says so), where 已完成 lets a to-do go after
+ * seven days. One whose reply has not settled (`turnIndex` absent) has
+ * no card until it does.
  */
 export function todosByMessage(
-  todo: AssistantTodo,
+  items: readonly TodoItem[],
   mainChatId: string | undefined,
 ): Map<string, TodoItem[]> {
   const byMessage = new Map<string, TodoItem[]>();
   if (!mainChatId) return byMessage;
-  const noted = allTodos(todo)
+  const noted = items
     .filter(
       (item) =>
+        item.kind === "todo" &&
         item.createdIn?.sessionId === mainChatId &&
         item.createdIn.turnIndex != null,
     )
-    .sort((a, b) => dueOrder(a) - dueOrder(b) || a.id.localeCompare(b.id));
+    .sort(
+      (a, b) =>
+        (a.createdAt ?? "").localeCompare(b.createdAt ?? "") ||
+        a.id.localeCompare(b.id),
+    );
   for (const item of noted) {
     const key = replyMessageId(mainChatId, item.createdIn!.turnIndex!);
     const group = byMessage.get(key);

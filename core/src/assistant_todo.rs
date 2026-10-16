@@ -35,6 +35,11 @@
 //! card in the conversation says 已取消). A routine can be in two: its
 //! next fire in routine, its last one in done.
 //!
+//! The cards under the replies read the to-dos a second way
+//! ([`noted_todos`], main chat ticket 43): every one Galley noted in the
+//! main chat, done however long ago or cancelled, each as the list words
+//! it — a card under a reply stays where 已完成 lets go.
+//!
 //! A subtask's state comes from its live run state (Core's run gate)
 //! and its latest run's last reply in the database: running while a run
 //! is open; asking when the run ended on `ask_user`; done when it ended
@@ -49,7 +54,7 @@ use crate::api::schedule::{
     parse_utc_secs, ScheduleTarget, ScheduledTaskBrief, ScheduledTaskCreatedIn, ScheduledTaskRepeat,
 };
 use crate::api::{
-    Origin, OriginVia, SessionId, TodoBrief, TodoDue, TodoReminder, TodoStatus,
+    Origin, OriginVia, RuntimeKind, SessionId, TodoBrief, TodoDue, TodoReminder, TodoStatus,
     ASSISTANT_SUPERVISOR,
 };
 use crate::db::{LastRunReply, ScheduleListScope, SqliteGalley, TodoListScope, TodoSubtaskRow};
@@ -234,6 +239,15 @@ pub struct TodoItem {
     /// ([`TodoCreator::User`]), Galley, another agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub done_by: Option<TodoCreator>,
+    /// To-dos: when it was noted (UTC ISO) — the panel's 「记下」 day
+    /// (main chat ticket 43).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    /// To-dos cancelled: when (UTC ISO); `state` and `at` say how it
+    /// stood. Only [`noted_todos`] returns a cancelled to-do (its card
+    /// says 已取消); no group of the list holds one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancelled_at: Option<String>,
 }
 
 /// What [`build_todo`] knows of one subtask: its row, its live run state
@@ -294,6 +308,69 @@ pub async fn todo_list(galley: &SqliteGalley, all: bool) -> Result<Vec<TodoBrief
     };
     let todos = galley.list_todos(scope).await?;
     Ok(todo_list_order(todos, Utc::now(), &chrono::Local))
+}
+
+/// The to-dos Galley noted in the main chat (main chat ticket 43), every
+/// one — not done, done however long ago, cancelled — for the cards under
+/// the replies that noted them: a card stays under its reply for good,
+/// where 已完成 lets a done one go after [`RECENT_WINDOW_DAYS`] and holds
+/// no cancelled one. In the order they were noted ([`noted_items`]).
+/// Empty on the external runtime (it has no assistant: to-dos noted on the
+/// managed one stay out of its sight) and before there is a main chat.
+/// Read now, in this machine's zone (Tauri `list_noted_todos`).
+pub async fn noted_todos(galley: &SqliteGalley, now: DateTime<Utc>) -> Result<Vec<TodoItem>> {
+    if galley.active_runtime_kind().await? != RuntimeKind::Managed {
+        return Ok(Vec::new());
+    }
+    let Some(main) = galley.main_chat_id().await? else {
+        return Ok(Vec::new());
+    };
+    let todos = galley.list_todos(TodoListScope::All).await?;
+    Ok(noted_items(&todos, &main, now, &chrono::Local))
+}
+
+/// [`noted_todos`] from what was read: the to-dos noted in a turn of
+/// `main_chat`, oldest first (same second: by id, as the list orders),
+/// each as the list words it — not done (overdue read at `now` in `tz`),
+/// done (`at` is when it was ticked off), or cancelled
+/// ([`TodoItem::cancelled_at`]; `state` and `at` as it stood, never
+/// overdue). Pure.
+pub fn noted_items<Tz: TimeZone>(
+    todos: &[TodoBrief],
+    main_chat: &SessionId,
+    now: DateTime<Utc>,
+    tz: &Tz,
+) -> Vec<TodoItem>
+where
+    Tz::Offset: std::fmt::Display,
+{
+    let mut noted: Vec<&TodoBrief> = todos
+        .iter()
+        .filter(|todo| {
+            todo.created_in
+                .as_ref()
+                .is_some_and(|turn| turn.session_id == *main_chat)
+        })
+        .collect();
+    noted.sort_by(|a, b| {
+        parse_utc_secs(&a.created_at)
+            .cmp(&parse_utc_secs(&b.created_at))
+            .then_with(|| a.id.as_str().cmp(b.id.as_str()))
+    });
+    noted
+        .into_iter()
+        .map(|todo| {
+            let done = todo.done_at.is_some();
+            let (state, at) = if done {
+                (TodoState::Done, todo.done_at.clone())
+            } else {
+                (TodoState::Open, None)
+            };
+            let overdue = todo.status == TodoStatus::Open
+                && todo.stored_due().is_some_and(|due| due.overdue(now, tz));
+            todo_item(todo, state, at, overdue, tz)
+        })
+        .collect()
 }
 
 fn window_start(now: DateTime<Utc>) -> i64 {
@@ -565,6 +642,8 @@ fn blank(kind: TodoKind, id: String, text: String, state: TodoState) -> TodoItem
         overdue: false,
         reminder: None,
         done_by: None,
+        created_at: None,
+        cancelled_at: None,
     }
 }
 
@@ -589,6 +668,8 @@ where
         overdue,
         reminder: todo.reminder.clone(),
         done_by: todo.done_by.as_ref().map(|by| creator(Some(by)).0),
+        created_at: Some(todo.created_at.clone()),
+        cancelled_at: todo.cancelled_at.clone(),
         ..blank(
             TodoKind::Todo,
             todo.id.as_str().to_string(),
@@ -987,9 +1068,143 @@ mod tests {
         assert_eq!(item["createdIn"]["turnIndex"], 3);
         assert_eq!(item["createdBy"], "assistant");
         assert!(item.get("at").is_none());
+        // When it was noted (ticket 43); never cancelled in the list.
+        assert_eq!(item["createdAt"], "2026-10-10T00:00:00Z");
+        assert!(item.get("cancelledAt").is_none());
         // Not overdue: no field at all.
         assert!(json["yours"]["anytime"][0].get("overdue").is_none());
         assert!(json["yours"]["anytime"][0].get("due").is_none());
+        assert_eq!(
+            json["yours"]["anytime"][0]["createdAt"],
+            "2026-10-11T00:00:00Z"
+        );
+        // A task or a subtask carries no 「记下」 day.
+        let tasks = build(
+            &[task("t-task")],
+            &[subtask("s-sub", "2026-10-16T11:00:00Z")],
+        );
+        let json = serde_json::to_value(&tasks).unwrap();
+        assert!(json["assistant"][0].get("createdAt").is_none());
+        assert!(json["assistant"][1].get("createdAt").is_none());
+    }
+
+    // ---- the cards under the replies (ticket 43) ----
+
+    #[test]
+    fn the_cards_read_every_to_do_noted_in_the_main_chat_in_the_order_noted() {
+        // Now: Fri 2026-10-16 12:00 UTC.
+        let main = SessionId("s-main".into());
+        let noted_at = |mut t: TodoBrief, at: &str| {
+            t.created_at = at.into();
+            t
+        };
+        let cancel = |mut t: TodoBrief, at: &str| {
+            t.status = TodoStatus::Cancelled;
+            t.cancelled_at = Some(at.into());
+            t
+        };
+        // Ticked off a month ago: out of 已完成, still a card.
+        let long_done = noted_at(
+            done_todo(
+                "t-long-done",
+                "2026-09-16T00:00:00+00:00",
+                Origin::desktop(),
+            ),
+            "2026-09-15T00:00:00+00:00",
+        );
+        // Cancelled while due last week: not overdue, as it stood.
+        let cancelled = cancel(
+            todo(
+                "t-cancelled",
+                Some(date(2026, 10, 9)),
+                "2026-10-03T00:00:00+00:00",
+            ),
+            "2026-10-05T00:00:00+00:00",
+        );
+        // Ticked off, then cancelled: done as it stood.
+        let done_cancelled = cancel(
+            noted_at(
+                done_todo(
+                    "t-done-cancelled",
+                    "2026-10-04T00:00:00+00:00",
+                    Origin::gui(),
+                ),
+                "2026-10-03T12:00:00+00:00",
+            ),
+            "2026-10-06T00:00:00+00:00",
+        );
+        let overdue = todo(
+            "t-overdue",
+            Some(date(2026, 10, 9)),
+            "2026-10-04T00:00:00+00:00",
+        );
+        // Noted in another conversation, or outside a turn: no card here.
+        let mut elsewhere = todo("t-elsewhere", None, "2026-10-05T00:00:00+00:00");
+        elsewhere.created_in = Some(ScheduledTaskCreatedIn {
+            session_id: SessionId("s-other".into()),
+            turn_index: Some(2),
+        });
+        let mut nowhere = todo("t-nowhere", None, "2026-10-05T00:00:00+00:00");
+        nowhere.created_in = None;
+        // The same second: by id, as the list orders.
+        let same_b = todo("t-same-b", None, "2026-10-06T00:00:00+00:00");
+        let same_a = todo("t-same-a", None, "2026-10-06T00:00:00+00:00");
+        let todos = [
+            same_b,
+            overdue,
+            cancelled,
+            elsewhere,
+            done_cancelled,
+            long_done,
+            nowhere,
+            same_a,
+        ];
+        let got = noted_items(&todos, &main, now(), &Utc);
+        assert_eq!(
+            ids(&got),
+            [
+                "t-long-done",
+                "t-cancelled",
+                "t-done-cancelled",
+                "t-overdue",
+                "t-same-a",
+                "t-same-b",
+            ]
+        );
+        assert!(got.iter().all(|i| i.kind == TodoKind::Todo));
+        let long_done = &got[0];
+        assert_eq!(long_done.state, TodoState::Done);
+        assert_eq!(long_done.at.as_deref(), Some("2026-09-16T00:00:00+00:00"));
+        assert_eq!(long_done.done_by, Some(TodoCreator::User));
+        assert!(long_done.cancelled_at.is_none());
+        let cancelled = &got[1];
+        assert_eq!(cancelled.state, TodoState::Open);
+        assert_eq!(
+            cancelled.cancelled_at.as_deref(),
+            Some("2026-10-05T00:00:00+00:00")
+        );
+        assert!(!cancelled.overdue && cancelled.at.is_none());
+        assert_eq!(got[2].state, TodoState::Done);
+        assert!(got[2].cancelled_at.is_some());
+        assert!(got[3].overdue && got[3].cancelled_at.is_none());
+        assert_eq!(
+            got[3].created_at.as_deref(),
+            Some("2026-10-04T00:00:00+00:00")
+        );
+        // The list itself lets the month-old one go and holds no
+        // cancelled one.
+        let list = build_todo(&todos, &[], &[], now(), &Utc);
+        assert!(list.done.is_empty());
+        assert!(!list.yours.iter().any(|i| i.id == "t-cancelled"));
+        // On the wire.
+        let json = serde_json::to_value(&got).unwrap();
+        assert_eq!(json[1]["state"], "open");
+        assert_eq!(json[1]["cancelledAt"], "2026-10-05T00:00:00+00:00");
+        assert_eq!(json[1]["createdAt"], "2026-10-03T00:00:00+00:00");
+        assert!(json[1].get("overdue").is_none());
+        assert!(json[0].get("cancelledAt").is_none());
+        // Another main chat: none of these.
+        assert!(noted_items(&todos, &SessionId("s-new".into()), now(), &Utc).is_empty());
     }
 
     // ---- tasks and subtasks (ticket 37's rules, regrouped) ----

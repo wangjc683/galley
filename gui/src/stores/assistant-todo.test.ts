@@ -16,7 +16,8 @@ import { useAssistantTodoStore } from "./assistant-todo";
  * writes it after the hold and the row moves with the fresh list; a
  * failed write puts it back with a reason; cancelling a reminder goes
  * straight to Core. Not mounted in a component: the panel and the card
- * read the same state, so they agree.
+ * read the same state, so they agree. Every read takes the list and the
+ * to-dos noted in the main chat together (ticket 43: the cards).
  */
 
 const OPEN: TodoItem = {
@@ -39,10 +40,14 @@ function answer(lists: AssistantTodo[]) {
   const { invoke } = getTauriMocks();
   invoke.mockImplementation(async (command) => {
     if (command === "list_assistant_todo") return lists.shift() ?? after;
+    if (command === "list_noted_todos") return [];
     return { id: "todo_1" };
   });
   return invoke;
 }
+
+/** A read: the list, then the noted to-dos, asked for together. */
+const READ = ["list_assistant_todo", "list_noted_todos"];
 
 const calls = (invoke: ReturnType<typeof getTauriMocks>["invoke"]) =>
   invoke.mock.calls.map(([command]) => command);
@@ -51,6 +56,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   useAssistantTodoStore.setState({
     todo: before,
+    noted: [],
     loaded: true,
     flips: {},
     failures: {},
@@ -77,7 +83,7 @@ describe("a tick", () => {
     expect(invoke).toHaveBeenCalledWith("complete_todo", { id: "todo_1" });
     await vi.runAllTimersAsync();
     state = useAssistantTodoStore.getState();
-    expect(calls(invoke)).toEqual(["complete_todo", "list_assistant_todo"]);
+    expect(calls(invoke)).toEqual(["complete_todo", ...READ]);
     // In one step: the fresh list and the flip gone.
     expect(state.flips).toEqual({});
     expect(state.todo.done).toEqual([DONE]);
@@ -103,7 +109,7 @@ describe("a tick", () => {
       todoChecked(DONE, useAssistantTodoStore.getState().flips.todo_1),
     ).toBe(false);
     await vi.runAllTimersAsync();
-    expect(calls(invoke)).toEqual(["reopen_todo", "list_assistant_todo"]);
+    expect(calls(invoke)).toEqual(["reopen_todo", ...READ]);
     expect(useAssistantTodoStore.getState().todo.yours.today).toEqual([OPEN]);
   });
 
@@ -115,7 +121,7 @@ describe("a tick", () => {
         ? new Promise((resolve) => {
             release = () => resolve({ id: "todo_1" });
           })
-        : Promise.resolve(after),
+        : Promise.resolve(command === "list_noted_todos" ? [] : after),
     );
     useAssistantTodoStore.getState().toggle(OPEN);
     await vi.advanceTimersByTimeAsync(TODO_SETTLE_MS);
@@ -127,7 +133,7 @@ describe("a tick", () => {
     });
     release();
     await vi.runAllTimersAsync();
-    expect(calls(invoke)).toEqual(["complete_todo", "list_assistant_todo"]);
+    expect(calls(invoke)).toEqual(["complete_todo", ...READ]);
   });
 
   it("goes back as it was when Core refuses, with the reason", async () => {
@@ -136,7 +142,7 @@ describe("a tick", () => {
       if (command === "complete_todo") {
         throw JSON.stringify({ error: "not_found", message: "gone" });
       }
-      return before;
+      return command === "list_noted_todos" ? [] : before;
     });
     useAssistantTodoStore.getState().toggle(OPEN);
     await vi.runAllTimersAsync();
@@ -145,7 +151,9 @@ describe("a tick", () => {
     expect(todoChecked(OPEN, state.flips.todo_1)).toBe(false);
     expect(state.failures).toEqual({ todo_1: "gone" });
     // The next try clears it.
-    invoke.mockImplementation(async () => before);
+    invoke.mockImplementation(async (command) =>
+      command === "list_noted_todos" ? [] : before,
+    );
     useAssistantTodoStore.getState().toggle(OPEN);
     state = useAssistantTodoStore.getState();
     expect(state.failures).toEqual({});
@@ -154,17 +162,85 @@ describe("a tick", () => {
 
   it("keeps the latest read when reads come back out of order", async () => {
     const { invoke } = getTauriMocks();
-    const resolvers: ((todo: AssistantTodo) => void)[] = [];
+    const resolvers: Record<string, ((value: unknown) => void)[]> = {};
     invoke.mockImplementation(
-      () => new Promise((resolve) => resolvers.push(resolve as never)),
+      (command) =>
+        new Promise((resolve) => (resolvers[command] ??= []).push(resolve)),
     );
     const first = useAssistantTodoStore.getState().load();
     const second = useAssistantTodoStore.getState().load();
-    resolvers[1](after);
+    resolvers.list_assistant_todo[1](after);
+    resolvers.list_noted_todos[1]([DONE]);
     await second;
-    resolvers[0](before);
+    resolvers.list_assistant_todo[0](before);
+    resolvers.list_noted_todos[0]([OPEN]);
     await first;
     expect(useAssistantTodoStore.getState().todo).toEqual(after);
+    expect(useAssistantTodoStore.getState().noted).toEqual([DONE]);
+  });
+});
+
+describe("the to-dos noted in the main chat (ticket 43)", () => {
+  const LONG_DONE: TodoItem = {
+    ...DONE,
+    id: "todo_old",
+    at: "2026-09-16T07:00:00Z",
+  };
+  const CANCELLED: TodoItem = {
+    ...OPEN,
+    id: "todo_gone",
+    cancelledAt: "2026-10-15T07:00:00Z",
+  };
+
+  it("are read with the list, and kept as they come", async () => {
+    const { invoke } = getTauriMocks();
+    invoke.mockImplementation(async (command) =>
+      command === "list_noted_todos" ? [OPEN, LONG_DONE, CANCELLED] : before,
+    );
+    useAssistantTodoStore.setState({ loaded: false });
+    await useAssistantTodoStore.getState().load();
+    expect(calls(invoke)).toEqual(READ);
+    const state = useAssistantTodoStore.getState();
+    expect(state.loaded).toBe(true);
+    expect(state.todo).toEqual(before);
+    expect(state.noted).toEqual([OPEN, LONG_DONE, CANCELLED]);
+  });
+
+  it("are not taken alone: a failed half leaves both as they were", async () => {
+    const { invoke } = getTauriMocks();
+    invoke.mockImplementation(async (command) => {
+      if (command === "list_noted_todos") throw new Error("boom");
+      return after;
+    });
+    useAssistantTodoStore.setState({ noted: [OPEN] });
+    await useAssistantTodoStore.getState().load();
+    const state = useAssistantTodoStore.getState();
+    expect(state.todo).toEqual(before);
+    expect(state.noted).toEqual([OPEN]);
+  });
+
+  it("untick a done one from a card, however long ago, and move with the fresh read", async () => {
+    useAssistantTodoStore.setState({ noted: [LONG_DONE] });
+    const { invoke } = getTauriMocks();
+    invoke.mockImplementation(async (command) => {
+      if (command === "list_noted_todos")
+        return [{ ...LONG_DONE, state: "open", at: undefined }];
+      if (command === "list_assistant_todo") return before;
+      return { id: "todo_old" };
+    });
+    useAssistantTodoStore.getState().toggle(LONG_DONE);
+    await vi.runAllTimersAsync();
+    expect(calls(invoke)).toEqual(["reopen_todo", ...READ]);
+    expect(invoke).toHaveBeenCalledWith("reopen_todo", { id: "todo_old" });
+    expect(useAssistantTodoStore.getState().noted[0].state).toBe("open");
+  });
+
+  it("leave a cancelled one's box alone: no hold, no write", async () => {
+    const invoke = answer([]);
+    useAssistantTodoStore.getState().toggle(CANCELLED);
+    expect(useAssistantTodoStore.getState().flips).toEqual({});
+    await vi.runAllTimersAsync();
+    expect(calls(invoke)).toEqual([]);
   });
 });
 
@@ -176,10 +252,7 @@ describe("cancelling a reminder", () => {
       todo_1: true,
     });
     await vi.runAllTimersAsync();
-    expect(calls(invoke)).toEqual([
-      "cancel_todo_reminder",
-      "list_assistant_todo",
-    ]);
+    expect(calls(invoke)).toEqual(["cancel_todo_reminder", ...READ]);
     expect(invoke).toHaveBeenCalledWith("cancel_todo_reminder", {
       id: "todo_1",
     });

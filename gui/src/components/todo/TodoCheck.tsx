@@ -1,5 +1,6 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import type { TodoItem } from "@/lib/assistant-todo";
+import { todoCancelled } from "@/lib/todo-panel";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
 
 /**
@@ -9,7 +10,8 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
  * through the store, which holds the row in place for a moment first
  * (stores/assistant-todo.ts); `checked` is what the row shows, the tick
  * on its way included. Named by the to-do's title; the box says whether
- * it is done.
+ * it is done. A cancelled to-do's box (a card's, main chat ticket 43)
+ * stays, unticked and disabled: there is nothing left to tick.
  */
 export function TodoCheck({
   item,
@@ -22,10 +24,11 @@ export function TodoCheck({
   saving: boolean;
 }) {
   const toggle = useAssistantTodoStore((s) => s.toggle);
+  const cancelled = todoCancelled(item);
   return (
     <Checkbox
       checked={checked}
-      disabled={saving}
+      disabled={saving || cancelled}
       aria-label={item.text}
       data-todo-check={item.id}
       onCheckedChange={() => toggle(item)}

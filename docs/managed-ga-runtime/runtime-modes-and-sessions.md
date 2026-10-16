@@ -367,8 +367,8 @@ Managed runtime with a main chat only: every write is refused with
 Main chat ticket 37, regrouped by ticket 39 (`core/src/assistant_todo.rs`):
 one read of the user's to-dos and what the assistant is on. The desktop
 (Tauri `list_assistant_todo`, ticket 42) keeps one copy of it for the
-「待办 · 今天 N」 row under Galley's sidebar card, the to-do panel beside the
-main chat and the to-do cards under the replies that noted them, and the
+「待办 · 今天 N」 row under Galley's sidebar card and the to-do panel beside
+the main chat, and the
 main chat's 「在办的事」
 lines (ticket 36: the state block's "In Hand" subsection, written at every
 main chat runner spawn, [prompt composition](./prompt-composition.md#in-hand-main-chat-only))
@@ -397,7 +397,8 @@ carries its kind (`todo`, `task`, `subtask`), id, title or words, state,
 the instant it is ordered by (UTC), who made it (the assistant, the user's
 form, another agent), where it leads (the reply it was noted or set in, a
 subtask's session, a scheduled run's session), and for a to-do its notes,
-due date, overdue mark, reminder and who ticked it. Deterministic and
+due date, overdue mark, reminder, who ticked it and when it was noted
+(`createdAt`, ticket 43). Deterministic and
 read-only; the desktop reads it again on the existing events
 (`todos:changed`, `scheduled-tasks:changed`, `subtask-dispatched`,
 `session-run-state`, session updates), at local midnight, and when a to-do
@@ -405,6 +406,15 @@ with a time falls due (overdue starts then; Core sends no event for the
 clock). Core's subtask state after a restart
 comes from the rows alone: a step-limit or error ending is known only while
 the Core process that saw it runs, and reads as stopped short afterwards.
+
+The to-do cards under the replies read a second, read-only list with it,
+on the same events (Tauri `list_noted_todos`, ticket 43,
+`assistant_todo::noted_todos`): every to-do noted in a turn of the main
+chat — not done, done however long ago, cancelled — in the order noted,
+each worded as above, a cancelled one with `cancelledAt` (its `state` as it
+stood). A card stays under its reply where 已完成 lets a to-do go after 7
+days and holds no cancelled one. Empty on the external runtime and before
+there is a main chat.
 
 ## CLI Runtime Contract
 

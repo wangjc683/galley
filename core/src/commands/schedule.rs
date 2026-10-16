@@ -159,6 +159,22 @@ pub(crate) async fn list_assistant_todo(
         .map_err(stringify_error)
 }
 
+/// The to-dos Galley noted in the main chat, every one (main chat ticket
+/// 43): not done, done however long ago, cancelled — the cards under the
+/// replies that noted them, which stay where 已完成 lets a to-do go. In the
+/// order they were noted, each as `list_assistant_todo` words it, with
+/// `cancelledAt` on a cancelled one. Read-only; empty on the external
+/// runtime and before there is a main chat. The page reads it with
+/// `list_assistant_todo`, on the same events.
+#[tauri::command]
+pub(crate) async fn list_noted_todos(
+    galley: State<'_, SqliteGalley>,
+) -> std::result::Result<Vec<crate::assistant_todo::TodoItem>, String> {
+    crate::assistant_todo::noted_todos(&galley, chrono::Utc::now())
+        .await
+        .map_err(stringify_error)
+}
+
 // ---------------- to-dos (main chat ticket 39) ----------------
 //
 // The desktop's three direct actions on a to-do (PRD ruling 91 point 3):

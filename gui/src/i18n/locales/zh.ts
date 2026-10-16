@@ -2064,6 +2064,10 @@ export const zhCopy = {
     reminded: (when: string) => `已提醒 ${when}`,
     /** 例行的下次时刻。 */
     nextAt: (when: string) => `下次 ${when}`,
+    /** 「你的事」每行小字里记下的日子（票 43），日子照消息时刻的写法：今天、昨天、10月16日、2025年10月16日。 */
+    noted: (day: string) => `${day} 记下`,
+    notedToday: "今天",
+    notedYesterday: "昨天",
     /** 只有日期的截止。 */
     dayToday: "今天",
     dayTomorrow: "明天",

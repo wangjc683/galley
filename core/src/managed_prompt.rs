@@ -1305,6 +1305,8 @@ mod tests {
             overdue: false,
             reminder: None,
             done_by: None,
+            created_at: None,
+            cancelled_at: None,
         }
     }
 

@@ -451,8 +451,9 @@ function useTodoWrite(id: string) {
   return { flip, failure, cancelling };
 }
 
-/** 你的事: the box, the title, when it is due and its reminder;
- * 「说说这件」 on the right, and 「取消提醒」 beside a reminder still to go
+/** 你的事: the box, the title, when it is due, its reminder and the day
+ * it was noted (ticket 43); 「说说这件」 on the right, and
+ * 「取消提醒」 beside a reminder still to go
  * off — by the thing it removes, and not a second target beside the
  * first at the row's end (deferred.md 「session 行 hover 置顶按钮」: two
  * precise targets side by side make the row's hover loud). */
@@ -466,7 +467,9 @@ function YourRow(props: RowProps) {
   const cancelReminder = useAssistantTodoStore((s) => s.cancelReminder);
   const { flip, failure, cancelling } = useTodoWrite(item.id);
   const checked = todoChecked(item, flip);
-  const parts = todoMetaParts(item, checked, todayStartMs, language, copy);
+  const parts = todoMetaParts(item, checked, todayStartMs, language, copy, {
+    noted: true,
+  });
   const canCancelReminder = !checked && todoReminderCancellable(item);
   return (
     <RowShell
@@ -505,7 +508,9 @@ function YourRow(props: RowProps) {
 }
 
 /** A to-do's second line: the due date (warning when overdue), the
- * reminder, and `after` it (the reminder's cancel, on hover). */
+ * reminder, the day it was noted, and `after` it (the reminder's cancel,
+ * on hover: on the reminder's line, after the day when there is one —
+ * the line cuts the day first when narrow, never the button). */
 function MetaLine({
   parts,
   after,

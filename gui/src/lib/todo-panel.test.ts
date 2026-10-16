@@ -9,6 +9,7 @@ import {
   nextTodoRefreshMs,
   routineRowLine,
   TODO_SETTLE_MS,
+  todoCancelled,
   todoChecked,
   todoMetaParts,
   todoOverdueDays,
@@ -19,10 +20,10 @@ import {
 } from "@/lib/todo-panel";
 
 /**
- * The to-do panel's and the to-do cards' pure half (main chat ticket
- * 42): what a row's second line says (today, overdue, crossing
- * midnight), where a title leads, which reply a card hangs under, when
- * the list is read again.
+ * The to-do panel's and the to-do cards' pure half (main chat tickets
+ * 42 and 43): what a row's second line says (today, overdue, crossing
+ * midnight, the day it was noted), where a title leads, which reply a
+ * card hangs under and in what order, when the list is read again.
  */
 
 // Local wall-clock parts, so the day words hold in whatever zone the
@@ -200,6 +201,98 @@ describe("a to-do's second line", () => {
     // past any motion token.
     expect(TODO_SETTLE_MS).toBe(1500);
   });
+
+  it("never shows a cancelled one checked, however it stood (ticket 43)", () => {
+    const cancelled = todo({ cancelledAt: local(2026, 10, 15, 9, 0) });
+    expect(todoCancelled(cancelled)).toBe(true);
+    expect(todoCancelled(todo())).toBe(false);
+    expect(todoChecked(cancelled)).toBe(false);
+    expect(todoChecked({ ...cancelled, state: "done" })).toBe(false);
+    expect(todoChecked(cancelled, { done: true, phase: "settling" })).toBe(
+      false,
+    );
+  });
+});
+
+describe("the day a to-do was noted (ticket 43)", () => {
+  const noted = (createdAt: string) =>
+    todo({
+      createdAt,
+      due: { date: "2026-10-23", hasTime: false },
+      reminder: {
+        taskId: "sched_9",
+        at: local(2026, 10, 17, 9, 0),
+        state: "scheduled",
+      },
+    });
+  const lastOf = (parts: string[]) => parts[parts.length - 1];
+  const line = (item: TodoItem, today = TODAY, language = "zh-CN") =>
+    texts(
+      todoMetaParts(
+        item,
+        false,
+        today,
+        language as "zh-CN" | "en-US",
+        language === "zh-CN" ? zh : en,
+        { noted: true },
+      ),
+    );
+
+  it("comes last, after the due date and the reminder, in the message time's day words", () => {
+    // Last: a narrow panel cuts it before the reminder.
+    expect(line(noted(local(2026, 10, 16, 8, 5)))).toEqual([
+      "截止 10月23日",
+      "提醒 明天 09:00",
+      "今天 记下",
+    ]);
+    expect(lastOf(line(noted(local(2026, 10, 15, 22, 0))))).toBe("昨天 记下");
+    // Two days back and more: the date, no weekday (the message time's
+    // shape, not the schedule's).
+    expect(lastOf(line(noted(local(2026, 10, 14, 10, 0))))).toBe(
+      "10月14日 记下",
+    );
+    expect(lastOf(line(noted(local(2026, 1, 3, 10, 0))))).toBe("1月3日 记下");
+    expect(lastOf(line(noted(local(2025, 12, 31, 23, 0))))).toBe(
+      "2025年12月31日 记下",
+    );
+    expect(lastOf(line(noted(local(2026, 10, 16, 8, 5)), TODAY, "en-US"))).toBe(
+      "Noted today",
+    );
+    expect(lastOf(line(noted(local(2026, 10, 15, 8, 5)), TODAY, "en-US"))).toBe(
+      "Noted yesterday",
+    );
+    expect(lastOf(line(noted(local(2026, 10, 14, 8, 5)), TODAY, "en-US"))).toBe(
+      "Noted Oct 14",
+    );
+    expect(lastOf(line(noted(local(2025, 10, 14, 8, 5)), TODAY, "en-US"))).toBe(
+      "Noted Oct 14, 2025",
+    );
+  });
+
+  it("turns to 昨天 at midnight, on the day stamp alone", () => {
+    // Noted at 23:59 on Friday; the panel stays open past midnight.
+    const lateFriday = noted(local(2026, 10, 16, 23, 59));
+    expect(lastOf(line(lateFriday, TODAY))).toBe("今天 记下");
+    expect(lastOf(line(lateFriday, TOMORROW))).toBe("昨天 记下");
+    // Just past midnight: today, though a minute after the one before.
+    expect(lastOf(line(noted(local(2026, 10, 17, 0, 0)), TOMORROW))).toBe(
+      "今天 记下",
+    );
+  });
+
+  it("is the panel's alone: a card, an item without the time, nothing", () => {
+    const item = noted(local(2026, 10, 16, 8, 5));
+    expect(texts(todoMetaParts(item, false, TODAY, "zh-CN", zh))).toEqual([
+      "截止 10月23日",
+      "提醒 明天 09:00",
+    ]);
+    expect(line(todo())).toEqual([]);
+    expect(line(todo({ createdAt: "not a time" }))).toEqual([]);
+    // Held after a tick: the reminder goes, the day stays.
+    expect(
+      texts(todoMetaParts(item, true, TODAY, "zh-CN", zh, { noted: true })),
+    ).toEqual(["截止 10月23日", "今天 记下"]);
+  });
 });
 
 describe("Galley's rows, routines and done items", () => {
@@ -299,14 +392,20 @@ describe("where a title leads", () => {
 });
 
 describe("cards under replies", () => {
-  it("hang the to-dos under the reply that noted them, soonest due first", () => {
-    const anytime = todo({ id: "todo_any" });
+  it("hang every to-do noted under the reply that noted it, in the order noted (ticket 43)", () => {
+    // Noted first, due last; noted last, due first: the order noted wins.
     const friday = todo({
       id: "todo_fri",
+      createdAt: "2026-10-16T01:00:00+00:00",
       due: { date: "2026-10-23", hasTime: false },
+    });
+    const anytime = todo({
+      id: "todo_any",
+      createdAt: "2026-10-16T01:00:02+00:00",
     });
     const wednesday = todo({
       id: "todo_wed",
+      createdAt: "2026-10-16T01:00:05+00:00",
       due: {
         date: "2026-10-21",
         hasTime: true,
@@ -314,9 +413,18 @@ describe("cards under replies", () => {
         time: "15:00",
       },
     });
-    const done = todo({
+    // Ticked off a month ago, or cancelled: the card stays.
+    const longDone = todo({
       id: "todo_done",
       state: "done",
+      at: local(2026, 9, 16, 9, 0),
+      createdAt: "2026-09-15T01:00:00+00:00",
+      createdIn: { sessionId: "s-main", turnIndex: 9 },
+    });
+    const cancelled = todo({
+      id: "todo_cancelled",
+      createdAt: "2026-09-15T01:00:01+00:00",
+      cancelledAt: "2026-09-20T01:00:00+00:00",
       createdIn: { sessionId: "s-main", turnIndex: 9 },
     });
     const elsewhere = todo({
@@ -328,16 +436,17 @@ describe("cards under replies", () => {
       createdIn: { sessionId: "s-main" },
     });
     const byMessage = todosByMessage(
-      {
-        ...EMPTY_TODO,
-        yours: {
-          today: [],
-          later: [friday, wednesday, unsettled],
-          anytime: [anytime, elsewhere],
-        },
-        // Done ones keep their card; Galley's own tasks have none here.
-        done: [done, task({ state: "fired" })],
-      },
+      [
+        wednesday,
+        cancelled,
+        unsettled,
+        anytime,
+        elsewhere,
+        friday,
+        longDone,
+        // Galley's own tasks have none here (ticket 37's card is theirs).
+        task({ state: "fired" }),
+      ],
       "s-main",
     );
     expect([...byMessage.keys()].sort()).toEqual([
@@ -345,14 +454,23 @@ describe("cards under replies", () => {
       "msg_s-main_9_assistant",
     ]);
     expect(byMessage.get("msg_s-main_4_assistant")!.map((i) => i.id)).toEqual([
-      "todo_wed",
       "todo_fri",
       "todo_any",
+      "todo_wed",
     ]);
     expect(byMessage.get("msg_s-main_9_assistant")!.map((i) => i.id)).toEqual([
       "todo_done",
+      "todo_cancelled",
     ]);
-    expect(todosByMessage(EMPTY_TODO, undefined).size).toBe(0);
+    // The same second: by id, as Core lists them.
+    const same = (id: string) =>
+      todo({ id, createdAt: "2026-10-16T01:00:00+00:00" });
+    expect(
+      todosByMessage([same("todo_b"), same("todo_a")], "s-main")
+        .get("msg_s-main_4_assistant")!
+        .map((i) => i.id),
+    ).toEqual(["todo_a", "todo_b"]);
+    expect(todosByMessage([friday], undefined).size).toBe(0);
   });
 });
 

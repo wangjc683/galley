@@ -6,13 +6,19 @@ import type { DoneVariant } from "./todo-variants/todo-variants";
 /**
  * A checked to-do's title — in the panel (held in place after a tick,
  * and under 已完成) and on its card under the reply: struck through in
- * `ink-muted`, Markdown's strike-through (MarkdownView `del`). The
- * change rides `--motion-base`; none under reduced motion.
+ * `ink-muted`, Markdown's strike-through (MarkdownView `del`). A
+ * cancelled one's (a card's, main chat ticket 43) is `ink-muted` and not
+ * struck: it was not done. The change rides `--motion-base`; none under
+ * reduced motion.
  */
-export function todoTitleClass(checked: boolean): string {
+export function todoTitleClass(checked: boolean, cancelled = false): string {
   return cn(
     "transition-colors duration-(--motion-base) motion-reduce:transition-none",
-    checked ? "text-ink-muted line-through" : "text-ink",
+    cancelled
+      ? "text-ink-muted"
+      : checked
+        ? "text-ink-muted line-through"
+        : "text-ink",
   );
 }
 

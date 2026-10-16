@@ -24,7 +24,8 @@ import { SUBTASK_DISPATCHED_EVENT } from "@/lib/subtasks";
  * hears something with a time in it, says so, and a card drawn from the
  * database hangs under that reply (`remindersByMessage`). It notes the
  * user's own to-dos the same way (ticket 39), each with a card of its
- * own under the reply (ticket 42, lib/todo-panel.ts). Galley's card in
+ * own under the reply (ticket 42, lib/todo-panel.ts) that stays there
+ * done or cancelled (ticket 43, `list_noted_todos`). Galley's card in
  * the sidebar has a 「待办」 row under it that opens the to-do panel
  * beside the main chat: the user's to-dos, what Galley is on, its
  * routines, what was done lately — one Core read
@@ -115,6 +116,12 @@ export interface TodoItem {
   /** To-dos ticked off: who ticked it (the user at the desktop is
    * `user`). */
   doneBy?: TodoCreator;
+  /** To-dos: when it was noted, UTC ISO (ticket 43: the panel's
+   * 「10月16日 记下」). */
+  createdAt?: string;
+  /** To-dos cancelled: when, UTC ISO; `state` says how it stood. Only
+   * `listNotedTodos` returns one (its card says 已取消). */
+  cancelledAt?: string;
 }
 
 /** Mirror of Core `YourTodos`: the user's to-dos not done. */
@@ -154,6 +161,19 @@ export const EMPTY_TODO: AssistantTodo = {
 
 export async function listAssistantTodo(): Promise<AssistantTodo> {
   return invoke<AssistantTodo>("list_assistant_todo");
+}
+
+/**
+ * The to-dos Galley noted in the main chat, every one (Core's
+ * `list_noted_todos`, main chat ticket 43): not done, done however long
+ * ago, cancelled — the cards under the replies that noted them, which
+ * stay where 已完成 lets a to-do go after seven days. In the order they
+ * were noted, each as `listAssistantTodo` words it, `cancelledAt` on a
+ * cancelled one. Empty on the external runtime and before there is a
+ * main chat.
+ */
+export async function listNotedTodos(): Promise<TodoItem[]> {
+  return invoke<TodoItem[]>("list_noted_todos");
 }
 
 /** Mirror of Core `TodoStatus`. */

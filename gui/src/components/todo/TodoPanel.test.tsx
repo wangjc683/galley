@@ -14,7 +14,8 @@ import type { TodoFlip } from "@/lib/todo-panel";
 import { TodoPanel } from "./TodoPanel";
 
 /**
- * The to-do panel and the to-do card (main chat ticket 42), rendered.
+ * The to-do panel and the to-do card (main chat tickets 42 and 43),
+ * rendered.
  * Static rendering reads a zustand store's initial state only, so the
  * list, the ticks on their way and the variant are handed in by mocking
  * the hooks; how the store moves them is pinned in
@@ -303,6 +304,60 @@ describe("the panel's rows", () => {
     expect(row(panel(FULL), "todo_late")).toContain("这件事已经不在了。");
   });
 
+  it("writes the day each of 你的事's rows was noted, last on its second line (ticket 43)", () => {
+    const html = panel({
+      ...FULL,
+      yours: {
+        today: [{ ...OVERDUE, createdAt: inDays(-3, 10) }],
+        later: [{ ...REMINDED, createdAt: inDays(-1, 22) }],
+        anytime: [{ ...ANYTIME, createdAt: inDays(0, 8) }],
+      },
+      done: [{ ...DONE_TODO, createdAt: inDays(-1, 8) }],
+    });
+    const d = new Date(inDays(-3, 10));
+    expect(row(html, "todo_late")).toContain(
+      `>${d.getMonth() + 1}月${d.getDate()}日 记下<`,
+    );
+    const report = row(html, "todo_report");
+    expect(report).toContain(">昨天 记下<");
+    // Due, reminder, then the day (cut first when narrow); 「取消提醒」
+    // stays on that line, outside what is cut.
+    const meta = report.slice(report.indexOf('data-role="todo-meta"'));
+    expect(meta.indexOf("截止 ")).toBeLessThan(meta.indexOf("提醒 "));
+    expect(meta.indexOf("提醒 ")).toBeLessThan(meta.indexOf("昨天 记下"));
+    expect(meta.indexOf("昨天 记下")).toBeLessThan(meta.indexOf("取消提醒"));
+    expect(meta).toMatch(
+      /<span class="min-w-0 truncate">[^]*昨天 记下[^]*<\/span><button[^>]*aria-label="取消提醒"/,
+    );
+    // A row with nothing else to say has the day alone.
+    expect(row(html, "todo_soil")).toContain(">今天 记下<");
+    // 已完成 dates the tick, not the noting.
+    expect(
+      row(
+        panel(
+          { ...FULL, done: [{ ...DONE_TODO, createdAt: inDays(-1, 8) }] },
+          { doneOpen: true },
+        ),
+        "todo_done",
+      ),
+    ).not.toContain("记下");
+    expect(
+      row(
+        panel(
+          {
+            ...FULL,
+            yours: {
+              ...FULL.yours,
+              anytime: [{ ...ANYTIME, createdAt: inDays(0, 8) }],
+            },
+          },
+          { language: "en-US" },
+        ),
+        "todo_soil",
+      ),
+    ).toContain(">Noted today<");
+  });
+
   it("fades a done row only under C2 (TEMP variant switcher, main chat 42)", () => {
     store.flips = { todo_report: { done: true, phase: "settling" } };
     expect(row(panel(FULL), "todo_report")).not.toContain("opacity-60");
@@ -353,5 +408,100 @@ describe("the card under the reply", () => {
   it("says why a tick failed, under the card", () => {
     store.failures = { todo_report: "failed" };
     expect(cards([REMINDED])).toContain("没能完成，再试一次。");
+  });
+
+  it("names no 「记下」 day: the reply above it is dated", () => {
+    expect(cards([{ ...REMINDED, createdAt: inDays(-1, 8) }])).not.toContain(
+      "记下",
+    );
+  });
+
+  // Ticket 43: a card stays under its reply, in three states.
+  const LONG_DONE = todo({
+    id: "todo_old",
+    text: "交房租",
+    state: "done",
+    at: inDays(-30, 7),
+    due: { date: dayIn(-31), hasTime: false },
+  });
+  const CANCELLED = todo({
+    id: "todo_gone",
+    text: "买营养土",
+    due: { date: dayIn(-2), hasTime: false },
+    reminder: { taskId: "sched_g", at: inDays(-3), state: "fired" },
+    cancelledAt: inDays(-1, 9),
+  });
+
+  it("not done: an open box, as before", () => {
+    const html = cards([REMINDED]);
+    expect(html).toContain('data-todo-state="open"');
+    expect(html).toContain('data-todo-checked="false"');
+    expect(html).not.toContain('disabled=""');
+    expect(html).toMatch(/text-ink"[^>]*>交季度报告</);
+  });
+
+  it("done a month ago: still there, as 已完成 looks in the panel, and can be unticked", () => {
+    const html = cards([LONG_DONE]);
+    expect(html).toContain('data-todo-state="done"');
+    expect(html).toContain('data-todo-checked="true"');
+    expect(html).toContain('checked=""');
+    expect(html).not.toContain('disabled=""');
+    expect(html).toMatch(/text-ink-muted line-through[^>]*>交房租</);
+    // Its due date quietly, never overdue.
+    expect(html).not.toContain("逾期");
+    expect(html).toContain("截止 ");
+    // Under C2 the whole card fades, as the panel's done row does.
+    expect(html).not.toContain("opacity-60");
+    variants.done = "C2";
+    expect(cards([LONG_DONE])).toContain("opacity-60");
+    expect(row(panel(FULL, { doneOpen: true }), "todo_done")).toContain(
+      "opacity-60",
+    );
+  });
+
+  it("cancelled: the box takes no click, the title faded, 「已取消」 beside it", () => {
+    const html = cards([CANCELLED]);
+    expect(html).toContain('data-todo-state="cancelled"');
+    expect(html).toContain('data-todo-checked="false"');
+    expect(html).not.toContain('checked=""');
+    expect(html).toContain('disabled=""');
+    expect(html).toContain("cursor-not-allowed");
+    // Faded, not struck: it was not done.
+    expect(html).toMatch(/text-ink-muted"[^>]*>买营养土</);
+    expect(html).not.toContain("line-through");
+    expect(html).toMatch(/data-role="todo-meta"[^>]*><span>[^]*>已取消</);
+    // 「已取消」 in place of when it was due and its reminder.
+    expect(html).not.toContain("逾期");
+    expect(html).not.toContain("截止");
+    expect(html).not.toContain("提醒");
+    expect(html).not.toContain("text-warning");
+    // Done before it was cancelled: still unticked.
+    expect(cards([{ ...CANCELLED, state: "done" }])).not.toContain(
+      'checked=""',
+    );
+    // A tick on its way does not tick it either.
+    store.flips = { todo_gone: { done: true, phase: "settling" } };
+    expect(cards([CANCELLED])).not.toContain('checked=""');
+    expect(cards([CANCELLED])).not.toContain("opacity-60");
+    expect(
+      renderToStaticMarkup(
+        <CopyProvider language="en-US">
+          <Tooltip.Provider>
+            <TodoCards items={[CANCELLED]} />
+          </Tooltip.Provider>
+        </CopyProvider>,
+      ),
+    ).toContain(">Cancelled<");
+  });
+
+  it("draws the three in the order given, a reply's in the order noted", () => {
+    const html = cards([REMINDED, LONG_DONE, CANCELLED]);
+    expect(count(html, 'data-role="todo-card"')).toBe(3);
+    expect(html.indexOf('data-todo-id="todo_report"')).toBeLessThan(
+      html.indexOf('data-todo-id="todo_old"'),
+    );
+    expect(html.indexOf('data-todo-id="todo_old"')).toBeLessThan(
+      html.indexOf('data-todo-id="todo_gone"'),
+    );
   });
 });

@@ -5,7 +5,7 @@ import { useTodoVariants } from "@/components/todo/todo-variants/todo-variants";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { todoFailureText, type TodoItem } from "@/lib/assistant-todo";
 import { useCopy, useLanguage } from "@/lib/i18n";
-import { todoChecked, todoMetaParts } from "@/lib/todo-panel";
+import { todoCancelled, todoChecked, todoMetaParts } from "@/lib/todo-panel";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { cn } from "@/lib/utils";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
@@ -25,6 +25,13 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
  * (「逾期 2 天」 in warning) and its reminder, 12px `ink-muted`. A tick
  * strikes the title through; a failed one puts it back with a line
  * under it.
+ *
+ * A card stays under its reply for good (ticket 43; the to-dos come from
+ * every one noted in the main chat, not the list): done however long
+ * ago, it looks as 已完成 does in the panel and can be unticked;
+ * cancelled, its box stays unticked and takes no click, its title goes
+ * `ink-muted` (not struck: it was not done) and 「已取消」 takes the
+ * place of when it was due.
  */
 export function TodoCards({
   items,
@@ -55,12 +62,18 @@ function TodoCard({ item }: { item: TodoItem }) {
   const fade = useTodoVariants((s) => s.done);
   const flip = useAssistantTodoStore((s) => s.flips[item.id]);
   const failure = useAssistantTodoStore((s) => s.failures[item.id] ?? null);
+  const cancelled = todoCancelled(item);
   const checked = todoChecked(item, flip);
-  const parts = todoMetaParts(item, checked, todayStartMs, language, copy);
+  const parts = cancelled
+    ? [{ text: copy.todo.stateCancelled, tone: "muted" as const }]
+    : todoMetaParts(item, checked, todayStartMs, language, copy);
   return (
     <div
       data-role="todo-card"
       data-todo-id={item.id}
+      data-todo-state={
+        cancelled ? "cancelled" : item.state === "done" ? "done" : "open"
+      }
       data-todo-checked={checked ? "true" : "false"}
       className="rounded-md border border-line bg-app"
     >
@@ -80,7 +93,7 @@ function TodoCard({ item }: { item: TodoItem }) {
         <span
           className={cn(
             "min-w-0 flex-1 truncate text-[13px] leading-5",
-            todoTitleClass(checked),
+            todoTitleClass(checked, cancelled),
           )}
           onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, item.text)}
         >

@@ -17,7 +17,9 @@ use galley_core_lib::api::{
     CreateTodoInput, GalleyApi, MessageVisibility, Origin, OriginVia, SessionId, TodoBrief, TodoId,
     TodoPatch, TodoReminderState, TodoStatus, ASSISTANT_SUPERVISOR, TODOS_CHANGED_EVENT,
 };
-use galley_core_lib::assistant_todo::{assistant_todo, AssistantTodo, TodoCreator, TodoKind};
+use galley_core_lib::assistant_todo::{
+    assistant_todo, noted_todos, AssistantTodo, TodoCreator, TodoKind, TodoState,
+};
 use galley_core_lib::db::{MainChatSeed, PersistAssistantMessage, SqliteGalley, TodoListScope};
 use galley_core_lib::error::GalleyError;
 use galley_core_lib::notify::Notifier;
@@ -826,6 +828,100 @@ async fn the_turn_a_to_do_was_noted_in_is_settled_to_its_reply() {
             .turn_index,
         Some(i64::from(turn + 1))
     );
+}
+
+// ---------------- the cards under the replies (ticket 43) ----------------
+
+#[tokio::test]
+async fn the_cards_read_every_to_do_noted_in_the_main_chat_not_on_the_external_runtime() {
+    let (pool, galley) = with_main_chat().await;
+    let in_turn = |turn: i64| Some((SessionId(MAIN.into()), turn));
+    let report = galley
+        .create_todo(titled("交报告"), assistant(), in_turn(4))
+        .await
+        .unwrap();
+    let rent = galley
+        .create_todo(titled("交房租"), assistant(), in_turn(4))
+        .await
+        .unwrap();
+    let soil = galley
+        .create_todo(titled("买营养土"), assistant(), in_turn(6))
+        .await
+        .unwrap();
+    // Noted outside a turn of the main chat: no card.
+    let loose = note(&galley, titled("随手记的")).await;
+    // Noted a minute apart (one second would order them by id).
+    for (todo, minutes) in [(&report, 3), (&rent, 2), (&soil, 1), (&loose, 0)] {
+        sqlx::query("UPDATE todos SET created_at = ? WHERE id = ?")
+            .bind(instant_to_utc_iso(
+                &(Utc::now() - Duration::minutes(minutes)),
+            ))
+            .bind(todo.id.as_str())
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    // The rent was paid a month ago; the soil is not wanted any more.
+    galley
+        .complete_todo(&id(&rent), Origin::desktop())
+        .await
+        .unwrap();
+    sqlx::query("UPDATE todos SET done_at = ? WHERE id = ?")
+        .bind(instant_to_utc_iso(&(Utc::now() - Duration::days(30))))
+        .bind(rent.id.as_str())
+        .execute(&pool)
+        .await
+        .unwrap();
+    galley.cancel_todo(&id(&soil), assistant()).await.unwrap();
+
+    let mut noted = Vec::new();
+    for todo in [&report, &loose, &soil] {
+        noted.push(galley.todo(todo.id.as_str()).await.unwrap().created_at);
+    }
+
+    // The list words when each was noted, and lets the other two go.
+    let todo = read(&galley).await;
+    assert_eq!(
+        ids(&todo.yours.anytime),
+        [report.id.as_str(), loose.id.as_str()]
+    );
+    assert_eq!(todo.yours.anytime[0].created_at.as_ref(), Some(&noted[0]));
+    assert_eq!(todo.yours.anytime[1].created_at.as_ref(), Some(&noted[1]));
+    assert!(todo.done.is_empty());
+
+    // The cards: every one noted in a turn of the main chat, in the
+    // order noted, done a month ago and cancelled too.
+    let cards = noted_todos(&galley, Utc::now()).await.unwrap();
+    assert_eq!(
+        ids(&cards),
+        [report.id.as_str(), rent.id.as_str(), soil.id.as_str()]
+    );
+    assert_eq!(cards[0].state, TodoState::Open);
+    assert!(cards[0].cancelled_at.is_none());
+    assert_eq!(cards[1].state, TodoState::Done);
+    assert_eq!(cards[1].done_by, Some(TodoCreator::User));
+    assert!(cards[1].at.is_some());
+    assert_eq!(cards[2].state, TodoState::Open);
+    assert!(cards[2].cancelled_at.is_some());
+    assert_eq!(cards[2].created_at.as_ref(), Some(&noted[2]));
+    // Its reply has not settled yet (no reply in this test): the card
+    // waits for it, the read does not.
+    assert_eq!(cards[2].created_in.as_ref().unwrap().session_id.0, MAIN);
+
+    // The external runtime shows none of it, nor does a database with no
+    // main chat.
+    galley
+        .set_pref_json("active_runtime_kind", json!("external"))
+        .await
+        .unwrap();
+    assert!(noted_todos(&galley, Utc::now()).await.unwrap().is_empty());
+    galley
+        .set_pref_json("active_runtime_kind", json!("managed"))
+        .await
+        .unwrap();
+    assert_eq!(noted_todos(&galley, Utc::now()).await.unwrap().len(), 3);
+    let (_pool, bare) = fresh("managed").await;
+    assert!(noted_todos(&bare, Utc::now()).await.unwrap().is_empty());
 }
 
 // ---------------- events ----------------
