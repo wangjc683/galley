@@ -7,10 +7,14 @@ import {
   USER_MSG_ANCHOR_TOP_PX,
 } from "@/lib/conversation-anchor";
 import {
+  ASK_USER_COVERED_PX,
+  ASK_USER_GAP_PX,
+  askUserRevealTop,
   liveTailBlank,
   liveTailMinHeight,
   liveTailPark,
   liveTailReattaches,
+  scrolledAboveRound,
   startLiveTail,
   submitScroll,
 } from "@/lib/live-tail";
@@ -110,6 +114,21 @@ class Layout {
   /** The bubble's top edge from the viewport's top. */
   get anchorOnScreen(): number {
     return this.anchor.getBoundingClientRect().top - TOP;
+  }
+
+  /** An ask_user block `height` tall at `y` in the column. */
+  question(y: number, height: number) {
+    return {
+      getBoundingClientRect: () => {
+        const top = TOP + PAD + y - this.scrollTop;
+        return { top, bottom: top + height };
+      },
+    } as unknown as Element;
+  }
+  /** Where a question's edges sit from the viewport's top edge. */
+  onScreen(question: Element) {
+    const rect = question.getBoundingClientRect();
+    return { top: rect.top - TOP, bottom: rect.bottom - TOP };
   }
 
   makeAnchor(y: number, timeLine: boolean, id: string | null = null) {
@@ -458,6 +477,177 @@ describe("submitScroll", () => {
   });
 });
 
+describe("a question while it runs (ticket 09)", () => {
+  /** In view: under the top edge, over the button's band. */
+  const RESTS_AT = 800 - ASK_USER_COVERED_PX - ASK_USER_GAP_PX; // 728
+
+  it("leaves a question in full view, and scrolls one under the fold to just over the button", () => {
+    expect(
+      askUserRevealTop({
+        scrollTop: 1_000,
+        clientHeight: 800,
+        top: 500,
+        bottom: 700,
+      }),
+    ).toBeNull();
+    // Under the button's band (752–800) counts as out of view.
+    expect(
+      askUserRevealTop({
+        scrollTop: 1_000,
+        clientHeight: 800,
+        top: 600,
+        bottom: 760,
+      }),
+    ).toBe(1_000 + 760 - RESTS_AT);
+    // Entirely below.
+    expect(
+      askUserRevealTop({
+        scrollTop: 1_000,
+        clientHeight: 800,
+        top: 1_100,
+        bottom: 1_300,
+      }),
+    ).toBe(1_000 + 1_300 - RESTS_AT);
+  });
+
+  it("puts a question taller than the room on the anchor line by its top", () => {
+    expect(
+      askUserRevealTop({
+        scrollTop: 1_000,
+        clientHeight: 800,
+        top: 900,
+        bottom: 1_700,
+      }),
+    ).toBe(1_000 + 900 - USER_MSG_ANCHOR_TOP_PX);
+  });
+
+  it("draws the line at where this round's message parks", () => {
+    // Parked, or the viewport below the park position (reading the run).
+    expect(scrolledAboveRound(0)).toBe(false);
+    expect(scrolledAboveRound(8)).toBe(false);
+    expect(scrolledAboveRound(-900)).toBe(false);
+    // Above it: the message sits under its line.
+    expect(scrolledAboveRound(9)).toBe(true);
+    expect(scrolledAboveRound(400)).toBe(true);
+  });
+
+  /** Your message parked, the run past the screen, a question asked at
+   * its end. */
+  function asked(height = 150) {
+    const layout = new Layout({ content: 2_120, clientHeight: 800, y: 2_000 });
+    const tail = start(layout);
+    tail.onScroll();
+    const y = 3_400;
+    layout.content = y + height + 20;
+    return { layout, tail, question: layout.question(y, height) };
+  }
+
+  it("scrolls a question under the fold into view; following stays off", () => {
+    const { layout, tail, question } = asked();
+    const round = layout.anchor as unknown as Element;
+    expect(tail.reveal(question, round, "q1")).toBe("scrolling");
+    tail.onScroll();
+    // At the content's end it rests as far as the content scrolls: the
+    // bottom, which is not you asking to follow.
+    expect(layout.scrollTop).toBe(layout.maxScrollTop);
+    expect(layout.onScreen(question).bottom).toBeLessThanOrEqual(800 - 24);
+    expect(tail.noFollow).toBe(true);
+    expect(tail.reveal(question, round, "q1")).toBe("visible");
+    // You scroll away and back to the end yourself: that attaches.
+    layout.scrollTop -= 200;
+    tail.onScroll();
+    layout.scrollTop = layout.maxScrollTop;
+    tail.onScroll();
+    expect(tail.noFollow).toBe(false);
+  });
+
+  it("rests just over the button when there is more below it", () => {
+    const { layout, tail, question } = asked();
+    layout.content += 600; // the step-cap row, say
+    tail.reveal(question, layout.anchor as unknown as Element, "q1");
+    expect(layout.onScreen(question).bottom).toBe(RESTS_AT);
+    tail.onScroll();
+    expect(tail.noFollow).toBe(true);
+  });
+
+  it("puts a tall question's top on the anchor line", () => {
+    const { layout, tail, question } = asked(900);
+    tail.reveal(question, layout.anchor as unknown as Element, "q1");
+    expect(layout.onScreen(question).top).toBe(USER_MSG_ANCHOR_TOP_PX);
+  });
+
+  it("leaves you alone when you are above this round, and not when you read below it", () => {
+    const above = asked();
+    above.layout.scrollTop -= 300;
+    above.tail.onScroll();
+    const reading = above.layout.scrollTop;
+    expect(
+      above.tail.reveal(above.question, above.layout.anchor as never, "q1"),
+    ).toBe("above");
+    expect(above.layout.scrollTop).toBe(reading);
+
+    const below = asked();
+    below.layout.scrollTop += 500; // reading the run's steps
+    below.tail.onScroll();
+    expect(
+      below.tail.reveal(below.question, below.layout.anchor as never, "q1"),
+    ).toBe("scrolling");
+    // As far as the content scrolls: its end, 24px of padding under the
+    // block's 20px margin.
+    expect(below.layout.scrollTop).toBe(below.layout.maxScrollTop);
+    expect(below.layout.onScreen(below.question).bottom).toBe(800 - 24 - 20);
+  });
+
+  it("is yours once you scroll during it; a new question starts over", () => {
+    const { layout, tail, question } = asked();
+    raf.state.reducedMotion = false;
+    const round = layout.anchor as unknown as Element;
+    expect(tail.reveal(question, round, "q1")).toBe("scrolling");
+    raf.tick(100);
+    layout.el.dispatchEvent(new Event("wheel"));
+    expect(tail.reveal(question, round, "q1")).toBe("taken-over");
+    // The next question of the round goes by the same rule again.
+    expect(tail.reveal(question, round, "q2")).toBe("scrolling");
+  });
+
+  it("re-aims when the layout moves it, and when other code moved the scroll", () => {
+    const { layout, tail } = asked();
+    raf.state.reducedMotion = false;
+    const round = layout.anchor as unknown as Element;
+    let y = 3_400;
+    const moving = {
+      getBoundingClientRect: () => {
+        const top = TOP + PAD + y - layout.scrollTop;
+        return { top, bottom: top + 150 };
+      },
+    } as unknown as Element;
+    tail.reveal(moving, round, "q1");
+    raf.tick(100);
+    // The run's region re-renders above it: 300px more.
+    y += 300;
+    layout.content += 300;
+    expect(tail.reveal(moving, round, "q1")).toBe("scrolling");
+    // Something else moves the scroll position (the browser's own
+    // anchoring, say): not you.
+    raf.tick(16);
+    layout.scrollTop -= 50;
+    raf.tick(16);
+    expect(tail.reveal(moving, round, "q1")).toBe("scrolling");
+    raf.runOut();
+    expect(layout.onScreen(moving).bottom).toBeLessThanOrEqual(800 - 24);
+  });
+
+  it("leaves a round that follows to the follow rules", () => {
+    const { layout, tail, question } = asked();
+    tail.resumeFollowing();
+    const before = layout.scrollTop;
+    expect(tail.reveal(question, layout.anchor as never, "q1")).toBe(
+      "following",
+    );
+    expect(layout.scrollTop).toBe(before);
+  });
+});
+
 describe("useStickyScroll's wiring", () => {
   // Static renders run no effects; this checks the source.
   const source = readFileSync(
@@ -473,6 +663,14 @@ describe("useStickyScroll's wiring", () => {
       submit.indexOf("submitScroll("),
     );
     expect(source.split("startLiveTail(").length - 1).toBe(1);
+  });
+
+  it("reveals a question only through the workbench's tail", () => {
+    const ask = source.slice(source.indexOf("const askedRef = useRef"));
+    const keep = ask.slice(ask.indexOf("const keep = () => {"));
+    expect(
+      keep.indexOf("if (stickBottomRef.current || !tail) return;"),
+    ).toBeLessThan(keep.indexOf("tail.reveal("));
   });
 
   it("stands every follow path down while the tail holds following off", () => {

@@ -72,8 +72,10 @@ const SCROLL_KEYS = new Set([
 export type ScrollEnd =
   /** Reached its target (or wrote it at once). */
   | "arrived"
-  /** The user scrolled, or something else moved `scrollTop`. */
+  /** The user scrolled. */
   | "interrupted"
+  /** Something else moved `scrollTop` between two frames. */
+  | "displaced"
   /** A newer `animateScroll` on the same container took over. */
   | "superseded"
   /** `cancel()`. */
@@ -228,7 +230,7 @@ export function animateScroll(
     frame = null;
     if (ended) return;
     if (Math.abs(el.scrollTop - written) > FOREIGN_MOVE_PX) {
-      finish("interrupted");
+      finish("displaced");
       return;
     }
     const t = (performance.now() - startedAt) / duration;

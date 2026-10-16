@@ -196,7 +196,7 @@ describe("animateScroll", () => {
     // The follow-the-bottom snap writes the bottom.
     box.scrollTop = box.scrollHeight;
     tick();
-    expect(animation.ended).toBe("interrupted");
+    expect(animation.ended).toBe("displaced");
     expect(box.scrollTop).toBe(2_300);
   });
 
