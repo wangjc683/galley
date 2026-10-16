@@ -184,6 +184,19 @@ pub fn managed_llm_choices(models: Vec<ManagedModelRecord>) -> Vec<ManagedLlmCho
         .collect()
 }
 
+/// Stable prefix of the `invalid_args` message for `llm set-default` while
+/// the active runtime is the external one: an attached GenericAgent's
+/// default is the first model of its own config, which Galley does not
+/// write (Rule 1). Agent API §1.1.
+pub const MANAGED_RUNTIME_ONLY: &str = "managed_runtime_only";
+
+/// Tauri event (empty payload) after something other than the desktop's
+/// own model settings changed the managed model store — the socket's
+/// `llm.set_default`. The desktop re-lists the store, as after its own
+/// saves, so its model pickers and the model a new session starts on
+/// follow.
+pub const MANAGED_MODELS_CHANGED_EVENT: &str = "managed-models:changed";
+
 /// The name a managed model is shown and matched by: the trimmed display
 /// name, or the provider model id when the display name is blank.
 pub fn managed_model_display_name(display_name: &str, model: &str) -> String {

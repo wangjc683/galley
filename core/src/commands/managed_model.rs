@@ -309,36 +309,19 @@ pub(crate) async fn logout_chatgpt_codex_provider(
     sync_managed_model_config(&app, &galley).await
 }
 
+/// Core's sync after a model-store write
+/// ([`managed_model_config::sync_for_app`], shared with the socket's
+/// `llm.set_default`), its errors worded as these commands always have.
 async fn sync_managed_model_config(
     app: &tauri::AppHandle,
     galley: &SqliteGalley,
 ) -> std::result::Result<(), String> {
-    let diagnostics = managed_runtime::ensure_for_app(app).map_err(|e| e.to_string())?;
-    let models = galley
-        .list_managed_models()
+    managed_model_config::sync_for_app(app, galley)
         .await
-        .map_err(stringify_error)?;
-    managed_model_config::write_nonsecret_config(
-        std::path::Path::new(&diagnostics.paths.model_config_dir),
-        &models,
-    )
-    .map_err(stringify_error)?;
-    let revision = managed_model_config::new_revision();
-    galley
-        .set_pref_json(
-            managed_model_config::REVISION_PREF_KEY,
-            serde_json::json!(revision),
-        )
-        .await
-        .map_err(stringify_error)?;
-    {
-        use tauri::Manager;
-        if let Some(manager) = app.try_state::<std::sync::Arc<im_supervisor::ImSupervisorManager>>()
-        {
-            manager.refresh_model_config_staleness(app).await;
-        }
-    }
-    Ok(())
+        .map_err(|e| match e {
+            managed_model_config::ConfigSyncError::Layout(e) => e.to_string(),
+            managed_model_config::ConfigSyncError::Store(e) => stringify_error(e),
+        })
 }
 
 fn new_managed_model_id() -> String {

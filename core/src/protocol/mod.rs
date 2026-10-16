@@ -28,12 +28,14 @@ mod envelope;
 mod error_tag;
 
 pub use commands::{
-    GitReviewRequest, LlmSetArgs, LocalFileRequest, ProjectCreateArgs, ProjectDeleteArgs,
+    GitReviewRequest, LlmSetArgs, LlmSetDefaultArgs, LocalFileRequest, ProjectArchiveSessionsArgs,
+    ProjectCreateArgs, ProjectDeleteArgs, ProjectPinArgs, ProjectUnpinArgs, ProjectUpdateArgs,
     ScheduleCreateArgs, ScheduleDeleteArgs, ScheduleDisableArgs, ScheduleEnableArgs,
     ScheduleListArgs, ScheduleRunArgs, ScheduleShowArgs, ScheduleUpdateArgs, SessionArchiveArgs,
-    SessionBtwArgs, SessionCheckpointArgs, SessionMoveArgs, SessionNewArgs, SessionNewResult,
-    SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs, SessionShutdownRunnerArgs,
-    SessionStopArgs, SessionWatchArgs, SessionsRunStateArgs, SocketCommand,
+    SessionBtwArgs, SessionCheckpointArgs, SessionDeleteArgs, SessionMoveArgs, SessionNewArgs,
+    SessionNewResult, SessionPinArgs, SessionRenameArgs, SessionRestoreArgs, SessionRunStateArgs,
+    SessionSendArgs, SessionShutdownRunnerArgs, SessionStopArgs, SessionUnpinArgs,
+    SessionWatchArgs, SessionsRunStateArgs, SocketCommand,
 };
 pub use envelope::{
     SocketRequest, SocketResponse, StreamEnvelope, WatchFrame, ACCEPTED_SCHEMA_VERSIONS,

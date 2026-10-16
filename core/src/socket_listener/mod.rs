@@ -97,6 +97,7 @@ use tokio::time::timeout;
 
 mod common;
 mod ctx;
+mod hands_cmds;
 mod llm_cmds;
 mod project_cmds;
 mod schedule_cmds;
@@ -106,6 +107,7 @@ mod wire;
 
 use crate::notify::{NullNotifier, TauriNotifier};
 pub use ctx::{DbSource, HandlerCtx, RunnerPort};
+use hands_cmds::*;
 use llm_cmds::*;
 use project_cmds::*;
 use schedule_cmds::*;
@@ -699,6 +701,34 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
         }
         "schedule.run" => {
             DispatchResult::Unary(dispatch_schedule_run(request_id, req.args, ctx).await)
+        }
+        // ---- the remaining hands (main chat ticket 35, additive inside 3) ----
+        "session.rename" => {
+            DispatchResult::Unary(dispatch_session_rename(request_id, req.args, ctx).await)
+        }
+        "session.pin" => {
+            DispatchResult::Unary(dispatch_session_pin(request_id, req.args, ctx).await)
+        }
+        "session.unpin" => {
+            DispatchResult::Unary(dispatch_session_unpin(request_id, req.args, ctx).await)
+        }
+        "session.delete" => {
+            DispatchResult::Unary(dispatch_session_delete(request_id, req.args, ctx).await)
+        }
+        "project.update" => {
+            DispatchResult::Unary(dispatch_project_update(request_id, req.args, ctx).await)
+        }
+        "project.pin" => {
+            DispatchResult::Unary(dispatch_project_pin(request_id, req.args, ctx).await)
+        }
+        "project.unpin" => {
+            DispatchResult::Unary(dispatch_project_unpin(request_id, req.args, ctx).await)
+        }
+        "project.archive_sessions" => DispatchResult::Unary(
+            dispatch_project_archive_sessions(request_id, req.args, ctx).await,
+        ),
+        "llm.set_default" => {
+            DispatchResult::Unary(dispatch_llm_set_default(request_id, req.args, ctx).await)
         }
         other => DispatchResult::Unary(SocketResponse::err(
             request_id,

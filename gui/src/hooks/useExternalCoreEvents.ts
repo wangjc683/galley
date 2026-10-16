@@ -11,6 +11,7 @@ import {
   applySubtaskReportUndelivered,
   noteSubtaskReportPersisted,
 } from "@/lib/ipc-handlers";
+import { MANAGED_MODELS_CHANGED_EVENT } from "@/lib/managed-models";
 import {
   applyMessageDeleted,
   MESSAGE_DELETED_EVENT,
@@ -23,6 +24,7 @@ import {
   type SubtaskDispatchedPayload,
   type SubtaskReportUndeliveredPayload,
 } from "@/lib/subtasks";
+import { useManagedModelsStore } from "@/stores/managed-models";
 import { useMessagesStore } from "@/stores/messages";
 import { useRuntimeStore } from "@/stores/runtime";
 
@@ -171,6 +173,27 @@ export function useExternalCoreEvents(): void {
         MESSAGE_DELETED_EVENT,
         (e) => applyMessageDeleted(e.payload),
       );
+      if (cancelled) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  // The CLI changed the default model (ticket 35): re-list the models, so
+  // the pickers and the model a new session starts on follow.
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    void (async () => {
+      const fn = await listen(MANAGED_MODELS_CHANGED_EVENT, () => {
+        void useManagedModelsStore.getState().applyExternalChange();
+      });
       if (cancelled) {
         fn();
       } else {

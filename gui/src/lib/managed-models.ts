@@ -11,6 +11,12 @@ import type {
   SaveManagedProviderInput,
 } from "@/types/managed-models";
 
+/** Tauri event (empty payload) Core emits after something other than
+ * this page changed the managed model store — the CLI's
+ * `galley llm set-default` (`core/src/api/model.rs`
+ * `MANAGED_MODELS_CHANGED_EVENT`). Re-list, as after a save here. */
+export const MANAGED_MODELS_CHANGED_EVENT = "managed-models:changed";
+
 export interface CodexDeviceLoginStart {
   deviceAuthId: string;
   userCode: string;

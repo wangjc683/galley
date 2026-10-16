@@ -15,7 +15,9 @@ non-breaking inside `schemaVersion: 1` per §7.
 - `galley project archive <id>` — true reversible archive (current
   `project delete` is destructive; a future schema can add an
   `archived_at` column and ship this as a separate command without
-  changing the existing `delete` semantics — sub-plan O2).
+  changing the existing `delete` semantics — sub-plan O2). Not the same
+  as `project archive-sessions` (2026-10-16, §5.16c), which archives a
+  project's conversations and keeps the project.
 - `galley session watch <id> --from=<event-index>` — backlog/resume
   support for supervisors reconnecting after a network blip (B2 N35).
 - `galley llm warmup <id>` — explicit "spawn a bridge so the external
@@ -32,12 +34,16 @@ Future human/Supervisor-facing session and project write commands should accept
 The full session/project CRUD trait landed in B3 M4a as the
 authoritative write path. **B4 M1 minted CLI subcommands for the
 supervisor-facing subset** (`session new / archive / restore / move`,
-`project create / list / delete`, `llm set` — see §5.8-§5.18). The
-methods below remain trait-only because the GUI invokes them through
-direct interactions (rename via text input, pinned via right-click,
-bulk via multi-select) and there's no SOP-driven scenario that needs
-them outside the GUI. If a v0.6+ supervisor workflow demands them,
-they get minted as new CLI subcommands additively.
+`project create / list / delete`, `llm set` — see §5.8-§5.18). Main chat
+ticket 35 (2026-10-16) minted the next ones, for the assistant that runs
+Galley on the user's behalf: `session rename / pin / unpin / delete`
+(`rename_session`, `set_session_pinned`, `delete_session`), `project
+update / pin / unpin` (`update_project`), `project archive-sessions` (the
+desktop's 「归档全部对话」) and `llm set-default` (§5.13a–c, §5.16a–c,
+§5.18a). The rest of the table stays trait-only: the GUI invokes it
+through direct interactions (bulk via multi-select, unread marks) and no
+SOP-driven scenario needs it outside the GUI; it gets minted additively
+when one does.
 
 Trait signatures (Rust types):
 

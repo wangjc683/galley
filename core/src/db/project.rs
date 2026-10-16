@@ -1,12 +1,12 @@
 use super::*;
 
 impl SqliteGalley {
-    /// Internal helper used by `create_project` / `update_project` to
-    /// re-read the row after a write. Returns NotFound when the id
-    /// vanished between the write and the read (should never happen
-    /// outside of an external concurrent DELETE, but explicit beats
-    /// `unwrap`).
-    pub(super) async fn fetch_project(&self, id: &str) -> Result<ProjectBrief> {
+    /// One project, `not_found` when there is none. Used by
+    /// `create_project` / `update_project` to re-read the row after a
+    /// write (NotFound there means an external concurrent DELETE won the
+    /// race), and by `Writes::archive_project_sessions` as its existence
+    /// check.
+    pub async fn fetch_project(&self, id: &str) -> Result<ProjectBrief> {
         let row = sqlx::query_as::<_, ProjectRow>(
             "SELECT p.id, p.name, p.root_path, p.workspace_enabled, \
                 p.icon, p.color, p.pinned, \

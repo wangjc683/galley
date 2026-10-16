@@ -388,6 +388,37 @@ impl SqliteGalley {
         self.managed_model_by_id(id).await
     }
 
+    /// Make model `id` the default — Settings > Models
+    /// 「设为默认（移到顶部）」. The desktop does it by saving the model
+    /// unchanged with `makeDefault`; this is the same upsert with the
+    /// stored fields and layers kept, so the model takes the top of the
+    /// order with `is_default` set and the rest move down one. `Ok(false)`,
+    /// writing nothing, when it already heads the order (the desktop
+    /// returns early there too). `not_found` for an unknown id. The caller
+    /// rewrites the generated runtime config, as after any model save.
+    pub async fn set_default_managed_model(&self, id: &str) -> Result<bool> {
+        let models = self.list_managed_models().await?;
+        let Some(model) = models.iter().find(|m| m.id == id) else {
+            return Err(GalleyError::NotFound {
+                message: format!("managed model {id} not found"),
+            });
+        };
+        if models.first().map(|m| m.id.as_str()) == Some(id) {
+            return Ok(false);
+        }
+        self.upsert_managed_model_metadata(UpsertManagedModelMetadata {
+            id: model.id.clone(),
+            provider_id: model.provider_id.clone(),
+            display_name: crate::api::managed_model_display_name(&model.display_name, &model.model),
+            model: model.model.clone(),
+            preset_options: None,
+            advanced_overrides: None,
+            make_default: true,
+        })
+        .await?;
+        Ok(true)
+    }
+
     pub async fn delete_managed_model_metadata(&self, id: &str) -> Result<bool> {
         let trimmed = id.trim();
         if trimmed.is_empty() {

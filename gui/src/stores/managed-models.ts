@@ -57,6 +57,11 @@ interface ManagedModelsActions {
   saveDefaults: (defaults: Record<string, unknown>) => Promise<void>;
   reorderModels: (modelIds: string[]) => Promise<void>;
   deleteModel: (id: string) => Promise<void>;
+  /** Core changed the model store from outside this page (the CLI's
+   * `llm set-default`, `MANAGED_MODELS_CHANGED_EVENT`): re-list the
+   * models and refresh the runtime diagnostics, as after a save here, so
+   * the pickers and a new session's model follow. */
+  applyExternalChange: () => Promise<void>;
 }
 
 export type ManagedModelsStore = ManagedModelsState & ManagedModelsActions;
@@ -178,6 +183,19 @@ export const useManagedModelsStore = create<ManagedModelsStore>((set) => ({
     } catch (e) {
       set({ saving: false });
       throw e;
+    }
+  },
+
+  applyExternalChange: async () => {
+    try {
+      const models = await listManagedModels();
+      set({ models });
+      void refreshManagedRuntimeDiagnostics();
+    } catch (e) {
+      console.warn(
+        "[managed-models] re-list after an external change failed.",
+        e,
+      );
     }
   },
 }));
