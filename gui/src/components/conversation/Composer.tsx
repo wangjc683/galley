@@ -26,6 +26,8 @@ import {
 } from "@/components/conversation/LLMPill";
 import { SavedPromptDialogs } from "@/components/conversation/SavedPromptDialogs";
 import { ComposerOneLine } from "@/components/conversation/ComposerOneLine";
+// TEMP variant switcher (telegram-details 05)
+import { composerGrowTiming } from "@/components/conversation/td-variants/td-variants";
 import {
   COMPOSER_MAX_HEIGHT_PX,
   ONE_LINE_GHOST_CLASS,
@@ -40,6 +42,7 @@ import { useComposerFocus } from "@/hooks/useComposerFocus";
 import { useFileReferences } from "@/hooks/useFileReferences";
 import { useImageAttachments } from "@/hooks/useImageAttachments";
 import { usePasteFold } from "@/hooks/usePasteFold";
+import { animateTextareaHeight } from "@/lib/composer-grow";
 import type { ImageBlockReason } from "@/lib/composer-images";
 import {
   dropComposerDraft,
@@ -306,6 +309,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     useEffect(() => {
       const el = textareaRef.current;
       if (!el) return;
+      // TEMP variant switcher (telegram-details 05): A2 / A3 animate the
+      // one-line input to its new height (lib/composer-grow.ts); A1,
+      // today's, is the instant path below.
+      const timing = oneLine ? composerGrowTiming() : "instant";
+      if (animateTextareaHeight(el, timing, oneLineMaxHeightPx)) return;
       el.style.height = "auto";
       const cap = oneLine ? oneLineMaxHeightPx(el) : COMPOSER_MAX_HEIGHT_PX;
       const next = Math.min(el.scrollHeight, cap);

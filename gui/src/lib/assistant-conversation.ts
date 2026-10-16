@@ -74,7 +74,68 @@ export function assistantRowGap(
   side: "user" | "agent",
 ): string {
   if (previous === "agent-bar") return "mt-0";
-  return previous === side ? "mt-1" : "mt-5";
+  return assistantJoinsGroup(previous, side) ? "mt-1" : "mt-5";
+}
+
+/** Whether a message row continues the IM group of the row right above
+ * it: the same side, the 4px gap. A reply's action row ends its group
+ * (`agent-bar` is not `agent`); so does anything drawn in between, a
+ * time line included, which the caller checks (it draws them). */
+export function assistantJoinsGroup(
+  previous: AssistantRowSide | null,
+  side: "user" | "agent",
+): boolean {
+  return previous === side;
+}
+
+/**
+ * The corners of a bubble inside an IM group (telegram-details ticket
+ * 05, after Telegram's grouped bubbles): the corners on the sender's
+ * side that face a neighbour of the group get smaller — the bottom one
+ * of the first bubble, both of a middle one, the top one of the last.
+ * The far side keeps its 12px, and so does the last bubble's bottom
+ * (no tail). The user's bubbles sit on the right, the assistant's on
+ * the left. `above` / `below`: the row joins the one above / the one
+ * below joins it (`assistantJoinsGroup`, nothing in between).
+ *
+ * Classes for the row that holds the bubble (MessageUser's
+ * `rowClassName`, MessageAgent's and AnsweredAskUser's `className`):
+ * the bubble is the row's direct child. Undefined for a bubble alone.
+ *
+ * TEMP variant switcher (telegram-details 05): the radius is the
+ * switcher's `--bubble-group-radius` (td-variants.ts); after the ruling
+ * the chosen px goes in its place, or this goes if 12px stays.
+ */
+export function assistantGroupCornerClass(
+  side: "user" | "agent",
+  above: boolean,
+  below: boolean,
+): string | undefined {
+  const corners: string[] = [];
+  if (side === "user") {
+    if (above) {
+      corners.push(
+        "[&>[data-role^=user-msg]]:rounded-tr-(--bubble-group-radius)",
+      );
+    }
+    if (below) {
+      corners.push(
+        "[&>[data-role^=user-msg]]:rounded-br-(--bubble-group-radius)",
+      );
+    }
+  } else {
+    if (above) {
+      corners.push(
+        "[&>[data-role=assistant-bubble]]:rounded-tl-(--bubble-group-radius)",
+      );
+    }
+    if (below) {
+      corners.push(
+        "[&>[data-role=assistant-bubble]]:rounded-bl-(--bubble-group-radius)",
+      );
+    }
+  }
+  return corners.length > 0 ? corners.join(" ") : undefined;
 }
 
 // ---- Process: one line --------------------------------------------------
