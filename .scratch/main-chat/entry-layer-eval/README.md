@@ -36,7 +36,7 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --render-only        # 只从 res
 
 - 托管模式（`GALLEY_RUNTIME_KIND=managed`），状态根是新建的临时目录，里面只有 `managed-ga/state-seed/memory` 的拷贝，即全新安装的样子；`agentmain` 导入时照常生成 `global_mem.txt` 与 `global_mem_insight.txt`。
 - 工作目录切到状态根（主对话的 cwd 为空，runner 就是这样做的）。
-- 模型配置：从 Galley 数据库的临时副本读出 gpt-6.1-sol 这一行，按 `managed_model_layers` 的规则合并预设、全局默认与模型自己的选项（结果是 `chat_completions`、`stream`、`temperature` 1、`reasoning_effort` high），解出 key，交给 runner 自己的 `managed_model_config_from_env` 转成 GA 的配置。主对话会话行没有单独设推理强度，所以沿用模型配置。
+- 模型配置：从 Galley 数据库读出 gpt-6.1-sol 这一行（只读、immutable 打开；票 36 之前是读临时副本），按 `managed_model_layers` 的规则合并预设、全局默认与模型自己的选项（结果是 `chat_completions`、`stream`、`temperature` 1、`reasoning_effort` high），解出 key，交给 runner 自己的 `managed_model_config_from_env` 转成 GA 的配置。主对话会话行没有单独设推理强度，所以沿用模型配置。
 - 提示词：GA 核心提示词与记忆由 `agentmain` 自己拼；Galley 那段经 runner 的 `install_managed_prompt_profile` 装到 `extra_sys_prompt`，与真实 runner 同一个函数。GA 随后照常追加 `[Peer]` 提示和 Action Protocol。
 - 历史：有上下文的用例经 runner 的 `GaSession.set_history` 装进去，就是 `load_history` 走的那条路。带过来的用例在 Main Chat 一节写明 1 轮、最后一条在「现在减 hours_ago」的本地时间。
 - 新消息用 `put_task(..., source="workbench")` 发出，与 runner 相同；`verbose`、`inc_out` 也照设。
@@ -114,11 +114,42 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --render-only        # 只从 res
 - **叫醒措辞**：`draft` 在所有用例上行为都对，只有 Step limit 一件看得出缺口：消息里没有子任务停下时的文字，两遍都先去翻引擎的 `model_responses` 日志再 `session show`（4～5 次模型调用）。`v2` 补上这段文字、把「the same way」写成完整命令，两遍都直接 `session send … "continue"`（3 次调用）。
 - **用量**：50 次运行（保留 20 次，作废 30 次），166 次模型调用。
 
+## 定时与提醒评测（票 36）
+
+评测助理手册的新节「Reminders and scheduled tasks」、入口层新加的那句和主对话自己的「What Only The User Changes」：该建的自己建、不该建的不建、该先问的先问、改与取消、到点被叫醒时怎么做。同一套脚本与沙盒，`run.py --suite schedule`。
+
+- **输入**（都在 `schedule/`）：
+  - `cases.json`：13 个用例。票 36 列的 12 条（该建 3 条、不该建 2 条、该先问 1 条、已有同一件、不用了、改时间、叫醒按时 / 晚了 9 小时 / 已过时），另加 JC 真机要试的「十分钟后提醒我喝水」。每条有当前段的历史、假 CLI 里已有的定时任务（时间按运行那一刻算）、用户这句或这次叫醒到点的任务，以及自动判定用的 `expect`。字段见 `_note`。
+  - `galley-prompt/main_chat.plain.txt`：真实 Rust 代码 `compose_main_chat_runtime_prompt` 生成的主对话提示词（版本 0.6.2、macOS），含票 36 的入口层与主对话那一段；会话 id、分段起点、日期、手册路径、「In Hand」一节留成 `__…__` 占位。生成方法同上（测试模块里临时加一个测试写出文件，跑完删掉）。
+  - `cli-help.json`：当前 CLI 各命令 `--help` 的原文（开发版 `galley` 二进制、假 HOME，只跑 `--help`），含 `schedule` 命令族与票 35 的手。
+  - `rust-samples.json`：同一个临时测试写出的 Rust 原文样本：一组「In Hand」（`in_hand_section`）、三条到点叫醒消息（`subtask_report::report_text`）与几个「晚了多久」。`run.py` 里的 Python 移植（`in_hand_block`、`reminder_note`、`lateness_words`）在 `--dry-test` 里逐字对照它们。
+- **组成**：同叫醒评测。用例里标了 `in_hand` 的任务（分段开始前就有），照 `in_hand_section` 的格式写进提示词的「In Hand」一节，时间写成消息前一小时；没有就不写这一节（同 Core）。叫醒用例的新消息照 Core 的措辞拼出。
+- **假 CLI**：叫醒评测那个，另外回答 `schedule list / show / create / update / delete / enable / disable / run`：形状照 Agent API §5.20–§5.27，参数照真实 CLI 校验（`--at` 认带偏移的 RFC 3339 与本地 `YYYY-MM-DDTHH:MM`，按本机时区；过去的时刻报 `time_in_past:`；`--target` 默认 `session`；定时规则互斥、重复的要 `--time`），状态存在假 CLI 自己的文件里，跑完连同起始的任务一起记进结果。票 35 的手（`session rename / pin / unpin / delete`、`project update / pin / unpin / archive-sessions`、`llm set-default`）也接着，主对话被拒（`main_chat_protected:`）。
+- **沙盒**：同叫醒评测，另允许 `/bin/date`（手册让它算「十分钟后」之前先看钟）。每次运行最多 10 次工具调用。
+- **判定**：按 `expect` 自动判，看它发出的命令（假 CLI 的日志与最后的状态）和回复：该建的建了一个、时间在窗口里、`--target=assistant`、记下的话里有该有的（单号）；不该建的什么都没写；该先问的问了、没建；已有的没再建、没删；不用了的删了那一个；改时间的改到了（或删了重建，不留两个）；叫醒按时的不说晚、晚了的说晚了多久、已过时的只回 `<no-reply/>`；回复里说出了时间（钟点，加上不是今天时的哪天，或「几分钟后」）；字数上限。每条都查 `schedule create` 带没带 `--target=assistant`、`schedule` 写命令带没带 `--supervisor=galley-assistant`、有没有多余的写命令、会卡住主对话的命令或 `<subtask>`。另记有没有先读手册、建之前有没有 `schedule list`（只记，不判）。
+- **结果**：`schedule/results.json`（原始结果）、`schedule/results.md`（通过率表、一览表、每条的消息与工具调用、新建 / 删除 / 改动、回复）；`schedule/composed/` 是两个用例第一遍的完整首个请求。
+- **怎么跑**：`run.py --suite schedule`（每条两遍，结果与已有的合并）；`--repeats 1` 只跑一遍；`--first-repeat 2` 接着补第 2 遍而不重跑第 1 遍；`--cases a,b` 只跑几条；`--supersede "<原因>"` 把被这次替换的旧结果连同原因留进 `meta.superseded_runs`；`--render-only`。
+
+### 结果（2026-10-16，gpt-6.1-sol，推理强度 high）
+
+最终文本下 28 次运行 27 次过（13 条各两遍，叫醒晚了 9 小时那条四遍；`schedule/results.md` 开头的通过率表）。唯一不过的是「不用了」第 2 遍：删对了那一个，但「已取消……不会再提醒你了」只写进了 `<summary>`，回复正文是空的，主对话里看不到（判定规则：该回话时正文为空算不过）。
+
+- **该建**：「周三下午要交报告」建在周二下午或晚上，「我订了周五早上 7 点的航班」（周五晚上说的）按下周五理解、建在前一晚 8 点并说明是哪天，「下周一记得帮我看下物流」建在周一上午、记下的话里带着单号，「十分钟后提醒我喝水」先看钟再建；每次都先 `schedule list`、带 `--target=assistant` 与 `--supervisor=galley-assistant`，回复一句说出时间。
+- **不该建、该先问**：学吉他、开会累都没动任何东西；「以后每天早上给我看看新闻」先问一句（几点、看什么、每天会花模型费用），没建。
+- **已有、不用了、改时间**：已有的季度报告提醒（在「In Hand」里）没再建，回复说已经记着、几点提醒；「不用了」两遍都删了那一个（一遍回复正文为空，见上）；「改到 9 点」`schedule update` 到明天 9:00。
+- **叫醒**：按时的一两句提醒、不说晚；晚了 9 小时的先说晚了多久再说事；已经办了的只回 `<no-reply/>`。
+
+改过的地方（被替换的运行与原因都在 `results.json` 的 `meta.superseded_runs`）：
+
+- **手册**：第一轮（每条一遍）12 过 1 不过。周五晚上说「周五早上 7 点的航班」，它问「你说的是下周五吗」而没建。手册「Setting one」加了一条：一天能指两个日期时取还没过的那个，建好，在那句话里说出日期让用户纠正，不先问。整组重跑。
+- **叫醒措辞**（Core 的 `subtask_report::due_paragraph`）：第二轮当时判 26 过 25（「正文为空算不过」是之后才加的规则，按它算是 24，另一处就是上面「不用了」那遍，它留在最终表里），不过的是晚了 9 小时那条：「晚了 9 小时」只写进了 GA 的 `<summary>`（主对话不显示），回复只转述了记下的话。先改成「Act on it now, and say first that it comes 9 hours late」，两遍都还是写进摘要（「先说」被理解成先写在摘要里）；再改成「say in the reply itself (the user does not see your summary) that it comes 9 hours late」，四遍全过。
+- **用量**：45 次运行（保留 28 次，作废 17 次），107 次模型调用。
+
 ## 安全措施
 
 - 拦截点在 GA 的工具分发：worker 把 `agentmain` 里的 `GenericAgentHandler` 换成子类（runner 自己装处理器子类用的也是这个接口 `GaSession.install_handler`）。子类的 `dispatch` 遇到任何真实工具就记录并返回 `should_exit`，一次模型调用后整个运行结束；只有 GA 自己判断最终回答的 `no_tool`（只读回复文本）和格式错误的重试提示 `bad_json` 走原路。子类上除 `do_no_tool` 外的所有 `do_*` 方法都换成一调用就报错的版本，作为第二道保险。
 - 第三道保险是进程级护栏：worker 里启动子进程、`os.system` / `exec` / `spawn`、打开浏览器、连本地 socket（Galley Core 与 CLI）、解析模型 API 以外的域名、往临时目录以外写文件，一律拒绝并记录。唯一的例外是沙盒模式（派活对照第二轮、叫醒评测）里 `code_run` 启动解释器：只能在执行 `code_run` 的那一刻、只能经 `sandbox-exec` 套上该次运行的沙盒配置、只能带沙盒里的环境变量、工作目录必须在沙盒里。
 - `--dry-test` 在任何真调用之前验证这些：用假的模型流返回一个先说话、再调 `code_run`（`touch` 一个金丝雀文件）和 `file_write` 的回复，以及一个带建议标签的普通回复，检查只发生一次模型调用、没有进入任何工具方法、护栏无记录、金丝雀文件不存在、护栏确实拒绝子进程 / 域名 / 外部写入，并检查请求的拼装（GA 核心、Galley 段、Main Chat、WITH 的草案位置、历史顺序、带过来的那句）。
-- 不碰真实数据：Galley 数据库先拷到权限 700 的临时目录再读，读完即删；不写 `~/Library/Application Support/app.galley`、真实 GA 记忆或 `~/Documents/GenericAgent`；状态根路径若像真实数据目录就拒绝运行。
+- 不碰真实数据：Galley 数据库以只读、immutable 方式打开（`mode=ro&immutable=1`，不写锁、不建 WAL 索引；票 36 之前是先拷到权限 700 的临时目录再读）；不写 `~/Library/Application Support/app.galley`、真实 GA 记忆或 `~/Documents/GenericAgent`；状态根路径若像真实数据目录就拒绝运行。
 - 不留 key：key 只在内存里，经 stdin 交给 worker；请求记录只存请求体不存请求头；写结果前把 key 字符串整体替换掉；worker 日志随临时目录删除。
 - 设 `PYTHONDONTWRITEBYTECODE=1`，不在 `managed-ga/code/` 下留 `__pycache__`。
