@@ -206,34 +206,65 @@ afterEach(() => {
 });
 
 describe("with a main chat: the masthead, the card, the new-chat row", () => {
-  it("drops the wordmark: the masthead is the lights' zone and the three icons", () => {
+  it("drops the wordmark: the masthead is the lights' zone and two icons", () => {
     const html = render([mainChat, sideChat]);
     const masthead = html.slice(0, html.indexOf(CARD));
     expect(masthead).not.toContain("font-serif");
     expect(masthead).not.toContain(">Galley<");
-    for (const label of ["搜索", "待办", "新建项目"]) {
+    for (const label of ["搜索", "新建项目"]) {
       expect(count(masthead, `aria-label="${label}"`)).toBe(1);
     }
+    // Ticket 42: the 待办 icon gave way to the row under the card.
+    expect(masthead).not.toContain('aria-label="待办"');
     expect(tagWith(html, "data-tauri-drag-region")).toContain("justify-end");
     // Off macOS (the test platform) the icons never leave the masthead.
     expect(masthead).toContain('class="items-center flex shrink-0 gap-1"');
   });
 
-  it("puts the assistant's 待办 second, with no badge (ticket 37)", () => {
+  it("has neither 定时 nor its badge in the masthead (tickets 37, 42)", () => {
     const html = render([mainChat, sideChat], { scheduledActionCount: 2 });
     const masthead = html.slice(0, html.indexOf(CARD));
-    const order = ["搜索", "待办", "新建项目"].map((label) =>
-      masthead.indexOf(`aria-label="${label}"`),
+    expect(masthead.indexOf('aria-label="搜索"')).toBeLessThan(
+      masthead.indexOf('aria-label="新建项目"'),
     );
-    expect(order).toEqual([...order].sort((a, b) => a - b));
-    expect(order[0]).toBeGreaterThan(-1);
     // A count here only ever meant "handle something" (ruling 86).
     expect(html).not.toContain('aria-label="定时"');
     expect(html).not.toContain("2 项定时任务需要处理");
     expect(html).not.toContain("sidebar-state-pop");
     expect(html).not.toContain(">2</span>");
-    const en = render([mainChat, sideChat], { language: "en-US" });
-    expect(en).toContain('aria-label="To-do"');
+  });
+
+  it("puts 「待办」 under the card, above the strong line (ticket 42)", () => {
+    const html = renderToStaticMarkup(
+      <Tooltip.Provider>
+        <Sidebar
+          sessions={[mainChat, sideChat]}
+          expandedProjectIds={[]}
+          onToggleTodo={() => {}}
+        />
+      </Tooltip.Provider>,
+    );
+    const TODO_ROW = 'data-role="sidebar-todo-row"';
+    expect(count(html, TODO_ROW)).toBe(1);
+    // In the card's block: after the card, before the scrolling list.
+    expect(html.indexOf(TODO_ROW)).toBeGreaterThan(html.indexOf(CARD));
+    expect(html.indexOf(TODO_ROW)).toBeLessThan(html.indexOf(SCROLL_LIST));
+    expect(tagWith(html, TODO_ROW)).toContain('aria-label="待办"');
+    expect(tagWith(html, TODO_ROW)).toContain('aria-expanded="false"');
+    // Without the wiring there is none, nor without a main chat (the
+    // external runtime keeps its sidebar as it was).
+    expect(render([mainChat, sideChat])).not.toContain(TODO_ROW);
+    const external = renderToStaticMarkup(
+      <Tooltip.Provider>
+        <Sidebar
+          sessions={[managed("s-ext", { gaRuntimeKind: "external" })]}
+          expandedProjectIds={[]}
+          onToggleTodo={() => {}}
+        />
+      </Tooltip.Provider>,
+    );
+    expect(external).not.toContain(TODO_ROW);
+    expect(external).toContain('aria-label="定时"');
   });
 
   it("keeps 定时 and its badge without a main chat", () => {
@@ -288,11 +319,12 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
     // The external runtime's button: the brand plus, ⌘N on its end.
     expect(row).toContain("text-brand-strong");
     expect(row).toContain("Ctrl+N");
-    // The masthead's three icons are in the row too, shown below the
+    // The masthead's two icons are in the row too, shown below the
     // macOS threshold only.
-    for (const label of ["搜索", "待办", "新建项目"]) {
+    for (const label of ["搜索", "新建项目"]) {
       expect(count(row, `aria-label="${label}"`)).toBe(1);
     }
+    expect(row).not.toContain('aria-label="待办"');
     expect(row).toContain('class="items-center hidden min-w-0 gap-0.5"');
     expect(count(html, NEW_CHAT)).toBe(1);
     // scrollIntoView clears the sticky row; rows fade under it once the

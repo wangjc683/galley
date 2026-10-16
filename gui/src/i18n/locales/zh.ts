@@ -160,6 +160,8 @@ export const zhCopy = {
     scheduledNeedsAction: (count: number) => `${count} 项定时任务需要处理`,
     /** 书眉第二个图标在内置运行时（有主对话时）的名字（票 37，裁决 86）。 */
     todo: "待办",
+    /** Galley 卡片下「待办」那一行的右边：今天到期与逾期的件数。 */
+    todoToday: (count: number) => `今天 ${count}`,
     working: "正在工作",
     thinking: "思考中",
     waitingForYou: "等你回复",
@@ -847,6 +849,8 @@ export const zhCopy = {
         deletesLabel: "会删除",
         deletes: [
           "主对话的聊天记录，包括它派出去、还没变成普通对话的子任务和附件",
+          // 待办是这条对话的副产品（主聊天票 39 的数据层，票 42 的文案）。
+          "待办里你的事和挂在上面的提醒（它自己要回头查的提醒和例行留着）",
           "它的长期记忆（所有对话和 IM 共用，其他对话里的它也会一起忘）",
           "迁移前的自动备份",
         ],
@@ -2030,22 +2034,40 @@ export const zhCopy = {
    * 它在一条回复里建的提醒，卡片挂在那条回复下面。 */
   todo: {
     title: "待办",
-    groupUpcoming: "接下来",
-    groupActive: "在办",
-    groupRecent: "最近做完",
-    /** 「最近做完」超过上限没列出的件数。 */
-    recentOmitted: (count: number) => `还有 ${count} 件没有列出`,
-    empty: "Galley 记下的提醒和派出去的活会出现在这里。",
-    emptyExample: "比如跟 Galley 说：「明天早上 9 点提醒我开会」",
+    // 待办面板的四组与「你的事」下的三段（主聊天票 42，裁决 91）。
+    groupYours: "你的事",
+    groupToday: "今天",
+    groupLater: "以后",
+    groupAnytime: "随时",
+    groupAssistant: "Galley 在办",
+    groupRoutine: "例行",
+    groupDone: "已完成",
+    /** 「已完成」超过上限没列出的件数。 */
+    doneOmitted: (count: number) => `还有 ${count} 件没有列出`,
+    // 面板离开了对话，写名字（文案规范「Galley」一行）。
+    empty: "你要办的事、Galley 在办的事，都会记在这里。",
+    emptyExample: "比如跟 Galley 说：「周三下午 3 点前要交季度报告」",
     emptyTalk: "去跟 Galley 说",
     /** 列表顶上一行（scheduled-tasks 票 14 的条件）。按钮沿用 scheduled.autostartEnable。 */
     autostartHint: "Galley 未设为开机自动启动，电脑重启后提醒不会响。",
-    /** 不是它建的：你在定时任务表单里建的、外部 Agent 建的。 */
-    badgeManual: "手动",
-    badgeManualTitle: "你在定时任务表单里建的",
-    badgeAgent: "Agent",
-    badgeAgentTitle: (name: string) => `${name} 建的`,
-    badgeAgentTitleBare: "外部 Agent 建的",
+    /** 悬停一行出现：把这件事引用进主对话的输入框。 */
+    talkAbout: "说说这件",
+    /** 悬停有提醒的待办出现：只去掉提醒，待办不动。 */
+    cancelReminder: "取消提醒",
+    // 待办第二行：截止、逾期、提醒。
+    due: (when: string) => `截止 ${when}`,
+    overdueDays: (days: number) => `逾期 ${days} 天`,
+    /** 今天有时刻的截止已经过了。 */
+    overdueAt: (when: string) => `逾期 · ${when}`,
+    reminderAt: (when: string) => `提醒 ${when}`,
+    reminderPaused: (when: string) => `提醒 ${when} · 已暂停`,
+    reminded: (when: string) => `已提醒 ${when}`,
+    /** 例行的下次时刻。 */
+    nextAt: (when: string) => `下次 ${when}`,
+    /** 只有日期的截止。 */
+    dayToday: "今天",
+    dayTomorrow: "明天",
+    dayYesterday: "昨天",
     stateScheduled: "待提醒",
     /** 到点开一个新对话的任务。 */
     stateScheduledSession: "待运行",
@@ -2060,10 +2082,7 @@ export const zhCopy = {
     stateStopped: "没有跑完",
     stateDone: "已完成",
     cancel: "取消",
-    pause: "暂停",
-    resume: "恢复",
-    edit: "编辑",
-    /** 卡片与列表里取消、暂停没成功时写在那一行下面。 */
+    /** 卡片与面板里勾掉、取消勾、取消提醒没成功时写在那一行下面。 */
     actionFailed: "没能完成，再试一次。",
     actionGone: "这件事已经不在了。",
     timeToday: (time: string) => `今天 ${time}`,

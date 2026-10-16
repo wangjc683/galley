@@ -357,8 +357,11 @@ Managed runtime with a main chat only: every write is refused with
 ### The Assistant's To-Do List
 
 Main chat ticket 37, regrouped by ticket 39 (`core/src/assistant_todo.rs`):
-one read of the user's to-dos and what the assistant is on. The desktop's
-「待办」 (Tauri `list_assistant_todo`) shows it, and the main chat's 「在办的事」
+one read of the user's to-dos and what the assistant is on. The desktop
+(Tauri `list_assistant_todo`, ticket 42) keeps one copy of it for the
+「待办 · 今天 N」 row under Galley's sidebar card, the to-do panel beside the
+main chat and the to-do cards under the replies that noted them, and the
+main chat's 「在办的事」
 lines (ticket 36: the state block's "In Hand" subsection, written at every
 main chat runner spawn, [prompt composition](./prompt-composition.md#in-hand-main-chat-only))
 are written from the same read — every group but done — so both list the
@@ -389,7 +392,9 @@ subtask's session, a scheduled run's session), and for a to-do its notes,
 due date, overdue mark, reminder and who ticked it. Deterministic and
 read-only; the desktop reads it again on the existing events
 (`todos:changed`, `scheduled-tasks:changed`, `subtask-dispatched`,
-`session-run-state`, session updates). Core's subtask state after a restart
+`session-run-state`, session updates), at local midnight, and when a to-do
+with a time falls due (overdue starts then; Core sends no event for the
+clock). Core's subtask state after a restart
 comes from the rows alone: a step-limit or error ending is known only while
 the Core process that saw it runs, and reads as stopped short afterwards.
 

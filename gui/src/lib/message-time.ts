@@ -352,6 +352,76 @@ export function formatScheduleTime(
   return dateWithClock(date, today, zh, clock);
 }
 
+/** The day words a day without a time can carry. */
+export interface ScheduleDayWords {
+  today: string;
+  tomorrow: string;
+  yesterday: string;
+}
+
+/** A local calendar day, `YYYY-MM-DD`, as the local midnight it starts
+ * on; null when it is not one. */
+export function localDayMs(day: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!match) return null;
+  const date = new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+  );
+  return Number.isNaN(date.getTime()) ? null : date.getTime();
+}
+
+/**
+ * A day without a time (main chat ticket 42: a to-do due 「周五前」, a
+ * floating local date, `YYYY-MM-DD`), in `formatScheduleTime`'s shapes
+ * without the clock:
+ *
+ *   today / tomorrow / yesterday   今天 / 明天 / 昨天    Today / Tomorrow / Yesterday
+ *   2–6 days away or back          周五                  Fri
+ *   further this year              10月30日              Oct 30
+ *   another year                   2027年1月3日          Jan 3, 2027
+ *
+ * Pure over `todayStartMs` (`useDayStamp()`). Null when `day` is not a
+ * date.
+ */
+export function formatScheduleDay(
+  day: string,
+  todayStartMs: number,
+  language: ResolvedLanguage,
+  words: ScheduleDayWords,
+): string | null {
+  const ms = localDayMs(day);
+  if (ms === null) return null;
+  const date = new Date(ms);
+  const today = localDayStart(todayStartMs);
+  const zh = language === "zh-CN";
+  const back = daysBefore(ms, today);
+  if (back === 0) return words.today;
+  if (back === -1) return words.tomorrow;
+  if (back === 1) return words.yesterday;
+  if (Math.abs(back) <= 6) {
+    return zh ? ZH_WEEKDAYS[date.getDay()] : EN_WEEKDAY.format(date);
+  }
+  const sameYear = date.getFullYear() === new Date(today).getFullYear();
+  if (zh) {
+    const monthDay = `${date.getMonth() + 1}月${date.getDate()}日`;
+    return sameYear ? monthDay : `${date.getFullYear()}年${monthDay}`;
+  }
+  return (sameYear ? EN_DATE : EN_YEAR_DATE).format(date);
+}
+
+/** How many local calendar days `day` (`YYYY-MM-DD`) lies before the
+ * day `todayStartMs` falls on: 0 today, negative ahead; null when it is
+ * not a date. */
+export function calendarDaysBefore(
+  day: string,
+  todayStartMs: number,
+): number | null {
+  const ms = localDayMs(day);
+  return ms === null ? null : daysBefore(ms, localDayStart(todayStartMs));
+}
+
 const FULL_FORMATS: Record<ResolvedLanguage, Intl.DateTimeFormat> = {
   "zh-CN": new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "full",

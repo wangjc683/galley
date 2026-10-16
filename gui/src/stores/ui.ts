@@ -44,6 +44,31 @@ interface UiState {
    * panel on every bump. Pure UI coordination, never persisted.
    */
   reviewRequest: number;
+
+  /**
+   * The to-do panel beside the main chat is wanted (main chat ticket
+   * 42). It shows only while the main chat itself is on screen (App):
+   * leaving for the workbench or a subtask folds it away and coming
+   * back brings it again. It shares the reading panel's place, one at a
+   * time: opening a file preview or the Git review clears it
+   * (LocalFileWorkspace), and setting it closes them. Per window run,
+   * never persisted.
+   */
+  todoPanelOpen: boolean;
+
+  /**
+   * "Quote this into that conversation's composer" — the to-do panel's
+   * 「说说这件」 (ticket 42), which sits outside MainView and so cannot
+   * reach its composer. MainView subscribes and quotes on every new
+   * request for the session it shows. Pure UI coordination.
+   */
+  quoteRequest: QuoteRequest | null;
+}
+
+export interface QuoteRequest {
+  sessionId: string;
+  text: string;
+  nonce: number;
 }
 
 export interface LocateRequest {
@@ -77,6 +102,9 @@ interface UiActions {
   clearLocate: () => void;
 
   requestReview: () => void;
+
+  setTodoPanelOpen: (open: boolean) => void;
+  requestQuote: (sessionId: string, text: string) => void;
 }
 
 export type UiStore = UiState & UiActions;
@@ -90,6 +118,8 @@ export const useUiStore = create<UiStore>((set, get) => ({
   pendingPetMigrationTo: null,
   locateRequest: null,
   reviewRequest: 0,
+  todoPanelOpen: false,
+  quoteRequest: null,
 
   setScreen: (s) => set({ screen: s }),
   setPaletteOpen: (o) => set({ paletteOpen: o, paletteScope: null }),
@@ -133,4 +163,14 @@ export const useUiStore = create<UiStore>((set, get) => ({
 
   requestReview: () =>
     set((state) => ({ reviewRequest: state.reviewRequest + 1 })),
+
+  setTodoPanelOpen: (open) => set({ todoPanelOpen: open }),
+  requestQuote: (sessionId, text) =>
+    set((state) => ({
+      quoteRequest: {
+        sessionId,
+        text,
+        nonce: (state.quoteRequest?.nonce ?? 0) + 1,
+      },
+    })),
 }));

@@ -89,6 +89,24 @@ const DEFAULT_PREVIEW_LAYOUT = {
 const SPLIT_MIN_WIDTH = 880;
 const CONVERSATION_MIN = "440px";
 const DOCUMENT_MIN = "400px";
+// The to-do panel (main chat ticket 42) is a narrow list: it sits beside
+// the conversation from the conversation's 440 + its own 280 floor + the
+// same 40 of slack as above, and covers the conversation's right edge
+// below that.
+const ASIDE_SPLIT_MIN_WIDTH = 760;
+const ASIDE_MIN = "280px";
+
+/** A panel that takes the reading panel's place (main chat ticket 42:
+ * the to-do panel), with its own first width and its own remembered
+ * split. */
+export interface WorkspaceAside {
+  /** Its Panel id: the split is remembered under it, apart from the
+   * reading panel's. */
+  id: string;
+  /** First width, px; after a drag the remembered split. */
+  width: number;
+  content: ReactNode;
+}
 
 /** Window-owned Git review; Markdown reads remain scoped to their session. */
 export function LocalFileWorkspace({
@@ -97,12 +115,24 @@ export function LocalFileWorkspace({
   header: mainHeader,
   repositoryHint,
   sessionId,
+  aside,
 }: {
   children: ReactNode;
   fontSize?: ConversationFontSize;
   header?: ReactNode;
   repositoryHint?: string;
   sessionId?: string;
+  /**
+   * The to-do panel while it is on screen (main chat ticket 42), in the
+   * reading panel's place: one of them at a time, the later replacing
+   * the earlier. Opening a preview or the review clears the to-do
+   * panel's open state (`todoPanelOpen`); opening the to-do panel
+   * closes them. Beside the conversation from 760px of main area, with
+   * its own first width and its own remembered split; narrower, it
+   * covers the conversation's right edge — not a dialog, so the
+   * composer stays usable (its 「说说这件」 quotes into it).
+   */
+  aside?: WorkspaceAside | null;
 }) {
   const copy = useCopy();
   const [documentPreview, setPreview] = useState<Preview | null>(null);
@@ -144,14 +174,26 @@ export function LocalFileWorkspace({
     );
   }, []);
   const [wide, setWide] = useState(false);
+  const [asideWide, setAsideWide] = useState(false);
   const panelOpen = preview !== null || review !== null;
   const split = wide && panelOpen;
+  // The reading panel wins the place in the instant both want it (the
+  // store subscription below closes it as the to-do panel opens).
+  const asideOpen = !!aside && !panelOpen;
+  const asideSplit = asideOpen && asideWide;
+  const asideId = aside?.id;
+  const asidePanels = useMemo(
+    () => (asideId ? [CONVERSATION_PANEL, asideId] : SOLO_PANELS),
+    [asideId],
+  );
   const groupRef = useGroupRef();
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: "galley-file-preview-layout-v1",
     // Separate single-panel and split entries prevent closing the preview
     // from replacing the saved reading split with a 100% conversation.
-    panelIds: split ? SPLIT_PANELS : SOLO_PANELS,
+    // The to-do panel's split has its own entry (its own panel id), so
+    // it never takes the reading split's ratio, nor gives it its own.
+    panelIds: split ? SPLIT_PANELS : asideSplit ? asidePanels : SOLO_PANELS,
   });
   const container = useRef<HTMLDivElement>(null);
   const pane = useRef<HTMLDivElement>(null);
@@ -170,9 +212,10 @@ export function LocalFileWorkspace({
   useEffect(() => {
     const element = container.current;
     if (!element) return;
-    const observer = new ResizeObserver(([entry]) =>
-      setWide(entry.contentRect.width >= SPLIT_MIN_WIDTH),
-    );
+    const observer = new ResizeObserver(([entry]) => {
+      setWide(entry.contentRect.width >= SPLIT_MIN_WIDTH);
+      setAsideWide(entry.contentRect.width >= ASIDE_SPLIT_MIN_WIDTH);
+    });
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
@@ -200,6 +243,21 @@ export function LocalFileWorkspace({
         source.focus({ preventScroll: true });
     });
   }, []);
+
+  // The to-do panel opening takes the place (main chat ticket 42): the
+  // preview or review goes, its pending read with it, and the caret
+  // stays where it is. A store callback, not render or an effect body.
+  useEffect(
+    () =>
+      useUiStore.subscribe((state, previous) => {
+        if (!state.todoPanelOpen || previous.todoPanelOpen) return;
+        generation.current += 1;
+        currentPath.current = null;
+        setPreview(null);
+        setReview(null);
+      }),
+    [],
+  );
 
   // Escape closes the wide pane from anywhere that is not a text field
   // — the pane only had it while focused, so Esc from the Composer did
@@ -229,6 +287,8 @@ export function LocalFileWorkspace({
       generation.current += 1;
       currentPath.current = null;
       if (source && !pane.current?.contains(source)) origin.current = source;
+      // The later panel replaces the earlier: the to-do panel goes.
+      useUiStore.getState().setTodoPanelOpen(false);
       setPreview(null);
       setReview({
         path: path ?? repository ?? repositoryHint,
@@ -304,6 +364,8 @@ export function LocalFileWorkspace({
       if (source && !pane.current?.contains(source)) origin.current = source;
       currentPath.current = path;
       setReview(null);
+      // The later panel replaces the earlier: the to-do panel goes.
+      if (!refresh) useUiStore.getState().setTodoPanelOpen(false);
       if (!refresh) scroll.current = 0;
       setPreview({ sessionId, path, kind: expected, content: null, error: null });
       try {
@@ -495,8 +557,10 @@ export function LocalFileWorkspace({
           >
             <Panel
               id={CONVERSATION_PANEL}
-              defaultSize={split ? "54%" : "100%"}
-              minSize={split ? CONVERSATION_MIN : 0}
+              // Beside the to-do panel the conversation takes what its
+              // first width leaves.
+              defaultSize={split ? "54%" : asideSplit ? undefined : "100%"}
+              minSize={split || asideSplit ? CONVERSATION_MIN : 0}
             >
               <div className="flex h-full min-h-0 min-w-0 flex-col">
                 {children}
@@ -508,6 +572,30 @@ export function LocalFileWorkspace({
                   groupRef.current?.setLayout(DEFAULT_PREVIEW_LAYOUT);
                 }}
               />
+            )}
+            {asideSplit && aside && (
+              <PreviewResizeSeparator
+                onReset={() => {
+                  // Back to its first width, as a share of the group.
+                  const total = container.current?.clientWidth ?? 0;
+                  if (total <= 0) return;
+                  const share = Math.min(60, (aside.width / total) * 100);
+                  groupRef.current?.setLayout({
+                    [CONVERSATION_PANEL]: 100 - share,
+                    [aside.id]: share,
+                  });
+                }}
+              />
+            )}
+            {asideSplit && aside && (
+              <Panel
+                key={aside.id}
+                id={aside.id}
+                defaultSize={`${aside.width}px`}
+                minSize={ASIDE_MIN}
+              >
+                {aside.content}
+              </Panel>
             )}
             {panelOpen &&
               (wide ? (
@@ -564,6 +652,15 @@ export function LocalFileWorkspace({
                 </Dialog.Root>
               ))}
           </Group>
+          {asideOpen && aside && !asideSplit && (
+            <div
+              data-role="workspace-aside-overlay"
+              style={{ width: `min(100%, ${aside.width}px)` }}
+              className="absolute inset-y-0 right-0 z-30 border-l border-line shadow-elevated"
+            >
+              {aside.content}
+            </div>
+          )}
         </div>
       </GitReviewContext.Provider>
     </LocalFilesContext.Provider>

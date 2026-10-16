@@ -1,5 +1,5 @@
 import { ArrowDown } from "@phosphor-icons/react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AskUserBubble } from "@/components/conversation/AskUserBubble";
 import {
@@ -27,6 +27,7 @@ import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToo
 import { StepRegion } from "@/components/conversation/StepRegion";
 import { ReminderCards } from "@/components/conversation/ReminderCards";
 import { SubtaskCards } from "@/components/conversation/SubtaskCards";
+import { TodoCards } from "@/components/conversation/TodoCards";
 import { ThinkingPreview } from "@/components/conversation/ThinkingPreview";
 import { UserQuestionRail } from "@/components/conversation/UserQuestionRail";
 import { useActiveMessages } from "@/hooks/useActiveSession";
@@ -35,6 +36,7 @@ import { useRemovedTurnsAnchor } from "@/hooks/useRemovedTurnsAnchor";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
 import { useRemindersByMessage } from "@/hooks/useReminderCards";
 import { useSubtaskDispatchesByMessage } from "@/hooks/useSubtaskCards";
+import { useTodosByMessage } from "@/hooks/useTodoCards";
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { useMarkdownStream } from "@/hooks/useMarkdownStream";
 import { assistantLineSentence } from "@/lib/assistant-conversation";
@@ -58,9 +60,11 @@ import {
 import { withoutHiddenTurns } from "@/lib/message-delete";
 import { mendStreamingMarkdown } from "@/lib/mend-streaming-markdown";
 import { stepLimitTailVisible } from "@/lib/step-limit";
+import { quoteForComposer } from "@/lib/todo-open";
 import { cn } from "@/lib/utils";
 import { hiddenRowIds, useMessageDeleteStore } from "@/stores/message-delete";
 import { EMPTY_ORDINALS, useMessagesStore } from "@/stores/messages";
+import { useUiStore } from "@/stores/ui";
 import type {
   PendingAskUser,
   PendingImageAttachment,
@@ -223,8 +227,10 @@ function MainViewContent({
   const subtaskDispatches = useSubtaskDispatchesByMessage(
     isMainChat ? activeSessionId : undefined,
   );
-  // …and the reminders it set in them (ticket 37), after a reply's
-  // subtask cards when it has both.
+  // …the user's to-dos it noted in them (ticket 42), and the reminders
+  // it set (ticket 37): under a reply, its subtask cards, then its
+  // to-dos, then its reminders.
+  const todos = useTodosByMessage(isMainChat ? activeSessionId : undefined);
   const reminders = useRemindersByMessage(
     isMainChat ? activeSessionId : undefined,
   );
@@ -302,6 +308,22 @@ function MainViewContent({
   // (candidate text → textarea, not sent).
   const composerRef = useRef<ComposerHandle>(null);
   const userSubmitTick = useMessagesStore((s) => s.userSubmitTick);
+  // The to-do panel's 「说说这件」 (ticket 42) quotes a to-do into this
+  // composer from outside MainView, through the UI store. A store
+  // callback, not render or an effect body.
+  useEffect(
+    () =>
+      useUiStore.subscribe((state, previous) => {
+        const text = quoteForComposer(
+          state.quoteRequest,
+          previous.quoteRequest,
+          activeSessionId,
+          isMainChat,
+        );
+        if (text !== null) composerRef.current?.quote(text);
+      }),
+    [isMainChat, activeSessionId],
+  );
 
   // Stripped partial — empty when nothing renderable yet (e.g. only
   // `<thinking>...` partial has come through). We hide the
@@ -538,20 +560,29 @@ function MainViewContent({
                 askUserPending={Boolean(pendingAskUser)}
                 agentRunning={isRunning}
                 renderAfterAnswer={
-                  subtaskDispatches.size > 0 || reminders.size > 0
+                  subtaskDispatches.size > 0 ||
+                  todos.size > 0 ||
+                  reminders.size > 0
                     ? (messageId) => {
                         const dispatches = subtaskDispatches.get(messageId);
+                        const noted = todos.get(messageId);
                         const tasks = reminders.get(messageId);
-                        if (!dispatches && !tasks) return null;
+                        if (!dispatches && !noted && !tasks) return null;
                         return (
                           <>
                             {dispatches && (
                               <SubtaskCards dispatches={dispatches} />
                             )}
+                            {noted && (
+                              <TodoCards
+                                items={noted}
+                                afterSubtasks={!!dispatches}
+                              />
+                            )}
                             {tasks && (
                               <ReminderCards
                                 tasks={tasks}
-                                afterSubtasks={!!dispatches}
+                                afterSubtasks={!!dispatches || !!noted}
                               />
                             )}
                           </>

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  calendarDaysBefore,
   formatListTime,
   formatMessageDateTime,
+  formatScheduleDay,
   formatScheduleTime,
   formatMessageTime,
   formatMessageTimeFull,
@@ -509,5 +511,58 @@ describe("formatScheduleTime (reminder cards and the 待办 list)", () => {
 
   it("returns null for an unparseable timestamp", () => {
     expect(formatScheduleTime("nope", today, "zh-CN", zhWords)).toBeNull();
+  });
+});
+
+describe("formatScheduleDay (a to-do due on a day, ticket 42)", () => {
+  // Friday 2026-10-16, today.
+  const today = local(2026, 10, 16).getTime();
+  const zhWords = { today: "今天", tomorrow: "明天", yesterday: "昨天" };
+  const enWords = {
+    today: "Today",
+    tomorrow: "Tomorrow",
+    yesterday: "Yesterday",
+  };
+  const zh = (day: string, todayMs = today) =>
+    formatScheduleDay(day, todayMs, "zh-CN", zhWords);
+  const en = (day: string) =>
+    plain(formatScheduleDay(day, today, "en-US", enWords));
+
+  it("writes the day words, the weekday within six days, else the date", () => {
+    expect(zh("2026-10-16")).toBe("今天");
+    expect(zh("2026-10-17")).toBe("明天");
+    expect(zh("2026-10-15")).toBe("昨天");
+    expect(zh("2026-10-21")).toBe("周三");
+    expect(zh("2026-10-13")).toBe("周二");
+    expect(zh("2026-10-23")).toBe("10月23日");
+    expect(zh("2027-01-03")).toBe("2027年1月3日");
+    expect(en("2026-10-17")).toBe("Tomorrow");
+    expect(en("2026-10-21")).toBe("Wed");
+    expect(en("2026-10-30")).toBe("Oct 30");
+    expect(en("2027-01-03")).toBe("Jan 3, 2027");
+  });
+
+  it("is a floating local date: midnight moves it, the zone does not", () => {
+    // The same stored day reads 「明天」 tonight and 「今天」 after
+    // midnight, whatever zone the suite runs in.
+    expect(zh("2026-10-17")).toBe("明天");
+    expect(zh("2026-10-17", local(2026, 10, 17).getTime())).toBe("今天");
+    expect(zh("2026-10-17", local(2026, 10, 18).getTime())).toBe("昨天");
+    expect(zh("2026-11-01", local(2026, 10, 31).getTime())).toBe("明天");
+  });
+
+  it("counts the days a date lies before today", () => {
+    expect(calendarDaysBefore("2026-10-16", today)).toBe(0);
+    expect(calendarDaysBefore("2026-10-14", today)).toBe(2);
+    expect(calendarDaysBefore("2026-10-20", today)).toBe(-4);
+    expect(
+      calendarDaysBefore("2026-10-16", local(2026, 10, 17, 0, 0, 1).getTime()),
+    ).toBe(1);
+  });
+
+  it("returns null for what is not a date", () => {
+    expect(zh("nope")).toBeNull();
+    expect(zh("2026-10-16T09:00")).toBeNull();
+    expect(calendarDaysBefore("", today)).toBeNull();
   });
 });

@@ -23,7 +23,14 @@ import { ArchivedDialog } from "@/components/screens/archived/ArchivedDialog";
 import { EarlierDialog } from "@/components/screens/earlier/EarlierDialog";
 import { CreateProjectDialog } from "@/components/screens/project/CreateProjectDialog";
 import { ScheduledTasksDialog } from "@/components/screens/scheduled/ScheduledTasksDialog";
-import { TodoDialog } from "@/components/screens/scheduled/TodoDialog";
+import { TodoPanel } from "@/components/todo/TodoPanel";
+// TEMP variant switcher (main chat 42): the pill and comparison B.
+import { TodoVariantsPill } from "@/components/todo/todo-variants/TodoVariantsPill";
+import {
+  PANEL_WIDTH,
+  todoPanelId,
+  useTodoVariants,
+} from "@/components/todo/todo-variants/todo-variants";
 import {
   ConfirmDeleteProjectDialog,
   EditProjectDialog,
@@ -35,7 +42,9 @@ import {
 } from "@/lib/composer-focus";
 import { CopyProvider, copyForLanguage } from "@/lib/i18n";
 import { findMainChat, openMainChat } from "@/lib/main-chat";
+import { openTodoPanel, toggleTodoPanel } from "@/lib/todo-open";
 import { useAppHydrationEffects } from "@/hooks/useAppHydrationEffects";
+import { useAssistantTodoSync } from "@/hooks/useAssistantTodoSync";
 import { useBrowserControlLiveStatus } from "@/hooks/useBrowserControlLiveStatus";
 import { useChannelsStatus } from "@/hooks/useChannelsStatus";
 import { useExternalCoreEvents } from "@/hooks/useExternalCoreEvents";
@@ -99,6 +108,8 @@ function App() {
   const dropPaletteScope = useUiStore((s) => s.dropPaletteScope);
   const requestLocate = useUiStore((s) => s.requestLocate);
   const requestReview = useUiStore((s) => s.requestReview);
+  const todoPanelOpen = useUiStore((s) => s.todoPanelOpen);
+  const setTodoPanelOpen = useUiStore((s) => s.setTodoPanelOpen);
 
   const settingsOpen = useUiStore((s) => s.settingsOpen);
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
@@ -396,12 +407,10 @@ function App() {
   // (user expects modals to be closed on app re-open).
   const [archivedOpen, setArchivedOpen] = useState(false);
   // ScheduledTasksDialog: management surface for scheduled tasks,
-  // opened from the sidebar 定时 icon. The sessions the
-  // tasks produce live in the normal timeline.
+  // opened from the sidebar 定时 icon (the external runtime's; with a
+  // main chat there is no such icon). The sessions the tasks produce
+  // live in the normal timeline.
   const [scheduledOpen, setScheduledOpen] = useState(false);
-  // TodoDialog (main chat ticket 37): with a main chat the same icon (and
-  // ⌘K) opens the assistant's 待办 instead.
-  const [todoOpen, setTodoOpen] = useState(false);
   // EarlierDialog: opens when the user clicks the collapsed
   // "Earlier (N)" row in the sidebar. Same local-state rationale as
   // archivedOpen.
@@ -433,6 +442,16 @@ function App() {
   );
   const { collapsed: sidebarCollapsed, toggle: toggleSidebar } =
     useSidebarCollapse(hasMainChat);
+  // The assistant's to-do list (main chat ticket 42): one copy for the
+  // sidebar's 「待办 · 今天 N」, the panel and the cards under replies.
+  useAssistantTodoSync(hasMainChat);
+  // The to-do panel shows beside the main chat itself only: a subtask or
+  // a workbench conversation folds it away, Galley brings it back.
+  const todoPanelShown =
+    todoPanelOpen && screen === "main" && Boolean(activeSession?.mainChat);
+  // TEMP variant switcher (main chat 42): comparison B, the panel's
+  // first width, its split remembered per option.
+  const todoWidthVariant = useTodoVariants((s) => s.width);
   const paletteSessions = useMemo(
     () =>
       visibleSessions.map((s) =>
@@ -555,10 +574,14 @@ function App() {
             onOpenEarlier={() => setEarlierOpen(true)}
             archivedCount={archivedCount}
             onSearch={() => setPaletteOpen(true)}
-            onOpenScheduled={() =>
-              hasMainChat ? setTodoOpen(true) : setScheduledOpen(true)
-            }
+            onOpenScheduled={() => setScheduledOpen(true)}
             scheduledActionCount={scheduledActionCount}
+            // Galley's 「待办」 row (ticket 42): the panel beside the main
+            // chat, entered from anywhere.
+            onToggleTodo={
+              hasMainChat ? () => toggleTodoPanel(todoPanelShown) : undefined
+            }
+            todoPanelShown={todoPanelShown}
             projects={projects}
             expandedProjectIds={expandedProjectIds}
             projectReveal={projectReveal}
@@ -588,6 +611,30 @@ function App() {
                   : (projects.find(
                       (project) => project.id === activeSession?.projectId,
                     )?.rootPath ?? undefined)
+              }
+              // The to-do panel in the reading panel's place (ticket 42).
+              aside={
+                todoPanelShown && activeSession
+                  ? {
+                      // TEMP variant switcher (main chat 42): comparison B.
+                      id: todoPanelId(todoWidthVariant),
+                      width: PANEL_WIDTH[todoWidthVariant],
+                      content: (
+                        <TodoPanel
+                          mainChatId={activeSession.id}
+                          onOpenSession={openSession}
+                          onTalk={() =>
+                            focusComposerUnlessClaimed(
+                              document.querySelector<HTMLTextAreaElement>(
+                                `textarea[${COMPOSER_INPUT_ATTR}]`,
+                              ),
+                            )
+                          }
+                          onClose={() => setTodoPanelOpen(false)}
+                        />
+                      ),
+                    }
+                  : null
               }
               header={
                 <MainHeaderHost
@@ -745,9 +792,10 @@ function App() {
           setEmptyComposerFocusTick((tick) => tick + 1);
         }}
         onNewProject={() => setCreateProjectOpen(true)}
-        // The assistant's 待办 (ticket 37); the external runtime has no
+        // The assistant's 待办 (ticket 37): the panel beside the main chat,
+        // Galley entered first (ticket 42); the external runtime has no
         // such item.
-        onOpenTodo={hasMainChat ? () => setTodoOpen(true) : undefined}
+        onOpenTodo={hasMainChat ? openTodoPanel : undefined}
         onOpenSession={openSession}
         onOpenMessage={(sessionId, messageId, query) => {
           // File the locate first: useStickyScroll's session-switch
@@ -812,39 +860,6 @@ function App() {
         onArchiveSession={(id) => archiveSession(id)}
         onTogglePinSession={(id) => togglePinSession(id)}
         onArchiveSessionsBulk={(ids) => archiveSessionsBulk(ids)}
-      />
-
-      <TodoDialog
-        open={todoOpen}
-        onOpenChange={setTodoOpen}
-        projects={projects}
-        llms={llms}
-        onOpenReply={(sessionId, messageId) => {
-          // A main chat reset since: the reply is gone with it.
-          if (!visibleSessions.some((s) => s.id === sessionId)) {
-            void openMainChat();
-            return;
-          }
-          // The 查找聊天记录 jump (ticket 28): file the locate first, then
-          // open the conversation.
-          requestLocate(sessionId, messageId);
-          openSession(sessionId);
-        }}
-        onOpenSession={openSession}
-        onTalk={() => {
-          void openMainChat().then((opened) => {
-            if (!opened) return;
-            // A main chat already on screen keeps its composer mounted,
-            // so it does not take the caret by itself.
-            requestAnimationFrame(() =>
-              focusComposerUnlessClaimed(
-                document.querySelector<HTMLTextAreaElement>(
-                  `textarea[${COMPOSER_INPUT_ATTR}]`,
-                ),
-              ),
-            );
-          });
-        }}
       />
 
       <ScheduledTasksDialog
@@ -917,6 +932,9 @@ function App() {
           setEditingProjectId(null);
         }}
       />
+
+      {/* TEMP variant switcher (main chat 42) */}
+      {hasMainChat && <TodoVariantsPill />}
 
       <ToastHost
         toasts={toasts}

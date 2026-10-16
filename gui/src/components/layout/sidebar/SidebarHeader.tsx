@@ -15,19 +15,19 @@ export function SidebarHeader({
   onOpenScheduled,
   scheduledActionCount,
   onNewProject,
-  todo = false,
+  scheduled = true,
 }: {
   /** False with a main chat (main chat ticket 18): 「Galley」 is the
    * assistant's name on the card below, so the masthead is the traffic
-   * lights' zone and the three icons, under its own width rule. */
+   * lights' zone and the icons, under its own width rule. */
   wordmark?: boolean;
   onSearch?: () => void;
   onOpenScheduled?: () => void;
   scheduledActionCount?: number;
   onNewProject?: () => void;
-  /** With a main chat the second icon is the assistant's 待办 (ticket
-   * 37); see SidebarNavIcons. */
-  todo?: boolean;
+  /** False with a main chat: 搜索 and 新建项目 only (ticket 42; the
+   * 待办 entry is the row under Galley's card). See SidebarNavIcons. */
+  scheduled?: boolean;
 }) {
   // Masthead row (2026-10-03): the "Galley" wordmark left, 搜索 / 定时 /
   // 新建项目 as 28px icons right — the same TopBarIconButton rhythm as
@@ -60,11 +60,11 @@ export function SidebarHeader({
   // elsewhere — sidebar-width.ts), the icons drop into the new-chat row
   // below and this header is the wordmark alone.
   //
-  // With a main chat there is no wordmark (main chat ticket 18): the
-  // left keeps clear of the traffic lights (80px, as the collapse
-  // toggle does) or the regular gutter, and everything but the icons
-  // drags the window. The icons drop into the new-chat row only on
-  // macOS, below 184px.
+  // With a main chat there is no wordmark (main chat ticket 18) and two
+  // icons, 搜索 and 新建项目 (ticket 42): the left keeps clear of the
+  // traffic lights (80px, as the collapse toggle does) or the regular
+  // gutter, and everything but the icons drags the window. The icons
+  // drop into the new-chat row only on macOS, below 152px.
   return (
     <div
       data-tauri-drag-region
@@ -113,7 +113,7 @@ export function SidebarHeader({
         onOpenScheduled={onOpenScheduled}
         scheduledActionCount={scheduledActionCount}
         onNewProject={onNewProject}
-        todo={todo}
+        scheduled={scheduled}
       />
     </div>
   );

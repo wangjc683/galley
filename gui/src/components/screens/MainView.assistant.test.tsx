@@ -68,12 +68,13 @@ vi.mock("@/stores/sessions", async (importOriginal) => {
   return { ...actual, useSessionsStore: current };
 });
 
-// The cards under a reply (tickets 06a, 37): the records the two hooks
+// The cards under a reply (tickets 06a, 37, 42): the records the hooks
 // read from Core, handed in. Each hook gets the session id only for the
 // main chat; anything else reads nothing.
 const cards = vi.hoisted(() => ({
   dispatches: new Map<string, unknown[]>(),
   reminders: new Map<string, unknown[]>(),
+  todos: new Map<string, unknown[]>(),
 }));
 vi.mock("@/hooks/useSubtaskCards", () => ({
   useSubtaskDispatchesByMessage: (id: string | undefined) =>
@@ -83,10 +84,14 @@ vi.mock("@/hooks/useReminderCards", () => ({
   useRemindersByMessage: (id: string | undefined) =>
     id ? cards.reminders : new Map(),
 }));
+vi.mock("@/hooks/useTodoCards", () => ({
+  useTodosByMessage: (id: string | undefined) => (id ? cards.todos : new Map()),
+}));
 
 afterEach(() => {
   cards.dispatches = new Map();
   cards.reminders = new Map();
+  cards.todos = new Map();
   live.slice = {};
   useSessionsStore.setState({ activeSessionId: undefined });
   useQueueStore.setState({ bySession: {} });
@@ -255,6 +260,113 @@ describe("the main chat is the assistant's conversation", () => {
     const other = render({ isMainChat: false });
     expect(other).not.toContain('data-role="reminder-card');
     expect(other).not.toContain('data-role="subtask-card');
+  });
+
+  it("hangs the to-dos it noted under that reply: subtasks, to-dos, reminders (ticket 42)", () => {
+    const noted = {
+      kind: "todo",
+      id: "todo_report",
+      text: "交季度报告",
+      state: "open",
+      createdBy: "assistant",
+      createdIn: { sessionId: "s-1", turnIndex: 2 },
+      due: { date: "2099-10-21", hasTime: false },
+    };
+    cards.todos = new Map([["a-排好了。", [noted]]]);
+    const alone = render({ isMainChat: true });
+    expect(count(alone, 'data-role="todo-card"')).toBe(1);
+    expect(alone).toContain(
+      'data-role="todo-cards" class="flex flex-col gap-2 mt-3"',
+    );
+    const card = alone.indexOf('data-role="todo-card"');
+    expect(alone.lastIndexOf("排好了。", card)).toBeGreaterThan(
+      alone.lastIndexOf("多云，记得带伞。", card),
+    );
+    // With a reminder card: the to-dos first, the reminders 8px under.
+    cards.reminders = new Map([
+      [
+        "a-排好了。",
+        [
+          {
+            id: "sched_water",
+            prompt: "提醒用户喝水",
+            repeat: { kind: "once" },
+            timeOfDay: "21:40",
+            enabled: true,
+            fireAt: "2099-10-16T13:40:00.000Z",
+            target: "assistant",
+            createdIn: { sessionId: "s-1", turnIndex: 2 },
+            createdAt: "2026-10-16T08:00:00Z",
+            updatedAt: "2026-10-16T08:00:00Z",
+          },
+        ],
+      ],
+    ]);
+    const two = render({ isMainChat: true });
+    expect(two.indexOf('data-role="todo-cards"')).toBeLessThan(
+      two.indexOf('data-role="reminder-cards"'),
+    );
+    expect(two).toContain(
+      'data-role="todo-cards" class="flex flex-col gap-2 mt-3"',
+    );
+    expect(two).toContain(
+      'data-role="reminder-cards" class="flex flex-col gap-2 mt-2"',
+    );
+    // With a subtask card too: subtasks, then the to-dos, then the
+    // reminders, 8px apart.
+    cards.dispatches = new Map([
+      [
+        "a-排好了。",
+        [
+          {
+            parentSessionId: "s-1",
+            turnIndex: 2,
+            ordinal: 0,
+            messageId: "a-排好了。",
+            sessionId: null,
+            title: "订船票",
+            failure: "empty",
+            failureDetail: null,
+            createdAt: "2026-10-16T08:00:00Z",
+          },
+        ],
+      ],
+    ]);
+    cards.reminders = new Map([
+      [
+        "a-排好了。",
+        [
+          {
+            id: "sched_water",
+            prompt: "提醒用户喝水",
+            repeat: { kind: "once" },
+            timeOfDay: "21:40",
+            enabled: true,
+            fireAt: "2099-10-16T13:40:00.000Z",
+            target: "assistant",
+            createdIn: { sessionId: "s-1", turnIndex: 2 },
+            createdAt: "2026-10-16T08:00:00Z",
+            updatedAt: "2026-10-16T08:00:00Z",
+          },
+        ],
+      ],
+    ]);
+    const all = render({ isMainChat: true });
+    const order = [
+      'data-role="subtask-cards"',
+      'data-role="todo-cards"',
+      'data-role="reminder-cards"',
+    ].map((needle) => all.indexOf(needle));
+    expect(order.every((at) => at > -1)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(all).toContain(
+      'data-role="todo-cards" class="flex flex-col gap-2 mt-2"',
+    );
+    expect(all).toContain(
+      'data-role="reminder-cards" class="flex flex-col gap-2 mt-2"',
+    );
+    // Only the main chat has them.
+    expect(render({ isMainChat: false })).not.toContain('data-role="todo-card');
   });
 
   it("stacks a short conversation up from the composer (贴底)", () => {

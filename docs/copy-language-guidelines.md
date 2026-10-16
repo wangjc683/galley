@@ -314,7 +314,7 @@ Section 标签（2026-10-07 JC 裁）：
 #### 重置主对话（2026-10-14，主聊天票 15、裁决 59）
 
 运行环境「更多」的最后一行与它的长按确认弹窗。中文是票里的原文，加上 JC 10-14 定的 A 版修改（「会删除」
-第一条改说「聊天记录」，「不会删除」加内核运行日志一条）；英文按英文语气重写。说「它」「长期记忆」；指引擎本身
+第一条改说「聊天记录」，「不会删除」加内核运行日志一条；2026-10-17 主聊天票 42 加待办一条，Core 在票 39 起就一起删）；英文按英文语气重写。说「它」「长期记忆」；指引擎本身
 时用「内核」（见「内核 / Engine」），不说 GA；列表项不带句末标点。
 
 | 位置 | 中文 | English |
@@ -325,7 +325,7 @@ Section 标签（2026-10-07 JC 裁）：
 | 弹窗标题 | 重置主对话？ | Reset the main chat? |
 | 正文 | 主对话会清空，从问候重新开始；它记住的关于你的事、学会的做事方法也会清掉，回到刚装好时。 | The main chat is emptied and starts over from its greeting. What it remembers about you and the ways of working it has learned are cleared too, back to a fresh install. |
 | 分组 | 会删除 / 不会删除 | Deleted / Kept |
-| 会删除 | 主对话的聊天记录，包括它派出去、还没变成普通对话的子任务和附件 · 它的长期记忆（所有对话和 IM 共用，其他对话里的它也会一起忘） · 迁移前的自动备份 | The main chat's messages, including its attachments and the subtasks it sent out that haven't become ordinary conversations · Its long-term memory (shared by every conversation and IM chat, so it forgets in those too) · The automatic backups made before data migrations |
+| 会删除 | 主对话的聊天记录，包括它派出去、还没变成普通对话的子任务和附件 · 待办里你的事和挂在上面的提醒（它自己要回头查的提醒和例行留着） · 它的长期记忆（所有对话和 IM 共用，其他对话里的它也会一起忘） · 迁移前的自动备份 | The main chat's messages, including its attachments and the subtasks it sent out that haven't become ordinary conversations · Your to-dos and the reminders on them (its own reminders and routines stay) · Its long-term memory (shared by every conversation and IM chat, so it forgets in those too) · The automatic backups made before data migrations |
 | 不会删除 | 其他对话和 IM 里接回的对话（还在侧栏里，它以后翻历史仍可能读到） · 它替你做出来的文件 · 内核的运行日志（30 天后自动清掉，这之前它翻历史仍可能读到） · 模型、渠道和其他设置 | Other conversations and the IM chats it picked back up (they stay in the sidebar, and it may still read them when it looks back through history) · Files it made for you · The engine's logs (deleted automatically after 30 days; until then it may still read them when it looks back through history) · Models, channels and other settings |
 | 末行 | 已经发给模型服务商的内容收不回来。 | What was already sent to model providers can't be taken back. |
 | 确认键 / 执行中 | 按住 5 秒重置 / 正在重置… | Hold 5 s to reset / Resetting… |
@@ -349,7 +349,7 @@ Section 标签（2026-10-07 JC 裁）：
 
 | 叫法 | 用在哪里 |
 |---|---|
-| Galley | 助手的名字，内置运行时那条一直在的对话在界面上就是它：侧栏的助手卡片、开着它时顶栏的身份行、子任务面包屑「Galley ›」（无障碍名「回到 Galley」）、⌘K（搜「主对话」「助理」「助手」「main chat」「assistant」也找得到）。字标退役，品牌只出现一次。名字后面不挂职位：卡片、顶栏都只写「Galley」，不写「Galley 助理」「Galley · Assistant」（2026-10-15，[助手 PRD](../.scratch/assistant/PRD.md) 裁决 7） 指它时：离开它自己的对话（侧栏顶上的待办、设置、通知、提示条）写名字「Galley」，不写没有先行词的「它」；它的对话里、它的卡片上名字就在旁边，可以说「它」（2026-10-16，JC 看待办空状态：「这个它是谁？」）。 |
+| Galley | 助手的名字，内置运行时那条一直在的对话在界面上就是它：侧栏的助手卡片、开着它时顶栏的身份行、子任务面包屑「Galley ›」（无障碍名「回到 Galley」）、⌘K（搜「主对话」「助理」「助手」「main chat」「assistant」也找得到）。字标退役，品牌只出现一次。名字后面不挂职位：卡片、顶栏都只写「Galley」，不写「Galley 助理」「Galley · Assistant」（2026-10-15，[助手 PRD](../.scratch/assistant/PRD.md) 裁决 7） 指它时：离开它自己的对话（侧栏卡片下的待办与待办面板、设置、通知、提示条）写名字「Galley」，待办面板的组名也是「Galley 在办」，不写没有先行词的「它」；它的对话里、它的卡片上名字就在旁边，可以说「它」（2026-10-16，JC 看待办空状态：「这个它是谁？」）。 |
 | 助理 / assistant | 角色词：介绍它是你的什么时用，中文「私人助理」「助理」，英文 personal assistant / assistant（2026-10-15，助手 PRD 裁决 7）。用在问候的第一句「你好，我是你的私人助理。」、关于页副标题、渠道里的「Galley 是私人助理」。界面不写「助手」「幕僚长」「管家」：「助手」留作设计文档与代码里的内部用语（助手卡片、助手的对话），「幕僚长」只在说明里当一次比喻。「带一支团队」由句子说，不进名词。`Supervisor` 仍只在集成语境（上表），指操作 Galley 团队的 agent，内置的那一个就是 Galley 本人 |
 | 主对话 | 退为内部用语。界面上还剩的几处，叫法另定：输入框上方的忙时选择（「主对话正在忙」「本轮结束后接着交给主对话」）、子任务卡片与它第一条消息的来源提示、设置里的「重置主对话」 |
 | 新对话 | 新建动作，有没有主对话都叫这个：侧栏的新对话行、⌘N、忙时选择的第二个按钮「开新对话」 |

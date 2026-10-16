@@ -15,24 +15,24 @@ import { SESSION_RUN_STATE_EVENT } from "@/lib/session-run-state";
 import { SUBTASK_DISPATCHED_EVENT } from "@/lib/subtasks";
 
 /**
- * The assistant's to-do list and its reminder cards (main chat ticket
- * 37; main chat PRD rulings 84 and 86, assistant PRD ruling 9). Core
- * regrouped the list into four groups and added the user's to-dos
- * (ticket 39, ruling 91); this dialog keeps its three groups from them
- * (`legacyTodoGroups`) and leaves the to-dos out until the panel of
- * ticket 42 replaces it.
+ * The assistant's to-do list and its reminder cards (main chat tickets
+ * 37, 39 and 42; main chat PRD rulings 84, 86 and 91, assistant PRD
+ * ruling 9).
  *
  * On the managed runtime there is no 「定时任务」 feature for the user:
  * scheduled tasks are the assistant's hands. It sets a reminder when it
  * hears something with a time in it, says so, and a card drawn from the
- * database hangs under that reply (`remindersByMessage`). The second
- * icon of the sidebar masthead opens its 待办: what is coming up, what
- * it is working on, what it finished lately — one Core read
+ * database hangs under that reply (`remindersByMessage`). It notes the
+ * user's own to-dos the same way (ticket 39), each with a card of its
+ * own under the reply (ticket 42, lib/todo-panel.ts). Galley's card in
+ * the sidebar has a 「待办」 row under it that opens the to-do panel
+ * beside the main chat: the user's to-dos, what Galley is on, its
+ * routines, what was done lately — one Core read
  * (`list_assistant_todo`, core/src/assistant_todo.rs), the same one
  * Core writes the main chat's 「在办的事」 from (ticket 36), so what the
  * user sees is what the assistant sees.
  *
- * Everything here is pure but the two Core calls: the wire shapes, the
+ * Everything here is pure but the Core calls: the wire shapes, the
  * card's state, the words and times a row shows, where a row leads.
  */
 
@@ -156,41 +156,6 @@ export async function listAssistantTodo(): Promise<AssistantTodo> {
   return invoke<AssistantTodo>("list_assistant_todo");
 }
 
-/** The dialog's three groups (ticket 37) from Core's four (ticket 39),
- * until the panel of ticket 42: 接下来 is Galley's one-off tasks and the
- * routines, soonest first and paused ones last, as it was; 在办 the
- * subtasks; 最近做完 what was done but the to-dos. The to-dos are left
- * out: this dialog has no row for them. */
-export interface LegacyTodoGroups {
-  upcoming: TodoItem[];
-  active: TodoItem[];
-  recent: TodoItem[];
-  recentOmitted: number;
-}
-
-function atMs(item: TodoItem, absent: number): number {
-  const ms = item.at ? Date.parse(item.at) : NaN;
-  return Number.isNaN(ms) ? absent : ms;
-}
-
-export function legacyTodoGroups(todo: AssistantTodo): LegacyTodoGroups {
-  const upcoming = [
-    ...todo.assistant.filter((i) => i.kind === "task"),
-    ...todo.routine,
-  ].sort(
-    (a, b) =>
-      Number(a.state === "paused") - Number(b.state === "paused") ||
-      atMs(a, Infinity) - atMs(b, Infinity) ||
-      a.id.localeCompare(b.id),
-  );
-  return {
-    upcoming,
-    active: todo.assistant.filter((i) => i.kind === "subtask"),
-    recent: todo.done.filter((i) => i.kind !== "todo"),
-    recentOmitted: todo.doneOmitted,
-  };
-}
-
 /** Mirror of Core `TodoStatus`. */
 export type TodoStatus = "open" | "done" | "cancelled";
 
@@ -234,7 +199,7 @@ export async function cancelTodoReminder(id: string): Promise<TodoBrief> {
 export const TODOS_CHANGED_EVENT = "todos:changed";
 
 /**
- * Core events after which the open list reads again: a to-do changed
+ * Core events after which the list reads again: a to-do changed
  * (`todos:changed`), a task changed or fired (`scheduled-tasks:changed`),
  * a subtask was dispatched, a run started or ended
  * (`session-run-state`), a subtask was promoted, archived, restored or
@@ -254,15 +219,6 @@ export const TODO_REFRESH_EVENTS: readonly string[] = [
   "message-deleted",
 ];
 
-/** Whether the dialog's groups have nothing at all (its empty state). */
-export function todoIsEmpty(groups: LegacyTodoGroups): boolean {
-  return (
-    groups.upcoming.length === 0 &&
-    groups.active.length === 0 &&
-    groups.recent.length === 0
-  );
-}
-
 /** The reply a turn's message id names (`AgentTurn.messageId`, the
  * subtask dispatch's `messageId`). */
 export function replyMessageId(sessionId: string, turnIndex: number): string {
@@ -271,7 +227,9 @@ export function replyMessageId(sessionId: string, turnIndex: number): string {
 
 // ---- Times and words ------------------------------------------------------
 
-function scheduleTime(
+/** An instant in the reminder card's shapes (「明天 09:00」); the raw
+ * value when it does not parse. */
+export function scheduleTime(
   iso: string,
   todayStartMs: number,
   language: ResolvedLanguage,
@@ -311,7 +269,8 @@ export function todoTimeLabel(
 export function todoStateLabel(item: TodoItem, copy: AppCopy): string {
   const session = item.target === "session";
   switch (item.state) {
-    // A to-do not done: the dialog shows none (ticket 42 words it).
+    // A to-do not done: its box says it (lib/todo-panel.ts words its
+    // due date and reminder).
     case "open":
       return "";
     case "scheduled":
@@ -337,34 +296,9 @@ export function todoStateLabel(item: TodoItem, copy: AppCopy): string {
   }
 }
 
-/** The small mark for what the assistant did not make: the user's form
- * (「手动」) or another agent (「Agent」, its name in the tooltip). The
- * assistant's own and the ones the user asked it for carry none. */
-export function todoBadge(
-  item: TodoItem,
-  copy: AppCopy,
-): { label: string; title: string } | null {
-  switch (item.createdBy) {
-    case "assistant":
-      return null;
-    case "user":
-      return {
-        label: copy.todo.badgeManual,
-        title: copy.todo.badgeManualTitle,
-      };
-    case "agent":
-      return {
-        label: copy.todo.badgeAgent,
-        title: item.agent
-          ? copy.todo.badgeAgentTitle(item.agent)
-          : copy.todo.badgeAgentTitleBare,
-      };
-  }
-}
+// ---- Where a row leads -----------------------------------------------------
 
-// ---- Where a row leads, what it can do -------------------------------------
-
-/** What clicking a row does. */
+/** What clicking a row's title does. */
 export type TodoTarget =
   /** The reply the assistant made it in: jump there and light it up
    * (the 查找聊天记录 jump, ticket 28). */
@@ -372,12 +306,10 @@ export type TodoTarget =
   /** A subtask: open it, as its card's 「打开」 does. */
   | { kind: "subtask"; sessionId: string }
   /** The session a scheduled run made. */
-  | { kind: "session"; sessionId: string }
-  /** A task made in the form: open the form. */
-  | { kind: "edit"; taskId: string };
+  | { kind: "session"; sessionId: string };
 
 /** Where a row leads; null for a row with nowhere to go (a task another
- * agent made, or made outside a reply). */
+ * agent or the old form made, or made outside a reply). */
 export function todoRowTarget(item: TodoItem): TodoTarget | null {
   if (item.kind === "subtask") return { kind: "subtask", sessionId: item.id };
   const anchor = item.createdIn;
@@ -391,40 +323,7 @@ export function todoRowTarget(item: TodoItem): TodoTarget | null {
   if (item.state === "fired" && item.runSessionId) {
     return { kind: "session", sessionId: item.runSessionId };
   }
-  if (todoCanEdit(item)) return { kind: "edit", taskId: item.id };
   return null;
-}
-
-/** Still to come (接下来). */
-function upcoming(item: TodoItem): boolean {
-  return (
-    item.kind === "task" &&
-    (item.state === "scheduled" || item.state === "paused")
-  );
-}
-
-/** Every task still to come can be cancelled. */
-export function todoCanCancel(item: TodoItem): boolean {
-  return upcoming(item);
-}
-
-/** A repeating task can be paused; a paused one resumed. */
-export function todoCanPause(item: TodoItem): boolean {
-  return upcoming(item) && item.state === "scheduled" && isRepeating(item);
-}
-
-export function todoCanResume(item: TodoItem): boolean {
-  return upcoming(item) && item.state === "paused";
-}
-
-/** The user's own repeating tasks open the old form (one-offs it cannot
- * express). */
-export function todoCanEdit(item: TodoItem): boolean {
-  return upcoming(item) && item.createdBy === "user" && isRepeating(item);
-}
-
-function isRepeating(item: TodoItem): boolean {
-  return !!item.repeat && item.repeat.kind !== "once";
 }
 
 /** The hint at the top of the list (scheduled-tasks ticket 14's rule):
@@ -548,9 +447,11 @@ export async function cancelScheduledTask(id: string): Promise<void> {
   await deleteScheduledTask(id);
 }
 
-/** A failed cancel (or pause) in words, from Core's rejection
- * (`{"error": "not_found", …}` when the task is gone). */
-export function todoActionFailure(error: unknown, copy: AppCopy): string {
+/** Why an action failed: the thing is gone (Core's `{"error":
+ * "not_found", …}`), or anything else. */
+export type TodoFailure = "gone" | "failed";
+
+export function todoFailureKind(error: unknown): TodoFailure {
   const raw =
     typeof error === "string"
       ? error
@@ -559,9 +460,20 @@ export function todoActionFailure(error: unknown, copy: AppCopy): string {
         : String(error);
   try {
     const parsed = JSON.parse(raw) as { error?: unknown } | null;
-    if (parsed?.error === "not_found") return copy.todo.actionGone;
+    if (parsed?.error === "not_found") return "gone";
   } catch {
     // Not Core's JSON.
   }
-  return copy.todo.actionFailed;
+  return "failed";
+}
+
+/** A failure in words, for the line under a card or a row. */
+export function todoFailureText(kind: TodoFailure, copy: AppCopy): string {
+  return kind === "gone" ? copy.todo.actionGone : copy.todo.actionFailed;
+}
+
+/** A failed cancel (a card's, a reminder's) in words, from Core's
+ * rejection. */
+export function todoActionFailure(error: unknown, copy: AppCopy): string {
+  return todoFailureText(todoFailureKind(error), copy);
 }

@@ -277,23 +277,19 @@ export function SidebarAssistantCard({
  * (ruling 64). `lit` while the empty new-chat composer is up — a
  * project's too — until the first send's row takes over: the selected
  * row's channels, the sidebar's one "you are here". On macOS below the
- * masthead's 184px the masthead's three icons come down into this row,
- * the external runtime's one-row layout; the row is there either way,
- * so the list never moves (sidebar-width.ts).
+ * masthead's 152px the masthead's two icons (搜索, 新建项目) come down
+ * into this row, the external runtime's one-row layout; the row is there
+ * either way, so the list never moves (sidebar-width.ts).
  */
 export function SidebarNewChatRow({
   lit,
   onNewChat,
   onSearch,
-  onOpenScheduled,
-  scheduledActionCount = 0,
   onNewProject,
 }: {
   lit: boolean;
   onNewChat?: () => void;
   onSearch?: () => void;
-  onOpenScheduled?: () => void;
-  scheduledActionCount?: number;
   onNewProject?: () => void;
 }) {
   const language = useLanguage();
@@ -316,10 +312,8 @@ export function SidebarNewChatRow({
         placement="row"
         display={ASSISTANT_ROW_NAV_ICONS_DISPLAY}
         onSearch={onSearch}
-        onOpenScheduled={onOpenScheduled}
-        scheduledActionCount={scheduledActionCount}
         onNewProject={onNewProject}
-        todo
+        scheduled={false}
       />
     </div>
   );

@@ -1,9 +1,4 @@
-import {
-  Clock,
-  FolderPlus,
-  ListChecks,
-  MagnifyingGlass,
-} from "@phosphor-icons/react";
+import { Clock, FolderPlus, MagnifyingGlass } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
 import { TopBarIconButton } from "@/components/layout/TopBarIconButton";
@@ -47,11 +42,11 @@ type NavIconsPlacement = "header" | "row";
  * threshold (sidebar-width.ts, `ASSISTANT_*`). Omitted, this
  * platform's rule.
  *
- * `todo` (main chat ticket 37, PRD ruling 86): with a main chat the
- * second icon is the assistant's 待办 — `ListChecks`, named 「待办」, no
- * badge (a number here only ever meant "handle something"; a subtask
- * asking or failing already counts on the assistant card). Without it,
- * 定时 with its badge, unchanged.
+ * `scheduled` false (with a main chat, main chat ticket 42, PRD ruling
+ * 91 point 5): the group is 搜索 and 新建项目 only. The second icon was
+ * the assistant's 待办 from ticket 37; its entry is now the 「待办」 row
+ * under Galley's card. Without a main chat, 定时 with its badge,
+ * unchanged.
  */
 export function SidebarNavIcons({
   placement,
@@ -60,7 +55,7 @@ export function SidebarNavIcons({
   scheduledActionCount = 0,
   onNewProject,
   display,
-  todo = false,
+  scheduled = true,
 }: {
   placement: NavIconsPlacement;
   onSearch?: () => void;
@@ -74,16 +69,14 @@ export function SidebarNavIcons({
   onNewProject?: () => void;
   /** The group's display rule, instead of this platform's. */
   display?: string;
-  /** The second icon opens the assistant's 待办 instead of 定时. */
-  todo?: boolean;
+  /** False with a main chat: no 定时 icon. */
+  scheduled?: boolean;
 }) {
   const copy = useCopy();
   const inHeader = placement === "header";
   const NavButton = inHeader ? HeaderIconButton : QuickIconButton;
   const iconSize = inHeader ? 16 : 14;
-  const scheduledLabel = todo
-    ? copy.sidebar.todo
-    : scheduledTooltip(copy, scheduledActionCount);
+  const scheduledLabel = scheduledTooltip(copy, scheduledActionCount);
   return (
     <div
       className={cn(
@@ -108,23 +101,16 @@ export function SidebarNavIcons({
       >
         <MagnifyingGlass size={iconSize} weight="thin" />
       </NavButton>
-      <NavButton
-        label={scheduledLabel}
-        tooltip={scheduledLabel}
-        onClick={onOpenScheduled}
-      >
-        {todo ? (
-          <ListChecks size={iconSize} weight="thin" />
-        ) : (
-          <>
-            <Clock size={iconSize} weight="thin" />
-            <ScheduledBadge
-              count={scheduledActionCount}
-              placement={placement}
-            />
-          </>
-        )}
-      </NavButton>
+      {scheduled && (
+        <NavButton
+          label={scheduledLabel}
+          tooltip={scheduledLabel}
+          onClick={onOpenScheduled}
+        >
+          <Clock size={iconSize} weight="thin" />
+          <ScheduledBadge count={scheduledActionCount} placement={placement} />
+        </NavButton>
+      )}
       <NavButton
         label={copy.sidebar.newProject}
         tooltip={copy.sidebar.newProject}

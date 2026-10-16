@@ -11,10 +11,10 @@ import { Sidebar } from "./Sidebar";
 /**
  * The sidebar's width rules on macOS (sidebar/sidebar-width.ts read the
  * platform once, at load): with a main chat the masthead has no
- * wordmark, so its three icons fit down to 184px and move into the
- * new-chat row below that — the row is there either way, so the list
- * never moves. The rest of the suite runs as Linux, which has no narrow
- * state with a main chat.
+ * wordmark and two icons (搜索, 新建项目; main chat ticket 42), so they
+ * fit down to 152px and move into the new-chat row below that — the row
+ * is there either way, so the list never moves. The rest of the suite
+ * runs as Linux, which has no narrow state with a main chat.
  */
 vi.mock("@/lib/platform", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/platform")>();
@@ -49,14 +49,14 @@ function render(sessions: Session[], language: "zh-CN" | "en-US" = "zh-CN") {
 const between = (html: string, from: string, until: string) =>
   html.slice(html.indexOf(from), html.indexOf(until, html.indexOf(from) + 1));
 const MASTHEAD_ICONS =
-  'class="items-center hidden @min-[184px]/sidebar:flex shrink-0 gap-1"';
+  'class="items-center hidden @min-[152px]/sidebar:flex shrink-0 gap-1"';
 const ROW_ICONS =
-  'class="items-center flex @min-[184px]/sidebar:hidden min-w-0 gap-0.5"';
+  'class="items-center flex @min-[152px]/sidebar:hidden min-w-0 gap-0.5"';
 
 describe("on macOS, with a main chat", () => {
   const sessions = [managed("s-main", { mainChat: true }), managed("s-side")];
 
-  it("clears the traffic lights and holds the three icons down to 184px", () => {
+  it("clears the traffic lights and holds the two icons down to 152px", () => {
     const html = render(sessions);
     const masthead = html.slice(0, html.indexOf('data-role="assistant-card"'));
     expect(masthead).toContain("pl-20");
@@ -72,13 +72,16 @@ describe("on macOS, with a main chat", () => {
       );
       expect(row).toContain(ROW_ICONS);
       for (const label of language === "zh-CN"
-        ? ["搜索", "待办", "新建项目"]
-        : ["Search", "To-do", "New project"]) {
+        ? ["搜索", "新建项目"]
+        : ["Search", "New project"]) {
         expect(row).toContain(`aria-label="${label}"`);
       }
-      // Beside the icons the label needs more than 184px: plus only.
-      expect(row).toContain("@max-[184px]/sidebar:hidden");
-      expect(row).toContain("hidden @min-[184px]/sidebar:block");
+      expect(row).not.toContain(
+        `aria-label="${language === "zh-CN" ? "待办" : "To-do"}"`,
+      );
+      // Beside the icons the label needs more than 152px: plus only.
+      expect(row).toContain("@max-[152px]/sidebar:hidden");
+      expect(row).toContain("hidden @min-[152px]/sidebar:block");
       expect(row).toContain("⌘");
     }
   });
@@ -88,6 +91,6 @@ describe("on macOS, with a main chat", () => {
     expect(html).toContain("pl-[88px]");
     expect(html).toContain("hidden @min-[251px]/sidebar:flex");
     expect(html).toContain("flex @min-[251px]/sidebar:hidden");
-    expect(html).not.toContain("184px");
+    expect(html).not.toContain("152px");
   });
 });

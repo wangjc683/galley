@@ -7,7 +7,6 @@ import {
   cancelTodoReminder,
   completeTodo,
   EMPTY_TODO,
-  legacyTodoGroups,
   listAssistantTodo,
   onceFired,
   reminderCardState,
@@ -18,12 +17,7 @@ import {
   replyMessageId,
   todoActionFailure,
   todoAutostartHintVisible,
-  todoBadge,
-  todoCanCancel,
-  todoCanEdit,
-  todoCanPause,
-  todoCanResume,
-  todoIsEmpty,
+  todoFailureKind,
   todoRowTarget,
   todoStateLabel,
   todoTimeLabel,
@@ -34,10 +28,10 @@ import type { ScheduledTask } from "@/lib/scheduled-tasks";
 import { getTauriMocks } from "@/test/setup";
 
 /**
- * The assistant's 待办 and reminder cards (main chat ticket 37): the
+ * The assistant's 待办 and reminder cards (main chat tickets 37, 42): the
  * pure half — the words and times a row and a card show, where a row
- * leads, which actions it has, which reply a card hangs under — and the
- * two Core calls.
+ * leads, which reply a card hangs under — and the Core calls. The to-do
+ * panel's own words and the to-do cards are in lib/todo-panel.test.ts.
  */
 
 // Local wall-clock parts, so the day words hold in whatever timezone the
@@ -132,7 +126,7 @@ describe("a row's time", () => {
   });
 });
 
-describe("a row's state and mark", () => {
+describe("a row's state", () => {
   it("reminds or runs by what a fire does", () => {
     expect(todoStateLabel(item(), zh)).toBe("待提醒");
     expect(todoStateLabel(item({ target: "session" }), zh)).toBe("待运行");
@@ -153,23 +147,6 @@ describe("a row's state and mark", () => {
     expect(sub("stopped")).toBe("没有跑完");
     expect(sub("done")).toBe("已完成");
   });
-
-  it("marks what the form or another agent made, not the assistant's", () => {
-    expect(todoBadge(item(), zh)).toBeNull();
-    expect(todoBadge(item({ createdBy: "user" }), zh)).toEqual({
-      label: "手动",
-      title: "你在定时任务表单里建的",
-    });
-    expect(
-      todoBadge(item({ createdBy: "agent", agent: "claude-code" }), zh),
-    ).toEqual({
-      label: "Agent",
-      title: "claude-code 建的",
-    });
-    expect(todoBadge(item({ createdBy: "agent" }), zh)?.title).toBe(
-      "外部 Agent 建的",
-    );
-  });
 });
 
 describe("where a row leads", () => {
@@ -183,7 +160,7 @@ describe("where a row leads", () => {
     expect(replyMessageId("s-main", 7)).toBe("msg_s-main_7_assistant");
   });
 
-  it("opens a subtask, a scheduled run's session, or the form", () => {
+  it("opens a subtask or a scheduled run's session", () => {
     expect(
       todoRowTarget(
         item({ kind: "subtask", id: "s-sub", createdIn: undefined }),
@@ -195,7 +172,9 @@ describe("where a row leads", () => {
       repeat: { kind: "daily" },
       target: "session",
     });
-    expect(todoRowTarget(form)).toEqual({ kind: "edit", taskId: "sched_1" });
+    // The panel has no form (ticket 42): a routine the old form made
+    // leads nowhere until it has run.
+    expect(todoRowTarget(form)).toBeNull();
     expect(
       todoRowTarget({ ...form, state: "fired", runSessionId: "s-run" }),
     ).toEqual({ kind: "session", sessionId: "s-run" });
@@ -208,55 +187,14 @@ describe("where a row leads", () => {
     expect(
       todoRowTarget(item({ createdIn: { sessionId: "s-main" } })),
     ).toBeNull();
-    // A one-off from the form (the old form cannot edit it).
+    // A one-off from the form.
     expect(
       todoRowTarget(item({ createdBy: "user", createdIn: undefined })),
     ).toBeNull();
   });
 });
 
-describe("a row's actions", () => {
-  it("cancels anything still to come; pauses and resumes the repeating", () => {
-    const once = item();
-    expect([
-      todoCanCancel(once),
-      todoCanPause(once),
-      todoCanResume(once),
-    ]).toEqual([true, false, false]);
-    const daily = item({ repeat: { kind: "daily" } });
-    expect([
-      todoCanCancel(daily),
-      todoCanPause(daily),
-      todoCanResume(daily),
-    ]).toEqual([true, true, false]);
-    const paused = { ...daily, state: "paused" as const };
-    expect([todoCanPause(paused), todoCanResume(paused)]).toEqual([
-      false,
-      true,
-    ]);
-    for (const done of [
-      item({ state: "fired" }),
-      item({ kind: "subtask", state: "running" }),
-    ]) {
-      expect(
-        todoCanCancel(done) || todoCanPause(done) || todoCanResume(done),
-      ).toBe(false);
-    }
-  });
-
-  it("edits only the user's repeating tasks", () => {
-    expect(
-      todoCanEdit(item({ createdBy: "user", repeat: { kind: "daily" } })),
-    ).toBe(true);
-    expect(todoCanEdit(item({ createdBy: "user" }))).toBe(false);
-    expect(todoCanEdit(item({ repeat: { kind: "daily" } }))).toBe(false);
-    expect(
-      todoCanEdit(
-        item({ createdBy: "agent", repeat: { kind: "weekly", weekdays: [1] } }),
-      ),
-    ).toBe(false);
-  });
-
+describe("a card's cancel", () => {
   it("cancels through Core's soft delete, from the desktop", async () => {
     const { invoke } = getTauriMocks();
     await cancelScheduledTask("sched_1");
@@ -272,6 +210,10 @@ describe("a row's actions", () => {
     expect(todoActionFailure(new Error("boom"), zh)).toBe(
       "没能完成，再试一次。",
     );
+    expect(todoFailureKind(gone)).toBe("gone");
+    expect(todoFailureKind("assistant_unavailable: no main chat")).toBe(
+      "failed",
+    );
   });
 });
 
@@ -281,59 +223,6 @@ describe("the list", () => {
     invoke.mockResolvedValueOnce(EMPTY_TODO);
     await expect(listAssistantTodo()).resolves.toEqual(EMPTY_TODO);
     expect(invoke).toHaveBeenCalledWith("list_assistant_todo");
-  });
-
-  it("is empty only with nothing in any group", () => {
-    expect(todoIsEmpty(legacyTodoGroups(EMPTY_TODO))).toBe(true);
-    expect(
-      todoIsEmpty(
-        legacyTodoGroups({ ...EMPTY_TODO, done: [item({ state: "fired" })] }),
-      ),
-    ).toBe(false);
-  });
-
-  it("draws its three groups from Core's four, to-dos left out", () => {
-    const todo = item({
-      kind: "todo",
-      id: "todo_1",
-      state: "open",
-      at: undefined,
-      target: undefined,
-      repeat: undefined,
-    });
-    const sub = item({ kind: "subtask", id: "s-1", state: "running" });
-    const late = item({ id: "sched_late", at: local(2026, 10, 20, 9, 0) });
-    const paused = item({
-      id: "sched_paused",
-      state: "paused",
-      at: local(2026, 10, 16, 22, 0),
-    });
-    const routine = item({
-      id: "sched_daily",
-      repeat: { kind: "daily" },
-      at: local(2026, 10, 17, 8, 0),
-    });
-    const groups = legacyTodoGroups({
-      ...EMPTY_TODO,
-      yours: { today: [todo], later: [], anytime: [] },
-      assistant: [sub, late, paused, item()],
-      routine: [routine],
-      done: [
-        item({ kind: "todo", id: "todo_done", state: "done" }),
-        item({ kind: "subtask", id: "s-done", state: "done" }),
-      ],
-      doneOmitted: 2,
-    });
-    expect(groups.upcoming.map((i) => i.id)).toEqual([
-      "sched_1",
-      "sched_daily",
-      "sched_late",
-      "sched_paused",
-    ]);
-    expect(groups.active.map((i) => i.id)).toEqual(["s-1"]);
-    expect(groups.recent.map((i) => i.id)).toEqual(["s-done"]);
-    expect(groups.recentOmitted).toBe(2);
-    expect(todoStateLabel(todo, zh)).toBe("");
   });
 
   it("ticks a to-do, unticks it, cancels its reminder through Core", async () => {
