@@ -71,7 +71,7 @@ JC：「1，做；2，刚试了，目前新消息是停在底部附近，如果�
 | [07](./issues/07-quote-strip-and-bubble.md) | 引用改成输入框上方的一条，气泡里单独画引用（裁决 3a），切换器与 05 合用 | done |
 | [08](./issues/08-finalize-switcher.md) | 拆切换器定稿：A3（缓动 `--ease-firm`）、B1、C2、D2 | done |
 | [09](./issues/09-ask-user-into-view.md) | 工作台跑的途中问你、问题出在屏幕以下时滚过去（裁决 2a） | done |
-| [10](./issues/10-main-chat-bubble-density.md) | 切换器：主对话气泡里的字号、行距、段距（裁决 8） | ready-for-agent |
+| [10](./issues/10-main-chat-bubble-density.md) | 切换器：主对话气泡里的字号、行距、段距（裁决 8） | merged，等切档裁决 |
 
 01–03 都动输入框，同一个子代理按序做；04、05 各一个子代理，并行；06 接在 04 后面（用它的滚动函数）。
 
