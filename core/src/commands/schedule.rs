@@ -139,3 +139,20 @@ pub(crate) async fn delete_scheduled_task(
         .await
         .map_err(stringify_error)
 }
+
+/// The assistant's to-do list (main chat ticket 37): what it has coming
+/// up, what it is working on, what it finished lately — the desktop's
+/// 「待办」 behind the sidebar masthead on the managed runtime. Read-only;
+/// the page reads it again on the events that change it
+/// (`scheduled-tasks:changed`, `subtask-dispatched`, `session-run-state`,
+/// session updates). The same read feeds the main chat's 「在办的事」
+/// (ticket 36), so both show one list in one order.
+#[tauri::command]
+pub(crate) async fn list_assistant_todo(
+    galley: State<'_, SqliteGalley>,
+    manager: State<'_, std::sync::Arc<crate::runner_manager::RunnerManager>>,
+) -> std::result::Result<crate::assistant_todo::AssistantTodo, String> {
+    crate::assistant_todo::assistant_todo(&galley, &manager, chrono::Utc::now())
+        .await
+        .map_err(stringify_error)
+}

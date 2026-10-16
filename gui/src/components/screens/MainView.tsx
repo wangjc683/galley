@@ -25,6 +25,7 @@ import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToolbar";
 import { StepRegion } from "@/components/conversation/StepRegion";
+import { ReminderCards } from "@/components/conversation/ReminderCards";
 import { SubtaskCards } from "@/components/conversation/SubtaskCards";
 import { ThinkingPreview } from "@/components/conversation/ThinkingPreview";
 import { UserQuestionRail } from "@/components/conversation/UserQuestionRail";
@@ -32,6 +33,7 @@ import { useActiveMessages } from "@/hooks/useActiveSession";
 import { useEarlierTurns } from "@/hooks/useEarlierTurns";
 import { useRemovedTurnsAnchor } from "@/hooks/useRemovedTurnsAnchor";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
+import { useRemindersByMessage } from "@/hooks/useReminderCards";
 import { useSubtaskDispatchesByMessage } from "@/hooks/useSubtaskCards";
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { useMarkdownStream } from "@/hooks/useMarkdownStream";
@@ -219,6 +221,11 @@ function MainViewContent({
   // The main chat's subtask cards (ticket 06a), by the reply that
   // dispatched them. Every other session has none.
   const subtaskDispatches = useSubtaskDispatchesByMessage(
+    isMainChat ? activeSessionId : undefined,
+  );
+  // …and the reminders it set in them (ticket 37), after a reply's
+  // subtask cards when it has both.
+  const reminders = useRemindersByMessage(
     isMainChat ? activeSessionId : undefined,
   );
 
@@ -531,12 +538,24 @@ function MainViewContent({
                 askUserPending={Boolean(pendingAskUser)}
                 agentRunning={isRunning}
                 renderAfterAnswer={
-                  subtaskDispatches.size > 0
+                  subtaskDispatches.size > 0 || reminders.size > 0
                     ? (messageId) => {
                         const dispatches = subtaskDispatches.get(messageId);
-                        return dispatches ? (
-                          <SubtaskCards dispatches={dispatches} />
-                        ) : null;
+                        const tasks = reminders.get(messageId);
+                        if (!dispatches && !tasks) return null;
+                        return (
+                          <>
+                            {dispatches && (
+                              <SubtaskCards dispatches={dispatches} />
+                            )}
+                            {tasks && (
+                              <ReminderCards
+                                tasks={tasks}
+                                afterSubtasks={!!dispatches}
+                              />
+                            )}
+                          </>
+                        );
                       }
                     : undefined
                 }

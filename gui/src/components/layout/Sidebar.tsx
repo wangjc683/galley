@@ -430,6 +430,7 @@ export function Sidebar({
     <div className="@container/sidebar flex h-full flex-col bg-chrome text-[13px] text-ink">
       <SidebarHeader
         wordmark={!sectioned}
+        todo={sectioned}
         onSearch={onSearch}
         onOpenScheduled={onOpenScheduled}
         scheduledActionCount={scheduledActionCount}

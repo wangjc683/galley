@@ -319,6 +319,7 @@ export function SidebarNewChatRow({
         onOpenScheduled={onOpenScheduled}
         scheduledActionCount={scheduledActionCount}
         onNewProject={onNewProject}
+        todo
       />
     </div>
   );

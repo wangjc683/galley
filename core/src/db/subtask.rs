@@ -69,6 +69,43 @@ pub struct RunReply {
     pub tool_calls: Option<String>,
 }
 
+/// A subtask of the main chat as the assistant's to-do list reads it
+/// (main chat ticket 37, [`crate::assistant_todo`]): not promoted, not
+/// archived, still there.
+#[derive(Debug, Clone, Default, PartialEq, Eq, FromRow)]
+pub struct TodoSubtaskRow {
+    pub session_id: String,
+    pub title: String,
+    pub last_activity_at: String,
+    /// The first line of the instructions, from the dispatch record.
+    pub dispatch_title: Option<String>,
+    /// Its runner did not start ([`SubtaskFailure::StartFailed`]).
+    pub start_failed: bool,
+}
+
+/// The last visible assistant row of a session's latest run — what the
+/// to-do list tells a finished subtask from one asking or stopped short
+/// by ([`SqliteGalley::latest_run_last_reply`]).
+#[derive(Debug, Clone, PartialEq, Eq, FromRow)]
+pub struct LastRunReply {
+    /// `tool_calls` as stored (JSON).
+    pub tool_calls: Option<String>,
+}
+
+impl LastRunReply {
+    /// It stopped on an `ask_user` question.
+    pub fn asks_user(&self) -> bool {
+        self.tool_calls
+            .as_deref()
+            .is_some_and(super::session::tool_calls_ask_user)
+    }
+
+    /// It is a final answer (no tool, or only GA's synthetic `no_tool`).
+    pub fn is_final_answer(&self) -> bool {
+        crate::subtask::is_final_answer(self.tool_calls.as_deref())
+    }
+}
+
 /// One row the send-back count reads, in transcript order: an assistant
 /// row (with its `tool_calls` only when it may hold `ask_user`) or one of
 /// the assistant's user messages.
@@ -351,6 +388,53 @@ impl SqliteGalley {
         .bind(session_id.as_str())
         .bind(session_id.as_str())
         .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)
+    }
+
+    /// The subtasks of `parent_session_id` the to-do list may show (main
+    /// chat ticket 37): not promoted, not archived; most recent activity
+    /// first. Which of them it shows is [`crate::assistant_todo`]'s.
+    pub async fn todo_subtask_rows(
+        &self,
+        parent_session_id: &SessionId,
+    ) -> Result<Vec<TodoSubtaskRow>> {
+        sqlx::query_as::<_, TodoSubtaskRow>(
+            "SELECT s.id AS session_id, s.title AS title, \
+                    s.last_activity_at AS last_activity_at, \
+                    (SELECT d.title FROM subtask_dispatches d WHERE d.session_id = s.id \
+                     ORDER BY d.created_at LIMIT 1) AS dispatch_title, \
+                    EXISTS (SELECT 1 FROM subtask_dispatches d \
+                            WHERE d.session_id = s.id AND d.failure = ?) AS start_failed \
+             FROM sessions s \
+             WHERE s.parent_session_id = ? AND s.promoted_at IS NULL \
+               AND s.status != 'archived' \
+             ORDER BY s.last_activity_at DESC, s.id",
+        )
+        .bind(SubtaskFailure::StartFailed.as_sql())
+        .bind(parent_session_id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)
+    }
+
+    /// The last visible assistant row of `session_id`'s latest run — from
+    /// its latest user message on — if it wrote one.
+    pub async fn latest_run_last_reply(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<Option<LastRunReply>> {
+        sqlx::query_as::<_, LastRunReply>(
+            "SELECT tool_calls FROM messages \
+             WHERE session_id = ? AND role = 'assistant' AND visibility = 'visible' \
+               AND turn_index >= COALESCE( \
+                 (SELECT MAX(turn_index) FROM messages WHERE session_id = ? AND role = 'user'), \
+                 0) \
+             ORDER BY turn_index DESC, sequence DESC LIMIT 1",
+        )
+        .bind(session_id.as_str())
+        .bind(session_id.as_str())
+        .fetch_optional(&self.pool)
         .await
         .map_err(map_sqlx_err)
     }

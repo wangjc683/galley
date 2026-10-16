@@ -158,6 +158,8 @@ export const zhCopy = {
     scheduled: "定时",
     openScheduled: "管理定时任务",
     scheduledNeedsAction: (count: number) => `${count} 项定时任务需要处理`,
+    /** 书眉第二个图标在内置运行时（有主对话时）的名字（票 37，裁决 86）。 */
+    todo: "待办",
     working: "正在工作",
     thinking: "思考中",
     waitingForYou: "等你回复",
@@ -649,6 +651,8 @@ export const zhCopy = {
     resetLayout: "恢复默认布局",
     openSettings: "打开设置",
     reviewChanges: "查看仓库改动",
+    /** 内置运行时（有主对话时）打开助理的待办（票 37）。 */
+    openTodo: "待办",
     back: "返回",
     mainMenu: "主菜单",
     yourMessage: "你的提问",
@@ -2020,6 +2024,53 @@ export const zhCopy = {
     deleteTitle: "删除这个定时任务？",
     deleteBody: "它产出的会话会保留在时间线里。",
     create: "创建",
+  },
+  /** 助理的待办与回复下的提醒卡片（主聊天票 37，裁决 84、86）：内置运行时
+   * 侧栏书眉第二个图标与 ⌘K 打开列表，三组「接下来」「在办」「最近做完」；
+   * 它在一条回复里建的提醒，卡片挂在那条回复下面。 */
+  todo: {
+    title: "待办",
+    groupUpcoming: "接下来",
+    groupActive: "在办",
+    groupRecent: "最近做完",
+    /** 「最近做完」超过上限没列出的件数。 */
+    recentOmitted: (count: number) => `还有 ${count} 件没有列出`,
+    empty: "它记下的提醒和派出去的活会出现在这里。",
+    emptyExample: "比如跟它说：「明天早上 9 点提醒我开会」",
+    emptyTalk: "去跟它说",
+    /** 列表顶上一行（scheduled-tasks 票 14 的条件）。按钮沿用 scheduled.autostartEnable。 */
+    autostartHint: "Galley 未设为开机自动启动，电脑重启后提醒不会响。",
+    /** 不是它建的：你在定时任务表单里建的、外部 Agent 建的。 */
+    badgeManual: "手动",
+    badgeManualTitle: "你在定时任务表单里建的",
+    badgeAgent: "Agent",
+    badgeAgentTitle: (name: string) => `${name} 建的`,
+    badgeAgentTitleBare: "外部 Agent 建的",
+    stateScheduled: "待提醒",
+    /** 到点开一个新对话的任务。 */
+    stateScheduledSession: "待运行",
+    statePaused: "已暂停",
+    stateFired: "已提醒",
+    stateFiredSession: "已运行",
+    stateCancelled: "已取消",
+    stateRunning: "正在工作",
+    stateAsking: "等你回复",
+    stateFailed: "出错",
+    stateStepLimit: "停在步数上限",
+    stateStopped: "没有跑完",
+    stateDone: "已完成",
+    cancel: "取消",
+    pause: "暂停",
+    resume: "恢复",
+    edit: "编辑",
+    /** 卡片与列表里取消、暂停没成功时写在那一行下面。 */
+    actionFailed: "没能完成，再试一次。",
+    actionGone: "这件事已经不在了。",
+    timeToday: (time: string) => `今天 ${time}`,
+    timeTomorrow: (time: string) => `明天 ${time}`,
+    timeYesterday: (time: string) => `昨天 ${time}`,
+    /** 卡片的无障碍名前缀。 */
+    reminder: "提醒",
   },
   updates: {
     check: "检查更新",

@@ -23,11 +23,16 @@ import { ArchivedDialog } from "@/components/screens/archived/ArchivedDialog";
 import { EarlierDialog } from "@/components/screens/earlier/EarlierDialog";
 import { CreateProjectDialog } from "@/components/screens/project/CreateProjectDialog";
 import { ScheduledTasksDialog } from "@/components/screens/scheduled/ScheduledTasksDialog";
+import { TodoDialog } from "@/components/screens/scheduled/TodoDialog";
 import {
   ConfirmDeleteProjectDialog,
   EditProjectDialog,
 } from "@/components/screens/project/EditProjectDialog";
 import { ASSISTANT_SEARCH_KEYWORDS } from "@/lib/assistant";
+import {
+  COMPOSER_INPUT_ATTR,
+  focusComposerUnlessClaimed,
+} from "@/lib/composer-focus";
 import { CopyProvider, copyForLanguage } from "@/lib/i18n";
 import { findMainChat, openMainChat } from "@/lib/main-chat";
 import { useAppHydrationEffects } from "@/hooks/useAppHydrationEffects";
@@ -394,6 +399,9 @@ function App() {
   // opened from the sidebar 定时 icon. The sessions the
   // tasks produce live in the normal timeline.
   const [scheduledOpen, setScheduledOpen] = useState(false);
+  // TodoDialog (main chat ticket 37): with a main chat the same icon (and
+  // ⌘K) opens the assistant's 待办 instead.
+  const [todoOpen, setTodoOpen] = useState(false);
   // EarlierDialog: opens when the user clicks the collapsed
   // "Earlier (N)" row in the sidebar. Same local-state rationale as
   // archivedOpen.
@@ -547,7 +555,9 @@ function App() {
             onOpenEarlier={() => setEarlierOpen(true)}
             archivedCount={archivedCount}
             onSearch={() => setPaletteOpen(true)}
-            onOpenScheduled={() => setScheduledOpen(true)}
+            onOpenScheduled={() =>
+              hasMainChat ? setTodoOpen(true) : setScheduledOpen(true)
+            }
             scheduledActionCount={scheduledActionCount}
             projects={projects}
             expandedProjectIds={expandedProjectIds}
@@ -735,6 +745,9 @@ function App() {
           setEmptyComposerFocusTick((tick) => tick + 1);
         }}
         onNewProject={() => setCreateProjectOpen(true)}
+        // The assistant's 待办 (ticket 37); the external runtime has no
+        // such item.
+        onOpenTodo={hasMainChat ? () => setTodoOpen(true) : undefined}
         onOpenSession={openSession}
         onOpenMessage={(sessionId, messageId, query) => {
           // File the locate first: useStickyScroll's session-switch
@@ -799,6 +812,39 @@ function App() {
         onArchiveSession={(id) => archiveSession(id)}
         onTogglePinSession={(id) => togglePinSession(id)}
         onArchiveSessionsBulk={(ids) => archiveSessionsBulk(ids)}
+      />
+
+      <TodoDialog
+        open={todoOpen}
+        onOpenChange={setTodoOpen}
+        projects={projects}
+        llms={llms}
+        onOpenReply={(sessionId, messageId) => {
+          // A main chat reset since: the reply is gone with it.
+          if (!visibleSessions.some((s) => s.id === sessionId)) {
+            void openMainChat();
+            return;
+          }
+          // The 查找聊天记录 jump (ticket 28): file the locate first, then
+          // open the conversation.
+          requestLocate(sessionId, messageId);
+          openSession(sessionId);
+        }}
+        onOpenSession={openSession}
+        onTalk={() => {
+          void openMainChat().then((opened) => {
+            if (!opened) return;
+            // A main chat already on screen keeps its composer mounted,
+            // so it does not take the caret by itself.
+            requestAnimationFrame(() =>
+              focusComposerUnlessClaimed(
+                document.querySelector<HTMLTextAreaElement>(
+                  `textarea[${COMPOSER_INPUT_ATTR}]`,
+                ),
+              ),
+            );
+          });
+        }}
       />
 
       <ScheduledTasksDialog

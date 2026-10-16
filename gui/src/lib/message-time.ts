@@ -304,6 +304,54 @@ export function formatListTime(
   return (sameYear ? EN_DATE : EN_YEAR_DATE).format(date);
 }
 
+/** The day words a scheduled time can carry, each around the clock. */
+export interface ScheduleTimeDayWords {
+  today: (time: string) => string;
+  tomorrow: (time: string) => string;
+  yesterday: (time: string) => string;
+}
+
+/**
+ * A scheduled time to the minute, either side of now (main chat ticket
+ * 37: the reminder card under a reply and the 待办 list), counted on
+ * local calendar days:
+ *
+ *   today                    今天 21:40        Today 9:40 PM
+ *   tomorrow                 明天 09:00        Tomorrow 9:00 AM
+ *   yesterday                昨天 09:00        Yesterday 9:00 AM
+ *   2–6 days away or back    周五 09:00        Fri 9:00 AM
+ *   further this year        10月30日 09:00    Oct 30, 9:00 AM
+ *   another year             2027年1月3日 09:00  Jan 3, 2027, 9:00 AM
+ *
+ * Which side of now a weekday is on, the reader's group says
+ * (接下来 / 最近做完). Shapes as in `formatMessageTime`; pure over
+ * `todayStartMs` (`useDayStamp()`). Null when unparseable.
+ */
+export function formatScheduleTime(
+  iso: string,
+  todayStartMs: number,
+  language: ResolvedLanguage,
+  words: ScheduleTimeDayWords,
+): string | null {
+  const ms = parseTime(iso);
+  if (ms === null) return null;
+  const date = new Date(ms);
+  const today = localDayStart(todayStartMs);
+  const zh = language === "zh-CN";
+  const clock = zh
+    ? `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+    : EN_TIME.format(date);
+  const back = daysBefore(ms, today);
+  if (back === 0) return words.today(clock);
+  if (back === -1) return words.tomorrow(clock);
+  if (back === 1) return words.yesterday(clock);
+  if (Math.abs(back) <= 6) {
+    const weekday = zh ? ZH_WEEKDAYS[date.getDay()] : EN_WEEKDAY.format(date);
+    return `${weekday} ${clock}`;
+  }
+  return dateWithClock(date, today, zh, clock);
+}
+
 const FULL_FORMATS: Record<ResolvedLanguage, Intl.DateTimeFormat> = {
   "zh-CN": new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "full",

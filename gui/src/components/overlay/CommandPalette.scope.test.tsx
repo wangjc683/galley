@@ -184,6 +184,34 @@ describe("the palette inside one conversation", () => {
   });
 });
 
+describe("⌘K's 待办 (main chat ticket 37)", () => {
+  it("opens the assistant's to-do list with a main chat, found by 定时 and 提醒 too", () => {
+    const html = renderToStaticMarkup(
+      <CommandPalette
+        open
+        onOpenChange={() => {}}
+        sessions={sessions}
+        runtimeKind="managed"
+        onOpenTodo={() => {}}
+      />,
+    );
+    const item = html.slice(html.indexOf('data-test-item="todo'));
+    expect(item.slice(0, item.indexOf(">"))).toMatch(/待办 提醒 定时 定时任务/);
+    expect(item).toContain(">待办<");
+    // First of the actions.
+    expect(html.indexOf(">操作<")).toBeLessThan(
+      html.indexOf('data-test-item="todo'),
+    );
+    expect(html.indexOf('data-test-item="todo')).toBeLessThan(
+      html.indexOf('data-test-item="switch llm'),
+    );
+  });
+
+  it("has no such item without one", () => {
+    expect(palette(null)).not.toContain('data-test-item="todo');
+  });
+});
+
 describe("ScopedResults", () => {
   // Local wall-clock parts: the dates hold in whatever timezone the
   // suite runs in.

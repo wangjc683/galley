@@ -146,6 +146,7 @@ function render(
     newChatSessionId?: string;
     projects?: Project[];
     language?: "zh-CN" | "en-US";
+    scheduledActionCount?: number;
   } = {},
 ) {
   return renderToStaticMarkup(
@@ -157,6 +158,7 @@ function render(
           activeId={opts.activeId}
           newChatActive={opts.newChatActive}
           newChatSessionId={opts.newChatSessionId}
+          scheduledActionCount={opts.scheduledActionCount}
           expandedProjectIds={[]}
           onNewChat={() => {}}
           onSelectSession={() => {}}
@@ -209,12 +211,36 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
     const masthead = html.slice(0, html.indexOf(CARD));
     expect(masthead).not.toContain("font-serif");
     expect(masthead).not.toContain(">Galley<");
-    for (const label of ["搜索", "定时", "新建项目"]) {
+    for (const label of ["搜索", "待办", "新建项目"]) {
       expect(count(masthead, `aria-label="${label}"`)).toBe(1);
     }
     expect(tagWith(html, "data-tauri-drag-region")).toContain("justify-end");
     // Off macOS (the test platform) the icons never leave the masthead.
     expect(masthead).toContain('class="items-center flex shrink-0 gap-1"');
+  });
+
+  it("puts the assistant's 待办 second, with no badge (ticket 37)", () => {
+    const html = render([mainChat, sideChat], { scheduledActionCount: 2 });
+    const masthead = html.slice(0, html.indexOf(CARD));
+    const order = ["搜索", "待办", "新建项目"].map((label) =>
+      masthead.indexOf(`aria-label="${label}"`),
+    );
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(order[0]).toBeGreaterThan(-1);
+    // A count here only ever meant "handle something" (ruling 86).
+    expect(html).not.toContain('aria-label="定时"');
+    expect(html).not.toContain("2 项定时任务需要处理");
+    expect(html).not.toContain("sidebar-state-pop");
+    expect(html).not.toContain(">2</span>");
+    const en = render([mainChat, sideChat], { language: "en-US" });
+    expect(en).toContain('aria-label="To-do"');
+  });
+
+  it("keeps 定时 and its badge without a main chat", () => {
+    const html = render([sideChat], { scheduledActionCount: 2 });
+    expect(html).toContain('aria-label="2 项定时任务需要处理"');
+    expect(html).not.toContain('aria-label="待办"');
+    expect(html).toContain(">2</span>");
   });
 
   it("has no main chat row, 其他对话 header or its hint, nor 主对话 anywhere", () => {
@@ -264,7 +290,7 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
     expect(row).toContain("Ctrl+N");
     // The masthead's three icons are in the row too, shown below the
     // macOS threshold only.
-    for (const label of ["搜索", "定时", "新建项目"]) {
+    for (const label of ["搜索", "待办", "新建项目"]) {
       expect(count(row, `aria-label="${label}"`)).toBe(1);
     }
     expect(row).toContain('class="items-center hidden min-w-0 gap-0.5"');

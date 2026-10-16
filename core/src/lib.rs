@@ -5,6 +5,7 @@ mod app_paths;
 mod app_setup;
 pub mod app_update;
 mod assistant_manual;
+pub mod assistant_todo;
 pub mod attachment_read;
 pub mod browser_bridge;
 pub mod browser_control;
@@ -253,6 +254,8 @@ pub fn run() {
             preview_scheduled_fire,
             run_scheduled_task_now,
             delete_scheduled_task,
+            // The assistant's to-do list (main chat ticket 37)
+            list_assistant_todo,
             // B2 runner commands
             runner_commands::spawn_runner,
             runner_commands::send_to_runner,

@@ -1,8 +1,11 @@
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
 
 import { useCopy } from "@/lib/i18n";
+import { openMainChat } from "@/lib/main-chat";
 import { sendGatedSystemNotification } from "@/lib/notify";
+import { remindUndelivered } from "@/lib/reminder-notify";
 import {
   countFailedTasks,
   listScheduledTasks,
@@ -12,6 +15,7 @@ import {
   type ScheduledFireFailedPayload,
   type ScheduledReminderUndeliveredPayload,
 } from "@/lib/scheduled-tasks";
+import { useUiStore } from "@/stores/ui";
 
 /**
  * "Needs your action" count for the sidebar's 定时 quick-action row:
@@ -57,9 +61,10 @@ export function useSchedulerActionCount(): number {
  * throttle — lives in `sendGatedSystemNotification`.
  *
  * Also the fallback for a reminder that could not reach the assistant
- * (main chat ticket 33): Core consumed the fire, and the notification
- * carries the task's own words. Same kind (no pref: it needs you), the
- * "needs you" tone.
+ * (main chat tickets 33, 37): Core consumed the fire, and the user gets
+ * the task's own words — a system notification that lands the window on
+ * the assistant, or a toast when the window is in front
+ * (lib/reminder-notify.ts).
  */
 export function useScheduledFireFailedNotification(): void {
   const copy = useCopy();
@@ -83,11 +88,19 @@ export function useScheduledFireFailedNotification(): void {
     void listen<ScheduledReminderUndeliveredPayload>(
       SCHEDULED_REMINDER_UNDELIVERED_EVENT,
       (e) => {
-        void sendGatedSystemNotification("scheduleFailed", {
-          title: copy.scheduled.reminderNotifyTitle,
-          body: e.payload.prompt,
-          throttleKey: `schedule-reminder:${e.payload.taskId}`,
-          tone: "needsYou",
+        void remindUndelivered(e.payload, copy, {
+          windowFocused: async () => {
+            try {
+              return await getCurrentWindow().isFocused();
+            } catch {
+              // No window API (browser dev): the notification path,
+              // which skips itself there.
+              return false;
+            }
+          },
+          pushToast: (toast) => useUiStore.getState().pushToast(toast),
+          notify: sendGatedSystemNotification,
+          openAssistant: openMainChat,
         });
       },
     ).then(keep);
