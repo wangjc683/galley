@@ -722,6 +722,12 @@ Pre-Flight checks this list):
   foundation: Galley is your personal assistant and runs the team itself;
   Supervisor stays the integration term for outside agents
   (`.scratch/assistant/PRD.md` rulings 1, 7).
+- Release notes: one line that workbench conversations now share the
+  assistant's grammar (your words on the right, time centred, a fold
+  opens one line a step, one-step replies without a fold header). It
+  reaches external-runtime users too, whose whole UI is the workbench
+  (`.scratch/workbench-conversation/PRD.md`, devlog
+  [2026-10-16-workbench-conversation-grammar](./devlog/2026-10-16-workbench-conversation-grammar.md)).
 
 - **Core send takeover and remote-access groundwork** (2026-10-10,
   `.scratch/ios-client/`, devlog
