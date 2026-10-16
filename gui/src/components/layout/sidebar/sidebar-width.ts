@@ -84,7 +84,8 @@ export const NEW_CHAT_LABEL_HIDDEN = isMac
  * masthead has no wordmark — 「Galley」 is the assistant's name on the
  * card under it — and the new-chat row under the card is the scrolling
  * list's sticky first row. Since ticket 42 the masthead holds two icons,
- * 搜索 and 新建项目 (the 待办 icon gave way to the row under the card).
+ * 搜索 and 新建项目 (the 待办 icon went; its entry is in Galley's top
+ * bar since ticket 45).
  * Same one-threshold rule as above, new numbers.
  *
  * Masthead: pl (80 under the macOS traffic lights, the collapse

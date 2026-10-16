@@ -26,6 +26,32 @@ import { repeatSummary } from "@/lib/scheduled-tasks";
  */
 
 /**
+ * The panel's first width, px, and its id in the reading panel's group
+ * (LocalFileWorkspace's `aside`): a dragged split is remembered under
+ * the id, apart from the file preview's. 320 is B1 of ticket 42's
+ * comparison, JC's pick (ruling 93, ticket 45); 380 was the other.
+ */
+export const TODO_PANEL_WIDTH = 320;
+export const TODO_PANEL_ID = "todo-panel";
+
+/**
+ * Whether a panel opening in the reading panel's place closes the to-do
+ * panel — closed, and remembered so (ticket 45: closed when a file
+ * preview replaces it). The Git review is the window's: it stays open
+ * across conversations and would stand in the to-do panel's place
+ * beside Galley too, so it closes it wherever it opens. A file preview
+ * is its conversation's and goes when you leave it, so it closes the
+ * to-do panel only when it replaces it on screen; one opened in the
+ * workbench or a subtask leaves the panel to come back with Galley.
+ */
+export function readingPanelClosesTodo(
+  kind: "preview" | "review",
+  todoShown: boolean,
+): boolean {
+  return kind === "review" || todoShown;
+}
+
+/**
  * How long a ticked (or unticked) to-do holds its place, struck through
  * and faded, before it moves to 已完成 (or back): 1.5 s, and a second
  * click in it takes the tick back without a word to Core.

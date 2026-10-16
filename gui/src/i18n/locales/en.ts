@@ -175,8 +175,6 @@ export const enCopy: AppCopy = {
       count === 1
         ? "1 scheduled item needs attention"
         : `${count} scheduled items need attention`,
-    todo: "To-do",
-    todoToday: (count: number) => `Today ${count}`,
     working: "Working",
     thinking: "Thinking",
     waitingForYou: "Waiting for you",
@@ -286,6 +284,8 @@ export const enCopy: AppCopy = {
     expandSidebar: "Show sidebar",
     sidebarNeedsYou: (count) =>
       count === 1 ? "1 chat needs you" : `${count} chats need you`,
+    todo: "To-do",
+    todoWithToday: (count) => `To-do · Today ${count}`,
     display: {
       tooltip: "Display",
       aria: "Display settings",

@@ -158,10 +158,6 @@ export const zhCopy = {
     scheduled: "定时",
     openScheduled: "管理定时任务",
     scheduledNeedsAction: (count: number) => `${count} 项定时任务需要处理`,
-    /** 书眉第二个图标在内置运行时（有主对话时）的名字（票 37，裁决 86）。 */
-    todo: "待办",
-    /** Galley 卡片下「待办」那一行的右边：今天到期与逾期的件数。 */
-    todoToday: (count: number) => `今天 ${count}`,
     working: "正在工作",
     thinking: "思考中",
     waitingForYou: "等你回复",
@@ -305,6 +301,10 @@ export const zhCopy = {
     expandSidebar: "展开侧栏",
     /** 收起时开关上的计数徽标，读作提示与无障碍名称。 */
     sidebarNeedsYou: (count: number) => `${count} 个对话在等你`,
+    /** 工具簇第一个按钮：Galley 的待办，只在主对话本身开着时出现（票 45，裁决 93）。 */
+    todo: "待办",
+    /** 有今天到期与逾期的待办时，按钮的提示与无障碍名称（按钮上只写数字）。 */
+    todoWithToday: (count: number) => `待办 · 今天 ${count}`,
     display: {
       tooltip: "显示",
       aria: "显示设置",

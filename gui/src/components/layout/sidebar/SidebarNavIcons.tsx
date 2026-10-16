@@ -44,9 +44,9 @@ type NavIconsPlacement = "header" | "row";
  *
  * `scheduled` false (with a main chat, main chat ticket 42, PRD ruling
  * 91 point 5): the group is 搜索 and 新建项目 only. The second icon was
- * the assistant's 待办 from ticket 37; its entry is now the 「待办」 row
- * under Galley's card. Without a main chat, 定时 with its badge,
- * unchanged.
+ * the assistant's 待办 from ticket 37; its entry is now the 待办 button
+ * in Galley's top bar (ticket 45; ticket 42 had a row under Galley's
+ * card). Without a main chat, 定时 with its badge, unchanged.
  */
 export function SidebarNavIcons({
   placement,

@@ -26,7 +26,8 @@ export function SidebarHeader({
   scheduledActionCount?: number;
   onNewProject?: () => void;
   /** False with a main chat: 搜索 and 新建项目 only (ticket 42; the
-   * 待办 entry is the row under Galley's card). See SidebarNavIcons. */
+   * 待办 entry is in Galley's top bar since ticket 45). See
+   * SidebarNavIcons. */
   scheduled?: boolean;
 }) {
   // Masthead row (2026-10-03): the "Galley" wordmark left, 搜索 / 定时 /

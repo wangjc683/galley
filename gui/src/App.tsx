@@ -24,13 +24,8 @@ import { EarlierDialog } from "@/components/screens/earlier/EarlierDialog";
 import { CreateProjectDialog } from "@/components/screens/project/CreateProjectDialog";
 import { ScheduledTasksDialog } from "@/components/screens/scheduled/ScheduledTasksDialog";
 import { TodoPanel } from "@/components/todo/TodoPanel";
-// TEMP variant switcher (main chat 42): the pill and comparison B.
-import { TodoVariantsPill } from "@/components/todo/todo-variants/TodoVariantsPill";
-import {
-  PANEL_WIDTH,
-  todoPanelId,
-  useTodoVariants,
-} from "@/components/todo/todo-variants/todo-variants";
+// TEMP variant switcher (main-chat 45): the pill.
+import { TodoButtonVariantPill } from "@/components/todo/todo-button-variant/TodoButtonVariantPill";
 import {
   ConfirmDeleteProjectDialog,
   EditProjectDialog,
@@ -42,7 +37,12 @@ import {
 } from "@/lib/composer-focus";
 import { CopyProvider, copyForLanguage } from "@/lib/i18n";
 import { findMainChat, openMainChat } from "@/lib/main-chat";
-import { openTodoPanel, toggleTodoPanel } from "@/lib/todo-open";
+import {
+  mainChatOnScreen,
+  openTodoPanel,
+  toggleTodoPanel,
+} from "@/lib/todo-open";
+import { TODO_PANEL_ID, TODO_PANEL_WIDTH } from "@/lib/todo-panel";
 import { useAppHydrationEffects } from "@/hooks/useAppHydrationEffects";
 import { useAssistantTodoSync } from "@/hooks/useAssistantTodoSync";
 import { useBrowserControlLiveStatus } from "@/hooks/useBrowserControlLiveStatus";
@@ -443,15 +443,14 @@ function App() {
   const { collapsed: sidebarCollapsed, toggle: toggleSidebar } =
     useSidebarCollapse(hasMainChat);
   // The assistant's to-do list (main chat ticket 42): one copy for the
-  // sidebar's 「待办 · 今天 N」, the panel and the cards under replies.
+  // top bar's count, the panel and the cards under replies.
   useAssistantTodoSync(hasMainChat);
-  // The to-do panel shows beside the main chat itself only: a subtask or
-  // a workbench conversation folds it away, Galley brings it back.
-  const todoPanelShown =
-    todoPanelOpen && screen === "main" && Boolean(activeSession?.mainChat);
-  // TEMP variant switcher (main chat 42): comparison B, the panel's
-  // first width, its split remembered per option.
-  const todoWidthVariant = useTodoVariants((s) => s.width);
+  // The main chat itself is on screen (ruling 87's 「开着」: one of its
+  // subtasks is not): its top bar has the 待办 button (ticket 45), and
+  // the to-do panel shows beside it only. A subtask or a workbench
+  // conversation folds the panel away, Galley brings it back.
+  const todoEntryShown = mainChatOnScreen(screen, activeSession);
+  const todoPanelShown = todoPanelOpen && todoEntryShown;
   const paletteSessions = useMemo(
     () =>
       visibleSessions.map((s) =>
@@ -576,12 +575,6 @@ function App() {
             onSearch={() => setPaletteOpen(true)}
             onOpenScheduled={() => setScheduledOpen(true)}
             scheduledActionCount={scheduledActionCount}
-            // Galley's 「待办」 row (ticket 42): the panel beside the main
-            // chat, entered from anywhere.
-            onToggleTodo={
-              hasMainChat ? () => toggleTodoPanel(todoPanelShown) : undefined
-            }
-            todoPanelShown={todoPanelShown}
             projects={projects}
             expandedProjectIds={expandedProjectIds}
             projectReveal={projectReveal}
@@ -612,13 +605,13 @@ function App() {
                       (project) => project.id === activeSession?.projectId,
                     )?.rootPath ?? undefined)
               }
-              // The to-do panel in the reading panel's place (ticket 42).
+              // The to-do panel in the reading panel's place (ticket 42),
+              // 320px at first (B1, ticket 45).
               aside={
                 todoPanelShown && activeSession
                   ? {
-                      // TEMP variant switcher (main chat 42): comparison B.
-                      id: todoPanelId(todoWidthVariant),
-                      width: PANEL_WIDTH[todoWidthVariant],
+                      id: TODO_PANEL_ID,
+                      width: TODO_PANEL_WIDTH,
                       content: (
                         <TodoPanel
                           mainChatId={activeSession.id}
@@ -657,6 +650,13 @@ function App() {
                       void openMainChat();
                     },
                   })}
+                  // Galley's 待办, first in the tool cluster (ticket 45).
+                  onToggleTodo={
+                    todoEntryShown
+                      ? () => toggleTodoPanel(todoPanelShown)
+                      : undefined
+                  }
+                  todoOpen={todoPanelShown}
                   // The open main chat shows the assistant's identity as
                   // the title menu's trigger (ticket 18).
                   identity={
@@ -933,8 +933,8 @@ function App() {
         }}
       />
 
-      {/* TEMP variant switcher (main chat 42) */}
-      {hasMainChat && <TodoVariantsPill />}
+      {/* TEMP variant switcher (main-chat 45) */}
+      {hasMainChat && <TodoButtonVariantPill />}
 
       <ToastHost
         toasts={toasts}

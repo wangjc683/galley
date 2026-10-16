@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import { paletteAfterFind, type PaletteScope } from "@/lib/palette-scope";
+import { readTodoPanelOpen, writeTodoPanelOpen } from "@/lib/todo-panel-memory";
 import type { AppError } from "@/types/app-error";
 
 export type Screen = "onboarding" | "empty" | "main";
@@ -50,9 +51,11 @@ interface UiState {
    * 42). It shows only while the main chat itself is on screen (App):
    * leaving for the workbench or a subtask folds it away and coming
    * back brings it again. It shares the reading panel's place, one at a
-   * time: opening a file preview or the Git review clears it
-   * (LocalFileWorkspace), and setting it closes them. Per window run,
-   * never persisted.
+   * time: a file preview replacing it on screen, or the Git review
+   * opening anywhere, clears it (LocalFileWorkspace), and setting it
+   * closes them. Remembered on this machine across restarts (ticket 45,
+   * lib/todo-panel-memory.ts): every set writes it, and it starts from
+   * what was written — closed when nothing readable was.
    */
   todoPanelOpen: boolean;
 
@@ -118,7 +121,7 @@ export const useUiStore = create<UiStore>((set, get) => ({
   pendingPetMigrationTo: null,
   locateRequest: null,
   reviewRequest: 0,
-  todoPanelOpen: false,
+  todoPanelOpen: readTodoPanelOpen(),
   quoteRequest: null,
 
   setScreen: (s) => set({ screen: s }),
@@ -164,7 +167,10 @@ export const useUiStore = create<UiStore>((set, get) => ({
   requestReview: () =>
     set((state) => ({ reviewRequest: state.reviewRequest + 1 })),
 
-  setTodoPanelOpen: (open) => set({ todoPanelOpen: open }),
+  setTodoPanelOpen: (open) => {
+    writeTodoPanelOpen(open);
+    set({ todoPanelOpen: open });
+  },
   requestQuote: (sessionId, text) =>
     set((state) => ({
       quoteRequest: {

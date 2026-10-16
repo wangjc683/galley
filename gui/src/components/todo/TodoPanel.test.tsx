@@ -17,8 +17,7 @@ import { TodoPanel } from "./TodoPanel";
  * The to-do panel and the to-do card (main chat tickets 42 and 43),
  * rendered.
  * Static rendering reads a zustand store's initial state only, so the
- * list, the ticks on their way and the variant are handed in by mocking
- * the hooks; how the store moves them is pinned in
+ * list and the ticks on their way are handed in by mocking the hooks; how the store moves them is pinned in
  * stores/assistant-todo.test.ts, the words in lib/todo-panel.test.ts.
  */
 
@@ -38,25 +37,6 @@ vi.mock("@/stores/assistant-todo", () => ({
       load: async () => {},
     }),
 }));
-const variants = vi.hoisted(() => ({
-  row: "A1",
-  width: "B1",
-  done: "C1",
-}));
-vi.mock(
-  "@/components/todo/todo-variants/todo-variants",
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import("@/components/todo/todo-variants/todo-variants")
-      >();
-    return {
-      ...actual,
-      useTodoVariants: (select: (state: unknown) => unknown) =>
-        select({ ...variants, set: () => {} }),
-    };
-  },
-);
 
 afterEach(() => {
   store.todo = EMPTY_TODO;
@@ -64,7 +44,6 @@ afterEach(() => {
   store.flips = {};
   store.failures = {};
   store.cancelling = {};
-  variants.done = "C1";
 });
 
 function inDays(days: number, hour = 9): string {
@@ -358,12 +337,14 @@ describe("the panel's rows", () => {
     ).toContain(">Noted today<");
   });
 
-  it("fades a done row only under C2 (TEMP variant switcher, main chat 42)", () => {
+  it("strikes a done row's title in ink-muted and fades nothing else (C1, ticket 45)", () => {
     store.flips = { todo_report: { done: true, phase: "settling" } };
-    expect(row(panel(FULL), "todo_report")).not.toContain("opacity-60");
-    variants.done = "C2";
-    expect(row(panel(FULL), "todo_report")).toContain("opacity-60");
-    expect(row(panel(FULL), "todo_late")).not.toContain("opacity-60");
+    const held = row(panel(FULL), "todo_report");
+    expect(held).toMatch(/text-ink-muted line-through[^>]*>交季度报告/);
+    expect(held).not.toContain("opacity-60");
+    const done = row(panel(FULL, { doneOpen: true }), "todo_done");
+    expect(done).toContain("line-through");
+    expect(done).not.toContain("opacity-60");
   });
 });
 
@@ -450,13 +431,8 @@ describe("the card under the reply", () => {
     // Its due date quietly, never overdue.
     expect(html).not.toContain("逾期");
     expect(html).toContain("截止 ");
-    // Under C2 the whole card fades, as the panel's done row does.
+    // C1 (ticket 45): the strike-through alone, the card not faded.
     expect(html).not.toContain("opacity-60");
-    variants.done = "C2";
-    expect(cards([LONG_DONE])).toContain("opacity-60");
-    expect(row(panel(FULL, { doneOpen: true }), "todo_done")).toContain(
-      "opacity-60",
-    );
   });
 
   it("cancelled: the box takes no click, the title faded, 「已取消」 beside it", () => {

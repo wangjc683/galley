@@ -4,7 +4,8 @@ import { cn } from "@/lib/utils";
 
 /**
  * Shared 28px icon button for the column headers — MainHeader's utility
- * cluster (Changes / 显示 / Supervisor SOP / settings), its
+ * cluster (待办 / Changes / 显示 / Supervisor SOP / settings; 待办 widens
+ * for its count), its
  * icon-form status indicators (engine / the Browser Control and Channels
  * lamps), and SidebarHeader's 搜索 / 定时 / 项目. One place owns the
  * hover / press / popover-open rhythm so a motion tweak can't drift

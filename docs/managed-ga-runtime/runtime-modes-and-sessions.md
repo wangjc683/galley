@@ -369,8 +369,8 @@ Managed runtime with a main chat only: every write is refused with
 Main chat ticket 37, regrouped by ticket 39 (`core/src/assistant_todo.rs`):
 one read of the user's to-dos and what the assistant is on. The desktop
 (Tauri `list_assistant_todo`, ticket 42) keeps one copy of it for the
-「待办 · 今天 N」 row under Galley's sidebar card and the to-do panel beside
-the main chat, and the
+count on the 待办 button in Galley's top bar (ticket 45) and the to-do
+panel beside the main chat, and the
 main chat's 「在办的事」
 lines (ticket 36: the state block's "In Hand" subsection, written at every
 main chat runner spawn, [prompt composition](./prompt-composition.md#in-hand-main-chat-only))

@@ -5,6 +5,7 @@ import { useUiStore } from "@/stores/ui";
 
 import {
   goToTodoTarget,
+  mainChatOnScreen,
   openTodoPanel,
   quoteForComposer,
   quoteTodo,
@@ -12,10 +13,11 @@ import {
 } from "./todo-open";
 
 /**
- * The to-do panel's ways in and out (main chat ticket 42): the row and
- * ⌘K land on Galley with the panel open; a title jumps in the main chat
- * beside it or opens a session; 「说说这件」 quotes the title into the
- * main chat's composer and nothing else's.
+ * The to-do panel's ways in and out (main chat tickets 42, 45): ⌘K
+ * lands on Galley with the panel open; the top bar's button, there only
+ * beside the main chat, flips it in place; a title jumps in the main
+ * chat beside it or opens a session; 「说说这件」 quotes the title into
+ * the main chat's composer and nothing else's.
  */
 
 const openMainChat = vi.hoisted(() => vi.fn(async () => true));
@@ -45,15 +47,41 @@ describe("opening the panel", () => {
     expect(openMainChat).toHaveBeenCalledTimes(1);
   });
 
-  it("the row: opens when the panel is not on screen, closes when it is", () => {
-    // Wanted but folded away (the user is in the workbench): open, and go.
-    useUiStore.setState({ todoPanelOpen: true });
+  it("the top bar's button: opens and closes in place, never lands", () => {
     toggleTodoPanel(false);
     expect(useUiStore.getState().todoPanelOpen).toBe(true);
-    expect(openMainChat).toHaveBeenCalledTimes(1);
     toggleTodoPanel(true);
     expect(useUiStore.getState().todoPanelOpen).toBe(false);
-    expect(openMainChat).toHaveBeenCalledTimes(1);
+    // It is only ever beside the main chat itself.
+    expect(openMainChat).not.toHaveBeenCalled();
+  });
+});
+
+describe("where the button and the panel are (ticket 45)", () => {
+  const main = { mainChat: true };
+  const subtask = { mainChat: false };
+  const workbench = {};
+
+  it("only with the main chat itself in the main area", () => {
+    expect(mainChatOnScreen("main", main)).toBe(true);
+    // Ruling 87's 「开着」: its subtask is not it.
+    expect(mainChatOnScreen("main", subtask)).toBe(false);
+    expect(mainChatOnScreen("main", workbench)).toBe(false);
+    // The empty composer, onboarding, nothing open.
+    expect(mainChatOnScreen("empty", main)).toBe(false);
+    expect(mainChatOnScreen("onboarding", main)).toBe(false);
+    expect(mainChatOnScreen("main", undefined)).toBe(false);
+  });
+
+  it("left open, the panel folds away elsewhere and is back with Galley", () => {
+    toggleTodoPanel(false);
+    const shown = (session: { mainChat?: boolean }) =>
+      useUiStore.getState().todoPanelOpen && mainChatOnScreen("main", session);
+    expect(shown(main)).toBe(true);
+    expect(shown(workbench)).toBe(false);
+    expect(shown(subtask)).toBe(false);
+    // Nothing closed it on the way: it is open again beside Galley.
+    expect(shown(main)).toBe(true);
   });
 });
 

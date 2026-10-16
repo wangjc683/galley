@@ -7,7 +7,10 @@ import {
   assistantRowLine,
   doneRowLine,
   nextTodoRefreshMs,
+  readingPanelClosesTodo,
   routineRowLine,
+  TODO_PANEL_ID,
+  TODO_PANEL_WIDTH,
   TODO_SETTLE_MS,
   todoCancelled,
   todoChecked,
@@ -519,5 +522,25 @@ describe("the list", () => {
       new Date(2026, 9, 16, 15, 0).getTime(),
     );
     expect(nextTodoRefreshMs(EMPTY_TODO, now)).toBeNull();
+  });
+});
+
+describe("the panel's place (ticket 45)", () => {
+  it("starts at 320px (B1) under one id, so a dragged split has one memory", () => {
+    expect(TODO_PANEL_WIDTH).toBe(320);
+    expect(TODO_PANEL_ID).toBe("todo-panel");
+  });
+
+  it("closes when a file preview replaces it, not for one elsewhere", () => {
+    // Beside Galley: the preview takes its place, it counts as closed.
+    expect(readingPanelClosesTodo("preview", true)).toBe(true);
+    // In the workbench or a subtask: the preview is that conversation's
+    // and goes with it; the panel comes back with Galley.
+    expect(readingPanelClosesTodo("preview", false)).toBe(false);
+  });
+
+  it("closes for the Git review wherever it opens (it is the window's)", () => {
+    expect(readingPanelClosesTodo("review", true)).toBe(true);
+    expect(readingPanelClosesTodo("review", false)).toBe(true);
   });
 });

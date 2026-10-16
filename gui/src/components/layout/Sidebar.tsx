@@ -25,7 +25,6 @@ import { SidebarHeader } from "./sidebar/SidebarHeader";
 import { SidebarQuickActions } from "./sidebar/SidebarQuickActions";
 import { SidebarOtherSources } from "./sidebar/SidebarSideChats";
 import { SidebarSectionsList } from "./sidebar/SidebarTimeline";
-import { SidebarTodoRow } from "./sidebar/SidebarTodoRow";
 
 export interface SidebarProps {
   sessions: Session[];
@@ -54,12 +53,6 @@ export interface SidebarProps {
   scheduledActionCount?: number;
   /** Open the CreateProjectDialog: the masthead's 新建项目 icon. */
   onNewProject?: () => void;
-  /** With a main chat, the 「待办」 row under Galley's card (main chat
-   * ticket 42): opens the to-do panel beside the main chat, or closes
-   * it while it is on screen. */
-  onToggleTodo?: () => void;
-  /** The to-do panel is on screen: the 「待办」 row is selected. */
-  todoPanelShown?: boolean;
   /** Click a project group row → expand/collapse that one project. */
   onToggleProjectExpanded?: (id: string) => void;
   /** Click a project's inline + → prepare a new conversation whose
@@ -138,9 +131,9 @@ export interface SidebarProps {
  * 30–37, 60–65, tickets 08 / 09 / 18) the main chat is the assistant,
  * Galley, and the sidebar has two blocks. On the chrome, under a
  * masthead without the wordmark (the traffic lights' zone, 搜索 and
- * 新建项目), the assistant's card — one row of an IM chat list — and
- * its 「待办」 row (ticket 42), then the sidebar's strongest line
- * (line-strong). Under it, on the app ground,
+ * 新建项目), the assistant's card — one row of an IM chat list — then
+ * the sidebar's strongest line (line-strong); its to-dos open from
+ * Galley's own top bar (ticket 45). Under it, on the app ground,
  * the list opens on 「＋ 新对话 ⌘N」 as its sticky first row
  * (sidebar/SidebarAssistant.tsx); the buckets hold what a person
  * started, and agent-started sessions outside projects fold into
@@ -172,8 +165,6 @@ export function Sidebar({
   onOpenScheduled,
   scheduledActionCount,
   onNewProject,
-  onToggleTodo,
-  todoPanelShown = false,
   onToggleProjectExpanded,
   onStartProjectConversation,
   onArchiveSession,
@@ -451,8 +442,7 @@ export function Sidebar({
         // strongest structural line (line-strong, ticket 09: JC's C3 +
         // 常显 + 加重): what stays put sits above it, the scrolling list
         // below. The 10-08 "no line at rest" rule kept the 新对话 row
-        // joined to the list it heads; the card heads nothing. Galley's
-        // 「待办」 row stays with the card (ticket 42).
+        // joined to the list it heads; the card heads nothing.
         <div className="border-b border-line-strong py-1.5">
           <SidebarAssistantCard
             mainChat={mainChat}
@@ -461,9 +451,6 @@ export function Sidebar({
             open={activeId === mainChat.id}
             onOpen={() => handleSelectSession(mainChat.id)}
           />
-          {onToggleTodo && (
-            <SidebarTodoRow selected={todoPanelShown} onToggle={onToggleTodo} />
-          )}
         </div>
       ) : (
         <SidebarQuickActions

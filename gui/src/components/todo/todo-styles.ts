@@ -1,15 +1,13 @@
 import { cn } from "@/lib/utils";
 
-// TEMP variant switcher (main chat 42): the type of C's two options.
-import type { DoneVariant } from "./todo-variants/todo-variants";
-
 /**
  * A checked to-do's title — in the panel (held in place after a tick,
  * and under 已完成) and on its card under the reply: struck through in
- * `ink-muted`, Markdown's strike-through (MarkdownView `del`). A
- * cancelled one's (a card's, main chat ticket 43) is `ink-muted` and not
- * struck: it was not done. The change rides `--motion-base`; none under
- * reduced motion.
+ * `ink-muted`, Markdown's strike-through (MarkdownView `del`), and
+ * nothing more — the row is not faded too (ticket 42's C1, JC's pick,
+ * ruling 93; C2 also took the row to 60%). A cancelled one's (a card's,
+ * main chat ticket 43) is `ink-muted` and not struck: it was not done.
+ * The change rides `--motion-base`; none under reduced motion.
  */
 export function todoTitleClass(checked: boolean, cancelled = false): string {
   return cn(
@@ -19,17 +17,5 @@ export function todoTitleClass(checked: boolean, cancelled = false): string {
       : checked
         ? "text-ink-muted line-through"
         : "text-ink",
-  );
-}
-
-/**
- * A checked to-do's whole row. TEMP variant switcher (main chat 42),
- * comparison C: C1 adds nothing to the title's strike-through, C2 fades
- * the row (box, title, second line) to 60% as well.
- */
-export function todoDoneClass(checked: boolean, fade: DoneVariant): string {
-  return cn(
-    "transition-opacity duration-(--motion-base) motion-reduce:transition-none",
-    checked && fade === "C2" && "opacity-60",
   );
 }

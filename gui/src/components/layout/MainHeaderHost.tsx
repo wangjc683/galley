@@ -42,6 +42,8 @@ export function MainHeaderHost({
   leading,
   breadcrumb,
   identity,
+  todoOpen = false,
+  onToggleTodo,
 }: {
   channelStatuses: ReadonlyArray<ImSupervisorStatus | null>;
   channelsLoadError: string | null;
@@ -65,6 +67,11 @@ export function MainHeaderHost({
   breadcrumb?: MainHeaderProps["breadcrumb"];
   /** The assistant's identity as the title menu's trigger (ticket 18). */
   identity?: MainHeaderProps["identity"];
+  /** The to-do panel is on screen (ticket 45). */
+  todoOpen?: boolean;
+  /** Galley's 待办 button: passed only while the main chat itself is
+   * open (App); on the managed runtime only, as the main chat is. */
+  onToggleTodo?: () => void;
 }) {
   const browserControlStatus = useBrowserControlStore((s) => s.status);
   const browserControlVerified = useBrowserControlStore((s) => s.verified);
@@ -114,6 +121,8 @@ export function MainHeaderHost({
 
   const header = (
     <MainHeader
+      onToggleTodo={activeRuntimeKind === "managed" ? onToggleTodo : undefined}
+      todoOpen={todoOpen}
       onToggleChanges={showChanges ? gitReview.toggle : undefined}
       changesOpen={gitReview?.isOpen}
       sessionTitle={sessionTitle}

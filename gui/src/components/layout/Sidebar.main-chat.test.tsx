@@ -234,37 +234,17 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
     expect(html).not.toContain(">2</span>");
   });
 
-  it("puts 「待办」 under the card, above the strong line (ticket 42)", () => {
-    const html = renderToStaticMarkup(
-      <Tooltip.Provider>
-        <Sidebar
-          sessions={[mainChat, sideChat]}
-          expandedProjectIds={[]}
-          onToggleTodo={() => {}}
-        />
-      </Tooltip.Provider>,
+  it("has no 「待办」 row under the card: it opens from Galley's top bar (ticket 45)", () => {
+    const html = render([mainChat, sideChat]);
+    expect(html).not.toContain('aria-label="待办"');
+    // The card's block holds the card alone, as before ticket 42.
+    const block = html.slice(
+      html.indexOf("border-b border-line-strong py-1.5"),
+      html.indexOf(SCROLL_LIST),
     );
-    const TODO_ROW = 'data-role="sidebar-todo-row"';
-    expect(count(html, TODO_ROW)).toBe(1);
-    // In the card's block: after the card, before the scrolling list.
-    expect(html.indexOf(TODO_ROW)).toBeGreaterThan(html.indexOf(CARD));
-    expect(html.indexOf(TODO_ROW)).toBeLessThan(html.indexOf(SCROLL_LIST));
-    expect(tagWith(html, TODO_ROW)).toContain('aria-label="待办"');
-    expect(tagWith(html, TODO_ROW)).toContain('aria-expanded="false"');
-    // Without the wiring there is none, nor without a main chat (the
-    // external runtime keeps its sidebar as it was).
-    expect(render([mainChat, sideChat])).not.toContain(TODO_ROW);
-    const external = renderToStaticMarkup(
-      <Tooltip.Provider>
-        <Sidebar
-          sessions={[managed("s-ext", { gaRuntimeKind: "external" })]}
-          expandedProjectIds={[]}
-          onToggleTodo={() => {}}
-        />
-      </Tooltip.Provider>,
-    );
-    expect(external).not.toContain(TODO_ROW);
-    expect(external).toContain('aria-label="定时"');
+    expect(count(block, CARD)).toBe(1);
+    // The card is the block's only button.
+    expect(count(block, "<button")).toBe(1);
   });
 
   it("keeps 定时 and its badge without a main chat", () => {

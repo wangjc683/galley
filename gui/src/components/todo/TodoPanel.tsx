@@ -14,8 +14,6 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 
 import { ReadingPanelHeader } from "@/components/conversation/reading/ReadingPanelHeader";
-// TEMP variant switcher (main chat 42): comparison C, the done fade.
-import { useTodoVariants } from "@/components/todo/todo-variants/todo-variants";
 import { Button, IconButton } from "@/components/ui/button";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import {
@@ -44,7 +42,7 @@ import { goToTodoTarget, quoteTodo } from "@/lib/todo-open";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
 
 import { TodoCheck } from "./TodoCheck";
-import { todoDoneClass, todoTitleClass } from "./todo-styles";
+import { todoTitleClass } from "./todo-styles";
 
 export interface TodoPanelProps {
   /** The main chat on screen beside the panel: titles jump within it,
@@ -349,7 +347,6 @@ function RowShell({
   titleClass,
   line,
   actions,
-  rowClass,
   failure,
 }: {
   item: TodoItem;
@@ -359,7 +356,6 @@ function RowShell({
   titleClass?: string;
   line?: ReactNode;
   actions?: ReactNode[];
-  rowClass?: string;
   failure?: string | null;
 }) {
   const copy = useCopy();
@@ -392,7 +388,7 @@ function RowShell({
       data-todo-row={item.id}
       data-todo-kind={item.kind}
       data-todo-state={item.state}
-      className={cn("group/todo-row rounded-sm hover:bg-hover", rowClass)}
+      className="group/todo-row rounded-sm hover:bg-hover"
     >
       <div className="relative flex gap-2.5 px-2.5 py-1.5">
         <span className="flex h-5 w-4 shrink-0 items-center justify-center">
@@ -462,8 +458,6 @@ function YourRow(props: RowProps) {
   const copy = useCopy();
   const language = useLanguage();
   const todayStartMs = useDayStamp();
-  // TEMP variant switcher (main chat 42): comparison C.
-  const fade = useTodoVariants((s) => s.done);
   const cancelReminder = useAssistantTodoStore((s) => s.cancelReminder);
   const { flip, failure, cancelling } = useTodoWrite(item.id);
   const checked = todoChecked(item, flip);
@@ -482,7 +476,6 @@ function YourRow(props: RowProps) {
         />
       }
       titleClass={todoTitleClass(checked)}
-      rowClass={todoDoneClass(checked, fade)}
       line={
         <MetaLine
           parts={parts}
@@ -610,8 +603,6 @@ function DoneRow(props: RowProps) {
   const copy = useCopy();
   const language = useLanguage();
   const todayStartMs = useDayStamp();
-  // TEMP variant switcher (main chat 42): comparison C.
-  const fade = useTodoVariants((s) => s.done);
   const { flip, failure } = useTodoWrite(item.id);
   const line = (
     <PlainLine
@@ -632,7 +623,6 @@ function DoneRow(props: RowProps) {
           />
         }
         titleClass={todoTitleClass(checked)}
-        rowClass={todoDoneClass(checked, fade)}
         line={line}
         failure={failure && todoFailureText(failure, copy)}
       />

@@ -20,6 +20,16 @@ import { TopBarUtilityCluster } from "./header/UtilityCluster";
 
 export interface MainHeaderProps {
   /**
+   * Galley's 待办 (main chat ticket 45): the tool cluster's first button,
+   * opening and closing the to-do panel. Passed only while the main
+   * chat itself is open on the managed runtime (MainHeaderHost); then
+   * the header is also the `main-header` size container the button's
+   * word reads.
+   */
+  onToggleTodo?: () => void;
+  /** The to-do panel is on screen. */
+  todoOpen?: boolean;
+  /**
    * Git review toggle. Omitted (button hidden) while no repository is
    * known and the review is closed — MainHeaderHost decides; the
    * command palette's 查看仓库改动 stays as the always-there entry.
@@ -156,8 +166,9 @@ export interface MainHeaderProps {
  *   - TopBarStatusCluster — state-of-the-world badges (engine /
  *     Browser Control / Channels / Update), gated on
  *     `hasTopBarStatusItems`.
- *   - TopBarUtilityCluster — Changes (while a repository is known), the
- *     显示 popover (width / font / theme), Supervisor SOP and Settings.
+ *   - TopBarUtilityCluster — 待办 (while the main chat itself is open),
+ *     Changes (while a repository is known), the 显示 popover (width /
+ *     font / theme), Supervisor SOP and Settings.
  * Each cluster and its indicators live under `./header/`.
  *
  * Why title-left (not centered): Galley is a multi-session workspace
@@ -190,6 +201,8 @@ export interface MainHeaderProps {
  * the OS for window drag instead of focusing the input).
  */
 export function MainHeader({
+  onToggleTodo,
+  todoOpen = false,
   onToggleChanges,
   changesOpen = false,
   sessionTitle,
@@ -257,6 +270,11 @@ export function MainHeader({
         // "the darker column". Bottom border matches SidebarHeader so
         // the two column headers line up into one continuous top strip.
         "flex h-11 shrink-0 items-stretch border-b border-line/60 bg-app text-[13px]",
+        // TEMP variant switcher (main-chat 45): D2's word gives way on a
+        // narrow header (TodoToggleButton); only with the button is the
+        // header a size container, so every other header renders as it
+        // did.
+        onToggleTodo && "@container/main-header",
         // Windows: no right padding — WindowControls owns the right edge
         // and hugs the window corner (= window top-right). Mac keeps its
         // 12px breathing room since the right cluster ends the header.
@@ -365,6 +383,8 @@ export function MainHeader({
           <div aria-hidden="true" className="h-5 w-px bg-line/80" />
         )}
         <TopBarUtilityCluster
+          todoOpen={todoOpen}
+          onToggleTodo={onToggleTodo}
           changesOpen={changesOpen}
           onToggleChanges={onToggleChanges}
           conversationWidth={conversationWidth}

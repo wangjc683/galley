@@ -1,7 +1,5 @@
 import { TodoCheck } from "@/components/todo/TodoCheck";
-import { todoDoneClass, todoTitleClass } from "@/components/todo/todo-styles";
-// TEMP variant switcher (main chat 42): comparison C, the done fade.
-import { useTodoVariants } from "@/components/todo/todo-variants/todo-variants";
+import { todoTitleClass } from "@/components/todo/todo-styles";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { todoFailureText, type TodoItem } from "@/lib/assistant-todo";
 import { useCopy, useLanguage } from "@/lib/i18n";
@@ -58,8 +56,6 @@ function TodoCard({ item }: { item: TodoItem }) {
   const copy = useCopy();
   const language = useLanguage();
   const todayStartMs = useDayStamp();
-  // TEMP variant switcher (main chat 42): comparison C.
-  const fade = useTodoVariants((s) => s.done);
   const flip = useAssistantTodoStore((s) => s.flips[item.id]);
   const failure = useAssistantTodoStore((s) => s.failures[item.id] ?? null);
   const cancelled = todoCancelled(item);
@@ -77,12 +73,7 @@ function TodoCard({ item }: { item: TodoItem }) {
       data-todo-checked={checked ? "true" : "false"}
       className="rounded-md border border-line bg-app"
     >
-      <div
-        className={cn(
-          "flex min-h-10 items-center gap-2.5 py-1.5 pl-4 pr-3",
-          todoDoneClass(checked, fade),
-        )}
-      >
+      <div className="flex min-h-10 items-center gap-2.5 py-1.5 pl-4 pr-3">
         <span className="flex h-5 w-4 shrink-0 items-center justify-center">
           <TodoCheck
             item={item}

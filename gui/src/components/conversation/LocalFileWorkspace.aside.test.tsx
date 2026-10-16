@@ -2,6 +2,8 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TODO_PANEL_ID, TODO_PANEL_WIDTH } from "@/lib/todo-panel";
+
 import { LocalFileWorkspace } from "./LocalFileWorkspace";
 
 /**
@@ -43,7 +45,7 @@ function render(aside?: { id: string; width: number }) {
 
 describe("the workspace's aside (the to-do panel)", () => {
   it("covers the conversation's right edge at its own width when narrow", () => {
-    const html = render({ id: "todo-panel-b1", width: 320 });
+    const html = render({ id: TODO_PANEL_ID, width: TODO_PANEL_WIDTH });
     expect(html).toContain('data-role="workspace-aside-overlay"');
     expect(html).toContain("width:min(100%, 320px)");
     expect(html).toContain('data-role="todo-panel"');
@@ -51,9 +53,6 @@ describe("the workspace's aside (the to-do panel)", () => {
     expect(html).not.toContain("bg-overlay");
     expect(html.indexOf('data-role="conversation"')).toBeLessThan(
       html.indexOf('data-role="todo-panel"'),
-    );
-    expect(render({ id: "todo-panel-b2", width: 380 })).toContain(
-      "width:min(100%, 380px)",
     );
   });
 
