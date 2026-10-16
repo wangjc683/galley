@@ -157,6 +157,15 @@ mod tests {
             "`--weekly=<days>`",
             "`--monthly=<days>`",
             "`--time=HH:MM`",
+            // Ticket 40's `todo` family (ticket 41).
+            "`todo list`",
+            "`todo show <todo-id>`",
+            "`todo update <todo-id>`",
+            "`--no-due`",
+            "`--no-remind`",
+            "`todo done <todo-id>`",
+            "`todo reopen <todo-id>`",
+            "`todo cancel <todo-id>`",
         ] {
             assert!(body.contains(command), "manual lost: {command}");
         }
@@ -167,21 +176,29 @@ mod tests {
             "schedule create \"<your words>\" --at=<YYYY-MM-DDTHH:MM> --target=assistant \
              --supervisor=galley-assistant --reason=\"<why>\""
         ));
+        // The add line as the CLI parses it (`cli/src/args.rs`
+        // `TodoCmd::Add`): the title, `--due`, `--remind-at`, `--notes`.
+        assert!(body.contains(
+            "todo add \"<title>\" --due=<date or time> --remind-at=<YYYY-MM-DDTHH:MM> \
+             --notes=\"<details>\" --supervisor=galley-assistant --reason=\"<why>\""
+        ));
     }
 
     /// Ticket 36: the section on reminders and scheduled tasks — when to
     /// set one unasked, when not, saying so, the words for later,
     /// changing and cancelling, the target the CLI does not default to,
     /// and what to do when one comes due — and the authority the new
-    /// hands carry. Single-line fragments only (CRLF on Windows).
+    /// hands carry. Ticket 41 folded it into "To-dos and reminders": the
+    /// reminders are the model's own now (a follow-up, a check on the
+    /// outside world), the times its rules share with to-dos. Single-line
+    /// fragments only (CRLF on Windows).
     #[test]
     fn manual_covers_reminders_and_the_new_hands() {
         let body = manual_body();
         for heading in [
-            "## Reminders and scheduled tasks",
-            "### When to set one",
-            "### Setting one",
-            "### Changing and cancelling",
+            "## To-dos and reminders",
+            "### Times",
+            "### Your own reminders",
             "### When one comes due",
         ] {
             assert!(body.contains(heading), "manual lost: {heading}");
@@ -190,10 +207,10 @@ mod tests {
             // When: unasked, promises, waiting on the outside world.
             "Set one without being asked when:",
             "- You promise a follow-up",
-            "- Work you handed off waits on something outside",
-            // When not: no time, said no, already there.
-            "Do not set one for something with no time to it",
-            "`schedule list` before you create; when the thing is already there, keep",
+            "- Something waits on the outside world (a delivery, a review, a reply),",
+            "later (「下周一帮我看下物流」): set a time to check again.",
+            // Already there: list first.
+            "Before you create one, run `schedule list`: when the thing is already",
             // Say so, every time; no silent wake-ups.
             "Each time you set one, say in your reply, in one sentence, when and what",
             "Never set one without saying so.",
@@ -228,5 +245,65 @@ mod tests {
         assert!(body.contains("- Deleting anything for good, such as `session delete` or"));
         assert!(body.contains("Never archive, rename, pin or delete the main chat itself (this"));
         assert!(body.contains("these, but `session archive` would still go through."));
+    }
+
+    /// Ticket 41 (main chat PRD ruling 91): the user's to-dos — noted
+    /// unasked for what the user has to do (a reminder on it when it has
+    /// a date, never through `schedule`), not for information, wishes or
+    /// what is already there; said in a sentence; changed when the user
+    /// says so, found by its title when quoted from the list; ticked off
+    /// when done; `todo list` before saying what is left; no suggesting or
+    /// tidying unasked; the list's own few controls; a to-do's reminder
+    /// only reminds. Single-line fragments only (CRLF on Windows).
+    #[test]
+    fn manual_covers_the_users_to_dos() {
+        let body = manual_body();
+        for heading in [
+            "### Noting a to-do",
+            "### Changing a to-do, ticking it off, what is left",
+        ] {
+            assert!(body.contains(heading), "manual lost: {heading}");
+        }
+        for rule in [
+            // Two lists; the user's only controls on theirs.
+            "- **The user's to-dos**: what they have to do (hand in a report, call the",
+            "「待办」 beside this chat and can only tick a to-do off, untick it, or",
+            "words, they tell you, and you change it; do not send them to the list",
+            "- **Your own reminders**: times Galley wakes you to do something yourself,",
+            // Information is memory; no suggesting or tidying unasked.
+            "Neither holds information: an address, a flight number or a preference",
+            "belongs in your memory. Do not suggest to-dos or tidy the list on your",
+            "history if you need to), show them the list first, and note them once",
+            // When: unasked, with a time or without; a reminder request.
+            "Note one without being asked when the user mentions something they have",
+            "to be reminded (「十分钟后提醒我喝水」) is one too, with its reminder.",
+            // When not, and list first.
+            "Not for a wish with nothing to do yet (「我最近想学吉他」), a remark about",
+            "something already there: run `todo list` before you add; when it is",
+            // Due, reminder, notes; never `schedule` for a to-do's reminder.
+            "- When it has a due date, hang one reminder on it with `--remind-at`,",
+            "a deadline, half an hour before a call. Without a due date, no reminder.",
+            "- `--notes`: what you will need when the reminder comes (names, places,",
+            "- A to-do's reminder is set, moved and removed only with `todo add` and",
+            "commands: a reminder made with `schedule create` is not on the to-do.",
+            // Say it.
+            "Say what you noted in one sentence, and when you will remind them if you",
+            "Never note one without saying so.",
+            // Change, quote, tick, what is left.
+            "- The user changes a to-do by telling you: `todo update <todo-id>` with",
+            "- A message that opens with a quote of a line from the list",
+            "When nothing matches, or more than one thing does, ask which.",
+            "- When the user says it is done (「营养土买好了」), or you saw it done",
+            "so in a few words (「已勾掉。」); do not recite the list.",
+            "- Asked what is left (「我还有什么没办」), run `todo list` first and answer",
+            // A to-do's reminder only reminds.
+            "subtask for long work. A to-do's reminder only reminds: do not tick the",
+            "to-do off until the user says it is done.",
+            // Authority.
+            "- Note, change, tick off or cancel the user's to-dos, and their",
+        ] {
+            assert!(body.contains(rule), "manual lost: {rule}");
+        }
+        assert!(!body.contains("## Reminders and scheduled tasks"));
     }
 }

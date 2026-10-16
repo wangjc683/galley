@@ -335,6 +335,13 @@ look it up with the Galley CLI (search, then
 /// write list became the command families, `schedule` among them. The
 /// rules themselves (when, when not, saying so, what to note, authority,
 /// what to do when it comes due) are the manual's.
+///
+/// Ticket 41 (main chat PRD ruling 91) rewrote that sentence for the
+/// user's to-dos: what the user has to do becomes a to-do (a reminder on
+/// it when it has a date) and is ticked off when done, the model's own
+/// follow-ups get its own reminder, and `todo list` is read before saying
+/// what is left; the manual's section is now "To-dos and reminders". The
+/// write list gained `to-do`.
 fn main_chat_entry_layer(manual_path: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
@@ -351,12 +358,14 @@ tell the user, so do not wait on it or watch it. Do quick work yourself.
 Use this, not the file-based subagent in your memory (subagent.md), which
 the user cannot see.
 
-When the user mentions something with a date or time (a deadline, a
-meeting, a flight, a payment), or you promise to follow up, set a reminder
-without being asked: see "Reminders and scheduled tasks" in your manual.
+Note what the user has to do (a deadline, a call, a flight, a purchase) as
+a to-do, with a reminder when it has a date, and tick it off when it is
+done; set yourself a reminder when you promise to follow up. Do it unasked,
+and read `todo list` before saying what is left: see "To-dos and
+reminders" in your manual.
 
-Before your first Galley CLI write (a session, project, model or schedule
-command), read your manual at `{manual_path}`."#
+Before your first Galley CLI write (a session, project, model, schedule or
+to-do command), read your manual at `{manual_path}`."#
     )
 }
 
@@ -1052,8 +1061,10 @@ mod tests {
         let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL);
         // Single-line fragments only (a Windows checkout makes the raw
         // string CRLF).
-        assert!(main
-            .contains("Before your first Galley CLI write (a session, project, model or schedule"));
+        assert!(main.contains(
+            "Before your first Galley CLI write (a session, project, model, schedule or"
+        ));
+        assert!(main.contains("to-do command), read your manual at"));
         assert!(main.contains(&format!("read your manual at `{MANUAL}`.")));
         assert_eq!(main.matches(MANUAL).count(), 1);
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
@@ -1084,7 +1095,16 @@ mod tests {
     /// with its break), and the write list as command families, `schedule`
     /// among them (+4). Without the paragraph the model never opens the
     /// manual on a remark like 「周三下午要交报告」: no CLI write is in sight.
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 1920;
+    /// Raised 1920 → 2026 by ticket 41 (main chat PRD ruling 91): +106
+    /// bytes, the paragraph rewritten for the user's to-dos (+99: what the
+    /// user has to do is noted as a to-do with a reminder when it has a
+    /// date, ticked off when done, and `todo list` read before saying what
+    /// is left; the follow-up reminder kept; the section's new name) and
+    /// `to-do` in the write list (+7). Each of the three starts from a
+    /// remark with no CLI write in sight (「记一下要买营养土」,
+    /// 「营养土买好了」, 「我还有什么没办」), so the manual alone would never be
+    /// opened for them.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 2026;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {
@@ -1219,28 +1239,34 @@ mod tests {
         assert!(len <= STATIC_PROMPT_BUDGET_BYTES);
     }
 
-    /// Ticket 36: the entry layer asks for a reminder unasked and names
-    /// the manual's section; the write list names the command families.
+    /// Tickets 36 and 41: the entry layer asks, unasked, for a to-do for
+    /// what the user has to do (a reminder on it when it has a date), the
+    /// tick when it is done, its own reminder for a follow-up it promises,
+    /// and `todo list` before saying what is left; it names the manual's
+    /// section, which exists. Main chat only.
     #[test]
     fn main_chat_entry_layer_asks_for_reminders_unasked() {
         let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL);
         // Single-line fragments only (CRLF on Windows).
-        assert!(
-            main.contains("When the user mentions something with a date or time (a deadline, a")
-        );
         assert!(main.contains(
-            "meeting, a flight, a payment), or you promise to follow up, set a reminder"
+            "Note what the user has to do (a deadline, a call, a flight, a purchase) as"
         ));
+        assert!(main
+            .contains("a to-do, with a reminder when it has a date, and tick it off when it is"));
         assert!(main.contains(
-            "without being asked: see \"Reminders and scheduled tasks\" in your manual."
+            "done; set yourself a reminder when you promise to follow up. Do it unasked,"
         ));
-        assert!(crate::assistant_manual::manual_body().contains("## Reminders and scheduled tasks"));
+        assert!(main.contains("and read `todo list` before saying what is left: see \"To-dos and"));
+        assert!(main.contains("reminders\" in your manual."));
+        assert!(!main.contains("Reminders and scheduled tasks\" in your manual"));
+        assert!(crate::assistant_manual::manual_body().contains("## To-dos and reminders"));
         let layer = main.find("## Galley Main Chat Entry Layer").unwrap();
-        let reminder = main.find("set a reminder").unwrap();
+        let todo = main.find("Note what the user has to do").unwrap();
         let manual = main.find("read your manual at").unwrap();
-        assert!(layer < reminder && reminder < manual);
+        assert!(layer < todo && todo < manual);
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
-            assert!(!prompt.contains("set a reminder"));
+            assert!(!prompt.contains("set yourself a reminder"));
+            assert!(!prompt.contains("`todo list`"));
         }
     }
 

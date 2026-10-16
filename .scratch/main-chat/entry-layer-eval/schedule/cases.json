@@ -1,11 +1,11 @@
 {
- "_note": "定时与提醒评测用例（票 36）。history 是主对话当前段里已有的轮次；tasks 是假 CLI 里已有的定时任务（时间按运行那一刻算：next_weekday 是今天之后第一个星期几，days 是今天之后第几天，minutes_ago 是几分钟前；in_hand 为真的在提示词的「In Hand」一节里列出，即分段开始时就有；fired 表示已经到点、等着叫醒）；message 是用户这句，wake 列出这次叫醒里到点的任务，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。",
+ "_note": "定时与提醒评测用例（票 36）。history 是主对话当前段里已有的轮次；tasks 是假 CLI 里已有的定时任务（时间按运行那一刻算：next_weekday 是今天之后第一个星期几，days 是今天之后第几天，minutes_ago 是几分钟前；in_hand 为真的在提示词的「In Hand」一节里列出，即分段开始时就有；fired 表示已经到点、等着叫醒）；message 是用户这句，wake 列出这次叫醒里到点的任务，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 41：expect.via 为 either 的，挂在待办上的提醒（todo add --remind-at）也算建了那一个；不写 via 的只认 schedule create；keep_or_replace 是已有的那个留着、或删了换成一个在窗口里的。",
  "cases": [
   {
    "id": "report-wed",
    "no": 1,
    "group": "该建",
-   "expect_text": "提到带时间的事（没说「提醒我」）→ 自己建一个叫醒自己的一次性提醒（--target=assistant），时间在周三下午之前；回复一句话说出时间",
+   "expect_text": "提到带时间的事（没说「提醒我」）→ 自己建一个叫醒自己的提醒，时间在周三下午之前；票 41 起挂在待办上（todo add --remind-at）或 schedule create --target=assistant 都算；回复一句话说出时间",
    "history": [],
    "tasks": [],
    "message": "周三下午要交报告",
@@ -24,14 +24,15 @@
      "报告"
     ],
     "mentions_time": true,
-    "max_chars": 150
+    "max_chars": 150,
+    "via": "either"
    }
   },
   {
    "id": "flight-fri",
    "no": 2,
    "group": "该建",
-   "expect_text": "订了航班（没说「提醒我」）→ 自己建提醒，时间在航班之前；回复说出时间",
+   "expect_text": "订了航班（没说「提醒我」）→ 自己建提醒，时间在航班之前（挂在待办上或独立的都算）；回复说出时间",
    "history": [],
    "tasks": [],
    "message": "我订了周五早上 7 点的航班",
@@ -54,14 +55,15 @@
      "7"
     ],
     "mentions_time": true,
-    "max_chars": 150
+    "max_chars": 150,
+    "via": "either"
    }
   },
   {
    "id": "logistics-mon",
    "no": 3,
    "group": "该建",
-   "expect_text": "要等外部结果的后续 → 建周一的提醒，记下的话里带上单号（写给到点的自己）；回复说出时间",
+   "expect_text": "要等外部结果的后续 → 建周一它自己的提醒（schedule create，不是待办），记下的话里带上单号（写给到点的自己）；回复说出时间",
    "history": [
     {
      "role": "user",
@@ -97,7 +99,7 @@
    "id": "water-10min",
    "no": 4,
    "group": "该建",
-   "expect_text": "「十分钟后提醒我喝水」→ 先看现在几点，建十分钟后的提醒；回复说出时间",
+   "expect_text": "「十分钟后提醒我喝水」→ 先看现在几点，建十分钟后的提醒（挂在待办上或独立的都算）；回复说出时间",
    "history": [],
    "tasks": [],
    "message": "十分钟后提醒我喝水",
@@ -115,7 +117,8 @@
      "水"
     ],
     "mentions_time": true,
-    "max_chars": 120
+    "max_chars": 120,
+    "via": "either"
    }
   },
   {
@@ -163,7 +166,7 @@
    "id": "already-set",
    "no": 8,
    "group": "已有同一件",
-   "expect_text": "「在办的事」里已有同一件 → 不再建第二个、不删；回复说已经记着、几点提醒",
+   "expect_text": "「在办的事」里已有同一件（票 41 之前建的独立提醒）→ 不再建第二个提醒；留着它，或换成挂在待办上的一个（删旧建新、时间仍在周三下午 3 点前）；可以只记一件不带提醒的待办；回复说已经记着、几点提醒",
    "history": [],
    "tasks": [
     {
@@ -179,13 +182,24 @@
    ],
    "message": "对了，周三下午我得交季度报告",
    "expect": {
-    "create": "none",
+    "create": "any",
+    "via": "either",
     "allow": [
-     "schedule update"
+     "schedule update",
+     "schedule delete"
     ],
-    "keep": [
-     "sched_6c1f0e9a2b7d4385"
-    ],
+    "keep_or_replace": {
+     "id": "sched_6c1f0e9a2b7d4385",
+     "window": {
+      "from": {
+       "now": true
+      },
+      "to": {
+       "next_weekday": 3,
+       "time": "15:00"
+      }
+     }
+    },
     "mentions_time_of": "sched_6c1f0e9a2b7d4385",
     "max_chars": 150
    }

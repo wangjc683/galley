@@ -344,8 +344,10 @@ that finishes a task and restates the result. The layer says three things:
   subtask by id (`[subtask <id>: <title>]`, or
   `[subtask not started: <why>]`) for `session show <id>`.
 - **Read the manual before the first CLI write** (ticket 30): the layer
-  closes with "Before your first Galley CLI write (send, stop, archive,
-  move, project, model), read your manual at `<path>`". The
+  closes with "Before your first Galley CLI write (a session, project,
+  model, schedule or to-do command), read your manual at `<path>`"
+  (ticket 30 listed "send, stop, archive, move, project, model"; tickets
+  36 and 41 named the families). The
   [assistant manual](./galley-assistant-manual.md) is embedded in Core
   (`core/src/assistant_manual.rs`) and written to
   `<state_root>/assistant/reference/galley-assistant-manual.md` at every
@@ -369,15 +371,31 @@ that finishes a task and restates the result. The layer says three things:
   are its own; a repeating task that costs every time it runs (even when
   asked), changing someone else's task, renaming the user's conversation,
   deleting for good and the default model are asked first; and the main
-  chat itself is never archived, renamed, pinned or deleted.
-- **Set a reminder unasked** (ticket 36; assistant PRD ruling 9): before
-  the manual paragraph, "When the user mentions something with a date or
-  time (a deadline, a meeting, a flight, a payment), or you promise to
-  follow up, set a reminder without being asked: see "Reminders and
-  scheduled tasks" in your manual." Without it the model never opens the
-  manual on a remark like 「周三下午要交报告」, where no CLI write is in
-  sight. The manual paragraph's write list became the command families:
-  "(a session, project, model or schedule command)".
+  chat itself is never archived, renamed, pinned or deleted. Ticket 41
+  (main chat PRD ruling 91) rewrote that section as "To-dos and
+  reminders": what the user has to do (with a time or without, a request
+  to be reminded included) is noted as a to-do with `todo add`, a reminder
+  on it when it has a due date and never through `schedule`; information
+  is memory, not a to-do; no suggesting or tidying unasked (a tidy-up on
+  request is shown before it is noted); it is changed when the user says
+  so, found by its title when quoted from the list (「说说这件」), ticked off
+  when done, and `todo list` is read before saying what is left; the
+  user's only controls on the list are tick, untick and cancelling a
+  reminder. The assistant's own reminders keep ticket 36's rules (a
+  follow-up it promised, something waiting on the outside world), and a
+  to-do's reminder, when it comes due, only reminds.
+- **Note what the user has to do, unasked** (ticket 36, rewritten by
+  ticket 41; assistant PRD ruling 9, main chat PRD ruling 91): before the
+  manual paragraph, "Note what the user has to do (a deadline, a call, a
+  flight, a purchase) as a to-do, with a reminder when it has a date, and
+  tick it off when it is done; set yourself a reminder when you promise to
+  follow up. Do it unasked, and read `todo list` before saying what is
+  left: see "To-dos and reminders" in your manual." Each of the three
+  starts from a remark with no CLI write in sight (「记一下要买营养土」,
+  「营养土买好了」, 「我还有什么没办」), so the model would never open the
+  manual for them; ticket 36's sentence did the same for 「周三下午要交报告」.
+  The manual paragraph's write list is the command families: "(a session,
+  project, model, schedule or to-do command)".
 
 - **Evidence**: compared with and without on the main chat's own model
   (`.scratch/main-chat/entry-layer-eval/`, 15 messages, tools intercepted).
@@ -431,14 +449,36 @@ that finishes a task and restates the result. The layer says three things:
   question instead of a reminder), and the late wake note now asks for the
   lateness in the reply itself (the model had put 「晚了 9 小时」 only in
   GA's `<summary>`, which the main chat does not show).
-- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 1920, no headroom,
+- **To-do evidence** (ticket 41): this layer and the manual's "To-dos and
+  reminders", with ticket 39's three-part In Hand lines, on the main
+  chat's model (`.scratch/main-chat/entry-layer-eval/todo/`, 11 cases,
+  tool calls run in a sandbox against a fake CLI with the `todo` family;
+  22 of 22 runs passed, with no wording changed for the eval). Unasked, it
+  noted 「周三下午 3 点前要交季度报告」 as a to-do due Wednesday 15:00 with a
+  reminder the day before, 「记一下要买营养土」 with no due date and no
+  reminder, 「明天要给房东回电话」 due the next day with a morning reminder,
+  each after `todo list` and said in one sentence; 「下周一帮我看下物流」
+  stayed its own `schedule create --target=assistant` with the tracking
+  number; nothing for 「我最近想学吉他」 or a flight number; 「营养土买好了」
+  ticked that one off in a few words; a quoted 「交季度报告」 with
+  「改到周四」 moved that one's due date and reminder; 「我还有什么没办」 read
+  `todo list` first, so a to-do the user had ticked off in the panel since
+  the snapshot was not named and one noted since was; an item already on
+  the list was not noted twice; and a to-do's reminder, when it came due,
+  only reminded. Ticket 36's reminder eval was rerun on the same text
+  (26 of 26): the user's own timed things now get a to-do with a reminder
+  (judged as setting the one reminder), its own follow-ups and the older
+  plain reminders keep the `schedule` commands.
+- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 2026, no headroom,
   `\r` not counted, measured with an empty manual path (the user's state
   root does not count, as for the IM layer). 827 for the 03d layer;
   ticket 06a added 619 for the dispatch clause (the `T` text 522, the
   subagent sentence 94, breaks 3); ticket 30 added 253 (the evidence 90,
   the wake sentence in place of "its card shows … when they ask" +58, the
   manual paragraph 105); ticket 36 added 221 (the reminder paragraph with
-  its break 217, the write list as command families +4).
+  its break 217, the write list as command families +4); ticket 41 added
+  106 (that paragraph rewritten for to-dos +99, `to-do` in the write list
+  +7): 2026.
   Behavior, but main chat only, so it stays out of the static budget and
   the prompt hash.
 
@@ -517,6 +557,7 @@ row.
 | What Only The User Changes, main chat only: scheduled tasks off the list, "you set them yourself with the Galley CLI, as your manual (named below) says" | assistant PRD rulings 3 and 9, main chat PRD ruling 84, ticket 36 (2026-10-16): the CLI got the `schedule` family (ticket 34), so the assistant sets reminders itself; galley#31's failure (saying a schedule is set when nothing will run) was a model with no hands, and the command now exists. Workbench sessions, subtasks and IM keep the shared paragraph word for word. The main chat's static text got 70 bytes shorter; the static cap is unchanged |
 | State block: In Hand (the user's to-dos not done, subtasks not finished and one-off reminders and tasks to come, routines, as of when) | assistant PRD rulings 5 and 9, main chat PRD rulings 86 and 91, tickets 36 and 39: at each segment the main chat knows what the user has to do, what it promised and what it handed off, from the same read as the desktop's 「待办」, in the same order. Own cap `IN_HAND_BUDGET_BYTES` |
 | Main chat entry layer: set a reminder unasked when the user mentions a date or time or the model promises a follow-up, naming the manual's section; the write list as command families | assistant PRD ruling 9, ticket 36: JC wanted reminders the user never has to ask for; without a line in the always-present layer the model would not open the manual on a remark. Run on the main chat's model with the manual's new section (`.scratch/main-chat/entry-layer-eval/schedule/`). Cap raised 1699 → 1920 (+221 bytes) in the same diff |
+| Main chat entry layer: the reminder paragraph rewritten for the user's to-dos (note what the user has to do as a to-do with a reminder when it has a date, tick it off when done, a reminder of its own for a promised follow-up, `todo list` before saying what is left, the manual's "To-dos and reminders"); `to-do` in the write list | main chat PRD ruling 91, ticket 41 (2026-10-17): to-dos became their own record (tickets 39, 40), and noting one, ticking one off and answering 「还有什么没办」 all start from a remark with no CLI write in sight. Run on the main chat's model with the manual's rewritten section (`.scratch/main-chat/entry-layer-eval/todo/`, and the `schedule/` suite rerun). Cap raised 1920 → 2026 (+106 bytes) in the same diff |
 | Past Galley Conversations: `--around` example; coverage sentence reworded to 「This reaches every Galley session, but not direct IM chats …」 | ticket 03b (2026-10-12): `session show` gained `--around`, and `--tail=20` reads the end of a session, not where a search hit is. Paid for in the same diff: the two coverage sentences became one (−51 bytes against the +51-byte line on both platforms), so the static text stays at 6855 bytes (Windows) / 6837 (POSIX) and the cap is unchanged |
 | Removed 2026-10-13: Goal in the feature map's message-box line, `goal` in the IM entry layer's CLI write list | Goal was removed (devlog [2026-10-13 remove Goal](../devlog/2026-10-13-remove-goal.md)). Both caps lowered in the same diff to stay at no headroom: static 6855 → 6775 bytes (Windows; POSIX 6757), IM 1383 → 1376 (Telegram) |
 
@@ -613,20 +654,23 @@ in a real managed session after any prompt change:
     main chat asks the user in a sentence and passes the answer on when
     they reply; a question the user already answered (「我喜欢靠窗」) is
     answered for them, silently.
-28. Main chat: 「周三下午要交报告」 (no "remind me") → reads the manual,
-    runs `schedule list`, then `schedule create … --target=assistant
-    --supervisor=galley-assistant` for a time before Wednesday afternoon,
-    and says when in one sentence; a reminder card hangs under the reply.
-    「我最近想学吉他」 and 「昨天开会挺累的」 → nothing set.
-29. Main chat: 「十分钟后提醒我喝水」 → reads the clock, sets one ten
-    minutes out and says when; ten minutes later it says so in the main
-    chat, with a notification.
+28. Main chat: 「周三下午 3 点前要交季度报告」 (no "remind me") → reads the
+    manual, runs `todo list`, then `todo add "交季度报告" --due=<Wed>T15:00
+    --remind-at=<before it> --supervisor=galley-assistant`, and says what
+    and when it will remind in one sentence; a to-do card hangs under the
+    reply and the to-do shows in 「待办」. 「我最近想学吉他」 and
+    「昨天开会挺累的」 → nothing noted, nothing set. (Since ticket 41; ticket
+    36 made a plain reminder here.)
+29. Main chat: 「十分钟后提醒我喝水」 → reads the clock, notes 「喝水」 with
+    a reminder ten minutes out and says when; ten minutes later it says so
+    in the main chat, with a notification.
 30. Main chat: 「以后每天早上给我看看新闻」 → asks first, in one question
     (the time, what to look at), and sets nothing until the user says yes;
     then a `--daily --time=… --target=assistant` task.
-31. Main chat, after it set a reminder: 「改到 9 点」 → `schedule update
-    <id> --at=…`; 「不用了」 → `schedule delete <id>`; never a second one
-    for the same thing.
+31. Main chat, after it set a reminder of its own: 「改到 9 点」 →
+    `schedule update <id> --at=…`; 「不用了」 → `schedule delete <id>`;
+    never a second one for the same thing. A to-do's reminder moves with
+    `todo update <id> --remind-at=…`, never through `schedule`.
 32. Main chat, a reminder comes due after the computer slept → says it
     comes late and how late, then what it was; one the user already
     handled → nothing shows (`<no-reply/>`).
@@ -636,3 +680,19 @@ in a real managed session after any prompt change:
 34. Main chat: 「把这个对话改个名」 (the main chat itself) → declines; it
     renames a subtask it started without asking, and asks before renaming
     a conversation the user started or deleting one for good.
+35. Main chat: 「记一下要买营养土」 → `todo add "买营养土"` with no due date
+    and no reminder, one short sentence; 「我的航班号是 MU5101」 → no to-do
+    (memory at most); 「下周一帮我看下物流」 → its own `schedule create …
+    --target=assistant` on Monday with the tracking number, not a to-do.
+36. Main chat, with 「买营养土」 on the list: 「营养土买好了」 → `todo done
+    <id>`, 「已勾掉」 in a few words, the rest of the list not recited; it
+    shows ticked in 「待办」.
+37. 「待办」 panel: 「说说这件」 on 「交季度报告」, then 「改到周四」 → `todo
+    update <id> --due=<Thu…> --remind-at=<…>` on that one (no new to-do),
+    and the new time in one sentence.
+38. Tick something off in the panel, then ask 「我还有什么没办」 → runs
+    `todo list` first; the ticked one is not named as still to do, and one
+    noted earlier in the same segment is.
+39. Main chat, a to-do's reminder comes due → a sentence or two naming it
+    and when it is due; the to-do stays open until the user says it is
+    done.

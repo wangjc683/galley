@@ -1,0 +1,452 @@
+{
+ "_note": "待办评测用例（票 41）。history 是主对话当前段里已有的轮次；todos 是假 CLI 里已有的待办：due 是时间（next_weekday 是今天之后第一个星期几，days 是今天之后第几天，in_minutes 是几分钟后，带 date_only 的只有日期），reminder 是挂在它上面的提醒（fired 表示已经到点、等着叫醒），in_hand 默认为真，即分段开始时就有、写在提示词的「In Hand」一节（为假的是这一段里刚记的），done_since 表示分段开始后用户在面板上勾掉了（快照里还是没做）；tasks 是它自己的定时任务（同 schedule/cases.json）；message 是用户这句，wake 列出这次叫醒里到点的提醒，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。",
+ "cases": [
+  {
+   "id": "note-report",
+   "no": 1,
+   "group": "该记待办",
+   "expect_text": "有截止的事（没说「提醒我」）→ todo add：标题有季度报告，截止周三 15:00（带时刻），挂一个周三 15:00 之前的提醒；不用 schedule create；一句话说出几点提醒",
+   "history": [],
+   "message": "周三下午 3 点前要交季度报告",
+   "expect": {
+    "todo": "one",
+    "title_any": [
+     "季度报告"
+    ],
+    "due": {
+     "window": {
+      "from": {
+       "next_weekday": 3,
+       "time": "12:00"
+      },
+      "to": {
+       "next_weekday": 3,
+       "time": "15:00"
+      }
+     },
+     "need_time": true
+    },
+    "reminder": {
+     "window": {
+      "from": {
+       "now": true
+      },
+      "to": {
+       "next_weekday": 3,
+       "time": "15:00"
+      }
+     }
+    },
+    "mentions_time": true,
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "note-soil",
+   "no": 2,
+   "group": "该记待办",
+   "expect_text": "没时间的事 → todo add「买营养土」，不写截止、不挂提醒；回复一句说记下了",
+   "history": [],
+   "message": "记一下要买营养土",
+   "expect": {
+    "todo": "one",
+    "title_any": [
+     "营养土"
+    ],
+    "due": null,
+    "reminder": null,
+    "mentions_any": [
+     "营养土"
+    ],
+    "max_chars": 100
+   }
+  },
+  {
+   "id": "note-landlord",
+   "no": 3,
+   "group": "该记待办",
+   "expect_text": "「明天要给房东回电话」→ todo add，截止明天（凌晨说的「明天」两天都算），挂一个截止之前的提醒；回复说出几点提醒",
+   "history": [],
+   "message": "明天要给房东回电话",
+   "expect": {
+    "todo": "one",
+    "title_any": [
+     "房东"
+    ],
+    "due": {
+     "window": {
+      "from": {
+       "days": 0,
+       "time": "00:00"
+      },
+      "to": {
+       "days": 1,
+       "time": "23:59"
+      }
+     }
+    },
+    "reminder": {
+     "window": {
+      "from": {
+       "now": true
+      },
+      "to": {
+       "days": 1,
+       "time": "23:59"
+      }
+     }
+    },
+    "mentions_time": true,
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "logistics-mon",
+   "no": 4,
+   "group": "它自己的提醒",
+   "expect_text": "让它回头查的事 → schedule create --target=assistant 在下周一，记下的话里带单号；不记待办；回复说出时间",
+   "history": [
+    {
+     "role": "user",
+     "content": "我在京东买了台显示器，单号 JD8812345678，说下周一前能到。"
+    },
+    {
+     "role": "assistant",
+     "content": "好的，到了记得验一下屏幕有没有坏点。"
+    }
+   ],
+   "message": "下周一帮我看下物流",
+   "expect": {
+    "todo": "none",
+    "schedule": "one",
+    "window": {
+     "from": {
+      "next_weekday": 1,
+      "time": "00:00"
+     },
+     "to": {
+      "next_weekday": 1,
+      "time": "23:59"
+     }
+    },
+    "words_any": [
+     "JD8812345678"
+    ],
+    "mentions_time": true,
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "guitar",
+   "no": 5,
+   "group": "不该记",
+   "expect_text": "没有可办的事 → 不记待办、不建提醒，不动任何东西",
+   "history": [],
+   "message": "我最近想学吉他",
+   "expect": {
+    "todo": "none",
+    "allow": []
+   }
+  },
+  {
+   "id": "flight-number",
+   "no": 6,
+   "group": "不该记",
+   "expect_text": "信息（航班号）→ 不记成待办、不建提醒（可以记进记忆）",
+   "history": [],
+   "message": "我的航班号是 MU5101",
+   "expect": {
+    "todo": "none",
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "tick-soil",
+   "no": 7,
+   "group": "勾掉",
+   "expect_text": "「在办的事」里有「买营养土」，说「营养土买好了」→ todo done 那一件；一句话说已勾掉，不复述清单",
+   "history": [],
+   "todos": [
+    {
+     "id": "todo_2b3c4d5e6f7a8b9c",
+     "title": "交季度报告",
+     "notes": "报告在 ~/Documents/Q3 季度报告.docx，交给王经理",
+     "due": {
+      "next_weekday": 3,
+      "time": "15:00"
+     },
+     "reminder": {
+      "id": "sched_8c1e0a7b3d2f4965",
+      "at": {
+       "next_weekday": 3,
+       "time": "12:00"
+      }
+     }
+    },
+    {
+     "id": "todo_4d5e6f7a8b9c0d1e",
+     "title": "买营养土"
+    },
+    {
+     "id": "todo_1a2b3c4d5e6f7a8b",
+     "title": "给房东回电话",
+     "due": {
+      "days": 1,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_3e9d1c7a5b0f2486",
+      "at": {
+       "days": 1,
+       "time": "10:00"
+      }
+     }
+    }
+   ],
+   "message": "营养土买好了",
+   "expect": {
+    "todo": "none",
+    "done": [
+     "todo_4d5e6f7a8b9c0d1e"
+    ],
+    "forbid_any": [
+     "季度报告",
+     "房东"
+    ],
+    "max_chars": 60
+   }
+  },
+  {
+   "id": "quote-move",
+   "no": 8,
+   "group": "引用改",
+   "expect_text": "输入框带引用块「交季度报告」，说「改到周四」→ todo update 那一件：截止挪到周四、提醒跟着挪（在周四截止之前）；不新建；回复说出新时间",
+   "history": [],
+   "todos": [
+    {
+     "id": "todo_2b3c4d5e6f7a8b9c",
+     "title": "交季度报告",
+     "notes": "报告在 ~/Documents/Q3 季度报告.docx，交给王经理",
+     "due": {
+      "next_weekday": 3,
+      "time": "15:00"
+     },
+     "reminder": {
+      "id": "sched_8c1e0a7b3d2f4965",
+      "at": {
+       "next_weekday": 3,
+       "time": "12:00"
+      }
+     }
+    },
+    {
+     "id": "todo_4d5e6f7a8b9c0d1e",
+     "title": "买营养土"
+    }
+   ],
+   "message": "> 交季度报告\n\n改到周四",
+   "expect": {
+    "todo": "none",
+    "update": {
+     "id": "todo_2b3c4d5e6f7a8b9c",
+     "due_window": {
+      "from": {
+       "next_weekday": 4,
+       "time": "00:00"
+      },
+      "to": {
+       "next_weekday": 4,
+       "time": "23:59"
+      }
+     }
+    },
+    "mentions_any": [
+     "周四",
+     "星期四",
+     "礼拜四"
+    ],
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "whats-left",
+   "no": 9,
+   "group": "问还有什么没办",
+   "expect_text": "「In Hand」是段首快照（买营养土那时还没做；续签合同是这段里刚记的、不在快照里），之后用户在面板上勾掉了营养土 → 先 todo list 读最新的，答季度报告、房东、续签合同，不把营养土当成没办",
+   "history": [
+    {
+     "role": "user",
+     "content": "记一下，周五前要把房屋合同续签了"
+    },
+    {
+     "role": "assistant",
+     "content": "记下了：周五前续签房屋合同，周四晚上 8 点提醒你。"
+    }
+   ],
+   "todos": [
+    {
+     "id": "todo_2b3c4d5e6f7a8b9c",
+     "title": "交季度报告",
+     "notes": "报告在 ~/Documents/Q3 季度报告.docx，交给王经理",
+     "due": {
+      "next_weekday": 3,
+      "time": "15:00"
+     },
+     "reminder": {
+      "id": "sched_8c1e0a7b3d2f4965",
+      "at": {
+       "next_weekday": 3,
+       "time": "12:00"
+      }
+     }
+    },
+    {
+     "id": "todo_1a2b3c4d5e6f7a8b",
+     "title": "给房东回电话",
+     "due": {
+      "days": 1,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_3e9d1c7a5b0f2486",
+      "at": {
+       "days": 1,
+       "time": "10:00"
+      }
+     }
+    },
+    {
+     "id": "todo_4d5e6f7a8b9c0d1e",
+     "title": "买营养土",
+     "done_since": {
+      "via": "gui",
+      "minutes_ago": 30
+     }
+    },
+    {
+     "id": "todo_5e6f7a8b9c0d1e2f",
+     "title": "续签房屋合同",
+     "due": {
+      "next_weekday": 5,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_6a0b4c8d2e1f3957",
+      "at": {
+       "next_weekday": 4,
+       "time": "20:00"
+      }
+     },
+     "in_hand": false
+    }
+   ],
+   "message": "我还有什么没办",
+   "expect": {
+    "todo": "none",
+    "reads_list": true,
+    "mentions_groups": [
+     [
+      "季度报告"
+     ],
+     [
+      "房东"
+     ],
+     [
+      "合同"
+     ]
+    ],
+    "forbid_unless": {
+     "word": "营养土",
+     "unless_any": [
+      "勾",
+      "已完成",
+      "完成了",
+      "买好",
+      "已经买",
+      "办完",
+      "划掉",
+      "已办"
+     ]
+    },
+    "max_chars": 300
+   }
+  },
+  {
+   "id": "already-noted",
+   "no": 10,
+   "group": "已有同一件",
+   "expect_text": "清单上已有「交季度报告」（带提醒）→ 不再记第二件、不再挂第二个提醒；回复说已经记着、几点提醒",
+   "history": [],
+   "todos": [
+    {
+     "id": "todo_2b3c4d5e6f7a8b9c",
+     "title": "交季度报告",
+     "notes": "报告在 ~/Documents/Q3 季度报告.docx，交给王经理",
+     "due": {
+      "next_weekday": 3,
+      "time": "15:00"
+     },
+     "reminder": {
+      "id": "sched_8c1e0a7b3d2f4965",
+      "at": {
+       "next_weekday": 3,
+       "time": "12:00"
+      }
+     }
+    }
+   ],
+   "message": "对了，周三下午 3 点前我得交季度报告",
+   "expect": {
+    "todo": "none",
+    "allow": [
+     "todo update"
+    ],
+    "mentions_time_of": "sched_8c1e0a7b3d2f4965",
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "wake-todo",
+   "no": 11,
+   "group": "待办的提醒到点",
+   "expect_text": "待办「交季度报告」的提醒按时到点（Core 的待办叫醒措辞）→ 一两句提醒（季度报告、几点截止），不勾掉、不动任何东西，不出 <no-reply/>",
+   "history": [],
+   "todos": [
+    {
+     "id": "todo_2b3c4d5e6f7a8b9c",
+     "title": "交季度报告",
+     "notes": "报告在 ~/Documents/Q3 季度报告.docx，交给王经理",
+     "due": {
+      "in_minutes": 180
+     },
+     "reminder": {
+      "id": "sched_8c1e0a7b3d2f4965",
+      "at": {
+       "minutes_ago": 0
+      },
+      "fired": {
+       "late_minutes": 0
+      }
+     }
+    }
+   ],
+   "wake": [
+    "sched_8c1e0a7b3d2f4965"
+   ],
+   "expect": {
+    "todo": "none",
+    "mentions_any": [
+     "季度报告"
+    ],
+    "forbid_any": [
+     "晚了",
+     "迟了",
+     "晚到",
+     "延迟",
+     "已勾"
+    ],
+    "max_chars": 160
+   }
+  }
+ ]
+}

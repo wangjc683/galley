@@ -116,6 +116,8 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --render-only        # 只从 res
 
 ## 定时与提醒评测（票 36）
 
+（票 41 起这一节在手册里并进「To-dos and reminders」，提示词、样本与 CLI 帮助已重新写出，结果是票 41 的重跑，见本节末。）
+
 评测助理手册的新节「Reminders and scheduled tasks」、入口层新加的那句和主对话自己的「What Only The User Changes」：该建的自己建、不该建的不建、该先问的先问、改与取消、到点被叫醒时怎么做。同一套脚本与沙盒，`run.py --suite schedule`。
 
 - **输入**（都在 `schedule/`）：
@@ -145,6 +147,42 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --render-only        # 只从 res
 - **叫醒措辞**（Core 的 `subtask_report::due_paragraph`）：第二轮当时判 26 过 25（「正文为空算不过」是之后才加的规则，按它算是 24，另一处就是上面「不用了」那遍，它留在最终表里），不过的是晚了 9 小时那条：「晚了 9 小时」只写进了 GA 的 `<summary>`（主对话不显示），回复只转述了记下的话。先改成「Act on it now, and say first that it comes 9 hours late」，两遍都还是写进摘要（「先说」被理解成先写在摘要里）；再改成「say in the reply itself (the user does not see your summary) that it comes 9 hours late」，四遍全过。
 - **用量**：45 次运行（保留 28 次，作废 17 次），107 次模型调用。
 
+这一轮的 `results.json` / `results.md` 已被下面的票 41 重跑替换，原文在 git 历史里（票 36 的合并提交 `3e22b3e8`）。
+
+### 票 41 重跑（2026-10-17，gpt-6.1-sol，推理强度 high）
+
+票 41 把手册的这一节改写成「To-dos and reminders」、入口层那一段改成待办的说法，「In Hand」也在票 39 换成了三组，票 36 的结果不再对应现在的文本，整组重跑（旧结果没有并进 `meta.superseded_runs`，见上）。
+
+- **跟着换的输入**：`galley-prompt/main_chat.plain.txt`（票 41 的入口层，关于 Galley 的功能地图也已是票 90 之后的「待办」）、`rust-samples.json`（四组「In Hand」：三组都满并截断、只有它自己的提醒、只有待办、同一组换成 UTC；六组叫醒，含两条待办的提醒）、`cli-help.json`（顶层多了 `todo`，加 `todo` 与七个子命令的 `--help` 原文）。都由票 41 的临时测试（跑完删掉）与开发版二进制重新写出，待办评测共用这三份。
+- **判定跟着改的**：用户自己的带时间的事，提醒挂在待办上也算建了那一个（`expect.via: either`：周三交报告、周五航班、十分钟后喝水）；物流这种它自己回头查的只认 `schedule create`，记成待办算不过；「已有同一件」（票 41 之前建的独立提醒）留着它、或删了换成挂在待办上的一个都算，再挂第二个算不过，可以另记一件不带提醒的待办。其余用例的期望不变。
+- **结果**：26 次运行 26 次过（13 条各两遍），一次也没有改措辞。周三交报告、周五航班、十分钟后喝水三条都记成了待办并挂提醒（交报告只写日子、提醒在前一天；航班截止周五 7 点、提醒周四晚 8 点；喝水截止与提醒都在十分钟后），回复一句说出时间；物流两遍都是 `schedule create … --target=assistant` 在周一上午 10 点、带单号；学吉他、开会累、每天看新闻（先问一句）照旧；已有的独立提醒两遍都只读了 `schedule list` 与 `todo list`、回复已经记着与几点提醒；不用了、改到 9 点照旧用 `schedule delete` / `update`；三条叫醒照旧（晚了 9 小时的两遍都先说晚了多久，还顺手查了 `todo list --all` 与历史）。
+- **用量**：26 次运行，77 次模型调用。
+
+## 待办评测（票 41）
+
+评测助理手册改写后的「To-dos and reminders」与入口层改写的那一段：你的事记成待办（有截止的挂提醒）、它自己回头查的用定时任务、信息不记、办好了去勾、从清单引用一件事改对那一件、回答「还有什么没办」之前先读清单、待办的提醒到点时只提醒。同一套脚本与沙盒，`run.py --suite todo`。
+
+- **输入**：
+  - `todo/cases.json`：11 个用例。票 41 列的 9 条（该记待办 3 条、它自己的提醒 1 条、不该记 2 条、勾掉、引用改、问还有什么没办），另加两条：清单上已有同一件、待办的提醒到点（票 39 新写的叫醒措辞第一次上真模型）。每条有当前段的历史、假 CLI 里已有的待办（截止、挂着的提醒、是不是在「In Hand」里、分段开始后有没有在面板上被勾掉）与定时任务、用户这句或这次叫醒到点的提醒，以及自动判定用的 `expect`。字段见 `_note`。
+  - 提示词、CLI 帮助与 Rust 样本与定时评测共用 `schedule/` 下那三份（见上一节「票 41 重跑」）。
+- **组成**：同定时评测。用例里分段开始前就有的待办与定时任务照 `in_hand_section` 的格式（票 39 的三组：用户的待办、它在办的、例行）写进「In Hand」一节，时间写成消息前一小时；之后在面板上被勾掉的，快照里仍是没做，假 CLI 里是做完的；这一段里刚记的不在快照里。「说说这件」的消息照 `gui/src/lib/composer-quote.ts` 的写法：引用块是那件事的标题，空一行，再接用户的话。待办的提醒到点时，新消息照 Core 的措辞（`subtask_report` 的待办一段）拼出。
+- **假 CLI**：定时评测那个，另外回答 `todo list / show / add / update / done / reopen / cancel`：形状照 Agent API §5.28–§5.34，校验照真实 CLI 与 Core（`--due` 收本地日期或 `--at` 的写法、过去的日期不拒；`--remind-at` 过去报 `time_in_past:`；`--due=` / `--remind-at=` 空值、`--due` 与 `--no-due` 同给、`update` 什么都没给是参数错误，退出码 2，报错原文用开发版二进制在假 HOME 下抓的；未知或已取消的 id 退出码 3；勾掉与取消会取消还没提醒到的提醒，再勾不变，取消勾不恢复提醒；做完的不能挂提醒；`list` 的顺序与 `--all` 照 `todo_list_order`）。`todo add / update --remind-at` 建或挪的提醒是一个带 `todoId`、叫醒助理的一次性定时任务，`schedule list` 里看得到。
+- **判定**：按 `expect` 自动判，看它发出的命令（假 CLI 的日志与最后的状态）和回复：该记的记了一件、标题对、截止在窗口里（要带时刻的带了）、有截止的挂了一个在截止之前的提醒、没时间的不写截止不挂提醒；它自己的提醒是 `schedule create --target=assistant`、不是待办，记下的话里带单号；不该记的什么都没写；勾掉的是那一件、记成 Galley 勾的；引用改的是那一件、截止到了新的一天、提醒跟着挪且不晚于新截止、没新建；问「还有什么没办」的先跑了 `todo list`、点到了三件、没把面板上勾掉的当成没办；已有的没再记、没再挂提醒，说出了已有提醒的时间；提醒到点的只提醒、不勾掉。每条都查 `todo` 与 `schedule` 写命令带没带 `--supervisor=galley-assistant`、`schedule create` 带没带 `--target=assistant`、有没有动不该动的待办、多余的写命令、会卡住主对话的命令或 `<subtask>`；回复里说出了提醒时间、字数上限。另记有没有先读手册、写之前有没有读清单（只记，不判）。
+- **结果**：`todo/results.json`、`todo/results.md`（同定时评测的版式）；`todo/composed/` 是引用改与问还有什么没办两条第一遍的完整首个请求。
+- **怎么跑**：`run.py --suite todo`，参数同定时评测（`--repeats`、`--first-repeat`、`--cases`、`--supersede`、`--render-only`）。`--dry-test` 覆盖这条路径：「In Hand」是快照（面板上勾掉的仍在、这一段刚记的不在）、假 CLI 的 `todo` 命令族照真实 CLI 拒绝与改状态（上面那些错误、勾掉取消提醒、取消后再取消是 `not_found`、`--all`、`schedule list` 里的待办提醒）、待办提醒的叫醒消息逐字是 Core 的，判定读得出该勾没勾、多记、动了不该动的和多余的写命令。
+
+### 结果（2026-10-17，gpt-6.1-sol，推理强度 high）
+
+22 次运行 22 次过（11 条各两遍；`todo/results.md` 开头的通过率表），一次也没有改手册或入口层的措辞。
+
+- **该记待办**：「周三下午 3 点前要交季度报告」`todo add "交季度报告" --due=<周三>T15:00`，提醒挂在周二下午 3 点，回复一句说出截止与几点提醒；「记一下要买营养土」记一件、不写截止不挂提醒，一句话；「明天要给房东回电话」（凌晨一点多说的）按日历上的明天记、截止只写日子，提醒在明早 9 点或 10 点，回复点明是 10 月 18 日。每次都先读手册、先 `todo list`、带 `--supervisor=galley-assistant`，没有一次用 `schedule create` 给用户的事挂提醒。
+- **它自己的提醒**：「下周一帮我看下物流」两遍都是 `schedule list` 后 `schedule create … --target=assistant` 在周一上午 10 点，记下的话里有单号，并叮嘱到时不要虚构结果，没记成待办。
+- **不该记**：学吉他什么都没动；「我的航班号是 MU5101」没记待办、没建提醒，两遍都先查了一下历史，再问哪天出发。
+- **勾掉、引用改**：「营养土买好了」`todo done` 那一件，回复「已勾掉。」或「已把“买营养土”勾掉了。」，没复述清单；引用「交季度报告」说「改到周四」，两遍都 `todo update` 到周四下午 3 点，提醒顺延到周四中午 12 点，没新建。
+- **问还有什么没办、已有同一件**：两遍都先 `todo list`，答房东、季度报告、续签合同三件（续签合同不在快照里），没提面板上勾掉的营养土；清单上已有季度报告时只读了清单，回复已经记着、中午 12 点提醒，没再记。
+- **待办的提醒到点**：一两句提醒季度报告几点截止、交给谁、文件在哪，没勾掉、没动任何东西。
+- **用量**：22 次运行，69 次模型调用。
+
 ## 安全措施
 
 - 拦截点在 GA 的工具分发：worker 把 `agentmain` 里的 `GenericAgentHandler` 换成子类（runner 自己装处理器子类用的也是这个接口 `GaSession.install_handler`）。子类的 `dispatch` 遇到任何真实工具就记录并返回 `should_exit`，一次模型调用后整个运行结束；只有 GA 自己判断最终回答的 `no_tool`（只读回复文本）和格式错误的重试提示 `bad_json` 走原路。子类上除 `do_no_tool` 外的所有 `do_*` 方法都换成一调用就报错的版本，作为第二道保险。
@@ -152,4 +190,5 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --render-only        # 只从 res
 - `--dry-test` 在任何真调用之前验证这些：用假的模型流返回一个先说话、再调 `code_run`（`touch` 一个金丝雀文件）和 `file_write` 的回复，以及一个带建议标签的普通回复，检查只发生一次模型调用、没有进入任何工具方法、护栏无记录、金丝雀文件不存在、护栏确实拒绝子进程 / 域名 / 外部写入，并检查请求的拼装（GA 核心、Galley 段、Main Chat、WITH 的草案位置、历史顺序、带过来的那句）。
 - 不碰真实数据：Galley 数据库以只读、immutable 方式打开（`mode=ro&immutable=1`，不写锁、不建 WAL 索引；票 36 之前是先拷到权限 700 的临时目录再读）；不写 `~/Library/Application Support/app.galley`、真实 GA 记忆或 `~/Documents/GenericAgent`；状态根路径若像真实数据目录就拒绝运行。
 - 不留 key：key 只在内存里，经 stdin 交给 worker；请求记录只存请求体不存请求头；写结果前把 key 字符串整体替换掉；worker 日志随临时目录删除。
+- 不留本机路径：写结果前把系统临时目录换成 `$TMPDIR`，把跑 worker 的解释器路径换成 `$PYTHON`、它的安装目录换成 `$PYTHON_ROOT`（票 41 起；之前的结果里还留着解释器路径）。
 - 设 `PYTHONDONTWRITEBYTECODE=1`，不在 `managed-ga/code/` 下留 `__pycache__`。

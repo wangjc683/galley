@@ -349,6 +349,14 @@ Managed runtime with a main chat only: every write is refused with
 - **Where it was noted**: as for a task — the main chat and the run's
   starting turn when the CLI call comes in, the reply's `turn_index` when
   the run ends.
+- **How Galley keeps them**: the [assistant manual](./galley-assistant-manual.md)'s
+  "To-dos and reminders" (ticket 41). What the user has to do is noted
+  unasked, with a reminder on it when it has a date; the assistant's own
+  follow-ups (a delivery to check) stay plain scheduled tasks. It ticks a
+  to-do off when the user says it is done, finds one quoted from the list
+  by its title, and reads `todo list` before saying what is left; the
+  entry layer carries one paragraph for these, since none starts with a
+  CLI write in sight.
 - **Reset**: resetting the main chat deletes every to-do and the tasks that
   were their reminders; the assistant's own tasks stay.
 - Every write broadcasts `todos:changed` (and `scheduled-tasks:changed` when
