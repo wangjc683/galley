@@ -1737,7 +1737,7 @@ export const zhCopy = {
       `第 ${first} 到 ${last} 条提问组，共 ${count} 条，点击跳到第 ${first} 条`,
     questionCluster: (first: number, last: number, count: number) =>
       `第 ${first} 到 ${last} 条提问，共 ${count} 条`,
-    scrollLatest: "Scroll to latest",
+    scrollLatest: "回到最新",
     waitingForYou: "等你回复",
     askedYou: "曾向你提问",
     fillCandidate: "填入输入框",

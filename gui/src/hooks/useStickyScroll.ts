@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { animateScroll, scrollDestination } from "@/lib/animate-scroll";
 import {
   assistantFollowBottom,
   assistantScrollToBottom,
 } from "@/lib/assistant-conversation";
+import { chaseBottom } from "@/lib/chase-bottom";
 import {
   USER_MSG_ANCHOR_TOLERANCE_PX,
   USER_MSG_ANCHOR_TOP_PX,
@@ -91,12 +93,17 @@ function clearLocateHighlight(): void {
  *   - sticky-bottom follow while streaming (don't yank a user who
  *     scrolled up to read older content), and while the composer
  *     below grows or shrinks
- *   - the floating scroll-to-bottom button + its smooth-scroll monitor
+ *   - the floating scroll-to-bottom button + its chase of the bottom
+ *     (lib/chase-bottom.ts)
  *   - scroll-to-bottom on session switch (race-hardened against async
  *     SQLite restore, Shiki reflow, and WKWebView repaint skips)
  *   - stick-to-user-message-top on submit (the assistant's
  *     conversation sticks to the bottom instead, `stickBottom`)
  *   - ⌥↑ / ⌥↓ keyboard jump between user messages
+ *
+ * Every smooth scroll here goes through lib/animate-scroll.ts (its
+ * durations, the far-jump rule, reduced motion), never the engine's
+ * own smooth `scrollTo` / `scrollBy`.
  *
  * Inputs are the bottom-anchored growth / navigation triggers the
  * effects depend on; the component owns the DOM these refs point at.
@@ -151,7 +158,8 @@ export function useStickyScroll({
   // doesn't toggle the mode.
   const [atBottom, setAtBottom] = useState(true);
   const [isScrollingToBottom, setIsScrollingToBottom] = useState(false);
-  const scrollToBottomRafRef = useRef<number | null>(null);
+  /** Stops the running 「回到底部」 chase, if any. */
+  const stopChaseRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -199,77 +207,26 @@ export function useStickyScroll({
     el.scrollTop = el.scrollHeight;
   }, [streamingContent, atBottom, turnsLength, pendingAskUser, stickBottom]);
 
-  const stopMonitoringScrollToBottom = () => {
-    setIsScrollingToBottom(false);
-    if (scrollToBottomRafRef.current !== null) {
-      cancelAnimationFrame(scrollToBottomRafRef.current);
-      scrollToBottomRafRef.current = null;
-    }
-  };
-
+  // The click's intent is "attach to the tail", not "scroll to the
+  // coordinate the tail happened to be at" — lib/chase-bottom.ts re-aims
+  // while the bottom grows, lets go if the user pulls up mid-way, and
+  // past 1600ms writes the bottom and attaches.
   const onClickScrollToBottom = () => {
     const el = scrollContainerRef.current;
     if (!el) return;
-
-    stopMonitoringScrollToBottom();
+    stopChaseRef.current?.();
     setIsScrollingToBottom(true);
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-
-    // The click's intent is "attach to the tail", not "scroll to the
-    // coordinate the tail happened to be at". While streaming, the
-    // bottom is a moving target: the smooth animation aims at the
-    // scrollHeight sampled on click, chunks land, and the distance
-    // check can stay >24px forever. So the monitor (a) re-aims the
-    // animation whenever the document grows, and (b) on timeout snaps
-    // + attaches instead of giving up. The only path that ends
-    // detached is the user actively pulling away mid-flight.
-    const startedAt = performance.now();
-    let lastScrollTop = el.scrollTop;
-    let issuedForHeight = el.scrollHeight;
-    const monitorScroll = () => {
-      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      if (distFromBottom < 24) {
-        stopMonitoringScrollToBottom();
-        setAtBottom(true);
-        return;
-      }
-
-      if (el.scrollTop < lastScrollTop - 2) {
-        // User scrolled up against the animation — they changed their
-        // mind; abort without attaching.
-        stopMonitoringScrollToBottom();
-        setAtBottom(false);
-        return;
-      }
-
-      if (performance.now() - startedAt > 1600) {
-        // Streaming outgrew the animation. Finish the job instantly.
-        el.scrollTop = el.scrollHeight;
-        stopMonitoringScrollToBottom();
-        setAtBottom(true);
-        return;
-      }
-
-      // Bottom moved since the last scrollTo — re-aim at the new
-      // bottom. Only on growth, so the smooth animation isn't
-      // restarted (and visibly stuttered) every frame.
-      if (el.scrollHeight !== issuedForHeight) {
-        issuedForHeight = el.scrollHeight;
-        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-      }
-
-      lastScrollTop = el.scrollTop;
-      scrollToBottomRafRef.current = requestAnimationFrame(monitorScroll);
-    };
-    scrollToBottomRafRef.current = requestAnimationFrame(monitorScroll);
+    stopChaseRef.current = chaseBottom(el, (attached) => {
+      stopChaseRef.current = null;
+      setIsScrollingToBottom(false);
+      setAtBottom(attached);
+    });
   };
 
   useEffect(
     () => () => {
-      if (scrollToBottomRafRef.current !== null) {
-        cancelAnimationFrame(scrollToBottomRafRef.current);
-        scrollToBottomRafRef.current = null;
-      }
+      stopChaseRef.current?.();
+      stopChaseRef.current = null;
     },
     [],
   );
@@ -446,7 +403,7 @@ export function useStickyScroll({
         container.getBoundingClientRect().top,
       );
       if (Math.abs(delta) < 1) return;
-      container.scrollBy({ top: delta, behavior: "smooth" });
+      animateScroll(container, container.scrollTop + delta);
     });
     return () => cancelAnimationFrame(handle);
   }, [userSubmitTick]);
@@ -484,11 +441,18 @@ export function useStickyScroll({
 
       const containerTop = container.getBoundingClientRect().top;
       const tolerance = USER_MSG_ANCHOR_TOLERANCE_PX;
+      // Mid-jump, pick from where the jump is headed, so a second press
+      // goes one message further instead of re-aiming at the same one.
+      const ahead =
+        (scrollDestination(container) ?? container.scrollTop) -
+        container.scrollTop;
 
       // How far each message is from where it parks (its bubble on the
       // anchor line, or the time line right above it at its own):
       // positive below, negative above.
-      const offsets = userMsgs.map((el) => userMsgParkOffset(el, containerTop));
+      const offsets = userMsgs.map(
+        (el) => userMsgParkOffset(el, containerTop) - ahead,
+      );
 
       let target: number | undefined;
       if (e.key === "ArrowDown") {
@@ -507,7 +471,13 @@ export function useStickyScroll({
       if (target === undefined) return;
 
       e.preventDefault();
-      container.scrollBy({ top: offsets[target], behavior: "smooth" });
+      // Off follow-the-bottom before the jump's first frame, as the
+      // rail's `onJump` does: a streaming chunk's snap would move
+      // scrollTop under the animation, and it lets go of a position
+      // someone else moved. Landing at the bottom re-attaches through
+      // the scroll listener.
+      setAtBottom(false);
+      animateScroll(container, container.scrollTop + ahead + offsets[target]);
     };
 
     document.addEventListener("keydown", onKeyDown);
