@@ -429,7 +429,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [30](./issues/30-assistant-manual-and-entry-layer.md) | — | 入口层派活条款改写、助手手册（内嵌、写进内置状态）、真模型评测叫醒措辞 | 03d | done（裁决 82；2026-10-16 合入，待 JC 真机验收） |
 | [31](./issues/31-subtask-wake-gui.md) | — | 界面：藏起叫醒行与不出声的回复、卡片最后一句、通知一个声音、子任务卡片「第 N 轮 · 」 | 29 | done（裁决 82；2026-10-16 合入，待 JC 真机验收） |
 | [26](./issues/26-user-bubble-selection-copy.md) | — | 你的气泡不挂悬停复制，选中文字时弹浮动复制 | 20 | done（裁决 73，`3b029e56`，JC 真机验收；工作台有意不跟） |
-| [32](./issues/32-delete-single-message.md) | — | 主对话删单条消息：右键「删除」、库与 runner、手机端事件 | 29、31 | ready-for-agent（裁决 83） |
+| [32](./issues/32-delete-single-message.md) | — | 主对话删单条消息：右键「删除」、库与 runner、手机端事件 | 29、31 | merged（裁决 83，合并提交 `57fc1853`），待 JC 真机验收 |
 | [33](./issues/33-schedule-once-and-wake.md) | — | 定时任务加「一次性」与「叫醒助理」、补发、软删除、表单任务跑完也叫醒（Core） | 29、32 | ready-for-agent（裁决 84） |
 | [34](./issues/34-cli-schedule-commands.md) | — | CLI：`galley schedule` 命令族 | 33 | ready-for-agent（裁决 84） |
 | [35](./issues/35-cli-more-hands.md) | — | CLI：补齐授权前两级的手（改名、置顶、删除、项目、默认模型） | —（与 34 同改分发表） | ready-for-agent（裁决 84） |
