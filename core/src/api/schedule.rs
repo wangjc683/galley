@@ -1,14 +1,20 @@
 //! Scheduled tasks: "project + prompt + repeat rule + enabled switch".
 //!
-//! Firing a scheduled task creates an ordinary session through the
-//! existing command path — no new session type. This module holds the
-//! wire types plus the pure next-fire calendar math shared by the Core
-//! scheduler loop and the read path (`nextFireAt` on the brief).
+//! Firing a scheduled task does one of two things ([`ScheduleTarget`]):
+//! create an ordinary session through the existing command path (no new
+//! session type), or — since main chat ticket 33 — wake the managed
+//! runtime's main chat with the words the task carries
+//! (`crate::subtask_report`). This module holds the wire types plus the
+//! pure next-fire calendar math shared by the Core scheduler loop and the
+//! read path (`nextFireAt` on the brief).
 //!
 //! Time model: the repeat rule is LOCAL wall clock ("every day at
 //! 09:00" follows the user across timezones), so next-fire math runs on
 //! `NaiveDateTime` and is resolved to an instant only at the edge
 //! ([`resolve_wall_clock`]), where DST gaps / ambiguities are handled.
+//! A one-off ([`ScheduledTaskRepeat::Once`]) is the exception: it fires
+//! at an absolute instant (`fireAt`, UTC), and the calendar math never
+//! sees it.
 
 use chrono::{
     DateTime, Datelike, Duration, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, SecondsFormat,
@@ -16,7 +22,7 @@ use chrono::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::{ProjectId, SessionId};
+use super::{Origin, ProjectId, SessionId};
 use crate::error::{GalleyError, Result};
 
 /// Tauri event fired after any scheduled-task state change (CRUD from
@@ -37,6 +43,130 @@ pub const SCHEDULED_TASK_FIRE_FAILED_EVENT: &str = "scheduled-tasks:fire-failed"
 pub struct ScheduledFireFailed {
     pub task_id: ScheduledTaskId,
     pub prompt: String,
+}
+
+/// Tauri event fired when a task that wakes the assistant came due but
+/// could not reach it (main chat ticket 33): the main chat was waiting
+/// for the user's answer, its runner did not start or did not take the
+/// message, or the turn it woke ended on an error without a reply. The
+/// fire is consumed — the assistant is not woken for it again — and the
+/// desktop shows a system notification with the task's own words
+/// instead. Carries [`ScheduledReminderUndelivered`]. Desktop only, like
+/// [`SCHEDULED_TASK_FIRE_FAILED_EVENT`]: Core sends no OS notification
+/// itself.
+pub const SCHEDULED_REMINDER_UNDELIVERED_EVENT: &str = "scheduled-tasks:reminder-undelivered";
+
+/// Why a wake for a due task did not reach the assistant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReminderUndeliveredReason {
+    /// The main chat was waiting for the user's answer: any message then
+    /// would be taken as that answer.
+    Asking,
+    /// Its runner did not start, or did not take the message.
+    NotStarted,
+    /// The turn it woke ended on an error, or its runner exited, before a
+    /// reply.
+    NoReply,
+    /// The main chat it was due in is gone (reset) or the runtime is no
+    /// longer the managed one.
+    NoMainChat,
+}
+
+/// Payload of [`SCHEDULED_REMINDER_UNDELIVERED_EVENT`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduledReminderUndelivered {
+    pub task_id: ScheduledTaskId,
+    /// What the task carries — the notification's text.
+    pub prompt: String,
+    pub reason: ReminderUndeliveredReason,
+}
+
+/// What a fire does (main chat ticket 33). Stored in
+/// `scheduled_tasks.target`; every row from before migration 049 is
+/// [`Self::Session`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScheduleTarget {
+    /// Start a new ordinary session that runs the prompt (the behavior
+    /// before 049).
+    #[default]
+    Session,
+    /// Start no session: wake the managed runtime's main chat for a turn
+    /// with the prompt (`crate::subtask_report`).
+    Assistant,
+}
+
+impl ScheduleTarget {
+    pub fn as_sql(self) -> &'static str {
+        match self {
+            Self::Session => "session",
+            Self::Assistant => "assistant",
+        }
+    }
+
+    pub fn from_sql(raw: &str) -> Result<Self> {
+        match raw {
+            "session" => Ok(Self::Session),
+            "assistant" => Ok(Self::Assistant),
+            other => Err(GalleyError::Internal {
+                message: format!("scheduled task: unknown target {other:?}"),
+            }),
+        }
+    }
+}
+
+/// How the last fire of a [`ScheduleTarget::Assistant`] task reached the
+/// main chat (`scheduled_tasks.last_wake`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScheduledWake {
+    /// Fired, not yet confirmed delivered: waiting for the main chat, or
+    /// its turn still running. Durable — a restart sends it again.
+    Pending,
+    /// The assistant got it and its turn ended (a `<no-reply/>` counts).
+    Delivered,
+    /// It could not reach the assistant; the desktop was told to show a
+    /// system notification with the prompt instead
+    /// ([`SCHEDULED_REMINDER_UNDELIVERED_EVENT`]).
+    Notified,
+}
+
+impl ScheduledWake {
+    pub fn as_sql(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Delivered => "delivered",
+            Self::Notified => "notified",
+        }
+    }
+
+    pub fn from_sql(raw: &str) -> Result<Self> {
+        match raw {
+            "pending" => Ok(Self::Pending),
+            "delivered" => Ok(Self::Delivered),
+            "notified" => Ok(Self::Notified),
+            other => Err(GalleyError::Internal {
+                message: format!("scheduled task: unknown last_wake {other:?}"),
+            }),
+        }
+    }
+}
+
+/// The main chat turn a task was made in (main chat ticket 33): the
+/// assistant made it through the CLI while that run was open. The card
+/// for it hangs under the reply, like a subtask's
+/// (`subtask_dispatches(parent_session_id, turn_index, …)`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduledTaskCreatedIn {
+    pub session_id: SessionId,
+    /// The `turn_index` of that run's reply — its latest visible
+    /// assistant row. Absent while the run is still open (Core fills it
+    /// when the run ends), and when the run wrote no reply.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_index: Option<i64>,
 }
 
 /// What saving a task with a given rule would do — drives the
@@ -79,12 +209,18 @@ impl std::fmt::Display for ScheduledTaskId {
 /// Monthly clamps to short months: a task on the 31st fires on Apr 30
 /// and Feb 28/29 rather than silently skipping the month — a
 /// month-end task that vanishes half the year destroys trust.
+///
+/// `Once` (main chat ticket 33, additive) is no calendar rule: the task
+/// fires once, at its absolute `fireAt`. The calendar functions below
+/// treat it like `Daily` so they always terminate, but nothing calls them
+/// for a one-off.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ScheduledTaskRepeat {
     Daily,
     Weekly { weekdays: Vec<u8> },
     Monthly { monthdays: Vec<u8> },
+    Once,
 }
 
 fn normalize_days(mut days: Vec<u8>, max: u8, what: &str) -> Result<Vec<u8>> {
@@ -109,6 +245,7 @@ impl ScheduledTaskRepeat {
     pub fn normalized(self) -> Result<Self> {
         match self {
             Self::Daily => Ok(Self::Daily),
+            Self::Once => Ok(Self::Once),
             Self::Weekly { weekdays } => Ok(Self::Weekly {
                 weekdays: normalize_days(weekdays, 7, "weekly")?,
             }),
@@ -118,9 +255,16 @@ impl ScheduledTaskRepeat {
         }
     }
 
+    /// Whether this is the one-off kind.
+    pub fn is_once(&self) -> bool {
+        matches!(self, Self::Once)
+    }
+
     fn allows_date(&self, date: NaiveDate) -> bool {
         match self {
-            Self::Daily => true,
+            // `Once` never reaches the calendar; `true` keeps every walk
+            // below finite should a caller slip.
+            Self::Daily | Self::Once => true,
             Self::Weekly { weekdays } => {
                 weekdays.contains(&(date.weekday().number_from_monday() as u8))
             }
@@ -208,6 +352,51 @@ pub fn resolve_wall_clock<Tz: TimeZone>(tz: &Tz, naive: NaiveDateTime) -> DateTi
     tz.from_utc_datetime(&naive)
 }
 
+/// Read a one-off's fire time (`fireAt`, CLI `--at`). Accepted forms:
+///
+/// - RFC 3339 with `Z` or a `±HH:MM` offset: that instant.
+/// - `YYYY-MM-DDTHH:MM` or `YYYY-MM-DDTHH:MM:SS` (a space works in place
+///   of the `T`): wall-clock time in `tz` — production passes this
+///   machine's zone, the user's, since Galley runs on their computer. A
+///   time in a daylight-saving gap moves to the first minute after it,
+///   and one that occurs twice means the first, as for repeating tasks
+///   ([`resolve_wall_clock`]).
+///
+/// A date without a time is refused: "when on that day" is the caller's
+/// to say.
+pub fn parse_fire_at<Tz: TimeZone>(input: &str, tz: &Tz) -> Result<DateTime<Utc>> {
+    let value = input.trim();
+    if let Ok(at) = DateTime::parse_from_rfc3339(value) {
+        return Ok(at.with_timezone(&Utc));
+    }
+    for format in [
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+    ] {
+        if let Ok(naive) = NaiveDateTime::parse_from_str(value, format) {
+            return Ok(resolve_wall_clock(tz, naive).with_timezone(&Utc));
+        }
+    }
+    Err(GalleyError::InvalidArgs {
+        message: format!(
+            "scheduled task: fire time must be an RFC 3339 instant or a local \
+             YYYY-MM-DDTHH:MM, got {value:?}"
+        ),
+    })
+}
+
+/// The local wall-clock `"HH:MM"` of a UTC ISO instant in `tz` — a
+/// one-off's `timeOfDay`, for readers that show one for every task.
+pub fn wall_clock_hhmm<Tz: TimeZone>(iso: &str, tz: &Tz) -> Option<String>
+where
+    Tz::Offset: std::fmt::Display,
+{
+    let at = DateTime::parse_from_rfc3339(iso).ok()?;
+    Some(at.with_timezone(tz).format("%H:%M").to_string())
+}
+
 /// Format an instant in the exact UTC ISO shape every other timestamp
 /// column uses (`YYYY-MM-DDTHH:MM:SS+00:00`, matching
 /// `db/helpers.rs::iso_from_unix_secs`). Fire stamps written before the
@@ -226,8 +415,15 @@ pub struct ScheduledTaskBrief {
     pub project_id: Option<ProjectId>,
     pub prompt: String,
     pub repeat: ScheduledTaskRepeat,
-    /// Local wall clock, `"HH:MM"`.
+    /// Local wall clock, `"HH:MM"`. For a one-off it is read off
+    /// `fireAt` in this machine's zone (informational: `fireAt` decides).
     pub time_of_day: String,
+    /// A one-off's fire instant, UTC ISO. Absent on repeating tasks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fire_at: Option<String>,
+    /// What a fire does. `session` for every task made before it existed.
+    #[serde(default)]
+    pub target: ScheduleTarget,
     /// Model display name to run fires on (same semantic as
     /// `--llm=<name>`). `None` = runtime default. Resolution failure at
     /// fire time falls back to the default rather than killing the run.
@@ -242,11 +438,63 @@ pub struct ScheduledTaskBrief {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_run_session_id: Option<SessionId>,
     /// UTC ISO instant of the next fire, computed at read time from the
-    /// local rule. `None` when disabled.
+    /// local rule. `None` when disabled, cancelled, or a one-off that
+    /// already fired.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_fire_at: Option<String>,
+    /// The planned instant of the last fire (UTC ISO): a one-off's
+    /// `fireAt`, a repeating task's period. `lastFiredAt` is when it
+    /// actually fired; the two differ when the computer slept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_due_at: Option<String>,
+    /// An `assistant` task's last fire: how it reached the main chat.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_wake: Option<ScheduledWake>,
+    /// Who made the task — the desktop form (`gui`), the assistant
+    /// (`supervisor` + `galley-assistant`), another agent. Absent only
+    /// for rows that cannot say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<Origin>,
+    /// The main chat turn the assistant made it in, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_in: Option<ScheduledTaskCreatedIn>,
+    /// When it was cancelled (a soft delete): the scheduler and the
+    /// default lists skip it, the row stays.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancelled_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+impl ScheduledTaskBrief {
+    /// A one-off that fired for its `fireAt` (a later `fireAt` arms it
+    /// again; a manual run before `fireAt` does not consume it).
+    pub fn once_fired(&self) -> bool {
+        if !self.repeat.is_once() {
+            return false;
+        }
+        let (Some(fire_at), Some(last)) = (
+            self.fire_at.as_deref().and_then(parse_utc_secs),
+            self.last_fired_at.as_deref().and_then(parse_utc_secs),
+        ) else {
+            return false;
+        };
+        last >= fire_at
+    }
+
+    /// Whether the task may still fire: enabled, not cancelled, not a
+    /// one-off that already fired. What `schedule list` shows by default.
+    pub fn is_active(&self) -> bool {
+        self.enabled && self.cancelled_at.is_none() && !self.once_fired()
+    }
+}
+
+/// Second-resolution UTC instant of an ISO-8601 timestamp; `None` when
+/// unparseable (callers fail closed).
+pub fn parse_utc_secs(iso: &str) -> Option<i64> {
+    DateTime::parse_from_rfc3339(iso)
+        .ok()
+        .map(|dt| dt.timestamp())
 }
 
 /// Payload for [`crate::api::GalleyApi::create_scheduled_task`].
@@ -259,12 +507,32 @@ pub struct CreateScheduledTaskInput {
     pub project_id: Option<String>,
     pub prompt: String,
     pub repeat: ScheduledTaskRepeat,
+    /// `"HH:MM"` for the repeating kinds; ignored for a one-off.
+    #[serde(default)]
     pub time_of_day: String,
     #[serde(default)]
     pub llm_name: Option<String>,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    /// A one-off's fire time ([`parse_fire_at`]); required with `Once`,
+    /// refused otherwise. A time already past is refused
+    /// ([`TIME_IN_PAST`]).
+    #[serde(default)]
+    pub fire_at: Option<String>,
+    /// What a fire does; `session` when absent. `assistant` needs the
+    /// managed runtime's main chat ([`ASSISTANT_UNAVAILABLE`]).
+    #[serde(default)]
+    pub target: ScheduleTarget,
 }
+
+/// Stable prefix of the `invalid_args` message for a one-off whose fire
+/// time is already past (Agent API §1.1, like `schema_mismatch:`).
+pub const TIME_IN_PAST: &str = "time_in_past";
+
+/// Stable prefix of the `invalid_args` message for an `assistant` task
+/// when there is no assistant to wake: the active runtime is not the
+/// managed one, or it has no main chat yet.
+pub const ASSISTANT_UNAVAILABLE: &str = "assistant_unavailable";
 
 fn default_true() -> bool {
     true
@@ -288,6 +556,12 @@ pub struct ScheduledTaskPatch {
     pub llm_name: Option<Option<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
+    /// A one-off's new fire time. Setting it (with no `repeat`) makes the
+    /// task a one-off; a later time arms a fired one-off again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fire_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<ScheduleTarget>,
 }
 
 #[cfg(test)]

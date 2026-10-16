@@ -6,9 +6,11 @@ import { sendGatedSystemNotification } from "@/lib/notify";
 import {
   countFailedTasks,
   listScheduledTasks,
+  SCHEDULED_REMINDER_UNDELIVERED_EVENT,
   SCHEDULED_TASKS_CHANGED_EVENT,
   SCHEDULED_TASK_FIRE_FAILED_EVENT,
   type ScheduledFireFailedPayload,
+  type ScheduledReminderUndeliveredPayload,
 } from "@/lib/scheduled-tasks";
 
 /**
@@ -53,12 +55,21 @@ export function useSchedulerActionCount(): number {
  * the event; the GUI owns the OS notification so the two sides never
  * double-send (issue 05). Gating — window focus, permission, per-task
  * throttle — lives in `sendGatedSystemNotification`.
+ *
+ * Also the fallback for a reminder that could not reach the assistant
+ * (main chat ticket 33): Core consumed the fire, and the notification
+ * carries the task's own words. Same kind (no pref: it needs you), the
+ * "needs you" tone.
  */
 export function useScheduledFireFailedNotification(): void {
   const copy = useCopy();
   useEffect(() => {
     let cancelled = false;
-    let unlisten: (() => void) | null = null;
+    const unlisteners: (() => void)[] = [];
+    const keep = (fn: () => void) => {
+      if (cancelled) fn();
+      else unlisteners.push(fn);
+    };
     void listen<ScheduledFireFailedPayload>(
       SCHEDULED_TASK_FIRE_FAILED_EVENT,
       (e) => {
@@ -68,13 +79,21 @@ export function useScheduledFireFailedNotification(): void {
           throttleKey: `schedule-failed:${e.payload.taskId}`,
         });
       },
-    ).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
+    ).then(keep);
+    void listen<ScheduledReminderUndeliveredPayload>(
+      SCHEDULED_REMINDER_UNDELIVERED_EVENT,
+      (e) => {
+        void sendGatedSystemNotification("scheduleFailed", {
+          title: copy.scheduled.reminderNotifyTitle,
+          body: e.payload.prompt,
+          throttleKey: `schedule-reminder:${e.payload.taskId}`,
+          tone: "needsYou",
+        });
+      },
+    ).then(keep);
     return () => {
       cancelled = true;
-      unlisten?.();
+      for (const fn of unlisteners) fn();
     };
   }, [copy]);
 }

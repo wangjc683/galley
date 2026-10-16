@@ -234,7 +234,7 @@ frontend could have seen them.
 | delete, bulk delete, the launch sweeps of empty and demo sessions (one per session) | `session-deleted-external` | `{ sessionId, via }` |
 | create / update a project | `project-created-external` / `project-updated-external` | `{ project, via }` |
 | delete a project | `project-deleted-external` | `{ projectId, detachedSessions, detachedSessionIds }` |
-| create / update / delete a scheduled task, a fire | `scheduled-tasks:changed` | none (pages refetch) |
+| create / update / cancel (delete) a scheduled task, a fire, a wake delivered or notified, the turn it was made in settled | `scheduled-tasks:changed` | none (pages refetch) |
 | a visible turn's session bump (turn persistence, below) | `session-updated-external`, `via: "turn-persist"` | `{ session, via }` |
 
 `via` is `"gui"` for the GUI's writes, the command name for the

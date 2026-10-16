@@ -73,6 +73,7 @@ const MIG_045: &str = include_str!("../migrations/045_ledger_exclusions.sql");
 const MIG_046: &str = include_str!("../migrations/046_main_chat_segments.sql");
 const MIG_047: &str = include_str!("../migrations/047_drop_ledger_exclusions.sql");
 const MIG_048: &str = include_str!("../migrations/048_subtasks.sql");
+const MIG_049: &str = include_str!("../migrations/049_scheduled_tasks_once_and_wake.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -114,7 +115,7 @@ async fn run_migrations(pool: &SqlitePool) {
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
         MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
         MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037, MIG_038, MIG_039, MIG_040,
-        MIG_042, MIG_043, MIG_044, MIG_045, MIG_046, MIG_047, MIG_048,
+        MIG_042, MIG_043, MIG_044, MIG_045, MIG_046, MIG_047, MIG_048, MIG_049,
     ] {
         sqlx::raw_sql(sql)
             .execute(pool)
@@ -2608,6 +2609,8 @@ fn sched_input(id: &str) -> CreateScheduledTaskInput {
         time_of_day: "09:00".into(),
         llm_name: None,
         enabled: true,
+        fire_at: None,
+        target: Default::default(),
     }
 }
 
@@ -2789,6 +2792,8 @@ async fn update_scheduled_task_patches_and_detaches_project() {
                 enabled: Some(false),
                 project_id: Some(None),
                 llm_name: None,
+                fire_at: None,
+                target: None,
             },
             Origin::gui(),
         )
@@ -2865,7 +2870,79 @@ async fn mark_scheduled_task_fired_stamps_and_survives_session_delete() {
 }
 
 #[tokio::test]
-async fn delete_scheduled_task_removes_row() {
+async fn migration_049_keeps_old_tasks_as_desktop_session_tasks() {
+    // Rows made before 049 rebuild unchanged: target session, made from
+    // the desktop, never cancelled, no wake (main chat ticket 33).
+    let pool = SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("open in-memory sqlite");
+    sqlx::raw_sql("PRAGMA foreign_keys = ON;")
+        .execute(&pool)
+        .await
+        .expect("enable foreign keys");
+    for sql in [
+        MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
+        MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
+        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
+        MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037, MIG_038, MIG_039, MIG_040,
+        MIG_042, MIG_043, MIG_044, MIG_045, MIG_046, MIG_047, MIG_048,
+    ] {
+        sqlx::raw_sql(sql).execute(&pool).await.expect("migration");
+    }
+    sqlx::query(
+        "INSERT INTO scheduled_tasks (id, project_id, prompt, repeat_kind, repeat_days, \
+            time_of_day, enabled, last_fired_at, last_run_session_id, created_at, updated_at, \
+            llm_name) \
+         VALUES ('sched_old', NULL, 'weekly sweep', 'weekly', '1,5', '07:30', 0, \
+                 '2026-07-20T11:30:00Z', NULL, '2026-07-01T00:00:00+00:00', \
+                 '2026-07-02T00:00:00+00:00', 'Claude Haiku 4.5')",
+    )
+    .execute(&pool)
+    .await
+    .expect("seed pre-049 row");
+    sqlx::raw_sql(MIG_049)
+        .execute(&pool)
+        .await
+        .expect("migration 049");
+
+    let galley = SqliteGalley::from_pool(pool.clone());
+    let task = galley.scheduled_task("sched_old").await.expect("read");
+    assert_eq!(task.prompt, "weekly sweep");
+    assert_eq!(
+        task.repeat,
+        ScheduledTaskRepeat::Weekly {
+            weekdays: vec![1, 5]
+        }
+    );
+    assert_eq!(task.time_of_day, "07:30");
+    assert!(!task.enabled);
+    assert_eq!(task.llm_name.as_deref(), Some("Claude Haiku 4.5"));
+    assert_eq!(task.last_fired_at.as_deref(), Some("2026-07-20T11:30:00Z"));
+    assert_eq!(task.updated_at, "2026-07-02T00:00:00+00:00");
+    assert_eq!(task.target, galley_core_lib::api::ScheduleTarget::Session);
+    let origin = task.origin.expect("origin");
+    assert_eq!(origin.via, galley_core_lib::api::OriginVia::Gui);
+    assert!(origin.supervisor.is_none() && origin.reason.is_none());
+    assert!(task.fire_at.is_none());
+    assert!(task.cancelled_at.is_none());
+    assert!(task.last_wake.is_none());
+    assert!(task.created_in.is_none());
+    // The widened CHECKs hold: a one-off needs its instant, a repeating
+    // task its time of day.
+    for bad in [
+        "INSERT INTO scheduled_tasks (id, prompt, repeat_kind, created_at, updated_at) \
+         VALUES ('b1', 'x', 'once', 't', 't')",
+        "INSERT INTO scheduled_tasks (id, prompt, repeat_kind, created_at, updated_at) \
+         VALUES ('b2', 'x', 'daily', 't', 't')",
+        "INSERT INTO scheduled_tasks (id, prompt, repeat_kind, time_of_day, target, \
+            created_at, updated_at) VALUES ('b3', 'x', 'daily', '09:00', 'robot', 't', 't')",
+    ] {
+        assert!(sqlx::query(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+}
+
+#[tokio::test]
+async fn delete_scheduled_task_cancels_and_keeps_the_row() {
     let pool = fresh_pool().await;
     let galley = SqliteGalley::from_pool(pool);
     galley
@@ -2876,11 +2953,16 @@ async fn delete_scheduled_task_removes_row() {
         .delete_scheduled_task(ScheduledTaskId("sched_del".into()), Origin::gui())
         .await
         .expect("delete");
+    // Gone from the desktop's list and the scheduler's (ticket 33)…
     assert!(galley
         .list_scheduled_tasks()
         .await
         .expect("list")
         .is_empty());
+    // …but kept, cancelled, for its card.
+    let kept = galley.scheduled_task("sched_del").await.expect("kept");
+    assert!(kept.cancelled_at.is_some());
+    assert!(kept.next_fire_at.is_none());
     let err = galley
         .delete_scheduled_task(ScheduledTaskId("sched_del".into()), Origin::gui())
         .await

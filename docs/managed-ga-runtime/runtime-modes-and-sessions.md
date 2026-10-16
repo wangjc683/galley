@@ -273,6 +273,47 @@ result, send the subtask back, answer its question, or tell the user.
   and main chat replies left empty by `<no-reply/>`; the Agent API's
   `sessions search` is unchanged.
 
+### Scheduled Tasks Wake The Assistant
+
+Scheduled tasks travel the same pipeline (ticket 33,
+`.scratch/main-chat/issues/33-schedule-once-and-wake.md`, assistant PRD
+ruling 9; `core/src/scheduler.rs`, `core/src/subtask_report.rs`, migration
+049):
+
+- **What a fire does** (`scheduled_tasks.target`): `session` starts a session
+  that runs the prompt, as before; `assistant` starts no session and wakes the
+  main chat with a report carrying the task's words, when it was planned for,
+  when it went off and, from two minutes late on, how late (`2 days 3 hours`).
+  The assistant decides what to say or do; `<no-reply/>` is allowed.
+  `assistant` tasks are refused while the active runtime is not the managed
+  one or it has no main chat (`invalid_args`, message prefix
+  `assistant_unavailable:`), and do not fire meanwhile.
+- **One-offs** (`repeat_kind = 'once'`, `fire_at` UTC): fire once, not bound
+  to the local day — a computer asleep for days fires a missed one when it
+  wakes. A time already past is refused (`time_in_past:`).
+- **Durable**: a fire of an `assistant` task is stamped `last_wake =
+  'pending'`; every scheduler tick reads the pending fires into the waiting
+  reports (`restore_pending_reminders`, deduplicated per fire), so a restart
+  sends what was not delivered. Several due at once go in one wake. A fire
+  ends as `delivered` when the turn it woke ends, or as `notified` when it
+  could not reach the assistant — the main chat waiting for the user's
+  answer, its runner not starting or not taking the message, the turn ending
+  on an error before a reply. Then Core broadcasts
+  `scheduled-tasks:reminder-undelivered` `{ taskId, prompt, reason }` and the
+  desktop shows a system notification with the prompt; it is not retried.
+  The wake row is the usual `galley-report` row, the task ids in its note,
+  `[Galley: reminder <id> came due (…) — details: schedule show <id>]` as its
+  replay line.
+- **Sessions a task started** report each run that ends like a subtask,
+  while the managed runtime has a main chat and nobody wrote in the session
+  from an app; they stay ordinary sessions.
+- **Soft cancel**: deleting a task sets `cancelled_at`; the scheduler and the
+  default lists skip it, the row stays for its card.
+- **Where it was made**: a task the assistant (`--supervisor=galley-assistant`)
+  makes through the CLI while a main chat run is open records the main chat
+  and that run's starting turn; when the run ends Core fills its reply's
+  `turn_index` (`createdIn`).
+
 ## CLI Runtime Contract
 
 Galley has not shipped a stable CLI release before managed runtime, so the CLI

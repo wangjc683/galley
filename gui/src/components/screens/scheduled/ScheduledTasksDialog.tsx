@@ -19,6 +19,7 @@ import {
   deleteScheduledTask,
   formatFireTime,
   formDaysValid,
+  formFromTask,
   listScheduledTasks,
   mintScheduledTaskId,
   previewScheduledFire,
@@ -64,7 +65,7 @@ export interface ScheduledTasksDialogProps {
 const EXAMPLES: Array<{
   title: (copy: AppCopy) => string;
   prompt: (copy: AppCopy) => string;
-  repeat: ScheduledTaskRepeat;
+  repeat: Exclude<ScheduledTaskRepeat, { kind: "once" }>;
   timeOfDay: string;
 }> = [
   {
@@ -342,47 +343,33 @@ export function ScheduledTasksDialog({
                     </div>
                   </div>
                 ) : (
-                  tasks.map((task) => (
-                    <TaskRow
-                      key={task.id}
-                      task={task}
-                      session={
-                        task.lastRunSessionId
-                          ? sessionsById.get(task.lastRunSessionId)
-                          : undefined
-                      }
-                      onToggle={(enabled) => {
-                        void updateScheduledTask(task.id, { enabled })
-                          .then(reload)
-                          .catch((e) =>
-                            console.warn("[scheduled] toggle failed.", e),
-                          );
-                      }}
-                      onEdit={() =>
-                        setForm({
-                          id: task.id,
-                          prompt: task.prompt,
-                          projectId: task.projectId ?? "",
-                          repeatKind: task.repeat.kind,
-                          weekdays:
-                            task.repeat.kind === "weekly"
-                              ? task.repeat.weekdays
-                              : [],
-                          monthdays:
-                            task.repeat.kind === "monthly"
-                              ? task.repeat.monthdays
-                              : [],
-                          timeOfDay: task.timeOfDay,
-                          llmName: task.llmName ?? "",
-                        })
-                      }
-                      onDelete={() => setDeleting(task)}
-                      onOpenSession={(id) => {
-                        onSelectSession(id);
-                        onOpenChange(false);
-                      }}
-                    />
-                  ))
+                  tasks.map((task) => {
+                    const editForm = formFromTask(task);
+                    return (
+                      <TaskRow
+                        key={task.id}
+                        task={task}
+                        session={
+                          task.lastRunSessionId
+                            ? sessionsById.get(task.lastRunSessionId)
+                            : undefined
+                        }
+                        onToggle={(enabled) => {
+                          void updateScheduledTask(task.id, { enabled })
+                            .then(reload)
+                            .catch((e) =>
+                              console.warn("[scheduled] toggle failed.", e),
+                            );
+                        }}
+                        onEdit={editForm ? () => setForm(editForm) : undefined}
+                        onDelete={() => setDeleting(task)}
+                        onOpenSession={(id) => {
+                          onSelectSession(id);
+                          onOpenChange(false);
+                        }}
+                      />
+                    );
+                  })
                 )}
               </div>
               <div className="border-t border-line/70 px-5 py-2.5">
@@ -458,7 +445,9 @@ function TaskRow({
   task: ScheduledTask;
   session: Session | undefined;
   onToggle: (enabled: boolean) => void;
-  onEdit: () => void;
+  /** Absent for a one-off, which this form cannot edit (ticket 37
+   * redoes the list). */
+  onEdit?: () => void;
   onDelete: () => void;
   onOpenSession: (id: string) => void;
 }) {
@@ -490,12 +479,13 @@ function TaskRow({
       <button
         type="button"
         onClick={onEdit}
+        disabled={!onEdit}
         className={cn(
           "min-w-0 flex-1 text-left outline-none",
           "focus-visible:ring-2 focus-visible:ring-brand/30",
           !task.enabled && "opacity-55",
         )}
-        title={copy.scheduled.edit}
+        title={onEdit ? copy.scheduled.edit : undefined}
       >
         <div className="truncate text-[13px] text-ink">{task.prompt}</div>
         {/* tabular-nums: the next-fire time updates live via the
@@ -556,6 +546,17 @@ function LastRunCell({
       </span>
     );
   }
+  const label = copy.scheduled.lastRun(
+    formatFireTime(task.lastFiredAt, language),
+  );
+  // A task that wakes the assistant starts no session by design.
+  if (task.target === "assistant") {
+    return (
+      <span className="shrink-0 text-[11.5px] tabular-nums text-ink-muted">
+        {label}
+      </span>
+    );
+  }
   if (!task.lastRunSessionId) {
     return (
       <span className="shrink-0 text-[11.5px] text-warning">
@@ -563,9 +564,6 @@ function LastRunCell({
       </span>
     );
   }
-  const label = copy.scheduled.lastRun(
-    formatFireTime(task.lastFiredAt, language),
-  );
   if (!session) {
     return (
       <span className="shrink-0 text-[11.5px] tabular-nums text-ink-muted">

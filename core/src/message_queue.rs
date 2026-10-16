@@ -161,7 +161,13 @@ pub async fn dispatch_queued_message(
 /// waiting reports — the one just reported to, and this session if it is
 /// a main chat that took no queued message, so the user's queued
 /// messages go before a report ([`crate::subtask_report::spawn_wake_if_due`]).
-/// The reports live as long as this task.
+/// Before the queue step, too: a main chat turn that a wake for due
+/// scheduled tasks started settles them
+/// ([`crate::subtask_report::record_wake_run_end`]), and the tasks the
+/// assistant made in the run get its reply's turn
+/// ([`SqliteGalley::settle_scheduled_created_in`], ticket 33).
+/// `reports` is the app's one store, shared with the scheduler, which
+/// adds due tasks to it.
 ///
 /// `tauri::async_runtime::spawn`, NOT `tokio::spawn`: the caller is
 /// the synchronous setup hook, where no ambient tokio runtime exists —
@@ -173,9 +179,9 @@ pub fn spawn_queue_drain_task(
     manager: Arc<RunnerManager>,
     notifier: Arc<dyn Notifier>,
     app: Option<AppHandle>,
+    reports: Arc<crate::subtask_report::SubtaskReports>,
     mut rx: mpsc::UnboundedReceiver<RunSignal>,
 ) {
-    let reports = Arc::new(crate::subtask_report::SubtaskReports::new());
     tauri::async_runtime::spawn(async move {
         while let Some(signal) = rx.recv().await {
             let session_id = match &signal {
@@ -202,6 +208,25 @@ pub fn spawn_queue_drain_task(
             let report_to =
                 crate::subtask_report::record_run_end(&reports, &galley, manager.as_ref(), &signal)
                     .await;
+            // Due scheduled tasks a wake carried: delivered, or not
+            // (ticket 33). Then the tasks the assistant made in the run.
+            crate::subtask_report::record_wake_run_end(
+                &reports,
+                &galley,
+                manager.as_ref(),
+                notifier.as_ref(),
+                &signal,
+            )
+            .await;
+            match galley.settle_scheduled_created_in(&session_id).await {
+                Ok(0) => {}
+                Ok(_) => crate::notify::notify(
+                    notifier.as_ref(),
+                    crate::api::SCHEDULED_TASKS_CHANGED_EVENT,
+                    &(),
+                ),
+                Err(e) => eprintln!("[queue {session_id}] settling scheduled tasks failed: {e}"),
+            }
             let next = manager.queue_take_next(&signal).await;
             let took_next = next.is_some();
             if let Some(item) = next {

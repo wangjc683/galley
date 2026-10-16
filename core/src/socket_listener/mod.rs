@@ -681,6 +681,20 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
     }
 }
 
+/// The `session.new` handler with typed args, for Core's own callers
+/// (the scheduler's fire): exactly what a `session.new` request line
+/// runs, without going back through [`dispatch_line_with`] — the
+/// `schedule.run` command fires from inside that router.
+pub async fn dispatch_session_new_with(
+    ctx: &HandlerCtx<'_>,
+    args: SessionNewArgs,
+) -> SocketResponse {
+    match serde_json::to_value(args) {
+        Ok(value) => dispatch_session_new(None, value, ctx).await,
+        Err(e) => SocketResponse::err(None, ErrorTag::Internal, format!("session.new args: {e}")),
+    }
+}
+
 /// Lifetime guard for the socket file. Held in app state; when the app
 /// drops it (or panics with unwind), Drop unlinks the socket file on Unix.
 /// On Windows the named pipe namespace auto-cleans when all handles drop.

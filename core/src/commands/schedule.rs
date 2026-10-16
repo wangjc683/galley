@@ -7,11 +7,23 @@ use super::*;
 // another page's view, never corrupts it. The scheduler loop emits the
 // same event, through the same seam, when it stamps a fire.
 
+/// The tasks that are not cancelled (the list the desktop shows). With
+/// `all` (main chat ticket 33, optional), cancelled ones too — for the
+/// cards that say "cancelled".
 #[tauri::command]
 pub(crate) async fn list_scheduled_tasks(
     galley: State<'_, SqliteGalley>,
+    all: Option<bool>,
 ) -> std::result::Result<Vec<ScheduledTaskBrief>, String> {
-    galley.list_scheduled_tasks().await.map_err(stringify_error)
+    let scope = if all.unwrap_or(false) {
+        crate::db::ScheduleListScope::All
+    } else {
+        crate::db::ScheduleListScope::Live
+    };
+    galley
+        .list_scheduled_tasks_in(scope)
+        .await
+        .map_err(stringify_error)
 }
 
 #[tauri::command]
@@ -80,6 +92,13 @@ pub(crate) async fn preview_scheduled_fire(
         last_fired_at: base.as_ref().and_then(|t| t.last_fired_at.clone()),
         last_run_session_id: None,
         next_fire_at: None,
+        fire_at: None,
+        target: Default::default(),
+        last_due_at: None,
+        last_wake: None,
+        origin: None,
+        created_in: None,
+        cancelled_at: None,
         created_at: base
             .as_ref()
             .map(|t| t.created_at.clone())
@@ -105,6 +124,8 @@ pub(crate) async fn run_scheduled_task_now(
         .map_err(stringify_error)
 }
 
+/// Cancels the task (a soft delete since main chat ticket 33): the row
+/// stays with `cancelledAt`, the desktop's list no longer shows it.
 #[tauri::command]
 pub(crate) async fn delete_scheduled_task(
     app: tauri::AppHandle,

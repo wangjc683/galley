@@ -43,8 +43,10 @@ pub use origin::{
 pub use project::{CreateProjectInput, ProjectBrief, ProjectId, ProjectPatch};
 pub use queue::{QueuedMessage, SessionQueueChangedPayload, SESSION_QUEUE_CHANGED_EVENT};
 pub use schedule::{
-    CreateScheduledTaskInput, ScheduledTaskBrief, ScheduledTaskId, ScheduledTaskPatch,
-    ScheduledTaskRepeat, SCHEDULED_TASKS_CHANGED_EVENT,
+    CreateScheduledTaskInput, ReminderUndeliveredReason, ScheduleTarget,
+    ScheduledReminderUndelivered, ScheduledTaskBrief, ScheduledTaskCreatedIn, ScheduledTaskId,
+    ScheduledTaskPatch, ScheduledTaskRepeat, ScheduledWake, ASSISTANT_UNAVAILABLE,
+    SCHEDULED_REMINDER_UNDELIVERED_EVENT, SCHEDULED_TASKS_CHANGED_EVENT, TIME_IN_PAST,
 };
 pub use search::{SearchHit, SearchScope};
 pub use session::{
@@ -366,9 +368,10 @@ pub trait GalleyApi: Send + Sync {
 
     // ---------------- scheduled tasks ----------------
 
-    /// List all scheduled tasks, enabled first, then most recently
-    /// updated. `nextFireAt` is computed at read time from the local
-    /// repeat rule.
+    /// List the scheduled tasks that are not cancelled, enabled first,
+    /// then most recently updated. `nextFireAt` is computed at read time
+    /// from the local repeat rule (a one-off's `fireAt`). One-offs that
+    /// fired stay listed; cancelled tasks do not (main chat ticket 33).
     async fn list_scheduled_tasks(&self) -> Result<Vec<ScheduledTaskBrief>>;
 
     /// Create a scheduled task with the caller-assigned id (GUI mints
@@ -392,8 +395,11 @@ pub trait GalleyApi: Send + Sync {
         origin: Origin,
     ) -> Result<ScheduledTaskBrief>;
 
-    /// Delete a scheduled task. Sessions it created are ordinary
-    /// sessions and stay untouched.
+    /// Delete a scheduled task — softly, since main chat ticket 33: it is
+    /// cancelled (`cancelledAt`), the scheduler and the default lists skip
+    /// it, the row stays for its card. Cancelling a cancelled task does
+    /// nothing. Sessions it created are ordinary sessions and stay
+    /// untouched.
     ///
     /// **Errors**: `not_found`.
     async fn delete_scheduled_task(&self, id: ScheduledTaskId, origin: Origin) -> Result<()>;

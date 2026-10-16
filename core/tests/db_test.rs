@@ -58,6 +58,10 @@ const MIG_045: &str = include_str!("../migrations/045_ledger_exclusions.sql");
 const MIG_046: &str = include_str!("../migrations/046_main_chat_segments.sql");
 const MIG_047: &str = include_str!("../migrations/047_drop_ledger_exclusions.sql");
 const MIG_048: &str = include_str!("../migrations/048_subtasks.sql");
+const MIG_035: &str = include_str!("../migrations/035_scheduled_tasks.sql");
+const MIG_036: &str = include_str!("../migrations/036_scheduled_tasks_monthly.sql");
+const MIG_037: &str = include_str!("../migrations/037_scheduled_tasks_llm.sql");
+const MIG_049: &str = include_str!("../migrations/049_scheduled_tasks_once_and_wake.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -66,8 +70,9 @@ async fn fresh_pool() -> SqlitePool {
     for sql in [
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
-        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_031, MIG_034,
-        MIG_038, MIG_040, MIG_042, MIG_043, MIG_044, MIG_045, MIG_046, MIG_047, MIG_048,
+        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_031,
+        MIG_034, MIG_035, MIG_036, MIG_037, MIG_038, MIG_040, MIG_042, MIG_043, MIG_044, MIG_045,
+        MIG_046, MIG_047, MIG_048, MIG_049,
     ] {
         sqlx::raw_sql(sql)
             .execute(&pool)
