@@ -6,8 +6,6 @@ import {
   assistantFirstLine,
   assistantFollowBottom,
   assistantFollowTop,
-  assistantGroupCornerClass,
-  assistantJoinsGroup,
   assistantLineClock,
   assistantLinePlan,
   assistantLineSentence,
@@ -105,52 +103,6 @@ describe("assistantRowGap", () => {
     // The reply's reserved 30px action row already is the gap.
     expect(assistantRowGap("agent-bar", "user")).toBe("mt-0");
     expect(assistantRowGap("agent-bar", "agent")).toBe("mt-0");
-  });
-});
-
-describe("assistantJoinsGroup", () => {
-  it("is the 4px gap: the same side right above, never a reply's action row", () => {
-    expect(assistantJoinsGroup("user", "user")).toBe(true);
-    expect(assistantJoinsGroup("agent", "agent")).toBe(true);
-    expect(assistantJoinsGroup("user", "agent")).toBe(false);
-    expect(assistantJoinsGroup("agent", "user")).toBe(false);
-    expect(assistantJoinsGroup("agent-bar", "agent")).toBe(false);
-    expect(assistantJoinsGroup(null, "user")).toBe(false);
-    // The same rule as the gap: joined ⇔ mt-1.
-    for (const previous of ["user", "agent", "agent-bar", null] as const) {
-      for (const side of ["user", "agent"] as const) {
-        expect(assistantJoinsGroup(previous, side)).toBe(
-          assistantRowGap(previous, side) === "mt-1",
-        );
-      }
-    }
-  });
-});
-
-describe("assistantGroupCornerClass", () => {
-  it("leaves a bubble alone as it is", () => {
-    expect(assistantGroupCornerClass("user", false, false)).toBeUndefined();
-    expect(assistantGroupCornerClass("agent", false, false)).toBeUndefined();
-  });
-
-  it("rounds the sender's side less where a neighbour of the group is", () => {
-    // Yours, on the right: first, middle, last.
-    expect(assistantGroupCornerClass("user", false, true)).toBe(
-      "[&>[data-role^=user-msg]]:rounded-br-(--bubble-group-radius)",
-    );
-    expect(assistantGroupCornerClass("user", true, true)).toBe(
-      "[&>[data-role^=user-msg]]:rounded-tr-(--bubble-group-radius) [&>[data-role^=user-msg]]:rounded-br-(--bubble-group-radius)",
-    );
-    expect(assistantGroupCornerClass("user", true, false)).toBe(
-      "[&>[data-role^=user-msg]]:rounded-tr-(--bubble-group-radius)",
-    );
-    // Its, on the left.
-    expect(assistantGroupCornerClass("agent", false, true)).toBe(
-      "[&>[data-role=assistant-bubble]]:rounded-bl-(--bubble-group-radius)",
-    );
-    expect(assistantGroupCornerClass("agent", true, false)).toBe(
-      "[&>[data-role=assistant-bubble]]:rounded-tl-(--bubble-group-radius)",
-    );
   });
 });
 

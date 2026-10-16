@@ -49,16 +49,6 @@ export function timeLineAbove(message: Element): Element | null {
     : null;
 }
 
-/** The quotes drawn right above a user message's bubble (MessageQuotes
- * outside the bubble, telegram-details ticket 07), if any: the bubble's
- * previous sibling in its row. */
-export function quotesAbove(message: Element): Element | null {
-  const previous = message.previousElementSibling;
-  return previous?.getAttribute("data-role") === "message-quotes"
-    ? previous
-    : null;
-}
-
 /**
  * Signed distance from where a user message is to where it parks, for
  * a scroll container whose top edge is at `containerTop` (viewport
@@ -66,8 +56,7 @@ export function quotesAbove(message: Element): Element | null {
  * USER_MSG_ANCHOR_TOLERANCE_PX it counts as parked, above that as
  * below the anchor, under it as above. Measures the time line right
  * above the message when there is one (TIME_LINE_ANCHOR_TOP_PX), the
- * bubble otherwise (USER_MSG_ANCHOR_TOP_PX) — from the top of its quotes
- * when they are drawn above it, so a parked message shows them.
+ * bubble otherwise (USER_MSG_ANCHOR_TOP_PX).
  */
 export function userMsgParkOffset(
   message: Element,
@@ -76,7 +65,7 @@ export function userMsgParkOffset(
   const line = timeLineAbove(message);
   return line
     ? line.getBoundingClientRect().top - containerTop - TIME_LINE_ANCHOR_TOP_PX
-    : (quotesAbove(message) ?? message).getBoundingClientRect().top -
+    : message.getBoundingClientRect().top -
         containerTop -
         USER_MSG_ANCHOR_TOP_PX;
 }

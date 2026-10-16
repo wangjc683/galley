@@ -4,31 +4,90 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   animateTextareaHeight,
+  COMPOSER_GROW_EASING_TOKEN,
   composerGrowDurationMs,
-  easeOut,
+  cubicBezier,
+  parseCubicBezier,
 } from "@/lib/composer-grow";
 import { keepBottomOnViewportResize } from "@/lib/viewport-resize";
 
+/** `--ease-firm` as globals.css defines it: the tests read the token's
+ * definition, as the page does, never a copy of its numbers. */
+const FIRM_TOKEN = (() => {
+  const css = readFileSync(
+    path.resolve(__dirname, "../styles/globals.css"),
+    "utf8",
+  );
+  const match = /--ease-firm:\s*([^;]+);/.exec(css);
+  if (!match) throw new Error("--ease-firm is not defined in globals.css");
+  return match[1];
+})();
+const firm = cubicBezier(...parseCubicBezier(FIRM_TOKEN)!);
+
+/** The page's root style, with the token (or `value`) on it. */
+function stubToken(value: string = FIRM_TOKEN) {
+  vi.stubGlobal("document", { documentElement: {} });
+  vi.stubGlobal("getComputedStyle", () => ({
+    getPropertyValue: (name: string) =>
+      name === COMPOSER_GROW_EASING_TOKEN ? ` ${value}` : "",
+  }));
+}
+
 describe("composerGrowDurationMs", () => {
-  it("is nothing for the instant path or a change under a pixel", () => {
-    expect(composerGrowDurationMs("instant", 45)).toBe(0);
-    expect(composerGrowDurationMs("fixed", 0.5)).toBe(0);
-    expect(composerGrowDurationMs("distance", -0.5)).toBe(0);
+  it("is nothing for a change under a pixel", () => {
+    expect(composerGrowDurationMs(0.5)).toBe(0);
+    expect(composerGrowDurationMs(-0.5)).toBe(0);
   });
 
-  it("is 100ms for any change in the fixed option", () => {
-    expect(composerGrowDurationMs("fixed", 22)).toBe(100);
-    expect(composerGrowDurationMs("fixed", -157)).toBe(100);
-  });
-
-  it("follows Telegram's 50 × ln|Δh| by distance, growing or shrinking", () => {
+  it("follows Telegram's 50 × ln|Δh|, growing or shrinking", () => {
     // One more line at the standard size (about 22px).
-    expect(composerGrowDurationMs("distance", 22)).toBe(155);
+    expect(composerGrowDurationMs(22)).toBe(155);
     // One line to three (48 → 93).
-    expect(composerGrowDurationMs("distance", 45)).toBe(190);
+    expect(composerGrowDurationMs(45)).toBe(190);
     // One line to eight (48 → 205), and back after a send.
-    expect(composerGrowDurationMs("distance", 157)).toBe(253);
-    expect(composerGrowDurationMs("distance", -157)).toBe(253);
+    expect(composerGrowDurationMs(157)).toBe(253);
+    expect(composerGrowDurationMs(-157)).toBe(253);
+  });
+});
+
+describe("the --ease-firm curve", () => {
+  it("is read off the token's definition: cubic-bezier(0.2, 0, 0, 1)", () => {
+    expect(parseCubicBezier(FIRM_TOKEN)).toEqual([0.2, 0, 0, 1]);
+    expect(parseCubicBezier(" cubic-bezier(0.2,0,0,1) ")).toEqual([
+      0.2, 0, 0, 1,
+    ]);
+    expect(parseCubicBezier("ease-out")).toBeNull();
+    expect(parseCubicBezier("")).toBeNull();
+    // x outside 0–1 is not a timing function CSS accepts.
+    expect(parseCubicBezier("cubic-bezier(1.2, 0, 0, 1)")).toBeNull();
+  });
+
+  it("evaluates a cubic Bézier the way CSS does", () => {
+    // CSS ease-out, cubic-bezier(0, 0, 0.58, 1), at known points.
+    const easeOut = cubicBezier(0, 0, 0.58, 1);
+    expect(easeOut(0.5)).toBeCloseTo(0.6847, 3);
+    expect(easeOut(0.25)).toBeCloseTo(0.3781, 3);
+    // --ease-firm against a brute-force reading of the same curve.
+    const reference = (t: number) => {
+      let best = 0;
+      let bestGap = Infinity;
+      for (let i = 0; i <= 200_000; i++) {
+        const s = i / 200_000;
+        const x = 3 * (1 - s) * (1 - s) * s * 0.2 + s * s * s;
+        if (Math.abs(x - t) < bestGap) {
+          bestGap = Math.abs(x - t);
+          best = 3 * (1 - s) * s * s + s * s * s;
+        }
+      }
+      return best;
+    };
+    for (const t of [0.1, 0.25, 0.5, 0.75, 0.9]) {
+      expect(firm(t)).toBeCloseTo(reference(t), 4);
+    }
+    expect(firm(0)).toBe(0);
+    expect(firm(1)).toBe(1);
+    // Decisive arrival: well past half way at half the time.
+    expect(firm(0.5)).toBeGreaterThan(0.85);
   });
 });
 
@@ -74,45 +133,31 @@ function stubFrames() {
 
 const px = (el: HTMLTextAreaElement) => Number.parseFloat(el.style.height);
 
-describe("easeOut", () => {
-  it("is CSS ease-out: quick off the mark, settling in", () => {
-    expect(easeOut(0)).toBe(0);
-    expect(easeOut(1)).toBe(1);
-    expect(easeOut(0.5)).toBeCloseTo(0.6847, 3);
-    expect(easeOut(0.25)).toBeCloseTo(0.3781, 3);
-  });
-});
-
 describe("animateTextareaHeight", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("leaves the instant path to the caller and touches nothing", () => {
-    const el = input(77, "32px");
-    expect(animateTextareaHeight(el, "instant", cap(189))).toBe(false);
-    expect(el.style.height).toBe("32px");
-    expect(el.style.overflowY).toBe("");
-  });
-
-  it("moves to the text's height over the option's time, ease-out, frame by frame", () => {
+  it("moves to the text's height over 50 × ln|Δh| ms on --ease-firm, frame by frame", () => {
+    stubToken();
     const frames = stubFrames();
     const el = input(77, "32px");
-    expect(animateTextareaHeight(el, "fixed", cap(189))).toBe(true);
+    expect(animateTextareaHeight(el, cap(189))).toBe(true);
     // Nothing moves until the first frame.
     expect(el.style.height).toBe("32px");
     // Fits under the cap: no scrollbar while a line lands ahead of the
     // box.
     expect(el.style.overflowY).toBe("hidden");
     const heights: number[] = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 12; i++) {
       frames.frame();
       heights.push(px(el));
     }
-    // 100ms: 16, 32, … 96, then 112 lands it.
-    expect(heights[0]).toBeCloseTo(32 + 45 * easeOut(0.16), 5);
-    expect(heights[2]).toBeCloseTo(32 + 45 * easeOut(0.48), 5);
-    expect(heights[6]).toBe(77);
+    // 45px: 190ms. 16, 32, … 176, then 192 lands it.
+    expect(heights[0]).toBeCloseTo(32 + 45 * firm(16 / 190), 5);
+    expect(heights[4]).toBeCloseTo(32 + 45 * firm(80 / 190), 5);
+    expect(heights[10]).toBeLessThan(77);
+    expect(heights[11]).toBe(77);
     expect(frames.pending()).toBe(0);
     // Always on its way up.
     for (let i = 1; i < heights.length; i++) {
@@ -120,11 +165,12 @@ describe("animateTextareaHeight", () => {
     }
   });
 
-  it("takes 50 × ln|Δh| ms by distance, back down after a send too", () => {
+  it("takes 253ms for the whole way back down after a send", () => {
+    stubToken();
     const frames = stubFrames();
     const back = input(32, "189px");
-    animateTextareaHeight(back, "distance", cap(189));
-    // 253ms for 157px: not there at 240, there at 256.
+    animateTextareaHeight(back, cap(189));
+    // Not there at 240, there at 256.
     for (let i = 0; i < 15; i++) frames.frame();
     expect(px(back)).toBeGreaterThan(32);
     frames.frame();
@@ -132,9 +178,10 @@ describe("animateTextareaHeight", () => {
   });
 
   it("carries on from where it stands when the next line comes mid-way", () => {
+    stubToken();
     const frames = stubFrames();
     const el = input(54, "32px");
-    animateTextareaHeight(el, "distance", cap(189));
+    animateTextareaHeight(el, cap(189));
     frames.frame();
     frames.frame();
     const mid = px(el);
@@ -142,7 +189,7 @@ describe("animateTextareaHeight", () => {
     expect(mid).toBeLessThan(54);
     // A third line: off again from `mid`, no jump back or ahead.
     (el as unknown as { scrollHeight: number }).scrollHeight = 77;
-    animateTextareaHeight(el, "distance", cap(189));
+    animateTextareaHeight(el, cap(189));
     frames.frame(1);
     expect(px(el)).toBeGreaterThanOrEqual(mid);
     expect(px(el)).toBeLessThan(mid + 2);
@@ -151,46 +198,54 @@ describe("animateTextareaHeight", () => {
   });
 
   it("stops at the cap and scrolls past it", () => {
+    stubToken();
     const frames = stubFrames();
     const el = input(400, "77px");
-    animateTextareaHeight(el, "distance", cap(189));
+    animateTextareaHeight(el, cap(189));
     expect(el.style.overflowY).toBe("");
     for (let i = 0; i < 20; i++) frames.frame();
     expect(el.style.height).toBe("189px");
   });
 
   it("sets the first height at once, and moves nothing for no change", () => {
+    stubToken();
     const frames = stubFrames();
     const mounted = input(32);
-    animateTextareaHeight(mounted, "distance", cap(189));
+    animateTextareaHeight(mounted, cap(189));
     expect(mounted.style.height).toBe("32px");
     expect(frames.pending()).toBe(0);
 
     const same = input(77, "77px");
-    animateTextareaHeight(same, "fixed", cap(189));
+    animateTextareaHeight(same, cap(189));
     expect(same.style.height).toBe("77px");
     expect(frames.pending()).toBe(0);
   });
 
-  it("stops a motion and clears what it set when switched back to instant", () => {
+  it("is instant under reduced motion, and stops a motion on its way", () => {
+    stubToken();
     const frames = stubFrames();
     const el = input(77, "32px");
-    animateTextareaHeight(el, "fixed", cap(189));
+    animateTextareaHeight(el, cap(189));
     frames.frame();
-    expect(animateTextareaHeight(el, "instant", cap(189))).toBe(false);
-    expect(frames.pending()).toBe(0);
-    expect(el.style.overflowY).toBe("");
-  });
-
-  it("is instant under reduced motion", () => {
     vi.stubGlobal("window", {
       matchMedia: (query: string) => ({
         matches: query === "(prefers-reduced-motion: reduce)",
       }),
     });
+    expect(animateTextareaHeight(el, cap(189))).toBe(false);
+    expect(frames.pending()).toBe(0);
+    expect(el.style.overflowY).toBe("");
+  });
+
+  it("is instant when the token cannot be read, and touches nothing", () => {
+    stubToken("");
     const el = input(77, "32px");
-    expect(animateTextareaHeight(el, "distance", cap(189))).toBe(false);
+    expect(animateTextareaHeight(el, cap(189))).toBe(false);
     expect(el.style.height).toBe("32px");
+    expect(el.style.overflowY).toBe("");
+    vi.unstubAllGlobals();
+    // No page at all (a static render).
+    expect(animateTextareaHeight(el, cap(189))).toBe(false);
   });
 });
 
@@ -207,7 +262,6 @@ describe("the composer's animated growth keeps the conversation pinned", () => {
    * ResizeObserver (lib/viewport-resize.ts).
    */
   function run(
-    timing: "fixed" | "distance",
     from: number,
     to: number,
     // Where the input moves in the frame: in the frame callbacks (ours),
@@ -215,6 +269,7 @@ describe("the composer's animated growth keeps the conversation pinned", () => {
     // frame's start).
     moves: "in-frame" | "before-read" = "in-frame",
   ) {
+    stubToken();
     const frames = stubFrames();
     let fire: () => void = () => {};
     vi.stubGlobal(
@@ -243,7 +298,7 @@ describe("the composer's animated growth keeps the conversation pinned", () => {
     layout();
     view.scrollTop = view.scrollHeight - view.clientHeight;
     fire();
-    animateTextareaHeight(el, timing, cap(189));
+    animateTextareaHeight(el, cap(189));
     let scrolled = false;
     const seen: { dist: number; atBottom: boolean }[] = [];
     while (seen.length < 40) {
@@ -273,17 +328,14 @@ describe("the composer's animated growth keeps the conversation pinned", () => {
   }
 
   it("lands every frame at the bottom, and never reads as scrolled up", () => {
-    for (const [timing, from, to] of [
-      // A pasted page in 100ms: up to ~45px a frame.
-      ["fixed", 32, 189],
-      ["distance", 32, 189],
+    for (const [from, to] of [
+      // A pasted page, one line to eight.
+      [32, 189],
       // One more line, and back to one line after a send.
-      ["fixed", 32, 54],
-      ["distance", 32, 54],
-      ["fixed", 189, 32],
-      ["distance", 189, 32],
+      [32, 54],
+      [189, 32],
     ] as const) {
-      const seen = run(timing, from, to);
+      const seen = run(from, to);
       expect(seen.length).toBeGreaterThan(5);
       for (const frame of seen) {
         expect(Math.abs(frame.dist)).toBeLessThan(0.001);
@@ -293,10 +345,10 @@ describe("the composer's animated growth keeps the conversation pinned", () => {
   });
 
   it("would leave a frame unpinned if the input moved before the scroll event read (why not a CSS transition)", () => {
-    // The page pasted in 100ms: a step past 24px reads as scrolled up,
-    // and the frame after it is not pinned (in Chrome with a transition:
-    // one frame 17px low).
-    const seen = run("fixed", 32, 189, "before-read");
+    // The page pasted: --ease-firm's steepest frames step past 24px,
+    // which reads as scrolled up, and the frame after it is not pinned
+    // (in Chrome with a transition: one frame 17px low).
+    const seen = run(32, 189, "before-read");
     expect(seen.some((frame) => !frame.atBottom)).toBe(true);
     expect(Math.max(...seen.map((frame) => frame.dist))).toBeGreaterThan(10);
   });
@@ -309,12 +361,9 @@ describe("the composer's animated growth keeps the conversation pinned", () => {
       "utf8",
     );
     const call = source.indexOf(
-      "if (animateTextareaHeight(el, timing, oneLineMaxHeightPx)) return;",
+      "if (oneLine && animateTextareaHeight(el, oneLineMaxHeightPx)) return;",
     );
     expect(call).toBeGreaterThan(-1);
     expect(source.indexOf('el.style.height = "auto";')).toBeGreaterThan(call);
-    expect(source).toContain(
-      'const timing = oneLine ? composerGrowTiming() : "instant";',
-    );
   });
 });
