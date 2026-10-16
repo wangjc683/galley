@@ -165,9 +165,20 @@ describe("the main chat is the assistant's conversation", () => {
     expect(count(main, PROCESS)).toBe(1);
     const other = render({ isMainChat: false });
     expect(other).not.toContain('data-role="assistant-bubble"');
-    expect(other).not.toContain("max-w-[min(80%,560px)]");
     expect(other).not.toContain(PROCESS);
     expect(other).toContain('data-role="run-fold"');
+    // The user's words sit on the right in both (workbench ticket 01);
+    // only beside the question rail does the bubble read the scroll
+    // box's width and the column's cap to keep off the rail.
+    expect(other).toContain("ml-auto max-w-[min(80%,560px)]");
+    expect(other).toContain(
+      "overflow-y-auto px-8 py-6 @container/conversation [--conversation-column:760px]",
+    );
+    expect(main).not.toContain("@container/conversation");
+    expect(main).not.toContain("--conversation-column");
+    expect(render({ isMainChat: false, conversationWidth: "wide" })).toContain(
+      "[--conversation-column:1200px]",
+    );
   });
 
   it("stacks a short conversation up from the composer (贴底)", () => {

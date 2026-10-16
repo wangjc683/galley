@@ -81,13 +81,11 @@ export interface RunGroup {
   complete: boolean;
   /** True when the conversation may render this run folded: complete
    * and free of system turns (/btw exchanges must not be swallowed).
-   * Single-step runs fold too (2026-08-06, reversing the launch
-   * decision): the header became the only home of settled
-   * run duration when the footer ⏱ was removed — absence now loses
-   * data, not just uniformity — and since the folded render dropped
-   * its StrongHr, header + answer is quieter than the unfolded
-   * marker + rule + answer, so the fold pays even with nothing to
-   * hide. */
+   * Single-step runs folded too from 2026-08-06 (reversing the launch
+   * decision: the header had become the only home of settled run
+   * duration); since 2026-10-16 the workbench draws them as their
+   * answer alone instead, with no header at all — see
+   * `answeredInOneStep`. */
   foldable: boolean;
   /** The run-shape half of `foldable` (user-opened, no system turns).
    * While the run is still live this is what lets the conversation
@@ -305,6 +303,23 @@ export function liveRunGroup(
   const last = groups[groups.length - 1];
   if (!last || last.complete || !last.foldEligible) return null;
   return agentRunning || askUserPending ? last : null;
+}
+
+/**
+ * A settled run that answered in one step: the closing turn is its
+ * only agent turn. The workbench draws it as the answer alone — no
+ * fold header, no step marker, no StrongHr (workbench conversation PRD
+ * ruling 7, as the assistant leaves nothing of a one-step round); its
+ * tokens and context stay in the answer's hover row. The rule reads
+ * the step count and nothing else: on the dogfood data none of the 46
+ * one-step replies carried reasoning or a preamble. Such a run never
+ * ran a tool either — the closing turn is all `no_tool` by definition
+ * (`isClosingTurn`), and any real tool call would have been a step of
+ * its own before it. The cost is its duration, which only the header
+ * showed (2026-08-06), and the step's DetailPanel.
+ */
+export function answeredInOneStep(group: RunGroup): boolean {
+  return group.complete && group.stats.stepCount === 1;
 }
 
 /**
