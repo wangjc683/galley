@@ -651,6 +651,18 @@
 
 ---
 
+## OpenAI 接口的回复被截断时没有提示
+
+- **状态**：暂存
+- **提出**：2026-10-16（JC 发现主对话一条回复不完整；查明是引擎收到的就是半截，JC：「如果不是 Galley 问题，那先不改」）
+- **启动信号**：再遇到一次没有任何提示的半截回复。
+- **现状**：内置引擎走 OpenAI `chat_completions` 时，解析流式回复（`managed-ga/code/llmcore.py` `_parse_openai_sse`）不看 `finish_reason`，也不检查流是否正常结束：撞长度上限、被内容过滤截掉、连接被提前关掉，都当成写完。`responses` 接口只在一个字都没收到时才标截断。上游对 Anthropic 接口是处理的（同文件：流中途断、撞 max_tokens、拒答都在回复末尾追加一行提示）。2026-10-16 那条（输出 225 个 token，排除撞上限）具体原因查不到：引擎没记 `finish_reason`。9 月以来 369 条最终回复里只此一条。
+- **方案**：内置引擎补丁，OpenAI 两种接口照上游 Anthropic 那套：`length` / `content_filter` / 流未正常结束时在回复末尾追加一行带原因的提示，并把 `finish_reason` 写进模型响应日志。加进补丁栈，写明上游补上就删。外置 GA 照旧。
+- **待定**：提示文案（照上游的英文还是走 Galley 文案规范）；不做自动续写（多套一层，被过滤截掉的再请求多半照样截）。
+- **关联**：[telegram-details devlog](./2026-10-16-telegram-details.md)。
+
+---
+
 ## 滚动时浮动日期（主对话往回翻）
 
 - **状态**：暂存
@@ -690,23 +702,6 @@
   是另一个问题。（原「`GoalCommissionMarker` 前的间距是否同步」随 2026-10-13 Goal 移除作废。）
 - **关联**：[run-fold header spacing](./2026-08-06-run-fold-header-spacing.md)、
   [user message highlighter](./2026-08-06-user-message-highlighter.md)。
-
----
-
-## 自动滚动到最终答案开头（scroll-on-completion）
-
-- **状态**：可能撤下（2026-10-16 telegram-details 票 06 之后回复开头本来就在眼前，JC 真机验收后撤）
-- **提出**：2026-05-13
-- **启动信号**：beta / 公测用户反馈「每次长答案出来都要手动往上滚才能开始读」是高频痛点。
-- **方案（E）**：默认 read mode；流式期间不做 stream-follow（用户可手动滚到底 opt-in watch mode）；`run_complete` 时 smooth scroll 把最终答案开头（`[data-role="final-answer"]` wrapper）定位到 viewport top + 32px。这个 scroll 动作本身同时充当「GA 完成了」的视觉信号。
-- **实施要点（约 5 处小改）**：
-  1. `Conversation.tsx` AgentTurnView：给 final turn 的 MessageAgent 套 `<div data-role="final-answer">`
-  2. `useAppStore.ts`：加 `runCompleteTick: number`（初值 0）
-  3. `ipc-handlers.ts` 的 `run_complete` case：`runCompleteTick + 1`
-  4. `MainView.tsx`：加 useEffect 监听 tick，RAF 后 smooth `scrollBy` 到 final-answer（复用 `userSubmitTick` effect 的位置计算逻辑）
-  5. `MainView.tsx` stream-follow effect：删掉提交后 `atBottom` 自动翻 true 的隐含行为
-- **待定**：用户主动 scroll 中遇 `run_complete` 是否强制 snap（倾向 snap）；smooth 时长 200-300ms 未实测；anchor 用 MessageAgent wrapper 还是 StrongHr（倾向前者）。
-- **关联**：原讨论已并入本节（原 `2026-05-13-scroll-on-completion-deferred` entry 已收编删除）。
 
 ---
 
