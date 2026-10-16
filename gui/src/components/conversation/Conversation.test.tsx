@@ -513,6 +513,45 @@ describe("the workbench's grammar (workbench conversation ticket 01)", () => {
     );
   });
 
+  it("puts each time line right before its message's row, the bubble a child of the row (what parking reads)", () => {
+    // lib/conversation-anchor.ts `timeLineAbove` finds the line as the
+    // previous sibling of the bubble's parent; both conversations.
+    const turns: Turn[] = [
+      user("早", at(9)),
+      answer("早。", 1),
+      user("下午好", at(15), {
+        origin: { via: "supervisor", supervisor: "galley-assistant" },
+      }),
+      answer("下午好。", 1),
+    ];
+    for (const html of [render(turns), render(turns, { assistant: true })]) {
+      const lines = [...html.matchAll(/data-role="message-time-divider"/g)].map(
+        (m) => m.index,
+      );
+      expect(lines).toHaveLength(2);
+      for (const at of lines) {
+        const close =
+          html.indexOf("</time></div>", at) + "</time></div>".length;
+        expect(html.slice(close).startsWith('<div class="group relative')).toBe(
+          true,
+        );
+      }
+      for (const content of ["早", "下午好"]) {
+        // The row's direct children: the bubble is one of them.
+        const row = rowOf(html, content);
+        const children: string[] = [];
+        let depth = 0;
+        for (const m of row.matchAll(/<div\b[^>]*>|<\/div>/g)) {
+          if (m[0] === "</div>") depth--;
+          else if (++depth === 2) children.push(m[0]);
+        }
+        expect(
+          children.some((tag) => tag.startsWith('<div data-role="user-msg"')),
+        ).toBe(true);
+      }
+    }
+  });
+
   it("adds nothing above a time line right under a reply, 16px at the top", () => {
     const html = render([
       user("早", at(9)),

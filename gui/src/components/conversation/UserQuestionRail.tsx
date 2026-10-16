@@ -4,7 +4,7 @@ import { PauseCircle } from "@phosphor-icons/react";
 import { useCopy } from "@/lib/i18n";
 import {
   USER_MSG_ANCHOR_TOLERANCE_PX,
-  USER_MSG_ANCHOR_TOP_PX,
+  userMsgParkOffset,
 } from "@/lib/conversation-anchor";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { buildRailExchanges } from "@/lib/rail-preview";
@@ -26,9 +26,10 @@ import type { Turn } from "@/types/conversation";
  *     user-msgs in agent-heavy stretches naturally spread apart on the
  *     rail; clusters of follow-up questions show as adjacent dots.
  *     Mirrors the native scrollbar's position semantics.
- *   - "Active" dot = the topmost user-msg whose top is at or above the
- *     viewport's USER_MSG_ANCHOR_TOP_PX anchor line (matches the same line MainView
- *     uses for submit-snap and ⌥↑/⌥↓).
+ *   - "Active" dot = the last user-msg parked at or above the anchor
+ *     line (lib/conversation-anchor.ts `userMsgParkOffset`: its bubble
+ *     on the line, or the time line right above it at its own — the
+ *     same rule MainView uses for submit-snap and ⌥↑/⌥↓).
  *
  * Click jumps to that user-msg via the same scrollBy delta pattern as
  * MainView's keyboard nav (no jarring instant jump, no scroll-into-view
@@ -345,11 +346,10 @@ export function UserQuestionRail({
     return () => observer.disconnect();
   }, [scrollContainerRef, exchanges]);
 
-  // Track which dot is "current" — the most recent user-msg whose
-  // top is at or above the viewport's USER_MSG_ANCHOR_TOP_PX anchor (where
-  // MainView parks user-msgs after submit / keyboard nav). Same
-  // 8px tolerance as MainView's ⌥↑/⌥↓ math so the boundary feels
-  // identical.
+  // Track which dot is "current" — the most recent user-msg parked at
+  // or above the anchor (where MainView parks user-msgs after submit /
+  // keyboard nav; `userMsgParkOffset`). Same 8px tolerance as
+  // MainView's ⌥↑/⌥↓ math so the boundary feels identical.
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -359,13 +359,12 @@ export function UserQuestionRail({
         '[data-role="user-msg"]',
       );
       if (userMsgs.length === 0) return;
-      const scrollTop = container.scrollTop;
-      const anchorTop =
-        scrollTop + USER_MSG_ANCHOR_TOP_PX + USER_MSG_ANCHOR_TOLERANCE_PX;
       const containerTop = container.getBoundingClientRect().top;
       let last = -1;
       userMsgs.forEach((el, i) => {
-        if (getTopInScrollContent(containerTop, scrollTop, el) <= anchorTop) {
+        if (
+          userMsgParkOffset(el, containerTop) <= USER_MSG_ANCHOR_TOLERANCE_PX
+        ) {
           last = i;
         }
       });
@@ -387,10 +386,10 @@ export function UserQuestionRail({
     );
     const target = userMsgs[idx];
     if (!target) return;
-    const delta =
-      target.getBoundingClientRect().top -
-      container.getBoundingClientRect().top -
-      USER_MSG_ANCHOR_TOP_PX;
+    const delta = userMsgParkOffset(
+      target,
+      container.getBoundingClientRect().top,
+    );
     const prefersReducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;

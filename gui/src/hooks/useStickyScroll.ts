@@ -7,6 +7,8 @@ import {
 import {
   USER_MSG_ANCHOR_TOLERANCE_PX,
   USER_MSG_ANCHOR_TOP_PX,
+  timeLineAbove,
+  userMsgParkOffset,
 } from "@/lib/conversation-anchor";
 import { keepBottomOnViewportResize } from "@/lib/viewport-resize";
 import { turnsHoldMessage, useMessagesStore } from "@/stores/messages";
@@ -23,6 +25,9 @@ const LOCATE_RETRY_FRAMES = 30;
  * globals.css. */
 const LOCATE_HIGHLIGHT_NAME = "galley-locate";
 const LOCATE_MAX_TERM_RANGES = 200;
+/** A user message's bubble, a run opener or an ask_user reply. */
+const USER_MSG_SELECTOR =
+  '[data-role="user-msg"], [data-role="user-msg-reply"]';
 
 /**
  * Case-insensitive substring occurrences of `query` inside `root`'s
@@ -434,9 +439,12 @@ export function useStickyScroll({
       );
       const last = userMsgs[userMsgs.length - 1];
       if (!last) return;
-      const containerRect = container.getBoundingClientRect();
-      const targetTop = last.getBoundingClientRect().top;
-      const delta = targetTop - containerRect.top - USER_MSG_ANCHOR_TOP_PX;
+      // The bubble's top on the anchor line, or the time line right
+      // above it at its own (lib/conversation-anchor.ts).
+      const delta = userMsgParkOffset(
+        last,
+        container.getBoundingClientRect().top,
+      );
       if (Math.abs(delta) < 1) return;
       container.scrollBy({ top: delta, behavior: "smooth" });
     });
@@ -474,33 +482,32 @@ export function useStickyScroll({
       );
       if (userMsgs.length === 0) return;
 
-      const containerRect = container.getBoundingClientRect();
-      const anchor = USER_MSG_ANCHOR_TOP_PX;
+      const containerTop = container.getBoundingClientRect().top;
       const tolerance = USER_MSG_ANCHOR_TOLERANCE_PX;
 
-      const tops = userMsgs.map(
-        (el) => el.getBoundingClientRect().top - containerRect.top,
-      );
+      // How far each message is from where it parks (its bubble on the
+      // anchor line, or the time line right above it at its own):
+      // positive below, negative above.
+      const offsets = userMsgs.map((el) => userMsgParkOffset(el, containerTop));
 
-      let target: HTMLElement | undefined;
+      let target: number | undefined;
       if (e.key === "ArrowDown") {
-        // Next user-msg whose top is below the current anchor line.
-        target = userMsgs.find((_, i) => tops[i] > anchor + tolerance);
+        // Next user-msg parking below the current anchor line.
+        target = offsets.findIndex((offset) => offset > tolerance);
+        if (target < 0) target = undefined;
       } else {
-        // Previous user-msg whose top is above the current anchor line.
+        // Previous user-msg parking above the current anchor line.
         for (let i = userMsgs.length - 1; i >= 0; i--) {
-          if (tops[i] < anchor - tolerance) {
-            target = userMsgs[i];
+          if (offsets[i] < -tolerance) {
+            target = i;
             break;
           }
         }
       }
-      if (!target) return;
+      if (target === undefined) return;
 
       e.preventDefault();
-      const delta =
-        target.getBoundingClientRect().top - containerRect.top - anchor;
-      container.scrollBy({ top: delta, behavior: "smooth" });
+      container.scrollBy({ top: offsets[target], behavior: "smooth" });
     };
 
     document.addEventListener("keydown", onKeyDown);
@@ -571,10 +578,18 @@ export function useStickyScroll({
     // Park the first term occurrence when there is one — a long answer
     // can carry the match hundreds of px below the block's top — else
     // the block itself.
+    // A user message with a time line right above it parks as every
+    // other path parks it, the line in sight (lib/conversation-anchor.ts
+    // `userMsgParkOffset`): its words sit a few lines under that, so
+    // the term is on screen either way.
     const park = (target: HTMLElement, focal: Range | null): number => {
       const containerRect = container.getBoundingClientRect();
+      const timed =
+        target.matches(USER_MSG_SELECTOR) && timeLineAbove(target) !== null;
       const focalTop = (focal ?? target).getBoundingClientRect().top;
-      const delta = focalTop - containerRect.top - USER_MSG_ANCHOR_TOP_PX;
+      const delta = timed
+        ? userMsgParkOffset(target, containerRect.top)
+        : focalTop - containerRect.top - USER_MSG_ANCHOR_TOP_PX;
       const top = Math.max(0, container.scrollTop + delta);
       if (Math.abs(container.scrollTop - top) < 1) {
         // Same pixel — the write would be optimized away and paint
