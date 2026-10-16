@@ -325,7 +325,8 @@ Galley 有两套**并行**的字号系统，分属不同表面，二者不互相
 
 | CSS var | small | **standard** | large | 用途 |
 |---|---|---|---|---|
-| `--conversation-body-size` / `-leading` | 13.5 / 1.65 | **15 / 1.7** | 16.5 / 1.75 | agent + 用户消息正文 |
+| `--conversation-body-size` / `-leading` | 13.5 / 1.65 | **15 / 1.7** | 16.5 / 1.75 | agent + 用户消息正文（主对话的两种气泡里行高另取 1.5 / 1.55 / 1.6，见下） |
+| `--conversation-block-gap` | 10.5 | **12** | 13.5 | markdown 块间距的基数（约为行框 0.47；主对话的气泡里另取 9.5 / 10.5 / 12.5，见下） |
 | `--conversation-thinking-size` / `-leading` | 13 / 1.5 | **14 / 1.55** | 15.5 / 1.6 | italic thinking summary |
 | `--conversation-step-size` | 11.5 | **12** | 12.5 | TurnMarker 行（summary 字号；序号走 mono 档） |
 | `--conversation-tool-label-size` | 10.5 | **11** | 11.5 | inline pill 主标签（2026-09-16 降一档与 mono 同档，退到 step summary 之下） |
@@ -339,6 +340,8 @@ Galley 有两套**并行**的字号系统，分属不同表面，二者不互相
 | `--conversation-table-size` | 13 | **14** | 15.5 | markdown 表格 |
 | `--conversation-narration-size` / `-leading` | 12.5 / 1.55 | **13 / 1.6** | 14.5 / 1.65 | 线程内系统叙述行（降权；2026-10-13 由 `--conversation-goal-narration-*` 改名） |
 | `--conversation-composer-size` | 13.5 | **14.5** | 16 | Composer textarea |
+
+主对话的两种气泡（助手的与你的）里正文的行高与段距比上表收一档，字号不变（2026-10-16，[telegram-details PRD](../../.scratch/telegram-details/PRD.md) 裁决 8）：`--conversation-bubble-leading` 1.5 / **1.55** / 1.6、`--conversation-bubble-block-gap` 9.5 / **10.5** / 12.5px，由主对话的对话列注入（`assistantBubbleTextStyle`），只在两种气泡上替换 `--conversation-body-leading` 与 `--conversation-block-gap`（`ASSISTANT_BUBBLE_TEXT_CLASS`）。气泡外的小字、工作台、输入框照上表。见 [conversation.md](./conversation.md)「助手的对话」。
 
 **B. UI chrome 面 — 固定值 token**
 
@@ -364,7 +367,7 @@ Galley 有两套**并行**的字号系统，分属不同表面，二者不互相
 
 | Token（utility） | 值 | 用途 |
 |---|---|---|
-| `[line-height:var(--conversation-body-leading)]` | 1.7 | 对话正文（阅读面，随 tier 浮动） |
+| `[line-height:var(--conversation-body-leading)]` | 1.7 | 对话正文（阅读面，随 tier 浮动；主对话的气泡里 1.55） |
 | `leading-code` | 1.6 | 代码块 |
 | `leading-secondary` | 1.55 | 次要正文 / 二级信息 / Composer textarea |
 | `leading-notice` | 1.5 | 提示 / error 块 / Epigraph |

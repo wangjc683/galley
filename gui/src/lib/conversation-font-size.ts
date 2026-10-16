@@ -40,6 +40,9 @@ export function stepConversationFontSize(
  * line box ran 0.54 line at `small` and 0.42 at `large`: asking for a
  * bigger face made the document *tighter*, the opposite of the request.
  * The values below hold that ratio near 0.47 across all three tiers.
+ *
+ * The main chat's two bubbles take a tighter leading and gap of their own
+ * (`assistantBubbleTextStyle`, below); everything else reads these.
  */
 const TYPOGRAPHY_VARS: Record<
   ConversationFontSize,
@@ -112,3 +115,65 @@ export function conversationTypographyStyle(
 ): CSSProperties {
   return TYPOGRAPHY_VARS[size];
 }
+
+/**
+ * The main chat's bubbles set their text a step tighter than the
+ * workbench's prose (telegram-details PRD ruling 8, after JC's 「主对话信息
+ * 稍微有点密度不够」 in a live test; he compared four options live and took
+ * this one, ticket 10).
+ * The size stays the tier's; the leading drops 0.15 and the paragraph gap
+ * follows the smaller line box:
+ *
+ *              small         standard       large
+ *   workbench  13.5 / 1.65   15 / 1.7       16.5 / 1.75    gap 10.5 / 12 / 13.5
+ *   bubbles    13.5 / 1.5    15 / 1.55      16.5 / 1.6     gap  9.5 / 10.5 / 12.5
+ *
+ * The gaps hold about 0.47 of the line box, as the tier table above does
+ * (standard sits at 0.45, the value compared live). A bubble is a short
+ * IM message in a narrow column (about 42 characters a line at 760), not
+ * a page of a document, so 1.7 left it airy.
+ *
+ * Only the text in the two bubbles takes it: the main chat's column carries
+ * `assistantBubbleTextStyle` and `ASSISTANT_BUBBLE_TEXT_CLASS`, which
+ * re-declares the tier's variables on the assistant's bubble
+ * (`data-role="assistant-bubble"`, AssistantParts: its replies, the
+ * greeting, its questions, a report round's reply; the leading and the
+ * gap, for its markdown) and the user's (`data-role^="user-msg"`,
+ * MessageUser: the leading; it has no paragraphs). Everything else in the
+ * column keeps the tier's values: the process and subtask cards, the line
+ * while it works, the time lines, the candidates under a question, a run
+ * drawn in full or a /btw exchange; inside a bubble the headings, code and
+ * tables keep their sizes (their margins are multiples of the gap, so they
+ * follow it), and so do the quotes atop the user's bubble. The workbench
+ * and the composer are not touched.
+ */
+const ASSISTANT_BUBBLE_TEXT_VARS: Record<
+  ConversationFontSize,
+  CSSProperties & Record<`--conversation-bubble-${string}`, string>
+> = {
+  small: {
+    "--conversation-bubble-leading": "1.5",
+    "--conversation-bubble-block-gap": "9.5px",
+  },
+  standard: {
+    "--conversation-bubble-leading": "1.55",
+    "--conversation-bubble-block-gap": "10.5px",
+  },
+  large: {
+    "--conversation-bubble-leading": "1.6",
+    "--conversation-bubble-block-gap": "12.5px",
+  },
+};
+
+export function assistantBubbleTextStyle(
+  size: ConversationFontSize,
+): CSSProperties {
+  return ASSISTANT_BUBBLE_TEXT_VARS[size];
+}
+
+/** The main chat's column: its two bubbles take the bubble values. */
+export const ASSISTANT_BUBBLE_TEXT_CLASS = [
+  "[&_[data-role=assistant-bubble]]:[--conversation-body-leading:var(--conversation-bubble-leading)]",
+  "[&_[data-role=assistant-bubble]]:[--conversation-block-gap:var(--conversation-bubble-block-gap)]",
+  "[&_[data-role^=user-msg]]:[--conversation-body-leading:var(--conversation-bubble-leading)]",
+].join(" ");
