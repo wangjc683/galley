@@ -1693,6 +1693,9 @@ export const zhCopy = {
     messageTimeYesterday: (time: string) => `昨天 ${time}`,
     copy: "复制",
     copySelection: "复制选中",
+    // 选中文字浮出的第二颗：把所选以 Markdown 引用放进输入框（Telegram
+    // 细节票 02）。
+    quoteSelection: "引用",
     copied: "已复制",
     // Telemetry tooltips. The meter says "约" because its number is
     // converted from GA's char budget by a ×3 heuristic, while input /

@@ -1,7 +1,12 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect } from "react";
 
-import { focusComposerUnlessClaimed } from "@/lib/composer-focus";
+import {
+  focusComposerUnlessClaimed,
+  hasOpenLayer,
+  pressKeepsComposerFocus,
+  typeToFocusAction,
+} from "@/lib/composer-focus";
 
 /**
  * All composer focus wiring in one hook. The policy (when the composer
@@ -23,7 +28,15 @@ import { focusComposerUnlessClaimed } from "@/lib/composer-focus";
  *    where some focus paths turn the first outside click into "blur
  *    only", swallowing the click on a button / link / menuitem. We blur
  *    during the capture phase, then re-dispatch the click ourselves if
- *    the native one never arrives.
+ *    the native one never arrives. Not for a press that keeps the
+ *    composer focused (4): no blur, nothing to work around.
+ * 4. Presses that keep focus, and typing that takes it (telegram-details
+ *    ticket 03; the rules are in lib/composer-focus.ts): with the
+ *    composer focused, a press on a conversation button or on the
+ *    conversation's blank backdrop has its mousedown default prevented,
+ *    so the caret stays; a printable key typed while nothing that takes
+ *    keys has focus focuses the composer first and lands in it
+ *    (`TYPE_TO_FOCUS_MODE` switches this part off or to "focus only").
  *
  * Known gap: on Windows, Alt+Tab reactivation sets DOM focus correctly
  * but WebView2 can leave Win32 keyboard focus stranded outside the
@@ -82,6 +95,7 @@ export function useComposerFocus(
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (composerRootRef.current?.contains(target)) return;
+      if (pressKeepsComposerFocus(target, selectsText)) return;
       const clickTarget = target.closest<HTMLElement>(
         'button, a[href], [role="button"], [role="menuitem"], [role="radio"]',
       );
@@ -126,4 +140,46 @@ export function useComposerFocus(
       );
     };
   }, [textareaRef, composerRootRef]);
+
+  // 4. Presses that keep focus; typing that takes it.
+  useEffect(() => {
+    const keepFocusOnPress = (event: MouseEvent) => {
+      if (document.activeElement !== textareaRef.current) return;
+      if (event.button !== 0 || event.ctrlKey) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (composerRootRef.current?.contains(target)) return;
+      if (pressKeepsComposerFocus(target, selectsText)) event.preventDefault();
+    };
+    const takeTypedKey = (event: KeyboardEvent) => {
+      const textarea = textareaRef.current;
+      if (!textarea || textarea.disabled) return;
+      const action = typeToFocusAction(
+        event,
+        document.activeElement,
+        hasOpenLayer(document),
+      );
+      if (action === "none") return;
+      textarea.focus({ preventScroll: true });
+      if (action === "focus-swallow") event.preventDefault();
+    };
+
+    document.addEventListener("mousedown", keepFocusOnPress, true);
+    document.addEventListener("keydown", takeTypedKey, true);
+    return () => {
+      document.removeEventListener("mousedown", keepFocusOnPress, true);
+      document.removeEventListener("keydown", takeTypedKey, true);
+    };
+  }, [textareaRef, composerRootRef]);
+}
+
+/** Would a press on `el` start a text selection? */
+function selectsText(el: Element): boolean {
+  const style = getComputedStyle(el);
+  const value =
+    style.userSelect ||
+    (style as CSSStyleDeclaration & { webkitUserSelect?: string })
+      .webkitUserSelect ||
+    "";
+  return value !== "none";
 }

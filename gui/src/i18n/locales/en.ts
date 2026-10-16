@@ -1695,6 +1695,7 @@ export const enCopy: AppCopy = {
     messageTimeYesterday: (time) => `Yesterday ${time}`,
     copy: "Copy",
     copySelection: "Copy selection",
+    quoteSelection: "Quote",
     copied: "Copied",
     // Telemetry tooltips. The meter is prefixed "~" because its number is
     // converted from GA's char budget by a ×3 heuristic, while input /

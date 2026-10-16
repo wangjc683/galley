@@ -35,3 +35,33 @@ Status: ready-for-agent
 - 真机（JC）：主对话与工作台各写半句不发 → 退出 App 重开（或 `tauri dev` 重启）→ 草稿还在，侧栏助手卡片显示「草稿：…」。
 
 ## Comments
+
+### 2026-10-16 实现（子代理，分支 `td-composer`）
+
+**做了什么**
+
+- `gui/src/lib/composer-draft.ts`：每次 `saveComposerDraft` 在改内存的同时把这一份草稿的文字写进 localStorage，一个草稿一个键 `galley.draft.<草稿键>`（会话 id、`empty-state`、`main-composer`），值就是展开后的全文（不包 JSON）。清空（`saveComposerDraft` 收到空草稿）、发出与删除（`dropComposerDraft`）当场 `removeItem`。模块加载时把 `galley.draft.*` 全部读回内存 map（`images: []`），之后照旧只读内存；`readComposerDraft` 的调用方一处没改。开头「Deliberately NOT persisted」那段换成现在的约定、依据（Telegram）与代价（图片不存，只有图片的草稿重启后没了）。
+- `gui/src/stores/sessions/shared.ts`：`forgetDeletedSessions` 里对每个被删的会话 `dropComposerDraft`。
+- 文档：`docs/design/conversation.md` §4.4「视觉」那条草稿规则改写；`docs/design/layout-and-chrome.md` 助手卡片「草稿从内存草稿来」一句跟着改。
+
+**取舍（票里「你定」的）**
+
+- 写入时机：**每次改动当场写，不防抖**。票的原则是关 App 前最后一次改动不丢，Tauri 关窗不保证 `beforeunload` / `pagehide`，防抖窗口里 ⌘Q 就丢；当场写之后页面这一侧没有「还没写」的状态，也就不用挂任何关窗兜底。代价是长草稿（粘贴了几千行再打字）每一键都整段 `setItem` 一次；写入前比对上次写下的文字，相同就跳过（加删图片、重新挂载时的回写都不会再写一遍）。WebKit 把 localStorage 落盘本身还有它自己的节奏，页面管不到，这一点只能真机看（见下）。
+- 清理放在哪：放在 `forgetDeletedSessions`。它是删除的唯一汇合点：本页删（`deleteSessionPermanently`、批量删、清空归档）在 Core 确认后走它，别处删（CLI、手机、另一页）由 Core 的 `session-deleted-external` 广播走它，重置主对话也经 `applyExternalSessionDeleted` 走它（`main-chat-reset.ts` 原本就逐个 drop，留着，幂等）。写操作都要经 Core，Core 跑在 App 里，所以 App 关着时不会有会话被删，不需要启动时再比对一遍。没选「会话列表加载后比对」：`hydrate` 的 `list_sessions` 按当前运行时过滤（`runtimeKind`），拿它比会把另一个运行时的会话草稿当孤儿删掉；要比就得另发一次不过滤的 `list_sessions`，为一个已经封住的口子多一次启动 IPC，不值。归档的会话不清（还能恢复）。
+- 写失败（配额满、存储被禁）：内存照旧，同时把这个键在盘上的旧文字删掉，免得重启后冒出一份更早的草稿；之后写入恢复时下一次改动照常写。读 `window.localStorage` 本身抛错时整模块退回纯内存。全部静默，不弹提示。
+- 键名照票里的例子用 `galley.draft.`（与已有的 `galley_theme_preference` 风格不同，按票走）。
+
+**测试**
+
+- `lib/composer-draft.test.ts` 新增 7 条（node 没有 localStorage，测试里放一个内存版 `Storage`，`vi.resetModules()` 后重新 import 模拟重启）：重启后文字还在、图片不在；只写改了的那个键、文字没变不写；清空 / 发出 / drop 即删，只剩图片时盘上不留；读回后再发出即删；配额抛错退回内存且不留旧文字、恢复后照写；拿不到 storage 时纯内存；不碰别的 localStorage 键、读回时删掉空白键。
+- `stores/sessions.core-broadcast.test.ts` 删除那条加断言：删 `a` 后 `a` 的草稿没了、`b` 的还在。
+- `pnpm --dir gui typecheck`、`lint` 通过；相关 5 个文件 91 条通过。
+
+**JC 真机验收**
+
+1. 主对话写半句不发；工作台某个会话写半句不发；新对话空状态也写半句。
+2. ⌘Q 退出（最好打完最后一个字立刻 ⌘Q，测「最后一次改动不丢」）→ 重开（或 `tauri dev` 重启）。
+3. 三处草稿都在；不在主对话时侧栏助手卡片显示「草稿：…」。
+4. 带一张图的草稿重启后只剩文字（预期如此）。
+5. 发出 / 清空后再重启，草稿不回来。
+6. 若第 2 步立刻 ⌘Q 丢了最后几个字：那是 WebKit 落盘的节奏，页面这一侧已经当场写了，告诉主会话再议（可选的补救是 Rust 侧退出前等一下，超出本票「只改 GUI」）。

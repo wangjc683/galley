@@ -6,6 +6,7 @@ import {
   assistantScrollToBottom,
 } from "@/lib/assistant-conversation";
 import { chaseBottom } from "@/lib/chase-bottom";
+import { altArrowBelongsToField } from "@/lib/composer-focus";
 import {
   USER_MSG_ANCHOR_TOLERANCE_PX,
   USER_MSG_ANCHOR_TOP_PX,
@@ -417,19 +418,15 @@ export function useStickyScroll({
   // Bound to document, not the container — the conversation column
   // doesn't take focus naturally (it isn't tabbable). We bail out
   // when an editable element is focused so we don't steal Option+Up
-  // from text-cursor-by-paragraph navigation inside Composer.
+  // from text-cursor-by-paragraph navigation inside Composer — except
+  // an empty composer, which has no caret to move and is where focus
+  // nearly always is (telegram-details ticket 03).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!e.altKey || e.metaKey || e.ctrlKey) return;
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
 
-      const active = document.activeElement as HTMLElement | null;
-      if (active) {
-        const tag = active.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || active.isContentEditable) {
-          return;
-        }
-      }
+      if (altArrowBelongsToField(document.activeElement)) return;
 
       const container = scrollContainerRef.current;
       if (!container) return;

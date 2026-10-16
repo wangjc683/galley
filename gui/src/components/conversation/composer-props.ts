@@ -19,6 +19,13 @@ export interface ComposerHandle {
    * the end so the user can immediately edit / submit.
    */
   prefillText(text: string): void;
+  /**
+   * Quote a conversation selection (telegram-details ticket 02): append
+   * `selected` as a Markdown quote after the current text (one blank
+   * line between), keep the draft's images and placeholders, and focus
+   * with the caret on the line after the quote's blank line.
+   */
+  quote(selected: string): void;
   focus(): void;
 }
 
