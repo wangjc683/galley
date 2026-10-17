@@ -76,9 +76,10 @@ export interface TodoPanelProps {
  * conversation is open (ticket 46, ruling 95): looking is for anywhere,
  * noting and changing stay with Galley.
  *
- *   你的事       the user's to-dos not done, under 今天 (overdue first) /
- *               以后 / 随时: a box, the title, when it is due and its
- *               reminder
+ *   今天 / 以后 / 随时
+ *               the user's to-dos not done (overdue first under 今天),
+ *               with no label over them (ruling 98): a box, the title,
+ *               when it is due and its reminder
  *   Galley 在办  its subtasks and the one-off tasks it will come back
  *               to: no box, the session rows' status glyphs
  *   例行         repeating tasks: the rule and the next time
@@ -200,9 +201,10 @@ export function TodoPanelGroups({
   const copy = useCopy();
   const [doneOpen, setDoneOpen] = useState(defaultDoneOpen);
   const yours = todo.yours;
-  const hasYours =
-    yours.today.length + yours.later.length + yours.anytime.length > 0;
   const rowProps = { mainChatId, onGo, onTalkAbout };
+  // The user's to-dos are the list's own: by time, each its own group,
+  // with no label over them (main chat PRD ruling 98: a list kept for
+  // you doesn't tag yours as yours; only Galley's are set apart).
   const yourParts: [string, string, TodoItem[]][] = [
     ["today", copy.todo.groupToday, yours.today],
     ["later", copy.todo.groupLater, yours.later],
@@ -210,26 +212,21 @@ export function TodoPanelGroups({
   ];
   return (
     <>
-      {hasYours && (
-        <section data-todo-group="yours">
-          <GroupLabel label={copy.todo.groupYours} />
-          {yourParts.map(
-            ([key, label, items]) =>
-              items.length > 0 && (
-                <div key={key} data-todo-part={key}>
-                  <PartLabel label={label} />
-                  {items.map((item) => (
-                    <YourRow
-                      key={item.id}
-                      item={item}
-                      inToday={key === "today"}
-                      {...rowProps}
-                    />
-                  ))}
-                </div>
-              ),
-          )}
-        </section>
+      {yourParts.map(
+        ([key, label, items]) =>
+          items.length > 0 && (
+            <section key={key} data-todo-group="yours" data-todo-part={key}>
+              <GroupLabel label={label} />
+              {items.map((item) => (
+                <YourRow
+                  key={item.id}
+                  item={item}
+                  inToday={key === "today"}
+                  {...rowProps}
+                />
+              ))}
+            </section>
+          ),
       )}
       {todo.assistant.length > 0 && (
         <section data-todo-group="assistant">
@@ -326,16 +323,6 @@ function GroupLabel({
         />
       </span>
     </button>
-  );
-}
-
-/** 今天 / 以后 / 随时 under 你的事: a step quieter than a group (regular
- * where the group is semibold). */
-function PartLabel({ label }: { label: string }) {
-  return (
-    <div className="px-2.5 pb-0.5 pt-1.5 text-[11px] text-ink-muted">
-      {label}
-    </div>
   );
 }
 
@@ -468,8 +455,8 @@ function useTodoWrite(id: string) {
   return { flip, failure, cancelling };
 }
 
-/** 你的事: the box, the title, when it is due, its reminder and the day
- * it was noted (ticket 43); 「说说这件」 on the right, and
+/** One of the user's to-dos: the box, the title, when it is due and
+ * its reminder (ruling 97); 「说说这件」 on the right, and
  * 「取消提醒」 beside a reminder still to go
  * off — by the thing it removes, and not a second target beside the
  * first at the row's end (deferred.md 「session 行 hover 置顶按钮」: two

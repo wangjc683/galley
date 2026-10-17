@@ -153,21 +153,35 @@ function row(html: string, id: string): string {
 }
 
 describe("the panel's groups", () => {
-  it("draws the four groups in order, 你的事 in its three parts", () => {
+  it("draws the groups in order: your to-dos by time, no label over them (ruling 98), then Galley's", () => {
     const html = panel(FULL);
     expect(html).toContain('aria-label="待办"');
-    const order = ["yours", "assistant", "routine", "done"].map((g) =>
-      html.indexOf(`data-todo-group="${g}"`),
-    );
+    const order = [
+      'data-todo-part="today"',
+      'data-todo-part="later"',
+      'data-todo-part="anytime"',
+      'data-todo-group="assistant"',
+      'data-todo-group="routine"',
+      'data-todo-group="done"',
+    ].map((g) => html.indexOf(g));
     expect(order.every((at) => at > -1)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
-    for (const label of ["你的事", "Galley 在办", "例行", "已完成"]) {
+    for (const label of [
+      "今天",
+      "以后",
+      "随时",
+      "Galley 在办",
+      "例行",
+      "已完成",
+    ]) {
       expect(html).toContain(`>${label}<`);
     }
-    const parts = ["today", "later", "anytime"].map((p) =>
-      html.indexOf(`data-todo-part="${p}"`),
+    expect(html).not.toContain("你的事");
+    // 今天, 以后, 随时 are groups now, in the groups' register.
+    const today = html.slice(html.indexOf('data-todo-part="today"'));
+    expect(today).toMatch(
+      /^[^>]*><div class="[^"]*font-semibold[^"]*"><span[^>]*>今天</,
     );
-    expect(parts).toEqual([...parts].sort((a, b) => a - b));
     // No input anywhere (ruling 91 point 6).
     expect(html).not.toContain('<input type="text"');
     expect(html).not.toContain("<textarea");
@@ -235,7 +249,14 @@ describe("the panel's groups", () => {
   it("names the groups in English, never 「Galley」 in capitals", () => {
     const html = panel(FULL, { language: "en-US" });
     expect(html).not.toContain("uppercase");
-    for (const label of ["Yours", "Galley&#x27;s on it", "Routine", "Done"]) {
+    for (const label of [
+      "Today",
+      "Later",
+      "Anytime",
+      "Galley&#x27;s on it",
+      "Routine",
+      "Done",
+    ]) {
       expect(html).toContain(`>${label}<`);
     }
     expect(html).toContain('aria-label="Talk about this"');

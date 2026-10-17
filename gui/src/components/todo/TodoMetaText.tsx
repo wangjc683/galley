@@ -3,7 +3,7 @@ import { BellSimple } from "@phosphor-icons/react";
 import type { TodoMetaPart } from "@/lib/todo-panel";
 
 /**
- * A to-do's second line as text, the panel's 你的事 and the cards under
+ * A to-do's second line as text, the panel's rows and the cards under
  * replies alike: the parts joined by 「 · 」, overdue in warning; the
  * reminder a bell and its time, set apart by a gap instead of the dot
  * (main chat PRD ruling 97).

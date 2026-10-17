@@ -2050,7 +2050,6 @@ export const enCopy: AppCopy = {
   },
   todo: {
     title: "To-do",
-    groupYours: "Yours",
     groupToday: "Today",
     groupLater: "Later",
     groupAnytime: "Anytime",
