@@ -2064,7 +2064,8 @@ export const enCopy: AppCopy = {
       "For example: “I need to hand in the quarterly report by 3 PM Wednesday.”",
     emptyTalk: "Tell Galley",
     autostartHint:
-      "Galley doesn't launch at login, so reminders won't go off after a restart.",
+      "After your computer restarts, reminders wait until you open Galley.",
+    autostartHintClose: "Don't show again",
     talkAbout: "Talk about this",
     cancelReminder: "Cancel reminder",
     due: (when: string) => `Due ${when}`,

@@ -255,12 +255,14 @@ describe("the list", () => {
 
   it("warns about launch at login only while something is set to go off", () => {
     const set = { ...EMPTY_TODO, assistant: [item()] };
-    expect(todoAutostartHintVisible(false, set)).toBe(true);
-    expect(todoAutostartHintVisible(true, set)).toBe(false);
-    expect(todoAutostartHintVisible(null, set)).toBe(false);
-    expect(todoAutostartHintVisible(false, EMPTY_TODO)).toBe(false);
+    expect(todoAutostartHintVisible(false, set, false)).toBe(true);
+    expect(todoAutostartHintVisible(true, set, false)).toBe(false);
+    expect(todoAutostartHintVisible(null, set, false)).toBe(false);
+    expect(todoAutostartHintVisible(false, EMPTY_TODO, false)).toBe(false);
     const paused = { ...EMPTY_TODO, routine: [item({ state: "paused" })] };
-    expect(todoAutostartHintVisible(false, paused)).toBe(false);
+    expect(todoAutostartHintVisible(false, paused, false)).toBe(false);
+    // Closed with its × (ruling 96): gone, even with something set.
+    expect(todoAutostartHintVisible(false, set, true)).toBe(false);
     // A to-do's reminder still to go off counts.
     const reminded = item({
       kind: "todo",
@@ -273,9 +275,9 @@ describe("the list", () => {
       },
     });
     const yours = { today: [], later: [reminded], anytime: [] };
-    expect(todoAutostartHintVisible(false, { ...EMPTY_TODO, yours })).toBe(
-      true,
-    );
+    expect(
+      todoAutostartHintVisible(false, { ...EMPTY_TODO, yours }, false),
+    ).toBe(true);
   });
 });
 

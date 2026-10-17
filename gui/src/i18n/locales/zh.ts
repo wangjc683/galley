@@ -2048,8 +2048,12 @@ export const zhCopy = {
     empty: "要办的事，说一声就记在这里。",
     emptyExample: "比如「周三下午 3 点前要交季度报告」",
     emptyTalk: "跟 Galley 说",
-    /** 列表顶上一行（scheduled-tasks 票 14 的条件）。按钮沿用 scheduled.autostartEnable。 */
-    autostartHint: "Galley 未设为开机自动启动，电脑重启后提醒不会响。",
+    /** 列表最后一行小字（scheduled-tasks 票 14 的条件；主聊天裁决 96 挪到最后、可关）。
+     * 错过的提醒在打开 Galley 后补发（票 33），所以说「要先打开」，不说「不会响」。
+     * 后面跟的按钮沿用 scheduled.autostartEnable。 */
+    autostartHint: "电脑重启后，要先打开 Galley，提醒才会响。",
+    /** 那一行末尾的 ×：关掉后本机不再出现。 */
+    autostartHintClose: "不再提示",
     /** 悬停一行出现：把这件事引用进主对话的输入框。 */
     talkAbout: "说说这件",
     /** 悬停有提醒的待办出现：只去掉提醒，待办不动。 */

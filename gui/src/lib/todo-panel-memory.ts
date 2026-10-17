@@ -50,3 +50,30 @@ export function writeTodoPanelOpen(place: TodoPlace, open: boolean): void {
     // Storage unavailable: this run remembers, the next starts closed.
   }
 }
+
+/**
+ * The launch-at-login hint at the foot of the list, closed with its ×
+ * (main chat PRD ruling 96): gone for good on this machine, whatever
+ * comes to be set to go off later — launch at login stays in Settings →
+ * General. Same rules as above: only `"1"` counts, anything unreadable
+ * is not closed, a write that fails keeps it closed for this run alone.
+ */
+export const TODO_AUTOSTART_HINT_CLOSED_KEY = "galley.todoAutostartHintClosed";
+
+export function readAutostartHintClosed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(TODO_AUTOSTART_HINT_CLOSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function writeAutostartHintClosed(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(TODO_AUTOSTART_HINT_CLOSED_KEY, "1");
+  } catch {
+    // Storage unavailable: closed for this run, back on the next.
+  }
+}

@@ -39,7 +39,11 @@ import {
 import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { cn } from "@/lib/utils";
 import { goToTodoTarget, quoteTodo, talkToGalley } from "@/lib/todo-open";
-import type { TodoPlace } from "@/lib/todo-panel-memory";
+import {
+  readAutostartHintClosed,
+  writeAutostartHintClosed,
+  type TodoPlace,
+} from "@/lib/todo-panel-memory";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
 
 import { TodoCheck } from "./TodoCheck";
@@ -143,7 +147,6 @@ export function TodoPanel({
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-4 pt-2">
-        <AutostartHint todo={todo} />
         {loaded && todoPanelEmpty(todo) ? (
           <TodoPanelEmpty onTalk={talk} />
         ) : (
@@ -155,6 +158,7 @@ export function TodoPanel({
             defaultDoneOpen={defaultDoneOpen}
           />
         )}
+        <AutostartHint todo={todo} />
       </div>
     </div>
   );
@@ -670,11 +674,16 @@ function PlainLine({ text, tone }: { text: string; tone: TodoLineTone }) {
   );
 }
 
-/** The line at the top (scheduled-tasks ticket 14's condition and fix,
- * as the old 待办 dialog had it): launch at login is off while something
- * is set to go off. Unknown (browser dev, plugin missing) never warns. */
+/** The line at the foot of the list (scheduled-tasks ticket 14's
+ * condition and fix; main chat PRD ruling 96): launch at login is off
+ * while something is set to go off. A condition, not a to-do, so it
+ * sits below them in muted type — the warning colour is overdue's — and
+ * its × closes it for good on this machine. What it costs is lateness,
+ * not loss: a missed one-off reminder goes off when Galley next runs
+ * (ticket 33). Unknown (browser dev, plugin missing) never warns. */
 function AutostartHint({ todo }: { todo: AssistantTodo }) {
   const copy = useCopy();
+  const [closed, setClosed] = useState(readAutostartHintClosed);
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -691,7 +700,7 @@ function AutostartHint({ todo }: { todo: AssistantTodo }) {
       cancelled = true;
     };
   }, []);
-  if (!todoAutostartHintVisible(enabled, todo)) return null;
+  if (!todoAutostartHintVisible(enabled, todo, closed)) return null;
   const turnOn = () => {
     if (pending) return;
     setPending(true);
@@ -709,21 +718,40 @@ function AutostartHint({ todo }: { todo: AssistantTodo }) {
       })
       .finally(() => setPending(false));
   };
+  const close = () => {
+    writeAutostartHintClosed();
+    setClosed(true);
+  };
   return (
-    <div data-role="todo-autostart-hint" className="px-2.5 pb-2">
-      <p className="text-[11.5px] leading-[1.45] text-warning">
-        {copy.todo.autostartHint}
-      </p>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="-ml-2 mt-0.5"
-        disabled={pending}
-        onClick={turnOn}
+    <div
+      data-role="todo-autostart-hint"
+      className="mt-5 flex items-start gap-1 pl-2.5"
+    >
+      <div className="min-w-0 flex-1 pt-px text-[12px] leading-[1.5] text-ink-muted">
+        <p>{copy.todo.autostartHint}</p>
+        {/* Its own line in both languages: inline, it wraps by width
+            and lands indented. */}
+        <button
+          type="button"
+          disabled={pending}
+          onClick={turnOn}
+          className={cn(
+            "mt-0.5 block rounded-sm text-left text-ink-soft underline decoration-ink-muted/60 underline-offset-2 outline-none",
+            "hover:text-ink hover:decoration-ink focus-visible:ring-2 focus-visible:ring-brand/30",
+            "disabled:opacity-60",
+          )}
+        >
+          {copy.scheduled.autostartEnable}
+        </button>
+        {error && <p className="mt-1 text-error">{error}</p>}
+      </div>
+      <IconButton
+        size="xs"
+        ariaLabel={copy.todo.autostartHintClose}
+        onClick={close}
       >
-        {copy.scheduled.autostartEnable}
-      </Button>
-      {error && <p className="mt-1 text-[11.5px] text-error">{error}</p>}
+        <X size={12} weight="thin" />
+      </IconButton>
     </div>
   );
 }

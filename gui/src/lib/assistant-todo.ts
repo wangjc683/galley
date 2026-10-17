@@ -346,14 +346,17 @@ export function todoRowTarget(item: TodoItem): TodoTarget | null {
   return null;
 }
 
-/** The hint at the top of the list (scheduled-tasks ticket 14's rule):
- * launch at login is off and something is set to go off — a task, or a
- * to-do's reminder. Unknown (`null`) never warns. */
+/** The hint at the foot of the list (scheduled-tasks ticket 14's rule;
+ * main chat PRD ruling 96 moved it down and gave it a ×): launch at
+ * login is off and something is set to go off — a task, or a to-do's
+ * reminder — and the user has not closed it. Unknown (`null`) never
+ * warns. */
 export function todoAutostartHintVisible(
   autostartEnabled: boolean | null,
   todo: AssistantTodo,
+  closed: boolean,
 ): boolean {
-  if (autostartEnabled !== false) return false;
+  if (closed || autostartEnabled !== false) return false;
   const tasks = [...todo.assistant, ...todo.routine];
   const yours = [
     ...todo.yours.today,
