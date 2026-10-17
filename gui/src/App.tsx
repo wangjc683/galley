@@ -24,8 +24,6 @@ import { EarlierDialog } from "@/components/screens/earlier/EarlierDialog";
 import { CreateProjectDialog } from "@/components/screens/project/CreateProjectDialog";
 import { ScheduledTasksDialog } from "@/components/screens/scheduled/ScheduledTasksDialog";
 import { TodoPanel } from "@/components/todo/TodoPanel";
-// TEMP variant switcher (main-chat 45): the pill.
-import { TodoButtonVariantPill } from "@/components/todo/todo-button-variant/TodoButtonVariantPill";
 import {
   ConfirmDeleteProjectDialog,
   EditProjectDialog,
@@ -932,9 +930,6 @@ function App() {
           setEditingProjectId(null);
         }}
       />
-
-      {/* TEMP variant switcher (main-chat 45) */}
-      {hasMainChat && <TodoButtonVariantPill />}
 
       <ToastHost
         toasts={toasts}

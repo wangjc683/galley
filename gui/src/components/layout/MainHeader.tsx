@@ -22,9 +22,7 @@ export interface MainHeaderProps {
   /**
    * Galley's 待办 (main chat ticket 45): the tool cluster's first button,
    * opening and closing the to-do panel. Passed only while the main
-   * chat itself is open on the managed runtime (MainHeaderHost); then
-   * the header is also the `main-header` size container the button's
-   * word reads.
+   * chat itself is open on the managed runtime (MainHeaderHost).
    */
   onToggleTodo?: () => void;
   /** The to-do panel is on screen. */
@@ -270,11 +268,6 @@ export function MainHeader({
         // "the darker column". Bottom border matches SidebarHeader so
         // the two column headers line up into one continuous top strip.
         "flex h-11 shrink-0 items-stretch border-b border-line/60 bg-app text-[13px]",
-        // TEMP variant switcher (main-chat 45): D2's word gives way on a
-        // narrow header (TodoToggleButton); only with the button is the
-        // header a size container, so every other header renders as it
-        // did.
-        onToggleTodo && "@container/main-header",
         // Windows: no right padding — WindowControls owns the right edge
         // and hugs the window corner (= window top-right). Mac keeps its
         // 12px breathing room since the right cluster ends the header.

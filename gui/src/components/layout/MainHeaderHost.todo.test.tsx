@@ -11,9 +11,8 @@ import { MainHeaderHost } from "./MainHeaderHost";
  * the first button of the tool cluster (视图与设置), before Changes,
  * only on the managed runtime and only when App hands it the toggle —
  * which it does while the main chat itself is open (lib/todo-open.ts
- * `mainChatOnScreen`, tested there). Only then is the header the
- * `main-header` size container the button's word reads. The runtime is
- * seeded per test.
+ * `mainChatOnScreen`, tested there). The header is otherwise the same
+ * with and without it. The runtime is seeded per test.
  */
 
 const seed = vi.hoisted(() => ({
@@ -70,7 +69,6 @@ function header(
 
 const TODO = 'data-role="topbar-todo"';
 const TOOLS = 'aria-label="视图与设置"';
-const CONTAINER = "@container/main-header";
 
 describe("the main header's 待办", () => {
   it("is the tool cluster's first button, before Changes", () => {
@@ -84,7 +82,6 @@ describe("the main header's 待办", () => {
     expect(tools.indexOf(TODO)).toBeLessThan(changes);
     // In the tool cluster, not the status cluster before it.
     expect(html.indexOf(TODO)).toBeGreaterThan(html.indexOf(TOOLS));
-    expect(html).toContain(CONTAINER);
   });
 
   it("is pressed while the panel is open", () => {
@@ -99,11 +96,9 @@ describe("the main header's 待办", () => {
   it("is not there without the toggle (a subtask, the workbench) nor on the external runtime", () => {
     const without = header({ todo: false });
     expect(without).not.toContain(TODO);
-    expect(without).not.toContain(CONTAINER);
     seed.runtime = "external";
     const external = header();
     expect(external).not.toContain(TODO);
-    expect(external).not.toContain(CONTAINER);
     // The header is otherwise the same with and without it.
     seed.runtime = "managed";
     expect(header({ todo: false })).toBe(without);

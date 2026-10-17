@@ -10,10 +10,9 @@ import { TodoToggleButton } from "./TodoToggleButton";
 /**
  * Galley's 待办 in its top bar (main chat ticket 45): the list icon, N
  * beside it only when N > 0 (Core's `todayCount`, plain text, never a
- * badge), pressed and `bg-selected` while the panel is open, and the
- * temporary D1 / D2 forms. Static rendering reads a store's initial
- * state, so today's count and the variant are handed in by mocking the
- * hooks.
+ * badge), pressed and `bg-selected` while the panel is open, and no
+ * word (D1, ruled 2026-10-17). Static rendering reads a store's initial
+ * state, so today's count is handed in by mocking the hook.
  */
 
 const todo = vi.hoisted(() => ({ todayCount: 0 }));
@@ -21,25 +20,8 @@ vi.mock("@/stores/assistant-todo", () => ({
   useAssistantTodoStore: (select: (state: unknown) => unknown) =>
     select({ todo: { ...EMPTY_TODO, todayCount: todo.todayCount } }),
 }));
-const variant = vi.hoisted(() => ({ value: "D1" }));
-vi.mock(
-  "@/components/todo/todo-button-variant/todo-button-variant",
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import("@/components/todo/todo-button-variant/todo-button-variant")
-      >();
-    return {
-      ...actual,
-      useTodoButtonVariant: (select: (state: unknown) => unknown) =>
-        select({ variant: variant.value, set: () => {} }),
-    };
-  },
-);
-
 afterEach(() => {
   todo.todayCount = 0;
-  variant.value = "D1";
 });
 
 function render(
@@ -91,26 +73,11 @@ describe("the top bar's 待办 button", () => {
     expect(render({ open: true })).toContain('aria-pressed="true"');
   });
 
-  it("D1 has no word; D2 adds 「待办」, which gives way on a narrow header (TEMP, main-chat 45)", () => {
+  it("has no word beside the icon (D1)", () => {
     todo.todayCount = 2;
-    const d1 = render();
-    expect(d1).toContain('data-variant="D1"');
-    expect(d1).not.toContain(">待办<");
-    variant.value = "D2";
-    const d2 = render();
-    expect(d2).toContain('data-variant="D2"');
-    expect(d2).toContain(">待办<");
-    // Tests run as neither macOS nor Windows: the Windows / Linux
-    // thresholds, per language. The word is hidden below them.
-    expect(d2).toContain("hidden @min-[780px]/main-header:inline");
-    expect(render({ language: "en-US" })).toContain(
-      "hidden @min-[890px]/main-header:inline",
-    );
-    expect(render({ language: "en-US" })).toContain(">To-do<");
-    // The count stays in both.
-    expect(d2).toContain(">2<");
-    // With the word and no count the button still widens for the word.
+    expect(render()).not.toContain(">待办<");
+    expect(render({ language: "en-US" })).not.toContain(">To-do<");
     todo.todayCount = 0;
-    expect(render()).toContain("w-auto gap-1 px-[5px]");
+    expect(render()).not.toContain("w-auto");
   });
 });
