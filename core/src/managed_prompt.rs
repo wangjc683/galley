@@ -41,7 +41,10 @@ macro_rules! history_cli_commands {
 
 /// The configuration boundary of "What Only The User Changes In Galley",
 /// as every session but the main chat reads it: workbench sessions,
-/// subtasks and IM. The main chat reads
+/// subtasks and IM. Its last sentence sends to-dos, reminders and
+/// scheduled tasks to the Galley conversation (main chat PRD rulings 90
+/// and 95: a workbench model has the CLI, and the to-do panel opens
+/// beside its conversation too). The main chat reads
 /// [`MAIN_CHAT_USER_ONLY_CONFIGURATION`] in its place (ticket 36): its
 /// assistant sets reminders and scheduled tasks itself. A macro so the
 /// paragraph is written once and still sits inside
@@ -53,9 +56,9 @@ interface: model providers and API keys, Channels, Browser Control and its
 browser extension, the runtime, updates, and display. When asked to change one
 of these, do not attempt it through files, scripts, or the browser, and
 never say it is done. Tell the user where it is, and prepare what they need:
-the values to fill in. Reminders and scheduled tasks are set by the assistant,
-in the Galley conversation at the top of the sidebar: ask the user to tell it
-there, and never say one is set."#
+the values to fill in. To-dos, reminders and scheduled tasks are kept by the
+assistant, in the Galley conversation atop the sidebar: ask the user to tell
+it there, and never say one is noted or set."#
     };
 }
 
@@ -101,8 +104,8 @@ open-source GenericAgent.
 Galley's features, and where the user finds them:
 - Sidebar: conversations, Projects (conversations grouped around a folder).
   ⌘K (Ctrl+K on Windows) searches every past conversation.
-- The Galley conversation's top bar: its to-do ("待办" / "To-do": reminders,
-  scheduled tasks, subtasks), which opens beside it.
+- Every conversation's top bar: the to-do ("待办" / "To-do": reminders,
+  scheduled tasks, subtasks), opening beside it.
 - Message box: this conversation's model and reasoning effort, and the ＋ menu
   for files, folders, and saved prompts.
 - Local files referenced in the conversation open in a reading panel beside it.
@@ -800,10 +803,13 @@ mod tests {
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(prompt.contains("never write `sche_tasks`"));
             // Since tickets 36–37 the assistant sets them, from the
-            // main chat; its to-do opens from the Galley conversation's
-            // top bar (main chat PRD rulings 84, 86, 93).
+            // main chat; its to-do opens from every conversation's top
+            // bar (main chat PRD rulings 84, 86, 93, 95).
             assert!(prompt.contains("\"待办\" / \"To-do\""));
-            assert!(prompt.contains("in the Galley conversation at the top of the sidebar"));
+            assert!(prompt.contains("- Every conversation's top bar: the to-do (\"待办\""));
+            assert!(prompt.contains("subtasks), opening beside it."));
+            assert!(!prompt.contains("The Galley conversation's top bar"));
+            assert!(prompt.contains("in the Galley conversation atop the sidebar"));
         }
     }
 
@@ -869,7 +875,8 @@ mod tests {
     /// to-do in the feature map (main chat PRD ruling 90, measured then on
     /// macOS only, so Windows sat 7 over until this diff), 44 when the
     /// to-do moved to the Galley conversation's top bar and took its own
-    /// line in the map (ruling 93). To
+    /// line in the map (ruling 93). Ruling 95 (every conversation's top
+    /// bar; to-dos in the redirect sentence) changed it by 0 bytes. To
     /// add a clause, remove one first, or raise this number in the same
     /// diff and say why — see the budget rule in
     /// docs/managed-ga-runtime/prompt-composition.md. Bytes, not tokens:
@@ -1183,7 +1190,8 @@ mod tests {
         assert!(!main.contains("Channels, scheduled tasks, Browser"));
         assert!(!main.contains("the prompt and time for a scheduled task"));
         assert!(!main.contains("so the prompt must stand on its own"));
-        assert!(!main.contains("ask the user to tell it"));
+        assert!(!main.contains("ask the user to tell"));
+        assert!(!main.contains("never say one is noted or set"));
         // galley#31 and the capability rule stay for the main chat too.
         assert!(main.contains("never write `sche_tasks`"));
         assert!(main.contains("Do not"));
@@ -1192,10 +1200,12 @@ mod tests {
         );
 
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
+            // Ruling 95: to-dos too, now that the panel opens beside
+            // every conversation and the workbench has `galley todo`.
             assert!(prompt.contains(
-                "the values to fill in. Reminders and scheduled tasks are set by the assistant,"
+                "the values to fill in. To-dos, reminders and scheduled tasks are kept by the"
             ));
-            assert!(prompt.contains("there, and never say one is set."));
+            assert!(prompt.contains("it there, and never say one is noted or set."));
             assert!(!prompt.contains("Reminders and scheduled tasks are not on this list"));
             assert!(!prompt.contains("your manual"));
         }

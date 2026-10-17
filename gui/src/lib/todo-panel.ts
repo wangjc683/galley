@@ -16,9 +16,10 @@ import {
   formatScheduleDay,
 } from "@/lib/message-time";
 import { repeatSummary } from "@/lib/scheduled-tasks";
+import { TODO_PLACES, type TodoPlace } from "@/lib/todo-panel-memory";
 
 /**
- * The to-do panel beside the main chat and the to-do cards under the
+ * The to-do panel beside a conversation and the to-do cards under the
  * replies that noted them (main chat ticket 42, PRD ruling 91): what a
  * row says, where its title leads, which cards hang under which reply,
  * when the list must be read again. Pure; the store
@@ -35,20 +36,33 @@ export const TODO_PANEL_WIDTH = 320;
 export const TODO_PANEL_ID = "todo-panel";
 
 /**
- * Whether a panel opening in the reading panel's place closes the to-do
- * panel — closed, and remembered so (ticket 45: closed when a file
- * preview replaces it). The Git review is the window's: it stays open
- * across conversations and would stand in the to-do panel's place
- * beside Galley too, so it closes it wherever it opens. A file preview
- * is its conversation's and goes when you leave it, so it closes the
- * to-do panel only when it replaces it on screen; one opened in the
- * workbench or a subtask leaves the panel to come back with Galley.
+ * Which of the to-do panel's places a panel opening in the reading
+ * panel's place closes — closed, and remembered so (ticket 45: closed
+ * when a file preview replaces it; ticket 46: per place). `shown` is the
+ * place whose panel is on screen, null when none is. The Git review is
+ * the window's: it stays open across conversations and would stand in
+ * the to-do panel's place in both, so it closes both wherever it opens.
+ * A file preview is its conversation's and goes when you leave it, so
+ * it closes only the place it replaces on screen; with no panel on
+ * screen it closes none, and the other place's panel comes back when
+ * you go there.
  */
 export function readingPanelClosesTodo(
   kind: "preview" | "review",
-  todoShown: boolean,
+  shown: TodoPlace | null,
+): readonly TodoPlace[] {
+  if (kind === "review") return TODO_PLACES;
+  return shown ? [shown] : [];
+}
+
+/** Whether a place's panel has just been opened (`next` against
+ * `previous`): it takes the reading panel's place, which closes the
+ * file preview or the review there (LocalFileWorkspace). */
+export function todoPanelOpened(
+  next: Readonly<Record<TodoPlace, boolean>>,
+  previous: Readonly<Record<TodoPlace, boolean>>,
 ): boolean {
-  return kind === "review" || todoShown;
+  return TODO_PLACES.some((place) => next[place] && !previous[place]);
 }
 
 /**
@@ -256,7 +270,7 @@ export function doneRowLine(
 }
 
 /**
- * Where a row's title leads from the panel: the reply in this main chat
+ * Where a row's title leads from the panel: the reply in the main chat
  * that noted it (the 查找聊天记录 jump), a subtask, a scheduled run's
  * session; null when it has nowhere (made outside a reply, by another
  * agent, or in a main chat since reset).

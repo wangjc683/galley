@@ -35,11 +35,7 @@ import {
 } from "@/lib/composer-focus";
 import { CopyProvider, copyForLanguage } from "@/lib/i18n";
 import { findMainChat, openMainChat } from "@/lib/main-chat";
-import {
-  mainChatOnScreen,
-  openTodoPanel,
-  toggleTodoPanel,
-} from "@/lib/todo-open";
+import { openTodoPanel, todoView, toggleTodoPanel } from "@/lib/todo-open";
 import { TODO_PANEL_ID, TODO_PANEL_WIDTH } from "@/lib/todo-panel";
 import { useAppHydrationEffects } from "@/hooks/useAppHydrationEffects";
 import { useAssistantTodoSync } from "@/hooks/useAssistantTodoSync";
@@ -434,21 +430,27 @@ function App() {
   const assistantName = copy.assistant.name;
   // With a main chat the sidebar can collapse, by the toggle at the main
   // header's left or ⌘\ (ticket 08); the external runtime has neither.
-  const hasMainChat = useMemo(
-    () => findMainChat(visibleSessions) !== undefined,
+  const mainChatId = useMemo(
+    () => findMainChat(visibleSessions)?.id,
     [visibleSessions],
   );
+  const hasMainChat = mainChatId !== undefined;
   const { collapsed: sidebarCollapsed, toggle: toggleSidebar } =
     useSidebarCollapse(hasMainChat);
   // The assistant's to-do list (main chat ticket 42): one copy for the
   // top bar's count, the panel and the cards under replies.
   useAssistantTodoSync(hasMainChat);
-  // The main chat itself is on screen (ruling 87's 「开着」: one of its
-  // subtasks is not): its top bar has the 待办 button (ticket 45), and
-  // the to-do panel shows beside it only. A subtask or a workbench
-  // conversation folds the panel away, Galley brings it back.
-  const todoEntryShown = mainChatOnScreen(screen, activeSession);
-  const todoPanelShown = todoPanelOpen && todoEntryShown;
+  // With a main chat every conversation's top bar has the 待办 button
+  // (tickets 45, 46; ruling 95), and the to-do panel opens beside
+  // whatever is on screen. Open or closed is kept in two places: beside
+  // Galley itself (ruling 87's 「开着」: one of its subtasks is not it),
+  // and beside anything else — the workbench, subtasks, the empty
+  // composer. Going to the other place shows that place's panel.
+  const {
+    entry: todoEntryShown,
+    here: todoHere,
+    shown: todoPanelShown,
+  } = todoView(hasMainChat, todoPanelOpen, screen, activeSession);
   const paletteSessions = useMemo(
     () =>
       visibleSessions.map((s) =>
@@ -604,15 +606,18 @@ function App() {
                     )?.rootPath ?? undefined)
               }
               // The to-do panel in the reading panel's place (ticket 42),
-              // 320px at first (B1, ticket 45).
+              // 320px at first (B1, ticket 45), beside any conversation
+              // (ticket 46): always the main chat's.
               aside={
-                todoPanelShown && activeSession
+                todoPanelShown && mainChatId
                   ? {
                       id: TODO_PANEL_ID,
                       width: TODO_PANEL_WIDTH,
+                      place: todoHere,
                       content: (
                         <TodoPanel
-                          mainChatId={activeSession.id}
+                          mainChatId={mainChatId}
+                          here={todoHere}
                           onOpenSession={openSession}
                           onTalk={() =>
                             focusComposerUnlessClaimed(
@@ -621,7 +626,7 @@ function App() {
                               ),
                             )
                           }
-                          onClose={() => setTodoPanelOpen(false)}
+                          onClose={() => setTodoPanelOpen(todoHere, false)}
                         />
                       ),
                     }
@@ -648,10 +653,12 @@ function App() {
                       void openMainChat();
                     },
                   })}
-                  // Galley's 待办, first in the tool cluster (ticket 45).
+                  // 待办, first in the tool cluster (ticket 45), in every
+                  // conversation's top bar while there is a main chat
+                  // (ticket 46).
                   onToggleTodo={
                     todoEntryShown
-                      ? () => toggleTodoPanel(todoPanelShown)
+                      ? () => toggleTodoPanel(todoHere, todoPanelShown)
                       : undefined
                   }
                   todoOpen={todoPanelShown}
@@ -790,10 +797,10 @@ function App() {
           setEmptyComposerFocusTick((tick) => tick + 1);
         }}
         onNewProject={() => setCreateProjectOpen(true)}
-        // The assistant's 待办 (ticket 37): the panel beside the main chat,
-        // Galley entered first (ticket 42); the external runtime has no
-        // such item.
-        onOpenTodo={hasMainChat ? openTodoPanel : undefined}
+        // The assistant's 待办 (ticket 37): the panel, opened beside what
+        // is on screen (ticket 46; Galley was entered first until then);
+        // the external runtime has no such item.
+        onOpenTodo={todoEntryShown ? () => openTodoPanel(todoHere) : undefined}
         onOpenSession={openSession}
         onOpenMessage={(sessionId, messageId, query) => {
           // File the locate first: useStickyScroll's session-switch

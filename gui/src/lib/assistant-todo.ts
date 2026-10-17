@@ -25,10 +25,10 @@ import { SUBTASK_DISPATCHED_EVENT } from "@/lib/subtasks";
  * database hangs under that reply (`remindersByMessage`). It notes the
  * user's own to-dos the same way (ticket 39), each with a card of its
  * own under the reply (ticket 42, lib/todo-panel.ts) that stays there
- * done or cancelled (ticket 43, `list_noted_todos`). Galley's card in
- * the sidebar has a 「待办」 row under it that opens the to-do panel
- * beside the main chat: the user's to-dos, what Galley is on, its
- * routines, what was done lately — one Core read
+ * done or cancelled (ticket 43, `list_noted_todos`). The top bar's
+ * 「待办」 (ticket 45; every conversation's since ticket 46) opens the
+ * to-do panel beside the conversation: the user's to-dos, what Galley
+ * is on, its routines, what was done lately — one Core read
  * (`list_assistant_todo`, core/src/assistant_todo.rs), the same one
  * Core writes the main chat's 「在办的事」 from (ticket 36), so what the
  * user sees is what the assistant sees.

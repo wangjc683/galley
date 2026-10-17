@@ -8,10 +8,11 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
 import { TopBarIconButton } from "../TopBarIconButton";
 
 /**
- * Galley's 「待办」 in its own top bar (main chat ticket 45, PRD ruling
- * 93): the first of the tool cluster, before Changes, there only while
- * the main chat itself is on screen (MainHeaderHost). It opens the to-do
- * panel beside the conversation and closes it again — the Changes
+ * 「待办」 in the top bar (main chat ticket 45, PRD ruling 93): the first
+ * of the tool cluster, before Changes, in every conversation's top bar
+ * while there is a main chat (ticket 46, ruling 95; Galley's own until
+ * then; MainHeaderHost). It opens the to-do panel beside the
+ * conversation on screen and closes it again — the Changes
  * button's grammar (ChangesToggleButton): a pressed toggle, `bg-selected`
  * while its panel is open, a different material from the hover around
  * it.

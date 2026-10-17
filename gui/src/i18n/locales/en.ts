@@ -2059,9 +2059,9 @@ export const enCopy: AppCopy = {
     groupDone: "Done",
     doneOmitted: (count: number) =>
       count === 1 ? "1 more not listed" : `${count} more not listed`,
-    empty: "What you need to do and what Galley is working on are noted here.",
+    empty: "Say what you need to do, and it's noted here.",
     emptyExample:
-      "Try telling Galley: “I need to hand in the quarterly report by 3 PM Wednesday.”",
+      "For example: “I need to hand in the quarterly report by 3 PM Wednesday.”",
     emptyTalk: "Tell Galley",
     autostartHint:
       "Galley doesn't launch at login, so reminders won't go off after a restart.",

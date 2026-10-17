@@ -12,8 +12,8 @@ import { DisplayMenu } from "./DisplayMenu";
 import { TodoToggleButton } from "./TodoToggleButton";
 
 /**
- * Right half of the MainHeader right group: global tools — Galley's
- * 待办 (only while the main chat itself is open; ticket 45), Changes
+ * Right half of the MainHeader right group: global tools — 待办 (in
+ * every conversation while there is a main chat; tickets 45, 46), Changes
  * (only while a repository is known or the review is open; the host
  * omits `onToggleChanges` otherwise), 显示 (width / font size / theme),
  * Supervisor SOP, and Settings. Apart from those two these never gate
@@ -37,7 +37,7 @@ export function TopBarUtilityCluster({
 }: {
   /** The to-do panel is on screen: its button is pressed. */
   todoOpen?: boolean;
-  /** Omitted (no button) unless the main chat itself is open. */
+  /** Omitted (no button) without a main chat: the external runtime. */
   onToggleTodo?: () => void;
   changesOpen?: boolean;
   onToggleChanges?: (source: HTMLElement) => void;

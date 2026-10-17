@@ -60,7 +60,7 @@ import {
 import { withoutHiddenTurns } from "@/lib/message-delete";
 import { mendStreamingMarkdown } from "@/lib/mend-streaming-markdown";
 import { stepLimitTailVisible } from "@/lib/step-limit";
-import { quoteForComposer } from "@/lib/todo-open";
+import { takeQuote } from "@/lib/todo-open";
 import { cn } from "@/lib/utils";
 import { hiddenRowIds, useMessageDeleteStore } from "@/stores/message-delete";
 import { EMPTY_ORDINALS, useMessagesStore } from "@/stores/messages";
@@ -309,21 +309,20 @@ function MainViewContent({
   const composerRef = useRef<ComposerHandle>(null);
   const userSubmitTick = useMessagesStore((s) => s.userSubmitTick);
   // The to-do panel's 「说说这件」 (ticket 42) quotes a to-do into this
-  // composer from outside MainView, through the UI store. A store
-  // callback, not render or an effect body.
-  useEffect(
-    () =>
-      useUiStore.subscribe((state, previous) => {
-        const text = quoteForComposer(
-          state.quoteRequest,
-          previous.quoteRequest,
-          activeSessionId,
-          isMainChat,
-        );
-        if (text !== null) composerRef.current?.quote(text);
-      }),
-    [isMainChat, activeSessionId],
-  );
+  // composer from outside MainView, through the UI store: one that
+  // comes while the main chat is on screen, or one the panel filed
+  // before it sent you here from elsewhere (ticket 46). Quoted once,
+  // then cleared.
+  useEffect(() => {
+    const take = () => {
+      const text = takeQuote(activeSessionId, isMainChat);
+      if (text !== null) composerRef.current?.quote(text);
+    };
+    take();
+    return useUiStore.subscribe((state, previous) => {
+      if (state.quoteRequest !== previous.quoteRequest) take();
+    });
+  }, [isMainChat, activeSessionId]);
 
   // Stripped partial — empty when nothing renderable yet (e.g. only
   // `<thinking>...` partial has come through). We hide the

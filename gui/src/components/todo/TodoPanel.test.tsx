@@ -133,6 +133,7 @@ function panel(
       <Tooltip.Provider>
         <TodoPanel
           mainChatId="s-main"
+          here="galley"
           onOpenSession={() => {}}
           onTalk={() => {}}
           onClose={() => {}}
@@ -204,11 +205,28 @@ describe("the panel's groups", () => {
   });
 
   it("says what is empty, with an example and a way to Galley, once read", () => {
+    // One sentence, one example, one button; the name only on the
+    // button (ticket 46, ruling 95 point 5).
     const html = panel(EMPTY_TODO);
-    expect(html).toContain('data-role="todo-empty"');
-    expect(html).toContain("你要办的事、Galley 在办的事，都会记在这里。");
-    expect(html).toContain("比如跟 Galley 说：「周三下午 3 点前要交季度报告」");
-    expect(html).toContain(">去跟 Galley 说<");
+    const empty = html.slice(html.indexOf('data-role="todo-empty"'));
+    expect(empty).toMatch(
+      /<p class="[^"]*text-\[13px\][^"]*">要办的事，说一声就记在这里。<\/p>/,
+    );
+    expect(empty).toMatch(
+      /<p class="[^"]*text-\[12px\][^"]*">比如「周三下午 3 点前要交季度报告」<\/p>/,
+    );
+    expect(empty).toContain(">跟 Galley 说<");
+    expect(empty.split("Galley").length - 1).toBe(1);
+    const en = panel(EMPTY_TODO, { language: "en-US" });
+    expect(en).toContain(
+      ">Say what you need to do, and it&#x27;s noted here.<",
+    );
+    expect(en).toContain(
+      ">For example: “I need to hand in the quarterly report by 3 PM Wednesday.”<",
+    );
+    expect(en).toContain(">Tell Galley<");
+    const enEmpty = en.slice(en.indexOf('data-role="todo-empty"'));
+    expect(enEmpty.split("Galley").length - 1).toBe(1);
     // Before the first read: nothing, no flash of the empty state.
     store.loaded = false;
     expect(panel(EMPTY_TODO)).not.toContain('data-role="todo-empty"');

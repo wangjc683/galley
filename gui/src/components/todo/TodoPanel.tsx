@@ -38,19 +38,23 @@ import {
 } from "@/lib/todo-panel";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { cn } from "@/lib/utils";
-import { goToTodoTarget, quoteTodo } from "@/lib/todo-open";
+import { goToTodoTarget, quoteTodo, talkToGalley } from "@/lib/todo-open";
+import type { TodoPlace } from "@/lib/todo-panel-memory";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
 
 import { TodoCheck } from "./TodoCheck";
 import { todoTitleClass } from "./todo-styles";
 
 export interface TodoPanelProps {
-  /** The main chat on screen beside the panel: titles jump within it,
-   * 「说说这件」 quotes into its composer. */
+  /** The main chat, wherever the panel is (ticket 46): titles jump into
+   * it, 「说说这件」 quotes into its composer. */
   mainChatId: string;
+  /** Where the panel is open: beside Galley itself, or elsewhere — from
+   * where a jump to Galley opens it first (lib/todo-open.ts). */
+  here: TodoPlace;
   /** Open a session: a subtask, or the session a scheduled run made. */
   onOpenSession: (sessionId: string) => void;
-  /** 「去跟 Galley 说」: the main chat's composer takes the caret. */
+  /** 「跟 Galley 说」 beside Galley: its composer takes the caret. */
   onTalk: () => void;
   onClose: () => void;
   /** 已完成 starts folded. */
@@ -58,11 +62,13 @@ export interface TodoPanelProps {
 }
 
 /**
- * The to-do panel beside the main chat (main chat ticket 42, PRD ruling
- * 91): Galley's notebook, where the user can tick off their own things
- * and nothing else is edited — new things, new times, other words are
- * said to Galley (ruling 91 points 3 and 6), so there is no input here.
- * In the reading panel's place (LocalFileWorkspace), its own width.
+ * The to-do panel (main chat ticket 42, PRD ruling 91): Galley's
+ * notebook, where the user can tick off their own things and nothing
+ * else is edited — new things, new times, other words are said to Galley
+ * (ruling 91 points 3 and 6), so there is no input here. In the reading
+ * panel's place (LocalFileWorkspace), its own width, beside whichever
+ * conversation is open (ticket 46, ruling 95): looking is for anywhere,
+ * noting and changing stay with Galley.
  *
  *   你的事       the user's to-dos not done, under 今天 (overdue first) /
  *               以后 / 随时: a box, the title, when it is due and its
@@ -73,15 +79,17 @@ export interface TodoPanelProps {
  *   已完成       the last seven days, folded, with its count
  *
  * Empty groups are not drawn. The actions are only these: tick and
- * untick the user's own (TodoCheck), cancel a to-do's reminder, and on
- * hover 「说说这件」, which quotes the title into the main chat's
- * composer and keeps the panel open. A title goes where the thing came
- * from: the reply that noted it (the 查找聊天记录 jump), a subtask, a
- * scheduled run's session. Escape closes it from anywhere but a text
- * field, as it does the reading panel.
+ * untick the user's own (TodoCheck), cancel a to-do's reminder — where
+ * the panel is — and on hover 「说说这件」, which quotes the title into
+ * the main chat's composer and keeps the panel open. A title goes where
+ * the thing came from: the reply that noted it (the 查找聊天记录 jump), a
+ * subtask, a scheduled run's session. A jump out of the panel takes the
+ * panel along (lib/todo-open.ts). Escape closes it from anywhere but a
+ * text field, as it does the reading panel.
  */
 export function TodoPanel({
   mainChatId,
+  here,
   onOpenSession,
   onTalk,
   onClose,
@@ -110,8 +118,10 @@ export function TodoPanel({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  const go = (target: TodoTarget) => goToTodoTarget(target, onOpenSession);
-  const talkAbout = (item: TodoItem) => quoteTodo(mainChatId, item);
+  const go = (target: TodoTarget) =>
+    goToTodoTarget(target, here, mainChatId, onOpenSession);
+  const talkAbout = (item: TodoItem) => quoteTodo(item, here, mainChatId);
+  const talk = () => talkToGalley(here, onTalk);
 
   return (
     <div
@@ -135,7 +145,7 @@ export function TodoPanel({
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-4 pt-2">
         <AutostartHint todo={todo} />
         {loaded && todoPanelEmpty(todo) ? (
-          <TodoPanelEmpty onTalk={onTalk} />
+          <TodoPanelEmpty onTalk={talk} />
         ) : (
           <TodoPanelGroups
             todo={todo}

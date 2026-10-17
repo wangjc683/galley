@@ -17,6 +17,7 @@ import {
   todoMetaParts,
   todoOverdueDays,
   todoPanelEmpty,
+  todoPanelOpened,
   todoReminderCancellable,
   todosByMessage,
   todoTitleTarget,
@@ -525,22 +526,51 @@ describe("the list", () => {
   });
 });
 
-describe("the panel's place (ticket 45)", () => {
+describe("the panel's place (tickets 45, 46)", () => {
   it("starts at 320px (B1) under one id, so a dragged split has one memory", () => {
     expect(TODO_PANEL_WIDTH).toBe(320);
     expect(TODO_PANEL_ID).toBe("todo-panel");
   });
 
-  it("closes when a file preview replaces it, not for one elsewhere", () => {
-    // Beside Galley: the preview takes its place, it counts as closed.
-    expect(readingPanelClosesTodo("preview", true)).toBe(true);
-    // In the workbench or a subtask: the preview is that conversation's
-    // and goes with it; the panel comes back with Galley.
-    expect(readingPanelClosesTodo("preview", false)).toBe(false);
+  it("a file preview closes only the place whose panel it replaces", () => {
+    // Beside Galley: the preview takes its place, Galley's counts as
+    // closed; the other place's stays as it was.
+    expect(readingPanelClosesTodo("preview", "galley")).toEqual(["galley"]);
+    // Beside the workbench, a subtask or the empty composer: theirs.
+    expect(readingPanelClosesTodo("preview", "elsewhere")).toEqual([
+      "elsewhere",
+    ]);
+    // No panel on screen: the preview is that conversation's and goes
+    // with it; each place's panel comes back where it was open.
+    expect(readingPanelClosesTodo("preview", null)).toEqual([]);
   });
 
-  it("closes for the Git review wherever it opens (it is the window's)", () => {
-    expect(readingPanelClosesTodo("review", true)).toBe(true);
-    expect(readingPanelClosesTodo("review", false)).toBe(true);
+  it("the Git review closes both, wherever it opens (it is the window's)", () => {
+    for (const shown of ["galley", "elsewhere", null] as const) {
+      expect([...readingPanelClosesTodo("review", shown)].sort()).toEqual([
+        "elsewhere",
+        "galley",
+      ]);
+    }
+  });
+
+  it("either place opening takes the reading panel's place; closing does not", () => {
+    const closed = { galley: false, elsewhere: false };
+    expect(todoPanelOpened({ galley: true, elsewhere: false }, closed)).toBe(
+      true,
+    );
+    expect(todoPanelOpened({ galley: false, elsewhere: true }, closed)).toBe(
+      true,
+    );
+    expect(
+      todoPanelOpened(
+        { galley: true, elsewhere: true },
+        { galley: true, elsewhere: false },
+      ),
+    ).toBe(true);
+    expect(todoPanelOpened(closed, { galley: true, elsewhere: true })).toBe(
+      false,
+    );
+    expect(todoPanelOpened(closed, closed)).toBe(false);
   });
 });

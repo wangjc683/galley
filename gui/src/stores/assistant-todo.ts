@@ -16,8 +16,9 @@ import { TODO_SETTLE_MS, todoCancelled, type TodoFlip } from "@/lib/todo-panel";
 
 /**
  * The assistant's to-do list on the desktop (main chat ticket 42): one
- * copy of Core's read for the sidebar's 「待办 · 今天 N」 and the panel
- * beside the main chat, and beside it every to-do noted in the main chat
+ * copy of Core's read for the top bar's 「待办」 count (ticket 45) and the
+ * panel (beside any conversation, ticket 46), and beside it every to-do
+ * noted in the main chat
  * for the cards under its replies (`noted`, ticket 43: a card stays done
  * however long ago, or cancelled), read together so the three always
  * agree. `useAssistantTodoSync` (App, with a main chat) reads them and

@@ -7,12 +7,14 @@ import { GitReviewContext } from "@/lib/git-review";
 import { MainHeaderHost } from "./MainHeaderHost";
 
 /**
- * Galley's 待办 in the main header (main chat ticket 45, PRD ruling 93):
- * the first button of the tool cluster (视图与设置), before Changes,
- * only on the managed runtime and only when App hands it the toggle —
- * which it does while the main chat itself is open (lib/todo-open.ts
- * `mainChatOnScreen`, tested there). The header is otherwise the same
- * with and without it. The runtime is seeded per test.
+ * 待办 in the main header (main chat ticket 45, PRD ruling 93): the
+ * first button of the tool cluster (视图与设置), before Changes, only on
+ * the managed runtime and only when App hands it the toggle — which it
+ * does in every conversation's header while there is a main chat
+ * (ticket 46, ruling 95; lib/todo-open.ts `todoView`, tested there):
+ * Galley's, a workbench conversation's, a subtask's, the empty
+ * composer's. The header is otherwise the same with and without it. The
+ * runtime is seeded per test.
  */
 
 const seed = vi.hoisted(() => ({
@@ -38,8 +40,16 @@ afterEach(() => {
 });
 
 function header(
-  opts: { todo?: boolean; open?: boolean; changes?: boolean } = {},
+  opts: {
+    todo?: boolean;
+    open?: boolean;
+    changes?: boolean;
+    /** Whose header: Galley's (default), a workbench conversation's, a
+     * subtask's (「Galley ›」 before its title), the empty composer's. */
+    of?: "galley" | "workbench" | "subtask" | "empty";
+  } = {},
 ): string {
+  const of = opts.of ?? "galley";
   return renderToStaticMarkup(
     <GitReviewContext.Provider
       value={
@@ -57,8 +67,16 @@ function header(
           openSettings={() => {}}
           onOpenSettings={() => {}}
           resolvedTheme="light"
-          sessionTitle="Galley"
-          isMainChat
+          sessionTitle={
+            of === "galley" ? "Galley" : of === "empty" ? undefined : "整理发票"
+          }
+          isMainChat={of === "galley"}
+          canRenameSession={of !== "galley"}
+          breadcrumb={
+            of === "subtask"
+              ? { label: "Galley", ariaLabel: "回到 Galley", onClick: () => {} }
+              : undefined
+          }
           todoOpen={opts.open ?? false}
           onToggleTodo={opts.todo === false ? undefined : () => {}}
         />
@@ -93,12 +111,23 @@ describe("the main header's 待办", () => {
     expect(tag(header({ open: true }))).toContain('aria-pressed="true"');
   });
 
-  it("is not there without the toggle (a subtask, the workbench) nor on the external runtime", () => {
+  it("is in a workbench conversation's, a subtask's and the empty composer's header too (ticket 46)", () => {
+    for (const of of ["workbench", "subtask", "empty"] as const) {
+      const html = header({ of, changes: true });
+      const tools = html.slice(html.indexOf(TOOLS));
+      const first = tools.slice(tools.indexOf("<button"));
+      expect(first.slice(0, first.indexOf(">")), of).toContain(TODO);
+    }
+    expect(header({ of: "subtask" })).toContain('aria-label="回到 Galley"');
+  });
+
+  it("is not there without the toggle (no main chat) nor on the external runtime", () => {
     const without = header({ todo: false });
     expect(without).not.toContain(TODO);
     seed.runtime = "external";
-    const external = header();
-    expect(external).not.toContain(TODO);
+    for (const of of ["galley", "workbench", "subtask", "empty"] as const) {
+      expect(header({ of }), of).not.toContain(TODO);
+    }
     // The header is otherwise the same with and without it.
     seed.runtime = "managed";
     expect(header({ todo: false })).toBe(without);

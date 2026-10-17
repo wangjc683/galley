@@ -20,9 +20,10 @@ import { TopBarUtilityCluster } from "./header/UtilityCluster";
 
 export interface MainHeaderProps {
   /**
-   * Galley's 待办 (main chat ticket 45): the tool cluster's first button,
-   * opening and closing the to-do panel. Passed only while the main
-   * chat itself is open on the managed runtime (MainHeaderHost).
+   * 待办 (main chat ticket 45): the tool cluster's first button, opening
+   * and closing the to-do panel. Passed in every conversation's top bar
+   * while there is a main chat (ticket 46), on the managed runtime only
+   * (MainHeaderHost).
    */
   onToggleTodo?: () => void;
   /** The to-do panel is on screen. */
@@ -164,7 +165,7 @@ export interface MainHeaderProps {
  *   - TopBarStatusCluster — state-of-the-world badges (engine /
  *     Browser Control / Channels / Update), gated on
  *     `hasTopBarStatusItems`.
- *   - TopBarUtilityCluster — 待办 (while the main chat itself is open),
+ *   - TopBarUtilityCluster — 待办 (while there is a main chat),
  *     Changes (while a repository is known), the 显示 popover (width /
  *     font / theme), Supervisor SOP and Settings.
  * Each cluster and its indicators live under `./header/`.

@@ -52,7 +52,8 @@ import {
   reportFileError,
   type LocalFileResult,
 } from "@/lib/local-files";
-import { readingPanelClosesTodo } from "@/lib/todo-panel";
+import { readingPanelClosesTodo, todoPanelOpened } from "@/lib/todo-panel";
+import type { TodoPlace } from "@/lib/todo-panel-memory";
 import { useUiStore } from "@/stores/ui";
 
 interface Preview {
@@ -106,7 +107,16 @@ export interface WorkspaceAside {
   id: string;
   /** First width, px; after a drag the remembered split. */
   width: number;
+  /** The to-do panel's place it is open in (ticket 46): a preview
+   * replacing it closes that place. */
+  place: TodoPlace;
   content: ReactNode;
+}
+
+/** Mark the to-do panel's `places` closed (and remembered so). */
+function closeTodoPanels(places: readonly TodoPlace[]): void {
+  const ui = useUiStore.getState();
+  for (const place of places) ui.setTodoPanelOpen(place, false);
 }
 
 /** Window-owned Git review; Markdown reads remain scoped to their session. */
@@ -126,8 +136,8 @@ export function LocalFileWorkspace({
   /**
    * The to-do panel while it is on screen (main chat ticket 42), in the
    * reading panel's place: one of them at a time, the later replacing
-   * the earlier. A preview replacing it, or the review opening anywhere,
-   * clears the to-do panel's open state (`todoPanelOpen`,
+   * the earlier. A preview replacing it clears its place's open state,
+   * the review opening anywhere clears both (`todoPanelOpen`,
    * `readingPanelClosesTodo`); opening the to-do panel closes them. Beside the conversation from 760px of main area, with
    * its own first width and its own remembered split; narrower, it
    * covers the conversation's right edge — not a dialog, so the
@@ -198,12 +208,12 @@ export function LocalFileWorkspace({
   });
   const container = useRef<HTMLDivElement>(null);
   const pane = useRef<HTMLDivElement>(null);
-  // The to-do panel is on screen here (ticket 45): a preview opening now
-  // replaces it, so it counts as closed; one opening in a conversation
-  // without it leaves it to come back with Galley.
-  const asideShown = useRef(false);
+  // The place whose to-do panel is on screen here (tickets 45, 46): a
+  // preview opening now replaces it, so that place counts as closed;
+  // one opening with no panel on screen leaves both as they are.
+  const asideShown = useRef<TodoPlace | null>(null);
   useEffect(() => {
-    asideShown.current = aside != null;
+    asideShown.current = aside?.place ?? null;
   });
   const origin = useRef<HTMLElement | null>(null);
   const currentPath = useRef<string | null>(null);
@@ -252,13 +262,16 @@ export function LocalFileWorkspace({
     });
   }, []);
 
-  // The to-do panel opening takes the place (main chat ticket 42): the
-  // preview or review goes, its pending read with it, and the caret
-  // stays where it is. A store callback, not render or an effect body.
+  // The to-do panel opening takes the place (main chat ticket 42; in
+  // either of its places, ticket 46: one opening elsewhere comes with a
+  // jump there): the preview or review goes, its pending read with it,
+  // and the caret stays where it is. A store callback, not render or an
+  // effect body.
   useEffect(
     () =>
       useUiStore.subscribe((state, previous) => {
-        if (!state.todoPanelOpen || previous.todoPanelOpen) return;
+        if (!todoPanelOpened(state.todoPanelOpen, previous.todoPanelOpen))
+          return;
         generation.current += 1;
         currentPath.current = null;
         setPreview(null);
@@ -296,9 +309,8 @@ export function LocalFileWorkspace({
       currentPath.current = null;
       if (source && !pane.current?.contains(source)) origin.current = source;
       // The later panel replaces the earlier: the to-do panel goes. The
-      // review is the window's, so wherever it opens.
-      if (readingPanelClosesTodo("review", asideShown.current))
-        useUiStore.getState().setTodoPanelOpen(false);
+      // review is the window's, so in both places, wherever it opens.
+      closeTodoPanels(readingPanelClosesTodo("review", asideShown.current));
       setPreview(null);
       setReview({
         path: path ?? repository ?? repositoryHint,
@@ -375,9 +387,9 @@ export function LocalFileWorkspace({
       currentPath.current = path;
       setReview(null);
       // The later panel replaces the earlier: the to-do panel goes when
-      // it is the one on screen.
-      if (!refresh && readingPanelClosesTodo("preview", asideShown.current))
-        useUiStore.getState().setTodoPanelOpen(false);
+      // it is the one on screen, in its place only.
+      if (!refresh)
+        closeTodoPanels(readingPanelClosesTodo("preview", asideShown.current));
       if (!refresh) scroll.current = 0;
       setPreview({ sessionId, path, kind: expected, content: null, error: null });
       try {

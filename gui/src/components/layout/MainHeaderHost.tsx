@@ -69,8 +69,9 @@ export function MainHeaderHost({
   identity?: MainHeaderProps["identity"];
   /** The to-do panel is on screen (ticket 45). */
   todoOpen?: boolean;
-  /** Galley's 待办 button: passed only while the main chat itself is
-   * open (App); on the managed runtime only, as the main chat is. */
+  /** The 待办 button: passed in every conversation's top bar while
+   * there is a main chat (App, ticket 46); on the managed runtime only,
+   * as the main chat is. */
   onToggleTodo?: () => void;
 }) {
   const browserControlStatus = useBrowserControlStore((s) => s.status);

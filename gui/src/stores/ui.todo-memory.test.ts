@@ -1,15 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { TODO_PANEL_OPEN_KEY } from "@/lib/todo-panel-memory";
+import { TODO_PANEL_OPEN_KEYS } from "@/lib/todo-panel-memory";
 
 /**
  * The to-do panel remembers whether it was open (main chat ticket 45,
- * PRD ruling 93 point 2): every set writes it to this machine's
+ * PRD ruling 93 point 2), in two places apart (ticket 46, ruling 95
+ * point 3): beside Galley, under ticket 45's key, and beside everything
+ * else, under its own. Every set writes its place to this machine's
  * localStorage, and a fresh start — a restart, the window reloading —
  * begins from what was written. Default closed; anything unreadable is
  * closed. Each case loads the ui store afresh over a stubbed window, as
  * a new run of the app would.
  */
+
+const GALLEY = TODO_PANEL_OPEN_KEYS.galley;
+const ELSEWHERE = TODO_PANEL_OPEN_KEYS.elsewhere;
 
 function storage(initial: Record<string, string> = {}, throws = false) {
   const data = new Map(Object.entries(initial));
@@ -44,38 +49,82 @@ afterEach(() => {
 });
 
 describe("remembering the to-do panel", () => {
-  it("starts closed, and open after a restart once it was left open", async () => {
+  it("keeps Galley's under ticket 45's key, unmigrated, and the rest under their own", () => {
+    expect(GALLEY).toBe("galley.todoPanelOpen");
+    expect(ELSEWHERE).toBe("galley.todoPanelOpenElsewhere");
+  });
+
+  it("starts closed in both places, and open after a restart where it was left open", async () => {
     const local = storage();
     vi.stubGlobal("window", { localStorage: local });
     const first = await freshStore();
-    expect(first.getState().todoPanelOpen).toBe(false);
-    first.getState().setTodoPanelOpen(true);
-    expect(local.data.get(TODO_PANEL_OPEN_KEY)).toBe("1");
+    expect(first.getState().todoPanelOpen).toEqual({
+      galley: false,
+      elsewhere: false,
+    });
+    first.getState().setTodoPanelOpen("galley", true);
+    expect(local.data.get(GALLEY)).toBe("1");
+    expect(local.data.has(ELSEWHERE)).toBe(false);
 
     const second = await freshStore();
-    expect(second.getState().todoPanelOpen).toBe(true);
+    expect(second.getState().todoPanelOpen).toEqual({
+      galley: true,
+      elsewhere: false,
+    });
     // Closed — by its X, the button, or a preview taking its place —
-    // and the next run starts closed.
-    second.getState().setTodoPanelOpen(false);
-    expect(local.data.has(TODO_PANEL_OPEN_KEY)).toBe(false);
-    expect((await freshStore()).getState().todoPanelOpen).toBe(false);
+    // and the next run starts closed there.
+    second.getState().setTodoPanelOpen("galley", false);
+    expect(local.data.has(GALLEY)).toBe(false);
+    expect((await freshStore()).getState().todoPanelOpen.galley).toBe(false);
+  });
+
+  it("remembers each place apart", async () => {
+    const local = storage();
+    vi.stubGlobal("window", { localStorage: local });
+    const first = await freshStore();
+    first.getState().setTodoPanelOpen("elsewhere", true);
+    expect(local.data.get(ELSEWHERE)).toBe("1");
+    expect(local.data.has(GALLEY)).toBe(false);
+    expect((await freshStore()).getState().todoPanelOpen).toEqual({
+      galley: false,
+      elsewhere: true,
+    });
+
+    // A machine that had Galley's open before ticket 46 keeps it, and
+    // the workbench starts closed.
+    vi.stubGlobal("window", { localStorage: storage({ [GALLEY]: "1" }) });
+    expect((await freshStore()).getState().todoPanelOpen).toEqual({
+      galley: true,
+      elsewhere: false,
+    });
   });
 
   it("counts anything unreadable as closed", async () => {
     vi.stubGlobal("window", {
-      localStorage: storage({ [TODO_PANEL_OPEN_KEY]: "true" }),
+      localStorage: storage({ [GALLEY]: "true", [ELSEWHERE]: "yes" }),
     });
-    expect((await freshStore()).getState().todoPanelOpen).toBe(false);
+    expect((await freshStore()).getState().todoPanelOpen).toEqual({
+      galley: false,
+      elsewhere: false,
+    });
 
     vi.stubGlobal("window", { localStorage: storage({}, true) });
     const blocked = await freshStore();
-    expect(blocked.getState().todoPanelOpen).toBe(false);
+    expect(blocked.getState().todoPanelOpen).toEqual({
+      galley: false,
+      elsewhere: false,
+    });
     // A failed write leaves the choice to this run alone.
-    expect(() => blocked.getState().setTodoPanelOpen(true)).not.toThrow();
-    expect(blocked.getState().todoPanelOpen).toBe(true);
+    expect(() =>
+      blocked.getState().setTodoPanelOpen("elsewhere", true),
+    ).not.toThrow();
+    expect(blocked.getState().todoPanelOpen.elsewhere).toBe(true);
   });
 
   it("is closed with no window at all (a static render)", async () => {
-    expect((await freshStore()).getState().todoPanelOpen).toBe(false);
+    expect((await freshStore()).getState().todoPanelOpen).toEqual({
+      galley: false,
+      elsewhere: false,
+    });
   });
 });

@@ -1,7 +1,11 @@
 import { create } from "zustand";
 
 import { paletteAfterFind, type PaletteScope } from "@/lib/palette-scope";
-import { readTodoPanelOpen, writeTodoPanelOpen } from "@/lib/todo-panel-memory";
+import {
+  readTodoPanelOpen,
+  writeTodoPanelOpen,
+  type TodoPlace,
+} from "@/lib/todo-panel-memory";
 import type { AppError } from "@/types/app-error";
 
 export type Screen = "onboarding" | "empty" | "main";
@@ -47,23 +51,25 @@ interface UiState {
   reviewRequest: number;
 
   /**
-   * The to-do panel beside the main chat is wanted (main chat ticket
-   * 42). It shows only while the main chat itself is on screen (App):
-   * leaving for the workbench or a subtask folds it away and coming
-   * back brings it again. It shares the reading panel's place, one at a
-   * time: a file preview replacing it on screen, or the Git review
-   * opening anywhere, clears it (LocalFileWorkspace), and setting it
-   * closes them. Remembered on this machine across restarts (ticket 45,
-   * lib/todo-panel-memory.ts): every set writes it, and it starts from
-   * what was written — closed when nothing readable was.
+   * The to-do panel is wanted (main chat ticket 42), in each of its two
+   * places (ticket 46): beside Galley itself, and beside anything else
+   * (App shows the one for what is on screen). Leaving for the other
+   * place folds it away, coming back brings it again. It shares the
+   * reading panel's place, one at a time: a file preview replacing it on
+   * screen clears that place, the Git review opening anywhere clears
+   * both (LocalFileWorkspace), and opening either closes them.
+   * Remembered on this machine across restarts (tickets 45, 46,
+   * lib/todo-panel-memory.ts): every set writes its place, and each
+   * starts from what was written — closed when nothing readable was.
    */
-  todoPanelOpen: boolean;
+  todoPanelOpen: Readonly<Record<TodoPlace, boolean>>;
 
   /**
    * "Quote this into that conversation's composer" — the to-do panel's
    * 「说说这件」 (ticket 42), which sits outside MainView and so cannot
-   * reach its composer. MainView subscribes and quotes on every new
-   * request for the session it shows. Pure UI coordination.
+   * reach its composer. The MainView showing that session quotes it and
+   * clears it: at once when it is on screen, on mounting when the panel
+   * sent you there first (ticket 46). Pure UI coordination.
    */
   quoteRequest: QuoteRequest | null;
 }
@@ -106,8 +112,9 @@ interface UiActions {
 
   requestReview: () => void;
 
-  setTodoPanelOpen: (open: boolean) => void;
+  setTodoPanelOpen: (place: TodoPlace, open: boolean) => void;
   requestQuote: (sessionId: string, text: string) => void;
+  clearQuote: () => void;
 }
 
 export type UiStore = UiState & UiActions;
@@ -121,7 +128,10 @@ export const useUiStore = create<UiStore>((set, get) => ({
   pendingPetMigrationTo: null,
   locateRequest: null,
   reviewRequest: 0,
-  todoPanelOpen: readTodoPanelOpen(),
+  todoPanelOpen: {
+    galley: readTodoPanelOpen("galley"),
+    elsewhere: readTodoPanelOpen("elsewhere"),
+  },
   quoteRequest: null,
 
   setScreen: (s) => set({ screen: s }),
@@ -167,9 +177,11 @@ export const useUiStore = create<UiStore>((set, get) => ({
   requestReview: () =>
     set((state) => ({ reviewRequest: state.reviewRequest + 1 })),
 
-  setTodoPanelOpen: (open) => {
-    writeTodoPanelOpen(open);
-    set({ todoPanelOpen: open });
+  setTodoPanelOpen: (place, open) => {
+    writeTodoPanelOpen(place, open);
+    set((state) => ({
+      todoPanelOpen: { ...state.todoPanelOpen, [place]: open },
+    }));
   },
   requestQuote: (sessionId, text) =>
     set((state) => ({
@@ -179,4 +191,5 @@ export const useUiStore = create<UiStore>((set, get) => ({
         nonce: (state.quoteRequest?.nonce ?? 0) + 1,
       },
     })),
+  clearQuote: () => set({ quoteRequest: null }),
 }));

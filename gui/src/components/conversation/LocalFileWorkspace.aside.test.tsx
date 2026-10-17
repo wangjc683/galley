@@ -33,7 +33,11 @@ function render(aside?: { id: string; width: number }) {
         sessionId="s-main"
         aside={
           aside
-            ? { ...aside, content: <div data-role="todo-panel">待办</div> }
+            ? {
+                ...aside,
+                place: "elsewhere",
+                content: <div data-role="todo-panel">待办</div>,
+              }
             : null
         }
       >

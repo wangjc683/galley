@@ -301,7 +301,7 @@ export const zhCopy = {
     expandSidebar: "展开侧栏",
     /** 收起时开关上的计数徽标，读作提示与无障碍名称。 */
     sidebarNeedsYou: (count: number) => `${count} 个对话在等你`,
-    /** 工具簇第一个按钮：Galley 的待办，只在主对话本身开着时出现（票 45，裁决 93）。 */
+    /** 工具簇第一个按钮：待办，有主对话时每条对话的顶栏都有（票 45、46，裁决 93、95）。 */
     todo: "待办",
     /** 有今天到期与逾期的待办时，按钮的提示与无障碍名称（按钮上只写数字）。 */
     todoWithToday: (count: number) => `待办 · 今天 ${count}`,
@@ -2044,10 +2044,10 @@ export const zhCopy = {
     groupDone: "已完成",
     /** 「已完成」超过上限没列出的件数。 */
     doneOmitted: (count: number) => `还有 ${count} 件没有列出`,
-    // 面板离开了对话，写名字（文案规范「Galley」一行）。
-    empty: "你要办的事、Galley 在办的事，都会记在这里。",
-    emptyExample: "比如跟 Galley 说：「周三下午 3 点前要交季度报告」",
-    emptyTalk: "去跟 Galley 说",
+    // 全空时一句、一个例子、一个按钮；名字只在按钮上出现一次（票 46，裁决 95 第 5 条）。
+    empty: "要办的事，说一声就记在这里。",
+    emptyExample: "比如「周三下午 3 点前要交季度报告」",
+    emptyTalk: "跟 Galley 说",
     /** 列表顶上一行（scheduled-tasks 票 14 的条件）。按钮沿用 scheduled.autostartEnable。 */
     autostartHint: "Galley 未设为开机自动启动，电脑重启后提醒不会响。",
     /** 悬停一行出现：把这件事引用进主对话的输入框。 */
