@@ -509,7 +509,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [43](./issues/43-todo-cards-persist-and-noted-date.md) | — | 待办卡片长留、行上写「记下」的日子 | 42 | merged |
 | [44](./issues/44-nudge-is-own-reminder.md) | — | 只要提醒的事用 Galley 自己的提醒（手册与评测） | 41 | merged（裁决 92） |
 | [45](./issues/45-todo-entry-in-top-bar.md) | — | 待办入口挪到 Galley 对话的顶栏，面板定 B1 + C1 | 42、43 | merged（裁决 93；条件与记住开关由票 46 改） |
-| [46](./issues/46-todo-panel-everywhere.md) | — | 待办面板与主对话解耦：每条对话的顶栏都能开、开关两处记、跳转带面板、空状态精简、工作台提示词补待办 | 45 | ready-for-agent（裁决 95） |
+| [46](./issues/46-todo-panel-everywhere.md) | — | 待办面板与主对话解耦：每条对话的顶栏都能开、开关两处记、跳转带面板、空状态精简、工作台提示词补待办 | 45 | merged（裁决 95，合并提交 `ee89d54a`），待 JC 真机验收 |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 
