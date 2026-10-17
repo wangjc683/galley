@@ -3,6 +3,7 @@ import { todoTitleClass } from "@/components/todo/todo-styles";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { todoFailureText, type TodoItem } from "@/lib/assistant-todo";
 import { useCopy, useLanguage } from "@/lib/i18n";
+import { TodoMetaText } from "@/components/todo/TodoMetaText";
 import { todoCancelled, todoChecked, todoMetaParts } from "@/lib/todo-panel";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { cn } from "@/lib/utils";
@@ -95,20 +96,7 @@ function TodoCard({ item }: { item: TodoItem }) {
             data-role="todo-meta"
             className="shrink-0 select-none text-[12px] tabular-nums text-ink-muted"
           >
-            {parts.map((part, index) => (
-              <span key={index}>
-                {index > 0 && " · "}
-                <span
-                  className={
-                    part.tone === "warning"
-                      ? "font-medium text-warning"
-                      : undefined
-                  }
-                >
-                  {part.text}
-                </span>
-              </span>
-            ))}
+            <TodoMetaText parts={parts} />
           </span>
         )}
       </div>

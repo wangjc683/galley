@@ -35,7 +35,8 @@ function parseTime(iso: string | undefined): number | null {
   return Number.isNaN(ms) ? null : ms;
 }
 
-function localDayStart(ms: number): number {
+/** The local midnight a moment's day starts on. */
+export function localDayStart(ms: number): number {
   const d = new Date(ms);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
@@ -305,39 +306,21 @@ export function formatListTime(
 }
 
 /**
- * The day alone, in `formatMessageTime`'s shapes without the clock (main
- * chat ticket 43: the day a to-do was noted, 「10月16日 记下」), counted on
- * local calendar days:
- *
- *   today                 今天              today
- *   yesterday             昨天              yesterday
- *   earlier this year     10月16日          Oct 16
- *   an earlier year       2025年10月16日    Oct 16, 2025
- *
- * The day words come from the locale (an English one sits mid-sentence,
- * "Noted today"). A time later than today (a skewed clock) reads as
- * today's. Pure over `todayStartMs` (`useDayStamp()`). Null for an
- * unparseable timestamp.
+ * The clock alone, as every shape here writes it: zero-padded 24-hour
+ * 「14:00」 in Chinese, en-US 「2:00 PM」 in English (main chat PRD
+ * ruling 97: a to-do's reminder on its due day, a time under 今天).
+ * Null for an unparseable timestamp.
  */
-export function formatMessageDay(
+export function formatClock(
   iso: string,
-  todayStartMs: number,
   language: ResolvedLanguage,
-  words: { today: string; yesterday: string },
 ): string | null {
   const ms = parseTime(iso);
   if (ms === null) return null;
   const date = new Date(ms);
-  const today = localDayStart(todayStartMs);
-  const days = daysBefore(ms, today);
-  if (days <= 0) return words.today;
-  if (days === 1) return words.yesterday;
-  const sameYear = date.getFullYear() === new Date(today).getFullYear();
-  if (language === "zh-CN") {
-    const monthDay = `${date.getMonth() + 1}月${date.getDate()}日`;
-    return sameYear ? monthDay : `${date.getFullYear()}年${monthDay}`;
-  }
-  return (sameYear ? EN_DATE : EN_YEAR_DATE).format(date);
+  return language === "zh-CN"
+    ? `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+    : EN_TIME.format(date);
 }
 
 /** The day words a scheduled time can carry, each around the clock. */

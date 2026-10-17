@@ -12,8 +12,10 @@ import {
 import type { ResolvedLanguage } from "@/lib/language";
 import {
   calendarDaysBefore,
-  formatMessageDay,
+  formatClock,
   formatScheduleDay,
+  localDayMs,
+  localDayStart,
 } from "@/lib/message-time";
 import { repeatSummary } from "@/lib/scheduled-tasks";
 import { TODO_PLACES, type TodoPlace } from "@/lib/todo-panel-memory";
@@ -101,13 +103,20 @@ export function todoChecked(item: TodoItem, flip?: TodoFlip): boolean {
   return flip ? flip.done : item.state === "done";
 }
 
-/** A row's second line, in parts: the due date (warning when overdue)
- * and the reminder. */
+/** A row's second line, in parts: when it is due (warning when
+ * overdue) and the reminder. */
 export interface TodoMetaPart {
   text: string;
   tone: "muted" | "warning";
+  /** The reminder: drawn as a bell before its text, set apart by a gap,
+   * not 「·」 (main chat PRD ruling 97). */
+  bell?: boolean;
+  /** What the part says in full (「提醒 周三 14:00」), its accessible
+   * name and hover text. */
+  title?: string;
 }
 
+/** When a to-do is due, without a word before it: 「周三 15:00」, 「明天」. */
 function dueWhen(
   due: TodoDue,
   todayStartMs: number,
@@ -144,15 +153,19 @@ export function todoOverdueDays(
 }
 
 /**
- * The second line of one of the user's to-dos: when it is due (「截止
- * 周三 15:00」, 「截止 周五」; 「逾期 2 天」 in warning once past), then
- * its reminder (「提醒 周三 14:00」, 「已提醒 …」), then with `noted` (the
- * panel's 你的事, main chat ticket 43) the day it was noted (「10月16日
- * 记下」, `formatMessageDay`) — last, so a narrow panel cuts it before
- * the reminder. A checked one shows its due date quietly and no
+ * The second line of one of the user's to-dos (main chat PRD ruling 97,
+ * after Apple's Reminders: one time, the reminder a bell): when it is
+ * due, with no word before it (「周三 15:00」, 「明天」; 「逾期 2 天」 in
+ * warning once past), then the reminder, a bell and its time — the clock
+ * alone on the due day (「周三 15:00 🔔 14:00」, 「明天 🔔 10:00」), the
+ * day too on another (「🔔 周二 20:00」). `inToday`: the row sits under
+ * 今天, so the day word goes (「18:00」; a day without a time leaves
+ * nothing, and today's reminder is its clock). A reminder that has gone
+ * off is not written; a paused one says so. The day it was noted is not
+ * on the line: its title leads back to the sentence, and the card hangs
+ * under that reply. A checked one shows its due date quietly and no
  * reminder: a tick cancels a reminder that has not gone off (Core), and
- * a tick still settling hides it as the tick will. A card under the
- * reply that noted it needs no day: the reply is dated.
+ * a tick still settling hides it as the tick will.
  */
 export function todoMetaParts(
   item: TodoItem,
@@ -160,41 +173,44 @@ export function todoMetaParts(
   todayStartMs: number,
   language: ResolvedLanguage,
   copy: AppCopy,
-  { noted = false }: { noted?: boolean } = {},
+  { inToday = false }: { inToday?: boolean } = {},
 ): TodoMetaPart[] {
   const parts: TodoMetaPart[] = [];
-  if (item.due) {
+  const due = item.due;
+  if (due) {
     const overdue = checked ? null : todoOverdueDays(item, todayStartMs);
-    const when = dueWhen(item.due, todayStartMs, language, copy);
-    if (overdue === null) {
-      parts.push({ text: copy.todo.due(when), tone: "muted" });
-    } else if (overdue >= 1) {
+    const clock = due.hasTime && due.at ? formatClock(due.at, language) : null;
+    const when = dueWhen(due, todayStartMs, language, copy);
+    if (overdue !== null && overdue >= 1) {
       parts.push({ text: copy.todo.overdueDays(overdue), tone: "warning" });
-    } else {
-      parts.push({ text: copy.todo.overdueAt(when), tone: "warning" });
+    } else if (overdue === 0) {
+      parts.push({
+        text: copy.todo.overdueAt(inToday && clock ? clock : when),
+        tone: "warning",
+      });
+    } else if (!inToday) {
+      parts.push({ text: when, tone: "muted" });
+    } else if (clock) {
+      parts.push({ text: clock, tone: "muted" });
     }
   }
   const reminder = item.reminder;
-  if (reminder && !checked) {
-    const when = scheduleTime(reminder.at, todayStartMs, language, copy);
-    parts.push({
-      text:
-        reminder.state === "fired"
-          ? copy.todo.reminded(when)
-          : reminder.state === "paused"
-            ? copy.todo.reminderPaused(when)
-            : copy.todo.reminderAt(when),
-      tone: "muted",
-    });
-  }
-  const day =
-    noted && item.createdAt
-      ? formatMessageDay(item.createdAt, todayStartMs, language, {
-          today: copy.todo.notedToday,
-          yesterday: copy.todo.notedYesterday,
-        })
-      : null;
-  if (day) parts.push({ text: copy.todo.noted(day), tone: "muted" });
+  if (!reminder || checked || reminder.state === "fired") return parts;
+  const full = scheduleTime(reminder.at, todayStartMs, language, copy);
+  const at = Date.parse(reminder.at);
+  const day = Number.isNaN(at) ? null : localDayStart(at);
+  const dueDay = due ? localDayMs(due.date) : null;
+  const sameDay =
+    day !== null &&
+    (day === dueDay || (inToday && day === localDayStart(todayStartMs)));
+  const short = (sameDay ? formatClock(reminder.at, language) : null) ?? full;
+  const paused = reminder.state === "paused";
+  parts.push({
+    text: paused ? `${short} · ${copy.todo.statePaused}` : short,
+    tone: "muted",
+    bell: true,
+    title: paused ? copy.todo.reminderPaused(full) : copy.todo.reminderAt(full),
+  });
   return parts;
 }
 

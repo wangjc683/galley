@@ -2058,20 +2058,15 @@ export const zhCopy = {
     talkAbout: "说说这件",
     /** 悬停有提醒的待办出现：只去掉提醒，待办不动。 */
     cancelReminder: "取消提醒",
-    // 待办第二行：截止、逾期、提醒。
-    due: (when: string) => `截止 ${when}`,
+    // 待办第二行：一个时间，不写「截止」；提醒是铃铛加时刻（裁决 97）。
     overdueDays: (days: number) => `逾期 ${days} 天`,
     /** 今天有时刻的截止已经过了。 */
     overdueAt: (when: string) => `逾期 · ${when}`,
+    /** 铃铛的悬停文字与无障碍名称。 */
     reminderAt: (when: string) => `提醒 ${when}`,
     reminderPaused: (when: string) => `提醒 ${when} · 已暂停`,
-    reminded: (when: string) => `已提醒 ${when}`,
     /** 例行的下次时刻。 */
     nextAt: (when: string) => `下次 ${when}`,
-    /** 「你的事」每行小字里记下的日子（票 43），日子照消息时刻的写法：今天、昨天、10月16日、2025年10月16日。 */
-    noted: (day: string) => `${day} 记下`,
-    notedToday: "今天",
-    notedYesterday: "昨天",
     /** 只有日期的截止。 */
     dayToday: "今天",
     dayTomorrow: "明天",

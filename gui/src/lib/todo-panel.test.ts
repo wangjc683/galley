@@ -69,14 +69,24 @@ function task(extra: Partial<TodoItem> = {}): TodoItem {
   };
 }
 
-const texts = (parts: { text: string }[]) => parts.map((p) => p.text);
+describe("a to-do's second line (ruling 97)", () => {
+  const line = (
+    item: TodoItem,
+    options: { inToday?: boolean; checked?: boolean; today?: number } = {},
+    language: "zh-CN" | "en-US" = "zh-CN",
+  ) =>
+    todoMetaParts(
+      item,
+      options.checked ?? false,
+      options.today ?? TODAY,
+      language,
+      language === "zh-CN" ? zh : en,
+      { inToday: options.inToday },
+    ).map((p) => (p.bell ? `🔔${p.text}` : p.text));
 
-describe("a to-do's second line", () => {
-  it("says when it is due: a day, or a day and a time", () => {
+  it("says when it is due, with no word before it", () => {
     const friday = todo({ due: { date: "2026-10-23", hasTime: false } });
-    expect(texts(todoMetaParts(friday, false, TODAY, "zh-CN", zh))).toEqual([
-      "截止 10月23日",
-    ]);
+    expect(line(friday)).toEqual(["10月23日"]);
     const wednesday = todo({
       due: {
         date: "2026-10-21",
@@ -85,20 +95,29 @@ describe("a to-do's second line", () => {
         time: "15:00",
       },
     });
-    expect(texts(todoMetaParts(wednesday, false, TODAY, "zh-CN", zh))).toEqual([
-      "截止 周三 15:00",
-    ]);
+    expect(line(wednesday)).toEqual(["周三 15:00"]);
     expect(
-      texts(todoMetaParts(wednesday, false, TODAY, "en-US", en)).map((t) =>
-        t.replace(/\s/g, " "),
-      ),
-    ).toEqual(["Due Wed 3:00 PM"]);
-    const today = todo({ due: { date: "2026-10-16", hasTime: false } });
-    expect(texts(todoMetaParts(today, false, TODAY, "zh-CN", zh))).toEqual([
-      "截止 今天",
-    ]);
+      line(wednesday, {}, "en-US").map((t) => t.replace(/\s/g, " ")),
+    ).toEqual(["Wed 3:00 PM"]);
     // No due date, no reminder: nothing (随时).
     expect(todoMetaParts(todo(), false, TODAY, "zh-CN", zh)).toEqual([]);
+  });
+
+  it("drops the day word under 今天", () => {
+    const tonight = todo({
+      due: {
+        date: "2026-10-16",
+        hasTime: true,
+        at: local(2026, 10, 16, 18, 0),
+        time: "18:00",
+      },
+    });
+    expect(line(tonight, { inToday: true })).toEqual(["18:00"]);
+    // A day without a time, today: nothing to say.
+    const today = todo({ due: { date: "2026-10-16", hasTime: false } });
+    expect(line(today, { inToday: true })).toEqual([]);
+    // A card has no heading: it keeps the word.
+    expect(line(today)).toEqual(["今天"]);
   });
 
   it("says how many days overdue, in warning", () => {
@@ -109,9 +128,7 @@ describe("a to-do's second line", () => {
     expect(todoMetaParts(late, false, TODAY, "zh-CN", zh)).toEqual([
       { text: "逾期 2 天", tone: "warning" },
     ]);
-    expect(texts(todoMetaParts(late, false, TODAY, "en-US", en))).toEqual([
-      "2 days overdue",
-    ]);
+    expect(line(late, { inToday: true }, "en-US")).toEqual(["2 days overdue"]);
     // Due earlier today at a time that has passed (Core's mark).
     const thisMorning = todo({
       due: {
@@ -125,6 +142,7 @@ describe("a to-do's second line", () => {
     expect(todoMetaParts(thisMorning, false, TODAY, "zh-CN", zh)).toEqual([
       { text: "逾期 · 今天 10:00", tone: "warning" },
     ]);
+    expect(line(thisMorning, { inToday: true })).toEqual(["逾期 · 10:00"]);
     expect(todoOverdueDays(thisMorning, TODAY)).toBe(0);
   });
 
@@ -150,35 +168,73 @@ describe("a to-do's second line", () => {
     expect(todoOverdueDays(lateFriday, TOMORROW)).toBe(1);
   });
 
-  it("says its reminder, which a tick takes away", () => {
-    const reminded = todo({
-      due: { date: "2026-10-23", hasTime: false },
+  it("draws the reminder as a bell: the clock on the due day, the day too on another", () => {
+    const haircut = todo({
+      due: { date: "2026-10-17", hasTime: false },
       reminder: {
         taskId: "sched_9",
-        at: local(2026, 10, 17, 9, 0),
+        at: local(2026, 10, 17, 10, 0),
         state: "scheduled",
       },
     });
-    expect(texts(todoMetaParts(reminded, false, TODAY, "zh-CN", zh))).toEqual([
-      "截止 10月23日",
-      "提醒 明天 09:00",
+    expect(todoMetaParts(haircut, false, TODAY, "zh-CN", zh)).toEqual([
+      { text: "明天", tone: "muted" },
+      {
+        text: "10:00",
+        tone: "muted",
+        bell: true,
+        title: "提醒 明天 10:00",
+      },
     ]);
-    expect(todoReminderCancellable(reminded)).toBe(true);
+    const report = todo({
+      due: {
+        date: "2026-10-21",
+        hasTime: true,
+        at: local(2026, 10, 21, 15, 0),
+        time: "15:00",
+      },
+      reminder: {
+        taskId: "sched_9",
+        at: local(2026, 10, 21, 14, 0),
+        state: "scheduled",
+      },
+    });
+    expect(line(report)).toEqual(["周三 15:00", "🔔14:00"]);
+    expect(line(report, {}, "en-US").map((t) => t.replace(/\s/g, " "))).toEqual(
+      ["Wed 3:00 PM", "🔔2:00 PM"],
+    );
+    // The evening before: its day too.
+    const early = todo({
+      ...report,
+      reminder: { ...report.reminder!, at: local(2026, 10, 20, 20, 0) },
+    });
+    expect(line(early)).toEqual(["周三 15:00", "🔔周二 20:00"]);
+    // A reminder and no due date.
+    expect(line(todo({ reminder: haircut.reminder }))).toEqual([
+      "🔔明天 10:00",
+    ]);
+    // Under 今天, today's reminder is its clock.
+    const today = todo({
+      due: { date: "2026-10-16", hasTime: false },
+      reminder: { ...haircut.reminder!, at: local(2026, 10, 16, 20, 0) },
+    });
+    expect(line(today, { inToday: true })).toEqual(["🔔20:00"]);
+    expect(todoReminderCancellable(haircut)).toBe(true);
     // Checked (a tick on its way, or done): the reminder goes, the due
     // date stays and is never overdue.
-    expect(texts(todoMetaParts(reminded, true, TODAY, "zh-CN", zh))).toEqual([
-      "截止 10月23日",
-    ]);
+    expect(line(haircut, { checked: true })).toEqual(["明天"]);
+  });
+
+  it("leaves out a reminder that has gone off, and says one is paused", () => {
     const fired = todo({
+      due: { date: "2026-10-16", hasTime: false },
       reminder: {
         taskId: "sched_9",
         at: local(2026, 10, 16, 9, 0),
         state: "fired",
       },
     });
-    expect(texts(todoMetaParts(fired, false, TODAY, "zh-CN", zh))).toEqual([
-      "已提醒 今天 09:00",
-    ]);
+    expect(line(fired)).toEqual(["今天"]);
     expect(todoReminderCancellable(fired)).toBe(false);
     const paused = todo({
       reminder: {
@@ -187,11 +243,21 @@ describe("a to-do's second line", () => {
         state: "paused",
       },
     });
-    expect(texts(todoMetaParts(paused, false, TODAY, "zh-CN", zh))).toEqual([
-      "提醒 明天 09:00 · 已暂停",
+    expect(todoMetaParts(paused, false, TODAY, "zh-CN", zh)).toEqual([
+      {
+        text: "明天 09:00 · 已暂停",
+        tone: "muted",
+        bell: true,
+        title: "提醒 明天 09:00 · 已暂停",
+      },
     ]);
     expect(todoReminderCancellable(paused)).toBe(true);
     expect(todoReminderCancellable({ ...paused, state: "done" })).toBe(false);
+  });
+
+  it("does not write the day it was noted", () => {
+    const noted = todo({ createdAt: local(2026, 10, 14, 10, 0) });
+    expect(line(noted)).toEqual([]);
   });
 
   it("shows checked what Core says, or the tick on its way", () => {
@@ -215,87 +281,6 @@ describe("a to-do's second line", () => {
     expect(todoChecked(cancelled, { done: true, phase: "settling" })).toBe(
       false,
     );
-  });
-});
-
-describe("the day a to-do was noted (ticket 43)", () => {
-  const noted = (createdAt: string) =>
-    todo({
-      createdAt,
-      due: { date: "2026-10-23", hasTime: false },
-      reminder: {
-        taskId: "sched_9",
-        at: local(2026, 10, 17, 9, 0),
-        state: "scheduled",
-      },
-    });
-  const lastOf = (parts: string[]) => parts[parts.length - 1];
-  const line = (item: TodoItem, today = TODAY, language = "zh-CN") =>
-    texts(
-      todoMetaParts(
-        item,
-        false,
-        today,
-        language as "zh-CN" | "en-US",
-        language === "zh-CN" ? zh : en,
-        { noted: true },
-      ),
-    );
-
-  it("comes last, after the due date and the reminder, in the message time's day words", () => {
-    // Last: a narrow panel cuts it before the reminder.
-    expect(line(noted(local(2026, 10, 16, 8, 5)))).toEqual([
-      "截止 10月23日",
-      "提醒 明天 09:00",
-      "今天 记下",
-    ]);
-    expect(lastOf(line(noted(local(2026, 10, 15, 22, 0))))).toBe("昨天 记下");
-    // Two days back and more: the date, no weekday (the message time's
-    // shape, not the schedule's).
-    expect(lastOf(line(noted(local(2026, 10, 14, 10, 0))))).toBe(
-      "10月14日 记下",
-    );
-    expect(lastOf(line(noted(local(2026, 1, 3, 10, 0))))).toBe("1月3日 记下");
-    expect(lastOf(line(noted(local(2025, 12, 31, 23, 0))))).toBe(
-      "2025年12月31日 记下",
-    );
-    expect(lastOf(line(noted(local(2026, 10, 16, 8, 5)), TODAY, "en-US"))).toBe(
-      "Noted today",
-    );
-    expect(lastOf(line(noted(local(2026, 10, 15, 8, 5)), TODAY, "en-US"))).toBe(
-      "Noted yesterday",
-    );
-    expect(lastOf(line(noted(local(2026, 10, 14, 8, 5)), TODAY, "en-US"))).toBe(
-      "Noted Oct 14",
-    );
-    expect(lastOf(line(noted(local(2025, 10, 14, 8, 5)), TODAY, "en-US"))).toBe(
-      "Noted Oct 14, 2025",
-    );
-  });
-
-  it("turns to 昨天 at midnight, on the day stamp alone", () => {
-    // Noted at 23:59 on Friday; the panel stays open past midnight.
-    const lateFriday = noted(local(2026, 10, 16, 23, 59));
-    expect(lastOf(line(lateFriday, TODAY))).toBe("今天 记下");
-    expect(lastOf(line(lateFriday, TOMORROW))).toBe("昨天 记下");
-    // Just past midnight: today, though a minute after the one before.
-    expect(lastOf(line(noted(local(2026, 10, 17, 0, 0)), TOMORROW))).toBe(
-      "今天 记下",
-    );
-  });
-
-  it("is the panel's alone: a card, an item without the time, nothing", () => {
-    const item = noted(local(2026, 10, 16, 8, 5));
-    expect(texts(todoMetaParts(item, false, TODAY, "zh-CN", zh))).toEqual([
-      "截止 10月23日",
-      "提醒 明天 09:00",
-    ]);
-    expect(line(todo())).toEqual([]);
-    expect(line(todo({ createdAt: "not a time" }))).toEqual([]);
-    // Held after a tick: the reminder goes, the day stays.
-    expect(
-      texts(todoMetaParts(item, true, TODAY, "zh-CN", zh, { noted: true })),
-    ).toEqual(["截止 10月23日", "今天 记下"]);
   });
 });
 

@@ -301,7 +301,7 @@ describe("the panel's rows", () => {
     expect(row(panel(FULL), "todo_late")).toContain("这件事已经不在了。");
   });
 
-  it("writes the day each of 你的事's rows was noted, last on its second line (ticket 43)", () => {
+  it("draws 你的事's second line as ruling 97: one time, then the bell, never the day it was noted", () => {
     const html = panel({
       ...FULL,
       yours: {
@@ -309,50 +309,23 @@ describe("the panel's rows", () => {
         later: [{ ...REMINDED, createdAt: inDays(-1, 22) }],
         anytime: [{ ...ANYTIME, createdAt: inDays(0, 8) }],
       },
-      done: [{ ...DONE_TODO, createdAt: inDays(-1, 8) }],
     });
-    const d = new Date(inDays(-3, 10));
-    expect(row(html, "todo_late")).toContain(
-      `>${d.getMonth() + 1}月${d.getDate()}日 记下<`,
-    );
+    expect(html).not.toContain("记下");
+    expect(html).not.toContain("截止");
     const report = row(html, "todo_report");
-    expect(report).toContain(">昨天 记下<");
-    // Due, reminder, then the day (cut first when narrow); 「取消提醒」
-    // stays on that line, outside what is cut.
     const meta = report.slice(report.indexOf('data-role="todo-meta"'));
-    expect(meta.indexOf("截止 ")).toBeLessThan(meta.indexOf("提醒 "));
-    expect(meta.indexOf("提醒 ")).toBeLessThan(meta.indexOf("昨天 记下"));
-    expect(meta.indexOf("昨天 记下")).toBeLessThan(meta.indexOf("取消提醒"));
-    expect(meta).toMatch(
-      /<span class="min-w-0 truncate">[^]*昨天 记下[^]*<\/span><button[^>]*aria-label="取消提醒"/,
+    // The bell, its full words as its name, no 「·」 before it, and
+    // 「取消提醒」 after it, outside what is cut.
+    expect(meta).toMatch(/aria-label="提醒 [^"]+"/);
+    expect(meta).not.toContain(" · ");
+    expect(meta.indexOf('aria-label="提醒 ')).toBeLessThan(
+      meta.indexOf("取消提醒"),
     );
-    // A row with nothing else to say has the day alone.
-    expect(row(html, "todo_soil")).toContain(">今天 记下<");
-    // 已完成 dates the tick, not the noting.
-    expect(
-      row(
-        panel(
-          { ...FULL, done: [{ ...DONE_TODO, createdAt: inDays(-1, 8) }] },
-          { doneOpen: true },
-        ),
-        "todo_done",
-      ),
-    ).not.toContain("记下");
-    expect(
-      row(
-        panel(
-          {
-            ...FULL,
-            yours: {
-              ...FULL.yours,
-              anytime: [{ ...ANYTIME, createdAt: inDays(0, 8) }],
-            },
-          },
-          { language: "en-US" },
-        ),
-        "todo_soil",
-      ),
-    ).toContain(">Noted today<");
+    expect(meta).toMatch(
+      /<span class="min-w-0 truncate">[^]*<\/span><button[^>]*aria-label="取消提醒"/,
+    );
+    // A row with nothing to say has no second line.
+    expect(row(html, "todo_soil")).not.toContain('data-role="todo-meta"');
   });
 
   it("strikes a done row's title in ink-muted and fades nothing else (C1, ticket 45)", () => {
@@ -446,9 +419,10 @@ describe("the card under the reply", () => {
     expect(html).toContain('checked=""');
     expect(html).not.toContain('disabled=""');
     expect(html).toMatch(/text-ink-muted line-through[^>]*>交房租</);
-    // Its due date quietly, never overdue.
+    // Its due date quietly, never overdue, with no word before it.
     expect(html).not.toContain("逾期");
-    expect(html).toContain("截止 ");
+    expect(html).not.toContain("截止");
+    expect(html).toMatch(/data-role="todo-meta"[^>]*><span><span>[^<]+</);
     // C1 (ticket 45): the strike-through alone, the card not faded.
     expect(html).not.toContain("opacity-60");
   });

@@ -31,6 +31,7 @@ import {
   routineRowLine,
   todoChecked,
   todoMetaParts,
+  type TodoMetaPart,
   todoPanelEmpty,
   todoReminderCancellable,
   todoTitleTarget,
@@ -47,6 +48,7 @@ import {
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
 
 import { TodoCheck } from "./TodoCheck";
+import { TodoMetaText } from "./TodoMetaText";
 import { todoTitleClass } from "./todo-styles";
 
 export interface TodoPanelProps {
@@ -217,7 +219,12 @@ export function TodoPanelGroups({
                 <div key={key} data-todo-part={key}>
                   <PartLabel label={label} />
                   {items.map((item) => (
-                    <YourRow key={item.id} item={item} {...rowProps} />
+                    <YourRow
+                      key={item.id}
+                      item={item}
+                      inToday={key === "today"}
+                      {...rowProps}
+                    />
                   ))}
                 </div>
               ),
@@ -467,7 +474,10 @@ function useTodoWrite(id: string) {
  * off — by the thing it removes, and not a second target beside the
  * first at the row's end (deferred.md 「session 行 hover 置顶按钮」: two
  * precise targets side by side make the row's hover loud). */
-function YourRow(props: RowProps) {
+function YourRow({
+  inToday = false,
+  ...props
+}: RowProps & { inToday?: boolean }) {
   const { item, onTalkAbout } = props;
   const copy = useCopy();
   const language = useLanguage();
@@ -476,7 +486,7 @@ function YourRow(props: RowProps) {
   const { flip, failure, cancelling } = useTodoWrite(item.id);
   const checked = todoChecked(item, flip);
   const parts = todoMetaParts(item, checked, todayStartMs, language, copy, {
-    noted: true,
+    inToday,
   });
   const canCancelReminder = !checked && todoReminderCancellable(item);
   return (
@@ -522,7 +532,7 @@ function MetaLine({
   parts,
   after,
 }: {
-  parts: ReturnType<typeof todoMetaParts>;
+  parts: readonly TodoMetaPart[];
   after?: ReactNode;
 }) {
   if (parts.length === 0) return null;
@@ -532,18 +542,7 @@ function MetaLine({
       className="mt-0.5 flex min-w-0 items-center text-[12px] leading-[1.4] tabular-nums text-ink-muted"
     >
       <span className="min-w-0 truncate">
-        {parts.map((part, index) => (
-          <span key={index}>
-            {index > 0 && " · "}
-            <span
-              className={
-                part.tone === "warning" ? "font-medium text-warning" : undefined
-              }
-            >
-              {part.text}
-            </span>
-          </span>
-        ))}
+        <TodoMetaText parts={parts} />
       </span>
       {after}
     </div>
