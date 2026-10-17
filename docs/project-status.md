@@ -708,6 +708,25 @@ main-chat planning docs, main has:
   `SubtaskDispatch` carries `sendBacks`; a CLI `session show` of the main
   chat shows report rows as `via: "system"` with a `summary`.
 
+- **Reminders and the to-do** (2026-10-16 / 17, `.scratch/main-chat/`
+  rulings 84, 86–98, tickets 33–46, devlog
+  [2026-10-17-todo-galleys-notebook](./devlog/2026-10-17-todo-galleys-notebook.md)).
+  Managed runtime with a main chat only. Scheduled tasks gain one-offs that
+  wake the assistant, catch-up of a missed one-off and soft delete
+  (migration **049**); the assistant keeps the user's to-dos, a reminder
+  being a one-off hung on its to-do (migration **050**). Every
+  conversation's top bar has a 「待办」 button with today's count, opening
+  the to-do panel beside it: the user can only tick off, untick and cancel
+  a reminder there, everything else is said to Galley, and workbench
+  sessions are told to send the user there. The main chat can delete a
+  single message (rulings 83, 85; remote event `message.deleted`).
+  **Agent API, additive inside `3`** (also under `1` / `2`): the
+  `schedule` family, `session rename / pin / unpin / delete`, `project
+  update / pin / unpin / archive-sessions`, `llm set-default` (2026-10-16),
+  the `todo` family and `ScheduledTask.todoId` (2026-10-17). Owed: JC's
+  live look at the two remembered panel states across a restart and the
+  new empty state.
+
 **Do at release** (outward-facing, so ask JC before each; the release SOP's
 Pre-Flight checks this list):
 
