@@ -430,15 +430,19 @@ def canonical_session_record(
     plan_path = item.get("plan_path", "")
     if not isinstance(title, str) or not isinstance(cwd, str) or not isinstance(plan_path, str):
         raise BackupFormatError("session text field is invalid")
-    messages = _record_list(item.get("messages"), [], "messages")
-    llm_history_value = item.get("llm_history")
-    llm_history = None if llm_history_value is None else _record_list(
-        llm_history_value, [], "llm history"
-    )
+    try:
+        from .desktop_history import metadata
+    except ImportError:
+        from desktop_history import metadata
     llm_no_value = item.get("llm_no")
     llm_no = None if llm_no_value is None else _non_negative_integer(
         llm_no_value, 0, "model index"
     )
+    if "messages" in item:
+        _record_list(item["messages"], [], "messages")
+    history = item.get("llm_history")
+    if history is not None and (not isinstance(history, list) or any(not isinstance(m, dict) for m in history)):
+        raise BackupFormatError("session history is invalid")
     pinned = item.get("pinned", False)
     untitled = item.get("untitled", True)
     if not isinstance(pinned, bool) or not isinstance(untitled, bool):
@@ -449,7 +453,7 @@ def canonical_session_record(
         "cwd": cwd,
         "created_at": _finite_timestamp(item.get("created_at"), current_time),
         "updated_at": _finite_timestamp(item.get("updated_at"), current_time),
-        "messages": messages,
+        **metadata(item),
         "msg_seq": _non_negative_integer(item.get("msg_seq"), 0, "message sequence"),
         "pinned": pinned,
         "untitled": untitled,
@@ -458,7 +462,6 @@ def canonical_session_record(
         ),
         "plan_path": plan_path,
         "llm_no": llm_no,
-        "llm_history": llm_history,
     }
 
 

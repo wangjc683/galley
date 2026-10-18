@@ -22,7 +22,9 @@ live in [refactor](./archive/refactor/README.md).
 - Shipped GA baseline: `f308ee7` (audited 2026-10-06, first shipped in
   `v0.6.1`, again in `v0.6.2`) — the memory-distill prompt now lets the
   model merge and compress existing memory entries. The previous `1b6442f` shipped
-  `v0.5.1` … `v0.6.0`, `efb3bc6` before it `v0.4.11` … `v0.5.0`. See
+  `v0.5.1` … `v0.6.0`, `efb3bc6` before it `v0.4.11` … `v0.5.0`. Audited
+  on main, not yet shipped: `5205f40` (2026-10-18; upstream's new mykey
+  store broke the managed loader, fixed in the runner). See
   [GA baseline](./ga-baseline.md).
 - Product shape: dual-native local agent team orchestrator
 
@@ -707,6 +709,18 @@ main-chat planning docs, main has:
   `ensureRunner` (CLI `--ensure-runner`, default off), and
   `SubtaskDispatch` carries `sendBacks`; a CLI `session show` of the main
   chat shows report rows as `via: "system"` with a `summary`.
+
+- **GA baseline bump `f308ee7` -> `5205f40`** (audited 2026-10-18,
+  [devlog](./devlog/2026-10-18-ga-upstream-upgrade-f308ee7-to-5205f40.md)).
+  Upstream moved mykey loading into a store `agentmain` reads directly,
+  which bypassed Galley's managed loader (every managed session would have
+  had no LLM); the runner now feeds the store and keeps the first load.
+  Two bridge adapters for upstream's model reload at every task start:
+  settle it before `put_task`, and report a `next_llm` that did not
+  switch. Plan mode is gone upstream; the turn-end nudges are spaced out.
+  It makes the next release's bundled-runtime gate mandatory, and its SOP
+  step 8 (a real task in each runtime mode, the four IM channels'
+  restart checks) is still owed.
 
 - **Reminders and the to-do** (2026-10-16 / 17, `.scratch/main-chat/`
   rulings 84, 86–98, tickets 33–46, devlog

@@ -464,7 +464,9 @@ class TestDataBackupImport:
         )
         assert document["id"] == "sess-valid"
         assert document["updated_at"] == 11.5
-        assert document["messages"][0]["role"] == "user"
+        assert "messages" not in document
+        assert "llm_history" not in document
+        assert document["storage_version"] == 2
         assert "unknown" not in document
 
     def test_mocked_windows_reparse_source_is_rejected_before_read(

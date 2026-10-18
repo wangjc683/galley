@@ -1,7 +1,7 @@
 diff --git a/agentmain.py b/agentmain.py
 --- a/agentmain.py
 +++ b/agentmain.py
-@@ -154,2 +154,5 @@ class GenericAgent:
+@@ -168,2 +168,5 @@ class GenericAgent:
 -                try: sock._real_close()  # CPython internal; bypasses refcount -> actual closesocket
 -                except AttributeError: sock.close()
 +                # Galley 0025: Windows only. On macOS the shutdown above is the wake-up, and closing the fd right after

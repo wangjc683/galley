@@ -6,7 +6,7 @@ if sys.stderr is None: sys.stderr = open(os.devnull, "w")
 elif hasattr(sys.stderr, 'reconfigure'): sys.stderr.reconfigure(errors='replace')
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from llmcore import reload_mykeys, ToolClient, MixinSession, NativeToolClient, NativeClaudeSession, NativeOAISession, resolve_client
+from llmcore import mykeys_store, ToolClient, MixinSession, NativeToolClient, NativeClaudeSession, NativeOAISession, resolve_client
 from agent_loop import agent_runner_loop
 try:
     from plugins.hooks import discover_and_load; discover_and_load()
@@ -75,6 +75,7 @@ class GenericAgent:
     def __init__(self):
         os.makedirs(state_path('temp'), exist_ok=True)
         self.lock = threading.Lock()
+        self._model_lock = threading.RLock()
         self.task_dir = None
         self.history = []; self.handler = None; self.all_outputs = []
         self.task_queue = queue.Queue()
@@ -93,44 +94,57 @@ class GenericAgent:
         self.intervene = self.extrakeyinfo = None
 
     def load_llm_sessions(self):
-        mykeys, changed = reload_mykeys()
-        if not changed and hasattr(self, 'llmclients'): return
-        try: oldhistory, oldname = self.llmclient.backend.history, self.llmclient.backend.name
-        except: oldhistory = oldname = None
-        llm_sessions = []
-        for k, cfg in mykeys.items():
-            if not any(x in k for x in ['api', 'config', 'cookie']): continue
-            try:
-                if 'mixin' in k: llm_sessions += [{'mixin_cfg': cfg}]
-                elif c := resolve_client(k): llm_sessions += [c]
-            except: pass
-        for i, s in enumerate(llm_sessions):
-            if isinstance(s, dict) and 'mixin_cfg' in s:
+        with self._model_lock:
+            if self.is_running: return
+            mykeys, updated_at = mykeys_store.snapshot()
+            if hasattr(self, 'llmclients') and getattr(self, '_mykeys_updated_at', None) == updated_at: return
+            try: oldhistory = self.llmclient.backend.history
+            except: oldhistory = None
+            try: oldkey = self._llm_config_keys[self.llm_no]
+            except (AttributeError, IndexError): oldkey = None
+            llm_sessions, config_keys = [], []
+            for k, cfg in mykeys.items():
+                if not any(x in k for x in ['api', 'config', 'cookie']): continue
                 try:
-                    mixin = MixinSession(llm_sessions, s['mixin_cfg'])
-                    if isinstance(mixin._sessions[0], (NativeClaudeSession, NativeOAISession)): llm_sessions[i] = NativeToolClient(mixin)
-                    else: llm_sessions[i] = ToolClient(mixin)
-                except Exception as e: print(f'\n\n\n[ERROR] Failed to init MixinSession with cfg {s["mixin_cfg"]}: {e}!!!\n\n')
-        self.llmclients = llm_sessions
-        if not self.llmclients: return
-        names = [c.backend.name if not isinstance(c, dict) else f'BADMIXIN_{i}' for i, c in enumerate(self.llmclients)]
-        if oldname in names: self.llm_no = names.index(oldname)
-        self.llmclient = self.llmclients[self.llm_no%len(self.llmclients)]
-        if oldhistory: self.llmclient.backend.history = oldhistory
+                    if 'mixin' in k: llm_sessions += [{'mixin_cfg': cfg}]
+                    elif c := resolve_client(k, cfg): llm_sessions += [c]
+                    else: continue
+                    config_keys.append(k)
+                except: pass
+            for i, s in enumerate(llm_sessions):
+                if isinstance(s, dict) and 'mixin_cfg' in s:
+                    try:
+                        mixin = MixinSession(llm_sessions, s['mixin_cfg'])
+                        if isinstance(mixin._sessions[0], (NativeClaudeSession, NativeOAISession)): llm_sessions[i] = NativeToolClient(mixin)
+                        else: llm_sessions[i] = ToolClient(mixin)
+                    except Exception as e: print(f'\n\n\n[ERROR] Failed to init MixinSession with cfg {s["mixin_cfg"]}: {e}!!!\n\n')
+            self.llmclients, self._llm_config_keys = llm_sessions, config_keys
+            if not self.llmclients:
+                self.llmclient = None
+                self._mykeys_updated_at = updated_at
+                return
+            if oldkey in config_keys: self.llm_no = config_keys.index(oldkey)
+            self.llm_no %= len(self.llmclients)
+            self.llmclient = self.llmclients[self.llm_no]
+            if oldhistory: self.llmclient.backend.history = oldhistory
+            self._mykeys_updated_at = updated_at
 
     def next_llm(self, n=-1):
-        self.load_llm_sessions()
-        if not self.llmclients: return
-        self.llm_no = ((self.llm_no + 1) if n < 0 else n) % len(self.llmclients)
-        lastc = self.llmclient
-        self.llmclient = self.llmclients[self.llm_no]
-        try: self.llmclient.backend.history = lastc.backend.history
-        except: raise Exception('[ERROR] BAD Mixin config: Check your mykey.py')
-        self.llmclient.last_tools = ''
-        load_tool_schema()
+        with self._model_lock:
+            if self.is_running: return
+            self.load_llm_sessions()
+            if not self.llmclients: return
+            self.llm_no = ((self.llm_no + 1) if n < 0 else n) % len(self.llmclients)
+            lastc = self.llmclient
+            self.llmclient = self.llmclients[self.llm_no]
+            try: self.llmclient.backend.history = lastc.backend.history
+            except: raise Exception('[ERROR] BAD Mixin config: Check your mykey.py')
+            self.llmclient.last_tools = ''
+            load_tool_schema()
     def list_llms(self):
-        self.load_llm_sessions()
-        return [(i, self.get_llm_name(b), i == self.llm_no) for i, b in enumerate(self.llmclients)]
+        with self._model_lock:
+            self.load_llm_sessions()
+            return [(i, self.get_llm_name(b), i == self.llm_no) for i, b in enumerate(self.llmclients)]
     def get_llm_name(self, b=None, model=False):
         b = self.llmclient if b is None else b
         if isinstance(b, dict): return 'BADCONFIG_MIXIN'
@@ -187,37 +201,38 @@ class GenericAgent:
             images = task.get("images") or []
             if isinstance(task, str): break
             raw_query, source, display_queue = task["query"], task["source"], task["output"]
-            raw_query = self._handle_slash_cmd(raw_query, display_queue)
-            if raw_query is None:
-                self.task_queue.task_done(); continue
-            self.is_running = True; self._current_queue = display_queue
-            if len(raw_query) > 2000:
-                task_file = state_path('temp', f'user_prompt_{os.getpid()}_{time.time_ns()}.md')
-                with open(task_file, 'w', encoding='utf-8') as f: f.write(raw_query)
-                raw_query = f'Long user prompt saved to {task_file}. Read and execute.'
-            self.all_outputs.append({"input": raw_query, "outputs": []})
-            if len(self.all_outputs) > 10000: self.all_outputs = self.all_outputs[-5000:]
-            rquery = smart_format(raw_query.replace('\n', ' '), max_str_len=200)
-            self.history.append(f"[USER]: {rquery}")
-            sys_prompt = get_system_prompt() + '\n'.join(self.extra_sys_prompts) + getattr(self.llmclient.backend, 'extra_sys_prompt', '')
-            if self.peer_hint: sys_prompt += f"\n[Peer] 用户提及其他会话/后台任务状态时: temp/model_responses/ (只找近期修改的文件尾部)\n"
-            handler = GenericAgentHandler(self, self.history, state_path('temp'))
-            if getattr(self, 'no_print', False): handler.print = lambda *a, **k: None
-            if self.handler and 'key_info' in self.handler.working:
-                ki = re.sub(r'\n\[SYSTEM\] 此为.*?工作记忆[。\n]*', '', self.handler.working['key_info'])  # 去旧
-                handler.working['key_info'] = ki
-                handler.working['passed_sessions'] = ps = self.handler.working.get('passed_sessions', 0) + 1
-                if ps > 0: handler.working['key_info'] += f'\n[SYSTEM] 此为 {ps} 个对话前设置的key_info，若已在新任务，先更新或清除工作记忆。\n'
-            self.handler = handler  # although new handler, the **full** history is in llmclient, so it is full history!
-            self.llmclient.log_path = self.log_path
-            if self.force_non_stream:
-                self.llmclient.backend.stream = False
-                self.llmclient.backend.read_timeout = max(self.llmclient.backend.read_timeout, 1200)
-            initial_user_content = image_content_blocks(raw_query, images) if images else None
-            gen = agent_runner_loop(self.llmclient, sys_prompt, raw_query, handler, TOOLS_SCHEMA,
-                                    max_turns=180, verbose=self.verbose, initial_user_content=initial_user_content, yield_info=True)
+            full_resp = ""; last_pos = 0; curr_turn = 0; turn_resps = []
             try:
-                full_resp = ""; last_pos = 0; curr_turn = 0; turn_resps = self.all_outputs[-1]["outputs"]
+                with self._model_lock:
+                    self.load_llm_sessions()
+                    self.is_running = True; self._current_queue = display_queue
+                raw_query = self._handle_slash_cmd(raw_query, display_queue)
+                if raw_query is None: continue
+                if len(raw_query) > 2000:
+                    task_file = state_path('temp', f'user_prompt_{os.getpid()}_{time.time_ns()}.md')
+                    with open(task_file, 'w', encoding='utf-8') as f: f.write(raw_query)
+                    raw_query = f'Long user prompt saved to {task_file}. Read and execute.'
+                self.all_outputs.append({"input": raw_query, "outputs": turn_resps})
+                if len(self.all_outputs) > 10000: self.all_outputs = self.all_outputs[-5000:]
+                rquery = smart_format(raw_query.replace('\n', ' '), max_str_len=200)
+                self.history.append(f"[USER]: {rquery}")
+                sys_prompt = get_system_prompt() + '\n'.join(self.extra_sys_prompts) + getattr(self.llmclient.backend, 'extra_sys_prompt', '')
+                if self.peer_hint: sys_prompt += f"\n[Peer] 用户提及其他会话/后台任务状态时: temp/model_responses/ (只找近期修改的文件尾部)\n"
+                handler = GenericAgentHandler(self, self.history, state_path('temp'))
+                if getattr(self, 'no_print', False): handler.print = lambda *a, **k: None
+                if self.handler and 'key_info' in self.handler.working:
+                    ki = re.sub(r'\n\[SYSTEM\] 此为.*?工作记忆[。\n]*', '', self.handler.working['key_info'])  # 去旧
+                    handler.working['key_info'] = ki
+                    handler.working['passed_sessions'] = ps = self.handler.working.get('passed_sessions', 0) + 1
+                    if ps > 0: handler.working['key_info'] += f'\n[SYSTEM] 此为 {ps} 个对话前设置的key_info，若已在新任务，先更新或清除工作记忆。\n'
+                self.handler = handler  # although new handler, the **full** history is in llmclient, so it is full history!
+                self.llmclient.log_path = self.log_path
+                if self.force_non_stream:
+                    self.llmclient.backend.stream = False
+                    self.llmclient.backend.read_timeout = max(self.llmclient.backend.read_timeout, 1200)
+                initial_user_content = image_content_blocks(raw_query, images) if images else None
+                gen = agent_runner_loop(self.llmclient, sys_prompt, raw_query, handler, TOOLS_SCHEMA,
+                                        max_turns=180, verbose=self.verbose, initial_user_content=initial_user_content, yield_info=True)
                 for chunk in gen:
                     if consume_file(self.task_dir, '_stop'): self.abort()
                     if self.stop_sig: break
@@ -238,9 +253,12 @@ class GenericAgent:
                 display_queue.put({'done': full_resp + f'\n```\n{format_error(e)}\n```', 'source': source, 'turn': curr_turn, 'outputs': turn_resps.copy()})
             finally:
                 if self.stop_sig: print('User aborted the task.')
-                self.is_running = self.stop_sig = False  # keep _current_queue: its final 'done' may still be unclaimed (refreshed UI salvages it); next task overwrites it
-                self.task_queue.task_done()
                 if self.handler is not None: self.handler.code_stop_signal.append(1)
+                with self._model_lock:
+                    self.is_running = self.stop_sig = False  # keep _current_queue for final output retrieval
+                    try: self.load_llm_sessions()
+                    except Exception as e: print(f'[ERROR] Failed to reload models: {e}')
+                self.task_queue.task_done()
 
 GeneraticAgent = GenericAgent
 

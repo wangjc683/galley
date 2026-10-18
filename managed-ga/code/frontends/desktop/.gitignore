@@ -1,7 +1,4 @@
-# Rust build artifacts
-src-tauri/target/
-src-tauri/gen/
-
-# Node
-node_modules/
-package-lock.json
+# Desktop is maintained separately. Local files are not part of this repository.
+/*
+!/.gitignore
+!/README.md

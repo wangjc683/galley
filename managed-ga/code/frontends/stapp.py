@@ -158,8 +158,14 @@ def render_sidebar():
     llm_options = agent.list_llms()
     current_idx = agent.llm_no
     llm_labels = {idx: f"{idx}: {(name or '').strip()}" for idx, name, _ in llm_options}
+    # 外部(hub/手机)切了通道 -> widget state 必须跟随真值, 否则带 key 的 selectbox 会用旧值把切换静默回滚
+    # 注意: 全程只用 Session State API 定值, 不能再传 index=, 否则 streamlit 每次 rerun 都刷一条 default-value 警告
+    llm_idxs = [idx for idx, _, _ in llm_options]
+    if st.session_state.get('_llm_shadow') != current_idx:
+        st.session_state['_llm_shadow'] = current_idx
+        st.session_state['sidebar_llm_select'] = current_idx if current_idx in llm_idxs else (llm_idxs[0] if llm_idxs else None)
     st.caption(f"LLM Core: {llm_labels.get(current_idx, str(current_idx))}")
-    selected_idx = st.selectbox("LLM", [idx for idx, _, _ in llm_options], index=next((i for i, (idx, _, _) in enumerate(llm_options) if idx == current_idx), 0), format_func=llm_labels.get, label_visibility="collapsed", key="sidebar_llm_select")
+    selected_idx = st.selectbox("LLM", llm_idxs, format_func=llm_labels.get, label_visibility="collapsed", key="sidebar_llm_select")
     if selected_idx != current_idx:
         agent.next_llm(selected_idx); st.rerun()
     if st.button(T('force_stop')):

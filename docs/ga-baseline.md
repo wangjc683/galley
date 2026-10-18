@@ -15,17 +15,166 @@ audited against.
 
 ## Current Baseline
 
-Locked commit: `f308ee7eb079cc402edf5a934fa65f6d71a4c7ad`
+Locked commit: `5205f4080ff234f0ce84d8453f22fe236fc4008e`
 
-- Tree hash: `85f99e16330aa3474a1b034dac41d304a0e52f38`
+- Tree hash: `02d1a54070e237a180e4eb01a7c0df04dc500b8f`
 - Source: `lsdefine/GenericAgent` upstream `main`
-- Date audited: 2026-10-06
-- Shipped in: `v0.6.1` (2026-10-07; audited after `v0.6.0`), `v0.6.2`
-  (2026-10-09)
+- Date audited: 2026-10-18
+- Shipped in: not yet (audited on main after `v0.6.2`)
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
-- Previous baseline: `1b6442fe4f97d87a3d9d52d76569f69d156af853`
+- Previous baseline: `f308ee7eb079cc402edf5a934fa65f6d71a4c7ad`
+  (tree `85f99e16330aa3474a1b034dac41d304a0e52f38`, audited 2026-10-06,
+  shipped `v0.6.1`, `v0.6.2`)
+- Delta (`f308ee7..5205f40` = 17 commits): 188 files, +1014 / −28492.
+  164 of those files and 27.5k of the deleted lines are upstream moving its
+  Desktop app out of the repository (`frontends/desktop/` is now a
+  placeholder) and dropping the two desktop CI workflows. Engine core delta
+  is `agentmain.py` (+84 / −66), `llmcore.py` (+63 / −34) and `ga.py`
+  (+16 / −32); `agent_loop.py` and root `pyproject.toml` had **zero diff**
+  (`GA_DEPS` untouched).
+- Result: **one hard break, in the managed runtime**: upstream moved mykey
+  loading into a `MyKeys` store that `agentmain` reads directly, so
+  Galley's managed loader, which replaced the old module-level function,
+  no longer reached it, and every managed session and IM channel would
+  have started with no LLM. Fixed in Galley's runner (no patch), together
+  with two bridge adapters for upstream's new model-reload behavior in
+  both modes (item 20 below). The rest is behavior to know, not to fix:
+  plan mode removed, the turn-end nudges spaced out, a DeepSeek
+  tool-markup retry. Patch-stack rebase stopped three times on four real
+  conflicts (`0001` ×2, `0003`, `0008`), all upstream reshaping lines a
+  patch edits; see the [patch manifest](../managed-ga/patches/manifest.md).
+- Standing guard re-run: `grep -rn "hub.connect" managed-ga/code/` still
+  shows only `agentmain.py --reflect`, `hub.py` itself and `stapp.py` —
+  none on Galley's path.
+- Devlog: [GA upstream upgrade f308ee7 -> 5205f40](./devlog/2026-10-18-ga-upstream-upgrade-f308ee7-to-5205f40.md)
+
+New in the `f308ee7` -> `5205f40` range:
+
+- `llmcore.py` + `agentmain.py` — **mykey loading moved into a store**
+  (upstream `a5979ea`): `llmcore.mykeys_store` (`MyKeys`: data, path,
+  mtime and an `updated_at` stamp under a lock; `_load()` compiles
+  `mykey.py` from source or falls back to `mykey.json`).
+  `reload_mykeys()` and the module-level `_load_mykeys()` are now thin
+  wrappers over it, and `agentmain.load_llm_sessions` reads
+  `mykeys_store.snapshot()` itself, rebuilding when the store's
+  `updated_at` differs from the agent's `_mykeys_updated_at`.
+  `resolve_session(name, cfg=None)` takes the snapshot's cfg and copies it
+  before stamping `_mykey_name`. **Hard break for the managed runtime**:
+  `install_managed_mykey_loader` replaced `llmcore._load_mykeys`, which
+  nothing on agentmain's path calls any more; the store then found no
+  `mykey.py`, failed to stat `mykey.json`, and `reload()` swallowed the
+  error, leaving `llmclient = None` (reproduced with the bundled Python
+  against the rebuilt payload). Fixed in the runner: the loader now
+  replaces `mykeys_store._load` with one that returns
+  `(env config, None, None)` and resets the store. No path and no mtime
+  mean nothing to watch, so `MyKeys.reload` keeps the first load for the
+  life of the process. That is on purpose. The config is the env JSON
+  Core spawned the process with and cannot change in-process, while Core
+  rewrites `managed-models.json` (the file the old loader stat'ed) after
+  every Settings model edit; with the rebuild points below, reloading on
+  that would rebuild every client from the same config at the next task
+  start and drop `extra_sys_prompt` (Galley's managed prompt) and the
+  reasoning-effort override. The runner no longer reads
+  `GALLEY_MANAGED_MODEL_CONFIG_PATH` (Core still sets it; the file is
+  still Core's non-secret config). Test:
+  `test_managed_mykey_loader_serves_env_config_and_never_reloads` (fails
+  on the old loader). External GA users get the store when they pull;
+  Galley does not touch their loader.
+- `agentmain.py` — **model reload synchronized with runs** (upstream
+  `2ba5529`): a `_model_lock`; `load_llm_sessions` and `next_llm` return
+  without doing anything while `is_running`; `run()` calls
+  `load_llm_sessions()` at every task start (before `is_running = True`)
+  and again in `finally` (after it clears); the selection sticks by config
+  key (`_llm_config_keys`) instead of backend name; an empty config sets
+  `llmclient = None`. Two Galley adapters, both modes (item 20):
+  - A new rebuild point (item 13 (c)). In attach mode a user who saves
+    `mykey.py` mid-session now gets a rebuild at the next task start,
+    after Galley armed the image wrapper and applied the reasoning-effort
+    override on the old backend: the images would silently not go out
+    and the run would use the model's own effort. `_settle_llm_clients`
+    calls `list_llms()` and re-applies the override right before each
+    `put_task` (user message and ask_user answer), which makes GA's own
+    task-start call a no-op. Managed mode never rebuilds (above), so
+    there it is a cheap re-check. Test:
+    `test_user_message_settles_a_client_rebuild_before_put_task`.
+  - `next_llm` silently does nothing while GA's `is_running` is set.
+    Galley gates `set_llm` on its own `run_in_progress`, which clears on
+    the run's `done` or the ask_user turn end, a moment before GA's
+    `finally` clears `is_running`. `_handle_set_llm` now checks
+    `agent.llm_no` after the call and reports a business error instead
+    of an `llm_changed` for a switch that did not happen. Test:
+    `test_set_llm_reports_a_switch_ga_did_not_make`. WeChat's `/llm`
+    replies with `agent.llm_no`, so it stays truthful as it is.
+
+  Also in `run()`: slash commands are handled after `is_running = True`
+  and `_current_queue = display_queue`, inside the `try` (one that
+  returns `None` leaves through `finally`), and the whole task setup
+  moved inside the `try`, so a setup exception (no LLM, a bad slash
+  command) now ends the task with an error `done` instead of killing the
+  run thread. Items 15 (a) / (c) and 17 (b) / (c) still hold: a slash
+  command's own `done` is still `source: 'system'`, a task still gets
+  exactly one other `done`, and the exception branch still appends the
+  error fence.
+- `ga.py` — **plan mode removed** (upstream `5205f40`): `enter_plan_mode`,
+  the completion-claim intercept, the `📌` step hint and the plan turn cap
+  are gone, so `handler.max_turns` is 180 for every run (`agent_loop`
+  still sets it; item 17 (a) holds). Galley removed its plan-visibility
+  chain on 2026-07-22. `memory/plan_sop.md` (deprecated since then) still
+  ships and stays in existing managed state; a model that follows it into
+  `handler.enter_plan_mode` now gets an `AttributeError` in its tool
+  output, nothing worse. The GUI comments on plan mode's lower cap
+  (`gui/src/lib/step-limit.ts`, `StepLimitTail.tsx`) stay true for older
+  external GA.
+- `ga.py` — turn-end cadence (`5205f40`): the checkpoint nudge every 17
+  turns (was 13), the write-to-a-file nudge every 41 (was 31), and the
+  periodic global-memory re-injection every 15 (was 10), now wrapped in
+  `<global_memory>…</global_memory>`, which `compress_history_tags` folds
+  like `<history>` (upstream `67817cc`, community PR #834). Galley reads
+  none of these strings; long runs carry fewer nudges and less re-injected
+  memory.
+- `ga.py` — `start_long_term_update` appends an "L1 … is too large" line
+  when `global_mem_insight.txt` passes 6000 characters, read through the
+  new `load_L1()` (`5205f40`). `0001` redirects `load_L1` to the managed
+  state root, so both of its callers read the user's L1, not the code
+  root's.
+- `ga.py` — `code_run` with an empty `type` defaults to python, and a
+  script that starts with `ls` / `cd` / `pwd` / `dir` / `echo` / `cat` /
+  `git` / `pip` / `npm` / `curl` / `ssh` runs as shell (`f7cadb6`).
+  Galley's callout shows the script's first line, not the type. Inert.
+- `ga.py` — a reply ending in `</｜DSML｜ calls>` (DeepSeek's tool-call
+  markup arriving as text) is regenerated instead of being taken as the
+  final answer (`f7e4cc5`). Positive for managed DeepSeek presets.
+- `frontends/continue_cmd.py` — `extract_ui_messages` split out
+  `extract_ui_messages_text` and gained per-message `ts` (`a2eb541`).
+  Galley calls neither; the item 15 (f) / 16 functions are unchanged.
+- `frontends/desktop/` + `.github/workflows/desktop-*` — **upstream's
+  Desktop app left the repository** (`5a4b6fa`, `250a7c2`): the directory
+  keeps a README ("maintained independently in a private repository") and
+  a `.gitignore` that ignores everything else. `desktop_bridge.py`,
+  `conductor.py`, `data_backup.py` and the new `desktop_history.py` drop
+  the global default model and store session metadata only. Not on
+  Galley's path; `_patch_chat_for_images` (item 12's reference) is
+  byte-identical. Product signal: upstream's desktop GUI is no longer
+  developed in the open.
+- `frontends/stapp.py` / `tuiapp_v2.py` — the LLM selectbox follows an
+  external switch; the TUI's key reload uses
+  `mykeys_store.reload(force=True)`. Inert.
+- `memory/memory_management_sop.md` / `memory_cleanup_sop.md` — L3 SOPs
+  should get shorter as they are updated, L1 indexes SOPs by
+  self-explaining names without trigger words, a long-term-memory
+  admission rule, and the `file_patch` dirty-character pitfall removed.
+  Seeded missing-only: existing managed state keeps the old files.
+- `mykey_template*.py` — rewritten with quick-start configs first. Inert:
+  managed mode never reads it.
+- Carried watch item from `f308ee7`: the memory-distill prompt may merge
+  and compress existing entries (one distillation seen at `v0.6.1`, no
+  entry changed). Still watching.
+
+Carried forward from the `1b6442f` -> `f308ee7` range (2026-10-06):
+
+- Previous-previous baseline: `1b6442fe4f97d87a3d9d52d76569f69d156af853`
   (tree `d865e30e6a16197c30f254fbf601bbcd06c22eb3`, audited 2026-09-18,
   shipped `v0.5.1` … `v0.6.0`)
 - Delta (`1b6442f..f308ee7` = 8 commits): 10 files, +401 / −50. Engine
@@ -842,7 +991,9 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     `load_llm_sessions`). Re-check on upgrade that (a) the slash command
     still sets the attribute the same way, (b) `_enum('reasoning_effort',
     …)` still accepts `none / minimal / low / medium / high / xhigh / max`,
-    (c) no new rebuild point appeared outside those three.
+    (c) no new rebuild point appeared outside those three. Since upstream
+    `2ba5529` `run()` is a fourth (task start and end); see item 20 for
+    how the bridge settles it.
 14. `response.thinking` on the `response` object GA hands its turn-end hooks
     (2026-09-23): `runner/workbench_bridge.py::_on_turn_end` reads it
     read-only (both runtime modes, next to the existing `response.content`
@@ -957,7 +1108,8 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     `agentmain.run()`'s `for chunk in gen:`. Galley relies on two things:
     (a) `runner/workbench_bridge.py::_on_turn_end` reads
     `ctx["self"].max_turns` read-only (the handler attribute
-    `agent_runner_loop` sets, lowered mid-run by `enter_plan_mode`) and
+    `agent_runner_loop` sets; until upstream `5205f40` removed plan mode,
+    `enter_plan_mode` changed it mid-run) and
     treats an exit-less turn with `turn >= max_turns` as the last
     iteration, synthesizing `MAX_TURNS_EXCEEDED`; (b) `run()` puts exactly
     one non-`system` `done` per task, after the loop has ended (normal
@@ -1009,6 +1161,31 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     `galley_im_display` pulls in `chatapp_common`, which installs
     `/continue` / `/btw` / `/review` on the GA class in the WeChat process,
     as on the other channels.
+20. Model config loading and client rebuilds (2026-10-18, upstream
+    `a5979ea` / `2ba5529`; no managed patch). Managed:
+    `runner/managed_runtime.py::install_managed_mykey_loader` replaces
+    `llmcore.mykeys_store._load` with one returning `(config, None, None)`
+    and resets the store. It relies on `MyKeys.reload` skipping the load
+    when the stat of `self.path` (`None` when there is no path) equals
+    `self.mtime`, so a load that reports no file is never repeated in the
+    process, and on `agentmain.load_llm_sessions` reading
+    `mykeys_store.snapshot()` rather than a module-level function (the old
+    seam, `llmcore._load_mykeys`, stopped being on that path in
+    `a5979ea`). Both modes: GA rebuilds every client in
+    `load_llm_sessions` (`__init__`, `next_llm`, `list_llms`, and `run()`'s
+    task start and end), only when the store's `updated_at` moved past the
+    agent's `_mykeys_updated_at`. The bridge settles the task-start
+    rebuild through `list_llms()` and re-applies the reasoning effort
+    right before each `put_task` (`_settle_llm_clients`), so the override
+    and the attach-mode image wrapper are on the backend the run uses.
+    `next_llm` returns without switching while `is_running`, so
+    `_handle_set_llm` checks `agent.llm_no` afterwards. Re-check on
+    upgrade: (a) `mykeys_store` is still what `load_llm_sessions` reads,
+    and `_load` is still its only source hook, returning
+    `(data, path, mtime)`; (b) no `load_llm_sessions` call appeared
+    between `put_task` and the first LLM request other than `run()`'s
+    task start; (c) `next_llm`'s `is_running` guard and `llm_no`
+    semantics.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
@@ -1032,6 +1209,11 @@ start the audit there instead of grepping the bridge:
   `response.thinking` read and the `handler.max_turns` read.
 - **`runner/workbench_bridge.py::_close_run_without_exit`** — item 17:
   the `done`-is-task-terminal safety net and its backend-error lift.
+- **`runner/managed_runtime.py::install_managed_mykey_loader`** — item
+  20: the `llmcore.mykeys_store._load` replacement (managed only).
+- **`runner/workbench_bridge.py::_settle_llm_clients`** and
+  **`_handle_set_llm`** — item 20: the pre-`put_task` settle and the
+  post-`next_llm` `llm_no` check (both modes).
 - **`runner/managed_runtime.py::install_managed_prompt_profile`** — the
   one backend write outside GaSession (`extra_sys_prompt`); shared with
   the Bridge-less `managed_im_supervisor` path.

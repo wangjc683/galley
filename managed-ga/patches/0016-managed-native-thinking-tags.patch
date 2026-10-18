@@ -1,7 +1,7 @@
 diff --git a/llmcore.py b/llmcore.py
 --- a/llmcore.py
 +++ b/llmcore.py
-@@ -155,0 +156,24 @@ def _raise_if_retryable_overload(emsg):
+@@ -184,0 +185,24 @@ def _raise_if_retryable_overload(emsg):
 +# Galley: native reasoning arrives on its own channel (Anthropic thinking_delta,
 +# OpenAI-compatible reasoning_content / reasoning), but upstream yields it UNTAGGED
 +# into the display stream, where frontends can only tell reasoning from answer by
@@ -26,26 +26,26 @@ diff --git a/llmcore.py b/llmcore.py
 +        s = self.hold + self.END if self.open else ""
 +        self.open = False; self.hold = ""; return s
 +
-@@ -158,0 +183 @@ def _parse_claude_sse(resp_lines):
+@@ -187,0 +212 @@ def _parse_claude_sse(resp_lines):
 +    think = _GalleyThinkTag()  # Galley: in-band <thinking> for native reasoning
-@@ -190 +215 @@ def _parse_claude_sse(resp_lines):
+@@ -219 +244 @@ def _parse_claude_sse(resp_lines):
 -                if thinking: yield thinking
 +                if (s := think.feed(thinking)): yield s  # Galley: tagged, live
-@@ -195,0 +221 @@ def _parse_claude_sse(resp_lines):
+@@ -224,0 +250 @@ def _parse_claude_sse(resp_lines):
 +            if (s := think.close()): yield s  # Galley: a thinking block ends here
-@@ -211,0 +238 @@ def _parse_claude_sse(resp_lines):
+@@ -240,0 +267 @@ def _parse_claude_sse(resp_lines):
 +            if (s := think.close()): yield s  # Galley: close before a retry or warn exit
-@@ -213,0 +241 @@ def _parse_claude_sse(resp_lines):
+@@ -242,0 +270 @@ def _parse_claude_sse(resp_lines):
 +    if (s := think.close()): yield s  # Galley: never leave the tag open on a normal exit
-@@ -326,0 +355 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
+@@ -355,0 +384 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
 +        think = _GalleyThinkTag()  # Galley: in-band <thinking> for native reasoning
-@@ -338 +367,2 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
+@@ -367 +396,2 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
 -                reasoning_text += rc; yield rc
 +                reasoning_text += rc
 +                if (s := think.feed(rc)): yield s  # Galley: tagged, live
-@@ -339,0 +370 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
+@@ -368,0 +399 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
 +                if (s := think.close()): yield s  # Galley: reasoning ends before the answer
-@@ -340,0 +372 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
+@@ -369,0 +401 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
 +            if delta.get("tool_calls") and (s := think.close()): yield s  # Galley: ...or before tool calls
-@@ -351,0 +384 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
+@@ -380,0 +413 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
 +        if (s := think.close()): yield s  # Galley: [DONE] or stream end

@@ -21,7 +21,7 @@ def test_real_aiohttp_routes_expose_data_backup_capability(
         await client.start_server()
         try:
             inspect_head = await client.head("/memory/import/inspect")
-            assert inspect_head.status == 404
+            assert inspect_head.status == 405  # API exists, but accepts POST only.
 
             capabilities = await client.get("/services/capabilities")
             assert capabilities.status == 200

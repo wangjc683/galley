@@ -893,7 +893,7 @@ class Bridge:
         continues with whatever the model configuration says.
         """
         # `id(backend)` keys the memo: GA rebuilds client objects in
-        # __init__ / next_llm / list_llms, and a fresh object carries
+        # __init__ / next_llm / list_llms / run(), and a fresh object carries
         # the model config's own value again. Entries are kept for
         # every backend seen (switching back to an earlier LLM must
         # not re-read a value Galley has already overwritten).
@@ -930,6 +930,25 @@ class Bridge:
         if managed_runtime.is_managed_runtime():
             return True
         return self.ga.supports_image_input()
+
+    def _settle_llm_clients(self) -> None:
+        """Let GA rebuild its clients now, before the run, if it is going to.
+
+        Since upstream ``2ba5529`` ``GenericAgent.run()`` calls
+        ``load_llm_sessions()`` at every task start, which rebuilds every
+        client when the model config changed on disk (attach mode: the
+        user saved mykey.py mid-session). A rebuild there would leave the
+        reasoning-effort override and the one-shot image wrapper on a
+        backend the run no longer uses. Going through ``list_llms()``
+        first makes GA's own call a no-op. Managed mode never rebuilds
+        (see ``install_managed_mykey_loader``), so this is a cheap
+        re-check there.
+        """
+        try:
+            self.agent.list_llms()
+        except Exception as e:
+            print(f"list_llms before the run failed: {e}", file=sys.stderr)
+        self._apply_reasoning_effort()
 
     def _arm_image_delivery(self, images: list[str]) -> None:
         """Attach-mode image input: arm the one-shot `backend.ask`
@@ -1688,6 +1707,7 @@ class Bridge:
             self._begin_run_tracking()
             run_generation = self._open_run()
             self._emit_turn_start(1)
+            self._settle_llm_clients()
             self._arm_image_delivery(cmd.images)
             display_queue = self.agent.put_task(
                 cmd.text, source="workbench", images=cmd.images
@@ -1713,6 +1733,7 @@ class Bridge:
             self._begin_run_tracking()
             run_generation = self._open_run()
             self._emit_turn_start(1)
+            self._settle_llm_clients()
             display_queue = self.agent.put_task(cmd.text, source="workbench")
             self._start_progress_drain(display_queue, run_generation)
         elif isinstance(cmd, AbortCommand):
@@ -1822,6 +1843,19 @@ class Bridge:
             self._emit_error(
                 f"next_llm({cmd.llmIndex}) failed: {e}",
                 traceback.format_exc(),
+                context="set_llm",
+            )
+            return
+        # Since upstream 2ba5529 next_llm() returns without switching
+        # while GA's own is_running is still set, which can outlast
+        # run_in_progress by the tail of GA's task loop. Report that
+        # instead of announcing a switch that did not happen.
+        if self.agent.llm_no != cmd.llmIndex:
+            self._emit_error(
+                f"next_llm({cmd.llmIndex}) did not take effect; the engine "
+                f"is still on LLM {self.agent.llm_no}",
+                None,
+                category="business",
                 context="set_llm",
             )
             return

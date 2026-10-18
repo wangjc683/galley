@@ -61,6 +61,7 @@ class FakeAgent:
         self.next_llm_calls: list[int] = []
         self.reloads = 0
         self.failing = failing or set()
+        self.task_queue = queue.Queue()
 
     def load_llm_sessions(self):
         self.reloads += 1
@@ -78,20 +79,6 @@ class FakeAgent:
         client = client or self.llmclient
         return client.backend.model if model else client.backend.name
 
-
-def test_out_of_range_config_falls_back_without_modulo(monkeypatch):
-    agent = FakeAgent(["zero", "one", "two", "three"])
-    monkeypatch.setattr(
-        conductor,
-        "_settings_doc",
-        lambda: {"conductor": {"llmNo": 99}, "ui": {"llmNo": 1}},
-    )
-
-    state = conductor._apply_desktop_model(agent)
-
-    assert agent.next_llm_calls == [1]
-    assert state["effective"] == 1
-    assert state["fallbackReason"] == "invalid_configured"
 
 
 def test_conductor_default_port_override_is_e2e_scoped(monkeypatch):
@@ -114,45 +101,7 @@ def test_conductor_port_parser_rejects_invalid_values(value):
         conductor._parse_conductor_port(value)
 
 
-def test_unusable_configured_client_falls_back_to_ui_default(monkeypatch):
-    agent = FakeAgent(["zero", "one", None, "three"])
-    monkeypatch.setattr(
-        conductor,
-        "_settings_doc",
-        lambda: {"conductor": {"llmNo": 2}, "ui": {"llmNo": 1}},
-    )
 
-    state = conductor._apply_desktop_model(agent)
-
-    assert agent.next_llm_calls == [1]
-    assert state["effective"] == 1
-    assert state["fallbackReason"] == "configured_unavailable"
-
-
-def test_configured_activation_failure_falls_back_to_ui_default(monkeypatch):
-    agent = FakeAgent(["zero", "one", "two"], failing={2})
-    monkeypatch.setattr(
-        conductor,
-        "_settings_doc",
-        lambda: {"conductor": {"llmNo": 2}, "ui": {"llmNo": 1}},
-    )
-
-    state = conductor._apply_desktop_model(agent)
-
-    assert agent.next_llm_calls == [2, 1]
-    assert state["effective"] == 1
-    assert state["fallbackReason"] == "configured_unavailable"
-
-
-def test_missing_config_uses_first_usable_when_ui_is_invalid(monkeypatch):
-    agent = FakeAgent([None, None, "two", "three"])
-    monkeypatch.setattr(conductor, "_settings_doc", lambda: {"ui": {"llmNo": 99}})
-
-    state = conductor._apply_desktop_model(agent)
-
-    assert agent.next_llm_calls == [2]
-    assert state["effective"] == 2
-    assert state["fallbackReason"] == "first_available"
 
 
 def test_explicit_numeric_worker_model_rejects_out_of_range():
@@ -164,52 +113,12 @@ def test_explicit_numeric_worker_model_rejects_out_of_range():
     assert agent.next_llm_calls == []
 
 
-def test_standalone_model_selection_persists_without_mutating_live_client(tmp_path, monkeypatch):
-    settings_path = tmp_path / "settings.json"
-    settings_path.write_text('{"theme":"dark","ui":{"llmNo":0}}', encoding="utf-8")
-    monkeypatch.setattr(conductor, "SETTINGS_PATH", settings_path)
-    agent = FakeAgent(["zero", "one", "two"])
 
-    selected = conductor._set_conductor_llm_no(agent, 2)
-
-    assert selected == 2
-    assert agent.llm_no == 0
-    assert agent.next_llm_calls == []
-    assert conductor._settings_doc() == {
-        "theme": "dark",
-        "ui": {"llmNo": 0},
-        "conductor": {"llmNo": 2},
-    }
-
-
-def test_standalone_model_selection_rejects_unavailable_model(tmp_path, monkeypatch):
-    settings_path = tmp_path / "settings.json"
-    settings_path.write_text('{"theme":"dark"}', encoding="utf-8")
-    monkeypatch.setattr(conductor, "SETTINGS_PATH", settings_path)
-    agent = FakeAgent(["zero", None])
-
-    with pytest.raises(ValueError, match="unavailable"):
-        conductor._set_conductor_llm_no(agent, 1)
-
-    assert conductor._settings_doc() == {"theme": "dark"}
-
-
-def test_standalone_model_selection_applies_at_next_task_boundary(tmp_path, monkeypatch):
-    settings_path = tmp_path / "settings.json"
-    monkeypatch.setattr(conductor, "SETTINGS_PATH", settings_path)
-    agent = FakeAgent(["zero", "one", "two"])
-
-    conductor._set_conductor_llm_no(agent, 2)
-    state = conductor._apply_desktop_model(agent)
-
-    assert agent.next_llm_calls == [2]
-    assert state["configured"] == 2
-    assert state["effective"] == 2
-    assert state["fallbackReason"] is None
 
 
 def test_runtime_model_snapshot_is_broadcast_with_running_state(monkeypatch):
     instance = conductor.Conductor()
+    instance.agent = FakeAgent(["model-one"])
     payloads: list[dict] = []
     monkeypatch.setattr(conductor, "schedule_broadcast", payloads.append)
     state = {
@@ -221,12 +130,12 @@ def test_runtime_model_snapshot_is_broadcast_with_running_state(monkeypatch):
 
     instance._publish_model_state(state, running=True)
 
-    assert instance.model_snapshot() == {**state, "running": True}
+    assert instance.model_snapshot() == {**conductor._runtime_model_state(instance.agent), "running": True}
     assert payloads == [{"type": "model", "model": {**state, "running": True}}]
 
 
 def test_long_lived_conductor_refreshes_model_between_tasks(monkeypatch):
-    """A saved binding waits for task cleanup, then affects the next task."""
+    """Display completion does not permit switching before task cleanup."""
 
     class EndOfInbox(Exception):
         pass
@@ -254,7 +163,6 @@ def test_long_lived_conductor_refreshes_model_between_tasks(monkeypatch):
             # Keep each event as a separate task boundary for this regression.
             return True
 
-    selected = {"llmNo": 1}
     timeline: list[tuple[str, int]] = []
     allow_first_cleanup = threading.Event()
     first_cleanup_done = threading.Event()
@@ -276,10 +184,7 @@ def test_long_lived_conductor_refreshes_model_between_tasks(monkeypatch):
             self.task_models.append(self.llm_no)
             timeline.append(("submit", self.llm_no))
             if len(self.task_models) == 1:
-                # Simulate save_config while task one is already submitted. The
-                # display queue reports done before the agent runner persists its
-                # final state and calls task_done().
-                selected["llmNo"] = 2
+                # Display completion precedes task cleanup.
                 assert self.llm_no == 1
                 self.task_queue.put("first")
 
@@ -302,13 +207,9 @@ def test_long_lived_conductor_refreshes_model_between_tasks(monkeypatch):
 
     instance = conductor.Conductor()
     instance.agent = TaskAgent()
+    instance.agent.next_llm(1)
     instance.inbox = BoundaryInbox()
     payloads: list[dict] = []
-    monkeypatch.setattr(
-        conductor,
-        "_settings_doc",
-        lambda: {"conductor": {"llmNo": selected["llmNo"]}},
-    )
     monkeypatch.setattr(conductor, "schedule_broadcast", payloads.append)
     monkeypatch.setattr(conductor, "start_agent_runner", lambda *_args: None)
     monkeypatch.setattr(conductor.time, "sleep", lambda _seconds: None)
@@ -333,6 +234,8 @@ def test_long_lived_conductor_refreshes_model_between_tasks(monkeypatch):
     assert instance.agent.task_models == [1]
     assert timeline == [("select", 1), ("submit", 1)]
 
+    with pytest.raises(ValueError, match="busy"):
+        instance.select_model(2)
     allow_first_cleanup.set()
     assert first_cleanup_done.wait(timeout=2)
     runner.join(timeout=2)
@@ -342,21 +245,20 @@ def test_long_lived_conductor_refreshes_model_between_tasks(monkeypatch):
     assert not runner.is_alive()
     assert run_errors == []
 
-    assert instance.agent.task_models == [1, 2]
+    assert instance.agent.task_models == [1, 1]
     assert timeline == [
         ("select", 1),
         ("submit", 1),
-        ("select", 2),
-        ("submit", 2),
+        ("submit", 1),
     ]
     assert instance.model_snapshot() == {
-        "configured": 2,
-        "effective": 2,
+        "configured": None,
+        "effective": 1,
         "fallbackReason": None,
-        "current": "two",
+        "current": "one",
         "running": False,
     }
-    assert [item["model"]["effective"] for item in payloads] == [1, 1, 2, 2]
+    assert [item["model"]["effective"] for item in payloads] == [1, 1, 1, 1]
     assert [item["model"]["running"] for item in payloads] == [True, False, True, False]
 
 
@@ -397,6 +299,7 @@ def test_conductor_defers_events_without_models_and_recovers(monkeypatch):
         def load_llm_sessions(self):
             if ready["value"] and not self.llmclients:
                 self.llmclients = [Client("recovered")]
+                self.llmclient = self.llmclients[0]
 
         def next_llm(self, no: int):
             self.llm_no = no
@@ -417,7 +320,6 @@ def test_conductor_defers_events_without_models_and_recovers(monkeypatch):
     instance.agent = RecoveringAgent()
     instance.inbox = BoundaryInbox()
     payloads: list[dict] = []
-    monkeypatch.setattr(conductor, "_settings_doc", lambda: {})
     monkeypatch.setattr(conductor, "schedule_broadcast", payloads.append)
     monkeypatch.setattr(conductor, "start_agent_runner", lambda *_args: None)
     monkeypatch.setattr(conductor.time, "sleep", lambda _seconds: None)
@@ -453,3 +355,112 @@ def test_parallel_worker_model_selection_keeps_agents_isolated():
     assert selected == [True] * 10
     assert [agent.llm_no for agent in agents] == requested
     assert [agent.next_llm_calls for agent in agents] == [[no] for no in requested]
+
+
+def test_model_selection_is_memory_only_and_survives_refresh(monkeypatch):
+    instance = conductor.Conductor()
+    instance.agent = FakeAgent(["zero", "one", "two"])
+    monkeypatch.setattr(conductor, "schedule_broadcast", lambda _: None)
+    def forbidden(*args, **kwargs):
+        raise AssertionError("model selection must not access settings files")
+    monkeypatch.setattr("builtins.open", forbidden)
+    monkeypatch.setattr(Path, "open", forbidden)
+    assert instance.select_model(2) == 2
+    instance.agent.load_llm_sessions()
+    assert instance.model_snapshot()["effective"] == 2
+    assert instance.agent.next_llm_calls == [2]
+    # A fresh agent uses its own default, not a previously saved selection.
+    other = conductor.Conductor()
+    other.agent = FakeAgent(["zero", "one", "two"])
+    assert other.model_snapshot()["effective"] == 0
+
+
+@pytest.mark.parametrize("value", [99, -1, True, None, "invalid", 1])
+def test_invalid_model_selection_keeps_current_agent(value, monkeypatch):
+    instance = conductor.Conductor()
+    instance.agent = FakeAgent(["zero", None])
+    monkeypatch.setattr(conductor, "schedule_broadcast", lambda _: None)
+    with pytest.raises(ValueError):
+        instance.select_model(value)
+    assert instance.agent.llm_no == 0
+    assert instance.agent.next_llm_calls == []
+
+
+def test_running_model_selection_is_rejected(monkeypatch):
+    instance = conductor.Conductor()
+    instance.agent = FakeAgent(["zero", "one"])
+    instance._model_running = True
+    with pytest.raises(ValueError, match="busy"):
+        instance.select_model(1)
+    assert instance.agent.next_llm_calls == []
+
+
+def test_actual_generic_agent_next_llm_preserves_history(monkeypatch):
+    # Execute the real method with inert clients; no credentials or LLM calls.
+    import ast
+    tree = ast.parse((ROOT / "agentmain.py").read_text(encoding="utf-8"))
+    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "GenericAgent")
+    method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "next_llm")
+    namespace = {"load_tool_schema": lambda: None}
+    exec(compile(ast.Module(body=[method], type_ignores=[]), "agentmain.py", "exec"), namespace)
+    instance = conductor.Conductor()
+    instance.agent = FakeAgent(["zero", "one"])
+    instance.agent.llmclient.backend.history = [{"role": "user", "content": "history"}]
+    history = instance.agent.llmclient.backend.history
+    instance.agent.next_llm = types.MethodType(namespace["next_llm"], instance.agent)
+    monkeypatch.setattr(conductor, "schedule_broadcast", lambda _: None)
+    assert instance.select_model(1) == 1
+    assert instance.agent.llmclient is instance.agent.llmclients[1]
+    assert instance.agent.llmclient.backend.history is history
+    assert instance.agent.llmclient.last_tools == ""
+
+
+def test_websocket_switch_reconnect_and_busy_error(monkeypatch):
+    from fastapi.testclient import TestClient
+    instance = conductor.Conductor()
+    instance.agent = FakeAgent(["zero", "one"])
+    instance.agent.list_llms = lambda: [(i, c.backend.name, i == instance.agent.llm_no)
+                                      for i, c in enumerate(instance.agent.llmclients)]
+    monkeypatch.setattr(conductor, "conductor", instance)
+    monkeypatch.setattr(conductor, "schedule_broadcast", lambda _: None)
+    # Do not enter TestClient lifespan: no real runner or IM poller is started.
+    client = TestClient(conductor.app)
+    with client.websocket_connect("/ws") as ws:
+        assert ws.receive_json()["llm"] == 0
+        ws.send_json({"llm": 1})
+        assert ws.receive_json() == {"type": "model_selected", "llm": 1}
+        instance.agent.task_queue.put("running")
+        ws.send_json({"llm": 0})
+        error = ws.receive_json()
+        assert error["type"] == "model_error"
+        assert error["llm"] == 1
+        instance.agent.task_queue.get_nowait()
+        instance.agent.task_queue.task_done()
+        ws.send_json({"llm": 99})
+        assert ws.receive_json()["type"] == "model_error"
+    with client.websocket_connect("/ws") as ws:
+        hello = ws.receive_json()
+        assert hello["llm"] == hello["model"]["effective"] == 1
+
+
+def test_conductor_has_no_desktop_settings_dependency():
+    source = CONDUCTOR_PATH.read_text(encoding="utf-8")
+    for removed in ["desktop_settings", "SETTINGS_PATH", "_apply_desktop_model", "ui_default"]:
+        assert removed not in source
+
+
+def test_start_uses_generic_agent_default_without_files(monkeypatch):
+    agent = FakeAgent(["zero", "one"])
+    agent.next_llm(1)
+    monkeypatch.setattr(conductor, "GenericAgent", lambda: agent)
+    monkeypatch.setattr(conductor, "schedule_broadcast", lambda _: None)
+    monkeypatch.setattr(conductor.threading.Thread, "start", lambda _: None)
+    def forbidden(*args, **kwargs):
+        raise AssertionError("startup must not access desktop settings")
+    monkeypatch.setattr("builtins.open", forbidden)
+    monkeypatch.setattr(Path, "open", forbidden)
+    instance = conductor.Conductor()
+    instance.start()
+    assert instance.agent is agent
+    assert instance.model_snapshot()["effective"] == 1
+    assert agent.next_llm_calls == [1]

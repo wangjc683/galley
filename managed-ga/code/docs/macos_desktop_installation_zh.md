@@ -1,5 +1,7 @@
 # GenericAgent 桌面版安装指南
 
+> 以下为旧DMG说明。新的源码部署使用独立签名 `.app`，参见 [Desktop组件与源码部署](desktop_components.md)。
+
 ## 📦 安装步骤
 
 ### 第一步：打开安装包

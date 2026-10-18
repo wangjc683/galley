@@ -395,11 +395,13 @@ class GaSession:
         """Identity of the live backend object, or None when the agent
         has no client yet.
 
-        GA rebuilds its client objects in three places
-        (``GenericAgent.__init__``, ``next_llm``, ``list_llms`` — all via
-        ``load_llm_sessions``, and only when the model config's mtime
-        moved), so a caller that memorizes per-backend state keys it on
-        this id and re-reads after a rebuild.
+        GA rebuilds its client objects wherever it calls
+        ``load_llm_sessions`` (``GenericAgent.__init__``, ``next_llm``,
+        ``list_llms``, and since upstream ``2ba5529`` the start and end of
+        every task in ``run()``), and only when the model config changed
+        on disk, so a caller that memorizes per-backend state keys it on
+        this id and re-reads after a rebuild. The bridge settles the
+        task-start rebuild before ``put_task`` (``_settle_llm_clients``).
 
         The object is pinned for the life of this session: CPython reuses
         ``id()`` values once an object is collected, and a rebuilt backend

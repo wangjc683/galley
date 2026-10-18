@@ -11,13 +11,11 @@ import queue
 import socket
 import threading
 from collections.abc import Iterable
-from pathlib import Path
 from typing import Any
 
 GALLEY_RUNTIME_KIND_ENV = "GALLEY_RUNTIME_KIND"
 GALLEY_MANAGED_STATE_ROOT_ENV = "GALLEY_GA_STATE_ROOT"
 GALLEY_MANAGED_MODEL_CONFIG_ENV = "GALLEY_MANAGED_MODEL_CONFIG_JSON"
-GALLEY_MANAGED_MODEL_CONFIG_PATH_ENV = "GALLEY_MANAGED_MODEL_CONFIG_PATH"
 GALLEY_RUNTIME_PROMPT_TEXT_ENV = "GALLEY_RUNTIME_PROMPT_TEXT"
 # Literal Core leaves in prompt templates whose supervisor identity can
 # only be known per agent instance (core/src/managed_prompt.rs).
@@ -184,21 +182,27 @@ def managed_model_config_from_env() -> dict[str, Any]:
 
 
 def install_managed_mykey_loader() -> None:
-    """Patch managed GA's llmcore to read Galley-owned model config."""
+    """Patch managed GA's llmcore to read Galley-owned model config.
+
+    The config is the env JSON Core spawned this process with, so it
+    cannot change while the process lives. The loader reports no file to
+    watch (path and mtime ``None``): ``MyKeys.reload`` then keeps its
+    first load for good instead of rebuilding every client when Core
+    rewrites managed-models.json after a Settings edit. A rebuild would
+    bring back the same config but drop what Galley wrote onto the
+    backends (``extra_sys_prompt``, the reasoning-effort override), and
+    since upstream ``2ba5529`` GA reloads at every task start and end.
+    ``MyKeys`` itself arrived in upstream ``a5979ea``.
+    """
     import llmcore  # type: ignore[import-not-found]
 
-    marker = os.environ.get(GALLEY_MANAGED_MODEL_CONFIG_PATH_ENV)
-    if not marker:
-        raise RuntimeError("managed runtime missing model config marker path")
-    marker_path = str(Path(marker).expanduser().resolve())
+    def _load_managed_mykeys() -> tuple[dict[str, Any], None, None]:
+        return managed_model_config_from_env(), None, None
 
-    def _load_managed_mykeys() -> dict[str, Any]:
-        llmcore._mykey_path = marker_path
-        return managed_model_config_from_env()
-
-    llmcore._load_mykeys = _load_managed_mykeys
-    llmcore._mykey_path = marker_path
-    llmcore._mykey_mtime = None
+    store = llmcore.mykeys_store
+    with store.lock:
+        store._load = _load_managed_mykeys
+        store.data, store.path, store.mtime, store.updated_at = {}, None, None, None
 
 
 def managed_prompt_profile(

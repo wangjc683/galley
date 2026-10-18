@@ -587,3 +587,50 @@ def test_agentmain_image_content_blocks_encodes_local_images(
             "data": "aW1hZ2UtYnl0ZXM=",
         },
     }
+
+
+def test_managed_mykey_loader_serves_env_config_and_never_reloads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Upstream a5979ea moved mykey loading into `llmcore.mykeys_store`,
+    which agentmain reads directly; replacing the old module-level
+    `_load_mykeys` no longer reached it. The managed loader must feed the
+    store, and the store must keep that first load: since upstream
+    2ba5529 every task start asks it again, and a reload would rebuild
+    the clients and drop Galley's `extra_sys_prompt`."""
+    import runner.managed_runtime as managed_runtime
+
+    store = llmcore.mykeys_store
+    for attr in ("_load", "data", "path", "mtime", "updated_at"):
+        monkeypatch.setattr(store, attr, getattr(store, attr))
+    monkeypatch.setenv(
+        managed_runtime.GALLEY_MANAGED_MODEL_CONFIG_ENV,
+        json.dumps(
+            {
+                "models": [
+                    {
+                        "protocol": "anthropic",
+                        "displayName": "Claude",
+                        "apiKey": "sk-test",
+                        "apiBase": "https://example.test",
+                        "model": "claude-test",
+                    }
+                ]
+            }
+        ),
+    )
+
+    managed_runtime.install_managed_mykey_loader()
+
+    data, changed = llmcore.reload_mykeys()
+    assert changed is True
+    assert list(data) == ["native_claude_config_0"]
+    assert data["native_claude_config_0"]["model"] == "claude-test"
+    # The plugin path (langfuse_tracing imports `_load_mykeys`) goes
+    # through the same loader.
+    assert list(llmcore._load_mykeys()) == ["native_claude_config_0"]
+
+    _, first = store.snapshot()
+    _, again = store.snapshot()
+    assert again == first
+    assert llmcore.reload_mykeys()[1] is False

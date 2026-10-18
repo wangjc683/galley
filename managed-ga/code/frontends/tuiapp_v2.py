@@ -5620,22 +5620,17 @@ class GenericAgentTUI(App[None]):
         self._refresh_all()
 
     def _cmd_reload_keys(self, args, raw):
-        # Force rebuild of every session's llmclients from a fresh mykey.py.
-        # reload_mykeys() uses a module-level mtime cache, so the first agent
-        # to call it consumes the "changed" signal and subsequent agents see
-        # changed=False (and skip rebuild). Invalidate the cache before each
-        # agent so every session picks up the new config.
         try:
             import llmcore
         except Exception as e:
             self._system(f"❌ 无法 import llmcore: {e}"); return
+        llmcore.mykeys_store.reload(force=True)
         n_ok = n_fail = 0
         for sess in self.sessions.values():
             agent = getattr(sess, "agent", None)
             if agent is None:
                 continue
             try:
-                llmcore._mykey_mtime = None
                 agent.load_llm_sessions()
                 n_ok += 1
             except Exception:

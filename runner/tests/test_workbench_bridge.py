@@ -1964,11 +1964,13 @@ def test_set_llm_replays_override_on_the_new_backend() -> None:
     agent = SimpleNamespace(
         llmclient=clients[0],
         llmclients=clients,
+        llm_no=0,
         get_llm_name=lambda: "NativeOAISession/gpt-5",
     )
 
     def _next_llm(index: int) -> None:
         agent.llmclient = clients[index]
+        agent.llm_no = index
 
     agent.next_llm = _next_llm
     bridge.agent = agent
@@ -1985,6 +1987,60 @@ def test_set_llm_replays_override_on_the_new_backend() -> None:
     assert event["kind"] == "llm_changed"
     assert event["reasoningEffort"] == "high"
     assert event["configuredReasoningEffort"] == "low"
+
+
+def test_set_llm_reports_a_switch_ga_did_not_make() -> None:
+    """Since upstream 2ba5529 next_llm() returns without switching while
+    GA's is_running is set; the bridge must not announce llm_changed."""
+    clients = [SimpleNamespace(backend=_FakeBackend()), SimpleNamespace(backend=_FakeBackend())]
+    bridge = _new_test_bridge()
+    bridge.agent = SimpleNamespace(
+        llmclient=clients[0],
+        llmclients=clients,
+        llm_no=0,
+        next_llm=lambda _index: None,
+        get_llm_name=lambda: "NativeOAISession/gpt-5",
+    )
+
+    bridge.dispatch_command(SetLLMCommand(llmIndex=1))
+
+    event = _next_bridge_event(bridge)
+    assert event["kind"] == "error"
+    assert event["category"] == "business"
+    assert event["context"] == "set_llm"
+    assert bridge.event_queue.empty()
+
+
+def test_user_message_settles_a_client_rebuild_before_put_task() -> None:
+    """Since upstream 2ba5529 GA's run() reloads the model config at task
+    start and rebuilds every client when mykey.py changed. The bridge
+    settles that rebuild through list_llms() first, so the override is
+    on the backend the run will use when put_task hands it over."""
+    old_backend, new_backend = _FakeBackend(), _FakeBackend(configured="low")
+    seen: list[str | None] = []
+    bridge = _new_test_bridge()
+    bridge._reasoning_effort_override = "high"
+
+    class FakeAgent:
+        llmclient = SimpleNamespace(backend=old_backend)
+
+        def list_llms(self) -> list[tuple[int, str, bool]]:
+            # The config changed on disk: GA hands out new client objects.
+            self.llmclient = SimpleNamespace(backend=new_backend)
+            return [(0, "NativeOAISession/gpt-5", True)]
+
+        def put_task(self, text: str, source: str, **_k: Any) -> object:
+            seen.append(getattr(self.llmclient.backend, "reasoning_effort", None))
+            return object()
+
+    bridge.agent = FakeAgent()
+    bridge._btw_handler = None
+    bridge._start_progress_drain = lambda _queue, _generation: None  # type: ignore[assignment]
+
+    bridge.dispatch_command(UserMessageCommand(text="hello"))
+
+    assert seen == ["high"]
+    assert bridge._apply_reasoning_effort() == ("high", "low")
 
 
 def test_set_reasoning_effort_rejects_unknown_tier() -> None:

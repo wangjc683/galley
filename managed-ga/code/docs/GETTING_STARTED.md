@@ -83,7 +83,7 @@ uv venv && uv pip install -e ".[ui]"
 
 进入项目文件夹，把 `mykey_template.py` 复制一份，重命名为 `mykey.py`。
 
-用任意文本编辑器打开 `mykey.py`，填入你的 API 信息。**选一种填就行**，不用的配置删掉或留着不管都行。
+用任意文本编辑器打开 `mykey.py`，按接口协议选择开头的一段配置，**取消整段注释，填好地址、API Key 和模型名即可**。不用的配置保持注释。
 
 > 💡 也可以运行交互式向导 `python assets/configure_mykey.py`，按提示选择厂商、填入 Key 即可自动生成 `mykey.py`。
 
@@ -125,7 +125,7 @@ mixin_config = {
 }
 ```
 
-> 💡 完整字段说明（`thinking_type` / `reasoning_effort` / `context_win` / `proxy` / Zhipu / MiniMax / Kimi / OpenRouter 等渠道示例）见 `mykey_template.py` 顶部注释。
+> 💡 常用高级选项、自动故障转移和聊天平台配置见 `mykey_template.py` 后半部分；首次配置只需看开头。
 
 ### 关键规则
 

@@ -156,3 +156,6 @@ frontends/conductor_im_plugins/*
 
 # Beta 渠道：订阅门户插件（仅 beta 分发携带，不入库）
 plugins/subscription_portal.py
+
+# Local-only model reload regression tests
+/frontends/tests/test_mykeys_reload.py

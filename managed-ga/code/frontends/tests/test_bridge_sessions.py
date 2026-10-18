@@ -147,7 +147,8 @@ class TestPersistSessionConcurrentMutation:
         f = manager._session_file(sess.id)
         data = json.loads(f.read_text(encoding="utf-8"))
         assert data["id"] == sess.id
-        assert isinstance(data["messages"], list)
+        assert "messages" not in data
+        assert data["storage_version"] == 2
 
     def test_concurrent_mutation_llm_history(self, manager: AgentManager):
         """Mutating llm_history from another thread during persist must not corrupt."""
@@ -176,7 +177,7 @@ class TestPersistSessionConcurrentMutation:
 
         f = manager._session_file(sess.id)
         data = json.loads(f.read_text(encoding="utf-8"))
-        assert isinstance(data["llm_history"], list)
+        assert "llm_history" not in data
 
 
 class TestTransactionalDataImport:
@@ -563,6 +564,12 @@ class TestSessionContinuityAfterRestart:
     def test_persist_and_reload_preserves_llm_no(self, manager: AgentManager):
         """Full cycle: persist session with llm_no, reload, verify llm_no survives."""
         sess = _make_session(sid="sess-roundtrip")
+        from test_desktop_history import seed_mr, record
+        seed_mr(Path(manager.ga_root), "model_responses_roundtrip.txt")
+        meta = record("model_responses_roundtrip.txt")
+        sess.log_refs = meta["log_refs"]
+        sess.first_message = meta["first_message"]
+        sess.first_message_at = meta["first_message_at"]
         sess.llm_no = 5
         sess.llm_history = [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
         manager.sessions[sess.id] = sess
@@ -574,7 +581,8 @@ class TestSessionContinuityAfterRestart:
         reloaded = manager.sessions.get("sess-roundtrip")
         assert reloaded is not None
         assert reloaded.llm_no == 5
-        assert reloaded.llm_history == [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
+        assert reloaded.llm_history[0]["content"][0]["text"] == "hello"
+        assert len(reloaded.llm_history) == 2
         assert reloaded.agent is None
 
 
@@ -686,19 +694,19 @@ class TestConductorModelConfigResolution:
         )
         assert state == {"configured": 2, "effective": 2, "fallbackReason": None}
 
-    def test_missing_config_uses_ui_default(self):
+    def test_missing_config_ignores_legacy_ui_default(self):
         state = _mod._resolve_conductor_model_state(
             {"ui": {"llmNo": 1}},
             profile_count=4,
         )
-        assert state == {"configured": None, "effective": 1, "fallbackReason": "ui_default"}
+        assert state == {"configured": None, "effective": 0, "fallbackReason": "first_available"}
 
     def test_out_of_range_config_never_wraps(self):
         state = _mod._resolve_conductor_model_state(
             {"conductor": {"llmNo": 99}, "ui": {"llmNo": 1}},
             profile_count=4,
         )
-        assert state == {"configured": 99, "effective": 1, "fallbackReason": "invalid_configured"}
+        assert state == {"configured": 99, "effective": 0, "fallbackReason": "first_available"}
 
     def test_no_valid_config_falls_back_to_first_profile(self):
         state = _mod._resolve_conductor_model_state(
@@ -1311,6 +1319,9 @@ class TestCanonicalSessionRestart:
                 "unknown": "ignored",
             },
         }
+        from test_desktop_history import seed_mr, record as log_record
+        seed_mr(Path(manager.ga_root), "model_responses_canonical.txt")
+        records["valid.json"].update(log_record("model_responses_canonical.txt"))
         for name, record in records.items():
             (manager._sessions_dir / name).write_text(json.dumps(record), encoding="utf-8")
 
@@ -1382,3 +1393,46 @@ class TestBridgeSettingsWrites:
         assert json.loads(response.text)["error"] == "atomic replace failed"
         assert settings.read_text(encoding="utf-8") == original
         assert manager.config == {}
+
+
+@pytest.mark.parametrize("selected, expected_calls", [(None, []), (0, []), (3, [3])])
+def test_agent_constructor_owns_default_model(manager, monkeypatch, selected, expected_calls):
+    class FakeAgent:
+        def __init__(self):
+            self.llm_no = 0
+            self.calls = []
+            self.llmclient = _types.SimpleNamespace(backend=_types.SimpleNamespace(name="test"))
+
+        def next_llm(self, no):
+            self.calls.append(no)
+            self.llm_no = no
+
+        def run(self):
+            pass
+
+    monkeypatch.setattr(manager, "ensure_ga_import_path", lambda: Path(manager.ga_root))
+    monkeypatch.setitem(sys.modules, "agentmain", _make_stub("agentmain", {"GenericAgent": FakeAgent}))
+    monkeypatch.setattr(_mod, "_settings_doc", lambda: {"ui": {"llmNo": 4}})
+    sess = manager.create_session()
+    assert sess.llm_no is None
+    sess.llm_no = selected
+    agent = manager.make_agent(sess)
+    assert agent.calls == expected_calls
+    sess.agent = agent
+    assert manager._live_model(sess)["llmNo"] == agent.llm_no == (selected or 0)
+
+
+def test_legacy_ui_model_is_neither_read_nor_written(manager, monkeypatch, tmp_path):
+    import asyncio
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"ui": {"llmNo": 4, "lang": "zh"}}), encoding="utf-8")
+    monkeypatch.setattr(_mod, "_SETTINGS", settings)
+    monkeypatch.setattr(_mod, "manager", manager)
+    assert _mod._desktop_ui() == {"lang": "zh"}
+    response = asyncio.run(_mod.get_config_handler(None))
+    assert "llmNo" not in json.loads(response.text)["config"]
+    response = asyncio.run(_mod.save_config_handler(
+        TestBridgeSettingsWrites.Request({"config": {"llmNo": 5}})))
+    assert response.status == 200
+    assert "llmNo" not in manager.config
+    assert json.loads(settings.read_text(encoding="utf-8"))["ui"]["llmNo"] == 4

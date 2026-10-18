@@ -2,10 +2,42 @@
 
 Patch stack id: `galley-managed-ga-patches-v1`
 
-Last replay verified: `2026-10-13` against upstream
-`f308ee7eb079cc402edf5a934fa65f6d71a4c7ad` (26-patch stack, through `0028`;
-`0022` retired with the Goal removal, see `.scratch/remove-goal/PRD.md`).
-The committed 27-patch stack was first rebuilt from a fresh clone in an
+Last replay verified: `2026-10-18` against upstream
+`5205f4080ff234f0ce84d8453f22fe236fc4008e` (26-patch stack through `0028`,
+the `f308ee7` -> `5205f40` baseline upgrade). `rebase-managed-ga-patches.sh`
+replayed the old chain, matched the committed payload byte-for-byte, and
+stopped three times (`0001`, `0003`, `0008`) on four **real conflicts**,
+all from upstream reshaping code a patch edits, none from a patch's intent
+changing:
+
+- `0001` / `ga.py`: upstream `5205f40` moved the L1 read out of
+  `get_global_memory()` into a new `load_L1()` (also called by
+  `do_start_long_term_update` for its new size warning). Resolved by keeping
+  upstream's `insight = load_L1()` and redirecting the `open` inside
+  `load_L1` to `state_path('memory', 'global_mem_insight.txt')`, so both
+  callers read the managed state root.
+- `0001` / `agentmain.py`: upstream `2ba5529` moved `run()`'s task setup
+  inside the `try` (one indent level deeper). Resolved by taking upstream's
+  block and re-applying the two `state_path('temp', …)` substitutions (the
+  long-prompt file, the handler's `temp` dir).
+- `0003` / `ga.py`: the same `get_global_memory()` lines as `0001`; kept
+  `load_L1()` and the `asset_path(...)` structure read.
+- `0008` / `agentmain.py`: the same `run()` re-indent. Resolved by taking
+  upstream's block and re-inserting `initial_user_content = …` and its
+  `agent_runner_loop` keyword at the new indent; the `images =` line above
+  the `try` did not move.
+
+The other 23 patches rebased on their own (`0002`, `0007`, `0016`, `0017`,
+`0021`, `0025`, `0027` re-exported with header-only drift, `llmcore.py`
++29 lines above them from the new `MyKeys` store). `build-managed-ga.sh`
+applied all 26, its `py_compile` sweep passed,
+`check-managed-ga-payload.mjs` passed, and the payload differs from the
+upstream tree only in patch-touched files (plus `frontends/conductor.py`'s
+trailing-space normalization).
+
+Previous replay (`2026-10-13`, `f308ee7`, 26-patch stack through `0028`;
+`0022` retired with the Goal removal, see `.scratch/remove-goal/PRD.md`):
+the committed 27-patch stack was first rebuilt from a fresh clone in an
 isolated build root and matched the committed `managed-ga/code` and
 `managed-ga/state-seed` (`diff -r`, no differences), then
 `build-managed-ga.sh` applied all 26 clean, its `py_compile` sweep passed,

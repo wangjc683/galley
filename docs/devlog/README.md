@@ -16,6 +16,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ## 时间线
 
+### 2026-10-18
+- [GA 上游升级 f308ee7 -> 5205f40](./2026-10-18-ga-upstream-upgrade-f308ee7-to-5205f40.md) — JC 要求单独审计；17 提交 188 文件，其中 164 个是上游把 Desktop 移出仓库；**硬断点**：mykey 加载挪进 `MyKeys` store、agentmain 直接读，内置加载器替换的旧函数不在路径上，内置会话全部无模型，runner 改为替换 `mykeys_store._load` 且进程内不重载（配置来自环境变量，Settings 改模型会重写 marker，重载会丢内置提示词）；`run()` 任务首尾重载模型，bridge 在 `put_task` 前先 `list_llms()` 落定、`next_llm` 后核对 `llm_no`；plan mode 删除、turn-end 提醒拉稀、DSML 重试；rebase 停三次四处冲突（`0001` ×2、`0003`、`0008`，都是上游重排代码）；runner 553 passed、兼容矩阵 553、bundle mac-x64 冒烟 + 打包 Python 端到端、drift gate OK；SOP 第 8 步待做
+
 ### 2026-10-17
 
 - [待办重做：Galley 的记事本，哪条对话旁边都能看](./2026-10-17-todo-galleys-notebook.md) — JC 嫌裁决 86 的「待办」入口与对话框太弱；裁决 91 丙：只从对话里来、只收能办完的事，清单上只有勾掉与取消提醒，提醒挂在待办上（迁移 050、`galley todo` 命令族）；92 只要提醒的事用 Galley 自己的提醒；93 入口挪顶栏、只图标加数字；94 名字照旧；95 面板与主对话解耦、记与改仍归 Galley、开关两处记；96 自启提示降级可关；97 第二行照 Apple 提醒事项；98 去掉「你的事」组名；dev CLI 是旧的，理发写进了 macOS 提醒事项

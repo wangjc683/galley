@@ -10,38 +10,67 @@ _RESP_CACHE_KEY = str(uuid.uuid4()); _RESP_CODEX_KEY = str(uuid.uuid4())
 _ROOT = os.path.dirname(os.path.abspath(__file__))
 if _ROOT not in sys.path: sys.path.append(_ROOT)
 
-def _load_mykeys():
-    global _mykey_path
-    try:
+class MyKeys:
+    def __init__(self):
+        self.path = self.mtime = self.updated_at = None
+        self.data = {}
+        self.lock = threading.Lock()
+
+    def _load(self):
         sys.modules.pop('mykey', None)
-        import mykey; _mykey_path = mykey.__file__
-        return {k: v for k, v in vars(mykey).items() if not k.startswith('_')}
-    except ImportError as e:
-        if getattr(e, 'name', None) != 'mykey':
-            raise Exception(f'[ERROR] mykey.py found but failed to import: {e}') from e
-    except SyntaxError as e:
-        raise Exception(f'[ERROR] mykey.py has syntax error: {e}') from e
-    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mykey.json')
-    if not os.path.exists(p): raise Exception('[ERROR] mykey.py not found in sys.path and mykey.json not found. Run "python configure_mykey.py" or copy mykey_template.py to mykey.py and fill in your keys.')
-    with open(_mykey_path := p, encoding='utf-8') as f: mk = json.load(f)
-    if isinstance(mk, dict) and 'remote_url' in mk: return requests.get(mk['remote_url'], timeout=10).json()
-    return mk
+        spec = importlib.util.find_spec('mykey')
+        if spec is not None:
+            path = spec.origin
+            mt = os.stat(path).st_mtime_ns
+            module = importlib.util.module_from_spec(spec)
+            sys.modules['mykey'] = module
+            # Compile source directly: pyc timestamps only have second precision.
+            try:
+                exec(compile(spec.loader.get_source('mykey'), path, 'exec'), module.__dict__)
+            except BaseException:
+                sys.modules.pop('mykey', None)
+                raise
+            data = {k: v for k, v in vars(module).items() if not k.startswith('_')}
+        else:
+            path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mykey.json')
+            mt = os.stat(path).st_mtime_ns
+            with open(path, encoding='utf-8') as f: data = json.load(f)
+            if isinstance(data, dict) and 'remote_url' in data:
+                data = requests.get(data['remote_url'], timeout=10).json()
+        if not isinstance(data, dict): raise ValueError('mykey configuration must be a dict')
+        if os.stat(path).st_mtime_ns != mt: raise RuntimeError('mykey changed while loading')
+        return data, path, mt
 
-_mykey_lock = threading.Lock()
-_mykey_path = _mykey_mtime = None
+    def reload(self, force=False):
+        with self.lock:
+            try:
+                mt = os.stat(self.path).st_mtime_ns if self.path else None
+                if not force and self.updated_at is not None and mt == self.mtime:
+                    return self.data, self.updated_at, False
+                data, path, mt = self._load()
+                self.data, self.path, self.mtime = data, path, mt
+                self.updated_at = max(time.monotonic_ns(), (self.updated_at or 0) + 1)
+                print(f'[Info] Load mykeys from {self.path}')
+                return self.data, self.updated_at, True
+            except Exception:
+                return self.data, self.updated_at, False
+
+    def snapshot(self):
+        data, updated_at, _ = self.reload()
+        return data, updated_at
+
+
+mykeys_store = MyKeys()
+
 def reload_mykeys():
-    global _mykey_mtime
-    try:
-        mt = os.stat(_mykey_path).st_mtime_ns if _mykey_path else -1
-        if mt == _mykey_mtime: return globals().get('mykeys', {}), False
-        with _mykey_lock: mk = _load_mykeys()
-        _mykey_mtime = os.stat(_mykey_path).st_mtime_ns
-        print(f'[Info] Load mykeys from {_mykey_path}')
-        globals().update(mykeys=mk)
-        return mk, True
-    except: return globals().get('mykeys', {}), False
+    data, _, changed = mykeys_store.reload()
+    return data, changed
 
-def __getattr__(name):  # once guard in PEP 562
+def _load_mykeys():
+    with mykeys_store.lock:
+        return mykeys_store._load()[0]
+
+def __getattr__(name):
     if name == 'mykeys': return reload_mykeys()[0]
     raise AttributeError(f"module 'llmcore' has no attribute {name}")
 
@@ -52,7 +81,7 @@ def compress_history_tags(messages, keep_recent=10, max_len=800, force=False, in
     if compress_history_tags._cd % interval != 0: return messages
     _before = sum(len(json.dumps(m, ensure_ascii=False)) for m in messages)
     _pats = {tag: re.compile(rf'(<{tag}>)([\s\S]*?)(</{tag}>)') for tag in ('thinking', 'think', 'tool_use', 'tool_result')}
-    _hist_pat = re.compile(r'<(history|key_info|earlier_context)>[\s\S]*?</\1>')
+    _hist_pat = re.compile(r'<(history|key_info|earlier_context|global_memory)>[\s\S]*?</\1>')
     def _trunc_str(s): return s[:max_len//2] + '\n...[Truncated]...\n' + s[-max_len//2:] if isinstance(s, str) and len(s) > max_len else s
     def _trunc(text):
         text = _hist_pat.sub(lambda m: f'<{m.group(1)}>[...]</{m.group(1)}>', text)
@@ -1500,16 +1529,16 @@ class NativeToolClient:
         if resp and hasattr(resp, 'tool_calls') and resp.tool_calls: self._pending_tool_ids = [tc.id for tc in resp.tool_calls]
         return resp
 
-def resolve_session(cfg_name):
-    cfg = reload_mykeys()[0].get(cfg_name)
+def resolve_session(cfg_name, cfg=None):
+    if cfg is None: cfg = reload_mykeys()[0].get(cfg_name)
     if not cfg: raise ValueError(f"Config '{cfg_name}' not in mykey")
-    cfg['_mykey_name'] = cfg_name
+    cfg = {**cfg, '_mykey_name': cfg_name}
     if 'native' in cfg_name: return (NativeClaudeSession if 'claude' in cfg_name else NativeOAISession)(cfg=cfg)
     if 'claude' in cfg_name: return ClaudeSession(cfg=cfg)
     return LLMSession(cfg=cfg) if 'oai' in cfg_name else None
 
-def resolve_client(cfg_name):
-    s = resolve_session(cfg_name)
+def resolve_client(cfg_name, cfg=None):
+    s = resolve_session(cfg_name, cfg)
     return (NativeToolClient(s) if isinstance(s, (NativeClaudeSession, NativeOAISession)) else ToolClient(s)) if s else None
 
 def fast_ask(prompt, cfg_name):
