@@ -718,9 +718,13 @@ main-chat planning docs, main has:
   Two bridge adapters for upstream's model reload at every task start:
   settle it before `put_task`, and report a `next_llm` that did not
   switch. Plan mode is gone upstream; the turn-end nudges are spaced out.
-  It makes the next release's bundled-runtime gate mandatory, and its SOP
-  step 8 (a real task in each runtime mode, the four IM channels'
-  restart checks) is still owed.
+  It also fixes a latent v0.6.x bug: after a Settings model edit, switching
+  the model in an open managed session (or `/llm` in a channel) dropped
+  Galley's managed prompt until the runner restarted. It makes the next
+  release's bundled-runtime gate mandatory. SOP step 8: the desktop part
+  passed on 2026-10-18 (managed with real models in tauri dev, attach
+  against a fake server); the four IM channels' restart checks are owed
+  and go into the next release's smoke.
 
 - **Reminders and the to-do** (2026-10-16 / 17, `.scratch/main-chat/`
   rulings 84, 86–98, tickets 33–46, devlog

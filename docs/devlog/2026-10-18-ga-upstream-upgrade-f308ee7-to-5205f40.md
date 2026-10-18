@@ -41,6 +41,12 @@ path 和 mtime 都是 `None`，`MyKeys.reload` 每次比较的就是 `None == No
   `extra_sys_prompt`（内置提示词）和推理强度覆盖。
 - runner 因此不再读 `GALLEY_MANAGED_MODEL_CONFIG_PATH`。Core 仍然设置它，这个文件也仍是 Core 的非机密配置，本次不动 Core。
 
+顺带修掉一个升级前就有的潜伏问题：旧加载器按 marker 的 mtime 重载，旧上游虽然只在 `next_llm` / `list_llms` 里重建，
+但 bridge 只在启动时装一次内置提示词。所以在已发布的 v0.6.x 里，Settings 改过模型之后，在已打开的内置会话里切换模型
+（IM 渠道里的 `/llm` 同理），这个会话之后就一直没有内置提示词，直到 runner 重启。用打包 Python 对着 HEAD~1 的 payload 和 runner 复现：
+改 marker 的 mtime，再 `next_llm(1)`、`next_llm(0)`，backend 换成了新对象，`extra_sys_prompt` 是 `''`；新代码同一场景 backend 不变、提示词还在。
+没有用户报告过，可能因为切换后回答风格的变化不容易察觉。
+
 测试：`test_managed_mykey_loader_serves_env_config_and_never_reloads`（对着真 payload 的 `llmcore`，旧加载器下失败）。
 另用打包 Python 做了一次不花额度的端到端：装加载器、建 `GenericAgent`、`list_llms()` 列出两个模型，
 把 marker 的 mtime 往后拨，再跑 `load_llm_sessions()` / `next_llm(0)` / `list_llms()`，backend 对象和 `extra_sys_prompt` 都没变。
@@ -123,9 +129,17 @@ path 和 mtime 都是 `None`，`MyKeys.reload` 每次比较的就是 `None == No
 - 打包门禁：`pyproject.toml` 零 diff，依赖不变，本次用现有的 `mac-x64` bundle 跑 `check-bundled-python-managed-ga.sh`：
   `managed GA import OK`。另加上面那次打包 Python 端到端（加载器、模型列表、不重建）。
 - `check-ga-baseline-drift.mjs --write` 之后四个面都通过。
-- **未做**：SOP 第 8 步（dev 模式下两种运行时各跑一个真任务，加上四个 IM 渠道的重启检查）。本次碰到了模型加载和 `run()`，
-  比 10-06 那次风险高，最该看的是：内置会话能正常回答、Settings 改一次模型后已开的内置会话下一轮仍带内置提示词、
-  外置会话中途改 `mykey.py` 后下一轮图片与推理强度仍生效、四个渠道启动后能回答。
+- SOP 第 8 步，桌面部分（JC 选了我代跑，四个 IM 渠道的重启检查并入下一版冒烟）：
+  - 内置，tauri dev 里用 CLI 跑真模型（会话 `s-mvdjkph1-ekro0wk0`，runner 16:06:41 起、晚于提交）：
+    第 1 轮 `gpt-6.1-sol` 回答「5」，引擎日志里的原始回复带 `<next-suggestion>`（只有内置提示词会要求它）。
+    `galley llm set` 切到 `glm-5.3-flash`，再 `touch` 一次 `managed-models.json`（和 Settings 改模型后 runner 看到的一样，
+    没有走 `llm set-default`，免得四个渠道在设置页里被标成「模型配置已过期」），第 2 轮跑在 `glm-5.3-flash` 上，
+    从「Galley State」读出 `0.6.2`，也带 `<next-suggestion>`。切回 `gpt-6.1-sol` 时 `session watch` 只收到一条 `llm_changed`，
+    没有 `error`，`llm_no` 核对在成功路径上不误报。
+  - 外置，不动 JC 的运行时设置和 `~/Documents/GenericAgent`：scratchpad 里一份 5205f40 克隆，`mykey.py` 指向本机假 OpenAI 服务
+    （记录每个请求体），直接驱动真 bridge，`--reasoning-effort high`。第一轮后重新保存 `mykey.py`，第二轮带一张图片。
+    有 settle：第二轮请求 `reasoning_effort='high'`、最后一条用户消息里 1 张图片。拿掉 settle 的对照组：`reasoning_effort=None`、
+    图片 0 张，两样都静默丢了。
 
 ## 起源纪律
 

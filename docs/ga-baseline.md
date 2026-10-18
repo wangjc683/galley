@@ -78,7 +78,12 @@ New in the `f308ee7` -> `5205f40` range:
   start and drop `extra_sys_prompt` (Galley's managed prompt) and the
   reasoning-effort override. The runner no longer reads
   `GALLEY_MANAGED_MODEL_CONFIG_PATH` (Core still sets it; the file is
-  still Core's non-secret config). Test:
+  still Core's non-secret config). This also closes a latent v0.6.x bug:
+  the old loader reloaded on that file's mtime, old upstream rebuilt on
+  `next_llm`, and the bridge installs the managed prompt once at startup,
+  so a model switch in an open managed session after a Settings edit
+  (or `/llm` in a channel) dropped the prompt until the runner restarted
+  (reproduced on the previous payload). Test:
   `test_managed_mykey_loader_serves_env_config_and_never_reloads` (fails
   on the old loader). External GA users get the store when they pull;
   Galley does not touch their loader.
