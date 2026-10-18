@@ -1094,9 +1094,10 @@
 - **背景**（已核实，别重查）：
   - 「运行中」= 活着的 bridge 集合：每个打开过的会话保留一个 bridge，走 LRU 上限回收（`bridge-slice.ts` `_enforceLRUCap`），归档 / 删除 / 挤出 / 退出才关，多数闲着。
   - 内核自带热更：`llmcore` 在 `load_llm_sessions`（`__init__` / `next_llm` / `list_llms` 调用）检查 `_mykey_path` 的 mtime，变了就用 `_load_mykeys()` 重建全部 client、保留当前历史、按名字重选。内置模式的 marker 路径就是 `managed-models.json`，Core 每次保存都重写（`sync_managed_model_config`），mtime 确实变、内核确实重建，但 `runner/managed_runtime.py` `install_managed_mykey_loader` 装的加载器读的是 spawn 时的环境变量 `GALLEY_MANAGED_MODEL_CONFIG`，重建出来仍是旧配置。**差的是配置源，不是机制。**
+  - **2026-10-18 更新**（GA 基线 `5205f40`，[devlog](./2026-10-18-ga-upstream-upgrade-f308ee7-to-5205f40.md)）：上面这条是旧机制。上游把加载挪进 `llmcore.mykeys_store`（`a5979ea`），`run()` 每个任务首尾也会调 `load_llm_sessions`（`2ba5529`）；内置加载器改为替换 `mykeys_store._load`、不报告文件，进程内永不重载，Core 重写 `managed-models.json` 不再触发重建。另外，旧机制下的那次重建会丢掉 bridge 启动时装在 backend 上的内置提示词（`extra_sys_prompt`），这是 v0.6.x 的潜伏问题，已随新加载器消失。
   - 五个网络键与 `reasoning_effort` 都是内核每次请求才读的实例属性（`self.read_timeout` 等），可以像 `set_reasoning_effort` 那样直接写活的 backend；方言键与新增模型必须重建。
   - 现有口径：模型保存后 toast「新对话立即使用最新配置」，Channels 有「重启 Channels」CTA。
-- **方案**（B，下一轮生效）：Core 每次重写配置时向所有活着的 bridge 发一条新 IPC 命令（纯增量，载荷 = spawn 时那份模型 JSON 去掉凭证；不在凭证白名单里的模型 runner 过滤掉），runner 换配置源、把 `llmcore._mykey_mtime` 清零，在下一次空闲回合边界（与 `set_llm` 同一 idle 门）调 `agent.load_llm_sessions()` 重建、然后走现成的 `_apply_reasoning_effort` 重放会话覆盖，emit 一条事件让 GUI 刷 pill 的 configured 值。正在跑的 run 不打扰。Core 扇出与 `set_reasoning_effort` 转发同构。
+- **方案**（B，下一轮生效）：Core 每次重写配置时向所有活着的 bridge 发一条新 IPC 命令（纯增量，载荷 = spawn 时那份模型 JSON 去掉凭证；不在凭证白名单里的模型 runner 过滤掉），runner 换配置源、把 `llmcore._mykey_mtime` 清零，在下一次空闲回合边界（与 `set_llm` 同一 idle 门）调 `agent.load_llm_sessions()` 重建、然后走现成的 `_apply_reasoning_effort` 重放会话覆盖，emit 一条事件让 GUI 刷 pill 的 configured 值。（2026-10-18 起按新机制：换的是 `mykeys_store._load` 的配置源、再 `mykeys_store.reload(force=True)`；重建后还必须重装内置提示词 `install_managed_prompt_profile`，原方案漏了这步。）正在跑的 run 不打扰。Core 扇出与 `set_reasoning_effort` 转发同构。
 - **边界**：只热更已有模型的生效配置；新增 / 删除模型、换 Key 仍需新会话（凭证白名单 spawn 时定死）。Channels 先不动。
 - **被否**：C「本 run 内立即生效」（直接写属性 + 仍要重建，两套机制换一个小收益）。
 - **关联**：`runner/managed_runtime.py` `install_managed_mykey_loader` · `runner/workbench_bridge.py` `_apply_reasoning_effort` · `core/src/commands/managed_model.rs` `sync_managed_model_config` · [IPC §5.14](../ipc-protocol.md)

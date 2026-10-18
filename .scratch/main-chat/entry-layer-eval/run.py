@@ -2250,17 +2250,15 @@ def worker() -> int:
         os.makedirs(state_root / rel, exist_ok=True)
     import llmcore  # type: ignore[import-not-found]
 
-    marker = state_root.parent / "managed-models.json"
-    marker.write_text('{"schemaVersion":1,"models":[]}\n', encoding="utf-8")
     mykeys = job["mykeys"]
 
-    def load_mykeys() -> dict[str, Any]:  # managed_runtime.install_managed_mykey_loader
-        llmcore._mykey_path = str(marker)
-        return {k: dict(v) for k, v in mykeys.items()}
+    def load_mykeys() -> tuple[dict[str, Any], None, None]:  # managed_runtime.install_managed_mykey_loader
+        return {k: dict(v) for k, v in mykeys.items()}, None, None
 
-    llmcore._load_mykeys = load_mykeys
-    llmcore._mykey_path = str(marker)
-    llmcore._mykey_mtime = None
+    store = llmcore.mykeys_store
+    with store.lock:
+        store._load = load_mykeys
+        store.data, store.path, store.mtime, store.updated_at = {}, None, None, None
 
     # Record exactly what is sent (the request payload; headers carry the
     # key and are not kept) and the usage the stream reports.
