@@ -1,46 +1,52 @@
 {
- "_note": "票 60：入口层评测的 15 条（../cases.json，消息与上下文只写在那里）在票 60 的主对话提示词下重跑，看闲聊里会不会乱设待办或提醒。每条的 group、expect_text 与 expect（字段同 ../todo/cases.json 的 _note）；只判它设了什么，回答本身不判（run.py 的 chat_facts）。票 63：personal-surgery 从两可改成判定（裁决 115 第 3 条），该设次日的问候并在回复里说出来；有 follow_up 的用例，「回复没说出」算进判定。",
+ "_note": "票 60：入口层评测的 15 条（../cases.json，消息与上下文只写在那里）在票 60 的主对话提示词下重跑，看闲聊里会不会乱设待办或提醒。每条的 group、expect_text 与 expect（字段同 ../todo/cases.json 的 _note）；只判它设了什么，回答本身不判（run.py 的 chat_facts）。票 63：personal-surgery 从两可改成判定（裁决 115 第 3 条），该设次日的问候并在回复里说出来；有 follow_up 的用例，「回复没说出」算进判定。票 64：不该设的 12 条加了 expect.no_retract（最终回复不能提改口，见 ../todo/cases.json 的 _note）。",
  "cases": {
   "chat-tired": {
    "group": "闲聊",
-   "expect_text": "不记待办、不建提醒",
+   "expect_text": "不记待办、不建提醒，不提改口",
    "expect": {
-    "todo": "none"
+    "todo": "none",
+    "no_retract": true
    }
   },
   "chat-full": {
    "group": "闲聊",
-   "expect_text": "不记待办、不建提醒",
+   "expect_text": "不记待办、不建提醒，不提改口",
    "expect": {
-    "todo": "none"
+    "todo": "none",
+    "no_retract": true
    }
   },
   "chat-morning": {
    "group": "闲聊",
-   "expect_text": "不记待办、不建提醒",
+   "expect_text": "不记待办、不建提醒，不提改口",
    "expect": {
-    "todo": "none"
+    "todo": "none",
+    "no_retract": true
    }
   },
   "quick-tomato": {
    "group": "快问",
-   "expect_text": "不记待办、不建提醒",
+   "expect_text": "不记待办、不建提醒，不提改口",
    "expect": {
-    "todo": "none"
+    "todo": "none",
+    "no_retract": true
    }
   },
   "quick-usd": {
    "group": "快问",
-   "expect_text": "不记待办、不建提醒",
+   "expect_text": "不记待办、不建提醒，不提改口",
    "expect": {
-    "todo": "none"
+    "todo": "none",
+    "no_retract": true
    }
   },
   "quick-title": {
    "group": "快问",
-   "expect_text": "不记待办、不建提醒",
+   "expect_text": "不记待办、不建提醒，不提改口",
    "expect": {
-    "todo": "none"
+    "todo": "none",
+    "no_retract": true
    }
   },
   "errand-rent": {
@@ -79,23 +85,26 @@
   },
   "errand-translate": {
    "group": "干活",
-   "expect_text": "不记待办、不建提醒",
+   "expect_text": "不记待办、不建提醒，不提改口",
    "expect": {
-    "todo": "none"
+    "todo": "none",
+    "no_retract": true
    }
   },
   "carry-quote": {
    "group": "接前事",
-   "expect_text": "不记待办、不建提醒",
+   "expect_text": "不记待办、不建提醒，不提改口",
    "expect": {
-    "todo": "none"
+    "todo": "none",
+    "no_retract": true
    }
   },
   "carry-laptop": {
    "group": "接前事",
-   "expect_text": "不记待办、不建提醒",
+   "expect_text": "不记待办、不建提醒，不提改口",
    "expect": {
-    "todo": "none"
+    "todo": "none",
+    "no_retract": true
    }
   },
   "carry-older": {
@@ -107,23 +116,26 @@
   },
   "work-email": {
    "group": "干活",
-   "expect_text": "不记待办、不建提醒",
+   "expect_text": "不记待办、不建提醒，不提改口",
    "expect": {
-    "todo": "none"
+    "todo": "none",
+    "no_retract": true
    }
   },
   "work-rust": {
    "group": "干活",
-   "expect_text": "不记待办、不建提醒",
+   "expect_text": "不记待办、不建提醒，不提改口",
    "expect": {
-    "todo": "none"
+    "todo": "none",
+    "no_retract": true
    }
   },
   "work-downloads": {
    "group": "干活",
-   "expect_text": "不记待办、不建提醒",
+   "expect_text": "不记待办、不建提醒，不提改口",
    "expect": {
-    "todo": "none"
+    "todo": "none",
+    "no_retract": true
    }
   },
   "personal-surgery": {

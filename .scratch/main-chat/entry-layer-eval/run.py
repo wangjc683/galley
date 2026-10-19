@@ -3948,7 +3948,74 @@ RERUN_INTROS = {
     "63": "上一次是这一套最近一次的结果（叫醒是票 59，待办、定时、闲聊是票 60），这一次是票 63 改了 Core 的叫醒说明、"
           "手册（「When one comes due」挪进 `wake.md`，`todos.md` 的第③条与提醒时间）与入口层（没写下就不说「记下了」）之后。"
           "只比两次都有的用例；两次都用现在的判定重判（票 63 起每条都判「说了记下了，这一轮就得有写」）。",
+    "64": "上一次是票 63 的结果，这一次是票 64 改了入口层的待办那一段之后（「Do it unasked」改成先读 `todos.md` 再说要记，"
+          "底线加了「没写下就不提记」）。两次都用现在的判定重判（票 64 起什么都不该设的用例判「最终回复不提改口」）。"
+          "待办评测另有「同日对照」：同一时段用票 63 的提示词跑的基线（`meta.ticket64_control`，只跑了不该设的那 7 条）。",
 }
+
+
+def retract_section(data: dict[str, Any], cases: list[dict[str, Any]], facts_fn: Any) -> list[str]:
+    """Ticket 64: for the cases where nothing is to be set
+    (expect.no_retract), how many replies took back a noting and how many
+    first turns said they would note: ticket 63's runs (the group 票 64
+    replaced), the same-hour baseline under ticket 63's prompt
+    (meta.ticket64_control) and this time; then each hit word for word."""
+    meta = data["meta"]
+    want = [c for c in cases if c["expect"].get("no_retract")]
+    if not want:
+        return []
+    by_id = {c["id"]: c for c in want}
+    groups = meta.get("superseded_runs") or []
+    groups = [groups] if isinstance(groups, dict) else groups
+    old = next((g for g in groups if str(g.get("reason", "")).startswith("票 64")), None)
+    sources: list[tuple[str, list[dict[str, Any]]]] = []
+    if old:
+        sources.append(("票 63 的运行（" + str(old["runs"][0].get("now", ""))[:16].replace("T", " ") + " 开跑）"
+                        if old["runs"] else "票 63 的运行", [r for r in old["runs"] if r["id"] in by_id]))
+    ctl = [r for r in meta.get("ticket64_control") or [] if r["id"] in by_id]
+    if ctl:
+        sources.append((f"基线：票 63 的提示词（{meta.get('ticket64_control_at', '')}）", ctl))
+    sources.append(("这一次" + ("：票 64 的提示词" if old or ctl else ""),
+                    [r for r in data["results"] if r["id"] in by_id]))
+    facts = {(label, r["id"], r["variant"]): facts_fn(r, by_id[r["id"]]) for label, runs in sources for r in runs}
+    out = ["## 票 64：改口与第一轮表态", "",
+           "什么都不该设的用例（`expect.no_retract`）：「改口」是最终回复（去掉 `<summary>`、`<next-suggestion>`）里提了"
+           "本来要记（`RETRACT_RE`：「刚才说」「多此一举」「多余」「本来要」「就不加了」「不特意设」一类），判定；"
+           "「表态」是第一轮（不是最后一轮时）的正文或 `<summary>` 里说了要记（`STANCE_RE`：「记到待办」「设个提醒」「我先记下」一类），"
+           "只记录。每格是「改口 / 表态 / 运行」。", "",
+           "| # | 用例 | " + " | ".join(label for label, _ in sources) + " |",
+           "| --- | --- |" + " --- |" * len(sources)]
+    totals = [[0, 0, 0] for _ in sources]
+    for case in want:
+        cells = []
+        for k, (label, runs) in enumerate(sources):
+            mine = [r for r in runs if r["id"] == case["id"]]
+            fs = [facts[(label, r["id"], r["variant"])] for r in mine]
+            a = sum(1 for f in fs if f["retract"])
+            b = sum(1 for f in fs if (f.get("stance") or {}).get("says"))
+            totals[k] = [totals[k][0] + a, totals[k][1] + b, totals[k][2] + len(fs)]
+            cells.append(f"{a} / {b} / {len(fs)}" if fs else "—")
+        out.append(f"| {case['no']} | {case['id']} | " + " | ".join(cells) + " |")
+    out += ["| | 合计 | " + " | ".join(f"{a} / {b} / {n}" for a, b, n in totals) + " |", ""]
+    hits = []
+    for label, runs in sources:
+        for r in sorted(runs, key=lambda r: (by_id[r["id"]]["no"], r.get("repeat", 0))):
+            f = facts[(label, r["id"], r["variant"])]
+            st = f.get("stance") or {}
+            if not (f["retract"] or st.get("says")):
+                continue
+            line = f"- {label}，{r['id']} 第 {r.get('repeat', 1)} 遍："
+            if st.get("says"):
+                where = "、".join(x for x, y in (("正文", st["hits"]["text"]), ("summary", st["hits"]["summary"])) if y)
+                line += (f"第一轮在{where}里表态（" + "".join(f"「{w}」" for w in st["hits"]["text"] + st["hits"]["summary"])
+                         + f"），正文「{one_line(st['text']) or '（空）'}」，summary「{one_line(st['summary']) or '（空）'}」；")
+            if f["retract"]:
+                line += "最终回复改口（" + "".join(f"「{w}」" for w in f["retract"]) + f"）：「{one_line(f['body'])}」"
+            else:
+                line += f"最终回复没改口：「{one_line(f['body'])}」"
+            hits.append(line.replace("|", "/"))
+    out += (hits or ["没有一次改口或表态。"]) + [""]
+    return out
 
 
 def rerun_section(data: dict[str, Any], cases: list[dict[str, Any]], facts_fn: Any, ticket: str) -> list[str]:
@@ -4598,6 +4665,39 @@ def unwritten_claim(body: str, wrote: bool) -> str | None:
     return None
 
 
+# Ticket 64 (main chat PRD ruling 116): a reply that notes nothing does not
+# take back a noting it never did (「刚才说要加待办有点多此一举，就不加了」);
+# judged where `expect.no_retract` is set. The first turn's text and
+# <summary> saying it will note (「我把今晚的安排记到待办里。」) are only
+# recorded. Checked against every earlier run of the to-do, chat and
+# schedule suites: the two hotpot replies of ticket 63 are the only hits.
+RETRACT_RE = re.compile(r"刚才(说|提到|讲|想)|多此一举|多余|本来(要|想|打算)|原本(要|想|打算)|"
+                        r"就不(加|记|设)了|不(特意|特地|专门)(设|记|加)")
+STANCE_RE = re.compile(r"(记|加|放|写)(到|进|入|在)?(待办|清单)|(?<![不别没])(设|挂|定|建|加)(一?个|置|上|好)?"
+                       r"(提醒|闹钟|待办)|(我|先|帮你|给你)(先|来)?(记|加)(一下|下来|下|到|进|上|个|一笔)|记下(?!了)")
+SUMMARY_TEXT_RE = re.compile(r"<summary>([\s\S]*?)</summary>")
+
+
+def retractions(body: str) -> list[str]:
+    """The words of the reply (tags stripped) that take back a noting."""
+    return list(dict.fromkeys(m.group(0) for m in RETRACT_RE.finditer(body)))
+
+
+def first_turn_stance(r: dict[str, Any]) -> dict[str, Any] | None:
+    """Ticket 64: what the first model turn said, in its text and in its
+    <summary>, when it was not the last (the user sees both while the run
+    goes on), and the words in them that say it will note something."""
+    turns = r.get("turns") or []
+    if len(turns) < 2:
+        return None
+    raw = turns[0].get("content") or ""
+    summary = " ".join(m.strip() for m in SUMMARY_TEXT_RE.findall(raw))
+    body = strip_for_display(raw).strip()
+    hits = {"text": list(dict.fromkeys(m.group(0) for m in STANCE_RE.finditer(body))),
+            "summary": list(dict.fromkeys(m.group(0) for m in STANCE_RE.finditer(summary)))}
+    return {"text": body, "summary": summary, "hits": hits, "says": bool(hits["text"] or hits["summary"])}
+
+
 def memory_changed(r: dict[str, Any]) -> list[str]:
     """The files of GA's memory the run added, changed or removed
     (worker's memory_snapshot, ticket 63)."""
@@ -4924,6 +5024,9 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
                 reasons.append("复述了提醒的原话：" + body.strip()[:40])
         if exp.get("max_chars") and len(body) > exp["max_chars"]:
             reasons.append(f"太长：{len(body)} 字，上限 {exp['max_chars']}")
+    retract = retractions(body)
+    if exp.get("no_retract") and retract:
+        reasons.append("回复提了改口（没设的不提本来要设）：" + "".join(f"「{w}」" for w in retract))
     mem = memory_changed(r)
     wrote = bool([t for t in todos if t["id"] not in fx_todos] or [t for t in tasks if t["id"] not in fx_tasks]
                  or [t for t in todos if t["id"] in fx_todos and t != fx_todos[t["id"]]]
@@ -4961,6 +5064,8 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         "manual_reads": reads,
         "listed": listed,
         "stop": stop,
+        "retract": retract,
+        "stance": first_turn_stance(r),
         "pass": None if record else not reasons,
         "reasons": reasons,
     }
@@ -5002,6 +5107,9 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         "另加「今晚吃火锅，记一下」「下午 3 点开会，记一下」（钟点按运行时间取还在前面的那个，见 `cases.json` 的 `_note`）、"
         "用户点了提醒时间的、它自己的两个提醒到点（offer、妈妈手术）；叫醒消息是改过的 Core 措辞。"
         "每条都判：回复说「记下了」一类的话，这一轮就得有写（改动清单或提醒，或写了 GA 记忆，按运行前后记忆目录的差别认）。",
+        "- **票 64**（主对话 PRD 裁决 116）：入口层的待办那一段改成先读 `todos.md` 再说要记、没写下就不提记。"
+        "什么都不该设的 7 条（`expect.no_retract`）判最终回复不提改口，另记第一轮的正文与 `<summary>` 有没有表态"
+        "（见「票 64：改口与第一轮表态」）；同一时段先用票 63 的提示词跑这 7 条做基线（`meta.ticket64_control`）。",
         "- **新消息**：用户这句（「说说这件」是引用块加一句话，照 `composer-quote.ts` 的写法）；叫醒用例是照 Core 措辞"
         "（`subtask_report::report_text` 的待办一段，同样逐字对过）拼出的叫醒消息。",
         "- **工具**：`code_run` 与文件工具在每次运行自己的 macOS 沙盒里真的执行（同票 36 的沙盒）；Galley CLI 是假的："
@@ -5020,7 +5128,8 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
-    out += (rerun_section(data, cases, todo_facts, "63") + rerun_section(data, cases, todo_facts, "60")
+    out += (rerun_section(data, cases, todo_facts, "64") + retract_section(data, cases, todo_facts)
+            + rerun_section(data, cases, todo_facts, "63") + rerun_section(data, cases, todo_facts, "60")
             + rerun_section(data, cases, todo_facts, "59"))
     total = passed = 0
     out += ["## 通过率", "", "| # | 用例 | 分组 | 期望 | 遍数 | 过 | 通过率 |", "| --- | --- | --- | --- | --- | --- | --- |"]
@@ -5180,8 +5289,11 @@ def render_chat_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         "两条两可的（妈妈明天做手术、成都机票订好了）只记录。回答本身（查网页停下、派子任务、长短）不判，写在「另记」里。",
         "- **票 63**：入口层多了「没写下就不说记下了」，提示词重新生成；妈妈手术那条照票 60 的做法改成判定"
         "（设次日的问候，并在回复里说出来，裁决 115 第 3 条），成都机票仍只记录；每条另判「说了记下了，这一轮就得有写」。",
+        "- **票 64**：入口层的待办那一段改成先读 `todos.md` 再说要记、没写下就不提记，提示词重新生成；"
+        "不该设的 12 条另判最终回复不提改口（`expect.no_retract`），并记第一轮有没有表态。",
         "",
     ]
+    out += rerun_section(data, cases, chat_facts, "64") + retract_section(data, cases, chat_facts)
     out += rerun_section(data, cases, chat_facts, "63")
     out += [
         f"判了 {len(judged)} 次，过 {sum(1 for f in judged if f['pass'])} 次；设了待办或提醒的：{len(set_any)} 次"
@@ -5603,8 +5715,9 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, 
           and "Channels, scheduled tasks, Browser" not in plain
           and "Note what the user has to do" in plain
           and "or what comes up on a date and will be worth raising then" in plain
-          and "left: see `todos.md` in your manual." in plain
-          and "Your manual is in `__MANUAL_DIR__`, one file per part." in plain, "the ticket 60 prompt")
+          and "Do it unasked, but read `todos.md` in your manual before\nsaying you will" in plain
+          and "if you write nothing down, do not bring up\nnoting it." in plain
+          and "Your manual is in `__MANUAL_DIR__`, one file per part." in plain, "the ticket 64 prompt")
     check(held.index("### In Hand") < held.index("What you are on (") and "The user's to-dos" not in held,
           "a case's own reminder is in the What-you-are-on group")
     for r in sorted(results, key=lambda r: r["id"]):
@@ -5674,7 +5787,8 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, 
 
 def synth_run(case: dict[str, Any], at: datetime, reply: str, todos: tuple[dict[str, Any], ...] = (),
               tasks: tuple[dict[str, Any], ...] = (), log: tuple[list[str], ...] = (),
-              memory: dict[str, list[str]] | None = None) -> dict[str, Any]:
+              memory: dict[str, list[str]] | None = None,
+              turns: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Dry test (ticket 63): a run's result as the judge reads it, built by
     hand at a fixed `at`: the case's fixture, the to-dos and tasks the run
     left besides, the fake galley's log, GA's memory changes."""
@@ -5683,7 +5797,7 @@ def synth_run(case: dict[str, Any], at: datetime, reply: str, todos: tuple[dict[
             "galley_log": [{"argv": list(a)} for a in log], "calls": [],
             "fixture_tasks": fx["tasks"], "fixture_todos": fx["todos"],
             "fake_state": {"todos": fx["todos"] + list(todos), "tasks": fx["tasks"] + list(tasks)},
-            "memory_changes": memory or {"added": [], "changed": [], "removed": []}}
+            "memory_changes": memory or {"added": [], "changed": [], "removed": []}, "turns": turns or []}
 
 
 def synth_todo(title: str, due: str | None = None, due_at: datetime | None = None) -> dict[str, Any]:
@@ -5754,8 +5868,12 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
           and filled["due"]["window"]["from"] == {"days": 1, "time": "00:00"}
           and clock_case(cases["guitar"], mon) is cases["guitar"],
           "clock: the time named, in the expectations; a case without a clock is as it was")
+    # Ticket 64: 11 pm is still 「今晚」 (a late hotpot), so the suite can
+    # run until 22:15; later than that it refuses.
+    check(clock_words(hot, datetime(2026, 10, 19, 21, 30, tzinfo=tz))[0] == "今晚 11 点",
+          "clock: at 21:30 the evening's last hour, 11 pm")
     try:
-        clock_words(hot, datetime(2026, 10, 19, 21, 30, tzinfo=tz))
+        clock_words(hot, datetime(2026, 10, 19, 22, 30, tzinfo=tz))
         late_refused = False
     except SystemExit:
         late_refused = True
@@ -5813,6 +5931,37 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     check(f["pass"] is True and f["memory_changed"] == ["global_mem.txt"], f"after a memory write it passes ({f['reasons']})")
     f = judged("founding-date", "好的，2019 年 11 月 20 日。")
     check(f["pass"] is True, f"no claim, nothing written: passes ({f['reasons']})")
+    # Ticket 64: where nothing is to be set, a reply that takes back a
+    # noting fails, one that does not passes; the first turn's words that
+    # say it will note are recorded, not judged; a case that sets
+    # something is not judged on it.
+    back = "今晚有火锅局呀，吃得开心！刚才说要加待办有点多此一举，就不加了。"
+    f = judged("hotpot-tonight", back)
+    check(f["pass"] is False and f["retract"] == ["刚才说", "多此一举", "就不加了"]
+          and any("改口" in x for x in f["reasons"]), f"hotpot: a reply taking back a noting fails ({f['reasons']})")
+    f = judged("hotpot-tonight", "吃得开心！刚才说记待办有点多余，就不特意设提醒打扰你了。")
+    check(f["pass"] is False and f["retract"] == ["刚才说", "多余", "不特意设"],
+          f"hotpot: the second wording of ticket 63 fails too ({f['retract']})")
+    said = [{"turn": 1, "content": "<summary>你今晚 9 点和朋友吃火锅，我先记到待办里。</summary>\n我把今晚的安排记到待办里。"},
+            {"turn": 2, "content": "吃得开心！"}]
+    f = judged("hotpot-tonight", "吃得开心！九点才开吃，饿的话先垫两口。", turns=said)
+    st = f["stance"] or {}
+    check(f["pass"] is True and f["retract"] == [] and st.get("says") and st["hits"] == {
+        "text": ["记到待办"], "summary": ["我先记到"]} and st["summary"] == "你今晚 9 点和朋友吃火锅，我先记到待办里。",
+          f"hotpot: no taking back passes; the first turn's stance is recorded ({f['reasons']}, {st})")
+    later = [{"turn": 1, "content": "<summary>先查看待办和时间规则，记下安排。</summary>"}, {"turn": 2, "content": "好"}]
+    check(judged("hotpot-tonight", "吃得开心！", turns=later)["stance"]["hits"]["summary"] == ["记下"],
+          "stance: 「记下安排」 is one (「记下了」 is the claim, judged on its own)")
+    quiet = [{"turn": 1, "content": "<summary>我先查一下待办规则。</summary>\n我先看看手册。"}, {"turn": 2, "content": "好"}]
+    f = judged("reno-no-remind", "好，你自己盯着就行。", turns=quiet)
+    check(f["pass"] is True and f["stance"] and not f["stance"]["says"]
+          and judged("reno-no-remind", "好，不设提醒。", turns=[{"turn": 1, "content": "<summary>只记事项，不设提醒。</summary>"},
+                                                         {"turn": 2, "content": "好"}])["stance"]["says"] is False
+          and judged("hotpot-tonight", "吃得开心！")["stance"] is None,
+          "stance: a look at the manual, 「不设提醒」, and a one-turn run are no stance")
+    f = judged("hotpot-asked", "记下了：今晚 8 点和朋友吃火锅。刚才说的 8 点没变。", todos=(pot,), log=(SYNTH_ADD,))
+    check(not any("改口" in x for x in f["reasons"]) and f["retract"] == ["刚才说"],
+          f"a case that sets something is not judged on it ({f['reasons']})")
     f = judged("wake-surgery", "提醒：问问妈妈手术情况。")
     check(f["pass"] is False and any("复述了提醒的原话" in x for x in f["reasons"]),
           f"its own reminder recited: fails ({f['reasons']})")
@@ -5969,6 +6118,13 @@ def dry_test_chat(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
           f"chat: the follow-up set but not said: fails ({f['reasons']})")
     f = chat_facts(synth_run(surgery, mon, "别太担心，会顺利的。"), surgery)
     check(f["pass"] is False, f"chat: nothing set: fails ({f['reasons']})")
+    # Ticket 64: in chat too, a reply that takes back a noting fails
+    # where nothing is to be set (judged, not aside).
+    f = chat_facts(synth_run(cases["chat-tired"], mon, "本来要给你记个待办，想想多余，就不记了。早点休息。"), cases["chat-tired"])
+    check(f["pass"] is False and any("改口" in x for x in f["reasons"]),
+          f"chat: taking back a noting fails ({f['reasons']})")
+    f = chat_facts(synth_run(cases["chat-tired"], mon, "辛苦了，早点休息。"), cases["chat-tired"])
+    check(f["pass"] is True, f"chat: a plain reply passes ({f['reasons']})")
     f = chat_facts(synth_run(cases["carry-older"], mon, "好的。"), cases["carry-older"])
     check(f["pass"] is None, "chat: the two-sided case is still recorded only")
     for r in sorted(results, key=lambda r: r["id"]):
@@ -6090,6 +6246,9 @@ def main() -> int:
                          "dispatch-results.*) or firststop (the first run: any non-dispatch tool "
                          "call ends the run, dispatch-results-firststop.*)")
     ap.add_argument("--cases", help="comma-separated case ids (default: all); results are merged")
+    ap.add_argument("--control", metavar="TICKET",
+                    help="schedule / todo / chat: keep these runs in meta.ticket<TICKET>_control (a same-day "
+                         "control under the prompt before that ticket), not in the results (ticket 64)")
     ap.add_argument("--galley-db", default=str(DEFAULT_GALLEY_DB))
     ap.add_argument("--model-id", default=DEFAULT_MODEL_ID)
     ap.add_argument("--mykey", help="fallback: a GA mykey.py (read-only)")
@@ -6190,6 +6349,26 @@ def main() -> int:
     secret = str(next(iter(mykeys.values())).get("apikey") or "")
     if len(secret) >= 8:
         results = json.loads(json.dumps(results, ensure_ascii=False).replace(secret, "<redacted>"))
+    if args.control:
+        # Ticket 64: a same-day control (the prompt before the ticket, run
+        # in the same hour as the rerun), kept beside the results; merged
+        # by run, the composed requests left as they are.
+        if not sched or not results_json.is_file():
+            fail("--control is for the schedule, todo and chat suites, after a first run")
+        for r in results:
+            r.pop("request", None)
+        previous = json.loads(results_json.read_text(encoding="utf-8"))
+        key = f"ticket{args.control}_control"
+        fresh = {(r["id"], r["variant"]) for r in results}
+        kept = [r for r in previous["meta"].get(key) or [] if (r["id"], r["variant"]) not in fresh]
+        order = {c["id"]: i for i, c in enumerate(all_cases)}
+        previous["meta"][key] = sorted(kept + results, key=lambda r: (order.get(r["id"], 99), r.get("repeat", 0)))
+        previous["meta"][key + "_at"] = now.strftime("%Y-%m-%d %H:%M")
+        results_json.write_text(scrub(json.dumps(previous, ensure_ascii=False, indent=2) + "\n"), encoding="utf-8")
+        results_md.write_text(scrub(render(previous, all_cases)), encoding="utf-8")
+        failed = [f"{r['id']}/{r['variant']}" for r in results if r["status"] != "ok"]
+        print("failed: " + (", ".join(failed) if failed else "none"))
+        return 1 if failed else 0
     for r in results:
         if r.get("request") and r["status"] == "ok":
             if sched:
@@ -6265,22 +6444,27 @@ def main() -> int:
             data["meta"]["superseded_runs"] = previous_meta["superseded_runs"]
     if previous_meta.get("history_note"):
         data["meta"]["history_note"] = previous_meta["history_note"]
-    for key in ("ticket59_note", "ticket59_control", "ticket60_note", "ticket63_note"):
+    for key in ("ticket59_note", "ticket59_control", "ticket60_note", "ticket63_note", "ticket64_note",
+                "ticket64_control", "ticket64_control_at"):
         if previous_meta.get(key):
             data["meta"][key] = previous_meta[key]
     if sched:
         data["meta"].update({
-            "suite": ("chat (ticket 60, rerun for ticket 63): the entry layer's cases.json under the main chat prompt of ticket 63 "
+            "suite": ("chat (ticket 60, rerun for tickets 63 and 64): the entry layer's cases.json under the main chat prompt of ticket 64 "
                       "(schedule/galley-prompt/, carried-1 for the carried cases), the assistant manual's parts in "
                       "the state root, the to-do suite's sandbox and fake galley with nothing in it; judged only on "
-                      "the to-dos and reminders set (chat/cases.json)" if chat else
+                      "the to-dos and reminders set (chat/cases.json), since ticket 64 also on a reply taking back a "
+                      "noting" if chat else
                       "todo (ticket 41, rerun for ticket 44): the main chat prompt with the ticket 41 entry layer, "
                       "In Hand lines (ticket 39's three groups) for to-dos and tasks from before the segment, the "
                       "assistant manual (ticket 44's text, in parts since ticket 59) in the state root, the case's "
                       "to-dos and tasks in the fake galley; rerun for tickets 59 and 60 (ticket 60's cases added; "
                       "In Hand's fourth group, ticket 61, for the cases that start with a follow-up turned down); rerun "
                       "for ticket 63 (Core's new wake words, the manual's coming-due rules in wake.md, the entry "
-                      "layer's floor on 「记下了」; the two-sided cases judged, ticket 63's cases added)"
+                      "layer's floor on 「记下了」; the two-sided cases judged, ticket 63's cases added); rerun for "
+                      "ticket 64 (the entry layer reads todos.md before saying it will note, and does not bring noting "
+                      "up when it wrote nothing; the cases where nothing is to be set judged on a reply taking back a "
+                      "noting; a same-hour baseline of those under ticket 63's prompt in meta.ticket64_control)"
                       if todo else
                       "schedule (ticket 36, rerun for tickets 41 and 44): the main chat prompt with the ticket 41 "
                       "entry layer and its own configuration paragraph, In Hand lines (ticket 39's three groups) for "
