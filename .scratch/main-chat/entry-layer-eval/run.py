@@ -368,7 +368,9 @@ ALLOWED = {
     ("sessions", "search"): {"runtime", "all", "session"},
     ("session", "brief"): set(), ("session", "watch"): set(),
     ("session", "show"): {"tail", "around", "context", "since", "until"},
-    ("session", "send"): {"supervisor", "reason", "jump"},
+    # `--ensure-runner` since ticket 63: the real CLI has it (wake/cli-help.json, recaptured), and the
+    # manual's `cli.md` asks for it; without it a send was refused and sent again (ticket 59's eval).
+    ("session", "send"): {"supervisor", "reason", "jump", "ensure-runner"},
     ("session", "follow"): {"tail"},
     ("session", "wait"): {"timeout", "poll", "tail", "final-show", "after-turn", "until-idle"},
     ("session", "new"): {"project", "llm", "runtime", "supervisor", "reason"},
@@ -1103,6 +1105,50 @@ def load_wording() -> dict[str, dict[str, str]]:
     return out
 
 
+WAKE_DATE_RE = re.compile(r"\{\{(Q[0-2]|W):(ymd|md|mmdd|cn|cnc|en)\}\}")
+EN_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def wake_days(now: datetime) -> dict[str, Any]:
+    """Ticket 63: the days a wake case's dates are filled with, from the run
+    day: Q0 today, Q1 and Q2 the day before and two days before, none before
+    this week's Monday (W), so a quote of 「这周」 is this week's whatever day
+    the suite runs (it was written for 2026-10-15; run on 10-19, the model
+    took the quotes for last week's and sent the subtask back)."""
+    today = now.date()
+    monday = today - timedelta(days=today.weekday())
+    days: dict[str, Any] = {"W": monday}
+    for k in range(3):
+        days[f"Q{k}"] = max(today - timedelta(days=k), monday)
+    return days
+
+
+def wake_dated(case: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """The case with its `{{Q0:ymd}}`-style dates filled (cases.json `_note`),
+    keys too (the evidence files are named by date)."""
+    days = wake_days(now)
+
+    def words(m: re.Match[str]) -> str:
+        d, how = days[m[1]], m[2]
+        return {"ymd": d.strftime("%Y-%m-%d"), "md": d.strftime("%m-%d"), "mmdd": d.strftime("%m%d"),
+                "cn": f"{d.month} 月 {d.day} 日", "cnc": f"{d.month}月{d.day}日",
+                "en": f"{d.day} {EN_MONTHS[d.month - 1]} {d.year}"}[how]
+
+    def fill(v: Any) -> Any:
+        if isinstance(v, str):
+            return WAKE_DATE_RE.sub(words, v)
+        if isinstance(v, list):
+            return [fill(x) for x in v]
+        if isinstance(v, dict):
+            return {fill(k): fill(x) for k, x in v.items()}
+        return v
+
+    filled = fill(case)
+    if "{{" in json.dumps(filled, ensure_ascii=False):
+        fail(f"{case['id']}: a date left unfilled")
+    return filled
+
+
 def wake_note(case: dict[str, Any], words: dict[str, str]) -> str:
     """The wake message for a case, filled from one wording as ticket 29's
     draft says: the header once, the items in order with a blank line
@@ -1309,14 +1355,18 @@ def due_paragraph(d: dict[str, Any]) -> str:
         notes = (todo.get("notes") or "").strip()
         body = todo["title"].strip() + ("\n" + notes if notes else "")
         due_line = f"It is due {todo['due']}, local time." if todo.get("due") else "It has no due date."
-        return (f"Reminder `{tid}` on the user's to-do `{todo['id']}` came due. {when} The to-do is the user's own, "
-                f"something they have to do:\n<<<\n{body}\n>>>\n{due_line} "
-                f"{act} remind the user of it in a sentence or two, look something up first, or start a subtask. "
+        # Ticket 63: on the user's list whoever does it; what is of use now.
+        return (f"Reminder `{tid}` on the user's to-do `{todo['id']}` came due. {when} The to-do is on the user's "
+                f"list, something to do or something coming up they want to hear about:\n<<<\n{body}\n>>>\n"
+                f"{due_line} {act} tell the user what is of use to them now, in a sentence or two (not the to-do "
+                "read back: ask whether it is done or has happened, or give the next step), look something up "
+                "first, or start a subtask. Do not tick it off until they say it is done or has happened. "
                 "If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.")
     what = (f"Reminder `{tid}` (one-off) came due." if d["once"]
             else f"Scheduled reminder `{tid}` ({d['rule']}) came due.")
     return (f"{what} {when} What you noted when you set it:\n<<<\n{d['prompt'].strip()}\n>>>\n"
-            f"{act} tell the user in a sentence or two, look something up first, or start a subtask. "
+            f"{act} tell the user what is of use to them now, in a sentence or two (not your words read back), "
+            "look something up first, or start a subtask. "
             "If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.")
 
 
@@ -1527,6 +1577,59 @@ def in_hand_todo(todos: list[dict[str, Any]], tasks: list[dict[str, Any]], at: d
                       "later": [i for _, i in sorted(later, key=lambda x: x[0])],
                       "anytime": [i for _, i in sorted(anytime, key=lambda x: x[0])]},
             "assistant": sorted(on, key=key), "routine": sorted(routine, key=key)}
+
+
+def clock_words(case: dict[str, Any], now: datetime) -> tuple[str, datetime]:
+    """Ticket 63: the time a case's message names (todo/cases.json `_note`,
+    `clock`), the one still far enough ahead when the suite runs, with its
+    words. `tonight` takes the first of `hours` at least `lead_minutes`
+    ahead (「今晚 9 点」); `afternoon` takes `hour` today when it is that far
+    ahead, else tomorrow (「明天下午 3 点」). Ticket 60 ran 「今晚 7 点」 at
+    18:48; run in the evening, the plan would be in the past."""
+    spec = case["clock"]
+    lead = timedelta(minutes=int(spec.get("lead_minutes", 60)))
+
+    def at(day: Any, hour: int) -> datetime:
+        return datetime(day.year, day.month, day.day, hour, 0, tzinfo=now.tzinfo)
+
+    today = now.date()
+    if spec["kind"] == "tonight":
+        for hour in spec["hours"]:
+            if at(today, hour) >= now + lead:
+                return f"今晚 {hour - 12} 点", at(today, hour)
+        fail(f"{case['id']}: run it earlier: no evening hour of {spec['hours']} is {lead} ahead")
+    if spec["kind"] == "afternoon":
+        hour = int(spec["hour"])
+        if at(today, hour) >= now + lead:
+            return f"下午 {hour - 12} 点", at(today, hour)
+        return f"明天下午 {hour - 12} 点", at(today + timedelta(days=1), hour)
+    fail(f"{case['id']}: unknown clock kind {spec['kind']!r}")
+    raise AssertionError
+
+
+def clock_case(case: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """The case with `{{clock}}` in its message filled (clock_words) and
+    every time spec `{"stated": true, "minutes": k}` in its expectations
+    turned into the day and time k minutes from the time named; the same
+    for the jobs and for the judge, which both have the run's `now`. A case
+    without `clock` is returned as it is."""
+    if not case.get("clock"):
+        return case
+    words, stated = clock_words(case, now)
+
+    def fill(v: Any) -> Any:
+        if isinstance(v, dict):
+            if v.get("stated"):
+                t = stated + timedelta(minutes=int(v.get("minutes", 0)))
+                return {"days": (t.date() - now.date()).days, "time": t.strftime("%H:%M")}
+            return {k: fill(x) for k, x in v.items()}
+        if isinstance(v, list):
+            return [fill(x) for x in v]
+        return v
+
+    out = dict(case, expect=fill(case["expect"]), stated_at=stated.isoformat(timespec="minutes"))
+    out["message"] = case["message"].replace("{{clock}}", words)
+    return out
 
 
 def sched_time(spec: dict[str, Any], now: datetime, started: datetime | None = None) -> datetime:
@@ -2091,7 +2194,7 @@ DRY_CLI_BRIEF = "把下载文件夹里的 PDF 按内容分类，完成后汇报"
 WAKE_DRY_BASH = r'''GALLEY="$(sed -n '1p' "${XDG_CONFIG_HOME:-$HOME/.config}/galley/cli-path")"
 echo "cli=${GALLEY##*/}"
 "$GALLEY" session show s-mgq3c1d8-2k7v4p0a --tail=40 | head -2
-"$GALLEY" session send s-mgq3c1d8-2k7v4p0a "截图路径再给一下" --supervisor=galley-assistant --reason="send back"
+"$GALLEY" session send s-mgq3c1d8-2k7v4p0a "截图路径再给一下" --supervisor=galley-assistant --reason="send back" --ensure-runner
 "$GALLEY" session brief s-mgq3c1d8-2k7v4p0a
 "$GALLEY" llm set s-mgq3c1d8-2k7v4p0a glm-5.3 --supervisor=galley-assistant; echo "llm_set=$?"
 "$GALLEY" session wait s-mgq3c1d8-2k7v4p0a --until-idle --timeout=5 | tail -1
@@ -2381,6 +2484,15 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                  '--reason="dinner tonight"'})),
             call("<summary>Set</summary>\n一小时后提醒你出门。")],
         "todo-recite": [call("<summary>Remind</summary>\n提醒：702 办公室装修完工。")],
+        # Ticket 63: 「记下了」 with nothing written (wrong), and after a
+        # line its own code appends to GA's memory (right); its own
+        # reminder's wake answered with a question.
+        "todo-claim": [call("<summary>Noted</summary>\n记下了，你们公司成立于 2019 年 11 月 20 日。")],
+        "todo-memory": [
+            call("<summary>Remember it</summary>\n记一下。", ("code_run", {"type": "bash", "script":
+                 'printf \'\\n- 公司成立日：2019-11-20\\n\' >> "$GALLEY_GA_STATE_ROOT/memory/global_mem.txt"; echo ok'})),
+            call("<summary>Noted</summary>\n记下了：你们公司 2019 年 11 月 20 日成立。")],
+        "todo-offer-ask": [call("<summary>Ask</summary>\nHR 今天该给 offer 答复了，结果怎么样？")],
         "todo-put-to-use": [call("<summary>Remind</summary>\n702 装修预计今天完工，完了吗？要不要约个时间验收？")],
         "sbx-inline": [
             call("<summary>Inline</summary>\n直接算。",
@@ -2663,6 +2775,11 @@ def worker() -> int:
         if warning:
             rec["history_warning"] = warning
 
+    # Ticket 63: what the run wrote into GA's memory, however it wrote it
+    # (file_write, file_patch or code of its own), from the memory
+    # directory before and after; GA's own count of memory reads
+    # (`file_access_stats.json`, ga.log_memory_access) is not a write.
+    memory_before = memory_snapshot(state_root / "memory")
     threading.Thread(target=agent.run, daemon=True).start()
     started = time.time()
     rec["started_at"] = started
@@ -2680,6 +2797,12 @@ def worker() -> int:
     latency = time.time() - started
 
     result = build_result(job, rec, done, latency)
+    memory_after = memory_snapshot(state_root / "memory")
+    result["memory_changes"] = {
+        "added": sorted(set(memory_after) - set(memory_before)),
+        "changed": sorted(k for k in set(memory_before) & set(memory_after) if memory_before[k] != memory_after[k]),
+        "removed": sorted(set(memory_before) - set(memory_after)),
+    }
     if sandbox:
         result["sandbox"] = {"launched": SANDBOX_EXEC["launched"], "refused": list(REFUSED)}
     if job.get("dry"):
@@ -2689,6 +2812,19 @@ def worker() -> int:
         f.write(json.dumps(result, ensure_ascii=False, indent=2))
     sys.stdout.flush()
     os._exit(0)
+
+
+def memory_snapshot(root: Path) -> dict[str, str]:
+    """Each file under GA's memory directory, by path, with a hash of what
+    it holds (ticket 63); GA's count of memory reads left out."""
+    import hashlib
+
+    out = {}
+    for p in sorted(root.rglob("*")):
+        if p.is_file() and p.name != "file_access_stats.json" and "__pycache__" not in p.parts:
+            with REAL_OPEN(p, "rb") as f:
+                out[str(p.relative_to(root))] = hashlib.sha256(f.read()).hexdigest()
+    return out
 
 
 def guard_selftest(real_home: str) -> dict[str, bool]:
@@ -3168,6 +3304,7 @@ def make_wake_jobs(cases: list[dict[str, Any]], wordings: list[str], now: dateti
     prompt = wake_prompt(now)
     jobs = []
     for case in cases:
+        case = wake_dated(case, now)
         for wording in wordings:
             if wording not in words:
                 fail(f"no wording {wording!r} in wording.md ({', '.join(words)})")
@@ -3202,6 +3339,7 @@ def make_sched_jobs(cases: list[dict[str, Any]], now: datetime, mykeys: dict[str
     `now` is local and aware."""
     jobs = []
     for case in cases:
+        case = clock_case(case, now)
         message = case.get("message") or sched_note(case, now)
         for n in range(first, first + repeats):
             jobs.append({
@@ -3807,6 +3945,9 @@ RERUN_INTROS = {
     "59": "上一次是被这次替换的运行（整本手册），这一次是按部分拆开之后。",
     "60": "上一次是票 59 重跑之后的结果（手册拆开之后），这一次是票 60 改了手册（`todos.md`、`reminders.md`、"
           "`todos-change.md`）与入口层的待办那一段之后。只比两次都有的用例，票 60 新加的用例只有这一次。",
+    "63": "上一次是这一套最近一次的结果（叫醒是票 59，待办、定时、闲聊是票 60），这一次是票 63 改了 Core 的叫醒说明、"
+          "手册（「When one comes due」挪进 `wake.md`，`todos.md` 的第③条与提醒时间）与入口层（没写下就不说「记下了」）之后。"
+          "只比两次都有的用例；两次都用现在的判定重判（票 63 起每条都判「说了记下了，这一轮就得有写」）。",
 }
 
 
@@ -3955,7 +4096,7 @@ def render_wake_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
-    out += rerun_section(data, cases, wake_facts, "59")
+    out += rerun_section(data, cases, wake_facts, "63") + rerun_section(data, cases, wake_facts, "59")
     out += [
         "## 一览",
         "",
@@ -4280,6 +4421,13 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
             reasons.append("该先问一句，没问")
         if exp.get("max_chars") and len(body) > exp["max_chars"]:
             reasons.append(f"太长：{len(body)} 字，上限 {exp['max_chars']}")
+    # Ticket 63: 「记下了」 only after a write in the run.
+    fx_todos = {t["id"]: t for t in r.get("fixture_todos") or []}
+    todos_now = (r.get("fake_state") or {}).get("todos") or []
+    claim = unwritten_claim(body, bool(made or cancelled or changed or memory_changed(r)
+                                       or [t for t in todos_now if fx_todos.get(t["id"]) != t]))
+    if claim:
+        reasons.append(claim)
     return {
         "commands": [" ".join(a) for a in log],
         "names": names,
@@ -4312,7 +4460,7 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     facts = {(r["id"], r["variant"]): sched_facts(r, next(c for c in cases if c["id"] == r["id"]))
              for r in data["results"] if any(c["id"] == r["id"] for c in cases)}
     out = [
-        "# 定时与提醒评测结果（票 36，票 44、票 59、票 60 重跑）",
+        "# 定时与提醒评测结果（票 36，票 44、票 59、票 60、票 63 重跑）",
         "",
         f"模型：{meta['model']['name']}（{meta['model_source']}，即 JC 主对话现在用的模型），推理强度 "
         f"{meta['model']['options'].get('reasoning_effort', '默认')}；首次运行于 {meta['ran_at']}。",
@@ -4342,7 +4490,8 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
-    out += rerun_section(data, cases, sched_facts, "60") + rerun_section(data, cases, sched_facts, "59")
+    out += (rerun_section(data, cases, sched_facts, "63") + rerun_section(data, cases, sched_facts, "60")
+            + rerun_section(data, cases, sched_facts, "59"))
     total = passed = 0
     out += ["## 通过率", "", "| # | 用例 | 分组 | 期望 | 遍数 | 过 | 通过率 |", "| --- | --- | --- | --- | --- | --- | --- |"]
     for case in cases:
@@ -4435,6 +4584,27 @@ def todo_gist(t: dict[str, Any]) -> str:
     return f"`{t['id']}` {t['title']}{notes}，截止 {due}，{state}"
 
 
+# Ticket 63 (main chat PRD ruling 115): a reply that says it noted
+# something must follow a write in the same run (a CLI write that changed
+# the fake galley, or GA's memory).
+NOTED_WORDS = ("记下了", "记住了", "记好了", "已记")
+RECITE_RE = re.compile(r"[\s，。！？、：:,.!?「」“”*]")
+
+
+def unwritten_claim(body: str, wrote: bool) -> str | None:
+    said = [w for w in NOTED_WORDS if w in body]
+    if said and not wrote:
+        return "说了「" + "」「".join(said) + "」，这一轮却什么都没写下（没有改动清单或提醒的写命令，也没写记忆）"
+    return None
+
+
+def memory_changed(r: dict[str, Any]) -> list[str]:
+    """The files of GA's memory the run added, changed or removed
+    (worker's memory_snapshot, ticket 63)."""
+    mc = r.get("memory_changes") or {}
+    return sorted(set(mc.get("added") or []) | set(mc.get("changed") or []) | set(mc.get("removed") or []))
+
+
 def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     """What a to-do run did, and whether it met the case's expectations
     (todo/cases.json `expect`). Commands from the fake galley's log; to-dos
@@ -4444,9 +4614,14 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     noted, its reminder as `reminder` says), `cancel` (one of these
     cancelled in this run, at the user's request, the kind in the
     reason), `asks_or_any`, and `record_only` (judged by no one: `pass`
-    is None); `flags` note what passes but is worth a look."""
-    exp = case["expect"]
+    is None); `flags` note what passes but is worth a look. Ticket 63:
+    `clock` (the time the message names, from the run's `now`),
+    `follow_up.windows` (any of them) and `follow_up.clock`,
+    `reminder.optional`, `no_recite`, and for every case a reply that says
+    it noted something without a write in the run fails."""
     now = datetime.fromisoformat(r["now"])
+    case = clock_case(case, now)
+    exp = case["expect"]
     tz = now.tzinfo
     started = datetime.fromtimestamp(r["started_at"], tz) if r.get("started_at") else now
     log = [c.get("argv") or [] for c in r.get("galley_log") or []]
@@ -4574,8 +4749,10 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
                 reasons.append("建成了每次新开会话的任务（target 不是 assistant）")
             if at is None:
                 reasons.append("不是一次性提醒")
-            elif not in_window(at, fu["window"]):
+            elif not any(in_window(at, w) for w in fu.get("windows") or [fu["window"]]):
                 reasons.append("跟进时间不对：" + local_words(at))
+            elif fu.get("clock") and at.strftime("%H:%M") != fu["clock"]:
+                reasons.append(f"提醒不在说的 {fu['clock']}：" + local_words(at))
             elif t is not None and due_end(t) and at > due_end(t):
                 reasons.append("提醒在截止之后：" + local_words(at))
             if t is not None and exp.get("title_any") and not any(w in t["title"] for w in exp["title_any"]):
@@ -4613,7 +4790,10 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
                 if rem:
                     reasons.append("没时间的不该挂提醒：" + local_words(local(rem["fireAt"])))
             elif not rem:
-                reasons.append("有截止却没挂提醒")
+                if exp["reminder"].get("optional"):
+                    flags.append("没挂提醒")
+                else:
+                    reasons.append("有截止却没挂提醒")
             else:
                 timed = rem
                 at = local(rem["fireAt"])
@@ -4737,10 +4917,23 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
             reasons.append("该先问一句，没问")
         if exp.get("asks_or_any") and not ("？" in body or "?" in body or any(w in body for w in exp["asks_or_any"])):
             reasons.append("只复述了提醒：没问一句，也没给下一步（" + " / ".join(exp["asks_or_any"]) + "）")
+        if exp.get("no_recite"):
+            flat = RECITE_RE.sub("", body)
+            if body.lstrip().startswith(("提醒：", "提醒:", "提醒你：")) or any(
+                    flat in (RECITE_RE.sub("", w), "提醒" + RECITE_RE.sub("", w)) for w in exp["no_recite"]):
+                reasons.append("复述了提醒的原话：" + body.strip()[:40])
         if exp.get("max_chars") and len(body) > exp["max_chars"]:
             reasons.append(f"太长：{len(body)} 字，上限 {exp['max_chars']}")
-    if memory_writes:
-        flags.append("写了记忆：" + "、".join(os.path.basename(x) for x in memory_writes))
+    mem = memory_changed(r)
+    wrote = bool([t for t in todos if t["id"] not in fx_todos] or [t for t in tasks if t["id"] not in fx_tasks]
+                 or [t for t in todos if t["id"] in fx_todos and t != fx_todos[t["id"]]]
+                 or [t for t in tasks if t["id"] in fx_tasks and t != fx_tasks[t["id"]]] or mem)
+    claim = unwritten_claim(body, wrote)
+    if claim:
+        reasons.append(claim)
+    if memory_writes or mem:
+        flags.append("写了记忆：" + "、".join(dict.fromkeys([os.path.basename(x) for x in memory_writes]
+                                                          + [os.path.basename(x) for x in mem])))
     record = bool(exp.get("record_only"))
     return {
         "commands": [" ".join(a) for a in log],
@@ -4749,6 +4942,8 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         "made_todos": made_todos,
         "cancelled_todos": [t["id"] for t in cancelled_todos],
         "memory_writes": memory_writes,
+        "memory_changed": mem,
+        "wrote": wrote,
         "flags": flags,
         "record_only": record,
         "made_tasks": [t for t in tasks if t["id"] not in fx_tasks],
@@ -4788,7 +4983,7 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     facts = {(r["id"], r["variant"]): todo_facts(r, next(c for c in cases if c["id"] == r["id"]))
              for r in data["results"] if any(c["id"] == r["id"] for c in cases)}
     out = [
-        "# 待办评测结果（票 41，票 44、票 59、票 60 重跑）",
+        "# 待办评测结果（票 41，票 44、票 59、票 60、票 63 重跑）",
         "",
         f"模型：{meta['model']['name']}（{meta['model_source']}，即 JC 主对话现在用的模型），推理强度 "
         f"{meta['model']['options'].get('reasoning_effort', '默认')}；首次运行于 {meta['ran_at']}。",
@@ -4803,6 +4998,10 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         "（该跟进、不该跟进、两可、到点与取消）。两可的只记录、不判（通过率不算它们），回复原文给 JC 读。"
         "「最近不要的跟进」用例的假 CLI 里起始就有一件取消过的待办，照 `in_hand_section` 写成「In Hand」的第四组；"
         "判定只认这次运行里发生的取消。",
+        "- **票 63 的用例**（主对话 PRD 裁决 115）：两可的三条改成判定（复查、开学该跟进，今晚的火锅不跟），"
+        "另加「今晚吃火锅，记一下」「下午 3 点开会，记一下」（钟点按运行时间取还在前面的那个，见 `cases.json` 的 `_note`）、"
+        "用户点了提醒时间的、它自己的两个提醒到点（offer、妈妈手术）；叫醒消息是改过的 Core 措辞。"
+        "每条都判：回复说「记下了」一类的话，这一轮就得有写（改动清单或提醒，或写了 GA 记忆，按运行前后记忆目录的差别认）。",
         "- **新消息**：用户这句（「说说这件」是引用块加一句话，照 `composer-quote.ts` 的写法）；叫醒用例是照 Core 措辞"
         "（`subtask_report::report_text` 的待办一段，同样逐字对过）拼出的叫醒消息。",
         "- **工具**：`code_run` 与文件工具在每次运行自己的 macOS 沙盒里真的执行（同票 36 的沙盒）；Galley CLI 是假的："
@@ -4821,7 +5020,8 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
-    out += rerun_section(data, cases, todo_facts, "60") + rerun_section(data, cases, todo_facts, "59")
+    out += (rerun_section(data, cases, todo_facts, "63") + rerun_section(data, cases, todo_facts, "60")
+            + rerun_section(data, cases, todo_facts, "59"))
     total = passed = 0
     out += ["## 通过率", "", "| # | 用例 | 分组 | 期望 | 遍数 | 过 | 通过率 |", "| --- | --- | --- | --- | --- | --- | --- |"]
     for case in cases:
@@ -4913,8 +5113,9 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                     f"手册版本：`{r.get('manual_sha', '?')}`。", "",
                     f"新记的待办：{made}；新建的提醒：{tasks}；改过的已有待办：{after}；"
                     f"取消的已有提醒：{'、'.join(f['cancelled_tasks']) or '无'}。", ""]
-            if f["memory_writes"]:
-                out += ["写进记忆：" + "、".join(f"`{os.path.basename(x)}`" for x in f["memory_writes"]), ""]
+            if f["memory_writes"] or f["memory_changed"]:
+                out += ["写进记忆：" + "、".join(dict.fromkeys(f"`{os.path.basename(x)}`" for x in
+                                                          f["memory_writes"] + f["memory_changed"])), ""]
             if f["asked_via_tool"]:
                 out += ["ask_user 的问题：", ""] + fenced(json.dumps(f["asked_via_tool"], ensure_ascii=False, indent=1), "json")
             out += ["回复（去掉 summary 与建议标签）：", ""] + fenced(f["body"] or "（空）")
@@ -4946,7 +5147,10 @@ def chat_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     """Ticket 60: todo_facts, judged only on the to-dos and reminders it
     set (or failed to set where the user asked); the rest is noted."""
     f = todo_facts(r, case)
-    aside = [x for x in f["reasons"] if x.startswith(CHAT_ASIDE)]
+    # Ticket 63: where a follow-up is expected (personal-surgery), saying
+    # it in the reply is part of it (ruling 115 3).
+    aside = [x for x in f["reasons"] if x.startswith(CHAT_ASIDE)
+             and not (case["expect"].get("follow_up") and x.startswith("回复没说出"))]
     kept = [x for x in f["reasons"] if x not in aside]
     out = dict(f, reasons=kept, aside=aside)
     out["pass"] = None if f["pass"] is None else not kept
@@ -4961,7 +5165,7 @@ def render_chat_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     judged = [f for f in facts.values() if f["pass"] is not None]
     set_any = [k for k, f in facts.items() if f["made_todos"] or any(not t.get("cancelledAt") for t in f["made_tasks"])]
     out = [
-        "# 闲聊用例重跑（票 60）",
+        "# 闲聊用例重跑（票 60、票 63）",
         "",
         f"模型：{meta['model']['name']}（{meta['model_source']}），推理强度 "
         f"{meta['model']['options'].get('reasoning_effort', '默认')}；运行于 {meta['ran_at']}。",
@@ -4974,7 +5178,12 @@ def render_chat_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         "看不到它会不会真的写，所以不用它。",
         "- **判定**：只看它设了什么：闲聊、问答、干活的不该记待办、不该建提醒；「提醒我一下，周五之前要给房东转房租」该记待办挂提醒；"
         "两条两可的（妈妈明天做手术、成都机票订好了）只记录。回答本身（查网页停下、派子任务、长短）不判，写在「另记」里。",
+        "- **票 63**：入口层多了「没写下就不说记下了」，提示词重新生成；妈妈手术那条照票 60 的做法改成判定"
+        "（设次日的问候，并在回复里说出来，裁决 115 第 3 条），成都机票仍只记录；每条另判「说了记下了，这一轮就得有写」。",
         "",
+    ]
+    out += rerun_section(data, cases, chat_facts, "63")
+    out += [
         f"判了 {len(judged)} 次，过 {sum(1 for f in judged if f['pass'])} 次；设了待办或提醒的：{len(set_any)} 次"
         + (f"（{'、'.join(sorted(i for i, _ in set_any))}）" if set_any else "") + "。",
         "",
@@ -5095,9 +5304,12 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
                     "todo-stop-vague": ("stop-this-kind", "todo-stop-vague"),
                     "todo-declined-quiet": ("declined-before", "todo-quiet"),
                     "todo-declined-set": ("declined-before", "todo-declined-set"),
-                    "todo-maybe-hotpot": ("maybe-hotpot", "todo-maybe"),
                     "todo-wake-recite": ("wake-reno", "todo-recite"),
-                    "todo-wake-use": ("wake-reno", "todo-put-to-use")}
+                    "todo-wake-use": ("wake-reno", "todo-put-to-use"),
+                    # Ticket 63.
+                    "todo-founding-claim": ("founding-date", "todo-claim"),
+                    "todo-founding-memory": ("founding-date", "todo-memory"),
+                    "todo-wake-offer": ("wake-offer", "todo-offer-ask")}
     for run_id, (case_id, script) in todo_scripts.items():
         for job in make_sched_jobs([tcases[case_id]], snow, mykeys, ga_lang, set(), 1, script, suite="todo"):
             job["case_id"] = run_id
@@ -5121,7 +5333,7 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
         print(("  PASS " if cond else "  FAIL ") + what)
         ok = ok and cond
 
-    dry_test_wake([r for r in results if r["id"].startswith("wake-")], wake_scripts, wcases, check)
+    dry_test_wake([r for r in results if r["id"].startswith("wake-")], wake_scripts, wcases, now, check)
     dry_test_sched([r for r in results if r["id"].startswith("sched-")], sched_scripts, scases, snow, check)
     dry_test_todo([r for r in results if r["id"].startswith("todo-")], todo_scripts, tcases, snow, check)
     dry_test_chat([r for r in results if r["id"].startswith("chat-")], chat_scripts, ccases, check)
@@ -5267,16 +5479,27 @@ def dry_test_sandbox(results: list[dict[str, Any]], scripts: dict[tuple[str, str
 
 
 def dry_test_wake(results: list[dict[str, Any]], scripts: dict[str, str],
-                  cases: dict[str, dict[str, Any]], check: Any) -> None:
+                  cases: dict[str, dict[str, Any]], now: datetime, check: Any) -> None:
     """Wake suite: the prompt names the manual where the run's state root
     has it; the wake note is the new user message after the history; the
     model's shell reaches the fake galley (discovery line with sed, reads,
     a send, state kept, a refused flag, a holding command) and nothing
-    outside the sandbox; ask_user ends the run; the judge reads it."""
+    outside the sandbox; ask_user ends the run; the judge reads it. Ticket
+    63: the quote dates are the run day's, none before this week's Monday."""
     words = load_wording()["draft"]
+    thu, mon = datetime(2026, 10, 15, 11, 0), datetime(2026, 10, 19, 11, 0)
+    check({k: str(v) for k, v in wake_days(thu).items()} == {"W": "2026-10-12", "Q0": "2026-10-15", "Q1": "2026-10-14",
+                                                             "Q2": "2026-10-13"}
+          and set(str(v) for v in wake_days(mon).values()) == {"2026-10-19"},
+          "wake dates: on the Thursday the case was written for, its own dates; on a Monday, all that Monday")
+    old = wake_dated(cases["done-evidence"], thu)
+    check("东辰_1013.png" in json.dumps(old, ensure_ascii=False) and "Rebar quotation, 13 Oct 2026" in json.dumps(
+        old, ensure_ascii=False) and "本周（10 月 12 日这一周）" in old["subtasks"][0]["instructions"]
+          and "{{" not in json.dumps(wake_dated(cases["two-at-once"], mon), ensure_ascii=False),
+          "wake dates: filled everywhere, file names too")
     for r in sorted(results, key=lambda r: r["id"]):
         script = scripts[r["id"]]
-        case = cases[r["id"][len("wake-"):]]
+        case = wake_dated(cases[r["id"][len("wake-"):]], now)
         print(f"wake {r['id']} / {r['variant']} ({script})")
         check(r["status"] == "ok", f"run completed (status {r['status']} {r.get('error', '')[:300]})")
         if r["status"] != "ok":
@@ -5326,6 +5549,10 @@ def dry_test_wake(results: list[dict[str, Any]], scripts: dict[str, str],
                   f"fake galley logged every call ({f['names']})")
             check(len(f["sends"]) == 1 and f["sends"][0]["supervisor"] == "galley-assistant"
                   and f["sends"][0]["content"] == "截图路径再给一下", f"the send is read back ({f['sends']})")
+            check(any("--ensure-runner" in (c.get("argv") or []) for c in r.get("galley_log") or [])
+                  and "unexpected argument '--ensure-runner'" not in out,
+                  "a send with --ensure-runner goes through, as the real CLI's (ticket 63)")
+            check(time.strftime("%m%d") in out or "报价截图" in out, "the evidence is in the fake Downloads")
             check(f["held"] == ["session wait"] and not f["pass"]
                   and any("卡住" in x for x in f["reasons"]), "the judge flags the holding command")
             check(f["no_reply"] and f["manual"].startswith("读了"), "no-reply and manual read are recognized")
@@ -5445,6 +5672,35 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, 
             check(f["pass"] and f["no_reply"] and not f["names"], f"<no-reply/>, nothing touched ({f['reasons']})")
 
 
+def synth_run(case: dict[str, Any], at: datetime, reply: str, todos: tuple[dict[str, Any], ...] = (),
+              tasks: tuple[dict[str, Any], ...] = (), log: tuple[list[str], ...] = (),
+              memory: dict[str, list[str]] | None = None) -> dict[str, Any]:
+    """Dry test (ticket 63): a run's result as the judge reads it, built by
+    hand at a fixed `at`: the case's fixture, the to-dos and tasks the run
+    left besides, the fake galley's log, GA's memory changes."""
+    fx = sched_fixture(clock_case(case, at), at)
+    return {"now": at.isoformat(), "status": "ok", "stop_reason": "final_reply", "final_reply": reply,
+            "galley_log": [{"argv": list(a)} for a in log], "calls": [],
+            "fixture_tasks": fx["tasks"], "fixture_todos": fx["todos"],
+            "fake_state": {"todos": fx["todos"] + list(todos), "tasks": fx["tasks"] + list(tasks)},
+            "memory_changes": memory or {"added": [], "changed": [], "removed": []}}
+
+
+def synth_todo(title: str, due: str | None = None, due_at: datetime | None = None) -> dict[str, Any]:
+    return {"id": "todo_dry0000000000001", "title": title, "notes": None, "dueDate": due,
+            "dueAt": due_at.isoformat() if due_at else None, "doneAt": None, "cancelledAt": None}
+
+
+def synth_reminder(at: datetime, todo_id: str | None = None, prompt: str = "dry") -> dict[str, Any]:
+    return {"id": "sched_dry000000000001", "todoId": todo_id, "fireAt": at.isoformat(), "target": "assistant",
+            "prompt": prompt, "cancelledAt": None}
+
+
+SYNTH_ADD = ("todo", "add", "dry", "--supervisor=galley-assistant", "--reason=dry")
+SYNTH_CREATE = ("schedule", "create", "dry", "--at=dry", "--target=assistant", "--supervisor=galley-assistant",
+                "--reason=dry")
+
+
 def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, str]],
                   cases: dict[str, dict[str, Any]], now: datetime, check: Any) -> None:
     """To-do suite: the In Hand lines carry the case's to-dos as they stood
@@ -5482,6 +5738,90 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
           and sum(1 for t in fx["tasks"] if t.get("todoId")) == 3, "fake galley: the live list (soil ticked off since)")
     quote = sched_prompt(cases["quote-move"], now)
     check("`todo_2b3c4d5e6f7a8b9c` due " in quote and ", reminder " in quote, "In Hand: a to-do with due and reminder")
+    # Ticket 63: the clock a message names, and the judge on what was set
+    # for it, on a fixed Monday evening (18:25) and morning.
+    tz = now.tzinfo
+    hot, meet, named = cases["hotpot-asked"], cases["meeting-3pm"], cases["remind-named-time"]
+    morning, five = datetime(2026, 10, 19, 9, 0, tzinfo=tz), datetime(2026, 10, 19, 17, 0, tzinfo=tz)
+    check(clock_words(hot, five)[0] == "今晚 7 点" and clock_words(hot, mon)[0] == "今晚 8 点"
+          and clock_case(hot, mon)["message"] == "今晚 8 点和朋友吃火锅，记一下"
+          and clock_case(cases["hotpot-tonight"], mon)["message"] == "今晚 8 点和朋友吃火锅"
+          and clock_words(meet, morning)[0] == "下午 3 点"
+          and clock_case(meet, mon)["message"] == "明天下午 3 点要和客户开会，记一下",
+          "clock: the first evening hour an hour ahead; 3 pm today, or tomorrow when less than two hours ahead")
+    filled = clock_case(meet, mon)["expect"]
+    check(filled["reminder"]["window"]["to"] == {"days": 1, "time": "14:59"}
+          and filled["due"]["window"]["from"] == {"days": 1, "time": "00:00"}
+          and clock_case(cases["guitar"], mon) is cases["guitar"],
+          "clock: the time named, in the expectations; a case without a clock is as it was")
+    try:
+        clock_words(hot, datetime(2026, 10, 19, 21, 30, tzinfo=tz))
+        late_refused = False
+    except SystemExit:
+        late_refused = True
+    check(late_refused, "clock: too late in the evening for 「今晚」 refuses to run")
+    eight, tomorrow = datetime(2026, 10, 19, 20, 0, tzinfo=tz), datetime(2026, 10, 20, 0, 0, tzinfo=tz)
+
+    def judged(case_id: str, reply: str, **kw: Any) -> dict[str, Any]:
+        return todo_facts(synth_run(cases[case_id], mon, reply, **kw), cases[case_id])
+
+    pot = synth_todo("和朋友吃火锅", due="2026-10-19")
+    f = judged("hotpot-asked", "记下了：今晚 8 点和朋友吃火锅，8 点提醒你。", todos=(pot,),
+               tasks=(synth_reminder(eight, pot["id"]),), log=(SYNTH_ADD,))
+    check(f["pass"] is False and any("提醒时间不对" in x for x in f["reasons"]),
+          f"「记一下」: a reminder at the moment it starts fails ({f['reasons']})")
+    f = judged("hotpot-asked", "记下了：今晚 8 点和朋友吃火锅，7 点半提醒你出门。", todos=(pot,),
+               tasks=(synth_reminder(eight - timedelta(minutes=30), pot["id"]),), log=(SYNTH_ADD,))
+    check(f["pass"] is True, f"「记一下」: noted, reminded half an hour ahead, passes ({f['reasons']})")
+    f = judged("hotpot-asked", "记下了：今晚 8 点和朋友吃火锅。", todos=(pot,), log=(SYNTH_ADD,))
+    check(f["pass"] is True and "没挂提醒" in f["flags"], f"「记一下」: noted without a reminder passes, noted ({f['flags']})")
+    f = judged("hotpot-tonight", "好，吃得开心！", tasks=(synth_reminder(eight - timedelta(minutes=30)),),
+               log=(SYNTH_CREATE,))
+    check(f["pass"] is False and any("不该建它自己的提醒" in x for x in f["reasons"]),
+          f"tonight's plan followed up unasked fails ({f['reasons']})")
+    f = judged("hotpot-tonight", "好，吃得开心！")
+    check(f["pass"] is True, f"tonight's plan left alone passes ({f['reasons']})")
+    meeting = synth_todo("和客户开会", due_at=tomorrow + timedelta(hours=15))
+    f = judged("meeting-3pm", "记下了：明天下午 3 点和客户开会，下午 2 点半提醒你。", todos=(meeting,),
+               tasks=(synth_reminder(tomorrow + timedelta(hours=14, minutes=30), meeting["id"]),), log=(SYNTH_ADD,))
+    check(f["pass"] is True, f"the meeting, reminded ahead: passes ({f['reasons']})")
+    f = judged("meeting-3pm", "记下了：明天下午 3 点和客户开会，3 点提醒你。", todos=(meeting,),
+               tasks=(synth_reminder(tomorrow + timedelta(hours=15), meeting["id"]),), log=(SYNTH_ADD,))
+    check(f["pass"] is False, f"the meeting, reminded as it starts: fails ({f['reasons']})")
+    f = judged("remind-named-time", "好，明天下午 2 点 50 提醒你开会。",
+               tasks=(synth_reminder(tomorrow + timedelta(hours=14, minutes=50)),), log=(SYNTH_CREATE,))
+    check(f["pass"] is True, f"the time the user named kept: passes ({f['reasons']})")
+    f = judged("remind-named-time", "好，明天下午 2 点半提醒你开会。",
+               tasks=(synth_reminder(tomorrow + timedelta(hours=14, minutes=30)),), log=(SYNTH_CREATE,))
+    check(f["pass"] is False and any("跟进时间不对" in x for x in f["reasons"]),
+          f"the time the user named moved earlier: fails ({f['reasons']})")
+    visit = synth_todo("去医院复查", due="2026-10-20")
+    for at, ok in ((eight, True), (tomorrow + timedelta(hours=7, minutes=30), True), (tomorrow + timedelta(hours=13), False)):
+        f = judged("hospital-tomorrow", f"记下了：明天去医院复查，{local_words(at)}提醒你带上报告。", todos=(visit,),
+                   tasks=(synth_reminder(at, visit["id"]),), log=(SYNTH_ADD,))
+        check(f["pass"] is ok and (ok or any("跟进时间不对" in x for x in f["reasons"])),
+              f"the check-up: reminded {local_words(at)} {'passes' if ok else 'fails'} ({f['reasons']})")
+    school = synth_todo("孩子开学", due="2026-10-26")
+    for at, ok in ((datetime(2026, 10, 25, 19, 0, tzinfo=tz), True), (datetime(2026, 10, 26, 7, 0, tzinfo=tz), False)):
+        f = judged("school-monday", f"记下了：孩子 10 月 26 日开学，{at.month} 月 {at.day} 日 {at.hour} 点提醒你。",
+                   todos=(school,), tasks=(synth_reminder(at, school["id"]),), log=(SYNTH_ADD,))
+        check(f["pass"] is ok, f"school: reminded {local_words(at)} {'passes' if ok else 'fails'} ({f['reasons']})")
+    f = judged("founding-date", "记下了，你们公司成立于 2019 年 11 月 20 日。")
+    check(f["pass"] is False and any("这一轮却什么都没写下" in x for x in f["reasons"]),
+          f"「记下了」 with nothing written fails ({f['reasons']})")
+    f = judged("founding-date", "记下了。", memory={"added": [], "changed": ["global_mem.txt"], "removed": []})
+    check(f["pass"] is True and f["memory_changed"] == ["global_mem.txt"], f"after a memory write it passes ({f['reasons']})")
+    f = judged("founding-date", "好的，2019 年 11 月 20 日。")
+    check(f["pass"] is True, f"no claim, nothing written: passes ({f['reasons']})")
+    f = judged("wake-surgery", "提醒：问问妈妈手术情况。")
+    check(f["pass"] is False and any("复述了提醒的原话" in x for x in f["reasons"]),
+          f"its own reminder recited: fails ({f['reasons']})")
+    f = judged("wake-surgery", "阿姨今天的手术还顺利吗？你也别太累。")
+    check(f["pass"] is True, f"a gentle question: passes ({f['reasons']})")
+    gcase = next(c for c in json.loads(SCHED_CASES.read_text(encoding="utf-8"))["cases"] if c["id"] == "guitar")
+    sf = sched_facts(synth_run(gcase, mon, "记住了，加油！"), gcase)
+    check(sf["pass"] is False and any("这一轮却什么都没写下" in x for x in sf["reasons"]),
+          f"schedule judge: 「记住了」 with nothing written fails ({sf['reasons']})")
     note = sched_note(cases["wake-todo"], now)
     check("on the user's to-do `todo_2b3c4d5e6f7a8b9c` came due." in note and "交给王经理\n>>>\nIt is due " in note,
           "the wake note for a to-do's reminder, in Core's words")
@@ -5583,10 +5923,24 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
         elif r["id"] == "todo-declined-set":
             check(f["pass"] is False and any("不该记待办" in x for x in f["reasons"]),
                   f"a follow-up of the kind turned down: fails ({f['reasons']})")
-        elif r["id"] == "todo-maybe-hotpot":
-            check(f["pass"] is None and len(f["made_tasks"]) == 1, f"two-sided: recorded, not judged ({f['reasons']})")
+        elif r["id"] == "todo-founding-claim":
+            check(f["pass"] is False and any("这一轮却什么都没写下" in x for x in f["reasons"])
+                  and not f["memory_changed"] and r.get("memory_changes") == {"added": [], "changed": [], "removed": []},
+                  f"「记下了」 with nothing written fails; a run that writes nothing leaves memory as it was "
+                  f"({f['reasons']} {r.get('memory_changes')})")
+        elif r["id"] == "todo-founding-memory":
+            check(f["pass"] is True and f["memory_changed"] == ["global_mem.txt"] and not f["memory_writes"]
+                  and any("写了记忆" in x for x in f["flags"]),
+                  f"a memory line its own code wrote counts as written ({f['reasons']} {f['memory_changed']})")
+        elif r["id"] == "todo-wake-offer":
+            check("What you noted when you set it:\n<<<\n问问 offer 结果\n>>>\nAct on it now: tell the user what is of "
+                  "use to them now, in a sentence or two (not your words read back)" in r["message"]
+                  and "### In Hand" not in system,
+                  "its own reminder's wake note, in Core's ticket 63 words")
+            check(f["pass"] is True and not f["names"], f"asked how it went, nothing touched: passes ({f['reasons']})")
         elif r["id"] == "todo-wake-recite":
-            check(f["pass"] is False and any("只复述了提醒" in x for x in f["reasons"]),
+            check(f["pass"] is False and any("只复述了提醒" in x for x in f["reasons"])
+                  and any("复述了提醒的原话" in x for x in f["reasons"]),
                   f"a reminder recited: fails ({f['reasons']})")
         elif r["id"] == "todo-wake-use":
             check(f["pass"] is True and not f["names"], f"what is of use now, nothing touched: passes ({f['reasons']})")
@@ -5599,7 +5953,24 @@ def dry_test_chat(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
                   cases: dict[str, dict[str, Any]], check: Any) -> None:
     """Chat suite (ticket 60): the entry layer's cases under today's main
     chat prompt (a carried case with Rust's carried wording), the manual
-    in the state root, no In Hand; judged on what it set."""
+    in the state root, no In Hand; judged on what it set. Ticket 63: the
+    mother's operation is judged (a follow-up tomorrow, said)."""
+    from datetime import timezone
+
+    mon = datetime(2026, 10, 19, 18, 25).astimezone()
+    tomorrow7 = datetime(2026, 10, 20, 19, 0, tzinfo=mon.tzinfo)
+    surgery = cases["personal-surgery"]
+    own = synth_reminder(tomorrow7.astimezone(timezone.utc))
+    f = chat_facts(synth_run(surgery, mon, "别太担心。明晚 7 点我问问你阿姨的情况。", tasks=(own,), log=(SYNTH_CREATE,)),
+                   surgery)
+    check(f["pass"] is True, f"chat: a follow-up tomorrow evening, said: passes ({f['reasons']})")
+    f = chat_facts(synth_run(surgery, mon, "别太担心，会顺利的。", tasks=(own,), log=(SYNTH_CREATE,)), surgery)
+    check(f["pass"] is False and any("回复没说出" in x for x in f["reasons"]),
+          f"chat: the follow-up set but not said: fails ({f['reasons']})")
+    f = chat_facts(synth_run(surgery, mon, "别太担心，会顺利的。"), surgery)
+    check(f["pass"] is False, f"chat: nothing set: fails ({f['reasons']})")
+    f = chat_facts(synth_run(cases["carry-older"], mon, "好的。"), cases["carry-older"])
+    check(f["pass"] is None, "chat: the two-sided case is still recorded only")
     for r in sorted(results, key=lambda r: r["id"]):
         case_id, script = scripts[r["id"]]
         print(f"chat {r['id']} ({script})")
@@ -5837,6 +6208,12 @@ def main() -> int:
     fresh = {(r["id"], r["variant"]) for r in results}
     replaced = [r for r in merged if (r["id"], r["variant"]) in fresh]
     merged = [r for r in merged if (r["id"], r["variant"]) not in fresh] + results
+    if args.supersede:
+        # Ticket 63: the runs of a case no longer in cases.json (a case
+        # replaced by another) go with the runs this one replaces.
+        known = {c["id"] for c in all_cases}
+        replaced += [r for r in merged if r["id"] not in known]
+        merged = [r for r in merged if r["id"] in known]
     order = {c["id"]: i for i, c in enumerate(all_cases)}
     if sched:
         merged.sort(key=lambda r: (order.get(r["id"], 99), r.get("repeat", 0)))
@@ -5874,9 +6251,9 @@ def main() -> int:
         })
     if wake:
         data["meta"].update({
-            "suite": "wake (ticket 30, rerun for ticket 59): the main chat prompt (regenerated for ticket 59: its "
-                     "entry layer and today's static rules), the assistant manual's parts in the state root, a wake "
-                     "note filled from wording.md",
+            "suite": "wake (ticket 30, rerun for tickets 59 and 63): the main chat prompt (regenerated for tickets 59 "
+                     "and 63: its entry layer and today's static rules), the assistant manual's parts in the state "
+                     "root, a wake note filled from wording.md; since ticket 63 the quote dates are the run day's",
             "wordings_order": list(all_variants),
             "repeats": args.repeats,
             "tool_cap": WAKE_TOOL_CAP,
@@ -5888,12 +6265,12 @@ def main() -> int:
             data["meta"]["superseded_runs"] = previous_meta["superseded_runs"]
     if previous_meta.get("history_note"):
         data["meta"]["history_note"] = previous_meta["history_note"]
-    for key in ("ticket59_note", "ticket59_control", "ticket60_note"):
+    for key in ("ticket59_note", "ticket59_control", "ticket60_note", "ticket63_note"):
         if previous_meta.get(key):
             data["meta"][key] = previous_meta[key]
     if sched:
         data["meta"].update({
-            "suite": ("chat (ticket 60): the entry layer's cases.json under the main chat prompt of ticket 60 "
+            "suite": ("chat (ticket 60, rerun for ticket 63): the entry layer's cases.json under the main chat prompt of ticket 63 "
                       "(schedule/galley-prompt/, carried-1 for the carried cases), the assistant manual's parts in "
                       "the state root, the to-do suite's sandbox and fake galley with nothing in it; judged only on "
                       "the to-dos and reminders set (chat/cases.json)" if chat else
@@ -5901,12 +6278,14 @@ def main() -> int:
                       "In Hand lines (ticket 39's three groups) for to-dos and tasks from before the segment, the "
                       "assistant manual (ticket 44's text, in parts since ticket 59) in the state root, the case's "
                       "to-dos and tasks in the fake galley; rerun for tickets 59 and 60 (ticket 60's cases added; "
-                      "In Hand's fourth group, ticket 61, for the cases that start with a follow-up turned down)"
+                      "In Hand's fourth group, ticket 61, for the cases that start with a follow-up turned down); rerun "
+                      "for ticket 63 (Core's new wake words, the manual's coming-due rules in wake.md, the entry "
+                      "layer's floor on 「记下了」; the two-sided cases judged, ticket 63's cases added)"
                       if todo else
                       "schedule (ticket 36, rerun for tickets 41 and 44): the main chat prompt with the ticket 41 "
                       "entry layer and its own configuration paragraph, In Hand lines (ticket 39's three groups) for "
                       "tasks from before the segment, the assistant manual (ticket 44's text, in parts since ticket "
-                      "59) in the state root, the case's tasks in the fake galley; rerun for tickets 59 and 60"),
+                      "59) in the state root, the case's tasks in the fake galley; rerun for tickets 59, 60 and 63"),
             "repeats": args.repeats,
             "tool_cap": SCHED_TOOL_CAP,
             "extra_exec": list(SCHED_EXTRA_EXEC),

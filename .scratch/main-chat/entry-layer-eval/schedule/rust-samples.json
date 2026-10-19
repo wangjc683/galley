@@ -1276,7 +1276,7 @@
           "todo": null
         }
       ],
-      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_aaaaaaaaaaaaaaaa` (one-off) came due. Planned for 2026-10-16 13:00 (Fri), local time. What you noted when you set it:\n<<<\n提醒用户带身份证\n明早 8:05 的高铁\n>>>\nAct on it now: tell the user in a sentence or two, look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>."
+      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_aaaaaaaaaaaaaaaa` (one-off) came due. Planned for 2026-10-16 13:00 (Fri), local time. What you noted when you set it:\n<<<\n提醒用户带身份证\n明早 8:05 的高铁\n>>>\nAct on it now: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>."
     },
     {
       "reports": [
@@ -1291,7 +1291,7 @@
           "todo": null
         }
       ],
-      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_bbbbbbbbbbbbbbbb` (one-off) came due. Planned for 2026-10-16 13:00 (Fri), local time; it went off at 2026-10-16 22:00 (Fri), 9 hours late (the computer was asleep or Galley was closed). What you noted when you set it:\n<<<\n提醒用户给王经理回电话\n>>>\nAct on it now, and say in the reply itself (the user does not see your summary) that it comes 9 hours late: tell the user in a sentence or two, look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>."
+      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_bbbbbbbbbbbbbbbb` (one-off) came due. Planned for 2026-10-16 13:00 (Fri), local time; it went off at 2026-10-16 22:00 (Fri), 9 hours late (the computer was asleep or Galley was closed). What you noted when you set it:\n<<<\n提醒用户给王经理回电话\n>>>\nAct on it now, and say in the reply itself (the user does not see your summary) that it comes 9 hours late: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>."
     },
     {
       "reports": [
@@ -1316,7 +1316,7 @@
           "todo": null
         }
       ],
-      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_cccccccccccccccc` (one-off) came due. Planned for 2026-10-16 13:00 (Fri), local time. What you noted when you set it:\n<<<\n一\n>>>\nAct on it now: tell the user in a sentence or two, look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.\n\nReminder `sched_dddddddddddddddd` (one-off) came due. Planned for 2026-10-16 13:00 (Fri), local time; it went off at 2026-10-16 22:00 (Fri), 3 minutes late (the computer was asleep or Galley was closed). What you noted when you set it:\n<<<\n二\n>>>\nAct on it now, and say in the reply itself (the user does not see your summary) that it comes 3 minutes late: tell the user in a sentence or two, look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.\n\nReply once, covering all of them."
+      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_cccccccccccccccc` (one-off) came due. Planned for 2026-10-16 13:00 (Fri), local time. What you noted when you set it:\n<<<\n一\n>>>\nAct on it now: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.\n\nReminder `sched_dddddddddddddddd` (one-off) came due. Planned for 2026-10-16 13:00 (Fri), local time; it went off at 2026-10-16 22:00 (Fri), 3 minutes late (the computer was asleep or Galley was closed). What you noted when you set it:\n<<<\n二\n>>>\nAct on it now, and say in the reply itself (the user does not see your summary) that it comes 3 minutes late: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.\n\nReply once, covering all of them."
     },
     {
       "reports": [
@@ -1336,7 +1336,7 @@
           }
         }
       ],
-      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_eeeeeeeeeeeeeeee` on the user's to-do `todo_2b3c4d5e6f7a8b9c` came due. Planned for 2026-10-16 13:00 (Fri), local time. The to-do is the user's own, something they have to do:\n<<<\n交季度报告\n报告在 ~/Documents/Q3 季度报告.docx\n交给王经理\n>>>\nIt is due 2026-10-21 15:00 (Wed), local time. Act on it now: remind the user of it in a sentence or two, look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>."
+      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_eeeeeeeeeeeeeeee` on the user's to-do `todo_2b3c4d5e6f7a8b9c` came due. Planned for 2026-10-16 13:00 (Fri), local time. The to-do is on the user's list, something to do or something coming up they want to hear about:\n<<<\n交季度报告\n报告在 ~/Documents/Q3 季度报告.docx\n交给王经理\n>>>\nIt is due 2026-10-21 15:00 (Wed), local time. Act on it now: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>."
     },
     {
       "reports": [
@@ -1356,7 +1356,7 @@
           }
         }
       ],
-      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_ffffffffffffffff` on the user's to-do `todo_4d5e6f7a8b9c0d1e` came due. Planned for 2026-10-16 13:00 (Fri), local time; it went off at 2026-10-16 22:00 (Fri), 1 day 1 hour late (the computer was asleep or Galley was closed). The to-do is the user's own, something they have to do:\n<<<\n买营养土\n>>>\nIt has no due date. Act on it now, and say in the reply itself (the user does not see your summary) that it comes 1 day 1 hour late: remind the user of it in a sentence or two, look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>."
+      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_ffffffffffffffff` on the user's to-do `todo_4d5e6f7a8b9c0d1e` came due. Planned for 2026-10-16 13:00 (Fri), local time; it went off at 2026-10-16 22:00 (Fri), 1 day 1 hour late (the computer was asleep or Galley was closed). The to-do is on the user's list, something to do or something coming up they want to hear about:\n<<<\n买营养土\n>>>\nIt has no due date. Act on it now, and say in the reply itself (the user does not see your summary) that it comes 1 day 1 hour late: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>."
     },
     {
       "reports": [
@@ -1386,7 +1386,7 @@
           "todo": null
         }
       ],
-      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_1111111111111111` on the user's to-do `todo_3c4d5e6f7a8b9c0d` came due. Planned for 2026-10-16 13:00 (Fri), local time. The to-do is the user's own, something they have to do:\n<<<\n交材料\n>>>\nIt is due 2026-10-23 (Fri), local time. Act on it now: remind the user of it in a sentence or two, look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.\n\nReminder `sched_2222222222222222` (one-off) came due. Planned for 2026-10-16 13:00 (Fri), local time. What you noted when you set it:\n<<<\n看物流\n>>>\nAct on it now: tell the user in a sentence or two, look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.\n\nReply once, covering all of them."
+      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_1111111111111111` on the user's to-do `todo_3c4d5e6f7a8b9c0d` came due. Planned for 2026-10-16 13:00 (Fri), local time. The to-do is on the user's list, something to do or something coming up they want to hear about:\n<<<\n交材料\n>>>\nIt is due 2026-10-23 (Fri), local time. Act on it now: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.\n\nReminder `sched_2222222222222222` (one-off) came due. Planned for 2026-10-16 13:00 (Fri), local time. What you noted when you set it:\n<<<\n看物流\n>>>\nAct on it now: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.\n\nReply once, covering all of them."
     }
   ]
 }
