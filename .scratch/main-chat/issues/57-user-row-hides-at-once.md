@@ -46,3 +46,5 @@ Status: ready-for-agent
 3. 工作台里你的消息同样。
 
 ## Comments
+
+- 2026-10-19（实现）：命中区用 `MessageUser.tsx` 里一个空的 `span`（`absolute inset-x-0 top-full h-7.5`，`aria-hidden`），正好盖住下外边距 `mb-7.5`，在 chip 行之前、被 chip 行（`z-10`）压在下面；没用伪元素，静态渲染的测试看得到它。悬停仍用 JS 进出状态（`hovered`），删掉 `ACTION_HIDE_DELAY_MS` 与它的计时器，离开即 `setHovered(false)`；钉住规则原样（对勾、菜单开着、让位），显示判断挪到 `lib/user-row-hover.ts`（`userRowChipsShown`）。菜单关掉时用浏览器自己的 `:hover` 判断指针在不在区内（`pointerInRegion`），不在就立刻收起。顺手去掉 `handleCopy` 里的 `showActions()`：复制是异步的，指针在剪贴板回来前离开会把行钉住不收。不选 CSS 悬停：要么改 `ActionChip` 的 `revealed`（隐藏时 `aria-hidden`、逐颗 `pointer-events-none`）和 `MessageMenu` 两颗按钮的接口与测试，范围超出本票。自查（Chrome 无头，临时页已删）：两种对话从气泡中心每步 2px 移到最左那颗，0 步隐藏；往下移出带子的第一个像素当场收起。

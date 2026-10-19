@@ -25,6 +25,7 @@ import { useCopy } from "@/lib/i18n";
 import { userMessageCopyText } from "@/lib/message-menu";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { useYieldsToSelection } from "@/lib/selection-copy";
+import { pointerInRegion, userRowChipsShown } from "@/lib/user-row-hover";
 import { cn } from "@/lib/utils";
 import type { MessageAttachment, Origin } from "@/types/conversation";
 
@@ -133,10 +134,12 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *   row since ruling 105 (ticket 53, overturning ruling 73 items 1–2,
  *   which had none there): copy · quote · ⋯, the bubble's message menu
  *   one hover away. Each wears the bare chip skin, as on a reply's bar.
- *   Mouse leave delays hiding briefly so the user can move from the
- *   message body to the action without chasing it. While a selection in
- *   the bubble has the selection toolbar up, the row yields to it (main
- *   chat PRD ruling 108; below).
+ *   The hover region is the row plus the 30px band under it, so the
+ *   pointer stays in it from the bubble to a chip, and leaving hides
+ *   the row at once, as a reply's bar (main chat PRD ruling 109; until
+ *   then the margin was outside it and the row waited 600ms). While a
+ *   selection in the bubble has the selection toolbar up, the row
+ *   yields to it (ruling 108; below).
  *
  * `data-role="user-msg"` is a stable anchor that MainView's scroll
  * effect uses to find the just-submitted user message and snap its
@@ -145,10 +148,6 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  */
 const COLLAPSE_LINE_THRESHOLD = 6;
 const COLLAPSE_CHAR_THRESHOLD = 500;
-// The chip sits a few pixels off the block, so the pointer never has to
-// travel to reach it. 1800ms was sized for a longer trip and left a
-// visible tail hanging after the mouse had already moved on.
-const ACTION_HIDE_DELAY_MS = 600;
 const COPY_FEEDBACK_MS = 1500;
 
 /**
@@ -238,11 +237,12 @@ export const MessageUser = memo(function MessageUser({
       ? copy.conversation.expandLines(lineCount)
       : copy.conversation.expandFull;
   const [collapsed, setCollapsed] = useState(true);
-  const [actionsVisible, setActionsVisible] = useState(false);
+  // The pointer in the row's hover region (lib/user-row-hover).
+  const [hovered, setHovered] = useState(false);
   const [copied, setCopied] = useState(false);
   // The assistant's ⋯ menu open: the row stays up, as a reply's bar does.
   const [menuOpen, setMenuOpen] = useState(false);
-  const hideTimer = useRef<number | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
   const copyTimer = useRef<number | null>(null);
   // The bubble's key for the selection toolbar (lib/selection-copy): in
   // the assistant's conversation, where its text can get the toolbar.
@@ -259,32 +259,14 @@ export const MessageUser = memo(function MessageUser({
 
   useEffect(() => {
     return () => {
-      if (hideTimer.current) window.clearTimeout(hideTimer.current);
       if (copyTimer.current) window.clearTimeout(copyTimer.current);
     };
   }, []);
-
-  const showActions = () => {
-    if (hideTimer.current) {
-      window.clearTimeout(hideTimer.current);
-      hideTimer.current = null;
-    }
-    setActionsVisible(true);
-  };
-
-  const scheduleHideActions = () => {
-    if (hideTimer.current) window.clearTimeout(hideTimer.current);
-    hideTimer.current = window.setTimeout(() => {
-      setActionsVisible(false);
-      hideTimer.current = null;
-    }, ACTION_HIDE_DELAY_MS);
-  };
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
-      showActions();
       if (copyTimer.current) window.clearTimeout(copyTimer.current);
       copyTimer.current = window.setTimeout(() => {
         setCopied(false);
@@ -295,19 +277,19 @@ export const MessageUser = memo(function MessageUser({
     }
   };
 
-  const copyVisible = actionsVisible || copied;
-  // The assistant's row: the whole row stays up while its menu is open
-  // or its copy flashes, as a reply's bar does.
-  const chipsVisible = copyVisible || menuOpen;
+  // Up while hovered, and pinned while its copy flashes or (the
+  // assistant's row) its menu is open, as a reply's bar is.
+  const chipsVisible = userRowChipsShown({ hovered, copied, menuOpen });
   // 复制 where the menu has it (lib/message-menu): not under an image
   // alone.
   const canCopy = userMessageCopyText(content) !== null;
   const onMenuOpenChange = (open: boolean) => {
     setMenuOpen(open);
     // The menu is portalled: React saw no leave while the pointer was
-    // in it, so closed, the row goes as it would on leaving — unless
-    // the pointer is (still) on the row, whose enter brings it back.
-    if (!open) scheduleHideActions();
+    // in it, so closed, the row goes at once unless the pointer is in
+    // its region; if the browser only catches up on the next move, the
+    // row's enter brings it back.
+    if (!open) setHovered(pointerInRegion(rowRef.current));
   };
 
   const toggle = isLong ? (
@@ -335,14 +317,15 @@ export const MessageUser = memo(function MessageUser({
 
   return (
     <div
+      ref={rowRef}
       className={cn(
         "group relative",
         assistant
           ? cn(rowClassName ?? "mt-5", "mb-7.5")
           : cn("mt-5 mb-7.5", RAIL_CLEARANCE),
       )}
-      onMouseEnter={showActions}
-      onMouseLeave={scheduleHideActions}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       data-selection-yield={assistant ? selectionYieldKey : undefined}
     >
       {/* Provenance above the bubble, on its side: Supervisor, or the
@@ -447,6 +430,13 @@ export const MessageUser = memo(function MessageUser({
           none — and a bordered control box pressed against the user's
           own words inverts the register (machine parts crisp, the
           human voice plain). */}
+      {/* The hit band (ruling 109): the row's 30px bottom margin, where
+          the chips hang, inside the hover region, so the pointer does
+          not leave it crossing the 6px under the bubble and the row
+          can hide at once on leaving, as a reply's bar does. Out of
+          flow and empty: no layout, nothing to see; only in the
+          margin, so it covers no neighbour; under the chips (z-10). */}
+      <span aria-hidden="true" className="absolute inset-x-0 top-full h-7.5" />
       <div className="absolute top-full right-0 z-10 mt-1.5 flex h-6 items-center gap-1">
         {assistant ? (
           <div
@@ -490,7 +480,7 @@ export const MessageUser = memo(function MessageUser({
             idleLabel={copy.conversation.copy}
             activeLabel={copy.conversation.copied}
             onClick={() => void handleCopy()}
-            revealed={copyVisible}
+            revealed={chipsVisible}
           />
         )}
         {toggle}

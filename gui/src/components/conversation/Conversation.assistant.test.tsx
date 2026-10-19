@@ -425,6 +425,27 @@ describe("the assistant's conversation: the row under your bubble", () => {
     expect(row).not.toContain('<div class="flex items-center gap-0.5">');
   });
 
+  it("makes the 30px under your bubble part of its hover region, in both conversations (ruling 109)", () => {
+    const BAND =
+      '<span aria-hidden="true" class="absolute inset-x-0 top-full h-7.5"></span>';
+    for (const html of [
+      assistant(conversation(), { messageMenu: MENU }),
+      render(conversation()),
+    ]) {
+      // Every bubble of yours, your answer to its question too.
+      expect(count(html, BAND)).toBe(5);
+      const row = rowOf(html, "帮我排个行程");
+      // A child of the row (the hover region), over exactly its bottom
+      // margin: out of flow, as tall as `mb-7.5`, the whole row wide.
+      expect(row).toMatch(/^<div class="group relative [^"]*mb-7\.5/);
+      expect(count(row, BAND)).toBe(1);
+      // Before the chips, which paint over it (z-10) and stay clickable.
+      expect(row.indexOf(BAND)).toBeLessThan(row.indexOf(CHIP_ROW));
+      expect(row.indexOf(BAND)).toBeGreaterThan(row.indexOf("帮我排个行程"));
+      expect(CHIP_ROW).toContain("z-10");
+    }
+  });
+
   it("puts a long message's toggle in the same row, outermost on the right", () => {
     const long = Array.from({ length: 9 }, (_, i) => `第 ${i + 1} 行`).join(
       "\n",
