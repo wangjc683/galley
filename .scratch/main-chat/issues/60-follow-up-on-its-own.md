@@ -84,3 +84,13 @@ JC 在主对话里说「帮我记一下，702 办公室装修预计完工时间 
 4. 一周后（2026-10-26）主会话数它主动设了几个、你取消了几个。
 
 ## Comments
+
+### 2026-10-19 实现说明（分支 `main-chat-60-follow-up-on-its-own`）
+
+- **提交**：手册与入口层 `4e8df7cb`，评测 `394beedd`，本条另一提交。
+- **手册**：`todos.md`（清单收什么、「Neither holds information」补分界、Noting 加三条门槛与不跟的、「记一下 / 帮我记着 / 提醒我」带日子不只进记忆、主动设之前看「Follow-ups the user turned down」、判法覆盖主动跟进并给装修 / 租约与 offer 的例子、提醒时机并进原来那条、没开口的同一句说为什么和什么时候、「不用」取消与「这类别提醒我」带类别）；`reminders.md`（「without being asked」加有结果可问的一条、建之前看最近不要的、说一句时带为什么、「这类别提醒我」取消时 `--reason` 以类别开头、到点时不复述）；`todos-change.md`（取消一类的那条，模型取消待办时读的是这一部分）。删了「Do not suggest to-dos」，「不自己整理清单」与「整理成待办先给用户看」照留。`--reason` 的例子 `user: no renovation progress reminders` 是 38 个字符，「In Hand」那一行的原因在 40 个字符处截断。
+- **`authority.md` 没改**：票里第 7 条依据的裁决 114 第 5 条与代码不符。`session_writes.rs:545` 的拒绝只在 `protecting_main_chat()` 时生效，只有桌面的 Tauri 命令打开它（`commands/session.rs:42`）；socket 的 `session archive` 用的是 `Writes::new(…)`（`socket_listener/session_cmds.rs:661`），模块注释写明这是有意的（Rule 3），测试 `an_archived_main_chat_comes_back_restored` 断言「the CLI can still archive it」，Agent API `session-commands.md:72` 也写着 `session archive` 照样接受。所以手册那句「Galley refuses most of these, but `session archive` would still go through」是如实的，没动。
+- **入口层**：待办那一段加「or what comes up on a date and will be worth raising then (a renovation due to finish, a lease ending)」，+105 字节，预算 2463 → 2568，注释写了理由；`prompt_hash()` 改前改后都是 `c033e8d3`，工作台、IM 提示词不变（原有测试照过）。
+- **评测**：判定先改成只认这次运行里发生的取消（定时评测原来按最终状态里有 `cancelledAt` 认），再加 15 条新用例。待办 54 次运行（原有 24/24，新用例 24/24，两可 6 遍只记录），定时 28/28，闲聊组 13/13（另 2 条两可只记录），一次也没改措辞。两可的六遍都记成待办挂提醒（火锅那条提醒就在 7 点整）。共 302 次模型调用。要写的用例读手册约 13 KB（票 59 是 8–10 KB），请求次数与用时没变多。细节在评测 README 的「它自己判断要不要跟进（票 60）」一节与三套 `results.md`。
+- **闲聊组是新起的**：票 03d 那套用的是票 03d 的提示词、第一次工具调用就停，测不了这件事，所以入口层的 15 条改在待办评测的沙盒里用票 60 的提示词跑（`chat/`）。
+- **没动**：GUI、runner、`managed-ga/code`、`cli/`、数据与迁移、别的提示词层、`wake/galley-prompt/`（叫醒评测这次没跑）；devlog 与 PRD 留给主会话。
