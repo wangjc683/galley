@@ -77,3 +77,12 @@ Status: ready-for-agent
 合入会重启 Core，主会话等主对话空闲（`busy:0`）再合。效果要等票 60 的手册才看得到；本票只看它不出错：主对话照常回话，面板没有多出东西。
 
 ## Comments
+
+- 2026-10-19（实现子代理）：已在分支 `main-chat-61-declined-follow-ups` 做完，待主会话合入（Core 与文档 `b9315802`，评测镜像 `f15d688c`，本条另一提交）。没跑真模型。
+  - **取消落库**：迁移 `051_cancelled_by.sql` 给两张表各加三列，取值照 `done_via`，另有一条约束「有来源就必须已取消」；051 之前取消的旧行留 NULL。`cancel_scheduled_task` 加了 origin 参数，`cancel_todo`、`cancel_todo_reminder` 不再丢掉 origin。来源：CLI 的 `todo cancel`、`schedule delete`、`todo update --no-remind` 记 `--supervisor` 与 `--reason`；桌面的「取消提醒」与卡片、清单、定时任务对话框里的取消记 `gui`；勾掉或取消待办时顺带取消的提醒、调度器丢掉的已关待办的提醒记 `system`（新加 `Origin::system()`）。`--no-remind` 记成调用方自己的取消，票里没点名，回报里写明了。
+  - **「在办的事」第四组**：`assistant_todo::declined_follow_ups` 单独读（全部待办与定时任务，筛出 Galley 建的、近 90 天、`gui` 或 `supervisor` 加 `galley-assistant`），`in_hand_read` 把它和面板那份一起交给 `in_hand_section`；面板读的 `AssistantTodo` 里没有这一组，模块注释写明这是裁决 113 第 4 条的有意例外。组名 `Follow-ups the user turned down (… last 90 days):`，每行写取消的时间、谁取消的、话、`(reason: …)`，多的记「and N more: `todo list --all`, `schedule list --all`」。四组都空不出这一节；只有这一组也出。这一组为空时输出逐字不变（原有的 `in_hand_lines_say_what_when_and_who` 照旧逐字通过，评测里也对了一次）。`IN_HAND_BUDGET_BYTES` 4230 → 6161（第四组每行带话和原因两段截断）。
+  - **重置**：待办连同取消记录照旧删掉；留下的定时任务（它自己的）清掉三列，新主对话的这一组从空开始。
+  - **Agent API**：`Todo.cancelledBy`、`ScheduledTask.cancelledBy`，`3` 内加法，`1`、`2` 照样带；改了 `todo-commands.md` §5.28、§5.34，`schedule-commands.md` §5.20、§5.25，`stability-and-versioning.md` §7.1 加一条。CLI 不用改，`--reason` 本来就送到 Core。
+  - **GUI**：票里写的 `gui/src/types/ipc.ts` 里没有这两个类型（那里是 runner 的 IPC 事件），镜像在 `gui/src/lib/assistant-todo.ts` 的 `TodoBrief` 与 `gui/src/lib/scheduled-tasks.ts` 的 `ScheduledTask`，可选字段加在那两处，界面没动。
+  - **评测**：`in_hand_block` 多一个 `declined` 参数，`declined_items` 移植选法，`sched_in_hand` 从起始数据里取（现在的用例都没有取消过的，提示词不变）；`rust-samples.json` 多三组「In Hand」与一组选法样本，由临时测试写出、已删；假 CLI 照 Core 记 `cancelledBy`，`--dry-test` 341 项全过。用例里怎么写取消过的、判定怎么算，留给票 60。
+  - **验证**：`cargo test --workspace` 1135 项全过；相关测试在 `TZ=UTC` 与 `TZ=America/Los_Angeles` 下各跑一遍全过；改过的 Rust 文件 `rustfmt --check` 没有新增差异；`git diff --check`、`pnpm --dir gui typecheck` 通过。
