@@ -20,7 +20,7 @@ Date: 2026-10-16
 
 - **范围**：只在助理的对话（主对话，只有内置有）。工作台不动；外置零变化（没有主对话，也没有提示词通道）。
 - **输出**：回复末尾的 `<visual>` 标签，GUI 剥掉后画卡，同 `<subtask>`。复制拿到的是剥掉标签后的正文。落库怎么存（原文留标签、渲染时剥，还是 Core 拆出来），开工时对照 `<subtask>` 的落库（`core/src/turn_persistence/derive.rs`）定，预计不改库结构、不动 Agent API。
-- **指南**：写进助理手册（`docs/managed-ga-runtime/galley-assistant-manual.md`）一节，约 1–2KB，系统提示只加一行指针。内容：什么时候画（拿不准就不画）、Galley 色板与深浅两套变量、禁止外联、正文必须自足、尺寸上限。
+- **指南**：写进助理手册（`docs/managed-ga-runtime/galley-assistant-manual/`，2026-10-19 票 59 起一部分一个文件）新增的一个部分，约 1–2KB，系统提示只加一行指针。内容：什么时候画（拿不准就不画）、Galley 色板与深浅两套变量、禁止外联、正文必须自足、尺寸上限。
 - **渲染**：iframe `sandbox="allow-scripts"`，**不给 `allow-same-origin`**（08-07 Artifacts 裁决，OpenWorker 与 Open WebUI CVE-2026-45303 都栽在这里），CSP 禁外联；高度由卡片 postMessage 报给宿主；画坏了退回显示源码。
 - **形态**：借子任务卡片（hairline `border-line`、`rounded-md`、`bg-app`，不加投影、不抬升），紧贴气泡下 12px，最宽同气泡上限（栏宽 88%）。不是 dashboard，也不是侧栏 artifact（[foundations](../../docs/design/foundations.md) 两条禁令都不撞）。
 - **交互 v1**：卡片内部的本地交互（切换、展开、排序、悬停），加上「点选项把文字填进输入框」，不自动发送、不调工具。自动发送要校验用户手势并限频（OpenClaw：每分钟 10 次），留到后面。
