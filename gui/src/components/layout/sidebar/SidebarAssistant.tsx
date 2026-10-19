@@ -159,7 +159,7 @@ export function SidebarAssistantCard({
   // No key while it is open: its draft is in the composer right there,
   // and typing there then never re-renders the card.
   const draft = useComposerDraft(open ? undefined : mainChat.id);
-  const lastMessage = useAssistantLastMessage(mainChat);
+  const lastMessage = useAssistantLastMessage(mainChat, open);
   const line = assistantCardLine(
     state,
     { question, draft, lastMessage, open },

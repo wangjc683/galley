@@ -452,6 +452,129 @@ describe("the last visible message", () => {
     expect(lastVisibleMessage([step], zh)).toBeNull();
   });
 
+  // Ruling 104 (ticket 52): with the main chat on screen while it runs,
+  // the card stays on the last bubble the conversation draws. A step
+  // that called tools is the line's: live, its narration is no message.
+  describe("in the live round, with the main chat on screen", () => {
+    const narrated = (text: string, turnIndex: number) =>
+      reply(text, {
+        turnIndex,
+        tools: [
+          {
+            id: `t${turnIndex}`,
+            name: "web_scan",
+            status: "success-historical",
+          },
+        ],
+      });
+    const asked = reply(null, {
+      turnIndex: 3,
+      tools: [
+        {
+          id: "t3",
+          name: "ask_user",
+          status: "success-historical",
+          args: { question: "每天都提醒，还是只提醒明天？", candidates: [] },
+        },
+      ],
+    });
+    const live = { liveRound: true };
+
+    it("stays on your message while a step narrates before its tools", () => {
+      const turns: Turn[] = [
+        reply("早"),
+        user("明天早上 9 点提醒我喝水"),
+        narrated("我先看一下现在几点。", 1),
+        narrated("再看看有没有重复的提醒。", 2),
+      ];
+      expect(lastVisibleMessage(turns, zh, live)).toMatchObject({
+        fromUser: true,
+        text: "明天早上 9 点提醒我喝水",
+      });
+      // At rest, or away from the main chat: as before, the narration.
+      expect(lastVisibleMessage(turns, zh)?.text).toBe(
+        "再看看有没有重复的提醒。",
+      );
+    });
+
+    it("still says a question it asks", () => {
+      expect(
+        lastVisibleMessage(
+          [user("提醒我喝水"), narrated("我先看一下现在几点。", 1), asked],
+          zh,
+          live,
+        ),
+      ).toMatchObject({
+        fromUser: false,
+        text: "每天都提醒，还是只提醒明天？",
+      });
+      // Answered: your answer, then its narrating steps are skipped again.
+      expect(
+        lastVisibleMessage(
+          [
+            user("提醒我喝水"),
+            asked,
+            user("每天"),
+            narrated("我按每天建。", 4),
+          ],
+          zh,
+          live,
+        ),
+      ).toMatchObject({ fromUser: true, text: "每天" });
+    });
+
+    it("says the reply once it lands, before the run completes", () => {
+      expect(
+        lastVisibleMessage(
+          [
+            user("提醒我喝水"),
+            narrated("我先看一下现在几点。", 1),
+            reply("好的，明早 9 点提醒你喝水。", { turnIndex: 2 }),
+          ],
+          zh,
+          live,
+        ),
+      ).toMatchObject({ fromUser: false, text: "好的，明早 9 点提醒你喝水。" });
+      // GA's `no_tool` placeholder marks a reply too.
+      expect(
+        lastVisibleMessage(
+          [
+            user("提醒我喝水"),
+            reply("建好了。", {
+              tools: [
+                { id: "n", name: "no_tool", status: "success-historical" },
+              ],
+            }),
+          ],
+          zh,
+          live,
+        )?.text,
+      ).toBe("建好了。");
+    });
+
+    it("ends at your last message, not at a /btw side question", () => {
+      const btwQuestion: UserTurn = { role: "user", content: "/btw 几点了" };
+      const btwReply: SystemTurn = {
+        role: "system",
+        content: "三点",
+        variant: "side_question",
+      };
+      expect(
+        lastVisibleMessage(
+          [
+            user("提醒我喝水"),
+            narrated("我先看一下现在几点。", 1),
+            btwQuestion,
+            btwReply,
+            narrated("再看看有没有重复的提醒。", 2),
+          ],
+          zh,
+          live,
+        )?.text,
+      ).toBe("提醒我喝水");
+    });
+  });
+
   it("counts a question the assistant asked as what it said", () => {
     const asked = reply(null, {
       tools: [

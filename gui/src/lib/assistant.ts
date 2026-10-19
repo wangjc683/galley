@@ -1,4 +1,5 @@
 import type { AppCopy } from "@/i18n/types";
+import { isFinalAnswerTurn } from "@/lib/agent-turn";
 import { mergedAskUserArgs } from "@/lib/ask-user-candidates";
 import { splitQuotedMessage } from "@/lib/composer-quote";
 import { dropPathBasename } from "@/lib/file-drop";
@@ -291,14 +292,34 @@ function messageLine(
  * it with, and the whole of a round that said nothing (`<no-reply/>`)
  * but a question it asked you. A question the assistant asked counts
  * as what it said.
+ *
+ * `liveRound` (the card with the main chat on screen while it runs,
+ * main chat PRD ruling 104): the round since your last message is
+ * live, and the main chat draws none of its steps as a message — a
+ * step that called tools says what it says in the line at the end of
+ * the conversation, not in a bubble. Those steps are skipped, so the
+ * card stays on what the conversation shows as its last bubble: your
+ * message, a question it asked, or the reply once it lands. At rest,
+ * and away from the main chat, a narrating step still counts (a run
+ * stopped half-way is drawn in full there).
  */
 export function lastVisibleMessage(
   turns: readonly Turn[],
   copy: AppCopy,
+  { liveRound = false }: { liveRound?: boolean } = {},
 ): AssistantLastMessage | null {
   const hidden = hiddenReportTurns(turns);
+  // Still inside the live round: nothing from the end back to the last
+  // message (yours, or the report row a woken round starts from).
+  let live = liveRound;
   for (let i = turns.length - 1; i >= 0; i -= 1) {
     const turn = turns[i];
+    if (
+      turn.role === "user" &&
+      (turn.messageId !== undefined || turn.clientRequestId !== undefined)
+    ) {
+      live = false;
+    }
     if (turn.role === "system" || hidden.has(i)) continue;
     if (turn.role === "user") {
       // A `/btw` question carries neither key (messages.ts's
@@ -323,6 +344,15 @@ export function lastVisibleMessage(
           sentAt: turn.createdAt,
         };
       }
+      continue;
+    }
+    // A live step that called tools and asks nothing: the line's, not a
+    // bubble.
+    if (
+      live &&
+      !isFinalAnswerTurn(turn.tools) &&
+      !mergedAskUserArgs(turn.tools)
+    ) {
       continue;
     }
     if (turn.finalAnswer !== null) {

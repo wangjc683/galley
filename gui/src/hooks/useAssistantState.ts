@@ -119,19 +119,27 @@ export function useComposerDraft(
  * scroll position stay as they were. It is read again only when the
  * session's activity moves while the cache still holds nothing; once
  * the cache has turns, they win.
+ *
+ * `open`: the main chat itself is on screen. While it then runs, the
+ * live round's tool steps are no message (`lastVisibleMessage`'s
+ * `liveRound`, main chat PRD ruling 104): the card stays on the last
+ * bubble the conversation draws. Away from it, nothing changes.
  */
 export function useAssistantLastMessage(
   mainChat: Session,
+  open = false,
 ): AssistantLastMessage | null {
   const copy = useCopy();
   const turns = useMessagesStore((s) => s.byId[mainChat.id]?.turns);
   const restoring = useMessagesStore(
     (s) => s.byId[mainChat.id]?.restoring ?? false,
   );
+  const running = useSessionStatusView(mainChat).status === "running";
+  const liveRound = open && running;
   const cached = turns ?? EMPTY_TURNS;
   const fromCache = useMemo(
-    () => lastVisibleMessage(cached, copy),
-    [cached, copy],
+    () => lastVisibleMessage(cached, copy, { liveRound }),
+    [cached, copy, liveRound],
   );
   const readKey = `${mainChat.id}@${mainChat.lastActivityAt}`;
   const needsRead = cached.length === 0 && !restoring;
