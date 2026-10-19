@@ -67,3 +67,5 @@ Blocked by: 51（会碰对话末尾那一行的上边距，`AssistantParts.tsx` 
 4. 切到工作台会话：你的消息照旧只有一颗复制。
 
 ## Comments
+
+- 2026-10-19（实现子代理）：已在分支 `main-chat-53-user-bubble-hover-actions` 做完，待主会话合入与 JC 真机。主对话里你的每条气泡下面都挂一行复制 · 引用 · ⋯（工作台同一几何，挂在这一行的 `mb-7.5` 里），引用与「⋯」直接用回复那两颗（`MessageQuoteButton`、`MessageMenuButton`，加了 `revealed` 与 `align`，你这边的菜单右缘对齐「⋯」），复制沿用 `MessageUser` 原有的那颗，是否出现与菜单的「复制」读同一个判断 `userMessageCopyText`；只有图片时只剩「⋯」，还没有行 id 时只有复制。你的回答（`user-msg-reply`）是你这边的气泡、有菜单，同样有这一行。间距：`assistantRowGap` 加了 `user-bar`，与 `agent-bar` 一样让下一条 `mt-0`，时间条读同一个 `endsWithActionRow`；那一行的 `mt-5` 没改，与你这一行的 30px 外边距合并，量得 30px，交接时那一行与接替它的气泡都在你的气泡下 30px，长出来的起点（第一帧 `clip-path`）与改前逐字相同。临时页实测（主区 1220 宽、标准字号）：你 → 回复、那一行、时间条、它的提问、你的下一条都是 30px；工作台与子任务改前改后 24 组截图逐像素相减为零。设计文档按票改了「杏沙气泡」一条、「你的在右」、「分组间距」、「消息菜单」的入口、Message Actions 两处；另把「行动条」一条里同样写着「你的气泡照旧不加悬停按钮（裁决 73）」的半句一并对齐。截图在主会话 scratchpad 的 `t53-shots/`。

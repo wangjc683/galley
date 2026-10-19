@@ -18,7 +18,8 @@ import type { Turn } from "@/types/conversation";
 /**
  * A bubble's message menu in the assistant's conversation (main chat
  * ticket 38, PRD ruling 85): right-click a bubble, or the ⋯ at the end of
- * a reply's action bar — one list for both (layout-and-chrome: right-click
+ * a reply's action bar or of the row under your bubble (ticket 53, PRD
+ * ruling 105) — one list for both (layout-and-chrome: right-click
  * for the practised hand, ⋯ for whoever looks for it, the same actions
  * in the same order).
  *
@@ -31,7 +32,9 @@ import type { Turn } from "@/types/conversation";
  * and the bar's 引用 runs this menu's (ticket 47, PRD ruling 99).
  * The greeting is a reply with no process; a question it asked copies
  * and quotes its question (it has no bar). Yours copies your words as
- * sent. 引用 quotes the whole message, cut short when long
+ * sent (`userMessageCopyText`), and the row under your bubble offers
+ * the same three on the same terms (ticket 53). 引用 quotes the whole
+ * message, cut short when long
  * (`wholeMessageQuote`). 删除 is last, after a separator, and the only
  * item ever greyed: while it replies or waits for your answer, and for a
  * reply that started subtasks (lib/message-delete).
@@ -118,9 +121,8 @@ function bubbleText(
   question: boolean,
 ): { text: string; markdown: boolean } | null {
   if (turn.role === "user") {
-    return turn.content.trim() === ""
-      ? null
-      : { text: turn.content, markdown: false };
+    const text = userMessageCopyText(turn.content);
+    return text === null ? null : { text, markdown: false };
   }
   if (turn.role !== "agent") return null;
   if (question) {
@@ -132,6 +134,16 @@ function bubbleText(
   return answer.trim() === "" || isLeakedToolCallMarkup(answer)
     ? null
     : { text: answer, markdown: true };
+}
+
+/**
+ * What 复制 takes from your message: the text as sent, the quotes at its
+ * head and all; null when it has no words (an image alone): no 复制 in
+ * its menu, and no copy chip under its bubble (ticket 53, the one
+ * judgment for both).
+ */
+export function userMessageCopyText(content: string): string | null {
+  return content.trim() === "" ? null : content;
 }
 
 /** Each bubble's quote, by its turn (turns are never edited in place: a

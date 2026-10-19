@@ -28,6 +28,7 @@ import {
   type AssistantRowSide,
   assistantLinePlan,
   assistantRowGap,
+  endsWithActionRow,
 } from "@/lib/assistant-conversation";
 import { assistantProcessSteps } from "@/lib/assistant-process";
 import {
@@ -535,11 +536,12 @@ export function Conversation({
 
   // A user message, on the right (both conversations since the
   // workbench's ticket 01). Its send time at a break is a centred line
-  // of its own before it, with nothing above it right under a reply,
-  // whose action row is the gap (`previous`: the side of the row right
-  // above). The assistant's adds its IM row gap and copies by
-  // selection; the workbench's keeps the hover copy, its row under the
-  // bubble the gap to what follows.
+  // of its own before it, with nothing above it right under an action
+  // row, which is the gap (`previous`: the side of the row right
+  // above). Its own row under the bubble is the gap to what follows:
+  // the workbench's hover copy, or in the assistant's conversation copy
+  // · quote · ⋯ (ruling 105, ticket 53), which adds its IM row gap
+  // above and keeps the selection's floating copy.
   const userRow = (
     turn: UserTurn,
     turnIndex: number,
@@ -553,7 +555,7 @@ export function Conversation({
             label={pinned.label}
             full={pinned.full}
             iso={turn.createdAt}
-            afterReply={previous === "agent-bar"}
+            afterActionRow={endsWithActionRow(previous)}
           />
         )}
         <MessageUser
@@ -562,7 +564,7 @@ export function Conversation({
           origin={turn.origin}
           askUserReply={replySet.has(turnIndex)}
           messageId={turn.messageId}
-          selectionCopy={assistant}
+          assistant={assistant}
           rowClassName={
             assistant
               ? pinned
@@ -674,7 +676,7 @@ export function Conversation({
         label={reportTime.label}
         full={reportTime.full}
         iso={reportTime.iso}
-        afterReply={previous === "agent-bar"}
+        afterActionRow={endsWithActionRow(previous)}
       />
     ) : null;
     if (linePlan?.question.has(turnIndex)) {
@@ -919,9 +921,11 @@ export function Conversation({
         const row = renderLineRow(turn, turnIndex, prevSide);
         if (row) {
           rendered.push(row);
+          // Your message ends with its row of chips (ruling 105), a
+          // reply with its action bar: either is the gap to the next.
           prevSide =
             turn.role === "user"
-              ? "user"
+              ? "user-bar"
               : turn.role !== "agent"
                 ? null
                 : linePlan.question.has(turnIndex)
@@ -958,7 +962,7 @@ export function Conversation({
           label={reportTime.label}
           full={reportTime.full}
           iso={reportTime.iso}
-          afterReply={prevSide === "agent-bar"}
+          afterActionRow={endsWithActionRow(prevSide)}
         />,
       );
     }

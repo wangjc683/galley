@@ -113,8 +113,9 @@ describe("the message menu", () => {
   it("ends a reply's bar in ⋯ (更多), in the assistant's conversation only", () => {
     const more = `aria-label="${zhCopy.common.more}"`;
     const html = render(TURNS, { assistant: true, messageMenu: menu });
-    // One reply, one ⋯: the menu trigger, closed.
-    expect(html.split(more)).toHaveLength(2);
+    // One reply and your two messages (the row under each bubble, ticket
+    // 53), one ⋯ each: the menu trigger, closed.
+    expect(html.split(more)).toHaveLength(4);
     expect(html).toContain('aria-haspopup="menu"');
     expect(render(TURNS, { assistant: true })).not.toContain(more);
     expect(render(TURNS, { messageMenu: menu })).not.toContain(more);

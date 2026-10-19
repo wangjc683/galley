@@ -22,9 +22,10 @@ import type { Turn } from "@/types/conversation";
  *
  *   bubbles   on both sides: the user's words on the right (apricot),
  *             the assistant's replies, questions and greeting on the
- *             left (`bg-assistant-tint`); no avatar, no name. One
- *             side's consecutive messages sit 4px apart, a change of
- *             side 20px, and a reply's action row is the gap under it
+ *             left (`bg-assistant-tint`); no avatar, no name. A reply's
+ *             action row is the gap under it, and so is the row under
+ *             your bubble (copy, quote, ⋯ on hover; ruling 105): 30px
+ *             after either; its own consecutive messages sit 4px apart
  *             (`assistantRowGap`).
  *   process   while it works, one line at the conversation's end: the
  *             latest sentence it wrote (`assistantLineSentence`: what
@@ -69,24 +70,42 @@ import type { Turn } from "@/types/conversation";
 
 // ---- Bubbles ----------------------------------------------------------
 
-/** The side of the message row above, for the row gap: a reply row
- * (`agent-bar`) ends with its action row's reserved 30px (the
- * hover-only copy, save and process button). */
-export type AssistantRowSide = "user" | "agent" | "agent-bar";
+/** The side of the message row above, for the row gap. Two end with an
+ * action row's reserved 30px, hidden until hovered: a reply row
+ * (`agent-bar`: copy, quote, save, the process button, ⋯), and your
+ * message in the assistant's conversation (`user-bar`, ruling 105,
+ * ticket 53: copy, quote, ⋯ under the bubble). A question it asked
+ * (`agent`) ends at its candidates. `user` is the workbench's user
+ * message, which only a time line reads (the workbench has no IM gap;
+ * its copy row sits in the row's bottom margin, and the line's own
+ * margin collapses into it). */
+export type AssistantRowSide = "user" | "user-bar" | "agent" | "agent-bar";
+
+/** Whether the row above ends with an action row's reserved 30px (a
+ * reply's, or your message's in the assistant's conversation): that row
+ * is the gap, and neither the next message row nor a time line adds
+ * anything above. */
+export function endsWithActionRow(previous: AssistantRowSide | null): boolean {
+  return previous === "agent-bar" || previous === "user-bar";
+}
 
 /**
  * Top margin of a message row: 4px under a row on the same side (an IM
  * group), 20px (the workbench user message's my-5) when the side
- * changes or something else sits in between, and none under a reply's
- * action row, whose reserved 30px already is the gap (otherwise a
- * change of side reads 50px one way and 20px the other, and the
- * conversation falls into question–answer pairs).
+ * changes or something else sits in between, and none under an action
+ * row, whose reserved 30px already is the gap (otherwise a change of
+ * side reads 50px one way and 20px the other, and the conversation
+ * falls into question–answer pairs). Since your message carries its row
+ * too (ruling 105), both changes of side are 30px, and so are two of
+ * yours in a row: no 4px group on your side (bursts are rare in the
+ * main chat — none among your 9 messages in the database when ruling
+ * 105 was made — so no second set of rules for them).
  */
 export function assistantRowGap(
   previous: AssistantRowSide | null,
   side: "user" | "agent",
 ): string {
-  if (previous === "agent-bar") return "mt-0";
+  if (endsWithActionRow(previous)) return "mt-0";
   return previous === side ? "mt-1" : "mt-5";
 }
 

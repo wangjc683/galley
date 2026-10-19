@@ -30,22 +30,26 @@ const MESSAGE_TIME_TEXT =
 /**
  * 16px above it, 20px under it (the message after it keeps its own
  * 20px, collapsing with this); right under a reply, whose reserved
- * action row already leaves 30px, it adds nothing above. The tooltip
- * gives the full date with the weekday.
+ * action row already leaves 30px, it adds nothing above, nor right
+ * under your message in the assistant's conversation, whose row of
+ * chips does the same (ruling 105). The tooltip gives the full date
+ * with the weekday.
  */
 export function MessageTimeDivider({
   label,
   full,
   iso,
-  afterReply = false,
+  afterActionRow = false,
 }: {
   label: string;
   /** Full date + weekday for the tooltip. */
   full?: string;
   /** ISO timestamp, the `<time>`'s `dateTime`. */
   iso?: string;
-  /** Right under a reply row (its action row is the gap above). */
-  afterReply?: boolean;
+  /** Right under a row whose action row is the gap above: a reply's,
+   * or your message's in the assistant's conversation
+   * (lib/assistant-conversation `endsWithActionRow`). */
+  afterActionRow?: boolean;
 }) {
   const time = (
     <time dateTime={iso} className={MESSAGE_TIME_TEXT}>
@@ -55,7 +59,7 @@ export function MessageTimeDivider({
   return (
     <div
       data-role="message-time-divider"
-      className={cn("flex justify-center", afterReply ? "mb-4" : "my-4")}
+      className={cn("flex justify-center", afterActionRow ? "mb-4" : "my-4")}
     >
       {full ? <TooltipLabel text={full}>{time}</TooltipLabel> : time}
     </div>

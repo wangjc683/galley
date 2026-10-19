@@ -6,6 +6,7 @@ import {
   canQuoteMessage,
   messageMenuEntries,
   messageMenuTarget,
+  userMessageCopyText,
   type MessageMenuEntry,
 } from "@/lib/message-menu";
 import { buildRunGroups, liveRunGroup } from "@/lib/run-groups";
@@ -205,6 +206,16 @@ describe("the rows of a bubble's menu", () => {
     expect(
       words(messageMenuEntries(setup(turns).target("img")!, idle)),
     ).toEqual(["delete"]);
+  });
+
+  it("your 复制 takes your words as sent, quotes and all — the menu's and the chip's under your bubble (ticket 53)", () => {
+    const quoted = "> 明天 9 点出发\n\n那就改到 10 点";
+    expect(userMessageCopyText(quoted)).toBe(quoted);
+    const turns: Turn[] = [user("u0", quoted), answer("a0")];
+    expect(setup(turns).target("u0")!.copyText).toBe(quoted);
+    // No words, no 复制: neither in the menu nor under the bubble.
+    expect(userMessageCopyText("")).toBeNull();
+    expect(userMessageCopyText("  \n ")).toBeNull();
   });
 
   it("a reply that is leaked tool-call markup: nothing to copy or save", () => {

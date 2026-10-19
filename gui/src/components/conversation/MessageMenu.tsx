@@ -35,10 +35,11 @@ import { cn } from "@/lib/utils";
  * runs the menu's own, `MessageQuoteButton`, ticket 47). Both draw
  * the same rows from the same model (`MessageMenuRows`, through the
  * sidebar's context / dropdown seam), in the sidebar row menus' register
- * (`galley-pop-in`, 200px, 13px). Your bubble has no hover button (ruling
- * 73): right-click only. Closing either menu moves no focus, and Esc
- * closes only the menu, so a selection in the conversation and its
- * floating copy and quote stay as they were.
+ * (`galley-pop-in`, 200px, 13px). Your bubble's row (ticket 53, PRD
+ * ruling 105, overturning ruling 73's 「right-click only」) takes the same
+ * two: its 引用 and its ⋯, after its copy (MessageUser). Closing either
+ * menu moves no focus, and Esc closes only the menu, so a selection in
+ * the conversation and its floating copy and quote stay as they were.
  */
 
 /** A bubble's menu, built when it opens. */
@@ -252,13 +253,19 @@ export function MessageContextMenu({
  * the quote strip appearing and the caret in the composer are the
  * receipt. It shows exactly where the menu has 引用 (`wiring.canQuote`,
  * the menu's own judgment): not where the reply has no menu, as the ⋯,
- * nor under a reply with nothing to quote (an image alone).
+ * nor under a reply with nothing to quote (an image alone). The row
+ * under your bubble has it too (ticket 53), the same way: your words
+ * whole, cut short when long.
  */
 export function MessageQuoteButton({
   messageId,
+  revealed,
 }: {
-  /** The reply's answer row. */
+  /** The bubble's row: a reply's answer row, or your message's. */
   messageId: string;
+  /** The row under your bubble shows and hides its chips itself
+   * (ActionChip `revealed`); a reply's bar hides as a whole. */
+  revealed?: boolean;
 }) {
   const copy = useCopy();
   const wiring = useContext(MessageMenuContext);
@@ -271,6 +278,7 @@ export function MessageQuoteButton({
       idleLabel={copy.conversation.quoteSelection}
       activeLabel={copy.conversation.quoteSelection}
       onClick={() => wiring.model(messageId)?.onSelect("quote")}
+      revealed={revealed}
     />
   );
 }
@@ -281,17 +289,27 @@ export function MessageQuoteButton({
  * `tabIndex={-1}`), 「更多」 for its name and tooltip, pressed while the
  * menu is open; the bar holds it (`open` keeps the bar up). Nothing
  * where the reply has no menu (outside the assistant's conversation, a
- * reply drawn the workbench way).
+ * reply drawn the workbench way). It also ends the row under your
+ * bubble (ticket 53), where the menu opens from its right edge (`align
+ * "end"`): that row sits on the right, flush with the bubble.
  */
 export function MessageMenuButton({
   messageId,
   open,
   onOpenChange,
+  revealed,
+  align = "start",
 }: {
-  /** The reply's answer row. */
+  /** The bubble's row: a reply's answer row, or your message's. */
   messageId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The row under your bubble shows and hides its chips itself
+   * (ActionChip `revealed`); a reply's bar hides as a whole. */
+  revealed?: boolean;
+  /** The menu's edge on the ⋯: its left under a reply (the bar is on
+   * the left), its right under your bubble. */
+  align?: "start" | "end";
 }) {
   const copy = useCopy();
   const wiring = useContext(MessageMenuContext);
@@ -307,12 +325,13 @@ export function MessageMenuButton({
           activeIcon={<DotsThree size={14} weight="bold" />}
           idleLabel={copy.common.more}
           activeLabel={copy.common.more}
+          revealed={revealed}
         />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           data-role="message-menu"
-          align="start"
+          align={align}
           sideOffset={6}
           className={CONTENT_CLASS}
           onCloseAutoFocus={(event) => event.preventDefault()}

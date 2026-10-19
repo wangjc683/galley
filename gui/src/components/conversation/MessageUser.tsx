@@ -10,6 +10,10 @@ import {
 import { useEffect, memo, useMemo, useRef, useState } from "react";
 
 import { ActionChip } from "@/components/conversation/ActionChip";
+import {
+  MessageMenuButton,
+  MessageQuoteButton,
+} from "@/components/conversation/MessageMenu";
 import { MessageQuotes } from "@/components/conversation/MessageQuotes";
 import {
   ImagePreviewDialog,
@@ -18,6 +22,7 @@ import {
 import { IconTooltip } from "@/components/ui/tooltip";
 import { splitQuotedMessage } from "@/lib/composer-quote";
 import { useCopy } from "@/lib/i18n";
+import { userMessageCopyText } from "@/lib/message-menu";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { cn } from "@/lib/utils";
 import type { MessageAttachment, Origin } from "@/types/conversation";
@@ -123,10 +128,12 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *   copies the full text, a collapsed long message included: that is
  *   why the workbench keeps it (main chat ruling 73 item 4; the
  *   workbench is where long documents and prompts get pasted). The
- *   assistant's conversation has none (`selectionCopy`). It wears the
- *   BARE chip skin, not the bordered one. Mouse leave delays hiding
- *   briefly so the user can move from the message body to the action
- *   without chasing it.
+ *   assistant's conversation (`assistant`) puts three chips in the same
+ *   row since ruling 105 (ticket 53, overturning ruling 73 items 1–2,
+ *   which had none there): copy · quote · ⋯, the bubble's message menu
+ *   one hover away. Each wears the BARE chip skin, not the bordered
+ *   one. Mouse leave delays hiding briefly so the user can move from
+ *   the message body to the action without chasing it.
  *
  * `data-role="user-msg"` is a stable anchor that MainView's scroll
  * effect uses to find the just-submitted user message and snap its
@@ -183,18 +190,23 @@ export interface MessageUserProps {
   /** Persisted `messages.id`; rendered as `data-message-id` on the
    * anchor block so a palette full-text hit can scroll to it. */
   messageId?: string;
-  /** The assistant's conversation: no hover copy (main chat PRD ruling
-   * 73): a chip floating in the empty gutter beside the bubble belonged
-   * to nothing, and under it a chip would cover the next message of a
-   * burst, 4px below. Selecting the bubble's text brings up the
-   * floating copy instead (SelectionCopyToolbar, scope `user-message`),
-   * which copies exactly this plain text. The workbench keeps the hover
-   * copy: long pastes collapse there, and a selection cannot reach the
-   * collapsed text. */
-  selectionCopy?: boolean;
-  /** The row's vertical margin in place of the workbench's `mt-5` and
-   * copy row (the assistant's IM grouping,
-   * lib/assistant-conversation.ts `assistantRowGap`). */
+  /** The assistant's conversation (main chat PRD ruling 105, ticket 53;
+   * it overturns ruling 73 items 1–2, which left this bubble with no
+   * hover button): the row under the bubble holds copy · quote · ⋯,
+   * the bubble's message menu in its order with ⋯ last (ruling 99) —
+   * copy only where the menu has 复制 (not under an image alone), quote
+   * and ⋯ only where the bubble has a menu (MessageQuoteButton,
+   * MessageMenuButton run its own). Ruling 73 had refused this place
+   * because a chip there would cover the next message of a burst, 4px
+   * below; your row now keeps its 30px at every change of side and
+   * between two of yours, and bursts hardly happen in the main chat.
+   * Selecting the bubble's text still brings up the floating copy and
+   * quote (SelectionCopyToolbar, scope `user-message`), and the
+   * right-click menu stays. Off: the workbench's single hover copy. */
+  assistant?: boolean;
+  /** The assistant's conversation: the row's top margin in place of the
+   * workbench's `mt-5` (the IM gaps, lib/assistant-conversation.ts
+   * `assistantRowGap`); the bottom one is the chip row's 30px in both. */
   rowClassName?: string;
 }
 
@@ -204,7 +216,7 @@ export const MessageUser = memo(function MessageUser({
   origin,
   askUserReply = false,
   messageId,
-  selectionCopy = false,
+  assistant = false,
   rowClassName,
 }: MessageUserProps) {
   const copy = useCopy();
@@ -223,6 +235,8 @@ export const MessageUser = memo(function MessageUser({
   const [collapsed, setCollapsed] = useState(true);
   const [actionsVisible, setActionsVisible] = useState(false);
   const [copied, setCopied] = useState(false);
+  // The assistant's ⋯ menu open: the row stays up, as a reply's bar does.
+  const [menuOpen, setMenuOpen] = useState(false);
   const hideTimer = useRef<number | null>(null);
   const copyTimer = useRef<number | null>(null);
 
@@ -271,6 +285,19 @@ export const MessageUser = memo(function MessageUser({
   };
 
   const copyVisible = actionsVisible || copied;
+  // The assistant's row: the whole row stays up while its menu is open
+  // or its copy flashes, as a reply's bar does.
+  const chipsVisible = copyVisible || menuOpen;
+  // 复制 where the menu has it (lib/message-menu): not under an image
+  // alone.
+  const canCopy = userMessageCopyText(content) !== null;
+  const onMenuOpenChange = (open: boolean) => {
+    setMenuOpen(open);
+    // The menu is portalled: React saw no leave while the pointer was
+    // in it, so closed, the row goes as it would on leaving — unless
+    // the pointer is (still) on the row, whose enter brings it back.
+    if (!open) scheduleHideActions();
+  };
 
   const toggle = isLong ? (
     <button
@@ -299,10 +326,12 @@ export const MessageUser = memo(function MessageUser({
     <div
       className={cn(
         "group relative",
-        rowClassName ?? cn("mt-5 mb-7.5", RAIL_CLEARANCE),
+        assistant
+          ? cn(rowClassName ?? "mt-5", "mb-7.5")
+          : cn("mt-5 mb-7.5", RAIL_CLEARANCE),
       )}
-      onMouseEnter={selectionCopy ? undefined : showActions}
-      onMouseLeave={selectionCopy ? undefined : scheduleHideActions}
+      onMouseEnter={showActions}
+      onMouseLeave={scheduleHideActions}
     >
       {/* Provenance above the bubble, on its side: Supervisor, or the
           main chat for a subtask's instructions. In flow — it takes its
@@ -345,7 +374,7 @@ export const MessageUser = memo(function MessageUser({
       <div
         data-role={askUserReply ? "user-msg-reply" : "user-msg"}
         data-message-id={messageId}
-        data-selection-copy-scope={selectionCopy ? "user-message" : undefined}
+        data-selection-copy-scope={assistant ? "user-message" : undefined}
         className={cn(
           "relative w-fit rounded-md bg-brand-tint px-3.5 py-2.5 [font-size:var(--conversation-body-size)] font-medium [line-height:var(--conversation-body-leading)] text-ink",
           "select-text",
@@ -368,34 +397,69 @@ export const MessageUser = memo(function MessageUser({
           <UserImageAttachments attachments={attachments} />
         )}
       </div>
-      {selectionCopy ? (
-        toggle && <div className="mt-1 flex justify-end">{toggle}</div>
-      ) : (
-        /* Under the bubble, right edges flush, 6px down: the reply's
-            action row (mt-1.5, 24px chips), mirrored. It sits in the
-            row's bottom margin (mb-7.5, 30px) rather than in flow, so
-            that row IS the gap to whatever comes next — a fold header,
-            the live row, a reply, a question — whose own top margin
-            (mt-6 at most) collapses into it; in flow it would stack on
-            top of theirs. The idea of the assistant's 「它 → 你 30px
-            由行动条占着」 (assistantRowGap), here on the user's side.
-            The chip hides with opacity and keeps its box, so nothing
-            moves when it shows.
+      {/* Under the bubble, right edges flush, 6px down: the reply's
+          action row (mt-1.5, 24px chips), mirrored. It sits in the
+          row's bottom margin (mb-7.5, 30px) rather than in flow, so
+          that row IS the gap to whatever comes next — a fold header,
+          the live row, a reply, a question — whose own top margin
+          (mt-6 at most) collapses into it; in flow it would stack on
+          top of theirs. The idea of the assistant's 「它 → 你 30px
+          由行动条占着」 (assistantRowGap), here on the user's side; in
+          the assistant's conversation that rule now reads both ways
+          (ruling 105: `user-bar`), and its live line's mt-5 collapses
+          into these 30px the same way. The chips hide with opacity and
+          keep their boxes, so nothing moves when they show.
 
-            A long message's 「展开 / 收起」 shares the row, outermost
-            on the right where the assistant puts it: always there, so
-            it keeps the bubble's edge, and the chip comes in to its
-            left on hover. Two rows would make a long message's gap
-            58px; the chip outermost would leave the toggle hanging 28px
-            short of the edge at rest.
+          A long message's 「展开 / 收起」 shares the row, outermost
+          on the right where the assistant puts it: always there, so
+          it keeps the bubble's edge, and the chips come in to its
+          left on hover. Two rows would make a long message's gap
+          58px; the chips outermost would leave the toggle hanging
+          short of the edge at rest.
 
-            `inline`, not `floating`: the bordered, solid-background chip
-            exists so the selection toolbar can portal itself on top of
-            arbitrary text. This one sits in clean canvas margin and
-            needs no such armour — and a bordered control box pressed
-            against the user's own words inverts the register (machine
-            parts crisp, the human voice plain). */
-        <div className="absolute top-full right-0 z-10 mt-1.5 flex h-6 items-center gap-1">
+          The assistant's three (ruling 105): copy · quote · ⋯, in the
+          menu's order with ⋯ last, 2px apart as on a reply's bar. Copy
+          copies as the workbench chip does (the menu's 复制 takes the
+          same text, lib/message-menu) and flashes the check; quote and
+          ⋯ are the menu's own (MessageMenu).
+
+          `inline`, not `floating`: the bordered, solid-background chip
+          exists so the selection toolbar can portal itself on top of
+          arbitrary text. This one sits in clean canvas margin and
+          needs no such armour — and a bordered control box pressed
+          against the user's own words inverts the register (machine
+          parts crisp, the human voice plain). */}
+      <div className="absolute top-full right-0 z-10 mt-1.5 flex h-6 items-center gap-1">
+        {assistant ? (
+          <div className="flex items-center gap-0.5">
+            {canCopy && (
+              <ActionChip
+                active={copied}
+                idleIcon={<Copy size={14} weight="thin" />}
+                activeIcon={<Check size={14} weight="bold" />}
+                idleLabel={copy.conversation.copy}
+                activeLabel={copy.conversation.copied}
+                onClick={() => void handleCopy()}
+                revealed={chipsVisible}
+              />
+            )}
+            {messageId && (
+              <>
+                <MessageQuoteButton
+                  messageId={messageId}
+                  revealed={chipsVisible}
+                />
+                <MessageMenuButton
+                  messageId={messageId}
+                  open={menuOpen}
+                  onOpenChange={onMenuOpenChange}
+                  revealed={chipsVisible}
+                  align="end"
+                />
+              </>
+            )}
+          </div>
+        ) : (
           <ActionChip
             variant="inline"
             active={copied}
@@ -406,9 +470,9 @@ export const MessageUser = memo(function MessageUser({
             onClick={() => void handleCopy()}
             revealed={copyVisible}
           />
-          {toggle}
-        </div>
-      )}
+        )}
+        {toggle}
+      </div>
     </div>
   );
 });

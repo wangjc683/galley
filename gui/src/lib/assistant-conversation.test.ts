@@ -12,6 +12,7 @@ import {
   assistantRowGap,
   assistantScrollToBottom,
   assistantWriting,
+  endsWithActionRow,
 } from "@/lib/assistant-conversation";
 import { buildRunGroups, liveRunGroup } from "@/lib/run-groups";
 import type {
@@ -104,6 +105,23 @@ describe("assistantRowGap", () => {
     // The reply's reserved 30px action row already is the gap.
     expect(assistantRowGap("agent-bar", "user")).toBe("mt-0");
     expect(assistantRowGap("agent-bar", "agent")).toBe("mt-0");
+  });
+
+  it("adds nothing under your message's row of chips either (ruling 105): 30px both ways, two of yours included", () => {
+    // You → it: the row's 30px, no longer 20px.
+    expect(assistantRowGap("user-bar", "agent")).toBe("mt-0");
+    // Two of yours in a row: 30px, no 4px group.
+    expect(assistantRowGap("user-bar", "user")).toBe("mt-0");
+  });
+
+  it("names the rows whose action row is the gap: a reply's, your message's", () => {
+    expect(endsWithActionRow("agent-bar")).toBe(true);
+    expect(endsWithActionRow("user-bar")).toBe(true);
+    // A question ends at its candidates; the workbench's user message
+    // as the time line reads it; nothing above.
+    expect(endsWithActionRow("agent")).toBe(false);
+    expect(endsWithActionRow("user")).toBe(false);
+    expect(endsWithActionRow(null)).toBe(false);
   });
 });
 

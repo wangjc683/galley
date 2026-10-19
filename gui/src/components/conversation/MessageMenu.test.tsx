@@ -25,7 +25,15 @@ import {
 
 vi.mock("@radix-ui/react-dropdown-menu", () => {
   const Pass = ({ children }: { children?: ReactNode }) => <>{children}</>;
-  return { Root: Pass, Trigger: Pass, Portal: Pass, Content: Pass };
+  // The edge the menu opens from, as Radix is handed it.
+  const Content = ({
+    children,
+    align,
+  }: {
+    children?: ReactNode;
+    align?: string;
+  }) => <div data-align={align}>{children}</div>;
+  return { Root: Pass, Trigger: Pass, Portal: Pass, Content };
 });
 
 vi.mock("@/components/layout/sidebar/SidebarRowMenu", () => ({
@@ -137,6 +145,48 @@ describe("the ⋯ menu", () => {
       wiring(open),
     );
     expect(rows(markup)).toContain(`item:${words.foldCollapse}`);
+  });
+
+  it("opens from its right edge under your bubble, its left under a reply (ticket 53)", () => {
+    const yours = render(
+      <MessageMenuButton
+        messageId="a1"
+        open
+        onOpenChange={() => {}}
+        align="end"
+      />,
+      wiring(REPLY),
+    );
+    expect(yours).toContain('data-align="end"');
+    const reply = render(
+      <MessageMenuButton messageId="a1" open onOpenChange={() => {}} />,
+      wiring(REPLY),
+    );
+    expect(reply).toContain('data-align="start"');
+  });
+
+  it("hides with the row under your bubble, keeping its place (`revealed`)", () => {
+    const tag = (markup: string) => {
+      const at = markup.indexOf("<button");
+      return markup.slice(at, markup.indexOf(">", at) + 1);
+    };
+    const hidden = render(
+      <MessageMenuButton
+        messageId="a1"
+        open={false}
+        onOpenChange={() => {}}
+        revealed={false}
+      />,
+      wiring(REPLY),
+    );
+    expect(tag(hidden)).toContain("pointer-events-none opacity-0");
+    expect(tag(hidden)).toContain('aria-hidden="true"');
+    // A reply's bar hides as a whole: its ⋯ is never hidden by itself.
+    const shown = render(
+      <MessageMenuButton messageId="a1" open={false} onOpenChange={() => {}} />,
+      wiring(REPLY),
+    );
+    expect(tag(shown)).not.toContain("opacity-0");
   });
 
   it("is not there without the conversation's menu, nor on a reply that has none", () => {

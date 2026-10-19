@@ -70,6 +70,16 @@ export function AssistantBubble({ children }: { children: ReactNode }) {
  * cue, not a typing bubble. Cut to one line. When its bubble takes its
  * place, the bubble grows out of it (`ref`: MainView keeps where it
  * stands, hooks/useLiveLineHandoff.ts).
+ *
+ * Its `mt-5` adds nothing under your bubble (ruling 105, ticket 53):
+ * that row's bottom margin is the 30px its hover chips sit in
+ * (MessageUser `mb-7.5`), and the two collapse — through the end of the
+ * conversation's root, the line's sibling in the column — so the line
+ * stands 30px under your bubble, where the reply that takes its place
+ * stands (`assistantRowGap` gives that reply `mt-0`), and the hand-off
+ * starts from the bubble's own top edge as before. In a round Core woke
+ * it for there is no bubble of yours: under a reply's action bar,
+ * which is in flow, the line keeps its 20px.
  */
 export function AssistantLiveLine({
   sentence,
