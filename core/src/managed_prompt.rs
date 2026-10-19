@@ -358,6 +358,11 @@ look it up with the Galley CLI (search, then
 /// 800 characters, so a part read earlier is gone by the next write, and
 /// reading it again is what happens anyway. The to-do sentence names the
 /// part (`todos.md`) instead of the section.
+///
+/// Ticket 60 (main chat PRD ruling 112) widened the to-do sentence to
+/// what comes up on a date and will be worth raising then, whoever does
+/// it (a renovation due to finish, a lease ending). The test of when to
+/// follow one up unasked, and where it goes, is `todos.md`'s.
 fn main_chat_entry_layer(manual_dir: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
@@ -374,11 +379,12 @@ tell the user, so do not wait on it or watch it. Do quick work yourself.
 Use this, not the file-based subagent in your memory (subagent.md), which
 the user cannot see.
 
-Note what the user has to do (a deadline, a call, a flight, a purchase) as
-a to-do, with a reminder when it has a date, and tick it off when it is
-done; set yourself a reminder when you promise to follow up. Do it unasked,
-and read `todo list` before saying what is left: see `todos.md` in your
-manual.
+Note what the user has to do (a deadline, a call, a flight, a purchase),
+or what comes up on a date and will be worth raising then (a renovation due
+to finish, a lease ending), as a to-do, with a reminder when it has a date,
+and tick it off when it is done; set yourself a reminder when you promise
+to follow up. Do it unasked, and read `todo list` before saying what is
+left: see `todos.md` in your manual.
 
 Your manual is in `{manual_dir}`, one file per part. Before a Galley CLI
 write (a session, project, model, schedule or to-do command), read the
@@ -1255,8 +1261,15 @@ mod tests {
     /// read of the manual drops from about 2k tokens (GA's `file_read`
     /// takes 200 lines at a time) to a few hundred, and it was read again
     /// for each write, while these lines ride every request almost always
-    /// from the cache.
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 2463;
+    /// from the cache. Raised 2463 → 2568 by ticket 60 (main chat PRD
+    /// ruling 112): +105 bytes, the to-do sentence widened to what comes
+    /// up on a date and will be worth raising then, with two examples (a
+    /// renovation due to finish, a lease ending). Without it a remark like
+    /// 「装修师傅说 702 办公室 11 月 20 号能完工」 has no CLI write in
+    /// sight (the sentence named only what the user has to do), so the
+    /// model would not open `todos.md`, where the test of when to follow
+    /// something up unasked is.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 2568;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {
@@ -1398,21 +1411,26 @@ mod tests {
     /// what the user has to do (a reminder on it when it has a date), the
     /// tick when it is done, its own reminder for a follow-up it promises,
     /// and `todo list` before saying what is left; it names the manual's
-    /// part (its section until ticket 59), which exists. Main chat only.
+    /// part (its section until ticket 59), which exists. Ticket 60: and
+    /// for what comes up on a date and will be worth raising then.
+    /// Main chat only.
     #[test]
     fn main_chat_entry_layer_asks_for_reminders_unasked() {
         let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
         // Single-line fragments only (CRLF on Windows).
+        assert!(main
+            .contains("Note what the user has to do (a deadline, a call, a flight, a purchase),"));
         assert!(main.contains(
-            "Note what the user has to do (a deadline, a call, a flight, a purchase) as"
+            "or what comes up on a date and will be worth raising then (a renovation due"
+        ));
+        assert!(main.contains(
+            "to finish, a lease ending), as a to-do, with a reminder when it has a date,"
         ));
         assert!(main
-            .contains("a to-do, with a reminder when it has a date, and tick it off when it is"));
-        assert!(main.contains(
-            "done; set yourself a reminder when you promise to follow up. Do it unasked,"
-        ));
+            .contains("and tick it off when it is done; set yourself a reminder when you promise"));
         assert!(main
-            .contains("and read `todo list` before saying what is left: see `todos.md` in your"));
+            .contains("to follow up. Do it unasked, and read `todo list` before saying what is"));
+        assert!(main.contains("left: see `todos.md` in your manual."));
         assert!(!main.contains("\"To-dos and"));
         assert!(!main.contains("Reminders and scheduled tasks\" in your manual"));
         assert!(crate::assistant_manual::part("todos.md").contains("### Noting a to-do"));
@@ -1707,6 +1725,13 @@ mod tests {
             in_hand_section(&only_done, &one, now, &shanghai()),
             Some(want)
         );
+        // Ticket 60: the manual sends the model to this group by its
+        // name, in the parts that set or cancel a follow-up.
+        let name = "\"Follow-ups the user turned down\"";
+        assert!(text.contains("\nFollow-ups the user turned down ("));
+        for part in ["todos.md", "todos-change.md", "reminders.md"] {
+            assert!(crate::assistant_manual::part(part).contains(name), "{part}");
+        }
 
         let long = "一二三四五六七八九十".repeat(5);
         let cut: String = long.chars().take(IN_HAND_TEXT_CHARS).collect();

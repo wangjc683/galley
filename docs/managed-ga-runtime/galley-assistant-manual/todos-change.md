@@ -9,6 +9,12 @@ not edit them.
   `--due=` and `--remind-at=` to move it (move the reminder with it),
   `--title=`, `--notes=`, `--no-due` or `--no-remind`;
   `todo cancel <todo-id>` when they no longer need it.
+- When the user says not to be reminded of that kind of thing
+  (「这类别提醒我」), cancel the one you set, and say the kind, briefly, at
+  the start of `--reason`
+  (`--reason="user: no renovation progress reminders"`): Galley lists it
+  under "Follow-ups the user turned down" in each later segment's "In
+  Hand" lines, so you need not remember it.
 - A message that opens with a quote of a line from the list
   (`> 交季度报告`) is about that item: find it by its title (`todo list`;
   your own reminders are in `schedule list`, subtasks in `sessions list`)

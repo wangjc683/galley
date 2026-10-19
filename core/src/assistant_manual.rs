@@ -209,15 +209,20 @@ mod tests {
                 assert!(names.contains(&file), "{name} links to {file}, not a part");
             }
         }
-        // The cross-references the split made (ticket 59's list).
-        assert_eq!(referred, 10);
+        // The cross-references the split made (ticket 59's list), and
+        // ticket 60's two: reminders.md to the three tests in todos.md,
+        // todos.md to cancelling a kind in todos-change.md.
+        assert_eq!(referred, 12);
         assert!(
             part("authority.md").contains("needs their yes to what and when (see `reminders.md`).")
         );
         assert!(part("reminders.md").contains("Galley wakes you with a note (see `wake.md`) that"));
         assert!(part("reminders.md").contains("`todos.md`), and without being asked when:"));
         assert!(part("todos.md")
-            .contains("(「半小时后提醒我关火」, see `reminders.md`); once it has gone off"));
+            .contains("own one-off reminder (「半小时后提醒我关火」, see `reminders.md`;"));
+        assert!(part("reminders.md")
+            .contains("three tests in `todos.md`, and need not stay on their list"));
+        assert!(part("todos.md").contains("the kind in `--reason` (see `todos-change.md`)."));
         for part_name in ["authority.md", "cli.md", "todos.md", "reminders.md"] {
             for section in [
                 "\"To-dos and",
@@ -460,22 +465,23 @@ mod tests {
         for rule in [
             // Two lists; the user's only controls on theirs.
             "- **The user's to-dos**: what they have to do (hand in a report, call the",
-            "「待办」 beside this chat and can only tick a to-do off, untick it, or",
-            "words, they tell you, and you change it; do not send them to the list",
+            "user sees it in 「待办」 beside this chat and can only tick a to-do off,",
+            "new time, new words, they tell you, and you change it; do not send them",
             "- **Your own reminders**: times Galley wakes you to do something yourself,",
-            // Information is memory; no suggesting or tidying unasked.
+            // Information is memory; no tidying unasked.
             "Neither holds information: an address, a flight number or a preference",
-            "belongs in your memory. Do not suggest to-dos or tidy the list on your",
-            "history if you need to), show them the list first, and note them once",
+            "be of use to raise then is not information: follow it up. Do not tidy the",
+            "(search the history if you need to), show them the list first, and note",
             // When: unasked, with a time or without.
             "Note one without being asked when the user mentions something they have",
             // When not, and list first.
             "Not for a wish with nothing to do yet (「我最近想学吉他」), a remark about",
-            "something already there: run `todo list` before you add; when it is",
+            "said they do not need, or something already there: run `todo list` before",
             // Due, reminder, notes; never `schedule` for a to-do's reminder.
             "- When it has a due date, hang one reminder on it with `--remind-at`: at",
-            "the time they named, or else ahead by what it is: the evening before an",
-            "early flight, the day before a deadline, half an hour before a call.",
+            "the time they named, or else when raising it helps most: ahead when",
+            "there is something to get ready (the evening before an early flight,",
+            "the day before a deadline, half an hour before a call, a few weeks",
             "Without a due date, no reminder.",
             "- `--notes`: what you will need when the reminder comes (names, places,",
             "- A to-do's reminder is set, moved and removed only with `todo add` and",
@@ -502,8 +508,8 @@ mod tests {
         // A to-do's reminder only reminds.
         let reminders = part("reminders.md");
         assert!(reminders
-            .contains("subtask for long work. A to-do's reminder only reminds: do not tick the"));
-        assert!(reminders.contains("to-do off until the user says it is done."));
+            .contains("work. A to-do's reminder only reminds: do not tick the to-do off until"));
+        assert!(reminders.contains("the user says it is done or has happened."));
         // Authority.
         assert!(part("authority.md")
             .contains("- Note, change, tick off or cancel the user's to-dos, and their"));
@@ -528,16 +534,16 @@ mod tests {
             "such as checking on a delivery, or to nudge the user when there is",
             "nothing for them to finish (「十分钟后提醒我喝水」). These are scheduled",
             // The question.
-            "When the user asks to be reminded, ask yourself: if they ignored the",
-            "reminder, would the thing still need to be on their list?",
+            "When the user asks to be reminded, or you follow something up, ask",
+            "yourself: if they ignored the reminder, would the thing still need to be",
             // No: a nudge, its own one-off reminder.
             "- No (drink water, turn off the stove, leave the house, get up and",
-            "stretch): it is a nudge, not a to-do. Set your own one-off reminder",
-            "(「半小时后提醒我关火」, see `reminders.md`); once it has gone off",
-            "there is nothing left to tick.",
+            "stretch, an answer to ask after): it is a nudge, not a to-do. Set your",
+            "own one-off reminder (「半小时后提醒我关火」, see `reminders.md`;",
+            "has gone off there is nothing left to tick.",
             // Yes: a to-do, reminded at the time named.
-            "- Yes (call the landlord back, hand in the report, catch the flight): it",
-            "is a to-do with its reminder at the time they named",
+            "- Yes (call the landlord back, hand in the report, catch the flight, a",
+            "renovation due to finish, a lease running out): it is a to-do with its",
             "(「明天早上 8 点提醒我给房东回电话」: the call, due that day, reminded at",
         ] {
             assert!(todos.contains(rule), "todos.md lost: {rule}");
@@ -553,5 +559,79 @@ mod tests {
         let question = todos.find("When the user asks to be reminded").unwrap();
         assert!(note < question);
         assert!(!part("reminders.md").contains("When the user asks to be reminded"));
+    }
+
+    /// Ticket 60 (main chat PRD rulings 112, 113): the list takes what
+    /// the user will want followed up, whoever does it, and the model
+    /// follows it up unasked when three tests hold; a date with nothing
+    /// to do then is information. Where it goes is the nudge-or-to-do
+    /// question, its time what it is for (ahead, on the day, after). The
+    /// floor: 「记一下」 with a date is never memory alone; every one is
+    /// said, the unasked with why and when; a kind turned down is
+    /// cancelled with the kind in `--reason`, and "Follow-ups the user
+    /// turned down" (the In Hand group's title) is read before setting
+    /// one unasked. When one comes due it says what is of use, not the
+    /// words. Single-line fragments only (CRLF on Windows).
+    #[test]
+    fn manual_follows_up_what_comes_up_on_a_date() {
+        let todos = part("todos.md");
+        for rule in [
+            // What the list holds.
+            "landlord back, buy potting soil), or something coming up on a date that",
+            "they will want to act on or hear about then, whoever does it (their",
+            "belongs in your memory, and so does a date with nothing to do when it",
+            // Unasked, by three tests.
+            "Follow up something they mention without being asked, too, when all three",
+            "1. It will happen, fall due or have an outcome at a time to come: a date,",
+            "2. Raising it then will be of use to the user: something to do, decide or",
+            "3. They may not think of it then by themselves: not a habit, such as going",
+            // Not for a date alone; what the user turned down.
+            "the past (「昨天开会挺累的」), a date that is only a date, something they",
+            "second. Before you follow something up unasked, read",
+            "\"Follow-ups the user turned down\" in your \"In Hand\" lines: one of the",
+            "same kind there means leave it, unless the user asks for it outright.",
+            // The floor: asked with a date, never memory alone.
+            "When the user says 「记一下」, 「帮我记着」 or 「提醒我」 about something with",
+            "into your memory alone.",
+            // Where: an answer to ask after is a nudge; a renovation or a
+            // lease a to-do.
+            "「HR 说这周五给 offer 答复」: ask on Friday evening how it went); once it",
+            // When: ahead, on the day, after.
+            "before a lease runs out), on the day when there is something to check",
+            "comes later, as your own reminder (the evening the answer is due).",
+            // Say why and when; cancel, with the kind.
+            "they did not ask, the same sentence says why and when",
+            "(「11 月 20 号我问你一下装修完没。」). The desktop shows a card for it under",
+            "When they say they do not need it (「不用」), cancel it; when they say not",
+        ] {
+            assert!(todos.contains(rule), "todos.md lost: {rule}");
+        }
+        assert!(!todos.contains("Do not suggest to-dos"));
+        let reminders = part("reminders.md");
+        for rule in [
+            "- Something the user mentioned has an outcome worth asking after, by the",
+            "one unasked, read \"Follow-ups the user turned down\" in your \"In Hand\"",
+            "sentence says why (「周五傍晚我问你一下 offer 的结果。」). The desktop",
+            "Never set one without saying so.",
+            "(「这类别提醒我」), cancel the one you set, and say the kind, briefly, at the",
+            // Coming due: what is of use now, not the words.
+            "- Then do what it says. Do not recite it (「提醒：装修完工」): think what",
+            "(「702 装修预计今天完工，完了吗？要不要约个时间验收？」); look something",
+        ] {
+            assert!(reminders.contains(rule), "reminders.md lost: {rule}");
+        }
+        let change = part("todos-change.md");
+        assert!(change.contains(
+            "  (「这类别提醒我」), cancel the one you set, and say the kind, briefly, at"
+        ));
+        // The kind survives the In Hand line's cut (managed_prompt's
+        // IN_HAND_TEXT_CHARS, 40 characters). That the group named is
+        // the one the In Hand lines print is managed_prompt's test.
+        let example = "user: no renovation progress reminders";
+        assert!(example.chars().count() <= 40);
+        for body in [reminders, change] {
+            assert!(body.contains(&format!("`--reason=\"{example}\"`")));
+            assert!(body.contains("under \"Follow-ups the user turned down\" in each later"));
+        }
     }
 }
