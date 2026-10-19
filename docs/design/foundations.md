@@ -670,7 +670,8 @@ namespace）、`ease-firm`（`--ease-*` 有 namespace，直接成为 utility）�
 
 - 程序发起的平滑滚动：时长 300ms + 距离 ÷ 800px × 300ms，最长 600ms，超过 800px
   先瞬移，曲线也按距离分两档，数值集中在 `lib/animate-scroll.ts`，见
-  [conversation](./conversation.md)「Scroll behaviour」的「平滑滚动」。
+  [conversation](./conversation.md)「Scroll behaviour」的「平滑滚动」。例外一处：主对话里在跑那一行交接给气泡的那次落地跟随，
+  时长与曲线跟着气泡展开（`--motion-slow`、`--ease-pop`），整段都动画、不瞬移（2026-10-19，主聊天 PRD 裁决 103，票 51）。
 - 输入框长高、变矮（人触发的交互反馈，Telegram 的 `round(50 × ln|Δh|)` ms，多一
   行 155ms、贴满 8 行 253ms）：时长随距离变，**缓动仍用 token** `--ease-firm`。逐帧
   写高度，所以在 JS 里按这条三次贝塞尔求值，数从 token 的定义读（`getComputedStyle`
