@@ -4,17 +4,27 @@ import { createPortal } from "react-dom";
 
 import { ActionChip } from "@/components/conversation/ActionChip";
 import { useCopy } from "@/lib/i18n";
-import { SELECTION_COPY_SCOPE as ASSISTANT_SELECTION_SCOPE } from "@/lib/selection-copy";
+import { preventMouseFocus } from "@/lib/pointer-focus";
+import {
+  SELECTION_COPY_SCOPE as ASSISTANT_SELECTION_SCOPE,
+  SELECTION_YIELD_REGION,
+  selectionToolbarServes,
+} from "@/lib/selection-copy";
 import { cn } from "@/lib/utils";
 
 const TOOLBAR_SELECTOR = "[data-selection-copy-toolbar]";
-const TOOLBAR_WIDTH = 28;
 const VIEWPORT_GAP = 12;
 const TOOLBAR_GUTTER_GAP = 10;
-/** One floating chip (`size-7`). */
-const CHIP_SIZE = 28;
-/** Between copy and quote (`gap-1`). */
-const CHIP_GAP = 4;
+/** One chip, the hover rows' own (`inline`, `size-6`). */
+const CHIP_SIZE = 24;
+/** Between copy and quote (`gap-0.5`), as between a hover row's chips. */
+const CHIP_GAP = 2;
+/** The shell's edge to a chip: its 1px border and its `p-1.5` (6px). */
+const SHELL_INSET = 7;
+/** The shell's width (38px): one chip and the inset on either side. */
+const TOOLBAR_WIDTH = CHIP_SIZE + SHELL_INSET * 2;
+/** From the shell's top to the middle of copy, its first chip. */
+const COPY_MIDDLE = SHELL_INSET + CHIP_SIZE / 2;
 
 interface SelectionCopyToolbarProps {
   scrollContainerRef: RefObject<HTMLDivElement | null>;
@@ -25,29 +35,39 @@ interface SelectionCopyToolbarProps {
   onQuote?: (text: string) => void;
 }
 
+type ToolbarSide = "left" | "right" | "viewport-left";
+
 interface ToolbarState {
   text: string;
   left: number;
   top: number;
-  side: "left" | "right" | "viewport-left";
+  side: ToolbarSide;
+  /** The key of the message it serves (`data-selection-yield` on its
+   * hover region), whose hover row yields while it shows. */
+  serves: string | null;
 }
 
 /**
- * Floating chips beside a selection in a reply (or, in the assistant's
- * conversation, in your bubble): copy, and quote into the composer. A
- * column in the gutter, copy on top where it always sat (its middle on
- * the selection's last line), quote 4px under it.
+ * A floating shell beside a selection in a reply (or, in the assistant's
+ * conversation, in your bubble) holding copy, and quote into the
+ * composer. A column in the gutter, copy on top where it always sat (its
+ * middle on the selection's last line), quote under it.
+ *
+ * While it shows, the message it serves keeps its hover row down (main
+ * chat PRD ruling 108; lib/selection-copy): one set of actions at a
+ * time, not two copies and two quotes that act on different things.
  */
 export function SelectionCopyToolbar({
   scrollContainerRef,
   onQuote,
 }: SelectionCopyToolbarProps) {
-  const copy = useCopy();
-  const toolbarHeight = onQuote ? CHIP_SIZE * 2 + CHIP_GAP : CHIP_SIZE;
+  const toolbarHeight =
+    SHELL_INSET * 2 + (onQuote ? CHIP_SIZE * 2 + CHIP_GAP : CHIP_SIZE);
   const [toolbar, setToolbar] = useState<ToolbarState | null>(null);
   const [copied, setCopied] = useState(false);
   const rafRef = useRef<number | null>(null);
   const copyTimerRef = useRef<number | null>(null);
+  const serves = toolbar?.serves ?? null;
 
   useEffect(() => {
     const updateFromSelection = () => {
@@ -115,6 +135,14 @@ export function SelectionCopyToolbar({
     };
   }, []);
 
+  // The served message's hover row yields while the toolbar shows: the
+  // key changes only when the toolbar comes, goes or moves to another
+  // message, not on every selectionchange.
+  useEffect(() => {
+    selectionToolbarServes(serves);
+    return () => selectionToolbarServes(null);
+  }, [serves]);
+
   const onCopy = async () => {
     if (!toolbar) return;
     try {
@@ -139,43 +167,95 @@ export function SelectionCopyToolbar({
 
   if (!toolbar) return null;
 
-  const tooltipSide = toolbar.side === "left" ? "left" : "right";
-
   return createPortal(
+    <SelectionToolbarShell
+      side={toolbar.side}
+      left={toolbar.left}
+      top={toolbar.top}
+      copied={copied}
+      onCopy={() => void onCopy()}
+      onQuote={onQuote && onQuoteClick}
+    />,
+    document.body,
+  );
+}
+
+/**
+ * The toolbar's look (main chat PRD ruling 108): ONE floating shell
+ * holding the hover rows' own chips, so the two read as one family. The
+ * chips are `inline` (24px, 14px thin glyph, `ink-muted`, `bg-hover` on
+ * hover, the check for 1.5s after a copy, `tabIndex={-1}`); the armour a
+ * control needs to cut itself out of the text it lands on is worn once,
+ * by the shell: solid `bg-elevated` (no glass), a 1px `line` border and
+ * `--shadow-float`, the back-to-bottom button's. Until 2026-10-19 each
+ * chip wore it (`floating`): two bordered boxes, another family.
+ *
+ * - Radius `rounded-md` (12px), the menus' (MessageMenu, the sidebar's
+ *   row menus): like a menu it is a surface holding controls with their
+ *   own hover ground, and it nests the same way, outer = inner + padding
+ *   (the menu's 12 = 8 + 4, here the chip's `rounded-sm` 6 + 6). The
+ *   tooltip's 6px fits a label with nothing inside it; around a 6px
+ *   chip 6px in, it would be squarer than the chip it holds.
+ * - Padding `p-1.5` (6px), chips `gap-0.5` (2px) apart as in a hover
+ *   row: a 14px glyph sits 5px inside its 24px chip, so the glyphs are
+ *   12px apart (5 + 2 + 5), as in the row, and 12px from the shell's
+ *   outer edge (5 + 6 + 1): the row's rhythm, closed into a box.
+ * - 38px wide, 64px tall (38 with copy alone); SelectionCopyToolbar's
+ *   constants follow from these.
+ *
+ * Exported for its test; SelectionCopyToolbar portals it.
+ */
+export function SelectionToolbarShell({
+  side,
+  left,
+  top,
+  copied,
+  onCopy,
+  onQuote,
+}: {
+  side: ToolbarSide;
+  left: number;
+  top: number;
+  copied: boolean;
+  onCopy: () => void;
+  /** Without it the shell holds copy alone. */
+  onQuote?: () => void;
+}) {
+  const copy = useCopy();
+  const tooltipSide = side === "left" ? "left" : "right";
+  return (
     <div
       data-selection-copy-toolbar
+      // A press on the shell between the chips keeps the selection, as
+      // one on a chip does.
+      onMouseDown={preventMouseFocus}
       className={cn(
-        "pointer-events-none fixed z-[70] flex flex-col gap-1",
-        toolbar.side === "left" && "-translate-x-full",
+        "fixed z-[70] flex flex-col gap-0.5 rounded-md border border-line bg-elevated p-1.5 shadow-[var(--shadow-float)]",
+        side === "left" && "-translate-x-full",
       )}
-      style={{ left: toolbar.left, top: toolbar.top }}
+      style={{ left, top }}
     >
       <ActionChip
-        variant="floating"
         active={copied}
         idleIcon={<Copy size={14} weight="thin" />}
         activeIcon={<Check size={14} weight="bold" />}
         idleLabel={copy.conversation.copySelection}
         activeLabel={copy.conversation.copied}
-        onClick={() => void onCopy()}
+        onClick={onCopy}
         tooltipSide={tooltipSide}
-        className="pointer-events-auto"
       />
       {onQuote && (
         <ActionChip
-          variant="floating"
           active={false}
           idleIcon={<Quotes size={14} weight="thin" />}
           activeIcon={<Quotes size={14} weight="thin" />}
           idleLabel={copy.conversation.quoteSelection}
           activeLabel={copy.conversation.quoteSelection}
-          onClick={onQuoteClick}
+          onClick={onQuote}
           tooltipSide={tooltipSide}
-          className="pointer-events-auto"
         />
       )}
-    </div>,
-    document.body,
+    </div>
   );
 }
 
@@ -203,12 +283,17 @@ function readAssistantSelection(toolbarHeight: number): ToolbarState | null {
       : side === "right"
         ? scopeRect.right + TOOLBAR_GUTTER_GAP
         : VIEWPORT_GAP;
+  // Copy's middle on the selection's last line.
   const top = clampToolbarTop(
-    rect.top + rect.height / 2 - CHIP_SIZE / 2,
+    rect.top + rect.height / 2 - COPY_MIDDLE,
     toolbarHeight,
   );
+  const serves =
+    scope
+      .closest(SELECTION_YIELD_REGION)
+      ?.getAttribute("data-selection-yield") ?? null;
 
-  return { text, left, top, side };
+  return { text, left, top, side, serves };
 }
 
 function selectedAssistantScope(range: Range): Element | null {
@@ -238,7 +323,7 @@ function selectionRect(range: Range): DOMRect | null {
   return rect;
 }
 
-function toolbarSide(scopeRect: DOMRect): ToolbarState["side"] {
+function toolbarSide(scopeRect: DOMRect): ToolbarSide {
   if (
     window.innerWidth - scopeRect.right >=
     TOOLBAR_WIDTH + VIEWPORT_GAP + TOOLBAR_GUTTER_GAP

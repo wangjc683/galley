@@ -32,6 +32,7 @@ import {
   telemetryInputTotal,
 } from "@/lib/telemetry";
 import { saveReplyMarkdown } from "@/lib/reply-save";
+import { useYieldsToSelection } from "@/lib/selection-copy";
 import { cn } from "@/lib/utils";
 import type { MessageTelemetry } from "@/types/conversation";
 
@@ -100,6 +101,17 @@ import type { MessageTelemetry } from "@/types/conversation";
  * menu's findable door, and delete's only one (right-click is the quick
  * one), so it stays when quote joins the bar. While the menu is open the
  * bar stays visible, as it does for the open steps.
+ *
+ * The bar yields to the selection toolbar (main chat PRD ruling 108,
+ * lib/selection-copy), in the workbench and the assistant's conversation
+ * alike: while a selection in this reply has the toolbar up, the bar is
+ * down, hover or not, and so is a bar held up by the open steps or a
+ * copied / saved flash — two sets at once, two copies and two quotes,
+ * one for the reply and one for the selection, is what the ruling
+ * removes, and the steps stay open under it. When the toolbar goes the
+ * bar is as it was. (The open ⋯ menu cannot meet it: the ⋯ is down and
+ * click-through then, and an open menu takes the pointer from the page.)
+ * Hidden the same way, keeping its box.
  */
 
 interface MessageActionsProps {
@@ -115,6 +127,9 @@ interface MessageActionsProps {
    * runs its message menu's 引用, and the ⋯ at the bar's end opens the
    * menu. */
   messageId?: string;
+  /** The reply's key for the selection toolbar (MessageAgent's
+   * `data-selection-yield`): the bar yields while the toolbar serves it. */
+  selectionYieldKey?: string;
 }
 
 export function MessageActions({
@@ -122,8 +137,10 @@ export function MessageActions({
   telemetry,
   assistant,
   messageId,
+  selectionYieldKey,
 }: MessageActionsProps) {
   const copy = useCopy();
+  const yielded = useYieldsToSelection(selectionYieldKey);
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -165,12 +182,14 @@ export function MessageActions({
   // The process button pressed keeps the bar up, as a copied / saved
   // flash does: pinning the button alone would leave it floating right
   // of two transparent chips that still hold their place.
-  const hidden =
-    !copied &&
-    !saved &&
-    !process?.open &&
-    !menuOpen &&
-    "pointer-events-none opacity-0 group-hover/answer:pointer-events-auto group-hover/answer:opacity-100";
+  // Yielding to the selection toolbar it is down whatever holds it up.
+  const hidden = yielded
+    ? "pointer-events-none opacity-0"
+    : !copied &&
+      !saved &&
+      !process?.open &&
+      !menuOpen &&
+      "pointer-events-none opacity-0 group-hover/answer:pointer-events-auto group-hover/answer:opacity-100";
   return (
     <div
       className={cn(

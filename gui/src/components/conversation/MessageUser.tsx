@@ -7,7 +7,7 @@ import {
   House,
   PlugsConnected,
 } from "@phosphor-icons/react";
-import { useEffect, memo, useMemo, useRef, useState } from "react";
+import { useEffect, memo, useId, useMemo, useRef, useState } from "react";
 
 import { ActionChip } from "@/components/conversation/ActionChip";
 import {
@@ -24,6 +24,7 @@ import { splitQuotedMessage } from "@/lib/composer-quote";
 import { useCopy } from "@/lib/i18n";
 import { userMessageCopyText } from "@/lib/message-menu";
 import { preventMouseFocus } from "@/lib/pointer-focus";
+import { useYieldsToSelection } from "@/lib/selection-copy";
 import { cn } from "@/lib/utils";
 import type { MessageAttachment, Origin } from "@/types/conversation";
 
@@ -131,9 +132,11 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *   assistant's conversation (`assistant`) puts three chips in the same
  *   row since ruling 105 (ticket 53, overturning ruling 73 items 1–2,
  *   which had none there): copy · quote · ⋯, the bubble's message menu
- *   one hover away. Each wears the BARE chip skin, not the bordered
- *   one. Mouse leave delays hiding briefly so the user can move from
- *   the message body to the action without chasing it.
+ *   one hover away. Each wears the bare chip skin, as on a reply's bar.
+ *   Mouse leave delays hiding briefly so the user can move from the
+ *   message body to the action without chasing it. While a selection in
+ *   the bubble has the selection toolbar up, the row yields to it (main
+ *   chat PRD ruling 108; below).
  *
  * `data-role="user-msg"` is a stable anchor that MainView's scroll
  * effect uses to find the just-submitted user message and snap its
@@ -201,8 +204,10 @@ export interface MessageUserProps {
    * below; your row now keeps its 30px at every change of side and
    * between two of yours, and bursts hardly happen in the main chat.
    * Selecting the bubble's text still brings up the floating copy and
-   * quote (SelectionCopyToolbar, scope `user-message`), and the
-   * right-click menu stays. Off: the workbench's single hover copy. */
+   * quote (SelectionCopyToolbar, scope `user-message`), and while it
+   * shows the row is down (ruling 108); the right-click menu stays.
+   * Off: the workbench's single hover copy, which has no selection
+   * toolbar to yield to. */
   assistant?: boolean;
   /** The assistant's conversation: the row's top margin in place of the
    * workbench's `mt-5` (the IM gaps, lib/assistant-conversation.ts
@@ -239,6 +244,12 @@ export const MessageUser = memo(function MessageUser({
   const [menuOpen, setMenuOpen] = useState(false);
   const hideTimer = useRef<number | null>(null);
   const copyTimer = useRef<number | null>(null);
+  // The bubble's key for the selection toolbar (lib/selection-copy): in
+  // the assistant's conversation, where its text can get the toolbar.
+  const selectionYieldKey = useId();
+  const yielded = useYieldsToSelection(
+    assistant ? selectionYieldKey : undefined,
+  );
 
   const isSupervisor = origin?.via === "supervisor";
   // A subtask's first message is the instructions the main chat wrote
@@ -332,6 +343,7 @@ export const MessageUser = memo(function MessageUser({
       )}
       onMouseEnter={showActions}
       onMouseLeave={scheduleHideActions}
+      data-selection-yield={assistant ? selectionYieldKey : undefined}
     >
       {/* Provenance above the bubble, on its side: Supervisor, or the
           main chat for a subtask's instructions. In flow — it takes its
@@ -423,15 +435,26 @@ export const MessageUser = memo(function MessageUser({
           same text, lib/message-menu) and flashes the check; quote and
           ⋯ are the menu's own (MessageMenu).
 
-          `inline`, not `floating`: the bordered, solid-background chip
-          exists so the selection toolbar can portal itself on top of
-          arbitrary text. This one sits in clean canvas margin and
-          needs no such armour — and a bordered control box pressed
-          against the user's own words inverts the register (machine
-          parts crisp, the human voice plain). */}
+          While the selection toolbar serves this bubble the three are
+          down (ruling 108; MessageActions has the rule): hover, the ⋯
+          open or the copied flash alike, kept in their place as when
+          hidden; when it goes they are as they were. Not the 「展开 /
+          收起」, which is no hover action.
+
+          Bare chips: the armour (border, solid ground, shadow) is the
+          selection toolbar's shell's, which portals itself on top of
+          arbitrary text. This row sits in clean canvas margin and needs
+          none — and a bordered control box pressed against the user's
+          own words inverts the register (machine parts crisp, the
+          human voice plain). */}
       <div className="absolute top-full right-0 z-10 mt-1.5 flex h-6 items-center gap-1">
         {assistant ? (
-          <div className="flex items-center gap-0.5">
+          <div
+            className={cn(
+              "flex items-center gap-0.5",
+              yielded && "pointer-events-none opacity-0",
+            )}
+          >
             {canCopy && (
               <ActionChip
                 active={copied}
@@ -461,7 +484,6 @@ export const MessageUser = memo(function MessageUser({
           </div>
         ) : (
           <ActionChip
-            variant="inline"
             active={copied}
             idleIcon={<Copy size={14} weight="thin" />}
             activeIcon={<Check size={14} weight="bold" />}

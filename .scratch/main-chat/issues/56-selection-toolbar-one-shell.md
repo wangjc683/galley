@@ -63,3 +63,5 @@ Status: ready-for-agent
 4. 工作台会话里选中回复的一段：同一个小壳，回复的行动条不出现。
 
 ## Comments
+
+- 2026-10-19（实现子代理）：已在分支 `main-chat-56-selection-toolbar-one-shell` 做完，待主会话合入与 JC 真机。壳：`SelectionToolbarShell`（`SelectionCopyToolbar.tsx`）一个 `rounded-md border border-line bg-elevated p-1.5 shadow-[var(--shadow-float)]` 的竖排框，里面两颗裸 `ActionChip`，间距 `gap-0.5`；圆角取菜单那档 12px（同菜单「外圆角 = 里面圆角 + 内边距」：chip 6 + 内边距 6），图标间距与图标到外缘都是 12px。壳 38 × 64（只有复制 38 × 38），常量改为 `CHIP_SIZE 24`、`CHIP_GAP 2`、`SHELL_INSET 7`、`TOOLBAR_WIDTH 38`、复制中线离壳顶 19，临时页实测复制中线与选区最后一行中线逐像素重合。`floating` 变体没人用了，已删（连同 `variant` 参数）。让位：能弹工具条的消息在悬停区挂 `data-selection-yield`（`useId`），工具条记下它服务的键（`lib/selection-copy.ts` 的小订阅，`useSyncExternalStore`），回复的行动条与你的气泡下那一行只问「是不是我」，只有离开与来到的那一两条重渲染；钉住常显（闪对勾、过程展开）时也让位，工具条一收回到原样。票里说悬停行 chip 间距是 `gap-1`，代码里是 `gap-0.5`（`MessageActions.tsx`、`MessageUser.tsx` 的 chip 组），按 2px 做。改了 `MessageAgent.tsx`（票 55 清单外）三处：`useId` 引入、悬停区一个属性、传给行动条一个 prop。设计文档改了「复制入口统一」的选中一条（壳、chip、让位）、「两条正交的规则」第 2 条，「你的在右」「行动条」「Message Actions」开头与「视觉」各补一句引用。截图在主会话 scratchpad 的 `t56-shots/`（改前改后各 18 张，`compare/` 是上下对照）。

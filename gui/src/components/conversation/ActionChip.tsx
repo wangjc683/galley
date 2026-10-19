@@ -18,21 +18,22 @@ import { blurAfterClick, preventMouseFocus } from "@/lib/pointer-focus";
  *   - transient: fades in on a user action — hovering a user message
  *     (MessageUser) or selecting assistant text (SelectionCopyToolbar).
  *
- * Skin is decided by WHAT IS BEHIND THE CHIP, not by its lifetime:
- *
- *   - `floating` (border + solid `bg-elevated` + shadow): only when the
- *     chip lands on top of arbitrary content and has to cut itself out
- *     of it. The portal'd selection toolbar is the one such case.
- *   - `inline` (bare muted glyph, hover-only background): everywhere the
- *     chip sits on clean canvas — the reply bar, and a user message's
- *     hover chip out in the margin. Armour it does not need reads as a
- *     UI part intruding on the content.
+ * Skin is decided by WHAT IS BEHIND THE CHIP, not by its lifetime, and
+ * the chip itself is always the bare one (`inline` in the design docs):
+ * a muted glyph, a background only on hover. On clean canvas — the reply
+ * bar, the row under a user message out in the margin — that is all it
+ * wears; armour it does not need reads as a UI part intruding on the
+ * content. Where chips land on top of arbitrary content and have to cut
+ * themselves out of it (the portal'd selection toolbar, the one such
+ * case), the armour is on the shell around them, worn once
+ * (SelectionToolbarShell: solid `bg-elevated`, border, float shadow, no
+ * glassmorphism; main chat PRD ruling 108). Until 2026-10-19 each
+ * selection chip wore it (a `floating` variant), and two bordered boxes
+ * beside a selection read as another family than the hover rows.
  *
  * Quiet tier of the button-press language (DESIGN.md §2.5): muted →
  * ink on hover, a crisp integer 1px press, success flips to a green
- * Check. `floating` adds a firm bordered container (solid `bg-elevated`,
- * no glassmorphism) for the portal'd selection chip; `inline` is a
- * bare muted icon that lives in an action row.
+ * Check.
  *
  * Presentational only — callers own the copied / saved state and its
  * reset timer, and (for the hover row) the `revealed` flag.
@@ -63,7 +64,6 @@ export interface ActionChipProps {
   activeLabel: string;
   /** The action; none for a menu trigger (the trigger's props open it). */
   onClick?: () => void;
-  variant?: "inline" | "floating";
   /**
    * Hover-reveal control for inline rows. When false the chip is
    * transparent + non-focusable but keeps its layout box, so revealing
@@ -94,7 +94,6 @@ export const ActionChip = forwardRef<
     idleLabel,
     activeLabel,
     onClick,
-    variant = "inline",
     revealed = true,
     expanded,
     tooltipSide,
@@ -103,7 +102,6 @@ export const ActionChip = forwardRef<
   },
   ref,
 ) {
-  const floating = variant === "floating";
   const label = active ? activeLabel : idleLabel;
 
   const button = (
@@ -115,8 +113,9 @@ export const ActionChip = forwardRef<
       aria-hidden={!revealed || undefined}
       aria-expanded={expanded}
       tabIndex={-1}
-      // Floating chip lives on a transient selection; every chip also
-      // avoids mouse focus so hover-only UI doesn't stick after click.
+      // Every chip avoids mouse focus so hover-only UI doesn't stick
+      // after a click, and a press keeps a selection where it is (the
+      // selection toolbar's chips act on it).
       onMouseDown={preventMouseFocus}
       onClick={(event) => {
         onClick?.();
@@ -124,9 +123,7 @@ export const ActionChip = forwardRef<
       }}
       className={cn(
         ACTION_CHIP_BASE,
-        floating
-          ? "size-7 border border-line bg-elevated shadow-[var(--shadow-float)] hover:border-line-strong"
-          : "size-6 border border-transparent",
+        "size-6 border border-transparent",
         active
           ? "text-success"
           : expanded

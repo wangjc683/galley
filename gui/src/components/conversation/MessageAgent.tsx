@@ -1,5 +1,5 @@
 import { CaretDown, XCircle } from "@phosphor-icons/react";
-import { isValidElement, memo, useState, type ReactNode } from "react";
+import { isValidElement, memo, useId, useState, type ReactNode } from "react";
 
 import { AssistantBubble } from "@/components/conversation/AssistantParts";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
@@ -30,6 +30,11 @@ import type { MessageTelemetry } from "@/types/conversation";
  *
  * ReactNode demo children always skip actions — there's no canonical
  * markdown source to copy back out, and demos rarely need actions.
+ *
+ * The answer's hover region carries its key for the selection toolbar
+ * (`data-selection-yield`, lib/selection-copy): while a selection in
+ * the answer has the toolbar up, the action bar yields (main chat PRD
+ * ruling 108).
  */
 // Memoised: during streaming the conversation re-renders on every
 // throttled chunk, but settled agent turns carry an immutable string
@@ -63,6 +68,7 @@ export const MessageAgent = memo(function MessageAgent({
    * in the assistant's conversation. */
   attachment?: ReactNode;
 }) {
+  const selectionYieldKey = useId();
   if (typeof children === "string") {
     // #22: a "final answer" that is really leaked tool-call markup
     // (`<invoke …>` returned as plain text by a proxy that never
@@ -103,6 +109,7 @@ export const MessageAgent = memo(function MessageAgent({
     return (
       <div
         data-message-id={messageId}
+        data-selection-yield={selectionYieldKey}
         className={cn("group/answer", className)}
       >
         {bubble ? <AssistantBubble>{body}</AssistantBubble> : body}
@@ -113,6 +120,7 @@ export const MessageAgent = memo(function MessageAgent({
             telemetry={telemetry}
             assistant={bubble ? { process } : undefined}
             messageId={bubble ? messageId : undefined}
+            selectionYieldKey={selectionYieldKey}
           />
         )}
       </div>
