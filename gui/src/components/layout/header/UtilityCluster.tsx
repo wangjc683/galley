@@ -16,9 +16,11 @@ import { TodoToggleButton } from "./TodoToggleButton";
  * every conversation while there is a main chat; tickets 45, 46), Changes
  * (only while a repository is known or the review is open; the host
  * omits `onToggleChanges` otherwise), 显示 (width / font size / theme),
- * Supervisor SOP, and Settings. Apart from those two these never gate
- * on state (Supervisor SOP shows in both runtime modes), so the cluster
- * and its ARIA landmark render unconditionally.
+ * Supervisor SOP (the external runtime only: the host omits
+ * `onOpenSupervisorSop` on the managed one, where the assistant is the
+ * supervisor; main chat ruling 106, ticket 54), and Settings. 显示 and
+ * Settings never gate on state, so the cluster and its ARIA landmark
+ * render unconditionally.
  */
 export function TopBarUtilityCluster({
   todoOpen = false,
@@ -48,7 +50,8 @@ export function TopBarUtilityCluster({
   themePreference: ThemePreference;
   resolvedTheme: ResolvedTheme;
   onChangeThemePreference?: (preference: ThemePreference) => void;
-  /** Opens Settings → Agent, where the Supervisor SOP is copied. */
+  /** Opens Settings → Agent, where the Supervisor SOP is copied.
+   * Omitted (no button) on the managed runtime (ruling 106). */
   onOpenSupervisorSop?: () => void;
   onOpenSettings?: () => void;
 }) {
@@ -79,14 +82,16 @@ export function TopBarUtilityCluster({
         resolvedTheme={resolvedTheme}
         onChangeThemePreference={onChangeThemePreference}
       />
-      <TooltipLabel text={copy.supervisorSopTooltip}>
-        <TopBarIconButton
-          onClick={onOpenSupervisorSop}
-          aria-label={copy.openSupervisorSop}
-        >
-          <PlugsConnected size={16} weight="thin" />
-        </TopBarIconButton>
-      </TooltipLabel>
+      {onOpenSupervisorSop && (
+        <TooltipLabel text={copy.supervisorSopTooltip}>
+          <TopBarIconButton
+            onClick={onOpenSupervisorSop}
+            aria-label={copy.openSupervisorSop}
+          >
+            <PlugsConnected size={16} weight="thin" />
+          </TopBarIconButton>
+        </TooltipLabel>
+      )}
       <TooltipLabel
         text={copy.settingsShortcut(formatShortcutReadable("Mod+,"))}
       >

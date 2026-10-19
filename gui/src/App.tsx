@@ -825,7 +825,7 @@ function App() {
         // LocalFileWorkspace owns the review and listens on the UI
         // store; the palette renders outside its provider.
         onReviewChanges={requestReview}
-        onOpenSettings={() => openSettings()}
+        onOpenSettings={(tab) => openSettings(tab)}
         onSubmitFreeText={(text) => {
           console.info("[palette] free-text submit:", text);
           setScreen("main");

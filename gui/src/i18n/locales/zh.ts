@@ -664,6 +664,8 @@ export const zhCopy = {
     current: (name: string) => `当前：${name}`,
     resetLayout: "恢复默认布局",
     openSettings: "打开设置",
+    /** 直接打开设置 → 智能体接入，两种运行时都有（裁决 106，票 54）。 */
+    openAgent: "智能体接入",
     reviewChanges: "查看仓库改动",
     /** 内置运行时（有主对话时）打开助理的待办（票 37）。 */
     openTodo: "待办",
@@ -1150,12 +1152,13 @@ export const zhCopy = {
       madeBy: "由 JC Wang 开发 · MIT License",
     },
     agent: {
-      subtitle: "把 Galley 交给本地 Agent 调度",
+      subtitle: "让其他 Agent 用命令行操作 Galley",
       discoveryFile: "CLI 路径文件",
       discoveryDescription:
         "Galley 启动时把 CLI 的绝对路径写进这个文件，Supervisor SOP 第一步读它来定位 `galley`。",
       agentSop: "Supervisor SOP",
-      sopDescription: "复制给你的 Agent，让它学会用 Galley 调度对话。",
+      sopDescription:
+        "复制给你在用的其他 Agent，让它学会操作 Galley 里的对话。",
       sopCapabilities: [
         "继续已有对话",
         "新开一个对话",

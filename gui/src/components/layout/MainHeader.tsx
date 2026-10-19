@@ -59,7 +59,8 @@ export interface MainHeaderProps {
   runtimeIndicator?: RuntimeIndicator;
   onOpenRuntimeSettings?: () => void;
   onOpenModelsSettings?: () => void;
-  /** Supervisor SOP entry in the utility cluster → Settings → Agent. */
+  /** Supervisor SOP entry in the utility cluster → Settings → Agent;
+   * omitted (no button) on the managed runtime (ruling 106). */
   onOpenSupervisorSop?: () => void;
   /**
    * App-update awareness (`.scratch/topbar-update-indicator/PRD.md`).

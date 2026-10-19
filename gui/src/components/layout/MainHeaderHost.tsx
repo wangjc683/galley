@@ -153,7 +153,13 @@ export function MainHeaderHost({
       runtimeIndicator={runtimeIndicator}
       onOpenRuntimeSettings={() => openSettings("runtime")}
       onOpenModelsSettings={() => openSettings("models")}
-      onOpenSupervisorSop={() => openSettings("integration")}
+      // The assistant is the supervisor on the managed runtime: no SOP
+      // icon there, Settings → Agent and ⌘K still reach it (ruling 106).
+      onOpenSupervisorSop={
+        activeRuntimeKind === "managed"
+          ? undefined
+          : () => openSettings("integration")
+      }
       appUpdateStatus={appUpdateStatus}
       hasRunningSessions={hasRunningSessions}
       onRestartAppUpdate={() => {

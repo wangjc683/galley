@@ -637,6 +637,7 @@ export const enCopy: AppCopy = {
     current: (name) => `Current: ${name}`,
     resetLayout: "Reset window layout",
     openSettings: "Open Settings",
+    openAgent: "Agent",
     reviewChanges: "Review repository changes",
     openTodo: "To-do",
     back: "Back",
@@ -1142,13 +1143,13 @@ export const enCopy: AppCopy = {
       madeBy: "Built by JC Wang · MIT License",
     },
     agent: {
-      subtitle: "Let a local Agent coordinate Galley",
+      subtitle: "Let other Agents operate Galley from the command line",
       discoveryFile: "Discovery file",
       discoveryDescription:
         "Galley writes the absolute CLI path here on startup. Galley Supervisor SOP reads it first to locate `galley`.",
       agentSop: "Galley Supervisor SOP",
       sopDescription:
-        "Copy it to your Agent so it learns to drive Galley sessions.",
+        "Copy it to another Agent you use so it learns to drive Galley sessions.",
       sopCapabilities: [
         "Continue an existing session",
         "Start one focused session",

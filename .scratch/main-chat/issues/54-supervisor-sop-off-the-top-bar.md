@@ -60,3 +60,5 @@ Status: ready-for-agent
 3. （可选）切到外置运行时：顶栏照旧有那颗图标。
 
 ## Comments
+
+- 2026-10-19 实现（子代理，分支 `main-chat-54-supervisor-sop-off-the-top-bar`）：顶栏照待办按钮的取法，`MainHeaderHost` 读 `activeRuntimeKind`，内置运行时不传 `onOpenSupervisorSop`，`UtilityCluster` 没有回调就不画这一颗；外置运行时改前改后截图逐字节相同。⌘K 的 `onOpenSettings` 加可选参数 `tab`，「打开设置」不传、照旧落「通用」，「智能体接入」传 `"integration"`，紧跟「打开设置」，两种运行时都有。副标题改为「让其他 Agent 用命令行操作 Galley」/「Let other Agents operate Galley from the command line」；`sopDescription` 改为「复制给你在用的其他 Agent，让它学会操作 Galley 里的对话。」（英文「Copy it to another Agent you use so it learns to drive Galley sessions.」）：内置运行时里助手 Galley 本人就是调度对话的 Agent，「你的 Agent」会读成它。`docs/copy-language-guidelines.md` 副标题那一行一并改了（规范表里记着旧句）。单测两个新文件：`MainHeaderHost.sop.test.tsx`、`CommandPalette.agent.test.tsx`。

@@ -130,21 +130,6 @@
 
 ---
 
-## 设置 Agent 页去掉 Supervisor 叙事（SOP 降级）
-
-- **状态**：暂缓（2026-10-09 JC 按推荐：Supervisor 分三层——退远程叙事、降 SOP、留 CLI 契约；降 SOP 这一层不急）。
-  **2026-10-15 改写**（[助手 PRD](../../.scratch/assistant/PRD.md)，[devlog](./2026-10-15-assistant-runs-the-team.md)）：Supervisor 不再降级，而是进门：主对话的助手就是内置的 Supervisor，SOP 成为助手自己的岗位手册（第 1 步「闭环」随助手手册落地，照 IM 的先例由 Core 写进内置状态）；「复制 SOP」留给接外部 agent 的高级用户与开发者，本节的「改说法」仍成立，但不再是「退出产品叙事」。退的只是 10-09 的远程叙事。
-- **提出**：2026-10-09（[devlog](./2026-10-09-ios-client-and-main-chat-direction.md)）。移动端替代了「人在外面 → IM → Supervisor → CLI」的远程用法；
-  本机 161 个会话里 CLI / supervisor 建的 42 个，带标签的几乎全是试用和测试；社区 galley#29 / #30 作者仍在用 `session send --supervisor` 派活。
-- **启动信号**：~~票 01 改写 PRD 远程叙事时顺手做；或主聊天的原生派活工具落地、IM 委派换过去之后。~~ 助手 PRD 次序第 1 步的助手手册落地之后（10-15 改）。
-- **方案**：设置 → Agent 的「复制 Supervisor SOP」改为「让其他 Agent 操作 Galley」的说法，面向高级用户与开发者；
-  `docs/integrations/galley-supervisor-sop.md` 保留为外部 agent 的参考，不再当产品主叙事。CLI 与 Agent API 契约不动（Rule 3）。
-- **实施要点**：CLAUDE.md / AGENTS.md「Supervisor SOP is copy-first」一段要同步；中英文案按文案规范；galley-supervisor skill 不受影响。
-- **待定**：Agent 页标题要不要改名；本节与上方 galley#30「Supervisor 的队列操作面」的优先级关系（新方向下它更低）。
-- **关联**：[overlays-and-settings「Agent」](../design/overlays-and-settings.md)、`core/src/sop_install.rs`、`docs/integrations/galley-supervisor-sop.md`。
-
----
-
 ## 项目整体归档
 
 - **状态**：暂缓（2026-10-08 JC 按推荐：这次只在删除确认框里加「同时归档」）。

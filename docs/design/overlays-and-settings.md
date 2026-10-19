@@ -106,9 +106,10 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
 
 - 切换模型（Switch model）→ 嵌套二级（展开当前 availableLLMs 列表）
 - Open settings
+- **智能体接入**（2026-10-19，主聊天票 54，[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 106）：`PlugsConnected` 图标，紧跟在「打开设置」后面，直接打开「设置 → 智能体接入」（英文 UI 叫 Agent，同设置侧栏这一页的名字）。两种运行时都有：内置运行时的顶栏不再有 Supervisor SOP 图标（[layout-and-chrome](./layout-and-chrome.md) §4.1 工具簇），这是除设置侧栏外的入口。搜「SOP」「Supervisor」「agent」「cli」「智能体」「接入」都找得到：找它的人多半敲 SOP 的名字，不是页名。「打开设置」照旧落「通用」。
 - ~~Re-run health check~~、~~Attach GA folder~~：2026-10-08 删除（Settings 逐页第二批 D2，JC 选 B）。两项从
   Stage 2 起只打日志、选了什么都不发生；入口唯一在设置 → 运行环境 →「接入外部 GA」。
-- （V0.1 之后加入：New project、Reset window layout、查看仓库改动、待办）
+- （V0.1 之后加入：New project、Reset window layout、查看仓库改动、待办、智能体接入）
 - **待办**（2026-10-16，主聊天票 37；2026-10-17 票 42 起打开面板）：`ListChecks` 图标，「操作」组的第一项，打开 Galley 的待办面板（下文「待办」）：在当前对话右边打开，记当前那一处为开，与顶栏的「待办」按钮同一个去处（按钮在面板开着时再点是关掉，这一项总是打开；2026-10-17 票 46 起，[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 95 第 4 条；票 42–45 时先进 Galley 再在主对话右边打开）；搜「待办」「提醒」「定时」「定时任务」「todo」都找得到。只在内置运行时有主对话时出现。外置运行时没有这一项（它的定时任务入口照旧只在书眉，⌘K 也从来没有过）。
 - **查看仓库改动**（2026-10-04）：`GitDiff` 图标，与 MainHeader「改动」按钮
   同一动作。按钮只在知道仓库时出现，这一项始终在，是不知道仓库时的入口
@@ -754,6 +755,8 @@ Indicator）。
 
 #### Agent
 
+- 页头副标题「让其他 Agent 用命令行操作 Galley」（英文 UI「Let other Agents operate Galley from the command line」；2026-10-19 起，主聊天票 54、裁决 106，此前「把 Galley 交给本地 Agent 调度」）：面向接外部 Agent 的高级用户与开发者，两种运行时都成立；内置运行时里调度对话的是助手 Galley 本人，这一页是让别的 Agent 也能操作 Galley。SOP 说明同理写「复制给你在用的其他 Agent，让它学会操作 Galley 里的对话。」（英文 UI「Copy it to another Agent you use so it learns to drive Galley sessions.」）。页名、按钮、能力列表、例句、高级选项不变。
+- 入口：设置侧栏「智能体接入」；⌘K「智能体接入」（两种运行时，上文「Action 类」）；外置运行时还有顶栏工具簇的 Supervisor SOP 图标（[layout-and-chrome](./layout-and-chrome.md) §4.1）。
 - Copy Supervisor SOP：复制 Supervisor SOP（英文 UI 叫 Galley Supervisor SOP），不写入 GenericAgent memory。
   按钮「已复制」1.5 秒后复位（与例句、「复制详情」同一节奏），右侧「可以发给 Agent 了」保留；SOP 读取
   失败单列一句，不再说「复制失败」。

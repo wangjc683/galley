@@ -10,6 +10,7 @@ import {
   GitDiff,
   ListChecks,
   MagnifyingGlass,
+  PlugsConnected,
   Plus,
   User,
   X,
@@ -17,6 +18,7 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 
+import type { SettingsTab } from "@/components/screens/settings/settings-types";
 import { ShortcutGlyphs } from "@/components/ui/shortcut-glyphs";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { snippetQuoteSegments } from "@/lib/composer-quote";
@@ -71,7 +73,9 @@ export interface CommandPaletteProps {
   /** Open the Git review panel, like the header's Changes button (which
    * hides while no repository is known; this entry never does). */
   onReviewChanges?: () => void;
-  onOpenSettings?: () => void;
+  /** Open Settings: on its first tab without `tab` (打开设置), on
+   * Settings → Agent with `"integration"` (智能体接入, ruling 106). */
+  onOpenSettings?: (tab?: SettingsTab) => void;
   /** Open the assistant's 待办 (main chat ticket 37). Absent on the
    * external runtime: no item. */
   onOpenTodo?: () => void;
@@ -109,7 +113,7 @@ export interface CommandPaletteProps {
  *   - Full-text message hits (SQLite FTS5, query ≥ 2 chars)
  *   - Actions: Switch LLM (nested submenu) / Re-run health check /
  *     Review repository changes / Reset layout / Open settings /
- *     Attach GA folder
+ *     Settings → Agent / Attach GA folder
  *
  * Everything below the pinned creation rows sits in a labeled
  * Command.Group — the root list mixes four semantic kinds, so
@@ -312,6 +316,10 @@ export function CommandPalette(props: CommandPaletteProps) {
               props.onOpenSettings?.();
               close();
             }}
+            onOpenAgentSettings={() => {
+              props.onOpenSettings?.("integration");
+              close();
+            }}
             onOpenTodo={
               props.onOpenTodo
                 ? () => {
@@ -357,6 +365,7 @@ function RootPage({
   onReviewChanges,
   onResetLayout,
   onOpenSettings,
+  onOpenAgentSettings,
   onOpenTodo,
   onSubmitFreeText,
 }: {
@@ -374,6 +383,7 @@ function RootPage({
   onReviewChanges: () => void;
   onResetLayout: () => void;
   onOpenSettings: () => void;
+  onOpenAgentSettings: () => void;
   onOpenTodo?: () => void;
   onSubmitFreeText: (text: string) => void;
 }) {
@@ -536,6 +546,15 @@ function RootPage({
             label={copy.command.openSettings}
             shortcut={formatShortcutReadable("Mod+,")}
           />
+        </Command.Item>
+        {/* Settings → Agent in both runtimes (ruling 106): the managed
+            top bar has no Supervisor SOP icon, and whoever looks for
+            the SOP types its name, not the page's. */}
+        <Command.Item
+          value="agent integration supervisor sop cli 智能体接入 智能体 接入"
+          onSelect={onOpenAgentSettings}
+        >
+          <PaletteRow Icon={PlugsConnected} label={copy.command.openAgent} />
         </Command.Item>
       </Command.Group>
     </>
