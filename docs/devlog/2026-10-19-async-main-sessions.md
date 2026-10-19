@@ -20,3 +20,4 @@
 - `docs/agents/triage-labels.md`：加 `needs-dogfood` 行与「值写在最前」的写法。
 - `docs/agents/issue-tracker.md`：「Lifecycle after shipping」改为合入后先分 `needs-dogfood` / `done`。
 - 现有票里「已合入、待 JC 真机」的散文状态同时归一为 `needs-dogfood`，括号说明逐字保留。
+- 同日后续：`.scratch` 里的中文状态值（暂缓、撤销、被取代、搁置、拆为 …）归一为标准值、原词留在括号最前，PRD 票索引表删掉与票 `Status:` 行重复的状态列。

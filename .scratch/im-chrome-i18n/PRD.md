@@ -1,6 +1,6 @@
 # PRD: IM 渠道外壳多语言（跟随 Galley 界面语言）
 
-Status: 暂缓（2026-09-30 JC 裁决：Discord / Telegram 对话体验打磨收尾后最后做）
+Status: needs-triage（暂缓，2026-09-30 JC 裁决：Discord / Telegram 对话体验打磨收尾后最后做）
 Date: 2026-09-30
 来源：讨论 Discord 停止按钮时 JC 指出「按钮还是中文的，英语用户会很奇怪」；读码确认整层外壳都是中文，按钮只是其一
 关联：[discord-ux 05](../discord-ux/issues/05-drop-stop-button.md)（去掉停止按钮，同一讨论）·

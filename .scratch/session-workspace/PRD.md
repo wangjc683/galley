@@ -1,6 +1,6 @@
 # PRD: Session Workspace（会话产出的落点与可达性）
 
-Status: 暂缓实现（2026-08-13 JC 裁决：设计定案，先不动手）
+Status: needs-triage（暂缓实现，2026-08-13 JC 裁决：设计定案，先不动手）
 Date: 2026-08-13
 关联:
 - 参考实现读码来源 deepseek-ai/deepseek-harness @ `47f9438` 的

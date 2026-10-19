@@ -1,6 +1,6 @@
 # PRD：README 截图第三版（重拍）
 
-Status: 暂缓（2026-10-07 JC 裁决：截图先不动，不重拍）
+Status: needs-triage（暂缓，2026-10-07 JC 裁决：截图先不动，不重拍）
 Date: 2026-10-07
 来源：README 全面排查（2026-10-07），文字已按审计结论改完，截图与图注原样保留
 关联：[deferred「README 截图第三版」](../../docs/devlog/deferred.md) ·

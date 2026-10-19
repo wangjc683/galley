@@ -18,6 +18,15 @@ Write the value first; details may follow in a parenthetical
 (`Status: needs-dogfood（2026-10-19 合入，…）`), so `grep "^Status: <value>"`
 stays exact.
 
+Chinese habit words are not values. Map them to the standard value and keep the
+original word at the start of the parenthetical
+(`Status: needs-triage（暂缓，2026-10-07 JC 裁决：…）`):
+
+- 暂缓 / 暂缓实现 → `needs-triage`
+- 撤销 / 被取代 / 搁置 → `wontfix`
+- A parent ticket split into child tickets → `done`, with
+  `（拆为 …，以子票状态为准）`
+
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding string from this table.
 
 Edit the right-hand column to match whatever vocabulary you actually use.

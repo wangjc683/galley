@@ -1,6 +1,6 @@
 # 回复里的可视化卡片（富 UI 回复）
 
-Status: 暂缓（2026-10-16 JC：方向很好，进暂缓计划；等主对话 / 助理打磨得差不多了再来讨论，目前主对话优先）
+Status: needs-triage（暂缓，2026-10-16 JC：方向很好，进暂缓计划；等主对话 / 助理打磨得差不多了再来讨论，目前主对话优先）
 Date: 2026-10-16
 来源：JC 问 [thesysdev/openui](https://github.com/thesysdev/openui) 是什么，接着提出想让助理的回复不只是 Markdown 文字，而是更生动、更漂亮、甚至可交互的 UI。三路调研（OpenUI 源码、业内横评、Galley 现状）见 [research.md](./research.md)。
 关联：[deferred「回复里的可视化卡片」](../../docs/devlog/deferred.md)、[助手 PRD](../assistant/PRD.md)、[主聊天 PRD](../main-chat/PRD.md)、[Artifacts PRD](../artifacts/PRD.md)（另一件事，见文末）。

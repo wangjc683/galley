@@ -1,6 +1,6 @@
 # 06（F）子任务：父会话、派活标签、卡片
 
-Status: 拆为 [06a](./06a-subtask-dispatch-and-cards.md)（派活与卡片，done，2026-10-13 合入）、[06b](./06b-scheduled-results-as-cards.md)（定时任务改卡片，needs-triage）
+Status: done（拆为 [06a](./06a-subtask-dispatch-and-cards.md)（派活与卡片，done，2026-10-13 合入）、[06b](./06b-scheduled-results-as-cards.md)（定时任务改卡片，wontfix，被裁决 80 取代），以子票状态为准）
 
 来源：主聊天 PRD 裁决 5、9、25、26（2026-10-09、10-12），派活方式由裁决 52（2026-10-13）改为回复里的标签。依赖 02。卡片组件在本票做出来，05 复用。
 

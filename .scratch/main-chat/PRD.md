@@ -507,60 +507,60 @@ README「dense context instead of long」（`README.md:54`）。
 
 ## 票
 
-| 票 | 讨论中的代号 | 内容 | 依赖 | 状态 |
-|---|---|---|---|---|
-| [01](./issues/01-affairs-ledger.md) | A | 事项账本后台挖掘 | — | 撤销（裁决 49，代码由票 10 拆掉） |
-| [02](./issues/02-main-chat-form.md) | B | 主聊天形态 + A1 / A2 切换器 + 排队 / 开旁聊 | — | done（侧栏形态见 07–09） |
-| [03](./issues/03-segments-and-injection.md) | C | 切段、注入、入口层提示词 | 02 | 03a、03b、03d done（事项清单注入由票 10 拆掉；03d `0cec6d94`）；03c needs-triage（按 deferred 的启动信号） |
-| [04](./issues/04-what-it-remembers-page.md) | D | 「它记得我什么」页面 | 01 | 撤销（裁决 49）：04a–04d 合入后整页由票 10 拆掉，问候只留第一段 |
-| [06](./issues/06-subtasks.md) | F | 子任务：父会话、派活标签（裁决 52）、卡片、定时任务改卡片 | 02 | 拆为 06a、06b（裁决 53） |
-| [06a](./issues/06a-subtask-dispatch-and-cards.md) | — | 派活标签、子会话、卡片、面包屑、升级、通知、入口层派活条款 | 03d | done（`0366baf9`–`567b3560`，迁移 048；JC 真机验收随 dev 试用） |
-| [06b](./issues/06b-scheduled-results-as-cards.md) | — | 定时任务的结果改为主对话里的卡片 | 06a | 被上层取代（裁决 80：定时任务结果并进闭环的叫醒，[助手 PRD](../assistant/PRD.md) 次序第 1、2 步） |
-| [07](./issues/07-sidebar-structure-trial.md) | — | 侧栏结构试验：A3 / B / B′ + 演示状态 | 02 | done（JC 定 B′ + 其他对话） |
-| [08](./issues/08-sidebar-finalize.md) | — | 侧栏收尾：B′ 转正、删试验代码、改设计文档 | 07 | done（`a3d7254b`） |
-| [09](./issues/09-section-belonging-trial.md) | — | 「其他对话」归属感试验：C1 / C2 / C3 | 08 | done（JC 定 C3 + 常显 + 加重） |
-| [05](./issues/05-proactive-cards.md) | E | 主动提醒卡片 + IM 出口 | 01、06 | 被上层取代（裁决 80：当场承诺与「在办的事」清单，[助手 PRD](../assistant/PRD.md) 次序第 2 步；IM 出口归次序第 4 步） |
-| [10](./issues/10-remove-affairs-ledger.md) | — | 拆掉事项账本与「记忆」页，问候只留第一段 | — | done（裁决 49，`fa6f9127`–`36affec8`） |
-| [11](./issues/11-carry-last-turns-into-new-segment.md) | — | 新段带上段首之前的最近 3 轮 | 03a | done（裁决 50，`b9c1eef8`） |
-| [12](./issues/12-paged-conversation-history.md) | — | 对话历史按轮分页加载（所有对话） | — | done（裁决 51，`0d086e2a`–`acc3559a`） |
-| [13](./issues/13-new-chat-placeholder-trial.md) | — | 新对话占位试验：现状 / B 亮加号 / A 落点 | 08 | done（裁决 56：JC 定 B，试验 `27635f3a`） |
-| [14](./issues/14-main-chat-subline-trial.md) | — | 主对话行第二行试验：A 只写状态 / A′ 有事才写 / 现状 | 08 | done（裁决 58：JC 定 A，试验 `76820c32`） |
-| [15](./issues/15-reset-main-chat.md) | — | 重置主对话：设置深处、长按 5 秒 | 02、06a | done（裁决 59，`71f2323e`–`8d7c655f`，JC 真机验收通过） |
-| [16](./issues/16-assistant-spaces-shell-trial.md) | — | 助手与工作台两个空间的壳：现状 / 乙 左上开关 / 甲 左侧图标栏 | 08、06a | done（JC 真机看过甲、乙，都不要，裁决 62；试验代码由票 17 撤掉） |
-| [17](./issues/17-sidebar-assistant-region-trial.md) | — | 侧栏上半块：现状 / 方案 2 书眉就是助手 / 方案 3 助手卡片 / 3′ 大头像 | 16 | done（JC 真机比完选 3，裁决 64；按赢家撤由票 18 做） |
-| [18](./issues/18-assistant-card-final.md) | — | 助手卡片定稿：方案 3、书眉三个图标、IM 列表的一行 | 17 | done（裁决 64、65；JC 真机验收通过，三处出入全保留） |
-| [19](./issues/19-assistant-im-rendering-trial.md) | — | 主区的 IM 画法：气泡 / 过程 / 时间 / 滚动四件，切换器加演示对话 | 18 | done（裁决 66、67：JC 真机比完，四件都取推荐档；试验 `a945378e`，由票 20 撤） |
-| [20](./issues/20-assistant-im-rendering-final.md) | — | 主区的 IM 画法定稿：C、一行、居中、贴底，问候的时间条，气泡底的 token | 19 | done（裁决 67；合入 `01214080`，JC 真机验收通过） |
-| [21](./issues/21-assistant-process-button.md) | — | 助手回复的过程按钮：步数、用时、token 收进展开区，不画上下文；卡片与顶栏在跑时说主区那一句 | 20 | done（裁决 68；`dfd43968`–`294c27cc`，JC 真机验收通过，图标留 `Footprints`） |
-| [22](./issues/22-assistant-process-card.md) | — | 展开的过程改成卡片：每步一行（那句话 + 网站或文件名），最多 8 行、超出内滚，单步可点开细节 | 21 | done（裁决 69；`94cdb8a7`–`8f1d9fde`，JC 真机验收通过） |
-| [23](./issues/23-galley-icon-and-avatar.md) | — | 新应用图标（扁平的木头机器人 G）与助手头像：矢量母图、各平台导出、头像裁圆加描边、README 资源 | — | done（裁决 70；合并提交 `4fc4ed53`，JC 真机验收通过） |
-| [24](./issues/24-assistant-composer-trial.md) | — | 主对话输入框试验：现状 / 一行式（模型短语在发送键左边），切换器；直接排队、去提示行、「发消息…」直接做 | 22 | done（裁决 71、72：JC 真机比完选一行式；试验 `45c13508`，由票 25 撤） |
-| [25](./issues/25-assistant-composer-final.md) | — | 主对话输入框定稿：一行式转正、离底边 24px、撤切换器与演示、设计文档 | 24 | done（裁决 72；合并提交 `ffd7f9b2`，JC 真机验收；弹层偏左另记裁决 76） |
-| [27](./issues/27-workbench-one-line-composer.md) | — | 工作台会话的输入框也改一行式、保留提示行，输入框长高时保持贴底 | 25 | done（裁决 74、76；合并提交 `61fc3b15`，JC 真机验收通过） |
-| [28](./issues/28-header-menu-find-and-reset.md) | — | 顶栏菜单：查找聊天记录（⌘K 面板带范围、⌘F）、重置主对话 | 27 | done（裁决 77；合并提交 `7541197a`，JC 真机验收通过） |
-| [29](./issues/29-subtask-wake-core.md) | — | 子任务叫醒助手（Core）：触发、待报与时机、叫醒行、打回次数、`<no-reply/>`、回放压缩、搜索排除、送不出去的退路 | 06a | done（裁决 82；2026-10-16 合入，待 JC 真机验收） |
-| [30](./issues/30-assistant-manual-and-entry-layer.md) | — | 入口层派活条款改写、助手手册（内嵌、写进内置状态）、真模型评测叫醒措辞 | 03d | done（裁决 82；2026-10-16 合入，待 JC 真机验收） |
-| [31](./issues/31-subtask-wake-gui.md) | — | 界面：藏起叫醒行与不出声的回复、卡片最后一句、通知一个声音、子任务卡片「第 N 轮 · 」 | 29 | done（裁决 82；2026-10-16 合入，待 JC 真机验收） |
-| [26](./issues/26-user-bubble-selection-copy.md) | — | 你的气泡不挂悬停复制，选中文字时弹浮动复制 | 20 | done（裁决 73，`3b029e56`，JC 真机验收；工作台有意不跟） |
-| [32](./issues/32-delete-single-message.md) | — | 主对话删单条消息：右键「删除」、库与 runner、手机端事件 | 29、31 | done（裁决 83，合并提交 `57fc1853`，JC 真机验收；入口与确认框由票 38 改） |
-| [33](./issues/33-schedule-once-and-wake.md) | — | 定时任务加「一次性」与「叫醒助理」、补发、软删除、表单任务跑完也叫醒（Core） | 29、32 | merged（裁决 84，合并提交 `16d7f2e1`） |
-| [34](./issues/34-cli-schedule-commands.md) | — | CLI：`galley schedule` 命令族 | 33 | merged（裁决 84，合并提交 `16d7f2e1`） |
-| [35](./issues/35-cli-more-hands.md) | — | CLI：补齐授权前两级的手（改名、置顶、删除、项目、默认模型） | —（与 34 同改分发表） | merged（裁决 84，合并提交 `20cf949c`） |
-| [36](./issues/36-manual-and-in-flight.md) | — | 助理手册、入口层、「在办的事」、真模型评测 | 34、35、37 | merged（裁决 84，合并提交 `3e22b3e8`） |
-| [37](./issues/37-reminder-card-and-schedule-list.md) | — | 界面：提醒卡片、「待办」（书眉入口与列表）、送不出去的通知 | 33 | merged（裁决 84、86） |
-| [38](./issues/38-message-menu-and-undo.md) | — | 消息菜单（右键与回复的「⋯」）、删除改为撤销提示条 | 32 | merged（裁决 85，合并提交 `ab4b0783`），待 JC 真机验收 |
-| [39](./issues/39-todo-core.md) | — | 待办记录（Core）：表、提醒挂在待办上、查询改组、「在办的事」带上待办 | 33、37 | merged（裁决 91） |
-| [40](./issues/40-todo-cli.md) | — | CLI：`galley todo` 命令族 | 39 | merged（裁决 91） |
-| [41](./issues/41-todo-manual-and-eval.md) | — | 手册与评测：什么时候记待办、「办好了」去勾、改时间 | 40 | merged（裁决 91） |
-| [42](./issues/42-todo-panel-and-sidebar.md) | — | 界面：卡片下面的「待办」行、对话旁边的面板、方框与划线、「说说这件」、对话里的待办卡片、切换器 | 39 | merged（裁决 91；入口由票 45 改） |
-| [43](./issues/43-todo-cards-persist-and-noted-date.md) | — | 待办卡片长留、行上写「记下」的日子 | 42 | merged |
-| [44](./issues/44-nudge-is-own-reminder.md) | — | 只要提醒的事用 Galley 自己的提醒（手册与评测） | 41 | merged（裁决 92） |
-| [45](./issues/45-todo-entry-in-top-bar.md) | — | 待办入口挪到 Galley 对话的顶栏，面板定 B1 + C1 | 42、43 | merged（裁决 93；条件与记住开关由票 46 改） |
-| [46](./issues/46-todo-panel-everywhere.md) | — | 待办面板与主对话解耦：每条对话的顶栏都能开、开关两处记、跳转带面板、空状态精简、工作台提示词补待办 | 45 | merged（裁决 95，合并提交 `ee89d54a`），JC 真机验过工作台跳回 |
-| [47](./issues/47-quote-in-bar-and-live-line-summary.md) | — | 回复行动条加「引用」；运行中那一行没有旁白时用 summary | 38 | needs-dogfood（裁决 99、100，`3a887520`） |
-| [48](./issues/48-subtask-question-answered-in-main-chat.md) | — | 子任务提问只在主对话里答，卡片只写状态；别处答掉后主对话里的提问怎么收尾（先查） | 06a、29、31 | ready-for-agent（裁决 101） |
-| [49](./issues/49-lock-opened-subtask-while-relayed.md) | — | Galley 在处理或已转述子任务的提问时，打开的子任务里不能答 | 48 | ready-for-agent（裁决 102） |
-| [50](./issues/50-restored-question-after-restart.md) | — | 重启后恢复出来的提问被当成普通消息（子任务升级进侧栏、主对话开新段） | — | needs-triage |
+| 票 | 讨论中的代号 | 内容 | 依赖 |
+|---|---|---|---|
+| [01](./issues/01-affairs-ledger.md) | A | 事项账本后台挖掘 | — |
+| [02](./issues/02-main-chat-form.md) | B | 主聊天形态 + A1 / A2 切换器 + 排队 / 开旁聊 | — |
+| [03](./issues/03-segments-and-injection.md) | C | 切段、注入、入口层提示词 | 02 |
+| [04](./issues/04-what-it-remembers-page.md) | D | 「它记得我什么」页面 | 01 |
+| [06](./issues/06-subtasks.md) | F | 子任务：父会话、派活标签（裁决 52）、卡片、定时任务改卡片 | 02 |
+| [06a](./issues/06a-subtask-dispatch-and-cards.md) | — | 派活标签、子会话、卡片、面包屑、升级、通知、入口层派活条款 | 03d |
+| [06b](./issues/06b-scheduled-results-as-cards.md) | — | 定时任务的结果改为主对话里的卡片 | 06a |
+| [07](./issues/07-sidebar-structure-trial.md) | — | 侧栏结构试验：A3 / B / B′ + 演示状态 | 02 |
+| [08](./issues/08-sidebar-finalize.md) | — | 侧栏收尾：B′ 转正、删试验代码、改设计文档 | 07 |
+| [09](./issues/09-section-belonging-trial.md) | — | 「其他对话」归属感试验：C1 / C2 / C3 | 08 |
+| [05](./issues/05-proactive-cards.md) | E | 主动提醒卡片 + IM 出口 | 01、06 |
+| [10](./issues/10-remove-affairs-ledger.md) | — | 拆掉事项账本与「记忆」页，问候只留第一段 | — |
+| [11](./issues/11-carry-last-turns-into-new-segment.md) | — | 新段带上段首之前的最近 3 轮 | 03a |
+| [12](./issues/12-paged-conversation-history.md) | — | 对话历史按轮分页加载（所有对话） | — |
+| [13](./issues/13-new-chat-placeholder-trial.md) | — | 新对话占位试验：现状 / B 亮加号 / A 落点 | 08 |
+| [14](./issues/14-main-chat-subline-trial.md) | — | 主对话行第二行试验：A 只写状态 / A′ 有事才写 / 现状 | 08 |
+| [15](./issues/15-reset-main-chat.md) | — | 重置主对话：设置深处、长按 5 秒 | 02、06a |
+| [16](./issues/16-assistant-spaces-shell-trial.md) | — | 助手与工作台两个空间的壳：现状 / 乙 左上开关 / 甲 左侧图标栏 | 08、06a |
+| [17](./issues/17-sidebar-assistant-region-trial.md) | — | 侧栏上半块：现状 / 方案 2 书眉就是助手 / 方案 3 助手卡片 / 3′ 大头像 | 16 |
+| [18](./issues/18-assistant-card-final.md) | — | 助手卡片定稿：方案 3、书眉三个图标、IM 列表的一行 | 17 |
+| [19](./issues/19-assistant-im-rendering-trial.md) | — | 主区的 IM 画法：气泡 / 过程 / 时间 / 滚动四件，切换器加演示对话 | 18 |
+| [20](./issues/20-assistant-im-rendering-final.md) | — | 主区的 IM 画法定稿：C、一行、居中、贴底，问候的时间条，气泡底的 token | 19 |
+| [21](./issues/21-assistant-process-button.md) | — | 助手回复的过程按钮：步数、用时、token 收进展开区，不画上下文；卡片与顶栏在跑时说主区那一句 | 20 |
+| [22](./issues/22-assistant-process-card.md) | — | 展开的过程改成卡片：每步一行（那句话 + 网站或文件名），最多 8 行、超出内滚，单步可点开细节 | 21 |
+| [23](./issues/23-galley-icon-and-avatar.md) | — | 新应用图标（扁平的木头机器人 G）与助手头像：矢量母图、各平台导出、头像裁圆加描边、README 资源 | — |
+| [24](./issues/24-assistant-composer-trial.md) | — | 主对话输入框试验：现状 / 一行式（模型短语在发送键左边），切换器；直接排队、去提示行、「发消息…」直接做 | 22 |
+| [25](./issues/25-assistant-composer-final.md) | — | 主对话输入框定稿：一行式转正、离底边 24px、撤切换器与演示、设计文档 | 24 |
+| [27](./issues/27-workbench-one-line-composer.md) | — | 工作台会话的输入框也改一行式、保留提示行，输入框长高时保持贴底 | 25 |
+| [28](./issues/28-header-menu-find-and-reset.md) | — | 顶栏菜单：查找聊天记录（⌘K 面板带范围、⌘F）、重置主对话 | 27 |
+| [29](./issues/29-subtask-wake-core.md) | — | 子任务叫醒助手（Core）：触发、待报与时机、叫醒行、打回次数、`<no-reply/>`、回放压缩、搜索排除、送不出去的退路 | 06a |
+| [30](./issues/30-assistant-manual-and-entry-layer.md) | — | 入口层派活条款改写、助手手册（内嵌、写进内置状态）、真模型评测叫醒措辞 | 03d |
+| [31](./issues/31-subtask-wake-gui.md) | — | 界面：藏起叫醒行与不出声的回复、卡片最后一句、通知一个声音、子任务卡片「第 N 轮 · 」 | 29 |
+| [26](./issues/26-user-bubble-selection-copy.md) | — | 你的气泡不挂悬停复制，选中文字时弹浮动复制 | 20 |
+| [32](./issues/32-delete-single-message.md) | — | 主对话删单条消息：右键「删除」、库与 runner、手机端事件 | 29、31 |
+| [33](./issues/33-schedule-once-and-wake.md) | — | 定时任务加「一次性」与「叫醒助理」、补发、软删除、表单任务跑完也叫醒（Core） | 29、32 |
+| [34](./issues/34-cli-schedule-commands.md) | — | CLI：`galley schedule` 命令族 | 33 |
+| [35](./issues/35-cli-more-hands.md) | — | CLI：补齐授权前两级的手（改名、置顶、删除、项目、默认模型） | —（与 34 同改分发表） |
+| [36](./issues/36-manual-and-in-flight.md) | — | 助理手册、入口层、「在办的事」、真模型评测 | 34、35、37 |
+| [37](./issues/37-reminder-card-and-schedule-list.md) | — | 界面：提醒卡片、「待办」（书眉入口与列表）、送不出去的通知 | 33 |
+| [38](./issues/38-message-menu-and-undo.md) | — | 消息菜单（右键与回复的「⋯」）、删除改为撤销提示条 | 32 |
+| [39](./issues/39-todo-core.md) | — | 待办记录（Core）：表、提醒挂在待办上、查询改组、「在办的事」带上待办 | 33、37 |
+| [40](./issues/40-todo-cli.md) | — | CLI：`galley todo` 命令族 | 39 |
+| [41](./issues/41-todo-manual-and-eval.md) | — | 手册与评测：什么时候记待办、「办好了」去勾、改时间 | 40 |
+| [42](./issues/42-todo-panel-and-sidebar.md) | — | 界面：卡片下面的「待办」行、对话旁边的面板、方框与划线、「说说这件」、对话里的待办卡片、切换器 | 39 |
+| [43](./issues/43-todo-cards-persist-and-noted-date.md) | — | 待办卡片长留、行上写「记下」的日子 | 42 |
+| [44](./issues/44-nudge-is-own-reminder.md) | — | 只要提醒的事用 Galley 自己的提醒（手册与评测） | 41 |
+| [45](./issues/45-todo-entry-in-top-bar.md) | — | 待办入口挪到 Galley 对话的顶栏，面板定 B1 + C1 | 42、43 |
+| [46](./issues/46-todo-panel-everywhere.md) | — | 待办面板与主对话解耦：每条对话的顶栏都能开、开关两处记、跳转带面板、空状态精简、工作台提示词补待办 | 45 |
+| [47](./issues/47-quote-in-bar-and-live-line-summary.md) | — | 回复行动条加「引用」；运行中那一行没有旁白时用 summary | 38 |
+| [48](./issues/48-subtask-question-answered-in-main-chat.md) | — | 子任务提问只在主对话里答，卡片只写状态；别处答掉后主对话里的提问怎么收尾（先查） | 06a、29、31 |
+| [49](./issues/49-lock-opened-subtask-while-relayed.md) | — | Galley 在处理或已转述子任务的提问时，打开的子任务里不能答 | 48 |
+| [50](./issues/50-restored-question-after-restart.md) | — | 重启后恢复出来的提问被当成普通消息（子任务升级进侧栏、主对话开新段） | — |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 

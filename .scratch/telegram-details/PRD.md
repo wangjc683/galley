@@ -61,19 +61,19 @@ JC：「1，做；2，刚试了，目前新消息是停在底部附近，如果�
 
 ## 票
 
-| 票 | 内容 | 状态 |
-|---|---|---|
-| [01](./issues/01-drafts-persist.md) | 草稿存盘（裁决 1） | done |
-| [02](./issues/02-quote-selection.md) | 选中文字引用进输入框（裁决 3） | done |
-| [03](./issues/03-type-to-focus.md) | 打字即聚焦、点按钮与空白不失焦（裁决 4） | done |
-| [04](./issues/04-scroll-rules.md) | 远跳先瞬移、平滑滚动认减少动态、四处小出入（裁决 5） | done |
-| [05](./issues/05-variants-composer-corners.md) | 切换器：输入框长高动画、主对话连发组内圆角（裁决 6） | done |
-| [06](./issues/06-workbench-live-tail.md) | 工作台发出后留白、你的话停在顶上、回复超出一屏不跟随（裁决 2） | done |
-| [07](./issues/07-quote-strip-and-bubble.md) | 引用改成输入框上方的一条，气泡里单独画引用（裁决 3a），切换器与 05 合用 | done |
-| [08](./issues/08-finalize-switcher.md) | 拆切换器定稿：A3（缓动 `--ease-firm`）、B1、C2、D2 | done |
-| [09](./issues/09-ask-user-into-view.md) | 工作台跑的途中问你、问题出在屏幕以下时滚过去（裁决 2a） | done |
-| [10](./issues/10-main-chat-bubble-density.md) | 切换器：主对话气泡里的字号、行距、段距（裁决 8） | done（V1） |
-| [11](./issues/11-finalize-bubble-density.md) | 拆票 10 的切换器、V1 写死（裁决 8） | done |
+| 票 | 内容 |
+|---|---|
+| [01](./issues/01-drafts-persist.md) | 草稿存盘（裁决 1） |
+| [02](./issues/02-quote-selection.md) | 选中文字引用进输入框（裁决 3） |
+| [03](./issues/03-type-to-focus.md) | 打字即聚焦、点按钮与空白不失焦（裁决 4） |
+| [04](./issues/04-scroll-rules.md) | 远跳先瞬移、平滑滚动认减少动态、四处小出入（裁决 5） |
+| [05](./issues/05-variants-composer-corners.md) | 切换器：输入框长高动画、主对话连发组内圆角（裁决 6） |
+| [06](./issues/06-workbench-live-tail.md) | 工作台发出后留白、你的话停在顶上、回复超出一屏不跟随（裁决 2） |
+| [07](./issues/07-quote-strip-and-bubble.md) | 引用改成输入框上方的一条，气泡里单独画引用（裁决 3a），切换器与 05 合用 |
+| [08](./issues/08-finalize-switcher.md) | 拆切换器定稿：A3（缓动 `--ease-firm`）、B1、C2、D2 |
+| [09](./issues/09-ask-user-into-view.md) | 工作台跑的途中问你、问题出在屏幕以下时滚过去（裁决 2a） |
+| [10](./issues/10-main-chat-bubble-density.md) | 切换器：主对话气泡里的字号、行距、段距（裁决 8） |
+| [11](./issues/11-finalize-bubble-density.md) | 拆票 10 的切换器、V1 写死（裁决 8） |
 
 01–03 都动输入框，同一个子代理按序做；04、05 各一个子代理，并行；06 接在 04 后面（用它的滚动函数）。
 

@@ -1,6 +1,6 @@
 # 研读笔记：OpenWorker（andrewyng/openworker）
 
-Status: 参考资料（2026-08-07 两轮精读；Artifacts 部分已转化为本目录 PRD）
+Status: done（参考资料，不是待办；2026-08-07 两轮精读；Artifacts 部分已转化为本目录 PRD）
 源码基线: github.com/andrewyng/openworker @ `01b6f83`（2026-08-01）。
 文中 `file:line` 均指该 commit；上游迭代极快（发布两周合并 393 个 PR），
 复核时注意漂移。

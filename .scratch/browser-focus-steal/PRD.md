@@ -1,6 +1,6 @@
 # PRD：浏览器操作抢走前台
 
-Status: 暂缓（2026-10-07 JC 裁决：Chrome 用户基本不受影响，保持现状）
+Status: needs-triage（暂缓，2026-10-07 JC 裁决：Chrome 用户基本不受影响，保持现状）
 Date: 2026-10-07
 来源：JC 提议「锁定前台显示」按钮——Galley 每次调用浏览器，浏览器就跳到前台把 Galley 挡住，刚切回去又被挡
 关联：[deferred「浏览器操作抢走前台」](../../docs/devlog/deferred.md) ·
