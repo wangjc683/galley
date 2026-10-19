@@ -15,6 +15,24 @@ import { Sidebar } from "./Sidebar";
 
 // useCopy falls back to the zh copy without a CopyProvider.
 
+// 票 65 临时切换器，定档后由拆除票删掉：these tests describe today's
+// avatar and card (现状, what a production build draws); the trial's own
+// tests are under assistant/face-trial.
+vi.mock(
+  "@/components/layout/assistant/face-trial/face-trial",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@/components/layout/assistant/face-trial/face-trial")
+    >()),
+    useAssistantFaceTrial: () => ({
+      motion: null,
+      layout: null,
+      demo: false,
+      pinned: null,
+    }),
+  }),
+);
+
 // A row's live state (running, a pending question, a runtime error) is
 // store-derived and can't be seeded under static rendering; override
 // the view by session id on top of the real hook.

@@ -8,6 +8,11 @@ import {
   AssistantAvatar,
   AssistantAvatarBadge,
 } from "@/components/layout/assistant/AssistantAvatar";
+// 票 65 临时切换器，定档后由拆除票删掉。
+import {
+  type CardLayoutTier,
+  useAssistantFaceTrial,
+} from "@/components/layout/assistant/face-trial/face-trial";
 import {
   useAssistantLastMessage,
   useAssistantState,
@@ -16,6 +21,7 @@ import {
 } from "@/hooks/useAssistantState";
 import { useAssistantTyping } from "@/hooks/useAssistantSentence";
 import { useDayStamp } from "@/hooks/useDayStamp";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import {
   type AssistantCardLine,
   type AssistantStateKind,
@@ -25,6 +31,7 @@ import { useCopy, useLanguage } from "@/lib/i18n";
 import { formatListTime } from "@/lib/message-time";
 import { truncationFadeRef } from "@/lib/truncation-fade";
 import { cn } from "@/lib/utils";
+import { signalAssistantLook } from "@/stores/assistant-face";
 import type { Session } from "@/types/session";
 
 import {
@@ -93,6 +100,51 @@ function lineTone(line: AssistantCardLine): string {
       return "text-ink-muted";
   }
 }
+
+/** 票 65 临时切换器，定档后由拆除票删掉：the stage's fill. The card
+ * is not filled when selected (ruling 118 point 3: no 282 × 140 of
+ * selected colour from launch on); a brand ring round the avatar and the
+ * name's full ink say it instead. Hover fills the card as today's does,
+ * and a selected card does not answer it. The badge's ring is the
+ * chrome or the hover fill under it. */
+function stageFill(selected: boolean): string {
+  return selected
+    ? "[--assistant-ground:var(--color-chrome)]"
+    : "[--assistant-ground:var(--color-chrome)] hover:bg-hover hover:[--assistant-ground:var(--color-hover)]";
+}
+
+/** 票 65 临时切换器，定档后由拆除票删掉：the trial cards' avatar and
+ * badges, with the narrow sidebar's smaller avatar by container query —
+ * one avatar box, its size switched; the badge for each size, one shown.
+ *
+ *   行 64     64px from a 168px sidebar, 40px under it: the text column
+ *             is the sidebar less 112px, and 「Galley」 (about 48px)
+ *             needs 160; under 168 it gets today's card's 40px and grid.
+ *   舞台 72   72px from 184px, 48px under it (ticket 42's old masthead
+ *             threshold): under 184 a 72px face takes over two fifths of
+ *             the card's width and the zone reads as a poster, not the
+ *             head of a list. The avatar's slot stays 72px high, so
+ *             crossing it never moves the list.
+ */
+const TRIAL_AVATAR: Record<
+  CardLayoutTier,
+  { size: 64 | 72; narrow: 40 | 48; box: string; wide: string; tight: string }
+> = {
+  row64: {
+    size: 64,
+    narrow: 40,
+    box: "size-10 @min-[168px]/sidebar:size-16",
+    wide: "hidden @min-[168px]/sidebar:inline-flex",
+    tight: "@min-[168px]/sidebar:hidden",
+  },
+  stage72: {
+    size: 72,
+    narrow: 48,
+    box: "size-12 @min-[184px]/sidebar:size-18",
+    wide: "hidden @min-[184px]/sidebar:inline-flex",
+    tight: "@min-[184px]/sidebar:hidden",
+  },
+};
 
 function lineText(line: AssistantCardLine): string {
   return "prefix" in line && line.prefix
@@ -204,6 +256,137 @@ export function SidebarAssistantCard({
     }
     onOpen();
   };
+  // 票 65 临时切换器，定档后由拆除票删掉：the trial's face and layouts;
+  // production keeps today's card below.
+  const trial = useAssistantFaceTrial();
+  // Under reduced motion the face holds still, so the spinner comes back
+  // while it runs (ruling 117 point 8): a woken round says the last
+  // message on the second line, and the spinner is then its one sign.
+  const reducedMotion = usePrefersReducedMotion();
+  const nameLine = (
+    <>
+      <span
+        className={cn(
+          "min-w-0 truncate text-[14px] leading-5",
+          state.kind === "idle" ? "font-medium" : "font-semibold",
+        )}
+      >
+        {copy.assistant.name}
+      </span>
+      {time && (
+        <span
+          data-role="assistant-time"
+          className="shrink-0 text-[11px] leading-5 tabular-nums text-ink-muted"
+        >
+          {time}
+        </span>
+      )}
+    </>
+  );
+  const secondLine = (extra?: string) =>
+    line && (
+      <span
+        key={`${line.kind}:${fullLine}`}
+        data-role="assistant-card-line"
+        data-kind={line.kind}
+        ref={truncationFadeRef}
+        className={cn(
+          "truncate-fade mt-0.5 text-[12px] leading-[1.4] tabular-nums",
+          lineTone(line),
+          extra,
+        )}
+      >
+        {"prefix" in line && line.prefix && (
+          <span className={prefixTone(line)}>{line.prefix}</span>
+        )}
+        {line.text}
+      </span>
+    );
+  if (trial.layout !== null) {
+    const layout = trial.layout;
+    const avatar = TRIAL_AVATAR[layout];
+    const animated = trial.motion !== null;
+    const stage = layout === "stage72";
+    const face = (
+      <span className="relative inline-flex shrink-0">
+        {stage && selected && (
+          <span
+            aria-hidden
+            data-role="assistant-selected-ring"
+            className="pointer-events-none absolute -inset-1 rounded-full border-2 border-brand"
+          />
+        )}
+        <AssistantAvatar
+          size={avatar.size}
+          animated={animated}
+          className={avatar.box}
+        />
+        {[avatar.narrow, avatar.size].map((size) => (
+          <AssistantAvatarBadge
+            key={`${size}:${state.kind}`}
+            kind={state.kind}
+            size={size}
+            pop={pop}
+            faceRuns={animated && !reducedMotion}
+            className={size === avatar.size ? avatar.wide : avatar.tight}
+          />
+        ))}
+      </span>
+    );
+    return (
+      <button
+        type="button"
+        data-role="assistant-card"
+        data-layout={layout}
+        data-state={state.kind}
+        aria-label={label}
+        aria-current={selected ? "page" : undefined}
+        onPointerDown={handlePointerDown}
+        onPointerEnter={animated ? signalAssistantLook : undefined}
+        onClick={handleClick}
+        className={cn(
+          "mx-1.5 flex w-[calc(100%-12px)] rounded-md px-3 text-ink",
+          stage
+            ? "flex-col items-center pb-1.5 pt-1.5 text-center"
+            : "h-[78px] items-center gap-3 text-left",
+          "transition-none active:translate-y-px active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+          "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
+          stage ? stageFill(selected) : cardFill(selected),
+        )}
+      >
+        {stage ? (
+          <>
+            <span className="flex h-18 items-center justify-center">
+              {face}
+            </span>
+            {/* The name, the time small after it, the pair centred;
+                the time yields whole when they do not fit, as on the
+                row card. Unselected the name steps back to ink-soft,
+                selected it takes the full ink. */}
+            <span
+              className={cn(
+                "mt-1.5 flex h-5 min-w-0 max-w-full flex-wrap items-baseline justify-center gap-x-1.5 overflow-hidden",
+                selected ? "text-ink" : "text-ink-soft",
+              )}
+            >
+              {nameLine}
+            </span>
+            {secondLine("max-w-full")}
+          </>
+        ) : (
+          <>
+            {face}
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="flex h-5 min-w-0 flex-wrap items-baseline justify-between gap-x-2 overflow-hidden">
+                {nameLine}
+              </span>
+              {secondLine()}
+            </span>
+          </>
+        )}
+      </button>
+    );
+  }
   return (
     <button
       type="button"
