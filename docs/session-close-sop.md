@@ -88,6 +88,45 @@ documentation diff. Do not commit or close the session unless asked.
    - Include latest commit, verification run, completed outcome, and next
      useful step.
    - Keep the handoff short enough for the next session to scan quickly.
+   - The handoff lives in the closeout answer, which the next session cannot
+     read. Anything the next session needs must already be in a ticket
+     `Status:` line, the devlog, or agent memory.
+
+## Main Sessions With Background Agents
+
+A main session discusses, writes tickets, dispatches them to background agents
+(each in its own git worktree), verifies, merges, and commits. One main session
+covers one cluster of related tickets and closes when that cluster is merged
+and recorded. Record each ruling where it belongs (ticket Comments, PRD) when
+it is made; the closeout reconciles, it is not the first write.
+
+Before step 7, also pass this close gate:
+
+- No background agent is still running: its result only reaches the session
+  that started it.
+- Every merged worktree is removed (`git worktree remove`, then delete its
+  branch). Every unmerged worktree has its work committed on its branch, and
+  the ticket's `Status:` line or Comments names the branch. Worktrees under a
+  temp or scratchpad directory do not survive a reboot; a branch does.
+- Tickets that are merged but not yet dogfooded by the user are set to
+  `needs-dogfood` (see [triage labels](./agents/triage-labels.md)). Waiting on
+  dogfood does not keep the session open.
+- The closeout answer includes a ruling reconciliation: every ruling made in
+  the session, with the `file:line` where it is recorded.
+
+## Starting The Next Main Session
+
+There is no handoff file. Ticket `Status:` lines are the single home for work
+state, so the next main session rebuilds it:
+
+1. List open tickets, including `needs-dogfood` ones waiting on the user:
+
+   ```bash
+   grep -rn "^Status:" .scratch --include="*.md" | grep -vE "Status: (done|wontfix|resolved)"
+   ```
+
+2. Read `git log --oneline` since the previous closeout's commit.
+3. Read the PRD and tickets of the topic the user names.
 
 ## Knowledge Sync Rules
 
@@ -124,5 +163,6 @@ A good closeout answer should include:
 - verification results
 - commit hash / message
 - known remaining risks or next step
+- ruling reconciliation (main sessions; see above)
 
 Avoid a full transcript recap. The devlog is the durable narrative.

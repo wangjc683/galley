@@ -1,6 +1,6 @@
 # 29 子任务叫醒助手（Core）
 
-Status: done（2026-10-16 合入，待 JC 真机验收）
+Status: needs-dogfood（2026-10-16 合入，待 JC 真机验收）
 
 来源：[助手 PRD](../../assistant/PRD.md) 裁决 2（闭环）、8（第 1 步执行定稿）；[主对话 PRD](../PRD.md) 裁决 80、82。
 同批：[30](./30-assistant-manual-and-entry-layer.md)（入口层与助手手册，另一个 worktree）、[31](./31-subtask-wake-gui.md)（界面，与本票同一个 worktree，按目录分域）。

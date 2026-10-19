@@ -12,8 +12,12 @@ Issues and PRDs for this repo live as markdown files in `.scratch/`.
 
 ## Lifecycle after shipping
 
-When an issue's work ships, set `Status: done`. When the whole feature has
-shipped and its dogfood round closed:
+When an issue's work is merged and machine-verified, set `Status: needs-dogfood`
+if it still needs the user's dogfood in the real app, otherwise `Status: done`.
+Set `done` once the dogfood passes; if it finds more work, note it under
+Comments and set the ticket back to `ready-for-agent`.
+
+When the whole feature has shipped and its dogfood round closed:
 
 1. Check the feature's devlog entries cover whatever in the PRD / issues
    still has long-term value (open questions, rejected options); move any

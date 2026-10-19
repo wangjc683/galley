@@ -1,6 +1,6 @@
 # 06a 子任务：派活标签、子会话、卡片
 
-Status: done（`0366baf9`、`8fbeab66`、`567b3560`，2026-10-13 合入本地 main，未推送；JC 真机验收待做，见 Comments 末条）
+Status: needs-dogfood（`0366baf9`、`8fbeab66`、`567b3560`，2026-10-13 合入 main，已推送〔2026-10-19 核实在 origin/main〕；JC 真机验收待做，见 Comments 末条）
 
 来源：主聊天 PRD 裁决 9、25、52 与 2026-10-13 JC 按建议定的五点（见票 [06](./06-subtasks.md) Comments）。依赖 02、03d（入口层已接入，`0cec6d94`）。定时任务改卡片是 [06b](./06b-scheduled-results-as-cards.md)。
 

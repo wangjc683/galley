@@ -16,6 +16,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ## 时间线
 
+### 2026-10-19
+- [主会话 + 后台代理：一组票一个主会话，真机验收挂在票上](./2026-10-19-async-main-sessions.md) — 主会话讨论、写票、派后台代理在 worktree 里做、验收合入；一组票完成 = 合入 + 机器验收 + 记录到位，真机验收改挂票上，新增 `needs-dogfood`（真机试用常持续数天）；不设交接文件，新会话从 `Status:` 行、`git log`、话题 PRD 重建（否决覆盖式 `handoff.md` 与粘贴收尾回复）；收尾闸门：无在途代理、worktree 清理或分支名进票、裁决对账表，裁决当场落盘；默认一次一个主会话；现有票的散文状态同时归一
+
 ### 2026-10-18
 - [GA 上游升级 f308ee7 -> 5205f40](./2026-10-18-ga-upstream-upgrade-f308ee7-to-5205f40.md) — JC 要求单独审计；17 提交 188 文件，其中 164 个是上游把 Desktop 移出仓库；**硬断点**：mykey 加载挪进 `MyKeys` store、agentmain 直接读，内置加载器替换的旧函数不在路径上，内置会话全部无模型，runner 改为替换 `mykeys_store._load` 且进程内不重载（配置来自环境变量，Settings 改模型会重写 marker，重载会丢内置提示词）；`run()` 任务首尾重载模型，bridge 在 `put_task` 前先 `list_llms()` 落定、`next_llm` 后核对 `llm_no`；plan mode 删除、turn-end 提醒拉稀、DSML 重试；rebase 停三次四处冲突（`0001` ×2、`0003`、`0008`，都是上游重排代码）；runner 553 passed、兼容矩阵 553、bundle mac-x64 冒烟 + 打包 Python 端到端、drift gate OK；顺带修掉 v0.6.x 潜伏问题（Settings 改模型后在已开内置会话里切模型会丢内置提示词）；SOP 第 8 步桌面部分通过（内置 tauri dev 真模型、外置假服务对照组），四个 IM 渠道并入下一版冒烟
 

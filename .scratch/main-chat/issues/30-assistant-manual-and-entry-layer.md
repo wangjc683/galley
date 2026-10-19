@@ -1,6 +1,6 @@
 # 30 助手手册、入口层改写与叫醒措辞的真模型评测
 
-Status: done（2026-10-16 合入，待 JC 真机验收）
+Status: needs-dogfood（2026-10-16 合入，待 JC 真机验收）
 
 来源：[助手 PRD](../../assistant/PRD.md) 裁决 2、3、8；[主对话 PRD](../PRD.md) 裁决 80、82。
 同批：[29](./29-subtask-wake-core.md)（Core 叫醒，另一个 worktree）、[31](./31-subtask-wake-gui.md)（界面）。
