@@ -53,3 +53,8 @@ Status: ready-for-agent
 2. 等一次到点提醒（或子任务交代），看叫醒的一轮。
 
 ## Comments
+
+- 2026-10-19（实现子代理）：已在分支 `main-chat-58-typing-bubble-final` 做完，待主会话合入与 JC 真机（代码 `f6d981d6`，文档另一提交）。
+  - **删**：切换器、演示与档位 store（`typing-trial/` 整个目录）；`AssistantLiveLine` 与它的计时（`assistantLineClock`、`ASSISTANT_LINE_CLOCK_AFTER_MS`）；`hooks/useLiveLineHandoff.ts`（记那一行的位置、离场拷贝、`lineTextWidth`）；顶栏两个词那套（`assistantState` 的 `writing`、`useAssistantWriting`）；卡片在主对话没开着时说那句的那条（`useAssistantSentence`、`assistantCachedSentence`）；`assistantLineSentence` 并进 `assistantSettledSentence`（只给顶栏，不再读流）。只给 pill 和演示用的 i18n 键原本就没有（它们的字写在组件里），`typingLabel` 给三点气泡读屏，留着。
+  - **挪**：`TypingBubble.tsx` → `components/conversation/`；交接 → `hooks/useTypingBubbleHandoff.ts`（`findBubble`、`followersOf` 并进来，只剩一套）；规则 → `lib/assistant-conversation.ts`（`typingBubbleShown`、`assistantTyping`、`assistantSettledSentence`、点的尺寸常量）；`lib/live-line-handoff.ts` 改名 `lib/typing-bubble-handoff.ts`（`liveLineHandoff` → `typingBubbleHandoff`，判断不变）；卡片的规则并进 `assistantCardLine`（`typing` 参数）。
+  - **前后对照**：同一个 harness（票 55 的思路，演示脚本拷进 harness，不进仓库）在 `f2cd8a34`（档位固定 2）与本分支上逐帧相减：你发起的一轮、叫醒的一轮、不出声的一轮、深色、减少动态、工作台三段脚本共 145 帧，交接帧条（你发起、叫醒、没流式、长回复、提问、减少动态、提问减少动态、深色、工作台）63 帧，全为零。GPU 光栅化下头像边缘一个像素会在同一棵树的两次运行之间随机跳，换成软件光栅化（`--disable-gpu` 等）后稳定，最终一轮用的是它。截图在主会话 scratchpad，文件名带 `t58-`。

@@ -562,9 +562,9 @@ onboarding hero）。这是 serif register 的签名，sans / mono 不加。
 - disabled 控件必须静止，不保留 hover lift。
 
 长任务反馈同样克制：读秒就在原状态行里（工作台每步从 0.0 起跳、一分钟内
-带十分位；助手的那一行过 3 秒才接上用时；见 conversation「Thinking
-Placeholder」），不加「仍在运行」之类的安抚文案。不要 toast，不要
-banner，不要额外提示“可停止 / 可切后台继续”。
+带十分位；见 conversation「Thinking Placeholder」；助手的对话在跑时不读秒，
+对话里是三点气泡，用时在过程卡片第一行，2026-10-19 主聊天 PRD 裁决 110），
+不加「仍在运行」之类的安抚文案。不要 toast，不要 banner，不要额外提示“可停止 / 可切后台继续”。
 
 例外：Composer submit / stop、window controls、复杂 row trigger、Radix menu item 这类强语义控件可以保留局部实现，但颜色、字号、按下节奏仍应对齐 token。
 
@@ -637,6 +637,12 @@ devlog [thinking 计时器与 shimmer 裁决](../devlog/2026-08-12-thinking-time
 骨架屏 / 容器 / 装饰性 shimmer 照旧禁止——被禁的是「装修等待」，被豁免的是
 「指示进行中」。
 
+主对话在跑时的三点气泡（2026-10-19，[主聊天 PRD](../../.scratch/main-chat/PRD.md)
+裁决 107、110）不走这条豁免，是上面允许的约定俗成指示（三点 working 指示）：它是
+对话里唯一的在忙信号，计时不在同一处（顶栏不计时，用时在过程卡片），不重演 08-12
+「三点与计时并列成第三个信号」那一案，所以与扫光豁免不冲突；它也不用扫光。
+2026-10-15 到 10-19 主对话末尾那一行灰字用过 `thinking-shimmer`，随那一行拆掉。
+
 > 已落地的 B 类收敛：thinking 态逐字波浪 → 三点指示 + 等宽计数器（2026-08-12
 > 再裁决：三点 → 状态文字扫光 + 0.1s 计数器，走上方豁免）；running tool
 > 左竖条呼吸 → 删除，running 态 liveness 改由 旋转图标 + 三点指示（`LiveDots`）+
@@ -670,8 +676,8 @@ namespace）、`ease-firm`（`--ease-*` 有 namespace，直接成为 utility）�
 
 - 程序发起的平滑滚动：时长 300ms + 距离 ÷ 800px × 300ms，最长 600ms，超过 800px
   先瞬移，曲线也按距离分两档，数值集中在 `lib/animate-scroll.ts`，见
-  [conversation](./conversation.md)「Scroll behaviour」的「平滑滚动」。例外一处：主对话里在跑那一行交接给气泡的那次落地跟随，
-  时长与曲线跟着气泡展开（`--motion-slow`、`--ease-pop`），整段都动画、不瞬移（2026-10-19，主聊天 PRD 裁决 103，票 51）。
+  [conversation](./conversation.md)「Scroll behaviour」的「平滑滚动」。例外一处：主对话里回复从三点气泡撑开的那次落地跟随，
+  时长与曲线跟着气泡展开（`--motion-slow`、`--ease-pop`），整段都动画、不瞬移（2026-10-19，主聊天 PRD 裁决 103、110，票 51、58）。
 - 输入框长高、变矮（人触发的交互反馈，Telegram 的 `round(50 × ln|Δh|)` ms，多一
   行 155ms、贴满 8 行 253ms）：时长随距离变，**缓动仍用 token** `--ease-firm`。逐帧
   写高度，所以在 JS 里按这条三次贝塞尔求值，数从 token 的定义读（`getComputedStyle`
