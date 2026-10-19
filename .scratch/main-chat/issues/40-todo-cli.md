@@ -1,6 +1,6 @@
 # 40 CLI：`galley todo` 命令族
 
-Status: needs-dogfood（2026-10-17 快进合入 main，提交 `2cdddb9f`、`c2c3e97f`；真机随票 42 一起验，真模型随票 41）
+Status: done（2026-10-19 JC 真机第 4 站：记下带提醒的待办、卡片与面板、勾掉与取消勾、「说说这件」改日期、取消提醒、切走再回卡片还在，均通过。2026-10-17 快进合入 main，提交 `2cdddb9f`、`c2c3e97f`；真机随票 42 一起验，真模型随票 41）
 
 来源：主聊天 PRD 裁决 91。依赖 39。改 Core 的 socket 处理、CLI 与 Agent API 文档；不改界面。
 
