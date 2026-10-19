@@ -1,6 +1,6 @@
 # 52 主对话开着时卡片第二行只写最后一句；顶栏写字时「正在输入…」
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-10-19 快进合入 main，`d76fa6fc`、`fc5fc127`；主会话复跑门禁：typecheck、lint、两个时区各 1807 条、diff-check 全过）
 
 来源：主聊天 PRD 裁决 104（2026-10-19，JC：侧栏卡片与顶栏在回复时都写「思考中」，重复了；顶栏能不能更像 IM 的「正在输入」）。依赖 47（已合入）。推翻裁决 87 第 2、3 条。只改 GUI 与设计文档；Core、runner、提示词不动。与在途的票 51（回复气泡从那一行长出来，改 `MainView`、`AssistantParts`、滚动）不碰同一处，别去改它那些文件。
 
