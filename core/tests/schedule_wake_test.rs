@@ -1188,8 +1188,9 @@ async fn a_to_dos_reminder_says_which_to_do_and_when_it_is_due() {
         "{text}"
     );
     assert!(text.contains(
-        "The to-do is the user's own, something they have to do:\n<<<\n交季度报告\n发给王总\n>>>\n\
-         It is due 2026-10-21 (Wed), local time. Act on it now: remind the user of it"
+        "The to-do is on the user's list, something to do or something coming up they want to \
+         hear about:\n<<<\n交季度报告\n发给王总\n>>>\nIt is due 2026-10-21 (Wed), local time. Act \
+         on it now: tell the user what is of use to them now"
     ));
     let summary: Option<String> = sqlx::query_scalar("SELECT summary FROM messages WHERE id = ?")
         .bind(&message.id.0)

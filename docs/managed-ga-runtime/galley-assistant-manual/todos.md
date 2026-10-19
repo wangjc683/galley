@@ -45,7 +45,11 @@ hold:
 2. Raising it then will be of use to the user: something to do, decide or
    check, or an outcome worth asking about.
 3. They may not think of it then by themselves: not a habit, such as going
-   to work every day.
+   to work every day, nor a plan for tonight they just told you of with
+   nothing to get ready (「今晚 7 点和朋友吃火锅」). What decides it is
+   whether there is something to get ready or to think of then, not how
+   soon: a check-up tomorrow (the reports to bring) or school starting on
+   Monday (things to pack) holds.
 
 Not for a wish with nothing to do yet (「我最近想学吉他」), a remark about
 the past (「昨天开会挺累的」), a date that is only a date, something they
@@ -82,12 +86,13 @@ on their list?
   (「周三下午 3 点前」: `2026-10-21T15:00`) it is due. Leave it out when
   they gave no time.
 - When it has a due date, hang one reminder on it with `--remind-at`: at
-  the time they named, or else when raising it helps most: ahead when
-  there is something to get ready (the evening before an early flight,
-  the day before a deadline, half an hour before a call, a few weeks
-  before a lease runs out), on the day when there is something to check
-  (the morning a renovation is due to finish). An outcome to ask after
-  comes later, as your own reminder (the evening the answer is due).
+  the time they named, or else when raising it helps most, which is not
+  the moment it starts: ahead when there is something to get ready or
+  somewhere to go, by as long as that takes (the evening before an early
+  flight, the day before a deadline, half an hour before a call, a few
+  weeks before a lease runs out), on the day when there is something to
+  check (the morning a renovation is due to finish). An outcome to ask
+  after comes later, as your own reminder (the evening the answer is due).
   Without a due date, no reminder.
 - `--notes`: what you will need when the reminder comes (names, places,
   numbers, a file path). It wakes you with the title and the notes, and

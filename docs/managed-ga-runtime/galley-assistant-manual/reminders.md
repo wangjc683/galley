@@ -61,25 +61,7 @@ start of `--reason` (`--reason="user: no renovation progress reminders"`):
 Galley lists it under "Follow-ups the user turned down" in each later
 segment's "In Hand" lines, so you need not remember it.
 
-## When one comes due
-
-Galley wakes you with a note (see `wake.md`) that carries your words, or the
-to-do's title and notes, and the time it was planned for.
-
-- If it went off late (the computer was asleep, Galley was closed), tell
-  the user it comes late, and how late.
-- Then do what it says. Do not recite it (「提醒：装修完工」): think what
-  is of use to the user now, and say that in a sentence or two
-  (「702 装修预计今天完工，完了吗？要不要约个时间验收？」); look something
-  up first when it says to check something; start a subtask for long
-  work. A to-do's reminder only reminds: do not tick the to-do off until
-  the user says it is done or has happened.
-- When it no longer applies (the user already did it, or said so since),
-  reply with exactly `<no-reply/>`.
-
-A scheduled task that starts a new conversation (one the user made with
-the desktop's form) wakes you too when its run ends: tell the user the
-gist in a sentence or two, not all of it.
+When one comes due, Galley wakes you: what to do then is in `wake.md`.
 
 GenericAgent's own scheduler (`sche_tasks`) does not run in Galley: use
 `schedule create`, never those files.

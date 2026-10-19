@@ -211,12 +211,15 @@ mod tests {
         }
         // The cross-references the split made (ticket 59's list), and
         // ticket 60's two: reminders.md to the three tests in todos.md,
-        // todos.md to cancelling a kind in todos-change.md.
+        // todos.md to cancelling a kind in todos-change.md. Ticket 63
+        // moved "When one comes due" into wake.md, and reminders.md's
+        // reference to wake.md is now the sentence left in its place.
         assert_eq!(referred, 12);
         assert!(
             part("authority.md").contains("needs their yes to what and when (see `reminders.md`).")
         );
-        assert!(part("reminders.md").contains("Galley wakes you with a note (see `wake.md`) that"));
+        assert!(part("reminders.md")
+            .contains("When one comes due, Galley wakes you: what to do then is in `wake.md`."));
         assert!(part("reminders.md").contains("`todos.md`), and without being asked when:"));
         assert!(part("todos.md")
             .contains("own one-off reminder (「半小时后提醒我关火」, see `reminders.md`;"));
@@ -388,9 +391,13 @@ mod tests {
         assert!(part("todos.md").contains("## To-dos and reminders"));
         assert!(part("times.md").contains("## Times"));
         let reminders = part("reminders.md");
-        for heading in ["## Your own reminders", "## When one comes due"] {
-            assert!(reminders.contains(heading), "reminders.md lost: {heading}");
-        }
+        assert!(reminders.contains("## Your own reminders"));
+        // Coming due is wake.md's since ticket 63.
+        let wake = part("wake.md");
+        assert!(wake.contains("## When a reminder comes due"));
+        assert!(wake.contains("the user it comes late, and how late."));
+        assert!(wake
+            .contains("user, or a reminder no longer applies (the user already did it, or said"));
         for rule in [
             // When: a nudge the user asks for (ticket 44); unasked,
             // promises, waiting on the outside world.
@@ -410,9 +417,6 @@ mod tests {
             "- Always pass `--target=assistant`, repeating ones too. The CLI's default",
             // Ask before a repeating task that works each time.
             "costs money every day, so ask first, in one question, with the time and",
-            // Coming due: late, act, no longer applies.
-            "the user it comes late, and how late.",
-            "reply with exactly `<no-reply/>`.",
             // galley#31.
             "GenericAgent's own scheduler (`sche_tasks`) does not run in Galley: use",
         ] {
@@ -479,9 +483,9 @@ mod tests {
             "said they do not need, or something already there: run `todo list` before",
             // Due, reminder, notes; never `schedule` for a to-do's reminder.
             "- When it has a due date, hang one reminder on it with `--remind-at`: at",
-            "the time they named, or else when raising it helps most: ahead when",
-            "there is something to get ready (the evening before an early flight,",
-            "the day before a deadline, half an hour before a call, a few weeks",
+            "the time they named, or else when raising it helps most, which is not",
+            "somewhere to go, by as long as that takes (the evening before an early",
+            "flight, the day before a deadline, half an hour before a call, a few",
             "Without a due date, no reminder.",
             "- `--notes`: what you will need when the reminder comes (names, places,",
             "- A to-do's reminder is set, moved and removed only with `todo add` and",
@@ -505,11 +509,12 @@ mod tests {
         ] {
             assert!(change.contains(rule), "todos-change.md lost: {rule}");
         }
-        // A to-do's reminder only reminds.
-        let reminders = part("reminders.md");
-        assert!(reminders
-            .contains("work. A to-do's reminder only reminds: do not tick the to-do off until"));
-        assert!(reminders.contains("the user says it is done or has happened."));
+        // A to-do's reminder only reminds (wake.md's since ticket 63).
+        let wake = part("wake.md");
+        assert!(
+            wake.contains("work. A to-do's reminder only reminds: do not tick the to-do off until")
+        );
+        assert!(wake.contains("the user says it is done or has happened."));
         // Authority.
         assert!(part("authority.md")
             .contains("- Note, change, tick off or cancel the user's to-dos, and their"));
@@ -597,7 +602,7 @@ mod tests {
             // lease a to-do.
             "「HR 说这周五给 offer 答复」: ask on Friday evening how it went); once it",
             // When: ahead, on the day, after.
-            "before a lease runs out), on the day when there is something to check",
+            "weeks before a lease runs out), on the day when there is something to",
             "comes later, as your own reminder (the evening the answer is due).",
             // Say why and when; cancel, with the kind.
             "they did not ask, the same sentence says why and when",
@@ -614,12 +619,16 @@ mod tests {
             "sentence says why (「周五傍晚我问你一下 offer 的结果。」). The desktop",
             "Never set one without saying so.",
             "(「这类别提醒我」), cancel the one you set, and say the kind, briefly, at the",
-            // Coming due: what is of use now, not the words.
-            "- Then do what it says. Do not recite it (「提醒：装修完工」): think what",
-            "(「702 装修预计今天完工，完了吗？要不要约个时间验收？」); look something",
         ] {
             assert!(reminders.contains(rule), "reminders.md lost: {rule}");
         }
+        // Coming due: what is of use now, not the words (wake.md's since
+        // ticket 63).
+        let wake = part("wake.md");
+        assert!(wake
+            .contains("- Then do what it says. Do not recite it (「提醒：装修完工」): think what"));
+        assert!(wake
+            .contains("(「702 装修预计今天完工，完了吗？要不要约个时间验收？」); look something"));
         let change = part("todos-change.md");
         assert!(change.contains(
             "  (「这类别提醒我」), cancel the one you set, and say the kind, briefly, at"
@@ -633,5 +642,87 @@ mod tests {
             assert!(body.contains(&format!("`--reason=\"{example}\"`")));
             assert!(body.contains("under \"Follow-ups the user turned down\" in each later"));
         }
+    }
+
+    /// Ticket 63 (main chat PRD ruling 115): what to do when a reminder
+    /// comes due is in the part a wake reads (`wake.md`, which the entry
+    /// layer names for when Galley wakes you), once: reminders.md keeps a
+    /// sentence pointing there, and the no-reply rule is the one wake.md
+    /// already had. A plan for tonight with nothing to get ready fails the
+    /// third test; what decides it is something to get ready or think of,
+    /// not how soon. A reminder time the model picks is not the moment the
+    /// thing starts, and that rule is part of the `--remind-at` line.
+    /// Single-line fragments only (CRLF on Windows).
+    #[test]
+    fn manual_wakes_with_what_is_of_use() {
+        let wake = part("wake.md");
+        let woken = wake.find("## When Galley wakes you").unwrap();
+        let due = wake.find("## When a reminder comes due").unwrap();
+        assert!(woken < due);
+        for rule in [
+            "The note carries your own words, or the to-do's title and notes, and the",
+            "- If it went off late (the computer was asleep, Galley was closed), tell",
+            "- Then do what it says. Do not recite it (「提醒：装修完工」): think what",
+            "is of use to the user now, and say that in a sentence or two",
+            "work. A to-do's reminder only reminds: do not tick the to-do off until",
+            "A scheduled task that starts a new conversation (one the user made with",
+        ] {
+            let at = wake
+                .find(rule)
+                .unwrap_or_else(|| panic!("wake.md lost: {rule}"));
+            assert!(due < at, "{rule} is not under its heading");
+        }
+        // One set of words for each rule: none left behind in reminders.md.
+        for rule in [
+            "When one comes due",
+            "Do not recite it",
+            "it comes late, and how late",
+            "A to-do's reminder only reminds",
+            "A scheduled task that starts a new conversation",
+            "<no-reply/>",
+        ] {
+            let count: usize = PARTS
+                .iter()
+                .map(|(_, body)| body.matches(rule).count())
+                .sum();
+            let here = if rule == "When one comes due" {
+                part("reminders.md")
+            } else {
+                wake
+            };
+            assert_eq!(count, 1, "{rule} in more than one place");
+            assert_eq!(here.matches(rule).count(), 1, "{rule}");
+        }
+        let reminders = part("reminders.md");
+        assert!(!reminders.contains("## When one comes due"));
+        assert!(reminders
+            .contains("GenericAgent's own scheduler (`sche_tasks`) does not run in Galley: use"));
+
+        let todos = part("todos.md");
+        for rule in [
+            // The third test: tonight's plan, nothing to get ready.
+            "to work every day, nor a plan for tonight they just told you of with",
+            "nothing to get ready (「今晚 7 点和朋友吃火锅」). What decides it is",
+            "whether there is something to get ready or to think of then, not how",
+            "soon: a check-up tomorrow (the reports to bring) or school starting on",
+            // The time it picks: not the moment it starts.
+            "the time they named, or else when raising it helps most, which is not",
+            "the moment it starts: ahead when there is something to get ready or",
+            "somewhere to go, by as long as that takes (the evening before an early",
+        ] {
+            assert!(todos.contains(rule), "todos.md lost: {rule}");
+        }
+        let test = todos
+            .find("3. They may not think of it then by themselves")
+            .unwrap();
+        let tonight = todos.find("今晚 7 点和朋友吃火锅").unwrap();
+        let floor = todos.find("When the user says 「记一下」").unwrap();
+        assert!(test < tonight && tonight < floor);
+        let line = todos
+            .find("- When it has a due date, hang one reminder on it")
+            .unwrap();
+        let start = todos.find("the moment it starts").unwrap();
+        let end = todos.find("Without a due date, no reminder.").unwrap();
+        assert!(line < start && start < end);
     }
 }

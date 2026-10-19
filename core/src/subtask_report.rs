@@ -418,11 +418,17 @@ fn due_paragraph(due: &DueReminder) -> String {
     // reply only relayed the words (one run in three with "Tell the user
     // it comes late, and how late." after the times; two in two with
     // "say first", the summary being what comes first).
+    //
+    // What is of use now, not the words read back (ticket 63, main chat
+    // PRD ruling 115): this note is what every wake has in front of it.
+    // In ticket 60's eval one wake read only `wake.md` and the other read
+    // nothing, while the rule was in `reminders.md`.
     let (when, act) = due_when_and_act(due);
     format!(
         "{what} {when} What you noted when you set it:\n<<<\n{}\n>>>\n\
-         {act} tell the user in a sentence or two, look something up first, or start a \
-         subtask. If it no longer applies (the user already did it), {NO_REPLY_END}.",
+         {act} tell the user what is of use to them now, in a sentence or two (not your \
+         words read back), look something up first, or start a subtask. If it no longer \
+         applies (the user already did it), {NO_REPLY_END}.",
         due.prompt.trim()
     )
 }
@@ -451,8 +457,12 @@ fn due_when_and_act(due: &DueReminder) -> (String, String) {
 
 /// A reminder on one of the user's to-dos (ticket 39): which to-do, when
 /// it is due, when the reminder was planned and went off — so the model
-/// knows this is the user's own thing to do, to remind them of, not
-/// something it noted for itself.
+/// knows this is on the user's list, not something it noted for itself.
+/// Ticket 63 (main chat PRD ruling 115): the list holds what is coming up
+/// as well as what the user has to do (ruling 112: a renovation due to
+/// finish), so the model says what is of use now (did it happen, what
+/// next) instead of reminding them of the title, and still leaves the
+/// to-do open until the user says it is done.
 fn todo_due_paragraph(due: &DueReminder, todo: &DueTodo) -> String {
     let id = &due.task_id;
     let (when, act) = due_when_and_act(due);
@@ -465,10 +475,13 @@ fn todo_due_paragraph(due: &DueReminder, todo: &DueTodo) -> String {
         None => "It has no due date.".to_string(),
     };
     format!(
-        "Reminder `{id}` on the user's to-do `{}` came due. {when} The to-do is the user's own, \
-         something they have to do:\n<<<\n{body}\n>>>\n{due_line} \
-         {act} remind the user of it in a sentence or two, look something up first, or start \
-         a subtask. If it no longer applies (the user already did it), {NO_REPLY_END}.",
+        "Reminder `{id}` on the user's to-do `{}` came due. {when} The to-do is on the user's \
+         list, something to do or something coming up they want to hear about:\n\
+         <<<\n{body}\n>>>\n{due_line} {act} tell the user what is of use to them now, in a \
+         sentence or two (not the to-do read back: ask whether it is done or has happened, or \
+         give the next step), look something up first, or start a subtask. Do not tick it off \
+         until they say it is done or has happened. If it no longer applies (the user already \
+         did it), {NO_REPLY_END}.",
         todo.id
     )
 }
@@ -1762,9 +1775,15 @@ mod tests {
         ));
         assert!(late.contains(
             ">>>\nAct on it now, and say in the reply itself (the user does not see your summary) \
-             that it comes 1 day 13 hours late: tell the user in a sentence or two"
+             that it comes 1 day 13 hours late: tell the user what is of use to them now"
         ));
-        assert!(text.contains(">>>\nAct on it now: tell the user in a sentence or two"));
+        // Ticket 63: what is of use now, not the words read back.
+        assert!(text.contains(
+            ">>>\nAct on it now: tell the user what is of use to them now, in a sentence or two \
+             (not your words read back), look something up first, or start a subtask. If it no \
+             longer applies"
+        ));
+        assert!(!text.contains("tell the user in a sentence or two"));
         assert_eq!(
             replay_lines(&[due_report(due(true, None))]),
             "[Galley: reminder sched_a came due (2026-10-20 20:00 (Tue)) — details: schedule \
@@ -1784,9 +1803,12 @@ mod tests {
 
     /// Ticket 39: a reminder on one of the user's to-dos says which to-do,
     /// its title and notes, when it is due, with ticket 33's times and
-    /// lateness unchanged; its replay line names the to-do.
+    /// lateness unchanged; its replay line names the to-do. Ticket 63: the
+    /// to-do is on the user's list whoever does it, and the model says
+    /// what is of use now, not the to-do read back, and does not tick it
+    /// off until the user says it is done or has happened.
     #[test]
-    fn a_to_dos_reminder_says_it_is_the_users_own() {
+    fn a_to_dos_reminder_says_it_is_on_the_users_list() {
         let mut on_todo = due(true, None);
         on_todo.todo = Some(DueTodo {
             id: "todo_1".into(),
@@ -1798,10 +1820,15 @@ mod tests {
         assert!(text.starts_with(OPENING_REMINDER));
         assert!(text.contains(
             "Reminder `sched_a` on the user's to-do `todo_1` came due. Planned for 2026-10-20 \
-             20:00 (Tue), local time. The to-do is the user's own, something they have to \
-             do:\n<<<\n交季度报告\n发给王总\n>>>\nIt is due 2026-10-21 15:00 (Wed), local time. \
-             Act on it now: remind the user of it in a sentence or two"
+             20:00 (Tue), local time. The to-do is on the user's list, something to do or \
+             something coming up they want to hear about:\n<<<\n交季度报告\n发给王总\n>>>\nIt is \
+             due 2026-10-21 15:00 (Wed), local time. Act on it now: tell the user what is of use \
+             to them now, in a sentence or two (not the to-do read back: ask whether it is done \
+             or has happened, or give the next step), look something up first, or start a \
+             subtask. Do not tick it off until they say it is done or has happened. If it no \
+             longer applies"
         ));
+        assert!(!text.contains("something they have to do") && !text.contains("remind the user"));
         assert!(text.ends_with(
             "If it no longer applies (the user already did it), end your reply with exactly \
              <no-reply/>."
@@ -1819,7 +1846,8 @@ mod tests {
         ));
         assert!(text.contains(
             "<<<\n交季度报告\n>>>\nIt has no due date. Act on it now, and say in the reply \
-             itself (the user does not see your summary) that it comes 9 hours late: remind"
+             itself (the user does not see your summary) that it comes 9 hours late: tell the \
+             user what is of use"
         ));
         assert_eq!(
             replay_lines(&[due_report(on_todo)]),

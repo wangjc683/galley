@@ -363,6 +363,11 @@ look it up with the Galley CLI (search, then
 /// what comes up on a date and will be worth raising then, whoever does
 /// it (a renovation due to finish, a lease ending). The test of when to
 /// follow one up unasked, and where it goes, is `todos.md`'s.
+///
+/// Ticket 63 (main chat PRD ruling 115) closed the to-do paragraph with
+/// a floor: 「记下了」 only after this turn wrote something down (a to-do,
+/// a reminder, the memory). It is here, not in the manual, because the
+/// turn that said it without writing anything read nothing.
 fn main_chat_entry_layer(manual_dir: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
@@ -384,7 +389,8 @@ or what comes up on a date and will be worth raising then (a renovation due
 to finish, a lease ending), as a to-do, with a reminder when it has a date,
 and tick it off when it is done; set yourself a reminder when you promise
 to follow up. Do it unasked, and read `todo list` before saying what is
-left: see `todos.md` in your manual.
+left: see `todos.md` in your manual. Say 「记下了」 or the like only after
+you wrote it down this turn (a to-do, a reminder, your memory).
 
 Your manual is in `{manual_dir}`, one file per part. Before a Galley CLI
 write (a session, project, model, schedule or to-do command), read the
@@ -1268,8 +1274,14 @@ mod tests {
     /// 「装修师傅说 702 办公室 11 月 20 号能完工」 has no CLI write in
     /// sight (the sentence named only what the user has to do), so the
     /// model would not open `todos.md`, where the test of when to follow
-    /// something up unasked is.
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 2568;
+    /// something up unasked is. Raised 2568 → 2675 by ticket 63 (main chat
+    /// PRD ruling 115): +107 bytes, the sentence closing the to-do
+    /// paragraph (106, with its space) that says 「记下了」 only after this
+    /// turn wrote something down (a to-do, a reminder, the memory). In
+    /// ticket 60's eval 「我们公司是 2019 年 11 月 20 号成立的」 got
+    /// 「记下了」 once in two runs with no tool call at all: that turn read
+    /// nothing, so the manual cannot carry it.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 2675;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {
@@ -1441,6 +1453,26 @@ mod tests {
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(!prompt.contains("set yourself a reminder"));
             assert!(!prompt.contains("`todo list`"));
+        }
+    }
+
+    /// Ticket 63 (main chat PRD ruling 115): the to-do paragraph closes
+    /// with the floor that 「记下了」 follows a write in the same turn (a
+    /// to-do, a reminder, the memory). Main chat only.
+    #[test]
+    fn main_chat_entry_layer_says_noted_only_after_a_write() {
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
+        // Single-line fragments only (CRLF on Windows).
+        assert!(main.contains(
+            "left: see `todos.md` in your manual. Say 「记下了」 or the like only after"
+        ));
+        assert!(main.contains("you wrote it down this turn (a to-do, a reminder, your memory)."));
+        let todo = main.find("Note what the user has to do").unwrap();
+        let floor = main.find("Say 「记下了」").unwrap();
+        let manual = main.find("Your manual is in").unwrap();
+        assert!(todo < floor && floor < manual);
+        for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
+            assert!(!prompt.contains("记下了"));
         }
     }
 
