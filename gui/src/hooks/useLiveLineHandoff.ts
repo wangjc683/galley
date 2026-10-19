@@ -50,8 +50,10 @@ function measureLine(
 }
 
 /** The bubble that took the line's place: the answer's (by its row's
- * message id), or the live question's. */
-function findBubble(
+ * message id), or the live question's. Exported for the trial's typing
+ * bubble (components/conversation/typing-trial/), which hands over to
+ * the same bubble. 票 55 临时切换器，定档后由拆除票删掉。 */
+export function findBubble(
   column: Element,
   handoff: LiveLineHandoff,
 ): HTMLElement | null {
@@ -77,9 +79,10 @@ function findBubble(
  * hangs under it in its row (the subtask, to-do and reminder cards; the
  * question's candidates; the action row, whose own opacity is its hover
  * reveal, so its contents fade instead), and a report round's time line
- * right above its row, which appears with its first reply.
+ * right above its row, which appears with its first reply. Exported
+ * with `findBubble`. 票 55 临时切换器，定档后由拆除票删掉。
  */
-function followersOf(bubble: HTMLElement, column: Element): Element[] {
+export function followersOf(bubble: HTMLElement, column: Element): Element[] {
   const followers: Element[] = [];
   for (
     let sibling = bubble.nextElementSibling;

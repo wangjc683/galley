@@ -13,6 +13,16 @@ import {
   TurnMarker,
 } from "@/components/conversation/Conversation";
 import { AssistantLiveLine } from "@/components/conversation/AssistantParts";
+// 票 55 临时切换器，定档后由拆除票删掉。The trial's tier 2 and its demo.
+import { TypingBubble } from "@/components/conversation/typing-trial/TypingBubble";
+import {
+  liveLineDrawn,
+  typingBubbleShown,
+  useTypingTier,
+  useTypingTrialStore,
+} from "@/components/conversation/typing-trial/typing-trial";
+import { typingDemoComposerPlaceholder } from "@/components/conversation/typing-trial/typing-trial-demo";
+import { useTypingBubbleHandoff } from "@/components/conversation/typing-trial/useTypingBubbleHandoff";
 import { ConversationSkeleton } from "@/components/conversation/ConversationSkeleton";
 import { StepLimitTail } from "@/components/conversation/StepLimitTail";
 import { Button } from "@/components/ui/button";
@@ -60,7 +70,7 @@ import {
   conversationTypographyStyle,
   type ConversationFontSize,
 } from "@/lib/conversation-font-size";
-import { useCopy } from "@/lib/i18n";
+import { useCopy, useLanguage } from "@/lib/i18n";
 import {
   cleanPartialContent,
   extractLiveThinking,
@@ -455,6 +465,21 @@ function MainViewContent({
   // is not busy), from the moment the question arrives.
   const lineShown =
     isRunning && isMainChat && !lineRoundSettled && !pendingAskUser;
+  // 票 55 临时切换器，定档后由拆除票删掉。Tier 2 (ruling 107) ends the
+  // conversation in the typing bubble instead of the line — from the send
+  // on in a round you start, only while it writes in one Core woke it
+  // for — and hands over from it. Tier 1, and every production build, is
+  // the line as above.
+  const typingTier = useTypingTier();
+  const lineDrawn = liveLineDrawn(typingTier, lineShown);
+  const typingShown = useMemo(
+    () =>
+      typingTier === 2 && typingBubbleShown(lineShown, turns, inFlightContent),
+    [typingTier, lineShown, turns, inFlightContent],
+  );
+  // …and while one of its demos plays here, the composer is off.
+  const language = useLanguage();
+  const typingDemo = useTypingTrialStore((s) => s.demo) !== null && isMainChat;
   // The hand-off (ruling 103, ticket 51): the render where the line's
   // place goes to its bubble — the answer, or its question — grows the
   // bubble out of the line, and the follow for it keeps the same clock.
@@ -513,7 +538,13 @@ function MainViewContent({
   });
   // The line's place, and the hand-off on the page.
   const liveLineRef = useLiveLineHandoff({
-    enabled: isMainChat,
+    // 票 55 临时切换器，定档后由拆除票删掉。Tier 2 hands over below.
+    enabled: isMainChat && typingTier === 1,
+    scrollContainerRef,
+    handoff,
+  });
+  const typingBubbleRef = useTypingBubbleHandoff({
+    enabled: isMainChat && typingTier === 2,
     scrollContainerRef,
     handoff,
   });
@@ -706,7 +737,9 @@ function MainViewContent({
                 reasoning and the streaming prose — gone once the round
                 has its answer or asks, its bubble growing out of it
                 (useLiveLineHandoff). */}
-            {lineShown && (
+            {/* 票 55 临时切换器，定档后由拆除票删掉。The line at tier 1,
+                the typing bubble at tier 2. */}
+            {lineDrawn && (
               <AssistantLiveLine
                 ref={liveLineRef}
                 sentence={lineSentence}
@@ -714,6 +747,7 @@ function MainViewContent({
                 baseMs={runElapsedBaseMs}
               />
             )}
+            {typingShown && <TypingBubble ref={typingBubbleRef} />}
             {isRunning && !isMainChat && (
               // The elapsed clock inside TurnMarker resets whenever
               // `index` changes — step 1 took 30s; step 2's clock
@@ -972,18 +1006,22 @@ function MainViewContent({
             draftKey={activeSessionId ?? "main-composer"}
             llmDisplayName={llmDisplayName}
             placeholder={
-              copy.composer[
-                composerRegisterCopyKey(
-                  resolveComposerRegister({
-                    isRunning,
-                    pendingAskUser: Boolean(pendingAskUser),
-                    askUserHasCandidates:
-                      (pendingAskUser?.candidates.length ?? 0) > 0,
-                    mainChat: isMainChat,
-                    questionWithGalley: questionLocked,
-                  }),
-                )
-              ]
+              // 票 55 临时切换器，定档后由拆除票删掉。A demo only changes
+              // the display, so nothing can be sent while it plays.
+              typingDemo
+                ? typingDemoComposerPlaceholder(language)
+                : copy.composer[
+                    composerRegisterCopyKey(
+                      resolveComposerRegister({
+                        isRunning,
+                        pendingAskUser: Boolean(pendingAskUser),
+                        askUserHasCandidates:
+                          (pendingAskUser?.candidates.length ?? 0) > 0,
+                        mainChat: isMainChat,
+                        questionWithGalley: questionLocked,
+                      }),
+                    )
+                  ]
             }
             ghostSuggestion={ghostSuggestion}
             onSubmit={onSubmit}
@@ -993,7 +1031,8 @@ function MainViewContent({
             submitAckTick={userSubmitTick}
             // Off while the subtask's question is with the assistant
             // (ruling 102): anything sent here would be its answer.
-            disabled={questionLocked}
+            // 票 55 临时切换器，定档后由拆除票删掉。Also off while a demo plays.
+            disabled={questionLocked || typingDemo}
             llms={llms}
             onSelectLLM={onSelectLLM}
             llmConfigHint={llmConfigHint}

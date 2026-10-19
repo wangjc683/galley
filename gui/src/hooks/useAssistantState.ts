@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
+// 票 55 临时切换器，定档后由拆除票删掉。Tier 2's header sentence.
+import {
+  assistantStateReadings,
+  useAssistantSettledSentence,
+  useTypingTier,
+} from "@/components/conversation/typing-trial/typing-trial";
 import {
   useAssistantSentence,
   useAssistantWriting,
@@ -53,8 +59,19 @@ export function useAssistantState({
   const copy = useCopy();
   const view = useSessionStatusView(mainChat);
   const running = view.status === "running";
-  const sentence = useAssistantSentence(mainChat.id, running && !open);
-  const writing = useAssistantWriting(mainChat.id, running && header);
+  // 票 55 临时切换器，定档后由拆除票删掉。Tier 1 (main) reads the line's
+  // sentence and the writing flag; tier 2's header reads the newest
+  // settled step's sentence instead, and its card says 「正在输入…」
+  // (SidebarAssistant).
+  const tier = useTypingTier();
+  const reads = assistantStateReadings(tier, { running, open, header });
+  const lineSentence = useAssistantSentence(mainChat.id, reads.sentence);
+  const writing = useAssistantWriting(mainChat.id, reads.writing);
+  const settledSentence = useAssistantSettledSentence(
+    mainChat.id,
+    reads.settled,
+  );
+  const sentence = tier === 2 ? settledSentence : lineSentence;
   const subtaskAttention = useSessionsAttention(subtasks, undefined);
   return assistantState(
     {

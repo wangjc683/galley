@@ -4,6 +4,13 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+// 票 55 临时切换器，定档后由拆除票删掉。Tier 2's card line.
+import {
+  cardReadsLiveRound,
+  typingTrialCardLine,
+  useTypingCardSignals,
+  useTypingTier,
+} from "@/components/conversation/typing-trial/typing-trial";
 import {
   AssistantAvatar,
   AssistantAvatarBadge,
@@ -18,7 +25,6 @@ import { useDayStamp } from "@/hooks/useDayStamp";
 import {
   type AssistantCardLine,
   type AssistantStateKind,
-  assistantCardLine,
 } from "@/lib/assistant";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { formatListTime } from "@/lib/message-time";
@@ -159,10 +165,24 @@ export function SidebarAssistantCard({
   // No key while it is open: its draft is in the composer right there,
   // and typing there then never re-renders the card.
   const draft = useComposerDraft(open ? undefined : mainChat.id);
-  const lastMessage = useAssistantLastMessage(mainChat, open);
-  const line = assistantCardLine(
+  // 票 55 临时切换器，定档后由拆除票删掉。At tier 2 the card says
+  // 「正在输入…」 while it runs, open or not (in a round Core woke it for,
+  // only while it writes; else the last message, the live round's steps
+  // skipped as with the main chat open). Tier 1 is assistantCardLine.
+  const tier = useTypingTier();
+  const typingSignals = useTypingCardSignals(
+    mainChat.id,
+    tier === 2 && state.kind === "running",
+  );
+  const lastMessage = useAssistantLastMessage(
+    mainChat,
+    cardReadsLiveRound(tier, open),
+  );
+  const line = typingTrialCardLine(
+    tier,
     state,
     { question, draft, lastMessage, open },
+    typingSignals,
     copy,
   );
   const time = formatListTime(

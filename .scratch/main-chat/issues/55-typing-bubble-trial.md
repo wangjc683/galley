@@ -70,3 +70,11 @@ Blocked by: 53（同一片对话代码：`AssistantParts.tsx`、`Conversation.ts
 4. 定档后告诉主会话，开拆除票。
 
 ## Comments
+
+- 2026-10-19（实现子代理）：已在分支 `main-chat-55-typing-bubble-trial` 做完，待主会话合入与 JC 真机。
+  - **代码**：新目录 `gui/src/components/conversation/typing-trial/`：`typing-trial.ts`（档位 store 与第 2 档的规则，头部写了拆除步骤）、`TypingBubble.tsx`、`useTypingBubbleHandoff.ts`、`typing-trial-demo.ts`、`TypingTrialSwitcher.tsx`、`typing-trial.test.ts`（20 条）。旧文件只在分支点加判断，都带「票 55 临时切换器，定档后由拆除票删掉」：`MainView.tsx`（画那一行还是三点气泡、两个交接钩子各开各的、演示时输入框停用）、`useAssistantState.ts`（顶栏读哪一句）、`SidebarAssistant.tsx`（卡片第二行）、`App.tsx`（挂 pill，只在开发构建、主区开着主对话时）；`useLiveLineHandoff.ts` 只把 `findBubble`、`followersOf` 改成导出。读屏文案 `assistant.typingLabel` 中英各一条（「Galley 正在输入」 / 「Galley is typing」）。
+  - **第 2 档**：三点气泡标准字号下 54 × 43.25px，与一行字的回复气泡同高；点 6px、间距 4px（`LiveDots` 的两倍，按 em 写，随字号档变），节奏照 `live-dot`（1.4 秒、依次错开 0.16 秒的明暗），减少动态下静止。交接照票 51：底色从三点气泡的框展开，三个点的拷贝在 `--motion-fast` 里淡出（接着原来的相位，不从头跳），字与跟着的东西从这段的一半起淡入；叫醒的一轮落地时屏上没有三点，就从气泡左上角一个三点气泡大小的框长出来。顶栏第二行只取做完的步，收口的回答那一步也不算（否则回复落地到 run_complete 之间顶栏会闪一下回复的第一句）。卡片在跑时写「正在输入…」，叫醒的一轮跟着三点，不在时是最后一句（跳过在跑这一轮的工具步，开着、没开着都这样）。
+  - **演示**：走 store 的同一条路径（`appendUserTurn`、`applyUserMessagePersisted`、`dispatchIPCEvent`），工具步也流出 GA 的 verbose 显示（轮次头、summary、派发标记、输出），对话、顶栏、卡片照真的一轮去读；结束（播完或再点一次、离开主对话）时把主对话在 store 里的那份与会话行放回原样，不写库、不发给模型。演示中主对话来了真事件，结束时从库重读一遍对话。和真的一轮的差别：演示 1 的回复下面没有提醒卡片（要 Core 里真有那条提醒）。主对话自己在忙（在跑、在问你、在读回）时演示按钮停用。
+  - **pill**：主区顶栏下沿右端（top 50px、right 12px，同票 17、19 与 telegram-details 10 的位置），「临时 · 进度 1 2 | 演示 1 2 3」，档位存 `localStorage` 的 `galley.tmp.typingTier`。
+  - **自查**：同一个 harness 在 `0e466822` 与本分支上逐帧相减：第 1 档浅色演示 1、2、3 共 53 帧、深色演示 1 共 24 帧全为零；第 2 档开着时工作台画法（主区，同三段脚本）53 帧全为零。重渲染（父组件按 App 的订阅）：第 2 档演示 1、2、3 顶栏 6、4、4 次，卡片 6、5、4 次，流出 chunk 时顶栏 0 次、卡片只在叫醒的一轮三点出现那一下 1 次；第 1 档 7、5、4 与 6、4、4 次，与 main 相同。截图与帧条在主会话 scratchpad，文件名带 `t55-`。
+  - **看到没改**：pill 会压住待办面板打开时的右上角（收起面板或不管）；减少动态下三点的拷贝按栏里的旧位置放，栏已上移时它会出现在回复气泡的左上角里再淡出（票 51 的那一行同样做法）。

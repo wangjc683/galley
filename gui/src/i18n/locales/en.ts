@@ -274,6 +274,7 @@ export const enCopy: AppCopy = {
     file: (name) => `[File] ${name}`,
     timeYesterday: "Yesterday",
     typing: "Typing…",
+    typingLabel: "Galley is typing",
   },
   topbar: {
     newConversation: "New chat",
