@@ -619,7 +619,7 @@ state, not decoration”）。`prefers-reduced-motion` 下 A/B 动效一律退�
 设置要实时读，不缓存到启动时：对话的平滑滚动（`lib/animate-scroll.ts`）每次调用读
 `matchMedia`，CSS 侧本来就是实时的 `@media`。
 
-**唯一豁免（2026-08-12）：in-flight 状态文字的 shimmer。** thinking 行的工作
+**豁免一（2026-08-12）：in-flight 状态文字的 shimmer。** thinking 行的工作
 指示由三点改为状态文字上的扫光（`thinking-shimmer`），真机 A/B 裁决（见
 devlog [thinking 计时器与 shimmer 裁决](../devlog/2026-08-12-thinking-timer-and-shimmer-verdict.md)）。
 豁免论证：
@@ -642,6 +642,21 @@ devlog [thinking 计时器与 shimmer 裁决](../devlog/2026-08-12-thinking-time
 对话里唯一的在忙信号，计时不在同一处（顶栏不计时，用时在过程卡片），不重演 08-12
 「三点与计时并列成第三个信号」那一案，所以与扫光豁免不冲突；它也不用扫光。
 2026-10-15 到 10-19 主对话末尾那一行灰字用过 `thinking-shimmer`，随那一行拆掉。
+
+**豁免二（2026-10-20）：助理的脸。** 内置运行时有主对话时，侧栏助理卡片上的头像是一张会动的脸：应用图标那个木头机器人，眼睛、嘴、舌头卷成的 G 跟着它在做的事动（[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 117、118、119，票 65、66、67）。这里重审而不是规范赢（裁决 117 第 5 条）：本节反对的是「仪器在运转」的工具气质，转圈恰恰是仪器，一张在想事情的脸是人；活物的信号是对你有反应、有眼神、动得有变化、大多数时候是静的，所以要的是对的动效，不是更多动效。边界：
+
+- **只此一张，只在侧栏卡片上**：顶栏身份行的 28px 头像一律静止（`gui/src/components/layout/assistant/AssistantIdentity.tsx:60` 画静止的图标），那一行字已经说它在做什么，主对话开着时对话里还有三点气泡（裁决 119 第 6 条）；侧栏收起时也不交给顶栏。同一时刻只有一张脸在动，规则没有例外。驱动只挂一个（`gui/src/App.tsx:796` 的 `AssistantFaceDriver`），外置运行时没有助理，一个像素不变。
+- **只在它有状态时动，每个动作一句话说得清在表达什么**：每个动作对应界面已经知道的一件事，不演它没在做的事；同一个动作备两到四个变体、大小与时机每次重抽，不做节拍器；几件撞在一起只演最要紧的：等你回复 > 出错 > 写回复 > 做事 > 想（`gui/src/lib/assistant-face.ts:209` `faceActivity`）。状态表以代码为准（`lib/assistant-face.ts` 的 `FaceActivity`、`FaceReaction`）：
+  - **持续的**（事情在就一直演）：在想（还没动手或两步之间）、看网页（`web_scan`、`web_execute_js`）、读文件（`file_read`）、记（`file_write`、`file_patch`、`start_long_term_update`，以及 `code_run` 里 galley 的待办与提醒写操作）、动手（其余 `code_run`）、写回复（正在出字）、等子任务（它派出的子任务在跑）；等你回复与出错演完进入的那一拍就定住不动；闲着、打盹（30 分钟没碰它，深夜 1 分钟，`:256`）。工具怎么归类在 `:114` `classifyTool`。
+  - **演一次的**：你发出消息、在它的输入框打字、鼠标移上去、拖进文件、按停止、做完、派出子任务、子任务交回、提醒叫醒、打盹时被碰醒。
+  - 每个状态的动作与它表达的那句话写在 `MOTION` 对应那一条的注释里（下面「数值」）。以后加动作照这个门：先说清它对应哪件已知的事，再写进 `MOTION`，占比测试照样要过。
+- **扫一眼分得出在忙**（裁决 117 第 8 条）：干活的状态（`gui/src/lib/assistant-face-motion.ts:822` `WORKING`）底下垫一层不停的起伏（`MOTION.bob`，`:527`：头上下约 2px，一口 1.0–1.5 秒，一口接一口），神态叠在上面，干活时 ≥95% 的时间在动、不停超过约 1 秒；闲着的动作短而稀（`MOTION.idleAlive`，`:486`：8–15 秒一次，眨眼 ≤0.2 秒，看一眼或舌尖一甩 ≤0.6 秒；打盹同样稀，`MOTION.doze`，`:501`），≤5%。这样守住侧栏「只有 running 会动——动 = 仍在推进」。测试按常量模拟 10 分钟 × 5 个种子守着这两个数（`gui/src/lib/assistant-face-director.test.ts:370`、`:381`）。
+- **长活安静下来**（裁决 119 第 6 条）：同一个干活状态持续 15 秒后，动作、定住的姿势与底下那层都缩到约四成、照旧一直在动，之后每隔 20–30 秒来一拍全幅；换状态或任何一次反应立刻回到全幅、重新计时（`MOTION.quiet`，`:539`；导演 `gui/src/lib/assistant-face-director.ts`）。
+- **数值：幅度 1 倍，集中在 `MOTION`**：所有时长、距离、角度都在 `gui/src/lib/assistant-face-motion.ts` 的 `MOTION`（`:337` 起），每条带注释说它表达什么；距离用图标自己的 4096 单位，72px 上 57 单位为 1px。幅度在开发版里比过 1、1.5、2 倍，JC 真机定 1 倍（裁决 119 第 7 条：「幅度太大的确不太适合 Galley 的气质」），乘数已经拆掉，要调就改 `MOTION` 本身。
+- **只用 transform、透明度与描摹路径自己的点，用 SMIL 播**：每一拍是一组 SVG 动画（`<animateTransform>`、`<animate>`，`gui/src/components/layout/assistant/face-smil.ts`），浏览器自己跑，不逐帧跑脚本。不用 CSS 或 Web Animations：在 Chrome 里只要有一个在跑，整张 SVG 就错开半个设备像素重新栅格化，拍子开始、结束时整张脸跳一下；SMIL 不动栅格，静止时与应用图标逐像素相同（票 65 实测；舌头靠改路径的 `d` 弯过去，CSS 也做不到，票 66）。
+- **减少动态下静止，窗口不在前台时暂停**：`prefers-reduced-motion` 下只给一张静止的脸（导演 `setStill`，实时读系统设置，`gui/src/hooks/useAssistantFaceDriver.ts:355`），卡片在跑时把转圈徽标放回来（现有的 `.spin`，减少动态下放慢不停，`gui/src/styles/globals.css:917`；`AssistantAvatar.tsx:156` 只在脸能动时省掉转圈）：叫醒的一轮第二行写的是最后一句，那时转圈就是唯一的在忙信号。窗口不在前台、或脸不在屏上时不起新拍，正在演的那一拍演完定住（`useAssistantFaceDriver.ts:340`）。
+
+历史：2026-10-19 至 10-20 票 65、66 在开发版里用临时切换器比过乙（只在有状态时动）与丙（加上闲着时的眨眼、打盹）、两种卡片版式与三档幅度，生产构建那时照旧是 40px 静止头像加转圈徽标；票 67 拆掉切换器，丙、舞台 72、1 倍进生产。
 
 > 已落地的 B 类收敛：thinking 态逐字波浪 → 三点指示 + 等宽计数器（2026-08-12
 > 再裁决：三点 → 状态文字扫光 + 0.1s 计数器，走上方豁免）；running tool

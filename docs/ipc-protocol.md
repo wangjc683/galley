@@ -190,6 +190,12 @@ agent 进入一轮步骤。Bridge 会在普通 `user_message` / `ask_user_respon
 
 工具开始执行。
 
+**现状（2026-10-20 照代码核对）：runner 不发这个事件。** 它只在协议里定义着：`runner/ipc.py:89` 的 `ToolCallStartEvent` 与 `:488` 的 `EVENT_KINDS` 登记，Core（`core/src/ipc.rs:151`）与 GUI（`gui/src/types/ipc.ts:125`）都认得它，GUI 收到也只记一条 debug 日志（`gui/src/lib/ipc-handlers.ts:817`）；bridge 里没有任何地方构造它。一步里调了哪些工具，要到这一步的 `turn_end` 才随 `toolCalls` 一起到（§4.7，`runner/workbench_bridge.py:1538`）。
+
+GUI 要知道「此刻正在调哪个工具」时（侧栏助理卡片那张脸的神态，主聊天票 65），不靠这个事件，读的是这一步正在流出的原始文字（消息缓存的 `inFlightContent`）里 GA 打出的最后一条派发行：GA 在派发每个工具前先打一行（`managed-ga/code/agent_loop.py:78` 的详细格式：`🛠️ Tool:` 后接反引号里的工具名，再接参数块；`:79` 的紧凑格式：`🛠️ name(args)`），bridge 原样转发，这一步的 `turn_end` 才清掉，所以工具在跑时最后一条派发行就是它。解析在 `gui/src/lib/assistant-face.ts:148` 的 `liveToolCall`，归类在 `:114` 的 `classifyTool`。这是一处读 GA 输出格式的耦合点：GA 改了派发行的写法，脸会退回「在想」，不影响别的界面。协议本身不改；哪天 runner 真发了这个事件，GUI 可以改读它、去掉这处耦合。
+
+下面是协议定义的形状：
+
 ```json
 {
   "kind": "tool_call_start",
