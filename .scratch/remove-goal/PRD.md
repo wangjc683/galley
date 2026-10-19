@@ -1,6 +1,6 @@
 # 去掉 Goal（Less harness. More model.）
 
-Status: needs-dogfood（2026-10-13 四票完成并合入 main，待 JC 真机验收；见 devlog `2026-10-13-remove-goal.md`）
+Status: done（2026-10-13 四票完成并合入 main；2026-10-19 JC 真机验收通过，CLI `goal start` exit 2 由主会话验；见 devlog `2026-10-13-remove-goal.md`）
 
 来源：2026-10-13 讨论。JC 提出按「Less harness. More model.」完全去掉 Goal：模型够强，说清目标就能一直干下去。
 agent 的判断：这条论证只覆盖「干完为止」一种用法——模型停下多半不是能力不够，而是收口习惯、`ask_user`、
