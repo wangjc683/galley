@@ -85,3 +85,18 @@ Status: ready-for-agent
 ## 给 JC 的真机步骤（主会话合入后补全）
 
 ## Comments
+
+### 2026-10-19 实现说明（分支 `main-chat-63-wake-says-what-is-of-use`）
+
+- **提交**：Core、手册与入口层 `6956be2c`，评测 `3e57f758`，本条另一提交。
+- **Core 的叫醒说明**（`core/src/subtask_report.rs`）：它自己的提醒那段，「tell the user in a sentence or two」改成「tell the user what is of use to them now, in a sentence or two (not your words read back)」；待办那段，「The to-do is the user's own, something they have to do」改成「The to-do is on the user's list, something to do or something coming up they want to hear about」，「remind the user of it in a sentence or two」改成「tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step)」，并加一句「Do not tick it off until they say it is done or has happened.」（叫醒不一定读手册，「只提醒、不勾」这层意思原来靠「remind」带着，换掉之后写明）。迟到那句与 `NO_REPLY_END` 没动。调用方：`report_text` 只在把报告送进主对话的那条路上用（`subtask_report.rs` 的叫醒）和测试里，到点的报告按 `galley.main_chat_id()` 建，外置运行时没有主对话；`core/tests/schedule_wake_test.rs` 有一处旧句，跟着改了。
+- **手册**：「When one comes due」整节挪进 `wake.md`，改名「When a reminder comes due」（在 `wake.md` 里「one」没有所指）；`<no-reply/>` 那条与 `wake.md` 原有的一条重复，并进原有那条（补上「the user already did it, or said so since」），新节里不再写。「A scheduled task that starts a new conversation…」随节挪过去；`sche_tasks` 那句讲的是设提醒，留在 `reminders.md`。`reminders.md` 原处留「When one comes due, Galley wakes you: what to do then is in `wake.md`.」，跨部分引用仍是 12（`reminders.md` 到 `wake.md` 的那一处从挪走的节换成这一句）。`todos.md` 第③条加今晚就去、刚说出口、没什么要准备的不跟，分界写成「到时有没有要准备或要想起来的事，不是远近」，复查、开学照跟；「hang one reminder」那条加「which is not the moment it starts」与「or somewhere to go, by as long as that takes」，没另起一段。
+- **入口层**：待办那一段末尾加「Say 「记下了」 or the like only after you wrote it down this turn (a to-do, a reminder, your memory).」（106 字节，连空格 +107），预算 2568 → 2675，注释写了理由；`prompt_hash()` 改前改后都是 `c033e8d3`，工作台、IM 提示词不变（新测试断言它们没有「记下了」）。
+- **评测**（细节在评测 README 的「到点时说此刻有用的话（票 63）」一节与四套 `results.md`）：待办 64/64、定时 28/28（「不用了」第 2 遍话只写进 `<summary>`，补跑一遍过了）、闲聊 14/14、叫醒 16/18，一次也没改措辞，共 126 次运行、404 次模型调用。到点的七条十四遍都读了 `wake.md`、都没复述。
+- **与票不一样的地方**：
+  - 叫醒套件不是 18/18。日期修好了（两遍都不再当成上周的报价、不打回），但「结果够好」两遍都在交代前想读截图里的字（读 `vision_sop.md`、`ocr_utils.py`、找系统识别工具）：一遍内容对、186 字超过 160 的上限，一遍用满工具调用。是票 30 注 3 的过度核实，票 59 那两遍被日期问题盖住了；与本票改动无关，没改。
+  - 火锅与开会两条说的是今天的钟点，晚上跑就成了过去的事（票 60 在 18:48 跑「今晚 7 点」）。用例加了 `clock`：火锅取晚上第一个离运行时刻还有 45 分钟以上的整点，开会离下午 3 点不足两小时就说「明天下午 3 点」，判定里的时间跟着算。这一次 20:04 开跑，消息是「今晚 9 点和朋友吃火锅」「明天下午 3 点要和客户开会，记一下」。
+  - `remind-named-time` 没有照抄房东那条（它照旧在原有用例里重跑，两遍都在 8:00），换成「明天下午 3 点和客户开会，2 点 50 提醒我」：用户点的时间就在开始前，第③条最可能把它挪早；两遍都在 14:50。
+  - 「说了记下了，这一轮就得有写」放在每条用例上（待办、定时、闲聊），不只 `founding-date`；对比表里上一次的运行也按它重判，票 60 的 `founding-date` 第 2 遍因此不过。
+  - `wake-reno` 的「点到那件事」放宽到「装修」或「702」：第 1 遍「702 办公室今天按计划完工了吗？如果师傅已经收尾，可以约个时间现场验收……」没有「装修」二字，内容是对的。
+- **没动**：GUI、runner、`managed-ga/code`、`cli/`、数据与迁移、别的提示词层、`docs/managed-ga-runtime/prompt-composition.md`（第 39 条真机期望「a sentence or two naming it」已与新措辞对不上，留给主会话）；devlog 与 PRD 留给主会话。
