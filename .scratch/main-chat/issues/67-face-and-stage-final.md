@@ -1,6 +1,6 @@
 # 67 定稿：拆幅度档与演示，丙加舞台 72 加 1 倍的脸进生产，设计文档定稿
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-10-20 合入 `4c16790d`、`1e435e06`、`d8dbfd76`；主会话复跑门禁：typecheck、lint、`TZ=UTC` 与 `TZ=America/Los_Angeles` 各 1945 条测试全过、`pnpm --dir gui build`、`git diff --check`、文档链接门禁，「票 65 / 66」清零，新增行没有本机路径；合入后 touch `gui/index.html`，dev 服务器给出的 `App.tsx` 已接正式驱动。屏幕锁着没截到真机窗口，真机看一眼即可）
 
 来源：主聊天 PRD 裁决 117、118、119（2026-10-20，JC 真机比完票 66：「幅度太大的确不太适合 Galley 的气质，这三档看肯定是 1x 比较合适」，裁决 119 第 7 条）。依赖 66（已合入）。改 GUI 与文档；Core、runner、CLI 不动。
 
@@ -56,7 +56,13 @@ Status: ready-for-agent
 6. 截图路径。
 7. 看到但没改的问题。
 
-## 给 JC 的真机步骤（主会话合入后补全）
+## 给 JC 的真机步骤
+
+只改 GUI 与文档，dev 已整页重载。
+
+1. 侧栏助理卡片是居中舞台 72，脸照 1 倍在动，和票 66 的 1× 一样；主区顶栏下沿不再有 pill。
+2. 让它干点活，脸在侧栏动、顶栏的小头像不动。
+3. 已知（代理回报）：还没有任何消息时卡片没有第二行（110px），第二行出现时列表下移约 19px，只在新主对话问候落地前遇到；`docs/ipc-protocol.md` §4.5 `tool_call_end`、§4.6 `tool_call_progress` 同样只定义、runner 不发，这次只改了 §4.4。
 
 ## Comments
 
