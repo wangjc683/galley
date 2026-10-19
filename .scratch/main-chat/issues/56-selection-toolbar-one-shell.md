@@ -1,6 +1,6 @@
 # 56 选中工具条：一个浮起的壳装同款图标；有选区时悬停行让位
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-10-19 快进合入 main，`9dff5b45`；主会话复跑门禁：typecheck、lint、两个时区各 1839 条、diff-check 全过）
 
 来源：主聊天 PRD 裁决 108（2026-10-19，JC 真机票 53 后提：选中文字时出现的两颗图标与悬停行风格割裂）。只改 GUI 与设计文档；Core、runner 不动。不上切换器。
 
