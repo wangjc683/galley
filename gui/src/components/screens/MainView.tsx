@@ -33,6 +33,7 @@ import { ThinkingPreview } from "@/components/conversation/ThinkingPreview";
 import { UserQuestionRail } from "@/components/conversation/UserQuestionRail";
 import { useActiveMessages } from "@/hooks/useActiveSession";
 import { useEarlierTurns } from "@/hooks/useEarlierTurns";
+import { useLiveLineHandoff } from "@/hooks/useLiveLineHandoff";
 import { useRemovedTurnsAnchor } from "@/hooks/useRemovedTurnsAnchor";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
 import { useSubtaskQuestionHolder } from "@/hooks/useSubtaskQuestionHolder";
@@ -42,6 +43,11 @@ import { useTodosByMessage } from "@/hooks/useTodoCards";
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { useMarkdownStream } from "@/hooks/useMarkdownStream";
 import { assistantLineSentence } from "@/lib/assistant-conversation";
+import {
+  liveLineHandoff,
+  type LiveLineFrame,
+  type LiveLineHandoff,
+} from "@/lib/live-line-handoff";
 import { openMainChat } from "@/lib/main-chat";
 import { endsInSilentReport, subtaskQuestionLocked } from "@/lib/subtasks";
 import {
@@ -431,11 +437,59 @@ function MainViewContent({
     () => isMainChat && endsInSilentReport(turns),
     [isMainChat, turns],
   );
-  const lineRoundSettled = useMemo(() => {
-    if (!isMainChat) return false;
+  // …and the answer that settled it (its row's message id), which the
+  // line hands over to.
+  const { lineRoundSettled, lineReplyId } = useMemo(() => {
+    if (!isMainChat) return { lineRoundSettled: false, lineReplyId: null };
     const groups = buildRunGroups(turns);
-    return (groups[groups.length - 1]?.complete ?? false) || silentReport;
+    const last = groups[groups.length - 1];
+    const reply =
+      last?.finalTurnIndex != null ? turns[last.finalTurnIndex] : undefined;
+    return {
+      lineRoundSettled: (last?.complete ?? false) || silentReport,
+      lineReplyId:
+        reply && reply.role !== "system" ? (reply.messageId ?? null) : null,
+    };
   }, [isMainChat, turns, silentReport]);
+  // The line while the round runs; not while it asks you (it waits, it
+  // is not busy), from the moment the question arrives.
+  const lineShown =
+    isRunning && isMainChat && !lineRoundSettled && !pendingAskUser;
+  // The hand-off (ruling 103, ticket 51): the render where the line's
+  // place goes to its bubble — the answer, or its question — grows the
+  // bubble out of the line, and the follow for it keeps the same clock.
+  // Only one you are watching: the line was on screen in the render
+  // before, in this session, not under a cold-start restore
+  // (lib/live-line-handoff.ts). MainView mounts per session, so a
+  // switch or a reload starts from what is there. Guarded
+  // setState-in-render: the hand-off has to be known in the commit that
+  // lands it.
+  const lineFrameNow: LiveLineFrame = {
+    sessionId: activeSessionId,
+    live: lineShown && !restoring,
+  };
+  const [lineFrame, setLineFrame] = useState<LiveLineFrame>(lineFrameNow);
+  const [handoff, setHandoff] = useState<LiveLineHandoff | null>(null);
+  if (
+    lineFrame.sessionId !== lineFrameNow.sessionId ||
+    lineFrame.live !== lineFrameNow.live
+  ) {
+    setLineFrame(lineFrameNow);
+    const kind = liveLineHandoff(lineFrame, {
+      sessionId: activeSessionId,
+      lineShown,
+      question: Boolean(pendingAskUser),
+      settled: lineRoundSettled,
+      silent: silentReport,
+    });
+    if (kind) {
+      setHandoff({
+        tick: (handoff?.tick ?? 0) + 1,
+        kind,
+        messageId: kind === "reply" ? lineReplyId : null,
+      });
+    }
+  }
 
   // Conversation scroll behavior — sticky-bottom follow, the
   // scroll-to-bottom button, session-switch snap, stick-to-user-message,
@@ -455,6 +509,13 @@ function MainViewContent({
     pendingAskUser,
     restoring,
     stickBottom: isMainChat,
+    landingTick: handoff?.tick ?? 0,
+  });
+  // The line's place, and the hand-off on the page.
+  const liveLineRef = useLiveLineHandoff({
+    enabled: isMainChat,
+    scrollContainerRef,
+    handoff,
   });
   // Earlier pages of the conversation: read near the top, prepended
   // without moving what is on screen. See useEarlierTurns.
@@ -643,9 +704,11 @@ function MainViewContent({
               the before/after into one per-step rhythm. */}
             {/* The assistant: one line instead of the in-flight row, its
                 reasoning and the streaming prose — gone once the round
-                has its answer. */}
-            {isRunning && isMainChat && !lineRoundSettled && (
+                has its answer or asks, its bubble growing out of it
+                (useLiveLineHandoff). */}
+            {lineShown && (
               <AssistantLiveLine
+                ref={liveLineRef}
                 sentence={lineSentence}
                 startedAtMs={currentRunStartedAtMs}
                 baseMs={runElapsedBaseMs}

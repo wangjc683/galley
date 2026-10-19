@@ -42,6 +42,16 @@
  * the way restarts from where the container is now, under the same
  * rules (a growing tail that the 「回到底部」 chase keeps re-aiming at;
  * a message that must park while the layout under it moves).
+ *
+ * Keeping time with something else on screen (`ScrollTiming`, ticket
+ * 51: the main chat's follow when its reply grows out of the live line)
+ * the caller sets the duration and the curve instead, and then the
+ * whole way is animated (no far jump), the clock starts at the first
+ * frame, as a Web Animation started in the same task does, and a
+ * retarget keeps the end time: the rest of the way runs from where the
+ * container is to the new target over what is left of the curve. The
+ * user and other code still get the last word; reduced motion still
+ * writes at once.
  */
 
 /** Farthest distance animated; beyond it, jump to this far short of the
@@ -92,6 +102,15 @@ export interface ScrollAnimation {
   readonly ended: ScrollEnd | null;
   /** The `scrollTop` it is heading for, clamped to the scrollable range. */
   readonly target: number;
+}
+
+/** A scroll that keeps time with an animation beside it (see the
+ * module note): its duration and its curve. */
+export interface ScrollTiming {
+  /** The whole way, in ms; a retarget keeps the end time. */
+  durationMs: number;
+  /** Progress (0–1) at time fraction `t` (0–1). */
+  easing: (t: number) => number;
 }
 
 /** The scroll container as this module uses it (an HTMLElement in the
@@ -173,12 +192,15 @@ export function scrollDestination(el: ScrollBox): number | null {
 /**
  * Smoothly scrolls `el` to `top` under the rules above. `onEnd` runs
  * once when it ends, with how; it can run before this returns (reduced
- * motion, already there).
+ * motion, already there). `timing` sets the duration and the curve for
+ * a scroll that keeps time with something else (see the module note);
+ * without it, they follow the distance.
  */
 export function animateScroll(
   el: ScrollBox,
   top: number,
   onEnd?: (end: ScrollEnd) => void,
+  timing?: ScrollTiming,
 ): ScrollAnimation {
   running.get(el)?.finish("superseded");
 
@@ -191,6 +213,12 @@ export function animateScroll(
   /** `scrollTop` as read right after our last write. */
   let written = 0;
   let frame: number | null = null;
+  // With `timing`: the first frame's time (the clock starts there), the
+  // time fraction the last frame reached, and the curve's progress where
+  // the current leg began (0, or where a retarget picked up).
+  let clockAt: number | null = null;
+  let reached = 0;
+  let legFrom = 0;
 
   // A wheel / trackpad tick or a touch on the scroller.
   const onUserScroll = () => finish("interrupted");
@@ -226,18 +254,32 @@ export function animateScroll(
     onEnd?.(end);
   }
 
-  const step = () => {
+  /** Where the current leg is at time fraction `t`: the distance's own
+   * curve, or with `timing` its curve over what is left of it. */
+  const legProgress = (t: number): number => {
+    if (!timing) return scrollProgress(distance, t);
+    const left = 1 - legFrom;
+    if (left <= 1e-9) return 1;
+    return (timing.easing(Math.min(1, Math.max(0, t))) - legFrom) / left;
+  };
+
+  const step = (frameTime: number) => {
     frame = null;
     if (ended) return;
     if (Math.abs(el.scrollTop - written) > FOREIGN_MOVE_PX) {
       finish("displaced");
       return;
     }
-    const t = (performance.now() - startedAt) / duration;
+    let t: number;
+    if (timing) {
+      if (clockAt === null) clockAt = frameTime;
+      t = (frameTime - clockAt) / duration;
+      reached = Math.min(1, t);
+    } else {
+      t = (performance.now() - startedAt) / duration;
+    }
     const done = t >= 1;
-    el.scrollTop = done
-      ? target
-      : from + distance * scrollProgress(distance, t);
+    el.scrollTop = done ? target : from + distance * legProgress(t);
     written = el.scrollTop;
     if (done) {
       finish("arrived");
@@ -253,7 +295,8 @@ export function animateScroll(
       finish("arrived");
       return;
     }
-    const start = scrollJumpFrom(el.scrollTop, target);
+    // Kept in time with something else: the whole way, no far jump.
+    const start = timing ? el.scrollTop : scrollJumpFrom(el.scrollTop, target);
     if (start !== el.scrollTop) el.scrollTop = start;
     from = el.scrollTop;
     written = from;
@@ -263,8 +306,15 @@ export function animateScroll(
       finish("arrived");
       return;
     }
-    duration = scrollDurationMs(distance);
-    startedAt = performance.now();
+    if (timing) {
+      // The end time stays where the first aim put it; this leg runs
+      // over the rest of the curve.
+      duration = timing.durationMs;
+      legFrom = timing.easing(reached);
+    } else {
+      duration = scrollDurationMs(distance);
+      startedAt = performance.now();
+    }
     if (frame === null) frame = requestAnimationFrame(step);
   };
 

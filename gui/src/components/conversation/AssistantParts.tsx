@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode, type Ref } from "react";
 
 import { assistantLineClock } from "@/lib/assistant-conversation";
 import { useCopy } from "@/lib/i18n";
@@ -67,16 +67,20 @@ export function AssistantBubble({ children }: { children: ReactNode }) {
  * the corner clock's own number and words, which the assistant's
  * conversation does not show, so the time shows once. The thinking
  * row's register (12px sans, ink-soft) and its shimmer as the busy
- * cue, not a typing bubble. Cut to one line.
+ * cue, not a typing bubble. Cut to one line. When its bubble takes its
+ * place, the bubble grows out of it (`ref`: MainView keeps where it
+ * stands, hooks/useLiveLineHandoff.ts).
  */
 export function AssistantLiveLine({
   sentence,
   startedAtMs,
   baseMs,
+  ref,
 }: {
   sentence: string | null;
   startedAtMs: number | null;
   baseMs: number;
+  ref?: Ref<HTMLDivElement>;
 }) {
   const copy = useCopy();
   const [now, setNow] = useState(() => Date.now());
@@ -92,6 +96,7 @@ export function AssistantLiveLine({
   const text = sentence ?? copy.conversation.thinking.replace(/[.…]+$/, "");
   return (
     <div
+      ref={ref}
       data-role="assistant-live-line"
       className="mt-5 flex min-w-0 items-baseline gap-1.5 leading-[1.6] text-ink-soft [font-size:var(--conversation-step-size)]"
     >

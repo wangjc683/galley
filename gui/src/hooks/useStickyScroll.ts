@@ -1,8 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { animateScroll, scrollDestination } from "@/lib/animate-scroll";
+import {
+  animateScroll,
+  prefersReducedMotion,
+  scrollDestination,
+  type ScrollAnimation,
+} from "@/lib/animate-scroll";
 import {
   assistantFollowBottom,
+  assistantFollowTop,
+  assistantReplyStart,
   assistantScrollToBottom,
 } from "@/lib/assistant-conversation";
 import { chaseBottom } from "@/lib/chase-bottom";
@@ -19,6 +26,7 @@ import {
   startLiveTail,
   submitScroll,
 } from "@/lib/live-tail";
+import { landingScrollTiming } from "@/lib/live-line-handoff";
 import { keepBottomOnViewportResize } from "@/lib/viewport-resize";
 import { turnsHoldMessage, useMessagesStore } from "@/stores/messages";
 import { type LocateRequest, useUiStore } from "@/stores/ui";
@@ -48,6 +56,96 @@ const USER_MSG_SELECTOR =
  * runs a mount's effect twice and cancels the first frame.
  */
 let scrolledForSubmitTick = 0;
+
+/** Within this of the bottom counts as at the bottom (px): the scroll
+ * listener's tolerance. */
+const AT_BOTTOM_PX = 24;
+
+/**
+ * The main chat's follow for the landing its live line hands over to
+ * (ticket 51, lib/live-line-handoff.ts): the same target as every
+ * follow (`assistantFollowTop`), reached on the growth's clock instead
+ * of at once, so the bubble opens where the line was. While it runs,
+ * the follow paths re-aim it rather than write `scrollTop` (a write
+ * would make it let go), and 「at the bottom」 reads where it ends:
+ * attached, or parked short at the reply's start (the button shows, as
+ * after an instant park).
+ */
+interface Landing {
+  /** The reply start's top in the scroll content, taken as it starts
+   * (the transforms the hand-off puts on the column would skew a later
+   * reading). Null without one. */
+  startY: number | null;
+  /** It ends within AT_BOTTOM_PX of the bottom. */
+  attached: boolean;
+  animation: ScrollAnimation | null;
+}
+
+function landingTarget(
+  el: HTMLElement,
+  startY: number | null,
+): { top: number; attached: boolean } {
+  const { top } = assistantFollowTop({
+    scrollTop: el.scrollTop,
+    scrollHeight: el.scrollHeight,
+    clientHeight: el.clientHeight,
+    replyStartOffset: startY === null ? null : startY - el.scrollTop,
+    anchor: USER_MSG_ANCHOR_TOP_PX,
+  });
+  const bottom = Math.max(0, el.scrollHeight - el.clientHeight);
+  return { top, attached: bottom - top < AT_BOTTOM_PX };
+}
+
+/** Starts the landing's follow; false when it cannot run smoothly
+ * (reduced motion, the tokens unreadable) — then the follow is the
+ * usual instant one. */
+function startLanding(
+  el: HTMLElement,
+  landingRef: { current: Landing | null },
+): boolean {
+  const timing = landingScrollTiming();
+  if (!timing || prefersReducedMotion()) return false;
+  const previous = landingRef.current;
+  landingRef.current = null;
+  previous?.animation?.cancel();
+  const start = assistantReplyStart(el);
+  const startY = start
+    ? start.getBoundingClientRect().top -
+      el.getBoundingClientRect().top +
+      el.scrollTop
+    : null;
+  const { top, attached } = landingTarget(el, startY);
+  const landing: Landing = { startY, attached, animation: null };
+  landingRef.current = landing;
+  landing.animation = animateScroll(
+    el,
+    top,
+    () => {
+      // Not when a newer landing or the unmount took over.
+      if (landingRef.current !== landing) return;
+      landingRef.current = null;
+      el.dispatchEvent(new Event("scroll"));
+    },
+    timing,
+  );
+  // Parked short: following stops now, as with an instant park (a
+  // scroll event, since setState stays out of effects).
+  if (!attached && landingRef.current === landing) {
+    el.dispatchEvent(new Event("scroll"));
+  }
+  return true;
+}
+
+/** The tail grew or shrank under a running landing: same rule, new
+ * target, same end time. */
+function retargetLanding(el: HTMLElement, landing: Landing): void {
+  const { top, attached } = landingTarget(el, landing.startY);
+  landing.attached = attached;
+  const animation = landing.animation;
+  if (animation && !animation.ended && Math.abs(top - animation.target) >= 1) {
+    animation.retarget(top);
+  }
+}
 
 /**
  * Case-insensitive substring occurrences of `query` inside `root`'s
@@ -137,6 +235,7 @@ export function useStickyScroll({
   pendingAskUser,
   restoring = false,
   stickBottom = false,
+  landingTick = 0,
 }: {
   /** Active session id. Identity change re-snaps the new conversation
    * to the bottom. Undefined during pre-session screens. */
@@ -163,6 +262,13 @@ export function useStickyScroll({
    * switches and 「回到底部」 still land on the bottom itself.
    */
   stickBottom?: boolean;
+  /**
+   * Bumped by MainView in the commit where the main chat's live line
+   * hands over to its bubble (ticket 51): that commit's follow is smooth,
+   * on the growth's clock (`Landing` above). Not following then (you
+   * are reading further up): nothing scrolls, as before.
+   */
+  landingTick?: number;
 }) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const stickBottomRef = useRef(stickBottom);
@@ -189,10 +295,20 @@ export function useStickyScroll({
   /** Observes what the tail measures from (the viewport, the rows above
    * its anchor); set up once below. */
   const tailObserverRef = useRef<ResizeObserver | null>(null);
+  /** The main chat's landing in flight (ticket 51), and the hand-off it
+   * last saw. */
+  const landingRef = useRef<Landing | null>(null);
+  const landedTickRef = useRef(landingTick);
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
     const onScroll = () => {
+      // Mid-landing the position is on its way: read where it ends.
+      const landing = landingRef.current;
+      if (landing) {
+        setAtBottom(landing.attached);
+        return;
+      }
       const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
       setAtBottom(distFromBottom < 24);
       tailRef.current?.onScroll();
@@ -223,10 +339,20 @@ export function useStickyScroll({
   //
   // scrollTop assignment is O(1) so re-firing per render is fine.
   useLayoutEffect(() => {
+    // A hand-off is seen once, followed or not: one that landed while
+    // you read further up does not play when you come back down.
+    const landed = stickBottom && landingTick !== landedTickRef.current;
+    landedTickRef.current = landingTick;
     if (!atBottom) return;
     const el = scrollContainerRef.current;
     if (!el) return;
     if (stickBottom) {
+      // The landing: the same target, on the growth's clock.
+      if (landed && startLanding(el, landingRef)) return;
+      if (landingRef.current) {
+        retargetLanding(el, landingRef.current);
+        return;
+      }
       // Parked short of the bottom: the scroll listener drops follow
       // mode (a scroll event, since setState stays out of effects).
       if (assistantFollowBottom(el, USER_MSG_ANCHOR_TOP_PX)) {
@@ -238,7 +364,14 @@ export function useStickyScroll({
     // it without moving the viewport.
     if (tailRef.current?.noFollow) return;
     el.scrollTop = el.scrollHeight;
-  }, [streamingContent, atBottom, turnsLength, pendingAskUser, stickBottom]);
+  }, [
+    streamingContent,
+    atBottom,
+    turnsLength,
+    pendingAskUser,
+    stickBottom,
+    landingTick,
+  ]);
 
   // The click's intent is "attach to the tail", not "scroll to the
   // coordinate the tail happened to be at" — lib/chase-bottom.ts re-aims
@@ -260,6 +393,9 @@ export function useStickyScroll({
     () => () => {
       stopChaseRef.current?.();
       stopChaseRef.current = null;
+      const landing = landingRef.current;
+      landingRef.current = null;
+      landing?.animation?.cancel();
     },
     [],
   );
@@ -303,6 +439,11 @@ export function useStickyScroll({
       }
       if (!atBottomRef.current) return;
       if (stickBottomRef.current) {
+        // A landing running: re-aim it (a write would end it).
+        if (landingRef.current) {
+          retargetLanding(el, landingRef.current);
+          return;
+        }
         if (assistantFollowBottom(el, USER_MSG_ANCHOR_TOP_PX)) {
           setAtBottom(false);
         }

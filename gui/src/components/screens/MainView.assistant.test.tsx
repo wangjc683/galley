@@ -472,6 +472,16 @@ describe("the assistant's live line", () => {
     });
     expect(asking).not.toContain('data-role="assistant-live-line"');
     expect(asking).toContain('data-role="ask-user-bubble"');
+    // …from the moment the question arrives, before the run's close:
+    // its bubble takes the line's place (ticket 51).
+    const asked = render({
+      isMainChat: true,
+      isRunning: true,
+      turns: [...sent, ask("订哪一班？", ["8:30"], 1)],
+      pendingAskUser: { question: "订哪一班？", candidates: ["8:30"] },
+    });
+    expect(asked).not.toContain('data-role="assistant-live-line"');
+    expect(asked).toContain('data-role="ask-user-bubble"');
   });
 
   it("carries the round's clock past 3 seconds, and the corner clock is not shown", () => {

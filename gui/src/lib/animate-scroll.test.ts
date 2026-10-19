@@ -252,6 +252,78 @@ describe("animateScroll", () => {
   });
 });
 
+describe("animateScroll keeping time with something else (ticket 51)", () => {
+  const linear = { durationMs: 240, easing: (t: number) => t };
+
+  it("takes the given time and curve the whole way, no far jump, its clock starting at the first frame", () => {
+    const box = new Box(10_000, 700);
+    const ends: ScrollEnd[] = [];
+    animateScroll(box, 1_500, (end) => ends.push(end), linear);
+    // 1500px away and nothing jumped.
+    expect(box.scrollTop).toBe(0);
+    // The first frame is the start, as for a Web Animation started in
+    // the same task.
+    tick(30);
+    expect(box.scrollTop).toBe(0);
+    tick(120);
+    expect(box.scrollTop).toBeCloseTo(750, 6);
+    tick(119);
+    expect(ends).toEqual([]);
+    tick(1);
+    expect(box.scrollTop).toBe(1_500);
+    expect(ends).toEqual(["arrived"]);
+  });
+
+  it("follows the given curve", () => {
+    const box = new Box(3_000, 700);
+    animateScroll(box, 400, undefined, {
+      durationMs: 240,
+      easing: (t) => t * t,
+    });
+    tick();
+    tick(60);
+    expect(box.scrollTop).toBeCloseTo(400 * 0.25 ** 2, 6);
+  });
+
+  it("keeps its end time on a retarget, going on from where it is", () => {
+    const box = new Box(10_000, 700);
+    const ends: ScrollEnd[] = [];
+    const animation = animateScroll(
+      box,
+      1_000,
+      (end) => ends.push(end),
+      linear,
+    );
+    tick();
+    tick(60);
+    expect(box.scrollTop).toBeCloseTo(250, 6);
+    // The tail grew: 2000 now. The rest of the curve (0.25 → 1) carries
+    // it from 250 to 2000.
+    animation.retarget(2_000);
+    tick(60);
+    expect(box.scrollTop).toBeCloseTo(250 + 1_750 * (0.25 / 0.75), 6);
+    tick(120);
+    expect(box.scrollTop).toBe(2_000);
+    expect(ends).toEqual(["arrived"]);
+    // 240ms after the first frame, as first aimed.
+    expect(raf.elapsed()).toBe(16 + 240);
+  });
+
+  it("still writes at once under reduced motion and lets go when the user scrolls", () => {
+    const box = new Box(3_000, 700);
+    raf.state.reducedMotion = true;
+    animateScroll(box, 600, undefined, linear);
+    expect(box.writes).toEqual([600]);
+    raf.state.reducedMotion = false;
+    const ends: ScrollEnd[] = [];
+    animateScroll(box, 0, (end) => ends.push(end), linear);
+    tick();
+    tick(60);
+    box.dispatchEvent(new Event("wheel"));
+    expect(ends).toEqual(["interrupted"]);
+  });
+});
+
 describe("the conversation's smooth scrolls", () => {
   it("all go through animateScroll, none through the engine's smooth scroll", () => {
     // Static renders run no effects or handlers, so this checks the
@@ -274,5 +346,7 @@ describe("the conversation's smooth scrolls", () => {
       "utf8",
     );
     expect(hook).toContain("chaseBottom(el,");
+    // The main chat's landing (ticket 51), on the growth's clock.
+    expect(hook).toMatch(/animateScroll\(\s*el,\s*top,[\s\S]*?timing,\s*\);/);
   });
 });
