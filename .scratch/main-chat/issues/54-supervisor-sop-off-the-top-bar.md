@@ -1,6 +1,6 @@
 # 54 Supervisor SOP 降显示优先级：内置运行时顶栏撤图标，⌘K 加入口，页面改说法
 
-Status: needs-dogfood（2026-10-19 快进合入 main，`41477a3d`；主会话复跑门禁：typecheck、lint、两个时区各 1812 条、diff-check 全过。下一版更新说明要写：内置运行时顶栏撤掉了 SOP 图标，入口在设置与 ⌘K）
+Status: done（2026-10-19 JC 真机验收通过：「票 54 通过」。合入 `41477a3d`；下一版更新说明要写：内置运行时顶栏撤掉了 SOP 图标，入口在设置与 ⌘K）
 
 来源：主聊天 PRD 裁决 106（2026-10-19，JC 问助手完善后 Supervisor SOP 还要不要常驻顶栏；主会话推荐 B，JC 同意）。同时了结 `docs/devlog/deferred.md`「设置 Agent 页去掉 Supervisor 叙事（SOP 降级）」。只改 GUI 与文档；Core、CLI、Agent API、`core/src/sop_install.rs`、SOP 正文（`docs/integrations/galley-supervisor-sop.md`）、宪法都不动。
 
