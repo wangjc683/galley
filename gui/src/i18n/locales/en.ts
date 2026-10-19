@@ -186,6 +186,9 @@ export const enCopy: AppCopy = {
     scheduledCreated: "Created by scheduled task",
     newReplyTitle: "New reply",
     emptySessions: "Your conversations will appear here.",
+    // 票 62 临时切换器，定档后由拆除票删掉 (sidebar/zones-trial).
+    zoneWorkbench: "Workbench",
+    zoneAssistant: "Assistant",
     bucketPinned: "Pinned",
     bucketToday: "Today",
     bucketWeek: "This week",

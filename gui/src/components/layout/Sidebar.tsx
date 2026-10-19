@@ -25,6 +25,15 @@ import { SidebarHeader } from "./sidebar/SidebarHeader";
 import { SidebarQuickActions } from "./sidebar/SidebarQuickActions";
 import { SidebarOtherSources } from "./sidebar/SidebarSideChats";
 import { SidebarSectionsList } from "./sidebar/SidebarTimeline";
+// 票 62 临时切换器，定档后由拆除票删掉。
+import {
+  SidebarAssistantLabel,
+  SidebarWorkbenchLabel,
+} from "./sidebar/zones-trial/SidebarZoneLabel";
+import {
+  sidebarZonesLayout,
+  useSidebarZonesTrial,
+} from "./sidebar/zones-trial/zones-trial";
 
 export interface SidebarProps {
   sessions: Session[];
@@ -183,14 +192,30 @@ export function Sidebar({
 }: SidebarProps) {
   const copy = useCopy();
   const mainChat = useMemo(() => findMainChat(sessions), [sessions]);
+  // 票 62 临时切换器，定档后由拆除票删掉。With a main chat only: the
+  // tier's card block, zone names and ground (`null`: today's sidebar),
+  // and 「新用户」, a list with nothing in it while the card stays real.
+  const zonesTrial = useSidebarZonesTrial();
+  const zones = mainChat ? sidebarZonesLayout(zonesTrial.tier) : null;
+  const demoNewUser = mainChat !== undefined && zonesTrial.newUser;
   // The list never holds the main chat (its card stands above it) nor a
   // subtask the user has not written in yet (ticket 06a): that one is a
   // card under the main chat reply that sent it, and its states reach
   // the assistant's card instead.
   const listSessions = useMemo(
     () =>
-      sessions.filter((s) => s.id !== mainChat?.id && !isUnpromotedSubtask(s)),
-    [sessions, mainChat],
+      // 票 62 临时切换器，定档后由拆除票删掉：「新用户」 lists nothing.
+      demoNewUser
+        ? []
+        : sessions.filter(
+            (s) => s.id !== mainChat?.id && !isUnpromotedSubtask(s),
+          ),
+    [sessions, mainChat, demoNewUser],
+  );
+  // 票 62 临时切换器，定档后由拆除票删掉：nor any project.
+  const listProjects = useMemo(
+    () => (demoNewUser ? [] : projects),
+    [demoNewUser, projects],
   );
   const mainChatSubtasks = useMemo(
     () => unpromotedSubtasksOf(sessions, mainChat?.id),
@@ -229,11 +254,11 @@ export function Sidebar({
   // agent-started sessions also come out into 「其他来源」.
   const sections = useMemo(
     () =>
-      buildSidebarSections(listSessions, projects, {
+      buildSidebarSections(listSessions, listProjects, {
         splitOtherSources: sectioned,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [listSessions, projects, dayStamp, sectioned],
+    [listSessions, listProjects, dayStamp, sectioned],
   );
   const listEmpty =
     sections.earlier.length === 0 &&
@@ -283,8 +308,8 @@ export function Sidebar({
     }
   }
   const navigationProjects = useMemo(
-    () => sortProjectsForNavigation(projects, listSessions),
-    [projects, listSessions],
+    () => sortProjectsForNavigation(listProjects, listSessions),
+    [listProjects, listSessions],
   );
   const expandedProjectIdSet = useMemo(
     () => new Set(expandedProjectIds),
@@ -443,15 +468,26 @@ export function Sidebar({
         // 常显 + 加重): what stays put sits above it, the scrolling list
         // below. The 10-08 "no line at rest" rule kept the 新对话 row
         // joined to the list it heads; the card heads nothing.
-        <div className="border-b border-line-strong py-1.5">
-          <SidebarAssistantCard
-            mainChat={mainChat}
-            subtasks={mainChatSubtasks}
-            selected={mainChatSelected}
-            open={activeId === mainChat.id}
-            onOpen={() => handleSelectSession(mainChat.id)}
-          />
-        </div>
+        <>
+          {/* 票 62 临时切换器，定档后由拆除票删掉：the trial tiers move
+              the line into 「工作台」's row under the block (and B puts
+              「助理」 on the masthead's line at its top). */}
+          <div
+            className={
+              zones ? zones.cardBlock : "border-b border-line-strong py-1.5"
+            }
+          >
+            {zones?.assistantLabel && <SidebarAssistantLabel />}
+            <SidebarAssistantCard
+              mainChat={mainChat}
+              subtasks={mainChatSubtasks}
+              selected={mainChatSelected}
+              open={activeId === mainChat.id}
+              onOpen={() => handleSelectSession(mainChat.id)}
+            />
+          </div>
+          {zones && <SidebarWorkbenchLabel />}
+        </>
       ) : (
         <SidebarQuickActions
           onNewChat={onNewChat}
@@ -472,6 +508,10 @@ export function Sidebar({
           // scrollIntoView clears the sticky new-chat row (42px: pt-1.5
           // + the button's h-8 + pb-1).
           sectioned && "scroll-pt-[42px]",
+          // 票 62 临时切换器，定档后由拆除票删掉：the workbench's ground
+          // runs to the window's foot however short the list, Windows'
+          // scrollbar lane with it.
+          zones && "bg-app",
         )}
       >
         {sectioned ? (
@@ -538,7 +578,18 @@ export function Sidebar({
           climbing counter on the quietest row reads as debt for work
           the user already decided was done. The exact count lives in
           the ArchivedDialog header, where it is actually consulted. */}
-      {archivedCount > 0 && <SidebarFooter onOpenArchived={onOpenArchived} />}
+      {/* 票 62 临时切换器，定档后由拆除票删掉：「新用户」 has nothing
+          archived; the trial tiers pin the row to the workbench's foot,
+          on its ground. */}
+      {archivedCount > 0 &&
+        !demoNewUser &&
+        (zones ? (
+          <div className="bg-app">
+            <SidebarFooter onOpenArchived={onOpenArchived} />
+          </div>
+        ) : (
+          <SidebarFooter onOpenArchived={onOpenArchived} />
+        ))}
     </div>
   );
 }
