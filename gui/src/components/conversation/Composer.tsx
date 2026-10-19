@@ -654,7 +654,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             >
               ·
             </span>
-            <EffortPill {...reasoningEffort} popoverAlign={popoverAlign} />
+            <EffortPill
+              {...reasoningEffort}
+              popoverAlign={popoverAlign}
+              disabled={disabled}
+            />
           </>
         )}
       </>

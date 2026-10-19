@@ -62,7 +62,9 @@ export interface ComposerReasoningEffortState {
  *     the tier's own arrow while the model had none.
  *   - Usable mid-run: the engine reads the value per request, so a
  *     change applies to the next call. The LLM switch lock does not
- *     reach here.
+ *     reach here. Only a disabled composer (the opened subtask whose
+ *     question is with Galley, main chat ticket 49) greys its rows, the
+ *     way LLMPill greys the model rows.
  */
 export function EffortPill({
   effective,
@@ -70,9 +72,12 @@ export function EffortPill({
   override,
   onSelect,
   popoverAlign = "start",
+  disabled = false,
 }: ComposerReasoningEffortState & {
   /** As LLMPill's: `center` in the one-line composer (ruling 76). */
   popoverAlign?: "start" | "center";
+  /** The composer is disabled: rows grey out and pick nothing. */
+  disabled?: boolean;
 }) {
   const copy = useCopy();
   const effortCopy = copy.composer.reasoningEffort;
@@ -183,12 +188,15 @@ export function EffortPill({
                   onClick={() => {
                     // Picking what is already in force is a no-op (it
                     // would otherwise round-trip a write for nothing).
-                    if (isCurrent) return;
+                    if (disabled || isCurrent) return;
                     onSelect(row.value);
                   }}
+                  aria-disabled={disabled || undefined}
                   className={cn(
                     "flex w-full min-w-0 items-center gap-2 rounded-callout px-2.5 py-1.5 text-left text-[12.5px] hover:bg-hover",
                     isCurrent ? "text-ink" : "text-ink-soft",
+                    disabled &&
+                      "cursor-not-allowed opacity-50 hover:bg-transparent",
                   )}
                 >
                   {/* Same row grammar as the model popover: text flush
