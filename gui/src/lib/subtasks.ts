@@ -309,6 +309,10 @@ export function deriveSubtaskCard(
  * arrives). It holds while the subtask still asks that same question;
  * the store drops it when the subtask runs again and when a later wake
  * carrying it reaches the assistant.
+ *
+ * The subtask opened in the main area follows from the same facts
+ * (ruling 102, {@link subtaskQuestionHolder}): it answers whenever the
+ * card does, and also before the question reached the assistant.
  */
 export function answeredInCard(
   fallback: PendingAskUser | null | undefined,
@@ -326,6 +330,142 @@ export function sameQuestion(a: PendingAskUser, b: PendingAskUser): boolean {
     a.candidates.length === b.candidates.length &&
     a.candidates.every((c, i) => c === b.candidates[i])
   );
+}
+
+// ---- Who holds a subtask's question (ruling 102) ---------------------
+
+/** What the page has of the main chat, for {@link subtaskQuestionHolder}. */
+export interface MainChatQuestionView {
+  /** Its loaded turns (messages store). */
+  turns: readonly Turn[];
+  agentRunning: boolean;
+  pendingAskUser: PendingAskUser | null;
+}
+
+/**
+ * Who has a subtask's question now, and so where it is answered:
+ *
+ *   none           it asks nothing.
+ *   subtask        it was not handed to the assistant yet — Core has not
+ *                  woken the main chat, or the page cannot tell (the main
+ *                  chat's turns not loaded, a reload): answered in the
+ *                  subtask itself, opened from its card.
+ *   card           Core could not wake the main chat for it (ruling 101,
+ *                  `answeredInCard`): answered in the card, and in the
+ *                  opened subtask too — both go straight to the subtask,
+ *                  and nothing waits in the main chat.
+ *   galleyWorking  a wake carrying it reached the assistant and that round
+ *                  is running: the assistant is answering it for the user
+ *                  or about to ask them. Nowhere for the user to answer,
+ *                  on purpose: an answer now would have the assistant
+ *                  relay a question already answered.
+ *   galleyAsked    in that round the assistant asked the user in the main
+ *                  chat, and waits: answered there.
+ *
+ * The opened subtask is locked (`subtaskQuestionLocked`) in the last
+ * two: an answer there would leave the main chat's question waiting,
+ * its next message taken as the answer (ruling 102). Somewhere answers
+ * at every moment but while the assistant's round runs
+ * (`subtaskQuestionPlaces`).
+ *
+ * The wake is the main chat's latest run when a report row (Core's
+ * `galley-report`) opened it, its note names this subtask, and it was
+ * written after the subtask's current run began (its latest user turn:
+ * the run that ended on the question). An older wake — the question
+ * before, a result, a send-back — is not this question's. Core stamps
+ * both rows to the second; a report always comes at least one model
+ * call after the run it reports began, hence strictly later.
+ */
+export type SubtaskQuestionHolder =
+  | "none"
+  | "subtask"
+  | "card"
+  | "galleyWorking"
+  | "galleyAsked";
+
+export function subtaskQuestionHolder({
+  subtaskId,
+  pending,
+  askInCard,
+  subtaskTurns,
+  mainChat,
+}: {
+  subtaskId: string;
+  /** The subtask's pending question (messages store). */
+  pending: PendingAskUser | null;
+  /** The subtasks store's `askInCard` entry for it, absent for none. */
+  askInCard: PendingAskUser | null | undefined;
+  /** The subtask's loaded turns: when its current run began. */
+  subtaskTurns: readonly Turn[];
+  /** The main chat as the page has it; undefined when not loaded. */
+  mainChat: MainChatQuestionView | undefined;
+}): SubtaskQuestionHolder {
+  if (!pending) return "none";
+  if (answeredInCard(askInCard, pending)) return "card";
+  if (!mainChat || !wakeCarries(subtaskId, subtaskTurns, mainChat.turns)) {
+    return "subtask";
+  }
+  if (mainChat.agentRunning) return "galleyWorking";
+  if (mainChat.pendingAskUser) return "galleyAsked";
+  // The round ended without a question to the user (told them in a
+  // sentence, stopped, failed): the subtask is the place again.
+  return "subtask";
+}
+
+/** Whether the opened subtask may not answer: its question is with the
+ * assistant (ruling 102). */
+export function subtaskQuestionLocked(holder: SubtaskQuestionHolder): boolean {
+  return holder === "galleyWorking" || holder === "galleyAsked";
+}
+
+/** Where the user can answer a subtask's question for `holder` — the
+ * card (`answeredInCard`, ruling 101), the opened subtask (ruling 102),
+ * the main chat (the assistant's own question). */
+export function subtaskQuestionPlaces(holder: SubtaskQuestionHolder): {
+  card: boolean;
+  subtask: boolean;
+  mainChat: boolean;
+} {
+  return {
+    card: holder === "card",
+    subtask: holder !== "none" && !subtaskQuestionLocked(holder),
+    mainChat: holder === "galleyAsked",
+  };
+}
+
+/** Whether the main chat's latest run is a wake carrying the subtask's
+ * current question (see {@link SubtaskQuestionHolder}). */
+function wakeCarries(
+  subtaskId: string,
+  subtaskTurns: readonly Turn[],
+  mainTurns: readonly Turn[],
+): boolean {
+  const runBegan = latestUserTurnMs(subtaskTurns);
+  if (runBegan === null || !mainTurns.some(isSubtaskReportTurn)) return false;
+  const groups = buildRunGroups(mainTurns as Turn[]);
+  const last = groups[groups.length - 1];
+  if (!last || !isReportRound(last, mainTurns)) return false;
+  const opener = mainTurns[last.openerIndex];
+  if (opener?.role !== "user") return false;
+  const named = (opener.origin?.reason ?? "").split(",").map((id) => id.trim());
+  const writtenAt = timeMs(opener.createdAt);
+  return (
+    named.includes(subtaskId) && writtenAt !== null && writtenAt > runBegan
+  );
+}
+
+function latestUserTurnMs(turns: readonly Turn[]): number | null {
+  for (let i = turns.length - 1; i >= 0; i -= 1) {
+    const turn = turns[i];
+    if (turn.role === "user") return timeMs(turn.createdAt);
+  }
+  return null;
+}
+
+function timeMs(iso: string | undefined): number | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? ms : null;
 }
 
 function dispatchFailure(dispatch: SubtaskDispatch): SubtaskFailure {

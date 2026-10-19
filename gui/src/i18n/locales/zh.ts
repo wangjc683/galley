@@ -262,6 +262,11 @@ export const zhCopy = {
     notifyAsking: "子任务在问你",
     notifyDone: "子任务完成",
     notifyFailed: "子任务出错",
+    /** 打开的子任务在问、提问已交给 Galley 时，提问下面那一行（裁决 102），
+     * 后面跟「回到 Galley」按钮。叫醒那一轮还在跑：它在决定替你答还是来问你。 */
+    withGalleyWorking: "Galley 正在处理这个问题",
+    /** 同上，它已在你们的对话里问你。 */
+    withGalleyAsked: "Galley 正在问你这个问题",
   },
   /** 助手（主聊天 PRD 裁决 60–65，票 18）：内置运行时的主对话在界面上
    * 是一个叫 Galley 的人。侧栏顶上一张助手卡片（IM 会话列表里的一行），
@@ -506,6 +511,9 @@ export const zhCopy = {
       `下一步建议：${suggestion}。按 → 填入输入框。`,
     replyToContinue: "回复，或选择上方候选",
     replyOpen: "回复上方提问",
+    /** 打开的子任务在问、提问已交给 Galley 时，输入框停用，占位说去哪答（裁决 102）。
+     * 不写「主对话」：那是内部用语，界面叫它 Galley。 */
+    answerWithGalley: "在和 Galley 的对话里回答",
     byTheWay: "/btw 顺便问一句，不打断任务…",
     send: "发送",
     sendWithEnter: "发送 · Enter",

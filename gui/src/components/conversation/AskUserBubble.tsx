@@ -38,7 +38,8 @@ export interface AskUserBubbleProps {
    * and by ⌘ / Ctrl + click. Omit to hide the affordance.
    */
   onFillCandidate?: (candidateText: string) => void;
-  /** When true, chips are disabled (e.g. bridge not connected). */
+  /** When true, chips are disabled: a subtask opened while its question
+   * is with Galley (ruling 102) — the reason goes in `children`. */
   disabled?: boolean;
   /** Merged over the bubble's own classes. A subtask card (ticket 06a)
    * passes the bubble in bare — the card carries the warning bar and
@@ -46,7 +47,9 @@ export interface AskUserBubbleProps {
   className?: string;
   /** Rendered under the candidates: the subtask card's one-line reply
    * (a question answered in the card, not the Composer — only when its
-   * report could not wake the main chat, ruling 101). */
+   * report could not wake the main chat, ruling 101), or, in a subtask
+   * opened while Galley has its question, why it cannot be answered here
+   * and the way back (ruling 102). */
   children?: ReactNode;
   /** The assistant's conversation: the question is a plain left bubble
    * with the candidates under it — no warning bar, no 「等你回复」 (the

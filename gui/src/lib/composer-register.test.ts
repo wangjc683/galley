@@ -65,4 +65,19 @@ describe("resolveComposerRegister", () => {
     ).toBe("reply");
     expect(composerRegisterCopyKey("messaging")).toBe("writeMessage");
   });
+  it("says where to answer when an opened subtask's question is with Galley, over anything else (ruling 102)", () => {
+    for (const isRunning of [false, true]) {
+      for (const pendingAskUser of [false, true]) {
+        expect(
+          resolveComposerRegister({
+            isRunning,
+            pendingAskUser,
+            askUserHasCandidates: true,
+            questionWithGalley: true,
+          }),
+        ).toBe("withGalley");
+      }
+    }
+    expect(composerRegisterCopyKey("withGalley")).toBe("answerWithGalley");
+  });
 });

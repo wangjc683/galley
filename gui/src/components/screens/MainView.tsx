@@ -15,6 +15,7 @@ import {
 import { AssistantLiveLine } from "@/components/conversation/AssistantParts";
 import { ConversationSkeleton } from "@/components/conversation/ConversationSkeleton";
 import { StepLimitTail } from "@/components/conversation/StepLimitTail";
+import { Button } from "@/components/ui/button";
 import {
   buildRunGroups,
   liveRunElapsedBaseMs,
@@ -34,13 +35,15 @@ import { useActiveMessages } from "@/hooks/useActiveSession";
 import { useEarlierTurns } from "@/hooks/useEarlierTurns";
 import { useRemovedTurnsAnchor } from "@/hooks/useRemovedTurnsAnchor";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
+import { useSubtaskQuestionHolder } from "@/hooks/useSubtaskQuestionHolder";
 import { useRemindersByMessage } from "@/hooks/useReminderCards";
 import { useSubtaskDispatchesByMessage } from "@/hooks/useSubtaskCards";
 import { useTodosByMessage } from "@/hooks/useTodoCards";
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { useMarkdownStream } from "@/hooks/useMarkdownStream";
 import { assistantLineSentence } from "@/lib/assistant-conversation";
-import { endsInSilentReport } from "@/lib/subtasks";
+import { openMainChat } from "@/lib/main-chat";
+import { endsInSilentReport, subtaskQuestionLocked } from "@/lib/subtasks";
 import {
   composerRegisterCopyKey,
   resolveComposerRegister,
@@ -221,6 +224,18 @@ function MainViewContent({
     isRunning,
     waitingAskUser: !!pendingAskUser,
   });
+
+  // A subtask opened from its card whose question is with the assistant
+  // — its round running, or its question to the user waiting in the
+  // main chat (ruling 102, lib/subtasks.ts `subtaskQuestionHolder`):
+  // nothing here may answer it, or the main chat's question would be
+  // left waiting and the user's next message there taken as its answer.
+  // The question's candidates and the composer are off; one line under
+  // the question says so and leads back, as the 「Galley ›」 crumb does.
+  const questionHolder = useSubtaskQuestionHolder(
+    isMainChat ? undefined : activeSessionId,
+  );
+  const questionLocked = subtaskQuestionLocked(questionHolder);
 
   // The main chat's subtask cards (ticket 06a), by the reply that
   // dispatched them. Every other session has none.
@@ -742,7 +757,32 @@ function MainViewContent({
                   composerRef.current?.prefillText(text)
                 }
                 bubble={isMainChat}
-              />
+                disabled={questionLocked}
+              >
+                {questionLocked && (
+                  // The reason under the controls it turned off, not
+                  // dimmed (the rule of a greyed menu item's reason
+                  // line, conversation.md 「消息菜单」); the way back is
+                  // a small ghost button, as the card's 「打开」.
+                  <div
+                    data-role="question-with-galley"
+                    className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-[1.45] text-ink-soft"
+                  >
+                    <span>
+                      {questionHolder === "galleyAsked"
+                        ? copy.subtask.withGalleyAsked
+                        : copy.subtask.withGalleyWorking}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void openMainChat()}
+                    >
+                      {copy.assistant.backTo}
+                    </Button>
+                  </div>
+                )}
+              </AskUserBubble>
             )}
             {/* The run paused at GA's step cap; one reply continues it. */}
             {showStepLimitTail && <StepLimitTail />}
@@ -877,6 +917,7 @@ function MainViewContent({
                     askUserHasCandidates:
                       (pendingAskUser?.candidates.length ?? 0) > 0,
                     mainChat: isMainChat,
+                    questionWithGalley: questionLocked,
                   }),
                 )
               ]
@@ -887,7 +928,9 @@ function MainViewContent({
             isStopping={isStopping}
             onStop={onStop}
             submitAckTick={userSubmitTick}
-            disabled={false}
+            // Off while the subtask's question is with the assistant
+            // (ruling 102): anything sent here would be its answer.
+            disabled={questionLocked}
             llms={llms}
             onSelectLLM={onSelectLLM}
             llmConfigHint={llmConfigHint}

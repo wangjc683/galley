@@ -13,14 +13,23 @@ import {
   isUnpromotedSubtask,
   mergeDispatches,
   sameQuestion,
+  subtaskQuestionHolder,
+  subtaskQuestionLocked,
+  subtaskQuestionPlaces,
   subtaskBreadcrumb,
   subtaskCardLine,
   unpromotedSubtasksOf,
+  type MainChatQuestionView,
   type SubtaskDispatch,
   type SubtaskLiveView,
 } from "@/lib/subtasks";
 import { makeSession } from "@/test/factories";
-import type { AgentTurn, Turn } from "@/types/conversation";
+import type {
+  AgentTurn,
+  ConversationToolEvent,
+  PendingAskUser,
+  Turn,
+} from "@/types/conversation";
 
 const zh = copyForLanguage("zh-CN");
 const en = copyForLanguage("en-US");
@@ -61,6 +70,15 @@ const userTurn: Turn = {
   role: "user",
   content: "把下载文件夹里的 PDF 按内容分类",
 };
+
+function askTool(pending: PendingAskUser): ConversationToolEvent {
+  return {
+    id: `ask-${pending.question}`,
+    name: "ask_user",
+    status: "success-historical",
+    args: { question: pending.question, candidates: pending.candidates },
+  };
+}
 
 function agent(extra: Partial<AgentTurn> = {}): AgentTurn {
   return { role: "agent", tools: [], finalAnswer: null, ...extra };
@@ -355,6 +373,252 @@ describe("the card's state", () => {
     expect(
       deriveSubtaskCard(dispatch(), { ...subtask, turnCount: 4 }, live()).kind,
     ).toBe("loading");
+  });
+});
+
+// Ruling 102: who has a subtask's question, so where it is answered —
+// the card (ruling 101), the subtask opened from it, the main chat.
+describe("who holds a subtask's question", () => {
+  const asked: PendingAskUser = {
+    question: "下载文件夹按什么分类？",
+    candidates: ["按类型", "按用途"],
+  };
+  const SUB = "s-sub";
+  /** The subtask: its instructions at 03:19:12, then the question. */
+  const subTurns: Turn[] = [
+    {
+      role: "user",
+      content: "整理下载文件夹，先问分类",
+      createdAt: "2026-10-19T03:19:12Z",
+      origin: { via: "subtask" },
+    },
+    agent({ tools: [askTool(asked)] }),
+  ];
+  function wakeRow(reason: string, createdAt: string): Turn {
+    return {
+      role: "user",
+      content: "[Galley — not a message from the user] …",
+      createdAt,
+      origin: { via: "system", supervisor: "galley-report", reason },
+    };
+  }
+  const earlier: Turn[] = [
+    {
+      role: "user",
+      content: "帮我整理下载文件夹",
+      createdAt: "2026-10-19T03:19:00Z",
+    },
+    agent({
+      finalAnswer: "好，我派出去。",
+      tools: [{ id: "t", name: "no_tool", status: "success-historical" }],
+    }),
+  ];
+  const wake = wakeRow(SUB, "2026-10-19T03:19:18Z");
+  const relay = agent({ tools: [askTool(asked)] });
+  type Main = MainChatQuestionView | undefined;
+  const MAIN: Record<string, Main> = {
+    notLoaded: undefined,
+    noWake: { turns: earlier, agentRunning: false, pendingAskUser: null },
+    // Core could not wake it: it waits for the user's answer to its own.
+    ownQuestion: {
+      turns: [
+        ...earlier,
+        {
+          role: "user",
+          content: "再帮我看看天气",
+          createdAt: "2026-10-19T03:19:05Z",
+        },
+        agent({ tools: [askTool({ question: "哪个城市？", candidates: [] })] }),
+      ],
+      agentRunning: false,
+      pendingAskUser: { question: "哪个城市？", candidates: [] },
+    },
+    wakeWritten: {
+      turns: [...earlier, wake],
+      agentRunning: true,
+      pendingAskUser: null,
+    },
+    wakeRunning: {
+      turns: [...earlier, wake, agent({ preamble: "我看看。" })],
+      agentRunning: true,
+      pendingAskUser: null,
+    },
+    relayed: {
+      turns: [...earlier, wake, relay],
+      agentRunning: false,
+      pendingAskUser: asked,
+    },
+    // The user answered the relay there; it is passing it on.
+    answeredThere: {
+      turns: [
+        ...earlier,
+        wake,
+        relay,
+        { role: "user", content: "按用途", createdAt: "2026-10-19T03:20:32Z" },
+      ],
+      agentRunning: true,
+      pendingAskUser: null,
+    },
+    // It told the user in a sentence, or the round failed.
+    endedWithoutAsking: {
+      turns: [
+        ...earlier,
+        wake,
+        agent({
+          finalAnswer: "它在问分类，你想按什么分？",
+          tools: [{ id: "t2", name: "no_tool", status: "success-historical" }],
+        }),
+      ],
+      agentRunning: false,
+      pendingAskUser: null,
+    },
+    // The wake was written, its dispatch failed (persisted_only).
+    notDispatched: {
+      turns: [...earlier, wake],
+      agentRunning: false,
+      pendingAskUser: null,
+    },
+    otherSubtask: {
+      turns: [...earlier, wakeRow("s-other", "2026-10-19T03:19:18Z"), relay],
+      agentRunning: false,
+      pendingAskUser: asked,
+    },
+    twoSubtasks: {
+      turns: [
+        ...earlier,
+        wakeRow(`s-other,${SUB}`, "2026-10-19T03:19:18Z"),
+        relay,
+      ],
+      agentRunning: false,
+      pendingAskUser: asked,
+    },
+    // A wake older than the subtask's current run: the question before.
+    olderWake: {
+      turns: [...earlier, wakeRow(SUB, "2026-10-19T03:19:10Z"), relay],
+      agentRunning: false,
+      pendingAskUser: asked,
+    },
+    // Core stamps to the second: a wake in the run's own second is not its.
+    sameSecond: {
+      turns: [...earlier, wakeRow(SUB, "2026-10-19T03:19:12Z"), relay],
+      agentRunning: false,
+      pendingAskUser: asked,
+    },
+  };
+  function holder(
+    main: Main,
+    extra: {
+      pending?: PendingAskUser | null;
+      askInCard?: PendingAskUser | null;
+    } = {},
+  ) {
+    return subtaskQuestionHolder({
+      subtaskId: SUB,
+      pending: extra.pending === undefined ? asked : extra.pending,
+      askInCard: "askInCard" in extra ? extra.askInCard : undefined,
+      subtaskTurns: subTurns,
+      mainChat: main,
+    });
+  }
+
+  it("is nobody's while it asks nothing", () => {
+    expect(holder(MAIN.relayed, { pending: null })).toBe("none");
+  });
+
+  it("stays the subtask's until a wake carrying this question reaches Galley", () => {
+    for (const main of [
+      MAIN.notLoaded,
+      MAIN.noWake,
+      MAIN.ownQuestion,
+      MAIN.otherSubtask,
+      MAIN.olderWake,
+      MAIN.sameSecond,
+    ]) {
+      expect(holder(main)).toBe("subtask");
+    }
+    expect(holder(MAIN.twoSubtasks)).toBe("galleyAsked");
+  });
+
+  it("is Galley's while that round runs, and while it asks the user there", () => {
+    expect(holder(MAIN.wakeWritten)).toBe("galleyWorking");
+    expect(holder(MAIN.wakeRunning)).toBe("galleyWorking");
+    expect(holder(MAIN.relayed)).toBe("galleyAsked");
+    expect(holder(MAIN.answeredThere)).toBe("galleyWorking");
+  });
+
+  it("goes back to the subtask when the round ends without asking", () => {
+    expect(holder(MAIN.endedWithoutAsking)).toBe("subtask");
+    expect(holder(MAIN.notDispatched)).toBe("subtask");
+  });
+
+  it("is the card's when Core could not wake Galley for it, over anything the main chat shows", () => {
+    for (const main of Object.values(MAIN)) {
+      expect(holder(main, { askInCard: asked })).toBe("card");
+      expect(holder(main, { askInCard: null })).toBe("card");
+    }
+    // Word for another question: not this one's.
+    expect(
+      holder(MAIN.relayed, {
+        askInCard: { question: "合同放哪？", candidates: [] },
+      }),
+    ).toBe("galleyAsked");
+  });
+
+  it("locks the opened subtask only while Galley has it", () => {
+    expect(
+      (
+        ["none", "subtask", "card", "galleyWorking", "galleyAsked"] as const
+      ).filter(subtaskQuestionLocked),
+    ).toEqual(["galleyWorking", "galleyAsked"]);
+  });
+
+  // The ruling's invariant: at any moment somewhere can answer — the
+  // card, the opened subtask, or the main chat's own question — except
+  // while Galley's round runs, when it is the one answering or asking.
+  it("always leaves somewhere to answer, the card and the lock reading the same facts", () => {
+    const words: Array<PendingAskUser | null | undefined> = [
+      undefined,
+      null,
+      { ...asked, candidates: [...asked.candidates] },
+      { question: "合同放哪？", candidates: [] },
+    ];
+    for (const [name, main] of Object.entries(MAIN)) {
+      for (const askInCard of words) {
+        const who = holder(main, { askInCard });
+        const places = subtaskQuestionPlaces(who);
+        // The card's own derivation agrees on the card.
+        const card = deriveSubtaskCard(
+          dispatch(),
+          subtask,
+          live({ pendingAskUser: asked, askInCard, turns: subTurns }),
+        );
+        expect(card.kind === "asking" && card.inCard, name).toBe(places.card);
+        // The main chat is a place only when it asks the user itself.
+        if (places.mainChat) expect(main?.pendingAskUser, name).toBeTruthy();
+        expect(
+          who === "galleyWorking" ||
+            places.card ||
+            places.subtask ||
+            places.mainChat,
+          `${name} / ${JSON.stringify(askInCard)}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  // A reload loses `askInCard` (memory only) while Core's report still
+  // waits undelivered: the page sees no wake and no word, and the opened
+  // subtask answers.
+  it("leaves the opened subtask to answer after a reload lost the card's word, the wake undelivered", () => {
+    for (const main of [MAIN.notLoaded, MAIN.ownQuestion]) {
+      const who = holder(main, { askInCard: undefined });
+      expect(who).toBe("subtask");
+      expect(subtaskQuestionPlaces(who)).toEqual({
+        card: false,
+        subtask: true,
+        mainChat: false,
+      });
+    }
   });
 });
 

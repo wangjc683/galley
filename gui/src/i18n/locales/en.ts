@@ -260,6 +260,8 @@ export const enCopy: AppCopy = {
     notifyAsking: "A subtask is asking you",
     notifyDone: "Subtask done",
     notifyFailed: "Subtask failed",
+    withGalleyWorking: "Galley is handling this question",
+    withGalleyAsked: "Galley is asking you this question",
   },
   assistant: {
     name: "Galley",
@@ -489,6 +491,7 @@ export const enCopy: AppCopy = {
       `Suggested next step: ${suggestion}. Press right arrow to fill it in.`,
     replyToContinue: "Reply, or choose an option above",
     replyOpen: "Reply to the question above",
+    answerWithGalley: "Answer in your chat with Galley",
     byTheWay: "/btw to ask alongside without interrupting the task…",
     send: "Send",
     sendWithEnter: "Send · Enter",

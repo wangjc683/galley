@@ -20,7 +20,8 @@ export type ComposerRegister =
   | "reply"
   | "replyOpen"
   | "byTheWay"
-  | "messaging";
+  | "messaging"
+  | "withGalley";
 
 export interface ComposerRegisterState {
   /** Agent is mid-run (`stopMode`). */
@@ -42,6 +43,13 @@ export interface ComposerRegisterState {
    * keep the reply registers.
    */
   mainChat?: boolean;
+  /**
+   * A subtask opened in the main area whose question is with the
+   * assistant (main chat PRD ruling 102, lib/subtasks.ts
+   * `subtaskQuestionLocked`): the box is off and says where to answer.
+   * Outranks the rest — whatever it would have said, nothing here sends.
+   */
+  questionWithGalley?: boolean;
 }
 
 /**
@@ -54,6 +62,7 @@ export interface ComposerRegisterState {
 export function resolveComposerRegister(
   s: ComposerRegisterState,
 ): Exclude<ComposerRegister, "commissioning"> {
+  if (s.questionWithGalley) return "withGalley";
   if (s.isRunning) return s.mainChat ? "messaging" : "byTheWay";
   if (s.pendingAskUser) return s.askUserHasCandidates ? "reply" : "replyOpen";
   return s.mainChat ? "messaging" : "continuing";
@@ -67,7 +76,8 @@ export function composerRegisterCopyKey(
   | "replyToContinue"
   | "replyOpen"
   | "continueConversation"
-  | "writeMessage" {
+  | "writeMessage"
+  | "answerWithGalley" {
   switch (register) {
     case "byTheWay":
       return "byTheWay";
@@ -79,5 +89,7 @@ export function composerRegisterCopyKey(
       return "continueConversation";
     case "messaging":
       return "writeMessage";
+    case "withGalley":
+      return "answerWithGalley";
   }
 }
