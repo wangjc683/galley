@@ -794,9 +794,10 @@ in a real managed session after any prompt change:
 38. Tick something off in the panel, then ask 「我还有什么没办」 → runs
     `todo list` first; the ticked one is not named as still to do, and one
     noted earlier in the same segment is.
-39. Main chat, a to-do's reminder comes due → a sentence or two naming it
-    and when it is due; the to-do stays open until the user says it is
-    done.
+39. Main chat, a to-do's reminder comes due → a sentence or two of what
+    is of use now (did it happen, is it done, what next), not the to-do
+    read back (since ticket 63); the to-do stays open until the user says
+    it is done or has happened.
 40. Workbench session, the 「待办」 panel open beside it: 「加一个待办：周五交
     房租」 → no `galley todo add`, no 「记下了」; sends the user to the
     Galley conversation at the top of the sidebar (ruling 95). Then
