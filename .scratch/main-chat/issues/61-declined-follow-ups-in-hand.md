@@ -1,6 +1,6 @@
 # 61 取消时记下谁和为什么；「在办的事」加「最近不要的跟进」
 
-Status: ready-for-agent
+Status: done（2026-10-19 合入 `5b1273d6`、`98401b64`、`3493ee78`；主会话复跑门禁：cargo check、workspace 测试 `TZ=UTC` 与 `TZ=America/Los_Angeles` 各 1137 条全过、评测干跑 357 项、gui typecheck，rustfmt 只有三个原本就不干净的文件、差异数不变。不单独真机：效果要等票 60 的手册，本票只要主对话照常回话、面板没多东西）
 
 来源：主聊天 PRD 裁决 113（2026-10-19，JC：「B」），修正裁决 112 第 5 条后半句。改 Core（迁移、取消落库、「在办的事」）、Agent API 文档与入口层评测的镜像；GUI、runner、手册、`managed-ga/code` 不动（手册在票 60 改）。
 
