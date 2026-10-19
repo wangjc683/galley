@@ -4,12 +4,9 @@ import { useCopy } from "@/lib/i18n";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { truncationFadeRef } from "@/lib/truncation-fade";
 import { cn } from "@/lib/utils";
-import { signalAssistantLook } from "@/stores/assistant-face";
 import type { Session } from "@/types/session";
 
 import { AssistantAvatar } from "./AssistantAvatar";
-// 票 65 临时切换器，定档后由拆除票删掉。
-import { useAssistantFaceTrial } from "./face-trial/face-trial";
 
 /**
  * The assistant in the main header while it is open (main chat ticket
@@ -52,24 +49,15 @@ export function AssistantIdentity({
     open: true,
     header: true,
   });
-  // 票 65 临时切换器，定档后由拆除票删掉：the trial's face moves here
-  // too, the same beats as the card's (one driver), at 28px.
-  const animated = useAssistantFaceTrial().motion !== null;
+  // The avatar here stays still, whatever the sidebar's face does (main
+  // chat PRD ruling 119 point 6): the line under the name says what it
+  // is doing, and one face moving at a time is enough.
   return (
     <span
       data-role="assistant-identity"
       className="flex min-w-0 items-center gap-2"
     >
-      {animated ? (
-        <span
-          className="inline-flex shrink-0"
-          onPointerEnter={signalAssistantLook}
-        >
-          <AssistantAvatar size={28} animated />
-        </span>
-      ) : (
-        <AssistantAvatar size={28} />
-      )}
+      <AssistantAvatar size={28} />
       <span className="flex min-w-0 flex-col justify-center">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate text-[13px] font-medium leading-4 text-ink">

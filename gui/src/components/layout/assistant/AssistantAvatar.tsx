@@ -12,15 +12,14 @@ import { cn } from "@/lib/utils";
 import { AssistantFace } from "./AssistantFace";
 
 /** The avatar's sizes: 28 in the main header's identity row, 40 on the
- * sidebar's assistant card; 票 65 临时切换器，定档后由拆除票删掉：the
- * trial's cards add 64 (行 64), 72 (舞台 72) and 48 (either, narrow). */
-export type AssistantAvatarSize = 28 | 40 | 48 | 64 | 72;
+ * sidebar's assistant card; 票 66 临时切换器，定档后由拆除票删掉：the
+ * trial's stage card adds 72, and 48 on a narrow sidebar. */
+export type AssistantAvatarSize = 28 | 40 | 48 | 72;
 
 const DISC: Record<AssistantAvatarSize, string> = {
   28: "size-7",
   40: "size-10",
   48: "size-12",
-  64: "size-16",
   72: "size-18",
 };
 
@@ -47,15 +46,39 @@ const DISC: Record<AssistantAvatarSize, string> = {
 export function AssistantAvatar({
   size = 28,
   animated = false,
+  amplitude = 1,
   className,
 }: {
   size?: AssistantAvatarSize;
-  /** 票 65 临时切换器，定档后由拆除票删掉：the face that moves
-   * (AssistantFace, the trial's 乙 / 丙) in place of the still picture;
-   * at rest the two are the same pixels. */
+  /** 票 66 临时切换器，定档后由拆除票删掉：the face that moves
+   * (AssistantFace) in place of the still picture; at rest the two are
+   * the same pixels. Its figure is not cropped to the circle (it jumps
+   * out of it; the marks sit beside it), only its ground. */
   animated?: boolean;
+  /** 票 66 临时切换器，定档后由拆除票删掉：the trial's 幅度. */
+  amplitude?: number;
   className?: string;
 }) {
+  if (animated) {
+    return (
+      <span
+        aria-hidden
+        data-role="assistant-avatar"
+        className={cn(
+          "relative inline-flex shrink-0 select-none rounded-full",
+          DISC[size],
+          className,
+        )}
+      >
+        <AssistantFace amplitude={amplitude}>
+          <span
+            data-role="assistant-avatar-ring"
+            className="pointer-events-none absolute inset-0 rounded-full shadow-[inset_0_0_0_1px_var(--color-avatar-ring)]"
+          />
+        </AssistantFace>
+      </span>
+    );
+  }
   return (
     <span
       aria-hidden
@@ -66,16 +89,12 @@ export function AssistantAvatar({
         className,
       )}
     >
-      {animated ? (
-        <AssistantFace />
-      ) : (
-        <img
-          src={galleyIconUrl}
-          alt=""
-          draggable={false}
-          className="pointer-events-none size-full"
-        />
-      )}
+      <img
+        src={galleyIconUrl}
+        alt=""
+        draggable={false}
+        className="pointer-events-none size-full"
+      />
       <span
         data-role="assistant-avatar-ring"
         className="pointer-events-none absolute inset-0 rounded-full shadow-[inset_0_0_0_1px_var(--color-avatar-ring)]"
@@ -86,10 +105,10 @@ export function AssistantAvatar({
 
 // Badge diameter and glyph size per disc, and where the badge sits: its
 // centre on the disc's 45° point, r(1 − 1/√2) in from the box corner
-// (28: 4.1px, 40: 5.86px), a 1.5px ring around the glyph. 票 65 临时切换
+// (28: 4.1px, 40: 5.86px), a 1.5px ring around the glyph. 票 66 临时切换
 // 器，定档后由拆除票删掉：the trial's sizes on the same rule (48: 7.03px,
-// 64: 9.37px, 72: 10.54px), the badge a little larger with the disc
-// (16 / 18 / 20px, glyphs 13 / 14 / 16).
+// 72: 10.54px), the badge a little larger with the disc (16 / 20px,
+// glyphs 13 / 16).
 const BADGE: Record<
   AssistantAvatarSize,
   { box: string; glyph: number; at: string }
@@ -97,7 +116,6 @@ const BADGE: Record<
   28: { box: "size-[15px]", glyph: 12, at: "-right-[3px] -top-[3px]" },
   40: { box: "size-4", glyph: 13, at: "-right-[2px] -top-[2px]" },
   48: { box: "size-4", glyph: 13, at: "-right-px -top-px" },
-  64: { box: "size-[18px]", glyph: 14, at: "right-0 top-0" },
   72: { box: "size-5", glyph: 16, at: "right-[0.5px] top-[0.5px]" },
 };
 
@@ -130,13 +148,13 @@ export function AssistantAvatarBadge({
   size: AssistantAvatarSize;
   /** Play the entry pop (a state just became news). */
   pop?: boolean;
-  /** 票 65 临时切换器，定档后由拆除票删掉：the face says it is busy, so
+  /** 票 66 临时切换器，定档后由拆除票删掉：the face says it is busy, so
    * no spinner (ruling 117 point 1: the spinner is 「the program is
    * loading」); a question, an error and a new reply keep their marks.
    * Not under reduced motion: the face is still there (point 8). */
   faceRuns?: boolean;
-  /** 票 65 临时切换器，定档后由拆除票删掉：which sidebar widths show it
-   * (the trial cards switch their avatar's size by container query). */
+  /** 票 66 临时切换器，定档后由拆除票删掉：which sidebar widths show it
+   * (the trial card switches its avatar's size by container query). */
   className?: string;
 }) {
   if (kind === "idle") return null;

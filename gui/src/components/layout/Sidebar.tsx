@@ -26,7 +26,7 @@ import { SidebarQuickActions } from "./sidebar/SidebarQuickActions";
 import { SidebarOtherSources } from "./sidebar/SidebarSideChats";
 import { SidebarSectionsList } from "./sidebar/SidebarTimeline";
 import { SidebarWorkbenchLabel } from "./sidebar/SidebarWorkbenchLabel";
-// 票 65 临时切换器，定档后由拆除票删掉。
+// 票 66 临时切换器，定档后由拆除票删掉。
 import { useAssistantFaceTrial } from "./assistant/face-trial/face-trial";
 
 export interface SidebarProps {
@@ -188,10 +188,10 @@ export function Sidebar({
 }: SidebarProps) {
   const copy = useCopy();
   const mainChat = useMemo(() => findMainChat(sessions), [sessions]);
-  // 票 65 临时切换器，定档后由拆除票删掉：the stage's own air round the
+  // 票 66 临时切换器，定档后由拆除票删掉：the stage's own air round the
   // card (8px over it, 6px under it: the stage card carries its own
   // 6px inside), so the assistant's zone stays about 140px.
-  const cardLayout = useAssistantFaceTrial().layout;
+  const stage = useAssistantFaceTrial().on;
   // The list never holds the main chat (its card stands above it) nor a
   // subtask the user has not written in yet (ticket 06a): that one is a
   // card under the main chat reply that sent it, and its states reach
@@ -457,9 +457,7 @@ export function Sidebar({
         // kept the 新对话 row joined to the list it heads; the card heads
         // nothing.
         <>
-          <div
-            className={cardLayout === "stage72" ? "pb-1.5 pt-2" : "pb-2.5 pt-3"}
-          >
+          <div className={stage ? "pb-1.5 pt-2" : "pb-2.5 pt-3"}>
             <SidebarAssistantCard
               mainChat={mainChat}
               subtasks={mainChatSubtasks}

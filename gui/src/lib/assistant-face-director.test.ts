@@ -5,11 +5,11 @@ import { FaceDirector, type FaceClock } from "@/lib/assistant-face-director";
 import {
   basePose,
   type FaceBeat,
+  type FacePose,
   faceAtRest,
   listenPose,
   MOTION,
   NEUTRAL_POSE,
-  samePose,
   WORKING,
 } from "@/lib/assistant-face-motion";
 
@@ -82,21 +82,27 @@ function rig(seed = 1) {
   };
 }
 
-const last = (beat: FaceBeat) => beat.frames[beat.frames.length - 1].pose;
+const last = (beat: FaceBeat) => beat.end;
 
-/** When the face moves, from what was played: the time inside segments
- * whose poses differ, cut where the next beat on the channel began. */
+/** When the face moves, from what was played: the time inside each
+ * field's segments whose ends differ, cut where the next beat on the
+ * channel began. */
 function movingIntervals(played: Played[], until: number): [number, number][] {
   const out: [number, number][] = [];
   played.forEach(({ t, beat }, i) => {
     const cut = Math.min(played[i + 1]?.t ?? until, until);
-    for (let k = 0; k < beat.frames.length - 1; k++) {
-      const a = beat.frames[k];
-      const b = beat.frames[k + 1];
-      if (samePose(a.pose, b.pose)) continue;
-      const from = t + a.at * beat.duration;
-      const to = Math.min(t + b.at * beat.duration, cut);
-      if (to > from) out.push([from, to]);
+    for (const [field, keys] of Object.entries(beat.tracks)) {
+      let t0 = 0;
+      let v0 = beat.from[field as keyof FacePose];
+      for (const key of keys) {
+        if (key.v !== v0) {
+          const from = t + t0;
+          const to = Math.min(t + key.t, cut);
+          if (to > from) out.push([from, to]);
+        }
+        t0 = key.t;
+        v0 = key.v;
+      }
     }
   });
   return out;
@@ -182,7 +188,7 @@ describe("an activity: turn to its pose, then its beats with pauses", () => {
     expect(new Set(gaps.map(Math.round)).size).toBeGreaterThan(gaps.length / 2);
   });
 
-  it("holds still at rest in 乙, while waiting for you and after an error", () => {
+  it("holds still waiting for you and after an error (and at rest when not alive)", () => {
     for (const activity of ["idle", "ask", "error"] as const) {
       const r = rig();
       r.director.setActivity("think");
@@ -190,13 +196,15 @@ describe("an activity: turn to its pose, then its beats with pauses", () => {
       r.director.setActivity(activity);
       const settled = r.beats.length;
       r.advance(120_000);
-      // The turn back to looking at you, then nothing.
+      // The turn to its pose, then nothing.
       expect(r.beats.length - settled, activity).toBeLessThanOrEqual(1);
-      expect(last(r.beats[r.beats.length - 1].beat)).toEqual(NEUTRAL_POSE);
+      expect(last(r.beats[r.beats.length - 1].beat)).toEqual(
+        basePose(activity),
+      );
     }
   });
 
-  it("lives at rest in 丙: a blink or a look every 8–15 seconds", () => {
+  it("lives at rest in 丙: a blink, a look or a flick every 8–15 seconds", () => {
     const r = rig(3);
     r.director.setAlive(true);
     r.advance(300_000);
@@ -237,7 +245,7 @@ describe("a reaction cuts in and hands back to the activity", () => {
     r.advance(MOTION.turnMs / 2);
     r.director.react("look");
     const look = r.beats[r.beats.length - 1].beat;
-    const first = look.frames[0].pose;
+    const first = look.from;
     // Half-way between at rest and browsing's pose, not either end.
     expect(first.gx).toBeLessThan(0);
     expect(first.gx).toBeGreaterThan(basePose("browse").gx);
@@ -353,9 +361,10 @@ describe("busy or not reads at a glance (ruling 117 point 8)", () => {
     expect(r.bobs.length).toBe(count);
   });
 
-  // Measured on 10 simulated minutes × 5 seeds (2026-10-19): every
-  // working state 100% (the undercurrent never pauses), 丙 at rest 2.0%,
-  // dozing 4.0%, waiting for you and after an error 0%.
+  // Measured on 10 simulated minutes × 5 seeds (ticket 66, 2026-10-19):
+  // every working state 100% (the undercurrent never pauses, quiet or
+  // not), 丙 at rest 2.4%, dozing 4.3%, waiting for you and after an
+  // error 0%.
   const working = [...WORKING];
   it.each(working)(
     "%s moves at least 95% of the time, never still a second",
@@ -376,7 +385,7 @@ describe("busy or not reads at a glance (ruling 117 point 8)", () => {
     }
   });
 
-  it("keeps 丙's moves at rest short: a blink under 0.2s, a look under 0.6s", () => {
+  it("keeps 丙's moves at rest short: a blink under 0.2s, a look or a flick under 0.6s", () => {
     const r = rig(9);
     r.director.setAlive(true);
     r.advance(600_000);
@@ -387,7 +396,77 @@ describe("busy or not reads at a glance (ruling 117 point 8)", () => {
       else expect(beat.duration, beat.name).toBeLessThanOrEqual(600);
     }
     expect(new Set(loops.map((b) => b.beat.name))).toEqual(
-      new Set(["idle:blink", "idle:look"]),
+      new Set(["idle:blink", "idle:look", "idle:flick"]),
     );
+  });
+});
+
+describe("a long stretch of the same work quiets down (ruling 119 point 6)", () => {
+  /** The largest a beat moves the head, in units. */
+  const size = (beat: FaceBeat) =>
+    Math.max(
+      0,
+      ...(["x", "y"] as const).flatMap((f) =>
+        (beat.tracks[f] ?? []).map((k) => Math.abs(k.v)),
+      ),
+    );
+
+  it("shrinks to four tenths after 15 seconds, still moving all the time", () => {
+    const r = rig(4);
+    r.director.setActivity("browse");
+    r.advance(14_000);
+    expect(r.director.quiet).toBe(false);
+    r.advance(74_000);
+    expect(r.director.quiet).toBe(true);
+    const early = r.beats.filter(
+      (b) => b.t < 14_000 && b.beat.name.startsWith("browse:"),
+    );
+    const late = r.beats.filter(
+      (b) => b.t > 20_000 && b.beat.name.startsWith("browse:"),
+    );
+    const small = late.filter((b) => size(b.beat) <= 0.45 * 460);
+    expect(small.length).toBeGreaterThan(late.length / 2);
+    expect(Math.max(...early.map((b) => size(b.beat)))).toBeGreaterThan(300);
+    const m = motion(
+      [...movingIntervals(r.beats, 74_000), ...movingIntervals(r.bobs, 74_000)],
+      20_000,
+      74_000,
+    );
+    expect(m.share).toBeGreaterThanOrEqual(0.95);
+    expect(m.longestStill).toBeLessThanOrEqual(1_000);
+    // The undercurrent quiets too.
+    const lateBob = r.bobs.filter((b) => b.t > 20_000);
+    for (const { beat } of lateBob) {
+      expect(size(beat)).toBeLessThanOrEqual(0.4 * 150 + 1);
+    }
+  });
+
+  it("plays a full-size beat every 20–30 seconds while quiet", () => {
+    const r = rig(6);
+    r.director.setActivity("browse");
+    r.advance(180_000);
+    const big = r.beats.filter(
+      (b) =>
+        b.t > 16_000 && b.beat.name.startsWith("browse:") && size(b.beat) > 300,
+    );
+    expect(big.length).toBeGreaterThanOrEqual(5);
+    for (let i = 1; i < big.length; i++) {
+      const gap = big[i].t - big[i - 1].t;
+      expect(gap).toBeGreaterThanOrEqual(20_000);
+      expect(gap).toBeLessThanOrEqual(30_000 + 3_000);
+    }
+  });
+
+  it("comes back to full size at once on any change", () => {
+    const r = rig(2);
+    r.director.setActivity("read");
+    r.advance(40_000);
+    expect(r.director.quiet).toBe(true);
+    r.director.react("sent");
+    expect(r.director.quiet).toBe(false);
+    r.advance(80_000);
+    expect(r.director.quiet).toBe(true);
+    r.director.setActivity("talk");
+    expect(r.director.quiet).toBe(false);
   });
 });

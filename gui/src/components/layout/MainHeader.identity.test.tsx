@@ -17,24 +17,6 @@ import { MainHeader } from "./MainHeader";
  * state. Static rendering never opens a Radix menu, so the menu renders
  * its items inline here.
  */
-// 票 65 临时切换器，定档后由拆除票删掉：these tests describe today's
-// avatar and card (现状, what a production build draws); the trial's own
-// tests are under assistant/face-trial.
-vi.mock(
-  "@/components/layout/assistant/face-trial/face-trial",
-  async (importOriginal) => ({
-    ...(await importOriginal<
-      typeof import("@/components/layout/assistant/face-trial/face-trial")
-    >()),
-    useAssistantFaceTrial: () => ({
-      motion: null,
-      layout: null,
-      demo: false,
-      pinned: null,
-    }),
-  }),
-);
-
 vi.mock("@radix-ui/react-dropdown-menu", () => {
   const Pass = ({ children }: { children?: ReactNode }) => <>{children}</>;
   return {

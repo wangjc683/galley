@@ -1,11 +1,12 @@
 /*
- * TEMPORARY — 票 65 临时切换器，定档后由拆除票删掉 (see face-trial.ts).
+ * TEMPORARY — 票 66 临时切换器，定档后由拆除票删掉 (see face-trial.ts).
  *
- * The trial's demo (ticket 65 §4): every state of 乙's table in turn,
- * about three seconds each — the ones that last and the ones that play
- * once — and 丙's dozing; or one of them pinned, played again and again.
- * It only changes what the face shows: it feeds the director made-up
- * activities and reactions and touches no data.
+ * The trial's demo (tickets 65, 66): every state of ticket 66's table in
+ * turn, about three seconds each — the ones that last, the ones that
+ * play once, and the face at rest, dozing and waking; or one of them
+ * pinned, played again and again. It only changes what the face shows:
+ * it feeds the director made-up activities and reactions and touches no
+ * data.
  */
 import type { FaceActivity, FaceReaction } from "@/lib/assistant-face";
 import type { FaceClock, FaceDirector } from "@/lib/assistant-face-director";
@@ -24,13 +25,15 @@ export interface FaceDemoItem {
   before?: FaceActivity;
   /** Typing: the reaction again every this many ms through the step. */
   repeatMs?: number;
-  /** Only 丙's: in the rotation when 丙 is picked (pinned, it plays
-   * either way). */
-  aliveOnly?: boolean;
   /** Longer than the usual step: falling asleep comes first. */
   stepMs?: number;
   /** Activities in turn through the step, each this long (ms). */
   sequence?: readonly { activity: FaceActivity; ms: number }[];
+  /** A state at rest moves every 8–15 seconds; the demo plays its next
+   * move at once, and again this many ms later, so the step shows it. */
+  nudgeMs?: number;
+  /** Only when pinned (too long for the rotation). */
+  pinnedOnly?: boolean;
 }
 
 /** A step that first falls asleep (`before: "doze"`). */
@@ -42,6 +45,7 @@ export const FACE_DEMO_ITEMS: readonly FaceDemoItem[] = [
   { id: "read", label: "读文件", activity: "read" },
   { id: "note", label: "记（写文件、记待办、设提醒）", activity: "note" },
   { id: "work", label: "动手（跑代码）", activity: "work" },
+  { id: "talk", label: "写回复", activity: "talk" },
   {
     id: "dispatch",
     label: "派出子任务",
@@ -49,7 +53,6 @@ export const FACE_DEMO_ITEMS: readonly FaceDemoItem[] = [
     reaction: "dispatch",
   },
   { id: "await", label: "等子任务回来", activity: "awaitSubtask" },
-  { id: "talk", label: "写回复", activity: "talk" },
   { id: "sent", label: "你发出消息", activity: "idle", reaction: "sent" },
   {
     id: "listen",
@@ -101,19 +104,33 @@ export const FACE_DEMO_ITEMS: readonly FaceDemoItem[] = [
   },
   {
     id: "alive",
-    label: "丙 · 没事时（眨眼、左右看）",
+    label: "丙 · 没事时（眨眼、左右看、舌尖一甩）",
     activity: "idle",
-    aliveOnly: true,
+    nudgeMs: 1500,
   },
-  { id: "doze", label: "丙 · 打盹", activity: "doze", aliveOnly: true },
+  {
+    id: "doze",
+    label: "丙 · 打盹",
+    activity: "doze",
+    stepMs: AFTER_DOZE_STEP_MS,
+    nudgeMs: MOTION.dozeInMs + 400,
+  },
   {
     id: "wake",
-    label: "丙 · 一碰就醒",
+    label: "丙 · 醒来",
     activity: "idle",
     reaction: "wake",
     before: "doze",
-    aliveOnly: true,
     stepMs: AFTER_DOZE_STEP_MS,
+  },
+  {
+    // Ruling 119 point 6: a long stretch of the same work quiets down
+    // after 15 seconds, with a full-size move every 20–30.
+    id: "quiet",
+    label: "看网页一分钟不换（看它安静下来）",
+    activity: "browse",
+    stepMs: 60_000,
+    pinnedOnly: true,
   },
 ];
 
@@ -133,11 +150,11 @@ export class FaceDemo {
     private readonly onItem: (item: FaceDemoItem | null) => void,
   ) {}
 
-  start(pinned: string | null, alive: boolean): void {
+  start(pinned: string | null): void {
     this.stop();
     const items = pinned
       ? FACE_DEMO_ITEMS.filter((item) => item.id === pinned)
-      : FACE_DEMO_ITEMS.filter((item) => alive || !item.aliveOnly);
+      : FACE_DEMO_ITEMS.filter((item) => !item.pinnedOnly);
     if (items.length === 0) return;
     this.index = 0;
     this.step(items);
@@ -167,6 +184,9 @@ export class FaceDemo {
 
   private play(item: FaceDemoItem): void {
     const d = this.director;
+    // Each step at full size: a pinned state repeating is no long
+    // stretch of work (but the quiet's own step is).
+    d.freshen();
     if (item.before) {
       // Start from where the reaction needs the face: set the activity
       // and let it settle a moment, then react.
@@ -198,6 +218,17 @@ export class FaceDemo {
       return;
     }
     d.setActivity(item.activity);
+    if (item.nudgeMs !== undefined) {
+      const nudge = () => {
+        d.playNext();
+        this.repeat = this.clock.setTimeout(nudge, item.nudgeMs!);
+      };
+      this.repeat = this.clock.setTimeout(
+        nudge,
+        item.activity === "doze" ? item.nudgeMs : 300,
+      );
+      return;
+    }
     if (!item.reaction) return;
     d.react(item.reaction);
     if (item.repeatMs) {

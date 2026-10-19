@@ -8,7 +8,8 @@ import {
 } from "@/lib/assistant-face-motion";
 
 /**
- * The assistant's face, shared by every avatar that draws it (ticket 65):
+ * The assistant's face, shared by every avatar that draws it (tickets 65,
+ * 66; since ruling 119 point 6 that is the sidebar card's alone):
  * the beat to play now (`seq` counts beats, so the same beat twice still
  * plays twice) and the pose it ends on, which an avatar mounted later
  * takes at once; and the undercurrent's breath while it works (`bob`).
@@ -16,8 +17,8 @@ import {
  * hooks/useAssistantFaceDriver.ts) writes it; AssistantFace reads it.
  *
  * Two small channels the other way: each avatar says whether it is on
- * screen (the director pauses with none), and the card and the header
- * say when the pointer comes onto the assistant (`signal("look")`).
+ * screen (the director pauses with none), and the card says when the
+ * pointer comes onto the assistant (`signal("look")`).
  */
 interface AssistantFaceState {
   beat: FaceBeat | null;
@@ -27,7 +28,7 @@ interface AssistantFaceState {
   bobSeq: number;
   /** Where the last beat ends. */
   pose: FacePose;
-  /** What the demo plays now, for the pill (ticket 65's trial). */
+  /** What the demo plays now, for the pill (the trial's). */
   demoLabel: string | null;
   /** Avatars on screen, by their own id. */
   onScreen: Record<string, true>;
@@ -54,7 +55,7 @@ export const useAssistantFaceStore = create<AssistantFaceState>()(
       set((s) => ({
         beat,
         seq: s.seq + 1,
-        pose: beat.frames[beat.frames.length - 1].pose,
+        pose: beat.end,
       })),
     playBob: (bob) => set((s) => ({ bob, bobSeq: s.bobSeq + 1 })),
     setDemoLabel: (demoLabel) => {
@@ -73,7 +74,7 @@ export const useAssistantFaceStore = create<AssistantFaceState>()(
   }),
 );
 
-/** The pointer came onto the assistant (its card, its header row). */
+/** The pointer came onto the assistant (its card). */
 export function signalAssistantLook(): void {
   useAssistantFaceStore.getState().sendSignal("look");
 }

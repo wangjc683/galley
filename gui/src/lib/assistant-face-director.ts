@@ -9,20 +9,24 @@ import {
   listenPose,
   loopBeat,
   loopGap,
+  loopVariants,
   MOTION,
   NEUTRAL_POSE,
   poseAt,
   reactionBeat,
   samePose,
+  scaleBeat,
+  scalePose,
   stillBeat,
   turnBeat,
   WORKING,
 } from "@/lib/assistant-face-motion";
 
 /**
- * When the assistant's face plays what (ticket 65): one director for
- * both avatars — the sidebar card's and the header's 28px — so they play
- * the same beat at the same time (`onBeat` goes to one store both read).
+ * When the assistant's face plays what (tickets 65, 66): one director,
+ * its beats to one store the sidebar card's face reads (`onBeat`; since
+ * ruling 119 point 6 only that one avatar moves — the header's stays
+ * still).
  *
  *   - An activity (lib/assistant-face.ts) turns the face to its pose,
  *     then plays its beats with random pauses between them
@@ -46,6 +50,10 @@ import {
  * Time and chance come in from outside (`clock`, `random`), so a test
  * drives it without waiting.
  */
+
+function drawMs(random: () => number, [a, b]: readonly [number, number]) {
+  return Math.round(a + (b - a) * random());
+}
 
 export interface FaceClock {
   now(): number;
@@ -103,17 +111,37 @@ export class FaceDirector {
   private bobbing = false;
   private bob: { beat: FaceBeat; at: number } | null = null;
   private bobTimer: unknown = null;
+  /** When the activity (or the last reaction) began: a long stretch of
+   * one quiets down. */
+  private since = 0;
+  /** The size the face moves at now: 1, or the quiet's. */
+  private level = 1;
+  /** When a quiet stretch plays its next full-size beat. */
+  private nextBig = 0;
 
   constructor(options: FaceDirectorOptions) {
     this.clock = options.clock;
     this.random = options.random;
     this.onBeat = options.onBeat;
     this.onBob = options.onBob ?? (() => {});
+    this.since = this.clock.now();
   }
 
   /** The activity it plays (for the demo label and tests). */
   get currentActivity(): FaceActivity {
     return this.activity;
+  }
+
+  /** Whether a long stretch of work has quieted it down (tests, demo). */
+  get quiet(): boolean {
+    return this.level !== 1;
+  }
+
+  /** Start the quiet's clock over without a change (the demo, stepping
+   * through states, plays each at full size). */
+  freshen(): void {
+    this.since = this.clock.now();
+    this.level = 1;
   }
 
   /** 丙: the face lives at rest. */
@@ -162,6 +190,7 @@ export class FaceDirector {
   setActivity(activity: FaceActivity): void {
     if (activity === this.activity) return;
     this.activity = activity;
+    this.freshen();
     this.updateBob();
     if (this.still) return;
     // A reaction or the listening pose plays out first; it hands back to
@@ -176,12 +205,32 @@ export class FaceDirector {
     this.settle();
   }
 
+  /** Play the activity's next beat now instead of after its pause (the
+   * demo's, so a few seconds show what 8–15 at rest would); nothing if a
+   * beat or a reaction is under way. */
+  playNext(): void {
+    if (this.still || !this.active) return;
+    if (this.phase !== "gap" && this.phase !== "rest") return;
+    if (!hasLoop(this.activity, this.alive)) return;
+    const pick = loopBeat(
+      this.activity,
+      this.pose,
+      this.random,
+      this.lastVariant,
+    );
+    if (!pick) return;
+    this.clear();
+    this.lastVariant = pick.variant;
+    this.play(pick.beat, false);
+  }
+
   react(reaction: FaceReaction): void {
     if (this.still) return;
     // Nobody sees a reaction in a window behind others or off screen,
     // and a late one would play for something long past. Waking is
     // the exception: the face must open its eyes either way.
     if (!this.active && reaction !== "wake") return;
+    this.freshen();
     if (reaction === "listen") {
       this.listen();
       return;
@@ -228,7 +277,7 @@ export class FaceDirector {
       this.bob && this.clock.now() - this.bob.at < this.bob.beat.duration
         ? poseAt(this.bob.beat, this.clock.now() - this.bob.at)
         : NEUTRAL_POSE;
-    const beat = bobBeat(from, this.random);
+    const beat = bobBeat(from, this.random, this.level);
     this.bob = { beat, at: this.clock.now() };
     this.onBob(beat);
     this.bobTimer = this.clock.setTimeout(() => {
@@ -254,7 +303,7 @@ export class FaceDirector {
     const beat = reactionBeat("listen", from, listenPose(), this.random);
     this.reacting = true;
     this.phase = "listen";
-    this.pose = beat.frames[beat.frames.length - 1].pose;
+    this.pose = beat.end;
     this.playing = { beat, at: this.clock.now() };
     this.onBeat(beat);
     this.waitListen();
@@ -280,7 +329,7 @@ export class FaceDirector {
   private play(beat: FaceBeat, reaction: boolean): void {
     this.reacting = reaction;
     this.phase = "beat";
-    this.pose = beat.frames[beat.frames.length - 1].pose;
+    this.pose = beat.end;
     this.playing = { beat, at: this.clock.now() };
     this.onBeat(beat);
     this.timer = this.clock.setTimeout(() => {
@@ -295,7 +344,7 @@ export class FaceDirector {
    * elsewhere, else wait for the activity's next beat. */
   private settle(turnMs?: number): void {
     if (this.still) return;
-    const base = basePose(this.activity);
+    const base = scalePose(basePose(this.activity), this.level);
     if (!samePose(this.pose, base)) {
       const beat = turnBeat(this.pose, base, this.activity);
       if (turnMs !== undefined && this.activity !== "doze") {
@@ -320,20 +369,48 @@ export class FaceDirector {
           this.phase = "rest";
           return;
         }
+        // A long stretch of work quiets down; now and then a full-size
+        // beat.
+        let size = 1;
+        let only: string | undefined;
+        if (this.quietNow()) {
+          const now = this.clock.now();
+          if (this.level === 1) {
+            this.nextBig = now + drawMs(this.random, MOTION.quiet.bigMs);
+          }
+          this.level = MOTION.quiet.k;
+          if (now >= this.nextBig) {
+            // Its biggest variant (listed first), or the next one when
+            // that just played: never the same twice in a row.
+            const [first, second] = loopVariants(activity);
+            only = first === this.lastVariant && second ? second : first;
+            this.nextBig = now + drawMs(this.random, MOTION.quiet.bigMs);
+          } else {
+            size = this.level;
+          }
+        }
         const pick = loopBeat(
           activity,
           this.pose,
           this.random,
           this.lastVariant,
+          only,
         );
         if (!pick) {
           this.phase = "rest";
           return;
         }
         this.lastVariant = pick.variant;
-        this.play(pick.beat, false);
+        this.play(size === 1 ? pick.beat : scaleBeat(pick.beat, size), false);
       },
       loopGap(activity, this.random),
+    );
+  }
+
+  private quietNow(): boolean {
+    return (
+      WORKING.has(this.activity) &&
+      this.clock.now() - this.since >= MOTION.quiet.afterMs
     );
   }
 

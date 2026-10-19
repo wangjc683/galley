@@ -1,4 +1,4 @@
-// TEMPORARY — 票 65 临时切换器，定档后由拆除票删掉 (see face-trial.ts).
+// TEMPORARY — 票 66 临时切换器，定档后由拆除票删掉 (see face-trial.ts).
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -17,7 +17,7 @@ import type { Session } from "@/types/session";
 import { FACE_DEMO_ITEMS, FaceDemo, type FaceDemoItem } from "./face-demo";
 import {
   type AssistantFaceTrial,
-  FACE_MOTION_TIERS,
+  FACE_AMPLITUDES,
   useFaceTrialStore,
 } from "./face-trial";
 
@@ -57,14 +57,14 @@ afterEach(() => {
 });
 
 const TODAY: AssistantFaceTrial = {
-  motion: null,
-  layout: null,
+  on: false,
+  amplitude: 1,
   demo: false,
   pinned: null,
 };
 const trial = (patch: Partial<AssistantFaceTrial>): AssistantFaceTrial => ({
-  motion: "B",
-  layout: "stage72",
+  on: true,
+  amplitude: 1,
   demo: false,
   pinned: null,
   ...patch,
@@ -118,18 +118,26 @@ const CARD = 'data-role="assistant-card"';
 const FACE = 'data-role="assistant-face"';
 const SPINNER = 'class="spin"';
 
-describe("票 65: the switcher's defaults", () => {
-  it("starts on 乙 and the centred stage, demo off; no 现状 to pick", () => {
+describe("票 66: the switcher's defaults", () => {
+  it("starts at 1×, demo off; the amplitudes are 1, 1.5 and 2", () => {
     const state = useFaceTrialStore.getState();
-    expect(state.motion).toBe("B");
-    expect(state.layout).toBe("stage72");
+    expect(state.amplitude).toBe(1);
     expect(state.demo).toBe(false);
     expect(state.pinned).toBeNull();
-    expect(FACE_MOTION_TIERS).toEqual(["B", "C"]);
+    expect(FACE_AMPLITUDES).toEqual([1, 1.5, 2]);
+  });
+
+  it("keeps no 乙 and no 大头像行 64 (ruling 119 point 1)", () => {
+    const state = useFaceTrialStore.getState() as unknown as Record<
+      string,
+      unknown
+    >;
+    expect(state.motion).toBeUndefined();
+    expect(state.layout).toBeUndefined();
   });
 });
 
-describe("票 65: today's card stays the production branch", () => {
+describe("票 66: today's card stays the production branch", () => {
   it("draws the 40px still avatar and the spinner while it runs", () => {
     seed.trial = TODAY;
     seed.live.set("s-main", { status: "running" });
@@ -142,7 +150,7 @@ describe("票 65: today's card stays the production branch", () => {
   });
 });
 
-describe("票 65: the 居中舞台 72 layout", () => {
+describe("票 66: the stage, the one layout in a dev build", () => {
   it("centres a 72px face, 48px on a narrow sidebar, name and line under it", () => {
     seed.trial = trial({});
     const html = card();
@@ -152,10 +160,25 @@ describe("票 65: the 居中舞台 72 layout", () => {
     expect(html).toContain("size-12 @min-[184px]/sidebar:size-18");
     expect(html).toContain(FACE);
     expect(html.indexOf(FACE)).toBeLessThan(html.indexOf(">Galley<"));
-    // At rest the name steps back; the card's hover fills it.
-    expect(html).toContain("text-ink-soft");
+    expect(tagWith(html, "mt-1.5 flex h-5")).toContain("text-ink-soft");
     expect(tag).toContain("hover:bg-hover");
     expect(html).not.toContain("assistant-selected-ring");
+  });
+
+  it("lets the figure out of the circle; only the ground is cropped", () => {
+    seed.trial = trial({});
+    const html = card();
+    const avatar = tagWith(html, 'data-role="assistant-avatar"');
+    expect(avatar).toContain("rounded-full");
+    expect(avatar).not.toContain("overflow-hidden");
+    expect(tagWith(html, FACE)).toContain('overflow="visible"');
+  });
+
+  it("plays at the amplitude the pill picked", () => {
+    for (const amplitude of FACE_AMPLITUDES) {
+      seed.trial = trial({ amplitude });
+      expect(tagWith(card(), FACE)).toContain(`data-amplitude="${amplitude}"`);
+    }
   });
 
   it("selects with a brand ring round the face and the name in full ink, no fill", () => {
@@ -164,38 +187,24 @@ describe("票 65: the 居中舞台 72 layout", () => {
     const tag = tagWith(html, CARD);
     expect(tag).toContain('aria-current="page"');
     expect(tag).not.toContain("bg-selected");
-    expect(tag).not.toContain("shadow-");
     expect(tag).not.toContain("hover:bg-hover");
     expect(tagWith(html, "assistant-selected-ring")).toContain(
       "border-2 border-brand",
     );
-    expect(html).not.toContain("text-ink-soft");
+    expect(tagWith(html, "mt-1.5 flex h-5")).not.toContain("text-ink-soft");
+    expect(tagWith(html, "mt-1.5 flex h-5")).toContain("text-ink");
   });
 
   it("gives the zone its own air: 8px over the card, 6px under", () => {
     seed.trial = trial({});
     expect(sidebar([mainChat, side])).toContain('<div class="pb-1.5 pt-2">');
-    seed.trial = trial({ layout: "row64" });
+    seed.trial = TODAY;
     expect(sidebar([mainChat, side])).toContain('<div class="pb-2.5 pt-3">');
   });
 });
 
-describe("票 65: the 大头像行 64 layout", () => {
-  it("is an IM row 78px high with a 64px face, 40px on a narrow sidebar", () => {
-    seed.trial = trial({ layout: "row64" });
-    const html = card();
-    const tag = tagWith(html, CARD);
-    expect(tag).toContain('data-layout="row64"');
-    expect(tag).toContain("h-[78px]");
-    expect(tag).toContain("gap-3");
-    expect(html).toContain("size-10 @min-[168px]/sidebar:size-16");
-    // Selected as today's card: fill and lift.
-    expect(tagWith(card(true), CARD)).toContain("bg-selected");
-  });
-});
-
-describe("票 65: the face says it runs, the spinner goes — but not under reduced motion", () => {
-  it("drops the spinner while it runs, keeps a question's, an error's, a reply's marks", () => {
+describe("票 66: the face says it runs, the spinner goes — but not under reduced motion", () => {
+  it("drops the spinner while it runs, keeps a question's mark", () => {
     seed.trial = trial({});
     seed.live.set("s-main", { status: "running" });
     expect(card()).not.toContain(SPINNER);
@@ -204,39 +213,42 @@ describe("票 65: the face says it runs, the spinner goes — but not under redu
   });
 
   it("brings the spinner back under reduced motion", () => {
-    seed.trial = trial({ motion: "C", layout: "row64" });
+    seed.trial = trial({});
     seed.live.set("s-main", { status: "running" });
     seed.reduced = true;
     expect(card()).toContain(SPINNER);
   });
+});
 
-  it("moves the header's 28px avatar with the same face", () => {
-    seed.trial = trial({});
-    const html = renderToStaticMarkup(
-      <AssistantIdentity mainChat={mainChat} subtasks={[]} />,
-    );
-    expect(html).toContain(FACE);
-    expect(html).toContain("size-7");
+describe("票 66: the header's 28px avatar stays still (ruling 119 point 6)", () => {
+  it("draws the still icon whatever the trial", () => {
+    for (const t of [TODAY, trial({}), trial({ amplitude: 2, demo: true })]) {
+      seed.trial = t;
+      const html = renderToStaticMarkup(
+        <AssistantIdentity mainChat={mainChat} subtasks={[]} />,
+      );
+      expect(html).not.toContain(FACE);
+      expect(html).toMatch(/src="[^"]*\/galley-icon\.svg"/);
+      expect(html).toContain("size-7");
+    }
   });
 });
 
-describe("票 65: the external runtime is left alone", () => {
+describe("票 66: the external runtime is left alone", () => {
   it("draws the same sidebar whatever the trial", () => {
     const sessions = [makeSession({ id: "e-1", origin: { via: "gui" } })];
     seed.trial = TODAY;
     const today = sidebar(sessions);
-    for (const layout of ["row64", "stage72"] as const) {
-      for (const motion of ["B", "C"] as const) {
-        seed.trial = trial({ layout, motion });
-        expect(sidebar(sessions)).toBe(today);
-      }
+    for (const amplitude of FACE_AMPLITUDES) {
+      seed.trial = trial({ amplitude });
+      expect(sidebar(sessions)).toBe(today);
     }
     expect(today).not.toContain(CARD);
     expect(today).not.toContain(FACE);
   });
 });
 
-describe("票 65: the demo", () => {
+describe("票 66: the demo", () => {
   function demoRig() {
     let now = 0;
     let id = 0;
@@ -249,11 +261,13 @@ describe("票 65: the demo", () => {
       },
       clearTimeout: (h) => void timers.delete(h as number),
     };
+    const beats: string[] = [];
     const director = new FaceDirector({
       clock,
       random: () => 0.5,
-      onBeat: () => {},
+      onBeat: (beat) => beats.push(beat.name),
     });
+    director.setAlive(true);
     const seen: (FaceDemoItem | null)[] = [];
     const demo = new FaceDemo(director, clock, (item) => seen.push(item));
     const advance = (to: number) => {
@@ -267,28 +281,27 @@ describe("票 65: the demo", () => {
       }
       now = to;
     };
-    return { director, demo, seen, advance };
+    return { director, demo, seen, beats, advance };
   }
 
-  it("plays 乙's every state in turn, about three seconds each", () => {
+  it("plays every state of ticket 66's table in turn", () => {
     const r = demoRig();
-    r.demo.start(null, false);
-    r.advance(120_000);
+    r.demo.start(null);
+    r.advance(200_000);
     const ids = r.seen.filter(Boolean).map((item) => item!.id);
-    const bItems = FACE_DEMO_ITEMS.filter((item) => !item.aliveOnly).map(
+    const rotation = FACE_DEMO_ITEMS.filter((item) => !item.pinnedOnly).map(
       (i) => i.id,
     );
-    expect(ids.slice(0, bItems.length)).toEqual(bItems);
-    // Every row of ruling 117's table, the woken round's busy face too.
+    expect(ids.slice(0, rotation.length)).toEqual(rotation);
     for (const id of [
       "think",
       "browse",
       "read",
       "note",
       "work",
+      "talk",
       "dispatch",
       "await",
-      "talk",
       "sent",
       "listen",
       "look",
@@ -299,31 +312,48 @@ describe("票 65: the demo", () => {
       "error",
       "reminder",
       "back",
+      "alive",
+      "doze",
+      "wake",
       "woken-busy",
     ]) {
-      expect(bItems).toContain(id);
+      expect(rotation).toContain(id);
     }
+    // The long one only when pinned.
+    expect(rotation).not.toContain("quiet");
   });
 
-  it("adds 丙's dozing with 丙, and repeats one state when pinned", () => {
-    const r = demoRig();
-    r.demo.start(null, true);
-    r.advance(200_000);
-    expect(r.seen.some((item) => item?.id === "doze")).toBe(true);
+  it("repeats one state when pinned, at full size each time", () => {
     const p = demoRig();
-    p.demo.start("talk", false);
-    p.advance(20_000);
+    p.demo.start("browse");
+    p.advance(40_000);
     expect(new Set(p.seen.filter(Boolean).map((item) => item!.id))).toEqual(
-      new Set(["talk"]),
+      new Set(["browse"]),
     );
-    expect(p.director.currentActivity).toBe("talk");
+    expect(p.director.currentActivity).toBe("browse");
+    expect(p.director.quiet).toBe(false);
     p.demo.stop();
     expect(p.seen[p.seen.length - 1]).toBeNull();
   });
 
+  it("lets the quiet's own step quiet down", () => {
+    const p = demoRig();
+    p.demo.start("quiet");
+    p.advance(40_000);
+    expect(p.director.currentActivity).toBe("browse");
+    expect(p.director.quiet).toBe(true);
+  });
+
+  it("shows the moves at rest at once, not after 8–15 seconds", () => {
+    const r = demoRig();
+    r.demo.start("alive");
+    r.advance(3_000);
+    expect(r.beats.some((name) => name.startsWith("idle:"))).toBe(true);
+  });
+
   it("walks the woken round through looking things up", () => {
     const r = demoRig();
-    r.demo.start("woken-busy", false);
+    r.demo.start("woken-busy");
     const acts = new Set<string>();
     for (let t = 0; t <= 6_000; t += 100) {
       r.advance(t);
@@ -333,7 +363,7 @@ describe("票 65: the demo", () => {
   });
 });
 
-describe("票 65: every branch point can be found", () => {
+describe("票 66: every branch point can be found", () => {
   const SRC = path.resolve(__dirname, "../../../..");
   function sources(dir: string): string[] {
     return readdirSync(dir).flatMap((name) => {
@@ -343,21 +373,29 @@ describe("票 65: every branch point can be found", () => {
     });
   }
 
-  it("says 票 65 wherever the trial is used", () => {
+  it("says 票 66 wherever the trial is used", () => {
     const uses = [
       "face-trial",
       "useAssistantFaceTrial",
       "AssistantFaceTrialSwitcher",
       "faceRuns",
-      "TRIAL_AVATAR",
+      "STAGE_AVATAR",
     ];
     const files = sources(SRC).filter((file) => {
       const text = readFileSync(file, "utf8");
       return uses.some((needle) => text.includes(needle));
     });
-    expect(files.length).toBeGreaterThan(8);
+    expect(files.length).toBeGreaterThan(7);
     for (const file of files) {
-      expect(readFileSync(file, "utf8"), file).toContain("票 65");
+      expect(readFileSync(file, "utf8"), file).toContain("票 66");
+    }
+  });
+
+  it("leaves no 乙 tier and no 行 64 behind", () => {
+    for (const file of sources(SRC)) {
+      if (file === __filename) continue;
+      const text = readFileSync(file, "utf8");
+      expect(text, file).not.toMatch(/row64|FACE_MOTION_TIERS|行 64/);
     }
   });
 });

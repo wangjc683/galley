@@ -3,10 +3,9 @@ import { useMemo, useState } from "react";
 import { ToastHost } from "@/components/error-card/ToastHost";
 import { AppShell } from "@/components/layout/AppShell";
 import { AssistantIdentity } from "@/components/layout/assistant/AssistantIdentity";
-// 票 65 临时切换器，定档后由拆除票删掉。
+// 票 66 临时切换器，定档后由拆除票删掉。
 import { AssistantFaceDriver } from "@/components/layout/assistant/face-trial/AssistantFaceDriver";
 import { AssistantFaceTrialSwitcher } from "@/components/layout/assistant/face-trial/AssistantFaceTrialSwitcher";
-import { useAssistantFaceTrial } from "@/components/layout/assistant/face-trial/face-trial";
 import { MainHeaderHost } from "@/components/layout/MainHeaderHost";
 import { browserControlInviteVisible } from "@/components/layout/header/browser-control-indicator-status";
 import { SidebarCollapseToggle } from "@/components/layout/header/SidebarCollapseToggle";
@@ -439,10 +438,9 @@ function App() {
     [visibleSessions],
   );
   const hasMainChat = mainChatId !== undefined;
-  // 票 65 临时切换器，定档后由拆除票删掉：the assistant's face (rulings
-  // 117, 118) — its one driver and the pill, in a dev build with a main
+  // 票 66 临时切换器，定档后由拆除票删掉：the assistant's face (rulings
+  // 117–119) — its one driver and the pill, in a dev build with a main
   // chat in the managed runtime.
-  const faceTrial = useAssistantFaceTrial();
   const faceMainChat = useMemo(
     () => findMainChat(visibleSessions),
     [visibleSessions],
@@ -796,20 +794,18 @@ function App() {
         }
       />
 
-      {/* 票 65 临时切换器，定档后由拆除票删掉。The face's trial: its pill,
-          and while a motion tier is on, the face's one driver. */}
+      {/* 票 66 临时切换器，定档后由拆除票删掉。The face's trial: its pill
+          and the face's one driver. */}
       {import.meta.env.DEV &&
         activeRuntimeKind === "managed" &&
         faceMainChat && (
           <>
             <AssistantFaceTrialSwitcher />
-            {faceTrial.motion !== null && (
-              <AssistantFaceDriver
-                mainChat={faceMainChat}
-                subtasks={faceSubtasks}
-                open={effectiveActiveId === faceMainChat.id}
-              />
-            )}
+            <AssistantFaceDriver
+              mainChat={faceMainChat}
+              subtasks={faceSubtasks}
+              open={effectiveActiveId === faceMainChat.id}
+            />
           </>
         )}
 

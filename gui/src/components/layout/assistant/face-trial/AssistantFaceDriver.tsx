@@ -9,10 +9,10 @@ import { FaceDemo } from "./face-demo";
 import { useAssistantFaceTrial } from "./face-trial";
 
 /*
- * TEMPORARY — 票 65 临时切换器，定档后由拆除票删掉 (see face-trial.ts).
- * The face's one driver, mounted by App while the trial's motion is on,
- * and the demo on top of it. When a motion tier wins, the driver's mount
- * stays (without the demo) and this file goes.
+ * TEMPORARY — 票 66 临时切换器，定档后由拆除票删掉 (see face-trial.ts).
+ * The face's one driver, mounted by App in a dev build, alive at rest
+ * (丙, ruling 119 point 1), and the demo on top of it. When the trial
+ * ends, the driver's mount stays (without the demo) and this file goes.
  */
 export function AssistantFaceDriver({
   mainChat,
@@ -24,12 +24,11 @@ export function AssistantFaceDriver({
   open: boolean;
 }) {
   const trial = useAssistantFaceTrial();
-  const alive = trial.motion === "C";
   const director = useAssistantFaceDriver({
     mainChat,
     subtasks,
     open,
-    alive,
+    alive: true,
     demo: trial.demo,
   });
 
@@ -39,9 +38,9 @@ export function AssistantFaceDriver({
     const demo = new FaceDemo(current, REAL_CLOCK, (item) =>
       useAssistantFaceStore.getState().setDemoLabel(item?.label ?? null),
     );
-    demo.start(trial.pinned, alive);
+    demo.start(trial.pinned);
     return () => demo.stop();
-  }, [trial.demo, trial.pinned, alive, director]);
+  }, [trial.demo, trial.pinned, director]);
 
   return null;
 }
