@@ -485,6 +485,13 @@ README「dense context instead of long」（`README.md:54`）。
     4. **代价**：每一轮多 10px（10-15 嫌过主对话密度不够，真机看）；不照微信、iMessage「自己的消息不挂悬停按钮」的习惯（回复那一侧本来就是悬停行动条）。
     5. **没选**：A 不动；C 气泡里右上角一个「⌄」（WhatsApp 桌面版：不占版面，但复制要点两下、短消息里压字、成了第三套位置）；气泡左边悬空（Messenger 的位置，10-15 真机已否）。工作台、子任务、外置运行时零变化（工作台照旧只有一颗复制，要不要加引用等这边真机看过再说）。只改 GUI。票 53，等票 51 合入后派（会碰对话末尾那一行的上边距）。
 
+106. **Supervisor SOP 降显示优先级：内置运行时的顶栏不再常驻它的图标，入口留在设置 → 智能体接入与 ⌘K；外置运行时照旧**（JC 2026-10-19：「随着我们主对话助理功能完善，我感觉之前的 Supervisor SOP 是不是可以降低功能优先级和显示优先级了？要不要保留？保留的话留在哪里出现？还需要像现在这样一直在 topbar 上常驻吗？」；主会话查到顶栏那颗只是设置页的深链（`gui/src/components/layout/MainHeaderHost.tsx:156`），本机 9 月以来外部 Supervisor 发进对话的消息全是测试身份加 2 条 IM，deferred「设置 Agent 页去掉 Supervisor 叙事」的启动信号（助手手册落地）今天已到；给 A 不动、B 内置撤图标外置照旧、C 两边都撤，推荐 B，JC：「Supervisor SOP 按你建议推进」）：
+    1. **功能保留**：CLI、Agent API（宪法 Rule 3）、复制 SOP 与 `docs/integrations/galley-supervisor-sop.md` 都在；外部 Supervisor 的新功能排在助手之后，只修 bug、只做加法。社区 #29、#30 的作者在用 `session send --supervisor`。
+    2. **顶栏**：内置运行时不显示 Supervisor SOP 图标，工具簇剩待办、改动、显示、设置；外置运行时照旧（没有助手，外部 Supervisor 是它唯一的编排方式；外置界面冻结）。
+    3. **入口**：设置 → 智能体接入，不挪位置（与浏览器、IM、手机同属「把外面的东西接进来」一组）；⌘K 加一条「智能体接入」，两种运行时都有（现在 ⌘K 只有「打开设置」）。
+    4. **改说法**（deferred 那一条随之了结）：页面副标题从「把 Galley 交给本地 Agent 调度」改成面向高级用户与开发者、两种运行时都成立的「让其他 Agent 用命令行操作 Galley」一类说法；按钮、行为、页名都不变。宪法里「Settings -> Agent provides Copy SOP」照旧成立，不改。
+    5. **理由**：复制 SOP 是一次性的接入动作，顶栏工具簇放的是常用、跨对话的东西；助手成了内置的 Supervisor，顶栏再挂一个 Supervisor 图标，读作还得另找一个。没选：A 不动；C 两边都撤（外置会失去唯一编排方式的显眼入口）。README 与 About 的叙事随发版重写（`docs/project-status.md`「Do at release」），这次不碰。只改 GUI 与文档。票 54。
+
 ## 事实依据（2026-10-12 核对）
 
 - 桌面用量（`workbench.db`）：GUI 会话 5 个月里最长 21 轮；跨天续用的会话一共 6 个，9 月起 0 个；9 月 41 个会话共 116 轮，单个最长 8 轮。习惯是「开一个，问完就走」。
@@ -585,6 +592,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [51](./issues/51-live-line-grows-into-bubble.md) | D | 运行中那一行在落地时长成气泡（回复与它的提问） | 47 |
 | [52](./issues/52-card-last-line-header-typing.md) | — | 主对话开着时卡片第二行只写最后一句；顶栏写字时「正在输入…」 | 47 |
 | [53](./issues/53-user-bubble-hover-actions.md) | B | 你的气泡悬停时下面出现「复制 · 引用 · ⋯」，你 → 它变 30px | 51 |
+| [54](./issues/54-supervisor-sop-off-the-top-bar.md) | B | 内置运行时顶栏撤掉 Supervisor SOP 图标，⌘K 加「智能体接入」，页面改说法 | — |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 
