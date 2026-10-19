@@ -1,6 +1,6 @@
 # 57 你的消息下那一行离开即收起
 
-Status: needs-dogfood（2026-10-19 快进合入 main，`b813e64d`；主会话复跑门禁：typecheck、lint、两个时区各 1864 条、diff-check 全过）
+Status: done（2026-10-19 JC 真机：「票 57 验收 OK」。合入 `b813e64d`）
 
 来源：主聊天 PRD 裁决 109（2026-10-19）。只改 GUI 与设计文档。不上切换器。
 
