@@ -1,6 +1,6 @@
 # 55 切换器：在跑时的分工，现状 / 三点气泡
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-10-19 快进合入 main，`b44520a9`；主会话复跑门禁：typecheck、lint、两个时区各 1859 条、diff-check 全过。切换器只在开发构建，正式构建恒为第 1 档。等 JC 比完定档，再开拆除票）
 Blocked by: 53（同一片对话代码：`AssistantParts.tsx`、`Conversation.tsx`、`assistant-conversation.ts`；53 合入后从最新的 main 起分支）
 
 来源：主聊天 PRD 裁决 107（2026-10-19）。JC 提：为了让普通用户一眼看懂、有传统 IM 体验，对话里用三点气泡，过程挪到顶栏，侧栏写「正在输入…」。这是手感问题，又一起翻裁决 103、104 与 87 的字面，所以做成**临时切换器**，在 tauri dev 里真机比两档，比完定一档、拆掉切换器（拆是另一张票）。只改 GUI；Core、runner、提示词、设计文档都不动（定稿时再改文档）。
