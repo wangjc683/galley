@@ -38,7 +38,7 @@ Status: done（2026-10-19 JC 真机：行动条五个按钮、整条引用、运
 
 ### 2026-10-19 实现回报（子代理）
 
-worktree：`/Users/inkstone/Documents/genericagent-webui/.claude/worktrees/agent-ac01e0d260a659044`，分支 `worktree-agent-ac01e0d260a659044`（基于 `bd28de72`）。未提交。本票文件在主工作树里还没提交，worktree 里原本没有，是照主工作树的版本复制进来再追加本节的。
+worktree：`.claude/worktrees/agent-ac01e0d260a659044`，分支 `worktree-agent-ac01e0d260a659044`（基于 `bd28de72`）。未提交。本票文件在主工作树里还没提交，worktree 里原本没有，是照主工作树的版本复制进来再追加本节的。
 
 **1. 改动文件**
 
@@ -92,7 +92,7 @@ worktree：`/Users/inkstone/Documents/genericagent-webui/.claude/worktrees/agent
 
 **6. worktree 与分支**
 
-`/Users/inkstone/Documents/genericagent-webui/.claude/worktrees/agent-ac01e0d260a659044`，分支 `worktree-agent-ac01e0d260a659044`。
+`.claude/worktrees/agent-ac01e0d260a659044`，分支 `worktree-agent-ac01e0d260a659044`。
 
 **7. 票外发现（只报不修）**
 

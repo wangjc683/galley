@@ -750,6 +750,17 @@ resident bridge (`.scratch/browser-control-ux/PRD.md`, moved out of the
   live look at the two remembered panel states across a restart and the
   new empty state.
 
+- **Dogfood follow-ups** (2026-10-19, `.scratch/main-chat/` rulings
+  99–102, tickets 47–49, devlog
+  [2026-10-19-dogfood-walk-and-subtask-questions](./devlog/2026-10-19-dogfood-walk-and-subtask-questions.md)).
+  GUI only, managed runtime with a main chat. A reply's action bar is copy,
+  quote, save, (process), ⋯; the live line falls back to a step's summary
+  when the model wrote no narration; a subtask's question is answered in the
+  Galley chat only — its card shows 等你回复, the full question only when the
+  wake could not reach the assistant — and the opened subtask cannot answer
+  while Galley holds the question; a disabled composer greys the effort rows.
+  No Agent API or migration change.
+
 **Do at release** (outward-facing, so ask JC before each; the release SOP's
 Pre-Flight checks this list):
 
