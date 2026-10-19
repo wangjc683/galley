@@ -1,6 +1,6 @@
 # 11 新段带上段首之前的最近几轮
 
-Status: needs-dogfood（`b9c1eef8`、`4435b4d7`、`db3954fe`，2026-10-13 已推送；真机复现待 JC 在 dev 试用中遇到自然切段时看，不写隐藏设置）
+Status: done（2026-10-19 JC：日常使用里隔几个小时后前几轮原话都在；dev 日志 `[segment s-mvbu2ofu-vgao8ozm] idle since 2026-10-18T02:00:50+00:00: new segment from turn 6`、`load_history (6 messages, opening with 3 turns carried over)`。`b9c1eef8`、`4435b4d7`、`db3954fe`，2026-10-13 已推送；真机复现待 JC 在 dev 试用中遇到自然切段时看，不写隐藏设置）
 
 来源：主聊天 PRD 裁决 50（2026-10-13，JC 按建议推进）。deferred「主对话的跨段连续性」第 1 级，不等两周信号提前做。
 

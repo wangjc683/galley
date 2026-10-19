@@ -1,6 +1,6 @@
 # 35 CLI：补齐授权前两级的手
 
-Status: needs-dogfood（2026-10-16 合入 main，分支提交 `5d802f98`、`24ca243a`，合并提交 `20cf949c`；真机随票 36、37 一起验）
+Status: done（2026-10-19 真机第 8 站：主会话 `llm set-default gpt-6-astra`，JC 看到设置 → 模型自动把它移到顶部作默认、新对话模型选择器默认跟着变；生成配置 `managed-model-config/managed-models.json` 同步重写；随后改回 gpt-6.1-sol，顺序复原。2026-10-16 合入 main，分支提交 `5d802f98`、`24ca243a`，合并提交 `20cf949c`；真机随票 36、37 一起验）
 
 来源：[助手 PRD](../../assistant/PRD.md) 裁决 9 第一问选 B（JC：「一，B」）：界面能做、CLI 做不了、授权（裁决 3）前两级里点到的，都给助理接上。依赖：无；与 34 同改 socket 分发与 CLI，派同一个代理在 34 之后做，或你自己排好避免冲突。不改界面。
 

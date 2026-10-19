@@ -696,6 +696,11 @@ Post-release follow-up:
 Release-scope truth is `git log v0.6.2..HEAD`; besides the iOS-client and
 main-chat planning docs, main has:
 
+**Owed smoke for the next release** (besides the Owed notes in the entries
+below): browser control's new-user walkthrough and the Windows smoke of the
+resident bridge (`.scratch/browser-control-ux/PRD.md`, moved out of the
+2026-10-19 dogfood walk).
+
 - **The assistant runs the team; subtasks wake it** (2026-10-15 / 16,
   `.scratch/assistant/PRD.md`, devlogs
   [2026-10-15-assistant-runs-the-team](./devlog/2026-10-15-assistant-runs-the-team.md),
