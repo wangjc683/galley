@@ -25,6 +25,8 @@ JC 在主对话里说「帮我记一下，702 办公室装修预计完工时间 
    - 主动设一个之前，先看「最近不要的跟进」：同一类的不设；用户明说要的照办。
 6. **到点时**（When one comes due）：别复述（「提醒：装修完工」），想一下此刻什么对用户有用，一两句说出来（「702 装修预计今天完工，完了吗？要不要约个时间验收？」）。待办的提醒仍然只提醒，用户说办完 / 发生了才勾。
 
+7. **顺带修一句过时的话**（裁决 114 第 5 条核实）：`authority.md` 的「Galley refuses most of these, but `session archive` would still go through」不对，Core 在每条路径上都拒绝归档主对话（`core/src/session_writes.rs:545`，CLI 的 `session archive` 也走这里）。改成如实的说法，只动这一句。
+
 ## 二、入口层
 
 `core/src/managed_prompt.rs` 的 `main_chat_entry_layer` 待办那一段（「Note what the user has to do … Do it unasked …」）：加上「用户提到的事将来某天会发生或到期、到时提起来对他有用」也要跟进，措辞自定，尽量短。照 `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` 注释的写法补一段「Raised N → M by ticket 60」并写理由（没有这句，用户随口一提时模型看不到要去读手册）。相关测试跟着改；工作台、IM 提示词不变，`prompt_hash()` 不变。
