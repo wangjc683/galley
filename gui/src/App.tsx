@@ -7,8 +7,6 @@ import { MainHeaderHost } from "@/components/layout/MainHeaderHost";
 import { browserControlInviteVisible } from "@/components/layout/header/browser-control-indicator-status";
 import { SidebarCollapseToggle } from "@/components/layout/header/SidebarCollapseToggle";
 import { Sidebar } from "@/components/layout/Sidebar";
-// 票 62 临时切换器，定档后由拆除票删掉。
-import { SidebarZonesTrialSwitcher } from "@/components/layout/sidebar/zones-trial/SidebarZonesTrialSwitcher";
 import { CommandPalette } from "@/components/overlay/CommandPalette";
 import { ThemeProvider } from "@/components/theme/ThemeContext";
 import { BrowserControlAttentionSurface } from "@/components/screens/BrowserControlAttentionBanner";
@@ -781,12 +779,6 @@ function App() {
           </ThemeProvider>
         }
       />
-
-      {/* 票 62 临时切换器，定档后由拆除票删掉。The trial's pill, in a dev
-          build with the main chat's sidebar (the managed runtime). */}
-      {import.meta.env.DEV &&
-        activeRuntimeKind === "managed" &&
-        hasMainChat && <SidebarZonesTrialSwitcher />}
 
       <CommandPalette
         open={paletteOpen}

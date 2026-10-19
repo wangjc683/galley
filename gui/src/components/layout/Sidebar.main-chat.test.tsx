@@ -150,6 +150,7 @@ function render(
     projects?: Project[];
     language?: "zh-CN" | "en-US";
     scheduledActionCount?: number;
+    archivedCount?: number;
   } = {},
 ) {
   return renderToStaticMarkup(
@@ -162,6 +163,8 @@ function render(
           newChatActive={opts.newChatActive}
           newChatSessionId={opts.newChatSessionId}
           scheduledActionCount={opts.scheduledActionCount}
+          archivedCount={opts.archivedCount}
+          onOpenArchived={() => {}}
           expandedProjectIds={[]}
           onNewChat={() => {}}
           onSelectSession={() => {}}
@@ -197,6 +200,8 @@ const ROW = 'data-role="sidebar-new-chat-row"';
 const SCROLL_LIST = "overflow-y-auto";
 const STICKY = "data-sidebar-section-header";
 const EMPTY = "你的对话会出现在这里。";
+const WORKBENCH = 'data-sidebar-zone-label="workbench"';
+const ARCHIVED = ">已归档</span>";
 
 afterEach(() => {
   needsYou.clear();
@@ -242,8 +247,8 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
     expect(html).not.toContain('aria-label="待办"');
     // The card's block holds the card alone, as before ticket 42.
     const block = html.slice(
-      html.indexOf("border-b border-line-strong py-1.5"),
-      html.indexOf(SCROLL_LIST),
+      html.indexOf('<div class="pb-2.5 pt-3">'),
+      html.indexOf(WORKBENCH),
     );
     expect(count(block, CARD)).toBe(1);
     // The card is the block's only button.
@@ -272,11 +277,14 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
 
   it("stands the card on the chrome above the strong line, the list under it on the app ground", () => {
     const html = render([mainChat, sideChat]);
-    // The card's block carries the line at its foot; the list follows.
-    const block = tagWith(html, "border-line-strong");
-    expect(block).toContain("border-b border-line-strong py-1.5");
-    expect(html.indexOf("border-line-strong")).toBeLessThan(html.indexOf(CARD));
-    expect(html.indexOf(CARD)).toBeLessThan(html.indexOf(SCROLL_LIST));
+    // The card's block (12px over the card, 10px under it), then the
+    // workbench's name on the strong line; the list follows.
+    expect(tagWith(html, CARD)).not.toContain("line-strong");
+    expect(html.indexOf('<div class="pb-2.5 pt-3">')).toBeLessThan(
+      html.indexOf(CARD),
+    );
+    expect(html.indexOf(CARD)).toBeLessThan(html.indexOf(WORKBENCH));
+    expect(html.indexOf(WORKBENCH)).toBeLessThan(html.indexOf(SCROLL_LIST));
     const cardTag = tagWith(html, CARD);
     // One IM list row: fixed 58px, the card radius, no border.
     expect(cardTag).toContain("h-[58px]");
@@ -290,6 +298,48 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
     expect(body).toContain("size-10");
     expect(body).toMatch(/text-\[14px\][^>]*>Galley</);
     expect(tagWith(html, 'data-sidebar-section=""')).toContain("bg-app");
+  });
+
+  it("names the workbench on the strong line, drawn from after the word (ticket 62's C)", () => {
+    for (const language of ["zh-CN", "en-US"] as const) {
+      const html = render([mainChat, sideChat], { language });
+      const word = language === "zh-CN" ? ">工作台<" : ">Workbench<";
+      expect(count(html, "data-sidebar-zone-label")).toBe(1);
+      expect(count(html, word)).toBe(1);
+      // The strong line is the name row's, nowhere else.
+      expect(count(html, "line-strong")).toBe(1);
+      const row = between(html, WORKBENCH, SCROLL_LIST);
+      expect(row.indexOf(word)).toBeLessThan(row.indexOf("bg-line-strong"));
+      // The ground turns on the line: chrome above, the app ground below.
+      expect(tagWith(html, WORKBENCH)).toContain("h-[13px]");
+      expect(tagWith(html, WORKBENCH)).toContain(
+        "linear-gradient(to bottom, transparent 6px, var(--color-app) 6px)",
+      );
+      // Quieter than a bucket's eyebrow: regular, untracked, upright.
+      const span = row.slice(row.indexOf("<span"), row.indexOf("</span>"));
+      expect(span).toContain("text-ui-label");
+      expect(span).toContain("text-ink-muted");
+      expect(span).toContain("whitespace-nowrap");
+      for (const eyebrow of ["uppercase", "tracking-", "font-semibold"]) {
+        expect(span).not.toContain(eyebrow);
+      }
+    }
+    // No 「助理」 over the card (ruling 114 point 2).
+    expect(render([mainChat, sideChat])).not.toContain(">助理<");
+  });
+
+  it("runs the workbench's ground to the window's foot, 已归档 pinned there on it", () => {
+    const html = render([mainChat, sideChat], { archivedCount: 2 });
+    expect(tagWith(html, SCROLL_LIST)).toContain("scroll-pt-[42px] bg-app");
+    const i = html.indexOf(ARCHIVED);
+    expect(i).toBeGreaterThan(html.lastIndexOf(SCROLL_LIST));
+    const button = html.lastIndexOf("<button", i);
+    expect(html.slice(0, button).endsWith('<div class="bg-app">')).toBe(true);
+    expect(html.slice(button, i)).toContain("border-t border-line/70");
+    // Only with something archived, as before.
+    expect(render([mainChat, sideChat], { archivedCount: 0 })).not.toContain(
+      ARCHIVED,
+    );
   });
 
   it("opens the list on the sticky new-chat row, with the old sidebar's spacing", () => {
@@ -780,6 +830,7 @@ describe("without a main chat (external runtime)", () => {
     expect(html).not.toContain("主对话");
     expect(html).not.toContain("sticky");
     expect(html).not.toContain("border-line-strong");
+    expect(html).not.toContain("data-sidebar-zone-label");
     for (const attr of ["section", "section-header"]) {
       expect(html).not.toContain(`data-sidebar-${attr}=""`);
     }
@@ -789,6 +840,10 @@ describe("without a main chat (external runtime)", () => {
     // The CLI session stays in 今天.
     expect(at(html, "s-cli")).toBeGreaterThan(html.indexOf(">今天<"));
     expect(render([])).toContain(EMPTY);
+    // 已归档 on the chrome, its own row: no ground around it.
+    const archived = render([sideChat], { archivedCount: 2 });
+    expect(archived).toContain(ARCHIVED);
+    expect(archived).not.toContain('<div class="bg-app">');
   });
 
   it("selects the 新对话 row itself while the new-chat composer is up, a project's too", () => {
@@ -848,6 +903,15 @@ describe("the trials and the main-chat-on-top sidebar are gone", () => {
       "pressedPlusProjectId",
       "plusPressed",
       "data-sidebar-section-body",
+      // Ticket 62's zones trial (C won, ruling 118 point 5).
+      "galley.tmp.sidebarZonesTrial",
+      "zones-trial",
+      "SidebarZonesTrialSwitcher",
+      "SidebarAssistantLabel",
+      "zoneAssistant",
+      "demoNewUser",
+      // Spelled apart so a grep for the ticket marker finds nothing.
+      ["票", "62"].join(" "),
     ];
     const hits = sources(SRC)
       .filter((file) => file !== self && !file.includes("zz-harness"))

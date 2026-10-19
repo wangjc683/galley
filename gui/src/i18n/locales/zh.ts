@@ -168,10 +168,9 @@ export const zhCopy = {
     scheduledCreated: "定时任务创建",
     newReplyTitle: "有新回复",
     emptySessions: "你的对话会出现在这里。",
-    // 票 62 临时切换器，定档后由拆除票删掉：the zone names on the
-    // sidebar's lines (sidebar/zones-trial); the winner keeps its own.
+    // The workbench's name on the line under the assistant's card
+    // (sidebar/SidebarWorkbenchLabel, main chat PRD rulings 114, 118).
     zoneWorkbench: "工作台",
-    zoneAssistant: "助理",
     bucketPinned: "置顶",
     bucketToday: "今天",
     bucketWeek: "本周",
