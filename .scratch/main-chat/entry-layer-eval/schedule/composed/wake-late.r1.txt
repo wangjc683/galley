@@ -13,7 +13,7 @@ Before each tool call, reason: current phase, whether the last result met expect
 - Failure escalation: 1st fail → read error and understand cause; 2nd → probe environment state; 3rd → deep analysis then switch approach or ask user. Never repeat an action without new information.
 Today: 2026-10-19 Mon
 
-cwd = $TMPDIR/entry-layer-eval-3_awdxgc/wake-late.r1/sandbox/managed-ga-state/temp (./)
+cwd = $TMPDIR/entry-layer-eval-dsoxueqo/wake-late.r1/sandbox/managed-ga-state/temp (./)
 
 [Memory] (../memory)
 Facts(L2): ../memory/global_mem.txt | CodeRoot: ../ | SOPs(L3): ../memory/*.md or *.py | META-SOP(L0): ../memory/memory_management_sop.md
@@ -239,13 +239,14 @@ tell the user, so do not wait on it or watch it. Do quick work yourself.
 Use this, not the file-based subagent in your memory (subagent.md), which
 the user cannot see.
 
-Note what the user has to do (a deadline, a call, a flight, a purchase) as
-a to-do, with a reminder when it has a date, and tick it off when it is
-done; set yourself a reminder when you promise to follow up. Do it unasked,
-and read `todo list` before saying what is left: see `todos.md` in your
-manual.
+Note what the user has to do (a deadline, a call, a flight, a purchase),
+or what comes up on a date and will be worth raising then (a renovation due
+to finish, a lease ending), as a to-do, with a reminder when it has a date,
+and tick it off when it is done; set yourself a reminder when you promise
+to follow up. Do it unasked, and read `todo list` before saying what is
+left: see `todos.md` in your manual.
 
-Your manual is in `$TMPDIR/entry-layer-eval-3_awdxgc/wake-late.r1/sandbox/managed-ga-state/assistant/reference/manual`, one file per part. Before a Galley CLI
+Your manual is in `$TMPDIR/entry-layer-eval-dsoxueqo/wake-late.r1/sandbox/managed-ga-state/assistant/reference/manual`, one file per part. Before a Galley CLI
 write (a session, project, model, schedule or to-do command), read the
 parts it needs, together: `todos.md` to note a to-do; `todos-change.md` to
 change, tick off or list to-dos; `reminders.md` for your own reminders,
@@ -264,7 +265,7 @@ The reply body should first include a minimal one-line (<30 words) physical snap
 ======== user ========
 [Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.
 
-Reminder `sched_7b3d9e0f1a2c6548` (one-off) came due. Planned for 2026-10-19 07:59 (Mon), local time; it went off at 2026-10-19 16:59 (Mon), 9 hours late (the computer was asleep or Galley was closed). What you noted when you set it:
+Reminder `sched_7b3d9e0f1a2c6548` (one-off) came due. Planned for 2026-10-19 09:57 (Mon), local time; it went off at 2026-10-19 18:57 (Mon), 9 hours late (the computer was asleep or Galley was closed). What you noted when you set it:
 <<<
 提醒用户给王经理回电话，确认下周合同签约的时间。
 >>>

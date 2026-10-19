@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import builtins
+import calendar
 import concurrent.futures
 import json
 import os
@@ -46,7 +47,7 @@ import sys
 import tempfile
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -189,7 +190,16 @@ TODO_CASES = TODO_DIR / "cases.json"
 TODO_JSON = TODO_DIR / "results.json"
 TODO_MD = TODO_DIR / "results.md"
 TODO_COMPOSED_DIR = TODO_DIR / "composed"
-TODO_DUMP_CASES = ("quote-move", "whats-left")
+TODO_DUMP_CASES = ("quote-move", "whats-left", "declined-before")
+
+# Ticket 60: the entry layer's 15 cases (cases.json, ticket 03d) under
+# today's main chat prompt, in the to-do suite's sandbox and fake galley,
+# to see whether a passing remark gets a to-do or a reminder it should
+# not (chat/: each case's expectation; the messages stay in cases.json).
+CHAT_DIR = HERE / "chat"
+CHAT_CASES = CHAT_DIR / "cases.json"
+CHAT_JSON = CHAT_DIR / "results.json"
+CHAT_MD = CHAT_DIR / "results.md"
 
 # Sandbox mode (dispatch suite, second run): read-only lookups and file
 # work are answered for real inside a per-run sandbox instead of ending
@@ -1533,6 +1543,20 @@ def sched_time(spec: dict[str, Any], now: datetime, started: datetime | None = N
         day = now.date() + timedelta(days=1)
         while day.isoweekday() != spec["next_weekday"]:
             day += timedelta(days=1)
+    elif "week_after" in spec:
+        # Ticket 60: a weekday of next week, the week starting Monday
+        # (「下周三」 said on a Monday is nine days off, not two).
+        day = now.date() - timedelta(days=now.weekday()) + timedelta(days=6 + int(spec["week_after"]))
+    elif "month" in spec:
+        # Ticket 60: a day of the year (`day` may be "last"), in the year
+        # `year_offset` from now, or else the next one not before today.
+        def on(year: int) -> Any:
+            last = calendar.monthrange(year, int(spec["month"]))[1]
+            return date(year, int(spec["month"]), last if spec["day"] == "last" else int(spec["day"]))
+
+        day = on(now.year + int(spec.get("year_offset", 0)))
+        if "year_offset" not in spec and day < now.date():
+            day = on(now.year + 1)
     else:
         day = now.date() + timedelta(days=int(spec["days"]))
     h, m = (int(x) for x in spec["time"].split(":"))
@@ -1557,7 +1581,27 @@ def sched_task(t: dict[str, Any], now: datetime) -> dict[str, Any]:
     if t.get("fired"):
         fired = at + timedelta(minutes=t["fired"]["late_minutes"])
         task.update(lastFiredAt=iso_utc(fired), lastDueAt=task["fireAt"], lastWake="pending")
+    if t.get("cancelled"):
+        cancel_before(task, t["cancelled"], now)
     return task
+
+
+def cancel_before(row: dict[str, Any], spec: dict[str, Any], now: datetime) -> None:
+    """Ticket 60: a to-do or task the fake galley starts with already
+    cancelled (`cancelled`: days_ago / minutes_ago, `via` gui for the
+    user at the desktop, supervisor for Galley at the user's request,
+    system for Core taking a reminder along; `reason`), as Core records
+    it (ticket 61's cancelledBy). Made a day before it was cancelled."""
+    at = now - timedelta(days=spec.get("days_ago", 0), minutes=spec.get("minutes_ago", 0))
+    via = spec.get("via", "supervisor")
+    by: dict[str, Any] = ({"via": "supervisor", "supervisor": "galley-assistant"} if via == "supervisor"
+                          else {"via": via})
+    if spec.get("reason"):
+        by["reason"] = spec["reason"]
+    row["cancelledAt"] = row["updatedAt"] = iso_utc(at)
+    row["cancelledBy"] = by
+    if datetime.fromisoformat(row["createdAt"]) >= at:
+        row["createdAt"] = iso_utc(at - timedelta(days=1))
 
 
 def sched_day(spec: dict[str, Any], now: datetime) -> str:
@@ -1590,6 +1634,8 @@ def todo_stored(t: dict[str, Any], now: datetime, k: int) -> dict[str, Any]:
         done = now - timedelta(minutes=t["done_since"].get("minutes_ago", 30))
         todo["doneAt"] = todo["updatedAt"] = iso_utc(done)
         todo["doneBy"] = {"via": t["done_since"].get("via", "gui")}
+    if t.get("cancelled"):
+        cancel_before(todo, t["cancelled"], now)
     return todo
 
 
@@ -1602,6 +1648,9 @@ def todo_reminder_task(t: dict[str, Any], now: datetime) -> dict[str, Any] | Non
                        "in_hand": t.get("in_hand", True)}, now)
     task.pop("createdIn", None)
     task["todoId"] = t["id"]
+    if t.get("cancelled"):
+        # Core takes a cancelled to-do's reminder along (`system`).
+        cancel_before(task, dict(t["cancelled"], via="system", reason=None), now)
     return task
 
 
@@ -1627,7 +1676,8 @@ def todo_wire_at(todo: dict[str, Any], tasks: list[dict[str, Any]], tz: Any,
         w["reminder"] = {"taskId": task["id"], "at": task["fireAt"],
                          "state": "fired" if fired else "scheduled" if task.get("enabled", True) else "paused"}
     done = todo.get("doneAt") and (as_of is None or datetime.fromisoformat(todo["doneAt"]) <= as_of)
-    w["status"] = "done" if done else "open"
+    gone = todo.get("cancelledAt") and (as_of is None or datetime.fromisoformat(todo["cancelledAt"]) <= as_of)
+    w["status"] = "cancelled" if gone else "done" if done else "open"
     w["createdAt"] = todo["createdAt"]
     return w
 
@@ -1642,9 +1692,8 @@ def sched_in_hand(case: dict[str, Any], now: datetime) -> str | None:
     todos = [todo_wire_at(todo_stored(t, now, k), reminders, now.tzinfo, as_of)
              for k, t in enumerate(todo_specs(case)) if t.get("in_hand", True)]
     # Ticket 61: the follow-ups turned down, from every to-do and task the
-    # fake galley starts with, cancelled by the time of the snapshot. No
-    # case cancels one yet (ticket 60's cases will), so this is empty and
-    # the lines read as before.
+    # fake galley starts with, cancelled by the time of the snapshot
+    # (ticket 60's declined-before cases start with one).
     declined = [d for d in declined_items([todo_stored(t, now, k) for k, t in enumerate(todo_specs(case))],
                                           [sched_task(t, now) for t in case.get("tasks") or []] + reminders, as_of)
                 if datetime.fromisoformat(d["cancelledAt"].replace("Z", "+00:00")) <= as_of]
@@ -1655,7 +1704,17 @@ def sched_prompt(case: dict[str, Any], now: datetime) -> str:
     """The main chat prompt as the real Rust code composed it
     (schedule/galley-prompt/, with placeholders), segment facts and the
     case's In Hand lines filled; the manual's directory is filled per run."""
-    text = SCHED_PROMPT.read_text(encoding="utf-8")
+    turns = sum(1 for m in case.get("history") or [] if m.get("role") == "user")
+    if case.get("carried") and turns:
+        # Ticket 60's chat cases: turns carried over from before the
+        # segment, as the real Rust code writes it (main_chat.carried-N).
+        path = SCHED_PROMPT.with_name(f"main_chat.carried-{turns}.txt")
+        if not path.is_file():
+            fail(f"missing {path.name}")
+        last = now - timedelta(hours=float(case.get("hours_ago") or 0))
+        text = path.read_text(encoding="utf-8").replace("__LAST_SAID_AT__", last.strftime("%Y-%m-%d %H:%M"))
+    else:
+        text = SCHED_PROMPT.read_text(encoding="utf-8")
     text = (text.replace("__SESSION_ID__", SESSION_ID)
             .replace("__SEGMENT_START_TURN__", str(SEGMENT_START_TURN))
             .replace("__SEGMENT_START_DATE__", now.strftime("%Y-%m-%d")))
@@ -2286,6 +2345,43 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                  '"$G" todo list >/dev/null; "$G" todo add "给房东回电话" --due="$D" --remind-at="${D}T07:30" '
                  '--supervisor=galley-assistant --reason="user asked"'})),
             call("<summary>Noted</summary>\n记下了：明天给房东回电话，明早 7 点半提醒你。")],
+        # Ticket 60: a follow-up of its own, unasked; cancelling the kind
+        # the user turned down, with the kind in the reason and without;
+        # nothing set, and one set, where a follow-up of that kind was
+        # turned down; a two-sided case; a reminder recited, and one put
+        # to use.
+        "todo-follow-own": [
+            call("<summary>Follow it up</summary>\n跟一下。", ("code_run", {"type": "bash", "script":
+                 'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; "$G" schedule list >/dev/null; '
+                 '"$G" schedule create "问一下用户 702 办公室装修完没" --at="$(date +%Y)-11-20T10:00" '
+                 '--target=assistant --supervisor=galley-assistant --reason="renovation due to finish"'})),
+            call("<summary>Set</summary>\n11 月 20 号上午 10 点我问你一下装修完没。")],
+        "todo-stop-kind": [
+            call("<summary>Cancel</summary>\n取消。", ("code_run", {"type": "bash", "script":
+                 'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; "$G" todo list >/dev/null; '
+                 '"$G" todo cancel todo_6f7a8b9c0d1e2f3a --supervisor=galley-assistant '
+                 '--reason="user: no renovation progress reminders"'})),
+            call("<summary>Cancelled</summary>\n好，装修进度这类的不再提醒你了。")],
+        "todo-stop-vague": [
+            call("<summary>Cancel</summary>\n取消。", ("code_run", {"type": "bash", "script":
+                 'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; '
+                 '"$G" todo cancel todo_6f7a8b9c0d1e2f3a --supervisor=galley-assistant --reason="user asked"'})),
+            call("<summary>Cancelled</summary>\n好，不提醒了。")],
+        "todo-quiet": [call("<summary>Noted</summary>\n好的，知道了。")],
+        "todo-declined-set": [
+            call("<summary>Note it</summary>\n记一下。", ("code_run", {"type": "bash", "script":
+                 'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; "$G" todo add "801 装修完工" '
+                 '--due="$(date +%Y)-12-01" --remind-at="$(date +%Y)-12-01T10:00" '
+                 '--supervisor=galley-assistant --reason="renovation due to finish"'})),
+            call("<summary>Noted</summary>\n记下了，12 月 1 号上午 10 点提醒你。")],
+        "todo-maybe": [
+            call("<summary>Nudge</summary>\n提醒一下。", ("code_run", {"type": "bash", "script":
+                 'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; "$G" schedule create "提醒用户出门吃火锅" '
+                 '--at="$(date -v+1H +%Y-%m-%dT%H:%M)" --target=assistant --supervisor=galley-assistant '
+                 '--reason="dinner tonight"'})),
+            call("<summary>Set</summary>\n一小时后提醒你出门。")],
+        "todo-recite": [call("<summary>Remind</summary>\n提醒：702 办公室装修完工。")],
+        "todo-put-to-use": [call("<summary>Remind</summary>\n702 装修预计今天完工，完了吗？要不要约个时间验收？")],
         "sbx-inline": [
             call("<summary>Inline</summary>\n直接算。",
                  ("code_run", {"script": f"open({canary + '-inline'!r}, 'w').write('x')", "inline_eval": True}))],
@@ -2711,7 +2807,7 @@ def build_result(job: dict[str, Any], rec: dict[str, Any], done: Any, latency: f
             "stop_reason": stop,
             "final_reply": reply,
         })
-        if job.get("suite") in ("schedule", "todo"):
+        if job.get("suite") in ("schedule", "todo", "chat"):
             result.update({"suite": job["suite"], "now": job["now"], "started_at": rec.get("started_at")})
     elif variant:
         call = rec["dispatch_call"]
@@ -2985,7 +3081,7 @@ def run_job(job: dict[str, Any], python: str, workdir: Path) -> dict[str, Any]:
         # What the manual's directory held when the run ended (a part the
         # model wrote or removed would show here).
         result["manual_files"] = sorted(os.listdir(job["manual_dir"]))
-    if job.get("suite") in ("schedule", "todo"):
+    if job.get("suite") in ("schedule", "todo", "chat"):
         # What the fake galley ended with (tasks and to-dos made, changed,
         # cancelled), and what it started with.
         state_path = Path(sandbox["fake_state"]) if sandbox and sandbox.get("fake_state") else None
@@ -3707,24 +3803,38 @@ def manual_column(calls: list[dict[str, Any]], write_at: int | None) -> tuple[st
     return f"{when}：{parts}；{len(reads)} 次 {turns} 轮，{sum(x['bytes'] for x in reads)} 字节", reads
 
 
-def ticket59_section(data: dict[str, Any], cases: list[dict[str, Any]], facts_fn: Any) -> list[str]:
-    """Ticket 59's rerun against the runs it replaced (the first group in
-    meta.superseded_runs whose reason starts with 票 59): pass rate, model
-    requests and time per run, and how the manual was read; then per case,
-    with a flag where a case that writes takes over one more request on
-    average. A same-day control (meta.ticket59_control: the prompt and the
-    whole manual of before ticket 59, run the day of the rerun) gets a row
-    and a column of its own. Empty until that group exists."""
+RERUN_INTROS = {
+    "59": "上一次是被这次替换的运行（整本手册），这一次是按部分拆开之后。",
+    "60": "上一次是票 59 重跑之后的结果（手册拆开之后），这一次是票 60 改了手册（`todos.md`、`reminders.md`、"
+          "`todos-change.md`）与入口层的待办那一段之后。只比两次都有的用例，票 60 新加的用例只有这一次。",
+}
+
+
+def rerun_section(data: dict[str, Any], cases: list[dict[str, Any]], facts_fn: Any, ticket: str) -> list[str]:
+    """A ticket's rerun (59, 60) against the runs it replaced (the first
+    group in meta.superseded_runs whose reason starts with 票 <ticket>):
+    pass rate, model requests and time per run, and how the manual was
+    read; then per case, with a flag where a case that writes takes over
+    one more request on average. "This time" is the group a later ticket
+    replaced them with, if any (ticket 59's results are what ticket 60
+    compares with), else the current results. A same-day control (meta.ticket59_control: the
+    prompt and the whole manual of before ticket 59, run the day of the
+    rerun) gets a row and a column of its own. Empty until that group
+    exists. A record-only case counts as no pass."""
     meta = data["meta"]
     groups = meta.get("superseded_runs") or []
     groups = [groups] if isinstance(groups, dict) else groups
-    base = next((g for g in groups if str(g.get("reason", "")).startswith("票 59")), None)
-    if base is None:
+    mark = f"票 {ticket}"
+    at = next((i for i, g in enumerate(groups) if str(g.get("reason", "")).startswith(mark)), None)
+    if at is None:
         return []
+    base = groups[at]
+    later = next((g for g in groups[at + 1:] if not str(g.get("reason", "")).startswith(mark)), None)
     by_id = {c["id"]: c for c in cases}
     keys = {(r["id"], r["variant"]) for r in base["runs"]}
     before = [r for r in base["runs"] if r["id"] in by_id]
-    after = [r for r in data["results"] if (r["id"], r["variant"]) in keys and r["id"] in by_id]
+    after = [r for r in (later["runs"] if later else data["results"])
+             if (r["id"], r["variant"]) in keys and r["id"] in by_id]
 
     def facts(r: dict[str, Any]) -> dict[str, Any]:
         return facts_fn(r, by_id[r["id"]])
@@ -3740,7 +3850,7 @@ def ticket59_section(data: dict[str, Any], cases: list[dict[str, Any]], facts_fn
                     parts[p] = parts.get(p, 0) + 1
         return {
             "runs": len(runs),
-            "pass": sum(1 for f in fs if f["pass"]),
+            "pass": sum(1 for f in fs if f["pass"] is True),
             "calls": sum(int(r.get("llm_calls") or 0) for r in runs) / n,
             "secs": sum(float(r.get("latency_s") or 0) for r in runs) / n,
             "reads": sum(len(x) for x in reads) / n,
@@ -3753,16 +3863,17 @@ def ticket59_section(data: dict[str, Any], cases: list[dict[str, Any]], facts_fn
     def dist(parts: dict[str, int]) -> str:
         return "、".join(f"{p} {k}" for p, k in sorted(parts.items(), key=lambda kv: (-kv[1], kv[0]))) or "—"
 
-    control = [r for r in meta.get("ticket59_control") or [] if r["id"] in by_id]
+    control = [r for r in meta.get(f"ticket{ticket}_control") or [] if r["id"] in by_id]
     b, a = stats(before), stats(after)
     model = meta["model"]
-    title = (f"## 票 59 重跑（{str(base.get('at', ''))[:10]}，{model['name']}，推理强度 "
+    title = (f"## 票 {ticket} 重跑（{str(base.get('at', ''))[:10]}，{model['name']}，推理强度 "
              f"{model['options'].get('reasoning_effort', '默认')}）")
-    out = [title, ""] + list(meta.get("ticket59_note") or [])
-    if meta.get("ticket59_note"):
+    note = meta.get(f"ticket{ticket}_note")
+    out = [title, ""] + list(note or [])
+    if note:
         out.append("")
     out += [
-        "上一次是被这次替换的运行（整本手册），这一次是按部分拆开之后。请求次数是每次运行的模型调用数（GA 的轮数），"
+        RERUN_INTROS.get(ticket, "") + "请求次数是每次运行的模型调用数（GA 的轮数），"
         "用时是整次运行的墙钟时间；读手册的字节是返回给模型的工具结果的字节数，「轮」是读手册的那几次落在几个模型轮次里"
         "（一轮里并发读几份算一轮）。",
         "",
@@ -3844,7 +3955,7 @@ def render_wake_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
-    out += ticket59_section(data, cases, wake_facts)
+    out += rerun_section(data, cases, wake_facts, "59")
     out += [
         "## 一览",
         "",
@@ -3923,7 +4034,9 @@ def says_time(text: str, at: datetime, now: datetime, started: datetime) -> bool
     """Whether a reply names a time: the hour (24- or 12-hour, digits or
     Chinese, `:mm`, 点, 半) and, unless it is today, the day (明天, 周三,
     21 号 …); or, within three hours, how many minutes from now (or, since
-    ticket 44, 半小时 / N 小时 when it is that far)."""
+    ticket 44, 半小时 / N 小时 when it is that far). Since ticket 60, two
+    days off or more, the day alone (「11 月 20 号我问你一下」, the
+    manual's own example)."""
     text = text.replace("：", ":")
     h, m = at.hour, at.minute
     hours = {h, h % 12 or 12}
@@ -3967,7 +4080,11 @@ def says_time(text: str, at: datetime, now: datetime, started: datetime) -> bool
             words += ["明天", "明早", "明晚", "明日", "明儿", "明上午", "明下午"]
         if day == today + timedelta(days=2):
             words.append("后天")
+        if day.year != today.year:
+            words += [f"{day.year}-{day.month:02d}-{day.day:02d}"]
         day_ok = any(w in text for w in words)
+        if day_ok and (day - today).days >= 2:
+            return True
     return hour_ok and day_ok
 
 
@@ -3994,7 +4111,13 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     by_id = {t["id"]: t for t in final}
     made = [t for t in final if t["id"] not in fixture]
     made_live = [t for t in made if not t.get("cancelledAt")]
-    cancelled = sorted(t["id"] for t in final if t["id"] in fixture and t.get("cancelledAt"))
+
+    def cancelled_here(tid: str) -> bool:
+        # Ticket 60: cancelled in this run, not one the fake galley
+        # started with already cancelled.
+        return bool(by_id.get(tid, {}).get("cancelledAt")) and not fixture.get(tid, {}).get("cancelledAt")
+
+    cancelled = sorted(t["id"] for t in final if t["id"] in fixture and cancelled_here(t["id"]))
     changed = sorted(t["id"] for t in final if t["id"] in fixture and not t.get("cancelledAt")
                      and {k: v for k, v in t.items() if k != "updatedAt"}
                      != {k: v for k, v in fixture[t["id"]].items() if k != "updatedAt"})
@@ -4097,7 +4220,7 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     move = exp.get("move")
     if move:
         target = by_id.get(move["id"], {})
-        if not target.get("cancelledAt"):
+        if not cancelled_here(move["id"]):
             timed = target
             if not in_window(target, move["window"]):
                 reasons.append("没改到新时间：" + (local_words(local(target["fireAt"])) if target.get("fireAt") else "?"))
@@ -4118,13 +4241,13 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         if set(cancelled) - set(want_cancel):
             reasons.append("删了不该删的：" + "、".join(sorted(set(cancelled) - set(want_cancel))))
     for keep in exp.get("keep") or []:
-        if by_id.get(keep, {}).get("cancelledAt"):
+        if cancelled_here(keep):
             reasons.append(f"不该删 {keep}")
     kor = exp.get("keep_or_replace")
     if kor:
         # Kept, with no second reminder; or moved onto a to-do: cancelled,
         # and exactly one reminder made in its place, in the window.
-        if not by_id.get(kor["id"], {}).get("cancelledAt"):
+        if not cancelled_here(kor["id"]):
             if made_live:
                 reasons.append(f"已有 {kor['id']}，又建了 {len(made_live)} 个提醒")
         elif len(made_live) != 1 or not in_window(made_live[0], kor["window"]):
@@ -4189,7 +4312,7 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     facts = {(r["id"], r["variant"]): sched_facts(r, next(c for c in cases if c["id"] == r["id"]))
              for r in data["results"] if any(c["id"] == r["id"] for c in cases)}
     out = [
-        "# 定时与提醒评测结果（票 36，票 44、票 59 重跑）",
+        "# 定时与提醒评测结果（票 36，票 44、票 59、票 60 重跑）",
         "",
         f"模型：{meta['model']['name']}（{meta['model_source']}，即 JC 主对话现在用的模型），推理强度 "
         f"{meta['model']['options'].get('reasoning_effort', '默认')}；首次运行于 {meta['ran_at']}。",
@@ -4219,7 +4342,7 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
-    out += ticket59_section(data, cases, sched_facts)
+    out += rerun_section(data, cases, sched_facts, "60") + rerun_section(data, cases, sched_facts, "59")
     total = passed = 0
     out += ["## 通过率", "", "| # | 用例 | 分组 | 期望 | 遍数 | 过 | 通过率 |", "| --- | --- | --- | --- | --- | --- | --- |"]
     for case in cases:
@@ -4304,6 +4427,10 @@ def todo_gist(t: dict[str, Any]) -> str:
     """A to-do in the fake galley's stored form, in one line."""
     due = t.get("dueAt") or t.get("dueDate") or "无截止"
     state = "已取消" if t.get("cancelledAt") else "已勾掉" if t.get("doneAt") else "没做"
+    by = t.get("cancelledBy") or {}
+    if t.get("cancelledAt") and by:
+        who = {"gui": "用户在桌面上", "system": "Core 顺带"}.get(by.get("via"), by.get("supervisor") or by.get("via"))
+        state += f"（{t['cancelledAt']}，{who}" + (f"，原因：{by['reason']}" if by.get("reason") else "") + "）"
     notes = f"（备注：{t['notes']}）" if t.get("notes") else ""
     return f"`{t['id']}` {t['title']}{notes}，截止 {due}，{state}"
 
@@ -4312,7 +4439,12 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     """What a to-do run did, and whether it met the case's expectations
     (todo/cases.json `expect`). Commands from the fake galley's log; to-dos
     and tasks made, changed, ticked off and cancelled from its final
-    state."""
+    state. Ticket 60: `follow_up` (one follow-up, a to-do with its
+    reminder or its own, in a window), `todo: optional` (a to-do may be
+    noted, its reminder as `reminder` says), `cancel` (one of these
+    cancelled in this run, at the user's request, the kind in the
+    reason), `asks_or_any`, and `record_only` (judged by no one: `pass`
+    is None); `flags` note what passes but is worth a look."""
     exp = case["expect"]
     now = datetime.fromisoformat(r["now"])
     tz = now.tzinfo
@@ -4328,6 +4460,14 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     made_todos = [t for t in todos if t["id"] not in fx_todos and not t.get("cancelledAt")]
     adds = [parse_cli(a) for a in log if cli_name(a) == "todo add"]
     standalone = [t for t in tasks if t["id"] not in fx_tasks and not t.get("todoId") and not t.get("cancelledAt")]
+    # Ticket 60: cancelled in this run, not already cancelled when it began.
+    cancelled_todos = [t for t in todos if t["id"] in fx_todos and t.get("cancelledAt")
+                       and not fx_todos[t["id"]].get("cancelledAt")]
+    cancelled_fx_tasks = [t for t in tasks if t["id"] in fx_tasks and t.get("cancelledAt")
+                          and not fx_tasks[t["id"]].get("cancelledAt")]
+    memory_writes = [str((c.get("args") or {}).get("path", "")) for c in r.get("calls") or []
+                     if c.get("name") in ("file_write", "file_patch")
+                     and "memory" in str((c.get("args") or {}).get("path", ""))]
     sched_creates = [parse_cli(a) for a in log if cli_name(a) == "schedule create"]
     writes = [n for n in names if n in ALL_WRITES]
     held = [n for n in names if n in HOLDING_COMMANDS]
@@ -4386,6 +4526,7 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         return live[-1] if live else None
 
     reasons: list[str] = []
+    flags: list[str] = []
     if r.get("status") != "ok":
         reasons.append(f"运行失败：{r.get('status')}")
     if stop not in ("final_reply", "ask_user"):
@@ -4394,8 +4535,8 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         reasons.append("用了会卡住主对话的命令：" + "、".join(sorted(set(held))))
     if "session new" in names or "<subtask>" in reply:
         reasons.append("开了子任务或新会话")
-    for words, flags in sched_creates:
-        if flags.get("target") != "assistant":
+    for words, opts in sched_creates:
+        if opts.get("target") != "assistant":
             reasons.append("schedule create 没带 --target=assistant")
             break
     for a in log:
@@ -4405,7 +4546,53 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     allowed = set(exp.get("allow") or [])
     timed: dict[str, Any] | None = None
     want = exp.get("todo", "none")
-    if want == "one":
+    fu = exp.get("follow_up")
+    if fu:
+        # One follow-up: a to-do noted here with its reminder, or a
+        # reminder of its own; its time in the window, a to-do's not after
+        # its due.
+        via = fu.get("via", "either")
+        if via in ("either", "todo"):
+            allowed.add("todo add")
+        if via in ("either", "assistant"):
+            allowed.add("schedule create")
+        ups = [("todo", rem, t) for t in made_todos for rem in [reminder_of(t["id"])] if rem]
+        ups += [("assistant", x, None) for x in standalone]
+        bare = [t for t in made_todos if not reminder_of(t["id"])]
+        if len(ups) != 1:
+            reasons.append(f"该设 1 个跟进（待办挂提醒，或它自己的提醒），设了 {len(ups)} 个")
+        else:
+            kind, timed, t = ups[0]
+            at = local(timed["fireAt"]) if timed.get("fireAt") else None
+            if via != "either" and kind != via:
+                reasons.append("该是" + ("待办挂提醒" if via == "todo" else "它自己的提醒（schedule create）")
+                               + "，却" + ("记成了待办" if kind == "todo" else "建成了它自己的提醒"))
+            if fu.get("prefer") and kind != fu["prefer"]:
+                flags.append("记成了" + ("待办挂提醒" if kind == "todo" else "它自己的提醒")
+                             + "（期望" + ("待办" if fu["prefer"] == "todo" else "它自己的提醒") + "，也算过）")
+            if timed.get("target") != "assistant":
+                reasons.append("建成了每次新开会话的任务（target 不是 assistant）")
+            if at is None:
+                reasons.append("不是一次性提醒")
+            elif not in_window(at, fu["window"]):
+                reasons.append("跟进时间不对：" + local_words(at))
+            elif t is not None and due_end(t) and at > due_end(t):
+                reasons.append("提醒在截止之后：" + local_words(at))
+            if t is not None and exp.get("title_any") and not any(w in t["title"] for w in exp["title_any"]):
+                reasons.append("待办标题里没有：" + " / ".join(exp["title_any"]))
+        if bare:
+            flags.append("另记了不带提醒的待办：" + "、".join(t["title"] for t in bare))
+    elif want == "optional":
+        allowed.add("todo add")
+        if len(made_todos) > 1:
+            reasons.append(f"最多记 1 件待办，记了 {len(made_todos)} 件")
+        for t in made_todos:
+            rem = reminder_of(t["id"])
+            if "reminder" in exp and exp["reminder"] is None and rem:
+                reasons.append("说了不用提醒，却挂了提醒：" + local_words(local(rem["fireAt"])))
+            elif not rem:
+                flags.append(f"记了不带提醒的待办：{t['title']}")
+    elif want == "one":
         allowed.add("todo add")
         if len(made_todos) != 1:
             reasons.append(f"该记 1 件待办，记了 {len(made_todos)} 件")
@@ -4440,7 +4627,9 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
                     reasons.append("提醒在截止之后：" + local_words(at))
     elif adds or made_todos:
         reasons.append("不该记待办却记了（或试着记）：" + "、".join(t["title"] for t in made_todos))
-    if exp.get("schedule") == "one":
+    if fu:
+        pass
+    elif exp.get("schedule") == "one":
         allowed.add("schedule create")
         if len(standalone) != 1:
             reasons.append(f"该建 1 个它自己的提醒（schedule create），建了 {len(standalone)} 个")
@@ -4485,10 +4674,29 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
                 reasons.append("提醒在过去")
         if t.get("title") != old.get("title"):
             reasons.append(f"标题被改了：{t.get('title')}")
+    cx = exp.get("cancel")
+    if cx:
+        # Ticket 60: the follow-up the user turned down, cancelled in this
+        # run by Galley at their request, the kind in the reason.
+        allowed |= {"todo cancel", "todo update", "schedule delete"}
+        gone = [t for t in cancelled_todos + cancelled_fx_tasks if t["id"] in cx["any_of"]]
+        mine = [t for t in gone if (t.get("cancelledBy") or {}).get("supervisor") == "galley-assistant"]
+        if not gone:
+            reasons.append("该取消 " + " / ".join(cx["any_of"]) + "，没取消")
+        elif not mine:
+            reasons.append("取消时没记成 Galley 照用户的话取消的：" + json.dumps(gone[0].get("cancelledBy"), ensure_ascii=False))
+        else:
+            why = " ".join(str((t.get("cancelledBy") or {}).get("reason") or "") for t in mine)
+            if not any(w.lower() in why.lower() for w in cx["reason_any"]):
+                reasons.append("--reason 里没写明是哪一类：" + (why.strip() or "（没写）"))
+            elif min(len(str((t.get("cancelledBy") or {}).get("reason") or "")) for t in mine) > IN_HAND_TEXT_CHARS:
+                flags.append(f"原因超过 {IN_HAND_TEXT_CHARS} 个字，「在办的事」里会被截断：{why.strip()}")
+            if not any(t["id"] in fx_todos for t in mine) and any(x in fx_todos for x in cx["any_of"]):
+                flags.append("只取消了提醒，待办还在清单上")
     changed_status = [tid for tid, t in todo_by_id.items() if tid in fx_todos
                       and (bool(t.get("doneAt")) != bool(fx_todos[tid].get("doneAt"))
                            or bool(t.get("cancelledAt")) != bool(fx_todos[tid].get("cancelledAt")))
-                      and tid not in (exp.get("done") or [])]
+                      and tid not in (exp.get("done") or []) and tid not in ((cx or {}).get("any_of") or [])]
     if changed_status:
         reasons.append("动了不该动的待办：" + "、".join(todo_by_id[x]["title"] for x in changed_status))
     if exp.get("reads_list"):
@@ -4527,13 +4735,22 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
                     break
         if exp.get("asks") and not (asked or "？" in body or "?" in body):
             reasons.append("该先问一句，没问")
+        if exp.get("asks_or_any") and not ("？" in body or "?" in body or any(w in body for w in exp["asks_or_any"])):
+            reasons.append("只复述了提醒：没问一句，也没给下一步（" + " / ".join(exp["asks_or_any"]) + "）")
         if exp.get("max_chars") and len(body) > exp["max_chars"]:
             reasons.append(f"太长：{len(body)} 字，上限 {exp['max_chars']}")
+    if memory_writes:
+        flags.append("写了记忆：" + "、".join(os.path.basename(x) for x in memory_writes))
+    record = bool(exp.get("record_only"))
     return {
         "commands": [" ".join(a) for a in log],
         "names": names,
         "writes": writes,
         "made_todos": made_todos,
+        "cancelled_todos": [t["id"] for t in cancelled_todos],
+        "memory_writes": memory_writes,
+        "flags": flags,
+        "record_only": record,
         "made_tasks": [t for t in tasks if t["id"] not in fx_tasks],
         "todos_after": [t for t in todos if t["id"] in fx_todos and t != fx_todos[t["id"]]],
         "cancelled_tasks": sorted(t["id"] for t in tasks if t["id"] in fx_tasks and t.get("cancelledAt")
@@ -4549,9 +4766,18 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         "manual_reads": reads,
         "listed": listed,
         "stop": stop,
-        "pass": not reasons,
+        "pass": None if record else not reasons,
         "reasons": reasons,
     }
+
+
+def verdict_words(f: dict[str, Any]) -> str:
+    """The 判定 column: 过 / 不过 with the reasons / 只记录 (ticket 60's
+    two-sided cases), then the flags."""
+    verdict = "只记录" if f["pass"] is None else "过" if f["pass"] else "不过：" + "；".join(f["reasons"])
+    if f.get("flags"):
+        verdict += "（注：" + "；".join(f["flags"]) + "）"
+    return verdict
 
 
 def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
@@ -4562,7 +4788,7 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     facts = {(r["id"], r["variant"]): todo_facts(r, next(c for c in cases if c["id"] == r["id"]))
              for r in data["results"] if any(c["id"] == r["id"] for c in cases)}
     out = [
-        "# 待办评测结果（票 41，票 44、票 59 重跑）",
+        "# 待办评测结果（票 41，票 44、票 59、票 60 重跑）",
         "",
         f"模型：{meta['model']['name']}（{meta['model_source']}，即 JC 主对话现在用的模型），推理强度 "
         f"{meta['model']['options'].get('reasoning_effort', '默认')}；首次运行于 {meta['ran_at']}。",
@@ -4573,6 +4799,10 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         "手册是仓库里的 `docs/managed-ga-runtime/galley-assistant-manual/`（票 59 起按部分拆成八个文件，入口层列出每个文件什么时候读；"
         "之前是单个文件，票 44 改过的「To-dos and reminders」），整套放在这次运行状态根下 Core 写它的位置"
         "（`assistant/reference/manual/`）。票 44 加了「明天早上 8 点提醒我给房东回电话」：待办，提醒就在说的 8 点。",
+        "- **票 60 的用例**（主对话 PRD 裁决 112、113）：用户提到将来某天会发生、到时有用的事，它自己判断要不要跟进"
+        "（该跟进、不该跟进、两可、到点与取消）。两可的只记录、不判（通过率不算它们），回复原文给 JC 读。"
+        "「最近不要的跟进」用例的假 CLI 里起始就有一件取消过的待办，照 `in_hand_section` 写成「In Hand」的第四组；"
+        "判定只认这次运行里发生的取消。",
         "- **新消息**：用户这句（「说说这件」是引用块加一句话，照 `composer-quote.ts` 的写法）；叫醒用例是照 Core 措辞"
         "（`subtask_report::report_text` 的待办一段，同样逐字对过）拼出的叫醒消息。",
         "- **工具**：`code_run` 与文件工具在每次运行自己的 macOS 沙盒里真的执行（同票 36 的沙盒）；Galley CLI 是假的："
@@ -4591,12 +4821,16 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
-    out += ticket59_section(data, cases, todo_facts)
+    out += rerun_section(data, cases, todo_facts, "60") + rerun_section(data, cases, todo_facts, "59")
     total = passed = 0
     out += ["## 通过率", "", "| # | 用例 | 分组 | 期望 | 遍数 | 过 | 通过率 |", "| --- | --- | --- | --- | --- | --- | --- |"]
     for case in cases:
         runs = by_case.get(case["id"], [])
         if not runs:
+            continue
+        if case["expect"].get("record_only"):
+            out.append(f"| {case['no']} | {case['id']} | {case['group']} | {case['expect_text'].replace('|', '/')} | "
+                       f"{len(runs)} | 只记录 | — |")
             continue
         ok = sum(1 for r in runs if facts[(r["id"], r["variant"])]["pass"])
         total, passed = total + len(runs), passed + ok
@@ -4615,7 +4849,7 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                 reply = one_line(f["body"] + "（ask_user：" + str(f["asked_via_tool"].get("question", "")) + "）")
             else:
                 reply = one_line(f["body"]) or "（空）"
-            verdict = "过" if f["pass"] else "不过：" + "；".join(f["reasons"])
+            verdict = verdict_words(f)
             out.append(f"| {case['no']} | {case['id']} | {r['repeat']} | {cmds.replace('|', '/')} | "
                        f"{reply.replace('|', '/')} | {f['chars']} | {f['manual']} | {f['listed']} | "
                        f"{verdict.replace('|', '/')} |")
@@ -4638,10 +4872,12 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
             out += ["已有的待办（运行那一刻）：", ""]
             for t in first["fixture_todos"]:
                 spec = specs.get(t["id"], {})
-                where = "，在「In Hand」里" if spec.get("in_hand", True) else "，这一段里刚记下（不在「In Hand」里）"
+                where = ("，在「In Hand」的「最近不要的跟进」里" if spec.get("cancelled")
+                         else "，在「In Hand」里" if spec.get("in_hand", True) else "，这一段里刚记下（不在「In Hand」里）")
                 since = "，分段开始后用户在面板上勾掉了" if spec.get("done_since") else ""
                 rem = next((x for x in first.get("fixture_tasks") or [] if x.get("todoId") == t["id"]), None)
-                rem_s = f"，提醒 {rem['fireAt']}" + ("（已到点）" if rem.get("lastFiredAt") else "") if rem else ""
+                rem_s = (f"，提醒 {rem['fireAt']}" + ("（已到点）" if rem.get("lastFiredAt") else "")
+                         + ("（随待办取消）" if rem.get("cancelledAt") else "") if rem else "")
                 out.append(f"- {todo_gist(dict(t, doneAt=None) if spec.get('done_since') else t)}{rem_s}{where}{since}")
             out.append("")
         own = [t for t in first.get("fixture_tasks") or [] if not t.get("todoId")]
@@ -4652,9 +4888,12 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         out += [("叫醒消息：" if case.get("wake") else "用户：")] + [""] + fenced(first.get("message") or "")
         for r in runs:
             f = facts[(r["id"], r["variant"])]
-            out += [f"### 第 {r['repeat']} 遍：{'过' if f['pass'] else '不过'}", ""]
-            if not f["pass"]:
+            head = "只记录" if f["pass"] is None else "过" if f["pass"] else "不过"
+            out += [f"### 第 {r['repeat']} 遍：{head}", ""]
+            if f["pass"] is False:
                 out += ["不过的原因：" + "；".join(f["reasons"]), ""]
+            if f["flags"]:
+                out += ["注：" + "；".join(f["flags"]), ""]
             calls = r.get("calls") or []
             if calls:
                 out += ["工具调用：", ""]
@@ -4674,11 +4913,83 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                     f"手册版本：`{r.get('manual_sha', '?')}`。", "",
                     f"新记的待办：{made}；新建的提醒：{tasks}；改过的已有待办：{after}；"
                     f"取消的已有提醒：{'、'.join(f['cancelled_tasks']) or '无'}。", ""]
+            if f["memory_writes"]:
+                out += ["写进记忆：" + "、".join(f"`{os.path.basename(x)}`" for x in f["memory_writes"]), ""]
             if f["asked_via_tool"]:
                 out += ["ask_user 的问题：", ""] + fenced(json.dumps(f["asked_via_tool"], ensure_ascii=False, indent=1), "json")
             out += ["回复（去掉 summary 与建议标签）：", ""] + fenced(f["body"] or "（空）")
             if f["suggestion"]:
                 out += [f"建议标签：{f['suggestion']}", ""]
+    return "\n".join(line.rstrip() for line in "\n".join(out).split("\n")).rstrip() + "\n"
+
+
+def chat_cases() -> list[dict[str, Any]]:
+    """Ticket 60: the entry layer's cases (cases.json, the one place the
+    messages are written) with chat/cases.json's group and expectation for
+    each, numbered as there."""
+    entry = json.loads(CASES.read_text(encoding="utf-8"))["cases"]
+    spec = json.loads(CHAT_CASES.read_text(encoding="utf-8"))["cases"]
+    if set(spec) != {c["id"] for c in entry}:
+        fail("chat/cases.json must cover exactly the cases of cases.json")
+    return [dict(c, no=n, group=spec[c["id"]]["group"], expect_text=spec[c["id"]]["expect_text"],
+                 expect=spec[c["id"]]["expect"], history=c.get("history") or [])
+            for n, c in enumerate(entry, 1)]
+
+
+# What a chat case is not judged on: how it answered (a web lookup that
+# stops the run, a subtask, the length), only what it set.
+CHAT_ASIDE = ("运行失败", "没走到最终回复", "用了会卡住主对话的命令", "开了子任务或新会话", "不该写 <no-reply/>",
+              "回复正文是空的", "回复没说出", "没点到", "漏了", "不该说", "太长", "该先问一句", "只复述了提醒")
+
+
+def chat_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
+    """Ticket 60: todo_facts, judged only on the to-dos and reminders it
+    set (or failed to set where the user asked); the rest is noted."""
+    f = todo_facts(r, case)
+    aside = [x for x in f["reasons"] if x.startswith(CHAT_ASIDE)]
+    kept = [x for x in f["reasons"] if x not in aside]
+    out = dict(f, reasons=kept, aside=aside)
+    out["pass"] = None if f["pass"] is None else not kept
+    return out
+
+
+def render_chat_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
+    meta = data["meta"]
+    by_id = {c["id"]: c for c in cases}
+    runs = [r for r in data["results"] if r["id"] in by_id]
+    facts = {(r["id"], r["variant"]): chat_facts(r, by_id[r["id"]]) for r in runs}
+    judged = [f for f in facts.values() if f["pass"] is not None]
+    set_any = [k for k, f in facts.items() if f["made_todos"] or any(not t.get("cancelledAt") for t in f["made_tasks"])]
+    out = [
+        "# 闲聊用例重跑（票 60）",
+        "",
+        f"模型：{meta['model']['name']}（{meta['model_source']}），推理强度 "
+        f"{meta['model']['options'].get('reasoning_effort', '默认')}；运行于 {meta['ran_at']}。",
+        "",
+        "- **为什么**：票 60 让主对话自己判断一件事到时要不要跟进，入口层的待办那一段也放宽了；这里看闲聊里会不会乱设待办或提醒。",
+        "- **用例**：入口层评测的 15 条（`../cases.json`，票 03d），消息与上下文照旧；每条的期望在 `cases.json`（本目录）。"
+        "带过来的两条（carry-quote、carry-laptop）用 Rust 生成的 `main_chat.carried-1.txt`，写明 1 轮、最后一条在几小时前。",
+        "- **提示词与工具**：同待办评测：真实 Rust 生成的主对话提示词（`../schedule/galley-prompt/`，票 60 的入口层），"
+        "手册放在状态根里，沙盒与假 CLI 照旧（没有待办与定时任务，所以没有「In Hand」）。票 03d 那套只停在第一次工具调用，"
+        "看不到它会不会真的写，所以不用它。",
+        "- **判定**：只看它设了什么：闲聊、问答、干活的不该记待办、不该建提醒；「提醒我一下，周五之前要给房东转房租」该记待办挂提醒；"
+        "两条两可的（妈妈明天做手术、成都机票订好了）只记录。回答本身（查网页停下、派子任务、长短）不判，写在「另记」里。",
+        "",
+        f"判了 {len(judged)} 次，过 {sum(1 for f in judged if f['pass'])} 次；设了待办或提醒的：{len(set_any)} 次"
+        + (f"（{'、'.join(sorted(i for i, _ in set_any))}）" if set_any else "") + "。",
+        "",
+        "| # | 用例 | 分组 | 消息 | 期望 | 调了什么命令 | 回复原文 | 读手册 | 判定 | 另记 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for case in cases:
+        for r in sorted((x for x in runs if x["id"] == case["id"]), key=lambda x: x.get("repeat", 0)):
+            f = facts[(r["id"], r["variant"])]
+            cmds = "；".join(short_cmd(c, 160) for c in f["commands"] if cli_name(c.split()) != "help") or "—"
+            reply = one_line(f["body"]) or "（空）"
+            aside = "；".join(f["aside"])
+            out.append(f"| {case['no']} | {case['id']} | {case['group']} | {one_line(case['message'])} | "
+                       f"{case['expect_text'].replace('|', '/')} | {cmds.replace('|', '/')} | {reply.replace('|', '/')} | "
+                       f"{f['manual']} | {verdict_words(f).replace('|', '/')} | {aside.replace('|', '/') or '—'} |")
     return "\n".join(line.rstrip() for line in "\n".join(out).split("\n")).rstrip() + "\n"
 
 
@@ -4776,9 +5087,25 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
                     "todo-cancel-by": ("tick-soil", "todo-cancel-by"),
                     "todo-wake-todo": ("wake-todo", "todo-remind"),
                     "todo-landlord-8am": ("remind-landlord-8am", "todo-at-named"),
-                    "todo-landlord-early": ("remind-landlord-8am", "todo-early")}
+                    "todo-landlord-early": ("remind-landlord-8am", "todo-early"),
+                    # Ticket 60.
+                    "todo-reno-own": ("reno-mention", "todo-follow-own"),
+                    "todo-reno-quiet": ("reno-mention", "todo-quiet"),
+                    "todo-stop-kind": ("stop-this-kind", "todo-stop-kind"),
+                    "todo-stop-vague": ("stop-this-kind", "todo-stop-vague"),
+                    "todo-declined-quiet": ("declined-before", "todo-quiet"),
+                    "todo-declined-set": ("declined-before", "todo-declined-set"),
+                    "todo-maybe-hotpot": ("maybe-hotpot", "todo-maybe"),
+                    "todo-wake-recite": ("wake-reno", "todo-recite"),
+                    "todo-wake-use": ("wake-reno", "todo-put-to-use")}
     for run_id, (case_id, script) in todo_scripts.items():
         for job in make_sched_jobs([tcases[case_id]], snow, mykeys, ga_lang, set(), 1, script, suite="todo"):
+            job["case_id"] = run_id
+            jobs.append(job)
+    ccases = {c["id"]: c for c in chat_cases()}
+    chat_scripts = {"chat-carry-quote": ("carry-quote", "final"), "chat-errand-rent": ("errand-rent", "final")}
+    for run_id, (case_id, script) in chat_scripts.items():
+        for job in make_sched_jobs([ccases[case_id]], snow, mykeys, ga_lang, set(), 1, script, suite="chat"):
             job["case_id"] = run_id
             jobs.append(job)
     real_home = os.path.expanduser("~")
@@ -4797,6 +5124,7 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
     dry_test_wake([r for r in results if r["id"].startswith("wake-")], wake_scripts, wcases, check)
     dry_test_sched([r for r in results if r["id"].startswith("sched-")], sched_scripts, scases, snow, check)
     dry_test_todo([r for r in results if r["id"].startswith("todo-")], todo_scripts, tcases, snow, check)
+    dry_test_chat([r for r in results if r["id"].startswith("chat-")], chat_scripts, ccases, check)
     sbx_results = [r for r in results if r["id"].startswith("sbx-")]
     entry_results = [r for r in results if r["variant"] in VARIANTS]
     dispatch_results = [r for r in results if r["variant"] in DISPATCH_VARIANTS
@@ -5047,8 +5375,9 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, 
     check("Reminders and scheduled tasks are not on this list" in plain
           and "Channels, scheduled tasks, Browser" not in plain
           and "Note what the user has to do" in plain
-          and "see `todos.md` in your\nmanual." in plain
-          and "Your manual is in `__MANUAL_DIR__`, one file per part." in plain, "the ticket 59 prompt")
+          and "or what comes up on a date and will be worth raising then" in plain
+          and "left: see `todos.md` in your manual." in plain
+          and "Your manual is in `__MANUAL_DIR__`, one file per part." in plain, "the ticket 60 prompt")
     check(held.index("### In Hand") < held.index("What you are on (") and "The user's to-dos" not in held,
           "a case's own reminder is in the What-you-are-on group")
     for r in sorted(results, key=lambda r: r["id"]):
@@ -5123,6 +5452,25 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     since absent); the fake galley's `todo` family answers, refuses and
     keeps state as the real CLI and Core do; the judge reads it."""
     print("todo: prompts and fixtures")
+    # Ticket 60's time specs, on a fixed Monday.
+    mon = datetime(2026, 10, 19, 18, 25, tzinfo=now.tzinfo)
+    check(sched_time({"week_after": 3, "time": "08:00"}, mon) == datetime(2026, 10, 28, 8, 0, tzinfo=now.tzinfo)
+          and sched_time({"next_weekday": 3, "time": "08:00"}, mon).day == 21
+          and sched_time({"month": 11, "day": 20, "time": "10:00"}, mon).date() == date(2026, 11, 20)
+          and sched_time({"month": 3, "day": 1, "time": "00:00"}, mon).date() == date(2027, 3, 1)
+          and sched_time({"year_offset": 1, "month": 3, "day": "last", "time": "23:59"}, mon).date() == date(2027, 3, 31)
+          and sched_time({"year_offset": 0, "month": 12, "day": 1, "time": "00:00"}, mon).date() == date(2026, 12, 1),
+          "time specs: next week's Wednesday, a day of the year, the last of a month")
+    check(says_time("11 月 20 号我问你一下装修完没。", datetime(2026, 11, 20, 10, 0, tzinfo=now.tzinfo), mon, mon)
+          and not says_time("明天我问你一下。", datetime(2026, 10, 20, 10, 0, tzinfo=now.tzinfo), mon, mon),
+          "says_time: the day alone two days off or more, not for tomorrow")
+    # Ticket 60: the schedule judge counts only this run's cancels.
+    gone = dict(sched_task({"id": "sched_0dd0000000000001", "prompt": "旧的", "at": {"days": 3, "time": "10:00"},
+                            "cancelled": {"days_ago": 1, "via": "gui"}}, now))
+    gcase = next(c for c in json.loads(SCHED_CASES.read_text(encoding="utf-8"))["cases"] if c["id"] == "guitar")
+    sf = sched_facts({"now": now.isoformat(), "status": "ok", "stop_reason": "final_reply", "final_reply": "好的。",
+                      "galley_log": [], "calls": [], "fixture_tasks": [gone], "fake_state": {"tasks": [gone]}}, gcase)
+    check(sf["cancelled"] == [] and sf["pass"], f"schedule judge: a task cancelled before the run is not ({sf['reasons']})")
     left = sched_prompt(cases["whats-left"], now)
     block = left[left.index("### In Hand"):left.index("## Galley Main Chat Entry Layer")]
     check("The user's to-dos (not done):" in block and "买营养土" in block and "续签房屋合同" not in block
@@ -5154,10 +5502,15 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
             last = "\n".join(b.get("text", "") for b in last if isinstance(b, dict))
         want = case.get("message") or sched_note(case, datetime.fromisoformat(r["now"]))
         check(want in last and r["message"] == want, "the new message is the case's")
-        if case.get("todos"):
+        open_ones = [t for t in case.get("todos") or [] if t.get("in_hand", True) and not t.get("cancelled")]
+        turned_down = [t for t in case.get("todos") or [] if t.get("cancelled")]
+        if open_ones:
             check("### In Hand" in system and "The user's to-dos (not done):" in system, "In Hand with the to-dos")
-        else:
-            check("### In Hand" not in system, "no In Hand lines without to-dos")
+        if turned_down:
+            check("### In Hand" in system and "\n\nFollow-ups the user turned down (" in system,
+                  "In Hand with the follow-ups turned down")
+        if not open_ones and not turned_down:
+            check("### In Hand" not in system, "no In Hand lines without to-dos from before the segment")
         f = todo_facts(r, case)
         if script == "todo-cli":
             out = str((r["calls"][1].get("result") or {}).get("stdout", ""))
@@ -5206,9 +5559,67 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
         elif script == "todo-early":
             check(not f["pass"] and any("提醒不在说的 08:00" in x for x in f["reasons"]),
                   f"the judge flags a reminder off the time named ({f['reasons']})")
+        elif r["id"] == "todo-reno-own":
+            check(f["pass"] is True and f["names"] == ["schedule list", "schedule create"],
+                  f"a follow-up of its own in the window, said: passes ({f['reasons']})")
+        elif r["id"] == "todo-reno-quiet":
+            check(f["pass"] is False and any("该设 1 个跟进" in x for x in f["reasons"]),
+                  f"nothing set where it should follow up: fails ({f['reasons']})")
+        elif r["id"] == "todo-stop-kind":
+            check(f["pass"] is True and f["cancelled_todos"] == ["todo_6f7a8b9c0d1e2f3a"]
+                  and f["cancelled_tasks"] == ["sched_4b8c2d6e0f1a3957"],
+                  f"the one cancelled, the kind in the reason: passes ({f['reasons']} {f['cancelled_todos']})")
+        elif r["id"] == "todo-stop-vague":
+            check(f["pass"] is False and any("没写明是哪一类" in x for x in f["reasons"]),
+                  f"a reason without the kind: fails ({f['reasons']})")
+        elif r["id"] == "todo-declined-quiet":
+            block = system[system.index("### In Hand"):system.index("## Galley Main Chat Entry Layer")]
+            check("`todo_7a8b9c0d1e2f3a4b` cancelled " in block and "by you at the user's request: 702 办公室装修完工 "
+                  "(reason: user: no renovation progress reminders)" in block
+                  and "The user's to-dos (not done):" not in block and "sched_5c9d3e7f1a2b4068" not in block,
+                  "In Hand: the to-do turned down (its reminder Core took along is not), nothing open")
+            check(f["pass"] is True and not f["cancelled_todos"] and not f["cancelled_tasks"],
+                  f"one cancelled before the run is not this run's cancel ({f['reasons']})")
+        elif r["id"] == "todo-declined-set":
+            check(f["pass"] is False and any("不该记待办" in x for x in f["reasons"]),
+                  f"a follow-up of the kind turned down: fails ({f['reasons']})")
+        elif r["id"] == "todo-maybe-hotpot":
+            check(f["pass"] is None and len(f["made_tasks"]) == 1, f"two-sided: recorded, not judged ({f['reasons']})")
+        elif r["id"] == "todo-wake-recite":
+            check(f["pass"] is False and any("只复述了提醒" in x for x in f["reasons"]),
+                  f"a reminder recited: fails ({f['reasons']})")
+        elif r["id"] == "todo-wake-use":
+            check(f["pass"] is True and not f["names"], f"what is of use now, nothing touched: passes ({f['reasons']})")
         else:
             check(f["pass"] and not f["names"] and "on the user's to-do" in r["message"],
                   f"a to-do's reminder: a sentence, nothing touched ({f['reasons']})")
+
+
+def dry_test_chat(results: list[dict[str, Any]], scripts: dict[str, tuple[str, str]],
+                  cases: dict[str, dict[str, Any]], check: Any) -> None:
+    """Chat suite (ticket 60): the entry layer's cases under today's main
+    chat prompt (a carried case with Rust's carried wording), the manual
+    in the state root, no In Hand; judged on what it set."""
+    for r in sorted(results, key=lambda r: r["id"]):
+        case_id, script = scripts[r["id"]]
+        print(f"chat {r['id']} ({script})")
+        check(r["status"] == "ok", f"run completed (status {r['status']} {r.get('error', '')[:300]})")
+        if r["status"] != "ok":
+            continue
+        system = r["requests"][0]["messages"][0]["content"]
+        check("or what comes up on a date and will be worth raising then" in system and "### In Hand" not in system
+              and r.get("manual_files") == [x.name for x in manual_parts()],
+              "today's entry layer, no In Hand, the manual's parts in the state root")
+        f = chat_facts(r, cases[case_id])
+        if case_id == "carry-quote":
+            check("opens\nwith 1 exchange from before it, the last said " in system
+                  and cases[case_id]["history"][0]["content"] in json.dumps(r["requests"][0]["messages"][1],
+                                                                             ensure_ascii=False),
+                  "carried: Rust's carried Main Chat wording, the turn in the history")
+            check(f["pass"] is True, f"nothing set: passes ({f['reasons']})")
+        else:
+            check(f["pass"] is False and any("该记 1 件待办" in x for x in f["reasons"]),
+                  f"asked to be reminded, nothing noted: fails ({f['reasons']})")
 
 
 def dry_test_dispatch(results: list[dict[str, Any]], scripts: dict[tuple[str, str], str],
@@ -5288,10 +5699,11 @@ def main() -> int:
     ap.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--dry-test", action="store_true", help="verify interception, no model")
     ap.add_argument("--render-only", action="store_true", help="rebuild the .md from the .json")
-    ap.add_argument("--suite", choices=("entry", "dispatch", "wake", "schedule", "todo"), default="entry",
+    ap.add_argument("--suite", choices=("entry", "dispatch", "wake", "schedule", "todo", "chat"), default="entry",
                     help="entry: cases.json WITHOUT / WITH; dispatch: dispatch-cases.json T / C / P; "
                          "wake: wake/cases.json under the wordings of wake/wording.md; "
-                         "schedule: schedule/cases.json (ticket 36); todo: todo/cases.json (ticket 41)")
+                         "schedule: schedule/cases.json (ticket 36); todo: todo/cases.json (ticket 41); "
+                         "chat: cases.json under today's main chat prompt, judged by chat/cases.json (ticket 60)")
     ap.add_argument("--variant", default="all",
                     help="entry: without | with | both; dispatch: comma list of T,C,P; "
                          "wake: comma list of wording names; or all")
@@ -5326,10 +5738,13 @@ def main() -> int:
     dispatch = args.suite == "dispatch"
     wake = args.suite == "wake"
     todo = args.suite == "todo"
-    sched = args.suite == "schedule" or todo
+    chat = args.suite == "chat"
+    sched = args.suite == "schedule" or todo or chat
     sandbox_mode = dispatch and args.mode == "sandbox"
     if todo:
         suite_files = (TODO_CASES, TODO_JSON, TODO_MD, ("manual",), render_todo_md)
+    elif chat:
+        suite_files = (CHAT_CASES, CHAT_JSON, CHAT_MD, ("manual",), render_chat_md)
     elif sched:
         suite_files = (SCHED_CASES, SCHED_JSON, SCHED_MD, ("manual",), render_sched_md)
     elif wake:
@@ -5343,7 +5758,7 @@ def main() -> int:
     else:
         suite_files = (CASES, RESULTS_JSON, RESULTS_MD, VARIANTS, render_md)
     cases_path, results_json, results_md, all_variants, render = suite_files
-    all_cases = json.loads(cases_path.read_text(encoding="utf-8"))["cases"]
+    all_cases = chat_cases() if chat else json.loads(cases_path.read_text(encoding="utf-8"))["cases"]
     if args.render_only:
         data = json.loads(results_json.read_text(encoding="utf-8"))
         results_md.write_text(scrub(render(data, all_cases)), encoding="utf-8")
@@ -5473,19 +5888,25 @@ def main() -> int:
             data["meta"]["superseded_runs"] = previous_meta["superseded_runs"]
     if previous_meta.get("history_note"):
         data["meta"]["history_note"] = previous_meta["history_note"]
-    for key in ("ticket59_note", "ticket59_control"):
+    for key in ("ticket59_note", "ticket59_control", "ticket60_note"):
         if previous_meta.get(key):
             data["meta"][key] = previous_meta[key]
     if sched:
         data["meta"].update({
-            "suite": ("todo (ticket 41, rerun for ticket 44): the main chat prompt with the ticket 41 entry layer, "
+            "suite": ("chat (ticket 60): the entry layer's cases.json under the main chat prompt of ticket 60 "
+                      "(schedule/galley-prompt/, carried-1 for the carried cases), the assistant manual's parts in "
+                      "the state root, the to-do suite's sandbox and fake galley with nothing in it; judged only on "
+                      "the to-dos and reminders set (chat/cases.json)" if chat else
+                      "todo (ticket 41, rerun for ticket 44): the main chat prompt with the ticket 41 entry layer, "
                       "In Hand lines (ticket 39's three groups) for to-dos and tasks from before the segment, the "
                       "assistant manual (ticket 44's text, in parts since ticket 59) in the state root, the case's "
-                      "to-dos and tasks in the fake galley; rerun for ticket 59" if todo else
+                      "to-dos and tasks in the fake galley; rerun for tickets 59 and 60 (ticket 60's cases added; "
+                      "In Hand's fourth group, ticket 61, for the cases that start with a follow-up turned down)"
+                      if todo else
                       "schedule (ticket 36, rerun for tickets 41 and 44): the main chat prompt with the ticket 41 "
                       "entry layer and its own configuration paragraph, In Hand lines (ticket 39's three groups) for "
                       "tasks from before the segment, the assistant manual (ticket 44's text, in parts since ticket "
-                      "59) in the state root, the case's tasks in the fake galley; rerun for ticket 59"),
+                      "59) in the state root, the case's tasks in the fake galley; rerun for tickets 59 and 60"),
             "repeats": args.repeats,
             "tool_cap": SCHED_TOOL_CAP,
             "extra_exec": list(SCHED_EXTRA_EXEC),

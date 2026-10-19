@@ -1,0 +1,137 @@
+{
+ "_note": "票 60：入口层评测的 15 条（../cases.json，消息与上下文只写在那里）在票 60 的主对话提示词下重跑，看闲聊里会不会乱设待办或提醒。每条的 group、expect_text 与 expect（字段同 ../todo/cases.json 的 _note）；只判它设了什么，回答本身不判（run.py 的 chat_facts）。",
+ "cases": {
+  "chat-tired": {
+   "group": "闲聊",
+   "expect_text": "不记待办、不建提醒",
+   "expect": {
+    "todo": "none"
+   }
+  },
+  "chat-full": {
+   "group": "闲聊",
+   "expect_text": "不记待办、不建提醒",
+   "expect": {
+    "todo": "none"
+   }
+  },
+  "chat-morning": {
+   "group": "闲聊",
+   "expect_text": "不记待办、不建提醒",
+   "expect": {
+    "todo": "none"
+   }
+  },
+  "quick-tomato": {
+   "group": "快问",
+   "expect_text": "不记待办、不建提醒",
+   "expect": {
+    "todo": "none"
+   }
+  },
+  "quick-usd": {
+   "group": "快问",
+   "expect_text": "不记待办、不建提醒",
+   "expect": {
+    "todo": "none"
+   }
+  },
+  "quick-title": {
+   "group": "快问",
+   "expect_text": "不记待办、不建提醒",
+   "expect": {
+    "todo": "none"
+   }
+  },
+  "errand-rent": {
+   "group": "明说",
+   "expect_text": "明说「提醒我」又带日子：记成待办（转房租），截止周四或周五，挂一个截止之前的提醒",
+   "expect": {
+    "todo": "one",
+    "title_any": [
+     "房租",
+     "房东"
+    ],
+    "due": {
+     "window": {
+      "from": {
+       "next_weekday": 4,
+       "time": "00:00"
+      },
+      "to": {
+       "next_weekday": 5,
+       "time": "23:59"
+      }
+     }
+    },
+    "reminder": {
+     "window": {
+      "from": {
+       "now": true
+      },
+      "to": {
+       "next_weekday": 5,
+       "time": "23:59"
+      }
+     }
+    }
+   }
+  },
+  "errand-translate": {
+   "group": "干活",
+   "expect_text": "不记待办、不建提醒",
+   "expect": {
+    "todo": "none"
+   }
+  },
+  "carry-quote": {
+   "group": "接前事",
+   "expect_text": "不记待办、不建提醒",
+   "expect": {
+    "todo": "none"
+   }
+  },
+  "carry-laptop": {
+   "group": "接前事",
+   "expect_text": "不记待办、不建提醒",
+   "expect": {
+    "todo": "none"
+   }
+  },
+  "carry-older": {
+   "group": "两可",
+   "expect_text": "两可：只记录它设没设、回复原文，不判",
+   "expect": {
+    "record_only": true
+   }
+  },
+  "work-email": {
+   "group": "干活",
+   "expect_text": "不记待办、不建提醒",
+   "expect": {
+    "todo": "none"
+   }
+  },
+  "work-rust": {
+   "group": "干活",
+   "expect_text": "不记待办、不建提醒",
+   "expect": {
+    "todo": "none"
+   }
+  },
+  "work-downloads": {
+   "group": "干活",
+   "expect_text": "不记待办、不建提醒",
+   "expect": {
+    "todo": "none"
+   }
+  },
+  "personal-surgery": {
+   "group": "两可",
+   "expect_text": "两可：只记录它设没设、回复原文，不判",
+   "expect": {
+    "record_only": true
+   }
+  }
+ }
+}

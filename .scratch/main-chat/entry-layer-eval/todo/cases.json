@@ -1,5 +1,5 @@
 {
- "_note": "待办评测用例（票 41）。history 是主对话当前段里已有的轮次；todos 是假 CLI 里已有的待办：due 是时间（next_weekday 是今天之后第一个星期几，days 是今天之后第几天，in_minutes 是几分钟后，带 date_only 的只有日期），reminder 是挂在它上面的提醒（fired 表示已经到点、等着叫醒），in_hand 默认为真，即分段开始时就有、写在提示词的「In Hand」一节（为假的是这一段里刚记的），done_since 表示分段开始后用户在面板上勾掉了（快照里还是没做）；tasks 是它自己的定时任务（同 schedule/cases.json）；message 是用户这句，wake 列出这次叫醒里到点的提醒，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 44：expect.reminder.clock 是提醒必须落在的钟点（用户说了几点提醒）。",
+ "_note": "待办评测用例（票 41）。history 是主对话当前段里已有的轮次；todos 是假 CLI 里已有的待办：due 是时间（next_weekday 是今天之后第一个星期几，days 是今天之后第几天，in_minutes 是几分钟后，带 date_only 的只有日期），reminder 是挂在它上面的提醒（fired 表示已经到点、等着叫醒），in_hand 默认为真，即分段开始时就有、写在提示词的「In Hand」一节（为假的是这一段里刚记的），done_since 表示分段开始后用户在面板上勾掉了（快照里还是没做）；tasks 是它自己的定时任务（同 schedule/cases.json）；message 是用户这句，wake 列出这次叫醒里到点的提醒，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 44：expect.reminder.clock 是提醒必须落在的钟点（用户说了几点提醒）。票 60：时间还可以写成一年里的某天（month、day，day 可为 \"last\"；带 year_offset 是今年之后第几年，不带是今天起最近的那一天）或下周的星期几（week_after，周一起算的下一周）；cancelled 表示假 CLI 起始就已取消（days_ago，via 为 supervisor 是 Galley 照用户的话、gui 是用户在桌面上，reason），它的提醒随之由 Core 取消（system），分段开始前取消的写进「In Hand」的「最近不要的跟进」。expect.follow_up 是该设 1 个跟进（via：todo、assistant 或 either；prefer 是期望的那种，另一种也算过但标出来；window 是提醒时间），expect.todo 为 optional 是可以记 1 件（reminder 为 null 时不许挂提醒），expect.cancel 是这次运行里该由 Galley 照用户的话取消其中之一、原因里写明是哪一类（reason_any），expect.asks_or_any 是回复要问一句或给出其中一个下一步，expect.record_only 是两可的、只记录不判。",
  "cases": [
   {
    "id": "note-report",
@@ -487,6 +487,465 @@
      "已勾"
     ],
     "max_chars": 160
+   }
+  },
+  {
+   "id": "reno-asked",
+   "no": 13,
+   "group": "该跟进",
+   "expect_text": "「帮我记一下，702 办公室装修预计完工时间 11 月 20 号」（JC 的原话）→ 明说「记一下」又带日子：记成待办，截止 11 月 20 日，挂一个那天或之前一周内的提醒；不能只写进记忆；回复说出什么时候提醒",
+   "history": [],
+   "message": "帮我记一下，702 办公室装修预计完工时间 11 月 20 号",
+   "expect": {
+    "todo": "one",
+    "title_any": [
+     "装修",
+     "702"
+    ],
+    "due": {
+     "window": {
+      "from": {
+       "month": 11,
+       "day": 20,
+       "time": "00:00"
+      },
+      "to": {
+       "month": 11,
+       "day": 20,
+       "time": "23:59"
+      }
+     }
+    },
+    "reminder": {
+     "window": {
+      "from": {
+       "month": 11,
+       "day": 13,
+       "time": "00:00"
+      },
+      "to": {
+       "month": 11,
+       "day": 20,
+       "time": "23:59"
+      }
+     }
+    },
+    "mentions_time": true,
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "reno-mention",
+   "no": 14,
+   "group": "该跟进",
+   "expect_text": "「装修师傅说 702 办公室 11 月 20 号能完工」（没让记）→ 自己判断该跟进：待办挂提醒或它自己的提醒，时间在 11 月 18 日到 21 日之间；回复里说出来",
+   "history": [],
+   "message": "装修师傅说 702 办公室 11 月 20 号能完工",
+   "expect": {
+    "follow_up": {
+     "via": "either",
+     "window": {
+      "from": {
+       "month": 11,
+       "day": 18,
+       "time": "00:00"
+      },
+      "to": {
+       "month": 11,
+       "day": 21,
+       "time": "23:59"
+      }
+     }
+    },
+    "mentions_time": true,
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "lease-expiry",
+   "no": 15,
+   "group": "该跟进",
+   "expect_text": "「我们办公室租约明年 3 月底到期」→ 待办，截止明年 3 月，提醒提前几周（12 月 1 日到明年 3 月 24 日之间，不能是到期当天）；回复说出什么时候提醒",
+   "history": [],
+   "message": "我们办公室租约明年 3 月底到期",
+   "expect": {
+    "todo": "one",
+    "title_any": [
+     "租"
+    ],
+    "due": {
+     "window": {
+      "from": {
+       "year_offset": 1,
+       "month": 3,
+       "day": 1,
+       "time": "00:00"
+      },
+      "to": {
+       "year_offset": 1,
+       "month": 3,
+       "day": "last",
+       "time": "23:59"
+      }
+     }
+    },
+    "reminder": {
+     "window": {
+      "from": {
+       "year_offset": 0,
+       "month": 12,
+       "day": 1,
+       "time": "00:00"
+      },
+      "to": {
+       "year_offset": 1,
+       "month": 3,
+       "day": 24,
+       "time": "23:59"
+      }
+     }
+    },
+    "mentions_time": true,
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "offer-friday",
+   "no": 16,
+   "group": "该跟进",
+   "expect_text": "「HR 说这周五给我 offer 答复」→ 它自己的提醒（schedule create --target=assistant），周五下午或傍晚问一句结果；记成待办挂提醒也算过，但在结果里标出来；回复说出来",
+   "history": [],
+   "message": "HR 说这周五给我 offer 答复",
+   "expect": {
+    "follow_up": {
+     "via": "either",
+     "prefer": "assistant",
+     "window": {
+      "from": {
+       "next_weekday": 5,
+       "time": "12:00"
+      },
+      "to": {
+       "next_weekday": 5,
+       "time": "23:59"
+      }
+     }
+    },
+    "mentions_time": true,
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "flight-wed",
+   "no": 17,
+   "group": "该跟进",
+   "expect_text": "「我下周三早上的航班去上海」→ 待办（赶航班），截止下周三上午（不是这周三），提醒在前一天；回复说出什么时候提醒",
+   "history": [],
+   "message": "我下周三早上的航班去上海",
+   "expect": {
+    "todo": "one",
+    "title_any": [
+     "航班",
+     "飞",
+     "上海",
+     "机场"
+    ],
+    "due": {
+     "window": {
+      "from": {
+       "week_after": 3,
+       "time": "00:00"
+      },
+      "to": {
+       "week_after": 3,
+       "time": "12:00"
+      }
+     }
+    },
+    "reminder": {
+     "window": {
+      "from": {
+       "week_after": 2,
+       "time": "00:00"
+      },
+      "to": {
+       "week_after": 2,
+       "time": "23:59"
+      }
+     }
+    },
+    "mentions_time": true,
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "past-trip",
+   "no": 18,
+   "group": "不该跟进",
+   "expect_text": "「上个月 20 号去了趟上海，挺累的」→ 过去的事：什么都不设",
+   "history": [],
+   "message": "上个月 20 号去了趟上海，挺累的",
+   "expect": {
+    "todo": "none",
+    "allow": []
+   }
+  },
+  {
+   "id": "founding-date",
+   "no": 19,
+   "group": "不该跟进",
+   "expect_text": "「我们公司是 2019 年 11 月 20 号成立的」→ 只是个日子：不设待办、不设提醒（可以写进记忆）",
+   "history": [],
+   "message": "我们公司是 2019 年 11 月 20 号成立的",
+   "expect": {
+    "todo": "none"
+   }
+  },
+  {
+   "id": "reno-no-remind",
+   "no": 20,
+   "group": "不该跟进",
+   "expect_text": "「装修 11 月 20 号完工，这个不用提醒我，我自己盯着」→ 不挂提醒、不设它自己的提醒（记一件不带提醒的待办不算错，标出来）",
+   "history": [],
+   "message": "装修 11 月 20 号完工，这个不用提醒我，我自己盯着",
+   "expect": {
+    "todo": "optional",
+    "reminder": null
+   }
+  },
+  {
+   "id": "maybe-hospital",
+   "no": 21,
+   "group": "两可",
+   "expect_text": "「明天去医院复查」→ 两可：只记录它怎么做、回复原文，不判对错",
+   "history": [],
+   "message": "明天去医院复查",
+   "expect": {
+    "record_only": true
+   }
+  },
+  {
+   "id": "maybe-school",
+   "no": 22,
+   "group": "两可",
+   "expect_text": "「下周一孩子开学」→ 两可：只记录它怎么做、回复原文，不判对错",
+   "history": [],
+   "message": "下周一孩子开学",
+   "expect": {
+    "record_only": true
+   }
+  },
+  {
+   "id": "maybe-hotpot",
+   "no": 23,
+   "group": "两可",
+   "expect_text": "「今晚 7 点和朋友吃火锅」→ 两可：只记录它怎么做、回复原文，不判对错",
+   "history": [],
+   "message": "今晚 7 点和朋友吃火锅",
+   "expect": {
+    "record_only": true
+   }
+  },
+  {
+   "id": "wake-reno",
+   "no": 24,
+   "group": "到点与取消",
+   "expect_text": "待办「702 办公室装修完工」（截止今天）的提醒按时到点（Core 的待办叫醒措辞）→ 不复述，问完没完或给下一步（验收、确认）；不勾掉、不动任何东西，不出 <no-reply/>",
+   "history": [],
+   "todos": [
+    {
+     "id": "todo_6f7a8b9c0d1e2f3a",
+     "title": "702 办公室装修完工",
+     "notes": "装修师傅说预计这天完工",
+     "due": {
+      "days": 0,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_4b8c2d6e0f1a3957",
+      "at": {
+       "minutes_ago": 0
+      },
+      "fired": {
+       "late_minutes": 0
+      }
+     }
+    }
+   ],
+   "wake": [
+    "sched_4b8c2d6e0f1a3957"
+   ],
+   "expect": {
+    "todo": "none",
+    "mentions_any": [
+     "装修"
+    ],
+    "asks_or_any": [
+     "验收",
+     "确认",
+     "看看",
+     "检查"
+    ],
+    "forbid_any": [
+     "晚了",
+     "迟了",
+     "晚到",
+     "延迟",
+     "已勾"
+    ],
+    "max_chars": 160
+   }
+  },
+  {
+   "id": "stop-this-kind",
+   "no": 25,
+   "group": "到点与取消",
+   "expect_text": "它刚主动记了装修的跟进（待办挂提醒，这一段里记的），用户说「这种装修进度的事别提醒我了」→ 取消那一个（待办或它的提醒），记成 Galley 照用户的话取消，--reason 里写明是装修这一类；不新建",
+   "history": [
+    {
+     "role": "user",
+     "content": "装修师傅说 702 办公室 11 月 20 号能完工"
+    },
+    {
+     "role": "assistant",
+     "content": "记下了：702 办公室装修预计 11 月 20 号完工，那天上午 10 点我提醒你确认一下装修完没。"
+    }
+   ],
+   "todos": [
+    {
+     "id": "todo_6f7a8b9c0d1e2f3a",
+     "title": "702 办公室装修完工",
+     "notes": "装修师傅说预计这天完工",
+     "due": {
+      "month": 11,
+      "day": 20,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_4b8c2d6e0f1a3957",
+      "at": {
+       "month": 11,
+       "day": 20,
+       "time": "10:00"
+      }
+     },
+     "in_hand": false
+    }
+   ],
+   "message": "这种装修进度的事别提醒我了",
+   "expect": {
+    "todo": "none",
+    "cancel": {
+     "any_of": [
+      "todo_6f7a8b9c0d1e2f3a",
+      "sched_4b8c2d6e0f1a3957"
+     ],
+     "reason_any": [
+      "装修",
+      "renovat",
+      "decorat",
+      "fit-out"
+     ]
+    },
+    "max_chars": 120
+   }
+  },
+  {
+   "id": "declined-before",
+   "no": 26,
+   "group": "到点与取消",
+   "expect_text": "「In Hand」的「最近不要的跟进」里有 702 装修那件（两天前照用户的话取消，原因写着装修进度这一类别提醒）；用户随口说「楼下 801 的装修说 12 月 1 号完工」→ 同一类，不设跟进",
+   "history": [],
+   "todos": [
+    {
+     "id": "todo_7a8b9c0d1e2f3a4b",
+     "title": "702 办公室装修完工",
+     "notes": "装修师傅说预计这天完工",
+     "due": {
+      "month": 11,
+      "day": 20,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_5c9d3e7f1a2b4068",
+      "at": {
+       "month": 11,
+       "day": 20,
+       "time": "10:00"
+      }
+     },
+     "cancelled": {
+      "days_ago": 2,
+      "via": "supervisor",
+      "reason": "user: no renovation progress reminders"
+     }
+    }
+   ],
+   "message": "楼下 801 的装修说 12 月 1 号完工",
+   "expect": {
+    "todo": "none",
+    "allow": []
+   }
+  },
+  {
+   "id": "declined-before-asked",
+   "no": 27,
+   "group": "到点与取消",
+   "expect_text": "同样的「最近不要的跟进」，上一轮用户说了 801 的装修，这次明说「801 那个 12 月 1 号提醒我一下」→ 照办：待办挂提醒或它自己的提醒，在 12 月 1 日；回复说出时间",
+   "history": [
+    {
+     "role": "user",
+     "content": "楼下 801 的装修说 12 月 1 号完工"
+    },
+    {
+     "role": "assistant",
+     "content": "好的，知道了。"
+    }
+   ],
+   "todos": [
+    {
+     "id": "todo_7a8b9c0d1e2f3a4b",
+     "title": "702 办公室装修完工",
+     "notes": "装修师傅说预计这天完工",
+     "due": {
+      "month": 11,
+      "day": 20,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_5c9d3e7f1a2b4068",
+      "at": {
+       "month": 11,
+       "day": 20,
+       "time": "10:00"
+      }
+     },
+     "cancelled": {
+      "days_ago": 2,
+      "via": "supervisor",
+      "reason": "user: no renovation progress reminders"
+     }
+    }
+   ],
+   "message": "801 那个 12 月 1 号提醒我一下",
+   "expect": {
+    "follow_up": {
+     "via": "either",
+     "window": {
+      "from": {
+       "month": 12,
+       "day": 1,
+       "time": "00:00"
+      },
+      "to": {
+       "month": 12,
+       "day": 1,
+       "time": "23:59"
+      }
+     }
+    },
+    "mentions_time": true,
+    "max_chars": 150
    }
   }
  ]
