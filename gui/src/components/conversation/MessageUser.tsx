@@ -401,9 +401,10 @@ export const MessageUser = memo(function MessageUser({
           top of theirs. The idea of the assistant's 「它 → 你 30px
           由行动条占着」 (assistantRowGap), here on the user's side; in
           the assistant's conversation that rule now reads both ways
-          (ruling 105: `user-bar`), and its live line's mt-5 collapses
-          into these 30px the same way. The chips hide with opacity and
-          keep their boxes, so nothing moves when they show.
+          (ruling 105: `user-bar`), and its typing bubble, which has
+          no top margin, stands right under these 30px. The chips hide
+          with opacity and keep their boxes, so nothing moves when
+          they show.
 
           A long message's 「展开 / 收起」 shares the row, outermost
           on the right where the assistant puts it: always there, so

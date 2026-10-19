@@ -26,7 +26,7 @@ import {
   startLiveTail,
   submitScroll,
 } from "@/lib/live-tail";
-import { landingScrollTiming } from "@/lib/live-line-handoff";
+import { landingScrollTiming } from "@/lib/typing-bubble-handoff";
 import { keepBottomOnViewportResize } from "@/lib/viewport-resize";
 import { turnsHoldMessage, useMessagesStore } from "@/stores/messages";
 import { type LocateRequest, useUiStore } from "@/stores/ui";
@@ -62,10 +62,10 @@ let scrolledForSubmitTick = 0;
 const AT_BOTTOM_PX = 24;
 
 /**
- * The main chat's follow for the landing its live line hands over to
- * (ticket 51, lib/live-line-handoff.ts): the same target as every
- * follow (`assistantFollowTop`), reached on the growth's clock instead
- * of at once, so the bubble opens where the line was. While it runs,
+ * The main chat's follow for the landing its typing bubble hands over
+ * to (tickets 51, 58, lib/typing-bubble-handoff.ts): the same target as
+ * every follow (`assistantFollowTop`), reached on the growth's clock
+ * instead of at once, so the bubble opens where the dots were. While it runs,
  * the follow paths re-aim it rather than write `scrollTop` (a write
  * would make it let go), and 「at the bottom」 reads where it ends:
  * attached, or parked short at the reply's start (the button shows, as
@@ -263,10 +263,11 @@ export function useStickyScroll({
    */
   stickBottom?: boolean;
   /**
-   * Bumped by MainView in the commit where the main chat's live line
-   * hands over to its bubble (ticket 51): that commit's follow is smooth,
-   * on the growth's clock (`Landing` above). Not following then (you
-   * are reading further up): nothing scrolls, as before.
+   * Bumped by MainView in the commit where the main chat's typing
+   * bubble hands over to its reply (tickets 51, 58): that commit's
+   * follow is smooth, on the growth's clock (`Landing` above). Not
+   * following then (you are reading further up): nothing scrolls, as
+   * before.
    */
   landingTick?: number;
 }) {

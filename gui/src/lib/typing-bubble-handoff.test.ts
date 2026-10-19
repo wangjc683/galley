@@ -13,13 +13,12 @@ import {
   handoffMotion,
   insetClipPath,
   landingScrollTiming,
-  lineTextWidth,
-  liveLineHandoff,
+  typingBubbleHandoff,
   parseDurationMs,
   readHandoffTiming,
-  type LiveLineFrame,
-  type LiveLineNow,
-} from "@/lib/live-line-handoff";
+  type TypingBubbleFrame,
+  type TypingBubbleNow,
+} from "@/lib/typing-bubble-handoff";
 
 /** The tokens as globals.css defines them: the tests read the
  * definitions, as the page does, never a copy of their numbers. */
@@ -55,12 +54,12 @@ afterEach(() => {
 });
 
 const S = "main-chat";
-/** The line was on screen in the render before. */
-const watching: LiveLineFrame = { sessionId: S, live: true };
-/** This render, the line still up. */
-const running: LiveLineNow = {
+/** The round was live in the render before. */
+const watching: TypingBubbleFrame = { sessionId: S, live: true };
+/** This render, the round still live. */
+const running: TypingBubbleNow = {
   sessionId: S,
-  lineShown: true,
+  live: true,
   question: false,
   settled: false,
   silent: false,
@@ -69,63 +68,65 @@ const running: LiveLineNow = {
 describe("which hand-offs play", () => {
   it("plays the one you are watching: the answer lands, or it asks you", () => {
     expect(
-      liveLineHandoff(watching, {
+      typingBubbleHandoff(watching, {
         ...running,
-        lineShown: false,
+        live: false,
         settled: true,
       }),
     ).toBe("reply");
     expect(
-      liveLineHandoff(watching, {
+      typingBubbleHandoff(watching, {
         ...running,
-        lineShown: false,
+        live: false,
         question: true,
       }),
     ).toBe("question");
   });
 
   it("does not play on a session switch, a reload or a restore", () => {
-    const landed = { ...running, lineShown: false, settled: true };
-    // The line was another session's (MainView mounts per session; this
-    // is the guard if it did not).
+    const landed = { ...running, live: false, settled: true };
+    // The round was another session's (MainView mounts per session;
+    // this is the guard if it did not).
     expect(
-      liveLineHandoff(
+      typingBubbleHandoff(
         { sessionId: "workbench-1", live: true },
         { ...landed, sessionId: S },
       ),
     ).toBeNull();
-    // A reload mounts with what is there, and a cold-start restore draws
-    // the line over turns still being read back (what lands then was
-    // there before): MainView counts neither frame's line as live.
-    expect(liveLineHandoff({ sessionId: S, live: false }, landed)).toBeNull();
+    // A reload mounts with what is there, and a cold-start restore runs
+    // over turns still being read back (what lands then was there
+    // before): MainView counts neither frame as live.
+    expect(
+      typingBubbleHandoff({ sessionId: S, live: false }, landed),
+    ).toBeNull();
   });
 
-  it("does not play while the line stays: an earlier page, a message put back", () => {
-    expect(liveLineHandoff(watching, running)).toBeNull();
+  it("does not play while the round stays live: an earlier page, a message put back", () => {
+    expect(typingBubbleHandoff(watching, running)).toBeNull();
   });
 
   it("does not play for a reply that says nothing, a stop or an error", () => {
-    // `<no-reply/>`: the line just goes.
+    // `<no-reply/>`: nothing takes its place.
     expect(
-      liveLineHandoff(watching, {
+      typingBubbleHandoff(watching, {
         ...running,
-        lineShown: false,
+        live: false,
         settled: true,
         silent: true,
       }),
     ).toBeNull();
     // Stopped or failed: no bubble takes its place.
     expect(
-      liveLineHandoff(watching, { ...running, lineShown: false }),
+      typingBubbleHandoff(watching, { ...running, live: false }),
     ).toBeNull();
   });
 
-  it("never plays in the workbench: it has no line", () => {
+  it("never plays in the workbench: it has no typing bubble", () => {
     const workbench = { sessionId: "w-1", live: false };
     expect(
-      liveLineHandoff(workbench, {
+      typingBubbleHandoff(workbench, {
         sessionId: "w-1",
-        lineShown: false,
+        live: false,
         question: false,
         settled: true,
         silent: false,
@@ -140,60 +141,54 @@ describe("which hand-offs play", () => {
 });
 
 describe("where the tint starts", () => {
-  // A one-line answer under the user's message: the line sat where the
-  // bubble's top-left corner now is (both 20px under the message).
-  const bubble = { top: 100, left: 0, width: 300, height: 44 };
+  // A one-line answer under the user's message: the typing bubble stood
+  // where the reply's top-left corner now is (54 × 43.25px at the
+  // standard size, one reply line high).
+  const bubble = { top: 100, left: 0, width: 300, height: 43.25 };
 
-  it("from the line's text box: its left edge, top, width and height", () => {
-    const line = { top: 100, left: 0, width: 180, height: 19.2 };
-    const insets = bubbleGrowInsets(line, bubble);
+  it("from the typing bubble's box: its left edge, top, width and height", () => {
+    const typing = { top: 100, left: 0, width: 54, height: 43.25 };
+    const insets = bubbleGrowInsets(typing, bubble);
     expect(insets.top).toBe(0);
     expect(insets.left).toBe(0);
-    expect(insets.right).toBeCloseTo(120, 6);
-    expect(insets.bottom).toBeCloseTo(24.8, 6);
+    expect(insets.right).toBeCloseTo(246, 6);
+    expect(insets.bottom).toBeCloseTo(0, 6);
     expect(insetClipPath(insets, "12px")).toBe(
-      "inset(0px 120px 24.8px 0px round 12px)",
+      "inset(0px 246px 0px 0px round 12px)",
     );
     expect(insetClipPath(undefined, "12px")).toBe(
       "inset(0px 0px 0px 0px round 12px)",
     );
   });
 
-  it("starts lower when the bubble sits closer to what is above (after its own question)", () => {
-    const line = { top: 116, left: 0, width: 180, height: 19.2 };
-    const insets = bubbleGrowInsets(line, bubble);
-    expect(insets.top).toBe(16);
-    expect(insets.bottom).toBeCloseTo(8.8, 6);
+  it("opens down as well when the reply is taller than one line", () => {
+    const typing = { top: 100, left: 0, width: 54, height: 43.25 };
+    const insets = bubbleGrowInsets(typing, { ...bubble, height: 120 });
+    expect(insets.top).toBe(0);
+    expect(insets.bottom).toBeCloseTo(76.75, 6);
   });
 
-  it("stays inside the bubble: a line wider than a short answer, or below it", () => {
+  it("stays inside the bubble: a start wider than a short answer, or below it", () => {
     const wide = bubbleGrowInsets(
-      { top: 100, left: 0, width: 500, height: 19.2 },
-      { ...bubble, width: 60 },
+      { top: 100, left: 0, width: 500, height: 43.25 },
+      { ...bubble, width: 40 },
     );
     expect(wide.right).toBe(0);
     expect(wide.left).toBe(0);
     // Below: it starts as the bubble's bottom edge and grows up.
     const below = bubbleGrowInsets(
-      { top: 200, left: 0, width: 180, height: 19.2 },
+      { top: 200, left: 0, width: 54, height: 43.25 },
       bubble,
     );
-    expect(below.top).toBe(44);
+    expect(below.top).toBe(43.25);
     expect(below.bottom).toBe(0);
     // Above: its top edge.
     const above = bubbleGrowInsets(
-      { top: 20, left: 0, width: 180, height: 19.2 },
+      { top: 20, left: 0, width: 54, height: 43.25 },
       bubble,
     );
     expect(above.top).toBe(0);
-    expect(above.bottom).toBe(44);
-  });
-
-  it("reads the line's words, not its full-width row", () => {
-    // The sentence ends at 260, the clock at 312, in a 760px row at 40.
-    expect(lineTextWidth(40, [260, 312], 760)).toBe(272);
-    expect(lineTextWidth(40, [], 760)).toBe(760);
-    expect(lineTextWidth(40, [2_000], 760)).toBe(760);
+    expect(above.bottom).toBe(43.25);
   });
 
   it("lifts the column by what it moved up at once, nothing under half a pixel", () => {
@@ -224,7 +219,7 @@ describe("the timing comes from the motion tokens", () => {
       parseDurationMs(TOKENS.get(HANDOFF_FADE_TOKEN)!),
     );
     expect(timing!.easing).toBe(TOKENS.get(HANDOFF_EASING_TOKEN));
-    // The line out over one fade; the words in from half of it to the
+    // The dots out over one fade; the words in from half of it to the
     // end of the growth.
     expect(handoffFadeIn(timing!)).toEqual({
       delay: timing!.fadeMs / 2,

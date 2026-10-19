@@ -36,8 +36,8 @@ const NO_REPLY_TAG = /<\s*\/?\s*no-reply\s*\/?\s*>/i;
 
 /** What a trailing, still-unclosed `<no-reply/>` can look like while it
  * streams (the text after the last `<`, lowercased): `<`, `<no-re`,
- * `<no-reply`, `<no-reply /`, `</no-rep` … — held back so the line
- * never flashes it (`cleanPartialContent`). */
+ * `<no-reply`, `<no-reply /`, `</no-rep` … — held back so it never
+ * flashes as words (`cleanPartialContent`). */
 const NO_REPLY_PARTIAL =
   /^\s*\/?\s*(?:n(?:o(?:-(?:r(?:e(?:p(?:l(?:y\s*\/?\s*)?)?)?)?)?)?)?)?$/;
 
@@ -621,8 +621,8 @@ export function extractLiveThinking(buffer: string): LiveThinking {
 
 /** Index where the model's reply ends and GA's tool dispatch begins in
  * a verbose display buffer, or -1 when no dispatch has started. Also
- * one of the edges of the header's 「正在输入…」 (lib/assistant-
- * conversation.ts `assistantWriting`, main chat PRD ruling 104). */
+ * one of the edges of a woken round's typing bubble (lib/assistant-
+ * conversation.ts `assistantWriting`, main chat PRD rulings 104, 110). */
 export function modelReplyEnd(buffer: string): number {
   let end = -1;
   for (const re of [

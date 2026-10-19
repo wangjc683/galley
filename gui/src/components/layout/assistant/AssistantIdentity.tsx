@@ -17,15 +17,17 @@ import { AssistantAvatar } from "./AssistantAvatar";
  * menu — 重新注入工具, 桌面宠物, no rename — the way tapping a
  * contact's name opens their page in an IM app.
  *
- * The second line is a chat title bar's (lib/assistant.ts): only a
- * state — while it runs 「正在输入…」 when it is writing words and
- * 「思考中」 otherwise (ruling 104, lib/assistant-conversation.ts
- * `assistantWriting`; ruling 87: what it is saying is at the end of the
- * conversation right below; until then the same sentence was here too,
- * ruling 68), 「等你回复」, an error, a subtask's question or error —
- * and nothing at rest. Unlike the sidebar card it never quotes the question, the last
+ * The second line is a chat title bar's (lib/assistant.ts): while it
+ * runs, what it is doing — the sentence of the newest step that settled
+ * (lib/assistant-conversation.ts `assistantSettledSentence`: its
+ * narration, else its summary), 「思考中」 before there is one, never
+ * what streams and no clock (main chat PRD rulings 107, 110; the
+ * conversation below shows only the typing bubble) — else a state:
+ * 「等你回复」, an error, a subtask's question or error, and nothing at
+ * rest. Unlike the sidebar card it never quotes the question, the last
  * message or a draft: here they are all on screen, in the conversation
- * and the composer below.
+ * and the composer below. Cut with a fade when too long; hovering the
+ * cut line gives the whole of it (`syncTruncatedTitle`).
  *
  * The name is the session title's register (Inter 13px medium); the
  * line takes a row subline's (11px, brand while running, warning,

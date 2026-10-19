@@ -1,72 +1,76 @@
 import {
-  assistantCachedSentence,
-  assistantWriting,
+  assistantCachedSettledSentence,
+  assistantTyping,
 } from "@/lib/assistant-conversation";
-import { type MessagesStore, useMessagesStore } from "@/stores/messages";
+import {
+  EMPTY_TURNS,
+  type MessagesStore,
+  useMessagesStore,
+} from "@/stores/messages";
+
+/*
+ * What the main chat's round says while it runs, read from its message
+ * cache for the header identity and the sidebar card (main chat PRD
+ * rulings 107, 110): the main chat opens at launch, and the runner's
+ * events land in its cache whether it is on screen or not
+ * (lib/ipc-handlers.ts appends by the event's session). Each selector
+ * returns a string or a boolean, so a chunk that leaves the answer as
+ * it was re-renders nothing.
+ */
 
 /**
- * useAssistantSentence's selector: null at rest without looking at the
- * stream; running, the line's sentence from the session's message
- * cache.
+ * useAssistantSettledSentence's selector: null at rest without looking
+ * at the turns; running, the newest settled step's sentence
+ * (lib/assistant-conversation.ts `assistantSettledSentence`).
  */
-export function selectAssistantSentence(
+export function selectAssistantSettledSentence(
   state: MessagesStore,
   sessionId: string,
   running: boolean,
 ): string | null {
   if (!running) return null;
   const m = state.byId[sessionId];
-  return m ? assistantCachedSentence(m.turns, m.inFlightContent) : null;
+  return m ? assistantCachedSettledSentence(m.turns) : null;
 }
 
 /**
- * While the main chat runs, the sentence the line at the end of its
- * conversation says (lib/assistant-conversation.ts
- * `assistantCachedSentence`), for the sidebar card while the main chat
- * is not on screen (ruling 68; the header says 「正在输入…」 or
- * 「思考中」, ruling 104), read from the main chat's message cache: it opens at
- * launch, and the runner's events land in its cache whether it is on
- * screen or not (lib/ipc-handlers.ts appends by the event's session).
- * Null at rest, and while nothing is written yet (「思考中」).
- *
- * The selector returns the sentence itself, so a chunk that leaves it
- * as it was re-renders nothing.
+ * While the main chat runs, the header's second line: the sentence of
+ * the newest step that settled (null for 「思考中」). It changes only when
+ * a step lands, never per chunk: what streams is not read.
  */
-export function useAssistantSentence(
+export function useAssistantSettledSentence(
   sessionId: string,
   running: boolean,
 ): string | null {
   return useMessagesStore((s) =>
-    selectAssistantSentence(s, sessionId, running),
+    selectAssistantSettledSentence(s, sessionId, running),
   );
 }
 
 /**
- * useAssistantWriting's selector: false at rest without looking at the
- * stream; running, whether the session's stream is writing words
- * (`assistantWriting`).
+ * useAssistantTyping's selector: false at rest without looking at the
+ * stream; running, whether it reads as typing (`assistantTyping`: a
+ * round you started throughout, a woken one while it writes words).
  */
-export function selectAssistantWriting(
+export function selectAssistantTyping(
   state: MessagesStore,
   sessionId: string,
   running: boolean,
 ): boolean {
   if (!running) return false;
   const m = state.byId[sessionId];
-  return m ? assistantWriting(m.inFlightContent) : false;
+  return assistantTyping(m?.turns ?? EMPTY_TURNS, m?.inFlightContent ?? "");
 }
 
 /**
- * While the main chat runs, whether it is writing words right now, for
- * the header identity's 「正在输入…」 (main chat PRD ruling 104), from
- * the same message cache and stream as the sentence. Only the header
- * asks: the card, with the main chat on screen, says the last message.
- * The selector returns a boolean, so the header re-renders only when it
- * flips, not per chunk.
+ * While the main chat runs, whether the card says 「正在输入…」 — the
+ * conversation's dots' own rule, so in a round Core woke it for the card
+ * follows the dots and otherwise keeps the last message. A boolean, so
+ * the card re-renders only when it flips.
  */
-export function useAssistantWriting(
+export function useAssistantTyping(
   sessionId: string,
   running: boolean,
 ): boolean {
-  return useMessagesStore((s) => selectAssistantWriting(s, sessionId, running));
+  return useMessagesStore((s) => selectAssistantTyping(s, sessionId, running));
 }

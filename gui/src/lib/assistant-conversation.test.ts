@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { zhCopy } from "@/i18n/locales/zh";
 import {
-  assistantCachedSentence,
+  assistantCachedSettledSentence,
   assistantFirstLine,
   assistantFollowBottom,
   assistantFollowTop,
-  assistantLineClock,
   assistantLinePlan,
-  assistantLineSentence,
   assistantRowGap,
   assistantScrollToBottom,
+  assistantSettledSentence,
+  assistantTyping,
   assistantWriting,
   endsWithActionRow,
+  typingBubbleShown,
 } from "@/lib/assistant-conversation";
 import { buildRunGroups, liveRunGroup } from "@/lib/run-groups";
 import type {
@@ -125,18 +125,14 @@ describe("assistantRowGap", () => {
   });
 });
 
-describe("the live line", () => {
-  it("takes the first line of what streams, else this stretch's latest narration", () => {
+// Rulings 107, 110 (tickets 55, 58): the header's second line while it
+// runs, from the steps that settled; what streams is never read.
+describe("the header's sentence", () => {
+  it("takes this stretch's newest settled narration, nothing before one", () => {
     const run: Turn[] = [user("查一下天气"), step("我先查一下明天的天气。", 1)];
-    expect(assistantLineSentence(run, "")).toBe("我先查一下明天的天气。");
-    expect(assistantLineSentence(run, "## 明天多云\n\n22 到 27 度")).toBe(
-      "明天多云",
-    );
-    expect(assistantLineSentence(run, "\n\n- **东北风** 3 级")).toBe(
-      "东北风 3 级",
-    );
-    // Nothing written yet: 「思考中」.
-    expect(assistantLineSentence([user("查一下天气")], "")).toBeNull();
+    expect(assistantSettledSentence(run)).toBe("我先查一下明天的天气。");
+    // Nothing settled yet: 「思考中」.
+    expect(assistantSettledSentence([user("查一下天气")])).toBeNull();
     // An answer starts a new stretch: the narration before the question
     // is not the latest thing it wrote any more.
     const answered: Turn[] = [
@@ -145,10 +141,25 @@ describe("the live line", () => {
       ask("订哪一班？", ["8:30"], 2),
       user("8:30"),
     ];
-    expect(assistantLineSentence(answered, "")).toBeNull();
+    expect(assistantSettledSentence(answered)).toBeNull();
     expect(assistantFirstLine("  > 1. `code_run` 跑完了")).toBe(
       "code_run 跑完了",
     );
+  });
+
+  it("is no step's sentence when it is the round's answer", () => {
+    // The answer lands as the bubble, and run_complete follows: the
+    // header keeps the step before it until then.
+    expect(
+      assistantSettledSentence([
+        user("查一下天气"),
+        step("我先查一下明天的天气。", 1),
+        answer("明天多云，22 到 27 度。", 2),
+      ]),
+    ).toBe("我先查一下明天的天气。");
+    expect(
+      assistantSettledSentence([user("早"), answer("早，今天多云。", 1)]),
+    ).toBeNull();
   });
 
   // Ruling 100 (ticket 47): a step that wrote no narration says its
@@ -177,7 +188,7 @@ describe("the live line", () => {
 
     it("the newest step only has a summary: the summary", () => {
       expect(
-        assistantLineSentence([user("提醒我喝水"), summaryOnly(water, 1)], ""),
+        assistantSettledSentence([user("提醒我喝水"), summaryOnly(water, 1)]),
       ).toBe(water);
     });
 
@@ -187,75 +198,60 @@ describe("the live line", () => {
         finalAnswer: "我先看看有没有重复的提醒。",
       };
       expect(
-        assistantLineSentence(
-          [user("提醒我喝水"), summaryOnly(water, 1), narrated],
-          "",
-        ),
+        assistantSettledSentence([
+          user("提醒我喝水"),
+          summaryOnly(water, 1),
+          narrated,
+        ]),
       ).toBe("我先看看有没有重复的提醒。");
     });
 
     it("step 1 narrated, step 2 only a summary: step 2's summary", () => {
       expect(
-        assistantLineSentence(
-          [
-            user("提醒我喝水"),
-            step("我先看一下现在几点。", 1),
-            summaryOnly("没有重复的提醒；接下来建一个每小时的。", 2),
-          ],
-          "",
-        ),
+        assistantSettledSentence([
+          user("提醒我喝水"),
+          step("我先看一下现在几点。", 1),
+          summaryOnly("没有重复的提醒；接下来建一个每小时的。", 2),
+        ]),
       ).toBe("没有重复的提醒；接下来建一个每小时的。");
     });
 
     it("a step with no words at all is passed over for the one before it", () => {
       expect(
-        assistantLineSentence(
-          [user("提醒我喝水"), summaryOnly(water, 1), bare(2)],
-          "",
-        ),
+        assistantSettledSentence([
+          user("提醒我喝水"),
+          summaryOnly(water, 1),
+          bare(2),
+        ]),
       ).toBe(water);
-    });
-
-    it("what streams still comes first", () => {
-      expect(
-        assistantLineSentence(
-          [user("提醒我喝水"), summaryOnly(water, 1)],
-          "好的，每小时提醒你一次。",
-        ),
-      ).toBe("好的，每小时提醒你一次。");
     });
 
     it("stops at your last message: an older round's summary is not this one's", () => {
       expect(
-        assistantLineSentence(
-          [user("提醒我喝水"), summaryOnly(water, 1), user("改成半小时")],
-          "",
-        ),
+        assistantSettledSentence([
+          user("提醒我喝水"),
+          summaryOnly(water, 1),
+          user("改成半小时"),
+        ]),
       ).toBeNull();
       // Your answer to its question too.
       expect(
-        assistantLineSentence(
-          [
-            user("提醒我喝水"),
-            summaryOnly(water, 1),
-            ask("多久一次？", ["每小时"], 2),
-            user("每小时"),
-          ],
-          "",
-        ),
+        assistantSettledSentence([
+          user("提醒我喝水"),
+          summaryOnly(water, 1),
+          ask("多久一次？", ["每小时"], 2),
+          user("每小时"),
+        ]),
       ).toBeNull();
     });
 
     it("cleans the summary as the narration, and a protocol failure's says nothing", () => {
       // An old row's 「第 N 步 · 」 prefix, markdown, GA's 「...」 elision.
       expect(
-        assistantLineSentence(
-          [
-            user("提醒我喝水"),
-            summaryOnly("第 2 步 · 读取 **提醒列表** ... 接下来新建", 2),
-          ],
-          "",
-        ),
+        assistantSettledSentence([
+          user("提醒我喝水"),
+          summaryOnly("第 2 步 · 读取 **提醒列表** ... 接下来新建", 2),
+        ]),
       ).toBe("读取 提醒列表 … 接下来新建");
       // The runner's fixed marker, and raw leaked markup: no sentence.
       for (const failed of [
@@ -263,41 +259,89 @@ describe("the live line", () => {
         '<invoke name="code_run"><parameter name="code">x',
       ]) {
         expect(
-          assistantLineSentence(
-            [user("提醒我喝水"), summaryOnly(failed, 1)],
-            "",
-          ),
+          assistantSettledSentence([
+            user("提醒我喝水"),
+            summaryOnly(failed, 1),
+          ]),
         ).toBeNull();
       }
     });
   });
 
-  // Ticket 31: the line and the card clean the stream alike; a
-  // `<no-reply/>` on its way never shows, not even half of it.
-  it("never says the silent-reply tag, whole or half-written", () => {
-    const run: Turn[] = [user("比三家报价")];
+  it("keeps the sentence for the last turns array", () => {
+    const run: Turn[] = [user("查一下天气"), step("我先查一下明天的天气。", 1)];
+    expect(assistantCachedSettledSentence(run)).toBe("我先查一下明天的天气。");
+    expect(assistantCachedSettledSentence(run)).toBe(
+      assistantSettledSentence(run),
+    );
+    const next = [...run, step("再看看后天。", 2)];
+    expect(assistantCachedSettledSentence(next)).toBe("再看看后天。");
+  });
+});
+
+// Rulings 107, 110 (tickets 55, 58): the conversation ends in the typing
+// bubble while the round is live; the card's 「正在输入…」 reads the same
+// rule.
+describe("the typing bubble", () => {
+  const report: UserTurn = {
+    role: "user",
+    content: "[Galley — not a message from the user] …",
+    messageId: "u-report",
+    origin: { via: "system", supervisor: "galley-report", reason: "s-2" },
+  };
+  const DISPATCH =
+    '🛠️ Tool: `web_scan`  📥 args:\n````text\n{"url": "x"}\n````\n';
+
+  it("shows throughout a live round you started, from the send on, words or not", () => {
+    const sent: Turn[] = [...conversation(), user("顺便看看船票")];
+    for (const stream of ["", "<thinking>想一下", "周六有船。", DISPATCH]) {
+      expect(typingBubbleShown(true, sent, stream)).toBe(true);
+      expect(assistantTyping(sent, stream)).toBe(true);
+    }
+    expect(
+      typingBubbleShown(true, [...sent, step("我先查一下船班。", 1)], ""),
+    ).toBe(true);
+  });
+
+  it("shows in a woken round only while it writes words", () => {
+    const woken: Turn[] = [...conversation(), report];
+    expect(typingBubbleShown(true, woken, "")).toBe(false);
+    expect(typingBubbleShown(true, woken, "<thinking>看看结果")).toBe(false);
+    expect(typingBubbleShown(true, woken, "我先看一下结果。")).toBe(true);
+    // A dispatch follows the words: they are done, the dots go…
+    expect(
+      typingBubbleShown(true, woken, `我先看一下结果。\n${DISPATCH}`),
+    ).toBe(false);
+    // …and come back with the next step's words.
+    const after: Turn[] = [...woken, step("我先看一下结果。", 1)];
+    expect(typingBubbleShown(true, after, "")).toBe(false);
+    expect(typingBubbleShown(true, after, "好了，")).toBe(true);
+  });
+
+  it("never shows for a silent reply, whole or half-written", () => {
+    const woken: Turn[] = [...conversation(), report];
     for (const stream of [
       "<no-re",
       "<no-reply",
       "<no-reply/>",
       "<No-Reply />",
     ]) {
-      expect(assistantCachedSentence(run, stream)).toBeNull();
+      expect(typingBubbleShown(true, woken, stream)).toBe(false);
     }
-    expect(assistantCachedSentence(run, "我打回去了。<no-rep")).toBe(
-      "我打回去了。",
-    );
   });
 
-  it("shows the round's clock only past 3 seconds, in the corner clock's words", () => {
-    expect(assistantLineClock(2_999, zhCopy)).toBeNull();
-    expect(assistantLineClock(3_000, zhCopy)).toBe("3 秒");
-    expect(assistantLineClock(81_400, zhCopy)).toBe("1 分 21 秒");
+  it("is not drawn while the round is not live: settled, asking, at rest, the workbench", () => {
+    const sent: Turn[] = [...conversation(), user("顺便看看船票")];
+    expect(typingBubbleShown(false, sent, "周六有船。")).toBe(false);
+    expect(typingBubbleShown(false, [...conversation(), report], "好了")).toBe(
+      false,
+    );
   });
 });
 
-// Ruling 104 (ticket 52): the header says 「正在输入…」 while the step's
-// raw stream is writing words, 「思考中」 the rest of the time.
+// Rulings 104, 110 (tickets 52, 58): whether the step's raw stream is
+// writing words — a woken round's typing bubble and the card's
+// 「正在输入…」 in it.
 describe("assistantWriting", () => {
   const DISPATCH =
     '🛠️ Tool: `web_scan`  📥 args:\n````text\n{"url": "x"}\n````\n';
@@ -333,7 +377,7 @@ describe("assistantWriting", () => {
       ["<No-Reply />", false],
       ["<no-re", false],
       ["<thinking>打回去</thinking>\n<no-reply/>", false],
-      // Words beside the tag still show, as in the line.
+      // Words beside the tag still show.
       ["我打回去了。<no-rep", true],
       // Whitespace, tags and GA's markers are no words.
       ["   \n\n\t", false],

@@ -64,16 +64,17 @@ vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
 });
 
 // The card reads the pending question, the last message and, while it
-// runs, the conversation line's sentence from the messages store, which
-// static rendering only sees in its initial state (lib/assistant.test.ts
-// and hooks/useAssistantSentence.test.ts cover how they are worked
-// out); seed them here. Drafts come from the real composer-draft module.
+// runs, whether it types (a woken round only while it writes words) from
+// the messages store, which static rendering only sees in its initial
+// state (lib/assistant.test.ts and hooks/useAssistantSentence.test.ts
+// cover how they are worked out); seed them here. Drafts come from the
+// real composer-draft module.
 const card = vi.hoisted(() => ({
   question: null as string | null,
   lastMessage: null as AssistantLastMessage | null,
-  sentence: null as string | null,
-  // The stream is writing words: what the header would read.
-  writing: false,
+  // A round you started types throughout; a woken one between its words
+  // does not.
+  typing: true,
 }));
 vi.mock("@/hooks/useAssistantState", async (importOriginal) => {
   const actual =
@@ -89,10 +90,8 @@ vi.mock("@/hooks/useAssistantSentence", async (importOriginal) => {
     await importOriginal<typeof import("@/hooks/useAssistantSentence")>();
   return {
     ...actual,
-    useAssistantSentence: (_id: string, running: boolean) =>
-      running ? card.sentence : null,
-    useAssistantWriting: (_id: string, running: boolean) =>
-      running && card.writing,
+    useAssistantTyping: (_id: string, running: boolean) =>
+      running && card.typing,
   };
 });
 
@@ -205,8 +204,7 @@ afterEach(() => {
   live.clear();
   card.question = null;
   card.lastMessage = null;
-  card.sentence = null;
-  card.writing = false;
+  card.typing = true;
   dropComposerDraft("s-main");
 });
 
@@ -438,15 +436,12 @@ describe("the assistant's card", () => {
     expect(asking).toMatch(/text-warning[^>]*>等你回复：</);
     expect(asking).toContain("text-ink-muted");
 
-    // Running: the conversation line's sentence, 「思考中」 before it
-    // says anything (ruling 68) — never 「第 N 步 · 摘要」.
+    // Running: 「正在输入…」 (rulings 107, 110) — never the header's
+    // sentence, never 「第 N 步 · 摘要」.
     live.set("s-main", { status: "running" });
-    expect(textOf(say())).toBe("思考中");
-    card.sentence = "我先查一下花市几点开门。";
-    expect(textOf(say())).toBe("我先查一下花市几点开门。");
+    expect(textOf(say())).toBe("正在输入…");
     expect(say()).toContain("text-brand-strong/85");
     expect(say()).toContain("sidebar-step-tick");
-    card.sentence = null;
 
     live.clear();
     const draft = say();
@@ -457,10 +452,10 @@ describe("the assistant's card", () => {
     expect(textOf(say())).toBe("好的");
   });
 
-  // Ruling 104 (ticket 52), overturning ruling 87's 2nd and 3rd points.
+  // Ruling 104 (ticket 52), overturning ruling 87's 2nd and 3rd points;
+  // rulings 107, 110 (tickets 55, 58) for running.
   it("says only the last message with the main chat on screen, the state on the avatar; the words away from it", () => {
     card.question = "去哪个花市？";
-    card.sentence = "我先查一下花市几点开门。";
     card.lastMessage = { fromUser: true, text: "周六去花市" };
     saveComposerDraft("s-main", { text: "下周三的会", images: [] });
     const onScreen = () => render([used, subtask], { activeId: "s-main" });
@@ -468,7 +463,6 @@ describe("the assistant's card", () => {
       lineOf(render([used, subtask], { activeId: "s-sub" }));
 
     for (const [arrange, kind] of [
-      [() => live.set("s-main", { status: "running" }), "running"],
       [
         () =>
           live.set("s-main", { status: "running", hasPendingAskUser: true }),
@@ -500,28 +494,41 @@ describe("the assistant's card", () => {
       expect(body).toMatch(/font-semibold[^>]*>Galley</);
     }
 
-    // Away in its subtask: the words, as before — and never the
-    // header's 「正在输入…」, which only the header reads.
+    // Running: 「正在输入…」 on screen and away alike, in the running tone.
     live.clear();
     attentionKind.clear();
     live.set("s-main", { status: "running" });
-    card.writing = true;
-    expect(textOf(inSubtask())).toBe("我先查一下花市几点开门。");
-    card.sentence = null;
-    expect(textOf(inSubtask())).toBe("思考中");
-    expect(
-      textOf(lineOf(render([used, sideChat], { activeId: "s-side" }))),
-    ).toBe("思考中");
-    expect(textOf(lineOf(onScreen()))).toBe("你：周六去花市");
-    card.writing = false;
-    card.sentence = "我先查一下花市几点开门。";
+    for (const said of [
+      lineOf(onScreen()),
+      inSubtask(),
+      lineOf(render([used, sideChat], { activeId: "s-side" })),
+    ]) {
+      expect(textOf(said)).toBe("正在输入…");
+      expect(said).toContain('data-kind="running"');
+      expect(said).toContain("text-brand-strong/85");
+    }
+    expect(between(onScreen(), CARD, "</button>")).toContain(
+      'data-kind="running"',
+    );
+    // A woken round between its words: the last message, open or not —
+    // never the draft — the avatar still spinning.
+    card.typing = false;
+    for (const html of [
+      onScreen(),
+      render([used, subtask], { activeId: "s-sub" }),
+    ]) {
+      expect(textOf(lineOf(html))).toBe("你：周六去花市");
+      expect(between(html, CARD, "</button>")).toContain('data-kind="running"');
+    }
+    card.typing = true;
+
+    // Away in its subtask, not running: the words, as before.
     live.set("s-main", { status: "running", hasPendingAskUser: true });
     expect(textOf(inSubtask())).toBe("等你回复：去哪个花市？");
     live.set("s-main", { status: "error" });
     expect(textOf(inSubtask())).toBe("出错");
     live.clear();
     expect(textOf(inSubtask())).toBe("草稿：下周三的会");
-    card.sentence = null;
   });
 
   it("stays selected but marks a new reply while one of its subtasks is open", () => {
@@ -534,12 +541,11 @@ describe("the assistant's card", () => {
   });
 
   it("reports no steps, while a workbench session running beside it keeps its 「第 N 步」", () => {
-    card.sentence = "我先查一下花市几点开门。";
     const stepping = { ...sideChat, summary: "比较两班车", lastStepIndex: 3 };
     live.set("s-main", { status: "running" });
     live.set("s-side", { status: "running" });
     const html = render([used, stepping]);
-    expect(textOf(lineOf(html))).toBe("我先查一下花市几点开门。");
+    expect(textOf(lineOf(html))).toBe("正在输入…");
     expect(between(html, CARD, "</button>")).not.toMatch(/第 \d+ 步/);
     expect(between(html, 'data-session-id="s-side"', "</button>")).toContain(
       "第 3 步 · 比较两班车",

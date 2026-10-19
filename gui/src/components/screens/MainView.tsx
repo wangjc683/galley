@@ -12,17 +12,7 @@ import {
   Conversation,
   TurnMarker,
 } from "@/components/conversation/Conversation";
-import { AssistantLiveLine } from "@/components/conversation/AssistantParts";
-// 票 55 临时切换器，定档后由拆除票删掉。The trial's tier 2 and its demo.
-import { TypingBubble } from "@/components/conversation/typing-trial/TypingBubble";
-import {
-  liveLineDrawn,
-  typingBubbleShown,
-  useTypingTier,
-  useTypingTrialStore,
-} from "@/components/conversation/typing-trial/typing-trial";
-import { typingDemoComposerPlaceholder } from "@/components/conversation/typing-trial/typing-trial-demo";
-import { useTypingBubbleHandoff } from "@/components/conversation/typing-trial/useTypingBubbleHandoff";
+import { TypingBubble } from "@/components/conversation/TypingBubble";
 import { ConversationSkeleton } from "@/components/conversation/ConversationSkeleton";
 import { StepLimitTail } from "@/components/conversation/StepLimitTail";
 import { Button } from "@/components/ui/button";
@@ -43,7 +33,6 @@ import { ThinkingPreview } from "@/components/conversation/ThinkingPreview";
 import { UserQuestionRail } from "@/components/conversation/UserQuestionRail";
 import { useActiveMessages } from "@/hooks/useActiveSession";
 import { useEarlierTurns } from "@/hooks/useEarlierTurns";
-import { useLiveLineHandoff } from "@/hooks/useLiveLineHandoff";
 import { useRemovedTurnsAnchor } from "@/hooks/useRemovedTurnsAnchor";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
 import { useSubtaskQuestionHolder } from "@/hooks/useSubtaskQuestionHolder";
@@ -51,13 +40,9 @@ import { useRemindersByMessage } from "@/hooks/useReminderCards";
 import { useSubtaskDispatchesByMessage } from "@/hooks/useSubtaskCards";
 import { useTodosByMessage } from "@/hooks/useTodoCards";
 import { useTypewriter } from "@/hooks/useTypewriter";
+import { useTypingBubbleHandoff } from "@/hooks/useTypingBubbleHandoff";
 import { useMarkdownStream } from "@/hooks/useMarkdownStream";
-import { assistantLineSentence } from "@/lib/assistant-conversation";
-import {
-  liveLineHandoff,
-  type LiveLineFrame,
-  type LiveLineHandoff,
-} from "@/lib/live-line-handoff";
+import { typingBubbleShown } from "@/lib/assistant-conversation";
 import { openMainChat } from "@/lib/main-chat";
 import { endsInSilentReport, subtaskQuestionLocked } from "@/lib/subtasks";
 import {
@@ -70,7 +55,7 @@ import {
   conversationTypographyStyle,
   type ConversationFontSize,
 } from "@/lib/conversation-font-size";
-import { useCopy, useLanguage } from "@/lib/i18n";
+import { useCopy } from "@/lib/i18n";
 import {
   cleanPartialContent,
   extractLiveThinking,
@@ -80,6 +65,11 @@ import { withoutHiddenTurns } from "@/lib/message-delete";
 import { mendStreamingMarkdown } from "@/lib/mend-streaming-markdown";
 import { stepLimitTailVisible } from "@/lib/step-limit";
 import { takeQuote } from "@/lib/todo-open";
+import {
+  typingBubbleHandoff,
+  type TypingBubbleFrame,
+  type TypingBubbleHandoff,
+} from "@/lib/typing-bubble-handoff";
 import { cn } from "@/lib/utils";
 import { hiddenRowIds, useMessageDeleteStore } from "@/stores/message-delete";
 import { EMPTY_ORDINALS, useMessagesStore } from "@/stores/messages";
@@ -220,8 +210,8 @@ function MainViewContent({
   // workbench's task record (lib/assistant-conversation.ts).
   // `isMainChat` is the one gate, in these places below: Conversation's
   // `assistant` (bubbles on both sides, the quiet 「N 步 ›」, the centred
-  // time lines); the one live line in place of the in-flight row, with
-  // no streaming prose and no corner clock; the question as a bubble;
+  // time lines); the typing bubble in place of the in-flight row, with
+  // no streaming prose and no clock; the question as a bubble;
   // 贴底 (useStickyScroll's `stickBottom`, the column stacked up from
   // the composer); and the composer (rulings 71, 72): no hint row,
   // 「发消息…」, 24px off the window's bottom edge. Every other
@@ -412,8 +402,8 @@ function MainViewContent({
   // rationale. If the GA-side throttle is eventually reduced enough,
   // this hook becomes a no-op (reveal already keeps pace with
   // arrivals) and can be removed without behavior change.
-  // The assistant shows no streaming prose (its one line stands for the
-  // round): the typewriter and the markdown pipeline get nothing to
+  // The assistant shows no streaming prose (its typing bubble stands for
+  // the round): the typewriter and the markdown pipeline get nothing to
   // chew on.
   const typedPartial = useTypewriter(isMainChat ? "" : visiblePartial);
   // Markdown-parse throttle: `useTypewriter` reveals chars at ~60 Hz
@@ -432,86 +422,73 @@ function MainViewContent({
     () => mendStreamingMarkdown(throttledPartial),
     [throttledPartial],
   );
-  // The assistant's live line: its sentence — the first line of what
-  // streams, else this stretch's newest step with words, its narration
-  // or else its summary (ruling 100) — and whether the
-  // round already has its answer (the line then goes, the answer stands
-  // whole in the conversation, before run_complete). A report round
-  // whose reply said nothing (`<no-reply/>`, main chat ticket 31)
-  // settles too: the line goes and nothing takes its place.
-  const lineSentence = useMemo(
-    () => (isMainChat ? assistantLineSentence(turns, visiblePartial) : null),
-    [isMainChat, turns, visiblePartial],
-  );
+  // The round at the end of the assistant's conversation: whether it
+  // already has its answer (the typing bubble then goes, the answer
+  // stands whole in the conversation, before run_complete). A report
+  // round whose reply said nothing (`<no-reply/>`, main chat ticket 31)
+  // settles too: nothing takes the typing bubble's place.
   const silentReport = useMemo(
     () => isMainChat && endsInSilentReport(turns),
     [isMainChat, turns],
   );
   // …and the answer that settled it (its row's message id), which the
-  // line hands over to.
-  const { lineRoundSettled, lineReplyId } = useMemo(() => {
-    if (!isMainChat) return { lineRoundSettled: false, lineReplyId: null };
+  // typing bubble hands over to.
+  const { roundSettled, replyId } = useMemo(() => {
+    if (!isMainChat) return { roundSettled: false, replyId: null };
     const groups = buildRunGroups(turns);
     const last = groups[groups.length - 1];
     const reply =
       last?.finalTurnIndex != null ? turns[last.finalTurnIndex] : undefined;
     return {
-      lineRoundSettled: (last?.complete ?? false) || silentReport,
-      lineReplyId:
+      roundSettled: (last?.complete ?? false) || silentReport,
+      replyId:
         reply && reply.role !== "system" ? (reply.messageId ?? null) : null,
     };
   }, [isMainChat, turns, silentReport]);
-  // The line while the round runs; not while it asks you (it waits, it
-  // is not busy), from the moment the question arrives.
-  const lineShown =
-    isRunning && isMainChat && !lineRoundSettled && !pendingAskUser;
-  // 票 55 临时切换器，定档后由拆除票删掉。Tier 2 (ruling 107) ends the
-  // conversation in the typing bubble instead of the line — from the send
-  // on in a round you start, only while it writes in one Core woke it
-  // for — and hands over from it. Tier 1, and every production build, is
-  // the line as above.
-  const typingTier = useTypingTier();
-  const lineDrawn = liveLineDrawn(typingTier, lineShown);
+  // The round is live at the conversation's end while it runs; not
+  // while it asks you (it waits, it is not busy), from the moment the
+  // question arrives.
+  const roundLive = isRunning && isMainChat && !roundSettled && !pendingAskUser;
+  // The typing bubble (rulings 107, 110): from the send on in a round
+  // you start, only while it writes words in one Core woke it for, never
+  // in a silent one (lib/assistant-conversation.ts `typingBubbleShown`).
   const typingShown = useMemo(
-    () =>
-      typingTier === 2 && typingBubbleShown(lineShown, turns, inFlightContent),
-    [typingTier, lineShown, turns, inFlightContent],
+    () => typingBubbleShown(roundLive, turns, inFlightContent),
+    [roundLive, turns, inFlightContent],
   );
-  // …and while one of its demos plays here, the composer is off.
-  const language = useLanguage();
-  const typingDemo = useTypingTrialStore((s) => s.demo) !== null && isMainChat;
-  // The hand-off (ruling 103, ticket 51): the render where the line's
-  // place goes to its bubble — the answer, or its question — grows the
-  // bubble out of the line, and the follow for it keeps the same clock.
-  // Only one you are watching: the line was on screen in the render
-  // before, in this session, not under a cold-start restore
-  // (lib/live-line-handoff.ts). MainView mounts per session, so a
-  // switch or a reload starts from what is there. Guarded
-  // setState-in-render: the hand-off has to be known in the commit that
-  // lands it.
-  const lineFrameNow: LiveLineFrame = {
+  // The hand-off (rulings 103, 110; tickets 51, 58): the render where
+  // the live round's place goes to its bubble — the answer, or its
+  // question — grows the bubble out of the typing bubble, and the follow
+  // for it keeps the same clock. Only one you are watching: the round
+  // was live in the render before, in this session, not under a
+  // cold-start restore (lib/typing-bubble-handoff.ts). MainView mounts
+  // per session, so a switch or a reload starts from what is there.
+  // Guarded setState-in-render: the hand-off has to be known in the
+  // commit that lands it.
+  const typingFrameNow: TypingBubbleFrame = {
     sessionId: activeSessionId,
-    live: lineShown && !restoring,
+    live: roundLive && !restoring,
   };
-  const [lineFrame, setLineFrame] = useState<LiveLineFrame>(lineFrameNow);
-  const [handoff, setHandoff] = useState<LiveLineHandoff | null>(null);
+  const [typingFrame, setTypingFrame] =
+    useState<TypingBubbleFrame>(typingFrameNow);
+  const [handoff, setHandoff] = useState<TypingBubbleHandoff | null>(null);
   if (
-    lineFrame.sessionId !== lineFrameNow.sessionId ||
-    lineFrame.live !== lineFrameNow.live
+    typingFrame.sessionId !== typingFrameNow.sessionId ||
+    typingFrame.live !== typingFrameNow.live
   ) {
-    setLineFrame(lineFrameNow);
-    const kind = liveLineHandoff(lineFrame, {
+    setTypingFrame(typingFrameNow);
+    const kind = typingBubbleHandoff(typingFrame, {
       sessionId: activeSessionId,
-      lineShown,
+      live: roundLive,
       question: Boolean(pendingAskUser),
-      settled: lineRoundSettled,
+      settled: roundSettled,
       silent: silentReport,
     });
     if (kind) {
       setHandoff({
         tick: (handoff?.tick ?? 0) + 1,
         kind,
-        messageId: kind === "reply" ? lineReplyId : null,
+        messageId: kind === "reply" ? replyId : null,
       });
     }
   }
@@ -536,15 +513,9 @@ function MainViewContent({
     stickBottom: isMainChat,
     landingTick: handoff?.tick ?? 0,
   });
-  // The line's place, and the hand-off on the page.
-  const liveLineRef = useLiveLineHandoff({
-    // 票 55 临时切换器，定档后由拆除票删掉。Tier 2 hands over below.
-    enabled: isMainChat && typingTier === 1,
-    scrollContainerRef,
-    handoff,
-  });
+  // The typing bubble's place, and the hand-off on the page.
   const typingBubbleRef = useTypingBubbleHandoff({
-    enabled: isMainChat && typingTier === 2,
+    enabled: isMainChat,
     scrollContainerRef,
     handoff,
   });
@@ -733,20 +704,10 @@ function MainViewContent({
               thinking content, not a one-liner "still working"
               line. Sharing visual register with TurnMarker collapses
               the before/after into one per-step rhythm. */}
-            {/* The assistant: one line instead of the in-flight row, its
-                reasoning and the streaming prose — gone once the round
-                has its answer or asks, its bubble growing out of it
-                (useLiveLineHandoff). */}
-            {/* 票 55 临时切换器，定档后由拆除票删掉。The line at tier 1,
-                the typing bubble at tier 2. */}
-            {lineDrawn && (
-              <AssistantLiveLine
-                ref={liveLineRef}
-                sentence={lineSentence}
-                startedAtMs={currentRunStartedAtMs}
-                baseMs={runElapsedBaseMs}
-              />
-            )}
+            {/* The assistant: the typing bubble instead of the in-flight
+                row, its reasoning and the streaming prose — gone once
+                the round has its answer or asks, its bubble growing out
+                of it (useTypingBubbleHandoff). */}
             {typingShown && <TypingBubble ref={typingBubbleRef} />}
             {isRunning && !isMainChat && (
               // The elapsed clock inside TurnMarker resets whenever
@@ -1006,22 +967,18 @@ function MainViewContent({
             draftKey={activeSessionId ?? "main-composer"}
             llmDisplayName={llmDisplayName}
             placeholder={
-              // 票 55 临时切换器，定档后由拆除票删掉。A demo only changes
-              // the display, so nothing can be sent while it plays.
-              typingDemo
-                ? typingDemoComposerPlaceholder(language)
-                : copy.composer[
-                    composerRegisterCopyKey(
-                      resolveComposerRegister({
-                        isRunning,
-                        pendingAskUser: Boolean(pendingAskUser),
-                        askUserHasCandidates:
-                          (pendingAskUser?.candidates.length ?? 0) > 0,
-                        mainChat: isMainChat,
-                        questionWithGalley: questionLocked,
-                      }),
-                    )
-                  ]
+              copy.composer[
+                composerRegisterCopyKey(
+                  resolveComposerRegister({
+                    isRunning,
+                    pendingAskUser: Boolean(pendingAskUser),
+                    askUserHasCandidates:
+                      (pendingAskUser?.candidates.length ?? 0) > 0,
+                    mainChat: isMainChat,
+                    questionWithGalley: questionLocked,
+                  }),
+                )
+              ]
             }
             ghostSuggestion={ghostSuggestion}
             onSubmit={onSubmit}
@@ -1031,8 +988,7 @@ function MainViewContent({
             submitAckTick={userSubmitTick}
             // Off while the subtask's question is with the assistant
             // (ruling 102): anything sent here would be its answer.
-            // 票 55 临时切换器，定档后由拆除票删掉。Also off while a demo plays.
-            disabled={questionLocked || typingDemo}
+            disabled={questionLocked}
             llms={llms}
             onSelectLLM={onSelectLLM}
             llmConfigHint={llmConfigHint}

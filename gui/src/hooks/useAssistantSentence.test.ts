@@ -1,28 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  selectAssistantSentence,
-  selectAssistantWriting,
+  selectAssistantSettledSentence,
+  selectAssistantTyping,
 } from "@/hooks/useAssistantSentence";
+import { assistantState } from "@/lib/assistant";
 import {
-  assistantCachedSentence,
-  assistantLineSentence,
+  assistantSettledSentence,
+  typingBubbleShown,
 } from "@/lib/assistant-conversation";
+import { copyForLanguage } from "@/lib/i18n";
 import { dispatchIPCEvent } from "@/lib/ipc-handlers";
-import { cleanPartialContent } from "@/lib/ipc/ga-output-cleaning";
+import { buildRunGroups } from "@/lib/run-groups";
+import { endsInSilentReport, SUBTASK_REPORT_SUPERVISOR } from "@/lib/subtasks";
 import { useMessagesStore } from "@/stores/messages";
 import { useSessionsStore } from "@/stores/sessions";
 import { makeSession } from "@/test/factories";
 import { resetStores } from "@/test/store-reset";
-import type {
-  AgentTurn,
-  ConversationToolEvent,
-  Turn,
-  UserTurn,
-} from "@/types/conversation";
 
 // Counts the passes over the stream: the regex cleaning is the cost the
-// card and the header must not pay per store write.
+// card and the conversation must not pay per store write.
 const cleaning = vi.hoisted(() => ({ calls: 0 }));
 vi.mock("@/lib/ipc/ga-output-cleaning", async (importOriginal) => {
   const actual =
@@ -36,193 +33,451 @@ vi.mock("@/lib/ipc/ga-output-cleaning", async (importOriginal) => {
   };
 });
 
-function tool(name: string, args: Record<string, unknown> = {}) {
-  return {
-    id: `t-${name}-${Math.random()}`,
-    name,
-    status: "success-historical",
-    args,
-  } as ConversationToolEvent;
-}
-
-function user(content: string): UserTurn {
-  return { role: "user", content, messageId: `u-${content}` };
-}
-
-function step(narration: string, index: number): AgentTurn {
-  return {
-    role: "agent",
-    turnIndex: index,
-    finalAnswer: narration,
-    summary: `第 ${index} 步的摘要`,
-    tools: [tool("web_scan")],
-  };
-}
-
-function ask(question: string, index: number): AgentTurn {
-  return {
-    role: "agent",
-    turnIndex: index,
-    finalAnswer: null,
-    tools: [tool("ask_user", { question, candidates: ["8:30", "9:00"] })],
-  };
-}
-
+const zh = copyForLanguage("zh-CN");
 const MAIN = "s-main";
+const DISPATCH =
+  '🛠️ Tool: `code_run`  📥 args:\n````text\n{"script": "x"}\n````\n';
 
 beforeEach(() => {
   resetStores();
   cleaning.calls = 0;
 });
 
-describe("the card's sentence: the conversation's line", () => {
-  it("cleans the raw stream as the main area does, then takes the line's sentence", () => {
-    const turns: Turn[] = [user("看看周六的船票"), step("我先查一下船班。", 1)];
-    const cases: [string, string | null][] = [
-      ["", "我先查一下船班。"],
-      // The first line of what streams wins, GA's tags out.
-      [
-        "<thinking>先想一下</thinking>\n\n周六上午还有三班船。\n\n我再看返程",
-        "周六上午还有三班船。",
-      ],
-      // Still reasoning: nothing readable streams yet.
-      ["<thinking>还在想", "我先查一下船班。"],
-    ];
-    for (const [stream, expected] of cases) {
-      expect(assistantCachedSentence(turns, stream)).toBe(expected);
-      // The same edges as the line (MainView: cleaned, trimmed).
-      expect(assistantCachedSentence(turns, stream)).toBe(
-        assistantLineSentence(turns, cleanPartialContent(stream).trim()),
-      );
-    }
-    // Answered its question: the narration before it is stale.
-    expect(
-      assistantCachedSentence(
-        [...turns, ask("订哪一班？", 2), user("8:30")],
-        "",
-      ),
-    ).toBeNull();
+// ---- A round, event by event, as the runner's events reach the page ----
+
+/** One event of a round, named for the expectations. */
+type Beat = [label: string, run: () => void];
+
+let tick = 0;
+const stamp = () =>
+  `2026-10-19T02:${String(Math.floor(tick / 60) % 60).padStart(2, "0")}:${String(tick++ % 60).padStart(2, "0")}.000Z`;
+
+const progress = (delta: string) =>
+  dispatchIPCEvent({
+    kind: "turn_progress",
+    sessionId: MAIN,
+    delta,
+    source: "test",
+    timestamp: stamp(),
   });
 
-  it("is null at rest without looking at the stream, and cleans it once per chunk for every reader", () => {
-    const store = useMessagesStore.getState();
-    store.appendUserTurn(MAIN, "看看周六的船票", "c-1");
-    store.setAgentRunning(MAIN, true);
-    store.appendInFlightDelta(MAIN, "周六上午还有三班船。\n");
-    cleaning.calls = 0;
-    const state = () => useMessagesStore.getState();
+/** Your message: the composer's echo (the page marks the run started),
+ * then Core's persisted row. */
+function sendBeats(text: string): Beat[] {
+  const clientRequestId = `c-${text}`;
+  return [
+    [
+      "you send",
+      () =>
+        useMessagesStore.getState().appendUserTurn(MAIN, text, clientRequestId),
+    ],
+    [
+      "persisted",
+      () =>
+        useMessagesStore.getState().applyUserMessagePersisted({
+          sessionId: MAIN,
+          message: {
+            id: `u-${text}`,
+            sessionId: MAIN,
+            role: "user",
+            content: text,
+            createdAt: stamp(),
+            turnIndex: 40,
+          },
+          dispatch: "dispatched",
+          clientRequestId,
+        }),
+    ],
+  ];
+}
 
-    expect(selectAssistantSentence(state(), MAIN, false)).toBeNull();
+/** Core's report row waking the main chat (main chat ticket 31). */
+const wakeBeat: Beat = [
+  "report row",
+  () =>
+    useMessagesStore.getState().applyUserMessagePersisted({
+      sessionId: MAIN,
+      message: {
+        id: "report-1",
+        sessionId: MAIN,
+        role: "user",
+        content: "子任务汇报",
+        createdAt: stamp(),
+        turnIndex: 40,
+        origin: { via: "system", supervisor: SUBTASK_REPORT_SUPERVISOR },
+      },
+      dispatch: "dispatched",
+    }),
+];
+
+/** A tool step as GA's verbose display streams it: the turn's header,
+ * an optional narration, its summary, the dispatch and the tool's output
+ * (all of it but the narration cleaned away on the page), then it
+ * lands. */
+function toolStepBeats(
+  turnIndex: number,
+  summary: string,
+  narration = "",
+): Beat[] {
+  const beats: Beat[] = [
+    [
+      `step ${turnIndex} starts`,
+      () =>
+        dispatchIPCEvent({
+          kind: "turn_start",
+          sessionId: MAIN,
+          turnIndex,
+          timestamp: stamp(),
+        }),
+    ],
+    [
+      `step ${turnIndex} header`,
+      () => progress(`**LLM Running (Turn ${turnIndex}) ...**\n\n`),
+    ],
+  ];
+  if (narration) {
+    beats.push([`step ${turnIndex} narration`, () => progress(narration)]);
+  }
+  beats.push(
+    [
+      `step ${turnIndex} summary`,
+      () => progress(`\n<summary>${summary}</summary>\n`),
+    ],
+    [`step ${turnIndex} dispatch`, () => progress(DISPATCH)],
+    [`step ${turnIndex} output`, () => progress("`````\nok\n`````\n")],
+    [
+      `step ${turnIndex} settles`,
+      () =>
+        dispatchIPCEvent({
+          kind: "turn_end",
+          sessionId: MAIN,
+          turnIndex,
+          summary,
+          toolCalls: [{ toolName: "code_run", args: { script: "x" } }],
+          toolResults: [{ content: "ok" }],
+          responseContent: `${narration}<summary>${summary}</summary>`,
+          exitReason: null,
+          absoluteTurnIndex: 100 + turnIndex,
+          timestamp: stamp(),
+        }),
+    ],
+  );
+  return beats;
+}
+
+/** The closing step: its words stream in `pieces`, then it lands, then
+ * the run completes. */
+function replyBeats(turnIndex: number, pieces: string[]): Beat[] {
+  const content = pieces.join("");
+  return [
+    [
+      `step ${turnIndex} starts`,
+      () =>
+        dispatchIPCEvent({
+          kind: "turn_start",
+          sessionId: MAIN,
+          turnIndex,
+          timestamp: stamp(),
+        }),
+    ],
+    [
+      `step ${turnIndex} header`,
+      () => progress(`**LLM Running (Turn ${turnIndex}) ...**\n\n`),
+    ],
+    ...pieces.map(
+      (piece, i): Beat => [`chunk ${i + 1}`, () => progress(piece)],
+    ),
+    [
+      "reply settles",
+      () =>
+        dispatchIPCEvent({
+          kind: "turn_end",
+          sessionId: MAIN,
+          turnIndex,
+          summary: "直接回答了用户问题",
+          toolCalls: [],
+          toolResults: [],
+          responseContent: content,
+          exitReason: { result: "CURRENT_TASK_DONE", data: null },
+          absoluteTurnIndex: 100 + turnIndex,
+          timestamp: stamp(),
+        }),
+    ],
+    [
+      "run complete",
+      () =>
+        dispatchIPCEvent({
+          kind: "run_complete",
+          sessionId: MAIN,
+          exitReason: { result: "CURRENT_TASK_DONE", data: null },
+          finalContent: content,
+          totalTurns: turnIndex,
+          timestamp: stamp(),
+        }),
+    ],
+  ];
+}
+
+const STEP_ONE = "本机时间为10月19日10:34；先检查是否已有喝水提醒，避免重复。";
+const STEP_TWO = "已建好明天 9:00 的提醒。";
+
+/** A round you start: two tool steps that write only their summaries
+ * (the main model's habit), then the reply. */
+const youStart = (): Beat[] => [
+  ...sendBeats("明天早上 9 点提醒我喝水"),
+  ...toolStepBeats(1, STEP_ONE),
+  ...toolStepBeats(2, STEP_TWO),
+  ...replyBeats(3, ["好的，", "明天早上 ", "9 点", "提醒你", "喝水。"]),
+];
+
+/** A round Core woke it for: one tool step, then the reply. */
+const woken = (): Beat[] => [
+  wakeBeat,
+  ...toolStepBeats(1, "读到子任务的汇报：喝水提醒到点了。"),
+  ...replyBeats(2, ["该喝水啦，", "记得喝", "点水 💧"]),
+];
+
+/** The same, saying nothing. */
+const silent = (): Beat[] => [
+  wakeBeat,
+  ...toolStepBeats(1, "子任务交回的结果缺了确认号，打回去重查。"),
+  ...replyBeats(2, ["<no-", "reply/>"]),
+];
+
+function slice() {
+  return useMessagesStore.getState().byId[MAIN];
+}
+
+/** MainView's own condition for the live round: running, the main chat,
+ * the round not settled (its answer, or a silent report), not asking. */
+function liveNow(): boolean {
+  const m = slice();
+  const groups = buildRunGroups(m.turns);
+  const last = groups[groups.length - 1];
+  const settled = (last?.complete ?? false) || endsInSilentReport(m.turns);
+  return m.agentRunning && !settled && m.pendingAskUser === null;
+}
+
+/** The conversation ends in the typing bubble (MainView). */
+function dotsNow(): boolean {
+  const m = slice();
+  return typingBubbleShown(liveNow(), m.turns, m.inFlightContent);
+}
+
+/** The header's second line (AssistantIdentity: useAssistantState with
+ * `header`). */
+function headerNow(): string {
+  const m = slice();
+  const running = m.agentRunning;
+  return (
+    assistantState(
+      {
+        status: running ? "running" : "idle",
+        hasPendingAskUser: m.pendingAskUser !== null,
+        open: true,
+        sentence: selectAssistantSettledSentence(
+          useMessagesStore.getState(),
+          MAIN,
+          running,
+        ),
+      },
+      zh,
+    ).line?.text ?? ""
+  );
+}
+
+/** Runs `beats`, reading `read` after each one. */
+function play<T>(beats: Beat[], read: () => T): [string, T][] {
+  return beats.map(([label, run]) => {
+    run();
+    return [label, read()];
+  });
+}
+
+// ---- The typing bubble ---------------------------------------------------
+
+describe("the typing bubble, and the card's 「正在输入…」 with it", () => {
+  it("shows from the send on in a round you start, before any event, until the reply lands", () => {
+    const seen = play(youStart(), dotsNow);
+    // The send itself: the page marks the run started, nothing else yet.
+    expect(seen[0]).toEqual(["you send", true]);
+    const landed = seen.findIndex(([label]) => label === "reply settles");
+    expect(seen.slice(0, landed).every(([, shown]) => shown)).toBe(true);
+    expect(seen.slice(landed).every(([, shown]) => !shown)).toBe(true);
+  });
+
+  it("shows in a woken round only while it writes words", () => {
+    const seen = play(woken(), () => [liveNow(), dotsNow()] as const);
+    // The round is live throughout until its reply lands…
+    for (const [label, [live]] of seen) {
+      if (label !== "reply settles" && label !== "run complete") {
+        expect([label, live]).toEqual([label, true]);
+      }
+    }
+    // …but the dots only come with its words.
+    expect(seen.filter(([, [, dots]]) => dots).map(([label]) => label)).toEqual(
+      ["chunk 1", "chunk 2", "chunk 3"],
+    );
+  });
+
+  it("goes when a tool dispatch follows the words, and comes back with the next words", () => {
+    wakeBeat[1]();
+    expect(dotsNow()).toBe(false);
+    progress("我先看一下子任务交回来的结果。");
+    expect(dotsNow()).toBe(true);
+    progress(`\n${DISPATCH}`);
+    expect(dotsNow()).toBe(false);
+    dispatchIPCEvent({
+      kind: "turn_end",
+      sessionId: MAIN,
+      turnIndex: 1,
+      summary: "看了结果",
+      toolCalls: [{ toolName: "code_run", args: {} }],
+      toolResults: [{ content: "ok" }],
+      responseContent: "我先看一下子任务交回来的结果。",
+      exitReason: null,
+      absoluteTurnIndex: 101,
+      timestamp: stamp(),
+    });
+    expect(dotsNow()).toBe(false);
+    progress("好了，");
+    expect(dotsNow()).toBe(true);
+  });
+
+  it("never shows in a silent round", () => {
+    for (const [label, dots] of play(silent(), dotsNow)) {
+      expect([label, dots]).toEqual([label, false]);
+    }
+  });
+
+  it("does not show while it asks you", () => {
+    sendBeats("帮我订船票").forEach(([, run]) => run());
+    expect(dotsNow()).toBe(true);
+    useMessagesStore.getState().setPendingAskUser(MAIN, {
+      question: "订哪一班？",
+      candidates: ["8:30", "10:15"],
+    });
+    expect(liveNow()).toBe(false);
+    expect(dotsNow()).toBe(false);
+  });
+
+  it("says the card types as the dots do: throughout a round you start, with the words in a woken one", () => {
+    const card = () =>
+      selectAssistantTyping(
+        useMessagesStore.getState(),
+        MAIN,
+        slice()?.agentRunning ?? false,
+      );
+    const you = play(youStart(), card);
+    const end = you.findIndex(([label]) => label === "run complete");
+    expect(you.slice(0, end).every(([, typing]) => typing)).toBe(true);
+    expect(you[end][1]).toBe(false);
+    resetStores();
+    const wake = play(woken(), card);
+    // Once the answer lands the card says it, the avatar spinning until
+    // run_complete.
+    expect(wake.filter(([, typing]) => typing).map(([label]) => label)).toEqual(
+      ["chunk 1", "chunk 2", "chunk 3"],
+    );
+  });
+
+  it("is false at rest without looking at the stream, and cleans it once per chunk for every reader", () => {
+    const state = () => useMessagesStore.getState();
+    // A round you start types throughout: the stream is not read.
+    sendBeats("看看周六的船票").forEach(([, run]) => run());
+    progress("周六上午还有三班船。\n");
+    cleaning.calls = 0;
+    expect(selectAssistantTyping(state(), MAIN, true)).toBe(true);
+    expect(selectAssistantTyping(state(), MAIN, false)).toBe(false);
     expect(cleaning.calls).toBe(0);
 
-    // The card and the header read the same chunk: one pass.
-    expect(selectAssistantSentence(state(), MAIN, true)).toBe(
-      "周六上午还有三班船。",
-    );
-    expect(selectAssistantSentence(state(), MAIN, true)).toBe(
-      "周六上午还有三班船。",
-    );
+    // A woken round reads it: the card and the conversation's dots on
+    // the same chunk, one pass.
+    resetStores();
+    wakeBeat[1]();
+    progress("我先看一下结果。");
+    cleaning.calls = 0;
+    expect(selectAssistantTyping(state(), MAIN, false)).toBe(false);
+    expect(cleaning.calls).toBe(0);
+    expect(selectAssistantTyping(state(), MAIN, true)).toBe(true);
+    expect(dotsNow()).toBe(true);
+    expect(selectAssistantTyping(state(), MAIN, true)).toBe(true);
     expect(cleaning.calls).toBe(1);
 
-    // Another session's write leaves the pair as it was: no pass.
-    store.appendInFlightDelta("s-other", "别的会话");
-    expect(selectAssistantSentence(state(), MAIN, true)).toBe(
-      "周六上午还有三班船。",
-    );
+    // Another session's write leaves the stream as it was: no pass.
+    useMessagesStore.getState().appendInFlightDelta("s-other", "别的会话");
+    expect(selectAssistantTyping(state(), MAIN, true)).toBe(true);
     expect(cleaning.calls).toBe(1);
 
-    // The next chunk: one more.
-    store.appendInFlightDelta(MAIN, "8:30");
-    selectAssistantSentence(state(), MAIN, true);
-    selectAssistantSentence(state(), MAIN, true);
-    expect(cleaning.calls).toBe(2);
+    // A dispatch, an open thinking: known without cleaning.
+    progress(`\n${DISPATCH}`);
+    expect(selectAssistantTyping(state(), MAIN, true)).toBe(false);
+    useMessagesStore.getState().clearInFlightContent(MAIN);
+    progress("<thinking>再看看返程");
+    expect(selectAssistantTyping(state(), MAIN, true)).toBe(false);
+    expect(cleaning.calls).toBe(1);
+  });
+});
+
+// ---- The header's sentence -------------------------------------------------
+
+describe("the header's sentence: the newest settled step's", () => {
+  it("is the newest settled step's sentence, never what streams, no clock; 「思考中」 before one", () => {
+    const lines: string[] = [];
+    for (const [, text] of play(youStart(), headerNow)) {
+      if (lines[lines.length - 1] !== text) lines.push(text);
+    }
+    expect(lines).toEqual([
+      "思考中",
+      STEP_ONE,
+      STEP_TWO,
+      // run_complete: only the name.
+      "",
+    ]);
   });
 
-  it("changes, and so re-renders a reader, only when the sentence does — not per chunk", () => {
-    const store = useMessagesStore.getState();
-    store.appendUserTurn(MAIN, "看看周六的船票", "c-1");
-    store.setAgentRunning(MAIN, true);
-    // What useSyncExternalStore does with a selector: re-render when
-    // the selected value changes (Object.is).
-    let selected = selectAssistantSentence(
+  it("takes the narration first, else the summary", () => {
+    const beats: Beat[] = [
+      ...sendBeats("查船票"),
+      ...toolStepBeats(1, "查船班", "我先查船班。"),
+    ];
+    play(beats, () => null);
+    expect(headerNow()).toBe("我先查船班。");
+    play(toolStepBeats(2, "已查到两班"), () => null);
+    // Step 2 wrote only its summary: the header moves on to it, not
+    // holding step 1's narration (ruling 100).
+    expect(headerNow()).toBe("已查到两班");
+    expect(
+      selectAssistantSettledSentence(useMessagesStore.getState(), MAIN, true),
+    ).toBe(assistantSettledSentence(slice().turns));
+  });
+
+  it("is null at rest without looking at the turns", () => {
+    play(youStart().slice(0, 9), () => null);
+    expect(
+      selectAssistantSettledSentence(useMessagesStore.getState(), MAIN, false),
+    ).toBeNull();
+    expect(
+      selectAssistantSettledSentence(useMessagesStore.getState(), MAIN, true),
+    ).toBe(STEP_ONE);
+  });
+
+  it("re-reads only when a step lands: a chunk returns the same string", () => {
+    let changes = 0;
+    let last = selectAssistantSettledSentence(
       useMessagesStore.getState(),
       MAIN,
       true,
     );
-    const seen: (string | null)[] = [selected];
     const unsubscribe = useMessagesStore.subscribe((state) => {
-      const next = selectAssistantSentence(state, MAIN, true);
-      if (!Object.is(next, selected)) {
-        selected = next;
-        seen.push(next);
-      }
+      const next = selectAssistantSettledSentence(state, MAIN, true);
+      if (next !== last) changes += 1;
+      last = next;
     });
-    // The first line in three chunks, then 30 chunks of the rest.
-    const chunks = [
-      "周六上午",
-      "还有三班船",
-      "有票。\n\n",
-      ...Array.from({ length: 30 }, (_, i) => `第 ${i + 1} 段的内容。\n`),
-    ];
-    for (const chunk of chunks) store.appendInFlightDelta(MAIN, chunk);
+    play(youStart(), () => null);
     unsubscribe();
-    expect(chunks).toHaveLength(33);
-    expect(seen).toEqual([
-      null,
-      "周六上午",
-      "周六上午还有三班船",
-      "周六上午还有三班船有票。",
-    ]);
-  });
-
-  // Ruling 100 (ticket 47): a step that wrote only its summary moves the
-  // card's sentence on, through the cache, as a narration does.
-  it("takes up a step's summary when it wrote no narration", () => {
-    const store = useMessagesStore.getState();
-    store.appendUserTurn(MAIN, "提醒我喝水", "c-1");
-    store.setAgentRunning(MAIN, true);
-    const sentence = () =>
-      selectAssistantSentence(useMessagesStore.getState(), MAIN, true);
-    expect(sentence()).toBeNull();
-
-    const turnEnd = (
-      turnIndex: number,
-      responseContent: string,
-      summary: string,
-    ) =>
-      dispatchIPCEvent({
-        kind: "turn_end",
-        sessionId: MAIN,
-        turnIndex,
-        summary,
-        toolCalls: [{ toolName: "code_run", args: {} }],
-        toolResults: [{ toolUseId: `c${turnIndex}`, content: "ok" }],
-        responseContent,
-        exitReason: null,
-        timestamp: `2026-10-19T02:3${turnIndex}:00.000Z`,
-      });
-
-    turnEnd(
-      1,
-      "我先看一下现在几点。<summary>需要设置喝水提醒；先读取本机时间。</summary>",
-      "需要设置喝水提醒；先读取本机时间。",
-    );
-    expect(sentence()).toBe("我先看一下现在几点。");
-
-    // Step 2 wrote only its summary: the card moves on to it, not
-    // holding step 1's narration.
-    turnEnd(
-      2,
-      "<summary>本机时间为10月19日10:34；先检查是否已有喝水提醒，避免重复。</summary>",
-      "本机时间为10月19日10:34；先检查是否已有喝水提醒，避免重复。",
-    );
-    expect(sentence()).toBe(
-      "本机时间为10月19日10:34；先检查是否已有喝水提醒，避免重复。",
-    );
-    // Through the same function as the line.
-    expect(sentence()).toBe(
-      assistantLineSentence(useMessagesStore.getState().byId[MAIN].turns, ""),
-    );
+    // Step 1 lands, step 2 lands; the reply and every chunk change nothing.
+    expect(changes).toBe(2);
   });
 
   it("reads the main chat's cache while another session is on screen", () => {
@@ -233,35 +488,13 @@ describe("the card's sentence: the conversation's line", () => {
       ],
       activeSessionId: "s-other",
     });
-    const store = useMessagesStore.getState();
-    store.ensureMessages("s-other");
-    store.appendUserTurn(MAIN, "看看周六的船票", "c-1");
-    store.setAgentRunning(MAIN, true);
+    useMessagesStore.getState().ensureMessages("s-other");
     const sentence = () =>
-      selectAssistantSentence(useMessagesStore.getState(), MAIN, true);
+      selectAssistantSettledSentence(useMessagesStore.getState(), MAIN, true);
+    play(sendBeats("看看周六的船票"), () => null);
     expect(sentence()).toBeNull();
-
-    dispatchIPCEvent({
-      kind: "turn_end",
-      sessionId: MAIN,
-      turnIndex: 1,
-      summary: "已查到周六的船班；接下来核对余票。",
-      toolCalls: [{ toolName: "web_scan", args: {} }],
-      toolResults: [{ toolUseId: "c1", content: "ok" }],
-      responseContent: "我先查一下周六上午的船班。",
-      exitReason: null,
-      timestamp: "2026-10-15T08:01:00.000Z",
-    });
-    expect(sentence()).toBe("我先查一下周六上午的船班。");
-
-    dispatchIPCEvent({
-      kind: "turn_progress",
-      sessionId: MAIN,
-      delta: "周六上午还有三班船有票。\n\n",
-      source: "workbench",
-      timestamp: "2026-10-15T08:01:02.000Z",
-    });
-    expect(sentence()).toBe("周六上午还有三班船有票。");
+    play(toolStepBeats(1, "已查到周六的船班；接下来核对余票。"), () => null);
+    expect(sentence()).toBe("已查到周六的船班；接下来核对余票。");
     // Nothing went to the session on screen.
     expect(useMessagesStore.getState().byId["s-other"].inFlightContent).toBe(
       "",
@@ -270,163 +503,103 @@ describe("the card's sentence: the conversation's line", () => {
   });
 });
 
-// Ruling 104 (ticket 52): the header's 「正在输入…」 reads the same
-// stream, through the same one cleaning pass, and only flips.
-describe("the header's 「正在输入…」: whether it writes words", () => {
-  const DISPATCH =
-    '🛠️ Tool: `web_scan`  📥 args:\n````text\n{"url": "x"}\n````\n';
-  const progress = (delta: string) =>
-    dispatchIPCEvent({
-      kind: "turn_progress",
-      sessionId: MAIN,
-      delta,
-      source: "workbench",
-      timestamp: "2026-10-19T08:00:01.000Z",
-    });
-  const turnEnd = (
-    turnIndex: number,
-    responseContent: string,
-    final: boolean,
-  ) =>
-    dispatchIPCEvent({
-      kind: "turn_end",
-      sessionId: MAIN,
-      turnIndex,
-      summary: `第 ${turnIndex} 步的摘要`,
-      toolCalls: final ? [] : [{ toolName: "web_scan", args: {} }],
-      toolResults: final ? [] : [{ toolUseId: `c${turnIndex}`, content: "ok" }],
-      responseContent,
-      exitReason: final ? { result: "CURRENT_TASK_DONE", data: null } : null,
-      timestamp: `2026-10-19T08:0${turnIndex}:00.000Z`,
-    });
+// ---- Re-renders ----------------------------------------------------------
 
-  it("is false at rest without looking at the stream, and shares the card's one pass per chunk", () => {
-    const store = useMessagesStore.getState();
-    store.appendUserTurn(MAIN, "看看周六的船票", "c-1");
-    store.setAgentRunning(MAIN, true);
-    store.appendInFlightDelta(MAIN, "周六上午还有三班船。\n");
-    cleaning.calls = 0;
-    const state = () => useMessagesStore.getState();
-
-    expect(selectAssistantWriting(state(), MAIN, false)).toBe(false);
-    expect(cleaning.calls).toBe(0);
-
-    // The header and the card's sentence on the same chunk: one pass.
-    expect(selectAssistantWriting(state(), MAIN, true)).toBe(true);
-    expect(selectAssistantSentence(state(), MAIN, true)).toBe(
-      "周六上午还有三班船。",
-    );
-    expect(selectAssistantWriting(state(), MAIN, true)).toBe(true);
-    expect(cleaning.calls).toBe(1);
-
-    // Another session's write leaves the stream as it was: no pass.
-    store.appendInFlightDelta("s-other", "别的会话");
-    expect(selectAssistantWriting(state(), MAIN, true)).toBe(true);
-    expect(cleaning.calls).toBe(1);
-
-    // A dispatch, an open thinking: known without cleaning.
-    store.appendInFlightDelta(MAIN, DISPATCH);
-    expect(selectAssistantWriting(state(), MAIN, true)).toBe(false);
-    store.clearInFlightContent(MAIN);
-    store.appendInFlightDelta(MAIN, "<thinking>再看看返程");
-    expect(selectAssistantWriting(state(), MAIN, true)).toBe(false);
-    expect(cleaning.calls).toBe(1);
-  });
-
-  it("re-renders the header only when it flips, the open card never per chunk", () => {
+describe("re-renders", () => {
+  it("re-renders the header and the card on no chunk but the one that starts a woken round's words", () => {
     useSessionsStore.setState({
       sessions: [
         makeSession({ id: MAIN, mainChat: true, gaRuntimeKind: "managed" }),
       ],
       activeSessionId: MAIN,
     });
-    const store = useMessagesStore.getState();
-    store.appendUserTurn(MAIN, "看看周六的船票", "c-1");
-    store.setAgentRunning(MAIN, true);
 
     // What each subscribes to, as useSyncExternalStore compares it: a
     // re-render when any selected value changes (Object.is; the status
     // view's useShallow projection as one key).
-    const status = (s: ReturnType<typeof useMessagesStore.getState>) => {
+    type State = ReturnType<typeof useMessagesStore.getState>;
+    const status = (s: State) => {
       const m = s.byId[MAIN];
       return `${m?.agentRunning}|${m?.pendingAskUser != null}|${m?.pausedAtStepLimit}`;
     };
-    const running = (s: ReturnType<typeof useMessagesStore.getState>) =>
-      s.byId[MAIN]?.agentRunning ?? false;
+    const running = (s: State) => s.byId[MAIN]?.agentRunning ?? false;
     const readers = {
       // AssistantIdentity: useAssistantState({ open: true, header: true }).
-      header: (s: ReturnType<typeof useMessagesStore.getState>) => [
+      header: (s: State) => [
         status(s),
-        selectAssistantSentence(s, MAIN, false),
-        selectAssistantWriting(s, MAIN, running(s)),
+        selectAssistantSettledSentence(s, MAIN, running(s)),
       ],
-      // SidebarAssistantCard with the main chat on screen: its state
-      // (no stream: !open, not the header), the question, the turns
-      // its last message comes from.
-      card: (s: ReturnType<typeof useMessagesStore.getState>) => [
+      // SidebarAssistantCard: its state (no sentence), whether it types,
+      // the question, the turns its last message comes from.
+      card: (s: State) => [
         status(s),
-        selectAssistantSentence(s, MAIN, false),
-        selectAssistantWriting(s, MAIN, false),
+        selectAssistantTyping(s, MAIN, running(s)),
         s.byId[MAIN]?.pendingAskUser?.question ?? null,
         s.byId[MAIN]?.turns,
         s.byId[MAIN]?.restoring ?? false,
       ],
     };
-    const renders = { header: 0, card: 0 };
-    const words: boolean[] = [];
-    let last = {
-      header: readers.header(useMessagesStore.getState()),
-      card: readers.card(useMessagesStore.getState()),
-    };
-    const unsubscribe = useMessagesStore.subscribe((s) => {
-      for (const key of ["header", "card"] as const) {
-        const next = readers[key](s);
-        if (next.some((v, i) => !Object.is(v, last[key][i]))) {
-          renders[key] += 1;
-          last = { ...last, [key]: next };
-          if (key === "header") words.push(next[2] as boolean);
+    /** The beats during which each re-renders (once per re-render). */
+    const renders = (beats: Beat[]) => {
+      const seen = { header: [] as string[], card: [] as string[] };
+      let beat = "";
+      let last = {
+        header: readers.header(useMessagesStore.getState()),
+        card: readers.card(useMessagesStore.getState()),
+      };
+      const unsubscribe = useMessagesStore.subscribe((s) => {
+        for (const key of ["header", "card"] as const) {
+          const next = readers[key](s);
+          if (next.some((v, i) => !Object.is(v, last[key][i]))) {
+            seen[key].push(beat);
+            last = { ...last, [key]: next };
+          }
         }
+      });
+      for (const [label, run] of beats) {
+        beat = label;
+        run();
       }
+      unsubscribe();
+      return seen;
+    };
+
+    // A round you start: 23 events, 14 of them chunks.
+    const you = youStart();
+    expect(you).toHaveLength(23);
+    expect(
+      you.filter(([label]) =>
+        /chunk|header|summary|dispatch|output/.test(label),
+      ),
+    ).toHaveLength(14);
+    // No chunk re-renders either: the header when its run starts, each
+    // step lands and the run ends; the card on each write to the turns
+    // and when the run starts and ends.
+    expect(renders(you)).toEqual({
+      header: ["you send", "step 1 settles", "step 2 settles", "run complete"],
+      card: [
+        "you send",
+        "persisted",
+        "step 1 settles",
+        "step 2 settles",
+        "reply settles",
+        "run complete",
+      ],
     });
 
-    // Step 1: it reasons, writes a line, dispatches a tool, the tool
-    // prints; then the step lands.
-    const step1 = [
-      "<thinking>",
-      ...Array.from({ length: 8 }, (_, i) => `想第 ${i + 1} 点。`),
-      "</thinking>\n\n",
-      ...Array.from({ length: 12 }, (_, i) => `查第 ${i + 1} 班。`),
-      "\n",
-      DISPATCH,
-      ...Array.from({ length: 6 }, (_, i) => `\`\`\`\`\`\n输出 ${i}\n`),
-    ];
-    for (const chunk of step1) progress(chunk);
-    turnEnd(1, "查第 1 班。", false);
-    // Step 2: the reply streams, then lands; the run completes.
-    const step2 = [
-      "<thinking>想好了</thinking>\n\n",
-      ...Array.from({ length: 20 }, (_, i) => `第 ${i + 1} 句。`),
-    ];
-    for (const chunk of step2) progress(chunk);
-    turnEnd(2, "周六上午还有三班船有票。", true);
-    dispatchIPCEvent({
-      kind: "run_complete",
-      sessionId: MAIN,
-      exitReason: { result: "CURRENT_TASK_DONE", data: null },
-      finalContent: "周六上午还有三班船有票。",
-      totalTurns: 2,
-      timestamp: "2026-10-19T08:03:00.000Z",
+    // A woken round: the card also when the dots come with its first
+    // words (they go as the answer lands, a write to the turns anyway);
+    // no other chunk.
+    resetStores();
+    expect(renders(woken())).toEqual({
+      header: ["report row", "step 1 settles", "run complete"],
+      card: [
+        "report row",
+        "step 1 settles",
+        "chunk 1",
+        "reply settles",
+        "run complete",
+      ],
     });
-    unsubscribe();
-
-    const chunks = step1.length + step2.length;
-    expect(chunks).toBe(51);
-    // The header: 「正在输入…」 on the line's first words, 「思考中」 at the
-    // dispatch, 「正在输入…」 on the reply, gone when it lands — and once
-    // for the run's end. Nothing for the other chunks.
-    expect(words).toEqual([true, false, true, false, false]);
-    expect(renders.header).toBe(5);
-    // The open card: each landed step (a new turn) and the run's end.
-    expect(renders.card).toBe(3);
   });
 });

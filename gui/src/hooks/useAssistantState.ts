@@ -1,15 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
-// 票 55 临时切换器，定档后由拆除票删掉。Tier 2's header sentence.
-import {
-  assistantStateReadings,
-  useAssistantSettledSentence,
-  useTypingTier,
-} from "@/components/conversation/typing-trial/typing-trial";
-import {
-  useAssistantSentence,
-  useAssistantWriting,
-} from "@/hooks/useAssistantSentence";
+import { useAssistantSettledSentence } from "@/hooks/useAssistantSentence";
 import { useSessionStatusView } from "@/hooks/useSessionStatusView";
 import { useSessionsAttention } from "@/hooks/useSessionsAttention";
 import {
@@ -31,19 +22,16 @@ import type { Session } from "@/types/session";
 
 /**
  * The assistant's state for its sidebar card and its header identity
- * (lib/assistant.ts): the main chat's live status (while it runs, with
- * the sentence its conversation's line says: useAssistantSentence), its
- * unpromoted subtasks' questions and errors, its unread mark.
- * `subtasks` are the main chat's unpromoted subtasks. `open` is the main
- * chat itself on screen — its header identity always, the card while
- * the main chat is the open session (one of its subtasks is not: its
- * conversation is not in front of you there). Open, the sentence is
- * not quoted: the line at the end of the conversation says it (main
- * chat PRD ruling 87). `header` is the header identity: running, it
- * reads whether the assistant is writing (useAssistantWriting), and the
- * state says 「正在输入…」 or 「思考中」 (ruling 104). The card never reads
- * the stream with the main chat on screen: its second line is then the
- * last message.
+ * (lib/assistant.ts): the main chat's live status, its unpromoted
+ * subtasks' questions and errors, its unread mark. `subtasks` are the
+ * main chat's unpromoted subtasks. `open` is the main chat itself on
+ * screen — its header identity always, the card while the main chat is
+ * the open session (one of its subtasks is not: its conversation is not
+ * in front of you there). `header` is the header identity: running, it
+ * reads the newest settled step's sentence (useAssistantSettledSentence;
+ * main chat PRD rulings 107, 110), 「思考中」 before there is one. The
+ * card reads no sentence: running, it says 「正在输入…」
+ * (SidebarAssistant, useAssistantTyping).
  */
 export function useAssistantState({
   mainChat,
@@ -59,19 +47,7 @@ export function useAssistantState({
   const copy = useCopy();
   const view = useSessionStatusView(mainChat);
   const running = view.status === "running";
-  // 票 55 临时切换器，定档后由拆除票删掉。Tier 1 (main) reads the line's
-  // sentence and the writing flag; tier 2's header reads the newest
-  // settled step's sentence instead, and its card says 「正在输入…」
-  // (SidebarAssistant).
-  const tier = useTypingTier();
-  const reads = assistantStateReadings(tier, { running, open, header });
-  const lineSentence = useAssistantSentence(mainChat.id, reads.sentence);
-  const writing = useAssistantWriting(mainChat.id, reads.writing);
-  const settledSentence = useAssistantSettledSentence(
-    mainChat.id,
-    reads.settled,
-  );
-  const sentence = tier === 2 ? settledSentence : lineSentence;
+  const sentence = useAssistantSettledSentence(mainChat.id, running && header);
   const subtaskAttention = useSessionsAttention(subtasks, undefined);
   return assistantState(
     {
@@ -84,7 +60,6 @@ export function useAssistantState({
       hasUnread: mainChat.hasUnread,
       open,
       sentence,
-      writing,
       errorCount: mainChat.errorCount,
     },
     copy,
@@ -137,22 +112,20 @@ export function useComposerDraft(
  * session's activity moves while the cache still holds nothing; once
  * the cache has turns, they win.
  *
- * `open`: the main chat itself is on screen. While it then runs, the
- * live round's tool steps are no message (`lastVisibleMessage`'s
- * `liveRound`, main chat PRD ruling 104): the card stays on the last
- * bubble the conversation draws. Away from it, nothing changes.
+ * While it runs, the live round's tool steps are no message
+ * (`lastVisibleMessage`'s `liveRound`, main chat PRD rulings 104, 110):
+ * the card stays on the last bubble the conversation draws, the main
+ * chat open or not.
  */
 export function useAssistantLastMessage(
   mainChat: Session,
-  open = false,
 ): AssistantLastMessage | null {
   const copy = useCopy();
   const turns = useMessagesStore((s) => s.byId[mainChat.id]?.turns);
   const restoring = useMessagesStore(
     (s) => s.byId[mainChat.id]?.restoring ?? false,
   );
-  const running = useSessionStatusView(mainChat).status === "running";
-  const liveRound = open && running;
+  const liveRound = useSessionStatusView(mainChat).status === "running";
   const cached = turns ?? EMPTY_TURNS;
   const fromCache = useMemo(
     () => lastVisibleMessage(cached, copy, { liveRound }),

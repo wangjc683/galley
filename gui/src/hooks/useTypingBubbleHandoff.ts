@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 
-import { findBubble, followersOf } from "@/hooks/useLiveLineHandoff";
 import { prefersReducedMotion } from "@/lib/animate-scroll";
+import { TYPING_DOTS_WIDTH_EM } from "@/lib/assistant-conversation";
 import {
   bubbleGrowInsets,
   columnLift,
@@ -11,26 +11,23 @@ import {
   parseDurationMs,
   readHandoffTiming,
   type Box,
-  type LiveLineHandoff,
-} from "@/lib/live-line-handoff";
-
-import { TYPING_DOTS_WIDTH_EM } from "./typing-trial";
+  type TypingBubbleHandoff,
+} from "@/lib/typing-bubble-handoff";
 
 /*
- * TEMPORARY — 票 55 临时切换器，定档后由拆除票删掉 (see typing-trial.ts).
- *
- * Tier 2's hand-off: ticket 51's (lib/live-line-handoff.ts; MainView
- * decides when, useStickyScroll's `landingTick` runs the follow on the
- * same clock), with the typing bubble as the start. The tint opens from
- * the typing bubble's box to the reply's (or the question's) — the same
- * ground, so no leaving copy of a bubble: only the dots, copied where
- * they stood, fade out in the first segment (`--motion-fast`), while the
- * words and what hangs under the bubble fade in from half of it to the
- * end of the growth (`handoffFadeIn`). Under reduced motion the dots
- * fade out and the bubble fades in, nothing opens. A round Core woke it
- * for that lands without the dots on screen (it did not stream, or a
- * tool step had just put them away) grows from a one-line typing bubble
- * at the bubble's own top-left corner.
+ * The main chat's typing bubble handing over to its reply (rulings 103,
+ * 107, 110; tickets 51, 55, 58; rules in lib/typing-bubble-handoff.ts:
+ * MainView decides when, useStickyScroll's `landingTick` runs the follow
+ * on the same clock). The tint opens from the typing bubble's box to the
+ * reply's (or the question's) — the same ground, so no leaving copy of a
+ * bubble: only the dots, copied where they stood, fade out in the first
+ * segment (`--motion-fast`), while the words and what hangs under the
+ * bubble fade in from half of it to the end of the growth
+ * (`handoffFadeIn`). Under reduced motion the dots fade out and the
+ * bubble fades in, nothing opens. A round Core woke it for that lands
+ * without the dots on screen (it did not stream, or a tool step had just
+ * put them away) grows from a one-line typing bubble at the bubble's own
+ * top-left corner.
  */
 
 interface TypingRecord {
@@ -108,6 +105,64 @@ function measureTyping(
   };
 }
 
+/** The bubble that took the typing bubble's place: the answer's (by its
+ * row's message id), or the live question's. */
+function findBubble(
+  column: Element,
+  handoff: TypingBubbleHandoff,
+): HTMLElement | null {
+  // The live question sits at the column's end, after the conversation
+  // (a subtask card higher up may hold a question of its own).
+  const scope =
+    handoff.kind === "question"
+      ? Array.from(column.children).find((child) =>
+          child.matches('[data-role="ask-user-bubble"]'),
+        )
+      : handoff.messageId
+        ? column.querySelector(
+            `[data-message-id="${CSS.escape(handoff.messageId)}"]`,
+          )
+        : null;
+  return (
+    scope?.querySelector<HTMLElement>('[data-role="assistant-bubble"]') ?? null
+  );
+}
+
+/**
+ * What comes in with the bubble and must not show ahead of it: what
+ * hangs under it in its row (the subtask, to-do and reminder cards; the
+ * question's candidates; the action row, whose own opacity is its hover
+ * reveal, so its contents fade instead), and a report round's time line
+ * right above its row, which appears with its first reply.
+ */
+function followersOf(bubble: HTMLElement, column: Element): Element[] {
+  const followers: Element[] = [];
+  for (
+    let sibling = bubble.nextElementSibling;
+    sibling;
+    sibling = sibling.nextElementSibling
+  ) {
+    if (Number.parseFloat(getComputedStyle(sibling).opacity) < 1) {
+      followers.push(...Array.from(sibling.children));
+    } else {
+      followers.push(sibling);
+    }
+  }
+  let row: Element = bubble;
+  while (
+    row.parentElement &&
+    row.parentElement !== column &&
+    row.parentElement.getAttribute("data-role") !== "conversation"
+  ) {
+    row = row.parentElement;
+  }
+  const above = row.previousElementSibling;
+  if (above?.getAttribute("data-role") === "message-time-divider") {
+    followers.push(above);
+  }
+  return followers;
+}
+
 function px(value: string): number {
   const n = Number.parseFloat(value);
   return Number.isFinite(n) ? n : 0;
@@ -132,7 +187,7 @@ function playTypingHandoff(
   container: HTMLElement,
   previous: Frame,
   lastRecord: TypingRecord | null,
-  handoff: LiveLineHandoff,
+  handoff: TypingBubbleHandoff,
 ): () => void {
   const noop = () => {};
   const column = container.firstElementChild;
@@ -194,8 +249,9 @@ function playTypingHandoff(
 
   // The leaving dots: a copy of the row, on its old place in the column,
   // outside the layout — in a zero-size layer at the scroll content's
-  // origin, as ticket 51's leaving line (it scrolls with the content and
-  // has no box of its own).
+  // origin, so it scrolls with the content, takes no part in the
+  // column's flow and has no box of its own (the follow's 「reply start」
+  // skips boxes without height).
   let layer: HTMLDivElement | null = null;
   let leaving: HTMLElement | null = null;
   if (record) {
@@ -230,7 +286,7 @@ function playTypingHandoff(
       { duration: timing.fadeMs, easing: timing.easing, fill: "forwards" },
     );
     animations.push(leavingFade);
-    // Gone once faded, as ticket 51's leaving line.
+    // Gone once faded.
     const remove = () => layer?.remove();
     void leavingFade.finished.then(remove, remove);
   }
@@ -251,8 +307,10 @@ function playTypingHandoff(
     for (const words of Array.from(bubble.children)) fadeIn(words);
     if (lift !== 0) {
       // The column moved up at once (a conversation shorter than the
-      // viewport): held where it was and let up on the growth's curve,
-      // as ticket 51 does.
+      // viewport): held where it was and let up on the growth's curve.
+      // Its own box is not moved, so the scroller's height and the
+      // follow's numbers stay; what it carries is, clipped at its edge
+      // so it adds no overflow (no scrollbar for a frame).
       column.style.overflow = "clip";
       const lifted = { transform: [`translateY(${lift}px)`, "none"] };
       const options = { duration: timing.growMs, easing: timing.easing };
@@ -282,10 +340,10 @@ function playTypingHandoff(
 }
 
 /**
- * Tier 2's hand-off on the page (`enabled`: tier 2 in the main chat):
- * returns the ref for the typing bubble's row (TypingBubble), keeps where
- * it stood and whether the commit before had it, and plays each new
- * `handoff` once. Off, it measures nothing.
+ * The hand-off on the page (`enabled`: the main chat): returns the ref
+ * for the typing bubble's row (TypingBubble), keeps where it stood and
+ * whether the commit before had it, and plays each new `handoff` once.
+ * Off, it measures nothing.
  */
 export function useTypingBubbleHandoff({
   enabled,
@@ -294,7 +352,7 @@ export function useTypingBubbleHandoff({
 }: {
   enabled: boolean;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
-  handoff: LiveLineHandoff | null;
+  handoff: TypingBubbleHandoff | null;
 }): RefObject<HTMLDivElement | null> {
   const rowRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<HandoffState>({

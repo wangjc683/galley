@@ -1,49 +1,54 @@
 /**
- * The main chat's live line handing over to its bubble (main chat PRD
- * ruling 103, ticket 51; spec: conversation.md 「助手的对话」, 「过程：
- * 一行」). While a round runs the assistant's conversation ends in one
- * 12px line (AssistantParts `AssistantLiveLine`). When its bubble takes
- * that place — the round's answer, or a question it asks you — the
- * bubble grows out of the line's footprint instead of popping in: its
- * tint opens from the line's text box to its own box, the line and its
- * clock fade out, the words in the bubble and what hangs under it fade
- * in; `--motion-slow` and `--ease-pop`, once. Following the bottom, the
- * scroll for that landing runs on the same clock (animate-scroll
- * `ScrollTiming`), so the growth stays where the line was. Under
- * reduced motion it only fades (foundations §2.7 「只淡不移」).
+ * The main chat's typing bubble handing over to its reply (main chat PRD
+ * rulings 103, 107, 110; tickets 51, 55, 58; spec: conversation.md
+ * 「助手的对话」, 「在跑时：三点气泡」). While a round runs the
+ * assistant's conversation ends in the typing bubble (TypingBubble: three
+ * dots in the assistant's tint). When its bubble takes that place — the
+ * round's answer, or a question it asks you — the bubble grows out of
+ * the typing bubble instead of popping in: its tint opens from the
+ * typing bubble's box to its own, the dots fade out, the words in the
+ * bubble and what hangs under it fade in; `--motion-slow` and
+ * `--ease-pop`, once. Following the bottom, the scroll for that landing
+ * runs on the same clock (animate-scroll `ScrollTiming`), so the growth
+ * stays where the dots were. Under reduced motion it only fades
+ * (foundations §2.7 「只淡不移」).
  *
- * The rules here; the DOM side is hooks/useLiveLineHandoff.ts, the
+ * The rules here; the DOM side is hooks/useTypingBubbleHandoff.ts, the
  * scroll is useStickyScroll's `landingTick`.
  */
 import type { ScrollTiming } from "@/lib/animate-scroll";
 import { cubicBezier, parseCubicBezier } from "@/lib/composer-grow";
 
-/** What took the line's place: the round's answer, or its question. */
-export type LiveLineHandoffKind = "reply" | "question";
+/** What took the typing bubble's place: the round's answer, or its
+ * question. */
+export type TypingBubbleHandoffKind = "reply" | "question";
 
-/** One hand-off, as MainView hands it to the hooks: a new `tick` each
+/** One hand-off, as MainView hands it to the hook: a new `tick` each
  * time; the answer's `messageId` (its row's `data-message-id`). */
-export interface LiveLineHandoff {
+export interface TypingBubbleHandoff {
   tick: number;
-  kind: LiveLineHandoffKind;
+  kind: TypingBubbleHandoffKind;
   messageId: string | null;
 }
 
 /** What the previous render drew, as MainView keeps it from render to
  * render. */
-export interface LiveLineFrame {
+export interface TypingBubbleFrame {
   sessionId: string | undefined;
-  /** The line was on screen, and not under a cold-start restore (turns
-   * still being read back: what lands then was there before). */
+  /** The round was live at the conversation's end, and not under a
+   * cold-start restore (turns still being read back: what lands then
+   * was there before). */
   live: boolean;
 }
 
 /** This render. */
-export interface LiveLineNow {
+export interface TypingBubbleNow {
   sessionId: string | undefined;
-  /** The line is drawn (MainView: running, the main chat, the round not
-   * settled, not asking). */
-  lineShown: boolean;
+  /** The round is live at the conversation's end (MainView: running,
+   * the main chat, the round not settled, not asking) — where the
+   * typing bubble stands, though a round Core woke it for shows it only
+   * while it writes (`typingBubbleShown`). */
+  live: boolean;
   /** Its question is waiting for you. */
   question: boolean;
   /** The round has its answer (or settled saying nothing). */
@@ -54,26 +59,29 @@ export interface LiveLineNow {
 
 /**
  * Whether this render is a hand-off the user is watching, and of what:
- * only when the line was on screen in the render before, for this same
+ * only when the round was live in the render before, for this same
  * session, and its place now goes to a bubble. A session switch, a
- * reload (MainView mounts with the line's state as it is), a restore, an
- * earlier page or a message put back after a delete never hand off: the
- * line was not just there, or it still is. A stop or an error leaves
- * nothing to grow; nor does a reply that said nothing (`<no-reply/>`):
- * the line just goes.
+ * reload (MainView mounts with the round's state as it is), a restore,
+ * an earlier page or a message put back after a delete never hand off:
+ * the round was not just live, or it still is. A stop or an error
+ * leaves nothing to grow; nor does a reply that said nothing
+ * (`<no-reply/>`): the typing bubble, if it was up, just goes. A woken
+ * round whose dots were not up at the landing still hands off: its
+ * bubble grows from a typing bubble's box at its own corner
+ * (hooks/useTypingBubbleHandoff.ts).
  */
-export function liveLineHandoff(
-  previous: LiveLineFrame,
-  now: LiveLineNow,
-): LiveLineHandoffKind | null {
+export function typingBubbleHandoff(
+  previous: TypingBubbleFrame,
+  now: TypingBubbleNow,
+): TypingBubbleHandoffKind | null {
   if (!previous.live || previous.sessionId !== now.sessionId) return null;
-  if (now.lineShown) return null;
+  if (now.live) return null;
   if (now.question) return "question";
   if (now.settled && !now.silent) return "reply";
   return null;
 }
 
-/** Reduced motion only fades (foundations §2.7 「只淡不移」): the line
+/** Reduced motion only fades (foundations §2.7 「只淡不移」): the dots
  * out, the bubble in, nothing opens, nothing scrolls smoothly. */
 export type HandoffMotion = "grow" | "fade";
 
@@ -104,21 +112,21 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * Where the bubble's tint starts: the line's text box as insets of the
- * bubble's own box (both in the same space), held inside the bubble — a
- * line wider than a short answer starts at the bubble's width, a line
- * below the bubble's box starts as its bottom edge.
+ * Where the bubble's tint starts: the typing bubble's box (`from`) as
+ * insets of the bubble's own box (both in the same space), held inside
+ * the bubble — a start wider than a short answer starts at the bubble's
+ * width, a start below the bubble's box starts as its bottom edge.
  */
-export function bubbleGrowInsets(line: Box, bubble: Box): Insets {
-  const top = clamp(line.top - bubble.top, 0, bubble.height);
+export function bubbleGrowInsets(from: Box, bubble: Box): Insets {
+  const top = clamp(from.top - bubble.top, 0, bubble.height);
   const bottom = clamp(
-    bubble.top + bubble.height - (line.top + line.height),
+    bubble.top + bubble.height - (from.top + from.height),
     0,
     bubble.height - top,
   );
-  const left = clamp(line.left - bubble.left, 0, bubble.width);
+  const left = clamp(from.left - bubble.left, 0, bubble.width);
   const right = clamp(
-    bubble.left + bubble.width - (line.left + line.width),
+    bubble.left + bubble.width - (from.left + from.width),
     0,
     bubble.width - left,
   );
@@ -136,22 +144,6 @@ export function insetClipPath(
   const px = (value: number) => `${Math.round(value * 100) / 100}px`;
   const { top, right, bottom, left } = insets;
   return `inset(${px(top)} ${px(right)} ${px(bottom)} ${px(left)} round ${radius})`;
-}
-
-/**
- * The line's text box width: from its left edge to the right edge of
- * its last piece (the sentence, then the clock), at most the line's own
- * width. The line is a full-width row; its words are what the bubble
- * grows from.
- */
-export function lineTextWidth(
-  lineLeft: number,
-  pieceRights: readonly number[],
-  lineWidth: number,
-): number {
-  const right = Math.max(lineLeft, ...pieceRights);
-  const width = right - lineLeft;
-  return width > 0 ? Math.min(width, lineWidth) : lineWidth;
 }
 
 /**
@@ -173,7 +165,7 @@ export function columnLift(before: number, after: number): number {
 /** The hand-off's motion: the growth and the follow scroll (foundations
  * Motion tokens: 「较大结构位移」). */
 export const HANDOFF_GROW_TOKEN = "--motion-slow";
-/** Each fade: the line out at the start, what grows in at the end. */
+/** Each fade: the dots out at the start, what grows in at the end. */
 export const HANDOFF_FADE_TOKEN = "--motion-fast";
 /** Every part's curve (「内容入场」). */
 export const HANDOFF_EASING_TOKEN = "--ease-pop";
@@ -197,13 +189,13 @@ export function parseDurationMs(value: string): number | null {
 
 /**
  * When the words in the bubble and what hangs under it come in: from
- * half the line's fade to the end of the growth. On `--ease-pop` the
- * line is down to a few percent by then and the tint most of the way
- * open (measured at 60ms of 240: the line at 3%, the tint at 83%), so
- * the two sets of words never show at once (they overlap: the line's
- * sit on the bubble's top-left corner, the bubble's 14px in and 10px
- * down), and the tint is not left empty for long. Nothing under the
- * bubble shows before it has mostly opened.
+ * half the dots' fade to the end of the growth. On `--ease-pop` the
+ * dots are down to a few percent by then and the tint most of the way
+ * open (measured at 60ms of 240: the fade at 3%, the tint at 83%), so
+ * the dots and the words never show at once (they overlap: the dots sit
+ * where the reply's first words come in), and the tint is not left
+ * empty for long. Nothing under the bubble shows before it has mostly
+ * opened.
  */
 export function handoffFadeIn(timing: HandoffTiming): {
   delay: number;
@@ -225,7 +217,8 @@ function rootToken(name: string): string | null {
 
 /** The tokens as the page has them, read each time a hand-off starts —
  * one source for the numbers. Null when they cannot be read: then
- * nothing animates (the line just goes, as before). */
+ * nothing animates (the typing bubble just goes, the reply just
+ * appears). */
 export function readHandoffTiming(): HandoffTiming | null {
   const grow = parseDurationMs(rootToken(HANDOFF_GROW_TOKEN) ?? "");
   const fade = parseDurationMs(rootToken(HANDOFF_FADE_TOKEN) ?? "");

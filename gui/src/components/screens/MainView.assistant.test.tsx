@@ -5,7 +5,6 @@ import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AssistantLiveLine } from "@/components/conversation/AssistantParts";
 import { zhCopy } from "@/i18n/locales/zh";
 import { dropComposerDraft, saveComposerDraft } from "@/lib/composer-draft";
 import { ASSISTANT_BUBBLE_TEXT_CLASS } from "@/lib/conversation-font-size";
@@ -433,85 +432,80 @@ describe("the main chat is the assistant's conversation", () => {
   });
 });
 
-describe("the assistant's live line", () => {
+describe("the assistant's typing bubble", () => {
   const sent: Turn[] = [
     ...conversation(),
     { role: "user", content: "顺便看看船票", messageId: "u-3" },
   ];
+  const TYPING = 'data-role="assistant-typing"';
 
-  it("while it runs, shows only one line: the latest sentence, no steps, no streaming prose", () => {
+  it("while it runs, shows only the typing bubble: no steps, no streaming prose, no sentence", () => {
     const turns: Turn[] = [...sent, step("我先查一下周六的船班。", 1)];
+    live.slice = { inFlightContent: "周六上午还有三班船。" };
     const html = render({ isMainChat: true, isRunning: true, turns });
-    expect(count(html, 'data-role="assistant-live-line"')).toBe(1);
-    const line = html.indexOf('data-role="assistant-live-line"');
-    expect(html.slice(line, line + 400)).toContain("我先查一下周六的船班。");
+    expect(count(html, TYPING)).toBe(1);
+    const typing = html.slice(html.indexOf(TYPING));
+    // Three dots in the assistant's tint, read as 「Galley 正在输入」.
+    expect(typing).toMatch(/^data-role="assistant-typing" role="status"/);
+    expect(typing).toContain(zhCopy.assistant.typingLabel);
+    expect(typing).toContain("bg-assistant-tint");
+    expect(count(typing, "live-dot rounded-full")).toBe(3);
+    // What it is doing is the header's; what streams, nobody's.
+    expect(html).not.toContain("我先查一下周六的船班。");
+    expect(html).not.toContain("周六上午还有三班船。");
     expect(html).not.toContain('data-role="step-marker"');
     expect(html).not.toContain("streaming-prose");
     // Elsewhere: the live window and the in-flight row.
     const other = render({ isMainChat: false, isRunning: true, turns });
     expect(other).toContain('data-role="step-marker"');
-    expect(other).not.toContain('data-role="assistant-live-line"');
+    expect(other).not.toContain(TYPING);
   });
 
-  it("writes 「思考中」 before any sentence, and goes once the round has its answer or asks", () => {
-    const thinking = render({ isMainChat: true, isRunning: true, turns: sent });
-    const line = thinking.indexOf('data-role="assistant-live-line"');
-    expect(thinking.slice(line, line + 400)).toContain("思考中");
-    // The answer landed before the run closed: the line goes.
+  it("shows from the send on, and goes once the round has its answer or asks", () => {
+    // Sent, nothing back yet.
+    const waiting = render({ isMainChat: true, isRunning: true, turns: sent });
+    expect(count(waiting, TYPING)).toBe(1);
+    // The answer landed before the run closed: the typing bubble goes.
     const answered = render({
       isMainChat: true,
       isRunning: true,
       turns: [...sent, answer("还有票。", 1)],
     });
-    expect(answered).not.toContain('data-role="assistant-live-line"');
+    expect(answered).not.toContain(TYPING);
     // Asking: it waits, it is not busy.
     const asking = render({
       isMainChat: true,
       turns: [...sent, ask("订哪一班？", ["8:30"], 1)],
       pendingAskUser: { question: "订哪一班？", candidates: ["8:30"] },
     });
-    expect(asking).not.toContain('data-role="assistant-live-line"');
+    expect(asking).not.toContain(TYPING);
     expect(asking).toContain('data-role="ask-user-bubble"');
     // …from the moment the question arrives, before the run's close:
-    // its bubble takes the line's place (ticket 51).
+    // its bubble takes the typing bubble's place (tickets 51, 58).
     const asked = render({
       isMainChat: true,
       isRunning: true,
       turns: [...sent, ask("订哪一班？", ["8:30"], 1)],
       pendingAskUser: { question: "订哪一班？", candidates: ["8:30"] },
     });
-    expect(asked).not.toContain('data-role="assistant-live-line"');
+    expect(asked).not.toContain(TYPING);
     expect(asked).toContain('data-role="ask-user-bubble"');
   });
 
-  it("carries the round's clock past 3 seconds, and the corner clock is not shown", () => {
+  it("shows no clock: neither in the conversation nor in the corner", () => {
     live.slice = { currentRunStartedAtMs: Date.now() - 14_000 };
     const html = render({ isMainChat: true, isRunning: true, turns: sent });
-    const line = html.indexOf('data-role="assistant-live-line"');
-    expect(html.slice(line, line + 600)).toContain("· 14 秒");
+    expect(html).not.toContain("14 秒");
     expect(html).not.toContain(CORNER_CLOCK);
     // Elsewhere the corner clock stays.
     const other = render({ isMainChat: false, isRunning: true, turns: sent });
     expect(other).toContain(CORNER_CLOCK);
   });
 
-  it("shows no clock in its first 3 seconds", () => {
-    const line = (startedAgoMs: number) =>
-      renderToStaticMarkup(
-        <AssistantLiveLine
-          sentence="我先查一下。"
-          startedAtMs={Date.now() - startedAgoMs}
-          baseMs={0}
-        />,
-      );
-    expect(line(10_400)).toContain("· 10 秒");
-    expect(line(1_000)).not.toContain("·");
-  });
-
-  // Ticket 31: a round Core woke it for runs like any other — the line
-  // says what it does — and a reply that said nothing settles it: the
-  // line goes and nothing is left.
-  it("runs a subtask report's round on the line, and leaves nothing when its reply says nothing", () => {
+  // Ticket 31, rulings 107 and 110: a round Core woke it for shows the
+  // typing bubble only while it writes words, and a reply that said
+  // nothing settles it with nothing left.
+  it("shows a subtask report's round only while it writes, and leaves nothing when its reply says nothing", () => {
     const woken: Turn[] = [
       ...conversation(),
       {
@@ -522,11 +516,21 @@ describe("the assistant's live line", () => {
       },
       step("我让它再查一家。", 1),
     ];
-    const running = render({ isMainChat: true, isRunning: true, turns: woken });
-    const line = running.indexOf('data-role="assistant-live-line"');
-    expect(line).toBeGreaterThan(-1);
-    expect(running.slice(line, line + 400)).toContain("我让它再查一家。");
-    expect(running).not.toContain("not a message from the user");
+    // Between its words: nothing at the conversation's end.
+    const quiet = render({ isMainChat: true, isRunning: true, turns: woken });
+    expect(quiet).not.toContain(TYPING);
+    expect(quiet).not.toContain("我让它再查一家。");
+    expect(quiet).not.toContain("not a message from the user");
+    // Writing: the typing bubble.
+    live.slice = { inFlightContent: "查好了，" };
+    const writing = render({ isMainChat: true, isRunning: true, turns: woken });
+    expect(count(writing, TYPING)).toBe(1);
+    // A silent reply on its way says no words.
+    live.slice = { inFlightContent: "<no-reply" };
+    expect(
+      render({ isMainChat: true, isRunning: true, turns: woken }),
+    ).not.toContain(TYPING);
+    live.slice = {};
     const silent: AgentTurn = {
       role: "agent",
       turnIndex: 2,
@@ -540,7 +544,7 @@ describe("the assistant's live line", () => {
       isRunning: true,
       turns: [...woken, silent],
     });
-    expect(settled).not.toContain('data-role="assistant-live-line"');
+    expect(settled).not.toContain(TYPING);
     expect(settled).not.toContain("我让它再查一家。");
     expect(settled).not.toContain('data-role="step-marker"');
   });

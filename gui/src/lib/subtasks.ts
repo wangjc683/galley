@@ -602,8 +602,8 @@ export function isSilentReport(
   return false;
 }
 
-/** Whether `turns` end in a silent report round (the line goes, nothing
- * landed to read). */
+/** Whether `turns` end in a silent report round (nothing took the
+ * round's place, nothing landed to read). */
 export function endsInSilentReport(turns: readonly Turn[]): boolean {
   if (!turns.some(isSubtaskReportTurn)) return false;
   const groups = buildRunGroups(turns as Turn[]);

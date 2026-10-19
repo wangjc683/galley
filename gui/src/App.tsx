@@ -13,8 +13,6 @@ import { BrowserControlAttentionSurface } from "@/components/screens/BrowserCont
 import { EmptyState } from "@/components/screens/EmptyState";
 import { MainView } from "@/components/screens/MainView";
 import { LocalFileWorkspace } from "@/components/conversation/LocalFileWorkspace";
-// 票 55 临时切换器，定档后由拆除票删掉。
-import { TypingTrialSwitcher } from "@/components/conversation/typing-trial/TypingTrialSwitcher";
 import { OnboardingScreen } from "@/components/screens/onboarding/OnboardingScreen";
 import { SettingsHost } from "@/components/screens/settings/SettingsHost";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
@@ -781,15 +779,6 @@ function App() {
           </ThemeProvider>
         }
       />
-
-      {/* 票 55 临时切换器，定档后由拆除票删掉。The trial's pill, in a dev
-          build while the main chat is open in the main area. */}
-      {import.meta.env.DEV &&
-        screen === "main" &&
-        activeRuntimeKind === "managed" &&
-        activeSession?.mainChat && (
-          <TypingTrialSwitcher mainChatId={activeSession.id} />
-        )}
 
       <CommandPalette
         open={paletteOpen}

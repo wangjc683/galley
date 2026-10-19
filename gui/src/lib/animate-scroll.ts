@@ -43,10 +43,10 @@
  * rules (a growing tail that the 「回到底部」 chase keeps re-aiming at;
  * a message that must park while the layout under it moves).
  *
- * Keeping time with something else on screen (`ScrollTiming`, ticket
- * 51: the main chat's follow when its reply grows out of the live line)
- * the caller sets the duration and the curve instead, and then the
- * whole way is animated (no far jump), the clock starts at the first
+ * Keeping time with something else on screen (`ScrollTiming`, tickets
+ * 51, 58: the main chat's follow when its reply grows out of the typing
+ * bubble) the caller sets the duration and the curve instead, and then
+ * the whole way is animated (no far jump), the clock starts at the first
  * frame, as a Web Animation started in the same task does, and a
  * retarget keeps the end time: the rest of the way runs from where the
  * container is to the new target over what is left of the curve. The

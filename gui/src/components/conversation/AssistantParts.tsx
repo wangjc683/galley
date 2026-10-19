@@ -1,16 +1,14 @@
-import { useEffect, useState, type ReactNode, type Ref } from "react";
+import type { ReactNode } from "react";
 
-import { assistantLineClock } from "@/lib/assistant-conversation";
-import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /*
  * The pieces only the assistant's conversation draws (rules in
  * lib/assistant-conversation.ts; spec: conversation.md 「助手的对话」):
- * its bubble and the one line while it works. The card its process
- * button opens is AssistantProcessCard (the button itself is a chip of
- * the reply's action bar, MessageActions). The centred time it drew
- * first is both conversations' now (MessageTimeDivider).
+ * its bubble. The typing bubble while it works is TypingBubble; the card
+ * its process button opens is AssistantProcessCard (the button itself
+ * is a chip of the reply's action bar, MessageActions). The centred time
+ * it drew first is both conversations' now (MessageTimeDivider).
  */
 
 /** The reply bubble's width cap: wider than the user's (its content is
@@ -57,63 +55,6 @@ export function AssistantBubble({ children }: { children: ReactNode }) {
   return (
     <div data-role="assistant-bubble" className={BUBBLE}>
       {children}
-    </div>
-  );
-}
-
-/**
- * The one line at the conversation's end while the round runs: the
- * latest sentence it wrote, or 「思考中」; past 3s the round's clock —
- * the corner clock's own number and words, which the assistant's
- * conversation does not show, so the time shows once. The thinking
- * row's register (12px sans, ink-soft) and its shimmer as the busy
- * cue, not a typing bubble. Cut to one line. When its bubble takes its
- * place, the bubble grows out of it (`ref`: MainView keeps where it
- * stands, hooks/useLiveLineHandoff.ts).
- *
- * Its `mt-5` adds nothing under your bubble (ruling 105, ticket 53):
- * that row's bottom margin is the 30px its hover chips sit in
- * (MessageUser `mb-7.5`), and the two collapse — through the end of the
- * conversation's root, the line's sibling in the column — so the line
- * stands 30px under your bubble, where the reply that takes its place
- * stands (`assistantRowGap` gives that reply `mt-0`), and the hand-off
- * starts from the bubble's own top edge as before. In a round Core woke
- * it for there is no bubble of yours: under a reply's action bar,
- * which is in flow, the line keeps its 20px.
- */
-export function AssistantLiveLine({
-  sentence,
-  startedAtMs,
-  baseMs,
-  ref,
-}: {
-  sentence: string | null;
-  startedAtMs: number | null;
-  baseMs: number;
-  ref?: Ref<HTMLDivElement>;
-}) {
-  const copy = useCopy();
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (startedAtMs == null) return;
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [startedAtMs]);
-  const clock =
-    startedAtMs != null
-      ? assistantLineClock(baseMs + (now - startedAtMs), copy)
-      : null;
-  const text = sentence ?? copy.conversation.thinking.replace(/[.…]+$/, "");
-  return (
-    <div
-      ref={ref}
-      data-role="assistant-live-line"
-      className="mt-5 flex min-w-0 items-baseline gap-1.5 leading-[1.6] text-ink-soft [font-size:var(--conversation-step-size)]"
-    >
-      <span className="thinking-shimmer min-w-0 truncate">{text}</span>
-      {clock && (
-        <span className="shrink-0 tabular-nums text-ink-muted">{`· ${clock}`}</span>
-      )}
     </div>
   );
 }

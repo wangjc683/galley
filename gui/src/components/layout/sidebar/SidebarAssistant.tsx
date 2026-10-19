@@ -4,13 +4,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-// 票 55 临时切换器，定档后由拆除票删掉。Tier 2's card line.
-import {
-  cardReadsLiveRound,
-  typingTrialCardLine,
-  useTypingCardSignals,
-  useTypingTier,
-} from "@/components/conversation/typing-trial/typing-trial";
 import {
   AssistantAvatar,
   AssistantAvatarBadge,
@@ -21,10 +14,12 @@ import {
   useComposerDraft,
   usePendingQuestion,
 } from "@/hooks/useAssistantState";
+import { useAssistantTyping } from "@/hooks/useAssistantSentence";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import {
   type AssistantCardLine,
   type AssistantStateKind,
+  assistantCardLine,
 } from "@/lib/assistant";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { formatListTime } from "@/lib/message-time";
@@ -112,16 +107,18 @@ function lineText(line: AssistantCardLine): string {
  * like the list's counts; under them one line —
  *
  *   error > a question (「等你回复：」 + the question itself) > running
- *   (the sentence it is writing) > an unsent draft (「草稿：」) > the
- *   last message (「你：」 for the user's own)
+ *   (「正在输入…」) > an unsent draft (「草稿：」) > the last message
+ *   (「你：」 for the user's own)
  *
- * (lib/assistant.ts). With the main chat itself on screen the card is
- * the list's selected row and the line says only the last message,
- * whatever the state — the question when it asks (main chat PRD ruling
- * 104, overturning ruling 87's 「等你回复」 and 「思考中」 there); the
- * badge and the name's weight carry the state, the header and the
- * conversation the words. One of its subtasks open is not the main
- * chat on screen. The avatar wears
+ * (lib/assistant.ts). Running, it says 「正在输入…」 whether the main
+ * chat is on screen or not; in a round Core woke it for only while the
+ * conversation shows its dots (main chat PRD rulings 107, 110). With
+ * the main chat itself on screen the card is the list's selected row
+ * and otherwise says only the last message, whatever the state — the
+ * question when it asks (ruling 104, overturning ruling 87's 「等你回
+ * 复」 there); the badge and the name's weight carry the state, the
+ * header and the conversation the words. One of its subtasks open is
+ * not the main chat on screen. The avatar wears
  * a session row's status glyph in its corner for running, a question,
  * an error and a new reply, and the name goes semibold for those; a
  * draft and the resting card stay medium. A new reply shows only while
@@ -165,24 +162,14 @@ export function SidebarAssistantCard({
   // No key while it is open: its draft is in the composer right there,
   // and typing there then never re-renders the card.
   const draft = useComposerDraft(open ? undefined : mainChat.id);
-  // 票 55 临时切换器，定档后由拆除票删掉。At tier 2 the card says
-  // 「正在输入…」 while it runs, open or not (in a round Core woke it for,
-  // only while it writes; else the last message, the live round's steps
-  // skipped as with the main chat open). Tier 1 is assistantCardLine.
-  const tier = useTypingTier();
-  const typingSignals = useTypingCardSignals(
-    mainChat.id,
-    tier === 2 && state.kind === "running",
-  );
-  const lastMessage = useAssistantLastMessage(
-    mainChat,
-    cardReadsLiveRound(tier, open),
-  );
-  const line = typingTrialCardLine(
-    tier,
+  // Running, the card says 「正在输入…」, open or not; in a round Core
+  // woke it for only while the conversation shows its dots, else the
+  // last message, the live round's steps skipped (rulings 107, 110).
+  const typing = useAssistantTyping(mainChat.id, state.kind === "running");
+  const lastMessage = useAssistantLastMessage(mainChat);
+  const line = assistantCardLine(
     state,
-    { question, draft, lastMessage, open },
-    typingSignals,
+    { question, draft, lastMessage, open, typing },
     copy,
   );
   const time = formatListTime(
