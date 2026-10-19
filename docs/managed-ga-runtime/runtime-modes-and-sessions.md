@@ -349,8 +349,9 @@ Managed runtime with a main chat only: every write is refused with
 - **Where it was noted**: as for a task — the main chat and the run's
   starting turn when the CLI call comes in, the reply's `turn_index` when
   the run ends.
-- **How Galley keeps them**: the [assistant manual](./galley-assistant-manual.md)'s
-  "To-dos and reminders" (ticket 41). What the user has to do is noted
+- **How Galley keeps them**: the [assistant manual](./galley-assistant-manual/)'s
+  "To-dos and reminders" (ticket 41; since ticket 59 the parts `todos.md`,
+  `todos-change.md`, `times.md` and `reminders.md`). What the user has to do is noted
   unasked, with a reminder on it when it has a date; the assistant's own
   follow-ups (a delivery to check) stay plain scheduled tasks, and so does
   a nudge the user asks for with nothing to finish (「十分钟后提醒我喝水」,

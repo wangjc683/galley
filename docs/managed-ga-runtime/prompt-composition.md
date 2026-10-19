@@ -357,17 +357,35 @@ that finishes a task and restates the result. The layer says three things:
   desktop draws a card under it, and the replayed history names each
   subtask by id (`[subtask <id>: <title>]`, or
   `[subtask not started: <why>]`) for `session show <id>`.
-- **Read the manual before the first CLI write** (ticket 30): the layer
-  closes with "Before your first Galley CLI write (a session, project,
-  model, schedule or to-do command), read your manual at `<path>`"
-  (ticket 30 listed "send, stop, archive, move, project, model"; tickets
-  36 and 41 named the families). The
-  [assistant manual](./galley-assistant-manual.md) is embedded in Core
-  (`core/src/assistant_manual.rs`) and written to
-  `<state_root>/assistant/reference/galley-assistant-manual.md` at every
-  main chat spawn (`runner_commands::prepare_managed_spawn_args`, as IM
-  writes its SOP copy; a failed write is logged and the runner still
-  starts). It holds the details the layer leaves out: who the assistant
+- **Read the parts of the manual a CLI write needs** (ticket 30, in parts
+  since ticket 59): the layer closes with "Your manual is in `<dir>`, one
+  file per part. Before a Galley CLI write (a session, project, model,
+  schedule or to-do command), read the parts it needs, together:" and
+  every part by its bare file name with when to read it (`todos.md` to
+  note a to-do; `todos-change.md` to change, tick off or list to-dos;
+  `reminders.md` for its own reminders, changing them, and when the user
+  asks to be reminded; `times.md` for any date or time; `authority.md` and
+  `cli.md` for sessions, projects and models; `wake.md` and `subtasks.md`
+  when Galley wakes it), then "Every write but `llm set` carries
+  `--supervisor=galley-assistant --reason="<why>"`": the one rule every
+  part with a write needs and only `cli.md` states. Until ticket 59 it
+  read "Before your first Galley CLI write (…), read your manual at
+  `<path>`" (ticket 30 listed "send, stop, archive, move, project, model";
+  tickets 36 and 41 named the families). Main chat PRD ruling 111 split
+  the manual: GA's `file_read` takes 200 lines at a time and GA cuts tool
+  results older than its last ten messages to 800 characters, so the
+  model read the whole manual again (about 2k tokens) for each write; a
+  part is a few hundred, and "first" went because a part read earlier is
+  gone by the next write. The
+  [assistant manual](./galley-assistant-manual/), one file per part, is
+  embedded in Core (`core/src/assistant_manual.rs`) and written to
+  `<state_root>/assistant/reference/manual/` at every main chat spawn
+  (`runner_commands::prepare_managed_spawn_args`, as IM writes its SOP
+  copy; a failed write is logged and the runner still starts), which also
+  removes a part no longer on its list and the single file
+  `assistant/reference/galley-assistant-manual.md` of before ticket 59.
+  The parts point to each other by file name (`` see `reminders.md` ``).
+  It holds the details the layer leaves out: who the assistant
   is, the three levels of authority, the CLI commands with
   `--supervisor=galley-assistant` (`llm set` takes no origin flags), the
   commands it never uses in the main chat (`session wait` / `follow` /
@@ -410,7 +428,8 @@ that finishes a task and restates the result. The layer says three things:
   flight, a purchase) as a to-do, with a reminder when it has a date, and
   tick it off when it is done; set yourself a reminder when you promise to
   follow up. Do it unasked, and read `todo list` before saying what is
-  left: see "To-dos and reminders" in your manual." Each of the three
+  left: see "To-dos and reminders" in your manual." (since ticket 59: "see
+  `todos.md` in your manual."). Each of the three
   starts from a remark with no CLI write in sight (「记一下要买营养土」,
   「营养土买好了」, 「我还有什么没办」), so the model would never open the
   manual for them; ticket 36's sentence did the same for 「周三下午要交报告」.
@@ -494,8 +513,27 @@ that finishes a task and restates the result. The layer says three things:
   and 「半小时后提醒我关火」 became its own `schedule create` and no to-do,
   a deadline or a flight stayed a to-do with its reminder, and
   「明天早上 8 点提醒我给房东回电话」 a to-do reminded at 8.
-- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 2026, no headroom,
-  `\r` not counted, measured with an empty manual path (the user's state
+- **Manual-in-parts evidence** (ticket 59): the to-do, reminder and wake
+  suites rerun with the manual in parts, on the main chat's model
+  (`.scratch/main-chat/entry-layer-eval/`, results in each suite's
+  "票 59 重跑" section). On the first wording ("read the parts it
+  needs:", each part with when to read it) a tick, a move or a cancel
+  read `todos-change.md` or `reminders.md` alone and left
+  `--supervisor=galley-assistant` off (only `cli.md` says it), and one
+  「改到 9 点」 for the model's own reminder read only the to-dos' part and
+  noted a new to-do. The final wording adds the identity sentence, sends
+  changing its own reminders to `reminders.md` and asks for the parts
+  together: to-dos 24 of 24 (before 24 of 24), reminders 28 of 28 (28 of
+  28, one summary-only reply rerun), wakes 16 of 18 (17 of 18 on ticket
+  30's prompt; a same-day control with the prompt and whole manual of
+  before ticket 59 got 14 of 18, both failing the two cases whose quotes
+  are dated the week the cases were written). A run read about 6 KB of
+  manual for to-dos and reminders instead of about 10.5 KB, mostly in one
+  turn (several parts in one `code_run`), with the same number of model
+  requests (3.33 → 3.42, 3.04 → 3.04). Wakes now read `wake.md` and
+  `subtasks.md` almost every time (7.6 KB a run; the control 7.1 KB).
+- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 2463, no headroom,
+  `\r` not counted, measured with an empty manual directory (the user's state
   root does not count, as for the IM layer). 827 for the 03d layer;
   ticket 06a added 619 for the dispatch clause (the `T` text 522, the
   subagent sentence 94, breaks 3); ticket 30 added 253 (the evidence 90,
@@ -503,7 +541,10 @@ that finishes a task and restates the result. The layer says three things:
   manual paragraph 105); ticket 36 added 221 (the reminder paragraph with
   its break 217, the write list as command families +4); ticket 41 added
   106 (that paragraph rewritten for to-dos +99, `to-do` in the write list
-  +7): 2026.
+  +7): 2026; ticket 59 added 437 (the last paragraph naming the directory
+  and the eight parts with when to read them, together, and the identity
+  every write carries +449, of which 118 came from the eval of its first
+  wording; the to-do sentence naming `todos.md` −12): 2463.
   Behavior, but main chat only, so it stays out of the static budget and
   the prompt hash.
 
@@ -583,6 +624,7 @@ row.
 | State block: In Hand (the user's to-dos not done, subtasks not finished and one-off reminders and tasks to come, routines, as of when) | assistant PRD rulings 5 and 9, main chat PRD rulings 86 and 91, tickets 36 and 39: at each segment the main chat knows what the user has to do, what it promised and what it handed off, from the same read as the desktop's 「待办」, in the same order. Own cap `IN_HAND_BUDGET_BYTES` |
 | Main chat entry layer: set a reminder unasked when the user mentions a date or time or the model promises a follow-up, naming the manual's section; the write list as command families | assistant PRD ruling 9, ticket 36: JC wanted reminders the user never has to ask for; without a line in the always-present layer the model would not open the manual on a remark. Run on the main chat's model with the manual's new section (`.scratch/main-chat/entry-layer-eval/schedule/`). Cap raised 1699 → 1920 (+221 bytes) in the same diff |
 | Main chat entry layer: the reminder paragraph rewritten for the user's to-dos (note what the user has to do as a to-do with a reminder when it has a date, tick it off when done, a reminder of its own for a promised follow-up, `todo list` before saying what is left, the manual's "To-dos and reminders"); `to-do` in the write list | main chat PRD ruling 91, ticket 41 (2026-10-17): to-dos became their own record (tickets 39, 40), and noting one, ticking one off and answering 「还有什么没办」 all start from a remark with no CLI write in sight. Run on the main chat's model with the manual's rewritten section (`.scratch/main-chat/entry-layer-eval/todo/`, and the `schedule/` suite rerun). Cap raised 1920 → 2026 (+106 bytes) in the same diff |
+| Main chat entry layer: the manual in parts, "Your manual is in `<dir>`, one file per part", each part by its bare name with when to read it, read together before each write (not only the first), and the identity every write carries; the to-do sentence names `todos.md` | main chat PRD ruling 111, ticket 59 (2026-10-19): the manual was read whole again for each write (GA's `file_read` takes 200 lines, and GA cuts old tool results to 800 characters), about 2k tokens each time; a part is a few hundred. The identity sentence came from the eval of the first wording: a tick or a cancel read one part and left `--supervisor=galley-assistant` off. Run on the main chat's model (`.scratch/main-chat/entry-layer-eval/`: `todo`, `schedule`, `wake`). Cap raised 2026 → 2463 (+437 bytes) in the same diff |
 | Past Galley Conversations: `--around` example; coverage sentence reworded to 「This reaches every Galley session, but not direct IM chats …」 | ticket 03b (2026-10-12): `session show` gained `--around`, and `--tail=20` reads the end of a session, not where a search hit is. Paid for in the same diff: the two coverage sentences became one (−51 bytes against the +51-byte line on both platforms), so the static text stays at 6855 bytes (Windows) / 6837 (POSIX) and the cap is unchanged |
 | Feature map and redirect sentence for every conversation: "Every conversation's top bar: the to-do (…), opening beside it"; "To-dos, reminders and scheduled tasks are kept by the assistant, in the Galley conversation atop the sidebar: … never say one is noted or set." | main chat PRD ruling 95 (2026-10-17): the to-do panel opens beside any conversation, read-only outside Galley, and a workbench model could otherwise `galley todo add` or say 「记下了」 when the user asks there. Paid for in the same diff ("at the top of" → "atop", "which opens" → "opening", "The Galley conversation's … its" → "Every conversation's … the"): the static text stays at 6826 bytes (Windows) / 6808 (POSIX) and the cap is unchanged |
 | Feature map: the to-do on its own line, "The Galley conversation's top bar: its to-do (…), which opens beside it", off the sidebar line (rewritten by ruling 95, above) | main chat PRD ruling 93 (2026-10-17): the to-do's entry moved from the row under the sidebar's Galley card to the Galley conversation's top bar; the map names where things are, so the old sidebar line would send the user to the wrong place. Static cap 6775 → 6826 (Windows; POSIX 6808), +44 for this line and +7 owed by ruling 90 (see the budget paragraph above) |
@@ -671,9 +713,10 @@ in a real managed session after any prompt change:
 25. Main chat, a subtask finishes with what was asked (ticket 30): Galley
     wakes the main chat, which tells the user in a sentence or two and
     names the evidence (the full file path, the number); it does not paste
-    the subtask's answer or mention the wake. The main chat's first CLI
-    command in the segment is preceded by reading
-    `assistant/reference/galley-assistant-manual.md`.
+    the subtask's answer or mention the wake. A CLI write is preceded by
+    reading the parts of `assistant/reference/manual/` it needs (since
+    ticket 59; before, the main chat's first CLI command in the segment
+    was preceded by reading the single file).
 26. Main chat, a subtask says 「订好了」 without the confirmation number it
     was asked for → `session send <id> … --supervisor=galley-assistant`
     saying what is missing, and nothing new shows in the main chat (the
