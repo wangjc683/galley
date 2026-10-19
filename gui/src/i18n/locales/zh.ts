@@ -293,6 +293,9 @@ export const zhCopy = {
     file: (name: string) => `[文件] ${name}`,
     /** 卡片名字右边的时间：昨天的消息只写这个词。 */
     timeYesterday: "昨天",
+    /** 顶栏身份行第二行：在跑时它正在写字（没有没闭合的思考、还没派发工具、
+     * 清洗后有字），其余时候写侧栏的「思考中」（裁决 104）。 */
+    typing: "正在输入…",
   },
   topbar: {
     newConversation: "新对话",

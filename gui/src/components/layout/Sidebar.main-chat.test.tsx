@@ -72,6 +72,8 @@ const card = vi.hoisted(() => ({
   question: null as string | null,
   lastMessage: null as AssistantLastMessage | null,
   sentence: null as string | null,
+  // The stream is writing words: what the header would read.
+  writing: false,
 }));
 vi.mock("@/hooks/useAssistantState", async (importOriginal) => {
   const actual =
@@ -89,6 +91,8 @@ vi.mock("@/hooks/useAssistantSentence", async (importOriginal) => {
     ...actual,
     useAssistantSentence: (_id: string, running: boolean) =>
       running ? card.sentence : null,
+    useAssistantWriting: (_id: string, running: boolean) =>
+      running && card.writing,
   };
 });
 
@@ -202,6 +206,7 @@ afterEach(() => {
   card.question = null;
   card.lastMessage = null;
   card.sentence = null;
+  card.writing = false;
   dropComposerDraft("s-main");
 });
 
@@ -452,21 +457,70 @@ describe("the assistant's card", () => {
     expect(textOf(say())).toBe("好的");
   });
 
-  it("says only the state with the main chat on screen, the words away from it (ruling 87)", () => {
+  // Ruling 104 (ticket 52), overturning ruling 87's 2nd and 3rd points.
+  it("says only the last message with the main chat on screen, the state on the avatar; the words away from it", () => {
     card.question = "去哪个花市？";
     card.sentence = "我先查一下花市几点开门。";
-    const onScreen = () =>
-      lineOf(render([used, subtask], { activeId: "s-main" }));
+    card.lastMessage = { fromUser: true, text: "周六去花市" };
+    saveComposerDraft("s-main", { text: "下周三的会", images: [] });
+    const onScreen = () => render([used, subtask], { activeId: "s-main" });
     const inSubtask = () =>
       lineOf(render([used, subtask], { activeId: "s-sub" }));
 
-    live.set("s-main", { status: "running" });
-    expect(textOf(onScreen())).toBe("思考中");
-    expect(textOf(inSubtask())).toBe("我先查一下花市几点开门。");
+    for (const [arrange, kind] of [
+      [() => live.set("s-main", { status: "running" }), "running"],
+      [
+        () =>
+          live.set("s-main", { status: "running", hasPendingAskUser: true }),
+        "ask",
+      ],
+      [() => live.set("s-main", { status: "error" }), "error"],
+      [() => attentionKind.set("s-sub", "ask"), "ask"],
+      [() => attentionKind.set("s-sub", "error"), "error"],
+    ] as const) {
+      live.clear();
+      attentionKind.clear();
+      arrange();
+      const html = onScreen();
+      const said = lineOf(html);
+      // Asking, its question is what it said; otherwise your last words.
+      expect(textOf(said)).toBe(
+        kind === "ask" && live.get("s-main")?.hasPendingAskUser
+          ? "去哪个花市？"
+          : "你：周六去花市",
+      );
+      // In the last message's ink: no brand, amber or red state words.
+      expect(said).toContain('data-kind="message"');
+      expect(said).toContain("text-ink-muted");
+      expect(said).not.toMatch(/text-(brand-strong|warning|error)/);
+      expect(said).not.toContain("sidebar-step-tick");
+      // The avatar and the name carry the state.
+      const body = between(html, CARD, "</button>");
+      expect(body).toContain(`data-kind="${kind}"`);
+      expect(body).toMatch(/font-semibold[^>]*>Galley</);
+    }
 
+    // Away in its subtask: the words, as before — and never the
+    // header's 「正在输入…」, which only the header reads.
+    live.clear();
+    attentionKind.clear();
+    live.set("s-main", { status: "running" });
+    card.writing = true;
+    expect(textOf(inSubtask())).toBe("我先查一下花市几点开门。");
+    card.sentence = null;
+    expect(textOf(inSubtask())).toBe("思考中");
+    expect(
+      textOf(lineOf(render([used, sideChat], { activeId: "s-side" }))),
+    ).toBe("思考中");
+    expect(textOf(lineOf(onScreen()))).toBe("你：周六去花市");
+    card.writing = false;
+    card.sentence = "我先查一下花市几点开门。";
     live.set("s-main", { status: "running", hasPendingAskUser: true });
-    expect(textOf(onScreen())).toBe("等你回复");
     expect(textOf(inSubtask())).toBe("等你回复：去哪个花市？");
+    live.set("s-main", { status: "error" });
+    expect(textOf(inSubtask())).toBe("出错");
+    live.clear();
+    expect(textOf(inSubtask())).toBe("草稿：下周三的会");
     card.sentence = null;
   });
 

@@ -11,6 +11,7 @@ import {
   assistantLineSentence,
   assistantRowGap,
   assistantScrollToBottom,
+  assistantWriting,
 } from "@/lib/assistant-conversation";
 import { buildRunGroups, liveRunGroup } from "@/lib/run-groups";
 import type {
@@ -274,6 +275,80 @@ describe("the live line", () => {
     expect(assistantLineClock(2_999, zhCopy)).toBeNull();
     expect(assistantLineClock(3_000, zhCopy)).toBe("3 秒");
     expect(assistantLineClock(81_400, zhCopy)).toBe("1 分 21 秒");
+  });
+});
+
+// Ruling 104 (ticket 52): the header says 「正在输入…」 while the step's
+// raw stream is writing words, 「思考中」 the rest of the time.
+describe("assistantWriting", () => {
+  const DISPATCH =
+    '🛠️ Tool: `web_scan`  📥 args:\n````text\n{"url": "x"}\n````\n';
+
+  it("is writing only with words, no open thinking and no dispatch yet", () => {
+    const cases: [string, boolean][] = [
+      // Nothing streamed yet.
+      ["", false],
+      // Only an open thinking block: reasoning, not writing.
+      ["<thinking>先想一下用哪个工具", false],
+      ["<thinking>", false],
+      // Closed, nothing after it yet.
+      ["<thinking>想好了</thinking>", false],
+      ["<thinking>想好了</thinking>\n\n", false],
+      // Words after the thinking closed.
+      ["<thinking>想好了</thinking>\n\n明早九点", true],
+      ["明早九点提醒你喝水。", true],
+      // A second thinking opened after the words: reasoning again.
+      ["我看一下。<thinking>再想想", false],
+      // The start of a closing tag at the tail is still the block.
+      ["<thinking>想好了</thin", false],
+      // Words, then a tool dispatch: the words are done.
+      [`我先查一下船班。\n${DISPATCH}`, false],
+      [`我先查一下船班。\n${DISPATCH}\`\`\`\`\`\n[Action] 读取网页\n`, false],
+      // A dispatch on its way: partial verbose and compact markers, the
+      // output fence.
+      ["我先查一下船班。\n🛠️ Tool: `web_sc", false],
+      ["我先查一下船班。\n🛠️ web_scan(", false],
+      ["我先查一下船班。\n🛠 web_scan(url='x')\n", false],
+      ["`````\n[Action] 读取网页\n", false],
+      // A silent reply says nothing, whole or half-written.
+      ["<no-reply/>", false],
+      ["<No-Reply />", false],
+      ["<no-re", false],
+      ["<thinking>打回去</thinking>\n<no-reply/>", false],
+      // Words beside the tag still show, as in the line.
+      ["我打回去了。<no-rep", true],
+      // Whitespace, tags and GA's markers are no words.
+      ["   \n\n\t", false],
+      ["<summary>先读本机时间</summary>", false],
+      ["**LLM Running (Turn 2) ...**\n", false],
+      ["当前阶段：读取提醒列表", false],
+      // A tool call the provider sent as text is no words either.
+      ['<invoke name="code_run"><parameter name="code">x', false],
+    ];
+    for (const [stream, expected] of cases) {
+      expect([stream, assistantWriting(stream)]).toEqual([stream, expected]);
+    }
+  });
+
+  it("flips once each way across a step: thinking, words, the dispatch", () => {
+    const chunks = [
+      "<thinking>",
+      ...Array.from({ length: 10 }, (_, i) => `第 ${i + 1} 段思考。`),
+      "</thinking>\n\n",
+      ...Array.from({ length: 20 }, (_, i) => `第 ${i + 1} 句话。`),
+      "\n",
+      DISPATCH,
+      ...Array.from({ length: 8 }, (_, i) => `\`\`\`\`\`\n输出 ${i}\n`),
+    ];
+    let stream = "";
+    const seen: boolean[] = [];
+    for (const chunk of chunks) {
+      stream += chunk;
+      const writing = assistantWriting(stream);
+      if (seen[seen.length - 1] !== writing) seen.push(writing);
+    }
+    expect(chunks.length).toBeGreaterThan(40);
+    expect(seen).toEqual([false, true, false]);
   });
 });
 

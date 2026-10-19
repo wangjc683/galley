@@ -63,10 +63,14 @@ vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
   };
 });
 
-// While it runs, the line says the conversation line's sentence, which
-// the store holds and a static render cannot see; seed it here
-// (hooks/useAssistantSentence.test.ts covers how it is worked out).
-const running = vi.hoisted(() => ({ sentence: null as string | null }));
+// While it runs, the card says the conversation line's sentence and the
+// header whether it is writing words, both from the store, which a
+// static render cannot see; seed them here
+// (hooks/useAssistantSentence.test.ts covers how they are worked out).
+const running = vi.hoisted(() => ({
+  sentence: null as string | null,
+  writing: false,
+}));
 vi.mock("@/hooks/useAssistantSentence", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/hooks/useAssistantSentence")>();
@@ -74,6 +78,8 @@ vi.mock("@/hooks/useAssistantSentence", async (importOriginal) => {
     ...actual,
     useAssistantSentence: (_id: string, isRunning: boolean) =>
       isRunning ? running.sentence : null,
+    useAssistantWriting: (_id: string, isRunning: boolean) =>
+      isRunning && running.writing,
   };
 });
 
@@ -81,6 +87,7 @@ afterEach(() => {
   live.clear();
   subtaskAsking.on = false;
   running.sentence = null;
+  running.writing = false;
 });
 
 const mainChat = makeSession({
@@ -177,6 +184,17 @@ describe("the open main chat's header", () => {
     expect(header()).toMatch(
       /data-role="assistant-status-line"[^>]*text-brand-strong\/85/,
     );
+    // While it writes words: 「正在输入…」, in the same tone and the
+    // same line, so the row keeps its height (ruling 104).
+    running.writing = true;
+    expect(statusLine(header())).toBe("正在输入…");
+    expect(header()).toMatch(
+      /data-role="assistant-status-line"[^>]*text-brand-strong\/85/,
+    );
+    running.writing = false;
+    expect(statusLine(header())).toBe("思考中");
+    // Writing, but asking or erroring: the state, as before.
+    running.writing = true;
 
     live.set("s-main", { status: "running", hasPendingAskUser: true });
     const asking = header();
@@ -191,5 +209,8 @@ describe("the open main chat's header", () => {
     live.clear();
     subtaskAsking.on = true;
     expect(statusLine(header({}, [subtask]))).toBe("子任务在问你");
+    // At rest it says nothing, writing or not.
+    subtaskAsking.on = false;
+    expect(statusLine(header())).toBeNull();
   });
 });

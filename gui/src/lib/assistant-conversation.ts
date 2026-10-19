@@ -1,5 +1,9 @@
 import type { AppCopy } from "@/i18n/types";
-import { cleanPartialContent } from "@/lib/ipc/ga-output-cleaning";
+import {
+  cleanPartialContent,
+  extractLiveThinking,
+  modelReplyEnd,
+} from "@/lib/ipc/ga-output-cleaning";
 import type { RunGroup, RunStats } from "@/lib/run-groups";
 import {
   cleanSessionSummary,
@@ -28,8 +32,10 @@ import type { Turn } from "@/types/conversation";
  *             when it wrote none), with the round's clock past 3s, and
  *             nothing else; the sidebar card says the same sentence
  *             while the main chat is not on screen
- *             (`assistantCachedSentence`; the header says 「思考中」,
- *             ruling 87). The reply
+ *             (`assistantCachedSentence`; on screen the card says the
+ *             last message, and the header 「正在输入…」 while it
+ *             writes, else 「思考中」: `assistantWriting`, ruling 104).
+ *             The reply
  *             appears whole once the round has its answer. Under it
  *             nothing shows at rest: the action bar comes in on hover,
  *             icons only (copy, quote, save, for a reply of two steps
@@ -190,6 +196,24 @@ function assistantSummaryLine(summary: string | undefined): string | null {
   return assistantFirstLine(summary);
 }
 
+let streamCache: { inFlightContent: string; cleaned: string } | null = null;
+
+/**
+ * The main chat's raw stream cleaned as MainView cleans it
+ * (`cleanPartialContent`, trimmed), kept for the last stream: the
+ * card's sentence and the header's 「正在输入…」 read the same chunk
+ * with one regex pass between them.
+ */
+function cleanedStream(inFlightContent: string): string {
+  if (!inFlightContent) return "";
+  if (streamCache?.inFlightContent === inFlightContent) {
+    return streamCache.cleaned;
+  }
+  const cleaned = cleanPartialContent(inFlightContent).trim();
+  streamCache = { inFlightContent, cleaned };
+  return cleaned;
+}
+
 let sentenceCache: {
   turns: readonly Turn[];
   inFlightContent: string;
@@ -200,12 +224,13 @@ let sentenceCache: {
  * The line's sentence from the main chat's message cache, raw stream and
  * all: the sidebar card says it while the assistant runs and the main
  * chat is not on screen, so the card and the line say one sentence
- * (ruling 68). The header, and the card with the main chat on screen,
- * say only 「思考中」 and never ask for it (ruling 87: the same sentence
- * in three places was noise; `useAssistantState` reads it only while the
- * main chat is not open, and the header counts as open). The stream is
- * cleaned as MainView cleans it (`cleanPartialContent`, trimmed), then
- * `assistantLineSentence` — the same edges as the line.
+ * (ruling 68). The header never asks for it (ruling 87: the same
+ * sentence in three places was noise; it says 「正在输入…」 or 「思考中」,
+ * `assistantWriting`), nor does the card with the main chat on screen,
+ * which says the last message (ruling 104); `useAssistantState` reads
+ * it only while the main chat is not open, and the header counts as
+ * open. The stream is cleaned as MainView cleans it (`cleanedStream`),
+ * then `assistantLineSentence` — the same edges as the line.
  *
  * Kept for the last (turns, stream) pair: the card's selector runs on
  * every store write (any session's, every chunk), so the regex passes
@@ -226,12 +251,42 @@ export function assistantCachedSentence(
   ) {
     return sentenceCache.sentence;
   }
-  const streaming = inFlightContent
-    ? cleanPartialContent(inFlightContent).trim()
-    : "";
-  const sentence = assistantLineSentence(turns, streaming);
+  const sentence = assistantLineSentence(turns, cleanedStream(inFlightContent));
   sentenceCache = { turns, inFlightContent, sentence };
   return sentence;
+}
+
+let writingCache: { inFlightContent: string; writing: boolean } | null = null;
+
+/**
+ * Whether the assistant is writing words right now, for the header's
+ * second line while it runs: 「正在输入…」 when it is, 「思考中」 when not
+ * (main chat PRD ruling 104). A deterministic reading of this step's raw
+ * stream (`inFlightContent`; turn_end clears it), no guess: no
+ * `<thinking>` left open (`extractLiveThinking`), no tool dispatch
+ * started (`modelReplyEnd`: GA's dispatch marker or its output fence
+ * follows the reply in the same buffer, and the words before it are
+ * done), and words left once it is cleaned as the line cleans it
+ * (`cleanedStream`). A reply that is only `<no-reply/>` — or the start
+ * of one, held back by the cleaning — has none, nor has a step that so
+ * far wrote only tags, GA's markers or whitespace.
+ *
+ * Kept for the last stream, as `assistantCachedSentence` is: the
+ * header's selector runs on every store write, and the boolean is what
+ * keeps it from re-rendering per chunk — it updates only when the
+ * answer flips.
+ */
+export function assistantWriting(inFlightContent: string): boolean {
+  if (!inFlightContent) return false;
+  if (writingCache?.inFlightContent === inFlightContent) {
+    return writingCache.writing;
+  }
+  const writing =
+    modelReplyEnd(inFlightContent) === -1 &&
+    !extractLiveThinking(inFlightContent).open &&
+    cleanedStream(inFlightContent) !== "";
+  writingCache = { inFlightContent, writing };
+  return writing;
 }
 
 /** The process button under a reply of two steps or more: whether its

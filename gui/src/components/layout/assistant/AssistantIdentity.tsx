@@ -18,10 +18,12 @@ import { AssistantAvatar } from "./AssistantAvatar";
  * contact's name opens their page in an IM app.
  *
  * The second line is a chat title bar's (lib/assistant.ts): only a
- * state — 「思考中」 while it runs (ruling 87: what it is saying is at
- * the end of the conversation right below; until then the same sentence
- * was here too, ruling 68), 「等你回复」, an error, a subtask's question
- * or error — and nothing at rest. Unlike the sidebar card it never quotes the question, the last
+ * state — while it runs 「正在输入…」 when it is writing words and
+ * 「思考中」 otherwise (ruling 104, lib/assistant-conversation.ts
+ * `assistantWriting`; ruling 87: what it is saying is at the end of the
+ * conversation right below; until then the same sentence was here too,
+ * ruling 68), 「等你回复」, an error, a subtask's question or error —
+ * and nothing at rest. Unlike the sidebar card it never quotes the question, the last
  * message or a draft: here they are all on screen, in the conversation
  * and the composer below.
  *
@@ -39,7 +41,12 @@ export function AssistantIdentity({
   subtasks: Session[];
 }) {
   const copy = useCopy();
-  const { line } = useAssistantState({ mainChat, subtasks, open: true });
+  const { line } = useAssistantState({
+    mainChat,
+    subtasks,
+    open: true,
+    header: true,
+  });
   return (
     <span
       data-role="assistant-identity"

@@ -21,13 +21,18 @@ import type { SessionStatus } from "@/types/session";
  *     over a question over running over an unsent draft over the last
  *     message. Away from the main chat (in the workbench, or in one of
  *     its subtasks) it speaks for it: the question itself, the sentence
- *     it is writing, the draft. With the main chat on screen they are
- *     all right there, so it says only the state: 「等你回复」,
- *     「思考中」, no draft (main chat PRD ruling 87).
+ *     it is writing, the draft. With the main chat on screen it is the
+ *     selected row of the list and says only the last message, whatever
+ *     the state — a question it asked is what it said; the avatar's
+ *     mark and the name's weight carry the state, the header and the
+ *     conversation the words (main chat PRD ruling 104, overturning
+ *     ruling 87's 「思考中」 and 「等你回复」 there).
  *   - The header's second line (`AssistantState.line`) is what a chat's
  *     own title bar says: only a state — running, waiting for a reply
  *     (not the question: it is right below, in the conversation), an
- *     error, a subtask's — and nothing at rest. The last message and
+ *     error, a subtask's — and nothing at rest. Running, it says
+ *     「正在输入…」 while the assistant writes words and 「思考中」
+ *     otherwise (ruling 104, `assistantWriting`). The last message and
  *     the draft are both on screen there already.
  *
  * Running, what it is saying is said once, where you can read it: the
@@ -35,10 +40,11 @@ import type { SessionStatus } from "@/types/session";
  * writing, else its newest step since your last message that has words
  * — its narration, or since ruling 100 its summary when it wrote none —
  * `assistantLineSentence`), and the card while the main chat is not on
- * screen. The header, and the card with the main chat on screen, say
- * 「思考中」 (ruling 87: the same sentence in three places was noise;
- * the short state still tells you it works when you have scrolled up) —
- * never a step count. The assistant reports no steps anywhere; the
+ * screen. The header says 「正在输入…」 or 「思考中」 (ruling 87: the same
+ * sentence in three places was noise; the short state still tells you
+ * it works when you have scrolled up; ruling 104 split it in two), and
+ * the card with the main chat on screen the last message — never a
+ * step count. The assistant reports no steps anywhere; the
  * subtasks it sends off are task conversations and keep their 「第 N 步」
  * (lib/subtasks.ts), as the workbench's session rows do.
  */
@@ -81,6 +87,10 @@ export interface AssistantStateInput {
   /** While it runs: the line's sentence (`assistantCachedSentence`),
    * null for 「思考中」. */
   sentence?: string | null;
+  /** While it runs: it is writing words right now (`assistantWriting`)
+   * — the header's 「正在输入…」 (ruling 104). Only the header reads
+   * it; the card's sentence wins over it. */
+  writing?: boolean;
   errorCount?: number;
 }
 
@@ -135,7 +145,12 @@ export function assistantState(
   if (input.status === "running") {
     return {
       kind: "running",
-      line: { text: input.sentence || copy.sidebar.thinking, tone: "running" },
+      line: {
+        text:
+          input.sentence ||
+          (input.writing ? copy.assistant.typing : copy.sidebar.thinking),
+        tone: "running",
+      },
       fromSubtask: false,
     };
   }
@@ -163,7 +178,9 @@ export interface AssistantLastMessage {
 }
 
 /**
- * What the card's second line says, its prefix in its own colour:
+ * What the card's second line says, its prefix in its own colour —
+ * with the main chat on screen only the last message, whatever the
+ * state (ruling 104):
  *
  *   error    「出错」 / 「出错 · N」 / 「子任务出错」          red
  *   ask      「等你回复：」 + the question, or 「等你回复」,   amber prefix
@@ -202,23 +219,40 @@ export function assistantCardLine(
     question?: string | null;
     draft?: AssistantDraft | null;
     lastMessage?: AssistantLastMessage | null;
-    /** The main chat itself is on screen: its draft is in the composer
-     * right there, its question in the conversation (ruling 87). */
+    /** The main chat itself is on screen (ruling 104): the card is the
+     * list's selected row and says the last message alone — running,
+     * asking, erroring, a subtask's question or error, a draft in the
+     * composer right there all leave it be; the avatar's mark and the
+     * name's weight say the state. */
     open: boolean;
   },
   copy: AppCopy,
 ): AssistantCardLine | null {
+  if (open) {
+    // Asking, the last message is the question: what it asked is what
+    // it said. The asking step is in the turns by then (its turn_end
+    // lands before the ask_user event; a restore derives the pending
+    // question from that step), but `lastVisibleMessage` reads a step's
+    // words before its question, and a step that wrote a line besides
+    // asking would give that line — which the conversation does not
+    // draw: an asking step shows as its question only.
+    const asked =
+      state.kind === "ask" && !state.fromSubtask
+        ? plainLine(question ?? "", copy)
+        : "";
+    if (asked) return { kind: "message", prefix: null, text: asked };
+    return lastMessage ? messageLine(lastMessage, copy) : null;
+  }
   if (state.line && (state.kind === "error" || state.kind === "running")) {
     return { kind: state.kind, text: state.line.text };
   }
   if (state.kind === "ask" && state.line) {
-    const asked =
-      state.fromSubtask || open ? "" : plainLine(question ?? "", copy);
+    const asked = state.fromSubtask ? "" : plainLine(question ?? "", copy);
     return asked
       ? { kind: "ask", prefix: copy.assistant.askPrefix, text: asked }
       : { kind: "ask", prefix: null, text: state.line.text };
   }
-  if (draft && !open) {
+  if (draft) {
     const text =
       flattenWhitespace(draft.text) ||
       (draft.imageCount > 0
@@ -229,14 +263,18 @@ export function assistantCardLine(
     if (text)
       return { kind: "draft", prefix: copy.assistant.draftPrefix, text };
   }
-  if (lastMessage) {
-    return {
-      kind: "message",
-      prefix: lastMessage.fromUser ? copy.assistant.youPrefix : null,
-      text: lastMessage.text,
-    };
-  }
-  return null;
+  return lastMessage ? messageLine(lastMessage, copy) : null;
+}
+
+function messageLine(
+  lastMessage: AssistantLastMessage,
+  copy: AppCopy,
+): AssistantCardLine {
+  return {
+    kind: "message",
+    prefix: lastMessage.fromUser ? copy.assistant.youPrefix : null,
+    text: lastMessage.text,
+  };
 }
 
 // ---- The last message ------------------------------------------------

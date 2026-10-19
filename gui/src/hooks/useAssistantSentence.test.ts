@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { selectAssistantSentence } from "@/hooks/useAssistantSentence";
+import {
+  selectAssistantSentence,
+  selectAssistantWriting,
+} from "@/hooks/useAssistantSentence";
 import {
   assistantCachedSentence,
   assistantLineSentence,
@@ -264,5 +267,166 @@ describe("the card's sentence: the conversation's line", () => {
       "",
     );
     expect(useSessionsStore.getState().activeSessionId).toBe("s-other");
+  });
+});
+
+// Ruling 104 (ticket 52): the header's 「正在输入…」 reads the same
+// stream, through the same one cleaning pass, and only flips.
+describe("the header's 「正在输入…」: whether it writes words", () => {
+  const DISPATCH =
+    '🛠️ Tool: `web_scan`  📥 args:\n````text\n{"url": "x"}\n````\n';
+  const progress = (delta: string) =>
+    dispatchIPCEvent({
+      kind: "turn_progress",
+      sessionId: MAIN,
+      delta,
+      source: "workbench",
+      timestamp: "2026-10-19T08:00:01.000Z",
+    });
+  const turnEnd = (
+    turnIndex: number,
+    responseContent: string,
+    final: boolean,
+  ) =>
+    dispatchIPCEvent({
+      kind: "turn_end",
+      sessionId: MAIN,
+      turnIndex,
+      summary: `第 ${turnIndex} 步的摘要`,
+      toolCalls: final ? [] : [{ toolName: "web_scan", args: {} }],
+      toolResults: final ? [] : [{ toolUseId: `c${turnIndex}`, content: "ok" }],
+      responseContent,
+      exitReason: final ? { result: "CURRENT_TASK_DONE", data: null } : null,
+      timestamp: `2026-10-19T08:0${turnIndex}:00.000Z`,
+    });
+
+  it("is false at rest without looking at the stream, and shares the card's one pass per chunk", () => {
+    const store = useMessagesStore.getState();
+    store.appendUserTurn(MAIN, "看看周六的船票", "c-1");
+    store.setAgentRunning(MAIN, true);
+    store.appendInFlightDelta(MAIN, "周六上午还有三班船。\n");
+    cleaning.calls = 0;
+    const state = () => useMessagesStore.getState();
+
+    expect(selectAssistantWriting(state(), MAIN, false)).toBe(false);
+    expect(cleaning.calls).toBe(0);
+
+    // The header and the card's sentence on the same chunk: one pass.
+    expect(selectAssistantWriting(state(), MAIN, true)).toBe(true);
+    expect(selectAssistantSentence(state(), MAIN, true)).toBe(
+      "周六上午还有三班船。",
+    );
+    expect(selectAssistantWriting(state(), MAIN, true)).toBe(true);
+    expect(cleaning.calls).toBe(1);
+
+    // Another session's write leaves the stream as it was: no pass.
+    store.appendInFlightDelta("s-other", "别的会话");
+    expect(selectAssistantWriting(state(), MAIN, true)).toBe(true);
+    expect(cleaning.calls).toBe(1);
+
+    // A dispatch, an open thinking: known without cleaning.
+    store.appendInFlightDelta(MAIN, DISPATCH);
+    expect(selectAssistantWriting(state(), MAIN, true)).toBe(false);
+    store.clearInFlightContent(MAIN);
+    store.appendInFlightDelta(MAIN, "<thinking>再看看返程");
+    expect(selectAssistantWriting(state(), MAIN, true)).toBe(false);
+    expect(cleaning.calls).toBe(1);
+  });
+
+  it("re-renders the header only when it flips, the open card never per chunk", () => {
+    useSessionsStore.setState({
+      sessions: [
+        makeSession({ id: MAIN, mainChat: true, gaRuntimeKind: "managed" }),
+      ],
+      activeSessionId: MAIN,
+    });
+    const store = useMessagesStore.getState();
+    store.appendUserTurn(MAIN, "看看周六的船票", "c-1");
+    store.setAgentRunning(MAIN, true);
+
+    // What each subscribes to, as useSyncExternalStore compares it: a
+    // re-render when any selected value changes (Object.is; the status
+    // view's useShallow projection as one key).
+    const status = (s: ReturnType<typeof useMessagesStore.getState>) => {
+      const m = s.byId[MAIN];
+      return `${m?.agentRunning}|${m?.pendingAskUser != null}|${m?.pausedAtStepLimit}`;
+    };
+    const running = (s: ReturnType<typeof useMessagesStore.getState>) =>
+      s.byId[MAIN]?.agentRunning ?? false;
+    const readers = {
+      // AssistantIdentity: useAssistantState({ open: true, header: true }).
+      header: (s: ReturnType<typeof useMessagesStore.getState>) => [
+        status(s),
+        selectAssistantSentence(s, MAIN, false),
+        selectAssistantWriting(s, MAIN, running(s)),
+      ],
+      // SidebarAssistantCard with the main chat on screen: its state
+      // (no stream: !open, not the header), the question, the turns
+      // its last message comes from.
+      card: (s: ReturnType<typeof useMessagesStore.getState>) => [
+        status(s),
+        selectAssistantSentence(s, MAIN, false),
+        selectAssistantWriting(s, MAIN, false),
+        s.byId[MAIN]?.pendingAskUser?.question ?? null,
+        s.byId[MAIN]?.turns,
+        s.byId[MAIN]?.restoring ?? false,
+      ],
+    };
+    const renders = { header: 0, card: 0 };
+    const words: boolean[] = [];
+    let last = {
+      header: readers.header(useMessagesStore.getState()),
+      card: readers.card(useMessagesStore.getState()),
+    };
+    const unsubscribe = useMessagesStore.subscribe((s) => {
+      for (const key of ["header", "card"] as const) {
+        const next = readers[key](s);
+        if (next.some((v, i) => !Object.is(v, last[key][i]))) {
+          renders[key] += 1;
+          last = { ...last, [key]: next };
+          if (key === "header") words.push(next[2] as boolean);
+        }
+      }
+    });
+
+    // Step 1: it reasons, writes a line, dispatches a tool, the tool
+    // prints; then the step lands.
+    const step1 = [
+      "<thinking>",
+      ...Array.from({ length: 8 }, (_, i) => `想第 ${i + 1} 点。`),
+      "</thinking>\n\n",
+      ...Array.from({ length: 12 }, (_, i) => `查第 ${i + 1} 班。`),
+      "\n",
+      DISPATCH,
+      ...Array.from({ length: 6 }, (_, i) => `\`\`\`\`\`\n输出 ${i}\n`),
+    ];
+    for (const chunk of step1) progress(chunk);
+    turnEnd(1, "查第 1 班。", false);
+    // Step 2: the reply streams, then lands; the run completes.
+    const step2 = [
+      "<thinking>想好了</thinking>\n\n",
+      ...Array.from({ length: 20 }, (_, i) => `第 ${i + 1} 句。`),
+    ];
+    for (const chunk of step2) progress(chunk);
+    turnEnd(2, "周六上午还有三班船有票。", true);
+    dispatchIPCEvent({
+      kind: "run_complete",
+      sessionId: MAIN,
+      exitReason: { result: "CURRENT_TASK_DONE", data: null },
+      finalContent: "周六上午还有三班船有票。",
+      totalTurns: 2,
+      timestamp: "2026-10-19T08:03:00.000Z",
+    });
+    unsubscribe();
+
+    const chunks = step1.length + step2.length;
+    expect(chunks).toBe(51);
+    // The header: 「正在输入…」 on the line's first words, 「思考中」 at the
+    // dispatch, 「正在输入…」 on the reply, gone when it lands — and once
+    // for the run's end. Nothing for the other chunks.
+    expect(words).toEqual([true, false, true, false, false]);
+    expect(renders.header).toBe(5);
+    // The open card: each landed step (a new turn) and the run's end.
+    expect(renders.card).toBe(3);
   });
 });

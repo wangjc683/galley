@@ -620,8 +620,10 @@ export function extractLiveThinking(buffer: string): LiveThinking {
 }
 
 /** Index where the model's reply ends and GA's tool dispatch begins in
- * a verbose display buffer, or -1 when no dispatch has started. */
-function modelReplyEnd(buffer: string): number {
+ * a verbose display buffer, or -1 when no dispatch has started. Also
+ * one of the edges of the header's 「正在输入…」 (lib/assistant-
+ * conversation.ts `assistantWriting`, main chat PRD ruling 104). */
+export function modelReplyEnd(buffer: string): number {
   let end = -1;
   for (const re of [
     TOOL_DISPATCH_VERBOSE_PARTIAL,

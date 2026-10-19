@@ -273,6 +273,7 @@ export const enCopy: AppCopy = {
     quote: "[Quote]",
     file: (name) => `[File] ${name}`,
     timeYesterday: "Yesterday",
+    typing: "Typing…",
   },
   topbar: {
     newConversation: "New chat",

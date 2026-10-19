@@ -109,10 +109,13 @@ function lineText(line: AssistantCardLine): string {
  *   (the sentence it is writing) > an unsent draft (「草稿：」) > the
  *   last message (「你：」 for the user's own)
  *
- * (lib/assistant.ts). With the main chat itself on screen the question,
- * the sentence and the draft are in front of you, so the line says only
- * 「等你回复」 or 「思考中」 and no draft (main chat PRD ruling 87); one
- * of its subtasks open is not the main chat on screen. The avatar wears
+ * (lib/assistant.ts). With the main chat itself on screen the card is
+ * the list's selected row and the line says only the last message,
+ * whatever the state — the question when it asks (main chat PRD ruling
+ * 104, overturning ruling 87's 「等你回复」 and 「思考中」 there); the
+ * badge and the name's weight carry the state, the header and the
+ * conversation the words. One of its subtasks open is not the main
+ * chat on screen. The avatar wears
  * a session row's status glyph in its corner for running, a question,
  * an error and a new reply, and the name goes semibold for those; a
  * draft and the resting card stay medium. A new reply shows only while

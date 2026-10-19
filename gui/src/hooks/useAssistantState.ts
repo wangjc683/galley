@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
-import { useAssistantSentence } from "@/hooks/useAssistantSentence";
+import {
+  useAssistantSentence,
+  useAssistantWriting,
+} from "@/hooks/useAssistantSentence";
 import { useSessionStatusView } from "@/hooks/useSessionStatusView";
 import { useSessionsAttention } from "@/hooks/useSessionsAttention";
 import {
@@ -29,24 +32,29 @@ import type { Session } from "@/types/session";
  * chat itself on screen — its header identity always, the card while
  * the main chat is the open session (one of its subtasks is not: its
  * conversation is not in front of you there). Open, the sentence is
- * not quoted: the line at the end of the conversation says it, and the
- * state says 「思考中」 (main chat PRD ruling 87).
+ * not quoted: the line at the end of the conversation says it (main
+ * chat PRD ruling 87). `header` is the header identity: running, it
+ * reads whether the assistant is writing (useAssistantWriting), and the
+ * state says 「正在输入…」 or 「思考中」 (ruling 104). The card never reads
+ * the stream with the main chat on screen: its second line is then the
+ * last message.
  */
 export function useAssistantState({
   mainChat,
   subtasks,
   open,
+  header = false,
 }: {
   mainChat: Session;
   subtasks: Session[];
   open: boolean;
+  header?: boolean;
 }): AssistantState {
   const copy = useCopy();
   const view = useSessionStatusView(mainChat);
-  const sentence = useAssistantSentence(
-    mainChat.id,
-    view.status === "running" && !open,
-  );
+  const running = view.status === "running";
+  const sentence = useAssistantSentence(mainChat.id, running && !open);
+  const writing = useAssistantWriting(mainChat.id, running && header);
   const subtaskAttention = useSessionsAttention(subtasks, undefined);
   return assistantState(
     {
@@ -59,6 +67,7 @@ export function useAssistantState({
       hasUnread: mainChat.hasUnread,
       open,
       sentence,
+      writing,
       errorCount: mainChat.errorCount,
     },
     copy,

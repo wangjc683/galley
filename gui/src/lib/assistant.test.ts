@@ -88,6 +88,27 @@ describe("the assistant's state, in a session row's priority", () => {
     expect(state({ status: "running", sentence: null }, en).line?.text).toBe(
       "Thinking",
     );
+    // The header, while it writes words (ruling 104): 「正在输入…」, the
+    // same running tone; 「思考中」 the rest of the time.
+    expect(
+      state({ status: "running", sentence: null, writing: true }).line,
+    ).toEqual({
+      text: "正在输入…",
+      tone: "running",
+    });
+    expect(
+      state({ status: "running", sentence: null, writing: false }).line?.text,
+    ).toBe("思考中");
+    expect(
+      state({ status: "running", sentence: null, writing: true }, en).line
+        ?.text,
+    ).toBe("Typing…");
+    // Not running, writing says nothing: a question, an error, rest.
+    expect(state({ hasPendingAskUser: true, writing: true }).line?.text).toBe(
+      "等你回复",
+    );
+    expect(state({ status: "error", writing: true }).line?.text).toBe("出错");
+    expect(state({ writing: true }).line).toBeNull();
     expect(state({ status: "error", errorCount: 3 }).line?.text).toBe(
       "出错 · 3",
     );
@@ -161,10 +182,106 @@ describe("the card's second line: error > question > running > draft > last mess
     ).toMatchObject({ text: "哪天出发？ 周五 周六" });
   });
 
-  it("says only 「等你回复」 with the main chat on screen: the question is right there", () => {
+  // Ruling 104 (ticket 52), overturning ruling 87's 2nd and 3rd points:
+  // with the main chat on screen the card is the list's selected row and
+  // says the last message whatever the state; the avatar and the name
+  // carry the state.
+  it("says only the last message with the main chat on screen, whatever the state", () => {
+    const message = {
+      kind: "message",
+      prefix: null,
+      text: "好的，明早九点提醒你。",
+    };
+    const states: Partial<AssistantStateInput>[] = [
+      { status: "running" },
+      { status: "running", sentence: null },
+      { status: "running", writing: true },
+      { status: "error", errorCount: 3 },
+      { subtaskState: "ask" },
+      { subtaskState: "error" },
+      { status: "running", subtaskState: "ask" },
+      { hasUnread: true },
+      {},
+    ];
+    for (const input of states) {
+      // A draft waits in the composer right there, too.
+      expect(line(input, { open: true })).toEqual(message);
+    }
+    // 「你：」 as at rest.
     expect(
-      line({ hasPendingAskUser: true }, { question: "哪天出发？", open: true }),
-    ).toEqual({ kind: "ask", prefix: null, text: "等你回复" });
+      line(
+        { status: "running" },
+        { open: true, lastMessage: { fromUser: true, text: "订周五的票" } },
+      ),
+    ).toEqual({ kind: "message", prefix: "你：", text: "订周五的票" });
+    // Nothing said yet: no second line (the name sits centred).
+    expect(
+      line({ status: "running" }, { open: true, lastMessage: null }),
+    ).toBeNull();
+  });
+
+  it("says the question it asks as its last message with the main chat on screen", () => {
+    // What it asked is what it said: the question, plain, no 「等你回复：」
+    // — even when the asking step's own words are the last message.
+    expect(
+      line(
+        { hasPendingAskUser: true, status: "running" },
+        {
+          open: true,
+          question: "**哪天**出发？",
+          lastMessage: { fromUser: false, text: "我先确认一下日期。" },
+        },
+      ),
+    ).toEqual({ kind: "message", prefix: null, text: "哪天出发？" });
+    // Without the question at hand: the last message.
+    for (const question of [null, "", "  "]) {
+      expect(
+        line({ hasPendingAskUser: true }, { open: true, question }),
+      ).toEqual({
+        kind: "message",
+        prefix: null,
+        text: "好的，明早九点提醒你。",
+      });
+    }
+    // A subtask's question is the subtask's: the last message.
+    expect(
+      line({ subtaskState: "ask" }, { open: true, question: "这个不是它的" }),
+    ).toEqual({
+      kind: "message",
+      prefix: null,
+      text: "好的，明早九点提醒你。",
+    });
+    // Its own error outranks its question: the last message too.
+    expect(
+      line(
+        { status: "error", hasPendingAskUser: true },
+        { open: true, question: "哪天出发？" },
+      ),
+    ).toMatchObject({ kind: "message", text: "好的，明早九点提醒你。" });
+  });
+
+  it("writes it all out while the main chat is not on screen, as before", () => {
+    expect(line({ status: "running" })).toEqual({
+      kind: "running",
+      text: "我查一下厦门明天的天气。",
+    });
+    expect(line({ status: "running", sentence: null })).toEqual({
+      kind: "running",
+      text: "思考中",
+    });
+    expect(line({ hasPendingAskUser: true })).toEqual({
+      kind: "ask",
+      prefix: "等你回复：",
+      text: "去哪个花市？",
+    });
+    expect(line({ status: "error" })).toEqual({ kind: "error", text: "出错" });
+    expect(line({ subtaskState: "ask" })).toMatchObject({
+      text: "子任务在问你",
+    });
+    expect(line({ subtaskState: "error" })).toMatchObject({
+      text: "子任务出错",
+    });
+    expect(line({})).toMatchObject({ kind: "draft", text: "下周三的会" });
   });
 
   it("says what the conversation's line says while it runs, 「思考中」 before it says anything", () => {
