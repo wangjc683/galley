@@ -241,8 +241,8 @@ pub(crate) fn compose_runtime_prompt(app_version: &str) -> String {
 /// its id, where the segment its runner holds begins, and how to look up
 /// earlier parts), the "In Hand" lines when there are any (ticket 36,
 /// [`in_hand_section`]) and the main chat entry layer, which names the
-/// assistant manual at `manual_path` (ticket 30,
-/// [`crate::assistant_manual`]). Its static rules differ from the
+/// assistant manual's directory `manual_dir` (ticket 30, in parts since
+/// ticket 59; [`crate::assistant_manual`]). Its static rules differ from the
 /// workbench's in one paragraph: scheduled tasks are no longer the
 /// user's alone ([`MAIN_CHAT_USER_ONLY_CONFIGURATION`], ticket 36).
 /// Every other session gets [`compose_runtime_prompt`].
@@ -250,9 +250,9 @@ pub(crate) fn compose_main_chat_runtime_prompt(
     app_version: &str,
     main_chat: &MainChatPromptState,
     in_hand: Option<&str>,
-    manual_path: &str,
+    manual_dir: &str,
 ) -> String {
-    compose(app_version, true, Some((main_chat, in_hand, manual_path)))
+    compose(app_version, true, Some((main_chat, in_hand, manual_dir)))
 }
 
 /// IM-supervisor variant: same runtime rules WITHOUT the suggestion
@@ -329,7 +329,7 @@ look it up with the Galley CLI (search, then
 /// instructions also name the evidence to hand back, Galley wakes the
 /// model when a subtask finishes, asks or fails (instead of "look it up
 /// when they ask"), and a last paragraph sends the model to the assistant
-/// manual at `manual_path` before its first CLI write. The manual carries
+/// manual, at its path, before its first CLI write. The manual carries
 /// the details (authority, commands, wake notes, reporting); the wake
 /// note itself carries what to do at that moment.
 ///
@@ -346,7 +346,16 @@ look it up with the Galley CLI (search, then
 /// follow-ups get its own reminder, and `todo list` is read before saying
 /// what is left; the manual's section is now "To-dos and reminders". The
 /// write list gained `to-do`.
-fn main_chat_entry_layer(manual_path: &str) -> String {
+///
+/// Ticket 59 (main chat PRD ruling 111) split the manual into parts, one
+/// file each, in the directory `manual_dir`. The last paragraph names the
+/// directory once and every part by its bare file name with when to read
+/// it, and asks for the parts a write needs before each write, not only
+/// the first: GA cuts tool results older than its last ten messages to
+/// 800 characters, so a part read earlier is gone by the next write, and
+/// reading it again is what happens anyway. The to-do sentence names the
+/// part (`todos.md`) instead of the section.
+fn main_chat_entry_layer(manual_dir: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
 
@@ -365,11 +374,17 @@ the user cannot see.
 Note what the user has to do (a deadline, a call, a flight, a purchase) as
 a to-do, with a reminder when it has a date, and tick it off when it is
 done; set yourself a reminder when you promise to follow up. Do it unasked,
-and read `todo list` before saying what is left: see "To-dos and
-reminders" in your manual.
+and read `todo list` before saying what is left: see `todos.md` in your
+manual.
 
-Before your first Galley CLI write (a session, project, model, schedule or
-to-do command), read your manual at `{manual_path}`."#
+Your manual is in `{manual_dir}`, one file per part. Before a Galley CLI
+write (a session, project, model, schedule or to-do command), read the
+parts it needs, together: `todos.md` to note a to-do; `todos-change.md` to
+change, tick off or list to-dos; `reminders.md` for your own reminders,
+changing them, and when the user asks to be reminded; `times.md` for any
+date or time; `authority.md` and `cli.md` for sessions, projects and
+models; `wake.md` and `subtasks.md` when Galley wakes you. Every write but
+`llm set` carries `--supervisor=galley-assistant --reason="<why>"`."#
     )
 }
 
@@ -405,14 +420,14 @@ fn compose(
         RUNTIME_PROMPT_STATIC.to_string()
     };
     let main_chat = main_chat
-        .map(|(state, in_hand, manual_path)| {
+        .map(|(state, in_hand, manual_dir)| {
             let in_hand = in_hand
                 .map(|lines| format!("\n\n{lines}"))
                 .unwrap_or_default();
             format!(
                 "\n\n{}{in_hand}\n\n{}",
                 main_chat_section(state),
-                main_chat_entry_layer(manual_path)
+                main_chat_entry_layer(manual_dir)
             )
         })
         .unwrap_or_default();
@@ -897,10 +912,10 @@ mod tests {
         );
     }
 
-    /// A manual path as Core passes it: absolute, with a space in it
-    /// (`Application Support` on macOS).
-    const MANUAL: &str =
-        "/Users/u/Library/Application Support/app.galley/managed-ga-state/assistant/reference/galley-assistant-manual.md";
+    /// The manual's directory as Core passes it: absolute, with a space
+    /// in it (`Application Support` on macOS).
+    const MANUAL_DIR: &str =
+        "/Users/u/Library/Application Support/app.galley/managed-ga-state/assistant/reference/manual";
 
     fn main_chat_state() -> MainChatPromptState {
         MainChatPromptState {
@@ -922,7 +937,7 @@ mod tests {
     fn main_chat_section_names_the_conversation_and_its_segment() {
         let state = main_chat_state();
         let ordinary = compose_runtime_prompt("t");
-        let main = compose_main_chat_runtime_prompt("t", &state, None, MANUAL);
+        let main = compose_main_chat_runtime_prompt("t", &state, None, MANUAL_DIR);
         assert_eq!(
             main,
             format!(
@@ -933,7 +948,7 @@ mod tests {
                     1
                 ),
                 main_chat_section(&state),
-                main_chat_entry_layer(MANUAL)
+                main_chat_entry_layer(MANUAL_DIR)
             ),
             "the section and the entry layer are appended after the state block, \
              nothing else moves"
@@ -958,7 +973,7 @@ mod tests {
 
         // Data, not behavior: the prompt generation does not change.
         let hash = prompt_hash();
-        let _ = compose_main_chat_runtime_prompt("t", &state, None, MANUAL);
+        let _ = compose_main_chat_runtime_prompt("t", &state, None, MANUAL_DIR);
         assert_eq!(prompt_hash(), hash);
     }
 
@@ -1017,7 +1032,7 @@ mod tests {
     /// main chat and nowhere else.
     #[test]
     fn main_chat_entry_layer_is_main_chat_only() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL);
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
         let section = main.find("## Main Chat").expect("the Main Chat section");
         let layer = main
             .find("## Galley Main Chat Entry Layer")
@@ -1029,7 +1044,12 @@ mod tests {
         assert!(main.contains("Reply at the weight of what they said:"));
         assert!(main.contains("Open with the answer or outcome"));
         assert!(main.contains("without recapping it"));
-        assert!(main.ends_with(&format!("read your manual at `{MANUAL}`.")));
+        assert!(main.contains(
+            "models; `wake.md` and `subtasks.md` when Galley wakes you. Every write but"
+        ));
+        assert!(
+            main.ends_with("`llm set` carries `--supervisor=galley-assistant --reason=\"<why>\"`.")
+        );
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(!prompt.contains("Main Chat Entry Layer"));
         }
@@ -1043,7 +1063,7 @@ mod tests {
     /// the model instead of it looking the subtask up when asked.
     #[test]
     fn main_chat_entry_layer_dispatches_long_work_to_a_subtask() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL);
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
         // Single-line fragments only (a Windows checkout makes the raw
         // string CRLF).
         assert!(main.contains("free: end your reply with <subtask>what to do</subtask>. Galley"));
@@ -1066,24 +1086,68 @@ mod tests {
         }
     }
 
-    /// Ticket 30: before its first CLI write the model reads the
-    /// assistant manual, at the path Core wrote it to; every other
-    /// session and IM never hear of it.
+    /// Ticket 30: before a CLI write the model reads the assistant
+    /// manual, where Core wrote it; every other session and IM never hear
+    /// of it. Ticket 59: the manual is a directory of parts. The layer
+    /// names the directory once and every part on the table once, by its
+    /// bare file name with when to read it, and asks for them before each
+    /// write, not only the first; it names no file that is not a part.
     #[test]
     fn main_chat_entry_layer_sends_the_model_to_the_manual() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL);
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
         // Single-line fragments only (a Windows checkout makes the raw
         // string CRLF).
+        assert!(main.contains(&format!(
+            "Your manual is in `{MANUAL_DIR}`, one file per part. Before a Galley CLI"
+        )));
+        assert!(
+            main.contains("write (a session, project, model, schedule or to-do command), read the")
+        );
         assert!(main.contains(
-            "Before your first Galley CLI write (a session, project, model, schedule or"
+            "parts it needs, together: `todos.md` to note a to-do; `todos-change.md` to"
         ));
-        assert!(main.contains("to-do command), read your manual at"));
-        assert!(main.contains(&format!("read your manual at `{MANUAL}`.")));
-        assert_eq!(main.matches(MANUAL).count(), 1);
+        assert!(main
+            .contains("changing them, and when the user asks to be reminded; `times.md` for any"));
+        // The identity every write carries is the one rule all the parts
+        // with a write share (only `cli.md` states it): read for a tick or
+        // a cancel alone, `todos-change.md` and `reminders.md` would leave
+        // it out (ticket 59's eval). It is `cli.md`'s rule, word for word.
+        assert!(
+            main.contains("`llm set` carries `--supervisor=galley-assistant --reason=\"<why>\"`.")
+        );
+        assert!(crate::assistant_manual::part("cli.md")
+            .contains("--supervisor=galley-assistant --reason=\"<why>\""));
+        assert!(crate::assistant_manual::part("cli.md").contains("The one exception is `llm set`"));
+        assert!(!main.contains("first Galley CLI write"));
+        assert!(!main.contains("read your manual at"));
+        // The directory once; the parts by their bare names.
+        assert_eq!(main.matches(MANUAL_DIR).count(), 1);
+        assert!(!main.contains(&format!("{MANUAL_DIR}/")));
+        let list = &main[main.find("Your manual is in").unwrap()..];
+        for (name, _) in crate::assistant_manual::PARTS {
+            assert_eq!(list.matches(&format!("`{name}`")).count(), 1, "{name}");
+        }
+        let layer = &main[main.find("## Galley Main Chat Entry Layer").unwrap()..];
+        for code in layer.split('`').skip(1).step_by(2) {
+            if code.ends_with(".md") {
+                assert!(
+                    crate::assistant_manual::PARTS
+                        .iter()
+                        .any(|(name, _)| *name == code),
+                    "the entry layer names {code}, not a part"
+                );
+            }
+        }
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(!prompt.contains("your manual"));
-            assert!(!prompt.contains("galley-assistant-manual"));
+            assert!(!prompt.contains("Your manual"));
+            assert!(!prompt.contains("assistant/reference"));
+            assert!(!prompt.contains("todos.md"));
         }
+        // The entry layer is not in what `prompt_hash` fingerprints: a
+        // new layer is not a new prompt generation for anyone.
+        assert!(!workbench_static_prompt().contains("Main Chat Entry Layer"));
+        assert!(!workbench_static_prompt().contains("Your manual"));
     }
 
     /// Byte cap on the main chat entry layer: no headroom, `\r` not
@@ -1116,8 +1180,24 @@ mod tests {
     /// `to-do` in the write list (+7). Each of the three starts from a
     /// remark with no CLI write in sight (「记一下要买营养土」,
     /// 「营养土买好了」, 「我还有什么没办」), so the manual alone would never be
-    /// opened for them.
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 2026;
+    /// opened for them. Raised 2026 → 2463 by ticket 59 (main chat PRD
+    /// ruling 111): +437 bytes. The last paragraph names the manual's
+    /// directory and each of its eight parts with when to read them,
+    /// together (+449, the directory not counted; "your first" write
+    /// became a write, since a part read earlier is cut from the context
+    /// by the next one), and the to-do sentence names `todos.md` in place
+    /// of the section (−12). Of the +449, 118 came from the eval of the
+    /// first wording: the identity every write carries (only `cli.md`
+    /// says it, and a tick or a cancel read `todos-change.md` or
+    /// `reminders.md` alone and left it out), changing its own reminders
+    /// sent to `reminders.md` (「改到 9 点」 had gone to the to-dos'
+    /// part and noted a new to-do), and "together" (a reminder the user
+    /// asked for was read part by part, a round trip each). Worth it: a
+    /// read of the manual drops from about 2k tokens (GA's `file_read`
+    /// takes 200 lines at a time) to a few hundred, and it was read again
+    /// for each write, while these lines ride every request almost always
+    /// from the cache.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 2463;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {
@@ -1170,7 +1250,7 @@ mod tests {
     /// on Windows).
     #[test]
     fn only_the_main_chat_sets_scheduled_tasks_itself() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL);
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
         assert!(main.contains("## What Only The User Changes In Galley"));
         assert!(main.contains(
             "interface: model providers and API keys, Channels, Browser Control and its"
@@ -1259,10 +1339,10 @@ mod tests {
     /// what the user has to do (a reminder on it when it has a date), the
     /// tick when it is done, its own reminder for a follow-up it promises,
     /// and `todo list` before saying what is left; it names the manual's
-    /// section, which exists. Main chat only.
+    /// part (its section until ticket 59), which exists. Main chat only.
     #[test]
     fn main_chat_entry_layer_asks_for_reminders_unasked() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL);
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
         // Single-line fragments only (CRLF on Windows).
         assert!(main.contains(
             "Note what the user has to do (a deadline, a call, a flight, a purchase) as"
@@ -1272,13 +1352,14 @@ mod tests {
         assert!(main.contains(
             "done; set yourself a reminder when you promise to follow up. Do it unasked,"
         ));
-        assert!(main.contains("and read `todo list` before saying what is left: see \"To-dos and"));
-        assert!(main.contains("reminders\" in your manual."));
+        assert!(main
+            .contains("and read `todo list` before saying what is left: see `todos.md` in your"));
+        assert!(!main.contains("\"To-dos and"));
         assert!(!main.contains("Reminders and scheduled tasks\" in your manual"));
-        assert!(crate::assistant_manual::manual_body().contains("## To-dos and reminders"));
+        assert!(crate::assistant_manual::part("todos.md").contains("### Noting a to-do"));
         let layer = main.find("## Galley Main Chat Entry Layer").unwrap();
         let todo = main.find("Note what the user has to do").unwrap();
-        let manual = main.find("read your manual at").unwrap();
+        let manual = main.find("Your manual is in").unwrap();
         assert!(layer < todo && todo < manual);
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(!prompt.contains("set yourself a reminder"));
@@ -1589,8 +1670,8 @@ mod tests {
             ..AssistantTodo::default()
         };
         let lines = in_hand_section(&todo, at("2026-10-16T06:05:00Z"), &shanghai()).unwrap();
-        let without = compose_main_chat_runtime_prompt("t", &state, None, MANUAL);
-        let with = compose_main_chat_runtime_prompt("t", &state, Some(&lines), MANUAL);
+        let without = compose_main_chat_runtime_prompt("t", &state, None, MANUAL_DIR);
+        let with = compose_main_chat_runtime_prompt("t", &state, Some(&lines), MANUAL_DIR);
         let section = main_chat_section(&state);
         assert_eq!(
             with,

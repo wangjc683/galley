@@ -382,15 +382,16 @@ pub(crate) async fn prepare_managed_spawn_args(
     )
     .await;
     if let Some(main_chat) = main_chat {
-        // The assistant manual its entry layer names (ticket 30), written
-        // at every main chat spawn as IM writes its SOP copy. A failed
-        // write is logged and the runner still starts: the main chat
-        // without the manual beats no main chat.
+        // The assistant manual its entry layer names (ticket 30), one
+        // file per part in a directory since ticket 59, written at every
+        // main chat spawn as IM writes its SOP copy. A failed write is
+        // logged and the runner still starts: the main chat without the
+        // manual beats no main chat.
         let state_root = PathBuf::from(&context.diagnostics.paths.state_root);
         if let Err(e) = crate::assistant_manual::materialize(&state_root) {
             eprintln!("[main chat] writing the assistant manual failed: {e}");
         }
-        let manual = crate::assistant_manual::manual_path(&state_root);
+        let manual_dir = crate::assistant_manual::manual_dir(&state_root);
         // What it has in hand (ticket 36, regrouped by ticket 39): the
         // user's to-dos not done, the subtasks not finished with its own
         // one-off reminders, and the routines, read as the desktop's
@@ -419,7 +420,7 @@ pub(crate) async fn prepare_managed_spawn_args(
                 &app.package_info().version.to_string(),
                 &main_chat,
                 in_hand.as_deref(),
-                &manual.to_string_lossy(),
+                &manual_dir.to_string_lossy(),
             );
         }
     }
