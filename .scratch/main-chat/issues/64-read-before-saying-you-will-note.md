@@ -55,3 +55,22 @@ Status: ready-for-agent
 ## 给 JC 的真机步骤（主会话合入后补全）
 
 ## Comments
+
+### 2026-10-19 实现说明（分支 `main-chat-64-read-before-saying`）
+
+- **提交**：入口层 `3b4aa37d`，评测 `d0dd308b`，本条另一提交。
+- **入口层**（`core/src/managed_prompt.rs` 的 `main_chat_entry_layer`）：「Do it unasked, and read `todo list` before saying what is left: see `todos.md` in your manual.」改成「Do it unasked, but read `todos.md` in your manual before saying you will (it says when), and `todo list` before saying what is left.」（+38 字节，`todos.md` 从句末挪到前面）；「记下了」那句末尾接「; if you write nothing down, do not bring up noting it.」（+54）。门槛没搬进入口层。预算 2675 → 2767，照注释的写法写了理由。两个旧测试的片段跟着改，新加 `main_chat_entry_layer_reads_todos_before_saying_it_will_note`（只在主对话，工作台、IM 提示词没有这两句；指去的 `todos.md` 里有三条门槛）。`prompt_hash()` 改前改后都是 `c033e8d3`。
+- **评测**（细节在评测 README 的「先读手册再表态（票 64）」一节与 `todo/results.md`、`chat/results.md` 的「票 64 重跑」「票 64：改口与第一轮表态」两节）：不该设的 7 条加 `expect.no_retract`（最终回复不能有 `RETRACT_RE`），第一轮的正文与 `<summary>` 按 `STANCE_RE` 只记录；闲聊组不该设的 12 条同样加上。这个正则对三套以前的 362 次运行只命中票 63 火锅那两遍。21:23 用票 63 的提示词跑 7 条各两遍做基线（新参数 `--control 64`，存在 `meta.ticket64_control`），21:27 换成票 64 的提示词整组重跑，之后闲聊组一遍。改口 / 表态（14 次运行里）：票 63 的运行 2 / 5，基线 0 / 5，票 64 0 / 1。待办整组按现在的判定 62/64 → 64/64，请求次数 3.56 → 3.55，用时 28.8 → 27.9 s，读手册 9270 → 8776 字节；不该设的 7 条请求次数 2.43 → 2.43（基线 2.64），没有多一轮。闲聊 14/14 → 14/14，12 条两次都没有改口与表态。一次也没改措辞，共 94 次运行、296 次模型调用。
+- **与票不一样的地方**：
+  - 措辞没有先只改「Do it unasked」那一句：裁决 116 写明要加「没设就不提」这条底线，而且火锅两条 22:15 以后跑不了，来不及先试一轮再补一句，所以第一轮两条一起上。第一轮就是上面的结果。
+  - 21:11 开始做这张票，真跑时已过票 63 写的 21:15 截止，火锅两条的 `hours` 加了 23（「今晚 11 点」，夜宵），截止挪到 22:15；`--dry-test` 的「太晚拒绝」从 21:30 改到 22:30，另加 21:30 取「今晚 11 点」。所以基线与重跑的消息都是「今晚 11 点和朋友吃火锅」，不是票 63 的「今晚 9 点」。
+  - 基线没有复现改口：「今晚 11 点」下只有一遍在 `<summary>` 里写了「记下安排」，两遍都没改口，同一时段的改口对比是 0 → 0，能比的是第一轮表态 5 → 1。改口从票 63 的 2 次到 0 次，消息的钟点不同，不能全算在措辞上。
+  - 「改后跑同一组」用的是整组重跑里那 7 条（同一时段、同一提示词），没再单跑一遍，省了 14 次。
+  - `wake-reno` 第 2 遍补跑了一次：它在 64 次运行的队尾附近，比叫醒消息写的到点时刻晚约 8 分钟才开跑，查了时间后回复末尾说「这次提醒晚了约 8 分钟」（判定不许说「晚了」）。与入口层无关，原来那遍留在 `meta.superseded_runs` 的「票 64 补跑」一组。
+- **看到但没改**：
+  - 基线里 `reno-no-remind` 第 1 遍「我就不加待办，也不提醒了」、`declined-before` 第 2 遍「按你之前的意思，装修进度就不另设提醒了」：提的是「不记」而不是「本来要记」，正则没收（「就不加了」要紧挨着「了」）；票 64 下这两条都没再出现。算不算改口留给主会话。
+  - 票 64 下第一轮的 `<summary>` 还有一次表态（火锅第 1 遍「我先确认时间并记入待办。」，最终没改口）：入口层说的是「saying」，没点名 `<summary>`。
+  - 评测拼叫醒消息时，到点时刻取的是整组开跑的时间，队伍一长就晚（上面 `wake-reno` 那次）；改成按每次运行开跑的时间取会更稳，没改。
+  - 定时评测与待办共用 `schedule/galley-prompt/`，这次换成了票 64 的提示词，但定时没跑，`schedule/results.*` 仍是票 63 提示词下的结果（README 写了）。
+  - `docs/managed-ga-runtime/prompt-composition.md` 的入口层预算与原句停在票 59（2463），票 60、63、64 都没跟；devlog、PRD 留给主会话。
+- **验证**：`cargo check --manifest-path core/Cargo.toml --workspace` 通过；`cargo test --manifest-path core/Cargo.toml --workspace` 在 `TZ=UTC` 与 `TZ=America/Los_Angeles` 下各 1141 条全过（评测跑完之后才跑）；`rustfmt --edition 2021 --check core/src/managed_prompt.rs` 改前改后都干净；`git diff --check` 干净；`run.py --dry-test` 通过。新增行没有私有接口地址、API host 与本机绝对路径；中文全角标点用 scratchpad 里的脚本扫过新增行，标出的都是英文语境（英文注释里的括号、正则）。
