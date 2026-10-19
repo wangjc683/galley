@@ -368,6 +368,11 @@ look it up with the Galley CLI (search, then
 /// a floor: 「记下了」 only after this turn wrote something down (a to-do,
 /// a reminder, the memory). It is here, not in the manual, because the
 /// turn that said it without writing anything read nothing.
+///
+/// Ticket 64 (main chat PRD ruling 116): 「Do it unasked」 became read
+/// `todos.md` before saying you will (the test of when is there, not
+/// here), and the floor gained its other half: a turn that writes nothing
+/// down does not bring noting up (「刚才说要加待办有点多此一举，就不加了」).
 fn main_chat_entry_layer(manual_dir: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
@@ -388,9 +393,11 @@ Note what the user has to do (a deadline, a call, a flight, a purchase),
 or what comes up on a date and will be worth raising then (a renovation due
 to finish, a lease ending), as a to-do, with a reminder when it has a date,
 and tick it off when it is done; set yourself a reminder when you promise
-to follow up. Do it unasked, and read `todo list` before saying what is
-left: see `todos.md` in your manual. Say 「记下了」 or the like only after
-you wrote it down this turn (a to-do, a reminder, your memory).
+to follow up. Do it unasked, but read `todos.md` in your manual before
+saying you will (it says when), and `todo list` before saying what is left.
+Say 「记下了」 or the like only after you wrote it down this turn (a to-do, a
+reminder, your memory); if you write nothing down, do not bring up
+noting it.
 
 Your manual is in `{manual_dir}`, one file per part. Before a Galley CLI
 write (a session, project, model, schedule or to-do command), read the
@@ -1280,8 +1287,18 @@ mod tests {
     /// turn wrote something down (a to-do, a reminder, the memory). In
     /// ticket 60's eval 「我们公司是 2019 年 11 月 20 号成立的」 got
     /// 「记下了」 once in two runs with no tool call at all: that turn read
-    /// nothing, so the manual cannot carry it.
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 2675;
+    /// nothing, so the manual cannot carry it. Raised 2675 → 2767 by
+    /// ticket 64 (main chat PRD ruling 116): +92 bytes. 「Do it unasked」
+    /// became read `todos.md` before saying you will (+38: the part is
+    /// named there instead of after `todo list`), and the floor gained
+    /// "if you write nothing down, do not bring up noting it" (+54). In
+    /// ticket 63's eval 「今晚 9 点和朋友吃火锅」 noted nothing both times,
+    /// as `todos.md` says, but each first turn had said it would note it
+    /// (in its text once, in `<summary>` once) before reading the part,
+    /// and each reply took it back (「刚才说要加待办有点多此一举，就不加了」).
+    /// The test of when is in the part; what to say before reading it
+    /// cannot be, so it is here.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 2767;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {
@@ -1424,7 +1441,8 @@ mod tests {
     /// tick when it is done, its own reminder for a follow-up it promises,
     /// and `todo list` before saying what is left; it names the manual's
     /// part (its section until ticket 59), which exists. Ticket 60: and
-    /// for what comes up on a date and will be worth raising then.
+    /// for what comes up on a date and will be worth raising then. Ticket
+    /// 64: the part is read before saying it will note one.
     /// Main chat only.
     #[test]
     fn main_chat_entry_layer_asks_for_reminders_unasked() {
@@ -1440,9 +1458,12 @@ mod tests {
         ));
         assert!(main
             .contains("and tick it off when it is done; set yourself a reminder when you promise"));
-        assert!(main
-            .contains("to follow up. Do it unasked, and read `todo list` before saying what is"));
-        assert!(main.contains("left: see `todos.md` in your manual."));
+        assert!(
+            main.contains("to follow up. Do it unasked, but read `todos.md` in your manual before")
+        );
+        assert!(main.contains(
+            "saying you will (it says when), and `todo list` before saying what is left."
+        ));
         assert!(!main.contains("\"To-dos and"));
         assert!(!main.contains("Reminders and scheduled tasks\" in your manual"));
         assert!(crate::assistant_manual::part("todos.md").contains("### Noting a to-do"));
@@ -1464,15 +1485,40 @@ mod tests {
         let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
         // Single-line fragments only (CRLF on Windows).
         assert!(main.contains(
-            "left: see `todos.md` in your manual. Say 「记下了」 or the like only after"
+            "Say 「记下了」 or the like only after you wrote it down this turn (a to-do, a"
         ));
-        assert!(main.contains("you wrote it down this turn (a to-do, a reminder, your memory)."));
+        assert!(main.contains("reminder, your memory); if you write nothing down, do not bring up"));
         let todo = main.find("Note what the user has to do").unwrap();
         let floor = main.find("Say 「记下了」").unwrap();
         let manual = main.find("Your manual is in").unwrap();
         assert!(todo < floor && floor < manual);
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(!prompt.contains("记下了"));
+        }
+    }
+
+    /// Ticket 64 (main chat PRD ruling 116): it reads `todos.md` before
+    /// saying it will note something (the test of when is the part's), and
+    /// a turn that writes nothing down does not bring noting up. The part
+    /// it is sent to holds that test. Main chat only.
+    #[test]
+    fn main_chat_entry_layer_reads_todos_before_saying_it_will_note() {
+        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
+        // Single-line fragments only (CRLF on Windows).
+        assert!(main.contains("Do it unasked, but read `todos.md` in your manual before"));
+        assert!(main.contains("saying you will (it says when),"));
+        assert!(main.contains("if you write nothing down, do not bring up"));
+        assert!(main.contains("noting it."));
+        assert!(!main.contains("Do it unasked, and"));
+        assert!(crate::assistant_manual::part("todos.md")
+            .contains("Follow up something they mention without being asked, too, when all three"));
+        let read = main.find("but read `todos.md`").unwrap();
+        let floor = main.find("do not bring up").unwrap();
+        let manual = main.find("Your manual is in").unwrap();
+        assert!(read < floor && floor < manual);
+        for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
+            assert!(!prompt.contains("saying you will"));
+            assert!(!prompt.contains("do not bring up"));
         }
     }
 
