@@ -226,6 +226,15 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --render-only        # 只从 res
 - **补跑一次**：定时「不用了」第 2 遍话只写进 `<summary>`（票 36 见过的随机失误），补跑一遍过了。
 - **用量**：第一版措辞 70 次、第一轮 70 次、补跑 1 次，同日对照 22 次（含先用票 30 的提示词跑的「结果够好」「两件一起」4 次，同样打回）。
 
+### 票 61：「最近不要的跟进」的镜像（2026-10-19，没跑真模型）
+
+Core 在「In Hand」的三组之后加了第四组「Follow-ups the user turned down」（主聊天 PRD 裁决 113）：Galley 建的待办与定时任务里，近 90 天被用户在桌面上取消、或它照用户的话取消的，最新在前，最多 5 条，每行写取消的时间、谁取消的、标题或任务的话与原因。镜像跟着改，没跑真模型，有内容时的效果由票 60 的评测测。
+
+- **`in_hand_block`**：多一个参数 `declined`（`DeclinedFollowUp` 的 JSON 形状：`kind`、`id`、`text`、`cancelledAt`、`by`、可选的 `reason`），照 Rust 写第四组；为空时输出与之前逐字相同。
+- **`declined_items`**：`assistant_todo::declined_items` 的移植，从 `todo show` / `schedule show` 形状的记录里挑出这一组。`sched_in_hand` 用它从假 CLI 起始的待办与定时任务里取快照之前取消的那些；现在的用例都没有取消过的，所以这一组为空，提示词与之前相同。用例里怎么写「已经取消过的」、判定怎么算，留给票 60。
+- **`rust-samples.json`**：同一个临时测试（跑完删掉）多写了三组「In Hand」（四组都有并截断、只有这一组、只有这一组换成 UTC）和一组 `declined_items`（各种来源、90 天边界、同一秒按 id）；原有的样本逐字没变。`--dry-test` 逐字对照它们，另对一次「这一组为空时与票 61 之前相同」。
+- **假 CLI**：`todo cancel`、`schedule delete`、`todo update --no-remind` 照真实 Core 记下 `cancelledBy`（`--supervisor`、`--reason`，没带标签时是 `{"via": "cli"}`），勾掉或取消待办时顺带取消的提醒记 `{"via": "system"}`；`show` 与 `--all` 都带上它。`--dry-test` 加了一条 `todo-cancel-by` 逐项核对。
+
 ## 安全措施
 
 - 拦截点在 GA 的工具分发：worker 把 `agentmain` 里的 `GenericAgentHandler` 换成子类（runner 自己装处理器子类用的也是这个接口 `GaSession.install_handler`）。子类的 `dispatch` 遇到任何真实工具就记录并返回 `should_exit`，一次模型调用后整个运行结束；只有 GA 自己判断最终回答的 `no_tool`（只读回复文本）和格式错误的重试提示 `bad_json` 走原路。子类上除 `do_no_tool` 外的所有 `do_*` 方法都换成一调用就报错的版本，作为第二道保险。

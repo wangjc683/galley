@@ -630,7 +630,7 @@ def todo_wire(t):
         st = "fired" if once_fired(task) else ("scheduled" if task.get("enabled", True) else "paused")
         w["reminder"] = {"taskId": task["id"], "at": task["fireAt"], "state": st}
     w["status"] = "cancelled" if t.get("cancelledAt") else ("done" if t.get("doneAt") else "open")
-    for k in ("doneAt", "doneBy", "origin", "createdIn", "cancelledAt", "createdAt", "updatedAt"):
+    for k in ("doneAt", "doneBy", "origin", "createdIn", "cancelledAt", "cancelledBy", "createdAt", "updatedAt"):
         if t.get(k):
             w[k] = t[k]
     return w
@@ -658,10 +658,12 @@ def set_reminder(t, at):
         "createdAt": iso(now_utc()), "updatedAt": iso(now_utc())})
 
 def release_reminder(t):
-    """Ticking off or cancelling cancels a reminder that has not reminded the user."""
+    """Ticking off or cancelling cancels a reminder that has not reminded the user;
+    Core does it on its own (ticket 61: `system`)."""
     task = reminder_task(t["id"])
     if task and (not once_fired(task) or task.get("lastWake") == "pending"):
         task["cancelledAt"] = task["updatedAt"] = iso(now_utc())
+        task["cancelledBy"] = {"via": "system"}
 
 def todo_order(rows):
     """assistant_todo::todo_list_order: today (overdue first), later, any time; then done and
@@ -841,6 +843,7 @@ if cmd == ("schedule", "delete"):
     need(1, "<ID>")
     t = find_task(rest[0])
     t["cancelledAt"] = t["updatedAt"] = iso(now_utc())
+    t["cancelledBy"] = origin_of()
     out({"task": task_out(t)})
 if cmd in (("schedule", "enable"), ("schedule", "disable")):
     need(1, "<ID>")
@@ -921,6 +924,7 @@ if cmd == ("todo", "update"):
         task = reminder_task(t["id"])
         if task:
             task["cancelledAt"] = task["updatedAt"] = iso(now_utc())
+            task["cancelledBy"] = origin_of()
     elif renamed and reminder_task(t["id"]):
         reminder_task(t["id"]).update(prompt=title, updatedAt=iso(now_utc()))
     out({"todo": todo_wire(t)})
@@ -937,6 +941,7 @@ if cmd in (("todo", "done"), ("todo", "reopen"), ("todo", "cancel")):
         t["updatedAt"] = iso(now_utc())
     elif cmd[1] == "cancel":
         t["cancelledAt"] = t["updatedAt"] = iso(now_utc())
+        t["cancelledBy"] = origin_of()
         release_reminder(t)
     out({"todo": todo_wire(t)})
 if cmd in (("session", "rename"), ("session", "pin"), ("session", "unpin"), ("session", "delete")):
@@ -1238,6 +1243,7 @@ OPENING_REMINDER = ("[Galley — not a message from the user] A reminder you set
 CLOSING_MANY = "Reply once, covering all of them."
 LATE_AFTER_SECS = 120
 IN_HAND_MAX_PER_GROUP, IN_HAND_TEXT_CHARS, IN_HAND_AGENT_CHARS = 5, 40, 24
+DECLINED_WINDOW_DAYS = 90  # assistant_todo::DECLINED_WINDOW_DAYS (ticket 61)
 IN_HAND_STATES = {"running": "working", "asking": "asking a question", "failed": "failed",
                   "step_limit": "paused at the step limit", "stopped": "stopped before it finished",
                   "done": "done"}
@@ -1336,14 +1342,18 @@ def due_words(due: dict[str, Any], tz: Any) -> str | None:
     return day.strftime("%Y-%m-%d") + f" ({WEEKDAYS_EN[day.weekday()]})"
 
 
-def in_hand_block(todo: dict[str, Any], now: datetime, tz: Any) -> str | None:
+def in_hand_block(todo: dict[str, Any], now: datetime, tz: Any,
+                  declined: list[dict[str, Any]] | None = None) -> str | None:
     """managed_prompt::in_hand_section (ticket 36, regrouped by ticket 39),
     from the to-do read's JSON shape (AssistantTodo: `yours` {today, later,
-    anytime}, `assistant`, `routine`; camelCase items)."""
+    anytime}, `assistant`, `routine`; camelCase items), and since ticket 61
+    the follow-ups the user turned down (`declined`, DeclinedFollowUp's
+    JSON shape: kind, id, text, cancelledAt, by, reason?) as a fourth group."""
     yours = todo.get("yours") or {}
     mine = (yours.get("today") or []) + (yours.get("later") or []) + (yours.get("anytime") or [])
     on, routine = todo.get("assistant") or [], todo.get("routine") or []
-    if not mine and not on and not routine:
+    declined = declined or []
+    if not mine and not on and not routine and not declined:
         return None
     readers = ("`todo list`, `schedule list` and `session brief <id>`" if mine
                else "`schedule list` and `session brief <id>`")
@@ -1392,6 +1402,17 @@ def in_hand_block(todo: dict[str, Any], now: datetime, tz: Any) -> str | None:
                "`sessions list`, `schedule list`",
                lambda it: subtask_line(it) if it.get("kind") == "subtask" else task_line(it)),
               ("Routine (repeating tasks):", routine, "`schedule list`", task_line))
+    def declined_line(it: dict[str, Any]) -> str:
+        at = in_hand_time(it["cancelledAt"], tz)
+        who = "by the user on the desktop" if it["by"] == "user" else "by you at the user's request"
+        line = f"`{it['id']}` cancelled {at + ' ' if at else ''}{who}: {in_hand_cut(it.get('text', ''), IN_HAND_TEXT_CHARS)}"
+        if it.get("reason") is not None:
+            line += f" (reason: {in_hand_cut(it['reason'], IN_HAND_TEXT_CHARS)})"
+        return line
+
+    groups += ((f"Follow-ups the user turned down (to-dos and reminders you set that were cancelled on the "
+                f"desktop or at their request, last {DECLINED_WINDOW_DAYS} days):", declined,
+                "`todo list --all`, `schedule list --all`", declined_line),)
     for title, items, more, line in groups:
         if not items:
             continue
@@ -1400,6 +1421,41 @@ def in_hand_block(todo: dict[str, Any], now: datetime, tz: Any) -> str | None:
         if len(items) > IN_HAND_MAX_PER_GROUP:
             out.append(f"\n- and {len(items) - IN_HAND_MAX_PER_GROUP} more: {more}")
     return "".join(out)
+
+
+def declined_items(todos: list[dict[str, Any]], tasks: list[dict[str, Any]], now: datetime) -> list[dict[str, Any]]:
+    """assistant_todo::declined_items (ticket 61): the to-dos (`todo show`
+    shape) and tasks (`schedule show` shape) Galley made, cancelled within
+    DECLINED_WINDOW_DAYS of `now` by the user at the desktop (`gui`) or by
+    Galley at the user's request (`supervisor` + `galley-assistant`), most
+    recently cancelled first (the same second: by id), in
+    DeclinedFollowUp's JSON shape."""
+    since = int(now.timestamp()) - DECLINED_WINDOW_DAYS * 86_400
+    picked = []
+    for kind, rows, text_key in (("todo", todos, "title"), ("task", tasks, "prompt")):
+        for row in rows:
+            made, by, at = row.get("origin") or {}, row.get("cancelledBy"), row.get("cancelledAt")
+            if made.get("supervisor") != "galley-assistant" or not at or not by:
+                continue
+            try:
+                secs = int(datetime.fromisoformat(str(at).replace("Z", "+00:00")).timestamp())
+            except ValueError:
+                continue
+            if secs < since:
+                continue
+            if by.get("via") == "gui":
+                who = "user"
+            elif by.get("via") == "supervisor" and by.get("supervisor") == "galley-assistant":
+                who = "assistant"
+            else:
+                continue
+            item = {"by": who, "cancelledAt": at, "id": row["id"], "kind": kind, "text": row.get(text_key, "")}
+            reason = (by.get("reason") or "").strip()
+            if reason:
+                item["reason"] = reason
+            picked.append((secs, item))
+    picked.sort(key=lambda x: (-x[0], x[1]["id"]))
+    return [item for _, item in picked]
 
 
 def in_hand_todo(todos: list[dict[str, Any]], tasks: list[dict[str, Any]], at: datetime) -> dict[str, Any]:
@@ -1585,7 +1641,14 @@ def sched_in_hand(case: dict[str, Any], now: datetime) -> str | None:
     reminders = [r for r in (todo_reminder_task(t, now) for t in todo_specs(case)) if r]
     todos = [todo_wire_at(todo_stored(t, now, k), reminders, now.tzinfo, as_of)
              for k, t in enumerate(todo_specs(case)) if t.get("in_hand", True)]
-    return in_hand_block(in_hand_todo(todos, tasks, as_of), as_of, now.tzinfo)
+    # Ticket 61: the follow-ups turned down, from every to-do and task the
+    # fake galley starts with, cancelled by the time of the snapshot. No
+    # case cancels one yet (ticket 60's cases will), so this is empty and
+    # the lines read as before.
+    declined = [d for d in declined_items([todo_stored(t, now, k) for k, t in enumerate(todo_specs(case))],
+                                          [sched_task(t, now) for t in case.get("tasks") or []] + reminders, as_of)
+                if datetime.fromisoformat(d["cancelledAt"].replace("Z", "+00:00")) <= as_of]
+    return in_hand_block(in_hand_todo(todos, tasks, as_of), as_of, now.tzinfo, declined)
 
 
 def sched_prompt(case: dict[str, Any], now: datetime) -> str:
@@ -2032,6 +2095,23 @@ DUE="$(date -v+1d +%Y-%m-%d)"
 "$GALLEY" todo add --help | head -1
 '''
 
+# Ticket 61: who cancelled, as the real Core records it — `todo cancel`
+# with its label and reason, the reminder Core takes along (`system`),
+# `todo update --no-remind` (the caller's own), `schedule delete` with no
+# label (`cli`) — and `--all` carrying it.
+TODO_CANCEL_BY_BASH = r'''GALLEY="$(sed -n '1p' "${XDG_CONFIG_HOME:-$HOME/.config}/galley/cli-path")"
+AT="$(date -v+2H +%Y-%m-%dT%H:%M)"
+"$GALLEY" todo cancel todo_1a2b3c4d5e6f7a8b --supervisor=galley-assistant --reason="用户说房东的事不用提醒" >/dev/null
+"$GALLEY" todo show todo_1a2b3c4d5e6f7a8b | sed 's/^/cancelled: /'
+"$GALLEY" schedule show sched_3e9d1c7a5b0f2486 | sed 's/^/released: /'
+"$GALLEY" todo update todo_2b3c4d5e6f7a8b9c --no-remind --supervisor=galley-assistant --reason="不用提醒" >/dev/null
+"$GALLEY" schedule show sched_8c1e0a7b3d2f4965 | sed 's/^/unreminded: /'
+"$GALLEY" schedule create "提醒用户喝水" --at="$AT" --target=assistant --supervisor=galley-assistant >/dev/null
+"$GALLEY" schedule delete sched_5eed000000000002 | sed 's/^/deleted: /'
+"$GALLEY" todo list --all | grep -c cancelledBy | sed 's/^/all_cancelledby=/'
+"$GALLEY" schedule list --all | grep -c cancelledBy | sed 's/^/tasks_cancelledby=/'
+'''
+
 
 SANDBOX_PROBE = r'''import json, os, socket, subprocess
 res = {}
@@ -2183,6 +2263,9 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                  ("file_read", {"path": os.path.join(ctx.get("manual_dir", ""), "todos.md")})),
             call("<summary>Use the list</summary>\n动一下清单。", ("code_run", {"type": "bash", "script": TODO_DRY_BASH})),
             call("<summary>Done</summary>\n已勾掉。")],
+        "todo-cancel-by": [
+            call("<summary>Cancel</summary>\n取消。", ("code_run", {"type": "bash", "script": TODO_CANCEL_BY_BASH})),
+            call("<summary>Cancelled</summary>\n好，不提醒了。")],
         "todo-tick": [
             call("<summary>Tick it</summary>\n勾掉。", ("code_run", {"type": "bash", "script":
                  'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; "$G" todo list >/dev/null; '
@@ -4690,6 +4773,7 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
             jobs.append(job)
     tcases = {c["id"]: c for c in json.loads(TODO_CASES.read_text(encoding="utf-8"))["cases"]}
     todo_scripts = {"todo-tick-soil": ("tick-soil", "todo-cli"), "todo-tick-ok": ("tick-soil", "todo-tick"),
+                    "todo-cancel-by": ("tick-soil", "todo-cancel-by"),
                     "todo-wake-todo": ("wake-todo", "todo-remind"),
                     "todo-landlord-8am": ("remind-landlord-8am", "todo-at-named"),
                     "todo-landlord-early": ("remind-landlord-8am", "todo-early")}
@@ -4941,8 +5025,17 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, 
     samples = json.loads(SCHED_SAMPLES.read_text(encoding="utf-8"))
     for ih in samples["in_hand"]:
         tz = timezone(timedelta(minutes=ih["tz_offset_minutes"]))
-        check(in_hand_block(ih["todo"], datetime.fromisoformat(ih["now"].replace("Z", "+00:00")), tz) == ih["text"],
+        check(in_hand_block(ih["todo"], datetime.fromisoformat(ih["now"].replace("Z", "+00:00")), tz,
+                            ih.get("declined")) == ih["text"],
               f"in_hand_block == managed_prompt::in_hand_section ({ih['name']})")
+    # Ticket 61: which follow-ups were turned down, from the briefs.
+    for di in samples["declined_items"]:
+        got = declined_items(di["todos"], di["tasks"], datetime.fromisoformat(di["now"].replace("Z", "+00:00")))
+        check(got == di["declined"], f"declined_items == assistant_todo::declined_items ({di['name']})")
+    full = next(ih for ih in samples["in_hand"] if ih["name"] == "full")
+    check(in_hand_block(full["todo"], datetime.fromisoformat(full["now"].replace("Z", "+00:00")),
+                        timezone(timedelta(minutes=full["tz_offset_minutes"])), []) == full["text"],
+          "no follow-ups turned down: the lines read as before ticket 61")
     for n, w in enumerate(samples["wake"], 1):
         check(reminder_note(w["reports"]) == w["text"], f"reminder_note == subtask_report::report_text ({n})")
     check(all(lateness_words(a) == b for a, b in samples["lateness_words"]), "lateness_words matches")
@@ -5090,6 +5183,21 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
                   f"the judge flags it ({f['reasons']})")
             check(f["manual"].startswith("读了（第 1 次调用）：todos.md；1 次 1 轮，") and f["listed"] == "查了",
                   f"the part read, list read before writing ({f['manual']})")
+        elif script == "todo-cancel-by":
+            out = str((r["calls"][0].get("result") or {}).get("stdout", ""))
+            lines = {ln.split(": ", 1)[0]: json.loads(ln.split(": ", 1)[1]) for ln in out.splitlines()
+                     if ln.split(": ", 1)[0] in ("cancelled", "released", "unreminded", "deleted")}
+            check(lines.get("cancelled", {}).get("cancelledBy") == {
+                "via": "supervisor", "supervisor": "galley-assistant", "reason": "用户说房东的事不用提醒"},
+                f"todo cancel records its label and reason ({lines.get('cancelled')})")
+            check(lines.get("released", {}).get("cancelledBy") == {"via": "system"},
+                  f"the reminder Core took along is system ({lines.get('released')})")
+            check(lines.get("unreminded", {}).get("cancelledBy") == {
+                "via": "supervisor", "supervisor": "galley-assistant", "reason": "不用提醒"},
+                f"--no-remind is the caller's own cancel ({lines.get('unreminded')})")
+            check((lines.get("deleted", {}).get("task") or {}).get("cancelledBy") == {"via": "cli"},
+                  f"schedule delete with no label is cli ({lines.get('deleted')})")
+            check("all_cancelledby=1" in out and "tasks_cancelledby=3" in out, f"--all carries it ({out[-200:]})")
         elif script == "todo-tick":
             check(f["pass"] and f["names"] == ["todo list", "todo done"], f"ticked off, passes ({f['reasons']})")
         elif script == "todo-at-named":
