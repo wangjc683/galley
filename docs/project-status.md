@@ -761,6 +761,55 @@ resident bridge (`.scratch/browser-control-ux/PRD.md`, moved out of the
   while Galley holds the question; a disabled composer greys the effort rows.
   No Agent API or migration change.
 
+- **The main chat feels like IM** (2026-10-19, `.scratch/main-chat/`
+  rulings 103–110, tickets 51–58, devlog
+  [2026-10-19-im-feel-typing-bubble-and-hover-rows](./devlog/2026-10-19-im-feel-typing-bubble-and-hover-rows.md)).
+  GUI only, managed runtime with a main chat. While the assistant works the
+  conversation shows a three-dot typing bubble that grows into the reply
+  when it lands; the top bar's identity line carries the process (untimed)
+  and the sidebar card says 「正在输入…」. Your bubble shows copy · quote · ⋯
+  on hover and the row hides as soon as you leave; the selection toolbar is
+  one shell. The managed runtime's top bar has no Supervisor SOP icon
+  (Settings and ⌘K 「智能体接入」 reach the page). No Agent API or migration
+  change.
+
+- **The assistant's manual in parts** (2026-10-19, ruling 111, ticket 59,
+  devlog
+  [2026-10-19-prompt-layers-what-to-fetch-on-demand](./devlog/2026-10-19-prompt-layers-what-to-fetch-on-demand.md)).
+  Eight files under `<state_root>/assistant/reference/manual/`, rewritten
+  each time the main chat starts (the old single file is removed); the
+  main chat's entry layer names the parts to read before a CLI write. No
+  Agent API change.
+
+- **The assistant follows things up on its own** (2026-10-19, rulings
+  112–116, tickets 60, 61, 63, 64, devlog
+  [2026-10-19-follow-up-on-its-own](./devlog/2026-10-19-follow-up-on-its-own.md)).
+  Something coming up on a date that will be of use then goes on the list
+  or into its own reminders unasked (three tests in the manual's
+  `todos.md`, with a deterministic floor); a kind the user turned down is
+  kept on the cancellation and shown in each segment's In Hand lines
+  ("Follow-ups the user turned down", 90 days, at most 5); a reminder that
+  comes due says what is of use now instead of reading the item back.
+  **Migration 051** adds `cancelled_via`, `cancelled_by_supervisor`,
+  `cancelled_origin_note` to `todos` and `scheduled_tasks` (older
+  cancellations stay NULL). **Agent API, additive inside `3`:** `Todo` and
+  `ScheduledTask` carry `cancelledBy` in `todo show` / `todo list --all`
+  and `schedule show` / `schedule list --all`. The entry layer's budget is
+  2767 bytes.
+
+- **Two zones in the sidebar, and a face that is alive** (2026-10-19 / 20,
+  rulings 114, 117–119, tickets 62, 65–67, devlog
+  [2026-10-20-sidebar-zones-and-a-living-face](./devlog/2026-10-20-sidebar-zones-and-a-living-face.md)).
+  GUI only, managed runtime with a main chat; the external runtime's
+  sidebar is unchanged. 「工作台」 sits on the line between the assistant
+  and the workbench, whose ground runs to the window's foot with 「已归档」
+  pinned on it. The assistant's card is a centred 72px stage, and its
+  avatar's face (eyes, mouth, the tongue that makes the G, a few comic
+  marks) moves with what it is doing — only in the sidebar, mostly still
+  when idle, calmer on long runs; the top bar's avatar stays still, and
+  Reduce Motion keeps it still with the spinning badge back. No Agent API
+  or migration change.
+
 **Do at release** (outward-facing, so ask JC before each; the release SOP's
 Pre-Flight checks this list):
 
@@ -792,6 +841,9 @@ Pre-Flight checks this list):
   only)
   (`.scratch/telegram-details/PRD.md`, devlog
   [2026-10-16-telegram-details](./devlog/2026-10-16-telegram-details.md)).
+- Release notes: the managed runtime's top bar no longer has the
+  Supervisor SOP icon; Settings → 智能体接入 and ⌘K 「智能体接入」 reach the
+  page (main chat ticket 54, ruling 106). The external runtime keeps it.
 
 - **Core send takeover and remote-access groundwork** (2026-10-10,
   `.scratch/ios-client/`, devlog
