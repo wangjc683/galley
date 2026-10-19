@@ -37,7 +37,10 @@ import type { Turn } from "@/types/conversation";
  * `deriveSubtaskCard` over the same stores the sidebar row reads:
  *
  *   running   brand bar, spinner, 「第 N 步 · …」 (the row's subline)
- *   asking    warning bar + tint, the question answered right here
+ *   asking    warning bar + tint, 「等你回复」: the assistant takes the
+ *             question to the main chat and the user answers there
+ *             (ruling 101); only when Core could not wake it for this
+ *             question is it drawn and answered right here
  *   done      faint bar on the page, check, one line of result
  *   failed    red bar + tint, the reason
  *   not started  faint red bar, the reason, nothing to open
@@ -91,10 +94,16 @@ function SubtaskCard({ dispatch }: { dispatch: SubtaskDispatch }) {
   const runError = useSubtasksStore((s) =>
     sid ? (s.runErrors[sid] ?? null) : null,
   );
+  // Absent unless Core could not wake the main chat for this subtask's
+  // report (ruling 101): then its question is answered here.
+  const askInCard = useSubtasksStore((s) =>
+    sid && sid in s.askInCard ? s.askInCard[sid] : undefined,
+  );
   const state = deriveSubtaskCard(dispatch, session, {
     ...live,
     ...runtime,
     runError,
+    askInCard,
   });
 
   // A subtask from before this page (a restart, a reload) has history
@@ -165,7 +174,7 @@ function SubtaskCard({ dispatch }: { dispatch: SubtaskDispatch }) {
           </Button>
         )}
       </div>
-      {state.kind === "asking" && sid && (
+      {state.kind === "asking" && state.inCard && sid && (
         <SubtaskAnswer sessionId={sid} state={state} />
       )}
     </div>
@@ -175,7 +184,9 @@ function SubtaskCard({ dispatch }: { dispatch: SubtaskDispatch }) {
 /** The question, its candidates and a one-line reply, answered in the
  * card through the same Core send as the Composer's answer: it goes to
  * the subtask as `ask_user_response` (Core sees the pending question).
- * An answer never promotes the subtask into the sidebar. */
+ * An answer never promotes the subtask into the sidebar. Drawn only
+ * when the question's report could not wake the main chat (ruling
+ * 101); otherwise the user answers the assistant there. */
 function SubtaskAnswer({
   sessionId,
   state,

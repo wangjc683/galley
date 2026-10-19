@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SubtaskDispatch } from "@/lib/subtasks";
 import { makeSession } from "@/test/factories";
+import type { PendingAskUser } from "@/types/conversation";
 import type { Session } from "@/types/session";
 
 /**
@@ -18,6 +19,7 @@ const state = vi.hoisted(() => ({
   messages: {} as Record<string, unknown>,
   runtime: {} as Record<string, unknown>,
   runErrors: {} as Record<string, string>,
+  askInCard: {} as Record<string, PendingAskUser | null>,
 }));
 
 function fakeStore<T>(get: () => T) {
@@ -39,7 +41,10 @@ vi.mock("@/stores/runtime", () => ({
   useRuntimeStore: fakeStore(() => ({ byId: state.runtime })),
 }));
 vi.mock("@/stores/subtasks", () => ({
-  useSubtasksStore: fakeStore(() => ({ runErrors: state.runErrors })),
+  useSubtasksStore: fakeStore(() => ({
+    runErrors: state.runErrors,
+    askInCard: state.askInCard,
+  })),
 }));
 
 import { SubtaskCards } from "./SubtaskCards";
@@ -92,6 +97,7 @@ beforeEach(() => {
   state.messages = {};
   state.runtime = {};
   state.runErrors = {};
+  state.askInCard = {};
 });
 
 describe("a subtask card", () => {
@@ -129,7 +135,9 @@ describe("a subtask card", () => {
     expect(done).not.toContain("第 2 轮");
   });
 
-  it("asks: the question, its candidates and a reply line in the card", () => {
+  // Ruling 101: the question is the assistant's to take to the main
+  // chat, where the user answers it; the card only says it waits.
+  it("asks: only the waiting line, the question goes to the assistant", () => {
     liveMessages({
       pendingAskUser: {
         question: "要把发票单独放吗？",
@@ -138,12 +146,55 @@ describe("a subtask card", () => {
     });
     const html = render([dispatch()]);
     expect(html).toContain('data-subtask-state="asking"');
+    expect(html).toContain(">等你回复<");
+    expect(html).toContain("bg-warning");
+    expect(html).toContain("text-warning");
+    expect(html).toContain(">打开<");
+    expect(html).not.toContain("要把发票单独放吗？");
+    expect(html).not.toContain(">不要<");
+    expect(html).not.toContain('data-role="ask-user-bubble"');
+    expect(html).not.toContain('placeholder="回复…"');
+    expect(html).not.toContain('aria-label="发送"');
+  });
+
+  it("asks in the card when Core could not wake the main chat for it", () => {
+    const pending = {
+      question: "要把发票单独放吗？",
+      candidates: ["要", "不要"],
+    };
+    liveMessages({ pendingAskUser: pending });
+    state.askInCard = { "s-sub": { ...pending } };
+    const html = render([dispatch()]);
+    expect(html).toContain('data-subtask-state="asking"');
+    expect(html).toContain('data-role="ask-user-bubble"');
     expect(html).toContain("要把发票单独放吗？");
     expect(html).toContain(">不要<");
     expect(html).toContain('placeholder="回复…"');
     expect(html).toContain('aria-label="发送"');
     expect(html).toContain("bg-warning");
     expect(html).toContain(">打开<");
+    // The bubble says 「等你回复」 once; the card's own line stays out.
+    expect(html.split("等你回复").length - 1).toBe(1);
+    // Core's word came before the page had the question: the one it asks.
+    state.askInCard = { "s-sub": null };
+    expect(render([dispatch()])).toContain('placeholder="回复…"');
+  });
+
+  it("goes back to the waiting line on a new question, and to running when it runs", () => {
+    state.askInCard = {
+      "s-sub": { question: "要把发票单独放吗？", candidates: ["要", "不要"] },
+    };
+    liveMessages({
+      pendingAskUser: { question: "合同放哪一类？", candidates: [] },
+    });
+    const asked = render([dispatch()]);
+    expect(asked).toContain(">等你回复<");
+    expect(asked).not.toContain("合同放哪一类？");
+    expect(asked).not.toContain('placeholder="回复…"');
+    liveMessages({ agentRunning: true });
+    const running = render([dispatch()]);
+    expect(running).toContain('data-subtask-state="running"');
+    expect(running).not.toContain('placeholder="回复…"');
   });
 
   it("is done: one line of result and 打开", () => {

@@ -316,6 +316,90 @@ describe("a report that could not wake the main chat", () => {
   });
 });
 
+// Ruling 101: a subtask's question is the assistant's to take to the
+// main chat; its card answers it only while Core could not wake the
+// main chat for it.
+describe("a question left to the card", () => {
+  const asked = { question: "要把发票单独放吗？", candidates: ["要", "不要"] };
+
+  function ask(sessionId = SUB): void {
+    dispatchIPCEvent({
+      kind: "ask_user",
+      sessionId,
+      question: asked.question,
+      candidates: asked.candidates,
+      timestamp: "2026-10-13T08:01:00.000Z",
+    });
+  }
+
+  function turnStart(sessionId = SUB): IPCEvent {
+    return {
+      kind: "turn_start",
+      sessionId,
+      turnIndex: 1,
+      timestamp: "2026-10-13T08:02:00.000Z",
+    };
+  }
+
+  it("is nothing until Core says the report could not wake the main chat", () => {
+    seed();
+    startRun(0);
+    ask();
+    expect(useSubtasksStore.getState().askInCard).toEqual({});
+    applySubtaskReportUndelivered({ mainChatId: MAIN, subtaskIds: [SUB] });
+    expect(useSubtasksStore.getState().askInCard).toEqual({ [SUB]: asked });
+  });
+
+  it("holds for the question to come when Core said so first", () => {
+    seed();
+    applySubtaskReportUndelivered({ mainChatId: MAIN, subtaskIds: [SUB] });
+    expect(useSubtasksStore.getState().askInCard).toEqual({ [SUB]: null });
+  });
+
+  it("ends when the subtask runs again: answered, or overtaken", () => {
+    seed();
+    startRun(0);
+    ask();
+    applySubtaskReportUndelivered({ mainChatId: MAIN, subtaskIds: [SUB] });
+    dispatchIPCEvent(turnStart());
+    expect(useSubtasksStore.getState().askInCard).toEqual({});
+  });
+
+  it("ends when a later wake carrying it reaches the assistant", () => {
+    seed();
+    startRun(0);
+    ask();
+    applySubtaskReportUndelivered({ mainChatId: MAIN, subtaskIds: [SUB] });
+    // Written but not yet dispatched, or not taken: still the card's.
+    report("pending");
+    report("persisted_only");
+    expect(useSubtasksStore.getState().askInCard).toEqual({ [SUB]: asked });
+    report("dispatched");
+    expect(useSubtasksStore.getState().askInCard).toEqual({});
+  });
+
+  it("ends only for the subtasks the wake names", () => {
+    seed();
+    useSubtasksStore.getState().markAskInCard({ [SUB]: asked, "s-b": null });
+    const payload: UserMessagePersistedPayload = {
+      sessionId: MAIN,
+      message: {
+        id: `msg_${MAIN}_9_user`,
+        content: "[Galley — not a message from the user] …",
+        turnIndex: 9,
+        origin: {
+          via: "system",
+          supervisor: "galley-report",
+          reason: "s-b,s-c",
+        },
+      },
+      dispatch: "dispatched",
+    };
+    noteSubtaskReportPersisted(payload);
+    expect(useSubtasksStore.getState().askInCard).toEqual({ [SUB]: asked });
+  });
+});
+
 describe("the assistant's reply to a report", () => {
   function mainTurnEnd(responseContent: string): IPCEvent {
     return {

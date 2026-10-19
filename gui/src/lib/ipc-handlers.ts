@@ -37,7 +37,7 @@ import {
 } from "@/lib/subtasks";
 import { resolveAbsoluteTurnIndex } from "@/lib/turn-index";
 import { fromIPCError, makeAppError } from "@/types/app-error";
-import type { AgentTurn } from "@/types/conversation";
+import type { AgentTurn, PendingAskUser } from "@/types/conversation";
 import type {
   IPCEvent,
   MessageVisibility,
@@ -104,7 +104,10 @@ export function applySubtaskDispatched(
  * answer). One voice is the rule — the assistant's — and this is its
  * fallback: each subtask notifies as it did before ticket 31, from how
  * it stands now (lib/subtask-notify.ts `subtaskFallbackNotification`:
- * asking, failed, done after two minutes, with the same words).
+ * asking, failed, done after two minutes, with the same words), and a
+ * subtask's question is answered in its card until it runs again or a
+ * later wake carries it to the assistant (ruling 101, lib/subtasks.ts
+ * `answeredInCard`).
  */
 export function applySubtaskReportUndelivered(
   payload: SubtaskReportUndeliveredPayload,
@@ -113,6 +116,12 @@ export function applySubtaskReportUndelivered(
   const nowMs = Date.now();
   const dispatches =
     useSubtasksStore.getState().byParent[payload.mainChatId] ?? [];
+  const askInCard: Record<string, PendingAskUser | null> = {};
+  for (const id of payload.subtaskIds) {
+    askInCard[id] =
+      useMessagesStore.getState().byId[id]?.pendingAskUser ?? null;
+  }
+  useSubtasksStore.getState().markAskInCard(askInCard);
   for (const id of payload.subtaskIds) {
     const m = useMessagesStore.getState().byId[id];
     const r = useRuntimeStore.getState().byId[id];
@@ -141,16 +150,28 @@ export function applySubtaskReportUndelivered(
  * sent from here (`replyDone`, the window gate as ever); a reply that
  * says nothing drops the flag at its turn_end. A report that did not
  * get dispatched opens no run and leaves no flag.
+ *
+ * Once dispatched, the wake reached the assistant: a question one of
+ * its subtasks left to its card when an earlier wake could not be
+ * delivered is the assistant's again (ruling 101), and the card goes
+ * back to saying it is waiting. The row's note lists the subtasks
+ * (Core `Origin::subtask_report`).
  */
 export function noteSubtaskReportPersisted(
   payload: UserMessagePersistedPayload,
 ): void {
-  if (!isSubtaskReport(payload.message.origin)) return;
+  const origin = payload.message.origin;
+  if (!isSubtaskReport(origin)) return;
   const dispatch = payload.dispatch ?? "dispatched";
   if (dispatch === "pending" || dispatch === "dispatched") {
     markReplyNotifyPending(payload.sessionId);
   } else {
     clearReplyNotifyPending(payload.sessionId);
+  }
+  if (dispatch === "dispatched" && origin?.reason) {
+    useSubtasksStore
+      .getState()
+      .clearAskInCard(origin.reason.split(",").map((id) => id.trim()));
   }
 }
 
@@ -589,8 +610,11 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // Same for the step-limit tail (#29): whatever started this run —
       // composer, queue, CLI — the paused run is moving again.
       messages.setPausedAtStepLimit(event.sessionId, false);
-      // A new run of a subtask clears the error its card showed.
+      // A new run of a subtask clears the error its card showed, and
+      // the question its card was answering (ruling 101): answered, or
+      // overtaken by whatever started this run.
       useSubtasksStore.getState().setRunError(event.sessionId, null);
+      useSubtasksStore.getState().clearAskInCard([event.sessionId]);
       messages.setCurrentTurnIndex(
         event.sessionId,
         (messages.byId[event.sessionId]?.runStepBase ?? 0) + event.turnIndex,

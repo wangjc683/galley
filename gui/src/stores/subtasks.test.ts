@@ -77,4 +77,24 @@ describe("the subtasks store (ticket 06a)", () => {
     store.setRunError("s-a", null);
     expect(useSubtasksStore.getState().runErrors).toEqual({});
   });
+
+  // Ruling 101: a question left to the card while Core could not wake
+  // the main chat for it.
+  it("keeps a question left to the card until it is cleared or forgotten", () => {
+    const store = useSubtasksStore.getState();
+    const asked = { question: "靠窗还是靠过道？", candidates: ["靠窗"] };
+    store.markAskInCard({ "s-a": asked, "s-b": null });
+    expect(useSubtasksStore.getState().askInCard).toEqual({
+      "s-a": asked,
+      "s-b": null,
+    });
+    const before = useSubtasksStore.getState().askInCard;
+    store.clearAskInCard(["s-x"]);
+    // Nothing of its: the same object.
+    expect(useSubtasksStore.getState().askInCard).toBe(before);
+    store.clearAskInCard(["s-b"]);
+    expect(useSubtasksStore.getState().askInCard).toEqual({ "s-a": asked });
+    store.forgetSessions(["s-a"]);
+    expect(useSubtasksStore.getState().askInCard).toEqual({});
+  });
 });

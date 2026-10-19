@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { copyForLanguage } from "@/lib/i18n";
 import { buildRunGroups } from "@/lib/run-groups";
 import {
+  answeredInCard,
   deriveSubtaskCard,
   endsInSilentReport,
   hiddenReportTurns,
@@ -11,6 +12,7 @@ import {
   isSubtaskReportTurn,
   isUnpromotedSubtask,
   mergeDispatches,
+  sameQuestion,
   subtaskBreadcrumb,
   subtaskCardLine,
   unpromotedSubtasksOf,
@@ -221,7 +223,7 @@ describe("the card's state", () => {
         turns: [userTurn, agent()],
       }),
     );
-    expect(subtaskCardLine(asking, zh)).toBeNull();
+    expect(subtaskCardLine(asking, zh)).toBe("等你回复");
     const failed = deriveSubtaskCard(
       dispatch({ sendBacks: 1 }),
       subtask,
@@ -230,7 +232,9 @@ describe("the card's state", () => {
     expect(subtaskCardLine(failed, zh)).toBe("出错：quota exceeded");
   });
 
-  it("asks: the question goes to the card", () => {
+  // Ruling 101: the assistant takes a subtask's question to the main
+  // chat; the card answers it only when that wake could not be delivered.
+  it("asks: the card says it is waiting, the question goes to the assistant", () => {
     const pending = {
       question: "要把发票单独放吗？",
       candidates: ["要", "不要"],
@@ -240,9 +244,51 @@ describe("the card's state", () => {
       subtask,
       live({ pendingAskUser: pending, turns: [userTurn, agent()] }),
     );
-    expect(state).toEqual({ kind: "asking", pending });
-    // The bubble in the card says it; the state line stays empty.
+    expect(state).toEqual({ kind: "asking", pending, inCard: false });
+    // The sidebar row's words, nothing of the question.
+    expect(subtaskCardLine(state, zh)).toBe("等你回复");
+    expect(subtaskCardLine(state, en)).toBe("Waiting for you");
+  });
+
+  it("asks in the card when its report could not wake the main chat", () => {
+    const pending = {
+      question: "要把发票单独放吗？",
+      candidates: ["要", "不要"],
+    };
+    const state = deriveSubtaskCard(
+      dispatch(),
+      subtask,
+      live({
+        pendingAskUser: pending,
+        askInCard: { ...pending, candidates: [...pending.candidates] },
+        turns: [userTurn, agent()],
+      }),
+    );
+    expect(state).toEqual({ kind: "asking", pending, inCard: true });
+    // The bubble in the card says 「等你回复」; the state line stays empty.
     expect(subtaskCardLine(state, zh)).toBeNull();
+  });
+
+  it("answers in the card only the question Core could not deliver", () => {
+    const asked = {
+      question: "要把发票单独放吗？",
+      candidates: ["要", "不要"],
+    };
+    // No word from Core: the assistant has it.
+    expect(answeredInCard(undefined, asked)).toBe(false);
+    // Core said so before the page saw the question: the one it asks.
+    expect(answeredInCard(null, asked)).toBe(true);
+    expect(answeredInCard({ ...asked }, asked)).toBe(true);
+    // A new question is a new report: not this fallback's.
+    expect(
+      answeredInCard(asked, { question: "合同放哪？", candidates: [] }),
+    ).toBe(false);
+    expect(
+      answeredInCard(asked, { ...asked, candidates: ["要", "不要", "看情况"] }),
+    ).toBe(false);
+    expect(sameQuestion(asked, { ...asked, candidates: ["不要", "要"] })).toBe(
+      false,
+    );
   });
 
   it("is done with one line of result: the recap, else the answer's first line", () => {

@@ -45,7 +45,8 @@ export interface AskUserBubbleProps {
    * tint itself. */
   className?: string;
   /** Rendered under the candidates: the subtask card's one-line reply
-   * (its question is answered in the card, not the Composer). */
+   * (a question answered in the card, not the Composer — only when its
+   * report could not wake the main chat, ruling 101). */
   children?: ReactNode;
   /** The assistant's conversation: the question is a plain left bubble
    * with the candidates under it — no warning bar, no 「等你回复」 (the

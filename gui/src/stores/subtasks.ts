@@ -6,6 +6,7 @@ import {
   type SubtaskDispatch,
   type SubtaskDispatchedPayload,
 } from "@/lib/subtasks";
+import type { PendingAskUser } from "@/types/conversation";
 
 /**
  * Presenter mirror of Core's subtask dispatch records (main chat ticket
@@ -18,6 +19,13 @@ import {
  * ended on — the card shows it as 失败. The page sees it as an IPC
  * `error` event; nothing persists it, so after a restart a run that
  * stopped short reads as 「没有跑完」 instead.
+ *
+ * And, in memory only, which subtasks' reports Core could not deliver
+ * to the main chat (`subtask-report-undelivered`): their question is
+ * answered in the card (ruling 101, lib/subtasks.ts `answeredInCard`).
+ * Core says it once per report, so a page reloaded meanwhile does not
+ * hear it again: the card then only says the subtask is waiting, and
+ * the question is answered in the subtask itself (「打开」).
  */
 interface SubtasksState {
   /** Dispatch records by parent session, in display order. */
@@ -26,14 +34,24 @@ interface SubtasksState {
   requested: Record<string, true>;
   /** The error the last run of a subtask ended on, by subtask id. */
   runErrors: Record<string, string>;
+  /** Subtasks whose question is answered in their card, by subtask id:
+   * the question each was asking when Core said its report could not
+   * wake the main chat, null when the page had not seen it yet. */
+  askInCard: Record<string, PendingAskUser | null>;
   /** Read a parent's records, once per page lifetime. */
   loadFor: (parentSessionId: string) => Promise<void>;
   /** Apply Core's `subtask-dispatched`. */
   applyDispatched: (payload: SubtaskDispatchedPayload) => void;
   setRunError: (sessionId: string, message: string | null) => void;
+  /** Core could not deliver these subtasks' reports: each one's question,
+   * as the page has it now (null for none yet), goes to its card. */
+  markAskInCard: (questions: Record<string, PendingAskUser | null>) => void;
+  /** Their question is no longer the card's to answer: the subtask
+   * runs again, or a wake carrying it reached the assistant. */
+  clearAskInCard: (sessionIds: readonly string[]) => void;
   /** Drop what is kept for deleted sessions: their dispatch records as
-   * a parent, and their last run error (resetting the main chat,
-   * ticket 15). */
+   * a parent, their last run error and a question left to their card
+   * (resetting the main chat, ticket 15). */
   forgetSessions: (sessionIds: readonly string[]) => void;
 }
 
@@ -41,6 +59,7 @@ export const useSubtasksStore = create<SubtasksState>()((set, get) => ({
   byParent: {},
   requested: {},
   runErrors: {},
+  askInCard: {},
   loadFor: async (parentSessionId) => {
     if (get().requested[parentSessionId]) return;
     set((s) => ({ requested: { ...s.requested, [parentSessionId]: true } }));
@@ -90,23 +109,42 @@ export const useSubtasksStore = create<SubtasksState>()((set, get) => ({
       return { runErrors };
     });
   },
+  markAskInCard: (questions) => {
+    if (Object.keys(questions).length === 0) return;
+    set((s) => ({ askInCard: { ...s.askInCard, ...questions } }));
+  },
+  clearAskInCard: (sessionIds) => {
+    const current = get().askInCard;
+    const known = sessionIds.filter((id) => id in current);
+    if (known.length === 0) return;
+    set((s) => {
+      const askInCard = { ...s.askInCard };
+      for (const id of known) delete askInCard[id];
+      return { askInCard };
+    });
+  },
   forgetSessions: (sessionIds) => {
     const state = get();
     const known = sessionIds.filter(
       (id) =>
-        id in state.byParent || id in state.requested || id in state.runErrors,
+        id in state.byParent ||
+        id in state.requested ||
+        id in state.runErrors ||
+        id in state.askInCard,
     );
     if (known.length === 0) return;
     set((s) => {
       const byParent = { ...s.byParent };
       const requested = { ...s.requested };
       const runErrors = { ...s.runErrors };
+      const askInCard = { ...s.askInCard };
       for (const id of known) {
         delete byParent[id];
         delete requested[id];
         delete runErrors[id];
+        delete askInCard[id];
       }
-      return { byParent, requested, runErrors };
+      return { byParent, requested, runErrors, askInCard };
     });
   },
 }));

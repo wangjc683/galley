@@ -73,7 +73,9 @@ export const SUBTASK_DISPATCHED_EVENT = "subtask-dispatched";
 /** Core's `subtask-report-undelivered` (ticket 29): the reports of these
  * subtasks could not wake the main chat — its runner did not start or
  * did not take the message, or it is waiting for the user's answer. The
- * page falls back to each subtask's own notification. */
+ * page falls back to each subtask's own notification, and a subtask
+ * asking a question has it answered in its card (ruling 101,
+ * `answeredInCard`). */
 export const SUBTASK_REPORT_UNDELIVERED_EVENT = "subtask-report-undelivered";
 
 /** Payload of {@link SUBTASK_REPORT_UNDELIVERED_EVENT}. */
@@ -170,6 +172,10 @@ export interface SubtaskLiveView {
   /** The last run's error message this page saw (subtasks store), if
    * the run ended on one. */
   runError?: string | null;
+  /** Present when Core said this subtask's report could not wake the
+   * main chat (subtasks store `askInCard`): the question it was asking
+   * then, null when the page had not seen it yet. Absent otherwise. */
+  askInCard?: PendingAskUser | null;
 }
 
 /** Why a card reads as failed or not started. */
@@ -186,7 +192,11 @@ export type SubtaskCardState =
   /** The session is gone (deleted). */
   | { kind: "gone" }
   | { kind: "failed"; failure: SubtaskFailure }
-  | { kind: "asking"; pending: PendingAskUser }
+  /** `inCard`: the question is answered in the card — its report could
+   * not wake the main chat (ruling 101, `answeredInCard`). Otherwise
+   * the assistant takes it to the main chat, and the card only says
+   * it is waiting. */
+  | { kind: "asking"; pending: PendingAskUser; inCard: boolean }
   /** `step`/`summary`: the sidebar's running subline (the last finished
    * step and its recap); both null before the first step ends. `round`:
    * which round this is once the assistant sent it back (2 after one
@@ -209,7 +219,8 @@ export type SubtaskCardState =
  *   2. the session is not known → gone;
  *   3. the runner crashed (bridge `error`) or the last run ended on an
  *      error → failed;
- *   4. a question is pending → asking;
+ *   4. a question is pending → asking (answered in the card only when
+ *      its report could not wake the main chat, `answeredInCard`);
  *   5. working (a run open, or its runner starting) → running;
  *   6. Core could not start its runner and no step ever ran → failed;
  *   7. the last turn is a final answer (no question) → done;
@@ -242,7 +253,11 @@ export function deriveSubtaskCard(
     };
   }
   if (live.pendingAskUser) {
-    return { kind: "asking", pending: live.pendingAskUser };
+    return {
+      kind: "asking",
+      pending: live.pendingAskUser,
+      inCard: answeredInCard(live.askInCard, live.pendingAskUser),
+    };
   }
   if (live.agentRunning || live.bridgeStatus === "spawning") {
     const sendBacks = dispatch.sendBacks ?? 0;
@@ -276,6 +291,43 @@ export function deriveSubtaskCard(
   return { kind: "failed", failure: { kind: "didNotFinish" } };
 }
 
+/**
+ * Whether a subtask's question is answered in its card (main chat PRD
+ * ruling 101). In the main chat a subtask's question goes to the
+ * assistant: Core wakes it with the question, and it answers for the
+ * user or asks them in the main chat — so the card only says the
+ * subtask is waiting, and the question is never on screen twice. The
+ * fallback is Core saying the report could not wake the main chat
+ * (`subtask-report-undelivered`: it is waiting for the user's answer to
+ * something else, or its runner did not start or take the message):
+ * then nobody else will ask, and the card draws the question and a
+ * reply line as before.
+ *
+ * `fallback` is that word from Core (subtasks store `askInCard`): the
+ * question the subtask was asking when it came, or null when the page
+ * had not seen the question yet (it then holds for the question that
+ * arrives). It holds while the subtask still asks that same question;
+ * the store drops it when the subtask runs again and when a later wake
+ * carrying it reaches the assistant.
+ */
+export function answeredInCard(
+  fallback: PendingAskUser | null | undefined,
+  pending: PendingAskUser,
+): boolean {
+  if (fallback === undefined) return false;
+  if (fallback === null) return true;
+  return sameQuestion(fallback, pending);
+}
+
+/** The same question: same words, same candidates in the same order. */
+export function sameQuestion(a: PendingAskUser, b: PendingAskUser): boolean {
+  return (
+    a.question === b.question &&
+    a.candidates.length === b.candidates.length &&
+    a.candidates.every((c, i) => c === b.candidates[i])
+  );
+}
+
 function dispatchFailure(dispatch: SubtaskDispatch): SubtaskFailure {
   switch (dispatch.failure) {
     case "empty":
@@ -297,7 +349,9 @@ function firstLine(text: string): string | null {
 }
 
 /** The card's one state line, in the UI language. Null for a state
- * that shows no line (asking draws the question; loading draws none). */
+ * that shows no line: a question answered in the card (its bubble says
+ * 「等你回复」 above it), loading. Asking otherwise says 「等你回复」, the
+ * sidebar row's words (ruling 101). */
 export function subtaskCardLine(
   state: SubtaskCardState,
   copy: AppCopy,
@@ -327,6 +381,7 @@ export function subtaskCardLine(
       return line || copy.subtask.done;
     }
     case "asking":
+      return state.inCard ? null : copy.sidebar.waitingForYou;
     case "loading":
       return null;
   }
