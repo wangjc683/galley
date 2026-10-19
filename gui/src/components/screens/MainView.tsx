@@ -402,7 +402,8 @@ function MainViewContent({
     [throttledPartial],
   );
   // The assistant's live line: its sentence — the first line of what
-  // streams, else this stretch's latest narration — and whether the
+  // streams, else this stretch's newest step with words, its narration
+  // or else its summary (ruling 100) — and whether the
   // round already has its answer (the line then goes, the answer stands
   // whole in the conversation, before run_complete). A report round
   // whose reply said nothing (`<no-reply/>`, main chat ticket 31)

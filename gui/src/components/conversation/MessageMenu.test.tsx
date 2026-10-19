@@ -48,6 +48,7 @@ const words = zhCopy.conversation;
 function wiring(entries: MessageMenuEntry[]): MessageMenuWiring {
   return {
     has: (id) => id === "a1",
+    canQuote: (id) => id === "a1",
     model: (id) => (id === "a1" ? { entries, onSelect: () => {} } : null),
   };
 }

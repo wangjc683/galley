@@ -7,6 +7,7 @@ import {
 } from "@/lib/ipc/ga-output-cleaning";
 import {
   deletableAt,
+  isMenuBubble,
   messageRowIds,
   type DeletableMessage,
   type MessageDeleteBlock,
@@ -26,7 +27,8 @@ import type { Turn } from "@/types/conversation";
  *
  * The reply's are its action bar's actions on the same terms: 复制 and
  * 保存 take the answer's Markdown source, 展开过程 is the process button
- * (only under a reply of two steps or more, never greyed out instead).
+ * (only under a reply of two steps or more, never greyed out instead),
+ * and the bar's 引用 runs this menu's (ticket 47, PRD ruling 99).
  * The greeting is a reply with no process; a question it asked copies
  * and quotes its question (it has no bar). Yours copies your words as
  * sent. 引用 quotes the whole message, cut short when long
@@ -82,43 +84,103 @@ export function messageMenuTarget(
   const deletable = deletableAt(turns, plan, groups, index);
   if (!deletable) return null;
   const turn = turns[index];
+  if (turn.role !== "user" && turn.role !== "agent") return null;
+  const question = plan.question.has(index);
+  const text = bubbleText(turn, question)?.text ?? null;
   const base = {
     deletable,
     rowIds: messageRowIds(turns, groups, index),
+    copyText: text,
+    quoteText: messageQuoteText(turns, plan, index),
     saveSource: null,
     processOpener: null,
   };
-  if (turn.role === "user") {
-    const text = turn.content.trim() === "" ? null : turn.content;
-    return {
-      ...base,
-      copyText: text,
-      quoteText: text ? wholeMessageQuote(text, false) || null : null,
-    };
-  }
-  if (turn.role !== "agent") return null;
-  if (plan.question.has(index)) {
-    const args = mergedAskUserArgs(turn.tools);
-    const question = args ? stripGATags(args.question) : "";
-    const text = question.trim() === "" ? null : question;
-    return {
-      ...base,
-      copyText: text,
-      quoteText: text ? wholeMessageQuote(text, true) || null : null,
-    };
-  }
+  if (turn.role === "user" || question) return base;
   // A reply's answer (or the greeting): its bar's copy and save, none
   // when the answer is leaked tool-call markup (#22), as on the bar.
-  const answer = turn.finalAnswer ?? "";
-  const text =
-    answer.trim() === "" || isLeakedToolCallMarkup(answer) ? null : answer;
   return {
     ...base,
-    copyText: text,
-    quoteText: text ? wholeMessageQuote(text, true) || null : null,
     saveSource: text,
     processOpener: plan.steps.get(index)?.opener ?? null,
   };
+}
+
+/**
+ * The words a bubble's 复制 takes and its 引用 quotes from, null when it
+ * has none: your message as sent; the question it asked (`question`:
+ * the turn is drawn as its ask_user question); a reply's answer (or the
+ * greeting), none when the answer is leaked tool-call markup (#22), as
+ * on the bar. `markdown`: a reply's or a question's, read as Markdown
+ * for the quote.
+ */
+function bubbleText(
+  turn: Turn,
+  question: boolean,
+): { text: string; markdown: boolean } | null {
+  if (turn.role === "user") {
+    return turn.content.trim() === ""
+      ? null
+      : { text: turn.content, markdown: false };
+  }
+  if (turn.role !== "agent") return null;
+  if (question) {
+    const args = mergedAskUserArgs(turn.tools);
+    const asked = args ? stripGATags(args.question) : "";
+    return asked.trim() === "" ? null : { text: asked, markdown: true };
+  }
+  const answer = turn.finalAnswer ?? "";
+  return answer.trim() === "" || isLeakedToolCallMarkup(answer)
+    ? null
+    : { text: answer, markdown: true };
+}
+
+/** Each bubble's quote, by its turn (turns are never edited in place: a
+ * change is a new turn) and whether it is drawn as a question. */
+const quotes = new WeakMap<Turn, { question: boolean; quote: string | null }>();
+
+/**
+ * 引用's text for the bubble at `index` (`wholeMessageQuote` of
+ * `bubbleText`): the menu's item (`quoteText`) and the one judgment
+ * behind both 引用 — the menu's item and a reply bar's chip (ticket 47,
+ * `canQuoteMessage`). Null when there is nothing to quote: no text,
+ * leaked tool-call markup, or nothing left once the Markdown is read as
+ * it shows (a reply that is an image alone). Kept per turn: the bar asks
+ * on every render of the conversation, and a long reply's Markdown is
+ * read once, not per streamed chunk.
+ */
+export function messageQuoteText(
+  turns: readonly Turn[],
+  plan: AssistantLinePlan,
+  index: number,
+): string | null {
+  const turn = turns[index];
+  if (!turn) return null;
+  const question = plan.question.has(index);
+  const kept = quotes.get(turn);
+  if (kept && kept.question === question) return kept.quote;
+  const source = bubbleText(turn, question);
+  const quote = source
+    ? wholeMessageQuote(source.text, source.markdown) || null
+    : null;
+  quotes.set(turn, { question, quote });
+  return quote;
+}
+
+/**
+ * Whether the bubble at `index` offers 引用: it has a menu
+ * (`isMenuBubble`, as `messageMenuTarget`) and the menu has the item
+ * (`messageQuoteText`). What a reply bar's 引用 asks before it shows
+ * (ticket 47), without building the menu's whole target.
+ */
+export function canQuoteMessage(
+  turns: readonly Turn[],
+  plan: AssistantLinePlan,
+  index: number,
+): boolean {
+  return (
+    isMenuBubble(turns, plan, index) &&
+    messageQuoteText(turns, plan, index) !== null
+  );
 }
 
 /** The menu's rows, in order: what `target` offers, then a separator and

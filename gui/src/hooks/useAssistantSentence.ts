@@ -19,8 +19,8 @@ export function selectAssistantSentence(
 /**
  * While the main chat runs, the sentence the line at the end of its
  * conversation says (lib/assistant-conversation.ts
- * `assistantCachedSentence`), for the sidebar card and the header
- * (ruling 68), read from the main chat's message cache: it opens at
+ * `assistantCachedSentence`), for the sidebar card while the main chat
+ * is not on screen (ruling 68; the header says 「思考中」, ruling 87), read from the main chat's message cache: it opens at
  * launch, and the runner's events land in its cache whether it is on
  * screen or not (lib/ipc-handlers.ts appends by the event's session).
  * Null at rest, and while nothing is written yet (「思考中」).

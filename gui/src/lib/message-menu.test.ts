@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { assistantLinePlan } from "@/lib/assistant-conversation";
 import { messageRowIds } from "@/lib/message-delete";
 import {
+  canQuoteMessage,
   messageMenuEntries,
   messageMenuTarget,
   type MessageMenuEntry,
@@ -87,6 +88,12 @@ function setup(turns: Turn[]) {
       messageRowIds(
         turns,
         groups,
+        turns.findIndex((t) => t.role !== "system" && t.messageId === id),
+      ),
+    canQuote: (id: string) =>
+      canQuoteMessage(
+        turns,
+        plan,
         turns.findIndex((t) => t.role !== "system" && t.messageId === id),
       ),
   };
@@ -223,6 +230,8 @@ describe("the rows of a bubble's menu", () => {
 });
 
 describe("引用 quotes the whole message", () => {
+  const idle = { processOpen: false, block: null };
+
   it("short: whole; long: cut with 「…」", () => {
     const long = "这是一段很长的回复。".repeat(30);
     const turns: Turn[] = [user("u0"), answer("a0", long)];
@@ -231,6 +240,51 @@ describe("引用 quotes the whole message", () => {
     // About 120 CJK characters.
     expect(Array.from(quote).length).toBeLessThanOrEqual(121);
     expect(setup(TURNS).target("a4")!.quoteText).toBe("不客气");
+  });
+
+  // Ticket 47: a reply's bar shows 引用 exactly where its menu has it,
+  // by the same judgment (`canQuoteMessage`, `messageQuoteText`).
+  it("a reply that is an image alone: no 引用, in the menu or on the bar", () => {
+    const turns: Turn[] = [
+      user("u0", "画一只猫"),
+      answer("img", "![猫](/tmp/cat.png)"),
+    ];
+    const { target, canQuote } = setup(turns);
+    expect(words(messageMenuEntries(target("img")!, idle))).toEqual([
+      "copy",
+      "save",
+      "—",
+      "delete",
+    ]);
+    expect(target("img")!.quoteText).toBeNull();
+    expect(canQuote("img")).toBe(false);
+  });
+
+  it("the bar's judgment is the menu's, bubble by bubble", () => {
+    const turns: Turn[] = [
+      ...TURNS,
+      user("u5", "画一只猫"),
+      answer("img", "![猫](/tmp/cat.png)"),
+      user("u6", "再写一段代码"),
+      answer("leak", '<invoke name="code_run"></invoke>'),
+    ];
+    const { target, canQuote } = setup(turns);
+    for (const turn of turns) {
+      if (turn.role === "system" || !turn.messageId) continue;
+      const id = turn.messageId;
+      const menu = target(id);
+      const hasItem =
+        menu !== null &&
+        messageMenuEntries(menu, idle).some((entry) => entry.kind === "quote");
+      expect([id, canQuote(id)]).toEqual([id, hasItem]);
+      // Asked again (kept per turn): the same.
+      expect(canQuote(id)).toBe(hasItem);
+    }
+    // Both kinds are there: some offer it, some do not.
+    expect(canQuote("a3")).toBe(true);
+    expect(canQuote("s0")).toBe(false);
+    expect(canQuote("img")).toBe(false);
+    expect(canQuote("leak")).toBe(false);
   });
 });
 

@@ -32,7 +32,8 @@ import type { SessionStatus } from "@/types/session";
  *
  * Running, what it is saying is said once, where you can read it: the
  * line at the end of the conversation (ruling 68: the sentence it is
- * writing, else its latest narration since your last message,
+ * writing, else its newest step since your last message that has words
+ * — its narration, or since ruling 100 its summary when it wrote none —
  * `assistantLineSentence`), and the card while the main chat is not on
  * screen. The header, and the card with the main chat on screen, say
  * 「思考中」 (ruling 87: the same sentence in three places was noise;

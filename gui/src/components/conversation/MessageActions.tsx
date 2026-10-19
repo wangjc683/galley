@@ -17,7 +17,10 @@ import {
 } from "react";
 
 import { ActionChip } from "@/components/conversation/ActionChip";
-import { MessageMenuButton } from "@/components/conversation/MessageMenu";
+import {
+  MessageMenuButton,
+  MessageQuoteButton,
+} from "@/components/conversation/MessageMenu";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import type { AssistantProcessToggle } from "@/lib/assistant-conversation";
 import { useCopy } from "@/lib/i18n";
@@ -74,18 +77,29 @@ import type { MessageTelemetry } from "@/types/conversation";
  * so timers can be cleared on unmount or rapid re-clicks.
  *
  * The assistant's replies take this bar their own way (`assistant`;
- * conversation.md 「助手的对话」, main chat PRD ruling 68): icons only —
- * copy, save and, under a reply of two steps or more, the process
- * button last — and no numbers: no tokens (they head the opened steps)
- * and no context percentage (not drawn in the assistant's conversation
- * at all). While the steps are open the whole bar stays visible, the
- * process button pressed.
+ * conversation.md 「助手的对话」, main chat PRD rulings 68, 99): icons
+ * only — copy, quote, save, and under a reply of two steps or more the
+ * process button, then ⋯ — and no numbers: no tokens (they head the
+ * opened steps) and no context percentage (not drawn in the assistant's
+ * conversation at all). While the steps are open the whole bar stays
+ * visible, the process button pressed.
+ *
+ * Quote (main chat ticket 47, PRD ruling 99) is the menu's 引用 one click
+ * away and runs the menu's own action (MessageQuoteButton): the whole
+ * reply into the composer's quote strip, cut short when long. The bar
+ * keeps the menu's order (copy, quote, save, the process), so copy stays
+ * first under the hand and only the process, there under a reply of two
+ * steps or more, comes and goes, last before ⋯. Exactly where the menu
+ * has 引用 (`canQuote`): not under leaked tool-call markup
+ * (`processOnly`: nothing to copy, nothing to quote), nor under a reply
+ * with no words to quote (an image alone); not on the workbench's bar.
  *
  * The assistant's bar ends in ⋯ (main chat ticket 38, PRD ruling 85):
  * the reply's message menu, the same one a right-click on it opens
  * (MessageMenu) — copy, quote, save, the process, then delete. It is the
- * menu's findable door; right-click is the quick one. While the menu is
- * open the bar stays visible, as it does for the open steps.
+ * menu's findable door, and delete's only one (right-click is the quick
+ * one), so it stays when quote joins the bar. While the menu is open the
+ * bar stays visible, as it does for the open steps.
  */
 
 interface MessageActionsProps {
@@ -94,11 +108,12 @@ interface MessageActionsProps {
   telemetry?: MessageTelemetry;
   /** A reply in the assistant's conversation: icons only, `process`
    * for a reply of two steps or more (`processOnly` under leaked
-   * tool-call markup, which has nothing to copy or save). Without it,
-   * the workbench's bar. */
+   * tool-call markup, which has nothing to copy, quote or save).
+   * Without it, the workbench's bar. */
   assistant?: { process?: AssistantProcessToggle; processOnly?: boolean };
-  /** The reply's answer row: in the assistant's conversation, the ⋯ at
-   * the bar's end opens its message menu. */
+  /** The reply's answer row: in the assistant's conversation, the quote
+   * runs its message menu's 引用, and the ⋯ at the bar's end opens the
+   * menu. */
   messageId?: string;
 }
 
@@ -174,6 +189,11 @@ export function MessageActions({
               activeLabel={copy.conversation.copied}
               onClick={() => void onCopy()}
             />
+            {/* The menu's 引用, its own action (ticket 47): the
+                assistant's bar only, in the menu's order. */}
+            {assistant && messageId && (
+              <MessageQuoteButton messageId={messageId} />
+            )}
             <ActionChip
               active={saved}
               idleIcon={<FloppyDisk size={14} weight="thin" />}

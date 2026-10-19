@@ -9,13 +9,16 @@ import type { MessageTelemetry } from "@/types/conversation";
 
 import { MessageActions } from "./MessageActions";
 import { MessageAgent } from "./MessageAgent";
+import { MessageMenuProvider, type MessageMenuWiring } from "./MessageMenu";
 
 /**
  * A reply's action bar, the workbench's and the assistant's (main chat
- * PRD ruling 68): the assistant's is icons only — copy, save, and the
- * process button last under a reply of two steps or more — with no
- * numbers; pressed while its steps are open, and then the whole bar
- * stays up.
+ * PRD rulings 68, 99): the assistant's is icons only — copy, quote,
+ * save, the process button under a reply of two steps or more, then ⋯ —
+ * with no numbers; pressed while its steps are open, and then the whole
+ * bar stays up. Quote and ⋯ come with the conversation's message menu
+ * (MessageMenuProvider, which MainView wires for the main chat); what
+ * quote does is Conversation.quote.test.tsx's.
  */
 
 const TELEMETRY: MessageTelemetry = {
@@ -52,10 +55,24 @@ function buttonTags(markup: string): string[] {
 
 const label = (tag: string) => /aria-label="([^"]*)"/.exec(tag)?.[1];
 
+/** The main chat's menus, for the reply on row `a1`. */
+const MENU: MessageMenuWiring = {
+  has: (id) => id === "a1",
+  canQuote: (id) => id === "a1",
+  model: () => null,
+};
+
+function withMenu(node: ReactNode): ReactNode {
+  return <MessageMenuProvider value={MENU}>{node}</MessageMenuProvider>;
+}
+
 describe("the workbench's reply bar", () => {
   it("is copy, save | ↑ ↓ and the context, on hover", () => {
+    // No quote and no ⋯, even under a conversation that has the menu.
     const markup = html(
-      <MessageActions source="好的。" telemetry={TELEMETRY} />,
+      withMenu(
+        <MessageActions source="好的。" telemetry={TELEMETRY} messageId="a1" />,
+      ),
     );
     expect(barTag(markup)).toContain(HIDDEN);
     expect(buttonTags(markup).map(label)).toEqual([
@@ -77,21 +94,26 @@ describe("the workbench's reply bar", () => {
 describe("the assistant's reply bar", () => {
   const reply = (process?: { open: boolean }) =>
     html(
-      <MessageAgent
-        bubble
-        telemetry={TELEMETRY}
-        process={process && { ...process, onToggle: () => {} }}
-      >
-        好的，**明早 9 点**提醒你。
-      </MessageAgent>,
+      withMenu(
+        <MessageAgent
+          bubble
+          messageId="a1"
+          telemetry={TELEMETRY}
+          process={process && { ...process, onToggle: () => {} }}
+        >
+          好的，**明早 9 点**提醒你。
+        </MessageAgent>,
+      ),
     );
 
-  it("is copy and save only under a one-step reply, with no numbers, on hover", () => {
+  it("is copy, quote, save and ⋯ under a one-step reply, with no numbers, on hover", () => {
     const markup = reply();
     expect(barTag(markup)).toContain(HIDDEN);
     expect(buttonTags(markup).map(label)).toEqual([
       zhCopy.conversation.copy,
+      zhCopy.conversation.quoteSelection,
       zhCopy.conversation.save,
+      zhCopy.common.more,
     ]);
     expect(markup).not.toContain('class="h-3 w-px bg-line"');
     expect(markup).not.toContain("33k");
@@ -99,21 +121,28 @@ describe("the assistant's reply bar", () => {
     expect(markup).not.toMatch(/\d+ 步/);
   });
 
-  it("puts the process button last under a reply of two steps or more, in the chips' family", () => {
+  it("puts the process button after save, before ⋯, under a reply of two steps or more, in the chips' family", () => {
     const markup = reply({ open: false });
     expect(barTag(markup)).toContain(HIDDEN);
     const tags = buttonTags(markup);
     expect(tags.map(label)).toEqual([
       zhCopy.conversation.copy,
+      zhCopy.conversation.quoteSelection,
       zhCopy.conversation.save,
       zhCopy.conversation.foldExpand,
+      zhCopy.common.more,
     ]);
-    const process = tags[2];
+    const process = tags[3];
     expect(process).toContain('aria-expanded="false"');
     expect(process).toContain('tabindex="-1"');
-    // Copy's skin exactly: the same size, ink and hover ground.
+    // Copy's skin exactly: the same size, ink and hover ground; quote's
+    // too, and it is no disclosure.
     const skin = (tag: string) => /class="([^"]*)"/.exec(tag)?.[1];
     expect(skin(process)).toBe(skin(tags[0]));
+    const quote = tags[1];
+    expect(skin(quote)).toBe(skin(tags[0]));
+    expect(quote).toContain('tabindex="-1"');
+    expect(quote).not.toContain("aria-expanded");
     expect(markup).not.toContain("33k");
   });
 
@@ -123,7 +152,7 @@ describe("the assistant's reply bar", () => {
     expect(barTag(markup)).toBe(
       '<div class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">',
     );
-    const process = buttonTags(markup)[2];
+    const process = buttonTags(markup)[3];
     expect(label(process)).toBe(zhCopy.conversation.foldCollapse);
     expect(process).toContain('aria-expanded="true"');
     // The hover ground held, the ink a rung up; not the success check.
@@ -136,14 +165,38 @@ describe("the assistant's reply bar", () => {
     );
   });
 
-  it("is the process button alone under leaked tool-call markup", () => {
+  it("has no quote where the menu has no 引用 (canQuote), the rest as ever", () => {
     const markup = html(
-      <MessageAgent bubble process={{ open: false, onToggle: () => {} }}>
-        {'<invoke name="web_scan"><parameter name="url">x</parameter></invoke>'}
-      </MessageAgent>,
+      <MessageMenuProvider value={{ ...MENU, canQuote: () => false }}>
+        <MessageAgent bubble messageId="a1">
+          ![猫](/tmp/cat.png)
+        </MessageAgent>
+      </MessageMenuProvider>,
+    );
+    expect(buttonTags(markup).map(label)).toEqual([
+      zhCopy.conversation.copy,
+      zhCopy.conversation.save,
+      zhCopy.common.more,
+    ]);
+  });
+
+  it("is the process button and ⋯ alone under leaked tool-call markup: no quote", () => {
+    const markup = html(
+      withMenu(
+        <MessageAgent
+          bubble
+          messageId="a1"
+          process={{ open: false, onToggle: () => {} }}
+        >
+          {
+            '<invoke name="web_scan"><parameter name="url">x</parameter></invoke>'
+          }
+        </MessageAgent>,
+      ),
     );
     expect(buttonTags(markup).map(label)).toEqual([
       zhCopy.conversation.foldExpand,
+      zhCopy.common.more,
     ]);
     expect(barTag(markup)).toContain(HIDDEN);
     expect(markup).toContain('class="group/answer"');

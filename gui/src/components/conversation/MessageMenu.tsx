@@ -31,7 +31,8 @@ import { cn } from "@/lib/utils";
  * A bubble's message menu in the assistant's conversation (main chat
  * ticket 38, PRD ruling 85; the list is lib/message-menu.ts): right-click
  * a bubble (`MessageContextMenu`, one menu on the conversation's root), or
- * the ⋯ that ends a reply's action bar (`MessageMenuButton`). Both draw
+ * the ⋯ that ends a reply's action bar (`MessageMenuButton`; the bar's 引用
+ * runs the menu's own, `MessageQuoteButton`, ticket 47). Both draw
  * the same rows from the same model (`MessageMenuRows`, through the
  * sidebar's context / dropdown seam), in the sidebar row menus' register
  * (`galley-pop-in`, 200px, 13px). Your bubble has no hover button (ruling
@@ -51,6 +52,10 @@ export interface MessageMenuWiring {
   /** Whether row `messageId` is a bubble with a menu (cheap: the ⋯ asks
    * on every render). */
   has: (messageId: string) => boolean;
+  /** Whether that menu has 引用 — the same judgment as the menu's item
+   * (lib/message-menu `canQuoteMessage`), cheap enough for the bar's 引用
+   * to ask on every render (the quote is kept per turn). Implies `has`. */
+  canQuote: (messageId: string) => boolean;
   /** The menu of row `messageId`'s bubble, now; null when it has none. */
   model: (messageId: string) => MessageMenuModel | null;
 }
@@ -233,6 +238,40 @@ export function MessageContextMenu({
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>
+  );
+}
+
+/**
+ * 引用 on a reply's action bar (main chat ticket 47, PRD ruling 99): the
+ * menu's 引用 one click away, the same action — the click runs the
+ * menu's own (`wiring.model(…).onSelect("quote")`: the whole reply into
+ * the composer's quote strip, cut short when long, `wholeMessageQuote`),
+ * so the two never drift. A chip of the bar's own (24px, 14px thin
+ * Phosphor `Quotes` as on the menu and the selection's chip,
+ * `tabIndex={-1}`), 「引用」 for its name and tooltip. No check flash:
+ * the quote strip appearing and the caret in the composer are the
+ * receipt. It shows exactly where the menu has 引用 (`wiring.canQuote`,
+ * the menu's own judgment): not where the reply has no menu, as the ⋯,
+ * nor under a reply with nothing to quote (an image alone).
+ */
+export function MessageQuoteButton({
+  messageId,
+}: {
+  /** The reply's answer row. */
+  messageId: string;
+}) {
+  const copy = useCopy();
+  const wiring = useContext(MessageMenuContext);
+  if (!wiring || !wiring.canQuote(messageId)) return null;
+  return (
+    <ActionChip
+      active={false}
+      idleIcon={<Quotes size={14} weight="thin" />}
+      activeIcon={<Quotes size={14} weight="thin" />}
+      idleLabel={copy.conversation.quoteSelection}
+      activeLabel={copy.conversation.quoteSelection}
+      onClick={() => wiring.model(messageId)?.onSelect("quote")}
+    />
   );
 }
 

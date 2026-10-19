@@ -72,7 +72,7 @@ beforeEach(() => {
   cleaning.calls = 0;
 });
 
-describe("the card's and the header's sentence: the conversation's line", () => {
+describe("the card's sentence: the conversation's line", () => {
   it("cleans the raw stream as the main area does, then takes the line's sentence", () => {
     const turns: Turn[] = [user("看看周六的船票"), step("我先查一下船班。", 1)];
     const cases: [string, string | null][] = [
@@ -170,6 +170,56 @@ describe("the card's and the header's sentence: the conversation's line", () => 
       "周六上午还有三班船",
       "周六上午还有三班船有票。",
     ]);
+  });
+
+  // Ruling 100 (ticket 47): a step that wrote only its summary moves the
+  // card's sentence on, through the cache, as a narration does.
+  it("takes up a step's summary when it wrote no narration", () => {
+    const store = useMessagesStore.getState();
+    store.appendUserTurn(MAIN, "提醒我喝水", "c-1");
+    store.setAgentRunning(MAIN, true);
+    const sentence = () =>
+      selectAssistantSentence(useMessagesStore.getState(), MAIN, true);
+    expect(sentence()).toBeNull();
+
+    const turnEnd = (
+      turnIndex: number,
+      responseContent: string,
+      summary: string,
+    ) =>
+      dispatchIPCEvent({
+        kind: "turn_end",
+        sessionId: MAIN,
+        turnIndex,
+        summary,
+        toolCalls: [{ toolName: "code_run", args: {} }],
+        toolResults: [{ toolUseId: `c${turnIndex}`, content: "ok" }],
+        responseContent,
+        exitReason: null,
+        timestamp: `2026-10-19T02:3${turnIndex}:00.000Z`,
+      });
+
+    turnEnd(
+      1,
+      "我先看一下现在几点。<summary>需要设置喝水提醒；先读取本机时间。</summary>",
+      "需要设置喝水提醒；先读取本机时间。",
+    );
+    expect(sentence()).toBe("我先看一下现在几点。");
+
+    // Step 2 wrote only its summary: the card moves on to it, not
+    // holding step 1's narration.
+    turnEnd(
+      2,
+      "<summary>本机时间为10月19日10:34；先检查是否已有喝水提醒，避免重复。</summary>",
+      "本机时间为10月19日10:34；先检查是否已有喝水提醒，避免重复。",
+    );
+    expect(sentence()).toBe(
+      "本机时间为10月19日10:34；先检查是否已有喝水提醒，避免重复。",
+    );
+    // Through the same function as the line.
+    expect(sentence()).toBe(
+      assistantLineSentence(useMessagesStore.getState().byId[MAIN].turns, ""),
+    );
   });
 
   it("reads the main chat's cache while another session is on screen", () => {

@@ -1,7 +1,10 @@
 import type { AppCopy } from "@/i18n/types";
 import { cleanPartialContent } from "@/lib/ipc/ga-output-cleaning";
 import type { RunGroup, RunStats } from "@/lib/run-groups";
-import { cleanSessionSummary } from "@/lib/session-summary";
+import {
+  cleanSessionSummary,
+  isProtocolFailureSummary,
+} from "@/lib/session-summary";
 import { isReportRound, isSilentReport } from "@/lib/subtasks";
 import type { Turn } from "@/types/conversation";
 
@@ -20,14 +23,18 @@ import type { Turn } from "@/types/conversation";
  *             side 20px, and a reply's action row is the gap under it
  *             (`assistantRowGap`).
  *   process   while it works, one line at the conversation's end: the
- *             latest sentence it wrote (`assistantLineSentence`), with
- *             the round's clock past 3s, and nothing else; the sidebar
- *             card and the header say the same sentence
- *             (`assistantCachedSentence`). The reply appears whole once
- *             the round has its answer. Under it nothing shows at rest:
- *             the action bar comes in on hover, icons only (copy, save,
- *             and for a reply of two steps or more the process button,
- *             which opens its steps in place as a card: the round's
+ *             latest sentence it wrote (`assistantLineSentence`: what
+ *             streams, else the newest step's narration, or its summary
+ *             when it wrote none), with the round's clock past 3s, and
+ *             nothing else; the sidebar card says the same sentence
+ *             while the main chat is not on screen
+ *             (`assistantCachedSentence`; the header says 「思考中」,
+ *             ruling 87). The reply
+ *             appears whole once the round has its answer. Under it
+ *             nothing shows at rest: the action bar comes in on hover,
+ *             icons only (copy, quote, save, for a reply of two steps
+ *             or more the process button, then ⋯; the process button
+ *             opens its steps in place as a card: the round's
  *             numbers — 「4 步 · 用时 45 秒 · ↑33k ↓1.1k」 — then one
  *             line a step, eight at most before it scrolls
  *             (lib/assistant-process.ts); no context percentage
@@ -129,13 +136,25 @@ export function assistantFirstLine(
 
 /**
  * The line's sentence: the latest thing it wrote in this round — the
- * first line of the prose streaming right now, else the newest step's
- * narration since the user's last message (an ask_user answer starts a
- * new stretch: the narration before the question is stale once it has
- * asked), else null for 「思考中」. No guess at whether the streaming
- * prose is the answer: whatever streams is the line, and the reply
- * appears whole when the round settles (a deterministic rule; the cost
- * is that a long answer shows only once written).
+ * first line of the prose streaming right now, else the newest step
+ * since the user's last message that has words: its narration, or,
+ * when it wrote none, its summary (main chat PRD ruling 100) — else
+ * null for 「思考中」. An ask_user answer starts a new stretch: what it
+ * wrote before the question is stale once it has asked. No guess at
+ * whether the streaming prose is the answer: whatever streams is the
+ * line, and the reply appears whole when the round settles (a
+ * deterministic rule; the cost is that a long answer shows only once
+ * written).
+ *
+ * The summary (ruling 100, partly overturning ruling 68's 4th point,
+ * which read the narration only): the main model writes none on most
+ * tool steps — in October, 24 of gpt-6.1-sol's 29 rounds with tool
+ * steps had no narration on any of them — so the line said 「思考中」
+ * through a whole round. The summary is GA's working note (「已查到…；
+ * 接下来…」), but once the round settles the process card shows it to
+ * the reader anyway (ticket 22), and the card and the main area still
+ * say one sentence. The newest step wins: a step-1 narration does not
+ * hold the line once step 2 has written only its summary.
  */
 export function assistantLineSentence(
   turns: readonly Turn[],
@@ -147,10 +166,28 @@ export function assistantLineSentence(
     const turn = turns[i];
     if (turn.role === "user") break;
     if (turn.role !== "agent") continue;
-    const line = assistantFirstLine(turn.finalAnswer ?? turn.preamble);
+    const line =
+      assistantFirstLine(turn.finalAnswer ?? turn.preamble) ??
+      assistantSummaryLine(turn.summary);
     if (line) return line;
   }
   return null;
+}
+
+/**
+ * A step's summary as the line says it: the same cleaning as the
+ * narration (`assistantFirstLine`: its first line, block markers and
+ * markdown out, protocol tags and GA's 「...」 elision repaired by the
+ * sidebar's recap cleaner). The runner already sends it clean and on one
+ * line (GA joins its lines; workbench_bridge `_clean_turn_summary`), and
+ * GA takes the inside of `<summary>`, so no tag is left to strip; the
+ * cleaning covers rows from before that and the external runtime. A
+ * turn-protocol failure's summary (the runner's fixed marker, or leaked
+ * tool-call markup) is no sentence: nothing, as a step without one.
+ */
+function assistantSummaryLine(summary: string | undefined): string | null {
+  if (!summary || isProtocolFailureSummary(summary)) return null;
+  return assistantFirstLine(summary);
 }
 
 let sentenceCache: {
@@ -161,17 +198,23 @@ let sentenceCache: {
 
 /**
  * The line's sentence from the main chat's message cache, raw stream and
- * all: the sidebar card and the header say it while the assistant runs,
- * so all three say one sentence (ruling 68). The stream is cleaned as
- * MainView cleans it (`cleanPartialContent`, trimmed), then
+ * all: the sidebar card says it while the assistant runs and the main
+ * chat is not on screen, so the card and the line say one sentence
+ * (ruling 68). The header, and the card with the main chat on screen,
+ * say only 「思考中」 and never ask for it (ruling 87: the same sentence
+ * in three places was noise; `useAssistantState` reads it only while the
+ * main chat is not open, and the header counts as open). The stream is
+ * cleaned as MainView cleans it (`cleanPartialContent`, trimmed), then
  * `assistantLineSentence` — the same edges as the line.
  *
- * Kept for the last (turns, stream) pair: their selectors run on every
- * store write (any session's, every chunk), and the card and the header
- * read the same pair, so the regex passes over the stream run once per
- * chunk, and not at all for a write that leaves the pair as it was.
- * The string result is what keeps the two from re-rendering per chunk:
- * a selector that returns an equal string updates nothing.
+ * Kept for the last (turns, stream) pair: the card's selector runs on
+ * every store write (any session's, every chunk), so the regex passes
+ * over the stream run once per chunk, and not at all for a write that
+ * leaves the pair as it was. A step's narration and summary come with
+ * its turn_end, which appends a new turn (a new `turns` array), so a
+ * new summary misses the cache. The string result is what keeps the
+ * card from re-rendering per chunk: a selector that returns an equal
+ * string updates nothing.
  */
 export function assistantCachedSentence(
   turns: readonly Turn[],

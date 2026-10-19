@@ -132,6 +132,127 @@ describe("the live line", () => {
     );
   });
 
+  // Ruling 100 (ticket 47): a step that wrote no narration says its
+  // summary; the newest step with words wins.
+  describe("a step without narration says its summary", () => {
+    /** A tool step that wrote only `<summary>`: no narration. */
+    function summaryOnly(summary: string, index: number): AgentTurn {
+      return {
+        role: "agent",
+        turnIndex: index,
+        finalAnswer: null,
+        summary,
+        tools: [tool("code_run")],
+      };
+    }
+    /** A tool step that wrote nothing at all (no summary either). */
+    function bare(index: number): AgentTurn {
+      return {
+        role: "agent",
+        turnIndex: index,
+        finalAnswer: null,
+        tools: [tool("code_run")],
+      };
+    }
+    const water = "本机时间为10月19日10:34；先检查是否已有喝水提醒，避免重复。";
+
+    it("the newest step only has a summary: the summary", () => {
+      expect(
+        assistantLineSentence([user("提醒我喝水"), summaryOnly(water, 1)], ""),
+      ).toBe(water);
+    });
+
+    it("the newest step has narration: the narration, not its summary", () => {
+      const narrated: AgentTurn = {
+        ...summaryOnly("已列出提醒；接下来新建。", 2),
+        finalAnswer: "我先看看有没有重复的提醒。",
+      };
+      expect(
+        assistantLineSentence(
+          [user("提醒我喝水"), summaryOnly(water, 1), narrated],
+          "",
+        ),
+      ).toBe("我先看看有没有重复的提醒。");
+    });
+
+    it("step 1 narrated, step 2 only a summary: step 2's summary", () => {
+      expect(
+        assistantLineSentence(
+          [
+            user("提醒我喝水"),
+            step("我先看一下现在几点。", 1),
+            summaryOnly("没有重复的提醒；接下来建一个每小时的。", 2),
+          ],
+          "",
+        ),
+      ).toBe("没有重复的提醒；接下来建一个每小时的。");
+    });
+
+    it("a step with no words at all is passed over for the one before it", () => {
+      expect(
+        assistantLineSentence(
+          [user("提醒我喝水"), summaryOnly(water, 1), bare(2)],
+          "",
+        ),
+      ).toBe(water);
+    });
+
+    it("what streams still comes first", () => {
+      expect(
+        assistantLineSentence(
+          [user("提醒我喝水"), summaryOnly(water, 1)],
+          "好的，每小时提醒你一次。",
+        ),
+      ).toBe("好的，每小时提醒你一次。");
+    });
+
+    it("stops at your last message: an older round's summary is not this one's", () => {
+      expect(
+        assistantLineSentence(
+          [user("提醒我喝水"), summaryOnly(water, 1), user("改成半小时")],
+          "",
+        ),
+      ).toBeNull();
+      // Your answer to its question too.
+      expect(
+        assistantLineSentence(
+          [
+            user("提醒我喝水"),
+            summaryOnly(water, 1),
+            ask("多久一次？", ["每小时"], 2),
+            user("每小时"),
+          ],
+          "",
+        ),
+      ).toBeNull();
+    });
+
+    it("cleans the summary as the narration, and a protocol failure's says nothing", () => {
+      // An old row's 「第 N 步 · 」 prefix, markdown, GA's 「...」 elision.
+      expect(
+        assistantLineSentence(
+          [
+            user("提醒我喝水"),
+            summaryOnly("第 2 步 · 读取 **提醒列表** ... 接下来新建", 2),
+          ],
+          "",
+        ),
+      ).toBe("读取 提醒列表 … 接下来新建");
+      // The runner's fixed marker, and raw leaked markup: no sentence.
+      for (const failed of [
+        "回合协议错误：工具调用未能送达",
+        '<invoke name="code_run"><parameter name="code">x',
+      ]) {
+        expect(
+          assistantLineSentence(
+            [user("提醒我喝水"), summaryOnly(failed, 1)],
+            "",
+          ),
+        ).toBeNull();
+      }
+    });
+  });
+
   // Ticket 31: the line and the card clean the stream alike; a
   // `<no-reply/>` on its way never shows, not even half of it.
   it("never says the silent-reply tag, whole or half-written", () => {

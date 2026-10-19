@@ -41,7 +41,11 @@ import {
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { isMenuBubble, messageDeleteBlock } from "@/lib/message-delete";
-import { messageMenuEntries, messageMenuTarget } from "@/lib/message-menu";
+import {
+  canQuoteMessage,
+  messageMenuEntries,
+  messageMenuTarget,
+} from "@/lib/message-menu";
 import {
   formatMessageTime,
   formatMessageTimeFull,
@@ -1021,6 +1025,12 @@ export function Conversation({
           has: (messageId) => {
             const index = indexById.get(messageId);
             return index !== undefined && isMenuBubble(turns, linePlan, index);
+          },
+          canQuote: (messageId) => {
+            const index = indexById.get(messageId);
+            return (
+              index !== undefined && canQuoteMessage(turns, linePlan, index)
+            );
           },
           model: (messageId) => {
             const index = indexById.get(messageId);

@@ -75,7 +75,7 @@ export const MessageAgent = memo(function MessageAgent({
         className === undefined ? (
         <ProtocolFailureNotice markup={children} />
       ) : (
-        // No copy or save (nothing to deliver); the process button and,
+        // No copy, quote or save (nothing to deliver); the process button and,
         // in the assistant's conversation, the ⋯ of its message menu
         // (which a right-click on it opens too: `data-message-id`),
         // hovered in as the bar is.
