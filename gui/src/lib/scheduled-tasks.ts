@@ -100,6 +100,9 @@ export interface ScheduledTask {
   createdIn?: { sessionId: string; turnIndex?: number };
   /** Set once cancelled (deleted); the default list leaves these out. */
   cancelledAt?: string;
+  /** Who cancelled it and why (main chat ticket 61): `{ via: "gui" }`,
+   * the CLI's label and reason, `{ via: "system" }` for Core's own. */
+  cancelledBy?: { via: string; supervisor?: string; reason?: string };
   /** The to-do this task is the reminder of (main chat ticket 39); the
    * to-do's card stands for it. */
   todoId?: string;

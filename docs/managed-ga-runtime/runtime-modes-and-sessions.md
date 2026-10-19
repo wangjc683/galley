@@ -343,6 +343,16 @@ Managed runtime with a main chat only: every write is refused with
   reports again. Its wake says which to-do, its title and notes, when it is
   due, with the reminder's planned and actual times
   (`[Galley: reminder <id> for to-do <todo> came due (…)]` in replay).
+- **Who cancelled** (ticket 61, PRD ruling 113, migration 051): a to-do's
+  or a task's cancel records who made it and why (`cancelled_via`,
+  `cancelled_by_supervisor`, `cancelled_origin_note`; wire `cancelledBy`):
+  the CLI's `--supervisor` / `--reason`, `gui` for the desktop, `system`
+  for Core's own (a reminder going with its to-do). Galley's to-dos and
+  tasks the user cancelled at the desktop or Galley cancelled at their
+  request, in the last 90 days, are the main chat's "Follow-ups the user
+  turned down" in its In Hand lines
+  ([prompt composition](./prompt-composition.md)); the panel does not show
+  them. A main chat reset clears the records on the tasks it keeps.
 - **State**: open, done (`done_at` and who ticked it: `gui` is the user,
   `supervisor` + `galley-assistant` is Galley), cancelled (`cancelled_at`, a
   soft delete: every write then answers `not_found`).

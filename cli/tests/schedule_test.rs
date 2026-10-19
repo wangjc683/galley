@@ -251,17 +251,44 @@ async fn create_show_list_update_and_the_rest() {
     assert_eq!(ran["nextFireAt"], json!(at));
 
     // delete cancels: gone from the list, still shown; twice is not_found.
+    // Who cancelled it and why ride along (ticket 61), under `3` as under
+    // every pin.
     let (out, code) = galley(
         td.path(),
-        &["schedule", "delete", &rid, "--supervisor=galley-assistant"],
+        &[
+            "--schema=3",
+            "schedule",
+            "delete",
+            &rid,
+            "--supervisor=galley-assistant",
+            "--reason=user said not to remind",
+        ],
     )
     .await;
     assert_eq!(code, Some(0), "{out}");
-    assert!(json_of(&out)["task"]["cancelledAt"].is_string());
+    let deleted = json_of(&out)["task"].clone();
+    assert!(deleted["cancelledAt"].is_string());
+    let by = json!({
+        "via": "supervisor",
+        "supervisor": "galley-assistant",
+        "reason": "user said not to remind",
+    });
+    assert_eq!(deleted["cancelledBy"], by);
     let (out, _) = galley(td.path(), &["schedule", "list"]).await;
     assert!(!out.contains(&rid));
-    let (out, _) = galley(td.path(), &["schedule", "list", "--all"]).await;
+    let (out, _) = galley(td.path(), &["--schema=3", "schedule", "list", "--all"]).await;
     assert!(out.contains(&rid));
+    let listed = ndjson(&out);
+    let row = listed
+        .iter()
+        .find(|t| t["id"] == json!(rid))
+        .expect("listed");
+    assert_eq!(row["cancelledBy"], by);
+    let (out, _) = galley(td.path(), &["--schema=3", "schedule", "show", &rid]).await;
+    assert_eq!(json_of(&out)["cancelledBy"], by);
+    // The other task, never cancelled, has none.
+    let (out, _) = galley(td.path(), &["schedule", "show", &wid]).await;
+    assert!(json_of(&out).get("cancelledBy").is_none());
     let (out, code) = galley(td.path(), &["schedule", "delete", &rid]).await;
     assert_eq!(code, Some(3), "{out}");
     assert_eq!(json_of(&out)["error"], "not_found");

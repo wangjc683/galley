@@ -257,8 +257,12 @@ impl SqliteGalley {
     /// conversation's by-products, the notebook Galley kept in it), with
     /// the scheduled tasks that were their reminders — explicitly, as no
     /// foreign key links the two (migration 050). The assistant's own
-    /// tasks, linked to no to-do, stay. Attachment files live outside the
-    /// database and are the caller's.
+    /// tasks, linked to no to-do, stay, but not who cancelled the
+    /// cancelled ones or why (ticket 61, migration 051): what the user
+    /// turned down goes with the conversation it was said in, as the
+    /// engine's memory goes back to its seed, so the new main chat's
+    /// "In Hand" starts with no follow-ups turned down. Attachment files
+    /// live outside the database and are the caller's.
     ///
     /// The subtasks are read inside the transaction, so one dispatched
     /// after the caller last looked is deleted too (and listed). Refused
@@ -305,6 +309,14 @@ impl SqliteGalley {
             .await
             .map_err(map_sqlx_err)?
             .rows_affected();
+        sqlx::query(
+            "UPDATE scheduled_tasks SET cancelled_via = NULL, cancelled_by_supervisor = NULL, \
+                cancelled_origin_note = NULL \
+             WHERE cancelled_via IS NOT NULL",
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
         tx.commit().await.map_err(map_sqlx_err)?;
         Ok(MainChatDeletion {
             main_chat: id.clone(),

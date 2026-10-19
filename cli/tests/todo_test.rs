@@ -277,10 +277,17 @@ async fn add_show_list_update_done_reopen_cancel() {
     let soil_reminded = json_of(&out)["todo"].clone();
     assert_eq!(soil_reminded["reminder"]["at"], json!(later));
     assert_eq!(soil_reminded["notes"], "阳台用");
+    let soil_task = soil_reminded["reminder"]["taskId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let out = ok(dir, &["todo", "update", &soil, "--no-remind", "--notes="]).await;
     let soil_plain = json_of(&out)["todo"].clone();
     assert!(soil_plain.get("reminder").is_none());
     assert!(soil_plain.get("notes").is_none());
+    // Removing the reminder is the caller's own cancel (ticket 61).
+    let removed = json_of(&ok(dir, &["schedule", "show", &soil_task]).await);
+    assert_eq!(removed["cancelledBy"], json!({"via": "cli"}));
 
     // done: ticked off by Galley, its reminder cancelled.
     let out = ok(
@@ -294,6 +301,8 @@ async fn add_show_list_update_done_reopen_cancel() {
     assert!(done.get("reminder").is_none());
     let task = json_of(&ok(dir, &["schedule", "show", &task_id]).await);
     assert!(task["cancelledAt"].is_string(), "{task}");
+    // Core cancelled it with its to-do (ticket 61): `system`.
+    assert_eq!(task["cancelledBy"], json!({"via": "system"}));
     assert!(!ok(dir, &["schedule", "list"]).await.contains(&task_id));
     // Both left have no due date now, noted in the same second: their
     // order falls to the ids, so compare them as a set.
@@ -322,7 +331,18 @@ async fn add_show_list_update_done_reopen_cancel() {
         ids(&ok(dir, &["todo", "list", "--all"]).await),
         vec![rid.clone(), cid.clone(), soil.clone()]
     );
-    assert!(json_of(&ok(dir, &["todo", "show", &soil]).await)["cancelledAt"].is_string());
+    // Who cancelled it and why (ticket 61), in `show` and `list --all`.
+    let gone = json_of(&ok(dir, &["--schema=3", "todo", "show", &soil]).await);
+    assert!(gone["cancelledAt"].is_string());
+    let by = json!({"via": "cli", "reason": "user said never mind"});
+    assert_eq!(gone["cancelledBy"], by);
+    let all = ndjson(&ok(dir, &["--schema=3", "todo", "list", "--all"]).await);
+    let row = all.iter().find(|t| t["id"] == json!(soil)).expect("listed");
+    assert_eq!(row["cancelledBy"], by);
+    assert!(all
+        .iter()
+        .filter(|t| t["id"] != json!(soil))
+        .all(|t| t.get("cancelledBy").is_none()));
     // Twice is not_found, as for every write on a cancelled one.
     let (out, code) = galley(dir, &["todo", "cancel", &soil]).await;
     assert_eq!(code, Some(3), "{out}");

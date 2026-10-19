@@ -192,6 +192,8 @@ export interface TodoBrief {
   origin: { via: string; supervisor?: string; reason?: string };
   createdIn?: { sessionId: string; turnIndex?: number };
   cancelledAt?: string;
+  /** Who cancelled it and why (main chat ticket 61). */
+  cancelledBy?: { via: string; supervisor?: string; reason?: string };
   createdAt: string;
   updatedAt: string;
 }

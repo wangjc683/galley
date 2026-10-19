@@ -1297,12 +1297,12 @@ async fn a_to_do_ticked_off_is_not_reminded_of() {
         galley_core_lib::scheduler::drop_reminders_of_closed_todos(&galley, rec.as_ref(), due)
             .await;
     assert!(kept.is_empty());
-    assert!(galley
-        .scheduled_task(&task)
-        .await
-        .expect("task")
-        .cancelled_at
-        .is_some());
+    let dropped = galley.scheduled_task(&task).await.expect("task");
+    assert!(dropped.cancelled_at.is_some());
+    // Core did it on its own (ticket 61): not the user turning it down.
+    let by = dropped.cancelled_by.expect("who cancelled");
+    assert_eq!(by.via, galley_core_lib::api::OriginVia::System);
+    assert!(by.supervisor.is_none() && by.reason.is_none());
     assert_eq!(tick(&galley, &rec).await, 0);
 
     // A to-do still open: its reminder goes off as any.

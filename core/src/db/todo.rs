@@ -31,6 +31,9 @@ struct TodoRow {
     done_by_supervisor: Option<String>,
     done_origin_note: Option<String>,
     cancelled_at: Option<String>,
+    cancelled_via: Option<String>,
+    cancelled_by_supervisor: Option<String>,
+    cancelled_origin_note: Option<String>,
     created_via: String,
     created_by_supervisor: Option<String>,
     created_origin_note: Option<String>,
@@ -41,8 +44,9 @@ struct TodoRow {
 }
 
 const TODO_COLUMNS: &str = "id, title, notes, due_date, due_at, done_at, done_via, \
-    done_by_supervisor, done_origin_note, cancelled_at, created_via, created_by_supervisor, \
-    created_origin_note, created_in_session_id, created_in_turn_index, created_at, updated_at";
+    done_by_supervisor, done_origin_note, cancelled_at, cancelled_via, cancelled_by_supervisor, \
+    cancelled_origin_note, created_via, created_by_supervisor, created_origin_note, \
+    created_in_session_id, created_in_turn_index, created_at, updated_at";
 
 /// Which to-dos a list read returns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,6 +83,14 @@ impl TodoRow {
             )?),
             None => None,
         };
+        let cancelled_by = match self.cancelled_via.as_deref() {
+            Some(via) => Some(origin_from_stored(
+                via,
+                self.cancelled_by_supervisor,
+                self.cancelled_origin_note,
+            )?),
+            None => None,
+        };
         let origin = origin_from_stored(
             &self.created_via,
             self.created_by_supervisor,
@@ -102,6 +114,7 @@ impl TodoRow {
             origin,
             created_in,
             cancelled_at: self.cancelled_at,
+            cancelled_by,
             created_at: self.created_at,
             updated_at: self.updated_at,
         })
@@ -416,10 +429,13 @@ impl SqliteGalley {
 
     /// Cancel the to-do's reminder when ticking off or cancelling the
     /// to-do leaves it with nothing to remind of ([`reminder_unspent`]).
+    /// Core does it on its own ([`Origin::system`], ticket 61): the user
+    /// turned down the to-do, or did it, not the reminder.
     async fn release_todo_reminder(&self, todo_id: &str) -> Result<()> {
         if let Some(task) = self.todo_reminder_task(todo_id).await? {
             if reminder_unspent(&task) {
-                self.cancel_scheduled_task(&task.id).await?;
+                self.cancel_scheduled_task(&task.id, &Origin::system())
+                    .await?;
             }
         }
         Ok(())
@@ -486,8 +502,11 @@ impl SqliteGalley {
                     .await?;
             }
             Some(None) => {
+                // Removing the reminder is the caller's own cancel (ticket
+                // 61: `--no-remind` records its `--supervisor` and
+                // `--reason`).
                 if let Some(task) = self.todo_reminder_task(id.as_str()).await? {
-                    self.cancel_scheduled_task(&task.id).await?;
+                    self.cancel_scheduled_task(&task.id, &origin).await?;
                 }
             }
             None if title != row.title => {
@@ -559,20 +578,25 @@ impl SqliteGalley {
         self.todo(id.as_str()).await
     }
 
-    /// Cancel a to-do: a soft delete (the row stays with `cancelledAt`),
-    /// its reminder cancelled as when it is ticked off. Gone for every
-    /// write: cancelling it again is `not_found`.
+    /// Cancel a to-do: a soft delete (the row stays with `cancelledAt`
+    /// and, since ticket 61, who cancelled it and why: `origin`), its
+    /// reminder cancelled as when it is ticked off. Gone for every write:
+    /// cancelling it again is `not_found`.
     ///
     /// **Errors**: `not_found`, `invalid_args` (no assistant).
-    pub async fn cancel_todo(&self, id: &TodoId, _origin: Origin) -> Result<TodoBrief> {
+    pub async fn cancel_todo(&self, id: &TodoId, origin: Origin) -> Result<TodoBrief> {
         const CONTEXT: &str = "cancel_todo";
         self.ensure_assistant_available(CONTEXT).await?;
         let now = chrono_now_iso();
         let res = sqlx::query(
-            "UPDATE todos SET cancelled_at = ?, updated_at = ? \
+            "UPDATE todos SET cancelled_at = ?, cancelled_via = ?, cancelled_by_supervisor = ?, \
+                cancelled_origin_note = ?, updated_at = ? \
              WHERE id = ? AND cancelled_at IS NULL",
         )
         .bind(&now)
+        .bind(origin.via.as_sql())
+        .bind(origin.stored_supervisor())
+        .bind(origin.reason.as_deref())
         .bind(&now)
         .bind(id.as_str())
         .execute(&self.pool)
@@ -588,11 +612,12 @@ impl SqliteGalley {
     }
 
     /// Cancel a to-do's reminder, whatever it stands at, and leave the
-    /// to-do as it is (the desktop's 「取消提醒」).
+    /// to-do as it is (the desktop's 「取消提醒」). The task records
+    /// `origin` as who cancelled it (ticket 61: the desktop's is `gui`).
     ///
     /// **Errors**: `not_found` (no such to-do, cancelled, or no reminder),
     /// `invalid_args` (no assistant).
-    pub async fn cancel_todo_reminder(&self, id: &TodoId, _origin: Origin) -> Result<TodoBrief> {
+    pub async fn cancel_todo_reminder(&self, id: &TodoId, origin: Origin) -> Result<TodoBrief> {
         const CONTEXT: &str = "cancel_todo_reminder";
         self.ensure_assistant_available(CONTEXT).await?;
         self.live_todo_row(id.as_str()).await?;
@@ -602,7 +627,7 @@ impl SqliteGalley {
                 .ok_or_else(|| GalleyError::NotFound {
                     message: format!("todo {id} has no reminder"),
                 })?;
-        self.cancel_scheduled_task(&task.id).await?;
+        self.cancel_scheduled_task(&task.id, &origin).await?;
         self.todo(id.as_str()).await
     }
 

@@ -79,6 +79,7 @@ const MIG_036: &str = include_str!("../../core/migrations/036_scheduled_tasks_mo
 const MIG_037: &str = include_str!("../../core/migrations/037_scheduled_tasks_llm.sql");
 const MIG_049: &str = include_str!("../../core/migrations/049_scheduled_tasks_once_and_wake.sql");
 const MIG_050: &str = include_str!("../../core/migrations/050_todos.sql");
+const MIG_051: &str = include_str!("../../core/migrations/051_cancelled_by.sql");
 
 async fn seeded_db_at(path: &std::path::Path) -> SqlitePool {
     let opts = SqliteConnectOptions::new()
@@ -90,7 +91,7 @@ async fn seeded_db_at(path: &std::path::Path) -> SqlitePool {
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
         MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_031, MIG_032, MIG_034, MIG_035,
         MIG_036, MIG_037, MIG_040, MIG_042, MIG_043, MIG_044, MIG_045, MIG_046, MIG_047, MIG_048,
-        MIG_049, MIG_050,
+        MIG_049, MIG_050, MIG_051,
     ] {
         sqlx::raw_sql(sql)
             .execute(&pool)

@@ -488,6 +488,13 @@ pub struct ScheduledTaskBrief {
     /// default lists skip it, the row stays.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cancelled_at: Option<String>,
+    /// Who cancelled it, and why (main chat ticket 61): `gui` is the user
+    /// at the desktop, `supervisor` + `galley-assistant` is the assistant
+    /// on the user's word, `system` is Core on its own (a to-do's
+    /// reminder going with its to-do). Absent while it is not cancelled,
+    /// and on a task cancelled before this was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancelled_by: Option<Origin>,
     /// The to-do this task reminds the user of (main chat ticket 39):
     /// set when the task is a to-do's reminder, absent for the
     /// assistant's own tasks.

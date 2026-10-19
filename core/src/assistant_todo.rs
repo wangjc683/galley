@@ -40,6 +40,18 @@
 //! main chat, done however long ago or cancelled, each as the list words
 //! it — a card under a reply stays where 已完成 lets go.
 //!
+//! The 「在办的事」 lines read one thing the desktop does not
+//! ([`declined_follow_ups`], main chat ticket 61, PRD ruling 113): the
+//! follow-ups Galley set that the user turned down — its to-dos and
+//! tasks cancelled within [`DECLINED_WINDOW_DAYS`] by the user at the
+//! desktop, or by Galley on the user's word — so a "don't remind me of
+//! this kind" is in front of the main chat at every segment, not in a
+//! memory it may not open. A read of its own, on purpose: "what you see
+//! is what it sees" has this one exception (ruling 113 point 4). It is a
+//! record for the main chat's judgement, not a list, so the panel has no
+//! such group, and [`AssistantTodo`] (what the panel reads) never carries
+//! it; [`in_hand_read`] reads both for the main chat.
+//!
 //! A subtask's state comes from its live run state (Core's run gate)
 //! and its latest run's last reply in the database: running while a run
 //! is open; asking when the run ended on `ask_user`; done when it ended
@@ -68,6 +80,11 @@ pub const RECENT_WINDOW_DAYS: i64 = 7;
 /// At most this many items in [`AssistantTodo::done`]; the rest are
 /// counted in [`AssistantTodo::done_omitted`].
 pub const RECENT_LIMIT: usize = 50;
+
+/// How far back 「最近不要的跟进」 reaches (main chat ticket 61): a
+/// follow-up the user turned down stays in front of the main chat this
+/// long (a rolling window), then leaves on its own.
+pub const DECLINED_WINDOW_DAYS: i64 = 90;
 
 /// The four groups and the day's count (Tauri `list_assistant_todo`).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -250,6 +267,50 @@ pub struct TodoItem {
     pub cancelled_at: Option<String>,
 }
 
+/// Who turned a follow-up down ([`DeclinedFollowUp::by`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeclinedBy {
+    /// The user at the desktop (`cancelled_via = 'gui'`): a reminder
+    /// cancelled on its to-do, the 取消 on a card or in the lists.
+    User,
+    /// Galley at the user's request: cancelled through the CLI with
+    /// `--supervisor=galley-assistant`.
+    Assistant,
+}
+
+/// A follow-up the user turned down (main chat ticket 61): a to-do or a
+/// scheduled task Galley made (`created_by_supervisor =
+/// 'galley-assistant'`), cancelled within [`DECLINED_WINDOW_DAYS`] by the
+/// user at the desktop or by Galley at the user's request. Cancelled by
+/// Core on its own (`system`: a reminder going with its to-do), by
+/// another agent, or before who cancelled was recorded (NULL): not one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeclinedFollowUp {
+    /// [`TodoKind::Todo`] or [`TodoKind::Task`].
+    pub kind: TodoKind,
+    /// The to-do's or the task's id.
+    pub id: String,
+    /// The to-do's title or the task's words. Uncut: the reader truncates.
+    pub text: String,
+    /// When it was cancelled (UTC ISO).
+    pub cancelled_at: String,
+    pub by: DeclinedBy,
+    /// The reason the cancel gave (`--reason`), when there was one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// What the main chat's 「在办的事」 lines read (ticket 61): the list the
+/// desktop's 「待办」 reads, and the follow-ups the user turned down,
+/// which only the main chat reads.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct InHandRead {
+    pub todo: AssistantTodo,
+    pub declined: Vec<DeclinedFollowUp>,
+}
+
 /// What [`build_todo`] knows of one subtask: its row, its live run state
 /// (default when no runner was ever registered), and its latest run's
 /// last reply.
@@ -371,6 +432,126 @@ where
             todo_item(todo, state, at, overdue, tz)
         })
         .collect()
+}
+
+/// The main chat's read for its 「在办的事」 (ticket 61): [`assistant_todo`]
+/// as the desktop reads it, and [`declined_follow_ups`]. A failed read of
+/// the second is logged and leaves it empty: the rest of the lines beat
+/// none.
+pub async fn in_hand_read(
+    galley: &SqliteGalley,
+    runners: &RunnerManager,
+    now: DateTime<Utc>,
+) -> Result<InHandRead> {
+    let todo = assistant_todo(galley, runners, now).await?;
+    let declined = match declined_follow_ups(galley, now).await {
+        Ok(declined) => declined,
+        Err(e) => {
+            eprintln!("[main chat] reading the follow-ups turned down failed: {e}");
+            Vec::new()
+        }
+    };
+    Ok(InHandRead { todo, declined })
+}
+
+/// The follow-ups the user turned down (ticket 61, PRD ruling 113), read
+/// now: every to-do and task, cancelled ones included, through
+/// [`declined_items`]. The main chat's alone: the desktop's 「待办」 does
+/// not read it (see the module docs).
+pub async fn declined_follow_ups(
+    galley: &SqliteGalley,
+    now: DateTime<Utc>,
+) -> Result<Vec<DeclinedFollowUp>> {
+    let todos = galley.list_todos(TodoListScope::All).await?;
+    let tasks = galley
+        .list_scheduled_tasks_in(ScheduleListScope::All)
+        .await?;
+    Ok(declined_items(&todos, &tasks, now))
+}
+
+/// [`declined_follow_ups`] from what was read: the to-dos and tasks
+/// Galley made that were cancelled within [`DECLINED_WINDOW_DAYS`] of
+/// `now` (exactly 90 days back is in) by the user at the desktop or by
+/// Galley at the user's request, most recently cancelled first (the same
+/// second: by id). A to-do's reminder is a task of its own here: the
+/// user cancelling it is turning that reminder down, while Core
+/// cancelling it with its to-do is not. Pure.
+pub fn declined_items(
+    todos: &[TodoBrief],
+    tasks: &[ScheduledTaskBrief],
+    now: DateTime<Utc>,
+) -> Vec<DeclinedFollowUp> {
+    let since = now.timestamp() - DECLINED_WINDOW_DAYS * 86_400;
+    let mut declined: Vec<(i64, DeclinedFollowUp)> = todos
+        .iter()
+        .filter_map(|todo| {
+            declined_one(
+                TodoKind::Todo,
+                todo.id.as_str(),
+                &todo.title,
+                Some(&todo.origin),
+                todo.cancelled_at.as_deref(),
+                todo.cancelled_by.as_ref(),
+                since,
+            )
+        })
+        .chain(tasks.iter().filter_map(|task| {
+            declined_one(
+                TodoKind::Task,
+                task.id.as_str(),
+                &task.prompt,
+                task.origin.as_ref(),
+                task.cancelled_at.as_deref(),
+                task.cancelled_by.as_ref(),
+                since,
+            )
+        }))
+        .collect();
+    declined.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.id.cmp(&b.1.id)));
+    declined.into_iter().map(|(_, item)| item).collect()
+}
+
+/// One to-do or task as a follow-up turned down, with the instant it was
+/// cancelled, or `None` when it is not one ([`declined_items`]).
+fn declined_one(
+    kind: TodoKind,
+    id: &str,
+    text: &str,
+    made_by: Option<&Origin>,
+    cancelled_at: Option<&str>,
+    cancelled_by: Option<&Origin>,
+    since: i64,
+) -> Option<(i64, DeclinedFollowUp)> {
+    if made_by?.supervisor.as_deref() != Some(ASSISTANT_SUPERVISOR) {
+        return None;
+    }
+    let cancelled_at = cancelled_at?;
+    let at = parse_utc_secs(cancelled_at).filter(|&at| at >= since)?;
+    let by = cancelled_by?;
+    let who = match by.via {
+        OriginVia::Gui => DeclinedBy::User,
+        OriginVia::Supervisor if by.supervisor.as_deref() == Some(ASSISTANT_SUPERVISOR) => {
+            DeclinedBy::Assistant
+        }
+        _ => return None,
+    };
+    let reason = by
+        .reason
+        .as_deref()
+        .map(str::trim)
+        .filter(|reason| !reason.is_empty())
+        .map(str::to_string);
+    Some((
+        at,
+        DeclinedFollowUp {
+            kind,
+            id: id.to_string(),
+            text: text.to_string(),
+            cancelled_at: cancelled_at.to_string(),
+            by: who,
+            reason,
+        },
+    ))
 }
 
 fn window_start(now: DateTime<Utc>) -> i64 {
@@ -773,6 +954,7 @@ mod tests {
                 turn_index: Some(7),
             }),
             cancelled_at: None,
+            cancelled_by: None,
             todo_id: None,
             created_at: "2026-10-16T10:00:00+00:00".into(),
             updated_at: "2026-10-16T10:00:00+00:00".into(),
@@ -832,6 +1014,7 @@ mod tests {
                 turn_index: Some(3),
             }),
             cancelled_at: None,
+            cancelled_by: None,
             created_at: noted.into(),
             updated_at: noted.into(),
         }
@@ -1520,6 +1703,139 @@ mod tests {
         assert_eq!(got.done.len(), RECENT_LIMIT);
         assert_eq!(got.done_omitted, 5);
         assert_eq!(ids(&got.done[..3]), ["todo-done", "s-done", "t-052"]);
+    }
+
+    // ---- the follow-ups turned down (ticket 61) ----
+
+    fn cancelled_by(via: OriginVia, label: Option<&str>, reason: Option<&str>) -> Origin {
+        Origin {
+            via,
+            supervisor: label.map(str::to_string),
+            reason: reason.map(str::to_string),
+            client: None,
+        }
+    }
+
+    fn cancelled_todo(id: &str, at: &str, by: Option<Origin>) -> TodoBrief {
+        TodoBrief {
+            status: TodoStatus::Cancelled,
+            cancelled_at: Some(at.into()),
+            cancelled_by: by,
+            ..todo(id, None, "2026-07-01T00:00:00+00:00")
+        }
+    }
+
+    fn cancelled_task(id: &str, at: &str, by: Option<Origin>) -> ScheduledTaskBrief {
+        ScheduledTaskBrief {
+            cancelled_at: Some(at.into()),
+            cancelled_by: by,
+            next_fire_at: None,
+            ..task(id)
+        }
+    }
+
+    #[test]
+    fn declined_are_galleys_cancelled_by_the_user_or_at_their_request() {
+        // Now: Fri 2026-10-16 12:00 UTC.
+        let desktop = || Some(Origin::desktop());
+        let galley = |reason: Option<&str>| {
+            Some(cancelled_by(
+                OriginVia::Supervisor,
+                Some(ASSISTANT_SUPERVISOR),
+                reason,
+            ))
+        };
+        let mut users_task = cancelled_task("t-users-task", "2026-10-15T00:00:00Z", desktop());
+        users_task.origin = Some(Origin::gui());
+        let mut agents_todo = cancelled_todo("t-agents-todo", "2026-10-15T00:00:00Z", desktop());
+        agents_todo.origin = supervisor("claude-code");
+        let mut a_reminder = cancelled_task("t-reminder", "2026-10-14T00:00:00Z", desktop());
+        a_reminder.todo_id = Some("t-open".into());
+        let todos = [
+            cancelled_todo(
+                "t-asked",
+                "2026-10-16T09:00:00Z",
+                galley(Some("  用户说装修这类别提醒 ")),
+            ),
+            cancelled_todo("t-desktop", "2026-10-13T00:00:00Z", desktop()),
+            // Core on its own, another agent, through the CLI with no
+            // label, before 051: none of them the user's no.
+            cancelled_todo("t-system", "2026-10-16T09:00:00Z", Some(Origin::system())),
+            cancelled_todo(
+                "t-other-agent",
+                "2026-10-16T09:00:00Z",
+                Some(supervisor("claude-code")),
+            ),
+            cancelled_todo(
+                "t-cli",
+                "2026-10-16T09:00:00Z",
+                Some(Origin::cli(None, Some("x".into()))),
+            ),
+            cancelled_todo("t-unknown", "2026-10-16T09:00:00Z", None),
+            // Not Galley's.
+            agents_todo,
+            // Not cancelled.
+            todo("t-open", None, "2026-10-10T00:00:00Z"),
+            done_todo("t-done", "2026-10-16T09:00:00Z", Origin::desktop()),
+        ];
+        let tasks = [
+            cancelled_task("t-card", "2026-10-16T10:00:00Z", desktop()),
+            cancelled_task("t-released", "2026-10-16T10:00:00Z", Some(Origin::system())),
+            users_task,
+            a_reminder,
+            task("t-live"),
+        ];
+        let got = declined_items(&todos, &tasks, now());
+        // Newest first, to-dos and tasks together; a to-do's reminder the
+        // user cancelled is one of its own.
+        let order: Vec<&str> = got.iter().map(|d| d.id.as_str()).collect();
+        assert_eq!(order, ["t-card", "t-asked", "t-reminder", "t-desktop"]);
+        assert_eq!(got[0].kind, TodoKind::Task);
+        assert_eq!(got[0].by, DeclinedBy::User);
+        assert_eq!(got[0].text, "words of t-card");
+        assert_eq!(got[1].kind, TodoKind::Todo);
+        assert_eq!(got[1].by, DeclinedBy::Assistant);
+        assert_eq!(got[1].text, "title of t-asked");
+        // The reason, trimmed; none when the cancel gave none.
+        assert_eq!(got[1].reason.as_deref(), Some("用户说装修这类别提醒"));
+        assert_eq!(got[0].reason, None);
+        assert_eq!(got[1].cancelled_at, "2026-10-16T09:00:00Z");
+        // On the wire (the eval's mirror reads this shape).
+        let json = serde_json::to_value(&got[1]).unwrap();
+        assert_eq!(json["kind"], "todo");
+        assert_eq!(json["by"], "assistant");
+        assert_eq!(json["cancelledAt"], "2026-10-16T09:00:00Z");
+        assert!(serde_json::to_value(&got[0])
+            .unwrap()
+            .get("reason")
+            .is_none());
+    }
+
+    #[test]
+    fn declined_reach_back_ninety_days() {
+        // Now: 2026-10-16 12:00 UTC; ninety days back: 2026-07-18 12:00.
+        let by = || Some(Origin::desktop());
+        let todos = [
+            cancelled_todo("t-edge", "2026-07-18T12:00:00+00:00", by()),
+            cancelled_todo("t-old", "2026-07-18T11:59:59+00:00", by()),
+            cancelled_todo("t-bad", "not a time", by()),
+        ];
+        let tasks = [cancelled_task("t-recent", "2026-10-16T11:59:00Z", by())];
+        let got = declined_items(&todos, &tasks, now());
+        let order: Vec<&str> = got.iter().map(|d| d.id.as_str()).collect();
+        // Exactly ninety days back is in; a second more is out.
+        assert_eq!(order, ["t-recent", "t-edge"]);
+        assert_eq!(DECLINED_WINDOW_DAYS, 90);
+        // The same second: by id.
+        let same = [
+            cancelled_todo("t-b", "2026-10-16T09:00:00Z", by()),
+            cancelled_todo("t-a", "2026-10-16T09:00:00Z", by()),
+        ];
+        let order: Vec<String> = declined_items(&same, &[], now())
+            .into_iter()
+            .map(|d| d.id)
+            .collect();
+        assert_eq!(order, ["t-a", "t-b"]);
     }
 
     #[test]

@@ -26,8 +26,9 @@ command goes through the socket (`todo.list`, `todo.show`, `todo.add`,
 `todo.update`, `todo.done`, `todo.reopen`, `todo.cancel`; the socket also
 serves `list` and `show`). Every write takes `--supervisor=<x>` /
 `--reason=<y>` (§6A `Origin`): `add` records them as the to-do's `origin`,
-`done` as its `doneBy`, and a reminder that `add` or `update` makes carries
-them as its task's `origin`. The assistant writes with
+`done` as its `doneBy`, `cancel` as its `cancelledBy`, and a reminder that
+`add` or `update` makes carries them as its task's `origin` (and `update
+--no-remind` as its task's `cancelledBy`). The assistant writes with
 `--supervisor=galley-assistant`. There is no "run now" for a to-do.
 
 ### 5.28 · `Todo`
@@ -48,6 +49,7 @@ Every command prints this shape (`list` one per line, `show` alone, writes as
 | `origin`      | `Origin`         | Who noted it |
 | `createdIn`   | object?          | `{sessionId, turnIndex?}`: the main chat run Galley noted it in, as for a scheduled task (§5.20). Recorded when `add` carries `--supervisor=galley-assistant` while a main chat run is open; `turnIndex` (the run's reply, where the desktop hangs its card) is filled when that run ends |
 | `cancelledAt` | string?          | Set by `cancel`. A cancelled to-do is gone for every write |
+| `cancelledBy` | `Origin`?        | Added 2026-10-19 (main chat ticket 61). Who cancelled it and why, as `doneBy` says who ticked it off: `cancel`'s `--supervisor` / `--reason` (`{"via":"supervisor","supervisor":"galley-assistant","reason":"…"}` is Galley at the user's request; `{"via":"cli"}` when no label was given). Absent while it is not cancelled, and on a to-do cancelled before 2026-10-19 (not known, not guessed) |
 | `createdAt`   | string (ISO8601) | |
 | `updatedAt`   | string (ISO8601) | |
 
@@ -147,9 +149,16 @@ Exit codes: `0` / `2 invalid_args` (`assistant_unavailable:`) /
 
 **Write command.** Cancels the to-do (a soft delete) and its reminder as
 `done` does: it leaves the default list and the desktop's lists; `show` and
-`list --all` still read it, with `status` `cancelled` and `cancelledAt`.
-Prints `{"todo": …}`. A cancelled to-do is `not_found` for every write,
-cancelling it again included.
+`list --all` still read it, with `status` `cancelled`, `cancelledAt` and
+`cancelledBy` (`--supervisor` / `--reason`; the reminder it takes along is
+cancelled by Core, `{"via":"system"}` on its task). Prints `{"todo": …}`.
+A cancelled to-do is `not_found` for every write, cancelling it again
+included.
+
+The main chat reads these records: the to-dos and reminders Galley made
+that the user cancelled at the desktop, or that were cancelled with
+`--supervisor=galley-assistant`, within the last 90 days, are listed with
+their reason at the start of each of its segments.
 
 Exit codes: `0` / `2 invalid_args` (`assistant_unavailable:`) /
 `3 not_found` / `4 db_unavailable`.

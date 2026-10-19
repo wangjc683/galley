@@ -75,6 +75,7 @@ const MIG_047: &str = include_str!("../migrations/047_drop_ledger_exclusions.sql
 const MIG_048: &str = include_str!("../migrations/048_subtasks.sql");
 const MIG_049: &str = include_str!("../migrations/049_scheduled_tasks_once_and_wake.sql");
 const MIG_050: &str = include_str!("../migrations/050_todos.sql");
+const MIG_051: &str = include_str!("../migrations/051_cancelled_by.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -116,7 +117,7 @@ async fn run_migrations(pool: &SqlitePool) {
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
         MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
         MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037, MIG_038, MIG_039, MIG_040,
-        MIG_042, MIG_043, MIG_044, MIG_045, MIG_046, MIG_047, MIG_048, MIG_049, MIG_050,
+        MIG_042, MIG_043, MIG_044, MIG_045, MIG_046, MIG_047, MIG_048, MIG_049, MIG_050, MIG_051,
     ] {
         sqlx::raw_sql(sql)
             .execute(pool)
@@ -2905,11 +2906,15 @@ async fn migration_049_keeps_old_tasks_as_desktop_session_tasks() {
         .execute(&pool)
         .await
         .expect("migration 049");
-    // Read with today's columns (050 adds `todo_id`).
+    // Read with today's columns (050 adds `todo_id`, 051 who cancelled).
     sqlx::raw_sql(MIG_050)
         .execute(&pool)
         .await
         .expect("migration 050");
+    sqlx::raw_sql(MIG_051)
+        .execute(&pool)
+        .await
+        .expect("migration 051");
 
     let galley = SqliteGalley::from_pool(pool.clone());
     let task = galley.scheduled_task("sched_old").await.expect("read");
@@ -2981,6 +2986,11 @@ async fn migration_050_adds_todos_and_leaves_tasks_on_no_to_do() {
         .execute(&pool)
         .await
         .expect("migration 050");
+    // Read with today's columns (051: who cancelled).
+    sqlx::raw_sql(MIG_051)
+        .execute(&pool)
+        .await
+        .expect("migration 051");
     let galley = SqliteGalley::from_pool(pool.clone());
     let task = galley.scheduled_task("sched_before").await.expect("read");
     assert_eq!(task.prompt, "提醒用户喝水");
@@ -3012,6 +3022,83 @@ async fn migration_050_adds_todos_and_leaves_tasks_on_no_to_do() {
 }
 
 #[tokio::test]
+async fn migration_051_records_who_cancelled_and_leaves_older_cancels_unknown() {
+    // Main chat ticket 61: rows cancelled before 051 keep NULL (who it
+    // was is not known, and is not guessed); the CHECKs name the origin
+    // values and need the cancel stamp.
+    let pool = SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("open in-memory sqlite");
+    sqlx::raw_sql("PRAGMA foreign_keys = ON;")
+        .execute(&pool)
+        .await
+        .expect("enable foreign keys");
+    for sql in [
+        MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
+        MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
+        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
+        MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037, MIG_038, MIG_039, MIG_040,
+        MIG_042, MIG_043, MIG_044, MIG_045, MIG_046, MIG_047, MIG_048, MIG_049, MIG_050,
+    ] {
+        sqlx::raw_sql(sql).execute(&pool).await.expect("migration");
+    }
+    sqlx::query(
+        "INSERT INTO scheduled_tasks (id, prompt, repeat_kind, fire_at, target, created_via, \
+            created_by_supervisor, cancelled_at, created_at, updated_at) \
+         VALUES ('sched_gone', '提醒用户确认装修进度', 'once', '2026-10-16T12:00:00+00:00', \
+                 'assistant', 'supervisor', 'galley-assistant', '2026-10-16T01:00:00+00:00', \
+                 '2026-10-16T00:00:00+00:00', '2026-10-16T01:00:00+00:00')",
+    )
+    .execute(&pool)
+    .await
+    .expect("seed a task cancelled before 051");
+    sqlx::query(
+        "INSERT INTO todos (id, title, cancelled_at, created_via, created_by_supervisor, \
+            created_at, updated_at) \
+         VALUES ('todo_gone', '702 装修验收', '2026-10-16T01:00:00+00:00', 'supervisor', \
+                 'galley-assistant', 't', 't')",
+    )
+    .execute(&pool)
+    .await
+    .expect("seed a to-do cancelled before 051");
+    sqlx::raw_sql(MIG_051)
+        .execute(&pool)
+        .await
+        .expect("migration 051");
+    let galley = SqliteGalley::from_pool(pool.clone());
+    let task = galley.scheduled_task("sched_gone").await.expect("read");
+    assert!(task.cancelled_at.is_some());
+    assert!(task.cancelled_by.is_none());
+    let todo = galley.todo("todo_gone").await.expect("read");
+    assert!(todo.cancelled_at.is_some());
+    assert!(todo.cancelled_by.is_none());
+    let ok = "INSERT INTO todos (id, title, cancelled_at, cancelled_via, \
+                cancelled_by_supervisor, cancelled_origin_note, created_via, created_at, \
+                updated_at) \
+              VALUES ('todo_ok', 'x', 't', 'supervisor', 'galley-assistant', '不用了', 'cli', \
+                      't', 't')";
+    sqlx::query(ok)
+        .execute(&pool)
+        .await
+        .expect("a cancel with who");
+    for bad in [
+        // Who cancelled, on a row that is not cancelled.
+        "INSERT INTO todos (id, title, cancelled_via, created_via, created_at, updated_at) \
+         VALUES ('b1', 'x', 'gui', 'cli', 't', 't')",
+        "INSERT INTO scheduled_tasks (id, prompt, repeat_kind, time_of_day, cancelled_via, \
+            created_at, updated_at) VALUES ('b2', 'x', 'daily', '09:00', 'gui', 't', 't')",
+        // An origin the CHECK does not name.
+        "INSERT INTO todos (id, title, cancelled_at, cancelled_via, created_via, created_at, \
+            updated_at) VALUES ('b3', 'x', 't', 'robot', 'cli', 't', 't')",
+        "INSERT INTO scheduled_tasks (id, prompt, repeat_kind, time_of_day, cancelled_at, \
+            cancelled_via, created_at, updated_at) \
+         VALUES ('b4', 'x', 'daily', '09:00', 't', 'robot', 't', 't')",
+    ] {
+        assert!(sqlx::query(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+}
+
+#[tokio::test]
 async fn delete_scheduled_task_cancels_and_keeps_the_row() {
     let pool = fresh_pool().await;
     let galley = SqliteGalley::from_pool(pool);
@@ -3029,10 +3116,14 @@ async fn delete_scheduled_task_cancels_and_keeps_the_row() {
         .await
         .expect("list")
         .is_empty());
-    // …but kept, cancelled, for its card.
+    // …but kept, cancelled, for its card, with who cancelled it (ticket
+    // 61): the desktop.
     let kept = galley.scheduled_task("sched_del").await.expect("kept");
     assert!(kept.cancelled_at.is_some());
     assert!(kept.next_fire_at.is_none());
+    let by = kept.cancelled_by.expect("who cancelled");
+    assert_eq!(by.via, galley_core_lib::api::OriginVia::Gui);
+    assert!(by.supervisor.is_none() && by.reason.is_none());
     let err = galley
         .delete_scheduled_task(ScheduledTaskId("sched_del".into()), Origin::gui())
         .await

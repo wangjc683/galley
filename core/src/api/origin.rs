@@ -159,6 +159,18 @@ impl Origin {
         }
     }
 
+    /// Galley itself, with no label: a write Core makes on its own, such
+    /// as cancelling a to-do's reminder because the to-do was ticked off
+    /// or cancelled (main chat ticket 61).
+    pub fn system() -> Self {
+        Self {
+            via: OriginVia::System,
+            supervisor: None,
+            reason: None,
+            client: None,
+        }
+    }
+
     /// A subtask the main chat dispatched: its session and its first
     /// message (main chat ticket 06a).
     pub fn subtask() -> Self {

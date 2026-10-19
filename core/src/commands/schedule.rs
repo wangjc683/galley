@@ -99,6 +99,7 @@ pub(crate) async fn preview_scheduled_fire(
         origin: None,
         created_in: None,
         cancelled_at: None,
+        cancelled_by: None,
         todo_id: None,
         created_at: base
             .as_ref()

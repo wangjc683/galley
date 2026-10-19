@@ -35,13 +35,17 @@ pub(super) struct ScheduledTaskRow {
     pub(super) last_due_at: Option<String>,
     pub(super) last_wake: Option<String>,
     pub(super) cancelled_at: Option<String>,
+    pub(super) cancelled_via: Option<String>,
+    pub(super) cancelled_by_supervisor: Option<String>,
+    pub(super) cancelled_origin_note: Option<String>,
     pub(super) todo_id: Option<String>,
 }
 
 const SCHEDULED_TASK_COLUMNS: &str = "id, project_id, prompt, repeat_kind, repeat_days, \
     time_of_day, fire_at, llm_name, enabled, last_fired_at, last_run_session_id, created_at, \
     updated_at, target, created_via, created_by_supervisor, created_origin_note, \
-    created_in_session_id, created_in_turn_index, last_due_at, last_wake, cancelled_at, todo_id";
+    created_in_session_id, created_in_turn_index, last_due_at, last_wake, cancelled_at, \
+    cancelled_via, cancelled_by_supervisor, cancelled_origin_note, todo_id";
 
 /// Which scheduled tasks a list read returns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -120,6 +124,14 @@ impl ScheduledTaskRow {
                 session_id: SessionId(session_id),
                 turn_index: self.created_in_turn_index,
             });
+        let cancelled_by = match self.cancelled_via.as_deref() {
+            Some(via) => Some(origin_from_stored(
+                via,
+                self.cancelled_by_supervisor,
+                self.cancelled_origin_note,
+            )?),
+            None => None,
+        };
         let mut brief = ScheduledTaskBrief {
             id: ScheduledTaskId(self.id),
             project_id: self.project_id.map(ProjectId),
@@ -137,6 +149,7 @@ impl ScheduledTaskRow {
             origin: Some(origin),
             created_in,
             cancelled_at: self.cancelled_at,
+            cancelled_by,
             todo_id: self.todo_id,
             created_at: self.created_at,
             updated_at: self.updated_at,
@@ -566,24 +579,35 @@ impl SqliteGalley {
     pub(super) async fn delete_scheduled_task_db(
         &self,
         id: ScheduledTaskId,
-        _origin: Origin,
+        origin: Origin,
     ) -> Result<()> {
-        self.cancel_scheduled_task(&id).await.map(|_| ())
+        self.cancel_scheduled_task(&id, &origin).await.map(|_| ())
     }
 
     /// Cancel a task (main chat ticket 33): the soft delete behind every
     /// delete, the desktop's and the CLI's. The row stays with
-    /// `cancelled_at`. A cancelled task is gone for every write, so
-    /// cancelling it again is `not_found`, as deleting twice always was.
+    /// `cancelled_at`, and since ticket 61 with who cancelled it and why
+    /// (`origin`: the desktop, the CLI's `--supervisor` and `--reason`,
+    /// or [`Origin::system`] when Core does it on its own). A cancelled
+    /// task is gone for every write, so cancelling it again is
+    /// `not_found`, as deleting twice always was.
     ///
     /// **Errors**: `not_found`.
-    pub async fn cancel_scheduled_task(&self, id: &ScheduledTaskId) -> Result<ScheduledTaskBrief> {
+    pub async fn cancel_scheduled_task(
+        &self,
+        id: &ScheduledTaskId,
+        origin: &Origin,
+    ) -> Result<ScheduledTaskBrief> {
         let now = chrono_now_iso();
         let res = sqlx::query(
-            "UPDATE scheduled_tasks SET cancelled_at = ?, updated_at = ? \
+            "UPDATE scheduled_tasks SET cancelled_at = ?, cancelled_via = ?, \
+                cancelled_by_supervisor = ?, cancelled_origin_note = ?, updated_at = ? \
              WHERE id = ? AND cancelled_at IS NULL",
         )
         .bind(&now)
+        .bind(origin.via.as_sql())
+        .bind(origin.stored_supervisor())
+        .bind(origin.reason.as_deref())
         .bind(&now)
         .bind(id.as_str())
         .execute(&self.pool)

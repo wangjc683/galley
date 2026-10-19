@@ -278,6 +278,12 @@ pub struct TodoBrief {
     pub created_in: Option<ScheduledTaskCreatedIn>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cancelled_at: Option<String>,
+    /// Who cancelled it, and why (main chat ticket 61): `gui` is the user
+    /// at the desktop, `supervisor` + `galley-assistant` is Galley on the
+    /// user's word, its `reason` the note it gave. Absent while it is not
+    /// cancelled, and on a to-do cancelled before this was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancelled_by: Option<Origin>,
     pub created_at: String,
     pub updated_at: String,
 }

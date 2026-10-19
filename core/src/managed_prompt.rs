@@ -6,7 +6,10 @@
 
 use crate::api::schedule::{ScheduleTarget, ScheduledTaskRepeat};
 use crate::api::TodoReminderState;
-use crate::assistant_todo::{AssistantTodo, TodoCreator, TodoItem, TodoKind, TodoState};
+use crate::assistant_todo::{
+    AssistantTodo, DeclinedBy, DeclinedFollowUp, TodoCreator, TodoItem, TodoKind, TodoState,
+    DECLINED_WINDOW_DAYS,
+};
 use crate::session_runner::segment::MainChatPromptState;
 use ring::digest::{Context, SHA256};
 use std::fmt::Write;
@@ -476,9 +479,9 @@ fn main_chat_static_prompt() -> String {
 /// ([`in_hand_section`]); the rest are counted on one more line.
 const IN_HAND_MAX_PER_GROUP: usize = 5;
 
-/// A to-do's title, a task's words or a subtask's title is cut at this
-/// many characters in the "In Hand" block (`todo show`, `schedule show`
-/// and `session brief` read all of it).
+/// A to-do's title, a task's words, a subtask's title or a cancel's
+/// reason is cut at this many characters in the "In Hand" block (`todo
+/// show`, `schedule show` and `session brief` read all of it).
 const IN_HAND_TEXT_CHARS: usize = 40;
 
 /// Another agent's label is cut at this many characters.
@@ -498,19 +501,32 @@ const IN_HAND_AGENT_CHARS: usize = 24;
 /// only when there are to-dos: without them the first line reads as it
 /// did before ticket 39).
 ///
+/// Ticket 61 (main chat PRD ruling 113) added a fourth group after them:
+/// the follow-ups the user turned down (`declined`,
+/// [`crate::assistant_todo::declined_follow_ups`]), which the desktop's
+/// 「待办」 does not show — the one exception to "what you see is what it
+/// sees": a record for the main chat's judgement, not a list. Data only:
+/// how to use it is the manual's. Empty, the section reads exactly as it
+/// did before the group existed.
+///
 /// Bounded: [`IN_HAND_MAX_PER_GROUP`] lines per group, then "and N more";
-/// titles and words cut at [`IN_HAND_TEXT_CHARS`] characters. `None` when
-/// all three groups are empty: no section at all. Times are local (`tz`),
-/// in the wake note's format (`2026-10-20 20:00 (Tue)`).
+/// titles, words and reasons cut at [`IN_HAND_TEXT_CHARS`] characters.
+/// `None` when all four groups are empty: no section at all. Times are
+/// local (`tz`), in the wake note's format (`2026-10-20 20:00 (Tue)`).
 pub(crate) fn in_hand_section<Tz: chrono::TimeZone>(
     todo: &AssistantTodo,
+    declined: &[DeclinedFollowUp],
     now: chrono::DateTime<chrono::Utc>,
     tz: &Tz,
 ) -> Option<String>
 where
     Tz::Offset: std::fmt::Display,
 {
-    if todo.yours.is_empty() && todo.assistant.is_empty() && todo.routine.is_empty() {
+    if todo.yours.is_empty()
+        && todo.assistant.is_empty()
+        && todo.routine.is_empty()
+        && declined.is_empty()
+    {
         return None;
     }
     let readers = if todo.yours.is_empty() {
@@ -563,6 +579,23 @@ where
         "`schedule list`",
         &|item| in_hand_task_line(item, tz),
     );
+    if !declined.is_empty() {
+        let _ = write!(
+            out,
+            "\n\nFollow-ups the user turned down (to-dos and reminders you set that were \
+             cancelled on the desktop or at their request, last {DECLINED_WINDOW_DAYS} days):"
+        );
+        for item in declined.iter().take(IN_HAND_MAX_PER_GROUP) {
+            let _ = write!(out, "\n- {}", in_hand_declined_line(item, tz));
+        }
+        if declined.len() > IN_HAND_MAX_PER_GROUP {
+            let _ = write!(
+                out,
+                "\n- and {} more: `todo list --all`, `schedule list --all`",
+                declined.len() - IN_HAND_MAX_PER_GROUP
+            );
+        }
+    }
     Some(out)
 }
 
@@ -659,6 +692,32 @@ where
         facts.join(", "),
         in_hand_cut(&item.text, IN_HAND_TEXT_CHARS)
     )
+}
+
+/// `` `sched_…` cancelled 2026-10-18 21:30 (Sun) by the user on the
+/// desktop: <words> ``; `by you at the user's request` for Galley's own
+/// cancel; ` (reason: <reason>)` after the words when the cancel gave one.
+fn in_hand_declined_line<Tz: chrono::TimeZone>(item: &DeclinedFollowUp, tz: &Tz) -> String
+where
+    Tz::Offset: std::fmt::Display,
+{
+    let mut line = format!("`{}` cancelled ", item.id);
+    if let Some(at) = in_hand_time(&item.cancelled_at, tz) {
+        let _ = write!(line, "{at} ");
+    }
+    line.push_str(match item.by {
+        DeclinedBy::User => "by the user on the desktop",
+        DeclinedBy::Assistant => "by you at the user's request",
+    });
+    let _ = write!(line, ": {}", in_hand_cut(&item.text, IN_HAND_TEXT_CHARS));
+    if let Some(reason) = item.reason.as_deref() {
+        let _ = write!(
+            line,
+            " (reason: {})",
+            in_hand_cut(reason, IN_HAND_TEXT_CHARS)
+        );
+    }
+    line
 }
 
 /// `` `s-…` <title>: working ``.
@@ -1371,7 +1430,8 @@ mod tests {
     use crate::api::todo::StoredDue;
     use crate::api::TodoReminder;
     use crate::assistant_todo::{
-        AssistantTodo, TodoCreator, TodoItem, TodoKind, TodoState, YourTodos,
+        AssistantTodo, DeclinedBy, DeclinedFollowUp, TodoCreator, TodoItem, TodoKind, TodoState,
+        YourTodos,
     };
     use chrono::{DateTime, FixedOffset, NaiveDate, Utc};
 
@@ -1445,6 +1505,25 @@ mod tests {
 
     fn day(y: i32, m: u32, d: u32) -> StoredDue {
         StoredDue::Date(NaiveDate::from_ymd_opt(y, m, d).unwrap())
+    }
+
+    /// A follow-up the user turned down (ticket 61).
+    fn declined(
+        kind: TodoKind,
+        id: &str,
+        text: &str,
+        cancelled_at: &str,
+        by: DeclinedBy,
+        reason: Option<&str>,
+    ) -> DeclinedFollowUp {
+        DeclinedFollowUp {
+            kind,
+            id: id.into(),
+            text: text.into(),
+            cancelled_at: cancelled_at.into(),
+            by,
+            reason: reason.map(str::to_string),
+        }
     }
 
     /// Tickets 36 and 39: the format, item by item — a to-do's due date
@@ -1530,7 +1609,7 @@ mod tests {
             done_omitted: 0,
             today_count: 1,
         };
-        let text = in_hand_section(&todo, at("2026-10-16T06:05:00Z"), &shanghai()).unwrap();
+        let text = in_hand_section(&todo, &[], at("2026-10-16T06:05:00Z"), &shanghai()).unwrap();
         let want = [
             "### In Hand",
             "",
@@ -1556,6 +1635,109 @@ mod tests {
         assert_eq!(text, want);
         // The done group stays out.
         assert!(!text.contains("做完的"));
+
+        // Ticket 61: with none turned down the lines above are exactly
+        // what they were before the fourth group; with some, it follows
+        // the routines: when, who (the user at the desktop, or you at
+        // their request), the words, the reason when there is one.
+        let turned_down = [
+            declined(
+                TodoKind::Task,
+                "sched_7a1b2c3d4e5f6a7b",
+                "提醒用户确认 702 装修进度",
+                "2026-10-15T13:30:00+00:00",
+                DeclinedBy::User,
+                None,
+            ),
+            declined(
+                TodoKind::Todo,
+                "todo_5e6f7a8b9c0d1e2f",
+                "702 装修验收",
+                "2026-10-14T01:12:00+00:00",
+                DeclinedBy::Assistant,
+                Some("用户说装修这类的别提醒"),
+            ),
+        ];
+        let text =
+            in_hand_section(&todo, &turned_down, at("2026-10-16T06:05:00Z"), &shanghai()).unwrap();
+        let fourth = [
+            "",
+            "",
+            "Follow-ups the user turned down (to-dos and reminders you set that were cancelled on the desktop or at their request, last 90 days):",
+            "- `sched_7a1b2c3d4e5f6a7b` cancelled 2026-10-15 21:30 (Thu) by the user on the desktop: 提醒用户确认 702 装修进度",
+            "- `todo_5e6f7a8b9c0d1e2f` cancelled 2026-10-14 09:12 (Wed) by you at the user's request: 702 装修验收 (reason: 用户说装修这类的别提醒)",
+        ]
+        .join("\n");
+        assert_eq!(text, format!("{want}{fourth}"));
+    }
+
+    /// Ticket 61: the follow-ups turned down alone still make the section
+    /// (the first line as without to-dos); at most five lines, then "and N
+    /// more" with the commands that list cancelled ones; words and reasons
+    /// cut as titles are; a time Core cannot read is left out.
+    #[test]
+    fn in_hand_follow_ups_turned_down_alone_and_bounded() {
+        let now = at("2026-10-16T06:05:00Z");
+        let one = [declined(
+            TodoKind::Task,
+            "sched_7a1b2c3d4e5f6a7b",
+            "提醒用户喝水",
+            "2026-10-16T01:00:00+00:00",
+            DeclinedBy::User,
+            None,
+        )];
+        let text = in_hand_section(&AssistantTodo::default(), &one, now, &shanghai()).unwrap();
+        let want = [
+            "### In Hand",
+            "",
+            "As of 2026-10-16 14:05, local time (it may have changed since: `schedule list` and `session brief <id>` read it now).",
+            "",
+            "Follow-ups the user turned down (to-dos and reminders you set that were cancelled on the desktop or at their request, last 90 days):",
+            "- `sched_7a1b2c3d4e5f6a7b` cancelled 2026-10-16 09:00 (Fri) by the user on the desktop: 提醒用户喝水",
+        ]
+        .join("\n");
+        assert_eq!(text, want);
+        // Done ones alone still make nothing; with one turned down, the
+        // section is that group alone.
+        let only_done = AssistantTodo {
+            done: vec![subtask("s-done", "做完的", TodoState::Done)],
+            ..AssistantTodo::default()
+        };
+        assert_eq!(
+            in_hand_section(&only_done, &one, now, &shanghai()),
+            Some(want)
+        );
+
+        let long = "一二三四五六七八九十".repeat(5);
+        let cut: String = long.chars().take(IN_HAND_TEXT_CHARS).collect();
+        let many: Vec<DeclinedFollowUp> = (0..7)
+            .map(|n| {
+                declined(
+                    TodoKind::Todo,
+                    &format!("todo_{n:016x}"),
+                    &long,
+                    "2026-10-15T01:00:00+00:00",
+                    DeclinedBy::Assistant,
+                    Some(&long),
+                )
+            })
+            .collect();
+        let text = in_hand_section(&AssistantTodo::default(), &many, now, &shanghai()).unwrap();
+        assert_eq!(text.matches("\n- `todo_").count(), IN_HAND_MAX_PER_GROUP);
+        assert!(text.ends_with("\n- and 2 more: `todo list --all`, `schedule list --all`"));
+        assert!(text.contains(&format!(": {cut}… (reason: {cut}…)\n")));
+        assert!(!text.contains(&long));
+        let unreadable = [declined(
+            TodoKind::Todo,
+            "todo_1",
+            "x",
+            "not a time",
+            DeclinedBy::User,
+            None,
+        )];
+        let text =
+            in_hand_section(&AssistantTodo::default(), &unreadable, now, &shanghai()).unwrap();
+        assert!(text.ends_with("\n- `todo_1` cancelled by the user on the desktop: x"));
     }
 
     /// Tickets 36 and 39: at most five lines a group, then "and N more"
@@ -1567,14 +1749,14 @@ mod tests {
     fn in_hand_lines_are_bounded_and_absent_when_empty() {
         let now = at("2026-10-16T06:05:00Z");
         assert_eq!(
-            in_hand_section(&AssistantTodo::default(), now, &shanghai()),
+            in_hand_section(&AssistantTodo::default(), &[], now, &shanghai()),
             None
         );
         let only_done = AssistantTodo {
             done: vec![subtask("s-done", "做完的", TodoState::Done)],
             ..AssistantTodo::default()
         };
-        assert_eq!(in_hand_section(&only_done, now, &shanghai()), None);
+        assert_eq!(in_hand_section(&only_done, &[], now, &shanghai()), None);
 
         let long = "一二三四五六七八九十".repeat(5);
         let tasks: Vec<TodoItem> = (0..7)
@@ -1591,7 +1773,7 @@ mod tests {
             assistant: tasks,
             ..AssistantTodo::default()
         };
-        let text = in_hand_section(&todo, now, &shanghai()).unwrap();
+        let text = in_hand_section(&todo, &[], now, &shanghai()).unwrap();
         assert_eq!(text.matches("\n- `sched_").count(), IN_HAND_MAX_PER_GROUP);
         assert!(text.contains("\n- and 2 more: `sessions list`, `schedule list`"));
         assert!(!text.contains("to-dos") && !text.contains("Routine"));
@@ -1616,7 +1798,7 @@ mod tests {
             },
             ..AssistantTodo::default()
         };
-        let text = in_hand_section(&todo, now, &shanghai()).unwrap();
+        let text = in_hand_section(&todo, &[], now, &shanghai()).unwrap();
         assert_eq!(text.matches("\n- `todo_").count(), IN_HAND_MAX_PER_GROUP);
         assert!(
             text.contains("- `todo_c000000000000000` no due date: 事\n- and 2 more: `todo list`")
@@ -1638,7 +1820,7 @@ mod tests {
             routine,
             ..AssistantTodo::default()
         };
-        let text = in_hand_section(&todo, now, &shanghai()).unwrap();
+        let text = in_hand_section(&todo, &[], now, &shanghai()).unwrap();
         assert!(!text.contains("What you are on"));
         assert_eq!(text.matches(", daily, ").count(), IN_HAND_MAX_PER_GROUP);
         assert!(text.ends_with("\n- and 1 more: `schedule list`"));
@@ -1669,7 +1851,7 @@ mod tests {
             )],
             ..AssistantTodo::default()
         };
-        let lines = in_hand_section(&todo, at("2026-10-16T06:05:00Z"), &shanghai()).unwrap();
+        let lines = in_hand_section(&todo, &[], at("2026-10-16T06:05:00Z"), &shanghai()).unwrap();
         let without = compose_main_chat_runtime_prompt("t", &state, None, MANUAL_DIR);
         let with = compose_main_chat_runtime_prompt("t", &state, Some(&lines), MANUAL_DIR);
         let section = main_chat_section(&state);
@@ -1760,7 +1942,7 @@ mod tests {
             .await
             .expect("todo");
         assert!(todo.assistant.is_empty() && todo.yours.is_empty());
-        let text = in_hand_section(&todo, now, &shanghai()).expect("lines");
+        let text = in_hand_section(&todo, &[], now, &shanghai()).expect("lines");
         assert!(!text.contains("What you are on") && !text.contains("to-dos"));
         assert!(text.contains("daily, set by the user, starts a new conversation: 整理下载文件夹"));
 
@@ -1847,7 +2029,7 @@ mod tests {
         let todo = crate::assistant_todo::assistant_todo(&galley, &runners, now)
             .await
             .expect("todo");
-        let text = in_hand_section(&todo, now, &shanghai()).expect("lines");
+        let text = in_hand_section(&todo, &[], now, &shanghai()).expect("lines");
         let listed: Vec<&str> = todo
             .yours
             .iter()
@@ -1882,19 +2064,34 @@ mod tests {
         assert!(text.contains("set by you: 回头查物流"));
         assert!(text.contains("- `s-sub` 查物流: "));
         assert!(text.contains(&format!("- `{}` no due date: 买营养土", soil.id)));
+
+        // Ticket 61: the reminder the user cancelled on the desktop is in
+        // no group of the list, and in the main chat's read as one turned
+        // down, after the routines.
+        let read = crate::assistant_todo::in_hand_read(&galley, &runners, now)
+            .await
+            .expect("read");
+        assert_eq!(read.todo, todo);
+        let ids: Vec<&str> = read.declined.iter().map(|d| d.id.as_str()).collect();
+        assert_eq!(ids, ["sched_gone"]);
+        let with = in_hand_section(&read.todo, &read.declined, now, &shanghai()).expect("lines");
+        assert!(with.starts_with(&text));
+        assert!(with.contains("\n- `sched_gone` cancelled "));
+        assert!(with.ends_with(" by the user on the desktop: 取消的"));
     }
 
-    /// Byte cap on the "In Hand" lines (tickets 36 and 39), measured on
-    /// the longest they get: five lines in each of the three groups, each
-    /// with titles and words cut at the limit in three-byte characters —
-    /// to-dos overdue, with a time and a paused reminder; one-off tasks
-    /// paused with their time, set by an outside agent with a label past
-    /// its cut, that start a conversation; routines the same with their
-    /// next fire — and three-digit "more" counts. No headroom, `\r` not
-    /// counted. Data, main chat only: outside the static budget and the
-    /// prompt hash. Typical is far less (nothing at all when there is
-    /// nothing in hand); fifteen lines cap what rides every request of a
-    /// busy main chat.
+    /// Byte cap on the "In Hand" lines (tickets 36, 39 and 61), measured
+    /// on the longest they get: five lines in each of the four groups,
+    /// each with titles, words and reasons cut at the limit in three-byte
+    /// characters — to-dos overdue, with a time and a paused reminder;
+    /// one-off tasks paused with their time, set by an outside agent with
+    /// a label past its cut, that start a conversation; routines the same
+    /// with their next fire; follow-ups turned down by you at the user's
+    /// request, with a reason — and three-digit "more" counts. No
+    /// headroom, `\r` not counted. Data, main chat only: outside the
+    /// static budget and the prompt hash. Typical is far less (nothing at
+    /// all when there is nothing in hand); twenty lines cap what rides
+    /// every request of a busy main chat.
     ///
     /// Ticket 39 raised it from 2467 to 4230 (ticket 36: two groups of
     /// five, tasks and subtasks). The same rule — five lines a group, cut
@@ -1903,7 +2100,12 @@ mod tests {
     /// its subtasks) and the routines. Fifteen lines instead of ten, a
     /// to-do's line (due date, overdue, reminder) about as long as a
     /// task's, and `todo list` named on the first line.
-    const IN_HAND_BUDGET_BYTES: usize = 4230;
+    ///
+    /// Ticket 61 raised it from 4230 to 6161: the same rule over a fourth
+    /// group, the follow-ups the user turned down (main chat PRD ruling
+    /// 113: at most five, each with its words and its reason), whose line
+    /// carries two cut texts where the others carry one.
+    const IN_HAND_BUDGET_BYTES: usize = 6161;
 
     #[test]
     fn in_hand_lines_stay_within_budget() {
@@ -1929,6 +2131,15 @@ mod tests {
             Some(("2026-10-20T12:00:00+00:00", TodoReminderState::Paused)),
         );
         let many = IN_HAND_MAX_PER_GROUP + 999;
+        let longest_declined = declined(
+            TodoKind::Task,
+            "sched_ffffffffffffffff",
+            &long,
+            "2026-10-15T12:00:00+00:00",
+            DeclinedBy::Assistant,
+            Some(&long),
+        );
+        let turned_down = vec![longest_declined; many];
         let todo = AssistantTodo {
             yours: YourTodos {
                 today: vec![longest_todo; many],
@@ -1946,7 +2157,7 @@ mod tests {
             ],
             ..AssistantTodo::default()
         };
-        let len = in_hand_section(&todo, at("2026-10-16T06:05:00Z"), &shanghai())
+        let len = in_hand_section(&todo, &turned_down, at("2026-10-16T06:05:00Z"), &shanghai())
             .unwrap()
             .bytes()
             .filter(|&byte| byte != b'\r')

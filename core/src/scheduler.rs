@@ -68,7 +68,7 @@ use crate::api::schedule::{
     resolve_wall_clock, FirePreview, ScheduleTarget, ScheduledFireFailed, ScheduledTaskBrief,
     SCHEDULED_TASKS_CHANGED_EVENT, SCHEDULED_TASK_FIRE_FAILED_EVENT,
 };
-use crate::api::{GalleyApi, ScheduledTaskId};
+use crate::api::{GalleyApi, Origin, ScheduledTaskId};
 use crate::db::SqliteGalley;
 use crate::error::GalleyError;
 use crate::notify::{notify, Notifier};
@@ -208,7 +208,11 @@ pub async fn drop_reminders_of_closed_todos<T>(
                     "[scheduler] task {} reminds of to-do {todo}, no longer open: cancelled",
                     task.id
                 );
-                match galley.cancel_scheduled_task(&task.id).await {
+                // Core on its own (ticket 61): not the user turning it down.
+                match galley
+                    .cancel_scheduled_task(&task.id, &Origin::system())
+                    .await
+                {
                     Ok(_) => notify(notifier, SCHEDULED_TASKS_CHANGED_EVENT, &()),
                     Err(e) => eprintln!("[scheduler] cancelling task {} failed: {e:?}", task.id),
                 }
@@ -582,6 +586,7 @@ mod tests {
             origin: None,
             created_in: None,
             cancelled_at: None,
+            cancelled_by: None,
             todo_id: None,
             created_at: created_at.into(),
             updated_at: created_at.into(),

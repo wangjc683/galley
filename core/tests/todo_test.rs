@@ -3,7 +3,9 @@
 //! reminder that hangs on one (a scheduled task, ticket 33), the four
 //! groups of the to-do list (`galley_core_lib::assistant_todo`) read in
 //! this machine's zone, the turn a to-do was noted in, the events the
-//! write path sends, and a main chat reset. The wake a reminder sends is
+//! write path sends, who cancelled a to-do or a task and the follow-ups
+//! the user turned down (ticket 61), and a main chat reset. The wake a
+//! reminder sends is
 //! in `schedule_wake_test.rs`; the pure grouping, ordering and zones in
 //! the module's unit tests.
 
@@ -18,7 +20,8 @@ use galley_core_lib::api::{
     TodoPatch, TodoReminderState, TodoStatus, ASSISTANT_SUPERVISOR, TODOS_CHANGED_EVENT,
 };
 use galley_core_lib::assistant_todo::{
-    assistant_todo, noted_todos, AssistantTodo, TodoCreator, TodoKind, TodoState,
+    assistant_todo, declined_follow_ups, in_hand_read, noted_todos, AssistantTodo, DeclinedBy,
+    TodoCreator, TodoKind, TodoState,
 };
 use galley_core_lib::db::{MainChatSeed, PersistAssistantMessage, SqliteGalley, TodoListScope};
 use galley_core_lib::error::GalleyError;
@@ -1004,6 +1007,336 @@ async fn every_write_tells_the_desktop() {
     assert_eq!(rec.take(), both);
 }
 
+// ---------------- who cancelled (ticket 61) ----------------
+
+/// The three cancel columns of a row, as stored.
+async fn cancel_columns(
+    pool: &SqlitePool,
+    table: &str,
+    id: &str,
+) -> (Option<String>, Option<String>, Option<String>) {
+    let sql = format!(
+        "SELECT cancelled_via, cancelled_by_supervisor, cancelled_origin_note FROM {table} \
+         WHERE id = ?"
+    );
+    sqlx::query_as(&sql)
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .expect("cancel columns")
+}
+
+fn own_reminder(id: &str, words: &str) -> CreateScheduledTaskInput {
+    CreateScheduledTaskInput {
+        id: id.into(),
+        project_id: None,
+        prompt: words.into(),
+        repeat: ScheduledTaskRepeat::Once,
+        time_of_day: String::new(),
+        llm_name: None,
+        enabled: true,
+        fire_at: Some(hours(2)),
+        target: ScheduleTarget::Assistant,
+    }
+}
+
+fn turned_down(reason: &str) -> Origin {
+    Origin {
+        reason: Some(reason.into()),
+        ..assistant()
+    }
+}
+
+/// Main chat PRD ruling 113: every cancel records who and why, from its
+/// three sources — the CLI's `--supervisor` / `--reason` (`todo cancel`,
+/// `schedule delete`, `todo update --no-remind`), the desktop (`gui`),
+/// and Core on its own (`system`: a reminder going with its to-do).
+#[tokio::test]
+async fn every_cancel_records_who_and_why() {
+    let (pool, galley) = with_main_chat().await;
+    let reminded = |title: &str| CreateTodoInput {
+        remind_at: Some(hours(4)),
+        ..titled(title)
+    };
+
+    // The CLI cancels a to-do: its label and reason; Core takes its
+    // reminder along: system, no label, no note.
+    let report = note(&galley, reminded("交报告")).await;
+    let gone = galley
+        .cancel_todo(&id(&report), turned_down("用户说这件不用管了"))
+        .await
+        .expect("cancel");
+    let by = gone.cancelled_by.expect("who cancelled");
+    assert_eq!(by.via, OriginVia::Supervisor);
+    assert_eq!(by.supervisor.as_deref(), Some(ASSISTANT_SUPERVISOR));
+    assert_eq!(by.reason.as_deref(), Some("用户说这件不用管了"));
+    assert_eq!(
+        cancel_columns(&pool, "todos", report.id.as_str()).await,
+        (
+            Some("supervisor".into()),
+            Some(ASSISTANT_SUPERVISOR.into()),
+            Some("用户说这件不用管了".into())
+        )
+    );
+    let released = reminder_id(&report);
+    assert_eq!(
+        cancel_columns(&pool, "scheduled_tasks", released.as_str()).await,
+        (Some("system".into()), None, None)
+    );
+    let task = galley.scheduled_task(released.as_str()).await.unwrap();
+    assert_eq!(task.cancelled_by.expect("who").via, OriginVia::System);
+
+    // Ticking off takes the reminder along the same way.
+    let call = note(&galley, reminded("打电话")).await;
+    galley
+        .complete_todo(&id(&call), Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(
+        cancel_columns(&pool, "scheduled_tasks", reminder_id(&call).as_str()).await,
+        (Some("system".into()), None, None)
+    );
+
+    // The desktop cancels a reminder on its to-do: gui.
+    let soil = note(&galley, reminded("买营养土")).await;
+    galley
+        .cancel_todo_reminder(&id(&soil), Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(
+        cancel_columns(&pool, "scheduled_tasks", reminder_id(&soil).as_str()).await,
+        (Some("gui".into()), None, None)
+    );
+    // The to-do itself is not cancelled.
+    assert_eq!(
+        cancel_columns(&pool, "todos", soil.id.as_str()).await,
+        (None, None, None)
+    );
+
+    // `todo update --no-remind`: the caller's own cancel.
+    let parcel = note(&galley, reminded("取快递")).await;
+    galley
+        .update_todo(
+            &id(&parcel),
+            TodoPatch {
+                remind_at: Some(None),
+                ..TodoPatch::default()
+            },
+            turned_down("不用提醒"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        cancel_columns(&pool, "scheduled_tasks", reminder_id(&parcel).as_str()).await,
+        (
+            Some("supervisor".into()),
+            Some(ASSISTANT_SUPERVISOR.into()),
+            Some("不用提醒".into())
+        )
+    );
+
+    // `schedule delete` through the CLI, and the desktop's delete.
+    galley
+        .create_scheduled_task(own_reminder("sched_cli", "回头查物流"), assistant())
+        .await
+        .unwrap();
+    galley
+        .delete_scheduled_task(
+            ScheduledTaskId("sched_cli".into()),
+            Origin::cli(None, Some("never mind".into())),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        cancel_columns(&pool, "scheduled_tasks", "sched_cli").await,
+        (Some("cli".into()), None, Some("never mind".into()))
+    );
+    galley
+        .create_scheduled_task(own_reminder("sched_gui", "提醒用户喝水"), assistant())
+        .await
+        .unwrap();
+    galley
+        .delete_scheduled_task(ScheduledTaskId("sched_gui".into()), Origin::gui())
+        .await
+        .unwrap();
+    assert_eq!(
+        cancel_columns(&pool, "scheduled_tasks", "sched_gui").await,
+        (Some("gui".into()), None, None)
+    );
+    // A cancel that is refused writes nothing over the first.
+    assert!(galley
+        .cancel_todo(&id(&report), Origin::desktop())
+        .await
+        .is_err());
+    assert_eq!(
+        cancel_columns(&pool, "todos", report.id.as_str()).await.0,
+        Some("supervisor".into())
+    );
+}
+
+/// Ruling 113 point 2: the follow-ups turned down are Galley's to-dos
+/// and tasks the user cancelled at the desktop, or Galley cancelled at
+/// the user's request; not those Core cancelled on its own, another
+/// agent cancelled, the user made, or that were cancelled before who was
+/// recorded. Point 4: the desktop's list does not show them; only the
+/// main chat's read carries them.
+#[tokio::test]
+async fn the_follow_ups_turned_down_and_only_the_main_chat_reads_them() {
+    let (pool, galley) = with_main_chat().await;
+    // Turned down: a to-do Galley cancelled at the user's request, with
+    // its reason (its reminder, cancelled by Core along with it, is not
+    // one)…
+    let reno = note(
+        &galley,
+        CreateTodoInput {
+            remind_at: Some(hours(4)),
+            ..titled("702 装修验收")
+        },
+    )
+    .await;
+    galley
+        .cancel_todo(&id(&reno), turned_down("用户说装修这类别提醒"))
+        .await
+        .unwrap();
+    // …a reminder on a to-do the user cancelled at the desktop…
+    let soil = note(
+        &galley,
+        CreateTodoInput {
+            remind_at: Some(hours(4)),
+            ..titled("买营养土")
+        },
+    )
+    .await;
+    galley
+        .cancel_todo_reminder(&id(&soil), Origin::desktop())
+        .await
+        .unwrap();
+    // …and Galley's own reminder the user cancelled from its card.
+    galley
+        .create_scheduled_task(own_reminder("sched_water", "提醒用户喝水"), assistant())
+        .await
+        .unwrap();
+    galley
+        .delete_scheduled_task(ScheduledTaskId("sched_water".into()), Origin::gui())
+        .await
+        .unwrap();
+    // Not: ticked off (Core cancels its reminder), another agent's
+    // cancel, a task the user made, a cancel from before 051.
+    let call = note(
+        &galley,
+        CreateTodoInput {
+            remind_at: Some(hours(4)),
+            ..titled("打电话")
+        },
+    )
+    .await;
+    galley
+        .complete_todo(&id(&call), Origin::desktop())
+        .await
+        .unwrap();
+    galley
+        .create_scheduled_task(own_reminder("sched_agent", "看依赖更新"), assistant())
+        .await
+        .unwrap();
+    galley
+        .delete_scheduled_task(
+            ScheduledTaskId("sched_agent".into()),
+            Origin {
+                via: OriginVia::Supervisor,
+                supervisor: Some("claude-code".into()),
+                reason: Some("done elsewhere".into()),
+                client: None,
+            },
+        )
+        .await
+        .unwrap();
+    galley
+        .create_scheduled_task(own_reminder("sched_users", "整理下载文件夹"), Origin::gui())
+        .await
+        .unwrap();
+    galley
+        .delete_scheduled_task(ScheduledTaskId("sched_users".into()), Origin::gui())
+        .await
+        .unwrap();
+    galley
+        .create_scheduled_task(own_reminder("sched_old", "旧的取消"), assistant())
+        .await
+        .unwrap();
+    sqlx::query("UPDATE scheduled_tasks SET cancelled_at = ? WHERE id = 'sched_old'")
+        .bind(instant_to_utc_iso(&Utc::now()))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let declined = declined_follow_ups(&galley, Utc::now()).await.unwrap();
+    let mut got: Vec<(&str, TodoKind, DeclinedBy, Option<&str>)> = declined
+        .iter()
+        .map(|d| (d.id.as_str(), d.kind, d.by, d.reason.as_deref()))
+        .collect();
+    got.sort_by(|a, b| a.0.cmp(b.0));
+    let soil_reminder = reminder_id(&soil);
+    let mut want = vec![
+        (
+            reno.id.as_str(),
+            TodoKind::Todo,
+            DeclinedBy::Assistant,
+            Some("用户说装修这类别提醒"),
+        ),
+        (
+            soil_reminder.as_str(),
+            TodoKind::Task,
+            DeclinedBy::User,
+            None,
+        ),
+        ("sched_water", TodoKind::Task, DeclinedBy::User, None),
+    ];
+    want.sort_by(|a, b| a.0.cmp(b.0));
+    assert_eq!(got, want);
+    let soil_line = declined
+        .iter()
+        .find(|d| d.kind == TodoKind::Task && d.id != "sched_water");
+    assert_eq!(soil_line.expect("the reminder").text, "买营养土");
+
+    // The desktop's list: none of them, and no such group on the wire.
+    let panel = read(&galley).await;
+    let listed: Vec<&str> = panel
+        .yours
+        .iter()
+        .chain(&panel.assistant)
+        .chain(&panel.routine)
+        .chain(&panel.done)
+        .map(|i| i.id.as_str())
+        .collect();
+    for d in &declined {
+        assert!(!listed.contains(&d.id.as_str()), "{} on the panel", d.id);
+    }
+    let wire = serde_json::to_value(&panel).unwrap();
+    let mut keys: Vec<&str> = wire
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        [
+            "assistant",
+            "done",
+            "doneOmitted",
+            "routine",
+            "todayCount",
+            "yours"
+        ]
+    );
+    // The main chat's read: the same list, and them.
+    let main = in_hand_read(&galley, &RunnerManager::new(), Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(main.todo, panel);
+    assert_eq!(main.declined, declined);
+}
+
 // ---------------- reset ----------------
 
 #[tokio::test]
@@ -1083,6 +1416,59 @@ async fn a_main_chat_reset_clears_every_to_do_and_their_reminders() {
             .await
             .unwrap();
     assert_eq!(orphans, 0);
+}
+
+/// Ticket 61: what the user turned down goes with the conversation it was
+/// said in. The to-dos go with their cancel records; the assistant's own
+/// tasks stay, cancelled ones still cancelled, but who cancelled them and
+/// why is cleared, so the new main chat starts with none turned down.
+#[tokio::test]
+async fn a_main_chat_reset_forgets_what_the_user_turned_down() {
+    let (pool, galley) = with_main_chat().await;
+    let reno = note(&galley, titled("702 装修验收")).await;
+    galley
+        .cancel_todo(&id(&reno), turned_down("装修这类别提醒"))
+        .await
+        .unwrap();
+    galley
+        .create_scheduled_task(own_reminder("sched_water", "提醒用户喝水"), assistant())
+        .await
+        .unwrap();
+    galley
+        .delete_scheduled_task(
+            ScheduledTaskId("sched_water".into()),
+            turned_down("喝水这类别提醒"),
+        )
+        .await
+        .unwrap();
+    galley
+        .create_scheduled_task(own_reminder("sched_live", "回头查物流"), assistant())
+        .await
+        .unwrap();
+    assert_eq!(
+        declined_follow_ups(&galley, Utc::now())
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
+    galley
+        .delete_main_chat_for_reset(&SessionId(MAIN.into()))
+        .await
+        .expect("reset");
+    assert!(declined_follow_ups(&galley, Utc::now())
+        .await
+        .unwrap()
+        .is_empty());
+    let kept = galley.scheduled_task("sched_water").await.expect("kept");
+    assert!(kept.cancelled_at.is_some() && kept.cancelled_by.is_none());
+    assert_eq!(
+        cancel_columns(&pool, "scheduled_tasks", "sched_water").await,
+        (None, None, None)
+    );
+    // The live one is untouched.
+    let live = galley.scheduled_task("sched_live").await.expect("live");
+    assert!(live.cancelled_at.is_none() && live.next_fire_at.is_some());
 }
 
 #[tokio::test]

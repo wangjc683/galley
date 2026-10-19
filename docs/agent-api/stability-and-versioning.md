@@ -223,6 +223,15 @@ and error discriminants unchanged):
   `ScheduledTask.todoId` field that names a reminder's to-do came with
   ticket 39, 2026-10-17). Also served under `--schema=1` and
   `--schema=2`. See [todo-commands.md](./todo-commands.md).
+- 2026-10-19 — Who cancelled (main chat ticket 61): the optional
+  `Todo.cancelledBy` and `ScheduledTask.cancelledBy` (`Origin`), on what
+  `todo show / list --all` and `schedule show / list --all` print and every
+  write returns, set by `todo cancel` / `schedule delete` from their
+  `--supervisor` / `--reason`, `gui` for the desktop and `system` for Core.
+  Absent while not cancelled and on rows cancelled before. A new optional
+  field only; no command, flag, exit code or error changed. Also under
+  `--schema=1` and `--schema=2`. See [todo-commands.md](./todo-commands.md)
+  §5.28 and [schedule-commands.md](./schedule-commands.md) §5.20.
 
 ### 7.2 `schemaVersion: 2` (served for unchanged commands, since 2026-09-16)
 

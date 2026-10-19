@@ -311,5 +311,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/050_todos.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 51,
+            description: "to-dos and scheduled tasks: who cancelled them, and why",
+            sql: include_str!("../migrations/051_cancelled_by.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

@@ -1921,6 +1921,7 @@ mod tests {
             origin: None,
             created_in: None,
             cancelled_at: None,
+            cancelled_by: None,
             todo_id: None,
             created_at: "2026-10-16T00:00:00+00:00".into(),
             updated_at: "2026-10-16T00:00:00+00:00".into(),

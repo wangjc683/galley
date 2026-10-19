@@ -395,17 +395,20 @@ pub(crate) async fn prepare_managed_spawn_args(
         // What it has in hand (ticket 36, regrouped by ticket 39): the
         // user's to-dos not done, the subtasks not finished with its own
         // one-off reminders, and the routines, read as the desktop's
-        // 「待办」 reads them. A failed read is logged and the lines are
-        // left out; the runner still starts.
+        // 「待办」 reads them; then the follow-ups the user turned down,
+        // which only the main chat reads (ticket 61). A failed read is
+        // logged and the lines are left out; the runner still starts.
         let now = chrono::Utc::now();
-        let in_hand = match crate::assistant_todo::assistant_todo(
+        let in_hand = match crate::assistant_todo::in_hand_read(
             &app.state::<SqliteGalley>(),
             &app.state::<std::sync::Arc<crate::runner_manager::RunnerManager>>(),
             now,
         )
         .await
         {
-            Ok(todo) => managed_prompt::in_hand_section(&todo, now, &chrono::Local),
+            Ok(read) => {
+                managed_prompt::in_hand_section(&read.todo, &read.declined, now, &chrono::Local)
+            }
             Err(e) => {
                 eprintln!("[main chat] reading what it has in hand failed: {e}");
                 None

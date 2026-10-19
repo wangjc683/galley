@@ -26,7 +26,8 @@ command goes through the socket (`schedule.list`, `schedule.show`,
 `schedule.create`, `schedule.update`, `schedule.delete`, `schedule.enable`,
 `schedule.disable`, `schedule.run`; the socket also serves `list` and `show`).
 Every write takes `--supervisor=<x>` / `--reason=<y>` and records them as the
-task's `origin` when it creates it (§6A `Origin`). The assistant writes with
+task's `origin` when it creates it, and as its `cancelledBy` when `delete`
+cancels it (§6A `Origin`). The assistant writes with
 `--supervisor=galley-assistant`.
 
 ### 5.20 · `ScheduledTask`
@@ -53,6 +54,7 @@ Every command prints this shape (`list` one per line, `show` alone, writes as
 | `origin`          | `Origin`         | Who made it: `{"via":"gui"}` for the desktop form, `{"via":"supervisor","supervisor":"galley-assistant",…}` for the assistant |
 | `createdIn`       | object?          | `{sessionId, turnIndex?}`: the main chat run the assistant made it in. Recorded when the write carries `--supervisor=galley-assistant` while a main chat run is open; `turnIndex` (the run's reply) is filled when that run ends |
 | `cancelledAt`     | string?          | Set by `delete`. A cancelled task never fires and is gone for every write |
+| `cancelledBy`     | `Origin`?        | Added 2026-10-19 (main chat ticket 61). Who cancelled it and why: `delete`'s `--supervisor` / `--reason` (`{"via":"cli"}` with no label), `{"via":"gui"}` for the desktop's 取消, `{"via":"system"}` when Core did it on its own (a to-do's reminder going with its to-do, or dropped because its to-do is no longer open). Absent while it is not cancelled, and on a task cancelled before 2026-10-19 |
 | `todoId`          | string?          | Added 2026-10-17 (main chat ticket 39). The to-do this task is the reminder of (`todo_<16-hex>`); absent for the assistant's own tasks. Core keeps it in step with its to-do: ticking the to-do off or cancelling it cancels the task while it has not reached the assistant, and a task whose to-do is no longer open does not go off ([todo-commands](./todo-commands.md)) |
 | `createdAt`       | string (ISO8601) | |
 | `updatedAt`       | string (ISO8601) | |
@@ -135,9 +137,10 @@ Exit codes: `0` / `2 invalid_args` / `3 not_found` (unknown or cancelled) /
 ### 5.25 · `galley schedule delete <task-id> [--supervisor=<x>] [--reason=<y>]`
 
 **Write command.** Cancels the task: it never fires again and leaves the
-default list; `show` and `list --all` still read it, with `cancelledAt`
-(the desktop shows it as cancelled). Prints `{"task": …}`. Deleting a
-cancelled task is `not_found`.
+default list; `show` and `list --all` still read it, with `cancelledAt` and
+`cancelledBy` (`--supervisor` / `--reason`; the desktop shows it as
+cancelled). Prints `{"task": …}`. Deleting a cancelled task is
+`not_found`.
 
 Exit codes: `0` / `3 not_found` / `4 db_unavailable`.
 
