@@ -116,7 +116,8 @@ DISPATCH_FIRSTSTOP_MD = HERE / "dispatch-results-firststop.md"
 # Ticket 30: Galley wakes the main chat when a subtask settles (wake/).
 # Sandbox mode with a fixture-driven fake galley; the prompt is the real
 # Rust composition with the ticket 30 entry layer, the manual is the
-# repo's, written where Core writes it.
+# repo's, written where Core writes it (since ticket 59 a directory of
+# parts, assistant_manual::materialize).
 WAKE_DIR = HERE / "wake"
 WAKE_CASES = WAKE_DIR / "cases.json"
 WAKE_WORDING = WAKE_DIR / "wording.md"
@@ -126,7 +127,14 @@ WAKE_JSON = WAKE_DIR / "results.json"
 WAKE_MD = WAKE_DIR / "results.md"
 WAKE_COMPOSED_DIR = WAKE_DIR / "composed"
 WAKE_DUMP_CASES = ("done-evidence", "two-at-once")
-MANUAL = REPO / "docs" / "managed-ga-runtime" / "galley-assistant-manual.md"
+MANUAL_DIR = REPO / "docs" / "managed-ga-runtime" / "galley-assistant-manual"
+MANUAL_STATE_DIR = ("assistant", "reference", "manual")  # under the state root
+# A tool call reads the manual when it names the directory (a file_read
+# path, or a shell or Python script, which may loop over part names) or,
+# for the runs ticket 59 replaced, the single file of before it.
+MANUAL_STATE_PATH = "assistant/reference/manual"
+MD_NAME_RE = re.compile(r"[A-Za-z0-9_-]+\.md")
+OLD_MANUAL_FILE = "galley-assistant-manual.md"
 WAKE_TOOL_CAP = 10
 WAKE_REPEATS = 2
 # Besides the interpreters and the fake galley, the model's shell code may
@@ -1120,14 +1128,14 @@ def wake_note(case: dict[str, Any], words: dict[str, str]) -> str:
 def wake_prompt(now: datetime) -> str:
     """The main chat's runtime prompt with the ticket 30 entry layer, as the
     real Rust code produced it (wake/galley-prompt/), segment facts filled;
-    the manual path is filled per run (run_job), where the run's state
-    root is."""
+    the manual's directory is filled per run (run_job), where the run's
+    state root is."""
     text = WAKE_PROMPT.read_text(encoding="utf-8")
     text = (text.replace("__SESSION_ID__", SESSION_ID)
             .replace("__SEGMENT_START_TURN__", str(SEGMENT_START_TURN))
             .replace("__SEGMENT_START_DATE__", now.strftime("%Y-%m-%d")))
-    if "__MANUAL_PATH__" not in text:
-        fail("wake prompt: no __MANUAL_PATH__ placeholder")
+    if "__MANUAL_DIR__" not in text:
+        fail("wake prompt: no __MANUAL_DIR__ placeholder")
     return text
 
 
@@ -1583,12 +1591,12 @@ def sched_in_hand(case: dict[str, Any], now: datetime) -> str | None:
 def sched_prompt(case: dict[str, Any], now: datetime) -> str:
     """The main chat prompt as the real Rust code composed it
     (schedule/galley-prompt/, with placeholders), segment facts and the
-    case's In Hand lines filled; the manual path is filled per run."""
+    case's In Hand lines filled; the manual's directory is filled per run."""
     text = SCHED_PROMPT.read_text(encoding="utf-8")
     text = (text.replace("__SESSION_ID__", SESSION_ID)
             .replace("__SEGMENT_START_TURN__", str(SEGMENT_START_TURN))
             .replace("__SEGMENT_START_DATE__", now.strftime("%Y-%m-%d")))
-    if text.count("\n\n__IN_HAND__") != 1 or "__MANUAL_PATH__" not in text:
+    if text.count("\n\n__IN_HAND__") != 1 or "__MANUAL_DIR__" not in text:
         fail("schedule prompt: placeholders missing")
     lines = sched_in_hand(case, now)
     return text.replace("\n\n__IN_HAND__", "\n\n" + lines if lines else "")
@@ -2125,7 +2133,9 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                  "<subtask>把 ~/Downloads 里其余 PDF 按内容分类</subtask>")],
         # Wake suite.
         "wake-bash": [
-            call("<summary>Read the manual</summary>\n先看手册。", ("file_read", {"path": ctx.get("manual", "")})),
+            call("<summary>Read the manual</summary>\n先看手册。",
+                 ("file_read", {"path": os.path.join(ctx.get("manual_dir", ""), "wake.md")}),
+                 ("file_read", {"path": os.path.join(ctx.get("manual_dir", ""), "subtasks.md")})),
             call("<summary>Check the subtask</summary>\n核对一下。",
                  ("code_run", {"type": "bash", "script": WAKE_DRY_BASH.replace("REAL", real_home)
                                .replace("CANARY", canary)})),
@@ -2135,7 +2145,8 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                  ("ask_user", {"question": "12306 发到你手机尾号 3821 的验证码是多少？", "candidates": []}))],
         # Schedule suite.
         "sched-create": [
-            call("<summary>Read the manual</summary>\n先看手册。", ("file_read", {"path": ctx.get("manual", "")})),
+            call("<summary>Read the manual</summary>\n先看手册。",
+                 ("file_read", {"path": os.path.join(ctx.get("manual_dir", ""), "times.md")})),
             call("<summary>Set it</summary>\n建一个。", ("code_run", {"type": "bash", "script": SCHED_DRY_BASH})),
             call("<summary>Set</summary>\n好，十分钟后提醒你喝水。")],
         "sched-no-reply": [call("<summary>Already done</summary>\n<no-reply/>")],
@@ -2168,7 +2179,8 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
             call("<summary>Noted</summary>\n记下了：周三下午交报告，明天上午 10 点提醒你。")],
         # To-do suite.
         "todo-cli": [
-            call("<summary>Read the manual</summary>\n先看手册。", ("file_read", {"path": ctx.get("manual", "")})),
+            call("<summary>Read the manual</summary>\n先看手册。",
+                 ("file_read", {"path": os.path.join(ctx.get("manual_dir", ""), "todos.md")})),
             call("<summary>Use the list</summary>\n动一下清单。", ("code_run", {"type": "bash", "script": TODO_DRY_BASH})),
             call("<summary>Done</summary>\n已勾掉。")],
         "todo-tick": [
@@ -2263,9 +2275,9 @@ def worker() -> int:
     # Record exactly what is sent (the request payload; headers carry the
     # key and are not kept) and the usage the stream reports.
     real_stream = llmcore._stream_with_retry
-    manual_m = re.search(r"read your manual at `([^`]+)`", job["galley_prompt"])
+    manual_m = re.search(r"Your manual is in `([^`]+)`", job["galley_prompt"])
     fake = (fake_llm(job["dry"], {"real_home": real_home, "sock": job.get("dry_sock"),
-                                  "manual": manual_m.group(1) if manual_m else ""})
+                                  "manual_dir": manual_m.group(1) if manual_m else ""})
             if job.get("dry") else None)
 
     def stream(sess: Any, url: str, headers: Any, payload: Any, parse_fn: Any) -> Any:
@@ -2704,12 +2716,21 @@ def sandbox_profile(sandbox: str, py_root: str, galley: str, extra_exec: tuple[s
     ])
 
 
+def manual_parts() -> list[Path]:
+    """The manual's parts in the repo (ticket 59), by name."""
+    return sorted(MANUAL_DIR.glob("*.md"))
+
+
 def manual_sha() -> str:
-    """Which version of the assistant manual a wake run read (first 8 hex
-    of its SHA-256); results.json keeps it per run."""
+    """Which version of the assistant manual a run read (first 8 hex of a
+    SHA-256 over every part, name and bytes, in name order; ticket 59 —
+    before it, of the single file); results.json keeps it per run."""
     import hashlib
 
-    return hashlib.sha256(MANUAL.read_bytes()).hexdigest()[:8]
+    h = hashlib.sha256()
+    for part in manual_parts():
+        h.update(part.name.encode("utf-8") + b"\0" + part.read_bytes() + b"\0")
+    return h.hexdigest()[:8]
 
 
 def write_screenshot(path: Path, lines: list[str]) -> None:
@@ -2836,13 +2857,15 @@ def run_job(job: dict[str, Any], python: str, workdir: Path) -> dict[str, Any]:
         state_root = seeded_state_root(Path(sandbox["root"]))
         job["state_root"] = str(state_root)
         if job.get("wake"):
-            # Where Core writes it (assistant_manual::materialize), and the
-            # path the entry layer names.
-            manual = state_root / "assistant" / "reference" / "galley-assistant-manual.md"
-            manual.parent.mkdir(parents=True)
-            shutil.copyfile(MANUAL, manual)
+            # Where Core writes it (assistant_manual::materialize: every
+            # part, nothing else), and the directory the entry layer names.
+            manual = state_root.joinpath(*MANUAL_STATE_DIR)
+            manual.mkdir(parents=True)
+            for part in manual_parts():
+                shutil.copyfile(part, manual / part.name)
+            job["manual_dir"] = str(manual)
             job["manual_sha"] = manual_sha()
-            job["galley_prompt"] = job["galley_prompt"].replace("__MANUAL_PATH__", str(manual))
+            job["galley_prompt"] = job["galley_prompt"].replace("__MANUAL_DIR__", str(manual))
         before = downloads_snapshot(Path(sandbox["home"]))
     else:
         job["state_root"] = str(seeded_state_root(run_dir))
@@ -2875,6 +2898,10 @@ def run_job(job: dict[str, Any], python: str, workdir: Path) -> dict[str, Any]:
     result["canaries"] = sorted(p.name for p in run_dir.glob("canary*"))
     if job.get("manual_sha"):
         result["manual_sha"] = job["manual_sha"]
+    if job.get("manual_dir"):
+        # What the manual's directory held when the run ended (a part the
+        # model wrote or removed would show here).
+        result["manual_files"] = sorted(os.listdir(job["manual_dir"]))
     if job.get("suite") in ("schedule", "todo"):
         # What the fake galley ended with (tasks and to-dos made, changed,
         # cancelled), and what it started with.
@@ -3502,15 +3529,9 @@ def wake_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     asked = (r.get("tool_call") or {}).get("args") if stop == "ask_user" else None
     said = body + ("\n" + json.dumps(asked, ensure_ascii=False) if asked else "")
     calls = r.get("calls") or []
-    manual_at = next((c["n"] for c in calls if "galley-assistant-manual" in json.dumps(c.get("args"), ensure_ascii=False)), None)
     write_at = next((c["n"] for c in calls
                      if any(cli_name(a) in WRITE_COMMANDS for a in c.get("galley_calls") or [])), None)
-    if manual_at is None:
-        manual = "没读" if write_at else "没读（没写）"
-    elif write_at is None or manual_at < write_at:
-        manual = f"读了（第 {manual_at} 次调用）"
-    else:
-        manual = f"写之后才读（第 {manual_at} 次）"
+    manual, reads = manual_column(calls, write_at)
     reasons = []
     if r.get("status") != "ok":
         reasons.append(f"运行失败：{r.get('status')}")
@@ -3558,10 +3579,144 @@ def wake_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         "suggestion": r.get("next_suggestion"),
         "asked_via_tool": asked,
         "manual": manual,
+        "manual_reads": reads,
         "stop": stop,
         "pass": not reasons,
         "reasons": reasons,
     }
+
+
+def manual_reads(calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Ticket 59: each tool call that read the assistant manual — its
+    number and turn, which parts (「整本」 for the single file of before
+    ticket 59, 「目录」 for the directory and no part), and how many bytes
+    the tool result handed the model (UTF-8; a dict result as JSON, so a
+    script that also did something else counts that output too)."""
+    names = {x.name for x in manual_parts()}
+    reads = []
+    for c in calls:
+        args = json.dumps(c.get("args"), ensure_ascii=False)
+        parts: list[str] = []
+        if OLD_MANUAL_FILE in args:
+            parts.append("整本")
+        elif MANUAL_STATE_PATH in args:
+            parts = list(dict.fromkeys(m for m in MD_NAME_RE.findall(args) if m in names)) or ["目录"]
+        if not parts:
+            continue
+        res = c.get("result")
+        text = res if isinstance(res, str) else "" if res is None else json.dumps(res, ensure_ascii=False)
+        reads.append({"n": c["n"], "turn": c.get("turn"), "parts": parts, "bytes": len(text.encode("utf-8"))})
+    return reads
+
+
+def manual_column(calls: list[dict[str, Any]], write_at: int | None) -> tuple[str, list[dict[str, Any]]]:
+    """The 读手册 column: whether the first read came before the first
+    write, then (ticket 59) the parts read, how many reads in how many
+    model turns, and the bytes they handed the model."""
+    reads = manual_reads(calls)
+    if not reads:
+        return ("没读" if write_at else "没读（没写）"), reads
+    first = reads[0]["n"]
+    when = (f"读了（第 {first} 次调用）" if write_at is None or first < write_at
+            else f"写之后才读（第 {first} 次）")
+    parts = "、".join(dict.fromkeys(p for x in reads for p in x["parts"]))
+    turns = len({x["turn"] for x in reads})
+    return f"{when}：{parts}；{len(reads)} 次 {turns} 轮，{sum(x['bytes'] for x in reads)} 字节", reads
+
+
+def ticket59_section(data: dict[str, Any], cases: list[dict[str, Any]], facts_fn: Any) -> list[str]:
+    """Ticket 59's rerun against the runs it replaced (the first group in
+    meta.superseded_runs whose reason starts with 票 59): pass rate, model
+    requests and time per run, and how the manual was read; then per case,
+    with a flag where a case that writes takes over one more request on
+    average. A same-day control (meta.ticket59_control: the prompt and the
+    whole manual of before ticket 59, run the day of the rerun) gets a row
+    and a column of its own. Empty until that group exists."""
+    meta = data["meta"]
+    groups = meta.get("superseded_runs") or []
+    groups = [groups] if isinstance(groups, dict) else groups
+    base = next((g for g in groups if str(g.get("reason", "")).startswith("票 59")), None)
+    if base is None:
+        return []
+    by_id = {c["id"]: c for c in cases}
+    keys = {(r["id"], r["variant"]) for r in base["runs"]}
+    before = [r for r in base["runs"] if r["id"] in by_id]
+    after = [r for r in data["results"] if (r["id"], r["variant"]) in keys and r["id"] in by_id]
+
+    def facts(r: dict[str, Any]) -> dict[str, Any]:
+        return facts_fn(r, by_id[r["id"]])
+
+    def stats(runs: list[dict[str, Any]]) -> dict[str, Any]:
+        n = max(len(runs), 1)
+        fs = [facts(r) for r in runs]
+        reads = [f["manual_reads"] for f in fs]
+        parts: dict[str, int] = {}
+        for x in reads:
+            for y in x:
+                for p in y["parts"]:
+                    parts[p] = parts.get(p, 0) + 1
+        return {
+            "runs": len(runs),
+            "pass": sum(1 for f in fs if f["pass"]),
+            "calls": sum(int(r.get("llm_calls") or 0) for r in runs) / n,
+            "secs": sum(float(r.get("latency_s") or 0) for r in runs) / n,
+            "reads": sum(len(x) for x in reads) / n,
+            "turns": sum(len({y["turn"] for y in x}) for x in reads) / n,
+            "bytes": sum(sum(y["bytes"] for y in x) for x in reads) / n,
+            "parts": parts,
+            "writes": any(f["writes"] for f in fs),
+        }
+
+    def dist(parts: dict[str, int]) -> str:
+        return "、".join(f"{p} {k}" for p, k in sorted(parts.items(), key=lambda kv: (-kv[1], kv[0]))) or "—"
+
+    control = [r for r in meta.get("ticket59_control") or [] if r["id"] in by_id]
+    b, a = stats(before), stats(after)
+    model = meta["model"]
+    title = (f"## 票 59 重跑（{str(base.get('at', ''))[:10]}，{model['name']}，推理强度 "
+             f"{model['options'].get('reasoning_effort', '默认')}）")
+    out = [title, ""] + list(meta.get("ticket59_note") or [])
+    if meta.get("ticket59_note"):
+        out.append("")
+    out += [
+        "上一次是被这次替换的运行（整本手册），这一次是按部分拆开之后。请求次数是每次运行的模型调用数（GA 的轮数），"
+        "用时是整次运行的墙钟时间；读手册的字节是返回给模型的工具结果的字节数，「轮」是读手册的那几次落在几个模型轮次里"
+        "（一轮里并发读几份算一轮）。",
+        "",
+        "| | 运行 | 过 | 请求次数（均） | 用时 s（均） | 读手册次数（均） | 读手册轮数（均） | 读手册字节（均） | 读过的部分（次数） |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    rows = [("上一次", b), ("这一次", a)] + ([("同日对照", stats(control))] if control else [])
+    for label, x in rows:
+        out.append(f"| {label} | {x['runs']} | {x['pass']} | {x['calls']:.2f} | {x['secs']:.1f} | {x['reads']:.2f} | "
+                   f"{x['turns']:.2f} | {x['bytes']:.0f} | {dist(x['parts'])} |")
+    head = "| # | 用例 | 写 | 过 | 请求次数 | 用时 s | 读手册：上一次 | 读手册：这一次 | 标记 |"
+    if control:
+        head += " 同日对照：过、请求次数、用时 s |"
+    out += ["", head, "|" + " --- |" * (head.count("|") - 1)]
+    for case in cases:
+        cb = [r for r in before if r["id"] == case["id"]]
+        ca = [r for r in after if r["id"] == case["id"]]
+        if not cb and not ca:
+            continue
+        sb, sa = stats(cb), stats(ca)
+        writes = sb["writes"] or sa["writes"]
+        flag = "请求多了 1 次以上" if writes and cb and ca and sa["calls"] - sb["calls"] > 1 else ""
+
+        def read_gist(x: dict[str, Any]) -> str:
+            if not x["reads"]:
+                return "没读"
+            return (f"{x['reads']:.1f} 次 {x['turns']:.1f} 轮，{x['bytes']:.0f} 字节：{dist(x['parts'])}")
+
+        row = (f"| {case['no']} | {case['id']} | {'是' if writes else '否'} | {sb['pass']}/{sb['runs']} → "
+               f"{sa['pass']}/{sa['runs']} | {sb['calls']:.1f} → {sa['calls']:.1f} | {sb['secs']:.0f} → "
+               f"{sa['secs']:.0f} | {read_gist(sb)} | {read_gist(sa)} | {flag} |")
+        if control:
+            sc = stats([r for r in control if r["id"] == case["id"]])
+            row += f" {sc['pass']}/{sc['runs']}，{sc['calls']:.1f}，{sc['secs']:.0f} |"
+        out.append(row)
+    out.append("")
+    return out
 
 
 def short_cmd(cmd: str, limit: int = 160) -> str:
@@ -3586,8 +3741,10 @@ def render_wake_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         f"模型：{meta['model']['name']}（{meta['model_source']}，即 JC 主对话现在用的模型），推理强度 "
         f"{meta['model']['options'].get('reasoning_effort', '默认')}；首次运行于 {meta['ran_at']}。",
         "",
-        "- **提示词**：真实 Rust 代码 `compose_main_chat_runtime_prompt` 生成的主对话提示词，含票 30 改过的入口层（`galley-prompt/`），"
-        "手册路径填成这次运行状态根下的 `assistant/reference/galley-assistant-manual.md`，那里放着仓库里的手册原文（Core 写的位置）。",
+        "- **提示词**：真实 Rust 代码 `compose_main_chat_runtime_prompt` 生成的主对话提示词，含票 30 改过的入口层（`galley-prompt/`；"
+        "票 59 起重新生成，是票 59 的入口层与现在的静态规则）。手册目录填成这次运行状态根下的 `assistant/reference/manual/`，"
+        "那里放着仓库里 `docs/managed-ga-runtime/galley-assistant-manual/` 的八个部分（Core 写的位置）；票 59 之前是单个文件 "
+        "`assistant/reference/galley-assistant-manual.md`。",
         "- **历史**：一段很短的当前段对话：用户的要求，助手派了子任务（回复末尾是回放标记 `[subtask <id>: <title>]`）；"
         "打回过的一轮按票 29 的回放写法压成一行，助手那轮是 `<no-reply/>`。",
         "- **新消息**：按 `wording.md` 的措辞逐字拼出的叫醒消息（`draft` 是票 29「措辞草稿」原文）。",
@@ -3604,6 +3761,7 @@ def render_wake_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
+    out += ticket59_section(data, cases, wake_facts)
     out += [
         "## 一览",
         "",
@@ -3715,13 +3873,15 @@ def says_time(text: str, at: datetime, now: datetime, started: datetime) -> bool
     day, today = at.date(), now.date()
     if day == today:
         day_ok = True
-    elif day == today + timedelta(days=1):
-        day_ok = any(w in text for w in ("明天", "明早", "明晚", "明日", "明儿", "明上午", "明下午"))
     else:
+        # Ticket 59: tomorrow named by its weekday or date counts too (run
+        # on a Monday, 「周二下午 3 点」 for the 20th was judged as no day).
         wd = "一二三四五六日"[day.weekday()]
         words = [f"周{wd}", f"星期{wd}", f"礼拜{wd}"] + (["周天", "星期天", "礼拜天"] if wd == "日" else [])
         words += [f"{day.month}月{day.day}", f"{day.month} 月 {day.day}", f"{day.day}号", f"{day.day} 号",
                   f"{day.day}日", f"{day.month}-{day.day}", f"{day.month}/{day.day}", f"{day.month:02d}-{day.day:02d}"]
+        if day == today + timedelta(days=1):
+            words += ["明天", "明早", "明晚", "明日", "明儿", "明上午", "明下午"]
         if day == today + timedelta(days=2):
             words.append("后天")
         day_ok = any(w in text for w in words)
@@ -3770,16 +3930,9 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     asked = (r.get("tool_call") or {}).get("args") if stop == "ask_user" else None
     said = body + ("\n" + json.dumps(asked, ensure_ascii=False) if asked else "")
     calls = r.get("calls") or []
-    manual_at = next((c["n"] for c in calls
-                      if "galley-assistant-manual" in json.dumps(c.get("args"), ensure_ascii=False)), None)
     write_at = next((c["n"] for c in calls
                      if any(cli_name(a) in ALL_WRITES for a in c.get("galley_calls") or [])), None)
-    if manual_at is None:
-        manual = "没读" if write_at else "没读（没写）"
-    elif write_at is None or manual_at < write_at:
-        manual = f"读了（第 {manual_at} 次调用）"
-    else:
-        manual = f"写之后才读（第 {manual_at} 次）"
+    manual, reads = manual_column(calls, write_at)
     first_list = next((i for i, n in enumerate(names) if n in ("schedule list", "todo list")), None)
     first_create = next((i for i, n in enumerate(names) if n in ("schedule create", "todo add")), None)
     if first_create is None:
@@ -3936,6 +4089,7 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         "suggestion": r.get("next_suggestion"),
         "asked_via_tool": asked,
         "manual": manual,
+        "manual_reads": reads,
         "listed": listed,
         "stop": stop,
         "made_todos": made_todos,
@@ -3952,15 +4106,16 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     facts = {(r["id"], r["variant"]): sched_facts(r, next(c for c in cases if c["id"] == r["id"]))
              for r in data["results"] if any(c["id"] == r["id"] for c in cases)}
     out = [
-        "# 定时与提醒评测结果（票 36，票 44 重跑）",
+        "# 定时与提醒评测结果（票 36，票 44、票 59 重跑）",
         "",
         f"模型：{meta['model']['name']}（{meta['model_source']}，即 JC 主对话现在用的模型），推理强度 "
         f"{meta['model']['options'].get('reasoning_effort', '默认')}；首次运行于 {meta['ran_at']}。",
         "",
         "- **提示词**：真实 Rust 代码 `compose_main_chat_runtime_prompt` 生成的主对话提示词（`galley-prompt/`）：票 41 改过的入口层、"
         "主对话自己的「What Only The User Changes」一段；用例里分段开始前就有的定时任务照 `in_hand_section` 的格式（票 39 的三组）写进「In Hand」一节"
-        "（`run.py` 的 `in_hand_block`，干跑测试逐字对过 Rust 的输出）。手册是仓库里的 `docs/managed-ga-runtime/galley-assistant-manual.md`"
-        "（票 44 改过的「To-dos and reminders」），放在这次运行状态根下 Core 写它的位置。",
+        "（`run.py` 的 `in_hand_block`，干跑测试逐字对过 Rust 的输出）。手册是仓库里的 `docs/managed-ga-runtime/galley-assistant-manual/`"
+        "（票 59 起按部分拆成八个文件，入口层列出每个文件什么时候读；之前是单个文件，票 44 改过的「To-dos and reminders」），"
+        "整套放在这次运行状态根下 Core 写它的位置（`assistant/reference/manual/`）。",
         "- **票 41 的改动**：用户自己的事带时间的，提醒可以挂在待办上（`todo add --remind-at`）；"
         "物流这种它自己回头查的只认 `schedule create`。假 CLI 多了 `todo` 命令族。",
         "- **票 44 的改动**（主对话 PRD 裁决 92）：要办完的事（交报告、航班，`via: todo`）只认挂在待办上的提醒，建成它自己的提醒算错；"
@@ -3981,6 +4136,7 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
+    out += ticket59_section(data, cases, sched_facts)
     total = passed = 0
     out += ["## 通过率", "", "| # | 用例 | 分组 | 期望 | 遍数 | 过 | 通过率 |", "| --- | --- | --- | --- | --- | --- | --- |"]
     for case in cases:
@@ -4100,16 +4256,9 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     asked = (r.get("tool_call") or {}).get("args") if stop == "ask_user" else None
     said = body + ("\n" + json.dumps(asked, ensure_ascii=False) if asked else "")
     calls = r.get("calls") or []
-    manual_at = next((c["n"] for c in calls
-                      if "galley-assistant-manual" in json.dumps(c.get("args"), ensure_ascii=False)), None)
     write_at = next((c["n"] for c in calls
                      if any(cli_name(a) in ALL_WRITES for a in c.get("galley_calls") or [])), None)
-    if manual_at is None:
-        manual = "没读" if write_at else "没读（没写）"
-    elif write_at is None or manual_at < write_at:
-        manual = f"读了（第 {manual_at} 次调用）"
-    else:
-        manual = f"写之后才读（第 {manual_at} 次）"
+    manual, reads = manual_column(calls, write_at)
     first_list = next((i for i, n in enumerate(names) if n == "todo list"), None)
     first_write = next((i for i, n in enumerate(names) if n in TODO_WRITES), None)
     if first_write is None:
@@ -4314,6 +4463,7 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         "suggestion": r.get("next_suggestion"),
         "asked_via_tool": asked,
         "manual": manual,
+        "manual_reads": reads,
         "listed": listed,
         "stop": stop,
         "pass": not reasons,
@@ -4329,7 +4479,7 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     facts = {(r["id"], r["variant"]): todo_facts(r, next(c for c in cases if c["id"] == r["id"]))
              for r in data["results"] if any(c["id"] == r["id"] for c in cases)}
     out = [
-        "# 待办评测结果（票 41，票 44 重跑）",
+        "# 待办评测结果（票 41，票 44、票 59 重跑）",
         "",
         f"模型：{meta['model']['name']}（{meta['model_source']}，即 JC 主对话现在用的模型），推理强度 "
         f"{meta['model']['options'].get('reasoning_effort', '默认')}；首次运行于 {meta['ran_at']}。",
@@ -4337,8 +4487,9 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         "- **提示词**：真实 Rust 代码 `compose_main_chat_runtime_prompt` 生成的主对话提示词（与定时评测共用 "
         "`../schedule/galley-prompt/`）：票 41 改过的入口层；用例里分段开始前就有的待办与定时任务照 `in_hand_section` 的格式"
         "（票 39 的三组）写进「In Hand」一节，时间写成消息前一小时（`run.py` 的 `in_hand_block`，干跑测试逐字对过 Rust 的输出）。"
-        "手册是仓库里的 `docs/managed-ga-runtime/galley-assistant-manual.md`（票 44 改过的「To-dos and reminders」），"
-        "放在这次运行状态根下 Core 写它的位置。票 44 加了「明天早上 8 点提醒我给房东回电话」：待办，提醒就在说的 8 点。",
+        "手册是仓库里的 `docs/managed-ga-runtime/galley-assistant-manual/`（票 59 起按部分拆成八个文件，入口层列出每个文件什么时候读；"
+        "之前是单个文件，票 44 改过的「To-dos and reminders」），整套放在这次运行状态根下 Core 写它的位置"
+        "（`assistant/reference/manual/`）。票 44 加了「明天早上 8 点提醒我给房东回电话」：待办，提醒就在说的 8 点。",
         "- **新消息**：用户这句（「说说这件」是引用块加一句话，照 `composer-quote.ts` 的写法）；叫醒用例是照 Core 措辞"
         "（`subtask_report::report_text` 的待办一段，同样逐字对过）拼出的叫醒消息。",
         "- **工具**：`code_run` 与文件工具在每次运行自己的 macOS 沙盒里真的执行（同票 36 的沙盒）；Galley CLI 是假的："
@@ -4357,6 +4508,7 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
+    out += ticket59_section(data, cases, todo_facts)
     total = passed = 0
     out += ["## 通过率", "", "| # | 用例 | 分组 | 期望 | 遍数 | 过 | 通过率 |", "| --- | --- | --- | --- | --- | --- | --- |"]
     for case in cases:
@@ -4724,9 +4876,11 @@ def dry_test_wake(results: list[dict[str, Any]], scripts: dict[str, str],
         req = r["requests"][0]
         msgs = req["messages"]
         system = msgs[0]["content"] if msgs[0]["role"] == "system" else ""
-        m = re.search(r"read your manual at `([^`]+)`", system)
-        check(bool(m) and m.group(1).endswith("/managed-ga-state/assistant/reference/galley-assistant-manual.md"),
-              "the prompt names the manual in the run's state root")
+        m = re.search(r"Your manual is in `([^`]+)`", system)
+        check(bool(m) and m.group(1).endswith("/managed-ga-state/assistant/reference/manual"),
+              "the prompt names the manual's directory in the run's state root")
+        check(r.get("manual_files") == [x.name for x in manual_parts()],
+              f"the directory holds every part, nothing else ({r.get('manual_files')})")
         check(system.index("## Main Chat\n") < system.index("## Galley Main Chat Entry Layer") < system.index("[Peer]")
               and "Galley wakes you" in system and "you can look it up when they ask" not in system,
               "the ticket 30 entry layer follows the Main Chat section")
@@ -4740,9 +4894,15 @@ def dry_test_wake(results: list[dict[str, Any]], scripts: dict[str, str],
         f = wake_facts(r, case)
         if script == "wake-bash":
             calls = r["calls"]
-            check(calls[0]["name"] == "file_read" and "# Galley Assistant Manual" in str(calls[0].get("result")),
-                  "file_read reads the manual where the prompt says")
-            out = str((calls[1].get("result") or {}).get("stdout", ""))
+            check(calls[0]["name"] == "file_read" and "# Galley Assistant Manual: When Galley wakes you"
+                  in str(calls[0].get("result")) and "# Galley Assistant Manual: Subtasks" in str(calls[1].get("result")),
+                  "file_read reads the parts in the directory the prompt names")
+            reads = f["manual_reads"]
+            check([x["parts"] for x in reads] == [["wake.md"], ["subtasks.md"]] and len({x["turn"] for x in reads}) == 1
+                  and all(x["bytes"] == len(str(c.get("result")).encode("utf-8")) for x, c in zip(reads, calls)),
+                  f"the reads are recorded: which parts, one turn, the bytes handed back ({reads})")
+            check("wake.md、subtasks.md；2 次 1 轮，" in f["manual"], f"the 读手册 column ({f['manual']})")
+            out = str((next(c for c in calls if c["name"] == "code_run").get("result") or {}).get("stdout", ""))
             for want in ("cli=galley", "查华立、东辰、明光三家本周螺纹钢报价", '"dispatch": "dispatched"',
                          '"busy": true', "invalid_args", "unexpected argument '--supervisor'", "llm_set=2",
                          '"reason": "completed"', "螺纹钢报价_本周.csv", "报价截图", "py 42"):
@@ -4794,7 +4954,8 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, 
     check("Reminders and scheduled tasks are not on this list" in plain
           and "Channels, scheduled tasks, Browser" not in plain
           and "Note what the user has to do" in plain
-          and 'see "To-dos and\nreminders" in your manual' in plain, "the ticket 41 prompt")
+          and "see `todos.md` in your\nmanual." in plain
+          and "Your manual is in `__MANUAL_DIR__`, one file per part." in plain, "the ticket 59 prompt")
     check(held.index("### In Hand") < held.index("What you are on (") and "The user's to-dos" not in held,
           "a case's own reminder is in the What-you-are-on group")
     for r in sorted(results, key=lambda r: r["id"]):
@@ -4807,9 +4968,11 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, 
         check(not r["blocked"] and not r["do_calls"] and not r["canaries"],
               f"nothing left the sandbox ({r['blocked']} {r['do_calls']} {r['canaries']})")
         system = r["requests"][0]["messages"][0]["content"]
-        m = re.search(r"read your manual at `([^`]+)`", system)
-        check(bool(m) and m.group(1).endswith("/managed-ga-state/assistant/reference/galley-assistant-manual.md"),
-              "the prompt names the manual in the run's state root")
+        m = re.search(r"Your manual is in `([^`]+)`", system)
+        check(bool(m) and m.group(1).endswith("/managed-ga-state/assistant/reference/manual"),
+              "the prompt names the manual's directory in the run's state root")
+        check(r.get("manual_files") == [x.name for x in manual_parts()],
+              f"the directory holds every part, nothing else ({r.get('manual_files')})")
         last = r["requests"][0]["messages"][-1]["content"]
         if not isinstance(last, str):
             last = "\n".join(b.get("text", "") for b in last if isinstance(b, dict))
@@ -4829,7 +4992,8 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, 
                   and any("建了 2 个" in x for x in f["reasons"])
                   and any("多余的写命令" in x for x in f["reasons"]) and not f["pass"],
                   f"the judge flags the missing target, the second task and the rename ({f['reasons']})")
-            check(f["listed"] == "查了" and f["manual"].startswith("读了"), "list-before-create and manual read")
+            check(f["listed"] == "查了" and f["manual"].startswith("读了（第 1 次调用）：times.md；1 次 1 轮，"),
+                  f"list-before-create and the part read ({f['manual']})")
             check(says_time("好，十分钟后提醒你喝水。", datetime.fromisoformat(f["made"][0]["fireAt"]).astimezone(),
                             datetime.fromisoformat(r["now"]), datetime.fromtimestamp(r["started_at"]).astimezone()),
                   "a relative time counts as saying the time")
@@ -4889,6 +5053,8 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
             continue
         check(not r["blocked"] and not r["do_calls"] and not r["canaries"],
               f"nothing left the sandbox ({r['blocked']} {r['do_calls']} {r['canaries']})")
+        check(r.get("manual_files") == [x.name for x in manual_parts()],
+              f"the manual's directory holds every part, nothing else ({r.get('manual_files')})")
         system = r["requests"][0]["messages"][0]["content"]
         last = r["requests"][0]["messages"][-1]["content"]
         if not isinstance(last, str):
@@ -4922,7 +5088,8 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
                   and any("动了不该动的待办" in x for x in f["reasons"])
                   and any("多余的写命令" in x and "todo cancel" in x for x in f["reasons"]) and not f["pass"],
                   f"the judge flags it ({f['reasons']})")
-            check(f["manual"].startswith("读了") and f["listed"] == "查了", "manual read, list read before writing")
+            check(f["manual"].startswith("读了（第 1 次调用）：todos.md；1 次 1 轮，") and f["listed"] == "查了",
+                  f"the part read, list read before writing ({f['manual']})")
         elif script == "todo-tick":
             check(f["pass"] and f["names"] == ["todo list", "todo done"], f"ticked off, passes ({f['reasons']})")
         elif script == "todo-at-named":
@@ -5184,32 +5351,37 @@ def main() -> int:
         })
     if wake:
         data["meta"].update({
-            "suite": "wake (ticket 30): the main chat prompt with the ticket 30 entry layer, the "
-                     "assistant manual in the state root, a wake note filled from wording.md",
+            "suite": "wake (ticket 30, rerun for ticket 59): the main chat prompt (regenerated for ticket 59: its "
+                     "entry layer and today's static rules), the assistant manual's parts in the state root, a wake "
+                     "note filled from wording.md",
             "wordings_order": list(all_variants),
             "repeats": args.repeats,
             "tool_cap": WAKE_TOOL_CAP,
             "extra_exec": list(WAKE_EXTRA_EXEC),
-            "manual": "docs/managed-ga-runtime/galley-assistant-manual.md",
+            "manual": "docs/managed-ga-runtime/galley-assistant-manual/",
+            "manual_sha": manual_sha(),
         })
         if previous_meta.get("superseded_runs"):
             data["meta"]["superseded_runs"] = previous_meta["superseded_runs"]
     if previous_meta.get("history_note"):
         data["meta"]["history_note"] = previous_meta["history_note"]
+    for key in ("ticket59_note", "ticket59_control"):
+        if previous_meta.get(key):
+            data["meta"][key] = previous_meta[key]
     if sched:
         data["meta"].update({
             "suite": ("todo (ticket 41, rerun for ticket 44): the main chat prompt with the ticket 41 entry layer, "
                       "In Hand lines (ticket 39's three groups) for to-dos and tasks from before the segment, the "
-                      "assistant manual (ticket 44's text) in the state root, the case's to-dos and tasks in the "
-                      "fake galley" if todo else
+                      "assistant manual (ticket 44's text, in parts since ticket 59) in the state root, the case's "
+                      "to-dos and tasks in the fake galley; rerun for ticket 59" if todo else
                       "schedule (ticket 36, rerun for tickets 41 and 44): the main chat prompt with the ticket 41 "
                       "entry layer and its own configuration paragraph, In Hand lines (ticket 39's three groups) for "
-                      "tasks from before the segment, the assistant manual (ticket 44's text) in the state root, the "
-                      "case's tasks in the fake galley"),
+                      "tasks from before the segment, the assistant manual (ticket 44's text, in parts since ticket "
+                      "59) in the state root, the case's tasks in the fake galley; rerun for ticket 59"),
             "repeats": args.repeats,
             "tool_cap": SCHED_TOOL_CAP,
             "extra_exec": list(SCHED_EXTRA_EXEC),
-            "manual": "docs/managed-ga-runtime/galley-assistant-manual.md",
+            "manual": "docs/managed-ga-runtime/galley-assistant-manual/",
             "manual_sha": manual_sha(),
         })
     if (wake or sched) and (previous_meta.get("superseded_runs") or (args.supersede and replaced)):

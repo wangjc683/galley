@@ -86,14 +86,14 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --render-only        # 只从 res
 - **输入**（都在 `wake/`）：
   - `cases.json`：9 个用例（票 30 列的那 9 条），每条有当前段的一小段历史、子任务的固定数据、放进假 `~/Downloads` 的证据文件、这次叫醒的几件，以及自动判定用的 `expect`。由 `cases.json` 的 `_note` 说明各字段。
   - `wording.md`：叫醒措辞。`draft` 是票 29「措辞草稿」原文，逐字；改字建议另起一版（`--variant <名字>`）。拼法照草稿：开头一次，各件依次排，不止一件时末尾加一句。
-  - `galley-prompt/main_chat.plain.txt`：真实 Rust 代码 `compose_main_chat_runtime_prompt` 生成的主对话提示词（版本 0.6.2、macOS），含票 30 改过的入口层；会话 id、分段起点、日期、手册路径留成 `__…__` 占位。生成方法同上（测试模块里临时加一个测试写出文件，跑完删掉）。
+  - `galley-prompt/main_chat.plain.txt`：真实 Rust 代码 `compose_main_chat_runtime_prompt` 生成的主对话提示词（版本 0.6.2、macOS），含票 30 改过的入口层；会话 id、分段起点、日期、手册路径留成 `__…__` 占位（票 59 起是手册目录 `__MANUAL_DIR__`，提示词按票 59 重新生成）。生成方法同上（测试模块里临时加一个测试写出文件，跑完删掉）。
   - `cli-help.json`：真实 CLI 各命令 `--help` 的原文（用开发版 `galley` 二进制、假 HOME 只跑 `--help` 取得），假 CLI 照它回答帮助。
-- **组成**：GA 核心提示词与记忆照常，Galley 那段是上面的提示词；手册是仓库里的 `docs/managed-ga-runtime/galley-assistant-manual.md`，拷到这次运行状态根下的 `assistant/reference/galley-assistant-manual.md`（Core 写它的位置），提示词里的路径指向它。历史经 `set_history` 装入，新消息是拼好的叫醒消息。
+- **组成**：GA 核心提示词与记忆照常，Galley 那段是上面的提示词；手册是仓库里的 `docs/managed-ga-runtime/galley-assistant-manual/`（票 59 起一部分一个文件），整套拷到这次运行状态根下的 `assistant/reference/manual/`（Core 写它的位置），提示词里的目录指向它；票 59 之前是单个文件，拷到 `assistant/reference/galley-assistant-manual.md`。历史经 `set_history` 装入，新消息是拼好的叫醒消息。
 - **假 CLI**：`~/.config/galley/cli-path` 指向一个按固定数据回答的假 `galley`：`sessions list`（主对话、本例的子任务、用户自己的一个对话、外部 agent 开的一个会话）、`session brief` / `show`（子任务的派活说明、步骤、最终回答、提问的 `askUser`）、`project`、`llm list` 等读命令照 Agent API 的形状回答；`session send`、`stop`、`archive`、`restore`、`move`、`project create`、`llm set` 只改假 CLI 自己的状态（之后再读看得到），`session wait` / `follow` / `watch`、`project follow` 立即回一个结束帧。真实 CLI 不认的参数照样拒绝（`invalid_args`，退出码 2），例如 `llm set` 带 `--supervisor`。每次调用连同 argv 记日志。
 - **沙盒**：同派活对照第二轮，另允许 `sed`、`cat`、`head`、`tail`、`ls`、`grep`、`wc`、`sleep` 这几个系统程序（仍然只能读写沙盒、没有网络），因为 Galley 提示词里读 CLI 路径的写法要用 `sed`，模型核对证据会用 `ls` / `cat`；`PATH` 最前面是一个指向同一解释器的 `python3`。每次运行最多 10 次工具调用。
-- **判定**：脚本按 `expect` 自动判：该不该 `session send`、发的话里有没有写明要什么、带没带 `--supervisor=galley-assistant`、回复是不是只有 `<no-reply/>`（去掉 `<summary>`、`<next-suggestion>` 之后）、该交代时点没点到证据、字数上限、有没有用会卡住主对话的命令、有没有自己重开活。`ask_user` 停下算问了用户。另记有没有在第一次写命令之前读手册。
+- **判定**：脚本按 `expect` 自动判：该不该 `session send`、发的话里有没有写明要什么、带没带 `--supervisor=galley-assistant`、回复是不是只有 `<no-reply/>`（去掉 `<summary>`、`<next-suggestion>` 之后）、该交代时点没点到证据、字数上限、有没有用会卡住主对话的命令、有没有自己重开活。`ask_user` 停下算问了用户。另记有没有在第一次写命令之前读手册；票 59 起「读手册」一栏还写读了哪几部分、几次、落在几个模型轮次里、返回给模型共多少字节（`wake_facts` 的 `manual_reads`）。
 - **结果**：`wake/results.json`（原始结果）、`wake/results.md`（一览表加每条的叫醒消息、工具调用、回复）；`wake/composed/` 是两个用例第一遍的完整首个请求。
-- **怎么跑**：`run.py --suite wake`（默认 `draft`，每条两遍；结果总是与已有的合并）、`--variant draft,v2 --cases ask-known,step-limit` 只跑几条、`--repeats N`、`--render-only`。`--dry-test` 覆盖这条路径：提示词里的手册路径指向状态根里的手册、叫醒消息逐字是最后一条用户消息；模型的 shell 用 `sed` 读到 CLI 路径，读、写、被拒的参数、会卡住的命令都到了假 CLI 并被记下；读真实 HOME、`/etc`、启动名单外的程序（`/usr/bin/python3`、`curl`、`touch`）、往沙盒外写都失败；`ask_user` 停下。
+- **怎么跑**：`run.py --suite wake`（默认 `draft`，每条两遍；结果总是与已有的合并）、`--variant draft,v2 --cases ask-known,step-limit` 只跑几条、`--repeats N`、`--render-only`。`--dry-test` 覆盖这条路径：提示词里的手册目录是状态根里的那个、目录里正好是八个部分（结果的 `manual_files`），假模型在一轮里并发读两个部分，读了哪几部分、一轮、返回的字节都记下；叫醒消息逐字是最后一条用户消息；模型的 shell 用 `sed` 读到 CLI 路径，读、写、被拒的参数、会卡住的命令都到了假 CLI 并被记下；读真实 HOME、`/etc`、启动名单外的程序（`/usr/bin/python3`、`curl`、`touch`）、往沙盒外写都失败；`ask_user` 停下。
 
 ### 结果（2026-10-15，gpt-6.1-sol，推理强度 high）
 
@@ -128,7 +128,7 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --render-only        # 只从 res
 - **组成**：同叫醒评测。用例里标了 `in_hand` 的任务（分段开始前就有），照 `in_hand_section` 的格式写进提示词的「In Hand」一节，时间写成消息前一小时；没有就不写这一节（同 Core）。叫醒用例的新消息照 Core 的措辞拼出。
 - **假 CLI**：叫醒评测那个，另外回答 `schedule list / show / create / update / delete / enable / disable / run`：形状照 Agent API §5.20–§5.27，参数照真实 CLI 校验（`--at` 认带偏移的 RFC 3339 与本地 `YYYY-MM-DDTHH:MM`，按本机时区；过去的时刻报 `time_in_past:`；`--target` 默认 `session`；定时规则互斥、重复的要 `--time`），状态存在假 CLI 自己的文件里，跑完连同起始的任务一起记进结果。票 35 的手（`session rename / pin / unpin / delete`、`project update / pin / unpin / archive-sessions`、`llm set-default`）也接着，主对话被拒（`main_chat_protected:`）。
 - **沙盒**：同叫醒评测，另允许 `/bin/date`（手册让它算「十分钟后」之前先看钟）。每次运行最多 10 次工具调用。
-- **判定**：按 `expect` 自动判，看它发出的命令（假 CLI 的日志与最后的状态）和回复：该建的建了一个、时间在窗口里、`--target=assistant`、记下的话里有该有的（单号）；不该建的什么都没写；该先问的问了、没建；已有的没再建、没删；不用了的删了那一个；改时间的改到了（或删了重建，不留两个）；叫醒按时的不说晚、晚了的说晚了多久、已过时的只回 `<no-reply/>`；回复里说出了时间（钟点，加上不是今天时的哪天，或「几分钟后」）；字数上限。每条都查 `schedule create` 带没带 `--target=assistant`、`schedule` 写命令带没带 `--supervisor=galley-assistant`、有没有多余的写命令、会卡住主对话的命令或 `<subtask>`。另记有没有先读手册、建之前有没有 `schedule list`（只记，不判）。
+- **判定**：按 `expect` 自动判，看它发出的命令（假 CLI 的日志与最后的状态）和回复：该建的建了一个、时间在窗口里、`--target=assistant`、记下的话里有该有的（单号）；不该建的什么都没写；该先问的问了、没建；已有的没再建、没删；不用了的删了那一个；改时间的改到了（或删了重建，不留两个）；叫醒按时的不说晚、晚了的说晚了多久、已过时的只回 `<no-reply/>`；回复里说出了时间（钟点，加上不是今天时的哪天，或「几分钟后」）；字数上限。每条都查 `schedule create` 带没带 `--target=assistant`、`schedule` 写命令带没带 `--supervisor=galley-assistant`、有没有多余的写命令、会卡住主对话的命令或 `<subtask>`。另记有没有先读手册、建之前有没有 `schedule list`（只记，不判；票 59 起读手册一栏同叫醒评测，记读了哪几部分、几次几轮、多少字节）。
 - **结果**：`schedule/results.json`（原始结果）、`schedule/results.md`（通过率表、一览表、每条的消息与工具调用、新建 / 删除 / 改动、回复）；`schedule/composed/` 是两个用例第一遍的完整首个请求。
 - **怎么跑**：`run.py --suite schedule`（每条两遍，结果与已有的合并）；`--repeats 1` 只跑一遍；`--first-repeat 2` 接着补第 2 遍而不重跑第 1 遍；`--cases a,b` 只跑几条；`--supersede "<原因>"` 把被这次替换的旧结果连同原因留进 `meta.superseded_runs`；`--render-only`。
 
@@ -178,7 +178,7 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --render-only        # 只从 res
   - 提示词、CLI 帮助与 Rust 样本与定时评测共用 `schedule/` 下那三份（见上一节「票 41 重跑」）。
 - **组成**：同定时评测。用例里分段开始前就有的待办与定时任务照 `in_hand_section` 的格式（票 39 的三组：用户的待办、它在办的、例行）写进「In Hand」一节，时间写成消息前一小时；之后在面板上被勾掉的，快照里仍是没做，假 CLI 里是做完的；这一段里刚记的不在快照里。「说说这件」的消息照 `gui/src/lib/composer-quote.ts` 的写法：引用块是那件事的标题，空一行，再接用户的话。待办的提醒到点时，新消息照 Core 的措辞（`subtask_report` 的待办一段）拼出。
 - **假 CLI**：定时评测那个，另外回答 `todo list / show / add / update / done / reopen / cancel`：形状照 Agent API §5.28–§5.34，校验照真实 CLI 与 Core（`--due` 收本地日期或 `--at` 的写法、过去的日期不拒；`--remind-at` 过去报 `time_in_past:`；`--due=` / `--remind-at=` 空值、`--due` 与 `--no-due` 同给、`update` 什么都没给是参数错误，退出码 2，报错原文用开发版二进制在假 HOME 下抓的；未知或已取消的 id 退出码 3；勾掉与取消会取消还没提醒到的提醒，再勾不变，取消勾不恢复提醒；做完的不能挂提醒；`list` 的顺序与 `--all` 照 `todo_list_order`）。`todo add / update --remind-at` 建或挪的提醒是一个带 `todoId`、叫醒助理的一次性定时任务，`schedule list` 里看得到。
-- **判定**：按 `expect` 自动判，看它发出的命令（假 CLI 的日志与最后的状态）和回复：该记的记了一件、标题对、截止在窗口里（要带时刻的带了）、有截止的挂了一个在截止之前的提醒、没时间的不写截止不挂提醒；它自己的提醒是 `schedule create --target=assistant`、不是待办，记下的话里带单号；不该记的什么都没写；勾掉的是那一件、记成 Galley 勾的；引用改的是那一件、截止到了新的一天、提醒跟着挪且不晚于新截止、没新建；问「还有什么没办」的先跑了 `todo list`、点到了三件、没把面板上勾掉的当成没办；已有的没再记、没再挂提醒，说出了已有提醒的时间；提醒到点的只提醒、不勾掉。每条都查 `todo` 与 `schedule` 写命令带没带 `--supervisor=galley-assistant`、`schedule create` 带没带 `--target=assistant`、有没有动不该动的待办、多余的写命令、会卡住主对话的命令或 `<subtask>`；回复里说出了提醒时间、字数上限。另记有没有先读手册、写之前有没有读清单（只记，不判）。
+- **判定**：按 `expect` 自动判，看它发出的命令（假 CLI 的日志与最后的状态）和回复：该记的记了一件、标题对、截止在窗口里（要带时刻的带了）、有截止的挂了一个在截止之前的提醒、没时间的不写截止不挂提醒；它自己的提醒是 `schedule create --target=assistant`、不是待办，记下的话里带单号；不该记的什么都没写；勾掉的是那一件、记成 Galley 勾的；引用改的是那一件、截止到了新的一天、提醒跟着挪且不晚于新截止、没新建；问「还有什么没办」的先跑了 `todo list`、点到了三件、没把面板上勾掉的当成没办；已有的没再记、没再挂提醒，说出了已有提醒的时间；提醒到点的只提醒、不勾掉。每条都查 `todo` 与 `schedule` 写命令带没带 `--supervisor=galley-assistant`、`schedule create` 带没带 `--target=assistant`、有没有动不该动的待办、多余的写命令、会卡住主对话的命令或 `<subtask>`；回复里说出了提醒时间、字数上限。另记有没有先读手册、写之前有没有读清单（只记，不判；读手册一栏同上）。
 - **结果**：`todo/results.json`、`todo/results.md`（同定时评测的版式）；`todo/composed/` 是引用改与问还有什么没办两条第一遍的完整首个请求。
 - **怎么跑**：`run.py --suite todo`，参数同定时评测（`--repeats`、`--first-repeat`、`--cases`、`--supersede`、`--render-only`）。`--dry-test` 覆盖这条路径：「In Hand」是快照（面板上勾掉的仍在、这一段刚记的不在）、假 CLI 的 `todo` 命令族照真实 CLI 拒绝与改状态（上面那些错误、勾掉取消提醒、取消后再取消是 `not_found`、`--all`、`schedule list` 里的待办提醒）、待办提醒的叫醒消息逐字是 Core 的，判定读得出该勾没勾、多记、动了不该动的和多余的写命令。
 
@@ -202,6 +202,29 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --render-only        # 只从 res
 
 - **结果**：24 次运行 24 次过（12 条各两遍），一次也没有改措辞。新加的那条两遍都是 `todo list` 后 `todo add "给房东回电话" --due=<明天> --remind-at=<明天>T08:00`（05:54 说的，按日历上的明天），回复「记下了，明天（10 月 18 日）早上 8 点提醒你给房东回电话。」，没用 `schedule create`。其余 11 条与票 41 那轮做法相同：季度报告截止周三 15:00、提醒周二 15:00；营养土不写截止不挂提醒；「明天要给房东回电话」截止明天、提醒明早 9 点；物流是它自己的提醒、带单号；吉他与航班号什么都没记；勾掉、引用改到周四、先读清单再答还有什么没办、已有的不再记、待办的提醒到点只提醒，都照旧。
 - **用量**：24 次运行，80 次模型调用（05:53 开跑）。
+
+## 手册按部分拆开（票 59）
+
+主对话 PRD 裁决 111：手册从一个文件拆成 `docs/managed-ga-runtime/galley-assistant-manual/` 下的八个部分，入口层改成「写之前一起读要用的那几部分」，列出每个文件什么时候读。待办、定时、叫醒三套各重跑两遍，与上一次比通过率、请求次数、用时和读了手册的哪几部分。
+
+- **跟着换的输入**：`run.py` 把整个目录拷到状态根下的 `assistant/reference/manual/`（Core 写它的位置），提示词里的占位换成 `__MANUAL_DIR__`；`manual_sha` 对全部部分算（文件名与内容，按文件名排序）；结果里的 `manual_files` 记下跑完时目录里有哪些文件。`schedule/` 与 `wake/` 的 `galley-prompt/` 照上面的办法重新生成（临时测试，跑完删掉）。`wake/` 的那份之前一直是票 30 的提示词，这次一并带上了票 36、41、44 的改动。
+- **记读了什么**：「读手册」一栏写第一次读在不在第一次写之前，再写读了哪几部分、几次、落在几个模型轮次里、返回给模型共多少字节。一次工具调用提到手册目录就算读手册，部分按调用里出现的文件名认（模型常用一段 `code_run` 循环读几份）；`code_run` 同时做了别的事时，字节里也算上那些输出。票 59 之前的运行按旧路径认成「整本」。
+- **对比**：每套 `results.md` 的「票 59 重跑」一节，由 `run.py` 从 `meta.superseded_runs` 里第一组原因以「票 59」开头的运行（即拆开之前的上一次）与现在的结果算出：通过率、平均请求次数（GA 的轮数）与用时、读手册的次数、轮数、字节、读过的部分，再逐条列出，要写的用例平均请求次数多出 1 次以上的标出来。叫醒评测另有一组同日对照（`meta.ticket59_control`：票 59 之前的提示词加整本手册，同一天跑），多一行一栏。
+- **判定改了一处**：提醒在明天时，回复说出星期几或日期也算说出了哪天（之前只认「明天」；运行当天是周一，「周二下午 3 点」被判成没说哪天）。
+- **`--dry-test` 加的**：提示词里的目录是状态根里的那个，目录里正好是八个部分；假模型在一轮里并发读两个部分、或读一个部分，读了哪几部分、几轮、多少字节都记得下来，「读手册」一栏写得对。
+
+### 结果（2026-10-19，gpt-6.1-sol，推理强度 high）
+
+| 评测 | 上一次 → 这一次 | 请求次数（均） | 用时 s（均） | 读手册字节（均） |
+| --- | --- | --- | --- | --- |
+| 待办 | 24/24 → 24/24 | 3.33 → 3.42 | 19.9 → 24.8 | 10419 → 6423 |
+| 定时 | 28/28 → 28/28 | 3.04 → 3.04 | 21.1 → 23.9 | 10622 → 5946 |
+| 叫醒 | 17/18 → 16/18（同日对照 14/18） | 2.94 → 3.44（3.56） | 24.5 → 29.0（32.2） | 3032 → 7614（7064） |
+
+- **改过一轮措辞**：第一版（「read the parts it needs:」逐个列出部分）下待办 18/24、定时 24/28、叫醒 15/18。不过的多是身份参数：只读了 `todos-change.md` 或 `reminders.md` 去勾掉、改、取消，命令行上没有 `--supervisor=galley-assistant`，这条规则只在 `cli.md` 里；还有一遍「改到 9 点」只读了改待办的部分、另记了一件新待办。第一轮把「Every write but `llm set` carries `--supervisor=galley-assistant --reason="<why>"`.」写进入口层，改它自己的提醒指到 `reminders.md`，加上「together」，三套整组重跑。
+- **叫醒那两次**：「结果够好」的报价日期写于 10-15 那一周，10-19 跑时模型当成上周的、打回去要本周的；同日对照同样 4 遍打回，所以算在用例日期上。去掉这两条三组都是 14/14。
+- **补跑一次**：定时「不用了」第 2 遍话只写进 `<summary>`（票 36 见过的随机失误），补跑一遍过了。
+- **用量**：第一版措辞 70 次、第一轮 70 次、补跑 1 次，同日对照 22 次（含先用票 30 的提示词跑的「结果够好」「两件一起」4 次，同样打回）。
 
 ## 安全措施
 

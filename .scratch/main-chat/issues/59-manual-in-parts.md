@@ -98,3 +98,12 @@ Status: ready-for-agent
 7. 看到但没改的问题。
 
 ## Comments
+
+### 2026-10-19 实现说明（分支 `main-chat-59-manual-in-parts`）
+
+- **拆法**：八个文件照上表，在 `docs/managed-ga-runtime/galley-assistant-manual/`。正文没改写：部分之间的 6 处引用改成文件名（权限第一段、CLI 一节两处、Noting 里的 `see "Your own reminders"`、Your own reminders 里的 `see "Noting a to-do"`、When one comes due 的 `(see below)` 改成 `` `wake.md` ``）；开头那段删掉，第一句放到 `subtasks.md` 的 Who you are 前面；每个文件加标题与「Galley rewrites this manual's files each time the main chat starts; do not edit them.」；四个 `###` 升为 `##`（Times、Changing a to-do、Your own reminders、When one comes due）。按表的顺序拼回去与原文逐行对比，除这几类与两处挪位（Who you are、Times）没有别的差别。
+- **Core**：`assistant_manual.rs` 一张有序表 `PARTS`（八个 `include_str!`）、`manual_dir`；`materialize` 先写全部部分，再删目录里不在表上的 `.md` 和旧的单个文件（不在就不算错）。原来五条测试改成断言规则在它该在的那一部分，另加三条（写出全部文件；删掉不在表上的与旧的单个文件；部分之间只引用表上的文件名）。`runner_commands.rs` 跟着改名，把目录交给入口层。`prompt_hash()` 改前改后都是 `c033e8d3`。
+- **入口层**：最后一段改过一轮措辞，定稿是「read the parts it needs, together:」加分号隔开的八个部分与什么时候读，末尾加「Every write but `llm set` carries `--supervisor=galley-assistant --reason="<why>"`.」。字节预算 2026 → 2463，注释写了理由。
+- **评测**：第一版措辞（照起点稿）下待办 18/24、定时 24/28、叫醒 15/18。不过的主要是身份参数：只读 `todos-change.md` 或 `reminders.md` 去勾掉、改、取消，命令没带 `--supervisor=galley-assistant`，这条只在 `cli.md` 里；另有一遍「改到 9 点」读的是改待办的部分，另记了一件新待办。第一轮改措辞（身份那句、改它自己的提醒读 `reminders.md`、一起读）后三套整组重跑：待办 24/24，定时 28/28（「不用了」一遍话只写进 `<summary>`，补跑一遍），叫醒 16/18（上一次 17/18，是票 30 的提示词与手册；不过的两次是「结果够好」的报价日期写于 10-15 那一周，同日对照用票 59 之前的提示词加整本手册也 4 遍打回，14/18）。读手册的字节：待办 10.4 → 6.4 KB，定时 10.6 → 5.9 KB，叫醒 3.0 → 7.6 KB（同日对照 7.1 KB）；请求次数 3.33 → 3.42、3.04 → 3.04、2.94 → 3.44（对照 3.56）。细节在三套 `results.md` 的「票 59 重跑」一节与评测 README。
+- **判定改了一处**：提醒在明天时，回复说出星期几或日期也算说出了哪天（运行当天是周一，「周二下午 3 点」原先被判成没说哪天）。
+- **没动**：GUI、runner、`managed-ga/code`、`cli/`、别的提示词层；devlog 与 PRD 留给主会话。
