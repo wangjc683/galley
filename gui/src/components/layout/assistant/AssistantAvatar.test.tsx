@@ -3,16 +3,22 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { makeSession } from "@/test/factories";
+
 import {
   AssistantAvatar,
   AssistantAvatarBadge,
   type AssistantAvatarSize,
+  type AssistantBadgeSize,
 } from "./AssistantAvatar";
+import { AssistantIdentity } from "./AssistantIdentity";
 
 /**
  * The assistant's avatar is the app icon (main chat PRD ruling 70,
  * ticket 23): the icon's vector master cropped to a circle, a 1px ring
- * inside it, at 28 (the header's identity row) and 40 (the sidebar card).
+ * inside it. Still at 28 (the header's identity row, ruling 119 point
+ * 6); the sidebar card's stage draws it as the face that moves, at 72
+ * and 48 (AssistantFace.test.tsx, Sidebar.main-chat.test.tsx).
  */
 
 const ROOT = path.resolve(__dirname, "../../../../..");
@@ -39,11 +45,12 @@ describe("the assistant's avatar", () => {
     expect(html).not.toMatch(/bg-brand|font-serif|italic/);
   });
 
-  it("crops it to a circle, 28px by default and 40px on the card", () => {
+  it("crops it to a circle, 28px by default, 48 and 72 for the stage", () => {
     for (const [size, box] of [
       [undefined, "size-7"],
       [28, "size-7"],
-      [40, "size-10"],
+      [48, "size-12"],
+      [72, "size-18"],
     ] as const) {
       const avatar = tagWith(render(size), AVATAR);
       expect(avatar).toContain(box);
@@ -52,18 +59,18 @@ describe("the assistant's avatar", () => {
       // The picture fills the circle.
       expect(tagWith(render(size), "<img")).toContain("size-full");
     }
-    expect(tagWith(render(28), AVATAR)).not.toContain("size-10");
-    expect(tagWith(render(40), AVATAR)).not.toContain("size-7");
+    expect(tagWith(render(28), AVATAR)).not.toContain("size-18");
+    expect(tagWith(render(72), AVATAR)).not.toContain("size-7");
   });
 
   it("draws a 1px ring inside the circle, over the picture", () => {
-    const html = render(40);
+    const html = render(72);
     const ring = tagWith(html, RING);
     expect(ring).toContain("absolute inset-0 rounded-full");
     expect(ring).toContain("shadow-[inset_0_0_0_1px_var(--color-avatar-ring)]");
     // After the picture, so it paints on top of it.
     expect(html.indexOf("<img")).toBeLessThan(html.indexOf(RING));
-    // Inside: nothing outside the box adds to 28 / 40.
+    // Inside: nothing outside the box adds to its size.
     expect(tagWith(html, AVATAR)).not.toMatch(/\b(border|ring|outline)\b/);
     expect(tagWith(html, AVATAR)).toContain("relative");
   });
@@ -105,27 +112,62 @@ describe("the assistant's avatar", () => {
 });
 
 describe("the avatar's badge", () => {
-  it("sits on the circle's 45° point at both sizes, as before", () => {
-    const at = (size: AssistantAvatarSize) =>
-      tagWith(
-        renderToStaticMarkup(
-          <AssistantAvatarBadge kind="running" size={size} />,
-        ),
-        'data-role="assistant-badge"',
-      );
-    expect(at(28)).toContain("size-[15px]");
-    expect(at(28)).toContain("-right-[3px] -top-[3px]");
-    expect(at(40)).toContain("size-4");
-    expect(at(40)).toContain("-right-[2px] -top-[2px]");
+  const at = (size: AssistantBadgeSize) =>
+    tagWith(
+      renderToStaticMarkup(<AssistantAvatarBadge kind="ask" size={size} />),
+      'data-role="assistant-badge"',
+    );
+
+  it("sits on the circle's 45° point at both stage sizes", () => {
+    expect(at(48)).toContain("size-4");
+    expect(at(48)).toContain("-right-px -top-px");
+    expect(at(72)).toContain("size-5");
+    expect(at(72)).toContain("right-[0.5px] top-[0.5px]");
     // Ringed in the card's ground.
-    expect(at(40)).toContain(
+    expect(at(72)).toContain(
       "bg-[var(--assistant-ground,var(--color-chrome))]",
     );
   });
 
+  it("spins while it runs only when the face cannot say it", () => {
+    expect(
+      renderToStaticMarkup(<AssistantAvatarBadge kind="running" size={72} />),
+    ).toContain('class="spin"');
+    expect(
+      renderToStaticMarkup(
+        <AssistantAvatarBadge kind="running" size={72} faceRuns />,
+      ),
+    ).toBe("");
+    // A question keeps its mark either way.
+    expect(
+      renderToStaticMarkup(
+        <AssistantAvatarBadge kind="ask" size={72} faceRuns />,
+      ),
+    ).toContain('data-kind="ask"');
+  });
+
   it("is absent at rest", () => {
     expect(
-      renderToStaticMarkup(<AssistantAvatarBadge kind="idle" size={40} />),
+      renderToStaticMarkup(<AssistantAvatarBadge kind="idle" size={72} />),
     ).toBe("");
+  });
+});
+
+describe("the header's 28px avatar stays still (ruling 119 point 6)", () => {
+  it("draws the still icon, not the face", () => {
+    const mainChat = makeSession({
+      id: "s-main",
+      mainChat: true,
+      gaRuntimeKind: "managed",
+      runtimeKind: "managed",
+    });
+    const html = renderToStaticMarkup(
+      <AssistantIdentity mainChat={mainChat} subtasks={[]} />,
+    );
+    expect(html).not.toContain('data-role="assistant-face"');
+    expect(tagWith(html, "<img")).toMatch(/src="[^"]*\/galley-icon\.svg"/);
+    expect(tagWith(html, AVATAR)).toContain("size-7");
+    // No badge here: the line under the name says the state.
+    expect(html).not.toContain('data-role="assistant-badge"');
   });
 });

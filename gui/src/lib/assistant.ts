@@ -24,7 +24,7 @@ import type { SessionStatus } from "@/types/session";
  *     (main chat PRD rulings 107, 110: an IM list row says its contact
  *     is typing, nothing more); in a round Core woke it for only while
  *     the conversation shows its dots (`assistantTyping`), else the
- *     last message, the avatar spinning. Away from the main chat (in
+ *     last message, the face at work. Away from the main chat (in
  *     the workbench, or in one of its subtasks) it speaks for it at
  *     rest: the question itself, the draft. With the main chat on
  *     screen it is the selected row of the list and, unless it runs,
@@ -231,7 +231,7 @@ export function assistantCardLine(
   if (state.kind === "running") {
     // Open or not (rulings 107, 110): what it is doing is in the header,
     // what it says in the conversation. Not typing (a woken round
-    // between its words): the last message, the avatar spinning.
+    // between its words): the last message, the face at work.
     if (typing) return { kind: "running", text: copy.assistant.typing };
     return lastMessage ? messageLine(lastMessage, copy) : null;
   }

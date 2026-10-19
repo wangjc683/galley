@@ -23,7 +23,7 @@ import {
 } from "@/lib/assistant-face-motion";
 
 /**
- * When the assistant's face plays what (tickets 65, 66): one director,
+ * When the assistant's face plays what (tickets 65–67): one director,
  * its beats to one store the sidebar card's face reads (`onBeat`; since
  * ruling 119 point 6 only that one avatar moves — the header's stays
  * still).
@@ -40,7 +40,9 @@ import {
  *     finishes and the face holds its pose.
  *   - Still (`setStill(true)`: the system's reduced motion) it sets the
  *     face as drawn and plays nothing.
- *   - 乙 (`alive` false) holds still at rest; 丙 blinks and looks around.
+ *   - Alive at rest (丙, ruling 119 point 1: the driver sets it) it
+ *     blinks and looks around; not alive (乙, which the tests still
+ *     measure against) it holds still.
  *   - While it works, a second channel (`onBob`) plays the undercurrent:
  *     one breath of the head after another with no pause, under whatever
  *     the beats do (ruling 117 point 8: busy must read at a glance). It
@@ -127,19 +129,14 @@ export class FaceDirector {
     this.since = this.clock.now();
   }
 
-  /** The activity it plays (for the demo label and tests). */
-  get currentActivity(): FaceActivity {
-    return this.activity;
-  }
-
-  /** Whether a long stretch of work has quieted it down (tests, demo). */
+  /** Whether a long stretch of work has quieted it down (tests). */
   get quiet(): boolean {
     return this.level !== 1;
   }
 
-  /** Start the quiet's clock over without a change (the demo, stepping
-   * through states, plays each at full size). */
-  freshen(): void {
+  /** Start the quiet's clock over: a new activity or a reaction plays at
+   * full size. */
+  private freshen(): void {
     this.since = this.clock.now();
     this.level = 1;
   }
@@ -203,25 +200,6 @@ export class FaceDirector {
     this.phase = "rest";
     this.pose = from;
     this.settle();
-  }
-
-  /** Play the activity's next beat now instead of after its pause (the
-   * demo's, so a few seconds show what 8–15 at rest would); nothing if a
-   * beat or a reaction is under way. */
-  playNext(): void {
-    if (this.still || !this.active) return;
-    if (this.phase !== "gap" && this.phase !== "rest") return;
-    if (!hasLoop(this.activity, this.alive)) return;
-    const pick = loopBeat(
-      this.activity,
-      this.pose,
-      this.random,
-      this.lastVariant,
-    );
-    if (!pick) return;
-    this.clear();
-    this.lastVariant = pick.variant;
-    this.play(pick.beat, false);
   }
 
   react(reaction: FaceReaction): void {

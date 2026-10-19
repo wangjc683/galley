@@ -8,8 +8,10 @@ import {
   type FacePose,
   loopBeat,
   loopVariants,
+  MOTION,
   NEUTRAL_POSE,
   reactionBeat,
+  scaleBeat,
   turnBeat,
 } from "@/lib/assistant-face-motion";
 
@@ -156,8 +158,9 @@ describe("the tongue, bent on its skeleton", () => {
   });
 });
 
-/** Every pose a beat keys, at every amplitude. */
-function keyedPoses(): { name: string; pose: FacePose; amp: number }[] {
+/** Every pose a beat keys, and the same quieted down (a long stretch of
+ * work, `MOTION.quiet`). */
+function keyedPoses(): { name: string; pose: FacePose }[] {
   const rand = seeded(4);
   const beats = [];
   for (let i = 0; i < 4; i++) {
@@ -202,14 +205,14 @@ function keyedPoses(): { name: string; pose: FacePose; amp: number }[] {
     for (const keys of Object.values(beat.tracks)) {
       for (const k of keys) times.add(k.t);
     }
-    for (const amp of [1, 1.5, 2]) {
+    for (const b of [beat, scaleBeat(beat, MOTION.quiet.k)]) {
       for (const t of times) {
-        const pose = { ...beat.end };
-        for (const [f, keys] of Object.entries(beat.tracks)) {
+        const pose = { ...b.end };
+        for (const [f, keys] of Object.entries(b.tracks)) {
           const key = keys.find((k) => k.t === t);
           if (key) pose[f as keyof FacePose] = key.v;
         }
-        out.push({ name: beat.name, pose, amp });
+        out.push({ name: b === beat ? beat.name : `${beat.name} quiet`, pose });
       }
     }
   }
@@ -217,11 +220,11 @@ function keyedPoses(): { name: string; pose: FacePose; amp: number }[] {
 }
 const KEYED = keyedPoses();
 
-describe("drawn at any amplitude, the face stays drawable", () => {
+describe("at every key of every beat, the face stays drawable", () => {
   it("keeps the eyes inside the face (only the widest touch its walls)", () => {
     const bad: string[] = [];
-    for (const { name, pose, amp } of KEYED) {
-      const p = displayPose(pose, amp);
+    for (const { name, pose } of KEYED) {
+      const p = displayPose(pose);
       const r = EYE_RADIUS * p.wide;
       const [gx, gy] = partValue("gaze", p).split(" ").map(Number);
       const left = EYES[0].cx + gx - r;
@@ -235,39 +238,26 @@ describe("drawn at any amplitude, the face stays drawable", () => {
         top < FACE_ROOM.top - spill ||
         bottom > FACE_ROOM.bottom + spill
       ) {
-        bad.push(`${name} ×${amp}`);
+        bad.push(name);
       }
-      if (p.wide > MAX_WIDE) bad.push(`${name} ×${amp} wide ${p.wide}`);
+      if (p.wide > MAX_WIDE) bad.push(`${name} wide ${p.wide}`);
     }
     expect(bad).toEqual([]);
   });
 
   it("keeps the tongue off the head", () => {
     const bad: string[] = [];
-    for (const { name, pose, amp } of KEYED) {
-      const p = displayPose(pose, amp);
+    for (const { name, pose } of KEYED) {
+      const p = displayPose(pose);
       const t = clearTongue({
         t1: p.t1,
         t2: p.t2,
         t3: p.t3,
         stretch: p.stretch,
       });
-      if (!tongueClearOfHead(t)) bad.push(`${name} ×${amp}`);
+      if (!tongueClearOfHead(t)) bad.push(name);
     }
     expect(bad).toEqual([]);
-  });
-
-  it("doubles the sizes at 2×, not the timings", () => {
-    const beat = reactionBeat("done", NEUTRAL_POSE, NEUTRAL_POSE, seeded(1));
-    const one = partAnimation("move", beat, 1)!.attributes;
-    const two = partAnimation("move", beat, 2)!.attributes;
-    expect(two.dur).toBe(one.dur);
-    expect(two.keyTimes).toBe(one.keyTimes);
-    const ys = (values: string) =>
-      values.split(";").map((v) => Number(v.split(" ")[1]));
-    ys(two.values).forEach((y, i) => {
-      expect(y).toBeCloseTo(2 * ys(one.values)[i], 2);
-    });
   });
 });
 
@@ -403,18 +393,16 @@ describe("a beat as SMIL", () => {
       loopBeat("talk", basePose("talk"), rand2, null, "burst")!.beat,
     ];
     for (const beat of beats) {
-      for (const amp of [1, 2]) {
-        for (const part of FACE_PARTS) {
-          const spec = partAnimation(part, beat, amp);
-          if (!spec || part === "overlay") continue;
-          const values = spec.attributes.values.split(";");
-          expect(values[0], `${beat.name} ${part}`).toBe(
-            partValue(part, displayPose(beat.from, amp)),
-          );
-          expect(values[values.length - 1], `${beat.name} ${part}`).toBe(
-            partValue(part, displayPose(beat.end, amp)),
-          );
-        }
+      for (const part of FACE_PARTS) {
+        const spec = partAnimation(part, beat);
+        if (!spec || part === "overlay") continue;
+        const values = spec.attributes.values.split(";");
+        expect(values[0], `${beat.name} ${part}`).toBe(
+          partValue(part, displayPose(beat.from)),
+        );
+        expect(values[values.length - 1], `${beat.name} ${part}`).toBe(
+          partValue(part, displayPose(beat.end)),
+        );
       }
     }
   });

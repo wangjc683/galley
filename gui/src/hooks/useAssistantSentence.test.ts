@@ -374,7 +374,7 @@ describe("the typing bubble, and the card's 「正在输入…」 with it", () =
     expect(you[end][1]).toBe(false);
     resetStores();
     const wake = play(woken(), card);
-    // Once the answer lands the card says it, the avatar spinning until
+    // Once the answer lands the card says it, the face at work until
     // run_complete.
     expect(wake.filter(([, typing]) => typing).map(([label]) => label)).toEqual(
       ["chunk 1", "chunk 2", "chunk 3"],

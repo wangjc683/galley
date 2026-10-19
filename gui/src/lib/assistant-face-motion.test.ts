@@ -358,7 +358,7 @@ describe("what each motion says", () => {
   });
 });
 
-describe("the amplitude", () => {
+describe("the quiet of a long stretch of work scales the sizes", () => {
   it("scales sizes in space only: not how shut the eyes are, which shape they take, the marks", () => {
     const pose = {
       ...basePose("error"),
@@ -368,15 +368,16 @@ describe("the amplitude", () => {
       wide: 1.2,
       mouth: 0.4,
     };
-    const two = scalePose(pose, 2);
+    const k = MOTION.quiet.k;
+    const quiet = scalePose(pose, k);
     for (const f of FACE_FIELDS) {
       if (SPATIAL_FIELDS.includes(f)) {
-        expect(two[f] - NEUTRAL_POSE[f], f).toBeCloseTo(
-          2 * (pose[f] - NEUTRAL_POSE[f]),
+        expect(quiet[f] - NEUTRAL_POSE[f], f).toBeCloseTo(
+          k * (pose[f] - NEUTRAL_POSE[f]),
           9,
         );
       } else {
-        expect(two[f], f).toBe(pose[f]);
+        expect(quiet[f], f).toBe(pose[f]);
       }
     }
     expect(SPATIAL_FIELDS).not.toContain("lid");

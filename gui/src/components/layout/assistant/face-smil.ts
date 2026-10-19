@@ -8,7 +8,6 @@ import {
   fieldAt,
   NEUTRAL_POSE,
   poseAt,
-  scalePose,
 } from "@/lib/assistant-face-motion";
 
 import {
@@ -35,9 +34,8 @@ import {
  * splines. Transforms, opacity and the traced paths' own points only
  * (ruling 117 point 5). Pure, so the tests read what the avatar will play.
  *
- * Every pose is drawn at an amplitude (the trial's 1, 1.5 or 2 times;
- * `displayPose`), and kept drawable: the eyes inside the face, the mouth
- * inside its wood, the tongue off the head.
+ * Every pose is drawn kept drawable (`displayPose`): the eyes inside the
+ * face, the mouth inside its wood, the tongue off the head.
  *
  * Each part is its own group with one kind of transform, nested so that
  * together they move the figure as one (AssistantFace):
@@ -194,13 +192,13 @@ const clamp = (v: number, lo: number, hi: number) =>
   Math.min(hi, Math.max(lo, v));
 
 /**
- * The pose as drawn at amplitude `amp`: its spatial sizes times `amp`,
- * then kept drawable — the eyes no wider than `MAX_WIDE`, the mouth
- * between shut and `MAX_MOUTH`, squash and stretch short of folding, the
- * tongue no shorter than drawn and no longer than a third more.
+ * The pose as drawn, kept drawable — the eyes no wider than `MAX_WIDE`,
+ * the mouth between shut and `MAX_MOUTH`, squash and stretch short of
+ * folding, the tongue no shorter than drawn and no longer than a third
+ * more. A copy: the pose itself is left as the director made it.
  */
-export function displayPose(pose: FacePose, amp = 1): FacePose {
-  const p = scalePose(pose, amp);
+export function displayPose(pose: FacePose): FacePose {
+  const p = { ...pose };
   p.wide = clamp(p.wide, 0.3, MAX_WIDE);
   p.lid = clamp(p.lid, 0.04, 1.3);
   p.mouth = clamp(p.mouth, 0, MAX_MOUTH);
@@ -259,7 +257,7 @@ function jawShut(p: FacePose): number {
   return clamp(Math.max(1 - Math.min(1, p.mouth), p.o, p.grin), 0, 1);
 }
 
-/** A part's value in a pose (already at its amplitude): a transform's
+/** A part's value in a pose (already drawable): a transform's
  * arguments, an opacity, or a path. */
 export function partValue(part: FacePart, p: FacePose): string {
   switch (part) {
@@ -346,15 +344,14 @@ export interface PartAnimation {
 }
 
 /**
- * A part's animation for a beat at amplitude `amp`, or null when the
- * part stays put through it (nothing to animate: the drawing is left as
- * it is). The overlay shows for the whole beat and hides at its end only
- * when the beat ends with the eyes and the mouth as drawn.
+ * A part's animation for a beat, or null when the part stays put
+ * through it (nothing to animate: the drawing is left as it is). The
+ * overlay shows for the whole beat and hides at its end only when the
+ * beat ends with the eyes and the mouth as drawn.
  */
 export function partAnimation(
   part: FacePart,
   beat: FaceBeat,
-  amp = 1,
 ): PartAnimation | null {
   const dur = `${Math.max(1, Math.round(beat.duration))}ms`;
   const common = { dur, begin: "indefinite", fill: "freeze" };
@@ -364,9 +361,7 @@ export function partAnimation(
     // drawing itself shows whenever it can, so a beat that starts or ends
     // with the face as drawn starts and ends on the icon's own pixels.
     const times = beatTimes(beat);
-    const rest = times.map((t) =>
-      faceAtRest(displayPose(poseAt(beat, t), amp)),
-    );
+    const rest = times.map((t) => faceAtRest(displayPose(poseAt(beat, t))));
     if (rest.every(Boolean)) return null;
     const values = times.map((_, i) =>
       i < times.length - 1 && (!rest[i] || !rest[i + 1])
@@ -390,7 +385,7 @@ export function partAnimation(
   const fields = FIELDS[part];
   const times = beatTimes(beat, fields);
   const values = times.map((t) =>
-    partValue(part, displayPose(poseAt(beat, t), amp)),
+    partValue(part, displayPose(poseAt(beat, t))),
   );
   if (values.every((v) => v === values[0])) return null;
   const duration = Math.max(1, beat.duration);
@@ -444,15 +439,11 @@ function segmentEase(
   return "linear";
 }
 
-/** For tests and the harness: a field of a beat at a moment, at an
- * amplitude. */
+/** For tests and the harness: a field of a beat at a moment, as drawn. */
 export function displayedField(
   beat: FaceBeat,
   field: FaceField,
   ms: number,
-  amp = 1,
 ): number {
-  return displayPose({ ...beat.end, [field]: fieldAt(beat, field, ms) }, amp)[
-    field
-  ];
+  return displayPose({ ...beat.end, [field]: fieldAt(beat, field, ms) })[field];
 }

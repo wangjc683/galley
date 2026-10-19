@@ -26,8 +26,6 @@ import { SidebarQuickActions } from "./sidebar/SidebarQuickActions";
 import { SidebarOtherSources } from "./sidebar/SidebarSideChats";
 import { SidebarSectionsList } from "./sidebar/SidebarTimeline";
 import { SidebarWorkbenchLabel } from "./sidebar/SidebarWorkbenchLabel";
-// 票 66 临时切换器，定档后由拆除票删掉。
-import { useAssistantFaceTrial } from "./assistant/face-trial/face-trial";
 
 export interface SidebarProps {
   sessions: Session[];
@@ -188,10 +186,6 @@ export function Sidebar({
 }: SidebarProps) {
   const copy = useCopy();
   const mainChat = useMemo(() => findMainChat(sessions), [sessions]);
-  // 票 66 临时切换器，定档后由拆除票删掉：the stage's own air round the
-  // card (8px over it, 6px under it: the stage card carries its own
-  // 6px inside), so the assistant's zone stays about 140px.
-  const stage = useAssistantFaceTrial().on;
   // The list never holds the main chat (its card stands above it) nor a
   // subtask the user has not written in yet (ticket 06a): that one is a
   // card under the main chat reply that sent it, and its states reach
@@ -448,8 +442,10 @@ export function Sidebar({
       />
       {mainChat ? (
         // Two zones (rulings 114, 118 point 5; ticket 62's C): the
-        // assistant stays put on the chrome, with air around its card
-        // (12px over it, 10px under it to the workbench's name), above
+        // assistant stays put on the chrome, its stage card with air
+        // round it (8px over it, 6px under it to the workbench's name;
+        // the card carries its own 6px inside, so the zone is about
+        // 140px, ruling 118 point 2; ticket 67), above
         // the sidebar's strongest structural line (line-strong, ticket
         // 09: JC's C3 + 常显 + 加重), which carries the workbench's name
         // 「工作台」 (SidebarWorkbenchLabel). What stays put sits above the
@@ -457,7 +453,7 @@ export function Sidebar({
         // kept the 新对话 row joined to the list it heads; the card heads
         // nothing.
         <>
-          <div className={stage ? "pb-1.5 pt-2" : "pb-2.5 pt-3"}>
+          <div className="pb-1.5 pt-2">
             <SidebarAssistantCard
               mainChat={mainChat}
               subtasks={mainChatSubtasks}

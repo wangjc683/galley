@@ -15,23 +15,12 @@ import { Sidebar } from "./Sidebar";
 
 // useCopy falls back to the zh copy without a CopyProvider.
 
-// 票 66 临时切换器，定档后由拆除票删掉：these tests describe today's
-// avatar and card (现状, what a production build draws); the trial's own
-// tests are under assistant/face-trial.
-vi.mock(
-  "@/components/layout/assistant/face-trial/face-trial",
-  async (importOriginal) => ({
-    ...(await importOriginal<
-      typeof import("@/components/layout/assistant/face-trial/face-trial")
-    >()),
-    useAssistantFaceTrial: () => ({
-      on: false,
-      amplitude: 1,
-      demo: false,
-      pinned: null,
-    }),
-  }),
-);
+// The system's reduced motion, seeded per test: the face holds still
+// there and the card's running spinner comes back (ruling 117 point 8).
+const motion = vi.hoisted(() => ({ reduced: false }));
+vi.mock("@/hooks/usePrefersReducedMotion", () => ({
+  usePrefersReducedMotion: () => motion.reduced,
+}));
 
 // A row's live state (running, a pending question, a runtime error) is
 // store-derived and can't be seeded under static rendering; override
@@ -214,6 +203,9 @@ const PROJECT_PLUS = 'aria-label="在 回归 里新建对话"';
 const CARD = 'data-role="assistant-card"';
 const LINE = 'data-role="assistant-card-line"';
 const BADGE = 'data-role="assistant-badge"';
+const FACE = 'data-role="assistant-face"';
+const SPINNER = 'class="spin"';
+const BLOCK = '<div class="pb-1.5 pt-2">';
 const ROW = 'data-role="sidebar-new-chat-row"';
 const SCROLL_LIST = "overflow-y-auto";
 const STICKY = "data-sidebar-section-header";
@@ -228,6 +220,7 @@ afterEach(() => {
   card.question = null;
   card.lastMessage = null;
   card.typing = true;
+  motion.reduced = false;
   dropComposerDraft("s-main");
 });
 
@@ -264,10 +257,7 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
     const html = render([mainChat, sideChat]);
     expect(html).not.toContain('aria-label="待办"');
     // The card's block holds the card alone, as before ticket 42.
-    const block = html.slice(
-      html.indexOf('<div class="pb-2.5 pt-3">'),
-      html.indexOf(WORKBENCH),
-    );
+    const block = html.slice(html.indexOf(BLOCK), html.indexOf(WORKBENCH));
     expect(count(block, CARD)).toBe(1);
     // The card is the block's only button.
     expect(count(block, "<button")).toBe(1);
@@ -295,25 +285,27 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
 
   it("stands the card on the chrome above the strong line, the list under it on the app ground", () => {
     const html = render([mainChat, sideChat]);
-    // The card's block (12px over the card, 10px under it), then the
-    // workbench's name on the strong line; the list follows.
+    // The card's block (8px over the card, 6px under it: the stage card
+    // carries its own 6px inside), then the workbench's name on the
+    // strong line; the list follows.
     expect(tagWith(html, CARD)).not.toContain("line-strong");
-    expect(html.indexOf('<div class="pb-2.5 pt-3">')).toBeLessThan(
-      html.indexOf(CARD),
-    );
+    expect(html.indexOf(BLOCK)).toBeGreaterThan(0);
+    expect(html.indexOf(BLOCK)).toBeLessThan(html.indexOf(CARD));
     expect(html.indexOf(CARD)).toBeLessThan(html.indexOf(WORKBENCH));
     expect(html.indexOf(WORKBENCH)).toBeLessThan(html.indexOf(SCROLL_LIST));
     const cardTag = tagWith(html, CARD);
-    // One IM list row: fixed 58px, the card radius, no border.
-    expect(cardTag).toContain("h-[58px]");
+    // The stage: a column, centred, the card radius, no border.
+    expect(cardTag).toContain("flex-col items-center");
+    expect(cardTag).toContain("pb-1.5 pt-1.5");
     expect(cardTag).toContain("rounded-md");
     expect(cardTag).not.toContain("border");
     // At rest: no fill, no lift, the hover fill.
     expect(cardTag).not.toContain("bg-selected");
     expect(cardTag).toContain("hover:bg-hover");
-    // A 40px avatar, 「Galley」 at 14px.
+    // The face, 「Galley」 at 14px under it.
     const body = between(html, CARD, "</button>");
-    expect(body).toContain("size-10");
+    expect(body).toContain(FACE);
+    expect(body.indexOf(FACE)).toBeLessThan(body.indexOf(">Galley<"));
     expect(body).toMatch(/text-\[14px\][^>]*>Galley</);
     expect(tagWith(html, 'data-sidebar-section=""')).toContain("bg-app");
   });
@@ -449,12 +441,9 @@ describe("the assistant's card", () => {
 
   it("is selected while the main chat or one of its subtasks is open", () => {
     for (const activeId of ["s-main", "s-sub"]) {
-      const tag = tagWith(
-        render([mainChat, sideChat, subtask], { activeId }),
-        CARD,
-      );
-      expect(tag).toContain('aria-current="page"');
-      expect(tag).toContain("bg-selected shadow-[var(--shadow-selected)]");
+      const html = render([mainChat, sideChat, subtask], { activeId });
+      expect(tagWith(html, CARD)).toContain('aria-current="page"');
+      expect(html).toContain('data-role="assistant-selected-ring"');
     }
     const elsewhere = tagWith(
       render([mainChat, sideChat], { activeId: "s-side" }),
@@ -579,15 +568,20 @@ describe("the assistant's card", () => {
       'data-kind="running"',
     );
     // A woken round between its words: the last message, open or not —
-    // never the draft — the avatar still spinning.
+    // never the draft — the face saying it is busy (the spinner only
+    // under reduced motion, where the face holds still).
     card.typing = false;
     for (const html of [
       onScreen(),
       render([used, subtask], { activeId: "s-sub" }),
     ]) {
       expect(textOf(lineOf(html))).toBe("你：周六去花市");
-      expect(between(html, CARD, "</button>")).toContain('data-kind="running"');
+      expect(tagWith(html, CARD)).toContain('data-state="running"');
+      expect(between(html, CARD, "</button>")).not.toContain(SPINNER);
     }
+    motion.reduced = true;
+    expect(between(onScreen(), CARD, "</button>")).toContain(SPINNER);
+    motion.reduced = false;
     card.typing = true;
 
     // Away in its subtask, not running: the words, as before.
@@ -683,7 +677,7 @@ describe("the assistant's card", () => {
     );
   });
 
-  it("wears a row's status glyph on the avatar while busy, none for a draft or at rest", () => {
+  it("wears a row's status glyph on the avatar for a question or an error, none for a draft or at rest", () => {
     saveComposerDraft("s-main", { text: "下周三的会", images: [] });
     const rest = render([used, sideChat]);
     expect(rest).not.toContain(BADGE);
@@ -691,18 +685,27 @@ describe("the assistant's card", () => {
       /font-medium[^>]*>Galley</,
     );
     for (const [arrange, kind] of [
-      [() => live.set("s-main", { status: "running" }), "running"],
       [() => live.set("s-main", { hasPendingAskUser: true }), "ask"],
       [() => live.set("s-main", { status: "error" }), "error"],
     ] as const) {
       live.clear();
       arrange();
-      const html = render([used, sideChat]);
-      expect(between(html, CARD, "</button>")).toContain(`data-kind="${kind}"`);
-      expect(between(html, CARD, "</button>")).toMatch(
-        /font-semibold[^>]*>Galley</,
-      );
+      const body = between(render([used, sideChat]), CARD, "</button>");
+      expect(body).toContain(`${BADGE} data-kind="${kind}"`);
+      expect(body).toMatch(/font-semibold[^>]*>Galley</);
     }
+  });
+
+  it("lets the face say it runs: no spinner, but the spinner back under reduced motion", () => {
+    live.set("s-main", { status: "running" });
+    const moving = between(render([used, sideChat]), CARD, "</button>");
+    expect(moving).not.toContain(BADGE);
+    expect(moving).not.toContain(SPINNER);
+    expect(moving).toMatch(/font-semibold[^>]*>Galley</);
+    motion.reduced = true;
+    const still = between(render([used, sideChat]), CARD, "</button>");
+    expect(still).toContain(`${BADGE} data-kind="running"`);
+    expect(still).toContain(SPINNER);
   });
 
   it("dates the last message on the name line, else the last activity", () => {
@@ -757,6 +760,59 @@ describe("the assistant's card", () => {
     expect(render([mainChat], { language: "en-US" })).toContain(
       "Your conversations will appear here.",
     );
+  });
+});
+
+describe("the card is a stage for the face (rulings 118, 119; ticket 67)", () => {
+  it("centres a 72px face, 48px on a narrow sidebar, the name and the line under it", () => {
+    card.lastMessage = { fromUser: false, text: "好的" };
+    const html = render([mainChat, sideChat]);
+    const body = between(html, CARD, "</button>");
+    expect(body).toContain(
+      '<span class="flex h-18 items-center justify-center">',
+    );
+    expect(tagWith(body, 'data-role="assistant-avatar"')).toContain(
+      "size-12 @min-[184px]/sidebar:size-18",
+    );
+    // Name, then the line, under the face.
+    expect(body.indexOf(FACE)).toBeLessThan(body.indexOf(">Galley<"));
+    expect(body.indexOf(">Galley<")).toBeLessThan(body.indexOf(LINE));
+    // The name's line steps back to ink-soft unselected.
+    expect(tagWith(body, "mt-1.5 flex h-5")).toContain("text-ink-soft");
+    expect(body).not.toContain("assistant-selected-ring");
+  });
+
+  it("lets the figure out of the circle; only the ground is cropped", () => {
+    const body = between(render([mainChat]), CARD, "</button>");
+    const avatar = tagWith(body, 'data-role="assistant-avatar"');
+    expect(avatar).toContain("rounded-full");
+    expect(avatar).not.toContain("overflow-hidden");
+    expect(tagWith(body, FACE)).toContain('overflow="visible"');
+    // The face is final at 1×: no amplitude left on it.
+    expect(tagWith(body, FACE)).not.toContain("data-amplitude");
+  });
+
+  it("selects with a brand ring round the face and the name in full ink, no fill", () => {
+    const html = render([mainChat, sideChat], { activeId: "s-main" });
+    const tag = tagWith(html, CARD);
+    expect(tag).toContain('aria-current="page"');
+    expect(tag).not.toContain("bg-selected");
+    expect(tag).not.toContain("shadow-");
+    expect(tag).not.toContain("hover:bg-hover");
+    expect(tagWith(html, "assistant-selected-ring")).toContain(
+      "border-2 border-brand",
+    );
+    const name = tagWith(between(html, CARD, "</button>"), "mt-1.5 flex h-5");
+    expect(name).not.toContain("text-ink-soft");
+    expect(name).toContain("text-ink");
+  });
+
+  it("wears its badges at both sizes, one shown per width", () => {
+    live.set("s-main", { hasPendingAskUser: true });
+    const body = between(render([mainChat]), CARD, "</button>");
+    expect(count(body, BADGE)).toBe(2);
+    expect(body).toContain("hidden @min-[184px]/sidebar:inline-flex");
+    expect(body).toContain("@min-[184px]/sidebar:hidden");
   });
 });
 
@@ -844,6 +900,9 @@ describe("without a main chat (external runtime)", () => {
     // The 新对话 row is the loud one.
     expect(html).toContain("text-brand-strong");
     expect(html).not.toContain(CARD);
+    // No face anywhere: the external runtime has no assistant.
+    expect(html).not.toContain(FACE);
+    expect(html).not.toContain('data-role="assistant-avatar"');
     expect(html).not.toContain(OTHER_SOURCES);
     expect(html).not.toContain("主对话");
     expect(html).not.toContain("sticky");
@@ -928,8 +987,24 @@ describe("the trials and the main-chat-on-top sidebar are gone", () => {
       "SidebarAssistantLabel",
       "zoneAssistant",
       "demoNewUser",
-      // Spelled apart so a grep for the ticket marker finds nothing.
+      // Tickets 65 and 66's face trial (丙, the stage, 1×: ruling 119).
+      "galley.tmp.faceTrial",
+      "face-trial",
+      "useAssistantFaceTrial",
+      "AssistantFaceTrialSwitcher",
+      "FaceDemo",
+      "face-demo",
+      "demoLabel",
+      "demoStepMs",
+      "FaceAmplitude",
+      "FACE_AMPLITUDES",
+      "data-amplitude",
+      "stage72",
+      "row64",
+      // Spelled apart so a grep for the ticket markers finds nothing.
       ["票", "62"].join(" "),
+      ["票", "65"].join(" "),
+      ["票", "66"].join(" "),
     ];
     const hits = sources(SRC)
       .filter((file) => file !== self && !file.includes("zz-harness"))

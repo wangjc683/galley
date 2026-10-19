@@ -2,10 +2,12 @@ import type { FaceActivity, FaceReaction } from "@/lib/assistant-face";
 
 /**
  * How the assistant's face moves (main chat PRD rulings 117, 119;
- * tickets 65, 66): every number in one place, each motion with the one
+ * tickets 65–67): every number in one place, each motion with the one
  * thing it says (foundations.md §2.7: motion conveys state, not
  * decoration; ruling 117 point 5 asks for that sentence per motion).
- * When the trial ends, these go into §2.7 as the avatar's exemption.
+ * The rules they keep are §2.7's exemption for the assistant's face;
+ * the sizes are final at 1× (ruling 119 point 7: JC compared 1, 1.5 and
+ * 2 times on the real machine, 「1x 比较合适」).
  *
  * Ticket 66 made it big enough to read without staring (ruling 119:
  * 「绝大部分都动效幅度太小，不盯着看看不太出来」): the body moves 6–8px
@@ -177,9 +179,8 @@ export function samePose(a: FacePose, b: FacePose): boolean {
 
 /**
  * The fields that are a size in space — a distance, an angle, a scale's
- * departure from 1 — and so grow and shrink with the face's amplitude
- * (the trial's 1 / 1.5 / 2 times, and the quiet of a long stretch of
- * work). Not time, not how shut the eyes are (a blink is a blink), not
+ * departure from 1 — and so shrink with the quiet of a long stretch of
+ * work (`scalePose`, `scaleBeat`, `MOTION.quiet`). Not time, not how shut the eyes are (a blink is a blink), not
  * which shape the eyes or the mouth take, not the marks.
  */
 export const SPATIAL_FIELDS: readonly FaceField[] = [
@@ -220,7 +221,7 @@ export interface TrackKey {
 /** One motion: from where the face is to where it stays, each field
  * that moves on its own track. */
 export interface FaceBeat {
-  /** What it is, for the demo's label and the tests. */
+  /** What it is, for the tests. */
   name: string;
   /** Total length, ms (0: set at once). */
   duration: number;
@@ -330,8 +331,8 @@ export function beatTimes(
 
 /**
  * Every timing and size, with what it says. `[a, b]` is a range a beat
- * draws from each time it plays. Sizes are the 1× trial amplitude, on
- * the 72px avatar (57 units a pixel).
+ * draws from each time it plays. Sizes are final (1×, ruling 119 point
+ * 7), on the 72px avatar (57 units a pixel).
  */
 export const MOTION = {
   /** Moving from one activity's pose to the next: it turns to what it
@@ -679,9 +680,6 @@ export const MOTION = {
       t3: 10,
     },
   },
-
-  /** The demo: each state plays this long before the next. */
-  demoStepMs: 3000,
 } as const;
 
 // ---- Building beats --------------------------------------------------------

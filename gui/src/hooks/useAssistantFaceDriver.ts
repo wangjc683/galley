@@ -1,6 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { type RefObject, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { useSessionsAttention } from "@/hooks/useSessionsAttention";
 import { useSessionStatusView } from "@/hooks/useSessionStatusView";
@@ -29,7 +29,7 @@ import { useQueueStore } from "@/stores/queue";
 import { useSubtasksStore } from "@/stores/subtasks";
 import type { Session } from "@/types/session";
 
-/** How often 丙 checks whether it is time to doze. */
+/** How often it checks whether it is time to doze. */
 const DOZE_CHECK_MS = 20_000;
 /** After a round ends, how long to wait before calling it done: the
  * question or the error that may have ended it lands just after. */
@@ -41,10 +41,6 @@ export interface FaceDriverOptions {
   subtasks: Session[];
   /** The main chat itself is the open conversation. */
   open: boolean;
-  /** 丙: alive at rest, dozing. */
-  alive: boolean;
-  /** The demo drives the face; the real state is not followed. */
-  demo: boolean;
   clock?: FaceClock;
   random?: () => number;
 }
@@ -56,8 +52,6 @@ interface Live {
   /** Your last touch: any key or click in the window. */
   lastTouch: number;
   open: boolean;
-  alive: boolean;
-  demo: boolean;
   focused: boolean;
   /** This round was stopped / sent a subtask off. */
   stopped: boolean;
@@ -85,20 +79,19 @@ interface Live {
  *                                   main chat's queue, its `isStopping`
  *   you type in its composer        its draft (lib/composer-draft.ts)
  *   a file dragged in               the window's native drag events
- *   the pointer on it               the card's and the header's hover
+ *   the pointer on it               the card's hover
  *                                   (`signalAssistantLook`)
  *
- * Returns the director, for the trial's demo.
+ * Alive at rest (丙, ruling 119 point 1): it blinks, looks about and
+ * dozes when nothing happens.
  */
 export function useAssistantFaceDriver({
   mainChat,
   subtasks,
   open,
-  alive,
-  demo,
   clock = REAL_CLOCK,
   random = Math.random,
-}: FaceDriverOptions): RefObject<FaceDirector | null> {
+}: FaceDriverOptions): void {
   const directorRef = useRef<FaceDirector | null>(null);
   const live = useRef<Live>({
     inputs: {
@@ -113,8 +106,6 @@ export function useAssistantFaceDriver({
     dozing: false,
     lastTouch: 0,
     open,
-    alive,
-    demo,
     focused: true,
     stopped: false,
     dispatched: false,
@@ -146,6 +137,7 @@ export function useAssistantFaceDriver({
       onBeat: (beat) => useAssistantFaceStore.getState().play(beat),
       onBob: (beat) => useAssistantFaceStore.getState().playBob(beat),
     });
+    director.setAlive(true);
     directorRef.current = director;
     live.current.lastTouch = clock.now();
     return () => {
@@ -158,11 +150,10 @@ export function useAssistantFaceDriver({
   const recompute = () => {
     const director = directorRef.current;
     const l = live.current;
-    if (!director || l.demo) return;
+    if (!director) return;
     director.setActivity(faceActivity({ ...l.inputs, dozing: l.dozing }));
   };
   const react = (reaction: FaceReaction) => {
-    if (live.current.demo) return;
     directorRef.current?.react(reaction);
   };
   /** You touched it: the doze clock restarts, and it wakes. */
@@ -191,7 +182,6 @@ export function useAssistantFaceDriver({
       l.dozing = false;
       l.lastTouch = clock.now();
     }
-    if (l.demo) return;
     recompute();
     if (asking && !before.asking) react("askEnter");
     else if (erroring && !before.erroring) react("errorEnter");
@@ -216,25 +206,6 @@ export function useAssistantFaceDriver({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asking, erroring, running, writing, tool, subtasksRunning, mainId]);
-
-  // 乙 / 丙.
-  useEffect(() => {
-    live.current.alive = alive;
-    directorRef.current?.setAlive(alive);
-    if (!alive && live.current.dozing) {
-      live.current.dozing = false;
-      recompute();
-    }
-  }, [alive]);
-
-  // The demo takes over; when it ends, back to the real state.
-  useEffect(() => {
-    live.current.demo = demo;
-    if (!demo) {
-      useAssistantFaceStore.getState().setDemoLabel(null);
-      recompute();
-    }
-  }, [demo]);
 
   // Switching to the main chat wakes it.
   useEffect(() => {
@@ -401,9 +372,8 @@ export function useAssistantFaceDriver({
     };
   }, [clock]);
 
-  // 丙: time to doze?
+  // Time to doze?
   useEffect(() => {
-    if (!alive) return;
     let handle: unknown = null;
     const check = () => {
       const l = live.current;
@@ -424,7 +394,5 @@ export function useAssistantFaceDriver({
     return () => {
       if (handle !== null) clock.clearTimeout(handle);
     };
-  }, [alive, clock]);
-
-  return directorRef;
+  }, [clock]);
 }

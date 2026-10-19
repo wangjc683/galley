@@ -76,13 +76,8 @@ function findParts(svg: SVGSVGElement): Parts {
 
 /** Hold a part at a pose between beats: its attribute, or the bare
  * markup when the pose is the drawing's. */
-function holdPart(
-  part: FacePart,
-  el: SVGElement,
-  pose: FacePose,
-  amp: number,
-): void {
-  const value = partValue(part, displayPose(pose, amp));
+function holdPart(part: FacePart, el: SVGElement, pose: FacePose): void {
+  const value = partValue(part, displayPose(pose));
   const { name } = partAttribute(part, value);
   if (value === REST_VALUE[part]) {
     const markup = MARKUP_REST[part];
@@ -105,11 +100,11 @@ function dropAnimations(el: SVGElement): void {
   }
 }
 
-function holdPose(parts: Parts, pose: FacePose, amp: number): void {
+function holdPose(parts: Parts, pose: FacePose): void {
   for (const part of FACE_PARTS) {
     const el = parts[part];
     if (!el) continue;
-    holdPart(part, el, pose, amp);
+    holdPart(part, el, pose);
     dropAnimations(el);
   }
 }
@@ -120,21 +115,16 @@ function holdPose(parts: Parts, pose: FacePose, amp: number): void {
  * each part is held at the last pose and its animation removed — back
  * to the bare markup when that pose is the drawing.
  */
-function playBeat(
-  svg: SVGSVGElement,
-  parts: Parts,
-  beat: FaceBeat,
-  amp: number,
-): void {
+function playBeat(svg: SVGSVGElement, parts: Parts, beat: FaceBeat): void {
   const started: SVGAnimationElement[] = [];
   for (const part of FACE_PARTS) {
     const el = parts[part];
     if (!el) continue;
-    holdPart(part, el, beat.from, amp);
+    holdPart(part, el, beat.from);
     dropAnimations(el);
-    const spec = beat.duration > 0 ? partAnimation(part, beat, amp) : null;
+    const spec = beat.duration > 0 ? partAnimation(part, beat) : null;
     if (!spec) {
-      holdPart(part, el, beat.end, amp);
+      holdPart(part, el, beat.end);
       continue;
     }
     const animation = document.createElementNS(SVG_NS, spec.element);
@@ -146,13 +136,13 @@ function playBeat(
   }
   // No SMIL (a test's DOM): set the end.
   if (started.some((a) => typeof a.beginElement !== "function")) {
-    holdPose(parts, beat.end, amp);
+    holdPose(parts, beat.end);
     return;
   }
   const settle = () => {
     // Only if this beat is still the one playing.
     if (!started[0]?.isConnected) return;
-    holdPose(parts, beat.end, amp);
+    holdPose(parts, beat.end);
   };
   started[0]?.addEventListener("endEvent", settle, { once: true });
   for (const a of started) a.beginElement();
@@ -163,14 +153,14 @@ function playBeat(
 
 /** Play a breath of the undercurrent on its group: `move`'s animation,
  * on the group under it. */
-function playBob(bob: SVGGElement, beat: FaceBeat, amp: number): void {
+function playBob(bob: SVGGElement, beat: FaceBeat): void {
   dropAnimations(bob);
   const hold = (pose: FacePose) => {
-    const value = partValue("move", displayPose(pose, amp));
+    const value = partValue("move", displayPose(pose));
     if (value === REST_VALUE.move) bob.removeAttribute("transform");
     else bob.setAttribute("transform", partAttribute("move", value).value);
   };
-  const spec = beat.duration > 0 ? partAnimation("move", beat, amp) : null;
+  const spec = beat.duration > 0 ? partAnimation("move", beat) : null;
   if (!spec) {
     hold(beat.end);
     return;
@@ -236,40 +226,28 @@ const MARK_PART: Record<MarkKind, FacePart> = {
  * paths bend; each eye opens about its own centre; the strips over the
  * mouth come down from its top and open it from its foot.
  *
- * `amplitude` sizes every move (the trial's 1, 1.5, 2 times);
- * `children` go between the ground and the figure (the avatar's ring:
+ * Its sizes are final at 1× (ruling 119 point 7). `children` go between the ground and the figure (the avatar's ring:
  * the figure passes over it when it leaves the circle).
  *
  * It tells the store whether it is on screen (the director starts
  * nothing while none is). Decoration: hidden from screen readers.
  */
-export function AssistantFace({
-  amplitude = 1,
-  children,
-}: {
-  amplitude?: number;
-  children?: ReactNode;
-}) {
+export function AssistantFace({ children }: { children?: ReactNode }) {
   const id = useId();
   const svgRef = useRef<SVGSVGElement>(null);
-  const ampRef = useRef(amplitude);
-
-  useEffect(() => {
-    ampRef.current = amplitude;
-  }, [amplitude]);
 
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return;
     const parts = findParts(svg);
     const bob = svg.querySelector<SVGGElement>(`[data-face="${BOB_PART}"]`);
-    holdPose(parts, useAssistantFaceStore.getState().pose, ampRef.current);
+    holdPose(parts, useAssistantFaceStore.getState().pose);
     return useAssistantFaceStore.subscribe((state, previous) => {
       if (state.seq !== previous.seq && state.beat) {
-        playBeat(svg, parts, state.beat, ampRef.current);
+        playBeat(svg, parts, state.beat);
       }
       if (bob && state.bobSeq !== previous.bobSeq && state.bob) {
-        playBob(bob, state.bob, ampRef.current);
+        playBob(bob, state.bob);
       }
     });
   }, []);
@@ -310,7 +288,6 @@ export function AssistantFace({
         <svg
           ref={svgRef}
           data-role="assistant-face"
-          data-amplitude={amplitude}
           viewBox={ICON.viewBox}
           xmlns={SVG_NS}
           overflow="visible"

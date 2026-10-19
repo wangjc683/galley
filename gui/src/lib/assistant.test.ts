@@ -278,7 +278,7 @@ describe("the card's second line: error > question > running > draft > last mess
   it("follows the dots in a woken round: the last message while it does not type", () => {
     for (const open of [true, false]) {
       // Between its words (a tool step, or before it writes): the last
-      // message, the draft left alone; the avatar still spins.
+      // message, the draft left alone; the face still at work.
       expect(line({ status: "running" }, { open, typing: false })).toEqual({
         kind: "message",
         prefix: null,

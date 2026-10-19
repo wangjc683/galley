@@ -8,8 +8,8 @@ import {
 } from "@/lib/assistant-face-motion";
 
 /**
- * The assistant's face, shared by every avatar that draws it (tickets 65,
- * 66; since ruling 119 point 6 that is the sidebar card's alone):
+ * The assistant's face, shared by every avatar that draws it (tickets
+ * 65–67; since ruling 119 point 6 that is the sidebar card's alone):
  * the beat to play now (`seq` counts beats, so the same beat twice still
  * plays twice) and the pose it ends on, which an avatar mounted later
  * takes at once; and the undercurrent's breath while it works (`bob`).
@@ -28,15 +28,12 @@ interface AssistantFaceState {
   bobSeq: number;
   /** Where the last beat ends. */
   pose: FacePose;
-  /** What the demo plays now, for the pill (the trial's). */
-  demoLabel: string | null;
   /** Avatars on screen, by their own id. */
   onScreen: Record<string, true>;
   /** The latest signal to the driver, and its count. */
   signal: { kind: FaceReaction; seq: number } | null;
   play: (beat: FaceBeat) => void;
   playBob: (beat: FaceBeat) => void;
-  setDemoLabel: (label: string | null) => void;
   setOnScreen: (id: string, on: boolean) => void;
   sendSignal: (kind: FaceReaction) => void;
 }
@@ -48,7 +45,6 @@ export const useAssistantFaceStore = create<AssistantFaceState>()(
     bob: null,
     bobSeq: 0,
     pose: NEUTRAL_POSE,
-    demoLabel: null,
     onScreen: {},
     signal: null,
     play: (beat) =>
@@ -58,9 +54,6 @@ export const useAssistantFaceStore = create<AssistantFaceState>()(
         pose: beat.end,
       })),
     playBob: (bob) => set((s) => ({ bob, bobSeq: s.bobSeq + 1 })),
-    setDemoLabel: (demoLabel) => {
-      if (get().demoLabel !== demoLabel) set({ demoLabel });
-    },
     setOnScreen: (id, on) => {
       const current = get().onScreen;
       if ((current[id] === true) === on) return;
