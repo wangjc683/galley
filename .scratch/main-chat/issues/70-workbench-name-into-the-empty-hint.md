@@ -1,6 +1,6 @@
 # 70 工作台不挂区名：有对话时只留线，名字挪进空状态那句提示
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-10-20 合入 `c0799813`、`e91a55db`、`99e0a775`；主会话复跑门禁：typecheck、lint、`git diff --check`、文档链接门禁、`TZ=UTC` 与 `TZ=America/Los_Angeles` 各 178 个文件 1946 条测试全过，新增行没有本机路径，`gui/src` 里 `SidebarWorkbenchLabel`、`zoneWorkbench` 只剩遗留清单；看过有对话与新用户的浅深截图。等 JC 真机看一眼）
 
 来源：主聊天 PRD 裁决 121（2026-10-20，JC：「按你推荐推进」）。依赖 69（已合入）。改 GUI 与文档；Core、runner、CLI 不动。
 
