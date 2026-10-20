@@ -1,9 +1,11 @@
 """Managed GenericAgent parser compatibility tests."""
 from __future__ import annotations
 
+import base64
 import importlib
 import json
 import os
+import platform
 import sys
 import types
 from pathlib import Path
@@ -634,3 +636,405 @@ def test_managed_mykey_loader_serves_env_config_and_never_reloads(
     _, again = store.snapshot()
     assert again == first
     assert llmcore.reload_mykeys()[1] is False
+
+
+# --- Patch 0007, Sign in with ChatGPT route (`chatgpt_plan`) -----------------
+#
+# Driven through `_openai_stream`, so the session flag, the headers, the
+# request body, `_stream_with_retry` and the plan parser run as the engine runs
+# them; only `requests` and the clock are fakes.
+
+
+class _FakeHTTPResponse:
+    def __init__(
+        self, status_code: int, body: Any = None, lines: tuple[str, ...] = ()
+    ) -> None:
+        self.status_code = status_code
+        self.headers: dict[str, str] = {}
+        self.text = body if isinstance(body, str) else json.dumps(body)
+        self._lines = list(lines)
+
+    def __enter__(self) -> _FakeHTTPResponse:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def iter_lines(self, *_args: object, **_kwargs: object) -> Any:
+        return iter(self._lines)
+
+
+class _FakeNetwork:
+    """Serves the queued responses in order (the last one repeats), each
+    POST a fresh object as with real `requests` (`_stream_with_retry` rebinds
+    `iter_lines` on the response it gets), and records every POST and every
+    WHAM GET."""
+
+    def __init__(self, *responses: _FakeHTTPResponse) -> None:
+        self.responses = list(responses)
+        self.posts: list[dict[str, Any]] = []
+        self.gets: list[str] = []
+
+    def post(self, url: str, headers: Any = None, json: Any = None, **_kw: Any) -> Any:
+        self.posts.append({"url": url, "headers": dict(headers or {}), "payload": json})
+        r = self.responses.pop(0) if len(self.responses) > 1 else self.responses[0]
+        return _FakeHTTPResponse(r.status_code, r.text, tuple(r._lines))
+
+    def get(self, url: str, *_args: Any, **_kwargs: Any) -> Any:
+        self.gets.append(url)
+        return _FakeHTTPResponse(500, "")
+
+
+def _install_network(
+    monkeypatch: pytest.MonkeyPatch, *responses: _FakeHTTPResponse
+) -> _FakeNetwork:
+    net = _FakeNetwork(*responses)
+    req = llmcore.requests
+    monkeypatch.setattr(req, "post", net.post, raising=False)
+    monkeypatch.setattr(req, "get", net.get, raising=False)
+    # The runner venv has no `requests`; this module imports llmcore against a
+    # bare stub, so give it the exception types `_stream_with_retry` catches.
+    if not hasattr(req, "ConnectionError"):
+        monkeypatch.setattr(
+            req, "ConnectionError", type("ConnectionError", (OSError,), {}), raising=False
+        )
+    if not hasattr(req, "Timeout"):
+        monkeypatch.setattr(req, "Timeout", type("Timeout", (OSError,), {}), raising=False)
+    if not hasattr(req, "exceptions"):
+        chunked = type("ChunkedEncodingError", (Exception,), {})
+        monkeypatch.setattr(
+            req, "exceptions", types.SimpleNamespace(ChunkedEncodingError=chunked), raising=False
+        )
+    # Backoff sleeps run on a fake clock.
+    clock = [1_700_000_000.0]
+    monkeypatch.setattr(llmcore.time, "time", lambda: clock[0])
+    monkeypatch.setattr(
+        llmcore.time, "sleep", lambda s: clock.__setitem__(0, clock[0] + s)
+    )
+    return net
+
+
+def _jwt_with_account(account_id: str) -> str:
+    claims = {"https://api.openai.com/auth": {"chatgpt_account_id": account_id}}
+    body = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
+    return f"e30.{body}.sig"
+
+
+def _codex_session(chatgpt_plan: bool, *, codex_backend: bool = True) -> Any:
+    cfg: dict[str, Any] = {
+        "name": "chatgpt-test",
+        "apikey": _jwt_with_account("acct-123"),
+        "apibase": "https://api.openai.com/v1",
+        "model": "gpt-5.6-sol",
+        "api_mode": "responses",
+        "max_tokens": 4096,
+        "max_retries": 2,
+    }
+    if codex_backend:
+        cfg["codex_backend"] = True
+    if chatgpt_plan:
+        cfg["chatgpt_plan"] = True
+    return llmcore.LLMSession(cfg)
+
+
+def _run(sess: Any) -> tuple[list[str], Any]:
+    return _collect(llmcore._openai_stream(sess, [{"role": "user", "content": "hi"}]))
+
+
+_OK_STREAM = _FakeHTTPResponse(
+    200,
+    lines=tuple(
+        _sse(
+            {"type": "response.output_text.delta", "delta": "ok"},
+            {"type": "response.completed", "response": {"usage": {}}},
+        )
+    ),
+)
+
+
+def test_chatgpt_plan_sends_galley_headers_and_codex_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    net = _install_network(monkeypatch, _OK_STREAM)
+    sess = _codex_session(chatgpt_plan=True)
+
+    chunks, blocks = _run(sess)
+
+    assert chunks == ["ok"]
+    assert blocks == [{"type": "text", "text": "ok"}]
+    [call] = net.posts
+    assert call["url"] == "https://api.openai.com/v1/responses"
+    headers = call["headers"]
+    assert headers["User-Agent"] == f"Galley ({platform.system()}; {platform.machine()})"
+    assert "originator" not in headers
+    # Not even when the token carries an account claim.
+    assert "ChatGPT-Account-ID" not in headers
+    assert headers["Authorization"] == f"Bearer {sess.api_key}"
+    payload = call["payload"]
+    assert payload["store"] is False
+    assert payload["stream"] is True
+    assert "max_output_tokens" not in payload
+    assert payload["prompt_cache_key"]
+    assert payload["include"] == ["reasoning.encrypted_content"]
+
+
+def test_codex_cli_route_headers_are_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    net = _install_network(monkeypatch, _OK_STREAM)
+
+    _run(_codex_session(chatgpt_plan=False))
+
+    headers = net.posts[0]["headers"]
+    assert headers["User-Agent"] == "codex_cli_rs/0.0.0 (Galley)"
+    assert headers["originator"] == "codex_cli_rs"
+    assert headers["ChatGPT-Account-ID"] == "acct-123"
+    assert net.posts[0]["payload"]["store"] is False
+
+
+def test_chatgpt_plan_needs_the_codex_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    net = _install_network(monkeypatch, _OK_STREAM)
+    sess = _codex_session(chatgpt_plan=True, codex_backend=False)
+
+    _run(sess)
+
+    assert sess.chatgpt_plan is False
+    headers = net.posts[0]["headers"]
+    assert headers["User-Agent"] == sess.user_agent
+    assert headers["originator"] == "codex_exec"
+
+
+# (error.code, HTTP status, retried, text the message must carry)
+_PLAN_ERROR_ROWS = [
+    (
+        "subscription_sharing_usage_limit_exceeded",
+        429,
+        False,
+        ["usage limit", "limit you set for Galley", "https://chatgpt.com/settings/usage"],
+    ),
+    ("subscription_sharing_user_not_eligible", 403, False, ["API key provider"]),
+    (
+        "subscription_sharing_unsupported_capability",
+        400,
+        False,
+        ["does not support this request", "param: tools"],
+    ),
+    ("subscription_sharing_route_not_supported", 400, False, ["request rejected"]),
+    ("subscription_sharing_invalid_user", 401, False, ["request rejected"]),
+    ("chatpass_v2_scope_not_authorized", 403, False, ["request rejected"]),
+    ("chatpass_v2_invalid_authorization_context", 401, False, ["request rejected"]),
+    ("subscription_sharing_usage_unavailable", 503, True, ["temporarily unavailable"]),
+    ("subscription_sharing_user_unavailable", 503, True, ["temporarily unavailable"]),
+]
+
+
+# These two explain themselves; every other row carries the server's message.
+_FIXED_COPY_CODES = {
+    "subscription_sharing_usage_limit_exceeded",
+    "subscription_sharing_user_not_eligible",
+}
+
+
+def _plan_error(code: str) -> dict[str, Any]:
+    return {"code": code, "param": "tools", "message": "server says"}
+
+
+def _assert_plan_message(message: str, code: str, texts: list[str]) -> None:
+    assert code in message
+    for text in texts:
+        assert text in message
+    assert ("server says" in message) is (code not in _FIXED_COPY_CODES)
+
+
+@pytest.mark.parametrize(("code", "status", "retried", "texts"), _PLAN_ERROR_ROWS)
+def test_chatgpt_plan_http_error_is_classified_by_code(
+    monkeypatch: pytest.MonkeyPatch,
+    code: str,
+    status: int,
+    retried: bool,
+    texts: list[str],
+) -> None:
+    net = _install_network(monkeypatch, _FakeHTTPResponse(status, {"error": _plan_error(code)}))
+
+    chunks, blocks = _run(_codex_session(chatgpt_plan=True))
+
+    # max_retries=2: a retried code is sent three times, a terminal one once.
+    assert len(net.posts) == (3 if retried else 1)
+    [message] = chunks
+    assert message.startswith(f"!!!Error: HTTP {status}: ")
+    _assert_plan_message(message, code, texts)
+    assert blocks == [{"type": "text", "text": message}]
+    assert net.gets == []
+
+
+@pytest.mark.parametrize(("code", "status", "retried", "texts"), _PLAN_ERROR_ROWS)
+def test_chatgpt_plan_response_failed_is_classified_by_code(
+    monkeypatch: pytest.MonkeyPatch,
+    code: str,
+    status: int,
+    retried: bool,
+    texts: list[str],
+) -> None:
+    del status  # the stream itself is HTTP 200
+    failed = _FakeHTTPResponse(
+        200,
+        lines=tuple(
+            _sse(
+                {
+                    "type": "response.failed",
+                    "response": {"error": _plan_error(code), "usage": {"input_tokens": 9}},
+                }
+            )
+        ),
+    )
+    net = _install_network(monkeypatch, failed)
+
+    chunks, blocks = _run(_codex_session(chatgpt_plan=True))
+
+    assert len(net.posts) == (3 if retried else 1)
+    [message] = chunks
+    if retried:
+        # GA's own network backoff gave up; the message is the plan's.
+        assert message.startswith("!!!Error: ConnectionError: ")
+    else:
+        assert message.startswith("!!!Error: ")
+        assert "ConnectionError" not in message
+    _assert_plan_message(message, code, texts)
+    assert blocks == [{"type": "text", "text": message}]
+
+
+def test_chatgpt_plan_usage_limit_is_not_retried_even_if_it_reads_like_a_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GA's overload heuristic retries any in-stream error that mentions a rate
+    limit; a terminal plan code must end the call first."""
+    err = {
+        "code": "subscription_sharing_usage_limit_exceeded",
+        "message": "Rate limit reached, retry later",
+    }
+    failed = _FakeHTTPResponse(
+        200,
+        lines=tuple(
+            _sse(
+                {"type": "response.output_text.delta", "delta": "partial "},
+                {"type": "response.failed", "response": {"error": err}},
+            )
+        ),
+    )
+    net = _install_network(monkeypatch, failed)
+
+    chunks, blocks = _run(_codex_session(chatgpt_plan=True))
+
+    assert len(net.posts) == 1
+    assert chunks[0] == "partial "
+    assert chunks[1].startswith("!!!Error: ChatGPT plan usage limit reached")
+    # Same block shape as GA's own response.failed handling.
+    assert blocks == [{"type": "text", "text": "partial " + chunks[1]}]
+
+
+def test_chatgpt_plan_error_event_is_classified_by_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream = _FakeHTTPResponse(
+        200,
+        lines=tuple(
+            _sse(
+                {
+                    "type": "error",
+                    "code": "subscription_sharing_user_not_eligible",
+                    "message": "not eligible",
+                }
+            )
+        ),
+    )
+    net = _install_network(monkeypatch, stream)
+
+    chunks, _ = _run(_codex_session(chatgpt_plan=True))
+
+    assert len(net.posts) == 1
+    assert chunks == [
+        "!!!Error: This ChatGPT account cannot use its plan in Galley "
+        "(subscription_sharing_user_not_eligible); use an API key provider instead"
+    ]
+
+
+def test_chatgpt_plan_unavailable_then_recovers(monkeypatch: pytest.MonkeyPatch) -> None:
+    unavailable = _FakeHTTPResponse(
+        503, {"error": _plan_error("subscription_sharing_usage_unavailable")}
+    )
+    net = _install_network(monkeypatch, unavailable, _OK_STREAM)
+
+    chunks, _ = _run(_codex_session(chatgpt_plan=True))
+
+    assert len(net.posts) == 2
+    assert chunks == ["ok"]
+
+
+def test_chatgpt_plan_detail_shaped_error_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    body = {"detail": {"code": "subscription_sharing_user_not_eligible", "message": "nope"}}
+    net = _install_network(monkeypatch, _FakeHTTPResponse(403, body))
+
+    chunks, _ = _run(_codex_session(chatgpt_plan=True))
+
+    assert len(net.posts) == 1
+    assert chunks[0].startswith("!!!Error: HTTP 403: This ChatGPT account cannot use its plan")
+
+
+def test_chatgpt_plan_codeless_errors_keep_ga_handling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A bare {"detail": "..."} has no code: GA's message, GA's retry rules."""
+    net = _install_network(monkeypatch, _FakeHTTPResponse(401, {"detail": "Unauthorized"}))
+
+    chunks, _ = _run(_codex_session(chatgpt_plan=True))
+
+    assert len(net.posts) == 1
+    assert chunks == ['!!!Error: HTTP 401: {"detail": "Unauthorized"}']
+
+
+def test_chatgpt_plan_unknown_429_keeps_ga_retry_and_skips_wham(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = {"error": {"code": "rate_limit_exceeded", "message": "slow down"}}
+    net = _install_network(monkeypatch, _FakeHTTPResponse(429, body))
+
+    chunks, _ = _run(_codex_session(chatgpt_plan=True))
+
+    assert len(net.posts) == 3
+    assert chunks == [f"!!!Error: HTTP 429: {json.dumps(body)}"]
+    assert net.gets == []
+
+
+def test_chatgpt_plan_unknown_failed_code_keeps_ga_parser(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failed = _FakeHTTPResponse(
+        200,
+        lines=tuple(
+            _sse(
+                {
+                    "type": "response.failed",
+                    "response": {"error": {"code": "server_error", "message": "boom"}},
+                }
+            )
+        ),
+    )
+    net = _install_network(monkeypatch, failed)
+
+    chunks, _ = _run(_codex_session(chatgpt_plan=True))
+
+    assert len(net.posts) == 1
+    assert chunks == ["!!!Error: boom"]
+
+
+def test_codex_cli_route_usage_limit_code_keeps_ga_retry_and_wham(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without `chatgpt_plan` the plan codes mean nothing: 429 retries and the
+    final failure still asks WHAM, as before."""
+    body = {"error": _plan_error("subscription_sharing_usage_limit_exceeded")}
+    net = _install_network(monkeypatch, _FakeHTTPResponse(429, body))
+
+    chunks, _ = _run(_codex_session(chatgpt_plan=False))
+
+    assert len(net.posts) == 3
+    assert net.gets == ["https://chatgpt.com/backend-api/wham/usage"]
+    assert chunks == [f"!!!Error: HTTP 429: {json.dumps(body)}"]

@@ -1,4 +1,4 @@
-import os, json, re, time, requests, sys, threading, urllib3, base64, importlib, uuid, pathlib, copy, socket
+import os, json, re, time, requests, sys, threading, urllib3, base64, importlib, uuid, pathlib, copy, socket, platform
 from datetime import datetime, timezone
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 _INFLIGHT = {}  # thread ident -> live socket; lets abort() close it even before response headers arrive
@@ -552,6 +552,9 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
                 sess.active_response = r
                 if r.status_code >= 400:
                     #pathlib.Path(__file__).parent.joinpath('temp','bad_requests.json').write_text(json.dumps({"url":url,"headers":headers,"payload":payload,"t":time.time()},ensure_ascii=False),encoding='utf-8')
+                    plan_err = _chatgpt_plan_http_error(sess, r)  # Galley: (retryable, message) for a known ChatGPT plan error.code
+                    if plan_err and not plan_err[0]:  # terminal plan errors never retry (GA retries 429)
+                        err = f"!!!Error: HTTP {r.status_code}: {plan_err[1]}"; yield err; return [{"type": "text", "text": err}]
                     d = _delay(r, attempt) if r.status_code in _RETRYABLE and attempt < sess.max_retries else None
                     if d is not None:
                         print(f"[LLM Retry] HTTP {r.status_code}, retry in {d:.1f}s ({attempt+1}/{sess.max_retries+1})")
@@ -559,6 +562,7 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
                         continue
                     try: body = r.text.strip()[:500]
                     except: body = ""
+                    if plan_err: body = plan_err[1]
                     if r.status_code == 429 and getattr(sess, 'codex_backend', False):
                         body = _codex_enrich_quota_error(sess, headers, body)
                     err = f"!!!Error: HTTP {r.status_code}" + (f" (retry-after {(r.headers or {}).get('retry-after')}s > {cap:.0f}s cap)" if d is None and r.status_code in _RETRYABLE and attempt < sess.max_retries else "") + (f": {body}" if body else "")
@@ -610,6 +614,7 @@ def _codex_account_id_from_jwt(access_token):
 _CODEX_WHAM_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage"
 
 def _codex_enrich_quota_error(sess, headers, body):
+    if getattr(sess, 'chatgpt_plan', False): return body  # WHAM is a chatgpt.com endpoint; the plan route never calls it
     hint = _codex_fetch_usage_limit_message(sess, headers)
     if not hint: return body
     if body and hint not in body: return f"{body}\n{hint}"
@@ -748,6 +753,84 @@ def _galley_codex_access_token(sess):
     except Exception as e:
         raise RuntimeError(f"Galley Codex credential refresh failed: {e}") from e
 
+# Galley: Sign in with ChatGPT ("chatgpt_plan", set by Core on a codex_backend model).
+# Same Codex-shaped Responses request, sent to api.openai.com as Galley itself: its own
+# User-Agent, no Codex CLI originator, no ChatGPT-Account-ID, no WHAM lookup. Plan
+# errors carry error.code, before the stream (HTTP body) or in it (response.failed /
+# error events); terminal codes end the call without a retry, the two *_unavailable
+# codes go through GA's normal backoff. Messages name the code for later localization.
+_CHATGPT_PLAN_USAGE_URL = "https://chatgpt.com/settings/usage"
+_CHATGPT_PLAN_RETRYABLE = {"subscription_sharing_usage_unavailable", "subscription_sharing_user_unavailable"}
+_CHATGPT_PLAN_TERMINAL = {"subscription_sharing_usage_limit_exceeded", "subscription_sharing_user_not_eligible",
+                          "subscription_sharing_unsupported_capability", "subscription_sharing_route_not_supported",
+                          "subscription_sharing_invalid_user", "chatpass_v2_scope_not_authorized",
+                          "chatpass_v2_invalid_authorization_context"}
+
+def _chatgpt_plan_user_agent():
+    return f"Galley ({platform.system()}; {platform.machine()})"
+
+def _chatgpt_plan_error(err):
+    """(retryable, message) for a plan error object with a known error.code, else None."""
+    code = err.get("code") if isinstance(err, dict) else None
+    if not isinstance(code, str) or code not in (_CHATGPT_PLAN_RETRYABLE | _CHATGPT_PLAN_TERMINAL): return None
+    detail = str(err.get("message") or "").strip()
+    if code == "subscription_sharing_usage_limit_exceeded":
+        text = f"ChatGPT plan usage limit reached ({code}): this is your plan's limit or the limit you set for Galley; manage usage at {_CHATGPT_PLAN_USAGE_URL}"
+    elif code == "subscription_sharing_user_not_eligible":
+        text = f"This ChatGPT account cannot use its plan in Galley ({code}); use an API key provider instead"
+    elif code == "subscription_sharing_unsupported_capability":
+        text = f"ChatGPT plan does not support this request ({code}, param: {err.get('param')})" + (f": {detail}" if detail else "")
+    elif code in _CHATGPT_PLAN_RETRYABLE:
+        text = f"ChatGPT plan temporarily unavailable ({code})" + (f": {detail}" if detail else "")
+    else:
+        text = f"ChatGPT plan request rejected ({code})" + (f": {detail}" if detail else "")
+    return code in _CHATGPT_PLAN_RETRYABLE, text
+
+def _chatgpt_plan_http_error(sess, r):
+    """Plan error in an HTTP error body: {"error": {...}} or {"detail": {...}}; a bare {"detail": "..."} has no code."""
+    if not getattr(sess, 'chatgpt_plan', False): return None
+    try: data = json.loads(r.text)
+    except Exception: return None
+    if not isinstance(data, dict): return None
+    return _chatgpt_plan_error(data.get("error") if isinstance(data.get("error"), dict) else data.get("detail"))
+
+def _chatgpt_plan_sse_error(line):
+    """(usage, (retryable, message)) for a response.failed / error SSE event carrying a known plan code."""
+    line = line.decode('utf-8', errors='replace') if isinstance(line, bytes) else line
+    if not line or not line.startswith("data:"): return None
+    try: evt = json.loads(line[5:].lstrip())
+    except Exception: return None
+    if not isinstance(evt, dict): return None
+    if evt.get("type") == "response.failed":
+        resp = evt.get("response") if isinstance(evt.get("response"), dict) else {}
+        err, usage = resp.get("error"), resp.get("usage")
+    elif evt.get("type") == "error":
+        err, usage = (evt["error"] if isinstance(evt.get("error"), dict) else evt), None
+    else: return None
+    found = _chatgpt_plan_error(err)
+    return (usage or {}, found) if found else None
+
+def _chatgpt_plan_parse_sse(resp_lines, api_mode):
+    """_parse_openai_sse, except that a plan error event ends the stream by its code: a retryable
+    one raises ConnectionError into _stream_with_retry's backoff, a terminal one becomes the
+    !!!Error text without passing the overload heuristic (which would retry it)."""
+    found = []
+    def lines():
+        for line in resp_lines:
+            hit = _chatgpt_plan_sse_error(line)
+            if hit: found.append(hit); return
+            yield line
+    blocks = yield from _parse_openai_sse(lines(), api_mode)
+    if not found: return blocks
+    usage, (retryable, text) = found[0]
+    _record_usage(usage, api_mode)
+    if retryable: raise requests.ConnectionError(text)
+    err = f"!!!Error: {text}"; yield err
+    tb = next((b for b in blocks if b.get("type") == "text"), None)
+    if tb: tb["text"] += err
+    else: blocks.insert(sum(1 for b in blocks if b.get("type") == "thinking"), {"type": "text", "text": err})
+    return blocks
+
 def _openai_stream(sess, messages):
     model, api_mode = sess.model, sess.api_mode
     ml = model.lower()
@@ -759,7 +842,9 @@ def _openai_stream(sess, messages):
     if getattr(sess, 'codex_backend', False):
         api_key, account_id = _galley_codex_access_token(sess)
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "Accept": "text/event-stream", 'originator': 'codex_exec'}
-    if getattr(sess, 'codex_backend', False):
+    if getattr(sess, 'chatgpt_plan', False):
+        headers.pop('originator', None); headers["User-Agent"] = _chatgpt_plan_user_agent()
+    elif getattr(sess, 'codex_backend', False):
         headers.update({"User-Agent": "codex_cli_rs/0.0.0 (Galley)", "originator": "codex_cli_rs"})
         account_id = account_id or _codex_account_id_from_jwt(api_key)
         if account_id: headers["ChatGPT-Account-ID"] = account_id
@@ -787,6 +872,7 @@ def _openai_stream(sess, messages):
     if tools: payload["tools"] = _prepare_oai_tools(tools, api_mode)
     if sess.service_tier: payload["service_tier"] = sess.service_tier
     parse_fn = (lambda r: _parse_openai_sse(r.iter_lines(), api_mode)) if sess.stream else (lambda r: _parse_openai_json(r.json(), api_mode))
+    if getattr(sess, 'chatgpt_plan', False): parse_fn = lambda r: _chatgpt_plan_parse_sse(r.iter_lines(), api_mode)
     return (yield from _stream_with_retry(sess, url, headers, payload, parse_fn))
 
 def _prepare_oai_tools(tools, api_mode="chat_completions"):
@@ -888,6 +974,7 @@ class BaseSession:
         self.api_base = cfg['apibase'].rstrip('/')
         self.model = cfg.get('model', '')
         self.codex_backend = bool(cfg.get('codex_backend'))
+        self.chatgpt_plan = self.codex_backend and bool(cfg.get('chatgpt_plan'))
         self.galley_api_key_ref = cfg.get('galley_api_key_ref') or ''
         ipc = cfg.get('galley_credential_ipc')
         self.galley_credential_ipc = ipc if isinstance(ipc, dict) else None

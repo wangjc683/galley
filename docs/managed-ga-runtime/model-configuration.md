@@ -226,6 +226,19 @@ windows report a reset, show the latest reset among exhausted windows; if WHAM
 is unavailable or malformed, fall back to the original quota/rate-limit error.
 Never let the WHAM probe block or replace the original Codex failure path.
 
+Sign in with ChatGPT (`.scratch/chatgpt-siwc/PRD.md`) shares the
+`chatgpt_codex_oauth` auth kind during development. Core marks those models
+with `chatgptPlan: true` in the runner model JSON; the runner turns that, and
+nothing else, into the engine's `chatgpt_plan` key. Patch `0007` then keeps the
+Codex request body against `https://api.openai.com/v1` but sends Galley's own
+`User-Agent` (`Galley (<system>; <machine>)`) without `originator` or
+`ChatGPT-Account-ID`, never queries WHAM, and handles plan errors by
+`error.code`: terminal codes (usage limit, not eligible, unsupported
+capability, and the other rejections) fail at once with an English message
+that names the code, and the two `*_unavailable` codes use GA's normal
+backoff. The ledger row for `0007` in `managed-ga/patches/manifest.md` lists
+the codes.
+
 Do not expose non-native text-protocol sessions, mixin failover, IM bot config,
 Langfuse, or arbitrary GA template fields in first-run onboarding. Those can
 become advanced Settings later if there is real demand.
