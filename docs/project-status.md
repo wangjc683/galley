@@ -701,7 +701,8 @@ below): browser control's new-user walkthrough and the Windows smoke of the
 resident bridge (`.scratch/browser-control-ux/PRD.md`, moved out of the
 2026-10-19 dogfood walk). Sign in with ChatGPT on Windows: the loopback
 sign-in listener (watch for a firewall prompt) and the credential pipe,
-renamed `galley-codex-*` → `galley-credential-*`, which no Mac build compiles.
+renamed `galley-codex-*` → `galley-credential-*` (CI's Windows job compiles
+and tests it, green on `98dec86c`; the runtime smoke is what's owed).
 
 - **Sign in with ChatGPT replaces the Codex CLI login** (2026-10-20,
   `.scratch/chatgpt-siwc/PRD.md`, devlog
