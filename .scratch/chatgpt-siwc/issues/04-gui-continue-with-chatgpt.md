@@ -1,6 +1,6 @@
 # 04 · GUI：用 ChatGPT 登录
 
-Status: needs-dogfood
+Status: done
 
 来源：[PRD](../PRD.md) 裁决 1、5、6；Core 接口来自票 02（`core/src/chatgpt_siwc/`，前端绑定已在 `gui/src/lib/managed-models.ts`）。OpenAI 的界面要求见 <https://developers.openai.com/siwc/ui-ux-guidelines>。
 
@@ -107,3 +107,5 @@ Status: needs-dogfood
   - 2 右端：违反 887–889 行「左边放进什么、谁来回答，右边只剩怎么发」；
   - 3 徽标：避开了 1047 行否掉的灰底等宽大写，但这一行里仍然多了一个框。
 - 2026-10-20 真机：第 5 步「断开后重新登录」通过（JC）。三档标识定为第 1 档（裁决 13），菜单改法见裁决 14，由 05b 收尾。还差：取消授权、退出登录两步，和 05b 合入后的菜单 / 标志复看。
+
+- 2026-10-20 真机（第二批合入后）：模型菜单的标志与底部一行、两份同名 gpt-6.1-sol 只在悬停时显示服务商、编辑 ChatGPT 服务商只剩登录与退出、取消授权、退出登录都没问题（JC）。
