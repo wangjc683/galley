@@ -18,13 +18,16 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { ChatGptMark } from "@/components/conversation/ChatGptPlanMark";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
 import { ShortcutGlyphs } from "@/components/ui/shortcut-glyphs";
+import { useChatGptPlanModelIds } from "@/hooks/useChatGptPlanModelIds";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { snippetQuoteSegments } from "@/lib/composer-quote";
 import type { MessageSearchHit } from "@/lib/db";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { isImeCompositionKeydown } from "@/lib/ime";
+import { isChatGptPlanOption, providerLabelAlwaysShown } from "@/lib/llm-menu";
 import {
   dropsScope,
   paletteSearch,
@@ -48,6 +51,8 @@ export interface LLMOption {
   key?: string;
   name?: string;
   displayName: string;
+  /** Managed runtime only (the external GA's list has none). */
+  providerDisplayName?: string;
   isCurrent: boolean;
 }
 
@@ -136,6 +141,11 @@ export function CommandPalette(props: CommandPaletteProps) {
   // tells 「没找到」 from a query still out.
   const [hitsFor, setHitsFor] = useState<string | null>(null);
   const scope = props.scope ?? null;
+  // The models that spend the ChatGPT plan, for 切换模型's marks (SIWC
+  // decision 18). Read here, not in the page, so the page takes them as
+  // a prop and its tests need no stores — the composer hands them to its
+  // model menu the same way. Empty on the external runtime.
+  const chatGptPlanKeys = useChatGptPlanModelIds();
 
   // Reset internal state every time the palette opens — feels less
   // surprising than persisting across opens (DESIGN.md §8: no recent-
@@ -336,6 +346,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         ) : (
           <SwitchLLMPage
             llms={props.llms ?? []}
+            chatGptPlanKeys={chatGptPlanKeys}
             onPick={(index) => {
               props.onSwitchLLM?.(index);
               close();
@@ -702,16 +713,46 @@ export function ScopedResults({
 
 // ---------------- Switch LLM page ----------------
 
-function SwitchLLMPage({
+/**
+ * The ChatGPT mark in a 切换模型 row, in the Cube's place (SIWC
+ * decision 18): 14px in ink-muted, centred in the 16px the other rows'
+ * thin line icons take, so every name starts on one line. A solid mark
+ * at their 16px and ink-soft reads heavier than they do. Size and ink
+ * are JC's to tune on the real app.
+ */
+const PLAN_MARK_CLASS = "size-[14px] text-ink-muted";
+
+function PalettePlanMark() {
+  return (
+    <span className="inline-flex size-4 items-center justify-center">
+      <ChatGptMark className={PLAN_MARK_CLASS} />
+    </span>
+  );
+}
+
+/**
+ * The page ⌘K's 切换模型 opens: back, then the model list. Exported for
+ * its tests: a static render of the palette never leaves the root page.
+ *
+ * The model menu's rules (LLMPill's `LLMMenu`; SIWC decision 18): a
+ * model that spends the ChatGPT plan has the ChatGPT mark before its
+ * name, and rows whose names match and the mark can't tell apart keep
+ * their provider name shown (`providerLabelAlwaysShown`). The menu's
+ * other half, the name surfacing on hover, has no ⌘K counterpart.
+ */
+export function SwitchLLMPage({
   llms,
+  chatGptPlanKeys,
   onPick,
   onBack,
 }: {
   llms: LLMOption[];
+  chatGptPlanKeys?: ReadonlySet<string>;
   onPick: (index: number) => void;
   onBack: () => void;
 }) {
   const copy = useCopy();
+  const labelAlwaysShown = providerLabelAlwaysShown(llms, chatGptPlanKeys);
   return (
     <>
       <Command.Item value="back" onSelect={onBack}>
@@ -721,15 +762,29 @@ function SwitchLLMPage({
           sub={copy.command.mainMenu}
         />
       </Command.Item>
-      {llms.map((llm) => (
+      {llms.map((llm, position) => (
         <Command.Item
           key={llm.index}
-          value={`llm ${llm.displayName}`}
+          // One value per row: cmdk keys its selection by value, so two
+          // models with one display name lit up together, ↓ stopped at
+          // the first and Enter always picked it (cmdk 1.1.1, checked
+          // in jsdom). The index tells them apart.
+          value={`llm ${llm.index} ${llm.displayName}`}
           onSelect={() => onPick(llm.index)}
         >
           <PaletteRow
             Icon={Cube}
+            iconNode={
+              isChatGptPlanOption(chatGptPlanKeys, llm) ? (
+                <PalettePlanMark />
+              ) : undefined
+            }
             label={llm.displayName}
+            aside={
+              labelAlwaysShown[position]
+                ? llm.providerDisplayName?.trim() || undefined
+                : undefined
+            }
             checked={llm.isCurrent}
           />
         </Command.Item>
@@ -878,6 +933,7 @@ function PaletteRow({
   label,
   preview,
   sub,
+  aside,
   shortcut,
   checked,
   query,
@@ -894,6 +950,10 @@ function PaletteRow({
   /** Short right-aligned annotation ("当前: x"). Never truncates, so
    * only feed it bounded strings — long text belongs in `preview`. */
   sub?: string;
+  /** Right-aligned like `sub`, for text with no bound (a provider name:
+   * a custom one's is its host): truncates past 160px, the full text on
+   * hover. */
+  aside?: string;
   shortcut?: string;
   checked?: boolean;
 }) {
@@ -918,6 +978,14 @@ function PaletteRow({
       {sub && (
         <span className="shrink-0 text-[11.5px] text-ink-muted">{sub}</span>
       )}
+      {aside && (
+        <span
+          className="max-w-[160px] shrink-0 truncate text-[11.5px] text-ink-muted"
+          title={aside}
+        >
+          {aside}
+        </span>
+      )}
       {checked && (
         <Check size={12} weight="bold" className="shrink-0 text-brand-strong" />
       )}
@@ -925,7 +993,7 @@ function PaletteRow({
         <span
           className={cn(
             "shrink-0 rounded-sm border border-line bg-app px-1.5 py-px font-mono text-[10px] text-ink-muted",
-            !sub && !checked && "ml-auto",
+            !sub && !aside && !checked && "ml-auto",
           )}
         >
           {/* ⌘ in the system font, as in the sidebar and Settings →

@@ -28,14 +28,17 @@ import {
 } from "@phosphor-icons/react";
 import { useState } from "react";
 
+import { ChatGptMark } from "@/components/conversation/ChatGptPlanMark";
 import { Button, IconButton } from "@/components/ui/button";
 import { SettingsTag } from "@/components/screens/settings/settings-badges";
 import { SettingsSectionLabel } from "@/components/screens/settings/settings-ui";
 import { IconTooltip, TooltipLabel } from "@/components/ui/tooltip";
+import { chatGptPlanModelIds } from "@/lib/chatgpt-plan";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { isChineseLanguage } from "@/lib/language";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { cn } from "@/lib/utils";
+import { useChatGptPlanStore } from "@/stores/chatgpt-plan";
 import { useManagedModelsStore } from "@/stores/managed-models";
 import type {
   ManagedModelProviderRecord,
@@ -122,6 +125,14 @@ export function ConfiguredModelsPanel({
   // With the config unreadable an empty list says nothing about what
   // is configured, so the empty box must not invite adding a provider.
   const loadFailed = useManagedModelsStore((s) => s.loadError !== null);
+  // A model that spends the ChatGPT plan has its mark before the name,
+  // as in the model menu this list orders (SIWC decision 18). Not by
+  // runtime, unlike the composer's `useChatGptPlanModelIds`: this page
+  // lists the managed runtime's models on either one, and the provider
+  // card's 「ChatGPT 订阅」 doesn't ask either. Those cards, below,
+  // read each ChatGPT provider's plan status as they mount.
+  const statusByProvider = useChatGptPlanStore((s) => s.statusByProvider);
+  const planModelIds = chatGptPlanModelIds(models, statusByProvider);
   // Pointer drags need a few px of travel before they start so a plain
   // click on the handle never turns into a drag; the keyboard sensor
   // gives the focused handle Space + Arrow reordering.
@@ -186,6 +197,7 @@ export function ConfiguredModelsPanel({
                     model={model}
                     provider={provider}
                     isDefault={index === 0}
+                    onPlan={planModelIds.has(model.id)}
                     isEditing={modelDraft?.id === model.id}
                     draft={modelDraft?.id === model.id ? modelDraft : null}
                     allModelCount={models.length}
@@ -280,6 +292,7 @@ function ConfiguredModelRow({
   model,
   provider,
   isDefault,
+  onPlan,
   isEditing,
   draft,
   allModelCount,
@@ -305,6 +318,8 @@ function ConfiguredModelRow({
   model: ManagedModelRecord;
   provider?: ManagedModelProviderRecord;
   isDefault: boolean;
+  /** Spends the ChatGPT plan: the mark before the name. */
+  onPlan: boolean;
   isEditing: boolean;
   draft: ModelDraftState | null;
   allModelCount: number;
@@ -411,13 +426,19 @@ function ConfiguredModelRow({
           )}
         >
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <div
-              className={cn(
-                "truncate text-ui-compact font-medium transition-colors duration-(--motion-fast) ease-firm",
-                isEditing ? "text-brand-strong" : "text-ink",
-              )}
-            >
-              {display.title}
+            {/* The model menu's mark and gap (LLMPill): 13px ink-muted,
+                4px before the name, its ink kept while the name turns
+                brand in the editor. Other rows hold no space for it. */}
+            <div className="flex min-w-0 items-center gap-1">
+              {onPlan && <ChatGptMark className="size-[13px] text-ink-muted" />}
+              <div
+                className={cn(
+                  "truncate text-ui-compact font-medium transition-colors duration-(--motion-fast) ease-firm",
+                  isEditing ? "text-brand-strong" : "text-ink",
+                )}
+              >
+                {display.title}
+              </div>
             </div>
             {/* Provider is identity, so it reads as words right after the
                 name in quiet ink — no container (2026-09-22: the grey

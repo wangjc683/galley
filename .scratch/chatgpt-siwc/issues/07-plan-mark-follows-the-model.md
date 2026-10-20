@@ -1,6 +1,6 @@
 # 07 · 订阅标志跟着模型走：⌘K「切换模型」与「我的模型」补标志，⌘K 补同名规则
 
-Status: ready-for-agent
+Status: needs-dogfood
 
 来源：[PRD](../PRD.md) 裁决 18（2026-10-20）。只动界面，合入时 Core 不用重启。
 
@@ -80,3 +80,84 @@ git diff --check
 - 给 JC 的真机步骤：⌘K 和设置页各自看什么、怎么造出同名的一对。
 
 Status 改成 `needs-dogfood`，随界面提交一起提交。最后回报提交号（抄 `git log` 的输出）和上面这些内容。
+
+## Comments
+
+### 2026-10-20 交付
+
+代理在 worktree 分支 `siwc-07-plan-mark` 上交付，界面与设计文档各一个提交，未合入 main。
+
+**改了什么**
+
+- ⌘K「切换模型」（`gui/src/components/overlay/CommandPalette.tsx`）：
+  - `LLMOption` 加 `providerDisplayName`（`:55`），App 传进来的 `llms` 本来就带这个字段，App 不用改。
+  - `CommandPalette` 里取订阅集合（`:148`），作为 prop 传给 `SwitchLLMPage`（`:349`）。
+  - 订阅行的标志：`PLAN_MARK_CLASS`（`:723`，`size-[14px] text-ink-muted`）加 16px 居中盒子 `PalettePlanMark`（`:725`），走 `PaletteRow` 的 `iconNode`。
+  - `SwitchLLMPage` 导出给测试用（`:743`），同名规则用 `providerLabelAlwaysShown`；cmdk `value` 带上序号（`:772`）；服务商名走新槽位 `aside`（`:783`）。
+  - `PaletteRow` 加 `aside`（`:956`、`:981`）：靠右、11.5px 淡墨，超过 160px 截断，`title` 显示全文，排在勾号之前。`sub` 不动。
+- 我的模型（`gui/src/components/screens/settings/models/ConfiguredModelsPanel.tsx`）：
+  - 订阅集合用 `chatGptPlanModelIds(models, statusByProvider)`（`:134–135`），不看运行时，按行传 `onPlan`（`:200`、`:322`）。
+  - 名字外包一层 `flex min-w-0 items-center gap-1`（`:432`），订阅行在名字前放 13px 标志（`:433`）。没有标志的行，这层里只有名字，不留空位。
+- `ChatGptMark` 顶部注释补上 ⌘K 与「我的模型」，并写明标志不跟服务商走（`gui/src/components/conversation/ChatGptPlanMark.tsx:14`）。
+- 设计文档：
+  - `docs/design/conversation.md:1056`：把窄例外改写成「标志跟着模型走，不跟服务商走」，写了一图两义的理由，链到 PRD 裁决 18。
+  - `docs/design/overlays-and-settings.md:107`：⌘K「切换模型」补上标志、同名规则和 value。
+  - `docs/design/overlays-and-settings.md:409`：「我的模型」行补上标志。
+- 测试（新增 2 个文件，共 8 条，都跑在 jsdom 里）：
+  - `gui/src/components/overlay/CommandPalette.switch-llm.test.tsx`：用真的 cmdk。覆盖订阅行有标志、非订阅行仍是 Cube；同名且标志分不开的两行都显示服务商名，标志分得开的两行都不显示；同名两行用 ↓ 和回车、用点击都能分别选中；整个面板点进「切换模型」后标志在，集合为空时没有。
+  - `gui/src/components/screens/settings/models/ConfiguredModelsPanel.plan-mark.test.tsx`：订阅行有标志、别的行没有，也不留空位；外置运行时下订阅行仍然有标志；退出登录（`flow: null`）后标志消失。
+
+**cmdk value 的核实结论**
+
+有问题，已改。在 jsdom 里用真的 cmdk 1.1.1 写了探针，两行用同一个 value：
+
+- ↓ 移到这一对时，两行同时高亮；
+- 再按 ↓ 就停在原地，走不到这一对后面的行；
+- 回车只触发第一行的 `onSelect`；
+- 鼠标点第二行能选中第二行，但两行仍一起高亮。
+
+原因是 cmdk 用 value 记录当前选中项：每行的 `aria-selected` 都是「value 等于当前值」，↓ 和回车都从第一个选中的元素开始找。改成 `` `llm ${llm.index} ${llm.displayName}` `` 后，每次只亮一行，回车选到的就是亮着的那一行。把 value 改回旧写法，新测试会失败（两行一起亮）。
+
+搜索：这一页本来就不过滤。`shouldFilter={page === "root" && !scope}`（`CommandPalette.tsx:229`）从 `4ee23e3f` 起就只在根页打开，「搜索模型…」框里输入什么，列表都不变。所以 value 改了，搜索的表现照旧。value 里保留了显示名，以后打开过滤也能按名字搜到。
+
+**订阅集合在 ⌘K 里怎么接**
+
+票面给了两个选项，两个都没选：hook 在 `CommandPalette` 里调，作为 prop 传给 `SwitchLLMPage`，和输入框的写法一样（`Composer` 调 hook，传给 `LLMPill`，再传给 `LLMMenu`）。
+
+- 不在 App 里调：App 已经很大，这个集合只有面板用得到。
+- 不在 `SwitchLLMPage` 里调：页面只收 prop，测试直接喂一个集合就行，不用 mock store。
+- 这个 hook 在外置运行时返回空集，所以外置运行时下没有标志、也没有服务商名（GA 的列表没有服务商名）。只有 value 变了，界面上看不出来，同名行也就能分别选中了。
+- `ensureStatus` 对已经读过或正在读的服务商不再发请求（`gui/src/stores/chatgpt-plan.ts:59`），所以和输入框同时调这个 hook，不会多读一次。
+
+**门禁**（在 worktree 根目录跑）
+
+- `pnpm --dir gui typecheck`：通过。
+- `pnpm --dir gui lint`：通过，0 warning。
+- `pnpm --dir gui test`：193 个文件、2030 条全过（新增 2 个文件、8 条）。
+- `node scripts/check-docs-links.mjs`：检查了 465 个文件，通过。
+- `git diff --check`：通过。
+- 全角标点扫描（scratchpad 下 `siwc07/cjk_punct_check.py`，扫 `git diff -U0 HEAD` 的新增行和新文件）：hits 为 0。
+
+**与票面不一致、交给 JC 真机判断的地方**
+
+- 「我的模型」没有自己 `ensureStatus`：同一页的服务商卡挂载时就会读订阅状态（`ProviderCard.tsx:134`），每个服务商都有一张卡（`SettingsModels.tsx:563`）。列表在卡片上面，它的 effect 先跑；如果列表也去 ensure，会先发一次读，接着卡片照样再读一次，变成两次请求。
+- ⌘K 根页「切换模型」那一行右边的「当前：gpt-6.1-sol」也是个模型名（`CommandPalette.tsx:538`），照裁决 18 的字面意思，名字前也该有标志。这次没加：票面只列了两处，而且 `copy.command.current(name)` 是一整句文案，要加标志就得拆 locale。要不要加，请 JC 定。
+- 「切换模型」页的搜索框不过滤（见上），这是原来就有的问题，这次没改。
+- 这几个值 JC 真机看过后可以直接改：标志的 `PLAN_MARK_CLASS`（`CommandPalette.tsx:723`）和 16px 的盒子（同文件 `:727`）；服务商名的截断宽度 `max-w-[160px]`（同文件 `:983`）。
+
+**没验证到的 / 未解决的风险**
+
+- 都没有在真机或 `tauri dev` 里看过。jsdom 不做布局，标志的视觉重量、名字是否对齐、16px 盒子是否居中、160px 截断的样子、「我的模型」里标志和名字的垂直对齐，测试都只查了 class，没有量像素。
+- 「我的模型」的标志靠同一页的服务商卡去读订阅状态。以后如果服务商卡改成懒挂载、或挪出这一页：内置运行时下，要等输入框的 hook 读过状态，标志才会出现；外置运行时下就一直不出现。测试只覆盖了 store 里已经有状态的情况。
+
+**给 JC 的真机步骤**（纯界面改动，合入后 Core 不用重启）
+
+- ⌘K（内置运行时）：
+  1. 用现成的那对：ChatGPT 订阅的 gpt-6.1-sol 和 CPA 的 gpt-6.1-sol。打开任意对话，⌘K →「切换模型」。看：订阅那一行的 Cube 换成了 ChatGPT 标志，颜色比别的行的图标淡一点，模型名和别的行左对齐；这两行都不显示服务商名，因为标志已经把它们分开了。
+  2. 用 ↓ 从「返回」一路往下走：每次只亮一行，能走过这对同名行、走到后面的行。在第二个 gpt-6.1-sol 上回车，输入框的 pill 应该切成这一行（标志的有无对得上）。
+  3. 造一对标志分不开的同名行：在「我的模型」里编辑一个非订阅模型，把显示名改成另一个非订阅模型的名字（比如两个都叫 claude-5）。回到 ⌘K，这两行右侧、勾号之前都显示服务商名。如果服务商名很长（比如自定义服务商的主机名），超过 160px 会截断，悬停能看到全文。看完把显示名改回去。
+  4. 切到外置运行时，⌘K →「切换模型」：和改之前一样，全是 Cube，没有服务商名。
+- 设置 → 模型 →「我的模型」：
+  1. 订阅模型的名字前有 13px 标志，和名字隔 4px，后面的「· ChatGPT」照旧；别的行的名字位置没变。
+  2. 点订阅行打开编辑器：名字变成杏色，标志仍是淡墨。拖动订阅行，标志跟着走，颜色不变。
+  3. 到设置 → 运行环境切成外置运行时，再回模型页：标志还在。
