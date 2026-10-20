@@ -70,7 +70,7 @@ describe("findChatGptPlanError → words and the way on", () => {
     expect(findChatGptPlanError(NOT_ELIGIBLE)?.kind).toBe("not_eligible");
     expect(chatGptPlanErrorView("not_eligible", zh)).toEqual({
       title: null,
-      body: "这个 ChatGPT 账号的套餐不能在 Galley 里使用（支持 Plus / Pro），可以改用 API key 服务商。",
+      body: "这个 ChatGPT 账号的套餐不能在 Galley 里使用（支持 Plus / Pro），可以改选一个用密钥的服务商。",
       action: "open_settings",
       actionLabel: "去设置",
     });

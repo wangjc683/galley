@@ -180,7 +180,7 @@ export const zhCopy = {
     signInExpired: "ChatGPT 登录已失效，需要重新登录。",
     signInInSettings: "去设置登录",
     accountNotEligible:
-      "这个 ChatGPT 账号的套餐不能在 Galley 里使用（支持 Plus / Pro），可以改用 API key 服务商。",
+      "这个 ChatGPT 账号的套餐不能在 Galley 里使用（支持 Plus / Pro），可以改选一个用密钥的服务商。",
     openSettings: "去设置",
   },
   sidebar: {
