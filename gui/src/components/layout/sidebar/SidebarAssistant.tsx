@@ -87,16 +87,34 @@ function lineTone(line: AssistantCardLine): string {
   }
 }
 
-/** The card's fill, and the ground its avatar badge is ringed in. The
- * card is not filled when selected (ruling 118 point 3: no 282 × 140 of
- * selected colour from launch on); a brand ring round the avatar and the
- * name's full ink say it instead. Hover fills the card with `bg-hover`,
- * and a selected card does not answer it. The badge's ring is the
- * chrome or the hover fill under it. */
+/** The card's edge and fill, and the ground its avatar badge is ringed
+ * in (main chat PRD ruling 122). At rest a faint line inside its edge
+ * (`line-strong` at 60%, an inset ring: the box keeps its size and the
+ * focus ring its look) makes the card a thing, not a stretch of the
+ * chrome; hover fills it with `bg-hover`. Selected it takes a selected
+ * row's fill, without the lift, the line one step deeper in that hue,
+ * and does not answer hover: selected must outweigh hover (globals.css
+ * records the same fault on rows, 08-21), and the card opens on
+ * pointerdown, so the fill comes in under the press instead of the
+ * hover fill going out. Held down, the fill deepens a step. */
 function stageFill(selected: boolean): string {
   return selected
-    ? "[--assistant-ground:var(--color-chrome)]"
-    : "[--assistant-ground:var(--color-chrome)] hover:bg-hover hover:[--assistant-ground:var(--color-hover)]";
+    ? "bg-selected [--assistant-ground:var(--color-selected)] inset-ring inset-ring-(--color-selected-hover) active:bg-(--color-selected-hover) active:[--assistant-ground:var(--color-selected-hover)]"
+    : "[--assistant-ground:var(--color-chrome)] inset-ring inset-ring-line-strong/60 hover:bg-hover hover:[--assistant-ground:var(--color-hover)]";
+}
+
+/** Runs `fn` once the pending frame is painted: the next animation
+ * frame, then a task after it. A hidden page runs no frames, so a
+ * timeout runs it regardless; whichever comes first wins. */
+function afterPaint(fn: () => void): void {
+  let done = false;
+  const run = () => {
+    if (done) return;
+    done = true;
+    fn();
+  };
+  requestAnimationFrame(() => setTimeout(run, 0));
+  setTimeout(run, 100);
 }
 
 /** The stage's avatar and badges, with the narrow sidebar's smaller
@@ -154,12 +172,15 @@ function lineText(line: AssistantCardLine): string {
  *
  * The face's slot is a fixed 72px high and the name's line 20px, so a
  * second line that changes never moves the list (128.8px with it; with
- * none, before any message, 110px). No border, no fill at rest, none when selected either: a brand
- * ring round the face and the name in full ink say selected; `bg-hover`
- * under the pointer, not while selected. The pointer coming onto it is
- * a look for the face (`signalAssistantLook`). It opens on pointerdown
- * like a session row (the click that follows is swallowed); Enter and
- * Space open it as any button.
+ * none, before any message, 110px). A faint line inside its edge at
+ * rest, `bg-hover` under the pointer; selected, a selected row's fill
+ * and the name in full ink (`stageFill`, ruling 122). The pointer coming
+ * onto it is a look for the face (`signalAssistantLook`). It opens on
+ * pointerdown like a session row (the click that follows is swallowed);
+ * Enter and Space open it as any button. Pressed it goes 1px down and to
+ * 98%, eased over `--motion-press`: a row's 1px alone is lost on a card
+ * three rows high. Tailwind v4 writes both as the `translate` and
+ * `scale` properties, which a `transform` transition does not reach.
  */
 export function SidebarAssistantCard({
   mainChat,
@@ -211,15 +232,18 @@ export function SidebarAssistantCard({
   ]
     .filter(Boolean)
     .join(" · ");
-  // Opens on pointerdown, as a session row does; the click that press
-  // produces is swallowed. A plain flag: every click follows a
-  // pointerdown that re-arms it (SidebarSessionRow).
+  // Opens on pointerdown, as a session row does, but once the press is
+  // on screen (`afterPaint`): mounting the main chat holds the main
+  // thread for a fifth of a second, and opened in the same task the
+  // press would show only after it (main chat PRD ruling 123). The
+  // click that press produces is swallowed. A plain flag: every click
+  // follows a pointerdown that re-arms it (SidebarSessionRow).
   const ignoreNextClickRef = useRef(false);
   const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
     // macOS Ctrl-click is the context-menu gesture.
     if (event.button !== 0 || event.ctrlKey) return;
     ignoreNextClickRef.current = true;
-    onOpen();
+    afterPaint(onOpen);
   };
   const handleClick = () => {
     if (ignoreNextClickRef.current) {
@@ -244,20 +268,13 @@ export function SidebarAssistantCard({
       onClick={handleClick}
       className={cn(
         "mx-1.5 flex w-[calc(100%-12px)] flex-col items-center rounded-md px-3 pb-1.5 pt-1.5 text-center text-ink",
-        "transition-none active:translate-y-px active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+        "transition-none active:translate-y-px active:scale-[0.98] active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm",
         "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
         stageFill(selected),
       )}
     >
       <span className="flex h-18 items-center justify-center">
         <span className="relative inline-flex shrink-0">
-          {selected && (
-            <span
-              aria-hidden
-              data-role="assistant-selected-ring"
-              className="pointer-events-none absolute -inset-1 rounded-full border-2 border-brand"
-            />
-          )}
           <AssistantAvatar
             size={STAGE_AVATAR.size}
             animated

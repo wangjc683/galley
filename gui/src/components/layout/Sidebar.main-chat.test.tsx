@@ -295,19 +295,26 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
     // The card's block (8px over the card, 6px under it; the stage card
     // carries its own 6px inside), the strong line its foot; the list
     // follows.
-    expect(tagWith(html, CARD)).not.toContain("line-strong");
+    expect(tagWith(html, CARD)).not.toContain("border-line-strong");
     expect(html.indexOf(BLOCK)).toBeGreaterThan(0);
     expect(html.indexOf(BLOCK)).toBeLessThan(html.indexOf(CARD));
     expect(html.indexOf(CARD)).toBeLessThan(html.indexOf(SCROLL_LIST));
     const cardTag = tagWith(html, CARD);
-    // The stage: a column, centred, the card radius, no border.
+    // The stage: a column, centred, the card radius, no border: its line
+    // is an inset ring, so the box keeps its size (ruling 122).
     expect(cardTag).toContain("flex-col items-center");
     expect(cardTag).toContain("pb-1.5 pt-1.5");
     expect(cardTag).toContain("rounded-md");
     expect(cardTag).not.toContain("border");
-    // At rest: no fill, no lift, the hover fill.
+    // At rest: a faint line inside the edge, no fill, no lift, the hover
+    // fill.
+    expect(cardTag).toContain("inset-ring inset-ring-line-strong/60");
     expect(cardTag).not.toContain("bg-selected");
     expect(cardTag).toContain("hover:bg-hover");
+    // Pressed: 1px down and 98%, eased on the properties Tailwind v4
+    // writes them as.
+    expect(cardTag).toContain("active:translate-y-px active:scale-[0.98]");
+    expect(cardTag).toContain("active:transition-[translate,scale,box-shadow]");
     // The face, 「Galley」 at 14px under it.
     const body = between(html, CARD, "</button>");
     expect(body).toContain(FACE);
@@ -325,8 +332,9 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
       expect(html).not.toContain(">Workbench<");
       // The strong line is the card block's own bottom border, and the
       // sidebar's only one: no inset on the block (a direct child of the
-      // sidebar's column), so it runs from edge to edge.
-      expect(count(html, "line-strong")).toBe(1);
+      // sidebar's column), so it runs from edge to edge. (The card's own
+      // faint line is an inset ring.)
+      expect(count(html, "border-line-strong")).toBe(1);
       expect(count(html, BLOCK)).toBe(1);
       const root = html.lastIndexOf(
         "<div",
@@ -487,7 +495,7 @@ describe("the assistant's card", () => {
     for (const activeId of ["s-main", "s-sub"]) {
       const html = render([mainChat, sideChat, subtask], { activeId });
       expect(tagWith(html, CARD)).toContain('aria-current="page"');
-      expect(html).toContain('data-role="assistant-selected-ring"');
+      expect(tagWith(html, CARD)).toContain("bg-selected");
     }
     const elsewhere = tagWith(
       render([mainChat, sideChat], { activeId: "s-side" }),
@@ -838,16 +846,19 @@ describe("the card is a stage for the face (rulings 118, 119; ticket 67)", () =>
     expect(tagWith(body, FACE)).not.toContain("data-amplitude");
   });
 
-  it("selects with a brand ring round the face and the name in full ink, no fill", () => {
+  it("selects with a selected row's fill, no lift, the line in its hue and the name in full ink (ruling 122)", () => {
     const html = render([mainChat, sideChat], { activeId: "s-main" });
     const tag = tagWith(html, CARD);
     expect(tag).toContain('aria-current="page"');
-    expect(tag).not.toContain("bg-selected");
+    expect(tag).toContain("bg-selected");
+    expect(tag).toContain("inset-ring inset-ring-(--color-selected-hover)");
+    expect(tag).not.toContain("inset-ring-line-strong");
+    // Held down, the fill deepens a step.
+    expect(tag).toContain("active:bg-(--color-selected-hover)");
     expect(tag).not.toContain("shadow-");
     expect(tag).not.toContain("hover:bg-hover");
-    expect(tagWith(html, "assistant-selected-ring")).toContain(
-      "border-2 border-brand",
-    );
+    // No ring round the face: the fill says it.
+    expect(between(html, CARD, "</button>")).not.toContain("border-brand");
     const name = tagWith(between(html, CARD, "</button>"), "mt-1.5 flex h-5");
     expect(name).not.toContain("text-ink-soft");
     expect(name).toContain("text-ink");
@@ -1079,6 +1090,16 @@ describe("the trials and the main-chat-on-top sidebar are gone", () => {
       ["票", "65"].join(" "),
       ["票", "66"].join(" "),
       ["票", "68"].join(" "),
+      // Ticket 71's card trial (the line, the selected fill, the squeeze:
+      // ruling 122); the ring round the face it replaced.
+      "galley.tmp.assistantCard",
+      "assistant-card-trial",
+      "AssistantCardTrialSwitcher",
+      "useAssistantCardTrial",
+      "assistantCardNods",
+      "临时 · 助理卡片",
+      "助理卡片可点临时切换器",
+      "assistant-selected-ring",
     ];
     const hits = sources(SRC)
       .filter((file) => file !== self && !file.includes("zz-harness"))

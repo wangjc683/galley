@@ -558,7 +558,9 @@ onboarding hero）。这是 serif register 的签名，sans / mono 不加。
 - `primary` / `secondary` / `brand-soft` / `accent-secondary` / `warning` /
   `destructive` / `destructive-soft`：可以有轻阴影和 hover lift。
 - `ghost` / 文字链接 / session row / menu item：只给色块和极轻 active press，
-  不加厚阴影，避免页面里所有东西都漂起来。
+  不加厚阴影，避免页面里所有东西都漂起来。例外：侧栏的助手卡片按下时缩到 98%，
+  它的面积是一行的三倍，1px 按比例看等于没有（2026-10-20，主聊天 PRD 裁决 122，
+  [layout-and-chrome](./layout-and-chrome.md) §4.2「助手卡片」）。
 - disabled 控件必须静止，不保留 hover lift。
 
 长任务反馈同样克制：读秒就在原状态行里（工作台每步从 0.0 起跳、一分钟内

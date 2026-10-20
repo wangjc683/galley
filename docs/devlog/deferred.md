@@ -1271,3 +1271,18 @@
 - **关联**：`managed-ga/patches/0007-managed-codex-backend.patch`（套餐路由的请求头与报错处理）、`core/src/chatgpt_siwc/`。
 
 ---
+
+## 主对话常驻不卸载
+
+- **状态**：暂缓（2026-10-20 主聊天 PRD 裁决 123 第 5 条，JC：「按你推荐推进」，推荐的是先做 A、B，C 暂缓；[devlog](./2026-10-20-assistant-card-edge-and-switch-hitch.md)）。
+- **提出**：从别的对话回到主对话，主区按 `key={activeSessionId}` 整块重新挂载（`gui/src/App.tsx` 里的 `<MainView key={activeSessionId}>`），dev 实测主线程占住约 0.2 秒。主对话是用户最常回去的地方，如果它的主区常驻、只是隐藏，切回去几乎零成本。
+- **启动信号**：票 72（B）合入后，用同一个探针回路量，切到主对话仍明显比切到同长度工作台对话慢；或 JC 真机仍觉得回主对话卡。
+- **方案**：主对话的 `MainView` 单独一棵树常驻，开着别的对话时隐藏，不卸载；工作台对话照旧按 key 重挂。
+- **实施要点**：
+  - 隐藏时它的钩子不能照常跑：贴底、`ResizeObserver`、打字气泡交接、选区工具条、全局快捷键，都要按「是否在屏上」停下或分流。
+  - 输入框、草稿、滚动位置的状态要能跨隐藏保留。
+  - 侧栏里那张脸的驱动（`AssistantFaceDriver`）是另一棵树，不受影响。
+- **待定**：隐藏用 `display: none` 还是 `content-visibility: hidden`（后者保留布局缓存，切回更快，但隐藏时的尺寸读数会变）。
+- **关联**：主聊天 PRD 裁决 123，票 [72](../../.scratch/main-chat/issues/72-main-chat-switch-cost.md)；探针做法见那篇 devlog。
+
+---
