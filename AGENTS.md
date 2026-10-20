@@ -110,6 +110,13 @@ Galley Core accepts local control only on an AF_UNIX socket / Windows named
 pipe. It does not open a TCP listener, expose HTTP, or hold remote login
 tokens.
 
+One narrow exception (2026-10-20, see
+[Sign in with ChatGPT](./.scratch/chatgpt-siwc/PRD.md)): a sign-in the user
+starts whose OAuth flow requires a loopback redirect may open a one-shot HTTP
+listener bound to `127.0.0.1` on an ephemeral port. It lives only while that
+sign-in is pending, accepts exactly one callback whose `state` matches, then
+closes; it times out, and it never accepts commands or serves anything else.
+
 Remote access exists only through Galley's own remote module (since
 2026-10-09, see [iOS client](./.scratch/ios-client/PRD.md)): it runs inside
 the Core process, connects outward from the desktop to a relay, is
