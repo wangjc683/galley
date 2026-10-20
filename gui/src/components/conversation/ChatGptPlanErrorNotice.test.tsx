@@ -34,7 +34,7 @@ describe("a ChatGPT plan error in the conversation", () => {
     );
     expect(out).toContain('data-role="chatgpt-plan-error"');
     expect(out).toContain("已达到用量上限");
-    expect(out).toContain("检查你的 ChatGPT 套餐，或你给 Galley 设的上限。");
+    expect(out).toContain("检查你的 ChatGPT 订阅，或你给 Galley 设的上限。");
     expect(out).toContain("管理用量");
     // The engine text is behind 「原始输出」, folded.
     expect(out).toContain("原始输出");

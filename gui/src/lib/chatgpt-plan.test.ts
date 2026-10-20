@@ -42,7 +42,7 @@ describe("chatGptPlanLoginFailure", () => {
       ),
     ).toEqual({
       kind: "error",
-      message: "没有勾选「使用 ChatGPT 套餐」，再试一次时记得勾上。",
+      message: "授权时没有同意使用 ChatGPT 订阅的额度，再试一次时记得勾上。",
     });
   });
 
@@ -325,7 +325,7 @@ describe("finishChatGptPlanSignIn: the connection test after the callback", () =
     expect(finished).toEqual({
       providerId: "mp_chatgpt_codex",
       failure:
-        "已用 ChatGPT 登录，但这个 ChatGPT 套餐不能在 Galley 里使用（支持 Plus / Pro）。可以改选一个用密钥的服务商。",
+        "已用 ChatGPT 登录，但这个 ChatGPT 订阅不能在 Galley 里使用（支持 Plus / Pro）。可以改选一个用密钥的服务商。",
     });
     // The provider and credential stay: the store follows anyway.
     expect(order).toEqual([

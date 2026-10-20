@@ -172,7 +172,7 @@ export const enCopy: AppCopy = {
     otherMethods: "Other ways to sign in",
     accessDenied: "You cancelled the authorization in your browser.",
     usageNotGranted:
-      "ChatGPT plan usage wasn't allowed. When you try again, leave “Use your ChatGPT plan” checked.",
+      "You didn't allow use of your ChatGPT plan. When you try again, keep that permission checked.",
     temporary: "Couldn't reach ChatGPT. Try again in a moment.",
     failed: (detail) => `Couldn't sign in with ChatGPT: ${detail}`,
     notEligible:
