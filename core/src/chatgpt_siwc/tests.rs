@@ -46,8 +46,9 @@ use super::secret::{
     SiwcSecret, TokenResponse,
 };
 use super::{
-    galley_user_agent, is_siwc_secret, plan_model_upsert, runtime_chatgpt_plan, status_from_secret,
-    ChatgptPlanError, SIWC_DEFAULT_MODEL, SIWC_ISSUER, TERMINAL_REFRESH_CODES,
+    galley_user_agent, is_siwc_secret, plan_model_upsert, plan_provider_display_name,
+    runtime_chatgpt_plan, status_from_secret, ChatgptPlanError, SIWC_DEFAULT_MODEL, SIWC_ISSUER,
+    TERMINAL_REFRESH_CODES,
 };
 
 // ---------------------------------------------------------------------
@@ -1436,4 +1437,18 @@ async fn test_galley() -> SqliteGalley {
     .await
     .unwrap();
     SqliteGalley::from_pool(pool)
+}
+
+#[test]
+fn plan_sign_in_names_the_provider_chatgpt_unless_the_user_renamed_it() {
+    assert_eq!(plan_provider_display_name(None), "ChatGPT");
+    assert_eq!(
+        plan_provider_display_name(Some("ChatGPT / Codex")),
+        "ChatGPT"
+    );
+    assert_eq!(plan_provider_display_name(Some("  ")), "ChatGPT");
+    assert_eq!(
+        plan_provider_display_name(Some("Work ChatGPT")),
+        "Work ChatGPT"
+    );
 }

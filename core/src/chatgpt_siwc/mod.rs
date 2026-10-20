@@ -63,6 +63,10 @@ pub const SIWC_API_BASE: &str = "https://api.openai.com/v1";
 /// plan's catalog cannot be fetched or is empty. Normally the first entry
 /// the catalog lists is the default (JC, 2026-10-20).
 pub const SIWC_DEFAULT_MODEL: &str = "gpt-5.6-sol";
+/// Provider name a plan sign-in gives the ChatGPT provider (matches the
+/// GUI preset label). The Codex OAuth default name is replaced by it; a name
+/// the user chose is kept.
+pub const SIWC_DISPLAY_NAME: &str = "ChatGPT";
 
 const SIWC_ISSUER: &str = "https://auth.openai.com";
 const SIWC_AUTHORIZE_URL: &str = "https://auth.openai.com/api/accounts/authorize";
@@ -294,6 +298,16 @@ pub async fn is_siwc_ref(galley: &SqliteGalley, api_key_ref: &str) -> crate::err
 /// Persist a fresh SIWC credential, take over the ChatGPT provider and
 /// its model record, then run one connection test. Mirrors
 /// `codex_oauth::persist_probe_and_return`; the result has the same shape.
+/// The provider name after a plan sign-in: a new provider, or one still
+/// carrying the Codex OAuth default name, becomes [`SIWC_DISPLAY_NAME`];
+/// any other name is the user's and stays.
+pub(super) fn plan_provider_display_name(existing: Option<&str>) -> String {
+    match existing.map(str::trim) {
+        Some(name) if !name.is_empty() && name != CODEX_DISPLAY_NAME => name.to_string(),
+        _ => SIWC_DISPLAY_NAME.to_string(),
+    }
+}
+
 async fn persist_and_probe(
     galley: &SqliteGalley,
     secret: SiwcSecret,
@@ -315,10 +329,11 @@ async fn persist_and_probe(
     let provider = galley
         .upsert_managed_model_provider_metadata(UpsertManagedModelProviderMetadata {
             id: CODEX_PROVIDER_ID.into(),
-            // Display copy belongs to ticket 04: keep whatever is there.
-            display_name: existing_provider
-                .map(|provider| provider.display_name)
-                .unwrap_or_else(|| CODEX_DISPLAY_NAME.into()),
+            display_name: plan_provider_display_name(
+                existing_provider
+                    .as_ref()
+                    .map(|provider| provider.display_name.as_str()),
+            ),
             protocol: ManagedModelProtocol::Openai,
             auth_kind: ManagedModelAuthKind::ChatgptCodexOauth,
             api_base: SIWC_API_BASE.into(),
