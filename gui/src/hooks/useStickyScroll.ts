@@ -300,6 +300,13 @@ export function useStickyScroll({
    * last saw. */
   const landingRef = useRef<Landing | null>(null);
   const landedTickRef = useRef(landingTick);
+  /** The follow below has placed the conversation once: the mount. */
+  const placedRef = useRef(false);
+  /** The column's box as that placing left it (贴底 only): the follow
+   * observer's first report, made because observing began, not because
+   * anything grew, says the same and has nothing to follow. Null once
+   * the observer has seen a box of its own. */
+  const placedBoxRef = useRef<{ width: number; height: number } | null>(null);
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -347,6 +354,26 @@ export function useStickyScroll({
     if (!atBottom) return;
     const el = scrollContainerRef.current;
     if (!el) return;
+    // The mount (a session switch, the assistant opened, a reload): the
+    // conversation opens on its bottom, where the session-switch snap
+    // below puts it a frame later — 贴底 too (conversation.md 「切换会话、
+    // 打开助手…落到真正的底部」). Its follow limit is for a reply growing
+    // in front of you, not for this: run here it read the reply's start
+    // (one more layout) and could park short of the bottom, which the
+    // scroll listener then read back as 「not at the bottom」 and the snap
+    // undid, two renders of the whole conversation for nothing
+    // (ticket 72). One read of the height; the column's box with it, now
+    // that layout is fresh.
+    if (!placedRef.current) {
+      placedRef.current = true;
+      el.scrollTop = el.scrollHeight;
+      const column = el.firstElementChild;
+      if (stickBottom && column) {
+        const { width, height } = column.getBoundingClientRect();
+        placedBoxRef.current = { width, height };
+      }
+      return;
+    }
     if (stickBottom) {
       // The landing: the same target, on the growth's clock.
       if (landed && startLanding(el, landingRef)) return;
@@ -430,7 +457,23 @@ export function useStickyScroll({
     if (!el) return;
     const inner = el.firstElementChild;
     if (!(inner instanceof HTMLElement)) return;
-    const observer = new ResizeObserver(() => {
+    const observer = new ResizeObserver((entries) => {
+      // 贴底: the report observing begins with, on the box the mount
+      // placed at the bottom — nothing grew, so no layout to read and
+      // nothing to follow (ticket 72). From the first other box on,
+      // every report follows as before.
+      const placed = placedBoxRef.current;
+      if (placed) {
+        placedBoxRef.current = null;
+        const box = entries[entries.length - 1]?.borderBoxSize?.[0];
+        if (
+          box &&
+          Math.abs(box.inlineSize - placed.width) < 0.5 &&
+          Math.abs(box.blockSize - placed.height) < 0.5
+        ) {
+          return;
+        }
+      }
       if (tailRef.current?.noFollow) {
         // Not following (the live tail): nothing scrolls, so no scroll
         // event says the run has outgrown the screen. Read where the

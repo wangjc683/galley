@@ -343,14 +343,21 @@ function playTypingHandoff(
  * The hand-off on the page (`enabled`: the main chat): returns the ref
  * for the typing bubble's row (TypingBubble), keeps where it stood and
  * whether the commit before had it, and plays each new `handoff` once.
- * Off, it measures nothing.
+ * Off, it measures nothing; on, only while the round is `live`.
  */
 export function useTypingBubbleHandoff({
   enabled,
+  live,
   scrollContainerRef,
   handoff,
 }: {
   enabled: boolean;
+  /** The round is live at the conversation's end (MainView's
+   * `TypingBubbleFrame.live`). A hand-off plays only in the commit right
+   * after one where it was (lib/typing-bubble-handoff.ts), so only such a
+   * commit is measured: a mount on a settled conversation — every switch
+   * back to the main chat while it is idle — reads no layout (ticket 72). */
+  live: boolean;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   handoff: TypingBubbleHandoff | null;
 }): RefObject<HTMLDivElement | null> {
@@ -360,16 +367,25 @@ export function useTypingBubbleHandoff({
     now: NO_FRAME,
     record: null,
   });
+  // For the observer below, as the last commit had it.
+  const liveRef = useRef(live);
 
   // Every commit: the one before becomes `previous` (the hand-off's
   // commit reads it below — declared first, so it runs first), and this
-  // one is measured. A commit without the bubble keeps its last record.
+  // one is measured while the round is live. A commit without the bubble
+  // keeps its last record.
   useLayoutEffect(() => {
     if (!enabled) return;
     const state = stateRef.current;
     const container = scrollContainerRef.current;
     const row = rowRef.current;
+    liveRef.current = live;
     state.previous = state.now;
+    if (!live) {
+      // No hand-off can follow this commit: nothing to measure.
+      state.now = { present: row !== null, columnTop: null };
+      return;
+    }
     state.now = {
       present: row !== null,
       columnTop: container ? columnTopOf(container) : null,
@@ -383,6 +399,7 @@ export function useTypingBubbleHandoff({
     const container = scrollContainerRef.current;
     if (!container) return;
     const observer = new ResizeObserver(() => {
+      if (!liveRef.current) return;
       const state = stateRef.current;
       state.now = { ...state.now, columnTop: columnTopOf(container) };
       const row = rowRef.current;

@@ -1,6 +1,12 @@
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import {
+  forwardRef,
+  useContext,
+  type ButtonHTMLAttributes,
+  type ReactNode,
+} from "react";
 
 import { IconTooltip, type TooltipSide } from "@/components/ui/tooltip";
+import { ChipRootsContext } from "@/lib/chip-roots";
 import { cn } from "@/lib/utils";
 import { blurAfterClick, preventMouseFocus } from "@/lib/pointer-focus";
 
@@ -103,6 +109,9 @@ export const ActionChip = forwardRef<
   ref,
 ) {
   const label = active ? activeLabel : idleLabel;
+  // The assistant's rows mount the tooltip on their first hover
+  // (lib/chip-roots.ts); the button is the same either way.
+  const rooted = useContext(ChipRootsContext);
 
   const button = (
     <button
@@ -140,6 +149,7 @@ export const ActionChip = forwardRef<
     </button>
   );
 
+  if (!rooted) return button;
   return (
     // Tooltip tracks the current state: hovering right after a copy
     // must read "已复制", not contradict the green check with "复制".

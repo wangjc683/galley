@@ -12,6 +12,7 @@ import {
   createContext,
   useContext,
   useState,
+  type ButtonHTMLAttributes,
   type MouseEvent,
   type ReactElement,
   type ReactNode,
@@ -23,6 +24,7 @@ import {
   type SidebarRowMenuKind,
   SidebarRowMenuSeparator,
 } from "@/components/layout/sidebar/SidebarRowMenu";
+import { ChipRootsContext } from "@/lib/chip-roots";
 import { useCopy } from "@/lib/i18n";
 import type { MessageMenuAction, MessageMenuEntry } from "@/lib/message-menu";
 import { cn } from "@/lib/utils";
@@ -292,6 +294,11 @@ export function MessageQuoteButton({
  * reply drawn the workbench way). It also ends the row under your
  * bubble (ticket 53), where the menu opens from its right edge (`align
  * "end"`): that row sits on the right, flush with the bubble.
+ *
+ * Its menu's root mounts with the row's other chip roots, on the row's
+ * first hover (lib/chip-roots.ts, ticket 72), or when it opens. Before
+ * that the bare chip answers a press or a key the way the menu's trigger
+ * does, by opening it.
  */
 export function MessageMenuButton({
   messageId,
@@ -313,21 +320,47 @@ export function MessageMenuButton({
 }) {
   const copy = useCopy();
   const wiring = useContext(MessageMenuContext);
+  const rooted = useContext(ChipRootsContext);
   if (!wiring || !wiring.has(messageId)) return null;
+  const chip = (
+    props: Pick<
+      ButtonHTMLAttributes<HTMLButtonElement>,
+      "aria-haspopup" | "onPointerDown" | "onKeyDown"
+    > = {},
+  ) => (
+    <ActionChip
+      active={false}
+      expanded={open}
+      idleIcon={<DotsThree size={14} weight="bold" />}
+      activeIcon={<DotsThree size={14} weight="bold" />}
+      idleLabel={copy.common.more}
+      activeLabel={copy.common.more}
+      revealed={revealed}
+      {...props}
+    />
+  );
+  if (!rooted && !open) {
+    // As Radix's trigger: a menu button, which the primary button
+    // without Ctrl (macOS's right-click) opens, the press taking no
+    // focus; so do Enter, Space and ↓.
+    return chip({
+      "aria-haspopup": "menu",
+      onPointerDown: (event) => {
+        if (event.button !== 0 || event.ctrlKey) return;
+        event.preventDefault();
+        onOpenChange(true);
+      },
+      onKeyDown: (event) => {
+        if (!["Enter", " ", "ArrowDown"].includes(event.key)) return;
+        event.preventDefault();
+        onOpenChange(true);
+      },
+    });
+  }
   const model = open ? wiring.model(messageId) : null;
   return (
     <DropdownMenu.Root open={open} onOpenChange={onOpenChange}>
-      <DropdownMenu.Trigger asChild>
-        <ActionChip
-          active={false}
-          expanded={open}
-          idleIcon={<DotsThree size={14} weight="bold" />}
-          activeIcon={<DotsThree size={14} weight="bold" />}
-          idleLabel={copy.common.more}
-          activeLabel={copy.common.more}
-          revealed={revealed}
-        />
-      </DropdownMenu.Trigger>
+      <DropdownMenu.Trigger asChild>{chip()}</DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           data-role="message-menu"

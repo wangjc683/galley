@@ -20,6 +20,7 @@ import {
   type ImagePreviewItem,
 } from "@/components/conversation/ImagePreviewDialog";
 import { IconTooltip } from "@/components/ui/tooltip";
+import { ChipRootsContext } from "@/lib/chip-roots";
 import { splitQuotedMessage } from "@/lib/composer-quote";
 import { useCopy } from "@/lib/i18n";
 import { userMessageCopyText } from "@/lib/message-menu";
@@ -242,6 +243,10 @@ export const MessageUser = memo(function MessageUser({
   const [copied, setCopied] = useState(false);
   // The assistant's ⋯ menu open: the row stays up, as a reply's bar does.
   const [menuOpen, setMenuOpen] = useState(false);
+  // The assistant's row mounts its chips' tooltips and ⋯ menu on its
+  // first hover, the render that shows them, and keeps them
+  // (lib/chip-roots.ts, ticket 72).
+  const [chipRoots, setChipRoots] = useState(!assistant);
   const rowRef = useRef<HTMLDivElement>(null);
   const copyTimer = useRef<number | null>(null);
   // The bubble's key for the selection toolbar (lib/selection-copy): in
@@ -324,7 +329,10 @@ export const MessageUser = memo(function MessageUser({
           ? cn(rowClassName ?? "mt-5", "mb-7.5")
           : cn("mt-5 mb-7.5", RAIL_CLEARANCE),
       )}
-      onMouseEnter={() => setHovered(true)}
+      onMouseEnter={() => {
+        setHovered(true);
+        setChipRoots(true);
+      }}
       onMouseLeave={() => setHovered(false)}
       data-selection-yield={assistant ? selectionYieldKey : undefined}
     >
@@ -446,32 +454,34 @@ export const MessageUser = memo(function MessageUser({
               yielded && "pointer-events-none opacity-0",
             )}
           >
-            {canCopy && (
-              <ActionChip
-                active={copied}
-                idleIcon={<Copy size={14} weight="thin" />}
-                activeIcon={<Check size={14} weight="bold" />}
-                idleLabel={copy.conversation.copy}
-                activeLabel={copy.conversation.copied}
-                onClick={() => void handleCopy()}
-                revealed={chipsVisible}
-              />
-            )}
-            {messageId && (
-              <>
-                <MessageQuoteButton
-                  messageId={messageId}
+            <ChipRootsContext.Provider value={chipRoots || menuOpen}>
+              {canCopy && (
+                <ActionChip
+                  active={copied}
+                  idleIcon={<Copy size={14} weight="thin" />}
+                  activeIcon={<Check size={14} weight="bold" />}
+                  idleLabel={copy.conversation.copy}
+                  activeLabel={copy.conversation.copied}
+                  onClick={() => void handleCopy()}
                   revealed={chipsVisible}
                 />
-                <MessageMenuButton
-                  messageId={messageId}
-                  open={menuOpen}
-                  onOpenChange={onMenuOpenChange}
-                  revealed={chipsVisible}
-                  align="end"
-                />
-              </>
-            )}
+              )}
+              {messageId && (
+                <>
+                  <MessageQuoteButton
+                    messageId={messageId}
+                    revealed={chipsVisible}
+                  />
+                  <MessageMenuButton
+                    messageId={messageId}
+                    open={menuOpen}
+                    onOpenChange={onMenuOpenChange}
+                    revealed={chipsVisible}
+                    align="end"
+                  />
+                </>
+              )}
+            </ChipRootsContext.Provider>
           </div>
         ) : (
           <ActionChip

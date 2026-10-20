@@ -7,6 +7,7 @@ import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { MessageActions } from "@/components/conversation/MessageActions";
 import type { AssistantProcessToggle } from "@/lib/assistant-conversation";
 import { findChatGptPlanError } from "@/lib/chatgpt-plan-errors";
+import { ChipRootsContext } from "@/lib/chip-roots";
 import { useCopy } from "@/lib/i18n";
 import { isLeakedToolCallMarkup } from "@/lib/ipc/ga-output-cleaning";
 import { cn } from "@/lib/utils";
@@ -71,6 +72,18 @@ export const MessageAgent = memo(function MessageAgent({
   attachment?: ReactNode;
 }) {
   const selectionYieldKey = useId();
+  // The assistant's bar mounts its chips' tooltips and ⋯ menu on the
+  // answer's first hover and keeps them (lib/chip-roots.ts, ticket 72).
+  const [chipRoots, setChipRoots] = useState(false);
+  const onMouseEnter = bubble ? () => setChipRoots(true) : undefined;
+  const bar = (actions: ReactNode) =>
+    bubble ? (
+      <ChipRootsContext.Provider value={chipRoots}>
+        {actions}
+      </ChipRootsContext.Provider>
+    ) : (
+      actions
+    );
   if (typeof children === "string") {
     // A ChatGPT plan error the engine ended the turn with (SIWC ticket
     // 04, PRD ruling 7): Galley's words and the way on, the engine text
@@ -81,6 +94,7 @@ export const MessageAgent = memo(function MessageAgent({
         <div
           data-message-id={messageId}
           className={cn("group/answer", className)}
+          onMouseEnter={onMouseEnter}
         >
           {planError.before && (
             <MarkdownView source={planError.before} variant="agent" />
@@ -89,13 +103,14 @@ export const MessageAgent = memo(function MessageAgent({
           {attachment}
           {/* Like the protocol-failure notice: nothing to copy, quote
               or save; the process button and the assistant's ⋯ stay. */}
-          {(process !== undefined || bubble) && (
-            <MessageActions
-              source={children}
-              assistant={{ process, processOnly: true }}
-              messageId={bubble ? messageId : undefined}
-            />
-          )}
+          {(process !== undefined || bubble) &&
+            bar(
+              <MessageActions
+                source={children}
+                assistant={{ process, processOnly: true }}
+                messageId={bubble ? messageId : undefined}
+              />,
+            )}
         </div>
       );
     }
@@ -117,16 +132,18 @@ export const MessageAgent = memo(function MessageAgent({
         <div
           data-message-id={bubble ? messageId : undefined}
           className={cn("group/answer", className)}
+          onMouseEnter={onMouseEnter}
         >
           <ProtocolFailureNotice markup={children} />
           {attachment}
-          {(process !== undefined || bubble) && (
-            <MessageActions
-              source={children}
-              assistant={{ process, processOnly: true }}
-              messageId={bubble ? messageId : undefined}
-            />
-          )}
+          {(process !== undefined || bubble) &&
+            bar(
+              <MessageActions
+                source={children}
+                assistant={{ process, processOnly: true }}
+                messageId={bubble ? messageId : undefined}
+              />,
+            )}
         </div>
       );
     }
@@ -140,18 +157,20 @@ export const MessageAgent = memo(function MessageAgent({
         data-message-id={messageId}
         data-selection-yield={selectionYieldKey}
         className={cn("group/answer", className)}
+        onMouseEnter={onMouseEnter}
       >
         {bubble ? <AssistantBubble>{body}</AssistantBubble> : body}
         {attachment}
-        {showActions && (
-          <MessageActions
-            source={children}
-            telemetry={telemetry}
-            assistant={bubble ? { process } : undefined}
-            messageId={bubble ? messageId : undefined}
-            selectionYieldKey={selectionYieldKey}
-          />
-        )}
+        {showActions &&
+          bar(
+            <MessageActions
+              source={children}
+              telemetry={telemetry}
+              assistant={bubble ? { process } : undefined}
+              messageId={bubble ? messageId : undefined}
+              selectionYieldKey={selectionYieldKey}
+            />,
+          )}
       </div>
     );
   }

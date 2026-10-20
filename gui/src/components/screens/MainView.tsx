@@ -516,6 +516,7 @@ function MainViewContent({
   // The typing bubble's place, and the hand-off on the page.
   const typingBubbleRef = useTypingBubbleHandoff({
     enabled: isMainChat,
+    live: typingFrameNow.live,
     scrollContainerRef,
     handoff,
   });

@@ -9,6 +9,19 @@ import {
 } from "@/lib/scheduled-tasks";
 
 /**
+ * The list as last read, kept across mounts: MainView mounts afresh on
+ * every switch to the main chat (App keys it by session), and a mount
+ * that started from nothing re-rendered the whole conversation when the
+ * read came back, cards or no cards (ticket 72). With it, a mount draws
+ * the cards it had from its first render, and a read that brings the
+ * same list sets nothing.
+ */
+let lastRead: { tasks: ScheduledTask[]; json: string } = {
+  tasks: [],
+  json: "[]",
+};
+
+/**
  * The reminders the assistant set in the main chat's replies, by the
  * reply they hang under (main chat ticket 37). Reads every task,
  * cancelled ones too (their card says 已取消), and again on Core's
@@ -19,7 +32,7 @@ import {
 export function useRemindersByMessage(
   mainChatId: string | undefined,
 ): Map<string, ScheduledTask[]> {
-  const [tasks, setTasks] = useState<ScheduledTask[]>([]);
+  const [tasks, setTasks] = useState<ScheduledTask[]>(() => lastRead.tasks);
   useEffect(() => {
     if (!mainChatId) return;
     let cancelled = false;
@@ -27,7 +40,9 @@ export function useRemindersByMessage(
     const load = () => {
       listScheduledTasks(true)
         .then((all) => {
-          if (!cancelled) setTasks(all);
+          const json = JSON.stringify(all);
+          if (json !== lastRead.json) lastRead = { tasks: all, json };
+          if (!cancelled) setTasks(lastRead.tasks);
         })
         .catch((e) => console.warn("[reminders] list failed.", e));
     };

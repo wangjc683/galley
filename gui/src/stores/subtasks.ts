@@ -55,6 +55,10 @@ interface SubtasksState {
   forgetSessions: (sessionIds: readonly string[]) => void;
 }
 
+/** No dispatches: one array, so a selector falling back to it and a
+ * parent read with none give the same value. */
+const EMPTY: SubtaskDispatch[] = [];
+
 export const useSubtasksStore = create<SubtasksState>()((set, get) => ({
   byParent: {},
   requested: {},
@@ -68,13 +72,24 @@ export const useSubtasksStore = create<SubtasksState>()((set, get) => ({
         "list_subtask_dispatches",
         { parentSessionId },
       );
+      // Nothing new (a main chat with no subtasks yet, or every record
+      // already announced) leaves what the cards read as it was, so the
+      // conversation that asked is not drawn again for the same cards
+      // (ticket 72), as `applyDispatched` below. A first read of nothing
+      // still marks the parent read (the assistant's face takes the
+      // first records it sees as history), with the very array the
+      // cards' selector falls back to.
+      const existing = get().byParent[parentSessionId];
+      const current = existing ?? EMPTY;
+      const next = mergeDispatches(current, records);
+      const unchanged =
+        next.length === current.length &&
+        next.every((d, i) => d === current[i]);
+      if (unchanged && existing) return;
       set((s) => ({
         byParent: {
           ...s.byParent,
-          [parentSessionId]: mergeDispatches(
-            s.byParent[parentSessionId] ?? [],
-            records,
-          ),
+          [parentSessionId]: unchanged ? current : next,
         },
       }));
     } catch (e) {
@@ -148,8 +163,6 @@ export const useSubtasksStore = create<SubtasksState>()((set, get) => ({
     });
   },
 }));
-
-const EMPTY: SubtaskDispatch[] = [];
 
 /** One parent's dispatch records (empty array when none). */
 export function useSubtaskDispatches(
