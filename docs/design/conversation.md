@@ -994,7 +994,7 @@ quick prompt 建议**——能力发现靠"用户主动打开库时看到能力�
 - 点击展开 popover：
   - `surface-elevated` 背景 + `shadow-elevated`
   - 圆角 12px / 内边距 8px / 每行 32px
-  - current 项左侧杏沙 ✓
+  - current 项右侧杏色 ✓（2026-09-22 起从左侧挪到行尾，见下方「Popover 结构」）
   - 切换中 spinner（`CircleNotch`）未实现——切换足够快，V0.2 再议
 - agent running 时不可切换：`aria-disabled` + 点击
   no-op（不用真 `disabled`——禁用元素吞掉指针事件，解释性 tooltip
