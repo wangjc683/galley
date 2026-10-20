@@ -205,25 +205,16 @@ const LINE = 'data-role="assistant-card-line"';
 const BADGE = 'data-role="assistant-badge"';
 const FACE = 'data-role="assistant-face"';
 const SPINNER = 'class="spin"';
-const BLOCK = '<div class="pt-2 has-[:focus-visible]:relative">';
+/** The card's block: 8px over the card, 6px under it, the strong line
+ * its foot (ticket 70; tickets 62–69 hung the workbench's name there). */
+const BLOCK = '<div class="border-b border-line-strong pb-1.5 pt-2">';
 const ROW = 'data-role="sidebar-new-chat-row"';
 const SCROLL_LIST = "overflow-y-auto";
 const STICKY = "data-sidebar-section-header";
-const EMPTY = "你的对话会出现在这里。";
-const WORKBENCH = 'data-sidebar-zone-label="workbench"';
-/** The workbench's name: one half of the strong line, the word, the
- * other half (ticket 69). */
-const HALF =
-  '<span aria-hidden="true" class="h-px min-w-0 flex-1 bg-line-strong">';
-const NAME =
-  '<span class="shrink-0 whitespace-nowrap px-2 text-ui-label leading-[13px] text-ink-muted">';
-const GROUND =
-  "linear-gradient(to bottom, var(--color-chrome), var(--color-app))";
-/** The name's element, from its opening tag to its close. */
-const labelOf = (html: string) => {
-  const i = html.indexOf(WORKBENCH);
-  return html.slice(html.lastIndexOf("<div", i), html.indexOf("</div>", i) + 6);
-};
+/** The managed runtime's empty list names the workbench (ruling 121);
+ * the external runtime's keeps the old sidebar's words. */
+const EMPTY = "工作台：你另开的对话会出现在这里。";
+const EMPTY_EXTERNAL = "你的对话会出现在这里。";
 const ARCHIVED = ">已归档</span>";
 
 afterEach(() => {
@@ -270,7 +261,10 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
     const html = render([mainChat, sideChat]);
     expect(html).not.toContain('aria-label="待办"');
     // The card's block holds the card alone, as before ticket 42.
-    const block = html.slice(html.indexOf(BLOCK), html.indexOf(WORKBENCH));
+    const block = html.slice(
+      html.indexOf(BLOCK),
+      html.indexOf(SCROLL_LIST, html.indexOf(BLOCK)),
+    );
     expect(count(block, CARD)).toBe(1);
     // The card is the block's only button.
     expect(count(block, "<button")).toBe(1);
@@ -298,14 +292,13 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
 
   it("stands the card on the chrome above the strong line, the list under it on the app ground", () => {
     const html = render([mainChat, sideChat]);
-    // The card's block (8px over the card; the 6px under it are the
-    // name's, ticket 69; the stage card carries its own 6px inside), then
-    // the workbench's name on the strong line; the list follows.
+    // The card's block (8px over the card, 6px under it; the stage card
+    // carries its own 6px inside), the strong line its foot; the list
+    // follows.
     expect(tagWith(html, CARD)).not.toContain("line-strong");
     expect(html.indexOf(BLOCK)).toBeGreaterThan(0);
     expect(html.indexOf(BLOCK)).toBeLessThan(html.indexOf(CARD));
-    expect(html.indexOf(CARD)).toBeLessThan(html.indexOf(WORKBENCH));
-    expect(html.indexOf(WORKBENCH)).toBeLessThan(html.indexOf(SCROLL_LIST));
+    expect(html.indexOf(CARD)).toBeLessThan(html.indexOf(SCROLL_LIST));
     const cardTag = tagWith(html, CARD);
     // The stage: a column, centred, the card radius, no border.
     expect(cardTag).toContain("flex-col items-center");
@@ -323,66 +316,58 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
     expect(tagWith(html, 'data-sidebar-section=""')).toContain("bg-app");
   });
 
-  it("names the workbench centred on the strong line, in two halves out to the edges (ticket 69)", () => {
+  it("hangs no name on the strong line: the card block's foot, edge to edge (ruling 121, ticket 70)", () => {
     for (const language of ["zh-CN", "en-US"] as const) {
       const html = render([mainChat, sideChat], { language });
-      const text = language === "zh-CN" ? "工作台" : "Workbench";
-      expect(count(html, "data-sidebar-zone-label")).toBe(1);
-      expect(count(html, `>${text}<`)).toBe(1);
-      // Left half, the word, right half, and nothing else: the halves
-      // are both flex-1 from nothing, so they stretch alike and the word
-      // sits on the sidebar's axis, 8px off each (px-2), the halves out
-      // to the sidebar's edges; the strong line is theirs alone.
-      expect(labelOf(html)).toBe(
-        `<div ${WORKBENCH} class="flex h-[19px] shrink-0 items-center pt-1.5" style="background:${GROUND}">` +
-          `${HALF}</span>${NAME}${text}</span>${HALF}</span></div>`,
+      // No 「工作台」 row: the name is said only in the empty list's line.
+      expect(html).not.toContain("data-sidebar-zone-label");
+      expect(html).not.toContain(">工作台<");
+      expect(html).not.toContain(">Workbench<");
+      // The strong line is the card block's own bottom border, and the
+      // sidebar's only one: no inset on the block (a direct child of the
+      // sidebar's column), so it runs from edge to edge.
+      expect(count(html, "line-strong")).toBe(1);
+      expect(count(html, BLOCK)).toBe(1);
+      const root = html.lastIndexOf(
+        "<div",
+        html.indexOf('class="@container/sidebar'),
       );
-      expect(count(html, "line-strong")).toBe(2);
-      // No longer hung on the grid's left line.
-      expect(labelOf(html)).not.toContain("pl-4.5");
-      // Quieter than a bucket's eyebrow: regular, untracked, upright.
-      expect(NAME).toContain("text-ui-label");
-      expect(NAME).toContain("text-ink-muted");
-      expect(NAME).toContain("whitespace-nowrap");
-      for (const eyebrow of ["uppercase", "tracking-", "font-semibold"]) {
-        expect(labelOf(html)).not.toContain(eyebrow);
-      }
+      const before = html.slice(root, html.indexOf(BLOCK));
+      expect(count(before, "<div") - count(before, "</div>")).toBe(1);
     }
     // No 「助理」 over the card (ruling 114 point 2).
     expect(render([mainChat, sideChat])).not.toContain(">助理<");
   });
 
-  it("fades the chrome into the app ground over the name's 19px, with no step (ticket 69)", () => {
+  it("turns the ground under the line, no fade, the list straight after the card block (ticket 70)", () => {
     const html = render([mainChat, sideChat]);
-    const tag = tagWith(html, WORKBENCH);
-    // One gradient over the whole element, chrome at the card block's
-    // foot to app at the row's, no stops: neither end has an edge, and
-    // nothing turns hard (until ticket 69, transparent to app at 6px).
-    const style = /style="([^"]*)"/.exec(tag)?.[1];
-    expect(style).toBe(
-      "background:linear-gradient(to bottom, var(--color-chrome), var(--color-app))",
-    );
-    expect(style).not.toMatch(/\dpx|%|transparent/);
-    expect(count(html, "linear-gradient(to bottom, var(--color-chrome)")).toBe(
-      1,
-    );
-    // The same height as before: the card block keeps its 8px over the
-    // card and gives its 6px under it to the name, whose 19px are those
-    // 6 and the 13px row (the type's own line box, the line at its 6px).
-    expect(tag).toContain("h-[19px]");
-    expect(tag).toContain("pt-1.5");
-    expect(tag).toContain("items-center");
-    expect(labelOf(html)).toContain("leading-[13px]");
-    expect(html).not.toContain('<div class="pb-1.5 pt-2">');
-    // The fade starts at the card's foot; the card block, positioned
-    // while the card's focus ring shows, paints the ring over it.
+    // The block holds the card alone, 8px over it and 6px under it, and
+    // is not positioned: the focus ring, 2px outside the card, lies in
+    // the block's own 6px foot (until ticket 70 the name, painted after
+    // the block, had its fade over it while the ring showed).
     const card = html.lastIndexOf("<button", html.indexOf(CARD));
     expect(html.slice(0, card).endsWith(BLOCK)).toBe(true);
-    // The sticky row and the list under it are untouched.
+    expect(html).not.toContain("has-[:focus-visible]:relative");
+    // Under the line comes the scrolling list on the app ground: the
+    // ground turns under the line, nothing in between, no fade (ticket
+    // 69's chrome → app over 19px is gone with the name).
+    const cardEnd = html.indexOf("</button>", card) + "</button>".length;
+    expect(
+      html.slice(cardEnd).startsWith('</div><div class="scrollbar-stable'),
+    ).toBe(true);
+    expect(tagWith(html, SCROLL_LIST)).toContain("scroll-pt-[42px] bg-app");
+    expect(html).not.toContain(
+      "linear-gradient(to bottom, var(--color-chrome)",
+    );
+    // The one gradient left is the sticky row's fade over scrolled rows.
+    expect(count(html, "linear-gradient")).toBe(1);
+    expect(
+      count(html, "linear-gradient(to bottom, var(--color-app), transparent)"),
+    ).toBe(1);
+    // The sticky row and its 6px over the new-chat button are untouched.
     expect(tagWith(html, STICKY)).toContain(
       "sticky top-0 z-20 bg-app pb-1 pt-1.5",
     );
-    expect(tagWith(html, SCROLL_LIST)).toContain("scroll-pt-[42px] bg-app");
   });
 
   it("runs the workbench's ground to the window's foot, 已归档 pinned there on it", () => {
@@ -425,13 +410,25 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
     expect(html).not.toContain("first-child");
   });
 
-  it("says the old sidebar's line while nobody has started a conversation", () => {
-    expect(render([mainChat])).toContain(EMPTY);
+  it("names the workbench in the list's line while nobody has started a conversation (ruling 121)", () => {
+    const html = render([mainChat]);
+    // The old sidebar's line and style, the workbench's name in front;
+    // not the external runtime's words.
+    expect(html).toContain(
+      `<p class="mx-1.5 px-3 py-2 text-[12.5px] italic text-ink-muted">${EMPTY}</p>`,
+    );
+    expect(count(html, EMPTY)).toBe(1);
+    expect(html).not.toContain(EMPTY_EXTERNAL);
+    // Right under the sticky new-chat row, inside the list.
+    expect(html.indexOf(EMPTY)).toBeGreaterThan(html.indexOf(STICKY));
     // Agent sessions don't count; 其他来源 is there with it.
     const agentsOnly = render([mainChat, cliChat]);
     expect(agentsOnly).toContain(EMPTY);
     expect(agentsOnly).toContain(OTHER_SOURCES);
-    expect(render([mainChat, sideChat])).not.toContain(EMPTY);
+    // A person's first conversation takes it away, the name with it.
+    const used = render([mainChat, sideChat]);
+    expect(used).not.toContain(EMPTY);
+    expect(used).not.toContain("工作台");
   });
 });
 
@@ -804,9 +801,11 @@ describe("the assistant's card", () => {
     expect(html).toContain('aria-label="New chat"');
     expect(html).toContain(">Other sources<");
     expect(html).not.toContain("Main chat");
-    expect(render([mainChat], { language: "en-US" })).toContain(
-      "Your conversations will appear here.",
+    const empty = render([mainChat], { language: "en-US" });
+    expect(empty).toContain(
+      "Workbench: conversations you start will appear here.",
     );
+    expect(empty).not.toContain("Your conversations will appear here.");
   });
 });
 
@@ -953,9 +952,9 @@ describe("without a main chat (external runtime)", () => {
     expect(html).not.toContain(OTHER_SOURCES);
     expect(html).not.toContain("主对话");
     expect(html).not.toContain("sticky");
+    // No card block, so no strong line at its foot; no name, no fade.
     expect(html).not.toContain("border-line-strong");
     expect(html).not.toContain("data-sidebar-zone-label");
-    // Nor the name's fade, nor the card block it took 6px from.
     expect(html).not.toContain("linear-gradient");
     expect(html).not.toContain(BLOCK);
     for (const attr of ["section", "section-header"]) {
@@ -966,7 +965,16 @@ describe("without a main chat (external runtime)", () => {
     );
     // The CLI session stays in 今天.
     expect(at(html, "s-cli")).toBeGreaterThan(html.indexOf(">今天<"));
-    expect(render([])).toContain(EMPTY);
+    // Its empty list keeps the old words, unnamed, in both languages.
+    const empty = render([]);
+    expect(empty).toContain(
+      `<div class="px-5 py-6 text-[12.5px] italic text-ink-muted">${EMPTY_EXTERNAL}</div>`,
+    );
+    expect(empty).not.toContain(EMPTY);
+    expect(empty).not.toContain("工作台");
+    const emptyEn = render([], { language: "en-US" });
+    expect(emptyEn).toContain("Your conversations will appear here.");
+    expect(emptyEn).not.toContain("Workbench");
     // 已归档 on the chrome, its own row: no ground around it.
     const archived = render([sideChat], { archivedCount: 2 });
     expect(archived).toContain(ARCHIVED);
@@ -1060,6 +1068,12 @@ describe("the trials and the main-chat-on-top sidebar are gone", () => {
       "LABEL_TIERS",
       "data-label-trial",
       "临时 · 区名",
+      // Ticket 69's name on the line (no name since ruling 121, ticket
+      // 70: the workbench is named in the empty list's line).
+      "SidebarWorkbenchLabel",
+      "zoneWorkbench",
+      "WORKBENCH_GROUND",
+      "data-sidebar-zone-label",
       // Spelled apart so a grep for the ticket markers finds nothing.
       ["票", "62"].join(" "),
       ["票", "65"].join(" "),

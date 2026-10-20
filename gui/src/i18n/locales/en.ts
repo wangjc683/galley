@@ -186,8 +186,9 @@ export const enCopy: AppCopy = {
     scheduledCreated: "Created by scheduled task",
     newReplyTitle: "New reply",
     emptySessions: "Your conversations will appear here.",
-    // The workbench's name (sidebar/SidebarWorkbenchLabel).
-    zoneWorkbench: "Workbench",
+    // The managed runtime's empty list, naming the workbench
+    // (SidebarAssistantEmptyHint).
+    emptyWorkbench: "Workbench: conversations you start will appear here.",
     bucketPinned: "Pinned",
     bucketToday: "Today",
     bucketWeek: "This week",

@@ -168,9 +168,10 @@ export const zhCopy = {
     scheduledCreated: "定时任务创建",
     newReplyTitle: "有新回复",
     emptySessions: "你的对话会出现在这里。",
-    // The workbench's name on the line under the assistant's card
-    // (sidebar/SidebarWorkbenchLabel, main chat PRD rulings 114, 118).
-    zoneWorkbench: "工作台",
+    // The managed runtime's empty list, the one place the workbench is
+    // named (sidebar/SidebarAssistant's SidebarAssistantEmptyHint, main
+    // chat PRD ruling 121).
+    emptyWorkbench: "工作台：你另开的对话会出现在这里。",
     bucketPinned: "置顶",
     bucketToday: "今天",
     bucketWeek: "本周",

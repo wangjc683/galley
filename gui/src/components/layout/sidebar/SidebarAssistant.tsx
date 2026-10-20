@@ -382,14 +382,20 @@ export function SidebarNewChatRow({
   );
 }
 
-/** The list's line while nobody has started a conversation: the old
- * sidebar's words (「你的对话会出现在这里。」); agent-started sessions
- * in 「其他来源」 do not count. */
+/** The list's line while nobody has started a conversation (agent-started
+ * sessions in 「其他来源」 do not count):
+ * 「工作台：你另开的对话会出现在这里。」, the old sidebar's line and
+ * style with the workbench's name in front.
+ * It is the one place the name is said (ruling 121): the line under the
+ * card carries none, and the word explains the list only while there is
+ * nothing in it yet; it goes with the line when the first conversation
+ * comes. The external runtime's empty list keeps the old words
+ * (emptySessions, Sidebar). */
 export function SidebarAssistantEmptyHint() {
   const copy = useCopy();
   return (
     <p className="mx-1.5 px-3 py-2 text-[12.5px] italic text-ink-muted">
-      {copy.sidebar.emptySessions}
+      {copy.sidebar.emptyWorkbench}
     </p>
   );
 }

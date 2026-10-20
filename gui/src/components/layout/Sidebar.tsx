@@ -25,7 +25,6 @@ import { SidebarHeader } from "./sidebar/SidebarHeader";
 import { SidebarQuickActions } from "./sidebar/SidebarQuickActions";
 import { SidebarOtherSources } from "./sidebar/SidebarSideChats";
 import { SidebarSectionsList } from "./sidebar/SidebarTimeline";
-import { SidebarWorkbenchLabel } from "./sidebar/SidebarWorkbenchLabel";
 
 export interface SidebarProps {
   sessions: Session[];
@@ -133,10 +132,12 @@ export interface SidebarProps {
  * Galley, and the sidebar has two blocks. On the chrome, under a
  * masthead without the wordmark (the traffic lights' zone, 搜索 and
  * 新建项目), the assistant's card — a stage, its face centred (ticket
- * 67) — then the sidebar's strongest line (line-strong) with the
- * workbench's name centred on it, 「━━ 工作台 ━━」 (rulings 114, 118,
- * 120 point 6; tickets 62, 69), the chrome fading into the app ground
- * behind it; its to-dos open from Galley's own top bar (ticket 45).
+ * 67) — then the sidebar's strongest line (line-strong), edge to edge
+ * at the card block's foot, where the chrome gives way to the app
+ * ground; its to-dos open from Galley's own top bar (ticket 45). The
+ * line carries no name (ruling 121; tickets 62–69 hung 「工作台」 on
+ * it): the workbench is named once, in the list's line while nobody
+ * has started a conversation, 「工作台：你另开的对话会出现在这里。」.
  * Under it, on the app ground that runs to the window's foot,
  * 「已归档」 pinned there, the list opens on 「＋ 新对话 ⌘N」 as its
  * sticky first row (sidebar/SidebarAssistant.tsx); the buckets hold what a person
@@ -442,41 +443,40 @@ export function Sidebar({
         onNewProject={onNewProject}
       />
       {mainChat ? (
-        // Two zones (rulings 114, 118 point 5; ticket 62's C): the
-        // assistant stays put on the chrome, its stage card with air
-        // round it (8px over it, 6px under it to the workbench's name's
-        // row; the card carries its own 6px inside, so the zone is about
-        // 140px, ruling 118 point 2; ticket 67), above the sidebar's
-        // strongest structural line (line-strong, ticket 09: JC's C3 +
-        // 常显 + 加重), which carries the workbench's name 「工作台」,
-        // centred (SidebarWorkbenchLabel). What stays put sits above the
-        // line, the scrolling list below. The 10-08 "no line at rest" rule
-        // kept the 新对话 row joined to the list it heads; the card heads
-        // nothing.
+        // Two zones (rulings 114, 118 point 5, 121): the assistant stays
+        // put on the chrome, its stage card with air round it (8px over
+        // it, 6px under it; the card carries its own 6px inside, so the
+        // zone is about 140px, ruling 118 point 2; ticket 67), above the
+        // sidebar's strongest structural line (line-strong, ticket 09:
+        // JC's C3 + 常显 + 加重), this block's foot, edge to edge. What
+        // stays put sits above the line, the scrolling list below, and
+        // the ground turns from chrome to app right under it, so the line
+        // covers the step: one edge, not two. Outside the scrolling list,
+        // it runs over Windows' 10px scrollbar lane to the sidebar's
+        // edge; the lane begins under it. The 10-08 "no line at rest"
+        // rule kept the 新对话 row joined to the list it heads; the card
+        // heads nothing.
         //
-        // The 6px under the card belong to the name's element (ticket 69;
-        // until then this block's pb-1.5): the chrome fades into the app
-        // ground from the card's foot to the name's row's, and one element
-        // owns that whole run. The card's hover fill stops at its foot,
-        // where the fade starts; pressed, its translate lifts it over the
-        // fade. Its focus ring, 2px outside it, would lie under the fade
-        // at its foot, the name being painted after this block: the block
-        // is positioned while the ring shows, which paints it over the
-        // name. Only then: at rest the card is painted as before (a
-        // positioned block changed how headless Chrome with Windows
-        // scrollbars rasterised the card, by a level or two).
-        <>
-          <div className="pt-2 has-[:focus-visible]:relative">
-            <SidebarAssistantCard
-              mainChat={mainChat}
-              subtasks={mainChatSubtasks}
-              selected={mainChatSelected}
-              open={activeId === mainChat.id}
-              onOpen={() => handleSelectSession(mainChat.id)}
-            />
-          </div>
-          <SidebarWorkbenchLabel />
-        </>
+        // No name on the line (ruling 121). The stage, the line and the
+        // two grounds part the zones, and 「工作台」 is no place anyone is
+        // sent to, only a word that explains the list once: it says so in
+        // the list's empty line (SidebarAssistantEmptyHint), and goes with
+        // it. Bring a name back, from ticket 69's (centred on the line,
+        // the ground fading under it), once Galley's own words call the
+        // list 工作台 — "I opened one in the workbench" needs something on
+        // screen to point at (ruling 121 point 5).
+        //
+        // The card's focus ring, 2px outside it, lies in this block's own
+        // 6px foot, which nothing painted later reaches.
+        <div className="border-b border-line-strong pb-1.5 pt-2">
+          <SidebarAssistantCard
+            mainChat={mainChat}
+            subtasks={mainChatSubtasks}
+            selected={mainChatSelected}
+            open={activeId === mainChat.id}
+            onOpen={() => handleSelectSession(mainChat.id)}
+          />
+        </div>
       ) : (
         <SidebarQuickActions
           onNewChat={onNewChat}
@@ -497,9 +497,8 @@ export function Sidebar({
           // scrollIntoView clears the sticky new-chat row (42px: pt-1.5
           // + the button's h-8 + pb-1).
           // With a main chat the workbench's app ground runs from under
-          // its name (whose fade ends on it) to the window's foot however
-          // short the list, Windows' scrollbar lane with it (ruling 114
-          // point 5).
+          // the strong line to the window's foot however short the list,
+          // Windows' scrollbar lane with it (ruling 114 point 5).
           sectioned && "scroll-pt-[42px] bg-app",
         )}
       >
