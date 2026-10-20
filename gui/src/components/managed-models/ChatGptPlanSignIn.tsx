@@ -103,6 +103,12 @@ export function ChatGptPlanSignInControls({
         <Button variant="secondary" size="sm" onClick={onCancel}>
           {appCopy.common.cancel}
         </Button>
+        {/* A stale saved registration makes the authorize page show an
+            error instead of redirecting; cancelling drops it in Core, so
+            the next attempt registers afresh (ticket 02). */}
+        <span className="basis-full text-[12px] text-ink-muted">
+          {appCopy.chatgptPlan.waitingHint}
+        </span>
       </div>
     );
   }

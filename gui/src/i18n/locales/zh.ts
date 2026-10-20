@@ -157,6 +157,7 @@ export const zhCopy = {
     title: "使用你的 ChatGPT 套餐",
     body: "Galley 里符合条件的请求，会用你 ChatGPT 套餐或额度余额里的用量完成。",
     waiting: "在浏览器里完成登录…",
+    waitingHint: "浏览器里报错了？点「取消」，再登录一次。",
     otherMethods: "其他登录方式",
     accessDenied: "你在浏览器里取消了授权。",
     usageNotGranted: "没有勾选「使用 ChatGPT 套餐」，再试一次时记得勾上。",

@@ -168,6 +168,7 @@ export const enCopy: AppCopy = {
     title: "Use your ChatGPT plan",
     body: "Complete eligible requests in Galley with usage included in your ChatGPT plan or credits balance.",
     waiting: "Finish signing in in your browser…",
+    waitingHint: "Seeing an error in the browser? Cancel and sign in again.",
     otherMethods: "Other ways to sign in",
     accessDenied: "You cancelled the authorization in your browser.",
     usageNotGranted:
