@@ -1,4 +1,4 @@
-# 区名「工作台」放回线上：19px 软过渡加居中
+# 区名「工作台」：从线上到空状态提示
 
 日期：2026-10-20
 关联：[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 120，票 [68](../../.scratch/main-chat/issues/68-workbench-label-placement-trial.md)、[69](../../.scratch/main-chat/issues/69-workbench-label-on-the-line-final.md)；设计文档 [layout-and-chrome](../design/layout-and-chrome.md) §4.2「区名『工作台』」「下面那块的底与分隔线」；前情 [侧栏分两区](./2026-10-20-sidebar-zones-and-a-living-face.md)

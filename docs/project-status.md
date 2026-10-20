@@ -798,8 +798,9 @@ resident bridge (`.scratch/browser-control-ux/PRD.md`, moved out of the
   2767 bytes.
 
 - **Two zones in the sidebar, and a face that is alive** (2026-10-19 / 20,
-  rulings 114, 117–119, tickets 62, 65–67, devlog
-  [2026-10-20-sidebar-zones-and-a-living-face](./devlog/2026-10-20-sidebar-zones-and-a-living-face.md)).
+  rulings 114, 117–121, tickets 62, 65–70, devlogs
+  [2026-10-20-sidebar-zones-and-a-living-face](./devlog/2026-10-20-sidebar-zones-and-a-living-face.md)
+  and [2026-10-20-workbench-label-on-the-line](./devlog/2026-10-20-workbench-label-on-the-line.md)).
   GUI only, managed runtime with a main chat; the external runtime's
   sidebar is unchanged. A strong line parts the assistant from the
   workbench, with no standing name on it (the name, 「工作台」, is said in

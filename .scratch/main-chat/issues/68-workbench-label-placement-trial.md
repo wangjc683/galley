@@ -69,7 +69,7 @@ Status: done（2026-10-20 JC 真机比完，A、B 都不要，放回线上改 19
 - `pnpm --dir gui typecheck`、`pnpm --dir gui lint`、`git diff --check`。
 - `TZ=UTC pnpm --dir gui test` 与 `TZ=America/Los_Angeles pnpm --dir gui test`。
 - 单测：默认档的 DOM 与 class 和现状一致；A、B 各渲染出一个区名，字在对的底上（A 在 app、B 在 chrome），线通栏；线档切换 `line-strong` / `line`；外置运行时不受档位影响；生产构建（非 DEV）忽略本机存的档位；「票 68」都找得到。
-- 自查截图（放 `/private/tmp/claude-501/-Users-inkstone-Documents-genericagent-webui/c580e5ad-5e9f-499f-a462-4283d029147f/scratchpad/t68/`，文件名带 `t68-` 前缀，不进仓库）：三档 × 两种线 × 浅色 / 深色 × 中文，外加英文、最窄 134px、列表滚动后、侧栏收起、外置运行时；「现状 + 加重」与基点同一个 harness 逐像素比。另拼一张总览图（三档 × 两种线，浅色、中文），给 JC 先看。数据用合成的，或 `workbench.db` 的只读副本（副本放 scratchpad，用完删）。截完删掉临时页，**自己起的 Vite / 浏览器进程全部停掉**。
+- 自查截图（放主会话 scratchpad 的 `t68/`，文件名带 `t68-` 前缀，不进仓库）：三档 × 两种线 × 浅色 / 深色 × 中文，外加英文、最窄 134px、列表滚动后、侧栏收起、外置运行时；「现状 + 加重」与基点同一个 harness 逐像素比。另拼一张总览图（三档 × 两种线，浅色、中文），给 JC 先看。数据用合成的，或 `workbench.db` 的只读副本（副本放 scratchpad，用完删）。截完删掉临时页，**自己起的 Vite / 浏览器进程全部停掉**。
 
 ## 回报格式
 

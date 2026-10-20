@@ -15,7 +15,7 @@ Status: done（2026-10-20 JC 真机看过，随即提出区名是否该隐藏，
 - **字**：配方不变：`text-ui-label`（11px）、常规字重、`ink-muted`、不转大写、不加字距，中文「工作台」、英文「Workbench」（`copy.sidebar.zoneWorkbench`）。
 - 新对话按钮仍从 205.8 起；吸顶新对话行、它下沿的渐隐、`scroll-pt-[42px]` 不动。
 
-示意（主会话画的，不是真机）：`/private/tmp/claude-501/-Users-inkstone-Documents-genericagent-webui/c580e5ad-5e9f-499f-a462-4283d029147f/scratchpad/wb-label-mock2.html` 里的「④ 软过渡 + 居中」，换成「①′」那种 19px 渐变。
+示意（主会话画的，不是真机）：主会话 scratchpad 的 `wb-label-mock2.html` 里的「④ 软过渡 + 居中」，换成「①′」那种 19px 渐变。
 
 ## 改什么
 
@@ -68,7 +68,7 @@ Status: done（2026-10-20 JC 真机看过，随即提出区名是否该隐藏，
 - `pnpm --dir gui typecheck`、`pnpm --dir gui lint`、`git diff --check`、`pnpm --dir gui build`。
 - `TZ=UTC pnpm --dir gui test` 与 `TZ=America/Los_Angeles pnpm --dir gui test`。
 - 文档链接门禁：`node scripts/check-docs-links.mjs`。
-- 生产构建自查截图（放 `/private/tmp/claude-501/-Users-inkstone-Documents-genericagent-webui/c580e5ad-5e9f-499f-a462-4283d029147f/scratchpad/t69/`，文件名带 `t69-`，不进仓库）：浅色 / 深色 × 中文 / 英文，最窄 134px，卡片悬停与按下，列表滚动后，Windows 滚动条（去掉 `--hide-scrollbars` 才截得到滑块），外置运行时与基点逐像素比。交界那一段 2x 放大，浅深各一张，给 JC 先看。量一遍上面的数值（卡片、渐变起止、线、按钮），写进回报。截完自己起的 Vite / 浏览器进程全部停掉。
+- 生产构建自查截图（放主会话 scratchpad 的 `t69/`，文件名带 `t69-`，不进仓库）：浅色 / 深色 × 中文 / 英文，最窄 134px，卡片悬停与按下，列表滚动后，Windows 滚动条（去掉 `--hide-scrollbars` 才截得到滑块），外置运行时与基点逐像素比。交界那一段 2x 放大，浅深各一张，给 JC 先看。量一遍上面的数值（卡片、渐变起止、线、按钮），写进回报。截完自己起的 Vite / 浏览器进程全部停掉。
 
 ## 回报格式
 

@@ -1,6 +1,6 @@
 # 70 工作台不挂区名：有对话时只留线，名字挪进空状态那句提示
 
-Status: needs-dogfood（2026-10-20 合入 `c0799813`、`e91a55db`、`99e0a775`；主会话复跑门禁：typecheck、lint、`git diff --check`、文档链接门禁、`TZ=UTC` 与 `TZ=America/Los_Angeles` 各 178 个文件 1946 条测试全过，新增行没有本机路径，`gui/src` 里 `SidebarWorkbenchLabel`、`zoneWorkbench` 只剩遗留清单；看过有对话与新用户的浅深截图。等 JC 真机看一眼）
+Status: done（2026-10-20 JC 真机通过：「这几个里面最满意了」。合入 `c0799813`、`e91a55db`、`99e0a775`；主会话复跑门禁：typecheck、lint、`git diff --check`、文档链接门禁、`TZ=UTC` 与 `TZ=America/Los_Angeles` 各 178 个文件 1946 条测试全过，新增行没有本机路径，`gui/src` 里 `SidebarWorkbenchLabel`、`zoneWorkbench` 只剩遗留清单；看过有对话与新用户的浅深截图。等 JC 真机看一眼）
 
 来源：主聊天 PRD 裁决 121（2026-10-20，JC：「按你推荐推进」）。依赖 69（已合入）。改 GUI 与文档；Core、runner、CLI 不动。
 
@@ -54,7 +54,7 @@ Status: needs-dogfood（2026-10-20 合入 `c0799813`、`e91a55db`、`99e0a775`�
 
 - `pnpm --dir gui typecheck`、`pnpm --dir gui lint`、`git diff --check`、`pnpm --dir gui build`、`node scripts/check-docs-links.mjs`。
 - `TZ=UTC pnpm --dir gui test` 与 `TZ=America/Los_Angeles pnpm --dir gui test`。
-- 生产构建自查截图（放 `/private/tmp/claude-501/-Users-inkstone-Documents-genericagent-webui/c580e5ad-5e9f-499f-a462-4283d029147f/scratchpad/t70/`，文件名带 `t70-`，不进仓库）：浅色 / 深色 × 中文 / 英文，有对话与新用户（列表空）各一套；最窄 134px（含新提示）；卡片悬停、按下、键盘焦点；列表滚动后；Windows 滚动条（去掉 `--hide-scrollbars`）；外置运行时与基点逐像素比。另拼一张给 JC 先看的：浅色中文，有对话与新用户并排，外加深色同一组。截完自己起的 Vite / 浏览器进程全部停掉。
+- 生产构建自查截图（放主会话 scratchpad 的 `t70/`，文件名带 `t70-`，不进仓库）：浅色 / 深色 × 中文 / 英文，有对话与新用户（列表空）各一套；最窄 134px（含新提示）；卡片悬停、按下、键盘焦点；列表滚动后；Windows 滚动条（去掉 `--hide-scrollbars`）；外置运行时与基点逐像素比。另拼一张给 JC 先看的：浅色中文，有对话与新用户并排，外加深色同一组。截完自己起的 Vite / 浏览器进程全部停掉。
 
 ## 回报格式
 
