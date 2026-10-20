@@ -801,8 +801,10 @@ resident bridge (`.scratch/browser-control-ux/PRD.md`, moved out of the
   rulings 114, 117–119, tickets 62, 65–67, devlog
   [2026-10-20-sidebar-zones-and-a-living-face](./devlog/2026-10-20-sidebar-zones-and-a-living-face.md)).
   GUI only, managed runtime with a main chat; the external runtime's
-  sidebar is unchanged. 「工作台」 sits on the line between the assistant
-  and the workbench, whose ground runs to the window's foot with 「已归档」
+  sidebar is unchanged. A strong line parts the assistant from the
+  workbench, with no standing name on it (the name, 「工作台」, is said in
+  the list's empty line until the first conversation); the workbench's
+  ground runs to the window's foot with 「已归档」
   pinned on it. The assistant's card is a centred 72px stage, and its
   avatar's face (eyes, mouth, the tongue that makes the G, a few comic
   marks) moves with what it is doing — only in the sidebar, mostly still
