@@ -1,6 +1,6 @@
 # 用 ChatGPT 套餐登录（Sign in with ChatGPT）
 
-Status: active（2026-10-20 裁决 1：走 C，原生接 OpenAI 官方的 Sign in with ChatGPT；裁决 2–17 同日定：删 A、C 就地接管现有服务商、对话报错本地化、默认模型取目录第一个、额度显示暂缓、文案叫「ChatGPT 订阅」、订阅标识定为模型名前的 ChatGPT 标志，菜单行同样用标志，设置页服务商小字与「添加」菜单）
+Status: shipped-on-main（2026-10-20 票 01–06 全部合入并通过真机，等发版；发版后按 issue-tracker 的生命周期删除本目录。2026-10-20 裁决 1：走 C，原生接 OpenAI 官方的 Sign in with ChatGPT；裁决 2–17 同日定：删 A、C 就地接管现有服务商、对话报错本地化、默认模型取目录第一个、额度显示暂缓、文案叫「ChatGPT 订阅」、订阅标识定为模型名前的 ChatGPT 标志，菜单行同样用标志，设置页服务商小字与「添加」菜单）
 
 来源：2026-10-20 JC 提出，依据 Codex 负责人 Tibo 的推文，考虑以 CLIProxyAPI（CPA）的形式内嵌，让用户用 ChatGPT 订阅里的 Codex 额度跑 Galley。
 对比后改走官方的 Sign in with ChatGPT（下称 SIWC）：DevDay 2026 推出，开源项目与本地运行的应用可自助接入，Galley（MIT、本机运行）在范围内。
