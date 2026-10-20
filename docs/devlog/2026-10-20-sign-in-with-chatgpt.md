@@ -1,7 +1,7 @@
 # 用 ChatGPT 订阅登录：不内嵌 CPA，改走官方 Sign in with ChatGPT，删掉借 Codex CLI 的旧登录
 
 日期：2026-10-20
-关联：[SIWC PRD](../../.scratch/chatgpt-siwc/PRD.md) 裁决 1–17，票 01–06；暂缓项 [deferred「ChatGPT 套餐的额度显示」](./deferred.md#chatgpt-套餐的额度显示)；运行时文档 [model-configuration](../managed-ga-runtime/model-configuration.md)「ChatGPT（Sign in with ChatGPT）」一节；宪法 Rule 2 的窄例外（`AGENTS.md`）。
+关联：[SIWC PRD](../../.scratch/chatgpt-siwc/PRD.md) 裁决 1–18，票 01–07；暂缓项 [deferred「ChatGPT 套餐的额度显示」](./deferred.md#chatgpt-套餐的额度显示)；运行时文档 [model-configuration](../managed-ga-runtime/model-configuration.md)「ChatGPT（Sign in with ChatGPT）」一节；宪法 Rule 2 的窄例外（`AGENTS.md`）。
 
 ## 起因
 
@@ -50,6 +50,7 @@ JC 看到 Codex 负责人 Tibo 的推文，认为 OpenAI 认可个人订阅用�
 - **裁决 14**：模型菜单的订阅行同样用标志；列表中间的分组头挪到底部动作栏（分组头按位置插入，订阅模型被拖到中间时会误把下面的行也框进去）；05-28 起就有、却从没写进文档的「同名模型常显服务商」规则补上标志例外。
 - **裁决 15、16**：设置页服务商小字改说「怎么接」（ChatGPT 订阅 / 官方 API / X 兼容），不写「OpenAI 官方」（订阅额度不是 API 计费）；「添加」本身就是菜单，三下变两下。
 - **裁决 17**：「添加」菜单每项两行，只露出 7 项，「自定义」藏在下面又看不出能滚；改成单行，一屏放下 11 项，上下渐隐兜底。
+- **裁决 18**：JC 问模型配置页的其他地方要不要统一加 logo。定为标志跟着会花订阅额度的模型走，不跟服务商走：补上 ⌘K「切换模型」和设置 →「我的模型」两处，⌘K 顺带补上同名规则；服务商卡、「添加」菜单、引导页都不放。否掉「所有服务商都上 logo」：ChatGPT 标志就是 OpenAI 的花形标，给「OpenAI（官方 API）」也加，就成了一图两义。句子里的模型名（⌘K 首页的「当前：X」）也不放。
 
 ## 顺带修掉的
 

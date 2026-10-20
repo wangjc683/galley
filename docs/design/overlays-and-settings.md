@@ -108,6 +108,7 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
   - 走 ChatGPT 订阅的行把 `Cube` 换成 ChatGPT 标志（`ChatGptMark`）：14px、`text-ink-muted`，放在 16px 宽的居中盒子里，模型名与别的行对齐。不用图标的 16px 和 `text-ink-soft`：实心标志放在细线图标旁边，同尺寸同墨色会显得重。见 [conversation.md](./conversation.md)「ChatGPT 订阅标志」。
   - 服务商名只在同名、而标志又分不开（都走订阅，或都不走）的行上显示：行右侧、勾号之前，11.5px 淡墨，超过 160px 截断，悬停看全文；其余行不显示。判定与模型菜单共用（`providerLabelAlwaysShown`，见 [conversation.md](./conversation.md)「LLM 切换器」的 Popover 结构）。菜单里「悬停才浮出」的那一半不移植：⌘K 没有悬停浮出的语法。
   - 每行的 cmdk `value` 带序号：同名两行 value 相同时，cmdk 把两行一起高亮，↓ 停在第一行走不下去，回车总是选第一行。
+  - 首页「切换模型」那行右边的「当前：X」**有意不加**标志：句子里的模型名不放，和 pill 的提示「使用 ChatGPT 订阅」同理（JC 真机后定）。
 - Open settings
 - **智能体接入**（2026-10-19，主聊天票 54，[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 106）：`PlugsConnected` 图标，紧跟在「打开设置」后面，直接打开「设置 → 智能体接入」（英文 UI 叫 Agent，同设置侧栏这一页的名字）。两种运行时都有：内置运行时的顶栏不再有 Supervisor SOP 图标（[layout-and-chrome](./layout-and-chrome.md) §4.1 工具簇），这是除设置侧栏外的入口。搜「SOP」「Supervisor」「agent」「cli」「智能体」「接入」都找得到：找它的人多半敲 SOP 的名字，不是页名。「打开设置」照旧落「通用」。
 - ~~Re-run health check~~、~~Attach GA folder~~：2026-10-08 删除（Settings 逐页第二批 D2，JC 选 B）。两项从

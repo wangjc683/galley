@@ -715,7 +715,9 @@ and tests it, green on `98dec86c`; the runtime smoke is what's owed).
   credentials at start without revoking them, and those users see
   「需要登录」. `AGENTS.md` Rule 2 gains a narrow exception for the one-shot
   loopback sign-in listener. The plan shows as a ChatGPT logo before the
-  model name, copy says 「ChatGPT 订阅」, plan errors in the conversation get
+  model name wherever such a model is listed (the composer pill, its menu,
+  ⌘K 切换模型, Settings → 我的模型), never on a provider; copy says
+  「ChatGPT 订阅」, plan errors in the conversation get
   「管理用量」 / 「去设置登录」; Settings → Models says how each provider
   connects and 「添加」 opens the provider list directly. Migration `052`
   also fixes the no-auth provider, which never saved since 2026-08-31.
