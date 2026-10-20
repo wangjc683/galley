@@ -1,5 +1,4 @@
-import { CaretRight, CircleNotch } from "@phosphor-icons/react";
-import { useState, type ReactNode } from "react";
+import { CircleNotch } from "@phosphor-icons/react";
 
 import chatGptLogoBlackUrl from "@/assets/chatgpt-logo-black.svg";
 import chatGptLogoWhiteUrl from "@/assets/chatgpt-logo-white.svg";
@@ -120,43 +119,6 @@ export function ChatGptPlanSignInControls({
         disabled={disabled}
         onClick={onSignIn}
       />
-    </div>
-  );
-}
-
-/**
- * 「其他登录方式」: the Codex CLI sign-ins (device code, import), folded
- * by default under the onboarding 「高级」 toggle's own look. Ticket 05
- * deletes the whole block, so it gets no styling of its own.
- */
-export function OtherSignInMethods({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  const copy = useCopy().chatgptPlan;
-  const [open, setOpen] = useState(false);
-  return (
-    <div className={className}>
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-        className="flex items-center gap-1 text-[12px] text-ink-muted hover:text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
-      >
-        <CaretRight
-          size={11}
-          weight="bold"
-          className={cn(
-            "transition-transform duration-(--motion-fast) ease-firm",
-            open && "rotate-90",
-          )}
-        />
-        {copy.otherMethods}
-      </button>
-      {open && <div className="mt-3">{children}</div>}
     </div>
   );
 }

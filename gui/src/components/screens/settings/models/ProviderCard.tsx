@@ -141,8 +141,8 @@ export function ProviderCard({
   ]);
   const signInNeeded = chatGptSignInNeeded(provider, planStatus);
   const keyMissing = provider.credentialStatus === "missing" || signInNeeded;
-  // Signed in with ChatGPT (not the Codex CLI login): its usage is the
-  // plan's, and its model list is the plan's real one.
+  // A Sign in with ChatGPT credential is stored: its usage is the plan's,
+  // and its model list (once signed in) is the plan's real one.
   const isPlan = planStatus?.flow === "siwc";
   const planSignedIn = isPlan && planStatus.signedIn;
   const providerProbeAction: ProbeAction = "model-test";
@@ -163,11 +163,11 @@ export function ProviderCard({
   );
   const visibleOptions = filteredOptions.slice(0, 80);
   // The 「已添加」 chips cover what the 可添加模型 list can't: with a list,
-  // only the added models it lacks (typed by hand); without one (Codex,
-  // missing key, failed / empty read, not read yet), all of them. While
-  // a first read is in flight the answer isn't known yet, so nothing
-  // shows rather than every chip flashing up and vanishing as the list
-  // lands.
+  // only the added models it lacks (typed by hand); without one (ChatGPT
+  // not signed in, missing key, failed / empty read, not read yet), all
+  // of them. While a first read is in flight the answer isn't known yet,
+  // so nothing shows rather than every chip flashing up and vanishing as
+  // the list lands.
   const listPending =
     modelOptions.length === 0 &&
     modelProbeState.kind === "loading" &&
@@ -214,10 +214,9 @@ export function ProviderCard({
 
   // Expand-triggered auto-fetch: pull the provider's model list once
   // per session when the card opens with nothing cached, so "可添加模型"
-  // appears without a manual click. The Codex CLI login is skipped (its
-  // backend has no meaningful model listing); Sign in with ChatGPT reads
-  // the plan's real list (ticket 04). The explicit button below stays as
-  // the refresh path.
+  // appears without a manual click. A ChatGPT provider reads the plan's
+  // real list once signed in (ticket 04) and is skipped until then. The
+  // explicit button below stays as the refresh path.
   const autoFetchedRef = useRef(false);
   useEffect(() => {
     if (

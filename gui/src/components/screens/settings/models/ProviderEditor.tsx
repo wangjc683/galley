@@ -1,22 +1,16 @@
 import {
   CircleNotch,
-  CloudArrowDown,
   Eye,
   EyeSlash,
   ListMagnifyingGlass,
   PlugsConnected,
   Plus,
-  SignIn,
   SignOut,
   X,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
-import {
-  ChatGptPlanSignInControls,
-  OtherSignInMethods,
-} from "@/components/managed-models/ChatGptPlanSignIn";
-import { CodexDeviceCodeCard } from "@/components/managed-models/CodexDeviceCodeCard";
+import { ChatGptPlanSignInControls } from "@/components/managed-models/ChatGptPlanSignIn";
 import { ManagedModelProviderPicker } from "@/components/managed-models/ManagedModelProviderPicker";
 import { ModelCombobox } from "@/components/managed-models/ModelCombobox";
 import { Button, IconButton } from "@/components/ui/button";
@@ -37,11 +31,10 @@ import {
   managedModelProtocolLabel,
   providerPresetLabel,
 } from "@/lib/managed-model-preset-copy";
-import type { CodexDeviceLoginStart } from "@/lib/managed-models";
 import { cn } from "@/lib/utils";
 import type { ManagedModelProtocol } from "@/types/managed-models";
 
-import { ExternalLinkIcon, ExternalTextLink } from "../external-link";
+import { ExternalTextLink } from "../external-link";
 import {
   EditorBlockedHint,
   ErrorLine,
@@ -73,19 +66,13 @@ export function ProviderEditor({
   modelOptions,
   editTestModel,
   blocked,
-  codexLoginStart,
-  codexPolling = false,
   chatGptPlanLogin = CHATGPT_PLAN_LOGIN_IDLE,
   onChange,
   onSelectProviderPreset,
   onTest,
   onFetchModels,
-  onCodexLogin,
-  onCodexOpenLoginPage,
-  onCodexCompleteLogin,
-  onCodexImport,
-  onCodexLogout,
   onChatGptPlanSignIn,
+  onChatGptPlanSignOut,
   onChatGptPlanCancel,
   onSave,
   onCancel,
@@ -110,9 +97,7 @@ export function ProviderEditor({
   editTestModel?: string;
   /** Set when this form just refused to be replaced (unsaved input). */
   blocked?: EditorBlockedState;
-  codexLoginStart?: CodexDeviceLoginStart | null;
-  codexPolling?: boolean;
-  /** Sign in with ChatGPT, the ChatGPT card's main path (ticket 04). */
+  /** Sign in with ChatGPT, the ChatGPT card's sign-in (ticket 04). */
   chatGptPlanLogin?: ChatGptPlanLoginState;
   onChange: (patch: Partial<ProviderFormState>) => void;
   onSelectProviderPreset: (
@@ -120,12 +105,8 @@ export function ProviderEditor({
   ) => void;
   onTest: () => void;
   onFetchModels: () => void;
-  onCodexLogin: () => void;
-  onCodexOpenLoginPage: () => void;
-  onCodexCompleteLogin: () => void;
-  onCodexImport: () => void;
-  onCodexLogout: () => void;
   onChatGptPlanSignIn: () => void;
+  onChatGptPlanSignOut: () => void;
   onChatGptPlanCancel: () => void;
   onSave: () => void;
   onCancel: () => void;
@@ -139,7 +120,7 @@ export function ProviderEditor({
     ? getManagedModelProviderPreset(form.providerPresetId)
     : null;
   const providerSelected = Boolean(selectedPreset && form.protocol);
-  const isCodexProvider = form.authKind === "chatgpt_codex_oauth";
+  const isChatGptProvider = form.authKind === "chatgpt_codex_oauth";
   // The Custom card leads with what it can't preset: the protocol and
   // the endpoint, then the (optional) key. Every other card keeps
   // key → URL.
@@ -176,7 +157,7 @@ export function ProviderEditor({
   // Editing keeps the card it was saved under: switching cards would
   // reset the endpoint while the provider's models keep the old card's
   // preset layer. Only the Custom card's protocol stays switchable.
-  const editIdentityProtocolLabel = isCodexProvider
+  const editIdentityProtocolLabel = isChatGptProvider
     ? copy.chatgptCodexBadge
     : isCustomEndpoint || !form.protocol
       ? null
@@ -268,12 +249,13 @@ export function ProviderEditor({
           )
         )}
 
-        {providerSelected && selectedPreset && form.protocol && isCodexProvider && (
-          <div className="space-y-4 pb-1">
-            {/* Sign in with ChatGPT is the main path (ticket 04); the
-                Codex CLI sign-ins wait folded below until ticket 05
-                removes them. */}
-            <div className="space-y-3">
+        {providerSelected &&
+          selectedPreset &&
+          form.protocol &&
+          isChatGptProvider && (
+            // Sign in with ChatGPT, the ChatGPT card's only sign-in (SIWC
+            // ticket 05 removed the Codex CLI ones).
+            <div className="space-y-3 pb-1">
               <div>
                 <div className="text-ui-meta font-medium text-ink-soft">
                   {planCopy.title}
@@ -294,7 +276,7 @@ export function ProviderEditor({
                     variant="ghost"
                     size="sm"
                     disabled={probeState.kind === "loading"}
-                    onClick={onCodexLogout}
+                    onClick={onChatGptPlanSignOut}
                     leadingIcon={<SignOut size={12} weight="thin" />}
                   >
                     {copy.signOutChatGPT}
@@ -307,109 +289,9 @@ export function ProviderEditor({
               )}
               <ProbeErrorLine state={probeState} action="provider-test" />
             </div>
+          )}
 
-            <OtherSignInMethods className="border-t border-line pt-3">
-              <div className="space-y-4">
-                <div className="space-y-3">
-                  <div>
-                    <div className="text-ui-meta font-medium text-ink-soft">
-                      {copy.chatgptCodexWebLogin}
-                    </div>
-                    <p className="m-0 mt-1 max-w-[620px] text-ui-secondary leading-5 text-ink-muted">
-                      {copy.chatgptCodexReadyBody}
-                    </p>
-                  </div>
-                  {codexLoginStart && (
-                    <CodexDeviceCodeCard
-                      userCode={codexLoginStart.userCode}
-                      copy={copy}
-                      className="mt-4"
-                    />
-                  )}
-                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
-                    {!codexLoginStart ? (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={probeState.kind === "loading"}
-                        onClick={onCodexLogin}
-                        leadingIcon={
-                          probeState.kind === "loading" &&
-                          probeState.action === "provider-test" ? (
-                            <span className="spin">
-                              <CircleNotch size={12} weight="thin" />
-                            </span>
-                          ) : (
-                            <SignIn size={12} weight="bold" />
-                          )
-                        }
-                      >
-                        {copy.generateChatGPTLoginCode}
-                      </Button>
-                    ) : (
-                      <>
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          disabled={probeState.kind === "loading"}
-                          onClick={onCodexOpenLoginPage}
-                          leadingIcon={<ExternalLinkIcon />}
-                        >
-                          {copy.openChatGPTLoginPage}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          disabled={probeState.kind === "loading"}
-                          onClick={onCodexCompleteLogin}
-                          leadingIcon={
-                            <PlugsConnected size={12} weight="thin" />
-                          }
-                        >
-                          {copy.completeChatGPTLogin}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={probeState.kind === "loading"}
-                          onClick={onCodexLogin}
-                        >
-                          {copy.regenerateChatGPTLoginCode}
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                  {codexPolling && (
-                    <div className="flex items-center gap-1.5 text-ui-secondary text-ink-muted">
-                      <span className="spin">
-                        <CircleNotch size={12} weight="thin" />
-                      </span>
-                      {copy.codexWaitingForLogin}
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t border-line pt-3">
-                  <div className="text-ui-meta font-medium text-ink-soft">
-                    {copy.codexCliLoginTitle}
-                  </div>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="mt-2"
-                    disabled={probeState.kind === "loading"}
-                    onClick={onCodexImport}
-                    leadingIcon={<CloudArrowDown size={12} weight="thin" />}
-                  >
-                    {copy.importCodexCliLogin}
-                  </Button>
-                </div>
-              </div>
-            </OtherSignInMethods>
-          </div>
-        )}
-
-        {providerSelected && selectedPreset && form.protocol && !isCodexProvider && (
+        {providerSelected && selectedPreset && form.protocol && !isChatGptProvider && (
           <>
             {isCustomEndpoint && (
               <>

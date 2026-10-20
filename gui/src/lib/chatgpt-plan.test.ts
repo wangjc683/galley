@@ -228,10 +228,16 @@ describe("which models spend the ChatGPT plan", () => {
     expect(
       chatGptPlanModelIds(models, { mp_chatgpt_codex: status({}) }),
     ).toEqual(new Set(["mm_plan_a", "mm_plan_b"]));
-    // The Codex CLI login is not the plan route.
+    // Its tokens cleared after a dead refresh: still the plan's models.
     expect(
       chatGptPlanModelIds(models, {
-        mp_chatgpt_codex: status({ flow: "codex" }),
+        mp_chatgpt_codex: status({ signedIn: false, needsReauth: true }),
+      }),
+    ).toEqual(new Set(["mm_plan_a", "mm_plan_b"]));
+    // No credential (signed out, or a Codex CLI login cleared at start).
+    expect(
+      chatGptPlanModelIds(models, {
+        mp_chatgpt_codex: status({ flow: null, signedIn: false }),
       }).size,
     ).toBe(0);
     // Not read yet: nothing claimed.

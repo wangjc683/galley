@@ -10,18 +10,14 @@ import {
 } from "@/lib/chatgpt-plan";
 import {
   cancelChatGptPlanLogin,
-  completeChatGptCodexLogin,
   getChatGptPlanStatus,
-  importChatGptCodexCliLogin,
   listManagedModelOptions,
   logoutChatGptPlan,
   managedModelProbeErrorMessage,
   modelListProbeFailureState,
-  startChatGptCodexLogin,
   startChatGptPlanLogin,
   testManagedModelConnectionWithLatency,
   type ChatGptPlanLoginStart,
-  type CodexDeviceLoginStart,
 } from "@/lib/managed-models";
 import { useCopy } from "@/lib/i18n";
 import {
@@ -42,7 +38,6 @@ import {
   providerFormFromRecord,
   providerFormModelTestInput,
   providerListFingerprint,
-  runCodexComplete,
   runProviderCommit,
   shouldAutoOpenNewProviderForm,
   type ProbeAction,
@@ -87,7 +82,7 @@ export function useProviderSetupController({
   trimCredentialsOnSave = false,
   postSaveForm = "reset",
   onSaved,
-  onCodexComplete,
+  onChatGptSignedIn,
   expandProvider,
   rememberProviderModelOptions,
 }: {
@@ -128,13 +123,11 @@ export function useProviderSetupController({
    * caller's wrapped store actions report it (settings: error toast). */
   postSaveForm?: "reset" | "success-status";
   onSaved?: (ctx: { providerId: string; isNewProvider: boolean }) => void;
-  /** Post-success strategy for the ChatGPT sign-ins (Sign in with
-   * ChatGPT, and the Codex CLI login / import). `isNewProvider` is known
-   * for Sign in with ChatGPT only (it may take over an existing
-   * provider); the Codex flows leave it out. */
-  onCodexComplete?: (
+  /** Post-success strategy for Sign in with ChatGPT. `isNewProvider`
+   * is false when it took over the ChatGPT provider already there. */
+  onChatGptSignedIn?: (
     providerId: string,
-    ctx?: { isNewProvider: boolean },
+    ctx: { isNewProvider: boolean },
   ) => void;
   /** Settings-only: expand a provider card when editing starts. */
   expandProvider?: (id: string) => void;
@@ -152,9 +145,6 @@ export function useProviderSetupController({
   const [providerFormModelOptions, setProviderFormModelOptions] = useState<
     string[]
   >([]);
-  const [codexLoginStart, setCodexLoginStart] =
-    useState<CodexDeviceLoginStart | null>(null);
-  const [codexPolling, setCodexPolling] = useState(false);
   // Sign in with ChatGPT (.scratch/chatgpt-siwc ticket 04): one sign-in
   // at a time for the page. The attempt counter retires a sign-in the
   // user cancelled or walked away from while a call was still out; the
@@ -200,7 +190,7 @@ export function useProviderSetupController({
   const providerFormDirty = isProviderFormDirty(providerForm, editingProvider);
   const isCreatingProvider = !!visibleProviderForm && !visibleProviderForm.id;
   const providerFormIsInlineEdit = !!visibleProviderForm?.id;
-  const isCodexProviderForm =
+  const isChatGptProviderForm =
     visibleProviderForm?.authKind === "chatgpt_codex_oauth";
   const providerFormEffectiveAuthKind = visibleProviderForm
     ? effectiveProviderAuthKind(visibleProviderForm, providerHasSavedKey)
@@ -225,7 +215,7 @@ export function useProviderSetupController({
     providerFormProbeState.kind !== "loading";
   const canFetchProviderFormModels =
     !!visibleProviderForm &&
-    !isCodexProviderForm &&
+    !isChatGptProviderForm &&
     visibleProviderForm.protocol !== null &&
     !visibleProviderForm.id &&
     visibleProviderForm.apiBase.trim() !== "" &&
@@ -357,7 +347,7 @@ export function useProviderSetupController({
   // materialise out of nowhere; failure still degrades silently (back
   // to idle) — the explicit fetch button stays the loud error path.
   const autoFetchFingerprint =
-    visibleProviderForm && isCreatingProvider && !isCodexProviderForm
+    visibleProviderForm && isCreatingProvider && !isChatGptProviderForm
       ? providerListFingerprint(visibleProviderForm)
       : null;
   const visibleProviderFormRef = useRef(visibleProviderForm);
@@ -478,14 +468,13 @@ export function useProviderSetupController({
    * goes with it. One started from a provider card (Settings, no ChatGPT
    * form open) is the card's and stays. */
   const releaseFormChatGptPlanLogin = () => {
-    if (isCodexProviderForm) cancelChatGptPlanSignIn();
+    if (isChatGptProviderForm) cancelChatGptPlanSignIn();
   };
 
   const resetProviderForm = () => {
     setProviderForm(null);
     setProviderFormModelOptions([]);
     setProviderFormProbeState({ kind: "idle" });
-    setCodexLoginStart(null);
     releaseFormChatGptPlanLogin();
     setNoAuthConfirmOpen(false);
     setClearKeyConfirmOpen(false);
@@ -507,7 +496,6 @@ export function useProviderSetupController({
       setProviderFormModelOptions([]);
     }
     setProviderFormProbeState({ kind: "idle" });
-    setCodexLoginStart(null);
     resetConnectionTest();
   };
 
@@ -534,7 +522,6 @@ export function useProviderSetupController({
     });
     setProviderFormModelOptions([]);
     setProviderFormProbeState({ kind: "idle" });
-    setCodexLoginStart(null);
     releaseFormChatGptPlanLogin();
     resetConnectionTest();
   };
@@ -543,7 +530,6 @@ export function useProviderSetupController({
     setProviderForm(newProviderForm());
     setProviderFormModelOptions([]);
     setProviderFormProbeState({ kind: "idle" });
-    setCodexLoginStart(null);
     releaseFormChatGptPlanLogin();
     resetConnectionTest();
   };
@@ -553,7 +539,6 @@ export function useProviderSetupController({
     setProviderForm(providerFormFromRecord(provider));
     setProviderFormModelOptions([]);
     setProviderFormProbeState({ kind: "idle" });
-    setCodexLoginStart(null);
     releaseFormChatGptPlanLogin();
     resetConnectionTest();
   };
@@ -772,10 +757,10 @@ export function useProviderSetupController({
 
   /**
    * Sign in with ChatGPT: open Core's sign-in, send the browser to it,
-   * wait for the callback (`complete`, once per login id), then the same
-   * tail as the Codex sign-in. Needs no form: the provider card's
-   * 「用 ChatGPT 登录」 runs it too. Core takes over the ChatGPT provider,
-   * whichever sign-in it had before.
+   * wait for the callback (`complete`, once per login id), then reload
+   * the store and the plan status. Needs no form: the provider card's
+   * 「用 ChatGPT 登录」 runs it too. Core takes over the ChatGPT provider
+   * if there is one.
    */
   const handleChatGptPlanLogin = async () => {
     if (
@@ -863,124 +848,24 @@ export function useProviderSetupController({
     ) {
       resetProviderForm();
     }
-    onCodexComplete?.(finished.providerId, {
+    onChatGptSignedIn?.(finished.providerId, {
       isNewProvider: !knownProviderIds.has(finished.providerId),
     });
   };
 
-  const handleCodexLogin = async () => {
-    if (
-      !visibleProviderForm ||
-      visibleProviderForm.authKind !== "chatgpt_codex_oauth"
-    ) {
-      return;
-    }
-    setProviderFormProbeState({ kind: "loading", action: "provider-test" });
-    try {
-      const start = await startChatGptCodexLogin();
-      setCodexLoginStart(start);
-      setProviderFormProbeState({
-        kind: "success",
-        action: "provider-test",
-        message: modelCopy.chatgptCodexCodeReady,
-      });
-    } catch (e) {
-      setProviderFormProbeState({
-        kind: "error",
-        action: "provider-test",
-        message: managedModelProbeErrorMessage(e, modelCopy),
-      });
-    }
-  };
-
-  const handleCodexCompleteLogin = async () => {
-    if (!codexLoginStart || codexPolling) return;
-    setCodexPolling(true);
-    setProviderFormProbeState({ kind: "loading", action: "provider-test" });
-    try {
-      const providerId = await runCodexComplete(
-        { complete: completeChatGptCodexLogin, loadManagedModels },
-        codexLoginStart,
-      );
-      if (postSaveForm === "reset") {
-        resetProviderForm();
-      }
-      onCodexComplete?.(providerId);
-    } catch (e) {
-      setProviderFormProbeState({
-        kind: "error",
-        action: "provider-test",
-        message: managedModelProbeErrorMessage(e, modelCopy),
-      });
-    } finally {
-      setCodexPolling(false);
-    }
-  };
-
-  const handleCodexOpenLoginPage = async () => {
-    if (!codexLoginStart) return;
-    try {
-      await openUrl(codexLoginStart.verificationUrl);
-    } catch (e) {
-      setProviderFormProbeState({
-        kind: "error",
-        action: "provider-test",
-        message: managedModelProbeErrorMessage(e, modelCopy),
-      });
-      return;
-    }
-    // Start polling right away — the standard device-code flow. The
-    // user finishes sign-in in the browser and the provider lands on
-    // its own; the manual "complete sign-in" button stays as the
-    // retry path after a timeout or error.
-    void handleCodexCompleteLogin();
-  };
-
-  const handleCodexImport = async () => {
-    if (
-      !visibleProviderForm ||
-      visibleProviderForm.authKind !== "chatgpt_codex_oauth"
-    ) {
-      return;
-    }
-    setCodexLoginStart(null);
-    setProviderFormProbeState({ kind: "loading", action: "provider-test" });
-    try {
-      const result = await importChatGptCodexCliLogin();
-      await loadManagedModels();
-      if (postSaveForm === "reset") {
-        resetProviderForm();
-      }
-      onCodexComplete?.(result.provider.id);
-    } catch (e) {
-      setProviderFormProbeState({
-        kind: "error",
-        action: "provider-test",
-        message: managedModelProbeErrorMessage(e, modelCopy),
-      });
-    }
-  };
-
-  const handleCodexLogout = async () => {
-    if (
-      !visibleProviderForm ||
-      visibleProviderForm.authKind !== "chatgpt_codex_oauth"
-    ) {
-      return;
-    }
+  const handleChatGptPlanLogout = async () => {
+    if (!visibleProviderForm || !isChatGptProviderForm) return;
     const providerId = visibleProviderForm.id;
-    setCodexLoginStart(null);
     setProviderFormProbeState({ kind: "loading", action: "provider-test" });
     try {
-      // Which sign-in is being signed out of: only a Sign in with ChatGPT
-      // credential that still had tokens is revoked, so only then does
-      // an unconfirmed revocation mean anything.
+      // Only a credential that still had tokens is revoked, so only then
+      // does an unconfirmed revocation mean anything.
       const before = providerId
         ? await getChatGptPlanStatus(providerId).catch(
             () => useChatGptPlanStore.getState().statusByProvider[providerId],
           )
         : undefined;
-      // Dispatches by the stored flow: SIWC revokes, Codex deletes locally.
+      // Revokes, then clears the tokens (the registration stays).
       const result = await logoutChatGptPlan(providerId);
       await loadManagedModels();
       if (providerId) {
@@ -991,11 +876,7 @@ export function useProviderSetupController({
         action: "provider-test",
         message: modelCopy.codexSignedOut,
       });
-      if (
-        before?.flow === "siwc" &&
-        before.signedIn &&
-        !result.remoteRevokeConfirmed
-      ) {
+      if (before?.signedIn && !result.remoteRevokeConfirmed) {
         useUiStore.getState().pushToast(
           makeAppError({
             id: "chatgpt-plan-revoke-unconfirmed",
@@ -1030,8 +911,6 @@ export function useProviderSetupController({
     cancelNoAuthSave,
     chatGptPlanLogin,
     clearKeyConfirmOpen,
-    codexLoginStart,
-    codexPolling,
     confirmClearProviderKey,
     confirmNoAuthSave,
     connectionInputComplete,
@@ -1039,16 +918,12 @@ export function useProviderSetupController({
     editingProviderIsNoAuth: editingProvider?.authKind === "none",
     noAuthConfirmOpen,
     handleChatGptPlanLogin,
-    handleCodexCompleteLogin,
-    handleCodexImport,
-    handleCodexLogin,
-    handleCodexLogout,
-    handleCodexOpenLoginPage,
+    handleChatGptPlanLogout,
     handleProviderClearKey,
     handleProviderFormFetchModels,
     handleProviderFormTest,
     handleProviderSave,
-    isCodexProviderForm,
+    isChatGptProviderForm,
     providerFormDirty,
     providerFormIsInlineEdit,
     providerFormModelOptions,

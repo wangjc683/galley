@@ -17,26 +17,6 @@ import type {
  * `MANAGED_MODELS_CHANGED_EVENT`). Re-list, as after a save here. */
 export const MANAGED_MODELS_CHANGED_EVENT = "managed-models:changed";
 
-export interface CodexDeviceLoginStart {
-  deviceAuthId: string;
-  userCode: string;
-  verificationUrl: string;
-  intervalSeconds: number;
-  expiresAt?: string | null;
-}
-
-export interface CompleteCodexDeviceLoginInput {
-  deviceAuthId: string;
-  userCode: string;
-  intervalSeconds?: number;
-}
-
-export interface CodexAuthSetupResult {
-  provider: ManagedModelProviderRecord;
-  model: ManagedModelRecord;
-  status: ManagedModelConnectionResult;
-}
-
 export async function listManagedModelProviders(): Promise<
   ManagedModelProviderRecord[]
 > {
@@ -112,30 +92,6 @@ export async function testManagedModelConnection(
   );
 }
 
-export async function startChatGptCodexLogin(): Promise<CodexDeviceLoginStart> {
-  return invoke<CodexDeviceLoginStart>("start_chatgpt_codex_login");
-}
-
-export async function completeChatGptCodexLogin(
-  input: CompleteCodexDeviceLoginInput,
-): Promise<CodexAuthSetupResult> {
-  return invoke<CodexAuthSetupResult>("complete_chatgpt_codex_login", {
-    input,
-  });
-}
-
-export async function importChatGptCodexCliLogin(): Promise<CodexAuthSetupResult> {
-  return invoke<CodexAuthSetupResult>("import_chatgpt_codex_cli_login");
-}
-
-export async function logoutChatGptCodexProvider(
-  providerId?: string,
-): Promise<void> {
-  await invoke("logout_chatgpt_codex_provider", {
-    input: { providerId },
-  });
-}
-
 // Sign in with ChatGPT (.scratch/chatgpt-siwc ticket 02;
 // `core/src/chatgpt_siwc/`). Errors reject with the JSON string
 // `{"error": <code>, "message": ...}`; see `chatGptPlanErrorCode`.
@@ -162,8 +118,9 @@ export interface ChatGptPlanModelList {
 }
 
 export interface ChatGptPlanStatus {
-  /** Which sign-in the stored credential came from; `null` when none. */
-  flow: "siwc" | "codex" | null;
+  /** `"siwc"` when a Sign in with ChatGPT credential is stored; `null`
+   * when none (a leftover Codex CLI login credential counts as none). */
+  flow: "siwc" | null;
   signedIn: boolean;
   /** SIWC tokens were cleared after a dead refresh or a revocation. */
   needsReauth: boolean;
@@ -174,6 +131,14 @@ export interface ChatGptPlanStatus {
   expiresAt: number | null;
   lastRefreshAt: string | null;
   lastRefreshError: string | null;
+}
+
+/** A completed sign-in: the ChatGPT provider Core created or took over,
+ * its model, and the connection test Core ran right after. */
+export interface ChatGptPlanSignInResult {
+  provider: ManagedModelProviderRecord;
+  model: ManagedModelRecord;
+  status: ManagedModelConnectionResult;
 }
 
 export interface ChatGptPlanLogoutResult {
@@ -228,8 +193,8 @@ export async function startChatGptPlanLogin(): Promise<ChatGptPlanLoginStart> {
  * provider and runs one connection test. */
 export async function completeChatGptPlanLogin(
   loginId: string,
-): Promise<CodexAuthSetupResult> {
-  return invoke<CodexAuthSetupResult>("complete_chatgpt_plan_login", {
+): Promise<ChatGptPlanSignInResult> {
+  return invoke<ChatGptPlanSignInResult>("complete_chatgpt_plan_login", {
     input: { loginId },
   });
 }
@@ -255,8 +220,7 @@ export async function getChatGptPlanStatus(
   });
 }
 
-/** Signs out by credential flow: SIWC revokes and clears tokens (keeps the
- * registration); the Codex flow only deletes locally. */
+/** Signs out: revokes, then clears the tokens (keeps the registration). */
 export async function logoutChatGptPlan(
   providerId?: string,
 ): Promise<ChatGptPlanLogoutResult> {

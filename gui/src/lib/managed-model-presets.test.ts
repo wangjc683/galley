@@ -37,6 +37,30 @@ describe("managed model presets", () => {
     }
   });
 
+  it("matches a signed-in ChatGPT provider to the ChatGPT card, not the OpenAI one at the same address", () => {
+    const chatGpt = providerRecord({
+      id: "mp_chatgpt_codex",
+      protocol: "openai",
+      authKind: "chatgpt_codex_oauth",
+      apiBase: "https://api.openai.com/v1",
+    });
+    expect(managedModelProviderPresetForRecord(chatGpt)?.id).toBe(
+      "chatgpt-codex",
+    );
+    expect(recommendedAdvancedOptionsForManagedModelProvider(chatGpt)).toEqual(
+      getManagedModelProviderPreset("chatgpt-codex").advancedOptions,
+    );
+    expect(
+      managedModelProviderPresetForRecord(
+        providerRecord({
+          protocol: "openai",
+          authKind: "api_key",
+          apiBase: "https://api.openai.com/v1",
+        }),
+      )?.id,
+    ).toBe("custom-openai");
+  });
+
   it("recommends protocol defaults for arbitrary custom OpenAI-compatible providers", () => {
     const advancedOptions = recommendedAdvancedOptionsForManagedModelProvider(
       providerRecord({
@@ -99,7 +123,7 @@ describe("custom endpoint card", () => {
     ).toBe("https://api.deepseek.com/anthropic");
   });
 
-  it("is the edit card for unmatched api_key / no-auth endpoints; Codex OAuth keeps its own", () => {
+  it("is the edit card for unmatched api_key / no-auth endpoints; ChatGPT keeps its own", () => {
     expect(customManagedModelProviderPresetId("api_key")).toBe(
       CUSTOM_ENDPOINT_PRESET_ID,
     );

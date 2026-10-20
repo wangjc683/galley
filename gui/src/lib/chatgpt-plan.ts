@@ -15,8 +15,8 @@ import {
   chatGptPlanErrorCode,
   completeChatGptPlanLogin,
   managedModelProbeErrorMessage,
+  type ChatGptPlanSignInResult,
   type ChatGptPlanStatus,
-  type CodexAuthSetupResult,
 } from "@/lib/managed-models";
 import type {
   ManagedModelConnectionResult,
@@ -99,9 +99,9 @@ function planErrorMessage(error: unknown): string {
  * the first call's promise instead of a second call.
  */
 export function createCompleteOnce(
-  complete: (loginId: string) => Promise<CodexAuthSetupResult>,
-): (loginId: string) => Promise<CodexAuthSetupResult> {
-  const calls = new Map<string, Promise<CodexAuthSetupResult>>();
+  complete: (loginId: string) => Promise<ChatGptPlanSignInResult>,
+): (loginId: string) => Promise<ChatGptPlanSignInResult> {
+  const calls = new Map<string, Promise<ChatGptPlanSignInResult>>();
   return (loginId) => {
     const existing = calls.get(loginId);
     if (existing) return existing;
@@ -149,7 +149,7 @@ export function chatGptPlanTestFailure(
  */
 export async function finishChatGptPlanSignIn(
   deps: {
-    complete: (loginId: string) => Promise<CodexAuthSetupResult>;
+    complete: (loginId: string) => Promise<ChatGptPlanSignInResult>;
     loadManagedModels: () => Promise<unknown>;
     refreshStatus: (providerId: string) => unknown;
   },
@@ -202,8 +202,9 @@ export function claimChatGptPlanNotice(
 
 // ---- Which providers and models are on the plan ---------------------------
 
-/** The ChatGPT providers among these models (the auth kind Sign in with
- * ChatGPT shares with the Codex CLI login until ticket 05). */
+/** The ChatGPT providers among these models (auth kind
+ * `chatgpt_codex_oauth`, a stored value that outlived the Codex CLI
+ * login). */
 export function chatGptProviderIds(models: ManagedModelRecord[]): string[] {
   return [
     ...new Set(

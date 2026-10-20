@@ -8,11 +8,7 @@ import {
   recommendedAdvancedOptionsForManagedModelProvider,
   type ManagedModelProviderPresetId,
 } from "@/lib/managed-model-presets";
-import type {
-  CodexDeviceLoginStart,
-  TimedManagedModelConnectionResult,
-  completeChatGptCodexLogin,
-} from "@/lib/managed-models";
+import type { TimedManagedModelConnectionResult } from "@/lib/managed-models";
 import type { ManagedModelsStore } from "@/stores/managed-models";
 import type {
   ManagedModelAuthKind,
@@ -25,7 +21,7 @@ import type {
  * StepModelConfig and Settings → 模型). The stateful orchestration
  * lives in `use-provider-setup-controller.ts`; everything here is
  * node-testable — form shapes, fingerprints, gating predicates, and
- * the save/codex commit sequences with injected store actions.
+ * the save commit sequence with injected store actions.
  */
 
 export type SettingsModelsCopy = ReturnType<
@@ -480,26 +476,4 @@ export async function runProviderCommit(
     });
   }
   return { providerId: saved.id, isNewProvider };
-}
-
-/**
- * Device-code login completion: poll until the browser sign-in lands,
- * then refresh the managed-models store so the new provider row is
- * visible. Returns the provider id for the caller's post-save strategy
- * (settings expands + toasts; onboarding just completes the step).
- */
-export async function runCodexComplete(
-  deps: {
-    complete: typeof completeChatGptCodexLogin;
-    loadManagedModels: () => Promise<unknown>;
-  },
-  start: CodexDeviceLoginStart,
-): Promise<string> {
-  const result = await deps.complete({
-    deviceAuthId: start.deviceAuthId,
-    userCode: start.userCode,
-    intervalSeconds: start.intervalSeconds,
-  });
-  await deps.loadManagedModels();
-  return result.provider.id;
 }

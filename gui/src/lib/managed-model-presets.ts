@@ -92,7 +92,10 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     label: "ChatGPT",
     protocol: "openai",
     authKind: "chatgpt_codex_oauth",
-    apiBase: "https://chatgpt.com/backend-api/codex",
+    // Where Sign in with ChatGPT talks to (Core's `SIWC_API_BASE`, which
+    // it writes on the provider), so a saved ChatGPT provider matches
+    // this card and its new models get these options.
+    apiBase: "https://api.openai.com/v1",
     model: "gpt-5.6-sol",
     displayName: "ChatGPT",
     modelPlaceholder: "gpt-5.6-sol",
@@ -330,7 +333,7 @@ export function recommendedModelForManagedModelProviderPreset(
 }
 
 /** The card a saved provider that matches no shipped preset edits as.
- * Codex OAuth stays on its own card; every api_key / none endpoint
+ * The ChatGPT provider stays on its own card; every api_key / none endpoint
  * opens as the Custom card, its protocol taken from the record (the
  * form keeps `provider.protocol`). Display only — the record itself
  * is never rewritten. */

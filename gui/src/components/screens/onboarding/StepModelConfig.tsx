@@ -3,21 +3,15 @@ import {
   CaretRight,
   CheckCircle,
   CircleNotch,
-  CloudArrowDown,
   Eye,
   EyeSlash,
   ListMagnifyingGlass,
-  SignIn,
   WarningCircle,
 } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useState, type KeyboardEvent, type ReactNode } from "react";
 
-import {
-  ChatGptPlanSignInControls,
-  OtherSignInMethods,
-} from "@/components/managed-models/ChatGptPlanSignIn";
-import { CodexDeviceCodeCard } from "@/components/managed-models/CodexDeviceCodeCard";
+import { ChatGptPlanSignInControls } from "@/components/managed-models/ChatGptPlanSignIn";
 import { ManagedModelProviderCardGrid } from "@/components/managed-models/ManagedModelProviderCardGrid";
 import { ModelCombobox } from "@/components/managed-models/ModelCombobox";
 import { useProviderSetupController } from "@/components/managed-models/use-provider-setup-controller";
@@ -74,19 +68,13 @@ export function StepModelConfig({
     cancelChatGptPlanSignIn,
     cancelNoAuthSave,
     chatGptPlanLogin,
-    codexLoginStart,
-    codexPolling,
     confirmNoAuthSave,
     connectionInputComplete,
     noAuthConfirmOpen,
     handleChatGptPlanLogin,
-    handleCodexCompleteLogin,
-    handleCodexImport,
-    handleCodexLogin,
-    handleCodexOpenLoginPage,
     handleProviderFormFetchModels,
     handleProviderSave,
-    isCodexProviderForm,
+    isChatGptProviderForm,
     providerFormModelOptions,
     providerFormProbeState,
     runConnectionTest,
@@ -117,7 +105,7 @@ export function StepModelConfig({
     trimCredentialsOnSave: true,
     postSaveForm: "success-status",
     onSaved: () => onComplete(),
-    onCodexComplete: () => onComplete(),
+    onChatGptSignedIn: () => onComplete(),
   });
 
   const state = providerFormProbeState;
@@ -131,7 +119,6 @@ export function StepModelConfig({
   const selectedPreset = providerPresetId
     ? getManagedModelProviderPreset(providerPresetId)
     : null;
-  const isCodexProvider = isCodexProviderForm;
   // The Custom card has no endpoint to preset, so its URL is a primary
   // field (protocol → URL → key → model) instead of hiding under 高级;
   // every other card keeps key → model with the URL folded.
@@ -166,12 +153,13 @@ export function StepModelConfig({
           onChange={selectProviderPreset}
         />
 
-        {providerSelected && selectedPreset && protocol && isCodexProvider && (
-          <div className="space-y-4 rounded-sm border border-line bg-elevated/80 px-3 py-3">
-            {/* Sign in with ChatGPT is the main path (ticket 04); the
-                Codex CLI sign-ins wait folded below until ticket 05
-                removes them. */}
-            <div className="space-y-3">
+        {providerSelected &&
+          selectedPreset &&
+          protocol &&
+          isChatGptProviderForm && (
+            // Sign in with ChatGPT, the ChatGPT card's only sign-in (SIWC
+            // ticket 05 removed the Codex CLI ones).
+            <div className="space-y-3 rounded-sm border border-line bg-elevated/80 px-3 py-3">
               <div>
                 <div className="text-[12.5px] font-medium text-ink">
                   {planCopy.title}
@@ -190,108 +178,9 @@ export function StepModelConfig({
                 <StatusLine tone="error" message={chatGptPlanLogin.message} />
               )}
             </div>
+          )}
 
-            <OtherSignInMethods className="border-t border-line pt-3">
-              <div className="space-y-4">
-                <div className="space-y-3">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
-                      {modelCopy.chatgptCodexWebLogin}
-                    </div>
-                    <div className="mt-1 text-[12.5px] leading-5 text-ink-muted">
-                      {modelCopy.chatgptCodexReadyBody}
-                    </div>
-                  </div>
-                  {codexLoginStart && (
-                    <CodexDeviceCodeCard
-                      userCode={codexLoginStart.userCode}
-                      copy={modelCopy}
-                      className="py-2"
-                    />
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    {!codexLoginStart ? (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={isBusy}
-                        onClick={() => void handleCodexLogin()}
-                        leadingIcon={
-                          isBusy && state.kind === "loading" ? (
-                            <span className="spin">
-                              <CircleNotch size={12} weight="thin" />
-                            </span>
-                          ) : (
-                            <SignIn size={12} weight="bold" />
-                          )
-                        }
-                      >
-                        {modelCopy.generateChatGPTLoginCode}
-                      </Button>
-                    ) : (
-                      <>
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          disabled={isBusy}
-                          onClick={() => void handleCodexOpenLoginPage()}
-                          leadingIcon={
-                            <ArrowSquareOut size={12} weight="thin" />
-                          }
-                        >
-                          {modelCopy.openChatGPTLoginPage}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          disabled={isBusy}
-                          onClick={() => void handleCodexCompleteLogin()}
-                          leadingIcon={<CheckCircle size={12} weight="thin" />}
-                        >
-                          {modelCopy.completeChatGPTLogin}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={isBusy}
-                          onClick={() => void handleCodexLogin()}
-                        >
-                          {modelCopy.regenerateChatGPTLoginCode}
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                  {codexPolling && (
-                    <div className="flex items-center gap-1.5 text-[12px] text-ink-muted">
-                      <span className="spin">
-                        <CircleNotch size={12} weight="thin" />
-                      </span>
-                      {modelCopy.codexWaitingForLogin}
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t border-line pt-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
-                    {modelCopy.codexCliLoginTitle}
-                  </div>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="mt-2"
-                    disabled={isBusy}
-                    onClick={() => void handleCodexImport()}
-                    leadingIcon={<CloudArrowDown size={12} weight="thin" />}
-                  >
-                    {modelCopy.importCodexCliLogin}
-                  </Button>
-                </div>
-              </div>
-            </OtherSignInMethods>
-          </div>
-        )}
-
-        {providerSelected && selectedPreset && protocol && !isCodexProvider && (
+        {providerSelected && selectedPreset && protocol && !isChatGptProviderForm && (
           <>
             {isCustomEndpoint && (
               <>
@@ -472,7 +361,7 @@ export function StepModelConfig({
               {onboardingCopy.continueWithCurrentModel}
             </Button>
           )}
-          {!isCodexProvider && (
+          {!isChatGptProviderForm && (
             <>
               <InlineSetupStatus
                 state={state}
@@ -502,7 +391,7 @@ export function StepModelConfig({
       </div>
       <div className="mt-2 flex justify-end">
         <div className="w-full max-w-[420px] space-y-2">
-          {!isCodexProvider && (
+          {!isChatGptProviderForm && (
             <SetupErrorLine
               state={state}
               action="model-test"

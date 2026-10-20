@@ -194,7 +194,7 @@ Section 标签（2026-10-07 JC 裁）：
 | `Health Check` | 作为流程 / 组件名保留 |
 | `CLI`、`API`、`MCP`、`Socket`、`schemaVersion` | 协议 / 契约词，保留 |
 | `Python` | 保留 |
-| `API Key` | 字段名保留（「API Key」「获取 API Key」「401 未授权：API Key 不正确」）；正文、提示、按钮一律说「密钥」，同一句里不混用「Key」（2026-10-08 起）。「凭证」只用于 ChatGPT / Codex 登录这类没有密钥的鉴权，徽标写「需要登录」 |
+| `API Key` | 字段名保留（「API Key」「获取 API Key」「401 未授权：API Key 不正确」）；正文、提示、按钮一律说「密钥」，同一句里不混用「Key」（2026-10-08 起）。「凭证」只用于「用 ChatGPT 登录」（Sign in with ChatGPT）这类没有密钥的鉴权，徽标写「需要登录」 |
 | `LLM` | 界面一律说「模型」，紧凑控件也不例外（2026-10-03 JC 裁，此前「紧凑控件可保留」）；只在外置 GA 的技术语境保留，如 Health Check「mykey.py 存在」的副标签「LLM 配置文件」 |
 | 模型 / 服务品牌 | OpenAI、Anthropic、Claude、GPT、DeepSeek、Kimi、GLM、MiniMax、OpenRouter、SiliconFlow、Xiaomi MiMo 等保留 |
 | `galley` | 命令名，保留并用 inline code |

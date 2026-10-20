@@ -19,7 +19,6 @@ import {
   providerHostFallback,
   providerHostnameFallback,
   providerListFingerprint,
-  runCodexComplete,
   runProviderCommit,
   shouldAutoOpenNewProviderForm,
   type ProviderFormState,
@@ -606,49 +605,6 @@ describe("runProviderCommit", () => {
         apiBase: " https://a.example ",
       }),
     );
-  });
-});
-
-describe("runCodexComplete", () => {
-  const start = {
-    deviceAuthId: "auth-1",
-    userCode: "ABCD-1234",
-    intervalSeconds: 5,
-    verificationUrl: "https://example.com/verify",
-  };
-
-  it("completes, reloads the store, and returns the provider id", async () => {
-    const order: string[] = [];
-    const complete = vi.fn().mockImplementation(async () => {
-      order.push("complete");
-      return { provider: { id: "prov-c" } };
-    });
-    const loadManagedModels = vi.fn().mockImplementation(async () => {
-      order.push("load");
-    });
-    const providerId = await runCodexComplete(
-      { complete: complete as never, loadManagedModels },
-      start as never,
-    );
-    expect(providerId).toBe("prov-c");
-    expect(order).toEqual(["complete", "load"]);
-    expect(complete).toHaveBeenCalledWith({
-      deviceAuthId: "auth-1",
-      userCode: "ABCD-1234",
-      intervalSeconds: 5,
-    });
-  });
-
-  it("propagates a failed poll without reloading", async () => {
-    const complete = vi.fn().mockRejectedValue(new Error("expired"));
-    const loadManagedModels = vi.fn();
-    await expect(
-      runCodexComplete(
-        { complete: complete as never, loadManagedModels },
-        start as never,
-      ),
-    ).rejects.toThrow("expired");
-    expect(loadManagedModels).not.toHaveBeenCalled();
   });
 });
 
