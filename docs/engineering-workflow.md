@@ -133,12 +133,14 @@ refactor-execution rules (I1, I2, I4, I7, I8, I10) live in the
   already run that number, and editing it makes the two sides drift. A wrong
   migration is fixed by adding a new one on top.
   **Adding the `.sql` file is not enough** — the runtime does not scan the
-  directory. A new migration must also be registered in BOTH runtime lists:
-  the `Migration` vec in `core/src/db_migrations.rs` and `MIGRATION_SPECS` in
-  `core/src/migration_backup.rs` (plus its latest-version test assertions),
-  or the shipped app silently never applies it and every query touching the
-  new column fails (2026-07-20: sidebar went empty in dogfood exactly this
-  way). Test fixtures keep their own per-file migration lists
+  directory. A new migration must also be registered in the `Migration` vec
+  in `core/src/db_migrations.rs`, or the shipped app silently never applies
+  it and every query touching the new column fails (2026-07-20: sidebar went
+  empty in dogfood exactly this way). `SAFE_PREFLIGHT_MIGRATIONS` in
+  `core/src/migration_backup.rs` ends at 033 on purpose; do not add later
+  migrations there. A CHECK change on a foreign-key parent table must not
+  rely on `PRAGMA foreign_keys = OFF` (a no-op inside SQLx's transaction):
+  rebuild the child around the parent in the same migration, as 052 does. Test fixtures keep their own per-file migration lists
   (`core/tests/*.rs`, `cli/tests/*.rs`) — extend the ones whose tables you
   touched.
 - **I5 — API surface single source of truth.** The Rust `GalleyApi` trait is

@@ -78,7 +78,7 @@ OpenWebUI 这类本地生态都是「API Key（可选）」一个框。
   空串（无 IPC 往返）。
 - **runner**：`managed_runtime.py` 的可用性过滤对 `authKind == "none"`
   放行空 apikey；`apibase` / `model` 仍必填。
-- **契约面**：DB `auth_kind` 是 TEXT 无需 migration；`managed-models.json`
+- **契约面**：DB `auth_kind` 是 TEXT 无需 migration（**更正 2026-10-20**：这句是错的。014 给这一列加了 CHECK，只允许 `api_key` 与 `chatgpt_codex_oauth`，所以存 `none` 一直报约束错误；迁移 052 补上，见 `core/migrations/052_provider_auth_kind_none.sql`）；`managed-models.json`
   与 Tauri 命令入参均为 additive；CLI Agent API 不暴露该面，
   schemaVersion 不动。
 
