@@ -41,6 +41,8 @@ GenericAgent (lsdefine/GenericAgent, MIT, ~10K star) 是个能力强、社区活
 v0.1 Galley 解决了第 1 个（multi-session 桌面 GUI）；第 2 / 3 个的答案是 Galley 自己的手机端：桌面 Core 是手机的后端，
 两端看到同一份状态；IM 渠道与 Agent 经 CLI 操作继续作为替代入口（2026-10-09 起；此前 v0.2 的答案是「人经 IM 对 Supervisor Agent 说话、
 Supervisor 经 localhost CLI 控制 Galley」，数据上委派为 0 次，见 [10-06 devlog](./devlog/2026-10-06-im-entry-layer-phone-first.md)）。
+2026-10-20 起 IM 不只是替代入口：IM 是打给同一个助理的一条线（它来找你、随口一句），手机端是去它那儿（看全貌、看得见它在干活）；
+IM 私聊并入主对话后，第 2 个问题在 IM 上也解决了（下一次发版之后实施，见 [IM 并入 devlog](./devlog/2026-10-20-im-a-line-to-the-same-assistant.md)）。
 
 Galley 自身永远是本地应用；远程传输由 Galley 自己的远程模块经端到端加密中转完成（宪法 Rule 2，2026-10 修订）。
 

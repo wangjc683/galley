@@ -84,6 +84,7 @@ Status: needs-info（讨论中；待 JC 内部确认 Apple 开发者账号主体
 18. 移动端只服务内置 GA 用户；Galley 后续主力开发也在内置方向。手机只显示内置会话，不随桌面当前运行时切换
     （Core 本来支持跨运行时操作内置会话，`docs/agent-api/session-commands.md:499`）；手机发图不需要图片能力闸门（内置恒支持，补丁 0008）。
 19. IM 渠道留给偏好 IM 或有群聊需求的用户；手机上的主力入口引导到原生 App。
+    （2026-10-20 改写，[IM 并入 PRD](../im-one-assistant/PRD.md) 裁决 1：IM 是打给同一个助理的一条线，管「它来找你」与「随口一句」；App 是「去它那儿」，iPhone 上看全貌引导到 App，它来找你的渠道由用户选。IM 私聊并入主对话排在本 PRD 的 App 之前，Core 通知判断（票 08）在并入时先做。）
 20. 主聊天做成 Galley 的一等会话，桌面和手机都有，只在内置内核；~~先零成本试用一周再定形态~~（2026-10-12 试用取消，主聊天先在桌面上，形态见主聊天 PRD 第三轮）。详见 [主聊天 PRD](../main-chat/PRD.md)。
 21. Supervisor 分三层处理（本机 `workbench.db` 161 个会话中 CLI / supervisor 建的 42 个，带标签的几乎全是试用和测试；社区 galley#29 / #30 作者在用）：
     - 退：「人在外面 → IM → Supervisor → CLI → Galley」的远程叙事（`docs/PRD.md:41-45`、§4.2），随票 01 改写。
@@ -129,6 +130,7 @@ Status: needs-info（讨论中；待 JC 内部确认 Apple 开发者账号主体
 ## P0 要回答的问题
 
 JC 用原生端是否比用 IM 多。手机端用户轮次按 `client = ios` 从 `workbench.db` 统计；IM 对话不在库里，要看引擎日志 `model_responses`。
+（2026-10-20：IM 私聊并入主对话后也进 `workbench.db`，`client` 记渠道名，两边同一张表里比；答案为是即 deferred「安卓原生 App」的启动信号。）
 
 ## 风险
 
