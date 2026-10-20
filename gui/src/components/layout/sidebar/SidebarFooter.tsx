@@ -24,7 +24,7 @@ export function SidebarFooter({
     <button
       type="button"
       onClick={onOpenArchived}
-      className="flex w-full items-center gap-2 border-t border-line/70 py-1.5 pl-4.5 pr-3.5 text-left text-[11px] text-ink-muted transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft active:translate-y-px outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+      className="flex w-full items-center gap-2 border-t border-line/70 py-1.5 pl-4.5 pr-3.5 text-left text-[11px] text-ink-muted transition-none active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft active:translate-y-px outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
     >
       <span className="flex w-4 shrink-0 justify-center">
         <Archive size={12} weight="thin" className="text-ink-muted" />

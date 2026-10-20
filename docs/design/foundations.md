@@ -552,6 +552,11 @@ onboarding hero）。这是 serif register 的签名，sans / mono 不加。
   `--shadow-control-press` 深接触 inset(缝隙压没);下沉走 `--motion-press`
   (70ms)+ `--ease-firm`,松开随基础态瞬时回弹(原生 snap)。**不用 bounce /
   elastic**。
+  Tailwind v4 的下沉、缩放、旋转是独立的 `translate`、`scale`、`rotate` 属性，
+  过渡属性表要写上它们（按下统一写 `active:transition-[translate,scale,box-shadow]`），
+  `transition-[transform,…]` 管不到；手写属性表里不许出现 `transform`，由
+  `gui/src/styles/transition-properties.test.ts` 守着（2026-10-20，
+  [票 01](../../.scratch/press-transition/issues/01-transition-properties.md)）。
 - **ghost / 文字按钮保持平**:只给极轻 `1px` press + 颜色反馈,不加阴影塌陷,把"重物理"留给主 CTA。
 - 所有位移用整数像素;`*-hover` 阴影 token 一律 firm(紧软模糊,无 8–16px 气球)。
 

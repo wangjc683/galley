@@ -259,7 +259,7 @@ function QuickIconButton({
           // Default flex-shrink stays on: at the 134px minimum sidebar
           // the row squeezes these to ~29px instead of overflowing.
           "relative inline-flex size-8 items-center justify-center rounded-sm",
-          "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm active:translate-y-px",
+          "transition-none active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm active:translate-y-px",
           "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
           "text-ink-soft hover:bg-hover hover:text-ink active:bg-selected/60",
         )}

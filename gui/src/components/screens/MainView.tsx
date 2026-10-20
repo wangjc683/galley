@@ -910,7 +910,7 @@ function MainViewContent({
               className={cn(
                 "group pointer-events-auto relative inline-flex size-8 items-center justify-center rounded-full",
                 "border border-line bg-elevated/92 text-ink-soft shadow-[var(--shadow-float)] backdrop-blur-md",
-                "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+                "transition-none active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm",
                 "hover:-translate-y-0.5 hover:border-line-strong hover:bg-elevated hover:text-ink hover:shadow-[var(--shadow-float-hover)]",
                 "active:translate-y-0 active:scale-95",
                 "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/20",

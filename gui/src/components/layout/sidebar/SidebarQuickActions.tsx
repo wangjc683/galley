@@ -130,7 +130,7 @@ export function NewChatButton({
           // narrowest widths the row must squeeze the icons, not clip
           // the plus.
           "flex h-8 min-w-[28px] flex-1 items-center gap-2 rounded-sm pl-3 text-left text-[13px] text-ink",
-          "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+          "transition-none active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm",
           // Selected or not, the row answers the pointer: it is an
           // action (clicking it while selected refocuses the composer),
           // unlike a selected session row. Selected hover deepens the

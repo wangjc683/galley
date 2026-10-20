@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
  */
 
 const CARET_MOTION =
-  "transition-[color,transform] duration-(--motion-fast) ease-firm motion-reduce:transition-none";
+  "transition-[color,rotate] duration-(--motion-fast) ease-firm motion-reduce:transition-none";
 
 export function SettingsDisclosureCard({
   open,

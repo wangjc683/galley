@@ -21,7 +21,7 @@ export const COMPOSER_MAX_HEIGHT_PX = 280;
 
 export const COMPOSER_ACTION_BUTTON = cn(
   "flex size-8 items-center justify-center rounded-full border",
-  "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+  "transition-none active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm",
   // Full key travel: rises a crisp 1px on hover (key meets finger),
   // sinks 2px on press (~3px of perceptible travel) with a slight
   // compression scale. Integer-pixel movement, never sub-pixel.

@@ -287,7 +287,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         type={type}
         className={cn(
           "inline-flex select-none items-center justify-center rounded-sm",
-          "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+          "transition-none active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm",
           "outline-none disabled:cursor-not-allowed disabled:opacity-40",
           VARIANT_CLASSES[variant],
           SIZE_CLASSES[size],
@@ -339,7 +339,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         aria-label={ariaLabel}
         className={cn(
           "inline-flex select-none items-center justify-center rounded-sm",
-          "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+          "transition-none active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm",
           "outline-none disabled:cursor-not-allowed disabled:opacity-40",
           ICON_VARIANT_CLASSES[variant],
           ICON_SIZE_CLASSES[size],

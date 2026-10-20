@@ -78,4 +78,4 @@ JC 担心新用户看到侧栏顶上的主对话卡片，不能马上知道这�
 
 - 票 71 等 JC 真机摸按下的手感。
 - 票 72 合入后，用同一个探针回路验收：补丁在主会话 scratchpad，不进仓库。
-- 全局按下过渡不生效：另议。
+- 全局按下过渡不生效：已开票，[`.scratch/press-transition/issues/01-transition-properties.md`](../../.scratch/press-transition/issues/01-transition-properties.md)。

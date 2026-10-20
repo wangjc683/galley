@@ -289,7 +289,7 @@ function ProjectGroupRow({
         // state rides the rail, the name's weight and the folder's pop,
         // with no summary words to read.
         "group relative mx-1.5 grid min-h-9 scroll-my-2 grid-cols-[16px_minmax(0,1fr)] items-center gap-2 overflow-hidden rounded-sm px-3 py-1 text-left outline-none",
-        "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+        "transition-none active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm",
         "active:translate-y-px",
         actionsOpen ? "bg-hover" : "hover:bg-hover",
       )}
@@ -394,7 +394,7 @@ function ProjectGroupRow({
                   // light-button rules (layout-and-chrome.md §4.2
                   // Project 行).
                   "inline-flex size-[32px] shrink-0 items-center justify-center rounded-sm",
-                  "text-ink-muted transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+                  "text-ink-muted transition-none active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm",
                   "group-hover:text-ink-soft",
                   "hover:bg-hover hover:text-ink active:translate-y-px active:bg-selected/60",
                   "outline-none",
@@ -619,7 +619,7 @@ function ProjectGroupDrawer({
           className={cn(
             GROUP_CHILDREN_CLASS,
             "pb-2",
-            "transition-[opacity,transform] duration-(--motion-base) ease-pop motion-reduce:transition-none",
+            "transition-[opacity,translate] duration-(--motion-base) ease-pop motion-reduce:transition-none",
             expanded
               ? "translate-y-0 opacity-100 delay-[40ms]"
               : "-translate-y-2 opacity-0",
@@ -691,7 +691,7 @@ export function SidebarShowMoreRow({
       aria-label={ariaLabel}
       className={cn(
         "mx-1.5 grid min-h-7 w-[calc(100%-12px)] grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 rounded-sm px-3 text-left text-[11px] text-ink-muted",
-        "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
+        "transition-none active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
         "active:translate-y-px outline-none",
       )}
     >
@@ -737,7 +737,7 @@ function ProjectEmptyHint({
         aria-label={newConversationTitle}
         className={cn(
           "mx-1.5 mt-2 flex w-[calc(100%-12px)] items-center gap-2 rounded-sm border border-line/70 bg-elevated/55 px-3 py-2 text-left",
-          "text-[12px] font-medium text-ink-soft transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+          "text-[12px] font-medium text-ink-soft transition-none active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm",
           "hover:border-brand/35 hover:bg-selected/70 hover:text-ink active:translate-y-px",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
         )}

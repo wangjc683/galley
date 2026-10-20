@@ -611,7 +611,7 @@ function DetectedModelRow({
             onClick={onEnable}
             className={cn(
               "inline-flex min-h-7 min-w-[76px] shrink-0 items-center justify-center gap-1 rounded-sm border border-transparent px-2.5 text-ui-meta leading-none text-ink-muted",
-              "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm",
+              "transition-none active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm",
               "hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/20 active:translate-y-px",
               "disabled:cursor-not-allowed disabled:opacity-40 disabled:translate-y-0",
             )}

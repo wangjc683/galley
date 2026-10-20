@@ -197,7 +197,7 @@ export function SessionTitleMenu({
             // vertical pad, so its fill keeps clear of the 44px header's
             // edges; a little less on the left, where the disc is round.
             label ? "py-0.5 pl-1.5 pr-2 text-left" : "px-2 py-1",
-            "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover data-[state=open]:bg-hover active:translate-y-px",
+            "transition-none active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover data-[state=open]:bg-hover active:translate-y-px",
             "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
           )}
         >

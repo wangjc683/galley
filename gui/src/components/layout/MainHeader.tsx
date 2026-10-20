@@ -317,7 +317,7 @@ export function MainHeader({
               onClick={breadcrumb.onClick}
               className={cn(
                 "inline-flex min-w-0 items-center rounded-md px-2 py-1 text-ink-muted",
-                "transition-none active:translate-y-px active:transition-[transform] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
+                "transition-none active:translate-y-px active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
                 "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
               )}
             >

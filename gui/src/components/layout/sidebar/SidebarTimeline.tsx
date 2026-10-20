@@ -342,7 +342,7 @@ function SidebarCollapsibleSectionLabel({
         aria-expanded={open}
         className={cn(
           "mx-1.5 flex w-[calc(100%-12px)] items-center gap-1.5 rounded-sm px-3 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted",
-          "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
+          "transition-none active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
           "active:translate-y-px",
           "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
         )}
@@ -413,7 +413,7 @@ function SidebarEarlierEntry({
       aria-label={copy.sidebar.showAll}
       className={cn(
         "mx-1.5 mt-2 flex w-[calc(100%-12px)] items-center gap-1.5 rounded-sm px-3 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted",
-        "transition-none active:transition-[transform,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
+        "transition-none active:transition-[translate,scale,box-shadow] active:duration-(--motion-press) active:ease-firm hover:bg-hover hover:text-ink-soft",
         "active:translate-y-px",
         "outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
       )}
