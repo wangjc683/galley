@@ -1,6 +1,6 @@
 # 05 · 删掉借 Codex CLI 身份的旧登录（A）
 
-Status: ready-for-agent
+Status: needs-dogfood
 
 来源：[PRD](../PRD.md) 裁决 5、6。2026-10-20 JC 真机确认新登录可行（登录、对话都过了），条件满足，A 整体删除。分两段：05a（Core、runner、内核、文档）现在做；05b（GUI）等 04b 交付后接着做。两段合在一起合入。
 
@@ -70,3 +70,24 @@ Status: ready-for-agent
 - 提交只点名文件；英文提交信息，结尾 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`。
 
 ## Comments
+
+### 2026-10-20 交付与合入（第二批）
+
+- 05a（代理）：
+  - 删掉整个 `core/src/codex_oauth/` 和 4 个 Tauri 命令；凭据通道搬到 `core/src/credential_ipc/`，wire 格式不变，socket / pipe 名改为 `galley-credential-*`；
+  - 启动时清掉旧凭据（`chatgpt_siwc::retire_codex_cli_credentials`，`core/src/chatgpt_siwc/legacy.rs`）：不撤销、不碰 `auth.json`，可重入；
+  - `chatgpt_plan` 标记去掉，`codex_backend` 本身就表示订阅路由；补丁文件名保留；
+  - 顺带修好：Core 返回 `chatgpt_plan_reauth_required` 时，内核原来吞掉错误码，对话里的「去设置登录」永远触发不了。
+- 05b（代理）：
+  - 删掉设备码卡片、「其他登录方式」和 A 的绑定与文案（中英各 14 条）；
+  - 拆掉切换器，第 1 档「标志」改为常驻；
+  - 菜单行加标志，「ChatGPT 订阅 · 管理用量」挪到底部动作栏；同名规则按「显示名 + 是否订阅」分组（`gui/src/lib/llm-menu.ts`）；
+  - 设计文档与文案规范同步。
+- 主会话：设计文档里过期的「current 项左侧杏沙 ✓」改为右侧。
+- 门禁：cargo 1190、pytest 586、mypy、ruff、gui 184 个文件 / 1993 条、四项检查脚本、`git diff --check` 全部通过。已快进合入 main（头 `add49cd7`）。
+- 待 JC 真机看：
+  - 菜单行的标志、底部那一行（行首的 11px 标志对不对得齐、排在「配置模型…」下面合不合适）；
+  - CPA 与 ChatGPT 两个同名的 gpt-6.1-sol 都只在悬停时显示服务商；
+  - 编辑 ChatGPT 服务商时只剩「用 ChatGPT 登录 / 退出登录」；
+  - 票 04 剩下的「取消授权」「退出登录」。
+- 推送后留意：Windows 的命名管道改了名，本机编不到这段代码，要看 CI 的 Windows job。
