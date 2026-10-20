@@ -1,6 +1,6 @@
 # 02 · Core：Sign in with ChatGPT 登录与令牌生命周期
 
-Status: needs-dogfood
+Status: done
 
 来源：[PRD](../PRD.md) 裁决 1、2、6 与「探针结果」一节。C 就地接管现有的 ChatGPT 服务商；票 05 删 A 之前，A 与 C 在同一个服务商、同一个 auth_kind 下共存，靠凭据里的 `flow` 区分。
 
@@ -75,3 +75,5 @@ Status: needs-dogfood
 
 - 裁决 9：默认模型取 `/v1/models` 里第一个可见模型；`gpt-5.6-sol` 只在读不到目录或目录为空时兜底；已有模型记录在目录里就保留。在集成线上另加一个提交。
 - 断开后重新登录可能卡住：用已保存注册的登录以超时或取消结束时丢掉保存的 `client_id`（保留 host id），下次重新注册。已交回代理，在集成线上另加一个提交（见 PRD「另」）。主会话另加 `44a2c227`：新登录或仍叫「ChatGPT / Codex」的服务商改名为「ChatGPT」，用户改过的名字保留。
+
+- 2026-10-20 真机：用 ChatGPT 登录、对话（带工具调用）、断开后重新登录都通过（JC）。

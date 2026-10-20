@@ -1,6 +1,6 @@
 # 03 · runner 与内核补丁：ChatGPT 套餐路由
 
-Status: needs-dogfood
+Status: done
 
 来源：[PRD](../PRD.md) 裁决 1、5、6 与「探针结果」一节。探针已证明：GA 现有的 Codex 分支请求格式，端点换成 `https://api.openai.com/v1` 后，两轮带工具调用都能跑通。所以本票只做路由标记、请求头和错误处理，不动请求体。
 
@@ -63,3 +63,5 @@ Core 给 runner 的模型 JSON（`core/src/runner_commands.rs:196` 的 `ManagedR
   - 主会话用探针令牌真机跑过补丁后的内核：UA 为 `Galley (Darwin; x86_64)`，没有 `originator` 和账号头；两轮带工具调用正常；不存在的模型立即返回 400、不重试。
 - 没验到：额度用尽等结构化报错的真实格式（只按文档在测试里构造）、在 ChatGPT 设置里断开后的真实报错、Windows 上 `platform.machine()` 的取值、与票 02 的端到端联调。
 - 合入提示：本票和票 02 都可能改 `docs/managed-ga-runtime/model-configuration.md`，合入时留意冲突。
+
+- 2026-10-20 真机：用 ChatGPT 登录、对话（带工具调用）、断开后重新登录都通过（JC）。
