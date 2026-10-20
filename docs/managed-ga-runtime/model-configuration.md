@@ -246,6 +246,11 @@ parsing as before.
   (`client_id=dynamic_agent_client`, `agent_name_hint=Galley`); later ones
   re-use the issued client id with `id_token_hint`. Every request carries
   `ext_agent_host_id`, a `urn:uuid:<v4>` created once per installation.
+  A sign-in that re-used the saved client and ends without a callback (timed
+  out, cancelled, or replaced by a newer one) forgets that client and its ID
+  token but keeps the host id, so the next sign-in registers afresh — a client
+  disconnected in ChatGPT settings never redirects back, and a plain cancel
+  paying for one extra registration is the accepted cost.
 - **Loopback callback**: the redirect goes to `http://127.0.0.1:<port>/auth/callback`
   on an ephemeral port — the narrow Rule 2 exception in `AGENTS.md`. The
   listener lives only while that sign-in is pending (10 minutes, cancellable,

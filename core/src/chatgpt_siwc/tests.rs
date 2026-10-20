@@ -32,8 +32,9 @@ use super::callback::{
 };
 use super::id_token::{verify_id_token, Jwk, Jwks};
 use super::login::{
-    build_authorize_url, callback_from_outcome, cancel_login, complete_login, pkce_challenge,
-    start_login, AuthorizeParams, CancelChatgptPlanLoginInput, CompleteChatgptPlanLoginInput, Pkce,
+    build_authorize_url, callback_from_outcome, cancel_login, complete_login, forget_stale_client,
+    pkce_challenge, start_login, start_login_with_timeout, AuthorizeParams,
+    CancelChatgptPlanLoginInput, CompleteChatgptPlanLoginInput, Pkce,
 };
 use super::logout::revoke_with_retry;
 use super::probe::{clear_if_revoked, http_error, probe_payload, visible_models_from_body};
@@ -369,9 +370,16 @@ async fn listener_closes_when_its_sign_in_is_cancelled() {
     assert!(TcpStream::connect(("127.0.0.1", port)).await.is_err());
 }
 
-/// The only test that touches the process-wide pending sign-in slot.
+/// Serializes the tests that touch the process-wide pending sign-in slot;
+/// each of them leaves the slot empty.
+fn pending_slot_lock() -> &'static tokio::sync::Mutex<()> {
+    static LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+}
+
 #[tokio::test]
 async fn pending_sign_in_lifecycle() {
+    let _slot = pending_slot_lock().lock().await;
     let galley = test_galley().await;
 
     // Start: a dynamic registration, and the host id is persisted first.
@@ -460,15 +468,235 @@ async fn pending_sign_in_lifecycle() {
         .unwrap()
         .port()
         .unwrap();
-    cancel_login(CancelChatgptPlanLoginInput {
-        login_id: Some("someone-else".into()),
-    });
+    cancel_login(
+        &galley,
+        CancelChatgptPlanLoginInput {
+            login_id: Some("someone-else".into()),
+        },
+    )
+    .await;
     assert!(TcpStream::connect(("127.0.0.1", third_port)).await.is_ok());
-    cancel_login(CancelChatgptPlanLoginInput {
-        login_id: Some(third.login_id.clone()),
-    });
+    cancel_login(
+        &galley,
+        CancelChatgptPlanLoginInput {
+            login_id: Some(third.login_id.clone()),
+        },
+    )
+    .await;
     tokio::time::sleep(Duration::from_millis(50)).await;
     assert!(TcpStream::connect(("127.0.0.1", third_port)).await.is_err());
+}
+
+// A saved client that ChatGPT no longer accepts (Galley disconnected in
+// ChatGPT settings) never gets a callback: the authorize page errors and
+// does not redirect. A saved-registration sign-in that times out or is
+// cancelled therefore forgets the client, keeping the host id.
+
+async fn galley_with_saved_client(client_id: &str) -> (SqliteGalley, String) {
+    let galley = test_galley().await;
+    let host_id = new_host_id().unwrap();
+    save_registration(
+        &galley,
+        &SiwcRegistration {
+            host_id: host_id.clone(),
+            client_id: Some(client_id.into()),
+            id_token: Some("saved.id.token".into()),
+            sub: Some("user-sub-1".into()),
+        },
+    )
+    .await
+    .unwrap();
+    (galley, host_id)
+}
+
+fn assert_fresh_registration_url(url: &str, host_id: &str) {
+    let pairs = query(url);
+    assert_eq!(param(&pairs, "client_id"), Some("dynamic_agent_client"));
+    assert_eq!(param(&pairs, "agent_name_hint"), Some("Galley"));
+    assert_eq!(param(&pairs, "id_token_hint"), None);
+    assert_eq!(param(&pairs, "ext_agent_host_id"), Some(host_id));
+}
+
+async fn assert_client_forgotten(galley: &SqliteGalley, host_id: &str) {
+    let registration = read_registration(galley).await.unwrap().unwrap();
+    assert_eq!(registration.client_id, None);
+    assert_eq!(registration.id_token, None);
+    assert_eq!(registration.host_id, host_id, "the host id is kept");
+}
+
+async fn cancel_any(galley: &SqliteGalley) {
+    cancel_login(galley, CancelChatgptPlanLoginInput { login_id: None }).await;
+}
+
+#[tokio::test]
+async fn saved_client_sign_in_that_times_out_forgets_the_client() {
+    let _slot = pending_slot_lock().lock().await;
+    let (galley, host_id) = galley_with_saved_client("oaiapp_stale_timeout").await;
+
+    let start = start_login_with_timeout(&galley, Duration::from_millis(100))
+        .await
+        .unwrap();
+    let pairs = query(&start.auth_url);
+    assert_eq!(param(&pairs, "client_id"), Some("oaiapp_stale_timeout"));
+    assert_eq!(param(&pairs, "id_token_hint"), Some("saved.id.token"));
+
+    let err = complete_login(
+        &galley,
+        CompleteChatgptPlanLoginInput {
+            login_id: start.login_id.clone(),
+        },
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err.code(), "chatgpt_plan_login_timed_out");
+    assert_client_forgotten(&galley, &host_id).await;
+
+    let next = start_login(&galley).await.unwrap();
+    assert_fresh_registration_url(&next.auth_url, &host_id);
+    cancel_any(&galley).await;
+}
+
+#[tokio::test]
+async fn saved_client_sign_in_that_is_cancelled_forgets_the_client() {
+    let _slot = pending_slot_lock().lock().await;
+
+    // The cancel command.
+    let (galley, host_id) = galley_with_saved_client("oaiapp_stale_cancel").await;
+    let start = start_login(&galley).await.unwrap();
+    assert_eq!(
+        param(&query(&start.auth_url), "client_id"),
+        Some("oaiapp_stale_cancel")
+    );
+    cancel_login(
+        &galley,
+        CancelChatgptPlanLoginInput {
+            login_id: Some(start.login_id.clone()),
+        },
+    )
+    .await;
+    assert_client_forgotten(&galley, &host_id).await;
+    let next = start_login(&galley).await.unwrap();
+    assert_fresh_registration_url(&next.auth_url, &host_id);
+    cancel_any(&galley).await;
+
+    // A newer sign-in replacing the pending one: the newer one already
+    // registers afresh.
+    let (galley, host_id) = galley_with_saved_client("oaiapp_stale_replaced").await;
+    let first = start_login(&galley).await.unwrap();
+    assert_eq!(
+        param(&query(&first.auth_url), "client_id"),
+        Some("oaiapp_stale_replaced")
+    );
+    let second = start_login(&galley).await.unwrap();
+    assert_fresh_registration_url(&second.auth_url, &host_id);
+    assert_client_forgotten(&galley, &host_id).await;
+    cancel_any(&galley).await;
+}
+
+#[tokio::test]
+async fn access_denied_keeps_the_saved_client() {
+    let _slot = pending_slot_lock().lock().await;
+    let (galley, host_id) = galley_with_saved_client("oaiapp_declined").await;
+    let start = start_login(&galley).await.unwrap();
+    let pairs = query(&start.auth_url);
+    let waiting = {
+        let galley = galley.clone();
+        let login_id = start.login_id.clone();
+        tokio::spawn(async move {
+            complete_login(&galley, CompleteChatgptPlanLoginInput { login_id }).await
+        })
+    };
+    let port = reqwest::Url::parse(param(&pairs, "redirect_uri").unwrap())
+        .unwrap()
+        .port()
+        .unwrap();
+    let state = param(&pairs, "state").unwrap();
+    http_get(
+        port,
+        &format!("/auth/callback?error=access_denied&state={state}"),
+    )
+    .await
+    .unwrap();
+    let err = tokio::time::timeout(Duration::from_secs(5), waiting)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(err.code(), "chatgpt_plan_access_denied");
+
+    let registration = read_registration(&galley).await.unwrap().unwrap();
+    assert_eq!(registration.client_id.as_deref(), Some("oaiapp_declined"));
+    assert_eq!(registration.id_token.as_deref(), Some("saved.id.token"));
+    assert_eq!(registration.host_id, host_id);
+    let next = start_login(&galley).await.unwrap();
+    assert_eq!(
+        param(&query(&next.auth_url), "client_id"),
+        Some("oaiapp_declined")
+    );
+
+    // A declined sign-in whose result nobody collected is not "stale"
+    // either when a newer one replaces it.
+    let next_pairs = query(&next.auth_url);
+    let port = reqwest::Url::parse(param(&next_pairs, "redirect_uri").unwrap())
+        .unwrap()
+        .port()
+        .unwrap();
+    let state = param(&next_pairs, "state").unwrap();
+    http_get(
+        port,
+        &format!("/auth/callback?error=access_denied&state={state}"),
+    )
+    .await
+    .unwrap();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let replacing = start_login(&galley).await.unwrap();
+    assert_eq!(
+        param(&query(&replacing.auth_url), "client_id"),
+        Some("oaiapp_declined")
+    );
+    cancel_any(&galley).await;
+}
+
+#[tokio::test]
+async fn first_registration_timeout_leaves_the_registration_alone() {
+    let _slot = pending_slot_lock().lock().await;
+    let galley = test_galley().await;
+    let start = start_login_with_timeout(&galley, Duration::from_millis(200))
+        .await
+        .unwrap();
+    assert_eq!(
+        param(&query(&start.auth_url), "client_id"),
+        Some("dynamic_agent_client")
+    );
+    // Meanwhile a client gets saved (e.g. by a sign-in on the same store).
+    let mut registration = read_registration(&galley).await.unwrap().unwrap();
+    registration.client_id = Some("oaiapp_newer".into());
+    registration.id_token = Some("newer.id.token".into());
+    save_registration(&galley, &registration).await.unwrap();
+
+    let err = complete_login(
+        &galley,
+        CompleteChatgptPlanLoginInput {
+            login_id: start.login_id.clone(),
+        },
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err.code(), "chatgpt_plan_login_timed_out");
+    let after = read_registration(&galley).await.unwrap().unwrap();
+    assert_eq!(after.client_id.as_deref(), Some("oaiapp_newer"));
+    assert_eq!(after.id_token.as_deref(), Some("newer.id.token"));
+    cancel_any(&galley).await;
+}
+
+#[tokio::test]
+async fn forgetting_a_stale_client_never_wipes_a_newer_one() {
+    let (galley, host_id) = galley_with_saved_client("oaiapp_current").await;
+    forget_stale_client(&galley, "oaiapp_old").await;
+    let kept = read_registration(&galley).await.unwrap().unwrap();
+    assert_eq!(kept.client_id.as_deref(), Some("oaiapp_current"));
+    forget_stale_client(&galley, "oaiapp_current").await;
+    assert_client_forgotten(&galley, &host_id).await;
 }
 
 // ---------------------------------------------------------------------

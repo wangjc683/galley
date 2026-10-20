@@ -341,9 +341,10 @@ pub(crate) async fn complete_chatgpt_plan_login(
 
 #[tauri::command]
 pub(crate) async fn cancel_chatgpt_plan_login(
+    galley: State<'_, SqliteGalley>,
     input: chatgpt_siwc::CancelChatgptPlanLoginInput,
 ) -> std::result::Result<(), String> {
-    chatgpt_siwc::cancel_login(input);
+    chatgpt_siwc::cancel_login(&galley, input).await;
     Ok(())
 }
 

@@ -22,8 +22,8 @@ use super::id_token::{fetch_jwks, verify_id_token};
 use super::logout::revoke_refresh_token;
 use super::refresh::{classify_token_error, RefreshFailure};
 use super::secret::{
-    has_plan_scope, load_or_create_registration, parse_scopes, random_token, save_registration,
-    SiwcRegistration, SiwcSecret, TokenResponse,
+    has_plan_scope, load_or_create_registration, parse_scopes, random_token, read_registration,
+    save_registration, SiwcRegistration, SiwcSecret, TokenResponse,
 };
 use super::{
     http_client, persist_and_probe, ChatgptPlanError, PlanResult, SIWC_AGENT_NAME_HINT,
@@ -94,9 +94,19 @@ fn pending_slot() -> &'static Mutex<Option<PendingLogin>> {
 }
 
 pub async fn start_login(galley: &SqliteGalley) -> PlanResult<ChatgptPlanLoginStart> {
+    start_login_with_timeout(galley, Duration::from_secs(SIWC_LOGIN_TIMEOUT_SECS)).await
+}
+
+pub(super) async fn start_login_with_timeout(
+    galley: &SqliteGalley,
+    timeout: Duration,
+) -> PlanResult<ChatgptPlanLoginStart> {
+    // Close the previous sign-in's listener before opening a new one, and
+    // settle its registration first so this sign-in's URL reflects it.
+    if let Some(previous) = take_pending(None) {
+        abandon(galley, previous).await;
+    }
     let registration = load_or_create_registration(galley).await?;
-    // Close the previous sign-in's listener before opening a new one.
-    drop(take_pending(None));
     let (listener, port) = bind_loopback().await.map_err(|e| {
         ChatgptPlanError::Core(GalleyError::Internal {
             message: format!("opening the ChatGPT sign-in callback listener failed: {e}"),
@@ -116,11 +126,22 @@ pub async fn start_login(galley: &SqliteGalley) -> PlanResult<ChatgptPlanLoginSt
     );
     let auth_url = build_authorize_url(&params);
 
-    let timeout = Duration::from_secs(SIWC_LOGIN_TIMEOUT_SECS);
     let (cancel_tx, cancel_rx) = oneshot::channel();
     let (outcome_tx, outcome_rx) = oneshot::channel();
+    let task_galley = galley.clone();
+    let task_saved_client = params.saved_client_id();
     tokio::spawn(async move {
         let outcome = serve_callback(listener, state, timeout, cancel_rx).await;
+        if matches!(
+            outcome,
+            CallbackOutcome::TimedOut | CallbackOutcome::Cancelled
+        ) {
+            if let Some(client_id) = task_saved_client.as_deref() {
+                // Before the outcome is handed on, so a caller that sees
+                // the timeout also sees the registration it left behind.
+                forget_stale_client(&task_galley, client_id).await;
+            }
+        }
         let _ = outcome_tx.send(outcome);
     });
     let expires_at = (Utc::now() + chrono::Duration::seconds(timeout.as_secs() as i64))
@@ -159,8 +180,59 @@ pub async fn complete_login(
     finish_sign_in(galley, callback, exchange).await
 }
 
-pub fn cancel_login(input: CancelChatgptPlanLoginInput) {
-    drop(take_pending(input.login_id.as_deref()));
+pub async fn cancel_login(galley: &SqliteGalley, input: CancelChatgptPlanLoginInput) {
+    if let Some(pending) = take_pending(input.login_id.as_deref()) {
+        abandon(galley, pending).await;
+    }
+}
+
+/// End a sign-in that never got its callback (cancelled, or replaced by a
+/// newer one): forget the saved client it re-used, then drop it, which
+/// closes its listener. The listener task forgets too (idempotent); doing
+/// it here as well means a sign-in started right after already registers
+/// afresh.
+async fn abandon(galley: &SqliteGalley, mut pending: PendingLogin) {
+    // A callback that already arrived but was never collected proves the
+    // client reached the redirect: that one is kept.
+    let got_callback = pending.outcome.as_mut().is_some_and(|outcome| {
+        matches!(
+            outcome.try_recv(),
+            Ok(CallbackOutcome::Authorized(_) | CallbackOutcome::Denied { .. })
+        )
+    });
+    if !got_callback {
+        if let Some(client_id) = pending.exchange.saved_client_id.as_deref() {
+            forget_stale_client(galley, client_id).await;
+        }
+    }
+    drop(pending);
+}
+
+/// A sign-in that re-used the saved client and ended without a callback
+/// (timed out or cancelled) forgets that client and the ID token used as
+/// `id_token_hint`; the host id stays. When the user disconnected Galley
+/// in ChatGPT settings the saved client is invalid, and per OAuth the
+/// authorize page then shows an error and never redirects back — every
+/// retry with the same client would hang until the timeout. Registering
+/// afresh is the only way out of that state. The accepted cost: a plain
+/// cancel of a healthy sign-in also leads to a new registration (one more
+/// "Galley" entry in ChatGPT settings). `access_denied` (the user said no,
+/// the client is fine) and a completed sign-in keep the client.
+///
+/// Compare-and-clear: only the client this sign-in used is forgotten, so
+/// a late call never wipes a registration a newer sign-in already saved.
+pub(super) async fn forget_stale_client(galley: &SqliteGalley, client_id: &str) {
+    let Ok(Some(mut registration)) = read_registration(galley).await else {
+        return;
+    };
+    if registration.client_id.as_deref() != Some(client_id) {
+        return;
+    }
+    registration.client_id = None;
+    registration.id_token = None;
+    if let Err(e) = save_registration(galley, &registration).await {
+        eprintln!("[chatgpt-siwc] clearing the saved client failed: {e}");
+    }
 }
 
 /// Take the pending sign-in if it matches `login_id` (any when `None`).
@@ -316,7 +388,7 @@ async fn exchange_code(
         ) {
             // The saved registration is no longer accepted: forget the
             // client (never the host id) so the next sign-in registers anew.
-            forget_saved_client(galley).await;
+            forget_stale_client(galley, client_id).await;
         }
         let message =
             |detail: &str| format!("exchanging the ChatGPT sign-in code failed ({detail})");
@@ -333,17 +405,6 @@ async fn exchange_code(
     serde_json::from_str(&body).map_err(|e| {
         ChatgptPlanError::Failed(format!("ChatGPT token response is invalid JSON: {e}"))
     })
-}
-
-async fn forget_saved_client(galley: &SqliteGalley) {
-    let Ok(mut registration) = load_or_create_registration(galley).await else {
-        return;
-    };
-    registration.client_id = None;
-    registration.id_token = None;
-    if let Err(e) = save_registration(galley, &registration).await {
-        eprintln!("[chatgpt-siwc] clearing the saved client failed: {e}");
-    }
 }
 
 pub(super) struct Pkce {
