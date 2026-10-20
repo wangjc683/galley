@@ -193,7 +193,7 @@ must not display API key values.
 
 The ChatGPT provider runs on the user's ChatGPT plan through Galley's own
 Sign in with ChatGPT (SIWC) client (`core/src/chatgpt_siwc/`; product rulings
-and probe findings in `.scratch/chatgpt-siwc/PRD.md`). Galley registers its own
+and probe findings in [the SIWC devlog](../devlog/2026-10-20-sign-in-with-chatgpt.md)). Galley registers its own
 OAuth client and spends the user's plan usage through `api.openai.com`. It is
 the provider's only sign-in: the Codex CLI login that came before it (it
 borrowed the Codex CLI's OAuth client and talked to `chatgpt.com`) was removed

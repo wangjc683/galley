@@ -699,8 +699,25 @@ main-chat planning docs, main has:
 **Owed smoke for the next release** (besides the Owed notes in the entries
 below): browser control's new-user walkthrough and the Windows smoke of the
 resident bridge (`.scratch/browser-control-ux/PRD.md`, moved out of the
-2026-10-19 dogfood walk).
+2026-10-19 dogfood walk). Sign in with ChatGPT on Windows: the loopback
+sign-in listener (watch for a firewall prompt) and the credential pipe,
+renamed `galley-codex-*` → `galley-credential-*`, which no Mac build compiles.
 
+- **Sign in with ChatGPT replaces the Codex CLI login** (2026-10-20,
+  `.scratch/chatgpt-siwc/PRD.md`, devlog
+  [2026-10-20-sign-in-with-chatgpt](./devlog/2026-10-20-sign-in-with-chatgpt.md)).
+  The ChatGPT provider signs in with OpenAI's official Sign in with ChatGPT:
+  Galley registers itself, spends Plus / Pro plan usage through
+  `api.openai.com`, and the user can see, cap and disconnect it in ChatGPT
+  settings. The borrowed Codex CLI login (device code, Codex CLI import,
+  `~/.codex/auth.json` write-back, WHAM) is gone; Core clears such
+  credentials at start without revoking them, and those users see
+  「需要登录」. `AGENTS.md` Rule 2 gains a narrow exception for the one-shot
+  loopback sign-in listener. The plan shows as a ChatGPT logo before the
+  model name, copy says 「ChatGPT 订阅」, plan errors in the conversation get
+  「管理用量」 / 「去设置登录」; Settings → Models says how each provider
+  connects and 「添加」 opens the provider list directly. Migration `052`
+  also fixes the no-auth provider, which never saved since 2026-08-31.
 - **The assistant runs the team; subtasks wake it** (2026-10-15 / 16,
   `.scratch/assistant/PRD.md`, devlogs
   [2026-10-15-assistant-runs-the-team](./devlog/2026-10-15-assistant-runs-the-team.md),
@@ -815,6 +832,13 @@ resident bridge (`.scratch/browser-control-ux/PRD.md`, moved out of the
 
 **Do at release** (outward-facing, so ask JC before each; the release SOP's
 Pre-Flight checks this list):
+
+- README (en + zh) line 86: the preset 「ChatGPT / Codex」 becomes 「ChatGPT」
+  and how it signs in (Sign in with ChatGPT, Plus / Pro); the release-notes
+  guide's area name `ChatGPT / Codex` becomes `ChatGPT`. Release notes: one
+  line for Sign in with ChatGPT, and an upgrade note that users of the old
+  Codex CLI login must sign in again, and only Plus / Pro plans work
+  (`.scratch/chatgpt-siwc/PRD.md` rulings 1, 5).
 
 - GitHub repo About, the Chinese sentence `极简 harness 的本地全能 AI 助手。`
   becomes `极简 harness 的本地全能 AI 助理。` (`gh repo edit --description`),

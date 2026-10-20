@@ -1251,7 +1251,7 @@
 
 ## ChatGPT 套餐的额度显示
 
-- **状态**：暂缓（2026-10-20 JC 按推荐：现在只给「管理用量」入口，等 OpenAI 开放数据再做；[SIWC PRD](../../.scratch/chatgpt-siwc/PRD.md) 裁决 10）。
+- **状态**：暂缓（2026-10-20 JC 按推荐：现在只给「管理用量」入口，等 OpenAI 开放数据再做；[SIWC devlog](./2026-10-20-sign-in-with-chatgpt.md) 裁决 10）。
 - **提出**：2026-10-20，JC 想在 Galley 里显示 ChatGPT 账号的额度：Plus 有 5 小时与 7 天两个窗口，Pro 只有 7 天。
 - **为什么现在做不了**：
   - SIWC 令牌拿不到额度数据。`/v1/responses` 与 `/v1/models` 不返回 `x-codex-primary-*` / `x-codex-secondary-*` 头，流里也没有额度事件（10-20 探针实测）。

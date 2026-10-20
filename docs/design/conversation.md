@@ -1043,7 +1043,7 @@ quick prompt 建议**——能力发现靠"用户主动打开库时看到能力�
 - **运行中语义**：`stopMode` 封锁模型切换（模型行置灰 + 区顶一行「运行中
   无法切换模型」小字），popover 本身照常打开。
 
-**ChatGPT 订阅标志**（2026-10-20，[SIWC PRD](../../.scratch/chatgpt-siwc/PRD.md)
+**ChatGPT 订阅标志**（2026-10-20，[SIWC devlog](../devlog/2026-10-20-sign-in-with-chatgpt.md)
 裁决 12–14）：当前对话的模型走 ChatGPT 订阅（Sign in with ChatGPT）时，模型 pill
 里名字前面一个 13px 的 ChatGPT 标志（`ChatGptMark`：官方标志做遮罩、取
 `text-ink-muted`，随主题变色，与名字隔 4px），悬停提示在「切换模型」下面多一行
