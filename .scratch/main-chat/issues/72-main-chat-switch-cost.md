@@ -1,6 +1,6 @@
 # 72 切到主对话不卡：去掉主对话挂载后的连锁重渲染与多余的强制布局
 
-Status: ready-for-agent（2026-10-20 派出）
+Status: needs-dogfood（2026-10-20 合入 `10b8e005`。后台代理在 worktree 里做；主会话复核后 rebase 到 main，复跑门禁：typecheck、lint、`git diff --check`，`TZ=UTC` 与 `TZ=America/Los_Angeles` 各 191 个文件 2022 条测试全过。真机复测（dev、StrictMode 开、A 已做）：按下后的停顿 192–237ms → 145–150ms，与切到 28 轮工作台对话的 141–148ms 持平；挂载后整段对话的重渲 2–3 次 → 0；强制布局 3 次 → 1 次。等 JC 真机看回主对话还卡不卡，以及下方 Comments 里代理请留意的几处）
 
 来源：主聊天 PRD 裁决 123（2026-10-20，JC：「多试了几次，感觉从其他对话点击回到主对话时，总会卡顿一下，你排查下原因」；主会话排查后推荐 A 加 B，JC：「按你推荐推进」）。A（卡片先画出按下、再打开主对话）主会话已做；本票是 B。只改 GUI；Core、runner、CLI 不动。
 
@@ -60,3 +60,22 @@ Status: ready-for-agent（2026-10-20 派出）
 - 第 3 条做没做；做了的话，前后数字。
 - 回归测试由红到绿的输出摘要；各项门禁的结果。
 - 分支名与提交号（从命令输出里抄）。
+
+## Comments
+
+**2026-10-20 代理回报，主会话转录**
+
+- **做了什么**：
+  - 连锁的主要来源是每条消息操作行上的 Radix 根：每颗 chip 的 tooltip，加每个 ⋯ 的 `DropdownMenu.Root`，19 轮里共 137 个。挂载时触发器的 ref 回调在根里 setState，之后每次重渲 `asChild` 又给新 ref。改法：新增 `gui/src/lib/chip-roots.ts`（`ChipRootsContext`），助理的两种行（`MessageUser` 助手模式、`MessageAgent` 的 `bubble`）在这一行第一次悬停时才挂这些根，挂上后一直保留。工作台和选中工具条照旧立即挂。所以第 3 条必须做，第 1 条才能达标。
+  - 贴底：挂载时直接放到真正的底部，依据是 `conversation.md`「切换会话、打开助手……落到真正的底部」。不再先停在回复开头，再被滚动监听和切换补位改两次状态。`ResizeObserver` 的首次回调尺寸没变就跳过。
+  - 提醒卡片：上次读到的列表用模块级缓存，读回来时内容没变就不 set。子任务：读到没有新内容就不写。
+  - 打字气泡交接：只在本轮还在跑时才测量。
+- **票面与实际不符**：
+  - 「⋯ 能 Tab 聚焦」不对。`ActionChip` 一直是 `tabIndex={-1}`，这是设计（`conversation.md`「消息菜单」；`MessageActions` 注释「hover-only actions stay out of the Tab order」），代理保持原状。还没悬停时的 ⋯ 仍是菜单按钮，保留 `aria-haspopup="menu"`，按下或 Enter、空格、↓ 都能打开菜单。
+  - 仓库原本没有 jsdom。代理加了开发依赖 `jsdom@^29.1.1`；没用 30，因为它要求 Node 22.22 以上，而 CI 跑 Node 20。主会话合入后已在主树跑过 `pnpm --dir gui install`。
+- **有意留下的 nested-update**：都不是每条消息一个，每个只重渲它自己。包括输入框的 3 个 Radix 根（两种对话都有）、整段对话唯一的右键菜单根、时间条的 tooltip（每个时间断点一个）。
+- **回归测试**：`gui/src/components/screens/MainView.mount-commits.test.tsx`，在 jsdom 里挂主对话的 `MainView`，用 Profiler 数提交。改前，挂载后还有 8 次追加提交，悬停前已有 25 个触发器；改后只有 mount 一次，悬停前 0 个。
+- **代理请真机留意**：
+  - 两种行上 chip 的 tooltip；
+  - ⋯ 菜单和右键菜单；
+  - 提醒卡片现在从切换后的第一帧起就在，不再等读回来之后才冒出来（读回来通常也早于第一帧，多半看不出差别）。
