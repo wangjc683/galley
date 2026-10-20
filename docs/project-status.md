@@ -830,6 +830,24 @@ renamed `galley-codex-*` → `galley-credential-*`, which no Mac build compiles.
   Reduce Motion keeps it still with the spinning badge back. No Agent API
   or migration change.
 
+- **The assistant's card reads as one clickable thing; presses animate;
+  the main chat opens without a hitch** (2026-10-20, rulings 122–123,
+  main chat tickets 71, 72 and `.scratch/press-transition` ticket 01,
+  devlog
+  [2026-10-20-assistant-card-edge-and-switch-hitch](./devlog/2026-10-20-assistant-card-edge-and-switch-hitch.md)).
+  GUI only. The card has a faint line inside its edge at rest, takes a
+  selected row's fill when selected (no more ring round the face), shrinks
+  to 98% when pressed, and opens the main chat once the press is painted.
+  App-wide, press sinks, the settings carets and the project group's
+  slide-in now animate as designed: Tailwind v4 writes them as `translate`
+  / `scale` / `rotate`, which the old `transition-[transform,…]` lists
+  never reached (a source-scan test now forbids `transform` there).
+  Switching to the main chat no longer re-renders the conversation after
+  mounting (the per-message tooltip and menu roots mount on a row's first
+  hover): in dev, 192–237ms → 145–150ms, on par with a workbench
+  conversation of the same length. Adds the dev dependency `jsdom` for
+  the mount test. No Agent API or migration change.
+
 **Do at release** (outward-facing, so ask JC before each; the release SOP's
 Pre-Flight checks this list):
 

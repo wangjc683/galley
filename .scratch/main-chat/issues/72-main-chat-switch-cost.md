@@ -1,6 +1,6 @@
 # 72 切到主对话不卡：去掉主对话挂载后的连锁重渲染与多余的强制布局
 
-Status: needs-dogfood（2026-10-20 合入 `10b8e005`。后台代理在 worktree 里做；主会话复核后 rebase 到 main，复跑门禁：typecheck、lint、`git diff --check`，`TZ=UTC` 与 `TZ=America/Los_Angeles` 各 191 个文件 2022 条测试全过。真机复测（dev、StrictMode 开、A 已做）：按下后的停顿 192–237ms → 145–150ms，与切到 28 轮工作台对话的 141–148ms 持平；挂载后整段对话的重渲 2–3 次 → 0；强制布局 3 次 → 1 次。等 JC 真机看回主对话还卡不卡，以及下方 Comments 里代理请留意的几处）
+Status: done（2026-10-20 JC 真机：「真机实测了，不在卡顿」。合入 `10b8e005`。后台代理在 worktree 里做；主会话复核后 rebase 到 main，复跑门禁：typecheck、lint、`git diff --check`，`TZ=UTC` 与 `TZ=America/Los_Angeles` 各 191 个文件 2022 条测试全过。真机复测（dev、StrictMode 开、A 已做）：按下后的停顿 192–237ms → 145–150ms，与切到 28 轮工作台对话的 141–148ms 持平；挂载后整段对话的重渲 2–3 次 → 0；强制布局 3 次 → 1 次）
 
 来源：主聊天 PRD 裁决 123（2026-10-20，JC：「多试了几次，感觉从其他对话点击回到主对话时，总会卡顿一下，你排查下原因」；主会话排查后推荐 A 加 B，JC：「按你推荐推进」）。A（卡片先画出按下、再打开主对话）主会话已做；本票是 B。只改 GUI；Core、runner、CLI 不动。
 
