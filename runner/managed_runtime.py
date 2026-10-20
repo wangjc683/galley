@@ -157,9 +157,12 @@ def managed_model_config_from_env() -> dict[str, Any]:
             if "connect_timeout" in advanced and "timeout" not in advanced:
                 cfg["timeout"] = advanced["connect_timeout"]
         if auth_kind == "chatgpt_codex_oauth":
-            # Single post-merge block: these keys must win over anything
-            # in advancedOptions. (This used to exist as two copies, one
-            # pre-merge and one post-merge, and they had already drifted.)
+            # Sign in with ChatGPT (patch 0007: the access token comes from
+            # Core over credential IPC, Galley's own headers, plan error
+            # codes). Single post-merge block: these keys must win over
+            # anything in advancedOptions. (This used to exist as two
+            # copies, one pre-merge and one post-merge, and they had
+            # already drifted.)
             cfg["codex_backend"] = True
             cfg["api_mode"] = "responses"
             cfg["stream"] = True
@@ -168,14 +171,6 @@ def managed_model_config_from_env() -> dict[str, Any]:
                 cfg["galley_credential_ipc"] = credential_ipc
             if str(cfg.get("reasoning_effort") or "").strip().lower() == "minimal":
                 cfg["reasoning_effort"] = "medium"
-            # Sign in with ChatGPT shares this auth kind with the Codex CLI
-            # login; Core's `chatgptPlan` flag alone picks the plan route
-            # (patch 0007: Galley's own headers, plan error codes, no WHAM),
-            # so an advanced-options key of the same name never does.
-            if model.get("chatgptPlan") is True:
-                cfg["chatgpt_plan"] = True
-            else:
-                cfg.pop("chatgpt_plan", None)
         # auth_kind "none" is a deliberate no-auth endpoint (e.g. local
         # Ollama): an empty apikey is its real credential — GA sends the
         # auth header unconditionally and such endpoints ignore it.

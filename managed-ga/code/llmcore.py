@@ -1,5 +1,5 @@
 import os, json, re, time, requests, sys, threading, urllib3, base64, importlib, uuid, pathlib, copy, socket, platform
-from datetime import datetime, timezone
+from datetime import datetime
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 _INFLIGHT = {}  # thread ident -> live socket; lets abort() close it even before response headers arrive
 _orig_conn_request = urllib3.connection.HTTPConnection.request
@@ -563,8 +563,6 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
                     try: body = r.text.strip()[:500]
                     except: body = ""
                     if plan_err: body = plan_err[1]
-                    if r.status_code == 429 and getattr(sess, 'codex_backend', False):
-                        body = _codex_enrich_quota_error(sess, headers, body)
                     err = f"!!!Error: HTTP {r.status_code}" + (f" (retry-after {(r.headers or {}).get('retry-after')}s > {cap:.0f}s cap)" if d is None and r.status_code in _RETRYABLE and attempt < sess.max_retries else "") + (f": {body}" if body else "")
                     yield err; return [{"type": "text", "text": err}]
                 if sess.stream:  # TTFT = first SSE event (prefill done), not first visible chunk; hidden thinking must count in decode window
@@ -600,134 +598,12 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
             err = f"\n\n[!!! 流异常中断 {type(e).__name__}: {e} !!!]" if streamed else f"!!!Error: {type(e).__name__}: {e}"
             yield err; return [{"type": "text", "text": err}]
 
-def _codex_account_id_from_jwt(access_token):
-    try:
-        parts = str(access_token or '').split('.')
-        if len(parts) < 2: return None
-        payload = parts[1] + "=" * (-len(parts[1]) % 4)
-        claims = json.loads(base64.urlsafe_b64decode(payload.encode()))
-        account_id = claims.get("https://api.openai.com/auth", {}).get("chatgpt_account_id")
-        return account_id if isinstance(account_id, str) and account_id else None
-    except Exception:
-        return None
-
-_CODEX_WHAM_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage"
-
-def _codex_enrich_quota_error(sess, headers, body):
-    if getattr(sess, 'chatgpt_plan', False): return body  # WHAM is a chatgpt.com endpoint; the plan route never calls it
-    hint = _codex_fetch_usage_limit_message(sess, headers)
-    if not hint: return body
-    if body and hint not in body: return f"{body}\n{hint}"
-    return hint
-
-def _codex_fetch_usage_limit_message(sess, headers):
-    try:
-        wham_headers = dict(headers or {})
-        wham_headers["Accept"] = "application/json"
-        wham_headers.pop("Content-Type", None)
-        timeout = (getattr(sess, 'connect_timeout', 10), min(5, getattr(sess, 'read_timeout', 180)))
-        resp = requests.get(_CODEX_WHAM_USAGE_URL, headers=wham_headers, timeout=timeout,
-                            proxies=getattr(sess, 'proxies', None), verify=getattr(sess, 'verify', True))
-        if getattr(resp, 'status_code', 0) < 200 or getattr(resp, 'status_code', 0) >= 300: return None
-        return _codex_usage_limit_message_from_wham(resp.json())
-    except Exception:
-        return None
-
-def _codex_usage_limit_message_from_wham(data, now=None):
-    if not isinstance(data, dict): return None
-    now = int(now if now is not None else time.time())
-    rate_limit = data.get("rate_limit") or data.get("rateLimit") or data
-    if not isinstance(rate_limit, dict): return None
-    limit_reached = _codex_bool_field(rate_limit, "limit_reached")
-    if limit_reached is None: limit_reached = _codex_bool_field(rate_limit, "limitReached")
-    if limit_reached is None: limit_reached = _codex_bool_field(data, "limit_reached")
-    if limit_reached is None: limit_reached = _codex_bool_field(data, "limitReached")
-    windows = []
-    for key in ("primary_window", "secondary_window", "primaryWindow", "secondaryWindow", "primary", "secondary"):
-        window = rate_limit.get(key)
-        parsed = _codex_parse_usage_window(window, now)
-        if parsed: windows.append(parsed)
-    if limit_reached is False:
-        return "Codex request was rate limited temporarily; retry shortly"
-    exhausted_resets = [w["reset_at"] for w in windows if w["exhausted"] and w.get("reset_at")]
-    fallback_resets = [w["reset_at"] for w in windows if w.get("reset_at")] if limit_reached is True else []
-    reset_at = max(exhausted_resets or fallback_resets) if (exhausted_resets or fallback_resets) else None
-    if not reset_at: return None
-    return f"Codex usage limit reached; next reset in {_codex_format_reset_duration(reset_at, now)} ({_codex_format_reset_timestamp(reset_at)})"
-
-def _codex_parse_usage_window(window, now):
-    if not isinstance(window, dict): return None
-    used_percent = (_codex_number_field(window, "used_percent") or
-                    _codex_number_field(window, "usedPercent") or
-                    _codex_number_field(window, "usage_percent") or
-                    _codex_number_field(window, "usagePercent"))
-    reset_at = _codex_parse_reset_at(window, now)
-    if used_percent is None and reset_at is None: return None
-    exhausted = used_percent is not None and (used_percent >= 100 or abs(used_percent - 1.0) < 1e-9)
-    return {"exhausted": exhausted, "reset_at": reset_at}
-
-def _codex_parse_reset_at(window, now):
-    for key in ("reset_at", "resetAt"):
-        reset_at = _codex_parse_timestamp(window.get(key))
-        if reset_at is not None: return reset_at
-    seconds = _codex_number_field(window, "reset_after_seconds")
-    if seconds is None: seconds = _codex_number_field(window, "resetAfterSeconds")
-    return int(now + max(0, seconds)) if seconds is not None else None
-
-def _codex_parse_timestamp(value):
-    if value is None: return None
-    if isinstance(value, (int, float)):
-        return int(value / 1000 if value > 10_000_000_000 else value)
-    if isinstance(value, str):
-        text = value.strip()
-        if not text: return None
-        try:
-            numeric = float(text)
-            return int(numeric / 1000 if numeric > 10_000_000_000 else numeric)
-        except Exception:
-            pass
-        try:
-            return int(datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp())
-        except Exception:
-            return None
-    return None
-
-def _codex_number_field(data, key):
-    value = data.get(key) if isinstance(data, dict) else None
-    if isinstance(value, (int, float)): return float(value)
-    if isinstance(value, str):
-        try: return float(value.strip())
-        except Exception: return None
-    return None
-
-def _codex_bool_field(data, key):
-    value = data.get(key) if isinstance(data, dict) else None
-    if isinstance(value, bool): return value
-    if isinstance(value, str):
-        lower = value.strip().lower()
-        if lower == "true": return True
-        if lower == "false": return False
-    return None
-
-def _codex_format_reset_duration(reset_at, now):
-    seconds = max(0, int(reset_at - now))
-    if seconds < 60: return "less than 1 minute"
-    minutes = (seconds + 59) // 60
-    if minutes < 60: return f"{minutes} minute" + ("" if minutes == 1 else "s")
-    hours, remaining_minutes = divmod(minutes, 60)
-    text = f"{hours} hour" + ("" if hours == 1 else "s")
-    if remaining_minutes: text += f" {remaining_minutes} minute" + ("" if remaining_minutes == 1 else "s")
-    return text
-
-def _codex_format_reset_timestamp(reset_at):
-    try: return datetime.fromtimestamp(int(reset_at), timezone.utc).isoformat().replace("+00:00", "Z")
-    except Exception: return f"unix {reset_at}"
-
 def _galley_codex_access_token(sess):
+    """Core's current access token for this model, over Galley's credential IPC."""
     ipc = getattr(sess, 'galley_credential_ipc', None)
     api_key_ref = getattr(sess, 'galley_api_key_ref', '')
     if not isinstance(ipc, dict) or not api_key_ref:
-        return sess.api_key, None
+        return sess.api_key
     req = json.dumps({"token": ipc.get("token", ""), "apiKeyRef": api_key_ref}, ensure_ascii=False).encode() + b"\n"
     kind, address = ipc.get("kind"), ipc.get("address")
     try:
@@ -748,17 +624,18 @@ def _galley_codex_access_token(sess):
             raise RuntimeError(f"unsupported credential IPC kind {kind!r}")
         data = json.loads(b"".join(chunks).decode("utf-8").strip())
         token = data.get("accessToken")
+        if not token and data.get("error"): raise RuntimeError(f"credential IPC rejected request ({data['error']}: {data.get('message')})")
         if not token: raise RuntimeError("credential IPC response missing accessToken")
-        return token, data.get("accountId")
+        return token
     except Exception as e:
         raise RuntimeError(f"Galley Codex credential refresh failed: {e}") from e
 
-# Galley: Sign in with ChatGPT ("chatgpt_plan", set by Core on a codex_backend model).
-# Same Codex-shaped Responses request, sent to api.openai.com as Galley itself: its own
-# User-Agent, no Codex CLI originator, no ChatGPT-Account-ID, no WHAM lookup. Plan
-# errors carry error.code, before the stream (HTTP body) or in it (response.failed /
-# error events); terminal codes end the call without a retry, the two *_unavailable
-# codes go through GA's normal backoff. Messages name the code for later localization.
+# Galley: Sign in with ChatGPT ("codex_backend", set by the runner on a ChatGPT-plan model).
+# Codex-shaped Responses request, sent to api.openai.com as Galley itself: its own
+# User-Agent, no originator, no ChatGPT-Account-ID. Plan errors carry error.code,
+# before the stream (HTTP body) or in it (response.failed / error events); terminal
+# codes end the call without a retry, the two *_unavailable codes go through GA's
+# normal backoff. Messages name the code for later localization.
 _CHATGPT_PLAN_USAGE_URL = "https://chatgpt.com/settings/usage"
 _CHATGPT_PLAN_RETRYABLE = {"subscription_sharing_usage_unavailable", "subscription_sharing_user_unavailable"}
 _CHATGPT_PLAN_TERMINAL = {"subscription_sharing_usage_limit_exceeded", "subscription_sharing_user_not_eligible",
@@ -790,7 +667,7 @@ def _chatgpt_plan_error(err):
 
 def _chatgpt_plan_http_error(sess, r):
     """Plan error in an HTTP error body: {"error": {...}} or {"detail": {...}}; a bare {"detail": "..."} has no code."""
-    if not getattr(sess, 'chatgpt_plan', False): return None
+    if not getattr(sess, 'codex_backend', False): return None
     try: data = json.loads(r.text)
     except Exception: return None
     if not isinstance(data, dict): return None
@@ -839,19 +716,10 @@ def _openai_stream(sess, messages):
     temperature = sess.temperature
     if 'kimi' in ml or 'moonshot' in ml: temperature = 1
     elif 'minimax' in ml: temperature = max(0.01, min(temperature, 1.0))  # MiniMax requires temp in (0, 1]
-    api_key = sess.api_key
-    account_id = None
-    if getattr(sess, 'codex_backend', False):
-        api_key, account_id = _galley_codex_access_token(sess)
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "Accept": "text/event-stream", 'originator': 'codex_exec'}
-    if getattr(sess, 'chatgpt_plan', False):
-        headers.pop('originator', None); headers["User-Agent"] = _chatgpt_plan_user_agent()
-    elif getattr(sess, 'codex_backend', False):
-        headers.update({"User-Agent": "codex_cli_rs/0.0.0 (Galley)", "originator": "codex_cli_rs"})
-        account_id = account_id or _codex_account_id_from_jwt(api_key)
-        if account_id: headers["ChatGPT-Account-ID"] = account_id
-    else:
-        headers["User-Agent"] = sess.user_agent
+    headers = {"Authorization": f"Bearer {sess.api_key}", "Content-Type": "application/json", "Accept": "text/event-stream", 'originator': 'codex_exec'}
+    headers["User-Agent"] = sess.user_agent
+    if getattr(sess, 'codex_backend', False):  # Galley (Sign in with ChatGPT): Core's access token, Galley's own UA, no originator
+        headers["Authorization"] = f"Bearer {_galley_codex_access_token(sess)}"; headers.pop('originator', None); headers["User-Agent"] = _chatgpt_plan_user_agent()
     if api_mode == "responses":
         url = f"{sess.api_base.rstrip('/')}/responses" if getattr(sess, 'codex_backend', False) else auto_make_url(sess.api_base, "responses")
         payload = {"model": model, "input": _to_responses_input(messages), "stream": sess.stream,
@@ -874,7 +742,7 @@ def _openai_stream(sess, messages):
     if tools: payload["tools"] = _prepare_oai_tools(tools, api_mode)
     if sess.service_tier: payload["service_tier"] = sess.service_tier
     parse_fn = (lambda r: _parse_openai_sse(r.iter_lines(), api_mode)) if sess.stream else (lambda r: _parse_openai_json(r.json(), api_mode))
-    if getattr(sess, 'chatgpt_plan', False): parse_fn = lambda r: _chatgpt_plan_parse_sse(r.iter_lines(), api_mode)
+    if getattr(sess, 'codex_backend', False): parse_fn = lambda r: _chatgpt_plan_parse_sse(r.iter_lines(), api_mode)
     return (yield from _stream_with_retry(sess, url, headers, payload, parse_fn))
 
 def _prepare_oai_tools(tools, api_mode="chat_completions"):
@@ -976,7 +844,6 @@ class BaseSession:
         self.api_base = cfg['apibase'].rstrip('/')
         self.model = cfg.get('model', '')
         self.codex_backend = bool(cfg.get('codex_backend'))
-        self.chatgpt_plan = self.codex_backend and bool(cfg.get('chatgpt_plan'))
         self.galley_api_key_ref = cfg.get('galley_api_key_ref') or ''
         ipc = cfg.get('galley_credential_ipc')
         self.galley_credential_ipc = ipc if isinstance(ipc, dict) else None

@@ -89,104 +89,6 @@ def test_tryparse_does_not_normalize_non_path_string_fields() -> None:
     assert parsed["arguments"]["script"] == r'print("D:\new\test.md")'
 
 
-def test_codex_wham_usage_message_uses_later_exhausted_window() -> None:
-    message = llmcore._codex_usage_limit_message_from_wham(
-        {
-            "rate_limit": {
-                "limit_reached": True,
-                "primary_window": {
-                    "used_percent": 100,
-                    "reset_after_seconds": 600,
-                },
-                "secondary_window": {
-                    "used_percent": 100,
-                    "reset_after_seconds": 7200,
-                },
-            }
-        },
-        now=1_700_000_000,
-    )
-
-    assert message is not None
-    assert "next reset in 2 hours" in message
-
-
-def test_codex_wham_usage_message_handles_temporary_limit() -> None:
-    message = llmcore._codex_usage_limit_message_from_wham(
-        {"rate_limit": {"limit_reached": False}},
-        now=1_700_000_000,
-    )
-
-    assert message == "Codex request was rate limited temporarily; retry shortly"
-
-
-def test_codex_stream_final_429_appends_quota_reset_hint(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class FakePostResponse:
-        status_code = 429
-        headers: dict[str, str] = {}
-        text = "quota exhausted"
-
-        def __enter__(self) -> FakePostResponse:
-            return self
-
-        def __exit__(self, *_args: object) -> None:
-            return None
-
-    class FakeGetResponse:
-        status_code = 200
-
-        def json(self) -> dict[str, Any]:
-            return {
-                "rate_limit": {
-                    "limit_reached": True,
-                    "primary_window": {
-                        "used_percent": 100,
-                        "reset_after_seconds": 3600,
-                    },
-                }
-            }
-
-    monkeypatch.setattr(
-        llmcore.requests,
-        "post",
-        lambda *_args, **_kwargs: FakePostResponse(),
-        raising=False,
-    )
-    monkeypatch.setattr(
-        llmcore.requests,
-        "get",
-        lambda *_args, **_kwargs: FakeGetResponse(),
-        raising=False,
-    )
-    monkeypatch.setattr(llmcore.time, "time", lambda: 1_700_000_000)
-    sess = types.SimpleNamespace(
-        name="codex-test",
-        max_retries=0,
-        stream=True,
-        connect_timeout=1,
-        read_timeout=10,
-        proxies=None,
-        verify=True,
-        codex_backend=True,
-    )
-
-    chunks = list(
-        llmcore._stream_with_retry(
-            sess,
-            "https://example.test",
-            {},
-            {},
-            lambda _r: iter(()),
-        )
-    )
-
-    assert chunks
-    assert "quota exhausted" in chunks[0]
-    assert "next reset in 1 hour" in chunks[0]
-
-
 def test_non_codex_stream_final_429_is_unchanged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -205,12 +107,6 @@ def test_non_codex_stream_final_429_is_unchanged(
         llmcore.requests,
         "post",
         lambda *_args, **_kwargs: FakePostResponse(),
-        raising=False,
-    )
-    monkeypatch.setattr(
-        llmcore.requests,
-        "get",
-        lambda *_args, **_kwargs: pytest.fail("WHAM should not be called for non-Codex"),
         raising=False,
     )
     sess = types.SimpleNamespace(
@@ -638,7 +534,7 @@ def test_managed_mykey_loader_serves_env_config_and_never_reloads(
     assert llmcore.reload_mykeys()[1] is False
 
 
-# --- Patch 0007, Sign in with ChatGPT route (`chatgpt_plan`) -----------------
+# --- Patch 0007, Sign in with ChatGPT route (`codex_backend`) ----------------
 #
 # Driven through `_openai_stream`, so the session flag, the headers, the
 # request body, `_stream_with_retry` and the plan parser run as the engine runs
@@ -667,8 +563,8 @@ class _FakeHTTPResponse:
 class _FakeNetwork:
     """Serves the queued responses in order (the last one repeats), each
     POST a fresh object as with real `requests` (`_stream_with_retry` rebinds
-    `iter_lines` on the response it gets), and records every POST and every
-    WHAM GET."""
+    `iter_lines` on the response it gets), and records every POST and any
+    GET (the backend sends none)."""
 
     def __init__(self, *responses: _FakeHTTPResponse) -> None:
         self.responses = list(responses)
@@ -720,7 +616,7 @@ def _jwt_with_account(account_id: str) -> str:
     return f"e30.{body}.sig"
 
 
-def _codex_session(chatgpt_plan: bool, *, codex_backend: bool = True) -> Any:
+def _codex_session(*, codex_backend: bool = True) -> Any:
     cfg: dict[str, Any] = {
         "name": "chatgpt-test",
         "apikey": _jwt_with_account("acct-123"),
@@ -732,8 +628,6 @@ def _codex_session(chatgpt_plan: bool, *, codex_backend: bool = True) -> Any:
     }
     if codex_backend:
         cfg["codex_backend"] = True
-    if chatgpt_plan:
-        cfg["chatgpt_plan"] = True
     return llmcore.LLMSession(cfg)
 
 
@@ -756,7 +650,7 @@ def test_chatgpt_plan_sends_galley_headers_and_codex_body(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     net = _install_network(monkeypatch, _OK_STREAM)
-    sess = _codex_session(chatgpt_plan=True)
+    sess = _codex_session()
 
     chunks, blocks = _run(sess)
 
@@ -778,28 +672,117 @@ def test_chatgpt_plan_sends_galley_headers_and_codex_body(
     assert payload["include"] == ["reasoning.encrypted_content"]
 
 
-def test_codex_cli_route_headers_are_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+class _FakeIpcSocket:
+    """Stands in for the AF_UNIX socket to Core's credential IPC: records what
+    the engine sends and answers one line."""
+
+    def __init__(self, reply: dict[str, Any]) -> None:
+        self.reply: bytes | None = json.dumps(reply).encode() + b"\n"
+        self.address: str | None = None
+        self.sent: list[bytes] = []
+
+    def __enter__(self) -> _FakeIpcSocket:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def settimeout(self, _timeout: float) -> None:
+        return None
+
+    def connect(self, address: str) -> None:
+        self.address = address
+
+    def sendall(self, data: bytes) -> None:
+        self.sent.append(data)
+
+    def recv(self, _size: int) -> bytes:
+        reply, self.reply = self.reply or b"", None
+        return reply
+
+
+def _ipc_session(
+    monkeypatch: pytest.MonkeyPatch, reply: dict[str, Any]
+) -> tuple[Any, _FakeIpcSocket]:
+    ipc = _FakeIpcSocket(reply)
+    monkeypatch.setattr(
+        llmcore,
+        "socket",
+        types.SimpleNamespace(AF_UNIX=1, SOCK_STREAM=1, socket=lambda *_a: ipc),
+    )
+    sess = llmcore.LLMSession(
+        {
+            "name": "chatgpt-test",
+            "apikey": "galley-codex-oauth",
+            "apibase": "https://api.openai.com/v1",
+            "model": "gpt-5.6-sol",
+            "api_mode": "responses",
+            "codex_backend": True,
+            "galley_api_key_ref": "managed-provider:mp_chatgpt_codex",
+            "galley_credential_ipc": {"kind": "unix", "address": "/galley.sock", "token": "t"},
+        }
+    )
+    return sess, ipc
+
+
+def test_codex_backend_takes_its_token_from_core_credential_ipc(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     net = _install_network(monkeypatch, _OK_STREAM)
+    # An `accountId` in the reply (Core no longer sends one) is not a header.
+    sess, ipc = _ipc_session(
+        monkeypatch, {"accessToken": "access-from-core", "accountId": "acct-1"}
+    )
 
-    _run(_codex_session(chatgpt_plan=False))
+    chunks, _ = _run(sess)
 
+    assert chunks == ["ok"]
+    assert ipc.address == "/galley.sock"
+    [request] = ipc.sent
+    assert json.loads(request) == {
+        "token": "t",
+        "apiKeyRef": "managed-provider:mp_chatgpt_codex",
+    }
     headers = net.posts[0]["headers"]
-    assert headers["User-Agent"] == "codex_cli_rs/0.0.0 (Galley)"
-    assert headers["originator"] == "codex_cli_rs"
-    assert headers["ChatGPT-Account-ID"] == "acct-123"
-    assert net.posts[0]["payload"]["store"] is False
+    assert headers["Authorization"] == "Bearer access-from-core"
+    assert "ChatGPT-Account-ID" not in headers
 
 
-def test_chatgpt_plan_needs_the_codex_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_codex_backend_names_the_code_core_refused_with(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A cleared sign-in: Core answers with its error envelope, and the code
+    reaches the turn text, where the GUI offers to sign in again."""
+    _install_network(monkeypatch, _OK_STREAM)
+    sess, _ = _ipc_session(
+        monkeypatch,
+        {
+            "error": "invalid_args",
+            "message": "chatgpt_plan_reauth_required: ChatGPT sign-in has expired",
+        },
+    )
+
+    with pytest.raises(RuntimeError) as raised:
+        _run(sess)
+
+    message = str(raised.value)
+    assert message.startswith("Galley Codex credential refresh failed: ")
+    assert "chatgpt_plan_reauth_required" in message
+
+
+def test_without_the_codex_backend_ga_headers_are_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     net = _install_network(monkeypatch, _OK_STREAM)
-    sess = _codex_session(chatgpt_plan=True, codex_backend=False)
+    sess = _codex_session(codex_backend=False)
 
     _run(sess)
 
-    assert sess.chatgpt_plan is False
     headers = net.posts[0]["headers"]
     assert headers["User-Agent"] == sess.user_agent
     assert headers["originator"] == "codex_exec"
+    assert headers["Authorization"] == f"Bearer {sess.api_key}"
+    assert "store" not in net.posts[0]["payload"]
 
 
 # (error.code, HTTP status, retried, text the message must carry)
@@ -856,7 +839,7 @@ def test_chatgpt_plan_http_error_is_classified_by_code(
 ) -> None:
     net = _install_network(monkeypatch, _FakeHTTPResponse(status, {"error": _plan_error(code)}))
 
-    chunks, blocks = _run(_codex_session(chatgpt_plan=True))
+    chunks, blocks = _run(_codex_session())
 
     # max_retries=2: a retried code is sent three times, a terminal one once.
     assert len(net.posts) == (3 if retried else 1)
@@ -889,7 +872,7 @@ def test_chatgpt_plan_response_failed_is_classified_by_code(
     )
     net = _install_network(monkeypatch, failed)
 
-    chunks, blocks = _run(_codex_session(chatgpt_plan=True))
+    chunks, blocks = _run(_codex_session())
 
     assert len(net.posts) == (3 if retried else 1)
     [message] = chunks
@@ -923,7 +906,7 @@ def test_chatgpt_plan_usage_limit_is_not_retried_even_if_it_reads_like_a_rate_li
     )
     net = _install_network(monkeypatch, failed)
 
-    chunks, blocks = _run(_codex_session(chatgpt_plan=True))
+    chunks, blocks = _run(_codex_session())
 
     assert len(net.posts) == 1
     assert chunks[0] == "partial "
@@ -949,7 +932,7 @@ def test_chatgpt_plan_error_event_is_classified_by_code(
     )
     net = _install_network(monkeypatch, stream)
 
-    chunks, _ = _run(_codex_session(chatgpt_plan=True))
+    chunks, _ = _run(_codex_session())
 
     assert len(net.posts) == 1
     assert chunks == [
@@ -964,7 +947,7 @@ def test_chatgpt_plan_unavailable_then_recovers(monkeypatch: pytest.MonkeyPatch)
     )
     net = _install_network(monkeypatch, unavailable, _OK_STREAM)
 
-    chunks, _ = _run(_codex_session(chatgpt_plan=True))
+    chunks, _ = _run(_codex_session())
 
     assert len(net.posts) == 2
     assert chunks == ["ok"]
@@ -980,7 +963,7 @@ def test_chatgpt_plan_revoked_token_is_terminal(monkeypatch: pytest.MonkeyPatch)
     )
     net = _install_network(monkeypatch, _FakeHTTPResponse(401, body))
 
-    chunks, blocks = _run(_codex_session(chatgpt_plan=True))
+    chunks, blocks = _run(_codex_session())
 
     assert len(net.posts) == 1
     assert chunks == [
@@ -991,11 +974,13 @@ def test_chatgpt_plan_revoked_token_is_terminal(monkeypatch: pytest.MonkeyPatch)
     assert net.gets == []
 
 
-def test_codex_cli_route_ignores_token_revoked_code(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_without_the_codex_backend_token_revoked_is_ga_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     body = {"error": {"code": "token_revoked", "message": "invalidated"}}
     _install_network(monkeypatch, _FakeHTTPResponse(401, body))
 
-    chunks, _ = _run(_codex_session(chatgpt_plan=False))
+    chunks, _ = _run(_codex_session(codex_backend=False))
 
     assert chunks == [f"!!!Error: HTTP 401: {json.dumps(body)}"]
 
@@ -1004,7 +989,7 @@ def test_chatgpt_plan_detail_shaped_error_body(monkeypatch: pytest.MonkeyPatch) 
     body = {"detail": {"code": "subscription_sharing_user_not_eligible", "message": "nope"}}
     net = _install_network(monkeypatch, _FakeHTTPResponse(403, body))
 
-    chunks, _ = _run(_codex_session(chatgpt_plan=True))
+    chunks, _ = _run(_codex_session())
 
     assert len(net.posts) == 1
     assert chunks[0].startswith("!!!Error: HTTP 403: This ChatGPT account cannot use its plan")
@@ -1016,19 +1001,19 @@ def test_chatgpt_plan_codeless_errors_keep_ga_handling(
     """A bare {"detail": "..."} has no code: GA's message, GA's retry rules."""
     net = _install_network(monkeypatch, _FakeHTTPResponse(401, {"detail": "Unauthorized"}))
 
-    chunks, _ = _run(_codex_session(chatgpt_plan=True))
+    chunks, _ = _run(_codex_session())
 
     assert len(net.posts) == 1
     assert chunks == ['!!!Error: HTTP 401: {"detail": "Unauthorized"}']
 
 
-def test_chatgpt_plan_unknown_429_keeps_ga_retry_and_skips_wham(
+def test_chatgpt_plan_unknown_429_keeps_ga_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     body = {"error": {"code": "rate_limit_exceeded", "message": "slow down"}}
     net = _install_network(monkeypatch, _FakeHTTPResponse(429, body))
 
-    chunks, _ = _run(_codex_session(chatgpt_plan=True))
+    chunks, _ = _run(_codex_session())
 
     assert len(net.posts) == 3
     assert chunks == [f"!!!Error: HTTP 429: {json.dumps(body)}"]
@@ -1051,22 +1036,21 @@ def test_chatgpt_plan_unknown_failed_code_keeps_ga_parser(
     )
     net = _install_network(monkeypatch, failed)
 
-    chunks, _ = _run(_codex_session(chatgpt_plan=True))
+    chunks, _ = _run(_codex_session())
 
     assert len(net.posts) == 1
     assert chunks == ["!!!Error: boom"]
 
 
-def test_codex_cli_route_usage_limit_code_keeps_ga_retry_and_wham(
+def test_without_the_codex_backend_plan_codes_keep_ga_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Without `chatgpt_plan` the plan codes mean nothing: 429 retries and the
-    final failure still asks WHAM, as before."""
+    """Outside the ChatGPT backend the plan codes mean nothing: 429 retries."""
     body = {"error": _plan_error("subscription_sharing_usage_limit_exceeded")}
     net = _install_network(monkeypatch, _FakeHTTPResponse(429, body))
 
-    chunks, _ = _run(_codex_session(chatgpt_plan=False))
+    chunks, _ = _run(_codex_session(codex_backend=False))
 
     assert len(net.posts) == 3
-    assert net.gets == ["https://chatgpt.com/backend-api/wham/usage"]
+    assert net.gets == []
     assert chunks == [f"!!!Error: HTTP 429: {json.dumps(body)}"]

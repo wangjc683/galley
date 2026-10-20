@@ -391,11 +391,11 @@ def test_managed_model_config_maps_codex_oauth_to_ga_config(
                     {
                         "protocol": "openai",
                         "authKind": "chatgpt_codex_oauth",
-                        "displayName": "ChatGPT / Codex",
+                        "displayName": "ChatGPT",
                         "apiKey": "galley-codex-oauth",
                         "apiKeyRef": "managed-provider:mp_chatgpt_codex",
-                        "apiBase": "https://chatgpt.com/backend-api/codex",
-                        "model": "gpt-5.5",
+                        "apiBase": "https://api.openai.com/v1",
+                        "model": "gpt-5.6-sol",
                         "credentialIpc": {
                             "kind": "unix",
                             "address": "/tmp/galley.sock",
@@ -462,41 +462,18 @@ _CODEX_OAUTH_CFG = {
 }
 
 
-def test_managed_model_config_marks_chatgpt_plan_route(
+def test_managed_model_config_maps_a_chatgpt_plan_model_exactly(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Sign in with ChatGPT (ticket chatgpt-siwc/03): Core's `chatgptPlan`
-    flag adds `chatgpt_plan` on top of the Codex backend settings."""
-    cfg = _single_model_config(monkeypatch, _codex_oauth_model(chatgptPlan=True))
-
-    assert cfg == {**_CODEX_OAUTH_CFG, "chatgpt_plan": True}
-
-
-@pytest.mark.parametrize("extra", [{}, {"chatgptPlan": False}])
-def test_managed_model_config_without_chatgpt_plan_is_unchanged(
-    monkeypatch: pytest.MonkeyPatch, extra: dict[str, Any]
-) -> None:
-    """No flag (the Codex CLI login, A): exactly the config it got before."""
-    cfg = _single_model_config(monkeypatch, _codex_oauth_model(**extra))
+    """Sign in with ChatGPT is the only `chatgpt_codex_oauth` route: the Codex
+    backend settings and nothing else (no separate plan flag since the Codex
+    CLI login was removed, chatgpt-siwc ticket 05)."""
+    cfg = _single_model_config(monkeypatch, _codex_oauth_model())
 
     assert cfg == _CODEX_OAUTH_CFG
 
 
-def test_managed_model_config_chatgpt_plan_comes_only_from_core_flag(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """An advanced-options key of the same name does not pick the route."""
-    cfg = _single_model_config(
-        monkeypatch,
-        _codex_oauth_model(
-            advancedOptions={"reasoning_effort": "high", "chatgpt_plan": True}
-        ),
-    )
-
-    assert cfg == _CODEX_OAUTH_CFG
-
-
-def test_managed_model_config_ignores_chatgpt_plan_on_api_key_models(
+def test_managed_model_config_api_key_models_get_no_codex_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cfg = _single_model_config(
@@ -508,12 +485,11 @@ def test_managed_model_config_ignores_chatgpt_plan_on_api_key_models(
             "apiKey": "sk-test",
             "apiBase": "https://api.openai.com/v1",
             "model": "gpt-5.6-sol",
-            "chatgptPlan": True,
         },
     )
 
-    assert "chatgpt_plan" not in cfg
     assert "codex_backend" not in cfg
+    assert "galley_credential_ipc" not in cfg
 
 
 def test_ask_user_response_resets_visibility_to_visible() -> None:
