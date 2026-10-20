@@ -1,6 +1,6 @@
 # 02 · Core：Sign in with ChatGPT 登录与令牌生命周期
 
-Status: ready-for-agent
+Status: needs-dogfood
 
 来源：[PRD](../PRD.md) 裁决 1、2、6 与「探针结果」一节。C 就地接管现有的 ChatGPT 服务商；票 05 删 A 之前，A 与 C 在同一个服务商、同一个 auth_kind 下共存，靠凭据里的 `flow` 区分。
 

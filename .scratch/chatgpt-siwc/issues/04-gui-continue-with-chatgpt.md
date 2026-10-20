@@ -1,6 +1,6 @@
 # 04 · GUI：用 ChatGPT 登录
 
-Status: ready-for-agent
+Status: needs-dogfood
 
 来源：[PRD](../PRD.md) 裁决 1、5、6；Core 接口来自票 02（`core/src/chatgpt_siwc/`，前端绑定已在 `gui/src/lib/managed-models.ts`）。OpenAI 的界面要求见 <https://developers.openai.com/siwc/ui-ux-guidelines>。
 
@@ -82,3 +82,22 @@ Status: ready-for-agent
 - 缺陷：登录后连接测试失败时，不结束引导、不关闭编辑器，说明原因；不符合资格时建议改用 API key 服务商（PRD「另」一段）。
 - 裁决 7：对话里的套餐报错按错误码显示中文提示和按钮（管理用量 / 去设置登录 / 去设置），引擎原文留在详情里。
 - 裁决 8：对话出现 `token_revoked` 时触发一次连接测试，每次报错只触发一次，然后刷新登录状态。
+
+### 2026-10-20 交付与合入
+
+- 代理交付后主会话补了一处文案：「API key 服务商」改为「用密钥的服务商」，依据文案规范。01–04 已快进合入 main（`00c4569a`）。
+- 门禁：pytest 591、mypy、ruff、gui typecheck / lint / test（181 个文件、1979 条）、四项检查脚本全部通过；Rust 全量在 `445975f2` 跑过（1196 条）。
+- 代理按规范做的取舍，待 JC 真机看：
+  - B 案标识沿用 12.5px 淡色，没有缩小（规范要求一行一个字号）；
+  - 「管理用量」用杏色描边按钮（Error Card 规范）；
+  - 「其他登录方式」展开时出现两个主按钮（临时，票 05 删）。
+- 过期的设计文档两处（`overlays-and-settings.md:414`、`onboarding-and-cards.md:38`）等真机裁决后一起改。
+
+### 2026-10-20 真机第一轮与 04b
+
+- 真机：JC 用 ChatGPT 登录成功，工作台对话正常（清单第 1、2 步过）。标识选 B，但嫌样式像强度。
+- 04b（已转给代理，接在 `siwc-04-gui` 上）：
+  - 中文文案「ChatGPT 套餐」全部改为「ChatGPT 订阅」，英文仍是「ChatGPT plan」，文案规范补一行；
+  - `usageNotGranted` 改为说明性写法；
+  - 切换器换成三档：1 标志、2 右端、3 徽标（PRD 裁决 11、12）。
+- 待合入：`f3d73325`（Core：丢掉作废的旧注册）、`688d677c`（等待态提示），加上 04b，三者一起合，Core 只重启一次。

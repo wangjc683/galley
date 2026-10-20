@@ -1,6 +1,6 @@
 # 01 · providers 表的 auth_kind 约束补上 `none`
 
-Status: ready-for-agent
+Status: needs-dogfood
 
 来源：2026-10-20 讨论 SIWC 时顺带发现。免密钥服务商（galley#24，`8b0c4d38`，08-31 上线）存不进库：
 迁移 014 给 `managed_model_providers.auth_kind` 加的约束只允许 `api_key` 和 `chatgpt_codex_oauth`

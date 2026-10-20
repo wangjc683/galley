@@ -1,6 +1,6 @@
 # 03 · runner 与内核补丁：ChatGPT 套餐路由
 
-Status: ready-for-agent
+Status: needs-dogfood
 
 来源：[PRD](../PRD.md) 裁决 1、5、6 与「探针结果」一节。探针已证明：GA 现有的 Codex 分支请求格式，端点换成 `https://api.openai.com/v1` 后，两轮带工具调用都能跑通。所以本票只做路由标记、请求头和错误处理，不动请求体。
 
