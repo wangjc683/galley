@@ -205,12 +205,25 @@ const LINE = 'data-role="assistant-card-line"';
 const BADGE = 'data-role="assistant-badge"';
 const FACE = 'data-role="assistant-face"';
 const SPINNER = 'class="spin"';
-const BLOCK = '<div class="pb-1.5 pt-2">';
+const BLOCK = '<div class="pt-2 has-[:focus-visible]:relative">';
 const ROW = 'data-role="sidebar-new-chat-row"';
 const SCROLL_LIST = "overflow-y-auto";
 const STICKY = "data-sidebar-section-header";
 const EMPTY = "你的对话会出现在这里。";
 const WORKBENCH = 'data-sidebar-zone-label="workbench"';
+/** The workbench's name: one half of the strong line, the word, the
+ * other half (ticket 69). */
+const HALF =
+  '<span aria-hidden="true" class="h-px min-w-0 flex-1 bg-line-strong">';
+const NAME =
+  '<span class="shrink-0 whitespace-nowrap px-2 text-ui-label leading-[13px] text-ink-muted">';
+const GROUND =
+  "linear-gradient(to bottom, var(--color-chrome), var(--color-app))";
+/** The name's element, from its opening tag to its close. */
+const labelOf = (html: string) => {
+  const i = html.indexOf(WORKBENCH);
+  return html.slice(html.lastIndexOf("<div", i), html.indexOf("</div>", i) + 6);
+};
 const ARCHIVED = ">已归档</span>";
 
 afterEach(() => {
@@ -285,9 +298,9 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
 
   it("stands the card on the chrome above the strong line, the list under it on the app ground", () => {
     const html = render([mainChat, sideChat]);
-    // The card's block (8px over the card, 6px under it: the stage card
-    // carries its own 6px inside), then the workbench's name on the
-    // strong line; the list follows.
+    // The card's block (8px over the card; the 6px under it are the
+    // name's, ticket 69; the stage card carries its own 6px inside), then
+    // the workbench's name on the strong line; the list follows.
     expect(tagWith(html, CARD)).not.toContain("line-strong");
     expect(html.indexOf(BLOCK)).toBeGreaterThan(0);
     expect(html.indexOf(BLOCK)).toBeLessThan(html.indexOf(CARD));
@@ -310,32 +323,66 @@ describe("with a main chat: the masthead, the card, the new-chat row", () => {
     expect(tagWith(html, 'data-sidebar-section=""')).toContain("bg-app");
   });
 
-  it("names the workbench on the strong line, drawn from after the word (ticket 62's C)", () => {
+  it("names the workbench centred on the strong line, in two halves out to the edges (ticket 69)", () => {
     for (const language of ["zh-CN", "en-US"] as const) {
       const html = render([mainChat, sideChat], { language });
-      const word = language === "zh-CN" ? ">工作台<" : ">Workbench<";
+      const text = language === "zh-CN" ? "工作台" : "Workbench";
       expect(count(html, "data-sidebar-zone-label")).toBe(1);
-      expect(count(html, word)).toBe(1);
-      // The strong line is the name row's, nowhere else.
-      expect(count(html, "line-strong")).toBe(1);
-      const row = between(html, WORKBENCH, SCROLL_LIST);
-      expect(row.indexOf(word)).toBeLessThan(row.indexOf("bg-line-strong"));
-      // The ground turns on the line: chrome above, the app ground below.
-      expect(tagWith(html, WORKBENCH)).toContain("h-[13px]");
-      expect(tagWith(html, WORKBENCH)).toContain(
-        "linear-gradient(to bottom, transparent 6px, var(--color-app) 6px)",
+      expect(count(html, `>${text}<`)).toBe(1);
+      // Left half, the word, right half, and nothing else: the halves
+      // are both flex-1 from nothing, so they stretch alike and the word
+      // sits on the sidebar's axis, 8px off each (px-2), the halves out
+      // to the sidebar's edges; the strong line is theirs alone.
+      expect(labelOf(html)).toBe(
+        `<div ${WORKBENCH} class="flex h-[19px] shrink-0 items-center pt-1.5" style="background:${GROUND}">` +
+          `${HALF}</span>${NAME}${text}</span>${HALF}</span></div>`,
       );
+      expect(count(html, "line-strong")).toBe(2);
+      // No longer hung on the grid's left line.
+      expect(labelOf(html)).not.toContain("pl-4.5");
       // Quieter than a bucket's eyebrow: regular, untracked, upright.
-      const span = row.slice(row.indexOf("<span"), row.indexOf("</span>"));
-      expect(span).toContain("text-ui-label");
-      expect(span).toContain("text-ink-muted");
-      expect(span).toContain("whitespace-nowrap");
+      expect(NAME).toContain("text-ui-label");
+      expect(NAME).toContain("text-ink-muted");
+      expect(NAME).toContain("whitespace-nowrap");
       for (const eyebrow of ["uppercase", "tracking-", "font-semibold"]) {
-        expect(span).not.toContain(eyebrow);
+        expect(labelOf(html)).not.toContain(eyebrow);
       }
     }
     // No 「助理」 over the card (ruling 114 point 2).
     expect(render([mainChat, sideChat])).not.toContain(">助理<");
+  });
+
+  it("fades the chrome into the app ground over the name's 19px, with no step (ticket 69)", () => {
+    const html = render([mainChat, sideChat]);
+    const tag = tagWith(html, WORKBENCH);
+    // One gradient over the whole element, chrome at the card block's
+    // foot to app at the row's, no stops: neither end has an edge, and
+    // nothing turns hard (until ticket 69, transparent to app at 6px).
+    const style = /style="([^"]*)"/.exec(tag)?.[1];
+    expect(style).toBe(
+      "background:linear-gradient(to bottom, var(--color-chrome), var(--color-app))",
+    );
+    expect(style).not.toMatch(/\dpx|%|transparent/);
+    expect(count(html, "linear-gradient(to bottom, var(--color-chrome)")).toBe(
+      1,
+    );
+    // The same height as before: the card block keeps its 8px over the
+    // card and gives its 6px under it to the name, whose 19px are those
+    // 6 and the 13px row (the type's own line box, the line at its 6px).
+    expect(tag).toContain("h-[19px]");
+    expect(tag).toContain("pt-1.5");
+    expect(tag).toContain("items-center");
+    expect(labelOf(html)).toContain("leading-[13px]");
+    expect(html).not.toContain('<div class="pb-1.5 pt-2">');
+    // The fade starts at the card's foot; the card block, positioned
+    // while the card's focus ring shows, paints the ring over it.
+    const card = html.lastIndexOf("<button", html.indexOf(CARD));
+    expect(html.slice(0, card).endsWith(BLOCK)).toBe(true);
+    // The sticky row and the list under it are untouched.
+    expect(tagWith(html, STICKY)).toContain(
+      "sticky top-0 z-20 bg-app pb-1 pt-1.5",
+    );
+    expect(tagWith(html, SCROLL_LIST)).toContain("scroll-pt-[42px] bg-app");
   });
 
   it("runs the workbench's ground to the window's foot, 已归档 pinned there on it", () => {
@@ -908,6 +955,9 @@ describe("without a main chat (external runtime)", () => {
     expect(html).not.toContain("sticky");
     expect(html).not.toContain("border-line-strong");
     expect(html).not.toContain("data-sidebar-zone-label");
+    // Nor the name's fade, nor the card block it took 6px from.
+    expect(html).not.toContain("linear-gradient");
+    expect(html).not.toContain(BLOCK);
     for (const attr of ["section", "section-header"]) {
       expect(html).not.toContain(`data-sidebar-${attr}=""`);
     }
@@ -1001,10 +1051,20 @@ describe("the trials and the main-chat-on-top sidebar are gone", () => {
       "data-amplitude",
       "stage72",
       "row64",
+      // Ticket 68's label trial (back on the line, centred, on a soft
+      // ground: ruling 120 point 6, ticket 69).
+      "galley.tmp.workbenchLabelTrial",
+      "label-trial",
+      "WorkbenchLabelTrial",
+      "labelLineClass",
+      "LABEL_TIERS",
+      "data-label-trial",
+      "临时 · 区名",
       // Spelled apart so a grep for the ticket markers finds nothing.
       ["票", "62"].join(" "),
       ["票", "65"].join(" "),
       ["票", "66"].join(" "),
+      ["票", "68"].join(" "),
     ];
     const hits = sources(SRC)
       .filter((file) => file !== self && !file.includes("zz-harness"))
