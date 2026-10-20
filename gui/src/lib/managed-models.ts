@@ -136,6 +136,135 @@ export async function logoutChatGptCodexProvider(
   });
 }
 
+// Sign in with ChatGPT (.scratch/chatgpt-siwc ticket 02;
+// `core/src/chatgpt_siwc/`). Errors reject with the JSON string
+// `{"error": <code>, "message": ...}`; see `chatGptPlanErrorCode`.
+
+export interface ChatGptPlanLoginStart {
+  loginId: string;
+  /** Open in the browser. May carry `id_token_hint`: never log it. */
+  authUrl: string;
+  /** RFC 3339; the loopback listener closes then (10 minutes). */
+  expiresAt: string;
+}
+
+export interface ChatGptPlanModel {
+  slug: string;
+  displayName: string;
+  contextWindow: number | null;
+  supportedReasoningLevels: string[];
+  defaultReasoningLevel: string | null;
+}
+
+export interface ChatGptPlanModelList {
+  models: ChatGptPlanModel[];
+  endpoint: string;
+}
+
+export interface ChatGptPlanStatus {
+  /** Which sign-in the stored credential came from; `null` when none. */
+  flow: "siwc" | "codex" | null;
+  signedIn: boolean;
+  /** SIWC tokens were cleared after a dead refresh or a revocation. */
+  needsReauth: boolean;
+  /** This installation has a SIWC client registration (kept on sign-out). */
+  registered: boolean;
+  scopes: string[];
+  /** Unix seconds. */
+  expiresAt: number | null;
+  lastRefreshAt: string | null;
+  lastRefreshError: string | null;
+}
+
+export interface ChatGptPlanLogoutResult {
+  remoteRevokeConfirmed: boolean;
+}
+
+export type ChatGptPlanErrorCode =
+  | "chatgpt_plan_access_denied"
+  | "chatgpt_plan_usage_not_granted"
+  | "chatgpt_plan_login_cancelled"
+  | "chatgpt_plan_login_timed_out"
+  | "chatgpt_plan_login_not_found"
+  | "chatgpt_plan_reauth_required"
+  | "chatgpt_plan_temporary"
+  | "chatgpt_plan_failed";
+
+const CHATGPT_PLAN_ERROR_CODES: readonly string[] = [
+  "chatgpt_plan_access_denied",
+  "chatgpt_plan_usage_not_granted",
+  "chatgpt_plan_login_cancelled",
+  "chatgpt_plan_login_timed_out",
+  "chatgpt_plan_login_not_found",
+  "chatgpt_plan_reauth_required",
+  "chatgpt_plan_temporary",
+  "chatgpt_plan_failed",
+];
+
+/** The plan error code of a rejected Sign in with ChatGPT command, or
+ * `null` for any other error (e.g. a plain Core `invalid_args`). */
+export function chatGptPlanErrorCode(
+  error: unknown,
+): ChatGptPlanErrorCode | null {
+  if (typeof error !== "string") return null;
+  try {
+    const parsed = JSON.parse(error) as { error?: unknown };
+    return typeof parsed.error === "string" &&
+      CHATGPT_PLAN_ERROR_CODES.includes(parsed.error)
+      ? (parsed.error as ChatGptPlanErrorCode)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Opens a one-shot loopback listener and returns the URL to open. A
+ * newer start cancels the pending one. */
+export async function startChatGptPlanLogin(): Promise<ChatGptPlanLoginStart> {
+  return invoke<ChatGptPlanLoginStart>("start_chatgpt_plan_login");
+}
+
+/** Waits for the browser callback, then signs in, takes over the ChatGPT
+ * provider and runs one connection test. */
+export async function completeChatGptPlanLogin(
+  loginId: string,
+): Promise<CodexAuthSetupResult> {
+  return invoke<CodexAuthSetupResult>("complete_chatgpt_plan_login", {
+    input: { loginId },
+  });
+}
+
+/** Closes the pending sign-in (only `loginId`'s, when given). */
+export async function cancelChatGptPlanLogin(loginId?: string): Promise<void> {
+  await invoke("cancel_chatgpt_plan_login", { input: { loginId } });
+}
+
+export async function listChatGptPlanModels(
+  providerId?: string,
+): Promise<ChatGptPlanModelList> {
+  return invoke<ChatGptPlanModelList>("list_chatgpt_plan_models", {
+    input: { providerId },
+  });
+}
+
+export async function getChatGptPlanStatus(
+  providerId?: string,
+): Promise<ChatGptPlanStatus> {
+  return invoke<ChatGptPlanStatus>("get_chatgpt_plan_status", {
+    input: { providerId },
+  });
+}
+
+/** Signs out by credential flow: SIWC revokes and clears tokens (keeps the
+ * registration); the Codex flow only deletes locally. */
+export async function logoutChatGptPlan(
+  providerId?: string,
+): Promise<ChatGptPlanLogoutResult> {
+  return invoke<ChatGptPlanLogoutResult>("logout_chatgpt_plan", {
+    input: { providerId },
+  });
+}
+
 export interface TimedManagedModelConnectionResult
   extends ManagedModelConnectionResult {
   latencyMs: number;

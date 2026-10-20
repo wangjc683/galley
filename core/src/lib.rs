@@ -9,6 +9,7 @@ pub mod assistant_todo;
 pub mod attachment_read;
 pub mod browser_bridge;
 pub mod browser_control;
+pub mod chatgpt_siwc;
 pub mod codex_oauth;
 mod commands;
 pub mod conversation_image;
@@ -200,6 +201,13 @@ pub fn run() {
             complete_chatgpt_codex_login,
             import_chatgpt_codex_cli_login,
             logout_chatgpt_codex_provider,
+            // Sign in with ChatGPT (.scratch/chatgpt-siwc ticket 02)
+            start_chatgpt_plan_login,
+            complete_chatgpt_plan_login,
+            cancel_chatgpt_plan_login,
+            list_chatgpt_plan_models,
+            get_chatgpt_plan_status,
+            logout_chatgpt_plan,
             list_sessions,
             // B3 M4a session writes
             create_session,

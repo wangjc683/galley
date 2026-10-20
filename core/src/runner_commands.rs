@@ -75,7 +75,10 @@ use crate::runner_manager::{
 use crate::session_runner::{
     EnsureOptions, GaConfigPref, LlmChoice, RunnerHost, SessionRunnerError,
 };
-use crate::{codex_oauth, credential_store, managed_model_config, managed_prompt, managed_runtime};
+use crate::{
+    chatgpt_siwc, codex_oauth, credential_store, managed_model_config, managed_prompt,
+    managed_runtime,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -204,6 +207,12 @@ struct ManagedRuntimeModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     credential_ipc: Option<codex_oauth::CodexCredentialIpcConfig>,
     advanced_options: serde_json::Value,
+    /// `chatgptPlan`: a `chatgpt_codex_oauth` model whose stored credential
+    /// is a Sign in with ChatGPT one — the runner routes it to the ChatGPT
+    /// plan path (.scratch/chatgpt-siwc tickets 02 / 03). Left out when
+    /// false, so every other model's JSON is unchanged.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    chatgpt_plan: bool,
 }
 
 pub(crate) struct ManagedRuntimeProcessContext {
@@ -237,6 +246,7 @@ pub(crate) async fn prepare_managed_runtime_context(
         }
     })?;
     let mut credential_allowlist: codex_oauth::CredentialIpcAllowlist = HashMap::new();
+    let mut chatgpt_plan_refs = std::collections::HashSet::new();
     let mut usable_models = Vec::new();
     for model in models {
         // No-auth models carry no secret at all — usable as-is, and
@@ -245,12 +255,17 @@ pub(crate) async fn prepare_managed_runtime_context(
             usable_models.push(model);
             continue;
         }
-        let has_secret = credential_store::get_secret(&galley, &model.api_key_ref)
+        let secret = credential_store::get_secret(&galley, &model.api_key_ref)
             .await
-            .map(|secret| !secret.trim().is_empty())
-            .unwrap_or(false);
+            .ok();
+        let has_secret = secret
+            .as_deref()
+            .is_some_and(|secret| !secret.trim().is_empty());
         if !has_secret {
             continue;
+        }
+        if chatgpt_siwc::runtime_chatgpt_plan(model.auth_kind, secret.as_deref()) {
+            chatgpt_plan_refs.insert(model.api_key_ref.clone());
         }
         credential_allowlist.insert(model.api_key_ref.clone(), model.auth_kind);
         usable_models.push(model);
@@ -279,16 +294,24 @@ pub(crate) async fn prepare_managed_runtime_context(
         if requested_model_id == Some(model.id.as_str()) {
             requested_model_index = Some(runtime_models.len() as i64);
         }
+        let chatgpt_plan = chatgpt_plan_refs.contains(&model.api_key_ref);
         runtime_models.push(ManagedRuntimeModel {
             display_name: model.display_name,
             protocol: model.protocol,
             auth_kind: model.auth_kind,
-            api_base: model.api_base,
+            // The plan path always talks to api.openai.com, whatever an
+            // older flow left in the provider row (ticket 03's contract).
+            api_base: if chatgpt_plan {
+                chatgpt_siwc::SIWC_API_BASE.into()
+            } else {
+                model.api_base
+            },
             model: model.model,
             api_key,
             api_key_ref: model.api_key_ref,
             credential_ipc: model_credential_ipc,
             advanced_options: model.advanced_options,
+            chatgpt_plan,
         });
     }
     if runtime_models.is_empty() {
@@ -950,6 +973,41 @@ mod tests {
         assert!(parsed.runtime_kind.is_none());
         assert!(parsed.env.is_empty());
         assert!(parsed.active_session_id.is_none());
+    }
+
+    fn runtime_model(auth_kind: ManagedModelAuthKind, chatgpt_plan: bool) -> ManagedRuntimeModel {
+        ManagedRuntimeModel {
+            display_name: "gpt-5.6-sol".into(),
+            protocol: ManagedModelProtocol::Openai,
+            auth_kind,
+            api_base: "https://api.openai.com/v1".into(),
+            model: "gpt-5.6-sol".into(),
+            api_key: "galley-codex-oauth".into(),
+            api_key_ref: "managed-provider:mp_chatgpt_codex".into(),
+            credential_ipc: None,
+            advanced_options: serde_json::json!({}),
+            chatgpt_plan,
+        }
+    }
+
+    #[test]
+    fn runtime_model_serializes_chatgpt_plan_only_when_true() {
+        let plan =
+            serde_json::to_value(runtime_model(ManagedModelAuthKind::ChatgptCodexOauth, true))
+                .unwrap();
+        assert_eq!(plan["chatgptPlan"], serde_json::json!(true));
+        assert_eq!(plan["authKind"], "chatgpt_codex_oauth");
+
+        // Every other model's JSON is byte-for-byte what it was.
+        let codex = serde_json::to_value(runtime_model(
+            ManagedModelAuthKind::ChatgptCodexOauth,
+            false,
+        ))
+        .unwrap();
+        assert!(codex.get("chatgptPlan").is_none());
+        let api_key =
+            serde_json::to_value(runtime_model(ManagedModelAuthKind::ApiKey, false)).unwrap();
+        assert!(api_key.get("chatgptPlan").is_none());
     }
 
     #[test]

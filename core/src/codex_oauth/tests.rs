@@ -596,6 +596,88 @@ async fn credential_ipc_codex_response_never_includes_refresh_token() {
     assert!(value.get("apiKey").is_none());
 }
 
+#[tokio::test]
+async fn credential_ipc_dispatches_a_siwc_credential_by_flow() {
+    let galley = test_galley().await;
+    let api_key_ref = "managed-provider:mp_chatgpt_codex";
+    // A SIWC access token is not decoded for an account id: even one that
+    // carries the claim must not produce a ChatGPT-Account-ID.
+    let access_token = fake_codex_access_token();
+    credential_store::set_secret(
+        &galley,
+        api_key_ref,
+        &serde_json::json!({
+            "flow": "siwc",
+            "clientId": "oaiapp_test",
+            "accessToken": access_token,
+            "refreshToken": "refresh-long-term",
+            "idToken": "id.token.value",
+            "scopes": ["openid", "chatgpt.tokens.use.direct"],
+            "expiresAt": Utc::now().timestamp() + 3600,
+        })
+        .to_string(),
+    )
+    .await
+    .unwrap();
+
+    let response = fulfill_credential_ipc_request(
+        &galley,
+        api_key_ref.into(),
+        CredentialKind::ChatgptCodexOauth,
+    )
+    .await
+    .unwrap();
+    let value = serde_json::to_value(response).unwrap();
+
+    assert_eq!(value["accessToken"], access_token);
+    assert!(value.get("accountId").is_none());
+    assert!(value.get("refreshToken").is_none());
+    assert!(value.get("idToken").is_none());
+}
+
+#[tokio::test]
+async fn credential_ipc_reports_sign_in_again_for_a_cleared_siwc_credential() {
+    let galley = test_galley().await;
+    let api_key_ref = "managed-provider:mp_chatgpt_codex";
+    credential_store::set_secret(
+        &galley,
+        api_key_ref,
+        &serde_json::json!({
+            "flow": "siwc",
+            "clientId": "oaiapp_test",
+            "accessToken": "",
+            "refreshToken": "",
+            "lastRefreshError": "refresh_token_invalidated",
+        })
+        .to_string(),
+    )
+    .await
+    .unwrap();
+
+    let err = fulfill_credential_ipc_request(
+        &galley,
+        api_key_ref.into(),
+        CredentialKind::ChatgptCodexOauth,
+    )
+    .await
+    .expect_err("a cleared SIWC credential must not resolve");
+
+    assert!(matches!(err, GalleyError::InvalidArgs { .. }));
+    assert!(err.to_string().contains("chatgpt_plan_reauth_required"));
+}
+
+#[test]
+fn codex_credential_without_flow_still_parses_as_codex() {
+    let raw = serde_json::to_string(
+        &CodexOAuthSecret::new(fake_codex_access_token(), "refresh".into()).unwrap(),
+    )
+    .unwrap();
+    assert!(!raw.contains("\"flow\""));
+    assert!(!crate::chatgpt_siwc::is_siwc_secret(&raw));
+    let parsed: CodexOAuthSecret = serde_json::from_str(&raw).unwrap();
+    assert_eq!(parsed.account_id.as_deref(), Some("acct_test"));
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn credential_ipc_unix_socket_is_0600() {

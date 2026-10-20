@@ -297,16 +297,87 @@ pub(crate) async fn import_chatgpt_codex_cli_login(
     Ok(result)
 }
 
+/// Sign-out of the ChatGPT provider. Dispatches by the stored
+/// credential's flow, so a Sign in with ChatGPT credential is revoked even
+/// through this older entry point; [`logout_chatgpt_plan`] also reports
+/// whether the revocation was confirmed.
 #[tauri::command]
 pub(crate) async fn logout_chatgpt_codex_provider(
     galley: State<'_, SqliteGalley>,
     app: tauri::AppHandle,
     input: codex_oauth::CodexProviderActionInput,
 ) -> std::result::Result<(), String> {
-    codex_oauth::logout_provider(input)
+    chatgpt_siwc::logout(&galley, input)
         .await
-        .map_err(stringify_error)?;
+        .map_err(|e| e.to_wire())?;
     sync_managed_model_config(&app, &galley).await
+}
+
+// Sign in with ChatGPT (.scratch/chatgpt-siwc ticket 02). Errors are the
+// JSON string `{"error": "<code>", "message": "..."}`; the plan-specific
+// codes are listed on `chatgpt_siwc::ChatgptPlanError`.
+
+#[tauri::command]
+pub(crate) async fn start_chatgpt_plan_login(
+    galley: State<'_, SqliteGalley>,
+) -> std::result::Result<chatgpt_siwc::ChatgptPlanLoginStart, String> {
+    chatgpt_siwc::start_login(&galley)
+        .await
+        .map_err(|e| e.to_wire())
+}
+
+#[tauri::command]
+pub(crate) async fn complete_chatgpt_plan_login(
+    galley: State<'_, SqliteGalley>,
+    app: tauri::AppHandle,
+    input: chatgpt_siwc::CompleteChatgptPlanLoginInput,
+) -> std::result::Result<codex_oauth::CodexAuthSetupResult, String> {
+    let result = chatgpt_siwc::complete_login(&galley, input)
+        .await
+        .map_err(|e| e.to_wire())?;
+    sync_managed_model_config(&app, &galley).await?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub(crate) async fn cancel_chatgpt_plan_login(
+    input: chatgpt_siwc::CancelChatgptPlanLoginInput,
+) -> std::result::Result<(), String> {
+    chatgpt_siwc::cancel_login(input);
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn list_chatgpt_plan_models(
+    galley: State<'_, SqliteGalley>,
+    input: codex_oauth::CodexProviderActionInput,
+) -> std::result::Result<chatgpt_siwc::ChatgptPlanModelList, String> {
+    chatgpt_siwc::list_models(&galley, input.provider_id)
+        .await
+        .map_err(|e| e.to_wire())
+}
+
+#[tauri::command]
+pub(crate) async fn get_chatgpt_plan_status(
+    galley: State<'_, SqliteGalley>,
+    input: codex_oauth::CodexProviderActionInput,
+) -> std::result::Result<chatgpt_siwc::ChatgptPlanStatus, String> {
+    chatgpt_siwc::status(&galley, input.provider_id)
+        .await
+        .map_err(|e| e.to_wire())
+}
+
+#[tauri::command]
+pub(crate) async fn logout_chatgpt_plan(
+    galley: State<'_, SqliteGalley>,
+    app: tauri::AppHandle,
+    input: codex_oauth::CodexProviderActionInput,
+) -> std::result::Result<chatgpt_siwc::ChatgptPlanLogoutResult, String> {
+    let result = chatgpt_siwc::logout(&galley, input)
+        .await
+        .map_err(|e| e.to_wire())?;
+    sync_managed_model_config(&app, &galley).await?;
+    Ok(result)
 }
 
 /// Core's sync after a model-store write

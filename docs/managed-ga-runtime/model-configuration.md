@@ -226,9 +226,82 @@ windows report a reset, show the latest reset among exhausted windows; if WHAM
 is unavailable or malformed, fall back to the original quota/rate-limit error.
 Never let the WHAM probe block or replace the original Codex failure path.
 
-Sign in with ChatGPT (`.scratch/chatgpt-siwc/PRD.md`) shares the
-`chatgpt_codex_oauth` auth kind during development. Core marks those models
-with `chatgptPlan: true` in the runner model JSON; the runner turns that, and
+### Sign in with ChatGPT (SIWC)
+
+Galley's native ChatGPT-plan sign-in (`core/src/chatgpt_siwc/`; product
+rulings and probe findings in `.scratch/chatgpt-siwc/PRD.md`, ticket 02).
+Galley registers its own
+OAuth client and spends the user's plan usage through `api.openai.com`. Until
+the Codex OAuth flow above is removed, both flows share the `mp_chatgpt_codex`
+provider, the `mm_chatgpt_codex_gpt_55` model record and the
+`chatgpt_codex_oauth` auth kind; the stored credential's `"flow": "siwc"` is
+what tells them apart. A Codex OAuth credential has no `flow` and keeps
+parsing as before.
+
+- **Sign-in**: authorization code + PKCE (S256) + `state` + `nonce` against
+  `https://auth.openai.com/api/accounts/authorize`, `resource` and
+  `redirect_uri` as below, scope
+  `openid profile email offline_access resource.invoke chatgpt.tokens.use.direct`.
+  The first sign-in on an installation registers a client
+  (`client_id=dynamic_agent_client`, `agent_name_hint=Galley`); later ones
+  re-use the issued client id with `id_token_hint`. Every request carries
+  `ext_agent_host_id`, a `urn:uuid:<v4>` created once per installation.
+- **Loopback callback**: the redirect goes to `http://127.0.0.1:<port>/auth/callback`
+  on an ephemeral port — the narrow Rule 2 exception in `AGENTS.md`. The
+  listener lives only while that sign-in is pending (10 minutes, cancellable,
+  a newer sign-in cancels it), answers 404 to any other method or path and
+  400 to a wrong `state` without counting either, and closes after the one
+  callback whose `state` matches. That callback gets a short static page.
+- **Token exchange and ID token**: the code is exchanged with the client id
+  the callback names (`oaiapp_…`), `code_verifier`, the same `redirect_uri`
+  and `resource=https://api.openai.com/v1`. The ID token is verified with
+  RS256 against `https://auth.openai.com/.well-known/jwks.json` (key by `kid`,
+  `ring`), then `iss`, `aud` (the issued client id), `exp` and `nonce`. A
+  grant without `chatgpt.tokens.use.direct` keeps the registration, revokes
+  the unused refresh token and fails with `chatgpt_plan_usage_not_granted`.
+- **Storage**: the credential lives in the encrypted store under the
+  provider's `apiKeyRef` (`flow`, `clientId`, `accessToken`, `refreshToken`,
+  `idToken`, `scopes`, `expiresAt`, `earliestRefreshAt`, `sub`,
+  `lastRefreshAt`, `lastRefreshError`). The registration (`hostId`,
+  `clientId`, `idToken`, `sub`) lives under `chatgpt-siwc:registration` and
+  survives sign-out and provider deletion.
+- **Refresh**: the same per-`apiKeyRef` gate pattern as Codex OAuth, 120 s
+  before expiry, `grant_type=refresh_token` + `client_id` + `refresh_token` +
+  `resource`. Access token, rotated refresh token, expiry and scopes are
+  replaced together. `invalid_grant`, `invalid_refresh_token`,
+  `token_expired`, `refresh_token_expired`, `refresh_token_invalidated` and
+  `refresh_token_reused` — in `error` or `error_reason` — clear the tokens,
+  keep the registration and the credential row, and turn every later request
+  into `chatgpt_plan_reauth_required`. A 401 `token_revoked` on Core's own
+  model list or connection test does the same. Network errors, 5xx and 429
+  keep the credential. There is no fallback to the Codex CLI's `auth.json`.
+- **Runtime**: credential IPC returns `accessToken` with no `accountId` (SIWC
+  access tokens carry no `chatgpt_account_id`). The runtime model JSON gets
+  `chatgptPlan: true` and `apiBase: https://api.openai.com/v1` for a SIWC
+  credential; the field is omitted otherwise, so every other model's JSON is
+  unchanged. The engine side of that contract follows the list below.
+- **Requests from Core** (model list `GET /v1/models`, keeping
+  `visibility == "list"`; connection test `POST /v1/responses` with
+  `store: false`, `stream: true`) send `User-Agent: Galley (<os>; <arch>)`,
+  named like Python's `platform.system()` / `platform.machine()`, and no
+  `originator` or `ChatGPT-Account-ID`.
+- **Sign-out**: SIWC removes the local tokens, then revokes the refresh token
+  (RFC 7009 form to `https://auth.openai.com/api/accounts/oauth/revoke`,
+  retried on network errors / 5xx / 429) and reports
+  `remoteRevokeConfirmed`. Codex OAuth sign-out stays local-only.
+
+Tauri commands (errors are `{"error": "<code>", "message": "..."}`; the
+plan codes are `chatgpt_plan_` followed by `access_denied`,
+`usage_not_granted`, `login_cancelled`, `login_timed_out`,
+`login_not_found`, `reauth_required`, `temporary` or `failed`):
+`start_chatgpt_plan_login`, `complete_chatgpt_plan_login`,
+`cancel_chatgpt_plan_login`, `list_chatgpt_plan_models`,
+`get_chatgpt_plan_status`, `logout_chatgpt_plan`. `logout_chatgpt_codex_provider`,
+`test_managed_model_connection` and `list_managed_model_options` dispatch by
+the stored flow as well. Never log the authorize URL (it may carry
+`id_token_hint`), tokens or authorization codes.
+
+Engine side (ticket 03): the runner turns Core's `chatgptPlan: true`, and
 nothing else, into the engine's `chatgpt_plan` key. Patch `0007` then keeps the
 Codex request body against `https://api.openai.com/v1` but sends Galley's own
 `User-Agent` (`Galley (<system>; <machine>)`) without `originator` or

@@ -19,15 +19,20 @@ use crate::api::{
     ManagedModelAuthKind, ManagedModelConnectionResult, ManagedModelListResult,
     ManagedModelProbeInput, ManagedModelProtocol,
 };
-use crate::codex_oauth;
 use crate::credential_store;
 use crate::db::SqliteGalley;
 use crate::error::{GalleyError, Result};
+use crate::{chatgpt_siwc, codex_oauth};
 
 const PROBE_TIMEOUT_SECS: u64 = 20;
 
 pub async fn list_models(input: ManagedModelProbeInput) -> Result<ManagedModelListResult> {
     if input.auth_kind == Some(ManagedModelAuthKind::ChatgptCodexOauth) {
+        if let Some((galley, api_key_ref)) = chatgpt_plan_credential(&input).await {
+            return chatgpt_siwc::list_model_slugs(&galley, &api_key_ref)
+                .await
+                .map_err(Into::into);
+        }
         return Ok(ManagedModelListResult {
             models: vec![
                 "gpt-5.5".into(),
@@ -108,6 +113,11 @@ async fn test_model(
             .and_then(|value| value.get("reasoning_effort"))
             .and_then(serde_json::Value::as_str)
             .unwrap_or(codex_oauth::CODEX_DEFAULT_REASONING);
+        if let Some((galley, plan_ref)) = chatgpt_plan_credential(&input).await {
+            return chatgpt_siwc::test_connection(&galley, &plan_ref, &model, reasoning)
+                .await
+                .map_err(Into::into);
+        }
         return codex_oauth::test_codex_connection(&api_key_ref, &model, reasoning).await;
     }
     let secret = resolve_secret(&input).await?;
@@ -174,6 +184,18 @@ async fn resolve_secret(input: &ManagedModelProbeInput) -> Result<String> {
     let galley = SqliteGalley::open().await?;
     let api_key_ref = resolve_api_key_ref(input).await?;
     credential_store::get_secret(&galley, &api_key_ref).await
+}
+
+/// The store and credential ref of a ChatGPT provider whose stored
+/// credential is a Sign in with ChatGPT one; `None` sends the caller down
+/// the Codex OAuth path unchanged (.scratch/chatgpt-siwc ticket 02).
+async fn chatgpt_plan_credential(input: &ManagedModelProbeInput) -> Option<(SqliteGalley, String)> {
+    let api_key_ref = resolve_api_key_ref(input).await.ok()?;
+    let galley = SqliteGalley::open().await.ok()?;
+    chatgpt_siwc::is_siwc_ref(&galley, &api_key_ref)
+        .await
+        .ok()?
+        .then_some((galley, api_key_ref))
 }
 
 async fn resolve_api_key_ref(input: &ManagedModelProbeInput) -> Result<String> {

@@ -405,6 +405,16 @@ pub(super) async fn fulfill_credential_ipc_request(
             Ok(CredentialIpcResponse::api_key(api_key))
         }
         CredentialKind::ChatgptCodexOauth => {
+            // Sign in with ChatGPT shares this auth kind with the Codex
+            // OAuth flow until the latter is removed; the stored
+            // credential's `flow` picks the refresh path
+            // (.scratch/chatgpt-siwc ticket 02).
+            if crate::chatgpt_siwc::is_siwc_ref(galley, &api_key_ref).await? {
+                let resolved = crate::chatgpt_siwc::resolve_access_token(galley, &api_key_ref)
+                    .await
+                    .map_err(GalleyError::from)?;
+                return Ok(CredentialIpcResponse::codex_access_token(resolved));
+            }
             let resolved = resolve_access_token(galley, &api_key_ref).await?;
             Ok(CredentialIpcResponse::codex_access_token(resolved))
         }
