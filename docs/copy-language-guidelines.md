@@ -219,6 +219,7 @@ Section 标签（2026-10-07 JC 裁）：
 | Back | 返回 |
 | Dismiss | 关闭 |
 | ChatGPT plan（Sign in with ChatGPT 用的套餐用量） | 「ChatGPT 订阅」：界面上一律这么叫（预设描述、首次登录说明、对话里的报错、模型 pill 的悬停提示「使用 ChatGPT 订阅」、模型菜单底部的「ChatGPT 订阅 · 管理用量」、服务商卡片；输入框里的标识是 ChatGPT 标志，不写字），英文版照 OpenAI 写 "ChatGPT plan"；「套餐」只在引用 OpenAI 原文时用（2026-10-20，[SIWC 票 04](../.scratch/chatgpt-siwc/issues/04-gui-continue-with-chatgpt.md)） |
+| Official API / OpenAI-compatible（设置页服务商名后的小字） | 说这个服务商「怎么接」：ChatGPT 服务商写「ChatGPT 订阅」，地址是 OpenAI / Anthropic 官方预设的写「官方 API」（英文 "Official API"），其余写「OpenAI 兼容」/「Anthropic 兼容」。不写「OpenAI 官方」：订阅额度不是官方 API 的按量计费，写「官方」容易让人以为是 API 账单（2026-10-20，[SIWC](../.scratch/chatgpt-siwc/PRD.md) 裁决 15；规则见 [overlays-and-settings](./design/overlays-and-settings.md) Models 节） |
 
 ## 内核 / Engine（managed 引擎的用户可见称谓）
 
