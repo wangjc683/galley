@@ -1,6 +1,6 @@
 # 用 ChatGPT 套餐登录（Sign in with ChatGPT）
 
-Status: active（2026-10-20 裁决 1：走 C，原生接 OpenAI 官方的 Sign in with ChatGPT；裁决 2–12 同日定：删 A、C 就地接管现有服务商、对话报错本地化、默认模型取目录第一个、额度显示暂缓、文案叫「ChatGPT 订阅」、标识样式真机三选一）
+Status: active（2026-10-20 裁决 1：走 C，原生接 OpenAI 官方的 Sign in with ChatGPT；裁决 2–13 同日定：删 A、C 就地接管现有服务商、对话报错本地化、默认模型取目录第一个、额度显示暂缓、文案叫「ChatGPT 订阅」、订阅标识定为模型名前的 ChatGPT 标志）
 
 来源：2026-10-20 JC 提出，依据 Codex 负责人 Tibo 的推文，考虑以 CLIProxyAPI（CPA）的形式内嵌，让用户用 ChatGPT 订阅里的 Codex 额度跑 Galley。
 对比后改走官方的 Sign in with ChatGPT（下称 SIWC）：DevDay 2026 推出，开源项目与本地运行的应用可自助接入，Galley（MIT、本机运行）在范围内。
@@ -47,6 +47,13 @@ Status: active（2026-10-20 裁决 1：走 C，原生接 OpenAI 官方的 Sign i
     - 3 徽标：短语后面跟一个杏色浅底的标签。
 
     09-22 否过这一行的灰底徽标 chip（`docs/design/conversation.md:1047`），但那次是强度参数，这次是费用来源，所以重新比一次。
+
+13. **订阅标识定为第 1 档「标志」**（2026-10-20，JC 真机比过三档：最舒服、最安静）：
+    - 当前对话的模型走订阅时，模型名前面加一个 13px 的淡色 ChatGPT 标志；
+    - 模型 pill 的提示多一行「使用 ChatGPT 订阅」；
+    - 模型菜单里订阅模型的上方保留「ChatGPT 订阅 · 管理用量」一行，OpenAI 要求的文字和「管理用量」链接都在这里。
+
+    这一条推翻 `docs/design/conversation.md` 1013 行「模型名，无箭头、无图标」，作为窄例外：标志说的是费用从哪里出，不是模型参数。2、3 档和临时切换器在票 05b 里拆掉。
 
 另：走查发现登录完成后，引导页和设置页不看连接测试结果（`gui/src/lib/provider-setup.ts:491`），测试失败也会结束引导。不符合资格的账号能登录成功、却过不了测试，正好踩中这个坑。按缺陷补进票 04：测试失败时停在原步骤，说明原因。
 

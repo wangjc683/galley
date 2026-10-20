@@ -42,6 +42,10 @@ Status: ready-for-agent
 - 预设 `chatgpt-codex` 的 `apiBase` 改为 `https://api.openai.com/v1`，并清掉只对 A 有意义的字段。
 - 设计文档两处过期的说法一起改：`docs/design/onboarding-and-cards.md:38`（设备码登录）、`docs/design/overlays-and-settings.md:414`（「Codex 跳过」自动读取）。
 - 文案规范里「凭证」一行提到「ChatGPT / Codex 登录」，改成现在的说法。
+- 订阅标识定为第 1 档「标志」（PRD 裁决 13）：
+  - 删掉临时切换器（`components/conversation/plan-mark-trial/`、`App.tsx` 里的挂载点）以及 2「右端」、3「徽标」两档的代码，第 1 档改成常驻行为；
+  - `grep -rn "SIWC 票 04" gui/src` 应该清零；
+  - `docs/design/conversation.md` 模型 pill 一节写明这个窄例外：订阅模型的名字前面放 13px 淡色 ChatGPT 标志，提示第二行「使用 ChatGPT 订阅」，菜单头「ChatGPT 订阅 · 管理用量」；理由是费用来源不是模型参数；1013 行「无箭头、无图标」加上例外说明。
 
 ## 验收
 
