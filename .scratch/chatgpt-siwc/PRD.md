@@ -1,6 +1,6 @@
 # 用 ChatGPT 套餐登录（Sign in with ChatGPT）
 
-Status: active（2026-10-20 裁决 1：走 C，原生接 OpenAI 官方的 Sign in with ChatGPT；裁决 2–6 同日定：删 A、C 就地接管现有服务商）
+Status: active（2026-10-20 裁决 1：走 C，原生接 OpenAI 官方的 Sign in with ChatGPT；裁决 2–9 同日定：删 A、C 就地接管现有服务商、对话报错本地化、默认模型取目录第一个）
 
 来源：2026-10-20 JC 提出，依据 Codex 负责人 Tibo 的推文，考虑以 CLIProxyAPI（CPA）的形式内嵌，让用户用 ChatGPT 订阅里的 Codex 额度跑 Galley。
 对比后改走官方的 Sign in with ChatGPT（下称 SIWC）：DevDay 2026 推出，开源项目与本地运行的应用可自助接入，Galley（MIT、本机运行）在范围内。
@@ -28,6 +28,17 @@ Status: active（2026-10-20 裁决 1：走 C，原生接 OpenAI 官方的 Sign i
    - 做法：老用户的 ChatGPT 服务商就地变成 C，服务商、模型记录与会话绑定不动，`api_base` 换成 `https://api.openai.com/v1`，删掉 A 的本地令牌，卡片与会话提示「需要用 ChatGPT 重新登录」；**不撤销** A 的令牌（可能与 Codex CLI 共用，撤销会把 Codex CLI 也登出），也不再写 `~/.codex/auth.json`；收到 `subscription_sharing_user_not_eligible` 时提示改用 API key，不重试、不反复拉登录。
    - 一起删：设备码登录、CLI 导入与写回、WHAM 额度查询、`core/src/managed_model_probe.rs` 的 Codex 静态模型列表、补丁 0007、GUI 设备码卡片与导入入口、相关文档；暂缓项「Codex 读取模型列表与预设不同步」随之关闭。凭据 IPC 与刷新闸门保留给 C 用。
 6. **C 就地接管现有服务商**（2026-10-20，取代当天早些时候批的「新 auth_kind + 新服务商」）：沿用 `mp_chatgpt_codex` 与 `chatgpt_codex_oauth`，不加新值。原方案的前提是 A 与 C 并存，删 A 后不再成立；而且 providers 表是 `managed_models` 的外键父表，每改一次约束都要冒级联删除的风险重建表（v0.2.9 同类事故，`core/src/migration_backup.rs:422`）。开发期 A 与 C 共用这个值，由 Core 写进模型配置的标记区分路由，删 A 时一起删掉。票 01 因此只补 `none`。
+
+7. **对话里的套餐报错按错误码显示中文提示和按钮**（2026-10-20，走查发现）：
+   - 额度用尽：标题「已达到用量上限」，主按钮「管理用量」，指向 `https://chatgpt.com/settings/usage`；
+   - 登录失效（`token_revoked` 或 `chatgpt_plan_reauth_required`）：显示「去设置登录」；
+   - 不符合资格：建议改用 API key 服务商。
+
+   引擎的英文原文保留在详情里。补进票 04。
+8. **对话收到 `token_revoked` 时，界面触发一次连接测试**（2026-10-20）：让 Core 立刻发现授权已撤销，设置卡片马上变成「需要登录」，而不是等最长一小时到下次刷新。补进票 04。
+9. **默认模型取账号目录里第一个可见模型**（2026-10-20）：`gpt-5.6-sol` 只在读不到目录或目录为空时兜底；已有的模型记录如果在目录里，就保留用户的选择。补进票 02。
+
+另：走查发现登录完成后，引导页和设置页不看连接测试结果（`gui/src/lib/provider-setup.ts:491`），测试失败也会结束引导。不符合资格的账号能登录成功、却过不了测试，正好踩中这个坑。按缺陷补进票 04：测试失败时停在原步骤，说明原因。
 
 ## 探针结果（2026-10-20，JC 的 Pro 账号，模型 `gpt-5.6-sol`）
 
