@@ -89,12 +89,12 @@ export function managedModelProtocolAdvancedDefaults(
 export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
   {
     id: "chatgpt-codex",
-    label: "ChatGPT / Codex",
+    label: "ChatGPT",
     protocol: "openai",
     authKind: "chatgpt_codex_oauth",
     apiBase: "https://chatgpt.com/backend-api/codex",
     model: "gpt-5.6-sol",
-    displayName: "ChatGPT / Codex",
+    displayName: "ChatGPT",
     modelPlaceholder: "gpt-5.6-sol",
     advancedOptions: {
       context_win: DEFAULT_CONTEXT_WIN,

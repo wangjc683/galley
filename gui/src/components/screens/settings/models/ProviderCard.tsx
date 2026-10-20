@@ -12,17 +12,26 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { ChatGptPlanSignInControls } from "@/components/managed-models/ChatGptPlanSignIn";
 import { SettingsTag } from "@/components/screens/settings/settings-badges";
 import { SettingsDisclosureCard } from "@/components/screens/settings/settings-disclosure";
 import { Button, IconButton } from "@/components/ui/button";
 import { ScrollFade } from "@/components/ui/scroll-fade";
+import {
+  CHATGPT_PLAN_LOGIN_IDLE,
+  CHATGPT_USAGE_URL,
+  chatGptSignInNeeded,
+  type ChatGptPlanLoginState,
+} from "@/lib/chatgpt-plan";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useChatGptPlanStore } from "@/stores/chatgpt-plan";
 import type {
   ManagedModelProviderRecord,
   ManagedModelRecord,
 } from "@/types/managed-models";
 
+import { ExternalTextLink } from "../external-link";
 import { modelDisplayParts } from "./model-settings-utils";
 import { ModelDraftEditor } from "./ModelDraftEditor";
 import {
@@ -60,6 +69,9 @@ export function ProviderCard({
   modelFilter,
   modelDraft,
   providerEditor,
+  chatGptPlanLogin = CHATGPT_PLAN_LOGIN_IDLE,
+  onChatGptPlanSignIn,
+  onChatGptPlanCancel,
   onToggle,
   onEditProvider,
   onDeleteProvider,
@@ -87,6 +99,12 @@ export function ProviderCard({
   modelFilter: string;
   modelDraft: ModelDraftState | null;
   providerEditor?: ReactNode;
+  /** Sign in with ChatGPT, for a ChatGPT provider that has to sign in
+   * again (ticket 04): the page's one sign-in, shown on this card while
+   * no ChatGPT form is open (the page passes idle otherwise). */
+  chatGptPlanLogin?: ChatGptPlanLoginState;
+  onChatGptPlanSignIn?: () => void;
+  onChatGptPlanCancel?: () => void;
   onToggle: () => void;
   onEditProvider: () => void;
   onDeleteProvider: () => void;
@@ -102,9 +120,31 @@ export function ProviderCard({
   onEnableDetectedModel: (modelName: string) => void;
   onRemoveDetectedModel: (model: ManagedModelRecord) => void;
 }) {
-  const copy = useCopy().settings.models;
-  const keyMissing = provider.credentialStatus === "missing";
+  const appCopy = useCopy();
+  const copy = appCopy.settings.models;
   const isCodex = provider.authKind === "chatgpt_codex_oauth";
+  // The ChatGPT provider's sign-in comes from Core's plan status: after a
+  // dead refresh the credential row stays `present` with its tokens
+  // cleared (ticket 02), so the row alone can't say "sign in again".
+  const planStatus = useChatGptPlanStore((s) =>
+    isCodex ? s.statusByProvider[provider.id] : undefined,
+  );
+  const refreshPlanStatus = useChatGptPlanStore((s) => s.refreshStatus);
+  useEffect(() => {
+    if (isCodex) void refreshPlanStatus(provider.id);
+  }, [
+    isCodex,
+    provider.id,
+    provider.credentialStatus,
+    provider.updatedAt,
+    refreshPlanStatus,
+  ]);
+  const signInNeeded = chatGptSignInNeeded(provider, planStatus);
+  const keyMissing = provider.credentialStatus === "missing" || signInNeeded;
+  // Signed in with ChatGPT (not the Codex CLI login): its usage is the
+  // plan's, and its model list is the plan's real one.
+  const isPlan = planStatus?.flow === "siwc";
+  const planSignedIn = isPlan && planStatus.signedIn;
   const providerProbeAction: ProbeAction = "model-test";
   const headerProbeState = providerProbeState;
   const providerProbeLoading =
@@ -174,9 +214,10 @@ export function ProviderCard({
 
   // Expand-triggered auto-fetch: pull the provider's model list once
   // per session when the card opens with nothing cached, so "可添加模型"
-  // appears without a manual click. Codex providers are skipped (their
-  // backend has no meaningful model listing) and the explicit button
-  // below stays as the refresh path.
+  // appears without a manual click. The Codex CLI login is skipped (its
+  // backend has no meaningful model listing); Sign in with ChatGPT reads
+  // the plan's real list (ticket 04). The explicit button below stays as
+  // the refresh path.
   const autoFetchedRef = useRef(false);
   useEffect(() => {
     if (
@@ -184,7 +225,7 @@ export function ProviderCard({
       autoFetchedRef.current ||
       keyMissing ||
       saving ||
-      isCodex ||
+      (isCodex && !planSignedIn) ||
       modelOptions.length > 0 ||
       modelProbeState.kind === "loading"
     ) {
@@ -199,6 +240,7 @@ export function ProviderCard({
     keyMissing,
     saving,
     isCodex,
+    planSignedIn,
     modelOptions.length,
     modelProbeState.kind,
   ]);
@@ -227,7 +269,7 @@ export function ProviderCard({
             {provider.displayName}
           </span>
           <CredentialBadge
-            status={provider.credentialStatus}
+            status={signInNeeded ? "missing" : provider.credentialStatus}
             authKind={provider.authKind}
           />
           <SettingsTag className="tabular-nums">
@@ -289,6 +331,27 @@ export function ProviderCard({
                 message={isCodex ? copy.codexLoginNeeded : copy.keyNeedsResave}
               />
             )}
+            {/* The way back in, right under 「需要重新登录 ChatGPT。」, and
+                a sign-in started here that is still going or went wrong
+                (signed in, but the connection test failed) — unless this
+                card's editor is open, which has its own. */}
+            {isCodex &&
+              (keyMissing || chatGptPlanLogin.phase !== "idle") &&
+              !providerEditor &&
+              onChatGptPlanSignIn &&
+              onChatGptPlanCancel && (
+                <>
+                  <ChatGptPlanSignInControls
+                    state={chatGptPlanLogin}
+                    disabled={saving}
+                    onSignIn={onChatGptPlanSignIn}
+                    onCancel={onChatGptPlanCancel}
+                  />
+                  {chatGptPlanLogin.phase === "error" && (
+                    <ErrorLine message={chatGptPlanLogin.message} />
+                  )}
+                </>
+              )}
 
             {chipModels.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 py-0.5">
@@ -338,6 +401,15 @@ export function ProviderCard({
               >
                 {copy.addManually}
               </Button>
+              {isPlan && (
+                <ExternalTextLink
+                  href={CHATGPT_USAGE_URL}
+                  tone="muted"
+                  className="ml-auto px-1.5 text-ui-tertiary"
+                >
+                  {appCopy.chatgptPlan.manageUsage}
+                </ExternalTextLink>
+              )}
             </div>
             {modelDraft && !modelDraft.id && (
               <ModelDraftEditor

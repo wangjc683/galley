@@ -2,9 +2,11 @@ import { CaretDown, XCircle } from "@phosphor-icons/react";
 import { isValidElement, memo, useId, useState, type ReactNode } from "react";
 
 import { AssistantBubble } from "@/components/conversation/AssistantParts";
+import { ChatGptPlanErrorNotice } from "@/components/conversation/ChatGptPlanErrorNotice";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { MessageActions } from "@/components/conversation/MessageActions";
 import type { AssistantProcessToggle } from "@/lib/assistant-conversation";
+import { findChatGptPlanError } from "@/lib/chatgpt-plan-errors";
 import { useCopy } from "@/lib/i18n";
 import { isLeakedToolCallMarkup } from "@/lib/ipc/ga-output-cleaning";
 import { cn } from "@/lib/utils";
@@ -70,6 +72,33 @@ export const MessageAgent = memo(function MessageAgent({
 }) {
   const selectionYieldKey = useId();
   if (typeof children === "string") {
+    // A ChatGPT plan error the engine ended the turn with (SIWC ticket
+    // 04, PRD ruling 7): Galley's words and the way on, the engine text
+    // one click away. Codes without words of ours stay prose.
+    const planError = findChatGptPlanError(children);
+    if (planError) {
+      return (
+        <div
+          data-message-id={messageId}
+          className={cn("group/answer", className)}
+        >
+          {planError.before && (
+            <MarkdownView source={planError.before} variant="agent" />
+          )}
+          <ChatGptPlanErrorNotice error={planError} />
+          {attachment}
+          {/* Like the protocol-failure notice: nothing to copy, quote
+              or save; the process button and the assistant's ⋯ stay. */}
+          {(process !== undefined || bubble) && (
+            <MessageActions
+              source={children}
+              assistant={{ process, processOnly: true }}
+              messageId={bubble ? messageId : undefined}
+            />
+          )}
+        </div>
+      );
+    }
     // #22: a "final answer" that is really leaked tool-call markup
     // (`<invoke …>` returned as plain text by a proxy that never
     // produced a structured block). Prose-rendering it is unreadable

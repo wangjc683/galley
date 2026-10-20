@@ -8,8 +8,10 @@ import {
   SettingsPanelHeader,
   SettingsSectionLabel,
 } from "@/components/screens/settings/settings-ui";
+import { CHATGPT_PLAN_LOGIN_IDLE } from "@/lib/chatgpt-plan";
 import { useCopy } from "@/lib/i18n";
 import { useManagedModelsStore } from "@/stores/managed-models";
+import { useUiStore } from "@/stores/ui";
 import type {
   ManagedModelProviderRecord,
   ManagedModelRecord,
@@ -119,8 +121,22 @@ export function SettingsModels({
   }, [reloadModels]);
 
   const showModelConfigSavedToast = useModelConfigSavedToast(activeRuntimeKind);
+  // Arrived from a ChatGPT plan error in the conversation (「去设置登录」,
+  // SIWC ticket 04): the ChatGPT card opens, where its sign-in is.
   const { expandProvider, isProviderExpanded, toggleProvider } =
-    useProviderExpansion();
+    useProviderExpansion(() =>
+      useUiStore.getState().settingsRequest?.expandChatGpt
+        ? useManagedModelsStore
+            .getState()
+            .providers.filter(
+              (provider) => provider.authKind === "chatgpt_codex_oauth",
+            )
+            .map((provider) => provider.id)
+        : [],
+    );
+  useEffect(() => {
+    useUiStore.getState().clearSettingsExpand();
+  }, []);
   const {
     orderedModels,
     modelMoveFeedback,
@@ -199,10 +215,17 @@ export function SettingsModels({
           : copy.toasts.modelConfigSavedMessage,
       );
     },
-    onCodexComplete: (providerId) => {
+    onCodexComplete: (providerId, ctx) => {
       providerEditorBlocked.clear();
       expandProvider(providerId);
-      showModelConfigSavedToast(modelCopy.providerCreatedToastMessage);
+      // Signing in again on a provider that was already there (Sign in
+      // with ChatGPT takes the ChatGPT provider over) added nothing: the
+      // plain saved toast, not 「已接入模型服务商」.
+      showModelConfigSavedToast(
+        ctx && !ctx.isNewProvider
+          ? undefined
+          : modelCopy.providerCreatedToastMessage,
+      );
     },
   });
   const editingModelId = providerModelController.modelDraft?.id;
@@ -235,8 +258,10 @@ export function SettingsModels({
     canFetchProviderFormModels,
     canSaveProvider,
     canTestProvider,
+    cancelChatGptPlanSignIn,
     cancelClearProviderKey,
     cancelNoAuthSave,
+    chatGptPlanLogin,
     clearKeyConfirmOpen,
     codexLoginStart,
     codexPolling,
@@ -244,6 +269,7 @@ export function SettingsModels({
     confirmNoAuthSave,
     editingProviderIsNoAuth,
     noAuthConfirmOpen,
+    handleChatGptPlanLogin,
     handleCodexCompleteLogin,
     handleCodexImport,
     handleCodexLogin,
@@ -253,6 +279,7 @@ export function SettingsModels({
     handleProviderFormFetchModels,
     handleProviderFormTest,
     handleProviderSave,
+    isCodexProviderForm,
     providerFormDirty,
     providerFormIsInlineEdit,
     providerFormModelOptions,
@@ -495,6 +522,7 @@ export function SettingsModels({
               blocked={providerEditorBlocked.state}
               codexLoginStart={codexLoginStart}
               codexPolling={codexPolling}
+              chatGptPlanLogin={chatGptPlanLogin}
               onChange={changeProviderForm}
               onSelectProviderPreset={changeProviderPreset}
               onTest={() => void handleProviderFormTest()}
@@ -504,6 +532,8 @@ export function SettingsModels({
               onCodexCompleteLogin={() => void handleCodexCompleteLogin()}
               onCodexImport={() => void handleCodexImport()}
               onCodexLogout={() => void handleCodexLogout()}
+              onChatGptPlanSignIn={() => void handleChatGptPlanLogin()}
+              onChatGptPlanCancel={cancelChatGptPlanSignIn}
               onSave={() => void handleProviderSave()}
               onCancel={closeProviderEditor}
             />
@@ -579,6 +609,7 @@ export function SettingsModels({
                       blocked={providerEditorBlocked.state}
                       codexLoginStart={codexLoginStart}
                       codexPolling={codexPolling}
+                      chatGptPlanLogin={chatGptPlanLogin}
                       onChange={changeProviderForm}
                       onSelectProviderPreset={changeProviderPreset}
                       onTest={() =>
@@ -599,11 +630,22 @@ export function SettingsModels({
                       }
                       onCodexImport={() => void handleCodexImport()}
                       onCodexLogout={() => void handleCodexLogout()}
+                      onChatGptPlanSignIn={() => void handleChatGptPlanLogin()}
+                      onChatGptPlanCancel={cancelChatGptPlanSignIn}
                       onSave={() => void handleProviderSave()}
                       onCancel={closeProviderEditor}
                     />
                   ) : null
                 }
+                // A sign-in started in a ChatGPT form is that form's; the
+                // card shows the one it started itself.
+                chatGptPlanLogin={
+                  isCodexProviderForm
+                    ? CHATGPT_PLAN_LOGIN_IDLE
+                    : chatGptPlanLogin
+                }
+                onChatGptPlanSignIn={() => void handleChatGptPlanLogin()}
+                onChatGptPlanCancel={cancelChatGptPlanSignIn}
                 onToggle={() => handleToggleProviderCard(provider)}
                 onEditProvider={() => handleEditProvider(provider)}
                 onDeleteProvider={() => handleDeleteProvider(provider)}

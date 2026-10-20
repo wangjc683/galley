@@ -27,6 +27,9 @@ import {
 } from "@/components/conversation/LLMPill";
 import { SavedPromptDialogs } from "@/components/conversation/SavedPromptDialogs";
 import { ComposerOneLine } from "@/components/conversation/ComposerOneLine";
+// SIWC 票 04 临时切换器，定档后拆掉。
+import { usePlanMarkVariant } from "@/components/conversation/plan-mark-trial/plan-mark-trial";
+import { TooltipLabel } from "@/components/ui/tooltip";
 import {
   COMPOSER_MAX_HEIGHT_PX,
   ONE_LINE_GHOST_CLASS,
@@ -37,10 +40,12 @@ import {
   ONE_LINE_TEXTAREA_STYLE,
   oneLineMaxHeightPx,
 } from "@/components/conversation/composer-styles";
+import { useChatGptPlanModelIds } from "@/hooks/useChatGptPlanModelIds";
 import { useComposerFocus } from "@/hooks/useComposerFocus";
 import { useFileReferences } from "@/hooks/useFileReferences";
 import { useImageAttachments } from "@/hooks/useImageAttachments";
 import { usePasteFold } from "@/hooks/usePasteFold";
+import { CHATGPT_USAGE_URL } from "@/lib/chatgpt-plan";
 import { animateTextareaHeight } from "@/lib/composer-grow";
 import type { ImageBlockReason } from "@/lib/composer-images";
 import {
@@ -55,6 +60,8 @@ import {
 } from "@/lib/composer-quote";
 import { useCopy } from "@/lib/i18n";
 import { isImeCompositionKeydown } from "@/lib/ime";
+import { openExternalUrl } from "@/lib/open-external";
+import { preventMouseFocus } from "@/lib/pointer-focus";
 import { findPromptFillSlot } from "@/lib/saved-prompts";
 import { isSideQuestion } from "@/lib/side-question";
 import { cn } from "@/lib/utils";
@@ -121,6 +128,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     ref,
   ) {
     const copy = useCopy();
+    // Sign in with ChatGPT (.scratch/chatgpt-siwc ticket 04): OpenAI asks
+    // for a "ChatGPT plan" mark by the composer or the model picker. SIWC
+    // 票 04 临时切换器：A puts it in the model menu (LLMPill), B after
+    // the 「模型 · 强度」 phrase while this conversation's model is on
+    // the plan.
+    const planMarkVariant = usePlanMarkVariant();
+    const chatGptPlanKeys = useChatGptPlanModelIds();
+    const currentModelOnPlan = !!llms?.some(
+      (llm) =>
+        llm.isCurrent && llm.key !== undefined && chatGptPlanKeys.has(llm.key),
+    );
     // Hybrid controlled / uncontrolled. When `value` prop is provided
     // we render it directly; otherwise we maintain an internal copy.
     // Avoid syncing prop -> internal in an effect (React 19 / Compiler
@@ -645,6 +663,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           stopMode={stopMode}
           phraseLead={reasoningEffort !== undefined}
           popoverAlign={popoverAlign}
+          chatGptPlanKeys={
+            planMarkVariant === "A" && chatGptPlanKeys.size > 0
+              ? chatGptPlanKeys
+              : undefined
+          }
         />
         {reasoningEffort && (
           <>
@@ -660,6 +683,23 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               disabled={disabled}
             />
           </>
+        )}
+        {/* SIWC 票 04 临时切换器 variant B: the plan after the phrase,
+            the dot's faint ink at the phrase's own size (conversation.md
+            「推理强度 pill」: one row, one type size), a link to the
+            plan's usage page. */}
+        {planMarkVariant === "B" && currentModelOnPlan && (
+          <TooltipLabel text={copy.chatgptPlan.manageUsage}>
+            <button
+              type="button"
+              tabIndex={-1}
+              onMouseDown={preventMouseFocus}
+              onClick={() => openExternalUrl(CHATGPT_USAGE_URL)}
+              className="ml-1 flex h-7 shrink-0 items-center whitespace-nowrap rounded-sm px-1 text-[12.5px] text-ink-muted/60 outline-none hover:bg-hover hover:text-ink-soft"
+            >
+              {copy.chatgptPlan.planLabel}
+            </button>
+          </TooltipLabel>
         )}
       </>
     );

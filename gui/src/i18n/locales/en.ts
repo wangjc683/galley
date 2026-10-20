@@ -163,6 +163,37 @@ export const enCopy: AppCopy = {
     quit: "Quit Galley",
     footnote: "You can change this anytime in Settings → General.",
   },
+  chatgptPlan: {
+    continueWithChatGPT: "Continue with ChatGPT",
+    title: "Use your ChatGPT plan",
+    body: "Complete eligible requests in Galley with usage included in your ChatGPT plan or credits balance.",
+    waiting: "Finish signing in in your browser…",
+    otherMethods: "Other ways to sign in",
+    accessDenied: "You cancelled the authorization in your browser.",
+    usageNotGranted:
+      "ChatGPT plan usage wasn't allowed. When you try again, leave “Use your ChatGPT plan” checked.",
+    temporary: "Couldn't reach ChatGPT. Try again in a moment.",
+    failed: (detail) => `Couldn't sign in with ChatGPT: ${detail}`,
+    notEligible:
+      "Signed in, but this ChatGPT plan can't be used in Galley (Plus and Pro are supported). Choose a provider that uses an API key instead.",
+    testFailed: (detail) =>
+      `Signed in with ChatGPT, but the connection test failed: ${detail}`,
+    manageUsage: "Manage usage",
+    planLabel: "ChatGPT plan",
+    signedOutRevokeUnconfirmed:
+      "Signed out. ChatGPT didn't confirm the revocation; you can disconnect Galley in your ChatGPT settings.",
+    noticeTitle: "You're using your ChatGPT plan.",
+    noticeBody:
+      "Eligible usage in this app uses your ChatGPT plan. Manage usage in your ChatGPT settings.",
+    noticeAction: "Got it",
+    usageLimitTitle: "Usage limit reached",
+    usageLimitBody: "Review your plan or this app's limit in ChatGPT settings.",
+    signInExpired: "Your ChatGPT sign-in is no longer valid. Sign in again.",
+    signInInSettings: "Sign in in Settings",
+    accountNotEligible:
+      "This ChatGPT account's plan can't be used in Galley (Plus and Pro are supported). Use a provider with an API key instead.",
+    openSettings: "Open Settings",
+  },
   sidebar: {
     newConversation: "New chat",
     otherSources: "Other sources",
@@ -886,7 +917,7 @@ export const enCopy: AppCopy = {
       customProtocolAria: "API protocol",
       openaiCompatibleProtocol: "OpenAI-compatible",
       anthropicCompatibleProtocol: "Anthropic-compatible",
-      chatgptCodexPresetDescription: "Sign in to ChatGPT and use Codex quota",
+      chatgptCodexPresetDescription: "Use your ChatGPT plan (Plus / Pro)",
       deepseekPresetDescription: "DeepSeek official API",
       kimiCodingPresetDescription: "Kimi for Coding plan",
       minimaxPresetDescription: "MiniMax official API",

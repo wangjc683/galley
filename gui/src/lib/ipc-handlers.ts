@@ -10,6 +10,7 @@ import {
   stripGATags,
 } from "@/lib/ipc/ga-output-cleaning";
 import { resolveLanguagePreference } from "@/lib/language";
+import { findChatGptPlanError } from "@/lib/chatgpt-plan-errors";
 import { managedModelsToLLMs } from "@/lib/managed-model-options";
 import {
   clearReplyNotifyPending,
@@ -47,6 +48,7 @@ import type {
 } from "@/types/ipc";
 
 import { useMessagesStore } from "@/stores/messages";
+import { checkChatGptRevocation } from "@/stores/chatgpt-plan";
 import { useManagedModelsStore } from "@/stores/managed-models";
 import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
@@ -426,6 +428,16 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       // Same primary key Core mints for the row below — lets a palette
       // hit on this reply locate the live node without a restore.
       turn.messageId = `msg_${event.sessionId}_${absoluteTurnIndex}_assistant`;
+      // A ChatGPT sign-in revoked mid-conversation (SIWC ticket 04, PRD
+      // ruling 8): one connection test per such turn so Core clears the
+      // tokens now and Settings says 「需要登录」 — not at the next
+      // refresh, up to an hour away. Live turns only: a restored
+      // transcript never comes through here.
+      if (
+        findChatGptPlanError(event.responseContent ?? "")?.kind === "revoked"
+      ) {
+        void checkChatGptRevocation(turn.messageId);
+      }
       if (visibility === "visible") {
         messages.appendAgentTurn(event.sessionId, turn);
       }

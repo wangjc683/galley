@@ -12,11 +12,19 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
+import {
+  ChatGptPlanSignInControls,
+  OtherSignInMethods,
+} from "@/components/managed-models/ChatGptPlanSignIn";
 import { CodexDeviceCodeCard } from "@/components/managed-models/CodexDeviceCodeCard";
 import { ManagedModelProviderPicker } from "@/components/managed-models/ManagedModelProviderPicker";
 import { ModelCombobox } from "@/components/managed-models/ModelCombobox";
 import { Button, IconButton } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import {
+  CHATGPT_PLAN_LOGIN_IDLE,
+  type ChatGptPlanLoginState,
+} from "@/lib/chatgpt-plan";
 import { useCopy } from "@/lib/i18n";
 import {
   apiBasePlaceholderForManagedModelProviderPreset,
@@ -36,6 +44,7 @@ import type { ManagedModelProtocol } from "@/types/managed-models";
 import { ExternalLinkIcon, ExternalTextLink } from "../external-link";
 import {
   EditorBlockedHint,
+  ErrorLine,
   InfoLine,
   InlineProbeStatus,
   ProbeErrorLine,
@@ -66,6 +75,7 @@ export function ProviderEditor({
   blocked,
   codexLoginStart,
   codexPolling = false,
+  chatGptPlanLogin = CHATGPT_PLAN_LOGIN_IDLE,
   onChange,
   onSelectProviderPreset,
   onTest,
@@ -75,6 +85,8 @@ export function ProviderEditor({
   onCodexCompleteLogin,
   onCodexImport,
   onCodexLogout,
+  onChatGptPlanSignIn,
+  onChatGptPlanCancel,
   onSave,
   onCancel,
   className,
@@ -100,6 +112,8 @@ export function ProviderEditor({
   blocked?: EditorBlockedState;
   codexLoginStart?: CodexDeviceLoginStart | null;
   codexPolling?: boolean;
+  /** Sign in with ChatGPT, the ChatGPT card's main path (ticket 04). */
+  chatGptPlanLogin?: ChatGptPlanLoginState;
   onChange: (patch: Partial<ProviderFormState>) => void;
   onSelectProviderPreset: (
     providerPresetId: ManagedModelProviderPresetId,
@@ -111,11 +125,15 @@ export function ProviderEditor({
   onCodexCompleteLogin: () => void;
   onCodexImport: () => void;
   onCodexLogout: () => void;
+  onChatGptPlanSignIn: () => void;
+  onChatGptPlanCancel: () => void;
   onSave: () => void;
   onCancel: () => void;
   className?: string;
 }) {
-  const copy = useCopy().settings.models;
+  const appCopy = useCopy();
+  const copy = appCopy.settings.models;
+  const planCopy = appCopy.chatgptPlan;
   const isCreatingProvider = !form.id;
   const selectedPreset = form.providerPresetId
     ? getManagedModelProviderPreset(form.providerPresetId)
@@ -252,72 +270,25 @@ export function ProviderEditor({
 
         {providerSelected && selectedPreset && form.protocol && isCodexProvider && (
           <div className="space-y-4 pb-1">
+            {/* Sign in with ChatGPT is the main path (ticket 04); the
+                Codex CLI sign-ins wait folded below until ticket 05
+                removes them. */}
             <div className="space-y-3">
               <div>
                 <div className="text-ui-meta font-medium text-ink-soft">
-                  {copy.chatgptCodexWebLogin}
+                  {planCopy.title}
                 </div>
                 <p className="m-0 mt-1 max-w-[620px] text-ui-secondary leading-5 text-ink-muted">
-                  {copy.chatgptCodexReadyBody}
+                  {planCopy.body}
                 </p>
               </div>
-              {codexLoginStart && (
-                <CodexDeviceCodeCard
-                  userCode={codexLoginStart.userCode}
-                  copy={copy}
-                  className="mt-4"
-                />
-              )}
               <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
-                {!codexLoginStart ? (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    disabled={probeState.kind === "loading"}
-                    onClick={onCodexLogin}
-                    leadingIcon={
-                      probeState.kind === "loading" &&
-                      probeState.action === "provider-test" ? (
-                        <span className="spin">
-                          <CircleNotch size={12} weight="thin" />
-                        </span>
-                      ) : (
-                        <SignIn size={12} weight="bold" />
-                      )
-                    }
-                  >
-                    {copy.generateChatGPTLoginCode}
-                  </Button>
-                ) : (
-                  <>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled={probeState.kind === "loading"}
-                      onClick={onCodexOpenLoginPage}
-                      leadingIcon={<ExternalLinkIcon />}
-                    >
-                      {copy.openChatGPTLoginPage}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={probeState.kind === "loading"}
-                      onClick={onCodexCompleteLogin}
-                      leadingIcon={<PlugsConnected size={12} weight="thin" />}
-                    >
-                      {copy.completeChatGPTLogin}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={probeState.kind === "loading"}
-                      onClick={onCodexLogin}
-                    >
-                      {copy.regenerateChatGPTLoginCode}
-                    </Button>
-                  </>
-                )}
+                <ChatGptPlanSignInControls
+                  state={chatGptPlanLogin}
+                  disabled={probeState.kind === "loading"}
+                  onSignIn={onChatGptPlanSignIn}
+                  onCancel={onChatGptPlanCancel}
+                />
                 {form.id && (
                   <Button
                     variant="ghost"
@@ -331,32 +302,110 @@ export function ProviderEditor({
                 )}
                 <InlineProbeStatus state={probeState} action="provider-test" />
               </div>
-              {codexPolling && (
-                <div className="flex items-center gap-1.5 text-ui-secondary text-ink-muted">
-                  <span className="spin">
-                    <CircleNotch size={12} weight="thin" />
-                  </span>
-                  {copy.codexWaitingForLogin}
-                </div>
+              {chatGptPlanLogin.phase === "error" && (
+                <ErrorLine message={chatGptPlanLogin.message} />
               )}
               <ProbeErrorLine state={probeState} action="provider-test" />
             </div>
 
-            <div className="border-t border-line pt-3">
-              <div className="text-ui-meta font-medium text-ink-soft">
-                {copy.codexCliLoginTitle}
+            <OtherSignInMethods className="border-t border-line pt-3">
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-ui-meta font-medium text-ink-soft">
+                      {copy.chatgptCodexWebLogin}
+                    </div>
+                    <p className="m-0 mt-1 max-w-[620px] text-ui-secondary leading-5 text-ink-muted">
+                      {copy.chatgptCodexReadyBody}
+                    </p>
+                  </div>
+                  {codexLoginStart && (
+                    <CodexDeviceCodeCard
+                      userCode={codexLoginStart.userCode}
+                      copy={copy}
+                      className="mt-4"
+                    />
+                  )}
+                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
+                    {!codexLoginStart ? (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={probeState.kind === "loading"}
+                        onClick={onCodexLogin}
+                        leadingIcon={
+                          probeState.kind === "loading" &&
+                          probeState.action === "provider-test" ? (
+                            <span className="spin">
+                              <CircleNotch size={12} weight="thin" />
+                            </span>
+                          ) : (
+                            <SignIn size={12} weight="bold" />
+                          )
+                        }
+                      >
+                        {copy.generateChatGPTLoginCode}
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          disabled={probeState.kind === "loading"}
+                          onClick={onCodexOpenLoginPage}
+                          leadingIcon={<ExternalLinkIcon />}
+                        >
+                          {copy.openChatGPTLoginPage}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={probeState.kind === "loading"}
+                          onClick={onCodexCompleteLogin}
+                          leadingIcon={
+                            <PlugsConnected size={12} weight="thin" />
+                          }
+                        >
+                          {copy.completeChatGPTLogin}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={probeState.kind === "loading"}
+                          onClick={onCodexLogin}
+                        >
+                          {copy.regenerateChatGPTLoginCode}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  {codexPolling && (
+                    <div className="flex items-center gap-1.5 text-ui-secondary text-ink-muted">
+                      <span className="spin">
+                        <CircleNotch size={12} weight="thin" />
+                      </span>
+                      {copy.codexWaitingForLogin}
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-line pt-3">
+                  <div className="text-ui-meta font-medium text-ink-soft">
+                    {copy.codexCliLoginTitle}
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="mt-2"
+                    disabled={probeState.kind === "loading"}
+                    onClick={onCodexImport}
+                    leadingIcon={<CloudArrowDown size={12} weight="thin" />}
+                  >
+                    {copy.importCodexCliLogin}
+                  </Button>
+                </div>
               </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="mt-2"
-                disabled={probeState.kind === "loading"}
-                onClick={onCodexImport}
-                leadingIcon={<CloudArrowDown size={12} weight="thin" />}
-              >
-                {copy.importCodexCliLogin}
-              </Button>
-            </div>
+            </OtherSignInMethods>
           </div>
         )}
 

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import type { SettingsTab } from "@/components/screens/settings/settings-types";
 import { paletteAfterFind, type PaletteScope } from "@/lib/palette-scope";
 import {
   readTodoPanelOpen,
@@ -72,6 +73,22 @@ interface UiState {
    * sent you there first (ticket 46). Pure UI coordination.
    */
   quoteRequest: QuoteRequest | null;
+
+  /**
+   * "Open Settings on this tab" from somewhere App's own handlers can't
+   * reach — a ChatGPT plan error in the conversation (SIWC ticket 04).
+   * `requestSettings` opens Settings; App takes the tab (a new nonce),
+   * Settings → 模型 expands the ChatGPT provider once when asked. Pure
+   * UI coordination, never persisted.
+   */
+  settingsRequest: SettingsRequest | null;
+}
+
+export interface SettingsRequest {
+  tab: SettingsTab;
+  /** Expand the ChatGPT provider's card (its sign-in lives there). */
+  expandChatGpt: boolean;
+  nonce: number;
 }
 
 export interface QuoteRequest {
@@ -115,6 +132,12 @@ interface UiActions {
   setTodoPanelOpen: (place: TodoPlace, open: boolean) => void;
   requestQuote: (sessionId: string, text: string) => void;
   clearQuote: () => void;
+  requestSettings: (
+    tab: SettingsTab,
+    options?: { expandChatGpt?: boolean },
+  ) => void;
+  /** Settings → 模型 expanded the ChatGPT card the request asked for. */
+  clearSettingsExpand: () => void;
 }
 
 export type UiStore = UiState & UiActions;
@@ -133,6 +156,7 @@ export const useUiStore = create<UiStore>((set, get) => ({
     elsewhere: readTodoPanelOpen("elsewhere"),
   },
   quoteRequest: null,
+  settingsRequest: null,
 
   setScreen: (s) => set({ screen: s }),
   setPaletteOpen: (o) => set({ paletteOpen: o, paletteScope: null }),
@@ -192,4 +216,21 @@ export const useUiStore = create<UiStore>((set, get) => ({
       },
     })),
   clearQuote: () => set({ quoteRequest: null }),
+  requestSettings: (tab, options) =>
+    set((state) => ({
+      settingsOpen: true,
+      settingsRequest: {
+        tab,
+        expandChatGpt: options?.expandChatGpt ?? false,
+        nonce: (state.settingsRequest?.nonce ?? 0) + 1,
+      },
+    })),
+  clearSettingsExpand: () =>
+    set((state) =>
+      state.settingsRequest?.expandChatGpt
+        ? {
+            settingsRequest: { ...state.settingsRequest, expandChatGpt: false },
+          }
+        : state,
+    ),
 }));

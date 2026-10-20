@@ -14,6 +14,9 @@ import { BrowserControlAttentionSurface } from "@/components/screens/BrowserCont
 import { EmptyState } from "@/components/screens/EmptyState";
 import { MainView } from "@/components/screens/MainView";
 import { LocalFileWorkspace } from "@/components/conversation/LocalFileWorkspace";
+// SIWC 票 04 临时切换器，定档后拆掉。
+import { PlanMarkTrialSwitcher } from "@/components/conversation/plan-mark-trial/PlanMarkTrialSwitcher";
+import { ChatGptPlanNoticeDialog } from "@/components/managed-models/ChatGptPlanNoticeDialog";
 import { OnboardingScreen } from "@/components/screens/onboarding/OnboardingScreen";
 import { SettingsHost } from "@/components/screens/settings/SettingsHost";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
@@ -228,6 +231,15 @@ function App() {
     setSettingsTab(tab);
     setSettingsOpen(true);
   };
+  // Settings asked for from outside App's handlers (a ChatGPT plan
+  // error in the conversation, SIWC ticket 04): the store has opened it;
+  // the tab is App's, taken once per request while rendering.
+  const settingsRequest = useUiStore((s) => s.settingsRequest);
+  const [takenSettingsRequest, setTakenSettingsRequest] = useState(0);
+  if (settingsRequest && settingsRequest.nonce !== takenSettingsRequest) {
+    setTakenSettingsRequest(settingsRequest.nonce);
+    setSettingsTab(settingsRequest.tab);
+  }
   const openModelsForMissingConfig = () => openSettings("models");
   const { showImageBlockedToast, handleImageBlocked, handleTextDropBlocked } =
     useImageBlockedToast({
@@ -982,6 +994,18 @@ function App() {
           void resolveFirstClose(keepInBackground);
         }}
       />
+
+      {/* After the first Sign in with ChatGPT on this machine, from
+          Settings or from onboarding (which hands over to this screen
+          right after the sign-in). */}
+      <ChatGptPlanNoticeDialog />
+
+      {/* SIWC 票 04 临时切换器，定档后拆掉。Where the ChatGPT plan mark
+          sits (model menu / after the composer's phrase), in a dev build
+          of the managed runtime. */}
+      {import.meta.env.DEV && activeRuntimeKind === "managed" && (
+        <PlanMarkTrialSwitcher />
+      )}
     </CopyProvider>
   );
 }

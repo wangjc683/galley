@@ -1,8 +1,11 @@
 import * as Popover from "@radix-ui/react-popover";
 import { Check, Gear } from "@phosphor-icons/react";
+import { Fragment } from "react";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
+import { CHATGPT_USAGE_URL } from "@/lib/chatgpt-plan";
 import { useCopy } from "@/lib/i18n";
+import { openExternalUrl } from "@/lib/open-external";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +48,7 @@ export function LLMPill({
   stopMode,
   phraseLead = false,
   popoverAlign = "start",
+  chatGptPlanKeys,
 }: {
   llmDisplayName: string;
   llms?: ComposerLLMOption[];
@@ -70,6 +74,11 @@ export function LLMPill({
    * not read as hanging from the pill (ruling 76; centred, it stays
    * inside the row on both sides). */
   popoverAlign?: "start" | "center";
+  /** SIWC 票 04 临时切换器 variant A: the `key`s of the models that
+   * spend the ChatGPT plan; each run of them gets a header row,
+   * 「ChatGPT 套餐 · 管理用量」. Absent = no header (variant B, or no
+   * plan models). */
+  chatGptPlanKeys?: ReadonlySet<string>;
 }) {
   const copy = useCopy();
   const footerHint = llmConfigHint ?? copy.app.externalModelHint;
@@ -179,11 +188,14 @@ export function LLMPill({
               {copy.composer.cannotSwitchRunning}
             </div>
           )}
-          {llms.map((llm) => {
+          {llms.map((llm, position) => {
             const providerLabel = llm.providerDisplayName?.trim();
             const isDuplicateDisplayName =
               (displayNameCounts.get(llm.displayName.trim()) ?? 0) > 1;
-            return (
+            const onPlan = isPlanModel(chatGptPlanKeys, llm);
+            const planHeader =
+              onPlan && !isPlanModel(chatGptPlanKeys, llms[position - 1]);
+            const row = (
               <Popover.Close asChild key={llm.index}>
                 <button
                   type="button"
@@ -232,6 +244,35 @@ export function LLMPill({
                 </button>
               </Popover.Close>
             );
+            if (!planHeader) return row;
+            // SIWC 票 04 临时切换器 variant A: the plan's header, in the
+            // action register (11px) — the popover keeps its two type
+            // sizes, content and actions.
+            return (
+              <Fragment key={llm.index}>
+                <div
+                  className={cn(
+                    "flex items-center gap-1 px-2.5 pb-0.5 pt-1 text-[11px] leading-[1.35] text-ink-muted/70",
+                    position > 0 && "mt-1",
+                  )}
+                >
+                  <span className="truncate">{copy.chatgptPlan.planLabel}</span>
+                  <span aria-hidden>·</span>
+                  <Popover.Close asChild>
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onMouseDown={preventMouseFocus}
+                      onClick={() => openExternalUrl(CHATGPT_USAGE_URL)}
+                      className="shrink-0 rounded-callout hover:text-ink-soft hover:underline"
+                    >
+                      {copy.chatgptPlan.manageUsage}
+                    </button>
+                  </Popover.Close>
+                </div>
+                {row}
+              </Fragment>
+            );
           })}
           {/* Action block: everything below the model list shares ONE
               quiet 11px register — the settings navigation. Two layers
@@ -267,4 +308,11 @@ export function LLMPill({
       </Popover.Portal>
     </Popover.Root>
   );
+}
+
+function isPlanModel(
+  keys: ReadonlySet<string> | undefined,
+  llm: ComposerLLMOption | undefined,
+): boolean {
+  return !!keys && !!llm?.key && keys.has(llm.key);
 }

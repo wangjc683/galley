@@ -148,6 +148,41 @@ export const zhCopy = {
     quit: "退出 Galley",
     footnote: "以后可在 设置 → 通用 中修改这个行为。",
   },
+  // Sign in with ChatGPT (.scratch/chatgpt-siwc ticket 04). The button,
+  // the first sign-in notice and the usage link follow OpenAI's SIWC UI
+  // guidelines; 「用 ChatGPT 登录」 is the Chinese for "Continue with
+  // ChatGPT".
+  chatgptPlan: {
+    continueWithChatGPT: "用 ChatGPT 登录",
+    title: "使用你的 ChatGPT 套餐",
+    body: "Galley 里符合条件的请求，会用你 ChatGPT 套餐或额度余额里的用量完成。",
+    waiting: "在浏览器里完成登录…",
+    otherMethods: "其他登录方式",
+    accessDenied: "你在浏览器里取消了授权。",
+    usageNotGranted: "没有勾选「使用 ChatGPT 套餐」，再试一次时记得勾上。",
+    temporary: "暂时连不上 ChatGPT，稍后再试。",
+    failed: (detail: string) => `没能用 ChatGPT 登录：${detail}`,
+    notEligible:
+      "已用 ChatGPT 登录，但这个 ChatGPT 套餐不能在 Galley 里使用（支持 Plus / Pro）。可以改选一个用密钥的服务商。",
+    testFailed: (detail: string) =>
+      `已用 ChatGPT 登录，但测试连接没有通过：${detail}`,
+    manageUsage: "管理用量",
+    planLabel: "ChatGPT 套餐",
+    signedOutRevokeUnconfirmed:
+      "已退出登录；远端撤销未确认，可在 ChatGPT 设置里断开 Galley。",
+    noticeTitle: "你正在使用 ChatGPT 套餐",
+    noticeBody:
+      "Galley 里符合条件的用量会计入你的 ChatGPT 套餐，可以在 ChatGPT 设置里管理用量。",
+    noticeAction: "知道了",
+    // In the conversation (PRD ruling 7): the engine's plan errors.
+    usageLimitTitle: "已达到用量上限",
+    usageLimitBody: "检查你的 ChatGPT 套餐，或你给 Galley 设的上限。",
+    signInExpired: "ChatGPT 登录已失效，需要重新登录。",
+    signInInSettings: "去设置登录",
+    accountNotEligible:
+      "这个 ChatGPT 账号的套餐不能在 Galley 里使用（支持 Plus / Pro），可以改用 API key 服务商。",
+    openSettings: "去设置",
+  },
   sidebar: {
     newConversation: "新对话",
     /** agent 开的、不在项目里的对话收成的一组（裁决 32）。 */
@@ -908,7 +943,7 @@ export const zhCopy = {
       customProtocolAria: "接口协议",
       openaiCompatibleProtocol: "OpenAI 兼容",
       anthropicCompatibleProtocol: "Anthropic 兼容",
-      chatgptCodexPresetDescription: "登录 ChatGPT，使用 Codex 额度",
+      chatgptCodexPresetDescription: "用 ChatGPT 套餐（Plus / Pro）的额度",
       deepseekPresetDescription: "DeepSeek 官方接口",
       kimiCodingPresetDescription: "Kimi for Coding 套餐",
       minimaxPresetDescription: "MiniMax 官方接口",

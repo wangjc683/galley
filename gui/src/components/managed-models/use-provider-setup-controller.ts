@@ -2,14 +2,25 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import {
+  CHATGPT_PLAN_LOGIN_IDLE,
+  chatGptPlanLoginFailure,
+  completeChatGptPlanLoginOnce,
+  finishChatGptPlanSignIn,
+  type ChatGptPlanLoginState,
+} from "@/lib/chatgpt-plan";
+import {
+  cancelChatGptPlanLogin,
   completeChatGptCodexLogin,
+  getChatGptPlanStatus,
   importChatGptCodexCliLogin,
   listManagedModelOptions,
-  logoutChatGptCodexProvider,
+  logoutChatGptPlan,
   managedModelProbeErrorMessage,
   modelListProbeFailureState,
   startChatGptCodexLogin,
+  startChatGptPlanLogin,
   testManagedModelConnectionWithLatency,
+  type ChatGptPlanLoginStart,
   type CodexDeviceLoginStart,
 } from "@/lib/managed-models";
 import { useCopy } from "@/lib/i18n";
@@ -38,7 +49,10 @@ import {
   type ProbeState,
   type ProviderFormState,
 } from "@/lib/provider-setup";
+import { useChatGptPlanStore } from "@/stores/chatgpt-plan";
 import type { ManagedModelsStore } from "@/stores/managed-models";
+import { useUiStore } from "@/stores/ui";
+import { makeAppError } from "@/types/app-error";
 import type {
   ManagedModelProviderRecord,
   ManagedModelRecord,
@@ -114,8 +128,14 @@ export function useProviderSetupController({
    * caller's wrapped store actions report it (settings: error toast). */
   postSaveForm?: "reset" | "success-status";
   onSaved?: (ctx: { providerId: string; isNewProvider: boolean }) => void;
-  /** Post-success strategy for the codex login / import flows. */
-  onCodexComplete?: (providerId: string) => void;
+  /** Post-success strategy for the ChatGPT sign-ins (Sign in with
+   * ChatGPT, and the Codex CLI login / import). `isNewProvider` is known
+   * for Sign in with ChatGPT only (it may take over an existing
+   * provider); the Codex flows leave it out. */
+  onCodexComplete?: (
+    providerId: string,
+    ctx?: { isNewProvider: boolean },
+  ) => void;
   /** Settings-only: expand a provider card when editing starts. */
   expandProvider?: (id: string) => void;
   /** Settings-only: park fetched model options on the created provider. */
@@ -123,6 +143,7 @@ export function useProviderSetupController({
 }) {
   const copy = useCopy();
   const modelCopy = copy.settings.models;
+  const planCopy = copy.chatgptPlan;
   const [providerForm, setProviderForm] = useState<ProviderFormState | null>(
     null,
   );
@@ -134,6 +155,14 @@ export function useProviderSetupController({
   const [codexLoginStart, setCodexLoginStart] =
     useState<CodexDeviceLoginStart | null>(null);
   const [codexPolling, setCodexPolling] = useState(false);
+  // Sign in with ChatGPT (.scratch/chatgpt-siwc ticket 04): one sign-in
+  // at a time for the page. The attempt counter retires a sign-in the
+  // user cancelled or walked away from while a call was still out; the
+  // login id is what Core cancels.
+  const [chatGptPlanLogin, setChatGptPlanLogin] =
+    useState<ChatGptPlanLoginState>(CHATGPT_PLAN_LOGIN_IDLE);
+  const chatGptPlanAttemptRef = useRef(0);
+  const chatGptPlanLoginIdRef = useRef<string | null>(null);
   // No-auth guardrails: a blank key resolves to a no-auth provider,
   // which is confirmed once per save instead of blocking the button;
   // clearing a saved key (→ no-auth) gets the same explicit confirm.
@@ -414,11 +443,50 @@ export function useProviderSetupController({
     resetConnectionTest,
   ]);
 
+  /** Retires the pending Sign in with ChatGPT and closes Core's
+   * listener for it. No state: safe from an unmount. */
+  const dropChatGptPlanLogin = () => {
+    chatGptPlanAttemptRef.current += 1;
+    const loginId = chatGptPlanLoginIdRef.current;
+    chatGptPlanLoginIdRef.current = null;
+    if (loginId) {
+      void cancelChatGptPlanLogin(loginId).catch((e: unknown) => {
+        console.warn("[provider-setup] cancel ChatGPT sign-in failed.", e);
+      });
+    }
+  };
+
+  // Leaving the surface while the browser is still out (closing
+  // Settings, onboarding moving on) gives up that sign-in.
+  useEffect(() => {
+    const attemptRef = chatGptPlanAttemptRef;
+    const loginIdRef = chatGptPlanLoginIdRef;
+    return () => {
+      attemptRef.current += 1;
+      const loginId = loginIdRef.current;
+      loginIdRef.current = null;
+      if (loginId) void cancelChatGptPlanLogin(loginId).catch(() => undefined);
+    };
+  }, []);
+
+  const cancelChatGptPlanSignIn = () => {
+    dropChatGptPlanLogin();
+    setChatGptPlanLogin(CHATGPT_PLAN_LOGIN_IDLE);
+  };
+
+  /** The form is being replaced or closed: a sign-in it was showing
+   * goes with it. One started from a provider card (Settings, no ChatGPT
+   * form open) is the card's and stays. */
+  const releaseFormChatGptPlanLogin = () => {
+    if (isCodexProviderForm) cancelChatGptPlanSignIn();
+  };
+
   const resetProviderForm = () => {
     setProviderForm(null);
     setProviderFormModelOptions([]);
     setProviderFormProbeState({ kind: "idle" });
     setCodexLoginStart(null);
+    releaseFormChatGptPlanLogin();
     setNoAuthConfirmOpen(false);
     setClearKeyConfirmOpen(false);
     resetConnectionTest();
@@ -467,6 +535,7 @@ export function useProviderSetupController({
     setProviderFormModelOptions([]);
     setProviderFormProbeState({ kind: "idle" });
     setCodexLoginStart(null);
+    releaseFormChatGptPlanLogin();
     resetConnectionTest();
   };
 
@@ -475,6 +544,7 @@ export function useProviderSetupController({
     setProviderFormModelOptions([]);
     setProviderFormProbeState({ kind: "idle" });
     setCodexLoginStart(null);
+    releaseFormChatGptPlanLogin();
     resetConnectionTest();
   };
 
@@ -484,6 +554,7 @@ export function useProviderSetupController({
     setProviderFormModelOptions([]);
     setProviderFormProbeState({ kind: "idle" });
     setCodexLoginStart(null);
+    releaseFormChatGptPlanLogin();
     resetConnectionTest();
   };
 
@@ -699,6 +770,104 @@ export function useProviderSetupController({
     }
   };
 
+  /**
+   * Sign in with ChatGPT: open Core's sign-in, send the browser to it,
+   * wait for the callback (`complete`, once per login id), then the same
+   * tail as the Codex sign-in. Needs no form: the provider card's
+   * 「用 ChatGPT 登录」 runs it too. Core takes over the ChatGPT provider,
+   * whichever sign-in it had before.
+   */
+  const handleChatGptPlanLogin = async () => {
+    if (
+      chatGptPlanLogin.phase === "starting" ||
+      chatGptPlanLogin.phase === "waiting"
+    ) {
+      return;
+    }
+    dropChatGptPlanLogin();
+    const attempt = chatGptPlanAttemptRef.current;
+    const knownProviderIds = new Set(providers.map((item) => item.id));
+    const failed = (e: unknown) => {
+      const failure = chatGptPlanLoginFailure(e, {
+        plan: planCopy,
+        models: modelCopy,
+      });
+      setChatGptPlanLogin(
+        failure.kind === "reset"
+          ? CHATGPT_PLAN_LOGIN_IDLE
+          : { phase: "error", message: failure.message },
+      );
+    };
+    setChatGptPlanLogin({ phase: "starting" });
+    let start: ChatGptPlanLoginStart;
+    try {
+      start = await startChatGptPlanLogin();
+    } catch (e) {
+      if (attempt === chatGptPlanAttemptRef.current) failed(e);
+      return;
+    }
+    if (attempt !== chatGptPlanAttemptRef.current) {
+      // Cancelled while it was being opened.
+      void cancelChatGptPlanLogin(start.loginId).catch(() => undefined);
+      return;
+    }
+    chatGptPlanLoginIdRef.current = start.loginId;
+    setChatGptPlanLogin({ phase: "waiting", loginId: start.loginId });
+    try {
+      // `authUrl` may carry id_token_hint: it goes to the browser and
+      // nowhere else — not into a log, not into an error message.
+      await openUrl(start.authUrl);
+    } catch {
+      if (attempt !== chatGptPlanAttemptRef.current) return;
+      dropChatGptPlanLogin();
+      setChatGptPlanLogin({ phase: "error", message: modelCopy.actionFailed });
+      return;
+    }
+    let finished: Awaited<ReturnType<typeof finishChatGptPlanSignIn>>;
+    try {
+      // Signed in even when the surface moved on meanwhile: the store and
+      // the plan status follow either way.
+      finished = await finishChatGptPlanSignIn(
+        {
+          complete: completeChatGptPlanLoginOnce,
+          loadManagedModels,
+          refreshStatus: useChatGptPlanStore.getState().refreshStatus,
+        },
+        start.loginId,
+        planCopy,
+      );
+    } catch (e) {
+      if (attempt !== chatGptPlanAttemptRef.current) return;
+      chatGptPlanLoginIdRef.current = null;
+      failed(e);
+      return;
+    }
+    if (attempt !== chatGptPlanAttemptRef.current) return;
+    chatGptPlanLoginIdRef.current = null;
+    if (finished.failure !== null) {
+      // Signed in, but the connection test Core ran right after did not
+      // pass (a plan Galley can't use, say): stay here — onboarding on
+      // its step, Settings with the editor open — and say why. Core kept
+      // the provider and the credential; signing in again or signing out
+      // go on from here.
+      setChatGptPlanLogin({ phase: "error", message: finished.failure });
+      return;
+    }
+    setChatGptPlanLogin(CHATGPT_PLAN_LOGIN_IDLE);
+    useChatGptPlanStore.getState().requestNotice();
+    // Close the ChatGPT form it ran in — not a form for another provider
+    // the user opened while the browser was out (a card's sign-in).
+    if (
+      postSaveForm === "reset" &&
+      visibleProviderFormRef.current?.authKind === "chatgpt_codex_oauth"
+    ) {
+      resetProviderForm();
+    }
+    onCodexComplete?.(finished.providerId, {
+      isNewProvider: !knownProviderIds.has(finished.providerId),
+    });
+  };
+
   const handleCodexLogin = async () => {
     if (
       !visibleProviderForm ||
@@ -799,16 +968,48 @@ export function useProviderSetupController({
     ) {
       return;
     }
+    const providerId = visibleProviderForm.id;
     setCodexLoginStart(null);
     setProviderFormProbeState({ kind: "loading", action: "provider-test" });
     try {
-      await logoutChatGptCodexProvider(visibleProviderForm.id);
+      // Which sign-in is being signed out of: only a Sign in with ChatGPT
+      // credential that still had tokens is revoked, so only then does
+      // an unconfirmed revocation mean anything.
+      const before = providerId
+        ? await getChatGptPlanStatus(providerId).catch(
+            () => useChatGptPlanStore.getState().statusByProvider[providerId],
+          )
+        : undefined;
+      // Dispatches by the stored flow: SIWC revokes, Codex deletes locally.
+      const result = await logoutChatGptPlan(providerId);
       await loadManagedModels();
+      if (providerId) {
+        void useChatGptPlanStore.getState().refreshStatus(providerId);
+      }
       setProviderFormProbeState({
         kind: "success",
         action: "provider-test",
         message: modelCopy.codexSignedOut,
       });
+      if (
+        before?.flow === "siwc" &&
+        before.signedIn &&
+        !result.remoteRevokeConfirmed
+      ) {
+        useUiStore.getState().pushToast(
+          makeAppError({
+            id: "chatgpt-plan-revoke-unconfirmed",
+            category: "business",
+            severity: "warning",
+            title: modelCopy.codexSignedOut,
+            message: planCopy.signedOutRevokeUnconfirmed,
+            hint: null,
+            retryable: false,
+            context: "logout_chatgpt_plan",
+            traceback: null,
+          }),
+        );
+      }
     } catch (e) {
       setProviderFormProbeState({
         kind: "error",
@@ -825,7 +1026,9 @@ export function useProviderSetupController({
     canSaveProvider,
     canTestProvider,
     cancelClearProviderKey,
+    cancelChatGptPlanSignIn,
     cancelNoAuthSave,
+    chatGptPlanLogin,
     clearKeyConfirmOpen,
     codexLoginStart,
     codexPolling,
@@ -835,6 +1038,7 @@ export function useProviderSetupController({
     connectionVerified,
     editingProviderIsNoAuth: editingProvider?.authKind === "none",
     noAuthConfirmOpen,
+    handleChatGptPlanLogin,
     handleCodexCompleteLogin,
     handleCodexImport,
     handleCodexLogin,

@@ -1,7 +1,12 @@
 import { useState } from "react";
 
-export function useProviderExpansion() {
-  const [expandedProviderIds, setExpandedProviderIds] = useState<string[]>([]);
+/** `initialExpanded`: the cards open on arrival (Settings asked for with
+ * the ChatGPT card open, SIWC ticket 04); read once, on mount. */
+export function useProviderExpansion(
+  initialExpanded: () => string[] = () => [],
+) {
+  const [expandedProviderIds, setExpandedProviderIds] =
+    useState<string[]>(initialExpanded);
 
   const expandProvider = (id: string) => {
     setExpandedProviderIds((current) =>
