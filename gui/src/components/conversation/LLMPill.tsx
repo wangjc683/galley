@@ -2,6 +2,7 @@ import * as Popover from "@radix-ui/react-popover";
 import { Check, Gear } from "@phosphor-icons/react";
 import { Fragment } from "react";
 
+import { ChatGptMark } from "@/components/conversation/ChatGptPlanMark";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { CHATGPT_USAGE_URL } from "@/lib/chatgpt-plan";
 import { useCopy } from "@/lib/i18n";
@@ -49,6 +50,7 @@ export function LLMPill({
   phraseLead = false,
   popoverAlign = "start",
   chatGptPlanKeys,
+  planLogo = false,
 }: {
   llmDisplayName: string;
   llms?: ComposerLLMOption[];
@@ -74,11 +76,15 @@ export function LLMPill({
    * not read as hanging from the pill (ruling 76; centred, it stays
    * inside the row on both sides). */
   popoverAlign?: "start" | "center";
-  /** SIWC 票 04 临时切换器 variant A: the `key`s of the models that
+  /** SIWC 票 04 临时切换器 step 1: the `key`s of the models that
    * spend the ChatGPT plan; each run of them gets a header row,
-   * 「ChatGPT 套餐 · 管理用量」. Absent = no header (variant B, or no
-   * plan models). */
+   * 「ChatGPT 订阅 · 管理用量」. Absent = no header (steps 2 and 3, or
+   * the current model is not on the plan). */
   chatGptPlanKeys?: ReadonlySet<string>;
+  /** SIWC 票 04 临时切换器 step 1: the current model is on the ChatGPT
+   * plan — a 13px ChatGPT mark in ink-muted before its name, and
+   * 「使用 ChatGPT 订阅」 as the tooltip's second line. */
+  planLogo?: boolean;
 }) {
   const copy = useCopy();
   const footerHint = llmConfigHint ?? copy.app.externalModelHint;
@@ -136,9 +142,19 @@ export function LLMPill({
     );
   }
 
+  // SIWC 票 04 临时切换器 step 1: the verb, then what the mark means.
+  const tooltip = planLogo ? (
+    <span className="flex flex-col gap-1">
+      <span>{title}</span>
+      <span>{copy.chatgptPlan.usingPlan}</span>
+    </span>
+  ) : (
+    title
+  );
+
   return (
     <Popover.Root>
-      <TooltipLabel text={title}>
+      <TooltipLabel text={tooltip}>
         <Popover.Trigger asChild>
           <button
             type="button"
@@ -153,6 +169,7 @@ export function LLMPill({
                 other didn't. Neither does now; the hover box + tooltip
                 are the affordance, as they already were for the model
                 name since 09-22. */}
+            {planLogo && <ChatGptMark className="size-[13px] text-ink-muted" />}
             <span className="min-w-0 truncate">{llmDisplayName}</span>
           </button>
         </Popover.Trigger>
@@ -245,7 +262,7 @@ export function LLMPill({
               </Popover.Close>
             );
             if (!planHeader) return row;
-            // SIWC 票 04 临时切换器 variant A: the plan's header, in the
+            // SIWC 票 04 临时切换器 step 1: the plan's header, in the
             // action register (11px) — the popover keeps its two type
             // sizes, content and actions.
             return (

@@ -181,6 +181,7 @@ export const enCopy: AppCopy = {
       `Signed in with ChatGPT, but the connection test failed: ${detail}`,
     manageUsage: "Manage usage",
     planLabel: "ChatGPT plan",
+    usingPlan: "Using your ChatGPT plan",
     signedOutRevokeUnconfirmed:
       "Signed out. ChatGPT didn't confirm the revocation; you can disconnect Galley in your ChatGPT settings.",
     noticeTitle: "You're using your ChatGPT plan.",

@@ -170,6 +170,7 @@ export const zhCopy = {
       `已用 ChatGPT 登录，但测试连接没有通过：${detail}`,
     manageUsage: "管理用量",
     planLabel: "ChatGPT 订阅",
+    usingPlan: "使用 ChatGPT 订阅",
     signedOutRevokeUnconfirmed:
       "已退出登录；远端撤销未确认，可在 ChatGPT 设置里断开 Galley。",
     noticeTitle: "你正在使用 ChatGPT 订阅",

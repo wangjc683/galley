@@ -13,18 +13,20 @@ import {
  */
 
 const VARIANT_LABELS: Record<PlanMarkVariant, string> = {
-  A: "A 菜单里",
-  B: "B 输入框",
+  "1": "1 标志",
+  "2": "2 右端",
+  "3": "3 徽标",
 };
 
 const VARIANT_TITLES: Record<PlanMarkVariant, string> = {
-  A: "A：只在模型菜单里，ChatGPT 套餐的模型上方写「ChatGPT 套餐 · 管理用量」",
-  B: "B：会话用的是 ChatGPT 套餐的模型时，输入框的模型短语后面跟淡色的「ChatGPT 套餐」",
+  "1": "1 标志：模型名前一个 ChatGPT 标志，悬停提示加一行「使用 ChatGPT 订阅」，模型菜单里保留「ChatGPT 订阅 · 管理用量」",
+  "2": "2 右端：发送键左边写「ChatGPT 订阅」，点开管理用量",
+  "3": "3 徽标：模型短语后面一个杏色底的「ChatGPT 订阅」标签，点开管理用量",
 };
 
 /**
- * The trial's pill: 「套餐标识 A B」 picks where the ChatGPT plan mark
- * sits, one click, stored (plan-mark-trial.ts). Portalled to <body> with
+ * The trial's pill: 「订阅标识 1 2 3」 picks how the ChatGPT plan mark
+ * looks, one click, stored (plan-mark-trial.ts). Portalled to <body> with
  * `pointer-events: auto` above every overlay tier, so an open menu or
  * dialog never blocks it; under the main header's right end, where the
  * earlier trial pills sat. App renders it only in a dev build, in the
@@ -36,12 +38,12 @@ export function PlanMarkTrialSwitcher() {
   return createPortal(
     <div
       role="group"
-      aria-label="临时切换器：ChatGPT 套餐标识"
+      aria-label="临时切换器：ChatGPT 订阅标识"
       data-role="plan-mark-trial-pill"
       style={{ pointerEvents: "auto" }}
       className="fixed right-3 top-[50px] z-[1000] flex items-center gap-1 rounded-full border border-dashed border-warning/70 bg-elevated py-0.5 pl-2.5 pr-1 text-ui-label text-ink-soft shadow-card"
     >
-      <span className="select-none">临时 · 套餐标识</span>
+      <span className="select-none">临时 · 订阅标识</span>
       {PLAN_MARK_VARIANTS.map((value) => (
         <button
           key={value}

@@ -1000,9 +1000,9 @@ function App() {
           right after the sign-in). */}
       <ChatGptPlanNoticeDialog />
 
-      {/* SIWC 票 04 临时切换器，定档后拆掉。Where the ChatGPT plan mark
-          sits (model menu / after the composer's phrase), in a dev build
-          of the managed runtime. */}
+      {/* SIWC 票 04 临时切换器，定档后拆掉。How the ChatGPT plan mark
+          looks (1 标志 / 2 右端 / 3 徽标), in a dev build of the managed
+          runtime. */}
       {import.meta.env.DEV && activeRuntimeKind === "managed" && (
         <PlanMarkTrialSwitcher />
       )}
