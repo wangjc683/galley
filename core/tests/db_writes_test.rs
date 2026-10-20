@@ -76,6 +76,7 @@ const MIG_048: &str = include_str!("../migrations/048_subtasks.sql");
 const MIG_049: &str = include_str!("../migrations/049_scheduled_tasks_once_and_wake.sql");
 const MIG_050: &str = include_str!("../migrations/050_todos.sql");
 const MIG_051: &str = include_str!("../migrations/051_cancelled_by.sql");
+const MIG_052: &str = include_str!("../migrations/052_provider_auth_kind_none.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -112,6 +113,14 @@ async fn fresh_file_pool() -> (tempfile::TempDir, SqlitePool) {
 }
 
 async fn run_migrations(pool: &SqlitePool) {
+    run_migrations_through_051(pool).await;
+    sqlx::raw_sql(MIG_052)
+        .execute(pool)
+        .await
+        .expect("run migration");
+}
+
+async fn run_migrations_through_051(pool: &SqlitePool) {
     for sql in [
         MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
@@ -650,6 +659,476 @@ async fn migration_042_lifts_a_shared_tier_and_keeps_an_existing_defaults_pref()
         managed_model_column_json(&pool, "mm_a", "advanced_options").await,
         serde_json::json!({"max_retries": 5, "read_timeout": 300, "stream": false, "reasoning_effort": "high"})
     );
+}
+
+// ---------------- managed provider auth kind 'none' (052) ----------------
+
+/// A stored CREATE statement with its layout taken out: whitespace runs
+/// collapse to one space, and the spaces next to `(`, `)` and `,` go. A
+/// table written with every column inline and the same table grown by
+/// ALTER TABLE ADD COLUMN then compare equal.
+fn normalized_create_sql(sql: &str) -> String {
+    let collapsed = sql.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut out = String::with_capacity(collapsed.len());
+    for ch in collapsed.chars() {
+        if matches!(ch, '(' | ')' | ',') && out.ends_with(' ') {
+            out.pop();
+        }
+        if ch == ' ' && (out.ends_with('(') || out.ends_with(')') || out.ends_with(',')) {
+            continue;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+async fn text_rows(pool: &SqlitePool, sql: &str, bind: &str) -> Vec<String> {
+    sqlx::query_scalar(sql)
+        .bind(bind)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_else(|e| panic!("{sql}: {e}"))
+}
+
+/// Everything SQLite records about `table` but its rootpages, one line each:
+/// the CREATE statement (normalized), every column, foreign key and index
+/// (an index's own statement verbatim, then its columns), and every row with
+/// its rowid, each value through quote() so a changed type would show too.
+async fn table_snapshot(pool: &SqlitePool, table: &str) -> Vec<String> {
+    let create: String =
+        sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?")
+            .bind(table)
+            .fetch_one(pool)
+            .await
+            .expect("table sql");
+    let mut lines = vec![format!("table: {}", normalized_create_sql(&create))];
+    for line in text_rows(
+        pool,
+        "SELECT quote(cid) || '|' || quote(name) || '|' || quote(type) || '|' || \
+                quote(\"notnull\") || '|' || quote(dflt_value) || '|' || quote(pk) || '|' || \
+                quote(hidden) \
+         FROM pragma_table_xinfo(?) ORDER BY cid",
+        table,
+    )
+    .await
+    {
+        lines.push(format!("column: {line}"));
+    }
+    for line in text_rows(
+        pool,
+        "SELECT quote(id) || '|' || quote(seq) || '|' || quote(\"table\") || '|' || \
+                quote(\"from\") || '|' || quote(\"to\") || '|' || quote(on_update) || '|' || \
+                quote(on_delete) || '|' || quote(\"match\") \
+         FROM pragma_foreign_key_list(?) ORDER BY id, seq",
+        table,
+    )
+    .await
+    {
+        lines.push(format!("foreign key: {line}"));
+    }
+    let index_names = text_rows(
+        pool,
+        "SELECT name FROM pragma_index_list(?) ORDER BY name",
+        table,
+    )
+    .await;
+    for index in index_names {
+        let (unique, origin, partial, sql): (i64, String, i64, Option<String>) = sqlx::query_as(
+            "SELECT il.\"unique\", il.origin, il.partial, m.sql \
+             FROM pragma_index_list(?) il \
+             LEFT JOIN sqlite_master m ON m.type = 'index' AND m.name = il.name \
+             WHERE il.name = ?",
+        )
+        .bind(table)
+        .bind(&index)
+        .fetch_one(pool)
+        .await
+        .expect("index row");
+        lines.push(format!(
+            "index: {index}|unique={unique}|origin={origin}|partial={partial}|{sql:?}"
+        ));
+        for line in text_rows(
+            pool,
+            "SELECT quote(seqno) || '|' || quote(cid) || '|' || quote(name) || '|' || \
+                    quote(\"desc\") || '|' || quote(coll) || '|' || quote(key) \
+             FROM pragma_index_xinfo(?) ORDER BY seqno",
+            &index,
+        )
+        .await
+        {
+            lines.push(format!("index column: {index}|{line}"));
+        }
+    }
+    let columns = text_rows(
+        pool,
+        "SELECT name FROM pragma_table_info(?) ORDER BY cid",
+        table,
+    )
+    .await;
+    let values = columns
+        .iter()
+        .map(|c| format!("quote(\"{c}\")"))
+        .collect::<Vec<_>>()
+        .join(" || '|' || ");
+    let rows: Vec<String> = sqlx::query_scalar(&format!(
+        "SELECT quote(rowid) || '|' || {values} FROM \"{table}\" ORDER BY rowid"
+    ))
+    .fetch_all(pool)
+    .await
+    .expect("table rows");
+    lines.extend(rows.into_iter().map(|row| format!("row: {row}")));
+    lines
+}
+
+/// One connection, so a PRAGMA set on it holds for every later statement.
+async fn single_connection_pool_through_051() -> SqlitePool {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .expect("open in-memory sqlite");
+    run_migrations_through_051(&pool).await;
+    pool
+}
+
+async fn seed_051_provider(pool: &SqlitePool, id: &str, protocol: &str, auth_kind: &str) {
+    sqlx::query(
+        "INSERT INTO managed_model_providers (
+           id, display_name, protocol, api_base, api_key_ref, created_at, updated_at, auth_kind
+         ) VALUES (?, ?, ?, ?, ?, '2026-09-01T00:00:00Z', '2026-10-01T00:00:00Z', ?)",
+    )
+    .bind(id)
+    .bind(format!("{id} provider"))
+    .bind(protocol)
+    .bind(format!("https://{id}.example/v1"))
+    .bind(format!("managed-provider:{id}"))
+    .bind(auth_kind)
+    .execute(pool)
+    .await
+    .expect("seed provider");
+}
+
+async fn seed_051_model(
+    pool: &SqlitePool,
+    id: &str,
+    provider_id: &str,
+    is_default: bool,
+    sort_order: i64,
+    last_validated_at: Option<&str>,
+    preset_options: &str,
+    advanced_options: &str,
+) {
+    sqlx::query(
+        "INSERT INTO managed_models (
+           id, provider_id, display_name, model, advanced_options, is_default,
+           last_validated_at, created_at, updated_at, sort_order, preset_options
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, '2026-09-02T00:00:00Z', '2026-10-02T00:00:00Z', ?, ?)",
+    )
+    .bind(id)
+    .bind(provider_id)
+    .bind(format!("{id} model"))
+    .bind(format!("{id}-name"))
+    .bind(advanced_options)
+    .bind(is_default)
+    .bind(last_validated_at)
+    .bind(sort_order)
+    .bind(preset_options)
+    .execute(pool)
+    .await
+    .expect("seed model");
+}
+
+async fn run_052_as_sqlx_does(pool: &SqlitePool) {
+    // SQLx applies a migration inside one transaction. Foreign keys stay
+    // enforced in there (PRAGMA foreign_keys = OFF would be a no-op), so a
+    // DROP of the parent table with the models still in place cascades.
+    let mut tx = pool.begin().await.expect("begin");
+    let foreign_keys: i64 = sqlx::query_scalar("PRAGMA foreign_keys")
+        .fetch_one(&mut *tx)
+        .await
+        .expect("read foreign_keys");
+    assert_eq!(
+        foreign_keys, 1,
+        "the cascade hazard must be live in this test"
+    );
+    sqlx::raw_sql(MIG_052)
+        .execute(&mut *tx)
+        .await
+        .expect("run 052 migration");
+    tx.commit().await.expect("commit 052");
+}
+
+async fn assert_db_consistent(pool: &SqlitePool) {
+    let violations: Vec<(String,)> =
+        sqlx::query_as("SELECT \"table\" FROM pragma_foreign_key_check")
+            .fetch_all(pool)
+            .await
+            .expect("foreign_key_check");
+    assert!(
+        violations.is_empty(),
+        "foreign key violations: {violations:?}"
+    );
+    let integrity: String = sqlx::query_scalar("PRAGMA integrity_check")
+        .fetch_one(pool)
+        .await
+        .expect("integrity_check");
+    assert_eq!(integrity, "ok");
+}
+
+const NO_AUTH_PROVIDER_INSERT: &str = "INSERT INTO managed_model_providers (
+       id, display_name, protocol, api_base, api_key_ref, created_at, updated_at, auth_kind
+     ) VALUES ('mp_local', 'Ollama', 'openai', 'http://localhost:11434/v1',
+               'managed-provider:mp_local', 't', 't', 'none')";
+
+/// Ticket chatgpt-siwc 01: a DB at 051 with two providers, models on both
+/// (one the default), the advanced layers and the defaults pref; rowids with
+/// gaps, as deletes leave them. After 052 both tables are what they were,
+/// rows, rowids, columns, foreign key and indexes, but for the one CHECK.
+#[tokio::test]
+async fn migration_052_widens_the_auth_kind_check_and_keeps_both_tables_as_they_were() {
+    let pool = single_connection_pool_through_051().await;
+    seed_051_provider(&pool, "mp_dropped", "openai", "api_key").await;
+    seed_051_provider(&pool, "mp_relay", "anthropic", "api_key").await;
+    seed_051_provider(&pool, "mp_codex", "openai", "chatgpt_codex_oauth").await;
+    seed_051_model(
+        &pool,
+        "mm_dropped",
+        "mp_dropped",
+        false,
+        3,
+        None,
+        "{}",
+        "{}",
+    )
+    .await;
+    seed_051_model(
+        &pool,
+        "mm_relay_default",
+        "mp_relay",
+        true,
+        0,
+        Some("2026-10-03T00:00:00Z"),
+        r#"{"context_win":90000,"thinking_type":"adaptive","read_timeout":180}"#,
+        r#"{"read_timeout":42,"reasoning_effort":null}"#,
+    )
+    .await;
+    seed_051_model(
+        &pool,
+        "mm_relay_b",
+        "mp_relay",
+        false,
+        1,
+        None,
+        r#"{"context_win":90000,"stream":false}"#,
+        "{}",
+    )
+    .await;
+    seed_051_model(
+        &pool,
+        "mm_codex",
+        "mp_codex",
+        false,
+        2,
+        Some("2026-10-04T00:00:00Z"),
+        r#"{"api_mode":"responses","codex_backend":true}"#,
+        r#"{"reasoning_effort":"xhigh"}"#,
+    )
+    .await;
+    // Deleting a provider takes its model with it (ON DELETE CASCADE),
+    // leaving a rowid gap in both tables.
+    sqlx::query("DELETE FROM managed_model_providers WHERE id = 'mp_dropped'")
+        .execute(&pool)
+        .await
+        .expect("delete provider");
+    sqlx::query(
+        "INSERT INTO prefs (key, value, updated_at) \
+         VALUES ('managed_model_defaults', '{\"read_timeout\":300}', 'x')",
+    )
+    .execute(&pool)
+    .await
+    .expect("seed defaults pref");
+
+    // Before 052 the CHECK turns a no-auth provider away: the bug.
+    let refused = sqlx::query(NO_AUTH_PROVIDER_INSERT)
+        .execute(&pool)
+        .await
+        .expect_err("051 refuses auth_kind 'none'");
+    assert!(
+        refused.to_string().contains("CHECK constraint failed"),
+        "{refused}"
+    );
+
+    let providers_before = table_snapshot(&pool, "managed_model_providers").await;
+    let models_before = table_snapshot(&pool, "managed_models").await;
+    // Not vacuous: 2 provider rows, 3 model rows (rowids 2..4), the
+    // foreign key, 1 + 2 auto provider indexes, 4 + 1 auto model indexes.
+    fn count(lines: &[String], prefix: &str) -> usize {
+        lines.iter().filter(|l| l.starts_with(prefix)).count()
+    }
+    assert_eq!(count(&providers_before, "row: "), 2);
+    assert_eq!(count(&models_before, "row: "), 3);
+    assert!(models_before
+        .iter()
+        .any(|l| l.starts_with("row: 2|'mm_relay_default'")));
+    assert_eq!(count(&models_before, "foreign key: "), 1);
+    assert_eq!(count(&providers_before, "index: "), 3);
+    assert_eq!(count(&models_before, "index: "), 5);
+
+    run_052_as_sqlx_does(&pool).await;
+
+    assert_eq!(table_snapshot(&pool, "managed_models").await, models_before);
+    let old_check = "'chatgpt_codex_oauth')";
+    assert_eq!(
+        providers_before[0].matches(old_check).count(),
+        1,
+        "{}",
+        providers_before[0]
+    );
+    let mut providers_expected = providers_before.clone();
+    providers_expected[0] = providers_before[0].replace(old_check, "'chatgpt_codex_oauth','none')");
+    assert_eq!(
+        table_snapshot(&pool, "managed_model_providers").await,
+        providers_expected
+    );
+    assert_eq!(
+        managed_model_defaults_pref(&pool).await,
+        Some(serde_json::json!({"read_timeout": 300}))
+    );
+    assert_db_consistent(&pool).await;
+
+    // After 052 the same insert goes in.
+    sqlx::query(NO_AUTH_PROVIDER_INSERT)
+        .execute(&pool)
+        .await
+        .expect("052 accepts auth_kind 'none'");
+}
+
+/// A model whose provider is gone can only have been written with foreign
+/// keys off. Copying it back under enforcement would abort 052 and Galley's
+/// startup; it was never readable (every read JOINs the provider), so 052
+/// leaves it out and keeps every other row.
+#[tokio::test]
+async fn migration_052_leaves_out_a_model_whose_provider_is_gone() {
+    let pool = single_connection_pool_through_051().await;
+    seed_051_provider(&pool, "mp_relay", "anthropic", "api_key").await;
+    seed_051_model(&pool, "mm_kept", "mp_relay", true, 0, None, "{}", "{}").await;
+    sqlx::raw_sql("PRAGMA foreign_keys = OFF;")
+        .execute(&pool)
+        .await
+        .expect("foreign keys off");
+    seed_051_model(&pool, "mm_orphan", "mp_missing", false, 1, None, "{}", "{}").await;
+    sqlx::raw_sql("PRAGMA foreign_keys = ON;")
+        .execute(&pool)
+        .await
+        .expect("foreign keys on");
+
+    run_052_as_sqlx_does(&pool).await;
+
+    let ids: Vec<String> = sqlx::query_scalar("SELECT id FROM managed_models ORDER BY id")
+        .fetch_all(&pool)
+        .await
+        .expect("model ids");
+    assert_eq!(ids, vec!["mm_kept".to_string()]);
+    assert_db_consistent(&pool).await;
+}
+
+/// The no-auth provider through the real write and read path, on a schema
+/// with 052: it saves, reads back, carries a model, switches kind and
+/// deletes; the two older kinds behave as before, and the CHECK still turns
+/// an unknown kind away.
+#[tokio::test]
+async fn no_auth_provider_saves_reads_back_and_deletes() {
+    let pool = fresh_pool().await;
+    let galley = SqliteGalley::from_pool(pool.clone());
+    let provider = |id: &str, auth_kind: ManagedModelAuthKind| UpsertManagedModelProviderMetadata {
+        id: id.into(),
+        display_name: format!("{id} provider"),
+        protocol: ManagedModelProtocol::Openai,
+        auth_kind,
+        api_base: format!("https://{id}.example/v1"),
+        api_key_ref: format!("managed-provider:{id}"),
+    };
+    for (id, auth_kind) in [
+        ("mp_key", ManagedModelAuthKind::ApiKey),
+        ("mp_codex", ManagedModelAuthKind::ChatgptCodexOauth),
+        ("mp_local", ManagedModelAuthKind::None),
+    ] {
+        let saved = galley
+            .upsert_managed_model_provider_metadata(provider(id, auth_kind))
+            .await
+            .unwrap_or_else(|e| panic!("save {id}: {e}"));
+        assert_eq!(saved.auth_kind, auth_kind, "{id}");
+    }
+
+    let listed = galley
+        .list_managed_model_providers()
+        .await
+        .expect("list providers");
+    let kind_of = |id: &str| listed.iter().find(|p| p.id == id).map(|p| p.auth_kind);
+    assert_eq!(kind_of("mp_key"), Some(ManagedModelAuthKind::ApiKey));
+    assert_eq!(
+        kind_of("mp_codex"),
+        Some(ManagedModelAuthKind::ChatgptCodexOauth)
+    );
+    assert_eq!(kind_of("mp_local"), Some(ManagedModelAuthKind::None));
+    // No secret row, and none needed.
+    let local = listed.iter().find(|p| p.id == "mp_local").unwrap();
+    assert!(matches!(
+        local.credential_status,
+        ManagedModelCredentialStatus::Present
+    ));
+    let keyed = listed.iter().find(|p| p.id == "mp_key").unwrap();
+    assert!(matches!(
+        keyed.credential_status,
+        ManagedModelCredentialStatus::Missing
+    ));
+
+    let model = galley
+        .upsert_managed_model_metadata(UpsertManagedModelMetadata {
+            id: "mm_local".into(),
+            provider_id: "mp_local".into(),
+            display_name: "Qwen".into(),
+            model: "qwen3:32b".into(),
+            preset_options: Some(serde_json::json!({"api_mode": "chat_completions"})),
+            advanced_overrides: Some(serde_json::json!({})),
+            make_default: true,
+        })
+        .await
+        .expect("save a model on the no-auth provider");
+    assert_eq!(model.auth_kind, ManagedModelAuthKind::None);
+
+    // An existing key provider can become no-auth (the clear-key save) and
+    // go back.
+    for auth_kind in [ManagedModelAuthKind::None, ManagedModelAuthKind::ApiKey] {
+        let saved = galley
+            .upsert_managed_model_provider_metadata(provider("mp_key", auth_kind))
+            .await
+            .expect("switch auth kind");
+        assert_eq!(saved.auth_kind, auth_kind);
+    }
+
+    let removed = galley
+        .delete_managed_model_provider_metadata("mp_local")
+        .await
+        .expect("delete the no-auth provider");
+    assert_eq!(removed.as_deref(), Some("managed-provider:mp_local"));
+    let listed = galley
+        .list_managed_model_providers()
+        .await
+        .expect("list providers");
+    assert!(listed.iter().all(|p| p.id != "mp_local"));
+    assert!(galley
+        .list_managed_models()
+        .await
+        .expect("list models")
+        .is_empty());
+
+    let bogus = "INSERT INTO managed_model_providers (
+                   id, display_name, protocol, api_base, api_key_ref, created_at, updated_at,
+                   auth_kind
+                 ) VALUES ('mp_bogus', 'x', 'openai', 'x', 'managed-provider:mp_bogus', 't', 't',
+                           'bogus')";
+    assert!(sqlx::query(bogus).execute(&pool).await.is_err());
 }
 
 #[tokio::test]

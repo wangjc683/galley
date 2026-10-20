@@ -317,5 +317,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/051_cancelled_by.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 52,
+            description: "managed providers: auth_kind may be 'none' (no-auth provider)",
+            sql: include_str!("../migrations/052_provider_auth_kind_none.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
