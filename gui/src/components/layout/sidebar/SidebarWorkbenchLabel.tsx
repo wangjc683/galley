@@ -1,5 +1,12 @@
 import { useCopy } from "@/lib/i18n";
 
+// 票 68 临时切换器，定档后由拆除票删掉。
+import {
+  labelLineClass,
+  useWorkbenchLabelTrial,
+} from "./label-trial/label-trial";
+import { SidebarWorkbenchLabelTrial } from "./label-trial/SidebarWorkbenchLabelTrial";
+
 /*
  * The workbench's name, 「工作台 ━━━━」 (main chat PRD rulings 114, 118
  * point 5; ticket 62 picked C). With a main chat the sidebar has two
@@ -37,6 +44,13 @@ const WORKBENCH_GROUND =
 /** 「工作台」 on the strong line between the card block and the list. */
 export function SidebarWorkbenchLabel() {
   const copy = useCopy();
+  // 票 68 临时切换器，定档后由拆除票删掉：A and B take the word out of
+  // the line's gap (label-trial/SidebarWorkbenchLabelTrial); the line
+  // tier picks today's line-strong or line, in every tier.
+  const trial = useWorkbenchLabelTrial();
+  if (trial.tier !== "now") {
+    return <SidebarWorkbenchLabelTrial tier={trial.tier} line={trial.line} />;
+  }
   return (
     <div
       data-sidebar-zone-label="workbench"
@@ -44,7 +58,11 @@ export function SidebarWorkbenchLabel() {
       style={{ background: WORKBENCH_GROUND }}
     >
       <span className={TEXT}>{copy.sidebar.zoneWorkbench}</span>
-      <span aria-hidden className="h-px min-w-0 flex-1 bg-line-strong" />
+      {/* 票 68 临时切换器，定档后由拆除票删掉：the line tier's colour. */}
+      <span
+        aria-hidden
+        className={`h-px min-w-0 flex-1 ${labelLineClass(trial.line)}`}
+      />
     </div>
   );
 }
