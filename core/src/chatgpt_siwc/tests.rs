@@ -1270,48 +1270,77 @@ fn model_record(model: &str, display_name: &str) -> ManagedModelRecord {
     }
 }
 
-#[test]
-fn sign_in_moves_an_unoffered_slug_to_the_default() {
-    let visible = vec!["gpt-6-sol".to_string(), SIWC_DEFAULT_MODEL.to_string()];
-    let upsert = plan_model_upsert(Some(&model_record("gpt-5.5", "gpt-5.5")), Some(&visible));
-    assert_eq!(upsert.id, CODEX_MODEL_ID);
-    assert_eq!(upsert.model, SIWC_DEFAULT_MODEL);
-    assert_eq!(upsert.display_name, SIWC_DEFAULT_MODEL);
-    // The stored option layers are kept.
-    assert!(upsert.preset_options.is_none());
-    assert!(upsert.advanced_overrides.is_none());
-
-    let renamed = plan_model_upsert(Some(&model_record("gpt-5.5", "Work model")), Some(&visible));
-    assert_eq!(renamed.model, SIWC_DEFAULT_MODEL);
-    assert_eq!(renamed.display_name, "Work model");
+/// The visible catalog in the order the probe saw it (2026-10-20).
+fn probe_catalog() -> Vec<String> {
+    [
+        "gpt-6.1-sol",
+        "gpt-6-astra",
+        "gpt-6-sol",
+        "gpt-6-luna",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+    ]
+    .map(String::from)
+    .to_vec()
 }
 
 #[test]
-fn sign_in_keeps_an_offered_slug_or_one_it_cannot_check() {
-    let visible = vec!["gpt-6-sol".to_string(), SIWC_DEFAULT_MODEL.to_string()];
+fn sign_in_keeps_a_stored_slug_the_catalog_lists() {
+    let catalog = probe_catalog();
     let kept = plan_model_upsert(
-        Some(&model_record("gpt-6-sol", "gpt-6-sol")),
-        Some(&visible),
+        Some(&model_record("gpt-5.6-terra", "gpt-5.6-terra")),
+        Some(&catalog),
     );
-    assert_eq!(kept.model, "gpt-6-sol");
-    let unknown = plan_model_upsert(Some(&model_record("gpt-5.5", "gpt-5.5")), None);
-    assert_eq!(unknown.model, "gpt-5.5");
+    assert_eq!(kept.id, CODEX_MODEL_ID);
+    assert_eq!(kept.model, "gpt-5.6-terra");
+    assert_eq!(kept.display_name, "gpt-5.6-terra");
+    // The stored option layers are kept.
+    assert!(kept.preset_options.is_none());
+    assert!(kept.advanced_overrides.is_none());
+}
+
+#[test]
+fn sign_in_moves_an_unlisted_slug_to_the_first_visible_entry() {
+    let catalog = probe_catalog();
+    let moved = plan_model_upsert(Some(&model_record("gpt-5.5", "gpt-5.5")), Some(&catalog));
+    assert_eq!(moved.model, "gpt-6.1-sol");
+    assert_eq!(moved.display_name, "gpt-6.1-sol");
+    assert!(moved.preset_options.is_none());
+    assert!(moved.advanced_overrides.is_none());
+
+    // A user-chosen display name stays.
+    let renamed = plan_model_upsert(Some(&model_record("gpt-5.5", "Work model")), Some(&catalog));
+    assert_eq!(renamed.model, "gpt-6.1-sol");
+    assert_eq!(renamed.display_name, "Work model");
+
+    // The fallback model is not preferred over the catalog's order.
+    let new_record = plan_model_upsert(None, Some(&catalog));
+    assert_eq!(new_record.model, "gpt-6.1-sol");
+    assert_ne!(new_record.model, SIWC_DEFAULT_MODEL);
+}
+
+#[test]
+fn sign_in_without_a_catalog_keeps_the_stored_slug() {
+    let failed = plan_model_upsert(Some(&model_record("gpt-5.5", "gpt-5.5")), None);
+    assert_eq!(failed.model, "gpt-5.5");
+    assert_eq!(failed.display_name, "gpt-5.5");
     let empty = plan_model_upsert(Some(&model_record("gpt-5.5", "gpt-5.5")), Some(&[]));
     assert_eq!(empty.model, "gpt-5.5");
 }
 
 #[test]
-fn sign_in_creates_the_model_record_when_missing() {
-    let created = plan_model_upsert(None, None);
-    assert_eq!(created.model, SIWC_DEFAULT_MODEL);
-    assert_eq!(created.provider_id, CODEX_PROVIDER_ID);
-    assert!(created.preset_options.is_some());
-    assert!(!created.make_default);
-    let without_default = vec!["gpt-6-sol".to_string()];
-    assert_eq!(
-        plan_model_upsert(None, Some(&without_default)).model,
-        "gpt-6-sol"
-    );
+fn sign_in_without_a_catalog_or_record_uses_the_fallback_model() {
+    for created in [
+        plan_model_upsert(None, None),
+        plan_model_upsert(None, Some(&[])),
+    ] {
+        assert_eq!(created.model, SIWC_DEFAULT_MODEL);
+        assert_eq!(created.display_name, SIWC_DEFAULT_MODEL);
+        assert_eq!(created.provider_id, CODEX_PROVIDER_ID);
+        assert!(created.preset_options.is_some());
+        assert!(!created.make_default);
+    }
 }
 
 // ---------------------------------------------------------------------

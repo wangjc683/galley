@@ -265,6 +265,14 @@ parsing as before.
   `lastRefreshAt`, `lastRefreshError`). The registration (`hostId`,
   `clientId`, `idToken`, `sub`) lives under `chatgpt-siwc:registration` and
   survives sign-out and provider deletion.
+- **Model record** (JC, 2026-10-20): a sign-in takes over
+  `mm_chatgpt_codex_gpt_55`. Its slug is kept when the account's `/v1/models`
+  catalog lists it (`visibility == "list"`) — that is the user's choice;
+  otherwise it becomes the catalog's first visible entry, in the order the
+  API returns it (the probe saw `gpt-6.1-sol` first). When the catalog cannot
+  be fetched or is empty, the stored slug stays, and a record created then
+  gets the fallback `gpt-5.6-sol`. The display name follows the slug only if
+  it was just the old slug; the model's option settings are kept.
 - **Refresh**: the same per-`apiKeyRef` gate pattern as Codex OAuth, 120 s
   before expiry, `grant_type=refresh_token` + `client_id` + `refresh_token` +
   `resource`. Access token, rotated refresh token, expiry and scopes are

@@ -59,7 +59,9 @@ use secret::{read_registration, SiwcSecret};
 pub const SIWC_FLOW: &str = "siwc";
 /// Inference base for ChatGPT-plan requests (also the OAuth `resource`).
 pub const SIWC_API_BASE: &str = "https://api.openai.com/v1";
-/// The model a sign-in falls back to when the stored slug is not offered.
+/// Fallback model for a sign-in that creates the model record while the
+/// plan's catalog cannot be fetched or is empty. Normally the first entry
+/// the catalog lists is the default (JC, 2026-10-20).
 pub const SIWC_DEFAULT_MODEL: &str = "gpt-5.6-sol";
 
 const SIWC_ISSUER: &str = "https://auth.openai.com";
@@ -365,11 +367,14 @@ async fn persist_and_probe(
     })
 }
 
-/// The model record a sign-in writes: the existing `mm_chatgpt_codex_gpt_55`
-/// keeps its slug when the plan offers it, otherwise moves to
-/// [`SIWC_DEFAULT_MODEL`]. A display name that merely echoed the old slug
-/// follows the new one; a user-chosen name and the stored option layers
-/// are kept. Without a model list the stored slug stands.
+/// The model record a sign-in writes. `visible` is the plan catalog's
+/// `visibility == "list"` slugs in the order `/v1/models` returns them.
+/// The existing `mm_chatgpt_codex_gpt_55` keeps its slug when the catalog
+/// lists it (the user's choice); otherwise it moves to the catalog's first
+/// entry, the plan's default. Without a catalog (unreachable or empty) the
+/// stored slug stands, and a new record gets [`SIWC_DEFAULT_MODEL`]. A
+/// display name that merely echoed the old slug follows the new one; a
+/// user-chosen name and the stored option layers are kept.
 pub(super) fn plan_model_upsert(
     existing: Option<&ManagedModelRecord>,
     visible: Option<&[String]>,
@@ -383,13 +388,9 @@ pub(super) fn plan_model_upsert(
         (Some(current), Some(visible)) if visible.iter().any(|s| s == current) => {
             current.to_string()
         }
+        (_, Some(visible)) => visible[0].clone(),
         (Some(current), None) => current.to_string(),
-        (_, Some(visible)) if !visible.iter().any(|s| s == SIWC_DEFAULT_MODEL) => {
-            // The default itself is gone from the plan: take the first
-            // model the plan does list rather than one it will refuse.
-            visible[0].clone()
-        }
-        _ => SIWC_DEFAULT_MODEL.to_string(),
+        (None, None) => SIWC_DEFAULT_MODEL.to_string(),
     };
     match existing {
         Some(model) => {
