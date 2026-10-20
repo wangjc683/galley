@@ -218,7 +218,7 @@ Section 标签（2026-10-07 JC 裁）：
 | Stop | 停止 |
 | Back | 返回 |
 | Dismiss | 关闭 |
-| ChatGPT plan（Sign in with ChatGPT 用的套餐用量） | 「ChatGPT 订阅」：界面上一律这么叫（预设描述、首次登录说明、对话里的报错、输入框旁的标识、服务商卡片），英文版照 OpenAI 写 "ChatGPT plan"；「套餐」只在引用 OpenAI 原文时用（2026-10-20，[SIWC 票 04](../.scratch/chatgpt-siwc/issues/04-gui-continue-with-chatgpt.md)） |
+| ChatGPT plan（Sign in with ChatGPT 用的套餐用量） | 「ChatGPT 订阅」：界面上一律这么叫（预设描述、首次登录说明、对话里的报错、模型 pill 的悬停提示「使用 ChatGPT 订阅」、模型菜单底部的「ChatGPT 订阅 · 管理用量」、服务商卡片；输入框里的标识是 ChatGPT 标志，不写字），英文版照 OpenAI 写 "ChatGPT plan"；「套餐」只在引用 OpenAI 原文时用（2026-10-20，[SIWC 票 04](../.scratch/chatgpt-siwc/issues/04-gui-continue-with-chatgpt.md)） |
 
 ## 内核 / Engine（managed 引擎的用户可见称谓）
 

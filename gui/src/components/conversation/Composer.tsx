@@ -28,12 +28,6 @@ import {
 import { SavedPromptDialogs } from "@/components/conversation/SavedPromptDialogs";
 import { ComposerOneLine } from "@/components/conversation/ComposerOneLine";
 import {
-  ChatGptPlanEndMark,
-  ChatGptPlanTag,
-} from "@/components/conversation/ChatGptPlanMark";
-// SIWC 票 04 临时切换器，定档后拆掉。
-import { usePlanMarkVariant } from "@/components/conversation/plan-mark-trial/plan-mark-trial";
-import {
   COMPOSER_MAX_HEIGHT_PX,
   ONE_LINE_GHOST_CLASS,
   ONE_LINE_GHOST_STYLE,
@@ -128,18 +122,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     ref,
   ) {
     const copy = useCopy();
-    // Sign in with ChatGPT (.scratch/chatgpt-siwc ticket 04): OpenAI asks
-    // for a "ChatGPT plan" mark by the composer or the model picker, shown
-    // while this conversation's model is on the plan. SIWC 票 04 临时切换器
-    // (04b)：1 a mark in the model pill (+ the menu header), 2 the words at
-    // the toolbar's right end, 3 a tag after the 「模型 · 强度」 phrase.
-    const planMarkVariant = usePlanMarkVariant();
+    // Sign in with ChatGPT (.scratch/chatgpt-siwc decisions 13, 14): the
+    // models that spend the ChatGPT plan carry the ChatGPT mark before
+    // their name, in the model pill and in its menu (LLMPill).
     const chatGptPlanKeys = useChatGptPlanModelIds();
-    const currentModelOnPlan = !!llms?.some(
-      (llm) =>
-        llm.isCurrent && llm.key !== undefined && chatGptPlanKeys.has(llm.key),
-    );
-    const planMarkStep = currentModelOnPlan ? planMarkVariant : null;
     // Hybrid controlled / uncontrolled. When `value` prop is provided
     // we render it directly; otherwise we maintain an internal copy.
     // Avoid syncing prop -> internal in an effect (React 19 / Compiler
@@ -664,8 +650,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           stopMode={stopMode}
           phraseLead={reasoningEffort !== undefined}
           popoverAlign={popoverAlign}
-          chatGptPlanKeys={planMarkStep === "1" ? chatGptPlanKeys : undefined}
-          planLogo={planMarkStep === "1"}
+          chatGptPlanKeys={chatGptPlanKeys}
         />
         {reasoningEffort && (
           <>
@@ -682,13 +667,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             />
           </>
         )}
-        {/* SIWC 票 04 临时切换器 step 3: a tag after the phrase, a
-            normal gap away (not the 「·」). */}
-        {planMarkStep === "3" && <ChatGptPlanTag />}
       </>
     );
-    // SIWC 票 04 临时切换器 step 2: the words just left of send.
-    const planEndMark = planMarkStep === "2" ? <ChatGptPlanEndMark /> : null;
     const actionSlot = (
       <ComposerActionSlot
         stopMode={stopMode}
@@ -723,12 +703,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               </>
             }
             modelPhrase={modelPhrase}
-            actionSlot={
-              <>
-                {planEndMark}
-                {actionSlot}
-              </>
-            }
+            actionSlot={actionSlot}
           />
         ) : (
           <div
@@ -776,7 +751,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               </div>
 
               <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                {planEndMark}
                 {actionSlot}
               </div>
             </div>

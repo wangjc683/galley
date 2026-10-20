@@ -1,11 +1,11 @@
 import * as Popover from "@radix-ui/react-popover";
 import { Check, Gear } from "@phosphor-icons/react";
-import { Fragment } from "react";
 
 import { ChatGptMark } from "@/components/conversation/ChatGptPlanMark";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { CHATGPT_USAGE_URL } from "@/lib/chatgpt-plan";
 import { useCopy } from "@/lib/i18n";
+import { isChatGptPlanOption, providerLabelAlwaysShown } from "@/lib/llm-menu";
 import { openExternalUrl } from "@/lib/open-external";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { cn } from "@/lib/utils";
@@ -50,7 +50,6 @@ export function LLMPill({
   phraseLead = false,
   popoverAlign = "start",
   chatGptPlanKeys,
-  planLogo = false,
 }: {
   llmDisplayName: string;
   llms?: ComposerLLMOption[];
@@ -76,15 +75,13 @@ export function LLMPill({
    * not read as hanging from the pill (ruling 76; centred, it stays
    * inside the row on both sides). */
   popoverAlign?: "start" | "center";
-  /** SIWC 票 04 临时切换器 step 1: the `key`s of the models that
-   * spend the ChatGPT plan; each run of them gets a header row,
-   * 「ChatGPT 订阅 · 管理用量」. Absent = no header (steps 2 and 3, or
-   * the current model is not on the plan). */
+  /** The `key`s of the models that spend the ChatGPT plan (Sign in
+   * with ChatGPT, .scratch/chatgpt-siwc decisions 13, 14). Each carries
+   * a 13px ChatGPT mark in ink-muted before its name: on the pill while
+   * it is the current model (and 「使用 ChatGPT 订阅」 as the tooltip's
+   * second line), and on its menu row; with any of them in the list,
+   * the menu's action block gains 「ChatGPT 订阅 · 管理用量」. */
   chatGptPlanKeys?: ReadonlySet<string>;
-  /** SIWC 票 04 临时切换器 step 1: the current model is on the ChatGPT
-   * plan — a 13px ChatGPT mark in ink-muted before its name, and
-   * 「使用 ChatGPT 订阅」 as the tooltip's second line. */
-  planLogo?: boolean;
 }) {
   const copy = useCopy();
   const footerHint = llmConfigHint ?? copy.app.externalModelHint;
@@ -133,17 +130,12 @@ export function LLMPill({
     );
   }
 
-  const displayNameCounts = new Map<string, number>();
-  for (const llm of llms) {
-    const displayNameKey = llm.displayName.trim();
-    displayNameCounts.set(
-      displayNameKey,
-      (displayNameCounts.get(displayNameKey) ?? 0) + 1,
-    );
-  }
-
-  // SIWC 票 04 临时切换器 step 1: the verb, then what the mark means.
-  const tooltip = planLogo ? (
+  // The mark is not a model parameter but where the bill goes (decision
+  // 13): the tooltip says so under the verb.
+  const currentOnPlan = llms.some(
+    (llm) => llm.isCurrent && isChatGptPlanOption(chatGptPlanKeys, llm),
+  );
+  const tooltip = currentOnPlan ? (
     <span className="flex flex-col gap-1">
       <span>{title}</span>
       <span>{copy.chatgptPlan.usingPlan}</span>
@@ -169,7 +161,9 @@ export function LLMPill({
                 other didn't. Neither does now; the hover box + tooltip
                 are the affordance, as they already were for the model
                 name since 09-22. */}
-            {planLogo && <ChatGptMark className="size-[13px] text-ink-muted" />}
+            {currentOnPlan && (
+              <ChatGptMark className="size-[13px] text-ink-muted" />
+            )}
             <span className="min-w-0 truncate">{llmDisplayName}</span>
           </button>
         </Popover.Trigger>
@@ -200,136 +194,168 @@ export function LLMPill({
             "max-h-[min(60vh,360px)] overflow-y-auto outline-none",
           )}
         >
-          {stopMode && (
-            <div className="px-2.5 pb-1 pt-1 text-[10.5px] leading-[1.4] text-ink-muted/70">
-              {copy.composer.cannotSwitchRunning}
-            </div>
-          )}
-          {llms.map((llm, position) => {
-            const providerLabel = llm.providerDisplayName?.trim();
-            const isDuplicateDisplayName =
-              (displayNameCounts.get(llm.displayName.trim()) ?? 0) > 1;
-            const onPlan = isPlanModel(chatGptPlanKeys, llm);
-            const planHeader =
-              onPlan && !isPlanModel(chatGptPlanKeys, llms[position - 1]);
-            const row = (
-              <Popover.Close asChild key={llm.index}>
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  onMouseDown={preventMouseFocus}
-                  onClick={() => {
-                    if (disabled) return;
-                    onSelectLLM?.(llm.index);
-                  }}
-                  aria-disabled={disabled || undefined}
-                  className={cn(
-                    "group/llm-option flex w-full min-w-0 items-center gap-2 rounded-callout px-2.5 py-1.5 text-left text-[12.5px] hover:bg-hover",
-                    llm.isCurrent ? "text-ink" : "text-ink-soft",
-                    disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
-                  )}
-                >
-                  {/* Text flush left, check TRAILING (2026-09-22): a
-                      leading check column reserved 22px on every row
-                      for a glyph only one row draws, and pushed the
-                      text 36px in from the popover edge. Trailing is the
-                      web model-picker convention (ChatGPT / Claude /
-                      Codex / Cursor); the provider label stays before
-                      the check so the check always hugs the right edge. */}
-                  <span className="min-w-0 flex-1 truncate">
-                    {llm.displayName}
-                  </span>
-                  {providerLabel && (
-                    <span
-                      className={cn(
-                        "shrink-0 overflow-hidden truncate whitespace-nowrap text-[10px] leading-4 text-ink-muted/50",
-                        isDuplicateDisplayName
-                          ? "max-w-[96px] opacity-100"
-                          : "max-w-0 opacity-0 group-hover/llm-option:max-w-[96px] group-hover/llm-option:opacity-100",
-                      )}
-                    >
-                      {providerLabel}
-                    </span>
-                  )}
-                  {llm.isCurrent && (
-                    <Check
-                      size={12}
-                      weight="bold"
-                      className="shrink-0 text-brand-strong"
-                    />
-                  )}
-                </button>
-              </Popover.Close>
-            );
-            if (!planHeader) return row;
-            // SIWC 票 04 临时切换器 step 1: the plan's header, in the
-            // action register (11px) — the popover keeps its two type
-            // sizes, content and actions.
-            return (
-              <Fragment key={llm.index}>
-                <div
-                  className={cn(
-                    "flex items-center gap-1 px-2.5 pb-0.5 pt-1 text-[11px] leading-[1.35] text-ink-muted/70",
-                    position > 0 && "mt-1",
-                  )}
-                >
-                  <span className="truncate">{copy.chatgptPlan.planLabel}</span>
-                  <span aria-hidden>·</span>
-                  <Popover.Close asChild>
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      onMouseDown={preventMouseFocus}
-                      onClick={() => openExternalUrl(CHATGPT_USAGE_URL)}
-                      className="shrink-0 rounded-callout hover:text-ink-soft hover:underline"
-                    >
-                      {copy.chatgptPlan.manageUsage}
-                    </button>
-                  </Popover.Close>
-                </div>
-                {row}
-              </Fragment>
-            );
-          })}
-          {/* Action block: everything below the model list shares ONE
-              quiet 11px register — the settings navigation. Two layers
-              total: content vs actions, no intermediate type size. */}
-          {onConfigureModels ? (
-            <div className="mt-1 border-t border-line/60 px-1.5 pb-1 pt-1">
-              <Popover.Close asChild>
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  onMouseDown={preventMouseFocus}
-                  onClick={onConfigureModels}
-                  className={cn(
-                    "flex w-full items-center gap-1.5 rounded-callout px-1.5 py-1 text-left text-[11px] leading-[1.35] text-ink-muted/70",
-                    "hover:bg-hover hover:text-ink-soft",
-                  )}
-                >
-                  <Gear size={11} weight="thin" className="shrink-0" />
-                  <span>{copy.composer.configureModels}</span>
-                </button>
-              </Popover.Close>
-            </div>
-          ) : (
-            // Footer hint: addresses the "为什么这里没有 X 模型" question
-            // right where it surfaces. Quiet metadata, not a CTA. Insets
-            // keep what users saw while the mode row sat above it
-            // (wrapper + inner padding summed: 12 / 8 / 6px).
-            <div className="mt-1 border-t border-line/60 px-3 pb-1.5 pt-2 text-[10.5px] leading-[1.45] text-ink-muted/70">
-              {footerHint}
-            </div>
-          )}
+          <LLMMenu
+            llms={llms}
+            chatGptPlanKeys={chatGptPlanKeys}
+            disabled={disabled}
+            stopMode={stopMode}
+            onSelectLLM={onSelectLLM}
+            onConfigureModels={onConfigureModels}
+            footerHint={footerHint}
+          />
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
   );
 }
 
-function isPlanModel(
-  keys: ReadonlySet<string> | undefined,
-  llm: ComposerLLMOption | undefined,
-): boolean {
-  return !!keys && !!llm?.key && keys.has(llm.key);
+/** The action block's rows: one quiet 11px register. */
+const ACTION_ROW_CLASS = cn(
+  "flex w-full items-center gap-1.5 rounded-callout px-1.5 py-1 text-left text-[11px] leading-[1.35] text-ink-muted/70",
+  "hover:bg-hover hover:text-ink-soft",
+);
+
+/**
+ * The model menu, inside LLMPill's popover: the model list, then the
+ * action block (or, with nothing to act on, the footer hint). Exported
+ * for its tests — a static render never opens the popover.
+ */
+export function LLMMenu({
+  llms,
+  chatGptPlanKeys,
+  disabled,
+  stopMode,
+  onSelectLLM,
+  onConfigureModels,
+  footerHint,
+}: {
+  llms: ComposerLLMOption[];
+  chatGptPlanKeys?: ReadonlySet<string>;
+  disabled: boolean;
+  stopMode: boolean;
+  onSelectLLM?: (index: number) => void;
+  onConfigureModels?: () => void;
+  footerHint: string;
+}) {
+  const copy = useCopy();
+  const labelAlwaysShown = providerLabelAlwaysShown(llms, chatGptPlanKeys);
+  const hasPlanModels = llms.some((llm) =>
+    isChatGptPlanOption(chatGptPlanKeys, llm),
+  );
+  return (
+    <>
+      {stopMode && (
+        <div className="px-2.5 pb-1 pt-1 text-[10.5px] leading-[1.4] text-ink-muted/70">
+          {copy.composer.cannotSwitchRunning}
+        </div>
+      )}
+      {llms.map((llm, position) => {
+        const providerLabel = llm.providerDisplayName?.trim();
+        const onPlan = isChatGptPlanOption(chatGptPlanKeys, llm);
+        return (
+          <Popover.Close asChild key={llm.index}>
+            <button
+              type="button"
+              tabIndex={-1}
+              onMouseDown={preventMouseFocus}
+              onClick={() => {
+                if (disabled) return;
+                onSelectLLM?.(llm.index);
+              }}
+              aria-disabled={disabled || undefined}
+              className={cn(
+                "group/llm-option flex w-full min-w-0 items-center gap-2 rounded-callout px-2.5 py-1.5 text-left text-[12.5px] hover:bg-hover",
+                llm.isCurrent ? "text-ink" : "text-ink-soft",
+                disabled &&
+                  "cursor-not-allowed opacity-50 hover:bg-transparent",
+              )}
+            >
+              {/* Text flush left, check TRAILING (2026-09-22): a
+                  leading check column reserved 22px on every row
+                  for a glyph only one row draws, and pushed the
+                  text 36px in from the popover edge. Trailing is the
+                  web model-picker convention (ChatGPT / Claude /
+                  Codex / Cursor); the provider label stays before
+                  the check so the check always hugs the right edge.
+                  A plan model's name has the pill's ChatGPT mark
+                  before it (decision 14), the same 4px away. */}
+              <span className="flex min-w-0 flex-1 items-center gap-1">
+                {onPlan && (
+                  <ChatGptMark className="size-[13px] text-ink-muted" />
+                )}
+                <span className="min-w-0 truncate">{llm.displayName}</span>
+              </span>
+              {providerLabel && (
+                <span
+                  className={cn(
+                    "shrink-0 overflow-hidden truncate whitespace-nowrap text-[10px] leading-4 text-ink-muted/50",
+                    labelAlwaysShown[position]
+                      ? "max-w-[96px] opacity-100"
+                      : "max-w-0 opacity-0 group-hover/llm-option:max-w-[96px] group-hover/llm-option:opacity-100",
+                  )}
+                >
+                  {providerLabel}
+                </span>
+              )}
+              {llm.isCurrent && (
+                <Check
+                  size={12}
+                  weight="bold"
+                  className="shrink-0 text-brand-strong"
+                />
+              )}
+            </button>
+          </Popover.Close>
+        );
+      })}
+      {/* Action block: everything below the model list shares ONE
+          quiet 11px register — the settings navigation, then the
+          ChatGPT plan's usage page while any model is on the plan
+          (decision 14: at the foot, not as a header in the list, where
+          the rows under it read as the plan's). Two layers total:
+          content vs actions, no intermediate type size. */}
+      {onConfigureModels || hasPlanModels ? (
+        <div className="mt-1 border-t border-line/60 px-1.5 pb-1 pt-1">
+          {onConfigureModels && (
+            <Popover.Close asChild>
+              <button
+                type="button"
+                tabIndex={-1}
+                onMouseDown={preventMouseFocus}
+                onClick={onConfigureModels}
+                className={ACTION_ROW_CLASS}
+              >
+                <Gear size={11} weight="thin" className="shrink-0" />
+                <span>{copy.composer.configureModels}</span>
+              </button>
+            </Popover.Close>
+          )}
+          {hasPlanModels && (
+            <Popover.Close asChild>
+              <button
+                type="button"
+                tabIndex={-1}
+                onMouseDown={preventMouseFocus}
+                onClick={() => openExternalUrl(CHATGPT_USAGE_URL)}
+                className={ACTION_ROW_CLASS}
+              >
+                <ChatGptMark className="size-[11px]" />
+                <span>
+                  {copy.chatgptPlan.planLabel} · {copy.chatgptPlan.manageUsage}
+                </span>
+              </button>
+            </Popover.Close>
+          )}
+        </div>
+      ) : (
+        // Footer hint: addresses the "为什么这里没有 X 模型" question
+        // right where it surfaces. Quiet metadata, not a CTA. Insets
+        // keep what users saw while the mode row sat above it
+        // (wrapper + inner padding summed: 12 / 8 / 6px).
+        <div className="mt-1 border-t border-line/60 px-3 pb-1.5 pt-2 text-[10.5px] leading-[1.45] text-ink-muted/70">
+          {footerHint}
+        </div>
+      )}
+    </>
+  );
 }

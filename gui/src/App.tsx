@@ -14,8 +14,6 @@ import { BrowserControlAttentionSurface } from "@/components/screens/BrowserCont
 import { EmptyState } from "@/components/screens/EmptyState";
 import { MainView } from "@/components/screens/MainView";
 import { LocalFileWorkspace } from "@/components/conversation/LocalFileWorkspace";
-// SIWC 票 04 临时切换器，定档后拆掉。
-import { PlanMarkTrialSwitcher } from "@/components/conversation/plan-mark-trial/PlanMarkTrialSwitcher";
 import { ChatGptPlanNoticeDialog } from "@/components/managed-models/ChatGptPlanNoticeDialog";
 import { OnboardingScreen } from "@/components/screens/onboarding/OnboardingScreen";
 import { SettingsHost } from "@/components/screens/settings/SettingsHost";
@@ -999,13 +997,6 @@ function App() {
           Settings or from onboarding (which hands over to this screen
           right after the sign-in). */}
       <ChatGptPlanNoticeDialog />
-
-      {/* SIWC 票 04 临时切换器，定档后拆掉。How the ChatGPT plan mark
-          looks (1 标志 / 2 右端 / 3 徽标), in a dev build of the managed
-          runtime. */}
-      {import.meta.env.DEV && activeRuntimeKind === "managed" && (
-        <PlanMarkTrialSwitcher />
-      )}
     </CopyProvider>
   );
 }
