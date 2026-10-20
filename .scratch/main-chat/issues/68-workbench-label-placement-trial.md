@@ -1,6 +1,6 @@
 # 68 切换器：工作台区名的位置（现状 / A 字落进工作台 / B 字站在线上）× 线（加重 / 默认）
 
-Status: needs-dogfood（2026-10-20 合入 `16de3bfd`、`b7607dad`；主会话复跑门禁：typecheck、lint、`git diff --check`、`TZ=UTC` 与 `TZ=America/Los_Angeles` 各 180 个文件 1959 条测试全过，新增行没有本机路径；看过浅深两张总览。等 JC 真机切档定方向）
+Status: done（2026-10-20 JC 真机比完，A、B 都不要，放回线上改 19px 软过渡加居中，裁决 120 第 6 条，定稿见票 69。合入 `16de3bfd`、`b7607dad`；主会话复跑门禁：typecheck、lint、`git diff --check`、`TZ=UTC` 与 `TZ=America/Los_Angeles` 各 180 个文件 1959 条测试全过，新增行没有本机路径；看过浅深两张总览。等 JC 真机切档定方向）
 
 来源：主聊天 PRD 裁决 120（2026-10-20，JC：「按你推荐推进」）。只改 GUI；设计文档等定档后由拆除票改。Core、runner、CLI 不动。
 
