@@ -21,9 +21,8 @@ use tokio::sync::oneshot;
 use crate::api::{
     ManagedModelAuthKind, ManagedModelCredentialStatus, ManagedModelProtocol, ManagedModelRecord,
 };
-use crate::codex_oauth::{CODEX_MODEL_ID, CODEX_PROVIDER_ID};
 use crate::credential_store;
-use crate::db::SqliteGalley;
+use crate::db::{SqliteGalley, UpsertManagedModelMetadata, UpsertManagedModelProviderMetadata};
 use crate::error::GalleyError;
 
 use super::callback::{
@@ -36,7 +35,7 @@ use super::login::{
     pkce_challenge, start_login, start_login_with_timeout, AuthorizeParams,
     CancelChatgptPlanLoginInput, CompleteChatgptPlanLoginInput, Pkce,
 };
-use super::logout::revoke_with_retry;
+use super::logout::{logout, revoke_with_retry};
 use super::probe::{clear_if_revoked, http_error, probe_payload, visible_models_from_body};
 use super::refresh::{
     classify_token_error, read_secret, refresh_body_to_secret, resolve_access_token_with_refresh,
@@ -48,8 +47,9 @@ use super::secret::{
 };
 use super::{
     galley_user_agent, is_siwc_secret, plan_model_upsert, plan_provider_display_name,
-    runtime_chatgpt_plan, status_from_secret, ChatgptPlanError, SIWC_DEFAULT_MODEL, SIWC_ISSUER,
-    TERMINAL_REFRESH_CODES,
+    retire_codex_cli_credentials, status_from_secret, ChatgptPlanError, ChatgptPlanProviderInput,
+    LegacySweepOutcome, CHATGPT_MODEL_ID, CHATGPT_PROVIDER_ID, SIWC_API_BASE, SIWC_DEFAULT_MODEL,
+    SIWC_ISSUER, TERMINAL_REFRESH_CODES,
 };
 
 // ---------------------------------------------------------------------
@@ -932,25 +932,17 @@ fn siwc_secret(access_token: &str, refresh_token: &str, expires_in: i64) -> Siwc
 }
 
 #[test]
-fn codex_credential_without_flow_is_not_siwc() {
-    let codex = json!({
-        "accessToken": "a",
-        "refreshToken": "r",
-        "expiresAt": 1,
-        "accountId": "acct",
-    })
-    .to_string();
+fn a_codex_cli_login_credential_is_no_credential() {
+    let codex = codex_cli_credential();
     assert!(!is_siwc_secret(&codex));
     assert!(!is_siwc_secret("sk-plain-api-key"));
     assert!(!is_siwc_secret(r#"{"flow":"other"}"#));
-    assert!(!runtime_chatgpt_plan(
-        ManagedModelAuthKind::ChatgptCodexOauth,
-        Some(&codex)
-    ));
-    let status = status_from_secret(Some(&codex), false);
-    assert_eq!(status.flow, Some("codex"));
-    assert!(status.signed_in);
+    // The card reads "sign in", not "signed in" or "needs a new sign-in".
+    let status = status_from_secret(Some(&codex), true);
+    assert_eq!(status.flow, None);
+    assert!(!status.signed_in);
     assert!(!status.needs_reauth);
+    assert!(status.registered);
 }
 
 #[test]
@@ -974,18 +966,6 @@ fn siwc_credential_round_trips_with_its_flow_and_fields() {
         assert!(value.get(key).is_some(), "missing {key}");
     }
     assert!(is_siwc_secret(&raw));
-    assert!(runtime_chatgpt_plan(
-        ManagedModelAuthKind::ChatgptCodexOauth,
-        Some(&raw)
-    ));
-    assert!(!runtime_chatgpt_plan(
-        ManagedModelAuthKind::ApiKey,
-        Some(&raw)
-    ));
-    assert!(!runtime_chatgpt_plan(
-        ManagedModelAuthKind::ChatgptCodexOauth,
-        None
-    ));
     let parsed: SiwcSecret = serde_json::from_str(&raw).unwrap();
     assert_eq!(parsed.access_token, "access-1");
     assert_eq!(parsed.client_id, TEST_CLIENT);
@@ -1200,7 +1180,7 @@ async fn resolve_returns_a_current_token_without_refreshing() {
         .await
         .unwrap();
     assert_eq!(resolved.access_token, "access-now");
-    assert_eq!(resolved.account_id, None);
+    assert!(resolved.expires_at.is_some());
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 
@@ -1478,8 +1458,8 @@ async fn a_revoked_access_token_clears_only_the_credential_that_holds_it() {
 
 fn model_record(model: &str, display_name: &str) -> ManagedModelRecord {
     ManagedModelRecord {
-        id: CODEX_MODEL_ID.into(),
-        provider_id: CODEX_PROVIDER_ID.into(),
+        id: CHATGPT_MODEL_ID.into(),
+        provider_id: CHATGPT_PROVIDER_ID.into(),
         provider_display_name: "ChatGPT / Codex".into(),
         display_name: display_name.into(),
         protocol: ManagedModelProtocol::Openai,
@@ -1521,7 +1501,7 @@ fn sign_in_keeps_a_stored_slug_the_catalog_lists() {
         Some(&model_record("gpt-5.6-terra", "gpt-5.6-terra")),
         Some(&catalog),
     );
-    assert_eq!(kept.id, CODEX_MODEL_ID);
+    assert_eq!(kept.id, CHATGPT_MODEL_ID);
     assert_eq!(kept.model, "gpt-5.6-terra");
     assert_eq!(kept.display_name, "gpt-5.6-terra");
     // The stored option layers are kept.
@@ -1566,7 +1546,7 @@ fn sign_in_without_a_catalog_or_record_uses_the_fallback_model() {
     ] {
         assert_eq!(created.model, SIWC_DEFAULT_MODEL);
         assert_eq!(created.display_name, SIWC_DEFAULT_MODEL);
-        assert_eq!(created.provider_id, CODEX_PROVIDER_ID);
+        assert_eq!(created.provider_id, CHATGPT_PROVIDER_ID);
         assert!(created.preset_options.is_some());
         assert!(!created.make_default);
     }
@@ -1678,5 +1658,274 @@ fn plan_sign_in_names_the_provider_chatgpt_unless_the_user_renamed_it() {
     assert_eq!(
         plan_provider_display_name(Some("Work ChatGPT")),
         "Work ChatGPT"
+    );
+}
+
+// ---------------------------------------------------------------------
+// Retiring the Codex CLI login (ticket 05): the startup sweep and sign-out
+// ---------------------------------------------------------------------
+
+const LEGACY_API_BASE: &str = "https://chatgpt.com/backend-api/codex";
+const CHATGPT_REF: &str = "managed-provider:mp_chatgpt_codex";
+
+/// What the removed Codex CLI login stored: tokens, no `flow`.
+fn codex_cli_credential() -> String {
+    json!({
+        "accessToken": "legacy-access",
+        "refreshToken": "legacy-refresh-shared-with-the-codex-cli",
+        "expiresAt": 1,
+        "accountId": "acct",
+    })
+    .to_string()
+}
+
+/// A store with every migration applied, holding the ChatGPT provider
+/// (`api_base` and `credential` as given), its model, a session bound to
+/// that model, an API-key provider with its key, and a SIWC registration.
+async fn galley_with_chatgpt_provider(api_base: &str, credential: Option<&str>) -> SqliteGalley {
+    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+    crate::apply_all_migrations_for_tests(&pool).await.unwrap();
+    let galley = SqliteGalley::from_pool(pool);
+    for (id, name, auth_kind, base) in [
+        (
+            CHATGPT_PROVIDER_ID,
+            "ChatGPT / Codex",
+            ManagedModelAuthKind::ChatgptCodexOauth,
+            api_base,
+        ),
+        (
+            "mp_openai",
+            "OpenAI",
+            ManagedModelAuthKind::ApiKey,
+            "https://api.openai.com/v1",
+        ),
+    ] {
+        galley
+            .upsert_managed_model_provider_metadata(UpsertManagedModelProviderMetadata {
+                id: id.into(),
+                display_name: name.into(),
+                protocol: ManagedModelProtocol::Openai,
+                auth_kind,
+                api_base: base.into(),
+                api_key_ref: credential_store::managed_provider_api_key_ref(id),
+            })
+            .await
+            .unwrap();
+    }
+    galley
+        .upsert_managed_model_metadata(UpsertManagedModelMetadata {
+            id: CHATGPT_MODEL_ID.into(),
+            provider_id: CHATGPT_PROVIDER_ID.into(),
+            display_name: "gpt-5.5".into(),
+            model: "gpt-5.5".into(),
+            preset_options: Some(json!({ "codex_backend": true })),
+            advanced_overrides: Some(json!({ "reasoning_effort": "high" })),
+            make_default: true,
+        })
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO sessions (id, title, status, turn_count, pending_approval_count, \
+            error_count, pinned, last_activity_at, created_at, updated_at, llm_key) \
+         VALUES ('s_chatgpt', 't', 'idle', 0, 0, 0, 0, 'x', 'x', 'x', ?)",
+    )
+    .bind(CHATGPT_MODEL_ID)
+    .execute(galley.pool())
+    .await
+    .unwrap();
+    if let Some(credential) = credential {
+        credential_store::set_secret(&galley, CHATGPT_REF, credential)
+            .await
+            .unwrap();
+    }
+    credential_store::set_secret(&galley, "managed-provider:mp_openai", "sk-test")
+        .await
+        .unwrap();
+    save_registration(&galley, &registration(Some((TEST_CLIENT, "id.token"))))
+        .await
+        .unwrap();
+    galley
+}
+
+async fn chatgpt_provider(galley: &SqliteGalley) -> crate::api::ManagedModelProviderRecord {
+    galley
+        .list_managed_model_providers()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|provider| provider.id == CHATGPT_PROVIDER_ID)
+        .expect("the ChatGPT provider stays")
+}
+
+async fn session_llm_key(galley: &SqliteGalley) -> Option<String> {
+    sqlx::query_scalar("SELECT llm_key FROM sessions WHERE id = 's_chatgpt'")
+        .fetch_one(galley.pool())
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn startup_sweep_retires_a_codex_cli_credential_and_keeps_the_records() {
+    let galley = galley_with_chatgpt_provider(LEGACY_API_BASE, Some(&codex_cli_credential())).await;
+    let registration_before =
+        credential_store::try_get_secret(&galley, "chatgpt-siwc:registration")
+            .await
+            .unwrap();
+
+    let outcome = retire_codex_cli_credentials(&galley).await.unwrap();
+
+    assert_eq!(
+        outcome,
+        LegacySweepOutcome {
+            credentials_removed: vec![CHATGPT_PROVIDER_ID.into()],
+            api_bases_rewritten: vec![CHATGPT_PROVIDER_ID.into()],
+        }
+    );
+    assert!(outcome.changed());
+    // The credential is gone locally ...
+    assert_eq!(
+        credential_store::try_get_secret(&galley, CHATGPT_REF)
+            .await
+            .unwrap(),
+        None
+    );
+    // ... and the provider moved to the plan endpoint, otherwise as it was.
+    let provider = chatgpt_provider(&galley).await;
+    assert_eq!(provider.api_base, SIWC_API_BASE);
+    assert_eq!(provider.display_name, "ChatGPT / Codex");
+    assert_eq!(provider.auth_kind, ManagedModelAuthKind::ChatgptCodexOauth);
+    assert_eq!(provider.api_key_ref, CHATGPT_REF);
+    assert_eq!(
+        provider.credential_status,
+        ManagedModelCredentialStatus::Missing
+    );
+    // The model record, its options and the session bound to it stay.
+    let model = galley
+        .list_managed_models()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|model| model.id == CHATGPT_MODEL_ID)
+        .expect("the ChatGPT model stays");
+    assert_eq!(model.provider_id, CHATGPT_PROVIDER_ID);
+    assert_eq!(model.model, "gpt-5.5");
+    assert_eq!(model.advanced_overrides["reasoning_effort"], "high");
+    assert!(model.is_default);
+    assert_eq!(
+        session_llm_key(&galley).await.as_deref(),
+        Some(CHATGPT_MODEL_ID)
+    );
+    // Other credentials, including the SIWC registration, are untouched.
+    assert_eq!(
+        credential_store::get_secret(&galley, "managed-provider:mp_openai")
+            .await
+            .unwrap(),
+        "sk-test"
+    );
+    assert_eq!(
+        credential_store::try_get_secret(&galley, "chatgpt-siwc:registration")
+            .await
+            .unwrap(),
+        registration_before
+    );
+}
+
+#[tokio::test]
+async fn startup_sweep_is_a_no_op_once_done() {
+    let galley = galley_with_chatgpt_provider(LEGACY_API_BASE, Some(&codex_cli_credential())).await;
+    assert!(retire_codex_cli_credentials(&galley)
+        .await
+        .unwrap()
+        .changed());
+    let providers_after_first = galley.list_managed_model_providers().await.unwrap();
+
+    let second = retire_codex_cli_credentials(&galley).await.unwrap();
+
+    assert_eq!(second, LegacySweepOutcome::default());
+    assert!(!second.changed());
+    // Nothing was written: not even `updated_at` moved.
+    let providers_after_second = galley.list_managed_model_providers().await.unwrap();
+    assert_eq!(
+        serde_json::to_value(&providers_after_second).unwrap(),
+        serde_json::to_value(&providers_after_first).unwrap()
+    );
+}
+
+#[tokio::test]
+async fn startup_sweep_leaves_a_siwc_credential_alone() {
+    let siwc = serde_json::to_string(&siwc_secret("access-1", "refresh-1", 3600)).unwrap();
+    let galley = galley_with_chatgpt_provider(SIWC_API_BASE, Some(&siwc)).await;
+    let provider_before = chatgpt_provider(&galley).await;
+
+    let outcome = retire_codex_cli_credentials(&galley).await.unwrap();
+
+    assert_eq!(outcome, LegacySweepOutcome::default());
+    assert_eq!(
+        credential_store::try_get_secret(&galley, CHATGPT_REF)
+            .await
+            .unwrap()
+            .as_deref(),
+        Some(siwc.as_str())
+    );
+    assert_eq!(
+        serde_json::to_value(chatgpt_provider(&galley).await).unwrap(),
+        serde_json::to_value(provider_before).unwrap()
+    );
+}
+
+#[tokio::test]
+async fn startup_sweep_moves_the_endpoint_of_a_signed_out_provider() {
+    // Signed out of the Codex CLI login long ago: no credential, old base.
+    let galley = galley_with_chatgpt_provider(LEGACY_API_BASE, None).await;
+
+    let outcome = retire_codex_cli_credentials(&galley).await.unwrap();
+
+    assert!(outcome.credentials_removed.is_empty());
+    assert_eq!(
+        outcome.api_bases_rewritten,
+        vec![CHATGPT_PROVIDER_ID.to_string()]
+    );
+    assert_eq!(chatgpt_provider(&galley).await.api_base, SIWC_API_BASE);
+}
+
+/// The sweep never revokes and never writes outside Galley's store: its
+/// code has no HTTP client, no revoke call and no file access. Checked on
+/// the source (comments stripped), since the sweep takes no client to fake.
+#[test]
+fn startup_sweep_makes_no_network_call_and_writes_no_file() {
+    let code: String = include_str!("legacy.rs")
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    for forbidden in [
+        "reqwest",
+        "http_client",
+        "revoke",
+        "SIWC_REVOKE_URL",
+        "std::fs",
+        "tokio::fs",
+        "auth.json",
+        "CODEX_HOME",
+    ] {
+        assert!(!code.contains(forbidden), "legacy.rs uses {forbidden}");
+    }
+}
+
+#[tokio::test]
+async fn sign_out_deletes_a_codex_cli_credential_without_revoking_it() {
+    // The early return comes before any HTTP client exists: no network.
+    let galley = galley_with_chatgpt_provider(LEGACY_API_BASE, Some(&codex_cli_credential())).await;
+
+    let result = logout(&galley, ChatgptPlanProviderInput::default())
+        .await
+        .unwrap();
+
+    assert!(!result.remote_revoke_confirmed);
+    assert_eq!(
+        credential_store::try_get_secret(&galley, CHATGPT_REF)
+            .await
+            .unwrap(),
+        None
     );
 }

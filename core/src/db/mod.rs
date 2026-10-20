@@ -61,7 +61,7 @@ impl SqliteGalley {
     /// Handle to the process-wide shared pool against the resolved
     /// [`db_path`]. The pool is opened once per process and cloned on
     /// every later call — callers all over the codebase (socket
-    /// handlers, IM supervisor, Codex OAuth) call this per request, and
+    /// handlers, IM supervisor, credential IPC) call this per request, and
     /// each used to build its own fresh 4-connection pool, multiplying
     /// WAL writer contention against the design of one shared pool.
     /// A failed open is not cached; the next call retries.

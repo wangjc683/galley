@@ -76,7 +76,7 @@ use crate::session_runner::{
     EnsureOptions, GaConfigPref, LlmChoice, RunnerHost, SessionRunnerError,
 };
 use crate::{
-    chatgpt_siwc, codex_oauth, credential_store, managed_model_config, managed_prompt,
+    chatgpt_siwc, credential_ipc, credential_store, managed_model_config, managed_prompt,
     managed_runtime,
 };
 use serde::{Deserialize, Serialize};
@@ -205,14 +205,19 @@ struct ManagedRuntimeModel {
     api_key: String,
     api_key_ref: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    credential_ipc: Option<codex_oauth::CodexCredentialIpcConfig>,
+    credential_ipc: Option<credential_ipc::CredentialIpcConfig>,
     advanced_options: serde_json::Value,
-    /// `chatgptPlan`: a `chatgpt_codex_oauth` model whose stored credential
-    /// is a Sign in with ChatGPT one — the runner routes it to the ChatGPT
-    /// plan path (.scratch/chatgpt-siwc tickets 02 / 03). Left out when
-    /// false, so every other model's JSON is unchanged.
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    chatgpt_plan: bool,
+}
+
+/// Whether a stored credential lets a model run. A ChatGPT model needs a
+/// Sign in with ChatGPT credential: a Codex CLI login credential the
+/// startup sweep has not removed yet counts as none (.scratch/chatgpt-siwc
+/// ticket 05). No-auth models never get here (they carry no secret).
+fn runtime_credential_usable(auth_kind: ManagedModelAuthKind, secret: Option<&str>) -> bool {
+    match auth_kind {
+        ManagedModelAuthKind::ChatgptCodexOauth => secret.is_some_and(chatgpt_siwc::is_siwc_secret),
+        _ => secret.is_some_and(|secret| !secret.trim().is_empty()),
+    }
 }
 
 pub(crate) struct ManagedRuntimeProcessContext {
@@ -245,8 +250,7 @@ pub(crate) async fn prepare_managed_runtime_context(
             detail: format!("loading managed model records failed: {e}"),
         }
     })?;
-    let mut credential_allowlist: codex_oauth::CredentialIpcAllowlist = HashMap::new();
-    let mut chatgpt_plan_refs = std::collections::HashSet::new();
+    let mut credential_allowlist: credential_ipc::CredentialIpcAllowlist = HashMap::new();
     let mut usable_models = Vec::new();
     for model in models {
         // No-auth models carry no secret at all — usable as-is, and
@@ -258,19 +262,13 @@ pub(crate) async fn prepare_managed_runtime_context(
         let secret = credential_store::get_secret(&galley, &model.api_key_ref)
             .await
             .ok();
-        let has_secret = secret
-            .as_deref()
-            .is_some_and(|secret| !secret.trim().is_empty());
-        if !has_secret {
+        if !runtime_credential_usable(model.auth_kind, secret.as_deref()) {
             continue;
-        }
-        if chatgpt_siwc::runtime_chatgpt_plan(model.auth_kind, secret.as_deref()) {
-            chatgpt_plan_refs.insert(model.api_key_ref.clone());
         }
         credential_allowlist.insert(model.api_key_ref.clone(), model.auth_kind);
         usable_models.push(model);
     }
-    let mut credential_ipc: Option<codex_oauth::CodexCredentialIpcConfig> = None;
+    let mut credential_ipc: Option<credential_ipc::CredentialIpcConfig> = None;
     let mut runtime_models = Vec::new();
     let mut requested_model_index: Option<i64> = None;
     for model in usable_models {
@@ -294,14 +292,13 @@ pub(crate) async fn prepare_managed_runtime_context(
         if requested_model_id == Some(model.id.as_str()) {
             requested_model_index = Some(runtime_models.len() as i64);
         }
-        let chatgpt_plan = chatgpt_plan_refs.contains(&model.api_key_ref);
         runtime_models.push(ManagedRuntimeModel {
             display_name: model.display_name,
             protocol: model.protocol,
             auth_kind: model.auth_kind,
-            // The plan path always talks to api.openai.com, whatever an
-            // older flow left in the provider row (ticket 03's contract).
-            api_base: if chatgpt_plan {
+            // A ChatGPT model always talks to api.openai.com, whatever a
+            // provider row the startup sweep has not reached yet says.
+            api_base: if model.auth_kind == ManagedModelAuthKind::ChatgptCodexOauth {
                 chatgpt_siwc::SIWC_API_BASE.into()
             } else {
                 model.api_base
@@ -311,7 +308,6 @@ pub(crate) async fn prepare_managed_runtime_context(
             api_key_ref: model.api_key_ref,
             credential_ipc: model_credential_ipc,
             advanced_options: model.advanced_options,
-            chatgpt_plan,
         });
     }
     if runtime_models.is_empty() {
@@ -375,13 +371,13 @@ pub(crate) async fn prepare_managed_runtime_context(
 }
 
 async fn shared_credential_ipc_config(
-    credential_ipc: &mut Option<codex_oauth::CodexCredentialIpcConfig>,
-    allowlist: &codex_oauth::CredentialIpcAllowlist,
-) -> Result<codex_oauth::CodexCredentialIpcConfig, RunnerSpawnError> {
+    credential_ipc: &mut Option<credential_ipc::CredentialIpcConfig>,
+    allowlist: &credential_ipc::CredentialIpcAllowlist,
+) -> Result<credential_ipc::CredentialIpcConfig, RunnerSpawnError> {
     if let Some(config) = credential_ipc.clone() {
         return Ok(config);
     }
-    let config = codex_oauth::start_credential_ipc(allowlist.clone())
+    let config = credential_ipc::start_credential_ipc(allowlist.clone())
         .await
         .map_err(|e| RunnerSpawnError::ManagedRuntimeInvalid {
             detail: format!("starting credential IPC failed: {e}"),
@@ -975,39 +971,57 @@ mod tests {
         assert!(parsed.active_session_id.is_none());
     }
 
-    fn runtime_model(auth_kind: ManagedModelAuthKind, chatgpt_plan: bool) -> ManagedRuntimeModel {
-        ManagedRuntimeModel {
+    #[test]
+    fn runtime_model_json_is_the_runner_contract() {
+        let model = ManagedRuntimeModel {
             display_name: "gpt-5.6-sol".into(),
             protocol: ManagedModelProtocol::Openai,
-            auth_kind,
+            auth_kind: ManagedModelAuthKind::ChatgptCodexOauth,
             api_base: "https://api.openai.com/v1".into(),
             model: "gpt-5.6-sol".into(),
             api_key: "galley-codex-oauth".into(),
             api_key_ref: "managed-provider:mp_chatgpt_codex".into(),
             credential_ipc: None,
             advanced_options: serde_json::json!({}),
-            chatgpt_plan,
-        }
+        };
+        let value = serde_json::to_value(model).unwrap();
+        let mut keys: Vec<&str> = value
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        // `runner/managed_runtime.py` reads these; no plan flag since the
+        // Codex CLI login was removed (the auth kind alone picks the route).
+        assert_eq!(
+            keys,
+            [
+                "advancedOptions",
+                "apiBase",
+                "apiKey",
+                "apiKeyRef",
+                "authKind",
+                "displayName",
+                "model",
+                "protocol"
+            ]
+        );
+        assert_eq!(value["authKind"], "chatgpt_codex_oauth");
     }
 
     #[test]
-    fn runtime_model_serializes_chatgpt_plan_only_when_true() {
-        let plan =
-            serde_json::to_value(runtime_model(ManagedModelAuthKind::ChatgptCodexOauth, true))
-                .unwrap();
-        assert_eq!(plan["chatgptPlan"], serde_json::json!(true));
-        assert_eq!(plan["authKind"], "chatgpt_codex_oauth");
-
-        // Every other model's JSON is byte-for-byte what it was.
-        let codex = serde_json::to_value(runtime_model(
-            ManagedModelAuthKind::ChatgptCodexOauth,
-            false,
-        ))
-        .unwrap();
-        assert!(codex.get("chatgptPlan").is_none());
-        let api_key =
-            serde_json::to_value(runtime_model(ManagedModelAuthKind::ApiKey, false)).unwrap();
-        assert!(api_key.get("chatgptPlan").is_none());
+    fn a_chatgpt_model_runs_only_with_a_sign_in_with_chatgpt_credential() {
+        let siwc = r#"{"flow":"siwc","clientId":"oaiapp_x","accessToken":"a","refreshToken":"r"}"#;
+        let codex_cli = r#"{"accessToken":"a","refreshToken":"r","accountId":"acct"}"#;
+        let chatgpt = ManagedModelAuthKind::ChatgptCodexOauth;
+        assert!(runtime_credential_usable(chatgpt, Some(siwc)));
+        assert!(!runtime_credential_usable(chatgpt, Some(codex_cli)));
+        assert!(!runtime_credential_usable(chatgpt, None));
+        let api_key = ManagedModelAuthKind::ApiKey;
+        assert!(runtime_credential_usable(api_key, Some("sk-test")));
+        assert!(!runtime_credential_usable(api_key, Some("  ")));
+        assert!(!runtime_credential_usable(api_key, None));
     }
 
     #[test]

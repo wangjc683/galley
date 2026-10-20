@@ -264,58 +264,10 @@ pub(crate) async fn test_managed_model_connection(
         .map_err(stringify_error)
 }
 
-#[tauri::command]
-pub(crate) async fn start_chatgpt_codex_login(
-) -> std::result::Result<codex_oauth::CodexDeviceLoginStart, String> {
-    codex_oauth::start_device_login()
-        .await
-        .map_err(stringify_error)
-}
-
-#[tauri::command]
-pub(crate) async fn complete_chatgpt_codex_login(
-    galley: State<'_, SqliteGalley>,
-    app: tauri::AppHandle,
-    input: codex_oauth::CompleteCodexDeviceLoginInput,
-) -> std::result::Result<codex_oauth::CodexAuthSetupResult, String> {
-    let result = codex_oauth::complete_device_login(input)
-        .await
-        .map_err(stringify_error)?;
-    sync_managed_model_config(&app, &galley).await?;
-    Ok(result)
-}
-
-#[tauri::command]
-pub(crate) async fn import_chatgpt_codex_cli_login(
-    galley: State<'_, SqliteGalley>,
-    app: tauri::AppHandle,
-) -> std::result::Result<codex_oauth::CodexAuthSetupResult, String> {
-    let result = codex_oauth::import_cli_login()
-        .await
-        .map_err(stringify_error)?;
-    sync_managed_model_config(&app, &galley).await?;
-    Ok(result)
-}
-
-/// Sign-out of the ChatGPT provider. Dispatches by the stored
-/// credential's flow, so a Sign in with ChatGPT credential is revoked even
-/// through this older entry point; [`logout_chatgpt_plan`] also reports
-/// whether the revocation was confirmed.
-#[tauri::command]
-pub(crate) async fn logout_chatgpt_codex_provider(
-    galley: State<'_, SqliteGalley>,
-    app: tauri::AppHandle,
-    input: codex_oauth::CodexProviderActionInput,
-) -> std::result::Result<(), String> {
-    chatgpt_siwc::logout(&galley, input)
-        .await
-        .map_err(|e| e.to_wire())?;
-    sync_managed_model_config(&app, &galley).await
-}
-
-// Sign in with ChatGPT (.scratch/chatgpt-siwc ticket 02). Errors are the
-// JSON string `{"error": "<code>", "message": "..."}`; the plan-specific
-// codes are listed on `chatgpt_siwc::ChatgptPlanError`.
+// Sign in with ChatGPT (.scratch/chatgpt-siwc ticket 02), the ChatGPT
+// provider's only sign-in since the Codex CLI login was removed (ticket
+// 05). Errors are the JSON string `{"error": "<code>", "message": "..."}`;
+// the plan-specific codes are listed on `chatgpt_siwc::ChatgptPlanError`.
 
 #[tauri::command]
 pub(crate) async fn start_chatgpt_plan_login(
@@ -331,7 +283,7 @@ pub(crate) async fn complete_chatgpt_plan_login(
     galley: State<'_, SqliteGalley>,
     app: tauri::AppHandle,
     input: chatgpt_siwc::CompleteChatgptPlanLoginInput,
-) -> std::result::Result<codex_oauth::CodexAuthSetupResult, String> {
+) -> std::result::Result<chatgpt_siwc::ChatgptPlanSetupResult, String> {
     let result = chatgpt_siwc::complete_login(&galley, input)
         .await
         .map_err(|e| e.to_wire())?;
@@ -351,7 +303,7 @@ pub(crate) async fn cancel_chatgpt_plan_login(
 #[tauri::command]
 pub(crate) async fn list_chatgpt_plan_models(
     galley: State<'_, SqliteGalley>,
-    input: codex_oauth::CodexProviderActionInput,
+    input: chatgpt_siwc::ChatgptPlanProviderInput,
 ) -> std::result::Result<chatgpt_siwc::ChatgptPlanModelList, String> {
     chatgpt_siwc::list_models(&galley, input.provider_id)
         .await
@@ -361,7 +313,7 @@ pub(crate) async fn list_chatgpt_plan_models(
 #[tauri::command]
 pub(crate) async fn get_chatgpt_plan_status(
     galley: State<'_, SqliteGalley>,
-    input: codex_oauth::CodexProviderActionInput,
+    input: chatgpt_siwc::ChatgptPlanProviderInput,
 ) -> std::result::Result<chatgpt_siwc::ChatgptPlanStatus, String> {
     chatgpt_siwc::status(&galley, input.provider_id)
         .await
@@ -372,7 +324,7 @@ pub(crate) async fn get_chatgpt_plan_status(
 pub(crate) async fn logout_chatgpt_plan(
     galley: State<'_, SqliteGalley>,
     app: tauri::AppHandle,
-    input: codex_oauth::CodexProviderActionInput,
+    input: chatgpt_siwc::ChatgptPlanProviderInput,
 ) -> std::result::Result<chatgpt_siwc::ChatgptPlanLogoutResult, String> {
     let result = chatgpt_siwc::logout(&galley, input)
         .await

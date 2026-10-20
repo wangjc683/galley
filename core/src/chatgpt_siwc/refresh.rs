@@ -1,8 +1,8 @@
 //! Access-token resolution for Sign in with ChatGPT credentials, behind
-//! the same per-`apiKeyRef` gate pattern as `codex_oauth::refresh`: read
-//! before locking, read again after locking, and reuse a token another
-//! request already refreshed. There is deliberately no fallback to the
-//! Codex CLI's `auth.json` — that belongs to flow A.
+//! a per-`apiKeyRef` gate: read before locking, read again after locking,
+//! and reuse a token another request already refreshed. Every write of
+//! the credential (sign-in, refresh, clearing, sign-out, the startup
+//! sweep) takes the same gate.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -12,7 +12,6 @@ use chrono::Utc;
 use reqwest::StatusCode;
 use tokio::sync::Mutex as AsyncMutex;
 
-use crate::codex_oauth::ResolvedCodexAccessToken;
 use crate::credential_store;
 use crate::db::SqliteGalley;
 use crate::error::GalleyError;
@@ -20,7 +19,8 @@ use crate::error::GalleyError;
 use super::secret::{SiwcSecret, TokenResponse};
 use super::{
     compact_body_redacted, error_code_from_body, http_client, ChatgptPlanError, PlanResult,
-    REFRESH_SKEW_SECONDS, SIWC_RESOURCE, SIWC_TOKEN_URL, TERMINAL_REFRESH_CODES,
+    ResolvedAccessToken, REFRESH_SKEW_SECONDS, SIWC_RESOURCE, SIWC_TOKEN_URL,
+    TERMINAL_REFRESH_CODES,
 };
 
 static SIWC_REFRESH_GATES: OnceLock<Mutex<HashMap<String, Arc<AsyncMutex<()>>>>> = OnceLock::new();
@@ -39,7 +39,7 @@ pub(super) enum RefreshFailure {
 pub async fn resolve_access_token(
     galley: &SqliteGalley,
     api_key_ref: &str,
-) -> PlanResult<ResolvedCodexAccessToken> {
+) -> PlanResult<ResolvedAccessToken> {
     resolve_access_token_with_refresh(galley, api_key_ref, &refresh_over_network).await
 }
 
@@ -47,7 +47,7 @@ pub(super) async fn resolve_access_token_with_refresh<F, Fut>(
     galley: &SqliteGalley,
     api_key_ref: &str,
     refresh: &F,
-) -> PlanResult<ResolvedCodexAccessToken>
+) -> PlanResult<ResolvedAccessToken>
 where
     F: Fn(SiwcSecret) -> Fut + Send + Sync,
     Fut: Future<Output = Result<SiwcSecret, RefreshFailure>> + Send,

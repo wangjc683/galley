@@ -3,6 +3,16 @@
 //! credentials. One process-wide listener serves every runner; access
 //! is gated by a per-process token plus a per-spawn allowlist of
 //! credential refs.
+//!
+//! Two credential kinds: an API key (`credentialKind: "api_key"`, sent
+//! by the runner) and a Sign in with ChatGPT access token (the default
+//! when the request names no kind, sent by managed GA's patch `0007`).
+//! The wire format is `{token, apiKeyRef, credentialKind?}` in, one
+//! JSON line out: `{apiKey}` or `{accessToken, expiresAt?}`, or a
+//! [`GalleyError`] envelope. A refresh token never leaves Core.
+
+#[cfg(test)]
+mod tests;
 
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock, RwLock};
@@ -14,16 +24,14 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader
 use tokio::sync::Mutex as AsyncMutex;
 
 use crate::api::ManagedModelAuthKind;
+use crate::chatgpt_siwc::{self, ResolvedAccessToken};
 use crate::credential_store;
 use crate::db::SqliteGalley;
 use crate::error::{GalleyError, Result};
 
-use super::refresh::resolve_access_token;
-use super::secret::ResolvedCodexAccessToken;
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CodexCredentialIpcConfig {
+pub struct CredentialIpcConfig {
     pub kind: &'static str,
     pub address: String,
     pub token: String,
@@ -33,22 +41,20 @@ pub type CredentialIpcAllowlist = HashMap<String, ManagedModelAuthKind>;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct CredentialIpcRequest {
-    pub(super) token: String,
-    pub(super) api_key_ref: String,
+struct CredentialIpcRequest {
+    token: String,
+    api_key_ref: String,
     #[serde(default)]
-    pub(super) credential_kind: Option<String>,
+    credential_kind: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct CredentialIpcResponse {
+struct CredentialIpcResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     api_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     access_token: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    account_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     expires_at: Option<i64>,
 }
@@ -58,32 +64,32 @@ impl CredentialIpcResponse {
         Self {
             api_key: Some(api_key),
             access_token: None,
-            account_id: None,
             expires_at: None,
         }
     }
 
-    fn codex_access_token(resolved: ResolvedCodexAccessToken) -> Self {
+    fn access_token(resolved: ResolvedAccessToken) -> Self {
         Self {
             api_key: None,
             access_token: Some(resolved.access_token),
-            account_id: resolved.account_id,
             expires_at: resolved.expires_at,
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum CredentialKind {
+enum CredentialKind {
     ApiKey,
-    ChatgptCodexOauth,
+    /// A Sign in with ChatGPT access token. The wire name is the auth
+    /// kind's stored value, `chatgpt_codex_oauth`, and is the default.
+    ChatgptPlan,
 }
 
 impl CredentialKind {
     fn parse(raw: Option<&str>) -> Result<Self> {
         match raw.unwrap_or("chatgpt_codex_oauth") {
             "api_key" => Ok(Self::ApiKey),
-            "chatgpt_codex_oauth" => Ok(Self::ChatgptCodexOauth),
+            "chatgpt_codex_oauth" => Ok(Self::ChatgptPlan),
             other => Err(GalleyError::InvalidArgs {
                 message: format!("credential IPC credentialKind is unsupported: {other}"),
             }),
@@ -93,7 +99,7 @@ impl CredentialKind {
     fn expected_auth_kind(self) -> ManagedModelAuthKind {
         match self {
             Self::ApiKey => ManagedModelAuthKind::ApiKey,
-            Self::ChatgptCodexOauth => ManagedModelAuthKind::ChatgptCodexOauth,
+            Self::ChatgptPlan => ManagedModelAuthKind::ChatgptCodexOauth,
         }
     }
 }
@@ -102,7 +108,7 @@ impl CredentialKind {
 /// managed runner: the per-spawn variant leaked a task + fd + socket
 /// file on every spawn (they were never closed).
 struct CredentialIpcHandle {
-    config: CodexCredentialIpcConfig,
+    config: CredentialIpcConfig,
     allowlist: Arc<RwLock<CredentialIpcAllowlist>>,
 }
 
@@ -115,7 +121,7 @@ static CREDENTIAL_IPC_SINGLETON: OnceLock<AsyncMutex<Option<CredentialIpcHandle>
 /// so a stale allowlist entry cannot leak anything.
 pub async fn start_credential_ipc(
     allowed_credentials: CredentialIpcAllowlist,
-) -> Result<CodexCredentialIpcConfig> {
+) -> Result<CredentialIpcConfig> {
     let singleton = CREDENTIAL_IPC_SINGLETON.get_or_init(|| AsyncMutex::new(None));
     let mut slot = singleton.lock().await;
     if let Some(handle) = slot.as_ref() {
@@ -160,12 +166,12 @@ fn credential_token_matches(actual: &str, expected: &str) -> bool {
 async fn start_platform_credential_ipc(
     token: String,
     allowed_credentials: Arc<RwLock<CredentialIpcAllowlist>>,
-) -> Result<CodexCredentialIpcConfig> {
+) -> Result<CredentialIpcConfig> {
     use std::os::unix::fs::PermissionsExt;
     use tokio::net::UnixListener;
 
     let address = std::env::temp_dir().join(format!(
-        "galley-codex-{}-{}.sock",
+        "galley-credential-{}-{}.sock",
         std::process::id(),
         random_hex(8)?
     ));
@@ -188,7 +194,7 @@ async fn start_platform_credential_ipc(
                     // rest of the process lifetime; failures are
                     // transient (fd pressure) — retry with backoff.
                     eprintln!(
-                        "[codex-oauth] accepting credential IPC connection failed: {e} — retrying in 500ms"
+                        "[credential-ipc] accepting credential IPC connection failed: {e} — retrying in 500ms"
                     );
                     tokio::time::sleep(Duration::from_millis(500)).await;
                     continue;
@@ -201,7 +207,7 @@ async fn start_platform_credential_ipc(
             });
         }
     });
-    Ok(CodexCredentialIpcConfig {
+    Ok(CredentialIpcConfig {
         kind: "unix",
         address: address.to_string_lossy().into_owned(),
         token,
@@ -212,9 +218,9 @@ async fn start_platform_credential_ipc(
 async fn start_platform_credential_ipc(
     token: String,
     allowed_credentials: Arc<RwLock<CredentialIpcAllowlist>>,
-) -> Result<CodexCredentialIpcConfig> {
+) -> Result<CredentialIpcConfig> {
     let address = format!(
-        r"\\.\pipe\galley-codex-{}-{}",
+        r"\\.\pipe\galley-credential-{}-{}",
         std::process::id(),
         random_hex(8)?
     );
@@ -229,7 +235,7 @@ async fn start_platform_credential_ipc(
                     // rest of the process lifetime; failures are
                     // transient (handle pressure) — retry with backoff.
                     eprintln!(
-                        "[codex-oauth] creating credential pipe instance failed: {e} — retrying in 500ms"
+                        "[credential-ipc] creating credential pipe instance failed: {e} — retrying in 500ms"
                     );
                     tokio::time::sleep(Duration::from_millis(500)).await;
                     continue;
@@ -245,7 +251,7 @@ async fn start_platform_credential_ipc(
             });
         }
     });
-    Ok(CodexCredentialIpcConfig {
+    Ok(CredentialIpcConfig {
         kind: "windows_named_pipe",
         address,
         token,
@@ -303,7 +309,7 @@ fn create_secure_credential_pipe(
     result
 }
 
-pub(super) async fn handle_credential_ipc_stream<S>(
+async fn handle_credential_ipc_stream<S>(
     stream: S,
     expected_token: String,
     allowed_credentials: Arc<RwLock<CredentialIpcAllowlist>>,
@@ -366,7 +372,7 @@ async fn build_credential_ipc_response(
     fulfill_credential_ipc_request(&galley, api_key_ref, requested_kind).await
 }
 
-pub(super) fn validate_credential_ipc_request(
+fn validate_credential_ipc_request(
     req: CredentialIpcRequest,
     expected_token: &str,
     allowed_credentials: &CredentialIpcAllowlist,
@@ -394,7 +400,7 @@ pub(super) fn validate_credential_ipc_request(
     Ok((req.api_key_ref, requested_kind))
 }
 
-pub(super) async fn fulfill_credential_ipc_request(
+async fn fulfill_credential_ipc_request(
     galley: &SqliteGalley,
     api_key_ref: String,
     requested_kind: CredentialKind,
@@ -404,19 +410,14 @@ pub(super) async fn fulfill_credential_ipc_request(
             let api_key = credential_store::get_secret(galley, &api_key_ref).await?;
             Ok(CredentialIpcResponse::api_key(api_key))
         }
-        CredentialKind::ChatgptCodexOauth => {
-            // Sign in with ChatGPT shares this auth kind with the Codex
-            // OAuth flow until the latter is removed; the stored
-            // credential's `flow` picks the refresh path
-            // (.scratch/chatgpt-siwc ticket 02).
-            if crate::chatgpt_siwc::is_siwc_ref(galley, &api_key_ref).await? {
-                let resolved = crate::chatgpt_siwc::resolve_access_token(galley, &api_key_ref)
-                    .await
-                    .map_err(GalleyError::from)?;
-                return Ok(CredentialIpcResponse::codex_access_token(resolved));
-            }
-            let resolved = resolve_access_token(galley, &api_key_ref).await?;
-            Ok(CredentialIpcResponse::codex_access_token(resolved))
+        CredentialKind::ChatgptPlan => {
+            // Only a Sign in with ChatGPT credential resolves; anything
+            // else stored under the ref answers "sign in again"
+            // (`chatgpt_plan_reauth_required`), never a refresh.
+            let resolved = chatgpt_siwc::resolve_access_token(galley, &api_key_ref)
+                .await
+                .map_err(GalleyError::from)?;
+            Ok(CredentialIpcResponse::access_token(resolved))
         }
     }
 }

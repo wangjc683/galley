@@ -33,6 +33,7 @@ pub(crate) fn setup_app(
     }
     write_cli_discovery_file();
     prune_engine_logs(app);
+    retire_codex_cli_login(app);
     start_background_services(app);
     #[cfg(target_os = "windows")]
     apply_windows_custom_chrome(app);
@@ -404,6 +405,33 @@ fn prune_engine_logs(app: &tauri::App) {
         Ok(outcome) => eprintln!("[model-responses] {outcome:?}"),
         Err(e) => eprintln!("[model-responses] prune skipped: {e}"),
     }
+}
+
+/// The Codex CLI login was removed (.scratch/chatgpt-siwc ticket 05): its
+/// credentials are deleted locally (never revoked) and the ChatGPT
+/// provider moves to the plan endpoint, see
+/// [`chatgpt_siwc::retire_codex_cli_credentials`]. Runs on every start
+/// (a no-op once done), after the duplicate-instance check and before
+/// `start_background_services` starts the IM channels; a change rewrites
+/// the generated model config like any model-store write. Non-fatal: a
+/// failure is logged and the next start tries again.
+///
+/// [`chatgpt_siwc::retire_codex_cli_credentials`]: crate::chatgpt_siwc::retire_codex_cli_credentials
+fn retire_codex_cli_login(app: &tauri::App) {
+    let galley = app.state::<SqliteGalley>().inner().clone();
+    let handle = app.handle().clone();
+    tauri::async_runtime::block_on(async move {
+        match crate::chatgpt_siwc::retire_codex_cli_credentials(&galley).await {
+            Ok(outcome) if outcome.changed() => {
+                eprintln!("[chatgpt] retired the Codex CLI login: {outcome:?}");
+                if let Err(e) = crate::managed_model_config::sync_for_app(&handle, &galley).await {
+                    eprintln!("[chatgpt] model config sync after the sweep failed: {e:?}");
+                }
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!("[chatgpt] retiring the Codex CLI login failed: {e}"),
+        }
+    });
 }
 
 /// Fire-and-forget background services: IM supervisor autostart, the

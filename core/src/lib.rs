@@ -10,9 +10,9 @@ pub mod attachment_read;
 pub mod browser_bridge;
 pub mod browser_control;
 pub mod chatgpt_siwc;
-pub mod codex_oauth;
 mod commands;
 pub mod conversation_image;
+pub mod credential_ipc;
 pub mod credential_store;
 pub mod db;
 mod db_migrations;
@@ -197,10 +197,6 @@ pub fn run() {
             set_managed_model_defaults,
             list_managed_model_options,
             test_managed_model_connection,
-            start_chatgpt_codex_login,
-            complete_chatgpt_codex_login,
-            import_chatgpt_codex_cli_login,
-            logout_chatgpt_codex_provider,
             // Sign in with ChatGPT (.scratch/chatgpt-siwc ticket 02)
             start_chatgpt_plan_login,
             complete_chatgpt_plan_login,

@@ -11,7 +11,6 @@ use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
-use crate::codex_oauth::CodexAuthSetupResult;
 use crate::db::SqliteGalley;
 use crate::error::GalleyError;
 
@@ -26,9 +25,9 @@ use super::secret::{
     save_registration, SiwcRegistration, SiwcSecret, TokenResponse,
 };
 use super::{
-    http_client, persist_and_probe, ChatgptPlanError, PlanResult, SIWC_AGENT_NAME_HINT,
-    SIWC_AUTHORIZE_URL, SIWC_DYNAMIC_CLIENT_ID, SIWC_LOGIN_TIMEOUT_SECS, SIWC_RESOURCE,
-    SIWC_SCOPES, SIWC_TOKEN_URL,
+    http_client, persist_and_probe, ChatgptPlanError, ChatgptPlanSetupResult, PlanResult,
+    SIWC_AGENT_NAME_HINT, SIWC_AUTHORIZE_URL, SIWC_DYNAMIC_CLIENT_ID, SIWC_LOGIN_TIMEOUT_SECS,
+    SIWC_RESOURCE, SIWC_SCOPES, SIWC_TOKEN_URL,
 };
 
 #[derive(Clone, Serialize)]
@@ -172,7 +171,7 @@ pub(super) async fn start_login_with_timeout(
 pub async fn complete_login(
     galley: &SqliteGalley,
     input: CompleteChatgptPlanLoginInput,
-) -> PlanResult<CodexAuthSetupResult> {
+) -> PlanResult<ChatgptPlanSetupResult> {
     let (outcome_rx, exchange) = claim_pending(&input.login_id)?;
     let outcome = outcome_rx.await.unwrap_or(CallbackOutcome::Cancelled);
     release_pending(&input.login_id);
@@ -299,7 +298,7 @@ async fn finish_sign_in(
     galley: &SqliteGalley,
     callback: AuthorizedCallback,
     exchange: PendingExchange,
-) -> PlanResult<CodexAuthSetupResult> {
+) -> PlanResult<ChatgptPlanSetupResult> {
     // The issued client id comes back on the callback (probe: `oaiapp_…`).
     let client_id = callback
         .client_id

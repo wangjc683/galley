@@ -1,10 +1,10 @@
 //! The Sign in with ChatGPT credential and registration models.
 //!
 //! The credential lives in Core's encrypted store under the ChatGPT
-//! provider's `api_key_ref`, as JSON carrying `"flow": "siwc"`. Codex OAuth
-//! credentials (flow A) have no `flow` field and keep parsing as A. The
-//! registration (host id, issued client id, last ID token, subject) lives
-//! under its own ref and survives sign-out.
+//! provider's `api_key_ref`, as JSON carrying `"flow": "siwc"`. A stored
+//! value without it (the removed Codex CLI login's credential) is no
+//! credential at all. The registration (host id, issued client id, last
+//! ID token, subject) lives under its own ref and survives sign-out.
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -12,18 +12,16 @@ use ring::rand::{SecureRandom, SystemRandom};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::api::ManagedModelAuthKind;
-use crate::codex_oauth::ResolvedCodexAccessToken;
 use crate::credential_store;
 use crate::db::SqliteGalley;
 use crate::error::{GalleyError, Result};
 
-use super::{SIWC_FLOW, SIWC_PLAN_SCOPE, SIWC_REGISTRATION_REF};
+use super::{ResolvedAccessToken, SIWC_FLOW, SIWC_PLAN_SCOPE, SIWC_REGISTRATION_REF};
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct SiwcSecret {
-    /// Always [`SIWC_FLOW`]; what tells this credential from flow A.
+    /// Always [`SIWC_FLOW`]; what makes a stored value this credential.
     pub(super) flow: String,
     pub(super) client_id: String,
     #[serde(default)]
@@ -178,19 +176,17 @@ impl SiwcSecret {
         }
     }
 
-    pub(super) fn into_resolved(self) -> ResolvedCodexAccessToken {
-        ResolvedCodexAccessToken {
+    pub(super) fn into_resolved(self) -> ResolvedAccessToken {
+        ResolvedAccessToken {
             access_token: self.access_token,
-            // SIWC access tokens carry no `chatgpt_account_id`, so no
-            // `ChatGPT-Account-ID` header is sent (probe, 2026-10-20).
-            account_id: None,
             expires_at: self.expires_at,
         }
     }
 }
 
-/// Whether a stored credential string is a SIWC credential. Flow-A JSON
-/// (no `flow`), API keys and anything unparsable are not.
+/// Whether a stored credential string is a SIWC credential. A Codex CLI
+/// login credential (no `flow`), an API key and anything unparsable are
+/// not.
 pub fn is_siwc_secret(raw: &str) -> bool {
     #[derive(Deserialize)]
     struct FlowProbe {
@@ -201,12 +197,6 @@ pub fn is_siwc_secret(raw: &str) -> bool {
         .ok()
         .and_then(|probe| probe.flow)
         .is_some_and(|flow| flow == SIWC_FLOW)
-}
-
-/// The `chatgptPlan` flag of a runtime model: a `chatgpt_codex_oauth`
-/// model whose stored credential is a SIWC one.
-pub fn runtime_chatgpt_plan(auth_kind: ManagedModelAuthKind, raw_secret: Option<&str>) -> bool {
-    auth_kind == ManagedModelAuthKind::ChatgptCodexOauth && raw_secret.is_some_and(is_siwc_secret)
 }
 
 pub(super) fn has_plan_scope(scopes: &[String]) -> bool {
