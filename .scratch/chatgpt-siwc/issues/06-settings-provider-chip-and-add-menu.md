@@ -1,6 +1,6 @@
 # 06 · 设置 → 模型：服务商小字改说「怎么接」，「添加」直接弹出服务商列表
 
-Status: ready-for-agent
+Status: needs-dogfood
 
 来源：2026-10-20 JC 真机走查设置 → 模型页时提出，PRD 裁决 15、16。只动界面，合入时 Core 不用重启。
 
@@ -51,3 +51,15 @@ Status: ready-for-agent
 - 提交只点名文件；英文提交信息，结尾 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`。
 
 ## Comments
+### 2026-10-20 交付与合入
+
+- 代理交付，主会话验收后合入 main（`92158c8a` 界面、`d1470359` 设计文档）。期间另一个会话往 main 提交了助手卡片与按压动效的改动，rebase 后重跑门禁：gui 189 个文件、2012 条测试全过，typecheck、lint、文档链接、`git diff --check` 都通过。
+- 小字：新函数 `providerConnectionLabel`（`gui/src/lib/managed-model-preset-copy.ts`）。ChatGPT 写「ChatGPT 订阅」；按协议、authKind、地址三项对上官方 OpenAI / Anthropic 预设的写「官方 API」；其余写协议名。卡片悬停时显示「小字 · 地址」。
+- 「添加」：`ManagedModelProviderAddMenu.tsx`（Radix DropdownMenu）。
+  - 选中后，表单的预设一栏只读。
+  - 表单有改动时，点「添加」不弹菜单，并提示「先保存或关闭当前编辑」；表单是干净的，就先关掉它再弹菜单。
+  - 零服务商时不变。
+- 与票面不一致、交给 JC 真机判断的地方：
+  - 原来的下拉里本就没有逐项小字，所以菜单也没加；
+  - 新增表单里换预设要先关掉表单、重新从「添加」选，已填的密钥会丢（以前在下拉里换预设会保留密钥）；
+  - 菜单宽度固定为 320px，这个数是估的。
