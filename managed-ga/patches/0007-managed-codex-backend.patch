@@ -14,7 +14,7 @@ diff --git a/llmcore.py b/llmcore.py
 +                    if plan_err: body = plan_err[1]
 +                    if r.status_code == 429 and getattr(sess, 'codex_backend', False):
 +                        body = _codex_enrich_quota_error(sess, headers, body)
-@@ -543,0 +550,231 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
+@@ -543,0 +550,233 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
 +def _codex_account_id_from_jwt(access_token):
 +    try:
 +        parts = str(access_token or '').split('.')
@@ -179,7 +179,7 @@ diff --git a/llmcore.py b/llmcore.py
 +_CHATGPT_PLAN_TERMINAL = {"subscription_sharing_usage_limit_exceeded", "subscription_sharing_user_not_eligible",
 +                          "subscription_sharing_unsupported_capability", "subscription_sharing_route_not_supported",
 +                          "subscription_sharing_invalid_user", "chatpass_v2_scope_not_authorized",
-+                          "chatpass_v2_invalid_authorization_context"}
++                          "chatpass_v2_invalid_authorization_context", "token_revoked"}
 +
 +def _chatgpt_plan_user_agent():
 +    return f"Galley ({platform.system()}; {platform.machine()})"
@@ -193,6 +193,8 @@ diff --git a/llmcore.py b/llmcore.py
 +        text = f"ChatGPT plan usage limit reached ({code}): this is your plan's limit or the limit you set for Galley; manage usage at {_CHATGPT_PLAN_USAGE_URL}"
 +    elif code == "subscription_sharing_user_not_eligible":
 +        text = f"This ChatGPT account cannot use its plan in Galley ({code}); use an API key provider instead"
++    elif code == "token_revoked":  # refresh token revoked, or Galley disconnected in ChatGPT settings
++        text = f"ChatGPT sign-in was revoked or disconnected ({code}); sign in again in Settings → Models"
 +    elif code == "subscription_sharing_unsupported_capability":
 +        text = f"ChatGPT plan does not support this request ({code}, param: {err.get('param')})" + (f": {detail}" if detail else "")
 +    elif code in _CHATGPT_PLAN_RETRYABLE:
@@ -246,7 +248,7 @@ diff --git a/llmcore.py b/llmcore.py
 +    else: blocks.insert(sum(1 for b in blocks if b.get("type") == "thinking"), {"type": "text", "text": err})
 +    return blocks
 +
-@@ -550,2 +787,13 @@ def _openai_stream(sess, messages):
+@@ -550,2 +789,13 @@ def _openai_stream(sess, messages):
 -    headers = {"Authorization": f"Bearer {sess.api_key}", "Content-Type": "application/json", "Accept": "text/event-stream", 'originator': 'codex_exec'}
 -    headers["User-Agent"] = sess.user_agent
 +    api_key = sess.api_key
@@ -262,25 +264,25 @@ diff --git a/llmcore.py b/llmcore.py
 +        if account_id: headers["ChatGPT-Account-ID"] = account_id
 +    else:
 +        headers["User-Agent"] = sess.user_agent
-@@ -553 +801 @@ def _openai_stream(sess, messages):
+@@ -553 +803 @@ def _openai_stream(sess, messages):
 -        url = auto_make_url(sess.api_base, "responses")
 +        url = f"{sess.api_base.rstrip('/')}/responses" if getattr(sess, 'codex_backend', False) else auto_make_url(sess.api_base, "responses")
-@@ -557,0 +806 @@ def _openai_stream(sess, messages):
+@@ -557,0 +808 @@ def _openai_stream(sess, messages):
 +        if getattr(sess, 'codex_backend', False): payload["store"] = False
-@@ -559 +808 @@ def _openai_stream(sess, messages):
+@@ -559 +810 @@ def _openai_stream(sess, messages):
 -        if sess.max_tokens: payload["max_output_tokens"] = sess.max_tokens
 +        if sess.max_tokens and not getattr(sess, 'codex_backend', False): payload["max_output_tokens"] = sess.max_tokens
-@@ -572,0 +822 @@ def _openai_stream(sess, messages):
+@@ -572,0 +824 @@ def _openai_stream(sess, messages):
 +    if getattr(sess, 'chatgpt_plan', False): parse_fn = lambda r: _chatgpt_plan_parse_sse(r.iter_lines(), api_mode)
-@@ -672,0 +923,5 @@ class BaseSession:
+@@ -672,0 +925,5 @@ class BaseSession:
 +        self.codex_backend = bool(cfg.get('codex_backend'))
 +        self.chatgpt_plan = self.codex_backend and bool(cfg.get('chatgpt_plan'))
 +        self.galley_api_key_ref = cfg.get('galley_api_key_ref') or ''
 +        ipc = cfg.get('galley_credential_ipc')
 +        self.galley_credential_ipc = ipc if isinstance(ipc, dict) else None
-@@ -690 +945 @@ class BaseSession:
+@@ -690 +947 @@ class BaseSession:
 -        self.stream = cfg.get('stream', True)
 +        self.stream = True if self.codex_backend else cfg.get('stream', True)
-@@ -698,0 +954,2 @@ class BaseSession:
+@@ -698,0 +956,2 @@ class BaseSession:
 +        if self.codex_backend and self.reasoning_effort == 'minimal':
 +            self.reasoning_effort = 'medium'

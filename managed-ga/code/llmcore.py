@@ -764,7 +764,7 @@ _CHATGPT_PLAN_RETRYABLE = {"subscription_sharing_usage_unavailable", "subscripti
 _CHATGPT_PLAN_TERMINAL = {"subscription_sharing_usage_limit_exceeded", "subscription_sharing_user_not_eligible",
                           "subscription_sharing_unsupported_capability", "subscription_sharing_route_not_supported",
                           "subscription_sharing_invalid_user", "chatpass_v2_scope_not_authorized",
-                          "chatpass_v2_invalid_authorization_context"}
+                          "chatpass_v2_invalid_authorization_context", "token_revoked"}
 
 def _chatgpt_plan_user_agent():
     return f"Galley ({platform.system()}; {platform.machine()})"
@@ -778,6 +778,8 @@ def _chatgpt_plan_error(err):
         text = f"ChatGPT plan usage limit reached ({code}): this is your plan's limit or the limit you set for Galley; manage usage at {_CHATGPT_PLAN_USAGE_URL}"
     elif code == "subscription_sharing_user_not_eligible":
         text = f"This ChatGPT account cannot use its plan in Galley ({code}); use an API key provider instead"
+    elif code == "token_revoked":  # refresh token revoked, or Galley disconnected in ChatGPT settings
+        text = f"ChatGPT sign-in was revoked or disconnected ({code}); sign in again in Settings → Models"
     elif code == "subscription_sharing_unsupported_capability":
         text = f"ChatGPT plan does not support this request ({code}, param: {err.get('param')})" + (f": {detail}" if detail else "")
     elif code in _CHATGPT_PLAN_RETRYABLE:

@@ -821,15 +821,17 @@ _PLAN_ERROR_ROWS = [
     ("subscription_sharing_invalid_user", 401, False, ["request rejected"]),
     ("chatpass_v2_scope_not_authorized", 403, False, ["request rejected"]),
     ("chatpass_v2_invalid_authorization_context", 401, False, ["request rejected"]),
+    ("token_revoked", 401, False, ["revoked or disconnected", "sign in again"]),
     ("subscription_sharing_usage_unavailable", 503, True, ["temporarily unavailable"]),
     ("subscription_sharing_user_unavailable", 503, True, ["temporarily unavailable"]),
 ]
 
 
-# These two explain themselves; every other row carries the server's message.
+# These explain themselves; every other row carries the server's message.
 _FIXED_COPY_CODES = {
     "subscription_sharing_usage_limit_exceeded",
     "subscription_sharing_user_not_eligible",
+    "token_revoked",
 }
 
 
@@ -966,6 +968,36 @@ def test_chatgpt_plan_unavailable_then_recovers(monkeypatch: pytest.MonkeyPatch)
 
     assert len(net.posts) == 2
     assert chunks == ["ok"]
+
+
+def test_chatgpt_plan_revoked_token_is_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The body measured live (2026-10-20) after revoking the refresh token: the
+    still-unexpired access token gets this 401. Disconnecting Galley in ChatGPT
+    settings is expected to answer the same."""
+    body = (
+        '{"error":{"message":"Encountered invalidated oauth token for user, failing request",'
+        '"type":null,"code":"token_revoked","param":null},"status":401}'
+    )
+    net = _install_network(monkeypatch, _FakeHTTPResponse(401, body))
+
+    chunks, blocks = _run(_codex_session(chatgpt_plan=True))
+
+    assert len(net.posts) == 1
+    assert chunks == [
+        "!!!Error: HTTP 401: ChatGPT sign-in was revoked or disconnected (token_revoked); "
+        "sign in again in Settings → Models"
+    ]
+    assert blocks == [{"type": "text", "text": chunks[0]}]
+    assert net.gets == []
+
+
+def test_codex_cli_route_ignores_token_revoked_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    body = {"error": {"code": "token_revoked", "message": "invalidated"}}
+    _install_network(monkeypatch, _FakeHTTPResponse(401, body))
+
+    chunks, _ = _run(_codex_session(chatgpt_plan=False))
+
+    assert chunks == [f"!!!Error: HTTP 401: {json.dumps(body)}"]
 
 
 def test_chatgpt_plan_detail_shaped_error_body(monkeypatch: pytest.MonkeyPatch) -> None:

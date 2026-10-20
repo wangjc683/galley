@@ -234,7 +234,8 @@ Codex request body against `https://api.openai.com/v1` but sends Galley's own
 `User-Agent` (`Galley (<system>; <machine>)`) without `originator` or
 `ChatGPT-Account-ID`, never queries WHAM, and handles plan errors by
 `error.code`: terminal codes (usage limit, not eligible, unsupported
-capability, and the other rejections) fail at once with an English message
+capability, a revoked or disconnected sign-in, and the other rejections) fail
+at once with an English message
 that names the code, and the two `*_unavailable` codes use GA's normal
 backoff. The ledger row for `0007` in `managed-ga/patches/manifest.md` lists
 the codes.
