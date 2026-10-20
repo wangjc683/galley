@@ -1266,7 +1266,7 @@
   - 用 SIWC 令牌调 `chatgpt.com/backend-api/wham/usage` 返回 401 `rejected_by_access_enforcement`。
   - 上面两条，[openai/codex#54219](https://github.com/openai/codex/issues/54219)（10-15 提，至今未答复）也实测过。
   - 用户在 ChatGPT 设置里给 Galley 设的每周上限是另一层限制，用量同样读不到。
-- **启动信号**：#54219 有官方答复；或 `/v1/responses` 开始返回 `x-codex-primary-*` 头或额度事件；或文档出现 SIWC 可用的用量接口。顺手可查的一条：探针里每次都出现的 `response.metadata` 事件只记了名字、没看内容，SIWC 票 04 合入后用正式登录抓一次原始事件确认。
+- **启动信号**：#54219 有官方答复；或 `/v1/responses` 开始返回 `x-codex-primary-*` 头或额度事件；或文档出现 SIWC 可用的用量接口。（2026-10-20 已查：`response.metadata` 事件里只有内容审核结果 `openai_chatgpt_moderation_metadata`，完成事件里的 `access_programs` 只有 `{"cyber": "standard"}`，都不含额度。）
 - **方案**：数据可读之后：
   - 服务商卡片显示「5 小时窗口 X% · 本周 Y% · 某时重置」，Pro 只有本周一行；
   - 模型菜单里「ChatGPT 套餐」后面跟本周百分比；
