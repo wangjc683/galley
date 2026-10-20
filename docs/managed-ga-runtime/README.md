@@ -32,7 +32,7 @@ attach-mode behavior unless a task explicitly changes this document.
 | [product-and-onboarding.md](./product-and-onboarding.md) | Product model and first-run UX contract: one-screen model setup, copy direction, interaction rules |
 | [browser-control.md](./browser-control.md) | Browser Control capability: `tmwd_cdp_bridge` setup contract, resident browser bridge (live status, auto-verify, TMWebDriver coupling points), probe rules, demo, recommended copy |
 | [runtime-modes-and-sessions.md](./runtime-modes-and-sessions.md) | `managed_ga` vs `external_ga` mode boundary, session history rules, and the CLI runtime contract (defaults, output shape, status) |
-| [model-configuration.md](./model-configuration.md) | Managed model config: Provider/Model records, encrypted credential rules, ChatGPT / Codex OAuth, managed IM channels |
+| [model-configuration.md](./model-configuration.md) | Managed model config: Provider/Model records, encrypted credential rules, ChatGPT (Sign in with ChatGPT), managed IM channels |
 | [prompt-composition.md](./prompt-composition.md) | Galley Runtime Prompt composition, `GALLEY_RUNTIME_PROMPT_TEXT` seam, prompt profile |
 | [galley-assistant-manual/](./galley-assistant-manual/) | **Shipped to the model, not a design doc**: the manual the main chat reads before a Galley CLI write, one file per part, the parts that write needs (authority, commands, times, the user's to-dos and its own reminders, wake notes, reporting); embedded in Core and written to `assistant/reference/manual/` in the state root |
 | [code-state-and-patches.md](./code-state-and-patches.md) | **Non-negotiable rules**: code-is-replaceable / state-is-user-owned boundary, state layout, patch discipline and how to add a patch, backup and device migration |

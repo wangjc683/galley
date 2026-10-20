@@ -231,14 +231,6 @@
 - **待定**：只做模型页还是做成 Settings 通用机制。（「Esc 在输入框内时是否只关编辑器不关设置」2026-10-08 第二批 D3 已定：焦点在输入框时第一下 Esc 只离开输入框，第二下才关设置，全设置页生效。）与「Channels 展开态跨进出 Settings 记忆」同属「组件态离开即丢」，可同批评估。
 - **关联**：[模型页逐页对表](./2026-10-08-settings-models-tab-pass.md) · `gui/src/components/screens/settings/Settings.tsx`
 
-## Codex「读取模型列表」与预设不同步
-
-- **状态**：暂缓（2026-10-08 模型批审计发现，JC 库里没有 Codex 服务商，未实测）。2026-10-20 起 ChatGPT 登录改走 Sign in with ChatGPT，模型列表从账号的 `/v1/models` 目录读取；SIWC 票 05 删掉旧的 Codex 登录时，本节随之删除（[SIWC PRD](../../.scratch/chatgpt-siwc/PRD.md)）。
-- **提出**：2026-10-08，模型页审计 C15：Codex 服务商手动「读取模型列表」返回 Core 写死的旧列表（`core/src/managed_model_probe.rs` 约 30-41 行：gpt-5.5 / 5.4 / 5.4-mini / 5.3-codex / 5.1），不含预设默认的 `gpt-5.6-sol`。
-- **启动信号**：下次动 Codex 预设或 Codex 登录流程；或 Codex 用户反馈列表里没有新模型。
-- **方案**：二选一：Core 静态列表与 `managed-model-presets.ts` 的 Codex 条目同步（或从同一份数据读）；或 Codex 卡不显示「读取模型列表」（与自动拉取已跳过 Codex 一致），只留手动填写。
-- **关联**：[模型页逐页对表](./2026-10-08-settings-models-tab-pass.md) · `gui/src/lib/managed-model-presets.ts`
-
 ---
 
 ## 浏览器操作抢走前台
@@ -503,7 +495,7 @@
 - **启动信号**：有用户明确说在用 priority tier；或上游给 Claude 加 fast（`speed`）时一并做。
 - **背景**：内核 `_enum('service_tier', {auto, default, priority, flex})` 已支持，只在 OpenAI payload 发送；GUI 没暴露，属于「有能力没入口」。Claude 的 fast 内核根本没有，按管理运行时纪律等上游，不自己 patch llmcore。
 - **方案**：高级面板加三选一 `auto` / `priority` / `flex`，只对 `protocol === "openai"` 显示，文案标注「更快、计费更高」。不进 Composer。
-- **待定**：Codex OAuth 后端是否透传该字段，做之前查 `_stream_openai` 的 codex 分支。
+- **待定**：ChatGPT 订阅后端（内核的 `codex_backend`）是否透传该字段，做之前查 `_openai_stream` 的 codex 分支。
 - **关联**：[issue #26 model config UX](./2026-09-08-issue-26-model-config-ux.md) · `gui/src/components/screens/settings/models/AdvancedModelOptions.tsx`
 
 ## 会话内查找（Ctrl+F）
@@ -741,7 +733,7 @@
 - **候选 5**（hive Goal controller helpers 收窄）随 2026-09-16 goal v2 退役 `cli/src/goal/` 一并消失。
 - **候选 6**（useComposerGoal 出参收成 goalView）随 2026-10-13 Goal 移除一并消失。
 - **候选 7 · GaSession seam grep gate**:seam 本身干净(bridge 11 处调用零 reach-in),但"re-audit 面 = 一个文件"的承诺无 CI 强制,且 `managed_im_supervisor.py:346` 的 `_galley_im_prompt_installed` 写入是结构性旁路(该路径无 Bridge)。做法:grep gate(同 `check-supervisor-sop-drift.mjs` 文风)+ docstring 补旁路,或让 supervisor 路径也构造 `GaSession(agent)`。
-- **Quick wins**:`hasRunningSessions` 收成 messages store selector(三处重推导:App.tsx / MainHeaderHost / app-update.ts);`lib/ipc/ga-output-cleaning.ts` 补测试(纯函数、流式热路径、零覆盖);`socket_listener/` 的 `use super::*` 互 glob 改具名 re-export(照 `codex_oauth/mod.rs`);`spawn_args_for_session_new` 7 参改 `&SessionBrief`+2;runtime store 补 slice-merge shape 守卫(照 `sessions.shape.test.ts`)。
+- **Quick wins**:`hasRunningSessions` 收成 messages store selector(三处重推导:App.tsx / MainHeaderHost / app-update.ts);`lib/ipc/ga-output-cleaning.ts` 补测试(纯函数、流式热路径、零覆盖);`socket_listener/` 的 `use super::*` 互 glob 改具名 re-export(照 `chatgpt_siwc/mod.rs`);`spawn_args_for_session_new` 7 参改 `&SessionBrief`+2;runtime store 补 slice-merge shape 守卫(照 `sessions.shape.test.ts`)。
 - **关联**:[架构审查第二轮](./2026-07-28-architecture-review-deepening-round.md) · ADR-0002。
 
 ---

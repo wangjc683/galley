@@ -61,7 +61,7 @@ probe and the composer effort pill only ever read the effective
 First-run Provider preset dropdown:
 
 ```text
-ChatGPT / Codex
+ChatGPT           (Sign in with ChatGPT, no key)
 OpenAI            (official API)
 Anthropic         (official API)
 DeepSeek
@@ -189,54 +189,33 @@ The generated config path is an implementation detail. Users should not edit or
 rely on it. Advanced diagnostics may show that a generated config exists, but
 must not display API key values.
 
-### ChatGPT / Codex OAuth
+### ChatGPT (Sign in with ChatGPT)
 
-ChatGPT / Codex is a managed OpenAI-compatible provider with a different auth
-contract from normal API-key providers:
+The ChatGPT provider runs on the user's ChatGPT plan through Galley's own
+Sign in with ChatGPT (SIWC) client (`core/src/chatgpt_siwc/`; product rulings
+and probe findings in `.scratch/chatgpt-siwc/PRD.md`). Galley registers its own
+OAuth client and spends the user's plan usage through `api.openai.com`. It is
+the provider's only sign-in: the Codex CLI login that came before it (it
+borrowed the Codex CLI's OAuth client and talked to `chatgpt.com`) was removed
+on 2026-10-20 (PRD decision 5, ticket 05). The data values it introduced stay:
+provider `mp_chatgpt_codex`, model record `mm_chatgpt_codex_gpt_55`, auth kind
+`chatgpt_codex_oauth`. A stored credential counts only when it carries
+`"flow": "siwc"`.
 
-- Core owns the OAuth access token, refresh token, expiry, and ChatGPT account
-  id in the encrypted local credential store.
-- Generated managed model config contains only `apiKeyRef`, Codex backend
-  metadata, and credential IPC connection metadata; it never contains the
-  refresh token.
-- Managed GA asks Core for a short-lived access token over local credential IPC
-  before Codex requests. The IPC response may include access token, account id,
-  and expiry, but must never return the refresh token.
-- Core refreshes access tokens behind a per-`apiKeyRef` async gate. It reads the
-  credential before locking, reads again after locking, and reuses a token that
-  another request already refreshed.
-- Refresh responses may rotate the refresh token. If the response omits a new
-  refresh token, Core preserves the previous refresh token.
-- If JWT expiry is missing, Core may use OAuth `expires_in` as the expiry
-  fallback.
-- After refresh failure, Core may recover from a newer usable DB credential or
-  from Codex CLI `auth.json`, but only when the ChatGPT account id is compatible
-  with the credential that was being refreshed. It must not silently switch a
-  running request to another account's quota or billing context.
+What sets it apart from an API-key provider:
 
-The managed GA Codex backend uses Codex-specific request behavior: Responses
-API endpoint under the ChatGPT Codex base URL, `store=false`, Codex user-agent
-and `originator` headers, `ChatGPT-Account-ID` when available, forced streaming,
-and no `max_output_tokens` field. If a configured Codex reasoning effort is
-`minimal`, managed GA normalizes it to `medium`.
+- Core owns the access token, refresh token and expiry in the encrypted local
+  credential store. The generated managed model config contains only
+  `apiKeyRef`, the ChatGPT backend options and the credential IPC connection
+  metadata, never a token.
+- Managed GA asks Core for a short-lived access token over the local credential
+  IPC (`core/src/credential_ipc/`) before each request. The reply carries the
+  access token and its expiry, never the refresh token.
+- The engine sends a Codex-shaped Responses request (`{api_base}/responses`,
+  `store: false`, forced streaming, no `max_output_tokens`); a configured
+  `minimal` reasoning effort is raised to `medium`.
 
-When Codex returns HTTP 429, Core connection tests and managed GA request
-failures may query ChatGPT WHAM usage as a best-effort diagnostic. If usage
-windows report a reset, show the latest reset among exhausted windows; if WHAM
-is unavailable or malformed, fall back to the original quota/rate-limit error.
-Never let the WHAM probe block or replace the original Codex failure path.
-
-### Sign in with ChatGPT (SIWC)
-
-Galley's native ChatGPT-plan sign-in (`core/src/chatgpt_siwc/`; product
-rulings and probe findings in `.scratch/chatgpt-siwc/PRD.md`, ticket 02).
-Galley registers its own
-OAuth client and spends the user's plan usage through `api.openai.com`. Until
-the Codex OAuth flow above is removed, both flows share the `mp_chatgpt_codex`
-provider, the `mm_chatgpt_codex_gpt_55` model record and the
-`chatgpt_codex_oauth` auth kind; the stored credential's `"flow": "siwc"` is
-what tells them apart. A Codex OAuth credential has no `flow` and keeps
-parsing as before.
+In detail:
 
 - **Sign-in**: authorization code + PKCE (S256) + `state` + `nonce` against
   `https://auth.openai.com/api/accounts/authorize`, `resource` and
@@ -278,30 +257,47 @@ parsing as before.
   be fetched or is empty, the stored slug stays, and a record created then
   gets the fallback `gpt-5.6-sol`. The display name follows the slug only if
   it was just the old slug; the model's option settings are kept.
-- **Refresh**: the same per-`apiKeyRef` gate pattern as Codex OAuth, 120 s
-  before expiry, `grant_type=refresh_token` + `client_id` + `refresh_token` +
-  `resource`. Access token, rotated refresh token, expiry and scopes are
+- **Refresh**: behind a per-`apiKeyRef` async gate (read before locking,
+  read again after locking, reuse a token another request already refreshed;
+  every write of the credential takes the same gate), 120 s before expiry,
+  `grant_type=refresh_token` + `client_id` + `refresh_token` + `resource`. Access token, rotated refresh token, expiry and scopes are
   replaced together. `invalid_grant`, `invalid_refresh_token`,
   `token_expired`, `refresh_token_expired`, `refresh_token_invalidated` and
   `refresh_token_reused` — in `error` or `error_reason` — clear the tokens,
   keep the registration and the credential row, and turn every later request
   into `chatgpt_plan_reauth_required`. A 401 `token_revoked` on Core's own
   model list or connection test does the same. Network errors, 5xx and 429
-  keep the credential. There is no fallback to the Codex CLI's `auth.json`.
-- **Runtime**: credential IPC returns `accessToken` with no `accountId` (SIWC
-  access tokens carry no `chatgpt_account_id`). The runtime model JSON gets
-  `chatgptPlan: true` and `apiBase: https://api.openai.com/v1` for a SIWC
-  credential; the field is omitted otherwise, so every other model's JSON is
-  unchanged. The engine side of that contract follows the list below.
+  keep the credential. If a refresh fails because another process already
+  rotated the stored credential, Core adopts that newer credential when it
+  belongs to the same account (`sub`); it never switches a request to another
+  account.
+- **Runtime**: a `chatgpt_codex_oauth` model reaches the runner only with a
+  SIWC credential, always with `apiBase: https://api.openai.com/v1`. Credential
+  IPC returns `accessToken` and `expiresAt`, no account id (SIWC access tokens
+  carry no `chatgpt_account_id`). The runner turns the auth kind alone into the
+  engine's `codex_backend` key; there is no separate plan flag (the
+  `chatgptPlan` / `chatgpt_plan` pair that chose between the two sign-ins
+  went with the Codex CLI login).
 - **Requests from Core** (model list `GET /v1/models`, keeping
   `visibility == "list"`; connection test `POST /v1/responses` with
   `store: false`, `stream: true`) send `User-Agent: Galley (<os>; <arch>)`,
   named like Python's `platform.system()` / `platform.machine()`, and no
   `originator` or `ChatGPT-Account-ID`.
-- **Sign-out**: SIWC removes the local tokens, then revokes the refresh token
-  (RFC 7009 form to `https://auth.openai.com/api/accounts/oauth/revoke`,
+- **Sign-out**: removes the stored credential, then revokes a SIWC refresh
+  token (RFC 7009 form to `https://auth.openai.com/api/accounts/oauth/revoke`,
   retried on network errors / 5xx / 429) and reports
-  `remoteRevokeConfirmed`. Codex OAuth sign-out stays local-only.
+  `remoteRevokeConfirmed`. A stored value that is not a SIWC credential is
+  only deleted, never revoked.
+- **Retiring the Codex CLI login** (`chatgpt_siwc::retire_codex_cli_credentials`,
+  run at every Core start before the background services, a no-op once done):
+  for every `chatgpt_codex_oauth` provider, a stored credential without
+  `"flow": "siwc"` is deleted from the encrypted store and the provider's
+  `api_base` becomes `https://api.openai.com/v1`. The credential is never
+  revoked (its refresh token may be the one the Codex CLI itself uses, and
+  revoking it would sign the user out there too), and nothing outside Galley's
+  store is written. Provider and model records and the sessions bound to them
+  stay, so the card reads "sign in" and the next sign-in takes the provider
+  over in place. A change rewrites the generated model config.
 
 Tauri commands (errors are `{"error": "<code>", "message": "..."}`; the
 plan codes are `chatgpt_plan_` followed by `access_denied`,
@@ -309,21 +305,20 @@ plan codes are `chatgpt_plan_` followed by `access_denied`,
 `login_not_found`, `reauth_required`, `temporary` or `failed`):
 `start_chatgpt_plan_login`, `complete_chatgpt_plan_login`,
 `cancel_chatgpt_plan_login`, `list_chatgpt_plan_models`,
-`get_chatgpt_plan_status`, `logout_chatgpt_plan`. `logout_chatgpt_codex_provider`,
-`test_managed_model_connection` and `list_managed_model_options` dispatch by
-the stored flow as well. Never log the authorize URL (it may carry
-`id_token_hint`), tokens or authorization codes.
+`get_chatgpt_plan_status`, `logout_chatgpt_plan`.
+`test_managed_model_connection` and `list_managed_model_options` use the
+plan's connection test and catalog for a `chatgpt_codex_oauth` provider.
+`get_chatgpt_plan_status` reports `flow: "siwc"` or `null`. Never log the
+authorize URL (it may carry `id_token_hint`), tokens or authorization codes.
 
-Engine side (ticket 03): the runner turns Core's `chatgptPlan: true`, and
-nothing else, into the engine's `chatgpt_plan` key. Patch `0007` then keeps the
-Codex request body against `https://api.openai.com/v1` but sends Galley's own
-`User-Agent` (`Galley (<system>; <machine>)`) without `originator` or
-`ChatGPT-Account-ID`, never queries WHAM, and handles plan errors by
-`error.code`: terminal codes (usage limit, not eligible, unsupported
-capability, a revoked or disconnected sign-in, and the other rejections) fail
-at once with an English message
-that names the code, and the two `*_unavailable` codes use GA's normal
-backoff. The ledger row for `0007` in `managed-ga/patches/manifest.md` lists
+Engine side (patch `0007`): with `codex_backend` the engine takes the access
+token from Core's credential IPC, keeps the Codex request body against
+`https://api.openai.com/v1`, sends Galley's own `User-Agent`
+(`Galley (<system>; <machine>)`) without `originator` or
+`ChatGPT-Account-ID`, and handles plan errors by `error.code`: terminal codes
+(usage limit, not eligible, unsupported capability, a revoked or disconnected
+sign-in, and the other rejections) fail at once with an English message that
+names the code, and the two `*_unavailable` codes use GA's normal backoff. The ledger row for `0007` in `managed-ga/patches/manifest.md` lists
 the codes.
 
 Do not expose non-native text-protocol sessions, mixin failover, IM bot config,

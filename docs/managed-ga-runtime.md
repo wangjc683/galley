@@ -12,7 +12,7 @@ Section map:
   [browser-control.md](./managed-ga-runtime/browser-control.md)
 - Runtime Modes, Session History, CLI Runtime Contract →
   [runtime-modes-and-sessions.md](./managed-ga-runtime/runtime-modes-and-sessions.md)
-- Model Configuration (incl. ChatGPT / Codex OAuth, managed channels) →
+- Model Configuration (incl. ChatGPT sign-in, managed channels) →
   [model-configuration.md](./managed-ga-runtime/model-configuration.md)
 - Prompt Composition →
   [prompt-composition.md](./managed-ga-runtime/prompt-composition.md)
