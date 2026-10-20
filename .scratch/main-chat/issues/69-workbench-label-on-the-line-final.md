@@ -1,6 +1,6 @@
 # 69 定稿：拆票 68 的切换器，区名放回线上，19px 软过渡加居中进生产，设计文档定稿
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-10-20 合入 `28bbdbe1`、`616c6ce5`、`5d5d6a1d`；主会话复跑门禁：typecheck、lint、`git diff --check`、文档链接门禁、`TZ=UTC` 与 `TZ=America/Los_Angeles` 各 178 个文件 1946 条测试全过，新增行没有本机路径与半角标点，「票 68」在 `gui/src` 只剩遗留清单；看过浅深两张交界放大图。等 JC 真机看一眼）
 
 来源：主聊天 PRD 裁决 120 第 6 条（2026-10-20，JC：「①′ + 居中，我感觉比较接近我想要的感觉：安静地介绍用户工作台区域」）。依赖 68（已合入）。改 GUI 与文档；Core、runner、CLI 不动。
 
