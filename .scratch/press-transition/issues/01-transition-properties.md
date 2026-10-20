@@ -1,6 +1,6 @@
 # 01 让按下与展开的过渡真正动起来：过渡属性表写全 translate / scale / rotate
 
-Status: ready-for-agent（2026-10-20 派出）
+Status: needs-dogfood（2026-10-20 合入 `e1c44a7e`。21 处原地改：按下统一写 `active:transition-[translate,scale,box-shadow]`，设置页箭头 `transition-[color,rotate]`，项目组子项 `transition-[opacity,translate]`；防回归测试 `gui/src/styles/transition-properties.test.ts` 规定手写属性表不许出现 `transform`，改前红 21 处、改后绿。主会话在主树复跑门禁：typecheck、lint、`git diff --check`、文档链接门禁、`TZ=UTC` 下 185 个文件 1994 条测试全过；构建产物里按下那串是 `transition-property:translate,scale,box-shadow`。等 JC 真机看按下、设置页箭头、项目组展开的手感）
 
 来源：2026-10-20 做主聊天 PRD 裁决 122（助理卡片）时发现，见 [devlog](../../../docs/devlog/2026-10-20-assistant-card-edge-and-switch-hitch.md)「第二轮：选中与按下」。JC：「修，开小票」。只改 GUI。
 
