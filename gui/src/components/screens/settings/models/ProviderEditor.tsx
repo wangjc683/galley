@@ -28,7 +28,7 @@ import {
   type ManagedModelProviderPresetId,
 } from "@/lib/managed-model-presets";
 import {
-  managedModelProtocolLabel,
+  providerConnectionLabel,
   providerPresetLabel,
 } from "@/lib/managed-model-preset-copy";
 import { cn } from "@/lib/utils";
@@ -58,6 +58,7 @@ export function ProviderEditor({
   canTest,
   canFetchModels,
   canCancel,
+  presetPicker = false,
   providerHasSavedKey,
   isNoAuthProvider = false,
   canClearKey = false,
@@ -84,6 +85,11 @@ export function ProviderEditor({
   canTest: boolean;
   canFetchModels: boolean;
   canCancel: boolean;
+  /** Create form only: the card is chosen inside the form, with the
+   * picker. Settings' zero-provider page, where this form is the one
+   * next step (no 「添加」 there). Otherwise the card came from
+   * 「添加」's menu and reads as text, as on the edit form. */
+  presetPicker?: boolean;
   providerHasSavedKey: boolean;
   /** The saved provider record is a no-auth endpoint (authKind "none"). */
   isNoAuthProvider?: boolean;
@@ -154,14 +160,48 @@ export function ProviderEditor({
     probeState.action === "model-list" &&
     (probeState.kind === "error" ||
       (probeState.kind === "success" && modelOptions.length === 0));
-  // Editing keeps the card it was saved under: switching cards would
-  // reset the endpoint while the provider's models keep the old card's
-  // preset layer. Only the Custom card's protocol stays switchable.
-  const editIdentityProtocolLabel = isChatGptProvider
-    ? copy.chatgptCodexBadge
-    : isCustomEndpoint || !form.protocol
-      ? null
-      : managedModelProtocolLabel(copy, form.protocol);
+  // A create form without a card yet can only be given one by the
+  // picker, whatever the caller asked for.
+  const showPresetPicker =
+    isCreatingProvider && (presetPicker || !selectedPreset);
+  // How the provider connects (SIWC decision 15), from the form as it
+  // stands: an official card pointed at a relay reads 「OpenAI 兼容」.
+  // The Custom card's protocol is its segmented control right below.
+  const connectionLabel =
+    selectedPreset && form.protocol && !isCustomEndpoint
+      ? providerConnectionLabel(copy, {
+          authKind: form.authKind,
+          protocol: form.protocol,
+          apiBase: form.apiBase,
+        })
+      : null;
+  // The card as read-only text: the edit form always (switching cards
+  // would reset the endpoint while the provider's models keep the old
+  // card's preset layer; only the Custom card's protocol stays
+  // switchable), and the create form opened from 「添加」's menu — a
+  // different card is 「添加」 again.
+  const presetIdentity = selectedPreset && (
+    <div className="flex min-w-0 items-baseline gap-2">
+      <span className="min-w-0 truncate text-ui-secondary font-medium text-ink">
+        {providerPresetLabel(copy, selectedPreset)}
+      </span>
+      {connectionLabel && (
+        <span className="shrink-0 text-ui-tertiary text-ink-muted">
+          {connectionLabel}
+        </span>
+      )}
+    </div>
+  );
+  const closeButton = canCancel && (
+    <IconButton
+      ariaLabel={copy.closeProviderEditor}
+      size="sm"
+      onClick={onCancel}
+      className="shrink-0"
+    >
+      <X size={12} weight="thin" />
+    </IconButton>
+  );
 
   const blockedFlash = blocked?.flash ?? false;
   const rootRef = useRef<HTMLDivElement>(null);
@@ -215,38 +255,25 @@ export function ProviderEditor({
       )}
 
       <div className="space-y-4">
-        {isCreatingProvider ? (
+        {showPresetPicker ? (
           <div className="flex items-center gap-2">
             <ManagedModelProviderPicker
               value={form.providerPresetId}
-              protocol={form.protocol}
+              badgeLabel={connectionLabel}
               onChange={onSelectProviderPreset}
               className="min-w-0 flex-1"
             />
-            {canCancel && (
-              <IconButton
-                ariaLabel={copy.closeProviderEditor}
-                size="sm"
-                onClick={onCancel}
-                className="shrink-0"
-              >
-                <X size={12} weight="thin" />
-              </IconButton>
-            )}
+            {closeButton}
+          </div>
+        ) : isCreatingProvider ? (
+          // No title on the create form: the card line leads, the close
+          // button where the picker's was.
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">{presetIdentity}</div>
+            {closeButton}
           </div>
         ) : (
-          selectedPreset && (
-            <div className="flex min-w-0 items-baseline gap-2">
-              <span className="min-w-0 truncate text-ui-secondary font-medium text-ink">
-                {providerPresetLabel(copy, selectedPreset)}
-              </span>
-              {editIdentityProtocolLabel && (
-                <span className="shrink-0 text-ui-tertiary text-ink-muted">
-                  {editIdentityProtocolLabel}
-                </span>
-              )}
-            </div>
-          )
+          presetIdentity
         )}
 
         {providerSelected &&

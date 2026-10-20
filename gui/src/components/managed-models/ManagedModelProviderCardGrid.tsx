@@ -21,7 +21,8 @@ interface ManagedModelProviderCardGridProps {
  * Flat card grid over the provider presets — the Onboarding variant of
  * ManagedModelProviderPicker. All choices are visible at once so the
  * first decision costs one click instead of open-dropdown → scan →
- * pick. Settings keeps the compact popover picker.
+ * pick. Settings stays compact: 「添加」 opens the presets as a menu
+ * (ManagedModelProviderAddMenu); a grid would stretch the page.
  */
 export function ManagedModelProviderCardGrid({
   value,

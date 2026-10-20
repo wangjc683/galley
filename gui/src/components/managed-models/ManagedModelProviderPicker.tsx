@@ -3,47 +3,44 @@ import { CaretDown, Check } from "@phosphor-icons/react";
 import { useRef, useState } from "react";
 
 import {
-  CUSTOM_ENDPOINT_PRESET_ID,
   getManagedModelProviderPreset,
   MANAGED_MODEL_PROVIDER_PRESETS,
+  type ManagedModelProviderPreset,
   type ManagedModelProviderPresetId,
 } from "@/lib/managed-model-presets";
 import {
-  managedModelProtocolLabel,
   providerPresetDescription,
   providerPresetLabel,
 } from "@/lib/managed-model-preset-copy";
 import { useCopy } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import type { ManagedModelProtocol } from "@/types/managed-models";
 
 interface ManagedModelProviderPickerProps {
   value: ManagedModelProviderPresetId | null;
-  protocol: ManagedModelProtocol | null;
+  /** Small text under the chosen card: how it connects
+   * (`providerConnectionLabel`), null for none (the Custom card, whose
+   * protocol control sits right below). */
+  badgeLabel: string | null;
   onChange: (value: ManagedModelProviderPresetId) => void;
   ariaLabel?: string;
   className?: string;
 }
 
+/**
+ * The create form's own card picker. Since SIWC decision 16
+ * (2026-10-20) only the zero-provider page uses it, where that form
+ * is the page's one next step; with a provider configured, 「添加」 is
+ * the card list itself (ManagedModelProviderAddMenu).
+ */
 export function ManagedModelProviderPicker({
   value,
-  protocol,
+  badgeLabel,
   onChange,
   ariaLabel,
   className,
 }: ManagedModelProviderPickerProps) {
   const copy = useCopy().settings.models;
   const selectedPreset = value ? getManagedModelProviderPreset(value) : null;
-  // The Custom card's protocol is a choice shown by the segmented
-  // control right below the picker — no duplicate badge here.
-  const badgeLabel =
-    selectedPreset?.id === "chatgpt-codex"
-      ? copy.chatgptCodexBadge
-      : selectedPreset?.id === CUSTOM_ENDPOINT_PRESET_ID
-        ? null
-        : protocol
-          ? managedModelProtocolLabel(copy, protocol)
-          : null;
   const triggerRef = useRef<HTMLButtonElement>(null);
   // The dialog that hosts the picker (Settings), resolved when the list
   // opens. Positioning against it keeps the list inside the dialog's
@@ -89,9 +86,9 @@ export function ManagedModelProviderPicker({
                 ? providerPresetLabel(copy, selectedPreset)
                 : copy.chooseProvider}
             </span>
-            {badgeLabel && (
+            {selectedPreset && badgeLabel && (
               // 11.5px, not text-ui-micro: these badges are Han text
-              // (「OpenAI 兼容」「ChatGPT 登录」), and Han never goes below
+              // (「OpenAI 兼容」「ChatGPT 订阅」), and Han never goes below
               // 11.5px (2026-10-07).
               <span className="mt-1 inline-flex rounded-sm bg-ink-muted/10 px-1.5 py-px text-ui-tertiary text-ink-muted">
                 {badgeLabel}
@@ -126,7 +123,6 @@ export function ManagedModelProviderPicker({
         >
           {MANAGED_MODEL_PROVIDER_PRESETS.map((preset) => {
             const selected = preset.id === value;
-            const description = providerPresetDescription(copy, preset.id);
             return (
               <Popover.Close asChild key={preset.id}>
                 <button
@@ -146,16 +142,7 @@ export function ManagedModelProviderPicker({
                       />
                     )}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-ui-secondary font-medium">
-                      {providerPresetLabel(copy, preset)}
-                    </span>
-                    {description && (
-                      <span className="mt-0.5 block truncate text-ui-tertiary leading-4 text-ink-muted">
-                        {description}
-                      </span>
-                    )}
-                  </span>
+                  <ProviderPresetOptionText preset={preset} />
                 </button>
               </Popover.Close>
             );
@@ -163,5 +150,29 @@ export function ManagedModelProviderPicker({
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
+  );
+}
+
+/** A card's name over its one-line description: the rows of this
+ * picker's list and of Settings' 「添加」 menu, kept one markup so the
+ * two lists read alike. */
+export function ProviderPresetOptionText({
+  preset,
+}: {
+  preset: ManagedModelProviderPreset;
+}) {
+  const copy = useCopy().settings.models;
+  const description = providerPresetDescription(copy, preset.id);
+  return (
+    <span className="min-w-0 flex-1">
+      <span className="block truncate text-ui-secondary font-medium">
+        {providerPresetLabel(copy, preset)}
+      </span>
+      {description && (
+        <span className="mt-0.5 block truncate text-ui-tertiary leading-4 text-ink-muted">
+          {description}
+        </span>
+      )}
+    </span>
   );
 }

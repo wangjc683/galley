@@ -526,8 +526,16 @@ export function useProviderSetupController({
     resetConnectionTest();
   };
 
-  const startNewProvider = () => {
-    setProviderForm(newProviderForm());
+  /** A fresh create form, on the given card when there is one (the
+   * card chosen from Settings' 「添加」 menu). */
+  const startNewProvider = (
+    providerPresetId?: ManagedModelProviderPresetId,
+  ) => {
+    setProviderForm(
+      providerPresetId
+        ? providerFormFromPreset(providerPresetId)
+        : newProviderForm(),
+    );
     setProviderFormModelOptions([]);
     setProviderFormProbeState({ kind: "idle" });
     releaseFormChatGptPlanLogin();

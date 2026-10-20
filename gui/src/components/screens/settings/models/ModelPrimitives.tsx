@@ -8,9 +8,9 @@ import {
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCopy } from "@/lib/i18n";
-import { managedModelProtocolLabel } from "@/lib/managed-model-preset-copy";
+import { providerConnectionLabel } from "@/lib/managed-model-preset-copy";
 import { cn } from "@/lib/utils";
-import type { ManagedModelProtocol } from "@/types/managed-models";
+import type { ManagedModelProviderRecord } from "@/types/managed-models";
 
 import type { ProbeAction, ProbeState } from "./types";
 
@@ -220,19 +220,23 @@ export function CredentialBadge({
   );
 }
 
-export function ProtocolBadge({
-  protocol,
-  apiBase,
+/** The card's small text after the name: how the provider is reached
+ * (「ChatGPT 订阅」 / 「官方 API」 / 「OpenAI 兼容」…), its address in
+ * the tooltip. */
+export function ProviderConnectionBadge({
+  provider,
 }: {
-  protocol: ManagedModelProtocol;
-  apiBase: string;
+  provider: Pick<
+    ManagedModelProviderRecord,
+    "protocol" | "authKind" | "apiBase"
+  >;
 }) {
   const copy = useCopy().settings.models;
-  const label = managedModelProtocolLabel(copy, protocol);
+  const label = providerConnectionLabel(copy, provider);
   return (
     <span
       className="shrink-0 text-ui-tertiary leading-4 text-ink-muted/55"
-      title={`${label} · ${apiBase}`}
+      title={`${label} · ${provider.apiBase}`}
     >
       {label}
     </span>

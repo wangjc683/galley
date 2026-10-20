@@ -954,7 +954,11 @@ export const zhCopy = {
       xiaomiMimoPresetDescription: "小米 MiMo Token 套餐",
       zhipuGlmPresetDescription: "智谱 GLM 官方接口",
       getApiKey: "获取 API Key",
-      chatgptCodexBadge: "ChatGPT 登录",
+      // The small text after a provider's name: how it is reached
+      // (SIWC decision 15). Not 「OpenAI 官方」: plan usage is not the
+      // official API's pay-as-you-go billing.
+      chatgptPlanConnection: "ChatGPT 订阅",
+      officialApiConnection: "官方 API",
       signOutChatGPT: "退出登录",
       apiKey: "API Key",
       apiUrl: "API 地址",

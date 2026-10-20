@@ -41,7 +41,7 @@ import {
   InfoLine,
   InlineProbeStatus,
   ProbeErrorLine,
-  ProtocolBadge,
+  ProviderConnectionBadge,
 } from "./ModelPrimitives";
 import type { ModelDraftState, ProbeAction, ProbeState } from "./types";
 
@@ -274,10 +274,7 @@ export function ProviderCard({
           <SettingsTag className="tabular-nums">
             {copy.enabledModelsCount(models.length)}
           </SettingsTag>
-          <ProtocolBadge
-            protocol={provider.protocol}
-            apiBase={provider.apiBase}
-          />
+          <ProviderConnectionBadge provider={provider} />
         </>
       }
       actionsPinned={headerProbeState.kind === "loading"}

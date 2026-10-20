@@ -1,8 +1,9 @@
-import { Info, Plus, WarningCircle } from "@phosphor-icons/react";
+import { Info, WarningCircle } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
+import { ManagedModelProviderAddMenu } from "@/components/managed-models/ManagedModelProviderAddMenu";
 import { useProviderSetupController } from "@/components/managed-models/use-provider-setup-controller";
 import {
   SettingsPanelHeader,
@@ -311,7 +312,8 @@ export function SettingsModels({
   // 「添加」, another card's 「⋯ → 编辑」 and this card's header would each
   // replace the open form; with unsaved input they refuse instead and
   // flag it (highlight + 「先保存或关闭当前编辑」). Switching cards inside
-  // the create form is the user's own choice and is not guarded.
+  // the zero-provider page's create form is the user's own choice and
+  // is not guarded.
   const closeProviderEditor = () => {
     providerEditorBlocked.clear();
     resetProviderForm();
@@ -323,10 +325,21 @@ export function SettingsModels({
     return false;
   };
 
-  const handleAddProvider = () => {
-    if (!providerFormReplaceable()) return;
+  // 「添加」 is a menu of cards (SIWC decision 16). Opening it is where
+  // the open form would be replaced, so the guard runs there: unsaved
+  // input keeps the menu shut and flags the form; a clean form closes
+  // before the menu opens, so Esc or a click outside leaves no form.
+  const handleAddMenuOpenRequest = () => {
+    if (!providerFormReplaceable()) return false;
+    closeProviderEditor();
+    return true;
+  };
+
+  const handleAddProvider = (
+    providerPresetId: Parameters<typeof startNewProvider>[0],
+  ) => {
     providerEditorBlocked.clear();
-    startNewProvider();
+    startNewProvider(providerPresetId);
   };
 
   const handleEditProvider = (provider: ManagedModelProviderRecord) => {
@@ -481,19 +494,15 @@ export function SettingsModels({
             </SettingsSectionLabel>
           </div>
           {showAddProvider && (
-            <Button
+            <ManagedModelProviderAddMenu
               // primary = the current actionable next step: with zero
               // providers, adding one IS the next step; once configured,
               // adding another is routine maintenance. (The usual zero-
               // provider page hides it: its create form is already open.)
               variant={providerListEmpty ? "primary" : "secondary"}
-              size="sm"
-              aria-label={modelCopy.addProviderAria}
-              onClick={handleAddProvider}
-              leadingIcon={<Plus size={12} weight="bold" />}
-            >
-              {modelCopy.addProvider}
-            </Button>
+              onOpenRequest={handleAddMenuOpenRequest}
+              onPick={handleAddProvider}
+            />
           )}
         </div>
         <div className="mt-3 space-y-2">
@@ -505,6 +514,9 @@ export function SettingsModels({
               canTest={canTestProvider}
               canFetchModels={canFetchProviderFormModels}
               canCancel={providers.length > 0 || !!visibleProviderForm.id}
+              // Zero providers: the form is the page's one next step and
+              // picks its own card; otherwise 「添加」's menu picked it.
+              presetPicker={providerListEmpty}
               providerHasSavedKey={providerHasSavedKey}
               isNoAuthProvider={editingProviderIsNoAuth}
               canClearKey={canClearProviderKey}
