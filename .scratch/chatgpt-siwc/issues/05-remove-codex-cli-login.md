@@ -47,6 +47,13 @@ Status: ready-for-agent
   - `grep -rn "SIWC 票 04" gui/src` 应该清零；
   - `docs/design/conversation.md` 模型 pill 一节写明这个窄例外：订阅模型的名字前面放 13px 淡色 ChatGPT 标志，提示第二行「使用 ChatGPT 订阅」，菜单头「ChatGPT 订阅 · 管理用量」；理由是费用来源不是模型参数；1013 行「无箭头、无图标」加上例外说明。
 
+- 模型菜单（PRD 裁决 14，`gui/src/components/conversation/LLMPill.tsx`）：
+  - 订阅模型的行，名字前放和 pill 同一个 13px 淡色 ChatGPT 标志；
+  - 去掉列表中间的分组头，「ChatGPT 订阅 · 管理用量」挪到底部动作栏（11px，与「配置模型…」同档），只在有订阅模型时出现；
+  - 同名规则 `isDuplicateDisplayName` 改成：几行同名、且标志能区分开（例如一行是订阅、另一行不是）时，不常显服务商；标志区分不开的同名行才常显；
+  - `docs/design/conversation.md` 的 Popover 结构一节写进同名规则与这个例外。
+  - 测试覆盖三种情况：订阅行加普通同名行 → 都只在悬停时显示服务商；两行普通同名 → 常显；没有订阅模型 → 底部不出现那一行。
+
 ## 验收
 
 - **Rust**：`cargo test --manifest-path core/Cargo.toml --workspace`、`cargo check` 全绿。
