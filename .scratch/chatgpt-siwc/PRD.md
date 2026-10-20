@@ -44,7 +44,11 @@ Status: active（2026-10-20 裁决 1：走 C，原生接 OpenAI 官方的 Sign i
 - **GA 原样跑通**：用 GA 自己的 `_openai_stream`（请求加解析整条路径）、现有 Codex 分支的请求格式、端点换成 `https://api.openai.com/v1`，两轮带工具调用都跑通（第一轮调 `code_run`，第二轮回答 `The result is 2.`）。
 - **缓存**：约 4000 token 的提示词、带同一个 `prompt_cache_key`，6 次命中 5 次（每次 3840 token）；不带 key 是 3 / 6；`session_id` 头没有影响。最早 3 次全没命中，是缓存还没暖。
 - **响应头**：没有额度类的头，只有 `x-codex-safety-buffering-*` 和 `x-codex-turn-state`。开了安全缓冲时，最终文本可能只出现在 `response.output_text.done` 里、没有 delta；GA 的解析器已经能处理。
-- **没测到**：额度用尽（`subscription_sharing_usage_limit_exceeded`）与其他报错格式；在 ChatGPT 设置里断开后的表现；撤销端点。GA 的解析器会把 `response.failed` 的错误消息显示出来（`managed-ga/code/llmcore.py:382`），但不看 `error.code`；补丁要按错误码给出能读懂的提示和「管理用量」链接，并且不重试不该重试的错误。
+- **撤销**：按 RFC 7009 的 form（`token`、`token_type_hint=refresh_token`、`client_id`）调用，成功返回空的 200，重复撤销也是 200。撤销后：
+  - 刷新返回 400 `{"error": "invalid_grant", "error_reason": "refresh_token_invalidated", ...}`，具体原因在 `error_reason` 里；
+  - 尚未过期的 access token 立刻失效，`/v1/responses` 返回 401，`error.code` 为 `token_revoked`。在 ChatGPT 设置里断开应该是同样的表现。
+- **补丁后的内核**（票 03 的 `f207502e`）真机验过：UA 为 `Galley (Darwin; x86_64)`，没有 `originator` 和账号头；两轮带工具调用正常；不存在的模型立即返回 400（`... is not supported when using Codex with a ChatGPT account`），不重试。这条报错也印证了套餐用量就是 Codex 的用量。
+- **没测到**：额度用尽（`subscription_sharing_usage_limit_exceeded`）与其他结构化报错的实际格式；在 ChatGPT 设置里断开后的实际表现。GA 的解析器会把 `response.failed` 的错误消息显示出来（`managed-ga/code/llmcore.py:382`），但不看 `error.code`；补丁要按错误码给出能读懂的提示和「管理用量」链接，并且不重试不该重试的错误。
 
 ## 参考
 

@@ -52,3 +52,14 @@ Core 给 runner 的模型 JSON（`core/src/runner_commands.rs:196` 的 `ManagedR
 - 提交只点名文件；英文提交信息，结尾 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`。
 
 ## Comments
+### 2026-10-20 实现说明（代理交付，主会话验收）
+
+- 分支 `siwc-03-runner-patch`（已 rebase 到 `ac6a4d43`）：`02641f7c` 主体，`7b28ce70` 补 `token_revoked`。待合入，和 SIWC 其他票一起合。
+- 路由：runner 只在 Core 给出 `chatgptPlan: true` 时设 `chatgpt_plan`，用户在高级选项里写的同名键会被丢掉；内核只在 `codex_backend` 与 `chatgpt_plan` 同时为真时走新路由。请求体不变，只换请求头，并且不查 WHAM。
+- 错误处理：按 `error.code` 分类，流开始前的 HTTP 错误体和流中的 `response.failed` / `error` 事件都覆盖。终止类错误跳过 GA 对 429 的重试和流内的过载判断；两个 `*_unavailable` 走 GA 原有的退避；Galley 不认识的错误码保持 GA 原样。后加的 `token_revoked` 也归为终止类，提示用户回设置里重新登录。
+- 补丁：0007 在同一基线上重放后修改，0008 与 0021 重新导出（只有行号变化）；`build-managed-ga.sh` 重建后只有 `llmcore.py` 变化，且与重放结果逐字节一致。
+- 验证：
+  - pytest 591 条通过（新增 38 条）；mypy、ruff、`check-managed-ga-payload`、`check-ga-baseline-drift`、`check-docs-links` 全过。
+  - 主会话用探针令牌真机跑过补丁后的内核：UA 为 `Galley (Darwin; x86_64)`，没有 `originator` 和账号头；两轮带工具调用正常；不存在的模型立即返回 400、不重试。
+- 没验到：额度用尽等结构化报错的真实格式（只按文档在测试里构造）、在 ChatGPT 设置里断开后的真实报错、Windows 上 `platform.machine()` 的取值、与票 02 的端到端联调。
+- 合入提示：本票和票 02 都可能改 `docs/managed-ga-runtime/model-configuration.md`，合入时留意冲突。

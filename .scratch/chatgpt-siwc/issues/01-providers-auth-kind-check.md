@@ -41,3 +41,14 @@ SQLite 不能就地改约束，只能重建表；难点在于 `managed_model_pro
 - 不改 Agent API / CLI 输出（CLI 不暴露 auth kind）。
 
 ## Comments
+
+### 2026-10-20 实现说明（代理交付，主会话验收）
+
+- 分支 `siwc-01-none-auth-check`（已 rebase 到 `ac6a4d43`）：`4695dd25` 迁移 052 与测试，`481eb24c` 两处文档更正（engineering-workflow I3 里早已不存在的 `MIGRATION_SPECS`；08-31 devlog「无需 migration」）。待合入，合入要等 `busy:0`，和 SIWC 其他票一起合。
+- 做法：照票里推荐的路线，在同一个迁移里把子表 `managed_models` 包在父表重建外面；没有用 `RENAME`，没有扩展 preflight。服务商已不存在的模型行（只有关闭外键时才写得进来）不拷回，否则外键检查会让迁移失败、Galley 起不来。
+- 验证：
+  - 新增 3 条测试：从 051 起步，放两个服务商、三个模型和 advanced 层数据，逐行逐列、逐个 pragma、逐条索引语句比对；
+  - 反向验证：只重建父表的写法会丢掉模型行；
+  - live 库只读拷贝试跑：3 个服务商、7 个模型，数据一致，`foreign_key_check` 为空；
+  - `cargo test --workspace`：1144 条测试通过，0 失败。
+- 没验到：真正的 tauri-plugin-sql 迁移器、GUI 端到端存一个免密钥服务商、Windows。合入后的真机步骤：设置 → 模型 → 新建服务商，API key 留空，确认后能保存。
