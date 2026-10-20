@@ -153,10 +153,9 @@ export function ManagedModelProviderPicker({
   );
 }
 
-/** A card's name over its one-line description: the rows of this
- * picker's list and of Settings' 「添加」 menu, kept one markup so the
- * two lists read alike. */
-export function ProviderPresetOptionText({
+/** A card's name over its one-line description: this picker's rows.
+ * Settings' 「添加」 menu draws the same two texts on one line. */
+function ProviderPresetOptionText({
   preset,
 }: {
   preset: ManagedModelProviderPreset;
