@@ -233,7 +233,7 @@
 
 ## Codex「读取模型列表」与预设不同步
 
-- **状态**：暂缓（2026-10-08 模型批审计发现，JC 库里没有 Codex 服务商，未实测）。
+- **状态**：暂缓（2026-10-08 模型批审计发现，JC 库里没有 Codex 服务商，未实测）。2026-10-20 起 ChatGPT 登录改走 Sign in with ChatGPT，模型列表从账号的 `/v1/models` 目录读取；SIWC 票 05 删掉旧的 Codex 登录时，本节随之删除（[SIWC PRD](../../.scratch/chatgpt-siwc/PRD.md)）。
 - **提出**：2026-10-08，模型页审计 C15：Codex 服务商手动「读取模型列表」返回 Core 写死的旧列表（`core/src/managed_model_probe.rs` 约 30-41 行：gpt-5.5 / 5.4 / 5.4-mini / 5.3-codex / 5.1），不含预设默认的 `gpt-5.6-sol`。
 - **启动信号**：下次动 Codex 预设或 Codex 登录流程；或 Codex 用户反馈列表里没有新模型。
 - **方案**：二选一：Core 静态列表与 `managed-model-presets.ts` 的 Codex 条目同步（或从同一份数据读）；或 Codex 卡不显示「读取模型列表」（与自动拉取已跳过 Codex 一致），只留手动填写。
@@ -1256,3 +1256,26 @@
 - **实施要点**：只改 GUI：顶栏身份行（`AssistantIdentity.tsx`）读这一轮的开跑时刻与已答完各段的用时（同工作台右下角计时的取法），每秒更新只在过了 60 秒之后、只重渲染身份行；渲染期不读 `Date.now()`（React 编译器 lint），用计时器写状态。截断时用时不能先被截掉（句子截断、用时留着），悬停全文带上用时。工作台、子任务、外置运行时零变化。
 - **待定**：阈值（60 秒是讨论时的数，真机碰到时再定；也可能是「这一步」超过多久而不是整轮）。
 - **关联**：[conversation](../design/conversation.md)「助手的对话」的「在跑时：三点气泡」；[layout-and-chrome](../design/layout-and-chrome.md) §4.1「开着助手时是身份行」；`gui/src/components/layout/assistant/AssistantIdentity.tsx`；主聊天 PRD 裁决 107、110，票 58。
+
+## ChatGPT 套餐的额度显示
+
+- **状态**：暂缓（2026-10-20 JC 按推荐：现在只给「管理用量」入口，等 OpenAI 开放数据再做；[SIWC PRD](../../.scratch/chatgpt-siwc/PRD.md) 裁决 10）。
+- **提出**：2026-10-20，JC 想在 Galley 里显示 ChatGPT 账号的额度：Plus 有 5 小时与 7 天两个窗口，Pro 只有 7 天。
+- **为什么现在做不了**：
+  - SIWC 令牌拿不到额度数据。`/v1/responses` 与 `/v1/models` 不返回 `x-codex-primary-*` / `x-codex-secondary-*` 头，流里也没有额度事件（10-20 探针实测）。
+  - 用 SIWC 令牌调 `chatgpt.com/backend-api/wham/usage` 返回 401 `rejected_by_access_enforcement`。
+  - 上面两条，[openai/codex#54219](https://github.com/openai/codex/issues/54219)（10-15 提，至今未答复）也实测过。
+  - 用户在 ChatGPT 设置里给 Galley 设的每周上限是另一层限制，用量同样读不到。
+- **启动信号**：#54219 有官方答复；或 `/v1/responses` 开始返回 `x-codex-primary-*` 头或额度事件；或文档出现 SIWC 可用的用量接口。顺手可查的一条：探针里每次都出现的 `response.metadata` 事件只记了名字、没看内容，SIWC 票 04 合入后用正式登录抓一次原始事件确认。
+- **方案**：数据可读之后：
+  - 服务商卡片显示「5 小时窗口 X% · 本周 Y% · 某时重置」，Pro 只有本周一行；
+  - 模型菜单里「ChatGPT 套餐」后面跟本周百分比；
+  - 任一窗口超过 80% 时在输入框附近提醒一次；
+  - 能分开拿到时，区分套餐上限与 Galley 自己的上限。
+- **否掉的路**：
+  - 借旧的 Codex CLI 登录去查 WHAM：等于留着 A、让用户登录两次，还冒用 Codex CLI 身份，与「删 A」裁决冲突。
+  - Galley 自己累计 token：没有分母，换算不成百分比，容易误导。
+- **现在的替代**：服务商卡片、模型菜单、额度用尽报错里都有「管理用量」，跳到 `https://chatgpt.com/settings/usage`（SIWC 票 04）。
+- **关联**：`managed-ga/patches/0007-managed-codex-backend.patch`（套餐路由的请求头与报错处理）、`core/src/chatgpt_siwc/`。
+
+---

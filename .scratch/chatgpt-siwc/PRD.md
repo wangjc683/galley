@@ -1,6 +1,6 @@
 # 用 ChatGPT 套餐登录（Sign in with ChatGPT）
 
-Status: active（2026-10-20 裁决 1：走 C，原生接 OpenAI 官方的 Sign in with ChatGPT；裁决 2–9 同日定：删 A、C 就地接管现有服务商、对话报错本地化、默认模型取目录第一个）
+Status: active（2026-10-20 裁决 1：走 C，原生接 OpenAI 官方的 Sign in with ChatGPT；裁决 2–10 同日定：删 A、C 就地接管现有服务商、对话报错本地化、默认模型取目录第一个、额度显示暂缓）
 
 来源：2026-10-20 JC 提出，依据 Codex 负责人 Tibo 的推文，考虑以 CLIProxyAPI（CPA）的形式内嵌，让用户用 ChatGPT 订阅里的 Codex 额度跑 Galley。
 对比后改走官方的 Sign in with ChatGPT（下称 SIWC）：DevDay 2026 推出，开源项目与本地运行的应用可自助接入，Galley（MIT、本机运行）在范围内。
@@ -37,6 +37,8 @@ Status: active（2026-10-20 裁决 1：走 C，原生接 OpenAI 官方的 Sign i
    引擎的英文原文保留在详情里。补进票 04。
 8. **对话收到 `token_revoked` 时，界面触发一次连接测试**（2026-10-20）：让 Core 立刻发现授权已撤销，设置卡片马上变成「需要登录」，而不是等最长一小时到下次刷新。补进票 04。
 9. **默认模型取账号目录里第一个可见模型**（2026-10-20）：`gpt-5.6-sol` 只在读不到目录或目录为空时兜底；已有的模型记录如果在目录里，就保留用户的选择。补进票 02。
+
+10. **额度显示暂缓，现在只给「管理用量」入口**（2026-10-20）：SIWC 令牌读不到 5 小时 / 7 天用量（探针实测，另见 openai/codex#54219）。借旧登录查 WHAM、自己累计 token 两条路都否掉。暂缓项见 `docs/devlog/deferred.md`「ChatGPT 套餐的额度显示」；票 04 合入后，用正式登录抓一次 `response.metadata` 的内容。
 
 另：走查发现登录完成后，引导页和设置页不看连接测试结果（`gui/src/lib/provider-setup.ts:491`），测试失败也会结束引导。不符合资格的账号能登录成功、却过不了测试，正好踩中这个坑。按缺陷补进票 04：测试失败时停在原步骤，说明原因。
 
