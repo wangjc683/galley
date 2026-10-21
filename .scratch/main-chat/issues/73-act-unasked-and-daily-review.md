@@ -81,6 +81,15 @@ JC 读了一篇 Today AI 的使用体验：作者和同事在群里排查成本�
 - 跟票 59 一样记下每条读了手册的哪几部分、多少字节、几次请求。
 - 结果文件里不能出现私有接口地址、API host、本机绝对路径或本机真实数据。
 
+## 七、打开白名单补文档格式
+
+2026-10-21 JC 加进本票（「按建议推进，并进 73」）。票 74 的文件卡片里，PDF、Word、Excel 点了只能「在文件夹中显示」，HTML 只能在阅读面板里看源码：`core/src/local_file.rs` 的 `is_openable` 只放行 Markdown、图片和 `OPENABLE_TEXT_EXTENSIONS`。白名单是为了防脚本被「用默认应用打开」执行，但把无害的文档也挡在了外面。
+
+- 加一组 `OPENABLE_DOCUMENT_EXTENSIONS`：`pdf`、`docx`、`xlsx`、`pptx`、`pages`、`numbers`、`html`、`htm`（HTML 用默认应用打开就是浏览器）。GUI 的镜像 `gui/src/lib/local-file-path.ts` 的 `isOpenableWithDefaultApp` 由票 74 同步，两边列表一字不差。
+- 不放：老二进制格式 `doc`、`xls`、`ppt`，带宏的 `docm`、`xlsm`、`pptm`（都能带宏）；`key`（和私钥文件撞扩展名）；脚本类照旧。理由写在常量上方的注释里。
+- `.pages`、`.numbers` 常存成包（macOS 上是文件夹）：`open` 对文件夹只在扩展名是这两个时放行，其余文件夹照旧拒绝，`inspect` 报的类型不变；`reveal` 对这两种包走 `reveal_item_in_dir`（在访达里选中它），不再 `open_path` 打开它（那等于用 Pages / Numbers 打开）。
+- 测试：新放行的能过打开的闸，不放的仍被拒；`x.pages/`、`x.numbers/` 文件夹能过，`x.zip/`、`report.pdf/` 一类的普通文件夹仍拒；`reveal` 对包选中、对普通文件夹打开。
+
 ## 别动
 
 - 主工作树：只在你的 worktree 里做，不碰主树，不跑 `tauri dev`。
@@ -113,3 +122,36 @@ JC 读了一篇 Today AI 的使用体验：作者和同事在群里排查成本�
 （合入后补）
 
 ## Comments
+
+### 2026-10-21 实现回报（票 73 代理）
+
+- **提交**（分支 `ticket-73-act-unasked`，未 push、未合入）：`7c918349` 手册、入口层与巡看；`b3b5a9b8` 打开白名单补文档格式；`77be46fd` 试用快照；`0d9dae29` Pages / Numbers 包能打开；`3e9c048c` 包的「在文件夹中显示」改成选中；`5920e65e` 文档；`2c45dd17` 在推进之事的措辞调一轮；`bc1e4192` 评测（gpt-6.1-sol）。
+- **Core 挂在哪**：
+  - 种子：`core/src/scheduler.rs` 的 `ensure_review`，调用在 `core/src/session_writes.rs` 的 `Writes::get_or_create_main_chat`（主对话建出、从归档恢复、桌面每次启动来要）与 `core/src/scheduler.rs` 的 `start`（Core 启动、定时循环开始前）。写入是 `core/src/db/schedule.rs` 的 `create_system_task_once`，一条 `INSERT … SELECT … WHERE NOT EXISTS`：只要有过 `created_via = 'system'` 且 `created_by_supervisor = 'galley-review'` 的行（启用、停用、已取消都算）就不建；外置运行时或还没有主对话（`ensure_assistant_available` 不过）不建。`created_via` 用 `system`，CHECK 收这个值。常量 `REVIEW_SUPERVISOR`、`REVIEW_TIME_OF_DAY`、`REVIEW_PROMPT` 在 `SCHEDULER_SUPERVISOR` 旁边。
+  - 叫醒前的检查：`core/src/scheduler.rs` 的 `fire_review`，tick 遇到 `task.is_review()` 时调（补跑走同一条路）。读 `assistant_todo::assistant_todo`，`AssistantTodo::anything_in_hand`：你的事没勾的，或 Galley 在办（没结束的子任务、还没到点的一次性提醒与任务）；例行不算。一件都没有就 `mark_scheduled_wake_skipped`：`last_fired_at`、`last_due_at` 照记（当天不再补跑），`last_wake` 置 NULL，不叫醒、不花 token。读失败按有事叫醒。`schedule run` 手动跑不做这个检查。
+  - 「跳过」的痕迹：行上的 `last_wake` 为 NULL（叫醒过的是 `pending` / `delivered`）；每一次另追加进 prefs 的 `assistant_review_log`（JSON 数组，最多 400 条，事件 `skipped` / `woke` / `run` / `dropped`，`core/src/db/prefs.rs` 的 `append_pref_log`，每步一条语句）。不加迁移。只靠 `last_wake` 只看得到最近一次，所以加了这份记录。
+  - 叫醒措辞：`core/src/subtask_report.rs` 的 `OPENING_REVIEW` 与 `review_paragraph`（这是每天早上的巡看、Galley 建的不是你设的、去读 `wake.md` 的「The morning review」、最多两件子任务、只派了子任务或什么都没做就 `<no-reply/>`；晚了只写时间，不让说晚）。存在库里的 `prompt` 是给 `schedule list` 与「In Hand」看的一句英文说明，叫醒文字由 Core 现拼，以后改措辞对已建的那条也生效。
+  - 送不出去：`return_due_tasks` 遇到巡看走 `drop_review_wake`：`drop_scheduled_wake` 把 `pending` 改成 NULL、日志记 `dropped` 和原因，不发 `scheduled-tasks:reminder-undelivered`。等用户回答、runner 起不来、那一轮出错、主对话没了四条路都汇到这里（测试覆盖了前三条）。
+  - 外置运行时：tick 里 `ensure_assistant_available` 不过，巡看与现有 `target = assistant` 的提醒一样不触发、不盖戳、不通知、不报错；切走前已经 `pending` 的一次留着，切回内置后照提醒的规矩送达（可能晚了几天，措辞让它不提晚）。
+  - 「已完成」：巡看的到点永远不进 `done` 组（`assistant_todo.rs` 的 `build_todo`，叫醒或跳过都一样），例行组照常有它。「In Hand」里那一行写「Galley's morning review, not set by you」，不再是「set by the outside agent galley-review」（手册对外部 agent 的任务要先问）。
+- **给票 74 的字段与取值**：
+  - 清单面板读 `list_assistant_todo`：`routine` 组里 `kind === "task"` 且 `agent === "galley-review"` 的那一项（`createdBy` 是 `"agent"`，`creator()` 没改，标签原样进 `agent`）；它的到点不进 `done`。
+  - 定时任务读取（Tauri `list_scheduled_tasks`、CLI `schedule list` / `show`）：`origin` 是 `{"via": "system", "supervisor": "galley-review"}`。IPC 与 Agent API 都没加字段。
+  - 文件：主对话 assistant 行原始 `content` 里，一行一个 `[FILE:<绝对路径>]`。
+- **七、打开白名单**：`core/src/local_file.rs` 加 `OPENABLE_DOCUMENT_EXTENSIONS`（`pdf`、`docx`、`xlsx`、`pptx`、`pages`、`numbers`、`html`、`htm`，与 GUI 的 `isOpenableWithDefaultApp` 一字不差）；`doc`、`xls`、`ppt`、`docm`、`xlsm`、`pptm`、`key` 不放，理由写在常量注释里。`open` 的闸改成 `may_open`：文件夹只在扩展名是 `pages` 或 `numbers` 时放行；`reveal` 对这两种包走 `reveal_item_in_dir`（`reveal_opens_folder`），其余文件夹照旧打开。测试只测到闸，不真的调系统打开。
+- **评测**（gpt-6.1-sol，条目 `mm_1792576875658`，与票 63、64 同一个模型；详见 `.scratch/main-chat/entry-layer-eval/README.md`「主动的第一阶段（票 73）」）：原有用例对 main 上的基线，待办 64/64 → 63/64（剩下一遍是判定误伤，回答本身对），定时 28/28 → 28/28，叫醒 16/18 → 18/18，闲聊 14/14 → 14/14（第一版措辞下 12/14，调了一轮）；新用例 12/14（`half-done`、`supplier-quote` 各有一遍把话只写进了 `<summary>`），同一批新用例在 main 的提示词下 5/7；`file-handover` 2/2（main 的提示词下写成了 Markdown 链接）。巡看四条八遍全过：没事就 `<no-reply/>`；有事时一遍去浏览器看账单（停在浏览器工具，看不到结果），一遍派 1 件只读的子任务再沉默；逾期不催；「早上那个巡看别弄了」用 `schedule disable` 并说怎么恢复。先跑过一轮 gpt-6-astra（结果只留在 scratchpad，没进仓库），结论大体一致。
+- **调的那一轮措辞**：第一版下闲聊组两条带过来的对话记了待办（「回来了」接着谈报价、选定笔记本后问注意事项），用户都在接着办。入口层改成「what they are in the middle of and set aside to come back to」（3132 → 3140 字节），`todos.md` 改成「sets aside to come back to … they stop here for now」并加「Not while they carry on with it here」。只重跑了这两条和待办「在推进」「两可」五条。
+- **没改的**：`authority.md` 里没有与「能撤回的准备不用问」冲突的句子，没动。`wake.md` 只改了与巡看直接相关的两句（叫醒消息的种类里加上巡看；`<no-reply/>`「Never write it in any other reply」后加巡看的例外）。
+
+### 看到但没改、没验证到的
+
+1. 「In Hand」里巡看那一行的说法改了（票面说 In Hand 的格式别动；改的是这一条的「谁建的」，格式没变）：不改的话它读成外部 agent 的任务，手册让它停之前先问。
+2. GUI 的「定时」对话框（`ScheduledTasksDialog`）列定时任务时会显示巡看那条的英文 `prompt`；票 74 只管清单面板，这里没人管。
+3. 巡看的 `prompt` 建的时候写进库，以后改 `REVIEW_PROMPT` 不会改已建的那条（叫醒文字是 Core 现拼的，不受影响）。模型用 `schedule update --prompt` 改它也只改显示的那句。
+4. `wake.md` 里原有的例子「要不要约个时间验收？」是问用户自己的事、不是「要不要我」，没动；判定的 `OFFER_RE` 也不把它算建议。
+5. 评测：巡看那条的钟点取运行那一分钟（好让叫醒按时），所以叫醒措辞里的规则是「every day at 运行那一分钟」，不是 09:00；巡看几条放在待办套件（它有待办与定时的假 CLI、叫醒照 Core 的措辞），叫醒套件只放了 `file-handover`。
+6. 评测：第二轮只重跑了七条，其余用例是第一版措辞下的结果；`whats-left` 第 2 遍的判定误伤没改判定（`forbid_unless` 认的词里没有「不在」）。
+7. 评测脚本读 Galley 库：新加的模型还在 WAL 里，`immutable` 读不到，改成读不到时退回普通只读（`mode=ro`，不写库，只在 `-shm` 里留读者标记）。
+8. 先用 gpt-6-astra 跑的那一轮存在 scratchpad 的 `t73-astra/`，没进仓库。
+9. 没跑 `tauri dev`，没在真机上看巡看的建出、跳过、叫醒、停掉，也没看 GUI；Core 的路径只由 `core/tests/schedule_wake_test.rs`、`main_chat_test.rs` 和单元测试覆盖。
+10. `core/src/scheduler.rs` 本来就不是 rustfmt-clean（`fire` 的签名、一处测试），这两处没动。
