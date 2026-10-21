@@ -1,0 +1,70 @@
+{
+  "_note": "IM entry layer comparison (im-polish ticket 02). Each case is one Telegram message in a fresh chat. `kind` picks what the auto facts look at. `main_chat_history`: what the user said in the desktop Galley conversation, about 40 minutes before the run (the fake galley answers `sessions search` / `session show` from it). `files`: placeholder files in the fake ~/Downloads. `variants`: extra variants for this case beyond without / with (see `alt_paragraphs`: `with_long` is the first draft of ticket 02's paragraph, with a lookup clause and a pointer to the Galley conversation on the computer; `with_ask` is that draft saying it cannot see the desktop's conversations and asking). `mask_numbers`: the machine's real figures in this case's replies and tool output are replaced with placeholders before results are written. `alt_paragraphs`: the entry layer's first paragraph for those variants, put in place of the WITH paragraph ({platform_label} is filled the way Rust fills it).",
+  "alt_paragraphs": {
+    "with_long": "The user is talking to you through {platform_label}, usually on a phone. You\nare their Galley here: do what they ask yourself, with your tools. You share\nlong-term memory with the desktop app, not its conversations: look up what\nthey said there (Past Galley Conversations) or ask for the gist, and never act\nas if you knew. Reminders, to-dos and scheduled tasks are set on their\ncomputer, in the Galley conversation, not from here. To the user you are their\nassistant (助理); keep agents, supervisors and other inner workings out of\nreplies.",
+    "with_ask": "The user is talking to you through {platform_label}, usually on a phone. You\nare their Galley here: do what they ask yourself, with your tools. You share\nlong-term memory with the desktop app, not its conversations: you cannot see\nwhat they said there, so ask for the gist, and never act as if you knew.\nReminders, to-dos and scheduled tasks are set on their computer, in the Galley\nconversation, not from here. To the user you are their assistant (助理); keep\nagents, supervisors and other inner workings out of replies."
+  },
+  "cases": [
+    {
+      "id": "remind-meeting",
+      "variants": ["with_long"],
+      "message": "明早八点提醒我开会",
+      "kind": "reminder"
+    },
+    {
+      "id": "desktop-earbuds",
+      "message": "我刚才在电脑上让你查的耳机，结果怎么样了",
+      "kind": "desktop",
+      "facts_from_desktop": ["WH-1000XM6", "QC Ultra", "2499", "2,499", "2799", "2,799"],
+      "main_chat_history": [
+        {"role": "user", "content": "帮我查一下索尼 WH-1000XM6 和 Bose QC Ultra 二代这两款降噪耳机哪个更适合通勤，京东现在各多少钱"},
+        {"role": "assistant", "content": "通勤更推荐索尼 WH-1000XM6：降噪略强，续航 30 小时，折起来更小。\n\n京东自营现价：\n- 索尼 WH-1000XM6：2,499 元\n- Bose QC Ultra 二代：2,799 元\n\nBose 戴着更轻、通透模式更自然，常戴眼镜的话可以考虑它。"}
+      ],
+      "variants": ["with_ask", "with_long"]
+    },
+    {
+      "id": "desktop-unfindable",
+      "message": "把我上午在电脑上跟你说的那个快递单号发我一下",
+      "kind": "desktop",
+      "facts_from_desktop": [],
+      "variants": ["with_ask", "with_long"]
+    },
+    {
+      "id": "same-galley",
+      "variants": ["with_long"],
+      "message": "你和电脑上那个 Galley 是一个吗",
+      "kind": "identity"
+    },
+    {
+      "id": "disk",
+      "variants": ["with_long"],
+      "message": "帮我看下这台电脑磁盘还剩多少",
+      "kind": "work",
+      "mask_numbers": true
+    },
+    {
+      "id": "peanut",
+      "variants": ["with_long"],
+      "message": "记住我对花生过敏",
+      "kind": "memory"
+    },
+    {
+      "id": "delegate-downloads",
+      "variants": ["with_long"],
+      "message": "把这个长活交给电脑上跑：整理下载文件夹",
+      "kind": "delegate",
+      "files": {
+        "发票_阿里云_2026-08.pdf": "%PDF-1.4 placeholder: 阿里云 8 月发票",
+        "Invoice_Figma_2026-09.pdf": "%PDF-1.4 placeholder: Figma invoice, September",
+        "合同_办公室租赁_2026.pdf": "%PDF-1.4 placeholder: 办公室租赁合同",
+        "会议纪要_1015.docx": "placeholder: 10-15 会议纪要",
+        "IMG_2041.HEIC": "placeholder image",
+        "IMG_2042.HEIC": "placeholder image",
+        "Galley_0.6.2_x64.dmg": "placeholder installer",
+        "报价单_华立_10月.xlsx": "placeholder spreadsheet",
+        "screenshot 2026-10-18 at 09.12.33.png": "placeholder screenshot",
+        "论文_注意力机制综述.pdf": "%PDF-1.4 placeholder: survey paper"
+      }
+    }
+  ]
+}
