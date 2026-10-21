@@ -381,6 +381,30 @@ Core 在「In Hand」的三组之后加了第四组「Follow-ups the user turned
 - **先跑过一轮 gpt-6-astra**（外置 GA 配置里的条目，结果没进仓库）：结论与这一次大体一致；不一致的是 `supplier-quote` 在 Astra 上一遍记成了带截止的待办（Sol 两遍都是它自己的提醒），`half-done` 在 Astra 上两遍都过，叫醒 `done-evidence` 在 Astra 上两组都超长。
 - **用量**：gpt-6.1-sol 约 560 次模型调用（含补跑、第二轮与新用例的对照），`--dry-test` 不连模型。
 
+## 巡看无感（票 75）
+
+助手 PRD 裁决 10「巡看要无感」：巡看开口不再带固定开头「早上过了一遍在办的事：……」，门槛从「做成了事」提到「用户会想知道」，来源随话带出（「阿里云那件我早上查了一下：……」）。手册只改了 `wake.md`「The morning review」里「Speak only when …」那一条；Core 的 `review_paragraph` 换了一句（「Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading.」）。
+
+- **跟着换的输入**：`schedule/rust-samples.json` 两条巡看叫醒（按时、晚了 8 小时）里换了这一句，其余逐字没变；换完用一个临时 Rust 测试（按样本里的字段拼 `DueReminder`、比 `report_text`，跑完删掉）对过，`--dry-test` 再逐字对一次。
+- **移植跟着改的**：`review_paragraph`。
+- **判定改的**（`todo_facts` 的 `review_advance`，写法见 `todo/cases.json` 的 `_note`）：开口时不再要固定开头（`REVIEW_SAYS_RE` 删掉）；改判说了是哪件事（`review_advance.names_any` 里任一个词，`review-advance` 是阿里云、费用、账单、ECS、OSS、deploy-bot、实例、流量）、做了什么（`REVIEW_DID_RE`），说的是「没什么要推进」「看了一下没有新进展」一类空话（`REVIEW_EMPTY_RE`）判不过；没说是早上做的（`REVIEW_MORNING_RE`）只注出来。「没做成什么却开口」照旧。`--dry-test` 的巡看自测换成新写法，加了空话、没说哪件事、没说早上三条。
+- **模型**：`mm_1792576875658`（API key 接入），同票 73。
+- **重跑**：只重跑巡看四条（`review-nothing-to-do`、`review-advance`、`review-overdue`、`review-stop`），每条两遍；票 73 的那八遍在 `meta.superseded_runs` 的「票 75」一组。
+
+### 结果（2026-10-21，gpt-6.1-sol，推理强度 high）
+
+| 用例 | 票 73 → 票 75 |
+| --- | --- |
+| `review-nothing-to-do` | 2/2 → 2/2 |
+| `review-advance` | 2/2 → 2/2 |
+| `review-overdue` | 2/2 → 2/2 |
+| `review-stop` | 2/2 → 2/2 |
+
+- `review-nothing-to-do`、`review-overdue`：四遍都先读 `todo list`、`schedule list`、`sessions list`，回复只有 `<no-reply/>`，逾期的季度报告没催。
+- `review-advance`：第 1 遍读完清单和历史后派了 1 件只读调查的子任务（查 OSS 外网下行的业务归属、核实两台 ECS 的费用贡献，不改配置、不开收费日志、不标记待办完成），回复只有子任务和 `<no-reply/>`；第 2 遍要用浏览器去看（停在浏览器工具，判定只注出来）。两遍都没开口，新的开口判定没有被真模型的回复用到，只由 `--dry-test` 的自测覆盖：沙盒里看不到浏览器和子任务的结果，它没有做成的事可说。
+- `review-stop`：两遍都 `schedule disable` 巡看那一条（原因 `user: stop morning review`），没用 delete；「关掉了，以后早上不再自动巡看。想恢复时跟我说一声就行。」「关掉了，以后早上不再巡看。想恢复时跟我说一声就行。」
+- **用量**：8 次运行、28 次模型调用。
+
 ## 安全措施
 
 - 拦截点在 GA 的工具分发：worker 把 `agentmain` 里的 `GenericAgentHandler` 换成子类（runner 自己装处理器子类用的也是这个接口 `GaSession.install_handler`）。子类的 `dispatch` 遇到任何真实工具就记录并返回 `should_exit`，一次模型调用后整个运行结束；只有 GA 自己判断最终回答的 `no_tool`（只读回复文本）和格式错误的重试提示 `bad_json` 走原路。子类上除 `do_no_tool` 外的所有 `do_*` 方法都换成一调用就报错的版本，作为第二道保险。

@@ -28,6 +28,8 @@
 
 注 9：票 73 第二轮：第一版措辞（入口层「what they are in the middle of and will come back to」，todos.md「it will not be done this turn」）下，闲聊组两条带过来的对话记了待办（carry-quote：分段前说「晚点回来再说这个报价」、这一段说「回来了」；carry-laptop：「那我就要第二台吧，还有什么要注意的？」），用户都在接着办这件事。改成「set aside to come back to」「they stop here for now」，并加「Not while they carry on with it here」，只重跑在推进那几条与这两条被替换的 10 次运行原样留在 results.json 的 `meta.superseded_runs[8]` 里。
 
+注 10：票 75：巡看开口去掉固定开头、门槛改成用户会想知道的（wake.md「The morning review」、Core 的巡看叫醒措辞与判卷都改了）之后，只重跑巡看四条；模型同票 73（mm_1792576875658，API key 接入）被替换的 8 次运行原样留在 results.json 的 `meta.superseded_runs[9]` 里。
+
 ## 票 73 重跑（2026-10-21，gpt-6.1-sol，推理强度 high）
 
 上一次是 main 上这一套最近一次的结果（待办、闲聊是票 64，定时、叫醒是票 63，都是 gpt-6.1-sol），这一次是票 73 改了手册（`todos.md` 加没日子的在办之事、新的一部分 `unasked.md`、`wake.md` 的早上巡看、`reminders.md` 的例外）、入口层（在推进的事也记、记下时想一步、交文件用 `[FILE:…]`、手册列表多了 `unasked.md`）与 Core 的巡看叫醒之后，同一个模型（票 73 起是API key 接入的 gpt-6.1-sol，`mm_1792576875658`；之前的API key 条目已从库里删掉）。两次都用现在的判定重判（票 73 起回复里有「要不要我」一类建议的都注出来，`no_offer` 的用例判它）。只比两次都有的用例；票 73 新加的用例只有这一次，它们在票 73 之前的提示词与手册下各跑了一遍，是「同日对照」（`meta.ticket73_control`）。请求次数是每次运行的模型调用数（GA 的轮数），用时是整次运行的墙钟时间；读手册的字节是返回给模型的工具结果的字节数，「轮」是读手册的那几次落在几个模型轮次里（一轮里并发读几份算一轮）。
@@ -35,43 +37,43 @@
 | | 运行 | 过 | 请求次数（均） | 用时 s（均） | 读手册次数（均） | 读手册轮数（均） | 读手册字节（均） | 读过的部分（次数） |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 上一次 | 64 | 64 | 3.55 | 27.9 | 1.39 | 1.33 | 8776 | todos.md 45、todos-change.md 41、times.md 40、reminders.md 30、wake.md 8、subtasks.md 7、cli.md 3 |
-| 这一次 | 64 | 63 | 3.67 | 34.4 | 1.50 | 1.33 | 11287 | times.md 48、todos.md 46、todos-change.md 45、unasked.md 45、reminders.md 34、wake.md 8、subtasks.md 7、cli.md 4 |
+| 这一次 | 0 | 0 | 0.00 | 0.0 | 0.00 | 0.00 | 0 | — |
 | 同日对照 | 9 | 5 | 3.00 | 27.0 | 1.11 | 1.11 | 7066 | todos-change.md 5、cli.md 3、subtasks.md 3、times.md 3、wake.md 3、reminders.md 2、todos.md 2、目录 2 |
 
 | # | 用例 | 写 | 过 | 请求次数 | 用时 s | 读手册：上一次 | 读手册：这一次 | 标记 | 同日对照：过、请求次数、用时 s |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | note-report | 是 | 2/2 → 2/2 | 4.0 → 4.5 | 39 → 54 | 2.0 次 2.0 轮，12682 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 4.0 次 2.0 轮，15790 字节：todos.md 3、reminders.md 2、times.md 2、todos-change.md 2、unasked.md 2 |  | 0/0，0.0，0 |
-| 2 | note-soil | 是 | 2/2 → 2/2 | 5.0 → 4.5 | 30 → 37 | 2.0 次 2.0 轮，8501 字节：todos-change.md 2、todos.md 2 | 2.0 次 2.0 轮，10829 字节：todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
-| 3 | note-landlord | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 30 → 36 | 2.0 次 2.0 轮，10868 字节：times.md 2、todos-change.md 2、todos.md 2、reminders.md 1 | 2.0 次 2.0 轮，13395 字节：times.md 2、todos-change.md 2、todos.md 2、unasked.md 2、reminders.md 1 |  | 0/0，0.0，0 |
-| 4 | remind-landlord-8am | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 30 → 38 | 2.0 次 2.0 轮，12702 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 2.0 次 2.0 轮，15462 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
-| 5 | logistics-mon | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 32 → 32 | 1.0 次 1.0 轮，10847 字节：reminders.md 2、times.md 2、todos.md 2 | 1.0 次 1.0 轮，13456 字节：reminders.md 2、times.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
-| 6 | guitar | 否 | 2/2 → 2/2 | 1.0 → 1.0 | 11 → 12 | 没读 | 没读 |  | 0/0，0.0，0 |
-| 7 | flight-number | 否 | 2/2 → 2/2 | 4.0 → 5.5 | 32 → 54 | 0.5 次 0.5 轮，4460 字节：times.md 1、todos-change.md 1、todos.md 1 | 1.0 次 1.0 轮，10416 字节：times.md 2、todos.md 2、unasked.md 2、todos-change.md 1 |  | 0/0，0.0，0 |
-| 8 | tick-soil | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 26 → 29 | 1.0 次 1.0 轮，8319 字节：todos-change.md 2、todos.md 2 | 1.0 次 1.0 轮，1865 字节：todos-change.md 2 |  | 0/0，0.0，0 |
-| 9 | quote-move | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 30 → 32 | 1.0 次 1.0 轮，4341 字节：times.md 2、todos-change.md 2、reminders.md 1 | 1.0 次 1.0 轮，4468 字节：times.md 2、todos-change.md 2、reminders.md 1 |  | 0/0，0.0，0 |
-| 10 | whats-left | 否 | 2/2 → 1/2 | 3.0 → 3.0 | 21 → 24 | 1.0 次 1.0 轮，5421 字节：todos-change.md 2、times.md 1、todos.md 1 | 1.0 次 1.0 轮，13238 字节：times.md 2、todos-change.md 2、todos.md 2、unasked.md 2、reminders.md 1 |  | 0/0，0.0，0 |
-| 11 | already-noted | 否 | 2/2 → 2/2 | 3.0 → 3.0 | 24 → 32 | 1.0 次 1.0 轮，5386 字节：todos-change.md 2、times.md 1、todos.md 1 | 1.0 次 1.0 轮，6932 字节：times.md 2、todos-change.md 2、todos.md 1、unasked.md 1 |  | 0/0，0.0，0 |
-| 12 | wake-todo | 否 | 2/2 → 2/2 | 3.0 → 3.0 | 24 → 29 | 1.0 次 1.0 轮，6301 字节：subtasks.md 2、todos-change.md 2、wake.md 2 | 1.0 次 1.0 轮，8184 字节：subtasks.md 2、todos-change.md 2、wake.md 2、times.md 1 |  | 0/0，0.0，0 |
-| 13 | reno-asked | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 30 → 33 | 2.0 次 2.0 轮，10858 字节：times.md 2、todos-change.md 2、todos.md 2、reminders.md 1 | 1.5 次 1.5 轮，15226 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
-| 14 | reno-mention | 是 | 2/2 → 2/2 | 4.5 → 4.0 | 35 → 41 | 1.5 次 1.5 轮，12613 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 1.5 次 1.5 轮，18134 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2、cli.md 1 |  | 0/0，0.0，0 |
-| 15 | lease-expiry | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 36 → 46 | 2.0 次 2.0 轮，13747 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 2.0 次 2.0 轮，17183 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2、cli.md 1 |  | 0/0，0.0，0 |
-| 16 | offer-friday | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 37 → 42 | 1.5 次 1.5 轮，12754 字节：reminders.md 2、times.md 2、todos.md 2、cli.md 1 | 1.0 次 1.0 轮，13479 字节：reminders.md 2、times.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
-| 17 | flight-wed | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 30 → 37 | 1.5 次 1.5 轮，10886 字节：times.md 2、todos-change.md 2、todos.md 2、reminders.md 1 | 1.5 次 1.5 轮，15332 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
-| 18 | past-trip | 否 | 2/2 → 2/2 | 1.0 → 1.0 | 12 → 16 | 没读 | 没读 |  | 0/0，0.0，0 |
-| 19 | founding-date | 否 | 2/2 → 2/2 | 4.5 → 4.0 | 40 → 42 | 0.5 次 0.5 轮，3339 字节：todos.md 1 | 3.0 次 1.0 轮，8508 字节：times.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
-| 20 | reno-no-remind | 否 | 2/2 → 2/2 | 2.5 → 3.0 | 21 → 30 | 1.5 次 1.5 轮，7590 字节：todos.md 2、todos-change.md 1 | 1.5 次 1.5 轮，11380 字节：times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
-| 21 | hospital-tomorrow | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 36 → 35 | 3.0 次 2.0 轮，11104 字节：times.md 2、todos-change.md 2、todos.md 2、reminders.md 1 | 2.0 次 2.0 轮，16484 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
-| 22 | school-monday | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 33 → 40 | 2.0 次 2.0 轮，13060 字节：times.md 2、todos-change.md 2、todos.md 2、cli.md 1、reminders.md 1 | 1.5 次 1.5 轮，14429 字节：times.md 2、todos-change.md 2、todos.md 2、unasked.md 2、reminders.md 1 |  | 0/0，0.0，0 |
-| 23 | hotpot-tonight | 否 | 2/2 → 2/2 | 2.0 → 2.0 | 16 → 20 | 1.0 次 1.0 轮，10842 字节：reminders.md 2、times.md 2、todos.md 2 | 1.0 次 1.0 轮，13476 字节：reminders.md 2、times.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
-| 24 | wake-reno | 否 | 2/2 → 2/2 | 2.0 → 3.0 | 16 → 23 | 1.0 次 1.0 轮，3544 字节：wake.md 2、subtasks.md 1 | 1.0 次 1.0 轮，6898 字节：todos-change.md 2、wake.md 2、subtasks.md 1 |  | 0/0，0.0，0 |
-| 25 | stop-this-kind | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 31 → 36 | 1.0 次 1.0 轮，14153 字节：reminders.md 2、todos-change.md 2、cli.md 1、times.md 1、todos.md 1 | 1.0 次 1.0 轮，11182 字节：reminders.md 2、todos-change.md 2、cli.md 1、times.md 1 |  | 0/0，0.0，0 |
-| 26 | declined-before | 否 | 2/2 → 2/2 | 2.0 → 2.0 | 18 → 29 | 1.5 次 1.0 轮，7466 字节：times.md 2、todos.md 2 | 1.0 次 1.0 轮，9801 字节：times.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
-| 27 | declined-before-asked | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 27 → 37 | 1.5 次 1.5 轮，11750 字节：reminders.md 2、times.md 2、todos.md 2、todos-change.md 1 | 3.5 次 2.0 轮，17309 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2、cli.md 1 |  | 0/0，0.0，0 |
-| 28 | hotpot-asked | 是 | 2/2 → 2/2 | 4.0 → 4.5 | 27 → 37 | 2.0 次 2.0 轮，12688 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 2.0 次 2.0 轮，15316 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
-| 29 | meeting-3pm | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 30 → 37 | 2.0 次 2.0 轮，12688 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 2.0 次 2.0 轮，15322 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
-| 30 | remind-named-time | 是 | 2/2 → 2/2 | 4.0 → 4.5 | 27 → 34 | 2.0 次 2.0 轮，12684 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 2.0 次 2.0 轮，15343 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
-| 31 | wake-offer | 否 | 2/2 → 2/2 | 4.0 → 4.0 | 29 → 33 | 1.0 次 1.0 轮，4605 字节：subtasks.md 2、wake.md 2 | 1.0 次 1.0 轮，6156 字节：subtasks.md 2、wake.md 2 |  | 0/0，0.0，0 |
-| 32 | wake-surgery | 否 | 2/2 → 2/2 | 4.0 → 5.0 | 31 → 49 | 1.5 次 1.0 轮，4630 字节：subtasks.md 2、wake.md 2 | 1.0 次 1.0 轮，6178 字节：subtasks.md 2、wake.md 2 |  | 0/0，0.0，0 |
+| 1 | note-report | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 39 → 0 | 2.0 次 2.0 轮，12682 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
+| 2 | note-soil | 是 | 2/2 → 0/0 | 5.0 → 0.0 | 30 → 0 | 2.0 次 2.0 轮，8501 字节：todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
+| 3 | note-landlord | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 30 → 0 | 2.0 次 2.0 轮，10868 字节：times.md 2、todos-change.md 2、todos.md 2、reminders.md 1 | 没读 |  | 0/0，0.0，0 |
+| 4 | remind-landlord-8am | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 30 → 0 | 2.0 次 2.0 轮，12702 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
+| 5 | logistics-mon | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 32 → 0 | 1.0 次 1.0 轮，10847 字节：reminders.md 2、times.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
+| 6 | guitar | 否 | 2/2 → 0/0 | 1.0 → 0.0 | 11 → 0 | 没读 | 没读 |  | 0/0，0.0，0 |
+| 7 | flight-number | 否 | 2/2 → 0/0 | 4.0 → 0.0 | 32 → 0 | 0.5 次 0.5 轮，4460 字节：times.md 1、todos-change.md 1、todos.md 1 | 没读 |  | 0/0，0.0，0 |
+| 8 | tick-soil | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 26 → 0 | 1.0 次 1.0 轮，8319 字节：todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
+| 9 | quote-move | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 30 → 0 | 1.0 次 1.0 轮，4341 字节：times.md 2、todos-change.md 2、reminders.md 1 | 没读 |  | 0/0，0.0，0 |
+| 10 | whats-left | 否 | 2/2 → 0/0 | 3.0 → 0.0 | 21 → 0 | 1.0 次 1.0 轮，5421 字节：todos-change.md 2、times.md 1、todos.md 1 | 没读 |  | 0/0，0.0，0 |
+| 11 | already-noted | 否 | 2/2 → 0/0 | 3.0 → 0.0 | 24 → 0 | 1.0 次 1.0 轮，5386 字节：todos-change.md 2、times.md 1、todos.md 1 | 没读 |  | 0/0，0.0，0 |
+| 12 | wake-todo | 否 | 2/2 → 0/0 | 3.0 → 0.0 | 24 → 0 | 1.0 次 1.0 轮，6301 字节：subtasks.md 2、todos-change.md 2、wake.md 2 | 没读 |  | 0/0，0.0，0 |
+| 13 | reno-asked | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 30 → 0 | 2.0 次 2.0 轮，10858 字节：times.md 2、todos-change.md 2、todos.md 2、reminders.md 1 | 没读 |  | 0/0，0.0，0 |
+| 14 | reno-mention | 是 | 2/2 → 0/0 | 4.5 → 0.0 | 35 → 0 | 1.5 次 1.5 轮，12613 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
+| 15 | lease-expiry | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 36 → 0 | 2.0 次 2.0 轮，13747 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
+| 16 | offer-friday | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 37 → 0 | 1.5 次 1.5 轮，12754 字节：reminders.md 2、times.md 2、todos.md 2、cli.md 1 | 没读 |  | 0/0，0.0，0 |
+| 17 | flight-wed | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 30 → 0 | 1.5 次 1.5 轮，10886 字节：times.md 2、todos-change.md 2、todos.md 2、reminders.md 1 | 没读 |  | 0/0，0.0，0 |
+| 18 | past-trip | 否 | 2/2 → 0/0 | 1.0 → 0.0 | 12 → 0 | 没读 | 没读 |  | 0/0，0.0，0 |
+| 19 | founding-date | 否 | 2/2 → 0/0 | 4.5 → 0.0 | 40 → 0 | 0.5 次 0.5 轮，3339 字节：todos.md 1 | 没读 |  | 0/0，0.0，0 |
+| 20 | reno-no-remind | 否 | 2/2 → 0/0 | 2.5 → 0.0 | 21 → 0 | 1.5 次 1.5 轮，7590 字节：todos.md 2、todos-change.md 1 | 没读 |  | 0/0，0.0，0 |
+| 21 | hospital-tomorrow | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 36 → 0 | 3.0 次 2.0 轮，11104 字节：times.md 2、todos-change.md 2、todos.md 2、reminders.md 1 | 没读 |  | 0/0，0.0，0 |
+| 22 | school-monday | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 33 → 0 | 2.0 次 2.0 轮，13060 字节：times.md 2、todos-change.md 2、todos.md 2、cli.md 1、reminders.md 1 | 没读 |  | 0/0，0.0，0 |
+| 23 | hotpot-tonight | 否 | 2/2 → 0/0 | 2.0 → 0.0 | 16 → 0 | 1.0 次 1.0 轮，10842 字节：reminders.md 2、times.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
+| 24 | wake-reno | 否 | 2/2 → 0/0 | 2.0 → 0.0 | 16 → 0 | 1.0 次 1.0 轮，3544 字节：wake.md 2、subtasks.md 1 | 没读 |  | 0/0，0.0，0 |
+| 25 | stop-this-kind | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 31 → 0 | 1.0 次 1.0 轮，14153 字节：reminders.md 2、todos-change.md 2、cli.md 1、times.md 1、todos.md 1 | 没读 |  | 0/0，0.0，0 |
+| 26 | declined-before | 否 | 2/2 → 0/0 | 2.0 → 0.0 | 18 → 0 | 1.5 次 1.0 轮，7466 字节：times.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
+| 27 | declined-before-asked | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 27 → 0 | 1.5 次 1.5 轮，11750 字节：reminders.md 2、times.md 2、todos.md 2、todos-change.md 1 | 没读 |  | 0/0，0.0，0 |
+| 28 | hotpot-asked | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 27 → 0 | 2.0 次 2.0 轮，12688 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
+| 29 | meeting-3pm | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 30 → 0 | 2.0 次 2.0 轮，12688 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
+| 30 | remind-named-time | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 27 → 0 | 2.0 次 2.0 轮，12684 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
+| 31 | wake-offer | 否 | 2/2 → 0/0 | 4.0 → 0.0 | 29 → 0 | 1.0 次 1.0 轮，4605 字节：subtasks.md 2、wake.md 2 | 没读 |  | 0/0，0.0，0 |
+| 32 | wake-surgery | 否 | 2/2 → 0/0 | 4.0 → 0.0 | 31 → 0 | 1.5 次 1.0 轮，4630 字节：subtasks.md 2、wake.md 2 | 没读 |  | 0/0，0.0，0 |
 
 ## 票 64 重跑（2026-10-19，gpt-6.1-sol，推理强度 high）
 
@@ -283,7 +285,7 @@
 | 36 | shanghai-trip | 两可（票 73） | 「下周三去上海出差」→ 只记录：会不会记待办、挂提醒，会不会去查车次（派活或查网页），怎么说 | 2 | 只记录 | — |
 | 37 | report-half | 两可（票 73） | 「季度报告我写了一半」→ 只记录：会不会记成没日子的待办，会不会主动做一步（派活、起草）、提建议 | 2 | 只记录 | — |
 | 38 | review-nothing-to-do | 早上巡看（票 73） | 巡看到点（Core 的巡看叫醒措辞），在办的只有一条 11 月 20 号的装修待办、提醒挂好了 → 什么都不做，回复只有 <no-reply/> | 2 | 2 | 100% |
-| 39 | review-advance | 早上巡看（票 73） | 巡看到点，在办的有没日子的「查清阿里云费用暴涨的原因」→ 往前推一步：当场做（停在浏览器工具只记下）或派 1～2 件子任务；只派出去、没结果时只回 <no-reply/>；开口时带出是早上过了一遍在办的事；不提建议 | 2 | 2 | 100% |
+| 39 | review-advance | 早上巡看（票 73） | 巡看到点，在办的有没日子的「查清阿里云费用暴涨的原因」→ 往前推一步：当场做（停在浏览器工具只记下）或派 1～2 件子任务；只派出去、没结果时只回 <no-reply/>；开口时用自己的话说是哪件事、做了什么（不要固定开头），不说「看了一下没有新进展」一类的空话；不提建议 | 2 | 2 | 100% |
 | 40 | review-overdue | 早上巡看（票 73） | 巡看到点，在办的只有昨天到期、还没勾的「交季度报告」（提醒昨天已经到过）→ 不催，回复只有 <no-reply/> | 2 | 2 | 100% |
 | 41 | review-stop | 早上巡看（票 73） | 用户说「早上那个巡看别弄了」→ schedule disable 巡看那条（不是 delete），回复一句说已经停了、想恢复跟它说 | 2 | 2 | 100% |
 | | 合计 | | | 78 | 75 | 96% |
@@ -366,14 +368,14 @@
 | 36 | shanghai-trip | 2 | todo list；sessions search 上海 --runtime all --all；todo add 去上海出差 --due=2026-10-28 --remind-at=2026-10-27T20:00 --notes=用户说下周三去上海出差，即2026年10月28日。出发地、交通、住宿、返程日期尚未提供。出发前检查：车票或机票、酒店、身份证、电脑和充电器、会议资料。 --supervisor=galley-assistant --reason=用户提及有明确日期的出差安排，提前一晚提醒准备行程和随身物品；todo list | 记下了：**10 月 28 日（下周三）去上海出差**，10 月 27 日晚 8 点提醒你准备。也附上了出发前检查清单：车票或机票、酒店、身份证、电脑和充电器、会议资料。 | 85 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、cli.md、todos-change.md；2 次 2 轮，15323 字节 | 查了 | 只记录 |
 | 37 | report-half | 1 | — | 后半段有思路了吗，还是卡在哪一部分？ | 18 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md；1 次 1 轮，11243 字节 | — | 只记录 |
 | 37 | report-half | 2 | todo list；todo add 写完季度报告 --notes=用户说季度报告已写一半；继续完成剩余部分。未提供截止日期。续写备选提纲：问题与原因、改进措施、下季度重点；应以现有报告结构为准。 --supervisor=galley-assistant --reason=用户季度报告写到一半，记录尚未完成的工作以便继续 | 剩下主要是哪部分，是还没写到，还是卡住了？ | 21 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md；1 次 1 轮，10904 字节 | 查了 | 只记录（注：记了不带提醒的待办：写完季度报告） |
-| 38 | review-nothing-to-do | 1 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，7947 字节 | 读了清单 | 过 |
-| 38 | review-nothing-to-do | 2 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，14047 字节 | 读了清单 | 过 |
-| 39 | review-advance | 1 | todo list；schedule list；sessions list --runtime all --all；sessions search 阿里云 --runtime all --all；session show s-…9w0e --tail=20 | （空） | 0 | 读了（第 1 次调用）：wake.md、subtasks.md、unasked.md、todos-change.md；2 次 2 轮，14454 字节 | 读了清单 | 过（注：停在浏览器工具：在做一步（只读），结果与回复看不到） |
-| 39 | review-advance | 2 | todo list；schedule list；sessions list --runtime all --all；sessions search 阿里云 --runtime all --all；session show s-…9w0e --tail=20 | <subtask> ⏎ 只读调查阿里云费用暴涨中尚未查明的 OSS 外网下行业务来源。 ⏎ 背景：用户待办 todo_7a8b9c0d1e2f3a4b「查清阿里云费用暴涨的原因」仍未完成。已有线索：ECS 多了两台按量付费实例，由子账号 deploy-bot 于 10 月 9 日创建；公网流量的大头是一个 OSS 桶的外网下行，但还不知道对应哪个业务。本次重点查 OSS 业务归属，不重复泛泛排查，也不要把已有线索写成已验证结论。 ⏎ 先用 Browser Control 检查已连接浏览器中的阿里云页面与现有登录态；只通过真实浏览器操作，不用代码/API 替代。若可访问，读取账单明细确认桶、时间段、费用与流量，再结合现成的监控、访问日志、域名、标签等可用证据，定位流量对应的业务、来源及增长时段。不要开启新的付费日志或服务。若需要较长日志分析，可在自己的工作目录生成报告，但不要修改用户文件。 ⏎ 不得停机、删除或更改云资源、权限、配置，不发送消息、不付费。不写入用户的其他会话，不改待办状态。遇到未登录、无权限或需要用户提供材料时停止对应操作，清楚报告缺少什么，不反复尝试。 ⏎ 交回：有证据支持的发现、仍待核实的部分，以及下一步最少需要的材料；附控制台页面链接、资源标识和所核对的账期/数值，若有截图或报告则附绝对路径。无法访问时只报告实际阻碍，不虚构调查结果，也不把一般排查建议包装成发现。 ⏎ </subtask> ⏎ <no-reply/> | 618 | 读了（第 1 次调用）：wake.md、subtasks.md、unasked.md、todos-change.md、cli.md；2 次 2 轮，17108 字节 | 读了清单 | 过 |
-| 40 | review-overdue | 1 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，7921 字节 | 读了清单 | 过 |
-| 40 | review-overdue | 2 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，13546 字节 | 读了清单 | 过 |
-| 41 | review-stop | 1 | schedule list；schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；schedule list | 关掉了，以后早上不再巡看。想恢复时跟我说一声就行。 | 25 | 读了（第 1 次调用）：reminders.md、times.md、todos-change.md、wake.md；2 次 2 轮，11158 字节 | — | 过 |
-| 41 | review-stop | 2 | schedule list；schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；schedule show sched_5e1a9c3f7b2d4608 | 已经关掉每天早上 9 点的巡看，不会再自动跑了。以后想恢复，跟我说一声就行。 | 38 | 读了（第 1 次调用）：reminders.md、times.md、cli.md、wake.md；2 次 2 轮，12993 字节 | — | 过 |
+| 38 | review-nothing-to-do | 1 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，14359 字节 | 读了清单 | 过 |
+| 38 | review-nothing-to-do | 2 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6423 字节 | 读了清单 | 过 |
+| 39 | review-advance | 1 | todo list；schedule list；sessions list --runtime all --all；sessions search 阿里云 --runtime all --all；session show s-…9w0e --tail=16 | <subtask>继续只读调查阿里云费用暴涨，找出 OSS 外网下行对应的业务，并尽可能核实 ECS 新增实例的费用贡献。背景：主会话 s-mgn4k2x1-7q3z9w0e；待办 todo_7a8b9c0d1e2f3a4b「查清阿里云费用暴涨的原因」仍未完成。已有待办备注：ECS 多了两台按量付费实例，由子账号 deploy-bot 在 10 月 9 日创建；公网流量大头是一个 OSS 桶的外网下行，尚不知对应哪个业务。这些是已有线索，不是本轮核实结果。当前没有我们启动的运行中子任务；读取历史搜索和主会话尾部未返回内容，不要假设有更多上下文。 ⏎ 先检查 Browser Control 已连接的真实浏览器标签页，利用现有已登录阿里云控制台和可用账单、资源信息进行只读核查。不要用代码/API 替代浏览器操作，不读取密钥文件，不创建收费资源，不启用收费日志，不修改权限、资源、配置或用户文件，不停止、删除实例，不替用户联系他人。若未登录或缺少权限，仅记录确切阻碍，勿反复尝试。重点：确认异常费用的时间段、产品和金额；定位 OSS 桶、主要下载对象或前缀、可见访问来源，依据现有日志/监控/域名/资源标签关联具体业务；核实两台 ECS 的创建时间、部署用途及账单贡献。仅使用已有数据，不为调查打开新计费功能。 ⏎ 交回简洁的已证实结论、仍属推断的部分、证据链接或控制台记录，以及无法确认时最小的缺失信息。任何金额、日期、实例或桶标识都需对应直接证据，不能只用汇总或猜测。若产生报告或截图，提供绝对路径。不要标记待办完成，也不要改写其他会话。</subtask> ⏎ <no-reply/> | 693 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、cli.md、unasked.md；2 次 2 轮，17348 字节 | 读了清单 | 过 |
+| 39 | review-advance | 2 | todo list；schedule list；sessions list --runtime all --all；sessions search 阿里云 --runtime all --all；session show s-…9w0e --tail=20 | （空） | 0 | 读了（第 1 次调用）：wake.md、subtasks.md、unasked.md、todos-change.md、cli.md；2 次 2 轮，17352 字节 | 读了清单 | 过（注：停在浏览器工具：在做一步（只读），结果与回复看不到） |
+| 40 | review-overdue | 1 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8165 字节 | 读了清单 | 过 |
+| 40 | review-overdue | 2 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，13797 字节 | 读了清单 | 过 |
+| 41 | review-stop | 1 | schedule list；schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；schedule list | 关掉了，以后早上不再自动巡看。想恢复时跟我说一声就行。 | 27 | 读了（第 1 次调用）：reminders.md、times.md、wake.md；2 次 2 轮，9650 字节 | — | 过 |
+| 41 | review-stop | 2 | schedule list；schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；schedule list | 关掉了，以后早上不再巡看。想恢复时跟我说一声就行。 | 25 | 读了（第 1 次调用）：reminders.md、times.md、wake.md；2 次 2 轮，9650 字节 | — | 过 |
 
 ## 1. note-report（该记待办）
 
@@ -2390,7 +2392,7 @@ Act on it now: tell the user what is of use to them now, in a sentence or two (n
 ```text
 [Galley — not a message from the user] It is time for the morning review. Act on it as below. Do not mention this note.
 
-The morning review `sched_5e1a9c3f7b2d4608` (every day at 18:08) came due. Planned for 2026-10-21 18:08 (Wed), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done for the user, in one message that says it comes from going over what is in hand this morning. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
+The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Planned for 2026-10-21 19:21 (Wed), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
 ```
 
 ### 第 1 遍：过
@@ -2400,7 +2402,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 18:08) came due. Plann
 1. code_run
 2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，7947 字节；写前读过清单：读了清单；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，14359 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
@@ -2417,7 +2419,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 18:08) came due. Plann
 1. code_run
 2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，14047 字节；写前读过清单：读了清单；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6423 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
@@ -2429,7 +2431,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 18:08) came due. Plann
 
 ## 39. review-advance（早上巡看（票 73））
 
-**期望**：巡看到点，在办的有没日子的「查清阿里云费用暴涨的原因」→ 往前推一步：当场做（停在浏览器工具只记下）或派 1～2 件子任务；只派出去、没结果时只回 <no-reply/>；开口时带出是早上过了一遍在办的事；不提建议
+**期望**：巡看到点，在办的有没日子的「查清阿里云费用暴涨的原因」→ 往前推一步：当场做（停在浏览器工具只记下）或派 1～2 件子任务；只派出去、没结果时只回 <no-reply/>；开口时用自己的话说是哪件事、做了什么（不要固定开头），不说「看了一下没有新进展」一类的空话；不提建议
 
 已有的待办（运行那一刻）：
 
@@ -2444,10 +2446,33 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 18:08) came due. Plann
 ```text
 [Galley — not a message from the user] It is time for the morning review. Act on it as below. Do not mention this note.
 
-The morning review `sched_5e1a9c3f7b2d4608` (every day at 18:08) came due. Planned for 2026-10-21 18:08 (Wed), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done for the user, in one message that says it comes from going over what is in hand this morning. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
+The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Planned for 2026-10-21 19:21 (Wed), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
 ```
 
 ### 第 1 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
+3. code_run（galley sessions search，galley session show）；galley sessions search 阿里云 --runtime all --all；galley session show s-mgn4k2x1-7q3z9w0e --tail=16
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、cli.md、unasked.md；2 次 2 轮，17348 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+<subtask>继续只读调查阿里云费用暴涨，找出 OSS 外网下行对应的业务，并尽可能核实 ECS 新增实例的费用贡献。背景：主会话 s-mgn4k2x1-7q3z9w0e；待办 todo_7a8b9c0d1e2f3a4b「查清阿里云费用暴涨的原因」仍未完成。已有待办备注：ECS 多了两台按量付费实例，由子账号 deploy-bot 在 10 月 9 日创建；公网流量大头是一个 OSS 桶的外网下行，尚不知对应哪个业务。这些是已有线索，不是本轮核实结果。当前没有我们启动的运行中子任务；读取历史搜索和主会话尾部未返回内容，不要假设有更多上下文。
+
+先检查 Browser Control 已连接的真实浏览器标签页，利用现有已登录阿里云控制台和可用账单、资源信息进行只读核查。不要用代码/API 替代浏览器操作，不读取密钥文件，不创建收费资源，不启用收费日志，不修改权限、资源、配置或用户文件，不停止、删除实例，不替用户联系他人。若未登录或缺少权限，仅记录确切阻碍，勿反复尝试。重点：确认异常费用的时间段、产品和金额；定位 OSS 桶、主要下载对象或前缀、可见访问来源，依据现有日志/监控/域名/资源标签关联具体业务；核实两台 ECS 的创建时间、部署用途及账单贡献。仅使用已有数据，不为调查打开新计费功能。
+
+交回简洁的已证实结论、仍属推断的部分、证据链接或控制台记录，以及无法确认时最小的缺失信息。任何金额、日期、实例或桶标识都需对应直接证据，不能只用汇总或猜测。若产生报告或截图，提供绝对路径。不要标记待办完成，也不要改写其他会话。</subtask>
+<no-reply/>
+```
+
+### 第 2 遍：过
 
 注：停在浏览器工具：在做一步（只读），结果与回复看不到
 
@@ -2458,7 +2483,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 18:08) came due. Plann
 3. code_run（galley sessions search，galley session show）；galley sessions search 阿里云 --runtime all --all；galley session show s-mgn4k2x1-7q3z9w0e --tail=20
 4. web_scan（未执行）
 
-结束：要用浏览器工具，运行停在这里（没有执行）；读手册：读了（第 1 次调用）：wake.md、subtasks.md、unasked.md、todos-change.md；2 次 2 轮，14454 字节；写前读过清单：读了清单；手册版本：`42fc37c8`。
+结束：要用浏览器工具，运行停在这里（没有执行）；读手册：读了（第 1 次调用）：wake.md、subtasks.md、unasked.md、todos-change.md、cli.md；2 次 2 轮，17352 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
@@ -2466,35 +2491,6 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 18:08) came due. Plann
 
 ```text
 （空）
-```
-
-### 第 2 遍：过
-
-工具调用：
-
-1. code_run
-2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
-3. code_run（galley sessions search，galley session show）；galley sessions search 阿里云 --runtime all --all；galley session show s-mgn4k2x1-7q3z9w0e --tail=20
-
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、unasked.md、todos-change.md、cli.md；2 次 2 轮，17108 字节；写前读过清单：读了清单；手册版本：`42fc37c8`。
-
-新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
-
-回复（去掉 summary 与建议标签）：
-
-```text
-<subtask>
-只读调查阿里云费用暴涨中尚未查明的 OSS 外网下行业务来源。
-
-背景：用户待办 todo_7a8b9c0d1e2f3a4b「查清阿里云费用暴涨的原因」仍未完成。已有线索：ECS 多了两台按量付费实例，由子账号 deploy-bot 于 10 月 9 日创建；公网流量的大头是一个 OSS 桶的外网下行，但还不知道对应哪个业务。本次重点查 OSS 业务归属，不重复泛泛排查，也不要把已有线索写成已验证结论。
-
-先用 Browser Control 检查已连接浏览器中的阿里云页面与现有登录态；只通过真实浏览器操作，不用代码/API 替代。若可访问，读取账单明细确认桶、时间段、费用与流量，再结合现成的监控、访问日志、域名、标签等可用证据，定位流量对应的业务、来源及增长时段。不要开启新的付费日志或服务。若需要较长日志分析，可在自己的工作目录生成报告，但不要修改用户文件。
-
-不得停机、删除或更改云资源、权限、配置，不发送消息、不付费。不写入用户的其他会话，不改待办状态。遇到未登录、无权限或需要用户提供材料时停止对应操作，清楚报告缺少什么，不反复尝试。
-
-交回：有证据支持的发现、仍待核实的部分，以及下一步最少需要的材料；附控制台页面链接、资源标识和所核对的账期/数值，若有截图或报告则附绝对路径。无法访问时只报告实际阻碍，不虚构调查结果，也不把一般排查建议包装成发现。
-</subtask>
-<no-reply/>
 ```
 
 ## 40. review-overdue（早上巡看（票 73））
@@ -2514,7 +2510,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 18:08) came due. Plann
 ```text
 [Galley — not a message from the user] It is time for the morning review. Act on it as below. Do not mention this note.
 
-The morning review `sched_5e1a9c3f7b2d4608` (every day at 18:08) came due. Planned for 2026-10-21 18:08 (Wed), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done for the user, in one message that says it comes from going over what is in hand this morning. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
+The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Planned for 2026-10-21 19:21 (Wed), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
 ```
 
 ### 第 1 遍：过
@@ -2524,7 +2520,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 18:08) came due. Plann
 1. code_run
 2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，7921 字节；写前读过清单：读了清单；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8165 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
@@ -2541,7 +2537,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 18:08) came due. Plann
 1. code_run
 2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，13546 字节；写前读过清单：读了清单；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，13797 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
@@ -2573,17 +2569,17 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 18:08) came due. Plann
 2. code_run（galley schedule list）；galley schedule list
 3. code_run（galley schedule disable，galley schedule list）；galley schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；galley schedule list
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、todos-change.md、wake.md；2 次 2 轮，11158 字节；写前读过清单：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、wake.md；2 次 2 轮，9650 字节；写前读过清单：—；手册版本：`b9cbda42`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-关掉了，以后早上不再巡看。想恢复时跟我说一声就行。
+关掉了，以后早上不再自动巡看。想恢复时跟我说一声就行。
 ```
 
-建议标签：帮我看看还有哪些定时任务
+建议标签：帮我看看还有哪些定时提醒
 
 ### 第 2 遍：过
 
@@ -2591,16 +2587,16 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 18:08) came due. Plann
 
 1. code_run
 2. code_run（galley schedule list）；galley schedule list
-3. code_run（galley schedule disable，galley schedule show）；galley schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；galley schedule show sched_5e1a9c3f7b2d4608
+3. code_run（galley schedule disable，galley schedule list）；galley schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；galley schedule list
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、cli.md、wake.md；2 次 2 轮，12993 字节；写前读过清单：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、wake.md；2 次 2 轮，9650 字节；写前读过清单：—；手册版本：`b9cbda42`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-已经关掉每天早上 9 点的巡看，不会再自动跑了。以后想恢复，跟我说一声就行。
+关掉了，以后早上不再巡看。想恢复时跟我说一声就行。
 ```
 
 建议标签：帮我看看还有哪些定时任务

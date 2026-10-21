@@ -1364,7 +1364,8 @@ def due_when_and_act(d: dict[str, Any]) -> tuple[str, str]:
 
 
 def review_paragraph(d: dict[str, Any]) -> str:
-    """subtask_report::review_paragraph (ticket 73): the morning review."""
+    """subtask_report::review_paragraph (ticket 73; ticket 75's wording): the
+    morning review."""
     tid = d["task_id"]
     if d.get("late") is None:
         when = f"Planned for {d['due_local']}, local time."
@@ -1374,10 +1375,10 @@ def review_paragraph(d: dict[str, Any]) -> str:
     return (f"The morning review `{tid}` ({d['rule']}) came due. {when} Galley made this task, not you: once a "
             "day, go over what is in hand. Read \"The morning review\" in `wake.md` in your manual and do as it "
             "says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without "
-            "being asked, and start at most two subtasks in all. Speak only when you got something done for the "
-            "user, in one message that says it comes from going over what is in hand this morning. If you only "
-            "started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you "
-            "did nothing, your whole reply is exactly <no-reply/>.")
+            "being asked, and start at most two subtasks in all. Speak only when you got something done the user "
+            "will want to know, in one message, in your own words, with no fixed heading. If you only started "
+            "subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did "
+            "nothing, your whole reply is exactly <no-reply/>.")
 
 
 def due_paragraph(d: dict[str, Any]) -> str:
@@ -4836,9 +4837,17 @@ SUMMARY_TEXT_RE = re.compile(r"<summary>([\s\S]*?)</summary>")
 # noted everywhere else.
 OFFER_RE = re.compile(r"要不要我|需要的话[，,]?\s*我|需要我(帮|给|去|来|再|把)|要我(帮|给|去|来|再|把)|"
                       r"我可以(帮|再|顺便|给|去|来)|如果(你|您)需要|如需(要)?我|你看要不要")
-# The words of the morning review's reply that say where it comes from
-# (wake.md: 「早上过了一遍在办的事：……」).
-REVIEW_SAYS_RE = re.compile(r"过了一遍|在办的事|巡看|早上看了|早上查了")
+# Ticket 75 (assistant PRD ruling 10, the review goes unnoticed): no fixed
+# heading. When the morning review speaks it says which thing (one of
+# `expect.review_advance.names_any`) and what it did (REVIEW_DID_RE), and
+# it is not empty words: that it looked and nothing changed
+# (REVIEW_EMPTY_RE fails it). That it did it this morning is only noted
+# (REVIEW_MORNING_RE).
+REVIEW_DID_RE = re.compile(r"查了|查到|查出|查清|看了|看过|找到|发现|定位|对了|核对|比对|派(了|人)|整理|列了|"
+                           r"写了|做了|做好|起草|准备好|算了|确认|原来|是因为")
+REVIEW_EMPTY_RE = re.compile(r"没(有)?什么(要|可|好|需要|能)?(推进|做|说|新|变化)|没(有)?(新|啥)(的)?(进展|消息|变化|动静)|"
+                             r"(暂时|还|仍然?|依然)没(有)?(进展|变化|动静|新)|一切(正常|照旧|如常)|还是老样子")
+REVIEW_MORNING_RE = re.compile(r"早上|今早|今天早|一早|刚才|刚刚")
 
 
 def retractions(body: str) -> list[str]:
@@ -5183,8 +5192,9 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     if "review_advance" in exp:
         # Ticket 73: the morning review with something to move forward: a
         # step done, or at most two subtasks started; silent while they
-        # run, speaking only with something done, and then saying where it
-        # comes from.
+        # run, speaking only with something done. Ticket 75: then saying
+        # which thing and what it did, in its own words (no fixed heading),
+        # and not that nothing changed.
         if stop == "web_tool":
             pass
         elif quiet:
@@ -5200,8 +5210,16 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
                 for c in calls)
             if not acted:
                 reasons.append("没做成什么却开口了")
-            if not REVIEW_SAYS_RE.search(body):
-                reasons.append("开口了却没带出是过了一遍在办的事")
+            names = (exp["review_advance"] or {}).get("names_any") or []
+            if names and not any(n in body for n in names):
+                reasons.append("开口了却没说是哪件事")
+            if not REVIEW_DID_RE.search(body):
+                reasons.append("开口了却没说做了什么")
+            empty = REVIEW_EMPTY_RE.search(body)
+            if empty:
+                reasons.append(f"开口说的是空话（「{empty.group(0)}」）")
+            if not REVIEW_MORNING_RE.search(body):
+                flags.append("没说是早上做的")
             if has_no_reply:
                 flags.append("开口了又写了 <no-reply/>")
             if exp.get("max_chars") and shown_len(body) > exp["max_chars"]:
@@ -6250,13 +6268,24 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     check(f["pass"] is False and any("最多派 2 件" in x for x in f["reasons"]), f"review: three subtasks fail ({f['reasons']})")
     f = judged("review-advance", "<no-reply/>")
     check(f["pass"] is False and any("什么都没推进" in x for x in f["reasons"]), f"review: silent having done nothing fails ({f['reasons']})")
-    f = judged("review-advance", "<subtask>a</subtask>\n早上过了一遍在办的事：阿里云那件我派人去查了。")
-    check(f["pass"] is True, f"review: saying where it comes from, having started one: passes ({f['reasons']})")
-    f = judged("review-advance", "<subtask>a</subtask>\n阿里云那件我派人去查了，要不要我顺便看看别的？")
-    check(f["pass"] is False and any("没带出" in x for x in f["reasons"]) and any("建议" in x for x in f["reasons"]),
-          f"review: no 「过了一遍」, with an offer: fails ({f['reasons']})")
-    f = judged("review-advance", "早上过了一遍在办的事，没什么要推进的。")
-    check(f["pass"] is False and any("没做成什么却开口" in x for x in f["reasons"]),
+    f = judged("review-advance", "<subtask>a</subtask>\n阿里云那件我早上派人去查了。")
+    check(f["pass"] is True and not f["flags"],
+          f"review: which thing and what it did, no fixed heading, having started one: passes ({f['reasons']})")
+    f = judged("review-advance", "<subtask>a</subtask>\n阿里云那件我派人去查了。")
+    check(f["pass"] is True and any("早上" in x for x in f["flags"]),
+          f"review: not saying it was this morning is only noted ({f['reasons']}, {f['flags']})")
+    f = judged("review-advance", "<subtask>a</subtask>\n阿里云那件我早上派人去查了，要不要我顺便看看别的？")
+    check(f["pass"] is False and any("建议" in x for x in f["reasons"]),
+          f"review: with an offer: fails ({f['reasons']})")
+    f = judged("review-advance", "<subtask>a</subtask>\n早上派人去查了，等结果。")
+    check(f["pass"] is False and any("哪件事" in x for x in f["reasons"]),
+          f"review: not saying which thing fails ({f['reasons']})")
+    f = judged("review-advance", "<subtask>a</subtask>\n阿里云那件我早上看了一下，暂时没有新进展。")
+    check(f["pass"] is False and any("空话" in x for x in f["reasons"]),
+          f"review: empty words (looked, nothing new) fail ({f['reasons']})")
+    f = judged("review-advance", "阿里云那件我早上过了一遍，没什么要推进的。")
+    check(f["pass"] is False and any("没做成什么却开口" in x for x in f["reasons"])
+          and any("空话" in x for x in f["reasons"]),
           f"review: speaking having done nothing fails ({f['reasons']})")
     f = todo_facts(dict(synth_run(rv, mon, ""), stop_reason="web_tool"), rv)
     check(f["pass"] is True and any("浏览器" in x for x in f["flags"]),
@@ -6264,7 +6293,7 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     for cid in ("review-nothing-to-do", "review-overdue"):
         f = judged(cid, "<no-reply/>")
         check(f["pass"] is True, f"{cid}: <no-reply/> passes ({f['reasons']})")
-        f = judged(cid, "早上过了一遍在办的事：季度报告还没交哦。")
+        f = judged(cid, "季度报告那件我早上看了一下：还没交哦。")
         check(f["pass"] is False, f"{cid}: speaking up fails ({f['reasons']})")
     rid = "sched_5e1a9c3f7b2d4608"
     stop_case = cases["review-stop"]
