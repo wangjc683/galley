@@ -210,6 +210,14 @@ fn may_open(path: &Path, target: &Path, target_meta: &std::fs::Metadata) -> bool
     kind_ok && is_openable(path) && is_openable(target)
 }
 
+/// Reveal shows a folder by opening it, and anything else by selecting it
+/// in its folder. A document package is a folder the system opens with
+/// its application, so it is selected like a file (ticket 73): opening it
+/// would launch Pages or Numbers instead of showing where it is.
+fn reveal_opens_folder(kind: &str, path: &Path) -> bool {
+    kind == "directory" && !OPENABLE_PACKAGE_EXTENSIONS.contains(&extension(path).as_str())
+}
+
 fn access_sync(request: LocalFileRequest) -> Result<LocalFileResult> {
     let path = absolute_path(&request.path)?;
     let metadata = std::fs::metadata(&path).map_err(io_error)?;
@@ -281,7 +289,7 @@ fn access_sync(request: LocalFileRequest) -> Result<LocalFileResult> {
             result.content = Some(text.strip_prefix('\u{feff}').unwrap_or(&text).to_owned());
         }
         LocalFileAction::Reveal => {
-            if kind == "directory" {
+            if reveal_opens_folder(kind, &path) {
                 tauri_plugin_opener::open_path(&path, None::<&str>)
             } else {
                 tauri_plugin_opener::reveal_item_in_dir(&path)
@@ -526,6 +534,22 @@ mod tests {
         std::fs::write(&file, "x").unwrap();
         let meta = std::fs::metadata(&file).unwrap();
         assert!(may_open(&file, &file, &meta));
+        // Reveal selects a package in its folder (opening it would launch
+        // its application); a plain folder opens; a file is selected.
+        assert!(!reveal_opens_folder(
+            "directory",
+            &dir.path().join("letter.pages")
+        ));
+        assert!(!reveal_opens_folder(
+            "directory",
+            &dir.path().join("Budget.NUMBERS")
+        ));
+        assert!(reveal_opens_folder("directory", &dir.path().join("plain")));
+        assert!(reveal_opens_folder(
+            "directory",
+            &dir.path().join("archive.zip")
+        ));
+        assert!(!reveal_opens_folder("file", &file));
     }
 
     #[test]
