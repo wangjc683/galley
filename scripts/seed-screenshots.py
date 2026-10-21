@@ -1215,7 +1215,7 @@ def assistant_zh(clock: Clock) -> dict:
         "subtask": {
             "instructions": (
                 "三家搬家公司报价与评价对比\n\n"
-                "用户月底从浦东搬到徐汇，两室一厅。对比日式搬家、公兴、蚂蚁三家：\n\n"
+                "用户月底从浦东搬到徐汇，两室一厅。对比青檀、木棉、橘子三家：\n\n"
                 "- 报价按同一口径折算（车型、楼层、是否含打包），写明各家原来的计价方式；\n"
                 "- 只看近三个月带图或带订单的评价，按准时、损坏、临时加价归类；\n"
                 "- 确认月底那个周六三家能不能上门。\n\n"
@@ -1227,7 +1227,7 @@ def assistant_zh(clock: Clock) -> dict:
                     "preamble": "当前阶段：读取三家的报价页。",
                     "thinking": "三家计价方式不同，先各自记录原始口径再折算。",
                     "tool_calls": [tc("web_scan", {"text_only": True}, "toolu_seed_04")],
-                    "tool_results": [tr("3 家报价页已读取：日式按车型计价，公兴按体积，蚂蚁按套餐", "toolu_seed_04")],
+                    "tool_results": [tr("3 家报价页已读取：青檀按车型计价，木棉按体积，橘子按套餐", "toolu_seed_04")],
                     "summary": "3 家报价口径已记录",
                     "after_s": 26,
                 },
@@ -1248,12 +1248,12 @@ def assistant_zh(clock: Clock) -> dict:
                     "after_s": 97,
                 },
             ],
-            "final": "同口径折算后（两室一厅，浦东到徐汇，含打包）：\n\n| 公司 | 月底周六 | 预估总价 | 准时率 | 近三月差评关键词 |\n|---|---|---|---|---|\n| 日式搬家 | 可约 | ¥2,300 | 94% | 「改约」×4 |\n| 公兴 | 可约 | ¥1,960 | 97% | 无集中差评 |\n| 蚂蚁 | 可约 | ¥1,680 | 88% | 「丢件」×2、「磕碰」×5 |\n\n推荐**公兴**：价格居中，近三个月没有集中差评。蚂蚁最便宜，但有两条丢件差评；日式搬家最贵，改约投诉偏多。",
-            "summary": "3 家报价已入表，推荐公兴",
+            "final": "同口径折算后（两室一厅，浦东到徐汇，含打包）：\n\n| 公司 | 月底周六 | 预估总价 | 准时率 | 近三月差评关键词 |\n|---|---|---|---|---|\n| 青檀 | 可约 | ¥2,300 | 94% | 「改约」×4 |\n| 木棉 | 可约 | ¥1,960 | 97% | 无集中差评 |\n| 橘子 | 可约 | ¥1,680 | 88% | 「临时加价」×2、「磕碰」×5 |\n\n推荐**木棉**：价格居中，近三个月没有集中差评。橘子最便宜，但有两条临时加价的差评；青檀最贵，改约投诉偏多。",
+            "summary": "3 家报价已入表，推荐木棉",
             "telemetry": tele(118, 19800, 1650, 7),
         },
         "report": {
-            "reply": "查好了：三家都能周六上门，报价 1,680 到 2,300。评价最稳的是公兴，价格居中；最便宜的蚂蚁近期有两条丢件差评。要我把公兴的预约电话发你吗？",
+            "reply": "查好了：三家都能周六上门，报价 1,680 到 2,300。评价最稳的是木棉，价格居中；最便宜的橘子近期有两条临时加价的差评。要我把木棉的预约电话发你吗？",
             "reply_summary": "汇报三家搬家公司的对比结果",
             "telemetry": tele(9, 24700, 260, 1),
         },
@@ -1313,7 +1313,7 @@ def assistant_en(clock: Clock) -> dict:
             "instructions": (
                 "Three moving companies: quotes and reviews\n\n"
                 "The user moves from Pudong to Xuhui at the end of the month, a two-bedroom flat. "
-                "Compare Nihon Moving, Gongxing and Ant:\n\n"
+                "Compare Qingtan, Mumian and Juzi:\n\n"
                 "- Normalize the quotes to one basis (truck, floors, packing), noting each company's own pricing model;\n"
                 "- Only reviews from the last three months with photos or order numbers, bucketed as punctuality / damage / surcharge;\n"
                 "- Check whether each can come on the last Saturday of the month.\n\n"
@@ -1325,7 +1325,7 @@ def assistant_en(clock: Clock) -> dict:
                     "preamble": "Current stage: reading the three pricing pages.",
                     "thinking": "Three different pricing models: record each raw, then convert.",
                     "tool_calls": [tc("web_scan", {"text_only": True}, "toolu_seed_04")],
-                    "tool_results": [tr("3 pricing pages read: Nihon per truck, Gongxing per volume, Ant per package", "toolu_seed_04")],
+                    "tool_results": [tr("3 pricing pages read: Qingtan per truck, Mumian per volume, Juzi per package", "toolu_seed_04")],
                     "summary": "3 pricing bases recorded",
                     "after_s": 26,
                 },
@@ -1346,12 +1346,12 @@ def assistant_en(clock: Clock) -> dict:
                     "after_s": 97,
                 },
             ],
-            "final": "On the same basis (two-bedroom, Pudong to Xuhui, packing included):\n\n| Company | Last Saturday | Est. total | On-time | Complaint keywords (3 mo) |\n|---|---|---|---|---|\n| Nihon Moving | Open | ¥2,300 | 94% | \"rescheduled\" ×4 |\n| Gongxing | Open | ¥1,960 | 97% | none recurring |\n| Ant | Open | ¥1,680 | 88% | \"lost items\" ×2, \"scuffs\" ×5 |\n\nRecommendation: **Gongxing**, mid-priced with no recurring complaints in three months. Ant is the cheapest but has two lost-item complaints; Nihon Moving is the priciest and draws rescheduling complaints.",
-            "summary": "3 quotes tabled, Gongxing recommended",
+            "final": "On the same basis (two-bedroom, Pudong to Xuhui, packing included):\n\n| Company | Last Saturday | Est. total | On-time | Complaint keywords (3 mo) |\n|---|---|---|---|---|\n| Qingtan | Open | ¥2,300 | 94% | \"rescheduled\" ×4 |\n| Mumian | Open | ¥1,960 | 97% | none recurring |\n| Juzi | Open | ¥1,680 | 88% | \"surprise surcharge\" ×2, \"scuffs\" ×5 |\n\nRecommendation: **Mumian**, mid-priced with no recurring complaints in three months. Juzi is the cheapest but has two complaints about surprise surcharges; Qingtan is the priciest and draws rescheduling complaints.",
+            "summary": "3 quotes tabled, Mumian recommended",
             "telemetry": tele(118, 19800, 1650, 7),
         },
         "report": {
-            "reply": "Done: all three can come on Saturday, quoting ¥1,680 to ¥2,300. Gongxing has the steadiest reviews and sits in the middle on price; the cheapest, Ant, has two recent complaints about lost items. Want me to send you Gongxing's booking number?",
+            "reply": "Done: all three can come on Saturday, quoting ¥1,680 to ¥2,300. Mumian has the steadiest reviews and sits in the middle on price; the cheapest, Juzi, has two recent complaints about surprise surcharges. Want me to send you Mumian's booking number?",
             "reply_summary": "Reported the movers comparison",
             "telemetry": tele(9, 24700, 260, 1),
         },
