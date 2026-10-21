@@ -586,12 +586,12 @@ class AgentChatMixin:
     pass
 
 
-class _TaskCard:
-    def __init__(self):
-        self.final = None
+def _take_lead_notice():
+    return ""
 
-    def done(self, text):
-        self.final = text
+
+def _restore_lead_notice():
+    pass
 
 
 def _reset_conversation(agent, message="🆕 已开启新对话，当前上下文已清空"):
@@ -644,12 +644,9 @@ def test_feishu_launcher_resumes_the_lazy_agent_before_anyone_gets_it(
     if scenario in ("mapped", "stale_lock"):
         assert Path(agent.log_path).name == LOG_NAME
 
-    card = run.module._TaskCard()
-    card.done("好的。")
-    assert card.final == (f"{NOTICE}\n好的。" if scenario == "missing" else "好的。")
-    card = run.module._TaskCard()
-    card.done("嗯。")
-    assert card.final == "嗯。"
+    # The first answer or question asks fsapp's seam for the notice, once.
+    assert run.module._take_lead_notice() == (NOTICE if scenario == "missing" else "")
+    assert run.module._take_lead_notice() == ""
 
     write_turn(agent)
     agent.fire_turn_end()
@@ -942,7 +939,7 @@ class FsWorld:
 
 @pytest.fixture
 def fs(monkeypatch: Any, tmp_path: Path) -> FsWorld:
-    fst._install_fsapp_stubs(monkeypatch)  # lark, agentmain, the frontends package
+    fst._install_fsapp_stubs(monkeypatch, common=False)  # lark, agentmain
     cc = load_continue_cmd(monkeypatch, tmp_path)
     monkeypatch.setattr(sys.modules["agentmain"], "GeneraticAgent", Agent)
     for name, attrs in (
@@ -953,9 +950,10 @@ def fs(monkeypatch: Any, tmp_path: Path) -> FsWorld:
         for key, value in attrs.items():
             setattr(stub, key, value)
         monkeypatch.setitem(sys.modules, name, stub)
-    monkeypatch.setattr(sys, "path", list(sys.path))  # both modules prepend the code root
-    # The real chatapp_common under the name fsapp imports it by.
-    _exec_module(monkeypatch, "frontends.chatapp_common", _FRONTENDS / "chatapp_common.py")
+    # The real chatapp_common and galley_im_display, under the top-level
+    # names fsapp imports them by (patch 0029).
+    _exec_module(monkeypatch, "chatapp_common", _FRONTENDS / "chatapp_common.py")
+    _exec_module(monkeypatch, "galley_im_display", _FRONTENDS / "galley_im_display.py")
     monkeypatch.setenv("GA_WORKSPACE_ROOT", str(tmp_path / "workspace"))
     monkeypatch.setenv("GALLEY_FEISHU_TEMP_DIR", str(tmp_path / "feishu-temp"))
     cwd = os.getcwd()
@@ -976,6 +974,8 @@ def fs(monkeypatch: Any, tmp_path: Path) -> FsWorld:
     monkeypatch.setattr(fsapp, "_send_raw", send_raw)
     monkeypatch.setattr(fsapp, "_patch_card", patch_card)
     monkeypatch.setattr(fsapp, "_send_generated_files", lambda *_a, **_k: None)
+    monkeypatch.setattr(fsapp, "_add_reaction", lambda *_a, **_k: None)
+    monkeypatch.setattr(fsapp, "_POLL_SECONDS", 0.01)
     seed_log(text=CORRUPT_LOG)
     state_dir = tmp_path / "state"
     seed_mapping(state_dir)
@@ -988,14 +988,24 @@ def fs(monkeypatch: Any, tmp_path: Path) -> FsWorld:
 
 
 def fs_run(fs: FsWorld, text: str, answer: str | None = None) -> str | None:
-    """One user message through FeishuApp.run_agent; the card's answer."""
+    """One user message through FeishuApp.run_agent, posted by fsapp's run
+    worker (patch 0029); the answer card's lines (the notice line, then the
+    answer), or None when the run posted text (its error) instead."""
     if answer is not None:
         fs.agent.scripts.append([{"done": answer}])
     app = fs.fsapp.get_app()
     asyncio.run(app.run_agent("oc_1", text, receive_id="oc_1", receive_id_type="chat_id"))
-    card = json.loads(fs.sent[-1][1])
-    elements = card["body"]["elements"]
-    return elements[-1]["content"] if elements[-2:-1] == [{"tag": "hr"}] else None
+    fst.wait_until(lambda: not fs.fsapp._RUNS)
+    receive_id, payload, msg_type = fs.sent[-1]
+    if msg_type != "interactive":
+        return None
+    shown = []
+    for element in json.loads(payload)["body"]["elements"]:
+        if element["tag"] == "div":
+            shown.append(element["text"]["content"])
+        elif element["tag"] == "markdown":
+            shown.append(element["content"])
+    return "\n".join(shown)
 
 
 def fs_command(fs: FsWorld, cmd: str) -> str:
@@ -1014,7 +1024,7 @@ def test_feishu_answer_card_leads_with_the_notice_once(fs: FsWorld) -> None:
 
 def test_feishu_failed_card_leaves_the_notice_for_the_next_answer(fs: FsWorld) -> None:
     fs.agent.fail_put = RuntimeError("boom")
-    assert fs_run(fs, "hi") is None  # the card ends in fail(), no answer
+    assert fs_run(fs, "hi") is None  # the run posts its error as text, no answer
     assert NOTICE not in fs.sent[-1][1]
     fs.agent.fail_put = None
     assert fs_run(fs, "hi", "好的。") == f"{NOTICE}\n好的。"

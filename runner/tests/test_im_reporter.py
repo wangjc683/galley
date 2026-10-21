@@ -1472,15 +1472,13 @@ def test_reporter_strips_workbench_suggestion_tag(
     assert fsapp._sent == [("ou_owner", "报告正文。")]
 
 
-def test_feishu_reports_still_go_through_send(
+def test_feishu_without_seams_reports_through_send(
     monkeypatch: Any, tmp_path: Path
 ) -> None:
-    """Only Discord, Telegram and WeChat dress reports up; Feishu inherits the
-    default send_report, which is exactly the old send call. (Telegram
-    without its tgapp seams is pinned by
+    """An fsapp payload without patch 0029's report seams gets the plain
+    send unchanged: a dead-status report reaches Feishu as the same plain
+    message. (Telegram without its tgapp seams is pinned by
     test_telegram_without_seams_sends_byte_identical_payload.)"""
-    assert im_reporter.FeishuChannel.send_report is im_reporter.ChannelAdapter.send_report
-    # A dead-status report reaches Feishu as the same plain message.
     fsapp = _stub_fsapp(["任务已取消。"])
     (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
     payloads = {
@@ -1491,6 +1489,155 @@ def test_feishu_reports_still_go_through_send(
     delivered = reporter.tick()
     assert [r.kind for r in delivered] == ["cancelled"]
     assert fsapp._sent == [("ou_owner", "任务已取消。")]
+
+
+FS_REPORT_DONE = (
+    "\nLLM Running (Turn 1) ...\n\n<summary>查看</summary>先看看。\n"
+    "🛠️ code_run(galley session show s1)\n"
+    "\nLLM Running (Turn 2) ...\n\n<summary>汇报</summary>报告正文\n"
+)
+
+
+def _seam_fsapp(replies: list[str]) -> Any:
+    """A stub fsapp with patch 0029's seams: report cards come out as
+    ("CARD", title, body, footer) pairs, sends are recorded in order."""
+    fsapp = _stub_fsapp(replies)
+    fsapp.answer_text = lambda raw: raw.rsplit("</summary>", 1)[-1].strip() if raw else ""
+    fsapp.report_cards = lambda title, body, footer: [
+        (f"CARD<{title}|{body}|{footer}>", f"PLAIN<{body}>")
+    ]
+    fsapp.deliveries = []
+    fsapp.refuse = set()
+
+    def deliver(kind: str) -> Any:
+        def send(owner: str, payload: str, receive_id_type: str = "open_id") -> str:
+            if payload in fsapp.refuse:
+                raise RuntimeError(f"refused {kind}")
+            fsapp.deliveries.append((kind, owner, payload))
+            return "om_1"
+
+        return send
+
+    fsapp.deliver_card = deliver("card")
+    fsapp.deliver_text = deliver("text")
+    fsapp._send_generated_files = lambda owner, raw: fsapp.deliveries.append(("files", owner, raw))
+    fsapp.busy = lambda: bool(fsapp._app.user_tasks)
+    return fsapp
+
+
+def _fs_seam_reporter(monkeypatch: Any, tmp_path: Path, fsapp: Any) -> FeishuReporter:
+    (tmp_path / "reporter_state.json").write_text('{"sessions":{}}', encoding="utf-8")
+    payloads = {"sessions": [_session("s1")], "show s1": [_agent_msg("a1", "done!")]}
+    return _make_reporter(monkeypatch, tmp_path, fsapp, payloads)
+
+
+@pytest.mark.parametrize(
+    ("kind", "title", "footer"),
+    [
+        ("completed", "✅ Task s1", "已完成 · s1"),
+        ("cancelled", "⏹ Task s1", "已停止 · s1"),
+        ("error", "❌ Task s1", "出错 · s1"),
+    ],
+)
+def test_feishu_report_lines_title_and_footer(kind: str, title: str, footer: str) -> None:
+    report = Report(kind=kind, session=_session("s1"), message=None)
+    assert im_reporter.feishu_report_lines(report) == (title, footer)
+
+
+def test_feishu_report_title_falls_back_to_id_and_stays_one_line() -> None:
+    cases = [("", "s1"), (None, "s1"), ("*_`", "s1"), ("修复 **飞书**\n报告", "修复 飞书 报告")]
+    for raw, shown in cases:
+        session = {**_session("s1"), "title": raw}
+        report = Report(kind="completed", session=session, message=None)
+        assert im_reporter.feishu_report_lines(report)[0] == f"✅ {shown}"
+
+
+def test_feishu_report_goes_out_as_cards_then_files(monkeypatch: Any, tmp_path: Path) -> None:
+    fsapp = _seam_fsapp([FS_REPORT_DONE])
+    reporter = _fs_seam_reporter(monkeypatch, tmp_path, fsapp)
+    assert len(reporter.tick()) == 1
+    # The closing step only (fsapp's answer_text), as a card, then files.
+    assert fsapp.deliveries == [
+        ("card", "ou_owner", "CARD<✅ Task s1|报告正文|已完成 · s1>"),
+        ("files", "ou_owner", FS_REPORT_DONE),
+    ]
+    assert fsapp._sent == []  # the old plain send is not used
+    assert reporter.tick() == []
+
+
+def test_feishu_refused_card_is_resent_as_plain_text(monkeypatch: Any, tmp_path: Path) -> None:
+    fsapp = _seam_fsapp(["报告正文"])
+    fsapp.refuse.add("CARD<✅ Task s1|报告正文|已完成 · s1>")
+    reporter = _fs_seam_reporter(monkeypatch, tmp_path, fsapp)
+    assert len(reporter.tick()) == 1
+    assert fsapp.deliveries[0] == ("text", "ou_owner", "PLAIN<报告正文>")
+
+
+def test_feishu_report_send_failure_is_a_retry(monkeypatch: Any, tmp_path: Path) -> None:
+    fsapp = _seam_fsapp(["报告正文", "报告正文"])
+    fsapp.refuse.update({"CARD<✅ Task s1|报告正文|已完成 · s1>", "PLAIN<报告正文>"})
+    reporter = _fs_seam_reporter(monkeypatch, tmp_path, fsapp)
+    assert reporter.tick() == []  # neither went out: not delivered
+    assert reporter.state.entry("s1")["reportAttempts"] == 1
+    fsapp.refuse.clear()
+    assert len(reporter.tick()) == 1
+    assert fsapp.deliveries[0][0] == "card"
+
+
+def test_feishu_report_that_renders_to_no_cards_is_not_delivered(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    fsapp = _seam_fsapp(["报告正文"])
+    fsapp.report_cards = lambda *_a: []
+    reporter = _fs_seam_reporter(monkeypatch, tmp_path, fsapp)
+    assert reporter.tick() == []
+    assert reporter.state.entry("s1")["reportAttempts"] == 1
+
+
+def test_feishu_render_and_busy_prefer_the_seams() -> None:
+    legacy = _stub_fsapp([])
+    assert im_reporter.FeishuChannel(legacy).render(FS_REPORT_DONE) == FS_REPORT_DONE
+    seam = im_reporter.FeishuChannel(_seam_fsapp([]))
+    assert seam.render(FS_REPORT_DONE) == "报告正文"
+    assert seam.render("   ") == ""
+    fsapp = _seam_fsapp([])
+    fsapp.busy = lambda: True  # a queued run, say, with user_tasks empty
+    assert im_reporter.FeishuChannel(fsapp).busy() is True
+
+
+def test_feishu_report_through_real_fsapp_seams(monkeypatch: Any, tmp_path: Path) -> None:
+    """The reporter's FeishuChannel over the real fsapp payload (patch 0029):
+    the closing step, Markdown table rewritten, title and footer lines."""
+    from runner.tests import test_managed_feishu_fsapp as fst
+
+    monkeypatch.setenv(
+        "GALLEY_FEISHU_CONFIG_JSON",
+        json.dumps(
+            {"fs_app_id": "cli", "fs_app_secret": "secret", "fs_allowed_users": ["ou_owner"]}
+        ),
+    )
+    fsapp = fst._load_managed_fsapp(monkeypatch, tmp_path)
+    sent: list[tuple[str, str, str]] = []
+
+    def create(receive_id: str, content: str, msg_type: str, receive_id_type: str) -> str:
+        sent.append((receive_id, msg_type, content))
+        return "om_1"
+
+    monkeypatch.setattr(fsapp, "_create_message", create)
+    monkeypatch.setattr(fsapp, "_send_generated_files", lambda *_a: None)
+    channel = im_reporter.FeishuChannel(fsapp)
+    raw = FS_REPORT_DONE.replace("报告正文", "| 项 | 值 |\n|---|---|\n| 磁盘 | 49% |")
+    text = channel.render(raw)
+    assert text == "| 项 | 值 |\n|---|---|\n| 磁盘 | 49% |"
+    report = Report(kind="completed", session=_session("s1"), message=None)
+    channel.send_report("ou_owner", text, raw, report)
+    ((owner, msg_type, content),) = sent
+    assert (owner, msg_type) == ("ou_owner", "interactive")
+    card = json.loads(content)
+    assert [e.get("content") or e["text"]["content"] for e in card["body"]["elements"]] == [
+        "**✅ Task s1**", "• 磁盘：49%", "已完成 · s1",
+    ]
+    assert card["config"]["summary"] == {"content": "✅ Task s1"}
 
 
 # ── WeChat channel adapter (ticket 01's conversation contract) ───────

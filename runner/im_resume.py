@@ -273,30 +273,22 @@ def _wrap_continue(resume: ChannelResume) -> Callable[[Any], Any]:
 def install_feishu(fsapp: Any, resume: ChannelResume) -> None:
     """Feishu seams, all module globals looked up at call time:
 
-    - ``fsapp._TaskCard``: a user task's card. ``done(text)`` sets the
-      answer (or question) under the card's steps; the notice goes on its
-      first line. Report turns never build a card (the reporter sends its
-      own text), and a stopped / failed / timed-out card ends in ``fail``,
-      so neither takes the notice.
+    - ``fsapp._take_lead_notice`` / ``_restore_lead_notice`` (patch
+      ``0029``): a run's answer or question card asks for the notice as it
+      is posted, as its small first line, and gives it back when neither
+      the card nor its plain-text fallback went out. Report turns go out
+      through the reporter's own sends, stop receipts and errors as plain
+      text: none of them takes it.
     - ``_reset_conversation`` / ``_handle_continue_frontend`` of the module
-      that defines ``AgentChatMixin`` (``frontends.chatapp_common``), which
-      ``AgentChatMixin.handle_command`` runs for ``/new`` and ``/continue``.
-      dcapp imports the same two names with ``from chatapp_common import``
-      (bound at import, and a different module object), and a Discord
-      process never runs this function."""
-    base = getattr(fsapp, "_TaskCard", None)
-    base_done: Any = getattr(base, "done", None)
-    if isinstance(base, type) and callable(base_done):
-
-        def done(card: Any, text: Any) -> Any:
-            notice = resume.take_notice()
-            if notice:
-                text = f"{notice}\n{text}" if text else notice
-            return base_done(card, text)
-
-        fsapp._TaskCard = type(base.__name__, (base,), {"done": done, "__doc__": base.__doc__})
+      that defines ``AgentChatMixin`` (the top-level ``chatapp_common``
+      since ``0029``), which fsapp's ``/new`` and ``/continue N`` and
+      ``AgentChatMixin.handle_command`` call. dcapp binds the same two
+      names at import, and a Discord process never runs this function."""
+    if callable(getattr(fsapp, "_take_lead_notice", None)):
+        fsapp._take_lead_notice = resume.take_notice
+        fsapp._restore_lead_notice = resume.restore_notice
     else:
-        print(f"{LOG_PREFIX} fsapp._TaskCard missing; no context-lost notice")
+        print(f"{LOG_PREFIX} fsapp._take_lead_notice missing; no context-lost notice")
     mixin = getattr(fsapp, "AgentChatMixin", None)
     common = sys.modules.get(getattr(mixin, "__module__", ""))
     if common is None:

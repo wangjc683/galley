@@ -1006,14 +1006,15 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     Native* `ask` still fills it from thinking blocks, falling back to a
     prompted `<think(ing)>` block it moves out of `content`, and that
     `ToolClient._parse_mixed_response` still sets it.
-15. The display queue and ask_user payload the managed Discord and
-    Telegram frontends read (Discord: patches `0023` and `0026`; Telegram:
-    patch `0024`; all 2026-09-30; see their rows in the
+15. The display queue and ask_user payload the managed Discord,
+    Telegram and Feishu frontends read (Discord: patches `0023` and `0026`;
+    Telegram: patch `0024`; all 2026-09-30; Feishu: patch `0029`,
+    2026-10-21; see their rows in the
     [patch ledger](../managed-ga/patches/manifest.md)), and Galley's WeChat
     conversation reads the same way (`runner/im_wechat.py`, 2026-10-10, no
     patch; item 19). A drift here still applies cleanly and compiles, and
-    the dcapp / tgapp / WeChat tests run on hand-written fake agents, so
-    nothing but a real run catches it.
+    the dcapp / tgapp / fsapp / WeChat tests run on hand-written fake
+    agents, so nothing but a real run catches it.
     Re-check on upgrade: (a) `agentmain.GenericAgent.run()` items: `next` /
     `done` carrying `turn` and `outputs` (`turn_resps[-2:]` on `next`,
     every step on `done`; `outputs` holds whole step texts either way), a
@@ -1022,22 +1023,22 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     in `next`'s text alone: dcapp's channel agents run with `inc_out` off
     (cumulative text), tgapp's agent with `inc_out = True` (only the new
     text since the last item); both read steps from `outputs`, never from
-    `next`, and so does the WeChat conversation (upstream's `inc_out`
-    default). (b) the ask_user exit reaching `_turn_end_hooks` as
+    `next`, and so do fsapp and the WeChat conversation (upstream's
+    `inc_out` default). (b) the ask_user exit reaching `_turn_end_hooks` as
     `exit_reason = {"result": "EXITED", "data": {"status": "INTERRUPT",
     "intent": "HUMAN_INTERVENTION", "data": {question, candidates}}}` with
     `tool_calls` alongside (`ga.py` `ask_user` / `turn_end_callback`,
     `agent_loop.py` EXITED branch); (c) `agent._current_queue` pointing at
     the running task's display queue when the hook fires, and staying on it
-    while `agent.is_running` (tgapp and the WeChat conversation also read
-    the pair to tell a completion-reporter turn from their own task:
+    while `agent.is_running` (tgapp, fsapp and the WeChat conversation also
+    read the pair to tell a completion-reporter turn from their own task:
     `·· 排队中`, `/stop`); (d)
     `review_cmd` still intercepting `/review` through `_handle_slash_cmd`
     only when the query starts with it (dcapp sends `/review` raw), and
     `review_cmd.handle(agent, body, display_queue)` still returning the
     prompt or putting a `done` itself (tgapp calls it directly); (e)
     `continue_cmd.reset_conversation` still aborting through
-    `agent.abort()`, which tgapp's and the WeChat conversation's
+    `agent.abort()`, which tgapp's, fsapp's and the WeChat conversation's
     `/continue n` wrap for one call to learn whether the running task was
     aborted. (f) the engine log a Discord
     channel is picked back up from after a restart or an eviction (`0026`):
@@ -1087,13 +1088,15 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     `handle_frontend_command` (imported from `continue_cmd`; the second is
     also what `_call_noting_abort` receives) and `0024`'s `_send_answer` /
     `_post_ask` (answer and question) and `_reply_markdown` / `_reply`
-    (their sends; the notice goes on the first); fsapp's `_TaskCard`
-    (subclassed: `done(text)` carries the answer or question, `fail` the
-    stop / error / timeout) and `_reset_conversation` /
+    (their sends; the notice goes on the first); fsapp's
+    `_take_lead_notice` / `_restore_lead_notice` (`0029`: the answer or
+    question card asks for the notice as it is posted and gives it back
+    when nothing went out) and `_reset_conversation` /
     `_handle_continue_frontend` on the module that defines
-    `AgentChatMixin` (`frontends.chatapp_common`, looked up by
-    `AgentChatMixin.handle_command`; dcapp binds the same names at import
-    from the top-level `chatapp_common`, so Discord is unaffected). WeChat
+    `AgentChatMixin` (the top-level `chatapp_common` since `0029`, looked
+    up by fsapp's `/new` and `/continue N` and by
+    `AgentChatMixin.handle_command`; dcapp binds the same names at import,
+    so Discord is unaffected). WeChat
     replaces no upstream global: since 2026-10-10 its conversation is
     Galley's (`runner/im_wechat.py`, item 19), which calls
     `ChannelResume.take_notice` / `fresh` / `continue_session` itself. A
@@ -1240,6 +1243,15 @@ start the audit there instead of grepping the bridge:
   `final_step_text` (the `done` / `outputs` relation), and
   `strip_transcript` / `step_summary` (the Turn marker and the 🛠️ echo
   format of `agent_loop.py`).
+- **`managed-ga/code/frontends/fsapp.py`** (patch `0029`) — item 15:
+  `_FsRun.observe` (item shape), `_install_ask_hook` and `_take_ask_event`
+  (ask payload, `_current_queue`), `_running_run` (`_current_queue` /
+  `is_running`) and `_continue_command` (the `/continue N` abort probe);
+  item 16: `_take_lead_notice` / `_restore_lead_notice`. It calls the same
+  `galley_im_display` helpers as tgapp. The completion reporter's
+  `FeishuChannel` (`runner/im_reporter.py`) renders through its
+  `answer_text` and sends through `report_cards` / `deliver_card` /
+  `deliver_text`.
 - **[`runner/im_resume.py`](../runner/im_resume.py)** — item 16:
   `ChannelResume.resume` / `record` / `fresh` / `continue_session`
   (`continue_cmd`'s loader and locks, `agent.log_path`,
@@ -1408,8 +1420,15 @@ already-generated bundle without rebuilding it. The smoke must verify
   (the status message freezes into `⏹ 已停止 · …`, and no other
   message follows). Then restart Channels (「重启 Channels」) and ask about
   what was said before: the answer picks it up (item 16).
-- Managed Feishu channel (item 16): say something to remember, restart
-  Channels (「重启 Channels」), then ask about it: the answer picks it up.
+- Managed Feishu channel (items 15, 16; same caveat about an installed
+  Galley): a multi-step request in the private chat (only a `Typing`
+  reaction on your message while it runs, then one card: the answer with a
+  folded 「过程」 panel, the reaction gone with it), a second message while
+  it runs (queued, not refused; it gets `Typing` when its turn comes), an
+  ask_user question answered with a number (the question card turns into
+  its echo), and `/stop` during a long step (one `⏹ 已停止 · …`, no answer
+  after it). Say something to remember, restart Channels
+  (「重启 Channels」), then ask about it: the answer picks it up.
 - Managed WeChat channel (items 15, 16, 19; same caveat about an installed
   Galley): a multi-step request (only 「对方正在输入」 while it runs, then
   one message: the answer with a `N 步 · 用时 X` last line, the indicator

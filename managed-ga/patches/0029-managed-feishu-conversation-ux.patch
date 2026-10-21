@@ -1,0 +1,890 @@
+diff --git a/frontends/fsapp.py b/frontends/fsapp.py
+--- a/frontends/fsapp.py
++++ b/frontends/fsapp.py
+@@ -82 +82,18 @@ from agentmain import GeneraticAgent
+-from frontends.chatapp_common import AgentChatMixin, FILE_HINT, split_text
++# Galley 0029: the top-level module, as tgapp and dcapp import it.
++# galley_im_display imports `chatapp_common` too; a second module object
++# under `frontends.chatapp_common` would install /continue, /btw and
++# /review on the GA class twice.
++import chatapp_common as _common
++from chatapp_common import AgentChatMixin, FILE_HINT, split_text
++from galley_im_display import (
++    answer_body,
++    clip,
++    extract_ask_user_event,
++    final_step_text,
++    fold_label,
++    one_line,
++    step_summary,
++    stopped_text,
++    tables_to_lists,
++    visible_text,
++)
+@@ -951,0 +969,768 @@ def _make_task_hook(card, task_id, on_final):
++# ── Galley conversation UX (managed patch 0029) ──────────────────────────
++# Aligned with Telegram / Discord (.scratch/im-polish/issues/03). While a run
++# works, the user's message carries a `Typing` reaction: no push, no change
++# in the chat list, no trace once it is removed (2026-10-20 device probe).
++# The run then posts exactly one new message, a card: its answer (the
++# closing step), with a folded 「过程」 panel from two steps on, or its
++# ask_user question; a stopped run posts the stop receipt instead. The
++# reaction comes off once that message is out. A message sent while a run
++# works queues behind it (one agent, FIFO); only the head run reads its
++# display queue. The status card above (_TaskCard / _make_task_hook,
++# patches 0009 and 0013) is no longer on the run path.
++
++_TYPING_EMOJI = "Typing"
++_POLL_SECONDS = 0.5
++_ANSWER_PART_LIMIT = 4000
++# Message create caps a card's request body at 30 KB.
++_CARD_BYTES_LIMIT = 28 * 1024
++_PROCESS_STEP_LINES = 30
++_PREVIEW_LIMIT = 100
++_ASK_USER_HOOK_KEY = "galley_feishu_ask_user"
++_ASK_EVENT_LIMIT = 8
++_ASK_QUESTION_LIMIT = 3000
++_NO_RUNNING_TASK_TEXT = "当前没有在跑的任务"
++_EMPTY_ANSWER_WITH_FILES = "已生成附件"
++_PANEL_ICON = {"tag": "standard_icon", "token": "down-small-ccm_outlined", "color": "grey", "size": "16px 16px"}
++_TURN_MARKER_LINE_RE = re.compile(r"^\*{0,2}LLM Running \(Turn \d+\) \.\.\.\*{0,2}[ \t]*$", re.M)
++_FILE_MARKER_RE = re.compile(r"\[FILE:([^\]]+)\]")
++_FENCE_LINE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
++_IMAGE_MD_RE = re.compile(r"!\[([^\]]*)\]\(\s*([^)\s]*)[^)]*\)")
++_REPLY_NUMBERS_RE = re.compile(r"\s*\d+(?:\s*[,，、;；\s]\s*\d+)*\s*")
++# Card Markdown reads these; plain text inside it goes in as entities.
++_MD_ESCAPES = {"<": "&#60;", ">": "&#62;", "*": "&#42;", "_": "&#95;", "`": "&#96;", "~": "&#126;"}
++_clock = time.monotonic  # run timing; injectable for tests
++_runs_cond = threading.Condition()  # guards _RUNS, _worker and _pending_asks
++_RUNS = []  # every registered run, in GA's task order
++_worker = None  # reads the head run's display queue while runs are registered
++_pending_asks = {}  # chat key -> _PendingAsk waiting for its reply
++_ask_lock = threading.Lock()  # ask_user events arrive on the GA worker thread
++_ask_events = {}  # display queue of the asking task -> ask_user event
++
++
++def _take_lead_notice():
++    """Galley seam (runner/im_resume.py replaces it): a line for the top of
++    the next answer or question, "" when there is none."""
++    return ""
++
++
++def _restore_lead_notice():
++    """Galley seam: the message that took the notice never went out."""
++
++
++# ── text ──
++
++
++def _file_names(text):
++    """[FILE:path] markers shown as file names, nothing else touched: the
++    transcript cleaning drops markers, so the names go in before it."""
++    return _FILE_MARKER_RE.sub(lambda match: os.path.basename(match.group(1)), text or "")
++
++
++def _answer_from(step_text, raw):
++    """A finished task's answer: its closing step cleaned (dcapp's and
++    tgapp's cleaning), else the whole transcript, file names shown."""
++    return answer_body(_file_names(step_text), _file_names(raw))
++
++
++def answer_text(raw):
++    """Galley seam (runner/im_reporter.py): the answer of a finished task
++    from its whole `done` text alone: the closing step, split on GA's
++    `LLM Running (Turn N) ...` marker lines, cleaned as an answer, [FILE:]
++    markers shown as file names. "" when nothing visible remains."""
++    raw = raw or ""
++    markers = list(_TURN_MARKER_LINE_RE.finditer(raw))
++    return _answer_from(raw[markers[-1].start():] if markers else raw, raw)
++
++
++def _image_as_link(match):
++    alt, url = match.group(1).strip(), match.group(2)
++    if url.startswith(("http://", "https://")):
++        return f"[{alt or url}]({url})"
++    return alt or os.path.basename(url)
++
++
++def _rewrite_markdown(text):
++    """Source rewrite for card Markdown, which shows headings, quotes,
++    rules, lists and code as they are (card JSON 2.0): tables become lists
++    (a Markdown component shows at most four, paging after five rows), and
++    image syntax, which takes uploaded image keys only, becomes a link.
++    Code fences are left alone."""
++    out, fence = [], ""
++    for line in tables_to_lists(text or "").split("\n"):
++        match = _FENCE_LINE_RE.match(line)
++        if fence:
++            if match and match.group(1)[0] == fence[0] and len(match.group(1)) >= len(fence) and not match.group(2).strip():
++                fence = ""
++            out.append(line)
++            continue
++        if match and not (match.group(1)[0] == "`" and "`" in match.group(2)):
++            fence = match.group(1)
++            out.append(line)
++            continue
++        out.append(_IMAGE_MD_RE.sub(_image_as_link, line))
++    return "\n".join(out)
++
++
++def _md_text(text):
++    """Plain text going into card Markdown, shown as typed."""
++    return "".join(_MD_ESCAPES.get(ch, ch) for ch in text or "")
++
++
++def _preview(text):
++    """A card's chat-list preview (`config.summary`): its first line of
++    text outside code blocks, Markdown marks dropped."""
++    fence = False
++    for line in (text or "").splitlines():
++        if _FENCE_LINE_RE.match(line):
++            fence = not fence
++            continue
++        if fence:
++            continue
++        line = re.sub(r"^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+•]\s+)", "", line)
++        line = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", line)
++        line = one_line(re.sub(r"<[^>]+>|[*_`~]", "", line))
++        if line.strip("-=|:· "):
++            return clip(line, _PREVIEW_LIMIT)
++    return ""
++
++
++def _process_lines(summaries, steps, seconds, width=0):
++    """What the 「过程」 panel shows: `N 步 · 用时 X`, then one `NN 摘要`
++    line per step (the last 30), each clipped to `width` when given.
++    Platform-neutral: a candidate for galley_im_display."""
++    lines = [f"{n:02d} {summaries.get(n, '')}".rstrip() for n in range(1, steps + 1)]
++    if width:
++        lines = [clip(line, width) for line in lines]
++    if len(lines) > _PROCESS_STEP_LINES:
++        lines = [f"… 前 {len(lines) - _PROCESS_STEP_LINES} 步略"] + lines[-_PROCESS_STEP_LINES:]
++    return [fold_label(steps, seconds), *lines]
++
++
++# ── cards ──
++
++
++def _card_json(elements, preview=""):
++    config = {"streaming_mode": False, "width_mode": "fill"}
++    if preview:
++        config["summary"] = {"content": preview}
++    return json.dumps({"schema": "2.0", "config": config, "body": {"elements": elements}}, ensure_ascii=False)
++
++
++def _text_line(text, size="normal"):
++    """One line of grey plain text: a component per line, since whether a
++    newline breaks plain_text is not documented."""
++    return {"tag": "div", "text": {"tag": "plain_text", "content": text, "text_size": size, "text_color": "grey"}}
++
++
++def _process_panel(lines):
++    """The answer's 「过程」 entry: a collapsible panel, folded by default.
++    The client opens and closes it: no callback, nothing kept in memory,
++    and it still opens after a restart."""
++    return {
++        "tag": "collapsible_panel",
++        "expanded": False,
++        "vertical_spacing": "4px",
++        "header": {
++            "title": {"tag": "plain_text", "content": "过程"},
++            "vertical_align": "center",
++            "icon": dict(_PANEL_ICON),
++            "icon_position": "follow_text",
++            "icon_expanded_angle": -180,
++        },
++        "elements": [_text_line(line) for line in lines],
++    }
++
++
++def _answer_card(body, notice="", process=None):
++    elements = [_text_line(notice, "notation")] if notice else []
++    elements.append({"tag": "markdown", "content": body})
++    if process:
++        elements.append(_process_panel(process))
++    return _card_json(elements, _preview(body))
++
++
++def _ask_status(pending, answered):
++    steps = pending.carry["steps"]
++    if answered:
++        return f"已回复 · 已完成 {steps} 步"
++    if not pending.event["candidates"]:
++        return f"⏸ 等你回复 · 已完成 {steps} 步"
++    if pending.event.get("multi"):
++        return f"⏸ 可多选，回复序号或文字 · 已完成 {steps} 步"
++    return f"⏸ 回复序号或文字 · 已完成 {steps} 步"
++
++
++def _ask_card(pending, chosen=None):
++    """The question card: the asking step's narration, the question, the
++    candidates numbered (no buttons: the app takes no card callbacks), and
++    how to reply as a small last line. Once answered (`chosen`: the
++    candidate indexes, [] for a typed answer) its echo: the chosen ticked,
++    the rest grey."""
++    elements = [_text_line(pending.notice, "notation")] if pending.notice else []
++    if pending.narration:
++        elements.append({"tag": "markdown", "content": pending.narration})
++    question = clip(pending.event["question"], _ASK_QUESTION_LIMIT)
++    items = []
++    for i, candidate in enumerate(pending.event["candidates"]):
++        label = _md_text(one_line(candidate))
++        if chosen is not None:
++            label = f"✓ {label}" if i in chosen else f"<font color='grey'>{label}</font>"
++        items.append(f"{i + 1}. {label}")
++    text = "<br>".join(_md_text(line) for line in question.split("\n"))
++    if items:
++        text += "\n\n" + "\n".join(items)
++    elements.append({"tag": "markdown", "content": text})
++    elements.append(_text_line(_ask_status(pending, chosen is not None), "notation"))
++    return _card_json(elements, clip(one_line(question), _PREVIEW_LIMIT))
++
++
++def _ask_plain(pending):
++    lines = [f"{i + 1}. {one_line(c)}" for i, c in enumerate(pending.event["candidates"])]
++    parts = [pending.notice, pending.narration, pending.event["question"], "\n".join(lines), _ask_status(pending, False)]
++    return "\n\n".join(part for part in parts if part)
++
++
++# ── reactions and strict sends ──
++
++
++def _add_reaction(message_id, emoji_type=_TYPING_EMOJI):
++    """Put a reaction on a message; its reaction_id, or None."""
++    try:
++        request = CreateMessageReactionRequest.builder().message_id(message_id).request_body(
++            CreateMessageReactionRequestBody.builder().reaction_type(
++                Emoji.builder().emoji_type(emoji_type).build()
++            ).build()
++        ).build()
++        r = client.im.v1.message_reaction.create(request)
++        if r.success():
++            return getattr(r.data, "reaction_id", None)
++        print(f"[FS typing] add failed: {r.code}, {r.msg}", flush=True)
++    except Exception as e:
++        print(f"[FS typing] add error: {type(e).__name__}: {e}", flush=True)
++    return None
++
++
++def _delete_reaction(message_id, reaction_id):
++    try:
++        request = DeleteMessageReactionRequest.builder().message_id(message_id).reaction_id(reaction_id).build()
++        r = client.im.v1.message_reaction.delete(request)
++        if r.success():
++            return True
++        print(f"[FS typing] remove failed: {r.code}, {r.msg}", flush=True)
++    except Exception as e:
++        print(f"[FS typing] remove error: {type(e).__name__}: {e}", flush=True)
++    return False
++
++
++class FeishuSendError(RuntimeError):
++    """Feishu refused a message (strict sends only)."""
++
++
++def _create_message(receive_id, content, msg_type, receive_id_type):
++    body = CreateMessageRequest.builder().receive_id_type(receive_id_type).request_body(
++        CreateMessageRequestBody.builder().receive_id(receive_id).msg_type(msg_type).content(content).build()
++    ).build()
++    r = client.im.v1.message.create(body)
++    if not r.success():
++        raise FeishuSendError(f"Feishu refused the message: {r.code}, {r.msg}")
++    return r.data.message_id if r.data else None
++
++
++def deliver_card(receive_id, card, receive_id_type="open_id"):
++    """Galley seam (runner/im_reporter.py): send a card; raises on failure."""
++    return _create_message(receive_id, card, "interactive", receive_id_type)
++
++
++def deliver_text(receive_id, text, receive_id_type="open_id"):
++    """Galley seam: send text in 4000-character parts; raises on failure."""
++    for part in split_text(text, _ANSWER_PART_LIMIT):
++        _create_message(receive_id, json.dumps({"text": part}, ensure_ascii=False), "text", receive_id_type)
++
++
++def report_cards(title, body, footer):
++    """Galley seam (runner/im_reporter.py): a completion report as (card,
++    plain text) pairs to send in order: a bold title line naming the
++    session, the body (rewritten as answers are) and `footer` as a small
++    grey last line, split like answers. The plain text is the fallback for
++    a card Feishu refuses."""
++    parts = split_text(_rewrite_markdown(body), _ANSWER_PART_LIMIT)
++    out = []
++    for i, part in enumerate(parts):
++        elements, plain = [], []
++        if i == 0:
++            elements.append({"tag": "markdown", "content": f"**{title}**"})
++            plain.append(title)
++        elements.append({"tag": "markdown", "content": part})
++        plain.append(part)
++        if i == len(parts) - 1:
++            elements.append(_text_line(footer, "notation"))
++            plain.append(footer)
++        out.append((_card_json(elements, title if i == 0 else _preview(part)), "\n\n".join(plain)))
++    return out
++
++
++# ── runs ──
++
++
++class _FsRun:
++    """One user message's run: a GA task, plus the ask_user segments it
++    continues (their steps and time add up; the wait for the reply does
++    not count). States: queued / running / asking / done / stopped / error."""
++
++    def __init__(self, chat_key, rid, rtype, message_id, answers_ask):
++        self.chat_key, self.rid, self.rtype = chat_key, rid, rtype
++        self.message_id = message_id  # the trigger: Typing goes on it
++        self.answers_ask = answers_ask  # takes the chat's pending question once it is the head
++        self.echo = None  # (question, chosen) to mark answered once it is the head
++        self.state = "queued"
++        self.dq = self.error = None
++        self.base_steps, self.base_elapsed, self.summaries = 0, 0.0, {}
++        self.task_turn = 0  # highest GA turn seen in this run's task
++        self.turn_texts = {}
++        self.started_at = self.ended_at = None
++        self.headed = False
++        self.lock = threading.Lock()  # the Typing reaction
++        self.typing = "none"  # none / adding / up / ending / down
++        self.reaction_id = None
++
++    def adopt(self, carry):
++        self.base_steps = int(carry.get("steps") or 0)
++        self.base_elapsed = float(carry.get("elapsed") or 0.0)
++        self.summaries = dict(carry.get("summaries") or {})
++
++    def total_steps(self):
++        return self.base_steps + self.task_turn
++
++    def elapsed(self, now):
++        """From the task's first display item: time queued does not count."""
++        if self.started_at is None:
++            return self.base_elapsed
++        return self.base_elapsed + max(0.0, now - self.started_at)
++
++    def carry(self, now):
++        return {"steps": self.total_steps(), "elapsed": self.elapsed(now), "summaries": dict(self.summaries)}
++
++    def observe(self, item, now):
++        """Fold one display-queue item in (tgapp's _TgRun.observe): step k
++        settles when an item for a later turn arrives, `done` settles the
++        last one. Returns `done`'s per-step texts."""
++        if self.started_at is None:
++            self.state, self.started_at = "running", now
++        outputs = item.get("outputs")
++        outputs = [str(text or "") for text in outputs] if isinstance(outputs, list) else []
++        turn = item.get("turn") if isinstance(item.get("turn"), int) else 0
++        if "done" in item:
++            self.turn_texts.update(enumerate(outputs, 1))
++            turn = max(turn, len(outputs), self.task_turn)
++        elif turn > 0 and outputs:
++            self.turn_texts[turn] = outputs[-1]
++            if len(outputs) > 1 and turn > 1:
++                self.turn_texts[turn - 1] = outputs[-2]
++        if turn > self.task_turn:
++            for k in range(max(1, self.task_turn), turn):
++                self.summaries[self.base_steps + k] = step_summary(self.turn_texts.get(k, ""))
++            self.task_turn = turn
++        if "done" in item:
++            for k in range(1, self.task_turn + 1):
++                self.summaries[self.base_steps + k] = step_summary(self.turn_texts.get(k, ""))
++        return outputs
++
++
++class _PendingAsk:
++    """A posted ask_user question waiting for its reply: the chat's next
++    plain text message answers it and carries the run's steps and clock on."""
++
++    def __init__(self, event, carry):
++        self.event, self.carry = event, carry
++        self.notice = self.narration = ""
++        self.message_id = None  # the question card, once posted
++
++    def answer(self, text):
++        """(what GA gets, candidate indexes to tick) for a typed reply: an
++        in-range number picks that candidate, several numbers pick several
++        on a multi-select question (joined with 「；」, as Telegram's
++        「提交」); anything else goes as typed and ticks nothing.
++        Platform-neutral: a candidate for galley_im_display."""
++        candidates = self.event["candidates"]
++        if candidates and _REPLY_NUMBERS_RE.fullmatch(text or ""):
++            picks = [int(n) for n in re.findall(r"\d+", text)]
++            chosen = sorted({n - 1 for n in picks})
++            if all(1 <= n <= len(candidates) for n in picks) and (len(chosen) == 1 or self.event.get("multi")):
++                return "；".join(candidates[i] for i in chosen), chosen
++        return text, []
++
++
++def _install_ask_hook(agent):
++    """ask_user events, keyed by the asking task's display queue, so only
++    the run owning that task claims one (a completion-reporter turn that
++    asks is never claimed)."""
++    hooks = getattr(agent, "_turn_end_hooks", None)
++    if not isinstance(hooks, dict):
++        hooks = {}
++        agent._turn_end_hooks = hooks
++
++    def hook(ctx):
++        event = extract_ask_user_event(ctx)
++        if event is None:
++            return
++        with _ask_lock:
++            _ask_events[getattr(agent, "_current_queue", None)] = event
++            while len(_ask_events) > _ASK_EVENT_LIMIT:
++                _ask_events.pop(next(iter(_ask_events)))
++
++    hooks[_ASK_USER_HOOK_KEY] = hook
++
++
++def _take_ask_event(dq):
++    with _ask_lock:
++        return _ask_events.pop(dq, None) if dq is not None else None
++
++
++def busy():
++    """Galley seam (the completion reporter): a user run is registered, or
++    GA is on a task."""
++    with _runs_cond:
++        if _RUNS:
++            return True
++    return bool(getattr(globals().get("agent"), "is_running", False))
++
++
++def _enqueue_run(chat_key, rid, rtype, message_id, text, images=None, answers_ask=False):
++    """Register a run and hand its task to GA in one step, so _RUNS and GA's
++    task queue keep the same order (called on the event thread, in message
++    order). A plain text message answers the chat's pending question: right
++    away when it is next in line for it, else once the run is the head (a
++    message sent before the question went out is still GA's next input)."""
++    global _worker
++    agent = get_app().agent
++    run = _FsRun(chat_key, rid, rtype, message_id, answers_ask)
++    with _runs_cond:
++        if answers_ask:
++            pending = _pending_asks.get(chat_key)
++            if pending is not None and not any(r.chat_key == chat_key and r.answers_ask for r in _RUNS):
++                del _pending_asks[chat_key]
++                text, chosen = pending.answer(text)
++                run.adopt(pending.carry)
++                run.echo = (pending, chosen)
++                run.answers_ask = False
++        prompt = text if text.startswith("/") else f"{FILE_HINT}\n\n{text}"
++        _RUNS.append(run)
++        try:
++            run.dq = agent.put_task(prompt, source="feishu", images=images or None)
++        except Exception as e:
++            run.error = e
++        position = len(_RUNS)
++        _runs_cond.notify_all()
++        if _worker is None:
++            _worker = threading.Thread(target=_work, name="galley-feishu-runs", daemon=True)
++            _worker.start()
++    print(f"[FS run] queued: position={position} continued={run.base_steps > 0}", flush=True)
++    return run
++
++
++def _head():
++    """Under _runs_cond: the run GA is on or gets next (a stopped run stays
++    listed only until its receipt is out)."""
++    return next((run for run in _RUNS if run.state != "stopped"), None)
++
++
++def _running_run(agent):
++    """Under _runs_cond: the user run GA is working on, or None -- also
++    while GA runs a completion-reporter turn or sits between tasks, when
++    /stop must abort nothing."""
++    if not getattr(agent, "is_running", False):
++        return None
++    current = getattr(agent, "_current_queue", None)
++    return next((run for run in _RUNS if run.dq is current and run.state in ("queued", "running")), None)
++
++
++def _mark_stopped(run):
++    # Under _runs_cond, before anything blocks: the worker then never
++    # turns the aborted task's `done` into an answer.
++    run.state, run.ended_at = "stopped", _clock()
++
++
++def _retire(run):
++    with _runs_cond:
++        if run in _RUNS:
++            _RUNS.remove(run)
++        _runs_cond.notify_all()
++
++
++def _work():
++    """The worker: one at a time, alive while runs are registered."""
++    global _worker
++    try:
++        while True:
++            with _runs_cond:
++                run = _head()
++                if run is None:
++                    if not _RUNS:
++                        _worker = None
++                        return
++                    _runs_cond.wait(_POLL_SECONDS)  # stop receipts on their way
++                    continue
++            try:
++                _advance(run)
++            except Exception as e:
++                print(f"[FS run error] {type(e).__name__}: {e}", flush=True)
++                traceback.print_exc()
++                _fail_run(run, e)
++    finally:
++        with _runs_cond:
++            if _worker is threading.current_thread():
++                _worker = None  # died unexpectedly: the next run starts a new one
++
++
++def _take_turn(run):
++    """The run became the head: it takes the chat's pending question when
++    its message answers it, marks the question answered, and puts Typing on
++    its message."""
++    with _runs_cond:
++        if run.answers_ask:
++            run.answers_ask = False
++            pending = _pending_asks.pop(run.chat_key, None)
++            if pending is not None:
++                run.adopt(pending.carry)
++                run.echo = (pending, [])
++    if run.echo is not None:
++        pending, chosen = run.echo
++        run.echo = None
++        if pending.message_id:
++            _patch_card(pending.message_id, _ask_card(pending, chosen))
++        print(f"[FS ask_user] answered: chosen={len(chosen)}", flush=True)
++    _start_typing(run)
++
++
++def _start_typing(run):
++    with run.lock:
++        if run.typing != "none" or not run.message_id:
++            return
++        run.typing = "adding"
++    reaction_id = _add_reaction(run.message_id)
++    with run.lock:
++        run.reaction_id = reaction_id
++        ended = run.typing == "ending"
++        run.typing = "up"
++    if ended:
++        _end_typing(run)
++
++
++def _end_typing(run):
++    """Take the run's Typing down; once only, and never left behind by an
++    add still on its way (the adder takes it down then)."""
++    with run.lock:
++        if run.typing == "adding":
++            run.typing = "ending"
++            return
++        reaction_id, run.reaction_id = run.reaction_id, None
++        run.typing = "down"
++    if reaction_id:
++        _delete_reaction(run.message_id, reaction_id)
++
++
++def _advance(run):
++    """One step of the head run: take its turn the first time, then wait up
++    to _POLL_SECONDS for its next display item. No timeout ends a run: only
++    its `done` or /stop does."""
++    if not run.headed:
++        run.headed = True
++        _take_turn(run)
++    if run.error is not None:
++        _fail_run(run, run.error)
++        return
++    try:
++        item = run.dq.get(True, _POLL_SECONDS)
++    except Q.Empty:
++        return
++    if not isinstance(item, dict):
++        return
++    with _runs_cond:
++        if run.state not in ("queued", "running"):
++            return  # stopped while the item was on its way
++        now = _clock()
++        outputs = run.observe(item, now)
++        if "done" not in item:
++            return
++        run.ended_at = now
++        steps, seconds = run.total_steps(), run.elapsed(now)
++        event = _take_ask_event(run.dq)
++        pending = None
++        if event is None:
++            run.state = "done"
++        else:
++            run.state = "asking"
++            pending = _PendingAsk(event, run.carry(now))
++            _pending_asks[run.chat_key] = pending
++    raw = str(item.get("done") or "")
++    try:
++        step_text = final_step_text(raw, outputs)
++        if pending is None:
++            _post_answer(run, raw, step_text, steps, seconds)
++        else:
++            _post_ask(run, pending, step_text)
++        _send_generated_files(run.rid, raw, run.rtype)
++    finally:
++        _end_typing(run)
++        _retire(run)
++
++
++def _has_files(raw):
++    return any(os.path.isfile(path.strip()) for path in _extract_files(raw))
++
++
++def _post_answer(run, raw, step_text, steps, seconds):
++    """The run's message: the closing step, with the 「过程」 panel on the
++    last part from two steps on. Cards that Feishu refuses go as text."""
++    body = _answer_from(step_text, raw) or (_EMPTY_ANSWER_WITH_FILES if _has_files(raw) else "")
++    parts = split_text(_rewrite_markdown(body), _ANSWER_PART_LIMIT)
++    notice = _take_lead_notice()
++    for i, part in enumerate(parts):
++        head = notice if i == 0 else ""
++        process = None
++        card = _answer_card(part, head)
++        if i == len(parts) - 1 and steps >= 2:
++            for width in (0, 60, 24):  # long step lines give way before the answer does
++                process = _process_lines(run.summaries, steps, seconds, width)
++                card = _answer_card(part, head, process)
++                if len(card.encode("utf-8")) <= _CARD_BYTES_LIMIT:
++                    break
++        if _send_raw(run.rid, card, "interactive", run.rtype):
++            continue
++        plain = "\n\n".join(text for text in (head, part, "\n".join(process or ())) if text)
++        if send_message(run.rid, plain, receive_id_type=run.rtype):
++            continue
++        if head:
++            _restore_lead_notice()
++        return
++    print(f"[FS run] answered: steps={steps}", flush=True)
++
++
++def _post_ask(run, pending, step_text):
++    """Pause for the owner's reply: the question card (text when Feishu
++    refuses it)."""
++    pending.narration = _rewrite_markdown(visible_text(_file_names(step_text)))
++    pending.notice = _take_lead_notice()
++    message_id = _send_raw(run.rid, _ask_card(pending), "interactive", run.rtype)
++    if message_id is None and send_message(run.rid, _ask_plain(pending), receive_id_type=run.rtype) is None:
++        if pending.notice:
++            _restore_lead_notice()
++    pending.message_id = message_id
++    print(f"[FS ask_user] posted: candidates={len(pending.event['candidates'])}", flush=True)
++
++
++def _fail_run(run, error):
++    """A frontend failure (a GA backend error is part of `done` and shows in
++    the answer): one `❌ 出错：…` message."""
++    try:
++        with _runs_cond:
++            if run.state == "stopped":
++                return  # its stop receipt is the run's message
++            run.state = "error"
++        label = fold_label(run.total_steps(), run.elapsed(run.ended_at or _clock()))
++        text = f"❌ 出错：{error}"
++        send_message(run.rid, f"{label}\n{text}" if label else text, receive_id_type=run.rtype)
++    finally:
++        _end_typing(run)
++        _retire(run)
++
++
++def _post_stopped(run):
++    """The stop receipt `⏹ 已停止 · N 步 · 用时 X`; the run leaves the list
++    once it is out."""
++    try:
++        text = stopped_text(run.total_steps(), run.elapsed(run.ended_at or _clock()))
++        send_message(run.rid, text, receive_id_type=run.rtype)
++    finally:
++        _end_typing(run)
++        _retire(run)
++
++
++# ── commands that end the running run ──
++
++
++def _stop_command(agent, rid, rtype):
++    """/stop stops the running run only: queued runs stay, and its stop
++    receipt is the only reply. A reporter turn or nothing at all running:
++    「当前没有在跑的任务」, nothing aborted."""
++    with _runs_cond:
++        run = _running_run(agent)
++        if run is not None:
++            _mark_stopped(run)
++    if run is None:
++        send_message(rid, _NO_RUNNING_TASK_TEXT, receive_id_type=rtype)
++        return
++    agent.abort()
++    print("[FS run] stopped by command", flush=True)
++    _post_stopped(run)
++
++
++def _new_command(agent, chat_key, rid, rtype):
++    """/new: the running run stops (its receipt first), then the
++    conversation resets; queued runs go on in the new context, and the
++    chat's pending question is dropped."""
++    with _runs_cond:
++        run = _running_run(agent)
++        if run is not None:
++            _mark_stopped(run)
++        _pending_asks.pop(chat_key, None)
++    try:
++        reply = _common._reset_conversation(agent)
++    finally:
++        if run is not None:
++            _post_stopped(run)
++    send_message(rid, reply, receive_id_type=rtype)
++
++
++def _restore_command(agent, chat_key, rid, rtype):
++    try:
++        restored_info, err = _common.format_restore()
++        if err:
++            send_message(rid, err, receive_id_type=rtype)
++            return
++        restored, fname, count = restored_info
++        with _runs_cond:
++            run = _running_run(agent)
++            if run is not None:
++                _mark_stopped(run)
++            _pending_asks.pop(chat_key, None)
++        try:
++            agent.abort()
++            agent.history.extend(restored)
++        finally:
++            if run is not None:
++                _post_stopped(run)
++        send_message(rid, f"✅ 已恢复 {count} 轮对话\n来源: {fname}\n(仅恢复上下文，请输入新问题继续)", receive_id_type=rtype)
++    except Exception as e:
++        send_message(rid, f"❌ 恢复失败: {e}", receive_id_type=rtype)
++
++
++def _continue_command(agent, chat_key, rid, rtype, cmd):
++    """/continue N aborts GA's task on a valid index only: the run it aborts
++    is marked stopped inside that abort, before GA can hand the task's
++    `done` to the worker (the WeChat conversation's _stopping_on_abort)."""
++    stopped = []
++    original, own = agent.abort, "abort" in vars(agent)
++
++    def abort(*args, **kwargs):
++        with _runs_cond:
++            run = _running_run(agent)
++            if run is not None:
++                _mark_stopped(run)
++                stopped.append(run)
++            _pending_asks.pop(chat_key, None)
++        return original(*args, **kwargs)
++
++    agent.abort = abort
++    try:
++        reply = _common._handle_continue_frontend(agent, cmd)
++    finally:
++        if own:
++            agent.abort = original
++        else:
++            del agent.abort
++        for run in stopped:
++            _post_stopped(run)
++    send_message(rid, reply, receive_id_type=rtype)
++
++
+@@ -966,57 +1751,21 @@ class FeishuApp(AgentChatMixin):
+-    async def run_agent(self, chat_id, text, *, receive_id=None, receive_id_type="open_id", images=None, **_):
+-        if self.user_tasks:
+-            await self.send_text(chat_id, "当前会话已有任务在运行，请等待完成或发送 /stop 后再试。", receive_id=receive_id, receive_id_type=receive_id_type)
+-            return
+-        state = {"running": True}
+-        self.user_tasks[chat_id] = state
+-        rid = receive_id or chat_id
+-        task_id = f"{chat_id}_{uuid.uuid4().hex}"
+-        hook_key = f"fs_{task_id}"
+-        card = _TaskCard(rid, receive_id_type)
+-        result = {"raw": None, "sent": False}
+-        finish_lock = threading.Lock()
+-
+-        def _finish(raw):
+-            with finish_lock:
+-                if result["sent"]:
+-                    return
+-                result["raw"] = raw
+-                result["sent"] = True
+-            card.done(_display_text(raw))
+-            _send_generated_files(rid, raw, receive_id_type=receive_id_type)
+-
+-        try:
+-            await asyncio.to_thread(card.start)
+-            if not hasattr(self.agent, '_turn_end_hooks'):
+-                self.agent._turn_end_hooks = {}
+-            self.agent._turn_end_hooks[hook_key] = _make_task_hook(card, task_id, _finish)
+-            self.agent._fs_active_task_id = task_id
+-            dq = self.agent.put_task(f"{FILE_HINT}\n\n{text}", source=self.source, images=images or None)
+-            start = time.time()
+-            while state["running"] and not result["sent"]:
+-                try:
+-                    item = await asyncio.to_thread(dq.get, True, 1)
+-                except Q.Empty:
+-                    item = None
+-                if item and "done" in item:
+-                    await asyncio.to_thread(_finish, item.get("done", ""))
+-                    break
+-                if time.time() - start > AGENT_TIMEOUT_SEC:
+-                    self.agent.abort()
+-                    await asyncio.to_thread(card.fail, "任务超时")
+-                    break
+-            if not state["running"] and not result["sent"]:
+-                self.agent.abort()
+-                await asyncio.to_thread(card.fail, "已停止")
+-        except Exception as e:
+-            traceback.print_exc()
+-            await asyncio.to_thread(card.fail, f"错误: {e}")
+-        finally:
+-            if getattr(self.agent, "_fs_active_task_id", None) == task_id:
+-                try:
+-                    delattr(self.agent, "_fs_active_task_id")
+-                except AttributeError:
+-                    pass
+-            if hasattr(self.agent, '_turn_end_hooks'):
+-                self.agent._turn_end_hooks.pop(hook_key, None)
+-            self.user_tasks.pop(chat_id, None)
++    async def handle_command(self, chat_id, cmd, **ctx):
++        """Galley 0029: /stop, /new, /restore and /continue N know the run
++        list; everything else is the mixin's."""
++        rid = ctx.get("receive_id") or chat_id
++        rtype = ctx.get("receive_id_type") or "open_id"
++        parts = (cmd or "").split()
++        op = (parts[0] if parts else "").lower()
++        if op == "/stop":
++            return _stop_command(self.agent, rid, rtype)
++        if op == "/new":
++            return _new_command(self.agent, chat_id, rid, rtype)
++        if op == "/restore":
++            return _restore_command(self.agent, chat_id, rid, rtype)
++        if op == "/continue" and len(parts) > 1:
++            return _continue_command(self.agent, chat_id, rid, rtype, cmd)
++        return await super().handle_command(chat_id, cmd, **ctx)
++
++    async def run_agent(self, chat_id, text, *, receive_id=None, receive_id_type="open_id", images=None, message_id=None, **_):
++        """Galley 0029: registers a run (the mixin's /review lands here); no
++        refusal while another one works."""
++        _enqueue_run(chat_id, receive_id or chat_id, receive_id_type, message_id, text, images)
+@@ -1028,0 +1778 @@ def get_app():
++        _install_ask_hook(app.agent)  # Galley 0029
+@@ -1082 +1832 @@ def _handle_message_impl(data):
+-            args=(get_app().handle_command(chat_key, user_input, receive_id=receive_id, receive_id_type=receive_id_type),),
++            args=(get_app().handle_command(chat_key, user_input, receive_id=receive_id, receive_id_type=receive_id_type, message_id=message_id),),
+@@ -1086,5 +1836,8 @@ def _handle_message_impl(data):
+-    threading.Thread(
+-        target=_run_async,
+-        args=(get_app().run_agent(chat_key, user_input, receive_id=receive_id, receive_id_type=receive_id_type, images=image_paths),),
+-        daemon=True,
+-    ).start()
++    # Galley 0029: registered here, on the event thread, so GA takes the
++    # messages in the order they came. Text answers a pending question; a
++    # picture or a file does not.
++    get_app()
++    _enqueue_run(
++        chat_key, receive_id, receive_id_type, message_id, user_input, image_paths,
++        answers_ask=message.message_type in ("text", "post") and not image_paths,
++    )

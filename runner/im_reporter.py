@@ -324,7 +324,7 @@ def _single_owner(public_access: Any, allowed: Any) -> str | None:
 
 def report_status_word(kind: str) -> str:
     """The word a report's outcome reads as, shared by every channel that
-    labels its reports (Discord card footer, Telegram and WeChat footer
+    labels its reports (Discord card footer, Telegram, WeChat and Feishu footer
     lines) so the platforms never disagree. Anything that is neither
     completed nor cancelled is a dead run and reads as an error, so a
     future dead status still gets a truthful label."""
@@ -371,10 +371,10 @@ class ChannelAdapter:
         """Deliver the report with its outcome at hand — the entry point
         the dispatcher calls. ``send`` only sees rendered text, but a
         channel that dresses reports differently from ordinary replies
-        (Discord's embed card, Telegram's and WeChat's title and footer
-        lines) needs the kind and the session. Defaults to ``send`` so
-        channels without such a surface (Feishu) keep their exact behavior;
-        same MUST-raise contract as ``send``."""
+        (Discord's embed card, Telegram's, WeChat's and Feishu's title and
+        footer lines) needs the kind and the session. Defaults to ``send``
+        so a channel without such a surface keeps its exact behavior; same
+        MUST-raise contract as ``send``."""
         self.send(owner, text, raw)
 
 
@@ -392,27 +392,92 @@ class FeishuChannel(ChannelAdapter):
         )
 
     def busy(self) -> bool:
+        """fsapp's ``busy`` seam (patch 0029): a user run is registered (queued,
+        running or posting), or GA is on a task. A payload without it keeps
+        the old ``user_tasks`` check."""
+        busy = getattr(self.fsapp, "busy", None)
+        if callable(busy):
+            return bool(busy())
         return bool(self.fsapp.get_app().user_tasks)
 
     def agent(self) -> Any:
         return self.fsapp.get_app().agent
 
     def begin_report_turn(self) -> None:
-        # Card isolation flag consumed by managed-ga patch 0013.
+        # Card isolation flag consumed by managed-ga patch 0013 (its hook is
+        # off the run path since 0029, where each run reads its own queue).
         self.fsapp._GALLEY_REPORT_TURN_ACTIVE = True
 
     def end_report_turn(self) -> None:
         self.fsapp._GALLEY_REPORT_TURN_ACTIVE = False
 
     def render(self, raw: str) -> str:
+        """The report turn's closing step, cleaned like a Feishu answer
+        (fsapp's ``answer_text`` seam, patch 0029: ``raw`` is the whole
+        ``done``, Turn markers and tool echoes of every step included). A
+        payload without the seam keeps the old whole-text cleaning."""
+        if not (raw or "").strip():
+            return ""
+        answer_text = getattr(self.fsapp, "answer_text", None)
+        if callable(answer_text):
+            return str(answer_text(raw) or "")
         display = getattr(self.fsapp, "_display_text", lambda t: t)(raw)
         return str(display or "")
 
     def send(self, owner: str, text: str, raw: str) -> None:
         self.fsapp.send_message(owner, text)
+        self._send_files(owner, raw)
+
+    def _send_files(self, owner: str, raw: str) -> None:
         send_files = getattr(self.fsapp, "_send_generated_files", None)
         if callable(send_files):
             send_files(owner, raw)
+
+    def send_report(self, owner: str, text: str, raw: str, report: Report) -> None:
+        """Send the report as cards: a bold ``{✅|⏹|❌} {session title}``
+        line, the body, and a small grey ``{status} · {session id}`` last
+        line, so a pushed background result reads differently from the
+        answer just above it (Telegram's three parts). Then the generated
+        files, as Feishu reports always sent them.
+
+        Coupling point: fsapp's ``report_cards`` / ``deliver_card`` /
+        ``deliver_text`` seams (patch 0029); the two sends raise on
+        failure. A card Feishu refuses goes again as its plain text; when
+        that fails too the exception reaches ``_deliver`` as a retry. A
+        payload without the seams gets the plain ``send`` unchanged."""
+        cards_of = getattr(self.fsapp, "report_cards", None)
+        deliver_card = getattr(self.fsapp, "deliver_card", None)
+        deliver_text = getattr(self.fsapp, "deliver_text", None)
+        if not (callable(cards_of) and callable(deliver_card) and callable(deliver_text)):
+            self.send(owner, text, raw)
+            return
+        title, footer = feishu_report_lines(report)
+        cards = list(cards_of(title, text, footer))
+        if not cards:
+            # Sending nothing and returning would mark the report delivered.
+            raise ReporterCliError("Feishu report rendered to no cards")
+        for index, (card, plain) in enumerate(cards, start=1):
+            try:
+                deliver_card(owner, card)
+            except Exception as exc:
+                print(
+                    f"[galley-im-reporter] Feishu refused report card {index}/{len(cards)} "
+                    f"({type(exc).__name__}: {exc}); resending it as plain text"
+                )
+                deliver_text(owner, plain)
+        self._send_files(owner, raw)
+
+
+def feishu_report_lines(report: Report) -> tuple[str, str]:
+    """(title line, footer line) of a Feishu report: Telegram's outcome icon
+    and the session title (markup that would end the title's bold early
+    dropped, line breaks as spaces; the session id when untitled), and
+    ``{status} · {session id}``."""
+    session_id = str(report.session.get("id") or "")
+    title = TELEGRAM_TITLE_MARKUP_RE.sub("", str(report.session.get("title") or ""))
+    title = re.sub(r"\s+", " ", title).strip() or session_id
+    icon, word = telegram_report_outcome(report.kind)
+    return f"{icon} {title}", f"{word} · {session_id}"
 
 
 TELEGRAM_TEXT_LIMIT = 4000
