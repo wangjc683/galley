@@ -57,3 +57,24 @@ JC 读的那篇 Today AI 使用体验里，助理交出的 HTML 计划、飞书�
 （合入后补）
 
 ## Comments
+
+### 2026-10-21 执行回报（worktree `ticket-74-files-in-bubble`）
+
+- **提交**：`57789e40` Main chat: file cards under a reply, the daily review's own name (ticket 74)。只动 `gui/`。
+- **复用**：点卡片走文件引用同一条路（`LocalFilesContext` 的 `activate`：能预览的进阅读面板，其余在文件夹中显示）；存在性用 `local_file` 的 `inspect`（`accessLocalFile`）；文件夹短写用 `FolderPathText` + `useHomeDir`（`~`）；图片用用户附件同款 96px 缩略图、`ImagePreviewDialog` 与 `open_conversation_image`；卡片壳照提醒卡片（hairline、`rounded-md`、`bg-app`、40px 一行、无投影）；文案键复用 `localFiles.locate`「在文件夹中显示」与 `localFiles.copyPath`；右键菜单照 `MarkdownImage` 的样式；例行第二行照旧 `routineRowLine`。
+- **GUI 读的字段**：文件读 `AgentTurn.files`（`finalAnswerFileRefs` 取原始 `content` / `responseContent` 里的 `[FILE:]`）。巡看读 `list_assistant_todo` 的 `TodoItem`：`kind === "task"` 且 `agent === "galley-review"`（常量 `REVIEW_SUPERVISOR`，`gui/src/lib/scheduled-tasks.ts`）。今天的 Core 已经带得出：`core/src/assistant_todo.rs` 的 `creator()` 对 `via` 不是 `gui`、supervisor 不是 `galley-assistant` 的任务，给 `createdBy: "agent"`、`agent: <标签>`。前提（请票 73 核对）：种子的 `created_via` 不能是 `gui`；`creator()` 不能把 `galley-review` 改映射成 Assistant（那样 `agent` 为空，GUI 认不出）。
+- **截图**（临时页 + 浏览器打桩，Core 的回答是假的，页面已删）：scratchpad 下 `t74-zh-CN-light.png`、`t74-zh-CN-dark.png`、`t74-en-US-light.png`、`t74-en-US-dark.png`、`t74-zh-CN-light-narrow.png`（窄栏看中间省略）。
+- **与票面不一致、按代码取的最小选择**：
+  1. 「不能预览的用系统默认程序打开」做不到：Core 的 `open` 只放行文档、图片、安全文本（`core/src/local_file.rs` 的 `is_openable`），pdf、docx、xlsx 会被拒；不改 Core，照文件引用现有做法：不能预览的在文件夹中显示并选中。
+  2. 「在 Finder 中显示 / 在资源管理器中显示」：现有同义键是平台中性的「在文件夹中显示」/「Show in folder」，照票面直接复用，没有新造分平台的文案。
+  3. 组间次序票面没定：文件卡片排第一（这条回复本身交出的东西），后面子任务、待办、提醒各隔 8px；为此 `SubtaskCards` 加了 `afterFiles`。
+  4. 「标明是 Galley 的」：例行组现有不分谁建的（主对话 PRD 裁决 86 第 4 条），巡看那条与别的例行同图标同样式，没加标记。
+  5. 文件不在时右键只剩「复制路径」，悬停不出「在文件夹中显示」；点它只悄悄再问一次 Core，回来了就照常打开。每次点卡片都先问一次，打开对话之后才被删的文件也不会弹错。
+- **没验证到、看到没改的**：
+  - 没在 tauri dev 里看过（按约束没跑），资源协议加载缩略图、阅读面板、在文件夹中显示都只有静态测试与打桩截图。
+  - 回复只有 `[FILE:]`、没有字时，`buildAgentTurn` 在 `finalAnswer` 为空时丢掉 `files`（`gui/src/lib/agent-turn.ts:196`），没有气泡也没有卡片；靠票 73 入口层要求「话里也说一句」，没改。
+  - 中文名字中间省略时，省略号后会留不到一个字宽的空（CSS 按整字退），同 `FolderPathText` 现状。
+  - 巡看到点后（含被跳过但记了 `last_fired_at` 的那次）在「已完成」里有一行，第二行照 `doneRowLine` 写「今天 09:00 · 已提醒」，「已提醒」对巡看不太贴切，没改。
+  - 外置运行时的定时任务对话框（`ScheduledTasksDialog`）照旧直接显示 `prompt`：从内置切到外置时，库里的巡看那条会以英文出现在那里。票面范围只在待办面板，没改。
+  - 巡看送不出去的系统通知走 `reminder-undelivered` 的 `prompt`（`gui/src/hooks/useSchedulerSignals.ts`）；票 73 定的是 Core 直接丢掉不发，若仍发，GUI 会弹英文。
+  - 每次进主对话（MainView 按会话重挂）每个文件问一次 `inspect`，没做并发去重；文件很多的长历史没量过。
