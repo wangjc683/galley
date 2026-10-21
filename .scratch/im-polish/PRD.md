@@ -1,6 +1,6 @@
 # IM 打磨：自己养 agent 这条路上的一轮
 
-Status: active（2026-10-21 裁决 1–4 已定；票 01–03 派出）
+Status: done（2026-10-21 票 01–05 全部合入；JC 真机验过飞书 1 步与多步、Telegram，其余免测；记录在 [devlog](../../docs/devlog/2026-10-21-im-polish-process-button-and-feishu.md)）
 
 来源：2026-10-21 JC 敲定 IM 维持「自己养 agent」（[devlog](../../docs/devlog/2026-10-20-im-a-line-to-the-same-assistant.md)「2026-10-21 改向」）后：「下面我们讨论以这个方向推进优化打磨，比如 Telegram 最终回复的折叠头里面，第一步的过程展示我觉得其实也可以隐藏等等」。主会话给了 Telegram 四档与另外四条打磨项，JC：「按建议推进，Telegram 定乙，不做切换器」。
 

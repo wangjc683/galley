@@ -1,6 +1,6 @@
 # 04 飞书补充：标题转粗体、插队时引用原话
 
-Status: needs-dogfood
+Status: done（2026-10-21 JC：其余不用测，直接合；未真机的项见 devlog「真机」一节）
 
 来源：票 [03](./03-feishu-conversation-ux.md) Comments「交 JC 定」五条，JC 2026-10-21「飞书那几项，按你推荐推进」：
 

@@ -1,6 +1,6 @@
 # 03 飞书对话体验对齐
 
-Status: needs-dogfood
+Status: done（2026-10-21 JC：其余不用测，直接合；未真机的项见 devlog「真机」一节）
 
 来源：[PRD](../PRD.md) 裁决 3。
 

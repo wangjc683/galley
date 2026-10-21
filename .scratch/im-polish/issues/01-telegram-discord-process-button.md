@@ -1,6 +1,6 @@
 # 01 Telegram、Discord 的「过程」按钮
 
-Status: needs-dogfood（Telegram 复测展开区一律普通引用块这一处，见 Comments 最后一条；Discord 未真机）
+Status: done（2026-10-21 JC：其余不用测，直接合；未真机的项见 devlog「真机」一节）
 
 来源：[PRD](../PRD.md) 裁决 1、2。
 
