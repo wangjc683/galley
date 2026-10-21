@@ -160,9 +160,13 @@ runtime behavior:
    `managed-ga/manifest.json` (`patchStack.patches`), and add a row to
    [`managed-ga/patches/manifest.md`](../../managed-ga/patches/manifest.md) with
    reason, touched upstream files, rebase risk, and removal condition.
-3. Verify the stack replays: `scripts/build-managed-ga.sh` regenerates
+3. Verify the stack replays: `scripts/build-managed-ga.sh <checkout>` regenerates
    `code/` from the pinned upstream baseline and applies every patch in
-   manifest order via `git apply --unidiff-zero`.
+   manifest order via `git apply --unidiff-zero`. Pass a clean, throwaway
+   clone of `upstream.source` checked out at `upstream.commit` (both in
+   `managed-ga/manifest.json`): the script's default checkout path may hold
+   a fork without that commit, and it refuses a dirty or mismatched one.
+   A replay that leaves `git status` clean proves payload and stack agree.
 4. Mind ordering dependencies between patches touching the same upstream
    file (for example, the fsapp patches rebase `0009` first); record them in
    the manifest row's rebase-risk column.

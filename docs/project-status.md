@@ -704,6 +704,23 @@ sign-in listener (watch for a firewall prompt) and the credential pipe,
 renamed `galley-codex-*` → `galley-credential-*` (CI's Windows job compiles
 and tests it, green on `98dec86c`; the runtime smoke is what's owed).
 
+- **IM polish on the channels' own agents** (2026-10-21, `.scratch/im-polish/`,
+  devlog [2026-10-21-im-polish-process-button-and-feishu](./devlog/2026-10-21-im-polish-process-button-and-feishu.md)).
+  The 10-20 plan to merge IM private chats into the main chat is shelved:
+  each channel keeps its own agent, and both migrations (into the main chat,
+  into workbench sessions) wait in deferred with start signals. Telegram and
+  Discord answers drop the fold header; from two steps on, a 「过程」 button
+  shows the process (Telegram expands the message in place as a plain quote,
+  Discord replies ephemerally). Discord's freeze is lifted; its DMs stay
+  closed. Feishu gets its first conversation pass (patch `0029`): a `Typing`
+  reaction instead of a status card, one answer card with a collapsed
+  「过程」 panel, queueing instead of refusing, `/stop`, numbered questions,
+  headings as bold lines, a reply-quote when other messages landed in
+  between, and reports with only the final step. The IM entry layer no
+  longer claims to be the desktop's assistant: long-term memory is shared,
+  conversations are not. On device JC checked Feishu (one and many steps)
+  and Telegram; Feishu's queue, `/stop` and questions, Discord, and
+  Telegram's plain-quote expansion were waived and are owed at first use.
 - **Sign in with ChatGPT replaces the Codex CLI login** (2026-10-20,
   `.scratch/chatgpt-siwc/PRD.md`, devlog
   [2026-10-20-sign-in-with-chatgpt](./devlog/2026-10-20-sign-in-with-chatgpt.md)).
