@@ -7,6 +7,8 @@ Date: 2026-10-07
 [README 刷新 devlog](../../docs/devlog/2026-10-07-readme-refresh.md) ·
 [截图 playbook](../../docs/screenshot-playbook.md) ·
 [v2 拍摄计划 devlog](../../docs/devlog/2026-09-09-screenshot-set-v2-plan.md)
+2026-10-21 更新：JC 裁决发版前只重拍 `hero`、`hero-dark`（主对话）和 `tools`（子任务），
+zh / en 各一套，其余五张暂留；见 [票 01](./issues/01-seed-main-chat-hero.md)。
 
 ## 问题
 
@@ -19,7 +21,7 @@ SOP 入口挪到顶栏、「已完成 · 」前缀改对勾圈、顶栏「显示
 
 1. `goal.png`：语义最过时。画面是 v1 的「3 个 Agent · 预算 30 分钟」与三条并行
    线；v2 是单会话、委托装扮、时间上限。README 图注「章节标记 / chapter markers」
-   也已失效，本轮按 JC 裁决原样保留。
+   也已失效，本轮按 JC 裁决原样保留。（2026-10-13 Goal 移除后此图已删，不再重拍。）
 2. `hero.png` / `hero-dark.png`：差异最大。两行实时窗口、步骤序号栏、思考预览、
    杏色气泡（暗色另调）、发送时间、浏览器步骤显示网站。
 3. `tools.png` / `reading.png`：序号栏、折叠头层级、回答操作栏改为悬停才出现；
@@ -29,12 +31,13 @@ SOP 入口挪到顶栏、「已完成 · 」前缀改对勾圈、顶栏「显示
 
 ## 前置修复（重拍前必做）
 
-- `scripts/seed-screenshots.py:1182-1187` 往 `goals` 插入 v1 的列（`project_id`、
-  `worker_limit`、`runtime_kind`、`write_mode`、`deadline_at`、`master_session_id`
-  等），039 迁移重建后的表没有这些列，种子会失败。改按 `039_goal_v2.sql` 的
-  `goals_v2` 结构写（`session_id`、`budget_seconds`、`continuation_count`、
-  `created_via` 等）。
-- playbook 的 goal 场景按 v1 写，要重写成 v2：一个会话、时间上限、模型宣告完成。
+- ~~种子往 `goals` 插 v1 的列、playbook 的 goal 场景按 v1 写~~：已过时。
+  2026-10-13 Goal 整体移除，`248e8d09` 同时删掉了种子的 goals 插入，`7ebbf696`
+  把 playbook 里的 Goal 退役，`docs/screenshots/` 里也已没有 `goal.png`。
+  2026-10-21 核实：种子 `--init-schema` 在迁移 001–052 上跑通，不再碰任何 Goal 表。
+- 种子停在 043 之前（没有主对话、子任务、待办），v3 的 hero 拍不了：
+  [票 01](./issues/01-seed-main-chat-hero.md) 补齐，playbook 的 hero / hero-dark /
+  tools 三行随之改写。
 
 ## 启动信号
 

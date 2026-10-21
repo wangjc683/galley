@@ -12,18 +12,30 @@ sidebar never renders).
                                                           # reading-panel repo
     scripts/seed-screenshots.py --demo-repo --no-db       # repo only
 
-What the seed produces (per language, see content_zh / content_en):
+What the seed produces (per language, see content_zh / content_en and
+assistant_zh / assistant_en):
 
   - 3 projects: the Wittgenstein easter egg (knowledge work), a household
     move (life admin), and galley-site (dev; pairs with the demo repo)
-  - 17 sessions across knowledge / life / dev, with states: running
-    ("Thinking..."), completed, unread, pinned, supervisor-created,
+  - 16 workbench sessions across knowledge / life / dev, with states:
+    running ("Thinking..."), completed, unread, pinned, supervisor-created,
     scheduler-created
-  - 3 scheduled tasks (daily / weekly / monthly, one disabled)
+  - the main chat (主对话, the assistant): the greeting and three earlier
+    exchanges — two to-dos noted three days ago, a to-do with a reminder
+    noted last night, and this morning a reply that dispatched a subtask,
+    followed by the hidden report row and the assistant's report reply.
+    The hero shot's own exchange is sent live, never seeded.
+  - 1 subtask ("three moving companies"), finished, under the main chat
+    (no sidebar row; its card sits under this morning's reply)
+  - 3 to-dos (one due next Wednesday with its reminder, one due today,
+    one any time): the top bar's 「待办」 count reads 1
+  - 4 scheduled tasks (daily / weekly / monthly, one disabled; plus the
+    to-do's one-off reminder that wakes the assistant)
   - telemetry on every final message (the "N 步 · 用时" footer)
 
 Persistence facts this script relies on (verified 2026-07-03, re-checked
-2026-09-09 against migrations 001-038):
+2026-09-09 against migrations 001-038, and 2026-10-21 against 001-052 and
+the Core writers named next to each main chat constant below):
 
   - sessions.status = 'running' with no in-flight turn renders as
     "Thinking..." (lastStepIndex is transient) and must not be clicked
@@ -31,9 +43,13 @@ Persistence facts this script relies on (verified 2026-07-03, re-checked
   - ask_user is in-memory only and cannot be seeded — produce it live
   - the sidebar "scheduled task" marker keys off
     sessions.created_by_supervisor == 'galley-scheduler'
-  - messages_fts has no triggers; hydrate backfills it when empty, so a
-    fresh seed can ignore FTS entirely
+  - messages_fts has no triggers; the launch backfill rebuilds it whenever
+    it holds fewer rows than the indexable messages (Core's greeting row
+    is indexed, the seeded rows are not), so the seed ignores FTS
   - telemetry_json shape mirrors the runner's turn_end payload
+  - Core creates the main chat when the desktop first asks for it (the
+    first launch after onboarding); the seed writes into that row, or
+    creates one the way Core does when there is none (--init-schema)
 
 The demo repo (--demo-repo) is a tiny static-site project with four
 curated working-tree changes; the reading panel's Git review pane picks
@@ -44,10 +60,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import secrets
 import sqlite3
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -115,6 +132,157 @@ def tele(elapsed_s: int, inp: int, out: int, requests: int) -> dict:
     }
 
 
+def js_json(value) -> str:
+    """`JSON.stringify` of what the page received from Core: keys in byte
+    order (Core's maps), no spaces, non-ASCII as is — how Core's turn
+    persistence stores tool_calls / tool_results / telemetry_json
+    (core/src/turn_persistence/derive.rs `js_json_stringify`)."""
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+# ---------------------------------------------------------------------------
+# The main chat, its subtask and its to-dos (migrations 044-051). Every
+# constant mirrors the Core writer named beside it; the seed writes the rows
+# those writers would have left.
+# ---------------------------------------------------------------------------
+
+MAIN_CHAT_TITLE = "主聊天"  # core/src/db/main_chat.rs MAIN_CHAT_TITLE (every language)
+MAIN_CHAT_GREETING = {  # main_chat.rs MAIN_CHAT_GREETING_ZH / _EN, word for word
+    "zh": "你好，我是你的私人助理。以后有什么事，直接在这里跟我说就行。费时间的活我派出去办，办完回来告诉你。",
+    "en": (
+        "Hi, I'm your personal assistant. Whatever comes up, just tell me here. "
+        "Longer jobs I'll hand off, and come back to you when they're done."
+    ),
+}
+GREETING_SUPERVISOR = "galley-greeting"  # main_chat.rs MAIN_CHAT_GREETING_SUPERVISOR
+GREETING_TURN_INDEX = -1  # main_chat.rs MAIN_CHAT_GREETING_TURN_INDEX
+PROMPT_PROFILE_ID = "galley-runtime-v1"  # core/src/managed_prompt.rs PROMPT_PROFILE_ID
+SUBTASK_SUPERVISOR = "galley-subtask"  # core/src/api/origin.rs SUBTASK_STORED_SUPERVISOR
+REPORT_SUPERVISOR = "galley-report"  # origin.rs SUBTASK_REPORT_SUPERVISOR
+ASSISTANT_SUPERVISOR = "galley-assistant"  # origin.rs ASSISTANT_SUPERVISOR
+SEGMENT_IDLE = timedelta(hours=4)  # core/src/session_runner/segment.rs DEFAULT_IDLE_HOURS
+TITLE_DERIVE_MAX = 80  # core/src/session_title.rs (UTF-16 units)
+
+
+def core_iso(t: datetime) -> str:
+    """Core's `chrono_now_iso` / `instant_to_utc_iso`: UTC, whole seconds,
+    `+00:00` (core/src/db/helpers.rs, core/src/api/schedule.rs)."""
+    return t.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+
+
+def ms_iso(t: datetime) -> str:
+    """Core's `runner_manager::queue::now_iso`: UTC, milliseconds, `Z` (the
+    subtask dispatch record's `created_at`)."""
+    u = t.astimezone(timezone.utc)
+    return u.strftime("%Y-%m-%dT%H:%M:%S.") + f"{u.microsecond // 1000:03d}Z"
+
+
+def radix36(n: int) -> str:
+    digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+    out = ""
+    while n:
+        n, r = divmod(n, 36)
+        out = digits[r] + out
+    return out or "0"
+
+
+def mint_session_id(t: datetime) -> str:
+    """`s-<ms since epoch, base 36>-<8 base-36 chars>`, the shape of Core's
+    `mint_session_id` (core/src/socket_listener/session_cmds.rs), stamped
+    with the session's own creation time."""
+    ms = int(t.timestamp() * 1000)
+    return f"s-{radix36(ms)}-{radix36(secrets.randbits(48)).rjust(8, '0')[-8:]}"
+
+
+def mint_hex16(prefix: str) -> str:
+    """`todo_<16 hex>` / `sched_<16 hex>` (core/src/api/todo.rs, schedule.rs)."""
+    return f"{prefix}_{secrets.token_hex(8)}"
+
+
+def subtask_title(instructions: str) -> str:
+    """core/src/subtask.rs `subtask_title`: the instructions' first line
+    without leading markdown marks, whitespace collapsed, at most 80
+    UTF-16 units (then cut with `…`)."""
+    first = None
+    for line in instructions.splitlines():
+        line = line.strip().lstrip("#>-*+").replace("**", "").strip()
+        if line:
+            first = line
+            break
+    text = " ".join((first or instructions).split())
+    units = 0
+    for i, ch in enumerate(text):
+        units += 2 if ord(ch) > 0xFFFF else 1
+        if units > TITLE_DERIVE_MAX:
+            return text[:i] + "…"
+    return text
+
+
+def report_text(subtask_id: str, title: str, answer: str) -> str:
+    """The wake message of one finished subtask, round 1 — core/src/
+    subtask_report.rs `report_text` (OPENING + `report_paragraph`'s Done
+    arm, with the send-back sentence of a round under SEND_BACK_LIMIT)."""
+    opening = (
+        "[Galley — not a message from the user] A subtask you started has an update. "
+        "Act on it, then reply to the user. Do not mention this note."
+    )
+    send_back = (
+        "If something is missing or wrong, send it back with "
+        f'`session send {subtask_id} "<what is missing>" --supervisor=galley-assistant '
+        '--reason="send back" --ensure-runner` and end your reply with exactly '
+        "<no-reply/> and nothing else."
+    )
+    paragraph = (
+        f'Subtask `{subtask_id}` "{title}" (round 1) finished. Its final answer:\n'
+        f"<<<\n{answer.strip()}\n>>>\n"
+        "Check it against what you asked for in its instructions (its first message: "
+        f"`session show {subtask_id} --around=msg_{subtask_id}_0_user`; its last steps: "
+        f"`session show {subtask_id} --tail=40`). If it holds, tell the user the result in "
+        "a sentence or two and name the evidence (a confirmation number, a file path, a "
+        f"link). {send_back}"
+    )
+    return f"{opening}\n\n{paragraph}"
+
+
+def report_replay_line(subtask_id: str, title: str) -> str:
+    """subtask_report.rs `replay_lines` for one finished subtask: what the
+    report row stores as its `summary` and the replayed history shows."""
+    return f'[Galley: subtask {subtask_id} "{title}" finished — details: session show {subtask_id}]'
+
+
+class Clock:
+    """Local wall-clock instants relative to the seed run. Naive local
+    datetimes go through `.astimezone()`, so each day gets its own UTC
+    offset (DST)."""
+
+    def __init__(self) -> None:
+        self.now = datetime.now().astimezone()
+        self.today = self.now.date()
+
+    def at(self, day: date, hhmm: str, sec: int = 0) -> datetime:
+        hh, mm = (int(x) for x in hhmm.split(":"))
+        return datetime.combine(day, time(hh, mm, sec)).astimezone()
+
+    def days_ago(self, n: int) -> date:
+        return self.today - timedelta(days=n)
+
+    @staticmethod
+    def next_week(said_on: date, weekday: int) -> date:
+        """「下周X」 as said on `said_on`: that weekday (Mon=0) of the
+        week after said_on's (weeks run Monday to Sunday)."""
+        monday = said_on - timedelta(days=said_on.weekday()) + timedelta(days=7)
+        return monday + timedelta(days=weekday)
+
+    def morning(self, hhmm: str = "09:12") -> datetime:
+        """This morning's exchange. It and its subtask's report take about
+        three minutes; a seed run before that has passed moves the whole
+        exchange back to 20 minutes ago (printed as a notice)."""
+        slot = self.at(self.today, hhmm, 8)
+        if self.now - slot >= timedelta(minutes=20):
+            return slot
+        return self.now - timedelta(minutes=20)
+
+
 # ---------------------------------------------------------------------------
 # Content — one dict per language. Structure:
 #   projects: [(id, name, minutes_ago)]
@@ -130,7 +298,7 @@ def content_zh() -> dict:
     return {
         "projects": [
             ("proj_wittgenstein", "维特根斯坦哲学与 LLM", 26 * 60),
-            ("proj_moving", "九月搬家", 40),
+            ("proj_moving", "九月搬家", 2 * 60),
             ("proj_site", "galley-site", 30),
         ],
         "sessions": [
@@ -213,39 +381,6 @@ def content_zh() -> dict:
                 ],
             },
             # ---- 九月搬家（生活事务） ----
-            {
-                "id": "sess_movers",
-                "project": "proj_moving",
-                "title": "三家搬家公司报价与评价对比",
-                "status": "completed",
-                "summary": "3 家报价已入表，推荐 1 家",
-                "ago": 40,
-                "turns": [
-                    {
-                        "user": "帮我对比一下上海这三家搬家公司的报价和口碑：日式搬家、公兴、蚂蚁。两室一厅，浦东到徐汇，月底搬。",
-                        "thinking": "报价按同一口径（车型、楼层、是否打包）拉齐，再看近三个月的评价。",
-                        "steps": [
-                            {
-                                "preamble": "当前阶段：抓取三家的报价页。",
-                                "thinking": "三家计价方式不同，先各自记录原始口径再折算。",
-                                "tool_calls": [tc("web_scan", {"urls": 3, "purpose": "pricing pages"}, "toolu_seed_04")],
-                                "tool_results": [tr("3 家报价页已读取：按车型 / 按体积 / 按套餐", "toolu_seed_04")],
-                                "summary": "3 家报价口径已记录",
-                            },
-                            {
-                                "preamble": "当前阶段：汇总近三个月评价。",
-                                "thinking": "只看带图和带订单的评价，剔除刷评特征。",
-                                "tool_calls": [tc("web_execute_js", {"action": "collect_reviews", "months": 3}, "toolu_seed_05")],
-                                "tool_results": [tr("有效评价 3 家共 217 条，已按准时 / 损坏 / 加价三类归并", "toolu_seed_05")],
-                                "summary": "217 条评价已归类",
-                            },
-                        ],
-                        "final": "同口径折算后：\n\n| 公司 | 预估总价 | 含打包 | 准时率 | 近三月差评关键词 |\n|---|---|---|---|---|\n| 日式搬家 | ¥3,200 | 是 | 97% | 「贵」 |\n| 公兴 | ¥1,850 | 否（+¥400） | 91% | 「临时加价」×6 |\n| 蚂蚁 | ¥1,600 | 否（+¥350） | 88% | 「家具磕碰」×9 |\n\n推荐**日式搬家**：贵 ¥1,000 左右，但差评里没有加价和损坏。如果预算优先，公兴加打包后 ¥2,250，记得电话里把加价条款问清。",
-                        "summary": "3 家报价已入表，推荐 1 家",
-                        "telemetry": tele(118, 19800, 1650, 7),
-                    }
-                ],
-            },
             {
                 "id": "sess_rail",
                 "project": "proj_moving",
@@ -590,7 +725,7 @@ def content_en() -> dict:
     return {
         "projects": [
             ("proj_wittgenstein", "Wittgenstein & LLMs", 26 * 60),
-            ("proj_moving", "September move", 40),
+            ("proj_moving", "September move", 2 * 60),
             ("proj_site", "galley-site", 30),
         ],
         "sessions": [
@@ -673,39 +808,6 @@ def content_en() -> dict:
                 ],
             },
             # ---- September move (life admin) ----
-            {
-                "id": "sess_movers",
-                "project": "proj_moving",
-                "title": "Three moving companies: quotes and reviews",
-                "status": "completed",
-                "summary": "3 quotes tabled, 1 recommended",
-                "ago": 40,
-                "turns": [
-                    {
-                        "user": "Compare quotes and reputation for three Shanghai movers: Nihon Moving, Gongxing, and Ant. Two-bedroom, Pudong to Xuhui, end of month.",
-                        "thinking": "Normalize quotes to one basis (truck, floors, packing), then read the last three months of reviews.",
-                        "steps": [
-                            {
-                                "preamble": "Current stage: fetching the three pricing pages.",
-                                "thinking": "Three different pricing models — record each raw, then convert.",
-                                "tool_calls": [tc("web_scan", {"urls": 3, "purpose": "pricing pages"}, "toolu_seed_04")],
-                                "tool_results": [tr("3 pricing pages read: per truck / per volume / per package", "toolu_seed_04")],
-                                "summary": "3 pricing bases recorded",
-                            },
-                            {
-                                "preamble": "Current stage: collecting recent reviews.",
-                                "thinking": "Only reviews with photos or order numbers; drop review-farm patterns.",
-                                "tool_calls": [tc("web_execute_js", {"action": "collect_reviews", "months": 3}, "toolu_seed_05")],
-                                "tool_results": [tr("217 usable reviews across 3 companies, bucketed as punctuality / damage / surcharge", "toolu_seed_05")],
-                                "summary": "217 reviews bucketed",
-                            },
-                        ],
-                        "final": "On the same basis:\n\n| Company | Est. total | Packing included | On-time | Complaint keywords (3 mo) |\n|---|---|---|---|---|\n| Nihon Moving | ¥3,200 | Yes | 97% | \"pricey\" |\n| Gongxing | ¥1,850 | No (+¥400) | 91% | \"surcharge on the day\" ×6 |\n| Ant | ¥1,600 | No (+¥350) | 88% | \"scuffed furniture\" ×9 |\n\nRecommendation: **Nihon Moving**. About ¥1,000 more, but zero surcharge or damage complaints. If budget wins, Gongxing with packing comes to ¥2,250 — ask about surcharge terms on the phone.",
-                        "summary": "3 quotes tabled, 1 recommended",
-                        "telemetry": tele(118, 19800, 1650, 7),
-                    }
-                ],
-            },
             {
                 "id": "sess_rail",
                 "project": "proj_moving",
@@ -1047,6 +1149,221 @@ def content_en() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# The assistant's conversation — one plan per language. Structure:
+#   greeting_at: when Core created the main chat (its greeting's time).
+#   exchanges: what you said and what it answered, oldest first. Each has
+#     the user's words and time; `todos` it noted with `galley todo add`
+#     in a code_run step before answering (the step's script and result
+#     are built from them, so they agree with the rows); its reply, GA
+#     summary and telemetry; `dispatch` when the reply carried the
+#     <subtask> tag.
+#   subtask: the session that tag started (instructions = its first
+#     message, the assistant's words), with its steps and final answer in
+#     the workbench turn shape of content_zh.
+#   report: the assistant's reply to Core's report of that subtask.
+# The hero shot's own exchange is sent live during the shoot (see the
+# playbook's Hero prompt), never seeded.
+# ---------------------------------------------------------------------------
+
+def assistant_zh(clock: Clock) -> dict:
+    noted = clock.days_ago(3)  # the first evening with the main chat
+    last_night = clock.days_ago(1)
+    due_wed = Clock.next_week(last_night, 2)  # 「下周三」, said last night
+    remind_tue = clock.at(Clock.next_week(last_night, 1), "20:00")  # 「周二晚上」
+    morning = clock.morning()
+    rent = clock.today
+    return {
+        "greeting_at": clock.at(noted, "20:31", 5),
+        "exchanges": [
+            {
+                "user": f"记两件事：{rent.day} 号要给房东转房租；干洗店那套西装好了，有空去取。",
+                "at": clock.at(noted, "20:40", 12),
+                "todos": [
+                    {"title": f"给房东转 {rent.month} 月房租", "due": rent, "reason": "用户让记下"},
+                    {"title": "取干洗的西装", "reason": "用户让记下"},
+                ],
+                "step_summary": "记下两条待办",
+                "reply": f"记下了：「给房东转 {rent.month} 月房租」{rent.day} 号到期，「取干洗的西装」随时。",
+                "reply_summary": "记下两条待办",
+                "telemetry": tele(11, 20600, 240, 2),
+            },
+            {
+                "user": "下周三要交季度报告的材料，周二晚上我在家。",
+                "at": clock.at(last_night, "21:10", 3),
+                "todos": [
+                    {
+                        "title": "交季度报告材料",
+                        "due": due_wed,
+                        "remind_at": remind_tue,
+                        "reason": "用户说下周三要交，周二晚上在家",
+                    },
+                ],
+                "step_summary": "记下待办并挂周二晚上的提醒",
+                "reply": "记下了：「交季度报告材料」截止下周三，周二晚上 8 点提醒你过一遍。不用提醒的话说一声。",
+                "reply_summary": "记下待办，周二 20:00 提醒",
+                "telemetry": tele(13, 21400, 290, 2),
+            },
+            {
+                "user": "帮我比较一下三家搬家公司的报价和评价。",
+                "at": morning,
+                "reply": "好，这个我派出去查：三家的报价按同一口径折算，再对一遍近三个月的评价，查好了告诉你。",
+                "reply_summary": "派子任务对比三家搬家公司",
+                "telemetry": tele(7, 21900, 180, 1),
+                "dispatch": True,
+            },
+        ],
+        "subtask": {
+            "instructions": (
+                "三家搬家公司报价与评价对比\n\n"
+                "用户月底从浦东搬到徐汇，两室一厅。对比日式搬家、公兴、蚂蚁三家：\n\n"
+                "- 报价按同一口径折算（车型、楼层、是否含打包），写明各家原来的计价方式；\n"
+                "- 只看近三个月带图或带订单的评价，按准时、损坏、临时加价归类；\n"
+                "- 确认月底那个周六三家能不能上门。\n\n"
+                "最后给一张对比表和一句推荐。"
+            ),
+            "thinking": "报价按同一口径（车型、楼层、是否打包）拉齐，再看近三个月的评价和周六档期。",
+            "steps": [
+                {
+                    "preamble": "当前阶段：读取三家的报价页。",
+                    "thinking": "三家计价方式不同，先各自记录原始口径再折算。",
+                    "tool_calls": [tc("web_scan", {"text_only": True}, "toolu_seed_04")],
+                    "tool_results": [tr("3 家报价页已读取：日式按车型计价，公兴按体积，蚂蚁按套餐", "toolu_seed_04")],
+                    "summary": "3 家报价口径已记录",
+                    "after_s": 26,
+                },
+                {
+                    "preamble": "当前阶段：汇总近三个月评价。",
+                    "thinking": "只看带图和带订单的评价，剔除刷评特征。",
+                    "tool_calls": [tc("web_execute_js", {"script": "collectReviews({ months: 3, withPhotoOrOrder: true })"}, "toolu_seed_05")],
+                    "tool_results": [tr("有效评价 3 家共 217 条，已按准时 / 损坏 / 加价三类归并", "toolu_seed_05")],
+                    "summary": "217 条评价已归类",
+                    "after_s": 71,
+                },
+                {
+                    "preamble": "当前阶段：确认月底周六的档期。",
+                    "thinking": "看各家预约页的日历，只认能直接选的时段。",
+                    "tool_calls": [tc("web_execute_js", {"script": "readBookingCalendar({ date: 'last Saturday of the month' })"}, "toolu_seed_15")],
+                    "tool_results": [tr("3 家月底周六均有可约时段", "toolu_seed_15")],
+                    "summary": "3 家周六均可上门",
+                    "after_s": 97,
+                },
+            ],
+            "final": "同口径折算后（两室一厅，浦东到徐汇，含打包）：\n\n| 公司 | 月底周六 | 预估总价 | 准时率 | 近三月差评关键词 |\n|---|---|---|---|---|\n| 日式搬家 | 可约 | ¥2,300 | 94% | 「改约」×4 |\n| 公兴 | 可约 | ¥1,960 | 97% | 无集中差评 |\n| 蚂蚁 | 可约 | ¥1,680 | 88% | 「丢件」×2、「磕碰」×5 |\n\n推荐**公兴**：价格居中，近三个月没有集中差评。蚂蚁最便宜，但有两条丢件差评；日式搬家最贵，改约投诉偏多。",
+            "summary": "3 家报价已入表，推荐公兴",
+            "telemetry": tele(118, 19800, 1650, 7),
+        },
+        "report": {
+            "reply": "查好了：三家都能周六上门，报价 1,680 到 2,300。评价最稳的是公兴，价格居中；最便宜的蚂蚁近期有两条丢件差评。要我把公兴的预约电话发你吗？",
+            "reply_summary": "汇报三家搬家公司的对比结果",
+            "telemetry": tele(9, 24700, 260, 1),
+        },
+    }
+
+
+def assistant_en(clock: Clock) -> dict:
+    noted = clock.days_ago(3)
+    last_night = clock.days_ago(1)
+    due_wed = Clock.next_week(last_night, 2)
+    remind_tue = clock.at(Clock.next_week(last_night, 1), "20:00")
+    morning = clock.morning()
+    rent = clock.today
+    month = rent.strftime("%B")
+    day = ordinal(rent.day)
+    return {
+        "greeting_at": clock.at(noted, "20:31", 5),
+        "exchanges": [
+            {
+                "user": f"Two things to keep track of: the rent goes to my landlord on the {day}, and my suit is ready at the dry cleaner's, no rush.",
+                "at": clock.at(noted, "20:40", 12),
+                "todos": [
+                    {"title": f"Pay the landlord {month}'s rent", "due": rent, "reason": "user asked to note it"},
+                    {"title": "Pick up the suit from the dry cleaner's", "reason": "user asked to note it"},
+                ],
+                "step_summary": "Noted two to-dos",
+                "reply": f"Noted both: \"Pay the landlord {month}'s rent\" by the {day}, and \"Pick up the suit from the dry cleaner's\" whenever you get to it.",
+                "reply_summary": "Noted two to-dos",
+                "telemetry": tele(11, 20600, 240, 2),
+            },
+            {
+                "user": "I need to hand in the quarterly report materials next Wednesday. I'm home Tuesday evening.",
+                "at": clock.at(last_night, "21:10", 3),
+                "todos": [
+                    {
+                        "title": "Hand in the quarterly report materials",
+                        "due": due_wed,
+                        "remind_at": remind_tue,
+                        "reason": "due next Wednesday; user is home Tuesday evening",
+                    },
+                ],
+                "step_summary": "Noted the to-do with a Tuesday evening reminder",
+                "reply": "Noted: \"Hand in the quarterly report materials\", due next Wednesday. I'll remind you Tuesday at 8 pm to go over them. Say if you'd rather I didn't.",
+                "reply_summary": "Noted the to-do, reminder Tuesday 20:00",
+                "telemetry": tele(13, 21400, 290, 2),
+            },
+            {
+                "user": "Can you compare quotes and reviews for the three moving companies?",
+                "at": morning,
+                "reply": "Sure, I'll send this off: quotes on one basis, plus the last three months of reviews. I'll tell you when it's back.",
+                "reply_summary": "Sent off a subtask comparing three movers",
+                "telemetry": tele(7, 21900, 180, 1),
+                "dispatch": True,
+            },
+        ],
+        "subtask": {
+            "instructions": (
+                "Three moving companies: quotes and reviews\n\n"
+                "The user moves from Pudong to Xuhui at the end of the month, a two-bedroom flat. "
+                "Compare Nihon Moving, Gongxing and Ant:\n\n"
+                "- Normalize the quotes to one basis (truck, floors, packing), noting each company's own pricing model;\n"
+                "- Only reviews from the last three months with photos or order numbers, bucketed as punctuality / damage / surcharge;\n"
+                "- Check whether each can come on the last Saturday of the month.\n\n"
+                "End with one comparison table and a one-line recommendation."
+            ),
+            "thinking": "Normalize quotes to one basis (truck, floors, packing), then read the last three months of reviews and the Saturday slots.",
+            "steps": [
+                {
+                    "preamble": "Current stage: reading the three pricing pages.",
+                    "thinking": "Three different pricing models: record each raw, then convert.",
+                    "tool_calls": [tc("web_scan", {"text_only": True}, "toolu_seed_04")],
+                    "tool_results": [tr("3 pricing pages read: Nihon per truck, Gongxing per volume, Ant per package", "toolu_seed_04")],
+                    "summary": "3 pricing bases recorded",
+                    "after_s": 26,
+                },
+                {
+                    "preamble": "Current stage: collecting recent reviews.",
+                    "thinking": "Only reviews with photos or order numbers; drop review-farm patterns.",
+                    "tool_calls": [tc("web_execute_js", {"script": "collectReviews({ months: 3, withPhotoOrOrder: true })"}, "toolu_seed_05")],
+                    "tool_results": [tr("217 usable reviews across 3 companies, bucketed as punctuality / damage / surcharge", "toolu_seed_05")],
+                    "summary": "217 reviews bucketed",
+                    "after_s": 71,
+                },
+                {
+                    "preamble": "Current stage: checking the last Saturday's slots.",
+                    "thinking": "Read each booking calendar; only slots that can be picked directly count.",
+                    "tool_calls": [tc("web_execute_js", {"script": "readBookingCalendar({ date: 'last Saturday of the month' })"}, "toolu_seed_15")],
+                    "tool_results": [tr("All 3 have open slots on the last Saturday", "toolu_seed_15")],
+                    "summary": "All 3 can come on Saturday",
+                    "after_s": 97,
+                },
+            ],
+            "final": "On the same basis (two-bedroom, Pudong to Xuhui, packing included):\n\n| Company | Last Saturday | Est. total | On-time | Complaint keywords (3 mo) |\n|---|---|---|---|---|\n| Nihon Moving | Open | ¥2,300 | 94% | \"rescheduled\" ×4 |\n| Gongxing | Open | ¥1,960 | 97% | none recurring |\n| Ant | Open | ¥1,680 | 88% | \"lost items\" ×2, \"scuffs\" ×5 |\n\nRecommendation: **Gongxing**, mid-priced with no recurring complaints in three months. Ant is the cheapest but has two lost-item complaints; Nihon Moving is the priciest and draws rescheduling complaints.",
+            "summary": "3 quotes tabled, Gongxing recommended",
+            "telemetry": tele(118, 19800, 1650, 7),
+        },
+        "report": {
+            "reply": "Done: all three can come on Saturday, quoting ¥1,680 to ¥2,300. Gongxing has the steadiest reviews and sits in the middle on price; the cheapest, Ant, has two recent complaints about lost items. Want me to send you Gongxing's booking number?",
+            "reply_summary": "Reported the movers comparison",
+            "telemetry": tele(9, 24700, 260, 1),
+        },
+    }
+
+
+def ordinal(n: int) -> str:
+    suffix = "th" if 11 <= n % 100 <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+# ---------------------------------------------------------------------------
 # Insertion
 # ---------------------------------------------------------------------------
 
@@ -1058,6 +1375,23 @@ def insert_projects(cur: sqlite3.Cursor, projects: list) -> None:
                VALUES (?, ?, 0, ?, ?, ?, 0)""",
             (pid, name, iso(ago), iso(ago + 7 * 24 * 60), iso(ago)),
         )
+
+
+def ga_content(text: str | None, *, thinking: str | None = None, summary: str | None = None) -> str:
+    """A step's raw `responseContent` in GA's shape: an optional
+    <thinking> block, the visible text, the <summary> recap. Core keeps it
+    verbatim in `content` (history replay feeds it back) and derives the
+    other columns from it; the rows below write those columns to match:
+    final_answer = the text with the tags stripped (None when only a
+    「当前阶段：」 preamble is left), preamble = the text on a tool step."""
+    parts = []
+    if thinking:
+        parts.append(f"<thinking>{thinking}</thinking>")
+    if text:
+        parts.append(text)
+    if summary:
+        parts.append(f"<summary>{summary}</summary>")
+    return "\n".join(parts)
 
 
 def message_rows_for_turns(session_id: str, turns: list) -> list[tuple]:
@@ -1086,9 +1420,9 @@ def message_rows_for_turns(session_id: str, turns: list) -> list[tuple]:
                 (
                     f"msg_{session_id}_{step_index}_assistant",
                     session_id, step_index, 1, "assistant",
-                    f"<preamble>{step['preamble']}</preamble><thinking>{step['thinking']}</thinking>",
-                    json.dumps(step["tool_calls"], ensure_ascii=False),
-                    json.dumps(step["tool_results"], ensure_ascii=False),
+                    ga_content(step["preamble"], thinking=step["thinking"], summary=step.get("summary")),
+                    js_json(step["tool_calls"]),
+                    js_json(step["tool_results"]),
                     step["thinking"], None, user_created,
                     step.get("summary"), step["preamble"], None,
                 )
@@ -1100,11 +1434,11 @@ def message_rows_for_turns(session_id: str, turns: list) -> list[tuple]:
                 (
                     f"msg_{session_id}_{step_index}_assistant",
                     session_id, step_index, 1, "assistant",
-                    f"<thinking>{turn['thinking']}</thinking>{turn['final']}",
+                    ga_content(turn["final"], thinking=turn.get("thinking"), summary=turn.get("summary")),
                     "[]", "[]",
                     turn.get("thinking"), turn["final"], user_created,
                     turn.get("summary"), None,
-                    json.dumps(telemetry) if telemetry else None,
+                    js_json(telemetry) if telemetry else None,
                 )
             )
             base = step_index + 1
@@ -1118,7 +1452,11 @@ def insert_sessions(cur: sqlite3.Cursor, sessions: list) -> None:
         ago = s["ago"]
         origin = s.get("origin")
         turns = s["turns"]
-        turn_count = sum(1 + len(t.get("steps", [])) + (1 if "final" in t else 0) for t in turns)
+        # Core bumps turn_count once per visible assistant row (each step's
+        # turn_end, core/src/db/session.rs bump_session_after_turn_db);
+        # user rows take an index but no bump. A session with no reply yet
+        # keeps 1, as before (the running row).
+        turn_count = sum(len(t.get("steps", [])) + (1 if "final" in t else 0) for t in turns)
         cur.execute(
             """INSERT INTO sessions
                (id, project_id, title, status, summary, turn_count, pinned,
@@ -1168,6 +1506,349 @@ def insert_scheduled(cur: sqlite3.Cursor, tasks: list) -> None:
                 iso(t["last_fired_ago"] if t["last_fired_ago"] is not None else t["created_ago"]),
             ),
         )
+
+
+# ---------------------------------------------------------------------------
+# Insertion — the main chat, its subtask and its to-dos
+# ---------------------------------------------------------------------------
+
+def insert_row(cur: sqlite3.Cursor, table: str, cols: dict) -> None:
+    names = ", ".join(cols)
+    marks = ", ".join("?" for _ in cols)
+    cur.execute(f"INSERT INTO {table} ({names}) VALUES ({marks})", list(cols.values()))
+
+
+def main_chat_state(conn: sqlite3.Connection) -> tuple[str | None, int]:
+    """The main chat's id (at most one: 044's partial unique index) and how
+    many of its rows are not the greeting."""
+    row = conn.execute("SELECT id FROM sessions WHERE main_chat = 1").fetchone()
+    if row is None:
+        return None, 0
+    others = conn.execute(
+        "SELECT COUNT(*) FROM messages WHERE session_id = ? "
+        "AND NOT (role = 'assistant' AND created_via = 'system' AND supervisor IS ?)",
+        (row[0], GREETING_SUPERVISOR),
+    ).fetchone()[0]
+    return row[0], others
+
+
+def ensure_main_chat(cur: sqlite3.Cursor, lang: str, created: datetime) -> tuple[str, bool]:
+    """The main chat to seed into, with its greeting.
+
+    Normally Core made it on the first launch after onboarding
+    (`get_or_create_main_chat`, core/src/db/main_chat.rs): the row is kept
+    and backdated to `created`, and its greeting row — written with it, in
+    the UI language of that launch — is set to `lang`'s greeting at the
+    same time, so the greeting's time line sits before the seeded history.
+    Without one (an --init-schema test file) it is made as Core makes it:
+    `insert_session_row_inner` with the desktop's origin, then
+    `main_chat = 1` and `write_main_chat_seed`'s greeting row."""
+    greeting = MAIN_CHAT_GREETING[lang]
+    at = core_iso(created)
+    row = cur.execute("SELECT id FROM sessions WHERE main_chat = 1").fetchone()
+    if row is None:
+        main_id = mint_session_id(created)
+        insert_row(cur, "sessions", {
+            "id": main_id, "project_id": None, "title": MAIN_CHAT_TITLE,
+            "title_source": "user", "status": "idle", "summary": None, "turn_count": 0,
+            "pending_approval_count": 0, "error_count": 0, "pinned": 0, "has_unread": 0,
+            "llm_index": None, "llm_key": None, "llm_display_name": None,
+            "last_activity_at": at, "created_at": at, "updated_at": at,
+            "created_via": "gui", "created_by_supervisor": None, "created_origin_note": None,
+            "client": "desktop", "ga_runtime_kind": "managed", "ga_runtime_id": None,
+            "prompt_profile": PROMPT_PROFILE_ID,
+        })
+        cur.execute("UPDATE sessions SET main_chat = 1 WHERE id = ?", (main_id,))
+        made = True
+    else:
+        main_id = row[0]
+        cur.execute(
+            "UPDATE sessions SET status = 'idle', created_at = ?, updated_at = ?, "
+            "last_activity_at = ? WHERE id = ?",
+            (at, at, at, main_id),
+        )
+        made = False
+    greeting_row = cur.execute(
+        "SELECT id FROM messages WHERE session_id = ? AND role = 'assistant' "
+        "AND created_via = 'system' AND supervisor = ?",
+        (main_id, GREETING_SUPERVISOR),
+    ).fetchone()
+    if greeting_row is None:
+        insert_row(cur, "messages", {
+            "id": f"msg_{main_id}_greeting", "session_id": main_id,
+            "turn_index": GREETING_TURN_INDEX, "sequence": 1, "role": "assistant",
+            "content": greeting, "final_answer": greeting, "created_at": at,
+            "created_via": "system", "supervisor": GREETING_SUPERVISOR, "visibility": "visible",
+        })
+    else:
+        cur.execute(
+            "UPDATE messages SET content = ?, final_answer = ?, created_at = ? WHERE id = ?",
+            (greeting, greeting, at, greeting_row[0]),
+        )
+    return main_id, made
+
+
+class Transcript:
+    """One session's rows as Core writes them, in order: a user row takes
+    the next turn index (`NEXT_TURN_INDEX_SQL`, core/src/db/helpers.rs:
+    one past the highest used, the greeting's -1 included); the run's
+    assistant rows take that index and the ones after it (the runner's
+    absoluteTurnIndex = base + step - 1), each bumping turn_count once
+    (turn persistence). Ids are Core's: msg_{session}_{turn}_{role}."""
+
+    def __init__(self, cur: sqlite3.Cursor, session_id: str) -> None:
+        self.cur = cur
+        self.sid = session_id
+        self.next_turn = 0
+        self.turn_count = 0
+        self.last_at: datetime | None = None
+        self.summary: str | None = None
+
+    def user(self, content: str, at: datetime, *, via: str = "gui", supervisor: str | None = None,
+             note: str | None = None, client: str | None = "desktop", summary: str | None = None) -> int:
+        """`insert_message_inner` (the desktop's send stamps client
+        'desktop'; Galley's own rows have none)."""
+        turn = self.next_turn
+        insert_row(self.cur, "messages", {
+            "id": f"msg_{self.sid}_{turn}_user", "session_id": self.sid, "turn_index": turn,
+            "sequence": 0, "role": "user", "content": content, "summary": summary,
+            "created_at": core_iso(at), "created_via": via, "supervisor": supervisor,
+            "origin_note": note, "client": client, "visibility": "visible",
+        })
+        self.last_at = at
+        return turn
+
+    def assistant(self, turn: int, at: datetime, *, content: str, tool_calls: list | None = None,
+                  tool_results: list | None = None, thinking: str | None = None,
+                  final: str | None = None, preamble: str | None = None,
+                  summary: str | None = None, telemetry: dict | None = None) -> str:
+        """`persist_assistant_message` (core/src/db/session.rs): sequence 1,
+        no origin of its own (the column default), tool JSON as the page
+        stringified it."""
+        msg_id = f"msg_{self.sid}_{turn}_assistant"
+        insert_row(self.cur, "messages", {
+            "id": msg_id, "session_id": self.sid, "turn_index": turn, "sequence": 1,
+            "role": "assistant", "content": content,
+            "tool_calls": js_json(tool_calls or []), "tool_results": js_json(tool_results or []),
+            "thinking": thinking, "final_answer": final, "summary": summary,
+            "preamble": preamble, "telemetry_json": js_json(telemetry) if telemetry else None,
+            "created_at": core_iso(at), "visibility": "visible",
+        })
+        self.next_turn = max(self.next_turn, turn + 1)
+        self.turn_count += 1
+        self.last_at = at
+        if summary:
+            self.summary = summary[:80] + ("…" if len(summary) > 80 else "")
+        return msg_id
+
+
+def todo_add_line(todo: dict) -> str:
+    """The shell line the assistant runs for one to-do (its manual's
+    `todo add` form; the CLI's path is read from the discovery file and
+    held in $GALLEY, docs/managed-ga-runtime/galley-assistant-manual/cli.md)."""
+    parts = [f'"$GALLEY" todo add "{todo["title"]}"']
+    if todo.get("due"):
+        parts.append(f"--due={todo['due'].isoformat()}")
+    if todo.get("remind_at"):
+        parts.append(f"--remind-at={todo['remind_at'].strftime('%Y-%m-%dT%H:%M')}")
+    parts.append(f'--supervisor={ASSISTANT_SUPERVISOR} --reason="{todo["reason"]}"')
+    return " ".join(parts)
+
+
+def todo_cli_json(todo: dict, main_id: str) -> str:
+    """What `galley todo add` prints for it ({"todo": Todo}, docs/agent-api/
+    todo-commands.md §5.28; `createdIn` has no turnIndex until the run
+    ends)."""
+    brief = {"id": todo["id"], "title": todo["title"]}
+    if todo.get("due"):
+        brief["due"] = {"date": todo["due"].isoformat(), "hasTime": False}
+    if todo.get("remind_at"):
+        brief["reminder"] = {"taskId": todo["task_id"], "at": core_iso(todo["remind_at"]),
+                             "state": "scheduled"}
+    brief["status"] = "open"
+    brief["origin"] = {"via": "supervisor", "supervisor": ASSISTANT_SUPERVISOR, "reason": todo["reason"]}
+    brief["createdIn"] = {"sessionId": main_id}
+    brief["createdAt"] = core_iso(todo["created"])
+    brief["updatedAt"] = core_iso(todo["created"])
+    return json.dumps({"todo": brief}, ensure_ascii=False, separators=(",", ":"))
+
+
+def insert_todo(cur: sqlite3.Cursor, todo: dict, main_id: str, run_turn: int, reply_turn: int,
+                settled: datetime) -> None:
+    """`create_todo` (core/src/db/todo.rs) through `galley todo add
+    --supervisor=galley-assistant` during an open main chat run: origin
+    'supervisor' + label + reason, created_in = (main chat, the run's user
+    turn); `settle_todo_created_in` then fills the reply's turn and moves
+    updated_at to the run's end. A reminder is `set_todo_reminder`: a
+    one-off (`create_scheduled_task_in`: fire_at UTC, time_of_day NULL)
+    that wakes the assistant, with the to-do's origin, made in no turn,
+    linked by `scheduled_tasks.todo_id`."""
+    origin = ("supervisor", ASSISTANT_SUPERVISOR, todo["reason"])
+    insert_row(cur, "todos", {
+        "id": todo["id"], "title": todo["title"], "notes": None,
+        "due_date": todo["due"].isoformat() if todo.get("due") else None, "due_at": None,
+        "created_via": origin[0], "created_by_supervisor": origin[1], "created_origin_note": origin[2],
+        "created_in_session_id": main_id, "created_in_run_turn": run_turn,
+        "created_in_turn_index": reply_turn,
+        "created_at": core_iso(todo["created"]), "updated_at": core_iso(settled),
+    })
+    if todo.get("remind_at"):
+        at = core_iso(todo["created"])
+        insert_row(cur, "scheduled_tasks", {
+            "id": todo["task_id"], "project_id": None, "prompt": todo["title"],
+            "repeat_kind": "once", "repeat_days": None, "time_of_day": None,
+            "fire_at": core_iso(todo["remind_at"]), "llm_name": None, "enabled": 1,
+            "created_at": at, "updated_at": at, "target": "assistant",
+            "created_via": origin[0], "created_by_supervisor": origin[1],
+            "created_origin_note": origin[2], "created_in_session_id": None,
+            "created_in_run_turn": None, "todo_id": todo["id"],
+        })
+
+
+def insert_subtask(cur: sqlite3.Cursor, spec: dict, main_id: str, created: datetime) -> dict:
+    """`create_subtask` (core/src/subtask.rs) and its run: a managed
+    session on the main chat's model, no project, origin 'system' +
+    'galley-subtask' (read back as via "subtask"), parent = the main chat,
+    not promoted; its first user row is the instructions, with the same
+    origin and no client. Then the run's steps and final answer as turn
+    persistence writes them; the row ends 'idle' as Core leaves it."""
+    sid = mint_session_id(created)
+    title = subtask_title(spec["instructions"])
+    llm = cur.execute(
+        "SELECT llm_index, llm_key, llm_display_name FROM sessions WHERE id = ?", (main_id,)
+    ).fetchone()
+    t = Transcript(cur, sid)
+    insert_row(cur, "sessions", {
+        "id": sid, "project_id": None, "title": title, "title_source": "user",
+        "status": "idle", "summary": None, "turn_count": 0, "pending_approval_count": 0,
+        "error_count": 0, "pinned": 0, "has_unread": 0,
+        "llm_index": llm[0], "llm_key": llm[1], "llm_display_name": llm[2],
+        "last_activity_at": core_iso(created), "created_at": core_iso(created),
+        "updated_at": core_iso(created), "created_via": "system",
+        "created_by_supervisor": SUBTASK_SUPERVISOR, "created_origin_note": None, "client": None,
+        "ga_runtime_kind": "managed", "ga_runtime_id": None, "prompt_profile": PROMPT_PROFILE_ID,
+        "parent_session_id": main_id, "promoted_at": None,
+    })
+    base = t.user(spec["instructions"], created, via="system", supervisor=SUBTASK_SUPERVISOR, client=None)
+    turn = base
+    for step in spec["steps"]:
+        t.assistant(
+            turn, created + timedelta(seconds=step["after_s"]),
+            content=ga_content(step["preamble"], thinking=step["thinking"], summary=step["summary"]),
+            tool_calls=step["tool_calls"], tool_results=step["tool_results"],
+            thinking=step["thinking"], preamble=step["preamble"], summary=step["summary"],
+        )
+        turn += 1
+    done = created + timedelta(milliseconds=spec["telemetry"]["elapsedMs"])
+    t.assistant(
+        turn, done,
+        content=ga_content(spec["final"], thinking=spec["thinking"], summary=spec["summary"]),
+        thinking=spec["thinking"], final=spec["final"], summary=spec["summary"],
+        telemetry=spec["telemetry"],
+    )
+    cur.execute(
+        "UPDATE sessions SET turn_count = ?, summary = ?, last_activity_at = ?, updated_at = ? "
+        "WHERE id = ?",
+        (t.turn_count, t.summary, core_iso(done), core_iso(done), sid),
+    )
+    return {"id": sid, "title": title, "answer": spec["final"], "done": done}
+
+
+def seed_assistant(cur: sqlite3.Cursor, lang: str, clock: Clock) -> dict:
+    """The main chat's history, its subtask and its to-dos (044-051)."""
+    plan = assistant_zh(clock) if lang == "zh" else assistant_en(clock)
+    main_id, made = ensure_main_chat(cur, lang, plan["greeting_at"])
+    chat = Transcript(cur, main_id)
+    chat.last_at = plan["greeting_at"]
+    segment_starts: list[tuple[int, datetime]] = []
+    todos_out: list[dict] = []
+    subtask = None
+    calls = 0
+
+    def open_segment_if_due(at: datetime) -> None:
+        # segment.rs: more than N idle hours since the last activity cuts
+        # a new segment at the next message's turn index; the desktop's
+        # ensure on open records it a little before the message.
+        if chat.next_turn > 0 and at - chat.last_at > SEGMENT_IDLE:
+            segment_starts.append((chat.next_turn, at - timedelta(seconds=25)))
+
+    for ex in plan["exchanges"]:
+        open_segment_if_due(ex["at"])
+        run_turn = chat.user(ex["user"], ex["at"])
+        turn = run_turn
+        todos = ex.get("todos", [])
+        reply_at = ex["at"] + timedelta(milliseconds=ex["telemetry"]["elapsedMs"])
+        if todos:
+            step_at = ex["at"] + timedelta(seconds=7)
+            for i, todo in enumerate(todos):
+                todo["id"] = mint_hex16("todo")
+                # One CLI call each, in the order the reply names them: a
+                # second apart, so the cards (created_at, then id) keep it.
+                todo["created"] = step_at - timedelta(seconds=len(todos) + 1 - i)
+                if todo.get("remind_at"):
+                    todo["task_id"] = mint_hex16("sched")
+            calls += 1
+            call_id = f"toolu_seed_m{calls:02d}"
+            chat.assistant(
+                turn, step_at,
+                content=ga_content(None, summary=ex["step_summary"]),
+                tool_calls=[tc("code_run", {
+                    "type": "bash",
+                    "script": "\n".join(todo_add_line(td) for td in todos),
+                }, call_id)],
+                tool_results=[tr("\n".join(todo_cli_json(td, main_id) for td in todos), call_id)],
+                summary=ex["step_summary"],
+            )
+            turn += 1
+        content = ga_content(ex["reply"], summary=ex["reply_summary"])
+        if ex.get("dispatch"):
+            content += f"\n<subtask>{plan['subtask']['instructions']}</subtask>"
+        chat.assistant(
+            turn, reply_at, content=content, final=ex["reply"],
+            summary=ex["reply_summary"], telemetry=ex["telemetry"],
+        )
+        for todo in todos:
+            insert_todo(cur, todo, main_id, run_turn, turn, reply_at)
+            todos_out.append(todo)
+        if ex.get("dispatch"):
+            # subtask.rs dispatch_reply: when the reply's run settles, one
+            # session per tag, then its record (one row per tag, reply order).
+            dispatched = reply_at + timedelta(seconds=1)
+            subtask = insert_subtask(cur, plan["subtask"], main_id, dispatched)
+            insert_row(cur, "subtask_dispatches", {
+                "parent_session_id": main_id, "turn_index": turn, "ordinal": 0,
+                "session_id": subtask["id"], "title": subtask["title"], "failure": None,
+                "failure_detail": None, "created_at": ms_iso(dispatched),
+            })
+            # subtask_report.rs deliver: the finished run wakes the idle
+            # main chat with one visible user row (hidden by the page):
+            # origin 'system' + 'galley-report', the subtask id as its
+            # note, the replay line as its summary, no client. The reply
+            # to it is an ordinary turn of that run.
+            reported = subtask["done"] + timedelta(seconds=1)
+            report_turn = chat.user(
+                report_text(subtask["id"], subtask["title"], subtask["answer"]), reported,
+                via="system", supervisor=REPORT_SUPERVISOR, note=subtask["id"], client=None,
+                summary=report_replay_line(subtask["id"], subtask["title"]),
+            )
+            rep = plan["report"]
+            chat.assistant(
+                report_turn, reported + timedelta(milliseconds=rep["telemetry"]["elapsedMs"]),
+                content=ga_content(rep["reply"], summary=rep["reply_summary"]),
+                final=rep["reply"], summary=rep["reply_summary"], telemetry=rep["telemetry"],
+            )
+
+    for start, at in segment_starts:
+        insert_row(cur, "main_chat_segments", {
+            "session_id": main_id, "start_turn_index": start, "created_at": core_iso(at),
+        })
+    cur.execute(
+        "UPDATE sessions SET turn_count = ?, summary = ?, last_activity_at = ?, updated_at = ?, "
+        "has_unread = 0 WHERE id = ?",
+        (chat.turn_count, chat.summary, core_iso(chat.last_at), core_iso(chat.last_at), main_id),
+    )
+    return {"main_id": main_id, "made": made, "subtask": subtask, "todos": todos_out,
+            "segments": len(segment_starts)}
 
 
 # ---------------------------------------------------------------------------
@@ -1445,33 +2126,64 @@ def main() -> int:
     try:
         if args.init_schema:
             init_schema(conn)
-        existing = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
-        if existing and not args.force:
+        # The main chat Core made on the first launch is expected: it is
+        # what the seed writes into. Anything else is somebody's workspace.
+        main_id, main_rows = main_chat_state(conn)
+        if main_rows:
             print(
-                f"error: sessions table already has {existing} rows; refusing to "
-                "mix seed content into an inhabited workspace (--force to override).",
+                f"error: the main chat {main_id} already has {main_rows} rows besides its "
+                "greeting; the seed cannot merge into a conversation (start from a fresh "
+                "database, see the playbook's mv-swap).",
+                file=sys.stderr,
+            )
+            return 1
+        existing = conn.execute("SELECT COUNT(*) FROM sessions WHERE main_chat = 0").fetchone()[0]
+        noted = conn.execute("SELECT COUNT(*) FROM todos").fetchone()[0]
+        if (existing or noted) and not args.force:
+            print(
+                f"error: {existing} sessions and {noted} to-dos are already there; refusing "
+                "to mix seed content into an inhabited workspace (--force to override).",
                 file=sys.stderr,
             )
             return 1
 
         content = content_zh() if args.lang == "zh" else content_en()
+        clock = Clock()
         cur = conn.cursor()
         insert_projects(cur, content["projects"])
         insert_sessions(cur, content["sessions"])
         insert_scheduled(cur, content["scheduled"])
+        seeded = seed_assistant(cur, args.lang, clock)
         conn.commit()
 
         n_sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
         n_messages = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
         n_sched = conn.execute("SELECT COUNT(*) FROM scheduled_tasks").fetchone()[0]
+        today = clock.today.isoformat()
+        n_today = conn.execute(
+            "SELECT COUNT(*) FROM todos WHERE done_at IS NULL AND cancelled_at IS NULL "
+            "AND due_date <= ?",
+            (today,),
+        ).fetchone()[0]
+        morning = clock.morning()
         print(
             f"seeded [{args.lang}] -> {args.db}\n"
             f"  projects: {len(content['projects'])}, sessions: {n_sessions}, "
             f"messages: {n_messages}, scheduled tasks: {n_sched}\n"
+            f"  main chat {seeded['main_id']} "
+            f"({'created by the seed' if seeded['made'] else 'the one Core made, backdated'}): "
+            f"{seeded['segments'] + 1} segments, subtask {seeded['subtask']['id']}, "
+            f"to-dos: {len(seeded['todos'])} (due today: {n_today})\n"
             "reminders: do NOT click the running row during the shoot "
             "(it derives back to idle); ask_user must be produced live; "
+            "do not type in the subtask (a message promotes it into the sidebar); "
             "FTS backfills itself on next launch."
         )
+        if morning.strftime("%H:%M") != "09:12":
+            print(
+                f"notice: it is not yet 09:32 here, so this morning's exchange is at "
+                f"{morning.strftime('%H:%M')} instead of 09:12.",
+            )
         return 0
     finally:
         conn.close()
