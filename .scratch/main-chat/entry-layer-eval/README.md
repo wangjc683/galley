@@ -27,7 +27,7 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --cases carry-quote,chat-full --v
 $PY .scratch/main-chat/entry-layer-eval/run.py --render-only        # 只从 results.json 重出 results.md
 ```
 
-其他参数：`--parallel`（默认 3）、`--model-id`（默认 `mm_1790734996114`，即 gpt-6.1-sol）、`--galley-db`、`--ga-lang`（默认 `en`）、`--keep-temp`（保留临时目录以便排查）。拿不到数据库时可用 `--mykey <GA 的 mykey.py> --mykey-entry <条目名>` 换成 GA 格式的配置（只读加载）。
+其他参数：`--parallel`（默认 3）、`--model-id`（默认 `mm_1792576875658`，即服务商 cpa 接的 gpt-6.1-sol，API key；票 64 之前的 `mm_1790734996114` 已从库里删掉，主对话自己的 gpt-6.1-sol 走 ChatGPT 登录、脚本取不到）、`--galley-db`、`--ga-lang`（默认 `en`）、`--keep-temp`（保留临时目录以便排查）。拿不到数据库时可用 `--mykey <GA 的 mykey.py> --mykey-entry <条目名>` 换成 GA 格式的配置（只读加载）。
 
 改了 Rust 提示词之后，`galley-prompt/` 要重新生成：在 `core/src/managed_prompt.rs` 的测试模块里临时加一个测试，用占位值调用 `compose_main_chat_runtime_prompt` 写出四个文件，跑完删掉这个测试（本目录的版本就是这样生成的，产品代码没有留下改动）。
 
@@ -333,6 +333,53 @@ Core 在「In Hand」的三组之后加了第四组「Follow-ups the user turned
 - **不退步**：该设的照样设，`hotpot-asked`、`hospital-tomorrow`、`school-monday`、`meeting-3pm`、`reno-mention`、`offer-friday` 等两遍都过；不该设的 7 条请求次数没变多（2.43 → 2.43，基线 2.64）。
 - **补跑一次**：`wake-reno` 第 2 遍排在 64 次运行的队尾附近，比叫醒消息写的到点时刻晚了约 8 分钟才开跑，它查了时间，回复末尾加了「这次提醒晚了约 8 分钟」（判定不许说「晚了」）。与入口层的改动无关（叫醒消息里的到点时刻取的是整组开跑的时间），单独补跑一遍过了，原来那遍在 `meta.superseded_runs` 的「票 64 补跑」一组。
 - **用量**：基线 14 次运行、37 次模型调用，待办整组 64 次、228 次（21:27 开跑，约 10 分钟），补跑 1 次、2 次，闲聊 15 次、29 次，共 94 次运行、296 次模型调用；`--dry-test` 不连模型。Rust 的全量测试在评测跑完之后才跑。
+
+## 主动的第一阶段（票 73）
+
+助手 PRD 裁决 10：没日子、在推进的事也记；记下时想一步，主动的是动作不是建议；每天 9:00 巡看在办的事。手册改了 `todos.md`（没日子的在办之事）、`reminders.md`（巡看的例外）、`wake.md`（「The morning review」，`<no-reply/>` 那条的例外），新加一部分 `unasked.md`；入口层待办那一段加「what they are in the middle of and will come back to」，后面加一段「记下时想一步、不提建议、交文件写 `[FILE:<绝对路径>]`」，手册列表里 `todos.md` 与 `unasked.md` 一起读；Core 加了巡看（`scheduler.rs` 的 `fire_review`，叫醒措辞是 `subtask_report.rs` 的 `review_paragraph`）。待办、定时、叫醒、闲聊四套重跑，待办加 9 条、叫醒加 1 条。
+
+- **跟着换的输入**：`schedule/galley-prompt/` 两份与 `wake/galley-prompt/main_chat.plain.txt` 照「怎么跑」的办法重新生成（临时测试，跑完删掉；与仓库里的旧文件只差入口层那几段，`wake/` 那份之前一直是票 63 的提示词，这次一并带上了票 64 的那一段）。`schedule/rust-samples.json` 多了三组 Rust 原文：一组「In Hand」（一条没日子的待办加巡看那条例行，启用与停用各一）、两条巡看的叫醒（按时、晚了 8 小时）；原有样本逐字没变，`--dry-test` 逐字对照它们。
+- **移植跟着改的**：`review_paragraph`、`OPENING_REVIEW`（叫醒里只有巡看时的开头；与别的混在一起照旧是 `OPENING_MIXED`）、`REVIEW_PROMPT`；`in_hand_block` 里巡看那条写「Galley's morning review, not set by you」；`in_hand_todo` 的「谁建的」照 `assistant_todo::creator`（`system` + 别的标签算 agent、标签带出来）。
+- **巡看那条的写法**（`todo/cases.json` 的 `_note`）：`tasks` 里 `review` 为真的一条，origin 是 `system` + `galley-review`、每天、`target = assistant`、三天前建的；`time` 不写时取运行那一分钟，好让叫醒按时（措辞里的规则因此是「every day at 运行那一分钟」，不是 09:00；巡看不论几点叫醒措辞都一样）；`fired` 表示这一次到点、等着叫醒。分段开始前就有的写进「In Hand」的例行一组（下次到点是这一次）。
+- **新用例**（每条两遍）：
+  - 待办套件「在推进」：`half-done`（查阿里云费用暴涨查到一半，「先吃饭，回来再说」→ 没日子的待办，可做一步或派 1 件，不提建议）、`supplier-quote`（「供应商的报价还没回，我在等」→ 它自己回头问的提醒，今晚到明天中午，不是没日子的待办）、`tired-today`（「今天好累，不想动」→ 什么都不设、不派）。
+  - 待办套件「两可」（只记录）：`shanghai-trip`（「下周三去上海出差」）、`report-half`（「季度报告我写了一半」）。
+  - 待办套件「早上巡看」：`review-nothing-to-do`（只有一条 11 月 20 号的装修待办、提醒挂好了 → `<no-reply/>`）、`review-advance`（有没日子的「查清阿里云费用暴涨的原因」→ 做一步或派 1～2 件；只派出去时不出声，开口时带出是过了一遍在办的事）、`review-overdue`（只有昨天到期没勾的「交季度报告」→ 不催，`<no-reply/>`）、`review-stop`（「早上那个巡看别弄了」→ `schedule disable` 那一条，不是 delete，说一句怎么恢复）。巡看几条放在待办套件，不放叫醒套件：叫醒套件的假 CLI 数据只有会话（子任务），待办套件有待办与定时任务，到点叫醒也照 Core 的措辞拼（叫醒套件用的是 `wording.md` 的草稿）。
+  - 叫醒套件：`file-handover`（子任务交回一个绝对路径的文件 → 交代里单独一行 `[FILE:那个路径]`）。路径写成 `{{HOME}}`，每次运行换成那次沙盒的假 HOME（`run_job`），结果里是 `$TMPDIR/…`，不写本机真实路径。
+- **判定加的**（`todo_facts`，写法见 `todo/cases.json` 的 `_note`）：`subtasks_max`（回复里最多几个 `<subtask>`，不写就一个都不许，同以前）、`no_offer`（回复与末尾的建议里不能有「要不要我」「需要的话我可以」一类，`OFFER_RE`；别的用例只在「注」里写出来）、`allow_web_stop`（停在浏览器工具只注出来：它在做一步只读的事，沙盒里看不到结果）、`review_advance`、`disable`；`wake_facts` 加 `file_ref`（要有、是绝对路径、单独一行）。`--dry-test` 对这些各造了过与不过的运行（`synth_run`）。
+- **记读了什么**：同票 59，「读手册」一栏写读了哪几部分、几次几轮、多少字节；票 73 起手册是九个部分。
+- **模型**：评测一直用的 gpt-6.1-sol 中转条目（`mm_1790734996114`）已从 Galley 库里删掉，主对话自己的 gpt-6.1-sol 走 ChatGPT 登录（`chatgpt_codex_oauth`），凭据在 Core 的凭据通道里，评测脚本取不到（`model_from_galley_db` 只认 `api_key` 与 `none`）。票 73 起默认用 JC 新加的 `mm_1792576875658`（服务商 cpa 接的 gpt-6.1-sol，API key，`DEFAULT_MODEL_ID`），与票 63、64 同一个模型。中间先用外置 GA 配置里的 gpt-6-astra 跑过一轮，结果没有进仓库（主对话不是这个模型）。
+- **对照**：原有用例的「上一次」就是 main 上票 63、64 在 gpt-6.1-sol 上的结果（提示词与 main 一致），不重跑；新用例另用 main 的提示词与八个部分的手册在 gpt-6.1-sol 上各跑一遍，存在 `meta.ticket73_control`（`--control 73`；叫醒套件的 `--control` 是票 73 加的）。
+
+### 结果（2026-10-21，gpt-6.1-sol，推理强度 high）
+
+模型同票 63、64（gpt-6.1-sol，推理强度 high、`chat_completions`、温度 1），条目换成 `mm_1792576875658`。「上一次」是 main 上票 63、64 的结果，用现在的判定重判。
+
+| 评测 | 上一次 → 这一次 | 请求次数（均） | 读手册字节（均） |
+| --- | --- | --- | --- |
+| 待办，原有 32 条 | 64/64 → 63/64（补跑 2 次） | 3.55 → 3.67 | 8776 → 11287 |
+| 待办，票 73 的 7 条判定用例（另 2 条两可只记录） | 新用例在 main 的提示词下 5/7 → 这一次 12/14 | 3.00 → 3.33 | 7066 → 11616 |
+| 定时 | 28/28 → 28/28（补跑 1 次） | 3.07 → 3.11 | 8732 → 9225 |
+| 叫醒，原有 9 条 | 16/18 → 18/18 | 3.06 → 3.11 | 6350 → 8276 |
+| 叫醒，file-handover | 在 main 的提示词下 0/1 → 这一次 2/2 | 2.00 → 3.00 | 6579 → 3136 |
+| 闲聊（15 条，判定 14 条） | 14/14 → 14/14（第二轮措辞，见下） | 1.93 → 2.20 | 2814 → 4394 |
+
+- **改了一轮措辞**：第一版（入口层「what they are in the middle of and will come back to」，`todos.md`「it will not be done this turn」）下，闲聊组两条带过来的对话记了待办：`carry-quote`（分段前「我先出门，晚点回来再说这个报价」，这一段「回来了」）记「核对供应商上涨 12% 的报价」，`carry-laptop`（「那我就要第二台吧，还有什么要注意的？」）记「核对 B 配置后购买笔记本」，用户都在接着办这件事（闲聊 14/14 → 12/14；先跑的 gpt-6-astra 上也是这两条）。改成入口层「what they are in the middle of and set aside to come back to」，`todos.md`「sets aside to come back to … and they stop here for now」，加一句「Not while they carry on with it here: back to it (「回来了」), or asking about what they just chose, it needs no to-do.」，入口层 3132 → 3140 字节。只重跑这两条和待办套件「在推进」「两可」的五条：两条闲聊都不记了，`half-done` 仍记成没日子的待办。被替换的第一轮在 `meta.superseded_runs` 的「票 73 第二轮」一组（待办那五条第一轮判定 6/6 过）。
+- **新用例逐条**（这一次）：
+  - `half-done`：两遍都 `todo add "查清阿里云费用暴涨的原因"`，不写截止、不挂提醒，备注里是断点、线索与下一步，没有派活、没有建议；第 1 遍「好，先吃饭。我把账单排查记到待办了，回来接着查实例背后的负责人和 OSS 流量来源，不设提醒打扰你。」过；第 2 遍「好，先吃饭。回来接着查 deploy-bot 背后是谁，以及 OSS 流量对应哪个业务。」记了却只在 `<summary>` 里说，判不过（「Never note one without saying so」）。main 的提示词下那一遍什么都没记（「好，先吃饭，回来接着查。」）。
+  - `supplier-quote`：两遍都是它自己的提醒，今晚 7 点问报价到了没（`schedule create --target=assistant`），都顺手起草了一段催报价的话、写明没发；第 1 遍「今晚 7 点」只写进了 `<summary>`，正文没说出时间，判不过；第 2 遍「他们说今天下班前发，我设好了今晚 7 点问你一下华立、东辰的报价到没到，免得一直干等。」过。main 的提示词下那一遍同样设了今晚 7 点的提醒，没有起草。
+  - `tired-today`：两遍什么都没动，一两句陪着（「那就先不动，怎么舒服怎么待着。……我陪你待会儿，不催你。」）。
+  - `review-nothing-to-do`、`review-overdue`：四遍都先读 `todo list`、`schedule list`、`sessions list`，回复只有 `<no-reply/>`，逾期的季度报告没催。
+  - `review-advance`：第 1 遍读完清单和历史后要用浏览器去看账单（停在浏览器工具，判定只注出来）；第 2 遍派了 1 件只读调查的子任务（查 OSS 外网下行的业务归属，交回证据、不改配置、不开收费日志、不写用户的会话），回复只有子任务和 `<no-reply/>`。
+  - `review-stop`：两遍都 `schedule disable` 巡看那一条（原因 `user: stop morning review`），没用 delete；「关掉了，以后早上不再巡看。想恢复时跟我说一声就行。」「已经关掉每天早上 9 点的巡看，不会再自动跑了。以后想恢复，跟我说一声就行。」main 的提示词下也停对了，但没说怎么恢复。
+  - `file-handover`：两遍都单独一行 `[FILE:<绝对路径>]`，话里说了是什么（「你可以先打开预览，晚点把 HTML 文件发到群里。」）。main 的提示词下写成了 Markdown 链接（`[打开团建方案网页](…)`）。
+- **两可的回复原文**（这一次，第二轮措辞）：
+  - 「下周三去上海出差」：两遍都记成待办，截止 10 月 28 日（下周三），提醒 27 日晚 8 点，备注放了核对清单，没去查车次。「记下了：下周三 **10月28日去上海出差**。我会在 **10月27日晚上8点** 提醒你检查车票、住宿和随身物品。」「记下了：**10 月 28 日（下周三）去上海出差**，10 月 27 日晚 8 点提醒你准备。也附上了出发前检查清单：车票或机票、酒店、身份证、电脑和充电器、会议资料。」main 的提示词下同样记了。
+  - 「季度报告我写了一半」：第 1 遍什么都没记，只问「后半段有思路了吗，还是卡在哪一部分？」；第 2 遍记成没日子的「写完季度报告」，回复「剩下主要是哪部分，是还没写到，还是卡住了？」（记了却没在正文里说，只在 `<summary>`）。第一轮两遍都记了、都说了「记下了」。main 的提示词下没记，问写到哪了。
+- **原有用例**：待办 63/64，剩下的一遍是 `whats-left` 第 2 遍「买营养土已经不在未完成清单里了」被判成把勾掉的当成没办（判定的 `forbid_unless` 认的词里没有「不在」，回答本身是对的）；`wake-todo` 两遍排在后面、比叫醒消息写的到点时刻晚了约 5 分钟才开跑，照实说了晚，补跑两遍过（同票 64 的 `wake-reno`）。定时 `no-need` 第 1 遍话只写进 `<summary>`（票 36、59、63 都见过），补跑一遍过。叫醒 18/18：`done-evidence` 两遍都不再超长（上一次一遍超长、一遍用满工具调用），三个原有用例（`done-evidence`、`two-at-once`、`third-round`）都用 `[FILE:]` 交出了表格；长度判定不算 `[FILE:]` 那一行（`shown_len`，界面上它是卡片）。闲聊 12 条闲聊、问答、干活都没设任何东西，没有派活，回复与建议里没有「要不要我」一类。
+- **读手册**：要记一件事时几乎都一起读 `todos.md`、`unasked.md`、`todos-change.md`，比上一次多 2.5 KB 上下；巡看读 `wake.md`、`subtasks.md`、`unasked.md`、`todos-change.md`；停掉巡看读 `reminders.md`、`times.md`、`wake.md`。请求次数略多（待办 3.55 → 3.67，闲聊 1.93 → 2.20）。
+- **先跑过一轮 gpt-6-astra**（外置 GA 配置里的条目，结果没进仓库）：结论与这一次大体一致；不一致的是 `supplier-quote` 在 Astra 上一遍记成了带截止的待办（Sol 两遍都是它自己的提醒），`half-done` 在 Astra 上两遍都过，叫醒 `done-evidence` 在 Astra 上两组都超长。
+- **用量**：gpt-6.1-sol 约 560 次模型调用（含补跑、第二轮与新用例的对照），`--dry-test` 不连模型。
 
 ## 安全措施
 

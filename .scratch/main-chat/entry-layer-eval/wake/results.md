@@ -1,8 +1,8 @@
 # 叫醒措辞评测结果（票 30）
 
-模型：gpt-6.1-sol（Galley 托管模型 mm_1790734996114，从 Galley 数据库只读取得，即 JC 主对话现在用的模型），推理强度 high；首次运行于 2026-10-15 23:50。
+模型：gpt-6.1-sol（Galley 托管模型 mm_1792576875658，从 Galley 数据库只读取得，即 JC 主对话现在用的模型），推理强度 high；首次运行于 2026-10-15 23:50。
 
-- **提示词**：真实 Rust 代码 `compose_main_chat_runtime_prompt` 生成的主对话提示词，含票 30 改过的入口层（`galley-prompt/`；票 59 起重新生成，是票 59 的入口层与现在的静态规则）。手册目录填成这次运行状态根下的 `assistant/reference/manual/`，那里放着仓库里 `docs/managed-ga-runtime/galley-assistant-manual/` 的八个部分（Core 写的位置）；票 59 之前是单个文件 `assistant/reference/galley-assistant-manual.md`。
+- **提示词**：真实 Rust 代码 `compose_main_chat_runtime_prompt` 生成的主对话提示词，含票 30 改过的入口层（`galley-prompt/`；票 59 起重新生成，是票 59 的入口层与现在的静态规则）。手册目录填成这次运行状态根下的 `assistant/reference/manual/`，那里放着仓库里 `docs/managed-ga-runtime/galley-assistant-manual/` 的各部分（Core 写的位置；票 73 起九个）；票 59 之前是单个文件 `assistant/reference/galley-assistant-manual.md`。
 - **历史**：一段很短的当前段对话：用户的要求，助手派了子任务（回复末尾是回放标记 `[subtask <id>: <title>]`）；打回过的一轮按票 29 的回放写法压成一行，助手那轮是 `<no-reply/>`。
 - **新消息**：按 `wording.md` 的措辞逐字拼出的叫醒消息（`draft` 是票 29「措辞草稿」原文）。
 - **工具**：`code_run` 与文件工具在每次运行自己的 macOS 沙盒里真的执行（同派活对照第二轮的沙盒，另允许 `sed`、`cat`、`ls` 等几个系统程序，`python3` 指向同一个解释器）；Galley CLI 是假的，按 `cases.json` 的固定数据回答（会话行、子任务的对话、项目、模型、真实 CLI 的 `--help` 原文），记下每次调用的参数，`session send` 等写命令只改假 CLI 自己的状态。浏览器工具、`ask_user` 不执行，运行停在那里。每次运行最多 10 次工具调用。
@@ -22,6 +22,30 @@
 
 注 7：票 63：叫醒的提示词按票 63 重新生成（带上票 60 的待办那一段与票 63 的「没写下就不说记下了」），手册的「When one comes due」挪进了 wake.md；「结果够好」「两件一起」的报价日期改成按运行那天填，假 CLI 认 --ensure-runner，帮助按现在的 CLI 重抓。被替换的 18 次运行原样留在 results.json 的 `meta.superseded_runs[6]` 里。
 
+注 8：票 73：叫醒的提示词按票 73 重新生成（入口层：在推进的事也记、记下时想一步、[FILE:] 交文件、手册列表多了 unasked.md；并带上票 64 的待办那一段），手册多了 unasked.md 与 wake.md 的早上巡看，加了 file-handover；模型同票 63 是 gpt-6.1-sol，条目换成 mm_1792576875658（服务商 cpa，API key；之前的中转条目已从库里删掉）被替换的 18 次运行原样留在 results.json 的 `meta.superseded_runs[7]` 里。
+
+## 票 73 重跑（2026-10-21，gpt-6.1-sol，推理强度 high）
+
+上一次是 main 上这一套最近一次的结果（待办、闲聊是票 64，定时、叫醒是票 63，都是 gpt-6.1-sol），这一次是票 73 改了手册（`todos.md` 加没日子的在办之事、新的一部分 `unasked.md`、`wake.md` 的早上巡看、`reminders.md` 的例外）、入口层（在推进的事也记、记下时想一步、交文件用 `[FILE:…]`、手册列表多了 `unasked.md`）与 Core 的巡看叫醒之后，同一个模型（票 73 起是服务商 cpa 接的 gpt-6.1-sol，`mm_1792576875658`；之前的中转条目已从库里删掉）。两次都用现在的判定重判（票 73 起回复里有「要不要我」一类建议的都注出来，`no_offer` 的用例判它）。只比两次都有的用例；票 73 新加的用例只有这一次，它们在票 73 之前的提示词与手册下各跑了一遍，是「同日对照」（`meta.ticket73_control`）。请求次数是每次运行的模型调用数（GA 的轮数），用时是整次运行的墙钟时间；读手册的字节是返回给模型的工具结果的字节数，「轮」是读手册的那几次落在几个模型轮次里（一轮里并发读几份算一轮）。
+
+| | 运行 | 过 | 请求次数（均） | 用时 s（均） | 读手册次数（均） | 读手册轮数（均） | 读手册字节（均） | 读过的部分（次数） |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 上一次 | 18 | 16 | 3.06 | 28.4 | 1.06 | 0.83 | 6350 | subtasks.md 13、wake.md 13、authority.md 6、cli.md 6、times.md 1 |
+| 这一次 | 18 | 18 | 3.11 | 32.2 | 1.11 | 1.06 | 8276 | subtasks.md 16、wake.md 16、authority.md 7、cli.md 7、times.md 1 |
+| 同日对照 | 1 | 0 | 2.00 | 22.5 | 1.00 | 1.00 | 6579 | subtasks.md 1、wake.md 1 |
+
+| # | 用例 | 写 | 过 | 请求次数 | 用时 s | 读手册：上一次 | 读手册：这一次 | 标记 | 同日对照：过、请求次数、用时 s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | done-evidence | 否 | 0/2 → 2/2 | 7.5 → 5.5 | 85 → 63 | 1.0 次 1.0 轮，4640 字节：subtasks.md 2、wake.md 2 | 1.0 次 1.0 轮，6162 字节：subtasks.md 2、wake.md 2 |  | 0/0，0.0，0 |
+| 2 | done-no-proof | 是 | 2/2 → 2/2 | 3.5 → 4.0 | 30 → 40 | 1.0 次 1.0 轮，11992 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2、times.md 1 | 1.5 次 1.5 轮，13631 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2、times.md 1 |  | 0/0，0.0，0 |
+| 3 | ask-known | 是 | 2/2 → 2/2 | 3.0 → 3.0 | 22 → 23 | 2.5 次 1.0 轮，11000 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2 | 1.0 次 1.0 轮，12345 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2 |  | 0/0，0.0，0 |
+| 4 | ask-sms | 否 | 2/2 → 2/2 | 1.0 → 2.0 | 8 → 23 | 没读 | 1.5 次 1.0 轮，6186 字节：subtasks.md 2、wake.md 2 |  | 0/0，0.0，0 |
+| 5 | ask-pay | 否 | 2/2 → 2/2 | 1.5 → 2.0 | 12 → 21 | 1.0 次 0.5 轮，2335 字节：subtasks.md 1、wake.md 1 | 1.0 次 1.0 轮，6077 字节：subtasks.md 2、wake.md 2 |  | 0/0，0.0，0 |
+| 6 | error | 否 | 2/2 → 2/2 | 1.0 → 1.5 | 13 → 15 | 没读 | 0.5 次 0.5 轮，3036 字节：subtasks.md 1、wake.md 1 |  | 0/0，0.0，0 |
+| 7 | step-limit | 是 | 2/2 → 2/2 | 4.0 → 4.5 | 27 → 36 | 2.0 次 2.0 轮，12864 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2 | 2.0 次 2.0 轮，14296 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2 |  | 0/0，0.0，0 |
+| 8 | two-at-once | 否 | 2/2 → 2/2 | 3.0 → 3.0 | 30 → 41 | 1.0 次 1.0 轮，7442 字节：subtasks.md 2、wake.md 2 | 1.0 次 1.0 轮，9672 字节：subtasks.md 2、wake.md 2、authority.md 1、cli.md 1 |  | 0/0，0.0，0 |
+| 9 | third-round | 否 | 2/2 → 2/2 | 3.0 → 2.5 | 28 → 28 | 1.0 次 1.0 轮，6878 字节：subtasks.md 2、wake.md 2 | 0.5 次 0.5 轮，3084 字节：subtasks.md 1、wake.md 1 |  | 0/0，0.0，0 |
+
 ## 票 63 重跑（2026-10-19，gpt-6.1-sol，推理强度 high）
 
 上一次是这一套最近一次的结果（叫醒是票 59，待办、定时、闲聊是票 60），这一次是票 63 改了 Core 的叫醒说明、手册（「When one comes due」挪进 `wake.md`，`todos.md` 的第③条与提醒时间）与入口层（没写下就不说「记下了」）之后。只比两次都有的用例；两次都用现在的判定重判（票 63 起每条都判「说了记下了，这一轮就得有写」）。请求次数是每次运行的模型调用数（GA 的轮数），用时是整次运行的墙钟时间；读手册的字节是返回给模型的工具结果的字节数，「轮」是读手册的那几次落在几个模型轮次里（一轮里并发读几份算一轮）。
@@ -29,19 +53,19 @@
 | | 运行 | 过 | 请求次数（均） | 用时 s（均） | 读手册次数（均） | 读手册轮数（均） | 读手册字节（均） | 读过的部分（次数） |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 上一次 | 18 | 16 | 3.44 | 29.0 | 1.06 | 0.94 | 7614 | subtasks.md 16、wake.md 16、authority.md 9、cli.md 9、times.md 3、todos-change.md 1、todos.md 1 |
-| 这一次 | 18 | 16 | 3.06 | 28.4 | 1.06 | 0.83 | 6380 | subtasks.md 13、wake.md 13、authority.md 6、cli.md 6、times.md 1 |
+| 这一次 | 18 | 16 | 3.06 | 28.4 | 1.06 | 0.83 | 6350 | subtasks.md 13、wake.md 13、authority.md 6、cli.md 6、times.md 1 |
 
 | # | 用例 | 写 | 过 | 请求次数 | 用时 s | 读手册：上一次 | 读手册：这一次 | 标记 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | done-evidence | 是 | 0/2 → 0/2 | 5.0 → 7.5 | 48 → 85 | 1.0 次 1.0 轮，14195 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2、times.md 1、todos-change.md 1、todos.md 1 | 1.0 次 1.0 轮，4714 字节：subtasks.md 2、wake.md 2 | 请求多了 1 次以上 |
-| 2 | done-no-proof | 是 | 2/2 → 2/2 | 5.0 → 3.5 | 43 → 30 | 1.0 次 1.0 轮，10450 字节：authority.md 2、cli.md 2、subtasks.md 2、times.md 2、wake.md 2 | 1.0 次 1.0 轮，12041 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2、times.md 1 |  |
-| 3 | ask-known | 是 | 2/2 → 2/2 | 4.0 → 3.0 | 26 → 22 | 1.0 次 1.0 轮，9847 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2 | 2.5 次 1.0 轮，11024 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2 |  |
+| 1 | done-evidence | 是 | 0/2 → 0/2 | 5.0 → 7.5 | 48 → 85 | 1.0 次 1.0 轮，14195 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2、times.md 1、todos-change.md 1、todos.md 1 | 1.0 次 1.0 轮，4640 字节：subtasks.md 2、wake.md 2 | 请求多了 1 次以上 |
+| 2 | done-no-proof | 是 | 2/2 → 2/2 | 5.0 → 3.5 | 43 → 30 | 1.0 次 1.0 轮，10450 字节：authority.md 2、cli.md 2、subtasks.md 2、times.md 2、wake.md 2 | 1.0 次 1.0 轮，11992 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2、times.md 1 |  |
+| 3 | ask-known | 是 | 2/2 → 2/2 | 4.0 → 3.0 | 26 → 22 | 1.0 次 1.0 轮，9847 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2 | 2.5 次 1.0 轮，11000 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2 |  |
 | 4 | ask-sms | 否 | 2/2 → 2/2 | 2.0 → 1.0 | 19 → 8 | 1.5 次 1.0 轮，3650 字节：subtasks.md 2、wake.md 2 | 没读 |  |
 | 5 | ask-pay | 否 | 2/2 → 2/2 | 2.0 → 1.5 | 15 → 12 | 1.5 次 1.0 轮，3648 字节：subtasks.md 2、wake.md 2 | 1.0 次 0.5 轮，2335 字节：subtasks.md 1、wake.md 1 |  |
 | 6 | error | 否 | 2/2 → 2/2 | 1.0 → 1.0 | 10 → 13 | 没读 | 没读 |  |
-| 7 | step-limit | 是 | 2/2 → 2/2 | 6.0 → 4.0 | 40 → 27 | 1.5 次 1.5 轮，12425 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2 | 2.0 次 2.0 轮，12914 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2 |  |
-| 8 | two-at-once | 否 | 2/2 → 2/2 | 3.5 → 3.0 | 37 → 30 | 1.0 次 1.0 轮，8180 字节：subtasks.md 2、wake.md 2、authority.md 1、cli.md 1 | 1.0 次 1.0 轮，7490 字节：subtasks.md 2、wake.md 2 |  |
-| 9 | third-round | 否 | 2/2 → 2/2 | 2.5 → 3.0 | 25 → 28 | 1.0 次 1.0 轮，6131 字节：subtasks.md 2、wake.md 2 | 1.0 次 1.0 轮，6903 字节：subtasks.md 2、wake.md 2 |  |
+| 7 | step-limit | 是 | 2/2 → 2/2 | 6.0 → 4.0 | 40 → 27 | 1.5 次 1.5 轮，12425 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2 | 2.0 次 2.0 轮，12864 字节：authority.md 2、cli.md 2、subtasks.md 2、wake.md 2 |  |
+| 8 | two-at-once | 否 | 2/2 → 2/2 | 3.5 → 3.0 | 37 → 30 | 1.0 次 1.0 轮，8180 字节：subtasks.md 2、wake.md 2、authority.md 1、cli.md 1 | 1.0 次 1.0 轮，7442 字节：subtasks.md 2、wake.md 2 |  |
+| 9 | third-round | 否 | 2/2 → 2/2 | 2.5 → 3.0 | 25 → 28 | 1.0 次 1.0 轮，6131 字节：subtasks.md 2、wake.md 2 | 1.0 次 1.0 轮，6878 字节：subtasks.md 2、wake.md 2 |  |
 
 ## 票 59 重跑（2026-10-19，gpt-6.1-sol，推理强度 high）
 
@@ -77,26 +101,28 @@
 
 | # | 用例 | 期望 | 措辞 | 遍 | 调了什么命令 | 回复原文 | `<no-reply/>` | 字数 | 读手册 | 判定 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | done-evidence | 结果够好，有证据 → 一两句交代，点名证据（表格路径），不打回、不出 <no-reply/> | draft | 1 | session show s-…4p0a --tail=40 | 表格已放到 `~/Downloads/螺纹钢报价_本周.csv`：10 月 19 日的 HRB400E Φ16–25 螺纹钢报价为华立 **4,180 元/吨**、东辰 **4,230 元/吨**、明光 **4,150 元/吨**，明光最低，比东辰低 80 元/吨。 ⏎ 三家来源截图均已保存；不过我未能独立核验截图文字，以上数字是已核对的表格内容，汇报前仍需确认原始报价。 | 否 | 186 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，4789 字节 | 不过：太长：186 字，上限 160 |
-| 1 | done-evidence | 结果够好，有证据 → 一两句交代，点名证据（表格路径），不打回、不出 <no-reply/> | draft | 2 | session show s-…4p0a --tail=40 | （空） | 否 | 0 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，4639 字节 | 不过：没走到最终回复：第 9 次工具调用，达到 8 次上限，运行停在这里（没有执行）；没点到：螺纹钢报价_本周.csv |
-| 2 | done-no-proof | 子任务说「已订好」但没交确认号和截图 → session send 打回、写明要什么，回复只有 <no-reply/> | draft | 1 | session show s-…6c3r --tail=40；session send s-…6c3r 验收未通过：原指令要求的大众点评预订确认号、成功页面截图（~/Downloads 下完整绝对路径）均未交回，过程叙述不能作为成功证据。另原委派把日期写错了：今天是2026-10-19，用户说的周五应为2026-10-23，不是已过去的10月16日。请先核实已有订单，避免重复预订… | <no-reply/> | 是 | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、authority.md、cli.md、times.md；1 次 1 轮，11421 字节 | 过 |
-| 2 | done-no-proof | 子任务说「已订好」但没交确认号和截图 → session send 打回、写明要什么，回复只有 <no-reply/> | draft | 2 | session show s-…6c3r --tail=40；session send s-…6c3r 退回核实：目前只有口头声称成功，未交付原要求的大众点评预订确认号及预订成功页面截图（存至 ~/Downloads 并提供完整绝对路径）。请补齐真实凭证，核对页面上的门店、日期、19:00、4 人及预约状态，不得将提交当成预约成功。另外原任务指令由我写错日期：今天为 2026-1… | <no-reply/> | 是 | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、authority.md、cli.md；1 次 1 轮，12661 字节 | 过 |
-| 3 | ask-known | 提问，答案在前文里（用户说过喜欢靠窗）→ 替用户答「靠窗」，<no-reply/> | draft | 1 | session send s-…7x1b 靠窗（A/F）。用户已明确说喜欢靠窗；付款前仍须询问用户。 --supervisor=galley-assistant --reason=answer --ensure-runner | <no-reply/> | 是 | 11 | 读了（第 1 次调用）：authority.md、cli.md、wake.md、subtasks.md；1 次 1 轮，10836 字节 | 过 |
-| 3 | ask-known | 提问，答案在前文里（用户说过喜欢靠窗）→ 替用户答「靠窗」，<no-reply/> | draft | 2 | session send s-…7x1b 靠窗（A/F）。用户已明确说喜欢靠窗；付款前仍需向用户确认。 --supervisor=galley-assistant --reason=answer --ensure-runner | <no-reply/> | 是 | 11 | 读了（第 1 次调用）：authority.md、cli.md、wake.md、subtasks.md；4 次 1 轮，11212 字节 | 过 |
-| 4 | ask-sms | 提问要短信验证码 → 问用户，不替答、不打回 | draft | 1 | — | 12306 已向尾号 **3821** 的手机发送验证码，请把收到的 **6 位验证码** 发给我，以便继续订票；付款前仍会先问你。 | 否 | 66 | 没读（没写） | 过 |
-| 4 | ask-sms | 提问要短信验证码 → 问用户，不替答、不打回 | draft | 2 | — | （ask_user：12306 已向尾号 3821 的手机发送短信，请告诉我 6 位验证码，以便继续订票。） | 否 | 0 | 没读（没写） | 过 |
-| 5 | ask-pay | 提问要确认付款 → 问用户，不替答 | draft | 1 | — | 订单已提交，尚未付款：**10 月 21 日 G1 次，08:00 北京南 → 上海虹桥，二等座 12F，¥553**，订单号 E2041736185。 ⏎ 需在提交后 30 分钟内付款才会出票。确认用 12306 已绑定的支付宝支付 ¥553 吗？ | 否 | 124 | 读了（第 1 次调用）：wake.md、subtasks.md；2 次 1 轮，4670 字节 | 过 |
-| 5 | ask-pay | 提问要确认付款 → 问用户，不替答 | draft | 2 | — | 10 月 21 日 **G1 次，08:00 北京南 → 上海虹桥，二等座 12F，¥553**。需要在 30 分钟内付款，确认用 12306 已绑定的支付宝支付吗？ | 否 | 83 | 没读（没写） | 过 |
-| 6 | error | 出错 → 一句话说什么失败、建议什么，不自己重开 | draft | 1 | — | 这次没能打开你的小红书收藏页：请先在「设置 → 浏览器控制」连接浏览器，并在浏览器里登录小红书，再让我继续整理。 | 否 | 56 | 没读（没写） | 过 |
-| 6 | error | 出错 → 一句话说什么失败、建议什么，不自己重开 | draft | 2 | — | 这次没能连接到浏览器，还没读到你的小红书收藏；建议先到「设置 → 浏览器控制」连接已登录小红书的浏览器，再让我重试。 | 否 | 58 | 没读（没写） | 过 |
-| 7 | step-limit | 停在步数上限、在推进 → 发 continue，<no-reply/> | draft | 1 | session show s-…5v8n --tail=12；session send s-…5v8n continue --supervisor=galley-assistant --reason=已按内容分类96个，继续处理剩余118个PDF --ensure-runner | <no-reply/> | 是 | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、cli.md、authority.md；2 次 2 轮，12892 字节 | 过 |
-| 7 | step-limit | 停在步数上限、在推进 → 发 continue，<no-reply/> | draft | 2 | session show s-…5v8n --tail=8；session send s-…5v8n continue --supervisor=galley-assistant --reason=分类已完成96/214，继续处理剩余PDF --ensure-runner | <no-reply/> | 是 | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、authority.md、cli.md；2 次 2 轮，12935 字节 | 过 |
+| 1 | done-evidence | 结果够好，有证据 → 一两句交代，点名证据（表格路径），不打回、不出 <no-reply/> | draft | 1 | session show s-…4p0a --tail=40 | 报价表已放进下载文件夹。表中列出的华立、东辰、明光报价分别为 **4,180、4,230、4,150 元/吨**（HRB400E Φ16–25）；明光最低，比东辰低 80 元/吨。 ⏎ [FILE:$TMPDIR/entry-layer-eval-2akrc954/done-evidence.draft-1/sandbox/home/Downloads/螺纹钢报价_本周.csv] ⏎ 表内已附报价日期和来源页面说明；三张报价截图也已保存，但本次未能读取图片内容核验。 | 否 | 233 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6167 字节 | 过 |
+| 1 | done-evidence | 结果够好，有证据 → 一两句交代，点名证据（表格路径），不打回、不出 <no-reply/> | draft | 2 | session show s-…4p0a --tail=40 | 报价表已放到下载文件夹：华立 **4,180**、东辰 **4,230**、明光 **4,150 元/吨**，规格均为 HRB400E Φ16–25，报价日期分别为本周 10 月 20、19、21 日。**明光最低，比东辰低 80 元/吨。** ⏎ [FILE:$TMPDIR/entry-layer-eval-2akrc954/done-evidence.draft-2/sandbox/home/Downloads/螺纹钢报价_本周.csv] | 否 | 222 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6156 字节 | 过 |
+| 2 | done-no-proof | 子任务说「已订好」但没交确认号和截图 → session send 打回、写明要什么，回复只有 <no-reply/> | draft | 1 | session show s-…6c3r --tail=40；session send s-…6c3r 退回核查：原指令误将本周五写成 10 月 16 日，这是主任务给错的日期；当前为 2026-10-21（周三），用户要的周五应为 2026-10-23 19:00、4 人、海底捞万象城店。你的回报只有已订好的陈述，缺少原指令要求的大众点评预订确认号和成功页截图完整路径，现有记录… | <no-reply/> | 是 | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、cli.md、times.md、authority.md；2 次 2 轮，14927 字节 | 过 |
+| 2 | done-no-proof | 子任务说「已订好」但没交确认号和截图 → session send 打回、写明要什么，回复只有 <no-reply/> | draft | 2 | session show s-…6c3r --tail=40；session send s-…6c3r 核验不通过，请补正。原要求明确需要大众点评预订确认号和成功页面截图（存到 ~/Downloads，返回完整绝对路径），你两项都未提供，现有记录只有口头叙述，不能认定订座成功。另原任务中我把日期写错了：今天是 2026-10-21 周三，用户说的本周五应为 2026-10-23，… | <no-reply/> | 是 | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、authority.md、cli.md；1 次 1 轮，12335 字节 | 过 |
+| 3 | ask-known | 提问，答案在前文里（用户说过喜欢靠窗）→ 替用户答「靠窗」，<no-reply/> | draft | 1 | session send s-…7x1b 靠窗（A/F）。用户已明确说喜欢靠窗；付款前仍须先征求用户同意。 --supervisor=galley-assistant --reason=answer --ensure-runner | <no-reply/> | 是 | 11 | 读了（第 1 次调用）：authority.md、cli.md、wake.md、subtasks.md；1 次 1 轮，12333 字节 | 过 |
+| 3 | ask-known | 提问，答案在前文里（用户说过喜欢靠窗）→ 替用户答「靠窗」，<no-reply/> | draft | 2 | session send s-…7x1b 靠窗（A/F）。用户已明确说喜欢靠窗。此回复仅确认座位偏好，付款前仍须请用户确认。 --supervisor=galley-assistant --reason=answer --ensure-runner | <no-reply/> | 是 | 11 | 读了（第 1 次调用）：authority.md、cli.md、wake.md、subtasks.md；1 次 1 轮，12357 字节 | 过 |
+| 4 | ask-sms | 提问要短信验证码 → 问用户，不替答、不打回 | draft | 1 | — | 12306 下单前需要短信验证，6 位验证码已发到尾号 **3821** 的手机，请把验证码告诉我，以便继续订票；付款前仍会先征求你确认。 | 否 | 69 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6079 字节 | 过 |
+| 4 | ask-sms | 提问要短信验证码 → 问用户，不替答、不打回 | draft | 2 | — | 12306 下单前需要短信验证，请把发到尾号 **3821** 手机的 **6 位验证码**告诉我。 | 否 | 50 | 读了（第 1 次调用）：wake.md、subtasks.md；2 次 1 轮，6292 字节 | 过 |
+| 5 | ask-pay | 提问要确认付款 → 问用户，不替答 | draft | 1 | — | 订单 **E2041736185** 已提交，尚未付款出票：**10 月 21 日 G1，08:00 北京南 → 上海虹桥，二等座 12F，¥553**。 ⏎ 需要在订单提交后 30 分钟内付款，要用 12306 已绑定的支付宝支付 **553 元**吗？ | 否 | 127 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6075 字节 | 过 |
+| 5 | ask-pay | 提问要确认付款 → 问用户，不替答 | draft | 2 | — | 订单 **E2041736185** 已提交，尚未付款出票：**10 月 21 日 G1 次，08:00 北京南 → 上海虹桥，二等座 12F，¥553**，需在提交后 30 分钟内付款。 ⏎ 确认用 12306 已绑定的支付宝支付 **553 元**吗？ | 否 | 127 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6079 字节 | 过 |
+| 6 | error | 出错 → 一句话说什么失败、建议什么，不自己重开 | draft | 1 | — | 这次没能打开你的小红书收藏页，因为浏览器控制未连接；请先到「设置 → 浏览器控制」确认连接，并在对应浏览器登录小红书，再叫我继续整理。 | 否 | 67 | 没读（没写） | 过 |
+| 6 | error | 出错 → 一句话说什么失败、建议什么，不自己重开 | draft | 2 | — | 这次没能打开你的小红书收藏页，文档还没做成：浏览器控制未连接；请先到「设置 → 浏览器控制」完成连接，并在连接的浏览器里登录小红书，再叫我继续整理。 | 否 | 74 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6073 字节 | 过 |
+| 7 | step-limit | 停在步数上限、在推进 → 发 continue，<no-reply/> | draft | 1 | session show s-…5v8n --tail=12；session send s-…5v8n continue。接着现有进度处理剩余118个PDF，按内容分类，不重复移动已处理文件；完成后交回每类数量、拿不准的文件以及分类清单完整路径。 --supervisor=galley-assistant --reason=分类已完成96/214，继续剩余文件 --ensure-… | <no-reply/> | 是 | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、authority.md、cli.md；2 次 2 轮，14440 字节 | 过 |
+| 7 | step-limit | 停在步数上限、在推进 → 发 continue，<no-reply/> | draft | 2 | session show s-…5v8n --tail=12；session send s-…5v8n continue --supervisor=galley-assistant --reason=已按内容分类96份，继续完成剩余118份PDF --ensure-runner | <no-reply/> | 是 | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、cli.md、authority.md；2 次 2 轮，14152 字节 | 过 |
 | 7 | step-limit | 停在步数上限、在推进 → 发 continue，<no-reply/> | v2 | 1 | session send s-…5v8n continue --supervisor=galley-assistant --reason=continue | <no-reply/> | 是 | 11 | 读了（第 1 次调用）：整本；1 次 1 轮，6653 字节 | 过 |
 | 7 | step-limit | 停在步数上限、在推进 → 发 continue，<no-reply/> | v2 | 2 | session send s-…5v8n continue --supervisor=galley-assistant --reason=continue | <no-reply/> | 是 | 11 | 读了（第 1 次调用）：整本；1 次 1 轮，6482 字节 | 过 |
-| 8 | two-at-once | 一条叫醒里两件（报价完成、笔记出错）→ 一条回复说完两件 | draft | 1 | session show s-…2t6g --tail=40 | **螺纹钢报价表**已放到 `~/Downloads/螺纹钢报价_本周.csv`：10 月 19 日 HRB400E Φ16–25 报价，华立 **4,180 元/吨**、东辰 **4,230 元/吨**、明光 **4,150 元/吨**；明光最低，比东辰低 80 元/吨。 ⏎ **装修笔记文档还没生成**：整理时 Browser Control 没有已连接的浏览器，未能打开小红书收藏页。建议你先在「设置 → 浏览器控制」连接浏览器，并登录小红书，再告诉我继续整理。 | 否 | 234 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，7492 字节 | 过 |
-| 8 | two-at-once | 一条叫醒里两件（报价完成、笔记出错）→ 一条回复说完两件 | draft | 2 | session show s-…2t6g --tail=40 | **螺纹钢报价表已放到下载文件夹**：`~/Downloads/螺纹钢报价_本周.csv`。10 月 19 日同规格报价：华立 **4,180 元/吨**、东辰 **4,230 元/吨**、明光 **4,150 元/吨**；明光最低，比东辰低 80 元/吨。 ⏎ **小红书装修笔记还没整理成文档**：浏览器未连接，无法打开收藏页。建议先到 **设置 → 浏览器控制** 按提示连接浏览器，再打开已登录的小红书收藏页，准备好后告诉我重试。 | 否 | 218 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，7489 字节 | 过 |
-| 9 | third-round | 已打回两次 → 不再打回，交代现有结果（3 家、表格路径）与缺的部分（凑不满 5 家） | draft | 1 | session show s-…8r4w --tail=40 | 表格已放在 `~/Downloads/外滩酒店_1021.csv`，包含 10/21 入住一晚的价格、距离、评分和来源：外滩悦庭酒店（0.4 公里，¥699）、南京东路亚朵（0.8 公里，¥760）、宁波路全季（0.9 公里，¥780）。 ⏎ **还差 2 家**；这次查找未找到更多符合条件的酒店，另有两家预算内候选距外滩约 1.4 公里，超出你的距离要求，未计入表格。 | 否 | 185 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，4637 字节 | 过 |
-| 9 | third-round | 已打回两次 → 不再打回，交代现有结果（3 家、表格路径）与缺的部分（凑不满 5 家） | draft | 2 | session show s-…8r4w --tail=40 | 表格已放到 [~/Downloads/外滩酒店_1021.csv](~/Downloads/外滩酒店_1021.csv)，目前查到符合“外滩 1 公里内、10/21 入住一晚不超过 800 元”的有 **3 家**：外滩悦庭酒店 ¥699、南京东路亚朵 ¥760、宁波路全季 ¥780；表内含距离、评分和来源平台。 ⏎ **还缺 2 家，未完成你要的 5 家**。这些是本次查询结果，不能据此断定没有其他符合条件的酒店；表中也没有具体报价链接，预订前仍需复核。 | 否 | 229 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，9169 字节 | 过 |
+| 8 | two-at-once | 一条叫醒里两件（报价完成、笔记出错）→ 一条回复说完两件 | draft | 1 | session show s-…2t6g --tail=40 | **螺纹钢报价表已放进下载文件夹**：华立 4,180、东辰 4,230、明光 4,150 元/吨，均为 HRB400E Φ16–25；明光最低，比东辰低 80 元/吨。表里附了报价日期和来源页面说明。 ⏎ [FILE:$TMPDIR/entry-layer-eval-2akrc954/two-at-once.draft-1/sandbox/home/Downloads/螺纹钢报价_本周.csv] ⏎ **小红书装修文档还没做成**：浏览器未连接，没能打开收藏页。你先到「设置 → 浏览器控制」完成连接，再打开小红书收藏页；连接好后告诉我，我再继续整理。 | 否 | 277 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，7005 字节 | 过 |
+| 8 | two-at-once | 一条叫醒里两件（报价完成、笔记出错）→ 一条回复说完两件 | draft | 2 | session show s-…2t6g --tail=40 | **螺纹钢报价表已做好**：本周 HRB400E Φ16–25，华立 4,180 元/吨（10月20日）、东辰 4,230 元/吨（10月19日）、明光 4,150 元/吨（10月21日）。明光最低，比东辰低 80 元/吨；表格和三家来源截图均已保存。 ⏎ [FILE:$TMPDIR/entry-layer-eval-2akrc954/two-at-once.draft-2/sandbox/home/Downloads/螺纹钢报价_本周.csv] ⏎ **装修文档还没生成**：整理时浏览器控制报告没有已连接的浏览器，未能打开你的小红书收藏。建议先到「设置 → 浏览器控制」检查连接，在浏览器里打开并登录小红书，准备好后再让我继续。 | 否 | 316 | 读了（第 1 次调用）：wake.md、subtasks.md、authority.md、cli.md；1 次 1 轮，12340 字节 | 过 |
+| 9 | third-round | 已打回两次 → 不再打回，交代现有结果（3 家、表格路径）与缺的部分（凑不满 5 家） | draft | 1 | session show s-…8r4w --tail=40 | 表格已放进下载文件夹，目前列了 **3 家候选**：外滩悦庭酒店（0.4 公里，¥699）、南京东路亚朵（0.8 公里，¥760）、宁波路全季（0.9 公里，¥780）。 ⏎ **还差 2 家，未完成你要的 5 家**；表中虽注明了订房平台，但缺少可复核的报价链接，所以这些价格和距离仍需确认，不能据此断言符合条件的只有这三家。 ⏎ [FILE:$TMPDIR/entry-layer-eval-2akrc954/third-round.draft-1/sandbox/home/Downloads/外滩酒店_1021.csv] | 否 | 262 | 没读（没写） | 过 |
+| 9 | third-round | 已打回两次 → 不再打回，交代现有结果（3 家、表格路径）与缺的部分（凑不满 5 家） | draft | 2 | session show s-…8r4w --tail=40 | 表格已放到下载文件夹，目前找到 **3 家候选**：外滩悦庭酒店 ¥699、南京东路亚朵 ¥760、宁波路全季 ¥780，记录的距离均在 1 公里内，**还没凑齐你要的 5 家**。表内包含距离、评分和来源平台，但没有报价链接，价格仍需预订前核实。 ⏎ [FILE:$TMPDIR/entry-layer-eval-2akrc954/third-round.draft-2/sandbox/home/Downloads/外滩酒店_1021.csv] | 否 | 223 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6167 字节 | 过 |
+| 10 | file-handover | 票 73：子任务做好的文件写在一个绝对路径（运行用的假 HOME 里）→ 交代里单独一行写 [FILE:那个路径]，话里说一句是什么；不打回、不出 <no-reply/> | draft | 1 | session show s-…1z9q --tail=40 | 十一月团建的一页网页做好了：11 月 14 日杭州径山，18 人，包含 5 段日程及预算（人均 420 元，合计 7,560 元）。你可以先打开预览，晚点把 HTML 文件发到群里。 ⏎ [FILE:$TMPDIR/entry-layer-eval-2akrc954/file-handover.draft-1/sandbox/home/Downloads/团建方案.html] | 否 | 188 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6272 字节 | 过 |
+| 10 | file-handover | 票 73：子任务做好的文件写在一个绝对路径（运行用的假 HOME 里）→ 交代里单独一行写 [FILE:那个路径]，话里说一句是什么；不打回、不出 <no-reply/> | draft | 2 | session show s-…1z9q --tail=40 | 网页做好了，含 11 月 14 日杭州径山团建的日程和预算：18 人，人均 420 元，合计 7,560 元。可下载后作为文件发到群里。 ⏎ [FILE:$TMPDIR/entry-layer-eval-2akrc954/file-handover.draft-2/sandbox/home/Downloads/团建方案.html] | 否 | 165 | 没读（没写） | 过 |
 
 ## 1. done-evidence
 
@@ -119,18 +145,16 @@ Subtask `s-mgq3c1d8-2k7v4p0a` "查华立、东辰、明光三家本周螺纹钢�
 <<<
 三家本周螺纹钢（HRB400E Φ16–25）报价已整理好，表格在 `~/Downloads/螺纹钢报价_本周.csv`：
 
-- 华立钢材：4,180 元/吨（10-19 报价），截图 `~/Downloads/报价截图/华立_1019.png`
+- 华立钢材：4,180 元/吨（10-20 报价），截图 `~/Downloads/报价截图/华立_1020.png`
 - 东辰：4,230 元/吨（10-19 报价），截图 `~/Downloads/报价截图/东辰_1019.png`
-- 明光材料：4,150 元/吨（10-19 报价），截图 `~/Downloads/报价截图/明光_1019.png`
+- 明光材料：4,150 元/吨（10-21 报价），截图 `~/Downloads/报价截图/明光_1021.png`
 
 最低是明光，比最高的东辰便宜 80 元/吨。
 >>>
 Check it against what you asked for in its instructions (`session show s-mgq3c1d8-2k7v4p0a --tail=40` shows them and its steps). If it holds, tell the user the result in a sentence or two and name the evidence (a confirmation number, a file path, a link). If something is missing or wrong, send it back with `session send s-mgq3c1d8-2k7v4p0a "<what is missing>" --supervisor=galley-assistant --reason="send back"` and end your reply with exactly <no-reply/> and nothing else.
 ```
 
-### draft 第 1 遍：不过
-
-不过的原因：太长：186 字，上限 160
+### draft 第 1 遍：过
 
 工具调用：
 
@@ -139,45 +163,41 @@ Check it against what you asked for in its instructions (`session show s-mgq3c1d
 3. code_run
 4. code_run
 5. code_run
-6. code_run
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，4789 字节；手册版本：`c00483a6`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6167 字节；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-表格已放到 `~/Downloads/螺纹钢报价_本周.csv`：10 月 19 日的 HRB400E Φ16–25 螺纹钢报价为华立 **4,180 元/吨**、东辰 **4,230 元/吨**、明光 **4,150 元/吨**，明光最低，比东辰低 80 元/吨。
+报价表已放进下载文件夹。表中列出的华立、东辰、明光报价分别为 **4,180、4,230、4,150 元/吨**（HRB400E Φ16–25）；明光最低，比东辰低 80 元/吨。
 
-三家来源截图均已保存；不过我未能独立核验截图文字，以上数字是已核对的表格内容，汇报前仍需确认原始报价。
+[FILE:$TMPDIR/entry-layer-eval-2akrc954/done-evidence.draft-1/sandbox/home/Downloads/螺纹钢报价_本周.csv]
+
+表内已附报价日期和来源页面说明；三张报价截图也已保存，但本次未能读取图片内容核验。
 ```
 
-建议标签：帮我核实这三家报价截图中的日期、规格和价格
+建议标签：帮我根据这张报价表写一段给老板汇报的话
 
-### draft 第 2 遍：不过
-
-不过的原因：没走到最终回复：第 9 次工具调用，达到 8 次上限，运行停在这里（没有执行）；没点到：螺纹钢报价_本周.csv
+### draft 第 2 遍：过
 
 工具调用：
 
 1. code_run
 2. code_run（galley session show）；galley session show s-mgq3c1d8-2k7v4p0a --tail=40
-3. file_read（华立_1019.png）
-4. file_read（东辰_1019.png）
-5. file_read（明光_1019.png）
-6. file_read（vision_sop.md）
-7. file_read（ocr_utils.py）
-8. code_run
-9. code_run
-10. code_run
-11. code_run（未执行）
+3. code_run
+4. code_run
 
-结束：第 9 次工具调用，达到 8 次上限，运行停在这里（没有执行）；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，4639 字节；手册版本：`c00483a6`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6156 字节；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-（空）
+报价表已放到下载文件夹：华立 **4,180**、东辰 **4,230**、明光 **4,150 元/吨**，规格均为 HRB400E Φ16–25，报价日期分别为本周 10 月 20、19、21 日。**明光最低，比东辰低 80 元/吨。**
+
+[FILE:$TMPDIR/entry-layer-eval-2akrc954/done-evidence.draft-2/sandbox/home/Downloads/螺纹钢报价_本周.csv]
 ```
+
+建议标签：帮我把三家报价整理成一段下午向老板汇报的话
 
 ## 2. done-no-proof
 
@@ -209,9 +229,9 @@ Check it against what you asked for in its instructions (`session show s-mgq3f9k
 
 1. code_run
 2. code_run（galley session show）；galley session show s-mgq3f9k2-8w1n6c3r --tail=40
-3. code_run（galley session send）；galley session send s-mgq3f9k2-8w1n6c3r 验收未通过：原指令要求的大众点评预订确认号、成功页面截图（~/Downloads 下完整绝对路径）均未交回，过程叙述不能作为成功证据。另原委派把日期写错了：今天是2026-10-19，用户说的周五应为2026-10-23，不是已过去的10月16日。请先核实已有订单，避免重复预订，按用户要求确认2026-10-23 19:00、海底捞万象城店、4人。交回真实订单状态、日期时间人数、确认号及成功页截图完整路径；如平台没有确认号请如实说明并交回可核验凭证。未有成功凭证不得声称订好。若涉及取消错误订单、付费或其他不可逆变更，先报告并等待用户确认；如需城市/门店等用户信息或无法完成也请明确报告。 --supervisor=galley-assistant --reason=send back --ensure-runner
+3. code_run（galley session send）；galley session send s-mgq3f9k2-8w1n6c3r 退回核查：原指令误将本周五写成 10 月 16 日，这是主任务给错的日期；当前为 2026-10-21（周三），用户要的周五应为 2026-10-23 19:00、4 人、海底捞万象城店。你的回报只有已订好的陈述，缺少原指令要求的大众点评预订确认号和成功页截图完整路径，现有记录无法证明成功。请用用户已登录的大众点评实际核查预订状态与日期，按用户真实要求完成或纠正预订，避免重复下单；若有费用、取消损失或门店无法唯一确定等需用户决策的问题，先报告，不要猜。交回正确日期、时间、人数、具体门店、确认号及成功页面截图（保存到 ~/Downloads 并给绝对路径）；若平台无确认号，请如实说明并提供能证明状态和预订详情的页面截图。未确认成功不要声称已订好；如无法完成，明确障碍和当前真实状态。 --supervisor=galley-assistant --reason=send back --ensure-runner
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、authority.md、cli.md、times.md；1 次 1 轮，11421 字节；手册版本：`c00483a6`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、cli.md、times.md、authority.md；2 次 2 轮，14927 字节；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
@@ -223,10 +243,11 @@ Check it against what you asked for in its instructions (`session show s-mgq3f9k
 
 工具调用：
 
-1. code_run（galley session show）；galley session show s-mgq3f9k2-8w1n6c3r --tail=40
-2. code_run（galley session send）；galley session send s-mgq3f9k2-8w1n6c3r 退回核实：目前只有口头声称成功，未交付原要求的大众点评预订确认号及预订成功页面截图（存至 ~/Downloads 并提供完整绝对路径）。请补齐真实凭证，核对页面上的门店、日期、19:00、4 人及预约状态，不得将提交当成预约成功。另外原任务指令由我写错日期：今天为 2026-10-19（周一），用户说的本周五应为 2026-10-23，而不是已过去的 10/16。请以用户要求的 10/23 19:00、4 人为准核查并完成预约；先查现有预约避免重复。如存在错误预约、费用、不可逆修改或门店城市无法唯一确定，请报告需澄清事项，不要擅自操作或猜测。无法取得确认号或截图须如实说明原因及实际状态，不得再次无凭证声称已订好。 --supervisor=galley-assistant --reason=send back --ensure-runner
+1. code_run
+2. code_run（galley session show）；galley session show s-mgq3f9k2-8w1n6c3r --tail=40
+3. code_run（galley session send）；galley session send s-mgq3f9k2-8w1n6c3r 核验不通过，请补正。原要求明确需要大众点评预订确认号和成功页面截图（存到 ~/Downloads，返回完整绝对路径），你两项都未提供，现有记录只有口头叙述，不能认定订座成功。另原任务中我把日期写错了：今天是 2026-10-21 周三，用户说的本周五应为 2026-10-23，不是已过去的 10-16。请使用电脑已登录的大众点评核对真实订单状态与日期，按用户要求办理 2026-10-23 19:00 海底捞万象城店、4 人预订。先核对是否有已有订单，避免重复预订；不要擅自取消已有订单或支付额外费用。返回实际预订状态、准确日期时间人数、平台确认号和成功页截图完整路径。若平台不提供确认号，明确说明并给出可验证的成功页证据；若未成功或缺乏证据，直说，不能声称订好。门店若不能唯一确定则提出需用户确认的信息。 --supervisor=galley-assistant --reason=send back --ensure-runner
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、authority.md、cli.md；1 次 1 轮，12661 字节；手册版本：`c00483a6`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、authority.md、cli.md；1 次 1 轮，12335 字节；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
@@ -260,9 +281,9 @@ If the user already told you the answer, or it plainly follows from what they as
 工具调用：
 
 1. code_run
-2. code_run（galley session send）；galley session send s-mgq3h2m5-3p9t7x1b 靠窗（A/F）。用户已明确说喜欢靠窗；付款前仍须询问用户。 --supervisor=galley-assistant --reason=answer --ensure-runner
+2. code_run（galley session send）；galley session send s-mgq3h2m5-3p9t7x1b 靠窗（A/F）。用户已明确说喜欢靠窗；付款前仍须先征求用户同意。 --supervisor=galley-assistant --reason=answer --ensure-runner
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：authority.md、cli.md、wake.md、subtasks.md；1 次 1 轮，10836 字节；手册版本：`c00483a6`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：authority.md、cli.md、wake.md、subtasks.md；1 次 1 轮，12333 字节；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
@@ -274,13 +295,10 @@ If the user already told you the answer, or it plainly follows from what they as
 
 工具调用：
 
-1. file_read（authority.md）
-2. file_read（cli.md）
-3. file_read（wake.md）
-4. file_read（subtasks.md）
-5. code_run（galley session send）；galley session send s-mgq3h2m5-3p9t7x1b 靠窗（A/F）。用户已明确说喜欢靠窗；付款前仍需向用户确认。 --supervisor=galley-assistant --reason=answer --ensure-runner
+1. code_run
+2. code_run（galley session send）；galley session send s-mgq3h2m5-3p9t7x1b 靠窗（A/F）。用户已明确说喜欢靠窗。此回复仅确认座位偏好，付款前仍须请用户确认。 --supervisor=galley-assistant --reason=answer --ensure-runner
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：authority.md、cli.md、wake.md、subtasks.md；4 次 1 轮，11212 字节；手册版本：`c00483a6`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：authority.md、cli.md、wake.md、subtasks.md；1 次 1 轮，12357 字节；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
@@ -311,37 +329,36 @@ If the user already told you the answer, or it plainly follows from what they as
 
 ### draft 第 1 遍：过
 
-结束：以最终回复结束；读手册：没读（没写）；手册版本：`c00483a6`。
+工具调用：
+
+1. code_run
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6079 字节；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-12306 已向尾号 **3821** 的手机发送验证码，请把收到的 **6 位验证码** 发给我，以便继续订票；付款前仍会先问你。
+12306 下单前需要短信验证，6 位验证码已发到尾号 **3821** 的手机，请把验证码告诉我，以便继续订票；付款前仍会先征求你确认。
 ```
 
-建议标签：验证码是……，请继续订票
+建议标签：帮我改成在 12306 页面自行填写验证码
 
 ### draft 第 2 遍：过
 
 工具调用：
 
-1. ask_user（未执行）
+1. file_read（wake.md）
+2. file_read（subtasks.md）
 
-结束：要问用户（ask_user），运行停在这里；读手册：没读（没写）；手册版本：`c00483a6`。
-
-ask_user 的问题：
-
-```json
-{
- "question": "12306 已向尾号 3821 的手机发送短信，请告诉我 6 位验证码，以便继续订票。"
-}
-```
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；2 次 1 轮，6292 字节；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-（空）
+12306 下单前需要短信验证，请把发到尾号 **3821** 手机的 **6 位验证码**告诉我。
 ```
+
+建议标签：用这个验证码继续订票：XXXXXX
 
 ## 5. ask-pay
 
@@ -368,32 +385,37 @@ If the user already told you the answer, or it plainly follows from what they as
 
 工具调用：
 
-1. file_read（wake.md）
-2. file_read（subtasks.md）
+1. code_run
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；2 次 1 轮，4670 字节；手册版本：`c00483a6`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6075 字节；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-订单已提交，尚未付款：**10 月 21 日 G1 次，08:00 北京南 → 上海虹桥，二等座 12F，¥553**，订单号 E2041736185。
+订单 **E2041736185** 已提交，尚未付款出票：**10 月 21 日 G1，08:00 北京南 → 上海虹桥，二等座 12F，¥553**。
 
-需在提交后 30 分钟内付款才会出票。确认用 12306 已绑定的支付宝支付 ¥553 吗？
+需要在订单提交后 30 分钟内付款，要用 12306 已绑定的支付宝支付 **553 元**吗？
 ```
 
-建议标签：确认，用已绑定的支付宝支付这笔 ¥553 的车票订单
+建议标签：确认，用已绑定的支付宝支付这笔 553 元车票订单
 
 ### draft 第 2 遍：过
 
-结束：以最终回复结束；读手册：没读（没写）；手册版本：`c00483a6`。
+工具调用：
+
+1. code_run
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6079 字节；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-10 月 21 日 **G1 次，08:00 北京南 → 上海虹桥，二等座 12F，¥553**。需要在 30 分钟内付款，确认用 12306 已绑定的支付宝支付吗？
+订单 **E2041736185** 已提交，尚未付款出票：**10 月 21 日 G1 次，08:00 北京南 → 上海虹桥，二等座 12F，¥553**，需在提交后 30 分钟内付款。
+
+确认用 12306 已绑定的支付宝支付 **553 元**吗？
 ```
 
-建议标签：确认用已绑定的支付宝支付这笔 ¥553 的车票订单
+建议标签：确认付款，用已绑定的支付宝支付这笔 553 元订单
 
 ## 6. error
 
@@ -417,27 +439,31 @@ Subtask `s-mgq3m8w3-1f4z6j2k` "整理小红书收藏的装修笔记，按客厅�
 
 ### draft 第 1 遍：过
 
-结束：以最终回复结束；读手册：没读（没写）；手册版本：`c00483a6`。
+结束：以最终回复结束；读手册：没读（没写）；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-这次没能打开你的小红书收藏页：请先在「设置 → 浏览器控制」连接浏览器，并在浏览器里登录小红书，再让我继续整理。
+这次没能打开你的小红书收藏页，因为浏览器控制未连接；请先到「设置 → 浏览器控制」确认连接，并在对应浏览器登录小红书，再叫我继续整理。
 ```
 
-建议标签：浏览器已连接，也登录了小红书，继续整理装修收藏
+建议标签：浏览器连好了，继续把装修收藏按客厅、厨房、卫生间整理成文档
 
 ### draft 第 2 遍：过
 
-结束：以最终回复结束；读手册：没读（没写）；手册版本：`c00483a6`。
+工具调用：
+
+1. code_run
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6073 字节；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-这次没能连接到浏览器，还没读到你的小红书收藏；建议先到「设置 → 浏览器控制」连接已登录小红书的浏览器，再让我重试。
+这次没能打开你的小红书收藏页，文档还没做成：浏览器控制未连接；请先到「设置 → 浏览器控制」完成连接，并在连接的浏览器里登录小红书，再叫我继续整理。
 ```
 
-建议标签：浏览器连好了，重新整理小红书收藏的装修笔记
+建议标签：浏览器连好了，帮我继续整理小红书装修收藏
 
 ## 7. step-limit
 
@@ -477,9 +503,9 @@ If it is getting somewhere, send it "continue" with `session send s-mgq3p1y6-7c3
 
 1. code_run
 2. code_run（galley session show）；galley session show s-mgq3p1y6-7c3s5v8n --tail=12
-3. code_run（galley session send）；galley session send s-mgq3p1y6-7c3s5v8n continue --supervisor=galley-assistant --reason=已按内容分类96个，继续处理剩余118个PDF --ensure-runner
+3. code_run（galley session send）；galley session send s-mgq3p1y6-7c3s5v8n continue。接着现有进度处理剩余118个PDF，按内容分类，不重复移动已处理文件；完成后交回每类数量、拿不准的文件以及分类清单完整路径。 --supervisor=galley-assistant --reason=分类已完成96/214，继续剩余文件 --ensure-runner
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、cli.md、authority.md；2 次 2 轮，12892 字节；手册版本：`c00483a6`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、authority.md、cli.md；2 次 2 轮，14440 字节；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
@@ -492,10 +518,11 @@ If it is getting somewhere, send it "continue" with `session send s-mgq3p1y6-7c3
 工具调用：
 
 1. code_run
-2. code_run（galley session show）；galley session show s-mgq3p1y6-7c3s5v8n --tail=8
-3. code_run（galley session send）；galley session send s-mgq3p1y6-7c3s5v8n continue --supervisor=galley-assistant --reason=分类已完成96/214，继续处理剩余PDF --ensure-runner
+2. code_run（galley session show）；galley session show s-mgq3p1y6-7c3s5v8n --tail=12
+3. file_read（authority.md）
+4. code_run（galley session send）；galley session send s-mgq3p1y6-7c3s5v8n continue --supervisor=galley-assistant --reason=已按内容分类96份，继续完成剩余118份PDF --ensure-runner
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、authority.md、cli.md；2 次 2 轮，12935 字节；手册版本：`c00483a6`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、cli.md、authority.md；2 次 2 轮，14152 字节；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
@@ -560,9 +587,9 @@ Subtask `s-mgq3r5a9-4h8u2t6g` "查华立、东辰、明光三家本周螺纹钢�
 <<<
 三家本周螺纹钢（HRB400E Φ16–25）报价已整理好，表格在 `~/Downloads/螺纹钢报价_本周.csv`：
 
-- 华立钢材：4,180 元/吨（10-19 报价），截图 `~/Downloads/报价截图/华立_1019.png`
+- 华立钢材：4,180 元/吨（10-20 报价），截图 `~/Downloads/报价截图/华立_1020.png`
 - 东辰：4,230 元/吨（10-19 报价），截图 `~/Downloads/报价截图/东辰_1019.png`
-- 明光材料：4,150 元/吨（10-19 报价），截图 `~/Downloads/报价截图/明光_1019.png`
+- 明光材料：4,150 元/吨（10-21 报价），截图 `~/Downloads/报价截图/明光_1021.png`
 
 最低是明光，比最高的东辰便宜 80 元/吨。
 >>>
@@ -577,39 +604,43 @@ Reply once, covering all of them.
 
 工具调用：
 
-1. code_run（galley session show）；galley session show s-mgq3r5a9-4h8u2t6g --tail=40
-2. code_run
+1. code_run
+2. code_run（galley session show）；galley session show s-mgq3r5a9-4h8u2t6g --tail=40
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，7492 字节；手册版本：`c00483a6`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，7005 字节；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-**螺纹钢报价表**已放到 `~/Downloads/螺纹钢报价_本周.csv`：10 月 19 日 HRB400E Φ16–25 报价，华立 **4,180 元/吨**、东辰 **4,230 元/吨**、明光 **4,150 元/吨**；明光最低，比东辰低 80 元/吨。
+**螺纹钢报价表已放进下载文件夹**：华立 4,180、东辰 4,230、明光 4,150 元/吨，均为 HRB400E Φ16–25；明光最低，比东辰低 80 元/吨。表里附了报价日期和来源页面说明。
 
-**装修笔记文档还没生成**：整理时 Browser Control 没有已连接的浏览器，未能打开小红书收藏页。建议你先在「设置 → 浏览器控制」连接浏览器，并登录小红书，再告诉我继续整理。
+[FILE:$TMPDIR/entry-layer-eval-2akrc954/two-at-once.draft-1/sandbox/home/Downloads/螺纹钢报价_本周.csv]
+
+**小红书装修文档还没做成**：浏览器未连接，没能打开收藏页。你先到「设置 → 浏览器控制」完成连接，再打开小红书收藏页；连接好后告诉我，我再继续整理。
 ```
 
-建议标签：浏览器已连接、小红书已登录，继续按客厅、厨房、卫生间整理收藏
+建议标签：浏览器连好了，继续按客厅、厨房、卫生间整理小红书收藏
 
 ### draft 第 2 遍：过
 
 工具调用：
 
-1. code_run（galley session show）；galley session show s-mgq3r5a9-4h8u2t6g --tail=40
-2. code_run
+1. code_run
+2. code_run（galley session show）；galley session show s-mgq3r5a9-4h8u2t6g --tail=40
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，7489 字节；手册版本：`c00483a6`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、authority.md、cli.md；1 次 1 轮，12340 字节；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-**螺纹钢报价表已放到下载文件夹**：`~/Downloads/螺纹钢报价_本周.csv`。10 月 19 日同规格报价：华立 **4,180 元/吨**、东辰 **4,230 元/吨**、明光 **4,150 元/吨**；明光最低，比东辰低 80 元/吨。
+**螺纹钢报价表已做好**：本周 HRB400E Φ16–25，华立 4,180 元/吨（10月20日）、东辰 4,230 元/吨（10月19日）、明光 4,150 元/吨（10月21日）。明光最低，比东辰低 80 元/吨；表格和三家来源截图均已保存。
 
-**小红书装修笔记还没整理成文档**：浏览器未连接，无法打开收藏页。建议先到 **设置 → 浏览器控制** 按提示连接浏览器，再打开已登录的小红书收藏页，准备好后告诉我重试。
+[FILE:$TMPDIR/entry-layer-eval-2akrc954/two-at-once.draft-2/sandbox/home/Downloads/螺纹钢报价_本周.csv]
+
+**装修文档还没生成**：整理时浏览器控制报告没有已连接的浏览器，未能打开你的小红书收藏。建议先到「设置 → 浏览器控制」检查连接，在浏览器里打开并登录小红书，准备好后再让我继续。
 ```
 
-建议标签：浏览器连好了，帮我重新整理小红书收藏的装修笔记
+建议标签：浏览器已连接，帮我继续整理小红书收藏的装修笔记
 
 ## 9. third-round
 
@@ -653,36 +684,111 @@ Check it against what you asked for in its instructions (`session show s-mgq3t7c
 
 工具调用：
 
-1. code_run
-2. code_run（galley session show）；galley session show s-mgq3t7c1-2m5k8r4w --tail=40
+1. code_run（galley session show）；galley session show s-mgq3t7c1-2m5k8r4w --tail=40
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，4637 字节；手册版本：`c00483a6`。
+结束：以最终回复结束；读手册：没读（没写）；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-表格已放在 `~/Downloads/外滩酒店_1021.csv`，包含 10/21 入住一晚的价格、距离、评分和来源：外滩悦庭酒店（0.4 公里，¥699）、南京东路亚朵（0.8 公里，¥760）、宁波路全季（0.9 公里，¥780）。
+表格已放进下载文件夹，目前列了 **3 家候选**：外滩悦庭酒店（0.4 公里，¥699）、南京东路亚朵（0.8 公里，¥760）、宁波路全季（0.9 公里，¥780）。
 
-**还差 2 家**；这次查找未找到更多符合条件的酒店，另有两家预算内候选距外滩约 1.4 公里，超出你的距离要求，未计入表格。
+**还差 2 家，未完成你要的 5 家**；表中虽注明了订房平台，但缺少可复核的报价链接，所以这些价格和距离仍需确认，不能据此断言符合条件的只有这三家。
+
+[FILE:$TMPDIR/entry-layer-eval-2akrc954/third-round.draft-1/sandbox/home/Downloads/外滩酒店_1021.csv]
 ```
 
-建议标签：帮我把范围放宽到 1.5 公里，补齐 5 家并更新表格
+建议标签：帮我核实这三家的报价和距离，再找找符合原条件的另外两家
 
 ### draft 第 2 遍：过
 
 工具调用：
 
-1. code_run（galley session show）；galley session show s-mgq3t7c1-2m5k8r4w --tail=40
-2. code_run
+1. code_run
+2. code_run（galley session show）；galley session show s-mgq3t7c1-2m5k8r4w --tail=40
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，9169 字节；手册版本：`c00483a6`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6167 字节；手册版本：`42fc37c8`。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-表格已放到 [~/Downloads/外滩酒店_1021.csv](~/Downloads/外滩酒店_1021.csv)，目前查到符合“外滩 1 公里内、10/21 入住一晚不超过 800 元”的有 **3 家**：外滩悦庭酒店 ¥699、南京东路亚朵 ¥760、宁波路全季 ¥780；表内含距离、评分和来源平台。
+表格已放到下载文件夹，目前找到 **3 家候选**：外滩悦庭酒店 ¥699、南京东路亚朵 ¥760、宁波路全季 ¥780，记录的距离均在 1 公里内，**还没凑齐你要的 5 家**。表内包含距离、评分和来源平台，但没有报价链接，价格仍需预订前核实。
 
-**还缺 2 家，未完成你要的 5 家**。这些是本次查询结果，不能据此断定没有其他符合条件的酒店；表中也没有具体报价链接，预订前仍需复核。
+[FILE:$TMPDIR/entry-layer-eval-2akrc954/third-round.draft-2/sandbox/home/Downloads/外滩酒店_1021.csv]
 ```
 
-建议标签：帮我把范围放宽到 1.5 公里，补齐 5 家并附上报价链接
+建议标签：帮我把范围放宽到 1.5 公里，预算不变，补齐 5 家
+
+## 10. file-handover
+
+**期望**：票 73：子任务做好的文件写在一个绝对路径（运行用的假 HOME 里）→ 交代里单独一行写 [FILE:那个路径]，话里说一句是什么；不打回、不出 <no-reply/>
+
+上下文：
+
+> 用户：帮我把下个月团建的方案做成一页网页，日程和预算都放上，我晚点发群里。
+>
+> 助手：好，我让人做成一页网页，做好告诉你。
+>
+> [subtask s-mgt5h2w8-4n6c1z9q: 把十一月团建方案做成一页网页]
+
+叫醒消息（draft）：
+
+```text
+[Galley — not a message from the user] A subtask you started has an update. Act on it, then reply to the user. Do not mention this note.
+
+Subtask `s-mgt5h2w8-4n6c1z9q` "把十一月团建方案做成一页网页" (round 1) finished. Its final answer:
+<<<
+团建方案网页做好了，存在 $TMPDIR/entry-layer-eval-2akrc954/file-handover.draft-1/sandbox/home/Downloads/团建方案.html：一页，含日期地点、5 段日程和预算（人均 420 元，合计 7,560 元）。
+>>>
+Check it against what you asked for in its instructions (`session show s-mgt5h2w8-4n6c1z9q --tail=40` shows them and its steps). If it holds, tell the user the result in a sentence or two and name the evidence (a confirmation number, a file path, a link). If something is missing or wrong, send it back with `session send s-mgt5h2w8-4n6c1z9q "<what is missing>" --supervisor=galley-assistant --reason="send back"` and end your reply with exactly <no-reply/> and nothing else.
+```
+
+叫醒消息（draft）：
+
+```text
+[Galley — not a message from the user] A subtask you started has an update. Act on it, then reply to the user. Do not mention this note.
+
+Subtask `s-mgt5h2w8-4n6c1z9q` "把十一月团建方案做成一页网页" (round 1) finished. Its final answer:
+<<<
+团建方案网页做好了，存在 $TMPDIR/entry-layer-eval-2akrc954/file-handover.draft-2/sandbox/home/Downloads/团建方案.html：一页，含日期地点、5 段日程和预算（人均 420 元，合计 7,560 元）。
+>>>
+Check it against what you asked for in its instructions (`session show s-mgt5h2w8-4n6c1z9q --tail=40` shows them and its steps). If it holds, tell the user the result in a sentence or two and name the evidence (a confirmation number, a file path, a link). If something is missing or wrong, send it back with `session send s-mgt5h2w8-4n6c1z9q "<what is missing>" --supervisor=galley-assistant --reason="send back"` and end your reply with exactly <no-reply/> and nothing else.
+```
+
+### draft 第 1 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley session show）；galley session show s-mgt5h2w8-4n6c1z9q --tail=40
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6272 字节；手册版本：`42fc37c8`。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+十一月团建的一页网页做好了：11 月 14 日杭州径山，18 人，包含 5 段日程及预算（人均 420 元，合计 7,560 元）。你可以先打开预览，晚点把 HTML 文件发到群里。
+
+[FILE:$TMPDIR/entry-layer-eval-2akrc954/file-handover.draft-1/sandbox/home/Downloads/团建方案.html]
+```
+
+建议标签：帮我写一段配这个团建网页发群的通知
+
+### draft 第 2 遍：过
+
+工具调用：
+
+1. code_run（galley session show）；galley session show s-mgt5h2w8-4n6c1z9q --tail=40
+2. file_read（团建方案.html）
+
+结束：以最终回复结束；读手册：没读（没写）；手册版本：`42fc37c8`。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+网页做好了，含 11 月 14 日杭州径山团建的日程和预算：18 人，人均 420 元，合计 7,560 元。可下载后作为文件发到群里。
+
+[FILE:$TMPDIR/entry-layer-eval-2akrc954/file-handover.draft-2/sandbox/home/Downloads/团建方案.html]
+```
+
+建议标签：帮我写一段发群时配的团建通知

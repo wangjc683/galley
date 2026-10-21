@@ -1,5 +1,5 @@
 {
- "_note": "叫醒评测用例（票 30）。history 是主对话当前段里已有的轮次（派活回复末尾是回放标记，已叫醒过的一轮压成一行，同票 29 的回放写法）；subtasks 是假 CLI 的固定数据（子任务的会话行与消息）；files 放进假 HOME 的 ~/Downloads（证据文件）；wake 是这次叫醒里的几件，run.py 按 wording.md 的措辞拼成消息；expect 是自动判定的规则，expect_text 是票 30 写的期望。票 63 起，「结果够好」（done-evidence）与「两件一起」（two-at-once）的报价日期按运行那天填：`{{Q0:…}}` 是当天，`{{Q1:…}}`、`{{Q2:…}}` 是前一天、前两天（都不早于本周一），`{{W:…}}` 是本周一；冒号后是写法（ymd 2026-10-19、md 10-19、mmdd 1019、cn 10 月 19 日、cnc 10月19日、en 19 Oct 2026）。之前写死在 10 月 12 日这一周，换个星期跑，模型就把它当成上周的报价打回。",
+ "_note": "叫醒评测用例（票 30）。history 是主对话当前段里已有的轮次（派活回复末尾是回放标记，已叫醒过的一轮压成一行，同票 29 的回放写法）；subtasks 是假 CLI 的固定数据（子任务的会话行与消息）；files 放进假 HOME 的 ~/Downloads（证据文件）；wake 是这次叫醒里的几件，run.py 按 wording.md 的措辞拼成消息；expect 是自动判定的规则，expect_text 是票 30 写的期望。票 63 起，「结果够好」（done-evidence）与「两件一起」（two-at-once）的报价日期按运行那天填：`{{Q0:…}}` 是当天，`{{Q1:…}}`、`{{Q2:…}}` 是前一天、前两天（都不早于本周一），`{{W:…}}` 是本周一；冒号后是写法（ymd 2026-10-19、md 10-19、mmdd 1019、cn 10 月 19 日、cnc 10月19日、en 19 Oct 2026）。之前写死在 10 月 12 日这一周，换个星期跑，模型就把它当成上周的报价打回。票 73：{{HOME}} 是这次运行的假 HOME（绝对路径，结果里写成 $TMPDIR/…），子任务交回的文件路径用它，不写本机真实路径；expect.file_ref 是交代里要有单独一行的 [FILE:<绝对路径>]，路径以这一段结尾（run.py 的 wake_facts）。",
  "main_chat": "s-mgn4k2x1-7q3z9w0e",
  "cases": [
   {
@@ -675,6 +675,64 @@
      "5 家",
      "五家"
     ]
+   }
+  },
+  {
+   "id": "file-handover",
+   "no": 10,
+   "expect_text": "票 73：子任务做好的文件写在一个绝对路径（运行用的假 HOME 里）→ 交代里单独一行写 [FILE:那个路径]，话里说一句是什么；不打回、不出 <no-reply/>",
+   "history": [
+    {
+     "role": "user",
+     "content": "帮我把下个月团建的方案做成一页网页，日程和预算都放上，我晚点发群里。"
+    },
+    {
+     "role": "assistant",
+     "content": "好，我让人做成一页网页，做好告诉你。\n\n[subtask s-mgt5h2w8-4n6c1z9q: 把十一月团建方案做成一页网页]"
+    }
+   ],
+   "subtasks": [
+    {
+     "id": "s-mgt5h2w8-4n6c1z9q",
+     "title": "把十一月团建方案做成一页网页",
+     "instructions": "把十一月团建方案做成一页网页\n\n目标：做一页 HTML，写清日期、地点、人数、日程和预算。\n用户给的信息：11 月 14 日（周六）去杭州径山，18 人，人均预算 420 元。\n交回：网页存到 ~/Downloads/团建方案.html，回复里给出完整路径。\n证据：文件的完整路径。",
+     "live": {
+      "lastExit": "CURRENT_TASK_DONE"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "写网页",
+       "content": "按给的信息写一页 HTML。"
+      },
+      {
+       "role": "agent",
+       "final": true,
+       "content": "团建方案网页做好了，存在 {{HOME}}/Downloads/团建方案.html：一页，含日期地点、5 段日程和预算（人均 420 元，合计 7,560 元）。"
+      }
+     ]
+    }
+   ],
+   "files": {
+    "团建方案.html": "<!doctype html>\n<html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>十一月团建方案</title></head>\n<body><h1>十一月团建方案</h1><p>日期：11 月 14 日（周六）；地点：杭州径山；人数：18 人。</p><h2>日程</h2><ul><li>08:30 公司楼下集合</li><li>10:30 径山徒步</li><li>12:30 农家午餐</li><li>15:00 茶园体验</li><li>18:00 返程</li></ul><h2>预算</h2><p>人均 420 元，合计 7,560 元。</p></body></html>\n"
+   },
+   "wake": [
+    {
+     "kind": "done",
+     "subtask": "s-mgt5h2w8-4n6c1z9q",
+     "send_backs": 0
+    }
+   ],
+   "expect": {
+    "send": false,
+    "no_reply": false,
+    "file_ref": "Downloads/团建方案.html",
+    "mentions_any": [
+     "团建",
+     "方案",
+     "网页"
+    ],
+    "max_chars": 200
    }
   }
  ]

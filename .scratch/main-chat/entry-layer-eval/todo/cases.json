@@ -1,5 +1,5 @@
 {
- "_note": "待办评测用例（票 41）。history 是主对话当前段里已有的轮次；todos 是假 CLI 里已有的待办：due 是时间（next_weekday 是今天之后第一个星期几，days 是今天之后第几天，in_minutes 是几分钟后，带 date_only 的只有日期），reminder 是挂在它上面的提醒（fired 表示已经到点、等着叫醒），in_hand 默认为真，即分段开始时就有、写在提示词的「In Hand」一节（为假的是这一段里刚记的），done_since 表示分段开始后用户在面板上勾掉了（快照里还是没做）；tasks 是它自己的定时任务（同 schedule/cases.json）；message 是用户这句，wake 列出这次叫醒里到点的提醒，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 44：expect.reminder.clock 是提醒必须落在的钟点（用户说了几点提醒）。票 60：时间还可以写成一年里的某天（month、day，day 可为 \"last\"；带 year_offset 是今年之后第几年，不带是今天起最近的那一天）或下周的星期几（week_after，周一起算的下一周）；cancelled 表示假 CLI 起始就已取消（days_ago，via 为 supervisor 是 Galley 照用户的话、gui 是用户在桌面上，reason），它的提醒随之由 Core 取消（system），分段开始前取消的写进「In Hand」的「最近不要的跟进」。expect.follow_up 是该设 1 个跟进（via：todo、assistant 或 either；prefer 是期望的那种，另一种也算过但标出来；window 是提醒时间），expect.todo 为 optional 是可以记 1 件（reminder 为 null 时不许挂提醒），expect.cancel 是这次运行里该由 Galley 照用户的话取消其中之一、原因里写明是哪一类（reason_any），expect.asks_or_any 是回复要问一句或给出其中一个下一步，expect.record_only 是两可的、只记录不判。票 63：clock 是消息里说的今天的钟点（tonight 取 hours 里第一个离运行时刻还有 lead_minutes 的整点，写成「今晚 H 点」；afternoon 取今天的 hour，离运行时刻不足 lead_minutes 就改成「明天下午 H 点」），填进 message 的 {{clock}}；时间写法 {\"stated\": true, \"minutes\": k} 是那个钟点加 k 分钟。expect.follow_up.windows 是几个窗口里任一个，follow_up.clock 是提醒必须落在的钟点；expect.reminder.optional 是可以不挂提醒（挂了就要在窗口里）；expect.no_recite 是回复不能是这些原话（或「提醒」加原话），也不能以「提醒：」开头。每条都判：回复里有「记下了 / 记住了 / 记好了 / 已记」时，这一轮必须有写（改动了假 CLI 的清单或提醒，或写了 GA 记忆）。票 64：expect.no_retract 是什么都不该设的用例（不记待办、不设它自己的提醒；reno-no-remind 可以记一件不挂提醒的）：最终回复（去掉 <summary>、<next-suggestion>）不能提改口，正则是 run.py 的 RETRACT_RE（「刚才说」「多此一举」「多余」「本来要」「就不加了」「不特意设」一类）；第一轮（不是最后一轮时）的正文与 <summary> 里有没有「记到待办」「设个提醒」一类的表态，按 STANCE_RE 只记录、不判。火锅两条的 hours 加了 23（「今晚 11 点」，夜宵），21:15 到 22:15 也能跑。",
+ "_note": "待办评测用例（票 41）。history 是主对话当前段里已有的轮次；todos 是假 CLI 里已有的待办：due 是时间（next_weekday 是今天之后第一个星期几，days 是今天之后第几天，in_minutes 是几分钟后，带 date_only 的只有日期），reminder 是挂在它上面的提醒（fired 表示已经到点、等着叫醒），in_hand 默认为真，即分段开始时就有、写在提示词的「In Hand」一节（为假的是这一段里刚记的），done_since 表示分段开始后用户在面板上勾掉了（快照里还是没做）；tasks 是它自己的定时任务（同 schedule/cases.json）；message 是用户这句，wake 列出这次叫醒里到点的提醒，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 44：expect.reminder.clock 是提醒必须落在的钟点（用户说了几点提醒）。票 60：时间还可以写成一年里的某天（month、day，day 可为 \"last\"；带 year_offset 是今年之后第几年，不带是今天起最近的那一天）或下周的星期几（week_after，周一起算的下一周）；cancelled 表示假 CLI 起始就已取消（days_ago，via 为 supervisor 是 Galley 照用户的话、gui 是用户在桌面上，reason），它的提醒随之由 Core 取消（system），分段开始前取消的写进「In Hand」的「最近不要的跟进」。expect.follow_up 是该设 1 个跟进（via：todo、assistant 或 either；prefer 是期望的那种，另一种也算过但标出来；window 是提醒时间），expect.todo 为 optional 是可以记 1 件（reminder 为 null 时不许挂提醒），expect.cancel 是这次运行里该由 Galley 照用户的话取消其中之一、原因里写明是哪一类（reason_any），expect.asks_or_any 是回复要问一句或给出其中一个下一步，expect.record_only 是两可的、只记录不判。票 63：clock 是消息里说的今天的钟点（tonight 取 hours 里第一个离运行时刻还有 lead_minutes 的整点，写成「今晚 H 点」；afternoon 取今天的 hour，离运行时刻不足 lead_minutes 就改成「明天下午 H 点」），填进 message 的 {{clock}}；时间写法 {\"stated\": true, \"minutes\": k} 是那个钟点加 k 分钟。expect.follow_up.windows 是几个窗口里任一个，follow_up.clock 是提醒必须落在的钟点；expect.reminder.optional 是可以不挂提醒（挂了就要在窗口里）；expect.no_recite 是回复不能是这些原话（或「提醒」加原话），也不能以「提醒：」开头。每条都判：回复里有「记下了 / 记住了 / 记好了 / 已记」时，这一轮必须有写（改动了假 CLI 的清单或提醒，或写了 GA 记忆）。票 64：expect.no_retract 是什么都不该设的用例（不记待办、不设它自己的提醒；reno-no-remind 可以记一件不挂提醒的）：最终回复（去掉 <summary>、<next-suggestion>）不能提改口，正则是 run.py 的 RETRACT_RE（「刚才说」「多此一举」「多余」「本来要」「就不加了」「不特意设」一类）；第一轮（不是最后一轮时）的正文与 <summary> 里有没有「记到待办」「设个提醒」一类的表态，按 STANCE_RE 只记录、不判。火锅两条的 hours 加了 23（「今晚 11 点」，夜宵），21:15 到 22:15 也能跑。票 73：tasks 里 review 为真的是早上的巡看（Galley 建的每天一条，origin 是 system + galley-review；time 是钟点，不写就取运行那一分钟，好让叫醒按时；fired 表示这一次到点、等着叫醒，叫醒消息照 Core 的巡看措辞拼）。expect.subtasks_max 是回复里最多几个 <subtask>（不写就一个都不许）；expect.no_offer 是回复和末尾的建议里不能有「要不要我」「需要的话我可以」一类（run.py 的 OFFER_RE；不判的用例只注出来）；expect.allow_web_stop 是停在浏览器工具只注出来、不算没走到最终回复（它在做一步只读的事，沙盒里看不到结果）；expect.review_advance 是巡看有事可推进：不出声时得派了子任务，开口时得做成了事、并带出是过了一遍在办的事（REVIEW_SAYS_RE）；expect.disable 是该 schedule disable 那一条，用了 delete 或没停都算不过。",
  "cases": [
   {
    "id": "note-report",
@@ -1219,6 +1219,300 @@
      "晚到",
      "延迟",
      "提醒："
+    ],
+    "max_chars": 120
+   }
+  },
+  {
+   "id": "half-done",
+   "no": 33,
+   "group": "在推进（票 73）",
+   "expect_text": "查阿里云费用暴涨查到一半、还没结论，用户说「先吃饭，回来再说」→ 记一条没日子的待办（查清阿里云费用暴涨的原因），不写截止、不挂提醒；可以当场做一步只读的（停在浏览器工具只记下）或派一件子任务；回复一句说记了什么、做了什么；不出现「要不要我……」一类的建议（回复和末尾的建议都不行）",
+   "history": [
+    {
+     "role": "user",
+     "content": "阿里云这个月的账单怎么涨了这么多？比上个月多了快一倍。"
+    },
+    {
+     "role": "assistant",
+     "content": "我对了一下你发的费用中心截图：主要涨在 ECS 和公网流量两项。ECS 多了两台按量付费的实例，流量费是上个月的三倍。还没对上是哪个项目开的。"
+    },
+    {
+     "role": "user",
+     "content": "那两台实例是谁开的？流量又是从哪来的？"
+    },
+    {
+     "role": "assistant",
+     "content": "操作审计里，那两台是 10 月 9 日用子账号 deploy-bot 开的；流量大头是一个 OSS 桶的外网下行，具体是哪个业务还没查到。"
+    }
+   ],
+   "message": "先吃饭，回来再说",
+   "expect": {
+    "todo": "one",
+    "title_any": [
+     "阿里云",
+     "费用",
+     "账单",
+     "成本"
+    ],
+    "due": null,
+    "reminder": null,
+    "subtasks_max": 1,
+    "no_offer": true,
+    "allow_web_stop": true,
+    "mentions_any": [
+     "记"
+    ],
+    "max_chars": 160
+   }
+  },
+  {
+   "id": "supplier-quote",
+   "no": 34,
+   "group": "在推进（票 73）",
+   "expect_text": "「供应商的报价还没回，我在等」（之前说过今天下班前发）→ 它自己回头查的提醒（等外部结果，schedule create --target=assistant），在今晚到明天中午之间，不是没日子的待办；回复说出什么时候问；不提建议",
+   "history": [
+    {
+     "role": "user",
+     "content": "我找了华立和东辰要这周的螺纹钢报价，他们说今天下班前发我。"
+    },
+    {
+     "role": "assistant",
+     "content": "好，收到了发我，我帮你对一下两家的价格。"
+    }
+   ],
+   "message": "供应商的报价还没回，我在等",
+   "expect": {
+    "todo": "none",
+    "follow_up": {
+     "via": "assistant",
+     "window": {
+      "from": {
+       "in_minutes": 15
+      },
+      "to": {
+       "days": 1,
+       "time": "12:00"
+      }
+     }
+    },
+    "no_offer": true,
+    "mentions_time": true,
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "tired-today",
+   "no": 35,
+   "group": "在推进（票 73）",
+   "expect_text": "「今天好累，不想动」→ 什么都不记、不设、不派；最终回复不提改口",
+   "history": [],
+   "message": "今天好累，不想动",
+   "expect": {
+    "todo": "none",
+    "allow": [],
+    "no_retract": true
+   }
+  },
+  {
+   "id": "shanghai-trip",
+   "no": 36,
+   "group": "两可（票 73）",
+   "expect_text": "「下周三去上海出差」→ 只记录：会不会记待办、挂提醒，会不会去查车次（派活或查网页），怎么说",
+   "history": [],
+   "message": "下周三去上海出差",
+   "expect": {
+    "record_only": true,
+    "todo": "optional",
+    "subtasks_max": 1,
+    "allow_web_stop": true,
+    "allow": [
+     "schedule create"
+    ]
+   }
+  },
+  {
+   "id": "report-half",
+   "no": 37,
+   "group": "两可（票 73）",
+   "expect_text": "「季度报告我写了一半」→ 只记录：会不会记成没日子的待办，会不会主动做一步（派活、起草）、提建议",
+   "history": [],
+   "message": "季度报告我写了一半",
+   "expect": {
+    "record_only": true,
+    "todo": "optional",
+    "subtasks_max": 1,
+    "allow_web_stop": true,
+    "allow": [
+     "schedule create"
+    ]
+   }
+  },
+  {
+   "id": "review-nothing-to-do",
+   "no": 38,
+   "group": "早上巡看（票 73）",
+   "expect_text": "巡看到点（Core 的巡看叫醒措辞），在办的只有一条 11 月 20 号的装修待办、提醒挂好了 → 什么都不做，回复只有 <no-reply/>",
+   "history": [],
+   "todos": [
+    {
+     "id": "todo_6f7a8b9c0d1e2f3a",
+     "title": "702 办公室装修完工",
+     "notes": "装修师傅说预计这天完工",
+     "due": {
+      "month": 11,
+      "day": 20,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_4b8c2d6e0f1a3957",
+      "at": {
+       "month": 11,
+       "day": 20,
+       "time": "09:00"
+      }
+     }
+    }
+   ],
+   "tasks": [
+    {
+     "id": "sched_5e1a9c3f7b2d4608",
+     "review": true,
+     "in_hand": true,
+     "fired": {
+      "late_minutes": 0
+     }
+    }
+   ],
+   "wake": [
+    "sched_5e1a9c3f7b2d4608"
+   ],
+   "expect": {
+    "todo": "none",
+    "no_reply": true,
+    "subtasks_max": 0
+   }
+  },
+  {
+   "id": "review-advance",
+   "no": 39,
+   "group": "早上巡看（票 73）",
+   "expect_text": "巡看到点，在办的有没日子的「查清阿里云费用暴涨的原因」→ 往前推一步：当场做（停在浏览器工具只记下）或派 1～2 件子任务；只派出去、没结果时只回 <no-reply/>；开口时带出是早上过了一遍在办的事；不提建议",
+   "history": [],
+   "todos": [
+    {
+     "id": "todo_7a8b9c0d1e2f3a4b",
+     "title": "查清阿里云费用暴涨的原因",
+     "notes": "ECS 多了两台按量付费实例（子账号 deploy-bot，10 月 9 日开的）；公网流量大头是一个 OSS 桶的外网下行，哪个业务还没查到"
+    }
+   ],
+   "tasks": [
+    {
+     "id": "sched_5e1a9c3f7b2d4608",
+     "review": true,
+     "in_hand": true,
+     "fired": {
+      "late_minutes": 0
+     }
+    }
+   ],
+   "wake": [
+    "sched_5e1a9c3f7b2d4608"
+   ],
+   "expect": {
+    "todo": "none",
+    "allow": [
+     "todo update"
+    ],
+    "review_advance": {},
+    "subtasks_max": 2,
+    "no_offer": true,
+    "allow_web_stop": true,
+    "max_chars": 200
+   }
+  },
+  {
+   "id": "review-overdue",
+   "no": 40,
+   "group": "早上巡看（票 73）",
+   "expect_text": "巡看到点，在办的只有昨天到期、还没勾的「交季度报告」（提醒昨天已经到过）→ 不催，回复只有 <no-reply/>",
+   "history": [],
+   "todos": [
+    {
+     "id": "todo_2b3c4d5e6f7a8b9c",
+     "title": "交季度报告",
+     "notes": "交给王经理",
+     "due": {
+      "days": -1,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_8c1e0a7b3d2f4965",
+      "at": {
+       "days": -1,
+       "time": "10:00"
+      },
+      "fired": {
+       "late_minutes": 0
+      }
+     }
+    }
+   ],
+   "tasks": [
+    {
+     "id": "sched_5e1a9c3f7b2d4608",
+     "review": true,
+     "in_hand": true,
+     "fired": {
+      "late_minutes": 0
+     }
+    }
+   ],
+   "wake": [
+    "sched_5e1a9c3f7b2d4608"
+   ],
+   "expect": {
+    "todo": "none",
+    "no_reply": true,
+    "subtasks_max": 0
+   }
+  },
+  {
+   "id": "review-stop",
+   "no": 41,
+   "group": "早上巡看（票 73）",
+   "expect_text": "用户说「早上那个巡看别弄了」→ schedule disable 巡看那条（不是 delete），回复一句说已经停了、想恢复跟它说",
+   "history": [],
+   "tasks": [
+    {
+     "id": "sched_5e1a9c3f7b2d4608",
+     "review": true,
+     "in_hand": true,
+     "time": "09:00"
+    }
+   ],
+   "message": "早上那个巡看别弄了",
+   "expect": {
+    "todo": "none",
+    "disable": {
+     "id": "sched_5e1a9c3f7b2d4608"
+    },
+    "mentions_groups": [
+     [
+      "停",
+      "关",
+      "不再",
+      "不会再"
+     ],
+     [
+      "恢复",
+      "重新",
+      "再开",
+      "打开",
+      "开回",
+      "跟我说",
+      "告诉我"
+     ]
     ],
     "max_chars": 120
    }
