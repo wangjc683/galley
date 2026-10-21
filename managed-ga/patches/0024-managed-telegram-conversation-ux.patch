@@ -2,7 +2,7 @@ diff --git a/frontends/galley_im_display.py b/frontends/galley_im_display.py
 new file mode 100644
 --- /dev/null
 +++ b/frontends/galley_im_display.py
-@@ -0,0 +1,270 @@
+@@ -0,0 +1,305 @@
 +"""Platform-neutral display helpers for Galley's managed IM frontends.
 +
 +Galley-owned: added by managed patch 0024 as a new file, so upstream never
@@ -10,14 +10,15 @@ new file mode 100644
 +its own copies from patch 0023 (the `_`-prefixed originals of the functions
 +below, same semantics): 0023 sits in front of 0024 in the patch stack, so
 +moving dcapp over would make an earlier patch depend on a later one. The
-+migration waits for the next re-export of 0023, when this file becomes its
-+own patch ordered ahead of 0023 (recorded in the 2026-09-30 Telegram
-+conversation UX devlog).
++migration, which makes this file its own patch ordered ahead of 0023, goes
++with the IM chrome localisation (patch ledger, 0024 row; the 2026-09-30
++Discord conversation UX devlog).
 +
 +Everything here is pure text in, text out: GA's display-queue step texts,
-+the desktop's fold header wording, the still-running tail of a live status
-+line, the ask_user payload of a turn-end hook, and a Markdown table rewrite
-+for chat apps that cannot render tables.
++the desktop's fold header wording, a run's process behind the 过程 button,
++the still-running tail of a live status line, the ask_user payload of a
++turn-end hook, and a Markdown table rewrite for chat apps that cannot
++render tables.
 +"""
 +import re
 +
@@ -36,6 +37,15 @@ new file mode 100644
 +_TOOL_CALL_RE = re.compile(r"^\s*🛠️\s+([A-Za-z_]\w*)\(", re.M)
 +_SUMMARY_RE = re.compile(r"<summary>\s*(.*?)\s*</summary>", re.DOTALL)
 +_SUMMARY_SEARCH_STRIP_RE = re.compile(r"```.*?```|<thinking>.*?</thinking>", re.DOTALL)
++# A run's process (IM polish 01): two or more steps get a 过程 button under
++# the answer; its first line is the fold label, then one `NN summary` line
++# per step, the last 30. Long step lines give way, widest first.
++PROCESS_MIN_STEPS = 2
++PROCESS_STEP_LINES = 30
++PROCESS_LINE_WIDTHS = (0, 60, 24)
++PROCESS_BUTTON_TEXT = "过程"
++PROCESS_HIDE_BUTTON_TEXT = "收起过程"
++PROCESS_GONE_TEXT = "过程已不在了（渠道重启过）"
 +_FENCE_RE = re.compile(r"^\s*(`{3,})")
 +_FENCE_CLOSE_RE = re.compile(r"^\s*(`{3,})\s*$")
 +_UNESCAPED_PIPE_RE = re.compile(r"(?<!\\)\|")
@@ -72,6 +82,31 @@ new file mode 100644
 +def stopped_text(steps, seconds):
 +    label = fold_label(steps, seconds)
 +    return f"⏹ 已停止 · {label}" if label else "⏹ 已停止"
++
++
++def process_lines(summaries, steps, width=0):
++    """A run's steps as `NN summary` lines (`summaries`: step number ->
++    summary), each clipped to `width` characters when given; past 30 steps
++    the last 30, behind a `… 前 K 步略` line."""
++    lines = [f"{n:02d} {summaries.get(n, '')}".rstrip() for n in range(1, steps + 1)]
++    if width:
++        lines = [clip(line, width) for line in lines]
++    if len(lines) > PROCESS_STEP_LINES:
++        lines = [f"… 前 {len(lines) - PROCESS_STEP_LINES} 步略"] + lines[-PROCESS_STEP_LINES:]
++    return lines
++
++
++def fit_process(summaries, steps, seconds, size, budget):
++    """A run's process as (label, lines): the fold label `N 步 · 用时 X` and
++    its step lines at the widest of PROCESS_LINE_WIDTHS whose rendering,
++    measured by `size(label, lines)`, stays within `budget` (the narrowest
++    when none does)."""
++    label = fold_label(steps, seconds)
++    for width in PROCESS_LINE_WIDTHS:
++        lines = process_lines(summaries, steps, width)
++        if size(label, lines) <= budget:
++            break
++    return label, lines
 +
 +
 +def still_running_suffix(seconds):
@@ -276,13 +311,20 @@ new file mode 100644
 diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 --- a/frontends/tgapp.py
 +++ b/frontends/tgapp.py
-@@ -26,0 +27,14 @@ from chatapp_common import (
+@@ -1,0 +2 @@ import os, sys, re, json, threading, asyncio, queue as Q, time, random, uuid
++from collections import OrderedDict
+@@ -26,0 +28,19 @@ from chatapp_common import (
 +from galley_im_display import (
++    PROCESS_BUTTON_TEXT,
++    PROCESS_GONE_TEXT,
++    PROCESS_HIDE_BUTTON_TEXT,
++    PROCESS_MIN_STEPS,
 +    answer_body,
 +    candidate_layout,
 +    clip,
 +    extract_ask_user_event,
 +    final_step_text,
++    fit_process,
 +    fold_label,
 +    one_line,
 +    step_summary,
@@ -291,29 +333,31 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +    tables_to_lists,
 +    visible_text,
 +)
-@@ -140,5 +153,0 @@ async def _handle_owner_bind_message(update):
+@@ -140,5 +159,0 @@ async def _handle_owner_bind_message(update):
 -_DRAFT_HINT = "thinking..."
 -_STREAM_SUFFIX = " ⏳"
 -_STREAM_SEGMENT_LIMIT = max(1200, MessageLimit.MAX_TEXT_LENGTH - 256)
 -_STREAM_UPDATE_INTERVAL_SECONDS = 2.0
 -_STREAM_MIN_UPDATE_CHARS = 400
-@@ -146 +154,0 @@ _RETRY_AFTER_MARGIN_SECONDS = 1.0
+@@ -146 +160,0 @@ _RETRY_AFTER_MARGIN_SECONDS = 1.0
 -_QUEUE_WAIT_SECONDS = 1
-@@ -150 +157,0 @@ _LLM_CALLBACK_PREFIX = "llm:"
+@@ -150 +164,2 @@ _LLM_CALLBACK_PREFIX = "llm:"
 -_ASK_CANCEL_ACTION = "none"
-@@ -153,4 +160 @@ _ASK_TOGGLE_ACTION = "toggle"
++_PROCESS_CALLBACK_PREFIX = "proc:"
++_PROCESS_SHOW, _PROCESS_HIDE = "show", "hide"
+@@ -153,4 +168 @@ _ASK_TOGGLE_ACTION = "toggle"
 -_ASK_CANCEL_LABEL = "none of these above"
 -_ASK_CANCEL_PROMPT = "已取消选择，请直接发送下一步操作。"
 -_ASK_MULTI_HINT = "可多选：点选项目后点击 Done 提交。"
 -_ASK_MULTI_EMPTY_HINT = "请至少选择一项，或选择 none of these above。"
 +_ASK_MULTI_EMPTY_HINT = "请至少选择一项，或直接打字回复"
-@@ -158 +161,0 @@ _LLM_MENU_PROMPT = "请选择要切换的 LLM："
+@@ -158 +169,0 @@ _LLM_MENU_PROMPT = "请选择要切换的 LLM："
 -_ask_menu_events = Q.Queue()
-@@ -161 +163,0 @@ _llm_menu_store = {}
+@@ -161 +171,0 @@ _llm_menu_store = {}
 -_MULTI_SELECT_RE = re.compile(r"\[?(?:多选|multi(?:[-_ ]?select)?|select all)\]?", re.IGNORECASE)
-@@ -178 +179,0 @@ _MD_TOKEN_RE = re.compile(
+@@ -178 +187,0 @@ _MD_TOKEN_RE = re.compile(
 -_TURN_MARKER_RE = re.compile(r"^\*{0,2}LLM Running \(Turn (\d+)\) \.\.\.\*{0,2}\s*$")
-@@ -180,15 +181,30 @@ _CODE_FENCE_RE = re.compile(r"^\s*(`{3,})(.*)$")
+@@ -180,15 +189,36 @@ _CODE_FENCE_RE = re.compile(r"^\s*(`{3,})(.*)$")
 -_TURN_SUMMARY_LIMIT = 160
 -_TURN_SUMMARY_RE = re.compile(r"<summary>\s*(.*?)\s*</summary>", re.DOTALL)
 -_TURN_SUMMARY_SEARCH_STRIP_RE = re.compile(r"`{3,}[\s\S]*?`{3,}|<thinking>[\s\S]*?</thinking>", re.DOTALL)
@@ -341,12 +385,17 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +# deleted; a stopped run freezes it into the stop receipt instead. Private
 +# chats first used a sendMessageDraft preview, dropped after dogfood: the
 +# client reserves a streaming area for a draft and pushes the chat up,
-+# leaving a blank gap.
++# leaving a blank gap. The answer carries no process: two or more steps put
++# a 过程 button under it, which expands the message in place (IM polish 01).
 +_LIVE_POLL_SECONDS = 1.0
 +_STATUS_EDIT_INTERVAL_SECONDS = 1.5
 +_SEND_ATTEMPTS = 3
-+_FOLD_STEP_LINES = 30
-+_FOLD_HEADER_BUDGET = MessageLimit.MAX_TEXT_LENGTH // 2
++_PROCESS_BUDGET = MessageLimit.MAX_TEXT_LENGTH // 2  # at most half a message; the answer splits to make room
++# A process block longer than this (lines with the label, or characters) is
++# an expandable quote, which Telegram shows folded to three lines.
++_PROCESS_QUOTE_MAX_LINES = 10
++_PROCESS_QUOTE_MAX_CHARS = 600
++_PROCESS_CACHE_LIMIT = 256
 +_ASK_BUTTON_MAX_CANDIDATES = 50
 +_ASK_LIST_BUTTONS_PER_ROW = 8
 +_ASK_QUESTION_LIMIT = 3000
@@ -358,8 +407,9 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +_ask_events = {}  # display queue of the asking task -> ask_user event
 +_pending_asks = {}  # chat id -> _PendingAsk waiting for the owner's answer
 +_last_message_ids = {}  # chat id -> newest message id seen, user's or bot's
++_processes = OrderedDict()  # (chat id, answer message id) -> _Process, in memory only (LRU)
 +_background_tasks = set()
-@@ -225,27 +240,0 @@ def _markdown_safe_segments(text, limit=None):
+@@ -225,27 +254,0 @@ def _markdown_safe_segments(text, limit=None):
 -def _line_complete(line):
 -    return (line or "").endswith(("\n", "\r"))
 -
@@ -387,7 +437,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 -        summary = summary[:_TURN_SUMMARY_LIMIT - 3].rstrip() + "..."
 -    return summary
 -
-@@ -256,13 +244,0 @@ def _quote_tag(text):
+@@ -256,13 +258,0 @@ def _quote_tag(text):
 -def _inject_turn_summary(body, summary):
 -    if not (body or "").strip() or not (summary or "").strip():
 -        return body
@@ -401,17 +451,17 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 -        return f"{title}\n\n{summary_line}\n\n{rest}"
 -    return f"{title}\n\n{summary_line}"
 -
-@@ -295 +271 @@ async def _send_files(root_msg, files):
+@@ -295 +285 @@ async def _send_files(root_msg, files):
 -                    await root_msg.reply_photo(fp)
 +                    _note_message(await root_msg.reply_photo(fp, disable_notification=True))
-@@ -301 +277 @@ async def _send_files(root_msg, files):
+@@ -301 +291 @@ async def _send_files(root_msg, files):
 -                    await root_msg.reply_document(fp)
 +                    _note_message(await root_msg.reply_document(fp, disable_notification=True))
-@@ -305,3 +280,0 @@ async def _send_files(root_msg, files):
+@@ -305,3 +294,0 @@ async def _send_files(root_msg, files):
 -async def _send_files_from_text(root_msg, text):
 -    await _send_files(root_msg, _files_from_text(text))
 -
-@@ -355,31 +327,0 @@ def _is_not_modified_error(exc):
+@@ -355,31 +341,0 @@ def _is_not_modified_error(exc):
 -def _extract_ask_user_event(ctx):
 -    exit_reason = (ctx or {}).get("exit_reason") or {}
 -    if exit_reason.get("result") != "EXITED":
@@ -443,7 +493,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 -        "multi": bool(_MULTI_SELECT_RE.search(question)),
 -    }
 -
-@@ -390,3 +332,10 @@ def _register_ask_user_hook():
+@@ -390,3 +346,10 @@ def _register_ask_user_hook():
 -        event = _extract_ask_user_event(ctx)
 -        if event:
 -            _ask_menu_events.put(event)
@@ -457,7 +507,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +            _ask_events[getattr(agent, "_current_queue", None)] = event
 +            while len(_ask_events) > _ASK_EVENT_LIMIT:
 +                _ask_events.pop(next(iter(_ask_events)))
-@@ -395,31 +343,0 @@ def _register_ask_user_hook():
+@@ -395,31 +357,0 @@ def _register_ask_user_hook():
 -def _drain_latest_ask_user_event():
 -    latest = None
 -    while True:
@@ -489,7 +539,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 -    ])
 -    return InlineKeyboardMarkup(rows)
 -
-@@ -450,35 +367,0 @@ def _build_text_prompt(text):
+@@ -450,35 +381,0 @@ def _build_text_prompt(text):
 -def _normalize_ask_menu_event(stored):
 -    if isinstance(stored, dict):
 -        candidates = stored.get("candidates") or []
@@ -525,15 +575,9 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 -        text = text[:MessageLimit.MAX_TEXT_LENGTH - 18].rstrip() + "\n...[truncated]"
 -    return text
 -
-@@ -491 +374,6 @@ async def _clear_ask_reply_markup(query):
+@@ -491,21 +388,6 @@ async def _clear_ask_reply_markup(query):
 -async def _edit_ask_user_result(query, event, selected=None, cancelled=False):
-+def _retry_after_seconds(exc):
-+    retry_after = getattr(exc, "_retry_after", None)
-+    if retry_after is None:
-+        retry_after = getattr(exc, "retry_after", 0) or 0
-+    if hasattr(retry_after, "total_seconds"):
-+        retry_after = retry_after.total_seconds()
-@@ -493,43 +381,138 @@ async def _edit_ask_user_result(query, event, selected=None, cancelled=False):
+-    try:
 -        await query.edit_message_text(
 -            _render_ask_user_result(event, selected=selected, cancelled=cancelled),
 -            reply_markup=None,
@@ -553,7 +597,13 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 -        "selected": [],
 -    }
 -    prompt = f"{event['question']}\n\n{_ASK_MULTI_HINT}" if multi else event["question"]
--    try:
++def _retry_after_seconds(exc):
++    retry_after = getattr(exc, "_retry_after", None)
++    if retry_after is None:
++        retry_after = getattr(exc, "retry_after", 0) or 0
++    if hasattr(retry_after, "total_seconds"):
++        retry_after = retry_after.total_seconds()
+@@ -513,23 +395,139 @@ async def _send_ask_user_menu(root_msg, event):
 -        await root_msg.reply_text(
 -            prompt,
 -            reply_markup=_build_ask_user_markup(menu_id, candidates, multi=multi),
@@ -644,15 +694,17 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +        return "\n".join(f"> {line}" if line else ">" for line in match.group(1).splitlines() or [""])
 +    return re.sub(_QUOTE_TOKEN_PATTERN, quoted, text or "")
 +
-+def _md_segments(source, first_limit=None):
++def _md_segments(source, room=0):
 +    """(markdown_v2, plain) message parts of already rewritten Markdown; the
-+    first part also fits first_limit, leaving room for a header on top."""
++    last part also leaves `room` characters free, for a process block added
++    at its end later."""
 +    source = (source or "").strip()
 +    if not source:
 +        return []
-+    parts = _markdown_safe_segments(source, first_limit)
-+    if first_limit and len(parts) > 1:
-+        parts = parts[:1] + _markdown_safe_segments(source[len(parts[0]):])
++    parts = _markdown_safe_segments(source)
++    limit = MessageLimit.MAX_TEXT_LENGTH - room
++    if room and len(_to_markdown_v2(parts[-1])) > limit:
++        parts[-1:] = _markdown_safe_segments(parts[-1], limit)
 +    return [(_to_markdown_v2(part), _plain_text(part)) for part in parts]
 +
 +def markdown_v2_segments(text):
@@ -684,25 +736,24 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +    markers = list(_TURN_MARKER_LINE_RE.finditer(raw))
 +    return _answer_from(raw[markers[-1].start():] if markers else raw, raw)
 +
-+def _fold_header(run, steps, seconds):
-+    """(markdown_v2, plain) header over the run's answer: an expandable
-+    quote opening with the desktop fold header `N 步 · 用时 X`, then one
-+    `NN summary` line per step (the last 30). Empty for 0 steps."""
-+    if steps < 1:
-+        return "", ""
-+    label = fold_label(steps, seconds)
-+    for width in (0, 60, 24):  # long step lines give way before the answer does
-+        lines = [f"{n:02d} {run.summaries.get(n, '')}".rstrip() for n in range(1, steps + 1)]
-+        if width:
-+            lines = [clip(line, width) for line in lines]
-+        if len(lines) > _FOLD_STEP_LINES:
-+            lines = [f"… 前 {len(lines) - _FOLD_STEP_LINES} 步略"] + lines[-_FOLD_STEP_LINES:]
-+        quoted = [f"**>{escape_markdown(label, version=2)}"]
-+        quoted += [f">{escape_markdown(line, version=2)}" for line in lines]
-+        markdown = "\n".join(quoted) + "||"
-+        if len(markdown) <= _FOLD_HEADER_BUDGET:
-+            break
-+    return markdown, "\n".join([label, *lines])
++def _process_quote(label, lines):
++    """The process block in MarkdownV2: a quote opening with `N 步 · 用时 X`,
++    then the step lines; an expandable quote (folded to three lines) once it
++    is long."""
++    rows = [label, *lines]
++    quoted = "\n>".join(escape_markdown(row, version=2) for row in rows)
++    if len(rows) > _PROCESS_QUOTE_MAX_LINES or len("\n".join(rows)) > _PROCESS_QUOTE_MAX_CHARS:
++        return f"**>{quoted}||"
++    return f">{quoted}"
++
++def _process_block(summaries, steps, seconds, budget=_PROCESS_BUDGET):
++    """(markdown_v2, plain) of a run's process for the end of its answer:
++    `N 步 · 用时 X`, then one `NN summary` line per step (the last 30), long
++    step lines clipped to 60, then 24 characters to stay within budget."""
++    label, lines = fit_process(
++        summaries, steps, seconds, lambda label, lines: len(_process_quote(label, lines)), budget,
++    )
++    return _process_quote(label, lines), "\n".join([label, *lines])
 +
 +class _LiveSurface:
 +    """A run's live window in its chat: a silent status message edited in
@@ -715,7 +766,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +        self.status_msg = None
 +        self.closed = False
 +        self.text = self.sent_at = None
-@@ -537,70 +519,0 @@ class _TelegramStreamSession:
+@@ -537,28 +534,0 @@ class _TelegramStreamSession:
 -        self.last_update_at = 0.0
 -        self.last_update_raw_len = 0
 -
@@ -744,7 +795,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 -        remaining = self.retry_until - self._now()
 -        if remaining > 0:
 -            await asyncio.sleep(remaining)
--
+@@ -566,62 +536,114 @@ class _TelegramStreamSession:
 -    def _should_stream_update(self, display):
 -        if display == self.active_display:
 -            return False
@@ -786,7 +837,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 -            self.active_display = _DRAFT_HINT
 -            return
 -        self.active_display = _DRAFT_HINT
-@@ -608,20 +521,114 @@ class _TelegramStreamSession:
+-
 -    async def add_chunk(self, chunk):
 -        if not chunk:
 -            return
@@ -921,7 +972,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +    async with run.lock:
 +        live = run.live
 +        if run.state not in ("queued", "running") or live.closed:
-@@ -629,20 +636,2 @@ class _TelegramStreamSession:
+@@ -629,20 +651,2 @@ class _TelegramStreamSession:
 -        await self._reply_text(notice)
 -        self.active_display = ""
 -
@@ -944,7 +995,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 -                await self._send_files()
 +        now = _clock()
 +        if now < live.retry_until:
-@@ -650,9 +639,2 @@ class _TelegramStreamSession:
+@@ -650,9 +654,2 @@ class _TelegramStreamSession:
 -        active_text = segments[-1] if segments else _DRAFT_HINT
 -        await self._stream_active(active_text)
 -
@@ -956,7 +1007,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 -        if self._is_retrying() or not self._should_stream_update(display):
 +        text = _live_text(run, now)
 +        if not _live_due(live, text, now):
-@@ -661,10 +643,10 @@ class _TelegramStreamSession:
+@@ -661,10 +658,10 @@ class _TelegramStreamSession:
 -            if self.can_use_draft:
 -                draft_result = await self._send_draft(display)
 -                if draft_result is True:
@@ -977,7 +1028,23 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +                await live.status_msg.edit_text(text)
 +        except RetryAfter as exc:
 +            live.retry_until = now + _retry_after_seconds(exc) + _RETRY_AFTER_MARGIN_SECONDS
-@@ -671,0 +654,47 @@ class _TelegramStreamSession:
+@@ -672,16 +669,20 @@ class _TelegramStreamSession:
+-
+-    async def _finalize_segment(self, text):
+-        final_text = (text or "").strip() or "..."
+-        if self.live_msg is not None:
+-            await self._edit_text(self.live_msg, final_text)
+-            self.live_msg = None
+-        else:
+-            await self._reply_text(final_text)
+-        self.active_display = ""
+-        if self.can_use_draft:
+-            self.draft_id = _make_draft_id()
+-
+-    async def _send_files(self):
+-        await _send_files(self.root_msg, self.files)
+-
+-    async def _send_draft(self, text):
 +        except Exception as exc:
 +            if not _is_not_modified_error(exc):
 +                print(f"[TG live surface error] {type(exc).__name__}: {exc}", flush=True)
@@ -998,7 +1065,13 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +        await msg.delete()
 +    except Exception as exc:
 +        print(f"[TG status delete error] {type(exc).__name__}: {exc}", flush=True)
-+        try:
+@@ -689,6 +690,19 @@ class _TelegramStreamSession:
+-            await self.root_msg.reply_text_draft(
+-                self.draft_id,
+-                _to_markdown_v2(text),
+-                parse_mode=ParseMode.MARKDOWN_V2,
+-            )
+-            return True
 +            await msg.edit_text(fallback)
 +        except Exception as edit_exc:
 +            print(f"[TG status fallback error] {type(edit_exc).__name__}: {edit_exc}", flush=True)
@@ -1018,51 +1091,97 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +    for attempt in range(_SEND_ATTEMPTS):
 +        try:
 +            message = await target.reply_text(text, **kwargs)
-+        except RetryAfter as exc:
+@@ -696,9 +710,106 @@ class _TelegramStreamSession:
+-            self._set_retry_after(exc)
+-            return None
+-        except Exception as exc:
+-            if _is_not_modified_error(exc):
+-                return True
+-            print(f"[TG draft fallback] {type(exc).__name__}: {exc}", flush=True)
+-            self.can_use_draft = False
+-            self.draft_id = _make_draft_id()
+-            return False
 +            if attempt + 1 >= _SEND_ATTEMPTS:
 +                raise
 +            await asyncio.sleep(_retry_after_seconds(exc) + _RETRY_AFTER_MARGIN_SECONDS)
 +            continue
 +        _note_message(message)
 +        return message
-@@ -673,10 +702,52 @@ class _TelegramStreamSession:
--    async def _finalize_segment(self, text):
--        final_text = (text or "").strip() or "..."
--        if self.live_msg is not None:
--            await self._edit_text(self.live_msg, final_text)
--            self.live_msg = None
--        else:
--            await self._reply_text(final_text)
--        self.active_display = ""
--        if self.can_use_draft:
--            self.draft_id = _make_draft_id()
-+async def _reply_markdown(target, markdown, plain, **kwargs):
-+    """Send as MarkdownV2; when Telegram rejects it, send the plain text."""
++
++async def _reply_markdown(target, markdown, plain, sent=None, **kwargs):
++    """Send as MarkdownV2; when Telegram rejects it, send the plain text.
++    `sent(message, markdown, plain, as_markdown)`, when given, learns what
++    went out: the context-lost notice wrapper (runner/im_resume.py) may have
++    put a line on top of both texts."""
 +    try:
-+        return await _reply(target, markdown, parse_mode=ParseMode.MARKDOWN_V2, **kwargs)
++        message = await _reply(target, markdown, parse_mode=ParseMode.MARKDOWN_V2, **kwargs)
++        as_markdown = True
 +    except RetryAfter:
 +        raise
 +    except Exception as exc:
 +        print(f"[TG markdown fallback] {type(exc).__name__}: {exc}", flush=True)
-+        return await _reply(target, plain, **kwargs)
++        message, as_markdown = await _reply(target, plain, **kwargs), False
++    if sent is not None:
++        sent(message, markdown, plain, as_markdown)
++    return message
++
++class _Process:
++    """The process behind an answer's 过程 button: the answer message as it
++    went out (both texts, and whether the MarkdownV2 one did), and the run's
++    step summaries, count and time. Kept per message in _processes."""
++
++    def __init__(self, summaries, steps, seconds):
++        self.summaries, self.steps, self.seconds = dict(summaries), steps, seconds
++        self.markdown = self.plain = ""
++        self.as_markdown = True
++        self.expanded = False
++
++    def sent(self, message, markdown, plain, as_markdown):
++        self.markdown, self.plain, self.as_markdown = markdown, plain, as_markdown
++        key = (_message_chat_id(message), getattr(message, "message_id", None))
++        if key[0] is not None and isinstance(key[1], int):
++            _processes[key] = self
++            _processes.move_to_end(key)
++            while len(_processes) > _PROCESS_CACHE_LIMIT:
++                _processes.popitem(last=False)
++
++    def text(self, expanded, markdown=True):
++        """(text, parse_mode) of the answer message with its process block at
++        the end, or without it (as sent). The block shrinks to the room the
++        message has left. A message that went out as plain text stays plain
++        text, and markdown=False asks for the plain text too."""
++        markdown = markdown and self.as_markdown
++        base = self.markdown if markdown else self.plain
++        if not expanded:
++            return base, ParseMode.MARKDOWN_V2 if markdown else None
++        room = MessageLimit.MAX_TEXT_LENGTH - len(base) - 2
++        block, block_plain = _process_block(self.summaries, self.steps, self.seconds, min(_PROCESS_BUDGET, room))
++        if markdown and len(block) <= room:
++            return f"{base}\n\n{block}", ParseMode.MARKDOWN_V2
++        return clip(f"{self.plain}\n\n{block_plain}", MessageLimit.MAX_TEXT_LENGTH), None
++
++def _process_markup(expanded):
++    label, action = (PROCESS_HIDE_BUTTON_TEXT, _PROCESS_HIDE) if expanded else (PROCESS_BUTTON_TEXT, _PROCESS_SHOW)
++    return InlineKeyboardMarkup([[
++        InlineKeyboardButton(label, callback_data=f"{_PROCESS_CALLBACK_PREFIX}{action}"),
++    ]])
 +
 +async def _send_answer(run, raw, step_text, steps, seconds):
-+    """The run's one pushed message: the fold header, a blank line, then the
-+    closing step's text. Further parts and the files arrive silently."""
++    """The run's one pushed message: the closing step's text, nothing above
++    it. A run of two or more steps gets a 过程 button under its last part,
++    and that part leaves room for the process block. Further parts and the
++    files arrive silently."""
 +    files = _files_from_text(raw)
 +    body = _answer_from(step_text, raw) or ("已生成附件" if files else "")
-+    header, header_plain = _fold_header(run, steps, seconds)
-+    first_limit = MessageLimit.MAX_TEXT_LENGTH - len(header) - 2 if header else None
-+    parts = _md_segments(_rewrite_markdown(body), first_limit)
-+    if header:
-+        markdown, plain = parts[0] if parts else ("", "")
-+        parts[:1] = [(
-+            f"{header}\n\n{markdown}" if markdown else header,
-+            f"{header_plain}\n\n{plain}" if plain else header_plain,
-+        )]
++    process = _Process(run.summaries, steps, seconds) if steps >= PROCESS_MIN_STEPS else None
++    room = len(_process_block(run.summaries, steps, seconds)[0]) + 2 if process else 0
++    parts = _md_segments(_rewrite_markdown(body), room) or [(escape_markdown("...", version=2), "...")]
 +    quote = _should_quote(run)
-+    for i, (markdown, plain) in enumerate(parts or [(escape_markdown("...", version=2), "...")]):
-+        await _reply_markdown(run.trigger, markdown, plain, do_quote=quote and i == 0, disable_notification=i > 0)
++    for i, (markdown, plain) in enumerate(parts):
++        kwargs = {"do_quote": quote and i == 0, "disable_notification": i > 0}
++        if process is not None and i == len(parts) - 1:
++            kwargs.update(reply_markup=_process_markup(False), sent=process.sent)
++        await _reply_markdown(run.trigger, markdown, plain, **kwargs)
 +    await _send_files(run.trigger, files)
 +
 +class _PendingAsk:
@@ -1088,9 +1207,14 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +    if len(candidates) > _ASK_BUTTON_MAX_CANDIDATES:
 +        return "text"
 +    return candidate_layout(candidates)
-@@ -684,2 +755,18 @@ class _TelegramStreamSession:
--    async def _send_files(self):
--        await _send_files(self.root_msg, self.files)
+@@ -706,7 +817,18 @@ class _TelegramStreamSession:
+-    async def _retry_call(self, func, *args):
+-        while True:
+-            await self._wait_for_retry()
+-            try:
+-                return await func(*args)
+-            except RetryAfter as exc:
+-                self._set_retry_after(exc)
 +def _ask_markup(pending):
 +    if pending.layout not in ("row", "list"):
 +        return None
@@ -1109,8 +1233,9 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +            "提交", callback_data=f"{_ASK_CALLBACK_PREFIX}{pending.menu_id}:{_ASK_MULTI_DONE_ACTION}",
 +        )])
 +    return InlineKeyboardMarkup(rows)
-@@ -687 +774,70 @@ class _TelegramStreamSession:
--    async def _send_draft(self, text):
+@@ -714,2 +836,70 @@ class _TelegramStreamSession:
+-    async def _reply_text_once(self, text):
+-        markdown = _to_markdown_v2(text)
 +def _ask_text(pending, echo=False, chosen=()):
 +    """(markdown_v2, plain) of the question message, or of its echo once
 +    answered: chosen candidates ticked, the rest italic; a typed answer
@@ -1181,51 +1306,14 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +    _forget_pending(pending)
 +    edit = getattr(pending.message, "edit_reply_markup", None)
 +    if edit is not None:
-@@ -689,9 +845 @@ class _TelegramStreamSession:
--            await self.root_msg.reply_text_draft(
--                self.draft_id,
--                _to_markdown_v2(text),
--                parse_mode=ParseMode.MARKDOWN_V2,
--            )
--            return True
--        except RetryAfter as exc:
--            self._set_retry_after(exc)
--            return None
-+            await edit(reply_markup=None)
-@@ -699,14 +847 @@ class _TelegramStreamSession:
--            if _is_not_modified_error(exc):
--                return True
--            print(f"[TG draft fallback] {type(exc).__name__}: {exc}", flush=True)
--            self.can_use_draft = False
--            self.draft_id = _make_draft_id()
--            return False
--
--    async def _retry_call(self, func, *args):
--        while True:
--            await self._wait_for_retry()
--            try:
--                return await func(*args)
--            except RetryAfter as exc:
--                self._set_retry_after(exc)
-+            print(f"[TG ask_user cleanup] {type(exc).__name__}: {exc}", flush=True)
-@@ -714,2 +849,7 @@ class _TelegramStreamSession:
--    async def _reply_text_once(self, text):
--        markdown = _to_markdown_v2(text)
-+async def _edit_ask_echo(pending, chosen=(), query=None):
-+    """Edit the question into its echo and drop its buttons."""
-+    markdown, plain = _ask_text(pending, echo=True, chosen=chosen)
-+    edit = query.edit_message_text if query is not None else getattr(pending.message, "edit_text", None)
-+    if edit is None:
-+        return
-+    if len(markdown) <= MessageLimit.MAX_TEXT_LENGTH:
-@@ -717,4 +857,2 @@ class _TelegramStreamSession:
+@@ -717,4 +907 @@ class _TelegramStreamSession:
 -            return await self.root_msg.reply_text(markdown, parse_mode=ParseMode.MARKDOWN_V2)
 -        except RetryAfter as exc:
 -            self._set_retry_after(exc)
 -            raise
-+            await edit(markdown, parse_mode=ParseMode.MARKDOWN_V2, reply_markup=None)
-+            return
-@@ -723,18 +861,56 @@ class _TelegramStreamSession:
++            await edit(reply_markup=None)
+@@ -722,16 +909 @@ class _TelegramStreamSession:
+-            if _is_not_modified_error(exc):
 -                return None
 -            try:
 -                return await self.root_msg.reply_text(text)
@@ -1241,9 +1329,45 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 -            else:
 -                last_msg = await self._reply_text_once(segment)
 -        return last_msg
--
++            print(f"[TG ask_user cleanup] {type(exc).__name__}: {exc}", flush=True)
+@@ -739,2 +911,7 @@ class _TelegramStreamSession:
 -    async def _edit_text_once(self, msg, text):
 -        markdown = _to_markdown_v2(text)
++async def _edit_ask_echo(pending, chosen=(), query=None):
++    """Edit the question into its echo and drop its buttons."""
++    markdown, plain = _ask_text(pending, echo=True, chosen=chosen)
++    edit = query.edit_message_text if query is not None else getattr(pending.message, "edit_text", None)
++    if edit is None:
++        return
++    if len(markdown) <= MessageLimit.MAX_TEXT_LENGTH:
+@@ -742,4 +919,2 @@ class _TelegramStreamSession:
+-            updated = await msg.edit_text(markdown, parse_mode=ParseMode.MARKDOWN_V2)
+-        except RetryAfter as exc:
+-            self._set_retry_after(exc)
+-            raise
++            await edit(markdown, parse_mode=ParseMode.MARKDOWN_V2, reply_markup=None)
++            return
+@@ -748,20 +923,49 @@ class _TelegramStreamSession:
+-                return msg
+-            try:
+-                updated = await msg.edit_text(text)
+-            except RetryAfter as retry_exc:
+-                self._set_retry_after(retry_exc)
+-                raise
+-        return updated if hasattr(updated, "edit_text") else msg
+-
+-    def _message_key(self, msg):
+-        chat_id = getattr(getattr(msg, "chat", None), "id", None)
+-        message_id = getattr(msg, "message_id", None)
+-        if chat_id is not None and message_id is not None:
+-            return (chat_id, message_id)
+-        if message_id is not None:
+-            return ("message", message_id)
+-        return ("object", id(msg))
+-
+-    async def _delete_text_once(self, msg):
+-        delete = getattr(msg, "delete", None)
+-        if delete is None:
 +                return
 +            print(f"[TG ask_user echo fallback] {type(exc).__name__}: {exc}", flush=True)
 +    try:
@@ -1293,75 +1417,22 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +    message, italic `N 步 · 用时 X` over `❌ 出错：…`."""
 +    async with run.lock:
 +        if run.state == "stopped":
-+            return
+@@ -768,0 +973,6 @@ class _TelegramStreamSession:
 +        run.state = "error"
 +        label = fold_label(run.total_steps(), run.elapsed(run.ended_at or _clock()))
 +        text = f"❌ 出错：{error}"
 +        markdown = escape_markdown(text, version=2)
 +        if label:
 +            markdown, text = f"_{escape_markdown(label, version=2)}_\n{markdown}", f"{label}\n{text}"
-@@ -742,4 +918 @@ class _TelegramStreamSession:
--            updated = await msg.edit_text(markdown, parse_mode=ParseMode.MARKDOWN_V2)
--        except RetryAfter as exc:
--            self._set_retry_after(exc)
--            raise
-+            await _reply_markdown(run.trigger, markdown, text, do_quote=_should_quote(run))
-@@ -747,2 +920,19 @@ class _TelegramStreamSession:
--            if _is_not_modified_error(exc):
--                return msg
-+            print(f"[TG run error notice] {type(exc).__name__}: {exc}", flush=True)
-+        finally:
-+            await _retire_live(run, "❌ 出错")
-+
-+def _mark_stopped(run):
-+    # Synchronous on purpose: callers mark the run before anything awaits,
-+    # so its display loop can never turn the aborted task's `done` into an
-+    # answer.
-+    run.state, run.ended_at = "stopped", _clock()
-+    run.wake.set()
-+
-+async def _post_stopped(run):
-+    """The stop receipt `⏹ 已停止 · N 步 · 用时 X`: the run's status message
-+    is frozen into it and stays; a new message only when there is none (or
-+    the edit fails)."""
-+    async with run.lock:
-+        text = stopped_text(run.total_steps(), run.elapsed(run.ended_at or _clock()))
-+        live = run.live
-+        if live.status_msg is not None:
-@@ -750,19 +940,5 @@ class _TelegramStreamSession:
--                updated = await msg.edit_text(text)
--            except RetryAfter as retry_exc:
--                self._set_retry_after(retry_exc)
--                raise
--        return updated if hasattr(updated, "edit_text") else msg
--
--    def _message_key(self, msg):
--        chat_id = getattr(getattr(msg, "chat", None), "id", None)
--        message_id = getattr(msg, "message_id", None)
--        if chat_id is not None and message_id is not None:
--            return (chat_id, message_id)
--        if message_id is not None:
--            return ("message", message_id)
--        return ("object", id(msg))
--
--    async def _delete_text_once(self, msg):
--        delete = getattr(msg, "delete", None)
--        if delete is None:
--            return
-+                await live.status_msg.edit_text(text)
-+                live.status_msg, live.closed = None, True
-+                return
-+            except Exception as exc:
-+                print(f"[TG stop receipt edit error] {type(exc).__name__}: {exc}", flush=True)
-@@ -770,6 +946 @@ class _TelegramStreamSession:
+@@ -770,6 +980 @@ class _TelegramStreamSession:
 -            result = delete()
 -            if hasattr(result, "__await__"):
 -                await result
 -        except RetryAfter as exc:
 -            self._set_retry_after(exc)
 -            raise
-+            await _reply(run.trigger, text, do_quote=_should_quote(run))
-@@ -777,32 +948,12 @@ class _TelegramStreamSession:
++            await _reply_markdown(run.trigger, markdown, text, do_quote=_should_quote(run))
+@@ -777,32 +982,40 @@ class _TelegramStreamSession:
 -            print(f"[TG stale overflow delete error] {type(exc).__name__}: {exc}", flush=True)
 -
 -    async def _delete_text(self, msg, wait_retry=True):
@@ -1394,6 +1465,34 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 -                )
 -            else:
 -                new_overflow_msgs.append(await self._reply_text(segment, wait_retry=wait_retry))
++            print(f"[TG run error notice] {type(exc).__name__}: {exc}", flush=True)
++        finally:
++            await _retire_live(run, "❌ 出错")
++
++def _mark_stopped(run):
++    # Synchronous on purpose: callers mark the run before anything awaits,
++    # so its display loop can never turn the aborted task's `done` into an
++    # answer.
++    run.state, run.ended_at = "stopped", _clock()
++    run.wake.set()
++
++async def _post_stopped(run):
++    """The stop receipt `⏹ 已停止 · N 步 · 用时 X`: the run's status message
++    is frozen into it and stays; a new message only when there is none (or
++    the edit fails)."""
++    async with run.lock:
++        text = stopped_text(run.total_steps(), run.elapsed(run.ended_at or _clock()))
++        live = run.live
++        if live.status_msg is not None:
++            try:
++                await live.status_msg.edit_text(text)
++                live.status_msg, live.closed = None, True
++                return
++            except Exception as exc:
++                print(f"[TG stop receipt edit error] {type(exc).__name__}: {exc}", flush=True)
++        try:
++            await _reply(run.trigger, text, do_quote=_should_quote(run))
++        except Exception as exc:
 +            print(f"[TG stop receipt error] {type(exc).__name__}: {exc}", flush=True)
 +        await _retire_live(run, text)
 +
@@ -1406,7 +1505,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +        return None
 +    current = getattr(agent, "_current_queue", None)
 +    return run if current is None or current is run.dq else None
-@@ -810,2 +961,5 @@ class _TelegramStreamSession:
+@@ -810,2 +1023,5 @@ class _TelegramStreamSession:
 -        for stale_msg in overflow_msgs[len(new_overflow_msgs):]:
 -            await self._delete_text(stale_msg, wait_retry=wait_retry)
 +def _call_noting_abort(fn, *args):
@@ -1414,14 +1513,14 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +    (upstream /continue n aborts for a valid index alone); return its result
 +    and whether it aborted a running task."""
 +    hits, original, own = [], agent.abort, "abort" in vars(agent)
-@@ -813,3 +967,3 @@ class _TelegramStreamSession:
+@@ -813,3 +1029,3 @@ class _TelegramStreamSession:
 -        if new_overflow_msgs:
 -            self._edit_overflow_msgs[self._message_key(primary_msg)] = new_overflow_msgs
 -        return primary_msg
 +    def abort(*a, **kw):
 +        hits.append(bool(getattr(agent, "is_running", False)))
 +        return original(*a, **kw)
-@@ -817,3 +971,6 @@ class _TelegramStreamSession:
+@@ -817,3 +1033,6 @@ class _TelegramStreamSession:
 -    async def _upsert_live_message(self, text, wait_retry=True):
 -        if self.live_msg is None:
 -            self.live_msg = await self._reply_text(text, wait_retry=wait_retry)
@@ -1431,7 +1530,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +    finally:
 +        if own:
 +            agent.abort = original
-@@ -821,91 +978,29 @@ class _TelegramStreamSession:
+@@ -821,91 +1040,29 @@ class _TelegramStreamSession:
 -            self.live_msg = await self._edit_text(self.live_msg, text, wait_retry=wait_retry)
 -
 -
@@ -1552,12 +1651,12 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +            await asyncio.wait_for(run.wake.wait(), _LIVE_POLL_SECONDS)
 +        except asyncio.TimeoutError:
 +            pass
-@@ -913,3 +1008 @@ class _TelegramTurnStreamCoordinator:
+@@ -913,3 +1070 @@ class _TelegramTurnStreamCoordinator:
 -async def _stream(dq, msg):
 -    stream = _TelegramTurnStreamCoordinator(msg)
 -    await stream.prime()
 +async def _drive_run(run):
-@@ -917,4 +1010,9 @@ async def _stream(dq, msg):
+@@ -917,4 +1072,9 @@ async def _stream(dq, msg):
 -        while True:
 -            try: first = await asyncio.to_thread(dq.get, True, _QUEUE_WAIT_SECONDS)
 -            except Q.Empty: continue
@@ -1571,7 +1670,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +            await _adopt_pending_ask(run)
 +        await _flush_live(run)
 +        while run.state in ("queued", "running"):
-@@ -922,15 +1020,12 @@ async def _stream(dq, msg):
+@@ -922,15 +1082,12 @@ async def _stream(dq, msg):
 -                while True: items.append(dq.get_nowait())
 -            except Q.Empty: pass
 -            done_item = None
@@ -1599,7 +1698,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +            outputs = run.observe(item, now)
 +            if "done" in item:
 +                await _finish_run(run, str(item.get("done") or ""), outputs)
-@@ -938,6 +1033 @@ async def _stream(dq, msg):
+@@ -938,6 +1095 @@ async def _stream(dq, msg):
 -    except asyncio.CancelledError:
 -        await stream.finish_with_notice("⏹️ 已停止")
 -    except RetryAfter as exc:
@@ -1607,7 +1706,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 -        if stream.session is not None:
 -            stream.session._set_retry_after(exc)
 +            await _flush_live(run)
-@@ -945,7 +1035,7 @@ async def _stream(dq, msg):
+@@ -945,7 +1097,7 @@ async def _stream(dq, msg):
 -        print(f"[TG stream error] {type(exc).__name__}: {exc}", flush=True)
 -        if stream.session is not None and stream.session._is_retrying():
 -            return
@@ -1622,25 +1721,25 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +            _RUNS.remove(run)
 +        for other in _RUNS:
 +            other.wake.set()
-@@ -960,4 +1049,0 @@ def _normalized_command(text):
+@@ -960,4 +1111,0 @@ def _normalized_command(text):
 -def _cancel_stream_task(ctx):
 -    task = ctx.user_data.pop('stream_task', None)
 -    if task and not task.done(): task.cancel()
 -
-@@ -992,4 +1078 @@ async def _handle_review_command(update, ctx, cmd):
+@@ -992,4 +1140 @@ async def _handle_review_command(update, ctx, cmd):
 -    _cancel_stream_task(ctx)
 -    task_dq = agent.put_task(prompt, source="telegram")
 -    task = asyncio.create_task(_stream(task_dq, update.message))
 -    ctx.user_data['stream_task'] = task
 +    _enqueue_run(update.message, prompt)
-@@ -1004,3 +1087,3 @@ async def handle_msg(update, ctx):
+@@ -1004,3 +1149,3 @@ async def handle_msg(update, ctx):
 -    dq = agent.put_task(prompt, source="telegram")
 -    task = asyncio.create_task(_stream(dq, update.message))
 -    ctx.user_data['stream_task'] = task
 +    _note_message(update.message)
 +    # With a question pending in the chat, this message is its answer.
 +    _enqueue_run(update.message, prompt, answers_ask=True)
-@@ -1018,5 +1101,5 @@ async def handle_ask_callback(update, ctx):
+@@ -1018,5 +1163,5 @@ async def handle_ask_callback(update, ctx):
 -    if not menu_id:
 -        return await query.answer("菜单无效")
 -    event = _normalize_ask_menu_event(_ask_menu_store.get(menu_id))
@@ -1651,16 +1750,16 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +        # Answered, expired, or left over from an earlier process: acknowledge
 +        # quietly and drop the buttons; nothing runs.
 +        await query.answer()
-@@ -1024,2 +1107,3 @@ async def handle_ask_callback(update, ctx):
+@@ -1024,2 +1169,3 @@ async def handle_ask_callback(update, ctx):
 -    candidates = event["candidates"]
 -    if event.get("multi") and action.startswith(f"{_ASK_TOGGLE_ACTION}:"):
 +    candidates = pending.event["candidates"]
 +    multi = bool(pending.event.get("multi"))
 +    if multi and action.startswith(f"{_ASK_TOGGLE_ACTION}:"):
-@@ -1028,2 +1111,0 @@ async def handle_ask_callback(update, ctx):
+@@ -1028,2 +1173,0 @@ async def handle_ask_callback(update, ctx):
 -            if selected_idx < 0 or selected_idx >= len(candidates):
 -                raise ValueError
-@@ -1031,35 +1113,4 @@ async def handle_ask_callback(update, ctx):
+@@ -1031,10 +1175,4 @@ async def handle_ask_callback(update, ctx):
 -            return await query.answer("菜单无效")
 -        stored = _ask_menu_store.get(menu_id)
 -        if not isinstance(stored, dict):
@@ -1671,7 +1770,11 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 -        else:
 -            selected.add(selected_idx)
 -        stored["selected"] = sorted(selected)
--        await query.answer()
++            selected_idx = -1
++        if not 0 <= selected_idx < len(candidates):
++            return await query.answer()
++        pending.selected ^= {selected_idx}
+@@ -1042,28 +1180,5 @@ async def handle_ask_callback(update, ctx):
 -        return await query.edit_message_reply_markup(
 -            reply_markup=_build_ask_user_markup(
 -                menu_id,
@@ -1696,11 +1799,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 -        return
 -    if action == _ASK_CANCEL_ACTION:
 -        _ask_menu_store.pop(menu_id, None)
-+            selected_idx = -1
-+        if not 0 <= selected_idx < len(candidates):
-+            return await query.answer()
-+        pending.selected ^= {selected_idx}
-@@ -1067,3 +1118,5 @@ async def handle_ask_callback(update, ctx):
+-        await query.answer()
 -        await _edit_ask_user_result(query, event, cancelled=True)
 -        if query.message is not None:
 -            await query.message.reply_text(_ASK_CANCEL_PROMPT)
@@ -1709,7 +1808,7 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +        except Exception as exc:
 +            if not _is_not_modified_error(exc):
 +                print(f"[TG ask_user toggle] {type(exc).__name__}: {exc}", flush=True)
-@@ -1071,5 +1124,14 @@ async def handle_ask_callback(update, ctx):
+@@ -1071,5 +1186,14 @@ async def handle_ask_callback(update, ctx):
 -    try:
 -        selected = candidates[int(action)]
 -    except (ValueError, IndexError):
@@ -1729,13 +1828,9 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +            return await query.answer()
 +        chosen, answer = [selected_idx], candidates[selected_idx]
 +    _forget_pending(pending)
-@@ -1077,6 +1139,7 @@ async def handle_ask_callback(update, ctx):
+@@ -1077,2 +1201,37 @@ async def handle_ask_callback(update, ctx):
 -    await _edit_ask_user_result(query, event, selected=selected)
 -    if query.message is None:
--        return
--    dq = agent.put_task(_build_text_prompt(selected), source="telegram")
--    task = asyncio.create_task(_stream(dq, query.message))
--    ctx.user_data['stream_task'] = task
 +    await _edit_ask_echo(pending, chosen, query=query)
 +    print(f"[TG ask_user] answered by button: chat={pending.chat_id} chosen={len(chosen)}", flush=True)
 +    # The continuation's trigger is the question; an inaccessible-message
@@ -1743,7 +1838,58 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +    trigger = query.message if hasattr(query.message, "reply_text") else pending.message
 +    if trigger is not None:
 +        _enqueue_run(trigger, _build_text_prompt(answer), carry=pending.carry)
-@@ -1133 +1196,6 @@ async def cmd_abort(update, ctx):
++
++async def _edit_process(query, process, expand):
++    text, parse_mode = process.text(expand)
++    markup = _process_markup(expand)
++    try:
++        if parse_mode:
++            await query.edit_message_text(text, parse_mode=parse_mode, reply_markup=markup)
++        else:
++            await query.edit_message_text(text, reply_markup=markup)
++        return True
++    except Exception as exc:
++        if _is_not_modified_error(exc):
++            return True
++        print(f"[TG process edit] {type(exc).__name__}: {exc}", flush=True)
++        if not parse_mode:
++            return False
++    try:  # the MarkdownV2 was refused: the plain text rather than nothing
++        await query.edit_message_text(process.text(expand, markdown=False)[0], reply_markup=markup)
++        return True
++    except Exception as exc:
++        print(f"[TG process plain fallback] {type(exc).__name__}: {exc}", flush=True)
++        return _is_not_modified_error(exc)
++
++async def handle_process_callback(update, ctx):
++    """The 过程 / 收起过程 button under an answer: edit that message into the
++    answer plus its process block, or back. Its parse mode and reply quote
++    stay as sent. The process lives in this process's memory only; after a
++    restart a click gets a toast and the message stays as it is."""
++    query = update.callback_query
++    if query is None:
+@@ -1080,3 +1239,17 @@ async def handle_ask_callback(update, ctx):
+-    dq = agent.put_task(_build_text_prompt(selected), source="telegram")
+-    task = asyncio.create_task(_stream(dq, query.message))
+-    ctx.user_data['stream_task'] = task
++    uid = update.effective_user.id if update.effective_user else None
++    if _galley_locked():
++        return await query.answer()
++    if ALLOWED and uid not in ALLOWED:
++        return await query.answer("no", show_alert=True)
++    message = query.message
++    key = (_message_chat_id(message), getattr(message, "message_id", None))
++    process = _processes.get(key)
++    if process is None:
++        return await query.answer(PROCESS_GONE_TEXT)
++    _processes.move_to_end(key)
++    expand = (query.data or "") == f"{_PROCESS_CALLBACK_PREFIX}{_PROCESS_SHOW}"
++    await query.answer()
++    if expand == process.expanded:
++        return  # a second tap on a button the first tap already replaced
++    if await _edit_process(query, process, expand):
++        process.expanded = expand
+@@ -1133 +1306,6 @@ async def cmd_abort(update, ctx):
 -    _cancel_stream_task(ctx)
 +    # Stops the running run only: queued runs stay, and the run's stop
 +    # receipt is the only reply.
@@ -1751,23 +1897,23 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +    if run is None:
 +        return await update.message.reply_text(_NO_RUNNING_TASK_TEXT)
 +    _mark_stopped(run)
-@@ -1135 +1203,2 @@ async def cmd_abort(update, ctx):
+@@ -1135 +1313,2 @@ async def cmd_abort(update, ctx):
 -    await update.message.reply_text("⏹️ 正在停止...")
 +    print(f"[TG run] stopped by command: chat={run.chat_id}", flush=True)
 +    await _post_stopped(run)
-@@ -1169,3 +1238,2 @@ async def handle_photo(update, ctx):
+@@ -1169,3 +1348,2 @@ async def handle_photo(update, ctx):
 -    dq = agent.put_task(prompt, source="telegram")
 -    task = asyncio.create_task(_stream(dq, update.message))
 -    ctx.user_data['stream_task'] = task
 +    _note_message(update.message)
 +    _enqueue_run(update.message, prompt)
-@@ -1180,0 +1249,2 @@ async def handle_command(update, ctx):
+@@ -1180,0 +1359,2 @@ async def handle_command(update, ctx):
 +    chat_id = _message_chat_id(update.message)
 +    _note_message(update.message)
-@@ -1191,0 +1262,2 @@ async def handle_command(update, ctx):
+@@ -1191,0 +1372,2 @@ async def handle_command(update, ctx):
 +    # /new, /restore and /continue n abort the running run's task: that run
 +    # ends as stopped (marked before anything awaits); queued runs go on.
-@@ -1193,2 +1265,8 @@ async def handle_command(update, ctx):
+@@ -1193,2 +1375,8 @@ async def handle_command(update, ctx):
 -        _cancel_stream_task(ctx)
 -        return await update.message.reply_text(reset_conversation(agent))
 +        run = _running_run()
@@ -1778,17 +1924,17 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +        if run is not None:
 +            await _post_stopped(run)
 +        return await update.message.reply_text(reply)
-@@ -1196 +1273,0 @@ async def handle_command(update, ctx):
+@@ -1196 +1383,0 @@ async def handle_command(update, ctx):
 -        _cancel_stream_task(ctx)
-@@ -1201,0 +1279,3 @@ async def handle_command(update, ctx):
+@@ -1201,0 +1389,3 @@ async def handle_command(update, ctx):
 +            run = _running_run()
 +            if run is not None:
 +                _mark_stopped(run)
-@@ -1203,0 +1284,3 @@ async def handle_command(update, ctx):
+@@ -1203,0 +1394,3 @@ async def handle_command(update, ctx):
 +            await _drop_pending_ask(chat_id)
 +            if run is not None:
 +                await _post_stopped(run)
-@@ -1208,2 +1291,11 @@ async def handle_command(update, ctx):
+@@ -1208,2 +1401,11 @@ async def handle_command(update, ctx):
 -        if cmd != '/continue': _cancel_stream_task(ctx)
 -        return await update.message.reply_text(handle_frontend_command(agent, cmd))
 +        if cmd == '/continue':
@@ -1802,3 +1948,5 @@ diff --git a/frontends/tgapp.py b/frontends/tgapp.py
 +        if run is not None and aborted:
 +            await _post_stopped(run)
 +        return await update.message.reply_text(reply)
+@@ -1258,0 +1461 @@ def main():
++            app.add_handler(CallbackQueryHandler(handle_process_callback, pattern=r"^proc:"))

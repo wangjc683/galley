@@ -334,9 +334,12 @@ def install_telegram(tgapp: Any, resume: ChannelResume) -> None:
     - ``_send_answer`` / ``_post_ask`` (``_finish_run``'s answer and
       question) arm the notice; ``_reply_markdown`` / ``_reply`` put it on
       the first message either posts, as an italic first line above the
-      fold header (the plain-text fallback gets the same line unstyled).
-      Report turns go out through the reporter's own Bot API sends, stop
-      receipts and errors through other paths: none of them takes it."""
+      answer (the plain-text fallback gets the same line unstyled). The
+      texts reach tgapp's own ``_reply_markdown`` with the line on top, so
+      an answer's 过程 button (its ``sent`` callback) keeps it when it
+      edits the message. Report turns go out through the reporter's own
+      Bot API sends, stop receipts and errors through other paths: none of
+      them takes it."""
     _replace(tgapp, "reset_conversation", _wrap_reset(resume))
     _replace(tgapp, "handle_frontend_command", _wrap_continue(resume))
     limit = int(getattr(getattr(tgapp, "MessageLimit", None), "MAX_TEXT_LENGTH", 4096))

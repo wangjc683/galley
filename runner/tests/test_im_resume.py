@@ -797,12 +797,33 @@ def test_telegram_answer_leads_with_the_notice_once(tg: TgWorld) -> None:
         tg_answer_script(env, "好的。")
         await env.say("换个话题")
         await env.settle()
-        header = tgt.header_b("1 步 · 用时 1 秒", "01 答")
-        assert env.bot.others()[-1].text == f"_{NOTICE}_\n{header}\n\n好的。"
+        assert env.bot.others()[-1].text == f"_{NOTICE}_\n好的。"
         tg_answer_script(env, "嗯。")
         await env.say("继续")
         await env.settle()
-        assert env.bot.others()[-1].text == f"{header}\n\n嗯。"
+        assert env.bot.others()[-1].text == "嗯。"
+
+    env.run(body)
+
+
+def test_telegram_process_expands_under_the_notice_line(tg: TgWorld) -> None:
+    """The notice goes on top of the answer's text through the
+    _reply_markdown wrapper; the 过程 button's edits keep it there."""
+    env = tg.env
+
+    async def body() -> None:
+        t1 = tgt.turn_text(1, "<summary>查</summary>", "code_run({})")
+        t2 = tgt.turn_text(2, "<summary>答</summary>好的。")
+        env.agent.scripts.append([tgt.nxt([t1]), tgt.nxt([t1, t2], 1.0), tgt.done([t1, t2], 1.0)])
+        await env.say("换个话题")
+        await env.settle()
+        answer = env.bot.others()[-1]
+        assert answer.text == f"_{NOTICE}_\n好的。"
+        show = await env.tap(answer, tgt.SHOW)
+        block = tgt.quote("2 步 · 用时 2 秒", "01 查", "02 答")
+        assert show.text_edits[0][0] == f"_{NOTICE}_\n好的。\n\n{block}"
+        hide = await env.tap(answer, tgt.HIDE)
+        assert hide.text_edits[0][0] == f"_{NOTICE}_\n好的。"
 
     env.run(body)
 
@@ -816,7 +837,7 @@ def test_telegram_plain_fallback_keeps_the_notice_line(tg: TgWorld) -> None:
         await env.say("hi")
         await env.settle()
         (answer,) = env.bot.others()
-        assert answer.text == f"{NOTICE}\n1 步 · 用时 1 秒\n01 答\n\n**好**"
+        assert answer.text == f"{NOTICE}\n**好**"
 
     env.run(body)
 
@@ -830,7 +851,7 @@ def test_telegram_notice_goes_just_before_a_first_part_with_no_room(tg: TgWorld)
         await env.settle()
         notice, first, *rest = env.bot.others()
         assert notice.text == f"_{NOTICE}_"
-        assert (first.text or "").startswith("**>1 步 · 用时 1 秒")
+        assert (first.text or "").startswith("内容内容")
         assert len(first.text or "") + len(notice.text or "") + 1 > tgt.MAX
         assert rest and all(len(m.text or "") <= tgt.MAX for m in [first, *rest])
 

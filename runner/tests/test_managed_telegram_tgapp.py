@@ -423,6 +423,12 @@ class Env:
         await self.tg.handle_ask_callback(self.update(query=query, uid=uid), self.ctx)
         return query
 
+    async def tap(self, message: FakeMessage | None, data: str, uid: int = OWNER) -> FakeQuery:
+        """A tap on an answer's 过程 / 收起过程 button."""
+        query = FakeQuery(data, message)
+        await self.tg.handle_process_callback(self.update(query=query, uid=uid), self.ctx)
+        return query
+
     async def settle(self) -> None:
         for _ in range(200):
             pending = [task for task in self.tg._background_tasks if not task.done()]
@@ -510,9 +516,17 @@ async def wait_until(predicate: Callable[[], bool], timeout: float = 5.0) -> Non
         await asyncio.sleep(0.005)
 
 
-def header_b(label: str, *lines: str) -> str:
-    esc = [_escape_markdown(line, 2) for line in lines]
-    return "\n".join([f"**>{_escape_markdown(label, 2)}", *(f">{line}" for line in esc)]) + "||"
+def quote(label: str, *lines: str, expandable: bool = False) -> str:
+    """A process block as tgapp writes it at the end of an answer: a
+    MarkdownV2 quote, expandable (folded to three lines) when long."""
+    body = "\n>".join(_escape_markdown(row, 2) for row in (label, *lines))
+    return f"**>{body}||" if expandable else f">{body}"
+
+
+SHOW, HIDE = "proc:show", "proc:hide"
+PROCESS_BUTTON = [[("过程", SHOW)]]
+HIDE_BUTTON = [[("收起过程", HIDE)]]
+GONE = "过程已不在了（渠道重启过）"
 
 
 def buttons(message: FakeMessage) -> list[list[tuple[str, str | None]]]:
@@ -568,10 +582,12 @@ def test_single_step_answer_replaces_status_message(env: Env) -> None:
         assert status.kwargs == STATUS_KWARGS
         assert status.shown() == ["·· 思考中"]
         assert status.deleted
-        assert answer.text == header_b("1 步 · 用时 3 秒", "01 打招呼") + "\n\n你好！"
+        # One step: the answer alone, no process and no button.
+        assert answer.text == "你好！"
         assert answer.kwargs == {
             "parse_mode": "MarkdownV2", "do_quote": False, "disable_notification": False,
         }
+        assert env.tg._processes == {}
         assert env.tg._RUNS == []
         assert env.agent.tasks[0][0] == f"{env.tg.FILE_HINT}\n\nhi"
         assert env.agent.tasks[0][1] == "telegram"
@@ -604,10 +620,11 @@ def test_multi_step_status_lines_and_answer_is_last_step_only(env: Env) -> None:
         assert not any("已完成" in (text or "") for text in status.shown())
         assert [kwargs for _text, kwargs in status.edits] == [{}, {}]  # plain text, in place
         assert status.deleted
-        assert answer.text == (
-            header_b("3 步 · 用时 10 秒", "01 读取会话列表", "02 整理结果", "03 回答")
-            + "\n\n一共有 3 个会话在跑。"
-        )
+        # The answer opens with the answer (the push preview too); the
+        # process waits behind the 过程 button under it.
+        assert answer.text == "一共有 3 个会话在跑。"
+        assert buttons(answer) == PROCESS_BUTTON
+        assert answer.kwargs["disable_notification"] is False
         assert "我先查一下" not in (answer.text or "")
         assert "LLM Running" not in (answer.text or "") and "🛠" not in (answer.text or "")
 
@@ -699,9 +716,13 @@ def test_group_chat_uses_silent_status_message(env: Env) -> None:
         assert status.kwargs == STATUS_KWARGS
         assert status.shown() == ["·· 思考中", "01 查\n·· 思考中"]
         assert status.deleted
-        assert answer.text == header_b("2 步 · 用时 3 秒", "01 查", "02 答") + "\n\n答"
+        assert answer.text == "答" and buttons(answer) == PROCESS_BUTTON
         assert answer.kwargs["do_quote"] is False  # right under its status message
         assert trigger.chat.type == "group"
+        # In a group too the tap expands that very message.
+        tap = await env.tap(answer, SHOW)
+        assert tap.text_edits[0][0] == "答\n\n" + quote("2 步 · 用时 3 秒", "01 查", "02 答")
+        assert answer.text == tap.text_edits[0][0] and buttons(answer) == HIDE_BUTTON
 
     env.run(body)
 
@@ -759,15 +780,18 @@ def test_status_message_retry_after_backs_off(env: Env) -> None:
     env.run(body)
 
 
-def test_fold_header_b_is_the_only_style(env: Env) -> None:
+def test_process_block_is_escaped_and_the_fold_switch_is_gone(env: Env) -> None:
     async def body() -> None:
         t1 = turn_text(1, "<summary>查 (1)</summary>", "code_run({})")
         t2 = turn_text(2, "结果是 1.5")
         env.agent.scripts.append([nxt([t1]), nxt([t1, t2], 1.0), done([t1, t2], 1.0)])
         await env.say("q")
         await env.settle()
-        assert env.bot.sent[-1].text == (
-            "**>2 步 · 用时 2 秒\n>01 查 \\(1\\)\n>02 结果是 1\\.5||\n\n结果是 1\\.5"
+        answer = env.bot.sent[-1]
+        assert answer.text == "结果是 1\\.5"
+        tap = await env.tap(answer, SHOW)
+        assert tap.text_edits[0][0] == (
+            "结果是 1\\.5\n\n>2 步 · 用时 2 秒\n>01 查 \\(1\\)\n>02 结果是 1\\.5"
         )
         # The dogfood switch is gone: /fold is an unknown command again.
         await env.command("/fold a")
@@ -779,7 +803,7 @@ def test_fold_header_b_is_the_only_style(env: Env) -> None:
     env.run(body)
 
 
-def test_fold_b_keeps_last_30_steps(env: Env) -> None:
+def test_long_process_is_an_expandable_quote_of_the_last_30_steps(env: Env) -> None:
     async def body() -> None:
         texts = [
             turn_text(k, f"<summary>第 {k} 步</summary>", "code_run({})") for k in range(1, 35)
@@ -788,13 +812,16 @@ def test_fold_b_keeps_last_30_steps(env: Env) -> None:
         env.agent.scripts.append([nxt(texts[:1]), done(texts, 70.0)])
         await env.say("长任务")
         await env.settle()
-        text = env.bot.sent[-1].text or ""
-        lines = text.split("\n")
-        assert lines[0] == "**>35 步 · 用时 1 分 10 秒"
-        assert lines[1] == ">… 前 5 步略"
-        assert lines[2] == ">06 第 6 步"
-        assert lines[31] == ">35 完成||"
-        assert lines[32:] == ["", "完成"]
+        answer = env.bot.sent[-1]
+        assert answer.text == "完成"
+        tap = await env.tap(answer, SHOW)
+        lines = tap.text_edits[0][0].split("\n")
+        assert lines[:2] == ["完成", ""]
+        assert lines[2] == "**>35 步 · 用时 1 分 10 秒"
+        assert lines[3] == ">… 前 5 步略"
+        assert lines[4] == ">06 第 6 步"
+        assert lines[33] == ">35 完成||"
+        assert len(lines) == 34
 
     env.run(body)
 
@@ -807,7 +834,7 @@ def test_plain_fallback_when_markdown_is_rejected(env: Env) -> None:
         await env.say("hi")
         await env.settle()
         (answer,) = env.bot.others()
-        assert answer.text == "1 步 · 用时 2 秒\n01 查\n\n**好**"
+        assert answer.text == "**好**"
         assert "parse_mode" not in answer.kwargs
 
     env.run(body)
@@ -826,8 +853,8 @@ def test_long_answer_pushes_first_part_only(env: Env) -> None:
             [False] + [True] * (len(parts) - 1)
         )
         assert all(len(m.text or "") <= MAX for m in parts)
-        assert (parts[0].text or "").startswith("**>1 步 · 用时 1 秒")
-        assert not any((m.text or "").startswith("**>") for m in parts[1:])
+        assert (parts[0].text or "").startswith("第 0 行：")
+        assert all(buttons(m) == [] for m in parts)  # one step: no process anywhere
 
     env.run(body)
 
@@ -1076,10 +1103,13 @@ def test_ask_row_click_continues_run_with_carried_counts(env: Env) -> None:
         assert env.agent.tasks[-1][0] == f"{env.tg.FILE_HINT}\n\n方案 B"
         await env.settle()
         answer = env.bot.sent[-1]
-        assert answer.text == header_b(
-            "4 步 · 用时 13 秒", "01 查看现状", "02 确认方向", "03 改好了", "04 按方案 B 改完了。",
-        ) + "\n\n按方案 B 改完了。"
+        assert answer.text == "按方案 B 改完了。" and buttons(answer) == PROCESS_BUTTON
         assert answer.kwargs["do_quote"] is False  # right below the question it continues
+        # The process runs across the question: steps and time add up.
+        tap = await env.tap(answer, SHOW)
+        assert tap.text_edits[0][0] == "按方案 B 改完了。\n\n" + quote(
+            "4 步 · 用时 13 秒", "01 查看现状", "02 确认方向", "03 改好了", "04 按方案 B 改完了。",
+        )
         _first, second_status = env.bot.statuses()
         assert second_status.shown() == [
             "02 确认方向\n·· 思考中", "03 改好了\n·· 思考中",
@@ -1196,7 +1226,12 @@ def test_ask_typed_answer_echoes_without_tick(env: Env) -> None:
             "_已回复 · 已完成 2 步_\n我需要你确认一下。\n用哪个方案？\n_方案 A_\n_方案 B_"
         )
         assert question.reply_markup is None
-        assert (env.bot.sent[-1].text or "").startswith("**>3 步 · 用时 13 秒")
+        answer = env.bot.sent[-1]
+        assert answer.text == "按你说的办。"
+        tap = await env.tap(answer, SHOW)
+        assert tap.text_edits[0][0] == "按你说的办。\n\n" + quote(
+            "3 步 · 用时 13 秒", "01 查看现状", "02 确认方向", "03 按你说的办。",
+        )
         assert CHAT_ID not in env.tg._pending_asks
 
     env.run(body)
@@ -1221,7 +1256,7 @@ def test_photo_does_not_answer_a_pending_question(env: Env, tmp_path: Path) -> N
         await env.tg.handle_photo(env.update(photo), env.ctx)
         await env.settle()
         assert env.agent.tasks[-1][0] == "[TIPS] 收到图片temp/tg_u1.jpg，请等待下一步指令"
-        assert env.bot.sent[-1].text == header_b("1 步 · 用时 1 秒", "01 收到图片") + "\n\n收到图片"
+        assert env.bot.sent[-1].text == "收到图片"
         assert CHAT_ID in env.tg._pending_asks  # still waiting for its answer
 
     env.run(body)
@@ -1260,7 +1295,7 @@ def test_new_and_restore_drop_pending_question(env: Env, monkeypatch: Any) -> No
         env.agent.scripts.append([nxt([t1]), done([t1], 1.0)])
         await env.say("新问题")
         await env.settle()
-        assert (env.bot.sent[-1].text or "").startswith("**>1 步")
+        assert env.bot.sent[-1].text == "新的" and buttons(env.bot.sent[-1]) == []
 
     env.run(body)
 
@@ -1298,7 +1333,7 @@ def test_stop_freezes_status_message_and_keeps_queue(env: Env) -> None:
         env.agent.tasks[1][2].put(*done([b1], 1.0))
         await env.settle()
         assert status.text == "⏹ 已停止 · 1 步 · 用时 7 秒" and not status.deleted
-        assert env.bot.other_texts() == [header_b("1 步 · 用时 1 秒", "01 二") + "\n\n二"]
+        assert env.bot.other_texts() == ["二"]
         assert env.tg._RUNS == []
 
     env.run(body)
@@ -1454,3 +1489,244 @@ def test_reporter_through_real_tgapp_seams(env: Env, monkeypatch: Any) -> None:
     assert markdown == (
         "*✅ 整理周报*\n\n会话已完成：\n\n• 周报：*已整理*\n\n_已完成 · s\\-1_"
     )
+
+
+# ── IM polish 01: the 过程 button ───────────────────────────────────────
+
+
+async def three_step_answer(env: Env) -> FakeMessage:
+    t1 = turn_text(1, "<summary>读取会话列表</summary>", "code_run({})")
+    t2 = turn_text(2, "<summary>整理结果</summary>", "file_read({})")
+    t3 = turn_text(3, "<summary>回答</summary>一共有 **3** 个。")
+    env.agent.scripts.append([
+        nxt([t1]), nxt([t1, t2], 2.0), nxt([t1, t2, t3], 2.0), done([t1, t2, t3], 6.0),
+    ])
+    await env.say("看看")
+    await env.settle()
+    return env.bot.sent[-1]
+
+
+THREE_STEPS = quote("3 步 · 用时 10 秒", "01 读取会话列表", "02 整理结果", "03 回答")
+
+
+def test_process_button_expands_and_collapses_in_place(env: Env) -> None:
+    async def body() -> None:
+        answer = await three_step_answer(env)
+        sent_as = answer.text
+        assert sent_as == "一共有 *3* 个。" and buttons(answer) == PROCESS_BUTTON
+
+        show = await env.tap(answer, SHOW)
+        assert show.answers == [(None, None)]
+        ((text, kwargs),) = show.text_edits
+        assert text == f"{sent_as}\n\n{THREE_STEPS}"
+        assert kwargs["parse_mode"] == "MarkdownV2"  # the parse mode it was sent with
+        assert buttons(answer) == HIDE_BUTTON
+
+        # A second tap on 过程 that raced the first edit changes nothing.
+        again = await env.tap(answer, SHOW)
+        assert again.answers == [(None, None)] and again.text_edits == []
+
+        hide = await env.tap(answer, HIDE)
+        markup = answer.reply_markup
+        assert hide.text_edits == [(sent_as, {"parse_mode": "MarkdownV2", "reply_markup": markup})]
+        assert answer.text == sent_as and buttons(answer) == PROCESS_BUTTON
+        # The trigger quote and the push stay as sent: an edit only changes text and button.
+        assert answer.kwargs["do_quote"] is False and answer.kwargs["disable_notification"] is False
+
+    env.run(body)
+
+
+def test_process_tap_after_a_restart_is_a_toast(env: Env) -> None:
+    async def body() -> None:
+        answer = await three_step_answer(env)
+        env.tg._processes.clear()  # what a restarted channel process starts with
+        tap = await env.tap(answer, SHOW)
+        assert tap.answers == [(GONE, None)]  # a toast, not an alert
+        assert tap.text_edits == [] and tap.markup_edits == []
+        assert buttons(answer) == PROCESS_BUTTON  # the message stays as it is
+        old = env.user_message("前一个进程的回答")
+        tap = await env.tap(old, HIDE)
+        assert tap.answers == [(GONE, None)] and tap.text_edits == []
+
+    env.run(body)
+
+
+def test_process_cache_is_bounded(env: Env, monkeypatch: Any) -> None:
+    async def body() -> None:
+        monkeypatch.setattr(env.tg, "_PROCESS_CACHE_LIMIT", 1)
+        first = await three_step_answer(env)
+        second = await three_step_answer(env)
+        assert list(env.tg._processes) == [(CHAT_ID, second.message_id)]
+        assert (await env.tap(first, SHOW)).answers == [(GONE, None)]
+        assert (await env.tap(second, SHOW)).text_edits
+
+    env.run(body)
+
+
+def test_process_tap_by_a_stranger_or_while_locked(env: Env) -> None:
+    async def body() -> None:
+        answer = await three_step_answer(env)
+        stranger = await env.tap(answer, SHOW, uid=STRANGER)
+        assert stranger.answers == [("no", True)] and stranger.text_edits == []
+        env.tg.ALLOWED = set()  # managed and not paired yet: locked
+        locked = await env.tap(answer, SHOW)
+        assert locked.answers == [(None, None)] and locked.text_edits == []
+
+    env.run(body)
+
+
+def test_short_process_is_a_plain_quote_long_one_folds(env: Env) -> None:
+    def steps_answer(n: int, summary: str = "第 {k} 步") -> None:
+        texts = [
+            turn_text(k, f"<summary>{summary.format(k=k)}</summary>", "code_run({})")
+            for k in range(1, n)
+        ]
+        texts.append(turn_text(n, "完成"))
+        env.agent.scripts.append([nxt(texts[:1]), done(texts, 5.0)])
+
+    async def body() -> None:
+        steps_answer(9)  # the label and 9 steps: 10 lines
+        await env.say("九步")
+        await env.settle()
+        tap = await env.tap(env.bot.sent[-1], SHOW)
+        block = tap.text_edits[0][0].split("\n\n", 1)[1]
+        assert block.startswith(">9 步 · 用时 5 秒\n>01 第 1 步") and not block.endswith("||")
+
+        steps_answer(10)  # 11 lines: folded to three
+        await env.say("十步")
+        await env.settle()
+        tap = await env.tap(env.bot.sent[-1], SHOW)
+        block = tap.text_edits[0][0].split("\n\n", 1)[1]
+        assert block.startswith("**>10 步 · 用时 5 秒\n>01 第 1 步")
+        assert block.endswith(">10 完成||")
+
+        steps_answer(6, "长" * 119 + "{k}")  # seven lines, but over 600 characters
+        await env.say("长摘要")
+        await env.settle()
+        tap = await env.tap(env.bot.sent[-1], SHOW)
+        block = tap.text_edits[0][0].split("\n\n", 1)[1]
+        assert block.startswith("**>6 步") and block.endswith("||")
+
+    env.run(body)
+
+
+def test_long_step_lines_give_way_within_the_budget(env: Env) -> None:
+    async def body() -> None:
+        texts = [
+            turn_text(k, f"<summary>{'摘' * 118}{k:02d}</summary>", "code_run({})")
+            for k in range(1, 30)
+        ]
+        texts.append(turn_text(30, "完成"))
+        env.agent.scripts.append([nxt(texts[:1]), done(texts, 5.0)])
+        await env.say("长")
+        await env.settle()
+        tap = await env.tap(env.bot.sent[-1], SHOW)
+        lines = tap.text_edits[0][0].split("\n")[2:]
+        # 31 lines of ~123 characters are over half a message: clipped to 60 first.
+        assert lines[0] == "**>30 步 · 用时 5 秒"
+        assert lines[1] == ">01 " + "摘" * 56 + "…"  # 60 characters with the ellipsis
+        assert len("\n".join(lines)) <= MAX // 2
+
+    env.run(body)
+
+
+def test_long_multi_step_answer_puts_the_button_on_its_last_part(env: Env) -> None:
+    async def body() -> None:
+        long_body = "\n".join(f"第 {i} 行：" + "内容" * 40 for i in range(120))
+        t1 = turn_text(1, "<summary>写</summary>", "file_write({})")
+        t2 = turn_text(2, long_body)
+        env.agent.scripts.append([nxt([t1]), nxt([t1, t2], 1.0), done([t1, t2], 1.0)])
+        await env.say("长")
+        await env.settle()
+        parts = env.bot.others()
+        assert len(parts) >= 3
+        quiet = [m.kwargs["disable_notification"] for m in parts]
+        assert quiet == [False] + [True] * (len(parts) - 1)
+        assert [buttons(m) for m in parts] == [[]] * (len(parts) - 1) + [PROCESS_BUTTON]
+        last = parts[-1]
+        sent_as = last.text
+        tap = await env.tap(last, SHOW)
+        ((text, _kwargs),) = tap.text_edits
+        assert text.startswith(f"{sent_as}\n\n>2 步 · 用时 2 秒\n>01 写\n>02 第 0 行：")
+        assert len(text) <= MAX
+        assert all(m.edits == [] for m in parts[:-1])  # only the last part changes
+
+    env.run(body)
+
+
+def test_a_full_last_part_gives_way_to_the_process_block(env: Env) -> None:
+    async def body() -> None:
+        # One message's worth without a process; with one, the answer splits
+        # so that its last part has room for the block.
+        t1 = turn_text(1, "<summary>查</summary>", "code_run({})")
+        t2 = turn_text(2, "字" * 4050)
+        env.agent.scripts.append([nxt([t1]), nxt([t1, t2], 1.0), done([t1, t2], 1.0)])
+        await env.say("长")
+        await env.settle()
+        first, last = env.bot.others()
+        assert buttons(first) == [] and buttons(last) == PROCESS_BUTTON
+        assert (first.text or "") + (last.text or "") == "字" * 4050
+        tap = await env.tap(last, SHOW)
+        assert len(tap.text_edits[0][0]) <= MAX
+
+        # The same answer of one step stays one message.
+        env.agent.scripts.append([nxt([t2]), done([t2], 1.0)])
+        await env.say("长")
+        await env.settle()
+        assert env.bot.others()[-1].text == "字" * 4050
+
+    env.run(body)
+
+
+def test_plain_text_answer_expands_as_plain_text(env: Env) -> None:
+    async def body() -> None:
+        env.bot.reject_markdown = True
+        t1 = turn_text(1, "<summary>查</summary>", "code_run({})")
+        t2 = turn_text(2, "<summary>答</summary>**好**")
+        env.agent.scripts.append([nxt([t1]), nxt([t1, t2], 1.0), done([t1, t2], 2.0)])
+        await env.say("hi")
+        await env.settle()
+        (answer,) = env.bot.others()
+        assert answer.text == "**好**" and "parse_mode" not in answer.kwargs
+        assert buttons(answer) == PROCESS_BUTTON
+        show = await env.tap(answer, SHOW)
+        assert show.text_edits[0][0] == "**好**\n\n2 步 · 用时 3 秒\n01 查\n02 答"
+        assert "parse_mode" not in show.text_edits[0][1]
+        hide = await env.tap(answer, HIDE)
+        assert hide.text_edits[0][0] == "**好**" and "parse_mode" not in hide.text_edits[0][1]
+
+    env.run(body)
+
+
+def test_refused_markdown_edit_falls_back_to_plain_text(env: Env) -> None:
+    async def body() -> None:
+        answer = await three_step_answer(env)
+        env.bot.reject_markdown = True  # this edit's entities are refused
+        show = await env.tap(answer, SHOW)
+        ((text, kwargs),) = show.text_edits
+        assert text == (
+            "一共有 **3** 个。\n\n3 步 · 用时 10 秒\n01 读取会话列表\n02 整理结果\n03 回答"
+        )
+        assert "parse_mode" not in kwargs and buttons(answer) == HIDE_BUTTON
+        env.bot.reject_markdown = False
+        hide = await env.tap(answer, HIDE)
+        kwargs = {"parse_mode": "MarkdownV2", "reply_markup": answer.reply_markup}
+        assert hide.text_edits == [("一共有 *3* 个。", kwargs)]
+
+    env.run(body)
+
+
+def test_process_seams_in_the_shared_helpers(display: Any) -> None:
+    lines = display.process_lines
+    assert lines({1: "查", 3: "答"}, 3) == ["01 查", "02", "03 答"]
+    assert lines({1: "一二三四五六"}, 1, width=6) == ["01 一二…"]
+    many = lines({k: f"第 {k} 步" for k in range(1, 33)}, 32)
+    assert many[0] == "… 前 2 步略" and many[1] == "03 第 3 步" and len(many) == 31
+    fit = display.fit_process
+    summaries = {1: "长" * 100, 2: "短"}
+    label, fitted = fit(summaries, 2, 3, lambda label, rows: len(label) + sum(map(len, rows)), 500)
+    assert label == "2 步 · 用时 3 秒" and fitted == lines(summaries, 2)
+    _, fitted = fit(summaries, 2, 3, lambda label, rows: max(map(len, rows)), 30)
+    assert fitted == lines(summaries, 2, 24)  # nothing fits: the narrowest
+    assert display.PROCESS_MIN_STEPS == 2
+    assert display.PROCESS_BUTTON_TEXT == "过程" and display.PROCESS_HIDE_BUTTON_TEXT == "收起过程"

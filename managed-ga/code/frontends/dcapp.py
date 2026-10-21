@@ -138,6 +138,16 @@ _TOOL_LABELS = {
     "code_run": "运行代码", "file_read": "读取文件", "file_write": "写入文件",
     "file_patch": "修改文件", "web_scan": "读取网页", "web_execute_js": "执行网页脚本",
 }
+# An answer of two or more steps carries a 过程 button; a click answers with
+# the run's process, seen by the clicker only (ephemeral): the fold label,
+# then one `NN summary` line per step, the last 30. The processes live in
+# this process's memory only, per answer message id (LRU).
+_PROCESS_MIN_STEPS = 2
+_PROCESS_STEP_LINES = 30
+_PROCESS_LINE_WIDTHS = (0, 60, 24)
+_PROCESS_CACHE_LIMIT = 256
+PROCESS_BUTTON_TEXT = "过程"
+PROCESS_GONE_TEXT = "过程已不在了（渠道重启过）"
 
 os.makedirs(MEDIA_DIR, exist_ok=True)
 
@@ -462,6 +472,39 @@ def _stopped_text(steps, seconds):
     return f"⏹ 已停止 · {label}" if label else "⏹ 已停止"
 
 
+def _process_lines(summaries, steps, width=0):
+    """A run's steps as `NN summary` lines (`summaries`: step number ->
+    summary), each clipped to `width` characters when given; past 30 steps
+    the last 30, behind a `… 前 K 步略` line."""
+    lines = [f"{n:02d} {summaries.get(n, '')}".rstrip() for n in range(1, steps + 1)]
+    if width:
+        lines = [_clip(line, width) for line in lines]
+    if len(lines) > _PROCESS_STEP_LINES:
+        lines = [f"… 前 {len(lines) - _PROCESS_STEP_LINES} 步略"] + lines[-_PROCESS_STEP_LINES:]
+    return lines
+
+
+def _fit_process(summaries, steps, seconds, size, budget):
+    """A run's process as (label, lines): the fold label `N 步 · 用时 X` and
+    its step lines at the widest of _PROCESS_LINE_WIDTHS whose rendering,
+    measured by `size(label, lines)`, stays within `budget` (the narrowest
+    when none does)."""
+    label = _fold_label(steps, seconds)
+    for width in _PROCESS_LINE_WIDTHS:
+        lines = _process_lines(summaries, steps, width)
+        if size(label, lines) <= budget:
+            break
+    return label, lines
+
+
+def _process_text(summaries, steps, seconds, limit):
+    """The process as one message of at most `limit` characters."""
+    label, lines = _fit_process(
+        summaries, steps, seconds, lambda label, lines: len("\n".join([label, *lines])), limit,
+    )
+    return _clip("\n".join([label, *lines]), limit)
+
+
 def _step_summary(text):
     """One status line for a settled step: its last <summary>, else the first
     line of its visible prose, else which tool it called, else nothing."""
@@ -628,6 +671,7 @@ class _DiscordRun:
         self.queued = False
         self.adopted = carry is not None
         self.base_steps, self.base_elapsed, self.last_summary = 0, 0.0, ""
+        self.summaries = {}  # step number -> summary, across ask_user segments
         self.adopt(carry)
         self.task_turn = 0  # highest GA turn seen in this run's task
         self.turn_texts = {}
@@ -644,6 +688,7 @@ class _DiscordRun:
             self.base_steps = int(carry.get("steps") or 0)
             self.base_elapsed = float(carry.get("elapsed") or 0.0)
             self.last_summary = str(carry.get("summary") or "")
+            self.summaries = dict(carry.get("summaries") or {})
 
     def settled_steps(self):
         return self.base_steps + max(0, self.task_turn - 1)
@@ -657,7 +702,10 @@ class _DiscordRun:
         return self.base_elapsed + max(0.0, now - self.started_at)
 
     def carry(self, now):
-        return {"steps": self.total_steps(), "elapsed": self.elapsed(now), "summary": self.last_summary}
+        return {
+            "steps": self.total_steps(), "elapsed": self.elapsed(now), "summary": self.last_summary,
+            "summaries": dict(self.summaries),
+        }
 
     def observe(self, item, now):
         """Fold one display-queue item in. The channel agent runs verbose=False
@@ -676,11 +724,15 @@ class _DiscordRun:
             if len(outputs) > 1 and turn > 1:
                 self.turn_texts[turn - 1] = outputs[-2]
         if turn > self.task_turn:
+            for k in range(max(1, self.task_turn), turn):
+                self.summaries[self.base_steps + k] = _step_summary(self.turn_texts.get(k, ""))
             self.task_turn, self.step_started_at = turn, now
             if turn > 1:
-                self.last_summary = _step_summary(self.turn_texts.get(turn - 1, ""))
+                self.last_summary = self.summaries[self.base_steps + turn - 1]
         if "done" in item and self.task_turn:
-            self.last_summary = _step_summary(self.turn_texts.get(self.task_turn, ""))
+            for k in range(1, self.task_turn + 1):
+                self.summaries[self.base_steps + k] = _step_summary(self.turn_texts.get(k, ""))
+            self.last_summary = self.summaries[self.base_steps + self.task_turn]
         return outputs
 
 
@@ -732,6 +784,7 @@ class DiscordApp(AgentChatMixin):
         self._ask_events = {}  # chat_id -> (display queue of the asking task, event)
         self._pending_asks = {}  # chat_id -> _PendingAsk waiting for an answer
         self._pending_by_token = {}  # button token -> _PendingAsk
+        self._processes = OrderedDict()  # answer message id -> process text (LRU, in memory only)
         self._build_client()
 
     def _build_client(self):
@@ -1474,19 +1527,41 @@ class DiscordApp(AgentChatMixin):
         await self._retire_status(run, "-# ✓ 已完成")
 
     async def _send_answer(self, run, raw, body, steps, elapsed, notice=""):
-        """The run's one pushed message: the desktop's fold header as a
-        `-# N 步 · 用时 X` subtext line over the closing step's text. Files
-        still come from the whole transcript. notice goes above it all."""
-        label = _fold_label(steps, elapsed)
-        text = "\n".join(part for part in (notice, f"-# {label}" if label else "", body) if part)
+        """The run's one pushed message: the closing step's text, nothing
+        above it but notice. Two or more steps put a 过程 button on its last
+        part. Files still come from the whole transcript."""
+        text = "\n".join(part for part in (notice, body) if part)
         files = _existing_files(raw)
         if not text and not files:
             text = "..."
         if text:
-            reply = self._answer_reply_kwargs(run)
-            for i, part in enumerate(_split_discord_text(text, self.split_limit)):
-                await run.channel.send(part, **(reply if i == 0 else {}))
+            await self._send_answer_text(run, text, steps, elapsed)
         await self._send_files(run.chat_id, files)
+
+    async def _send_answer_text(self, run, text, steps, elapsed):
+        """The answer's text parts; with two or more steps the last one
+        carries the 过程 button, and the process is kept by its id."""
+        process = ""
+        if steps >= _PROCESS_MIN_STEPS:
+            process = _process_text(run.summaries, steps, elapsed, self.split_limit)
+        reply = self._answer_reply_kwargs(run)
+        parts = _split_discord_text(text, self.split_limit)
+        for i, part in enumerate(parts):
+            kwargs = dict(reply) if i == 0 else {}
+            if process and i == len(parts) - 1:
+                kwargs["view"] = _component_view([(PROCESS_BUTTON_TEXT, f"{_COMPONENT_PREFIX}proc")])
+            message = await run.channel.send(part, **kwargs)
+            if "view" in kwargs:
+                self._remember_process(message, process)
+
+    def _remember_process(self, message, text):
+        message_id = getattr(message, "id", None)
+        if message_id is None:
+            return
+        self._processes[message_id] = text
+        self._processes.move_to_end(message_id)
+        while len(self._processes) > _PROCESS_CACHE_LIMIT:
+            self._processes.popitem(last=False)
 
     async def _fail_run(self, run, error):
         now = self._clock()
@@ -1572,6 +1647,8 @@ class DiscordApp(AgentChatMixin):
         if kind == "ask":
             token, _, index = rest.partition(":")
             return await self._on_ask_click(interaction, token, index)
+        if kind == "proc":
+            return await self._on_process_click(interaction)
         # Anything else is stale. That includes the 停止 button
         # (galley-dc:stop:<token>) status messages carried before stopping
         # became text-only (/stop): it stops nothing, even when the channel
@@ -1591,6 +1668,22 @@ class DiscordApp(AgentChatMixin):
         message = getattr(interaction, "message", None)
         if message is not None:
             await self._strip_buttons(message)
+
+    async def _on_process_click(self, interaction):
+        """The 过程 button under an answer: the run's process in a reply only
+        the clicker sees (ephemeral), so one person looking never changes the
+        message the whole channel sees. After a restart the process is gone:
+        the reply says so and the answer stays as it is."""
+        message_id = getattr(getattr(interaction, "message", None), "id", None)
+        text = self._processes.get(message_id) if message_id is not None else None
+        if text is None:
+            text = PROCESS_GONE_TEXT
+        else:
+            self._processes.move_to_end(message_id)
+        try:
+            await interaction.response.send_message(text, ephemeral=True)
+        except Exception as e:
+            print(f"[Discord] process reply failed: {e}")
 
     async def _on_ask_click(self, interaction, token, index):
         with self._ask_lock:

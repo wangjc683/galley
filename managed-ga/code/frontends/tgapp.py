@@ -1,4 +1,5 @@
 import os, sys, re, json, threading, asyncio, queue as Q, time, random, uuid
+from collections import OrderedDict
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _TEMP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'temp')
 from agentmain import GeneraticAgent
@@ -25,11 +26,16 @@ from chatapp_common import (
     split_text,
 )
 from galley_im_display import (
+    PROCESS_BUTTON_TEXT,
+    PROCESS_GONE_TEXT,
+    PROCESS_HIDE_BUTTON_TEXT,
+    PROCESS_MIN_STEPS,
     answer_body,
     candidate_layout,
     clip,
     extract_ask_user_event,
     final_step_text,
+    fit_process,
     fold_label,
     one_line,
     step_summary,
@@ -155,6 +161,8 @@ _RETRY_AFTER_MARGIN_SECONDS = 1.0
 _ASK_USER_HOOK_KEY = "telegram_ask_user_menu"
 _ASK_CALLBACK_PREFIX = "ask:"
 _LLM_CALLBACK_PREFIX = "llm:"
+_PROCESS_CALLBACK_PREFIX = "proc:"
+_PROCESS_SHOW, _PROCESS_HIDE = "show", "hide"
 _ASK_MULTI_DONE_ACTION = "done"
 _ASK_TOGGLE_ACTION = "toggle"
 _ASK_MULTI_EMPTY_HINT = "请至少选择一项，或直接打字回复"
@@ -190,12 +198,17 @@ _BLOCKQUOTE_RE = re.compile(r"^\s{0,3}>\s?(.*)$")
 # deleted; a stopped run freezes it into the stop receipt instead. Private
 # chats first used a sendMessageDraft preview, dropped after dogfood: the
 # client reserves a streaming area for a draft and pushes the chat up,
-# leaving a blank gap.
+# leaving a blank gap. The answer carries no process: two or more steps put
+# a 过程 button under it, which expands the message in place (IM polish 01).
 _LIVE_POLL_SECONDS = 1.0
 _STATUS_EDIT_INTERVAL_SECONDS = 1.5
 _SEND_ATTEMPTS = 3
-_FOLD_STEP_LINES = 30
-_FOLD_HEADER_BUDGET = MessageLimit.MAX_TEXT_LENGTH // 2
+_PROCESS_BUDGET = MessageLimit.MAX_TEXT_LENGTH // 2  # at most half a message; the answer splits to make room
+# A process block longer than this (lines with the label, or characters) is
+# an expandable quote, which Telegram shows folded to three lines.
+_PROCESS_QUOTE_MAX_LINES = 10
+_PROCESS_QUOTE_MAX_CHARS = 600
+_PROCESS_CACHE_LIMIT = 256
 _ASK_BUTTON_MAX_CANDIDATES = 50
 _ASK_LIST_BUTTONS_PER_ROW = 8
 _ASK_QUESTION_LIMIT = 3000
@@ -207,6 +220,7 @@ _ask_lock = threading.Lock()  # ask_user events arrive on the GA worker thread
 _ask_events = {}  # display queue of the asking task -> ask_user event
 _pending_asks = {}  # chat id -> _PendingAsk waiting for the owner's answer
 _last_message_ids = {}  # chat id -> newest message id seen, user's or bot's
+_processes = OrderedDict()  # (chat id, answer message id) -> _Process, in memory only (LRU)
 _background_tasks = set()
 
 def _markdown_safe_segments(text, limit=None):
@@ -445,15 +459,17 @@ def _plain_text(text):
         return "\n".join(f"> {line}" if line else ">" for line in match.group(1).splitlines() or [""])
     return re.sub(_QUOTE_TOKEN_PATTERN, quoted, text or "")
 
-def _md_segments(source, first_limit=None):
+def _md_segments(source, room=0):
     """(markdown_v2, plain) message parts of already rewritten Markdown; the
-    first part also fits first_limit, leaving room for a header on top."""
+    last part also leaves `room` characters free, for a process block added
+    at its end later."""
     source = (source or "").strip()
     if not source:
         return []
-    parts = _markdown_safe_segments(source, first_limit)
-    if first_limit and len(parts) > 1:
-        parts = parts[:1] + _markdown_safe_segments(source[len(parts[0]):])
+    parts = _markdown_safe_segments(source)
+    limit = MessageLimit.MAX_TEXT_LENGTH - room
+    if room and len(_to_markdown_v2(parts[-1])) > limit:
+        parts[-1:] = _markdown_safe_segments(parts[-1], limit)
     return [(_to_markdown_v2(part), _plain_text(part)) for part in parts]
 
 def markdown_v2_segments(text):
@@ -485,25 +501,24 @@ def answer_text(raw):
     markers = list(_TURN_MARKER_LINE_RE.finditer(raw))
     return _answer_from(raw[markers[-1].start():] if markers else raw, raw)
 
-def _fold_header(run, steps, seconds):
-    """(markdown_v2, plain) header over the run's answer: an expandable
-    quote opening with the desktop fold header `N 步 · 用时 X`, then one
-    `NN summary` line per step (the last 30). Empty for 0 steps."""
-    if steps < 1:
-        return "", ""
-    label = fold_label(steps, seconds)
-    for width in (0, 60, 24):  # long step lines give way before the answer does
-        lines = [f"{n:02d} {run.summaries.get(n, '')}".rstrip() for n in range(1, steps + 1)]
-        if width:
-            lines = [clip(line, width) for line in lines]
-        if len(lines) > _FOLD_STEP_LINES:
-            lines = [f"… 前 {len(lines) - _FOLD_STEP_LINES} 步略"] + lines[-_FOLD_STEP_LINES:]
-        quoted = [f"**>{escape_markdown(label, version=2)}"]
-        quoted += [f">{escape_markdown(line, version=2)}" for line in lines]
-        markdown = "\n".join(quoted) + "||"
-        if len(markdown) <= _FOLD_HEADER_BUDGET:
-            break
-    return markdown, "\n".join([label, *lines])
+def _process_quote(label, lines):
+    """The process block in MarkdownV2: a quote opening with `N 步 · 用时 X`,
+    then the step lines; an expandable quote (folded to three lines) once it
+    is long."""
+    rows = [label, *lines]
+    quoted = "\n>".join(escape_markdown(row, version=2) for row in rows)
+    if len(rows) > _PROCESS_QUOTE_MAX_LINES or len("\n".join(rows)) > _PROCESS_QUOTE_MAX_CHARS:
+        return f"**>{quoted}||"
+    return f">{quoted}"
+
+def _process_block(summaries, steps, seconds, budget=_PROCESS_BUDGET):
+    """(markdown_v2, plain) of a run's process for the end of its answer:
+    `N 步 · 用时 X`, then one `NN summary` line per step (the last 30), long
+    step lines clipped to 60, then 24 characters to stay within budget."""
+    label, lines = fit_process(
+        summaries, steps, seconds, lambda label, lines: len(_process_quote(label, lines)), budget,
+    )
+    return _process_quote(label, lines), "\n".join([label, *lines])
 
 class _LiveSurface:
     """A run's live window in its chat: a silent status message edited in
@@ -699,33 +714,80 @@ async def _reply(target, text, **kwargs):
         _note_message(message)
         return message
 
-async def _reply_markdown(target, markdown, plain, **kwargs):
-    """Send as MarkdownV2; when Telegram rejects it, send the plain text."""
+async def _reply_markdown(target, markdown, plain, sent=None, **kwargs):
+    """Send as MarkdownV2; when Telegram rejects it, send the plain text.
+    `sent(message, markdown, plain, as_markdown)`, when given, learns what
+    went out: the context-lost notice wrapper (runner/im_resume.py) may have
+    put a line on top of both texts."""
     try:
-        return await _reply(target, markdown, parse_mode=ParseMode.MARKDOWN_V2, **kwargs)
+        message = await _reply(target, markdown, parse_mode=ParseMode.MARKDOWN_V2, **kwargs)
+        as_markdown = True
     except RetryAfter:
         raise
     except Exception as exc:
         print(f"[TG markdown fallback] {type(exc).__name__}: {exc}", flush=True)
-        return await _reply(target, plain, **kwargs)
+        message, as_markdown = await _reply(target, plain, **kwargs), False
+    if sent is not None:
+        sent(message, markdown, plain, as_markdown)
+    return message
+
+class _Process:
+    """The process behind an answer's 过程 button: the answer message as it
+    went out (both texts, and whether the MarkdownV2 one did), and the run's
+    step summaries, count and time. Kept per message in _processes."""
+
+    def __init__(self, summaries, steps, seconds):
+        self.summaries, self.steps, self.seconds = dict(summaries), steps, seconds
+        self.markdown = self.plain = ""
+        self.as_markdown = True
+        self.expanded = False
+
+    def sent(self, message, markdown, plain, as_markdown):
+        self.markdown, self.plain, self.as_markdown = markdown, plain, as_markdown
+        key = (_message_chat_id(message), getattr(message, "message_id", None))
+        if key[0] is not None and isinstance(key[1], int):
+            _processes[key] = self
+            _processes.move_to_end(key)
+            while len(_processes) > _PROCESS_CACHE_LIMIT:
+                _processes.popitem(last=False)
+
+    def text(self, expanded, markdown=True):
+        """(text, parse_mode) of the answer message with its process block at
+        the end, or without it (as sent). The block shrinks to the room the
+        message has left. A message that went out as plain text stays plain
+        text, and markdown=False asks for the plain text too."""
+        markdown = markdown and self.as_markdown
+        base = self.markdown if markdown else self.plain
+        if not expanded:
+            return base, ParseMode.MARKDOWN_V2 if markdown else None
+        room = MessageLimit.MAX_TEXT_LENGTH - len(base) - 2
+        block, block_plain = _process_block(self.summaries, self.steps, self.seconds, min(_PROCESS_BUDGET, room))
+        if markdown and len(block) <= room:
+            return f"{base}\n\n{block}", ParseMode.MARKDOWN_V2
+        return clip(f"{self.plain}\n\n{block_plain}", MessageLimit.MAX_TEXT_LENGTH), None
+
+def _process_markup(expanded):
+    label, action = (PROCESS_HIDE_BUTTON_TEXT, _PROCESS_HIDE) if expanded else (PROCESS_BUTTON_TEXT, _PROCESS_SHOW)
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton(label, callback_data=f"{_PROCESS_CALLBACK_PREFIX}{action}"),
+    ]])
 
 async def _send_answer(run, raw, step_text, steps, seconds):
-    """The run's one pushed message: the fold header, a blank line, then the
-    closing step's text. Further parts and the files arrive silently."""
+    """The run's one pushed message: the closing step's text, nothing above
+    it. A run of two or more steps gets a 过程 button under its last part,
+    and that part leaves room for the process block. Further parts and the
+    files arrive silently."""
     files = _files_from_text(raw)
     body = _answer_from(step_text, raw) or ("已生成附件" if files else "")
-    header, header_plain = _fold_header(run, steps, seconds)
-    first_limit = MessageLimit.MAX_TEXT_LENGTH - len(header) - 2 if header else None
-    parts = _md_segments(_rewrite_markdown(body), first_limit)
-    if header:
-        markdown, plain = parts[0] if parts else ("", "")
-        parts[:1] = [(
-            f"{header}\n\n{markdown}" if markdown else header,
-            f"{header_plain}\n\n{plain}" if plain else header_plain,
-        )]
+    process = _Process(run.summaries, steps, seconds) if steps >= PROCESS_MIN_STEPS else None
+    room = len(_process_block(run.summaries, steps, seconds)[0]) + 2 if process else 0
+    parts = _md_segments(_rewrite_markdown(body), room) or [(escape_markdown("...", version=2), "...")]
     quote = _should_quote(run)
-    for i, (markdown, plain) in enumerate(parts or [(escape_markdown("...", version=2), "...")]):
-        await _reply_markdown(run.trigger, markdown, plain, do_quote=quote and i == 0, disable_notification=i > 0)
+    for i, (markdown, plain) in enumerate(parts):
+        kwargs = {"do_quote": quote and i == 0, "disable_notification": i > 0}
+        if process is not None and i == len(parts) - 1:
+            kwargs.update(reply_markup=_process_markup(False), sent=process.sent)
+        await _reply_markdown(run.trigger, markdown, plain, **kwargs)
     await _send_files(run.trigger, files)
 
 class _PendingAsk:
@@ -1144,6 +1206,54 @@ async def handle_ask_callback(update, ctx):
     if trigger is not None:
         _enqueue_run(trigger, _build_text_prompt(answer), carry=pending.carry)
 
+async def _edit_process(query, process, expand):
+    text, parse_mode = process.text(expand)
+    markup = _process_markup(expand)
+    try:
+        if parse_mode:
+            await query.edit_message_text(text, parse_mode=parse_mode, reply_markup=markup)
+        else:
+            await query.edit_message_text(text, reply_markup=markup)
+        return True
+    except Exception as exc:
+        if _is_not_modified_error(exc):
+            return True
+        print(f"[TG process edit] {type(exc).__name__}: {exc}", flush=True)
+        if not parse_mode:
+            return False
+    try:  # the MarkdownV2 was refused: the plain text rather than nothing
+        await query.edit_message_text(process.text(expand, markdown=False)[0], reply_markup=markup)
+        return True
+    except Exception as exc:
+        print(f"[TG process plain fallback] {type(exc).__name__}: {exc}", flush=True)
+        return _is_not_modified_error(exc)
+
+async def handle_process_callback(update, ctx):
+    """The 过程 / 收起过程 button under an answer: edit that message into the
+    answer plus its process block, or back. Its parse mode and reply quote
+    stay as sent. The process lives in this process's memory only; after a
+    restart a click gets a toast and the message stays as it is."""
+    query = update.callback_query
+    if query is None:
+        return
+    uid = update.effective_user.id if update.effective_user else None
+    if _galley_locked():
+        return await query.answer()
+    if ALLOWED and uid not in ALLOWED:
+        return await query.answer("no", show_alert=True)
+    message = query.message
+    key = (_message_chat_id(message), getattr(message, "message_id", None))
+    process = _processes.get(key)
+    if process is None:
+        return await query.answer(PROCESS_GONE_TEXT)
+    _processes.move_to_end(key)
+    expand = (query.data or "") == f"{_PROCESS_CALLBACK_PREFIX}{_PROCESS_SHOW}"
+    await query.answer()
+    if expand == process.expanded:
+        return  # a second tap on a button the first tap already replaced
+    if await _edit_process(query, process, expand):
+        process.expanded = expand
+
 async def _send_llm_menu(message):
     llms = agent.list_llms()
     if not llms:
@@ -1348,6 +1458,7 @@ def main():
                    .request(request).get_updates_request(request).post_init(_galley_post_init).build())
             app.add_handler(CallbackQueryHandler(handle_ask_callback, pattern=r"^ask:"))
             app.add_handler(CallbackQueryHandler(handle_llm_callback, pattern=r"^llm:"))
+            app.add_handler(CallbackQueryHandler(handle_process_callback, pattern=r"^proc:"))
             app.add_handler(MessageHandler(filters.COMMAND, handle_command))
             app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
             app.add_handler(MessageHandler(filters.Document.ALL, handle_photo))

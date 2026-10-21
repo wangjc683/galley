@@ -5,14 +5,15 @@ conflicts with it. frontends/tgapp.py uses it. frontends/dcapp.py still keeps
 its own copies from patch 0023 (the `_`-prefixed originals of the functions
 below, same semantics): 0023 sits in front of 0024 in the patch stack, so
 moving dcapp over would make an earlier patch depend on a later one. The
-migration waits for the next re-export of 0023, when this file becomes its
-own patch ordered ahead of 0023 (recorded in the 2026-09-30 Telegram
-conversation UX devlog).
+migration, which makes this file its own patch ordered ahead of 0023, goes
+with the IM chrome localisation (patch ledger, 0024 row; the 2026-09-30
+Discord conversation UX devlog).
 
 Everything here is pure text in, text out: GA's display-queue step texts,
-the desktop's fold header wording, the still-running tail of a live status
-line, the ask_user payload of a turn-end hook, and a Markdown table rewrite
-for chat apps that cannot render tables.
+the desktop's fold header wording, a run's process behind the 过程 button,
+the still-running tail of a live status line, the ask_user payload of a
+turn-end hook, and a Markdown table rewrite for chat apps that cannot
+render tables.
 """
 import re
 
@@ -31,6 +32,15 @@ CANDIDATE_LIST_MAX_ROW_TOTAL_CHARS = 60
 _TOOL_CALL_RE = re.compile(r"^\s*🛠️\s+([A-Za-z_]\w*)\(", re.M)
 _SUMMARY_RE = re.compile(r"<summary>\s*(.*?)\s*</summary>", re.DOTALL)
 _SUMMARY_SEARCH_STRIP_RE = re.compile(r"```.*?```|<thinking>.*?</thinking>", re.DOTALL)
+# A run's process (IM polish 01): two or more steps get a 过程 button under
+# the answer; its first line is the fold label, then one `NN summary` line
+# per step, the last 30. Long step lines give way, widest first.
+PROCESS_MIN_STEPS = 2
+PROCESS_STEP_LINES = 30
+PROCESS_LINE_WIDTHS = (0, 60, 24)
+PROCESS_BUTTON_TEXT = "过程"
+PROCESS_HIDE_BUTTON_TEXT = "收起过程"
+PROCESS_GONE_TEXT = "过程已不在了（渠道重启过）"
 _FENCE_RE = re.compile(r"^\s*(`{3,})")
 _FENCE_CLOSE_RE = re.compile(r"^\s*(`{3,})\s*$")
 _UNESCAPED_PIPE_RE = re.compile(r"(?<!\\)\|")
@@ -67,6 +77,31 @@ def fold_label(steps, seconds):
 def stopped_text(steps, seconds):
     label = fold_label(steps, seconds)
     return f"⏹ 已停止 · {label}" if label else "⏹ 已停止"
+
+
+def process_lines(summaries, steps, width=0):
+    """A run's steps as `NN summary` lines (`summaries`: step number ->
+    summary), each clipped to `width` characters when given; past 30 steps
+    the last 30, behind a `… 前 K 步略` line."""
+    lines = [f"{n:02d} {summaries.get(n, '')}".rstrip() for n in range(1, steps + 1)]
+    if width:
+        lines = [clip(line, width) for line in lines]
+    if len(lines) > PROCESS_STEP_LINES:
+        lines = [f"… 前 {len(lines) - PROCESS_STEP_LINES} 步略"] + lines[-PROCESS_STEP_LINES:]
+    return lines
+
+
+def fit_process(summaries, steps, seconds, size, budget):
+    """A run's process as (label, lines): the fold label `N 步 · 用时 X` and
+    its step lines at the widest of PROCESS_LINE_WIDTHS whose rendering,
+    measured by `size(label, lines)`, stays within `budget` (the narrowest
+    when none does)."""
+    label = fold_label(steps, seconds)
+    for width in PROCESS_LINE_WIDTHS:
+        lines = process_lines(summaries, steps, width)
+        if size(label, lines) <= budget:
+            break
+    return label, lines
 
 
 def still_running_suffix(seconds):
