@@ -27,7 +27,7 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --cases carry-quote,chat-full --v
 $PY .scratch/main-chat/entry-layer-eval/run.py --render-only        # 只从 results.json 重出 results.md
 ```
 
-其他参数：`--parallel`（默认 3）、`--model-id`（默认 `mm_1792576875658`，即服务商 cpa 接的 gpt-6.1-sol，API key；票 64 之前的 `mm_1790734996114` 已从库里删掉，主对话自己的 gpt-6.1-sol 走 ChatGPT 登录、脚本取不到）、`--galley-db`、`--ga-lang`（默认 `en`）、`--keep-temp`（保留临时目录以便排查）。拿不到数据库时可用 `--mykey <GA 的 mykey.py> --mykey-entry <条目名>` 换成 GA 格式的配置（只读加载）。
+其他参数：`--parallel`（默认 3）、`--model-id`（默认 `mm_1792576875658`，即API key 接入的 gpt-6.1-sol，API key；票 64 之前的 `mm_1790734996114` 已从库里删掉，主对话自己的 gpt-6.1-sol 走 ChatGPT 登录、脚本取不到）、`--galley-db`、`--ga-lang`（默认 `en`）、`--keep-temp`（保留临时目录以便排查）。拿不到数据库时可用 `--mykey <GA 的 mykey.py> --mykey-entry <条目名>` 换成 GA 格式的配置（只读加载）。
 
 改了 Rust 提示词之后，`galley-prompt/` 要重新生成：在 `core/src/managed_prompt.rs` 的测试模块里临时加一个测试，用占位值调用 `compose_main_chat_runtime_prompt` 写出四个文件，跑完删掉这个测试（本目录的版本就是这样生成的，产品代码没有留下改动）。
 
@@ -348,7 +348,7 @@ Core 在「In Hand」的三组之后加了第四组「Follow-ups the user turned
   - 叫醒套件：`file-handover`（子任务交回一个绝对路径的文件 → 交代里单独一行 `[FILE:那个路径]`）。路径写成 `{{HOME}}`，每次运行换成那次沙盒的假 HOME（`run_job`），结果里是 `$TMPDIR/…`，不写本机真实路径。
 - **判定加的**（`todo_facts`，写法见 `todo/cases.json` 的 `_note`）：`subtasks_max`（回复里最多几个 `<subtask>`，不写就一个都不许，同以前）、`no_offer`（回复与末尾的建议里不能有「要不要我」「需要的话我可以」一类，`OFFER_RE`；别的用例只在「注」里写出来）、`allow_web_stop`（停在浏览器工具只注出来：它在做一步只读的事，沙盒里看不到结果）、`review_advance`、`disable`；`wake_facts` 加 `file_ref`（要有、是绝对路径、单独一行）。`--dry-test` 对这些各造了过与不过的运行（`synth_run`）。
 - **记读了什么**：同票 59，「读手册」一栏写读了哪几部分、几次几轮、多少字节；票 73 起手册是九个部分。
-- **模型**：评测一直用的 gpt-6.1-sol 中转条目（`mm_1790734996114`）已从 Galley 库里删掉，主对话自己的 gpt-6.1-sol 走 ChatGPT 登录（`chatgpt_codex_oauth`），凭据在 Core 的凭据通道里，评测脚本取不到（`model_from_galley_db` 只认 `api_key` 与 `none`）。票 73 起默认用 JC 新加的 `mm_1792576875658`（服务商 cpa 接的 gpt-6.1-sol，API key，`DEFAULT_MODEL_ID`），与票 63、64 同一个模型。中间先用外置 GA 配置里的 gpt-6-astra 跑过一轮，结果没有进仓库（主对话不是这个模型）。
+- **模型**：评测一直用的 gpt-6.1-sol API key 条目（`mm_1790734996114`）已从 Galley 库里删掉，主对话自己的 gpt-6.1-sol 走 ChatGPT 登录（`chatgpt_codex_oauth`），凭据在 Core 的凭据通道里，评测脚本取不到（`model_from_galley_db` 只认 `api_key` 与 `none`）。票 73 起默认用 JC 新加的 `mm_1792576875658`（API key 接入的 gpt-6.1-sol，API key，`DEFAULT_MODEL_ID`），与票 63、64 同一个模型。中间先用外置 GA 配置里的 gpt-6-astra 跑过一轮，结果没有进仓库（主对话不是这个模型）。
 - **对照**：原有用例的「上一次」就是 main 上票 63、64 在 gpt-6.1-sol 上的结果（提示词与 main 一致），不重跑；新用例另用 main 的提示词与八个部分的手册在 gpt-6.1-sol 上各跑一遍，存在 `meta.ticket73_control`（`--control 73`；叫醒套件的 `--control` 是票 73 加的）。
 
 ### 结果（2026-10-21，gpt-6.1-sol，推理强度 high）

@@ -75,7 +75,7 @@ SEGMENT_START_TURN = 42
 DUMP_CASES = ("chat-tired", "carry-quote")
 
 DEFAULT_GALLEY_DB = Path.home() / "Library" / "Application Support" / "app.galley" / "workbench.db"
-# gpt-6.1-sol, the main chat's model, through the cpa provider (API key).
+# gpt-6.1-sol, the main chat's model, through an API-key provider.
 # Since ticket 73: the relay entry used until ticket 64 (mm_1790734996114)
 # was deleted from Galley's database, and the main chat's own gpt-6.1-sol
 # signs in with ChatGPT, which this script cannot reach.
@@ -4089,7 +4089,7 @@ RERUN_INTROS = {
     "73": "上一次是 main 上这一套最近一次的结果（待办、闲聊是票 64，定时、叫醒是票 63，都是 gpt-6.1-sol），这一次是票 73 "
           "改了手册（`todos.md` 加没日子的在办之事、新的一部分 `unasked.md`、`wake.md` 的早上巡看、`reminders.md` 的例外）、"
           "入口层（在推进的事也记、记下时想一步、交文件用 `[FILE:…]`、手册列表多了 `unasked.md`）与 Core 的巡看叫醒之后，"
-          "同一个模型（票 73 起是服务商 cpa 接的 gpt-6.1-sol，`mm_1792576875658`；之前的中转条目已从库里删掉）。两次都用现在的"
+          "同一个模型（票 73 起是API key 接入的 gpt-6.1-sol，`mm_1792576875658`；之前的API key 条目已从库里删掉）。两次都用现在的"
           "判定重判（票 73 起回复里有「要不要我」一类建议的都注出来，`no_offer` 的用例判它）。只比两次都有的用例；票 73 新加的"
           "用例只有这一次，它们在票 73 之前的提示词与手册下各跑了一遍，是「同日对照」（`meta.ticket73_control`）。",
     "64": "上一次是票 63 的结果，这一次是票 64 改了入口层的待办那一段之后（「Do it unasked」改成先读 `todos.md` 再说要记，"

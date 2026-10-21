@@ -30653,7 +30653,7 @@
         ]
       },
       {
-        "reason": "票 73：手册（todos.md 加没日子的在办之事、新的 unasked.md、wake.md 的早上巡看、reminders.md 的例外）、入口层（在推进的事也记、记下时想一步、[FILE:] 交文件、手册列表多了 unasked.md）与 Core 的巡看叫醒之后重跑；模型同票 63、64 是 gpt-6.1-sol，条目换成 mm_1792576875658（服务商 cpa，API key；之前的中转条目已从库里删掉）",
+        "reason": "票 73：手册（todos.md 加没日子的在办之事、新的 unasked.md、wake.md 的早上巡看、reminders.md 的例外）、入口层（在推进的事也记、记下时想一步、[FILE:] 交文件、手册列表多了 unasked.md）与 Core 的巡看叫醒之后重跑；模型同票 63、64 是 gpt-6.1-sol，条目换成 mm_1792576875658（API key 接入；之前的API key 条目已从库里删掉）",
         "at": "2026-10-21 18:08",
         "runs": [
           {
