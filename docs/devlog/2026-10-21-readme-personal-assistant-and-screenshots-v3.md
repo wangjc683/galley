@@ -73,3 +73,7 @@ JC 问拍摄能不能交给主会话。做法写进 playbook「代拍」一节�
 - README 里的工作台截图（reading、projects、search）仍用 v2 的种子会话，Dev 内容退到置顶之外但没删；整套种子围绕助理重写
   （上面裁决 5 的 B）没排期。
 - 20–40 秒演示视频（10-07 版式打磨的第三层）仍未做。
+- README 是新叙事的第一个落点，但另外几处一句话定位还没同步：宪法 Product Shape（`AGENTS.md`）、`docs/PRD.md` §1 / §3、
+  `docs/project-status.md` 的「Product shape: dual-native local agent team orchestrator」。宪法那处是助手 PRD 的待定项，
+  改之前要先问 JC。
+- 推送：JC 定 README 随发版一起推（新 README 写的主对话功能 v0.6.2 没有），提交时没有 push。
