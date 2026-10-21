@@ -30,6 +30,7 @@ Status: active（2026-10-21 裁决 1–4 已定；票 01–03 派出）
 | [01](./issues/01-telegram-discord-process-button.md) | Telegram、Discord 的「过程」按钮（裁决 1、2） | — |
 | [02](./issues/02-im-entry-layer-honest.md) | IM 入口层如实说 + 真模型对照（裁决 4） | — |
 | [03](./issues/03-feishu-conversation-ux.md) | 飞书对话体验对齐（裁决 3） | — |
+| [04](./issues/04-feishu-followups.md) | 飞书补充：标题转粗体、插队时引用原话（票 03 交 JC 定的五条） | 03 |
 
 三张票文件不重叠，并行派出；01、03 要 JC 真机验收，02 要 JC 读对照结果。
 
