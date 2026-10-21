@@ -1424,7 +1424,9 @@ already-generated bundle without rebuilding it. The smoke must verify
   Galley): a multi-step request in the private chat (only a `Typing`
   reaction on your message while it runs, then one card: the answer with a
   folded 「过程」 panel, the reaction gone with it), a second message while
-  it runs (queued, not refused; it gets `Typing` when its turn comes), an
+  it runs (queued, not refused; it gets `Typing` when its turn comes, and
+  each answer replies to its own message, the other one having landed in
+  between), an
   ask_user question answered with a number (the question card turns into
   its echo), and `/stop` during a long step (one `⏹ 已停止 · …`, no answer
   after it). Say something to remember, restart Channels

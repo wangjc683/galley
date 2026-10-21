@@ -6,7 +6,8 @@ Loads the shipped payload with ``lark_oapi`` and the heavy GA modules
 stubbed; the real ``chatapp_common`` and ``galley_im_display`` are used.
 The ``0029`` section drives fsapp's message handler with a fake agent whose
 display queues the test feeds (the item shapes of ``agentmain.run``), and a
-fake Feishu that records cards, texts, card patches and reactions in order.
+fake Feishu that records cards, texts, replies, card patches and reactions in
+order.
 """
 
 from __future__ import annotations
@@ -459,14 +460,29 @@ class TaskQueue:
 
 class FakeFeishu:
     """Records what reaches Feishu, in order: ``("card", rid, card)``,
-    ``("text", rid, text)``, ``("patch", message_id, card)``,
-    ``("react+", message_id)``, ``("react-", message_id)``."""
+    ``("text", rid, text)``, a reply to a message as ``("reply-card",
+    message_id, card)`` / ``("reply-text", message_id, text)``, a refused
+    reply as ``("reply-refused", message_id, None)``, ``("patch",
+    message_id, card)``, ``("react+", message_id)``, ``("react-",
+    message_id)``."""
 
     def __init__(self) -> None:
         self.events: list[tuple[str, str, Any]] = []
         self.ids = itertools.count(1)
         self.refuse_cards = 0
+        self.refuse_replies = 0
         self.raise_on_card: Exception | None = None
+
+    def reply_raw(self, message_id: str, payload: str, msg_type: str) -> str | None:
+        if self.refuse_replies:
+            self.refuse_replies -= 1
+            self.events.append(("reply-refused", message_id, None))
+            return None
+        if msg_type == "interactive":
+            self.events.append(("reply-card", message_id, json.loads(payload)))
+        else:
+            self.events.append((f"reply-{msg_type}", message_id, json.loads(payload)["text"]))
+        return f"om_bot_{next(self.ids)}"
 
     def send_raw(self, rid: str, payload: str, msg_type: str, _rtype: str) -> str | None:
         if msg_type == "interactive":
@@ -499,10 +515,10 @@ class FakeFeishu:
         return [(kind, str(target)) for kind, target, _ in self.events]
 
     def cards(self) -> list[Any]:
-        return [body for kind, _, body in self.events if kind == "card"]
+        return [body for kind, _, body in self.events if kind in ("card", "reply-card")]
 
     def texts(self) -> list[str]:
-        return [body for kind, _, body in self.events if kind == "text"]
+        return [body for kind, _, body in self.events if kind in ("text", "reply-text")]
 
 
 def wait_until(predicate: Callable[[], bool], timeout: float = 5.0) -> None:
@@ -627,6 +643,7 @@ def fs(monkeypatch: Any, tmp_path: Path) -> Any:
     monkeypatch.setattr(fsapp, "_POLL_SECONDS", 0.01)
     net = FakeFeishu()
     monkeypatch.setattr(fsapp, "_send_raw", net.send_raw)
+    monkeypatch.setattr(fsapp, "_reply_raw", net.reply_raw)
     monkeypatch.setattr(fsapp, "_patch_card", net.patch_card)
     monkeypatch.setattr(fsapp, "_add_reaction", net.add_reaction)
     monkeypatch.setattr(fsapp, "_delete_reaction", net.delete_reaction)
@@ -645,6 +662,7 @@ def test_one_step_answer_is_one_card_with_typing_around_it(fs: Env) -> None:
     assert fs.net.cards() == []  # no status card while it runs
     dq.put(done([turn_text(1, "<summary>打招呼</summary>你好！有什么要我做的？")]), advance=2)
     fs.idle()
+    # Right below its message: a new message, not a reply.
     assert fs.net.kinds() == [("react+", trigger), ("card", CHAT), ("react-", trigger)]
     (card,) = fs.net.cards()
     assert markdowns(card) == ["你好！有什么要我做的？"]
@@ -695,9 +713,11 @@ def test_message_while_running_queues_and_gets_typing_on_its_turn(fs: Env) -> No
     dq2.put(done([turn_text(1, "第二个回答")]))  # GA finishes in order: this waits
     dq1.put(done([turn_text(1, "第一个回答")]))
     fs.idle()
+    # Each answer replies to its message: the second message landed between
+    # the first one and its answer, the first answer between the second.
     assert fs.net.kinds() == [
-        ("react+", first), ("card", CHAT), ("react-", first),
-        ("react+", second), ("card", CHAT), ("react-", second),
+        ("react+", first), ("reply-card", first), ("react-", first),
+        ("react+", second), ("reply-card", second), ("react-", second),
     ]
     assert [markdowns(card) for card in fs.net.cards()] == [["第一个回答"], ["第二个回答"]]
 
@@ -719,9 +739,10 @@ def test_stop_stops_the_running_run_only(fs: Env) -> None:
     dq1.put(done(texts, tail="\n```\naborted\n```"))  # the aborted task's done: nobody's answer
     dq2.put(done([turn_text(1, "排队的回答")]))
     fs.idle()
+    # The receipt replies to the stopped message (the /stop came after it).
     assert fs.net.kinds() == [
-        ("react+", first), ("text", CHAT), ("react-", first),
-        ("react+", second), ("card", CHAT), ("react-", second),
+        ("react+", first), ("reply-text", first), ("react-", first),
+        ("react+", second), ("reply-card", second), ("react-", second),
     ]
     assert [markdowns(card) for card in fs.net.cards()] == [["排队的回答"]]
 
@@ -887,10 +908,139 @@ def test_markdown_rewrite_tables_and_images(fs: Env) -> None:
     fs.idle()
     (card,) = fs.net.cards()
     assert markdowns(card) == [
-        "## 结论\n\n• A：1\n• B：2\n\n"
+        "**结论**\n\n• A：1\n• B：2\n\n"
         "[图](https://example.com/a.png) 和 本地\n\n```\n| x | y |\n|---|---|\n```"
     ]
     assert preview(card) == "结论"
+
+
+def test_headings_become_bold_lines_each_its_own_paragraph(fs: Env) -> None:
+    fs.say("总结一下")
+    answer = (
+        "# 总结\n正文第一行\n## **要点** ##\n- 甲\n"
+        "```\n# 代码里的井号\n```\n#话题 不是标题"
+    )
+    fs.task(0).put(done([turn_text(1, answer)]))
+    fs.idle()
+    (card,) = fs.net.cards()
+    assert markdowns(card) == [
+        "**总结**\n\n正文第一行\n\n**要点**\n\n- 甲\n"
+        "```\n# 代码里的井号\n```\n#话题 不是标题"
+    ]
+    assert preview(card) == "总结"
+    ((report, _plain),) = fs.fsapp.report_cards("✅ 周报", "## 本周\n完成 3 项", "已完成 · s1")
+    assert markdowns(json.loads(report)) == ["**✅ 周报**", "**本周**\n\n完成 3 项"]
+
+
+def test_only_the_first_part_of_a_long_answer_replies(fs: Env) -> None:
+    first = fs.say("写长文")
+    dq = fs.task(0)
+    dq.begin()
+    fs.say("顺便再说一句")
+    body = "\n".join(f"第 {i} 段：" + "字" * 90 for i in range(100))
+    dq.put(done([turn_text(1, body)]))
+    wait_until(lambda: ("react-", first) in fs.net.kinds())
+    sent = [(kind, target) for kind, target in fs.net.kinds() if "card" in kind]
+    assert sent[:3] == [("reply-card", first), ("card", CHAT), ("card", CHAT)]
+    fs.task(1).put(done([turn_text(1, "好。")]))
+    fs.idle()
+
+
+def test_refused_reply_goes_out_as_a_new_message(fs: Env) -> None:
+    first = fs.say("查一下")
+    dq = fs.task(0)
+    dq.begin()
+    fs.say("另一件事")
+    fs.net.refuse_replies = 1  # the first message was recalled, say
+    dq.put(done([turn_text(1, "查好了。")]))
+    wait_until(lambda: ("react-", first) in fs.net.kinds())
+    assert fs.net.kinds()[:4] == [
+        ("react+", first), ("reply-refused", first), ("card", CHAT), ("react-", first),
+    ]
+    fs.task(1).put(done([turn_text(1, "好。")]))
+    fs.idle()
+
+
+def test_question_card_replies_when_a_message_came_in(fs: Env) -> None:
+    first = fs.say("导出报告")
+    dq = fs.task(0)
+    dq.begin()
+    second = fs.say("PDF 吧")  # sent before the question: it answers it
+    dq.put(done([turn_text(1, "确认。")]), ask=ask_ctx("要哪种格式？", ["PDF", "Word"]))
+    wait_until(lambda: ("react-", first) in fs.net.kinds())
+    assert ("reply-card", first) in fs.net.kinds()
+    fs.task(1).put(done([turn_text(1, "已导出。")]))
+    fs.idle()
+    # The question card landed after the second message: its answer replies.
+    assert fs.net.kinds()[-2:] == [("reply-card", second), ("react-", second)]
+
+
+def test_messages_in_another_chat_do_not_count(fs: Env) -> None:
+    first = fs.say("私聊里问")
+    dq1 = fs.task(0)
+    dq1.begin()
+    second = fs.say("@_user_1 群里问", chat_id="oc_group", chat_type="group")
+    dq1.put(done([turn_text(1, "私聊的回答")]))
+    fs.task(1).put(done([turn_text(1, "群里的回答")]))
+    fs.idle()
+    assert ("card", CHAT) in fs.net.kinds() and ("card", "oc_group") in fs.net.kinds()
+    assert all(not kind.startswith("reply") for kind, _ in fs.net.kinds())
+    assert ("react+", first) in fs.net.kinds() and ("react+", second) in fs.net.kinds()
+
+
+def test_group_answer_replies_when_another_message_came_in(fs: Env) -> None:
+    group = "oc_group"
+    first = fs.say("@_user_1 先查这个", chat_id=group, chat_type="group")
+    dq1 = fs.task(0)
+    dq1.begin()
+    second = fs.say("@_user_1 再查那个", chat_id=group, chat_type="group")
+    dq1.put(done([turn_text(1, "这个查好了。")]))
+    fs.task(1).put(done([turn_text(1, "那个也查好了。")]))
+    fs.idle()
+    assert fs.net.kinds() == [
+        ("react+", first), ("reply-card", first), ("react-", first),
+        ("react+", second), ("reply-card", second), ("react-", second),
+    ]
+
+
+def test_a_report_between_a_message_and_its_answer_makes_it_a_reply(
+    fs: Env, monkeypatch: Any
+) -> None:
+    reports: list[tuple[str, str]] = []
+
+    def create_message(rid: str, _content: str, _msg_type: str, rtype: str) -> str:
+        reports.append((rid, rtype))
+        return "om_report"
+
+    monkeypatch.setattr(fs.fsapp, "_create_message", create_message)
+    trigger = fs.say("hi")
+    dq = fs.task(0)
+    dq.begin()
+    ((card, _plain),) = fs.fsapp.report_cards("✅ 周报", "完成", "已完成 · s1")
+    fs.fsapp.deliver_card(OWNER, card)  # the reporter sends to the owner's open_id
+    dq.put(done([turn_text(1, "嗯。")]))
+    fs.idle()
+    assert reports == [(OWNER, "open_id")]
+    assert ("reply-card", trigger) in fs.net.kinds()
+
+
+def test_files_landing_after_a_message_make_its_answer_a_reply(
+    fs: Env, monkeypatch: Any, tmp_path: Path
+) -> None:
+    out = tmp_path / "report.pdf"
+    out.write_text("x", encoding="utf-8")
+    later: list[str] = []
+
+    def send_files(*_args: Any) -> None:
+        if not later:  # a message arrives while the first run's files upload
+            later.append(fs.say("收到了吗"))
+
+    monkeypatch.setattr(fs.fsapp, "_send_generated_files", send_files)
+    fs.say("导出")
+    fs.task(0).put(done([turn_text(1, f"做好了：[FILE:{out}]")]))
+    fs.task(1).put(done([turn_text(1, "收到了。")]))
+    fs.idle()
+    assert fs.net.kinds()[-2:] == [("reply-card", later[0]), ("react-", later[0])]
 
 
 def test_file_markers_show_as_names_and_files_only_answer(fs: Env, tmp_path: Path) -> None:

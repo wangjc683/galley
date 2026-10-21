@@ -21,7 +21,7 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +    tables_to_lists,
 +    visible_text,
 +)
-@@ -951,0 +969,768 @@ def _make_task_hook(card, task_id, on_final):
+@@ -951,0 +969,869 @@ def _make_task_hook(card, task_id, on_final):
 +# ── Galley conversation UX (managed patch 0029) ──────────────────────────
 +# Aligned with Telegram / Discord (.scratch/im-polish/issues/03). While a run
 +# works, the user's message carries a `Typing` reaction: no push, no change
@@ -31,8 +31,11 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +# ask_user question; a stopped run posts the stop receipt instead. The
 +# reaction comes off once that message is out. A message sent while a run
 +# works queues behind it (one agent, FIFO); only the head run reads its
-+# display queue. The status card above (_TaskCard / _make_task_hook,
-+# patches 0009 and 0013) is no longer on the run path.
++# display queue. A run's message replies to its trigger (Feishu's 回复消息,
++# which shows the message it answers) only when something else landed in
++# the chat after the trigger: Telegram's quote rule (.scratch/im-polish/
++# issues/04). The status card above (_TaskCard / _make_task_hook, patches
++# 0009 and 0013) is no longer on the run path.
 +
 +_TYPING_EMOJI = "Typing"
 +_POLL_SECONDS = 0.5
@@ -50,6 +53,7 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +_TURN_MARKER_LINE_RE = re.compile(r"^\*{0,2}LLM Running \(Turn \d+\) \.\.\.\*{0,2}[ \t]*$", re.M)
 +_FILE_MARKER_RE = re.compile(r"\[FILE:([^\]]+)\]")
 +_FENCE_LINE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
++_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)(?:\s+#+)?\s*$")  # tgapp's
 +_IMAGE_MD_RE = re.compile(r"!\[([^\]]*)\]\(\s*([^)\s]*)[^)]*\)")
 +_REPLY_NUMBERS_RE = re.compile(r"\s*\d+(?:\s*[,，、;；\s]\s*\d+)*\s*")
 +# Card Markdown reads these; plain text inside it goes in as entities.
@@ -61,6 +65,9 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +_pending_asks = {}  # chat key -> _PendingAsk waiting for its reply
 +_ask_lock = threading.Lock()  # ask_user events arrive on the GA worker thread
 +_ask_events = {}  # display queue of the asking task -> ask_user event
++_seq_lock = threading.Lock()  # the quote rule's counts: event, worker and reporter threads
++_chat_seqs = {}  # chat key -> messages seen landing in it, the user's and the bot's
++_p2p_chats = {}  # open_id -> its p2p chat: a report sent to the open_id lands there
 +
 +
 +def _take_lead_notice():
@@ -106,13 +113,20 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +
 +
 +def _rewrite_markdown(text):
-+    """Source rewrite for card Markdown, which shows headings, quotes,
-+    rules, lists and code as they are (card JSON 2.0): tables become lists
-+    (a Markdown component shows at most four, paging after five rows), and
-+    image syntax, which takes uploaded image keys only, becomes a link.
-+    Code fences are left alone."""
-+    out, fence = [], ""
++    """Source rewrite for card Markdown, which shows quotes, rules, lists
++    and code as they are (card JSON 2.0): tables become lists (a Markdown
++    component shows at most four, paging after five rows), headings bold
++    lines as tgapp's rewrite does (a level-one heading is 26 px, too big in
++    a chat on a phone; `**` inside it dropped), and image syntax, which
++    takes uploaded image keys only, becomes a link. A heading's bold line
++    stands as its own paragraph: card Markdown may ignore a single
++    newline, and a heading never runs into the lines around it. Code
++    fences are left alone."""
++    out, fence, pad = [], "", False
 +    for line in tables_to_lists(text or "").split("\n"):
++        if pad and line.strip():
++            out.append("")
++        pad = False
 +        match = _FENCE_LINE_RE.match(line)
 +        if fence:
 +            if match and match.group(1)[0] == fence[0] and len(match.group(1)) >= len(fence) and not match.group(2).strip():
@@ -123,7 +137,19 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +            fence = match.group(1)
 +            out.append(line)
 +            continue
-+        out.append(_IMAGE_MD_RE.sub(_image_as_link, line))
++        line = _IMAGE_MD_RE.sub(_image_as_link, line)
++        heading = _HEADING_RE.match(line)
++        if heading is None:
++            out.append(line)
++            continue
++        title = heading.group(1).replace("**", "").strip()
++        if not title:
++            out.append("")
++            continue
++        if out and out[-1].strip():
++            out.append("")
++        out.append(f"**{title}**")
++        pad = True
 +    return "\n".join(out)
 +
 +
@@ -278,6 +304,23 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +    return False
 +
 +
++def _reply_raw(message_id, payload, msg_type):
++    """Send as a reply to message_id (回复消息: the reply shows the message
++    it answers, in a p2p chat and a group alike); its message_id ("" when
++    Feishu gives none), or None when refused (a recalled message, say)."""
++    try:
++        request = ReplyMessageRequest.builder().message_id(message_id).request_body(
++            ReplyMessageRequestBody.builder().content(payload).msg_type(msg_type).build()
++        ).build()
++        r = client.im.v1.message.reply(request)
++        if r.success():
++            return (r.data.message_id if r.data else None) or ""
++        print(f"[FS reply] refused: {r.code}, {r.msg}", flush=True)
++    except Exception as e:
++        print(f"[FS reply] error: {type(e).__name__}: {e}", flush=True)
++    return None
++
++
 +class FeishuSendError(RuntimeError):
 +    """Feishu refused a message (strict sends only)."""
 +
@@ -294,13 +337,16 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +
 +def deliver_card(receive_id, card, receive_id_type="open_id"):
 +    """Galley seam (runner/im_reporter.py): send a card; raises on failure."""
-+    return _create_message(receive_id, card, "interactive", receive_id_type)
++    message_id = _create_message(receive_id, card, "interactive", receive_id_type)
++    _note_sent(receive_id, receive_id_type)  # a report between a trigger and its answer
++    return message_id
 +
 +
 +def deliver_text(receive_id, text, receive_id_type="open_id"):
 +    """Galley seam: send text in 4000-character parts; raises on failure."""
 +    for part in split_text(text, _ANSWER_PART_LIMIT):
-+        _create_message(receive_id, json.dumps({"text": part}, ensure_ascii=False), "text", receive_id_type)
++        _create_message(receive_id, _text_payload(part), "text", receive_id_type)
++        _note_sent(receive_id, receive_id_type)
 +
 +
 +def report_cards(title, body, footer):
@@ -325,6 +371,53 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +    return out
 +
 +
++# ── the quote rule ──
++
++
++def _text_payload(text):
++    return json.dumps({"text": text}, ensure_ascii=False)
++
++
++def _note_message(chat_key):
++    """One more message landed in the chat, the user's or the bot's; its
++    number there. Feishu's message ids are not ordered, so the quote rule
++    counts (tgapp's _note_message keeps Telegram's newest id instead)."""
++    with _seq_lock:
++        seq = _chat_seqs.get(chat_key, 0) + 1
++        _chat_seqs[chat_key] = seq
++    return seq
++
++
++def _note_sent(receive_id, receive_id_type):
++    """A message the bot sent by receive id: one sent to an open_id lands in
++    that user's p2p chat."""
++    if receive_id_type == "open_id":
++        receive_id = _p2p_chats.get(receive_id, receive_id)
++    _note_message(receive_id)
++
++
++def _should_quote(run):
++    """Quote the trigger only when something landed in the chat after it
++    (tgapp's rule): right below it, a message needs no quote."""
++    if not run.message_id or run.anchor is None:
++        return False
++    with _seq_lock:
++        return _chat_seqs.get(run.chat_key, 0) > run.anchor
++
++
++def _out(run, payload, msg_type, quote=False):
++    """One of the run's messages into its chat: a reply to its trigger when
++    `quote`, else a new message; a reply Feishu refuses (its trigger
++    recalled, say) goes again as a new message. Noted for the quote rule.
++    Its message_id ("" when Feishu gave none), or None."""
++    message_id = _reply_raw(run.message_id, payload, msg_type) if quote else None
++    if message_id is None:
++        message_id = _send_raw(run.rid, payload, msg_type, run.rtype)
++    if message_id is not None:
++        _note_message(run.chat_key)
++    return message_id
++
++
 +# ── runs ──
 +
 +
@@ -333,9 +426,10 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +    continues (their steps and time add up; the wait for the reply does
 +    not count). States: queued / running / asking / done / stopped / error."""
 +
-+    def __init__(self, chat_key, rid, rtype, message_id, answers_ask):
++    def __init__(self, chat_key, rid, rtype, message_id, answers_ask, anchor=None):
 +        self.chat_key, self.rid, self.rtype = chat_key, rid, rtype
 +        self.message_id = message_id  # the trigger: Typing goes on it
++        self.anchor = anchor  # the trigger's number in its chat (_note_message)
 +        self.answers_ask = answers_ask  # takes the chat's pending question once it is the head
 +        self.echo = None  # (question, chosen) to mark answered once it is the head
 +        self.state = "queued"
@@ -451,15 +545,16 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +    return bool(getattr(globals().get("agent"), "is_running", False))
 +
 +
-+def _enqueue_run(chat_key, rid, rtype, message_id, text, images=None, answers_ask=False):
++def _enqueue_run(chat_key, rid, rtype, message_id, text, images=None, answers_ask=False, anchor=None):
 +    """Register a run and hand its task to GA in one step, so _RUNS and GA's
 +    task queue keep the same order (called on the event thread, in message
 +    order). A plain text message answers the chat's pending question: right
 +    away when it is next in line for it, else once the run is the head (a
-+    message sent before the question went out is still GA's next input)."""
++    message sent before the question went out is still GA's next input).
++    `anchor` is the trigger's number in the chat, for the quote rule."""
 +    global _worker
 +    agent = get_app().agent
-+    run = _FsRun(chat_key, rid, rtype, message_id, answers_ask)
++    run = _FsRun(chat_key, rid, rtype, message_id, answers_ask, anchor)
 +    with _runs_cond:
 +        if answers_ask:
 +            pending = _pending_asks.get(chat_key)
@@ -626,6 +721,8 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +        else:
 +            _post_ask(run, pending, step_text)
 +        _send_generated_files(run.rid, raw, run.rtype)
++        if _has_files(raw):
++            _note_message(run.chat_key)  # the files landed too
 +    finally:
 +        _end_typing(run)
 +        _retire(run)
@@ -637,10 +734,12 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +
 +def _post_answer(run, raw, step_text, steps, seconds):
 +    """The run's message: the closing step, with the 「过程」 panel on the
-+    last part from two steps on. Cards that Feishu refuses go as text."""
++    last part from two steps on; its first part replies to the trigger
++    when the quote rule says so. Cards that Feishu refuses go as text."""
 +    body = _answer_from(step_text, raw) or (_EMPTY_ANSWER_WITH_FILES if _has_files(raw) else "")
 +    parts = split_text(_rewrite_markdown(body), _ANSWER_PART_LIMIT)
 +    notice = _take_lead_notice()
++    quote = _should_quote(run)
 +    for i, part in enumerate(parts):
 +        head = notice if i == 0 else ""
 +        process = None
@@ -651,10 +750,10 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +                card = _answer_card(part, head, process)
 +                if len(card.encode("utf-8")) <= _CARD_BYTES_LIMIT:
 +                    break
-+        if _send_raw(run.rid, card, "interactive", run.rtype):
++        if _out(run, card, "interactive", quote and i == 0) is not None:
 +            continue
 +        plain = "\n\n".join(text for text in (head, part, "\n".join(process or ())) if text)
-+        if send_message(run.rid, plain, receive_id_type=run.rtype):
++        if _out(run, _text_payload(plain), "text", quote and i == 0) is not None:
 +            continue
 +        if head:
 +            _restore_lead_notice()
@@ -664,11 +763,12 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +
 +def _post_ask(run, pending, step_text):
 +    """Pause for the owner's reply: the question card (text when Feishu
-+    refuses it)."""
++    refuses it), replying to the trigger when the quote rule says so."""
 +    pending.narration = _rewrite_markdown(visible_text(_file_names(step_text)))
 +    pending.notice = _take_lead_notice()
-+    message_id = _send_raw(run.rid, _ask_card(pending), "interactive", run.rtype)
-+    if message_id is None and send_message(run.rid, _ask_plain(pending), receive_id_type=run.rtype) is None:
++    quote = _should_quote(run)
++    message_id = _out(run, _ask_card(pending), "interactive", quote)
++    if message_id is None and _out(run, _text_payload(_ask_plain(pending)), "text", quote) is None:
 +        if pending.notice:
 +            _restore_lead_notice()
 +    pending.message_id = message_id
@@ -685,18 +785,19 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +            run.state = "error"
 +        label = fold_label(run.total_steps(), run.elapsed(run.ended_at or _clock()))
 +        text = f"❌ 出错：{error}"
-+        send_message(run.rid, f"{label}\n{text}" if label else text, receive_id_type=run.rtype)
++        _out(run, _text_payload(f"{label}\n{text}" if label else text), "text", _should_quote(run))
 +    finally:
 +        _end_typing(run)
 +        _retire(run)
 +
 +
 +def _post_stopped(run):
-+    """The stop receipt `⏹ 已停止 · N 步 · 用时 X`; the run leaves the list
-+    once it is out."""
++    """The stop receipt `⏹ 已停止 · N 步 · 用时 X`, replying to the stopped
++    message when the quote rule says so (the command that stops it landed
++    after it); the run leaves the list once it is out."""
 +    try:
 +        text = stopped_text(run.total_steps(), run.elapsed(run.ended_at or _clock()))
-+        send_message(run.rid, text, receive_id_type=run.rtype)
++        _out(run, _text_payload(text), "text", _should_quote(run))
 +    finally:
 +        _end_typing(run)
 +        _retire(run)
@@ -790,7 +891,7 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +    send_message(rid, reply, receive_id_type=rtype)
 +
 +
-@@ -966,57 +1751,21 @@ class FeishuApp(AgentChatMixin):
+@@ -966,57 +1852,21 @@ class FeishuApp(AgentChatMixin):
 -    async def run_agent(self, chat_id, text, *, receive_id=None, receive_id_type="open_id", images=None, **_):
 -        if self.user_tasks:
 -            await self.send_text(chat_id, "当前会话已有任务在运行，请等待完成或发送 /stop 后再试。", receive_id=receive_id, receive_id_type=receive_id_type)
@@ -865,16 +966,23 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +            return _continue_command(self.agent, chat_id, rid, rtype, cmd)
 +        return await super().handle_command(chat_id, cmd, **ctx)
 +
-+    async def run_agent(self, chat_id, text, *, receive_id=None, receive_id_type="open_id", images=None, message_id=None, **_):
++    async def run_agent(self, chat_id, text, *, receive_id=None, receive_id_type="open_id", images=None, message_id=None, anchor=None, **_):
 +        """Galley 0029: registers a run (the mixin's /review lands here); no
 +        refusal while another one works."""
-+        _enqueue_run(chat_id, receive_id or chat_id, receive_id_type, message_id, text, images)
-@@ -1028,0 +1778 @@ def get_app():
++        _enqueue_run(chat_id, receive_id or chat_id, receive_id_type, message_id, text, images, anchor=anchor)
+@@ -1028,0 +1879 @@ def get_app():
 +        _install_ask_hook(app.agent)  # Galley 0029
-@@ -1082 +1832 @@ def _handle_message_impl(data):
+@@ -1059,0 +1911,6 @@ def _handle_message_impl(data):
++    # Galley 0029: every message landing in the chat counts for the quote
++    # rule, gated or not; a p2p chat is also where a report sent to the
++    # open_id lands.
++    anchor = _note_message(chat_id or open_id)
++    if chat_id and getattr(message, "chat_type", "") == "p2p":
++        _p2p_chats[open_id] = chat_id
+@@ -1082 +1939 @@ def _handle_message_impl(data):
 -            args=(get_app().handle_command(chat_key, user_input, receive_id=receive_id, receive_id_type=receive_id_type),),
-+            args=(get_app().handle_command(chat_key, user_input, receive_id=receive_id, receive_id_type=receive_id_type, message_id=message_id),),
-@@ -1086,5 +1836,8 @@ def _handle_message_impl(data):
++            args=(get_app().handle_command(chat_key, user_input, receive_id=receive_id, receive_id_type=receive_id_type, message_id=message_id, anchor=anchor),),
+@@ -1086,5 +1943,8 @@ def _handle_message_impl(data):
 -    threading.Thread(
 -        target=_run_async,
 -        args=(get_app().run_agent(chat_key, user_input, receive_id=receive_id, receive_id_type=receive_id_type, images=image_paths),),
@@ -886,5 +994,5 @@ diff --git a/frontends/fsapp.py b/frontends/fsapp.py
 +    get_app()
 +    _enqueue_run(
 +        chat_key, receive_id, receive_id_type, message_id, user_input, image_paths,
-+        answers_ask=message.message_type in ("text", "post") and not image_paths,
++        answers_ask=message.message_type in ("text", "post") and not image_paths, anchor=anchor,
 +    )
