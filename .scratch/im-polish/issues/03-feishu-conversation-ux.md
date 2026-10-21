@@ -1,6 +1,6 @@
 # 03 飞书对话体验对齐
 
-Status: ready-for-agent
+Status: needs-dogfood
 
 来源：[PRD](../PRD.md) 裁决 3。
 
@@ -83,3 +83,48 @@ Status: ready-for-agent
   - fsapp 改成从顶层 `chatapp_common` 导入（同 tgapp / dcapp）：`galley_im_display` 自己就 `from chatapp_common import`，fsapp 还用 `frontends.chatapp_common` 的话进程里会有两份模块，`/continue`、`/btw`、`/review` 在 GA 类上各装两次（三个 `install` 只看最外层包装，交错安装时不幂等）。
   - runner 侧：`im_resume.install_feishu` 改接新 seam（接不上的提示挂在回答或提问的第一行，小字）；`im_reporter.FeishuChannel` 的 `busy` / `render` / `send_report` 改接新 seam。
   - 平台无关的新逻辑（展开区那几行、按回复数字认候选）先写在 `0029` 里，标注为可并入 `galley_im_display.py` 的候选，合入时由主会话归并（票 01 同时在改那个文件）。
+- 2026-10-21 实施（执行子代理）：新补丁 `0029-managed-feishu-conversation-ux.patch`（只改 `frontends/fsapp.py`），runner 侧 `im_resume.install_feishu`、`im_reporter.FeishuChannel` 接新 seam；补丁台账、`manifest.json`、`docs/ga-baseline.md`（第 15、16 条，耦合点清单，Step 8 的飞书清单）同步。验证：干净克隆 `5205f40` 用 `build-managed-ga.sh` 重放 27 张补丁全 clean，`py_compile` 通过，重建后 `managed-ga/code` 与 `state-seed` 逐文件哈希与提交一致；pytest 614 passed（`test_managed_feishu_fsapp.py` 新增 18 条：1 步无入口、多步有收起面板、排队不拒绝且轮到才挂 Typing、`/stop` 只停在跑的、空闲与报告轮时什么都不停、`/new`、出错与发送异常都撤 Typing、提问回数字 / 全角数字 / 多选 / 打字 / 过期、图片不算回答、群聊、超长分卡、卡片被拒退纯文本、表格与图片改写、`[FILE:]`、报告 seam、只有一份 `chatapp_common`；`test_im_reporter.py` 新增 10 条，含过真实 fsapp 的报告；`test_im_resume.py` 的飞书部分改接新 seam）。对 `_running_run`、Typing 的 `finally`、1 步判断、待答认领各做了一次变异，分别有 1、6、1、2 条测试失败。mypy strict、ruff、`git diff --check`、`check-managed-ga-payload.mjs`、`check-ga-baseline-drift.mjs` 绿。
+
+  **实施偏差**（各附理由）
+  1. 目标 7 没有照 Telegram 全套改写：只把表格改成列表、图片语法改成链接，标题、引用、分割线、列表、代码块原样交给卡片。理由见上面对表（卡片 JSON 2.0 原生支持这些）；交 JC 定。
+  2. 去掉上游的 900 秒超时（对表里写了，票面没提）：其余三个渠道都没有，微信对齐时当缺陷去掉过。
+  3. 「轮到」按「排到运行列表队首」算，不等 GA 真正开始这条任务：报告轮在跑时，排在它后面的那条消息也会先挂上 Typing（机器人确实在忙，报告轮跑完就接着跑它）。Telegram 那边这时显示「·· 排队中」，飞书没有能原地改的状态消息。
+  4. Typing 在回答和附件都发完之后才撤（票面写「回复发出后撤掉」）：附件是这一轮回复的一部分，先撤会出现「没在忙了但还在陆续来文件」。
+  5. 提问卡片的状态行放在末行（`⏸ 回复序号或文字 · 已完成 N 步`，微信的位置和措辞；Telegram 在首行）：没有按钮，「回复序号」这句要读在候选之后。回显的措辞用 Telegram 的「已回复 · 已完成 N 步」。
+  6. 多选题回一串数字（`1 3`、`1、3`）会换成「；」连起来的候选并在回显里打勾，同 Telegram 多选「提交」；微信是原样转给 GA。
+  7. 出错消息照 Telegram：首行 `N 步 · 用时 X`，下一行 `❌ 出错：…`（微信只有后一行）。
+  8. 完成报告的标题用卡片正文里的粗体行，不用卡片 header：header 是一整条彩色标题栏，比回答重得多；粗体行就是 Telegram 报告的样子。卡片的 `summary` 设成标题行。
+  9. 旧的卡片显示代码（`_TaskCard`、`_make_task_hook`、`_build_step_detail`，含 `0009` 的收尾面板和 `0013` 的报告轮标记）没删，只是不在运行路径上：删它们要动 `0009`、`0013` 的区域，票面要求不动这几张的语义；台账写明下次重导出 fsapp 补丁时一并删。
+  10. fsapp 改成从顶层 `chatapp_common` 导入（对表里写了理由）。`im_resume.install_feishu` 按 `AgentChatMixin.__module__` 找模块，不受影响。
+  11. 回答不引用触发消息：Telegram 在「触发消息之后插进了别的消息」时用引用回复，飞书要换成「回复消息」接口并自己记消息先后，票面没要求，没做；交 JC 定。
+
+  **交 JC 定**
+  1. 表格：改成列表（现在的做法，同 Telegram；理由是单个组件最多 4 张表、超过 5 行分页，手机上部分行要翻页才看得到）还是用飞书原生表格。
+  2. 标题：原样（一级标题 26px，手机聊天里偏大）还是像 Telegram 改成粗体行。
+  3. 提问要不要做成卡片按钮：要做得让用户在开放平台「开发配置 → 事件与回调 → 回调配置」选「使用长连接接收回调」，订阅「卡片回传交互」`card.action.trigger`，再创建并发布新版本；Galley 这边注册 `register_p2_card_action_trigger`（lark-oapi 1.6.8 支持，3 秒内必须响应），设置页飞书教程加一节。现在照微信回数字，不需要任何额外配置。
+  4. 中间插了别的消息时，回答要不要引用触发消息（偏差 11）。
+  5. 「过程」面板的样子（图标跟在文字后、展开转 180°，步行灰色 14px）与报告卡片的样子，真机看过再定。
+
+  **没验证到的**
+  - 所有飞书服务端行为都没有真发：卡片 JSON 能不能被接受（`collapsible_panel` 的 header 与图标、`div` 的 `text_size` / `text_color`、`config.summary`、Markdown 里的 `<font color='grey'>`、`<br>`、HTML 实体转义），测试只核对了我们发出的 JSON 形状。被拒时回答和提问会退回纯文本（Markdown 不渲染）。
+  - `Typing` 的加、删只在 lark-oapi 1.6.8 源码里核对了请求构造（`CreateMessageReactionRequest`、`Emoji`、`DeleteMessageReactionRequest`），没发过请求；接口本身 10-20 探针验过。
+  - 推送正文取不取 `config.summary`、会话列表预览是否从回答开始；PATCH 提问卡片成回显时推不推送、挂不挂「已编辑」。
+  - 群聊（@ 机器人）整条路径。
+  - 28 KB 的卡片预算按 UTF-8 字节算，与服务端「请求体 30 KB」的口径是否一致。
+  - 完成报告卡片的真机样子。
+
+  **Open risks**
+  - 卡片里若有一个字段服务端不认，每一轮回答都会先失败一次再走纯文本，`feishu.log` 会出现 `发送失败: <code>`；真机第一条就能看出来。
+  - 运行列表、待答提问都在进程内：重启 Channels 时排队中的消息和待答提问会丢，旧提问卡片还挂着「⏸ 回复序号或文字」，这时回数字会作为普通文字交给 GA（同 Telegram / 微信）。
+  - 超长回答切成几张卡，每张都推送（飞书机器人消息没有静默发送）；按 4000 字切，可能切在代码块中间（上游一直如此；微信那套按围栏切的拆分器在 runner 侧，补丁里用不上）。
+  - 与票 01 的合入：`_process_lines`、`_PendingAsk.answer` 是平台无关逻辑，先写在 `0029` 里，归并进 `galley_im_display.py` 时 `0029` 要重导出；票 01 若改了 `answer_body`、`step_summary`、`fold_label`、`tables_to_lists` 的语义，飞书跟着变。两张票都改了补丁台账头部和 `manifest.json` 末尾，会有文本冲突。
+  - `0029` 叠在 `0009`、`0011`、`0012`、`0013`、`0019` 之上，以后其中任何一张改了 `fsapp.py` 的行数，都要在其上重导出 `0029`（台账已写）。
+
+  **JC 真机清单**（dev 里「重启 Channels」后；开放平台不用另开任何配置：`Typing` 用教程里已有的 `im:message` 权限，折叠面板不靠回调）
+  1. 私聊发一个 1 步的问题：你的消息上出现 `Typing`，回答到时消失；回答是一张卡，没有「过程」；看推送和会话列表预览是不是从回答开始。
+  2. 发一个多步的问题：在跑时只有 `Typing`、没有状态卡；回答卡片末尾「过程」默认收起，点开第一行 `N 步 · 用时 X`，下面逐步 `01 …`；看收起、展开的手感，图标位置，灰字大小。
+  3. 在跑时再发一句：不被拒；第二句要等第一句的回答出来才挂 `Typing`；两条回答按顺序到。
+  4. 长任务中 `/stop`：只来一条 `⏹ 已停止 · …`，`Typing` 撤掉，之后没有回答；空闲时 `/stop` 回「当前没有在跑的任务」。
+  5. 触发一次提问（例如「帮我导出一份报告，先问我要什么格式」）：提问卡片候选带编号，末行「⏸ 回复序号或文字 · 已完成 N 步」；回一个数字：卡片变成回显（所选打 ✓、其余变灰），接着跑，最终回答「过程」里的步数接着算。
+  6. 顺带看：一个带表格和标题的回答（表格变列表、标题大小）；委派一个 session，等完成报告卡片（粗体标题、正文、灰色脚注，后面跟附件）。
+  7. 说一件事、重启 Channels、再问它：续接照旧；接不上时第一张回答卡顶部有一行灰色小字「之前的对话没接上，这是新的上下文」。
