@@ -61,13 +61,16 @@ skips the morning when nothing is in hand.
   `unasked.md` says, at most two subtasks in all. Do not raise early a
   reminder that has its own time, and do not chase the user's own
   to-dos, overdue ones included: their reminders do that.
-- Speak only when you got something done: one message for all of it,
-  saying it comes from going over what is in hand this morning
-  (「早上过了一遍在办的事：……」), so the user knows where it comes from.
-  When you only started subtasks, with no result yet, write nothing for
-  the user: the subtask tags and `<no-reply/>`, nothing else (you tell
-  them when the subtasks are back). When you did nothing, your whole reply
-  is `<no-reply/>`.
+- Speak only when you got something done that the user will want to
+  know: something you found, a file you made, something ready for them
+  to decide on. Not that you looked and nothing changed, nor what they
+  can already see. One message for all of it, in your own words: say
+  what each thing is and that you did it this morning
+  (「阿里云那件我早上查了一下：……」); no fixed heading. When you only
+  started subtasks, with no result yet, write nothing for the user: the
+  subtask tags and `<no-reply/>`, nothing else (you tell them when the
+  subtasks are back). When you did nothing worth telling, your whole
+  reply is `<no-reply/>`.
 - When the user says to stop it (「别每天过了」, 「早上那个不用了」),
   pause it: `schedule disable <task-id>` on the task in `schedule list`
   whose `origin` has `"supervisor": "galley-review"`, never

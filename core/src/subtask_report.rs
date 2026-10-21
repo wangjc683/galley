@@ -457,7 +457,8 @@ fn due_paragraph(due: &DueReminder) -> String {
 /// what to do (`wake.md`), and carries the two rules it acts on at once,
 /// the limit on subtasks and when to stay silent. Late is not for the
 /// user, who was promised nothing at 9:00: the times are there, with no
-/// "say it comes late".
+/// "say it comes late". Ticket 75 (ruling 10, the review goes unnoticed):
+/// no fixed heading, and only what the user will want to know.
 fn review_paragraph(due: &DueReminder) -> String {
     let id = &due.task_id;
     let when = match &due.late {
@@ -473,10 +474,10 @@ fn review_paragraph(due: &DueReminder) -> String {
          a day, go over what is in hand. Read \"The morning review\" in `wake.md` in your \
          manual and do as it says: read `todo list`, `schedule list` and your running subtasks, \
          move forward what you can without being asked, and start at most two subtasks in all. \
-         Speak only when you got something done for the user, in one message that says it \
-         comes from going over what is in hand this morning. If you only started subtasks, \
-         write nothing else for the user and {NO_REPLY_END}; if you did nothing, your whole \
-         reply is exactly <no-reply/>.",
+         Speak only when you got something done the user will want to know, in one message, \
+         in your own words, with no fixed heading. If you only started subtasks, write nothing \
+         else for the user and {NO_REPLY_END}; if you did nothing, your whole reply is exactly \
+         <no-reply/>.",
         due.rule
     )
 }
@@ -1925,11 +1926,12 @@ mod tests {
         ));
         assert!(text.contains("and start at most two subtasks in all."));
         assert!(text.contains(
-            "Speak only when you got something done for the user, in one message that says it \
-             comes from going over what is in hand this morning. If you only started subtasks, \
+            "Speak only when you got something done the user will want to know, in one \
+             message, in your own words, with no fixed heading. If you only started subtasks, \
              write nothing else for the user and end your reply with exactly <no-reply/>; if you \
              did nothing, your whole reply is exactly <no-reply/>."
         ));
+        assert!(!text.contains("going over what is in hand this morning"));
         assert!(!text.contains("What you noted"));
         assert!(!text.contains("Morning review: …"));
         let mut late = review.clone();
