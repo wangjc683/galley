@@ -375,8 +375,8 @@ look it up with the Galley CLI (search, then
 /// down does not bring noting up (「刚才说要加待办有点多此一举，就不加了」).
 ///
 /// Ticket 73 (assistant PRD ruling 10, main chat PRD ruling 124): the
-/// to-do sentence takes what the user is in the middle of and will come
-/// back to (「排查到一半，先吃饭吧」), with no date; a paragraph after it
+/// to-do sentence takes what the user is in the middle of and sets aside
+/// to come back to (「排查到一半，先吃饭吧」), with no date; a paragraph after it
 /// asks for a step ahead when noting something — do what can be done
 /// unasked, then say so, never an offer instead (`unasked.md` has the
 /// rules, and the manual list names it with `todos.md`) — and teaches
@@ -399,7 +399,7 @@ Use this, not the file-based subagent in your memory (subagent.md), which
 the user cannot see.
 
 Note what the user has to do (a deadline, a call, a flight, a purchase),
-what they are in the middle of and will come back to,
+what they are in the middle of and set aside to come back to,
 or what comes up on a date and will be worth raising then (a renovation due
 to finish, a lease ending), as a to-do, with a reminder when it has a date,
 and tick it off when it is done; set yourself a reminder when you promise
@@ -1323,11 +1323,15 @@ mod tests {
     /// (in its text once, in `<summary>` once) before reading the part,
     /// and each reply took it back (「刚才说要加待办有点多此一举，就不加了」).
     /// The test of when is in the part; what to say before reading it
-    /// cannot be, so it is here. Raised 2767 → 3132 by ticket 73
-    /// (assistant PRD ruling 10, main chat PRD ruling 124): +365 bytes.
-    /// The to-do sentence gained what the user is in the middle of and will
-    /// come back to (+54): with no date in sight 「排查到一半，先吃饭吧」 had
-    /// nothing to send the model to `todos.md`. A paragraph after it (+294,
+    /// cannot be, so it is here. Raised 2767 → 3140 by ticket 73
+    /// (assistant PRD ruling 10, main chat PRD ruling 124): +373 bytes.
+    /// The to-do sentence gained what the user is in the middle of and sets
+    /// aside to come back to (+62): with no date in sight 「排查到一半，先吃饭吧」
+    /// had nothing to send the model to `todos.md`. Its first wording, "and
+    /// will come back to" (+54), noted a to-do in two carried conversations
+    /// of the chat eval where the user was carrying on with the thing (「回来了」
+    /// after 「晚点回来再说这个报价」; a question about the laptop just chosen),
+    /// on gpt-6.1-sol and gpt-6-astra alike; "sets aside" names the pause. A paragraph after it (+294,
     /// with its break): when it notes something, a step ahead, done and
     /// then said, never offered (+152, naming `unasked.md`, whose rules
     /// these are: a turn that notes something reads `todos.md` and would
@@ -1336,7 +1340,7 @@ mod tests {
     /// taught the main chat the marker, and its replies never carried
     /// one, so what it made by itself showed only as a sentence. The
     /// manual list names `unasked.md` with `todos.md` (+17).
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 3132;
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 3140;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {
@@ -1570,7 +1574,7 @@ mod tests {
     fn main_chat_entry_layer_acts_unasked_and_hands_over_files() {
         let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
         // Single-line fragments only (CRLF on Windows).
-        assert!(main.contains("what they are in the middle of and will come back to,"));
+        assert!(main.contains("what they are in the middle of and set aside to come back to,"));
         assert!(
             main.contains("When you note something, think a step ahead: do what you can for it")
         );

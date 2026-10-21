@@ -52,10 +52,12 @@ hold:
    Monday (things to pack) holds.
 
 Note one without being asked, too, for something the user is in the
-middle of, with no time to it: they are working on it, it has a next
-step, they care how it turns out, and it will not be done this turn
-(「排查到一半，先吃饭吧」: note 「查清阿里云费用暴涨的原因」). Leave out
-`--due`. Then think one step further, as `unasked.md` says.
+middle of and sets aside to come back to, with no time to it: they are
+working on it, it has a next step, they care how it turns out, and they
+stop here for now (「排查到一半，先吃饭吧」: note 「查清阿里云费用暴涨的原因」).
+Leave out `--due`. Then think one step further, as `unasked.md` says. Not
+while they carry on with it here: back to it (「回来了」), or asking about
+what they just chose, it needs no to-do.
 
 Not for a wish with nothing to do yet (「我最近想学吉他」), a remark about
 the past (「昨天开会挺累的」), a date that is only a date, something they

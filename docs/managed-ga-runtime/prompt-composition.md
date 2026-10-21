@@ -471,9 +471,11 @@ that finishes a task and restates the result. The layer says three things:
   manual for them; ticket 36's sentence did the same for 「周三下午要交报告」.
   The manual paragraph's write list is the command families: "(a session,
   project, model, schedule or to-do command)". Ticket 73 (assistant PRD
-  ruling 10) added to the list "what they are in the middle of and will
-  come back to" (「排查到一半，先吃饭吧」: a to-do with no date, by
-  `todos.md`'s rule beside its three tests).
+  ruling 10) added to the list "what they are in the middle of and set
+  aside to come back to" (「排查到一半，先吃饭吧」: a to-do with no date, by
+  `todos.md`'s rule beside its three tests, and not while the user carries
+  on with it; the first wording, "and will come back to", noted one in two
+  carried chats where the user was carrying on).
 - **Act unasked, hand files over** (ticket 73, assistant PRD ruling 10,
   main chat PRD ruling 124): a paragraph after the to-do one, "When you
   note something, think a step ahead: do what you can for it unasked,
@@ -618,9 +620,10 @@ that finishes a task and restates the result. The layer says three things:
   added 105 (what comes up on a date, with two examples): 2568; ticket 63
   added 107 (「记下了」 only after a write): 2675; ticket 64 added 92 (read
   `todos.md` before saying you will +38, do not bring up noting when
-  nothing was written +54): 2767; ticket 73 added 365 (what the user is in
-  the middle of +54, the paragraph on acting unasked and handing over a
-  file with its break +294, `unasked.md` in the manual list +17): 3132.
+  nothing was written +54): 2767; ticket 73 added 373 (what the user is in
+  the middle of and sets aside +62, the paragraph on acting unasked and
+  handing over a file with its break +294, `unasked.md` in the manual list
+  +17): 3140.
   Behavior, but main chat only, so it stays out of the static budget and
   the prompt hash.
 

@@ -739,7 +739,8 @@ mod tests {
     }
 
     /// Ticket 73 (assistant PRD ruling 10): what the user is in the middle
-    /// of is a to-do with no date, beside the three tests, and a passing
+    /// of and sets aside is a to-do with no date, beside the three tests,
+    /// not while they carry on with it (the eval's carried chats), and a passing
     /// wish or a complaint is not one; what it does unasked is work, not
     /// advice — done when it can be undone and costs nothing and says
     /// nothing in the user's name, asked first with the groundwork done
@@ -752,8 +753,10 @@ mod tests {
         let todos = part("todos.md");
         for rule in [
             "Note one without being asked, too, for something the user is in the",
-            "(「排查到一半，先吃饭吧」: note 「查清阿里云费用暴涨的原因」). Leave out",
-            "`--due`. Then think one step further, as `unasked.md` says.",
+            "middle of and sets aside to come back to, with no time to it: they are",
+            "stop here for now (「排查到一半，先吃饭吧」: note 「查清阿里云费用暴涨的原因」).",
+            "Leave out `--due`. Then think one step further, as `unasked.md` says. Not",
+            "while they carry on with it here: back to it (「回来了」), or asking about",
             "passing wish, a complaint, or something already finished is not something",
         ] {
             assert!(todos.contains(rule), "todos.md lost: {rule}");
