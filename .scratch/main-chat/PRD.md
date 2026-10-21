@@ -760,6 +760,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [72](./issues/72-main-chat-switch-cost.md) | — | 切到主对话不卡：去掉主对话挂载后的连锁重渲染与多余的强制布局，操作行菜单视收益改成用到才挂 | — |
 | [73](./issues/73-act-unasked-and-daily-review.md) | — | 主动的第一阶段：手册门槛加没日子的在办之事、「主动的是动作」、巡看一部分；Core 每天 9:00 巡看（种子例行、没事不叫醒）；入口层教 `[FILE:]`；快照脚本；评测 | — |
 | [74](./issues/74-files-in-the-bubble-and-review-label.md) | — | 主对话气泡下挂它交出的文件卡片；清单「例行」里巡看那条显示成本地化的名字 | 73 的标记契约 |
+| [75](./issues/75-review-speaks-naturally.md) | — | 巡看开口去掉固定开头、来源随话带出，门槛提到「你会想知道」；Core 叫醒措辞与评测跟着改 | 73 |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 
