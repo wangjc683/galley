@@ -204,10 +204,6 @@ _LIVE_POLL_SECONDS = 1.0
 _STATUS_EDIT_INTERVAL_SECONDS = 1.5
 _SEND_ATTEMPTS = 3
 _PROCESS_BUDGET = MessageLimit.MAX_TEXT_LENGTH // 2  # at most half a message; the answer splits to make room
-# A process block longer than this (lines with the label, or characters) is
-# an expandable quote, which Telegram shows folded to three lines.
-_PROCESS_QUOTE_MAX_LINES = 10
-_PROCESS_QUOTE_MAX_CHARS = 600
 _PROCESS_CACHE_LIMIT = 256
 _ASK_BUTTON_MAX_CANDIDATES = 50
 _ASK_LIST_BUTTONS_PER_ROW = 8
@@ -502,14 +498,11 @@ def answer_text(raw):
     return _answer_from(raw[markers[-1].start():] if markers else raw, raw)
 
 def _process_quote(label, lines):
-    """The process block in MarkdownV2: a quote opening with `N 步 · 用时 X`,
-    then the step lines; an expandable quote (folded to three lines) once it
-    is long."""
+    """The process block in MarkdownV2: a plain quote opening with
+    `N 步 · 用时 X`, then the step lines. Never an expandable quote: the
+    过程 button is already the disclosure, and the budget caps the length."""
     rows = [label, *lines]
-    quoted = "\n>".join(escape_markdown(row, version=2) for row in rows)
-    if len(rows) > _PROCESS_QUOTE_MAX_LINES or len("\n".join(rows)) > _PROCESS_QUOTE_MAX_CHARS:
-        return f"**>{quoted}||"
-    return f">{quoted}"
+    return ">" + "\n>".join(escape_markdown(row, version=2) for row in rows)
 
 def _process_block(summaries, steps, seconds, budget=_PROCESS_BUDGET):
     """(markdown_v2, plain) of a run's process for the end of its answer:

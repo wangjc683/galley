@@ -516,11 +516,10 @@ async def wait_until(predicate: Callable[[], bool], timeout: float = 5.0) -> Non
         await asyncio.sleep(0.005)
 
 
-def quote(label: str, *lines: str, expandable: bool = False) -> str:
-    """A process block as tgapp writes it at the end of an answer: a
-    MarkdownV2 quote, expandable (folded to three lines) when long."""
-    body = "\n>".join(_escape_markdown(row, 2) for row in (label, *lines))
-    return f"**>{body}||" if expandable else f">{body}"
+def quote(label: str, *lines: str) -> str:
+    """A process block as tgapp writes it at the end of an answer: a plain
+    MarkdownV2 quote, never an expandable one, however long."""
+    return ">" + "\n>".join(_escape_markdown(row, 2) for row in (label, *lines))
 
 
 SHOW, HIDE = "proc:show", "proc:hide"
@@ -803,7 +802,7 @@ def test_process_block_is_escaped_and_the_fold_switch_is_gone(env: Env) -> None:
     env.run(body)
 
 
-def test_long_process_is_an_expandable_quote_of_the_last_30_steps(env: Env) -> None:
+def test_long_process_is_a_plain_quote_of_the_last_30_steps(env: Env) -> None:
     async def body() -> None:
         texts = [
             turn_text(k, f"<summary>第 {k} 步</summary>", "code_run({})") for k in range(1, 35)
@@ -817,10 +816,10 @@ def test_long_process_is_an_expandable_quote_of_the_last_30_steps(env: Env) -> N
         tap = await env.tap(answer, SHOW)
         lines = tap.text_edits[0][0].split("\n")
         assert lines[:2] == ["完成", ""]
-        assert lines[2] == "**>35 步 · 用时 1 分 10 秒"
+        assert lines[2] == ">35 步 · 用时 1 分 10 秒"
         assert lines[3] == ">… 前 5 步略"
         assert lines[4] == ">06 第 6 步"
-        assert lines[33] == ">35 完成||"
+        assert lines[33] == ">35 完成"
         assert len(lines) == 34
 
     env.run(body)
@@ -1575,7 +1574,7 @@ def test_process_tap_by_a_stranger_or_while_locked(env: Env) -> None:
     env.run(body)
 
 
-def test_short_process_is_a_plain_quote_long_one_folds(env: Env) -> None:
+def test_process_is_a_plain_quote_however_long(env: Env) -> None:
     def steps_answer(n: int, summary: str = "第 {k} 步") -> None:
         texts = [
             turn_text(k, f"<summary>{summary.format(k=k)}</summary>", "code_run({})")
@@ -1585,27 +1584,30 @@ def test_short_process_is_a_plain_quote_long_one_folds(env: Env) -> None:
         env.agent.scripts.append([nxt(texts[:1]), done(texts, 5.0)])
 
     async def body() -> None:
+        # The 过程 button is the disclosure: no expandable quote (`**>…||`)
+        # past 10 lines or 600 characters, the old threshold, either.
         steps_answer(9)  # the label and 9 steps: 10 lines
         await env.say("九步")
         await env.settle()
         tap = await env.tap(env.bot.sent[-1], SHOW)
         block = tap.text_edits[0][0].split("\n\n", 1)[1]
-        assert block.startswith(">9 步 · 用时 5 秒\n>01 第 1 步") and not block.endswith("||")
+        assert block.startswith(">9 步 · 用时 5 秒\n>01 第 1 步") and block.endswith(">09 完成")
 
-        steps_answer(10)  # 11 lines: folded to three
+        steps_answer(10)  # 11 lines
         await env.say("十步")
         await env.settle()
         tap = await env.tap(env.bot.sent[-1], SHOW)
         block = tap.text_edits[0][0].split("\n\n", 1)[1]
-        assert block.startswith("**>10 步 · 用时 5 秒\n>01 第 1 步")
-        assert block.endswith(">10 完成||")
+        assert block.startswith(">10 步 · 用时 5 秒\n>01 第 1 步")
+        assert block.endswith(">10 完成") and "**>" not in block and "||" not in block
 
-        steps_answer(6, "长" * 119 + "{k}")  # seven lines, but over 600 characters
+        steps_answer(6, "长" * 119 + "{k}")  # seven lines, over 600 characters
         await env.say("长摘要")
         await env.settle()
         tap = await env.tap(env.bot.sent[-1], SHOW)
         block = tap.text_edits[0][0].split("\n\n", 1)[1]
-        assert block.startswith("**>6 步") and block.endswith("||")
+        assert len(block) > 600
+        assert block.startswith(">6 步") and block.endswith(">06 完成") and "||" not in block
 
     env.run(body)
 
@@ -1623,7 +1625,7 @@ def test_long_step_lines_give_way_within_the_budget(env: Env) -> None:
         tap = await env.tap(env.bot.sent[-1], SHOW)
         lines = tap.text_edits[0][0].split("\n")[2:]
         # 31 lines of ~123 characters are over half a message: clipped to 60 first.
-        assert lines[0] == "**>30 步 · 用时 5 秒"
+        assert lines[0] == ">30 步 · 用时 5 秒"
         assert lines[1] == ">01 " + "摘" * 56 + "…"  # 60 characters with the ellipsis
         assert len("\n".join(lines)) <= MAX // 2
 

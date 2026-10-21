@@ -1,6 +1,6 @@
 # 01 Telegram、Discord 的「过程」按钮
 
-Status: ready-for-agent（Telegram 真机：展开区改为一律普通引用块，见 Comments 最后一条；Discord 未真机）
+Status: needs-dogfood（Telegram 复测展开区一律普通引用块这一处，见 Comments 最后一条；Discord 未真机）
 
 来源：[PRD](../PRD.md) 裁决 1、2。
 
@@ -111,3 +111,32 @@ Discord 频道：
 - 问题：多步任务点「过程」后出来的是可折叠引用块（过程块超过 `_PROCESS_QUOTE_MAX_LINES` 10 行或 `_PROCESS_QUOTE_MAX_CHARS` 600 字时，实施偏差 3），要再点一次才全开，「稍显啰嗦」。Discord 是 ephemeral 直接列全、飞书面板一点全开，只有 Telegram 多一层。
 - 主会话给甲（一律普通引用块，按钮本身就是展开动作）/ 乙（只调高阈值），推荐甲；JC：「按建议推进」。长度照旧受 `_PROCESS_BUDGET`（半条消息）约束，嫌长靠「收起过程」。
 - 要做：删掉可折叠分支与两个阈值常量，测试与文档里讲阈值的地方同步；补丁 `0024` 原地重导出（其后 `0025`–`0029` 不碰 tgapp，照规矩核一遍）。
+
+### 2026-10-21 展开区一律普通引用块（子代理，worktree 分支 `im-polish-05`）
+
+**做了什么**
+
+- `tgapp.py`：删掉 `_PROCESS_QUOTE_MAX_LINES`、`_PROCESS_QUOTE_MAX_CHARS` 两个常量与 `_process_quote` 里的可折叠分支（`**>…||`），展开区不论多长都是普通引用块（`>` 开头逐行）。长度照旧由 `fit_process` 按 `_PROCESS_BUDGET`（半条消息）与这条消息剩下的空间约束：先按 60、再按 24 字截步行，最多 30 步。预算按 `_process_quote` 的实际长度算，普通块比可折叠块短 4 个字符，发送时给最后一段留的空间也随之少 4 个字符，其余不变。
+- 补丁 `0024` 原地重导出：`tgapp.py` 那一节是「`0024` 之前的 `tgapp.py`（已提交的文件反向应用旧的那一节得到，用同一办法导出旧的那一节逐字节一致）」到新文件的 zero-context diff；`galley_im_display.py` 那一节没动。`0025`–`0029` 分别只碰 `agentmain.py`、`dcapp.py`、`llmcore.py`、`TMWebDriver.py`、`fsapp.py`，都不碰 `tgapp.py`，不用重导出。
+- 测试（`runner/tests/test_managed_telegram_tgapp.py`）：辅助函数 `quote` 去掉 `expandable` 参数；原「短的普通、长的可折叠」用例改名 `test_process_is_a_plain_quote_however_long`，断言 10 行、11 行、7 行但超过 600 字三种情况都是普通引用块、没有 `**>` 与 `||`；`test_long_process_is_a_plain_quote_of_the_last_30_steps`（原 `…_expandable_quote_…`）与 `test_long_step_lines_give_way_within_the_budget` 的首行、末行断言改成普通块。
+- 文档：台账 `0024` 行与「Last replay verified」（上一条 ticket 04 的记录挪成「Previous replay」）、`docs/design/overlays-and-settings.md` §9 Telegram 那条。`docs/project-status.md` 里 v0.5.5 那段「an expandable step-list quote on Telegram」讲的是当时发版的折叠头，属历史记录，没改。Discord、飞书没动。
+
+**验证**
+
+- `pytest`：640 passed，6 deselected（e2e）；`mypy runner`、`ruff check runner`、`git diff --check`、`check-managed-ga-payload.mjs`、`check-ga-baseline-drift.mjs` 全绿。
+- 干净克隆 `lsdefine/GenericAgent` 检出 `5205f40`，`build-managed-ga.sh` 重放 27 个补丁全 clean、`py_compile` 通过，重建后 `managed-ga/code` 与 `state-seed` 相对工作区无差异，重建出的 `tgapp.py` 与手改的版本逐字节一致；克隆已删。
+
+**没验证到的**
+
+- 没跑 tauri dev，没重启渠道，没往 Telegram 发消息：十步以上的展开区在客户端里是否直接全开、整块普通引用块在手机上有多长，要真机看。
+- e2e（真 GA + 真模型）没跑；没有 Rust / GUI 改动，cargo 与 pnpm 门禁没跑。
+
+**Open risks**
+
+- 步骤多、摘要长时，展开后的普通引用块最长约半条消息（约 2000 字），手机上会占好几屏；这是裁决接受的代价，嫌长靠「收起过程」。
+- 已经展开成可折叠块的旧消息（渠道重启前展开的）不会自己变：照旧是 Open risks 里那条，重启后点「收起过程」只弹 toast。
+
+**JC 真机该测的**（dev 里「重启 Channels」后，Telegram 私聊）
+
+1. 跑一个十步以上的任务，点「过程」：展开区直接全开，没有「再点一次」的折叠层。
+2. 点「收起过程」：回到原样。
