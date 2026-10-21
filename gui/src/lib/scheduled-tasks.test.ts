@@ -12,6 +12,7 @@ import {
   EMPTY_SCHEDULED_TASK_FORM,
   SCHEDULED_REMINDER_UNDELIVERED_EVENT,
   SCHEDULED_TASK_FIRE_FAILED_EVENT,
+  isDailyReviewTask,
   REVIEW_SUPERVISOR,
   SCHEDULER_SUPERVISOR,
   type ScheduledTask,
@@ -116,6 +117,33 @@ describe("SCHEDULER_SUPERVISOR", () => {
     expect(SCHEDULED_REMINDER_UNDELIVERED_EVENT).toBe(
       "scheduled-tasks:reminder-undelivered",
     );
+  });
+});
+
+describe("isDailyReviewTask", () => {
+  const task = (origin?: ScheduledTask["origin"]): ScheduledTask => ({
+    id: "sched_x",
+    prompt: "Daily review: go over what is in hand.",
+    repeat: { kind: "daily" },
+    timeOfDay: "09:00",
+    enabled: true,
+    target: "assistant",
+    origin,
+    createdAt: "2026-10-21T00:00:00+00:00",
+    updatedAt: "2026-10-21T00:00:00+00:00",
+  });
+
+  it("is the task Core seeded for the daily review (ticket 73's origin)", () => {
+    expect(
+      isDailyReviewTask(task({ via: "system", supervisor: "galley-review" })),
+    ).toBe(true);
+    expect(
+      isDailyReviewTask(
+        task({ via: "supervisor", supervisor: "galley-assistant" }),
+      ),
+    ).toBe(false);
+    expect(isDailyReviewTask(task({ via: "gui" }))).toBe(false);
+    expect(isDailyReviewTask(task())).toBe(false);
   });
 });
 

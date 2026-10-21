@@ -20,6 +20,7 @@ import {
   formatFireTime,
   formDaysValid,
   formFromTask,
+  isDailyReviewTask,
   listScheduledTasks,
   mintScheduledTaskId,
   previewScheduledFire,
@@ -134,8 +135,10 @@ export function ScheduledTasksDialog({
   const [autostartError, setAutostartError] = useState<string | null>(null);
 
   const reload = useCallback(() => {
+    // Not the daily review a managed run left in the database: it never
+    // runs here, and its prompt is for the model (ticket 74).
     listScheduledTasks()
-      .then(setTasks)
+      .then((all) => setTasks(all.filter((task) => !isDailyReviewTask(task))))
       .catch((e) => console.warn("[scheduled] list failed.", e));
   }, []);
 

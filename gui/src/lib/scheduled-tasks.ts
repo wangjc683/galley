@@ -56,6 +56,15 @@ export const SCHEDULER_SUPERVISOR = "galley-scheduler";
  * `scheduled-tasks.test.ts`, as the label above is. */
 export const REVIEW_SUPERVISOR = "galley-review";
 
+/** Whether a task is the daily review (its `origin` is `{ via:
+ * "system", supervisor: "galley-review" }`, ticket 73). The 定时 dialog
+ * leaves it out (ticket 74): the dialog only opens without a main chat
+ * — the external runtime, where the review never runs — and the row
+ * left behind by an earlier managed run would show its English prompt. */
+export function isDailyReviewTask(task: ScheduledTask): boolean {
+  return task.origin?.supervisor === REVIEW_SUPERVISOR;
+}
+
 /** Mirror of Rust `ScheduledTaskRepeat` (tagged, snake_case kinds).
  * Monthly clamps to short months Core-side: day 31 fires on Apr 30 /
  * Feb 28 rather than skipping the month. */
