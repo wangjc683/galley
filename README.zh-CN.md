@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  跑在你电脑上的全能助手。极简 harness，把舞台留给模型，在模型飞速进化的时代押注未来。
+  跑在你电脑上的全能助理。极简 harness，把舞台留给模型，在模型飞速进化的时代押注未来。
 </p>
 
 <p align="center">
@@ -30,7 +30,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/zh/hero-dark.png">
-    <img src="docs/screenshots/zh/hero.png" alt="Galley 主对话界面：agent 正在多步调用工具完成任务" width="800" />
+    <img src="docs/screenshots/zh/hero.png" alt="Galley 主对话：私人助理记下的待办，派出去又回来交代的活" width="800" />
   </picture>
   <br/>
   <sub>跟随系统外观，浅色深色各一套。</sub>
@@ -38,56 +38,68 @@
 
 ## Galley 是什么
 
-Galley 是一个跑在你自己电脑上的个人 AI 助手，能真正做事——操作浏览器、终端和文件，甚至手机。它的 harness 刻意做薄：内核只保留最小工具集，把上下文保持在高密度，把舞台留给模型；模型每升级一次，Galley 就跟着强一次，不用等我们追。
+**Galley 是跑在你自己电脑上的私人助理。**
 
-一个助手不够用时，Galley 就是一支团队。多条会话并行推进，随时切换、接管、继续。你在 GUI 里看进度、发指令；Supervisor Agent 在 CLI 里编排同一支团队——两个角色，一份状态，所有数据都留在本地。
+- **能动手**——终端、文件，还有你已经登录的浏览器：订票、查订单、填表这类云端助手碰不到的活，它在你电脑上直接办。
+- **只跟一个人说话**——费时间的活它派出去，办完回来给你交代；该提醒你的事，它自己记着。
+- **押注模型**——harness 刻意做薄，模型每升级一次，Galley 就跟着强一次；记住的、学会的都在你电脑上，换模型也带得走。
 
 ## 亮点
 
-### 单个 agent，能干活
+### 一个助理，事事有交代
+
+- 💬 **主对话**——一条一直在的对话，有事直接说，像在聊天软件里一样；侧栏里它那张会动的脸，告诉你它在忙还是闲着。
+- 🧑‍💼 **派活、验收、交代**——费时间的活它派给工作台里的子任务，跑完或卡住时它被叫醒：对照要求看结果，不够就打回去，够了用一两句告诉你。子任务的提问先到它这里，它答得了就替你答。
+- 📝 **待办与主动提醒**——「下周三交材料」这样的话，它自己判断要不要记成待办、什么时候提醒你；说一声「不用」就取消。每条对话旁边都能打开待办面板，你在上面只管勾掉，其余跟它说。
+- 🗂️ **替你管 Galley**——开会话、建项目、整理归档、设一次性提醒，它自己动手，做完告诉你怎么撤；API Key、登录、浏览器插件只能你来，它会告诉你去哪填。
+- 📱 **iPhone App（开发中）**——在手机上和同一个它说话。它照旧在你的电脑上干活，手机经端到端加密中转连回来，中转只见密文。
+
+### 能真正做事
 
 由内置内核驱动——基于 [GenericAgent](https://github.com/lsdefine/GenericAgent) 二次开发，随安装包附带，下载即用。
 
 - 🖥️ **系统级执行**——终端、文件、键盘鼠标、屏幕视觉，直到通过 ADB 操作手机：从查资料到把事真正办完。
-- 🌐 **真实浏览器**——把自带的扩展装进 Chrome 或 Edge 解锁一次，agent 用的就是你已登录的那个浏览器，不必重新登录。
-- 🧬 **自进化技能**——每解决一个新任务，就把做法沉淀成可复用的技能；技能树长在你本地。
+- 🌐 **真实浏览器**——把自带的扩展装进 Chrome 或 Edge 解锁一次，它用的就是你已登录的那个浏览器，不必重新登录。
+- 🧬 **自进化技能**——每解决一个新任务，就把做法沉淀成可复用的技能；技能和记忆都长在你本地，换模型也带得走。
 - 💰 **Token 效率，有数据**——靠信息密度而不是窗口长度：Lifelong AgentBench 上 100% 准确率，输入 token 只有主流 Agent 的 1/3 到 1/6（[论文](https://arxiv.org/abs/2604.17091)）；默认窗口 90K。
-- 🔌 **任意模型，包括本地的**——从 Anthropic、OpenAI 到 DeepSeek、Kimi、GLM 的预设，ChatGPT 账号登录，任意兼容端点，Ollama 不用填 Key；推理强度按对话设定。
-- 📖 **阅读面板**——agent 写出的文件在对话旁边打开：Markdown、代码、图片，CSV 显示成表格。在输入框添加文件或图片；只读审阅 Git 仓库的改动，统一或分栏。
+- 🔌 **任意模型，包括本地的**——登录 ChatGPT 用订阅额度，或者填自己的 API Key：从 Anthropic、OpenAI 到 DeepSeek、Kimi、GLM 的预设，任意兼容端点，Ollama 不用填 Key；推理强度按对话设定。
+- 📖 **阅读面板**——写出的文件在对话旁边打开：Markdown、代码、图片，CSV 显示成表格。在输入框添加文件或图片；只读审阅 Git 仓库的改动，统一或分栏。
 
-### 一支团队，管得住
+### 工作台和更多入口
 
-Galley 的编排层。你在 GUI 操作，Supervisor Agent 走稳定的 `galley` CLI；两边都是一等操作者，共享同一份会话与历史，不是各开各的。
+工作台是团队干活的地方：助理派出去的活在这里跑，你也可以自己开会话，围绕一个项目深度工作。
 
 - 🧭 **项目 + 并行会话**——把项目指向一个文件夹，代码仓库或资料夹都行，多条会话围绕它并行推进。
 - 🔧 **透明运行**——思考过程实时可见；每一步都能展开看完整参数与结果，跑完整轮折叠成一行。
-- ⏰ **定时任务**——每天、每周或每月到点开一条新会话跑一段提示词，结果在侧栏等你；需要 Galley 处于运行中，可设为开机自动启动。
-- 💬 **聊天软件**——微信、飞书、Telegram 或 Discord：在手机上找的就是同一个助手，长任务交给桌面端的会话。
-- 💾 **后台常驻 + 搜索**——关窗不退出，Galley 留在菜单栏 / 托盘，做完时发通知；⌘K（Windows 上是 Ctrl+K）全文搜索历史会话。
+- ⏰ **定时任务**——每天、每周或每月到点开一条新会话跑一段提示词，结果在侧栏等你；也可以直接跟助理说，它替你设。需要 Galley 处于运行中，可设为开机自动启动。
+- 📨 **聊天软件**——微信、飞书、Telegram 或 Discord 里也能找它办事，和桌面共用长期记忆；长任务交给桌面端的会话，做完回来告诉你。
+- 🤖 **外部 Agent 接入**——Claude Code、Codex 这类 Agent 经稳定的 `galley` CLI 操作同一份会话与项目，和你、和助理坐在同一张桌边。
+- 💾 **后台常驻 + 搜索**——关窗不退出，Galley 留在菜单栏 / 托盘，做完时发通知；⌘K（Windows 上是 Ctrl+K）全文搜索历史会话，⌘F（Ctrl+F）在当前对话里查找。
 
 ## 截图
 
 <table>
   <tr>
-    <td width="50%" valign="top"><img src="docs/screenshots/zh/tools.png" alt="工具时间线" /><br/><sub>工具时间线 · 每次调用的参数、结果、耗时都在行内</sub></td>
+    <td width="50%" valign="top"><img src="docs/screenshots/zh/todos.png" alt="待办面板" /><br/><sub>待办 · 它替你记着的事，每条对话旁边都能打开</sub></td>
+    <td width="50%" valign="top"><img src="docs/screenshots/zh/tools.png" alt="工作台" /><br/><sub>工作台 · 助理派出去的活在这里跑，每一步都看得见</sub></td>
+  </tr>
+  <tr>
     <td width="50%" valign="top"><img src="docs/screenshots/zh/reading.png" alt="阅读面板" /><br/><sub>阅读面板 · 在对话旁边审阅工作区改动</sub></td>
+    <td width="50%" valign="top"><img src="docs/screenshots/zh/projects.png" alt="项目" /><br/><sub>项目 · 多条会话围绕同一项目并行</sub></td>
   </tr>
   <tr>
-    <td width="50%" valign="top"><img src="docs/screenshots/zh/projects.png" alt="项目视图" /><br/><sub>项目视图 · 多条会话围绕同一项目并行</sub></td>
     <td width="50%" valign="top"><img src="docs/screenshots/zh/scheduled.png" alt="定时任务" /><br/><sub>定时任务 · 每天早上自己跑的一段提示词</sub></td>
-  </tr>
-  <tr>
     <td width="50%" valign="top"><img src="docs/screenshots/zh/search.png" alt="全文搜索" /><br/><sub>⌘K · 历史会话全文可搜，直达命中的那一行</sub></td>
   </tr>
 </table>
 
 ## 快速开始
 
-先想好怎么接模型。ChatGPT / Codex、OpenAI、Anthropic、DeepSeek、Kimi for Coding、MiniMax、OpenRouter、SiliconFlow、Xiaomi MiMo、Zhipu GLM 预设开箱可选，端点已预填：ChatGPT / Codex 登录 ChatGPT 账号即可，其余填 API Key。其他 OpenAI 或 Anthropic 兼容端点选「自定义」，填上地址即可；Ollama 这类本地服务不用填 Key。
+先想好怎么接模型。ChatGPT、OpenAI、Anthropic、DeepSeek、Kimi for Coding、MiniMax、OpenRouter、SiliconFlow、Xiaomi MiMo、Zhipu GLM 预设开箱可选，端点已预填：ChatGPT 登录你的 ChatGPT 账号，用 Plus / Pro 的订阅额度；其余填 API Key。其他 OpenAI 或 Anthropic 兼容端点选「自定义」，填上地址即可；Ollama 这类本地服务不用填 Key。
 
 1. **下载 Galley**——从 [Releases](https://github.com/wangjc683/galley/releases) 下载 macOS / Windows 安装包。
 2. **配置模型**——首次启动选择服务商、粘贴 API Key（或登录 ChatGPT），连接自动测试。
-3. **开始使用**——点击「开始使用 Galley」，进入主对话界面（登录 ChatGPT 的会直接进入）。
+3. **开始使用**——点击「开始使用 Galley」，进入主对话（登录 ChatGPT 的会直接进入），有事直接跟它说。
 
 | 平台 | 安装包 |
 |---|---|
@@ -106,13 +118,13 @@ xattr -dr com.apple.quarantine /Applications/Galley.app
 
 Windows SmartScreen 提示「发布者未知」时，点「更多信息」→「仍要运行」。
 
-已有 [GenericAgent](https://github.com/lsdefine/GenericAgent) 环境，可在 **设置 → 运行环境 → 更多 → 接入外部 GA** 选择 GA 目录。接入后 Galley 严格只读，不改动外部 GA 的代码、memory、SOP 或 `mykey.py`。浏览器控制与聊天软件只在内置内核下可用，**设置 → 模型** 里的服务商也只供内置内核使用；外部 GA 继续用它自己的 `mykey.py`。
+已有 [GenericAgent](https://github.com/lsdefine/GenericAgent) 环境，可在 **设置 → 运行环境 → 更多 → 接入外部 GA** 选择 GA 目录。接入后 Galley 严格只读，不改动外部 GA 的代码、memory、SOP 或 `mykey.py`。主对话（助理与待办）、浏览器控制与聊天软件只在内置内核下可用，**设置 → 模型** 里的服务商也只供内置内核使用；外部 GA 继续用它自己的 `mykey.py`。
 
 </details>
 
-## Supervisor 与聊天软件
+## 接入外部 Agent
 
-GUI 启动后进 **设置 → 智能体接入**：
+Galley 的助理用 `galley` CLI 带团队；Claude Code、Codex 这类外部 Agent 也能用同一套 CLI 接进来，作为 Supervisor Agent 检查、继续、新开会话。GUI 启动后进 **设置 → 智能体接入**：
 
 | 按钮 | 做什么 |
 |---|---|
@@ -126,8 +138,6 @@ GUI 启动后进 **设置 → 智能体接入**：
 
 - **简单问题**——直接读或跟进某个 session；
 - **项目 / 资料夹任务**——用 Project Workspace 绑定工作区，多会话并行。
-
-也可以在 **设置 → 聊天软件** 接入微信 / 飞书 / Telegram / Discord，在手机上找到同一个助手；长任务它会交给桌面端的会话。
 
 <details>
 <summary>展开 CLI 示例</summary>
@@ -175,13 +185,13 @@ galley session restore <id>
 
 ## 架构
 
-GUI 和 CLI 是**对等前端**——不是 GUI 套壳 CLI，而是两端各自直连同一个 **Rust Core**：GUI 在应用内部直连，CLI 走本地 socket。Core 是唯一权威层，掌管 session / Project 状态、定时任务、SQLite 写入，以及 Galley 运行的每一个 Python 进程；默认都跑在内置内核上，开箱即用。
+GUI 和 CLI 是**对等前端**——不是 GUI 套壳 CLI，而是两端各自直连同一个 **Rust Core**：GUI 在应用内部直连，CLI 走本地 socket。Core 是唯一权威层，掌管主对话、session / Project 状态、待办与定时任务、SQLite 写入，以及 Galley 运行的每一个 Python 进程；默认都跑在内置内核上，开箱即用。
 
 ```mermaid
 flowchart TB
   GUI["Galley GUI<br/>Tauri · React"] -- in-process --> Core
   CLI["Galley CLI<br/>Rust"] -- "local socket · named pipe<br/>no TCP · no token" --> Core
-  Core["Galley Core<br/>Rust<br/>sessions<br/>projects<br/>scheduled tasks<br/>SQLite"]
+  Core["Galley Core<br/>Rust<br/>main chat<br/>sessions<br/>projects<br/>to-dos<br/>scheduled tasks<br/>SQLite"]
   Core --> R["Session runners<br/>one per session"]
   Core --> IM["IM channels<br/>one per app"]
   Core --> BB["Browser bridge<br/>resident"]
@@ -204,7 +214,7 @@ flowchart TB
 <details>
 <summary>展开六条设计选择</summary>
 
-- **对等前端，不是 GUI 套壳 CLI。** GUI 和 CLI 各自直连 Rust Core，互不依赖。关掉窗口，Core、正在跑的 session 和 CLI 都照常在后台工作。聊天软件也没有另起一套协议：每个 IM 渠道里的助手，用的就是 Supervisor 用的那套 CLI 来调度 Galley。
+- **对等前端，不是 GUI 套壳 CLI。** GUI 和 CLI 各自直连 Rust Core，互不依赖。关掉窗口，Core、正在跑的 session 和 CLI 都照常在后台工作。助理和聊天软件也没有另起一套协议：主对话里的助理和每个聊天软件渠道，派活、查进度用的都是外部 Supervisor 用的那套 CLI。
 
 - **Rust Core 是唯一权威。** session / Project 的状态机、定时任务、SQLite 写入和所有子进程全部收敛到 Core 一处。前端只读投影、发意图，不持有可写状态，从根上避免了多端状态漂移。
 
@@ -222,7 +232,7 @@ flowchart TB
 
 船上的 galley 是厨房，也是工作台。每个人来这里都有自己的事，**但桌子是同一张**。
 
-Galley 也是这张桌子：human 在 GUI 推进工作，Supervisor Agent 通过 CLI 管理 agent team。两边共享同一份 session、历史和决策日志，不是各开各的 tab。
+Galley 也是这张桌子：你在这里跟助理说话，助理带着团队在工作台干活，接进来的外部 Agent 经 CLI 也坐在同一张桌边。会话、历史和每一步动作都是同一份，不是各开各的。
 
 > *Galley started as a workbench for [GenericAgent](https://github.com/lsdefine/GenericAgent). The first two letters of our name are a quiet bow to where we came from.*
 

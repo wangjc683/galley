@@ -1,9 +1,9 @@
 # PRD：README 截图第三版（重拍）
 
-Status: needs-triage（暂缓，2026-10-07 JC 裁决：截图先不动，不重拍）
+Status: done（2026-10-21 全套中英各 9 张由主会话代拍、JC 预览定稿；见 [devlog](../../docs/devlog/2026-10-21-readme-personal-assistant-and-screenshots-v3.md)。2026-10-07 曾暂缓）
 Date: 2026-10-07
 来源：README 全面排查（2026-10-07），文字已按审计结论改完，截图与图注原样保留
-关联：[deferred「README 截图第三版」](../../docs/devlog/deferred.md) ·
+关联：deferred「README 截图第三版」（2026-10-21 关闭，已删）·
 [README 刷新 devlog](../../docs/devlog/2026-10-07-readme-refresh.md) ·
 [截图 playbook](../../docs/screenshot-playbook.md) ·
 [v2 拍摄计划 devlog](../../docs/devlog/2026-09-09-screenshot-set-v2-plan.md)

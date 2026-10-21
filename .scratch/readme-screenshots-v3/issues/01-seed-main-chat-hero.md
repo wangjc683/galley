@@ -1,6 +1,6 @@
 # 01 种子补主对话、子任务、待办；playbook 改 hero 与 tools 场景
 
-Status: needs-dogfood
+Status: done（2026-10-21 拍摄通过；hero 改为不现场跑、种子侧栏又调过一次，见 devlog）
 
 来源：2026-10-21 JC 发版前改 README（「按你推荐推进」）。裁决：截图走 A，发版前只重拍 `hero.png`、`hero-dark.png`（主对话）
 和 `tools.png`（工作台），zh / en 各一套；`reading`、`projects`、`scheduled`、`search`、`new` 五张暂留。

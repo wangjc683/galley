@@ -871,8 +871,9 @@ and tests it, green on `98dec86c`; the runtime smoke is what's owed).
 **Do at release** (outward-facing, so ask JC before each; the release SOP's
 Pre-Flight checks this list):
 
-- README (en + zh) line 86: the preset 「ChatGPT / Codex」 becomes 「ChatGPT」
-  and how it signs in (Sign in with ChatGPT, Plus / Pro); the release-notes
+- ~~README (en + zh) line 86~~ done 2026-10-21 (README rewrite, devlog
+  [2026-10-21-readme-personal-assistant-and-screenshots-v3](./devlog/2026-10-21-readme-personal-assistant-and-screenshots-v3.md)).
+  Still at release: the release-notes
   guide's area name `ChatGPT / Codex` becomes `ChatGPT`. Release notes: one
   line for Sign in with ChatGPT, and an upgrade note that users of the old
   Codex CLI login must sign in again, and only Plus / Pro plans work
@@ -883,12 +884,11 @@ Pre-Flight checks this list):
   matching the About page subtitle changed on main in `115a55b5`
   (`.scratch/assistant/PRD.md` ruling 7). Not before: the released app still
   says 助手.
-- README (en + zh): the role words 「全能助手」「同一个助手」 become 助理 /
-  personal assistant, and the Supervisor narrative (「Supervisor Agent 在 CLI
-  里编排同一支团队」, the Why Galley paragraph) is rewritten for the assistant
-  foundation: Galley is your personal assistant and runs the team itself;
-  Supervisor stays the integration term for outside agents
-  (`.scratch/assistant/PRD.md` rulings 1, 7).
+- ~~README (en + zh): role words and the Supervisor narrative~~ done
+  2026-10-21 with JC (same devlog): personal assistant throughout, the
+  assistant runs the team, Supervisor kept for outside agents; screenshots
+  v3 shot and committed with it. The README now describes main-chat
+  features `v0.6.2` does not have, so push it with the release.
 - Release notes: one line that workbench conversations now share the
   assistant's grammar (your words on the right, time centred, a fold
   opens one line a step, one-step replies without a fold header), and that

@@ -298,7 +298,7 @@ def content_zh() -> dict:
     return {
         "projects": [
             ("proj_wittgenstein", "维特根斯坦哲学与 LLM", 26 * 60),
-            ("proj_moving", "九月搬家", 2 * 60),
+            ("proj_moving", "搬新家", 2 * 60),
             ("proj_site", "galley-site", 30),
         ],
         "sessions": [
@@ -513,6 +513,66 @@ def content_zh() -> dict:
             },
             # ---- 散置会话 ----
             {
+                "id": "sess_insurance",
+                "project": None,
+                "title": "家里的保单和续费日期",
+                "status": "completed",
+                "pinned": True,
+                "summary": "4 份保单已列表，最近一次续费在下月",
+                "ago": 6 * 24 * 60,
+                "turns": [
+                    {
+                        "user": "把家里几份保险整理一下：险种、被保人、保额、每年什么时候续费，快到期的标出来。",
+                        "thinking": "先读文档里的保单 PDF，逐份抽险种、被保人、保额与续费日，再按续费日排序。",
+                        "steps": [
+                            {
+                                "preamble": "当前阶段：读取保单文件。",
+                                "thinking": "保单在「文档 / 保险」里，逐份读首页与条款摘要。",
+                                "tool_calls": [tc("file_read", {"path": "~/Documents/保险/"}, "toolu_seed_31")],
+                                "tool_results": [tr("4 份保单 PDF：重疾险、医疗险、意外险、车险", "toolu_seed_31")],
+                                "summary": "读到 4 份保单",
+                            },
+                        ],
+                        "final": "按续费日期排好了：\n\n| 险种 | 被保人 | 保额 | 每年续费 |\n|---|---|---|---|\n| 车险 | 车辆 | 第三者 200 万 | 11 月 18 日 |\n| 医疗险 | 全家 | 300 万 | 1 月 6 日 |\n| 意外险 | 本人 | 100 万 | 3 月 2 日 |\n| 重疾险 | 本人 | 50 万 | 7 月 15 日 |\n\n车险下个月就到期，要我到时提醒你比价续保吗？",
+                        "summary": "4 份保单已列表，车险下月到期",
+                        "telemetry": tele(48, 12800, 900, 3),
+                    }
+                ],
+            },
+            {
+                "id": "sess_orders",
+                "project": None,
+                "title": "查上个月的网购订单，哪些还没确认收货",
+                "status": "completed",
+                "summary": "2 单待确认收货，1 单退款处理中",
+                "ago": 35,
+                "turns": [
+                    {
+                        "user": "帮我看下上个月的网购订单，哪些还没确认收货，有没有退款没到账的。",
+                        "thinking": "用已登录的浏览器打开订单页，筛上个月，逐单看物流与售后状态。",
+                        "steps": [
+                            {
+                                "preamble": "当前阶段：打开订单列表。",
+                                "thinking": "浏览器里已登录，直接进「我的订单」，按时间筛到上个月。",
+                                "tool_calls": [tc("web_scan", {"text_only": True}, "toolu_seed_32")],
+                                "tool_results": [tr("订单页已读取：上个月 11 单，已登录", "toolu_seed_32")],
+                                "summary": "上个月共 11 单",
+                            },
+                            {
+                                "preamble": "当前阶段：逐单看物流与售后。",
+                                "thinking": "只点开状态不是「已完成」的订单。",
+                                "tool_calls": [tc("web_execute_js", {"script": "readOrderStatus({ month: 'last' })"}, "toolu_seed_33")],
+                                "tool_results": [tr("待确认收货 2 单（均已签收），退款处理中 1 单", "toolu_seed_33")],
+                                "summary": "2 单待确认、1 单退款中",
+                            },
+                        ],
+                        "final": "上个月 11 单，需要你管的有 3 单：\n\n- **待确认收货 2 单**：护眼台灯、收纳箱，物流都显示已签收；\n- **退款处理中 1 单**：尺码不合退回的运动鞋，¥329，商家已收货，预计 3 个工作日内到账。\n\n确认收货要你点一下，我没替你点。",
+                        "summary": "2 单待确认收货，1 单退款处理中",
+                        "telemetry": tele(73, 18600, 1100, 5),
+                    }
+                ],
+            },
+            {
                 "id": "sess_downloads",
                 "project": None,
                 "title": "整理 Downloads 里的安装包和旧截图",
@@ -632,7 +692,6 @@ def content_zh() -> dict:
                 "project": None,
                 "title": "面试准备：手写并发限流 + 防抖",
                 "status": "completed",
-                "pinned": True,
                 "summary": "含 4 个常见变体写法",
                 "ago": 5 * 24 * 60,
                 "turns": [
@@ -725,7 +784,7 @@ def content_en() -> dict:
     return {
         "projects": [
             ("proj_wittgenstein", "Wittgenstein & LLMs", 26 * 60),
-            ("proj_moving", "September move", 2 * 60),
+            ("proj_moving", "Moving house", 2 * 60),
             ("proj_site", "galley-site", 30),
         ],
         "sessions": [
@@ -940,6 +999,66 @@ def content_en() -> dict:
             },
             # ---- loose sessions ----
             {
+                "id": "sess_insurance",
+                "project": None,
+                "title": "Home insurance policies and renewal dates",
+                "status": "completed",
+                "pinned": True,
+                "summary": "4 policies tabled, next renewal next month",
+                "ago": 6 * 24 * 60,
+                "turns": [
+                    {
+                        "user": "Sort out the household insurance policies: type, who's covered, how much, and when each renews. Flag anything coming up.",
+                        "thinking": "Read the policy PDFs in Documents, pull type, insured, cover and renewal date from each, then order by renewal.",
+                        "steps": [
+                            {
+                                "preamble": "Current stage: reading the policy files.",
+                                "thinking": "The policies are under Documents / Insurance; read each first page and summary of terms.",
+                                "tool_calls": [tc("file_read", {"path": "~/Documents/Insurance/"}, "toolu_seed_31")],
+                                "tool_results": [tr("4 policy PDFs: critical illness, medical, accident, car", "toolu_seed_31")],
+                                "summary": "4 policies found",
+                            },
+                        ],
+                        "final": "Ordered by renewal date:\n\n| Policy | Covers | Cover | Renews |\n|---|---|---|---|\n| Car | The car | ¥2M third party | Nov 18 |\n| Medical | Family | ¥3M | Jan 6 |\n| Accident | You | ¥1M | Mar 2 |\n| Critical illness | You | ¥500K | Jul 15 |\n\nThe car policy renews next month. Want me to remind you to compare quotes before then?",
+                        "summary": "4 policies tabled, car renews next month",
+                        "telemetry": tele(48, 12800, 900, 3),
+                    }
+                ],
+            },
+            {
+                "id": "sess_orders",
+                "project": None,
+                "title": "Last month's online orders: anything not yet confirmed?",
+                "status": "completed",
+                "summary": "2 awaiting confirmation, 1 refund in progress",
+                "ago": 35,
+                "turns": [
+                    {
+                        "user": "Check last month's online orders: which ones haven't I confirmed as received, and is any refund still missing?",
+                        "thinking": "Open the orders page in the signed-in browser, filter to last month, check delivery and after-sales status per order.",
+                        "steps": [
+                            {
+                                "preamble": "Current stage: opening the order list.",
+                                "thinking": "Already signed in; go to My Orders and filter to last month.",
+                                "tool_calls": [tc("web_scan", {"text_only": True}, "toolu_seed_32")],
+                                "tool_results": [tr("Orders page read: 11 orders last month, signed in", "toolu_seed_32")],
+                                "summary": "11 orders last month",
+                            },
+                            {
+                                "preamble": "Current stage: checking delivery and after-sales.",
+                                "thinking": "Only open the orders not marked complete.",
+                                "tool_calls": [tc("web_execute_js", {"script": "readOrderStatus({ month: 'last' })"}, "toolu_seed_33")],
+                                "tool_results": [tr("2 awaiting confirmation (both delivered), 1 refund in progress", "toolu_seed_33")],
+                                "summary": "2 to confirm, 1 refund pending",
+                            },
+                        ],
+                        "final": "11 orders last month; 3 need you:\n\n- **2 awaiting confirmation**: the desk lamp and the storage boxes, both marked delivered;\n- **1 refund in progress**: the running shoes sent back for size, ¥329; the seller has them, and the refund should land within 3 working days.\n\nConfirming receipt needs your click; I didn't do it for you.",
+                        "summary": "2 awaiting confirmation, 1 refund in progress",
+                        "telemetry": tele(73, 18600, 1100, 5),
+                    }
+                ],
+            },
+            {
                 "id": "sess_downloads",
                 "project": None,
                 "title": "Sort the installers piling up in Downloads",
@@ -1059,7 +1178,6 @@ def content_en() -> dict:
                 "project": None,
                 "title": "Interview prep: concurrency limiter + debounce by hand",
                 "status": "completed",
-                "pinned": True,
                 "summary": "Covers 4 common variants",
                 "ago": 5 * 24 * 60,
                 "turns": [

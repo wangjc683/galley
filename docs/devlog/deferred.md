@@ -262,22 +262,6 @@
 - **关联**：`.scratch/browser-focus-steal/PRD.md`（实测表、源码出处、原型数据、探针做法和坑）；
   [浏览器控制](../managed-ga-runtime/browser-control.md)。
 
-## README 截图第三版（重拍）
-
-- **状态**：暂缓（2026-10-07 JC 裁决：截图先不动，不重拍；README 文字已刷新，截图与图注原样保留）。
-- **提出**：2026-10-07，README 全面排查。
-- **启动信号**：任一即可。① UI 一轮大改收尾（Settings 逐页第二段与暗色复查做完），外壳短期不再变；② 有用户或社区
-  反馈截图与实物对不上；③ 运行区再改版，`hero.png` 偏差继续扩大。
-- **方案**：全部早于 v0.4.16 起的改版（2026-10-13 Goal 移除时中英两张 `goal.png` 已删，剩 16 张；其余截图里若拍到
-  Goal 入口也随之过时）；`hero` 差异最大。照 v2 playbook 由 JC 实拍，可分批先 `hero`，图注随图改。同日版式打磨
-  （[devlog](./2026-10-07-readme-visual-pass.md)）把依赖重拍的第三层并到这里：导览从 2×3 小图（每张约 370px，
-  手机上约 150px，UI 读不出）改成大图逐张或局部特写；补深色版截图（现在深色模式下是 6 块浅色图块）；
-  一段 20–40 秒真实任务的演示视频（user-attachments 上传的 mp4 能在 README 里内联播放）。
-- **实施要点**：种子脚本的 goals 插入与 playbook 的 goal 场景已随 Goal 移除删掉（[devlog](./2026-10-13-remove-goal.md)）；
-  重拍前先跑一遍种子，确认其余场景都能生成。
-- **关联**：`.scratch/readme-screenshots-v3/PRD.md`；[README 刷新 devlog](./2026-10-07-readme-refresh.md)；
-  [截图 playbook](../screenshot-playbook.md)。
-
 ## Galley 使用指南（按需读取，系统提示词方向一第二步）
 
 - **状态**：暂缓（2026-10-06，JC「按建议推进」：先只做常驻部分）。
