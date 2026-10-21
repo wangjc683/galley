@@ -184,6 +184,28 @@ describe("fileCardClick (where a click on a card goes)", () => {
       }),
     ).toBe("panel");
   });
+
+  it("opens a Pages or Numbers package, a folder on disk, in the default application", () => {
+    const folder = (path: string): FilePresence => ({
+      state: "present",
+      kind: "directory",
+      path,
+    });
+    expect(fileCardClick("/a/方案.pages", folder("/a/方案.pages"))).toBe(
+      "open",
+    );
+    expect(fileCardClick("/a/预算.Numbers", folder("/a/预算.Numbers"))).toBe(
+      "open",
+    );
+    // Its glyph is the document's, not a folder's.
+    expect(fileGlyph("/a/方案.pages", folder("/a/方案.pages"))).toBe("doc");
+    expect(fileGlyph("/a/预算.numbers", folder("/a/预算.numbers"))).toBe(
+      "sheet",
+    );
+    // Keynote is not on Core's list; any other folder stays a folder.
+    expect(fileCardClick("/a/talk.key", folder("/a/talk.key"))).toBe("panel");
+    expect(fileGlyph("/a/talk.key", folder("/a/talk.key"))).toBe("folder");
+  });
 });
 
 describe("fileGlyph", () => {

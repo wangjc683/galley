@@ -94,3 +94,4 @@ JC 读的那篇 Today AI 使用体验里，助理交出的 HTML 计划、飞书�
 - **阅读面板**：所有预览共用一个顶栏（`LocalFileWorkspace.tsx` 的 `markdownHeader`），「更多」里的「用默认应用打开」看 `isOpenableWithDefaultApp`，HTML 预览自动出现；PDF 不进阅读面板，不涉及。
 - 上面第一份回报「与票面不一致」第 1 条（不能预览的用系统默认程序打开做不到）由本节取代。
 - **风险**：`.pages`、`.numbers` 若是包格式（其实是文件夹），Core 的 `open` 要求是普通文件，会拒；卡片这边 Core 答 directory 就走文件夹路线，正文链接仍会发 `open` 并弹错。没在真机验证。
+- **补（`.pages` / `.numbers` 包）**：票 73 让 Core 的 `open` 对扩展名是 `pages`、`numbers` 的文件夹放行。GUI 配合：文件卡片里 Core 报 directory、扩展名是这两个的，走用默认应用打开，图标也画文档（Pages 画文档、Numbers 画表格）而不是文件夹；其余文件夹（含 `.key`）照旧在文件夹中显示。正文链接本来就发 `open`，没改。上一条风险随之收掉。剩一处没改：这种包的卡片悬停「在文件夹中显示」，Core 对文件夹的 reveal 是直接打开它（`open_path`），在 macOS 上等于用 Pages 打开，不是在 Finder 里选中。

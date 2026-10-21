@@ -104,6 +104,20 @@ export function thumbnailPath(
   return /^~[\\/]/.test(path) ? null : path;
 }
 
+/** A Pages or Numbers document saved as a package: a folder on disk,
+ * one document to the user. Core's `open` lets these two through for a
+ * folder and no other (ticket 73); mirror of that list. */
+const DOCUMENT_PACKAGE = /\.(?:pages|numbers)$/i;
+
+/** A folder by Core's answer that is a Pages / Numbers package. */
+function documentPackage(path: string, presence: FilePresence | undefined) {
+  return (
+    presence?.state === "present" &&
+    presence.kind === "directory" &&
+    DOCUMENT_PACKAGE.test(fileName(path))
+  );
+}
+
 /**
  * Where a click on a file card goes (ticket 74; a thumbnail opens the
  * image viewer instead): a document the default application opens —
@@ -111,14 +125,15 @@ export function thumbnailPath(
  * be seen rendered — opens there (`open`); everything else goes where a
  * file reference in the text goes (`panel`: the reading panel for
  * Markdown, images and text, the folder for the rest). A folder Core
- * named, whatever its name, is a folder.
+ * named, whatever its name, is a folder — but a Pages / Numbers package,
+ * which is a document.
  */
 export function fileCardClick(
   path: string,
   presence: FilePresence | undefined,
 ): "open" | "panel" {
   if (presence?.state === "present" && presence.kind === "directory") {
-    return "panel";
+    return documentPackage(path, presence) ? "open" : "panel";
   }
   return isOpenableDocument(path) ? "open" : "panel";
 }
@@ -259,7 +274,11 @@ export function fileGlyph(
   path: string,
   presence: FilePresence | undefined,
 ): FileGlyph {
-  if (presence?.state === "present" && presence.kind === "directory") {
+  if (
+    presence?.state === "present" &&
+    presence.kind === "directory" &&
+    !documentPackage(path, presence)
+  ) {
     return "folder";
   }
   const name = fileName(path);

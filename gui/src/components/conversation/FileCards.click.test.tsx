@@ -30,11 +30,13 @@ vi.mock("@/lib/local-files", async (importOriginal) => ({
     path,
     kind: /\.(png|jpe?g)$/.test(path)
       ? "image"
-      : /\.md$/.test(path)
-        ? "markdown"
-        : /\.(txt|html)$/.test(path)
-          ? "text"
-          : "file",
+      : /\.(pages|numbers)$/.test(path) || path.endsWith("/素材")
+        ? "directory"
+        : /\.md$/.test(path)
+          ? "markdown"
+          : /\.(txt|html)$/.test(path)
+            ? "text"
+            : "file",
     content: null,
   }),
   fileOperation: async (path: string, action: string) => {
@@ -113,6 +115,16 @@ describe("a click on a file card", () => {
       ["/Users/jc/out/plan.html", "open"],
     ]);
     expect(activated).toEqual([]);
+  });
+
+  it("opens a Pages package (a folder Core named) in the default application; a plain folder goes where a reference goes", async () => {
+    const container = mount(
+      <FileCards paths={["/Users/jc/out/方案.pages", "/Users/jc/素材"]} />,
+    );
+    await click(container.querySelector('button[aria-label="方案.pages"]'));
+    await click(container.querySelector('button[aria-label="素材"]'));
+    expect(calls.operations).toEqual([["/Users/jc/out/方案.pages", "open"]]);
+    expect(activated).toEqual(["/Users/jc/素材"]);
   });
 
   it("sends Markdown to the reading panel and a zip where a reference goes (its folder)", async () => {
