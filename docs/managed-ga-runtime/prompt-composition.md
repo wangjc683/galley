@@ -602,11 +602,26 @@ GA core prompt + GA memory + the shared static rules (no suggestion section)
 + the state block + the **IM entry layer**: `im_supervisor_prompt` in
 `core/src/managed_prompt.rs`, passed as `GALLEY_IM_SUPERVISOR_PROMPT_TEXT`
 (Discord: `GALLEY_IM_SUPERVISOR_PROMPT_TEMPLATE`, one supervisor id per
-channel). Positioning (JC, 2026-10-06): **IM is the same assistant, reached
-from a phone** — not a control surface that delegates by default. The layer
-says four things:
+channel). Positioning (JC, 2026-10-06): **IM does the work itself, reached
+from a phone** — not a control surface that delegates by default. Since
+2026-10-21 each channel keeps its own agent (IM polish PRD ruling 4,
+`.scratch/im-polish/`), and the layer says plainly what that agent shares
+with the desktop. It says four things:
 
-- **Who**: the same assistant as the desktop app; do the work yourself.
+- **Who, and what it shares**: the user's Galley in this chat; do the work
+  yourself. It shares GA's long-term memory with the desktop app (the IM
+  process runs in the managed state root), not its conversations: never
+  act as if it knew what the user said there. Reminders, to-dos and
+  scheduled tasks are not set from IM. To the user it is their assistant
+  (助理); agents, supervisors and other inner workings stay out of replies.
+  How to look up a desktop conversation and where reminders are set are
+  left to the shared rules (Past Galley Conversations; the redirect
+  sentence of "What Only The User Changes"): in the 2026-10-21 eval the
+  model looked conversations up and sent reminders to the computer under
+  every wording, so a longer draft that said both again was dropped. Until
+  2026-10-21 this read "You are the same assistant as in Galley's desktop
+  app", a promise the IM agent could not keep: the main chat is not in its
+  context, and it has no hands for reminders.
 - **Reply shape for a phone screen**: open with the answer or outcome; only
   the details the user needs next; no closing summary that repeats it; no
   tables (one item per line instead) and no headings; short paragraphs,
@@ -625,7 +640,8 @@ says four things:
   write, which routes the completion report request back to the chat.
 
 Budget: `IM_PROMPT_BUDGET_BYTES` caps the template (empty SOP path, `\r` not
-counted) on the longest platform variant, same rule as the static budget.
+counted) on the longest platform variant, same rule as the static budget:
+1630 bytes since 2026-10-21 (+264 for what IM shares with the desktop).
 
 ## Profile Id And Hash
 
@@ -677,6 +693,7 @@ row.
 | Past Galley Conversations: `--around` example; coverage sentence reworded to 「This reaches every Galley session, but not direct IM chats …」 | ticket 03b (2026-10-12): `session show` gained `--around`, and `--tail=20` reads the end of a session, not where a search hit is. Paid for in the same diff: the two coverage sentences became one (−51 bytes against the +51-byte line on both platforms), so the static text stays at 6855 bytes (Windows) / 6837 (POSIX) and the cap is unchanged |
 | Feature map and redirect sentence for every conversation: "Every conversation's top bar: the to-do (…), opening beside it"; "To-dos, reminders and scheduled tasks are kept by the assistant, in the Galley conversation atop the sidebar: … never say one is noted or set." | main chat PRD ruling 95 (2026-10-17): the to-do panel opens beside any conversation, read-only outside Galley, and a workbench model could otherwise `galley todo add` or say 「记下了」 when the user asks there. Paid for in the same diff ("at the top of" → "atop", "which opens" → "opening", "The Galley conversation's … its" → "Every conversation's … the"): the static text stays at 6826 bytes (Windows) / 6808 (POSIX) and the cap is unchanged |
 | Feature map: the to-do on its own line, "The Galley conversation's top bar: its to-do (…), which opens beside it", off the sidebar line (rewritten by ruling 95, above) | main chat PRD ruling 93 (2026-10-17): the to-do's entry moved from the row under the sidebar's Galley card to the Galley conversation's top bar; the map names where things are, so the old sidebar line would send the user to the wrong place. Static cap 6775 → 6826 (Windows; POSIX 6808), +44 for this line and +7 owed by ruling 90 (see the budget paragraph above) |
+| IM entry layer, first paragraph: "their Galley here"; shares long-term memory with the desktop app, not its conversations (never act as if it knew what was said there); reminders, to-dos and scheduled tasks are not set from here; to the user it is their assistant (助理), inner workings out of replies | IM polish PRD ruling 4, ticket 02 (2026-10-21): the channels keep their own agent, and the paragraph's "the same assistant as in Galley's desktop app" promised what it could not keep (the main chat is not in its context and it has no hands for reminders). Compared with and without on the IM channels' model (`.scratch/im-polish/entry-layer-eval/`); JC took the shorter of two drafts, since the longer one's lookup clause and "on their computer, in the Galley conversation" repeated what the shared rules already made the model do. IM cap raised 1376 → 1630 with it (+264; the layer had been 10 bytes under the cap) |
 | Removed 2026-10-13: Goal in the feature map's message-box line, `goal` in the IM entry layer's CLI write list | Goal was removed (devlog [2026-10-13 remove Goal](../devlog/2026-10-13-remove-goal.md)). Both caps lowered in the same diff to stay at no headroom: static 6855 → 6775 bytes (Windows; POSIX 6757), IM 1383 → 1376 (Telegram) |
 
 ## Dogfood Regression Checklist
@@ -828,3 +845,11 @@ in a real managed session after any prompt change:
     Galley conversation at the top of the sidebar (ruling 95). Then
     「说说这件」 on any row in the panel → lands in Galley with the title
     quoted in its composer.
+41. IM: 「明早八点提醒我开会」 → no `schedule` or `todo` write, no 「设好了」;
+    says it is set on the computer, in the Galley conversation (since
+    2026-10-21).
+42. IM: 「我刚才在电脑上让你查的耳机，结果怎么样了」 → looks it up with
+    `sessions search` / `session show --around` and answers from what it
+    finds, or says it cannot find it and asks for the gist; no made-up
+    result. 「你和电脑上那个 Galley 是一个吗」 → shared memory, separate
+    conversations, in plain words: no agent, supervisor or session.

@@ -819,8 +819,11 @@ pub(crate) fn im_supervisor_prompt(sop_path: &str, platform: &str, supervisor_id
         r#"## Galley IM Entry Layer
 
 The user is talking to you through {platform_label}, usually on a phone. You
-are the same assistant as in Galley's desktop app: do what they ask yourself,
-with your tools.
+are their Galley here: do what they ask yourself, with your tools. You share
+long-term memory with the desktop app, not its conversations: never act as if
+you knew what they said there. Reminders, to-dos and scheduled tasks are not
+set from here. To the user you are their assistant (助理); keep agents,
+supervisors and other inner workings out of replies.
 
 Your replies are read on a phone screen:
 - Open with the answer or outcome in a sentence or two. Add only the details
@@ -2327,7 +2330,40 @@ mod tests {
 
         let feishu = im_supervisor_prompt("/tmp/sop.md", "feishu", "galley-im/feishu");
         assert!(feishu.contains("through Feishu"));
-        assert!(feishu.contains("the same assistant as in Galley's desktop app"));
+        assert!(
+            feishu.contains("are their Galley here: do what they ask yourself, with your tools.")
+        );
+    }
+
+    /// IM keeps its own agent (2026-10-21, `.scratch/im-polish/` ruling 4):
+    /// it shares GA's long-term memory with the desktop (the IM process runs
+    /// in the managed state root) but not the desktop's conversations, and
+    /// it has no hands for reminders, to-dos or scheduled tasks (those are
+    /// the main chat's, see [`user_only_configuration!`]). The layer used to
+    /// say "the same assistant as in Galley's desktop app", a promise the IM
+    /// agent could not keep. Compared with and without on the IM channels'
+    /// model before it went in (`.scratch/im-polish/entry-layer-eval/`).
+    #[test]
+    fn im_supervisor_prompt_says_what_it_shares_with_the_desktop() {
+        for platform in ["wechat", "feishu", "telegram", "discord"] {
+            let prompt = im_supervisor_prompt("/tmp/sop.md", platform, "galley-im/x");
+            assert!(!prompt.contains("same assistant"));
+            // Single-line fragments only: a Windows checkout makes the raw
+            // string CRLF, so a substring spanning a line break fails there.
+            assert!(prompt.contains("long-term memory with the desktop app, not its conversations"));
+            assert!(prompt.contains("never act as if"));
+            assert!(prompt.contains("you knew what they said there."));
+            assert!(prompt.contains("Reminders, to-dos and scheduled tasks are not"));
+            assert!(prompt.contains("set from here."));
+            assert!(prompt.contains("assistant (助理); keep agents,"));
+            assert!(prompt.contains("supervisors and other inner workings out of replies."));
+        }
+        // The layer leaves the lookup and where reminders are set to the
+        // shared rules (the eval found them doing both without it), so
+        // both must reach IM.
+        let im = compose_im_runtime_prompt("t");
+        assert!(im.contains("## Past Galley Conversations"));
+        assert!(im.contains("in the Galley conversation atop the sidebar"));
     }
 
     #[test]
@@ -2359,7 +2395,7 @@ mod tests {
         assert!(prompt.contains("report request"));
     }
 
-    /// IM is the same assistant reached from a phone (2026-10-06, JC). The
+    /// IM does the work itself, reached from a phone (2026-10-06, JC). The
     /// orchestration details (waits, session questions, reversibility,
     /// timeouts) live only in the Supervisor SOP, which the entry layer
     /// sends the agent to before its first CLI write. They used to be
@@ -2420,8 +2456,14 @@ mod tests {
     /// count. `\r` is not counted. 1503 at the 2026-10-06 slimming, when
     /// WeChat carried a link note; lowered when the 2026-10-10 WeChat pass
     /// dropped it, and again (1383 → 1376) when Goal left the CLI write
-    /// list on 2026-10-13.
-    const IM_PROMPT_BUDGET_BYTES: usize = 1376;
+    /// list on 2026-10-13. Raised 1376 → 1630 on 2026-10-21, when the first
+    /// paragraph stopped promising "the same assistant" and said what IM
+    /// shares with the desktop and what it does not (`.scratch/im-polish/`
+    /// ticket 02): +264 bytes for it, and back to no headroom (the layer
+    /// had been 1366 bytes, 10 under the cap). JC took the shorter of the
+    /// two tested wordings; the longer one (1738) repeated what the shared
+    /// rules already make the model do.
+    const IM_PROMPT_BUDGET_BYTES: usize = 1630;
 
     #[test]
     fn im_supervisor_prompt_stays_within_budget() {
