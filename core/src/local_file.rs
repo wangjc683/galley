@@ -42,6 +42,18 @@ const OPENABLE_TEXT_EXTENSIONS: &[&str] = &[
     "txt", "log", "csv", "tsv", "json", "jsonl", "ndjson", "yaml", "yml", "toml", "xml", "ini",
     "cfg", "conf", "rst", "tex", "srt", "vtt",
 ];
+/// Documents the reading panel cannot show, opened with their default
+/// application (main chat ticket 73, for ticket 74's file cards): PDF,
+/// the Office Open XML formats without macros, Pages and Numbers, and
+/// HTML, whose default application is the browser. Left out on purpose,
+/// for the same reason as scripts above: the old binary Office formats
+/// (`doc`, `xls`, `ppt`) and the macro-enabled ones (`docm`, `xlsm`,
+/// `pptm`), which can carry macros that run on open; and `key`, which a
+/// Keynote deck shares with private key files. Mirrored word for word by
+/// `isOpenableWithDefaultApp` in `gui/src/lib/local-file-path.ts`.
+const OPENABLE_DOCUMENT_EXTENSIONS: &[&str] = &[
+    "pdf", "docx", "xlsx", "pptx", "pages", "numbers", "html", "htm",
+];
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -172,11 +184,14 @@ fn classify_file(path: &Path) -> &'static str {
 }
 
 /// Whether "open with the default application" is safe for this target:
-/// documents and images, never scripts (see `OPENABLE_TEXT_EXTENSIONS`).
+/// documents and images, never scripts (see `OPENABLE_TEXT_EXTENSIONS`
+/// and `OPENABLE_DOCUMENT_EXTENSIONS`).
 fn is_openable(path: &Path) -> bool {
+    let ext = extension(path);
     is_markdown(path)
         || image_mime(path).is_some()
-        || OPENABLE_TEXT_EXTENSIONS.contains(&extension(path).as_str())
+        || OPENABLE_TEXT_EXTENSIONS.contains(&ext.as_str())
+        || OPENABLE_DOCUMENT_EXTENSIONS.contains(&ext.as_str())
 }
 
 fn access_sync(request: LocalFileRequest) -> Result<LocalFileResult> {
@@ -423,6 +438,46 @@ mod tests {
         assert!(!is_openable(Path::new("/tmp/run.sh")));
     }
 
+    /// Ticket 73: documents the reading panel cannot show open with their
+    /// default application; the formats that can carry macros, and `key`
+    /// (Keynote, or a private key), stay out, refused before any opener
+    /// is reached.
+    #[test]
+    fn documents_open_with_the_default_app_but_not_macro_formats() {
+        for name in [
+            "report.pdf",
+            "Report.PDF",
+            "memo.docx",
+            "sheet.xlsx",
+            "deck.pptx",
+            "letter.pages",
+            "budget.numbers",
+            "plan.html",
+            "plan.HTM",
+        ] {
+            assert!(is_openable(Path::new(&format!("/tmp/{name}"))), "{name}");
+        }
+        let dir = tempfile::tempdir().unwrap();
+        for name in [
+            "old.doc",
+            "old.xls",
+            "old.ppt",
+            "macro.docm",
+            "macro.xlsm",
+            "macro.pptm",
+            "deck.key",
+            "id_rsa.key",
+        ] {
+            assert!(!is_openable(Path::new(&format!("/tmp/{name}"))), "{name}");
+            let path = dir.path().join(name);
+            std::fs::write(&path, "x").unwrap();
+            assert!(
+                access_sync(request(&path, LocalFileAction::Open)).is_err(),
+                "{name} must not open with the default app"
+            );
+        }
+    }
+
     #[test]
     fn reads_raster_images_with_a_bound_and_rejects_active_formats() {
         let dir = tempfile::tempdir().unwrap();
@@ -475,7 +530,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let script = dir.path().join("script.sh");
         std::fs::write(&script, "echo hi").unwrap();
-        for name in ["report.md", "data.csv", "chart.png"] {
+        for name in [
+            "report.md",
+            "data.csv",
+            "chart.png",
+            "report.pdf",
+            "plan.html",
+        ] {
             let link = dir.path().join(name);
             std::os::unix::fs::symlink(&script, &link).unwrap();
             assert!(
