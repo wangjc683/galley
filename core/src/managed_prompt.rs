@@ -1331,8 +1331,9 @@ mod tests {
     /// will come back to" (+54), noted a to-do in two carried conversations
     /// of the chat eval where the user was carrying on with the thing (「回来了」
     /// after 「晚点回来再说这个报价」; a question about the laptop just chosen),
-    /// on gpt-6.1-sol and gpt-6-astra alike; "sets aside" names the pause. A paragraph after it (+294,
-    /// with its break): when it notes something, a step ahead, done and
+    /// on gpt-6.1-sol and gpt-6-astra alike; "sets aside" names the pause.
+    /// A paragraph after it (+294, with its break): when it notes
+    /// something, a step ahead, done and
     /// then said, never offered (+152, naming `unasked.md`, whose rules
     /// these are: a turn that notes something reads `todos.md` and would
     /// not otherwise open the part), and the file handover,
