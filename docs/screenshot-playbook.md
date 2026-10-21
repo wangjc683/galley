@@ -69,7 +69,7 @@ rm -rf ~/Documents/galley-refs/galley-site
 | 对话字号 | standard |
 | Sidebar 宽度 | 默认 20% |
 | 截图方式 | `⌘⇧4 + 空格` 带窗口阴影；全套一致 |
-| 文件组织 | `docs/screenshots/zh/` + `docs/screenshots/en/`，**按场景命名**：`hero.png` `hero-dark.png` `tools.png` `reading.png` `projects.png` `scheduled.png` `search.png`；两份 README 各自引用对应语言目录 |
+| 文件组织 | `docs/screenshots/zh/` + `docs/screenshots/en/`，**按场景命名**：`hero.png` `hero-dark.png` `todos.png` `tools.png` `reading.png` `projects.png` `scheduled.png` `search.png`；两份 README 各自引用对应语言目录 |
 | 入镜纪律 | 无 dev 调试 chrome、无系统通知、无 tooltip；时间状态合理（种子时间戳相对拍摄日生成） |
 | 提交前 | 缩到 1600px 宽（系统 Python 的 Pillow：LANCZOS + `optimize=True`），单张 ≤ 600KB 上下（见文末资产政策） |
 
@@ -160,6 +160,7 @@ moving companies: quotes and reviews*。
 |---|---|---|---|---|
 | `hero.png` | 主对话（v3）：上面是种好的昨晚、今早两段（待办卡片、已完成的子任务卡片、汇报那句），最下面是现场发的 Hero prompt：助理回一句并派出子任务，卡片在跑 | 你只跟一个人说话：交代事、记待办、派活、听汇报 | 启动后主区就是主对话（不是就点侧栏顶部的助理卡片）→ 输入 Hero prompt 发送 → 助理回复、卡片出现「第 N 步 · …」时拍；画面从「昨天 21:10」那条时间线起 | 顶栏「待办」与今天计数 1；昨晚回复下的待办卡片（截止下周三、周二 20:00 提醒）；今早回复下已完成的子任务卡片与汇报那句；现场一轮的气泡、回复与在跑的子任务卡片；侧栏助理卡片（脸在动）与满员多状态的会话列表（置顶、running「思考中」、未读实心点、supervisor 徽标、定时任务标记） |
 | `hero-dark.png` | 同上，暗色主题 | 同上 | 现场那轮的子任务一般要跑几分钟：浅色拍完立刻切换外观，等 tooltip 消失再拍，两张卡片都在跑 | 同上；右上外观 tooltip 不入镜 |
+| `todos.png` | 主对话（v3，2026-10-21 加拍）：拍完 hero 后点顶栏「待办」，右侧打开待办面板 | 待办与主动提醒：它替你记着的事 | 拍完 `hero-dark` 切回浅色 → 主对话顶栏「待办」→ 面板在主对话右侧打开；不勾、不取消任何一条 | 今天（给房东转房租）、以后（交季度报告材料，铃铛与周二 20:00）、随时（取干洗的西装）三组；现场派出的看展子任务还在跑的话应出现在「Galley 在办」；例行三条；左侧主对话的气泡与卡片同框 |
 | `tools.png` | 从今早回复下的卡片点「打开」进「三家搬家公司报价与评价对比」（v3）：工作台视图，顶栏面包屑「Galley ›」，右侧是助理写的派活说明气泡（标「主对话派来的」），下面三步折叠、结果表 | 工具时间线：派出去的活每一步都看得见 | 主对话 → 今早回复下的子任务卡片 →「打开」→ 滚到「派活说明 + 折叠的三步 + 结果表」同框；只看不写 | 面包屑「Galley ›」；派活说明气泡与来源标记；折叠 run 的步数与用时；结果表；侧栏里没有这条会话（未转成普通对话） |
 | `reading.png` | （2026-10 暂留，外壳过时）阅读面板分栏：左边「给 galley-site 加导览页并接进导航」，右边演示仓库的工作区改动 | 阅读面板 | 点开会话 → 顶栏「查看工作区改动」→ 选择仓库 `~/Documents/galley-refs/galley-site` → 文件列表选 `src/styles.css` → 双列显示 | 文件列表 3 改 1 新；diff 双列；「与最新提交比较 · <hash>」头；左侧 final 的文件清单 |
 | `projects.png` | （2026-10 暂留，外壳过时）侧栏「项目」分区里展开项目组「维特根斯坦哲学与 LLM」，主区打开「PI §43 与工具调用的语义整理」显示对照表（2026-10-08 起没有项目视图，待重拍） | 项目工作区 + 多会话并行 | 「项目」分区若折叠先点分区头展开 → 点「维特根斯坦哲学与 LLM」组行展开 → 点开 PI §43（已完成行，安全） | 置顶下的「项目 3」分区头；展开的组行（双行汇总）含已完成会话与未读行；另外两个项目的组行折叠在列；时间桶里只有项目以外的会话；主区对照表 |
@@ -200,28 +201,20 @@ v2 的口径（工作台新对话里真跑到结束，拍折叠的 run 与结果
 
 ## README 版面（拍完后套用）
 
-hero 保持 `<picture prefers-color-scheme>`；导览网格替换现有 Screenshots
-节，顺序和 Highlights 两组一致（先助手，后团队）：
+hero 保持 `<picture prefers-color-scheme>`；截图节是无表头的 HTML 表格，两列三排、
+六张填满（2026-10-21 起），顺序跟 Highlights 三组走（先助理，再能做事，后工作台）：
+待办 · 工作台 / 阅读面板 · 项目 / 定时任务 · ⌘K。表格结构与图注以两份 README
+为准，本节不再抄一份。
 
-```markdown
-## A quick tour
-
-| | |
-|---|---|
-| ![Tool timeline](docs/screenshots/en/tools.png)<br/><sub>Tool timeline — every call's arguments, result, and timing, inline</sub> | ![Reading panel](docs/screenshots/en/reading.png)<br/><sub>Reading panel — review worktree changes beside the conversation</sub> |
-| ![Project view](docs/screenshots/en/projects.png)<br/><sub>Project view — sessions advancing around one project</sub> | ![Scheduled tasks](docs/screenshots/en/scheduled.png)<br/><sub>Scheduled tasks — a prompt that runs itself every morning</sub> |
-| ![Search](docs/screenshots/en/search.png)<br/><sub>⌘K — every past conversation, straight to the matching line</sub> | |
-```
-
-中文版同构（`docs/screenshots/zh/`，标题「截图」）。旧的 `01-hero` …
-`05-hero-dark` 十个文件在新图提交的同一个 commit 里删除。
+（v2 的 Markdown 表格与旧 `01-hero` … `05-hero-dark` 十个文件已在 2026-09-09
+删除，见 git 历史。）
 
 ## 二进制资产政策（全 docs 通用）
 
 进 git 的二进制**永远留在历史里**——删除和替换都只会让仓库更大，不会
 更小。所以规则设在入口处：
 
-- **只提交被文档引用的资产**。README 截图 = 上方场景清单的 7 张 × 双语，
+- **只提交被文档引用的资产**。README 截图 = 上方场景清单的 8 张 × 双语（另加 `new.png`），
   重拍**同名覆盖**，不新增文件、不留旧版（旧版在 git 历史里）。
 - **提交前压尺寸**：README 截图导出后先缩到 2× 展示宽（README 展示宽
   800px → 图片 1600px 宽即可，无需 3200px 原始 Retina 尺寸），PNG 走一遍
@@ -255,5 +248,6 @@ hero 保持 `<picture prefers-color-scheme>`；导览网格替换现有 Screensh
   实拍偏差见上节；种子脚本在实拍中修了两处（定时任务时间戳、表格文案）。
 - 2026-10-21：种子补到迁移 052（主对话、子任务、待办与提醒），本手册的 hero /
   hero-dark / tools 三行改成 v3 场景，待 JC 实拍（zh / en 各一套）；其余五张暂留。
+  同日加拍 `todos.png`（待办面板），README 截图节由五张变六张、两列填满。
 - [ ] 定时任务补跑失败的根因（见 deferred）
 - [ ] 演示 GIF（截图之后的独立资产任务）
