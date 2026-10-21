@@ -73,3 +73,20 @@ Status: ready-for-agent
 （合入后补）
 
 ## Comments
+
+### 2026-10-21 实现回报（票 75 代理）
+
+- **提交**（分支 `ticket-75-review-natural`，未 push、未合入）：`41382f19` 手册与 Core 措辞、测试；`59cd4535` 评测（移植、样本、判卷、四条重跑）。
+- **手册**：`wake.md`「The morning review」的「Speak only when …」一条照票面原样换掉，换行与票面一致，本节开头与其余条目没动。
+- **Core**：`review_paragraph` 换成「Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading.」，其余措辞没动；函数注释补了一句票 75。`subtask_report.rs` 的单元测试断言新句，另加一条不再含「going over what is in hand this morning」；`assistant_manual.rs` 的测试换成新条目里的五行（含「want to」「to decide on. Not that you looked and nothing changed」「(「阿里云那件我早上查了一下：……」); no fixed heading.」）。原来断言的「the user: the subtask tags and `<no-reply/>`, nothing else (you tell」这一行因换行变了，跟着换成新行。
+- **评测**：`rust-samples.json` 两条巡看叫醒只换了这一句，换完用临时 Rust 测试（按样本字段拼 `DueReminder`、比 `report_text`，跑完删掉）对过；`--dry-test` 全过（515 项 PASS、0 FAIL）。判卷去掉 `REVIEW_SAYS_RE`，改判是哪件事（`expect.review_advance.names_any`）、做了什么（`REVIEW_DID_RE`），空话（`REVIEW_EMPTY_RE`）判不过，没说早上只注出来；自测加了空话、没说哪件事、没说早上三条。
+- **四条重跑**（`mm_1792576875658`，API key 接入，每条两遍）：8/8 过。`review-nothing-to-do`、`review-overdue` 四遍只有 `<no-reply/>`；`review-advance` 第 1 遍派 1 件只读调查再 `<no-reply/>`，第 2 遍停在浏览器工具（`web_scan`）；`review-stop` 两遍 `schedule disable`，「关掉了，以后早上不再自动巡看。想恢复时跟我说一声就行。」「关掉了，以后早上不再巡看。想恢复时跟我说一声就行。」票 73 的八遍在 `meta.superseded_runs` 的「票 75」一组。
+
+### 看到但没改、没验证到的
+
+1. 八遍里没有一遍开口：`review-advance` 只派子任务或停在浏览器，沙盒里看不到结果，它没有做成的事可说。新的开口判定（哪件事、做了什么、空话）只由 `--dry-test` 的自测覆盖，没有被真模型的回复用到；要验它开口的样子，得加一条子任务已交回、有结果可说的巡看用例（不在本票范围）。
+2. 判卷的 `REVIEW_EMPTY_RE` 只认「没什么要推进」「没有新进展」「暂时没有变化」「一切正常」「还是老样子」一类；有实质内容却带一句「ECS 那边暂时没变化」的回复会被误判成空话。光秃秃的「没变化」「没动静」没放进去，以减少误伤。
+3. 判卷照旧允许「只派了子任务却开口」（`acted` 把子任务算做成了事），手册说这时不该开口；票 73 起就是这样，没改。
+4. `docs/devlog/2026-10-21-proactive-first-stage-todo-rooted.md`、`.scratch/assistant/PRD.md`、票 73、74 里还引着旧开头「早上过了一遍在办的事」，都是历史记录，没动。
+5. `todo/results.json` 的 `meta.manual_sha` 跟着这次重跑变成 `b9cbda42`，其余用例的运行仍是票 73 的手册（每条运行自己的 `manual_sha` 是对的）。
+6. 没跑 `tauri dev`，没在真机上看巡看开口。
