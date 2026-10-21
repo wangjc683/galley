@@ -1,6 +1,6 @@
 # 01 Telegram、Discord 的「过程」按钮
 
-Status: ready-for-agent
+Status: needs-dogfood
 
 来源：[PRD](../PRD.md) 裁决 1、2。
 
@@ -40,3 +40,67 @@ Status: ready-for-agent
 在 worktree 分支上提交（只点名文件），票 Comments 写实施偏差与没验证到的；Status 改 `needs-dogfood`。真机验收由 JC 在 dev 里「重启 Channels」后做：Telegram 私聊发一个 1 步、一个多步的问题，点「过程」展开、收起，看推送预览从回答开始、有没有「已编辑」；Discord 频道同样，看 ephemeral。
 
 ## Comments
+
+### 2026-10-21 实现（子代理，worktree 分支 `im-polish-01`，提交 `6dba476a`、`57f3be25`）
+
+**做了什么**
+
+- Telegram（`0024`）：回答上面什么都不挂，1 步也不挂；≥ 2 步时最后一段下面挂内联按钮「过程」（`callback_data` 为 `proc:show` / `proc:hide`）。点了用 `editMessageText` 把这条消息改成「回答 + 空行 + 引用块」（首行 `N 步 · 用时 X`，下面逐步 `NN 摘要`，最多 30 步，过长时按 60、24 字截），按钮换成「收起过程」，再点改回发出时的原文。编辑沿用发出时的 parse mode（MarkdownV2 发出就用 MarkdownV2，纯文本兜底发出就用纯文本），回复引用本来就不随编辑改变。过程按 `(chat id, 回答消息 id)` 存在进程内的 LRU（256 条）；找不到时用 callback 的 toast 回「过程已不在了（渠道重启过）」，不改消息。非 owner 点按钮回 `no`（同提问按钮），未配对时静默应答。
+- Discord（`0023`，`0026` 在新 `0023` 上重导出）：撤掉回答首行 `-# N 步 · 用时 X`；≥ 2 步时最后一段挂「过程」按钮（`custom_id` 为 `galley-dc:proc`），点了 `interaction.response.send_message(..., ephemeral=True)`，内容同 Telegram 展开区（纯文本行，整条不超过 1900 字）。过程按回答消息 id 存在进程内的 LRU（256 条），步骤摘要跨提问累加（`_DiscordRun` 新增 `summaries`，随 `carry` 带过去）；找不到时回同一句 ephemeral，按钮留着。非 owner 点击照旧静默应答。
+- 平台无关的部分放进 `galley_im_display.py`：`process_lines`、`fit_process` 与按钮文案常量，只新增、没改名也没删已有导出（票 03 会导入这个文件）。
+- 补丁流程：在临时克隆（`5205f40`）上按 manifest 顺序重放成提交链，先核对链与已提交的 payload 逐字节一致、链导出的补丁与仓库里的逐字节一致；再改 `0023`、`0024` 两个链提交，`0025`–`0028` 依次 cherry-pick。`0026` 叠到新 `0023` 上有两处真冲突（`DiscordApp.__init__` 里 `0026` 删的 `_stale_channels` 块紧挨 `0023` 新加的 `_processes` 行；`_send_answer` 两边都改），按「两边的改动都留」解决。新 `0026` 与旧的相比只有 `_send_answer` 那一处正文变化（原来的两个 hunk 并成一个），另有 31 个 hunk 头整体下移。干净克隆跑 `build-managed-ga.sh` 重放 26 个补丁全 clean、`py_compile` 通过，重建后 `managed-ga/code` 与 `state-seed` 共 217 个文件的 sha256 与测试所用的 payload 完全一致。台账 `manifest.md` 的重放记录与 `0023`、`0024` 两行已改。
+
+**实施偏差（各附理由）**
+
+1. 展开区不缓存成文本，点击时按这条消息剩下的空间现算；发送时最后一段先按「过程块最宽能放下的长度 + 2」留出空间，放不下就把最后一段再切一刀。理由：今天的预算规则是给首段顶上的折叠头留空间，现在过程块挂在最后一段末尾，规则得换到最后一段；而且 `runner/im_resume.py` 的「之前的对话没接上」提示会加在这条消息顶上，点击时现算才能把这一行算进去。实在放不下时退成纯文本展开（纯文本没有转义和引用标记，必然更短），收起时恢复原样。
+2. tgapp 的 `_reply_markdown` 加了一个 `sent` 回调参数，用来记下实际发出的两份文本。理由：`im_resume` 包了 `_reply_markdown`，会在回答顶上加提示行；不记实际发出的文本，展开一编辑那行提示就没了（新增测试 `test_telegram_process_expands_under_the_notice_line` 覆盖）。`im_resume.py` 的 docstring 同步改了，台账 `0024` 行的耦合说明也补了这一条。
+3. 「展开后超长」的阈值是我定的：过程块（含首行）超过 10 行或 600 字就用可折叠引用块，否则用普通引用块。票面没给数字；10 行约占手机屏三分之一，3 步、5 步的块整块摊开，不会重演「收起时露出头两步」。
+4. 两边 LRU 都是 256 条。deferred 原写「缓存上限与频道 agent 的 LRU 同量级」（12），但 agent 的 LRU 限的是频道数，不是回答数；12 条的话一个活跃频道十几轮后按钮就失效。每条只存摘要（几 KB），256 条不到 1 MB。
+5. Discord 重启后点旧按钮：回一句 ephemeral、不去掉按钮。deferred 写的是「静默或回一句」；回一句与 Telegram 的 toast 对齐，不去按钮与 Telegram「不改消息」对齐。
+6. Discord 的 `_` 前缀副本没换成导入：迁移条件已在 09-30 Discord devlog「迁移条件改写」改成「随 IM 外壳多语言一起做」（台账 `0024` 行的 removal condition 同此），不满足。dcapp 里新加的 `_process_lines`、`_fit_process` 是共享文件同名函数的副本，加了一条测试逐项比对两边输出。顺手把 `galley_im_display.py` 文件头里过时的迁移说明改成与台账一致。
+7. 文档：除台账外，还改了 `docs/design/overlays-and-settings.md` §9 的 Discord、Telegram 两条（以及微信那条里「与 TG / Discord『1 步也带头』是有意分叉」这句已不成立的话）和 `docs/ga-baseline.md` 的基线冒烟清单两条，免得留着描述旧行为的文字。deferred「Discord 回答的步骤展开」没删，留给主会话真机验收后连同 devlog 一起处理。
+8. 没动出错消息：`❌ 出错：…` 上面那行 `N 步 · 用时 X`（Telegram 斜体、Discord `-#`）照旧。票面「不动」清单没列它，也没说要改；它不是回答，我按不扩范围处理。
+
+**验证**
+
+- `.venv/bin/python -B -m pytest`：604 passed（Telegram 文件 53 条，新增 11 条；Discord 文件 51 条（含参数化展开），新增 6 条；`test_im_resume.py` 新增 1 条）。新增覆盖：≥ 2 步挂按钮、1 步不挂、展开与收起的文本和 parse mode、连点一次不重复编辑、重启后的 toast / ephemeral、LRU 上限、非 owner 与未配对、普通与可折叠引用块的阈值、长步行 60 字截、分条时只挂最后一条且只编辑最后一条、最后一段放不下时多切一刀、纯文本发出的回答按纯文本展开、MarkdownV2 编辑被拒时退纯文本、提示行在展开后还在、提问前后的步骤累加、dcapp 副本与共享函数输出一致。
+- `mypy runner`、`ruff check runner`、`git diff --check`、`check-managed-ga-payload.mjs`、`check-ga-baseline-drift.mjs` 全绿。reporter 的两个 seam（`answer_text`、`markdown_v2_segments`）行为不变，`test_reporter_through_real_tgapp_seams` 与 `test_im_reporter.py` 全过。
+- 平台用法核对：Bot API 现行文档（MarkdownV2 引用块 / 可折叠引用块语法、`editMessageText` 的 `reply_markup` 与 4096 字上限、`answerCallbackQuery` 的 `text` 为 toast、`callback_data` 1–64 字节）；随包的 discord.py 2.7.1 源码（`InteractionResponse.send_message(ephemeral=True)`）与 python-telegram-bot 22.8 源码（`CallbackQuery.edit_message_text`）。
+
+**没验证到的**
+
+- 没跑 tauri dev，没重启任何渠道，没往 Telegram / Discord 发过消息：以下全靠真机。
+- Telegram 客户端里：回答后接普通引用块、接可折叠引用块（`**>…||`，前面隔一个空行）的实际渲染；编辑后是否挂「已编辑」；推送预览是否从回答开始；toast 的样子。
+- Telegram 的 4096 字上限按「解析实体后」计，我按 MarkdownV2 源文长度算预算（更保守），没在真服务器上碰过边界。
+- Telegram 群聊：代码路径与私聊相同，测试只用假的群聊对象跑过。
+- Discord：ephemeral 的显示（「只有你能看到」）、按钮挂在分条的最后一条上的样子。
+- e2e（真 GA + 真模型）没跑。没有 Rust / GUI 改动，cargo 与 pnpm 门禁没跑。
+
+**Open risks**
+
+- LRU 挤掉（同一渠道进程里第 257 条多步回答之后）的旧按钮，点了也说「渠道重启过」，措辞在这个边角不准。
+- 渠道重启时正好展开着的消息会一直停在展开状态，按钮是「收起过程」，点了只弹 toast，收不回去。
+- MarkdownV2 编辑被拒、退成纯文本展开时，展开期间正文格式（粗体、列表符号等）会丢，收起后恢复。
+- Discord：多步回答若只有附件、没有正文，不会发文字消息，也就没有「过程」按钮（Telegram 这种情况发「已生成附件」，有按钮）。我没为它补一条文字消息。
+- 与票 03 合入：`galley_im_display.py` 只新增；`managed-ga/patches/manifest.md` 的「Last replay verified」段与 `0023`、`0024` 行、`manifest.json` 都可能和票 03 的 `0029` 冲突。合并后要再跑一遍干净克隆重放与 payload 检查，确认两张票叠在一起仍然 clean。
+- `docs/design/overlays-and-settings.md` §9 改了 Discord、Telegram、微信三条，票 03 若改同一节的飞书那条，合并时可能冲突。
+
+**JC 真机该测的**（dev 里「重启 Channels」后）
+
+Telegram 私聊：
+1. 问一个 1 步就答的（比如「你好」）：回答下面没有按钮，推送与聊天列表预览从回答开始。
+2. 问一个多步的：推送与预览从回答开始；回答下面有「过程」。
+3. 点「过程」：这条消息原地变成「回答 + 末尾引用块」，首行 `N 步 · 用时 X`、下面逐步；按钮变「收起过程」；看有没有挂「已编辑」，回答里的粗体、列表、引用是否还在。
+4. 点「收起过程」：回到原样。
+5. 跑一个十步以上的：展开后过程块是可折叠的（收着露三行），能在里面再点开。
+6. 让它答一段很长的（会分成几条）：只有最后一条有按钮，展开只改最后一条。
+7. 中途有提问的：答完后点「过程」，提问前的步骤也在里面，步数和用时是两段之和。
+8. 「重启 Channels」后点旧回答的按钮：顶部弹「过程已不在了（渠道重启过）」，消息不变。
+9. 不该变的：在跑时的静音状态消息、`/stop` 定格、提问消息、完成报告。
+
+Discord 频道：
+1. 1 步：回答上面没有小字、下面没有按钮。
+2. 多步：只有回答，下面有「过程」；点了出一条只有你看得到的消息，内容同上；频道里那条不变。
+3. 很长的回答：只有最后一条有按钮。
+4. 「重启 Channels」后点旧按钮：回一条只有你看得到的「过程已不在了（渠道重启过）」。
+5. 不该变的：状态消息、`/stop` 定格、提问、完成报告卡片，私信照旧不处理。
