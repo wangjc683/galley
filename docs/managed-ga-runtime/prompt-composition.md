@@ -290,7 +290,12 @@ Follow-ups the user turned down (to-dos and reminders you set that were cancelle
   `assistant_todo::assistant_todo(galley, runners, now)` (tickets 37, 39):
   its yours, Galley's and routine groups, in its order, so what the user
   sees is what the main chat is told; the done group stays out. A to-do's
-  reminder is on its to-do's line, not a task line of its own.
+  reminder is on its to-do's line, not a task line of its own. The
+  morning review (ticket 73, Galley's own daily task, `system` +
+  `galley-review`) is a routine like any other, its line saying
+  "Galley's morning review, not set by you" where an outside agent's says
+  "set by the outside agent <label>" (the manual asks before pausing an
+  outside agent's task, not Galley's).
   Deterministic, no model call. The fourth group is the one exception to
   "what you see is what it sees" (ruling 113 point 4), read on its own by
   `assistant_todo::declined_follow_ups` (both through
@@ -389,7 +394,8 @@ that finishes a task and restates the result. The layer says three things:
   `reminders.md` for its own reminders, changing them, and when the user
   asks to be reminded; `times.md` for any date or time; `authority.md` and
   `cli.md` for sessions, projects and models; `wake.md` and `subtasks.md`
-  when Galley wakes it), then "Every write but `llm set` carries
+  when Galley wakes it; since ticket 73 `todos.md` and `unasked.md` to note
+  a to-do), then "Every write but `llm set` carries
   `--supervisor=galley-assistant --reason="<why>"`": the one rule every
   part with a write needs and only `cli.md` states. Until ticket 59 it
   read "Before your first Galley CLI write (…), read your manual at
@@ -464,7 +470,28 @@ that finishes a task and restates the result. The layer says three things:
   「营养土买好了」, 「我还有什么没办」), so the model would never open the
   manual for them; ticket 36's sentence did the same for 「周三下午要交报告」.
   The manual paragraph's write list is the command families: "(a session,
-  project, model, schedule or to-do command)".
+  project, model, schedule or to-do command)". Ticket 73 (assistant PRD
+  ruling 10) added to the list "what they are in the middle of and will
+  come back to" (「排查到一半，先吃饭吧」: a to-do with no date, by
+  `todos.md`'s rule beside its three tests).
+- **Act unasked, hand files over** (ticket 73, assistant PRD ruling 10,
+  main chat PRD ruling 124): a paragraph after the to-do one, "When you
+  note something, think a step ahead: do what you can for it unasked,
+  then say what you did; offer nothing you have not done (see
+  `unasked.md`). To hand over a file you made or found, put
+  `[FILE:<absolute path>]` on a line of its own and say what it is: the
+  desktop shows it as a card." What it does unasked is work, not advice:
+  groundwork it can undo, that costs nothing and says nothing in the
+  user's name, is done and then said; anything outward-facing,
+  irreversible or into the user's own conversation is asked first with
+  the groundwork done; no 「要不要我帮你……」, in the reply or the next-step
+  suggestion; one subtask per thing noted, two per morning review (the
+  manual's new part `unasked.md`, the limits written there only, Core
+  enforcing none). The marker is the one the desktop already parses
+  (`finalAnswerFileRefs`, cards since ticket 74); the main chat's replies
+  had never carried it, as nothing taught it. The morning review itself
+  is a wake (`core/src/scheduler.rs` `fire_review`, words in
+  `subtask_report.rs`), its rules in `wake.md`'s "The morning review".
 
 - **Evidence**: compared with and without on the main chat's own model
   (`.scratch/main-chat/entry-layer-eval/`, 15 messages, tools intercepted).
@@ -591,7 +618,9 @@ that finishes a task and restates the result. The layer says three things:
   added 105 (what comes up on a date, with two examples): 2568; ticket 63
   added 107 (「记下了」 only after a write): 2675; ticket 64 added 92 (read
   `todos.md` before saying you will +38, do not bring up noting when
-  nothing was written +54): 2767.
+  nothing was written +54): 2767; ticket 73 added 365 (what the user is in
+  the middle of +54, the paragraph on acting unasked and handing over a
+  file with its break +294, `unasked.md` in the manual list +17): 3132.
   Behavior, but main chat only, so it stays out of the static budget and
   the prompt hash.
 

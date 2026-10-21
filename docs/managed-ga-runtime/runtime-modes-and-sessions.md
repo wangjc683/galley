@@ -315,6 +315,25 @@ ruling 9; `core/src/scheduler.rs`, `core/src/subtask_report.rs`, migration
   makes through the CLI while a main chat run is open records the main chat
   and that run's starting turn; when the run ends Core fills its reply's
   `turn_index` (`createdIn`).
+- **The morning review** (main chat ticket 73, assistant PRD ruling 10;
+  `core/src/scheduler.rs`): the one task Galley makes itself, a daily 09:00
+  `assistant` task with `created_via = 'system'` and supervisor
+  `galley-review` (no migration), made when the main chat is asked for and
+  once when Core starts, on the managed runtime with a main chat only, and
+  once ever: a review row in any state (enabled, paused, cancelled) means
+  Galley never makes another. Coming due (a catch-up too), Core first reads
+  what is in hand as the "In Hand" lines do (`assistant_todo`): the user's
+  to-dos not done, Galley's subtasks not finished and one-offs to come;
+  routines do not count. With nothing, the fire is consumed with
+  `last_wake` NULL and no wake; otherwise it wakes the main chat as a
+  reminder does, with words of its own (`subtask_report.rs`
+  `review_paragraph`: read "The morning review" in `wake.md`, at most two
+  subtasks, silent unless something got done). A review wake that cannot be
+  delivered is dropped (`last_wake` NULL), never notified: its words are for
+  the model. Its fires stay out of the to-do list's 已完成. The user stops
+  it by asking the main chat, which pauses it (`schedule disable`). Each
+  coming due, skip, hand run and dropped wake is appended to the
+  `assistant_review_log` pref (at most 400 entries) for the trial snapshot.
 
 ### The User's To-Dos
 

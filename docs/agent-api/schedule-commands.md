@@ -30,6 +30,12 @@ task's `origin` when it creates it, and as its `cancelledBy` when `delete`
 cancels it (§6A `Origin`). The assistant writes with
 `--supervisor=galley-assistant`.
 
+One task is Galley's own (main chat ticket 73): the morning review, a
+daily `assistant` task Galley makes for the main chat, with `origin`
+`{"via": "system", "supervisor": "galley-review"}`. It lists, changes,
+pauses and resumes like any other; once it exists in any state, Galley
+does not make it again. No field was added for it.
+
 ### 5.20 · `ScheduledTask`
 
 Every command prints this shape (`list` one per line, `show` alone, writes as
