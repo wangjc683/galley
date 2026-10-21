@@ -496,14 +496,6 @@ Runtime tab 的任何问题）。
     文案若写成 "leave channel" 会给出一条发不出去的命令；en 保留中文命令本体。
     对外只写一个 `退出频道`（2026-09-30 起，此前写成「退出该频道（子区发
     「退出该子区」）」，括号是冗余的）。
-- **IM 对话的方向：发短信的写法**（2026-10-20，[IM 并入 PRD](../../.scratch/im-one-assistant/PRD.md)
-  裁决 1、8、15，[devlog](../devlog/2026-10-20-im-a-line-to-the-same-assistant.md)）：IM 是打给同一个助理的
-  一条线（它来找你、随口一句），App 与桌面是去它那儿（看全貌、看得见它在干活）。IM 里只用发短信的写法：
-  在跑时是平台原生的「正在输入」，一轮只发一条消息，提问用平台原生的按钮或数字；**不要**往 IM 里搬卡片、
-  过程与富排版，过程在桌面主对话里看。新的 IM 需求先问「这是那条线的事，还是去它那儿的事」，后者留给桌面与 App。
-  私聊并入主对话随下一次发版之后实施（PRD 票 04、07）；在那之前，下面各渠道的现行形态照旧，届时按本条改写
-  （Telegram 的状态消息与回答顶部的步骤块、微信的末行、飞书的步骤卡片都会撤掉；Discord 继续关私信、首版不动，
-  照下面的现行形态，冻结只修 bug）。
 - Discord **频道内的对话形态**（2026-09-30，补丁 `0023`，
   [devlog](../devlog/2026-09-30-discord-conversation-ux.md)）以桌面
   [conversation.md](./conversation.md) 为准，按「新消息 = 推送一次、编辑 =
@@ -523,8 +515,8 @@ Runtime tab 的任何问题）。
   `-# 频道成员都能看到回复 · 发「退出频道」可退出`），退出回执
   `✅ 已退出，重新 @ 我即可激活`。**不做**：气味段（supervisor 工具几乎全是 `code_run`）、
   读秒（单步满 60 秒起按分钟追加 `· 已 N 分钟`，不再写「仍在运行」——与
-  「思考中」重复）、步骤展开与斜杠命令（原在 deferred，2026-10-20 改为不做，见
-  [IM 并入 devlog](../devlog/2026-10-20-im-a-line-to-the-same-assistant.md)「撤下的 deferred」）；实时思考预览在 Discord 做不到。
+  「思考中」重复）、步骤展开与斜杠命令（在
+  [deferred](../devlog/deferred.md)）；实时思考预览在 Discord 做不到。
 - Telegram **聊天内的对话形态**（2026-09-30，补丁 `0024`，
   [devlog](../devlog/2026-09-30-telegram-conversation-ux.md)）同样以桌面为准：
   live 窗口是一条**静音状态消息**（`disable_notification`），内容与规则同

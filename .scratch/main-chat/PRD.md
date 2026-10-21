@@ -667,7 +667,7 @@ README「dense context instead of long」（`README.md:54`）。
 
 ## IM 三级
 
-2026-10-20 起 L1、L2 由 [IM 并入 PRD](../im-one-assistant/PRD.md) 接手（L0 随裁决 49 撤掉）：私聊并入主对话、回复发回原渠道、主动消息发到「手机上找我」的渠道；下面「IM 的 `/new` 即开新段」作废，IM 私聊不再有 `/new`。下面三条留作历史。
+2026-10-20 起 L1、L2 曾由 [IM 并入 PRD](../im-one-assistant/PRD.md) 接手（L0 随裁决 49 撤掉）；2026-10-21 JC 改为维持 IM 自己养 agent，该 PRD 搁置，L2 连同 L1 回到 [deferred](../../docs/devlog/deferred.md)「IM 私聊并入主对话」（[devlog](../../docs/devlog/2026-10-20-im-a-line-to-the-same-assistant.md)「2026-10-21 改向」）。IM 的 `/new` 照旧是清空那个渠道自己的对话。下面三条留作历史。
 
 - **L0 同一个大脑、线分开**：账本从 IM 日志里学（票 01），IM 也带上事项清单（票 03）。在微信里也能联想，线和桌面不是同一条。
 - **L1 IM 当出口**（票 05）：不在电脑前时，主动提醒卡片和子任务的「在问你」发到选定的一个 IM 渠道。飞书 / Telegram / Discord 能随时发给主人；

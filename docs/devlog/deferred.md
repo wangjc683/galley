@@ -8,6 +8,32 @@
 
 ---
 
+## IM 私聊并入主对话（原「IM 渠道并入主聊天」）
+
+- **状态**：暂缓（2026-10-21 JC：「敲定了，就按自己养 Agent 来推进」，[devlog](./2026-10-20-im-a-line-to-the-same-assistant.md)「2026-10-21 改向」）。
+  沿革：2026-10-09 起以「IM 渠道并入主聊天」暂缓在本台账（10-12 细化为三级 L0 / L1 / L2，10-13 L0 随事项账本撤掉，10-15 [助理 PRD](../../.scratch/assistant/PRD.md) 裁决 6 定「一个人」的原则）；2026-10-20 落成 [IM 并入 PRD](../../.scratch/im-one-assistant/PRD.md)（裁决 1–18：私聊并入主对话，它主动发的消息发到「手机上找我」的渠道），从本台账撤下；10-21 改向后该 PRD 搁置，回到这里。
+- **提出**：2026-10-09 iOS 客户端与主聊天讨论（[devlog](./2026-10-09-ios-client-and-main-chat-direction.md)）。今天每个 IM 渠道各养一个 agent、各一条长期对话，不在 Galley 库里，也不是助理本人：IM 里的它没有提醒与派活的手，不知道主对话里说过什么。
+- **启动信号**（任一条）：你或社区用户真的开始在 IM 里干活；上游基线升级时 IM 对话层补丁（`0023`、`0024`、`0026`）重放出冲突；想在桌面上看 IM 对话；IM 需要真正看懂图片；以及本方向独有的一条：想在手机上让助理来找你（到点提醒、派出去的活回来交代），而 iOS App 覆盖不到那个人（安卓、不装 App），比如你出门时想在微信里设提醒，或有安卓用户要提醒。
+- **方案**：见 [IM 并入 PRD](../../.scratch/im-one-assistant/PRD.md)（对表、裁决、主对话语法到 IM 的映射、「一天的样子」、票 02–07 的拆法）。传话层与下一节「IM 迁到工作台会话」共用，两个方向只差私聊转到哪里。
+- **实施要点**：宪法 Rule 4 要补解释（措辞稿在 PRD）；它主动发的消息要能隔很久送到，微信隔十天不带 token 主动发会被拒（`ret -2`），窗口没量完（PRD 票 01 Comments）。只在内置内核，外置零变化。
+- **待定**：PRD「待定」一节。
+- **关联**：`runner/im_reporter.py`、`runner/im_resume.py`、`core/src/im_supervisor/`、`core/src/managed_prompt.rs` `im_supervisor_prompt`。
+
+---
+
+## IM 迁到工作台会话
+
+- **状态**：暂缓（2026-10-21 JC 敲定维持 IM 自己养 agent，[devlog](./2026-10-20-im-a-line-to-the-same-assistant.md)「2026-10-21 改向」）。
+- **提出**：2026-10-21 JC：「可能之前 IM 设计是不是回归简单，就是工作台的延伸，这样最简单最好理解，工程量是不是也最小？每个 IM 都是工作台里面的普通会话？」
+- **启动信号**（任一条）：你或社区用户真的开始在 IM 里干活；上游基线升级时 IM 对话层补丁（`0023`、`0024`、`0026`）重放出冲突；想在桌面上看 IM 对话；IM 需要真正看懂图片。
+- **方案**：IM 进程只做平台收发，消息经 `session send --ensure-runner` 进 Core 的一个工作台会话，回复与在跑状态从 `session follow` 拿。一个 IM 聊天对应一个会话，`/new` 开新会话，`/llm` 换这个会话的模型；过程留在桌面那个会话里，IM 里可以撤；IM 入口层改成如实说（共用长期记忆，提醒要在电脑上跟 Galley 说）。
+- **实施要点**：**全部聊天一起迁**（私聊、群聊、Discord 服务器频道），「IM 自己养 agent」的老路整条退掉，连带 `im_resume`、`im_reporter` 与对话层补丁；只迁私聊会变成两条路一起养，比哪一条单独都重。群聊进库意味着别人在群里说的话永久存进 Galley 的库，宪法 Rule 4 要单独议。runner 被 LRU 上限（20 个，`core/src/runner_manager/manager.rs`）挤掉时，下一句冷启动几秒。只在内置内核，外置零变化。
+- **显式代价**：手机上没有「它来找你」；在微信里说「提醒我」，只能让你去电脑上说。今天自己养的 agent 派出长活后还能接着聊、做完由 `im_reporter` 送回交代，迁过去要另想。
+- **待定**：在桌面上往 IM 会话里打字时回复发不发回 IM（倾向不发，只回从 IM 来的话）；派出去的长活怎么回报；一个会话长期不切段时上下文怎么收。
+- **关联**：[devlog](./2026-10-20-im-a-line-to-the-same-assistant.md)「2026-10-21 改向」（工作台方案对 C、对自己养 agent 两张对比的读法）；上一节「IM 私聊并入主对话」（传话层共用）。
+
+---
+
 ## 主对话的跨段连续性（事项账本撤掉之后）
 
 - **状态**：暂缓（2026-10-13 主聊天 PRD 裁决 49，JC 选 A：撤掉事项账本，[devlog](./2026-10-13-drop-affairs-ledger.md)）。
@@ -174,7 +200,7 @@
 - **显式代价**：用户引用机器人之前的某条回答说「这个再展开一下」，模型只看到「这个再展开一下」，要靠上下文猜指的是哪条。
 - **为什么不做**：新版微信的引用往往只带一个 `svr_id`，不带原文；官方插件 2.4.9 是在本地 SQLite 里存下收发消息的原文，再按 id 还原。Galley 存 IM 原文与 Rule 4（Galley 不存 IM 对话）冲突。
 - **启动信号**：JC 或用户在微信里用引用回复、并抱怨它没看懂指的是哪条。
-- **2026-10-20 更新**：「为什么不做」里的 Rule 4 阻碍随 IM 私聊并入主对话消失（[IM 并入 PRD](../../.scratch/im-one-assistant/PRD.md) 裁决 2、16）：并入后私聊消息本来就进 Galley 的库，方案③可以按 `svr_id` 在主对话里还原，前提是并入时把平台消息 id 一起存下（票 04 顺带记上）。启动信号不变。
+- **2026-10-21 更新**：10-20 写的「Rule 4 阻碍随并入消失」随 IM 改向作废（[devlog](./2026-10-20-im-a-line-to-the-same-assistant.md)「2026-10-21 改向」）：IM 对话照旧不进 Galley 的库，「为什么不做」原样成立。走了「IM 私聊并入主对话」或「IM 迁到工作台会话」，阻碍才会消失。
 - **方案**：①先只用随消息带来的引用内容（`ref_msg.title` / `ref_msg.message_item` 的文字），作为「引用：…」前缀交给模型；②只带 `svr_id` 的引用告诉模型「用户引用了一条消息，内容没随消息带来」；③要完整还原就得存原文，须先重新解释 Rule 4（先例：2026-08-13 对引擎日志的解释）。
 - **关联**：`runner/im_wechat.py` · [微信对齐 devlog](./2026-10-10-wechat-conversation-ux.md)
 
@@ -268,6 +294,23 @@
 - **待定**：只写中文还是中英两份；发版 SOP 加同步检查还是做漂移门禁。
 - **关联**：`.scratch/runtime-prompt-polish/issues/02-on-demand-user-guide.md`；
   [prompt-composition](../managed-ga-runtime/prompt-composition.md) 准入测试第 2 条（能从工具拿到就别写散文）。
+
+## IM 渠道的浏览器步骤带上网站
+
+- **状态**：暂缓（2026-10-04 JC 裁定「先不跟」）。显式代价：GUI 对话里的浏览器步骤显示网站（`db2dde5e`），
+  IM 渠道仍是「调用了读取网页」，两边在这一点上暂时不一致。
+- **2026-10-21 恢复**：10-20 随 IM 私聊并入主对话撤下，10-21 改向维持 IM 自己养 agent 后恢复原文（[devlog](./2026-10-20-im-a-line-to-the-same-assistant.md)「2026-10-21 改向」）。
+- **提出**：2026-10-04，浏览器控制 UX 票 01（`.scratch/browser-control-ux/PRD.md`）。
+- **启动信号**：IM 里有人追问 Agent 刚才去了哪个网站；或 IM 显示层因别的需求要接工具结果（届时顺手做）。
+- **方案**：在两个渠道已为 ask_user 挂的 `_turn_end_hooks` 里，从 ctx 的 `tool_results` 按轮次记下网站，交给 asyncio
+  侧的运行状态（照 ask 事件按 `_current_queue` 打标）；每个聊天维护一份跨轮次的标签页记忆；把
+  `gui/src/lib/browser-site.ts` 的解析与查找规则用 Python 重写并配测试。
+- **实施要点**：显示层今天拿不到网站——Telegram / Discord 以 `verbose = False` 运行（`tgapp.py:47`、`dcapp.py:26`），
+  `agent_loop.py:79-85` 只留 `🛠️ web_scan(参数)` 一行。要重导补丁 0024（tg + `galley_im_display`）、0023（dcapp）
+  及叠在其上的 0026（09-30 出过行号偏移），做 replay 逐字节比对。估计半天到一天。
+- **待定**：价值取决于 IM 显示设计：「调用了读取网页」只在步骤既无 summary 也无旁白时出现（真实数据 735 个浏览器步骤
+  仅 7 个），真要有用需给每条浏览器步骤行挂站名，这是新的 IM 显示设计，需先裁。
+- **关联**：[tools-and-approvals 浏览器步骤预览](../design/tools-and-approvals.md)；渠道改动默认全覆盖，「某渠道不跟」须写明代价（即本节状态行）。
 
 ## 浏览器插件上架 Chrome 应用商店 / Edge 加载项
 
@@ -490,6 +533,73 @@
 
 ---
 
+## IM 里的下一步建议按钮化（next-suggestion 的 IM 消费端）
+
+- **状态**：暂缓（漏出 bug 已由反方向修复：mandate 移出 IM 提示词）
+- **2026-10-21 恢复**：10-20 随 IM 私聊并入主对话撤下，10-21 改向维持 IM 自己养 agent 后恢复原文（[devlog](./2026-10-20-im-a-line-to-the-same-assistant.md)「2026-10-21 改向」）。
+- **提出**：2026-08-13（Discord dogfood 发现 `<next-suggestion>` 裸漏进
+  所有 IM 渠道回复，裁决记录见
+  [当日 devlog](./2026-08-13-im-suggestion-leak.md)）
+- **启动信号**：JC 在 IM 里实际产生「这条建议我想一键发出去」的实感，
+  或用户反馈希望 IM 端也有下一步引导。
+- **方案**：建议语义在 IM 端其实成立且各平台有现成基建——飞书卡片可
+  渲染成可点按钮（0009 卡片补丁）、Telegram 有 `InlineKeyboardButton`
+  （tgapp 已 import）、Discord 退化为文末「💡 下一步」行或 View 按钮。
+  点击 = 把建议文本当用户消息发送。
+- **实施要点**：**与已落地的根修互斥**——根修把 suggestion mandate 从
+  IM 提示词组合里拿掉了（`compose_im_runtime_prompt`），做本项需有条件
+  地带回 mandate（仅对接了消费端的渠道），并撤销 0019 的对应剥离；
+  每平台要接按钮回调，是 feature 量级不是修补量级。
+- **待定**：是否只在部分渠道做（飞书卡片体验最顺）；建议长度与按钮
+  文案的截断策略。
+- **关联**：workbench 幽灵文字功能（`fa6241ac`，2026-08-04）；
+  0019 补丁的移除条件已指向本项。
+- **注**（2026-09-30）：Discord 的 ask_user 按钮（补丁 `0023`）落地后，
+  Discord 端的按钮基建（`discord.ui.View`、owner 校验、点选即发送）已现成，
+  本项在 Discord 上的实施量降为「带回 mandate + 渲染一排建议按钮」。
+
+---
+
+## Discord 回答的步骤展开（桌面折叠头「点开看过程」的对应物）
+
+- **状态**：暂缓（2026-09-30 Discord 对话体验对齐桌面端时裁决不做）
+- **2026-10-21 恢复**：10-20 随 IM 私聊并入主对话撤下，10-21 改向维持 IM 自己养 agent 后恢复原文（[devlog](./2026-10-20-im-a-line-to-the-same-assistant.md)「2026-10-21 改向」）。Discord 的「冻结只修 bug」（10-20 裁决 5）是在并入的前提下定的，正在 10-21 起的 IM 打磨讨论里重议，重议前不开工。
+- **提出**：2026-09-30，`.scratch/discord-ux/PRD.md` 对表「点折叠头展开步骤」一行。
+- **启动信号**：JC 在 Discord 里实际产生「这轮它到底干了什么」想回看过程的实感；
+  或 supervisor 出错时需要从 Discord 里排查步骤而不得不回桌面。
+- **方案**：回答消息下挂一个「步骤」按钮，点击回一条 ephemeral 消息（只有点击者
+  看得到、不进频道），内容是该 run 的步骤清单（`NN summary` 逐行）。步骤清单在 dcapp
+  进程内按回答消息 id 缓存（LRU），不持久化。
+- **实施要点**：进程重启后旧按钮失效（view 随进程消失），点击应静默或回一句
+  「步骤记录已随重启释放」；缓存上限与频道 agent 的 LRU 同量级。
+- **待定**：每条回答多一排按钮是否太重——可只给 ≥ N 步的 run 挂按钮。
+- **关联**：[conversation.md](../design/conversation.md) RunFoldHeader；补丁 `0023`。
+
+---
+
+## Discord 原生斜杠命令（app commands）
+
+- **状态**：暂缓（2026-09-30 同上裁决）
+- **2026-10-21 恢复**：10-20 随 IM 私聊并入主对话撤下，10-21 改向维持 IM 自己养 agent 后恢复原文（[devlog](./2026-10-20-im-a-line-to-the-same-assistant.md)「2026-10-21 改向」）。Discord 的「冻结只修 bug」（10-20 裁决 5）是在并入的前提下定的，正在 10-21 起的 IM 打磨讨论里重议，重议前不开工。
+- **提出**：2026-09-30，Discord 对话体验讨论方向 D。
+- **启动信号**：JC 或用户开始在 Discord 里频繁用命令（`discord.log` 的
+  `command=True` 占比明显上升）；或有人反馈「不知道有哪些命令」。当时 7 条消息
+  全部 `command=False`。
+- **信号记录**：2026-09-30 真机验收当天，JC 以为 Discord 里没有 `/new`——敲 `/`
+  时 Discord 弹出的是它自己的斜杠命令面板，没注册原生命令就列不出我们的文本
+  命令。解释后 JC 满意（直接当普通消息发即可），未要求开工；算半个「不知道有
+  哪些命令」信号，再出现一次即可考虑启动。
+- **信号记录**（2026-09-30，同日）：状态消息上的停止按钮去掉后（`.scratch/discord-ux/issues/05`），文本 `/stop`
+  成了 Discord 里唯一的停止入口，本项的可发现性价值随之上升。
+- **方案**：用 discord.py `app_commands.CommandTree` 注册 `/stop` `/status` `/new`
+  `/llm` `/btw` `/review` `/help`，输入 `/` 时有原生补全；文本命令保留兼容。
+- **实施要点**：命令树同步时机（启动时 guild 级同步最快生效）；邀请链接是否需要
+  `applications.commands` scope 要先核实，setup guide 文案随之改；DiscordCard
+  命令参考表同步。
+- **关联**：`frontends/dcapp.py` `handle_command`；[§9 Channels](../design/overlays-and-settings.md)。
+
+---
+
 ## IM 渠道外壳多语言（跟随 Galley 界面语言）
 
 - **状态**：暂缓（2026-09-30 JC 裁决：Discord / Telegram 对话体验打磨收尾后最后做）
@@ -502,8 +612,27 @@
 - **实施要点**：前置是把 `galley_im_display.py` 拆成独立补丁排到 `0023` 前面、dcapp 改用它（后续补丁改编号）；「跟随系统」
   目前只在 GUI 解析（`gui/src/lib/language.ts`），Core 要补一次。
 - **待定**：上游原有中文（`/help`、Telegram 菜单、飞书 / 微信）覆盖与否；改语言时是否自动重启 Channels。
-- **2026-10-20 更新**：IM 私聊并入主对话后（[IM 并入 PRD](../../.scratch/im-one-assistant/PRD.md)），私聊的外壳文字在 Galley 自己的传话层里，「先把 `galley_im_display.py` 拆成独立补丁」这条前置只剩群聊与 Discord 服务器频道还需要；做时按并入后的结构重排。
 - **关联**：`.scratch/im-chrome-i18n/PRD.md`（详细清单与依据）；[Discord 对齐](./2026-09-30-discord-conversation-ux.md)。
+
+---
+
+## IM 渠道的图片输入：相册合并与视觉输入
+
+- **状态**：暂缓（2026-09-30 Telegram 对话体验对齐桌面端时裁决不做，范围 D）
+- **2026-10-21 恢复**：10-20 并进 IM 并入 PRD 的票 04，10-21 改向维持 IM 自己养 agent、该 PRD 搁置后恢复原文（[devlog](./2026-10-20-im-a-line-to-the-same-assistant.md)「2026-10-21 改向」）。
+- **提出**：2026-09-30，`.scratch/telegram-ux/PRD.md` 问题 6。
+- **现状**：Telegram 每张图单独起一个任务，提示词「[TIPS] 收到图片temp/…，请等待下一步指令」，
+  模型也会回一轮；相册 N 张 = N 轮 N 条回答（`tgapp.py` `handle_photo`）。图片只以路径进提示词，
+  不是视觉输入；Discord 同样只给路径（`dcapp.py` `_download_attachments`）。
+- **启动信号**：JC 或用户在 IM 里实际发图（`telegram.log` / `discord.log` 出现收图记录），
+  或抱怨「发了几张图它回了几遍」「它看不见我发的图」。
+- **方案**：①相册按 `media_group_id` 攒一小段时间（约 1 秒）合成一个任务；②managed runtime 的
+  `run()` 已消费 `put_task(images=)`（补丁 `0008`），图片路径直接传 `images=` 走视觉输入，
+  caption 当正文；③只有图没有文字时不再让模型「等待下一步指令」空回一轮——候选做法是收图后
+  只回一句确认、等下一条文字一起入队。
+- **待定**：③的交互（静默等文字 vs 回一句确认）；非图片文件是否同样合并。
+- **关联**：[上游 PR：让 GA `run()` 消费 `put_task(images=)`](#上游-pr让-ga-run-消费-put_taskimages删-0008--attach-wrapper)；
+  补丁 `0014` / `0024`（Telegram）、`0018` / `0023`（Discord）。
 
 ---
 
@@ -1101,6 +1230,7 @@
 ## 安卓原生 App
 
 - **状态**：暂缓（2026-10-20 [IM 并入 PRD](../../.scratch/im-one-assistant/PRD.md) 裁决 17，JC：「按照你推荐的推进」）。在那之前，IM（尤其微信）就是安卓用户的手机体验，投入按这个算，不按「过渡期凑合」算。
+- **2026-10-21 更新**：IM 改为维持自己养 agent（[devlog](./2026-10-20-im-a-line-to-the-same-assistant.md)「2026-10-21 改向」），本节「不排期」的结论留用。理由里「IM 是长期的那条线、管它来找你」的定位作废：IM 里的它不是助理，不替助理来找你；国内安卓没有 FCM、唯一开发者、备案与逐家上架这几条照旧。启动信号里原生端与 IM 的比较改回看引擎日志 `model_responses`（IM 对话不进库，同 iOS PRD「P0 要回答的问题」原文）。
 - **提出**：2026-10-20 讨论 IM 与 Galley 移动端的关系时，JC：「现在安卓端移动 App 都没有排进计划日程，安卓手机用户目前唯一从手机端使用 Galley 的方式就是这几个 IM 了」。
 - **启动信号**：iOS App 上线后，原生端的使用明显多于 IM：`workbench.db` 里 `client = ios` 的用户轮次对比 IM 各渠道的取值（IM 私聊并入后两者在同一张表里可比）。也就是 iOS PRD「P0 要回答的问题」的答案是肯定的。
 - **为什么不先做**：IM 是长期的那条线（「它来找你」与「随口一句」），原生 App 是「去它那儿」；国内安卓没有 Google 服务、FCM 用不了，原生 App 要逐家接华为、小米、OPPO、vivo、荣耀的推送通道才能可靠地找到你，微信已经解决了；唯一开发者，另一套代码加上 App 备案、逐家上架。
