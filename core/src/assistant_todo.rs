@@ -28,7 +28,9 @@
 //!   [`RECENT_WINDOW_DAYS`] (a rolling window, not calendar days) — a
 //!   to-do ticked off, a one-off on no to-do that went off, a routine's
 //!   last fire, a finished subtask; newest first, at most
-//!   [`RECENT_LIMIT`].
+//!   [`RECENT_LIMIT`]. The morning review's fires are not here (main
+//!   chat ticket 73): it is in routine, and what it got done shows as
+//!   itself.
 //!
 //! A to-do's reminder is part of its to-do ([`TodoItem::reminder`]), in no
 //! group of its own. A cancelled to-do or task is in no group (a task's
@@ -139,6 +141,14 @@ impl AssistantTodo {
             && self.assistant.is_empty()
             && self.routine.is_empty()
             && self.done.is_empty()
+    }
+
+    /// Something in hand for the morning review to look at (main chat
+    /// ticket 73): a to-do of the user's not done, or something Galley
+    /// is on (a subtask not finished, a one-off reminder or task to come).
+    /// Routines are not, the review being one; nor is what is done.
+    pub fn anything_in_hand(&self) -> bool {
+        !self.yours.is_empty() || !self.assistant.is_empty()
     }
 }
 
@@ -639,8 +649,10 @@ where
             }
         }
         // A one-off's fire counts once it fired for its time (a manual
-        // run before it does not); a routine's last fire counts.
-        let counts = fired_once || !once;
+        // run before it does not); a routine's last fire counts. The
+        // morning review's does not (ticket 73): it did nothing for the
+        // user by itself, and what it did shows on its own.
+        let counts = (fired_once || !once) && !task.is_review();
         if let Some(fired) = task.last_fired_at.as_deref() {
             if counts && parse_utc_secs(fired).is_some_and(|at| at >= since) {
                 let run = (task.target == ScheduleTarget::Session)

@@ -166,7 +166,11 @@ async fn the_first_ask_creates_it_and_later_asks_hand_the_same_row_back() {
     assert_eq!(first.ga_runtime_kind, RuntimeKind::Managed);
     assert_eq!(first.status, SessionStatus::Idle);
     assert_eq!(first.project_id, None);
-    assert_eq!(rec.names(), vec!["session-created-external"]);
+    // Ticket 73: the morning review is made with it.
+    assert_eq!(
+        rec.names(),
+        vec!["session-created-external", "scheduled-tasks:changed"]
+    );
     let event = rec.events.lock().unwrap()[0].1.clone();
     assert_eq!(event["session"]["mainChat"], json!(true));
 
@@ -490,4 +494,34 @@ async fn only_a_creation_greets() {
         .unwrap();
     assert!(matches!(back, MainChatEnsured::Restored(_)));
     assert_eq!(greetings(&galley).await, 1, "no second greeting");
+}
+
+// ---------------- the morning review (ticket 73) ----------------
+
+/// The desktop's ask makes the morning review the first time — a new
+/// main chat, and one from before the review alike, since the desktop
+/// asks at every launch — and never again; under the external runtime
+/// the ask is refused and nothing is made.
+#[tokio::test]
+async fn asking_for_the_main_chat_makes_the_morning_review_once() {
+    let reviews = |galley: SqliteGalley| async move {
+        galley
+            .list_scheduled_tasks_in(galley_core_lib::db::ScheduleListScope::All)
+            .await
+            .expect("tasks")
+            .into_iter()
+            .filter(|task| task.is_review())
+            .count()
+    };
+    let rec = Recorder::default();
+    let external = fresh_galley(RuntimeKind::External).await;
+    assert!(ask(&external, &rec).await.is_err());
+    assert_eq!(reviews(external.clone()).await, 0);
+
+    let galley = fresh_galley(RuntimeKind::Managed).await;
+    main_chat(&galley, &rec).await;
+    assert_eq!(reviews(galley.clone()).await, 1);
+    assert!(rec.names().contains(&"scheduled-tasks:changed".to_string()));
+    main_chat(&galley, &rec).await;
+    assert_eq!(reviews(galley.clone()).await, 1);
 }

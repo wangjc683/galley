@@ -57,10 +57,21 @@
 //! Main chat ticket 39: a task that is a to-do's reminder (`todoId`) does
 //! not go off once its to-do is ticked off or cancelled
 //! ([`drop_reminders_of_closed_todos`]); Core cancels it then anyway.
+//!
+//! Main chat ticket 73 (assistant PRD ruling 10): the **morning review**,
+//! the one task Galley makes itself ([`ensure_review`],
+//! [`REVIEW_SUPERVISOR`]): every day at 09:00 it wakes the main chat to go
+//! over what is in hand and move forward what it can. Coming due, it
+//! first looks without the model ([`fire_review`]): with nothing in hand
+//! it wakes nobody. Its wake travels as a reminder's, with words of its
+//! own (`crate::subtask_report`), and one that cannot be delivered is
+//! dropped, never handed to a notification (its words are for the
+//! model). The user stops it by asking the main chat, which pauses it;
+//! Galley never makes it again.
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Local, TimeZone};
+use chrono::{DateTime, Local, TimeZone, Utc};
 use tauri::Manager;
 
 use crate::api::schedule::{
@@ -89,6 +100,53 @@ const TICK_SECONDS: u64 = 60;
 /// behind a session ([`task_id_from_reason`]).
 pub const SCHEDULER_SUPERVISOR: &str = "galley-scheduler";
 
+/// Supervisor label of the **morning review** (main chat ticket 73,
+/// assistant PRD ruling 10): the one task Galley makes itself, stored
+/// with `created_via = 'system'` ([`ScheduledTaskBrief::is_review`]).
+/// Every day at [`REVIEW_TIME_OF_DAY`] it wakes the main chat to go over
+/// what is in hand. Read by the desktop (ticket 74) to show it by a name
+/// of its own instead of [`REVIEW_PROMPT`], from `origin.supervisor` on
+/// the task and `agent` on its item in the to-do list.
+pub const REVIEW_SUPERVISOR: &str = "galley-review";
+
+/// When the review fires, local wall clock, every day.
+pub const REVIEW_TIME_OF_DAY: &str = "09:00";
+
+/// The words the review carries: what `schedule list`, `schedule show` and
+/// the "In Hand" lines show the model. The wake itself is Core's
+/// ([`crate::subtask_report`]'s review paragraph), so a newer wording
+/// reaches a review made by an older version; these stay as they were
+/// written.
+pub const REVIEW_PROMPT: &str = "Morning review: go over what is in hand and move forward \
+     what you can without being asked (\"The morning review\" in `wake.md`). Galley made this \
+     task; when the user asks, pause it with `schedule disable`, never `schedule delete`.";
+
+/// The pref the review's log is kept under: one entry per fire and per
+/// wake dropped ([`ReviewEvent`]), newest last, at most
+/// [`REVIEW_LOG_MAX`]. The skips leave no other trace: a skipped fire
+/// stamps the task like any other and wakes nobody. Read by the trial
+/// snapshot (`.scratch/assistant/closed-loop-snapshot.py`).
+pub const REVIEW_LOG_PREF: &str = "assistant_review_log";
+
+/// How many entries the review's log keeps (about a year of fires).
+pub const REVIEW_LOG_MAX: usize = 400;
+
+/// What became of the morning review once, in its log.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewEvent {
+    /// It came due with nothing in hand: no wake, no tokens.
+    Skipped,
+    /// It came due and was stamped to wake the main chat.
+    Woke,
+    /// Fired by hand (`schedule run`, the desktop's run now): a wake with
+    /// no look at what is in hand first, and not a coming due.
+    Run,
+    /// Its wake could not reach the main chat and was dropped, without
+    /// the notification a reminder gets.
+    Dropped,
+}
+
 /// The `reason` a scheduler-created session is stamped with, followed by
 /// the task id.
 const REASON_PREFIX: &str = "scheduled task ";
@@ -106,7 +164,11 @@ pub(crate) fn start(app: &tauri::App) {
     // The pool is managed state by setup time — the loop holds it
     // instead of re-opening the global on every tick.
     let galley: SqliteGalley = app.state::<SqliteGalley>().inner().clone();
+    let notifier = crate::notify::TauriNotifier::new(handle.clone());
     tauri::async_runtime::spawn(async move {
+        // Ticket 73: a main chat made before the review existed gets it
+        // now (a new one gets it when it is made).
+        ensure_review(&galley, notifier.as_ref()).await;
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(TICK_SECONDS));
         // After a long sleep the timer owes many ticks; the due check is
         // wall-clock-derived, so bursting through them is pure noise.
@@ -152,7 +214,21 @@ async fn tick(app: &tauri::AppHandle, galley: &SqliteGalley) {
                     }
                 };
                 if available {
-                    fire_reminder(galley, notifier.as_ref(), &task, &planned, &now).await;
+                    if task.is_review() {
+                        let manager: Arc<RunnerManager> =
+                            app.state::<Arc<RunnerManager>>().inner().clone();
+                        fire_review(
+                            galley,
+                            manager.as_ref(),
+                            notifier.as_ref(),
+                            &task,
+                            &planned,
+                            &now,
+                        )
+                        .await;
+                    } else {
+                        fire_reminder(galley, notifier.as_ref(), &task, &planned, &now).await;
+                    }
                 }
             }
         }
@@ -270,6 +346,154 @@ pub async fn fire_reminder<Tz: TimeZone>(
     }
 }
 
+/// Make sure the morning review exists (main chat ticket 73): a daily
+/// task at [`REVIEW_TIME_OF_DAY`] that wakes the main chat, made by
+/// Galley ([`REVIEW_SUPERVISOR`]). Called when the main chat is asked for
+/// (made, restored, or there: the desktop asks at every launch) and once
+/// when Core starts. Made only on the managed runtime with its main
+/// chat, and only once ever ([`SqliteGalley::create_system_task_once`]):
+/// once the user has it paused or cancelled, Galley does not make it
+/// again. The desktop hears of a new one; a failure is logged, never in
+/// the caller's way. The task made, when this call made it.
+pub async fn ensure_review(
+    galley: &SqliteGalley,
+    notifier: &dyn Notifier,
+) -> Option<ScheduledTaskBrief> {
+    let id = crate::api::schedule::mint_scheduled_task_id();
+    match galley
+        .create_system_task_once(&id, REVIEW_PROMPT, REVIEW_TIME_OF_DAY, REVIEW_SUPERVISOR)
+        .await
+    {
+        Ok(Some(task)) => {
+            eprintln!("[scheduler] made the morning review {}", task.id);
+            notify(notifier, SCHEDULED_TASKS_CHANGED_EVENT, &());
+            Some(task)
+        }
+        Ok(None) => None,
+        Err(e) => {
+            eprintln!("[scheduler] making the morning review failed: {e:?}");
+            None
+        }
+    }
+}
+
+/// How a coming due of the morning review went ([`fire_review`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReviewFire {
+    /// Nothing in hand: the period consumed, no wake.
+    Skipped,
+    /// Stamped pending, to wake the main chat like a reminder.
+    Woke,
+    /// Recording the fire failed; the next tick tries again.
+    Failed,
+}
+
+/// The morning review came due (ticket 73). Before any model call, Core
+/// looks for something in hand, as the "In Hand" lines read it
+/// ([`crate::assistant_todo::assistant_todo`]): the user's to-dos not
+/// done, what Galley is on (subtasks not finished, one-off reminders and
+/// tasks to come). Routines do not count, the review being one. With
+/// nothing, the fire is stamped skipped — the period consumed, so it does
+/// not come due again today, and no wake
+/// ([`SqliteGalley::mark_scheduled_wake_skipped`]); otherwise it fires
+/// like a reminder ([`fire_reminder`]) and the wake pipeline takes it
+/// from there. Either way its log says so ([`log_review`]). A failed read
+/// wakes it: one turn too many beats a review that never runs. A catch-up
+/// (the computer asleep at 9:00) comes through here too.
+pub async fn fire_review<Tz: TimeZone>(
+    galley: &SqliteGalley,
+    runners: &RunnerManager,
+    notifier: &dyn Notifier,
+    task: &ScheduledTaskBrief,
+    due_at: &DateTime<Tz>,
+    now: &DateTime<Tz>,
+) -> ReviewFire {
+    let fired_at = instant_to_utc_iso(now);
+    let planned = instant_to_utc_iso(due_at);
+    let in_hand =
+        match crate::assistant_todo::assistant_todo(galley, runners, now.with_timezone(&Utc)).await
+        {
+            Ok(todo) => todo.anything_in_hand(),
+            Err(e) => {
+                eprintln!(
+                    "[scheduler] review {}: reading what is in hand failed, waking it: {e:?}",
+                    task.id
+                );
+                true
+            }
+        };
+    if in_hand {
+        if !fire_reminder(galley, notifier, task, due_at, now).await {
+            return ReviewFire::Failed;
+        }
+        log_review(
+            galley,
+            ReviewEvent::Woke,
+            task.id.as_str(),
+            &fired_at,
+            Some(&planned),
+            None,
+        )
+        .await;
+        return ReviewFire::Woke;
+    }
+    match galley
+        .mark_scheduled_wake_skipped(&task.id, &fired_at, &planned)
+        .await
+    {
+        Ok(_) => {
+            eprintln!("[scheduler] review {}: nothing in hand, skipped", task.id);
+            notify(notifier, SCHEDULED_TASKS_CHANGED_EVENT, &());
+            log_review(
+                galley,
+                ReviewEvent::Skipped,
+                task.id.as_str(),
+                &fired_at,
+                Some(&planned),
+                None,
+            )
+            .await;
+            ReviewFire::Skipped
+        }
+        Err(e) => {
+            eprintln!("[scheduler] review {} mark skipped failed: {e:?}", task.id);
+            ReviewFire::Failed
+        }
+    }
+}
+
+/// One entry in the morning review's log ([`REVIEW_LOG_PREF`]): what
+/// happened, to which fire (`firedAt`, the planned `dueAt` when there is
+/// one), when, and for a dropped wake why. A failed write is logged and
+/// otherwise ignored: the log is the trial's count, not the review.
+pub async fn log_review(
+    galley: &SqliteGalley,
+    event: ReviewEvent,
+    task_id: &str,
+    fired_at: &str,
+    due_at: Option<&str>,
+    reason: Option<&str>,
+) {
+    let mut entry = serde_json::json!({
+        "event": event,
+        "taskId": task_id,
+        "firedAt": fired_at,
+        "at": instant_to_utc_iso(&Utc::now()),
+    });
+    if let Some(due_at) = due_at {
+        entry["dueAt"] = serde_json::json!(due_at);
+    }
+    if let Some(reason) = reason {
+        entry["reason"] = serde_json::json!(reason);
+    }
+    if let Err(e) = galley
+        .append_pref_log(REVIEW_LOG_PREF, entry, REVIEW_LOG_MAX)
+        .await
+    {
+        eprintln!("[scheduler] review {task_id}: writing its log failed: {e:?}");
+    }
+}
+
 /// Run a task once, now — the GUI's "run now" and the CLI's `schedule
 /// run`, through the scheduled path ([`run_task_now`]'s contract): a
 /// `session` task fires through [`fire`]; an `assistant` task is stamped
@@ -302,6 +526,10 @@ pub async fn run_now(
                 return Err(GalleyError::Internal {
                     message: format!("scheduled task {id}: recording the fire failed"),
                 });
+            }
+            if task.is_review() {
+                let fired = instant_to_utc_iso(&now);
+                log_review(&galley, ReviewEvent::Run, id, &fired, Some(&fired), None).await;
             }
             if let Some(reports) = reports {
                 match ctx.app {

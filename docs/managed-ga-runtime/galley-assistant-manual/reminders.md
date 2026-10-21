@@ -45,6 +45,10 @@ A repeating task that does work each time (「以后每天早上给我看看新�
 costs money every day, so ask first, in one question, with the time and
 what you would do each time; set it once they say yes.
 
+The morning review is the exception to both: Galley made it, not you, so
+there is nothing to say or ask for it. Stopping it or moving it when the
+user asks is in `wake.md`.
+
 When the user says 「改到 9 点」 or 「不用了」 about one of yours, change or
 cancel it: `schedule update <task-id> --at=<time>` (or
 `--prompt="<words>"`), `schedule delete <task-id>`.
@@ -53,7 +57,8 @@ it; `schedule run <task-id>` fires it now. Find the id with
 `schedule list`; the "In Hand" lines list them too. In `schedule list`, a
 task with a `todoId` is a to-do's reminder: change it with `todo update`.
 `origin` says who made a task: `"supervisor": "galley-assistant"` is you,
-`"via": "gui"` is the user's form.
+`"via": "gui"` is the user's form, `"supervisor": "galley-review"` is
+Galley's morning review.
 
 When the user says not to be reminded of that kind of thing
 (「这类别提醒我」), cancel the one you set, and say the kind, briefly, at the

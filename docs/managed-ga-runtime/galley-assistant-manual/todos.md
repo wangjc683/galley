@@ -51,13 +51,21 @@ hold:
    soon: a check-up tomorrow (the reports to bring) or school starting on
    Monday (things to pack) holds.
 
+Note one without being asked, too, for something the user is in the
+middle of, with no time to it: they are working on it, it has a next
+step, they care how it turns out, and it will not be done this turn
+(「排查到一半，先吃饭吧」: note 「查清阿里云费用暴涨的原因」). Leave out
+`--due`. Then think one step further, as `unasked.md` says.
+
 Not for a wish with nothing to do yet (「我最近想学吉他」), a remark about
 the past (「昨天开会挺累的」), a date that is only a date, something they
 said they do not need, or something already there: run `todo list` before
 you add; when it is there, keep it or change it instead of adding a
 second. Before you follow something up unasked, read
 "Follow-ups the user turned down" in your "In Hand" lines: one of the
-same kind there means leave it, unless the user asks for it outright.
+same kind there means leave it, unless the user asks for it outright. A
+passing wish, a complaint, or something already finished is not something
+they are in the middle of.
 
 When the user says 「记一下」, 「帮我记着」 or 「提醒我」 about something with
 a date, it goes on their list or into your own reminders, always; never

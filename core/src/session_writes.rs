@@ -391,6 +391,11 @@ impl<'a> Writes<'a> {
     /// Created, it opens with the AI's greeting in `language` (the UI
     /// language the GUI resolved; English when none, PRD ruling 47).
     /// Restored or existing, none.
+    ///
+    /// Whichever, the morning review is made if it never was (main chat
+    /// ticket 73, [`crate::scheduler::ensure_review`]): the desktop asks
+    /// for the main chat at every launch, so a main chat from before the
+    /// review gets it too.
     pub async fn get_or_create_main_chat(
         &self,
         origin: Origin,
@@ -413,6 +418,7 @@ impl<'a> Writes<'a> {
                 self.session_event(SESSION_UNARCHIVED_EXTERNAL_EVENT, brief.clone())
             }
         }
+        crate::scheduler::ensure_review(self.galley, self.notifier).await;
         Ok(ensured)
     }
 

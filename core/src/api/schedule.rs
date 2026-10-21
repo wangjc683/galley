@@ -525,6 +525,16 @@ impl ScheduledTaskBrief {
     pub fn is_active(&self) -> bool {
         self.enabled && self.cancelled_at.is_none() && !self.once_fired()
     }
+
+    /// Whether this is the morning review (main chat ticket 73): the
+    /// task Galley made, `system` with
+    /// [`crate::scheduler::REVIEW_SUPERVISOR`].
+    pub fn is_review(&self) -> bool {
+        self.origin.as_ref().is_some_and(|origin| {
+            origin.via == super::OriginVia::System
+                && origin.supervisor.as_deref() == Some(crate::scheduler::REVIEW_SUPERVISOR)
+        })
+    }
 }
 
 /// Second-resolution UTC instant of an ISO-8601 timestamp; `None` when

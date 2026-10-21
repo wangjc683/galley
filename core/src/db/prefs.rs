@@ -24,6 +24,47 @@ impl SqliteGalley {
         .map_err(map_sqlx_err)?;
         Ok(())
     }
+
+    /// Append `entry` to the JSON array kept under `key`, keeping the
+    /// newest `max` (main chat ticket 73: the morning review's log). Each
+    /// step is one statement, so appends at the same time all land; a
+    /// value under `key` that is not an array starts a new one.
+    pub async fn append_pref_log(
+        &self,
+        key: &str,
+        entry: serde_json::Value,
+        max: usize,
+    ) -> Result<()> {
+        let entry = entry.to_string();
+        let now = chrono_now_iso();
+        sqlx::query(
+            "INSERT INTO prefs (key, value, updated_at)
+             VALUES (?, json_array(json(?)), ?)
+             ON CONFLICT(key) DO UPDATE SET
+               value = json_insert(
+                 CASE WHEN json_valid(prefs.value) AND json_type(prefs.value) = 'array'
+                      THEN prefs.value ELSE '[]' END,
+                 '$[#]', json(?)),
+               updated_at = excluded.updated_at",
+        )
+        .bind(key)
+        .bind(&entry)
+        .bind(&now)
+        .bind(&entry)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        sqlx::query(
+            "UPDATE prefs SET value = json_remove(value, '$[0]')
+             WHERE key = ? AND json_array_length(value) > ?",
+        )
+        .bind(key)
+        .bind(i64::try_from(max).unwrap_or(i64::MAX))
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(())
+    }
 }
 
 impl SqliteGalley {

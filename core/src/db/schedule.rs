@@ -682,6 +682,106 @@ impl SqliteGalley {
         self.fetch_scheduled_task(id.as_str()).await
     }
 
+    /// Record a fire of a task that wakes the assistant, made without a
+    /// wake (main chat ticket 73: the morning review with nothing in
+    /// hand): the period consumed like any fire's (`last_fired_at`,
+    /// `last_due_at`), and `last_wake` NULL — after a fire it means no
+    /// wake reached the main chat (this, or [`Self::drop_scheduled_wake`]).
+    ///
+    /// **Errors**: `not_found`.
+    pub async fn mark_scheduled_wake_skipped(
+        &self,
+        id: &ScheduledTaskId,
+        fired_at_iso: &str,
+        due_at_iso: &str,
+    ) -> Result<ScheduledTaskBrief> {
+        let res = sqlx::query(
+            "UPDATE scheduled_tasks \
+             SET last_fired_at = ?, last_due_at = ?, last_wake = NULL, \
+                 last_run_session_id = NULL, updated_at = ? \
+             WHERE id = ?",
+        )
+        .bind(fired_at_iso)
+        .bind(due_at_iso)
+        .bind(chrono_now_iso())
+        .bind(id.as_str())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| map_constraint_err("mark_scheduled_wake_skipped", e))?;
+        if res.rows_affected() == 0 {
+            return Err(GalleyError::NotFound {
+                message: format!("scheduled task {id} not found"),
+            });
+        }
+        self.fetch_scheduled_task(id.as_str()).await
+    }
+
+    /// Drop the pending wake of the fire at `fired_at_iso` with no
+    /// notification (ticket 73: the morning review, whose words are for
+    /// the model, not the user): `last_wake` NULL, as for a skipped fire.
+    /// `true` when this call moved it (still that fire's, still pending).
+    pub async fn drop_scheduled_wake(&self, id: &str, fired_at_iso: &str) -> Result<bool> {
+        let res = sqlx::query(
+            "UPDATE scheduled_tasks SET last_wake = NULL, updated_at = ? \
+             WHERE id = ? AND last_fired_at = ? AND last_wake = 'pending'",
+        )
+        .bind(chrono_now_iso())
+        .bind(id)
+        .bind(fired_at_iso)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(res.rows_affected() > 0)
+    }
+
+    /// Make a daily task of Galley's own that wakes the assistant at
+    /// `time_of_day` (ticket 73: the morning review, `supervisor` its
+    /// label), once ever: not while any task carries `created_via =
+    /// 'system'` with `supervisor` — enabled, paused or cancelled, so a
+    /// review the user had stopped or deleted is not made again — and
+    /// only while there is an assistant to wake
+    /// ([`Self::ensure_assistant_available`]: the managed runtime with its
+    /// main chat). The check and the insert are one statement, so two
+    /// callers at once make one. `Some` with the task when this call made
+    /// it.
+    pub async fn create_system_task_once(
+        &self,
+        id: &str,
+        prompt: &str,
+        time_of_day: &str,
+        supervisor: &str,
+    ) -> Result<Option<ScheduledTaskBrief>> {
+        match self.ensure_assistant_available("create_system_task").await {
+            Ok(_) => {}
+            Err(GalleyError::InvalidArgs { .. }) => return Ok(None),
+            Err(e) => return Err(e),
+        }
+        parse_time_of_day(time_of_day)?;
+        let now = chrono_now_iso();
+        let res = sqlx::query(
+            "INSERT INTO scheduled_tasks (id, prompt, repeat_kind, time_of_day, enabled, \
+                created_at, updated_at, target, created_via, created_by_supervisor) \
+             SELECT ?, ?, 'daily', ?, 1, ?, ?, 'assistant', 'system', ? \
+             WHERE NOT EXISTS ( \
+                 SELECT 1 FROM scheduled_tasks \
+                 WHERE created_via = 'system' AND created_by_supervisor = ?)",
+        )
+        .bind(id)
+        .bind(prompt)
+        .bind(time_of_day)
+        .bind(&now)
+        .bind(&now)
+        .bind(supervisor)
+        .bind(supervisor)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| map_constraint_err("create_system_task", e))?;
+        if res.rows_affected() == 0 {
+            return Ok(None);
+        }
+        self.fetch_scheduled_task(id).await.map(Some)
+    }
+
     /// Settle the pending wake of the fire at `fired_at_iso`: `true` when
     /// this call moved it (it was still that fire's, still pending).
     pub async fn settle_scheduled_wake(

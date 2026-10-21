@@ -6,8 +6,10 @@
 //! to the parts a Galley CLI write needs before it makes one: the three
 //! levels of authority, the CLI commands it uses (and the ones that would
 //! hold the main chat), times, the user's to-dos and changing them, its
-//! own reminders, what a wake note from Galley is, and who it is with how
-//! to check a subtask's result and report it. It is the built-in
+//! own reminders, what a wake note from Galley is (the morning review
+//! among them, ticket 73), what it does without being asked and what it
+//! asks first (`unasked.md`, ticket 73), and who it is with how to check
+//! a subtask's result and report it. It is the built-in
 //! assistant's counterpart of the Supervisor SOP an outside agent copies
 //! ([`crate::sop_install`]), which stays as it is.
 //!
@@ -42,7 +44,7 @@ macro_rules! part {
 /// The manual's parts in reading order, file name and text, bundled at
 /// build time from the files a developer reads in the repo. The entry
 /// layer names every one of them.
-pub(crate) const PARTS: [(&str, &str); 8] = [
+pub(crate) const PARTS: [(&str, &str); 9] = [
     part!("authority.md"),
     part!("cli.md"),
     part!("times.md"),
@@ -50,6 +52,7 @@ pub(crate) const PARTS: [(&str, &str); 8] = [
     part!("todos-change.md"),
     part!("reminders.md"),
     part!("wake.md"),
+    part!("unasked.md"),
     part!("subtasks.md"),
 ];
 
@@ -214,7 +217,10 @@ mod tests {
         // todos.md to cancelling a kind in todos-change.md. Ticket 63
         // moved "When one comes due" into wake.md, and reminders.md's
         // reference to wake.md is now the sentence left in its place.
-        assert_eq!(referred, 12);
+        // Ticket 73's six: todos.md and wake.md to unasked.md, unasked.md
+        // to wake.md, subtasks.md and authority.md, and reminders.md to
+        // wake.md for stopping the morning review.
+        assert_eq!(referred, 18);
         assert!(
             part("authority.md").contains("needs their yes to what and when (see `reminders.md`).")
         );
@@ -673,13 +679,19 @@ mod tests {
             assert!(due < at, "{rule} is not under its heading");
         }
         // One set of words for each rule: none left behind in reminders.md.
+        // The silent reply is wake.md's alone: once for a send-back or an
+        // answer, and (ticket 73) for the morning review.
+        let silent: usize = PARTS
+            .iter()
+            .map(|(_, body)| body.matches("<no-reply/>").count())
+            .sum();
+        assert_eq!(silent, wake.matches("<no-reply/>").count());
         for rule in [
             "When one comes due",
             "Do not recite it",
             "it comes late, and how late",
             "A to-do's reminder only reminds",
             "A scheduled task that starts a new conversation",
-            "<no-reply/>",
         ] {
             let count: usize = PARTS
                 .iter()
@@ -724,5 +736,94 @@ mod tests {
         let start = todos.find("the moment it starts").unwrap();
         let end = todos.find("Without a due date, no reminder.").unwrap();
         assert!(line < start && start < end);
+    }
+
+    /// Ticket 73 (assistant PRD ruling 10): what the user is in the middle
+    /// of is a to-do with no date, beside the three tests, and a passing
+    /// wish or a complaint is not one; what it does unasked is work, not
+    /// advice — done when it can be undone and costs nothing and says
+    /// nothing in the user's name, asked first with the groundwork done
+    /// otherwise, no offers, the subtask limits, a file handed over as
+    /// `[FILE:…]`; the morning review in `wake.md`, stopped by pausing it,
+    /// and Galley's, so nothing to say or ask for it. Single-line
+    /// fragments only (CRLF on Windows).
+    #[test]
+    fn manual_acts_unasked_and_reviews_each_morning() {
+        let todos = part("todos.md");
+        for rule in [
+            "Note one without being asked, too, for something the user is in the",
+            "(「排查到一半，先吃饭吧」: note 「查清阿里云费用暴涨的原因」). Leave out",
+            "`--due`. Then think one step further, as `unasked.md` says.",
+            "passing wish, a complaint, or something already finished is not something",
+        ] {
+            assert!(todos.contains(rule), "todos.md lost: {rule}");
+        }
+        // Beside the three tests, which stay as they were.
+        let third = todos.find("3. They may not think of it then").unwrap();
+        let middle = todos.find("for something the user is in the").unwrap();
+        let not_for = todos.find("Not for a wish with nothing to do yet").unwrap();
+        assert!(third < middle && middle < not_for);
+
+        let unasked = part("unasked.md");
+        for rule in [
+            "## Doing things without being asked",
+            "What you do on your own is work, not advice: get something done, then",
+            "- **Just do it**: groundwork you can undo, that costs the user no money",
+            "goes to a subtask (see `subtasks.md`), and when it is back Galley wakes",
+            "- **Ask first, with the groundwork done**: anything outward-facing",
+            "with it in hand (「Banner 草稿做好了，要发群里吗？」).",
+            "- **Got nothing done, say nothing**: no offers. Never 「要不要我帮你……」",
+            "or 「需要的话我可以……」, in your reply or in the next-step suggestion",
+            "- **Limits**: when you note something, at most one subtask for it; in a",
+            "morning review, at most two in all.",
+            "`[FILE:<absolute path>]` on a line of its own: the desktop shows it as",
+            "- **Not**: deciding for the user, changing what is theirs (their files,",
+        ] {
+            assert!(unasked.contains(rule), "unasked.md lost: {rule}");
+        }
+
+        let wake = part("wake.md");
+        let review = wake.find("## The morning review").unwrap();
+        for rule in [
+            "Every morning at 9:00 Galley wakes you to go over what is in hand; the",
+            "- Read what is current first: `todo list`, `schedule list`, and your",
+            "`unasked.md` says, at most two subtasks in all. Do not raise early a",
+            "to-dos, overdue ones included: their reminders do that.",
+            "(「早上过了一遍在办的事：……」), so the user knows where it comes from.",
+            "the user: the subtask tags and `<no-reply/>`, nothing else (you tell",
+            "- When the user says to stop it (「别每天过了」, 「早上那个不用了」),",
+            "pause it: `schedule disable <task-id>` on the task in `schedule list`",
+            "whose `origin` has `\"supervisor\": \"galley-review\"`, never",
+            "ask you to bring it back; when they do, `schedule enable <task-id>`. A",
+            "new time: `schedule update <task-id> --time=HH:MM`.",
+        ] {
+            let at = wake
+                .find(rule)
+                .unwrap_or_else(|| panic!("wake.md lost: {rule}"));
+            assert!(review < at, "{rule} is not under its heading");
+        }
+        // The label the manual names is the one Core makes it with.
+        assert!(wake.contains(&format!(
+            "`\"supervisor\": \"{}\"`",
+            crate::scheduler::REVIEW_SUPERVISOR
+        )));
+        assert!(wake.contains("Never write it in any other reply but the morning review's"));
+        assert!(
+            wake.contains("task ran, or that it is time for the morning review. The user did not")
+        );
+
+        let reminders = part("reminders.md");
+        for rule in [
+            "The morning review is the exception to both: Galley made it, not you, so",
+            "there is nothing to say or ask for it. Stopping it or moving it when the",
+            "`\"via\": \"gui\"` is the user's form, `\"supervisor\": \"galley-review\"` is",
+        ] {
+            assert!(reminders.contains(rule), "reminders.md lost: {rule}");
+        }
+        let both = reminders
+            .find("The morning review is the exception")
+            .unwrap();
+        assert!(reminders.find("Never set one without saying so.").unwrap() < both);
+        assert!(reminders.find("set it once they say yes.").unwrap() < both);
     }
 }

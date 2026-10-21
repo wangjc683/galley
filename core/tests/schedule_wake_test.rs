@@ -21,7 +21,11 @@
 //!   and not under the external runtime;
 //! - the turn the assistant made a task in is settled to its reply;
 //! - a to-do's reminder (ticket 39) says which to-do and when it is due,
-//!   and a to-do ticked off is not reminded of, whenever it is ticked.
+//!   and a to-do ticked off is not reminded of, whenever it is ticked;
+//! - the morning review (ticket 73) is made once ever, wakes nobody with
+//!   nothing in hand, wakes the main chat in words of its own otherwise,
+//!   stays out of 已完成, and is dropped without a notification when it
+//!   cannot be delivered.
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration as ChronoDuration, Local, Utc};
@@ -1321,4 +1325,348 @@ async fn a_to_do_ticked_off_is_not_reminded_of() {
         galley_core_lib::scheduler::drop_reminders_of_closed_todos(&galley, rec.as_ref(), due)
             .await;
     assert_eq!(kept.len(), 1);
+}
+
+// ---------------- the morning review (ticket 73) ----------------
+
+use galley_core_lib::assistant_todo::assistant_todo;
+use galley_core_lib::runner_manager::RunnerManager;
+use galley_core_lib::scheduler::{
+    ensure_review, fire_review, ReviewFire, REVIEW_LOG_PREF, REVIEW_SUPERVISOR, REVIEW_TIME_OF_DAY,
+};
+
+/// The review's log, as the trial snapshot reads it.
+async fn review_log(galley: &SqliteGalley) -> Vec<Value> {
+    match galley.get_pref_json(REVIEW_LOG_PREF).await.expect("read") {
+        Some(Value::Array(entries)) => entries,
+        Some(other) => panic!("not an array: {other}"),
+        None => Vec::new(),
+    }
+}
+
+/// Fire the review now, as the scheduler does when it comes due.
+async fn fire_review_now(galley: &SqliteGalley, rec: &Recorder, id: &str) -> ReviewFire {
+    let task = galley.scheduled_task(id).await.expect("review");
+    let now = Local::now();
+    fire_review(galley, &RunnerManager::new(), rec, &task, &now, &now).await
+}
+
+#[tokio::test]
+async fn the_review_is_made_once_and_never_again() {
+    let rec = Recorder::default();
+    // No main chat yet: nothing to wake, nothing made.
+    let (pool, galley) = fresh().await;
+    assert!(ensure_review(&galley, &rec).await.is_none());
+    galley
+        .get_or_create_main_chat(MAIN, Origin::desktop(), &MainChatSeed::default())
+        .await
+        .expect("main chat");
+    // The external runtime has no assistant: nothing made either.
+    galley
+        .set_pref_json("active_runtime_kind", json!("external"))
+        .await
+        .expect("external");
+    assert!(ensure_review(&galley, &rec).await.is_none());
+    galley
+        .set_pref_json("active_runtime_kind", json!("managed"))
+        .await
+        .expect("managed");
+
+    let review = ensure_review(&galley, &rec).await.expect("made");
+    assert!(review.is_review());
+    assert_eq!(review.repeat, ScheduledTaskRepeat::Daily);
+    assert_eq!(review.time_of_day, REVIEW_TIME_OF_DAY);
+    assert_eq!(review.target, ScheduleTarget::Assistant);
+    assert!(review.enabled && review.created_in.is_none() && review.todo_id.is_none());
+    let origin = review.origin.clone().expect("origin");
+    assert_eq!(origin.via, OriginVia::System);
+    assert_eq!(origin.supervisor.as_deref(), Some(REVIEW_SUPERVISOR));
+    // On the wire as the CLI's `schedule list` prints it (ticket 74 reads
+    // the same field from the desktop's reads).
+    let wire = serde_json::to_value(&review).expect("wire");
+    assert_eq!(
+        wire["origin"],
+        json!({"via": "system", "supervisor": "galley-review"})
+    );
+    assert!(!rec.named(SCHEDULED_TASKS_CHANGED_EVENT).is_empty());
+
+    // Once: there, paused, cancelled — never made again.
+    assert!(ensure_review(&galley, &rec).await.is_none());
+    galley
+        .update_scheduled_task(
+            review.id.clone(),
+            galley_core_lib::api::schedule::ScheduledTaskPatch {
+                enabled: Some(false),
+                ..Default::default()
+            },
+            assistant(),
+        )
+        .await
+        .expect("pause");
+    assert!(ensure_review(&galley, &rec).await.is_none());
+    galley
+        .delete_scheduled_task(review.id.clone(), assistant())
+        .await
+        .expect("cancel");
+    assert!(ensure_review(&galley, &rec).await.is_none());
+    let rows: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM scheduled_tasks WHERE created_by_supervisor = 'galley-review'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("count");
+    assert_eq!(rows, 1);
+    // A label another agent passes is not the review.
+    let mut other = review.clone();
+    other.origin = Some(Origin {
+        via: OriginVia::Supervisor,
+        supervisor: Some(REVIEW_SUPERVISOR.into()),
+        reason: None,
+        client: None,
+    });
+    assert!(!other.is_review());
+}
+
+#[tokio::test]
+async fn with_nothing_in_hand_the_review_wakes_nobody() {
+    let (_pool, galley) = with_main_chat().await;
+    let rec = Recorder::default();
+    let reports = SubtaskReports::new();
+    let review = ensure_review(&galley, &rec).await.expect("made");
+    // A routine is not in hand (the review is one), nor is another.
+    galley
+        .create_scheduled_task(
+            CreateScheduledTaskInput {
+                repeat: ScheduledTaskRepeat::Daily,
+                time_of_day: "20:00".into(),
+                fire_at: None,
+                ..once_input("sched_daily", "提醒用户吃药", Utc::now())
+            },
+            assistant(),
+        )
+        .await
+        .expect("routine");
+    assert_eq!(
+        fire_review_now(&galley, &rec, review.id.as_str()).await,
+        ReviewFire::Skipped
+    );
+    let task = galley.scheduled_task(review.id.as_str()).await.unwrap();
+    assert!(task.last_fired_at.is_some() && task.last_due_at.is_some());
+    assert_eq!(task.last_wake, None, "no wake");
+    // Consumed: it does not come due again today.
+    assert!(due_at(&task, &Local, &Local::now()).is_none());
+    assert!(restore_pending_reminders(&reports, &galley).await.is_none());
+    let log = review_log(&galley).await;
+    assert_eq!(log.len(), 1);
+    assert_eq!(log[0]["event"], "skipped");
+    assert_eq!(log[0]["taskId"], review.id.as_str());
+    assert_eq!(
+        log[0]["firedAt"],
+        task.last_fired_at.clone().unwrap().as_str()
+    );
+    // Not in 已完成: it did nothing by itself. In 例行, by its label.
+    let todo = assistant_todo(&galley, &RunnerManager::new(), Utc::now())
+        .await
+        .expect("todo");
+    assert!(todo.done.iter().all(|item| item.id != review.id.as_str()));
+    let row = todo
+        .routine
+        .iter()
+        .find(|item| item.id == review.id.as_str())
+        .expect("in routine");
+    assert_eq!(row.agent.as_deref(), Some(REVIEW_SUPERVISOR));
+    assert!(!todo.anything_in_hand());
+}
+
+#[tokio::test]
+async fn with_something_in_hand_the_review_wakes_the_main_chat() {
+    let (pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let reports = SubtaskReports::new();
+    let review = ensure_review(&galley, rec.as_ref()).await.expect("made");
+    // A to-do of the user's with no date, as ticket 73 notes them.
+    galley
+        .create_todo(
+            galley_core_lib::api::CreateTodoInput {
+                title: "查清阿里云费用暴涨的原因".into(),
+                notes: None,
+                due: None,
+                remind_at: None,
+            },
+            assistant(),
+            None,
+        )
+        .await
+        .expect("to-do");
+    assert_eq!(
+        fire_review_now(&galley, rec.as_ref(), review.id.as_str()).await,
+        ReviewFire::Woke
+    );
+    assert_eq!(
+        wake_state(&galley, review.id.as_str()).await,
+        Some(ScheduledWake::Pending)
+    );
+    assert_eq!(
+        restore_pending_reminders(&reports, &galley)
+            .await
+            .as_deref(),
+        Some(MAIN)
+    );
+    let host = host(&galley, &runner, &env, rec.clone());
+    let Some(WakeOutcome::Delivered { message, .. }) = wake_if_due(&reports, &host, MAIN).await
+    else {
+        panic!("not delivered");
+    };
+    let sent = runner.user_messages(MAIN);
+    assert_eq!(sent.len(), 1);
+    assert!(sent[0]
+        .starts_with("[Galley — not a message from the user] It is time for the morning review."));
+    assert!(sent[0].contains(&format!(
+        "The morning review `{}` (every day at 09:00) came due.",
+        review.id
+    )));
+    assert!(sent[0].contains("Read \"The morning review\" in `wake.md` in your"));
+    assert!(sent[0].contains("start at most two subtasks in all."));
+    let note: Option<String> = sqlx::query_scalar("SELECT origin_note FROM messages WHERE id = ?")
+        .bind(&message.id.0)
+        .fetch_one(&pool)
+        .await
+        .expect("row");
+    assert_eq!(note.as_deref(), Some(review.id.as_str()));
+    runner.run_ended(MAIN, "CURRENT_TASK_DONE", false);
+    record_wake_run_end(&reports, &galley, &runner, rec.as_ref(), &complete(MAIN)).await;
+    assert_eq!(
+        wake_state(&galley, review.id.as_str()).await,
+        Some(ScheduledWake::Delivered)
+    );
+    let log = review_log(&galley).await;
+    assert_eq!(log.len(), 1);
+    assert_eq!(log[0]["event"], "woke");
+    // A fire that woke it stays out of 已完成 too; 例行 lists it.
+    let todo = assistant_todo(&galley, &RunnerManager::new(), Utc::now())
+        .await
+        .expect("todo");
+    assert!(todo.done.iter().all(|item| item.id != review.id.as_str()));
+    assert!(todo
+        .routine
+        .iter()
+        .any(|item| item.id == review.id.as_str()
+            && item.agent.as_deref() == Some(REVIEW_SUPERVISOR)));
+
+    // A one-off reminder to come is in hand too.
+    let (_pool, galley) = with_main_chat().await;
+    let rec = Recorder::default();
+    let review = ensure_review(&galley, &rec).await.expect("made");
+    reminder(&galley, "sched_water", "提醒用户喝水").await;
+    assert_eq!(
+        fire_review_now(&galley, &rec, review.id.as_str()).await,
+        ReviewFire::Woke
+    );
+}
+
+#[tokio::test]
+async fn a_review_that_cannot_be_delivered_is_dropped_without_a_notification() {
+    let (_pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let reports = SubtaskReports::new();
+    let review = ensure_review(&galley, rec.as_ref()).await.expect("made");
+    reminder(&galley, "sched_later", "回头查物流").await;
+    // The main chat waits for the user's answer.
+    runner.edit_gate(MAIN, |g| g.ask_pending = true);
+    assert_eq!(
+        fire_review_now(&galley, rec.as_ref(), review.id.as_str()).await,
+        ReviewFire::Woke
+    );
+    restore_pending_reminders(&reports, &galley).await;
+    let first = host(&galley, &runner, &env, rec.clone());
+    assert!(take_due(&reports, &first, MAIN).await.is_none());
+    assert!(runner.user_messages(MAIN).is_empty(), "not sent");
+    // No notification with its words: they are for the model.
+    assert!(rec.named(SCHEDULED_REMINDER_UNDELIVERED_EVENT).is_empty());
+    // Consumed, not retried, now or after a restart.
+    assert_eq!(wake_state(&galley, review.id.as_str()).await, None);
+    runner.edit_gate(MAIN, |g| g.ask_pending = false);
+    assert!(wake_if_due(&reports, &first, MAIN).await.is_none());
+    assert!(restore_pending_reminders(&SubtaskReports::new(), &galley)
+        .await
+        .is_none());
+    let log = review_log(&galley).await;
+    let events: Vec<&str> = log.iter().map(|e| e["event"].as_str().unwrap()).collect();
+    assert_eq!(events, ["woke", "dropped"]);
+    assert_eq!(log[1]["reason"], "asking");
+
+    // A runner that does not start: dropped the same way.
+    let (_pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let rec = Arc::new(Recorder::default());
+    let reports = SubtaskReports::new();
+    let review = ensure_review(&galley, rec.as_ref()).await.expect("made");
+    reminder(&galley, "sched_later", "回头查物流").await;
+    runner.fail_spawn.store(true, Ordering::SeqCst);
+    fire_review_now(&galley, rec.as_ref(), review.id.as_str()).await;
+    restore_pending_reminders(&reports, &galley).await;
+    let host = host(&galley, &runner, &env, rec.clone());
+    assert!(matches!(
+        wake_if_due(&reports, &host, MAIN).await,
+        Some(WakeOutcome::Failed(_))
+    ));
+    assert!(rec.named(SCHEDULED_REMINDER_UNDELIVERED_EVENT).is_empty());
+    assert_eq!(wake_state(&galley, review.id.as_str()).await, None);
+    let log = review_log(&galley).await;
+    assert_eq!(log[1]["event"], "dropped");
+    assert_eq!(log[1]["reason"], "not_started");
+}
+
+#[tokio::test]
+async fn a_review_whose_turn_ends_on_an_error_is_dropped_and_waits_under_the_external_runtime() {
+    // The turn it woke ends on an error, before a reply.
+    let (_pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let reports = SubtaskReports::new();
+    let review = ensure_review(&galley, rec.as_ref()).await.expect("made");
+    reminder(&galley, "sched_later", "回头查物流").await;
+    fire_review_now(&galley, rec.as_ref(), review.id.as_str()).await;
+    restore_pending_reminders(&reports, &galley).await;
+    let h = host(&galley, &runner, &env, rec.clone());
+    assert!(matches!(
+        wake_if_due(&reports, &h, MAIN).await,
+        Some(WakeOutcome::Delivered { .. })
+    ));
+    runner.run_ended(MAIN, "DONE_WITHOUT_EXIT", false);
+    record_wake_run_end(&reports, &galley, &runner, rec.as_ref(), &complete(MAIN)).await;
+    assert!(rec.named(SCHEDULED_REMINDER_UNDELIVERED_EVENT).is_empty());
+    assert_eq!(wake_state(&galley, review.id.as_str()).await, None);
+    let log = review_log(&galley).await;
+    assert_eq!(log[1]["event"], "dropped");
+    assert_eq!(log[1]["reason"], "no_reply");
+
+    // Under the external runtime (no main chat to wake): a pending fire
+    // waits, as a reminder's does, and nothing is said or notified.
+    let (_pool, galley) = with_main_chat().await;
+    let rec = Arc::new(Recorder::default());
+    let review = ensure_review(&galley, rec.as_ref()).await.expect("made");
+    reminder(&galley, "sched_later", "回头查物流").await;
+    fire_review_now(&galley, rec.as_ref(), review.id.as_str()).await;
+    galley
+        .set_pref_json("active_runtime_kind", json!("external"))
+        .await
+        .expect("external");
+    assert!(galley
+        .ensure_assistant_available("scheduler")
+        .await
+        .is_err());
+    let reports = SubtaskReports::new();
+    assert!(restore_pending_reminders(&reports, &galley).await.is_none());
+    assert!(reports.waiting(MAIN).is_empty());
+    assert!(rec.named(SCHEDULED_REMINDER_UNDELIVERED_EVENT).is_empty());
+    assert_eq!(
+        wake_state(&galley, review.id.as_str()).await,
+        Some(ScheduledWake::Pending)
+    );
 }

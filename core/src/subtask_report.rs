@@ -78,6 +78,12 @@
 //!   ends, like a subtask, while the managed runtime has a main chat and
 //!   nobody wrote in that session from an app (main chat PRD ruling 80).
 //!   It stays an ordinary session in the sidebar.
+//! - The **morning review** (main chat ticket 73,
+//!   `crate::scheduler::fire_review`) travels as a due task, with words of
+//!   its own ([`DueReminder::review`]): what it is, the part of the manual
+//!   to read, at most two subtasks, silent unless something got done.
+//!   Not delivered, it is dropped with no notification
+//!   (`drop_review_wake`): its words are for the model, not the user.
 
 use crate::api::schedule::{
     ReminderUndeliveredReason, ScheduledReminderUndelivered, ScheduledTaskBrief,
@@ -129,6 +135,8 @@ const OPENING_REMINDER: &str = "[Galley — not a message from the user] A remin
 const OPENING_SCHEDULED: &str = "[Galley — not a message from the user] A scheduled task ran. Act on it, then reply to the user. Do not mention this note.";
 
 const OPENING_MIXED: &str = "[Galley — not a message from the user] Things you are looking after have updates. Act on them, then reply to the user. Do not mention this note.";
+
+const OPENING_REVIEW: &str = "[Galley — not a message from the user] It is time for the morning review. Act on it as below. Do not mention this note.";
 
 /// From this much lateness on, a reminder's report says how late it is
 /// and asks the assistant to say so (the computer slept, Galley was
@@ -184,6 +192,10 @@ pub struct DueReminder {
     /// The user's to-do it reminds of, when it is one's reminder (ticket
     /// 39): the wake then says it is the user's own thing to do.
     pub todo: Option<DueTodo>,
+    /// The morning review (ticket 73,
+    /// [`ScheduledTaskBrief::is_review`]): words of its own, and dropped
+    /// silently when it cannot be delivered.
+    pub review: bool,
 }
 
 /// The to-do a reminder is on, as its wake tells it (ticket 39). Read when
@@ -237,6 +249,7 @@ impl DueReminder {
             due_at,
             fired_at,
             todo: None,
+            review: task.is_review(),
         })
     }
 }
@@ -385,7 +398,9 @@ pub fn report_text(reports: &[SubtaskReport]) -> String {
 /// general.
 fn opening(reports: &[SubtaskReport]) -> &'static str {
     let kind = |r: &SubtaskReport| {
-        if r.due().is_some() {
+        if r.due().is_some_and(|due| due.review) {
+            OPENING_REVIEW
+        } else if r.due().is_some() {
             OPENING_REMINDER
         } else if r.is_scheduled_session() {
             OPENING_SCHEDULED
@@ -404,6 +419,9 @@ fn opening(reports: &[SubtaskReport]) -> &'static str {
 
 fn due_paragraph(due: &DueReminder) -> String {
     let id = &due.task_id;
+    if due.review {
+        return review_paragraph(due);
+    }
     if let Some(todo) = &due.todo {
         return todo_due_paragraph(due, todo);
     }
@@ -430,6 +448,36 @@ fn due_paragraph(due: &DueReminder) -> String {
          words read back), look something up first, or start a subtask. If it no longer \
          applies (the user already did it), {NO_REPLY_END}.",
         due.prompt.trim()
+    )
+}
+
+/// The morning review came due (ticket 73, assistant PRD ruling 10). No
+/// words of the model's own to act on, as Galley made the task: the note
+/// says what it is, sends the model to the part of the manual that says
+/// what to do (`wake.md`), and carries the two rules it acts on at once,
+/// the limit on subtasks and when to stay silent. Late is not for the
+/// user, who was promised nothing at 9:00: the times are there, with no
+/// "say it comes late".
+fn review_paragraph(due: &DueReminder) -> String {
+    let id = &due.task_id;
+    let when = match &due.late {
+        None => format!("Planned for {}, local time.", due.due_local),
+        Some(late) => format!(
+            "Planned for {}, local time; it went off at {}, {late} late (the computer was \
+             asleep or Galley was closed), which you need not mention.",
+            due.due_local, due.fired_local
+        ),
+    };
+    format!(
+        "The morning review `{id}` ({}) came due. {when} Galley made this task, not you: once \
+         a day, go over what is in hand. Read \"The morning review\" in `wake.md` in your \
+         manual and do as it says: read `todo list`, `schedule list` and your running subtasks, \
+         move forward what you can without being asked, and start at most two subtasks in all. \
+         Speak only when you got something done for the user, in one message that says it \
+         comes from going over what is in hand this morning. If you only started subtasks, \
+         write nothing else for the user and {NO_REPLY_END}; if you did nothing, your whole \
+         reply is exactly <no-reply/>.",
+        due.rule
     )
 }
 
@@ -673,6 +721,13 @@ pub fn replay_lines(reports: &[SubtaskReport]) -> String {
             let title = &report.title;
             if let Some(due) = report.due() {
                 let id = &due.task_id;
+                if due.review {
+                    return format!(
+                        "[Galley: the morning review {id} came due ({}) — details: schedule \
+                         show {id}]",
+                        due.due_local
+                    );
+                }
                 let on = due
                     .todo
                     .as_ref()
@@ -1557,6 +1612,10 @@ pub async fn return_due_tasks(
         let Some(due) = report.due() else {
             continue;
         };
+        if due.review {
+            drop_review_wake(galley, report, due, reason).await;
+            continue;
+        }
         match galley
             .settle_scheduled_wake(&due.task_id, &due.fired_at, ScheduledWake::Notified)
             .await
@@ -1584,6 +1643,47 @@ pub async fn return_due_tasks(
         }
     }
     notify(notifier, SCHEDULED_TASKS_CHANGED_EVENT, &());
+}
+
+/// A wake of the morning review that could not reach the main chat
+/// (ticket 73): dropped, with no notification — its words are for the
+/// model, and a system notification would show them to the user. The
+/// fire stays consumed (it does not come due again today) and its log
+/// says why. A fire no longer pending says nothing.
+async fn drop_review_wake(
+    galley: &SqliteGalley,
+    report: &SubtaskReport,
+    due: &DueReminder,
+    reason: ReminderUndeliveredReason,
+) {
+    match galley
+        .drop_scheduled_wake(&due.task_id, &due.fired_at)
+        .await
+    {
+        Ok(true) => {
+            eprintln!(
+                "[subtask-report {}] morning review {} not delivered ({reason:?}), dropped",
+                report.main_chat_id, due.task_id
+            );
+            let why = serde_json::to_value(reason)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_string));
+            crate::scheduler::log_review(
+                galley,
+                crate::scheduler::ReviewEvent::Dropped,
+                &due.task_id,
+                &due.fired_at,
+                Some(&due.due_at),
+                why.as_deref(),
+            )
+            .await;
+        }
+        Ok(false) => {}
+        Err(e) => eprintln!(
+            "[subtask-report {}] dropping review {} failed: {e}",
+            report.main_chat_id, due.task_id
+        ),
+    }
 }
 
 /// The drain task's hook for a run signal of the main chat, before the
@@ -1725,6 +1825,7 @@ mod tests {
 
     fn due(once: bool, late: Option<&str>) -> DueReminder {
         DueReminder {
+            review: false,
             task_id: "sched_a".into(),
             prompt: "提醒他喝水".into(),
             once,
@@ -1799,6 +1900,54 @@ mod tests {
             "[Galley: subtask s-1 has an update — details: session show s-1]\n\
              [Galley: scheduled task sched_a came due — details: schedule show sched_a]"
         );
+    }
+
+    /// Ticket 73: the morning review opens as itself, names the part of
+    /// the manual and the two rules it acts on at once, carries no words of
+    /// the model's own (Galley made it), and asks nothing about lateness;
+    /// its replay line says what it was. With other updates it opens in
+    /// general, as any mix does.
+    #[test]
+    fn the_morning_review_says_what_it_is_and_what_to_do() {
+        let mut review = due(false, None);
+        review.review = true;
+        review.prompt = "Morning review: …".into();
+        let text = report_text(&[due_report(review.clone())]);
+        assert!(text.starts_with(
+            "[Galley — not a message from the user] It is time for the morning review. Act on \
+             it as below. Do not mention this note."
+        ));
+        assert!(text.contains(
+            "The morning review `sched_a` (every day at 09:00) came due. Planned for 2026-10-20 \
+             20:00 (Tue), local time. Galley made this task, not you: once a day, go over what \
+             is in hand. Read \"The morning review\" in `wake.md` in your manual and do as it \
+             says:"
+        ));
+        assert!(text.contains("and start at most two subtasks in all."));
+        assert!(text.contains(
+            "Speak only when you got something done for the user, in one message that says it \
+             comes from going over what is in hand this morning. If you only started subtasks, \
+             write nothing else for the user and end your reply with exactly <no-reply/>; if you \
+             did nothing, your whole reply is exactly <no-reply/>."
+        ));
+        assert!(!text.contains("What you noted"));
+        assert!(!text.contains("Morning review: …"));
+        let mut late = review.clone();
+        late.late = Some("2 hours".into());
+        let late_text = report_text(&[due_report(late)]);
+        assert!(late_text.contains(
+            "2 hours late (the computer was asleep or Galley was closed), which you need not \
+             mention."
+        ));
+        assert!(!late_text.contains("say in the reply itself"));
+        assert_eq!(
+            replay_lines(&[due_report(review.clone())]),
+            "[Galley: the morning review sched_a came due (2026-10-20 20:00 (Tue)) — details: \
+             schedule show sched_a]"
+        );
+        let mixed = report_text(&[report(Some("s-1"), 0, done("x")), due_report(review)]);
+        assert!(mixed.starts_with(OPENING_MIXED));
+        assert!(mixed.ends_with(CLOSING_MANY));
     }
 
     /// Ticket 39: a reminder on one of the user's to-dos says which to-do,
