@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentTurn, Turn } from "@/types/conversation";
 
 import {
+  fileCardClick,
   fileCardRuns,
   fileFolder,
   fileGlyph,
@@ -159,6 +160,29 @@ describe("fileCardRuns", () => {
       { kind: "file", path: "/c.pdf" },
       { kind: "images", paths: ["/d.webp"] },
     ]);
+  });
+});
+
+describe("fileCardClick (where a click on a card goes)", () => {
+  it("opens documents in the default application, HTML included; the rest where a reference goes", () => {
+    expect(fileCardClick("/a/report.pdf", undefined)).toBe("open");
+    expect(fileCardClick("/a/plan.html", undefined)).toBe("open");
+    expect(fileCardClick("/a/deck.PPTX", undefined)).toBe("open");
+    expect(fileCardClick("/a/notes.md", undefined)).toBe("panel");
+    expect(fileCardClick("/a/banner.png", undefined)).toBe("panel");
+    expect(fileCardClick("/a/data.csv", undefined)).toBe("panel");
+    expect(fileCardClick("/a/bundle.zip", undefined)).toBe("panel");
+    expect(fileCardClick("/a/old.doc", undefined)).toBe("panel");
+  });
+
+  it("takes a folder Core named for a folder, whatever its name", () => {
+    expect(
+      fileCardClick("/a/site.html", {
+        state: "present",
+        kind: "directory",
+        path: "/a/site.html",
+      }),
+    ).toBe("panel");
   });
 });
 

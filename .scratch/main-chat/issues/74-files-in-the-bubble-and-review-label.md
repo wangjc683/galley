@@ -84,3 +84,13 @@ JC 读的那篇 Today AI 使用体验里，助理交出的 HTML 计划、飞书�
 - 主会话看截图后改（票面原写法的问题）：名字里写时间、第二行例行规则又写一遍，时间重复、格式也不一致（「每天 9:00 过一遍在办的事 / 每天 09:00 · 下次 明天 09:00」）。改成名字不带时间：zh「过一遍在办的事」，en「Go over what’s in hand」；时间只在第二行，照旧 `routineRowLine`，跟着任务实际的 `time_of_day` 变。
 - `todo.dailyReview` 改成不带参数的字符串；`DAILY_REVIEW_SEED_TIME` 与去前导零的逻辑删掉；测试与 locale 注释跟着改。
 - 上面回报里「巡看在『已完成』里出一行、写『已提醒』」那条，主会话已让票 73 在 Core 的读取里排除，GUI 不改。
+
+### 2026-10-21 补改：文档用默认应用打开（JC：「按建议推进，并进 73」）
+
+- **分工**：Core 那一半在票 73（`core/src/local_file.rs` 的 `is_openable` 加 `pdf`、`docx`、`xlsx`、`pptx`、`pages`、`numbers`、`html`、`htm`；不放 `doc`、`xls`、`ppt`、`docm`、`xlsm`、`pptm`、`key`）。两票一起合：票 73 合入前，GUI 对 pdf 等发 `open` 会被 Core 拒，弹「无法预览或打开此路径」，正常。
+- **白名单镜像**：`gui/src/lib/local-file-path.ts` 新常量 `OPENABLE_DOCUMENT_EXTENSIONS`，与上面一字不差，`isOpenableWithDefaultApp` 带上它；注释写明镜像 Core `is_openable` 的文档清单。Core 那边还没有这个常量，建议票 73 用同名常量，两边一眼对得上。
+- **文件卡片**（`fileCardClick`，`gui/src/lib/file-cards.ts`）：这组文档（含 HTML，交出的成品要看渲染效果）→ `fileOperation(…, "open")` 用默认应用打开；Markdown、文本 → 阅读面板；图片照旧缩略图、看图；其余（zip 等）→ 照旧在文件夹中显示。Core 回答是文件夹的，不论叫什么都照文件夹走，不发 `open`。
+- **正文里的文件链接**（`referenceClick`，`LocalFileReference`）：能预览的照旧进阅读面板，HTML 照旧看源码；不能预览、在白名单里的（pdf、docx 等）改为用默认应用打开；其余照旧交给阅读面板的判断（在文件夹中显示，或 Core 嗅出是文本）。跟着同一判断改的两处：这类链接的悬停提示由「在文件夹中显示」改为「用默认应用打开」，链接旁补上文件夹按钮（原来点链接就是在文件夹中显示，改成打开后不补这颗按钮，就没处去文件夹了；同可预览文件的样子）。工作台里写入步骤那颗打开按钮没动，仍走阅读面板的判断。
+- **阅读面板**：所有预览共用一个顶栏（`LocalFileWorkspace.tsx` 的 `markdownHeader`），「更多」里的「用默认应用打开」看 `isOpenableWithDefaultApp`，HTML 预览自动出现；PDF 不进阅读面板，不涉及。
+- 上面第一份回报「与票面不一致」第 1 条（不能预览的用系统默认程序打开做不到）由本节取代。
+- **风险**：`.pages`、`.numbers` 若是包格式（其实是文件夹），Core 的 `open` 要求是普通文件，会拒；卡片这边 Core 答 directory 就走文件夹路线，正文链接仍会发 `open` 并弹错。没在真机验证。

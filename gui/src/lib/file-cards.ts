@@ -1,4 +1,8 @@
-import { fileName, previewKindByPath } from "@/lib/local-file-path";
+import {
+  fileName,
+  isOpenableDocument,
+  previewKindByPath,
+} from "@/lib/local-file-path";
 import { accessLocalFile, type LocalFileResult } from "@/lib/local-files";
 import type { Turn } from "@/types/conversation";
 
@@ -98,6 +102,25 @@ export function thumbnailPath(
     return presence.kind === "image" ? presence.path : null;
   }
   return /^~[\\/]/.test(path) ? null : path;
+}
+
+/**
+ * Where a click on a file card goes (ticket 74; a thumbnail opens the
+ * image viewer instead): a document the default application opens —
+ * pdf, docx, xlsx, pptx, pages, numbers, and HTML, a delivered page to
+ * be seen rendered — opens there (`open`); everything else goes where a
+ * file reference in the text goes (`panel`: the reading panel for
+ * Markdown, images and text, the folder for the rest). A folder Core
+ * named, whatever its name, is a folder.
+ */
+export function fileCardClick(
+  path: string,
+  presence: FilePresence | undefined,
+): "open" | "panel" {
+  if (presence?.state === "present" && presence.kind === "directory") {
+    return "panel";
+  }
+  return isOpenableDocument(path) ? "open" : "panel";
 }
 
 /** A reply's cards in marker order, images side by side: a run of

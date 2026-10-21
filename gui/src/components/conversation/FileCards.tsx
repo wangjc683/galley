@@ -30,6 +30,7 @@ import { IconButton } from "@/components/ui/button";
 import { FolderPathText } from "@/components/ui/folder-path";
 import { useFilePresences } from "@/hooks/useFilePresence";
 import {
+  fileCardClick,
   fileCardRuns,
   fileFolder,
   fileGlyph,
@@ -57,10 +58,12 @@ import { cn } from "@/lib/utils";
  * `rounded-md`, the page ground, one 40px line, no shadow, no lift): the
  * file's glyph, its name cut in the middle so the extension stays, and
  * its folder with the home part as `~`. Never the whole path. A click
- * goes where a file reference in the text goes (LocalFileWorkspace's
- * `activate`): what the reading panel previews (text, Markdown, HTML
- * source, images) opens there, anything else shows in its folder. On
- * hover, and on a right-click with 复制路径, 「在文件夹中显示」.
+ * opens a document in its default application (pdf, docx, xlsx, pptx,
+ * pages, numbers, and HTML: a delivered page is seen rendered, not as
+ * source; `fileCardClick`); anything else goes where a file reference in
+ * the text goes (LocalFileWorkspace's `activate`): Markdown, images and
+ * text into the reading panel, the rest shown in its folder. On hover,
+ * and on a right-click with 复制路径, 「在文件夹中显示」.
  *
  * A png / jpg / jpeg / gif / webp draws as the user's own image
  * attachment does: a 96px thumbnail through the asset protocol, opening
@@ -102,7 +105,9 @@ export function FileCards({ paths }: { paths: readonly string[] }) {
   const open = async (path: string, source: HTMLElement) => {
     const answer = await recheck(path);
     if (answer.state === "missing") return;
-    if (activate) activate(path, source);
+    if (fileCardClick(path, answer) === "open") {
+      void fileOperation(path, "open", copy);
+    } else if (activate) activate(path, source);
     else void fileOperation(path, "reveal", copy);
   };
   const openThumbnail = async (path: string) => {

@@ -8,6 +8,7 @@ import {
   documentReference,
   localFilePath,
   previewKindByPath,
+  referenceClick,
 } from "@/lib/local-file-path";
 import {
   DocumentPathContext,
@@ -29,7 +30,11 @@ export function LocalFileReference({
   if (!activate) return <>{children}</>;
   // Judged by name for the affordance only; the click asks Core, which
   // may still reveal (binary) or promote an extension-less file to text.
+  // A document the panel cannot show but its default application may
+  // (pdf, docx, …; ticket 74) opens there, and keeps the folder button
+  // beside it, as a previewable one does.
   const kind = previewKindByPath(path);
+  const click = referenceClick(path);
   const tooltip =
     kind === "markdown"
       ? copy.localFiles.preview
@@ -37,7 +42,9 @@ export function LocalFileReference({
         ? copy.localFiles.previewImage
         : kind === "text"
           ? copy.localFiles.previewText
-          : copy.localFiles.locate;
+          : click === "open"
+            ? copy.localFiles.openDefault
+            : copy.localFiles.locate;
   return (
     <InsideLinkContext.Provider value={true}>
       <ContextMenu.Root>
@@ -50,7 +57,11 @@ export function LocalFileReference({
               <button
                 type="button"
                 className="file-path-button break-words rounded-[4px] text-left text-brand-strong underline decoration-brand-strong/35 underline-offset-2 focus-visible:outline focus-visible:outline-2"
-                onClick={(event) => activate(path, event.currentTarget)}
+                onClick={(event) =>
+                  click === "open"
+                    ? void fileOperation(path, "open", copy)
+                    : activate(path, event.currentTarget)
+                }
               >
                 {children}
               </button>
@@ -58,7 +69,7 @@ export function LocalFileReference({
             {/* Sized to the line, not the toolbar: a 24px control inside
                 a 15px prose line pushed the leading; 20px with the glyph
                 on the text baseline sits inside it. */}
-            {kind !== null && (
+            {click !== "locate" && (
               <IconButton
                 ariaLabel={copy.localFiles.locate}
                 size="xs"

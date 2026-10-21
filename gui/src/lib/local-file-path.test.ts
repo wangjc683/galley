@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   documentReference,
   isDelimitedPath,
+  isOpenableDocument,
   isOpenableWithDefaultApp,
   localFilePath,
   previewKindByPath,
+  referenceClick,
 } from "./local-file-path";
 
 describe("preview kind by name", () => {
@@ -29,6 +31,43 @@ describe("preview kind by name", () => {
       expect(isOpenableWithDefaultApp(path), path).toBe(true);
     for (const path of ["/tmp/run.sh", "/tmp/tool.py", "/tmp/job.bat", "/tmp/task.ps1", "/tmp/Makefile"])
       expect(isOpenableWithDefaultApp(path), path).toBe(false);
+  });
+  it("opens the same documents Core does, letter for letter (tickets 73, 74)", () => {
+    // Core's is_openable document list (core/src/local_file.rs).
+    for (const ext of [
+      "pdf",
+      "docx",
+      "xlsx",
+      "pptx",
+      "pages",
+      "numbers",
+      "html",
+      "htm",
+    ]) {
+      expect(isOpenableWithDefaultApp(`/tmp/a.${ext}`), ext).toBe(true);
+      expect(isOpenableDocument(`/tmp/a.${ext.toUpperCase()}`), ext).toBe(true);
+    }
+    // Left out on purpose: legacy and macro-enabled Office, Keynote.
+    for (const ext of ["doc", "xls", "ppt", "docm", "xlsm", "pptm", "key"]) {
+      expect(isOpenableWithDefaultApp(`/tmp/a.${ext}`), ext).toBe(false);
+      expect(isOpenableDocument(`/tmp/a.${ext}`), ext).toBe(false);
+    }
+    // Markdown, images and text open in the default app but are not
+    // the documents a card hands to it.
+    for (const path of ["/tmp/a.md", "/tmp/a.png", "/tmp/a.txt"])
+      expect(isOpenableDocument(path), path).toBe(false);
+  });
+  it("routes a click on a reference in the text: the panel, the default app, or the panel's judgment", () => {
+    expect(referenceClick("/tmp/a.md")).toBe("preview");
+    expect(referenceClick("/tmp/a.png")).toBe("preview");
+    // HTML stays source in the reading panel (the workbench writes code).
+    expect(referenceClick("/tmp/page.html")).toBe("preview");
+    expect(referenceClick("/tmp/report.pdf")).toBe("open");
+    expect(referenceClick("/tmp/deck.pptx")).toBe("open");
+    expect(referenceClick("/tmp/archive.zip")).toBe("locate");
+    expect(referenceClick("/tmp/old.doc")).toBe("locate");
+    // Core may still sniff an extension-less file as text.
+    expect(referenceClick("/tmp/blob")).toBe("locate");
   });
   it("knows which data files may render as a table", () => {
     expect(isDelimitedPath("/tmp/a.csv")).toBe(",");

@@ -35,9 +35,16 @@ describe("Markdown file references", () => {
       expect(html, path).toContain("在文件夹中显示");
       expect(html.match(/<button /g), path).toHaveLength(2); // primary + folder
     }
-    const opaque = render("`/tmp/deck.pptx`");
+    const opaque = render("`/tmp/archive.zip`");
     expect(opaque).not.toContain("在文件夹中显示");
     expect(opaque.match(/<button /g)).toHaveLength(1); // the link itself reveals
+    // A document the default application opens (ticket 74): the link
+    // opens it there, and the folder button stays beside it.
+    for (const path of ["/tmp/deck.pptx", "/tmp/report.pdf"]) {
+      const html = render(`\`${path}\``);
+      expect(html, path).toContain("在文件夹中显示");
+      expect(html.match(/<button /g), path).toHaveLength(2); // open + folder
+    }
   });
   it("does not nest path buttons inside links with code labels", () => {
     const html = render("[`/tmp/report.md`](/tmp/report.md)");

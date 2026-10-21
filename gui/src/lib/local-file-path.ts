@@ -74,6 +74,15 @@ const OPENABLE_TEXT_EXTENSIONS = new Set([
   "txt", "log", "csv", "tsv", "json", "jsonl", "ndjson", "yaml", "yml",
   "toml", "xml", "ini", "cfg", "conf", "rst", "tex", "srt", "vtt",
 ]);
+/** Documents the default application opens and only displays (main chat
+ * tickets 73, 74): the mirror of the document list Core's `is_openable`
+ * lets through in core/src/local_file.rs (ticket 73's
+ * `OPENABLE_DOCUMENT_EXTENSIONS`), letter for letter. The legacy and
+ * macro-enabled Office formats (doc, xls, ppt, docm, xlsm, pptm) and
+ * Keynote are left out there on purpose, so here too. */
+const OPENABLE_DOCUMENT_EXTENSIONS = new Set([
+  "pdf", "docx", "xlsx", "pptx", "pages", "numbers", "html", "htm",
+]);
 
 function extensionOf(path: string): string {
   const name = fileName(path);
@@ -100,8 +109,29 @@ export function isOpenableWithDefaultApp(path: string): boolean {
   return (
     isMarkdownPath(path) ||
     IMAGE_EXTENSIONS.has(extension) ||
-    OPENABLE_TEXT_EXTENSIONS.has(extension)
+    OPENABLE_TEXT_EXTENSIONS.has(extension) ||
+    OPENABLE_DOCUMENT_EXTENSIONS.has(extension)
   );
+}
+
+/** One of the documents above (pdf, docx, html, …): what a file card the
+ * assistant handed over opens in its default application, HTML included
+ * — a delivered page is seen rendered, not as source (ticket 74). */
+export function isOpenableDocument(path: string): boolean {
+  return OPENABLE_DOCUMENT_EXTENSIONS.has(extensionOf(path));
+}
+
+/**
+ * What a click on a file reference in the text does, by name (ticket
+ * 74): what the reading panel shows opens there, HTML as source too
+ * (the workbench's references are mostly code); a document it cannot
+ * show but the default application may open (pdf, docx, …) opens
+ * there; anything else is left to the reading panel's own judgment,
+ * which reveals it in its folder unless Core sniffs it as text.
+ */
+export function referenceClick(path: string): "preview" | "open" | "locate" {
+  if (previewKindByPath(path) !== null) return "preview";
+  return isOpenableWithDefaultApp(path) ? "open" : "locate";
 }
 
 /** Data files render as a table when they parse cleanly. */
