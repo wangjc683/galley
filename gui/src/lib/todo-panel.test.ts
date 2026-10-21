@@ -353,28 +353,23 @@ describe("the daily review's name (ticket 74)", () => {
     createdIn: undefined,
   });
 
-  it("shows a name of its own, never its prompt", () => {
-    expect(todoRowText(review, zh)).toBe("每天 9:00 过一遍在办的事");
-    expect(todoRowText(review, en)).toBe(
-      "Go over what’s in hand, daily at 9:00",
-    );
+  it("shows a name of its own, never its prompt, and no time in it", () => {
+    expect(todoRowText(review, zh)).toBe("过一遍在办的事");
+    expect(todoRowText(review, en)).toBe("Go over what’s in hand");
   });
 
-  it("follows the task's own time; the rule and next time stay on the second line", () => {
+  it("says the time once, on the second line, following the task's own time", () => {
     const moved = {
       ...review,
       timeOfDay: "07:30",
       at: local(2026, 10, 17, 7, 30),
     };
-    expect(todoRowText(moved, zh)).toBe("每天 7:30 过一遍在办的事");
+    expect(todoRowText(moved, zh)).toBe("过一遍在办的事");
     expect(routineRowLine(moved, TODAY, "zh-CN", zh)).toBe(
       "每天 07:30 · 下次 明天 07:30",
     );
-    expect(todoRowText({ ...review, timeOfDay: "21:00" }, en)).toBe(
-      "Go over what’s in hand, daily at 21:00",
-    );
     const paused = { ...review, state: "paused" as const, at: undefined };
-    expect(todoRowText(paused, zh)).toBe("每天 9:00 过一遍在办的事");
+    expect(todoRowText(paused, zh)).toBe("过一遍在办的事");
     expect(routineRowLine(paused, TODAY, "zh-CN", zh)).toBe(
       "每天 09:00 · 已暂停",
     );

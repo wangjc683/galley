@@ -322,8 +322,10 @@ describe("the panel's rows", () => {
       return routine.slice(start, next === -1 ? undefined : next);
     };
     const named = row("sched_review");
-    expect(named).toContain(">每天 7:30 过一遍在办的事<");
-    expect(named).toContain("每天 07:30 · 下次 明天 07:30");
+    // The name has no time; the time is said once, on the second line.
+    expect(named).toContain(">过一遍在办的事<");
+    expect(named).toContain(">每天 07:30 · 下次 明天 07:30<");
+    expect(named).not.toContain("7:30 过一遍");
     expect(html).not.toContain(prompt);
     // Same glyph, same title ink, same hover action as the other routine.
     const glyph = (r: string) => r.slice(0, r.indexOf("</svg>"));
@@ -338,16 +340,10 @@ describe("the panel's rows", () => {
     });
     expect(off).toContain("每天 07:30 · 已暂停");
     expect(off).toContain("text-ink-soft");
-    // In English, and once it has gone over the day (已完成) too.
-    const en = panel(
-      {
-        ...FULL,
-        routine: [review],
-        done: [{ ...review, state: "fired", at: inDays(0, 7) }],
-      },
-      { language: "en-US", doneOpen: true },
-    );
-    expect(count(en, ">Go over what’s in hand, daily at 7:30<")).toBe(2);
+    // In English.
+    const en = panel({ ...FULL, routine: [review] }, { language: "en-US" });
+    expect(count(en, ">Go over what’s in hand<")).toBe(1);
+    expect(en).toContain(">Daily 07:30 · Next Tomorrow 7:30 AM<");
     expect(en).not.toContain(prompt);
   });
 

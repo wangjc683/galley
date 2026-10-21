@@ -251,24 +251,17 @@ export function assistantRowLine(
   return { text: `${when} · ${state}`, tone };
 }
 
-/** The daily review's time when its row has none: the seed's (ticket
- * 73). */
-const DAILY_REVIEW_SEED_TIME = "09:00";
-
 /**
  * What a row is called (its title, and what 「说说这件」 quotes): the
  * words it carries, 「子任务」 for a subtask without a title, and for the
  * daily review a name of its own (main chat ticket 74) — its `prompt` is
- * English for the model, never shown. The name's time is the task's
- * own `timeOfDay` without the hour's leading zero (「每天 9:00 过一遍在办的
- * 事」), so it follows when the user has it moved; the rule and the next
- * time stay on the second line, as every routine's (`routineRowLine`).
+ * English for the model, never shown. The name carries no time: the
+ * rule and the next time are the second line's, as every routine's
+ * (`routineRowLine`), so the time is said once and follows the task's
+ * own `timeOfDay` when the user has it moved.
  */
 export function todoRowText(item: TodoItem, copy: AppCopy): string {
-  if (isDailyReview(item)) {
-    const time = item.timeOfDay || DAILY_REVIEW_SEED_TIME;
-    return copy.todo.dailyReview(time.replace(/^0(\d):/, "$1:"));
-  }
+  if (isDailyReview(item)) return copy.todo.dailyReview;
   return item.text || (item.kind === "subtask" ? copy.subtask.label : "");
 }
 

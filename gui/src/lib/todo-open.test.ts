@@ -253,8 +253,8 @@ describe("「说说这件」", () => {
   });
 
   it("quotes what the row shows when it names a row its own way (the daily review, ticket 74)", () => {
-    quoteTodo(ITEM, "galley", "s-main", "每天 9:00 过一遍在办的事");
-    expect(takeQuote("s-main", true)).toBe("每天 9:00 过一遍在办的事");
+    quoteTodo(ITEM, "galley", "s-main", "过一遍在办的事");
+    expect(takeQuote("s-main", true)).toBe("过一遍在办的事");
   });
 
   it("a second click quotes again (the composer drops a duplicate)", () => {

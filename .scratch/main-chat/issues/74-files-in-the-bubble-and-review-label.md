@@ -78,3 +78,9 @@ JC 读的那篇 Today AI 使用体验里，助理交出的 HTML 计划、飞书�
   - 外置运行时的定时任务对话框（`ScheduledTasksDialog`）照旧直接显示 `prompt`：从内置切到外置时，库里的巡看那条会以英文出现在那里。票面范围只在待办面板，没改。
   - 巡看送不出去的系统通知走 `reminder-undelivered` 的 `prompt`（`gui/src/hooks/useSchedulerSignals.ts`）；票 73 定的是 Core 直接丢掉不发，若仍发，GUI 会弹英文。
   - 每次进主对话（MainView 按会话重挂）每个文件问一次 `inspect`，没做并发去重；文件很多的长历史没量过。
+
+### 2026-10-21 补改：巡看的名字不带时间
+
+- 主会话看截图后改（票面原写法的问题）：名字里写时间、第二行例行规则又写一遍，时间重复、格式也不一致（「每天 9:00 过一遍在办的事 / 每天 09:00 · 下次 明天 09:00」）。改成名字不带时间：zh「过一遍在办的事」，en「Go over what’s in hand」；时间只在第二行，照旧 `routineRowLine`，跟着任务实际的 `time_of_day` 变。
+- `todo.dailyReview` 改成不带参数的字符串；`DAILY_REVIEW_SEED_TIME` 与去前导零的逻辑删掉；测试与 locale 注释跟着改。
+- 上面回报里「巡看在『已完成』里出一行、写『已提醒』」那条，主会话已让票 73 在 Core 的读取里排除，GUI 不改。
