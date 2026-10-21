@@ -34,6 +34,7 @@ import {
   type TodoMetaPart,
   todoPanelEmpty,
   todoReminderCancellable,
+  todoRowText,
   todoTitleTarget,
   type TodoLineTone,
 } from "@/lib/todo-panel";
@@ -127,7 +128,8 @@ export function TodoPanel({
 
   const go = (target: TodoTarget) =>
     goToTodoTarget(target, here, mainChatId, onOpenSession);
-  const talkAbout = (item: TodoItem) => quoteTodo(item, here, mainChatId);
+  const talkAbout = (item: TodoItem) =>
+    quoteTodo(item, here, mainChatId, todoRowText(item, copy));
   const talk = () => talkToGalley(here, onTalk);
 
   return (
@@ -368,7 +370,7 @@ function RowShell({
 }) {
   const copy = useCopy();
   const target = todoTitleTarget(item, mainChatId);
-  const text = item.text || (item.kind === "subtask" ? copy.subtask.label : "");
+  const text = todoRowText(item, copy);
   const shown = (actions ?? []).filter(Boolean);
   const title = target ? (
     <button

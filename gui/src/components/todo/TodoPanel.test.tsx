@@ -299,6 +299,58 @@ describe("the panel's rows", () => {
     expect(daily).toContain('aria-label="说说这件"');
   });
 
+  it("names the daily review in its own words, a routine like the others (ticket 74)", () => {
+    const prompt = "Daily review: read wake.md and go over what is in hand.";
+    const review: TodoItem = {
+      ...ROUTINE,
+      id: "sched_review",
+      text: prompt,
+      createdBy: "agent",
+      agent: "galley-review",
+      timeOfDay: "07:30",
+      at: new Date(Date.parse(inDays(1, 7)) + 30 * 60_000).toISOString(),
+    };
+    const html = panel({ ...FULL, routine: [ROUTINE, review] });
+    const routine = html.slice(
+      html.indexOf('data-todo-group="routine"'),
+      html.indexOf('data-todo-group="done"'),
+    );
+    expect(routine).toContain('data-todo-row="sched_daily"');
+    const row = (id: string) => {
+      const start = routine.indexOf(`data-todo-row="${id}"`);
+      const next = routine.indexOf("data-todo-row=", start + 1);
+      return routine.slice(start, next === -1 ? undefined : next);
+    };
+    const named = row("sched_review");
+    expect(named).toContain(">每天 7:30 过一遍在办的事<");
+    expect(named).toContain("每天 07:30 · 下次 明天 07:30");
+    expect(html).not.toContain(prompt);
+    // Same glyph, same title ink, same hover action as the other routine.
+    const glyph = (r: string) => r.slice(0, r.indexOf("</svg>"));
+    expect(glyph(named)).toBe(
+      glyph(row("sched_daily")).replace("sched_daily", "sched_review"),
+    );
+    expect(named).toContain('aria-label="说说这件"');
+    // Switched off: the paused routine's look.
+    const off = panel({
+      ...FULL,
+      routine: [{ ...review, state: "paused", at: undefined }],
+    });
+    expect(off).toContain("每天 07:30 · 已暂停");
+    expect(off).toContain("text-ink-soft");
+    // In English, and once it has gone over the day (已完成) too.
+    const en = panel(
+      {
+        ...FULL,
+        routine: [review],
+        done: [{ ...review, state: "fired", at: inDays(0, 7) }],
+      },
+      { language: "en-US", doneOpen: true },
+    );
+    expect(count(en, ">Go over what’s in hand, daily at 7:30<")).toBe(2);
+    expect(en).not.toContain(prompt);
+  });
+
   it("holds a tick in place: ticked, struck through, its reminder gone", () => {
     store.flips = { todo_report: { done: true, phase: "settling" } };
     const report = row(panel(FULL), "todo_report");

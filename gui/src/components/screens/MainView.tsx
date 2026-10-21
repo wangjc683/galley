@@ -26,6 +26,7 @@ import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToolbar";
 import { StepRegion } from "@/components/conversation/StepRegion";
+import { FileCards } from "@/components/conversation/FileCards";
 import { ReminderCards } from "@/components/conversation/ReminderCards";
 import { SubtaskCards } from "@/components/conversation/SubtaskCards";
 import { TodoCards } from "@/components/conversation/TodoCards";
@@ -43,6 +44,7 @@ import { useTypewriter } from "@/hooks/useTypewriter";
 import { useTypingBubbleHandoff } from "@/hooks/useTypingBubbleHandoff";
 import { useMarkdownStream } from "@/hooks/useMarkdownStream";
 import { typingBubbleShown } from "@/lib/assistant-conversation";
+import { filesByMessage } from "@/lib/file-cards";
 import { openMainChat } from "@/lib/main-chat";
 import { endsInSilentReport, subtaskQuestionLocked } from "@/lib/subtasks";
 import {
@@ -181,6 +183,9 @@ export function MainView(props: MainViewProps) {
   return <MainViewContent {...props} />;
 }
 
+/** Every conversation but the main chat: no file cards, one map. */
+const NO_FILES = new Map<string, readonly string[]>();
+
 function MainViewContent({
   turns,
   llmDisplayName,
@@ -254,6 +259,13 @@ function MainViewContent({
   const todos = useTodosByMessage(isMainChat ? activeSessionId : undefined);
   const reminders = useRemindersByMessage(
     isMainChat ? activeSessionId : undefined,
+  );
+  // …and the files it handed over (ticket 74), read off the replies
+  // themselves (their `[FILE:]` markers), first under each: the reply's
+  // own deliverable before the work it handed off.
+  const deliveredFiles = useMemo(
+    () => (isMainChat ? filesByMessage(turns) : NO_FILES),
+    [isMainChat, turns],
   );
 
   // Streaming state, subscribed locally so token churn stays inside
@@ -639,29 +651,40 @@ function MainViewContent({
                 askUserPending={Boolean(pendingAskUser)}
                 agentRunning={isRunning}
                 renderAfterAnswer={
+                  deliveredFiles.size > 0 ||
                   subtaskDispatches.size > 0 ||
                   todos.size > 0 ||
                   reminders.size > 0
                     ? (messageId) => {
+                        const files = deliveredFiles.get(messageId);
                         const dispatches = subtaskDispatches.get(messageId);
                         const noted = todos.get(messageId);
                         const tasks = reminders.get(messageId);
-                        if (!dispatches && !noted && !tasks) return null;
+                        if (!files && !dispatches && !noted && !tasks) {
+                          return null;
+                        }
+                        // `afterSubtasks`: under any cards above, 8px.
                         return (
                           <>
+                            {files && <FileCards paths={files} />}
                             {dispatches && (
-                              <SubtaskCards dispatches={dispatches} />
+                              <SubtaskCards
+                                dispatches={dispatches}
+                                afterFiles={!!files}
+                              />
                             )}
                             {noted && (
                               <TodoCards
                                 items={noted}
-                                afterSubtasks={!!dispatches}
+                                afterSubtasks={!!files || !!dispatches}
                               />
                             )}
                             {tasks && (
                               <ReminderCards
                                 tasks={tasks}
-                                afterSubtasks={!!dispatches || !!noted}
+                                afterSubtasks={
+                                  !!files || !!dispatches || !!noted
+                                }
                               />
                             )}
                           </>

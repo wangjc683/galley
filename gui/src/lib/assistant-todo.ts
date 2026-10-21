@@ -6,6 +6,7 @@ import { formatScheduleTime } from "@/lib/message-time";
 import {
   deleteScheduledTask,
   repeatSummary,
+  REVIEW_SUPERVISOR,
   SCHEDULED_TASKS_CHANGED_EVENT,
   type ScheduledTask,
   type ScheduledTaskRepeat,
@@ -316,6 +317,18 @@ export function todoStateLabel(item: TodoItem, copy: AppCopy): string {
     case "done":
       return copy.todo.stateDone;
   }
+}
+
+/**
+ * Whether a row is the daily review (main chat tickets 73, 74; assistant
+ * PRD ruling 10): the routine Core seeds with `created_by_supervisor =
+ * 'galley-review'`. Core's list carries a task's maker as its supervisor
+ * label in `agent` (core/src/assistant_todo.rs `creator`: every label
+ * but `galley-assistant`, for a task not made through the desktop's
+ * form), so that is where the label is read.
+ */
+export function isDailyReview(item: TodoItem): boolean {
+  return item.kind === "task" && item.agent === REVIEW_SUPERVISOR;
 }
 
 // ---- Where a row leads -----------------------------------------------------

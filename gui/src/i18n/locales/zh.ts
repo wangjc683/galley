@@ -75,6 +75,8 @@ export const zhCopy = {
     previewTitle: "文件预览",
     locate: "在文件夹中显示",
     copyPath: "复制路径",
+    /** 回复下的文件卡片（主聊天票 74）：文件已不在时写在文件名后面，卡片变淡。 */
+    cardMissing: "已移走或删除",
     openDefault: "用默认应用打开",
     refresh: "刷新",
     diskContent: "显示打开或刷新时的文件内容",
@@ -2114,6 +2116,8 @@ export const zhCopy = {
     reminderPaused: (when: string) => `提醒 ${when} · 已暂停`,
     /** 例行的下次时刻。 */
     nextAt: (when: string) => `下次 ${when}`,
+    /** 每天巡看那条例行（`galley-review`，主聊天票 74）的名字，替代它给模型看的英文；时刻取它实际的 `time_of_day`。 */
+    dailyReview: (time: string) => `每天 ${time} 过一遍在办的事`,
     /** 只有日期的截止。 */
     dayToday: "今天",
     dayTomorrow: "明天",

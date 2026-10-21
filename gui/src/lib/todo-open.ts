@@ -127,14 +127,17 @@ export function goToTodoTarget(
 /** 「说说这件」: the title, quoted into the main chat's composer (ticket
  * 07's quote strip, its limit and its dedupe) and the caret there; the
  * panel stays open. From elsewhere Galley opens first and its composer
- * takes the quote as it appears (MainView). */
+ * takes the quote as it appears (MainView). `title` is what the row
+ * shows (lib/todo-panel.ts `todoRowText`: the daily review's name, not
+ * its English prompt, ticket 74). */
 export function quoteTodo(
   item: TodoItem,
   here: TodoPlace,
   mainChatId: string,
+  title: string = item.text,
 ): void {
   const ui = useUiStore.getState();
-  ui.requestQuote(mainChatId, item.text);
+  ui.requestQuote(mainChatId, title);
   if (here === "galley") return;
   const request = useUiStore.getState().quoteRequest;
   backToGalley(() => {

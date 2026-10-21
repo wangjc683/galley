@@ -19,6 +19,7 @@ import {
   todoPanelEmpty,
   todoPanelOpened,
   todoReminderCancellable,
+  todoRowText,
   todosByMessage,
   todoTitleTarget,
 } from "@/lib/todo-panel";
@@ -334,6 +335,73 @@ describe("Galley's rows, routines and done items", () => {
     expect(doneRowLine(ticked, TODAY, "zh-CN", zh)).toBe("今天 15:02");
     const fired = task({ state: "fired", at: local(2026, 10, 15, 9, 0) });
     expect(doneRowLine(fired, TODAY, "zh-CN", zh)).toBe("昨天 09:00 · 已提醒");
+  });
+});
+
+describe("the daily review's name (ticket 74)", () => {
+  // The routine Core seeds (ticket 73): its maker's label comes in
+  // `agent` (core/src/assistant_todo.rs `creator`), its prompt is English
+  // for the model.
+  const review = task({
+    id: "sched_review",
+    text: "Daily review: read wake.md and go over what is in hand.",
+    createdBy: "agent",
+    agent: "galley-review",
+    repeat: { kind: "daily" },
+    timeOfDay: "09:00",
+    at: local(2026, 10, 17, 9, 0),
+    createdIn: undefined,
+  });
+
+  it("shows a name of its own, never its prompt", () => {
+    expect(todoRowText(review, zh)).toBe("每天 9:00 过一遍在办的事");
+    expect(todoRowText(review, en)).toBe(
+      "Go over what’s in hand, daily at 9:00",
+    );
+  });
+
+  it("follows the task's own time; the rule and next time stay on the second line", () => {
+    const moved = {
+      ...review,
+      timeOfDay: "07:30",
+      at: local(2026, 10, 17, 7, 30),
+    };
+    expect(todoRowText(moved, zh)).toBe("每天 7:30 过一遍在办的事");
+    expect(routineRowLine(moved, TODAY, "zh-CN", zh)).toBe(
+      "每天 07:30 · 下次 明天 07:30",
+    );
+    expect(todoRowText({ ...review, timeOfDay: "21:00" }, en)).toBe(
+      "Go over what’s in hand, daily at 21:00",
+    );
+    const paused = { ...review, state: "paused" as const, at: undefined };
+    expect(todoRowText(paused, zh)).toBe("每天 9:00 过一遍在办的事");
+    expect(routineRowLine(paused, TODAY, "zh-CN", zh)).toBe(
+      "每天 09:00 · 已暂停",
+    );
+  });
+
+  it("leaves every other row's words as they are", () => {
+    expect(todoRowText(task(), zh)).toBe("看看快递到了没有");
+    // Another agent's routine, by its own label.
+    expect(
+      todoRowText(task({ createdBy: "agent", agent: "claude-code" }), zh),
+    ).toBe("看看快递到了没有");
+    // The label on something that is not a task is not the review.
+    expect(todoRowText(todo({ agent: "galley-review" }), zh)).toBe(
+      "交季度报告",
+    );
+    expect(
+      todoRowText(
+        {
+          kind: "subtask",
+          id: "s-1",
+          text: "",
+          state: "running",
+          createdBy: "assistant",
+        },
+        zh,
+      ),
+    ).toBe(zh.subtask.label);
   });
 });
 

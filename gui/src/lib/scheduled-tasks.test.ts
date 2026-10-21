@@ -12,6 +12,7 @@ import {
   EMPTY_SCHEDULED_TASK_FORM,
   SCHEDULED_REMINDER_UNDELIVERED_EVENT,
   SCHEDULED_TASK_FIRE_FAILED_EVENT,
+  REVIEW_SUPERVISOR,
   SCHEDULER_SUPERVISOR,
   type ScheduledTask,
   type ScheduledTaskFormState,
@@ -97,6 +98,12 @@ describe("SCHEDULER_SUPERVISOR", () => {
     // sessions, the GUI filters on it (badge + sidebar marker). A rename
     // must land on both sides — this test is the tripwire.
     expect(SCHEDULER_SUPERVISOR).toBe("galley-scheduler");
+  });
+
+  it("pins the daily review's label Core seeds (main chat tickets 73, 74)", () => {
+    // `scheduled_tasks.created_by_supervisor` of the one routine Core
+    // seeds; the to-do panel names that row by it.
+    expect(REVIEW_SUPERVISOR).toBe("galley-review");
   });
 
   it("pins the fire-failed event name Core emits in api/schedule.rs", () => {

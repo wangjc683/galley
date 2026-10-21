@@ -48,6 +48,14 @@ export interface ScheduledReminderUndeliveredPayload {
  * `scheduled-tasks.test.ts` — a rename must land in Rust too. */
 export const SCHEDULER_SUPERVISOR = "galley-scheduler";
 
+/** Supervisor label of the daily review (main chat tickets 73, 74;
+ * assistant PRD ruling 10): the one routine Core seeds,
+ * `created_by_supervisor = 'galley-review'`, which wakes the assistant
+ * at 09:00 to go over what is in hand. Its `prompt` is English for the
+ * model; the to-do panel shows a name of its own instead. Pinned by
+ * `scheduled-tasks.test.ts`, as the label above is. */
+export const REVIEW_SUPERVISOR = "galley-review";
+
 /** Mirror of Rust `ScheduledTaskRepeat` (tagged, snake_case kinds).
  * Monthly clamps to short months Core-side: day 31 fires on Apr 30 /
  * Feb 28 rather than skipping the month. */

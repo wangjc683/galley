@@ -368,6 +368,89 @@ describe("the main chat is the assistant's conversation", () => {
     expect(render({ isMainChat: false })).not.toContain('data-role="todo-card');
   });
 
+  it("hangs the files a reply handed over under it, first, in marker order; nowhere else (ticket 74)", () => {
+    const delivered: AgentTurn = {
+      ...answer("排好了。", 2),
+      files: [
+        "/Users/jc/Documents/五一行程.html",
+        "/Users/jc/Documents/船票.pdf",
+      ],
+    };
+    const turns: Turn[] = [...conversation().slice(0, -1), delivered];
+    const main = render({ isMainChat: true, turns });
+    expect(count(main, 'data-role="file-card"')).toBe(2);
+    expect(main).toContain(
+      'data-role="file-cards" class="mt-3 flex flex-col gap-2"',
+    );
+    // Under the reply that handed them over, in the order it wrote them.
+    const first = main.indexOf('data-role="file-card"');
+    expect(main.lastIndexOf("排好了。", first)).toBeGreaterThan(
+      main.lastIndexOf("多云，记得带伞。", first),
+    );
+    expect(main.indexOf("五一行程")).toBeLessThan(main.indexOf("船票"));
+    // The paths themselves are not shown: the cleaned answer has no
+    // marker and the cards show a name and a folder.
+    expect(main).not.toContain("[FILE:");
+    expect(main).not.toContain(">/Users/jc/Documents/五一行程.html<");
+    // With the reply's subtask and reminder cards: the files first, the
+    // rest 8px under them.
+    cards.dispatches = new Map([
+      [
+        "a-排好了。",
+        [
+          {
+            parentSessionId: "s-1",
+            turnIndex: 2,
+            ordinal: 0,
+            messageId: "a-排好了。",
+            sessionId: null,
+            title: "订船票",
+            failure: "empty",
+            failureDetail: null,
+            createdAt: "2026-10-16T08:00:00Z",
+          },
+        ],
+      ],
+    ]);
+    cards.reminders = new Map([
+      [
+        "a-排好了。",
+        [
+          {
+            id: "sched_water",
+            prompt: "提醒用户喝水",
+            repeat: { kind: "once" },
+            timeOfDay: "21:40",
+            enabled: true,
+            fireAt: "2099-10-16T13:40:00.000Z",
+            target: "assistant",
+            createdIn: { sessionId: "s-1", turnIndex: 2 },
+            createdAt: "2026-10-16T08:00:00Z",
+            updatedAt: "2026-10-16T08:00:00Z",
+          },
+        ],
+      ],
+    ]);
+    const all = render({ isMainChat: true, turns });
+    const order = [
+      'data-role="file-cards"',
+      'data-role="subtask-cards"',
+      'data-role="reminder-cards"',
+    ].map((needle) => all.indexOf(needle));
+    expect(order.every((at) => at > -1)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(all).toContain(
+      'data-role="subtask-cards" class="mt-2 flex flex-col gap-2"',
+    );
+    expect(all).toContain(
+      'data-role="reminder-cards" class="flex flex-col gap-2 mt-2"',
+    );
+    // A workbench session, a subtask, the external runtime: none.
+    expect(render({ isMainChat: false, turns })).not.toContain(
+      'data-role="file-card',
+    );
+  });
+
   it("stacks a short conversation up from the composer (贴底)", () => {
     const main = render({ isMainChat: true, turns: [GREETING] });
     expect(main).toContain("overflow-y-auto px-8 py-6 flex flex-col");

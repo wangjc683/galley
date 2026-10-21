@@ -47,11 +47,18 @@ import type { Turn } from "@/types/conversation";
  */
 export function SubtaskCards({
   dispatches,
+  afterFiles = false,
 }: {
   dispatches: readonly SubtaskDispatch[];
+  /** Under the reply's file cards (ticket 74): their 8px gap instead of
+   * the 12px off the bubble. */
+  afterFiles?: boolean;
 }) {
   return (
-    <div data-role="subtask-cards" className="mt-3 flex flex-col gap-2">
+    <div
+      data-role="subtask-cards"
+      className={cn(afterFiles ? "mt-2" : "mt-3", "flex flex-col gap-2")}
+    >
       {dispatches.map((d) => (
         <SubtaskCard key={`${d.turnIndex}:${d.ordinal}`} dispatch={d} />
       ))}
