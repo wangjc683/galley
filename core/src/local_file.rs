@@ -194,6 +194,22 @@ fn is_openable(path: &Path) -> bool {
         || OPENABLE_DOCUMENT_EXTENSIONS.contains(&ext.as_str())
 }
 
+/// Document formats saved as a package, a folder the system opens with
+/// its application (ticket 73): Pages and Numbers often store a document
+/// so on macOS.
+const OPENABLE_PACKAGE_EXTENSIONS: &[&str] = &["pages", "numbers"];
+
+/// The `open` gate: the name asked for and the canonical target both pass
+/// [`is_openable`], and the target is a regular file, or a folder only
+/// when it is a document package ([`OPENABLE_PACKAGE_EXTENSIONS`]); any
+/// other folder is refused, as before.
+fn may_open(path: &Path, target: &Path, target_meta: &std::fs::Metadata) -> bool {
+    let kind_ok = target_meta.is_file()
+        || (target_meta.is_dir()
+            && OPENABLE_PACKAGE_EXTENSIONS.contains(&extension(target).as_str()));
+    kind_ok && is_openable(path) && is_openable(target)
+}
+
 fn access_sync(request: LocalFileRequest) -> Result<LocalFileResult> {
     let path = absolute_path(&request.path)?;
     let metadata = std::fs::metadata(&path).map_err(io_error)?;
@@ -278,10 +294,8 @@ fn access_sync(request: LocalFileRequest) -> Result<LocalFileResult> {
             // A document-looking symlink to an executable must never become an
             // execution shortcut: the canonical target decides, by its own name.
             let target = std::fs::canonicalize(&path).map_err(io_error)?;
-            if !is_openable(&path)
-                || !is_openable(&target)
-                || !std::fs::metadata(&target).map_err(io_error)?.is_file()
-            {
+            let target_meta = std::fs::metadata(&target).map_err(io_error)?;
+            if !may_open(&path, &target, &target_meta) {
                 return Err(invalid("local_file_unsupported"));
             }
             tauri_plugin_opener::open_path(&target, None::<&str>).map_err(|e| {
@@ -476,6 +490,42 @@ mod tests {
                 "{name} must not open with the default app"
             );
         }
+    }
+
+    /// Ticket 73: a Pages or Numbers document saved as a package (a
+    /// folder) passes the open gate; any other folder, one named like a
+    /// document included, is refused before the opener. What `inspect`
+    /// reports is unchanged: a directory.
+    #[test]
+    fn document_packages_open_but_other_folders_do_not() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["letter.pages", "Budget.NUMBERS"] {
+            let package = dir.path().join(name);
+            std::fs::create_dir(&package).unwrap();
+            let meta = std::fs::metadata(&package).unwrap();
+            assert!(may_open(&package, &package, &meta), "{name}");
+            assert_eq!(
+                access_sync(request(&package, LocalFileAction::Inspect))
+                    .unwrap()
+                    .kind,
+                "directory"
+            );
+        }
+        for name in ["archive.zip", "report.pdf", "plain"] {
+            let folder = dir.path().join(name);
+            std::fs::create_dir(&folder).unwrap();
+            let meta = std::fs::metadata(&folder).unwrap();
+            assert!(!may_open(&folder, &folder, &meta), "{name}");
+            assert!(
+                access_sync(request(&folder, LocalFileAction::Open)).is_err(),
+                "the folder {name} must not open"
+            );
+        }
+        // A regular file still passes by its name alone.
+        let file = dir.path().join("memo.docx");
+        std::fs::write(&file, "x").unwrap();
+        let meta = std::fs::metadata(&file).unwrap();
+        assert!(may_open(&file, &file, &meta));
     }
 
     #[test]
