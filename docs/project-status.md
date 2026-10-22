@@ -704,6 +704,30 @@ sign-in listener (watch for a firewall prompt) and the credential pipe,
 renamed `galley-codex-*` → `galley-credential-*` (CI's Windows job compiles
 and tests it, green on `98dec86c`; the runtime smoke is what's owed).
 
+- **The assistant acts unasked; a morning review** (2026-10-21 / 22,
+  assistant PRD ruling 10, main chat PRD rulings 124–127, tickets 73–79,
+  devlog [2026-10-21-proactive-first-stage-todo-rooted](./devlog/2026-10-21-proactive-first-stage-todo-rooted.md)).
+  The first stage of proactivity, rooted in the to-do list: the assistant
+  notes undated things the user is in the middle of, and what it does
+  unasked is work, not advice (manual part `unasked.md`): groundwork it
+  can undo it just does, anything outward-facing it prepares and then
+  asks, and with nothing done it says nothing. Core seeds one daily
+  `assistant` task, the morning review (`created_via = 'system'`,
+  supervisor `galley-review`, no migration), at a time picked once between
+  08:45 and 09:15 whose minute is not a multiple of five; with nothing in
+  hand it wakes nobody, and it speaks only when it got something done the
+  user will want to know, with no fixed heading. Files it hands over show
+  as cards under main-chat replies (`[FILE:<path>]`), and Core's
+  open-with-default-app list gains `pdf`, `docx`, `xlsx`, `pptx`, `pages`,
+  `numbers`, `html`, `htm`. A woken round that only dispatched subtasks and
+  ended in `<no-reply/>` draws nothing. A new main chat segment now carries
+  the last 10 turns (a user message and every reply up to the next one;
+  before, a multi-step answer was lost because turns were paired by
+  `turn_index`) within 15,000 characters, skipping woken rounds that said
+  nothing, and the state block says when the first and last were said. No
+  Agent API or IPC fields changed. Owed: JC's on-device walk of tickets
+  73–79 (each ticket's steps); the review speaking on a real model is
+  unverified (every eval run stayed silent); the trial runs to 2026-10-28.
 - **IM polish on the channels' own agents** (2026-10-21, `.scratch/im-polish/`,
   devlog [2026-10-21-im-polish-process-button-and-feishu](./devlog/2026-10-21-im-polish-process-button-and-feishu.md)).
   The 10-20 plan to merge IM private chats into the main chat is shelved:
