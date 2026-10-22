@@ -6,7 +6,7 @@
 
 - `cases.json`：15 个用例（消息、可选的上下文轮次、是否从分段前带过来、距今几小时）。
 - `draft.md`：入口层草案原文。
-- `galley-prompt/`：Galley 运行时提示词，由真实 Rust 代码 `managed_prompt::compose_main_chat_runtime_prompt` 生成（版本 0.6.2、macOS）。会话 id、分段起点、日期、带过来的最后一轮时间留成 `__…__` 占位，`run.py` 运行时填入。`plain` 是不带轮次的写法，`carried-N` 是带 N 轮过来的写法（N 为 1 到 3，即 `CARRY_TURNS`）。
+- `galley-prompt/`：Galley 运行时提示词，由真实 Rust 代码 `managed_prompt::compose_main_chat_runtime_prompt` 生成（版本 0.6.2、macOS）。会话 id、分段起点、日期、带过来的最后一轮时间留成 `__…__` 占位，`run.py` 运行时填入。`plain` 是不带轮次的写法，`carried-1` 是带 1 轮过来的写法；带 2 轮以上（最多 `CARRY_TURNS`，票 79 起是 10）时，`run.py` 的 `main_chat_carried_section` 把 `carried-1` 里那一节换成 N 轮的写法（「said between … and …」），移植与 `schedule/rust-samples.json` 的 `main_chat_section` 样本逐字对照（`--dry-test`）。原来的 `carried-2`、`carried-3` 两份模板是旧措辞，票 79 后已删。
 - `composed/`：两个用例（不带轮次的 `chat-tired`、带轮次的 `carry-quote`）各两组的完整请求，即模型实际收到的 system、历史与新消息，以及提供给它的工具名。
 - `results.json`：原始结果。每条含用例 id、组别、回复原文（`<summary>`、`<next-suggestion>` 标签都保留）、建议、第一个工具调用、用量、耗时等。
 - `results.md`：逐个用例先列消息与上下文，再依次放 WITHOUT、WITH 的回复。正文按对话界面的样子去掉标签，建议单独一行，工具调用写成「（要调用工具：名称，参数摘要）」。

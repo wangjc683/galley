@@ -1,6 +1,6 @@
 # 79 新段带最近 10 轮、15,000 字；一句话都没说的叫醒轮次不占名额；状态块写起止时间
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-10-22 合入 `c266b00e`、`9a2c875e`；主会话机器验收：rebase 到含票 78 的 main 后 `TZ=UTC cargo test --workspace` 1216 条全过、评测 `--dry-test` 全过；代理另跑本机时区全量与改过文件的 `rustfmt --check`。代理用本机数据备份核对：段首 37 的窗口带 9 轮、8,226 字，含第 13、21 轮，不含静默的 31→33。主会话删了没人读的 `carried-2`、`carried-3` 旧模板，README 跟着改）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 127（2026-10-22。旁路代理指出票 77 修好后，今早 9 点那一段带过去的 3 轮里有 2 轮是叫醒，JC 问 NBA 的原话一轮都没带上；JC：「最近 3 轮，我现在感觉是不是太少了？」主会话推荐 A 加 C，JC：「A + C，但是上限到 10 轮」，主会话补上 15,000 字与状态块写起止时间两个条件，JC：「定了，推进」）。只改 Core 与评测移植。依赖票 77（已合入 `e3767d1f`）。与在跑的票 78（`scheduler.rs`、`db/schedule.rs`、`subtask_report.rs`、`wake.md`、评测待办套件）不碰同一处；评测目录两张票都动，你只改 `run.py` 里主对话状态块那段移植与 `rust-samples.json` 里对应的样本。
 
