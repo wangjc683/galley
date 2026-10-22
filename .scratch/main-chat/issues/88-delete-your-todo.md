@@ -1,6 +1,6 @@
 # 88 面板上删除你的待办：「⋯」与右键一份菜单，5 秒撤销，卡片写「已删除」
 
-Status: needs-dogfood（2026-10-22 快进合入 `0e4a1773`，Core 随之重启；主会话机器验收：读过 Core 命令、删除暂存与提交、发出前先提交、菜单与文案的 diff；在代理的 worktree 里重跑 `cargo test --workspace`（45 组、1221 条全过）、`pnpm --dir gui typecheck`、`lint`、`test`（201 个文件、2205 条全过）、`git diff --check`、文档链接门禁；代理按主会话追加的两处也已合入：5 秒内被勾掉的不删、助理手册补「也能删除」）
+Status: done（2026-10-22 JC 真机：「真机看了，没问题」；查库自 17:00 起没有待办变化，与步骤里「702 只试撤销」一致：「⋯」与右键菜单、删除后行离开、提示条与撤销是真机验过的，等提示条走完交给 Core、卡片写「已删除」、连删合成一条没在真机上走，靠测试（store 与面板的点击测试、Core 的 `the_desktop_deletes_a_to_do_and_it_is_turned_down`）。快进合入 `0e4a1773`，Core 随之重启；主会话机器验收：Core 命令、删除暂存与提交、发出前先提交、菜单与文案的 diff，worktree 里 `cargo test --workspace` 1221 条、前端 2205 条全过）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 132（2026-10-22，JC：「按你推荐推进」）。Core 一个桌面命令 + GUI + 设计文档。外置运行时没有待办面板，零变化；Agent API 不变（CLI 本来就有 `todo cancel`）；不加迁移。
 

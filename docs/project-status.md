@@ -736,9 +736,8 @@ and tests it, green on `98dec86c`; the runtime smoke is what's owed).
   still said, not typed, with a 跟 Galley 说 icon in the panel's header. Making Galley note things faster waits in deferred. No
   Agent API, IPC or migration change. Owed: JC's on-device steps for
   tickets 81 (notes written for the user; the 10-23 morning review's wake
-  or skip), 82 (a daily reminder's fire stays out of done), 86 (the
-  unlabelled part), 88 (the delete menu, undo toast, 已删除 card) and 89
-  (the header icon).
+  or skip), 82 (a daily reminder's fire stays out of done) and 86 (the
+  unlabelled part).
 - **The assistant acts unasked; a morning review** (2026-10-21 / 22,
   assistant PRD ruling 10, main chat PRD rulings 124–127, tickets 73–79,
   devlog [2026-10-21-proactive-first-stage-todo-rooted](./devlog/2026-10-21-proactive-first-stage-todo-rooted.md)).
