@@ -344,7 +344,7 @@ Core 在「In Hand」的三组之后加了第四组「Follow-ups the user turned
 - **新用例**（每条两遍）：
   - 待办套件「在推进」：`half-done`（查阿里云费用暴涨查到一半，「先吃饭，回来再说」→ 没日子的待办，可做一步或派 1 件，不提建议）、`supplier-quote`（「供应商的报价还没回，我在等」→ 它自己回头问的提醒，今晚到明天中午，不是没日子的待办）、`tired-today`（「今天好累，不想动」→ 什么都不设、不派）。
   - 待办套件「两可」（只记录）：`shanghai-trip`（「下周三去上海出差」）、`report-half`（「季度报告我写了一半」）。
-  - 待办套件「早上巡看」：`review-nothing-to-do`（只有一条 11 月 20 号的装修待办、提醒挂好了 → `<no-reply/>`）、`review-advance`（有没日子的「查清阿里云费用暴涨的原因」→ 做一步或派 1～2 件；只派出去时不出声，开口时带出是过了一遍在办的事）、`review-overdue`（只有昨天到期没勾的「交季度报告」→ 不催，`<no-reply/>`）、`review-stop`（「早上那个巡看别弄了」→ `schedule disable` 那一条，不是 delete，说一句怎么恢复）。巡看几条放在待办套件，不放叫醒套件：叫醒套件的假 CLI 数据只有会话（子任务），待办套件有待办与定时任务，到点叫醒也照 Core 的措辞拼（叫醒套件用的是 `wording.md` 的草稿）。
+  - 待办套件「早上巡看」：`review-nothing-to-do`（只有一条 11 月 20 号的装修待办、提醒挂好了 → `<no-reply/>`；票 81 起按新判据，真机上这一种巡看会跳过、不叫醒，用例测的是醒了以后）、`review-advance`（有没日子的「查清阿里云费用暴涨的原因」→ 做一步或派 1～2 件；只派出去时不出声，开口时带出是过了一遍在办的事）、`review-overdue`（只有昨天到期没勾的「交季度报告」→ 不催，`<no-reply/>`）、`review-stop`（「早上那个巡看别弄了」→ `schedule disable` 那一条，不是 delete，说一句怎么恢复）。巡看几条放在待办套件，不放叫醒套件：叫醒套件的假 CLI 数据只有会话（子任务），待办套件有待办与定时任务，到点叫醒也照 Core 的措辞拼（叫醒套件用的是 `wording.md` 的草稿）。
   - 叫醒套件：`file-handover`（子任务交回一个绝对路径的文件 → 交代里单独一行 `[FILE:那个路径]`）。路径写成 `{{HOME}}`，每次运行换成那次沙盒的假 HOME（`run_job`），结果里是 `$TMPDIR/…`，不写本机真实路径。
 - **判定加的**（`todo_facts`，写法见 `todo/cases.json` 的 `_note`）：`subtasks_max`（回复里最多几个 `<subtask>`，不写就一个都不许，同以前）、`no_offer`（回复与末尾的建议里不能有「要不要我」「需要的话我可以」一类，`OFFER_RE`；别的用例只在「注」里写出来）、`allow_web_stop`（停在浏览器工具只注出来：它在做一步只读的事，沙盒里看不到结果）、`review_advance`、`disable`；`wake_facts` 加 `file_ref`（要有、是绝对路径、单独一行）。`--dry-test` 对这些各造了过与不过的运行（`synth_run`）。
 - **记读了什么**：同票 59，「读手册」一栏写读了哪几部分、几次几轮、多少字节；票 73 起手册是九个部分。
@@ -414,7 +414,7 @@ Core 在「In Hand」的三组之后加了第四组「Follow-ups the user turned
 - **用例写法**（`todo/cases.json` 的 `_note`）：`wake` 里可以写 `{"kind": "done", "subtask": <id>, "send_backs": n}`，是 `subtasks` 里（写法同叫醒套件）一件刚做完的子任务，回答取它最后一条 `final`；几件的次序就是 `wake` 列的次序。`sched_fixture` 把用例的子任务放进假 CLI（会话列表、`session show`），「In Hand」快照照旧没有它们（这一段里才派的）。
 - **新用例**（组名「巡看与别的事同一次叫醒（票 78）」，每条 3 遍）：
   - `review-with-reminder`：巡看与待办「702 办公室装修完工」（今天到期）的提醒同一分钟到点，合成一次叫醒，提醒在前、巡看在后（Core 读等着叫醒的定时任务按 `last_fired_at, id` 排，同一分钟的按 id）；在办的只有这一件。
-  - `review-with-subtask-done`：用户这一段让查下周三上午杭州东到上海虹桥的高铁，子任务查好交回三班车，回报与巡看在同一次叫醒，子任务的先到；在办的另有 11 月 20 号的装修待办（巡看因此不跳过）。
+  - `review-with-subtask-done`：用户这一段让查下周三上午杭州东到上海虹桥的高铁，子任务查好交回三班车，回报与巡看在同一次叫醒，子任务的先到；在办的另有 11 月 20 号的装修待办（票 78 时它让巡看不跳过；票 81 起它不再让巡看醒，真机上要出现这一种合并叫醒，得是巡看到点时子任务还没结束、让巡看醒了，回报随后赶进同一次叫醒）。
 - **判定加的**（`todo_facts` 的 `review_mixed`）：整条不出声（只有 `<no-reply/>` 或只有标签）、开口了却没提那件事（`names_any` 里一个词都没有）算吞掉，判不过；巡看没做成值得说的事却提了巡看（`REVIEW_TALK_RE`：「巡看」「过了一遍」「在办的事」「例行」一类，或 `REVIEW_EMPTY_RE` 的空话）判不过；开口了又写了 `<no-reply/>` 只注出来（Core 照样显示正文）；话只写在 `<summary>` 里照旧判不过，不算吞掉；`no_recite`、`no_offer` 同上。`--dry-test` 对两条各造了过与不过的运行（`synth_run`：说了那件事、只有 `<no-reply/>`、开口没提、固定开头、巡看的空话、建议、正文加 `<no-reply/>`、只写在 `<summary>`、复述提醒原文），另有两次假模型的运行：子任务那条照叫醒说的命令经假 CLI 核对后转达（过），提醒那条只回 `<no-reply/>`（判成吞掉）。
 - **顺手修的**：`todo_facts` 里票 75 的 `review_advance` 一段把 `names`（这次运行跑过的命令）覆盖成了 `names_any`，开口的那几遍记下的命令名会错；改了变量名，判定不变。
 - **模型**：`mm_1792576875658`（API key 接入），同票 73、75。只跑这两条，别的用例没重跑。
@@ -435,7 +435,7 @@ Core 在「In Hand」的三组之后加了第四组「Follow-ups the user turned
 
 主聊天 PRD 裁决 128 第 4、5 条：Core 的巡看只为没有自己闹钟的事醒（`assistant_todo.rs` 的 `review_has_something_to_look_at`），票 80 起面板把备注显示给用户。手册改了两句：`wake.md`「The morning review」第一段末尾（没有要看的就跳过，远期的事与它自己的提醒到时自己会响；醒了照旧过一遍全部在办的事），`todos.md` 的 `--notes` 一条补「The user sees the notes under the to-do in their list: write them for the user, in their language (「A 座 3 楼，带身份证」), without the title or the day again, and not as a record about them (「用户说……」).」。
 
-- **评测里没有巡看判据的镜像**：巡看用例直接拼到点的叫醒消息，不经 Core 判醒不醒，所以 `run.py` 没改；手册目录照旧整套拷进状态根，`--dry-test` 全过。按新判据，`review-nothing-to-do`（只有 11 月 20 日的装修待办、挂着提醒）在真机上不会再醒，这条用例现在测的是「醒了以后」；票 78 一节写的「在办的另有 11 月 20 号的装修待办（巡看因此不跳过）」也不再成立（那一次叫醒是子任务的回报带着巡看），用例本身没动。
+- **评测里没有巡看判据的镜像**：巡看用例直接拼到点的叫醒消息，不经 Core 判醒不醒，所以 `run.py` 没改；手册目录照旧整套拷进状态根，`--dry-test` 全过。按新判据，`review-nothing-to-do`（只有 11 月 20 日的装修待办、挂着提醒）在真机上不会再醒，这条用例现在测的是「醒了以后」；票 78 一节原来写的「巡看因此不跳过」也不再成立。这两处的说明（上面票 73、票 78 两节与 `todo/cases.json` 里这条的 `expect_text`）票 82 时改成了如实的说法，用例的输入与判定没动。
 - **重跑**：待办套件里会写备注、带地点或人名号码的六条（`reno-asked`、`flight-wed`、`hospital-tomorrow`、`half-done`、`lease-expiry`、`meeting-3pm`）各重跑第 1 遍，第 2 遍仍是旧手册下的结果；被替换的 6 次在 `meta.superseded_runs` 的「票 81」一组。模型 `mm_1792576875658`（API key 接入的 gpt-6.1-sol），同票 73。
 
 ### 结果（2026-10-22，gpt-6.1-sol，推理强度 high）
