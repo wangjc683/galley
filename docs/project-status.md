@@ -704,6 +704,25 @@ sign-in listener (watch for a firewall prompt) and the credential pipe,
 renamed `galley-codex-*` → `galley-credential-*` (CI's Windows job compiles
 and tests it, green on `98dec86c`; the runtime smoke is what's owed).
 
+- **The to-do panel from first principles** (2026-10-22, main chat PRD
+  rulings 128–130, tickets 80–86, devlog
+  [2026-10-22-todo-from-first-principles](./devlog/2026-10-22-todo-from-first-principles.md)).
+  The grouping stays (a box is the user's to act on, a state icon is to
+  look at). The morning review now wakes only for what has no alarm of its
+  own: an undated to-do, one due within three days or overdue, an
+  unfinished subtask (`REVIEW_LOOKAHEAD_DAYS`); far-off to-dos and Galley's
+  own reminders no longer wake it daily. The panel shows a to-do's notes
+  (the manual now asks for notes written for the user), Galley's own
+  one-off reminders can be cancelled from it, the empty state shows beside
+  the seeded review, the launch-at-login hint leaves the review out, and
+  groups sit 12px apart. Done items take a neutral grey ticked box and
+  muted titles; a routine's fires stay out of done. After a measured
+  comparison with Apple Reminders (row heights match; the room went to
+  group labels), the user's to-dos run as one unlabelled part and group
+  labels are tighter. No Agent API, IPC or migration change. Owed: JC's
+  on-device steps for tickets 81 (notes written for the user; the 10-23
+  morning review's wake or skip), 82 (a daily reminder's fire stays out of
+  done) and 86 (the unlabelled part).
 - **The assistant acts unasked; a morning review** (2026-10-21 / 22,
   assistant PRD ruling 10, main chat PRD rulings 124–127, tickets 73–79,
   devlog [2026-10-21-proactive-first-stage-todo-rooted](./devlog/2026-10-21-proactive-first-stage-todo-rooted.md)).
