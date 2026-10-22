@@ -726,12 +726,14 @@ and tests it, green on `98dec86c`; the runtime smoke is what's owed).
   you sent (`galley.todoPanelIntroduced`). A to-do card's title opens the
   panel at its row, and while the panel is on screen the rows Galley
   added or changed light up (a to-do it ticked holds a moment first). A
-  receipt card under the reply that changed a to-do waits in deferred. No
+  receipt card under the reply that changed a to-do waits in deferred.
+  Ticket 87's walk found the reply's landing follow losing the bottom when
+  the panel opened as the reply landed; the follow now ends on the real
+  bottom and gives up a stale re-aim when the column's width changes. No
   Agent API, IPC or migration change. Owed: JC's on-device steps for
   tickets 81 (notes written for the user; the 10-23 morning review's wake
-  or skip), 82 (a daily reminder's fire stays out of done), 86 (the
-  unlabelled part) and 87 (the one opening and lit rows; the narrow
-  look, the card title and the narrow-preview fix passed on 10-22).
+  or skip), 82 (a daily reminder's fire stays out of done) and 86 (the
+  unlabelled part).
 - **The assistant acts unasked; a morning review** (2026-10-21 / 22,
   assistant PRD ruling 10, main chat PRD rulings 124–127, tickets 73–79,
   devlog [2026-10-21-proactive-first-stage-todo-rooted](./devlog/2026-10-21-proactive-first-stage-todo-rooted.md)).

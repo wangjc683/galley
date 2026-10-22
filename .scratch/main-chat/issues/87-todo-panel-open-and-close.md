@@ -1,6 +1,6 @@
 # 87 待办面板的开与关：窄窗口只临时看一眼、卡片标题打开面板、只自动开一次、它动过的行亮一下
 
-Status: needs-dogfood（2026-10-22 JC 真机：第 1–3 站与合入后补修那一步通过，「真机看了，没问题」；第 4、5 站要跟 Galley 说话、会写进库，库里没有痕迹：702 仍是 11 月 20 日、没有新待办，合入后主对话里只有两句时区问题，还没走。快进合入 `31f37af7`，补修 `13265760`；主会话机器验收：读过 `lib/todo-open.ts`、`lib/todo-panel.ts`、`stores/ui.ts`、两个新 hook、`LocalFileWorkspace`、`TodoCards`、`App.tsx` 的 diff；在代理的 worktree 里重跑 `pnpm --dir gui typecheck`、`lint`、`test`（200 个文件、2177 条全过）、`git diff --check` 干净，设计文档新增行全角标点扫描 0 处；rebase 到 `2fb578a2` 时没有重叠文件）
+Status: done（2026-10-22 JC 真机：第 1–3 站与合入后补修那一步通过，「真机看了，没问题」；第 4、5 站 JC 让主会话代走（「你可以用 computer use 直接在 dev 上自己测试吗？」），全部通过，走查中发现并修掉一处滚动问题，见 Comments 最后一条。快进合入 `31f37af7`，补修 `13265760`；主会话机器验收：读过 `lib/todo-open.ts`、`lib/todo-panel.ts`、`stores/ui.ts`、两个新 hook、`LocalFileWorkspace`、`TodoCards`、`App.tsx` 的 diff；在代理的 worktree 里重跑 `pnpm --dir gui typecheck`、`lint`、`test`（200 个文件、2177 条全过）、`git diff --check` 干净，设计文档新增行全角标点扫描 0 处；rebase 到 `2fb578a2` 时没有重叠文件）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 131 第 2–5 条（2026-10-22，JC：「按建议推进」）。只改 GUI 与设计文档。外置运行时没有待办面板，零变化。
 
@@ -79,7 +79,7 @@ Status: needs-dogfood（2026-10-22 JC 真机：第 1–3 站与合入后补修�
 2. 窄窗口里点顶栏「待办」：盖在右边；切到工作台再回来：没了；重启：宽窗口下仍是原来记住的样子。
 3. 点回复下 702 那张卡片的标题：面板打开，那一行亮一下。
 4. 面板开着，跟 Galley 说「702 那件改到 11 月 25 日」：那一行亮一下，日子变了。再说「加一个待办：明天交周报」：新的一行亮。
-5. 只自动开一次：dev 窗口右键「检查元素」，控制台跑 `localStorage.removeItem("galley.todoPanelIntroduced"); localStorage.removeItem("galley.todoPanelOpen"); location.reload()`；关着面板跟 Galley 说「记一下周五交报告」，回复落定时面板自己打开、那一行亮；关掉后再记一件，不再自己开。
+5. 只自动开一次：dev 窗口右键「检查元素」，控制台跑 `["galley.todoPanelIntroduced","galley.todoPanelOpen","galley.todoPanelOpenElsewhere"].forEach(k=>localStorage.removeItem(k)); location.reload()`（右键要点在输入框里，别处的右键菜单被应用拦掉了；其他那一处记着开也算「认识了」，三个键都要删）；关着面板跟 Galley 说「记一下周五交报告」，回复落定时面板自己打开、那一行亮；关掉后再记一件，不再自己开。
 
 ## Comments
 
@@ -244,3 +244,12 @@ LA exit=0
 - **修法**：拉宽的那一刻，还开着的预览或审阅是后开的，照「后开的换掉先开的」把它换掉的那几处记为关，同宽窗口下开它时一样（文件预览记这条对话那一处，审阅两处）。纯函数 `readingPanelClosesTodoOnWiden(reading, here, wasNarrow, narrow)` 放 `lib/todo-panel.ts`；`LocalFileWorkspace` 的 ResizeObserver 在写 `todoNarrow` 时调用它，读的是 ref 里当前开着的阅读面板与新 prop `todoPlace`（App 传这条对话的那一处，没有主对话时不传）。
 - **顺带**：`replaceTodoPanel` 与拉宽这一支都只把原来记着开的记为关（`closeTodoPlaces`）。原来改动审阅在哪开都对两处写一次关，`setTodoPanelOpen` 每写一次都记「认识了」，没见过面板就先开了审阅的人会错过那一次自动打开。
 - **验证**：`lib/todo-panel.test.ts` 加一条（预览换这一处、审阅换两处、没有那一处、没开东西、仍窄、本来就宽各一例）；`pnpm --dir gui typecheck`、`lint`、`test` 全过，`git diff --check` 干净。没在真机上拉窗口看过。
+
+### 2026-10-22 主会话代走第 4、5 站
+
+- **做法**：`main.tsx` 临时挂 dev-only 测试脚本（`zz-harness-t87.ts`），配 scratchpad 里 127.0.0.1:1421 的小服务下指令、收日志：清本机标记、往输入框填字发出、点面板 ×、记面板出现与行上 `message-locate-flash` 的时刻、按 50ms 记对话的滚动位置；`screencapture -l` 截窗口。走完撤掉，`main.tsx` 无改动。
+- **第 5 站**：清掉三个键、重载后面板关着；发「记一下：周五交报告」，回复落定时面板自己打开（`introduced` 变真、Galley 一处记为开），「交报告」那一行亮。关掉面板再记「周六取快递」，卡片出现，面板不再打开。
+- **第 4 站**：面板开着，「702 那件改到 11 月 25 日」那一行亮、日子变了（Galley 顺手改写了备注）；「加一个待办：明天交周报」Galley 先问是不是和「交报告」同一件，答「不是同一件，另加交周报」后新行亮；「周五的报告交了」那一行打勾、删除线、原地停住并亮，随后落进「已完成」（4 → 5），Core 记 `done_via = supervisor`。
+- **发现的问题**：第 5 站面板打开那一刻，对话没留在底部，新回复和它的卡片在视野下方。重现三次并加探针：回复落定的平滑跟随（票 51）刚走到离底 1px，面板打开、对话从 1179px 变 740px、内容高出约 260–320px；跟随动画的最后一帧按旧目标收尾，滚动监听用重排后的布局读出离底约 280px，判成「不在底部」，尺寸监听晚几帧到、看到不在底部就不跟了。用按钮在静止时打开面板没有这个问题（离底 0）。
+- **修法**（`gui/src/hooks/useStickyScroll.ts`）：跟随动画本来要落到底的（`attached`），自然走完时落在当时真正的底部；动画途中尺寸监听看到列宽变了，不再按开始时量的回复开头重新瞄准，当即结束动画、照平常的规则跟到底（这一种顺序是读代码推出的，真机没撞到）。修后重现：面板打开后离底 0，新回复和卡片在视野里。没有单元测试：要真实布局与 ResizeObserver，jsdom 量不出来，证据是修前修后的真机对照。
+- **测试数据已清**：六件测试待办用 CLI 取消（`via = cli`，不进「最近不要的跟进」，见 `core/src/assistant_todo.rs` 的 `declined_one`），各自的提醒随之取消；702 用 CLI 改回 11 月 20 日、提醒 09:00、原来的备注（从 10-20 那次 `todo add` 的调用里抄回）。「交报告」已勾掉，留在「已完成」。这几轮对话与取消了的卡片留在主对话里（主对话还不能删单条消息，见 deferred「主对话里删单条消息」）。
