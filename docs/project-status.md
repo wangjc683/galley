@@ -733,13 +733,12 @@ and tests it, green on `98dec86c`; the runtime smoke is what's owed).
   Your own not-done to-dos can be deleted from the panel (a ⋯ / right-click
   menu, no confirm, five seconds to undo before Core hears it, the card
   then reads 已删除; a new desktop command `cancel_todo`); new ones are
-  still said, not typed, with a quiet 跟 Galley 说 row at the foot of a
-  non-empty list. Making Galley note things faster waits in deferred. No
+  still said, not typed, with a 跟 Galley 说 icon in the panel's header. Making Galley note things faster waits in deferred. No
   Agent API, IPC or migration change. Owed: JC's on-device steps for
   tickets 81 (notes written for the user; the 10-23 morning review's wake
   or skip), 82 (a daily reminder's fire stays out of done), 86 (the
   unlabelled part), 88 (the delete menu, undo toast, 已删除 card) and 89
-  (the foot row).
+  (the header icon).
 - **The assistant acts unasked; a morning review** (2026-10-21 / 22,
   assistant PRD ruling 10, main chat PRD rulings 124–127, tickets 73–79,
   devlog [2026-10-21-proactive-first-stage-todo-rooted](./devlog/2026-10-21-proactive-first-stage-todo-rooted.md)).
