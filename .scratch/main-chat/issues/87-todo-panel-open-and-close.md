@@ -1,6 +1,6 @@
 # 87 待办面板的开与关：窄窗口只临时看一眼、卡片标题打开面板、只自动开一次、它动过的行亮一下
 
-Status: needs-dogfood（2026-10-22 快进合入 `31f37af7`；主会话机器验收：读过 `lib/todo-open.ts`、`lib/todo-panel.ts`、`stores/ui.ts`、两个新 hook、`LocalFileWorkspace`、`TodoCards`、`App.tsx` 的 diff；在代理的 worktree 里重跑 `pnpm --dir gui typecheck`、`lint`、`test`（200 个文件、2177 条全过）、`git diff --check` 干净，设计文档新增行全角标点扫描 0 处；rebase 到 `2fb578a2` 时没有重叠文件）
+Status: needs-dogfood（2026-10-22 JC 真机：第 1–3 站与合入后补修那一步通过，「真机看了，没问题」；第 4、5 站要跟 Galley 说话、会写进库，库里没有痕迹：702 仍是 11 月 20 日、没有新待办，合入后主对话里只有两句时区问题，还没走。快进合入 `31f37af7`，补修 `13265760`；主会话机器验收：读过 `lib/todo-open.ts`、`lib/todo-panel.ts`、`stores/ui.ts`、两个新 hook、`LocalFileWorkspace`、`TodoCards`、`App.tsx` 的 diff；在代理的 worktree 里重跑 `pnpm --dir gui typecheck`、`lint`、`test`（200 个文件、2177 条全过）、`git diff --check` 干净，设计文档新增行全角标点扫描 0 处；rebase 到 `2fb578a2` 时没有重叠文件）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 131 第 2–5 条（2026-10-22，JC：「按建议推进」）。只改 GUI 与设计文档。外置运行时没有待办面板，零变化。
 
