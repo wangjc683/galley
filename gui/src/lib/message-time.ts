@@ -308,7 +308,7 @@ export function formatListTime(
 /**
  * The clock alone, as every shape here writes it: zero-padded 24-hour
  * 「14:00」 in Chinese, en-US 「2:00 PM」 in English (main chat PRD
- * ruling 97: a to-do's reminder on its due day, a time under 今天).
+ * ruling 97: a to-do's reminder on its due day).
  * Null for an unparseable timestamp.
  */
 export function formatClock(

@@ -75,7 +75,7 @@ function task(extra: Partial<TodoItem> = {}): TodoItem {
 describe("a to-do's second line (ruling 97)", () => {
   const line = (
     item: TodoItem,
-    options: { inToday?: boolean; checked?: boolean; today?: number } = {},
+    options: { checked?: boolean; today?: number } = {},
     language: "zh-CN" | "en-US" = "zh-CN",
   ) =>
     todoMetaParts(
@@ -84,7 +84,6 @@ describe("a to-do's second line (ruling 97)", () => {
       options.today ?? TODAY,
       language,
       language === "zh-CN" ? zh : en,
-      { inToday: options.inToday },
     ).map((p) => (p.bell ? `🔔${p.text}` : p.text));
 
   it("says when it is due, with no word before it", () => {
@@ -106,7 +105,7 @@ describe("a to-do's second line (ruling 97)", () => {
     expect(todoMetaParts(todo(), false, TODAY, "zh-CN", zh)).toEqual([]);
   });
 
-  it("drops the day word under 今天", () => {
+  it("says 今天 for today: no group label says it for the row (ticket 86)", () => {
     const tonight = todo({
       due: {
         date: "2026-10-16",
@@ -115,12 +114,11 @@ describe("a to-do's second line (ruling 97)", () => {
         time: "18:00",
       },
     });
-    expect(line(tonight, { inToday: true })).toEqual(["18:00"]);
-    // A day without a time, today: nothing to say.
+    expect(line(tonight)).toEqual(["今天 18:00"]);
+    // A day without a time, today: the day word alone.
     const today = todo({ due: { date: "2026-10-16", hasTime: false } });
-    expect(line(today, { inToday: true })).toEqual([]);
-    // A card has no heading: it keeps the word.
     expect(line(today)).toEqual(["今天"]);
+    expect(line(today, {}, "en-US")).toEqual(["Today"]);
   });
 
   it("says how many days overdue, in warning", () => {
@@ -131,7 +129,7 @@ describe("a to-do's second line (ruling 97)", () => {
     expect(todoMetaParts(late, false, TODAY, "zh-CN", zh)).toEqual([
       { text: "逾期 2 天", tone: "warning" },
     ]);
-    expect(line(late, { inToday: true }, "en-US")).toEqual(["2 days overdue"]);
+    expect(line(late, {}, "en-US")).toEqual(["2 days overdue"]);
     // Due earlier today at a time that has passed (Core's mark).
     const thisMorning = todo({
       due: {
@@ -145,7 +143,6 @@ describe("a to-do's second line (ruling 97)", () => {
     expect(todoMetaParts(thisMorning, false, TODAY, "zh-CN", zh)).toEqual([
       { text: "逾期 · 今天 10:00", tone: "warning" },
     ]);
-    expect(line(thisMorning, { inToday: true })).toEqual(["逾期 · 10:00"]);
     expect(todoOverdueDays(thisMorning, TODAY)).toBe(0);
   });
 
@@ -216,12 +213,12 @@ describe("a to-do's second line (ruling 97)", () => {
     expect(line(todo({ reminder: haircut.reminder }))).toEqual([
       "🔔明天 10:00",
     ]);
-    // Under 今天, today's reminder is its clock.
+    // Due today, reminded today: the clock alone after 「今天」.
     const today = todo({
       due: { date: "2026-10-16", hasTime: false },
       reminder: { ...haircut.reminder!, at: local(2026, 10, 16, 20, 0) },
     });
-    expect(line(today, { inToday: true })).toEqual(["🔔20:00"]);
+    expect(line(today)).toEqual(["今天", "🔔20:00"]);
     expect(todoReminderCancellable(haircut)).toBe(true);
     // Checked (a tick on its way, or done): the reminder goes, the due
     // date stays and is never overdue.

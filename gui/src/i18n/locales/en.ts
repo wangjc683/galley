@@ -2079,9 +2079,6 @@ export const enCopy: AppCopy = {
   },
   todo: {
     title: "To-do",
-    groupToday: "Today",
-    groupLater: "Later",
-    groupAnytime: "Anytime",
     groupAssistant: "Galley's on it",
     groupRoutine: "Routine",
     groupDone: "Done",

@@ -53,16 +53,6 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
 import { TodoCheck } from "./TodoCheck";
 import { TodoMetaText } from "./TodoMetaText";
 import { todoTitleClass } from "./todo-styles";
-// TEMP variant switcher (main chat 85): the panel's density and 「演示」.
-import {
-  densityLook,
-  ignore,
-  LABEL_PAD,
-  TodoDemoInert,
-  useDemoTodo,
-  useTodoDemoInert,
-  useTodoVariants,
-} from "./todo-variants/todo-variants";
 
 export interface TodoPanelProps {
   /** The main chat, wherever the panel is (ticket 46): titles jump into
@@ -89,10 +79,10 @@ export interface TodoPanelProps {
  * conversation is open (ticket 46, ruling 95): looking is for anywhere,
  * noting and changing stay with Galley.
  *
- *   今天 / 以后 / 随时
- *               the user's to-dos not done (overdue first under 今天),
- *               with no label over them (ruling 98): a box, the title,
- *               when it is due and its reminder, its notes (ticket 80)
+ *   (no label)  the user's to-dos not done, one part at the top in
+ *               Core's order — overdue, today, later by day, no time
+ *               (ticket 86, ruling 130): a box, the title, when it is
+ *               due and its reminder, its notes (ticket 80)
  *   Galley 在办  its subtasks and the one-off tasks it will come back
  *               to: no box, the session rows' status glyphs
  *   例行         repeating tasks: the rule and the next time
@@ -143,19 +133,10 @@ export function TodoPanel({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  // TEMP variant switcher (main chat 85): 「演示」 shows a list of its own,
-  // whose titles and 「说说这件」 go nowhere; the launch-at-login hint
-  // still reads the real one.
-  const demo = useDemoTodo();
-  const shown = demo ?? todo;
-  const go = demo
-    ? ignore
-    : (target: TodoTarget) =>
-        goToTodoTarget(target, here, mainChatId, onOpenSession);
-  const talkAbout = demo
-    ? ignore
-    : (item: TodoItem) =>
-        quoteTodo(item, here, mainChatId, todoRowText(item, copy));
+  const go = (target: TodoTarget) =>
+    goToTodoTarget(target, here, mainChatId, onOpenSession);
+  const talkAbout = (item: TodoItem) =>
+    quoteTodo(item, here, mainChatId, todoRowText(item, copy));
   const talk = () => talkToGalley(here, onTalk);
 
   return (
@@ -178,18 +159,16 @@ export function TodoPanel({
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-4 pt-2">
-        {loaded && todoPanelEmpty(shown) && <TodoPanelEmpty onTalk={talk} />}
+        {loaded && todoPanelEmpty(todo) && <TodoPanelEmpty onTalk={talk} />}
         {/* Empty, this draws 例行 alone, when the daily review is there
             (ticket 80); before the first read, nothing. */}
-        <TodoDemoInert.Provider value={demo !== null}>
-          <TodoPanelGroups
-            todo={shown}
-            mainChatId={mainChatId}
-            onGo={go}
-            onTalkAbout={talkAbout}
-            defaultDoneOpen={defaultDoneOpen}
-          />
-        </TodoDemoInert.Provider>
+        <TodoPanelGroups
+          todo={todo}
+          mainChatId={mainChatId}
+          onGo={go}
+          onTalkAbout={talkAbout}
+          defaultDoneOpen={defaultDoneOpen}
+        />
         <AutostartHint todo={todo} />
       </div>
     </div>
@@ -229,52 +208,32 @@ export function TodoPanelGroups({
 }) {
   const copy = useCopy();
   const [doneOpen, setDoneOpen] = useState(defaultDoneOpen);
-  // TEMP variant switcher (main chat 85): B runs 你的事 as one part.
-  const flat = densityLook(useTodoVariants((s) => s.look)).flatYours;
-  const yours = todo.yours;
   const rowProps = { mainChatId, onGo, onTalkAbout };
-  // The user's to-dos are the list's own: by time, each its own group,
-  // with no label over them (main chat PRD ruling 98: a list kept for
-  // you doesn't tag yours as yours; only Galley's are set apart).
-  const yourParts: [string, string, TodoItem[]][] = [
-    ["today", copy.todo.groupToday, yours.today],
-    ["later", copy.todo.groupLater, yours.later],
-    ["anytime", copy.todo.groupAnytime, yours.anytime],
+  // The user's to-dos are the list's own: one part at the top with no
+  // label (main chat PRD ruling 98: a list kept for you doesn't tag
+  // yours as yours; only Galley's are set apart), and since ticket 86
+  // (ruling 130) not split by time either — beside Apple's Reminders
+  // the rows were as tall, and the room went to labels. Core's three
+  // lists end to end, not sorted again: overdue (soonest due first),
+  // today (by time, a day without one after), later by day, no time in
+  // the order noted. Each row says its day, 「今天 18:00」 too.
+  const yours = [
+    ...todo.yours.today,
+    ...todo.yours.later,
+    ...todo.yours.anytime,
   ];
   // 12px between groups, none over the first — under the empty state
   // too, where 例行 is the first (main chat ticket 83, ruling 128 point
   // 9): a gap between the sections, whichever are drawn.
   return (
     <div data-role="todo-groups" className="space-y-3">
-      {/* TEMP variant switcher (main chat 85): B — Core's three lists end
-          to end (overdue, today, later by day, no time), not sorted
-          again, no label; each row worded as outside 今天. */}
-      {flat
-        ? yourParts.some(([, , items]) => items.length > 0) && (
-            <section data-todo-group="yours" data-todo-part="all">
-              {yourParts.flatMap(([, , items]) =>
-                items.map((item) => (
-                  <YourRow key={item.id} item={item} {...rowProps} />
-                )),
-              )}
-            </section>
-          )
-        : yourParts.map(
-            ([key, label, items]) =>
-              items.length > 0 && (
-                <section key={key} data-todo-group="yours" data-todo-part={key}>
-                  <GroupLabel label={label} />
-                  {items.map((item) => (
-                    <YourRow
-                      key={item.id}
-                      item={item}
-                      inToday={key === "today"}
-                      {...rowProps}
-                    />
-                  ))}
-                </section>
-              ),
-          )}
+      {yours.length > 0 && (
+        <section data-todo-group="yours">
+          {yours.map((item) => (
+            <YourRow key={item.id} item={item} {...rowProps} />
+          ))}
+        </section>
+      )}
       {todo.assistant.length > 0 && (
         <section data-todo-group="assistant">
           <GroupLabel label={copy.todo.groupAssistant} />
@@ -325,9 +284,12 @@ export function TodoPanelGroups({
  * register without its uppercase, as one group is named 「Galley 在办」 and
  * the product name is never set in capitals (AGENTS.md, Names And
  * Terms). 已完成 folds: the whole label toggles it, its count and a caret
- * on the right. The space over it is the groups' gap
- * (TodoPanelGroups); its own top margin, never in force as the first
- * child of its section, went with ticket 83. */
+ * on the right. 3px above and below, about 22px tall (main chat ticket
+ * 86, ruling 130: 6px before; beside Apple's Reminders the labels were
+ * where the room went), so a label sits about 9px from its own group
+ * and about 21px from the one above. The space over it is the groups'
+ * gap (TodoPanelGroups); its own top margin, never in force as the
+ * first child of its section, went with ticket 83. */
 function GroupLabel({
   label,
   count,
@@ -339,9 +301,8 @@ function GroupLabel({
   open?: boolean;
   onToggle?: () => void;
 }) {
-  // TEMP variant switcher (main chat 85): B+C's 3px in place of 6px.
-  const tight = densityLook(useTodoVariants((s) => s.look)).tightLabels;
-  const register = `flex w-full items-center gap-1.5 rounded-sm px-2.5 ${tight ? LABEL_PAD.tight : LABEL_PAD.normal} text-left text-[11px] font-semibold text-ink-muted`;
+  const register =
+    "flex w-full items-center gap-1.5 rounded-sm px-2.5 py-[3px] text-left text-[11px] font-semibold text-ink-muted";
   if (!onToggle) {
     return (
       <div className={register}>
@@ -517,22 +478,15 @@ function useTodoWrite(id: string) {
  * off — by the thing it removes, and not a second target beside the
  * first at the row's end (deferred.md 「session 行 hover 置顶按钮」: two
  * precise targets side by side make the row's hover loud). */
-function YourRow({
-  inToday = false,
-  ...props
-}: RowProps & { inToday?: boolean }) {
+function YourRow(props: RowProps) {
   const { item, onTalkAbout } = props;
   const copy = useCopy();
   const language = useLanguage();
   const todayStartMs = useDayStamp();
   const cancelReminder = useAssistantTodoStore((s) => s.cancelReminder);
-  // TEMP variant switcher (main chat 85): a demo row's cancel does nothing.
-  const inert = useTodoDemoInert();
   const { flip, failure, cancelling } = useTodoWrite(item.id);
   const checked = todoChecked(item, flip);
-  const parts = todoMetaParts(item, checked, todayStartMs, language, copy, {
-    inToday,
-  });
+  const parts = todoMetaParts(item, checked, todayStartMs, language, copy);
   const canCancelReminder = !checked && todoReminderCancellable(item);
   const notes = todoNotesLine(item);
   return (
@@ -553,7 +507,7 @@ function YourRow({
             canCancelReminder && (
               <CancelReminder
                 disabled={cancelling}
-                onClick={() => (inert ? ignore() : cancelReminder(item.id))}
+                onClick={() => cancelReminder(item.id)}
               />
             )
           }
@@ -649,8 +603,6 @@ function AssistantRow(props: RowProps) {
   const language = useLanguage();
   const todayStartMs = useDayStamp();
   const cancelTask = useAssistantTodoStore((s) => s.cancelTask);
-  // TEMP variant switcher (main chat 85): a demo row's cancel does nothing.
-  const inert = useTodoDemoInert();
   const { failure, cancelling } = useTodoWrite(item.id);
   const line = assistantRowLine(item, todayStartMs, language, copy);
   const canCancel = assistantTaskCancellable(item);
@@ -667,7 +619,7 @@ function AssistantRow(props: RowProps) {
             canCancel && (
               <CancelReminder
                 disabled={cancelling}
-                onClick={() => (inert ? ignore() : cancelTask(item.id))}
+                onClick={() => cancelTask(item.id)}
               />
             )
           }

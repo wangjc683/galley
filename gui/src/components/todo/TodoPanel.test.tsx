@@ -192,53 +192,98 @@ function row(html: string, id: string): string {
 }
 
 describe("the panel's groups", () => {
-  it("draws the groups in order: your to-dos by time, no label over them (ruling 98), then Galley's", () => {
+  it("draws your to-dos first, one part with no label (ruling 130), then Galley's groups under theirs", () => {
     const html = panel(FULL);
     expect(html).toContain('aria-label="待办"');
     const order = [
-      'data-todo-part="today"',
-      'data-todo-part="later"',
-      'data-todo-part="anytime"',
+      'data-todo-group="yours"',
       'data-todo-group="assistant"',
       'data-todo-group="routine"',
       'data-todo-group="done"',
     ].map((g) => html.indexOf(g));
     expect(order.every((at) => at > -1)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
-    for (const label of [
-      "今天",
-      "以后",
-      "随时",
-      "Galley 在办",
-      "例行",
-      "已完成",
-    ]) {
+    expect(count(html, 'data-todo-group="yours"')).toBe(1);
+    // No label over yours: the part opens on its first row.
+    expect(html).toMatch(
+      /data-todo-group="yours"><div data-todo-row="todo_late"/,
+    );
+    for (const label of ["Galley 在办", "例行", "已完成"]) {
       expect(html).toContain(`>${label}<`);
     }
-    expect(html).not.toContain("你的事");
-    // 今天, 以后, 随时 are groups now, in the groups' register.
-    const today = html.slice(html.indexOf('data-todo-part="today"'));
-    expect(today).toMatch(
-      /^[^>]*><div class="[^"]*font-semibold[^"]*"><span[^>]*>今天</,
-    );
+    for (const gone of ["今天", "以后", "随时", "你的事"]) {
+      expect(html).not.toContain(`>${gone}<`);
+    }
     // No input anywhere (ruling 91 point 6).
     expect(html).not.toContain('<input type="text"');
     expect(html).not.toContain("<textarea");
   });
 
-  it("draws no empty group and no empty part", () => {
+  it("runs Core's three lists end to end, not sorted again: overdue, today, later, no time", () => {
+    const tonight = todo({
+      id: "todo_tonight",
+      text: "取干洗的衣服",
+      due: {
+        date: dayIn(0),
+        hasTime: true,
+        at: inDays(0, 18),
+        time: "18:00",
+      },
+    });
+    const today = todo({
+      id: "todo_today",
+      text: "给花浇水",
+      due: { date: dayIn(0), hasTime: false },
+    });
+    const html = panel({
+      ...FULL,
+      yours: {
+        today: [OVERDUE, tonight, today],
+        later: [REMINDED],
+        anytime: [ANYTIME],
+      },
+    });
+    const yours = html.slice(
+      html.indexOf('data-todo-group="yours"'),
+      html.indexOf('data-todo-group="assistant"'),
+    );
+    const ids = [...yours.matchAll(/data-todo-row="([^"]+)"/g)].map(
+      (m) => m[1],
+    );
+    expect(ids).toEqual([
+      "todo_late",
+      "todo_tonight",
+      "todo_today",
+      "todo_report",
+      "todo_soil",
+    ]);
+    // Today's rows say so; overdue stays warning.
+    expect(row(html, "todo_tonight")).toMatch(
+      /data-role="todo-meta"[^]*>今天 18:00</,
+    );
+    expect(row(html, "todo_today")).toMatch(/data-role="todo-meta"[^]*>今天</);
+    expect(row(html, "todo_late")).toMatch(/text-warning[^>]*>逾期 2 天</);
+  });
+
+  it("draws no empty group, and no part of yours when there is none", () => {
     const html = panel({
       ...EMPTY_TODO,
       yours: { today: [], later: [REMINDED], anytime: [] },
       routine: [ROUTINE],
     });
     expect(html).toContain('data-todo-group="yours"');
-    expect(html).toContain('data-todo-part="later"');
-    expect(html).not.toContain('data-todo-part="today"');
-    expect(html).not.toContain('data-todo-part="anytime"');
     expect(html).not.toContain('data-todo-group="assistant"');
     expect(html).not.toContain('data-todo-group="done"');
     expect(html).toContain('data-todo-group="routine"');
+    // None of yours: 「Galley 在办」 is the first group.
+    const galleys = panel({
+      ...FULL,
+      yours: { today: [], later: [], anytime: [] },
+    });
+    expect(galleys).not.toContain('data-todo-group="yours"');
+    expect(galleys).toMatch(
+      /data-role="todo-groups" class="space-y-3"><section data-todo-group="assistant">/,
+    );
   });
 
   it("sets the groups 12px apart, none over the first, under the empty state too (ticket 83)", () => {
@@ -249,10 +294,20 @@ describe("the panel's groups", () => {
     expect(groups(html)).toMatch(
       /^data-role="todo-groups" class="space-y-3"><section/,
     );
-    expect(count(html, "<section")).toBe(6);
+    expect(count(html, "<section")).toBe(4);
     // No group label carries a margin of its own any more.
     expect(html).not.toContain("first:mt-0");
     expect(html).not.toMatch(/class="mt-3 flex w-full/);
+    // Each label 3px above and below (ticket 86, ruling 130), 已完成's
+    // button too.
+    const labels = [
+      ...html.matchAll(/class="(flex w-full items-center gap-1\.5[^"]*)"/g),
+    ].map((m) => m[1]);
+    expect(labels).toHaveLength(3);
+    for (const label of labels) {
+      expect(label).toContain("py-[3px]");
+      expect(label).not.toContain("py-1.5");
+    }
     // Under the empty state, 例行 is the first group: nothing over it.
     const empty = panel({ ...EMPTY_TODO, routine: [REVIEW] });
     expect(empty.indexOf('data-role="todo-empty"')).toBeLessThan(
@@ -362,15 +417,11 @@ describe("the panel's groups", () => {
   it("names the groups in English, never 「Galley」 in capitals", () => {
     const html = panel(FULL, { language: "en-US" });
     expect(html).not.toContain("uppercase");
-    for (const label of [
-      "Today",
-      "Later",
-      "Anytime",
-      "Galley&#x27;s on it",
-      "Routine",
-      "Done",
-    ]) {
+    for (const label of ["Galley&#x27;s on it", "Routine", "Done"]) {
       expect(html).toContain(`>${label}<`);
+    }
+    for (const gone of ["Today", "Later", "Anytime"]) {
+      expect(html).not.toContain(`>${gone}<`);
     }
     expect(html).toContain('aria-label="Talk about this"');
   });
@@ -467,11 +518,12 @@ describe("the panel's rows", () => {
     expect(report).toContain("line-through");
     expect(report).not.toContain("提醒 ");
     expect(report).not.toContain('aria-label="取消提醒"');
-    // Still in 以后, where it was.
+    // Still where it was: after the overdue one, before the one with no
+    // time.
     const html = panel(FULL);
-    expect(html.indexOf('data-todo-row="todo_report"')).toBeGreaterThan(
-      html.indexOf('data-todo-part="later"'),
-    );
+    const at = (id: string) => html.indexOf(`data-todo-row="${id}"`);
+    expect(at("todo_report")).toBeGreaterThan(at("todo_late"));
+    expect(at("todo_report")).toBeLessThan(at("todo_soil"));
   });
 
   it("says why a write failed, under the row", () => {

@@ -2085,9 +2085,6 @@ export const zhCopy = {
   todo: {
     title: "待办",
     // 待办面板的组（主聊天票 42，裁决 91）：你要办的按今天、以后、随时各成一组，上面不再挂「你的事」（裁决 98）。
-    groupToday: "今天",
-    groupLater: "以后",
-    groupAnytime: "随时",
     groupAssistant: "Galley 在办",
     groupRoutine: "例行",
     groupDone: "已完成",

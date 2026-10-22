@@ -159,9 +159,10 @@ export function todoOverdueDays(
  * due, with no word before it (「周三 15:00」, 「明天」; 「逾期 2 天」 in
  * warning once past), then the reminder, a bell and its time — the clock
  * alone on the due day (「周三 15:00 🔔 14:00」, 「明天 🔔 10:00」), the
- * day too on another (「🔔 周二 20:00」). `inToday`: the row sits under
- * 今天, so the day word goes (「18:00」; a day without a time leaves
- * nothing, and today's reminder is its clock). A reminder that has gone
+ * day too on another (「🔔 周二 20:00」). Today's says so (「今天 18:00」,
+ * 「今天」): the panel's own to-dos run as one part with no group label
+ * over them (main chat ticket 86, ruling 130), as the cards have none,
+ * so the day word is never left to a heading. A reminder that has gone
  * off is not written; a paused one says so. The day it was noted is not
  * on the line: its title leads back to the sentence, and the card hangs
  * under that reply. A checked one shows its due date quietly and no
@@ -174,25 +175,18 @@ export function todoMetaParts(
   todayStartMs: number,
   language: ResolvedLanguage,
   copy: AppCopy,
-  { inToday = false }: { inToday?: boolean } = {},
 ): TodoMetaPart[] {
   const parts: TodoMetaPart[] = [];
   const due = item.due;
   if (due) {
     const overdue = checked ? null : todoOverdueDays(item, todayStartMs);
-    const clock = due.hasTime && due.at ? formatClock(due.at, language) : null;
     const when = dueWhen(due, todayStartMs, language, copy);
     if (overdue !== null && overdue >= 1) {
       parts.push({ text: copy.todo.overdueDays(overdue), tone: "warning" });
     } else if (overdue === 0) {
-      parts.push({
-        text: copy.todo.overdueAt(inToday && clock ? clock : when),
-        tone: "warning",
-      });
-    } else if (!inToday) {
+      parts.push({ text: copy.todo.overdueAt(when), tone: "warning" });
+    } else {
       parts.push({ text: when, tone: "muted" });
-    } else if (clock) {
-      parts.push({ text: clock, tone: "muted" });
     }
   }
   const reminder = item.reminder;
@@ -201,9 +195,7 @@ export function todoMetaParts(
   const at = Date.parse(reminder.at);
   const day = Number.isNaN(at) ? null : localDayStart(at);
   const dueDay = due ? localDayMs(due.date) : null;
-  const sameDay =
-    day !== null &&
-    (day === dueDay || (inToday && day === localDayStart(todayStartMs)));
+  const sameDay = day !== null && day === dueDay;
   const short = (sameDay ? formatClock(reminder.at, language) : null) ?? full;
   const paused = reminder.state === "paused";
   parts.push({
