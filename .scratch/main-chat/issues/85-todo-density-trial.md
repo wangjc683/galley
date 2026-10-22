@@ -1,6 +1,6 @@
 # 85 待办面板的密度：临时切换器（现状 / B 你的事不分组 / B+C 组名收紧，带演示档）
 
-Status: ready-for-agent（排在票 84 合入之后：同改 `gui/src/components/todo/TodoPanel.tsx`，由票 84 的代理接着做）
+Status: needs-dogfood（2026-10-22 快进合入 `13092922`（切换器）、`f5c5e265`（回报）；主会话机器验收：看过 pill 的两处 DEV 守卫与接入点，在代理的 worktree 里重跑 `pnpm --dir gui typecheck`、`lint`、`vitest run`（200 个文件、2126 条全过）、`git diff --check` 干净；等 JC 真机选档，定档票按选定档写死、拆切换器、改设计文档）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 130（2026-10-22；JC：「上切换器」）。只改 GUI，做一个临时切换器给 JC 真机比；定档与拆切换器另开一张票，这张不改设计文档。
 
