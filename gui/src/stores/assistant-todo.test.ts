@@ -535,6 +535,60 @@ describe("deleting a to-do", () => {
     expect(toasts()).toEqual([]);
   });
 
+  // Ruling 132 point 2: a done to-do is never rewritten to 已删除.
+  it("leaves one Galley ticked off within the five seconds done: Core is not asked, the row ends in 已完成", async () => {
+    const ticked: TodoItem = {
+      ...OPEN,
+      state: "done",
+      at: "2026-10-22T08:00:00Z",
+    };
+    const afterTick: AssistantTodo = {
+      ...EMPTY_TODO,
+      yours: { today: [], later: [], anytime: [SOIL] },
+      done: [ticked],
+    };
+    const invoke = answer([afterTick, afterTick]);
+    todos().deleteTodo(OPEN);
+    // Galley's `todo done`, read in on `todos:changed` under the toast.
+    await todos().load();
+    expect(todos().todo.done).toEqual([ticked]);
+    runOut();
+    await todos().commitDeletes();
+
+    expect(deletes(invoke)).toEqual([]);
+    expect(todos().deleting).toEqual({});
+    expect(todos().failures).toEqual({});
+    const shown = todoWithoutDeleting(todos().todo, todos().deleting);
+    expect(shown.done.map((item) => item.id)).toEqual(["todo_1"]);
+    expect(drawn()).toEqual(["todo_2"]);
+  });
+
+  it("asks Core for the rest of a batch past one ticked off meanwhile", async () => {
+    const ticked: TodoItem = {
+      ...OPEN,
+      state: "done",
+      at: "2026-10-22T08:00:00Z",
+    };
+    const afterTick: AssistantTodo = {
+      ...EMPTY_TODO,
+      yours: { today: [], later: [], anytime: [SOIL] },
+      done: [ticked],
+    };
+    const invoke = answer([
+      afterTick,
+      { ...afterTick, yours: EMPTY_TODO.yours },
+    ]);
+    todos().deleteTodo(OPEN);
+    todos().deleteTodo(SOIL);
+    await todos().load();
+    runOut();
+    await todos().commitDeletes();
+
+    expect(deletes(invoke)).toEqual([{ id: "todo_2" }]);
+    expect(todos().deleting).toEqual({});
+    expect(todos().todo.done).toEqual([ticked]);
+  });
+
   it("takes only a to-do, once", async () => {
     const invoke = answer([]);
     const task: TodoItem = {

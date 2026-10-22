@@ -68,7 +68,8 @@ import { makeAppError } from "@/types/app-error";
  *   Galley within the five seconds deletes nothing (the safe way round).
  *   Core's answers are read back in the same set that lets them go, so a
  *   deleted row never shows between; one Core refused comes back with
- *   its reason (`failures`).
+ *   its reason (`failures`). One ticked off meanwhile (Galley's tick, in
+ *   the list's 已完成 when the toast goes) is not sent: it stays done.
  *
  * A write that fails puts the row back as it was and leaves a reason by
  * its id (`failures`), cleared by the next try. A to-do's id and a
@@ -207,9 +208,18 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
   // Ask Core for each of `ids`, in order, then read again: the fresh
   // list and these off `deleting` in one set, so a deleted row is never
   // drawn between; one refused is back on the panel with its reason.
+  // One ticked off while its undo toast ran (Galley's `todo done`, read
+  // in on `todos:changed`) is not asked for: a done to-do is never
+  // rewritten to 已删除 (PRD ruling 132 point 2), so it drops out of
+  // `deleting` with the rest, to 已完成, its card 已完成, and no reason.
   const sendDeletes = async (ids: readonly string[]) => {
     const refused: Record<string, TodoFailure> = {};
     for (const id of ids) {
+      if (
+        get().todo.done.some((item) => item.kind === "todo" && item.id === id)
+      ) {
+        continue;
+      }
       try {
         await cancelTodo(id);
       } catch (e) {
