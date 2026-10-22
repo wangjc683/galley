@@ -9,10 +9,11 @@ import { cn } from "@/lib/utils";
 
 export type CheckboxSize = "sm" | "md";
 
-/** How a ticked box is filled. TEMP variant switcher (main chat 83):
- * `quiet` is only the to-do panel's 已完成 and done to-do cards on B
- * and C (components/todo/todo-variants/todo-variants.ts); it stays if
- * one of them wins. */
+/** How a ticked box is filled: `brand`, every box's; `quiet` only for a
+ * to-do done in Core — the to-do panel's 已完成 and done to-do cards
+ * (main chat ticket 84, PRD ruling 129 point 2: a thing done asks for
+ * nothing, and brand is Galley at work or inviting you to start). A
+ * to-do's tick in its 1.5 s hold stays brand. */
 export type CheckboxCheckedTone = "brand" | "quiet";
 
 export interface CheckboxProps
@@ -28,9 +29,9 @@ export interface CheckboxProps
    * box on the first text line when the label is `items-start`
    * (multi-line labels), since a top-aligned box sits 1–2px high. */
   boxClassName?: string;
-  /** Ticked: `brand` (the default — every box but these) fills it with
-   * the brand colour; `quiet` fills and edges it `line-strong` with an
-   * `ink-soft` tick, for a thing done that asks nothing more. */
+  /** Ticked: `brand` (the default) fills it with the brand colour;
+   * `quiet` fills and edges it `line-strong` (each theme's own) with an
+   * `ink-soft` tick — same shape, size and tick, still clickable. */
   checkedTone?: CheckboxCheckedTone;
 }
 

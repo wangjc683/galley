@@ -53,13 +53,6 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
 import { TodoCheck } from "./TodoCheck";
 import { TodoMetaText } from "./TodoMetaText";
 import { todoTitleClass } from "./todo-styles";
-// TEMP variant switcher (main chat 83): 已完成's look and 「演示」.
-import {
-  DONE_FADE_CLASS,
-  doneLook,
-  useDemoDone,
-  useTodoVariants,
-} from "./todo-variants/todo-variants";
 
 export interface TodoPanelProps {
   /** The main chat, wherever the panel is (ticket 46): titles jump into
@@ -93,7 +86,9 @@ export interface TodoPanelProps {
  *   Galley 在办  its subtasks and the one-off tasks it will come back
  *               to: no box, the session rows' status glyphs
  *   例行         repeating tasks: the rule and the next time
- *   已完成       the last seven days, folded, with its count
+ *   已完成       the last seven days, folded, with its count: ticked
+ *               to-dos (their box in neutral grey), reminders that went
+ *               off, subtasks back
  *
  * Empty groups are not drawn; with nothing but the daily review, the
  * empty state is, and 例行 under it (ticket 80, `todoPanelEmpty`). The
@@ -213,10 +208,6 @@ export function TodoPanelGroups({
 }) {
   const copy = useCopy();
   const [doneOpen, setDoneOpen] = useState(defaultDoneOpen);
-  // TEMP variant switcher (main chat 83): 「演示」 swaps 已完成's rows.
-  const demo = useDemoDone();
-  const done = demo ?? todo.done;
-  const doneCount = demo ? demo.length : todo.done.length + todo.doneOmitted;
   const yours = todo.yours;
   const rowProps = { mainChatId, onGo, onTalkAbout };
   // The user's to-dos are the list's own: by time, each its own group,
@@ -264,25 +255,24 @@ export function TodoPanelGroups({
           ))}
         </section>
       )}
-      {done.length > 0 && (
+      {todo.done.length > 0 && (
         <section data-todo-group="done">
           <GroupLabel
             label={copy.todo.groupDone}
-            count={doneCount}
+            count={todo.done.length + todo.doneOmitted}
             open={doneOpen}
             onToggle={() => setDoneOpen((open) => !open)}
           />
           {doneOpen && (
             <>
-              {done.map((item) => (
+              {todo.done.map((item) => (
                 <DoneRow
                   key={`${item.kind}:${item.id}`}
                   item={item}
-                  inert={demo !== null}
                   {...rowProps}
                 />
               ))}
-              {!demo && todo.doneOmitted > 0 && (
+              {todo.doneOmitted > 0 && (
                 <p className="px-2.5 py-2 text-[12px] text-ink-muted">
                   {copy.todo.doneOmitted(todo.doneOmitted)}
                 </p>
@@ -383,7 +373,6 @@ function RowShell({
   notes,
   actions,
   failure,
-  rowClass,
 }: {
   item: TodoItem;
   mainChatId: string;
@@ -394,8 +383,6 @@ function RowShell({
   notes?: ReactNode;
   actions?: ReactNode[];
   failure?: string | null;
-  /** TEMP variant switcher (main chat 83): C's fade under 已完成. */
-  rowClass?: string;
 }) {
   const copy = useCopy();
   const target = todoTitleTarget(item, mainChatId);
@@ -427,7 +414,7 @@ function RowShell({
       data-todo-row={item.id}
       data-todo-kind={item.kind}
       data-todo-state={item.state}
-      className={cn("group/todo-row rounded-sm hover:bg-hover", rowClass)}
+      className="group/todo-row rounded-sm hover:bg-hover"
     >
       <div className="relative flex gap-2.5 px-2.5 py-1.5">
         <span className="flex h-5 w-4 shrink-0 items-center justify-center">
@@ -587,10 +574,10 @@ function NotesLine({ text, full }: { text: string; full: string }) {
   );
 }
 
-/** A to-do's second line: the due date (warning when overdue), the
- * reminder, the day it was noted, and `after` it (the reminder's cancel,
- * on hover: on the reminder's line, after the day when there is one —
- * the line cuts the day first when narrow, never the button). */
+/** A to-do's second line: when it is due (warning when overdue) and the
+ * reminder, a bell and its time (ruling 97: the day it was noted is not
+ * on it), and `after` it the reminder's cancel, on hover — outside what
+ * the line cuts, so a narrow row cuts the words, never the button. */
 function MetaLine({
   parts,
   after,
@@ -693,18 +680,15 @@ function RoutineRow(props: RowProps) {
   );
 }
 
-// TEMP variant switcher (main chat 83): what a demo row's box and title
-// do — nothing.
-const ignore = () => {};
-
-/** 已完成: a to-do keeps its box (unticking it brings it back); the
- * rest their kind's glyph, all a step quieter. */
-function DoneRow({ inert = false, ...rest }: RowProps & { inert?: boolean }) {
-  // TEMP variant switcher (main chat 83): the look, and 「演示」's rows
-  // (`inert`), whose box and title ask nothing of Core and go nowhere.
-  const look = doneLook(useTodoVariants((s) => s.look));
-  const props = inert ? { ...rest, onGo: ignore } : rest;
-  const rowClass = look.fade ? DONE_FADE_CLASS : undefined;
+/**
+ * 已完成: what Core lists there since ticket 82 — the user's ticked
+ * to-dos, Galley's one-off reminders that went off, subtasks that came
+ * back (a routine's fires stay out). A to-do keeps its box, ticked in
+ * neutral grey, not brand (unticking it brings it back); a subtask and
+ * a reminder their kind's glyph, the title in `ink-muted` as a ticked
+ * to-do's (main chat ticket 84, ruling 129 point 2: B).
+ */
+function DoneRow(props: RowProps) {
   const { item } = props;
   const copy = useCopy();
   const language = useLanguage();
@@ -726,31 +710,27 @@ function DoneRow({ inert = false, ...rest }: RowProps & { inert?: boolean }) {
             item={item}
             checked={checked}
             saving={flip?.phase === "saving"}
-            checkedTone={look.quietBox ? "quiet" : undefined}
-            onToggle={inert ? ignore : undefined}
+            // Only done to-dos are listed here: the box quiet once ticked.
+            checkedTone="quiet"
           />
         }
         titleClass={todoTitleClass(checked)}
         line={line}
         failure={failure && todoFailureText(failure, copy)}
-        rowClass={rowClass}
       />
     );
   }
   return (
     <RowShell
       {...props}
-      rowClass={rowClass}
       leading={
         item.kind === "subtask" ? (
           <StatusIcon status="completed" size={14} />
-        ) : item.repeat && item.repeat.kind !== "once" ? (
-          <Repeat size={14} weight="thin" className="text-ink-muted" />
         ) : (
           <Clock size={14} weight="thin" className="text-ink-muted" />
         )
       }
-      titleClass={look.mutedTitle ? "text-ink-muted" : "text-ink-soft"}
+      titleClass="text-ink-muted"
       line={line}
     />
   );

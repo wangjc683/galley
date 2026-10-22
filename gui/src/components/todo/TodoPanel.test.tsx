@@ -171,6 +171,19 @@ function panel(
 }
 
 const count = (html: string, needle: string) => html.split(needle).length - 1;
+/** The classes of the drawn box beside a to-do's input (`ui/checkbox.tsx`). */
+function box(html: string, id: string): string {
+  const match = new RegExp(
+    `data-todo-check="${id}"[^>]*/?>\\s*<span aria-hidden="true" class="([^"]*)"`,
+  ).exec(html);
+  if (!match) throw new Error(`no box for ${id}`);
+  return match[1];
+}
+// The box's ticked fills (ruling 129 point 2: B, ticket 84) and its
+// empty one.
+const BRAND = "border-brand bg-brand text-ink";
+const QUIET = "border-line-strong bg-line-strong text-ink-soft";
+const EMPTY_BOX = "border-line-strong bg-elevated text-transparent";
 /** The markup of one row, from its opening to the next row. */
 function row(html: string, id: string): string {
   const start = html.indexOf(`data-todo-row="${id}"`);
@@ -506,6 +519,78 @@ describe("the panel's rows", () => {
     expect(done).toContain("line-through");
     expect(done).not.toContain("opacity-60");
   });
+
+  // Ticket 84 (ruling 129 point 2: B).
+  it("ticks a done to-do's box in neutral grey under 已完成, still to be unticked", () => {
+    const html = panel(FULL, { doneOpen: true });
+    const done = row(html, "todo_done");
+    expect(box(done, "todo_done")).toContain(QUIET);
+    expect(box(done, "todo_done")).not.toContain("bg-brand");
+    expect(done).not.toContain('disabled=""');
+    // Nothing faded: the row and the card keep full opacity.
+    expect(done).not.toContain("opacity-");
+    // The boxes not done above it as ever.
+    expect(box(row(html, "todo_late"), "todo_late")).toContain(EMPTY_BOX);
+    expect(box(row(html, "todo_report"), "todo_report")).toContain(EMPTY_BOX);
+  });
+
+  it("keeps a tick brand through its hold; grey only once Core has it done", () => {
+    store.flips = { todo_report: { done: true, phase: "settling" } };
+    const held = row(panel(FULL), "todo_report");
+    expect(box(held, "todo_report")).toContain(BRAND);
+    store.flips = { todo_report: { done: true, phase: "saving" } };
+    expect(box(row(panel(FULL), "todo_report"), "todo_report")).toContain(
+      BRAND,
+    );
+    // Read back under 已完成: grey.
+    store.flips = {};
+    const after = panel(
+      {
+        ...FULL,
+        yours: { today: [OVERDUE], later: [], anytime: [ANYTIME] },
+        done: [{ ...REMINDED, state: "done", at: inDays(0, 10) }, DONE_TODO],
+      },
+      { doneOpen: true },
+    );
+    expect(box(row(after, "todo_report"), "todo_report")).toContain(QUIET);
+    // Unticked in its hold under 已完成: an empty box, as any not done.
+    store.flips = { todo_done: { done: false, phase: "settling" } };
+    expect(
+      box(row(panel(FULL, { doneOpen: true }), "todo_done"), "todo_done"),
+    ).toContain(EMPTY_BOX);
+  });
+
+  it("sets a done subtask's and a gone-off reminder's title in ink-muted, a ticked to-do's ink", () => {
+    const html = panel(
+      {
+        ...FULL,
+        done: [
+          DONE_TODO,
+          { ...SUBTASK, id: "s-back", state: "done", at: inDays(0, 8) },
+          {
+            kind: "task",
+            id: "sched_water",
+            text: "提醒喝水",
+            state: "fired",
+            createdBy: "assistant",
+            target: "assistant",
+            repeat: { kind: "once" },
+            at: inDays(0, 10),
+          },
+        ],
+      },
+      { doneOpen: true },
+    );
+    const sub = row(html, "s-back");
+    expect(sub).toMatch(/<button[^>]*text-ink-muted"[^>]*>查周五去上海的机票</);
+    expect(sub).not.toContain("text-ink-soft");
+    const fired = row(html, "sched_water");
+    expect(fired).toMatch(
+      /<span class="block truncate text-ink-muted">提醒喝水</,
+    );
+    expect(fired).not.toContain("text-ink-soft");
+    expect(fired).toContain(">今天 10:00 · 已提醒<");
+  });
 });
 
 describe("a to-do's notes (ticket 80)", () => {
@@ -746,6 +831,22 @@ describe("the card under the reply", () => {
     expect(html).toMatch(/data-role="todo-meta"[^>]*><span><span>[^<]+</);
     // C1 (ticket 45): the strike-through alone, the card not faded.
     expect(html).not.toContain("opacity-60");
+    // B (ticket 84): its box ticked in neutral grey, as under 已完成.
+    expect(box(html, "todo_old")).toContain(QUIET);
+    expect(html).not.toContain("bg-brand");
+    expect(html).not.toContain("opacity-");
+  });
+
+  it("keeps the box brand on a card being ticked, and empty on one not done or cancelled (ticket 84)", () => {
+    store.flips = { todo_report: { done: true, phase: "settling" } };
+    expect(box(cards([REMINDED]), "todo_report")).toContain(BRAND);
+    store.flips = {};
+    expect(box(cards([REMINDED]), "todo_report")).toContain(EMPTY_BOX);
+    expect(box(cards([CANCELLED]), "todo_gone")).toContain(EMPTY_BOX);
+    // Done, then cancelled: unticked, its box as any cancelled one.
+    expect(
+      box(cards([{ ...CANCELLED, state: "done" }]), "todo_gone"),
+    ).toContain(EMPTY_BOX);
   });
 
   it("cancelled: the box takes no click, the title faded, 「已取消」 beside it", () => {

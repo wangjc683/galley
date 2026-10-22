@@ -143,7 +143,9 @@ export interface AssistantTodo {
   assistant: TodoItem[];
   /** 例行: repeating tasks. */
   routine: TodoItem[];
-  /** 已完成: the last seven days. */
+  /** 已完成: the last seven days — to-dos ticked off, one-off tasks that
+   * went off, subtasks that came back; a routine's fires stay out (main
+   * chat ticket 82). */
   done: TodoItem[];
   /** Done within the window past Core's cap: left out. */
   doneOmitted: number;

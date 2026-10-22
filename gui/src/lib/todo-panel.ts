@@ -317,8 +317,8 @@ export function routineRowLine(
   return [rule, tail].filter(Boolean).join(" · ");
 }
 
-/** The second line of a done item: when (a to-do's tick, a fire, a
- * subtask's finish), and for what was not a to-do its state. */
+/** The second line of a done item: when (a to-do's tick, a one-off's
+ * fire, a subtask's finish), and for what was not a to-do its state. */
 export function doneRowLine(
   item: TodoItem,
   todayStartMs: number,
