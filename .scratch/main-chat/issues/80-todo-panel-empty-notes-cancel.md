@@ -62,3 +62,24 @@ Status: ready-for-agent
 3. 空状态现在的库里看不到（702 还在），测试覆盖；以后清单真清空时顺带看一眼：空状态的一句、例子、按钮都在，下面是「例行」里巡看那一行。
 
 ## Comments
+
+### 2026-10-22 实现回报（票 80 代理）
+
+- **提交**（分支 `ticket-80-todo-panel`，未 push、未合入）：`de6e0f86` GUI 与测试；`1e65873e` 设计文档；本条回报另一个提交。
+- **判空**：`todoPanelEmpty`（`gui/src/lib/todo-panel.ts:359`）把「例行为空」改成「例行里全是巡看」（`todo.routine.every(isDailyReview)`），暂停的巡看照样是巡看；巡看取消以后 Core 不再列它，例行为空，就是原来的全空。面板里空状态与列表不再二选一：空的时候先画空状态（一字不动），后面照常画 `TodoPanelGroups`，此时它只画得出「例行」一组，组名与巡看那一行和列表里同一份标记（测试逐字比过）；第一次读回来之前两样都不画，照旧。
+- **空状态与「例行」的间距**：不另加，与组与组之间相同。组与组之间实际是 0 外边距：`GroupLabel` 写着 `mt-3 … first:mt-0`，可组名在每组的 `section` 里都是第一个子元素，`mt-3` 从票 42 起就没生效过；看到的是上一行 6px 底边加组名 6px 上内边距。这里看到的是空状态自己的 32px 下内边距（`py-8`，没动）加组名 6px 上内边距：按钮底到组名那一块的顶 32px，到「例行」两字的行框顶 38px。
+- **备注**：新增纯函数 `todoNotesLine`（`:248`）：只给没做完的待办，`notes` 去首尾空白后为空就不画，换行与连续空白压成一个空格；悬停给的「全文」是去了首尾空白的原文（带换行，系统悬停提示会分行显示）。画法是 `NotesLine`：12px、`ink-muted`、`leading-[1.4]`、一行省略，被截断时 `syncTruncatedTitle` 给全文（同标题）。逾期的照样画、不用 warning 色；勾下去停留的 1.5 秒里照旧在（还没交给 Core，行不跳）。已完成走 `DoneRow`，不画；`TodoCards` 本来就不画，没改，补了测试。「说说这件」的引用照旧只带标题（`todoRowText`）。
+- **行变高后的对齐**：备注不放进标题那一栏，而是 `RowShell` 新加的 `notes` 槽，画在装着行首、标题、小字和悬停按钮的那一块（`relative … py-1.5`）下面，自己一块：`-mt-1 pb-1.5 pl-9 pr-2.5`。往上收 4px 进那块的 6px 底边，所以离上一行 2px（同小字离标题的 `mt-0.5`），起点 36px 与标题对齐（同失败那一行的 `pl-9`），下面照旧 6px 底边。悬停按钮是 `absolute inset-y-0` 在那一块里居中，那一块的高度与没有备注时一模一样，所以「说说这件」照旧在标题与时间两行之间居中（只有标题时对着标题），「取消提醒」照旧在时间那一行末尾，靠结构保证，不靠写死的高度。备注那一行悬停时不让宽度：两行的行里按钮下沿（39.4px）在备注上沿（46.8px）之上，碰不到；只有标题的行里按钮下沿压进备注行框顶 2px，字形到不了那里。
+- **它自己的提醒能取消**：新增 `assistantTaskCancellable`（`:232`）：`kind === "task"`、一次性（`repeat` 缺省也当一次性）、`scheduled` 或 `paused`。待办上那颗按钮抽成 `CancelReminder` 组件，两处用同一颗（测试比过两处按钮的标记逐字相同）。`PlainLine` 加了可选的 `after`：给了才换成 `MetaLine` 那种「截断的字 + 后面一颗按钮」的 flex 写法，子任务、例行、已完成的小字标记不变。store 里 `cancelReminder` 的写法抽成内部的 `cancel(id, write)`，新加 `cancelTask` 走 `cancelScheduledTask`，共用 `cancelling` / `failures` 两张表（待办 id `todo_…`、任务 id `sched_…`，碰不到一起）；成功后 `load()` 读回，这一行离开。失败照 `cancelReminder`：写原因、不重读，所以「这件事已经不在了。」会留到下一次事件触发的重读把这一行带走。
+- **卡片会跟着变**：同一条事件链，不经 store。`delete_scheduled_task` 在 Core 的 `Writes::delete_scheduled_task`（`core/src/session_writes.rs:788`）里成功后发 `scheduled-tasks:changed`（`:747`），回复下的提醒卡片由 `useRemindersByMessage` 监听它重读（`gui/src/hooks/useReminderCards.ts:50`），读回带 `cancelledAt` 的那条，`reminderCardState` 给「已取消」；面板这边 `TODO_REFRESH_EVENTS` 也含这个事件，与 store 自己的 `load()` 叠在一起由读取票号去重。卡片自己的「取消」也是靠这同一个事件变成「已取消」的。
+- **`cancelled_via` 核对**（只读，没改 Core）：链条是 `cancelScheduledTask`（`gui/src/lib/assistant-todo.ts:484`）→ `deleteScheduledTask`（`gui/src/lib/scheduled-tasks.ts:182`）带 `origin: GUI_ORIGIN`，即 `{ via: "gui" }`（`:140`）→ Tauri 命令 `delete_scheduled_task`（`core/src/commands/schedule.rs:132`）把 `origin` 原样交下去 → `db/api_impl.rs:225` → `cancel_scheduled_task`（`core/src/db/schedule.rs:596`）写 `cancelled_via = origin.via.as_sql()`，`OriginVia::Gui` 是 `"gui"`（`core/src/api/origin.rs:48`）。Core 现有测试 `every_cancel_records_who_and_why`（`core/tests/todo_test.rs:1055`）正是用 `Origin::gui()` 删一条一次性提醒，断言那一行是 `("gui", NULL, NULL)`（`:1163`）；进「最近不要的跟进」靠 `declined_one`（`core/src/assistant_todo.rs:542`，`Gui` 记为用户取消，前提是 `created_by_supervisor = 'galley-assistant'`）。GUI 这边 store 测试与点击测试都钉了 `invoke("delete_scheduled_task", { id, origin: { via: "gui" } })`。结论：记为 `gui`，与票面一致。这个 worktree 没编 Core，没跑那条 cargo 测试，也没查真实库。
+- **测试**：`lib/todo-panel.test.ts` 加判空五种（只有巡看、巡看暂停、巡看加别的例行、巡看加一件待办或别组的东西、巡看被取消）、`assistantTaskCancellable`、`todoNotesLine`；`TodoPanel.test.tsx`（静态渲染、mock store）加只有巡看时空状态与「例行」都在且巡看那一行与列表里逐字相同、有别的就照列表、备注在时间行下面 / 没有时间时在标题下面 / 空白不画 / 已完成不画 / 卡片不画 / 在悬停按钮那一块之外、它自己的提醒行有按钮（暂停的也有）、进行中禁用、失败写原因、子任务 / 例行 / 巡看 / 已完成没有按钮；`stores/assistant-todo.test.ts` 加 `cancelTask` 三条。「点了调用 `cancelScheduledTask`」要真点击，静态渲染做不到，而 `TodoPanel.test.tsx` 整个文件 mock 了 store，所以另起 `TodoPanel.click.test.tsx`（jsdom，照 `FileCards.click.test.tsx`）：真 store，包一层 `cancelScheduledTask` 记下调用，点了以后这一行随新清单离开；Core 拒绝时行下写「这件事已经不在了。」、按钮恢复可点。
+
+### 看到但没改、没验证到的
+
+1. `GroupLabel` 的 `mt-3` 一直没生效（见上「间距」）：组与组之间只靠两边各 6px 内边距。要不要按原意补上 12px，属于分组的视觉，票面列在「别动」里，没改。
+2. 判空之后 `TodoPanelGroups` 一直挂着，不再在「空 ↔ 有东西」之间重新挂载：已完成展开过、清单清空、后来又有做完的事时，「已完成」保持展开；原来回到列表时总是收起。没处理。
+3. 没开自启时，开机自启提示的条件把巡看算作「会响的事」（票 73 起就如此），所以新用户的空状态下面可能是「例行」加一句「电脑重启后，要先打开 Galley，提醒才会响。」。条件没改（票面「别动」里有开机自启提示）。
+4. 「Galley 在办」里的一次性任务不分谁建的：别的 agent 或旧表单建的也有这颗按钮（票面的条件只看 kind 与 state），到点开会话的（待运行）也有，同回复下提醒卡片。这种取消也记 `gui`，但不是 Galley 建的，不进「最近不要的跟进」（`declined_one` 的前提）。
+5. `MetaLine` 的注释还写着「the day it was noted」，裁决 97 起小字里已经没有记下的日子，旧注释，没改。
+6. 没跑 `tauri dev`，WebKit 下备注往上收 4px 后的实际间距、悬停按钮与备注行在只有标题的行里那 2px 的重叠、系统悬停提示对换行的显示，都没在真机看过；中文后备字体如果把行框撑高，备注离上一行会比 2px 多一点。
