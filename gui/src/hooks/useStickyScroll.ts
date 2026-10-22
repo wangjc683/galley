@@ -118,10 +118,17 @@ function startLanding(
   landing.animation = animateScroll(
     el,
     top,
-    () => {
+    (end) => {
       // Not when a newer landing or the unmount took over.
       if (landingRef.current !== landing) return;
       landingRef.current = null;
+      // Attached, it ends on the bottom as the column stands now, not on
+      // the target it last aimed at: a reflow in its last frames (the
+      // to-do panel opening beside the conversation as the reply lands,
+      // main chat ticket 87) grows the column before the follow below
+      // sees it, and the scroll event would read the old target as
+      // 「not at the bottom」 and stop following.
+      if (end === "arrived" && landing.attached) el.scrollTop = el.scrollHeight;
       el.dispatchEvent(new Event("scroll"));
     },
     timing,
@@ -455,7 +462,13 @@ export function useStickyScroll({
     if (!el) return;
     const inner = el.firstElementChild;
     if (!(inner instanceof HTMLElement)) return;
+    // The column's width at the last report: a landing re-aims only
+    // while it holds (below).
+    let width: number | null = null;
     const observer = new ResizeObserver((entries) => {
+      const box = entries[entries.length - 1]?.borderBoxSize?.[0];
+      const widthBefore = width;
+      width = box?.inlineSize ?? inner.clientWidth;
       // 贴底: the report observing begins with, on the box the mount
       // placed at the bottom — nothing grew, so no layout to read and
       // nothing to follow (ticket 72). From the first other box on,
@@ -463,7 +476,6 @@ export function useStickyScroll({
       const placed = placedBoxRef.current;
       if (placed) {
         placedBoxRef.current = null;
-        const box = entries[entries.length - 1]?.borderBoxSize?.[0];
         if (
           box &&
           Math.abs(box.inlineSize - placed.width) < 0.5 &&
@@ -481,10 +493,22 @@ export function useStickyScroll({
       }
       if (!atBottomRef.current) return;
       if (stickBottomRef.current) {
-        // A landing running: re-aim it (a write would end it).
-        if (landingRef.current) {
-          retargetLanding(el, landingRef.current);
-          return;
+        const landing = landingRef.current;
+        if (landing) {
+          // A landing running: re-aim it (a write would end it) — while
+          // the column keeps its width. A new width reflows everything
+          // above the reply, so the start it measured as it began is
+          // stale and a re-aim from it would park short of the bottom
+          // (the to-do panel opening beside the conversation mid-landing,
+          // main chat ticket 87; a window or sidebar resize). End it and
+          // follow at once; the reflow repaints the column in this frame
+          // anyway. The landing's end below covers the other order.
+          if (widthBefore === null || Math.abs(width - widthBefore) < 0.5) {
+            retargetLanding(el, landing);
+            return;
+          }
+          landingRef.current = null;
+          landing.animation?.cancel();
         }
         if (assistantFollowBottom(el, USER_MSG_ANCHOR_TOP_PX)) {
           setAtBottom(false);
