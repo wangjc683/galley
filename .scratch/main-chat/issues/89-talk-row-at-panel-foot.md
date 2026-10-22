@@ -32,3 +32,4 @@ Status: needs-dogfood（2026-10-22 JC 真机看了最下面那一行，「有点
 - **怎么改**：拿掉那一行；`TodoPanel` 的 `ReadingPanelHeader` 加 `actions`：一颗 `IconButton`（`ChatTeardropText` 16px thin，同文件预览 header 的动作），无障碍名与悬停提示「跟 Galley 说」，点了走同一个 `talk`。清单空不空都在；空状态那颗带字的按钮照留。
 - **测试**：静态测试改为断言 header 里有这颗、在关闭之前、清单里没有「跟 Galley 说」的字（空状态时只有它那颗按钮带字）；点击测试改为点 header 这颗。为那一行改过的行切片辅助函数与组名外边距的正则恢复原样。反向检查拿掉这颗，两条测试变红，放回全绿。`pnpm --dir gui typecheck`、`lint`、`test`（201 个文件、2207 条）全过。
 - **看到的**：顶栏工具簇里正上方的「聊天软件」状态灯是 `ChatCircleText`，与这颗 `ChatTeardropText` 很像，一上一下叠着，意思不同；图标照甲写明的用了对话图标，换不换交给 JC。
+- **换成加号**（JC：「按你倾向做」）：header 里那颗从 `ChatTeardropText` 换成 `Plus`（16px thin），名字与行为不变；与顶栏聊天软件状态灯（`ChatCircleText`）不再撞脸。测试只认无障碍名，不用改。
