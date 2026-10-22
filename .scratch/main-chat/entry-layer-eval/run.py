@@ -1037,29 +1037,80 @@ def refuse_real_data(path: Path) -> None:
 # ======================================================================
 
 
+# Ticket 79 (main chat PRD ruling 127): the Main Chat section a segment
+# opens with when it carries turns over, ported from Core's
+# `managed_prompt::main_chat_section` (`CARRY_TURNS` from
+# `session_runner::carry`). One turn says when it was said, more say when
+# the first and the last were. A carried case is the Rust carried-1 template
+# with its section rewritten for its number of turns; the dry test checks
+# the port byte for byte against Rust's own output
+# (schedule/rust-samples.json, `main_chat_section`).
+CARRY_TURNS = 10
+
+
+def main_chat_carried_section(session_id: str, start_turn: str, start_date: str, turns: int,
+                              first_said_at: str, last_said_at: str) -> str:
+    """`main_chat_section` with `turns` turns carried over."""
+    if turns == 1:
+        exchanges, said = "1 exchange", f"the last said {last_said_at}"
+    else:
+        exchanges, said = f"{turns} exchanges", f"said between {first_said_at} and {last_said_at}"
+    return ("## Main Chat\n\n"
+            f"This conversation is the user's main chat, session `{session_id}`. Your context\n"
+            f"holds it from turnIndex {start_turn} on, a segment that began {start_date}, and opens\n"
+            f"with {exchanges} from before it, {said}: time has passed\n"
+            "since. Anything older is not in your context: when the user refers to it,\n"
+            "look it up with the Galley CLI (search, then\n"
+            "`session show <id> --around=<messageId>`).")
+
+
+def carried_template(path: Path, turns: int) -> str:
+    """A carried-1 template (placeholders kept) saying `turns` turns, with
+    `__FIRST_SAID_AT__` for the first one's time when there are more."""
+    if not path.is_file():
+        fail(f"missing {path}")
+    if not 1 <= turns <= CARRY_TURNS:
+        fail(f"a segment carries 1 to {CARRY_TURNS} turns, not {turns}")
+    text = path.read_text(encoding="utf-8")
+    holes = ("__SESSION_ID__", "__SEGMENT_START_TURN__", "__SEGMENT_START_DATE__")
+    one = main_chat_carried_section(*holes, 1, "__LAST_SAID_AT__", "__LAST_SAID_AT__")
+    if text.count(one) != 1:
+        fail(f"{path.name}: its Main Chat section is not the port's one-turn text")
+    return text.replace(one, main_chat_carried_section(*holes, turns, "__FIRST_SAID_AT__", "__LAST_SAID_AT__"))
+
+
+def said_at_filled(text: str, case: dict[str, Any], now: datetime) -> str:
+    """The carried turns' times: the last `hours_ago` before now, the first
+    `first_hours_ago` (default: the same)."""
+    hours = float(case.get("hours_ago") or 0)
+    first = now - timedelta(hours=float(case.get("first_hours_ago", hours) or 0))
+    return (text.replace("__FIRST_SAID_AT__", first.strftime("%Y-%m-%d %H:%M"))
+            .replace("__LAST_SAID_AT__", (now - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M")))
+
+
 def galley_runtime_prompt(case: dict[str, Any], variant: str, now: datetime, draft: str) -> str:
     """Galley's main chat runtime prompt for this case, from the text the
     real Rust code produced (galley-prompt/, dumped from
-    managed_prompt::compose_main_chat_runtime_prompt with placeholders),
-    plus the draft entry layer for WITH."""
+    managed_prompt::compose_main_chat_runtime_prompt with placeholders;
+    a carried case's section from the port, carried_template), plus the
+    draft entry layer for WITH."""
     history = case.get("history") or []
     carried_turns = sum(1 for m in history if m.get("role") == "user")
     if case.get("carried") and carried_turns:
-        template = GALLEY_PROMPT_DIR / f"main_chat.carried-{carried_turns}.txt"
+        template = GALLEY_PROMPT_DIR / "main_chat.carried-1.txt"
+        text = carried_template(template, carried_turns)
     else:
         template = GALLEY_PROMPT_DIR / "main_chat.plain.txt"
-    if not template.is_file():
-        fail(f"missing {template}")
-    text = template.read_text(encoding="utf-8")
-    last_said = now - timedelta(hours=float(case.get("hours_ago") or 0))
-    text = (
+        if not template.is_file():
+            fail(f"missing {template}")
+        text = template.read_text(encoding="utf-8")
+    text = said_at_filled(
         text.replace("__SESSION_ID__", SESSION_ID)
         .replace("__SEGMENT_START_TURN__", str(SEGMENT_START_TURN))
-        .replace("__SEGMENT_START_DATE__", now.strftime("%Y-%m-%d"))
-        .replace("__LAST_SAID_AT__", last_said.strftime("%Y-%m-%d %H:%M"))
-    )
+        .replace("__SEGMENT_START_DATE__", now.strftime("%Y-%m-%d")),
+        case, now)
     for placeholder in ("__SESSION_ID__", "__SEGMENT_START_TURN__", "__SEGMENT_START_DATE__",
-                        "__LAST_SAID_AT__"):
+                        "__FIRST_SAID_AT__", "__LAST_SAID_AT__"):
         if placeholder in text:
             fail(f"unfilled {placeholder} in {template.name}")
     if variant == "with":
@@ -1951,12 +2002,10 @@ def sched_prompt(case: dict[str, Any], now: datetime) -> str:
     turns = sum(1 for m in case.get("history") or [] if m.get("role") == "user")
     if case.get("carried") and turns:
         # Ticket 60's chat cases: turns carried over from before the
-        # segment, as the real Rust code writes it (main_chat.carried-N).
-        path = SCHED_PROMPT.with_name(f"main_chat.carried-{turns}.txt")
-        if not path.is_file():
-            fail(f"missing {path.name}")
-        last = now - timedelta(hours=float(case.get("hours_ago") or 0))
-        text = path.read_text(encoding="utf-8").replace("__LAST_SAID_AT__", last.strftime("%Y-%m-%d %H:%M"))
+        # segment, as the real Rust code writes it (main_chat.carried-1,
+        # its section for N turns from the port since ticket 79).
+        text = said_at_filled(carried_template(SCHED_PROMPT.with_name("main_chat.carried-1.txt"), turns),
+                              case, now)
     else:
         text = SCHED_PROMPT.read_text(encoding="utf-8")
     text = (text.replace("__SESSION_ID__", SESSION_ID)
@@ -6072,6 +6121,13 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, 
     for n, w in enumerate(samples["wake"], 1):
         check(reminder_note(w["reports"]) == w["text"], f"reminder_note == subtask_report::report_text ({n})")
     check(all(lateness_words(a) == b for a, b in samples["lateness_words"]), "lateness_words matches")
+    # Ticket 79: the Main Chat section with turns carried over.
+    for ms in samples["main_chat_section"]:
+        got = main_chat_carried_section(ms["session_id"], str(ms["segment_start_turn"]), ms["segment_start_date"],
+                                        ms["turns"], ms["first_said_at"], ms["last_said_at"])
+        check(got == ms["text"], f"main_chat_carried_section == managed_prompt::main_chat_section ({ms['name']})")
+    check(sorted(ms["turns"] for ms in samples["main_chat_section"]) == [1, 2, CARRY_TURNS],
+          f"the samples cover one turn, two and the most carried ({CARRY_TURNS})")
     plain = sched_prompt(cases["report-wed"], now)
     held = sched_prompt(cases["already-set"], now)
     check("### In Hand" not in plain and "### In Hand" in held, "In Hand only when a case has tasks from before")
@@ -6665,6 +6721,30 @@ def dry_test_chat(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     from datetime import timezone
 
     mon = datetime(2026, 10, 19, 18, 25).astimezone()
+    # Ticket 79: a carried case composes through the port. One turn reads
+    # as Rust's carried-1 template filled in, byte for byte, in the main
+    # suite and the schedule suites; more turns name the first and the last
+    # time.
+    quote = cases["carry-quote"]
+
+    def filled(path: Path, hours: float) -> str:
+        return (path.read_text(encoding="utf-8").replace("__SESSION_ID__", SESSION_ID)
+                .replace("__SEGMENT_START_TURN__", str(SEGMENT_START_TURN))
+                .replace("__SEGMENT_START_DATE__", mon.strftime("%Y-%m-%d"))
+                .replace("__LAST_SAID_AT__", (mon - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M")))
+
+    lines = sched_in_hand(quote, mon)
+    check(galley_runtime_prompt(quote, "without", mon, "") == filled(GALLEY_PROMPT_DIR / "main_chat.carried-1.txt",
+                                                                     quote["hours_ago"])
+          and sched_prompt(quote, mon) == filled(SCHED_PROMPT.with_name("main_chat.carried-1.txt"), quote["hours_ago"])
+          .replace("\n\n__IN_HAND__", "\n\n" + lines if lines else ""),
+          "one carried turn: Rust's carried-1 wording, byte for byte (main and schedule prompts)")
+    three = dict(quote, history=quote["history"] * 3, first_hours_ago=50)
+    span = (f"with 3 exchanges from before it, said between {(mon - timedelta(hours=50)).strftime('%Y-%m-%d %H:%M')} "
+            f"and {(mon - timedelta(hours=quote['hours_ago'])).strftime('%Y-%m-%d %H:%M')}: time has passed\nsince.")
+    check(span in galley_runtime_prompt(three, "without", mon, "") and span in sched_prompt(three, mon)
+          and "the last said" not in sched_prompt(three, mon),
+          "three carried turns: the first and the last time (main and schedule prompts)")
     tomorrow7 = datetime(2026, 10, 20, 19, 0, tzinfo=mon.tzinfo)
     surgery = cases["personal-surgery"]
     own = synth_reminder(tomorrow7.astimezone(timezone.utc))

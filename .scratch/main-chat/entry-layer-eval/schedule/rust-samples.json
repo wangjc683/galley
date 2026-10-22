@@ -1316,6 +1316,38 @@
       "2 days"
     ]
   ],
+  "main_chat_section": [
+    {
+      "first_said_at": "2026-10-12 09:41",
+      "last_said_at": "2026-10-12 09:41",
+      "name": "one",
+      "segment_start_date": "2026-10-12",
+      "segment_start_turn": 42,
+      "session_id": "s-mgn4k2x1-7q3z9w0e",
+      "text": "## Main Chat\n\nThis conversation is the user's main chat, session `s-mgn4k2x1-7q3z9w0e`. Your context\nholds it from turnIndex 42 on, a segment that began 2026-10-12, and opens\nwith 1 exchange from before it, the last said 2026-10-12 09:41: time has passed\nsince. Anything older is not in your context: when the user refers to it,\nlook it up with the Galley CLI (search, then\n`session show <id> --around=<messageId>`).",
+      "turns": 1
+    },
+    {
+      "first_said_at": "2026-10-11 21:26",
+      "last_said_at": "2026-10-12 09:41",
+      "name": "two",
+      "segment_start_date": "2026-10-12",
+      "segment_start_turn": 42,
+      "session_id": "s-mgn4k2x1-7q3z9w0e",
+      "text": "## Main Chat\n\nThis conversation is the user's main chat, session `s-mgn4k2x1-7q3z9w0e`. Your context\nholds it from turnIndex 42 on, a segment that began 2026-10-12, and opens\nwith 2 exchanges from before it, said between 2026-10-11 21:26 and 2026-10-12 09:41: time has passed\nsince. Anything older is not in your context: when the user refers to it,\nlook it up with the Galley CLI (search, then\n`session show <id> --around=<messageId>`).",
+      "turns": 2
+    },
+    {
+      "first_said_at": "2026-10-05 08:03",
+      "last_said_at": "2026-10-12 09:41",
+      "name": "ten",
+      "segment_start_date": "2026-10-12",
+      "segment_start_turn": 42,
+      "session_id": "s-mgn4k2x1-7q3z9w0e",
+      "text": "## Main Chat\n\nThis conversation is the user's main chat, session `s-mgn4k2x1-7q3z9w0e`. Your context\nholds it from turnIndex 42 on, a segment that began 2026-10-12, and opens\nwith 10 exchanges from before it, said between 2026-10-05 08:03 and 2026-10-12 09:41: time has passed\nsince. Anything older is not in your context: when the user refers to it,\nlook it up with the Galley CLI (search, then\n`session show <id> --around=<messageId>`).",
+      "turns": 10
+    }
+  ],
   "wake": [
     {
       "reports": [
