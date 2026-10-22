@@ -45,3 +45,19 @@ Status: ready-for-agent（由票 83 的代理接着做）
 合入后（纯 GUI，热更新）切换器那一排不见了；已完成里勾掉的待办是灰方框，子任务、提醒的标题和勾掉的待办一样淡；勾下去那一下照旧是品牌色。
 
 ## Comments
+
+### 2026-10-22 实现回报（票 84 代理）
+
+- **提交**（分支 `ticket-84-done-b`，从 main `9aa1fa9e` 起，未 push、未合入）：`c05198c8` GUI 与测试；`3eacb727` 设计文档；本条回报另一个提交。
+- **写死 B**：`DoneRow` 里待办的方框写死 `checkedTone="quiet"`（已完成只列做完的待办；停留里取消勾时方框是空的，色调不起作用）；子任务、提醒的标题写死 `text-ink-muted`。`TodoCard` 只在 `item.state === "done"` 且没取消时传 `quiet`，正在勾的卡片（待办还是 open、勾在停留里）照旧品牌色。`ui/checkbox.tsx` 与 `TodoCheck` 保留 `checkedTone`，注释改写成定稿说法（只给 Core 里已做完的待办用，依据裁决 129 第 2 条，停留的 1.5 秒照旧品牌色）。`RowShell` 去掉 `rowClass`，C 的整行淡化跟着没了。
+- **拆**：`git rm` 了整个 `gui/src/components/todo/todo-variants/`（`todo-variants.ts`、`TodoVariantsPill.tsx`、`todo-variants.test.tsx` 与快照），去掉 `App.tsx` 的 pill 与 import；演示档的 `useDemoDone`、`DoneRow` 的 `inert` 与 `ignore`、`TodoCheck` 的 `onToggle` 都删了，已完成照旧读 `todo.done`、件数 `todo.done.length + todo.doneOmitted`、「还有 N 件没有列出」照旧。`grep -rn "main chat 83" gui/src` 为零：票 83 第 5、6 条的注释写的是「main chat ticket 83」，不含这个标记，两处定稿（`todoAutostartHintVisible` 不算巡看、`TodoPanelGroups` 外层 `space-y-3`）原样保留。
+- **删走不到的分支**：`DoneRow` 里非待办只剩子任务（`StatusIcon`）与一次性提醒（`Clock`）两支，画例行的 `Repeat` 那一支删了（`Repeat` 仍给「例行」组的 `RoutineRow` 用）。`AssistantTodo.done` 的类型镜像注释写上只有三种、例行响过不进（票 82）；`doneRowLine` 注释里的「a fire」改成「a one-off's fire」；面板文件头的分组表补上已完成的三种和灰方框。
+- **旧注释**：`MetaLine` 的注释改成现状：小字是截止与铃铛加时刻（裁决 97 起不写记下的日子），末尾是悬停的取消提醒，窄的时候截字不截按钮。
+- **设计文档**（`docs/design/conversation.md`）：「待办面板」的「已完成」写上方框中性灰实心、子任务与提醒标题 `ink-muted`；「勾掉的样子」写上 B、勾下去那一下照旧品牌色，加一条由来（10-17 C1 / C2，10-22 现状 / A / B / C 定 B，没选 C 的理由照裁决 129 第 2 条），另起一条写 Markdown 的 `- [x]` 不跟着改；「待办卡片」的「做完」把「品牌色填」改成同面板的中性灰，补一句正在勾的卡片照旧品牌色。都注了「2026-10-22，票 84，裁决 129」。顺手改了一处同类的过时说法：「点标题」里「到点开过会话的例行打开那个会话」改成「一次性任务」（票 82 起例行响过不进已完成，这一行已走不到）。Markdown 渲染那一节 `- [x]` 那一行没动。
+- **测试**：切换器测试随目录删掉。`TodoPanel.test.tsx` 加了：已完成里做完的待办方框是 `border-line-strong bg-line-strong text-ink-soft`、不带 `bg-brand`、仍可点、整行没有降不透明度；上面没做完的方框照旧是空框；停留中（`settling`、`saving`）的勾是品牌色，读回来落进已完成后是灰的，已完成里停留中取消勾是空框；已完成里子任务与送到的提醒标题 `ink-muted`、不再有 `ink-soft`。卡片测试加了：做完的卡片灰方框、不带 `bg-brand`；正在勾的卡片品牌色；没做的、取消的（含取消前做过的）是空框。新加 `ui/checkbox.test.tsx`：默认勾着的类名与改前逐字相同，`quiet` 的类名，没勾时色调不起作用。临时把 B 改回去跑过一次，这几条会失败（4 条失败），再恢复。
+
+### 看到但没改的
+
+1. 深色下灰实心方框（`line-strong` `#41464e`）和没做完的空框（同色描边、`bg-elevated` 底）靠填色与对勾区分，没在真机看；裁决 129 第 2 条留的跳出路线是灰底再深一档。
+2. 没跑 `tauri dev`，WebKit 下的样子没看。
+3. 已完成的子任务行用 `StatusIcon` 的完成图标，墨色是它自己的 `ink-muted`；这次只降了标题，图标没动（票面「图标、小字不变」）。
