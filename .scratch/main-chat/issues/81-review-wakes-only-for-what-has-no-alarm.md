@@ -69,3 +69,32 @@ Status: ready-for-agent
 3. 让它记一件带地点或人名的事（比如「下周三下午 3 点去 A 座 3 楼面试，记得带身份证」），打开待办面板（票 80 合入后）：那件事下面的备注是写给你看的一句，不复述标题与日子。
 
 ## Comments
+
+### 2026-10-22 实现回报（票 81 代理）
+
+- **提交**（分支 `ticket-81-review-gate`，未 push、未合入）：`b1993689` Core、测试、手册、现行文档与快照脚本；`a74b2a30` 评测结果与 README 一节；本条回报另一个提交。
+- **新判据**：`AssistantTodo::review_has_something_to_look_at(today: NaiveDate)`（`core/src/assistant_todo.rs`），只在 `fire_review` 用；`anything_in_hand` 没有别的调用方，删掉了。算的：你的事里没有截止的（随时），或截止日不晚于 `today` 加 `REVIEW_LOOKAHEAD_DAYS` 的（今天、逾期、挂没挂提醒都算；有时刻的按 `due.date` 那天，即构建清单时读的那个时区）；「Galley 在办」里 `kind == Subtask` 的（在跑、在问、出错、停在步数上限、没跑完）。不算：更远的你的事、它自己的一次性任务（`kind == Task`，两种 target）、例行、已完成。`due.date` 读不出来时当作要醒（Core 不会写出这样的值）。`REVIEW_LOOKAHEAD_DAYS = 3` 是 `assistant_todo.rs` 里的公开常量，注释写了裁决 128 第 4 条、试用到 10-28 再看、与 `todos.md` 的「ahead when there is something to get ready」对上。
+- **`fire_review`**：`today` 取 `now` 换到 `chrono::Local` 的日子（`assistant_todo` 构建清单用的就是 `chrono::Local`），判断本身只吃传进来的 `today`，单测里用 UTC、上海、洛杉矶各自的日子。读失败照旧醒，日志改成 `reading the to-do list failed, waking it`。跳过时的日志：`[scheduler] review {id}: nothing to look at (no to-do any time or due within 3 days, no unfinished subtask), skipped`（3 来自常量）。模块注释、`ReviewEvent::Skipped`、`ReviewEvent::Run`、`ReviewFire::Skipped`、`fire_review` 的文档注释改成新判据的说法；`REVIEW_PROMPT`、`review_paragraph`、`in_hand_section`、清单的分组排序都没动。
+- **手册**：`wake.md` 第一段末尾改为「Galley made this task, not you, and skips the morning when there is nothing to look at (what is due further off and your own reminders come up at their own time); when it wakes you, go over everything in hand.」；`todos.md` 的 `--notes` 一条原句保留，后面补「The user sees the notes under the to-do in their list: write them for the user, in their language (「A 座 3 楼，带身份证」), without the title or the day again, and not as a record about them (「用户说……」).」。反例没用票面的「JC 告知：……」，改成评测里旧手册下真出现过的「用户说……」，免得手册里带出真实用户的名字。`assistant_manual.rs` 两组断言各加了新句子（单行片段），`.md` 交叉引用数没变（仍是 18）。
+- **字节预算**：手册没有字节预算。`core/` 里的预算常量只管进提示词的部分（`STATIC_PROMPT_BUDGET_BYTES`、`MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES`、`MAIN_CHAT_SECTION_BUDGET_BYTES`、`IN_HAND_BUDGET_BYTES`、`IM_PROMPT_BUDGET_BYTES`），手册是按需读的文件，这次提示词一字没变，所以没有常量要改、`prompt-composition.md` 的条款台账也不用加行。两处手册改动合计 +363 字节（`todos.md` 6865 → 7097，+232；`wake.md` 4151 → 4282，+131；九个部分合计 26693 → 27056）。
+- **测试**：`assistant_todo.rs` 新增两条纯函数测试：只有远期待办（挂提醒的 11-20、不挂的今天加 4 天、今天加 4 天零点）、它自己的一次性任务（target assistant 与 session）、例行（含巡看本身）、已完成的待办与子任务 → 不醒；在此之上任加一件今天加 3 天（只有日期、当天 23:59）、今天加 2 天挂提醒、今天、逾期（日期、时刻）、随时 → 醒，单独一件也醒；在跑、出错、在问、没跑完的子任务各一 → 醒；7 天没动、不在清单里的旧子任务 → 不醒。时区：同一时刻的截止在上海是加 4 天、在洛杉矶是加 3 天，一醒一不醒；同一时刻上海已是第二天，日期型截止在上海算加 3 天、洛杉矶算加 4 天。`schedule_wake_test.rs`：`with_nothing_to_look_at_the_review_wakes_nobody`（原 `with_nothing_in_hand…`，加了 702 那样的远期待办挂提醒、加 4 天不挂、它自己的喝水提醒、一个开会话的一次性任务，照旧跳过，清单里这几件都还在）；`with_something_to_look_at_the_review_wakes_the_main_chat`（随时的那件照旧醒；加 3 天挂与不挂、今天、逾期 2 天醒，加 4 天挂与不挂不醒，加 3 天 23:59 醒；原来「它自己的一次性提醒也算在办」那段改成只有它不醒）；新增 `a_review_that_cannot_read_the_list_wakes_the_main_chat`（把 `todos` 表改名让读失败，照旧醒、记 `woke`）。原来靠一个十分钟后的提醒让巡看醒的四处（投递不到、runner 起不来、这一轮出错、外置运行时）改成一件随时的待办，覆盖的情形都留着。
+- **快照脚本**：`.scratch/assistant/closed-loop-snapshot.py` 文档串与输出里的「skipped (nothing in hand)」改为「skipped (nothing to look at)」，文档串写明票 81 起的判据；只读日志，没加逻辑。
+- **评测**：`run.py` 没有巡看判据的镜像（巡看用例直接拼到点的叫醒），手册目录照旧整套拷进状态根，`--dry-test` 560 项 PASS、0 项 FAIL，结尾 `DRY TEST PASSED`，`managed-ga/` 下没有 `__pycache__`。待办套件能走到 `todo add`，挑了六条（`reno-asked`、`flight-wed`、`hospital-tomorrow`、`half-done`、`lease-expiry`、`meeting-3pm`）各跑第 1 遍，`--model-id mm_1792576875658`，6 次运行、24 次模型调用，六遍都过；用 `--supersede` 合并，被替换的旧第 1 遍在 `meta.superseded_runs[10]`。备注原文：
+  - `reno-asked`：「预计完工，届时确认实际进度。」
+  - `flight-wed`：「早上的航班。出发前核对机场、航站楼和起飞时间，准备有效身份证件，查看值机安排并安排去机场的交通；航班号和具体起飞时间尚未提供。」
+  - `hospital-tomorrow`：「准备身份证、医保卡、既往检查报告和用药清单；核对预约时间、院区及医生告知的检查准备要求，是否空腹按医嘱。」
+  - `half-done`：「接着核实两台 ECS 实例的实际发起人，以及 OSS 外网下行流量对应的桶和业务。此前对话中的待核实线索：10 月 9 日、子账号 deploy-bot；需回到操作审计与账单明细验证。」
+  - `lease-expiry`：「先核对合同里的续租、退租提前通知期限及自动续约条款，再决定续租或搬迁；到期日按“3月底”暂记，具体以合同为准。」
+  - `meeting-3pm`：这一遍没写 `--notes`。
+  旧手册下这六条的第 1 遍，四条以「用户说」「用户先吃饭」开头，两条复述了标题与日子；这一次一条都没有。README 加了「备注写给用户看（票 81）」一节。
+- **对真实数据核对**（`sqlite3 … ".backup"` 到 worktree 之外的临时目录，不提交的临时测试按 `assistant_todo` 读备份，`RunnerManager::new()`，跑完删掉测试与备份）：今天 2026-10-22；你的事今天 0、以后 1（29 天后到期、挂着提醒）、随时 0；Galley 在办：子任务 0、它自己的任务 0；例行 1；已完成 3。原判据（有没有在办的）为真，新判据为假：不醒。
+- **文档**：`docs/managed-ga-runtime/runtime-modes-and-sessions.md` 的「The morning review」一条改成新判据。`docs/` 里别处（`prompt-composition.md`、`agent-api/schedule-commands.md`、`managed-ga-runtime/README.md`）只说巡看是什么、没写判据，没动；devlog、PRD、`docs/project-status.md`、`docs/design/` 没动。
+
+### 看到但没改、没验证到的
+
+1. 评测的 `review-nothing-to-do`（只有 11 月 20 日的装修待办、挂着提醒）按新判据在真机上不会再醒，这条用例现在测的是「醒了以后」；README 票 78 一节「在办的另有 11 月 20 号的装修待办（巡看因此不跳过）」也不再成立。用例和那段旧文字都没改，新的一节里写明了。
+2. 只重跑了六条的第 1 遍，第 2 遍仍是旧手册的结果；别的会写备注的用例（`note-report`、`school-monday`、`shanghai-trip`、`report-half`、`hotpot-asked` 等）没重跑。`flight-wed`、`half-done` 的备注还留着「尚未提供」「此前对话中的」这类给它自己看的字眼，`lease-expiry` 用的是弯引号“”；手册没再为这些加字，要不要再收由主会话定。
+3. 快照脚本的跳过次数按日志累计，合入之前的跳过是旧判据下的，没有按日期分开。
+4. 7 天没动、不在跑的子任务不在「Galley 在办」里（`RECENT_WINDOW_DAYS`），也就不让巡看醒：判据跟着清单走，没另算。
+5. `fire_review` 对 `now` 是泛型时区，但「今天」固定按 `chrono::Local` 取，与 `assistant_todo` 构建清单的时区一致；生产里调用方传的就是 `Local`，测试里也是。
+6. 没跑 `tauri dev`，真机三步没走；真模型只跑了上面 6 次运行。
