@@ -216,8 +216,11 @@ export function TodoPanelGroups({
     ["later", copy.todo.groupLater, yours.later],
     ["anytime", copy.todo.groupAnytime, yours.anytime],
   ];
+  // 12px between groups, none over the first — under the empty state
+  // too, where 例行 is the first (main chat ticket 83, ruling 128 point
+  // 9): a gap between the sections, whichever are drawn.
   return (
-    <>
+    <div data-role="todo-groups" className="space-y-3">
       {yourParts.map(
         ([key, label, items]) =>
           items.length > 0 && (
@@ -276,7 +279,7 @@ export function TodoPanelGroups({
           )}
         </section>
       )}
-    </>
+    </div>
   );
 }
 
@@ -284,7 +287,9 @@ export function TodoPanelGroups({
  * register without its uppercase, as one group is named 「Galley 在办」 and
  * the product name is never set in capitals (AGENTS.md, Names And
  * Terms). 已完成 folds: the whole label toggles it, its count and a caret
- * on the right. */
+ * on the right. The space over it is the groups' gap
+ * (TodoPanelGroups); its own top margin, never in force as the first
+ * child of its section, went with ticket 83. */
 function GroupLabel({
   label,
   count,
@@ -297,7 +302,7 @@ function GroupLabel({
   onToggle?: () => void;
 }) {
   const register =
-    "mt-3 flex w-full items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-left text-[11px] font-semibold text-ink-muted first:mt-0";
+    "flex w-full items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-left text-[11px] font-semibold text-ink-muted";
   if (!onToggle) {
     return (
       <div className={register}>

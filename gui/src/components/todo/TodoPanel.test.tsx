@@ -228,6 +228,28 @@ describe("the panel's groups", () => {
     expect(html).toContain('data-todo-group="routine"');
   });
 
+  it("sets the groups 12px apart, none over the first, under the empty state too (ticket 83)", () => {
+    const groups = (html: string) =>
+      html.slice(html.indexOf('data-role="todo-groups"'));
+    const html = panel(FULL);
+    // One gap between sibling sections, whichever are drawn.
+    expect(groups(html)).toMatch(
+      /^data-role="todo-groups" class="space-y-3"><section/,
+    );
+    expect(count(html, "<section")).toBe(6);
+    // No group label carries a margin of its own any more.
+    expect(html).not.toContain("first:mt-0");
+    expect(html).not.toMatch(/class="mt-3 flex w-full/);
+    // Under the empty state, 例行 is the first group: nothing over it.
+    const empty = panel({ ...EMPTY_TODO, routine: [REVIEW] });
+    expect(empty.indexOf('data-role="todo-empty"')).toBeLessThan(
+      empty.indexOf('data-role="todo-groups"'),
+    );
+    expect(groups(empty)).toMatch(
+      /^data-role="todo-groups" class="space-y-3"><section data-todo-group="routine">/,
+    );
+  });
+
   it("folds 已完成 with its count, open on asking", () => {
     const folded = panel(FULL);
     expect(folded).toContain('aria-expanded="false"');

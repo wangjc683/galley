@@ -279,6 +279,62 @@ describe("the list", () => {
       todoAutostartHintVisible(false, { ...EMPTY_TODO, yours }, false),
     ).toBe(true);
   });
+
+  it("leaves the daily review out of what is set to go off (ticket 83)", () => {
+    const review = item({
+      id: "sched_review",
+      text: "Daily review: read wake.md and go over what is in hand.",
+      createdBy: "agent",
+      agent: "galley-review",
+      repeat: { kind: "daily" },
+      timeOfDay: "09:00",
+      createdIn: undefined,
+    });
+    const alone = { ...EMPTY_TODO, routine: [review] };
+    expect(todoAutostartHintVisible(false, alone, false)).toBe(false);
+    // Beside a to-do's reminder still to go off: shown, as ever.
+    const reminded = item({
+      kind: "todo",
+      id: "todo_1",
+      state: "open",
+      reminder: {
+        taskId: "sched_9",
+        at: local(2026, 10, 17, 9, 0),
+        state: "scheduled",
+      },
+    });
+    expect(
+      todoAutostartHintVisible(
+        false,
+        {
+          ...alone,
+          yours: { today: [], later: [reminded], anytime: [] },
+        },
+        false,
+      ),
+    ).toBe(true);
+    // Beside Galley's own one-off reminder, or another routine: shown.
+    expect(
+      todoAutostartHintVisible(false, { ...alone, assistant: [item()] }, false),
+    ).toBe(true);
+    expect(
+      todoAutostartHintVisible(
+        false,
+        {
+          ...alone,
+          routine: [
+            review,
+            item({
+              id: "sched_daily",
+              repeat: { kind: "daily" },
+              timeOfDay: "08:00",
+            }),
+          ],
+        },
+        false,
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("reminder cards", () => {

@@ -365,7 +365,10 @@ export function todoRowTarget(item: TodoItem): TodoTarget | null {
  * main chat PRD ruling 96 moved it down and gave it a ×): launch at
  * login is off and something is set to go off — a task, or a to-do's
  * reminder — and the user has not closed it. Unknown (`null`) never
- * warns. */
+ * warns. The daily review does not count (main chat ticket 83, ruling
+ * 128 point 9): with nothing else in hand a late review loses nothing,
+ * and every main chat has one, so a new user's empty list would carry
+ * the hint. */
 export function todoAutostartHintVisible(
   autostartEnabled: boolean | null,
   todo: AssistantTodo,
@@ -379,8 +382,12 @@ export function todoAutostartHintVisible(
     ...todo.yours.anytime,
   ];
   return (
-    tasks.some((item) => item.kind === "task" && item.state === "scheduled") ||
-    yours.some((item) => item.reminder?.state === "scheduled")
+    tasks.some(
+      (item) =>
+        item.kind === "task" &&
+        item.state === "scheduled" &&
+        !isDailyReview(item),
+    ) || yours.some((item) => item.reminder?.state === "scheduled")
   );
 }
 
