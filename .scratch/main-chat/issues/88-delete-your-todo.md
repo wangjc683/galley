@@ -118,3 +118,12 @@ worktree `/Users/inkstone/Documents/genericagent-webui-wt88`，分支 `ticket-88
    - **Tauri 命令本身没有单测**：要 `AppHandle`；测的是它包装的那一行 `Writes::cancel_todo(…, Origin::desktop())`。
    - **没跑 `tauri dev`**，真机步骤都没走：WKWebView 里「⋯」的位置与悬停、右键、提示条、窄面板，以及 Galley 勾的停留行（只在静态测试里用你勾的停留验过，Galley 的停留走同一个 `checked` 判断）。
    - 测试里的 `localStorage is not available` 实验性警告是 Node 原有的，不是这张票加的。点击测试为 Radix 菜单在 jsdom 里补了一个空的 `ResizeObserver`，测完撤掉。
+
+### 2026-10-22 补充回报（票 88 代理，主会话追加的两条）
+
+主会话按裁决 132 定了上面第 5 条里的两项，同一个 worktree 与分支：
+
+1. **勾掉了的不删**（`9271120e`）：提示条走时，`stores/assistant-todo.ts` 的 `sendDeletes` 先看面板清单（`get().todo`，`todos:changed` 刷新过的）：这件已在「已完成」里（5 秒内 Galley 替你勾掉了），就不问 Core，不调 `cancel_todo`、不写原因，随这一批一起从 `deleting` 放掉，行回到「已完成」，卡片照旧「已完成」（裁决 132 第 2 条）；同一批里其余的照常交给 Core。补了两个 store 测试与设计文档「删除」里的一句。反向检查：去掉这个判断，`× leaves one Galley ticked off within the five seconds done: Core is not asked, the row ends in 已完成`、`× asks Core for the rest of a batch past one ticked off meanwhile`，`Tests  2 failed | 24 passed (26)`；拷回备份（`diff -q` 一致）后 `Tests  26 passed (26)`。
+2. **助理手册**（`89be80a6`）：`docs/managed-ga-runtime/galley-assistant-manual/todos.md` 改成「can only tick a to-do off, untick it, cancel its reminder, or delete it there.」，这一条后面几行按文件的宽度（74 列，中文算两列）重新折行；`core/src/assistant_manual.rs` 的 `manual_covers_the_users_to_dos` 换成新的两行片段，每段仍是文件里完整的一行。手册别处没动。没有测试数手册的字节（`managed_prompt.rs` 的字节预算只管入口层，不含手册各部分）。反向检查：把手册换回旧版，`todos.md lost: untick it, cancel its reminder, or delete it there. Everything else, a`，`test result: FAILED. 0 passed; 1 failed`；拷回后 `test result: ok. 1 passed`。
+
+验证（原样）：`cargo test --manifest-path core/Cargo.toml --workspace` 合计 45 个 `test result: ok.`、1221 passed、0 failed，退出码 0，其中 `test assistant_manual::tests::manual_covers_the_users_to_dos ... ok`、`test managed_prompt::tests::main_chat_entry_layer_sends_the_model_to_the_manual ... ok`；`pnpm --dir gui typecheck`、`lint` 无输出；`pnpm --dir gui test` 与 `TZ=UTC` 下都是 `Test Files  201 passed (201)`、`Tests  2205 passed (2205)`；`git diff --check` 无输出；`rustfmt --check`（经 stdin）`core/src/assistant_manual.rs` clean。
