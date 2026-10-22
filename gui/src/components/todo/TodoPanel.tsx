@@ -4,6 +4,7 @@ import {
   ChatTeardropText,
   Clock,
   PauseCircle,
+  Plus,
   Repeat,
   X,
 } from "@phosphor-icons/react";
@@ -196,11 +197,14 @@ export function TodoPanel({
         // way to Galley from here. An icon in the header's action group,
         // as the file preview's: in sight however long the list, taking
         // none of it. A row at the list's foot read as one more item
-        // (JC's dogfood, 10-22). The talk icon is 说说这件's: both put the
-        // caret in Galley's composer (`talkToGalley`), nothing prefilled.
+        // (JC's dogfood, 10-22). A plus, the common sign for a new one:
+        // a talk bubble here sat right under the top bar's Channels lamp
+        // (`ChatCircleText`) and read as the same thing. Its name says
+        // where it leads, and it puts the caret in Galley's composer
+        // (`talkToGalley`), nothing prefilled.
         actions={
           <IconButton ariaLabel={copy.todo.emptyTalk} onClick={talk}>
-            <ChatTeardropText size={16} weight="thin" />
+            <Plus size={16} weight="thin" />
           </IconButton>
         }
         close={
