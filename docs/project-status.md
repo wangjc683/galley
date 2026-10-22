@@ -705,7 +705,7 @@ renamed `galley-codex-*` → `galley-credential-*` (CI's Windows job compiles
 and tests it, green on `98dec86c`; the runtime smoke is what's owed).
 
 - **The to-do panel from first principles** (2026-10-22, main chat PRD
-  rulings 128–130, tickets 80–86, devlog
+  rulings 128–131, tickets 80–87, devlog
   [2026-10-22-todo-from-first-principles](./devlog/2026-10-22-todo-from-first-principles.md)).
   The grouping stays (a box is the user's to act on, a state icon is to
   look at). The morning review now wakes only for what has no alarm of its
@@ -719,10 +719,19 @@ and tests it, green on `98dec86c`; the runtime smoke is what's owed).
   muted titles; a routine's fires stay out of done. After a measured
   comparison with Apple Reminders (row heights match; the room went to
   group labels), the user's to-dos run as one unlabelled part and group
-  labels are tighter. No Agent API, IPC or migration change. Owed: JC's
-  on-device steps for tickets 81 (notes written for the user; the 10-23
-  morning review's wake or skip), 82 (a daily reminder's fire stays out of
-  done) and 86 (the unlabelled part).
+  labels are tighter. The panel still opens only when you open it, with
+  two exceptions: in a main area under 760px a remembered open is not
+  shown and opening it there is a look that folds when you leave; and it
+  opens by itself once, the first time a to-do card appears under a round
+  you sent (`galley.todoPanelIntroduced`). A to-do card's title opens the
+  panel at its row, and while the panel is on screen the rows Galley
+  added or changed light up (a to-do it ticked holds a moment first). A
+  receipt card under the reply that changed a to-do waits in deferred. No
+  Agent API, IPC or migration change. Owed: JC's on-device steps for
+  tickets 81 (notes written for the user; the 10-23 morning review's wake
+  or skip), 82 (a daily reminder's fire stays out of done), 86 (the
+  unlabelled part) and 87 (narrow look, card title, the one opening,
+  lit rows).
 - **The assistant acts unasked; a morning review** (2026-10-21 / 22,
   assistant PRD ruling 10, main chat PRD rulings 124–127, tickets 73–79,
   devlog [2026-10-21-proactive-first-stage-todo-rooted](./devlog/2026-10-21-proactive-first-stage-todo-rooted.md)).
