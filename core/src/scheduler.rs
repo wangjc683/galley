@@ -63,8 +63,10 @@
 //! [`REVIEW_SUPERVISOR`]): every day a little before or after 9:00 (ticket
 //! 78: a time picked once, when it is made, [`review_time_of_day`]) it
 //! wakes the main chat to go over what is in hand and move forward what it
-//! can. Coming due, it first looks without the model ([`fire_review`]):
-//! with nothing in hand it wakes nobody. Its wake travels as a reminder's,
+//! can. Coming due, it first looks without the model ([`fire_review`]),
+//! and wakes only for what has no alarm of its own (ticket 81): a to-do of
+//! the user's with no date or due within three days, or a subtask not
+//! finished; with none it wakes nobody. Its wake travels as a reminder's,
 //! with words of its own (`crate::subtask_report`), and one that cannot be
 //! delivered is dropped, never handed to a notification (its words are
 //! for the model). The user stops it by asking the main chat, which
@@ -161,12 +163,13 @@ pub const REVIEW_LOG_MAX: usize = 400;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewEvent {
-    /// It came due with nothing in hand: no wake, no tokens.
+    /// It came due with nothing to look at ([`fire_review`]): no wake, no
+    /// tokens.
     Skipped,
     /// It came due and was stamped to wake the main chat.
     Woke,
-    /// Fired by hand (`schedule run`, the desktop's run now): a wake with
-    /// no look at what is in hand first, and not a coming due.
+    /// Fired by hand (`schedule run`, the desktop's run now): a wake
+    /// without the look [`fire_review`] takes first, and not a coming due.
     Run,
     /// Its wake could not reach the main chat and was dropped, without
     /// the notification a reminder gets.
@@ -409,7 +412,7 @@ pub async fn ensure_review(
 /// How a coming due of the morning review went ([`fire_review`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReviewFire {
-    /// Nothing in hand: the period consumed, no wake.
+    /// Nothing to look at: the period consumed, no wake.
     Skipped,
     /// Stamped pending, to wake the main chat like a reminder.
     Woke,
@@ -418,17 +421,24 @@ pub enum ReviewFire {
 }
 
 /// The morning review came due (ticket 73). Before any model call, Core
-/// looks for something in hand, as the "In Hand" lines read it
-/// ([`crate::assistant_todo::assistant_todo`]): the user's to-dos not
-/// done, what Galley is on (subtasks not finished, one-off reminders and
-/// tasks to come). Routines do not count, the review being one. With
-/// nothing, the fire is stamped skipped — the period consumed, so it does
-/// not come due again today, and no wake
-/// ([`SqliteGalley::mark_scheduled_wake_skipped`]); otherwise it fires
-/// like a reminder ([`fire_reminder`]) and the wake pipeline takes it
-/// from there. Either way its log says so ([`log_review`]). A failed read
-/// wakes it: one turn too many beats a review that never runs. A catch-up
-/// (the computer asleep at its time) comes through here too.
+/// looks for something to look at, on the list the "In Hand" lines read
+/// ([`crate::assistant_todo::assistant_todo`]); ticket 81 (main chat PRD
+/// ruling 128 point 4): only what has no alarm of its own counts
+/// ([`AssistantTodo::review_has_something_to_look_at`]) — a to-do of the
+/// user's with no due date or due within
+/// [`crate::assistant_todo::REVIEW_LOOKAHEAD_DAYS`] days of today (overdue
+/// ones included), or a subtask not finished. A to-do due later, Galley's
+/// own one-off tasks (each goes off at its time by itself) and routines
+/// (the review is one) do not. With nothing to look at, the fire is
+/// stamped skipped — the period consumed, so it does not come due again
+/// today, and no wake ([`SqliteGalley::mark_scheduled_wake_skipped`]);
+/// otherwise it fires like a reminder ([`fire_reminder`]) and the wake
+/// pipeline takes it from there, and the review goes over everything in
+/// hand. Either way its log says so ([`log_review`]). A failed read wakes
+/// it: one turn too many beats a review that never runs. A catch-up (the
+/// computer asleep at its time) comes through here too.
+///
+/// [`AssistantTodo::review_has_something_to_look_at`]: crate::assistant_todo::AssistantTodo::review_has_something_to_look_at
 pub async fn fire_review<Tz: TimeZone>(
     galley: &SqliteGalley,
     runners: &RunnerManager,
@@ -439,19 +449,21 @@ pub async fn fire_review<Tz: TimeZone>(
 ) -> ReviewFire {
     let fired_at = instant_to_utc_iso(now);
     let planned = instant_to_utc_iso(due_at);
-    let in_hand =
-        match crate::assistant_todo::assistant_todo(galley, runners, now.with_timezone(&Utc)).await
-        {
-            Ok(todo) => todo.anything_in_hand(),
-            Err(e) => {
-                eprintln!(
-                    "[scheduler] review {}: reading what is in hand failed, waking it: {e:?}",
-                    task.id
-                );
-                true
-            }
-        };
-    if in_hand {
+    let at = now.with_timezone(&Utc);
+    // Today in the zone the list reads its due dates in: `assistant_todo`
+    // builds it in this machine's.
+    let today = at.with_timezone(&Local).date_naive();
+    let worth_a_look = match crate::assistant_todo::assistant_todo(galley, runners, at).await {
+        Ok(todo) => todo.review_has_something_to_look_at(today),
+        Err(e) => {
+            eprintln!(
+                "[scheduler] review {}: reading the to-do list failed, waking it: {e:?}",
+                task.id
+            );
+            true
+        }
+    };
+    if worth_a_look {
         if !fire_reminder(galley, notifier, task, due_at, now).await {
             return ReviewFire::Failed;
         }
@@ -471,7 +483,12 @@ pub async fn fire_review<Tz: TimeZone>(
         .await
     {
         Ok(_) => {
-            eprintln!("[scheduler] review {}: nothing in hand, skipped", task.id);
+            eprintln!(
+                "[scheduler] review {}: nothing to look at (no to-do any time or due within \
+                 {} days, no unfinished subtask), skipped",
+                task.id,
+                crate::assistant_todo::REVIEW_LOOKAHEAD_DAYS
+            );
             notify(notifier, SCHEDULED_TASKS_CHANGED_EVENT, &());
             log_review(
                 galley,

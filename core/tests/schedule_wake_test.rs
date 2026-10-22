@@ -23,7 +23,10 @@
 //! - a to-do's reminder (ticket 39) says which to-do and when it is due,
 //!   and a to-do ticked off is not reminded of, whenever it is ticked;
 //! - the morning review (ticket 73) is made once ever, wakes nobody with
-//!   nothing in hand, wakes the main chat in words of its own otherwise,
+//!   nothing to look at (ticket 81: only what has no alarm of its own —
+//!   a to-do with no date or due within three days, a subtask not
+//!   finished — and a failed read wakes it), wakes the main chat in words
+//!   of its own otherwise,
 //!   stays out of 已完成, and is dropped without a notification when it
 //!   cannot be delivered.
 
@@ -1351,6 +1354,33 @@ async fn fire_review_now(galley: &SqliteGalley, rec: &Recorder, id: &str) -> Rev
     fire_review(galley, &RunnerManager::new(), rec, &task, &now, &now).await
 }
 
+/// Today plus `days`, a day as `todo add --due` takes it, in this
+/// machine's zone (the one the list reads its days in).
+fn day_from_today(days: i64) -> String {
+    (Local::now().date_naive() + ChronoDuration::days(days))
+        .format("%Y-%m-%d")
+        .to_string()
+}
+
+/// A to-do of the user's the assistant noted, due `due` (`None`: any
+/// time), with a reminder ten minutes from now when `remind`.
+async fn users_todo(galley: &SqliteGalley, title: &str, due: Option<String>, remind: bool) {
+    galley
+        .create_todo(
+            galley_core_lib::api::CreateTodoInput {
+                title: title.into(),
+                notes: None,
+                due,
+                remind_at: remind
+                    .then(|| instant_to_utc_iso(&(Utc::now() + ChronoDuration::minutes(10)))),
+            },
+            assistant(),
+            None,
+        )
+        .await
+        .expect("to-do");
+}
+
 #[tokio::test]
 async fn the_review_is_made_once_and_never_again() {
     let rec = Recorder::default();
@@ -1440,12 +1470,39 @@ async fn the_review_is_made_once_and_never_again() {
 }
 
 #[tokio::test]
-async fn with_nothing_in_hand_the_review_wakes_nobody() {
+async fn with_nothing_to_look_at_the_review_wakes_nobody() {
     let (_pool, galley) = with_main_chat().await;
     let rec = Recorder::default();
     let reports = SubtaskReports::new();
     let review = ensure_review(&galley, &rec).await.expect("made");
-    // A routine is not in hand (the review is one), nor is another.
+    // Ticket 81: what has an alarm of its own does not wake it. A to-do
+    // due later, with its reminder (702) or without, four days on;
+    // Galley's own one-offs, either target.
+    users_todo(
+        &galley,
+        "702 办公室装修完工",
+        Some(day_from_today(29)),
+        true,
+    )
+    .await;
+    users_todo(&galley, "交季度报告", Some(day_from_today(4)), false).await;
+    reminder(&galley, "sched_water", "提醒用户喝水").await;
+    galley
+        .create_scheduled_task(
+            CreateScheduledTaskInput {
+                target: ScheduleTarget::Session,
+                ..once_input(
+                    "sched_weekly",
+                    "整理这周的周报",
+                    Utc::now() + ChronoDuration::days(1),
+                )
+            },
+            Origin::gui(),
+        )
+        .await
+        .expect("a one-off that starts a session");
+    // A routine is not something to look at (the review is one), nor is
+    // another.
     galley
         .create_scheduled_task(
             CreateScheduledTaskInput {
@@ -1487,11 +1544,15 @@ async fn with_nothing_in_hand_the_review_wakes_nobody() {
         .find(|item| item.id == review.id.as_str())
         .expect("in routine");
     assert_eq!(row.agent.as_deref(), Some(REVIEW_SUPERVISOR));
-    assert!(!todo.anything_in_hand());
+    // In hand all the same: the list and the "In Hand" lines are as they
+    // were; only the review does not wake for them.
+    assert_eq!(todo.yours.later.len(), 2);
+    assert_eq!(todo.assistant.len(), 2);
+    assert!(!todo.review_has_something_to_look_at(Local::now().date_naive()));
 }
 
 #[tokio::test]
-async fn with_something_in_hand_the_review_wakes_the_main_chat() {
+async fn with_something_to_look_at_the_review_wakes_the_main_chat() {
     let (pool, galley) = with_main_chat().await;
     let runner = Runner::default();
     let env = FakeEnv;
@@ -1567,15 +1628,85 @@ async fn with_something_in_hand_the_review_wakes_the_main_chat() {
         .any(|item| item.id == review.id.as_str()
             && item.agent.as_deref() == Some(REVIEW_SUPERVISOR)));
 
-    // A one-off reminder to come is in hand too.
+    // Ticket 81: a to-do due within three days of today wakes it,
+    // reminder or not, and so do today's and overdue ones; four days on
+    // does not. Each on a database of its own.
+    for (due, remind, wakes) in [
+        (3, false, true),
+        (3, true, true),
+        (0, true, true),
+        (-2, false, true),
+        (4, false, false),
+        (4, true, false),
+    ] {
+        let (_pool, galley) = with_main_chat().await;
+        let rec = Recorder::default();
+        let review = ensure_review(&galley, &rec).await.expect("made");
+        users_todo(&galley, "交季度报告", Some(day_from_today(due)), remind).await;
+        let want = if wakes {
+            ReviewFire::Woke
+        } else {
+            ReviewFire::Skipped
+        };
+        assert_eq!(
+            fire_review_now(&galley, &rec, review.id.as_str()).await,
+            want,
+            "due in {due} days, reminder {remind}"
+        );
+    }
+    // One due late on the third day, with a time.
+    let (_pool, galley) = with_main_chat().await;
+    let rec = Recorder::default();
+    let review = ensure_review(&galley, &rec).await.expect("made");
+    users_todo(
+        &galley,
+        "交季度报告",
+        Some(format!("{}T23:59", day_from_today(3))),
+        false,
+    )
+    .await;
+    assert_eq!(
+        fire_review_now(&galley, &rec, review.id.as_str()).await,
+        ReviewFire::Woke
+    );
+
+    // Its own one-off reminder to come alone does not: it wakes the main
+    // chat by itself at its time.
     let (_pool, galley) = with_main_chat().await;
     let rec = Recorder::default();
     let review = ensure_review(&galley, &rec).await.expect("made");
     reminder(&galley, "sched_water", "提醒用户喝水").await;
     assert_eq!(
         fire_review_now(&galley, &rec, review.id.as_str()).await,
+        ReviewFire::Skipped
+    );
+}
+
+#[tokio::test]
+async fn a_review_that_cannot_read_the_list_wakes_the_main_chat() {
+    let (pool, galley) = with_main_chat().await;
+    let rec = Recorder::default();
+    let review = ensure_review(&galley, &rec).await.expect("made");
+    // The to-dos cannot be read: one turn too many beats a review that
+    // never runs.
+    sqlx::query("ALTER TABLE todos RENAME TO todos_gone")
+        .execute(&pool)
+        .await
+        .expect("hide the to-dos");
+    assert!(assistant_todo(&galley, &RunnerManager::new(), Utc::now())
+        .await
+        .is_err());
+    assert_eq!(
+        fire_review_now(&galley, &rec, review.id.as_str()).await,
         ReviewFire::Woke
     );
+    assert_eq!(
+        wake_state(&galley, review.id.as_str()).await,
+        Some(ScheduledWake::Pending)
+    );
+    let log = review_log(&galley).await;
+    assert_eq!(log.len(), 1);
+    assert_eq!(log[0]["event"], "woke");
 }
 
 #[tokio::test]
@@ -1586,7 +1717,7 @@ async fn a_review_that_cannot_be_delivered_is_dropped_without_a_notification() {
     let rec = Arc::new(Recorder::default());
     let reports = SubtaskReports::new();
     let review = ensure_review(&galley, rec.as_ref()).await.expect("made");
-    reminder(&galley, "sched_later", "回头查物流").await;
+    users_todo(&galley, "回头查物流", None, false).await;
     // The main chat waits for the user's answer.
     runner.edit_gate(MAIN, |g| g.ask_pending = true);
     assert_eq!(
@@ -1617,7 +1748,7 @@ async fn a_review_that_cannot_be_delivered_is_dropped_without_a_notification() {
     let rec = Arc::new(Recorder::default());
     let reports = SubtaskReports::new();
     let review = ensure_review(&galley, rec.as_ref()).await.expect("made");
-    reminder(&galley, "sched_later", "回头查物流").await;
+    users_todo(&galley, "回头查物流", None, false).await;
     runner.fail_spawn.store(true, Ordering::SeqCst);
     fire_review_now(&galley, rec.as_ref(), review.id.as_str()).await;
     restore_pending_reminders(&reports, &galley).await;
@@ -1642,7 +1773,7 @@ async fn a_review_whose_turn_ends_on_an_error_is_dropped_and_waits_under_the_ext
     let rec = Arc::new(Recorder::default());
     let reports = SubtaskReports::new();
     let review = ensure_review(&galley, rec.as_ref()).await.expect("made");
-    reminder(&galley, "sched_later", "回头查物流").await;
+    users_todo(&galley, "回头查物流", None, false).await;
     fire_review_now(&galley, rec.as_ref(), review.id.as_str()).await;
     restore_pending_reminders(&reports, &galley).await;
     let h = host(&galley, &runner, &env, rec.clone());
@@ -1663,7 +1794,7 @@ async fn a_review_whose_turn_ends_on_an_error_is_dropped_and_waits_under_the_ext
     let (_pool, galley) = with_main_chat().await;
     let rec = Arc::new(Recorder::default());
     let review = ensure_review(&galley, rec.as_ref()).await.expect("made");
-    reminder(&galley, "sched_later", "回头查物流").await;
+    users_todo(&galley, "回头查物流", None, false).await;
     fire_review_now(&galley, rec.as_ref(), review.id.as_str()).await;
     galley
         .set_pref_json("active_runtime_kind", json!("external"))

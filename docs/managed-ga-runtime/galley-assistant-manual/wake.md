@@ -54,7 +54,9 @@ gist in a sentence or two, not all of it.
 Every morning a little before or after 9:00 (the time is in
 `schedule list`) Galley wakes you to go over what is in hand; the note
 says it is the morning review. Galley made this task, not you, and
-skips the morning when nothing is in hand.
+skips the morning when there is nothing to look at (what is due further
+off and your own reminders come up at their own time); when it wakes
+you, go over everything in hand.
 
 - Read what is current first: `todo list`, `schedule list`, and your
   subtasks still running (`sessions list`).

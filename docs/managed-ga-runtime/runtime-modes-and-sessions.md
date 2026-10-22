@@ -330,9 +330,14 @@ ruling 9; `core/src/scheduler.rs`, `core/src/subtask_report.rs`, migration
   once when Core starts, on the managed runtime with a main chat only, and
   once ever: a review row in any state (enabled, paused, cancelled) means
   Galley never makes another. Coming due (a catch-up too), Core first reads
-  what is in hand as the "In Hand" lines do (`assistant_todo`): the user's
-  to-dos not done, Galley's subtasks not finished and one-offs to come;
-  routines do not count. With nothing, the fire is consumed with
+  the list the "In Hand" lines read (`assistant_todo`) and wakes it only
+  for what has no alarm of its own (ticket 81, main chat PRD ruling 128,
+  `review_has_something_to_look_at`): a to-do of the user's with no due
+  date, or due on or before today plus `REVIEW_LOOKAHEAD_DAYS` (3) in this
+  machine's zone, overdue ones and ones with a reminder included; or a
+  subtask not finished. A to-do due later, Galley's own one-off tasks
+  (they go off at their time by themselves) and routines do not count; a
+  failed read wakes it. With nothing to look at, the fire is consumed with
   `last_wake` NULL and no wake; otherwise it wakes the main chat as a
   reminder does, with words of its own (`subtask_report.rs`
   `review_paragraph`: read "The morning review" in `wake.md`, at most two

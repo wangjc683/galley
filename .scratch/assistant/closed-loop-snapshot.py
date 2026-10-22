@@ -10,8 +10,10 @@ is not in the database; ask JC.
 Ticket 73 (assistant PRD ruling 10, the proactive first stage) adds: the
 to-dos it noted with no date, what was cancelled of what it set and by
 whom (ticket 61's cancel columns), and the morning review: how often it
-came due, was skipped (nothing in hand), woke the main chat, spoke (a reply
-that is not only <no-reply/>), and how many subtasks those turns started.
+came due, was skipped (nothing to look at: since ticket 81 it wakes only
+for a to-do with no date or due within three days, or a subtask not
+finished), woke the main chat, spoke (a reply that is not only
+<no-reply/>), and how many subtasks those turns started.
 The review's comings due and skips are read from its log, the
 `assistant_review_log` pref Core keeps (scheduler.rs `REVIEW_LOG_PREF`):
 a skip leaves no other trace.
@@ -237,7 +239,7 @@ def main() -> None:
         came_due = events["skipped"] + events["woke"]
         print(f"- morning review ({shown}):")
         print(
-            f"  came due {came_due}, skipped (nothing in hand) {events['skipped']}, "
+            f"  came due {came_due}, skipped (nothing to look at) {events['skipped']}, "
             f"woke {events['woke']}, run by hand {events['run']}, "
             f"dropped undelivered {events['dropped']} (from its log)"
         )

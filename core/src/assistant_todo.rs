@@ -61,7 +61,7 @@
 //! end (the step limit, an error), or stopped short. Deterministic, no
 //! model call. Times are UTC ISO; formatting is the reader's.
 
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::api::schedule::{
@@ -87,6 +87,15 @@ pub const RECENT_LIMIT: usize = 50;
 /// follow-up the user turned down stays in front of the main chat this
 /// long (a rolling window), then leaves on its own.
 pub const DECLINED_WINDOW_DAYS: i64 = 90;
+
+/// How many days past today the morning review looks at the user's
+/// to-dos ([`AssistantTodo::review_has_something_to_look_at`], main chat
+/// ticket 81): one due by the end of today plus this many days wakes it.
+/// The number the main session set (PRD ruling 128 point 4), to be
+/// looked at again after the trial to 10-28: long enough to get something
+/// ready ahead of its day, as the manual asks of a to-do's reminder
+/// ("ahead when there is something to get ready", `todos.md`).
+pub const REVIEW_LOOKAHEAD_DAYS: i64 = 3;
 
 /// The four groups and the day's count (Tauri `list_assistant_todo`).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -143,12 +152,37 @@ impl AssistantTodo {
             && self.done.is_empty()
     }
 
-    /// Something in hand for the morning review to look at (main chat
-    /// ticket 73): a to-do of the user's not done, or something Galley
-    /// is on (a subtask not finished, a one-off reminder or task to come).
-    /// Routines are not, the review being one; nor is what is done.
-    pub fn anything_in_hand(&self) -> bool {
-        !self.yours.is_empty() || !self.assistant.is_empty()
+    /// Whether the morning review has something to look at (main chat
+    /// ticket 81, PRD ruling 128 point 4): it wakes only for what has no
+    /// alarm of its own. That is a to-do of the user's with no due date
+    /// (any time), or due on or before `today` plus
+    /// [`REVIEW_LOOKAHEAD_DAYS`] — overdue ones and ones with a reminder
+    /// included, one with a time by its day — or a subtask not finished
+    /// (running, asking, failed, at the step limit, stopped short). Not a
+    /// to-do due later (its reminder raises it; before then there is
+    /// nothing yet to get ready), nor Galley's own one-off tasks, either
+    /// target (each goes off at its time by itself), nor routines (the
+    /// review is one), nor what is done. Woken, the review goes over
+    /// everything in hand; this decides only whether it wakes.
+    ///
+    /// `today` is the day in the zone the list was built in
+    /// ([`build_todo`]'s `tz`, this machine's in production): a to-do's
+    /// `due.date` was read there.
+    pub fn review_has_something_to_look_at(&self, today: NaiveDate) -> bool {
+        let horizon = today + chrono::Duration::days(REVIEW_LOOKAHEAD_DAYS);
+        let yours = self.yours.iter().any(|item| match &item.due {
+            None => true,
+            // A day that does not read (Core never writes one): one
+            // review too many beats one missed.
+            Some(due) => {
+                NaiveDate::parse_from_str(&due.date, "%Y-%m-%d").map_or(true, |day| day <= horizon)
+            }
+        });
+        yours
+            || self
+                .assistant
+                .iter()
+                .any(|item| item.kind == TodoKind::Subtask)
     }
 }
 
@@ -1848,6 +1882,200 @@ mod tests {
             .map(|d| d.id)
             .collect();
         assert_eq!(order, ["t-a", "t-b"]);
+    }
+
+    // ---- whether the morning review wakes (ticket 81) ----
+
+    /// The review's look at what was read, now (Fri 2026-10-16 12:00), in
+    /// UTC: today is the 16th, and three days on is Mon the 19th.
+    fn looks(todos: &[TodoBrief], tasks: &[ScheduledTaskBrief], subtasks: &[SubtaskFacts]) -> bool {
+        build_todo(todos, tasks, subtasks, now(), &Utc)
+            .review_has_something_to_look_at(now().date_naive())
+    }
+
+    /// The same in `tz`, today read there as the list reads its days.
+    fn looks_in<Tz: TimeZone>(todos: &[TodoBrief], now: DateTime<Utc>, tz: &Tz) -> bool
+    where
+        Tz::Offset: std::fmt::Display,
+    {
+        build_todo(todos, &[], &[], now, tz)
+            .review_has_something_to_look_at(now.with_timezone(tz).date_naive())
+    }
+
+    fn with_reminder(todo: TodoBrief, at: &str) -> TodoBrief {
+        TodoBrief {
+            reminder: Some(TodoReminder {
+                task_id: ScheduledTaskId(format!("sched_on_{}", todo.id.as_str())),
+                at: at.into(),
+                state: TodoReminderState::Scheduled,
+            }),
+            ..todo
+        }
+    }
+
+    /// Everything that has an alarm of its own, or is not in hand: a
+    /// to-do due later (with a reminder and without), its own one-offs
+    /// (either target), routines (the review among them), what is done.
+    fn nothing_to_look_at() -> (Vec<TodoBrief>, Vec<ScheduledTaskBrief>, Vec<SubtaskFacts>) {
+        let noted = "2026-10-10T00:00:00+00:00";
+        let todos = vec![
+            // 702: due 11-20, its reminder that morning.
+            with_reminder(
+                todo("t-far", Some(date(2026, 11, 20)), noted),
+                "2026-11-20T01:00:00+00:00",
+            ),
+            // Four days on, no reminder; and four days on at midnight.
+            todo("t-plus-four", Some(date(2026, 10, 20)), noted),
+            todo(
+                "t-plus-four-time",
+                Some(StoredDue::At(utc("2026-10-20T00:00:00Z"))),
+                noted,
+            ),
+            done_todo("t-done", "2026-10-16T11:00:00Z", Origin::gui()),
+        ];
+        let session_one_off = ScheduledTaskBrief {
+            target: ScheduleTarget::Session,
+            ..task("sched_session_once")
+        };
+        let review = ScheduledTaskBrief {
+            origin: Some(Origin {
+                via: OriginVia::System,
+                supervisor: Some(crate::scheduler::REVIEW_SUPERVISOR.into()),
+                reason: None,
+                client: None,
+            }),
+            target: ScheduleTarget::Assistant,
+            ..daily("sched_review", "2026-10-17T01:00:00+00:00")
+        };
+        assert!(review.is_review());
+        let tasks = vec![
+            task("sched_own"),
+            session_one_off,
+            daily("sched_daily", "2026-10-16T13:00:00+00:00"),
+            review,
+        ];
+        let finished = SubtaskFacts {
+            last_reply: reply(None),
+            ..subtask("s-done", "2026-10-16T09:00:00+00:00")
+        };
+        (todos, tasks, vec![finished])
+    }
+
+    #[test]
+    fn the_review_wakes_only_for_what_has_no_alarm_of_its_own() {
+        let (todos, tasks, subtasks) = nothing_to_look_at();
+        let built = build_todo(&todos, &tasks, &subtasks, now(), &Utc);
+        // In hand all the same (the "In Hand" lines and the panel are as
+        // they were): three later, two of Galley's, two routines, two
+        // done.
+        assert_eq!(built.yours.later.len(), 3);
+        assert_eq!(ids(&built.assistant), ["sched_own", "sched_session_once"]);
+        assert_eq!(built.routine.len(), 2);
+        assert_eq!(ids(&built.done), ["t-done", "s-done"]);
+        assert!(!looks(&todos, &tasks, &subtasks));
+        assert!(!looks(&[], &[], &[]));
+        // Its own one-offs alone, either target; routines alone.
+        assert!(!looks(&[], &tasks[..2], &[]));
+        assert!(!looks(&[], &tasks[2..], &[]));
+
+        // Any one of these wakes it, beside all of the above.
+        let noted = "2026-10-10T00:00:00+00:00";
+        let wakes = [
+            // Three days on: the day alone, or late that day.
+            todo("t-plus-three", Some(date(2026, 10, 19)), noted),
+            todo(
+                "t-plus-three-late",
+                Some(StoredDue::At(utc("2026-10-19T23:59:00Z"))),
+                noted,
+            ),
+            // With a reminder, too.
+            with_reminder(
+                todo("t-plus-two", Some(date(2026, 10, 18)), noted),
+                "2026-10-17T01:00:00+00:00",
+            ),
+            // Today, and overdue (a day, a time).
+            todo("t-today", Some(date(2026, 10, 16)), noted),
+            todo("t-overdue", Some(date(2026, 10, 9)), noted),
+            todo(
+                "t-overdue-time",
+                Some(StoredDue::At(utc("2026-10-16T09:00:00Z"))),
+                noted,
+            ),
+            // Any time.
+            todo("t-anytime", None, noted),
+        ];
+        for one in wakes {
+            let id = one.id.as_str().to_string();
+            let mut with = todos.clone();
+            with.push(one.clone());
+            assert!(looks(&with, &tasks, &subtasks), "{id}");
+            assert!(looks(&[one], &[], &[]), "{id} alone");
+        }
+
+        // A subtask not finished: running, failed (and asking, stopped).
+        let running = SubtaskFacts {
+            live: RunState {
+                open_run: true,
+                ..RunState::default()
+            },
+            ..subtask("s-running", "2026-10-16T11:00:00+00:00")
+        };
+        let failed = SubtaskFacts {
+            live: RunState {
+                last_exit: Some("DONE_WITHOUT_EXIT".into()),
+                ..RunState::default()
+            },
+            last_reply: reply(Some(r#"[{"toolName":"web_scan"}]"#)),
+            ..subtask("s-failed", "2026-10-16T11:00:00+00:00")
+        };
+        let asking = SubtaskFacts {
+            last_reply: reply(Some(r#"[{"toolName":"ask_user"}]"#)),
+            ..subtask("s-asking", "2026-10-16T11:00:00+00:00")
+        };
+        let stopped = subtask("s-stopped", "2026-10-16T11:00:00+00:00");
+        for (one, state) in [
+            (running, TodoState::Running),
+            (failed, TodoState::Failed),
+            (asking, TodoState::Asking),
+            (stopped, TodoState::Stopped),
+        ] {
+            assert_eq!(subtask_state(&one), state);
+            let mut with = subtasks.clone();
+            with.push(one.clone());
+            assert!(looks(&todos, &tasks, &with), "{state:?}");
+            assert!(looks(&[], &[], &[one]), "{state:?} alone");
+        }
+        // One that stopped long ago is out of the list, and of the look.
+        let stale = subtask("s-stale", "2026-10-09T11:59:59+00:00");
+        assert!(!looks(&[], &[], &[stale]));
+    }
+
+    #[test]
+    fn the_reviews_three_days_are_this_machines_days() {
+        let noted = "2026-10-10T00:00:00+00:00";
+        // UTC 15:30 on Fri the 16th: 23:30 that day in Shanghai, 08:30 in
+        // Los Angeles. Today is the 16th in both, three days on the 19th.
+        let now = utc("2026-10-16T15:30:00Z");
+        // Tue the 20th 01:00 in Shanghai, Mon the 19th 10:00 in Los Angeles.
+        let instant = [todo(
+            "t-instant",
+            Some(StoredDue::At(utc("2026-10-19T17:00:00Z"))),
+            noted,
+        )];
+        assert!(!looks_in(&instant, now, &Shanghai));
+        assert!(looks_in(&instant, now, &Los_Angeles));
+
+        // UTC 17:00 on the 16th: already Sat the 17th in Shanghai (three
+        // days on is the 20th), still the 16th in Los Angeles (the 19th).
+        let now = utc("2026-10-16T17:00:00Z");
+        let tuesday = [todo("t-tuesday", Some(date(2026, 10, 20)), noted)];
+        assert!(looks_in(&tuesday, now, &Shanghai));
+        assert!(!looks_in(&tuesday, now, &Los_Angeles));
+        // A day overdue in one zone and today in the other wakes it in
+        // both.
+        let friday = [todo("t-friday", Some(date(2026, 10, 16)), noted)];
+        assert!(looks_in(&friday, now, &Shanghai));
+        assert!(looks_in(&friday, now, &Los_Angeles));
     }
 
     #[test]

@@ -466,8 +466,9 @@ mod tests {
     /// tidying unasked; the list's own few controls; a to-do's reminder
     /// only reminds. Ticket 44 moved the request for a nudge out (see
     /// [`manual_tells_a_nudge_from_a_to_do`]). Ticket 59: noting is
-    /// `todos.md`, changing `todos-change.md`. Single-line fragments only
-    /// (CRLF on Windows).
+    /// `todos.md`, changing `todos-change.md`. Ticket 81: the notes are
+    /// written for the user, who sees them in the list. Single-line
+    /// fragments only (CRLF on Windows).
     #[test]
     fn manual_covers_the_users_to_dos() {
         let todos = part("todos.md");
@@ -494,6 +495,13 @@ mod tests {
             "flight, the day before a deadline, half an hour before a call, a few",
             "Without a due date, no reminder.",
             "- `--notes`: what you will need when the reminder comes (names, places,",
+            "numbers, a file path). It wakes you with the title and the notes, and",
+            // Ticket 81 (PRD ruling 128 point 5): the panel shows the
+            // notes, so they are written for the user.
+            "this conversation may be out of your context by then. The user sees the",
+            "notes under the to-do in their list: write them for the user, in their",
+            "language (「A 座 3 楼，带身份证」), without the title or the day again,",
+            "and not as a record about them (「用户说……」).",
             "- A to-do's reminder is set, moved and removed only with `todo add` and",
             "commands: a reminder made with `schedule create` is not on the to-do.",
             // Say it.
@@ -745,8 +753,9 @@ mod tests {
     /// advice — done when it can be undone and costs nothing and says
     /// nothing in the user's name, asked first with the groundwork done
     /// otherwise, no offers, the subtask limits, a file handed over as
-    /// `[FILE:…]`; the morning review in `wake.md`, stopped by pausing it,
-    /// and Galley's, so nothing to say or ask for it. Single-line
+    /// `[FILE:…]`; the morning review in `wake.md` (ticket 81: skipped with
+    /// nothing to look at, woken it goes over everything), stopped by
+    /// pausing it, and Galley's, so nothing to say or ask for it. Single-line
     /// fragments only (CRLF on Windows).
     #[test]
     fn manual_acts_unasked_and_reviews_each_morning() {
@@ -790,6 +799,11 @@ mod tests {
         for rule in [
             "Every morning a little before or after 9:00 (the time is in",
             "`schedule list`) Galley wakes you to go over what is in hand; the note",
+            // Ticket 81: it wakes only for what has no alarm of its own,
+            // and woken goes over all of it.
+            "skips the morning when there is nothing to look at (what is due further",
+            "off and your own reminders come up at their own time); when it wakes",
+            "you, go over everything in hand.",
             "- Read what is current first: `todo list`, `schedule list`, and your",
             "`unasked.md` says, at most two subtasks in all. Do not raise early a",
             "to-dos, overdue ones included: their reminders do that.",
