@@ -49,3 +49,26 @@ Status: ready-for-agent（排在票 81 之后：同改 `core/src/assistant_todo.
 合入后 dev 重启 Core。现在库里只有巡看一条例行，面板上看不出差别；以后让它设一个每天的提醒（「每天晚上 10 点提醒我关电脑」），响过以后，「已完成」里没有它，「例行」里那一行照旧写下次时刻。
 
 ## Comments
+
+### 2026-10-22 实现回报（票 82 代理，接着票 81 做）
+
+- **提交**（分支 `ticket-81-review-gate`，先 `git rebase main` 干净叠上票 80、裁决 128 第 9 条与裁决 129；未 push、未合入）：`f3fdc3fe` Core、测试与设计文档一条；`be47559a` 评测文字（主会话让顺带修的票 81 第 1 条）；本条回报另一个提交。票 81 的三个提交 rebase 后是 `0a443a40`、`620c0748`、`e3b2399c`。
+- **判断**：`core/src/assistant_todo.rs` 构建分组时，`let counts = (fired_once || !once) && !task.is_review();` 改为 `let counts = fired_once && !task.is_review();`。只剩不挂在待办上、按时响过的一次性任务（两种 target）进已完成；例行不论 target、不论是不是巡看都不进，照旧在「例行」里写下次时刻（暂停的照旧排后、不写时刻）。`!task.is_review()` 留着，只为一种边角：有人用 `schedule update` 把巡看改成一次性，响过以后照票 73 的理由也不进；注释里把它并进了同一句，不再单列一条规则。
+- **注释**：模块注释「Done」一条改为只收三种、例行的响过不在这里（巡看并进去），写上裁决 129 第 3 条与「已完成是办完了的承诺」；「A routine can be in two」改为「A routine is in routine alone, however often it has fired」；`AssistantTodo::done` 字段注释写出三种；判断旁的注释重写；`TodoState::Fired` 的注释原来也写着「a routine's last run」，一并改了。
+- **影响面核对**（只读）：
+  - 「In Hand」块：`in_hand_section`（`managed_prompt.rs:560` 起）只读 `yours`、`assistant`、`routine`，判空也只看这三组，不印已完成：不受影响。
+  - CLI `todo list` 与 socket `todo.list` 走 `todo_list`，它调 `build_todo(&todos, &[], &[], …)` 只为给你的事排序，不带任务：不受影响，Agent API 不变。
+  - 票 81 的巡看判据 `review_has_something_to_look_at` 只看 `yours` 与 `assistant`：不受影响。
+  - 读已完成的只有面板（Tauri `list_assistant_todo`，`commands/schedule.rs:154`）。
+  - `.scratch/main-chat/entry-layer-eval/`：`run.py` 的「In Hand」移植同 Rust 不写已完成，假 CLI 的 `todo list` 读待办本身，`:627` 一带的「一次性响过」是 `schedule list` 的移植，不是分组：无镜像，没改。`.scratch/assistant/closed-loop-snapshot.py`：不读这组分组：无。
+- **设计文档**：`docs/design/conversation.md`「待办面板」只改「已完成」那一条：加「只收三种：你勾掉的待办、它的一次性提醒送到了、子任务交回来了；例行响过不进（2026-10-22，票 82，裁决 129 第 3 条……；巡看早在票 73 就不进）」，后面「子任务、提醒、例行用它们的图标」去掉「例行」。「开机自启提示」与分组那几条没碰。GUI 代码没动。
+- **测试**：单测 `a_routine_and_its_last_run`（原来断言例行同时在例行与已完成）改为 `a_routine_that_fired_stays_in_routine_and_a_one_off_is_done`：每天的（今天响过、开会话、带运行会话）、每周的（叫醒助理、一小时前响过）、暂停的（昨天响过）、半个月前响过的、巡看（今早响过）都只在例行、状态与下次时刻照旧，已完成里只有一件按时响过的开会话一次性任务，带着它那次运行的会话、建的人是用户（原测试的 `run_session_id` 与 `created_by` 覆盖挪到了它身上）。`schedule_wake_test.rs` 新增端到端 `a_routine_that_fired_stays_out_of_done`：每天的例行经 `fire_reminder` 响过、它自己的一次性提醒睡过头后经调度器响过，已完成只有那个提醒，例行那一行的时刻是任务的下次时刻。一次性提醒响过进已完成（`a_fired_one_off_is_done_within_seven_days`）、巡看不进（`schedule_wake_test` 两处）、7 天窗口与 50 件上限（`done_mixes_kinds_newest_first_and_is_capped`）的原有测试没动、照旧过。
+- **评测文字**（主会话第 3 条）：README 票 73 一节 `review-nothing-to-do` 的说明后加「票 81 起按新判据，真机上这一种巡看会跳过、不叫醒，用例测的是醒了以后」；票 78 一节「（巡看因此不跳过）」改为「（票 78 时它让巡看不跳过；票 81 起它不再让巡看醒，真机上要出现这一种合并叫醒，得是巡看到点时子任务还没结束、让巡看醒了，回报随后赶进同一次叫醒）」；票 81 一节那条改成说明这两处已改。`todo/cases.json` 里这条的 `expect_text` 加同一句，`todo/results.md` 用 `--render-only` 重出。没重跑模型，用例的输入与判定没动，`--dry-test` 560 项 PASS、0 项 FAIL。
+- **验证**：`cargo check --manifest-path core/Cargo.toml --workspace` rc=0；`cargo test --manifest-path core/Cargo.toml --workspace` 本机时区、`TZ=UTC`、`TZ=America/Los_Angeles` 各一遍，都是 45 个测试二进制、1220 过、0 失败（`galley_core_lib` 578、`schedule_wake_test` 23）；`rustfmt --check`（`assistant_todo.rs`、`schedule_wake_test.rs`）rc=0；`git diff --check` rc=0；设计文档新增行全角标点扫过，0 处。
+
+### 看到但没改的
+
+1. `gui/` 的 `DoneRow`（`TodoPanel.tsx:678`）画例行的那一支现在走不到，票面说由已完成的定档票删。GUI 的类型镜像 `gui/src/lib/assistant-todo.ts` 看过，注释没写例行会进已完成，不用跟着改。
+2. `--render-only` 重出 `todo/results.md` 时，票 81 那六遍的「读手册字节」各少 49：运行当时 `render` 是在把沙盒路径换成 `$TMPDIR` 之前算的字节，重出是按存下来的（已换过的）结果算，后者可以复现。是 `run.py` 原有的小出入，没改脚本。
+3. 已完成里一次性任务的「按时响过」沿用 `once_fired`（`last_fired_at >= fire_at`）：一次性任务被手动提前跑过一次、后来又按时响了，只算按时那次，这是原有行为，没动。
+4. 没跑 `tauri dev`，真机步骤没走。
