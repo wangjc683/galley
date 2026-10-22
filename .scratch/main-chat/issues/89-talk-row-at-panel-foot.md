@@ -1,6 +1,6 @@
 # 89 清单不空时，面板最下面一行「跟 Galley 说」
 
-Status: ready-for-agent（等票 88 合入：同改 `gui/src/components/todo/TodoPanel.tsx`；主会话直接做）
+Status: needs-dogfood（2026-10-22 主会话在 88 合入后直接做；`pnpm --dir gui typecheck`、`lint`、`test`（201 个文件、2207 条全过）、`git diff --check`、文档链接门禁通过；反向检查拿掉这一行，两条新测试变红、放回全绿；dev 截图里这一行在「已完成」下面，图标在方框那一列）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 133 第 3 条（2026-10-22，JC：「按你推荐推进」）。只改 GUI 与设计文档。外置运行时零变化。
 

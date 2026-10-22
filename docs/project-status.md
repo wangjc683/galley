@@ -705,7 +705,7 @@ renamed `galley-codex-*` → `galley-credential-*` (CI's Windows job compiles
 and tests it, green on `98dec86c`; the runtime smoke is what's owed).
 
 - **The to-do panel from first principles** (2026-10-22, main chat PRD
-  rulings 128–131, tickets 80–87, devlog
+  rulings 128–133, tickets 80–89, devlog
   [2026-10-22-todo-from-first-principles](./devlog/2026-10-22-todo-from-first-principles.md)).
   The grouping stays (a box is the user's to act on, a state icon is to
   look at). The morning review now wakes only for what has no alarm of its
@@ -729,11 +729,17 @@ and tests it, green on `98dec86c`; the runtime smoke is what's owed).
   receipt card under the reply that changed a to-do waits in deferred.
   Ticket 87's walk found the reply's landing follow losing the bottom when
   the panel opened as the reply landed; the follow now ends on the real
-  bottom and gives up a stale re-aim when the column's width changes. No
+  bottom and gives up a stale re-aim when the column's width changes.
+  Your own not-done to-dos can be deleted from the panel (a ⋯ / right-click
+  menu, no confirm, five seconds to undo before Core hears it, the card
+  then reads 已删除; a new desktop command `cancel_todo`); new ones are
+  still said, not typed, with a quiet 跟 Galley 说 row at the foot of a
+  non-empty list. Making Galley note things faster waits in deferred. No
   Agent API, IPC or migration change. Owed: JC's on-device steps for
   tickets 81 (notes written for the user; the 10-23 morning review's wake
-  or skip), 82 (a daily reminder's fire stays out of done) and 86 (the
-  unlabelled part).
+  or skip), 82 (a daily reminder's fire stays out of done), 86 (the
+  unlabelled part), 88 (the delete menu, undo toast, 已删除 card) and 89
+  (the foot row).
 - **The assistant acts unasked; a morning review** (2026-10-21 / 22,
   assistant PRD ruling 10, main chat PRD rulings 124–127, tickets 73–79,
   devlog [2026-10-21-proactive-first-stage-todo-rooted](./devlog/2026-10-21-proactive-first-stage-todo-rooted.md)).
