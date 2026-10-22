@@ -499,32 +499,46 @@ impl SqliteGalley {
     }
 
     /// Where reading the turns a segment starting at `before` carries
-    /// over begins (ticket 11, `crate::session_runner` carry): the
-    /// `turn_index` of the oldest of the last `turns` complete turns
-    /// before it — a visible user message with a visible reply that is
-    /// not the greeting — whichever segment they are in. `None` when
-    /// there is none. This only bounds the read; which turns are carried
-    /// is decided from the rows themselves.
+    /// over begins (ticket 11, ticket 77): the `turn_index` of the oldest
+    /// of the last `turns` complete turns before it, whichever segment
+    /// they are in. A turn is the carry's own
+    /// ([`CarriedWindow::from_rows`](crate::session_runner::carry::CarriedWindow::from_rows),
+    /// the module docs of `crate::session_runner::carry`): a visible user
+    /// message and every reply up to the next one, complete when a
+    /// visible reply that is not the greeting comes before the next user
+    /// message and before `before`. Its replies may sit on later
+    /// `turn_index`es than the user message (a run takes one per step),
+    /// so the turn is found by its user message and the read, which runs
+    /// on from here, takes every step of it. `None` when there is none.
+    /// This only bounds the read; which turns are carried is decided from
+    /// the rows themselves.
     pub async fn main_chat_carry_from(
         &self,
         session_id: &SessionId,
         before: i64,
         turns: i64,
     ) -> Result<Option<i64>> {
+        // A reply comes before the next user message exactly when the
+        // first `user` / `assistant` row after the user message, the
+        // greeting aside, is a reply.
         sqlx::query_scalar(
             "SELECT MIN(turn_index) FROM ( \
-               SELECT DISTINCT u.turn_index FROM messages u \
+               SELECT u.turn_index FROM messages u \
                WHERE u.session_id = ? AND u.visibility = 'visible' AND u.role = 'user' \
                  AND u.turn_index < ? \
-                 AND EXISTS (SELECT 1 FROM messages a \
-                   WHERE a.session_id = u.session_id AND a.turn_index = u.turn_index \
-                     AND a.visibility = 'visible' AND a.role = 'assistant' \
-                     AND NOT (a.created_via IS 'system' AND a.supervisor IS ?)) \
-               ORDER BY u.turn_index DESC LIMIT ?)",
+                 AND (SELECT n.role FROM messages n \
+                   WHERE n.session_id = u.session_id AND n.visibility = 'visible' \
+                     AND (n.role = 'user' OR (n.role = 'assistant' \
+                       AND NOT (n.created_via IS 'system' AND n.supervisor IS ?))) \
+                     AND (n.turn_index, n.sequence) > (u.turn_index, u.sequence) \
+                     AND n.turn_index < ? \
+                   ORDER BY n.turn_index ASC, n.sequence ASC LIMIT 1) = 'assistant' \
+               ORDER BY u.turn_index DESC, u.sequence DESC LIMIT ?)",
         )
         .bind(session_id.as_str())
         .bind(before)
         .bind(MAIN_CHAT_GREETING_SUPERVISOR)
+        .bind(before)
         .bind(turns)
         .fetch_one(&self.pool)
         .await

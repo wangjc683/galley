@@ -11,20 +11,32 @@
 //! the model they come from before the break and when the last was said
 //! ([`super::segment::MainChatPromptState::carried`]).
 //!
-//! - **A turn** is one `turn_index`'s user message and its reply, read by
-//!   the replay's own rules ([`super::rows_to_conversation_messages`]):
-//!   `user` / `assistant` rows only, never the greeting (shown only). A
-//!   turn counts only with both, so one whose reply never came is
-//!   skipped, not carried as a dangling question.
+//! - **A turn** is one user message and every reply after it up to the
+//!   next user message (ticket 77,
+//!   `.scratch/main-chat/issues/77-carry-a-turn-by-the-users-message.md`,
+//!   PRD ruling 125). Not one `turn_index`: a run takes an index per
+//!   step and only its first step shares the user message's, so a
+//!   multi-step run's final answer sits on an index of its own. Rows
+//!   are read by the replay's own rules
+//!   ([`super::rows_to_conversation_messages`]): `user` / `assistant`
+//!   rows only, never the greeting (shown only), and a turn's replies
+//!   merge as the replay merges them. Every user row is a user message:
+//!   a wake (a subtask report, the daily review) opens a turn, and the
+//!   answer to an `ask_user` does too, so it splits its run in two. A
+//!   turn counts only with a reply, so a message whose reply never came
+//!   is skipped, not carried as a dangling question; a reply read before
+//!   the first user message (its own was deleted, ticket 32) is no turn
+//!   either. [`SqliteGalley::main_chat_carry_from`] bounds the read by
+//!   the same definition.
 //! - **The cap** counts the Unicode characters carried (each turn's user
-//!   message plus its reply; images ride along uncounted). Over it, whole
-//!   turns go, oldest first. When the latest turn alone is over it, its
-//!   user message and its reply are each sure of half, and a side that
-//!   needs less lends the rest to the other. A cut reply keeps its end,
-//!   where the final answer is; a cut user message keeps its start and
-//!   its end, since a long one is mostly a paste with the request at one
-//!   end or the other (GA cuts old tool output the same way,
-//!   `compress_history_tags` in `managed-ga/code/llmcore.py`).
+//!   message plus its replies; images ride along uncounted). Over it,
+//!   whole turns go, oldest first. When the latest turn alone is over
+//!   it, its user message and its replies are each sure of half, and a
+//!   side that needs less lends the rest to the other. A cut reply keeps
+//!   its end, where the final answer is; a cut user message keeps its
+//!   start and its end, since a long one is mostly a paste with the
+//!   request at one end or the other (GA cuts old tool output the same
+//!   way, `compress_history_tags` in `managed-ga/code/llmcore.py`).
 //!   [`CUT_MARKER`] stands where text was cut.
 //! - **Deterministic**: the window is a function of the persisted rows
 //!   before the boundary and nothing else (no clock, no pref), so a
@@ -43,12 +55,15 @@ use crate::error::GalleyError;
 /// How many complete turns before the boundary a new segment opens with.
 pub const CARRY_TURNS: usize = 3;
 
-/// Cap on what is carried, in Unicode characters. Set against 457 turns
-/// of real desktop use (PRD ruling 50): a turn's user message plus its
-/// reply has a median of 127 characters, p90 about 1,060, p95 about
-/// 1,950, so three ordinary turns fit with room to spare and only a
-/// rare long one is cut.
-pub const CARRY_MAX_CHARS: usize = 6_000;
+/// Cap on what is carried, in Unicode characters: the smallest whole
+/// thousand that holds three p90 turns. Measured again when a turn
+/// became a user message and every reply up to the next (ticket 77,
+/// PRD ruling 125), against 518 turns of real desktop use: a turn's
+/// user message plus its replies has a median of 759 characters, p90
+/// 2,464, p95 3,219, the longest 12,864. Three p90 turns are 7,392, so
+/// 6,000 (PRD ruling 50, set when a turn was one `turn_index` and the
+/// p90 was about 1,060) became 8,000; only a rare long turn is cut.
+pub const CARRY_MAX_CHARS: usize = 8_000;
 
 /// Stands where carried text was cut for length.
 pub const CUT_MARKER: &str = "[… cut for length …]";
@@ -56,9 +71,11 @@ pub const CUT_MARKER: &str = "[… cut for length …]";
 /// One turn carried into a new segment.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CarriedTurn {
+    /// The user message's `turn_index`.
     pub turn_index: i64,
     /// The user message (with its images, as the replay sends them).
     pub user: ConversationMessage,
+    /// Every reply up to the next user message, as one message.
     pub reply: ConversationMessage,
     /// When the reply was written: its last row's `created_at`, as
     /// stored.
@@ -79,37 +96,38 @@ pub struct CarriedWindow {
 }
 
 impl CarriedWindow {
-    /// The window carried from `rows`: rows of turns before the
-    /// segment's start, in conversation order (`turn_index`, then
-    /// `sequence`), as many as the read brought — the last
-    /// [`CARRY_TURNS`] complete ones are taken, then held to the cap.
+    /// The window carried from `rows`: rows before the segment's start,
+    /// in conversation order (`turn_index`, then `sequence`), as many as
+    /// the read brought. Each user row opens a turn that takes every
+    /// reply up to the next user row, whatever their `turn_index`
+    /// (ticket 77; the module docs have the whole definition, and
+    /// [`SqliteGalley::main_chat_carry_from`] reads from the oldest turn
+    /// it can take by the same one). The last [`CARRY_TURNS`] with a
+    /// reply are taken, then held to the cap.
     pub fn from_rows(rows: impl IntoIterator<Item = ReplayRow>) -> Self {
         let mut drafts: Vec<Draft> = Vec::new();
         for row in rows {
             if !row.is_conversation() {
                 continue;
             }
-            if drafts.last().map(|draft| draft.turn_index) != Some(row.turn_index) {
+            if row.role == "user" {
                 drafts.push(Draft {
                     turn_index: row.turn_index,
-                    user: None,
+                    user: row.into_message(),
                     reply: None,
                     said_at: String::new(),
                 });
+                continue;
             }
-            let draft = drafts.last_mut().expect("a draft for this turn");
-            if row.role == "assistant" {
-                draft.said_at = row.created_at.clone();
-            }
-            let message = row.into_message();
-            let slot = if message.role == "user" {
-                &mut draft.user
-            } else {
-                &mut draft.reply
+            // A reply before the first user message read opens nothing.
+            let Some(draft) = drafts.last_mut() else {
+                continue;
             };
-            match slot {
+            draft.said_at = row.created_at.clone();
+            let message = row.into_message();
+            match &mut draft.reply {
                 Some(prev) => merge_into(prev, message),
-                None => *slot = Some(message),
+                None => draft.reply = Some(message),
             }
         }
         let complete: Vec<CarriedTurn> = drafts.into_iter().filter_map(Draft::complete).collect();
@@ -149,11 +167,11 @@ impl CarriedWindow {
     }
 }
 
-/// A turn being read: complete once it has both a user message and a
-/// reply.
+/// A turn being read, opened by its user message: complete once a reply
+/// follows.
 struct Draft {
     turn_index: i64,
-    user: Option<ConversationMessage>,
+    user: ConversationMessage,
     reply: Option<ConversationMessage>,
     said_at: String,
 }
@@ -162,7 +180,7 @@ impl Draft {
     fn complete(self) -> Option<CarriedTurn> {
         Some(CarriedTurn {
             turn_index: self.turn_index,
-            user: self.user?,
+            user: self.user,
             reply: self.reply?,
             said_at: self.said_at,
         })
@@ -241,6 +259,8 @@ mod tests {
     use super::*;
     use crate::session_runner::ReplayAttachment;
 
+    /// A row written at minute `turn_index` of 09:00, so a later step is
+    /// said later.
     fn row(turn_index: i64, role: &str, content: &str) -> ReplayRow {
         ReplayRow {
             role: role.into(),
@@ -248,7 +268,7 @@ mod tests {
             content: content.into(),
             attachments: vec![],
             shown_only: false,
-            created_at: format!("2026-10-13T0{}:00:00Z", turn_index.rem_euclid(10)),
+            created_at: format!("2026-10-13T09:{:02}:00Z", turn_index.rem_euclid(60)),
         }
     }
 
@@ -267,8 +287,22 @@ mod tests {
         ]
     }
 
+    fn greeting(turn_index: i64) -> ReplayRow {
+        let mut greeting = row(turn_index, "assistant", "你好。");
+        greeting.shown_only = true;
+        greeting
+    }
+
     fn indexes(window: &CarriedWindow) -> Vec<i64> {
         window.turns.iter().map(|turn| turn.turn_index).collect()
+    }
+
+    fn replies(window: &CarriedWindow) -> Vec<&str> {
+        window
+            .turns
+            .iter()
+            .map(|turn| turn.reply.content.as_str())
+            .collect()
     }
 
     #[test]
@@ -292,29 +326,138 @@ mod tests {
                 ("assistant", "r4"),
             ]
         );
-        assert_eq!(window.last_said_at(), Some("2026-10-13T04:00:00Z"));
+        assert_eq!(window.last_said_at(), Some("2026-10-13T09:04:00Z"));
+    }
+
+    /// The main chat behind ticket 77, in shape: the first question is
+    /// answered in one step; the next two each take a run, and only a
+    /// run's first step shares its user message's `turn_index`, so the
+    /// answers (20, 26) sit on indexes no user message has.
+    #[test]
+    fn a_multi_step_run_is_carried_whole_up_to_its_answer() {
+        let mut rows = vec![
+            row(12, "user", "聊聊哲学"),
+            row(12, "assistant", "好，从哪说起？"),
+            row(13, "user", "西部怎么预测"),
+            row(13, "assistant", "我先查一下"),
+        ];
+        rows.extend((14..20).map(|i| row(i, "assistant", &format!("步骤{i}"))));
+        rows.push(row(20, "assistant", "西部的答案"));
+        rows.push(row(21, "user", "东部呢？"));
+        rows.push(row(21, "assistant", "东部我先核对"));
+        rows.extend((22..26).map(|i| row(i, "assistant", &format!("步骤{i}"))));
+        rows.push(row(26, "assistant", "东部的答案"));
+        let window = CarriedWindow::from_rows(rows);
+
+        // Three turns, numbered by their user messages.
+        assert_eq!(indexes(&window), vec![12, 13, 21]);
+        let run = |first: &str, steps: std::ops::Range<i64>, answer: &str| {
+            std::iter::once(first.to_string())
+                .chain(steps.map(|i| format!("步骤{i}")))
+                .chain(std::iter::once(answer.to_string()))
+                .collect::<Vec<_>>()
+                .join("\n\n")
+        };
+        let west = run("我先查一下", 14..20, "西部的答案");
+        let east = run("东部我先核对", 22..26, "东部的答案");
+        assert_eq!(
+            replies(&window),
+            vec!["好，从哪说起？", west.as_str(), east.as_str()]
+        );
+        // Said when the answer was: the run's last step.
+        assert_eq!(window.turns[1].said_at, "2026-10-13T09:20:00Z");
+        assert_eq!(window.last_said_at(), Some("2026-10-13T09:26:00Z"));
+        // As history: user, reply, turn by turn.
+        let roles: Vec<String> = window.into_messages().into_iter().map(|m| m.role).collect();
+        assert_eq!(
+            roles,
+            [
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant"
+            ]
+        );
     }
 
     #[test]
     fn greetings_unanswered_messages_and_other_rows_are_not_turns() {
-        let mut greeting = row(-1, "assistant", "你好。");
-        greeting.shown_only = true;
-        let mut rows = vec![greeting];
+        let mut rows = vec![greeting(-1)];
         rows.extend(exchange(0));
         rows.extend(exchange(1));
-        // Turn 2 never got its reply; turn 3 is a Galley note alone.
+        // Turn 2 never got its reply — the greeting is shown only, not
+        // one; turn 3 is a Galley note alone.
         rows.push(row(2, "user", "还在吗"));
+        rows.push(greeting(2));
         rows.push(row(3, "galley", "note"));
         rows.extend(exchange(4));
         rows.push(row(5, "user", "最后一句没人回"));
         let window = CarriedWindow::from_rows(rows);
         // Short of three after the skips, the window reaches further back.
         assert_eq!(indexes(&window), vec![0, 1, 4]);
+        assert_eq!(replies(&window), vec!["r0", "r1", "r4"]);
         assert!(window
             .into_messages()
             .iter()
             .all(|m| m.content != "你好。" && m.content != "还在吗" && m.content != "note"));
         assert!(CarriedWindow::from_rows(vec![row(0, "user", "只有问")]).is_empty());
+        assert!(CarriedWindow::from_rows(vec![row(0, "user", "只有问"), greeting(0)]).is_empty());
+    }
+
+    #[test]
+    fn a_reply_before_the_first_user_message_read_is_not_carried() {
+        // Its user message was deleted (ticket 32): the replies have none.
+        let mut rows = vec![
+            row(3, "assistant", "没有问题的回复"),
+            row(4, "assistant", "它的下一步"),
+        ];
+        rows.extend(exchange(5));
+        let window = CarriedWindow::from_rows(rows);
+        assert_eq!(indexes(&window), vec![5]);
+        assert_eq!(replies(&window), vec!["r5"]);
+        assert!(CarriedWindow::from_rows(vec![row(3, "assistant", "只有答")]).is_empty());
+    }
+
+    /// The user's answer to an `ask_user` is a user message like any
+    /// other: it splits the run it answers into two turns, with no rule
+    /// of its own.
+    #[test]
+    fn an_answer_to_ask_user_splits_its_run_in_two_turns() {
+        let rows = vec![
+            row(10, "user", "帮我订周五的会议室"),
+            row(10, "assistant", "我先看看空档"),
+            row(11, "assistant", "上午还是下午？"),
+            row(12, "user", "下午"),
+            row(12, "assistant", "正在预订"),
+            row(13, "assistant", "订好了：周五下午三点。"),
+        ];
+        let window = CarriedWindow::from_rows(rows);
+        assert_eq!(indexes(&window), vec![10, 12]);
+        assert_eq!(window.turns[1].user.content, "下午");
+        assert_eq!(
+            replies(&window),
+            vec![
+                "我先看看空档\n\n上午还是下午？",
+                "正在预订\n\n订好了：周五下午三点。"
+            ]
+        );
+        assert_eq!(window.turns[0].said_at, "2026-10-13T09:11:00Z");
+    }
+
+    /// A wake (a subtask report, the daily review) is a user row Galley
+    /// wrote, and opens a turn like the user's own.
+    #[test]
+    fn a_turn_a_wake_opens_is_carried() {
+        let mut rows = exchange(0);
+        rows.push(row(1, "user", "[Galley: subtask s-1 \"查资料\" finished]"));
+        rows.push(row(1, "assistant", "看看结果"));
+        rows.push(row(2, "assistant", "资料查到了。"));
+        let window = CarriedWindow::from_rows(rows);
+        assert_eq!(indexes(&window), vec![0, 1]);
+        assert_eq!(replies(&window), vec!["r0", "看看结果\n\n资料查到了。"]);
+        assert_eq!(window.last_said_at(), Some("2026-10-13T09:02:00Z"));
     }
 
     #[test]
@@ -330,9 +473,14 @@ mod tests {
                 path: "/b.pdf".into(),
             },
         ];
-        let mut late = row(7, "assistant", "第二步");
+        let mut late = row(8, "assistant", "第二步");
         late.created_at = "2026-10-13T09:41:30Z".into();
-        let window = CarriedWindow::from_rows(vec![user, row(7, "assistant", "第一步"), late]);
+        let window = CarriedWindow::from_rows(vec![
+            user,
+            row(7, "assistant", "第一步"),
+            row(7, "galley", "note"),
+            late,
+        ]);
         let turn = &window.turns[0];
         assert_eq!(turn.user.images, Some(vec!["/a.png".to_string()]));
         assert_eq!(turn.reply.content, "第一步\n\n第二步");
@@ -341,18 +489,19 @@ mod tests {
 
     #[test]
     fn over_the_cap_whole_turns_go_oldest_first() {
-        // 2,500 characters each: three are over the cap, two are not.
-        let rows: Vec<ReplayRow> = (0..3).flat_map(|i| sized(i, 500, 2_000)).collect();
+        // Three eighths of the cap each: three are over it, two are not.
+        let each = CARRY_MAX_CHARS * 3 / 8;
+        let rows: Vec<ReplayRow> = (0..3).flat_map(|i| sized(i, 500, each - 500)).collect();
         let window = CarriedWindow::from_rows(rows);
         assert_eq!(indexes(&window), vec![1, 2]);
-        assert_eq!(window.chars(), 5_000);
+        assert_eq!(window.chars(), 2 * each);
         // A newer turn too big to sit beside an older one goes alone,
         // uncut while it fits.
         let mut rows = sized(0, 10, 10);
-        rows.extend(sized(1, 100, 5_900));
+        rows.extend(sized(1, 100, CARRY_MAX_CHARS - 100));
         let window = CarriedWindow::from_rows(rows);
         assert_eq!(indexes(&window), vec![1]);
-        assert_eq!(window.chars(), 6_000);
+        assert_eq!(window.chars(), CARRY_MAX_CHARS);
         assert!(!window.turns[0].reply.content.contains(CUT_MARKER));
     }
 
@@ -360,7 +509,7 @@ mod tests {
     fn the_latest_turn_alone_over_the_cap_keeps_the_question_and_the_reply_end() {
         let mut rows = sized(0, 50, 50);
         rows.push(row(1, "user", "总结一下"));
-        let reply = format!("开头{}结论：可以。", "长".repeat(9_000));
+        let reply = format!("开头{}结论：可以。", "长".repeat(CARRY_MAX_CHARS + 3_000));
         rows.push(row(1, "assistant", &reply));
         let window = CarriedWindow::from_rows(rows);
         assert_eq!(indexes(&window), vec![1]);
@@ -375,13 +524,46 @@ mod tests {
         assert_eq!(window.chars(), CARRY_MAX_CHARS);
     }
 
+    /// A run over the cap is cut from its start: its first steps go, the
+    /// answer at its end stays.
+    #[test]
+    fn a_cut_run_keeps_the_end_of_its_answer() {
+        let step = CARRY_MAX_CHARS / 2;
+        let mut rows = exchange(0);
+        rows.push(row(1, "user", "查一下"));
+        rows.extend(
+            (1..5).map(|i| row(i, "assistant", &format!("步骤{i}：{}", "查".repeat(step)))),
+        );
+        rows.push(row(5, "assistant", "答案：可以，周五前办完。"));
+        let window = CarriedWindow::from_rows(rows);
+        assert_eq!(indexes(&window), vec![1]);
+        let turn = &window.turns[0];
+        assert_eq!(turn.user.content, "查一下");
+        assert!(turn.reply.content.starts_with(CUT_MARKER));
+        assert!(turn.reply.content.contains("步骤4："));
+        assert!(!turn.reply.content.contains("步骤1："));
+        assert!(turn
+            .reply
+            .content
+            .ends_with("查\n\n答案：可以，周五前办完。"));
+        assert_eq!(turn.said_at, "2026-10-13T09:05:00Z");
+        assert_eq!(window.chars(), CARRY_MAX_CHARS);
+    }
+
     #[test]
     fn a_user_message_over_half_the_cap_keeps_its_start_and_end() {
-        let user = format!("帮我看看这段：{}这段什么意思？", "贴".repeat(8_000));
+        let user = format!(
+            "帮我看看这段：{}这段什么意思？",
+            "贴".repeat(CARRY_MAX_CHARS + 2_000)
+        );
         // A long reply: each side gets half.
         let window = CarriedWindow::from_rows(vec![
             row(0, "user", &user),
-            row(0, "assistant", &format!("{}答完", "答".repeat(7_000))),
+            row(
+                0,
+                "assistant",
+                &format!("{}答完", "答".repeat(CARRY_MAX_CHARS)),
+            ),
         ]);
         let turn = &window.turns[0];
         assert_eq!(turn.user.content.chars().count(), CARRY_MAX_CHARS / 2);
@@ -406,8 +588,8 @@ mod tests {
         assert!(turn.user.content.ends_with("这段什么意思？"));
 
         // Long but within the cap together: nothing is cut.
-        let window = CarriedWindow::from_rows(sized(0, 4_000, 1_500));
-        assert_eq!(window.chars(), 5_500);
+        let window = CarriedWindow::from_rows(sized(0, CARRY_MAX_CHARS - 2_000, 1_500));
+        assert_eq!(window.chars(), CARRY_MAX_CHARS - 500);
         assert!(!window.turns[0].user.content.contains(CUT_MARKER));
     }
 
@@ -416,6 +598,7 @@ mod tests {
         let rows = || -> Vec<ReplayRow> {
             let mut rows: Vec<ReplayRow> = (0..4).flat_map(|i| sized(i, 300, 2_200)).collect();
             rows.extend(sized(4, 7_000, 9_000));
+            rows.extend((5..8).map(|i| row(i, "assistant", &"步".repeat(3_000))));
             rows
         };
         assert_eq!(

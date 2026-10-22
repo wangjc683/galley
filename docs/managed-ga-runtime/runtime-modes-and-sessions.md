@@ -121,16 +121,18 @@ is unaffected.
   `core/src/session_runner/carry.rs`): otherwise a user who writes again
   after the gap finds the assistant has forgotten the exchange still on
   screen. The replay of a segment with a recorded boundary opens with the
-  last 3 complete turns before it — a user message and its reply, read by
-  the replay's own rules; never the greeting, never a message whose reply
-  never came — whichever segment they are in, at most 6,000 Unicode
-  characters together (images ride along uncounted). Over the cap, whole
+  last 3 complete turns before it — a user message and every reply up to
+  the next one (ticket 77: a run takes a `turn_index` per step, so a
+  multi-step run's answer comes with the message that started it), read
+  by the replay's own rules; never the greeting, never a message whose
+  reply never came — whichever segment they are in, at most 8,000
+  Unicode characters together (images ride along uncounted). Over the cap, whole
   turns go, oldest first. When the latest turn alone is over it, its user
   message and its reply are each sure of half the cap and lend the other
   what they do not need: a cut reply keeps its end (the final answer), a
   cut user message its start and its end (a long one is mostly a paste
   with the request at one end), with `[… cut for length …]` where text
-  went. 3 and 6,000 are constants, not prefs. The window is computed from
+  went. 3 and 8,000 are constants, not prefs. The window is computed from
   the rows before the boundary and nothing else, so the replay after a
   Core restart opens the same way, and the state block, which reads it
   through the same function, says how many turns it carries and when the

@@ -11,7 +11,9 @@
 //! - a cold runner gets only the current segment back, the same after a
 //!   "restart" (a new registry on the same database) and after N changes;
 //! - a new segment opens with the last three complete turns before it,
-//!   from any earlier segment, held to the character cap (ticket 11);
+//!   from any earlier segment, held to the character cap (ticket 11) —
+//!   a turn being a user message and every reply up to the next, so a
+//!   multi-step run comes with its answer (ticket 77);
 //! - the database keeps the whole thread;
 //! - side chats — managed or attached — are untouched;
 //! - what the main chat's state block says about its segment (03b) and
@@ -950,6 +952,81 @@ async fn a_message_that_got_no_reply_is_not_carried() {
     assert_eq!(runner.load_histories(), vec![turn("第一问", "第一答")]);
 }
 
+/// A multi-step run the user message `user` opens, written the way Core
+/// writes one: each step a turn of its own on the next `turn_index`,
+/// only the first sharing the user message's; the last step is the
+/// answer. Returns the user message's index.
+async fn seed_run(galley: &SqliteGalley, sid: &str, user: &str, steps: &[&str]) -> u32 {
+    let first = galley
+        .send_message(SessionId(sid.into()), user.into(), gui_origin())
+        .await
+        .expect("user row")
+        .turn_index
+        .expect("turn index");
+    for (i, step) in steps.iter().enumerate() {
+        let tool_calls = (i + 1 < steps.len())
+            .then(|| json!([{"toolName": "web_search", "args": {"query": "q"}}]));
+        reply_to(galley, sid, first + i as u32, step, tool_calls).await;
+    }
+    first
+}
+
+/// Ticket 77: a turn is a user message and every reply up to the next,
+/// so a run's answer, on a later `turn_index` than its user message, is
+/// carried with it — the read starts at the user message and takes
+/// every step.
+#[tokio::test]
+async fn a_multi_step_run_is_carried_with_its_answer() {
+    let sid = "s-main-carry-run";
+    let (pool, galley) = fresh().await;
+    main_chat(&galley, sid).await;
+    seed_exchange(&galley, sid, "问0", "答0").await;
+    let west = seed_run(
+        &galley,
+        sid,
+        "西部怎么预测",
+        &["我先查一下", "还在查", "西部的答案"],
+    )
+    .await;
+    let east = seed_run(&galley, sid, "东部呢", &["东部我先核对", "东部的答案"]).await;
+    assert_eq!((west, east), (1, 4));
+
+    // Where the read starts for a segment from turn 6: the user message
+    // of the oldest of the last `turns`.
+    let id = SessionId(sid.into());
+    for (turns, from) in [(1, Some(4)), (2, Some(1)), (3, Some(0)), (4, Some(0))] {
+        let got = galley
+            .main_chat_carry_from(&id, 6, turns)
+            .await
+            .expect("carry from");
+        assert_eq!(got, from, "{turns} turns");
+    }
+    // Only what is before the segment counts.
+    for (before, from) in [(5, Some(4)), (4, Some(1)), (1, Some(0)), (0, None)] {
+        let got = galley
+            .main_chat_carry_from(&id, before, 1)
+            .await
+            .expect("carry from");
+        assert_eq!(got, from, "before {before}");
+    }
+
+    idle_for(&pool, sid, 5.0).await;
+    let runner = SegRunner::default();
+    let env = FakeEnv;
+    send_user_message(
+        &host(&galley, &runner, &env),
+        request(sid, "刚才那件你最后怎么说的？"),
+    )
+    .await
+    .expect("send");
+
+    assert_eq!(boundaries(&galley, sid).await, vec![6]);
+    let mut carried = turn("问0", "答0");
+    carried.extend(turn("西部怎么预测", "我先查一下\n\n还在查\n\n西部的答案"));
+    carried.extend(turn("东部呢", "东部我先核对\n\n东部的答案"));
+    assert_eq!(runner.load_histories(), vec![carried]);
+}
+
 // ---------------- a deleted message (ticket 32) ----------------
 
 /// A deletion's runner start, which the test does itself.
@@ -1079,7 +1156,7 @@ async fn the_cap_holds_in_the_replay() {
     let (pool, galley) = fresh().await;
     main_chat(&galley, sid).await;
     seed_exchange(&galley, sid, "短问", "短答").await;
-    let long = format!("开头{}结论在最后", "长".repeat(8_000));
+    let long = format!("开头{}结论在最后", "长".repeat(CARRY_MAX_CHARS + 2_000));
     seed_exchange(&galley, sid, "写一篇长文", &long).await;
     idle_for(&pool, sid, 5.0).await;
     let runner = SegRunner::default();
