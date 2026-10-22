@@ -2093,6 +2093,12 @@ export const enCopy: AppCopy = {
     autostartHintClose: "Don't show again",
     talkAbout: "Talk about this",
     cancelReminder: "Cancel reminder",
+    deleteTodo: {
+      menuItem: "Delete",
+      deleted: (title: string) => `Deleted "${title}"`,
+      deletedCount: (n: number) => `Deleted ${n} to-dos`,
+      undo: "Undo",
+    },
     overdueDays: (days: number) =>
       days === 1 ? "1 day overdue" : `${days} days overdue`,
     overdueAt: (when: string) => `Overdue · ${when}`,
@@ -2109,6 +2115,7 @@ export const enCopy: AppCopy = {
     stateFired: "Reminded",
     stateFiredSession: "Ran",
     stateCancelled: "Cancelled",
+    stateDeleted: "Deleted",
     stateRunning: "Working",
     stateAsking: "Waiting for you",
     stateFailed: "Error",

@@ -5,7 +5,15 @@ import {
   type AssistantTodo,
   type TodoItem,
 } from "@/lib/assistant-todo";
-import { TODO_SETTLE_MS, todoChecked } from "@/lib/todo-panel";
+import { zhCopy } from "@/i18n/locales/zh";
+import {
+  TODO_SETTLE_MS,
+  todoChecked,
+  todoWithoutDeleting,
+} from "@/lib/todo-panel";
+import { UNDO_DELETE_MS } from "@/stores/message-delete";
+import { usePrefsStore } from "@/stores/prefs";
+import { useUiStore } from "@/stores/ui";
 import { getTauriMocks } from "@/test/setup";
 
 import { useAssistantTodoStore } from "./assistant-todo";
@@ -62,7 +70,11 @@ beforeEach(() => {
     flips: {},
     failures: {},
     cancelling: {},
+    deleting: {},
+    deleteToastId: null,
   });
+  useUiStore.setState({ toasts: [] });
+  usePrefsStore.setState({ languagePreference: "zh-CN" });
 });
 
 afterEach(() => {
@@ -329,5 +341,219 @@ describe("cancelling one of Galley's own reminders (ticket 80)", () => {
     state = useAssistantTodoStore.getState();
     expect(state.failures).toEqual({});
     await vi.runAllTimersAsync();
+  });
+});
+
+/**
+ * Deleting a to-do of yours from the panel (main chat ticket 88, PRD
+ * ruling 132 point 4), stores/message-delete.ts's way: off the panel at
+ * once, Core asked only when the undo toast goes, several in a row one
+ * toast, 撤销 Core never hears of, a send into the main chat committing
+ * first, a refusal back on the panel with its reason.
+ */
+describe("deleting a to-do", () => {
+  const words = zhCopy.todo.deleteTodo;
+  const SOIL: TodoItem = { ...OPEN, id: "todo_2", text: "买营养土" };
+  const both: AssistantTodo = {
+    ...EMPTY_TODO,
+    yours: { today: [OPEN], later: [], anytime: [SOIL] },
+    todayCount: 1,
+  };
+  const gone: AssistantTodo = { ...EMPTY_TODO };
+
+  const todos = () => useAssistantTodoStore.getState();
+  const toasts = () => useUiStore.getState().toasts;
+  const deletes = (invoke: ReturnType<typeof getTauriMocks>["invoke"]) =>
+    invoke.mock.calls
+      .filter(([command]) => command === "cancel_todo")
+      .map(([, args]) => args);
+  /** What the panel draws now. */
+  const drawn = () =>
+    [
+      ...todoWithoutDeleting(todos().todo, todos().deleting).yours.today,
+      ...todoWithoutDeleting(todos().todo, todos().deleting).yours.anytime,
+    ].map((item) => item.id);
+
+  /** The undo toast runs out (ToastHost: its `onClose`, then away). */
+  function runOut(): void {
+    const toast = toasts()[0];
+    toast.onClose?.();
+    useUiStore.getState().dismissToast(toast.id);
+  }
+
+  beforeEach(() => {
+    useAssistantTodoStore.setState({ todo: both });
+  });
+
+  it("takes the row off at once and offers 撤销 for five seconds; Core hears nothing yet", async () => {
+    const invoke = answer([]);
+    useAssistantTodoStore.setState({ failures: { todo_1: "failed" } });
+    todos().deleteTodo(OPEN);
+
+    expect(todos().deleting).toEqual({
+      todo_1: { order: expect.any(Number), committing: false },
+    });
+    expect(drawn()).toEqual(["todo_2"]);
+    // A reason left by an earlier try goes.
+    expect(todos().failures).toEqual({});
+    expect(toasts()).toHaveLength(1);
+    expect(toasts()[0]).toMatchObject({
+      severity: "info",
+      title: words.deleted("交季度报告"),
+      autoDismissMs: UNDO_DELETE_MS,
+      action: { kind: "undo", label: words.undo },
+    });
+    // The list itself is Core's until Core has deleted it.
+    expect(todos().todo).toBe(both);
+    await vi.advanceTimersByTimeAsync(UNDO_DELETE_MS * 2);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("quotes a long title cut short", () => {
+    answer([]);
+    const long = {
+      ...OPEN,
+      text: "把这个季度所有门店的销售数据整理成一份报告发给区域经理",
+    };
+    todos().deleteTodo(long);
+    expect(toasts()[0].title).toBe(
+      words.deleted("把这个季度所有门店的销售数据整理成一份报告发给区…"),
+    );
+  });
+
+  it("撤销 puts it back and Core never hears of it", async () => {
+    const invoke = answer([]);
+    todos().deleteTodo(OPEN);
+    const toast = toasts()[0];
+    if (toast.action?.kind === "undo") toast.action.run();
+
+    expect(todos().deleting).toEqual({});
+    expect(drawn()).toEqual(["todo_1", "todo_2"]);
+    expect(toasts()).toEqual([]);
+    // A late close of that toast deletes nothing.
+    toast.onClose?.();
+    await vi.runAllTimersAsync();
+    expect(invoke).not.toHaveBeenCalled();
+    expect(todos().flushDeletes()).toBeNull();
+  });
+
+  it("asks Core once the toast goes, and lets it go with the fresh list in one set", async () => {
+    const invoke = answer([{ ...both, yours: { ...both.yours, today: [] } }]);
+    todos().deleteTodo(OPEN);
+    // Never drawn between: no state lists it with nothing holding it off.
+    const states: ReturnType<typeof useAssistantTodoStore.getState>[] = [];
+    const unsubscribe = useAssistantTodoStore.subscribe((state) =>
+      states.push(state),
+    );
+    runOut();
+    await todos().commitDeletes();
+    unsubscribe();
+
+    expect(deletes(invoke)).toEqual([{ id: "todo_1" }]);
+    expect(invoke.mock.calls.map(([command]) => command)).toEqual([
+      "cancel_todo",
+      ...READ,
+    ]);
+    for (const state of states) {
+      const shown = todoWithoutDeleting(state.todo, state.deleting);
+      expect(shown.yours.today.map((item) => item.id)).not.toContain("todo_1");
+    }
+    expect(todos().deleting).toEqual({});
+    expect(todos().todo.yours.today).toEqual([]);
+    expect(drawn()).toEqual(["todo_2"]);
+    expect(toasts()).toEqual([]);
+  });
+
+  it("several in a row are one toast, its time from the latest, 撤销 taking them all back", async () => {
+    const invoke = answer([]);
+    todos().deleteTodo(OPEN);
+    const first = toasts()[0];
+    todos().deleteTodo(SOIL);
+
+    expect(toasts()).toHaveLength(1);
+    expect(toasts()[0].id).not.toBe(first.id);
+    expect(toasts()[0].title).toBe(words.deletedCount(2));
+    expect(drawn()).toEqual([]);
+    // The replaced toast's close deletes nothing.
+    first.onClose?.();
+    await vi.runAllTimersAsync();
+    expect(invoke).not.toHaveBeenCalled();
+
+    const latest = toasts()[0];
+    if (latest.action?.kind === "undo") latest.action.run();
+    expect(todos().deleting).toEqual({});
+    expect(drawn()).toEqual(["todo_1", "todo_2"]);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("go to Core one by one, in the order deleted, when the toast goes", async () => {
+    const invoke = answer([gone]);
+    todos().deleteTodo(SOIL);
+    todos().deleteTodo(OPEN);
+    runOut();
+    await todos().commitDeletes();
+
+    expect(deletes(invoke)).toEqual([{ id: "todo_2" }, { id: "todo_1" }]);
+    expect(todos().deleting).toEqual({});
+    expect(todos().todo).toEqual(gone);
+  });
+
+  it("a send into the main chat commits first: the promise to wait for, the toast gone with it", async () => {
+    const invoke = answer([gone]);
+    expect(todos().flushDeletes()).toBeNull();
+    todos().deleteTodo(OPEN);
+    const flushing = todos().flushDeletes();
+    expect(flushing).not.toBeNull();
+    expect(toasts()).toEqual([]);
+    // Past undoing, still off the panel while Core answers.
+    expect(todos().deleting.todo_1.committing).toBe(true);
+    expect(drawn()).toEqual(["todo_2"]);
+    await flushing;
+    expect(deletes(invoke)).toEqual([{ id: "todo_1" }]);
+    expect(todos().deleting).toEqual({});
+  });
+
+  it("comes back with the reason when Core refuses", async () => {
+    const { invoke } = getTauriMocks();
+    invoke.mockImplementation(async (command, args) => {
+      if (command === "cancel_todo") {
+        throw (args as { id: string }).id === "todo_1"
+          ? JSON.stringify({ error: "not_found", message: "gone" })
+          : JSON.stringify({ error: "invalid_args", message: "no assistant" });
+      }
+      return command === "list_noted_todos" ? [] : both;
+    });
+    todos().deleteTodo(OPEN);
+    todos().deleteTodo(SOIL);
+    runOut();
+    await todos().commitDeletes();
+
+    expect(todos().deleting).toEqual({});
+    expect(todos().failures).toEqual({ todo_1: "gone", todo_2: "failed" });
+    expect(drawn()).toEqual(["todo_1", "todo_2"]);
+    // No toast: the reason is under the row.
+    expect(toasts()).toEqual([]);
+  });
+
+  it("takes only a to-do, once", async () => {
+    const invoke = answer([]);
+    const task: TodoItem = {
+      kind: "task",
+      id: "sched_water",
+      text: "提醒喝水",
+      state: "scheduled",
+      createdBy: "assistant",
+    };
+    todos().deleteTodo(task);
+    todos().deleteTodo({ ...OPEN, cancelledAt: "2026-10-15T07:00:00Z" });
+    expect(todos().deleting).toEqual({});
+    expect(toasts()).toEqual([]);
+    todos().deleteTodo(OPEN);
+    todos().deleteTodo(OPEN);
+    expect(Object.keys(todos().deleting)).toEqual(["todo_1"]);
+    expect(toasts()).toHaveLength(1);
+    expect(toasts()[0].title).toBe(words.deleted("交季度报告"));
+    await vi.runAllTimersAsync();
+    expect(invoke).not.toHaveBeenCalled();
   });
 });

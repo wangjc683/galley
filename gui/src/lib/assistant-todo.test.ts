@@ -4,6 +4,7 @@ import { enCopy } from "@/i18n/locales/en";
 import { zhCopy } from "@/i18n/locales/zh";
 import {
   cancelScheduledTask,
+  cancelTodo,
   cancelTodoReminder,
   completeTodo,
   EMPTY_TODO,
@@ -21,7 +22,9 @@ import {
   todoRowTarget,
   todoStateLabel,
   todoTimeLabel,
+  todoToastTitle,
   TODO_REFRESH_EVENTS,
+  TODO_TOAST_TITLE_CHARS,
   type TodoItem,
 } from "@/lib/assistant-todo";
 import type { ScheduledTask } from "@/lib/scheduled-tasks";
@@ -237,6 +240,35 @@ describe("the list", () => {
     expect(invoke).toHaveBeenLastCalledWith("cancel_todo_reminder", {
       id: "todo_1",
     });
+    // Ticket 88: the panel's 删除, Core's soft delete from the desktop.
+    await cancelTodo("todo_1");
+    expect(invoke).toHaveBeenLastCalledWith("cancel_todo", { id: "todo_1" });
+  });
+
+  it("quotes a title in the undo toast whole, or cut with 「…」 (ticket 88)", () => {
+    expect(todoToastTitle("交周报")).toBe("交周报");
+    // Its breaks and runs of space one space.
+    expect(todoToastTitle("  交\n周报  ")).toBe("交 周报");
+    const long = "把这个季度所有门店的销售数据整理成一份报告发给区域经理";
+    expect(Array.from(long).length).toBeGreaterThan(TODO_TOAST_TITLE_CHARS);
+    expect(todoToastTitle(long)).toBe(
+      `${Array.from(long).slice(0, TODO_TOAST_TITLE_CHARS).join("")}…`,
+    );
+    const exact = "一".repeat(TODO_TOAST_TITLE_CHARS);
+    expect(todoToastTitle(exact)).toBe(exact);
+    // Cut by characters, never inside one.
+    const emoji = "🎉".repeat(TODO_TOAST_TITLE_CHARS + 1);
+    expect(todoToastTitle(emoji)).toBe(
+      `${"🎉".repeat(TODO_TOAST_TITLE_CHARS)}…`,
+    );
+    expect(zhCopy.todo.deleteTodo.deleted(todoToastTitle("交周报"))).toBe(
+      "已删除「交周报」",
+    );
+    expect(enCopy.todo.deleteTodo.deleted("Hand in the report")).toBe(
+      'Deleted "Hand in the report"',
+    );
+    expect(zhCopy.todo.deleteTodo.deletedCount(2)).toBe("已删除 2 件待办");
+    expect(enCopy.todo.deleteTodo.deletedCount(2)).toBe("Deleted 2 to-dos");
   });
 
   it("reads again on the events that change it", () => {

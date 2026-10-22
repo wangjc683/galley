@@ -20,6 +20,11 @@ import {
 
 import { ActionChip } from "@/components/conversation/ActionChip";
 import {
+  MENU_CONTENT_CLASS,
+  MENU_DELETE_CLASS,
+  MENU_ITEM_CLASS,
+} from "@/components/conversation/message-menu-styles";
+import {
   SidebarRowMenuItem,
   type SidebarRowMenuKind,
   SidebarRowMenuSeparator,
@@ -27,7 +32,6 @@ import {
 import { ChipRootsContext } from "@/lib/chip-roots";
 import { useCopy } from "@/lib/i18n";
 import type { MessageMenuAction, MessageMenuEntry } from "@/lib/message-menu";
-import { cn } from "@/lib/utils";
 
 /**
  * A bubble's message menu in the assistant's conversation (main chat
@@ -81,22 +85,6 @@ export function MessageMenuProvider({
   );
 }
 
-const CONTENT_CLASS =
-  "galley-pop-in z-50 w-[200px] rounded-md border border-line bg-elevated p-1 shadow-elevated";
-
-// rounded-callout (8px) = the menu surface's rounded-md (12px) minus its
-// p-1 (4px), as the sidebar's rows.
-const ITEM_CLASS = cn(
-  "flex items-center gap-2 rounded-callout px-2.5 py-1.5 text-[13px] text-ink-soft outline-none",
-  "data-[highlighted]:bg-hover data-[highlighted]:text-ink",
-);
-
-const DELETE_CLASS = cn(
-  "flex items-center gap-2 rounded-callout px-2.5 py-1.5 text-[13px] text-error outline-none",
-  "data-[highlighted]:bg-error/[var(--opacity-soft)] data-[highlighted]:text-error",
-  "data-[disabled]:text-ink-muted",
-);
-
 /** The rows of `model`, in either menu. 删除 greyed carries its reason
  * on a line under it; the rest stay usable. */
 function MessageMenuRows({
@@ -135,7 +123,7 @@ function MessageMenuRows({
                   kind={kind}
                   disabled={reason !== null}
                   onSelect={() => model.onSelect("delete")}
-                  className={DELETE_CLASS}
+                  className={MENU_DELETE_CLASS}
                 >
                   <Trash size={13} weight="thin" />
                   {words.deleteMessage.menuItem}
@@ -154,7 +142,7 @@ function MessageMenuRows({
                 key={entry.kind}
                 kind={kind}
                 onSelect={() => model.onSelect(entry.kind)}
-                className={ITEM_CLASS}
+                className={MENU_ITEM_CLASS}
               >
                 {entry.kind === "copy" ? (
                   <>
@@ -231,7 +219,7 @@ export function MessageContextMenu({
       <ContextMenu.Portal>
         <ContextMenu.Content
           data-role="message-menu"
-          className={CONTENT_CLASS}
+          className={MENU_CONTENT_CLASS}
           onCloseAutoFocus={(event) => event.preventDefault()}
           // Esc closes the menu and nothing else: the selection's own Esc
           // (SelectionCopyToolbar, on the document) would clear it.
@@ -366,7 +354,7 @@ export function MessageMenuButton({
           data-role="message-menu"
           align={align}
           sideOffset={6}
-          className={CONTENT_CLASS}
+          className={MENU_CONTENT_CLASS}
           onCloseAutoFocus={(event) => event.preventDefault()}
           onEscapeKeyDown={(event) => event.stopPropagation()}
         >

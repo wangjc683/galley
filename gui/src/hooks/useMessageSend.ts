@@ -8,6 +8,7 @@ import {
   type SendOutcome,
 } from "@/lib/session-send";
 import { isSideQuestion } from "@/lib/side-question";
+import { useAssistantTodoStore } from "@/stores/assistant-todo";
 import { useMessageDeleteStore } from "@/stores/message-delete";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
@@ -50,7 +51,12 @@ export type SendEcho = "turn" | "side_question" | "none";
  * (its undo toast still up; main chat ticket 38) goes to Core first, and
  * the send waits for it, so the turn's history no longer holds it. The
  * echo shows meanwhile; a deletion Core refuses comes back on screen and
- * says so (stores/message-delete.ts), and the send goes on.
+ * says so (stores/message-delete.ts), and the send goes on. A to-do
+ * deleted from the panel within its five seconds goes to Core first too,
+ * before a send into the main chat (main chat ticket 88, PRD ruling 132
+ * point 4): Galley reads its list before it answers, and the to-do must
+ * not be on it; one Core refuses comes back on the panel
+ * (stores/assistant-todo.ts).
  *
  * Resolves to Core's outcome; throws Core's failure
  * (`SendUserMessageError`). An echo Core persisted before failing stays
@@ -87,6 +93,12 @@ export async function sendThroughCore(
   }
   const deleting = useMessageDeleteStore.getState().flush(sid);
   if (deleting) await deleting;
+  if (
+    useSessionsStore.getState().sessions.find((s) => s.id === sid)?.mainChat
+  ) {
+    const deletingTodos = useAssistantTodoStore.getState().flushDeletes();
+    if (deletingTodos) await deletingTodos;
+  }
   const result = await runtime.deliverUserMessage({
     sessionId: sid,
     text,

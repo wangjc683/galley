@@ -219,6 +219,31 @@ export async function cancelTodoReminder(id: string): Promise<TodoBrief> {
   return invoke<TodoBrief>("cancel_todo_reminder", { id });
 }
 
+/** Delete a to-do (`cancel_todo`, main chat ticket 88, PRD ruling 132):
+ * Core's soft delete, as Galley's `todo cancel`, recorded as the user at
+ * the desktop (a follow-up turned down, ruling 113); its reminder goes
+ * with it. Sent once the undo toast has gone (stores/assistant-todo.ts).
+ * Core sends `todos:changed`; `not_found` for one cancelled or gone. */
+export async function cancelTodo(id: string): Promise<TodoBrief> {
+  return invoke<TodoBrief>("cancel_todo", { id });
+}
+
+/** How much of a to-do's title the undo toast quotes (main chat ticket
+ * 88): about two of the toast's lines with 「已删除「」」 around it — the
+ * toast wraps and cuts nothing itself, and a long title would stand it
+ * tall in the corner. */
+export const TODO_TOAST_TITLE_CHARS = 24;
+
+/** A to-do's title as the undo toast quotes it: its breaks and runs of
+ * space one space, cut at `TODO_TOAST_TITLE_CHARS` characters with 「…」. */
+export function todoToastTitle(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const chars = Array.from(flat);
+  return chars.length > TODO_TOAST_TITLE_CHARS
+    ? `${chars.slice(0, TODO_TOAST_TITLE_CHARS).join("").trimEnd()}…`
+    : flat;
+}
+
 /** Core's event after any to-do change (`TODOS_CHANGED_EVENT`, ticket
  * 39); empty payload, read again. */
 export const TODOS_CHANGED_EVENT = "todos:changed";

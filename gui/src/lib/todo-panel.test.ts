@@ -34,6 +34,7 @@ import {
   todoRowText,
   todosByMessage,
   todoTitleTarget,
+  todoWithoutDeleting,
   todoWritesOnTheirWay,
   type TodoHold,
 } from "@/lib/todo-panel";
@@ -587,6 +588,43 @@ describe("cards under replies", () => {
 });
 
 describe("the list", () => {
+  // Ticket 88 (PRD ruling 132 point 4): what the panel draws while
+  // to-dos deleted there wait for Core.
+  it("leaves out the to-dos deleted here and not yet by Core, wherever they are", () => {
+    const report = todo({ id: "todo_report" });
+    const soil = todo({ id: "todo_soil" });
+    const done = todo({ id: "todo_done", state: "done" });
+    const own = task({ id: "sched_once" });
+    const listed: AssistantTodo = {
+      ...EMPTY_TODO,
+      yours: { today: [report], later: [], anytime: [soil] },
+      assistant: [own],
+      done: [done],
+      todayCount: 1,
+    };
+    expect(todoWithoutDeleting(listed, {})).toBe(listed);
+    const shown = todoWithoutDeleting(listed, {
+      todo_report: {},
+      todo_done: {},
+    });
+    expect(shown.yours).toEqual({ today: [], later: [], anytime: [soil] });
+    expect(shown.done).toEqual([]);
+    expect(shown.assistant).toEqual([own]);
+    // 「今天 N」 is Core's: it follows once Core has deleted it.
+    expect(shown.todayCount).toBe(1);
+    // A group without one of them is the same array.
+    expect(shown.yours.anytime).toBe(listed.yours.anytime);
+    // The last one gone: the empty state.
+    expect(
+      todoPanelEmpty(
+        todoWithoutDeleting(
+          { ...EMPTY_TODO, yours: { today: [report], later: [], anytime: [] } },
+          { todo_report: {} },
+        ),
+      ),
+    ).toBe(true);
+  });
+
   it("is empty only with nothing in any group", () => {
     expect(todoPanelEmpty(EMPTY_TODO)).toBe(true);
     expect(todoPanelEmpty({ ...EMPTY_TODO, done: [task()] })).toBe(false);
@@ -1024,11 +1062,31 @@ describe("what lights up (ticket 87, ruling 131 points 3 and 5)", () => {
     expect(
       [
         ...todoWritesOnTheirWay(
-          { flips: { todo_a: {} }, cancelling: {} },
-          { flips: {}, cancelling: { sched_x: true } },
+          { flips: { todo_a: {} }, cancelling: {}, deleting: {} },
+          { flips: {}, cancelling: { sched_x: true }, deleting: {} },
         ),
       ].sort(),
     ).toEqual(["sched_x", "todo_a"]);
+  });
+
+  // Ticket 88: a to-do deleted here, under its undo or sent, is this
+  // window's own: whatever Core's read does with it, nothing lights or
+  // holds — Galley ticking it off meanwhile included.
+  it("counts a to-do deleted here as this window's own write", () => {
+    const mine = todoWritesOnTheirWay(
+      { flips: {}, cancelling: {}, deleting: { todo_b: {} } },
+      { flips: {}, cancelling: {}, deleting: {} },
+    );
+    expect([...mine]).toEqual(["todo_b"]);
+    const before = list({ yours: yours(A, B) });
+    const after = list({
+      yours: yours(A),
+      done: [{ ...B, state: "done", at: local(2026, 10, 16, 10) }],
+    });
+    expect(todoPanelChanges(before, after, mine)).toEqual({
+      flash: [],
+      held: [],
+    });
   });
 
   it("holds a to-do Galley ticked off for you where it stood, lit, before 已完成", () => {

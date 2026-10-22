@@ -28,6 +28,7 @@ const store = vi.hoisted(() => ({
   flips: {} as Record<string, unknown>,
   failures: {} as Record<string, unknown>,
   cancelling: {} as Record<string, unknown>,
+  deleting: {} as Record<string, unknown>,
 }));
 vi.mock("@/stores/assistant-todo", () => ({
   useAssistantTodoStore: (select: (state: unknown) => unknown) =>
@@ -36,6 +37,7 @@ vi.mock("@/stores/assistant-todo", () => ({
       toggle: () => {},
       cancelReminder: () => {},
       cancelTask: () => {},
+      deleteTodo: () => {},
       load: async () => {},
     }),
 }));
@@ -46,6 +48,7 @@ afterEach(() => {
   store.flips = {};
   store.failures = {};
   store.cancelling = {};
+  store.deleting = {};
 });
 
 function inDays(days: number, hour = 9): string {
@@ -797,6 +800,84 @@ describe("cancelling Galley's own reminder from the panel (ticket 80)", () => {
   });
 });
 
+// Ticket 88 (PRD ruling 132 point 3): your to-do's ⋯ and right-click
+// menu, and a row deleted there. The menu's rows are pinned in
+// TodoRowMenu.test.tsx, a click through to the store in
+// TodoPanel.click.test.tsx.
+describe("your to-do's menu (ticket 88)", () => {
+  /** The `<button …>` tag named `label` in `html`. */
+  const buttonTag = (html: string, label: string) =>
+    html.match(new RegExp(`<button[^>]*aria-label="${label}"[^>]*>`))![0];
+
+  it("ends your row's hover buttons with ⋯, after 说说这件, the title giving way to both", () => {
+    const html = panel(FULL);
+    for (const id of ["todo_late", "todo_report", "todo_soil"]) {
+      const own = row(html, id);
+      expect(own).toMatch(/aria-label="说说这件"[^]*aria-label="更多"/);
+      // The row is the right-click's trigger, let past the webview guard.
+      expect(own).toContain('data-galley-context-menu-trigger=""');
+      expect(own).toContain("group-hover/todo-row:pr-[60px]");
+      expect(own).toContain("group-focus-within/todo-row:pr-[60px]");
+    }
+    // In the hover buttons' box: shown on hover or keyboard focus.
+    expect(row(html, "todo_late")).toMatch(
+      /opacity-0 group-focus-within\/todo-row:opacity-100 group-hover\/todo-row:opacity-100"><button[^>]*aria-label="说说这件"[^]*<button[^>]*aria-label="更多"/,
+    );
+    // The panel's own button, as 说说这件: the same size, a menu button,
+    // not pressed while closed.
+    const more = buttonTag(row(html, "todo_late"), "更多");
+    const talk = buttonTag(row(html, "todo_late"), "说说这件");
+    expect(more).toContain('aria-haspopup="menu"');
+    expect(more).toContain('aria-expanded="false"');
+    expect(more).toContain("size-7");
+    expect(talk).toContain("size-7");
+    // English: More.
+    expect(row(panel(FULL, { language: "en-US" }), "todo_late")).toContain(
+      'aria-label="More"',
+    );
+  });
+
+  it("is on no row but yours not done: not one ticked and holding, nor 已完成, Galley's or a routine", () => {
+    store.flips = { todo_report: { done: true, phase: "settling" } };
+    const html = panel(
+      { ...FULL, assistant: [SUBTASK, OWN_REMINDER], routine: [ROUTINE] },
+      { doneOpen: true },
+    );
+    for (const id of [
+      "todo_report",
+      "todo_done",
+      "s-sub",
+      "sched_water",
+      "sched_daily",
+    ]) {
+      expect(row(html, id)).not.toContain('aria-label="更多"');
+      expect(row(html, id)).not.toContain("data-galley-context-menu-trigger");
+    }
+    // A row with 说说这件 alone keeps its 32px.
+    expect(row(html, "s-sub")).toContain("group-hover/todo-row:pr-8");
+    expect(row(html, "todo_late")).toContain('aria-label="更多"');
+  });
+
+  it("takes a row deleted here off the panel at once; the last one leaves the empty state", () => {
+    store.deleting = { todo_report: { order: 1, committing: false } };
+    const html = panel(FULL);
+    expect(html).not.toContain('data-todo-row="todo_report"');
+    expect(html).toContain('data-todo-row="todo_late"');
+    expect(html).toContain('data-todo-row="todo_soil"');
+    // Sent and not yet answered: still off.
+    store.deleting = { todo_report: { order: 1, committing: true } };
+    expect(panel(FULL)).not.toContain('data-todo-row="todo_report"');
+    store.deleting = {
+      todo_late: { order: 1, committing: false },
+      todo_report: { order: 2, committing: false },
+      todo_soil: { order: 3, committing: false },
+    };
+    const emptied = panel({ ...EMPTY_TODO, yours: FULL.yours, todayCount: 1 });
+    expect(emptied).toContain('data-role="todo-empty"');
+    expect(emptied).not.toContain('data-todo-group="yours"');
+  });
+});
+
 describe("the card under the reply", () => {
   function cards(items: TodoItem[]): string {
     return renderToStaticMarkup(
@@ -918,7 +999,7 @@ describe("the card under the reply", () => {
     ).toContain(EMPTY_BOX);
   });
 
-  it("cancelled: the box takes no click, the title faded, 「已取消」 beside it", () => {
+  it("cancelled: the box takes no click, the title faded, 「已删除」 beside it", () => {
     const html = cards([CANCELLED]);
     expect(html).toContain('data-todo-state="cancelled"');
     expect(html).toContain('data-todo-checked="false"');
@@ -928,8 +1009,11 @@ describe("the card under the reply", () => {
     // Faded, not struck: it was not done.
     expect(html).toMatch(/text-ink-muted"[^>]*>买营养土</);
     expect(html).not.toContain("line-through");
-    expect(html).toMatch(/data-role="todo-meta"[^>]*><span>[^]*>已取消</);
-    // 「已取消」 in place of when it was due and its reminder.
+    // Deleted at the desktop or by Galley, one word (ticket 88, ruling
+    // 132 point 5); a reminder card keeps 「已取消」.
+    expect(html).toMatch(/data-role="todo-meta"[^>]*><span>[^]*>已删除</);
+    expect(html).not.toContain("已取消");
+    // 「已删除」 in place of when it was due and its reminder.
     expect(html).not.toContain("逾期");
     expect(html).not.toContain("截止");
     expect(html).not.toContain("提醒");
@@ -950,7 +1034,30 @@ describe("the card under the reply", () => {
           </Tooltip.Provider>
         </CopyProvider>,
       ),
-    ).toContain(">Cancelled<");
+    ).toContain(">Deleted<");
+  });
+
+  // Ticket 88: deleted from the panel, its undo toast still up.
+  it("deleted from the panel and not yet by Core: already as a deleted one, its title words", () => {
+    store.todo = {
+      ...EMPTY_TODO,
+      yours: { ...EMPTY_TODO.yours, later: [REMINDED] },
+    };
+    const listedHtml = cards([REMINDED]);
+    expect(listedHtml).toMatch(/<button[^>]*>交季度报告<\/button>/);
+    store.deleting = { todo_report: { order: 1, committing: false } };
+    const html = cards([REMINDED]);
+    expect(html).toContain('data-todo-state="cancelled"');
+    expect(html).not.toContain('checked=""');
+    expect(html).toContain('disabled=""');
+    expect(html).toMatch(/data-role="todo-meta"[^>]*><span>[^]*>已删除</);
+    expect(html).not.toContain("提醒");
+    // Not a way into the panel: the panel no longer draws it.
+    expect(html).not.toMatch(/<button[^>]*>交季度报告<\/button>/);
+    expect(html).toMatch(/text-ink-muted"[^>]*>交季度报告</);
+    // A tick on its way does not tick it either.
+    store.flips = { todo_report: { done: true, phase: "settling" } };
+    expect(cards([REMINDED])).not.toContain('checked=""');
   });
 
   it("draws the three in the order given, a reply's in the order noted", () => {

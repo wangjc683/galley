@@ -36,8 +36,12 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
  * ago, it looks as 已完成 does in the panel — its box ticked in neutral
  * grey, not brand (ticket 84) — and can be unticked;
  * cancelled, its box stays unticked and takes no click, its title goes
- * `ink-muted` (not struck: it was not done) and 「已取消」 takes the
- * place of when it was due.
+ * `ink-muted` (not struck: it was not done) and 「已删除」 takes the
+ * place of when it was due — deleted at the desktop or by Galley, one
+ * thing, one word (main chat ticket 88, PRD ruling 132 point 5; a
+ * reminder card's 「已取消」 is cancelling a reminder, and stays). A
+ * to-do deleted from the panel reads so at once, while its undo toast is
+ * up (`deleting`), and back as it was on 撤销.
  *
  * Its title opens the to-do panel at its row (main chat ticket 87, PRD
  * ruling 131 point 3), as the panel's title leads back to the sentence:
@@ -74,15 +78,16 @@ function TodoCard({ item }: { item: TodoItem }) {
   const flip = useAssistantTodoStore((s) => s.flips[item.id]);
   const failure = useAssistantTodoStore((s) => s.failures[item.id] ?? null);
   const listed = useAssistantTodoStore((s) => todoListed(s.todo, item.id));
+  const deleting = useAssistantTodoStore((s) => item.id in s.deleting);
   const mainChatId = item.createdIn?.sessionId;
-  const cancelled = todoCancelled(item);
-  const checked = todoChecked(item, flip);
+  const cancelled = todoCancelled(item) || deleting;
+  const checked = !deleting && todoChecked(item, flip);
   // Done in Core: the box neutral, as under 已完成 (ticket 84). A card
   // being ticked stays brand through the hold; a cancelled one is never
   // ticked.
   const done = item.state === "done" && !cancelled;
   const parts = cancelled
-    ? [{ text: copy.todo.stateCancelled, tone: "muted" as const }]
+    ? [{ text: copy.todo.stateDeleted, tone: "muted" as const }]
     : todoMetaParts(item, checked, todayStartMs, language, copy);
   return (
     <div
@@ -103,7 +108,7 @@ function TodoCard({ item }: { item: TodoItem }) {
             checkedTone={done ? "quiet" : undefined}
           />
         </span>
-        {listed && mainChatId ? (
+        {listed && !deleting && mainChatId ? (
           // The panel's title button (TodoPanel's RowShell): as wide as
           // its words, underlined on hover, a ring on keyboard focus.
           <span className="min-w-0 flex-1 text-[13px] leading-5">

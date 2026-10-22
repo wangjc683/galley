@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { EMPTY_TODO, type TodoItem } from "@/lib/assistant-todo";
 import { copyForLanguage } from "@/lib/i18n";
 import { applyRunnerHistoryReplay } from "@/lib/ipc/history-replay";
 import {
@@ -13,6 +14,7 @@ import type {
   SendUserMessageResult,
   UserMessagePersistedPayload,
 } from "@/lib/session-send";
+import { useAssistantTodoStore } from "@/stores/assistant-todo";
 import { useMessageDeleteStore } from "@/stores/message-delete";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
@@ -429,6 +431,83 @@ describe("a send through Core (send_user_message)", () => {
     expect(userTurns(sid).map((turn) => turn.content)).toEqual([
       "我刚才说了什么？",
     ]);
+  });
+
+  // Main chat ticket 88 (PRD ruling 132 point 4): Galley reads its
+  // to-do list before it answers, and a to-do deleted from the panel
+  // must not be on it.
+  describe("a to-do deleted from the panel within its five seconds", () => {
+    const TODO: TodoItem = {
+      kind: "todo",
+      id: "todo_report",
+      text: "交周报",
+      state: "open",
+      createdBy: "assistant",
+    };
+
+    /** Core answers the send, the delete and the reads; `order` gets
+     * every command. */
+    function coreWithTodos(sid: string, order: string[]): void {
+      tauriMocks.invoke.mockImplementation(async (command) => {
+        order.push(command);
+        if (command === "cancel_todo") return { id: TODO.id };
+        if (command === "list_assistant_todo") return EMPTY_TODO;
+        if (command === "list_noted_todos") return [];
+        if (command === "send_user_message") {
+          return dispatched(row(sid, 2, "我还有什么没办？"));
+        }
+        if (
+          command === "list_live_runners" ||
+          command === "runner_stderr_tail"
+        ) {
+          return [];
+        }
+        return undefined;
+      });
+      useAssistantTodoStore.setState({
+        todo: {
+          ...EMPTY_TODO,
+          yours: { today: [TODO], later: [], anytime: [] },
+        },
+        deleting: {},
+        deleteToastId: null,
+      });
+      useAssistantTodoStore.getState().deleteTodo(TODO);
+      expect(useUiStore.getState().toasts).toHaveLength(1);
+    }
+
+    it("goes to Core before a send into the main chat; the send waits", async () => {
+      const sid = "s-main-todo";
+      seed(sid, { mainChat: true });
+      const order: string[] = [];
+      coreWithTodos(sid, order);
+
+      await sendThroughCore(sid, { text: "我还有什么没办？", echo: "turn" });
+
+      expect(order.indexOf("cancel_todo")).toBeGreaterThanOrEqual(0);
+      expect(order.indexOf("cancel_todo")).toBeLessThan(
+        order.indexOf("send_user_message"),
+      );
+      expect(useUiStore.getState().toasts).toEqual([]);
+      expect(useAssistantTodoStore.getState().deleting).toEqual({});
+    });
+
+    it("waits under its toast through a send into another conversation", async () => {
+      const sid = "s-side-todo";
+      seed(sid);
+      const order: string[] = [];
+      coreWithTodos(sid, order);
+
+      await sendThroughCore(sid, { text: "整理一下发版说明", echo: "turn" });
+
+      expect(order).toContain("send_user_message");
+      expect(order).not.toContain("cancel_todo");
+      expect(useUiStore.getState().toasts).toHaveLength(1);
+      expect(Object.keys(useAssistantTodoStore.getState().deleting)).toEqual([
+        TODO.id,
+      ]);
+      useAssistantTodoStore.getState().undoDelete();
+    });
   });
 
   it("Core queued it (the page thought the session idle): the echo is taken back", async () => {

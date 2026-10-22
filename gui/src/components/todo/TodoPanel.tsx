@@ -11,7 +11,13 @@ import {
   enable as enableAutostart,
   isEnabled as isAutostartEnabled,
 } from "@tauri-apps/plugin-autostart";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
 import { ReadingPanelHeader } from "@/components/conversation/reading/ReadingPanelHeader";
 import { Button, IconButton } from "@/components/ui/button";
@@ -41,6 +47,7 @@ import {
   todoRowsInDone,
   todoRowText,
   todoTitleTarget,
+  todoWithoutDeleting,
   type TodoHold,
   type TodoLineTone,
 } from "@/lib/todo-panel";
@@ -60,6 +67,11 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
 
 import { TodoCheck } from "./TodoCheck";
 import { TodoMetaText } from "./TodoMetaText";
+import {
+  TodoRowContextMenu,
+  TodoRowMenuButton,
+  type TodoRowMenuModel,
+} from "./TodoRowMenu";
 import { todoTitleClass } from "./todo-styles";
 
 export interface TodoPanelProps {
@@ -104,9 +116,13 @@ export interface TodoPanelProps {
  * empty state is, and 例行 under it (ticket 80, `todoPanelEmpty`). The
  * actions are only these: tick and untick the user's own (TodoCheck),
  * cancel a to-do's reminder or one of Galley's own one-off reminders
- * (ticket 80) — where the panel is — and on hover 「说说这件」, which
- * quotes the title into the main chat's composer and keeps the panel
- * open. A title goes where the thing came from: the reply that noted it
+ * (ticket 80), delete one of the user's own not done (ticket 88, its
+ * row's ⋯ and right-click menu, TodoRowMenu) — where the panel is — and
+ * on hover 「说说这件」, which quotes the title into the main chat's
+ * composer and keeps the panel open. A deleted to-do leaves at once and
+ * Core hears of it when its undo toast goes (stores/assistant-todo.ts);
+ * meanwhile the panel draws the list without it (`todoWithoutDeleting`).
+ * A title goes where the thing came from: the reply that noted it
  * (the 查找聊天记录 jump), a subtask, a scheduled run's session. A jump
  * out of the panel takes the panel along (lib/todo-open.ts). Escape
  * closes it from anywhere but a text field, as it does the reading
@@ -126,7 +142,10 @@ export function TodoPanel({
   defaultDoneOpen = false,
 }: TodoPanelProps) {
   const copy = useCopy();
-  const todo = useAssistantTodoStore((s) => s.todo);
+  const listed = useAssistantTodoStore((s) => s.todo);
+  const deleting = useAssistantTodoStore((s) => s.deleting);
+  // The rows deleted here wait off the panel for their undo (ticket 88).
+  const todo = todoWithoutDeleting(listed, deleting);
   const loaded = useAssistantTodoStore((s) => s.loaded);
   const list = useRef<HTMLDivElement>(null);
   const { held, request } = useTodoPanelFlash(list);
@@ -405,6 +424,14 @@ const LINE_TONES: Record<TodoLineTone, string> = {
  * centre in, so a row with notes holds them where a row without does:
  * between the title and the second line, or on a lone title. A failed
  * write says why on a line under it all.
+ *
+ * With a `menu` (your to-dos, ticket 88) the actions end with its ⋯
+ * and a right-click on the row opens the same menu; while either is
+ * open the row stays as the hover left it — its actions in sight, the
+ * title still giving way, the hover ground — as a sidebar row does while
+ * its ⋯ is open. `menuOff` (a row ticked and holding its place) takes
+ * the ⋯ away and opens nothing on a right-click, with the row's tree as
+ * it was: a tick does not mount the row afresh.
  */
 function RowShell({
   item,
@@ -415,6 +442,8 @@ function RowShell({
   line,
   notes,
   actions,
+  menu,
+  menuOff = false,
   failure,
 }: {
   item: TodoItem;
@@ -425,12 +454,36 @@ function RowShell({
   line?: ReactNode;
   notes?: ReactNode;
   actions?: ReactNode[];
+  menu?: TodoRowMenuModel;
+  menuOff?: boolean;
   failure?: string | null;
 }) {
   const copy = useCopy();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
+  const menuShown = menu !== undefined && !menuOff;
+  // A menu taken away while open (Galley ticked the row off meanwhile)
+  // is not open when it comes back.
+  if (!menuShown && (dropdownOpen || contextOpen)) {
+    setDropdownOpen(false);
+    setContextOpen(false);
+  }
+  const menuOpen = menuShown && (dropdownOpen || contextOpen);
   const target = todoTitleTarget(item, mainChatId);
   const text = todoRowText(item, copy);
-  const shown = (actions ?? []).filter(Boolean);
+  const shown = [
+    ...(actions ?? []).filter(Boolean),
+    ...(menu && menuShown
+      ? [
+          <TodoRowMenuButton
+            key="menu"
+            model={menu}
+            open={dropdownOpen}
+            onOpenChange={setDropdownOpen}
+          />,
+        ]
+      : []),
+  ];
   const title = target ? (
     <button
       type="button"
@@ -452,12 +505,15 @@ function RowShell({
       {text}
     </span>
   );
-  return (
+  const row: ReactElement = (
     <div
       data-todo-row={item.id}
       data-todo-kind={item.kind}
       data-todo-state={item.state}
-      className="group/todo-row rounded-sm hover:bg-hover"
+      className={cn(
+        "group/todo-row rounded-sm hover:bg-hover",
+        menuOpen && "bg-hover",
+      )}
     >
       <div className="relative flex gap-2.5 px-2.5 py-1.5">
         <span className="flex h-5 w-4 shrink-0 items-center justify-center">
@@ -470,13 +526,19 @@ function RowShell({
               (shown.length > 1
                 ? "group-focus-within/todo-row:pr-[60px] group-hover/todo-row:pr-[60px]"
                 : "group-focus-within/todo-row:pr-8 group-hover/todo-row:pr-8"),
+            menuOpen && (shown.length > 1 ? "pr-[60px]" : "pr-8"),
           )}
         >
           <div className="text-[13px] leading-5">{title}</div>
           {line}
         </div>
         {shown.length > 0 && (
-          <div className="absolute inset-y-0 right-1.5 flex items-center gap-0.5 opacity-0 group-focus-within/todo-row:opacity-100 group-hover/todo-row:opacity-100">
+          <div
+            className={cn(
+              "absolute inset-y-0 right-1.5 flex items-center gap-0.5 opacity-0 group-focus-within/todo-row:opacity-100 group-hover/todo-row:opacity-100",
+              menuOpen && "opacity-100",
+            )}
+          >
             {shown}
           </div>
         )}
@@ -491,6 +553,16 @@ function RowShell({
         </p>
       )}
     </div>
+  );
+  if (!menu) return row;
+  return (
+    <TodoRowContextMenu
+      model={menu}
+      disabled={!menuShown}
+      onOpenChange={setContextOpen}
+    >
+      {row}
+    </TodoRowContextMenu>
   );
 }
 
@@ -522,7 +594,12 @@ function useTodoWrite(id: string) {
  * 「说说这件」 on the right, and 「取消提醒」 beside a reminder still to go
  * off — by the thing it removes, and not a second target beside the
  * first at the row's end (deferred.md 「session 行 hover 置顶按钮」: two
- * precise targets side by side make the row's hover loud). */
+ * precise targets side by side make the row's hover loud). Since ticket
+ * 88 (PRD ruling 132 point 3) the ⋯ after 「说说这件」 is that second
+ * target, ruling 85's way in to 删除: its menu, and the row's
+ * right-click, hold 说说这件, 取消提醒 and 删除. Not on a row ticked and
+ * holding its place (yours, or Galley's tick, ticket 87): that one is
+ * on its way to 已完成, where no row has it. */
 function YourRow({
   held = false,
   ...props
@@ -536,11 +613,18 @@ function YourRow({
   const language = useLanguage();
   const todayStartMs = useDayStamp();
   const cancelReminder = useAssistantTodoStore((s) => s.cancelReminder);
+  const deleteTodo = useAssistantTodoStore((s) => s.deleteTodo);
   const { flip, failure, cancelling } = useTodoWrite(item.id);
   const checked = held || todoChecked(item, flip);
   const parts = todoMetaParts(item, checked, todayStartMs, language, copy);
   const canCancelReminder = !checked && todoReminderCancellable(item);
   const notes = todoNotesLine(item);
+  const menu: TodoRowMenuModel = {
+    canCancelReminder,
+    onTalkAbout: () => onTalkAbout(item),
+    onCancelReminder: () => cancelReminder(item.id),
+    onDelete: () => deleteTodo(item),
+  };
   return (
     <RowShell
       {...props}
@@ -567,6 +651,8 @@ function YourRow({
       }
       notes={notes && <NotesLine text={notes.text} full={notes.full} />}
       actions={[<TalkAbout key="talk" item={item} onTalkAbout={onTalkAbout} />]}
+      menu={menu}
+      menuOff={checked}
       failure={failure && todoFailureText(failure, copy)}
     />
   );

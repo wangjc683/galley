@@ -13,7 +13,8 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
  * (stores/assistant-todo.ts); `checked` is what the row shows, the tick
  * on its way included. Named by the to-do's title; the box says whether
  * it is done. A cancelled to-do's box (a card's, main chat ticket 43)
- * stays, unticked and disabled: there is nothing left to tick.
+ * stays, unticked and disabled: there is nothing left to tick — so does
+ * one deleted from the panel while its undo toast is up (ticket 88).
  */
 export function TodoCheck({
   item,
@@ -31,7 +32,8 @@ export function TodoCheck({
   checkedTone?: CheckboxCheckedTone;
 }) {
   const toggle = useAssistantTodoStore((s) => s.toggle);
-  const cancelled = todoCancelled(item);
+  const deleting = useAssistantTodoStore((s) => item.id in s.deleting);
+  const cancelled = todoCancelled(item) || deleting;
   return (
     <Checkbox
       checked={checked}

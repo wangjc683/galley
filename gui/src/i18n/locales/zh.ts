@@ -2104,6 +2104,15 @@ export const zhCopy = {
     talkAbout: "说说这件",
     /** 悬停有提醒的待办出现：只去掉提醒，待办不动。 */
     cancelReminder: "取消提醒",
+    /** 你没做完的待办那一行的「⋯」与右键菜单里的「删除」，和删了以后底部的撤销提示条
+     * （主聊天票 88，裁决 132）：不确认，这一行立刻离开；提示条 5 秒（悬停或聚焦时暂停）
+     * 走了才交给 Core，5 秒内连删几件合成一条，「撤销」全部放回。标题过长时截短加省略号。 */
+    deleteTodo: {
+      menuItem: "删除",
+      deleted: (title: string) => `已删除「${title}」`,
+      deletedCount: (n: number) => `已删除 ${n} 件待办`,
+      undo: "撤销",
+    },
     // 待办第二行：一个时间，不写「截止」；提醒是铃铛加时刻（裁决 97）。
     overdueDays: (days: number) => `逾期 ${days} 天`,
     /** 今天有时刻的截止已经过了。 */
@@ -2126,6 +2135,9 @@ export const zhCopy = {
     stateFired: "已提醒",
     stateFiredSession: "已运行",
     stateCancelled: "已取消",
+    /** 回复下待办卡片上取消了的待办：你在面板里删的、让 Galley 删的都写「已删除」
+     * （主聊天票 88，裁决 132 第 5 条：一件事一个词）；提醒卡片照旧写「已取消」。 */
+    stateDeleted: "已删除",
     stateRunning: "正在工作",
     stateAsking: "等你回复",
     stateFailed: "出错",

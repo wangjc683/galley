@@ -449,21 +449,53 @@ export interface TodoPanelChange {
 }
 
 /** Ids with a write of this window's on its way — a tick or untick
- * (`flips`), a reminder being cancelled (`cancelling`) — in either of
- * two reads of the store: the read a write ends with clears its record
- * in the same set. */
+ * (`flips`), a reminder being cancelled (`cancelling`), a to-do deleted
+ * and not yet by Core (`deleting`, main chat ticket 88: staged under its
+ * undo toast or sent) — in either of two reads of the store: the read a
+ * write ends with clears its record in the same set. */
 export function todoWritesOnTheirWay(
   ...states: readonly {
     flips: Readonly<Record<string, unknown>>;
     cancelling: Readonly<Record<string, unknown>>;
+    deleting: Readonly<Record<string, unknown>>;
   }[]
 ): Set<string> {
   const ids = new Set<string>();
   for (const state of states) {
     for (const id of Object.keys(state.flips)) ids.add(id);
     for (const id of Object.keys(state.cancelling)) ids.add(id);
+    for (const id of Object.keys(state.deleting)) ids.add(id);
   }
   return ids;
+}
+
+/**
+ * The list as the panel draws it while to-dos deleted there wait for
+ * Core (main chat ticket 88, PRD ruling 132 point 4): without them, in
+ * whichever group — off the panel the moment 删除 is chosen, and back
+ * on 撤销 or when Core refuses. The same object when nothing is waiting.
+ * Only the rows: 「今天 N」 follows Core once it has deleted them.
+ */
+export function todoWithoutDeleting(
+  todo: AssistantTodo,
+  deleting: Readonly<Record<string, unknown>>,
+): AssistantTodo {
+  const ids = Object.keys(deleting);
+  if (ids.length === 0) return todo;
+  const away = new Set(ids);
+  const keep = (items: TodoItem[]) =>
+    items.some((item) => item.kind === "todo" && away.has(item.id))
+      ? items.filter((item) => !(item.kind === "todo" && away.has(item.id)))
+      : items;
+  return {
+    ...todo,
+    yours: {
+      today: keep(todo.yours.today),
+      later: keep(todo.yours.later),
+      anytime: keep(todo.yours.anytime),
+    },
+    done: keep(todo.done),
+  };
 }
 
 function sameDue(a: TodoItem["due"], b: TodoItem["due"]): boolean {

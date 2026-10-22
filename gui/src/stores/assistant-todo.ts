@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 import {
   cancelScheduledTask,
+  cancelTodo,
   cancelTodoReminder,
   completeTodo,
   EMPTY_TODO,
@@ -9,11 +10,18 @@ import {
   listNotedTodos,
   reopenTodo,
   todoFailureKind,
+  todoToastTitle,
   type AssistantTodo,
   type TodoFailure,
   type TodoItem,
 } from "@/lib/assistant-todo";
+import { copyForLanguage } from "@/lib/i18n";
+import { resolveLanguagePreference } from "@/lib/language";
 import { TODO_SETTLE_MS, todoCancelled, type TodoFlip } from "@/lib/todo-panel";
+import { UNDO_DELETE_MS } from "@/stores/message-delete";
+import { usePrefsStore } from "@/stores/prefs";
+import { useUiStore } from "@/stores/ui";
+import { makeAppError } from "@/types/app-error";
 
 /**
  * The assistant's to-do list on the desktop (main chat ticket 42): one
@@ -46,6 +54,21 @@ import { TODO_SETTLE_MS, todoCancelled, type TodoFlip } from "@/lib/todo-panel";
  *   straight to Core as a reminder card's 「取消」 goes
  *   (`cancelScheduledTask`), then read again; the row leaves the list,
  *   and the card, on Core's `scheduled-tasks:changed`, says 已取消.
+ * - **Delete a to-do of yours** (`deleteTodo`, main chat ticket 88, PRD
+ *   ruling 132 point 4), stores/message-delete.ts's way: no confirm, the
+ *   row off the panel at once and its card reading 已删除 (`deleting`),
+ *   「已删除「…」 · 撤销」 at the foot; only when that toast goes — its
+ *   five seconds (`UNDO_DELETE_MS`, paused while the pointer or focus is
+ *   on it, ToastHost) run out, or its × — is Core asked (`cancel_todo`).
+ *   Several within the five seconds are one toast, 「已删除 N 件待办」,
+ *   its time from the latest; 撤销 puts them all back and Core hears
+ *   nothing. A send into the main chat commits first and waits
+ *   (`flushDeletes`, from `sendThroughCore`): Galley reads its list
+ *   before it answers, and what was deleted must not be on it. Quitting
+ *   Galley within the five seconds deletes nothing (the safe way round).
+ *   Core's answers are read back in the same set that lets them go, so a
+ *   deleted row never shows between; one Core refused comes back with
+ *   its reason (`failures`).
  *
  * A write that fails puts the row back as it was and leaves a reason by
  * its id (`failures`), cleared by the next try. A to-do's id and a
@@ -65,6 +88,11 @@ interface AssistantTodoState {
   /** Reminders being cancelled, by to-do id or, for Galley's own, task
    * id. */
   cancelling: Record<string, true>;
+  /** To-dos deleted on the page and not yet by Core, by id (ticket 88):
+   * off the panel, their cards reading 已删除. */
+  deleting: Record<string, TodoDelete>;
+  /** The undo toast up now, if any. */
+  deleteToastId: string | null;
   /** Read the list and the noted to-dos from Core. */
   load: () => Promise<void>;
   /** The box was clicked (a cancelled to-do's box does nothing). */
@@ -72,6 +100,25 @@ interface AssistantTodoState {
   cancelReminder: (id: string) => void;
   /** Cancel one of Galley's own one-off reminders, by task id. */
   cancelTask: (id: string) => void;
+  /** 删除: a to-do off the panel at once, 撤销 offered. */
+  deleteTodo: (item: TodoItem) => void;
+  /** 撤销: every deletion not yet sent put back; Core hears nothing. */
+  undoDelete: () => void;
+  /** Send every deletion not yet sent to Core, one by one; resolves once
+   * Core has answered for them (and any sent before) and the list is
+   * read again. Never rejects: one refused comes back with its reason. */
+  commitDeletes: () => Promise<void>;
+  /** Before a send into the main chat: commit, and the promise to wait
+   * for; null when no deletion is waiting or on its way. */
+  flushDeletes: () => Promise<void> | null;
+}
+
+/** A to-do deleted on the page and not yet by Core (ticket 88). */
+export interface TodoDelete {
+  /** Staging order, unique: Core is asked in this order. */
+  order: number;
+  /** Sent to Core: past undoing, still off the panel until it answers. */
+  committing: boolean;
 }
 
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -79,6 +126,16 @@ const timers = new Map<string, ReturnType<typeof setTimeout>>();
 // write): only the latest issued one that has come back counts.
 let issued = 0;
 let applied = 0;
+// Deletions (ticket 88): the staging count, and the commits on their
+// way, one after another, each batch after the one before.
+let staging = 0;
+let inflightDeletes: Promise<void> | null = null;
+
+function deleteCopy() {
+  return copyForLanguage(
+    resolveLanguagePreference(usePrefsStore.getState().languagePreference),
+  ).todo.deleteTodo;
+}
 
 function without<T>(record: Record<string, T>, id: string): Record<string, T> {
   if (!(id in record)) return record;
@@ -147,6 +204,30 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
       .finally(() => set((s) => ({ cancelling: without(s.cancelling, id) })));
   };
 
+  // Ask Core for each of `ids`, in order, then read again: the fresh
+  // list and these off `deleting` in one set, so a deleted row is never
+  // drawn between; one refused is back on the panel with its reason.
+  const sendDeletes = async (ids: readonly string[]) => {
+    const refused: Record<string, TodoFailure> = {};
+    for (const id of ids) {
+      try {
+        await cancelTodo(id);
+      } catch (e) {
+        refused[id] = todoFailureKind(e);
+      }
+    }
+    const lists = await read();
+    set((s) => {
+      const deleting = { ...s.deleting };
+      for (const id of ids) delete deleting[id];
+      return {
+        ...(lists ? { ...lists, loaded: true } : {}),
+        deleting,
+        failures: { ...s.failures, ...refused },
+      };
+    });
+  };
+
   return {
     todo: EMPTY_TODO,
     noted: [],
@@ -154,6 +235,8 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
     flips: {},
     failures: {},
     cancelling: {},
+    deleting: {},
+    deleteToastId: null,
 
     load: async () => {
       const lists = await read();
@@ -186,5 +269,98 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
     cancelReminder: (id) => cancel(id, cancelTodoReminder),
 
     cancelTask: (id) => cancel(id, cancelScheduledTask),
+
+    deleteTodo: (item) => {
+      const id = item.id;
+      if (item.kind !== "todo" || todoCancelled(item) || get().deleting[id]) {
+        return;
+      }
+      staging += 1;
+      const deleting = {
+        ...get().deleting,
+        [id]: { order: staging, committing: false },
+      };
+      const waiting = Object.values(deleting).filter(
+        (entry) => !entry.committing,
+      ).length;
+      const previousToast = get().deleteToastId;
+      // A fresh toast each time: its five seconds start over.
+      const toastId = `todo-delete-undo-${staging}`;
+      set((s) => ({
+        deleting,
+        deleteToastId: toastId,
+        failures: without(s.failures, id),
+      }));
+      const copy = deleteCopy();
+      const ui = useUiStore.getState();
+      ui.pushToast(
+        makeAppError({
+          id: toastId,
+          category: "business",
+          severity: "info",
+          title:
+            waiting === 1
+              ? copy.deleted(todoToastTitle(item.text))
+              : copy.deletedCount(waiting),
+          message: "",
+          hint: null,
+          retryable: false,
+          context: "delete_todo",
+          traceback: null,
+          autoDismissMs: UNDO_DELETE_MS,
+          action: {
+            kind: "undo",
+            label: copy.undo,
+            run: () => get().undoDelete(),
+          },
+          // Ran out, or its ×: now Core deletes. Only while it is the
+          // toast up — a later deletion replaced it otherwise.
+          onClose: () => {
+            if (get().deleteToastId === toastId) void get().commitDeletes();
+          },
+        }),
+      );
+      if (previousToast) ui.dismissToast(previousToast);
+    },
+
+    undoDelete: () => {
+      const { deleting, deleteToastId } = get();
+      set({
+        deleting: Object.fromEntries(
+          Object.entries(deleting).filter(([, entry]) => entry.committing),
+        ),
+        deleteToastId: null,
+      });
+      if (deleteToastId) useUiStore.getState().dismissToast(deleteToastId);
+    },
+
+    commitDeletes: () => {
+      const { deleting, deleteToastId } = get();
+      const batch = Object.entries(deleting)
+        .filter(([, entry]) => !entry.committing)
+        .sort(([, a], [, b]) => a.order - b.order)
+        .map(([id]) => id);
+      if (deleteToastId) {
+        set({ deleteToastId: null });
+        useUiStore.getState().dismissToast(deleteToastId);
+      }
+      if (batch.length === 0) return inflightDeletes ?? Promise.resolve();
+      set((s) => {
+        const next = { ...s.deleting };
+        for (const id of batch) next[id] = { ...next[id], committing: true };
+        return { deleting: next };
+      });
+      const run = (inflightDeletes ?? Promise.resolve()).then(() =>
+        sendDeletes(batch),
+      );
+      inflightDeletes = run;
+      void run.finally(() => {
+        if (inflightDeletes === run) inflightDeletes = null;
+      });
+      return run;
+    },
+
+    flushDeletes: () =>
+      Object.keys(get().deleting).length > 0 ? get().commitDeletes() : null,
   };
 });
