@@ -26,16 +26,18 @@
 //!   either target, by their next fire; paused ones after them.
 //! - **Done** ([`AssistantTodo::done`], 已完成): within the last
 //!   [`RECENT_WINDOW_DAYS`] (a rolling window, not calendar days) — a
-//!   to-do ticked off, a one-off on no to-do that went off, a routine's
-//!   last fire, a finished subtask; newest first, at most
-//!   [`RECENT_LIMIT`]. The morning review's fires are not here (main
-//!   chat ticket 73): it is in routine, and what it got done shows as
-//!   itself.
+//!   to-do ticked off, a one-off on no to-do that went off, a finished
+//!   subtask; newest first, at most [`RECENT_LIMIT`]. A routine's fires
+//!   are not here, the morning review's among them (main chat ticket 82,
+//!   PRD ruling 129 point 3; ticket 73 had left out the review's alone):
+//!   done is a promise kept, and a fire keeps none. The promise stays in
+//!   routine, the fire was said in the conversation when it came, and
+//!   what the review got done shows as itself.
 //!
 //! A to-do's reminder is part of its to-do ([`TodoItem::reminder`]), in no
 //! group of its own. A cancelled to-do or task is in no group (a task's
-//! card in the conversation says 已取消). A routine can be in two: its
-//! next fire in routine, its last one in done.
+//! card in the conversation says 已取消). A routine is in routine alone,
+//! however often it has fired (ticket 82).
 //!
 //! The cards under the replies read the to-dos a second way
 //! ([`noted_todos`], main chat ticket 43): every one Galley noted in the
@@ -107,7 +109,8 @@ pub struct AssistantTodo {
     pub assistant: Vec<TodoItem>,
     /// 例行: the repeating tasks.
     pub routine: Vec<TodoItem>,
-    /// 已完成: the last seven days.
+    /// 已完成: the last seven days — to-dos ticked off, one-offs that
+    /// went off, subtasks finished; no routine's fire (ticket 82).
     pub done: Vec<TodoItem>,
     /// Done within the window but past [`RECENT_LIMIT`]: left out.
     pub done_omitted: u32,
@@ -209,8 +212,8 @@ pub enum TodoState {
     Scheduled,
     /// A task switched off: it will not fire until resumed.
     Paused,
-    /// A task's fire (done): a one-off that went off, a routine's last
-    /// run.
+    /// A task's fire (done): a one-off that went off. A routine's fires
+    /// are not done (ticket 82).
     Fired,
     /// A subtask with a run open.
     Running,
@@ -682,11 +685,14 @@ where
                 routine.push(item);
             }
         }
-        // A one-off's fire counts once it fired for its time (a manual
-        // run before it does not); a routine's last fire counts. The
-        // morning review's does not (ticket 73): it did nothing for the
-        // user by itself, and what it did shows on its own.
-        let counts = (fired_once || !once) && !task.is_review();
+        // Done holds a one-off that fired for its time (a manual run
+        // before it does not), never a routine's fire, whatever its
+        // target, the review's included (main chat ticket 82, PRD ruling
+        // 129 point 3): a fire keeps no promise; the routine stays in
+        // routine, and the fire was said in the conversation. A review
+        // made a one-off by hand stays out too: by itself it did nothing
+        // for the user (ticket 73).
+        let counts = fired_once && !task.is_review();
         if let Some(fired) = task.last_fired_at.as_deref() {
             if counts && parse_utc_secs(fired).is_some_and(|at| at >= since) {
                 let run = (task.target == ScheduleTarget::Session)
@@ -1538,20 +1544,82 @@ mod tests {
         assert!(todo.done.is_empty());
     }
 
+    /// Ticket 82 (main chat PRD ruling 129 point 3): a routine that fired
+    /// stays in routine alone, whatever its rule, target or state; a
+    /// one-off that fired for its time is done, with the session its run
+    /// made.
     #[test]
-    fn a_routine_and_its_last_run() {
+    fn a_routine_that_fired_stays_in_routine_and_a_one_off_is_done() {
+        // Fired today, a session task with the session its run made.
         let mut d = daily("t-daily", "2026-10-17T01:00:00+00:00");
         d.last_fired_at = Some("2026-10-16T01:00:00+00:00".into());
         d.last_run_session_id = Some(SessionId("s-run".into()));
+        // Weekly, waking the assistant, fired an hour ago.
+        let weekly = ScheduledTaskBrief {
+            repeat: ScheduledTaskRepeat::Weekly { weekdays: vec![5] },
+            target: ScheduleTarget::Assistant,
+            last_fired_at: Some("2026-10-16T11:00:00+00:00".into()),
+            ..daily("t-weekly", "2026-10-23T11:00:00+00:00")
+        };
+        // Paused since it fired yesterday.
+        let mut paused = daily("t-paused", "2026-10-17T03:00:00+00:00");
+        paused.enabled = false;
+        paused.next_fire_at = None;
+        paused.last_fired_at = Some("2026-10-15T03:00:00+00:00".into());
+        // Fired long ago.
         let mut stale = daily("t-stale", "2026-10-17T02:00:00+00:00");
         stale.last_fired_at = Some("2026-10-01T02:00:00+00:00".into());
-        let todo = build(&[d, stale], &[]);
-        assert_eq!(ids(&todo.routine), ["t-daily", "t-stale"]);
-        assert_eq!(ids(&todo.done), ["t-daily"]);
+        // The review, fired this morning.
+        let review = ScheduledTaskBrief {
+            origin: Some(Origin {
+                via: OriginVia::System,
+                supervisor: Some(crate::scheduler::REVIEW_SUPERVISOR.into()),
+                reason: None,
+                client: None,
+            }),
+            target: ScheduleTarget::Assistant,
+            last_fired_at: Some("2026-10-16T01:03:00+00:00".into()),
+            ..daily("t-review", "2026-10-17T01:03:00+00:00")
+        };
+        assert!(review.is_review());
+        // A one-off that started a session, fired for its time.
+        let mut once = task("t-once");
+        once.target = ScheduleTarget::Session;
+        once.origin = Some(Origin::gui());
+        once.fire_at = Some("2026-10-16T10:00:00+00:00".into());
+        once.last_due_at = once.fire_at.clone();
+        once.last_fired_at = Some("2026-10-16T10:00:05+00:00".into());
+        once.last_run_session_id = Some(SessionId("s-once-run".into()));
+        once.next_fire_at = None;
+
+        let todo = build(&[d, weekly, paused, stale, review, once], &[]);
+        assert_eq!(
+            ids(&todo.routine),
+            ["t-daily", "t-review", "t-stale", "t-weekly", "t-paused"]
+        );
+        let states: Vec<TodoState> = todo.routine.iter().map(|i| i.state).collect();
+        assert_eq!(
+            states,
+            [
+                TodoState::Scheduled,
+                TodoState::Scheduled,
+                TodoState::Scheduled,
+                TodoState::Scheduled,
+                TodoState::Paused
+            ]
+        );
+        // Each routine still shows its next fire.
+        assert_eq!(
+            todo.routine[0].at.as_deref(),
+            Some("2026-10-17T01:00:00+00:00")
+        );
+        assert_eq!(ids(&todo.done), ["t-once"]);
         let run = &todo.done[0];
         assert_eq!(run.state, TodoState::Fired);
-        assert_eq!(run.run_session_id.as_deref(), Some("s-run"));
+        assert_eq!(run.at.as_deref(), Some("2026-10-16T10:00:05+00:00"));
+        assert_eq!(run.run_session_id.as_deref(), Some("s-once-run"));
         assert_eq!(run.created_by, TodoCreator::User);
+        assert!(todo.assistant.is_empty());
     }
 
     #[test]

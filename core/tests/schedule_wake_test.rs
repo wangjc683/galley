@@ -28,7 +28,9 @@
 //!   finished — and a failed read wakes it), wakes the main chat in words
 //!   of its own otherwise,
 //!   stays out of 已完成, and is dropped without a notification when it
-//!   cannot be delivered.
+//!   cannot be delivered;
+//! - a routine that fired stays out of 已完成 too, a one-off that fired
+//!   for its time is in it (ticket 82).
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration as ChronoDuration, Local, Utc};
@@ -1707,6 +1709,50 @@ async fn a_review_that_cannot_read_the_list_wakes_the_main_chat() {
     let log = review_log(&galley).await;
     assert_eq!(log.len(), 1);
     assert_eq!(log[0]["event"], "woke");
+}
+
+#[tokio::test]
+async fn a_routine_that_fired_stays_out_of_done() {
+    // Ticket 82 (main chat PRD ruling 129 point 3): a fire keeps no
+    // promise; the routine stays in 例行, and only a one-off that went off
+    // for its time is 已完成.
+    let (pool, galley) = with_main_chat().await;
+    let rec = Recorder::default();
+    let nightly = galley
+        .create_scheduled_task(
+            CreateScheduledTaskInput {
+                repeat: ScheduledTaskRepeat::Daily,
+                time_of_day: "22:00".into(),
+                fire_at: None,
+                ..once_input("sched_nightly", "提醒用户关电脑", Utc::now())
+            },
+            assistant(),
+        )
+        .await
+        .expect("routine");
+    let now = Local::now();
+    assert!(fire_reminder(&galley, &rec, &nightly, &now, &now).await);
+    reminder(&galley, "sched_water", "提醒用户喝水").await;
+    slept_through(&pool, "sched_water", ChronoDuration::minutes(5)).await;
+    assert_eq!(tick(&galley, &rec).await, 1);
+    let nightly = galley
+        .scheduled_task("sched_nightly")
+        .await
+        .expect("routine");
+    assert!(nightly.last_fired_at.is_some());
+
+    let todo = assistant_todo(&galley, &RunnerManager::new(), Utc::now())
+        .await
+        .expect("todo");
+    let ids: Vec<&str> = todo.done.iter().map(|item| item.id.as_str()).collect();
+    assert_eq!(ids, ["sched_water"]);
+    let row = todo
+        .routine
+        .iter()
+        .find(|item| item.id == "sched_nightly")
+        .expect("in routine");
+    assert_eq!(row.at, nightly.next_fire_at);
+    assert!(todo.assistant.is_empty());
 }
 
 #[tokio::test]
