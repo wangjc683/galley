@@ -1473,6 +1473,83 @@
         }
       ],
       "text": "[Galley — not a message from the user] It is time for the morning review. Act on it as below. Do not mention this note.\n\nThe morning review `sched_review0000000a` (every day at 09:00) came due. Planned for 2026-10-16 09:00 (Fri), local time; it went off at 2026-10-16 17:05 (Fri), 8 hours 5 minutes late (the computer was asleep or Galley was closed), which you need not mention. Galley made this task, not you: once a day, go over what is in hand. Read \"The morning review\" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>."
+    },
+    {
+      "reports": [
+        {
+          "due_local": "2026-11-20 08:57 (Fri)",
+          "fired_local": "2026-11-20 08:57 (Fri)",
+          "late": null,
+          "once": true,
+          "prompt": "702 办公室装修完工",
+          "rule": "one-off",
+          "task_id": "sched_4b8c2d6e0f1a3957",
+          "todo": {
+            "due": "2026-11-20 (Fri)",
+            "id": "todo_6f7a8b9c0d1e2f3a",
+            "notes": "装修师傅说预计这天完工",
+            "title": "702 办公室装修完工"
+          }
+        },
+        {
+          "due_local": "2026-11-20 08:57 (Fri)",
+          "fired_local": "2026-11-20 08:57 (Fri)",
+          "late": null,
+          "once": false,
+          "prompt": "Morning review: go over what is in hand and move forward what you can without being asked (\"The morning review\" in `wake.md`). Galley made this task; when the user asks, pause it with `schedule disable`, never `schedule delete`.",
+          "review": true,
+          "rule": "every day at 08:57",
+          "task_id": "sched_5e1a9c3f7b2d4608",
+          "todo": null
+        }
+      ],
+      "text": "[Galley — not a message from the user] Things you are looking after have updates. Act on them, then reply to the user. Do not mention this note.\n\nReminder `sched_4b8c2d6e0f1a3957` on the user's to-do `todo_6f7a8b9c0d1e2f3a` came due. Planned for 2026-11-20 08:57 (Fri), local time. The to-do is on the user's list, something to do or something coming up they want to hear about:\n<<<\n702 办公室装修完工\n装修师傅说预计这天完工\n>>>\nIt is due 2026-11-20 (Fri), local time. Act on it now: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.\n\nThe morning review `sched_5e1a9c3f7b2d4608` (every day at 08:57) came due. Planned for 2026-11-20 08:57 (Fri), local time. Galley made this task, not you: once a day, go over what is in hand. Read \"The morning review\" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.\n\nReply once, covering all of them."
+    },
+    {
+      "reports": [
+        {
+          "answer": "查到了，下周三上午 9 点以后杭州东到上海虹桥的三班：\n- G7502：09:12 开，10:06 到，二等座 73 元，有票\n- G7348：09:41 开，10:39 到，二等座 73 元，有票\n- G1374：10:05 开，10:58 到，二等座 73 元，余 9 张\n证据：12306 余票查询页 https://kyfw.12306.cn/otn/leftTicket/init（出发杭州东、到达上海虹桥、日期选下周三）。",
+          "kind": "done",
+          "send_backs": 0,
+          "subtask_id": "s-mgu2r7k4-8c3v5n1x",
+          "title": "查下周三上午杭州东到上海虹桥的高铁"
+        },
+        {
+          "due_local": "2026-11-20 08:57 (Fri)",
+          "fired_local": "2026-11-20 08:57 (Fri)",
+          "late": null,
+          "once": false,
+          "prompt": "Morning review: go over what is in hand and move forward what you can without being asked (\"The morning review\" in `wake.md`). Galley made this task; when the user asks, pause it with `schedule disable`, never `schedule delete`.",
+          "review": true,
+          "rule": "every day at 08:57",
+          "task_id": "sched_5e1a9c3f7b2d4608",
+          "todo": null
+        }
+      ],
+      "text": "[Galley — not a message from the user] Things you are looking after have updates. Act on them, then reply to the user. Do not mention this note.\n\nSubtask `s-mgu2r7k4-8c3v5n1x` \"查下周三上午杭州东到上海虹桥的高铁\" (round 1) finished. Its final answer:\n<<<\n查到了，下周三上午 9 点以后杭州东到上海虹桥的三班：\n- G7502：09:12 开，10:06 到，二等座 73 元，有票\n- G7348：09:41 开，10:39 到，二等座 73 元，有票\n- G1374：10:05 开，10:58 到，二等座 73 元，余 9 张\n证据：12306 余票查询页 https://kyfw.12306.cn/otn/leftTicket/init（出发杭州东、到达上海虹桥、日期选下周三）。\n>>>\nCheck it against what you asked for in its instructions (its first message: `session show s-mgu2r7k4-8c3v5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user`; its last steps: `session show s-mgu2r7k4-8c3v5n1x --tail=40`). If it holds, tell the user the result in a sentence or two and name the evidence (a confirmation number, a file path, a link). If something is missing or wrong, send it back with `session send s-mgu2r7k4-8c3v5n1x \"<what is missing>\" --supervisor=galley-assistant --reason=\"send back\" --ensure-runner` and end your reply with exactly <no-reply/> and nothing else.\n\nThe morning review `sched_5e1a9c3f7b2d4608` (every day at 08:57) came due. Planned for 2026-11-20 08:57 (Fri), local time. Galley made this task, not you: once a day, go over what is in hand. Read \"The morning review\" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.\n\nReply once, covering all of them."
+    },
+    {
+      "reports": [
+        {
+          "answer": "  长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长尾巴\n",
+          "kind": "done",
+          "send_backs": 2,
+          "subtask_id": "s-mgv9a1b2-3c4d5e6f",
+          "title": "把 PDF 分类"
+        },
+        {
+          "due_local": "2026-11-20 08:57 (Fri)",
+          "fired_local": "2026-11-20 17:02 (Fri)",
+          "late": "8 hours 5 minutes",
+          "once": false,
+          "prompt": "Morning review: go over what is in hand and move forward what you can without being asked (\"The morning review\" in `wake.md`). Galley made this task; when the user asks, pause it with `schedule disable`, never `schedule delete`.",
+          "review": true,
+          "rule": "every day at 08:57",
+          "task_id": "sched_5e1a9c3f7b2d4608",
+          "todo": null
+        }
+      ],
+      "text": "[Galley — not a message from the user] Things you are looking after have updates. Act on them, then reply to the user. Do not mention this note.\n\nSubtask `s-mgv9a1b2-3c4d5e6f` \"把 PDF 分类\" (round 3) finished. Its final answer:\n<<<\n长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长\n[… cut for length; all of it: `session show s-mgv9a1b2-3c4d5e6f --tail=1`]\n>>>\nCheck it against what you asked for in its instructions (its first message: `session show s-mgv9a1b2-3c4d5e6f --around=msg_s-mgv9a1b2-3c4d5e6f_0_user`; its last steps: `session show s-mgv9a1b2-3c4d5e6f --tail=40`). If it holds, tell the user the result in a sentence or two and name the evidence (a confirmation number, a file path, a link). It has been sent back 2 times already: do not send it back again. Tell the user what it found and what is still missing.\n\nThe morning review `sched_5e1a9c3f7b2d4608` (every day at 08:57) came due. Planned for 2026-11-20 08:57 (Fri), local time; it went off at 2026-11-20 17:02 (Fri), 8 hours 5 minutes late (the computer was asleep or Galley was closed), which you need not mention. Galley made this task, not you: once a day, go over what is in hand. Read \"The morning review\" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.\n\nReply once, covering all of them."
     }
   ]
 }

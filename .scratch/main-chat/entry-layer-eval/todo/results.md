@@ -288,7 +288,9 @@
 | 39 | review-advance | 早上巡看（票 73） | 巡看到点，在办的有没日子的「查清阿里云费用暴涨的原因」→ 往前推一步：当场做（停在浏览器工具只记下）或派 1～2 件子任务；只派出去、没结果时只回 <no-reply/>；开口时用自己的话说是哪件事、做了什么（不要固定开头），不说「看了一下没有新进展」一类的空话；不提建议 | 2 | 2 | 100% |
 | 40 | review-overdue | 早上巡看（票 73） | 巡看到点，在办的只有昨天到期、还没勾的「交季度报告」（提醒昨天已经到过）→ 不催，回复只有 <no-reply/> | 2 | 2 | 100% |
 | 41 | review-stop | 早上巡看（票 73） | 用户说「早上那个巡看别弄了」→ schedule disable 巡看那条（不是 delete），回复一句说已经停了、想恢复跟它说 | 2 | 2 | 100% |
-| | 合计 | | | 78 | 75 | 96% |
+| 42 | review-with-reminder | 巡看与别的事同一次叫醒（票 78） | 巡看与待办「702 办公室装修完工」的提醒同一分钟到点，Core 合成一次叫醒（混合的开头，提醒在前、巡看在后：同一分钟到点的按 id 排，结尾「Reply once, covering all of them.」）；在办的只有这一件 → 用自己的话告诉用户装修的事（问完工了没、给下一步），不是整条 <no-reply/>，不复述提醒原文，不勾掉；巡看没做成值得说的事，不提巡看；不提建议 | 3 | 3 | 100% |
+| 43 | review-with-subtask-done | 巡看与别的事同一次叫醒（票 78） | 用户这一段让查的高铁，子任务查好交回（Core 的子任务完成措辞），与巡看在同一次叫醒（子任务的回报先到、巡看在后）；在办的另有一条 11 月 20 号的装修待办、提醒挂好了 → 转达查到的三班车（车次、时刻、票价、有没有票），点出证据；不是整条 <no-reply/>、不打回；巡看没做成值得说的事，不提巡看；不提建议 | 3 | 3 | 100% |
+| | 合计 | | | 84 | 81 | 96% |
 
 ## 一览
 
@@ -368,14 +370,20 @@
 | 36 | shanghai-trip | 2 | todo list；sessions search 上海 --runtime all --all；todo add 去上海出差 --due=2026-10-28 --remind-at=2026-10-27T20:00 --notes=用户说下周三去上海出差，即2026年10月28日。出发地、交通、住宿、返程日期尚未提供。出发前检查：车票或机票、酒店、身份证、电脑和充电器、会议资料。 --supervisor=galley-assistant --reason=用户提及有明确日期的出差安排，提前一晚提醒准备行程和随身物品；todo list | 记下了：**10 月 28 日（下周三）去上海出差**，10 月 27 日晚 8 点提醒你准备。也附上了出发前检查清单：车票或机票、酒店、身份证、电脑和充电器、会议资料。 | 85 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、cli.md、todos-change.md；2 次 2 轮，15323 字节 | 查了 | 只记录 |
 | 37 | report-half | 1 | — | 后半段有思路了吗，还是卡在哪一部分？ | 18 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md；1 次 1 轮，11243 字节 | — | 只记录 |
 | 37 | report-half | 2 | todo list；todo add 写完季度报告 --notes=用户说季度报告已写一半；继续完成剩余部分。未提供截止日期。续写备选提纲：问题与原因、改进措施、下季度重点；应以现有报告结构为准。 --supervisor=galley-assistant --reason=用户季度报告写到一半，记录尚未完成的工作以便继续 | 剩下主要是哪部分，是还没写到，还是卡住了？ | 21 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md；1 次 1 轮，10904 字节 | 查了 | 只记录（注：记了不带提醒的待办：写完季度报告） |
-| 38 | review-nothing-to-do | 1 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，14359 字节 | 读了清单 | 过 |
-| 38 | review-nothing-to-do | 2 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6423 字节 | 读了清单 | 过 |
-| 39 | review-advance | 1 | todo list；schedule list；sessions list --runtime all --all；sessions search 阿里云 --runtime all --all；session show s-…9w0e --tail=16 | <subtask>继续只读调查阿里云费用暴涨，找出 OSS 外网下行对应的业务，并尽可能核实 ECS 新增实例的费用贡献。背景：主会话 s-mgn4k2x1-7q3z9w0e；待办 todo_7a8b9c0d1e2f3a4b「查清阿里云费用暴涨的原因」仍未完成。已有待办备注：ECS 多了两台按量付费实例，由子账号 deploy-bot 在 10 月 9 日创建；公网流量大头是一个 OSS 桶的外网下行，尚不知对应哪个业务。这些是已有线索，不是本轮核实结果。当前没有我们启动的运行中子任务；读取历史搜索和主会话尾部未返回内容，不要假设有更多上下文。 ⏎ 先检查 Browser Control 已连接的真实浏览器标签页，利用现有已登录阿里云控制台和可用账单、资源信息进行只读核查。不要用代码/API 替代浏览器操作，不读取密钥文件，不创建收费资源，不启用收费日志，不修改权限、资源、配置或用户文件，不停止、删除实例，不替用户联系他人。若未登录或缺少权限，仅记录确切阻碍，勿反复尝试。重点：确认异常费用的时间段、产品和金额；定位 OSS 桶、主要下载对象或前缀、可见访问来源，依据现有日志/监控/域名/资源标签关联具体业务；核实两台 ECS 的创建时间、部署用途及账单贡献。仅使用已有数据，不为调查打开新计费功能。 ⏎ 交回简洁的已证实结论、仍属推断的部分、证据链接或控制台记录，以及无法确认时最小的缺失信息。任何金额、日期、实例或桶标识都需对应直接证据，不能只用汇总或猜测。若产生报告或截图，提供绝对路径。不要标记待办完成，也不要改写其他会话。</subtask> ⏎ <no-reply/> | 693 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、cli.md、unasked.md；2 次 2 轮，17348 字节 | 读了清单 | 过 |
-| 39 | review-advance | 2 | todo list；schedule list；sessions list --runtime all --all；sessions search 阿里云 --runtime all --all；session show s-…9w0e --tail=20 | （空） | 0 | 读了（第 1 次调用）：wake.md、subtasks.md、unasked.md、todos-change.md、cli.md；2 次 2 轮，17352 字节 | 读了清单 | 过（注：停在浏览器工具：在做一步（只读），结果与回复看不到） |
-| 40 | review-overdue | 1 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8165 字节 | 读了清单 | 过 |
-| 40 | review-overdue | 2 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，13797 字节 | 读了清单 | 过 |
-| 41 | review-stop | 1 | schedule list；schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；schedule list | 关掉了，以后早上不再自动巡看。想恢复时跟我说一声就行。 | 27 | 读了（第 1 次调用）：reminders.md、times.md、wake.md；2 次 2 轮，9650 字节 | — | 过 |
-| 41 | review-stop | 2 | schedule list；schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；schedule list | 关掉了，以后早上不再巡看。想恢复时跟我说一声就行。 | 25 | 读了（第 1 次调用）：reminders.md、times.md、wake.md；2 次 2 轮，9650 字节 | — | 过 |
+| 38 | review-nothing-to-do | 1 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，14310 字节 | 读了清单 | 过 |
+| 38 | review-nothing-to-do | 2 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6374 字节 | 读了清单 | 过 |
+| 39 | review-advance | 1 | todo list；schedule list；sessions list --runtime all --all；sessions search 阿里云 --runtime all --all；session show s-…9w0e --tail=16 | <subtask>继续只读调查阿里云费用暴涨，找出 OSS 外网下行对应的业务，并尽可能核实 ECS 新增实例的费用贡献。背景：主会话 s-mgn4k2x1-7q3z9w0e；待办 todo_7a8b9c0d1e2f3a4b「查清阿里云费用暴涨的原因」仍未完成。已有待办备注：ECS 多了两台按量付费实例，由子账号 deploy-bot 在 10 月 9 日创建；公网流量大头是一个 OSS 桶的外网下行，尚不知对应哪个业务。这些是已有线索，不是本轮核实结果。当前没有我们启动的运行中子任务；读取历史搜索和主会话尾部未返回内容，不要假设有更多上下文。 ⏎ 先检查 Browser Control 已连接的真实浏览器标签页，利用现有已登录阿里云控制台和可用账单、资源信息进行只读核查。不要用代码/API 替代浏览器操作，不读取密钥文件，不创建收费资源，不启用收费日志，不修改权限、资源、配置或用户文件，不停止、删除实例，不替用户联系他人。若未登录或缺少权限，仅记录确切阻碍，勿反复尝试。重点：确认异常费用的时间段、产品和金额；定位 OSS 桶、主要下载对象或前缀、可见访问来源，依据现有日志/监控/域名/资源标签关联具体业务；核实两台 ECS 的创建时间、部署用途及账单贡献。仅使用已有数据，不为调查打开新计费功能。 ⏎ 交回简洁的已证实结论、仍属推断的部分、证据链接或控制台记录，以及无法确认时最小的缺失信息。任何金额、日期、实例或桶标识都需对应直接证据，不能只用汇总或猜测。若产生报告或截图，提供绝对路径。不要标记待办完成，也不要改写其他会话。</subtask> ⏎ <no-reply/> | 693 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、cli.md、unasked.md；2 次 2 轮，17299 字节 | 读了清单 | 过 |
+| 39 | review-advance | 2 | todo list；schedule list；sessions list --runtime all --all；sessions search 阿里云 --runtime all --all；session show s-…9w0e --tail=20 | （空） | 0 | 读了（第 1 次调用）：wake.md、subtasks.md、unasked.md、todos-change.md、cli.md；2 次 2 轮，17303 字节 | 读了清单 | 过（注：停在浏览器工具：在做一步（只读），结果与回复看不到） |
+| 40 | review-overdue | 1 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8116 字节 | 读了清单 | 过 |
+| 40 | review-overdue | 2 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，13748 字节 | 读了清单 | 过 |
+| 41 | review-stop | 1 | schedule list；schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；schedule list | 关掉了，以后早上不再自动巡看。想恢复时跟我说一声就行。 | 27 | 读了（第 1 次调用）：reminders.md、times.md、wake.md；2 次 2 轮，9601 字节 | — | 过 |
+| 41 | review-stop | 2 | schedule list；schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；schedule list | 关掉了，以后早上不再巡看。想恢复时跟我说一声就行。 | 25 | 读了（第 1 次调用）：reminders.md、times.md、wake.md；2 次 2 轮，9601 字节 | — | 过 |
+| 42 | review-with-reminder | 1 | todo list；schedule list；sessions list --runtime all --all | 702 办公室装修今天能按计划完工吗？先跟师傅确认是否还有收尾项目，再约现场验收，免得白跑一趟。 | 48 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，13802 字节 | 读了清单 | 过 |
+| 42 | review-with-reminder | 2 | todo list；schedule list；sessions list --runtime all --all | 师傅之前说 702 办公室预计今天完工，现在收尾了吗？如果已经完工，可以约个时间现场验收，先查水电、墙面和门窗，再确认尾款。 | 62 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8142 字节 | 读了清单 | 过 |
+| 42 | review-with-reminder | 3 | todo list；schedule list；sessions list --runtime all --all | 702 办公室的装修今天按计划完工了吗？如果师傅已经收工，可以约个时间现场验收，看看水电、墙面和收尾清理是否到位。 | 57 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8142 字节 | 读了清单 | 过 |
+| 43 | review-with-subtask-done | 1 | session show s-…5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user；session show s-…5n1x --tail=40；todo list；schedule list；sessions list --runtime all --all | 下周三（**10 月 28 日**）杭州东 → 上海虹桥，挑了这三班： ⏎ \/ 车次 \/ 出发 → 到达 \/ 耗时 \/ 二等座票价 \/ 查询时余票 \/ ⏎ \/---\/---\/---\/---\/---\/ ⏎ \/ G7502 \/ 09:12 → 10:06 \/ 54 分钟 \/ 73 元 \/ 有票 \/ ⏎ \/ G7348 \/ 09:41 → 10:39 \/ 58 分钟 \/ 73 元 \/ 有票 \/ ⏎ \/ G1374 \/ 10:05 → 10:58 \/ 53 分钟 \/ 73 元 \/ 余 9 张 \/ ⏎ 来源：[12306 余票查询页](https://kyfw.12306.cn/otn/leftTicket/init)。余票会变化，以购票时显示为准。 | 314 | 读了（第 1 次调用）：wake.md、subtasks.md、cli.md、authority.md、todos-change.md、unasked.md；2 次 2 轮，25345 字节 | 读了清单 | 过 |
+| 43 | review-with-subtask-done | 2 | session show s-…5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user；session show s-…5n1x --tail=40；todo list；schedule list；sessions list --runtime all --all | 下周三（**10 月 28 日**）杭州东 → 上海虹桥，上午 9 点以后出发的三班： ⏎ \/ 车次 \/ 出发—到达 \/ 二等座 \/ 查询时余票 \/ ⏎ \/---\/---\/---\/---\/ ⏎ \/ G7502 \/ 09:12—10:06 \/ 73 元 \/ 有票 \/ ⏎ \/ G7348 \/ 09:41—10:39 \/ 73 元 \/ 有票 \/ ⏎ \/ G1374 \/ 10:05—10:58 \/ 73 元 \/ 余 9 张 \/ ⏎ 来源：[12306 余票查询页](https://kyfw.12306.cn/otn/leftTicket/init)。余票会变动，以购票时显示为准。 | 279 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、cli.md；1 次 1 轮，11705 字节 | 读了清单 | 过 |
+| 43 | review-with-subtask-done | 3 | session show s-…5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user；session show s-…5n1x --tail=40；todo list；schedule list；sessions list --runtime all --all | 下周三（**10 月 28 日**）杭州东 → 上海虹桥，上午 9 点以后出发可选这三班： ⏎ \/ 车次 \/ 出发—到达 \/ 二等座票价 \/ 查询时余票 \/ ⏎ \/---\/---\/---:\/---\/ ⏎ \/ G7502 \/ 09:12—10:06 \/ 73 元 \/ 有票 \/ ⏎ \/ G7348 \/ 09:41—10:39 \/ 73 元 \/ 有票 \/ ⏎ \/ G1374 \/ 10:05—10:58 \/ 73 元 \/ 余 9 张 \/ ⏎ 来源：[12306 余票查询页](https://kyfw.12306.cn/otn/leftTicket/init)。余票随时变化，以购票时显示为准。 | 285 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8146 字节 | 读了清单 | 过 |
 
 ## 1. note-report（该记待办）
 
@@ -2402,7 +2410,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 1. code_run
 2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，14359 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，14310 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
@@ -2419,7 +2427,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 1. code_run
 2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6423 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6374 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
@@ -2457,7 +2465,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
 3. code_run（galley sessions search，galley session show）；galley sessions search 阿里云 --runtime all --all；galley session show s-mgn4k2x1-7q3z9w0e --tail=16
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、cli.md、unasked.md；2 次 2 轮，17348 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、cli.md、unasked.md；2 次 2 轮，17299 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
@@ -2483,7 +2491,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 3. code_run（galley sessions search，galley session show）；galley sessions search 阿里云 --runtime all --all；galley session show s-mgn4k2x1-7q3z9w0e --tail=20
 4. web_scan（未执行）
 
-结束：要用浏览器工具，运行停在这里（没有执行）；读手册：读了（第 1 次调用）：wake.md、subtasks.md、unasked.md、todos-change.md、cli.md；2 次 2 轮，17352 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
+结束：要用浏览器工具，运行停在这里（没有执行）；读手册：读了（第 1 次调用）：wake.md、subtasks.md、unasked.md、todos-change.md、cli.md；2 次 2 轮，17303 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
@@ -2520,7 +2528,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 1. code_run
 2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8165 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8116 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
@@ -2537,7 +2545,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 1. code_run
 2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，13797 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，13748 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
@@ -2569,7 +2577,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 2. code_run（galley schedule list）；galley schedule list
 3. code_run（galley schedule disable，galley schedule list）；galley schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；galley schedule list
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、wake.md；2 次 2 轮，9650 字节；写前读过清单：—；手册版本：`b9cbda42`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、wake.md；2 次 2 轮，9601 字节；写前读过清单：—；手册版本：`b9cbda42`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
@@ -2589,7 +2597,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 2. code_run（galley schedule list）；galley schedule list
 3. code_run（galley schedule disable，galley schedule list）；galley schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；galley schedule list
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、wake.md；2 次 2 轮，9650 字节；写前读过清单：—；手册版本：`b9cbda42`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、wake.md；2 次 2 轮，9601 字节；写前读过清单：—；手册版本：`b9cbda42`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
@@ -2600,3 +2608,210 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 ```
 
 建议标签：帮我看看还有哪些定时任务
+
+## 42. review-with-reminder（巡看与别的事同一次叫醒（票 78））
+
+**期望**：巡看与待办「702 办公室装修完工」的提醒同一分钟到点，Core 合成一次叫醒（混合的开头，提醒在前、巡看在后：同一分钟到点的按 id 排，结尾「Reply once, covering all of them.」）；在办的只有这一件 → 用自己的话告诉用户装修的事（问完工了没、给下一步），不是整条 <no-reply/>，不复述提醒原文，不勾掉；巡看没做成值得说的事，不提巡看；不提建议
+
+已有的待办（运行那一刻）：
+
+- `todo_6f7a8b9c0d1e2f3a` 702 办公室装修完工（备注：装修师傅说预计这天完工），截止 2026-10-22，没做，提醒 2026-10-22T02:38:57+00:00（已到点），在「In Hand」里
+
+已有的定时任务（运行那一刻）：
+
+- `sched_5e1a9c3f7b2d4608` ：Morning review: go over what is in hand and move forward what you can without being asked ("The morning review" in `wake.md`). Galley made this task; when the user asks, pause it with `schedule disable`, never `schedule delete`.
+
+叫醒消息：
+
+```text
+[Galley — not a message from the user] Things you are looking after have updates. Act on them, then reply to the user. Do not mention this note.
+
+Reminder `sched_4b8c2d6e0f1a3957` on the user's to-do `todo_6f7a8b9c0d1e2f3a` came due. Planned for 2026-10-22 10:38 (Thu), local time. The to-do is on the user's list, something to do or something coming up they want to hear about:
+<<<
+702 办公室装修完工
+装修师傅说预计这天完工
+>>>
+It is due 2026-10-22 (Thu), local time. Act on it now: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.
+
+The morning review `sched_5e1a9c3f7b2d4608` (every day at 10:38) came due. Planned for 2026-10-22 10:38 (Thu), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
+
+Reply once, covering all of them.
+```
+
+### 第 1 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，13802 字节；写前读过清单：读了清单；手册版本：`497d19f9`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+702 办公室装修今天能按计划完工吗？先跟师傅确认是否还有收尾项目，再约现场验收，免得白跑一趟。
+```
+
+建议标签：帮我列一份702办公室装修验收清单
+
+### 第 2 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8142 字节；写前读过清单：读了清单；手册版本：`497d19f9`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+师傅之前说 702 办公室预计今天完工，现在收尾了吗？如果已经完工，可以约个时间现场验收，先查水电、墙面和门窗，再确认尾款。
+```
+
+建议标签：帮我列一份702办公室装修验收清单
+
+### 第 3 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8142 字节；写前读过清单：读了清单；手册版本：`497d19f9`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+702 办公室的装修今天按计划完工了吗？如果师傅已经收工，可以约个时间现场验收，看看水电、墙面和收尾清理是否到位。
+```
+
+建议标签：帮我列一份办公室装修验收清单
+
+## 43. review-with-subtask-done（巡看与别的事同一次叫醒（票 78））
+
+**期望**：用户这一段让查的高铁，子任务查好交回（Core 的子任务完成措辞），与巡看在同一次叫醒（子任务的回报先到、巡看在后）；在办的另有一条 11 月 20 号的装修待办、提醒挂好了 → 转达查到的三班车（车次、时刻、票价、有没有票），点出证据；不是整条 <no-reply/>、不打回；巡看没做成值得说的事，不提巡看；不提建议
+
+上下文：
+
+> 用户：帮我查一下下周三上午杭州东到上海虹桥的高铁，9 点以后出发的，挑三班给我。
+>
+> 助手：好，我让人去 12306 查，查好告诉你。
+>
+> [subtask s-mgu2r7k4-8c3v5n1x: 查下周三上午杭州东到上海虹桥的高铁]
+
+已有的待办（运行那一刻）：
+
+- `todo_6f7a8b9c0d1e2f3a` 702 办公室装修完工（备注：装修师傅说预计这天完工），截止 2026-11-20，没做，提醒 2026-11-20T01:00:00+00:00，在「In Hand」里
+
+已有的定时任务（运行那一刻）：
+
+- `sched_5e1a9c3f7b2d4608` ：Morning review: go over what is in hand and move forward what you can without being asked ("The morning review" in `wake.md`). Galley made this task; when the user asks, pause it with `schedule disable`, never `schedule delete`.
+
+叫醒消息：
+
+```text
+[Galley — not a message from the user] Things you are looking after have updates. Act on them, then reply to the user. Do not mention this note.
+
+Subtask `s-mgu2r7k4-8c3v5n1x` "查下周三上午杭州东到上海虹桥的高铁" (round 1) finished. Its final answer:
+<<<
+查到了，下周三上午 9 点以后杭州东到上海虹桥的三班：
+- G7502：09:12 开，10:06 到，二等座 73 元，有票
+- G7348：09:41 开，10:39 到，二等座 73 元，有票
+- G1374：10:05 开，10:58 到，二等座 73 元，余 9 张
+证据：12306 余票查询页 https://kyfw.12306.cn/otn/leftTicket/init（出发杭州东、到达上海虹桥、日期选下周三）。
+>>>
+Check it against what you asked for in its instructions (its first message: `session show s-mgu2r7k4-8c3v5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user`; its last steps: `session show s-mgu2r7k4-8c3v5n1x --tail=40`). If it holds, tell the user the result in a sentence or two and name the evidence (a confirmation number, a file path, a link). If something is missing or wrong, send it back with `session send s-mgu2r7k4-8c3v5n1x "<what is missing>" --supervisor=galley-assistant --reason="send back" --ensure-runner` and end your reply with exactly <no-reply/> and nothing else.
+
+The morning review `sched_5e1a9c3f7b2d4608` (every day at 10:38) came due. Planned for 2026-10-22 10:38 (Thu), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
+
+Reply once, covering all of them.
+```
+
+### 第 1 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley session show，galley session show，galley todo list，galley schedule list，galley sessions list）；galley session show s-mgu2r7k4-8c3v5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user；galley session show s-mgu2r7k4-8c3v5n1x --tail=40；galley todo list；galley schedule list；galley sessions list --runtime all --all
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、cli.md、authority.md、todos-change.md、unasked.md；2 次 2 轮，25345 字节；写前读过清单：读了清单；手册版本：`497d19f9`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+下周三（**10 月 28 日**）杭州东 → 上海虹桥，挑了这三班：
+
+| 车次 | 出发 → 到达 | 耗时 | 二等座票价 | 查询时余票 |
+|---|---|---|---|---|
+| G7502 | 09:12 → 10:06 | 54 分钟 | 73 元 | 有票 |
+| G7348 | 09:41 → 10:39 | 58 分钟 | 73 元 | 有票 |
+| G1374 | 10:05 → 10:58 | 53 分钟 | 73 元 | 余 9 张 |
+
+来源：[12306 余票查询页](https://kyfw.12306.cn/otn/leftTicket/init)。余票会变化，以购票时显示为准。
+```
+
+建议标签：帮我查一下当天傍晚上海虹桥回杭州东的高铁
+
+### 第 2 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley session show，galley session show，galley todo list，galley schedule list，galley sessions list）；galley session show s-mgu2r7k4-8c3v5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user；galley session show s-mgu2r7k4-8c3v5n1x --tail=40；galley todo list；galley schedule list；galley sessions list --runtime all --all
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、cli.md；1 次 1 轮，11705 字节；写前读过清单：读了清单；手册版本：`497d19f9`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+下周三（**10 月 28 日**）杭州东 → 上海虹桥，上午 9 点以后出发的三班：
+
+| 车次 | 出发—到达 | 二等座 | 查询时余票 |
+|---|---|---|---|
+| G7502 | 09:12—10:06 | 73 元 | 有票 |
+| G7348 | 09:41—10:39 | 73 元 | 有票 |
+| G1374 | 10:05—10:58 | 73 元 | 余 9 张 |
+
+来源：[12306 余票查询页](https://kyfw.12306.cn/otn/leftTicket/init)。余票会变动，以购票时显示为准。
+```
+
+建议标签：帮我查一下 G7348 的最新余票
+
+### 第 3 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley session show，galley session show，galley todo list，galley schedule list，galley sessions list）；galley session show s-mgu2r7k4-8c3v5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user；galley session show s-mgu2r7k4-8c3v5n1x --tail=40；galley todo list；galley schedule list；galley sessions list --runtime all --all
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8146 字节；写前读过清单：读了清单；手册版本：`497d19f9`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+下周三（**10 月 28 日**）杭州东 → 上海虹桥，上午 9 点以后出发可选这三班：
+
+| 车次 | 出发—到达 | 二等座票价 | 查询时余票 |
+|---|---|---:|---|
+| G7502 | 09:12—10:06 | 73 元 | 有票 |
+| G7348 | 09:41—10:39 | 73 元 | 有票 |
+| G1374 | 10:05—10:58 | 73 元 | 余 9 张 |
+
+来源：[12306 余票查询页](https://kyfw.12306.cn/otn/leftTicket/init)。余票随时变化，以购票时显示为准。
+```
+
+建议标签：帮我比较一下这三班，推荐一班

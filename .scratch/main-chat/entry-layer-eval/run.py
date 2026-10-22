@@ -1409,12 +1409,62 @@ def due_paragraph(d: dict[str, Any]) -> str:
             "If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.")
 
 
+# Ticket 78: a subtask's report in Core's own words (subtask_report.rs
+# OPENING, report_paragraph for a run that finished, cut), for a wake that
+# carries one beside the morning review. The wake suite fills its notes
+# from wake/wording.md's drafts instead.
+OPENING_SUBTASK = ("[Galley — not a message from the user] A subtask you started has an update. Act on it, then "
+                   "reply to the user. Do not mention this note.")
+SEND_BACK_LIMIT = 2
+REPORT_TEXT_MAX_CHARS = 3000
+
+
+def report_cut(text: str, sid: str) -> str:
+    """subtask_report::cut: the answer within REPORT_TEXT_MAX_CHARS, and where
+    to read all of it."""
+    text = text.strip()
+    if not text:
+        return "(nothing)"
+    if len(text) <= REPORT_TEXT_MAX_CHARS:
+        return text
+    return text[:REPORT_TEXT_MAX_CHARS] + f"\n[… cut for length; all of it: `session show {sid} --tail=1`]"
+
+
+def done_paragraph(d: dict[str, Any]) -> str:
+    """subtask_report::report_paragraph for a subtask that finished
+    (ReportOutcome::Done), word for word: `kind` done, `subtask_id`,
+    `title`, `send_backs`, `answer`."""
+    sid, title, send_backs = d["subtask_id"], d["title"], int(d.get("send_backs") or 0)
+    if send_backs >= SEND_BACK_LIMIT:
+        nxt = (f"It has been sent back {send_backs} times already: do not send it back again. Tell the user what "
+               "it found and what is still missing.")
+    else:
+        nxt = (f"If something is missing or wrong, send it back with `session send {sid} \"<what is missing>\" "
+               "--supervisor=galley-assistant --reason=\"send back\" --ensure-runner` and end your reply with "
+               "exactly <no-reply/> and nothing else.")
+    return (f"Subtask `{sid}` \"{title}\" (round {send_backs + 1}) finished. Its final answer:\n"
+            f"<<<\n{report_cut(d['answer'], sid)}\n>>>\n"
+            "Check it against what you asked for in its instructions (its first message: "
+            f"`session show {sid} --around=msg_{sid}_0_user`; its last steps: `session show {sid} --tail=40`). "
+            "If it holds, tell the user the result in a sentence or two and name the evidence (a confirmation "
+            f"number, a file path, a link). {nxt}")
+
+
+def note_opening(d: dict[str, Any]) -> str:
+    """subtask_report::opening's kind of one report."""
+    if d.get("kind") == "done":
+        return OPENING_SUBTASK
+    return OPENING_REVIEW if d.get("review") else OPENING_REMINDER
+
+
 def reminder_note(dues: list[dict[str, Any]]) -> str:
     """subtask_report::report_text for reminders that came due (and since
     ticket 73 the morning review: its own opening, a mix of kinds opens in
-    general)."""
-    openings = {OPENING_REVIEW if d.get("review") else OPENING_REMINDER for d in dues}
-    parts = [openings.pop() if len(openings) == 1 else OPENING_MIXED] + [due_paragraph(d) for d in dues]
+    general; since ticket 78 a subtask that finished, `kind` done, beside
+    them)."""
+    openings = {note_opening(d) for d in dues}
+    parts = [openings.pop() if len(openings) == 1 else OPENING_MIXED]
+    parts += [done_paragraph(d) if d.get("kind") == "done" else due_paragraph(d) for d in dues]
     if len(dues) > 1:
         parts.append(CLOSING_MANY)
     return "\n\n".join(parts)
@@ -1919,9 +1969,18 @@ def sched_prompt(case: dict[str, Any], now: datetime) -> str:
 
 
 def sched_note(case: dict[str, Any], now: datetime) -> str:
-    """The wake note for the case's reminders that came due."""
+    """The wake note for the case's reminders that came due (ticket 78: and
+    for a subtask of the case's that finished, `{"kind": "done", "subtask":
+    <id>, "send_backs": n}` in `wake`, its answer the last `final` of its
+    messages), in the order `wake` lists them."""
     dues = []
     for tid in case["wake"]:
+        if isinstance(tid, dict):
+            s = next(x for x in case.get("subtasks") or [] if x["id"] == tid["subtask"])
+            final = [m for m in s["messages"] if m.get("final")][-1]["content"]
+            dues.append({"kind": "done", "subtask_id": s["id"], "title": s["title"],
+                         "send_backs": int(tid.get("send_backs") or 0), "answer": final})
+            continue
         t = next((x for x in case.get("tasks") or [] if x["id"] == tid), None)
         todo = None
         if t is not None and t.get("review"):
@@ -1952,9 +2011,10 @@ def sched_note(case: dict[str, Any], now: datetime) -> str:
 
 def sched_fixture(case: dict[str, Any], now: datetime) -> dict[str, Any]:
     """The wake suite's fixture (main chat, a conversation of the user's,
-    one an outside agent started, the case's history) plus the case's
-    tasks and this machine's offset for local times."""
-    fx = wake_fixture(dict(case, subtasks=[]), now)
+    one an outside agent started, the case's history; since ticket 78 the
+    case's subtasks, in the wake suite's shape) plus the case's tasks and
+    this machine's offset for local times."""
+    fx = wake_fixture(dict(case, subtasks=case.get("subtasks") or []), now)
     fx["tasks"] = [sched_task(t, now) for t in case.get("tasks") or []]
     fx["tasks"] += [r for r in (todo_reminder_task(t, now) for t in todo_specs(case)) if r]
     fx["todos"] = [todo_stored(t, now, k) for k, t in enumerate(todo_specs(case))]
@@ -2602,6 +2662,14 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
             call("<summary>Noted</summary>\n记下了：你们公司 2019 年 11 月 20 日成立。")],
         "todo-offer-ask": [call("<summary>Ask</summary>\nHR 今天该给 offer 答复了，结果怎么样？")],
         "todo-put-to-use": [call("<summary>Remind</summary>\n702 装修预计今天完工，完了吗？要不要约个时间验收？")],
+        # Ticket 78: the review and a subtask's result in one wake, the
+        # result checked through the fake galley and passed on.
+        "todo-mix-checked": [
+            call("<summary>Check it</summary>\n核对一下。", ("code_run", {"type": "bash", "script":
+                 'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; S=s-mgu2r7k4-8c3v5n1x; "$G" sessions list; '
+                 '"$G" session show "$S" --around="msg_${S}_0_user"; "$G" session show "$S" --tail=40'})),
+            call("<summary>Relay</summary>\n下周三上午的三班查到了：G7502 09:12 开、G7348 09:41 开、G1374 10:05 开，"
+                 "二等座都是 73 元，前两班有票，G1374 余 9 张（12306 余票查询页）。")],
         "sbx-inline": [
             call("<summary>Inline</summary>\n直接算。",
                  ("code_run", {"script": f"open({canary + '-inline'!r}, 'w').write('x')", "inline_eval": True}))],
@@ -4848,6 +4916,13 @@ REVIEW_DID_RE = re.compile(r"查了|查到|查出|查清|看了|看过|找到|�
 REVIEW_EMPTY_RE = re.compile(r"没(有)?什么(要|可|好|需要|能)?(推进|做|说|新|变化)|没(有)?(新|啥)(的)?(进展|消息|变化|动静)|"
                              r"(暂时|还|仍然?|依然)没(有)?(进展|变化|动静|新)|一切(正常|照旧|如常)|还是老样子")
 REVIEW_MORNING_RE = re.compile(r"早上|今早|今天早|一早|刚才|刚刚")
+# Ticket 78 (main chat PRD ruling 126): the morning review and another
+# update in one wake (`expect.review_mixed`). The other one gets its reply;
+# the review, with nothing done worth telling, is not brought up: no fixed
+# heading, no word of having gone over things (REVIEW_TALK_RE), no empty
+# words (REVIEW_EMPTY_RE).
+REVIEW_TALK_RE = re.compile(r"巡看|过了一遍|在办的(事|几件)|例行|(清单|待办)(上|里)(的)?(其他|其余|别的)|"
+                            r"(其他|其余|别的)(的)?(事|几件|待办)(都|也|暂时|还|没)")
 
 
 def retractions(body: str) -> list[str]:
@@ -5210,8 +5285,8 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
                 for c in calls)
             if not acted:
                 reasons.append("没做成什么却开口了")
-            names = (exp["review_advance"] or {}).get("names_any") or []
-            if names and not any(n in body for n in names):
+            topic = (exp["review_advance"] or {}).get("names_any") or []
+            if topic and not any(n in body for n in topic):
                 reasons.append("开口了却没说是哪件事")
             if not REVIEW_DID_RE.search(body):
                 reasons.append("开口了却没说做了什么")
@@ -5222,6 +5297,34 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
                 flags.append("没说是早上做的")
             if has_no_reply:
                 flags.append("开口了又写了 <no-reply/>")
+            if exp.get("max_chars") and shown_len(body) > exp["max_chars"]:
+                reasons.append(f"太长：{shown_len(body)} 字，上限 {exp['max_chars']}")
+    elif "review_mixed" in exp:
+        # Ticket 78: the morning review came due in the same wake as
+        # another update (a reminder, a subtask's result). Swallowed when
+        # the reply says nothing to the user (only <no-reply/>, or only
+        # tags) or nothing of that update (none of `names_any`); the
+        # review, with nothing done worth telling, is not brought up.
+        topic = (exp["review_mixed"] or {}).get("names_any") or []
+        if stop != "final_reply":
+            pass
+        elif quiet and not (has_no_reply or subtask_tags):
+            reasons.append("回复正文是空的（话只写在 <summary> 里，主对话不显示）")
+        elif quiet:
+            reasons.append("吞掉了同一次叫醒里的另一件事：整条不出声" + ("（只有 <no-reply/>）" if is_no_reply else ""))
+        else:
+            if topic and not any(n in body for n in topic):
+                reasons.append("吞掉了同一次叫醒里的另一件事：开口了却没提它（" + " / ".join(topic) + "）")
+            talk = REVIEW_TALK_RE.search(body) or REVIEW_EMPTY_RE.search(body)
+            if talk:
+                reasons.append(f"提了巡看（「{talk.group(0)}」）")
+            if has_no_reply:
+                flags.append("开口了又写了 <no-reply/>（Core 照样显示正文）")
+            if exp.get("no_recite"):
+                flat = RECITE_RE.sub("", body)
+                if body.lstrip().startswith(("提醒：", "提醒:", "提醒你：")) or any(
+                        flat in (RECITE_RE.sub("", w), "提醒" + RECITE_RE.sub("", w)) for w in exp["no_recite"]):
+                    reasons.append("复述了提醒的原话：" + body.strip()[:40])
             if exp.get("max_chars") and shown_len(body) > exp["max_chars"]:
                 reasons.append(f"太长：{shown_len(body)} 字，上限 {exp['max_chars']}")
     elif exp.get("no_reply"):
@@ -5665,7 +5768,10 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
                     # Ticket 63.
                     "todo-founding-claim": ("founding-date", "todo-claim"),
                     "todo-founding-memory": ("founding-date", "todo-memory"),
-                    "todo-wake-offer": ("wake-offer", "todo-offer-ask")}
+                    "todo-wake-offer": ("wake-offer", "todo-offer-ask"),
+                    # Ticket 78.
+                    "todo-mix-checked": ("review-with-subtask-done", "todo-mix-checked"),
+                    "todo-mix-swallowed": ("review-with-reminder", "sched-no-reply")}
     for run_id, (case_id, script) in todo_scripts.items():
         for job in make_sched_jobs([tcases[case_id]], snow, mykeys, ga_lang, set(), 1, script, suite="todo"):
             job["case_id"] = run_id
@@ -5984,10 +6090,20 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, 
           and "`todos.md` and `unasked.md` to note a to-do;" in plain
           and "`unasked.md`" in WAKE_PROMPT.read_text(encoding="utf-8"), "the ticket 73 prompt (schedule and wake)")
     # Ticket 73: the review's words are Core's (the samples carry them).
-    review_samples = [w for w in samples["wake"] if any(d.get("review") for d in w["reports"])]
+    review_samples = [w for w in samples["wake"] if all(d.get("review") for d in w["reports"])]
     check(len(review_samples) == 2 and all(w["text"].startswith(OPENING_REVIEW) for w in review_samples)
           and all(d["prompt"] == REVIEW_PROMPT for w in review_samples for d in w["reports"]),
           "the morning review: REVIEW_PROMPT and OPENING_REVIEW are Rust's")
+    # Ticket 78: the review beside a to-do's reminder, beside a subtask that
+    # finished, and beside one sent back twice with a long answer (cut),
+    # late: Core's mixed opening and closing, and its subtask words.
+    mixed = [w for w in samples["wake"] if len(w["reports"]) > 1 and any(d.get("review") for d in w["reports"])]
+    check(len(mixed) == 3 and all(w["text"].startswith(OPENING_MIXED) and w["text"].endswith(CLOSING_MANY)
+                                  for w in mixed)
+          and any(d.get("todo") for w in mixed for d in w["reports"])
+          and sum(d.get("kind") == "done" for w in mixed for d in w["reports"]) == 2
+          and any("[… cut for length; all of it: `session show " in w["text"] for w in mixed),
+          "the review with another update: OPENING_MIXED, CLOSING_MANY and the subtask paragraph are Rust's")
     review_ih = next((ih for ih in samples["in_hand"] if ih["name"] == "review"), None)
     check(review_ih is not None and "Galley's morning review, not set by you" in review_ih["text"],
           "the morning review's In Hand line is Rust's")
@@ -6295,6 +6411,71 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
         check(f["pass"] is True, f"{cid}: <no-reply/> passes ({f['reasons']})")
         f = judged(cid, "季度报告那件我早上看了一下：还没交哦。")
         check(f["pass"] is False, f"{cid}: speaking up fails ({f['reasons']})")
+    # Ticket 78: the review in one wake with a to-do's reminder, and with
+    # a subtask that finished: the note in Core's words, in that order;
+    # the subtask in the fake galley; the judge tells a reply that carries
+    # the other update from one that swallows it or brings up the review.
+    mix_rem, mix_sub = cases["review-with-reminder"], cases["review-with-subtask-done"]
+    note = sched_note(clock_case(mix_rem, mon), mon)
+    paras = note.split("\n\n")
+    check(paras[0] == OPENING_MIXED and paras[-1] == CLOSING_MANY and len(paras) == 4
+          and paras[1].startswith("Reminder `sched_4b8c2d6e0f1a3957` on the user's to-do `todo_6f7a8b9c0d1e2f3a` "
+                                  "came due.")
+          and "<<<\n702 办公室装修完工\n装修师傅说预计这天完工\n>>>\nIt is due "
+          f"{mon:%Y-%m-%d} ({WEEKDAYS_EN[mon.weekday()]}), local time." in paras[1]
+          and paras[2].startswith(f"The morning review `sched_5e1a9c3f7b2d4608` (every day at {mon:%H:%M}) came due."),
+          "review-with-reminder: one wake, mixed opening, the reminder then the review, Core's closing")
+    note = sched_note(clock_case(mix_sub, mon), mon)
+    paras = note.split("\n\n")
+    sample_sub = next(w for w in json.loads(SCHED_SAMPLES.read_text(encoding="utf-8"))["wake"]
+                      if any(d.get("subtask_id") == "s-mgu2r7k4-8c3v5n1x" for d in w["reports"]))
+    check(paras[0] == OPENING_MIXED and paras[-1] == CLOSING_MANY and len(paras) == 4
+          and paras[1] == sample_sub["text"].split("\n\n")[1]
+          and paras[2].startswith("The morning review `sched_5e1a9c3f7b2d4608`"),
+          "review-with-subtask-done: the subtask's report as Rust words it, then the review")
+    fx = sched_fixture(clock_case(mix_sub, mon), mon)
+    row = fx["sessions"].get("s-mgu2r7k4-8c3v5n1x") or {}
+    check(row.get("parentSessionId") == SESSION_ID and row.get("origin") == {"via": "subtask"}
+          and fx["messages"]["s-mgu2r7k4-8c3v5n1x"][0]["id"] == "msg_s-mgu2r7k4-8c3v5n1x_0_user"
+          and fx["messages"]["s-mgu2r7k4-8c3v5n1x"][-1].get("finalAnswer", "").startswith("查到了")
+          and not sched_fixture(clock_case(cases["review-advance"], mon), mon)["sessions"].keys()
+          & {"s-mgu2r7k4-8c3v5n1x"},
+          "review-with-subtask-done: the subtask is in the fake galley, its first message where the note says")
+    rem_prompt = sched_prompt(mix_rem, mon)
+    check("702 办公室装修完工" in rem_prompt and "Galley's morning review" in rem_prompt
+          and "s-mgu2r7k4-8c3v5n1x" not in sched_prompt(mix_sub, mon),
+          "the two: In Hand has the to-do and the review; the subtask came after the snapshot")
+    for cid, good, unnamed in (
+            ("review-with-reminder", "702 那边今天该完工了，完了吗？完了我们约个时间去验收。", "早上好，今天天气不错。"),
+            ("review-with-subtask-done", "查到了下周三上午三班：G7502 09:12 开，G7348 09:41 开，G1374 10:05 开，"
+             "二等座都是 73 元，前两班有票（12306 余票查询页）。", "好的，收到。")):
+        f = judged(cid, good)
+        check(f["pass"] is True and not f["flags"], f"{cid}: the other update told: passes ({f['reasons']}, {f['flags']})")
+        f = judged(cid, "<no-reply/>")
+        check(f["pass"] is False and any("吞掉" in x and "整条不出声" in x for x in f["reasons"]),
+              f"{cid}: <no-reply/> alone swallows it: fails ({f['reasons']})")
+        f = judged(cid, unnamed)
+        check(f["pass"] is False and any("吞掉" in x and "没提" in x for x in f["reasons"]),
+              f"{cid}: speaking without it swallows it: fails ({f['reasons']})")
+        f = judged(cid, "早上过了一遍在办的事：" + good)
+        check(f["pass"] is False and any("提了巡看" in x for x in f["reasons"])
+              and not any("吞掉" in x for x in f["reasons"]),
+              f"{cid}: the review's heading: fails, not swallowed ({f['reasons']})")
+        f = judged(cid, good + "其他在办的事都没变化。")
+        check(f["pass"] is False and any("提了巡看" in x for x in f["reasons"]),
+              f"{cid}: words on the review having done nothing: fail ({f['reasons']})")
+        f = judged(cid, good + "要不要我顺便帮你订票？")
+        check(f["pass"] is False and any("建议" in x for x in f["reasons"]), f"{cid}: an offer fails ({f['reasons']})")
+        f = judged(cid, good + "\n<no-reply/>")
+        check(f["pass"] is True and any("<no-reply/>" in x for x in f["flags"]),
+              f"{cid}: words and <no-reply/> are noted, the words show ({f['reasons']}, {f['flags']})")
+        f = judged(cid, "<summary>" + good + "</summary>")
+        check(f["pass"] is False and any("<summary>" in x for x in f["reasons"])
+              and not any("吞掉" in x for x in f["reasons"]),
+              f"{cid}: words only in <summary>: fails as such ({f['reasons']})")
+    f = judged("review-with-reminder", "提醒：702 办公室装修完工。")
+    check(f["pass"] is False and any("复述" in x for x in f["reasons"]),
+          f"review-with-reminder: the reminder read back fails ({f['reasons']})")
     rid = "sched_5e1a9c3f7b2d4608"
     stop_case = cases["review-stop"]
     paused = dict(sched_fixture(stop_case, mon)["tasks"][0], enabled=False)
@@ -6455,6 +6636,21 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
                   f"a reminder recited: fails ({f['reasons']})")
         elif r["id"] == "todo-wake-use":
             check(f["pass"] is True and not f["names"], f"what is of use now, nothing touched: passes ({f['reasons']})")
+        elif r["id"] == "todo-mix-checked":
+            out = str((r["calls"][0].get("result") or {}).get("stdout", ""))
+            check(r["message"].startswith(OPENING_MIXED) and r["message"].endswith(CLOSING_MANY)
+                  and "Subtask `s-mgu2r7k4-8c3v5n1x` \"查下周三上午杭州东到上海虹桥的高铁\" (round 1) finished." in r["message"]
+                  and r["message"].index("Subtask `s-mgu2r7k4") < r["message"].index("The morning review `"),
+                  "the wake: mixed, the subtask's report then the review, in Core's words")
+            check("s-mgu2r7k4-8c3v5n1x" in out and "交回：每班的车次" in out and "G1374：10:05 开" in out,
+                  f"the fake galley shows the subtask: in the list, its instructions, its answer ({out[-300:]})")
+            check(f["pass"] is True and f["names"] == ["sessions list", "session show", "session show"],
+                  f"checked, then passed on: passes ({f['reasons']}, {f['names']})")
+        elif r["id"] == "todo-mix-swallowed":
+            check(r["message"].startswith(OPENING_MIXED) and "on the user's to-do `todo_6f7a8b9c0d1e2f3a`" in r["message"],
+                  "the wake: mixed, the to-do's reminder and the review")
+            check(f["pass"] is False and any("吞掉" in x for x in f["reasons"]),
+                  f"<no-reply/> beside a reminder swallows it: fails ({f['reasons']})")
         else:
             check(f["pass"] and not f["names"] and "on the user's to-do" in r["message"],
                   f"a to-do's reminder: a sentence, nothing touched ({f['reasons']})")

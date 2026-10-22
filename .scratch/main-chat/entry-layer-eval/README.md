@@ -405,6 +405,32 @@ Core 在「In Hand」的三组之后加了第四组「Follow-ups the user turned
 - `review-stop`：两遍都 `schedule disable` 巡看那一条（原因 `user: stop morning review`），没用 delete；「关掉了，以后早上不再自动巡看。想恢复时跟我说一声就行。」「关掉了，以后早上不再巡看。想恢复时跟我说一声就行。」
 - **用量**：8 次运行、28 次模型调用。
 
+## 巡看与别的事同一次叫醒（票 78）
+
+主聊天 PRD 裁决 126：同一分钟到期的几件事合成一次叫醒是对的，但巡看那段说「没做成值得说的事，整条回复就是 `<no-reply/>`」，提醒或子任务回报那段要它告诉用户，两段放在同一条里，真模型会不会把别的事一起吞掉，票 73、75 的四个巡看用例都没测过（都是巡看单独到期）。同一票里 Core 把巡看的种子时间从 09:00 换成 08:45 到 09:15 之间、分钟数不是 5 的倍数的随机一个（`scheduler.rs` 的 `review_time_of_day`）；评测里巡看那条的时间本来就取运行那一分钟（见上面「巡看那条的写法」），不受影响。手册 `wake.md`「The morning review」第一句跟着改成「a little before or after 9:00 (the time is in `schedule list`)」，其余没动。
+
+- **跟着换的输入**：`schedule/rust-samples.json` 多了三条混合叫醒的 Rust 原文：待办的提醒加巡看、刚做完的子任务加巡看、打回过两次且回答超长（被截断）的子任务加晚了 8 小时 5 分钟的巡看。用一个临时 Rust 测试（按样本里的字段拼 `SubtaskReport`、调 `report_text`，跑完删掉）生成；原有样本逐字没变，`--dry-test` 逐字对照全部。
+- **移植跟着改的**：`report_text` 的移植（`reminder_note`）能拼子任务做完的那一段了：`OPENING_SUBTASK`（只有子任务时的开头）、`done_paragraph`（`report_paragraph` 里做完的那一段，打回满两次换说法）、`report_cut`（`cut`，超过 3000 字截断）；几种混在一起照旧是 `OPENING_MIXED`，不止一件时结尾 `CLOSING_MANY`。叫醒套件拼子任务回报用的仍是 `wake/wording.md` 的草稿，这里的移植只给待办套件用。
+- **用例写法**（`todo/cases.json` 的 `_note`）：`wake` 里可以写 `{"kind": "done", "subtask": <id>, "send_backs": n}`，是 `subtasks` 里（写法同叫醒套件）一件刚做完的子任务，回答取它最后一条 `final`；几件的次序就是 `wake` 列的次序。`sched_fixture` 把用例的子任务放进假 CLI（会话列表、`session show`），「In Hand」快照照旧没有它们（这一段里才派的）。
+- **新用例**（组名「巡看与别的事同一次叫醒（票 78）」，每条 3 遍）：
+  - `review-with-reminder`：巡看与待办「702 办公室装修完工」（今天到期）的提醒同一分钟到点，合成一次叫醒，提醒在前、巡看在后（Core 读等着叫醒的定时任务按 `last_fired_at, id` 排，同一分钟的按 id）；在办的只有这一件。
+  - `review-with-subtask-done`：用户这一段让查下周三上午杭州东到上海虹桥的高铁，子任务查好交回三班车，回报与巡看在同一次叫醒，子任务的先到；在办的另有 11 月 20 号的装修待办（巡看因此不跳过）。
+- **判定加的**（`todo_facts` 的 `review_mixed`）：整条不出声（只有 `<no-reply/>` 或只有标签）、开口了却没提那件事（`names_any` 里一个词都没有）算吞掉，判不过；巡看没做成值得说的事却提了巡看（`REVIEW_TALK_RE`：「巡看」「过了一遍」「在办的事」「例行」一类，或 `REVIEW_EMPTY_RE` 的空话）判不过；开口了又写了 `<no-reply/>` 只注出来（Core 照样显示正文）；话只写在 `<summary>` 里照旧判不过，不算吞掉；`no_recite`、`no_offer` 同上。`--dry-test` 对两条各造了过与不过的运行（`synth_run`：说了那件事、只有 `<no-reply/>`、开口没提、固定开头、巡看的空话、建议、正文加 `<no-reply/>`、只写在 `<summary>`、复述提醒原文），另有两次假模型的运行：子任务那条照叫醒说的命令经假 CLI 核对后转达（过），提醒那条只回 `<no-reply/>`（判成吞掉）。
+- **顺手修的**：`todo_facts` 里票 75 的 `review_advance` 一段把 `names`（这次运行跑过的命令）覆盖成了 `names_any`，开口的那几遍记下的命令名会错；改了变量名，判定不变。
+- **模型**：`mm_1792576875658`（API key 接入），同票 73、75。只跑这两条，别的用例没重跑。
+
+### 结果（2026-10-22，gpt-6.1-sol，推理强度 high）
+
+| 用例 | 这一次 |
+| --- | --- |
+| `review-with-reminder` | 3/3 |
+| `review-with-subtask-done` | 3/3 |
+
+- 六遍都没有吞掉另一件事，也没有一遍提到巡看，所以没改 Core 的叫醒措辞（票 78 第二部分第 3 条：有一遍吞掉才改）：`review_paragraph` 一字没动，手册的巡看一节除第一句的时间也没动。
+- `review-with-reminder`：三遍都先读 `todo list`、`schedule list`、`sessions list`，没勾掉、没动别的；回复「702 办公室装修今天能按计划完工吗？先跟师傅确认是否还有收尾项目，再约现场验收，免得白跑一趟。」「师傅之前说 702 办公室预计今天完工，现在收尾了吗？如果已经完工，可以约个时间现场验收，先查水电、墙面和门窗，再确认尾款。」「702 办公室的装修今天按计划完工了吗？如果师傅已经收工，可以约个时间现场验收，看看水电、墙面和收尾清理是否到位。」末尾的建议都是「帮我列一份（702）办公室装修验收清单」。
+- `review-with-subtask-done`：三遍都先照叫醒说的 `session show … --around=msg_…_0_user` 和 `--tail=40` 核对，再读三份清单；回复都是一张三班车的表（车次、开到时刻、二等座 73 元、有没有票），附来源「12306 余票查询页」的链接和「余票会变化，以购票时显示为准」一句，第 1 遍多一列耗时；三遍都把「下周三」写成 10 月 28 日；没打回、没派活、没写 `<no-reply/>`。
+- **用量**：6 次运行、18 次模型调用。
+
 ## 安全措施
 
 - 拦截点在 GA 的工具分发：worker 把 `agentmain` 里的 `GenericAgentHandler` 换成子类（runner 自己装处理器子类用的也是这个接口 `GaSession.install_handler`）。子类的 `dispatch` 遇到任何真实工具就记录并返回 `should_exit`，一次模型调用后整个运行结束；只有 GA 自己判断最终回答的 `no_tool`（只读回复文本）和格式错误的重试提示 `bad_json` 走原路。子类上除 `do_no_tool` 外的所有 `do_*` 方法都换成一调用就报错的版本，作为第二道保险。
