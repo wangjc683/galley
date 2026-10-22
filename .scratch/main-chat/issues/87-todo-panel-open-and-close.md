@@ -82,3 +82,158 @@ Status: ready-for-agent
 5. 只自动开一次：dev 窗口右键「检查元素」，控制台跑 `localStorage.removeItem("galley.todoPanelIntroduced"); localStorage.removeItem("galley.todoPanelOpen"); location.reload()`；关着面板跟 Galley 说「记一下周五交报告」，回复落定时面板自己打开、那一行亮；关掉后再记一件，不再自己开。
 
 ## Comments
+
+### 2026-10-22 实现回报（票 87 代理）
+
+worktree `/Users/inkstone/Documents/genericagent-webui-wt87`，分支 `ticket-87-todo-open-close`，从 `b72df393` 起；本地 main 之后多了 `2fb578a2`（只动 `.scratch/dedicated-browser/PRD.md` 与 `docs/devlog/deferred.md`，与本票没有重叠文件）。未 push、未合入。
+
+**1. 提交列表**（这条回报自己的提交在它之后）
+
+```
+fca6857e Design: the to-do panel's open and close (ticket 87, ruling 131)
+4c7d99c7 Ticket 87: the to-do panel's open and close (narrow look, card title, opens once, rows light)
+```
+
+**2. 宽窄与临时状态放在哪、为什么；两个纯函数的签名**
+
+- 宽窄：`LocalFileWorkspace` 的 ResizeObserver 照旧量主区，结果写进 UI store 的 `todoNarrow`（`setTodoNarrow`，值不变不写）；它自己排并排还是覆盖也改读这个值，原来的本地 `asideWide` state 删了，一处来源。初值为 `true`（测到之前当窄）。
+- 临时状态：UI store 的 `todoGlance: { at, arrived } | null`，`at` 是这条对话（`todoConversationKey(screen, activeSessionId)`：`main:<会话 id>` 或 `empty`），不进 localStorage、不进 Core。
+- 汇合：`lib/todo-open.ts` 的纯函数 `todoView(hasMainChat, open, screen, session, look: { sessionId, narrow, glance })` 算 `{ entry, here, at, narrow, shown }`，`shown = hasMainChat && (glance.at === at || (!narrow && open[here]))`；App 照它给 `aside`、顶栏按钮的选中底色、⌘K。所有进出口（按钮、⌘K、×／Esc、面板里点出去的跳转、卡片标题、自动开）都收一个 `TodoSpot`（`here`、`at`、`narrow`），宽窄的分支只在 `lib/todo-open.ts` 里。离开这条对话：`todoGlanceAfterMove(glance, at)`（纯）由 `hooks/useTodoGlanceFollow.ts` 在 `at` 变化时套用。
+- 为什么放 store：进出口函数在 React 之外、本来就读写 UI store；自动开的判定是待办 store 的订阅回调，也要在 React 之外读宽窄。App 只接线（文件里没有 `useEffect`），所以跟随与自动开各是一个 hook。
+- 自动开的判定（`lib/todo-open.ts`）：
+
+```ts
+export function todoPanelIntroduces(input: TodoIntroduction): string[];
+export interface TodoIntroduction {
+  introduced: boolean;
+  previous: readonly TodoItem[] | null; // null = first read
+  next: readonly TodoItem[];
+  mainChatId: string | undefined;
+  yourRound: boolean; // !inReportRound(main chat turns)
+  mainChatOnScreen: boolean;
+  narrow: boolean;
+}
+```
+
+  返回刚出现卡片的待办 id，空数组即不开；`hooks/useTodoPanelIntroduction.ts` 在 `noted` 变化时调用，非空则 `introduceTodoPanel(ids)`（`setTodoPanelOpen("galley", true)`、写标记、请求亮那几行）。
+- 亮行比较（`lib/todo-panel.ts`）：
+
+```ts
+export function todoPanelChanges(
+  previous: AssistantTodo,
+  next: AssistantTodo,
+  mine: ReadonlySet<string>, // todoWritesOnTheirWay(previousState, nextState)
+): TodoPanelChange; // { flash: string[]; held: TodoHold[] }
+export function todoPanelRows(
+  todo: AssistantTodo,
+  held: readonly TodoHold[],
+): { yours: TodoItem[]; done: TodoItem[]; holding: ReadonlySet<string> };
+```
+
+  `hooks/useTodoPanelFlash.ts` 在面板挂着时订阅待办 store 调用它，停留 `TODO_SETTLE_MS` 后放下 `held`，一帧后给行加 `message-locate-flash`；卡片标题与自动开走 UI store 的 `todoRowRequest`，同一个亮法。
+
+**3. 验证命令与结果原样**
+
+```
+$ pnpm --dir gui typecheck
+> galley-desktop@0.6.2 typecheck /Users/inkstone/Documents/genericagent-webui-wt87/gui
+> tsc --noEmit
+
+typecheck exit=0
+
+$ pnpm --dir gui lint
+> galley-desktop@0.6.2 lint /Users/inkstone/Documents/genericagent-webui-wt87/gui
+> eslint src --max-warnings 0
+
+lint exit=0
+
+$ git diff --check
+diff-check exit=0
+
+$ pnpm --dir gui test
+ Test Files  200 passed (200)
+      Tests  2177 passed (2177)
+local exit=0
+
+$ TZ=UTC pnpm --dir gui test
+ Test Files  200 passed (200)
+      Tests  2177 passed (2177)
+UTC exit=0
+
+$ TZ=America/Los_Angeles pnpm --dir gui test
+ Test Files  200 passed (200)
+      Tests  2177 passed (2177)
+LA exit=0
+```
+
+反向检查（每次先把文件备份到 scratchpad，改坏、跑、用备份 `cp` 回去、再跑）：
+
+```
+--- broken: narrow ignored in todoView
+     × does not show the remembered open; widened, it is back 7ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 46 passed (47)
+--- restored
+      Tests  47 passed (47)
+--- broken: the flag ignored in todoPanelIntroduces
+     × not once met 8ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 46 passed (47)
+--- restored
+      Tests  47 passed (47)
+--- broken: narrow ignored in todoPanelIntroduces
+     × not in a narrow main area 8ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 46 passed (47)
+--- restored
+      Tests  47 passed (47)
+--- broken: a place left open no longer counts as met
+     × counts a place left open as met 6ms
+     × starts from what was written, a place left open counting 10ms
+     × is written by every remembered open or close, so a close keeps it met 2ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  3 failed | 16 passed (19)
+--- restored
+      Tests  19 passed (19)
+--- broken: notes no longer compared
+     × lights a to-do of yours with new words, due time, reminder or notes 9ms
+     × lights what Galley changed in a fresh list 63ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  2 failed | 54 passed (56)
+--- restored
+      Tests  56 passed (56)
+--- broken: this window's own tick held and lit
+     × does not light this window's own writes on their way 10ms
+     × holds a to-do Galley ticked off for you where it stood, lit, before 已完成 2ms
+     × does not light this window's own write 40ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  3 failed | 53 passed (56)
+--- restored
+      Tests  56 passed (56)
+```
+
+设计文档新增行的全角标点：scratchpad 里的 `t87-cjk-punct.py` 扫 `git diff -- docs/` 的新增行（跳过行内代码、代码块、链接目标），结果 `0 added line(s) with half-width punctuation next to CJK`；这条回报也照样扫过。
+
+**4. 票面没写到、我自己定的边界**
+
+1. 「这条对话」按会话认：`main:<id>` 或 `empty`。空白新对话发出第一句（从 `empty` 变成 `main:<新会话>`）算离开，临时开着的收起。
+2. 跳转途中不算离开：跳转把临时状态先送到目的地（`arrived: false`），落地前经过别的对话（目的地要先 restore，切换会先停在旧会话上）不收起，落地后才 `arrived`；跳到屏上这条对话即已到达。回 Galley 落不了地（Core 失败）时，送出去的临时状态跟定位、引用请求一起撤掉。
+3. 临时开着以后拉宽：留在屏上；之后的关、跳转、卡片标题按宽窗口的规矩写记忆，拉宽本身不写。
+4. 标记的写入比票面多一处：`setTodoPanelOpen` 每写一次记忆也写标记（包括文件预览换掉屏上面板那次）；`markTodoPanelIntroduced` 每次都写 localStorage，不因内存里已是 `true` 就跳过。原因：启动时因 `galley.todoPanelOpen` 为 `"1"` 而算已设的人，之后关掉面板会删掉那个键，标记若没写，下次启动又算没设、会自动开一次。
+5. 自动开排除已取消的（卡片写「已取消」，面板里没有那一行可亮）；同一轮记了几件就亮几件。没有另外核对新卡片的 `turnIndex` 是不是最后一轮：Core 的 `settle_todo_created_in` 只在一轮结束时给这一轮记的待办填 `turnIndex`，`noted` 里新出现卡片的就是正在落定的那一轮。「你发出的」在 `noted` 刷新的那一刻读 `!inReportRound(主对话 turns)`。
+6. 它替你勾掉的：停留时用勾之前那一份画（备注、截止照旧，同你自己勾的停留），方框打勾、不能点（照写入中的样子：不变暗）；停留期间「已完成」的件数不算它。「是不是这个窗口发出的勾」只看 store 的在途记录（`flips`、`cancelling`，刷新前后两份都算），不看 `doneBy`。
+7. 「新出现」也包括它替你取消勾、从「已完成」回到你的事里的；提醒加上、去掉都算改了提醒；提醒只比时刻与是否暂停，响过（`scheduled` 到 `fired`）不算。
+8. 卡片标题按钮：外层 span 占 `flex-1`，按钮只有字那么宽（同面板的标题按钮）；已完成的卡片在面板里有时照样是按钮，悬停时下划线替换删除线，同面板「已完成」的行。
+9. 亮的时长与类名挪进新文件 `lib/locate-flash.ts`（`LOCATE_FLASH_MS`、`LOCATE_FLASH_CLASS`），`useStickyScroll` 改为从这里取，`globals.css` 的注释跟着改，一处常量。滚动手算（只滚面板自己的列表，留 8px 给光晕），不用 `scrollIntoView`：它会带动 `overflow-hidden` 的祖先，jsdom 里也没有。
+10. `todoNarrow` 初值为窄：启动时记着开的面板先不画、测到宽再并排出现，不再先以覆盖层闪一帧（原来 `asideWide` 初值为 `false` 时会）。
+11. 没有加新文案。
+
+**5. 看到但没改的问题，没验证到的**
+
+1. 窄窗口里记着开、打开文件预览、再拉宽：预览照旧占位（`LocalFileWorkspace` 里阅读面板赢），可 `shown` 为真，顶栏按钮是选中底色、面板却没画；这时点卡片标题不会开面板，亮行请求挂到面板下次挂上。起因是窄窗口不写记忆（票面），App 不知道预览开着。要修得让 `LocalFileWorkspace` 把「阅读面板占着」告诉 App，或拉宽时另定谁让位，超出本票，没改。
+2. 自动开那一次若 Galley 里开着文件预览或改动审阅，会照「后开的换掉先开的」关掉它（只在宽窗口触发）。照票面做，没加条件。
+3. 跳转途中（目的地 restore 的几十毫秒里）又点去第三个对话：送出去的临时状态停在未到达，之后去到那个目的地时会出现。概率低，没处理。
+4. 你的一轮结束后、`noted` 刷新之前（防抖 150ms 加读的时间）紧接着开始一轮叫醒的：会被当成叫醒的一轮、这次不开，留给下一次（方向安全）。
+5. 没在真机（`tauri dev`）看过：ResizeObserver 写 store 的时机、并排与覆盖切换时面板重新挂上、亮行与滚动的观感、`message-locate-flash` 的 6px 光晕在面板行间会叠到相邻行上。jsdom 测的是接线（类名、顺序、停留、展开「已完成」、请求清掉）；jsdom 的 `getBoundingClientRect` 全是 0，滚动那一支没测到。
+6. 外置运行时没跑：没有主对话时 `shown` 恒假，`todoNarrow` 照样被写但没人用到。
+7. 全量测试里 Node 的 `ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.` 是原来就有的（改动前单跑 `TodoPanel.click.test.tsx` 也有）。
