@@ -55,3 +55,27 @@ Status: ready-for-agent（排在票 80 合入之后：同改 `gui/src/components
 3. 定一档告诉我；定档票按那一档写死、拆切换器、改设计文档。
 
 ## Comments
+
+### 2026-10-22 实现回报（票 83 代理）
+
+- **提交**（分支 `ticket-83-done-trial`，从 main `ee6b9b3a` 起，未 push、未合入）：`2bd7b54e` 第 5、6 条（定稿改动，连同设计文档与票面补进的第 5、6 条）；`cb5a28fd` 第 1–4 条的临时切换器；本条回报另一个提交。两类分开提交，拆切换器时只动后一个的内容。
+- **第 5 条，开机自启提示不算巡看**：`todoAutostartHintVisible`（`gui/src/lib/assistant-todo.ts`）判断「会响的任务」时加 `!isDailyReview(item)`；挂在待办上的提醒、它自己的一次性提醒、别的例行照旧算。测试在 `lib/assistant-todo.test.ts`：只有巡看时不出现；巡看加待办提醒、加它自己的一次性提醒、加别的例行时都出现。
+- **第 6 条，组与组之间 12px**：`TodoPanelGroups` 外面包一层 `<div data-role="todo-groups" className="space-y-3">`，间距落在各组 `section` 之间：第一组上面不加，空状态下面的「例行」在这层里也是第一组，同样不加；画出哪几组都一样，没有写死在哪一组上。`GroupLabel` 的 `mt-3 … first:mt-0` 从来没生效，删掉了。看到的距离：上一组最后一行的字到下一个组名的字，原来 6＋6＝12px，现在 6＋12＋6＝24px。最后一组下面没有外边距，开机自启提示的 20px 不变。测试在 `TodoPanel.test.tsx`：外层类名、六组都在这一层里、组名不再带外边距、空状态下「例行」是这一层的第一个子元素。设计文档「待办面板」的「分组」「全空 → 判空不算巡看」「开机自启提示」三处按现行改了，票 80 写的「两者之间不另加间距……上外边距实际为 0」那段换成现行说法。
+- **第 1 条，四档**：状态在 `components/todo/todo-variants/todo-variants.ts` 的 `useTodoVariants`（zustand，只在内存里，默认 `now` · `real`）；`doneLook(look)` 给出三个开关：`mutedTitle`（A 起）、`quietBox`（B 起）、`fade`（C）。接入点：
+  - `DoneRow`：非待办的行（子任务、提醒，以及票 82 之前还在的例行响过的那行）标题 `ink-soft` 换成 `ink-muted`；待办的方框 `checkedTone="quiet"`；C 时整行加 `DONE_FADE_CLASS`（`opacity-70 hover:opacity-100 focus-within:opacity-100`，经 `RowShell` 新加的 `rowClass` 加在行的最外层，方框、图标、标题、小字一起淡）。
+  - `TodoCards` 的 `TodoCard`：只在 `item.state === "done"` 且没取消时用灰方框（B）与整张 70%（C）；正在勾的卡片（待办还是 open、勾在停留里）照旧品牌色，取消的卡片不动。A 对卡片没有影响（卡片都是待办）。
+  - `ui/checkbox.tsx`：新加 `checkedTone?: "brand" | "quiet"`，默认 `brand`，类名不变；`quiet` 是 `border-line-strong bg-line-strong text-ink-soft`（浅深色各用自己的 token），形状、尺寸、对勾图标不变，照常能点。`TodoCheck` 把它往下传。Markdown 的 `- [x]` 不经过这里，没动。
+  - 勾下去那一下：今天、以后、随时组里是 `YourRow`，没有接入点，停留的 1.5 秒照旧是品牌色；Core 写完、读回来落进已完成以后，才由 `DoneRow` 画成灰的。测试里先放一个停留中的勾（品牌色），再换成读回来的清单（灰的）。
+- **现状一字不差**：在动任何代码之前（`ee6b9b3a`），先写了 `todo-variants.test.tsx` 的第一条测试，用真 store 在 jsdom 里挂上面板，把已完成里四行（勾掉的待办、子任务、一次性提醒、例行）和三张卡片（没做、做完、取消）的 `outerHTML` 记成快照（`__snapshots__/todo-variants.test.tsx.snap`）；改完以后同一条测试照这份快照逐字比，通过了。
+- **第 2 条，演示档**：`demoDone(todayStartMs)` 写死六件，新的在前：「提醒喝水」响过、「交季度报告」（截止有时刻，今天 09:00）、「给车做年检」（截止只有日期）、「查周五去上海的机票」子任务交回来、「买营养土」（没定时间）、「订周六的餐厅」（昨天 20:30 勾的）。今天的几件放在早上 07:40–08:50，下午看时都在「之前」。没有例行（票 82）。时刻从 `useDayStamp` 推出来，渲染期不读时钟。演示时：已完成的件数是 6，照旧默认收起；「还有 N 件没有列出」不画；真实的已完成为空时组照样画出来；上面几组和回复下的卡片照旧是真实数据。演示行走 `DoneRow` 的 `inert`：方框的 `onToggle` 和标题的 `onGo` 换成什么都不做的 `ignore`，不进 store、不调 Core、不跳转（子任务的标题仍是按钮，点了没反应）。已完成的行本来就没有「说说这件」。测试点了演示方框和子任务标题：`invoke` 没被调用，`onOpenSession` 没被调用，`flips` 还是空的，方框仍勾着。
+- **第 3 条，pill**：`TodoVariantsPill.tsx`，portal 到 `<body>`，`pointer-events: auto`、`z-[1000]`，位置照票 42：窗口水平居中，顶上 52px，挂在主区顶栏下面（右端是面板的关闭按钮，所以不放那里）。一行常驻：「临时 · 已完成」「现状」「A 档位拉齐」「B 方框退色」「C 再整行 70%」｜「真实」「演示」，各点一下就切，当前那档 `aria-pressed`。只在 dev 构建：组件里 `import.meta.env.DEV` 为假时返回 null，App 挂载处也加了 `import.meta.env.DEV && hasMainChat`。测试里 `vi.stubEnv("DEV", false)` 时什么都不渲染。档名写死在 `todo-variants.ts`，没进 locale。
+- **第 4 条，测试**：`todo-variants.test.tsx` 共 13 条：现状快照；四档开关表；A 只把非待办行的 `text-ink-soft` 换成 `text-ink-muted`，其余逐字不变，卡片不变；B 的灰方框（面板与卡片），A 的部分照旧，没做完的空框不变，仍可点；B 下停留期间品牌色、落进已完成后灰色，正在勾的卡片品牌色；C 的整行与整张 70%，上面几组不淡，没做的和取消的卡片不淡；演示的样例构成；演示换行、件数、收起、卡片不变；真实已完成为空时演示照样画；演示不调 Core；pill 只在 DEV、六个选项一点就切；标记只出现在拆法列出的 7 个文件里（同票 42 的做法）。
+- **拆法**：写在 `todo-variants.ts` 文件头：删这个文件夹与 App 里的 pill；去掉演示（`useDemoDone`、`inert`、`ignore`、`onToggle`）；然后按定下的那档保留哪几行（现状 / A / B / C 各一段），最后改设计文档。第 5、6 条不在拆的范围里。
+
+### 看到但没改、没验证到的
+
+1. 演示只换已完成，判空照旧看真实清单：真实清单全空时，演示下会是空状态加「例行」加演示的已完成。JC 库里有 702，看不到这种情况。
+2. C 的淡入淡出没有过渡，悬停时 70% 直接跳到 100%（票 42 的 C2 带了 `transition-opacity`）。票面没要求，没加。C 下已完成行下面的失败提示也跟着淡。
+3. pill 的位置照搬票 42 的 `top-[52px]`，没核对现在主区顶栏的实际高度，可能压到顶栏下沿或对话最上面一行。
+4. 没跑 `tauri dev`，WebKit 下的样子、浅色与深色都没看。深色下 `line-strong` 是 `#41464e`：灰实心方框和没做完的空框（同色描边、`bg-elevated` 底）靠填色与对勾区分，会不会太像要真机看（裁决 129 第 2 条已预计到，翻了改推灰底再深一档）。浅色下灰方框是 `#d4d2cf` 填色、`ink-soft` 对勾。
+5. 第 6 条的 12px 只在真机上看得出读起来对不对；10-10 侧栏案说小间距不做切换器，这里也没做。
