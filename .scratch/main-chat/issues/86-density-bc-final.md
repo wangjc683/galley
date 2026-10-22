@@ -1,6 +1,6 @@
 # 86 待办面板密度定 B+C：写死、拆切换器
 
-Status: ready-for-agent（由票 85 的代理接着做）
+Status: needs-dogfood（2026-10-22 快进合入；主会话机器验收：切换器、演示档与三个旧文案键 grep 为零，票 80、83、84 的定稿都在；rebase 前在代理的 worktree 里重跑 `pnpm --dir gui typecheck`、`lint`、`vitest run`（199 个文件、2114 条全过）、`git diff --check` 干净）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 130 第 5 条「定 B+C」（2026-10-22，JC 真机看过演示档：「我觉得B+C 组名收紧是空间利用率最高，倾向于选这个」，主会话同意）。只改 GUI 与设计文档。依赖票 85（已合入 main）。
 
