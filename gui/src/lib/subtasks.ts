@@ -582,12 +582,16 @@ export function isReportRound(
 
 /**
  * A report round whose reply said nothing (`<no-reply/>`, the closing
- * turn's `silent`): the assistant sent the subtask back or answered it.
- * Nothing of it is drawn but the questions it asked the user and their
- * answers; it notifies nobody, marks nothing unread and is no last
- * message. Once its silent reply lands it counts as settled, before
- * run_complete. A `<no-reply/>` outside a report round is a misuse and
- * reads as a reply that was only tags.
+ * turn's `silent`): the assistant sent the subtask back or answered it,
+ * or only dispatched new subtasks (ruling 125, ticket 76: the daily
+ * review with no result yet). Nothing of it is drawn but the questions
+ * it asked the user and their answers — no steps, and no cards of what
+ * it dispatched, which hang under that silent reply alone; the subtask
+ * is in the to-do panel's 「Galley 在办」. It notifies nobody, marks
+ * nothing unread and is no last message. Once its silent reply lands it
+ * counts as settled, before run_complete. A `<no-reply/>` outside a
+ * report round is a misuse and reads as a reply that was only tags,
+ * its cards under it.
  */
 export function isSilentReport(
   group: RunGroup,

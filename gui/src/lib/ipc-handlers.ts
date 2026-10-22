@@ -443,9 +443,10 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       }
       // The reply of a round Core woke the main chat for that said
       // nothing (`<no-reply/>`, tickets 29 / 31): the assistant sent the
-      // subtask back or answered it. Drawn nowhere, so nothing else of
-      // it shows either: no unread mark, no notification, and the last
-      // reply's ghost suggestion stays.
+      // subtask back or answered it, or only dispatched (ticket 76).
+      // Drawn nowhere, so nothing else of it shows either: no unread
+      // mark, no notification, and the last reply's ghost suggestion
+      // stays.
       const silentReport =
         event.exitReason != null &&
         visibility === "visible" &&

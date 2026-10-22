@@ -49,18 +49,21 @@ const NO_REPLY_PARTIAL =
  * from one that only dispatched subtasks. Prose beside the tag shows
  * (integration of tickets 29–31): a model that wrote the account and
  * then the tag by mistake must not lose the account; an extra
- * 「已打回。」 is the cheaper failure. A reply that also opens a
- * `<subtask>` is not silent: the cards of what it dispatched must show.
- * Only a reply in a round Core woke the main chat for goes unseen
- * (lib/subtasks.ts `isSilentReport`); anywhere else the tag is a misuse
- * and the reply reads as one that was only tags.
+ * 「已打回。」 is the cheaper failure. Subtask tags beside the tag change
+ * nothing (main chat PRD ruling 125, ticket 76, reversing tickets 29 /
+ * 31's 「派了活的，卡片必须显示」 for woken rounds): a woken round that
+ * only dispatched and ended in `<no-reply/>` — the daily review before
+ * its subtask is back — says nothing, its cards drawn nowhere; the subtask
+ * is in the to-do panel's 「Galley 在办」, and its report wakes the
+ * assistant to speak when it is back. A dispatch without the tag is no
+ * silent reply. Only a reply in a round Core woke the main chat for
+ * goes unseen (lib/subtasks.ts `isSilentReport`); anywhere else the tag
+ * is a misuse and the reply reads as one that was only tags — in a
+ * round the user started, a dispatch keeps its cards, tag or not.
  */
 export function isSilentReply(text: string): boolean {
   return (
-    !!text &&
-    NO_REPLY_TAG.test(text) &&
-    !text.includes(SUBTASK_OPEN) &&
-    cleanFinalAnswer(text).trim() === ""
+    !!text && NO_REPLY_TAG.test(text) && cleanFinalAnswer(text).trim() === ""
   );
 }
 

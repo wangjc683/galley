@@ -404,8 +404,9 @@ describe("rowsToTurns", () => {
     expect(silent.finalAnswer).toBeNull();
     expect(silent.silent).toBe(true);
     expect(silent.settledAt).toBe("2026-10-15T09:00:05.000Z");
-    // One that also dispatched is no silent reply: its cards must show.
-    expect((turns[2] as AgentTurn).silent).toBeUndefined();
+    // One that also dispatched is silent too (ruling 125, ticket 76): a
+    // woken round that only dispatched draws nothing, its cards included.
+    expect((turns[2] as AgentTurn).silent).toBe(true);
   });
 });
 

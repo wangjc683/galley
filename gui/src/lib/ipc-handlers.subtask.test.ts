@@ -29,6 +29,11 @@ import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSubtasksStore } from "@/stores/subtasks";
+import {
+  dispatchReply,
+  STEP_ONE_SUMMARY,
+  STEP_TWO_SUMMARY,
+} from "@/test/dispatch-round";
 import { makeSession } from "@/test/factories";
 import { resetStores } from "@/test/store-reset";
 import type { ExitReason, IPCEvent } from "@/types/ipc";
@@ -455,6 +460,94 @@ describe("the assistant's reply to a report", () => {
     // … but moves no viewport: the user sent nothing.
     expect(useMessagesStore.getState().userSubmitTick).toBe(tick);
   });
+
+  // Ruling 125 (ticket 76): a woken round that only dispatched — two
+  // tool steps, then the subtask tag and `<no-reply/>`, `no_tool` its
+  // only tool — as the daily review writes it with no result yet.
+  function dispatchRound(noReply: boolean): IPCEvent[] {
+    const step = (turnIndex: number, summary: string): IPCEvent => ({
+      kind: "turn_end",
+      sessionId: MAIN,
+      turnIndex,
+      summary,
+      toolCalls: [{ toolName: "code_run", args: { script: "x" } }],
+      toolResults: [{ content: "ok" }],
+      responseContent: `<summary>${summary}</summary>`,
+      exitReason: null,
+      absoluteTurnIndex: 9 + turnIndex,
+      timestamp: "2026-10-13T08:31:10.000Z",
+    });
+    return [
+      step(1, STEP_ONE_SUMMARY),
+      step(2, STEP_TWO_SUMMARY),
+      {
+        kind: "turn_end",
+        sessionId: MAIN,
+        turnIndex: 3,
+        summary: "派子任务查船票",
+        toolCalls: [{ toolName: "no_tool", args: {} }],
+        toolResults: [{ content: "" }],
+        responseContent: dispatchReply(noReply),
+        exitReason: DONE,
+        absoluteTurnIndex: 12,
+        timestamp: "2026-10-13T08:31:30.000Z",
+      },
+    ];
+  }
+
+  it("says nothing when it only dispatched: no notification, no unread, the ghost suggestion stays", () => {
+    seed();
+    useSessionsStore.setState({ activeSessionId: undefined });
+    useMessagesStore.getState().setNextSuggestion(MAIN, "船票查到了吗");
+    report();
+    dispatchRound(true).forEach(dispatchIPCEvent);
+    expect(sent()).toEqual([]);
+    expect(consumeReplyNotifyPending(MAIN)).toBe(false);
+    expect(
+      useSessionsStore.getState().sessions.find((s) => s.id === MAIN)
+        ?.hasUnread,
+    ).toBeFalsy();
+    expect(useMessagesStore.getState().byId[MAIN].nextSuggestion).toBe(
+      "船票查到了吗",
+    );
+  });
+
+  it.each([false, true])(
+    "notifies the user's own dispatch as before (<no-reply/>: %s)",
+    (noReply) => {
+      seed();
+      useSessionsStore.setState({ activeSessionId: undefined });
+      useMessagesStore.getState().setNextSuggestion(MAIN, "船票查到了吗");
+      useMessagesStore.getState().applyUserMessagePersisted({
+        sessionId: MAIN,
+        message: {
+          id: `msg_${MAIN}_9_user`,
+          content: "船票帮我查一下还有没有",
+          turnIndex: 9,
+          createdAt: "2026-10-13T08:31:00.000Z",
+        },
+        dispatch: "dispatched",
+      });
+      markReplyNotifyPending(MAIN);
+      dispatchRound(noReply).forEach(dispatchIPCEvent);
+      expect(sent()).toEqual([
+        [
+          "replyDone",
+          {
+            title: "回复完成",
+            body: "主聊天 · 派子任务查船票",
+            throttleKey: `reply:${MAIN}`,
+          },
+        ],
+      ]);
+      expect(
+        useSessionsStore.getState().sessions.find((s) => s.id === MAIN)
+          ?.hasUnread,
+      ).toBe(true);
+      // The final turn_end rewrites it, as any reply's does.
+      expect(useMessagesStore.getState().byId[MAIN].nextSuggestion).toBeNull();
+    },
+  );
 
   it("leaves no flag for a report that was not dispatched", () => {
     seed();

@@ -14,13 +14,25 @@ import {
   endsWithActionRow,
   typingBubbleShown,
 } from "@/lib/assistant-conversation";
+import { lastVisibleMessage } from "@/lib/assistant";
+import { copyForLanguage } from "@/lib/i18n";
 import { buildRunGroups, liveRunGroup } from "@/lib/run-groups";
+import { hiddenReportTurns } from "@/lib/subtasks";
+import { rowsToTurns } from "@/stores/messages/rowsToTurns";
+import {
+  DISPATCH_REPLY_ID,
+  DISPATCH_TAG,
+  dispatchRoundRows,
+  EARLIER_REPLY,
+} from "@/test/dispatch-round";
 import type {
   AgentTurn,
   ConversationToolEvent,
   Turn,
   UserTurn,
 } from "@/types/conversation";
+
+const zh = copyForLanguage("zh-CN");
 
 function tool(name: string, args: Record<string, unknown> = {}) {
   return {
@@ -412,6 +424,21 @@ describe("assistantWriting", () => {
     expect(chunks.length).toBeGreaterThan(40);
     expect(seen).toEqual([false, true, false]);
   });
+
+  // Ticket 76: a woken round that only dispatched writes the subtask tag
+  // and `<no-reply/>` — no words at any point of the stream, so its
+  // typing bubble never comes.
+  it("is never writing while a dispatch and its <no-reply/> stream", () => {
+    const reply = `<summary>派子任务查船票</summary>\n${DISPATCH_TAG}\n<no-reply/>`;
+    for (let end = 1; end <= reply.length; end++) {
+      const stream = reply.slice(0, end);
+      expect([stream, assistantWriting(stream)]).toEqual([stream, false]);
+    }
+    // Words before the tag are words.
+    expect(
+      assistantWriting(`交给子任务了。\n${DISPATCH_TAG.slice(0, 12)}`),
+    ).toBe(true);
+  });
 });
 
 describe("assistantLinePlan", () => {
@@ -531,6 +558,64 @@ describe("assistantLinePlan", () => {
     const none = assistantLinePlan(buildRunGroups(quiet), quiet, null);
     expect([...none.message]).toEqual([0]);
     expect(none.reports.size).toBe(0);
+  });
+
+  // Ruling 125 (ticket 76): a woken round that only dispatched and said
+  // `<no-reply/>` — the rows as Core wrote them — draws nothing: no
+  // steps, no reply (the cards of what it dispatched hang on it), no
+  // time for its report; the sidebar card's last message is the reply
+  // before it.
+  const planOf = (turns: Turn[]) =>
+    assistantLinePlan(
+      buildRunGroups(turns, { splitAfterAnswer: true }),
+      turns,
+      null,
+    );
+
+  it("draws nothing of a woken round that only dispatched", () => {
+    const turns = rowsToTurns(dispatchRoundRows({ woken: true }));
+    expect(turns.map((t) => t.role)).toEqual([
+      "user",
+      "agent",
+      "user",
+      "agent",
+      "agent",
+      "agent",
+    ]);
+    expect((turns[5] as AgentTurn).messageId).toBe(DISPATCH_REPLY_ID);
+    const plan = planOf(turns);
+    // The exchange before it, and nothing of the round.
+    expect([...plan.message]).toEqual([0, 1]);
+    expect(plan.flat.size).toBe(0);
+    expect(plan.steps.size).toBe(0);
+    expect(plan.question.size).toBe(0);
+    // No entry for its report: it dates nothing (Conversation's skip).
+    expect(plan.reports.size).toBe(0);
+    expect([...hiddenReportTurns(turns)].sort()).toEqual([2, 3, 4, 5]);
+    expect(lastVisibleMessage(turns, zh)?.text).toBe(EARLIER_REPLY);
+  });
+
+  it("draws the user's own dispatch as before, with <no-reply/> or without", () => {
+    const [bare, tagged] = [false, true].map((noReply) =>
+      rowsToTurns(dispatchRoundRows({ woken: false, noReply })),
+    );
+    for (const turns of [bare, tagged]) {
+      const plan = planOf(turns);
+      // No answer: the workbench way, the steps and the reply in the
+      // run's region, the reply's cards under it.
+      expect([...plan.message]).toEqual([0, 1, 2]);
+      expect([...plan.flat]).toEqual([
+        [3, 2],
+        [4, 2],
+        [5, 2],
+      ]);
+      expect(plan.steps.size).toBe(0);
+      expect(plan.reports.size).toBe(0);
+      expect(hiddenReportTurns(turns).size).toBe(0);
+    }
+    expect(lastVisibleMessage(tagged, zh)).toEqual(
+      lastVisibleMessage(bare, zh),
+    );
   });
 });
 

@@ -232,11 +232,30 @@ describe("no-reply tag stripping", () => {
     expect(isSummaryOnlyReply("")).toBe(false);
   });
 
-  it("is no silent reply without the tag, or with a dispatch", () => {
+  it("is no silent reply without the tag", () => {
     expect(isSilentReply("")).toBe(false);
     expect(isSilentReply("好的，已经订好了。")).toBe(false);
     expect(isSilentReply("<no-replying>")).toBe(false);
-    expect(isSilentReply("<subtask>再查一家</subtask><no-reply/>")).toBe(false);
+    // A dispatch alone is no silent reply.
+    expect(isSilentReply("<subtask>再查一家</subtask>")).toBe(false);
+  });
+
+  // Ruling 125 (ticket 76): the subtask tags beside it change nothing —
+  // a woken round that only dispatched says nothing. Words beside them
+  // still show.
+  it("is silent with the tag after a dispatch, unless words are left", () => {
+    expect(isSilentReply("<subtask>再查一家</subtask><no-reply/>")).toBe(true);
+    expect(
+      isSilentReply(
+        "<summary>派子任务去查</summary>\n<subtask>查一下明早的船班</subtask>\n<no-reply/>",
+      ),
+    ).toBe(true);
+    // A `</subtask>` it forgot: still silent (Core reports the tag that
+    // started nothing, and that wakes the assistant again).
+    expect(isSilentReply("<subtask>查一下明早的船班\n<no-reply/>")).toBe(true);
+    expect(
+      isSilentReply("交给子任务了。<subtask>再查一家</subtask><no-reply/>"),
+    ).toBe(false);
   });
 
   it("holds every prefix of the tag back while it streams", () => {

@@ -303,10 +303,11 @@ export interface AgentTurn {
   /**
    * The closing turn said only `<no-reply/>` (main chat tickets 29 /
    * 31): its answer cleans to nothing and the raw reply carries the tag
-   * (`isSilentReply`). In a round Core woke the main chat for, the
-   * reply is not drawn, notifies nobody and is no last message
-   * (lib/subtasks.ts `isSilentReport`); anywhere else it reads as a
-   * reply that was only tags.
+   * (`isSilentReply`), subtask tags beside it or not (ruling 125,
+   * ticket 76). In a round Core woke the main chat for, the reply is
+   * not drawn — nor the cards of what it dispatched — notifies nobody
+   * and is no last message (lib/subtasks.ts `isSilentReport`); anywhere
+   * else it reads as a reply that was only tags, its cards under it.
    */
   silent?: true;
 }

@@ -7,6 +7,14 @@ import { Conversation } from "./Conversation";
 import { zhCopy } from "@/i18n/locales/zh";
 import { LocalFilesContext } from "@/lib/local-files";
 import { userTimeMarks } from "@/lib/message-time";
+import { rowsToTurns } from "@/stores/messages/rowsToTurns";
+import {
+  DISPATCH_REPLY_ID,
+  dispatchRoundRows,
+  EARLIER_REPLY,
+  STEP_ONE_SUMMARY,
+  STEP_TWO_SUMMARY,
+} from "@/test/dispatch-round";
 import type {
   AgentTurn,
   BrowserFacts,
@@ -1165,6 +1173,43 @@ describe("the assistant's conversation: subtask reports", () => {
     const lines = [...html.matchAll(/data-role="message-time-divider"/g)];
     expect(lines).toHaveLength(2);
     expect(text(html.slice(lines[1].index))).toContain("14:00");
+  });
+
+  // Ruling 125 (ticket 76): the rows as Core wrote them, the subtask's
+  // card keyed on the reply that dispatched it.
+  const dispatchCards = (id: string): ReactNode =>
+    id === DISPATCH_REPLY_ID ? (
+      <div data-role="subtask-cards">cards</div>
+    ) : null;
+
+  it("draws nothing of a woken round that only dispatched: no steps, no card, no time", () => {
+    const turns = rowsToTurns(dispatchRoundRows({ woken: true }));
+    const html = assistant(turns, { renderAfterAnswer: dispatchCards });
+    expect(html).not.toContain('data-role="subtask-cards"');
+    expect(html).not.toContain('data-role="step-marker"');
+    expect(html).not.toContain(STEP_ONE_SUMMARY);
+    expect(html).not.toContain(STEP_TWO_SUMMARY);
+    expect(html).not.toContain("A subtask you started");
+    // Your message and the reply before it, nothing after.
+    expect(count(html, 'data-role="assistant-bubble"')).toBe(1);
+    expect(html.slice(html.indexOf(EARLIER_REPLY))).not.toContain(
+      'data-role="message-time-divider"',
+    );
+  });
+
+  it("keeps the card under the user's own dispatch, with <no-reply/> or without", () => {
+    const [bare, tagged] = [false, true].map((noReply) =>
+      assistant(rowsToTurns(dispatchRoundRows({ woken: false, noReply })), {
+        renderAfterAnswer: dispatchCards,
+      }),
+    );
+    expect(tagged).toBe(bare);
+    expect(count(bare, 'data-role="subtask-cards"')).toBe(1);
+    // Drawn the workbench way: the steps, then the reply with its card.
+    expect(bare).toContain(STEP_TWO_SUMMARY);
+    expect(bare.indexOf('data-role="subtask-cards"')).toBeGreaterThan(
+      bare.indexOf(STEP_TWO_SUMMARY),
+    );
   });
 
   it("shows nothing of a report round while it runs: the line stands for it", () => {

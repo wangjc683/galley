@@ -15,6 +15,7 @@ import { buildRunGroups } from "@/lib/run-groups";
 import { endsInSilentReport, SUBTASK_REPORT_SUPERVISOR } from "@/lib/subtasks";
 import { useMessagesStore } from "@/stores/messages";
 import { useSessionsStore } from "@/stores/sessions";
+import { STEP_ONE_SUMMARY, STEP_TWO_SUMMARY } from "@/test/dispatch-round";
 import { makeSession } from "@/test/factories";
 import { resetStores } from "@/test/store-reset";
 
@@ -244,6 +245,23 @@ const silent = (): Beat[] => [
   ...replyBeats(2, ["<no-", "reply/>"]),
 ];
 
+/** A woken round that only dispatched (ruling 125, ticket 76): two tool
+ * steps, then the subtask tag and `<no-reply/>`, streamed in pieces that
+ * split both tags. */
+const dispatchOnly = (): Beat[] => [
+  wakeBeat,
+  ...toolStepBeats(1, STEP_ONE_SUMMARY),
+  ...toolStepBeats(2, STEP_TWO_SUMMARY),
+  ...replyBeats(3, [
+    "<summary>派子任务",
+    "查船票</summary>\n<sub",
+    "task>查周六上午",
+    "厦门到鼓浪屿的船票余票</sub",
+    "task>\n<no-",
+    "reply/>",
+  ]),
+];
+
 function slice() {
   return useMessagesStore.getState().byId[MAIN];
 }
@@ -350,6 +368,16 @@ describe("the typing bubble, and the card's 「正在输入…」 with it", () =
     }
   });
 
+  it("never shows in a woken round that only dispatched, and the round settles when the reply lands", () => {
+    const seen = play(dispatchOnly(), () => [liveNow(), dotsNow()] as const);
+    for (const [label, [, dots]] of seen) {
+      expect([label, dots]).toEqual([label, false]);
+    }
+    const landed = seen.findIndex(([label]) => label === "reply settles");
+    expect(seen.slice(0, landed).every(([, [live]]) => live)).toBe(true);
+    expect(seen.slice(landed).every(([, [live]]) => !live)).toBe(true);
+  });
+
   it("does not show while it asks you", () => {
     sendBeats("帮我订船票").forEach(([, run]) => run());
     expect(dotsNow()).toBe(true);
@@ -434,6 +462,14 @@ describe("the header's sentence: the newest settled step's", () => {
       // run_complete: only the name.
       "",
     ]);
+  });
+
+  it("says each step of a woken round that only dispatched, as of any woken round", () => {
+    const lines: string[] = [];
+    for (const [, text] of play(dispatchOnly(), headerNow)) {
+      if (lines[lines.length - 1] !== text) lines.push(text);
+    }
+    expect(lines).toEqual(["思考中", STEP_ONE_SUMMARY, STEP_TWO_SUMMARY, ""]);
   });
 
   it("takes the narration first, else the summary", () => {
