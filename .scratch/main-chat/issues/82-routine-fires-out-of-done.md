@@ -1,6 +1,6 @@
 # 82 例行响过不进已完成
 
-Status: ready-for-agent（排在票 81 之后：同改 `core/src/assistant_todo.rs`，由票 81 的代理接着做，先 rebase 到 main）
+Status: needs-dogfood（2026-10-22 与票 81 一起快进合入 `15fa743b`、`12129063`、`d74d5c4a`；主会话机器验收：看过判断那处与设计文档那一条的 diff，`TZ=UTC cargo test --workspace` 1220 条全过；`DoneRow` 画例行的那一支由已完成定档票删）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 129 第 3 条（2026-10-22；JC：「按你的推荐推进」）。只改 Core 一处判断、它的注释与测试，加设计文档一行。
 
