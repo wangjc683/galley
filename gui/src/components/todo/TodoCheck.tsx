@@ -3,6 +3,9 @@ import type { TodoItem } from "@/lib/assistant-todo";
 import { todoCancelled } from "@/lib/todo-panel";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
 
+// TEMP variant switcher (main chat 85): a demo row's box does nothing.
+import { useTodoDemoInert } from "./todo-variants/todo-variants";
+
 /**
  * A to-do's box, in the panel and on its card (main chat ticket 42):
  * `ui/checkbox.tsx`'s box — the app's one checkbox, Markdown task items'
@@ -31,6 +34,8 @@ export function TodoCheck({
   checkedTone?: CheckboxCheckedTone;
 }) {
   const toggle = useAssistantTodoStore((s) => s.toggle);
+  // TEMP variant switcher (main chat 85): 「演示」's boxes are inert.
+  const inert = useTodoDemoInert();
   const cancelled = todoCancelled(item);
   return (
     <Checkbox
@@ -39,7 +44,7 @@ export function TodoCheck({
       disabled={saving || cancelled}
       aria-label={item.text}
       data-todo-check={item.id}
-      onCheckedChange={() => toggle(item)}
+      onCheckedChange={() => (inert ? undefined : toggle(item))}
       // A box in a row that answers the pointer: no dimming while Core
       // writes (that would read as "can't"), only no second click.
       className={saving ? "cursor-default opacity-100" : undefined}

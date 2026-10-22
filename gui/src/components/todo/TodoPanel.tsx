@@ -53,6 +53,16 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
 import { TodoCheck } from "./TodoCheck";
 import { TodoMetaText } from "./TodoMetaText";
 import { todoTitleClass } from "./todo-styles";
+// TEMP variant switcher (main chat 85): the panel's density and 「演示」.
+import {
+  densityLook,
+  ignore,
+  LABEL_PAD,
+  TodoDemoInert,
+  useDemoTodo,
+  useTodoDemoInert,
+  useTodoVariants,
+} from "./todo-variants/todo-variants";
 
 export interface TodoPanelProps {
   /** The main chat, wherever the panel is (ticket 46): titles jump into
@@ -133,10 +143,19 @@ export function TodoPanel({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  const go = (target: TodoTarget) =>
-    goToTodoTarget(target, here, mainChatId, onOpenSession);
-  const talkAbout = (item: TodoItem) =>
-    quoteTodo(item, here, mainChatId, todoRowText(item, copy));
+  // TEMP variant switcher (main chat 85): 「演示」 shows a list of its own,
+  // whose titles and 「说说这件」 go nowhere; the launch-at-login hint
+  // still reads the real one.
+  const demo = useDemoTodo();
+  const shown = demo ?? todo;
+  const go = demo
+    ? ignore
+    : (target: TodoTarget) =>
+        goToTodoTarget(target, here, mainChatId, onOpenSession);
+  const talkAbout = demo
+    ? ignore
+    : (item: TodoItem) =>
+        quoteTodo(item, here, mainChatId, todoRowText(item, copy));
   const talk = () => talkToGalley(here, onTalk);
 
   return (
@@ -159,16 +178,18 @@ export function TodoPanel({
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-4 pt-2">
-        {loaded && todoPanelEmpty(todo) && <TodoPanelEmpty onTalk={talk} />}
+        {loaded && todoPanelEmpty(shown) && <TodoPanelEmpty onTalk={talk} />}
         {/* Empty, this draws 例行 alone, when the daily review is there
             (ticket 80); before the first read, nothing. */}
-        <TodoPanelGroups
-          todo={todo}
-          mainChatId={mainChatId}
-          onGo={go}
-          onTalkAbout={talkAbout}
-          defaultDoneOpen={defaultDoneOpen}
-        />
+        <TodoDemoInert.Provider value={demo !== null}>
+          <TodoPanelGroups
+            todo={shown}
+            mainChatId={mainChatId}
+            onGo={go}
+            onTalkAbout={talkAbout}
+            defaultDoneOpen={defaultDoneOpen}
+          />
+        </TodoDemoInert.Provider>
         <AutostartHint todo={todo} />
       </div>
     </div>
@@ -208,6 +229,8 @@ export function TodoPanelGroups({
 }) {
   const copy = useCopy();
   const [doneOpen, setDoneOpen] = useState(defaultDoneOpen);
+  // TEMP variant switcher (main chat 85): B runs 你的事 as one part.
+  const flat = densityLook(useTodoVariants((s) => s.look)).flatYours;
   const yours = todo.yours;
   const rowProps = { mainChatId, onGo, onTalkAbout };
   // The user's to-dos are the list's own: by time, each its own group,
@@ -223,22 +246,35 @@ export function TodoPanelGroups({
   // 9): a gap between the sections, whichever are drawn.
   return (
     <div data-role="todo-groups" className="space-y-3">
-      {yourParts.map(
-        ([key, label, items]) =>
-          items.length > 0 && (
-            <section key={key} data-todo-group="yours" data-todo-part={key}>
-              <GroupLabel label={label} />
-              {items.map((item) => (
-                <YourRow
-                  key={item.id}
-                  item={item}
-                  inToday={key === "today"}
-                  {...rowProps}
-                />
-              ))}
+      {/* TEMP variant switcher (main chat 85): B — Core's three lists end
+          to end (overdue, today, later by day, no time), not sorted
+          again, no label; each row worded as outside 今天. */}
+      {flat
+        ? yourParts.some(([, , items]) => items.length > 0) && (
+            <section data-todo-group="yours" data-todo-part="all">
+              {yourParts.flatMap(([, , items]) =>
+                items.map((item) => (
+                  <YourRow key={item.id} item={item} {...rowProps} />
+                )),
+              )}
             </section>
-          ),
-      )}
+          )
+        : yourParts.map(
+            ([key, label, items]) =>
+              items.length > 0 && (
+                <section key={key} data-todo-group="yours" data-todo-part={key}>
+                  <GroupLabel label={label} />
+                  {items.map((item) => (
+                    <YourRow
+                      key={item.id}
+                      item={item}
+                      inToday={key === "today"}
+                      {...rowProps}
+                    />
+                  ))}
+                </section>
+              ),
+          )}
       {todo.assistant.length > 0 && (
         <section data-todo-group="assistant">
           <GroupLabel label={copy.todo.groupAssistant} />
@@ -303,8 +339,9 @@ function GroupLabel({
   open?: boolean;
   onToggle?: () => void;
 }) {
-  const register =
-    "flex w-full items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-left text-[11px] font-semibold text-ink-muted";
+  // TEMP variant switcher (main chat 85): B+C's 3px in place of 6px.
+  const tight = densityLook(useTodoVariants((s) => s.look)).tightLabels;
+  const register = `flex w-full items-center gap-1.5 rounded-sm px-2.5 ${tight ? LABEL_PAD.tight : LABEL_PAD.normal} text-left text-[11px] font-semibold text-ink-muted`;
   if (!onToggle) {
     return (
       <div className={register}>
@@ -489,6 +526,8 @@ function YourRow({
   const language = useLanguage();
   const todayStartMs = useDayStamp();
   const cancelReminder = useAssistantTodoStore((s) => s.cancelReminder);
+  // TEMP variant switcher (main chat 85): a demo row's cancel does nothing.
+  const inert = useTodoDemoInert();
   const { flip, failure, cancelling } = useTodoWrite(item.id);
   const checked = todoChecked(item, flip);
   const parts = todoMetaParts(item, checked, todayStartMs, language, copy, {
@@ -514,7 +553,7 @@ function YourRow({
             canCancelReminder && (
               <CancelReminder
                 disabled={cancelling}
-                onClick={() => cancelReminder(item.id)}
+                onClick={() => (inert ? ignore() : cancelReminder(item.id))}
               />
             )
           }
@@ -610,6 +649,8 @@ function AssistantRow(props: RowProps) {
   const language = useLanguage();
   const todayStartMs = useDayStamp();
   const cancelTask = useAssistantTodoStore((s) => s.cancelTask);
+  // TEMP variant switcher (main chat 85): a demo row's cancel does nothing.
+  const inert = useTodoDemoInert();
   const { failure, cancelling } = useTodoWrite(item.id);
   const line = assistantRowLine(item, todayStartMs, language, copy);
   const canCancel = assistantTaskCancellable(item);
@@ -626,7 +667,7 @@ function AssistantRow(props: RowProps) {
             canCancel && (
               <CancelReminder
                 disabled={cancelling}
-                onClick={() => cancelTask(item.id)}
+                onClick={() => (inert ? ignore() : cancelTask(item.id))}
               />
             )
           }
