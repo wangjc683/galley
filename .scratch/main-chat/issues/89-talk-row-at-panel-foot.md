@@ -1,0 +1,27 @@
+# 89 清单不空时，面板最下面一行「跟 Galley 说」
+
+Status: ready-for-agent（等票 88 合入：同改 `gui/src/components/todo/TodoPanel.tsx`；主会话直接做）
+
+来源：[主聊天 PRD](../PRD.md) 裁决 133 第 3 条（2026-10-22，JC：「按你推荐推进」）。只改 GUI 与设计文档。外置运行时零变化。
+
+## 要做的
+
+1. **一行「跟 Galley 说」**：`TodoPanel` 在清单不空时（`todoPanelEmpty` 为假），在各组之后、开机自启提示之前，画一行安静的文字按钮「跟 Galley 说」（同空状态按钮的文案 `copy.todo.emptyTalk`），点了走同一个 `talk`（`lib/todo-open.ts` 的 `talkToGalley`：在 Galley 里光标落进输入框；在别处先回 Galley 再落进去）。不预填文字。
+2. **样子**：一行，文字列与行标题左对齐，前面在方框那一列放 `ChatTeardropText`（14px thin，同「说说这件」的图标），13px `ink-muted`，悬停与键盘聚焦提到 `ink`；不是卡片、不加底色块、不加分隔线，与上一组隔开的距离同组与组之间。空状态照旧用它自己那颗按钮，不重复画这一行。
+3. **测试**：清单不空时有这一行、点了调 `onTalk`（或 `talkToGalley` 的同一条路）；空状态时没有这一行（只有空状态那颗）；开机自启提示仍在最后。
+4. **设计文档** `docs/design/conversation.md`「待办面板」：补这一行（位置、样子、行为、为什么：裁决 133，新建仍靠说，原来只有空状态有入口）。注「2026-10-22，票 89，裁决 133」。
+
+## 别动
+
+- 空状态、开机自启提示、各组与行的定稿（票 84、86、88）。
+- 不加输入框、不预填。
+
+## 验证
+
+- `pnpm --dir gui typecheck`、`lint`、`test`；`git diff --check`；文档新增行全角标点。
+
+## 给 JC 的真机步骤
+
+面板里有东西时，滚到最下面：「已完成」下面有一行带对话图标的「跟 Galley 说」；在 Galley 里点它，光标落进输入框；在工作台里点它，先回 Galley 再落进去。
+
+## Comments
