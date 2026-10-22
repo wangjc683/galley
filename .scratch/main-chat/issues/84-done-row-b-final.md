@@ -1,6 +1,6 @@
 # 84 已完成定 B：写死、拆切换器
 
-Status: ready-for-agent（由票 83 的代理接着做）
+Status: needs-dogfood（2026-10-22 快进合入 `9b5b6189`、`59da91bf`、`c49576c6`；主会话机器验收：代理中途用 `git checkout --` 误撤过一次未提交的改动后重做，主会话核对了自票 83 第 5、6 条以来 GUI 的净改动只有 B 的写死、走不到的例行分支与注释，票 80 与票 83 的定稿都在、切换器无残留；rebase 前在代理的 worktree 里重跑 `pnpm --dir gui typecheck`、`lint`、`vitest run`（199 个文件、2113 条全过）、`git diff --check` 干净）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 129 第 2 条「定 B」（2026-10-22，JC 真机后：「定B」）。只改 GUI 与设计文档。依赖票 82、83（都已合入 main）。
 
