@@ -1,5 +1,11 @@
 import { TodoCheck } from "@/components/todo/TodoCheck";
 import { todoTitleClass } from "@/components/todo/todo-styles";
+// TEMP variant switcher (main chat 83): a done card's look.
+import {
+  DONE_FADE_CLASS,
+  doneLook,
+  useTodoVariants,
+} from "@/components/todo/todo-variants/todo-variants";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { todoFailureText, type TodoItem } from "@/lib/assistant-todo";
 import { useCopy, useLanguage } from "@/lib/i18n";
@@ -61,6 +67,11 @@ function TodoCard({ item }: { item: TodoItem }) {
   const failure = useAssistantTodoStore((s) => s.failures[item.id] ?? null);
   const cancelled = todoCancelled(item);
   const checked = todoChecked(item, flip);
+  // TEMP variant switcher (main chat 83): B's quiet box and C's fade, on
+  // a card whose to-do is done (not one being ticked, not a cancelled
+  // one).
+  const look = doneLook(useTodoVariants((s) => s.look));
+  const done = item.state === "done" && !cancelled;
   const parts = cancelled
     ? [{ text: copy.todo.stateCancelled, tone: "muted" as const }]
     : todoMetaParts(item, checked, todayStartMs, language, copy);
@@ -72,7 +83,10 @@ function TodoCard({ item }: { item: TodoItem }) {
         cancelled ? "cancelled" : item.state === "done" ? "done" : "open"
       }
       data-todo-checked={checked ? "true" : "false"}
-      className="rounded-md border border-line bg-app"
+      className={cn(
+        "rounded-md border border-line bg-app",
+        look.fade && done && DONE_FADE_CLASS,
+      )}
     >
       <div className="flex min-h-10 items-center gap-2.5 py-1.5 pl-4 pr-3">
         <span className="flex h-5 w-4 shrink-0 items-center justify-center">
@@ -80,6 +94,7 @@ function TodoCard({ item }: { item: TodoItem }) {
             item={item}
             checked={checked}
             saving={flip?.phase === "saving"}
+            checkedTone={look.quietBox && done ? "quiet" : undefined}
           />
         </span>
         <span
