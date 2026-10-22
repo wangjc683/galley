@@ -384,7 +384,7 @@ describe("your to-do's menu (ticket 88)", () => {
   });
 });
 
-describe("「跟 Galley 说」 at the foot of a list (ticket 89)", () => {
+describe("「跟 Galley 说」 in the header (ticket 89)", () => {
   it("takes the empty state's path: beside Galley, the caret to its composer", () => {
     const talk = vi.fn();
     const container = document.createElement("div");
@@ -405,9 +405,8 @@ describe("「跟 Galley 说」 at the foot of a list (ticket 89)", () => {
         </CopyProvider>,
       );
     });
-    const button = container.querySelector('[data-role="todo-talk"]');
-    if (!(button instanceof HTMLElement)) throw new Error("no talk row");
-    expect(button.textContent).toBe("跟 Galley 说");
+    const button = container.querySelector('button[aria-label="跟 Galley 说"]');
+    if (!(button instanceof HTMLElement)) throw new Error("no talk button");
     act(() => button.click());
     expect(talk).toHaveBeenCalledTimes(1);
   });

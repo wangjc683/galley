@@ -187,6 +187,22 @@ export function TodoPanel({
     >
       <ReadingPanelHeader
         title={copy.todo.title}
+        // The way to a new one (main chat ticket 89, PRD ruling 133 point
+        // 3): new to-dos are still said, not typed — the panel has no
+        // input box, as a new one needs judging (when, whether to remind,
+        // a to-do or Galley's own reminder, the same as one already
+        // there) — but only the empty state had 「跟 Galley 说」, so beside
+        // a workbench conversation with things on the list there was no
+        // way to Galley from here. An icon in the header's action group,
+        // as the file preview's: in sight however long the list, taking
+        // none of it. A row at the list's foot read as one more item
+        // (JC's dogfood, 10-22). The talk icon is 说说这件's: both put the
+        // caret in Galley's composer (`talkToGalley`), nothing prefilled.
+        actions={
+          <IconButton ariaLabel={copy.todo.emptyTalk} onClick={talk}>
+            <ChatTeardropText size={16} weight="thin" />
+          </IconButton>
+        }
         close={
           <IconButton
             ariaLabel={copy.common.close}
@@ -213,40 +229,9 @@ export function TodoPanel({
           held={held}
           revealDone={revealDone}
         />
-        {loaded && !todoPanelEmpty(todo) && <TodoPanelTalk onTalk={talk} />}
         <AutostartHint todo={todo} />
       </div>
     </div>
-  );
-}
-
-/**
- * The way in when the list is not empty (main chat ticket 89, PRD ruling
- * 133 point 3): new to-dos are still said, not typed — the panel has no
- * input box, as a new one needs judging (when, whether to remind, a to-do
- * or Galley's own reminder, the same as one already there) — but until
- * this only the empty state had 「跟 Galley 说」, so beside a workbench
- * conversation with things on the list there was no way to Galley from
- * here. The empty state's words and path (`talkToGalley`: the caret in
- * Galley's composer, or Galley first from elsewhere), nothing prefilled.
- * A quiet row in the rows' geometry: its icon in the box's column, its
- * words on the titles' line, `ink-muted` until hovered; a group's gap
- * above it.
- */
-function TodoPanelTalk({ onTalk }: { onTalk: () => void }) {
-  const copy = useCopy();
-  return (
-    <button
-      type="button"
-      data-role="todo-talk"
-      onClick={onTalk}
-      className="mt-3 flex w-full gap-2.5 rounded-sm px-2.5 py-1.5 text-left text-[13px] leading-5 text-ink-muted outline-none transition-colors duration-(--motion-fast) hover:bg-hover hover:text-ink focus-visible:text-ink focus-visible:ring-2 focus-visible:ring-brand/30 motion-reduce:transition-none"
-    >
-      <span className="flex h-5 w-4 shrink-0 items-center justify-center">
-        <ChatTeardropText size={14} weight="thin" />
-      </span>
-      {copy.todo.emptyTalk}
-    </button>
   );
 }
 
