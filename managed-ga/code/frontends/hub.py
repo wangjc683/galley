@@ -19,16 +19,26 @@ class HubClient:
     def __init__(self, name, put_task=None, get_outputs=None, abort=None, state=None, on_ev=None, sub=(), fixed=False, llm=None, inject=None):
         self.name, self.put_task, self.get_outputs, self.abort, self.llm, self.inject = name, put_task, get_outputs, abort, llm, inject
         self.state, self.on_ev, self.sub, self.fixed = state or dict, on_ev, list(sub), fixed  # fixed -> stable name
+        self._closed, self._task = False, None
         self._tc, self._ws, self._lp = {}, None, None   # (i,j) -> (fp, title): a finished step is never re-scanned
     def emit(self, topic, data=None, to=None):          # thread-safe fire-and-forget from the host thread
         if self._ws and self._lp: asyncio.run_coroutine_threadsafe(self._ws.send(json.dumps(
             {'op': 'ev', 'topic': topic, 'to': to, 'data': data}, default=str)), self._lp)
     def start(self):
-        threading.Thread(target=lambda: asyncio.run(self._loop()), daemon=True).start(); return self
+        def run():
+            try: asyncio.run(self._loop())
+            except asyncio.CancelledError: pass  # explicit close is normal shutdown
+        threading.Thread(target=run, daemon=True).start(); return self
+    def close(self):
+        """Retire a host instance without reconnecting it."""
+        self._closed = True
+        if self._lp and self._lp.is_running() and self._task:
+            self._lp.call_soon_threadsafe(self._task.cancel)
     async def _loop(self):
+        self._lp, self._task = asyncio.get_running_loop(), asyncio.current_task()
         try: import websockets
         except ImportError: return
-        while True:
+        while not self._closed:
             try:
                 async with websockets.connect(URL, open_timeout=3, max_size=None) as ws:
                     self._ws, self._lp = ws, asyncio.get_running_loop()
@@ -79,7 +89,9 @@ class HubClient:
         elif op == 'abort': data = (await asyncio.to_thread(self.abort) or {'ok': 1}) if self.abort else {'error': 'no abort hook', 'code': 'nosupport'}
         elif op == 'llm': data = await asyncio.to_thread(self.llm, c.get('no')) if self.llm else {'error': 'no llm hook', 'code': 'nosupport'}
         elif op == 'inject': data = (await asyncio.to_thread(self.inject, c.get('kind'), c.get('text')) or {'ok': 1}) if self.inject else {'error': 'no inject hook', 'code': 'nosupport'}
-        await ws.send(json.dumps({'op': 'r', 'id': c.get('id'), 'name': self.name, 'data': data}, default=str))
+        after_reply = data if callable(data) else None  # deferred host action, e.g. exit after acknowledgement
+        await ws.send(json.dumps({'op': 'r', 'id': c.get('id'), 'name': self.name, 'data': {'ok': 1} if after_reply else data}, default=str))
+        if after_reply: await asyncio.to_thread(after_reply)
 
 _ROUTES = {'put': ('POST', 'put'), 'abort': ('POST', 'abort'), 'intervene': ('POST', 'intervene'), 'keyinfo': ('POST', 'keyinfo'),
            'llm': ('POST', 'llm'), 'llms': ('GET', 'llms'), 'messages': ('GET', 'messages')}
@@ -145,6 +157,17 @@ def connect(agent, name=None, put_task=None, get_outputs=None, abort=None, fold=
                                               'llm': getattr(getattr(agent, 'llmclient', None), 'name', '')})
         return agent._hub.start()
     except Exception: return None
+
+def phone_session():
+    from agentmain import GenericAgent
+    agent = GenericAgent()
+    def put(text):
+        if text == '/exit': return lambda: (agent.abort(), agent.task_queue.put('exit'))
+        if agent.is_running: return {'error': 'busy', 'code': 'busy'}
+        agent.put_task(text, source='hub')
+    client = connect(agent, 'phone', put_task=put)
+    agent.run()
+    client.close()
 
 # ------------------------------- server (python hub.py) -------------------------------
 if __name__ == '__main__':
@@ -231,6 +254,12 @@ if __name__ == '__main__':
     async def api_messages(name: str, detail: int = 1, sig: str = None, since: int = 0): return out(await ask(name, {'op': 'get', 'detail': detail, 'sig': sig, 'since': since}))
     @app.get('/api/{name}/seg/{i}/{j}')
     async def api_seg(name: str, i: int, j: int, off: int = 0): return out(await ask(name, {'op': 'seg', 'i': i, 'j': j, 'off': off}))
+    @app.post('/api/sessions')
+    async def api_new_session():
+        import subprocess
+        p = subprocess.Popen([sys.executable, '-c', 'from frontends.hub import phone_session; phone_session()'],
+                             cwd=os.path.dirname(HERE), creationflags=0x08000008 if os.name == 'nt' else 0)
+        return {'ok': 1, 'name': f'phone-{p.pid}'}
     @app.post('/api/{name}/put')
     async def api_put(name: str, body: dict):
         t = body.get('text', '')

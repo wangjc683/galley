@@ -859,16 +859,19 @@ def extract_ui_messages_text(content):
             out.append({'role': 'user', 'content': user, 'ts': ts})
             # Turn 1 marker too — agent_loop yields one per LLM call, including the
             # first, so fold_turns treats every non-last call uniformly as a fold.
+            step = f"\n\n**LLM Running (Turn 1) ...**\n\n{seg}"
             assistant = {'role': 'assistant', 'ts': ts,
-                         'content': f"\n\n**LLM Running (Turn 1) ...**\n\n{seg}"}
+                         'content': step, 'turn_segs': [step]}
             round_turn = 1
         else:
             if assistant is None:
-                assistant = {'role': 'assistant', 'content': ''}
+                assistant = {'role': 'assistant', 'content': '', 'turn_segs': []}
                 round_turn = 1
             round_turn += 1
             marker = f"\n\n**LLM Running (Turn {round_turn}) ...**\n\n"
-            assistant['content'] = (assistant['content'] or '') + marker + seg
+            step = marker + seg
+            assistant['turn_segs'].append(step)
+            assistant['content'] = (assistant['content'] or '') + step
     if assistant is not None: out.append(assistant)
     return [m for m in out if (m.get('content') or '').strip()]
 

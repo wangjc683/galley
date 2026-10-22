@@ -155,3 +155,48 @@ def test_archive_then_hot_continuation_chain(tmp_path):
 def test_replay_preserves_native_message_time():
     messages, _ = h.replay(log_text())
     assert [m['ts'] for m in messages] == [STAMP, STAMP]
+
+
+def test_restore_multistep_mr_and_l4_preserves_hub_segments(tmp_path):
+    from types import SimpleNamespace
+    from frontends.hub import HubClient
+
+    stamp = '2026-10-17 10:00:00'
+    noise = 'tool output ' * 10000
+    def pair(blocks, response):
+        prompt = json.dumps({'role': 'user', 'content': blocks})
+        return f'=== Prompt === {stamp}\n{prompt}\n=== Response === {stamp}\n{repr(response)}\n'
+    text = pair([{'type': 'text', 'text': 'hello'}], [
+        {'type': 'text', 'text': 'inspect'},
+        {'type': 'tool_use', 'id': 't1', 'name': 'code_run', 'input': {'script': 'print(1)'}}])
+    text += pair([{'type': 'tool_result', 'tool_use_id': 't1', 'content': noise}],
+                 [{'type': 'text', 'text': 'final answer'}])
+    text += log_text(user='next', answer='next answer')
+    for source in ('mr', 'l4'):
+        root = tmp_path / source
+        if source == 'mr':
+            seed_mr(root).write_text(text, encoding='utf-8')
+        else:
+            seed_zip(root, text)
+        agent = SimpleNamespace(llmclient=SimpleNamespace(backend=SimpleNamespace(history=[])))
+        h.restore_agent(agent, root, record())
+        assert [len(t['outputs']) for t in agent.all_outputs] == [2, 1]
+        assert len(agent.llmclient.backend.history) == 6
+        ui, _ = h.replay(text)
+        projected = h.display_messages(agent.all_outputs)
+        assert [m['content'] for m in projected] == [m['content'] for m in ui]
+        assert all(''.join(m['turn_segs']) == m['content'] for m in ui if m['role'] == 'assistant')
+        client = HubClient('test', get_outputs=lambda: agent.all_outputs)
+        steps = client._build({'detail': 1})['tasks'][0]['steps']
+        assert len(steps) == 2 and steps[0]['n'] > len(noise)
+        assert steps[-1]['n'] < 100
+        assert noise in client._seg({'i': 0, 'j': 0})['content']
+        final = client._seg({'i': 0, 'j': 1})['content']
+        assert 'final answer' in final and noise not in final
+
+
+def test_replay_does_not_split_literal_turn_marker():
+    answer = 'quoted marker: \n\n**LLM Running (Turn 9) ...**\n\nnot a real step'
+    messages, _ = h.replay(log_text(answer=answer))
+    assert len(messages[-1]['turn_segs']) == 1
+    assert answer in messages[-1]['turn_segs'][0]

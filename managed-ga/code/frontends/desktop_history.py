@@ -183,3 +183,41 @@ def load(root, item, anchors=None):
         message['id'] = i
     meta['log_refs'] = found or meta['log_refs']
     return messages, history or None, meta
+
+
+def restore_agent(agent, root, item):
+    """Restore execution state and outputs together; never publish a half-restored GA."""
+    restored = load(root, item)
+    if restored is None:
+        raise FileNotFoundError("history source no longer exists")
+    messages, history, meta = restored
+    try:
+        from .continue_cmd import _derive_hist_info
+    except ImportError:
+        from continue_cmd import _derive_hist_info
+    backend = agent.llmclient.backend
+    if not hasattr(backend, 'history'):
+        raise RuntimeError("model backend does not support history restoration")
+    outputs = []
+    for message in messages:
+        if message['role'] == 'user':
+            outputs.append({'input': message['content'], 'outputs': [], 'ts': message.get('ts')})
+        elif message['role'] == 'assistant' and outputs:
+            outputs[-1]['outputs'].extend(message.get('turn_segs') or [message['content']])
+    backend.history = list(history or [])
+    agent.history = _derive_hist_info(history or [])
+    agent.all_outputs = outputs
+    return meta
+
+
+def display_messages(outputs):
+    """Disposable desktop projection; the GA output list is authoritative."""
+    messages = []
+    for task in outputs:
+        messages.append({'id': len(messages) + 1, 'role': 'user',
+                         'content': task['input'], 'ts': task.get('ts')})
+        steps = task.get('outputs') or []
+        if steps:
+            messages.append({'id': len(messages) + 1, 'role': 'assistant',
+                             'content': ''.join(steps), 'turn_segs': list(steps), 'ts': task.get('ts')})
+    return messages

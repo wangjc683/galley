@@ -43,6 +43,7 @@ _plan_state_stub = _make_stub("plan_state", {
     "is_session_scoped_plan_path": lambda p, sid: True,
     "is_plan_preset_prompt": lambda prompt: False,
     "PLAN_PRESETS": {},
+    "desktop_plan_payload_from_session": lambda *args: None,
 })
 
 for _name in ("agentmain", "llmcore", "agent_loop", "plugins", "reflect",
@@ -106,7 +107,6 @@ def _make_session(sid: str = "sess-test-1", messages: list | None = None) -> Ses
         plan_path="",
         status="idle",
         agent=None,
-        llm_history=[{"role": "user", "content": "hello"}],
         llm_no=None,
     )
 
@@ -150,34 +150,6 @@ class TestPersistSessionConcurrentMutation:
         assert "messages" not in data
         assert data["storage_version"] == 2
 
-    def test_concurrent_mutation_llm_history(self, manager: AgentManager):
-        """Mutating llm_history from another thread during persist must not corrupt."""
-        sess = _make_session()
-        sess.llm_history = [{"role": "user", "content": "hi"}]
-        manager.sessions[sess.id] = sess
-
-        stop = threading.Event()
-
-        def mutator():
-            i = 0
-            while not stop.is_set():
-                sess.llm_history.append({"role": "assistant", "content": f"turn-{i}"})
-                i += 1
-                time.sleep(0.001)
-
-        t = threading.Thread(target=mutator, daemon=True)
-        t.start()
-        try:
-            for _ in range(15):
-                manager._persist_session(sess)
-                time.sleep(0.005)
-        finally:
-            stop.set()
-            t.join(timeout=2)
-
-        f = manager._session_file(sess.id)
-        data = json.loads(f.read_text(encoding="utf-8"))
-        assert "llm_history" not in data
 
 
 class TestTransactionalDataImport:
@@ -396,170 +368,9 @@ class TestSessionContinuityAfterRestart:
         assert sess.status == "idle"
         assert sess.messages == []
 
-    def test_run_agent_turn_injects_history(self, manager: AgentManager):
-        """After bridge restart (agent=None, llm_history populated), run_agent_turn
-        should inject persisted llm_history into the newly created agent."""
-        history = [
-            {"role": "user", "content": [{"type": "text", "text": "hello"}]},
-            {"role": "assistant", "content": [{"type": "text", "text": "hi there"}]},
-            {"role": "user", "content": [{"type": "text", "text": "what did I just say?"}]},
-        ]
-        sess = _make_session(sid="sess-continuity-1", messages=[
-            {"role": "user", "content": "hello"},
-            {"role": "assistant", "content": "hi there"},
-        ])
-        sess.llm_history = history
-        sess.agent = None
-        manager.sessions[sess.id] = sess
 
-        class FakeBackend:
-            def __init__(self):
-                self.history = []
-                self.name = "test-backend"
 
-        class FakeLLMClient:
-            def __init__(self):
-                self.backend = FakeBackend()
 
-        class FakeAgent:
-            def __init__(self):
-                self.llmclient = FakeLLMClient()
-                self.llm_no = 0
-                self.inc_out = True
-                self.verbose = True
-
-            def next_llm(self, n):
-                self.llm_no = n
-
-        fake_agent = FakeAgent()
-        with patch.object(manager, "make_agent", return_value=fake_agent):
-            if sess.agent is None:
-                sess.agent = manager.make_agent(sess)
-                if sess.llm_history:
-                    try:
-                        sess.agent.llmclient.backend.history = sess.llm_history
-                    except Exception:
-                        pass
-
-        assert sess.agent.llmclient.backend.history == history
-        assert len(sess.agent.llmclient.backend.history) == 3
-
-    def test_no_history_no_crash(self, manager: AgentManager):
-        """New session with no llm_history should not crash on agent creation."""
-        sess = _make_session(sid="sess-continuity-2")
-        sess.llm_history = None
-        sess.agent = None
-        manager.sessions[sess.id] = sess
-
-        class FakeBackend:
-            def __init__(self):
-                self.history = []
-                self.name = "test"
-
-        class FakeLLMClient:
-            def __init__(self):
-                self.backend = FakeBackend()
-
-        class FakeAgent:
-            def __init__(self):
-                self.llmclient = FakeLLMClient()
-                self.llm_no = 0
-
-            def next_llm(self, n):
-                self.llm_no = n
-
-        fake_agent = FakeAgent()
-        with patch.object(manager, "make_agent", return_value=fake_agent):
-            if sess.agent is None:
-                sess.agent = manager.make_agent(sess)
-                if sess.llm_history:
-                    try:
-                        sess.agent.llmclient.backend.history = sess.llm_history
-                    except Exception:
-                        pass
-
-        assert sess.agent.llmclient.backend.history == []
-
-    def test_empty_history_list_no_inject(self, manager: AgentManager):
-        """Empty llm_history list should not overwrite agent's default state."""
-        sess = _make_session(sid="sess-continuity-3")
-        sess.llm_history = []
-        sess.agent = None
-        manager.sessions[sess.id] = sess
-
-        class FakeBackend:
-            def __init__(self):
-                self.history = [{"role": "system", "content": "default"}]
-                self.name = "test"
-
-        class FakeLLMClient:
-            def __init__(self):
-                self.backend = FakeBackend()
-
-        class FakeAgent:
-            def __init__(self):
-                self.llmclient = FakeLLMClient()
-                self.llm_no = 0
-
-            def next_llm(self, n):
-                self.llm_no = n
-
-        fake_agent = FakeAgent()
-        with patch.object(manager, "make_agent", return_value=fake_agent):
-            if sess.agent is None:
-                sess.agent = manager.make_agent(sess)
-                if sess.llm_history:
-                    try:
-                        sess.agent.llmclient.backend.history = sess.llm_history
-                    except Exception:
-                        pass
-
-        assert sess.agent.llmclient.backend.history == [{"role": "system", "content": "default"}]
-
-    def test_model_preserved_after_restart(self, manager: AgentManager):
-        """sess.llm_no should be applied to recreated agent via next_llm."""
-        sess = _make_session(sid="sess-continuity-4")
-        sess.llm_no = 3
-        sess.llm_history = [{"role": "user", "content": [{"type": "text", "text": "test"}]}]
-        sess.agent = None
-        manager.sessions[sess.id] = sess
-
-        class FakeBackend:
-            def __init__(self):
-                self.history = []
-                self.name = "test"
-
-        class FakeLLMClient:
-            def __init__(self):
-                self.backend = FakeBackend()
-
-        class FakeAgent:
-            def __init__(self):
-                self.llmclient = FakeLLMClient()
-                self.llm_no = 0
-                self.next_llm_calls = []
-
-            def next_llm(self, n):
-                self.llm_no = n
-                self.next_llm_calls.append(n)
-
-        fake_agent = FakeAgent()
-        with patch.object(manager, "make_agent", return_value=fake_agent):
-            if sess.agent is None:
-                sess.agent = manager.make_agent(sess)
-                if sess.llm_history:
-                    try:
-                        sess.agent.llmclient.backend.history = sess.llm_history
-                    except Exception:
-                        pass
-            agent = sess.agent
-            no = sess.llm_no
-            if no is not None and hasattr(agent, "next_llm"):
-                agent.next_llm(int(no))
-
-        assert fake_agent.llm_no == 3
-        assert fake_agent.next_llm_calls == [3]
-        assert fake_agent.llmclient.backend.history == sess.llm_history
 
     def test_persist_and_reload_preserves_llm_no(self, manager: AgentManager):
         """Full cycle: persist session with llm_no, reload, verify llm_no survives."""
@@ -571,7 +382,6 @@ class TestSessionContinuityAfterRestart:
         sess.first_message = meta["first_message"]
         sess.first_message_at = meta["first_message_at"]
         sess.llm_no = 5
-        sess.llm_history = [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
         manager.sessions[sess.id] = sess
         manager._persist_session(sess)
 
@@ -581,12 +391,11 @@ class TestSessionContinuityAfterRestart:
         reloaded = manager.sessions.get("sess-roundtrip")
         assert reloaded is not None
         assert reloaded.llm_no == 5
-        assert reloaded.llm_history[0]["content"][0]["text"] == "hello"
-        assert len(reloaded.llm_history) == 2
+        assert reloaded.agent is None and reloaded.messages == []
         assert reloaded.agent is None
 
 
-class TestDeferredSessionModelSwitch:
+class TestSessionModelSwitch:
     class FakeBackend:
         name = "model-a"
         history = []
@@ -595,35 +404,18 @@ class TestDeferredSessionModelSwitch:
         backend = None
 
         def __init__(self):
-            self.backend = TestDeferredSessionModelSwitch.FakeBackend()
+            self.backend = TestSessionModelSwitch.FakeBackend()
 
     class FakeAgent:
         def __init__(self):
             self.llm_no = 0
-            self.llmclient = TestDeferredSessionModelSwitch.FakeClient()
+            self.llmclient = TestSessionModelSwitch.FakeClient()
             self.next_llm_calls: list[int] = []
 
         def next_llm(self, no: int):
             self.next_llm_calls.append(no)
             self.llm_no = no
             self.llmclient.backend.name = f"model-{no}"
-
-    def test_running_turn_keeps_current_client_and_defers_new_binding(self, manager: AgentManager):
-        sess = _make_session("sess-running-switch")
-        sess.status = "running"
-        sess.llm_no = 0
-        sess.running_llm_no = 0
-        sess.running_model = "model-a"
-        sess.agent = self.FakeAgent()
-        manager.sessions[sess.id] = sess
-
-        result = manager.set_session_model(sess.id, 2)
-
-        assert sess.llm_no == 2
-        assert sess.agent.next_llm_calls == []
-        assert result["model"]["llmNo"] == 2
-        assert result["model"]["runningLlmNo"] == 0
-        assert result["model"]["runningModel"] == "model-a"
 
     def test_idle_session_switches_live_client_immediately(self, manager: AgentManager):
         sess = _make_session("sess-idle-switch")
@@ -635,56 +427,6 @@ class TestDeferredSessionModelSwitch:
         manager.set_session_model(sess.id, 2)
 
         assert sess.agent.next_llm_calls == [2]
-
-    def test_turn_captures_and_clears_running_model(self, manager: AgentManager):
-        import queue
-
-        sess = _make_session("sess-running-snapshot")
-        sess.llm_no = 2
-        fake_agent = self.FakeAgent()
-        observed: list[tuple[int | None, str | None]] = []
-
-        def put_task(_prompt, images=None):
-            observed.append((sess.running_llm_no, sess.running_model))
-            q = queue.Queue()
-            q.put({"done": "ok", "outputs": ["ok"]})
-            return q
-
-        fake_agent.put_task = put_task
-        fake_agent.inc_out = True
-        sess.agent = fake_agent
-        manager.sessions[sess.id] = sess
-        plan_state = sys.modules["plan_state"]
-        with patch.object(plan_state, "sync_plan_path_from_text", lambda *args: None, create=True):
-            manager.run_agent_turn(sess, "hello")
-
-        assert observed == [(2, "model-2")]
-        assert sess.running_llm_no is None
-        assert sess.running_model is None
-        assert sess.status == "idle"
-
-    def test_concurrent_sessions_keep_independent_next_model_bindings(self, manager: AgentManager):
-        sessions = []
-        for i in range(10):
-            sess = _make_session(f"sess-concurrent-{i}")
-            sess.status = "running"
-            sess.llm_no = 0
-            sess.agent = self.FakeAgent()
-            manager.sessions[sess.id] = sess
-            sessions.append(sess)
-
-        threads = [
-            threading.Thread(target=manager.set_session_model, args=(sess.id, i + 1))
-            for i, sess in enumerate(sessions)
-        ]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join(timeout=2)
-
-        assert [sess.llm_no for sess in sessions] == list(range(1, 11))
-        assert all(sess.agent.next_llm_calls == [] for sess in sessions)
-
 
 class TestConductorModelConfigResolution:
     def test_configured_model_wins(self):
@@ -1328,7 +1070,7 @@ class TestCanonicalSessionRestart:
         manager._load_sessions()
 
         assert set(manager.sessions) == {"sess-canonical"}
-        assert manager.active_session_id == "sess-canonical"
+        assert manager.active_session_id is None
         assert manager.sessions["sess-canonical"].updated_at == 11
 
 
@@ -1410,6 +1152,8 @@ def test_agent_constructor_owns_default_model(manager, monkeypatch, selected, ex
         def run(self):
             pass
 
+    from frontends import hub
+    monkeypatch.setattr(hub, "connect", lambda *a, **kw: None)
     monkeypatch.setattr(manager, "ensure_ga_import_path", lambda: Path(manager.ga_root))
     monkeypatch.setitem(sys.modules, "agentmain", _make_stub("agentmain", {"GenericAgent": FakeAgent}))
     monkeypatch.setattr(_mod, "_settings_doc", lambda: {"ui": {"llmNo": 4}})
@@ -1436,3 +1180,67 @@ def test_legacy_ui_model_is_neither_read_nor_written(manager, monkeypatch, tmp_p
     assert response.status == 200
     assert "llmNo" not in manager.config
     assert json.loads(settings.read_text(encoding="utf-8"))["ui"]["llmNo"] == 4
+
+
+class TestSharedServices:
+    @pytest.mark.parametrize('sid', ['frontends/conductor.py', 'reflect/scheduler.py'])
+    def test_online_service_is_reused_even_after_duplicate_exit(self, manager, tmp_path, monkeypatch, sid):
+        from types import SimpleNamespace
+        sm = TestManagedServiceOwnership.service_manager(tmp_path)
+        sm._catalog = {sid: {'id': sid, 'shared': True, 'port': 8900, 'cmd': ['unused']}}
+        sm.procs[sid] = SimpleNamespace(poll=lambda: 1, returncode=1)
+        monkeypatch.setattr(_mod, 'manager', manager)
+        monkeypatch.setattr(_mod, '_shared_service_alive', lambda svc: True)
+        def unexpected(*args, **kwargs):
+            raise AssertionError('must not spawn, stop, or restart a shared service')
+        monkeypatch.setattr(_mod.subprocess, 'Popen', unexpected)
+        state = sm.start_service(sid)['service']
+        assert state['running'] and state['status'] == 'running'
+        assert not state['owned'] and not state['managed'] and not state['portConflict']
+        assert not state['lastError'] and state['canStart']
+        assert sm.stop_service(sid)['error'] == 'not_owned'
+        assert sm.running_managed_ids() == []
+        monkeypatch.setattr(sm, 'stop_service', unexpected)
+        monkeypatch.setattr(sm, 'start_service', unexpected)
+        sm.stop_all_extras()
+        sm.restart_broken_extras()
+
+    def test_spawned_service_is_detached_and_never_owned(self, manager, tmp_path, monkeypatch):
+        from types import SimpleNamespace
+        sm = TestManagedServiceOwnership.service_manager(tmp_path)
+        sid = 'frontends/conductor.py'
+        sm._catalog[sid]['shared'] = True
+        calls = []
+        def spawn(cmd, **kw):
+            calls.append(kw)
+            return SimpleNamespace(poll=lambda: None)
+        monkeypatch.setattr(_mod, 'manager', manager)
+        monkeypatch.setattr(_mod, '_shared_service_alive', lambda svc: bool(calls))
+        monkeypatch.setattr(_mod.subprocess, 'Popen', spawn)
+        assert sm.start_service(sid)['ok']
+        assert sm.start_service(sid)['ok']
+        assert len(calls) == 1
+        kw = calls[0]
+        assert kw['stdout'] == _mod.subprocess.DEVNULL
+        assert kw['stdin'] == _mod.subprocess.DEVNULL
+        assert kw['env']['GA_ROOT'] == str(tmp_path)
+        if sys.platform == 'win32':
+            assert kw['creationflags'] & _mod.subprocess.DETACHED_PROCESS
+        else:
+            assert kw['start_new_session']
+        assert sm.stop_service(sid)['error'] == 'not_owned'
+        sm.stop_all_extras()
+        assert not sm.running_managed_ids()
+
+    def test_singleton_probe_does_not_fill_accept_backlog(self):
+        import socket
+        with socket.socket() as listener:
+            listener.bind(('127.0.0.1', 0))
+            listener.listen(1)
+            port = listener.getsockname()[1]
+            for _ in range(20):
+                assert _mod._shared_service_alive({'singleton_port': port})
+            listener.settimeout(.05)
+            with pytest.raises(socket.timeout):
+                listener.accept()
+        assert not _mod._shared_service_alive({'singleton_port': port})

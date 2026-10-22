@@ -23,9 +23,10 @@ live in [refactor](./archive/refactor/README.md).
   `v0.6.1`, again in `v0.6.2`) — the memory-distill prompt now lets the
   model merge and compress existing memory entries. The previous `1b6442f` shipped
   `v0.5.1` … `v0.6.0`, `efb3bc6` before it `v0.4.11` … `v0.5.0`. Audited
-  on main, not yet shipped: `5205f40` (2026-10-18; upstream's new mykey
-  store broke the managed loader, fixed in the runner). See
-  [GA baseline](./ga-baseline.md).
+  on main, not yet shipped: `b70079d` (2026-10-22; no break, no Galley
+  change), on top of `5205f40` (2026-10-18; upstream's new mykey store
+  broke the managed loader, fixed in the runner), which never shipped
+  either. See [GA baseline](./ga-baseline.md).
 - Product shape: dual-native local agent team orchestrator
 
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
@@ -810,8 +811,14 @@ and tests it, green on `98dec86c`; the runtime smoke is what's owed).
   `SubtaskDispatch` carries `sendBacks`; a CLI `session show` of the main
   chat shows report rows as `via: "system"` with a `summary`.
 
-- **GA baseline bump `f308ee7` -> `5205f40`** (audited 2026-10-18,
-  [devlog](./devlog/2026-10-18-ga-upstream-upgrade-f308ee7-to-5205f40.md)).
+- **GA baseline bump `f308ee7` -> `5205f40` -> `b70079d`** (audited
+  2026-10-18, [devlog](./devlog/2026-10-18-ga-upstream-upgrade-f308ee7-to-5205f40.md);
+  then 2026-10-22, [devlog](./devlog/2026-10-22-ga-upstream-upgrade-5205f40-to-b70079d.md)).
+  The second step changes no Galley code or patch: a wider DeepSeek
+  tool-markup retry, one new L0 memory rule for fresh managed state, and
+  upstream frontends Galley does not load. Its SOP step 8 (both desktop
+  modes and the four IM channels' restart checks, the latter still owed
+  from the first step) is listed in its devlog. The first step:
   Upstream moved mykey loading into a store `agentmain` reads directly,
   which bypassed Galley's managed loader (every managed session would have
   had no LLM); the runner now feeds the store and keeps the first load.

@@ -15,16 +15,113 @@ audited against.
 
 ## Current Baseline
 
-Locked commit: `5205f4080ff234f0ce84d8453f22fe236fc4008e`
+Locked commit: `b70079dce7d7768338a17c693f67b9d8dac541b5`
 
-- Tree hash: `02d1a54070e237a180e4eb01a7c0df04dc500b8f`
+- Tree hash: `bf14c4fd4387c65759f534bb972ebff019ac12a1`
 - Source: `lsdefine/GenericAgent` upstream `main`
-- Date audited: 2026-10-18
-- Shipped in: not yet (audited on main after `v0.6.2`)
+- Date audited: 2026-10-22
+- Shipped in: not yet (audited on main after `v0.6.2`, before `v0.7.0`)
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
-- Previous baseline: `f308ee7eb079cc402edf5a934fa65f6d71a4c7ad`
+- Previous baseline: `5205f4080ff234f0ce84d8453f22fe236fc4008e`
+  (tree `02d1a54070e237a180e4eb01a7c0df04dc500b8f`, audited 2026-10-18,
+  never shipped)
+- Delta (`5205f40..b70079d` = 11 commits): 12 files, +702 / −315. Nine
+  files are upstream frontends: `desktop_bridge.py` (+180 / −40),
+  `desktop_history.py` (+38), `hub.py` (+32 / −3), `hub_p2p.py`
+  (+2 / −1) and four test files. Engine core delta is one line of `ga.py`
+  (the DSML check); `agent_loop.py`, `agentmain.py`, `llmcore.py` and root
+  `pyproject.toml` had **zero diff** (`GA_DEPS` untouched). Patch-touched
+  files upstream changed: `ga.py` and `frontends/continue_cmd.py` (+6 / −3).
+  The rest is two `memory/` seed files.
+- Result: **no break in either mode, and no Galley code or patch change.**
+  All 27 patches replayed with no drift: the `ga.py` line is replaced one
+  for one, and the `continue_cmd.py` lines land below `0001`'s two hunks.
+  The rebuilt payload's diff against the previous one equals upstream's
+  diff line for line in all 12 files. Behavior to know (below): a wider
+  DeepSeek tool-markup retry, a new `turn_segs` key in a `continue_cmd`
+  function Galley does not call, one new L0 memory rule that reaches only
+  fresh managed state, and OCR CUDA flags in a seed script the bundle
+  cannot import.
+- Standing guard re-run: `grep -rn "hub.connect" managed-ga/code/` shows
+  one new hit, `frontends/desktop_bridge.py` `make_agent` (upstream
+  `5b48e7b`: upstream's desktop now joins its Hub), beside
+  `agentmain.py --reflect`, `hub.py` itself and `stapp.py`. Still none on
+  Galley's path: Galley never imports `desktop_bridge` (the runner only
+  names it in a comment, `runner/ga_session.py`).
+- Devlog: [GA upstream upgrade 5205f40 -> b70079d](./devlog/2026-10-22-ga-upstream-upgrade-5205f40-to-b70079d.md)
+
+New in the `5205f40` -> `b70079d` range:
+
+- `ga.py` — **the DSML tool-markup retry is wider** (upstream `7c79515`,
+  `do_no_tool`): a final reply is regenerated when its last 50 characters
+  (after `rstrip`) contain `</｜DSML｜` and it ends in `>`, instead of
+  only when it ends in exactly `</｜DSML｜ calls>`. Checked with the
+  bundled Python against both payloads: a malformed close such as
+  `</｜DSML｜function_calls>` is now retried (the previous payload took it
+  as the answer); a managed reply ending in `</next-suggestion>` and a
+  plain answer are not. A leak followed by a `<next-suggestion>` block
+  longer than the window still escapes, as before. Retries still go
+  through `_retry_or_exit` (exit on the third). Galley has no coupling:
+  `WorkbenchHandler` only routes `no_tool` through `dispatch`. Positive
+  for managed DeepSeek presets.
+- `frontends/continue_cmd.py` — `extract_ui_messages_text` gives each
+  assistant message a `turn_segs` list (one entry per LLM turn) next to
+  an unchanged `content` (upstream `4f5a928`). Its callers are upstream's
+  UIs only (`stapp.py`, `tuiapp_v2.py`, `tui_v3.py`, `desktop_history.py`).
+  The item 15 (f) / 16 functions Galley calls (`session_occupant`,
+  `_lock_path`, `continue_inplace` / `continue_copy` with `restore_wm`,
+  `begin_fresh_session`, `list_sessions`, `reset_conversation`, `restore`,
+  `handle_frontend_command`) and the lock files are byte-identical.
+- `frontends/desktop_bridge.py` / `desktop_history.py` / `hub.py` /
+  `hub_p2p.py` — upstream's desktop restores sessions lazily into GA
+  (`restore_agent`, `display_messages`), drops its own `llm_history` copy,
+  joins the Hub per session, and treats the scheduler and conductor as
+  shared services it never stops; the Hub gains `HubClient.close()`,
+  deferred replies and `phone_session()` behind `POST /api/sessions`;
+  `hub_p2p` waits for an offline paired phone without a timeout
+  (`5b48e7b`, `e92ef58`, `4e8029f`, `84ec7d5`, `eaa2e6f`, `326354b`,
+  `e6b1bce`). The payload carries these files but no Galley process
+  imports them: the IM supervisor imports only `wechatapp`, `fsapp`,
+  `tgapp` and `dcapp` (and their helpers). `phone_session` is reachable
+  only from the Hub server (`python hub.py`), which needs `fastapi` /
+  `uvicorn`, absent from the bundle. Item 12's reference
+  `_patch_chat_for_images` is byte-identical (it moved from line 1034 to
+  1108), and `run()` still ignores `task["images"]`, so `0008` and the
+  attach-mode wrapper stay.
+- `memory/memory_management_sop.md` — one new L0 rule: "绝对禁止写入：非用户
+  要求的模型固有臆想规定或限制，如“不准删除，需要备份，需要比对sha”等等"
+  (`b70079d`). It rides `managed-ga/state-seed/memory/`, copied
+  missing-only (`core/src/managed_runtime.rs` `copy_missing_tree`), so it
+  reaches new installs and users who reset the main chat; existing managed
+  state keeps its old file. External GA users get it when they pull.
+  Found while checking how it arrives (older than this range): the engine
+  reads L0 inside `do_start_long_term_update` from
+  `./memory/memory_management_sop.md`, relative to the **process cwd**
+  (`ga.py`, unpatched by `0001`). Desktop managed sessions (spawned with no
+  cwd, so the bridge sits in the state root) and WeChat (the supervisor
+  stays in the state root) read the user's L0. Feishu, Telegram and
+  Discord `chdir` into the channel's state directory after import
+  (`runner/managed_im_supervisor.py`), so there the tool's result is
+  "Memory Management SOP not found. Do not update memory." while its next
+  prompt still asks for a distillation; the model can still reach L0
+  through the L1 pointer (`../memory/…` from `temp/`). Reproduced on the
+  rebuilt payload with the bundled Python. Not changed in this upgrade;
+  see the devlog for the options.
+- `memory/ui_detect.py` — RapidOCR is built with `det_use_cuda` /
+  `rec_use_cuda` / `cls_use_cuda` set (`b70079d`). Seed file, missing-only,
+  like the line above. The bundle cannot import `ui_detect` at all, before
+  or after: it has no `numpy` (`import numpy` is line 21) and no
+  `rapidocr_onnxruntime` / `onnxruntime` (none are in `GA_DEPS`). With
+  `rapidocr-onnxruntime` 1.4.4 and `onnxruntime` 1.23.2 installed outside
+  the bundle on an Intel Mac, the new constructor works: it logs that
+  `CUDAExecutionProvider` is unavailable, falls back to
+  `CoreMLExecutionProvider`, and OCR returns text.
+
+Carried forward from the `f308ee7` -> `5205f40` range (2026-10-18):
+
+- Previous-previous baseline: `f308ee7eb079cc402edf5a934fa65f6d71a4c7ad`
   (tree `85f99e16330aa3474a1b034dac41d304a0e52f38`, audited 2026-10-06,
   shipped `v0.6.1`, `v0.6.2`)
 - Delta (`f308ee7..5205f40` = 17 commits): 188 files, +1014 / −28492.

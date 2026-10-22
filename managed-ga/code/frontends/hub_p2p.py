@@ -34,7 +34,8 @@ def install(app, *, web_port, token, here):
             connected = False
             try:
                 state["status"], state["error"] = "reconnecting", None
-                ws = await connect_saved(name, path=rooms, direct_timeout=15)
+                # 已配对候房不超时；信令断开仍立即失败并走退避。
+                ws = await connect_saved(name, path=rooms, direct_timeout=15, peer_timeout=None)
                 connected = True
                 try:
                     await export(ws)

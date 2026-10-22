@@ -2,8 +2,21 @@
 
 Patch stack id: `galley-managed-ga-patches-v1`
 
-Last replay verified: `2026-10-21` against upstream
-`5205f4080ff234f0ce84d8453f22fe236fc4008e` (27-patch stack through `0029`;
+Last replay verified: `2026-10-22` against upstream
+`b70079dce7d7768338a17c693f67b9d8dac541b5` (27-patch stack through `0029`;
+GA baseline bump from `5205f40`,
+[devlog](../../docs/devlog/2026-10-22-ga-upstream-upgrade-5205f40-to-b70079d.md)).
+No patch file changed and none was re-exported. Upstream's only edits to
+patched files are one `ga.py` line replaced one for one (`do_no_tool`) and
+three lines added to `frontends/continue_cmd.py` below `0001`'s two hunks,
+so every zero-context hunk keeps its line number. `build-managed-ga.sh`
+applied all 27 from a clean clone of `b70079d` and its `py_compile` sweep
+passed. The rebuilt payload's diff against the previous one equals
+upstream's `5205f40..b70079d` diff line for line in all 12 changed files
+(10 under `code/`, 2 under `state-seed/memory/`), so no patch body moved.
+`check-managed-ga-payload.mjs` and `check-ga-baseline-drift.mjs` passed.
+
+Previous replay (`2026-10-21`, `5205f40`, 27-patch stack through `0029`;
 same baseline, `0024` amended in place for IM polish ticket 01's Telegram
 dogfood: the expanded process is always a plain quote,
 `.scratch/im-polish/issues/01-telegram-discord-process-button.md`). Its

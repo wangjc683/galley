@@ -11,8 +11,10 @@ UI元素检测 - 基于 OmniParser-v2.0 的 icon_detect YOLO 模型 + RapidOCR
   elements = detect(pil_image)                 # 支持PIL.Image
   elements = detect(img, mode='crop')          # crop备选
 返回: [{'bbox':[x1,y1,x2,y2], 'type':'icon'|'text', 'label':str|None, 'confidence':float}]
-模式: match=YOLO+全图OCR IoU匹配(推荐,1.2s,无文字图标label=None可VLM保底) | crop=拼接crop OCR(备选,更精确,2.3s)
-依赖: ultralytics, rapidocr-onnxruntime, pillow, numpy
+模式: match=YOLO+全图OCR IoU匹配(推荐,GPU约1.2s,无文字图标label=None可VLM保底) | crop=拼接crop OCR(备选,更精确)
+依赖: ultralytics, rapidocr-onnxruntime, pillow, numpy；GPU另需兼容的onnxruntime-gpu及CUDA/cuDNN
+OCR: 自动优先 CUDAExecutionProvider(本机3090实测1.1s, CPU约6s)，不可用回退CPU
+权重: temp/weights/icon_detect/model.pt (OmniParser-v2.0 icon_detect, 40MB)
 """
 from pathlib import Path
 from PIL import Image, ImageDraw
@@ -25,7 +27,7 @@ DEFAULT_MODEL = str(Path(__file__).resolve().parent.parent / 'temp' / 'weights' 
 
 try:
     from rapidocr_onnxruntime import RapidOCR
-    _ocr = RapidOCR()
+    _ocr = RapidOCR(det_use_cuda=True, rec_use_cuda=True, cls_use_cuda=True)
 except ImportError: _ocr = None
 
 _YOLO = None

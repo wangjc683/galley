@@ -239,9 +239,14 @@ class Session:
     updated_at: float = field(default_factory=time.time)
     messages: List[dict] = field(default_factory=list)
     msg_seq: int = 0
+    output_cache_source: Any = None
+    output_cache_count: int = 0
+    output_cache_tail: int = 0
+    output_cache_signature: Any = None
     partial: Optional[dict] = None
     status: str = "idle"  # idle|running|error|cancelled
     agent: Any = None
+    pending_restore: bool = False  # Only records read back from storage await restoration.
     thread: Optional[threading.Thread] = None
     cancel_requested: bool = False
     active_turn_id: str = ""
@@ -250,7 +255,6 @@ class Session:
     untitled: bool = True
     plan_scan_baseline: int = 0
     plan_path: str = ""
-    llm_history: Optional[List[dict]] = None  # memory only; reconstructed from MR/L4
     first_message: str = ""
     first_message_at: float = 0
     log_refs: List[dict] = field(default_factory=list)
@@ -450,22 +454,18 @@ class AgentManager:
             self._persist_session(s, strict=strict)
 
     def _session_from_item(self, item: dict) -> Optional["Session"]:
-        from desktop_history import legacy_anchors, load
-        anchors = legacy_anchors(item)
+        from desktop_history import metadata
+        meta = metadata(item)
         item = canonical_session_record(item, default_cwd=self.ga_root)
-        restored = load(self.ga_root, item, anchors)
-        if restored is None:
-            return None
-        msgs, history, meta = restored
         return Session(id=item["id"], title=item["title"], cwd=item["cwd"],
                        created_at=item["created_at"], updated_at=item["updated_at"],
-                       messages=msgs, msg_seq=max(item["msg_seq"], len(msgs)),
                        pinned=item["pinned"], untitled=item["untitled"],
-                       plan_scan_baseline=min(item["plan_scan_baseline"], len(msgs)),
+                       plan_scan_baseline=item["plan_scan_baseline"],
                        plan_path=_sanitize_desktop_plan_path(item["id"], item["plan_path"]),
-                       status="idle", agent=None, llm_history=history, llm_no=item["llm_no"],
+                       llm_no=item["llm_no"],
                        first_message=meta["first_message"], first_message_at=meta["first_message_at"],
-                       log_refs=meta["log_refs"], has_content=meta["has_content"])
+                       log_refs=meta["log_refs"], has_content=meta["has_content"],
+                       pending_restore=True)
 
     def _load_sessions(self):
         # New format: one file per session under temp/desktop_sessions/.
@@ -510,8 +510,6 @@ class AgentManager:
         except Exception as e:
             bridge_print(f"[bridge] migrate sessions failed: {e}")
 
-        if self.sessions:
-            self.active_session_id = max(self.sessions.values(), key=lambda s: s.updated_at).id
 
     def import_sessions(self, source_dir: str) -> dict:
         """把 source 的桌面会话合并进当前列表(按 id 去重)。
@@ -758,16 +756,51 @@ class AgentManager:
             if sess.llm_no is not None and sess.llm_no != agent.llm_no:
                 agent.next_llm(int(sess.llm_no))
             sess.llm_no = agent.llm_no
-            if sess.llm_history:
-                from continue_cmd import _derive_hist_info, _load_history_into
-                _load_history_into(agent, copy.deepcopy(sess.llm_history), _derive_hist_info(sess.llm_history))
+            if sess.has_content:
+                from desktop_history import restore_agent
+                meta = restore_agent(agent, self.ga_root, self._session_dict(sess))
+                sess.log_refs = meta["log_refs"]
             agent.inc_out = True
             agent.verbose = True
             threading.Thread(target=agent.run, daemon=True, name=f"GA-{sess.id}").start()
+            sess.agent = agent
+            sess.pending_restore = False
+            self._sync_display_cache(sess)
+            from frontends import hub
+            hub.connect(agent, f"desktop-{sess.id}",
+                        put_task=lambda text: self._hub_command(sess, "put", text),
+                        abort=lambda: self._hub_command(sess, "abort"),
+                        llm=lambda no=None: self._hub_command(sess, "llm", no))
             return agent
         finally:
             with contextlib.suppress(Exception):
                 os.chdir(old_cwd)
+
+    def _hub_command(self, sess: Session, op: str, text=None):
+        """Use the same entrance as Desktop; Hub reads state/output directly from GA."""
+        try:
+            with self.mutation():
+                if self.sessions.get(sess.id) is not sess:
+                    return {"error": "session deleted", "code": "gone"}
+                if op == "put":
+                    if not isinstance(text, str) or not text.strip():
+                        return {"error": "text must be non-empty", "code": "badop"}
+                    if self._session_has_unfinished_work(sess):
+                        return {"error": "session is busy", "code": "busy"}
+                    return self.submit_prompt(sess.id, text)
+                if op == "llm":
+                    agent = sess.agent
+                    if text is None:
+                        return {"cur": agent.llm_no, "items": [n for _, n, _ in agent.list_llms()]}
+                    if self._session_has_unfinished_work(sess):
+                        return {"error": "session is busy", "code": "busy"}
+                    if type(text) is not int or not 0 <= text < len(agent.list_llms()):
+                        return {"error": f"no llm #{text}", "code": "badop"}
+                    self.set_session_model(sess.id, text)
+                    return {"ok": 1, "cur": agent.llm_no}
+                return self.cancel(sess.id)
+        except MaintenanceConflict as exc:
+            return {"error": str(exc), "code": "busy"}
 
     @staticmethod
     def _base_display_name(var: str, cfg: Optional[dict]) -> str:
@@ -907,13 +940,46 @@ class AgentManager:
             return {"current": None, "isMixin": False, "llmNo": sess.llm_no,
                     "runningLlmNo": sess.running_llm_no, "runningModel": sess.running_model}
 
+    def _sync_display_cache(self, sess: Session):
+        """Disposable projection. Completed prefixes are reused; GA owns all text."""
+        agent = sess.agent
+        if agent is None or sess.status == "running" or getattr(agent, "is_running", False):
+            return  # stream queue supplies the temporary in-progress overlay
+        tasks = getattr(agent, "all_outputs", None)
+        if tasks is None:
+            return
+        signature = (len(tasks), str(tasks[-1].get("input", "")),
+                     tuple(tasks[-1].get("outputs") or [])) if tasks else (0,)
+        reset = sess.output_cache_source is not tasks or len(tasks) < sess.output_cache_count
+        if not reset and signature == sess.output_cache_signature and (sess.messages or not tasks):
+            return
+        from desktop_history import display_messages
+        start = 0 if reset or not sess.messages else max(0, sess.output_cache_count - 1)
+        offset = 0 if start == 0 else sess.output_cache_tail
+        projected = display_messages(tasks[start:])
+        for i, message in enumerate(projected, offset):
+            # Retain display-only metadata (attachments/timestamps), never cached text.
+            old = sess.messages[i] if i < len(sess.messages) else {}
+            projected[i - offset] = {**old, **message, "id": i + 1,
+                                     "ts": message.get("ts") or old.get("ts")}
+        sess.messages[offset:] = projected
+        sess.msg_seq = len(sess.messages)
+        sess.output_cache_source = tasks
+        sess.output_cache_count = len(tasks)
+        last_size = len(display_messages(tasks[-1:])) if tasks else 0
+        sess.output_cache_tail = len(sess.messages) - last_size
+        sess.output_cache_signature = signature
+
     def snapshot(self, sess: Session, include_messages: bool = True) -> dict:
+        if include_messages:
+            self._sync_display_cache(sess)
         out = {
             "sessionId": sess.id,
             "id": sess.id,
             "title": sess.title,
             "cwd": sess.cwd,
             "status": sess.status,
+            "loaded": not sess.pending_restore,
             "createdAt": sess.created_at,
             "updatedAt": sess.updated_at,
             "lastError": sess.last_error,
@@ -977,6 +1043,9 @@ class AgentManager:
             if sess.agent and hasattr(sess.agent, "abort"):
                 with contextlib.suppress(Exception):
                     sess.agent.abort()
+            peer = getattr(sess.agent, "_hub", None)
+            if peer:
+                peer.close()
             if self._session_has_unfinished_work(sess):
                 self._retired_sessions[sid] = sess
             emit_session_state(sess, "closed")
@@ -998,6 +1067,11 @@ class AgentManager:
                 raise web.HTTPNotFound(text=json.dumps({"error": f"session not found: {sid}"}, ensure_ascii=False), content_type="application/json")
             if sess.status == "running":
                 raise web.HTTPConflict(text=json.dumps({"error": "session is already running"}, ensure_ascii=False), content_type="application/json")
+            if sess.agent is None and _e2e_control_token() is None:
+                if sess.pending_restore:
+                    self.restore_context(sid)
+                else:
+                    self.make_agent(sess)
             extra = {}
             if image_ids:
                 extra["image_ids"] = image_ids
@@ -1098,7 +1172,8 @@ class AgentManager:
                 emit_session_state(sess, "idle")
                 return
             if sess.agent is None:
-                sess.agent = self.make_agent(sess)
+                with self.mutation():
+                    self.make_agent(sess)
             agent = sess.agent
             from desktop_history import preview
             log_path = getattr(agent, "log_path", None)
@@ -1214,8 +1289,6 @@ class AgentManager:
                 if turn_started:
                     msg_extra["executionMs"] = round((time.time() - turn_started) * 1000)
                 self.add_message(sess, "assistant", full, **msg_extra)
-                try: sess.llm_history = json.loads(json.dumps(agent.llmclient.backend.history, ensure_ascii=False, default=str))
-                except Exception: pass
                 sess.running_llm_no = None
                 sess.running_model = None
                 sess.status = "idle"
@@ -1243,6 +1316,7 @@ class AgentManager:
             sess = self.sessions.get(sid)
             if not sess:
                 raise web.HTTPNotFound(text=json.dumps({"error": f"session not found: {sid}"}, ensure_ascii=False), content_type="application/json")
+            self._sync_display_cache(sess)
             msgs = [m for m in sess.messages if int(m.get("id", 0)) > after]
             if limit > 0:
                 msgs = msgs[-limit:]
@@ -1293,17 +1367,27 @@ class AgentManager:
         return {"ok": True, "sessionId": sid}
 
     def restore_context(self, sid: str) -> dict:
-        with self.lock:
+        # Serialize publication with mutations: concurrent clicks cannot create duplicate GAs.
+        with self.mutation():
             sess = self.sessions.get(sid)
             if not sess:
-                raise web.HTTPNotFound(text=json.dumps({"error": f"session not found: {sid}"}, ensure_ascii=False), content_type="application/json")
-            if sess.agent is not None:
-                return {"ok": True, "sessionId": sid, "restored": False, "reason": "agent already alive"}
-        agent = self.make_agent(sess)
-        with self.lock:
-            sess.agent = agent
+                raise web.HTTPNotFound(text=json.dumps({"error": f"session not found: {sid}"}), content_type="application/json")
+            if not sess.pending_restore:
+                return {"ok": True, "sessionId": sid, "restored": False, "loaded": True}
+            try:
+                self.make_agent(sess)
+            except FileNotFoundError:
+                # No source remains: omit the record, without deleting its metadata file.
+                self.sessions.pop(sid, None)
+                raise web.HTTPNotFound(text=json.dumps({"error": "history source no longer exists"}), content_type="application/json")
+            except Exception as exc:
+                sess.last_error = str(exc)
+                raise web.HTTPInternalServerError(text=json.dumps({"error": str(exc)}), content_type="application/json")
             sess.status = "idle"
-        return {"ok": True, "sessionId": sid, "restored": True, "messageCount": len(sess.llm_history or sess.messages)}
+            sess.last_error = ""
+            self._persist_session(sess)
+            return {"ok": True, "sessionId": sid, "restored": True, "loaded": True,
+                    "messageCount": len(sess.messages)}
 
     def set_session_model(self, sid: str, llm_no: int) -> dict:
         """Bind a model to a session.
@@ -1322,6 +1406,7 @@ class AgentManager:
                     sess.llm_no = sess.agent.llm_no
             sess.updated_at = time.time()
             self._persist_session(sess)
+        emit_session_state(sess, "model")
         return {"ok": True, "sessionId": sid, "llmNo": sess.llm_no, "model": self._live_model(sess)}
 
 
@@ -1434,12 +1519,9 @@ def discover_extra_services(ga_root: Path) -> List[dict]:
         out.append({
             "id": "reflect/scheduler.py",
             "cmd": [sys.executable, "agentmain.py", "--reflect", "reflect/scheduler.py"],
+            "shared": True, "singleton_port": 45762,
         })
-    # conductor 跟 scheduler 一样,bridge 启动时自动拉起。--no-browser 是关键:
-    # conductor.py 默认会用 webbrowser.open 在用户浏览器弹一个 8900 端口 UI,
-    # 桌面版自启时不需要这个独立 UI(用户从「指挥家」页直接访问)。
-    # The desktop conductor evolves with this bridge. Keep both package-owned and inject the
-    # external core through GA_ROOT instead of executing arbitrary UI glue from that checkout.
+    # Shared services may be launched, but never owned by the desktop.
     conductor = APP_DIR / "conductor.py"
     if conductor.is_file():
         conductor_port = _configured_conductor_port()
@@ -1452,7 +1534,7 @@ def discover_extra_services(ga_root: Path) -> List[dict]:
                 "--port",
                 str(conductor_port),
             ],
-            "port": conductor_port,
+            "port": conductor_port, "shared": True,
         })
     return out
 
@@ -1465,6 +1547,23 @@ def _port_alive(port: Optional[int]) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(0.3)
         return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _shared_service_alive(svc: dict) -> bool:
+    port = svc.get("singleton_port")
+    if not port:
+        return _port_alive(svc.get("port"))
+    # Scheduler's lock socket never accepts: probing with connect fills its backlog.
+    import errno
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError as exc:
+            if exc.errno == errno.EADDRINUSE or getattr(exc, "winerror", None) == 10048:
+                return True
+            raise
+    return False
 
 
 def _mem_mb(pid: Optional[int]) -> Optional[int]:
@@ -1582,6 +1681,18 @@ class ServiceManager:
 
     def _state(self, sid: str, *, err: str = "") -> dict:
         proc = self.procs.get(sid)
+        svc = self._catalog.get(sid, {})
+        if svc.get("shared"):
+            running = _shared_service_alive(svc)
+            failed = proc is not None and proc.poll() is not None and not running
+            error = "" if running else err or (f"exit code {proc.returncode}" if failed else "")
+            return {
+                "id": sid, "status": "running" if running else "error" if error else "offline",
+                "running": running, "owned": False, "external": running,
+                "portConflict": False, "port": svc.get("port") or svc.get("singleton_port"),
+                "pid": None, "lastError": error, "errorKey": "",
+                "lastWarning": "", "warningKey": "",
+            }
         owned = proc is not None and proc.poll() is None
         running = owned
         status = "running" if owned else "offline"
@@ -1668,7 +1779,8 @@ class ServiceManager:
         item["name"] = sid
         item["memMb"] = _mem_mb(item.get("pid"))
         item["cpuPct"] = _cpu_pct(item.get("pid"))
-        item["managed"] = True
+        item["managed"] = not self._catalog[sid].get("shared", False)
+        item["canStart"] = True
         return item
 
     def list_panel_state(self) -> List[dict]:
@@ -1703,6 +1815,8 @@ class ServiceManager:
             svc = self._catalog.get(sid)
             if not svc:
                 raise KeyError(sid)
+            if svc.get("shared"):
+                return self._ensure_shared(sid, svc)
             proc = self.procs.get(sid)
             if proc is not None and proc.poll() is None:
                 return {"ok": True, "service": self._managed_state(sid)}
@@ -1744,6 +1858,31 @@ class ServiceManager:
                 return {"ok": False, "error": item["lastError"] or "start_failed", "service": item}
             return {"ok": True, "service": item}
 
+    def _ensure_shared(self, sid: str, svc: dict) -> dict:
+        if not _shared_service_alive(svc):
+            proc = self.procs.get(sid)
+            if proc is None or proc.poll() is not None:
+                kw = dict(cwd=str(self.ga_root), stdin=subprocess.DEVNULL,
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                          env={**os.environ, "GA_ROOT": str(self.ga_root)})
+                if sys.platform == "win32":
+                    kw["creationflags"] = (subprocess.DETACHED_PROCESS |
+                                           subprocess.CREATE_NEW_PROCESS_GROUP)
+                else:
+                    kw["start_new_session"] = True
+                proc = subprocess.Popen(svc["cmd"], **kw)
+                self.procs[sid] = proc  # Observe this launch only; never terminate it.
+            deadline = time.monotonic() + 10
+            while not _shared_service_alive(svc) and time.monotonic() < deadline:
+                if proc.poll() is not None:
+                    break
+                time.sleep(.1)
+        item = self._managed_state(sid)
+        if not item["running"] and not item["lastError"]:
+            item = self._managed_state(sid, err="service not ready")
+        self._emit({"type": "service.changed", "service": item})
+        return {"ok": item["running"], "error": item["lastError"], "service": item}
+
     def autostart_extras(self) -> None:
         """Auto-start non-IM services on bridge boot. Currently:
           - reflect/scheduler.py (drives L4 archive cron every 12h).
@@ -1758,6 +1897,8 @@ class ServiceManager:
 
     def stop_all_extras(self) -> None:
         for sid in sorted(set(self._catalog) - set(self._im_catalog)):
+            if self._catalog[sid].get("shared"):
+                continue
             with contextlib.suppress(Exception):
                 self.stop_service(sid)
 
@@ -1777,11 +1918,9 @@ class ServiceManager:
         return bool(buf) and any("Exception in thread conductor-agent" in ln for ln in buf)
 
     def restart_broken_extras(self) -> None:
-        """mykey 被整体重写(导入密钥/编辑渠道配置)后,只重启「已经坏掉」的
-        conductor/scheduler。健康运行中的进程不动——它们会在下个任务靠自身 mtime
-        热重载新 key,强行重启反而会打断正在跑的任务。"""
+        """Retry failed owned extras after configuration changes; never restart shared services."""
         for sid in sorted(set(self._catalog) - set(self._im_catalog)):
-            if not self._extra_is_broken(sid):
+            if self._catalog[sid].get("shared") or not self._extra_is_broken(sid):
                 continue
             with contextlib.suppress(Exception):
                 self.stop_service(sid)
@@ -1796,6 +1935,8 @@ class ServiceManager:
         with self.lock:
             if sid not in self._catalog:
                 raise KeyError(sid)
+            if self._catalog[sid].get("shared"):
+                return {"ok": False, "error": "not_owned", "service": self._managed_state(sid)}
             self._stopping.add(sid)
             proc = self.procs.get(sid)
             stop_error = ""
@@ -2244,8 +2385,7 @@ async def cancel_handler(request):
 
 async def restore_handler(request):
     sid = request.match_info["sid"]
-    with manager.mutation():
-        return json_ok(manager.restore_context(sid))
+    return json_ok(await asyncio.to_thread(manager.restore_context, sid))
 
 
 async def session_model_handler(request):
