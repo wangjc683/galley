@@ -5,6 +5,7 @@ import { zhCopy } from "@/i18n/locales/zh";
 import { EMPTY_TODO, type TodoItem } from "@/lib/assistant-todo";
 import {
   assistantRowLine,
+  assistantTaskCancellable,
   doneRowLine,
   nextTodoRefreshMs,
   readingPanelClosesTodo,
@@ -15,6 +16,7 @@ import {
   todoCancelled,
   todoChecked,
   todoMetaParts,
+  todoNotesLine,
   todoOverdueDays,
   todoPanelEmpty,
   todoPanelOpened,
@@ -336,6 +338,53 @@ describe("Galley's rows, routines and done items", () => {
     const fired = task({ state: "fired", at: local(2026, 10, 15, 9, 0) });
     expect(doneRowLine(fired, TODAY, "zh-CN", zh)).toBe("昨天 09:00 · 已提醒");
   });
+
+  it("lets Galley's own one-off reminders be cancelled while they can still go off (ticket 80)", () => {
+    expect(assistantTaskCancellable(task())).toBe(true);
+    expect(assistantTaskCancellable(task({ state: "paused" }))).toBe(true);
+    // One that starts a session is the reminder card's 「取消」 too.
+    expect(assistantTaskCancellable(task({ target: "session" }))).toBe(true);
+    // Gone off: not in 「Galley 在办」, and nothing to cancel.
+    expect(assistantTaskCancellable(task({ state: "fired" }))).toBe(false);
+    // Not a subtask, not a routine, not a to-do.
+    expect(
+      assistantTaskCancellable(
+        task({ kind: "subtask", id: "s-sub", state: "running" }),
+      ),
+    ).toBe(false);
+    expect(
+      assistantTaskCancellable(
+        task({ repeat: { kind: "daily" }, timeOfDay: "08:00" }),
+      ),
+    ).toBe(false);
+    expect(assistantTaskCancellable(todo())).toBe(false);
+  });
+});
+
+describe("a to-do's notes (ticket 80)", () => {
+  it("are one line: trimmed, breaks and runs of space one space; in full for the hover", () => {
+    expect(
+      todoNotesLine(
+        todo({ notes: "  王老师\n电话 138 0000 0000\n\n  A 座   3 楼 " }),
+      ),
+    ).toEqual({
+      text: "王老师 电话 138 0000 0000 A 座 3 楼",
+      full: "王老师\n电话 138 0000 0000\n\n  A 座   3 楼",
+    });
+  });
+
+  it("are not drawn when there are none, only blanks, or the to-do is done", () => {
+    expect(todoNotesLine(todo())).toBeNull();
+    expect(todoNotesLine(todo({ notes: "" }))).toBeNull();
+    expect(todoNotesLine(todo({ notes: " \n\t " }))).toBeNull();
+    expect(
+      todoNotesLine(todo({ state: "done", notes: "A 座 3 楼" })),
+    ).toBeNull();
+    // Overdue ones keep theirs.
+    expect(
+      todoNotesLine(todo({ overdue: true, notes: "A 座 3 楼" }))?.text,
+    ).toBe("A 座 3 楼");
+  });
 });
 
 describe("the daily review's name (ticket 74)", () => {
@@ -536,6 +585,72 @@ describe("the list", () => {
         yours: { today: [], later: [], anytime: [todo()] },
       }),
     ).toBe(false);
+  });
+
+  // Ticket 80 (ruling 128 point 3): the review Core seeds with the main
+  // chat does not count.
+  describe("with the daily review", () => {
+    const review = task({
+      id: "sched_review",
+      text: "Daily review: read wake.md and go over what is in hand.",
+      createdBy: "agent",
+      agent: "galley-review",
+      repeat: { kind: "daily" },
+      timeOfDay: "09:00",
+      createdIn: undefined,
+    });
+    const routine = task({
+      id: "sched_daily",
+      text: "早报",
+      repeat: { kind: "daily" },
+      timeOfDay: "08:00",
+    });
+
+    it("is empty with the review alone, running or paused", () => {
+      expect(todoPanelEmpty({ ...EMPTY_TODO, routine: [review] })).toBe(true);
+      expect(
+        todoPanelEmpty({
+          ...EMPTY_TODO,
+          routine: [{ ...review, state: "paused", at: undefined }],
+        }),
+      ).toBe(true);
+    });
+
+    it("is not with another routine beside it", () => {
+      expect(
+        todoPanelEmpty({ ...EMPTY_TODO, routine: [review, routine] }),
+      ).toBe(false);
+      expect(todoPanelEmpty({ ...EMPTY_TODO, routine: [routine] })).toBe(false);
+    });
+
+    it("is not with a to-do, or anything in another group", () => {
+      expect(
+        todoPanelEmpty({
+          ...EMPTY_TODO,
+          yours: { today: [], later: [todo()], anytime: [] },
+          routine: [review],
+        }),
+      ).toBe(false);
+      expect(
+        todoPanelEmpty({
+          ...EMPTY_TODO,
+          assistant: [task()],
+          routine: [review],
+        }),
+      ).toBe(false);
+      expect(
+        todoPanelEmpty({
+          ...EMPTY_TODO,
+          done: [todo({ state: "done" })],
+          routine: [review],
+        }),
+      ).toBe(false);
+    });
+
+    it("is empty, as it always was, once the review is cancelled", () => {
+      // Core leaves a cancelled task out of every group.
+      expect(todoPanelEmpty({ ...EMPTY_TODO, routine: [] })).toBe(true);
+    });
   });
 
   it("is read again when the soonest timed to-do falls due", () => {

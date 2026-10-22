@@ -27,11 +27,13 @@ import { useCopy, useLanguage } from "@/lib/i18n";
 import { StatusIcon } from "@/lib/status-icon";
 import {
   assistantRowLine,
+  assistantTaskCancellable,
   doneRowLine,
   routineRowLine,
   todoChecked,
   todoMetaParts,
   type TodoMetaPart,
+  todoNotesLine,
   todoPanelEmpty,
   todoReminderCancellable,
   todoRowText,
@@ -80,20 +82,23 @@ export interface TodoPanelProps {
  *   今天 / 以后 / 随时
  *               the user's to-dos not done (overdue first under 今天),
  *               with no label over them (ruling 98): a box, the title,
- *               when it is due and its reminder
+ *               when it is due and its reminder, its notes (ticket 80)
  *   Galley 在办  its subtasks and the one-off tasks it will come back
  *               to: no box, the session rows' status glyphs
  *   例行         repeating tasks: the rule and the next time
  *   已完成       the last seven days, folded, with its count
  *
- * Empty groups are not drawn. The actions are only these: tick and
- * untick the user's own (TodoCheck), cancel a to-do's reminder — where
- * the panel is — and on hover 「说说这件」, which quotes the title into
- * the main chat's composer and keeps the panel open. A title goes where
- * the thing came from: the reply that noted it (the 查找聊天记录 jump), a
- * subtask, a scheduled run's session. A jump out of the panel takes the
- * panel along (lib/todo-open.ts). Escape closes it from anywhere but a
- * text field, as it does the reading panel.
+ * Empty groups are not drawn; with nothing but the daily review, the
+ * empty state is, and 例行 under it (ticket 80, `todoPanelEmpty`). The
+ * actions are only these: tick and untick the user's own (TodoCheck),
+ * cancel a to-do's reminder or one of Galley's own one-off reminders
+ * (ticket 80) — where the panel is — and on hover 「说说这件」, which
+ * quotes the title into the main chat's composer and keeps the panel
+ * open. A title goes where the thing came from: the reply that noted it
+ * (the 查找聊天记录 jump), a subtask, a scheduled run's session. A jump
+ * out of the panel takes the panel along (lib/todo-open.ts). Escape
+ * closes it from anywhere but a text field, as it does the reading
+ * panel.
  */
 export function TodoPanel({
   mainChatId,
@@ -152,17 +157,16 @@ export function TodoPanel({
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-4 pt-2">
-        {loaded && todoPanelEmpty(todo) ? (
-          <TodoPanelEmpty onTalk={talk} />
-        ) : (
-          <TodoPanelGroups
-            todo={todo}
-            mainChatId={mainChatId}
-            onGo={go}
-            onTalkAbout={talkAbout}
-            defaultDoneOpen={defaultDoneOpen}
-          />
-        )}
+        {loaded && todoPanelEmpty(todo) && <TodoPanelEmpty onTalk={talk} />}
+        {/* Empty, this draws 例行 alone, when the daily review is there
+            (ticket 80); before the first read, nothing. */}
+        <TodoPanelGroups
+          todo={todo}
+          mainChatId={mainChatId}
+          onGo={go}
+          onTalkAbout={talkAbout}
+          defaultDoneOpen={defaultDoneOpen}
+        />
         <AutostartHint todo={todo} />
       </div>
     </div>
@@ -346,8 +350,11 @@ const LINE_TONES: Record<TodoLineTone, string> = {
  * One row: the leading column (a box or a glyph, on the title's line),
  * the title (one line, cut; a button when it leads somewhere), a second
  * line, and the hover actions over the row's right end — the title
- * gives way to them as a sidebar row's does to its ⋯. A failed write
- * says why on a line under it.
+ * gives way to them as a sidebar row's does to its ⋯. A to-do's notes
+ * (ticket 80) go on a line under those, outside the box the actions
+ * centre in, so a row with notes holds them where a row without does:
+ * between the title and the second line, or on a lone title. A failed
+ * write says why on a line under it all.
  */
 function RowShell({
   item,
@@ -356,6 +363,7 @@ function RowShell({
   leading,
   titleClass,
   line,
+  notes,
   actions,
   failure,
 }: {
@@ -365,6 +373,7 @@ function RowShell({
   leading: ReactNode;
   titleClass?: string;
   line?: ReactNode;
+  notes?: ReactNode;
   actions?: ReactNode[];
   failure?: string | null;
 }) {
@@ -422,6 +431,7 @@ function RowShell({
           </div>
         )}
       </div>
+      {notes}
       {failure && (
         <p
           role="alert"
@@ -458,8 +468,8 @@ function useTodoWrite(id: string) {
 }
 
 /** One of the user's to-dos: the box, the title, when it is due and
- * its reminder (ruling 97); 「说说这件」 on the right, and
- * 「取消提醒」 beside a reminder still to go
+ * its reminder (ruling 97), its notes under them (ticket 80);
+ * 「说说这件」 on the right, and 「取消提醒」 beside a reminder still to go
  * off — by the thing it removes, and not a second target beside the
  * first at the row's end (deferred.md 「session 行 hover 置顶按钮」: two
  * precise targets side by side make the row's hover loud). */
@@ -478,6 +488,7 @@ function YourRow({
     inToday,
   });
   const canCancelReminder = !checked && todoReminderCancellable(item);
+  const notes = todoNotesLine(item);
   return (
     <RowShell
       {...props}
@@ -494,22 +505,65 @@ function YourRow({
           parts={parts}
           after={
             canCancelReminder && (
-              <IconButton
-                ariaLabel={copy.todo.cancelReminder}
-                size="xs"
+              <CancelReminder
                 disabled={cancelling}
                 onClick={() => cancelReminder(item.id)}
-                className="-my-0.5 ml-0.5 shrink-0 opacity-0 group-focus-within/todo-row:opacity-100 group-hover/todo-row:opacity-100"
-              >
-                <BellSimpleSlash size={12} weight="thin" />
-              </IconButton>
+              />
             )
           }
         />
       }
+      notes={notes && <NotesLine text={notes.text} full={notes.full} />}
       actions={[<TalkAbout key="talk" item={item} onTalkAbout={onTalkAbout} />]}
       failure={failure && todoFailureText(failure, copy)}
     />
+  );
+}
+
+/** 「取消提醒」, on hover at the end of a row's second line, outside what
+ * the line cuts: a to-do's reminder, and since ticket 80 one of Galley's
+ * own one-off reminders — the same button in both. */
+function CancelReminder({
+  disabled,
+  onClick,
+}: {
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const copy = useCopy();
+  return (
+    <IconButton
+      ariaLabel={copy.todo.cancelReminder}
+      size="xs"
+      disabled={disabled}
+      onClick={onClick}
+      className="-my-0.5 ml-0.5 shrink-0 opacity-0 group-focus-within/todo-row:opacity-100 group-hover/todo-row:opacity-100"
+    >
+      <BellSimpleSlash size={12} weight="thin" />
+    </IconButton>
+  );
+}
+
+/**
+ * A to-do's notes (ticket 80, ruling 128 point 5): 12px `ink-muted`, one
+ * line, cut, its breaks and runs of space one space; cut, the hover
+ * gives them in full, as a title's does. Under the second line, or the
+ * title when there is none, at the title's start (the leading column
+ * and its gap: 36px). Its own block under the row's box, pulled up 4px
+ * into the box's 6px foot so it sits 2px under the line above, as the
+ * second line sits under the title, and with the row's 6px foot below.
+ */
+function NotesLine({ text, full }: { text: string; full: string }) {
+  return (
+    <div className="-mt-1 pb-1.5 pl-9 pr-2.5">
+      <p
+        data-role="todo-notes"
+        className="truncate text-[12px] leading-[1.4] text-ink-muted"
+        onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, full)}
+      >
+        {text}
+      </p>
+    </div>
   );
 }
 
@@ -538,20 +592,41 @@ function MetaLine({
   );
 }
 
-/** What Galley is on: the session rows' glyph, the title, the state. */
+/** What Galley is on: the session rows' glyph, the title, the state;
+ * on one of its own one-off reminders still to go off, 「取消提醒」 at
+ * the end of that line on hover, as on a to-do's reminder (ticket 80,
+ * ruling 128 point 7). Straight to Core as the reminder card's 「取消」;
+ * the row leaves with the fresh list. */
 function AssistantRow(props: RowProps) {
   const { item, onTalkAbout } = props;
   const copy = useCopy();
   const language = useLanguage();
   const todayStartMs = useDayStamp();
+  const cancelTask = useAssistantTodoStore((s) => s.cancelTask);
+  const { failure, cancelling } = useTodoWrite(item.id);
   const line = assistantRowLine(item, todayStartMs, language, copy);
+  const canCancel = assistantTaskCancellable(item);
   return (
     <RowShell
       {...props}
       leading={<AssistantGlyph item={item} />}
       titleClass="text-ink"
-      line={<PlainLine text={line.text} tone={line.tone} />}
+      line={
+        <PlainLine
+          text={line.text}
+          tone={line.tone}
+          after={
+            canCancel && (
+              <CancelReminder
+                disabled={cancelling}
+                onClick={() => cancelTask(item.id)}
+              />
+            )
+          }
+        />
+      }
       actions={[<TalkAbout key="talk" item={item} onTalkAbout={onTalkAbout} />]}
+      failure={canCancel && failure ? todoFailureText(failure, copy) : null}
     />
   );
 }
@@ -648,8 +723,31 @@ function DoneRow(props: RowProps) {
   );
 }
 
-function PlainLine({ text, tone }: { text: string; tone: TodoLineTone }) {
+/** A second line in one tone; `after` it, outside what the line cuts,
+ * a button on hover (MetaLine's way). */
+function PlainLine({
+  text,
+  tone,
+  after,
+}: {
+  text: string;
+  tone: TodoLineTone;
+  after?: ReactNode;
+}) {
   if (!text) return null;
+  if (after) {
+    return (
+      <div
+        className={cn(
+          "mt-0.5 flex min-w-0 items-center text-[12px] leading-[1.4] tabular-nums",
+          LINE_TONES[tone],
+        )}
+      >
+        <span className="min-w-0 truncate">{text}</span>
+        {after}
+      </div>
+    );
+  }
   return (
     <div
       className={cn(

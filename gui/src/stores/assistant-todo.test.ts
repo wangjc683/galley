@@ -14,8 +14,9 @@ import { useAssistantTodoStore } from "./assistant-todo";
  * The to-do list on the desktop (main chat ticket 42): a tick holds its
  * place, a second click in the hold takes it back without Core, Core
  * writes it after the hold and the row moves with the fresh list; a
- * failed write puts it back with a reason; cancelling a reminder goes
- * straight to Core. Not mounted in a component: the panel and the card
+ * failed write puts it back with a reason; cancelling a reminder, a
+ * to-do's or Galley's own (ticket 80), goes straight to Core. Not
+ * mounted in a component: the panel and the card
  * read the same state, so they agree. Every read takes the list and the
  * to-dos noted in the main chat together (ticket 43: the cards).
  */
@@ -268,5 +269,65 @@ describe("cancelling a reminder", () => {
       todo_1: "failed",
     });
     expect(useAssistantTodoStore.getState().cancelling).toEqual({});
+  });
+});
+
+describe("cancelling one of Galley's own reminders (ticket 80)", () => {
+  const OWN: TodoItem = {
+    kind: "task",
+    id: "sched_water",
+    text: "提醒喝水",
+    state: "scheduled",
+    createdBy: "assistant",
+    target: "assistant",
+    repeat: { kind: "once" },
+    at: "2026-10-23T07:00:00Z",
+  };
+  const listed: AssistantTodo = { ...EMPTY_TODO, assistant: [OWN] };
+
+  it("goes straight to Core as the reminder card's 取消 does, from the desktop, and reads again: the row leaves", async () => {
+    useAssistantTodoStore.setState({ todo: listed });
+    const invoke = answer([EMPTY_TODO]);
+    useAssistantTodoStore.getState().cancelTask("sched_water");
+    expect(useAssistantTodoStore.getState().cancelling).toEqual({
+      sched_water: true,
+    });
+    await vi.runAllTimersAsync();
+    expect(calls(invoke)).toEqual(["delete_scheduled_task", ...READ]);
+    // The desktop's origin: Core stores `cancelled_via = 'gui'`.
+    expect(invoke).toHaveBeenCalledWith("delete_scheduled_task", {
+      id: "sched_water",
+      origin: { via: "gui" },
+    });
+    const state = useAssistantTodoStore.getState();
+    expect(state.cancelling).toEqual({});
+    expect(state.todo.assistant).toEqual([]);
+  });
+
+  it("takes one click at a time", async () => {
+    const invoke = answer([EMPTY_TODO]);
+    useAssistantTodoStore.getState().cancelTask("sched_water");
+    useAssistantTodoStore.getState().cancelTask("sched_water");
+    await vi.runAllTimersAsync();
+    expect(calls(invoke)).toEqual(["delete_scheduled_task", ...READ]);
+  });
+
+  it("says why it failed, and the next try clears it", async () => {
+    useAssistantTodoStore.setState({ todo: listed });
+    const { invoke } = getTauriMocks();
+    invoke.mockRejectedValue(
+      JSON.stringify({ error: "not_found", message: "gone" }),
+    );
+    useAssistantTodoStore.getState().cancelTask("sched_water");
+    await vi.runAllTimersAsync();
+    let state = useAssistantTodoStore.getState();
+    expect(state.failures).toEqual({ sched_water: "gone" });
+    expect(state.cancelling).toEqual({});
+    expect(state.todo).toEqual(listed);
+    answer([EMPTY_TODO]);
+    useAssistantTodoStore.getState().cancelTask("sched_water");
+    state = useAssistantTodoStore.getState();
+    expect(state.failures).toEqual({});
+    await vi.runAllTimersAsync();
   });
 });

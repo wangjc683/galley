@@ -222,6 +222,38 @@ export function todoReminderCancellable(item: TodoItem): boolean {
   return item.state !== "done" && (state === "scheduled" || state === "paused");
 }
 
+/**
+ * Whether a row of 「Galley 在办」 is one of its own reminders that can
+ * still be cancelled from the panel (main chat ticket 80, PRD ruling 128
+ * point 7): a one-off task still to go off, or paused — the same as a
+ * reminder card's 「取消」 (`cancelScheduledTask`). Not a subtask, not a
+ * routine.
+ */
+export function assistantTaskCancellable(item: TodoItem): boolean {
+  return (
+    item.kind === "task" &&
+    (item.repeat?.kind ?? "once") === "once" &&
+    (item.state === "scheduled" || item.state === "paused")
+  );
+}
+
+/**
+ * The notes line under one of the user's to-dos not done (main chat
+ * ticket 80, PRD ruling 128 point 5): what Galley noted with it to have
+ * at hand (a name, a place, a number, a path). `text` is the line, its
+ * breaks and runs of space one space; `full` the notes as written, for
+ * the hover when the line is cut. Null when there are none or only
+ * blanks, and for a done one (已完成 draws none).
+ */
+export function todoNotesLine(
+  item: TodoItem,
+): { text: string; full: string } | null {
+  if (item.kind !== "todo" || item.state === "done") return null;
+  const full = item.notes?.trim();
+  if (!full) return null;
+  return { text: full.replace(/\s+/g, " "), full };
+}
+
 /** A line's tone: a session row subline's — the question in warning, a
  * failure in error, work in progress in brand, the rest muted. */
 export type TodoLineTone = "muted" | "warning" | "error" | "brand";
@@ -315,14 +347,22 @@ export function todoTitleTarget(
   return target;
 }
 
-/** Nothing in any group: the panel's empty state. */
+/**
+ * Nothing in any group but the daily review: the panel's empty state.
+ * Core seeds the review with the main chat (ticket 73), so counting it
+ * kept the empty state from ever showing (main chat ticket 80, PRD
+ * ruling 128 point 3); paused, it is still the review. The panel draws
+ * 例行 under the empty state then, the review's row as it always looks
+ * (assistant PRD ruling 10: in sight, and it can be let go). Cancelled,
+ * 例行 is empty and so is everything.
+ */
 export function todoPanelEmpty(todo: AssistantTodo): boolean {
   return (
     todo.yours.today.length === 0 &&
     todo.yours.later.length === 0 &&
     todo.yours.anytime.length === 0 &&
     todo.assistant.length === 0 &&
-    todo.routine.length === 0 &&
+    todo.routine.every(isDailyReview) &&
     todo.done.length === 0
   );
 }

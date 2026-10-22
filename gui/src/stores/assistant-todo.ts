@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import {
+  cancelScheduledTask,
   cancelTodoReminder,
   completeTodo,
   EMPTY_TODO,
@@ -25,8 +26,8 @@ import { TODO_SETTLE_MS, todoCancelled, type TodoFlip } from "@/lib/todo-panel";
  * reads them again on Core's events, at midnight, and when a to-do falls
  * due.
  *
- * The two writes the user has here (PRD ruling 91 point 3) go through
- * it too:
+ * The writes the user has here (PRD ruling 91 point 3) go through it
+ * too:
  *
  * - **Tick / untick** (`toggle`): the box flips at once and the row
  *   holds its place for `TODO_SETTLE_MS`, struck through (or not); a
@@ -40,9 +41,16 @@ import { TODO_SETTLE_MS, todoCancelled, type TodoFlip } from "@/lib/todo-panel";
  *   the hold drops it (the safe direction, as an undone delete).
  * - **Cancel a reminder** (`cancelReminder`): straight to Core
  *   (`cancel_todo_reminder`), then read again.
+ * - **Cancel one of Galley's own reminders** (`cancelTask`, main chat
+ *   ticket 80, ruling 128 point 7): a one-off task under 「Galley 在办」,
+ *   straight to Core as a reminder card's 「取消」 goes
+ *   (`cancelScheduledTask`), then read again; the row leaves the list,
+ *   and the card, on Core's `scheduled-tasks:changed`, says 已取消.
  *
  * A write that fails puts the row back as it was and leaves a reason by
- * its id (`failures`), cleared by the next try.
+ * its id (`failures`), cleared by the next try. A to-do's id and a
+ * task's never meet (`todo_…`, `sched_…`), so the two cancels share
+ * `cancelling` and `failures`.
  */
 interface AssistantTodoState {
   todo: AssistantTodo;
@@ -54,13 +62,16 @@ interface AssistantTodoState {
   flips: Record<string, TodoFlip>;
   /** Why the last write on a to-do failed, by id. */
   failures: Record<string, TodoFailure>;
-  /** Reminders being cancelled, by to-do id. */
+  /** Reminders being cancelled, by to-do id or, for Galley's own, task
+   * id. */
   cancelling: Record<string, true>;
   /** Read the list and the noted to-dos from Core. */
   load: () => Promise<void>;
   /** The box was clicked (a cancelled to-do's box does nothing). */
   toggle: (item: TodoItem) => void;
   cancelReminder: (id: string) => void;
+  /** Cancel one of Galley's own one-off reminders, by task id. */
+  cancelTask: (id: string) => void;
 }
 
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -119,6 +130,23 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
     }));
   };
 
+  // Straight to Core, no hold, no confirm; read again once it is done.
+  const cancel = (id: string, write: (id: string) => Promise<unknown>) => {
+    if (get().cancelling[id]) return;
+    set((s) => ({
+      cancelling: { ...s.cancelling, [id]: true },
+      failures: without(s.failures, id),
+    }));
+    write(id)
+      .then(() => get().load())
+      .catch((e: unknown) =>
+        set((s) => ({
+          failures: { ...s.failures, [id]: todoFailureKind(e) },
+        })),
+      )
+      .finally(() => set((s) => ({ cancelling: without(s.cancelling, id) })));
+  };
+
   return {
     todo: EMPTY_TODO,
     noted: [],
@@ -155,20 +183,8 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
       );
     },
 
-    cancelReminder: (id) => {
-      if (get().cancelling[id]) return;
-      set((s) => ({
-        cancelling: { ...s.cancelling, [id]: true },
-        failures: without(s.failures, id),
-      }));
-      cancelTodoReminder(id)
-        .then(() => get().load())
-        .catch((e: unknown) =>
-          set((s) => ({
-            failures: { ...s.failures, [id]: todoFailureKind(e) },
-          })),
-        )
-        .finally(() => set((s) => ({ cancelling: without(s.cancelling, id) })));
-    },
+    cancelReminder: (id) => cancel(id, cancelTodoReminder),
+
+    cancelTask: (id) => cancel(id, cancelScheduledTask),
   };
 });

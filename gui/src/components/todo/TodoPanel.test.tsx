@@ -18,7 +18,8 @@ import { TodoPanel } from "./TodoPanel";
  * rendered.
  * Static rendering reads a zustand store's initial state only, so the
  * list and the ticks on their way are handed in by mocking the hooks; how the store moves them is pinned in
- * stores/assistant-todo.test.ts, the words in lib/todo-panel.test.ts.
+ * stores/assistant-todo.test.ts, the words in lib/todo-panel.test.ts,
+ * a click through to Core in TodoPanel.click.test.tsx.
  */
 
 const store = vi.hoisted(() => ({
@@ -34,6 +35,7 @@ vi.mock("@/stores/assistant-todo", () => ({
       ...store,
       toggle: () => {},
       cancelReminder: () => {},
+      cancelTask: () => {},
       load: async () => {},
     }),
 }));
@@ -112,6 +114,30 @@ const DONE_TODO = todo({
   state: "done",
   at: inDays(0, 7),
 });
+
+// Core's seed (ticket 73): its maker's label in `agent`, its prompt
+// English for the model.
+const REVIEW: TodoItem = {
+  ...ROUTINE,
+  id: "sched_review",
+  text: "Daily review: read wake.md and go over what is in hand.",
+  createdBy: "agent",
+  agent: "galley-review",
+  timeOfDay: "07:30",
+  at: new Date(Date.parse(inDays(1, 7)) + 30 * 60_000).toISOString(),
+};
+// One of Galley's own one-off reminders (ticket 80).
+const OWN_REMINDER: TodoItem = {
+  kind: "task",
+  id: "sched_water",
+  text: "提醒喝水",
+  state: "scheduled",
+  createdBy: "assistant",
+  target: "assistant",
+  repeat: { kind: "once" },
+  at: inDays(1, 15),
+  createdIn: { sessionId: "s-main", turnIndex: 6 },
+};
 
 const FULL: AssistantTodo = {
   ...EMPTY_TODO,
@@ -244,6 +270,58 @@ describe("the panel's groups", () => {
     // Before the first read: nothing, no flash of the empty state.
     store.loaded = false;
     expect(panel(EMPTY_TODO)).not.toContain('data-role="todo-empty"');
+  });
+
+  it("says what is empty with the daily review alone, 例行 drawn under it as ever (ticket 80)", () => {
+    const html = panel({ ...EMPTY_TODO, routine: [REVIEW] });
+    const empty = html.indexOf('data-role="todo-empty"');
+    const routine = html.indexOf('data-todo-group="routine"');
+    expect(empty).toBeGreaterThan(-1);
+    expect(routine).toBeGreaterThan(empty);
+    // The empty state word for word: its sentence, example and button.
+    const words = html.slice(empty, routine);
+    expect(words).toContain(">要办的事，说一声就记在这里。<");
+    expect(words).toContain(">比如「周三下午 3 点前要交季度报告」<");
+    expect(words).toContain(">跟 Galley 说<");
+    // 例行 as it looks in the list: its label, the review's row.
+    const after = html.slice(routine);
+    expect(after).toMatch(
+      /^[^>]*><div class="[^"]*font-semibold[^"]*"><span[^>]*>例行</,
+    );
+    expect(after).toContain('data-todo-row="sched_review"');
+    expect(after).toContain(">过一遍在办的事<");
+    expect(after).toContain(">每天 07:30 · 下次 明天 07:30<");
+    expect(after).toContain('aria-label="说说这件"');
+    expect(html).not.toContain('data-todo-group="yours"');
+    expect(html).not.toContain('data-todo-group="assistant"');
+    expect(html).not.toContain('data-todo-group="done"');
+    // The same row the list draws beside another routine.
+    const listed = panel({ ...EMPTY_TODO, routine: [ROUTINE, REVIEW] });
+    expect(listed).not.toContain('data-role="todo-empty"');
+    expect(row(after, "sched_review")).toBe(row(listed, "sched_review"));
+    // Paused, still the review: still empty.
+    const off = panel({
+      ...EMPTY_TODO,
+      routine: [{ ...REVIEW, state: "paused", at: undefined }],
+    });
+    expect(off).toContain('data-role="todo-empty"');
+    expect(off).toContain(">每天 07:30 · 已暂停<");
+  });
+
+  it("is the list, not the empty state, with anything beside the review", () => {
+    for (const todo of [
+      { ...EMPTY_TODO, routine: [REVIEW, ROUTINE] },
+      {
+        ...EMPTY_TODO,
+        yours: { today: [], later: [REMINDED], anytime: [] },
+        routine: [REVIEW],
+      },
+      { ...EMPTY_TODO, assistant: [OWN_REMINDER], routine: [REVIEW] },
+    ]) {
+      const html = panel(todo);
+      expect(html).not.toContain('data-role="todo-empty"');
+      expect(html).toContain('data-todo-row="sched_review"');
+    }
   });
 
   it("names the groups in English, never 「Galley」 in capitals", () => {
@@ -405,6 +483,158 @@ describe("the panel's rows", () => {
     const done = row(panel(FULL, { doneOpen: true }), "todo_done");
     expect(done).toContain("line-through");
     expect(done).not.toContain("opacity-60");
+  });
+});
+
+describe("a to-do's notes (ticket 80)", () => {
+  const NOTES = "王老师\n电话 138 0000 0000，A 座 3 楼";
+
+  it("go on their own line under the time, 12px ink-muted, cut", () => {
+    const html = panel({
+      ...FULL,
+      yours: {
+        today: [{ ...OVERDUE, notes: NOTES }],
+        later: [{ ...REMINDED, notes: `  ${NOTES}  ` }],
+        anytime: [ANYTIME],
+      },
+    });
+    for (const id of ["todo_late", "todo_report"]) {
+      const r = row(html, id);
+      const meta = r.indexOf('data-role="todo-meta"');
+      const notes = r.indexOf('data-role="todo-notes"');
+      expect(meta).toBeGreaterThan(-1);
+      expect(notes).toBeGreaterThan(meta);
+      // Breaks and runs of space one space.
+      expect(r).toMatch(
+        /<p data-role="todo-notes" class="truncate text-\[12px\] leading-\[1\.4\] text-ink-muted">王老师 电话 138 0000 0000，A 座 3 楼<\/p>/,
+      );
+      // Outside the box the hover actions centre in, so they stay level
+      // with the title and the time.
+      expect(r.indexOf("absolute inset-y-0")).toBeLessThan(notes);
+      expect(r.slice(0, notes)).toContain('aria-label="说说这件"');
+    }
+    // Overdue: the time in warning, the notes not.
+    const late = row(html, "todo_late");
+    const notes = late.slice(late.indexOf('data-role="todo-notes"'));
+    expect(notes).not.toMatch(/^[^>]*text-warning/);
+    // 「取消提醒」 still on the time's line, before the notes.
+    const report = row(html, "todo_report");
+    expect(report.indexOf('aria-label="取消提醒"')).toBeLessThan(
+      report.indexOf('data-role="todo-notes"'),
+    );
+  });
+
+  it("go right under the title when there is no time line", () => {
+    const html = panel({
+      ...FULL,
+      yours: { today: [], later: [], anytime: [{ ...ANYTIME, notes: NOTES }] },
+    });
+    const soil = row(html, "todo_soil");
+    expect(soil).not.toContain('data-role="todo-meta"');
+    expect(soil.indexOf(">买营养土<")).toBeLessThan(
+      soil.indexOf('data-role="todo-notes"'),
+    );
+  });
+
+  it("are not drawn when blank, nor under 已完成, nor on the card", () => {
+    const blank = panel({
+      ...FULL,
+      yours: {
+        today: [{ ...OVERDUE, notes: "  \n " }],
+        later: [{ ...REMINDED, notes: "" }],
+        anytime: [ANYTIME],
+      },
+    });
+    expect(blank).not.toContain('data-role="todo-notes"');
+    const done = panel(
+      { ...FULL, done: [{ ...DONE_TODO, notes: NOTES }] },
+      { doneOpen: true },
+    );
+    expect(row(done, "todo_done")).not.toContain('data-role="todo-notes"');
+    expect(done).not.toContain("王老师");
+    const card = renderToStaticMarkup(
+      <Tooltip.Provider>
+        <TodoCards items={[{ ...REMINDED, notes: NOTES }]} />
+      </Tooltip.Provider>,
+    );
+    expect(card).toContain(">交季度报告<");
+    expect(card).not.toContain("王老师");
+    expect(card).not.toContain('data-role="todo-notes"');
+  });
+});
+
+describe("cancelling Galley's own reminder from the panel (ticket 80)", () => {
+  const list = (assistant: TodoItem[]): AssistantTodo => ({
+    ...FULL,
+    assistant,
+  });
+
+  it("puts 「取消提醒」 at the end of its second line on hover, the to-do's very button", () => {
+    const html = panel(list([SUBTASK, OWN_REMINDER]));
+    const own = row(html, "sched_water");
+    expect(own).toContain(">明天 15:00 · 待提醒<");
+    // After the text, outside what is cut, shown on hover or focus.
+    expect(own).toMatch(
+      /<span class="min-w-0 truncate">明天 15:00 · 待提醒<\/span><button[^>]*aria-label="取消提醒"/,
+    );
+    const button = (html: string) =>
+      html.match(/<button[^>]*aria-label="取消提醒"[^>]*>[^]*?<\/button>/)![0];
+    expect(button(own)).toContain("group-hover/todo-row:opacity-100");
+    expect(button(own)).toContain("group-focus-within/todo-row:opacity-100");
+    expect(button(own)).not.toContain('disabled=""');
+    // The same button a to-do's reminder has: size, glyph, place.
+    expect(button(own)).toBe(button(row(html, "todo_report")));
+    // 「说说这件」 stays.
+    expect(own).toContain('aria-label="说说这件"');
+    // Paused: it can still go off once switched on, so it can be cancelled.
+    const paused = row(
+      panel(list([{ ...OWN_REMINDER, state: "paused" }])),
+      "sched_water",
+    );
+    expect(paused).toContain(">明天 15:00 · 已暂停<");
+    expect(paused).toContain('aria-label="取消提醒"');
+  });
+
+  it("is held while Core cancels it, and says why it failed, under the row", () => {
+    store.cancelling = { sched_water: true };
+    const held = row(panel(list([OWN_REMINDER])), "sched_water");
+    expect(held).toMatch(/<button[^>]*aria-label="取消提醒"[^>]*disabled=""/);
+    store.cancelling = {};
+    store.failures = { sched_water: "gone" };
+    expect(row(panel(list([OWN_REMINDER])), "sched_water")).toContain(
+      'role="alert" class="pb-1.5 pl-9 pr-3 text-[11.5px] leading-[1.45] text-error">这件事已经不在了。',
+    );
+    store.failures = { sched_water: "failed" };
+    expect(row(panel(list([OWN_REMINDER])), "sched_water")).toContain(
+      "没能完成，再试一次。",
+    );
+  });
+
+  it("is not on a subtask, a routine, or what is done", () => {
+    const html = panel(
+      {
+        ...list([SUBTASK, OWN_REMINDER]),
+        routine: [ROUTINE, REVIEW],
+        done: [
+          DONE_TODO,
+          { ...OWN_REMINDER, id: "sched_fired", state: "fired" },
+        ],
+      },
+      { doneOpen: true },
+    );
+    for (const id of [
+      "s-sub",
+      "sched_daily",
+      "sched_review",
+      "todo_done",
+      "sched_fired",
+    ]) {
+      expect(row(html, id)).not.toContain('aria-label="取消提醒"');
+    }
+    // A subtask's line is as it was: one cut line, no button after it.
+    expect(row(html, "s-sub")).toMatch(
+      /<div class="mt-0\.5 truncate text-\[12px\][^"]*">正在工作<\/div>/,
+    );
   });
 });
 
