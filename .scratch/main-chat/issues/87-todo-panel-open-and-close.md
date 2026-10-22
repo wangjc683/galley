@@ -237,3 +237,10 @@ LA exit=0
 5. 没在真机（`tauri dev`）看过：ResizeObserver 写 store 的时机、并排与覆盖切换时面板重新挂上、亮行与滚动的观感、`message-locate-flash` 的 6px 光晕在面板行间会叠到相邻行上。jsdom 测的是接线（类名、顺序、停留、展开「已完成」、请求清掉）；jsdom 的 `getBoundingClientRect` 全是 0，滚动那一支没测到。
 6. 外置运行时没跑：没有主对话时 `shown` 恒假，`todoNarrow` 照样被写但没人用到。
 7. 全量测试里 Node 的 `ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.` 是原来就有的（改动前单跑 `TodoPanel.click.test.tsx` 也有）。
+
+### 2026-10-22 主会话补修「看到但没改的」第 1 条（JC：「顺手修掉第 1 条」）
+
+- **问题**：面板记着开、在窄窗口里开了文件预览（或改动审阅），再把窗口拉宽：预览占着位置，`shown` 却为真，顶栏按钮显示选中、面板没画出来，点卡片标题的亮行请求挂着。根子是窄窗口下开预览不写记忆（裁决 131 第 2 条），拉宽时两边都要那个位置。
+- **修法**：拉宽的那一刻，还开着的预览或审阅是后开的，照「后开的换掉先开的」把它换掉的那几处记为关，同宽窗口下开它时一样（文件预览记这条对话那一处，审阅两处）。纯函数 `readingPanelClosesTodoOnWiden(reading, here, wasNarrow, narrow)` 放 `lib/todo-panel.ts`；`LocalFileWorkspace` 的 ResizeObserver 在写 `todoNarrow` 时调用它，读的是 ref 里当前开着的阅读面板与新 prop `todoPlace`（App 传这条对话的那一处，没有主对话时不传）。
+- **顺带**：`replaceTodoPanel` 与拉宽这一支都只把原来记着开的记为关（`closeTodoPlaces`）。原来改动审阅在哪开都对两处写一次关，`setTodoPanelOpen` 每写一次都记「认识了」，没见过面板就先开了审阅的人会错过那一次自动打开。
+- **验证**：`lib/todo-panel.test.ts` 加一条（预览换这一处、审阅换两处、没有那一处、没开东西、仍窄、本来就宽各一例）；`pnpm --dir gui typecheck`、`lint`、`test` 全过，`git diff --check` 干净。没在真机上拉窗口看过。
