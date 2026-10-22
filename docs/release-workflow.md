@@ -66,7 +66,7 @@ Semver 0.x.y, pre-1.0:
 | `v0.2.0-alpha.1` | alpha pre-release | internal test / early adopter / dogfood |
 | `v0.2.0-beta.1` | beta pre-release | dogfood build closer to public release |
 | `v0.2.0-rc.1` | release candidate | final validation before stable |
-| `v1.0.0` | first stable | user volume + auto-update ready + critical features stable |
+| `v1.0.0` | first stable | the three conditions in [project status → Release Version Rules](./project-status.md#release-version-rules) (2026-10-22) |
 
 Pre-release tags contain `-`, so CI auto-marks them prerelease and GitHub does
 not promote them as "latest" to ordinary users.

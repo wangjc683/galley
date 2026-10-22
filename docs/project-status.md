@@ -1301,6 +1301,15 @@ Detailed phase narratives are intentionally not duplicated here. Use:
   (e.g. tool approval) is minor even when nothing is added. The magnitude
   rule above judges additions; a patch number would tell auto-updating users
   that nothing they rely on was taken away.
+- `v1.0.0` waits for three conditions (JC ruling, 2026-10-22, when the
+  main chat release was graded `v0.7.0` rather than `v1.0.0`): the phone
+  client ships with the release build (the release workflow sets the relay
+  URL and the iOS app is at least on TestFlight); the assistant and main
+  chat get through one whole `0.7.x` line with no breaking schema or CLI
+  change and no removal; and the Windows smoke owed in this document is
+  cleared. Until then a product-shape change grades minor like any other
+  line-sized feature; the release notes' opening carries the shape change,
+  not the number.
 - Use `vX.Y.Z` for Git tag and GitHub Release title.
 - Agent API is at `schemaVersion: 3` on main (`2` in the published
   `v0.6.2`); changes within a version are additive-only.
