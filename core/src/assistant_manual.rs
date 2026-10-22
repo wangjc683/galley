@@ -788,7 +788,8 @@ mod tests {
         let wake = part("wake.md");
         let review = wake.find("## The morning review").unwrap();
         for rule in [
-            "Every morning at 9:00 Galley wakes you to go over what is in hand; the",
+            "Every morning a little before or after 9:00 (the time is in",
+            "`schedule list`) Galley wakes you to go over what is in hand; the note",
             "- Read what is current first: `todo list`, `schedule list`, and your",
             "`unasked.md` says, at most two subtasks in all. Do not raise early a",
             "to-dos, overdue ones included: their reminders do that.",

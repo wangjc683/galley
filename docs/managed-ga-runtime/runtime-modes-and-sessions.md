@@ -318,8 +318,10 @@ ruling 9; `core/src/scheduler.rs`, `core/src/subtask_report.rs`, migration
   and that run's starting turn; when the run ends Core fills its reply's
   `turn_index` (`createdIn`).
 - **The morning review** (main chat ticket 73, assistant PRD ruling 10;
-  `core/src/scheduler.rs`): the one task Galley makes itself, a daily 09:00
-  `assistant` task with `created_via = 'system'` and supervisor
+  `core/src/scheduler.rs`): the one task Galley makes itself, a daily
+  `assistant` task (ticket 78: at a time picked once, when it is made,
+  between 08:45 and 09:15 with a minute that is not a multiple of five,
+  `review_time_of_day`) with `created_via = 'system'` and supervisor
   `galley-review` (no migration), made when the main chat is asked for and
   once when Core starts, on the managed runtime with a main chat only, and
   once ever: a review row in any state (enabled, paused, cancelled) means

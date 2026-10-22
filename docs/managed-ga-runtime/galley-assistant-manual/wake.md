@@ -51,8 +51,9 @@ gist in a sentence or two, not all of it.
 
 ## The morning review
 
-Every morning at 9:00 Galley wakes you to go over what is in hand; the
-note says it is the morning review. Galley made this task, not you, and
+Every morning a little before or after 9:00 (the time is in
+`schedule list`) Galley wakes you to go over what is in hand; the note
+says it is the morning review. Galley made this task, not you, and
 skips the morning when nothing is in hand.
 
 - Read what is current first: `todo list`, `schedule list`, and your

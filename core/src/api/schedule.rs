@@ -197,9 +197,15 @@ pub fn mint_scheduled_task_id() -> String {
     format!("sched_{}", mint_hex16())
 }
 
-/// 16 hex digits, apart for two mints in the same tick: the time stirred
-/// with a counter, as `mint_project_id` does.
+/// 16 hex digits, apart for two mints in the same tick: [`mint_u64`].
 pub(crate) fn mint_hex16() -> String {
+    format!("{:016x}", mint_u64())
+}
+
+/// 64 bits apart for two mints in the same tick: the time stirred with a
+/// counter, as `mint_project_id` does. The ids above, and the morning
+/// review's time (ticket 78, `crate::scheduler::review_time_of_day`).
+pub(crate) fn mint_u64() -> u64 {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -212,8 +218,8 @@ pub(crate) fn mint_hex16() -> String {
     x ^= x.wrapping_mul(0x9E3779B97F4A7C15_9E3779B97F4A7C15);
     x ^= x >> 64;
     x ^= x.wrapping_mul(0xC4CEB9FE1A85EC53_C4CEB9FE1A85EC53);
-    let hex = format!("{x:032x}");
-    hex[..16].to_string()
+    // The high half: what the first 16 of `{x:032x}` were.
+    (x >> 64) as u64
 }
 
 impl ScheduledTaskId {

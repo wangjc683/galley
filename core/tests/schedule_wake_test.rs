@@ -1332,7 +1332,7 @@ async fn a_to_do_ticked_off_is_not_reminded_of() {
 use galley_core_lib::assistant_todo::assistant_todo;
 use galley_core_lib::runner_manager::RunnerManager;
 use galley_core_lib::scheduler::{
-    ensure_review, fire_review, ReviewFire, REVIEW_LOG_PREF, REVIEW_SUPERVISOR, REVIEW_TIME_OF_DAY,
+    ensure_review, fire_review, review_times, ReviewFire, REVIEW_LOG_PREF, REVIEW_SUPERVISOR,
 };
 
 /// The review's log, as the trial snapshot reads it.
@@ -1375,7 +1375,13 @@ async fn the_review_is_made_once_and_never_again() {
     let review = ensure_review(&galley, &rec).await.expect("made");
     assert!(review.is_review());
     assert_eq!(review.repeat, ScheduledTaskRepeat::Daily);
-    assert_eq!(review.time_of_day, REVIEW_TIME_OF_DAY);
+    // Ticket 78: a time around 9 that people do not set, picked as it is
+    // made (which one is the scheduler's unit test).
+    assert!(
+        review_times().contains(&review.time_of_day),
+        "{}",
+        review.time_of_day
+    );
     assert_eq!(review.target, ScheduleTarget::Assistant);
     assert!(review.enabled && review.created_in.is_none() && review.todo_id.is_none());
     let origin = review.origin.clone().expect("origin");
@@ -1390,8 +1396,14 @@ async fn the_review_is_made_once_and_never_again() {
     );
     assert!(!rec.named(SCHEDULED_TASKS_CHANGED_EVENT).is_empty());
 
-    // Once: there, paused, cancelled — never made again.
+    // Once: there, paused, cancelled — never made again. One there keeps
+    // its time.
     assert!(ensure_review(&galley, &rec).await.is_none());
+    let kept = galley
+        .scheduled_task(review.id.as_str())
+        .await
+        .expect("kept");
+    assert_eq!(kept.time_of_day, review.time_of_day);
     galley
         .update_scheduled_task(
             review.id.clone(),
@@ -1524,8 +1536,8 @@ async fn with_something_in_hand_the_review_wakes_the_main_chat() {
     assert!(sent[0]
         .starts_with("[Galley — not a message from the user] It is time for the morning review."));
     assert!(sent[0].contains(&format!(
-        "The morning review `{}` (every day at 09:00) came due.",
-        review.id
+        "The morning review `{}` (every day at {}) came due.",
+        review.id, review.time_of_day
     )));
     assert!(sent[0].contains("Read \"The morning review\" in `wake.md` in your"));
     assert!(sent[0].contains("start at most two subtasks in all."));

@@ -60,14 +60,15 @@
 //!
 //! Main chat ticket 73 (assistant PRD ruling 10): the **morning review**,
 //! the one task Galley makes itself ([`ensure_review`],
-//! [`REVIEW_SUPERVISOR`]): every day at 09:00 it wakes the main chat to go
-//! over what is in hand and move forward what it can. Coming due, it
-//! first looks without the model ([`fire_review`]): with nothing in hand
-//! it wakes nobody. Its wake travels as a reminder's, with words of its
-//! own (`crate::subtask_report`), and one that cannot be delivered is
-//! dropped, never handed to a notification (its words are for the
-//! model). The user stops it by asking the main chat, which pauses it;
-//! Galley never makes it again.
+//! [`REVIEW_SUPERVISOR`]): every day a little before or after 9:00 (ticket
+//! 78: a time picked once, when it is made, [`review_time_of_day`]) it
+//! wakes the main chat to go over what is in hand and move forward what it
+//! can. Coming due, it first looks without the model ([`fire_review`]):
+//! with nothing in hand it wakes nobody. Its wake travels as a reminder's,
+//! with words of its own (`crate::subtask_report`), and one that cannot be
+//! delivered is dropped, never handed to a notification (its words are
+//! for the model). The user stops it by asking the main chat, which
+//! pauses it; Galley never makes it again.
 
 use std::sync::Arc;
 
@@ -103,14 +104,39 @@ pub const SCHEDULER_SUPERVISOR: &str = "galley-scheduler";
 /// Supervisor label of the **morning review** (main chat ticket 73,
 /// assistant PRD ruling 10): the one task Galley makes itself, stored
 /// with `created_via = 'system'` ([`ScheduledTaskBrief::is_review`]).
-/// Every day at [`REVIEW_TIME_OF_DAY`] it wakes the main chat to go over
-/// what is in hand. Read by the desktop (ticket 74) to show it by a name
+/// Every day at the time picked when it is made ([`review_time_of_day`],
+/// a little before or after 9:00) it wakes the main chat to go over what
+/// is in hand. Read by the desktop (ticket 74) to show it by a name
 /// of its own instead of [`REVIEW_PROMPT`], from `origin.supervisor` on
 /// the task and `agent` on its item in the to-do list.
 pub const REVIEW_SUPERVISOR: &str = "galley-review";
 
-/// When the review fires, local wall clock, every day.
-pub const REVIEW_TIME_OF_DAY: &str = "09:00";
+/// The window the review's time is picked in (main chat ticket 78, PRD
+/// ruling 126), local wall clock, in minutes after midnight, both ends
+/// included: 08:45 to 09:15.
+pub const REVIEW_WINDOW: std::ops::RangeInclusive<u32> = (8 * 60 + 45)..=(9 * 60 + 15);
+
+/// Every time the review may be made at, as `HH:MM`, earliest first: the
+/// minutes of [`REVIEW_WINDOW`] that are not a multiple of five, so none
+/// is a time people set (:00, :05, :15, :30, :45 …). There are 24.
+pub fn review_times() -> Vec<String> {
+    REVIEW_WINDOW
+        .filter(|minute| minute % 5 != 0)
+        .map(|minute| format!("{:02}:{:02}", minute / 60, minute % 60))
+        .collect()
+}
+
+/// The review's time of day, one of [`review_times`] picked by `random`
+/// (any number; Core passes `crate::api::schedule::mint_u64`'s). Main
+/// chat ticket 78 (PRD ruling 126): not 09:00 on every machine, on the
+/// hour people set their own tasks at. Picked once, when Galley makes the
+/// review ([`ensure_review`]), and kept: the user moves it with `schedule
+/// update`, Galley never does.
+pub fn review_time_of_day(random: u64) -> String {
+    let mut times = review_times();
+    let pick = (random % times.len() as u64) as usize;
+    times.swap_remove(pick)
+}
 
 /// The words the review carries: what `schedule list`, `schedule show` and
 /// the "In Hand" lines show the model. The wake itself is Core's
@@ -347,21 +373,24 @@ pub async fn fire_reminder<Tz: TimeZone>(
 }
 
 /// Make sure the morning review exists (main chat ticket 73): a daily
-/// task at [`REVIEW_TIME_OF_DAY`] that wakes the main chat, made by
-/// Galley ([`REVIEW_SUPERVISOR`]). Called when the main chat is asked for
-/// (made, restored, or there: the desktop asks at every launch) and once
-/// when Core starts. Made only on the managed runtime with its main
-/// chat, and only once ever ([`SqliteGalley::create_system_task_once`]):
-/// once the user has it paused or cancelled, Galley does not make it
-/// again. The desktop hears of a new one; a failure is logged, never in
-/// the caller's way. The task made, when this call made it.
+/// task that wakes the main chat, made by Galley ([`REVIEW_SUPERVISOR`]),
+/// at a time picked as it is made, a little before or after 9:00
+/// ([`review_time_of_day`], ticket 78). Called when the main chat is
+/// asked for (made, restored, or there: the desktop asks at every launch)
+/// and once when Core starts. Made only on the managed runtime with its
+/// main chat, and only once ever
+/// ([`SqliteGalley::create_system_task_once`]): once the user has it
+/// paused or cancelled, Galley does not make it again, and one there
+/// keeps its time. The desktop hears of a new one; a failure is logged,
+/// never in the caller's way. The task made, when this call made it.
 pub async fn ensure_review(
     galley: &SqliteGalley,
     notifier: &dyn Notifier,
 ) -> Option<ScheduledTaskBrief> {
     let id = crate::api::schedule::mint_scheduled_task_id();
+    let time = review_time_of_day(crate::api::schedule::mint_u64());
     match galley
-        .create_system_task_once(&id, REVIEW_PROMPT, REVIEW_TIME_OF_DAY, REVIEW_SUPERVISOR)
+        .create_system_task_once(&id, REVIEW_PROMPT, &time, REVIEW_SUPERVISOR)
         .await
     {
         Ok(Some(task)) => {
@@ -399,7 +428,7 @@ pub enum ReviewFire {
 /// like a reminder ([`fire_reminder`]) and the wake pipeline takes it
 /// from there. Either way its log says so ([`log_review`]). A failed read
 /// wakes it: one turn too many beats a review that never runs. A catch-up
-/// (the computer asleep at 9:00) comes through here too.
+/// (the computer asleep at its time) comes through here too.
 pub async fn fire_review<Tz: TimeZone>(
     galley: &SqliteGalley,
     runners: &RunnerManager,
@@ -922,6 +951,38 @@ mod tests {
     fn preview_refuses_a_one_off() {
         let t = once(ONCE_AT, None);
         assert!(preview_fire(&t, &New_York, &ny(2026, 7, 22, 8, 0)).is_err());
+    }
+
+    #[test]
+    fn the_review_time_is_off_the_times_people_set_around_nine() {
+        // Ticket 78: 08:45 to 09:15, both ends in the window, no minute a
+        // multiple of five — 24 times, each one a pick can land on.
+        use chrono::Timelike;
+        let times = review_times();
+        assert_eq!(times.len(), 24);
+        assert_eq!(times.first().map(String::as_str), Some("08:46"));
+        assert_eq!(times.last().map(String::as_str), Some("09:14"));
+        for t in &times {
+            let at = parse_time_of_day(t).expect("HH:MM");
+            let minute = at.hour() * 60 + at.minute();
+            assert!(REVIEW_WINDOW.contains(&minute), "{t} out of the window");
+            assert_ne!(minute % 5, 0, "{t} is a time people set");
+        }
+        for t in [
+            "08:45", "08:50", "08:55", "09:00", "09:05", "09:10", "09:15",
+        ] {
+            assert!(!times.iter().any(|x| x == t), "{t} picked");
+        }
+        assert!(!times.iter().any(|x| x == "08:44" || x == "09:16"));
+        // Every one is picked by some number, and only these are.
+        let picked: std::collections::BTreeSet<String> =
+            (0..24u64).map(review_time_of_day).collect();
+        assert_eq!(picked.len(), 24);
+        assert!(picked.iter().all(|t| times.contains(t)));
+        assert_eq!(review_time_of_day(0), "08:46");
+        assert_eq!(review_time_of_day(23), "09:14");
+        assert_eq!(review_time_of_day(24), "08:46");
+        assert!(times.contains(&review_time_of_day(u64::MAX)));
     }
 
     fn ny(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> DateTime<Tz> {
