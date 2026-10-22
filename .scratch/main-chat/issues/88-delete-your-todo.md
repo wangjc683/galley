@@ -59,3 +59,62 @@ Status: ready-for-agent
 4. 已完成、Galley 在办、例行的行没有「⋯」。
 
 ## Comments
+
+### 2026-10-22 实现回报（票 88 代理）
+
+worktree `/Users/inkstone/Documents/genericagent-webui-wt88`，分支 `ticket-88-delete-todo`（从本地 main `453ceaa4` 起），没 push、没合入。
+
+1. **提交**（`git log --oneline main..HEAD`，本条回报的提交不在其中）：
+
+   ```
+   1c6bf3b4 Ticket 88: the to-do panel's delete in design, managed runtime and Agent API docs
+   bf7beafe Ticket 88: delete your to-do from the panel, with a five-second undo
+   d5f0fac1 Ticket 88: Core's desktop command to delete a to-do
+   ```
+
+2. **做了什么**
+   - **Core**：Tauri 命令 `cancel_todo(app: tauri::AppHandle, galley: State<'_, SqliteGalley>, id: crate::api::TodoId) -> Result<crate::api::TodoBrief, String>`（`core/src/commands/schedule.rs`，在 `core/src/lib.rs` 的 invoke handler 里紧跟 `cancel_todo_reminder`）。照邻居：`Writes::new(&galley, notifier, VIA_GUI).cancel_todo(&id, Origin::desktop())`，所以记 `cancelled_via = 'gui'`；发 `todos:changed` 与 `scheduled-tasks:changed`（`Writes::todos_changed(result, true)`，Core 拒绝时也发）。错误是 Core 的 JSON：已取消或不存在 `not_found`，没有助理 `invalid_args`。数据库逻辑、CLI、socket、Agent API、迁移都没动。测试 `core/tests/todo_test.rs` 的 `the_desktop_deletes_a_to_do_and_it_is_turned_down`：两个事件、待办记 `gui`、挂着的提醒记 `system`、`declined_follow_ups` 只多这一件（`DeclinedBy::User`，提醒不另算）、`in_hand_read` 带上它、面板清单里没有它、再删一次 `not_found` 且不改写第一次的记录。
+   - **GUI 调用**：`lib/assistant-todo.ts` 的 `cancelTodo(id)`。
+   - **暂存与提交**：都在 `stores/assistant-todo.ts`（与勾的停留、取消提醒同一个 store）：`deleting`（按待办 id，`{ order, committing }`）、`deleteToastId`，动作 `deleteTodo(item)`、`undoDelete()`、`commitDeletes()`、`flushDeletes()`。Core 答完后读回新清单，新清单、放掉 `deleting`、拒绝的原因写进 `failures` 在同一次 `set` 里，删掉的行中间不会闪回来；拒绝的那件随之回到面板，行下用现有的失败小字。面板画的是 `lib/todo-panel.ts` 的 `todoWithoutDeleting(todo, deleting)`（所有组里拿掉，没有要拿的时原样返回同一个对象）；`todoWritesOnTheirWay` 加了 `deleting`，票 87 的亮行与停留不碰暂存或在途的那件。卡片（`TodoCards.tsx`）与方框（`TodoCheck.tsx`）读 `deleting`：暂存期间卡片已写「已删除」、方框不能点、标题是字。主对话发送前提交：`hooks/useMessageSend.ts` 的 `sendThroughCore` 里，删消息的 `flush` 之后，发往 `mainChat` 的会话才 `await flushDeletes()`。
+   - **与 `message-delete.ts` 共用的**：常量 `UNDO_DELETE_MS`（直接从那里导入）。照抄的做法（没抽公共代码）：提示条用 `pushToast` + `action: { kind: "undo" }` + `autoDismissMs` + `onClose`（只在它还是当前提示条时才提交），每次删除换一条新提示条、关掉上一条；提交排队（`inflightDeletes`，一批等上一批）；按偏好语言取文案。菜单的三个样式常量从 `MessageMenu.tsx` 挪到新的 `components/conversation/message-menu-styles.ts`，消息菜单与待办菜单共用；两个菜单都走侧栏的 `SidebarRowMenuItem` / `SidebarRowMenuSeparator`。
+   - **菜单**：`components/todo/TodoRowMenu.tsx`（`TodoRowMenuButton` 是行尾的「⋯」，`IconButton` 28px、`DotsThree` 14px、悬停或聚焦显现、名字与悬停文字「更多」；`TodoRowContextMenu` 把行本身做成右键的 trigger，带 `data-galley-context-menu-trigger`）。`TodoPanel.tsx` 的 `RowShell` 加 `menu` 与 `menuOff`，只有 `YourRow` 传。
+   - **文案**：`zh.ts` / `en.ts` 的 `todo.deleteTodo`（`menuItem`、`deleted(title)`、`deletedCount(n)`、`undo`）与 `todo.stateDeleted`；提醒卡片的 `stateCancelled` 没动。
+   - **文档**：`docs/design/conversation.md`（见下第 4 条最后一项还改了两处散文）。
+
+3. **验证**（原样）
+   - `cargo check --manifest-path core/Cargo.toml --workspace`：``Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.34s``；唯一的警告是 `galley-relay` 里原有的 `fetch_update` 弃用警告，不是这张票的。
+   - `cargo test --manifest-path core/Cargo.toml --workspace`：45 个 `test result: ok.`，合计 1221 passed、0 failed，退出码 0；其中 `test the_desktop_deletes_a_to_do_and_it_is_turned_down ... ok`、`test every_cancel_records_who_and_why ... ok`、`test the_follow_ups_turned_down_and_only_the_main_chat_reads_them ... ok`。
+   - `rustfmt --edition 2021 --check`（逐个文件经 stdin）：`core/src/commands/schedule.rs`、`core/src/lib.rs`、`core/src/api/todo.rs`、`core/tests/todo_test.rs` 都 clean；按路径跑时报出的差异只在别的文件与 `lib.rs` 原有的 `mod` 顺序，main 上就有。
+   - `pnpm --dir gui typecheck`：`tsc --noEmit` 无输出。`pnpm --dir gui lint`：`eslint src --max-warnings 0` 无输出。
+   - `pnpm --dir gui test`：`Test Files  201 passed (201)`、`Tests  2203 passed (2203)`；`TZ=UTC` 再跑一遍：`Test Files  201 passed (201)`、`Tests  2203 passed (2203)`。
+   - prettier：新文件整篇格式化；改过的旧文件里 main 上本来 clean 的整篇 `--write`，`zh.ts` / `en.ts`（main 上就不 clean）核对过 2080–2150 行之间没有 prettier 差异。
+   - `git diff --check`：无输出。
+   - 门禁脚本六个：`[ipc-drift] IPC protocol fields and optional/null semantics aligned (python: 18 events, 11 commands; rust: 18 events, 11 commands; ts: 18 events, 11 commands)`、`[supervisor-sop-drift] 4 reference copies verbatim with canonical docs; SKILL.md variants aligned`、`docs link gate OK: 471 files checked.`、`[version-consistency] 5 files agree on 0.6.2`、`[managed-ga-payload] OK`、`[ga-baseline-drift] OK (5205f408)`，退出码都是 0。
+   - 反向检查（先备份 `stores/assistant-todo.ts` 到 scratchpad，逐个改坏、跑 `stores/assistant-todo.test.ts`、`TodoPanel.click.test.tsx`、`useMessageSend.test.ts`，再拷回，与备份 `diff -q` 一致）：
+     - 撤销不放回（`undoDelete` 留着等待中的）：`× 撤销 puts it back and Core never hears of it`、`× several in a row are one toast, its time from the latest, 撤销 taking them all back`、`× ⋯ opens it: 说说这件, 取消提醒, 删除; 删除 takes the row off at once under an undo toast, Core told nothing`，`Tests  3 failed | 51 passed (54)`。
+     - 不合成一条（不关上一条提示条）：`× several in a row are one toast, its time from the latest, 撤销 taking them all back`、`× comes back with the reason when Core refuses`，`Tests  2 failed | 52 passed (54)`。
+     - Core 拒绝不放回（拒绝的留在 `deleting`）：`× comes back with the reason when Core refuses`、`× comes back with the reason under it when Core refuses`，`Tests  2 failed | 52 passed (54)`。
+     - 另做一条：关掉菜单时去掉右键包装（`if (!menu || menuOff) return row;`），`× is away while a tick holds, the row not mounted afresh: its box keeps focus`，`Tests  1 failed | 5 passed (6)`。
+     - 改回后全绿（见上面的全量结果）。
+   - 中文全角标点：scratchpad 的 `t88-cjk-punct.py` 扫 `git diff -U0 main` 新增行（去掉行内代码与链接目标后，找贴着中文的 `, ; : ! ? ( )` 与句末 `.`）：设计文档与文案 `checked 20 added lines with CJK, 0 flagged`；连本条回报一起 `checked 66 added lines with CJK, 0 flagged`。
+
+4. **票面没写到、我自己定的**
+   - **提示条标题的截断**：票面说「照现有提示条的截断」，但现有提示条没有截断（`ErrorCard` 的小提示条标题会折行，不限字数），与代码不符。我加了 `todoToastTitle`：换行与连续空白压成一个空格，超过 24 个字（按字符，不切开 emoji）截断加「…」，大约占提示条两行。
+   - **勾下去停留时没有「⋯」**：你勾的停留 1.5 秒、Galley 勾的停留（票 87）里，这一行正在去「已完成」，不出「⋯」、右键不开（交给全局拦截挡掉 WebView 菜单）。右键的包装一直在、只是 `disabled`，这样勾的时候行不重挂，方框的焦点与删除线的过渡都留着（加了测试）。
+   - **菜单开着时**：这一行保持悬停的样子（按钮在、标题照旧让出 60px、底色 `hover`），照侧栏行的「⋯」；Galley 在菜单开着时勾掉它，菜单收起，回来时不会自己再开。
+   - **焦点与 Esc**：照 `MessageMenu`，关菜单不还焦点（「说说这件」把光标放进输入框，不能被抢回）；Esc 只关菜单，不关面板。
+   - **菜单里的「取消提醒」**：进行中不禁用，store 的 `cancel` 本来就挡重复。
+   - **只在发往主对话时提交**：在别的对话（旁聊、子任务回答）里发，删除照旧等在提示条下。
+   - **Core 拒绝时不出错误提示条**（`message-delete.ts` 会出）：票面要的是行下原因，只写行下。`not_found` 的那件通常已不在新清单里，行不回来，原因也就看不到。
+   - **顶栏「今天 N」**：用 Core 的 `todayCount`，等 Core 删完读回才变。
+   - **英文提示条**用直引号 `Deleted "…"`（照票面，也是 `en.ts` 里引用标题的多数写法）。
+   - **另改的散文**：`docs/managed-ga-runtime/runtime-modes-and-sessions.md`、`docs/agent-api/todo-commands.md` 里「桌面上只能勾、取消勾、取消提醒」，与 `core/src/api/todo.rs` 的模块注释，都补上删除（Agent API 本身不变）。设计文档里「悬停的按钮」原写「行尾只有这一颗」，按裁决 132 第 3 条改为你的待办行尾两颗，写明是裁决定的。
+
+5. **看到但没改、没验证到的**
+   - **助理手册没改**：`core/src/assistant_manual.rs` 拼的 `todos.md`（模型看的）仍写「the user sees it in 「待办」 beside this chat and can only tick a to-do off, untick it, or cancel its reminder there」。改它是改模型提示词、按惯例要评测，票面没让动，留给 JC 定。
+   - **5 秒内被叫醒**：提醒到点或巡看叫醒 Galley（不是你发的一句）时不提交，它读的清单里还有这件。
+   - **5 秒内 Galley 勾掉了这件**：Core 的 `cancel_todo` 对做完的待办照样成功（只看 `cancelled_at`），回复下的卡片会从「已完成」变「已删除」，与裁决 132 第 2 条「不改写发生过的事」相抵。数据库逻辑在「别动」里，没改。
+   - **读回失败**：Core 删成功但随后读清单失败时，那件从 `deleting` 放掉、旧清单里还有它，会显示到下一次读（与勾写完后的处理相同）。
+   - **Tauri 命令本身没有单测**：要 `AppHandle`；测的是它包装的那一行 `Writes::cancel_todo(…, Origin::desktop())`。
+   - **没跑 `tauri dev`**，真机步骤都没走：WKWebView 里「⋯」的位置与悬停、右键、提示条、窄面板，以及 Galley 勾的停留行（只在静态测试里用你勾的停留验过，Galley 的停留走同一个 `checked` 判断）。
+   - 测试里的 `localStorage is not available` 实验性警告是 Node 原有的，不是这张票加的。点击测试为 Radix 菜单在 jsdom 里补了一个空的 `ResizeObserver`，测完撤掉。
