@@ -1,6 +1,6 @@
 # 80 待办面板：判空不算巡看、显示备注、它自己的提醒能直接取消
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-10-22 快进合入 `3f72d529`、`af4de491`、`a3b421c9`；主会话机器验收：逐处看过 `todo-panel.ts`、`assistant-todo.ts`、`TodoPanel.tsx` 与设计文档的 diff，rebase 到 `cffba49f` 前在代理的 worktree 里重跑 `pnpm --dir gui typecheck`、`lint`、`vitest run`（198 个文件、2104 条全过）、`git diff --check` 干净；回报「看到但没改」第 1、3 条交 JC 定，见主会话）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 128 第 3、5、7 条（2026-10-22，从底层捋一遍待办；JC：「按你的推荐推进」）。只改 GUI 与设计文档。与票 81（Core：巡看判据、手册）同时在跑，不碰同一处。
 
