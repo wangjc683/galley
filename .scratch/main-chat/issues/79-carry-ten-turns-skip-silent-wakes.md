@@ -50,3 +50,29 @@ Status: ready-for-agent
 1. 合入后 dev 重启 Core。等到下一次开新段（闲置 4 小时以上再开口，或第二天早上巡看）。
 2. 问它「我这周问过你哪些球队的事？」或「前天我们聊到哪了？」：它应当不用去查历史就答得上来这几天主对话里说过的事，并且分得清是哪天说的。
 3. 早上的巡看不再把已经答完的事当成没答。
+
+## Comments
+
+### 2026-10-22 实现回报（票 79 代理）
+
+- **提交**（分支 `ticket-79-carry-ten-turns`，未 push、未合入）：`61ff90d3` Core、测试与三处文档；`5a531c85` 评测移植与样本；本条回报另一个提交。
+- **常量**：`CARRY_TURNS` 3 → 10，`CARRY_MAX_CHARS` 8,000 → 15,000，常量注释写上裁决 127 与连续 10 轮的量数（44 个窗口，中位 10,808、p90 13,796、p95 14,188；15,000 装下 98%，12,000 只装下 64%）。
+- **静默叫醒轮**：判定写成一处 `db::is_main_chat_silent_reply`，与 `db/search.rs` 的 `HIDDEN_FROM_GUI_SEARCH` 同一口径，并照 SQLite 那里的读法（`TRIM` 只去空格，`LIKE` 不分 ASCII 大小写）。`ReplayRow` 从 `PersistedMessageRow` 带上 `created_via`、`supervisor`、`final_answer`（都是 `serde(default)`，回放的金样本不受影响），加 `is_wake()`（`Origin::is_stored_subtask_report`）与 `is_silent_reply()`；问候照旧走 `shown_only`。`from_rows` 记下一轮是不是叫醒行开头、它最后一行助理行是不是静默回复，两样都是就整轮不带、不占名额。`main_chat_carry_from` 的 SQL 加同一条件：叫醒行开头，且它之后、下一句用户行之前（也在段首之前）的最后一行非问候助理行是静默回复，就不算一轮。两处注释互相指向。问了用户的叫醒轮，最后一行助理行是那句提问，不静默，照常算，没有另做特例；说了话的叫醒轮（包括「已转告。<no-reply/>」这种有正文的）照常算。
+- **状态块**：只带 1 轮时一字不动；2 轮及以上，第三行改为 `with {k} exchanges from before it, said between {first} and {last}: time has passed`，下一行照旧 `since. Anything older …`。第一轮的时间取它最后一行助理行的 `created_at`（与最后一轮同一口径，本地时间到分钟）。新增 `CarriedWindow::first_said_at()`、`CarriedPromptState::first_said_at`。`MAIN_CHAT_SECTION_BUDGET_BYTES` 421 → 442（时间段 +20，十轮的第二位数字 +1），依据写进常量注释，`prompt-composition.md` 的条款台账加了一行。
+- **评测**：`run.py` 原来没有主对话状态块的移植（两个套件都直接读 Rust 写出的 `main_chat.carried-N.txt` 模板），这次新写了 `main_chat_carried_section`（照 `main_chat_section` 的带轮次写法，1 到 `CARRY_TURNS` 轮）。带过来的用例一律读 carried-1 模板，把那一节换成移植写出的 N 轮写法：1 轮时替换前后逐字相同，模板里找不到移植写出的 1 轮原文就报错退出。第一轮的时间来自可选字段 `first_hours_ago`（默认同 `hours_ago`）。`schedule/rust-samples.json` 加了新键 `main_chat_section`：临时 Rust 测试（跑完删掉）用 `main_chat_section` 写出的 1 轮、2 轮、10 轮三条原文。`--dry-test` 新增 6 项检查：三条样本逐字对上、样本覆盖 1、2 和 10 轮、carry-quote 在主套件与 schedule 提示词里和改动前的模板填法逐字相同、拼成 3 轮时两套提示词都写出起止时间。全程只跑 `--dry-test`，没跑真模型。
+- **对真实数据核对**（`sqlite3 … ".backup"` 到 worktree 之外的临时目录，用不提交的临时测试直接调用 `carry::read`，跑完删掉测试与备份）：
+  - 段首 27：读取起点 0，带 7 轮，合计 6,697 字，没有截断：0→0（2＋85）、1→4（5＋461）、5→8（28＋337）、9→11（63＋420）、12→12（29＋1,723）、13→20（28＋1,876）、21→26（4＋1,636），都不是叫醒。
+  - 段首 37：读取起点 0，带 9 轮，合计 8,226 字，没有截断：上面 7 轮原样，加 27→30（12＋297，不是叫醒）、34→36（174＋1,046，叫醒，说了话）；31→33（叫醒，静默）没带。第 13、21 轮（NBA 两问）都在窗口里。
+  - 两段之前能带的轮次都不到 10 轮，上限 15,000 字都没碰到。读取各 3～8 毫秒。
+- **测试**：`carry.rs` 新增静默叫醒轮不带不占名额（夹在两句之间一个、末尾连着几个、只有静默叫醒时为空、用户自己的一轮以 `<no-reply/>` 收尾照常带）、问了用户的叫醒轮照常带、说了话的叫醒轮照常带（原有的叫醒行测试改成真的带叫醒行来源）、10 轮正好 15,000 字整轮带上而多一个字丢掉最早一轮；原有测试改成按 `CARRY_TURNS`、`CARRY_MAX_CHARS` 写，覆盖的情形都留着。`main_chat_segment_test.rs` 新增三条端到端：静默叫醒轮跳过后 `main_chat_carry_from` 在不同 `turns` 与段首上的起点、开新段后 `load_history` 不含静默叫醒轮而含说了话的叫醒轮；问了用户的叫醒轮带上；只有静默叫醒轮时不带也不回放、状态块没有带轮次的那一句。状态块那条端到端改成核对起止两个时间。`managed_prompt.rs` 的状态块测试分 1 轮（逐行核对与票 11 一字不差）与多轮两种措辞。
+- **改了一条原有测试的预期**：`core/tests/subtask_report_test.rs` 的 `a_report_after_an_idle_gap_opens_a_segment_that_carries_the_line` 原来要求新段带上前一条以 `<no-reply/>` 收尾的子任务回报，正是这张票要去掉的行为；改名为 `…_that_leaves_a_silent_one_out`，预期改成只带用户那一轮。只动了这个测试文件，没动 `subtask_report.rs`。
+- **文档**：`docs/ipc-protocol.md`、`docs/managed-ga-runtime/runtime-modes-and-sessions.md` 里现行的「3 轮、8,000 字」改成 10 轮、15,000 字，写上静默叫醒轮不算；`runtime-modes-and-sessions.md` 与 `prompt-composition.md` 里状态块的说法改成起止时间（票面只点了前两份，`prompt-composition.md` 有现行措辞原文与「新条款必须加一行」的台账，一并改了）。裁决原文、devlog、`docs/project-status.md` 没动。
+
+### 看到但没改、没验证到的
+
+1. 评测里的 `galley-prompt/main_chat.carried-2.txt`、`carried-3.txt` 现在没人读，里面还是旧措辞；README「文件」一节仍写「`carried-N`……N 为 1 到 3，即 `CARRY_TURNS`」，也没记这次的移植与样本。按票面只动了 `run.py` 移植与样本，删不删、README 补不补由主会话定。
+2. 样本放在 `schedule/rust-samples.json` 新键 `main_chat_section`（按键名排序，落在 `lateness_words` 与 `wake` 之间）。票 78 也会动这个文件，若它整份重新写出，合并时要留住这一键。`subtask_report_test.rs` 票 78 也可能在动，合并时留意上面那条测试。
+3. `from_rows` 看的是 `mark_replay_rows` 之后的行（`<subtask>` 块已去掉），SQL 看原始 `content`：只有「`no-reply` 字样只出现在 `<subtask>` 派活说明里、答案又为空」时两边判法会不同，后果是读取起点偏晚、窗口少一轮。没有处理。
+4. 用户自己的一轮以 `<no-reply/>` 收尾照常算（票面只排除叫醒轮），测试里写明了。
+5. 第一轮的时间取它回复写完的时刻，不是用户那句的时刻，与最后一轮同一口径。
+6. 没跑 `tauri dev`，真机步骤没走；没跑真模型。
