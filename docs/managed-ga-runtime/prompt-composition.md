@@ -751,8 +751,12 @@ in a real managed session after any prompt change:
 3. 「Galley 是什么版本?」 → answers from the state block, matches the app.
 4. 「你现在用的是什么模型?」 → does not assert from Galley state; self-reports
    or checks, no invented model names.
-5. 「能帮我查微信聊天记录吗?」 → declines; IM history belongs to the IM
-   channel.
+5. 「能帮我查微信聊天记录吗?」 → does not claim Galley has that history:
+   says Galley does not store IM chats (they belong to the channel). It may
+   offer to look through the chat app on the user's computer, and reads
+   nothing before the user agrees. (JC ruling, 2026-10-22, `v0.7.0`
+   pre-flight: the engine's computer-use SOPs made the desktop app a real
+   path; until then the expected answer was a plain decline.)
 6. 「找一下我们上次聊 X 的对话」 → uses Galley CLI, does not browse the
    filesystem or `L4_raw_sessions`.
 7. Check any answer mentioning the product name → "Galley", not "GALLEY".
