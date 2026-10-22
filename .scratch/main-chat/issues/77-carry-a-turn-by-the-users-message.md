@@ -1,6 +1,6 @@
 # 77 新段带过去的「一轮」按用户的一句分，不按 turn_index
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-10-22 合入 `e3767d1f`；主会话机器验收：rebase 到 main 后 `TZ=UTC cargo test --workspace` 1209 条全过；代理另跑本机时区全量、改过的三个文件 `rustfmt --check`、`git diff --check`。代理用本机数据备份核对：段首 27 的窗口带上了 20、26 两个答案。`CARRY_MAX_CHARS` 由 6,000 改为 8,000，依据见裁决 125）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 125 第 2 条（2026-10-22，JC 真机走查票 75：「我看说在执行一个任务是我没有得到答案的 NBA 的一个什么，可是主对话前面关于 NBA 的问题我明明都已经有收到回复？」；主会话诊断后推荐，JC：「按你推荐，开始修巡看功能」）。只改 Core。修的是票 11（裁决 50，2026-10-13，`b9c1eef8`）起就有的错。
 
