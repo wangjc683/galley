@@ -1,6 +1,6 @@
 # 78 巡看错开整点；巡看与别的事同一次叫醒时不吞掉别的事
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-10-22 合入 `4b04ca08`、`50bea3a9`；主会话机器验收：rebase 到含票 77 的 main 后 `TZ=UTC cargo test --workspace` 1210 条全过、评测 `--dry-test` 全过；代理另跑本机时区全量、改过的文件 `rustfmt --check`、GUI typecheck 与 lint。两条混合叫醒用例 Sol 上 6/6，没有一遍吞掉别的事，叫醒措辞未改）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 126（2026-10-22，JC：「助理自己来选一个时间来执行定时任务、提醒用之类，我觉得是不是不应该定整点，因为用户通常会定整点……可以比如说定一个 9:13，10:07 之类的，和用户会配置的时间进行岔开」；主会话推荐 B 加 C、不做 A，JC：「按建议推进」）。依赖票 73、75（已合入）。与在跑的票 76（GUI 静默判定）、77（`carry.rs`、`db/main_chat.rs`）不碰同一处。
 
