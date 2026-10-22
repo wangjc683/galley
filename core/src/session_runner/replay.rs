@@ -19,7 +19,7 @@
 
 use super::carry::{self, CarriedWindow};
 use super::RunnerHost;
-use crate::api::{GalleyApi, SessionId};
+use crate::api::{GalleyApi, Origin, SessionId};
 use crate::db::PersistedMessageRow;
 use crate::error::GalleyError;
 use crate::ipc::{IpcCommand, IpcEvent, LoadHistoryCommand};
@@ -99,6 +99,16 @@ pub struct ReplayRow {
     /// segment carries over was said ([`super::carry`]).
     #[serde(default)]
     pub created_at: String,
+    /// The row's origin columns as stored (`created_via`, `supervisor`):
+    /// a new main chat segment tells a wake by them ([`Self::is_wake`]).
+    #[serde(default)]
+    pub created_via: Option<String>,
+    #[serde(default)]
+    pub supervisor: Option<String>,
+    /// A reply's answer as derived and stored: with the raw `content`,
+    /// whether it was said in silence ([`Self::is_silent_reply`]).
+    #[serde(default)]
+    pub final_answer: Option<String>,
 }
 
 impl ReplayRow {
@@ -106,6 +116,27 @@ impl ReplayRow {
     /// `assistant` row that is not shown only.
     pub(super) fn is_conversation(&self) -> bool {
         !self.shown_only && (self.role == "user" || self.role == "assistant")
+    }
+
+    /// Whether this is a wake: the user row Galley wakes the main chat
+    /// with, for a subtask report or the daily review (ticket 29,
+    /// [`Origin::is_stored_subtask_report`]).
+    pub(super) fn is_wake(&self) -> bool {
+        self.role == "user"
+            && Origin::is_stored_subtask_report(
+                self.created_via.as_deref(),
+                self.supervisor.as_deref(),
+            )
+    }
+
+    /// Whether this is a reply said in silence: no answer left and the
+    /// `<no-reply/>` tag in the raw text ([`crate::db::is_main_chat_silent_reply`]).
+    pub(super) fn is_silent_reply(&self) -> bool {
+        crate::db::is_main_chat_silent_reply(
+            &self.role,
+            self.final_answer.as_deref(),
+            &self.content,
+        )
     }
 
     /// The row as one history message: a user row's image attachments
@@ -145,6 +176,9 @@ impl From<PersistedMessageRow> for ReplayRow {
             turn_index: row.turn_index,
             content: row.content,
             created_at: row.created_at,
+            created_via: row.created_via,
+            supervisor: row.supervisor,
+            final_answer: row.final_answer,
             attachments: row
                 .attachments
                 .into_iter()

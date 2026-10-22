@@ -869,11 +869,14 @@ async fn side_chats_are_never_cut() {
 // ---------------- what a new segment carries over (ticket 11) ----------------
 
 #[tokio::test]
-async fn a_new_segment_opens_with_the_last_three_turns_also_after_a_restart() {
+async fn a_new_segment_opens_with_the_last_turns_also_after_a_restart() {
+    use galley_core_lib::session_runner::carry::CARRY_TURNS;
+
     let sid = "s-main-carry";
     let (pool, galley) = fresh().await;
     main_chat(&galley, sid).await;
-    for i in 0..5 {
+    let seeded = CARRY_TURNS + 2;
+    for i in 0..seeded {
         seed_exchange(&galley, sid, &format!("问{i}"), &format!("答{i}")).await;
     }
     idle_for(&pool, sid, 5.0).await;
@@ -884,12 +887,12 @@ async fn a_new_segment_opens_with_the_last_three_turns_also_after_a_restart() {
         .await
         .expect("send");
     let start = dispatched_turn(&outcome);
-    assert_eq!(boundaries(&galley, sid).await, vec![5]);
-    // The last three of five, never the greeting; the message just sent
-    // is input, not history.
-    let mut carried = turn("问2", "答2");
-    carried.extend(turn("问3", "答3"));
-    carried.extend(turn("问4", "答4"));
+    assert_eq!(boundaries(&galley, sid).await, vec![seeded as i64]);
+    // The last `CARRY_TURNS` of them, never the greeting; the message
+    // just sent is input, not history.
+    let carried: Vec<Value> = (2..seeded)
+        .flat_map(|i| turn(&format!("问{i}"), &format!("答{i}")))
+        .collect();
     assert_eq!(runner.load_histories(), vec![carried.clone()]);
 
     // The turn completes; "Core restarts": the same opening, then the
@@ -1025,6 +1028,210 @@ async fn a_multi_step_run_is_carried_with_its_answer() {
     carried.extend(turn("西部怎么预测", "我先查一下\n\n还在查\n\n西部的答案"));
     carried.extend(turn("东部呢", "东部我先核对\n\n东部的答案"));
     assert_eq!(runner.load_histories(), vec![carried]);
+}
+
+/// A wake Core writes into the main chat (a subtask report or the daily
+/// review), as Core writes it. Returns its index.
+async fn seed_wake(galley: &SqliteGalley, sid: &str, subtask: &str) -> u32 {
+    galley
+        .persist_subtask_report(
+            &SessionId(sid.into()),
+            format!("[Galley: subtask {subtask} finished]"),
+            Origin::subtask_report(&[subtask.to_string()]),
+            &format!(
+                "[Galley: subtask {subtask} \"查\" finished — details: session show {subtask}]"
+            ),
+        )
+        .await
+        .expect("wake row")
+        .turn_index
+        .expect("turn index")
+}
+
+/// A reply said in silence on `turn_index`, as the turn derivation
+/// stores one: the raw text keeps the tag, no answer is left.
+async fn reply_silently(galley: &SqliteGalley, sid: &str, turn_index: u32, content: &str) {
+    galley
+        .persist_assistant_message(PersistAssistantMessage {
+            session_id: SessionId(sid.into()),
+            turn_index,
+            content: content.into(),
+            tool_calls: None,
+            tool_results: None,
+            thinking: None,
+            final_answer: None,
+            summary: None,
+            preamble: None,
+            visibility: MessageVisibility::Visible,
+            telemetry: None,
+        })
+        .await
+        .expect("silent reply");
+    galley
+        .bump_session_after_turn(SessionId(sid.into()), None, None, false)
+        .await
+        .expect("bump");
+}
+
+/// Ticket 79: a wake answered in silence is no turn — not carried, and
+/// it takes no place, so the read reaches back past it — whether alone
+/// between two of the user's turns or several in a row. A wake whose
+/// turn said something is carried like any turn.
+#[tokio::test]
+async fn a_wake_answered_in_silence_is_not_carried_and_takes_no_place() {
+    let sid = "s-main-carry-wakes";
+    let (pool, galley) = fresh().await;
+    main_chat(&galley, sid).await;
+    seed_exchange(&galley, sid, "问0", "答0").await;
+    // The morning review: a step, then only a subtask sent off.
+    let review = seed_wake(&galley, sid, "s-1").await;
+    reply_to(
+        &galley,
+        sid,
+        review,
+        "看看在办的事",
+        Some(json!([{"toolName": "code_run", "args": {}}])),
+    )
+    .await;
+    reply_silently(
+        &galley,
+        sid,
+        review + 1,
+        "<subtask>查 NBA</subtask>\n<no-reply/>",
+    )
+    .await;
+    seed_exchange(&galley, sid, "问3", "答3").await;
+    // Two in a row.
+    let asking = seed_wake(&galley, sid, "s-1").await;
+    reply_silently(&galley, sid, asking, "<no-reply/>").await;
+    let done = seed_wake(&galley, sid, "s-2").await;
+    reply_silently(&galley, sid, done, "<no-reply/>").await;
+    // One that said something.
+    let told = seed_wake(&galley, sid, "s-1").await;
+    reply_to(&galley, sid, told, "NBA 查好了：西部雷霆第一。", None).await;
+    // One more in silence, right before the boundary.
+    let last = seed_wake(&galley, sid, "s-3").await;
+    reply_silently(&galley, sid, last, "<no-reply/>").await;
+    assert_eq!((review, asking, done, told, last), (1, 4, 5, 6, 7));
+
+    // Where the read starts for a segment from turn 8: the turns that
+    // count are 0, 3 and 6.
+    let id = SessionId(sid.into());
+    for (turns, from) in [(1, Some(6)), (2, Some(3)), (3, Some(0)), (4, Some(0))] {
+        let got = galley
+            .main_chat_carry_from(&id, 8, turns)
+            .await
+            .expect("carry from");
+        assert_eq!(got, from, "{turns} turns");
+    }
+    // The latest turn that counts before an earlier boundary is past the
+    // silent wakes right before it.
+    for (before, from) in [(3, Some(0)), (6, Some(3)), (7, Some(6))] {
+        let got = galley
+            .main_chat_carry_from(&id, before, 1)
+            .await
+            .expect("carry from");
+        assert_eq!(got, from, "before {before}");
+    }
+
+    idle_for(&pool, sid, 5.0).await;
+    let runner = SegRunner::default();
+    let env = FakeEnv;
+    send_user_message(&host(&galley, &runner, &env), request(sid, "早上好"))
+        .await
+        .expect("send");
+    assert_eq!(boundaries(&galley, sid).await, vec![8]);
+    let mut carried = turn("问0", "答0");
+    carried.extend(turn("问3", "答3"));
+    carried.extend(turn(
+        "[Galley: subtask s-1 \"查\" finished — details: session show s-1]",
+        "NBA 查好了：西部雷霆第一。",
+    ));
+    assert_eq!(runner.load_histories(), vec![carried]);
+}
+
+/// A wake whose turn asked the user is a turn: its last reply before the
+/// user's answer is the question, whatever the answer's own turn ends
+/// with.
+#[tokio::test]
+async fn a_wake_that_asked_the_user_is_carried() {
+    let sid = "s-main-carry-wake-asks";
+    let (pool, galley) = fresh().await;
+    main_chat(&galley, sid).await;
+    let wake = seed_wake(&galley, sid, "s-1").await;
+    reply_to(
+        &galley,
+        sid,
+        wake,
+        "子任务问：靠窗还是靠过道？",
+        Some(json!([{"toolName": "ask_user", "args": {}}])),
+    )
+    .await;
+    let answer = galley
+        .send_message(SessionId(sid.into()), "靠窗".into(), gui_origin())
+        .await
+        .expect("answer")
+        .turn_index
+        .expect("turn index");
+    reply_silently(&galley, sid, answer, "<no-reply/>").await;
+    assert_eq!((wake, answer), (0, 1));
+    let id = SessionId(sid.into());
+    for (turns, from) in [(1, Some(1)), (2, Some(0))] {
+        let got = galley
+            .main_chat_carry_from(&id, 2, turns)
+            .await
+            .expect("carry from");
+        assert_eq!(got, from, "{turns} turns");
+    }
+
+    idle_for(&pool, sid, 5.0).await;
+    let runner = SegRunner::default();
+    let env = FakeEnv;
+    send_user_message(&host(&galley, &runner, &env), request(sid, "订好了吗"))
+        .await
+        .expect("send");
+    let mut carried = turn(
+        "[Galley: subtask s-1 \"查\" finished — details: session show s-1]",
+        "子任务问：靠窗还是靠过道？",
+    );
+    carried.extend(turn("靠窗", "<no-reply/>"));
+    assert_eq!(runner.load_histories(), vec![carried]);
+}
+
+/// Silent wakes alone before the boundary leave nothing to carry, and
+/// with no reply in the new segment yet there is no replay.
+#[tokio::test]
+async fn only_silent_wakes_before_the_boundary_carry_nothing() {
+    use chrono_tz::Asia::Shanghai;
+    use galley_core_lib::session_runner::segment::prompt_state_in;
+
+    let sid = "s-main-carry-only-wakes";
+    let (pool, galley) = fresh().await;
+    main_chat(&galley, sid).await;
+    let wake = seed_wake(&galley, sid, "s-1").await;
+    reply_silently(&galley, sid, wake, "<no-reply/>").await;
+    let id = SessionId(sid.into());
+    assert_eq!(
+        galley
+            .main_chat_carry_from(&id, 1, 1)
+            .await
+            .expect("carry from"),
+        None
+    );
+
+    idle_for(&pool, sid, 5.0).await;
+    let runner = SegRunner::silent();
+    let env = FakeEnv;
+    let opened = ensure_session_runner(&host(&galley, &runner, &env), sid, opening())
+        .await
+        .expect("open");
+    assert!(opened.spawned);
+    assert_eq!(boundaries(&galley, sid).await, vec![1]);
+    assert!(runner.load_histories().is_empty());
+    let state = prompt_state_in(&galley, sid, &Shanghai)
+        .await
+        .expect("state");
+    assert_eq!(state.carried, None);
 }
 
 // ---------------- a deleted message (ticket 32) ----------------
@@ -1188,8 +1395,9 @@ async fn the_cap_holds_in_the_replay() {
 }
 
 /// The state block names what the replay opens with, from the same read:
-/// how many turns and, in local time to the minute, when the last was
-/// said. The first segment carries nothing and says nothing.
+/// how many turns and, in local time to the minute, when the first and
+/// the last were said. The first segment carries nothing and says
+/// nothing.
 #[tokio::test]
 async fn the_state_block_and_the_replay_agree_on_what_is_carried() {
     use chrono_tz::Asia::Shanghai;
@@ -1197,15 +1405,17 @@ async fn the_state_block_and_the_replay_agree_on_what_is_carried() {
 
     let sid = "s-main-carry-state";
     let (pool, galley) = main_chat_with_history(sid).await;
-    // The last reply was written at 09:41:30 in Shanghai.
+    // The first reply was written at 21:26 two days before, the last at
+    // 09:41:30, in Shanghai.
     sqlx::query(
-        "UPDATE messages SET created_at = '2026-10-12T01:41:30Z' \
-         WHERE session_id = ? AND role = 'assistant' AND turn_index = 1",
+        "UPDATE messages SET created_at = CASE turn_index \
+           WHEN 0 THEN '2026-10-10T13:26:00Z' ELSE '2026-10-12T01:41:30Z' END \
+         WHERE session_id = ? AND role = 'assistant' AND turn_index IN (0, 1)",
     )
     .bind(sid)
     .execute(&pool)
     .await
-    .expect("reply time");
+    .expect("reply times");
     let first = prompt_state_in(&galley, sid, &Shanghai)
         .await
         .expect("state");
@@ -1226,6 +1436,7 @@ async fn the_state_block_and_the_replay_agree_on_what_is_carried() {
         state.carried,
         Some(CarriedPromptState {
             turns: 2,
+            first_said_at: "2026-10-10 21:26".into(),
             last_said_at: "2026-10-12 09:41".into(),
         })
     );

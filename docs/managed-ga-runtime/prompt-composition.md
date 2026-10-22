@@ -211,17 +211,24 @@ with the Galley CLI (search, then `session show <id> --around=<messageId>`).
 Since ticket 11 (`.scratch/main-chat/issues/11-carry-last-turns-into-new-segment.md`)
 a segment with a recorded boundary opens with the last few turns before it
 ([runtime modes](./runtime-modes-and-sessions.md#main-chat-segments)), and
-the section then reads instead (`<k> exchanges`, or `1 exchange`):
+the section then reads instead, for one turn:
 
 ```text
 ## Main Chat
 
 This conversation is the user's main chat, session `<id>`. Your context
 holds it from turnIndex <N> on, a segment that began <YYYY-MM-DD>, and opens
-with <k> exchanges from before it, the last said <YYYY-MM-DD HH:MM>: time has passed
+with 1 exchange from before it, the last said <YYYY-MM-DD HH:MM>: time has passed
 since. Anything older is not in your context: when the user refers to it,
 look it up with the Galley CLI (search, then
 `session show <id> --around=<messageId>`).
+```
+
+and for `<k>` turns, two or more (ticket 79), its third line names when the
+first and the last were said:
+
+```text
+with <k> exchanges from before it, said between <YYYY-MM-DD HH:MM> and <YYYY-MM-DD HH:MM>: time has passed
 ```
 
 - **Facts**: the session id (a search hit with this `sessionId` and a
@@ -234,8 +241,11 @@ look it up with the Galley CLI (search, then
   crash) is told the same start; a new segment retires the runner, so the
   start never changes under a live one (admission rule 3).
 - **Carried turns** (ticket 11): how many turns the segment opens with and
-  when the last was said — its reply's `created_at`, local time to the
-  minute — so a carried 「我出门了」 is not read as said just now. Source:
+  when they were said — a turn's time is its last reply's `created_at`,
+  local time to the minute — so a carried 「我出门了」 is not read as said
+  just now. One turn names its time; more name the first's and the last's
+  (ticket 79: ten turns can span a week, and the last time alone would not
+  tell the day before yesterday from today). Source:
   `session_runner::carry::read`, the same read the replay opens with, from
   the rows before the boundary only, so it is fixed for the segment too.
   No carried turns (the first segment, or no complete turn before the
@@ -712,6 +722,7 @@ row.
 | State block | 2026-07-07 session: replace "don't invent metadata, go check Settings" deflection with injected facts |
 | State block: Main Chat (id, segment start, "search, then `--around`") | main chat PRD rulings 18 and 41, ticket 03b (2026-10-12): segments leave earlier parts out of context, and the decided lookup path is the existing CLI rather than a new GA tool. Own cap `MAIN_CHAT_SECTION_BUDGET_BYTES` |
 | State block: Main Chat, carried turns (「opens with <k> exchanges from before it, the last said <time>」, 「Anything older」) | main chat PRD ruling 50, ticket 11 (2026-10-13): a new segment opens with the last 3 turns before it, and without their time the model would take what the user said hours ago as said just now. Cap raised 327 → 421 (+94 bytes) in the same diff; the text without carried turns is unchanged |
+| State block: Main Chat, more than one carried turn 「said between <time> and <time>」 | main chat PRD ruling 127, ticket 79 (2026-10-22): a segment opens with up to 10 turns, which can span a week, and the last time alone would not tell the day before yesterday from today; it is also the cheapest guard for ticket 73 picking up an old thing as if it were still open. Cap raised 421 → 442 (+20 bytes for the span, +1 for the second digit of ten turns) in the same diff; one carried turn and no carried turn read as before |
 | Main chat entry layer: ongoing relationship, reply at the weight of the message, pick up what a break left open, `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` | ticket 03d (2026-10-13): JC found the main chat read as a pinned ordinary session; the draft was compared with and without on the main chat's model (`.scratch/main-chat/entry-layer-eval/`) before it went in |
 | Main chat entry layer: dispatch clause (long work → `<subtask>` tag, self-contained instructions, quick work stays; Galley's subtask, not GA's `subagent.md`) | ticket 06a, PRD rulings 52, 53 (2026-10-13): the main chat must not be occupied by one long job, and JC chose a tag in the reply over a native GA tool or a CLI command after the three were compared on the main chat's model (`dispatch-clauses.md`); models read GA's file-based subagent SOP unprompted in that comparison. Cap raised 827 → 1446 (+619 bytes) in the same diff |
 | Main chat entry layer: the evidence to hand back; "Galley wakes you … so do not wait on it or watch it" in place of "its card shows the progress, and you can look it up when they ask"; read the assistant manual before the first CLI write | assistant PRD rulings 2, 3, 8 and main chat PRD rulings 80, 82, ticket 30 (2026-10-15): the assistant answers for the work it hands off — Core wakes it when a subtask settles (ticket 29), the wake note says what to do then, and the manual carries authority, commands and reporting. The wake notes were run on the main chat's model with this layer and the manual (`.scratch/main-chat/entry-layer-eval/wake/`). Cap raised 1446 → 1699 (+253 bytes) in the same diff |

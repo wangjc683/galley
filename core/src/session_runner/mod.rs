@@ -412,8 +412,9 @@ async fn has_history(
             {
                 return Ok(true);
             }
-            // The window is never empty while a complete turn precedes
-            // the start: the cap cuts the latest turn, it never drops it.
+            // The window is never empty while a turn that counts (a
+            // complete one, not a wake answered in silence) precedes the
+            // start: the cap cuts the latest turn, it never drops it.
             host.galley
                 .main_chat_carry_from(sid, start, 1)
                 .await

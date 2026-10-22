@@ -186,6 +186,11 @@ pub struct MainChatPromptState {
 pub struct CarriedPromptState {
     /// How many turns are carried (1 to [`super::carry::CARRY_TURNS`]).
     pub turns: usize,
+    /// When the first of them was said, as [`Self::last_said_at`]; the
+    /// same as it for one turn. Named when more than one is carried, so
+    /// the model can tell the day before yesterday from today (ticket
+    /// 79).
+    pub first_said_at: String,
     /// When the last of them was said: local time to the minute
     /// (`YYYY-MM-DD HH:MM`).
     pub last_said_at: String,
@@ -241,7 +246,8 @@ pub async fn prompt_state_in<Tz: chrono::TimeZone>(
 }
 
 /// [`CarriedPromptState`] for the main chat's current segment: the
-/// window its replay opens with, read the same way
+/// window its replay opens with, how many turns and when the first and
+/// the last were said, read the same way
 /// ([`super::carry::read`]; the segment's own rows come along unused —
 /// the replay right after this spawn reads them again). Nothing in the
 /// first segment. A database error is logged and leaves the sentence
@@ -266,19 +272,27 @@ async fn carried_prompt_state<Tz: chrono::TimeZone>(
             return None;
         }
     };
-    let last = window.last_said_at()?;
     // As for the start date: an unreadable time is kept as written.
-    let last_said_at = DateTime::parse_from_rfc3339(last)
-        .map(|at| {
-            at.with_timezone(tz)
-                .naive_local()
-                .format("%Y-%m-%d %H:%M")
-                .to_string()
-        })
-        .unwrap_or_else(|_| last.chars().take(16).collect::<String>().replace('T', " "));
+    let local_minute = |said_at: &str| {
+        DateTime::parse_from_rfc3339(said_at)
+            .map(|at| {
+                at.with_timezone(tz)
+                    .naive_local()
+                    .format("%Y-%m-%d %H:%M")
+                    .to_string()
+            })
+            .unwrap_or_else(|_| {
+                said_at
+                    .chars()
+                    .take(16)
+                    .collect::<String>()
+                    .replace('T', " ")
+            })
+    };
     Some(CarriedPromptState {
         turns: window.turns.len(),
-        last_said_at,
+        first_said_at: local_minute(window.first_said_at()?),
+        last_said_at: local_minute(window.last_said_at()?),
     })
 }
 

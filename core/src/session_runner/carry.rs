@@ -1,6 +1,6 @@
 //! What a new main chat segment carries over (ticket 11,
 //! `.scratch/main-chat/issues/11-carry-last-turns-into-new-segment.md`,
-//! main chat PRD ruling 50).
+//! main chat PRD rulings 50 and 127).
 //!
 //! A new segment ([`super::segment`]) gives the main chat's runner a
 //! fresh context. Taken alone, that means a user who writes again after
@@ -8,7 +8,7 @@
 //! the screen. So the replay of a segment with a recorded boundary opens
 //! with the last [`CARRY_TURNS`] complete turns before it, whichever
 //! segment they are in, within [`CARRY_MAX_CHARS`]; the state block tells
-//! the model they come from before the break and when the last was said
+//! the model they come from before the break and when they were said
 //! ([`super::segment::MainChatPromptState::carried`]).
 //!
 //! - **A turn** is one user message and every reply after it up to the
@@ -28,6 +28,15 @@
 //!   the first user message (its own was deleted, ticket 32) is no turn
 //!   either. [`SqliteGalley::main_chat_carry_from`] bounds the read by
 //!   the same definition.
+//! - **A wake answered in silence is no turn** (ticket 79,
+//!   `.scratch/main-chat/issues/79-carry-ten-turns-skip-silent-wakes.md`,
+//!   PRD ruling 127): a turn a wake opens whose last reply is said in
+//!   silence (no answer left, the `<no-reply/>` tag in the raw text: the
+//!   desktop search's criterion, [`crate::db::is_main_chat_silent_reply`])
+//!   is not carried and takes no place. The user never saw it: since
+//!   ticket 76 the desktop draws nothing for such a turn. A wake whose
+//!   turn asked the user (the answer is the next user message) or said
+//!   something is a turn like any.
 //! - **The cap** counts the Unicode characters carried (each turn's user
 //!   message plus its replies; images ride along uncounted). Over it,
 //!   whole turns go, oldest first. When the latest turn alone is over
@@ -52,18 +61,21 @@ use crate::api::SessionId;
 use crate::db::{PersistedMessageRow, SqliteGalley};
 use crate::error::GalleyError;
 
-/// How many complete turns before the boundary a new segment opens with.
-pub const CARRY_TURNS: usize = 3;
+/// How many turns before the boundary a new segment opens with (PRD
+/// ruling 127, ticket 79): a user says a few things a day in the main
+/// chat, so three (ruling 50) reached back half a day and ten reach
+/// back over the week. A wake answered in silence takes no place.
+pub const CARRY_TURNS: usize = 10;
 
-/// Cap on what is carried, in Unicode characters: the smallest whole
-/// thousand that holds three p90 turns. Measured again when a turn
-/// became a user message and every reply up to the next (ticket 77,
-/// PRD ruling 125), against 518 turns of real desktop use: a turn's
-/// user message plus its replies has a median of 759 characters, p90
-/// 2,464, p95 3,219, the longest 12,864. Three p90 turns are 7,392, so
-/// 6,000 (PRD ruling 50, set when a turn was one `turn_index` and the
-/// p90 was about 1,060) became 8,000; only a rare long turn is cut.
-pub const CARRY_MAX_CHARS: usize = 8_000;
+/// Cap on what is carried, in Unicode characters (PRD ruling 127,
+/// ticket 79). Measured over windows of ten consecutive turns of real
+/// desktop use, every session, wakes answered in silence left out (44
+/// windows; a turn is a user message and every reply up to the next,
+/// ticket 77): a median of 10,808 characters, p90 13,796, p95 14,188.
+/// 15,000 holds 98% of them, 12,000 only 64%. It was 8,000 for three
+/// turns (ticket 77, ruling 125) and 6,000 when a turn was one
+/// `turn_index` (ruling 50).
+pub const CARRY_MAX_CHARS: usize = 15_000;
 
 /// Stands where carried text was cut for length.
 pub const CUT_MARKER: &str = "[… cut for length …]";
@@ -102,8 +114,10 @@ impl CarriedWindow {
     /// reply up to the next user row, whatever their `turn_index`
     /// (ticket 77; the module docs have the whole definition, and
     /// [`SqliteGalley::main_chat_carry_from`] reads from the oldest turn
-    /// it can take by the same one). The last [`CARRY_TURNS`] with a
-    /// reply are taken, then held to the cap.
+    /// it can take by the same one). A turn without a reply is none, and
+    /// neither is a wake's whose last reply is said in silence (ticket
+    /// 79). The last [`CARRY_TURNS`] turns are taken, then held to the
+    /// cap.
     pub fn from_rows(rows: impl IntoIterator<Item = ReplayRow>) -> Self {
         let mut drafts: Vec<Draft> = Vec::new();
         for row in rows {
@@ -113,9 +127,11 @@ impl CarriedWindow {
             if row.role == "user" {
                 drafts.push(Draft {
                     turn_index: row.turn_index,
+                    wake: row.is_wake(),
                     user: row.into_message(),
                     reply: None,
                     said_at: String::new(),
+                    silent: false,
                 });
                 continue;
             }
@@ -124,14 +140,15 @@ impl CarriedWindow {
                 continue;
             };
             draft.said_at = row.created_at.clone();
+            draft.silent = row.is_silent_reply();
             let message = row.into_message();
             match &mut draft.reply {
                 Some(prev) => merge_into(prev, message),
                 None => draft.reply = Some(message),
             }
         }
-        let complete: Vec<CarriedTurn> = drafts.into_iter().filter_map(Draft::complete).collect();
-        let mut turns = complete[complete.len().saturating_sub(CARRY_TURNS)..].to_vec();
+        let counted: Vec<CarriedTurn> = drafts.into_iter().filter_map(Draft::into_turn).collect();
+        let mut turns = counted[counted.len().saturating_sub(CARRY_TURNS)..].to_vec();
         while turns.len() > 1
             && turns.iter().map(CarriedTurn::chars).sum::<usize>() > CARRY_MAX_CHARS
         {
@@ -153,6 +170,13 @@ impl CarriedWindow {
         self.turns.iter().map(CarriedTurn::chars).sum()
     }
 
+    /// When the first carried turn was said (`created_at` as stored):
+    /// with [`Self::last_said_at`], the span the state block names when
+    /// more than one is carried (ticket 79).
+    pub fn first_said_at(&self) -> Option<&str> {
+        self.turns.first().map(|turn| turn.said_at.as_str())
+    }
+
     /// When the last carried turn was said (`created_at` as stored).
     pub fn last_said_at(&self) -> Option<&str> {
         self.turns.last().map(|turn| turn.said_at.as_str())
@@ -171,13 +195,23 @@ impl CarriedWindow {
 /// follows.
 struct Draft {
     turn_index: i64,
+    /// Opened by a wake ([`ReplayRow::is_wake`]).
+    wake: bool,
     user: ConversationMessage,
     reply: Option<ConversationMessage>,
     said_at: String,
+    /// Its last reply so far was said in silence
+    /// ([`ReplayRow::is_silent_reply`]).
+    silent: bool,
 }
 
 impl Draft {
-    fn complete(self) -> Option<CarriedTurn> {
+    /// The turn, when it is one: it has a reply, and it is not a wake
+    /// answered in silence.
+    fn into_turn(self) -> Option<CarriedTurn> {
+        if self.wake && self.silent {
+            return None;
+        }
         Some(CarriedTurn {
             turn_index: self.turn_index,
             user: self.user,
@@ -260,7 +294,8 @@ mod tests {
     use crate::session_runner::ReplayAttachment;
 
     /// A row written at minute `turn_index` of 09:00, so a later step is
-    /// said later.
+    /// said later. A reply's answer is its text, as the turn derivation
+    /// leaves plain text.
     fn row(turn_index: i64, role: &str, content: &str) -> ReplayRow {
         ReplayRow {
             role: role.into(),
@@ -269,7 +304,27 @@ mod tests {
             attachments: vec![],
             shown_only: false,
             created_at: format!("2026-10-13T09:{:02}:00Z", turn_index.rem_euclid(60)),
+            created_via: (role == "user").then(|| "gui".into()),
+            supervisor: None,
+            final_answer: (role == "assistant").then(|| content.to_string()),
         }
+    }
+
+    /// A wake (a subtask report or the daily review): the user row
+    /// Galley writes, with its origin.
+    fn wake(turn_index: i64, content: &str) -> ReplayRow {
+        let mut wake = row(turn_index, "user", content);
+        wake.created_via = Some("system".into());
+        wake.supervisor = Some(crate::api::SUBTASK_REPORT_SUPERVISOR.into());
+        wake
+    }
+
+    /// A reply said in silence, as stored: the raw text keeps the tag,
+    /// the answer is gone.
+    fn silent(turn_index: i64, content: &str) -> ReplayRow {
+        let mut reply = row(turn_index, "assistant", content);
+        reply.final_answer = None;
+        reply
     }
 
     /// One complete turn: `u{i}` and `r{i}`.
@@ -306,27 +361,31 @@ mod tests {
     }
 
     #[test]
-    fn the_last_three_complete_turns_are_carried() {
-        let rows: Vec<ReplayRow> = (0..5).flat_map(exchange).collect();
+    fn the_last_turns_up_to_the_count_are_carried() {
+        let n = CARRY_TURNS as i64;
+        let rows: Vec<ReplayRow> = (0..n + 2).flat_map(exchange).collect();
         let window = CarriedWindow::from_rows(rows);
-        assert_eq!(indexes(&window), vec![2, 3, 4]);
-        let messages = window.clone().into_messages();
-        let text: Vec<(&str, &str)> = messages
-            .iter()
-            .map(|m| (m.role.as_str(), m.content.as_str()))
+        assert_eq!(indexes(&window), (2..n + 2).collect::<Vec<_>>());
+        let text: Vec<(String, String)> = window
+            .clone()
+            .into_messages()
+            .into_iter()
+            .map(|m| (m.role, m.content))
             .collect();
+        let expected: Vec<(String, String)> = (2..n + 2)
+            .flat_map(|i| {
+                [
+                    ("user".to_string(), format!("u{i}")),
+                    ("assistant".to_string(), format!("r{i}")),
+                ]
+            })
+            .collect();
+        assert_eq!(text, expected);
+        assert_eq!(window.first_said_at(), Some("2026-10-13T09:02:00Z"));
         assert_eq!(
-            text,
-            vec![
-                ("user", "u2"),
-                ("assistant", "r2"),
-                ("user", "u3"),
-                ("assistant", "r3"),
-                ("user", "u4"),
-                ("assistant", "r4"),
-            ]
+            window.last_said_at(),
+            Some(format!("2026-10-13T09:{:02}:00Z", n + 1).as_str())
         );
-        assert_eq!(window.last_said_at(), Some("2026-10-13T09:04:00Z"));
     }
 
     /// The main chat behind ticket 77, in shape: the first question is
@@ -384,20 +443,26 @@ mod tests {
 
     #[test]
     fn greetings_unanswered_messages_and_other_rows_are_not_turns() {
+        let n = CARRY_TURNS as i64;
         let mut rows = vec![greeting(-1)];
-        rows.extend(exchange(0));
-        rows.extend(exchange(1));
-        // Turn 2 never got its reply — the greeting is shown only, not
-        // one; turn 3 is a Galley note alone.
-        rows.push(row(2, "user", "还在吗"));
-        rows.push(greeting(2));
-        rows.push(row(3, "galley", "note"));
-        rows.extend(exchange(4));
-        rows.push(row(5, "user", "最后一句没人回"));
+        rows.extend((0..n - 1).flat_map(exchange));
+        // Turn n - 1 never got its reply — the greeting is shown only,
+        // not one; turn n is a Galley note alone.
+        rows.push(row(n - 1, "user", "还在吗"));
+        rows.push(greeting(n - 1));
+        rows.push(row(n, "galley", "note"));
+        rows.extend(exchange(n + 1));
+        rows.push(row(n + 2, "user", "最后一句没人回"));
         let window = CarriedWindow::from_rows(rows);
-        // Short of three after the skips, the window reaches further back.
-        assert_eq!(indexes(&window), vec![0, 1, 4]);
-        assert_eq!(replies(&window), vec!["r0", "r1", "r4"]);
+        // The skips take no place: the window reaches back to turn 0.
+        let mut expected: Vec<i64> = (0..n - 1).collect();
+        expected.push(n + 1);
+        assert_eq!(indexes(&window), expected);
+        assert_eq!(replies(&window)[0], "r0");
+        assert_eq!(
+            replies(&window).last(),
+            Some(&format!("r{}", n + 1).as_str())
+        );
         assert!(window
             .into_messages()
             .iter()
@@ -447,17 +512,104 @@ mod tests {
     }
 
     /// A wake (a subtask report, the daily review) is a user row Galley
-    /// wrote, and opens a turn like the user's own.
+    /// wrote, and opens a turn like the user's own when it said
+    /// something — also when the tag follows what it said: it has an
+    /// answer.
     #[test]
-    fn a_turn_a_wake_opens_is_carried() {
+    fn a_turn_a_wake_opens_is_carried_when_it_said_something() {
         let mut rows = exchange(0);
-        rows.push(row(1, "user", "[Galley: subtask s-1 \"查资料\" finished]"));
+        rows.push(wake(1, "[Galley: subtask s-1 \"查资料\" finished]"));
         rows.push(row(1, "assistant", "看看结果"));
         rows.push(row(2, "assistant", "资料查到了。"));
+        rows.push(wake(3, "[Galley: subtask s-2 \"订座\" finished]"));
+        let mut told = row(3, "assistant", "已转告：订好了。<no-reply/>");
+        told.final_answer = Some("已转告：订好了。".into());
+        rows.push(told);
         let window = CarriedWindow::from_rows(rows);
-        assert_eq!(indexes(&window), vec![0, 1]);
-        assert_eq!(replies(&window), vec!["r0", "看看结果\n\n资料查到了。"]);
-        assert_eq!(window.last_said_at(), Some("2026-10-13T09:02:00Z"));
+        assert!(window
+            .turns
+            .iter()
+            .skip(1)
+            .all(|turn| turn.user.content.starts_with("[Galley:")));
+        assert_eq!(indexes(&window), vec![0, 1, 3]);
+        assert_eq!(
+            replies(&window),
+            vec![
+                "r0",
+                "看看结果\n\n资料查到了。",
+                "已转告：订好了。<no-reply/>"
+            ]
+        );
+        assert_eq!(window.last_said_at(), Some("2026-10-13T09:03:00Z"));
+    }
+
+    /// Ticket 79: a wake whose turn ends in silence — only a subtask
+    /// sent off, or an answer given for the user, then `<no-reply/>` —
+    /// is not carried and takes no place, alone between two of the
+    /// user's turns or several in a row; the window reaches back past
+    /// them. A turn of the user's own is never skipped this way.
+    #[test]
+    fn a_wake_answered_in_silence_takes_no_place() {
+        let n = CARRY_TURNS as i64;
+        let mut rows: Vec<ReplayRow> = (0..n - 1).flat_map(exchange).collect();
+        // Between two of the user's turns: the morning review, a step,
+        // then only a subtask sent off.
+        rows.push(wake(n - 1, "[Galley: morning review]"));
+        rows.push(row(n - 1, "assistant", "看看在办的事"));
+        rows.push(silent(n, "<no-reply/>\n\n[subtask s-1: 查 NBA]"));
+        rows.extend(exchange(n + 1));
+        // Several in a row, the last of them right before the boundary.
+        rows.push(wake(n + 2, "[Galley: subtask s-1 \"查 NBA\" asking]"));
+        rows.push(silent(n + 2, "<no-reply/>"));
+        rows.push(wake(n + 3, "[Galley: subtask s-2 \"查天气\" finished]"));
+        rows.push(silent(n + 3, "< No-Reply />"));
+        rows.push(wake(n + 4, "[Galley: subtask s-1 \"查 NBA\" finished]"));
+        rows.push(row(n + 4, "assistant", "核对一下"));
+        rows.push(silent(n + 5, "<no-reply/>"));
+        let window = CarriedWindow::from_rows(rows.clone());
+        let mut expected: Vec<i64> = (0..n - 1).collect();
+        expected.push(n + 1);
+        assert_eq!(indexes(&window), expected);
+        assert!(window
+            .turns
+            .iter()
+            .all(|turn| !turn.user.content.starts_with("[Galley:")));
+        assert_eq!(
+            window.last_said_at(),
+            Some(format!("2026-10-13T09:{:02}:00Z", n + 1).as_str())
+        );
+
+        // Only silent wakes: nothing to carry.
+        let wakes = rows
+            .iter()
+            .filter(|row| row.turn_index >= n + 2 || row.turn_index == n - 1 || row.turn_index == n)
+            .cloned();
+        assert!(CarriedWindow::from_rows(wakes).is_empty());
+
+        // The user's own turn answered with the tag is a turn.
+        let window =
+            CarriedWindow::from_rows(vec![row(0, "user", "不用回我"), silent(0, "<no-reply/>")]);
+        assert_eq!(indexes(&window), vec![0]);
+    }
+
+    /// A wake whose turn asked the user is a turn: the answer is the next
+    /// user message, and the question before it was said to the user.
+    /// The answer's own turn ends in silence, and is the user's.
+    #[test]
+    fn a_wake_that_asked_the_user_is_a_turn() {
+        let rows = vec![
+            wake(5, "[Galley: subtask s-1 \"订座\" asking]"),
+            row(5, "assistant", "子任务问：靠窗还是靠过道？"),
+            row(6, "user", "靠窗"),
+            row(6, "assistant", "已转告"),
+            silent(7, "<no-reply/>"),
+        ];
+        let window = CarriedWindow::from_rows(rows);
+        assert_eq!(indexes(&window), vec![5, 6]);
+        assert_eq!(
+            replies(&window),
+            vec!["子任务问：靠窗还是靠过道？", "已转告\n\n<no-reply/>"]
+        );
     }
 
     #[test]
@@ -591,6 +743,32 @@ mod tests {
         let window = CarriedWindow::from_rows(sized(0, CARRY_MAX_CHARS - 2_000, 1_500));
         assert_eq!(window.chars(), CARRY_MAX_CHARS - 500);
         assert!(!window.turns[0].user.content.contains(CUT_MARKER));
+    }
+
+    /// Ten turns that make the cap exactly go whole; one character more
+    /// and the oldest goes.
+    #[test]
+    fn the_turns_at_the_cap_go_whole_and_one_character_over_drops_the_oldest() {
+        let n = CARRY_TURNS as i64;
+        let each = CARRY_MAX_CHARS / CARRY_TURNS;
+        // The latest reply `extra` characters longer.
+        let at_cap = |extra: usize| -> Vec<ReplayRow> {
+            let mut rows: Vec<ReplayRow> = (0..n).flat_map(|i| sized(i, 100, each - 100)).collect();
+            let latest = rows.last_mut().expect("the latest reply");
+            latest.content.push_str(&"多".repeat(extra));
+            rows
+        };
+        let window = CarriedWindow::from_rows(at_cap(0));
+        assert_eq!(indexes(&window), (0..n).collect::<Vec<_>>());
+        assert_eq!(window.chars(), CARRY_MAX_CHARS);
+        assert!(window
+            .turns
+            .iter()
+            .all(|turn| !turn.reply.content.contains(CUT_MARKER)));
+
+        let window = CarriedWindow::from_rows(at_cap(1));
+        assert_eq!(indexes(&window), (1..n).collect::<Vec<_>>());
+        assert_eq!(window.chars(), CARRY_MAX_CHARS + 1 - each);
     }
 
     #[test]

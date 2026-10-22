@@ -1,4 +1,5 @@
 use super::*;
+use crate::api::SUBTASK_REPORT_SUPERVISOR;
 
 /// Title the main chat is created with. Not the GUI's label — the
 /// sidebar and the header show their own localized 主聊天 / Main chat —
@@ -59,6 +60,20 @@ pub fn is_main_chat_greeting(
     role == "assistant"
         && created_via == Some("system")
         && supervisor == Some(MAIN_CHAT_GREETING_SUPERVISOR)
+}
+
+/// Whether a persisted message is a main chat reply said in silence
+/// (tickets 29, 76): no answer left, and the raw text has the silent
+/// reply's tag (`<no-reply/>`, which the turn derivation strips). The
+/// desktop search's criterion (`HIDDEN_FROM_GUI_SEARCH` in
+/// `db/search.rs`) in Rust, read the way SQLite reads it there: `TRIM`
+/// takes spaces only, and `LIKE` ignores ASCII case. A new segment does
+/// not carry a wake answered this way
+/// (`crate::session_runner::carry`, [`SqliteGalley::main_chat_carry_from`]).
+pub fn is_main_chat_silent_reply(role: &str, final_answer: Option<&str>, content: &str) -> bool {
+    role == "assistant"
+        && final_answer.unwrap_or("").trim_matches(' ').is_empty()
+        && content.to_ascii_lowercase().contains("no-reply")
 }
 
 /// What Core writes with a new main chat, in the transaction that
@@ -499,14 +514,18 @@ impl SqliteGalley {
     }
 
     /// Where reading the turns a segment starting at `before` carries
-    /// over begins (ticket 11, ticket 77): the `turn_index` of the oldest
-    /// of the last `turns` complete turns before it, whichever segment
+    /// over begins (tickets 11, 77, 79): the `turn_index` of the oldest
+    /// of the last `turns` turns before it that count, whichever segment
     /// they are in. A turn is the carry's own
     /// ([`CarriedWindow::from_rows`](crate::session_runner::carry::CarriedWindow::from_rows),
     /// the module docs of `crate::session_runner::carry`): a visible user
     /// message and every reply up to the next one, complete when a
     /// visible reply that is not the greeting comes before the next user
-    /// message and before `before`. Its replies may sit on later
+    /// message and before `before`. It does not count when a wake opens
+    /// it (a subtask report or the daily review,
+    /// [`Origin::is_stored_subtask_report`]) and its last such reply is
+    /// said in silence ([`is_main_chat_silent_reply`]): the user never
+    /// saw it, so it takes no place. Its replies may sit on later
     /// `turn_index`es than the user message (a run takes one per step),
     /// so the turn is found by its user message and the read, which runs
     /// on from here, takes every step of it. `None` when there is none.
@@ -520,7 +539,9 @@ impl SqliteGalley {
     ) -> Result<Option<i64>> {
         // A reply comes before the next user message exactly when the
         // first `user` / `assistant` row after the user message, the
-        // greeting aside, is a reply.
+        // greeting aside, is a reply. A wake's turn ends on its last
+        // such reply with no user message between: silent, the desktop
+        // search's way (`HIDDEN_FROM_GUI_SEARCH`), it is left out.
         sqlx::query_scalar(
             "SELECT MIN(turn_index) FROM ( \
                SELECT u.turn_index FROM messages u \
@@ -533,10 +554,28 @@ impl SqliteGalley {
                      AND (n.turn_index, n.sequence) > (u.turn_index, u.sequence) \
                      AND n.turn_index < ? \
                    ORDER BY n.turn_index ASC, n.sequence ASC LIMIT 1) = 'assistant' \
+                 AND NOT (u.created_via IS 'system' AND u.supervisor IS ? \
+                   AND COALESCE((SELECT TRIM(COALESCE(a.final_answer, '')) = '' \
+                       AND a.content LIKE '%no-reply%' \
+                     FROM messages a \
+                     WHERE a.session_id = u.session_id AND a.visibility = 'visible' \
+                       AND a.role = 'assistant' \
+                       AND NOT (a.created_via IS 'system' AND a.supervisor IS ?) \
+                       AND (a.turn_index, a.sequence) > (u.turn_index, u.sequence) \
+                       AND a.turn_index < ? \
+                       AND NOT EXISTS (SELECT 1 FROM messages b \
+                         WHERE b.session_id = u.session_id AND b.visibility = 'visible' \
+                           AND b.role = 'user' \
+                           AND (b.turn_index, b.sequence) > (u.turn_index, u.sequence) \
+                           AND (b.turn_index, b.sequence) < (a.turn_index, a.sequence)) \
+                     ORDER BY a.turn_index DESC, a.sequence DESC LIMIT 1), 0)) \
                ORDER BY u.turn_index DESC, u.sequence DESC LIMIT ?)",
         )
         .bind(session_id.as_str())
         .bind(before)
+        .bind(MAIN_CHAT_GREETING_SUPERVISOR)
+        .bind(before)
+        .bind(SUBTASK_REPORT_SUPERVISOR)
         .bind(MAIN_CHAT_GREETING_SUPERVISOR)
         .bind(before)
         .bind(turns)

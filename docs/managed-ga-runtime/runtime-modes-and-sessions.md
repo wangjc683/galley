@@ -121,22 +121,25 @@ is unaffected.
   `core/src/session_runner/carry.rs`): otherwise a user who writes again
   after the gap finds the assistant has forgotten the exchange still on
   screen. The replay of a segment with a recorded boundary opens with the
-  last 3 complete turns before it — a user message and every reply up to
+  last 10 complete turns before it — a user message and every reply up to
   the next one (ticket 77: a run takes a `turn_index` per step, so a
   multi-step run's answer comes with the message that started it), read
   by the replay's own rules; never the greeting, never a message whose
-  reply never came — whichever segment they are in, at most 8,000
+  reply never came, never a wake (a subtask report, the daily review)
+  whose turn ends in a silent reply (`<no-reply/>` and no answer, ticket
+  79: the desktop draws nothing for it, so it takes no place either) —
+  whichever segment they are in, at most 15,000
   Unicode characters together (images ride along uncounted). Over the cap, whole
   turns go, oldest first. When the latest turn alone is over it, its user
   message and its reply are each sure of half the cap and lend the other
   what they do not need: a cut reply keeps its end (the final answer), a
   cut user message its start and its end (a long one is mostly a paste
   with the request at one end), with `[… cut for length …]` where text
-  went. 3 and 8,000 are constants, not prefs. The window is computed from
+  went. 10 and 15,000 are constants, not prefs. The window is computed from
   the rows before the boundary and nothing else, so the replay after a
   Core restart opens the same way, and the state block, which reads it
-  through the same function, says how many turns it carries and when the
-  last was said (last point). The first segment, every other
+  through the same function, says how many turns it carries and when they
+  were said (last point). The first segment, every other
   session, and attach mode are unchanged.
 - **Where the rule runs**: in `ensure_session_runner` (the GUI opening the
   main chat, `/btw`) and in Core's send just before it persists the message.
@@ -150,8 +153,9 @@ is unaffected.
 - **Earlier segments are looked up, not replayed** (ticket 03b): the main
   chat's state block says it is the main chat, gives its id and where the
   current segment begins (first `turnIndex`, local day) — and, when turns
-  are carried over, how many and when the last was said (local time to
-  the minute, ticket 11) — and sends the model to the Galley CLI for
+  are carried over, how many and when they were said (local time to the
+  minute: the one turn's time, ticket 11; the first's and the last's when
+  there are more, ticket 79) — and sends the model to the Galley CLI for
   anything older — `sessions search`, then
   `session show <id> --around=<messageId>`, or a `--since` / `--until`
   window ([prompt composition](./prompt-composition.md#main-chat-main-chat-only),

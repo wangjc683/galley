@@ -1240,7 +1240,7 @@ async fn the_replayed_history_shows_a_report_as_its_line() {
 }
 
 #[tokio::test]
-async fn a_report_after_an_idle_gap_opens_a_segment_that_carries_the_line() {
+async fn a_report_after_an_idle_gap_opens_a_segment_that_leaves_a_silent_one_out() {
     let (pool, galley) = with_main_chat().await;
     let env = FakeEnv;
     let first = Runner::default();
@@ -1256,7 +1256,8 @@ async fn a_report_after_an_idle_gap_opens_a_segment_that_carries_the_line() {
         .expect("backdate");
 
     // The next report wakes it after the gap: a new segment, opening with
-    // the turns before it, the earlier report as its line.
+    // the turns before it. The earlier report, answered in silence, is
+    // not one of them (ticket 79): the user never saw it.
     let runner = Runner::default();
     let reports = SubtaskReports::new();
     finished_subtask(&galley, &runner, "s-next", "查报价", "三家都问了").await;
@@ -1286,8 +1287,6 @@ async fn a_report_after_an_idle_gap_opens_a_segment_that_carries_the_line() {
                 "role": "assistant",
                 "content": "交给子任务了。\n\n[subtask s-sub: 把 PDF 分类]\n[subtask s-next: 查报价]"
             }),
-            json!({"role": "user", "content": REPORT_LINE}),
-            json!({"role": "assistant", "content": "<no-reply/>"}),
         ]]
     );
 }

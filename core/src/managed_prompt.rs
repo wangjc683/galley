@@ -274,8 +274,11 @@ pub(crate) fn compose_im_runtime_prompt(app_version: &str) -> String {
 ///
 /// When the segment opens with turns carried over from before it
 /// (ticket 11, `session_runner::carry`), the section says how many and
-/// when the last was said, so the model does not take something said
-/// hours ago for something said just now; "earlier parts" then becomes
+/// when they were said, so the model does not take something said
+/// hours ago for something said just now: for one turn when it was
+/// said, for more when the first and the last were (ticket 79: ten
+/// turns can span a week, and the last time alone would not tell the
+/// day before yesterday from today); "earlier parts" then becomes
 /// "anything older". Nothing carried, nothing said.
 fn main_chat_section(state: &MainChatPromptState) -> String {
     let Some(carried) = &state.carried else {
@@ -296,7 +299,7 @@ with the Galley CLI (search, then `session show <id> --around=<messageId>`)."#,
 
 This conversation is the user's main chat, session `{id}`. Your context
 holds it from turnIndex {turn} on, a segment that began {date}, and opens
-with {exchanges} from before it, the last said {at}: time has passed
+with {exchanges} from before it, {said}: time has passed
 since. Anything older is not in your context: when the user refers to it,
 look it up with the Galley CLI (search, then
 `session show <id> --around=<messageId>`)."#,
@@ -307,7 +310,13 @@ look it up with the Galley CLI (search, then
             1 => "1 exchange".to_string(),
             n => format!("{n} exchanges"),
         },
-        at = carried.last_said_at,
+        said = match carried.turns {
+            1 => format!("the last said {}", carried.last_said_at),
+            _ => format!(
+                "said between {} and {}",
+                carried.first_said_at, carried.last_said_at
+            ),
+        },
     )
 }
 
@@ -1082,9 +1091,11 @@ mod tests {
     }
 
     /// Ticket 11: a segment that opens with turns carried over from
-    /// before it says how many and when the last was said, and "earlier
+    /// before it says how many and when they were said, and "earlier
     /// parts" becomes "anything older". Without carried turns the
-    /// section reads exactly as 03b wrote it.
+    /// section reads exactly as 03b wrote it. Ticket 79: more than one
+    /// turn names when the first and the last were said; one turn reads
+    /// as ticket 11 wrote it.
     #[test]
     fn main_chat_section_says_what_the_segment_carries_over() {
         let plain = main_chat_section(&main_chat_state());
@@ -1094,6 +1105,7 @@ mod tests {
         let mut state = main_chat_state();
         state.carried = Some(CarriedPromptState {
             turns: 3,
+            first_said_at: "2026-10-05 21:26".into(),
             last_said_at: "2026-10-12 09:41".into(),
         });
         let carried = main_chat_section(&state);
@@ -1103,17 +1115,41 @@ mod tests {
         assert!(carried
             .contains("holds it from turnIndex 42 on, a segment that began 2026-10-12, and opens"));
         assert!(carried.contains(
-            "with 3 exchanges from before it, the last said 2026-10-12 09:41: time has passed"
+            "with 3 exchanges from before it, said between 2026-10-05 21:26 and \
+             2026-10-12 09:41: time has passed"
         ));
+        assert!(!carried.contains("the last said"));
         assert!(carried.contains("Anything older is not in your context:"));
         assert!(!carried.contains("Earlier"));
         assert!(carried.contains("`session show <id> --around=<messageId>`"));
 
+        // One turn: ticket 11's sentence, word for word; its first time
+        // is its last.
         state.carried = Some(CarriedPromptState {
             turns: 1,
+            first_said_at: "2026-10-12 09:41".into(),
             last_said_at: "2026-10-12 09:41".into(),
         });
-        assert!(main_chat_section(&state).contains("with 1 exchange from before it, the last said"));
+        let one = main_chat_section(&state);
+        assert!(one.contains(
+            "with 1 exchange from before it, the last said 2026-10-12 09:41: time has passed"
+        ));
+        assert!(!one.contains("between"));
+        // Line by line (`lines` drops a Windows checkout's `\r`).
+        let lines: Vec<&str> = one.lines().collect();
+        assert_eq!(
+            lines,
+            [
+                "## Main Chat",
+                "",
+                "This conversation is the user's main chat, session `s-mgn4k2x1-7q3z9w0e`. Your context",
+                "holds it from turnIndex 42 on, a segment that began 2026-10-12, and opens",
+                "with 1 exchange from before it, the last said 2026-10-12 09:41: time has passed",
+                "since. Anything older is not in your context: when the user refers to it,",
+                "look it up with the Galley CLI (search, then",
+                "`session show <id> --around=<messageId>`).",
+            ]
+        );
     }
 
     /// Byte cap on the main chat section, rendered with the longest
@@ -1121,16 +1157,22 @@ mod tests {
     /// characters until 2059; `mint_session_id`), a six-digit turn index,
     /// a date, and — since ticket 11 — the longer variant that says what
     /// the segment carries over, with the most turns it carries
-    /// (`CARRY_TURNS`, one digit) and a minute-precise local time. No
-    /// headroom, `\r` not counted. It rides every request of the main
-    /// chat, and the static budget does not cover it. Raised from 327
-    /// (03b; the variant without carried turns is unchanged) to 421 by
-    /// ticket 11: +94 bytes for "and opens with N exchanges from before
-    /// it, the last said <time>: time has passed since", with "Earlier
-    /// parts … them" reworded to "Anything older … it". The count tells
-    /// the model where the carried turns end; the time keeps it from
-    /// reading a carried "I'm heading out" as said just now.
-    const MAIN_CHAT_SECTION_BUDGET_BYTES: usize = 421;
+    /// (`CARRY_TURNS`, two digits since ticket 79) and minute-precise
+    /// local times. No headroom, `\r` not counted. It rides every
+    /// request of the main chat, and the static budget does not cover
+    /// it. Raised from 327 (03b; the variant without carried turns is
+    /// unchanged) to 421 by ticket 11: +94 bytes for "and opens with N
+    /// exchanges from before it, the last said <time>: time has passed
+    /// since", with "Earlier parts … them" reworded to "Anything older …
+    /// it". The count tells the model where the carried turns end; the
+    /// time keeps it from reading a carried "I'm heading out" as said
+    /// just now. Raised 421 → 442 by ticket 79 (PRD ruling 127): +20
+    /// bytes for "said between <time> and <time>" in place of "the last
+    /// said <time>" when more than one turn is carried, +1 for the
+    /// second digit of ten turns; ten can span a week, and the last time
+    /// alone would not tell the day before yesterday from today. One
+    /// carried turn reads as before.
+    const MAIN_CHAT_SECTION_BUDGET_BYTES: usize = 442;
 
     /// Ticket 03d: the entry layer follows the Main Chat section in the
     /// main chat and nowhere else.
@@ -1364,6 +1406,7 @@ mod tests {
             segment_start_date: "2026-10-12".into(),
             carried: Some(CarriedPromptState {
                 turns: crate::session_runner::carry::CARRY_TURNS,
+                first_said_at: "2026-10-05 23:59".into(),
                 last_said_at: "2026-10-12 23:59".into(),
             }),
         };
