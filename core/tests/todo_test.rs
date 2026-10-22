@@ -1337,6 +1337,97 @@ async fn the_follow_ups_turned_down_and_only_the_main_chat_reads_them() {
     assert_eq!(main.declined, declined);
 }
 
+/// Main chat ticket 88 (PRD ruling 132 point 6): the panel's 「删除」 is
+/// Core's soft delete from the desktop — the Tauri command `cancel_todo`
+/// is `Writes::cancel_todo` with `Origin::desktop()`. The to-do is
+/// cancelled as the user at the desktop (`gui`) and both events go out;
+/// one Galley noted is a follow-up the user turned down; the reminder on
+/// it goes with it, cancelled by Core (`system`), and is not a second
+/// one. It leaves the desktop's list, its card reads it cancelled, and
+/// deleting it again is `not_found`.
+#[tokio::test]
+async fn the_desktop_deletes_a_to_do_and_it_is_turned_down() {
+    let (pool, galley) = with_main_chat().await;
+    let rec = Recorder::default();
+    let writes = Writes::new(&galley, &rec, "test");
+    let report = note(
+        &galley,
+        CreateTodoInput {
+            remind_at: Some(hours(4)),
+            ..titled("交周报")
+        },
+    )
+    .await;
+    let soil = note(&galley, titled("买营养土")).await;
+    rec.take();
+
+    let gone = writes
+        .cancel_todo(&id(&report), Origin::desktop())
+        .await
+        .expect("delete");
+    assert_eq!(gone.status, TodoStatus::Cancelled);
+    assert!(gone.cancelled_at.is_some());
+    assert_eq!(gone.cancelled_by.expect("who").via, OriginVia::Gui);
+    assert_eq!(
+        rec.take(),
+        [
+            TODOS_CHANGED_EVENT.to_string(),
+            SCHEDULED_TASKS_CHANGED_EVENT.to_string(),
+        ]
+    );
+    assert_eq!(
+        cancel_columns(&pool, "todos", report.id.as_str()).await,
+        (Some("gui".into()), None, None)
+    );
+    // Its reminder went with it: Core's own cancel, not the user's.
+    let reminder = reminder_id(&report);
+    assert_eq!(
+        cancel_columns(&pool, "scheduled_tasks", reminder.as_str()).await,
+        (Some("system".into()), None, None)
+    );
+
+    // Turned down: the to-do, by the user, once; not its reminder.
+    let declined = declined_follow_ups(&galley, Utc::now()).await.unwrap();
+    let got: Vec<(&str, TodoKind, DeclinedBy, Option<&str>)> = declined
+        .iter()
+        .map(|d| (d.id.as_str(), d.kind, d.by, d.reason.as_deref()))
+        .collect();
+    assert_eq!(
+        got,
+        [(report.id.as_str(), TodoKind::Todo, DeclinedBy::User, None)]
+    );
+    assert_eq!(declined[0].text, "交周报");
+    let main = in_hand_read(&galley, &RunnerManager::new(), Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(main.declined, declined);
+
+    // Gone from the desktop's list; the other one stays.
+    let panel = read(&galley).await;
+    let listed = ids(panel
+        .yours
+        .today
+        .iter()
+        .chain(&panel.yours.later)
+        .chain(&panel.yours.anytime)
+        .chain(&panel.assistant)
+        .chain(&panel.done));
+    assert!(!listed.contains(&report.id.as_str()), "{listed:?}");
+    assert!(!listed.contains(&reminder.as_str()), "{listed:?}");
+    assert!(listed.contains(&soil.id.as_str()), "{listed:?}");
+
+    // Deleting it again: not there any more, nothing written over.
+    let err = writes
+        .cancel_todo(&id(&report), Origin::desktop())
+        .await
+        .unwrap_err();
+    assert!(matches!(err, GalleyError::NotFound { .. }), "{err:?}");
+    assert_eq!(
+        cancel_columns(&pool, "todos", report.id.as_str()).await,
+        (Some("gui".into()), None, None)
+    );
+}
+
 // ---------------- reset ----------------
 
 #[tokio::test]

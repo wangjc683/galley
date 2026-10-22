@@ -259,13 +259,15 @@ pub fn run() {
             run_scheduled_task_now,
             delete_scheduled_task,
             // The assistant's to-do list (main chat ticket 37), the
-            // three actions the desktop has on a to-do (ticket 39) and
-            // the to-dos noted in the main chat, for its cards (ticket 43)
+            // actions the desktop has on a to-do (ticket 39; its delete,
+            // ticket 88) and the to-dos noted in the main chat, for its
+            // cards (ticket 43)
             list_assistant_todo,
             list_noted_todos,
             complete_todo,
             reopen_todo,
             cancel_todo_reminder,
+            cancel_todo,
             // B2 runner commands
             runner_commands::spawn_runner,
             runner_commands::send_to_runner,

@@ -3,10 +3,11 @@
 //!
 //! Galley notes one in the conversation when the user mentions something
 //! they have to do — with a due date or without — and may hang a reminder
-//! on it. The user only ticks it off, unticks it, or cancels its reminder
-//! (the desktop's three commands); everything else they say to Galley,
-//! which changes it through the CLI (ticket 40). Core holds the record
-//! (`todos`, migration 050) and decides every write (Rule 5).
+//! on it. The user only ticks it off, unticks it, cancels its reminder or,
+//! since main chat ticket 88, deletes it (the desktop's four commands);
+//! everything else they say to Galley, which changes it through the CLI
+//! (ticket 40). Core holds the record (`todos`, migration 050) and decides
+//! every write (Rule 5).
 //!
 //! A reminder is a scheduled task (main chat ticket 33): a one-off that
 //! wakes the assistant, linked to its to-do (`scheduled_tasks.todo_id`,

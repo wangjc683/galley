@@ -178,14 +178,15 @@ pub(crate) async fn list_noted_todos(
 
 // ---------------- to-dos (main chat ticket 39) ----------------
 //
-// The desktop's three direct actions on a to-do (PRD ruling 91 point 3):
-// tick it off, untick it, cancel its reminder. Everything else the user
-// says to Galley, which writes through the CLI. Each is the user at the
-// desktop (`Origin::desktop()`: `done_via = 'gui'`), goes through Core's
-// write path, broadcasts `todos:changed` (and `scheduled-tasks:changed`
-// when a reminder moved), and returns the to-do as it now stands. Errors
-// are Core's JSON (`not_found` for a to-do cancelled or gone, or without a
-// reminder to cancel).
+// The desktop's direct actions on a to-do (PRD ruling 91 point 3): tick
+// it off, untick it, cancel its reminder, and since main chat ticket 88
+// (PRD ruling 132) delete it. Everything else the user says to Galley,
+// which writes through the CLI. Each is the user at the desktop
+// (`Origin::desktop()`: `done_via` / `cancelled_via = 'gui'`), goes
+// through Core's write path, broadcasts `todos:changed` (and
+// `scheduled-tasks:changed` when a reminder moved), and returns the to-do
+// as it now stands. Errors are Core's JSON (`not_found` for a to-do
+// cancelled or gone, or without a reminder to cancel).
 
 /// Tick a to-do off. Its reminder is cancelled while it has not reached
 /// the assistant.
@@ -226,6 +227,25 @@ pub(crate) async fn cancel_todo_reminder(
     let notifier = TauriNotifier::new(app);
     Writes::new(&galley, notifier.as_ref(), VIA_GUI)
         .cancel_todo_reminder(&id, Origin::desktop())
+        .await
+        .map_err(stringify_error)
+}
+
+/// Delete a to-do (main chat ticket 88, PRD ruling 132): Core's soft
+/// delete, the one Galley's `todo cancel` makes, from the panel's 「删除」
+/// once its undo toast has gone. Recorded as the user at the desktop
+/// (`cancelled_via = 'gui'`), so one Galley noted is a follow-up the user
+/// turned down (ruling 113, `declined_items`); its reminder goes with it,
+/// cancelled by Core (`system`), and is not a second one.
+#[tauri::command]
+pub(crate) async fn cancel_todo(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+    id: crate::api::TodoId,
+) -> std::result::Result<crate::api::TodoBrief, String> {
+    let notifier = TauriNotifier::new(app);
+    Writes::new(&galley, notifier.as_ref(), VIA_GUI)
+        .cancel_todo(&id, Origin::desktop())
         .await
         .map_err(stringify_error)
 }
