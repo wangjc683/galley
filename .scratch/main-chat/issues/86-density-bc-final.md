@@ -45,3 +45,20 @@ Status: ready-for-agent（由票 85 的代理接着做）
 合入后（纯 GUI，热更新）切换器那一排不见了；面板最上面是你的事，不挂组名（现在只有 702 一件，写「11月20日 🔔 09:00」）；下面「例行」「已完成」的组名比原来紧。
 
 ## Comments
+
+### 2026-10-22 实现回报（票 86 代理）
+
+- **提交**（分支 `ticket-86-density-bc`，从 main `24d9a77a` 起，未 push、未合入）：`40ca8820` GUI 与测试；`9b843544` 设计文档；本条回报另一个提交。
+- **写死 B+C**：`TodoPanelGroups` 只留一支：`yours = [...todo.yours.today, ...todo.yours.later, ...todo.yours.anytime]`，有东西时画一个 `section data-todo-group="yours"`，不挂组名、不重排；`yourParts` 和三个组名去掉，`data-todo-part` 属性跟着没了（只有测试读它）。`GroupLabel` 的类名写死 `py-[3px]`，`tight` 与 `LABEL_PAD` 随切换器删掉。注释改成定稿说法：依据裁决 130（对表苹果「提醒事项」，行高一样，空间花在组名上），推翻裁决 98 的一半（「不挂『你的事』」照旧）。组间距 `space-y-3` 不动。
+- **`inToday`**：`YourRow` 的 `inToday` 去掉了；全仓再没有调用方传 `true`，`todoMetaParts` 的 `inToday` 参数连同三处分支（今天不写「今天」、逾期写钟点、今天的提醒只写钟点）一起删，写法只剩卡片原来那一种：今天的写「今天 18:00」「今天」，逾期今天写「逾期 · 今天 15:00」；今天到期又今天提醒的，提醒照「同一天只写钟点」写成「今天 🔔 20:00」。`lib/message-time.ts` 的 `formatClock` 注释里「a time under 今天」删了。
+- **文案键**：先 grep 整个 `gui/src`（含 ⌘K 与测试），`groupToday`、`groupLater`、`groupAnytime` 只有 `TodoPanel.tsx` 读，已从 `zh.ts`、`en.ts` 删掉（类型由 locale 推出，不另有声明）。拆完再 grep 为零。
+- **拆**：`git rm` 了 `gui/src/components/todo/todo-variants/`（含快照）；`App.tsx` 的 pill 与 import、`TodoPanel` 的 `useDemoTodo` / `shown` / provider / 换掉的 `go` 与 `talkAbout`、`TodoCheck` / `YourRow` / `AssistantRow` 里的 `useTodoDemoInert` 都去掉，点击回到 store。`grep -rn "main chat 85" gui/src` 为零。
+- **设计文档**（`docs/design/conversation.md`「待办面板」）：「分组」写上组名 3px（约 22px）、组与组之间 12px、第一组不加、看到的间距（离上一组约 21px、离自己那组约 9px），以及你要办的事是最上面一段、其后三组各挂组名，由来写了裁决 98 与裁决 130 的对表数（行高 32 对 34、两行 50.8 对约 51，组名约占一半高度）和票 85 切换器定 B+C；原「今天、以后、随时」那一条改写成「你要办的事」一段（次序、为空时不画、顶栏「今天 N」数的就是这一段最前面的今天到期与逾期、代价与先换墨色不加回组名）；「主时间」改成今天的写「今天」；备注那条「随时组里」改成「没有截止、也没有提醒的」；「待办卡片」「勾掉与取消勾」「勾掉的样子」里提到三组的说法跟着改。都注了「2026-10-22，票 86，裁决 130」。`docs/design/layout-and-chrome.md`「待办按钮」那一条写的是「今天有到期与逾期的待办时……Core 的 `todayCount`」，没有依赖组名，没改。
+- **测试**：切换器测试随目录删掉。`TodoPanel.test.tsx`：你的事一段、不挂组名、在最前面，「今天」「以后」「随时」（英文 Today / Later / Anytime）不再出现；次序 today → later → anytime（逾期、今天有时刻、今天只有日期、以后、没定时间五件逐一核对），今天的小字带「今天」，逾期 warning；你的事为空时不画这一段、第一组是 Galley 在办；组名三个都是 `py-[3px]`、不再有 `py-1.5`，`space-y-3` 与四个 `section`；勾的停留仍在原位（改成按前后行核对，原来按「以后」组定位的那句在新结构下会恒真）。空状态加「例行」、逾期在前、空组不画的原有断言都留着。`lib/todo-panel.test.ts` 的 `inToday` 用例改成今天写「今天」的断言。反向检查：先把 `TodoPanel.tsx` 拷到 scratchpad，再把组名改回 `py-1.5`、把三组次序换成 anytime 在前，4 条测试失败；拷回原文件后全过。UTC 与 America/Los_Angeles 下也跑过。
+
+### 看到但没改的
+
+1. 裁决 130 第 5 条记下的代价：今天的几件只靠排在前面和小字的「今天」来认，没有做任何强调（裁决说先看试用，要找今天的事再考虑换墨色）。
+2. `lib/assistant-todo.ts` 的 `YourTodos` 照旧是三组（Core 的分组不动），面板在 GUI 侧接起来。
+3. PRD、devlog 里讲「今天、以后、随时」三组的历史段落没动（不是现行说法）。
+4. 组名一行约 22px 是按 3px＋行高算的，没在真机量；没跑 `tauri dev`，WebKit 下、浅色与深色都没看。
