@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { enCopy } from "@/i18n/locales/en";
 import { zhCopy } from "@/i18n/locales/zh";
-import { EMPTY_TODO, type TodoItem } from "@/lib/assistant-todo";
+import {
+  EMPTY_TODO,
+  type AssistantTodo,
+  type TodoItem,
+} from "@/lib/assistant-todo";
 import {
   assistantRowLine,
   assistantTaskCancellable,
@@ -18,19 +22,28 @@ import {
   todoMetaParts,
   todoNotesLine,
   todoOverdueDays,
+  todoGlanceOpened,
+  todoListed,
+  todoPanelChanges,
   todoPanelEmpty,
   todoPanelOpened,
+  todoPanelRows,
   todoReminderCancellable,
+  todoRowsInDone,
   todoRowText,
   todosByMessage,
   todoTitleTarget,
+  todoWritesOnTheirWay,
+  type TodoHold,
 } from "@/lib/todo-panel";
 
 /**
  * The to-do panel's and the to-do cards' pure half (main chat tickets
  * 42 and 43): what a row's second line says (today, overdue, crossing
  * midnight, the day it was noted), where a title leads, which reply a
- * card hangs under and in what order, when the list is read again.
+ * card hangs under and in what order, when the list is read again; and
+ * since ticket 87 (PRD ruling 131) what lights up when Galley changes
+ * the list, and where a to-do it ticked off holds.
  */
 
 // Local wall-clock parts, so the day words hold in whatever zone the
@@ -695,22 +708,23 @@ describe("the panel's place (tickets 45, 46)", () => {
   it("a file preview closes only the place whose panel it replaces", () => {
     // Beside Galley: the preview takes its place, Galley's counts as
     // closed; the other place's stays as it was.
-    expect(readingPanelClosesTodo("preview", "galley")).toEqual(["galley"]);
+    expect(readingPanelClosesTodo("preview", "galley", false)).toEqual([
+      "galley",
+    ]);
     // Beside the workbench, a subtask or the empty composer: theirs.
-    expect(readingPanelClosesTodo("preview", "elsewhere")).toEqual([
+    expect(readingPanelClosesTodo("preview", "elsewhere", false)).toEqual([
       "elsewhere",
     ]);
     // No panel on screen: the preview is that conversation's and goes
     // with it; each place's panel comes back where it was open.
-    expect(readingPanelClosesTodo("preview", null)).toEqual([]);
+    expect(readingPanelClosesTodo("preview", null, false)).toEqual([]);
   });
 
   it("the Git review closes both, wherever it opens (it is the window's)", () => {
     for (const shown of ["galley", "elsewhere", null] as const) {
-      expect([...readingPanelClosesTodo("review", shown)].sort()).toEqual([
-        "elsewhere",
-        "galley",
-      ]);
+      expect(
+        [...readingPanelClosesTodo("review", shown, false)].sort(),
+      ).toEqual(["elsewhere", "galley"]);
     }
   });
 
@@ -732,5 +746,349 @@ describe("the panel's place (tickets 45, 46)", () => {
       false,
     );
     expect(todoPanelOpened(closed, closed)).toBe(false);
+  });
+
+  it("in a narrow main area nothing is remembered closed (ticket 87)", () => {
+    for (const shown of ["galley", "elsewhere", null] as const) {
+      expect(readingPanelClosesTodo("preview", shown, true)).toEqual([]);
+      expect(readingPanelClosesTodo("review", shown, true)).toEqual([]);
+    }
+  });
+
+  it("a look opening, or sent ahead by a jump, takes the place too (ticket 87)", () => {
+    const here = { at: "main:a", arrived: true };
+    expect(todoGlanceOpened(here, null)).toBe(true);
+    expect(todoGlanceOpened({ at: "main:b", arrived: false }, here)).toBe(true);
+    // Arriving, or folding, is no opening.
+    expect(todoGlanceOpened(here, { at: "main:a", arrived: false })).toBe(
+      false,
+    );
+    expect(todoGlanceOpened(null, here)).toBe(false);
+  });
+});
+
+describe("what lights up (ticket 87, ruling 131 points 3 and 5)", () => {
+  const list = (extra: Partial<AssistantTodo> = {}): AssistantTodo => ({
+    ...EMPTY_TODO,
+    ...extra,
+  });
+  const yours = (...items: TodoItem[]): AssistantTodo["yours"] => ({
+    today: [],
+    later: [],
+    anytime: items,
+  });
+  const none = new Set<string>();
+  const lit = (
+    previous: AssistantTodo,
+    next: AssistantTodo,
+    mine: ReadonlySet<string> = none,
+  ) => todoPanelChanges(previous, next, mine).flash;
+
+  const A = todo({ id: "todo_a", text: "交季度报告" });
+  const B = todo({ id: "todo_b", text: "订机票" });
+  const C = todo({ id: "todo_c", text: "还书" });
+  const SUB: TodoItem = {
+    kind: "subtask",
+    id: "s-sub",
+    text: "查资料",
+    state: "running",
+    at: local(2026, 10, 16, 9, 0),
+    createdBy: "assistant",
+  };
+  const ONCE = task({ id: "sched_once" });
+  const DAILY = task({
+    id: "sched_daily",
+    text: "每天看看日程",
+    repeat: { kind: "daily" },
+    timeOfDay: "08:00",
+    at: local(2026, 10, 17, 8, 0),
+  });
+
+  it("lights what is new among your to-dos, Galley's and the routines, a subtask too", () => {
+    const before = list({ yours: yours(A), assistant: [ONCE], routine: [] });
+    const after = list({
+      yours: yours(A, B),
+      assistant: [ONCE, SUB],
+      routine: [DAILY],
+    });
+    expect(lit(before, after)).toEqual(["todo_b", "s-sub", "sched_daily"]);
+  });
+
+  it("lights a to-do of yours with new words, due time, reminder or notes", () => {
+    const before = list({
+      yours: yours(
+        A,
+        todo({ id: "todo_due", due: { date: "2026-11-20", hasTime: false } }),
+        todo({
+          id: "todo_bell",
+          reminder: {
+            taskId: "sched_r",
+            at: local(2026, 10, 18, 9),
+            state: "scheduled",
+          },
+        }),
+        todo({ id: "todo_notes", notes: "王老师" }),
+      ),
+    });
+    const after = list({
+      yours: yours(
+        { ...A, text: "交第三季度报告" },
+        todo({ id: "todo_due", due: { date: "2026-11-25", hasTime: false } }),
+        todo({
+          id: "todo_bell",
+          reminder: {
+            taskId: "sched_r",
+            at: local(2026, 10, 18, 10),
+            state: "scheduled",
+          },
+        }),
+        todo({ id: "todo_notes", notes: "王老师 13800000000" }),
+      ),
+    });
+    expect(lit(before, after)).toEqual([
+      "todo_a",
+      "todo_due",
+      "todo_bell",
+      "todo_notes",
+    ]);
+  });
+
+  it("lights a due time, a reminder paused, added or taken away", () => {
+    const at = local(2026, 10, 18, 9);
+    const bell = { taskId: "sched_r", at, state: "scheduled" as const };
+    const cases: [Partial<TodoItem>, Partial<TodoItem>][] = [
+      [
+        { due: { date: "2026-11-20", hasTime: false } },
+        { due: { date: "2026-11-20", hasTime: true, at, time: "09:00" } },
+      ],
+      [{}, { due: { date: "2026-11-20", hasTime: false } }],
+      [{ reminder: bell }, { reminder: { ...bell, state: "paused" } }],
+      [{}, { reminder: bell }],
+      [{ reminder: bell }, {}],
+    ];
+    for (const [was, now] of cases) {
+      expect(
+        lit(
+          list({ yours: yours(todo({ id: "todo_x", ...was })) }),
+          list({ yours: yours(todo({ id: "todo_x", ...now })) }),
+        ),
+      ).toEqual(["todo_x"]);
+    }
+  });
+
+  it("does not light a reminder going off, nor a to-do turning overdue (the clock)", () => {
+    const at = local(2026, 10, 16, 9);
+    const before = list({
+      yours: yours(
+        todo({
+          id: "todo_x",
+          reminder: { taskId: "sched_r", at, state: "scheduled" },
+        }),
+        todo({ id: "todo_y", due: { date: "2026-10-16", hasTime: true, at } }),
+      ),
+    });
+    const after = list({
+      yours: yours(
+        todo({
+          id: "todo_x",
+          reminder: { taskId: "sched_r", at, state: "fired" },
+        }),
+        todo({
+          id: "todo_y",
+          due: { date: "2026-10-16", hasTime: true, at },
+          overdue: true,
+        }),
+      ),
+    });
+    expect(lit(before, after)).toEqual([]);
+  });
+
+  it("lights one of Galley's own one-off reminders with new words or time, nothing else in 「Galley 在办」", () => {
+    const before = list({ assistant: [ONCE, SUB] });
+    expect(
+      lit(before, list({ assistant: [{ ...ONCE, text: "看看快递" }, SUB] })),
+    ).toEqual(["sched_once"]);
+    expect(
+      lit(
+        before,
+        list({ assistant: [{ ...ONCE, at: local(2026, 10, 17, 10) }, SUB] }),
+      ),
+    ).toEqual(["sched_once"]);
+    // Paused: not its words, not its time.
+    expect(
+      lit(before, list({ assistant: [{ ...ONCE, state: "paused" }, SUB] })),
+    ).toEqual([]);
+    // A subtask after it appears: its state, title, latest activity.
+    expect(
+      lit(
+        before,
+        list({
+          assistant: [
+            ONCE,
+            {
+              ...SUB,
+              state: "asking",
+              text: "查资料（二）",
+              at: local(2026, 10, 16, 10),
+            },
+          ],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("lights a routine with new words, rule, time of day, paused or resumed — not its next time", () => {
+    const before = list({ routine: [DAILY] });
+    const after = (extra: Partial<TodoItem>) =>
+      list({ routine: [{ ...DAILY, ...extra }] });
+    for (const extra of [
+      { text: "每天早上看看日程" },
+      { repeat: { kind: "weekly" as const, weekdays: [1, 3] } },
+      { timeOfDay: "08:30" },
+      { state: "paused" as const, at: undefined },
+    ]) {
+      expect(lit(before, after(extra))).toEqual(["sched_daily"]);
+    }
+    expect(
+      lit(list({ routine: [{ ...DAILY, state: "paused" }] }), before),
+    ).toEqual(["sched_daily"]);
+    // It went off: the next time moved on.
+    expect(lit(before, after({ at: local(2026, 10, 18, 8, 0) }))).toEqual([]);
+  });
+
+  it("does not light what goes off into 已完成, anything else new there, or what leaves", () => {
+    const fired = { ...ONCE, state: "fired" as const };
+    const back = { ...SUB, state: "done" as const };
+    expect(
+      lit(
+        list({ yours: yours(A, B), assistant: [ONCE, SUB] }),
+        list({ yours: yours(A), assistant: [], done: [fired, back] }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("does not light this window's own writes on their way", () => {
+    const bell = {
+      taskId: "sched_r",
+      at: local(2026, 10, 18),
+      state: "scheduled" as const,
+    };
+    const before = list({ yours: yours({ ...A, reminder: bell }, B) });
+    const after = list({
+      yours: yours(A, C),
+      done: [{ ...B, state: "done", at: local(2026, 10, 16, 10) }],
+    });
+    // A: its reminder cancelled here; B: ticked here; C: unticked here.
+    const mine = new Set(["todo_a", "todo_b", "todo_c"]);
+    expect(todoPanelChanges(before, after, mine)).toEqual({
+      flash: [],
+      held: [],
+    });
+    // Not this window's, the same read lights all three, in the panel's
+    // order (B held last, where it stood).
+    expect(lit(before, after)).toEqual(["todo_a", "todo_c", "todo_b"]);
+  });
+
+  it("takes this window's writes from either read of the store", () => {
+    expect(
+      [
+        ...todoWritesOnTheirWay(
+          { flips: { todo_a: {} }, cancelling: {} },
+          { flips: {}, cancelling: { sched_x: true } },
+        ),
+      ].sort(),
+    ).toEqual(["sched_x", "todo_a"]);
+  });
+
+  it("holds a to-do Galley ticked off for you where it stood, lit, before 已完成", () => {
+    const doneB = {
+      ...B,
+      state: "done" as const,
+      doneBy: "assistant" as const,
+    };
+    const before = list({ yours: yours(A, B, C) });
+    const after = list({ yours: yours(A, C), done: [doneB] });
+    const change = todoPanelChanges(before, after, none);
+    expect(change.held).toEqual([{ item: B, following: ["todo_c"] }]);
+    expect(change.flash).toEqual(["todo_b"]);
+    // Drawn in its place, struck as it stood, not yet in 已完成.
+    const rows = todoPanelRows(after, change.held);
+    expect(rows.yours.map((item) => item.id)).toEqual([
+      "todo_a",
+      "todo_b",
+      "todo_c",
+    ]);
+    expect(rows.done).toEqual([]);
+    expect([...rows.holding]).toEqual(["todo_b"]);
+    // Held out, it is in 已完成.
+    expect(todoPanelRows(after, []).done).toEqual([doneB]);
+    // A tick of yours, or one the user made elsewhere and this window
+    // knows as its own, holds by its own flip instead.
+    expect(todoPanelChanges(before, after, new Set(["todo_b"]))).toEqual({
+      flash: [],
+      held: [],
+    });
+  });
+
+  it("holds by who ticked it in this window, not by `doneBy`", () => {
+    // Ticked as the user, but not from this window (the CLI, another
+    // device): Galley's change as far as this panel knows.
+    const doneB = { ...B, state: "done" as const, doneBy: "user" as const };
+    const change = todoPanelChanges(
+      list({ yours: yours(A, B) }),
+      list({ yours: yours(A), done: [doneB] }),
+      none,
+    );
+    expect(change.held.map((hold) => hold.item.id)).toEqual(["todo_b"]);
+  });
+
+  it("does not hold one cancelled: it just goes", () => {
+    const change = todoPanelChanges(
+      list({ yours: yours(A, B) }),
+      list({ yours: yours(A) }),
+      none,
+    );
+    expect(change).toEqual({ flash: [], held: [] });
+  });
+
+  it("places held rows among a list that moved, and never twice", () => {
+    const held: TodoHold[] = [
+      { item: A, following: ["todo_b", "todo_c"] },
+      { item: B, following: ["todo_c"] },
+    ];
+    const now = list({ yours: yours(C) });
+    expect(todoPanelRows(now, held).yours.map((item) => item.id)).toEqual([
+      "todo_a",
+      "todo_b",
+      "todo_c",
+    ]);
+    // Nothing that followed is left: last.
+    expect(
+      todoPanelRows(list({ yours: yours(C) }), [
+        { item: A, following: ["todo_x"] },
+      ]).yours.map((item) => item.id),
+    ).toEqual(["todo_c", "todo_a"]);
+    // Unticked since: drawn once, as the list has it, and not held.
+    const again = todoPanelRows(list({ yours: yours(A, C) }), held);
+    expect(again.yours.map((item) => item.id)).toEqual([
+      "todo_a",
+      "todo_b",
+      "todo_c",
+    ]);
+    expect([...again.holding]).toEqual(["todo_b"]);
+  });
+
+  it("knows whether the panel lists a to-do, and when one is only under 已完成", () => {
+    const doneB = { ...B, state: "done" as const };
+    const now = list({ yours: yours(A), assistant: [SUB], done: [doneB] });
+    expect(todoListed(now, "todo_a")).toBe(true);
+    expect(todoListed(now, "todo_b")).toBe(true);
+    expect(todoListed(now, "s-sub")).toBe(true);
+    // Cancelled, or done more than seven days ago: not listed.
+    expect(todoListed(now, "todo_c")).toBe(false);
+    expect(todoRowsInDone(now, ["todo_b"])).toBe(true);
+    expect(todoRowsInDone(now, ["todo_a"])).toBe(false);
+    expect(todoRowsInDone(now, ["todo_a", "todo_b"])).toBe(true);
+    expect(todoRowsInDone(now, [])).toBe(false);
   });
 });

@@ -52,7 +52,11 @@ import {
   reportFileError,
   type LocalFileResult,
 } from "@/lib/local-files";
-import { readingPanelClosesTodo, todoPanelOpened } from "@/lib/todo-panel";
+import {
+  readingPanelClosesTodo,
+  todoGlanceOpened,
+  todoPanelOpened,
+} from "@/lib/todo-panel";
 import type { TodoPlace } from "@/lib/todo-panel-memory";
 import { useUiStore } from "@/stores/ui";
 
@@ -94,7 +98,8 @@ const DOCUMENT_MIN = "400px";
 // The to-do panel (main chat ticket 42) is a narrow list: it sits beside
 // the conversation from the conversation's 440 + its own 280 floor + the
 // same 40 of slack as above, and covers the conversation's right edge
-// below that.
+// below that — only for a look, never remembered (ticket 87: the UI
+// store's `todoNarrow`, which App reads too).
 const ASIDE_SPLIT_MIN_WIDTH = 760;
 const ASIDE_MIN = "280px";
 
@@ -113,10 +118,17 @@ export interface WorkspaceAside {
   content: ReactNode;
 }
 
-/** Mark the to-do panel's `places` closed (and remembered so). */
-function closeTodoPanels(places: readonly TodoPlace[]): void {
+/** The reading panel replaces the to-do panel (`shown`: the place on
+ * screen): those places are remembered closed when the main area is
+ * wide — nothing narrow writes them (ticket 87) — and a look folds. */
+function replaceTodoPanel(
+  kind: "preview" | "review",
+  shown: TodoPlace | null,
+): void {
   const ui = useUiStore.getState();
-  for (const place of places) ui.setTodoPanelOpen(place, false);
+  for (const place of readingPanelClosesTodo(kind, shown, ui.todoNarrow))
+    ui.setTodoPanelOpen(place, false);
+  if (ui.todoGlance) ui.setTodoGlance(null);
 }
 
 /** Window-owned Git review; Markdown reads remain scoped to their session. */
@@ -141,7 +153,8 @@ export function LocalFileWorkspace({
    * `readingPanelClosesTodo`); opening the to-do panel closes them. Beside the conversation from 760px of main area, with
    * its own first width and its own remembered split; narrower, it
    * covers the conversation's right edge — not a dialog, so the
-   * composer stays usable (its 「说说这件」 quotes into it).
+   * composer stays usable (its 「说说这件」 quotes into it) — and is only
+   * ever a look there (ticket 87, lib/todo-open.ts).
    */
   aside?: WorkspaceAside | null;
 }) {
@@ -185,7 +198,9 @@ export function LocalFileWorkspace({
     );
   }, []);
   const [wide, setWide] = useState(false);
-  const [asideWide, setAsideWide] = useState(false);
+  // Measured here, kept in the UI store: App shows the remembered to-do
+  // panel only where it fits beside the conversation (ticket 87).
+  const asideWide = !useUiStore((s) => s.todoNarrow);
   const panelOpen = preview !== null || review !== null;
   const split = wide && panelOpen;
   // The reading panel wins the place in the instant both want it (the
@@ -232,7 +247,9 @@ export function LocalFileWorkspace({
     if (!element) return;
     const observer = new ResizeObserver(([entry]) => {
       setWide(entry.contentRect.width >= SPLIT_MIN_WIDTH);
-      setAsideWide(entry.contentRect.width >= ASIDE_SPLIT_MIN_WIDTH);
+      useUiStore
+        .getState()
+        .setTodoNarrow(entry.contentRect.width < ASIDE_SPLIT_MIN_WIDTH);
     });
     observer.observe(element);
     return () => observer.disconnect();
@@ -264,13 +281,16 @@ export function LocalFileWorkspace({
 
   // The to-do panel opening takes the place (main chat ticket 42; in
   // either of its places, ticket 46: one opening elsewhere comes with a
-  // jump there): the preview or review goes, its pending read with it,
-  // and the caret stays where it is. A store callback, not render or an
-  // effect body.
+  // jump there; a look too, ticket 87): the preview or review goes, its
+  // pending read with it, and the caret stays where it is. A store
+  // callback, not render or an effect body.
   useEffect(
     () =>
       useUiStore.subscribe((state, previous) => {
-        if (!todoPanelOpened(state.todoPanelOpen, previous.todoPanelOpen))
+        if (
+          !todoPanelOpened(state.todoPanelOpen, previous.todoPanelOpen) &&
+          !todoGlanceOpened(state.todoGlance, previous.todoGlance)
+        )
           return;
         generation.current += 1;
         currentPath.current = null;
@@ -310,7 +330,7 @@ export function LocalFileWorkspace({
       if (source && !pane.current?.contains(source)) origin.current = source;
       // The later panel replaces the earlier: the to-do panel goes. The
       // review is the window's, so in both places, wherever it opens.
-      closeTodoPanels(readingPanelClosesTodo("review", asideShown.current));
+      replaceTodoPanel("review", asideShown.current);
       setPreview(null);
       setReview({
         path: path ?? repository ?? repositoryHint,
@@ -388,8 +408,7 @@ export function LocalFileWorkspace({
       setReview(null);
       // The later panel replaces the earlier: the to-do panel goes when
       // it is the one on screen, in its place only.
-      if (!refresh)
-        closeTodoPanels(readingPanelClosesTodo("preview", asideShown.current));
+      if (!refresh) replaceTodoPanel("preview", asideShown.current);
       if (!refresh) scroll.current = 0;
       setPreview({ sessionId, path, kind: expected, content: null, error: null });
       try {

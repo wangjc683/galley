@@ -26,15 +26,13 @@ import {
   startLiveTail,
   submitScroll,
 } from "@/lib/live-tail";
+import { LOCATE_FLASH_CLASS, LOCATE_FLASH_MS } from "@/lib/locate-flash";
 import { landingScrollTiming } from "@/lib/typing-bubble-handoff";
 import { keepBottomOnViewportResize } from "@/lib/viewport-resize";
 import { turnsHoldMessage, useMessagesStore } from "@/stores/messages";
 import { type LocateRequest, useUiStore } from "@/stores/ui";
 import type { PendingAskUser } from "@/types/conversation";
 
-/** How long the located message keeps its wash (matches the CSS
- * keyframes in globals.css — change both together or neither). */
-const LOCATE_FLASH_MS = 1400;
 /** Frames to keep looking for the anchor node after turns land —
  * covers Shiki / image reflow committing the node a beat later. */
 const LOCATE_RETRY_FRAMES = 30;
@@ -928,9 +926,9 @@ export function useStickyScroll({
       const focal = ranges[0] ?? null;
       let parkedAt = park(target, focal);
       setAtBottom(false);
-      target.classList.add("message-locate-flash");
+      target.classList.add(LOCATE_FLASH_CLASS);
       flashTimer = window.setTimeout(() => {
-        target.classList.remove("message-locate-flash");
+        target.classList.remove(LOCATE_FLASH_CLASS);
       }, LOCATE_FLASH_MS);
       clearLocate();
 

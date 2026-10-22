@@ -11,11 +11,12 @@ import {
   enable as enableAutostart,
   isEnabled as isAutostartEnabled,
 } from "@tauri-apps/plugin-autostart";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ReadingPanelHeader } from "@/components/conversation/reading/ReadingPanelHeader";
 import { Button, IconButton } from "@/components/ui/button";
 import { useDayStamp } from "@/hooks/useDayStamp";
+import { useTodoPanelFlash } from "@/hooks/useTodoPanelFlash";
 import {
   todoAutostartHintVisible,
   todoFailureText,
@@ -35,18 +36,25 @@ import {
   type TodoMetaPart,
   todoNotesLine,
   todoPanelEmpty,
+  todoPanelRows,
   todoReminderCancellable,
+  todoRowsInDone,
   todoRowText,
   todoTitleTarget,
+  type TodoHold,
   type TodoLineTone,
 } from "@/lib/todo-panel";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { cn } from "@/lib/utils";
-import { goToTodoTarget, quoteTodo, talkToGalley } from "@/lib/todo-open";
+import {
+  goToTodoTarget,
+  quoteTodo,
+  talkToGalley,
+  type TodoSpot,
+} from "@/lib/todo-open";
 import {
   readAutostartHintClosed,
   writeAutostartHintClosed,
-  type TodoPlace,
 } from "@/lib/todo-panel-memory";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
 
@@ -59,8 +67,10 @@ export interface TodoPanelProps {
    * it, 「说说这件」 quotes into its composer. */
   mainChatId: string;
   /** Where the panel is open: beside Galley itself, or elsewhere — from
-   * where a jump to Galley opens it first (lib/todo-open.ts). */
-  here: TodoPlace;
+   * where a jump to Galley opens it first — in which conversation, and
+   * whether the main area is narrow, where it is a look (ticket 87,
+   * lib/todo-open.ts). */
+  spot: TodoSpot;
   /** Open a session: a subtask, or the session a scheduled run made. */
   onOpenSession: (sessionId: string) => void;
   /** 「跟 Galley 说」 beside Galley: its composer takes the caret. */
@@ -101,10 +111,15 @@ export interface TodoPanelProps {
  * out of the panel takes the panel along (lib/todo-open.ts). Escape
  * closes it from anywhere but a text field, as it does the reading
  * panel.
+ *
+ * Rows light up (ticket 87, PRD ruling 131 points 3–5,
+ * useTodoPanelFlash): what Galley moves while the panel is on screen,
+ * and the row a card's title points at. A to-do Galley ticks off holds
+ * where it stood, ticked, before it goes to 已完成.
  */
 export function TodoPanel({
   mainChatId,
-  here,
+  spot,
   onOpenSession,
   onTalk,
   onClose,
@@ -113,6 +128,11 @@ export function TodoPanel({
   const copy = useCopy();
   const todo = useAssistantTodoStore((s) => s.todo);
   const loaded = useAssistantTodoStore((s) => s.loaded);
+  const list = useRef<HTMLDivElement>(null);
+  const { held, request } = useTodoPanelFlash(list);
+  // A row a request lights only under 已完成: it unfolds first.
+  const revealDone =
+    request && todoRowsInDone(todo, request.ids) ? request.nonce : null;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -134,10 +154,10 @@ export function TodoPanel({
   }, [onClose]);
 
   const go = (target: TodoTarget) =>
-    goToTodoTarget(target, here, mainChatId, onOpenSession);
+    goToTodoTarget(target, spot, mainChatId, onOpenSession);
   const talkAbout = (item: TodoItem) =>
-    quoteTodo(item, here, mainChatId, todoRowText(item, copy));
-  const talk = () => talkToGalley(here, onTalk);
+    quoteTodo(item, spot, mainChatId, todoRowText(item, copy));
+  const talk = () => talkToGalley(spot, mainChatId, onTalk);
 
   return (
     <div
@@ -158,7 +178,10 @@ export function TodoPanel({
           </IconButton>
         }
       />
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-4 pt-2">
+      <div
+        ref={list}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-4 pt-2"
+      >
         {loaded && todoPanelEmpty(todo) && <TodoPanelEmpty onTalk={talk} />}
         {/* Empty, this draws 例行 alone, when the daily review is there
             (ticket 80); before the first read, nothing. */}
@@ -168,6 +191,8 @@ export function TodoPanel({
           onGo={go}
           onTalkAbout={talkAbout}
           defaultDoneOpen={defaultDoneOpen}
+          held={held}
+          revealDone={revealDone}
         />
         <AutostartHint todo={todo} />
       </div>
@@ -192,6 +217,8 @@ function TodoPanelEmpty({ onTalk }: { onTalk: () => void }) {
   );
 }
 
+const NO_HOLDS: readonly TodoHold[] = [];
+
 /** The groups, empty ones not drawn. */
 export function TodoPanelGroups({
   todo,
@@ -199,15 +226,30 @@ export function TodoPanelGroups({
   onGo,
   onTalkAbout,
   defaultDoneOpen = false,
+  held = NO_HOLDS,
+  revealDone = null,
 }: {
   todo: AssistantTodo;
   mainChatId: string;
   onGo: (target: TodoTarget) => void;
   onTalkAbout: (item: TodoItem) => void;
   defaultDoneOpen?: boolean;
+  /** To-dos Galley ticked off, held where they stood a moment (ticket
+   * 87). */
+  held?: readonly TodoHold[];
+  /** A request's nonce when a row it lights is under 已完成: unfold it
+   * (ticket 87). */
+  revealDone?: number | null;
 }) {
   const copy = useCopy();
-  const [doneOpen, setDoneOpen] = useState(defaultDoneOpen);
+  const [doneOpen, setDoneOpen] = useState(
+    defaultDoneOpen || revealDone !== null,
+  );
+  const [revealed, setRevealed] = useState(revealDone);
+  if (revealDone !== revealed) {
+    setRevealed(revealDone);
+    if (revealDone !== null) setDoneOpen(true);
+  }
   const rowProps = { mainChatId, onGo, onTalkAbout };
   // The user's to-dos are the list's own: one part at the top with no
   // label (main chat PRD ruling 98: a list kept for you doesn't tag
@@ -216,12 +258,10 @@ export function TodoPanelGroups({
   // the rows were as tall, and the room went to labels. Core's three
   // lists end to end, not sorted again: overdue (soonest due first),
   // today (by time, a day without one after), later by day, no time in
-  // the order noted. Each row says its day, 「今天 18:00」 too.
-  const yours = [
-    ...todo.yours.today,
-    ...todo.yours.later,
-    ...todo.yours.anytime,
-  ];
+  // the order noted. Each row says its day, 「今天 18:00」 too. A to-do
+  // Galley ticked off holds its place among them a moment (ticket 87).
+  const rows = todoPanelRows(todo, held);
+  const yours = rows.yours;
   // 12px between groups, none over the first — under the empty state
   // too, where 例行 is the first (main chat ticket 83, ruling 128 point
   // 9): a gap between the sections, whichever are drawn.
@@ -230,7 +270,12 @@ export function TodoPanelGroups({
       {yours.length > 0 && (
         <section data-todo-group="yours">
           {yours.map((item) => (
-            <YourRow key={item.id} item={item} {...rowProps} />
+            <YourRow
+              key={item.id}
+              item={item}
+              held={rows.holding.has(item.id)}
+              {...rowProps}
+            />
           ))}
         </section>
       )}
@@ -250,17 +295,17 @@ export function TodoPanelGroups({
           ))}
         </section>
       )}
-      {todo.done.length > 0 && (
+      {rows.done.length > 0 && (
         <section data-todo-group="done">
           <GroupLabel
             label={copy.todo.groupDone}
-            count={todo.done.length + todo.doneOmitted}
+            count={rows.done.length + todo.doneOmitted}
             open={doneOpen}
             onToggle={() => setDoneOpen((open) => !open)}
           />
           {doneOpen && (
             <>
-              {todo.done.map((item) => (
+              {rows.done.map((item) => (
                 <DoneRow
                   key={`${item.kind}:${item.id}`}
                   item={item}
@@ -478,14 +523,21 @@ function useTodoWrite(id: string) {
  * off — by the thing it removes, and not a second target beside the
  * first at the row's end (deferred.md 「session 行 hover 置顶按钮」: two
  * precise targets side by side make the row's hover loud). */
-function YourRow(props: RowProps) {
+function YourRow({
+  held = false,
+  ...props
+}: RowProps & {
+  /** Galley ticked it off: held where it stood a moment, ticked as a
+   * tick of yours holds, the box still (ticket 87). */
+  held?: boolean;
+}) {
   const { item, onTalkAbout } = props;
   const copy = useCopy();
   const language = useLanguage();
   const todayStartMs = useDayStamp();
   const cancelReminder = useAssistantTodoStore((s) => s.cancelReminder);
   const { flip, failure, cancelling } = useTodoWrite(item.id);
-  const checked = todoChecked(item, flip);
+  const checked = held || todoChecked(item, flip);
   const parts = todoMetaParts(item, checked, todayStartMs, language, copy);
   const canCancelReminder = !checked && todoReminderCancellable(item);
   const notes = todoNotesLine(item);
@@ -496,7 +548,7 @@ function YourRow(props: RowProps) {
         <TodoCheck
           item={item}
           checked={checked}
-          saving={flip?.phase === "saving"}
+          saving={held || flip?.phase === "saving"}
         />
       }
       titleClass={todoTitleClass(checked)}

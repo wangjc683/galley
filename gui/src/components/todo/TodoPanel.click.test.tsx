@@ -94,7 +94,7 @@ function mount(): HTMLElement {
         <Tooltip.Provider>
           <TodoPanel
             mainChatId="s-main"
-            here="galley"
+            spot={{ here: "galley", at: "main:s-main", narrow: false }}
             onOpenSession={() => {}}
             onTalk={() => {}}
             onClose={() => {}}

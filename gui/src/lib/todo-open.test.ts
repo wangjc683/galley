@@ -4,16 +4,26 @@ import type { TodoItem } from "@/lib/assistant-todo";
 import { useUiStore } from "@/stores/ui";
 
 import {
+  closeTodoPanel,
   goToTodoTarget,
+  introduceTodoPanel,
   mainChatOnScreen,
+  moveTodoGlance,
   openTodoPanel,
   quoteForComposer,
   quoteTodo,
+  showTodoRow,
   takeQuote,
   talkToGalley,
+  todoConversationKey,
+  todoGlanceAfterMove,
+  todoPanelIntroduces,
   todoPlaceOf,
   todoView,
   toggleTodoPanel,
+  type TodoIntroduction,
+  type TodoLook,
+  type TodoSpot,
 } from "./todo-open";
 
 /**
@@ -22,7 +32,10 @@ import {
  * open or closed in two places — Galley's and everything else's — each
  * remembered apart; ⌘K opens it where you are; a jump out of the panel
  * lands where it leads and takes the panel along; 「说说这件」 and
- * 「跟 Galley 说」 always end in Galley's composer.
+ * 「跟 Galley 说」 always end in Galley's composer. Since ticket 87 (PRD
+ * ruling 131): under 760px of main area only a look, nothing remembered;
+ * a card's title opens the panel at its row; the panel opens by itself
+ * once; every open and close of yours marks it met.
  */
 
 const openMainChat = vi.hoisted(() =>
@@ -37,12 +50,43 @@ afterEach(() => {
   openMainChat.mockImplementation(async () => true);
   useUiStore.setState({
     todoPanelOpen: CLOSED,
+    todoNarrow: true,
+    todoGlance: null,
+    todoPanelIntroduced: false,
+    todoRowRequest: null,
     quoteRequest: null,
     locateRequest: null,
   });
 });
 
 const open = () => useUiStore.getState().todoPanelOpen;
+const glance = () => useUiStore.getState().todoGlance;
+const introduced = () => useUiStore.getState().todoPanelIntroduced;
+
+// Where you are: beside Galley, beside a workbench conversation; in a
+// main area wide enough for the panel beside it, or under 760px.
+const GALLEY: TodoSpot = { here: "galley", at: "main:s-main", narrow: false };
+const WORK: TodoSpot = { here: "elsewhere", at: "main:s-work", narrow: false };
+const narrow = (spot: TodoSpot): TodoSpot => ({ ...spot, narrow: true });
+/** A wide main area showing `sessionId`, no look open. */
+const wide = (sessionId?: string): TodoLook => ({
+  sessionId,
+  narrow: false,
+  glance: null,
+});
+/** The view as App takes it from the store, showing `sessionId`. */
+function viewOf(
+  session: { mainChat?: boolean } | undefined,
+  sessionId: string | undefined,
+  screen: "main" | "empty" = "main",
+) {
+  const ui = useUiStore.getState();
+  return todoView(true, ui.todoPanelOpen, screen, session, {
+    sessionId,
+    narrow: ui.todoNarrow,
+    glance: ui.todoGlance,
+  });
+}
 
 const ITEM: TodoItem = {
   kind: "todo",
@@ -58,17 +102,17 @@ const workbench = {};
 
 describe("where the button is (ticket 46)", () => {
   it("in every conversation's top bar while there is a main chat", () => {
-    expect(todoView(true, CLOSED, "main", main).entry).toBe(true);
-    expect(todoView(true, CLOSED, "main", workbench).entry).toBe(true);
-    expect(todoView(true, CLOSED, "main", subtask).entry).toBe(true);
+    expect(todoView(true, CLOSED, "main", main, wide()).entry).toBe(true);
+    expect(todoView(true, CLOSED, "main", workbench, wide()).entry).toBe(true);
+    expect(todoView(true, CLOSED, "main", subtask, wide()).entry).toBe(true);
     // The empty composer has the top bar too.
-    expect(todoView(true, CLOSED, "empty", undefined).entry).toBe(true);
+    expect(todoView(true, CLOSED, "empty", undefined, wide()).entry).toBe(true);
   });
 
   it("not without a main chat (the external runtime, or none yet), nor its panel", () => {
     const allOpen = { galley: true, elsewhere: true };
     for (const session of [main, workbench, subtask, undefined]) {
-      const view = todoView(false, allOpen, "main", session);
+      const view = todoView(false, allOpen, "main", session, wide());
       expect(view.entry).toBe(false);
       expect(view.shown).toBe(false);
     }
@@ -88,46 +132,48 @@ describe("the two places", () => {
   });
 
   it("each opens and closes on its own: open in Galley, closed in the workbench", () => {
-    toggleTodoPanel("galley", false);
+    toggleTodoPanel(GALLEY, false);
     expect(open()).toEqual({ galley: true, elsewhere: false });
-    expect(todoView(true, open(), "main", main).shown).toBe(true);
-    expect(todoView(true, open(), "main", workbench).shown).toBe(false);
-    expect(todoView(true, open(), "main", subtask).shown).toBe(false);
-    expect(todoView(true, open(), "empty", undefined).shown).toBe(false);
+    expect(todoView(true, open(), "main", main, wide()).shown).toBe(true);
+    expect(todoView(true, open(), "main", workbench, wide()).shown).toBe(false);
+    expect(todoView(true, open(), "main", subtask, wide()).shown).toBe(false);
+    expect(todoView(true, open(), "empty", undefined, wide()).shown).toBe(
+      false,
+    );
     // Nothing closed it on the way: it is open again beside Galley.
-    expect(todoView(true, open(), "main", main).shown).toBe(true);
+    expect(todoView(true, open(), "main", main, wide()).shown).toBe(true);
   });
 
   it("open in the workbench, back in Galley as Galley's was", () => {
-    toggleTodoPanel("elsewhere", false);
+    toggleTodoPanel(WORK, false);
     expect(open()).toEqual({ galley: false, elsewhere: true });
-    expect(todoView(true, open(), "main", workbench).shown).toBe(true);
+    expect(todoView(true, open(), "main", workbench, wide()).shown).toBe(true);
     // Subtasks and the empty composer share the workbench's place.
-    expect(todoView(true, open(), "main", subtask).shown).toBe(true);
-    expect(todoView(true, open(), "empty", undefined).shown).toBe(true);
-    expect(todoView(true, open(), "main", main).shown).toBe(false);
+    expect(todoView(true, open(), "main", subtask, wide()).shown).toBe(true);
+    expect(todoView(true, open(), "empty", undefined, wide()).shown).toBe(true);
+    expect(todoView(true, open(), "main", main, wide()).shown).toBe(false);
     // Closing it there leaves Galley's as it is.
     useUiStore.getState().setTodoPanelOpen("galley", true);
-    toggleTodoPanel("elsewhere", true);
+    toggleTodoPanel(WORK, true);
     expect(open()).toEqual({ galley: true, elsewhere: false });
   });
 
   it("the button flips its own place in place, never lands", () => {
-    toggleTodoPanel("elsewhere", false);
-    toggleTodoPanel("elsewhere", true);
-    toggleTodoPanel("galley", false);
-    toggleTodoPanel("galley", true);
+    toggleTodoPanel(WORK, false);
+    toggleTodoPanel(WORK, true);
+    toggleTodoPanel(GALLEY, false);
+    toggleTodoPanel(GALLEY, true);
     expect(open()).toEqual(CLOSED);
     expect(openMainChat).not.toHaveBeenCalled();
   });
 
   it("⌘K opens it where you are, and only there: Galley is not entered first", () => {
-    openTodoPanel("elsewhere");
+    openTodoPanel(WORK);
     expect(open()).toEqual({ galley: false, elsewhere: true });
     // It opens; it never closes (the button toggles).
-    openTodoPanel("elsewhere");
+    openTodoPanel(WORK);
     expect(open()).toEqual({ galley: false, elsewhere: true });
-    openTodoPanel("galley");
+    openTodoPanel(GALLEY);
     expect(open()).toEqual({ galley: true, elsewhere: true });
     expect(openMainChat).not.toHaveBeenCalled();
   });
@@ -143,7 +189,7 @@ describe("a title", () => {
   it("beside Galley: jumps to the reply in place, the panel kept", () => {
     const openSession = vi.fn();
     useUiStore.setState({ todoPanelOpen: { galley: true, elsewhere: false } });
-    goToTodoTarget(reply, "galley", "s-main", openSession);
+    goToTodoTarget(reply, GALLEY, "s-main", openSession);
     expect(useUiStore.getState().locateRequest).toMatchObject({
       sessionId: "s-main",
       messageId: "msg_s-main_4_assistant",
@@ -161,7 +207,7 @@ describe("a title", () => {
       return true;
     });
     useUiStore.setState({ todoPanelOpen: { galley: false, elsewhere: true } });
-    goToTodoTarget(reply, "elsewhere", "s-main", openSession);
+    goToTodoTarget(reply, WORK, "s-main", openSession);
     expect(openMainChat).toHaveBeenCalledTimes(1);
     expect(filedBeforeLanding).toMatchObject({
       sessionId: "s-main",
@@ -174,7 +220,7 @@ describe("a title", () => {
 
   it("from elsewhere with no Galley to land on: the locate does not linger", async () => {
     openMainChat.mockImplementation(async () => false);
-    goToTodoTarget(reply, "elsewhere", "s-main", vi.fn());
+    goToTodoTarget(reply, WORK, "s-main", vi.fn());
     await Promise.resolve();
     await Promise.resolve();
     expect(useUiStore.getState().locateRequest).toBeNull();
@@ -184,14 +230,14 @@ describe("a title", () => {
     const openSession = vi.fn();
     goToTodoTarget(
       { kind: "subtask", sessionId: "s-sub" },
-      "galley",
+      GALLEY,
       "s-main",
       openSession,
     );
     expect(open()).toEqual({ galley: false, elsewhere: true });
     goToTodoTarget(
       { kind: "session", sessionId: "s-run" },
-      "elsewhere",
+      WORK,
       "s-main",
       openSession,
     );
@@ -204,7 +250,7 @@ describe("a title", () => {
     const openSession = vi.fn();
     goToTodoTarget(
       { kind: "session", sessionId: "s-main" },
-      "elsewhere",
+      WORK,
       "s-main",
       openSession,
     );
@@ -215,7 +261,7 @@ describe("a title", () => {
 
 describe("「说说这件」", () => {
   it("beside Galley: quotes into the main chat's composer, and only there", () => {
-    quoteTodo(ITEM, "galley", "s-main");
+    quoteTodo(ITEM, GALLEY, "s-main");
     const request = useUiStore.getState().quoteRequest;
     expect(request).toMatchObject({ sessionId: "s-main", text: "交季度报告" });
     expect(openMainChat).not.toHaveBeenCalled();
@@ -228,7 +274,7 @@ describe("「说说这件」", () => {
 
   it("from the workbench: into Galley's composer, not the workbench's, once", () => {
     useUiStore.setState({ todoPanelOpen: { galley: false, elsewhere: true } });
-    quoteTodo(ITEM, "elsewhere", "s-main");
+    quoteTodo(ITEM, WORK, "s-main");
     expect(useUiStore.getState().quoteRequest).toMatchObject({
       sessionId: "s-main",
       text: "交季度报告",
@@ -246,21 +292,21 @@ describe("「说说这件」", () => {
 
   it("from elsewhere with no Galley to land on: the quote does not wait for the next visit", async () => {
     openMainChat.mockImplementation(async () => false);
-    quoteTodo(ITEM, "elsewhere", "s-main");
+    quoteTodo(ITEM, WORK, "s-main");
     await Promise.resolve();
     await Promise.resolve();
     expect(useUiStore.getState().quoteRequest).toBeNull();
   });
 
   it("quotes what the row shows when it names a row its own way (the daily review, ticket 74)", () => {
-    quoteTodo(ITEM, "galley", "s-main", "过一遍在办的事");
+    quoteTodo(ITEM, GALLEY, "s-main", "过一遍在办的事");
     expect(takeQuote("s-main", true)).toBe("过一遍在办的事");
   });
 
   it("a second click quotes again (the composer drops a duplicate)", () => {
-    quoteTodo(ITEM, "galley", "s-main");
+    quoteTodo(ITEM, GALLEY, "s-main");
     expect(takeQuote("s-main", true)).toBe("交季度报告");
-    quoteTodo(ITEM, "galley", "s-main");
+    quoteTodo(ITEM, GALLEY, "s-main");
     expect(takeQuote("s-main", true)).toBe("交季度报告");
   });
 });
@@ -268,7 +314,7 @@ describe("「说说这件」", () => {
 describe("「跟 Galley 说」", () => {
   it("beside Galley: the caret into its composer, in place", () => {
     const focus = vi.fn();
-    talkToGalley("galley", focus);
+    talkToGalley(GALLEY, "s-main", focus);
     expect(focus).toHaveBeenCalledTimes(1);
     expect(openMainChat).not.toHaveBeenCalled();
   });
@@ -276,9 +322,368 @@ describe("「跟 Galley 说」", () => {
   it("from elsewhere: Galley first, the panel with it; its composer takes the caret as it appears", () => {
     const focus = vi.fn();
     useUiStore.setState({ todoPanelOpen: { galley: false, elsewhere: true } });
-    talkToGalley("elsewhere", focus);
+    talkToGalley(WORK, "s-main", focus);
     expect(openMainChat).toHaveBeenCalledTimes(1);
     expect(focus).not.toHaveBeenCalled();
     expect(open()).toEqual({ galley: true, elsewhere: true });
+  });
+});
+
+describe("a narrow main area: only a look (ticket 87, ruling 131 point 2)", () => {
+  it("does not show the remembered open; widened, it is back", () => {
+    useUiStore.setState({ todoPanelOpen: { galley: true, elsewhere: true } });
+    expect(viewOf(main, "s-main").shown).toBe(false);
+    expect(viewOf(workbench, "s-work").shown).toBe(false);
+    useUiStore.setState({ todoNarrow: false });
+    expect(viewOf(main, "s-main").shown).toBe(true);
+    expect(viewOf(workbench, "s-work").shown).toBe(true);
+    // From wide to narrow the panel beside it folds; nothing is written.
+    useUiStore.setState({ todoNarrow: true });
+    expect(viewOf(main, "s-main").shown).toBe(false);
+    expect(open()).toEqual({ galley: true, elsewhere: true });
+  });
+
+  it("the button and ⌘K open a look there and remember nothing; the button again, × and Esc fold it", () => {
+    toggleTodoPanel(narrow(GALLEY), false);
+    expect(glance()).toEqual({ at: "main:s-main", arrived: true });
+    expect(open()).toEqual(CLOSED);
+    // On screen: the button's selected ground follows it.
+    expect(viewOf(main, "s-main").shown).toBe(true);
+    // Not beside another conversation.
+    expect(viewOf(workbench, "s-work").shown).toBe(false);
+    toggleTodoPanel(narrow(GALLEY), true);
+    expect(glance()).toBeNull();
+    expect(viewOf(main, "s-main").shown).toBe(false);
+
+    openTodoPanel(narrow(WORK));
+    expect(glance()).toEqual({ at: "main:s-work", arrived: true });
+    openTodoPanel(narrow(WORK));
+    expect(glance()).toEqual({ at: "main:s-work", arrived: true });
+    closeTodoPanel(narrow(WORK));
+    expect(glance()).toBeNull();
+    expect(open()).toEqual(CLOSED);
+  });
+
+  it("leaves what is remembered as it is, open or closed", () => {
+    useUiStore.setState({ todoPanelOpen: { galley: true, elsewhere: false } });
+    openTodoPanel(narrow(GALLEY));
+    closeTodoPanel(narrow(GALLEY));
+    openTodoPanel(narrow(WORK));
+    toggleTodoPanel(narrow(WORK), true);
+    expect(open()).toEqual({ galley: true, elsewhere: false });
+  });
+
+  it("folds when you leave the conversation it is open in, and stays folded when you come back", () => {
+    openTodoPanel(narrow(WORK));
+    moveTodoGlance("main:s-work");
+    expect(glance()).toEqual({ at: "main:s-work", arrived: true });
+    moveTodoGlance("main:s-other");
+    expect(glance()).toBeNull();
+    moveTodoGlance("main:s-work");
+    expect(viewOf(workbench, "s-work").shown).toBe(false);
+    // The other screen is a leaving too.
+    openTodoPanel(narrow(WORK));
+    moveTodoGlance(todoConversationKey("empty", "s-work"));
+    expect(glance()).toBeNull();
+  });
+
+  it("names the conversation by its session, the empty composer by its screen", () => {
+    expect(todoConversationKey("main", "s-1")).toBe("main:s-1");
+    expect(todoConversationKey("empty", "s-1")).toBe("empty");
+    expect(todoConversationKey("empty", undefined)).toBe("empty");
+  });
+
+  it("stays on screen through a widening, beside the conversation, still a look", () => {
+    openTodoPanel(narrow(WORK));
+    useUiStore.setState({ todoNarrow: false });
+    expect(viewOf(workbench, "s-work").shown).toBe(true);
+    expect(open()).toEqual(CLOSED);
+    // Leaving folds it as before; nothing was remembered.
+    moveTodoGlance("main:s-main");
+    expect(glance()).toBeNull();
+    expect(viewOf(workbench, "s-work").shown).toBe(false);
+  });
+
+  it("widened, a close is a wide one: remembered closed, the look gone", () => {
+    openTodoPanel(narrow(WORK));
+    useUiStore.setState({
+      todoNarrow: false,
+      todoPanelOpen: { galley: false, elsewhere: true },
+    });
+    closeTodoPanel(WORK);
+    expect(glance()).toBeNull();
+    expect(open()).toEqual(CLOSED);
+  });
+
+  it("a jump out of the panel takes the look along, and the jump is no leaving", () => {
+    const openSession = vi.fn();
+    openTodoPanel(narrow(GALLEY));
+    goToTodoTarget(
+      { kind: "subtask", sessionId: "s-sub" },
+      narrow(GALLEY),
+      "s-main",
+      openSession,
+    );
+    expect(openSession).toHaveBeenCalledWith("s-sub");
+    expect(glance()).toEqual({ at: "main:s-sub", arrived: false });
+    expect(open()).toEqual(CLOSED);
+    // On the way (the switch can show another conversation a moment
+    // while the one you go to is restored): it waits.
+    moveTodoGlance("main:s-other");
+    expect(glance()).toEqual({ at: "main:s-sub", arrived: false });
+    moveTodoGlance("main:s-sub");
+    expect(glance()).toEqual({ at: "main:s-sub", arrived: true });
+    expect(viewOf(subtask, "s-sub").shown).toBe(true);
+    // Landed, leaving folds it.
+    moveTodoGlance("main:s-work");
+    expect(glance()).toBeNull();
+  });
+
+  it("a jump to the conversation on screen has already arrived", () => {
+    openTodoPanel(narrow(WORK));
+    goToTodoTarget(
+      { kind: "session", sessionId: "s-work" },
+      narrow(WORK),
+      "s-main",
+      vi.fn(),
+    );
+    expect(glance()).toEqual({ at: "main:s-work", arrived: true });
+    moveTodoGlance("main:s-main");
+    expect(glance()).toBeNull();
+  });
+
+  it("back to Galley from elsewhere — a title, 「说说这件」, 「跟 Galley 说」 — the look goes ahead, Galley's memory untouched", () => {
+    const reply = {
+      kind: "reply" as const,
+      sessionId: "s-main",
+      messageId: "msg_s-main_4_assistant",
+    };
+    for (const jump of [
+      () => goToTodoTarget(reply, narrow(WORK), "s-main", vi.fn()),
+      () => quoteTodo(ITEM, narrow(WORK), "s-main"),
+      () => talkToGalley(narrow(WORK), "s-main", vi.fn()),
+    ]) {
+      useUiStore.setState({ todoGlance: { at: "main:s-work", arrived: true } });
+      jump();
+      expect(glance()).toEqual({ at: "main:s-main", arrived: false });
+      expect(open()).toEqual(CLOSED);
+    }
+    expect(openMainChat).toHaveBeenCalledTimes(3);
+  });
+
+  it("beside Galley a title jumps in place: the look stays", () => {
+    openTodoPanel(narrow(GALLEY));
+    goToTodoTarget(
+      {
+        kind: "reply",
+        sessionId: "s-main",
+        messageId: "msg_s-main_4_assistant",
+      },
+      narrow(GALLEY),
+      "s-main",
+      vi.fn(),
+    );
+    expect(glance()).toEqual({ at: "main:s-main", arrived: true });
+    expect(openMainChat).not.toHaveBeenCalled();
+  });
+
+  it("with no Galley to land on, the look sent ahead is dropped", async () => {
+    openMainChat.mockImplementation(async () => false);
+    openTodoPanel(narrow(WORK));
+    quoteTodo(ITEM, narrow(WORK), "s-main");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(glance()).toBeNull();
+    expect(useUiStore.getState().quoteRequest).toBeNull();
+  });
+
+  it("a look after a move, purely", () => {
+    const here = { at: "main:a", arrived: true };
+    const ahead = { at: "main:b", arrived: false };
+    expect(todoGlanceAfterMove(null, "main:a")).toBeNull();
+    expect(todoGlanceAfterMove(here, "main:a")).toBe(here);
+    expect(todoGlanceAfterMove(here, "main:b")).toBeNull();
+    expect(todoGlanceAfterMove(ahead, "main:c")).toBe(ahead);
+    expect(todoGlanceAfterMove(ahead, "main:b")).toEqual({
+      at: "main:b",
+      arrived: true,
+    });
+  });
+});
+
+describe("met (ticket 87, ruling 131 point 4)", () => {
+  const actions: [string, (spot: TodoSpot) => void][] = [
+    ["the button opening", (spot) => toggleTodoPanel(spot, false)],
+    ["the button closing", (spot) => toggleTodoPanel(spot, true)],
+    ["⌘K", (spot) => openTodoPanel(spot)],
+    ["× and Esc", (spot) => closeTodoPanel(spot)],
+    [
+      "a jump to a subtask",
+      (spot) =>
+        goToTodoTarget(
+          { kind: "subtask", sessionId: "s-sub" },
+          spot,
+          "s-main",
+          vi.fn(),
+        ),
+    ],
+    ["「说说这件」 from elsewhere", (spot) => quoteTodo(ITEM, spot, "s-main")],
+    [
+      "「跟 Galley 说」 from elsewhere",
+      (spot) => talkToGalley(spot, "s-main", vi.fn()),
+    ],
+  ];
+
+  it("by every open and close of yours, narrow and wide", () => {
+    for (const [name, act] of actions) {
+      for (const spot of [WORK, narrow(WORK)]) {
+        useUiStore.setState({ todoPanelIntroduced: false });
+        act(spot);
+        expect(introduced(), `${name}, narrow ${spot.narrow}`).toBe(true);
+      }
+    }
+  });
+
+  it("by a card's title, narrow and wide", () => {
+    for (const todoNarrow of [false, true]) {
+      useUiStore.setState({ todoPanelIntroduced: false, todoNarrow });
+      showTodoRow("todo_1", "s-main");
+      expect(introduced()).toBe(true);
+    }
+  });
+});
+
+describe("a card's title (ticket 87, ruling 131 point 3)", () => {
+  const rows = () => useUiStore.getState().todoRowRequest?.ids;
+
+  it("opens Galley's panel when wide, remembered open, and lights the row", () => {
+    useUiStore.setState({ todoNarrow: false });
+    showTodoRow("todo_1", "s-main");
+    expect(open()).toEqual({ galley: true, elsewhere: false });
+    expect(glance()).toBeNull();
+    expect(rows()).toEqual(["todo_1"]);
+    expect(viewOf(main, "s-main").shown).toBe(true);
+  });
+
+  it("opens a look when narrow, nothing remembered", () => {
+    showTodoRow("todo_1", "s-main");
+    expect(open()).toEqual(CLOSED);
+    expect(glance()).toEqual({ at: "main:s-main", arrived: true });
+    expect(rows()).toEqual(["todo_1"]);
+  });
+
+  it("leaves a panel already on screen as it is, and only lights the row", () => {
+    useUiStore.setState({
+      todoNarrow: false,
+      todoPanelOpen: { galley: true, elsewhere: false },
+    });
+    showTodoRow("todo_1", "s-main");
+    expect(open()).toEqual({ galley: true, elsewhere: false });
+    expect(glance()).toBeNull();
+    expect(rows()).toEqual(["todo_1"]);
+
+    useUiStore.setState({
+      todoNarrow: true,
+      todoGlance: { at: "main:s-main", arrived: true },
+    });
+    showTodoRow("todo_2", "s-main");
+    expect(glance()).toEqual({ at: "main:s-main", arrived: true });
+    expect(open()).toEqual({ galley: true, elsewhere: false });
+    expect(rows()).toEqual(["todo_2"]);
+  });
+});
+
+describe("opening by itself, once (ticket 87, ruling 131 point 4)", () => {
+  const carded = (id: string, turnIndex?: number): TodoItem => ({
+    ...ITEM,
+    id,
+    createdIn: { sessionId: "s-main", turnIndex },
+  });
+  const BASE: TodoIntroduction = {
+    introduced: false,
+    previous: [carded("todo_old", 3), carded("todo_new")],
+    next: [carded("todo_old", 3), carded("todo_new", 7)],
+    mainChatId: "s-main",
+    yourRound: true,
+    mainChatOnScreen: true,
+    narrow: false,
+  };
+
+  it("opens for the card that has just appeared under your round", () => {
+    expect(todoPanelIntroduces(BASE)).toEqual(["todo_new"]);
+    // Noted and settled between two reads: new to the list as well.
+    expect(
+      todoPanelIntroduces({ ...BASE, previous: [carded("todo_old", 3)] }),
+    ).toEqual(["todo_new"]);
+    // Two in one reply: both.
+    expect(
+      todoPanelIntroduces({
+        ...BASE,
+        next: [...BASE.next, carded("todo_two", 7)],
+      }),
+    ).toEqual(["todo_new", "todo_two"]);
+  });
+
+  it("not once met", () => {
+    expect(todoPanelIntroduces({ ...BASE, introduced: true })).toEqual([]);
+  });
+
+  it("not on the first read", () => {
+    expect(todoPanelIntroduces({ ...BASE, previous: null })).toEqual([]);
+  });
+
+  it("not for a round Core woke Galley for", () => {
+    expect(todoPanelIntroduces({ ...BASE, yourRound: false })).toEqual([]);
+  });
+
+  it("not unless Galley's conversation is on screen", () => {
+    expect(todoPanelIntroduces({ ...BASE, mainChatOnScreen: false })).toEqual(
+      [],
+    );
+  });
+
+  it("not in a narrow main area", () => {
+    expect(todoPanelIntroduces({ ...BASE, narrow: true })).toEqual([]);
+  });
+
+  it("not without a main chat", () => {
+    expect(todoPanelIntroduces({ ...BASE, mainChatId: undefined })).toEqual([]);
+  });
+
+  it("not for a card already there, nor one whose reply has not settled", () => {
+    expect(
+      todoPanelIntroduces({ ...BASE, previous: BASE.next, next: BASE.next }),
+    ).toEqual([]);
+    expect(
+      todoPanelIntroduces({
+        ...BASE,
+        next: [carded("todo_old", 3), carded("todo_new")],
+      }),
+    ).toEqual([]);
+  });
+
+  it("only your to-dos, in this main chat, not cancelled", () => {
+    const other = (item: Partial<TodoItem>): TodoIntroduction => ({
+      ...BASE,
+      next: [carded("todo_old", 3), { ...carded("todo_new", 7), ...item }],
+    });
+    expect(todoPanelIntroduces(other({ kind: "task" }))).toEqual([]);
+    expect(todoPanelIntroduces(other({ kind: "subtask" }))).toEqual([]);
+    expect(
+      todoPanelIntroduces(
+        other({ createdIn: { sessionId: "s-other", turnIndex: 7 } }),
+      ),
+    ).toEqual([]);
+    expect(
+      todoPanelIntroduces(other({ cancelledAt: "2026-10-22T09:00:00Z" })),
+    ).toEqual([]);
+  });
+
+  it("opens Galley's place, remembered open, marks the panel met and lights the rows", () => {
+    useUiStore.setState({ todoNarrow: false });
+    introduceTodoPanel(["todo_new"]);
+    expect(open()).toEqual({ galley: true, elsewhere: false });
+    expect(introduced()).toBe(true);
+    expect(useUiStore.getState().todoRowRequest?.ids).toEqual(["todo_new"]);
   });
 });

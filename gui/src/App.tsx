@@ -37,10 +37,17 @@ import {
 } from "@/lib/composer-focus";
 import { CopyProvider, copyForLanguage } from "@/lib/i18n";
 import { findMainChat, openMainChat } from "@/lib/main-chat";
-import { openTodoPanel, todoView, toggleTodoPanel } from "@/lib/todo-open";
+import {
+  closeTodoPanel,
+  openTodoPanel,
+  todoView,
+  toggleTodoPanel,
+} from "@/lib/todo-open";
 import { TODO_PANEL_ID, TODO_PANEL_WIDTH } from "@/lib/todo-panel";
 import { useAppHydrationEffects } from "@/hooks/useAppHydrationEffects";
 import { useAssistantTodoSync } from "@/hooks/useAssistantTodoSync";
+import { useTodoGlanceFollow } from "@/hooks/useTodoGlanceFollow";
+import { useTodoPanelIntroduction } from "@/hooks/useTodoPanelIntroduction";
 import { useBrowserControlLiveStatus } from "@/hooks/useBrowserControlLiveStatus";
 import { useChannelsStatus } from "@/hooks/useChannelsStatus";
 import { useExternalCoreEvents } from "@/hooks/useExternalCoreEvents";
@@ -105,7 +112,8 @@ function App() {
   const requestLocate = useUiStore((s) => s.requestLocate);
   const requestReview = useUiStore((s) => s.requestReview);
   const todoPanelOpen = useUiStore((s) => s.todoPanelOpen);
-  const setTodoPanelOpen = useUiStore((s) => s.setTodoPanelOpen);
+  const todoNarrow = useUiStore((s) => s.todoNarrow);
+  const todoGlance = useUiStore((s) => s.todoGlance);
 
   const settingsOpen = useUiStore((s) => s.settingsOpen);
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
@@ -466,12 +474,23 @@ function App() {
   // whatever is on screen. Open or closed is kept in two places: beside
   // Galley itself (ruling 87's 「开着」: one of its subtasks is not it),
   // and beside anything else — the workbench, subtasks, the empty
-  // composer. Going to the other place shows that place's panel.
-  const {
-    entry: todoEntryShown,
-    here: todoHere,
-    shown: todoPanelShown,
-  } = todoView(hasMainChat, todoPanelOpen, screen, activeSession);
+  // composer. Going to the other place shows that place's panel. In a
+  // main area under 760px the remembered open is not shown, and opening
+  // it there is a look that folds when you leave (ticket 87, ruling 131).
+  const todoPanel = todoView(
+    hasMainChat,
+    todoPanelOpen,
+    screen,
+    activeSession,
+    { sessionId: activeSessionId, narrow: todoNarrow, glance: todoGlance },
+  );
+  const { entry: todoEntryShown, shown: todoPanelShown } = todoPanel;
+  // A look arrives where a jump out of the panel took it, and folds once
+  // you leave the conversation it is open in (ticket 87).
+  useTodoGlanceFollow(todoPanel.at);
+  // The panel opens by itself once, the first time a to-do card appears
+  // under your round (ticket 87, ruling 131 point 4).
+  useTodoPanelIntroduction(mainChatId);
   const paletteSessions = useMemo(
     () =>
       visibleSessions.map((s) =>
@@ -634,11 +653,11 @@ function App() {
                   ? {
                       id: TODO_PANEL_ID,
                       width: TODO_PANEL_WIDTH,
-                      place: todoHere,
+                      place: todoPanel.here,
                       content: (
                         <TodoPanel
                           mainChatId={mainChatId}
-                          here={todoHere}
+                          spot={todoPanel}
                           onOpenSession={openSession}
                           onTalk={() =>
                             focusComposerUnlessClaimed(
@@ -647,7 +666,7 @@ function App() {
                               ),
                             )
                           }
-                          onClose={() => setTodoPanelOpen(todoHere, false)}
+                          onClose={() => closeTodoPanel(todoPanel)}
                         />
                       ),
                     }
@@ -679,7 +698,7 @@ function App() {
                   // (ticket 46).
                   onToggleTodo={
                     todoEntryShown
-                      ? () => toggleTodoPanel(todoHere, todoPanelShown)
+                      ? () => toggleTodoPanel(todoPanel, todoPanelShown)
                       : undefined
                   }
                   todoOpen={todoPanelShown}
@@ -830,7 +849,7 @@ function App() {
         // The assistant's 待办 (ticket 37): the panel, opened beside what
         // is on screen (ticket 46; Galley was entered first until then);
         // the external runtime has no such item.
-        onOpenTodo={todoEntryShown ? () => openTodoPanel(todoHere) : undefined}
+        onOpenTodo={todoEntryShown ? () => openTodoPanel(todoPanel) : undefined}
         onOpenSession={openSession}
         onOpenMessage={(sessionId, messageId, query) => {
           // File the locate first: useStickyScroll's session-switch

@@ -19,6 +19,7 @@ import {
   localDayStart,
 } from "@/lib/message-time";
 import { repeatSummary } from "@/lib/scheduled-tasks";
+import type { TodoGlance } from "@/lib/todo-open";
 import { TODO_PLACES, type TodoPlace } from "@/lib/todo-panel-memory";
 
 /**
@@ -48,12 +49,16 @@ export const TODO_PANEL_ID = "todo-panel";
  * A file preview is its conversation's and goes when you leave it, so
  * it closes only the place it replaces on screen; with no panel on
  * screen it closes none, and the other place's panel comes back when
- * you go there.
+ * you go there. In a narrow main area (`narrow`, under 760px) none:
+ * nothing there reads or writes what is remembered (main chat ticket 87,
+ * PRD ruling 131 point 2) — the look it replaces just folds.
  */
 export function readingPanelClosesTodo(
   kind: "preview" | "review",
   shown: TodoPlace | null,
+  narrow: boolean,
 ): readonly TodoPlace[] {
+  if (narrow) return [];
   if (kind === "review") return TODO_PLACES;
   return shown ? [shown] : [];
 }
@@ -66,6 +71,16 @@ export function todoPanelOpened(
   previous: Readonly<Record<TodoPlace, boolean>>,
 ): boolean {
   return TODO_PLACES.some((place) => next[place] && !previous[place]);
+}
+
+/** Whether a look at the panel has just been opened, or sent ahead to
+ * another conversation by a jump out of it (main chat ticket 87): it
+ * takes the reading panel's place as an opening does. */
+export function todoGlanceOpened(
+  next: TodoGlance | null,
+  previous: TodoGlance | null,
+): boolean {
+  return next !== null && next.at !== previous?.at;
 }
 
 /**
@@ -357,6 +372,239 @@ export function todoPanelEmpty(todo: AssistantTodo): boolean {
     todo.routine.every(isDailyReview) &&
     todo.done.length === 0
   );
+}
+
+/** Whether the panel lists a to-do (any group): a card's title is a
+ * button then (main chat ticket 87, PRD ruling 131 point 3). Not one
+ * cancelled, nor one done more than seven days ago or past 已完成's cap:
+ * a title with nowhere to lead is not a button, as in the panel. */
+export function todoListed(todo: AssistantTodo, id: string): boolean {
+  return [
+    todo.yours.today,
+    todo.yours.later,
+    todo.yours.anytime,
+    todo.assistant,
+    todo.routine,
+    todo.done,
+  ].some((group) => group.some((item) => item.id === id));
+}
+
+/** Whether lighting up `ids` needs 已完成 unfolded: one of them is only
+ * there (ticket 87: a card's title on a done to-do). */
+export function todoRowsInDone(
+  todo: AssistantTodo,
+  ids: readonly string[],
+): boolean {
+  return ids.some(
+    (id) =>
+      todo.done.some((item) => item.id === id) &&
+      !yourTodos(todo).some((item) => item.id === id),
+  );
+}
+
+/** The user's to-dos not done, one part in the panel's order (ticket
+ * 86): Core's three lists end to end. */
+export function yourTodos(todo: AssistantTodo): TodoItem[] {
+  return [...todo.yours.today, ...todo.yours.later, ...todo.yours.anytime];
+}
+
+/**
+ * One of the user's to-dos Galley ticked off while the panel was on
+ * screen (main chat ticket 87, PRD ruling 131 point 5): held where it
+ * stood, as a tick of the user's own holds (`TODO_SETTLE_MS`), before it
+ * goes to 已完成. `item` is the row as it stood; `following` the rows
+ * that came after it then, to find its place among the fresh list's.
+ */
+export interface TodoHold {
+  item: TodoItem;
+  following: readonly string[];
+}
+
+/** What a fresh list changes in the panel (`todoPanelChanges`). */
+export interface TodoPanelChange {
+  /** The rows to light up, in the panel's order. */
+  flash: string[];
+  /** To-dos Galley ticked off for the user, held in place a moment. */
+  held: TodoHold[];
+}
+
+/** Ids with a write of this window's on its way — a tick or untick
+ * (`flips`), a reminder being cancelled (`cancelling`) — in either of
+ * two reads of the store: the read a write ends with clears its record
+ * in the same set. */
+export function todoWritesOnTheirWay(
+  ...states: readonly {
+    flips: Readonly<Record<string, unknown>>;
+    cancelling: Readonly<Record<string, unknown>>;
+  }[]
+): Set<string> {
+  const ids = new Set<string>();
+  for (const state of states) {
+    for (const id of Object.keys(state.flips)) ids.add(id);
+    for (const id of Object.keys(state.cancelling)) ids.add(id);
+  }
+  return ids;
+}
+
+function sameDue(a: TodoItem["due"], b: TodoItem["due"]): boolean {
+  if (!a || !b) return !a && !b;
+  return (
+    a.date === b.date &&
+    a.hasTime === b.hasTime &&
+    (a.at ?? "") === (b.at ?? "")
+  );
+}
+
+/** A reminder's time, or paused: not its going off (the clock). */
+function sameReminder(
+  a: TodoItem["reminder"],
+  b: TodoItem["reminder"],
+): boolean {
+  if (!a || !b) return !a && !b;
+  return a.at === b.at && (a.state === "paused") === (b.state === "paused");
+}
+
+function sameRepeat(a: TodoItem["repeat"], b: TodoItem["repeat"]): boolean {
+  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
+
+/** One of the user's to-dos Galley changed: its words, when it is due,
+ * its reminder (time or paused), its notes. */
+function yourTodoChanged(before: TodoItem, after: TodoItem): boolean {
+  return (
+    before.text !== after.text ||
+    !sameDue(before.due, after.due) ||
+    !sameReminder(before.reminder, after.reminder) ||
+    (before.notes ?? "") !== (after.notes ?? "")
+  );
+}
+
+/** A row of 「Galley 在办」 changed: only one of its own one-off
+ * reminders, in its words or its time. A subtask's state, title and
+ * latest activity move with its work, not with Galley's changing the
+ * list. */
+function assistantRowChanged(before: TodoItem, after: TodoItem): boolean {
+  if (after.kind !== "task" || (after.repeat?.kind ?? "once") !== "once") {
+    return false;
+  }
+  return before.text !== after.text || (before.at ?? "") !== (after.at ?? "");
+}
+
+/** A routine changed: its words, its rule, its time of day, paused or
+ * not. Not its next time, which moves on each time it goes off. */
+function routineChanged(before: TodoItem, after: TodoItem): boolean {
+  return (
+    before.text !== after.text ||
+    !sameRepeat(before.repeat, after.repeat) ||
+    (before.timeOfDay ?? "") !== (after.timeOfDay ?? "") ||
+    (before.state === "paused") !== (after.state === "paused")
+  );
+}
+
+function byId(items: readonly TodoItem[]): Map<string, TodoItem> {
+  return new Map(items.map((item) => [item.id, item]));
+}
+
+/**
+ * What a fresh list (`next`) lights up in the panel on screen, against
+ * the one it showed (`previous`) — main chat ticket 87, PRD ruling 131
+ * point 5: what Galley moved, so you see it move. Compared field by
+ * field (the panel's rows carry no `updatedAt`); `mine` are this
+ * window's own writes on their way (`todoWritesOnTheirWay`), never lit.
+ *
+ * Lit: a row new to the user's to-dos, 「Galley 在办」 (a subtask too) or
+ * 例行; one of the user's to-dos with new words, due time, reminder
+ * (time or paused) or notes; one of Galley's own one-off reminders with
+ * new words or time; a routine with new words, rule, time of day, or
+ * paused or resumed; and one of the user's to-dos Galley ticked off —
+ * held where it stood a moment (`held`), lit there, then in 已完成.
+ *
+ * Not lit: a subtask after it appears (its state, title, activity); a
+ * routine's next time moving on as it goes off; a one-off reminder going
+ * off into 已完成; anything else new in 已完成; a row that leaves (a
+ * cancelled one just goes: the panel draws nothing cancelled).
+ */
+export function todoPanelChanges(
+  previous: AssistantTodo,
+  next: AssistantTodo,
+  mine: ReadonlySet<string>,
+): TodoPanelChange {
+  const flash = new Set<string>();
+  const compare = (
+    before: readonly TodoItem[],
+    after: readonly TodoItem[],
+    changed: (before: TodoItem, after: TodoItem) => boolean,
+  ) => {
+    const was = byId(before);
+    for (const item of after) {
+      if (mine.has(item.id)) continue;
+      const old = was.get(item.id);
+      if (!old || changed(old, item)) flash.add(item.id);
+    }
+  };
+  const yoursBefore = yourTodos(previous);
+  const yoursAfter = yourTodos(next);
+  compare(yoursBefore, yoursAfter, yourTodoChanged);
+  compare(previous.assistant, next.assistant, assistantRowChanged);
+  compare(previous.routine, next.routine, routineChanged);
+
+  const stillYours = new Set(yoursAfter.map((item) => item.id));
+  const doneNow = byId(next.done);
+  const held: TodoHold[] = [];
+  yoursBefore.forEach((item, index) => {
+    if (mine.has(item.id) || stillYours.has(item.id)) return;
+    if (doneNow.get(item.id)?.kind !== "todo") return;
+    held.push({
+      item,
+      following: yoursBefore.slice(index + 1).map((row) => row.id),
+    });
+    flash.add(item.id);
+  });
+
+  const order = [
+    ...todoPanelRows(next, held).yours,
+    ...next.assistant,
+    ...next.routine,
+  ];
+  return {
+    flash: order.filter((item) => flash.has(item.id)).map((item) => item.id),
+    held,
+  };
+}
+
+/**
+ * The user's to-dos and 已完成 as the panel draws them while Galley's
+ * ticks hold (`TodoHold`): each held one back where it stood — before
+ * the first row that followed it then and is still there, else last —
+ * and not yet in 已完成 (`holding` names them). A held one the fresh list
+ * has among the user's to-dos again (unticked since) is not drawn twice.
+ */
+export function todoPanelRows(
+  todo: AssistantTodo,
+  held: readonly TodoHold[],
+): { yours: TodoItem[]; done: TodoItem[]; holding: ReadonlySet<string> } {
+  const yours = yourTodos(todo);
+  const listed = new Set(yours.map((item) => item.id));
+  const holding = held.filter((hold) => !listed.has(hold.item.id));
+  for (const hold of holding) {
+    let at = yours.length;
+    for (const id of hold.following) {
+      const index = yours.findIndex((item) => item.id === id);
+      if (index >= 0) {
+        at = index;
+        break;
+      }
+    }
+    yours.splice(at, 0, hold.item);
+  }
+  const away = new Set(holding.map((hold) => hold.item.id));
+  return {
+    yours,
+    done: away.size
+      ? todo.done.filter((item) => !away.has(item.id))
+      : todo.done,
+    holding: away,
+  };
 }
 
 /**

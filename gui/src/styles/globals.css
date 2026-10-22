@@ -1014,7 +1014,9 @@ code {
 /* Located message (palette full-text hit → scroll here). A brand wash
    that decays over 1.4s — one-shot acknowledgement in the same family
    as runtime-mode-highlight; coupled to LOCATE_FLASH_MS in
-   useStickyScroll.ts (change both together or neither). Background
+   lib/locate-flash.ts (change both together or neither). Also the
+   to-do panel's row Galley moved or a card's title points at (main
+   chat ticket 87, useTodoPanelFlash). Background
    only: no outline / lift, the block must read as "here", not as a
    new element. */
 @keyframes message-locate-flash {

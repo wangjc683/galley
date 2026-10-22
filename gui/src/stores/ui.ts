@@ -2,8 +2,11 @@ import { create } from "zustand";
 
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
 import { paletteAfterFind, type PaletteScope } from "@/lib/palette-scope";
+import type { TodoGlance } from "@/lib/todo-open";
 import {
+  readTodoPanelIntroduced,
   readTodoPanelOpen,
+  writeTodoPanelIntroduced,
   writeTodoPanelOpen,
   type TodoPlace,
 } from "@/lib/todo-panel-memory";
@@ -62,8 +65,44 @@ interface UiState {
    * Remembered on this machine across restarts (tickets 45, 46,
    * lib/todo-panel-memory.ts): every set writes its place, and each
    * starts from what was written — closed when nothing readable was.
+   * Not shown, and neither read nor written, while the main area is
+   * narrow (`todoNarrow`, ticket 87).
    */
   todoPanelOpen: Readonly<Record<TodoPlace, boolean>>;
+
+  /**
+   * The main area is narrower than the to-do panel's split (760px,
+   * LocalFileWorkspace's ResizeObserver, which writes it): the panel
+   * would cover the conversation's right edge, so the remembered open is
+   * not shown and a look is taken instead (main chat ticket 87, PRD
+   * ruling 131 point 2). Narrow until first measured, so a remembered
+   * panel never flashes as a cover before the width is known.
+   */
+  todoNarrow: boolean;
+
+  /**
+   * The to-do panel open for a look, never remembered (ticket 87): taken
+   * in a narrow main area, it folds when you leave the conversation it
+   * is open in, and stays through a widening (lib/todo-open.ts). Never
+   * in localStorage, never in Core.
+   */
+  todoGlance: TodoGlance | null;
+
+  /**
+   * The to-do panel has been met on this machine
+   * (lib/todo-panel-memory.ts `readTodoPanelIntroduced`, ticket 87): it
+   * no longer opens by itself. Starts from what was written.
+   */
+  todoPanelIntroduced: boolean;
+
+  /**
+   * "Light these rows up" — a card's title, or the panel's one opening
+   * by itself (ticket 87). The panel takes it once its rows are on
+   * screen: unfolds 已完成 for one there, scrolls the first into view
+   * and flashes them (useTodoPanelFlash), then clears it. Pure UI
+   * coordination.
+   */
+  todoRowRequest: TodoRowRequest | null;
 
   /**
    * "Quote this into that conversation's composer" — the to-do panel's
@@ -94,6 +133,12 @@ export interface SettingsRequest {
 export interface QuoteRequest {
   sessionId: string;
   text: string;
+  nonce: number;
+}
+
+export interface TodoRowRequest {
+  /** The rows' ids (`data-todo-row`). */
+  ids: readonly string[];
   nonce: number;
 }
 
@@ -130,6 +175,13 @@ interface UiActions {
   requestReview: () => void;
 
   setTodoPanelOpen: (place: TodoPlace, open: boolean) => void;
+  setTodoNarrow: (narrow: boolean) => void;
+  setTodoGlance: (glance: TodoGlance | null) => void;
+  /** Write that the panel has been met (ticket 87). */
+  markTodoPanelIntroduced: () => void;
+  requestTodoRows: (ids: readonly string[]) => void;
+  /** The panel took the request with this nonce. */
+  clearTodoRowRequest: (nonce: number) => void;
   requestQuote: (sessionId: string, text: string) => void;
   clearQuote: () => void;
   requestSettings: (
@@ -155,6 +207,10 @@ export const useUiStore = create<UiStore>((set, get) => ({
     galley: readTodoPanelOpen("galley"),
     elsewhere: readTodoPanelOpen("elsewhere"),
   },
+  todoNarrow: true,
+  todoGlance: null,
+  todoPanelIntroduced: readTodoPanelIntroduced(),
+  todoRowRequest: null,
   quoteRequest: null,
   settingsRequest: null,
 
@@ -203,9 +259,34 @@ export const useUiStore = create<UiStore>((set, get) => ({
 
   setTodoPanelOpen: (place, open) => {
     writeTodoPanelOpen(place, open);
+    // A remembered open or close is one you saw (a preview replacing
+    // the panel on screen included), or the one time it opened by
+    // itself: met either way (ticket 87). A close deletes the open key,
+    // so the flag is what keeps it met.
+    get().markTodoPanelIntroduced();
     set((state) => ({
       todoPanelOpen: { ...state.todoPanelOpen, [place]: open },
     }));
+  },
+  setTodoNarrow: (narrow) => {
+    if (get().todoNarrow !== narrow) set({ todoNarrow: narrow });
+  },
+  setTodoGlance: (glance) => set({ todoGlance: glance }),
+  markTodoPanelIntroduced: () => {
+    // Written every time, not only the first: met at start because a
+    // place was open, it must stay met once that key is deleted.
+    writeTodoPanelIntroduced();
+    if (!get().todoPanelIntroduced) set({ todoPanelIntroduced: true });
+  },
+  requestTodoRows: (ids) =>
+    set((state) => ({
+      todoRowRequest: {
+        ids,
+        nonce: (state.todoRowRequest?.nonce ?? 0) + 1,
+      },
+    })),
+  clearTodoRowRequest: (nonce) => {
+    if (get().todoRowRequest?.nonce === nonce) set({ todoRowRequest: null });
   },
   requestQuote: (sessionId, text) =>
     set((state) => ({

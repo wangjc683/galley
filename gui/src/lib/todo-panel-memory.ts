@@ -12,7 +12,16 @@
  * the composer drafts: never in Core (Rule 5), never business data.
  * Default closed in both — a panel standing open on the right is what
  * made Galley read like an IDE (tools-and-approvals.md §4.7), so nothing
- * opens it but you.
+ * opens it but you, except once (main chat ticket 87, PRD ruling 131
+ * point 4): the first time a to-do card appears under a reply to a round
+ * you sent, Galley's panel opens by itself, remembered open, and the row
+ * lights up. The daily review must be in sight and able to be let go
+ * (assistant PRD ruling 10), and a panel that starts closed with nothing
+ * leading to it could leave a new user never knowing Galley goes over
+ * their things each morning. After that, never again
+ * (`TODO_PANEL_INTRODUCED_KEY`). In a narrow main area the remembered
+ * open is not shown at all and nothing there reads or writes it (ruling
+ * 131 point 2, lib/todo-open.ts): a look there is this run's alone.
  *
  * Anything unreadable counts as closed: no window (a static render), a
  * WebView with storage disabled, a value that is not ours. A write that
@@ -48,6 +57,40 @@ export function writeTodoPanelOpen(place: TodoPlace, open: boolean): void {
     else window.localStorage.removeItem(key);
   } catch {
     // Storage unavailable: this run remembers, the next starts closed.
+  }
+}
+
+/**
+ * The panel has been met on this machine (main chat ticket 87, PRD
+ * ruling 131 point 4): it never opens by itself again. Set by every open
+ * or close of yours — the button, ⌘K, ×, Esc, a jump out of the panel, a
+ * card's title, in a narrow main area too — and by the one time it
+ * opened by itself. A key of its own: a close deletes the open key, so
+ * 「closed」 and 「never touched」 read the same there. Open in either
+ * place at start counts as met too: whoever left it open knows it. Same
+ * rules as above: only `"1"` counts, anything unreadable is not met, a
+ * write that fails leaves it met for this run alone.
+ */
+export const TODO_PANEL_INTRODUCED_KEY = "galley.todoPanelIntroduced";
+
+export function readTodoPanelIntroduced(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    if (window.localStorage.getItem(TODO_PANEL_INTRODUCED_KEY) === "1") {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return TODO_PLACES.some(readTodoPanelOpen);
+}
+
+export function writeTodoPanelIntroduced(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(TODO_PANEL_INTRODUCED_KEY, "1");
+  } catch {
+    // Storage unavailable: met for this run, not on the next.
   }
 }
 

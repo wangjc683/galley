@@ -159,7 +159,7 @@ function panel(
       <Tooltip.Provider>
         <TodoPanel
           mainChatId="s-main"
-          here="galley"
+          spot={{ here: "galley", at: "main:s-main", narrow: false }}
           onOpenSession={() => {}}
           onTalk={() => {}}
           onClose={() => {}}
@@ -805,6 +805,23 @@ describe("the card under the reply", () => {
       </Tooltip.Provider>,
     );
   }
+
+  it("its title is the panel's title button while the panel lists it (ticket 87)", () => {
+    store.todo = FULL;
+    const html = cards([REMINDED, { ...REMINDED, id: "todo_gone" }]);
+    const listed = html.match(
+      /<div data-role="todo-card" data-todo-id="todo_report"[^]*?<\/button>/,
+    )![0];
+    // Underlined on hover, a ring on keyboard focus, cut with the full
+    // text on hover — the panel's title button.
+    expect(listed).toMatch(
+      /<button type="button" class="block max-w-full truncate rounded-sm text-left outline-none decoration-ink-muted\/60 underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-brand\/30 [^"]*">交季度报告<\/button>/,
+    );
+    // Not in the panel (cancelled, or done long ago): words.
+    const gone = html.slice(html.indexOf('data-todo-id="todo_gone"'));
+    expect(gone).not.toContain('<button type="button" class="block');
+    expect(gone).toContain(">交季度报告</span>");
+  });
 
   it("is a box, the title, when it is due and its reminder", () => {
     const html = cards([OVERDUE, REMINDED]);

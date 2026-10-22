@@ -4,7 +4,13 @@ import { useDayStamp } from "@/hooks/useDayStamp";
 import { todoFailureText, type TodoItem } from "@/lib/assistant-todo";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { TodoMetaText } from "@/components/todo/TodoMetaText";
-import { todoCancelled, todoChecked, todoMetaParts } from "@/lib/todo-panel";
+import { showTodoRow } from "@/lib/todo-open";
+import {
+  todoCancelled,
+  todoChecked,
+  todoListed,
+  todoMetaParts,
+} from "@/lib/todo-panel";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { cn } from "@/lib/utils";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
@@ -32,6 +38,13 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
  * cancelled, its box stays unticked and takes no click, its title goes
  * `ink-muted` (not struck: it was not done) and 「已取消」 takes the
  * place of when it was due.
+ *
+ * Its title opens the to-do panel at its row (main chat ticket 87, PRD
+ * ruling 131 point 3), as the panel's title leads back to the sentence:
+ * beside this conversation, the row lit up (lib/todo-open.ts
+ * `showTodoRow`). Only while the panel lists it — not cancelled, not
+ * done more than seven days ago — otherwise the title is words, as a
+ * panel title with nowhere to lead is.
  */
 export function TodoCards({
   items,
@@ -60,6 +73,8 @@ function TodoCard({ item }: { item: TodoItem }) {
   const todayStartMs = useDayStamp();
   const flip = useAssistantTodoStore((s) => s.flips[item.id]);
   const failure = useAssistantTodoStore((s) => s.failures[item.id] ?? null);
+  const listed = useAssistantTodoStore((s) => todoListed(s.todo, item.id));
+  const mainChatId = item.createdIn?.sessionId;
   const cancelled = todoCancelled(item);
   const checked = todoChecked(item, flip);
   // Done in Core: the box neutral, as under 已完成 (ticket 84). A card
@@ -88,15 +103,38 @@ function TodoCard({ item }: { item: TodoItem }) {
             checkedTone={done ? "quiet" : undefined}
           />
         </span>
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate text-[13px] leading-5",
-            todoTitleClass(checked, cancelled),
-          )}
-          onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, item.text)}
-        >
-          {item.text}
-        </span>
+        {listed && mainChatId ? (
+          // The panel's title button (TodoPanel's RowShell): as wide as
+          // its words, underlined on hover, a ring on keyboard focus.
+          <span className="min-w-0 flex-1 text-[13px] leading-5">
+            <button
+              type="button"
+              onClick={() => showTodoRow(item.id, mainChatId)}
+              onPointerEnter={(e) =>
+                syncTruncatedTitle(e.currentTarget, item.text)
+              }
+              className={cn(
+                "block max-w-full truncate rounded-sm text-left outline-none",
+                "decoration-ink-muted/60 underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-brand/30",
+                todoTitleClass(checked, cancelled),
+              )}
+            >
+              {item.text}
+            </button>
+          </span>
+        ) : (
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate text-[13px] leading-5",
+              todoTitleClass(checked, cancelled),
+            )}
+            onPointerEnter={(e) =>
+              syncTruncatedTitle(e.currentTarget, item.text)
+            }
+          >
+            {item.text}
+          </span>
+        )}
         {parts.length > 0 && (
           <span
             data-role="todo-meta"
