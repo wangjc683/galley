@@ -383,3 +383,32 @@ describe("your to-do's menu (ticket 88)", () => {
     expect(menuRows()).toEqual(["说说这件", "删除"]);
   });
 });
+
+describe("「跟 Galley 说」 at the foot of a list (ticket 89)", () => {
+  it("takes the empty state's path: beside Galley, the caret to its composer", () => {
+    const talk = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <CopyProvider language="zh-CN">
+          <Tooltip.Provider>
+            <TodoPanel
+              mainChatId="s-main"
+              spot={{ here: "galley", at: "main:s-main", narrow: false }}
+              onOpenSession={() => {}}
+              onTalk={talk}
+              onClose={() => {}}
+            />
+          </Tooltip.Provider>
+        </CopyProvider>,
+      );
+    });
+    const button = container.querySelector('[data-role="todo-talk"]');
+    if (!(button instanceof HTMLElement)) throw new Error("no talk row");
+    expect(button.textContent).toBe("跟 Galley 说");
+    act(() => button.click());
+    expect(talk).toHaveBeenCalledTimes(1);
+  });
+});

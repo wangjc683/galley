@@ -187,11 +187,18 @@ function box(html: string, id: string): string {
 const BRAND = "border-brand bg-brand text-ink";
 const QUIET = "border-line-strong bg-line-strong text-ink-soft";
 const EMPTY_BOX = "border-line-strong bg-elevated text-transparent";
-/** The markup of one row, from its opening to the next row. */
+/** The markup of one row, from its opening to the next row or the
+ * list's foot (ticket 89's 「跟 Galley 说」), the closing tags it ends on
+ * dropped: the last row reads the same whatever follows the list. */
 function row(html: string, id: string): string {
   const start = html.indexOf(`data-todo-row="${id}"`);
-  const next = html.indexOf("data-todo-row=", start + 1);
-  return html.slice(start, next === -1 ? undefined : next);
+  const ends = [
+    html.indexOf("data-todo-row=", start + 1),
+    html.indexOf('<button type="button" data-role="todo-talk"', start + 1),
+  ].filter((at) => at !== -1);
+  return html
+    .slice(start, ends.length > 0 ? Math.min(...ends) : undefined)
+    .replace(/(<\/(?:div|section)>)+$/, "");
 }
 
 describe("the panel's groups", () => {
@@ -300,7 +307,7 @@ describe("the panel's groups", () => {
     expect(count(html, "<section")).toBe(4);
     // No group label carries a margin of its own any more.
     expect(html).not.toContain("first:mt-0");
-    expect(html).not.toMatch(/class="mt-3 flex w-full/);
+    expect(html).not.toMatch(/class="mt-3 flex w-full items-center gap-1\.5/);
     // Each label 3px above and below (ticket 86, ruling 130), 已完成's
     // button too.
     const labels = [
@@ -415,6 +422,28 @@ describe("the panel's groups", () => {
       expect(html).not.toContain('data-role="todo-empty"');
       expect(html).toContain('data-todo-row="sched_review"');
     }
+  });
+
+  it("ends a list that is not empty with the empty state's 「跟 Galley 说」 (ticket 89, ruling 133)", () => {
+    const html = panel(FULL);
+    const talk = html.indexOf('data-role="todo-talk"');
+    // After every group, 已完成 the last of them, and once.
+    expect(talk).toBeGreaterThan(html.indexOf('data-todo-group="done"'));
+    expect(count(html, 'data-role="todo-talk"')).toBe(1);
+    expect(count(html, ">跟 Galley 说<")).toBe(1);
+    // A row in the rows' geometry: the talk icon in the box's column.
+    const button = html.slice(talk, html.indexOf("</button>", talk));
+    expect(button).toContain("px-2.5 py-1.5");
+    expect(button).toContain("text-ink-muted");
+    expect(button).toContain('class="flex h-5 w-4 shrink-0');
+    expect(panel(FULL, { language: "en-US" })).toContain(">Tell Galley<");
+    // The empty state keeps its own button, and this row is not drawn.
+    const empty = panel({ ...EMPTY_TODO, routine: [REVIEW] });
+    expect(empty).toContain('data-role="todo-empty"');
+    expect(empty).not.toContain('data-role="todo-talk"');
+    // Before the first read, nothing.
+    store.loaded = false;
+    expect(panel(FULL)).not.toContain('data-role="todo-talk"');
   });
 
   it("names the groups in English, never 「Galley」 in capitals", () => {
