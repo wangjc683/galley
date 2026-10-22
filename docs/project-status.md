@@ -938,10 +938,12 @@ Pre-Flight checks this list):
 
 - ~~README (en + zh) line 86~~ done 2026-10-21 (README rewrite, devlog
   [2026-10-21-readme-personal-assistant-and-screenshots-v3](./devlog/2026-10-21-readme-personal-assistant-and-screenshots-v3.md)).
-  Still at release: the release-notes
-  guide's area name `ChatGPT / Codex` becomes `ChatGPT`. Release notes: one
+  ~~Still at release: the release-notes
+  guide's area name `ChatGPT / Codex` becomes `ChatGPT`~~ done 2026-10-22
+  with JC (`v0.7.0` draft). ~~Release notes: one
   line for Sign in with ChatGPT, and an upgrade note that users of the old
-  Codex CLI login must sign in again, and only Plus / Pro plans work
+  Codex CLI login must sign in again, and only Plus / Pro plans work~~ in
+  the `v0.7.0` notes
   (`.scratch/chatgpt-siwc/PRD.md` rulings 1, 5).
 
 - GitHub repo About, the Chinese sentence `极简 harness 的本地全能 AI 助手。`

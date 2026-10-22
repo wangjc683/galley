@@ -71,7 +71,9 @@
   sidebar's Archived count were briefly merged as "quieter navigation chrome",
   then split back.)
 - Keep established product terms such as `Galley`, `GA`, `GenericAgent`,
-  `Agent / CLI`, `Browser Control`, `Channels`, and `ChatGPT / Codex`.
+  `Agent / CLI`, `Browser Control`, `Channels`, and `ChatGPT` (the provider
+  read `ChatGPT / Codex` until `v0.7.0` replaced the Codex CLI login with Sign
+  in with ChatGPT; "Codex" now names only that old login).
 - Use `内置 GA` in Chinese and `Bundled GA` in English. Do not expose
   `managed GA` in user-facing release notes.
 - Installation links must point directly to GitHub Release assets.
