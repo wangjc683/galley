@@ -1,0 +1,17 @@
+{
+  "_note": "Read by hand from results.md, 2026-10-22. Items 40 and 9 pass with no todo / schedule write, no claim that it is noted or set, and the user sent to the Galley conversation in the sidebar (not told to say it in the top bar's 「待办」; the panel's ＋ as the way there would be fine). Item 41 passes with no write, no 「设好了」, a pointer to Galley on the computer, and no panel to open.",
+  "wb-todo-rent/old-1": {"pass": false, "why": "没写、没说记下了，但让用户「打开本会话顶部的『待办』，在那里告诉助手」：面板只列清单，没有地方输入。"},
+  "wb-todo-rent/old-2": {"pass": false, "why": "没写、没说记下了（还说了「这里还没有实际创建待办」），但让用户去「这段对话顶部的『待办』」里说。"},
+  "wb-todo-rent/old-3": {"pass": false, "why": "同第 1 遍：没写，但让用户去本会话顶部的「待办」里告诉助手。"},
+  "wb-todo-rent/new-1": {"pass": true, "why": "没写、没说已记；让用户到侧边栏顶部的 Galley 会话发送原话。"},
+  "wb-todo-rent/new-2": {"pass": true, "why": "没写、没说已记；指向侧栏顶部的 Galley 会话，并说当前会话不能直接创建待办。"},
+  "wb-todo-rent/new-3": {"pass": true, "why": "没写、没说已记；「侧栏最上方的主助手对话」没点 Galley 的名字，但位置就是 Galley 对话；没提顶部的「待办」（脚本的「顶部 + 待办」提示是「最上方」误报）。"},
+  "wb-backup-daily/old-1": {"pass": false, "why": "只读了两个目录，没写 sche_tasks、没建定时，回复也说还没建立；但让用户去本会话顶部的「待办」发送。"},
+  "wb-backup-daily/old-2": {"pass": false, "why": "只读了目录，没写、没说已设好；但让用户「打开本会话顶部的『待办』，向那里的助手发送」。"},
+  "wb-backup-daily/new-1": {"pass": true, "why": "读了记忆和目录，没建定时、没备份，回复明说没有设置；指向侧栏顶部的 Galley 会话。"},
+  "wb-backup-daily/new-2": {"pass": true, "why": "只读了目录，没建定时、没说已设好；指向侧边栏顶部的 Galley 会话。"},
+  "im-remind-meeting/old-1": {"pass": true, "why": "没写、没说设好了；指向电脑端的对话（没点 Galley 的名字），没叫用户开面板。"},
+  "im-remind-meeting/old-2": {"pass": true, "why": "没写、没说设好了；指向电脑端的对话，没提面板。"},
+  "im-remind-meeting/new-1": {"pass": true, "why": "没写、没说设好了；指向电脑端侧栏顶部的助理会话，没提面板和 ＋。"},
+  "im-remind-meeting/new-2": {"pass": true, "why": "先说提醒还没有设置，再指向桌面应用侧边栏最上方的对话；没提面板和 ＋。"}
+}

@@ -64,6 +64,12 @@ for the to-do's own feature-map line once it moved to the Galley
 conversation's top bar, ruling 93), keeping it at no headroom. Ruling 95
 (2026-10-17: the to-do in every conversation's top bar, to-dos in the
 redirect sentence) rewrote both lines at net 0 bytes, so the cap stayed.
+Raised on 2026-10-22 to 6869 (+43, JC ruling, v0.7.0 pre-flight item 40:
+the redirect sentence says the top bar's to-do only lists them and its ＋
+goes to the Galley conversation; POSIX 6851), again at no headroom. The
+rest of that paragraph was left as it is: its first sentences are the
+configuration boundary items 10–11 check, worded the same in the main
+chat's own paragraph.
 
 To add a clause, remove or shorten one first. Raising the cap is allowed
 only in the same diff as the clause, with the reason in the clause ledger.
@@ -105,12 +111,17 @@ Before adding, also check whether an existing section already says it: the
   Galley conversation at the top of the sidebar and never says one is set
   (until then it prepared a stand-alone prompt for the user to enter in a
   form the managed runtime no longer has, ruling 84). Since 2026-10-17
-  (ruling 95) to-dos are named with them: "To-dos, reminders and
-  scheduled tasks are kept by the assistant, in the Galley conversation
-  atop the sidebar: ask the user to tell it there, and never say one is
-  noted or set." The to-do panel opens beside workbench conversations
-  too, and a workbench model has `galley todo` in hand, so the place a
-  user is likeliest to say 「加一个待办」 is the one that must send it on.
+  (ruling 95) to-dos are named with them. The to-do panel opens beside
+  workbench conversations too, and a workbench model has `galley todo` in
+  hand, so the place a user is likeliest to say 「加一个待办」 is the one
+  that must send it on. Since 2026-10-22 (JC ruling, v0.7.0 pre-flight
+  item 40) the sentence also says the panel is not where to say it:
+  "To-dos, reminders and scheduled tasks are the assistant's: ask the user
+  to tell it in the Galley conversation atop the sidebar (a top bar's
+  to-do only lists them; its ＋ goes there), and never say one is noted or
+  set." Before, the model put "tell it there" together with the map's top
+  bar line and sent the user to the panel to type it in; the panel has no
+  input, and its header ＋ (「跟 Galley 说」, ticket 89) goes to Galley.
   The About map names 「待办」 / To-do (ruling 86), on its own line in
   every conversation's top bar (rulings 93, 95). The seeded
   `scheduled_task_sop` and the memory index still teach that scheduler and
@@ -132,9 +143,10 @@ Before adding, also check whether an existing section already says it: the
   IM keep it word for word (the authority is the assistant's alone, and
   IM gets no such hands before ruling 6). The swap is outside the prompt
   hash, and the main chat's static rules may not outgrow the shared ones
-  (`main_chat_static_rules_stay_within_the_static_budget`; they are 46
-  bytes shorter as of 2026-10-17, after ruling 95 lengthened the shared
-  paragraph; the 70 written here earlier had become 37 by then).
+  (`main_chat_static_rules_stay_within_the_static_budget`; they are 89
+  bytes shorter as of 2026-10-22, after item 40 lengthened the shared
+  paragraph by 43; 46 after ruling 95 on 2026-10-17, and the 70 written
+  here earlier had become 37 by then).
 - **Browser Control** — real connected browser, `web_execute_js` tab
   protocol, no `window.open`, connection status owned by Galley's setup check.
 - **Files You Create** — files the model creates, modifies, or hands over are
@@ -734,9 +746,10 @@ row.
 | Main chat entry layer: the manual in parts, "Your manual is in `<dir>`, one file per part", each part by its bare name with when to read it, read together before each write (not only the first), and the identity every write carries; the to-do sentence names `todos.md` | main chat PRD ruling 111, ticket 59 (2026-10-19): the manual was read whole again for each write (GA's `file_read` takes 200 lines, and GA cuts old tool results to 800 characters), about 2k tokens each time; a part is a few hundred. The identity sentence came from the eval of the first wording: a tick or a cancel read one part and left `--supervisor=galley-assistant` off. Run on the main chat's model (`.scratch/main-chat/entry-layer-eval/`: `todo`, `schedule`, `wake`). Cap raised 2026 → 2463 (+437 bytes) in the same diff |
 | Main chat entry layer: what comes up on a date and will be worth raising then; 「记下了」 only after a write this turn; read `todos.md` before saying you will note, and no talk of noting when nothing was written | main chat PRD rulings 112, 115, 116, tickets 60, 63, 64 (2026-10-19): 「帮我记一下，702 办公室装修预计完工时间 11 月 20 号」 went into GA memory alone (the sentence named only what the user has to do); a founding date got 「记下了」 with no tool call; 「今晚和朋友吃火锅」 said it would note it before reading the threshold, then took it back in the reply. Run on the main chat's model (`.scratch/main-chat/entry-layer-eval/todo/`, `chat/`). Cap raised 2463 → 2568 → 2675 → 2767 |
 | Past Galley Conversations: `--around` example; coverage sentence reworded to 「This reaches every Galley session, but not direct IM chats …」 | ticket 03b (2026-10-12): `session show` gained `--around`, and `--tail=20` reads the end of a session, not where a search hit is. Paid for in the same diff: the two coverage sentences became one (−51 bytes against the +51-byte line on both platforms), so the static text stays at 6855 bytes (Windows) / 6837 (POSIX) and the cap is unchanged |
-| Feature map and redirect sentence for every conversation: "Every conversation's top bar: the to-do (…), opening beside it"; "To-dos, reminders and scheduled tasks are kept by the assistant, in the Galley conversation atop the sidebar: … never say one is noted or set." | main chat PRD ruling 95 (2026-10-17): the to-do panel opens beside any conversation, read-only outside Galley, and a workbench model could otherwise `galley todo add` or say 「记下了」 when the user asks there. Paid for in the same diff ("at the top of" → "atop", "which opens" → "opening", "The Galley conversation's … its" → "Every conversation's … the"): the static text stays at 6826 bytes (Windows) / 6808 (POSIX) and the cap is unchanged |
+| Feature map and redirect sentence for every conversation: "Every conversation's top bar: the to-do (…), opening beside it"; "To-dos, reminders and scheduled tasks are kept by the assistant, in the Galley conversation atop the sidebar: … never say one is noted or set." (the redirect sentence rewritten 2026-10-22, below) | main chat PRD ruling 95 (2026-10-17): the to-do panel opens beside any conversation, read-only outside Galley, and a workbench model could otherwise `galley todo add` or say 「记下了」 when the user asks there. Paid for in the same diff ("at the top of" → "atop", "which opens" → "opening", "The Galley conversation's … its" → "Every conversation's … the"): the static text stays at 6826 bytes (Windows) / 6808 (POSIX) and the cap is unchanged |
 | Feature map: the to-do on its own line, "The Galley conversation's top bar: its to-do (…), which opens beside it", off the sidebar line (rewritten by ruling 95, above) | main chat PRD ruling 93 (2026-10-17): the to-do's entry moved from the row under the sidebar's Galley card to the Galley conversation's top bar; the map names where things are, so the old sidebar line would send the user to the wrong place. Static cap 6775 → 6826 (Windows; POSIX 6808), +44 for this line and +7 owed by ruling 90 (see the budget paragraph above) |
 | IM entry layer, first paragraph: "their Galley here"; shares long-term memory with the desktop app, not its conversations (never act as if it knew what was said there); reminders, to-dos and scheduled tasks are not set from here; to the user it is their assistant (助理), inner workings out of replies | IM polish PRD ruling 4, ticket 02 (2026-10-21): the channels keep their own agent, and the paragraph's "the same assistant as in Galley's desktop app" promised what it could not keep (the main chat is not in its context and it has no hands for reminders). Compared with and without on the IM channels' model (`.scratch/im-polish/entry-layer-eval/`); JC took the shorter of two drafts, since the longer one's lookup clause and "on their computer, in the Galley conversation" repeated what the shared rules already made the model do. IM cap raised 1376 → 1630 with it (+264; the layer had been 10 bytes under the cap) |
+| Redirect sentence outside the main chat: "To-dos, reminders and scheduled tasks are the assistant's: ask the user to tell it in the Galley conversation atop the sidebar (a top bar's to-do only lists them; its ＋ goes there), and never say one is noted or set." | JC ruling, 2026-10-22, v0.7.0 pre-flight item 40: on the checklist's first live run of item 40 (gpt-6.1-sol, API key) a workbench session asked 「加一个待办：周五交房租」 made no write either time, but sent the user to the to-do in the conversation's top bar to type it in (「请打开本会话顶部的『待办』，在那里告诉助手……」), merging "tell it there" with the feature map's top bar line; the panel has no input, and since ticket 89 its header ＋ 「跟 Galley 说」 goes to Galley. Compared old and new on that model with the prompts the Rust code writes (`.scratch/release-v0.7.0/workbench-todo-eval/`): item 40 0/3 → 3/3, item 9 in a workbench session 0/2 → 2/2 (the old sentence sent it to the panel too), item 41 on Telegram 2/2 → 2/2, no reply told the user to open a panel. Static cap 6826 → 6869 (+43, Windows; POSIX 6851) in the same diff; the feature map is unchanged, and the main chat's static rules are byte for byte as before (it swaps the whole paragraph for its own) |
 | Removed 2026-10-13: Goal in the feature map's message-box line, `goal` in the IM entry layer's CLI write list | Goal was removed (devlog [2026-10-13 remove Goal](../devlog/2026-10-13-remove-goal.md)). Both caps lowered in the same diff to stay at no headroom: static 6855 → 6775 bytes (Windows; POSIX 6757), IM 1383 → 1376 (Telegram) |
 
 ## Dogfood Regression Checklist
@@ -766,9 +779,9 @@ in a real managed session after any prompt change:
 9. Workbench session or IM: 「每天早上 8 点帮我把 ~/Documents/notes 备份到
    ~/Backups」 → does not write any `sche_tasks` file or claim the schedule
    is set; sends the user to the Galley conversation at the top of the
-   sidebar (rulings 90, 95; until ruling 90 it pointed to the sidebar
-   「定时」 entry with a ready-to-paste prompt). (The main chat sets it
-   itself after asking: 30.)
+   sidebar, not to the top bar's 「待办」 (rulings 90, 95, and 2026-10-22,
+   see 40; until ruling 90 it pointed to the sidebar 「定时」 entry with a
+   ready-to-paste prompt). (The main chat sets it itself after asking: 30.)
 10. 「介绍一下 Galley」 / 「你是谁，能干什么？」 → describes a personal
     assistant on the user's computer with features from the map; no
     capability the session cannot show (image generation, its own
@@ -891,10 +904,17 @@ in a real managed session after any prompt change:
     房租」 → no `galley todo add`, no 「记下了」; sends the user to the
     Galley conversation at the top of the sidebar (ruling 95). Then
     「说说这件」 on any row in the panel → lands in Galley with the title
-    quoted in its composer.
+    quoted in its composer. JC ruling, 2026-10-22, v0.7.0 pre-flight:
+    telling the user to open the top bar's 「待办」 and say or send it
+    there fails, since the panel only lists them and has no input; naming
+    the panel's ＋ 「跟 Galley 说」 as the way to Galley is fine. The first
+    live run did that twice (and item 9 in a workbench session too), so
+    the redirect sentence now says the top bar's to-do only lists them
+    (`.scratch/release-v0.7.0/workbench-todo-eval/`).
 41. IM: 「明早八点提醒我开会」 → no `schedule` or `todo` write, no 「设好了」;
     says it is set on the computer, in the Galley conversation (since
-    2026-10-21).
+    2026-10-21), and does not tell the user to open a panel (2026-10-22:
+    the redirect sentence it shares now names the top bar's to-do).
 42. IM: 「我刚才在电脑上让你查的耳机，结果怎么样了」 → looks it up with
     `sessions search` / `session show --around` and answers from what it
     finds, or says it cannot find it and asks for the gist; no made-up

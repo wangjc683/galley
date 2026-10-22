@@ -52,6 +52,13 @@ macro_rules! history_cli_commands {
 /// assistant sets reminders and scheduled tasks itself. A macro so the
 /// paragraph is written once and still sits inside
 /// [`RUNTIME_PROMPT_STATIC`]'s `concat!`.
+///
+/// The parenthesis keeps the top bar's to-do out of the answer (v0.7.0
+/// pre-flight, checklist item 40): asked 「加一个待办」 in a workbench
+/// session, the model merged this sentence with the feature map's top bar
+/// line and told the user to open the to-do and send it there, but the
+/// panel only lists them; its ＋ (「跟 Galley 说」, ticket 89) goes to the
+/// Galley conversation.
 macro_rules! user_only_configuration {
     () => {
         r#"Galley's configuration belongs to the user and changes only in Galley's
@@ -59,9 +66,10 @@ interface: model providers and API keys, Channels, Browser Control and its
 browser extension, the runtime, updates, and display. When asked to change one
 of these, do not attempt it through files, scripts, or the browser, and
 never say it is done. Tell the user where it is, and prepare what they need:
-the values to fill in. To-dos, reminders and scheduled tasks are kept by the
-assistant, in the Galley conversation atop the sidebar: ask the user to tell
-it there, and never say one is noted or set."#
+the values to fill in. To-dos, reminders and scheduled tasks are the
+assistant's: ask the user to tell it in the Galley conversation atop the
+sidebar (a top bar's to-do only lists them; its ＋ goes there), and never say
+one is noted or set."#
     };
 }
 
@@ -937,7 +945,11 @@ mod tests {
             assert!(prompt.contains("- Every conversation's top bar: the to-do (\"待办\""));
             assert!(prompt.contains("subtasks), opening beside it."));
             assert!(!prompt.contains("The Galley conversation's top bar"));
-            assert!(prompt.contains("in the Galley conversation atop the sidebar"));
+            // Single-line fragments only (CRLF on Windows).
+            assert!(prompt.contains("ask the user to tell it in the Galley conversation atop the"));
+            assert!(
+                prompt.contains("sidebar (a top bar's to-do only lists them; its ＋ goes there)")
+            );
         }
     }
 
@@ -1004,13 +1016,16 @@ mod tests {
     /// macOS only, so Windows sat 7 over until this diff), 44 when the
     /// to-do moved to the Galley conversation's top bar and took its own
     /// line in the map (ruling 93). Ruling 95 (every conversation's top
-    /// bar; to-dos in the redirect sentence) changed it by 0 bytes. To
+    /// bar; to-dos in the redirect sentence) changed it by 0 bytes. Raised
+    /// by 43 on 2026-10-22 (JC ruling, v0.7.0 pre-flight item 40): the
+    /// redirect sentence says the top bar's to-do only lists them and its
+    /// ＋ goes to the Galley conversation (6851 bytes on POSIX). To
     /// add a clause, remove one first, or raise this number in the same
     /// diff and say why — see the budget rule in
     /// docs/managed-ga-runtime/prompt-composition.md. Bytes, not tokens:
     /// there is no tokenizer in CI. `\r` is not counted: a Windows
     /// checkout (`core.autocrlf`) puts CRLF into the raw string literals.
-    const STATIC_PROMPT_BUDGET_BYTES: usize = 6826;
+    const STATIC_PROMPT_BUDGET_BYTES: usize = 6869;
 
     #[test]
     fn static_prompt_stays_within_budget() {
@@ -1458,7 +1473,8 @@ mod tests {
         assert!(!main.contains("the prompt and time for a scheduled task"));
         assert!(!main.contains("so the prompt must stand on its own"));
         assert!(!main.contains("ask the user to tell"));
-        assert!(!main.contains("never say one is noted or set"));
+        assert!(!main.contains("one is noted or set."));
+        assert!(!main.contains("a top bar's to-do only lists them"));
         // galley#31 and the capability rule stay for the main chat too.
         assert!(main.contains("never write `sche_tasks`"));
         assert!(main.contains("Do not"));
@@ -1469,10 +1485,18 @@ mod tests {
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             // Ruling 95: to-dos too, now that the panel opens beside
             // every conversation and the workbench has `galley todo`.
+            // v0.7.0 pre-flight item 40: the panel only lists them, and
+            // its ＋ goes to the Galley conversation.
+            assert!(prompt
+                .contains("the values to fill in. To-dos, reminders and scheduled tasks are the"));
             assert!(prompt.contains(
-                "the values to fill in. To-dos, reminders and scheduled tasks are kept by the"
+                "assistant's: ask the user to tell it in the Galley conversation atop the"
             ));
-            assert!(prompt.contains("it there, and never say one is noted or set."));
+            assert!(prompt.contains(
+                "sidebar (a top bar's to-do only lists them; its ＋ goes there), and never say"
+            ));
+            assert!(prompt.contains("one is noted or set."));
+            assert!(!prompt.contains("kept by the"));
             assert!(!prompt.contains("Reminders and scheduled tasks are not on this list"));
             assert!(!prompt.contains("your manual"));
         }
@@ -2510,7 +2534,7 @@ mod tests {
         // both must reach IM.
         let im = compose_im_runtime_prompt("t");
         assert!(im.contains("## Past Galley Conversations"));
-        assert!(im.contains("in the Galley conversation atop the sidebar"));
+        assert!(im.contains("ask the user to tell it in the Galley conversation atop the"));
     }
 
     #[test]

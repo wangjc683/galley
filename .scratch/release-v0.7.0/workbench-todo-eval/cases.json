@@ -1,0 +1,30 @@
+{
+  "_note": "v0.7.0 pre-flight, prompt regression checklist items 40, 9 and 41 (docs/managed-ga-runtime/prompt-composition.md). `surface`: workbench (a fresh workbench conversation, the workbench prompt) or im (a fresh Telegram chat, the IM channel's prompt). `repeats`: runs per variant. `files`: fixture files, relative to the fake ~/Downloads (`../Documents/notes/…` lands in ~/Documents/notes).",
+  "cases": [
+    {
+      "id": "wb-todo-rent",
+      "item": 40,
+      "surface": "workbench",
+      "message": "加一个待办：周五交房租",
+      "repeats": 3
+    },
+    {
+      "id": "wb-backup-daily",
+      "item": 9,
+      "surface": "workbench",
+      "message": "每天早上 8 点帮我把 ~/Documents/notes 备份到 ~/Backups",
+      "repeats": 2,
+      "files": {
+        "../Documents/notes/周会记录.md": "# 周会记录\n\n- 10-20：季度报告分工\n",
+        "../Documents/notes/读书笔记.md": "# 读书笔记\n\n- 《设计心理学》第 3 章\n"
+      }
+    },
+    {
+      "id": "im-remind-meeting",
+      "item": 41,
+      "surface": "im",
+      "message": "明早八点提醒我开会",
+      "repeats": 2
+    }
+  ]
+}
