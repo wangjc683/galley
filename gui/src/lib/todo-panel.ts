@@ -63,6 +63,26 @@ export function readingPanelClosesTodo(
   return shown ? [shown] : [];
 }
 
+/**
+ * Which places a narrow main area widening closes (main chat ticket 87):
+ * a preview or review opened while narrow wrote nothing
+ * (`readingPanelClosesTodo`), so a place remembered open there would
+ * come back beside the conversation with the reading panel already in
+ * its place — the button selected, no panel drawn. The reading panel is
+ * the later of the two and keeps it: the places it replaces are
+ * remembered closed then, as if it had opened wide. `here` is the
+ * conversation's place, shown or not; `reading` what is open now.
+ */
+export function readingPanelClosesTodoOnWiden(
+  reading: "preview" | "review" | null,
+  here: TodoPlace | null,
+  wasNarrow: boolean,
+  narrow: boolean,
+): readonly TodoPlace[] {
+  if (!reading || !wasNarrow || narrow) return [];
+  return readingPanelClosesTodo(reading, here, false);
+}
+
 /** Whether a place's panel has just been opened (`next` against
  * `previous`): it takes the reading panel's place, which closes the
  * file preview or the review there (LocalFileWorkspace). */

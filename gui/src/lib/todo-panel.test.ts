@@ -13,6 +13,7 @@ import {
   doneRowLine,
   nextTodoRefreshMs,
   readingPanelClosesTodo,
+  readingPanelClosesTodoOnWiden,
   routineRowLine,
   TODO_PANEL_ID,
   TODO_PANEL_WIDTH,
@@ -753,6 +754,36 @@ describe("the panel's place (tickets 45, 46)", () => {
       expect(readingPanelClosesTodo("preview", shown, true)).toEqual([]);
       expect(readingPanelClosesTodo("review", shown, true)).toEqual([]);
     }
+  });
+
+  it("a preview or review opened narrow keeps its place as the main area widens (ticket 87)", () => {
+    // Widening with a preview open: it replaces this conversation's place.
+    expect(
+      readingPanelClosesTodoOnWiden("preview", "galley", true, false),
+    ).toEqual(["galley"]);
+    expect(
+      readingPanelClosesTodoOnWiden("preview", "elsewhere", true, false),
+    ).toEqual(["elsewhere"]);
+    // The review is the window's: both.
+    expect(
+      [
+        ...readingPanelClosesTodoOnWiden("review", "galley", true, false),
+      ].sort(),
+    ).toEqual(["elsewhere", "galley"]);
+    // No main chat, no place: a preview replaces none.
+    expect(readingPanelClosesTodoOnWiden("preview", null, true, false)).toEqual(
+      [],
+    );
+    // Nothing open, still narrow, or wide all along: nothing.
+    expect(readingPanelClosesTodoOnWiden(null, "galley", true, false)).toEqual(
+      [],
+    );
+    expect(
+      readingPanelClosesTodoOnWiden("preview", "galley", true, true),
+    ).toEqual([]);
+    expect(
+      readingPanelClosesTodoOnWiden("review", "galley", false, false),
+    ).toEqual([]);
   });
 
   it("a look opening, or sent ahead by a jump, takes the place too (ticket 87)", () => {

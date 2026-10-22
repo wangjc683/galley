@@ -637,6 +637,7 @@ function App() {
           <ThemeProvider theme={resolvedTheme}>
             <LocalFileWorkspace
               sessionId={activeSessionId}
+              todoPlace={todoEntryShown ? todoPanel.here : undefined}
               fontSize={conversationFontSize}
               repositoryHint={
                 screen === "empty"

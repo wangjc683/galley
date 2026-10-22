@@ -54,6 +54,7 @@ import {
 } from "@/lib/local-files";
 import {
   readingPanelClosesTodo,
+  readingPanelClosesTodoOnWiden,
   todoGlanceOpened,
   todoPanelOpened,
 } from "@/lib/todo-panel";
@@ -118,6 +119,15 @@ export interface WorkspaceAside {
   content: ReactNode;
 }
 
+/** Remember `places` closed — those remembered open only: writing a
+ * closed one again would mark the panel met (ticket 87) for someone who
+ * opened a review before ever seeing it. */
+function closeTodoPlaces(places: readonly TodoPlace[]): void {
+  const ui = useUiStore.getState();
+  for (const place of places)
+    if (ui.todoPanelOpen[place]) ui.setTodoPanelOpen(place, false);
+}
+
 /** The reading panel replaces the to-do panel (`shown`: the place on
  * screen): those places are remembered closed when the main area is
  * wide — nothing narrow writes them (ticket 87) — and a look folds. */
@@ -126,8 +136,7 @@ function replaceTodoPanel(
   shown: TodoPlace | null,
 ): void {
   const ui = useUiStore.getState();
-  for (const place of readingPanelClosesTodo(kind, shown, ui.todoNarrow))
-    ui.setTodoPanelOpen(place, false);
+  closeTodoPlaces(readingPanelClosesTodo(kind, shown, ui.todoNarrow));
   if (ui.todoGlance) ui.setTodoGlance(null);
 }
 
@@ -139,12 +148,18 @@ export function LocalFileWorkspace({
   repositoryHint,
   sessionId,
   aside,
+  todoPlace,
 }: {
   children: ReactNode;
   fontSize?: ConversationFontSize;
   header?: ReactNode;
   repositoryHint?: string;
   sessionId?: string;
+  /** This conversation's to-do panel place (ticket 46), shown or not;
+   * absent with no main chat. A preview or review opened while narrow
+   * replaces it there once the main area widens (ticket 87,
+   * `readingPanelClosesTodoOnWiden`). */
+  todoPlace?: TodoPlace;
   /**
    * The to-do panel while it is on screen (main chat ticket 42), in the
    * reading panel's place: one of them at a time, the later replacing
@@ -227,8 +242,18 @@ export function LocalFileWorkspace({
   // preview opening now replaces it, so that place counts as closed;
   // one opening with no panel on screen leaves both as they are.
   const asideShown = useRef<TodoPlace | null>(null);
+  // What a narrow main area widening finds (ticket 87): the reading
+  // panel open now, and this conversation's to-do place.
+  const widening = useRef<{
+    reading: "preview" | "review" | null;
+    here: TodoPlace | null;
+  }>({ reading: null, here: null });
   useEffect(() => {
     asideShown.current = aside?.place ?? null;
+    widening.current = {
+      reading: review ? "review" : preview ? "preview" : null,
+      here: todoPlace ?? null,
+    };
   });
   const origin = useRef<HTMLElement | null>(null);
   const currentPath = useRef<string | null>(null);
@@ -247,9 +272,17 @@ export function LocalFileWorkspace({
     if (!element) return;
     const observer = new ResizeObserver(([entry]) => {
       setWide(entry.contentRect.width >= SPLIT_MIN_WIDTH);
-      useUiStore
-        .getState()
-        .setTodoNarrow(entry.contentRect.width < ASIDE_SPLIT_MIN_WIDTH);
+      const ui = useUiStore.getState();
+      const narrow = entry.contentRect.width < ASIDE_SPLIT_MIN_WIDTH;
+      const { reading, here } = widening.current;
+      const replaced = readingPanelClosesTodoOnWiden(
+        reading,
+        here,
+        ui.todoNarrow,
+        narrow,
+      );
+      ui.setTodoNarrow(narrow);
+      closeTodoPlaces(replaced);
     });
     observer.observe(element);
     return () => observer.disconnect();
