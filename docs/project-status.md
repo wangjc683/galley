@@ -685,8 +685,8 @@ Post-release follow-up:
    0 → 5 within fifteen minutes). Not reported: the About page's downloaded
    line, a `_bz2.pyd` lock dialog, `galley version` from the bundled CLI and
    the `app.galley.backup.*` file. The macOS hop through the
-   install-at-restart path is still unobserved. `v0.6.1` → `v0.6.2` had not
-   been reported by the `v0.7.0` release; `v0.6.0` → `v0.6.1` and
+   install-at-restart path is still unobserved. `v0.6.1` → `v0.6.2` passed
+   (JC reported 2026-10-23, at the `v0.7.0` release); `v0.6.0` → `v0.6.1` and
    `v0.5.6` → `v0.6.0` were never reported; `v0.5.5` → `v0.5.6` passed on JC's
    Windows machine (2026-10-01, same session; the bundled CLI came out at
    0.5.6 too); `v0.5.4` → `v0.5.5` passed on an
@@ -778,12 +778,6 @@ Discord memory distillation cannot read L0 (`ga.py:538` opens a relative
 path from the channel's working directory), older than this release; the
 comment at `core/src/migration_backup.rs:13` says the opposite of its test.
 
-**Do at release**, left: the GitHub repo About sentence
-`极简 harness 的本地全能 AI 助手。` becomes `极简 harness 的本地全能 AI 助理。`
-(`gh repo edit --description`), matching the About page subtitle
-(`115a55b5`, `.scratch/assistant/PRD.md` ruling 7); due now that `v0.7.0`
-says 助理, outward-facing, so ask JC first.
-
 Carried forward. The README screenshots were re-shot (v3, 2026-10-21).
 `.scratch/sidebar-project-groups/issues/03` (ready-for-agent) holds two
 follow-ups from the 10-09 project passes: the edit dialog's folder hint should
@@ -805,13 +799,9 @@ regression wrote nothing, so the merge-and-compress path is still unobserved
 (fallback: a one-line managed patch back to minimal updates). Windows
 drag-to-reorder in Settings → Models has still not been reported on, nor has
 WeChat `/help` / `/status` on a paired account. The README social preview image
-waits for JC to upload it in the repo settings. Regression leftovers to
-delete (JC: after the release): the project 「v0.6.1 发版回归」 with its 19
-sessions and a Chrome tab (the `v0.6.2` delete confirm's 「同时归档里面的 N
-个对话」 clears the project in one step); from `v0.7.0`, the archived
-regression sessions, the smoke's test session and the Markdown file A1.6 put
-on the Desktop; the `~/Downloads` test files went to the Trash on
-2026-10-07. Small observations from the regression, none acted
+waits for JC to upload it in the repo settings. Regression leftovers were
+cleared on 2026-10-23, except a Chrome tab from the `v0.6.1` round that was
+not looked for. Small observations from the regression, none acted
 on: over IM,
 「现在 Galley 里在跑什么？」 ran the plain `sessions list` as the prompt says,
 then filtered it and ran `status` (3 steps where `status` alone would do); a
