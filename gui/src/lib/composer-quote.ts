@@ -1,4 +1,5 @@
 import { isSideQuestion } from "@/lib/side-question";
+import { charColumns, textColumns } from "@/lib/text-columns";
 
 /**
  * Quoting a conversation selection (telegram-details tickets 02, 07).
@@ -128,24 +129,13 @@ export function splitQuotedMessage(text: string): QuotedMessage {
 export const WHOLE_QUOTE_LINES = 3;
 export const WHOLE_QUOTE_COLUMNS = 240;
 
-/** A code point that takes two columns: CJK, Hangul, fullwidth forms,
- * emoji. */
-const WIDE =
-  /[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿ꀀ-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦\u{1F300}-\u{1FAFF}\u{20000}-\u{3FFFD}]/u;
-
-function columns(text: string): number {
-  let width = 0;
-  for (const char of text) width += WIDE.test(char) ? 2 : 1;
-  return width;
-}
-
 /** The longest head of `line` within `budget` columns, and whether that
  * is all of it. */
 function headWithin(line: string, budget: number): [string, boolean] {
   let width = 0;
   let head = "";
   for (const char of line) {
-    width += WIDE.test(char) ? 2 : 1;
+    width += charColumns(char);
     if (width > budget) return [head, false];
     head += char;
   }
@@ -271,7 +261,7 @@ export function wholeMessageQuote(text: string, markdown: boolean): string {
     }
     const [head, whole] = headWithin(lines[i], left);
     if (head !== "") out.push(head);
-    left -= columns(head);
+    left -= textColumns(head);
     if (!whole) {
       more = true;
       break;
