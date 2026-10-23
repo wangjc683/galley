@@ -57,3 +57,357 @@ Status: ready-for-agent（等主聊天票 91 合入 main 后派）
 6. 看到但没改的问题、没验证到的地方。
 
 ## Comments
+
+### 2026-10-23 实施回报（worktree `genericagent-webui-wt-upstream-menu`，分支 `remove-pet-and-reinject`，基于 main `188be15c`）
+
+#### 1. 提交列表
+
+```
+e70b9863 Docs: retire the desktop pet and Reinject Tools; devlog
+914cb3af Remove the desktop pet and Reinject Tools across runner, Core and GUI
+```
+
+另加本回报一个提交（`git log --oneline main..HEAD` 全文见主会话回报）。不 push、不合入。
+
+#### 2. 删掉的文件与符号
+
+没有删整个文件，都是文件内删减（36 个文件，+135 / −1215）。
+
+**runner**
+
+- `runner/ipc.py`：`ToolsReinjectedEvent`、`PetAttachedEvent`、`PetDetachedEvent`、`ReinjectToolsCommand`、`AttachPetCommand`、`DetachPetCommand`，以及 `Event` / `Command` 联合类型、`EVENT_KINDS` / `COMMAND_KINDS` 里的六个条目。
+- `runner/workbench_bridge.py`：`_handle_reinject_tools`、`_handle_attach_pet`、`_handle_detach_pet`、`_pet_process` / `_pet_port`、`dispatch_command` 的三个分支、`ShutdownCommand` 分支与 `run()` 主循环退出后的宠物清理、模块级 `_PARENT_LOSS_CLEANUP` 与 `__init__` 里往它注册的那一行、`main()` 传给看门狗的 `cleanup=`；六个 import。
+- `runner/_watchdog.py`：`exit_parentless` 与 `start_parent_watchdog` 的 `cleanup` 参数、模块文档串里那条说明。理由：票面写「通用机制若还服务别的子进程就留着」——`_PARENT_LOSS_CLEANUP` 只装过宠物这一项，IM supervisor 与 browser bridge 调看门狗时都不传 `cleanup`，删宠物后它没有任何调用方。
+- `runner/ga_session.py`：`extend_history`、`clear_last_tools`（`grep` 确认只有重新注入在用），以及删完后在 runner 里再无调用方的 `history()`（只被重新注入调用）、`unregister_turn_hook()`（只被解除宠物调用）——这两个票面没点名，按同一条规则一并删；模块文档串耦合点清单与 turn-end hooks 注释跟着改。
+- 测试：`test_ipc.py` 删六个往返测试、小节标题改名；`test_workbench_bridge.py` 删 `test_run_loop_exit_detaches_pet`、`test_bridge_registers_parent_loss_pet_cleanup`，`test_shutdown_detaches_pet_and_sets_shutdown_event` 改成 `test_shutdown_sets_shutdown_event`，去掉一处 `_handle_detach_pet` 桩；`test_ga_session.py` 删 `unregister` / `history+extend` / `clear_last_tools` 三个测试，`preserves_other_writers` 改用上游键；`test_watchdog.py` 的清理测试改成 `test_exit_parentless_hard_exits_with_zero`。
+
+**Core**
+
+- `core/src/ipc.rs`：`IpcEvent::{ToolsReinjected, PetAttached, PetDetached}` 与 `session_id()` 的三个分支、三个事件结构体、`IpcCommand::{ReinjectTools, AttachPet, DetachPet}`、`AttachPetCommand`、测试 `attach_pet_wire_uses_port_not_variant`；`GenerateTitleCommand` 与其测试的注释原本引用 AttachPet 的约定，改成直接写理由。`grep` 过 `core/`、`cli/`，没有别的读者。
+
+**GUI**
+
+- `gui/src/types/ipc.ts`：三个事件、三个命令接口与联合类型条目。
+- `gui/src/lib/ipc-handlers.ts`：`tools_reinjected`、`pet_attached`、`pet_detached` 三个分支（含隐式迁移重发 `attach_pet`），随之不用的 `makeAppError` import。
+- `gui/src/stores/runtime/info-slice.ts`：`petAttachedSessionId`、`setPetAttachedSession`；`gui/src/stores/runtime.ts` 注释。
+- `gui/src/stores/ui.ts`：`pendingPetMigrationTo`、`setPendingPetMigration`。
+- `gui/src/App.tsx`、`Sidebar.tsx`、`sidebar/SidebarTimelineRow.tsx`、`sidebar/SidebarSessionRow.tsx`：`petAttachedSessionId` / `petAttached` 一路传参与小猫徽标（`Cat` 图标、「桌面宠物附着中」提示）。
+- `MainHeader.tsx`、`MainHeaderHost.tsx`、`header/SessionTitleMenu.tsx`：`onReinjectTools`、`onTogglePet`、`currentSessionHasPet`，两个菜单项与图标（`ArrowsClockwise`、`Cat`）；`MainHeaderHost` 随之不用的 `bridgeStatus`、`sendIPCCommand` 与三个 import。分隔线改成只在「重置主对话…」前、且前面有项时出现。
+- `gui/src/lib/main-chat-reset.ts`：清宠物绑定与迁移目标的两步、`useRuntimeStore` import。
+- `assistant/AssistantIdentity.tsx` 注释里的菜单项改成 `查找聊天记录, 重置主对话`。
+- `zh.ts` / `en.ts` 各删 10 个键：`sidebar.desktopPetAttached`、`desktopPetAttachedTitle`，`topbar.reinjectTools`、`desktopPet`、`closeDesktopPet`，`toasts.toolsReinjected`、`toolsReinjectedMessage`、`petStarted`、`petStartedMessage`、`petClosed`。
+- 测试：`MainHeaderHost.menu.test.tsx` 三个用例改成新菜单（外置运行时的用例加断言只剩「查找」）；`MainHeader.identity.test.tsx` 改传 `onFindInChat`，断言菜单里有「查找聊天记录…」、没有「重命名」；`main-chat-reset.test.ts` 去掉宠物三行。
+
+**文档**
+
+- `docs/ipc-protocol.md`：§4.13–4.15、§5.10–5.12 删掉条目，各留一行删除说明并保留编号（照 §4.3、§5.2 审批删除的写法；文档没有单独的变更记录一节）。
+- `docs/design/layout-and-chrome.md`：标题菜单条目、主对话菜单那句、两栏示意图、「普通会话里它和重命名同组」那句、§侧栏的 Desktop Pet 徽标条。
+- `docs/ga-baseline.md`：宠物脚本那句标「since 2026-10-23 Galley no longer launches it」；约 778 行那句标「since 2026-10-23 no longer reads that one either」；Contract Surface 第 9（`last_tools`）、10（`tool_usable_history.json`）条标为 2026-10-23 退役、编号保留（后文多处按编号引用）；「Where each coupling lives」里 `ga_session.py` 的条目号与描述更新，`_handle_reinject_tools` 那条删掉。
+- `managed-ga/patches/manifest.md`：`0020` 那行去掉「desktop pet」，补丁本身不动。
+- 票面清单外、`grep` 盘到的：`CONTEXT.md`「GA integration seam」一段（去掉 `last_tools` 与 `tool_usable_history.json` 耦合）；`docs/galley-native/rfc-1-runtime-boundary.md` 「current IpcEvent vocabulary」里的 `tools_reinjected`。
+- 新写 `docs/devlog/2026-10-23-remove-desktop-pet-and-reinject-tools.md`，`docs/devlog/README.md` 时间线加 2026-10-23 一行。
+
+**盘点 `grep`**（`core cli runner gui/src docs/ipc-protocol.md docs/design docs/ga-baseline.md`，用 `git grep -P` 分别对 `main` 与 `HEAD`）：
+
+| 串 | 删前（main） | 删后（HEAD） |
+|---|---|---|
+| 宠物 | 251 行 / 28 个文件 | 6 行 / 3 个文件 |
+| 重新注入 | 115 行 / 19 个文件 | 7 行 / 3 个文件 |
+
+删后剩下的都在文档里，代码目录（`core cli runner gui/src`）为 0：
+
+- 指向新 devlog 与 PRD 的链接路径（文件名本身含 `desktop-pet`、`reinject`）：`ipc-protocol.md:428`、`:601`，`layout-and-chrome.md:58`、`:69`，`ga-baseline.md:1063`。去掉链接目标后再 `grep`，只剩下面这三行。
+- 票面要求「标明 2026-10-23 起不再读 / 不再启动」而保留文件名的三行：`ga-baseline.md:709`（`desktop_pet_v2.pyw`）、`:778`、`:1065`（`tool_usable_history.json`）。
+
+#### 3. 清理子进程那几处、`ga_session.py` 删掉的方法（diff 原样）
+
+`runner/_watchdog.py`（整份）：
+
+```diff
+@@ -11,10 +11,6 @@ Entrypoint-specific bits are parameters, not forks:
+
+ - ``label``       — process tag in the exit log line.
+ - ``thread_name`` — the watchdog thread's name.
+-- ``cleanup``     — best-effort hooks run before the hard exit (e.g. the
+-                    workbench bridge tears down its desktop-pet child). The
+-                    iterable is read at exit time, so a live list that other
+-                    code appends to after the watchdog starts is honored.
+ """
+ from __future__ import annotations
+
+@@ -22,7 +18,6 @@ import os
+ import sys
+ import threading
+ import time
+-from collections.abc import Callable, Iterable
+
+ GALLEY_CORE_PID_ENV = "GALLEY_CORE_PID"
+ PARENT_WATCH_INTERVAL_SEC = 2.0
+@@ -93,17 +88,11 @@ def exit_parentless(
+     reason: str,
+     *,
+     label: str,
+-    cleanup: Iterable[Callable[[], None]] = (),
+ ) -> None:
+     try:
+         print(f"[{label}] exiting: {reason}", file=sys.__stderr__, flush=True)
+     except Exception:
+         pass
+-    for hook in list(cleanup):
+-        try:
+-            hook()
+-        except Exception:
+-            pass
+     _EXIT_FOR_PARENT_LOSS(0)
+     raise SystemExit(0)
+
+@@ -113,7 +102,6 @@ def start_parent_watchdog(
+     *,
+     label: str,
+     thread_name: str,
+-    cleanup: Iterable[Callable[[], None]] = (),
+ ) -> None:
+     if parent_pid is None:
+         return
+@@ -124,6 +112,6 @@ def start_parent_watchdog(
+             time.sleep(PARENT_WATCH_INTERVAL_SEC)
+             reason = parent_loss_reason(parent_pid, original_ppid)
+             if reason:
+-                exit_parentless(reason, label=label, cleanup=cleanup)
++                exit_parentless(reason, label=label)
+
+     threading.Thread(target=_watch, name=thread_name, daemon=True).start()
+```
+
+`runner/workbench_bridge.py`（只摘清理那几处的 hunk：父进程丢失清理表、`__init__` 注册、`shutdown` 分支、主循环退出、`main()` 传看门狗；三个处理函数整段删除的 hunk 略）：
+
+```diff
+@@ -319,14 +313,6 @@ _managed_model_config_from_env = managed_runtime.managed_model_config_from_env
+ _USAGE_FIELDS = ("requests", "input", "output", "cache_create", "cache_read")
+
+
+-# Best-effort cleanup hooks run before the parent-loss hard exit (see
+-# runner/_watchdog.py). os._exit skips finally blocks and atexit handlers,
+-# so child processes (the desktop pet) must be torn down explicitly or they
+-# leak. Passed to the watchdog as its `cleanup` iterable; read at exit time
+-# so pet-attach appends after the watchdog starts are still honored.
+-_PARENT_LOSS_CLEANUP: list[Any] = []
+-
+-
+ def _llm_display_name(raw: str) -> str:
+     """Return the display name to send over Galley's IPC protocol.
+
+@@ -689,11 +668,6 @@ class Bridge:
+         # not close the newer run, nor pre-empt Abort's ABORTED (a user
+         # stop must reach Core as ABORTED, e.g. `live.lastExit`).
+         self._run_generation: int = 0
+-        # The parent watchdog exits with os._exit, which skips finally
+-        # blocks and atexit — an attached pet would survive as an orphan
+-        # holding its fixed port (and Galley Core is already gone, so
+-        # nothing else cleans it up). Register best-effort cleanup.
+-        _PARENT_LOSS_CLEANUP.append(lambda: self._handle_detach_pet(silent=True))
+
+     def _current_absolute_turn_index(self, turn_index: int) -> int | None:
+         if self._current_message_turn_base is None:
+@@ -1791,17 +1765,9 @@ class Bridge:
+             self._handle_set_llm(cmd)
+         elif isinstance(cmd, SetReasoningEffortCommand):
+             self._handle_set_reasoning_effort(cmd)
+-        elif isinstance(cmd, ReinjectToolsCommand):
+-            self._handle_reinject_tools()
+-        elif isinstance(cmd, AttachPetCommand):
+-            self._handle_attach_pet(cmd)
+-        elif isinstance(cmd, DetachPetCommand):
+-            self._handle_detach_pet()
+         elif isinstance(cmd, GenerateTitleCommand):
+             self._handle_generate_title(cmd)
+         elif isinstance(cmd, ShutdownCommand):
+-            # Make sure pet subprocess + hook don't leak on shutdown.
+-            self._handle_detach_pet(silent=True)
+             self.shutdown_event.set()
+
+     def _handle_set_llm(self, cmd: SetLLMCommand) -> None:
+@@ -2245,12 +1993,6 @@ class Bridge:
+                     f"command dispatch failed: {e}", traceback.format_exc()
+                 )
+
+-        # Whatever ended the loop (Shutdown command, stdin EOF, stdout
+-        # write failure), the pet subprocess must not outlive the bridge —
+-        # an orphan keeps holding its fixed port and blocks the next
+-        # attach. Idempotent: the Shutdown command path already detached.
+-        self._handle_detach_pet(silent=True)
+-
+         # Flush tail events deterministically: enqueue the writer-exit
+         # sentinel and join with a bound. Everything queued before the
+         # sentinel is written + flushed when join returns. (The previous
+@@ -2320,7 +2062,6 @@ def main() -> int:
+         _watchdog.parse_core_pid(),
+         label="workbench-bridge",
+         thread_name="galley-bridge-parent-watchdog",
+-        cleanup=_PARENT_LOSS_CLEANUP,
+     )
+
+     ga_path = str(Path(args.ga_path).expanduser().resolve())
+```
+
+`runner/ga_session.py`（整份）：
+
+```diff
+@@ -11,9 +11,8 @@ Scope rule (2026-07-11 decision): GaSession wraps exactly the
+ *internal / underscore / backend* surface — the things a baseline
+ upgrade can silently move:
+
+-- ``agent._turn_end_hooks``       → register/unregister_turn_hook
+-- ``agent.llmclient.backend.history`` → history / set_history /
+-                                        extend_history / context_usage
++- ``agent._turn_end_hooks``       → register_turn_hook
++- ``agent.llmclient.backend.history`` → set_history / context_usage
+ - ``agent.llmclient.backend.raw_ask`` → side_ask (read-only one-shot,
+                                         no history write)
+ - ``agent.llmclient.backend.reasoning_effort`` → active_backend_id /
+@@ -22,7 +21,6 @@ upgrade can silently move:
+                                         override, same in-process write
+                                         as upstream's
+                                         ``/session.reasoning_effort=``)
+-- ``agent.llmclient.last_tools``  → clear_last_tools
+ - ``agent._ga_project_mode_*``    → set_project_mode (Galley-namespaced,
+                                     in-memory only per Rule 1)
+ - ``agentmain.GenericAgentHandler`` module binding → install_handler
+@@ -143,35 +141,16 @@ class GaSession:
+
+     # ---------------- turn-end hooks ----------------
+     # GA's agent_runner_loop calls each registered hook after every
+-    # loop step. The dict lives on the agent object; both Galley
+-    # consumers (workbench turn streaming, desktop pet) register here.
++    # loop step. The dict lives on the agent object; Galley's consumer
++    # (workbench turn streaming) registers here.
+
+     def register_turn_hook(self, key: str, fn: Callable[..., Any]) -> None:
+         if not hasattr(self.agent, "_turn_end_hooks"):
+             self.agent._turn_end_hooks = {}
+         self.agent._turn_end_hooks[key] = fn
+
+-    def unregister_turn_hook(self, key: str) -> None:
+-        """Best-effort removal — safe on agents that never had hooks."""
+-        try:
+-            hooks = getattr(self.agent, "_turn_end_hooks", None)
+-            if isinstance(hooks, dict):
+-                hooks.pop(key, None)
+-        except Exception:
+-            pass
+-
+     # ---------------- backend history ----------------
+
+-    def history(self) -> list[Any]:
+-        """The live backend history list. Raises AttributeError-family
+-        errors when the backend isn't shaped as expected — callers own
+-        the error narration (their messages are user-facing)."""
+-        result: list[Any] = self.agent.llmclient.backend.history
+-        return result
+-
+-    def extend_history(self, blocks: list[Any]) -> None:
+-        self.history().extend(blocks)
+-
+     def set_history(self, messages: list[dict[str, Any]]) -> str | None:
+         """Replace backend history with desktop-shape ``messages``
+         adapted to GA's native block format.
+@@ -356,15 +335,6 @@ class GaSession:
+                 return "".join(texts)
+         return text
+
+-    def clear_last_tools(self) -> None:
+-        """Reset GA's per-LLM "last seen tools" cache so the next prompt
+-        rebuilds the tool block from scratch (mirrors stapp.py). Older
+-        GA versions lack the attribute — non-fatal by design."""
+-        try:
+-            self.agent.llmclient.last_tools = ""
+-        except Exception:
+-            pass
+-
+     def context_usage(self) -> dict[str, int]:
+         """Estimate backend context usage without mutating runtime state.
+
+```
+
+#### 4. 标题菜单前后对比
+
+| | 删前 | 删后 |
+|---|---|---|
+| 主对话（内置运行时） | 查找聊天记录… ⌘F、─、重新注入工具、桌面宠物（本会话持有时为「关闭桌面宠物」）、─、重置主对话… | 查找聊天记录… ⌘F、─、重置主对话… |
+| 普通会话 | 查找聊天记录… ⌘F、重命名、─、重新注入工具、桌面宠物 | 查找聊天记录… ⌘F、重命名 |
+| 主对话在外置运行时（测试用例，实际外置没有主对话） | 查找聊天记录… ⌘F、─、重新注入工具、桌面宠物 | 查找聊天记录… ⌘F |
+
+由 `MainHeaderHost.menu.test.tsx` 的三个用例按顺序断言（分隔线记作「─」）。
+
+#### 5. 验证
+
+在最终状态（`HEAD e70b9863`）上一次跑完，命令与输出摘录原样（日志尾部）：
+
+```
+=== cargo check --manifest-path core/Cargo.toml --workspace ===
+warning: `galley-relay` (lib) generated 1 warning (run `cargo fix --lib -p galley-relay` to apply 1 suggestion)
+    Checking galley-cli v0.7.0 (…/genericagent-webui-wt-upstream-menu/cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 21.86s
+exit=0
+=== cargo test --manifest-path core/Cargo.toml --workspace ===
+exit=0
+test result lines: 45 passed: 1220 failed: 0
+=== pnpm --dir gui typecheck ===
+> tsc --noEmit
+exit=0
+=== pnpm --dir gui lint ===
+> eslint src --max-warnings 0
+exit=0
+=== CI=true pnpm --dir gui test ===
+ Test Files  205 passed (205)
+      Tests  2263 passed (2263)
+exit=0
+=== runner.__file__ ===
+…/genericagent-webui-wt-upstream-menu/runner/__init__.py
+=== <主树>/.venv/bin/python -m pytest -q ===
+====================== 628 passed, 6 deselected in 8.41s =======================
+exit=0
+=== <主树>/.venv/bin/python -m mypy runner ===
+Success: no issues found in 34 source files
+exit=0
+=== <主树>/.venv/bin/ruff check runner ===
+All checks passed!
+exit=0
+=== node scripts/check-ipc-protocol-drift.mjs ===
+[ipc-drift] IPC protocol fields and optional/null semantics aligned (python: 15 events, 8 commands; rust: 15 events, 8 commands; ts: 15 events, 8 commands)
+exit=0
+=== node scripts/check-supervisor-sop-drift.mjs ===
+[supervisor-sop-drift] 4 reference copies verbatim with canonical docs; SKILL.md variants aligned
+exit=0
+=== node scripts/check-docs-links.mjs ===
+docs link gate OK: 474 files checked.
+exit=0
+=== node scripts/check-version-consistency.mjs ===
+[version-consistency] 5 files agree on 0.7.0
+exit=0
+=== node scripts/check-managed-ga-payload.mjs ===
+[managed-ga-payload] OK
+exit=0
+=== node scripts/check-ga-baseline-drift.mjs ===
+[ga-baseline-drift] OK (b70079dc)
+exit=0
+=== rustfmt --check --edition 2021 core/src/ipc.rs ===
+exit=0
+=== git diff --check main..HEAD ===
+exit=0
+```
+
+- `cargo test` 一行是对 45 条 `test result` 行的求和（全部 `ok`），完整日志在 scratchpad。
+- runner 628 = 删前 640 − 本票删掉的 12 个测试（`test_ipc.py` 7、`test_workbench_bridge.py` 2、`test_ga_session.py` 3）。
+- 唯一改过的 Rust 文件是 `core/src/ipc.rs`。GUI 改过的旧文件里，`App.tsx`、`SidebarSessionRow.tsx`、`zh.ts`、`en.ts`、`ipc-handlers.ts` 在 main 上本来就不 prettier-clean：逐个比了 prettier 偏差行数，删后与删前相同（`ipc-handlers.ts` 少一行，删掉了一处多余空行），其余改过的文件删前删后都 clean。
+- 新增与改动的中文文档行用 scratchpad 正则扫过半角标点：只命中 devlog 头的 `Status:`，那是现有 devlog 的英文键写法，保留。
+
+#### 6. 看到但没改的、没验证到的
+
+- **没验证到**：没跑 `tauri dev` 真机（派单禁止），菜单与侧栏的视觉只有静态渲染测试覆盖，待 JC 真机验收；runner e2e（要真 GA + LLM）没跑；Windows 未测（改动不涉平台分支）。
+- **超出票面字面的删除**，请主会话过目：`_watchdog.py` 的 `cleanup` 参数、`GaSession.history()` 与 `unregister_turn_hook()`（理由见第 2 条）；`CONTEXT.md` 与 Galley Native RFC 1 两处文档。
+- **协议文档的写法**：票面写「删掉条目」，我照该文档 10-05 删审批时的写法留了编号与一行删除说明（不含旧名字），免得 §4.16 之后的编号引用错位。
+- **盘点 `grep` 不为空**：见第 2 条末，都是链接路径与票面要求保留文件名的三行。
+- 看到没改：`docs/audits/codebase-review-2026-07-02/README.md`、`docs/archive/**`、`.scratch/main-chat/**` 里提到宠物 / 重新注入的是历史记录；`scripts/seed-screenshots.py` 的「无宠物」是截图种子里的二手沙发文案，无关；`runner/tests/test_im_resume.py`、`test_managed_discord_dcapp.py` 的假 `llmclient` 带 `last_tools = ""`，模拟的是上游代码自己读的属性，与 `GaSession` 无关，留着。
+- `cargo check` 有一条 `galley-relay` 的 `fetch_update` 弃用警告（`relay/src/channels.rs:347`），本票没碰 relay，早已存在。
+- `docs/project-status.md` 的「Unreleased On Main」没写这一项，留给合入时的收尾。
