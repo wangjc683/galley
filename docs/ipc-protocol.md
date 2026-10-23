@@ -140,9 +140,9 @@ bridge 启动并完成 GA 初始化后**立刻**发的第一条事件。desktop 
   "protocolVersion": "0.1",
   "gaCommit": "cf6551516fcc836f21dcdad592b07c703d09e1d8",
   "gaCommitDate": "2026-05-11T20:48:23+08:00",
-  "gaPath": "/Users/inkstone/Documents/GenericAgent",
+  "gaPath": "/Users/you/Documents/GenericAgent",
   "llmName": "NativeClaudeSession/glm-5.1",
-  "cwd": "/Users/inkstone/Documents/GenericAgent/temp",
+  "cwd": "/Users/you/Documents/GenericAgent/temp",
   "pid": 12345,
   "availableLLMs": [
     { "index": 0, "name": "NativeClaudeSession/glm-5.1", "displayName": "NativeClaudeSession/glm-5.1", "isCurrent": true },

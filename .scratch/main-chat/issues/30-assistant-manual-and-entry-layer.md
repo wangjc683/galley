@@ -92,7 +92,7 @@ git diff --check
 
 - 票 29 的文件（`core/src/subtask_report.rs`、`message_queue.rs`、`subtask.rs`、`turn_persistence/`、`session_runner/replay.rs`、`carry.rs`、`db/search.rs`）。手册的写出若要挂在 `session_runner` 的启动路径上，尽量只动拼提示词与 spawn 配置那一处，并在 Comments 里写明动了哪个函数，合入时主会话要对冲突。
 - `gui/`，外部 agent 用的 `docs/integrations/galley-supervisor-sop.md`，以及静态规则里的「What Only The User Changes」一节（本步不改）。
-- 只在 worktree 里工作：绝不碰主工作树 `/Users/inkstone/Documents/genericagent-webui`（JC 的 `tauri dev` 在那里跑），不跑 `tauri dev`，不 `git commit`，不写 JC 的数据库。
+- 只在 worktree 里工作：绝不碰主工作树 `~/Documents/genericagent-webui`（JC 的 `tauri dev` 在那里跑），不跑 `tauri dev`，不 `git commit`，不写 JC 的数据库。
 
 ## 回报
 

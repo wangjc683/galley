@@ -85,7 +85,7 @@ Status: done（2026-10-22 JC 真机：第 1–3 站与合入后补修那一步�
 
 ### 2026-10-22 实现回报（票 87 代理）
 
-worktree `/Users/inkstone/Documents/genericagent-webui-wt87`，分支 `ticket-87-todo-open-close`，从 `b72df393` 起；本地 main 之后多了 `2fb578a2`（只动 `.scratch/dedicated-browser/PRD.md` 与 `docs/devlog/deferred.md`，与本票没有重叠文件）。未 push、未合入。
+worktree `~/Documents/genericagent-webui-wt87`，分支 `ticket-87-todo-open-close`，从 `b72df393` 起；本地 main 之后多了 `2fb578a2`（只动 `.scratch/dedicated-browser/PRD.md` 与 `docs/devlog/deferred.md`，与本票没有重叠文件）。未 push、未合入。
 
 **1. 提交列表**（这条回报自己的提交在它之后）
 
@@ -136,13 +136,13 @@ export function todoPanelRows(
 
 ```
 $ pnpm --dir gui typecheck
-> galley-desktop@0.6.2 typecheck /Users/inkstone/Documents/genericagent-webui-wt87/gui
+> galley-desktop@0.6.2 typecheck ~/Documents/genericagent-webui-wt87/gui
 > tsc --noEmit
 
 typecheck exit=0
 
 $ pnpm --dir gui lint
-> galley-desktop@0.6.2 lint /Users/inkstone/Documents/genericagent-webui-wt87/gui
+> galley-desktop@0.6.2 lint ~/Documents/genericagent-webui-wt87/gui
 > eslint src --max-warnings 0
 
 lint exit=0

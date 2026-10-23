@@ -95,7 +95,7 @@ git diff --check
 
 - `core/`（票 29、30）；`.scratch/main-chat/entry-layer-eval/`（票 30）。
 - 工作台会话、外置运行时的界面行为。
-- 只在 worktree 里工作：绝不碰主工作树 `/Users/inkstone/Documents/genericagent-webui`（JC 的 `tauri dev` 在那里跑），不跑 `tauri dev`，不 `git commit`。
+- 只在 worktree 里工作：绝不碰主工作树 `~/Documents/genericagent-webui`（JC 的 `tauri dev` 在那里跑），不跑 `tauri dev`，不 `git commit`。
 - 票 29 的代理同时在 `core/` 里编译；你看到 Rust 侧或 IPC 门禁的瞬态错误是正常的，别去修 `core/`。
 
 ## 回报

@@ -24,7 +24,7 @@ committed at `2026-06-02T10:10:20+08:00`.
    the same generator protocol, and `_turn_end_hooks` remains available.
 
 2. **Keep the upgrade non-invasive for external GA**
-   JC's local `/Users/inkstone/Documents/GenericAgent` checkout already points
+   JC's local `~/Documents/GenericAgent` checkout already points
    at `5f46b438`, but it has untracked bot launch scripts. Galley did not modify
    that checkout and did not build managed GA from it. A clean temporary clone
    was used for the managed payload.
@@ -74,7 +74,7 @@ node scripts/check-managed-ga-payload.mjs
 => managed GA import OK (bundle is bridge-ready)
 
 PYTHONDONTWRITEBYTECODE=1 GALLEY_GA_STATE_ROOT=/private/tmp/galley-managed-import-smoke-current \
-  GALLEY_VERIFY_GA_PATH=/Users/inkstone/Documents/genericagent-webui/managed-ga/code \
+  GALLEY_VERIFY_GA_PATH=~/Documents/genericagent-webui/managed-ga/code \
   core/python-bundle/python/bin/python3 -c "import os, sys; sys.path.insert(0, os.environ['GALLEY_VERIFY_GA_PATH']); import agentmain, llmcore, qrcode, dotenv; from Crypto.Cipher import AES"
 => managed GA import OK (current payload + bundled python)
 
@@ -89,7 +89,7 @@ git diff --check
 ```
 
 ```text
-GA_PATH=/Users/inkstone/Documents/GenericAgent \
+GA_PATH=~/Documents/GenericAgent \
   BRIDGE_PYTHON=python3 \
   E2E_LLM_NAME=glm-5.1 \
   .venv/bin/python -m pytest runner/tests/ -m e2e -vv

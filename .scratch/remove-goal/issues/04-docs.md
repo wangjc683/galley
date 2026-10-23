@@ -8,7 +8,7 @@ Blocked by: 无
 ## 工作位置（硬约束）
 
 - **只在 worktree 里工作**：`/private/tmp/claude-501/-Users-inkstone-Documents-genericagent-webui/ab7a31ac-a0f8-4206-b6ee-0c4affeea868/scratchpad/wt-remove-goal`（下称 `$WT`）。
-- **绝不碰主工作树** `/Users/inkstone/Documents/genericagent-webui`。
+- **绝不碰主工作树** `~/Documents/genericagent-webui`。
 - 不 commit，不 push，不改代码（`core/`、`cli/`、`gui/`、`runner/`、`managed-ga/`、`remote-protocol/`、`ios/`、`scripts/`）。
 - **不改**：`AGENTS.md` / `CLAUDE.md`（主会话改）、`docs/project-status.md`、`docs/devlog/**`（含 `deferred.md` 与
   `README.md` 索引，主会话改）、`docs/archive/**`、`docs/audits/**`、`docs/adr/**`、`docs/galley-native/**`、`.scratch/**`

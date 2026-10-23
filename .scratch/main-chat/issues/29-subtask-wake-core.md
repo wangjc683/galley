@@ -166,7 +166,7 @@ git diff --check
 
 - `core/src/managed_prompt.rs` 与助手手册（票 30）；整个 `gui/`（TS 镜像与界面行为都归票 31，它和你在同一个 worktree 里并行，目录分开）。
 - 不加迁移，不加 CLI 命令，不改 Agent API 已有字段。
-- 只在 worktree 里工作：绝不碰主工作树 `/Users/inkstone/Documents/genericagent-webui`（JC 的 `tauri dev` 在那里跑），不跑 `tauri dev`，不 `git commit`。
+- 只在 worktree 里工作：绝不碰主工作树 `~/Documents/genericagent-webui`（JC 的 `tauri dev` 在那里跑），不跑 `tauri dev`，不 `git commit`。
 - 不对整个文件跑 `cargo fmt` / `prettier --write`，只格式化自己写的部分。
 
 ## 回报

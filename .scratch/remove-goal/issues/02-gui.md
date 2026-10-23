@@ -9,7 +9,7 @@ Blocked by: 无
 
 - **只在 worktree 里工作**：`/private/tmp/claude-501/-Users-inkstone-Documents-genericagent-webui/ab7a31ac-a0f8-4206-b6ee-0c4affeea868/scratchpad/wt-remove-goal`（下称 `$WT`）。
   `$WT/gui/node_modules` 已装好。
-- **绝不碰主工作树** `/Users/inkstone/Documents/genericagent-webui`：JC 的 `pnpm tauri dev` 常驻在那里，
+- **绝不碰主工作树** `~/Documents/genericagent-webui`：JC 的 `pnpm tauri dev` 常驻在那里，
   改它会让正在用的窗口热更新。
 - **不跑 `tauri dev` / `pnpm dev`**，不 commit，不 push，不改别的票的域（`core/`、`cli/`、`runner/`、`managed-ga/`、
   `remote-protocol/`、`ios/`、`docs/`、`README*`、`scripts/`、`.scratch/` 除本票 Comments）。

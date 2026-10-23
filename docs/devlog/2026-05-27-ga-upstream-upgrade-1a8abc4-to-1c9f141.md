@@ -84,7 +84,7 @@ PYTHONDONTWRITEBYTECODE=1 GALLEY_GA_STATE_ROOT=/private/tmp/galley-managed-impor
 ./scripts/bundle-python.sh mac-x64
 => managed GA import OK (bundle is bridge-ready)
 
-GA_PATH=/Users/inkstone/Documents/GenericAgent \
+GA_PATH=~/Documents/GenericAgent \
   BRIDGE_PYTHON=python3 \
   E2E_LLM_NAME=glm-5.1 \
   .venv/bin/python -m pytest runner/tests/ -m e2e -vv

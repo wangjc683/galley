@@ -62,7 +62,7 @@ Status: done（2026-10-22 JC 真机：「真机看了，没问题」；查库自
 
 ### 2026-10-22 实现回报（票 88 代理）
 
-worktree `/Users/inkstone/Documents/genericagent-webui-wt88`，分支 `ticket-88-delete-todo`（从本地 main `453ceaa4` 起），没 push、没合入。
+worktree `~/Documents/genericagent-webui-wt88`，分支 `ticket-88-delete-todo`（从本地 main `453ceaa4` 起），没 push、没合入。
 
 1. **提交**（`git log --oneline main..HEAD`，本条回报的提交不在其中）：
 

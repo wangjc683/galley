@@ -41,7 +41,7 @@ Multiple build attempts during session:
 ### What JC should do to finish the spike
 
 ```bash
-cd /Users/inkstone/Documents/genericagent-webui/core/experiments/tray-mode
+cd ~/Documents/genericagent-webui/core/experiments/tray-mode
 cargo build              # cold rebuild of Tauri 2.11 — 8-15 min wall-clock
 ./target/debug/tray-mode-spike   # launch; menubar icon should appear top-right
 ```

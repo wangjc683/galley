@@ -8,7 +8,7 @@ Blocked by: 无
 ## 工作位置（硬约束）
 
 - **只在 worktree 里工作**：`/private/tmp/claude-501/-Users-inkstone-Documents-genericagent-webui/ab7a31ac-a0f8-4206-b6ee-0c4affeea868/scratchpad/wt-remove-goal`（下称 `$WT`）。
-- **绝不碰主工作树** `/Users/inkstone/Documents/genericagent-webui`（JC 的 `tauri dev` 在用），只借用它的 venv
+- **绝不碰主工作树** `~/Documents/genericagent-webui`（JC 的 `tauri dev` 在用），只借用它的 venv
   解释器（见验证命令）。
 - **绝不改** `~/Documents/GenericAgent`：那是用户自己的外置 GA（宪法 Rule 1），连 checkout 都不许切。
 - 不 commit，不 push，不改别的票的域（`core/`、`cli/`、`gui/`、`remote-protocol/`、`ios/`、`docs/`、`README*`、
@@ -55,11 +55,11 @@ Blocked by: 无
 ## 验证命令（都在 `$WT` 下跑；venv 借主树的）
 
 ```bash
-PY=/Users/inkstone/Documents/genericagent-webui/.venv/bin/python
+PY=~/Documents/genericagent-webui/.venv/bin/python
 $PY -c "import runner, os; print(runner.__file__)"      # 必须打印 $WT/runner/__init__.py；若指向主树，停下来回报
 $PY -m pytest
 $PY -m mypy runner
-/Users/inkstone/Documents/genericagent-webui/.venv/bin/ruff check runner
+~/Documents/genericagent-webui/.venv/bin/ruff check runner
 $PY -m py_compile scripts/seed-screenshots.py
 node scripts/check-managed-ga-payload.mjs
 node scripts/check-ga-baseline-drift.mjs
