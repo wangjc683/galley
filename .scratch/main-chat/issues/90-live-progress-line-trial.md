@@ -77,7 +77,7 @@ Status: done（2026-10-23 JC 真机比完定「新」，裁决 135；由票 91 �
 
 ## 别动
 
-- 主工作树：只在 `/Users/inkstone/Documents/genericagent-webui-wt90`（分支 `ticket-90-live-progress-line`，从本地 main 起）里做，不碰主树，不跑 `tauri dev`。
+- 主工作树：只在 `~/Documents/genericagent-webui-wt90`（分支 `ticket-90-live-progress-line`，从本地 main 起）里做，不碰主树，不跑 `tauri dev`。
 - 工作台对话、从助手点开的子任务、外置运行时：逐像素不变（它们不走 `isMainChat`）。工作台的 `RunElapsedHud`、思考行不动。
 - 三点气泡本身的样子与交接几何（票 51、55、58）；过程卡片；回复的行动条；头像的脸。
 - `core/`、`runner/`、`managed-ga/`、提示词、手册；设计文档（定档票改）。
@@ -113,7 +113,7 @@ Status: done（2026-10-23 JC 真机比完定「新」，裁决 135；由票 91 �
 
 ### 2026-10-23 实现回报（票 90 子代理）
 
-在 `/Users/inkstone/Documents/genericagent-webui-wt90`（分支 `ticket-90-live-progress-line`）里做完，没碰主树、没跑 `tauri dev`、没 push、没合入。只改 GUI；设计文档、`core/`、`runner/`、`managed-ga/` 都没动。
+在 `~/Documents/genericagent-webui-wt90`（分支 `ticket-90-live-progress-line`）里做完，没碰主树、没跑 `tauri dev`、没 push、没合入。只改 GUI；设计文档、`core/`、`runner/`、`managed-ga/` 都没动。
 
 #### 1. 提交列表
 
@@ -823,12 +823,12 @@ function textProtocolStream(summary: string): string[] {
 
 ```
 $ pnpm --dir gui typecheck
-> galley-desktop@0.7.0 typecheck /Users/inkstone/Documents/genericagent-webui-wt90/gui
+> galley-desktop@0.7.0 typecheck ~/Documents/genericagent-webui-wt90/gui
 > tsc --noEmit
 （exit 0）
 
 $ pnpm --dir gui lint
-> galley-desktop@0.7.0 lint /Users/inkstone/Documents/genericagent-webui-wt90/gui
+> galley-desktop@0.7.0 lint ~/Documents/genericagent-webui-wt90/gui
 > eslint src --max-warnings 0
 （exit 0）
 

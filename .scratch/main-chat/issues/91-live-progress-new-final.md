@@ -51,7 +51,7 @@ Status: done（2026-10-23 机器验收过、合入 main）
 
 ### 2026-10-23 实现回报（票 91 子代理）
 
-在 `/Users/inkstone/Documents/genericagent-webui-wt91`（分支 `ticket-91-live-progress-final`，从本地 main 的 `e6fd4d61` 起）里做完，没碰主树、没跑 `tauri dev`、没 push、没合入。只改了 GUI 与两份设计文档；`core/`、`runner/`、`managed-ga/`、提示词、手册、`.scratch/` 下的 PRD 都没动。「新」的行为（那一行、卡片、交接）、工作台、子任务、外置运行时都没变：代码里只去掉了判档，测试断言只挪了位置。
+在 `~/Documents/genericagent-webui-wt91`（分支 `ticket-91-live-progress-final`，从本地 main 的 `e6fd4d61` 起）里做完，没碰主树、没跑 `tauri dev`、没 push、没合入。只改了 GUI 与两份设计文档；`core/`、`runner/`、`managed-ga/`、提示词、手册、`.scratch/` 下的 PRD 都没动。「新」的行为（那一行、卡片、交接）、工作台、子任务、外置运行时都没变：代码里只去掉了判档，测试断言只挪了位置。
 
 #### 1. 提交列表
 
@@ -334,12 +334,12 @@ $ grep -rn "main chat 90\|useLiveProgressVariant\|LiveProgressVariant" gui/src
 （无输出，exit 1）
 
 $ pnpm --dir gui typecheck
-> galley-desktop@0.7.0 typecheck /Users/inkstone/Documents/genericagent-webui-wt91/gui
+> galley-desktop@0.7.0 typecheck ~/Documents/genericagent-webui-wt91/gui
 > tsc --noEmit
 （exit 0）
 
 $ pnpm --dir gui lint
-> galley-desktop@0.7.0 lint /Users/inkstone/Documents/genericagent-webui-wt91/gui
+> galley-desktop@0.7.0 lint ~/Documents/genericagent-webui-wt91/gui
 > eslint src --max-warnings 0
 （exit 0）
 
