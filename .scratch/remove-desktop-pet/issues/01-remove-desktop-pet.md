@@ -1,12 +1,14 @@
-# 01 删掉桌面宠物：runner、Core、GUI、文档
+# 01 删掉桌面宠物与重新注入工具：runner、Core、GUI、文档
 
 Status: ready-for-agent（等主聊天票 91 合入 main 后派）
 
-来源：[PRD](../PRD.md) 裁决 1（2026-10-23；JC：「按你推荐推进，删掉桌面宠物」）。
+来源：[PRD](../PRD.md) 裁决 1、2（2026-10-23；JC：「按你推荐推进，删掉桌面宠物」「按建议推进」）。标题菜单里两个从上游搬来的项一起删。
 
 ## 为什么
 
-桌面宠物是 05-13 从上游 GA 搬来的功能：标题菜单「桌面宠物」→ 桥起上游的 `frontends/desktop_pet_v2.pyw` 子进程，注册 `galley_pet_<sessionId>` 的 turn_end 钩子，每一步往 `127.0.0.1:41983` 推进展。现在两头都断了：内置运行时里宠物进程一起来就退出（macOS 缺 PyObjC，Windows 缺 tkinter），桥却照发「已附着」，侧栏挂着小猫徽标；外置下打得开，但上游 08-10 起拆了 HTTP 端口换成 hub 总线，推的进展全部落空。JC 定整条删掉。理由全文见 PRD 裁决 1。
+桌面宠物是 05-13 从上游 GA 搬来的功能：标题菜单「桌面宠物」→ 桥起上游的 `frontends/desktop_pet_v2.pyw` 子进程，注册 `galley_pet_<sessionId>` 的 turn_end 钩子，每一步往 `127.0.0.1:41983` 推进展。现在两头都断了：内置运行时里宠物进程一起来就退出（macOS 缺 PyObjC，Windows 缺 tkinter），桥却照发「已附着」，侧栏挂着小猫徽标；外置下打得开，但上游 08-10 起拆了 HTTP 端口换成 hub 总线，推的进展全部落空。JC 定整条删掉。
+
+「重新注入工具」也是 05-13 从上游搬来的：读上游的 `assets/tool_usable_history.json`、清 GA 的 `last_tools`、把文件内容追加进 `backend.history`。这个文件 06-23 起就不在内置代码里了，点了只报「GA asset not found」；引擎自己会在五种情况下自动重发完整工具说明。JC 定一并删掉。理由全文见 PRD 裁决 1、2。
 
 ## 要做的
 
@@ -15,24 +17,30 @@ Status: ready-for-agent（等主聊天票 91 合入 main 后派）
 1. **runner**：`runner/ipc.py`（`AttachPetCommand`、`DetachPetCommand`、`PetAttachedEvent`、`PetDetachedEvent`，以及它们在联合类型与 kind 映射里的条目）；`runner/workbench_bridge.py`（`_handle_attach_pet`、`_handle_detach_pet`、`_pet_process` / `_pet_port`、命令分发、关闭与看门狗里清理宠物子进程的那几处）；`runner/_watchdog.py`、`runner/ga_session.py` 里提到宠物的注释或代码；对应测试 `runner/tests/test_ipc.py`、`test_workbench_bridge.py`、`test_ga_session.py`、`test_watchdog.py`。清理子进程的通用机制若还服务别的子进程就留着，只删宠物那一项。
 2. **Core**：`core/src/ipc.rs`（`PetAttached` / `PetDetached` 事件、`AttachPet` / `DetachPet` 命令、对应结构体与 `session_id` 的匹配分支）。`grep` 一遍 `core/` 与 `cli/` 确认没有别的读者（主会话盘到只有 `ipc.rs`）。
 3. **GUI**：`gui/src/types/ipc.ts`（IPC 的 TS 镜像）、`gui/src/lib/ipc-handlers.ts`、`gui/src/stores/ui.ts`、`gui/src/stores/runtime.ts`、`gui/src/stores/runtime/info-slice.ts`、`gui/src/App.tsx`、`gui/src/components/layout/MainHeader.tsx`、`MainHeaderHost.tsx`、`header/SessionTitleMenu.tsx`（菜单项「桌面宠物」/「关闭桌面宠物」）、`Sidebar.tsx`、`sidebar/SidebarSessionRow.tsx`、`sidebar/SidebarTimelineRow.tsx`（小猫徽标与「桌面宠物附着中」提示）、`gui/src/lib/main-chat-reset.ts`、`assistant/AssistantIdentity.tsx` 的注释（菜单里那串「重新注入工具、桌面宠物」）、`gui/src/i18n/locales/zh.ts` / `en.ts` 的相关键；测试 `MainHeader.identity.test.tsx`、`MainHeaderHost.menu.test.tsx`、`main-chat-reset.test.ts` 跟着改。删完标题菜单里「重新注入工具」之后若留下多余的分隔线，去掉。
-4. **文档**：
+4. **重新注入工具**（PRD 裁决 2），盘点 `reinject|Reinject|tools_reinjected|ToolsReinjected|clear_last_tools|extend_history|tool_usable_history|重新注入`：
+   - runner：`runner/ipc.py` 的 `ReinjectToolsCommand`、`ToolsReinjectedEvent` 与联合类型、kind 映射里的条目；`runner/workbench_bridge.py` 的 `_handle_reinject_tools` 与命令分发；`runner/ga_session.py` 的 `extend_history`、`clear_last_tools`（`grep` 确认只有重新注入在用，有别的读者就留着），以及模块文档串里耦合点清单的对应几行；测试 `test_ipc.py`、`test_ga_session.py` 跟着改。
+   - Core：`core/src/ipc.rs` 对应的命令与事件。
+   - GUI：`gui/src/types/ipc.ts`、`gui/src/lib/ipc-handlers.ts`、`MainHeader.tsx`、`MainHeaderHost.tsx`、`header/SessionTitleMenu.tsx`、`assistant/AssistantIdentity.tsx` 的注释、`zh.ts` / `en.ts` 的相关键（含成功 / 失败提示）；测试 `MainHeader.identity.test.tsx`、`MainHeaderHost.menu.test.tsx`。
+   - 文档：`docs/ipc-protocol.md` 的 `reinject_tools` / `tools_reinjected` 条目与流程说明（约第 428、652 行）；`docs/ga-baseline.md` 的耦合点第 10 条与约第 778 行提到它的那句（照该文档写法，标明 2026-10-23 起 Galley 不再读这个文件）。
+   - **两项都删后的标题菜单**：主对话是「查找聊天记录… ⌘F」、分隔线、「重置主对话…」；普通会话是「查找聊天记录… ⌘F」「重命名」，不留多余的分隔线。`docs/design/layout-and-chrome.md` 里那张两栏示意图照这个改。
+5. **文档**：
    - `docs/ipc-protocol.md`：删掉两条命令、两条事件的条目；若文档有变更记录一节，记一行 2026-10-23 删除。
    - `docs/design/layout-and-chrome.md`：标题菜单的条目与示意（约第 58、67–68 行）、§「Desktop Pet」那条（约第 347 行）。
    - `docs/ga-baseline.md`：宠物的耦合点（`desktop_pet_v2.pyw`）那条，改成「2026-10-23 起 Galley 不再启动它」或删掉，照该文档的写法。
    - `managed-ga/patches/manifest.md`：`0020` 那行说 runner 侧兄弟进程（git probe、galley CLI、desktop pet）在 `runner/process_command.py` 里修，去掉「desktop pet」。只改说明文字，补丁本身不动。
-   - 新写 `docs/devlog/2026-10-23-remove-desktop-pet.md`（中文，全角标点）：为什么删（PRD 裁决 1 第 1、2 条，简述并链接 PRD）、删了什么、什么留着（上游文件、外置用户可自己运行上游脚本）；在 `docs/devlog/README.md` 的索引里加一行，照现有格式。旧 devlog 不改（那是历史）。
+   - 新写 `docs/devlog/2026-10-23-remove-desktop-pet-and-reinject-tools.md`（中文，全角标点）：两项各自为什么删（PRD 裁决 1 第 1、2 条与裁决 2 第 1–3 条，简述并链接 PRD）、删了什么、什么留着（上游文件、外置用户可自己运行上游宠物脚本）、删后的标题菜单；在 `docs/devlog/README.md` 的索引里加一行，照现有格式。旧 devlog 不改（那是历史）。
 
 ## 别动
 
 - `managed-ga/code/` 下上游的宠物文件（`frontends/desktop_pet_v2.pyw`、皮肤、`DESKTOP_PET_README.md`）与 `stapp.py`、`ga_cli` 里上游自己的宠物用法：上游代码，不打补丁。
-- 「重新注入工具」及其 IPC。CLI、Agent API、`docs/agent-api/`。
+- CLI、Agent API、`docs/agent-api/`。上游 `stapp.py` / `stapp2.py` 里上游自己的「重新注入」按钮。
 - 主工作树：只在你的 worktree 里做（路径在派单里），不碰主树，不跑 `tauri dev`。
 - `core/` 不是 rustfmt-clean：只用 `rustfmt --check` 核你改过的文件，别跑 `cargo fmt --all`。`gui/` 不是 prettier-clean：旧文件只格式化你改的 hunk。
 - 提交只点名文件，`git add <文件…>` / `git rm <文件…>` 后 `git commit`，禁用 `git add -A` / `git commit -a`；提交说明英文，结尾 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`。不 push、不合入 main。
 
 ## 验证
 
-- 盘点 `grep`（上面那串）在 `core/ cli/ runner/ gui/src docs/ipc-protocol.md docs/design docs/ga-baseline.md` 里为空（旧 devlog、`managed-ga/code/` 上游文件除外）
+- 两串盘点 `grep`（宠物那串与第 4 条那串）在 `core/ cli/ runner/ gui/src docs/ipc-protocol.md docs/design docs/ga-baseline.md` 里为空（旧 devlog、`managed-ga/code/` 上游文件除外）
 - `cargo check --manifest-path core/Cargo.toml --workspace`、`cargo test --manifest-path core/Cargo.toml --workspace`
 - `pnpm --dir gui typecheck`、`pnpm --dir gui lint`、`CI=true pnpm --dir gui test`
 - runner：在 worktree 根目录用主树的 venv 跑 `<主树>/.venv/bin/python -m pytest`（先打印 `runner.__file__` 确认指向 worktree）、`<主树>/.venv/bin/python -m mypy runner`、`<主树>/.venv/bin/ruff check runner`
@@ -43,7 +51,7 @@ Status: ready-for-agent（等主聊天票 91 合入 main 后派）
 
 1. 提交列表（`git log --oneline main..HEAD` 原样）。
 2. 删掉的文件与符号清单（按 runner / Core / GUI / 文档）；盘点 `grep` 删前删后的结果。
-3. 看门狗与关闭流程里清理子进程那几处的 diff 原样。
+3. 看门狗与关闭流程里清理子进程那几处、`ga_session.py` 删掉的方法的 diff 原样。
 4. 标题菜单删项后的样子（菜单项列表，前后对比）。
 5. 每条验证命令与结果原样。
 6. 看到但没改的问题、没验证到的地方。
