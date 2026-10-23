@@ -347,7 +347,9 @@ function cjkDominant(source: string): boolean {
  * text shape. The pre wrapper is the reliable block signal.
  */
 const COMPONENTS: Components = {
-  table({ className, children, ...props }) {
+  // `node` (react-markdown's hast node) is not an attribute: spread onto
+  // the table it would render as node="[object Object]".
+  table({ node: _node, className, children, ...props }) {
     return (
       <div className="overflow-x-auto [margin-block:calc(var(--conversation-block-gap)*1.1667)]">
         <table

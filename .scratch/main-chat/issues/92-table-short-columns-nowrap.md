@@ -377,3 +377,10 @@ diff-check exit: 0
 - 设计文档「Markdown 渲染」开头那句渲染栈（`react-markdown` + `remark-gfm` + `remark-cjk-friendly` + Shiki）没写新插件；票里说只改两处，没动。
 - `WIDE` 的表情范围只到 U+1F300–1FAFF，✅（U+2705）这类算 1：原算法如此，照搬没改。
 - **没验证到**：真实 WebKit 里的列宽与表高（没跑 `tauri dev`，按票留给 JC 在 dev 里看）。两个任意变体用 `tailwindcss` 的 `compile` 编过，生成 `& th[data-short-col] { white-space: nowrap; }` 与 `& td[data-short-col] { white-space: nowrap; }`；流式时某列先短后长那一次重排没在界面上看。
+
+### 2026-10-23 主会话验收
+
+- 逐处看过 diff（`table-short-columns.ts`、`text-columns.ts` 与 `composer-quote.ts` 的抽取、`MarkdownView` 的接线与类名、设计文档两处），与票面一致。
+- 顺手修了代理报的原有问题：`table` 组件把 react-markdown 的 `node` 展开到 `<table>` 上（DOM 里多出 `node="[object Object]"`），改为解构掉 `node: _node`；没有快照依赖它。
+- 门禁在最终状态上重跑：`pnpm --dir gui typecheck`、`pnpm --dir gui lint` exit 0；`CI=true pnpm --dir gui test` 206 文件 2283 测试全过；`git diff --check` 干净。
+- 列宽与表高沿用裁决 136 的 WKWebView 实测（同语义：短列 `white-space: nowrap`）；真 App 里的样子留给 JC 在 dev 里看那张东部预测表。
