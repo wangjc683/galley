@@ -1,6 +1,6 @@
 # 93 三点下面那一行动起来：换句滚一行、「在做什么」慢扫光
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-10-23 机器验收过、合入 main；等 JC 在 dev 里看主对话三点下面那一行）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 137（2026-10-23；JC：「不做切换器，直接定 2，开始做」）。只改 GUI 与设计文档，不上切换器，JC 在 dev 里看。
 
@@ -129,3 +129,9 @@ ba403c4a Ticket 93: design docs for the moving progress line (ruling 137)
 - 扫光相位接续只在 jsdom 里用假的 `getAnimations` / `document.timeline` 测过；真 WebKit 里 `CSSAnimation` 的 `animationName` / `startTime` 在 app 里是否如预期、刚换上那句「按当下算」差的那一帧看不看得出来，没验证。
 - 连续换句时格子里同时有三句（两句在滚出、一句在滚进）的样子只在 jsdom 里验证了排列与动画参数，没看过真机。
 - 读屏：离场那句加 `aria-hidden` 与插入新句在同一次提交里，VoiceOver 实际念出什么没测（jsdom 只验证了去掉 `aria-hidden` 后的文字）。
+
+### 主会话验收（2026-10-23）
+
+- 读过全部代码改动；在 rebase 到 main 后的分支上重跑 typecheck、lint、`CI=true` 与 `TZ=UTC` 两遍测试（207 个文件、2281 条全过）、`check-docs-links`、`git diff --check`，都通过；新增文档行全角标点扫过（唯一命中是 markdown 链接的括号）、无本机路径。
+- 报告第 3 条（扫光节奏）属实：平铺的 200% 背景从 200% 走到 -200% 是两块，一个循环扫两趟。照裁决 137 第 3 条「约 2.4 秒扫一趟」改成行程 200% → 0%（`5f02585b`），一个循环正好一趟；工作台照旧（约 0.7 秒一趟）。裁决 137 的说法同步改正（`b71a10f9`）。
+- 其余 open risks 原样转给 JC，真机看。
