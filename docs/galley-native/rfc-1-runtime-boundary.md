@@ -108,7 +108,6 @@ run_complete
 error
 history_loaded
 llm_changed
-tools_reinjected
 system_message
 ```
 

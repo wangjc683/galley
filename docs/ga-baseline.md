@@ -706,10 +706,10 @@ Carried forward from the `d8d90ee` -> `308153b` range (2026-08-10):
   ~305 deletions. Roughly 90% of the diff is upstream's own frontends and is
   inert on Galley's path: the new P2P stack (`frontends/p2p_ws_client.py`
   +1045, `hub_p2p.py` +103), hub iteration (`hub.py` +103, `hub.html`),
-  `stapp.py` (297), `desktop_pet_v2.pyw`, the community desktop app
-  (`frontends/desktop/**`), and the TUI trio. Engine-core delta is only
-  `llmcore.py` (28), `ga.py` (12), `agentmain.py` (+7), and
-  `assets/tools_schema.json` (2).
+  `stapp.py` (297), `desktop_pet_v2.pyw` (since 2026-10-23 Galley no longer
+  launches it), the community desktop app (`frontends/desktop/**`), and the
+  TUI trio. Engine-core delta is only `llmcore.py` (28), `ga.py` (12),
+  `agentmain.py` (+7), and `assets/tools_schema.json` (2).
 - Result: no bridge protocol or dependency break; `pyproject.toml` did not
   change at all, and `agent_loop.py` had zero diff. Patch-stack rebase had
   one real conflict (`0007` `llmcore.py`: upstream raised the
@@ -775,8 +775,8 @@ New in the `d8d90ee` -> `308153b` range:
   the turn-13 / turn-31 checkpoint nudges → `[DANGER]`. Galley greps none of
   these strings (verified); pure prompt tuning.
 - `assets/tools_schema.json` — `code_run`'s `script` description simplified to
-  `"script"`. Inert: Galley reads `assets/tool_usable_history.json`, not this
-  file.
+  `"script"`. Inert: Galley read `assets/tool_usable_history.json`, not this
+  file (and since 2026-10-23 no longer reads that one either).
 - `memory/memory_management_sop.md` — L3 guidance now says not to store
   project-specific facts. Regenerated into the state seed, missing-only, so
   existing user memory is untouched.
@@ -1058,9 +1058,12 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
 6. `agentmain.GenericAgentHandler` import path
 7. `llmclient.backend.history` read/write semantics
 8. `agent.list_llms()` behavior
-9. `llmclient.last_tools` attribute (reinject-tools reset)
-10. `assets/tool_usable_history.json` path + block schema (mirrors
-    `stapp.py`'s Reinject Tools)
+9. Retired 2026-10-23: `llmclient.last_tools` attribute. Galley no longer
+   resets it; the title-menu item that did was removed
+   ([devlog](./devlog/2026-10-23-remove-desktop-pet-and-reinject-tools.md)).
+   The number stays so references to later items hold.
+10. Retired 2026-10-23: `assets/tool_usable_history.json` path + block
+    schema. Galley no longer reads this file (same devlog).
 11. `backend.raw_ask` generator *return value* is `list[content_block]`
     with typed `thinking` / `text` blocks on every Native* session
     (`_parse_claude_sse` / `_parse_claude_json` / the OAI parsers), while
@@ -1301,15 +1304,13 @@ Since 2026-07-11 the agent-object couplings have a single code home —
 start the audit there instead of grepping the bridge:
 
 - **[`runner/ga_session.py`](../runner/ga_session.py)** — items 5, 6, 7,
-  9, 11, 12: every internal/underscore/backend touch (`_turn_end_hooks`,
-  `backend.history` read/set/extend + context estimation, `last_tools`,
-  the `GenericAgentHandler` module rebinding, the one-shot `backend.ask`
-  image wrapper). Read the file top to bottom against the new baseline.
+  11, 12: every internal/underscore/backend touch (`_turn_end_hooks`,
+  `backend.history` set + context estimation, the `GenericAgentHandler`
+  module rebinding, the one-shot `backend.ask` image wrapper). Read the
+  file top to bottom against the new baseline.
 - **[`runner/handlers.py`](../runner/handlers.py)** — items 1–4: the
   `WorkbenchHandler` subclass and its dispatch assumptions (turn-signal
   synthesis, `tool_num` detection).
-- **`runner/workbench_bridge.py::_handle_reinject_tools`** — item 10:
-  the GA asset file read (path + schema noted in its docstring).
 - **`runner/workbench_bridge.py::_on_turn_end`** — items 14 and 17: the
   `response.thinking` read and the `handler.max_turns` read.
 - **`runner/workbench_bridge.py::_close_run_without_exit`** — item 17:

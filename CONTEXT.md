@@ -58,12 +58,11 @@ GenericAgent; **GaSession**
 ([`runner/ga_session.py`](./runner/ga_session.py)) is the module that
 IS that seam. Scope rule: it wraps exactly the
 internal/underscore/backend surface a baseline upgrade can silently
-move (`_turn_end_hooks`, `backend.history`, `last_tools`,
-`_ga_project_mode_*`, the `GenericAgentHandler` module binding); GA's
-public API stays direct on `bridge.agent`. Baseline-upgrade re-audit =
-read that one file, plus two documented non-agent couplings
-(`tool_usable_history.json`,
-`managed_runtime.install_managed_prompt_profile`). History restore on
+move (`_turn_end_hooks`, `backend.history`, `_ga_project_mode_*`, the
+`GenericAgentHandler` module binding); GA's public API stays direct on
+`bridge.agent`. Baseline-upgrade re-audit = read that one file, plus one
+documented non-agent coupling
+(`managed_runtime.install_managed_prompt_profile`). History restore on
 backends other than `NativeClaudeSession` emits a loud warning
 (PRD §10). (2026-07-11 decision; see devlog.)
 
