@@ -20,6 +20,7 @@ import {
 import { CodeBlockContext } from "@/lib/code-block-context";
 import { DocumentPathContext } from "@/lib/local-files";
 import { remarkDocumentHeadings } from "@/lib/remark-document-headings";
+import { remarkTableShortColumns } from "@/lib/table-short-columns";
 import { markdownUrlTransform } from "@/lib/markdown-image-src";
 import { cn } from "@/lib/utils";
 
@@ -164,6 +165,7 @@ export const MarkdownView = memo(function MarkdownView({
             remarkPlugins={[
               remarkGfm,
               remarkCjkFriendly,
+              remarkTableShortColumns,
               ...(documentPath ? [remarkDocumentHeadings] : []),
               ...(softBreaks ? [remarkBreaks] : []),
             ]}
@@ -284,6 +286,17 @@ const PROSE_BASE = cn(
   // cell (the long unbroken addresses and paths) may break anywhere.
   "[&_th]:border [&_th]:border-line [&_th]:bg-surface [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-medium [&_th]:text-ink",
   "[&_td]:border [&_td]:border-line [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_td]:text-ink [&_td]:[overflow-wrap:break-word] [&_td_code]:[overflow-wrap:anywhere] [&_td_a]:[overflow-wrap:anywhere]",
+  // Short columns do not wrap (2026-10-23, main chat PRD ruling 136):
+  // the Chinese half of the 10-16 fix above. Chinese breaks between any
+  // two characters, so a column of short Chinese cells has a min-content
+  // width of one character, and next to a long prose column it was
+  // squeezed by proportion until 「凯尔特人」 stood one character a
+  // line. A column whose every cell is at most 16 columns (8 CJK
+  // characters) carries `data-short-col` (lib/table-short-columns.ts)
+  // and stays on one line; the long columns wrap as before. The short
+  // columns may take 40 columns between them, or none is kept whole, so
+  // that keeping them whole does not add a sideways scroll.
+  "[&_th[data-short-col]]:whitespace-nowrap [&_td[data-short-col]]:whitespace-nowrap",
   // hr inside markdown.
   "[&_hr]:[margin-block:calc(var(--conversation-block-gap)*1.6667)] [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-line",
   // Strong / em — keep weight in line with the prose body. Body is normal
