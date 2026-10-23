@@ -1,6 +1,6 @@
 # 01 删掉桌面宠物与重新注入工具：runner、Core、GUI、文档
 
-Status: ready-for-agent（等主聊天票 91 合入 main 后派）
+Status: needs-dogfood（2026-10-23 机器验收过、合入 main；等 JC 真机看两个标题菜单与侧栏）
 
 来源：[PRD](../PRD.md) 裁决 1、2（2026-10-23；JC：「按你推荐推进，删掉桌面宠物」「按建议推进」）。标题菜单里两个从上游搬来的项一起删。
 
@@ -411,3 +411,9 @@ exit=0
 - 看到没改：`docs/audits/codebase-review-2026-07-02/README.md`、`docs/archive/**`、`.scratch/main-chat/**` 里提到宠物 / 重新注入的是历史记录；`scripts/seed-screenshots.py` 的「无宠物」是截图种子里的二手沙发文案，无关；`runner/tests/test_im_resume.py`、`test_managed_discord_dcapp.py` 的假 `llmclient` 带 `last_tools = ""`，模拟的是上游代码自己读的属性，与 `GaSession` 无关，留着。
 - `cargo check` 有一条 `galley-relay` 的 `fetch_update` 弃用警告（`relay/src/channels.rs:347`），本票没碰 relay，早已存在。
 - `docs/project-status.md` 的「Unreleased On Main」没写这一项，留给合入时的收尾。
+
+### 2026-10-23 主会话验收
+
+- 核过代理超出票面字面多删的几处：`_watchdog.py` 的 `cleanup` 只有 `workbench_bridge` 传过（浏览器桥、IM supervisor 调 `start_parent_watchdog` / `exit_parentless` 都不带它）；`GaSession.history()` 只有重新注入在调，`unregister_turn_hook()` 只有解除宠物在调（`git grep` main 上的调用方）。删得对。
+- 门禁在最终状态上重跑：`cargo test --workspace` 45 组 1220 通过 0 失败；`rustfmt --check core/src/ipc.rs` 通过；runner `pytest` 628 通过（`runner.__file__` 指向 worktree）、`mypy` 与 `ruff` 干净；六个 `check-*.mjs` 门禁全过；`pnpm --dir gui typecheck`、`lint` exit 0，`CI=true pnpm --dir gui test` 205 文件 2263 测试全过；`git diff --check` 干净。
+- 合入前 `galley status` 为 `busy: 0`。
