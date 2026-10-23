@@ -9,29 +9,52 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.6.2`.
-- Git tag / GitHub Release: `v0.6.2` is the current published stable release
-  (tagged at `1bc4900d` on 2026-10-09, GitHub Latest).
-- Agent API schema: `schemaVersion: 3` on main (since the Goal removal on
-  2026-10-13, unreleased; the published `v0.6.2` speaks `2`, first shipped in
-  `v0.5.0`). The server keeps answering `1` and `2` for every command that did
-  not change; every goal command, v1 and v2, is `unknown_command` under every
-  pin.
-- Release tier: stable patch; default update channel points at `v0.6.2`.
+- Package version: `0.7.0`.
+- Git tag / GitHub Release: `v0.7.0` is the current published stable release
+  (tagged at `c2e88df1` on 2026-10-22, published 2026-10-23, GitHub Latest).
+- Agent API schema: `schemaVersion: 3` (since the Goal removal on
+  2026-10-13, first shipped in `v0.7.0`; `2` first shipped in `v0.5.0`). The
+  server keeps answering `1` and `2` for every command that did not change;
+  every goal command, v1 and v2, is `unknown_command` under every pin.
+- Release tier: stable minor; default update channel points at `v0.7.0`.
   `beta` is kept as a legacy alias for older builds.
-- Shipped GA baseline: `f308ee7` (audited 2026-10-06, first shipped in
-  `v0.6.1`, again in `v0.6.2`) — the memory-distill prompt now lets the
-  model merge and compress existing memory entries. The previous `1b6442f` shipped
-  `v0.5.1` … `v0.6.0`, `efb3bc6` before it `v0.4.11` … `v0.5.0`. Audited
-  on main, not yet shipped: `b70079d` (2026-10-22; no break, no Galley
-  change), on top of `5205f40` (2026-10-18; upstream's new mykey store
-  broke the managed loader, fixed in the runner), which never shipped
-  either. See [GA baseline](./ga-baseline.md).
-- Product shape: dual-native local agent team orchestrator
+- Shipped GA baseline: `b70079d` (audited 2026-10-22, first shipped in
+  `v0.7.0`; no break, no Galley change), on top of `5205f40` (audited
+  2026-10-18, never shipped on its own; upstream's new mykey store broke the
+  managed loader, fixed in the runner). The previous `f308ee7` shipped
+  `v0.6.1` … `v0.6.2`, `1b6442f` `v0.5.1` … `v0.6.0`, `efb3bc6` before it
+  `v0.4.11` … `v0.5.0`. See [GA baseline](./ga-baseline.md).
+- Product shape: a personal assistant on the user's own computer that
+  scales into a local agent team (since `v0.7.0`; before it, a dual-native
+  local agent team orchestrator)
 
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
+
+`v0.7.0` (tagged 2026-10-22, published 2026-10-23) is a minor two weeks
+after `v0.6.2`, 687 commits (665 non-merge). The product turned from a
+workbench into a personal assistant: a persistent main chat at the top of
+the sidebar, drawn as Galley's card whose face moves with what it is doing,
+hands long work to subtasks and checks them when they wake it, keeps the
+user's to-dos and its own reminders, does groundwork unasked and runs a daily
+morning review. Also in it: Sign in with ChatGPT replacing the Codex CLI
+login, Goal removed (Agent API `schemaVersion: 3`), the IM channels' polish
+pass, the remote-access groundwork (off in release builds: no relay URL, no
+Phone tab) and the GA baseline `b70079d`. Migrations 043–052; `v0.6.x` exits
+at start on the upgraded database, and the notes point at Core's
+`app.galley.backup.*`. Graded minor, not `1.0.0` (the three conditions are
+under Release Version Rules). Pre-flight: `check.yml` green on the bump
+commit `c2e88df1` (run 39799034805, all seven jobs); a dev regression round
+in a second, temporary-HOME instance (main chat checklist 18–40; item 40's
+prompt fixed before the tag); the bundled-runtime gate on `mac-x64`. On the
+draft the agent ran the `v0.6.2` → `v0.7.0` database upgrade in a temporary
+HOME and the packaged-build prompt rechecks; JC smoked F1, F3, F4 and the
+Telegram / Feishu / WeChat restart continuity, and the morning review's skip
+ran for real on the draft. JC then approved publish without the rest (owed
+under Unreleased On Main). Stable promoted and verified the same session
+(run 39890754153). Full narrative: devlog
+[2026-10-22-v0.7.0-release](./devlog/2026-10-22-v0.7.0-release.md).
 
 `v0.6.2` (2026-10-09) is a patch two days after `v0.6.1`, 26 commits. The
 sidebar's projects became a 项目 section under 置顶 — one row per project, its
@@ -557,17 +580,22 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.6.2` is published and promoted as the live stable release (published
-2026-10-09 05:05 UTC). The default `updates/stable/latest.json` channel points
-at `v0.6.2`, with the legacy `updates/beta/latest.json` alias pointing at the
+`v0.7.0` is published and promoted as the live stable release (published
+2026-10-23 02:39 UTC). The default `updates/stable/latest.json` channel points
+at `v0.7.0`, with the legacy `updates/beta/latest.json` alias pointing at the
 same version for older installed builds. The live verifier passed with
 `--cache-bust` for both channels across all three platforms (darwin-aarch64,
 darwin-x86_64, windows-x86_64), in the promote run and again locally (channel
-branch at `c5975333`). One draft cut (release run 37883912570); JC approved
-publishing it without reporting smoke items, so the smoke items under
+branch at `43e40165`). One draft cut (release run 39802407918); JC smoked part
+of it and approved publishing without the rest, so the items owed under
 Unreleased On Main are still owed. The bundled-runtime gate passed on
-`mac-x64`; `check.yml` was green on the pre-bump head (run 37882729376, all
-six jobs).
+`mac-x64`; `check.yml` was green on the bump commit (run 39799034805, all
+seven jobs).
+
+`v0.6.2` (2026-10-09) went through the same path: one draft cut (release run
+37883912570), JC approved publishing without reporting smoke items, both
+channels verified with `--cache-bust`, bundled-runtime gate passed on
+`mac-x64`.
 
 `v0.6.1` (2026-10-07) went through the same path: one draft cut (release run
 37632655144), JC approved publishing without reporting smoke items, both
@@ -648,11 +676,14 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.6.1` → `v0.6.2` is owed (wait at
-   least 5 minutes after the 2026-10-09 promote). It runs `v0.6.1`'s own
-   updater, so on macOS the channels and browser bridge stopping at install
-   until a restart is expected; the install-at-restart path is first
-   testable on the `v0.6.2` → next hop. `v0.6.0` → `v0.6.1` and
+1. App-update dogfood (SOP step 10): `v0.6.2` → `v0.7.0` is owed (wait at
+   least 5 minutes after the 2026-10-23 promote; H1 in the release devlog's
+   smoke plan, on JC's Windows machine in a separate account with `v0.6.2`
+   installed). It is the first hop through `v0.6.2`'s install-at-restart
+   path (download only, install at 重启并更新, Windows no longer exiting
+   after download) and the first run of migrations 043–052 on a real older
+   database. `v0.6.1` → `v0.6.2` had not been reported by the `v0.7.0`
+   release; `v0.6.0` → `v0.6.1` and
    `v0.5.6` → `v0.6.0` were never reported; `v0.5.5` → `v0.5.6` passed on JC's
    Windows machine (2026-10-01, same session; the bundled CLI came out at
    0.5.6 too); `v0.5.4` → `v0.5.5` passed on an
@@ -694,443 +725,73 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Release-scope truth is `git log v0.6.2..HEAD`; besides the iOS-client and
-main-chat planning docs, main has:
+Nothing since `v0.7.0` yet; release-scope truth is `git log v0.7.0..HEAD`.
 
-**Owed smoke for the next release** (besides the Owed notes in the entries
-below): browser control's new-user walkthrough and the Windows smoke of the
-resident bridge (`.scratch/browser-control-ux/PRD.md`, moved out of the
-2026-10-19 dogfood walk). Sign in with ChatGPT on Windows: the loopback
-sign-in listener (watch for a firewall prompt) and the credential pipe,
-renamed `galley-codex-*` → `galley-credential-*` (CI's Windows job compiles
-and tests it, green on `98dec86c`; the runtime smoke is what's owed).
+**Owed from the `v0.7.0` smoke** (JC approved publish after part of it,
+2026-10-23; the plan and results are in the release devlog):
 
-- **The to-do panel from first principles** (2026-10-22, main chat PRD
-  rulings 128–133, tickets 80–89, devlog
-  [2026-10-22-todo-from-first-principles](./devlog/2026-10-22-todo-from-first-principles.md)).
-  The grouping stays (a box is the user's to act on, a state icon is to
-  look at). The morning review now wakes only for what has no alarm of its
-  own: an undated to-do, one due within three days or overdue, an
-  unfinished subtask (`REVIEW_LOOKAHEAD_DAYS`); far-off to-dos and Galley's
-  own reminders no longer wake it daily. The panel shows a to-do's notes
-  (the manual now asks for notes written for the user), Galley's own
-  one-off reminders can be cancelled from it, the empty state shows beside
-  the seeded review, the launch-at-login hint leaves the review out, and
-  groups sit 12px apart. Done items take a neutral grey ticked box and
-  muted titles; a routine's fires stay out of done. After a measured
-  comparison with Apple Reminders (row heights match; the room went to
-  group labels), the user's to-dos run as one unlabelled part and group
-  labels are tighter. The panel still opens only when you open it, with
-  two exceptions: in a main area under 760px a remembered open is not
-  shown and opening it there is a look that folds when you leave; and it
-  opens by itself once, the first time a to-do card appears under a round
-  you sent (`galley.todoPanelIntroduced`). A to-do card's title opens the
-  panel at its row, and while the panel is on screen the rows Galley
-  added or changed light up (a to-do it ticked holds a moment first). A
-  receipt card under the reply that changed a to-do waits in deferred.
-  Ticket 87's walk found the reply's landing follow losing the bottom when
-  the panel opened as the reply landed; the follow now ends on the real
-  bottom and gives up a stale re-aim when the column's width changes.
-  Your own not-done to-dos can be deleted from the panel (a ⋯ / right-click
-  menu, no confirm, five seconds to undo before Core hears it, the card
-  then reads 已删除; a new desktop command `cancel_todo`); new ones are
-  still said, not typed, with a 跟 Galley 说 icon in the panel's header. Making Galley note things faster waits in deferred. No
-  Agent API, IPC or migration change. Owed: JC's on-device steps for
-  tickets 81 (notes written for the user; the 10-23 morning review's wake
-  or skip), 82 (a daily reminder's fire stays out of done) and 86 (the
-  unlabelled part).
-- **The assistant acts unasked; a morning review** (2026-10-21 / 22,
-  assistant PRD ruling 10, main chat PRD rulings 124–127, tickets 73–79,
-  devlog [2026-10-21-proactive-first-stage-todo-rooted](./devlog/2026-10-21-proactive-first-stage-todo-rooted.md)).
-  The first stage of proactivity, rooted in the to-do list: the assistant
-  notes undated things the user is in the middle of, and what it does
-  unasked is work, not advice (manual part `unasked.md`): groundwork it
-  can undo it just does, anything outward-facing it prepares and then
-  asks, and with nothing done it says nothing. Core seeds one daily
-  `assistant` task, the morning review (`created_via = 'system'`,
-  supervisor `galley-review`, no migration), at a time picked once between
-  08:45 and 09:15 whose minute is not a multiple of five; with nothing in
-  hand it wakes nobody, and it speaks only when it got something done the
-  user will want to know, with no fixed heading. Files it hands over show
-  as cards under main-chat replies (`[FILE:<path>]`), and Core's
-  open-with-default-app list gains `pdf`, `docx`, `xlsx`, `pptx`, `pages`,
-  `numbers`, `html`, `htm`. A woken round that only dispatched subtasks and
-  ended in `<no-reply/>` draws nothing. A new main chat segment now carries
-  the last 10 turns (a user message and every reply up to the next one;
-  before, a multi-step answer was lost because turns were paired by
-  `turn_index`) within 15,000 characters, skipping woken rounds that said
-  nothing, and the state block says when the first and last were said. No
-  Agent API or IPC fields changed. Owed: JC's on-device walk of tickets
-  73–79 (each ticket's steps); the review speaking on a real model is
-  unverified (every eval run stayed silent); the trial runs to 2026-10-28.
-- **IM polish on the channels' own agents** (2026-10-21, `.scratch/im-polish/`,
-  devlog [2026-10-21-im-polish-process-button-and-feishu](./devlog/2026-10-21-im-polish-process-button-and-feishu.md)).
-  The 10-20 plan to merge IM private chats into the main chat is shelved:
-  each channel keeps its own agent, and both migrations (into the main chat,
-  into workbench sessions) wait in deferred with start signals. Telegram and
-  Discord answers drop the fold header; from two steps on, a 「过程」 button
-  shows the process (Telegram expands the message in place as a plain quote,
-  Discord replies ephemerally). Discord's freeze is lifted; its DMs stay
-  closed. Feishu gets its first conversation pass (patch `0029`): a `Typing`
-  reaction instead of a status card, one answer card with a collapsed
-  「过程」 panel, queueing instead of refusing, `/stop`, numbered questions,
-  headings as bold lines, a reply-quote when other messages landed in
-  between, and reports with only the final step. The IM entry layer no
-  longer claims to be the desktop's assistant: long-term memory is shared,
-  conversations are not. On device JC checked Feishu (one and many steps)
-  and Telegram; Feishu's queue, `/stop` and questions, Discord, and
-  Telegram's plain-quote expansion were waived and are owed at first use.
-- **Sign in with ChatGPT replaces the Codex CLI login** (2026-10-20,
-  `.scratch/chatgpt-siwc/PRD.md`, devlog
-  [2026-10-20-sign-in-with-chatgpt](./devlog/2026-10-20-sign-in-with-chatgpt.md)).
-  The ChatGPT provider signs in with OpenAI's official Sign in with ChatGPT:
-  Galley registers itself, spends Plus / Pro plan usage through
-  `api.openai.com`, and the user can see, cap and disconnect it in ChatGPT
-  settings. The borrowed Codex CLI login (device code, Codex CLI import,
-  `~/.codex/auth.json` write-back, WHAM) is gone; Core clears such
-  credentials at start without revoking them, and those users see
-  「需要登录」. `AGENTS.md` Rule 2 gains a narrow exception for the one-shot
-  loopback sign-in listener. The plan shows as a ChatGPT logo before the
-  model name wherever such a model is listed (the composer pill, its menu,
-  ⌘K 切换模型, Settings → 我的模型), never on a provider; copy says
-  「ChatGPT 订阅」, plan errors in the conversation get
-  「管理用量」 / 「去设置登录」; Settings → Models says how each provider
-  connects and 「添加」 opens the provider list directly. Migration `052`
-  also fixes the no-auth provider, which never saved since 2026-08-31.
-- **The assistant runs the team; subtasks wake it** (2026-10-15 / 16,
-  `.scratch/assistant/PRD.md`, devlogs
-  [2026-10-15-assistant-runs-the-team](./devlog/2026-10-15-assistant-runs-the-team.md),
-  [2026-10-16-closed-loop-subtask-wake](./devlog/2026-10-16-closed-loop-subtask-wake.md)).
-  The main chat's greeting now says who it is (「你好，我是你的私人助理。…」);
-  a subtask's finished / asking / failed run wakes the main chat for one
-  hidden turn (rows `galley-report`, no migration), which checks it,
-  sends it back (at most twice, silently with `<no-reply/>`) or reports;
-  the assistant's manual lives under `<state_root>/assistant/reference/`.
-  **Agent API, additive inside `3`:** socket `session send` takes
-  `ensureRunner` (CLI `--ensure-runner`, default off), and
-  `SubtaskDispatch` carries `sendBacks`; a CLI `session show` of the main
-  chat shows report rows as `via: "system"` with a `summary`.
+- Windows, none of it walked: a first session on the packaged engine (G1,
+  also the first Windows run of the `5205f40` / `b70079d` engine and of
+  `f308ee7` before it); Sign in with ChatGPT (G4): the loopback sign-in
+  listener (watch for a firewall prompt) and the credential pipe renamed
+  `galley-codex-*` → `galley-credential-*` (CI's Windows job compiles and
+  tests it; the runtime smoke is what's owed), with no fallback login left
+  for Windows ChatGPT users; browser control's new-user walkthrough and the
+  resident bridge (G5, G6, `.scratch/browser-control-ux/PRD.md`).
+- Discord's restart continuity (D4): its resume is patch `0026`'s own copy,
+  so Telegram, Feishu and WeChat passing does not cover it.
+- The main chat's notifications on an installed build (F5): the reminder
+  and a subtask that ran over two minutes fired on 2026-10-23, but whether
+  the toasts showed was not reported; a review that only dispatches
+  subtasks should show none.
+- A1.5 (pausing and resuming the morning review by a sentence), A2.3 (an
+  undated to-do noted mid-thing; a review run that only dispatches, then
+  speaks when the subtask reports), A1.6's HTML / PDF hand-over and how the
+  file card opens (the Markdown hand-over wrote its `[FILE:]` line).
+- Sign in with ChatGPT on a packaged Mac build (F7; dev passed 2026-10-20).
+- Tickets 73–79 on device: the morning review skipped for real on
+  2026-10-23 and a new segment carried 10 turns with the 10-21 questions in
+  it; the review speaking on a real model is still unverified, and the
+  trial runs to 2026-10-28 (its "cancelled or found noisy by half, tighten
+  the bar" conclusion goes into the next release). Tickets 81 (notes
+  written for the user), 82 (a daily reminder's fire stays out of done) and
+  86 (the unlabelled part); the two remembered to-do panel states across a
+  restart and its empty state.
+- IM, at first use: Feishu's queue, `/stop` and questions, Telegram's
+  plain-quote expansion, Discord's conversation pass; WeChat's `/stop`
+  (running and idle), two queued messages, a file sent back, `/new` mid-run.
+- Main chat: JC's live look at subtask cards and the 「Galley ›」 breadcrumb
+  (ticket 06a's four open points) and ticket 12's scroll feel; the Core send
+  takeover (tickets 02a–02d) still has no GUI acceptance; APNs sending has
+  not been tried against real APNs. Old orphaned `messages_fts` rows are not
+  cleaned.
 
-- **GA baseline bump `f308ee7` -> `5205f40` -> `b70079d`** (audited
-  2026-10-18, [devlog](./devlog/2026-10-18-ga-upstream-upgrade-f308ee7-to-5205f40.md);
-  then 2026-10-22, [devlog](./devlog/2026-10-22-ga-upstream-upgrade-5205f40-to-b70079d.md)).
-  The second step changes no Galley code or patch: a wider DeepSeek
-  tool-markup retry, one new L0 memory rule for fresh managed state, and
-  upstream frontends Galley does not load. Its SOP step 8 (both desktop
-  modes and the four IM channels' restart checks, the latter still owed
-  from the first step) is listed in its devlog. The first step:
-  Upstream moved mykey loading into a store `agentmain` reads directly,
-  which bypassed Galley's managed loader (every managed session would have
-  had no LLM); the runner now feeds the store and keeps the first load.
-  Two bridge adapters for upstream's model reload at every task start:
-  settle it before `put_task`, and report a `next_llm` that did not
-  switch. Plan mode is gone upstream; the turn-end nudges are spaced out.
-  It also fixes a latent v0.6.x bug: after a Settings model edit, switching
-  the model in an open managed session (or `/llm` in a channel) dropped
-  Galley's managed prompt until the runner restarted. It makes the next
-  release's bundled-runtime gate mandatory. SOP step 8: the desktop part
-  passed on 2026-10-18 (managed with real models in tauri dev, attach
-  against a fake server); the four IM channels' restart checks are owed
-  and go into the next release's smoke.
+Follow-ups noted at the release (no tickets yet): prompt checklist item 10 answers 「我是你的
+AI 助手」 without saying it is Galley (the role word is still 助手; only the
+IM entry layer says 助理) and item 14's reply repeats its verdict in a closing
+line, both for one `0.7.x` prompt ticket with its eval; Feishu, Telegram and
+Discord memory distillation cannot read L0 (`ga.py:538` opens a relative
+path from the channel's working directory), older than this release; the
+comment at `core/src/migration_backup.rs:13` says the opposite of its test.
 
-- **Reminders and the to-do** (2026-10-16 / 17, `.scratch/main-chat/`
-  rulings 84, 86–98, tickets 33–46, devlog
-  [2026-10-17-todo-galleys-notebook](./devlog/2026-10-17-todo-galleys-notebook.md)).
-  Managed runtime with a main chat only. Scheduled tasks gain one-offs that
-  wake the assistant, catch-up of a missed one-off and soft delete
-  (migration **049**); the assistant keeps the user's to-dos, a reminder
-  being a one-off hung on its to-do (migration **050**). Every
-  conversation's top bar has a 「待办」 button with today's count, opening
-  the to-do panel beside it: the user can only tick off, untick and cancel
-  a reminder there, everything else is said to Galley, and workbench
-  sessions are told to send the user there. The main chat can delete a
-  single message (rulings 83, 85; remote event `message.deleted`).
-  **Agent API, additive inside `3`** (also under `1` / `2`): the
-  `schedule` family, `session rename / pin / unpin / delete`, `project
-  update / pin / unpin / archive-sessions`, `llm set-default` (2026-10-16),
-  the `todo` family and `ScheduledTask.todoId` (2026-10-17). Owed: JC's
-  live look at the two remembered panel states across a restart and the
-  new empty state.
+**Do at release**, left: the GitHub repo About sentence
+`极简 harness 的本地全能 AI 助手。` becomes `极简 harness 的本地全能 AI 助理。`
+(`gh repo edit --description`), matching the About page subtitle
+(`115a55b5`, `.scratch/assistant/PRD.md` ruling 7); due now that `v0.7.0`
+says 助理, outward-facing, so ask JC first.
 
-- **Dogfood follow-ups** (2026-10-19, `.scratch/main-chat/` rulings
-  99–102, tickets 47–49, devlog
-  [2026-10-19-dogfood-walk-and-subtask-questions](./devlog/2026-10-19-dogfood-walk-and-subtask-questions.md)).
-  GUI only, managed runtime with a main chat. A reply's action bar is copy,
-  quote, save, (process), ⋯; the live line falls back to a step's summary
-  when the model wrote no narration; a subtask's question is answered in the
-  Galley chat only — its card shows 等你回复, the full question only when the
-  wake could not reach the assistant — and the opened subtask cannot answer
-  while Galley holds the question; a disabled composer greys the effort rows.
-  No Agent API or migration change.
-
-- **The main chat feels like IM** (2026-10-19, `.scratch/main-chat/`
-  rulings 103–110, tickets 51–58, devlog
-  [2026-10-19-im-feel-typing-bubble-and-hover-rows](./devlog/2026-10-19-im-feel-typing-bubble-and-hover-rows.md)).
-  GUI only, managed runtime with a main chat. While the assistant works the
-  conversation shows a three-dot typing bubble that grows into the reply
-  when it lands; the top bar's identity line carries the process (untimed)
-  and the sidebar card says 「正在输入…」. Your bubble shows copy · quote · ⋯
-  on hover and the row hides as soon as you leave; the selection toolbar is
-  one shell. The managed runtime's top bar has no Supervisor SOP icon
-  (Settings and ⌘K 「智能体接入」 reach the page). No Agent API or migration
-  change.
-
-- **The assistant's manual in parts** (2026-10-19, ruling 111, ticket 59,
-  devlog
-  [2026-10-19-prompt-layers-what-to-fetch-on-demand](./devlog/2026-10-19-prompt-layers-what-to-fetch-on-demand.md)).
-  Eight files under `<state_root>/assistant/reference/manual/`, rewritten
-  each time the main chat starts (the old single file is removed); the
-  main chat's entry layer names the parts to read before a CLI write. No
-  Agent API change.
-
-- **The assistant follows things up on its own** (2026-10-19, rulings
-  112–116, tickets 60, 61, 63, 64, devlog
-  [2026-10-19-follow-up-on-its-own](./devlog/2026-10-19-follow-up-on-its-own.md)).
-  Something coming up on a date that will be of use then goes on the list
-  or into its own reminders unasked (three tests in the manual's
-  `todos.md`, with a deterministic floor); a kind the user turned down is
-  kept on the cancellation and shown in each segment's In Hand lines
-  ("Follow-ups the user turned down", 90 days, at most 5); a reminder that
-  comes due says what is of use now instead of reading the item back.
-  **Migration 051** adds `cancelled_via`, `cancelled_by_supervisor`,
-  `cancelled_origin_note` to `todos` and `scheduled_tasks` (older
-  cancellations stay NULL). **Agent API, additive inside `3`:** `Todo` and
-  `ScheduledTask` carry `cancelledBy` in `todo show` / `todo list --all`
-  and `schedule show` / `schedule list --all`. The entry layer's budget is
-  2767 bytes.
-
-- **Two zones in the sidebar, and a face that is alive** (2026-10-19 / 20,
-  rulings 114, 117–121, tickets 62, 65–70, devlogs
-  [2026-10-20-sidebar-zones-and-a-living-face](./devlog/2026-10-20-sidebar-zones-and-a-living-face.md)
-  and [2026-10-20-workbench-label-on-the-line](./devlog/2026-10-20-workbench-label-on-the-line.md)).
-  GUI only, managed runtime with a main chat; the external runtime's
-  sidebar is unchanged. A strong line parts the assistant from the
-  workbench, with no standing name on it (the name, 「工作台」, is said in
-  the list's empty line until the first conversation); the workbench's
-  ground runs to the window's foot with 「已归档」
-  pinned on it. The assistant's card is a centred 72px stage, and its
-  avatar's face (eyes, mouth, the tongue that makes the G, a few comic
-  marks) moves with what it is doing — only in the sidebar, mostly still
-  when idle, calmer on long runs; the top bar's avatar stays still, and
-  Reduce Motion keeps it still with the spinning badge back. No Agent API
-  or migration change.
-
-- **The assistant's card reads as one clickable thing; presses animate;
-  the main chat opens without a hitch** (2026-10-20, rulings 122–123,
-  main chat tickets 71, 72 and `.scratch/press-transition` ticket 01,
-  devlog
-  [2026-10-20-assistant-card-edge-and-switch-hitch](./devlog/2026-10-20-assistant-card-edge-and-switch-hitch.md)).
-  GUI only. The card has a faint line inside its edge at rest, takes a
-  selected row's fill when selected (no more ring round the face), shrinks
-  to 98% when pressed, and opens the main chat once the press is painted.
-  App-wide, press sinks, the settings carets and the project group's
-  slide-in now animate as designed: Tailwind v4 writes them as `translate`
-  / `scale` / `rotate`, which the old `transition-[transform,…]` lists
-  never reached (a source-scan test now forbids `transform` there).
-  Switching to the main chat no longer re-renders the conversation after
-  mounting (the per-message tooltip and menu roots mount on a row's first
-  hover): in dev, 192–237ms → 145–150ms, on par with a workbench
-  conversation of the same length. Adds the dev dependency `jsdom` for
-  the mount test. No Agent API or migration change.
-
-**Do at release** (outward-facing, so ask JC before each; the release SOP's
-Pre-Flight checks this list):
-
-- ~~README (en + zh) line 86~~ done 2026-10-21 (README rewrite, devlog
-  [2026-10-21-readme-personal-assistant-and-screenshots-v3](./devlog/2026-10-21-readme-personal-assistant-and-screenshots-v3.md)).
-  ~~Still at release: the release-notes
-  guide's area name `ChatGPT / Codex` becomes `ChatGPT`~~ done 2026-10-22
-  with JC (`v0.7.0` draft). ~~Release notes: one
-  line for Sign in with ChatGPT, and an upgrade note that users of the old
-  Codex CLI login must sign in again, and only Plus / Pro plans work~~ in
-  the `v0.7.0` notes
-  (`.scratch/chatgpt-siwc/PRD.md` rulings 1, 5).
-
-- GitHub repo About, the Chinese sentence `极简 harness 的本地全能 AI 助手。`
-  becomes `极简 harness 的本地全能 AI 助理。` (`gh repo edit --description`),
-  matching the About page subtitle changed on main in `115a55b5`
-  (`.scratch/assistant/PRD.md` ruling 7). Not before: the released app still
-  says 助手.
-- ~~README (en + zh): role words and the Supervisor narrative~~ done
-  2026-10-21 with JC (same devlog): personal assistant throughout, the
-  assistant runs the team, Supervisor kept for outside agents; screenshots
-  v3 shot and committed with it. The README now describes main-chat
-  features `v0.6.2` does not have, so push it with the release.
-- Release notes: one line that workbench conversations now share the
-  assistant's grammar (your words on the right, time centred, a fold
-  opens one line a step, one-step replies without a fold header), and that
-  after you send, your words stay at the top while the reply grows below
-  them, not followed (telegram-details ticket 06). It
-  reaches external-runtime users too, whose whole UI is the workbench
-  (`.scratch/workbench-conversation/PRD.md`, devlog
-  [2026-10-16-workbench-conversation-grammar](./devlog/2026-10-16-workbench-conversation-grammar.md)).
-- Release notes: the details learnt from Telegram, both conversations,
-  both runtimes — drafts survive a restart (text only), select text and
-  「引用」 it into the composer (drawn as a quote block in your bubble),
-  clicking a button or blank space in the conversation keeps the
-  composer focused, the conversation's smooth scrolling honours Reduce
-  Motion, and the assistant's bubbles read a little denser (line height
-  only)
-  (`.scratch/telegram-details/PRD.md`, devlog
-  [2026-10-16-telegram-details](./devlog/2026-10-16-telegram-details.md)).
-- Release notes: the managed runtime's top bar no longer has the
-  Supervisor SOP icon; Settings → 智能体接入 and ⌘K 「智能体接入」 reach the
-  page (main chat ticket 54, ruling 106). The external runtime keeps it.
-
-- **Core send takeover and remote-access groundwork** (2026-10-10,
-  `.scratch/ios-client/`, devlog
-  [2026-10-10-remote-access-protocol-and-first-tickets](./devlog/2026-10-10-remote-access-protocol-and-first-tickets.md)).
-  Ticket 02a–02d: Core owns ensure-runner, history replay, the unified
-  send (ADR-0003) and broadcasts every write; GUI
-  behavior is meant to be unchanged, JC's GUI acceptance is still open.
-  Then 05c (remote sink on the notifier, `session-run-state`, a
-  turn-persist broadcast the GUI skips, attachment read by id, the pairing
-  key, migration **043** adding a nullable `client` column, message
-  paging), 05a `remote-protocol/`, 05b `core/src/remote/`, 06a `relay/`,
-  06b APNs sending (not yet tried against real APNs), 07a `ios/GalleyRemote/`,
-  05d Settings → Phone (pairing QR, unpair, status). The remote module only exists when a relay URL
-  is configured: `GALLEY_REMOTE_RELAY_URL` is not set in the release
-  workflow yet, so a release cut now ships migration 043 with remote access
-  off and no Phone tab.
-
-- **Settings sidebar evenly spaced** (2026-10-10, JC). The 10-07 three
-  groups had 12px between them, which on the 50px two-line Chinese rows
-  read as misaligned spacing; one even list now, same order.
-
-- **WeChat conversation aligned with the desktop** (2026-10-10,
-  `.scratch/wechat-ux/`, devlog
-  [2026-10-10-wechat-conversation-ux](./devlog/2026-10-10-wechat-conversation-ux.md)).
-  A device probe first: iLink cannot edit or delete (a reused `client_id` is
-  dropped), its native tool-progress items do not show, Markdown renders,
-  voice carries a transcription, sends without a context token arrive. So a
-  run shows only 「对方正在输入」 and posts one message: the closing step
-  with a `N 步 · 用时 X` last line from two steps on, the ask_user question
-  with numbered candidates (a number answers), or `⏹ 已停止 · …`; no
-  `[任务已完成]`, no answer cut at 3000, no 5-minute "done", no stale stop
-  flag. Galley-owned `runner/im_wechat.py` replaces upstream's
-  `on_message` (no managed patch; `docs/ga-baseline.md` item 19). WeChat
-  now gets completion reports (`WechatChannel`; the owner is whoever spoke
-  last, `wechat_owner.json`, cleared on Disconnect and re-scan), and the IM
-  entry layer drops its WeChat link / `1.` note (budget 1503 → 1383).
-  Quoted messages are deferred (Rule 4). JC's real-device round passed
-  (2026-10-10): a one-step chat, a two-step answer, two ask_user rounds
-  answered by number, a delegation with its completion report, resume on
-  restart. Not seen in the log, so still to observe: `/stop` (running and
-  idle), two queued messages, a file sent back, `/new` mid-run; voice
-  cannot be told from typing in the log.
-
-- **Main chat** (2026-10-12/13, `.scratch/main-chat/`, devlogs
-  [2026-10-12-main-chat-concept-review](./devlog/2026-10-12-main-chat-concept-review.md),
-  [2026-10-12-main-chat-sidebar-trial](./devlog/2026-10-12-main-chat-sidebar-trial.md),
-  [2026-10-12-affairs-ledger-and-memory-page](./devlog/2026-10-12-affairs-ledger-and-memory-page.md),
-  [2026-10-13-drop-affairs-ledger](./devlog/2026-10-13-drop-affairs-ledger.md),
-  [2026-10-14-main-chat-reset](./devlog/2026-10-14-main-chat-reset.md),
-  [2026-10-14-assistant-card-in-sidebar](./devlog/2026-10-14-assistant-card-in-sidebar.md),
-  [2026-10-15-assistant-im-rendering](./devlog/2026-10-15-assistant-im-rendering.md)).
-  Managed runtime only; the external runtime's sidebar is frozen. One
-  persistent main chat (migration **044**) opened at launch. Since
-  2026-10-14 (PRD rulings 60–65, tickets 16–18) the sidebar draws it as the
-  assistant, Galley: a card under a masthead that has lost its wordmark,
-  read as one row of an IM chat list (40px avatar, the time, the last
-  message or the state, an unsent draft), then the external runtime's own
-  new-chat row and list; the sidebar collapses with ⌘\, the open main chat's
-  header is an identity row over its title menu, and it has no question
-  rail. Since 2026-10-15 (rulings 66–67, tickets 19–20) the open main chat
-  is drawn as an IM with one person: bubbles on both sides (the user's
-  apricot on the right, the assistant's neutral `--color-assistant-tint`
-  on the left), one live line while it works, send times as centred lines
-  (one above the greeting), and the column stacked up from the composer.
-  Since ruling 68 (ticket 21) nothing shows under a reply at rest: the
-  hover bar is icons only (copy, save, and a process button for a reply of
-  two steps or more); no context percentage is drawn there, and the sidebar
-  card and the header say the live line's own sentence while it runs
-  instead of 「第 N 步 · 摘要」. Since ruling 69 (ticket 22) the process
-  button opens a card, not the workbench step region: 「N 步 · 用时 · ↑ ↓」
-  on top, then one line a step (its sentence and the site or file it
-  touched), eight and a half lines tall with the rest scrolling inside; a
-  line opens that step as it was. Since ruling 70 (ticket 23) the
-  assistant's avatar is the app icon cropped to a circle with a 1px inner
-  ring, and the app icon itself is the flat wooden robot G drawn from a
-  vector master (`core/icons/master/`), on Apple's grid for macOS; it ships
-  with the next release. Since rulings 71–76 (tickets 24–27) every
-  session's composer is one line (＋, input, 「模型 · 强度」, send; popovers
-  centred on their buttons): the main chat's has no hint row, sits 24px off
-  the window's bottom edge, queues mid-run Enter directly and says
-  「发消息…」; the workbench's keeps its hint row under it; the new-chat
-  empty state keeps its card. In the main chat the user's bubbles copy by
-  selection, not a hover chip (the workbench keeps its chip on purpose),
-  and the assistant card no longer shows the last message as a hover
-  title. Since ruling 77 (ticket 28) ⌘F (Ctrl+F) finds in the open
-  conversation through the ⌘K palette scoped to it (dated hits, Backspace
-  widens to everything), every title menu has 「查找聊天记录」, and the main
-  chat's also 「重置主对话…」, opening the hold-to-confirm dialog; the effort
-  popover lists the highest tier first (ruling 78); in the wide reading
-  width the reply bubble grows with the column instead of stopping at
-  680px (ruling 79). JC accepted tickets
-  20–28 live on 2026-10-15. Settings can reset the main chat with a five-second hold (ticket 15): its rows
-  go, long-term memory returns to factory, the migration backups are
-  deleted. A new main
-  chat opens with a fixed one-paragraph greeting in the UI language (shown
-  only: never replayed to the model, not a turn). The main chat cuts a new
-  context segment after 4 idle hours (migration **046**); its state block
-  names the main chat and where the segment begins, and the CLI gains
-  `session show --around / --since / --until` and search fields (additive,
-  Rule 3). Deleting any session now also deletes its `messages_fts` rows.
-  The affairs ledger and Settings → Memory, built in the same two days,
-  were removed before release (PRD ruling 49, ticket 10); migrations
-  **045** / **047** stay as they are, one creating and the other dropping
-  a table nothing uses. Later on 2026-10-13 (PRD rulings 50–53): the main
-  chat gained an entry layer in its prompt (ticket 03d: reply at the weight
-  of what was said); a new segment opens with the last 3 turns before it, at
-  most 6,000 characters (ticket 11); every conversation loads its history 50
-  turns a page, a run never split (ticket 12, new Tauri command
-  `session_message_turns_page`, `session_message_rows` dropped); and the
-  main chat hands long work to subtasks through a `<subtask>` tag in its
-  reply (ticket 06a, migration **048**): a card under the reply, 「Galley ›」
-  breadcrumb, no sidebar row until the user writes in it, notifications for
-  asking / failed / done after 2 minutes; the CLI session JSON gains
-  `parentSessionId` and `promoted`, and `origin.via` can be `subtask`
-  (additive, Rule 3). **Release held** (JC, 2026-10-13, ruling 54): a few
-  days of dev use first, because after a release the schema (migrations
-  044–048) and the new CLI fields can only move forward; an urgent fix in
-  the meantime goes out as a patch from the `v0.6.2` tag. Owed: JC's live
-  look at 06a (cards, breadcrumb, the four open points in its ticket),
-  ticket 11 met in real use (a natural 4-hour cut), ticket 12's scroll feel,
-  the greeting (a fresh data directory is needed to see it); old orphaned
-  `messages_fts` rows are not cleaned.
-
-- **Goal removed; Agent API `schemaVersion: 3`** (2026-10-13, JC,
-  `.scratch/remove-goal/`, devlog
-  [2026-10-13-remove-goal](./devlog/2026-10-13-remove-goal.md)). Usage was
-  the reason: five v2 goals in four weeks, zero continuations, the longest
-  task 52 steps against GA's 180. The Core continuation engine, the GUI entry
-  points (composer, top-bar indicator, goal markers, the Goal-end
-  notification toggle), the CLI `goal` family, managed patch `0022`, the
-  remote-protocol goal event / push kind and the `<goal-status>` handling are
-  gone; the GUI still strips that tag when rendering old rows. Every goal
-  command is `unknown_command` under every pin, `galley goal …` exits 2, and
-  `MessageBrief.goalId` is no longer produced. No migration: the `goals`
-  table, `messages.goal_id` and the `notify_on_goal_end` pref stay, unread.
-  Release notes must say `schemaVersion: 3` and that Goal is gone (a removal,
-  so the release is minor); the README Goal screenshots are deleted.
-
-Carried forward. The README screenshots still show the old sidebar, and
-`projects.png` the retired project view (its caption still says 项目视图);
-re-shoot with the next screenshot round (kept out of `v0.6.2`).
+Carried forward. The README screenshots were re-shot (v3, 2026-10-21).
 `.scratch/sidebar-project-groups/issues/03` (ready-for-agent) holds two
 follow-ups from the 10-09 project passes: the edit dialog's folder hint should
 follow `workspaceEnabled` (a CLI-created project without
 `--enable-workspace` gets the wrong line), and 「收起」 vanishes when every
-tail session is borrowed. Owed from the `v0.6.2` smoke (JC approved publish
-without an item-by-item report): the packaged-build external-Python fix, the
-composer focus after creating a project and 加入项目 → 新建项目…; on Windows a
-first session (also the `f308ee7` engine's first Windows run, owed since
-`v0.6.1`), F5 / Ctrl+R mid-run (steps and final answer kept, the run not
-restarted; owed since `v0.6.1`, and that WebView2 reloads on these keys is
-inferred, not observed) and the CLI-directory PATH hint in Settings → 智能体接入.
-The new update path (download only, install at 重启并更新, Windows no longer
-exiting after download) and the Windows App update smoke items wait for the
-`v0.6.2` → next hop, since an installed build runs its own updater.
+tail session is borrowed. Still owed from the `v0.6.2` smoke: the
+packaged-build external-Python fix, the composer focus after creating a
+project and 加入项目 → 新建项目…; on Windows F5 / Ctrl+R mid-run (steps and
+final answer kept, the run not restarted; owed since `v0.6.1`, and that
+WebView2 reloads on these keys is inferred, not observed) and the
+CLI-directory PATH hint in Settings → 智能体接入. The Windows first session is
+G1 above; the new update path is post-release follow-up 1.
 Still owed from `v0.6.0`: the resident browser bridge (stdin EOF exit, the `GALLEY_CORE_PID` watchdog, a port held by another program), the
 browser new-user flow (待解锁 → install → auto-verify → 试一试), which has not
 been walked live on any platform, the ＋ menu's native file and folder
@@ -1143,8 +804,10 @@ WeChat `/help` / `/status` on a paired account. The README social preview image
 waits for JC to upload it in the repo settings. Regression leftovers to
 delete (JC: after the release): the project 「v0.6.1 发版回归」 with its 19
 sessions and a Chrome tab (the `v0.6.2` delete confirm's 「同时归档里面的 N
-个对话」 clears the project in one step); the `~/Downloads` test files went to
-the Trash on 2026-10-07. Small observations from the regression, none acted
+个对话」 clears the project in one step); from `v0.7.0`, the archived
+regression sessions, the smoke's test session and the Markdown file A1.6 put
+on the Desktop; the `~/Downloads` test files went to the Trash on
+2026-10-07. Small observations from the regression, none acted
 on: over IM,
 「现在 Galley 里在跑什么？」 ran the plain `sessions list` as the prompt says,
 then filtered it and ran `status` (3 steps where `status` alone would do); a
@@ -1224,7 +887,10 @@ skipped a sixth time on the same reasoning. On 2026-10-06 the audit ran on
 its own, outside a release, and `f308ee7` became the audited baseline; it
 shipped in `v0.6.1` and again in `v0.6.2`, both times with upstream still at
 `f308ee7`. Upstream's default-constant line (`default_context_win`) has now
-collided with patch `0007` twice in a row — expect it again.
+collided with patch `0007` twice in a row — expect it again. `5205f40`
+(2026-10-18) and `b70079d` (2026-10-22) were audited on their own too;
+`b70079d` shipped in `v0.7.0`, with upstream `main` still at it when the tag
+was cut.
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
 `api_key_header` a GUI entry point in the Settings -> Models advanced panel,
@@ -1262,16 +928,16 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Area | Status | Read More |
 |---|---|---|
 | Core architecture | Rust Galley Core is authoritative | [architecture demo](./architecture-demo.md) |
-| CLI / Agent API | `schemaVersion: 3` on main since 2026-10-13 (Goal removed; unreleased); `2` (since v0.5.0) and `1` still served for unchanged commands | [agent-api](./agent-api.md) |
+| CLI / Agent API | `schemaVersion: 3` since v0.7.0 (Goal removed 2026-10-13); `2` (since v0.5.0) and `1` still served for unchanged commands | [agent-api](./agent-api.md) |
 | Agent surface | Settings -> Agent, copy-first SOP, Claude Skill | [Supervisor SOP](./integrations/galley-supervisor-sop.md) |
 | Managed GA runtime | Shipped in v0.2.0; Memory/SOP seed repair shipped in v0.2.6; audited upstream `b1e173dc` baseline shipped in v0.2.16; GUI / CLI split, Provider / Model config, local encrypted SQLite credentials, and Project Workspace are the current baseline | [managed GA runtime](./managed-ga-runtime/README.md) |
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications (gone with approval, 2026-10-05), missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.6.2 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.7.0 stable minor is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Audited upstream `f308ee7` (2026-10-06), shipped since `v0.6.1` (`1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Audited upstream `b70079d` (2026-10-22), shipped since `v0.7.0` (`f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 
@@ -1294,7 +960,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.6.2`. For the next release, bump every
+- Current package metadata uses `0.7.0`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
@@ -1320,8 +986,8 @@ Detailed phase narratives are intentionally not duplicated here. Use:
   line-sized feature; the release notes' opening carries the shape change,
   not the number.
 - Use `vX.Y.Z` for Git tag and GitHub Release title.
-- Agent API is at `schemaVersion: 3` on main (`2` in the published
-  `v0.6.2`); changes within a version are additive-only.
+- Agent API is at `schemaVersion: 3` (first shipped in `v0.7.0`); changes
+  within a version are additive-only.
 - A breaking Agent API change requires the next `schemaVersion`, with explicit
   compatibility notes in [agent-api](./agent-api.md) (how `1` and `2` are
   still served after the `3` bump is the template: stability §7).
