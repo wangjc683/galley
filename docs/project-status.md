@@ -676,14 +676,17 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.6.2` → `v0.7.0` is owed (wait at
-   least 5 minutes after the 2026-10-23 promote; H1 in the release devlog's
-   smoke plan, on JC's Windows machine in a separate account with `v0.6.2`
-   installed). It is the first hop through `v0.6.2`'s install-at-restart
-   path (download only, install at 重启并更新, Windows no longer exiting
-   after download) and the first run of migrations 043–052 on a real older
-   database. `v0.6.1` → `v0.6.2` had not been reported by the `v0.7.0`
-   release; `v0.6.0` → `v0.6.1` and
+1. App-update dogfood (SOP step 10): `v0.6.2` → `v0.7.0` passed on JC's
+   Windows machine (2026-10-23, same session as the release; H1 in the
+   release devlog): after the restart the app reads 0.7.0, the old sessions
+   and model settings are there, and the main chat works, so migrations
+   043–052 ran on a real older database; the release's Windows installer
+   was fetched by updaters right after promote (its download count went
+   0 → 5 within fifteen minutes). Not reported: the About page's downloaded
+   line, a `_bz2.pyd` lock dialog, `galley version` from the bundled CLI and
+   the `app.galley.backup.*` file. The macOS hop through the
+   install-at-restart path is still unobserved. `v0.6.1` → `v0.6.2` had not
+   been reported by the `v0.7.0` release; `v0.6.0` → `v0.6.1` and
    `v0.5.6` → `v0.6.0` were never reported; `v0.5.5` → `v0.5.6` passed on JC's
    Windows machine (2026-10-01, same session; the bundled CLI came out at
    0.5.6 too); `v0.5.4` → `v0.5.5` passed on an
@@ -730,9 +733,10 @@ Nothing since `v0.7.0` yet; release-scope truth is `git log v0.7.0..HEAD`.
 **Owed from the `v0.7.0` smoke** (JC approved publish after part of it,
 2026-10-23; the plan and results are in the release devlog):
 
-- Windows, none of it walked: a first session on the packaged engine (G1,
-  also the first Windows run of the `5205f40` / `b70079d` engine and of
-  `f308ee7` before it); Sign in with ChatGPT (G4): the loopback sign-in
+- Windows: the main chat works after the H1 upgrade (JC, 2026-10-23), the
+  first Windows run of the `5205f40` / `b70079d` engine; a fresh NSIS
+  install, the black CMD window check and a model switch (G1) were not
+  reported. Not walked: Sign in with ChatGPT (G4): the loopback sign-in
   listener (watch for a firewall prompt) and the credential pipe renamed
   `galley-codex-*` → `galley-credential-*` (CI's Windows job compiles and
   tests it; the runtime smoke is what's owed), with no fallback login left
@@ -790,8 +794,8 @@ packaged-build external-Python fix, the composer focus after creating a
 project and 加入项目 → 新建项目…; on Windows F5 / Ctrl+R mid-run (steps and
 final answer kept, the run not restarted; owed since `v0.6.1`, and that
 WebView2 reloads on these keys is inferred, not observed) and the
-CLI-directory PATH hint in Settings → 智能体接入. The Windows first session is
-G1 above; the new update path is post-release follow-up 1.
+CLI-directory PATH hint in Settings → 智能体接入. The new update path is
+post-release follow-up 1.
 Still owed from `v0.6.0`: the resident browser bridge (stdin EOF exit, the `GALLEY_CORE_PID` watchdog, a port held by another program), the
 browser new-user flow (待解锁 → install → auto-verify → 试一试), which has not
 been walked live on any platform, the ＋ menu's native file and folder
