@@ -728,7 +728,19 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Nothing since `v0.7.0` yet; release-scope truth is `git log v0.7.0..HEAD`.
+Release-scope truth is `git log v0.7.0..HEAD`. As of 2026-10-23, all
+dogfooded by JC in dev:
+
+- Main chat while it runs (rulings 134, 135, 137; tickets 90, 91, 93): the
+  header says nothing; a line under the typing dots says 「{在做什么} ·
+  {用时}」 from the first second, a new sentence rolls in and a slow band
+  sweeps it; the card says 「正在工作…」. From a user report after
+  `v0.7.0` (a long round read as frozen).
+- Tables: short columns no longer wrap (ruling 136, ticket 92), workbench
+  and main chat alike.
+- The desktop pet and Reinject Tools are gone from runner, Core and GUI
+  ([devlog](./devlog/2026-10-23-remove-desktop-pet-and-reinject-tools.md));
+  neither worked in the bundled runtime.
 
 **Owed from the `v0.7.0` smoke** (JC approved publish after part of it,
 2026-10-23; the plan and results are in the release devlog):
