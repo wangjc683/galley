@@ -1,6 +1,7 @@
 import { useEffect, useState, type Ref } from "react";
 
 import { ASSISTANT_BUBBLE_MAX } from "@/components/conversation/AssistantParts";
+import { useProgressRoll } from "@/hooks/useProgressRoll";
 import { TYPING_DOT_EM, TYPING_DOT_GAP_EM } from "@/lib/assistant-conversation";
 import { assistantProgressElapsed } from "@/lib/assistant-progress";
 import { useCopy } from "@/lib/i18n";
@@ -94,13 +95,15 @@ export interface TypingProgress {
  * 「{在做什么} · {用时}」 under the typing bubble (main chat PRD rulings
  * 134, 135): 6px under it, its left edge on the bubble's, one 18px line
  * whatever it says, no wider than a reply bubble may be. 12px `ink-soft`,
- * tabular numbers, no sweep, no motion. The doing part gives way: cut
- * with a fade when too long, the whole of it on hover (the header
- * identity row's way); 「 · 」 and the time never. Inside the bubble's
- * row, so following the bottom and the hand-off take it as part of it
- * (useTypingBubbleHandoff copies it out with the dots). The row is the
- * `status` live region: a new doing part is read out, the time, ticking
- * every second, is not (`aria-hidden`).
+ * tabular numbers. The doing part moves, the time does not (ruling 137,
+ * overturning 134's 「不扫光、不动」): a new sentence rolls in, a slow
+ * soft band sweeps it (`ProgressDoing`); the time only ticks. The doing
+ * part gives way: cut with a fade when too long, the whole of it on
+ * hover (the header identity row's way); 「 · 」 and the time never.
+ * Inside the bubble's row, so following the bottom and the hand-off
+ * take it as part of it (useTypingBubbleHandoff copies it out with the
+ * dots). The row is the `status` live region: a new doing part is read
+ * out, the time, ticking every second, is not (`aria-hidden`).
  */
 function ProgressLine({ progress }: { progress: TypingProgress }) {
   return (
@@ -111,21 +114,70 @@ function ProgressLine({ progress }: { progress: TypingProgress }) {
         ASSISTANT_BUBBLE_MAX,
       )}
     >
-      <span
-        data-role="assistant-progress-doing"
-        ref={truncationFadeRef}
-        onPointerEnter={(e) =>
-          syncTruncatedTitle(e.currentTarget, progress.doing)
-        }
-        className="truncate-fade min-w-0"
-      >
-        {progress.doing}
-      </span>
+      <ProgressDoing doing={progress.doing} />
       <ProgressElapsed
         startedAtMs={progress.startedAtMs}
         baseMs={progress.baseMs}
       />
     </div>
+  );
+}
+
+/** One sentence of the doing part: stacked in the box's one grid cell,
+ * as wide as it says (to the box's width, then cut with the fade —
+ * judged on its own width, so a wider one leaving never marks the new
+ * one cut), swept by the band (globals.css `progress-shimmer`; the
+ * fade's mask applies on top of it). */
+const SENTENCE_CLASS =
+  "truncate-fade progress-shimmer col-start-1 row-start-1 max-w-full min-w-0 justify-self-start";
+
+/**
+ * The doing part (ruling 137; hooks/useProgressRoll.ts). Said something
+ * else, the old sentence rolls up out of the line and the new one in
+ * from below, a whole line each (18px, `--motion-slow`, `--ease-firm`),
+ * clipped by the box; under reduced motion they fade where they stand.
+ * Not when the line first appears with the dots. While both are in, the
+ * box is as wide as the wider of them; once the old one is gone it
+ * takes the new one's width, and 「 · 用时」 follows in one step — no
+ * sideways slide. A change mid-roll goes straight to the newest
+ * sentence. The leaving one is `aria-hidden` and lets the pointer
+ * through: the status region reads the new one, the hover's whole text
+ * is the new one's.
+ */
+function ProgressDoing({ doing }: { doing: string }) {
+  const { roll, boxRef } = useProgressRoll(doing);
+  return (
+    <span
+      ref={boxRef}
+      data-role="assistant-progress-doing-box"
+      className="grid min-w-0 overflow-hidden"
+    >
+      {[...roll.leaving, roll.current].map((sentence) =>
+        sentence === roll.current ? (
+          <span
+            key={sentence.id}
+            ref={truncationFadeRef}
+            data-role="assistant-progress-doing"
+            onPointerEnter={(e) =>
+              syncTruncatedTitle(e.currentTarget, sentence.text)
+            }
+            className={SENTENCE_CLASS}
+          >
+            {sentence.text}
+          </span>
+        ) : (
+          <span
+            key={sentence.id}
+            ref={truncationFadeRef}
+            aria-hidden
+            data-role="assistant-progress-doing-leaving"
+            className={cn(SENTENCE_CLASS, "pointer-events-none")}
+          >
+            {sentence.text}
+          </span>
+        ),
+      )}
+    </span>
   );
 }
 

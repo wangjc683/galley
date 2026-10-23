@@ -774,7 +774,7 @@ describe("the line under the dots, in a round you started", () => {
     expect(row.endsWith(`${line}</div>`)).toBe(true);
     expect(textOf(line)).toBe("思考中 · 1 分 15 秒");
     // 6px under the bubble, one 18px line, 12px ink-soft, tabular
-    // numbers, no wider than a reply bubble; no sweep, no motion.
+    // numbers, no wider than a reply bubble.
     const box = line.slice(0, line.indexOf(">") + 1);
     for (const cls of [
       "mt-1.5",
@@ -788,10 +788,12 @@ describe("the line under the dots, in a round you started", () => {
     ]) {
       expect([cls, box.includes(cls)]).toEqual([cls, true]);
     }
-    expect(line).not.toMatch(/shimmer|animate-|live-dot/);
-    // The doing part gives way (fade, whole on hover); the time never.
+    // The doing part sweeps, in a box that clips its roll (ruling 137),
+    // and gives way (fade, whole on hover); the time does neither.
+    expect(line).not.toMatch(/animate-|live-dot/);
+    expect(count(line, "shimmer")).toBe(1);
     expect(line).toMatch(
-      /<span data-role="assistant-progress-doing" class="truncate-fade min-w-0">思考中<\/span>/,
+      /<span data-role="assistant-progress-doing-box" class="grid min-w-0 overflow-hidden"><span data-role="assistant-progress-doing" class="truncate-fade progress-shimmer [^"]*">思考中<\/span><\/span>/,
     );
     expect(line).toContain(
       '<span aria-hidden="true" data-role="assistant-progress-elapsed" class="shrink-0 whitespace-pre"> · 1 分 15 秒</span>',

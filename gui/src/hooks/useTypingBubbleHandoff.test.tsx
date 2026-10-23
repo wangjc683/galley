@@ -19,7 +19,8 @@ import { useTypingBubbleHandoff } from "@/hooks/useTypingBubbleHandoff";
 
 /*
  * The line under the dots in the hand-off (main chat PRD rulings 134,
- * 135): it leaves with the dots when the reply takes their place.
+ * 135): it leaves with the dots when the reply takes their place — only
+ * the sentence on screen, its sweep going on where it was (ruling 137).
  */
 
 beforeAll(() => {
@@ -90,6 +91,8 @@ describe("the line under the dots in the hand-off", () => {
       "--motion-slow": "240ms",
       "--motion-fast": "120ms",
       "--ease-pop": "cubic-bezier(0.2, 0.9, 0.3, 1.2)",
+      // The line's roll (lib/progress-line-motion.ts).
+      "--ease-firm": "cubic-bezier(0.2, 0, 0, 1)",
     };
     const computed = window.getComputedStyle.bind(window);
     vi.spyOn(window, "getComputedStyle").mockImplementation((element) => {
@@ -105,6 +108,8 @@ describe("the line under the dots in the hand-off", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     delete (Element.prototype as { animate?: unknown }).animate;
+    delete (Element.prototype as { getAnimations?: unknown }).getAnimations;
+    delete (document as { timeline?: unknown }).timeline;
   });
 
   /** A column with the typing bubble until `replied`, then the reply. */
@@ -139,9 +144,17 @@ describe("the line under the dots in the hand-off", () => {
     );
   }
 
-  function handOff(progress: TypingProgress | null) {
+  function handOff(
+    progress: TypingProgress | null,
+    then?: TypingProgress | null,
+  ) {
     mount(<Harness replied={false} progress={progress} />);
-    act(() => root!.render(<Harness replied progress={progress} />));
+    // A new sentence just before the reply: its roll is still running
+    // (`animate` here never finishes).
+    if (then) {
+      act(() => root!.render(<Harness replied={false} progress={then} />));
+    }
+    act(() => root!.render(<Harness replied progress={then ?? progress} />));
     return document.querySelector<HTMLElement>('[data-role="scroller"]')!;
   }
 
@@ -188,6 +201,70 @@ describe("the line under the dots in the hand-off", () => {
           "clipPath" in p.keyframes,
       ),
     ).toBe(true);
+  });
+
+  it("copies only the sentence on screen, mid-roll: the one rolling out stays behind", () => {
+    const scroller = handOff(
+      { doing: "我查各队伤病与轮换", startedAtMs: NOW - 12_000, baseMs: 0 },
+      { doing: "我对比各队近三季的胜场", startedAtMs: NOW - 12_000, baseMs: 0 },
+    );
+    // The roll was under way when the reply came.
+    expect(played.map((p) => p.role)).toEqual(
+      expect.arrayContaining([
+        "assistant-progress-doing-leaving",
+        "assistant-progress-doing",
+      ]),
+    );
+    const line = scroller.querySelector<HTMLElement>(
+      '[data-role="assistant-progress-leaving"]',
+    )!;
+    expect(line.textContent).toBe("我对比各队近三季的胜场 · 12 秒");
+    expect(
+      line.querySelector('[data-role="assistant-progress-doing-leaving"]'),
+    ).toBeNull();
+    const box = line.querySelector(
+      '[data-role="assistant-progress-doing-box"]',
+    )!;
+    expect(Array.from(box.children).map((e) => e.textContent)).toEqual([
+      "我对比各队近三季的胜场",
+    ]);
+  });
+
+  it("carries the sweep on where it was, as the dots' loop", () => {
+    // The sweep on the sentence started at 1000ms on the document
+    // timeline; the reply comes at 1600ms.
+    const timeline = { currentTime: 1000 };
+    Object.defineProperty(document, "timeline", {
+      configurable: true,
+      value: timeline,
+    });
+    Element.prototype.getAnimations = function (this: Element) {
+      if (this.getAttribute("data-role") !== "assistant-progress-doing") {
+        return [];
+      }
+      // A roll running on it too: not the sweep.
+      return [
+        { startTime: 900 },
+        { animationName: "progress-shimmer", startTime: 1000 },
+      ] as unknown as Animation[];
+    };
+    const progress = {
+      doing: "我对比各队近三季的胜场",
+      startedAtMs: NOW - 12_000,
+      baseMs: 0,
+    };
+    mount(<Harness replied={false} progress={progress} />);
+    timeline.currentTime = 1600;
+    act(() => root!.render(<Harness replied progress={progress} />));
+    const sentence = document.querySelector<HTMLElement>(
+      '[data-role="assistant-progress-leaving"] [data-role="assistant-progress-doing"]',
+    )!;
+    expect(sentence.style.animationDelay).toBe("-600ms");
+    // The time has no sweep to carry.
+    const elapsed = document.querySelector<HTMLElement>(
+      '[data-role="assistant-progress-leaving"] [data-role="assistant-progress-elapsed"]',
+    )!;
+    expect(elapsed.style.animationDelay).toBe("");
   });
 
   it("copies nothing more without a line (a round Core woke it for)", () => {

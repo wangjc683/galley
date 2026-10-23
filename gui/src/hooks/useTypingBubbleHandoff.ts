@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 
 import { prefersReducedMotion } from "@/lib/animate-scroll";
 import { TYPING_DOTS_WIDTH_EM } from "@/lib/assistant-conversation";
+import { PROGRESS_SHIMMER_ANIMATION } from "@/lib/progress-line-motion";
 import {
   bubbleGrowInsets,
   columnLift,
@@ -22,8 +23,10 @@ import {
  * reply's (or the question's) — the same ground, so no leaving copy of a
  * bubble: only the dots, copied where they stood, fade out in the first
  * segment (`--motion-fast`), and with them the line under the dots in a
- * round you started (rulings 134, 135), while the words and what hangs
- * under the bubble fade in from half of it to the end of the growth
+ * round you started (rulings 134, 135) — its copy holds only the
+ * sentence on screen, its sweep going on where it was (ruling 137) —
+ * while the words and what hangs under the bubble fade in from half
+ * of it to the end of the growth
  * (`handoffFadeIn`). Under reduced motion the dots and the line fade out
  * and the bubble fades in, nothing opens. A round Core woke it for that lands
  * without the dots on screen (it did not stream, or a tool step had just
@@ -46,6 +49,10 @@ interface TypingRecord {
    * line. */
   line: HTMLElement | null;
   lineBox: Box | null;
+  /** When the sweep on the line's sentence started (document timeline,
+   * ms; globals.css `progress-shimmer`): the copy carries it on, as the
+   * dots' loop. Null without one (reduced motion). */
+  sweepStart: number | null;
 }
 
 /** One commit as the hand-off reads it. */
@@ -114,7 +121,30 @@ function measureTyping(
           : null,
     line,
     lineBox: line ? inColumn(line.getBoundingClientRect()) : null,
+    sweepStart: line ? sweepStartOf(line) : null,
   };
+}
+
+/** When the sweep on the line's sentence on screen started. Each new
+ * sentence is a new element with a sweep of its own, measured in the
+ * commit that brings it, before that sweep has a start time (pending
+ * until the next frame): then it starts now, within a frame. */
+function sweepStartOf(line: HTMLElement): number | null {
+  const sentence = line.querySelector<HTMLElement>(
+    '[data-role="assistant-progress-doing"]',
+  );
+  if (!sentence || typeof sentence.getAnimations !== "function") return null;
+  const sweep = sentence
+    .getAnimations()
+    .find(
+      (animation) =>
+        "animationName" in animation &&
+        animation.animationName === PROGRESS_SHIMMER_ANIMATION,
+    );
+  if (!sweep) return null;
+  if (typeof sweep.startTime === "number") return sweep.startTime;
+  const now = document.timeline?.currentTime;
+  return typeof now === "number" ? now : null;
 }
 
 /** The bubble that took the typing bubble's place: the answer's (by its
@@ -305,6 +335,18 @@ function playTypingHandoff(
     if (record.line && record.lineBox) {
       leavingLine = record.line.cloneNode(true) as HTMLElement;
       leavingLine.setAttribute("data-role", "assistant-progress-leaving");
+      // Only the sentence on screen (ruling 137): one still rolling out
+      // is dropped, and the doing part lays out as that sentence alone —
+      // the line itself is as wide as the row lets it be, whatever it
+      // says, so the width below stands. The copy's sentence sits at its
+      // place (the roll is not copied).
+      for (const gone of Array.from(
+        leavingLine.querySelectorAll(
+          '[data-role="assistant-progress-doing-leaving"]',
+        ),
+      )) {
+        gone.remove();
+      }
       leavingLine.style.position = "absolute";
       leavingLine.style.margin = "0";
       leavingLine.style.top = `${columnTop + record.lineBox.top}px`;
@@ -315,6 +357,16 @@ function playTypingHandoff(
       // would be nothing.
       leavingLine.style.maxWidth = "none";
       layer.append(leavingLine);
+      // Its sweep carries on where it was, as the dots' loop does.
+      const sentence = leavingLine.querySelector<HTMLElement>(
+        '[data-role="assistant-progress-doing"]',
+      );
+      if (sentence && record.sweepStart !== null && typeof now === "number") {
+        const ran = now - record.sweepStart;
+        const delay =
+          parseDurationMs(getComputedStyle(sentence).animationDelay) ?? 0;
+        sentence.style.animationDelay = `${delay - ran}ms`;
+      }
       animations.push(
         leavingLine.animate(
           { opacity: [1, 0] },

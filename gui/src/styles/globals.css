@@ -865,7 +865,8 @@ code {
 
 /* Thinking-row status text working affordance — a light band
    sweeping through the glyphs (ThinkingStatus, Conversation.tsx).
-   This is the one sanctioned shimmer: §2.7's in-flight-status-text
+   This is the workbench's sanctioned shimmer (the main chat's is
+   `progress-shimmer` below; one per view): §2.7's in-flight-status-text
    carve-out (2026-08-12, live A/B verdict over LiveDots — see
    devlog 2026-08-12-thinking-timer-and-shimmer-verdict). It passes
    the §2.7 one-sentence test ("the band sweeping the label = the
@@ -899,6 +900,53 @@ code {
 }
 @media (prefers-reduced-motion: reduce) {
   .thinking-shimmer {
+    animation: none;
+    background-image: none;
+    color: var(--color-ink-soft);
+  }
+}
+
+/* The main chat's line under the typing bubble: a band of the same kind
+   on its doing part (TypingBubble `ProgressDoing`; main chat PRD ruling
+   137, ticket 93). §2.7's in-flight-status-text carve-out allows one per
+   view: this is the main chat's only one, the thinking row above is the
+   workbench's. Softer and slower than that one: the glyphs keep the
+   line's ink-soft and the band peaks at ink — about half the thinking
+   row's swing (L* 35 → 12 light, 77 → 92 dark, where its ink-muted →
+   ink is 55 → 12 and 58 → 92) — and a 2.4s loop against its 1.4s,
+   which is the dots' beat. The geometry is the thinking row's
+   (stops, size, travel), so the keyframes are a copy of its own. The
+   loop period is a B-class cycle, hence a literal rather than a
+   --motion-* token (§2.7 motion-token scope). Only the sentence sweeps:
+   the time after it is a sibling in solid ink-soft. With
+   .truncate-fade on the same element the fade's mask applies on top of
+   the sweep. The hand-off's copy carries the loop on where it was
+   (useTypingBubbleHandoff, by this animation's name). Reduced motion:
+   solid ink-soft, no gradient — the ticking seconds still carry
+   liveness. */
+@keyframes progress-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.progress-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-ink-soft) 35%,
+    var(--color-ink) 50%,
+    var(--color-ink-soft) 65%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: progress-shimmer 2.4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-shimmer {
     animation: none;
     background-image: none;
     color: var(--color-ink-soft);
