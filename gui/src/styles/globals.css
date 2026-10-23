@@ -913,9 +913,12 @@ code {
    workbench's. Softer and slower than that one: the glyphs keep the
    line's ink-soft and the band peaks at ink — about half the thinking
    row's swing (L* 35 → 12 light, 77 → 92 dark, where its ink-muted →
-   ink is 55 → 12 and 58 → 92) — and a 2.4s loop against its 1.4s,
-   which is the dots' beat. The geometry is the thinking row's
-   (stops, size, travel), so the keyframes are a copy of its own. The
+   ink is 55 → 12 and 58 → 92) — and one sweep every 2.4s against its
+   one every 0.7s. The stops and size are the thinking row's; the
+   travel is half of it, one tile of the repeating 200% background
+   (200% → 0%), so the loop is exactly one sweep and 2.4s means what it
+   says — the thinking row's 200% → -200% crosses two tiles, two
+   sweeps in each 1.4s loop (main chat PRD ruling 137, item 3). The
    loop period is a B-class cycle, hence a literal rather than a
    --motion-* token (§2.7 motion-token scope). Only the sentence sweeps:
    the time after it is a sibling in solid ink-soft. With
@@ -929,7 +932,7 @@ code {
     background-position: 200% 0;
   }
   to {
-    background-position: -200% 0;
+    background-position: 0% 0;
   }
 }
 .progress-shimmer {
