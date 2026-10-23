@@ -1,6 +1,6 @@
 # 92 表格的短列不折行
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-10-23 机器验收过、合入 main；等 JC 在 dev 里看那张东部预测表）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 136（2026-10-23；JC：「按你推荐推进」）。只改 GUI 与设计文档，不上切换器，JC 在 dev 里看。
 
