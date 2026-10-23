@@ -291,40 +291,6 @@ export interface ReasoningEffortChangedEvent {
 }
 
 /**
- * Bridge confirmation that a `reinject_tools` command succeeded.
- * `blocksAdded` is how many history entries were appended (one per
- * tool definition block read from GA's `tool_usable_history.json`).
- * Desktop surfaces this as a toast.
- */
-export interface ToolsReinjectedEvent {
-  kind: "tools_reinjected";
-  sessionId: string;
-  blocksAdded: number;
-  timestamp: string;
-}
-
-/**
- * Bridge confirmation that a Desktop Pet subprocess has been spawned
- * for this session and the per-turn hook is registered.
- */
-export interface PetAttachedEvent {
-  kind: "pet_attached";
-  sessionId: string;
-  port: number;
-  timestamp: string;
-}
-
-/**
- * Bridge confirmation that the Desktop Pet subprocess has terminated
- * and the per-turn hook has been removed.
- */
-export interface PetDetachedEvent {
-  kind: "pet_detached";
-  sessionId: string;
-  timestamp: string;
-}
-
-/**
  * Standalone, non-agent-loop conversation message. Emitted by the
  * bridge when GA's slash-command paths (`/btw`, `/session.x=v`) push
  * a `done` payload to display_queue with `source='system'` — those
@@ -374,9 +340,6 @@ export type IPCEvent =
   | HistoryLoadedEvent
   | LLMChangedEvent
   | ReasoningEffortChangedEvent
-  | ToolsReinjectedEvent
-  | PetAttachedEvent
-  | PetDetachedEvent
   | TitleGeneratedEvent
   | SystemMessageEvent;
 
@@ -428,35 +391,6 @@ export interface ShutdownCommand {
 }
 
 /**
- * Re-inject GA's tool definitions into this session's LLM history.
- * Mirrors GA's stapp.py "Reinject Tools" button — useful when a
- * long-running session has drifted and the agent is confused about
- * what tools are available.
- */
-export interface ReinjectToolsCommand {
-  kind: "reinject_tools";
-}
-
-/**
- * Spawn GA's `desktop_pet_v2.pyw` subprocess and register a per-turn
- * progress hook on this session's agent. `port` is the local HTTP
- * port the pet listens on (default 41983, matching GA's stapp.py).
- * Only one pet can run at a time globally since it binds a fixed port.
- */
-export interface AttachPetCommand {
-  kind: "attach_pet";
-  port?: number;
-}
-
-/**
- * Terminate the Desktop Pet subprocess (if running) and remove the
- * per-turn hook. No-op if no pet is currently attached.
- */
-export interface DetachPetCommand {
-  kind: "detach_pet";
-}
-
-/**
  * Ask the bridge for a short LLM-generated session title. Sent by
  * Galley Core's auto-title watcher, never by the GUI — mirrored here
  * because this file is the ts surface of the full wire protocol. The
@@ -477,7 +411,4 @@ export type IPCCommand =
   | SetLLMCommand
   | SetReasoningEffortCommand
   | ShutdownCommand
-  | ReinjectToolsCommand
-  | AttachPetCommand
-  | DetachPetCommand
   | GenerateTitleCommand;

@@ -37,7 +37,7 @@ import {
   type SubtaskReportUndeliveredPayload,
 } from "@/lib/subtasks";
 import { resolveAbsoluteTurnIndex } from "@/lib/turn-index";
-import { fromIPCError, makeAppError } from "@/types/app-error";
+import { fromIPCError } from "@/types/app-error";
 import type { AgentTurn, PendingAskUser } from "@/types/conversation";
 import type {
   IPCEvent,
@@ -699,113 +699,6 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       }
       return;
     }
-
-    case "tools_reinjected": {
-      const copy = currentCopy();
-      console.info("[ipc] tools_reinjected", {
-        sessionId: event.sessionId,
-        blocksAdded: event.blocksAdded,
-      });
-      useUiStore.getState().pushToast(
-        makeAppError({
-          category: "business",
-          severity: "info",
-          title: copy.toasts.toolsReinjected,
-          message: copy.toasts.toolsReinjectedMessage(event.blocksAdded),
-          hint: null,
-          retryable: false,
-          context: "reinject_tools",
-          traceback: null,
-        }),
-      );
-      return;
-    }
-
-    case "pet_attached": {
-      const copy = currentCopy();
-      console.info("[ipc] pet_attached", {
-        sessionId: event.sessionId,
-        port: event.port,
-      });
-      useRuntimeStore.getState().setPetAttachedSession(event.sessionId);
-      // Clear any stale migration target so a future detach can't
-      // re-trigger an attach on a session the user no longer wants.
-      useUiStore.getState().setPendingPetMigration(null);
-      useUiStore.getState().pushToast(
-        makeAppError({
-          category: "business",
-          severity: "info",
-          title: copy.toasts.petStarted,
-          message: copy.toasts.petStartedMessage,
-          hint: null,
-          retryable: false,
-          context: "attach_pet",
-          traceback: null,
-        }),
-      );
-      return;
-    }
-
-    case "pet_detached": {
-      const copy = currentCopy();
-      console.info("[ipc] pet_detached", {
-        sessionId: event.sessionId,
-      });
-      // Only clear top-level if it was attached to this session —
-      // defensive against out-of-order events. In practice the bridge
-      // only emits pet_detached for the session it was attached to.
-      if (useRuntimeStore.getState().petAttachedSessionId === event.sessionId) {
-        useRuntimeStore.getState().setPetAttachedSession(null);
-      }
-      // Implicit-migration relay: the user clicked "桌面宠物" in a
-      // non-holder session; we detached the holder, and now (port
-      // released, hook removed) we fire the follow-up attach. Skip
-      // the "已关闭" toast in this case — the about-to-arrive
-      // pet_attached toast tells the right story for migrations.
-      const pendingTarget = useUiStore.getState().pendingPetMigrationTo;
-      if (pendingTarget) {
-        useUiStore.getState().setPendingPetMigration(null);
-        useRuntimeStore
-          .getState()
-          .sendIPCCommand(pendingTarget, {
-            kind: "attach_pet",
-            port: 41983,
-          })
-          .catch((e) => {
-            // Migration ended half-way: detach succeeded, attach never
-            // reached the target bridge. The truthful end state is
-            // "pet closed" — surface the toast this branch skipped.
-            console.warn("[ipc] pet migration attach failed", e);
-            useUiStore.getState().pushToast(
-              makeAppError({
-                category: "business",
-                severity: "info",
-                title: copy.toasts.petClosed,
-                message: "",
-                hint: null,
-                retryable: false,
-                context: "attach_pet",
-                traceback: null,
-              }),
-            );
-          });
-        return;
-      }
-      useUiStore.getState().pushToast(
-        makeAppError({
-          category: "business",
-          severity: "info",
-          title: copy.toasts.petClosed,
-          message: "",
-          hint: null,
-          retryable: false,
-          context: "detach_pet",
-          traceback: null,
-        }),
-      );
-      return;
-    }
-
 
     case "system_message": {
       console.info("[ipc] system_message", {

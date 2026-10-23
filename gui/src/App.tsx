@@ -179,7 +179,6 @@ function App() {
   const setKeepInBackgroundOnClose = usePrefsStore(
     (s) => s.setKeepInBackgroundOnClose,
   );
-  const petAttachedSessionId = useRuntimeStore((s) => s.petAttachedSessionId);
 
   const toasts = useUiStore((s) => s.toasts);
   const pushToast = useUiStore((s) => s.pushToast);
@@ -630,7 +629,6 @@ function App() {
             onEditProject={(id) => setEditingProjectId(id)}
             onDeleteProject={(id) => setDeletingProjectId(id)}
             onArchiveSessions={(ids) => archiveSessionsBulk(ids)}
-            petAttachedSessionId={petAttachedSessionId}
           />
         }
         main={

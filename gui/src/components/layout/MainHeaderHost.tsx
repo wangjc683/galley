@@ -5,7 +5,6 @@ import {
 import type { RuntimeIndicator } from "@/components/layout/header/runtime-indicator";
 import { type ReactNode, useContext, useState } from "react";
 import { GitReviewContext } from "@/lib/git-review";
-import { useActiveRuntime } from "@/hooks/useActiveSession";
 import { ResetMainChatDialog } from "@/components/screens/settings/runtime/ResetMainChatAccess";
 import type { SettingsTab } from "@/components/screens/settings/settings-types";
 import { findInOpenConversation } from "@/lib/find-in-conversation";
@@ -15,15 +14,13 @@ import { useAppUpdateStore } from "@/stores/app-update";
 import { useBrowserControlStore } from "@/stores/browser-control";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
-import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
-import { useUiStore } from "@/stores/ui";
 
 /**
  * Self-subscribing wrapper around the MainHeader, extracted from
  * `App.tsx`. Header-only concerns (the 显示 popover's width / font /
- * theme, reinject, the pet toggle, app-update restart) select their
- * stores here; App passes down only what must stay single-instance at its
+ * theme, app-update restart) select their stores here; App passes down
+ * only what must stay single-instance at its
  * level (per-platform channel statuses and the restart action from
  * `useChannelsStatus`, the engine indicator from `useLLMDisplay`, the
  * settings opener).
@@ -101,10 +98,6 @@ export function MainHeaderHost({
   const hasRunningSessions = useMessagesStore((s) =>
     Object.values(s.byId).some((messages) => messages.agentRunning),
   );
-  const bridgeStatus = useActiveRuntime((r) => r.bridgeStatus, "idle");
-  const sendIPCCommand = useRuntimeStore((s) => s.sendIPCCommand);
-  const petAttachedSessionId = useRuntimeStore((s) => s.petAttachedSessionId);
-  const setPendingPetMigration = useUiStore((s) => s.setPendingPetMigration);
   const restartAppUpdate = useAppUpdateStore((s) => s.restart);
   const appUpdateStatus = useAppUpdateStore((s) => s.status);
   // 重置主对话… from the title menu opens Settings' own confirm (ticket
@@ -178,51 +171,6 @@ export function MainHeaderHost({
       onChangeThemePreference={(preference) => {
         void setThemePreference(preference);
       }}
-      onReinjectTools={() => {
-        // Reinject targets the currently active session — that's
-        // the conversation the user is reading when they notice
-        // tool drift. No-op if no active session (button is
-        // available but does nothing rather than throwing).
-        if (!activeSessionId) return;
-        if (bridgeStatus !== "connected") return;
-        void sendIPCCommand(activeSessionId, {
-          kind: "reinject_tools",
-        });
-      }}
-      onTogglePet={() => {
-        // Three cases (see devlog 2026-05-14 pet UX overhaul):
-        //   1. Active session HOLDS the pet → detach (close).
-        //   2. Pet on another session → implicit migrate:
-        //      detach old + stash target; the pet_detached IPC
-        //      handler fires the follow-up attach once the
-        //      port is released.
-        //   3. No pet anywhere → attach to active.
-        // The sidebar Cat badge tells the user where the pet
-        // currently lives, so the menu's "桌面宠物" always
-        // reads as "I want it here" without surprise.
-        if (!activeSessionId) return;
-        if (petAttachedSessionId === activeSessionId) {
-          void sendIPCCommand(activeSessionId, {
-            kind: "detach_pet",
-          });
-          return;
-        }
-        if (bridgeStatus !== "connected") return;
-        if (petAttachedSessionId) {
-          setPendingPetMigration(activeSessionId);
-          void sendIPCCommand(petAttachedSessionId, {
-            kind: "detach_pet",
-          });
-          return;
-        }
-        void sendIPCCommand(activeSessionId, {
-          kind: "attach_pet",
-          port: 41983,
-        });
-      }}
-      currentSessionHasPet={
-        !!activeSessionId && petAttachedSessionId === activeSessionId
-      }
       onRenameSession={
         canRenameSession
           ? (newTitle) => {

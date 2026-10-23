@@ -28,17 +28,6 @@ interface UiState {
   toasts: AppError[];
 
   /**
-   * Desktop Pet implicit-migration staging slot. Set by the title-menu
-   * click in a session that doesn't currently hold the pet; consumed
-   * by the pet_detached IPC handler to fire the follow-up attach_pet
-   * once the old pet's port is released.
-   *
-   * Pure UI coordination state, no persistence — pet's subprocess dies
-   * on app exit anyway.
-   */
-  pendingPetMigrationTo: string | null;
-
-  /**
    * "Open this session and park this message at the anchor line" —
    * set by a palette full-text hit, consumed by useStickyScroll once
    * the session's turns are on screen. `nonce` lets the same message
@@ -167,8 +156,6 @@ interface UiActions {
   pushToast: (e: AppError) => void;
   dismissToast: (id: string) => void;
 
-  setPendingPetMigration: (sessionId: string | null) => void;
-
   requestLocate: (sessionId: string, messageId: string, query?: string) => void;
   clearLocate: () => void;
 
@@ -200,7 +187,6 @@ export const useUiStore = create<UiStore>((set, get) => ({
   paletteScope: null,
   settingsOpen: false,
   toasts: [],
-  pendingPetMigrationTo: null,
   locateRequest: null,
   reviewRequest: 0,
   todoPanelOpen: {
@@ -239,9 +225,6 @@ export const useUiStore = create<UiStore>((set, get) => ({
     set((state) => ({
       toasts: state.toasts.filter((t) => t.id !== id),
     })),
-
-  setPendingPetMigration: (sessionId) =>
-    set({ pendingPetMigrationTo: sessionId }),
 
   requestLocate: (sessionId, messageId, query) =>
     set({

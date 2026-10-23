@@ -46,22 +46,15 @@ def test_parent_loss_reason_none_when_alive_and_stable(
     assert _watchdog.parent_loss_reason(parent_pid=123, original_ppid=100) is None
 
 
-def test_exit_parentless_runs_cleanup_then_exits(
+def test_exit_parentless_hard_exits_with_zero(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """os._exit skips finally/atexit, so parent-loss exit must run the
-    registered cleanup (e.g. pet detach) explicitly before dying. The
-    cleanup iterable is read at call time so late appends are honored."""
-    calls: list[str] = []
+    """Parent-loss exit goes through the os._exit patch point with code 0;
+    the trailing SystemExit only fires when that patch point returns."""
     codes: list[int] = []
     monkeypatch.setattr(_watchdog, "_EXIT_FOR_PARENT_LOSS", lambda code: codes.append(code))
 
     with pytest.raises(SystemExit):
-        _watchdog.exit_parentless(
-            "test parent loss",
-            label="unit",
-            cleanup=[lambda: calls.append("pet")],
-        )
+        _watchdog.exit_parentless("test parent loss", label="unit")
 
-    assert calls == ["pet"]
     assert codes == [0]

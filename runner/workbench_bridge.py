@@ -38,27 +38,21 @@ from runner.ipc import (
     AbortCommand,
     AskUserEvent,
     AskUserResponseCommand,
-    AttachPetCommand,
     Command,
-    DetachPetCommand,
     ErrorEvent,
     GenerateTitleCommand,
     HistoryLoadedEvent,
     IPCProtocolError,
     LLMChangedEvent,
     LoadHistoryCommand,
-    PetAttachedEvent,
-    PetDetachedEvent,
     ReadyEvent,
     ReasoningEffortChangedEvent,
-    ReinjectToolsCommand,
     RunCompleteEvent,
     SetLLMCommand,
     SetReasoningEffortCommand,
     ShutdownCommand,
     SystemMessageEvent,
     TitleGeneratedEvent,
-    ToolsReinjectedEvent,
     TurnEndEvent,
     TurnProgressEvent,
     TurnStartEvent,
@@ -317,14 +311,6 @@ def _to_json_safe(obj: Any) -> Any:
 _managed_model_config_from_env = managed_runtime.managed_model_config_from_env
 
 _USAGE_FIELDS = ("requests", "input", "output", "cache_create", "cache_read")
-
-
-# Best-effort cleanup hooks run before the parent-loss hard exit (see
-# runner/_watchdog.py). os._exit skips finally blocks and atexit handlers,
-# so child processes (the desktop pet) must be torn down explicitly or they
-# leak. Passed to the watchdog as its `cleanup` iterable; read at exit time
-# so pet-attach appends after the watchdog starts are still honored.
-_PARENT_LOSS_CLEANUP: list[Any] = []
 
 
 def _llm_display_name(raw: str) -> str:
@@ -668,13 +654,6 @@ class Bridge:
         self.agent: Any = None
         self.agentmain: Any = None
         self._btw_handler: Any = None
-        # Desktop Pet subprocess handle (when attached). None when not
-        # running. Only one pet can be attached at a time per bridge —
-        # and effectively globally across all bridges, because the pet
-        # binds a fixed local port (default 41983). Re-attaching while
-        # one is already running first detaches the old.
-        self._pet_process: Any = None
-        self._pet_port: int = 0
         # Serializes the run-completion check-emit-clear across threads:
         # natural turn_end (agent thread), Abort (command thread), and
         # the drain's `done` handling (slash-command completion and the
@@ -689,11 +668,6 @@ class Bridge:
         # not close the newer run, nor pre-empt Abort's ABORTED (a user
         # stop must reach Core as ABORTED, e.g. `live.lastExit`).
         self._run_generation: int = 0
-        # The parent watchdog exits with os._exit, which skips finally
-        # blocks and atexit — an attached pet would survive as an orphan
-        # holding its fixed port (and Galley Core is already gone, so
-        # nothing else cleans it up). Register best-effort cleanup.
-        _PARENT_LOSS_CLEANUP.append(lambda: self._handle_detach_pet(silent=True))
 
     def _current_absolute_turn_index(self, turn_index: int) -> int | None:
         if self._current_message_turn_base is None:
@@ -1791,17 +1765,9 @@ class Bridge:
             self._handle_set_llm(cmd)
         elif isinstance(cmd, SetReasoningEffortCommand):
             self._handle_set_reasoning_effort(cmd)
-        elif isinstance(cmd, ReinjectToolsCommand):
-            self._handle_reinject_tools()
-        elif isinstance(cmd, AttachPetCommand):
-            self._handle_attach_pet(cmd)
-        elif isinstance(cmd, DetachPetCommand):
-            self._handle_detach_pet()
         elif isinstance(cmd, GenerateTitleCommand):
             self._handle_generate_title(cmd)
         elif isinstance(cmd, ShutdownCommand):
-            # Make sure pet subprocess + hook don't leak on shutdown.
-            self._handle_detach_pet(silent=True)
             self.shutdown_event.set()
 
     def _handle_set_llm(self, cmd: SetLLMCommand) -> None:
@@ -1903,90 +1869,6 @@ class Bridge:
             )
         )
 
-    # ---------------- Reinject Tools ----------------
-
-    def _handle_reinject_tools(self) -> None:
-        """Re-inject GA's tool definitions into this session's LLM history.
-
-        Mirrors `stapp.py` (GA's official Streamlit frontend) Reinject
-        Tools button:
-
-          1. Clear `agent.llmclient.last_tools` so the next prompt
-             rebuilds the tool block from scratch
-          2. Read `<ga_path>/assets/tool_usable_history.json` — a list
-             of history blocks describing each available tool
-          3. Append those blocks to `agent.llmclient.backend.history`
-
-        After this the LLM's next reasoning step has fresh, complete
-        tool definitions in context — useful when a long session has
-        drifted (compression / forgetting) and the agent is confused
-        about what tools exist or how to call them.
-
-        Coupling point (AGENTS.md constitution §"Non-Invasive To GenericAgent"):
-          - Direct read of `<ga_path>/assets/tool_usable_history.json`
-          - Path + JSON schema are GA internal — re-audit at each GA
-            baseline upgrade. As of baseline 1a8abc4f this matches
-            stapp.py:67-74 and the file exists in the expected layout.
-        """
-        import json as _json
-
-        try:
-            self.ga.history()
-        except Exception as e:
-            self._emit_error(
-                f"Cannot access backend.history: {e}",
-                traceback.format_exc(),
-                category="business",
-                context="reinject_tools",
-            )
-            return
-        assets_path = Path(self.ga_path) / "assets" / "tool_usable_history.json"
-        if not assets_path.is_file():
-            self._emit_error(
-                f"GA asset not found: {assets_path}",
-                None,
-                category="business",
-                context="reinject_tools",
-            )
-            return
-        try:
-            with assets_path.open(encoding="utf-8") as f:
-                tool_hist = _json.load(f)
-        except Exception as e:
-            self._emit_error(
-                f"Failed to parse tool_usable_history.json: {e}",
-                traceback.format_exc(),
-                category="business",
-                context="reinject_tools",
-            )
-            return
-        if not isinstance(tool_hist, list):
-            self._emit_error(
-                "tool_usable_history.json: expected a list of history blocks",
-                None,
-                category="business",
-                context="reinject_tools",
-            )
-            return
-        # Reset GA's per-LLM "last seen tools" so the next prompt rebuilds
-        # the tool block from scratch — mirrors stapp.py exactly.
-        self.ga.clear_last_tools()
-        try:
-            self.ga.extend_history(tool_hist)
-        except Exception as e:
-            self._emit_error(
-                f"Failed to extend backend.history: {e}",
-                traceback.format_exc(),
-                context="reinject_tools",
-            )
-            return
-        self._emit(
-            ToolsReinjectedEvent(
-                sessionId=self.session_id,
-                blocksAdded=len(tool_hist),
-            )
-        )
-
     # ---------------- Auto title (generate_title) ----------------
 
     # Generous on purpose: the ask runs on a daemon worker, the sidebar
@@ -2070,140 +1952,6 @@ class Bridge:
             target=worker, daemon=True, name=f"btw-{self.session_id}"
         ).start()
 
-    # ---------------- Desktop Pet ----------------
-
-    def _handle_attach_pet(self, cmd: AttachPetCommand) -> None:
-        """Spawn GA's `desktop_pet_v2.pyw` subprocess and register a
-        per-turn hook that POSTs progress to its local HTTP listener.
-
-        Pet binds a fixed port (default 41983) so only one pet can run
-        at a time. If a pet is already attached to this session, the
-        old one is detached first.
-
-        Coupling point (AGENTS.md constitution §"Non-Invasive To GenericAgent"):
-          - File path: `<ga_path>/frontends/desktop_pet_v2.pyw`
-            (falls back to `desktop_pet.pyw` mirroring stapp.py:77-78)
-          - The pet subprocess is GA-owned code that we simply spawn;
-            we don't modify it. Re-audit at each GA baseline upgrade.
-        """
-        import subprocess as _subprocess
-
-        # Detach existing pet (if any) before re-attaching.
-        if self._pet_process is not None:
-            self._handle_detach_pet(silent=True)
-
-        # Locate the pet script.
-        pet_script = Path(self.ga_path) / "frontends" / "desktop_pet_v2.pyw"
-        if not pet_script.is_file():
-            pet_script = Path(self.ga_path) / "frontends" / "desktop_pet.pyw"
-        if not pet_script.is_file():
-            self._emit_error(
-                f"Desktop pet script not found in {self.ga_path}/frontends/",
-                None,
-                category="business",
-                context="attach_pet",
-            )
-            return
-
-        # Spawn pet subprocess.
-        python_exe = sys.executable
-        try:
-            self._pet_process = _subprocess.Popen(
-                [python_exe, str(pet_script)],
-                stdout=_subprocess.DEVNULL,
-                stderr=_subprocess.DEVNULL,
-                **process_command.no_window_kwargs(),
-            )
-            self._pet_port = cmd.port
-        except Exception as e:
-            self._pet_process = None
-            self._emit_error(
-                f"Failed to spawn desktop pet: {e}",
-                traceback.format_exc(),
-                context="attach_pet",
-            )
-            return
-
-        # Register the per-turn hook. Distinct key from our IPC hook
-        # so detach doesn't accidentally remove the wrong entry, and
-        # so coexistence with GA's own 'pet' key (if user runs stapp.py
-        # against the same agent — unusual but possible) doesn't clash.
-        port = cmd.port
-
-        def _pet_hook(ctx: dict[str, Any]) -> None:
-            from urllib.parse import quote
-            from urllib.request import urlopen
-
-            parts = [f"Turn {ctx.get('turn', '?')}"]
-            if ctx.get("summary"):
-                parts.append(str(ctx["summary"]))
-            if ctx.get("exit_reason"):
-                parts.append("DONE")
-            msg = quote("\n".join(parts))
-
-            def _do(url: str) -> None:
-                try:
-                    urlopen(url, timeout=2)
-                except Exception:
-                    pass
-
-            threading.Thread(
-                target=_do,
-                args=(f"http://127.0.0.1:{port}/?msg={msg}",),
-                daemon=True,
-            ).start()
-            if ctx.get("exit_reason"):
-                threading.Thread(
-                    target=_do,
-                    args=(f"http://127.0.0.1:{port}/?state=idle",),
-                    daemon=True,
-                ).start()
-
-        try:
-            self.ga.register_turn_hook(f"galley_pet_{self.session_id}", _pet_hook)
-        except Exception as e:
-            # Hook registration failed — kill the orphan pet subprocess.
-            self._handle_detach_pet(silent=True)
-            self._emit_error(
-                f"Failed to register pet hook: {e}",
-                traceback.format_exc(),
-                context="attach_pet",
-            )
-            return
-
-        self._emit(
-            PetAttachedEvent(
-                sessionId=self.session_id,
-                port=cmd.port,
-            )
-        )
-
-    def _handle_detach_pet(self, silent: bool = False) -> None:
-        """Terminate the pet subprocess (if running) and remove the
-        per-turn hook. `silent=True` skips the IPC event — used during
-        shutdown to avoid emitting on a half-torn-down bridge.
-        """
-        # Remove hook first so any in-flight turn_end doesn't try to
-        # POST to a pet we're about to kill.
-        self.ga.unregister_turn_hook(f"galley_pet_{self.session_id}")
-        # Terminate subprocess.
-        proc = self._pet_process
-        self._pet_process = None
-        self._pet_port = 0
-        if proc is not None:
-            try:
-                proc.terminate()
-                # Don't block bridge mainloop on the pet cleaning up —
-                # daemon process, OS will reap if needed.
-                try:
-                    proc.wait(timeout=1.0)
-                except Exception:
-                    proc.kill()
-            except Exception:
-                pass
-        if not silent:
-            self._emit(PetDetachedEvent(sessionId=self.session_id))
-
     def _load_history(self, messages: list[dict[str, Any]]) -> None:
         """Inject conversation history into the backend.
 
@@ -2244,12 +1992,6 @@ class Bridge:
                 self._emit_error(
                     f"command dispatch failed: {e}", traceback.format_exc()
                 )
-
-        # Whatever ended the loop (Shutdown command, stdin EOF, stdout
-        # write failure), the pet subprocess must not outlive the bridge —
-        # an orphan keeps holding its fixed port and blocks the next
-        # attach. Idempotent: the Shutdown command path already detached.
-        self._handle_detach_pet(silent=True)
 
         # Flush tail events deterministically: enqueue the writer-exit
         # sentinel and join with a bound. Everything queued before the
@@ -2320,7 +2062,6 @@ def main() -> int:
         _watchdog.parse_core_pid(),
         label="workbench-bridge",
         thread_name="galley-bridge-parent-watchdog",
-        cleanup=_PARENT_LOSS_CLEANUP,
     )
 
     ga_path = str(Path(args.ga_path).expanduser().resolve())

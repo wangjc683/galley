@@ -103,11 +103,6 @@ export interface SidebarProps {
   /** Count of archived sessions. Not rendered as a numeral — it only
    * decides whether the footer exists at all (0 → no footer row). */
   archivedCount?: number;
-  /** Session that currently holds the Desktop Pet, or `null` when no
-   * pet is running. Renders a small Cat badge on the matching session
-   * row so users see "where the pet lives" at a glance — non-
-   * interactive status, not a click target. */
-  petAttachedSessionId?: string | null;
 }
 
 /**
@@ -184,7 +179,6 @@ export function Sidebar({
   onOpenEarlier,
   onOpenArchived,
   archivedCount = 0,
-  petAttachedSessionId,
 }: SidebarProps) {
   const copy = useCopy();
   const mainChat = useMemo(() => findMainChat(sessions), [sessions]);
@@ -382,7 +376,6 @@ export function Sidebar({
   const rowWiring = {
     activeId: rowActiveId,
     projects: navigationProjects,
-    petAttachedSessionId,
     onSelectSession: handleSelectSession,
     onArchiveSession,
     onTogglePinSession,

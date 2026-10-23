@@ -11,9 +11,8 @@ Scope rule (2026-07-11 decision): GaSession wraps exactly the
 *internal / underscore / backend* surface — the things a baseline
 upgrade can silently move:
 
-- ``agent._turn_end_hooks``       → register/unregister_turn_hook
-- ``agent.llmclient.backend.history`` → history / set_history /
-                                        extend_history / context_usage
+- ``agent._turn_end_hooks``       → register_turn_hook
+- ``agent.llmclient.backend.history`` → set_history / context_usage
 - ``agent.llmclient.backend.raw_ask`` → side_ask (read-only one-shot,
                                         no history write)
 - ``agent.llmclient.backend.reasoning_effort`` → active_backend_id /
@@ -22,7 +21,6 @@ upgrade can silently move:
                                         override, same in-process write
                                         as upstream's
                                         ``/session.reasoning_effort=``)
-- ``agent.llmclient.last_tools``  → clear_last_tools
 - ``agent._ga_project_mode_*``    → set_project_mode (Galley-namespaced,
                                     in-memory only per Rule 1)
 - ``agentmain.GenericAgentHandler`` module binding → install_handler
@@ -143,34 +141,15 @@ class GaSession:
 
     # ---------------- turn-end hooks ----------------
     # GA's agent_runner_loop calls each registered hook after every
-    # loop step. The dict lives on the agent object; both Galley
-    # consumers (workbench turn streaming, desktop pet) register here.
+    # loop step. The dict lives on the agent object; Galley's consumer
+    # (workbench turn streaming) registers here.
 
     def register_turn_hook(self, key: str, fn: Callable[..., Any]) -> None:
         if not hasattr(self.agent, "_turn_end_hooks"):
             self.agent._turn_end_hooks = {}
         self.agent._turn_end_hooks[key] = fn
 
-    def unregister_turn_hook(self, key: str) -> None:
-        """Best-effort removal — safe on agents that never had hooks."""
-        try:
-            hooks = getattr(self.agent, "_turn_end_hooks", None)
-            if isinstance(hooks, dict):
-                hooks.pop(key, None)
-        except Exception:
-            pass
-
     # ---------------- backend history ----------------
-
-    def history(self) -> list[Any]:
-        """The live backend history list. Raises AttributeError-family
-        errors when the backend isn't shaped as expected — callers own
-        the error narration (their messages are user-facing)."""
-        result: list[Any] = self.agent.llmclient.backend.history
-        return result
-
-    def extend_history(self, blocks: list[Any]) -> None:
-        self.history().extend(blocks)
 
     def set_history(self, messages: list[dict[str, Any]]) -> str | None:
         """Replace backend history with desktop-shape ``messages``
@@ -355,15 +334,6 @@ class GaSession:
             if any(t.strip() for t in texts):
                 return "".join(texts)
         return text
-
-    def clear_last_tools(self) -> None:
-        """Reset GA's per-LLM "last seen tools" cache so the next prompt
-        rebuilds the tool block from scratch (mirrors stapp.py). Older
-        GA versions lack the attribute — non-fatal by design."""
-        try:
-            self.agent.llmclient.last_tools = ""
-        except Exception:
-            pass
 
     def context_usage(self) -> dict[str, int]:
         """Estimate backend context usage without mutating runtime state.

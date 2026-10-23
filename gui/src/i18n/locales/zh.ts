@@ -201,8 +201,6 @@ export const zhCopy = {
     thinking: "思考中",
     waitingForYou: "等你回复",
     unread: "未读",
-    desktopPetAttached: "桌面宠物附着中",
-    desktopPetAttachedTitle: "桌面宠物附着中 · 进入此对话可关闭",
     supervisorCreated: "Supervisor 创建",
     scheduledCreated: "定时任务创建",
     newReplyTitle: "有新回复",
@@ -466,9 +464,6 @@ export const zhCopy = {
     /** 标题菜单第一项：⌘K 面板只搜这个对话（票 28，裁决 77）。 */
     findInChat: "查找聊天记录…",
     rename: "重命名",
-    reinjectTools: "重新注入工具",
-    desktopPet: "桌面宠物",
-    closeDesktopPet: "关闭桌面宠物",
     /** 主对话标题菜单的最后一项，弹出设置里那个按住 5 秒的确认框（票 28）。 */
     resetMainChat: "重置主对话…",
   },
@@ -1942,12 +1937,6 @@ export const zhCopy = {
     imageUnsupported: "不支持的图片格式，请粘贴或选择 PNG / JPEG / WebP。",
     textDropBlocked: "不支持拖入文本",
     textDropBlockedMessage: "拖入的文字或链接无法接收，请改用复制粘贴。",
-    toolsReinjected: "工具已重新注入",
-    toolsReinjectedMessage: (count: number) =>
-      `已为本对话注入 ${count} 条工具定义。`,
-    petStarted: "桌面宠物已启动",
-    petStartedMessage: "宠物会实时显示本对话的进展。",
-    petClosed: "桌面宠物已关闭",
     archived: "已归档",
     archivedCount: (count: number) => `已归档 ${count} 个对话`,
     deleteFailed: "删除失败",

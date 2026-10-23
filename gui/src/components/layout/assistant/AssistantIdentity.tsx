@@ -14,7 +14,7 @@ import { AssistantAvatar } from "./AssistantAvatar";
  * caret, and under the name a state that needs you. MainHeader renders it
  * as the label of the title menu's trigger (SessionTitleMenu), so the
  * whole row hovers like the title button and opens the main chat's
- * menu — 重新注入工具, 桌面宠物, no rename — the way tapping a
+ * menu — 查找聊天记录, 重置主对话, no rename — the way tapping a
  * contact's name opens their page in an IM app.
  *
  * The second line is a chat title bar's (lib/assistant.ts): only a state

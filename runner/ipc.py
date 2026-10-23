@@ -254,48 +254,6 @@ class ReasoningEffortChangedEvent:
 
 
 @dataclass
-class ToolsReinjectedEvent:
-    """Bridge confirmation that a `reinject_tools` command succeeded.
-
-    Mirrors GA's stapp.py 'Reinject Tools' button behavior — re-reads
-    GA's `assets/tool_usable_history.json` and appends those tool
-    definition blocks back into `agent.llmclient.backend.history`, so
-    an LLM whose tool understanding drifted in a long session gets a
-    fresh reminder of what's available. Bridge emits this event on
-    success; failures use the standard `error` event.
-    """
-
-    sessionId: str
-    blocksAdded: int
-    timestamp: str = field(default_factory=_now_iso)
-    kind: str = "tools_reinjected"
-
-
-@dataclass
-class PetAttachedEvent:
-    """Bridge confirmation that the Desktop Pet subprocess has been
-    spawned and the per-turn hook is registered on this session's
-    agent. Desktop uses this to flip the menu item's "running" state.
-    """
-
-    sessionId: str
-    port: int
-    timestamp: str = field(default_factory=_now_iso)
-    kind: str = "pet_attached"
-
-
-@dataclass
-class PetDetachedEvent:
-    """Bridge confirmation that the Desktop Pet subprocess has been
-    terminated and the per-turn hook removed.
-    """
-
-    sessionId: str
-    timestamp: str = field(default_factory=_now_iso)
-    kind: str = "pet_detached"
-
-
-@dataclass
 class TitleGeneratedEvent:
     """Result of a `generate_title` command: a short LLM-generated
     session title. Emitted at most once per command; failures are
@@ -348,9 +306,6 @@ Event = (
     | HistoryLoadedEvent
     | LLMChangedEvent
     | ReasoningEffortChangedEvent
-    | ToolsReinjectedEvent
-    | PetAttachedEvent
-    | PetDetachedEvent
     | TitleGeneratedEvent
     | SystemMessageEvent
 )
@@ -413,41 +368,6 @@ class ShutdownCommand:
 
 
 @dataclass
-class ReinjectToolsCommand:
-    """Re-inject GA's tool definitions into the LLM history of this
-    session. Useful when an agent's long-running context has caused
-    its tool understanding to drift. Reads from GA's
-    `assets/tool_usable_history.json` (read-only — see AGENTS.md
-    constitution §"关于读取" — direct read of GA internal asset is
-    allowed because read-only, but path is a coupling point that must
-    be re-audited at GA baseline upgrades).
-    """
-
-    kind: str = "reinject_tools"
-
-
-@dataclass
-class AttachPetCommand:
-    """Spawn GA's `desktop_pet_v2.pyw` subprocess and register a per-
-    turn hook on this session's agent to push progress updates to
-    the pet's local HTTP listener. The pet is global (only one
-    instance can run at a time since the pyw binds a fixed port).
-    """
-
-    port: int = 41983
-    kind: str = "attach_pet"
-
-
-@dataclass
-class DetachPetCommand:
-    """Terminate the desktop pet subprocess (if running) and remove
-    the per-turn hook from this session's agent.
-    """
-
-    kind: str = "detach_pet"
-
-
-@dataclass
 class GenerateTitleCommand:
     """Ask the bridge for a short LLM-generated session title.
 
@@ -472,9 +392,6 @@ Command = (
     | SetLLMCommand
     | SetReasoningEffortCommand
     | ShutdownCommand
-    | ReinjectToolsCommand
-    | AttachPetCommand
-    | DetachPetCommand
     | GenerateTitleCommand
 )
 
@@ -496,9 +413,6 @@ EVENT_KINDS: dict[str, type] = {
     "history_loaded": HistoryLoadedEvent,
     "llm_changed": LLMChangedEvent,
     "reasoning_effort_changed": ReasoningEffortChangedEvent,
-    "tools_reinjected": ToolsReinjectedEvent,
-    "pet_attached": PetAttachedEvent,
-    "pet_detached": PetDetachedEvent,
     "title_generated": TitleGeneratedEvent,
     "system_message": SystemMessageEvent,
 }
@@ -511,9 +425,6 @@ COMMAND_KINDS: dict[str, type] = {
     "set_llm": SetLLMCommand,
     "set_reasoning_effort": SetReasoningEffortCommand,
     "shutdown": ShutdownCommand,
-    "reinject_tools": ReinjectToolsCommand,
-    "attach_pet": AttachPetCommand,
-    "detach_pet": DetachPetCommand,
     "generate_title": GenerateTitleCommand,
 }
 

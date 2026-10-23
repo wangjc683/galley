@@ -84,30 +84,6 @@ export interface MainHeaderProps {
   resolvedTheme?: ResolvedTheme;
   onChangeThemePreference?: (preference: ThemePreference) => void;
   /**
-   * Session-level overflow menu items (`⋯` button). The menu holds
-   * actions that operate on the current session and don't deserve a
-   * dedicated TopBar slot:
-   *
-   *   - Reinject Tools: re-injects GA's tool definitions into the
-   *     active session's LLM history. Low-frequency power-user fix
-   *     for "agent forgot its tools" after long runs.
-   *   - Desktop Pet: launches GA's `desktop_pet_v2.pyw` subprocess
-   *     and attaches a turn_end hook to a session. Clicking from a
-   *     non-holder session implicitly migrates the pet here (the
-   *     parent's onTogglePet handles the detach/attach sequence).
-   *
-   * `currentSessionHasPet` = pet is attached to the session whose
-   * title this menu represents. Drives the 2-state label:
-   *   true  → "关闭桌面宠物"
-   *   false → "桌面宠物"
-   * Whether a pet exists ON ANOTHER session is conveyed by the
-   * Sidebar's Cat badge; the menu intentionally doesn't surface
-   * that distinction.
-   */
-  onReinjectTools?: () => void;
-  onTogglePet?: () => void;
-  currentSessionHasPet?: boolean;
-  /**
    * Rename the active session. When provided, the title menu shows a
    * "重命名" entry that flips the title block into an inline input —
    * mirrors the right-click rename in Sidebar so users have two
@@ -227,9 +203,6 @@ export function MainHeader({
   themePreference = "system",
   resolvedTheme = "light",
   onChangeThemePreference,
-  onReinjectTools,
-  onTogglePet,
-  currentSessionHasPet = false,
   onRenameSession,
   onFindInChat,
   onResetMainChat,
@@ -278,9 +251,9 @@ export function MainHeader({
     >
       {/* Title-as-dropdown trigger. The title text + caret
           form a single button that opens session-scoped actions
-          (Reinject Tools / Desktop Pet, plus Rename when V0.1 #3
-          lands). Notion / Linear / Arc convention — clicking the
-          document name opens its menu.
+          (查找聊天记录, plus 重命名 or the main chat's 重置主对话).
+          Notion / Linear / Arc convention — clicking the document
+          name opens its menu.
 
           History: previously a bare title `<span>` with a separate
           `⋯` button next to it. Visually the trailing dots read as
@@ -336,9 +309,6 @@ export function MainHeader({
             title={sessionTitle}
             label={identity}
             onFind={onFindInChat}
-            onReinjectTools={onReinjectTools}
-            onTogglePet={onTogglePet}
-            currentSessionHasPet={currentSessionHasPet}
             onRename={onRenameSession}
             onResetMainChat={onResetMainChat}
             resetMainChatBlocked={resetMainChatBlocked}

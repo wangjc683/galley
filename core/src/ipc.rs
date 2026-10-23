@@ -63,9 +63,6 @@ pub enum IpcEvent {
     Error(ErrorEvent),
     HistoryLoaded(HistoryLoadedEvent),
     LlmChanged(LlmChangedEvent),
-    ToolsReinjected(ToolsReinjectedEvent),
-    PetAttached(PetAttachedEvent),
-    PetDetached(PetDetachedEvent),
     TitleGenerated(TitleGeneratedEvent),
     SystemMessage(SystemMessageEvent),
     ReasoningEffortChanged(ReasoningEffortChangedEvent),
@@ -88,9 +85,6 @@ impl IpcEvent {
             IpcEvent::Error(e) => &e.session_id,
             IpcEvent::HistoryLoaded(e) => &e.session_id,
             IpcEvent::LlmChanged(e) => &e.session_id,
-            IpcEvent::ToolsReinjected(e) => &e.session_id,
-            IpcEvent::PetAttached(e) => &e.session_id,
-            IpcEvent::PetDetached(e) => &e.session_id,
             IpcEvent::TitleGenerated(e) => &e.session_id,
             IpcEvent::SystemMessage(e) => &e.session_id,
             IpcEvent::ReasoningEffortChanged(e) => &e.session_id,
@@ -343,29 +337,6 @@ pub struct ReasoningEffortChangedEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ToolsReinjectedEvent {
-    pub session_id: String,
-    pub blocks_added: i64,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PetAttachedEvent {
-    pub session_id: String,
-    pub port: i64,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PetDetachedEvent {
-    pub session_id: String,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct TitleGeneratedEvent {
     pub session_id: String,
     pub title: String,
@@ -398,9 +369,6 @@ pub enum IpcCommand {
     SetLlm(SetLlmCommand),
     SetReasoningEffort(SetReasoningEffortCommand),
     Shutdown,
-    ReinjectTools,
-    AttachPet(AttachPetCommand),
-    DetachPet,
     GenerateTitle(GenerateTitleCommand),
 }
 
@@ -446,26 +414,11 @@ pub struct SetReasoningEffortCommand {
     pub value: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AttachPetCommand {
-    /// Local HTTP port the Desktop Pet subprocess binds to. Default
-    /// 41983 (matches GA's `stapp.py`). Python `runner/ipc.py`
-    /// `AttachPetCommand` declares `port: int = 41983`, so this field
-    /// must round-trip end-to-end: TS → Rust → Python. We use
-    /// `skip_serializing_if = Option::is_none` so omitting it from the
-    /// wire (when the TS caller doesn't specify) lets Python fall back
-    /// to its own default — sending `null` would error against Python's
-    /// strict-int dataclass.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub port: Option<u16>,
-}
-
 /// Context for the bridge's out-of-band title ask. Core owns the message
 /// store, so the prompt inputs travel in the command — the bridge never
 /// reads backend.history for this. Python default for `finalAnswer` is
-/// `""`, so `None` must serialize as an omitted field, mirroring the
-/// AttachPet `port` convention.
+/// `""`, so `None` must serialize as an omitted field — a `null` would
+/// fail Python's strict-typed dataclass.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GenerateTitleCommand {
@@ -778,10 +731,10 @@ mod tests {
         }
     }
 
-    /// Same drift class as `attach_pet_wire_uses_port_not_variant`:
-    /// Python decodes commands with strict kwargs, and its
-    /// `finalAnswer` default is `""` — a `null` on the wire would raise
-    /// in the dataclass. None must serialize as an omitted field.
+    /// Python decodes commands with strict kwargs (`cls(**payload)`),
+    /// and its `finalAnswer` default is `""` — a `null` on the wire
+    /// would raise in the dataclass. None must serialize as an omitted
+    /// field.
     #[test]
     fn serialize_command_generate_title() {
         let cmd = IpcCommand::GenerateTitle(GenerateTitleCommand {
@@ -802,44 +755,5 @@ mod tests {
             !s.contains("finalAnswer"),
             "None finalAnswer must be omitted (Python uses str default), got: {s}"
         );
-    }
-
-    /// Regression guard: the Rust↔Python `AttachPetCommand` schemas
-    /// must stay aligned. Python `runner/ipc.py` declares
-    /// `AttachPetCommand(port: int = 41983, kind: str = "attach_pet")`
-    /// and decodes via `cls(**payload)` — *strict* kwargs that error
-    /// on any unknown field. The original B2 mirror added a
-    /// speculative `variant` field on the Rust side; TS sent
-    /// `{kind, port: 41983}`, Rust dropped `port` and re-serialized
-    /// with `{kind, variant: null}`, Python raised
-    /// `AttachPetCommand.__init__() got an unexpected keyword argument
-    /// 'variant'`. Caught 2026-05-19 in JC's dogfood. Two invariants
-    /// guard against the same class of drift:
-    ///   1. The wire field is `port`, not `variant`
-    ///   2. When `port` is None, it's omitted (not serialized as
-    ///      `null`) so Python's int-typed default kicks in
-    #[test]
-    fn attach_pet_wire_uses_port_not_variant() {
-        let with_port = IpcCommand::AttachPet(AttachPetCommand { port: Some(41983) });
-        let s = serde_json::to_string(&with_port).unwrap();
-        assert!(s.contains("\"kind\":\"attach_pet\""), "{s}");
-        assert!(s.contains("\"port\":41983"), "{s}");
-        assert!(!s.contains("variant"), "Rust must not emit 'variant': {s}");
-
-        // Omitted port → field skipped, Python falls back to its
-        // 41983 default. Critical: must NOT serialize as `"port":null`.
-        let no_port = IpcCommand::AttachPet(AttachPetCommand { port: None });
-        let s = serde_json::to_string(&no_port).unwrap();
-        assert_eq!(
-            s, r#"{"kind":"attach_pet"}"#,
-            "None port must be omitted (Python uses int default), not serialized as null"
-        );
-
-        // Round-trip: TS-style input parses + re-serializes
-        // identically.
-        let from_ts = r#"{"kind":"attach_pet","port":41983}"#;
-        let parsed: IpcCommand = serde_json::from_str(from_ts).unwrap();
-        let reserialized = serde_json::to_string(&parsed).unwrap();
-        assert_eq!(reserialized, from_ts);
     }
 }

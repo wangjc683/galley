@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { readComposerDraft, saveComposerDraft } from "@/lib/composer-draft";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
-import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import type { SessionBriefWire } from "@/stores/sessions/shared";
 import { useSubtasksStore } from "@/stores/subtasks";
@@ -86,7 +85,6 @@ beforeEach(() => {
     requested: { [OLD_MAIN.id]: true },
     runErrors: { [SUBTASK.id]: "boom", [OTHER.id]: "kept" },
   });
-  useRuntimeStore.setState({ petAttachedSessionId: OLD_MAIN.id });
   saveComposerDraft(OLD_MAIN.id, { text: "没发出去的话", images: [] });
   tauriMocks.invoke.mockImplementation(async (command) => {
     if (command === "reset_main_chat") return NEW_MAIN;
@@ -150,7 +148,6 @@ describe("resetMainChat", () => {
     expect(subtasks.byParent).toEqual({});
     expect(subtasks.requested).toEqual({});
     expect(subtasks.runErrors).toEqual({ [OTHER.id]: "kept" });
-    expect(useRuntimeStore.getState().petAttachedSessionId).toBeNull();
     expect(readComposerDraft(OLD_MAIN.id)).toBeUndefined();
   });
 
@@ -171,7 +168,6 @@ describe("resetMainChat", () => {
     expect(sessions.activeSessionId).toBe(OLD_MAIN.id);
     expect(useUiStore.getState().settingsOpen).toBe(true);
     expect(useSubtasksStore.getState().runErrors[SUBTASK.id]).toBe("boom");
-    expect(useRuntimeStore.getState().petAttachedSessionId).toBe(OLD_MAIN.id);
     expect(readComposerDraft(OLD_MAIN.id)?.text).toBe("没发出去的话");
     expect(calls("get_or_create_main_chat")).toEqual([]);
   });

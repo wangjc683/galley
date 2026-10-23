@@ -93,8 +93,7 @@ function header(
       <MainHeader
         sessionTitle="Galley"
         identity={<AssistantIdentity mainChat={mainChat} subtasks={subtasks} />}
-        onReinjectTools={() => {}}
-        onTogglePet={() => {}}
+        onFindInChat={() => {}}
         {...props}
       />
     </Tooltip.Provider>,
@@ -137,8 +136,7 @@ describe("the open main chat's header", () => {
     expect(trigger).toContain("hover:bg-hover data-[state=open]:bg-hover");
     // The menu: the session's, minus rename.
     const menu = html.slice(html.indexOf("data-test-menu"));
-    expect(menu).toContain("重新注入工具");
-    expect(menu).toContain("桌面宠物");
+    expect(menu).toContain("查找聊天记录…");
     expect(menu).not.toContain("重命名");
     // Nothing in it drags the window: it is a button.
     expect(trigger).not.toContain("data-tauri-drag-region");

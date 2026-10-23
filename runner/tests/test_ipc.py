@@ -9,22 +9,16 @@ from runner.ipc import (
     PROTOCOL_VERSION,
     AbortCommand,
     AskUserResponseCommand,
-    AttachPetCommand,
-    DetachPetCommand,
     ErrorEvent,
     IPCProtocolError,
     LLMChangedEvent,
     LoadHistoryCommand,
-    PetAttachedEvent,
-    PetDetachedEvent,
     ReadyEvent,
-    ReinjectToolsCommand,
     RunCompleteEvent,
     SetLLMCommand,
     ShutdownCommand,
     ToolCallEndEvent,
     ToolCallStartEvent,
-    ToolsReinjectedEvent,
     TurnEndEvent,
     TurnProgressEvent,
     TurnStartEvent,
@@ -438,61 +432,7 @@ def test_protocol_version_constant() -> None:
     assert PROTOCOL_VERSION == "0.1"
 
 
-# ---------------- V0.2 additions (Reinject Tools / Desktop Pet) ----------------
-
-
-def test_reinject_tools_command_round_trip() -> None:
-    cmd = ReinjectToolsCommand()
-    decoded = decode_command(encode(cmd))
-    assert decoded == cmd
-    assert decoded.kind == "reinject_tools"
-
-
-def test_tools_reinjected_event_round_trip() -> None:
-    ev = ToolsReinjectedEvent(sessionId="s1", blocksAdded=12)
-    decoded = decode_event(encode(ev))
-    assert isinstance(decoded, ToolsReinjectedEvent)
-    assert decoded.sessionId == "s1"
-    assert decoded.blocksAdded == 12
-    assert decoded.kind == "tools_reinjected"
-
-
-def test_attach_pet_command_round_trip_default_port() -> None:
-    cmd = AttachPetCommand()
-    decoded = decode_command(encode(cmd))
-    assert isinstance(decoded, AttachPetCommand)
-    assert decoded == cmd
-    assert decoded.port == 41983
-
-
-def test_attach_pet_command_round_trip_custom_port() -> None:
-    cmd = AttachPetCommand(port=51234)
-    decoded = decode_command(encode(cmd))
-    assert isinstance(decoded, AttachPetCommand)
-    assert decoded.port == 51234
-
-
-def test_detach_pet_command_round_trip() -> None:
-    cmd = DetachPetCommand()
-    decoded = decode_command(encode(cmd))
-    assert decoded == cmd
-    assert decoded.kind == "detach_pet"
-
-
-def test_pet_attached_event_round_trip() -> None:
-    ev = PetAttachedEvent(sessionId="s1", port=41983)
-    decoded = decode_event(encode(ev))
-    assert isinstance(decoded, PetAttachedEvent)
-    assert decoded.sessionId == "s1"
-    assert decoded.port == 41983
-    assert decoded.kind == "pet_attached"
-
-
-def test_pet_detached_event_round_trip() -> None:
-    ev = PetDetachedEvent(sessionId="s1")
-    decoded = decode_event(encode(ev))
-    assert decoded.sessionId == "s1"
-    assert decoded.kind == "pet_detached"
+# ---------------- next suggestion / auto title ----------------
 
 
 def test_turn_end_next_suggestion_round_trip() -> None:

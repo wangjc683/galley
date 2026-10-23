@@ -8,7 +8,6 @@ import { SidebarSessionRow } from "./SidebarSessionRow";
 export type SidebarTimelineRowWiring = {
   activeId?: string;
   projects: Project[];
-  petAttachedSessionId?: string | null;
   onSelectSession?: (id: string) => void;
   onArchiveSession?: (id: string) => void;
   onTogglePinSession?: (id: string) => void;
@@ -35,7 +34,6 @@ export function SidebarTimelineRow({
   session: s,
   activeId,
   projects,
-  petAttachedSessionId,
   onSelectSession,
   onArchiveSession,
   onTogglePinSession,
@@ -55,7 +53,6 @@ export function SidebarTimelineRow({
     <SidebarSessionRow
       session={s}
       active={s.id === activeId}
-      petAttached={s.id === petAttachedSessionId}
       projects={projects}
       onClick={() => onSelectSession?.(s.id)}
       onArchive={onArchiveSession ? () => onArchiveSession(s.id) : undefined}

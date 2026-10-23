@@ -212,9 +212,6 @@ export const enCopy: AppCopy = {
     thinking: "Thinking",
     waitingForYou: "Waiting for you",
     unread: "New reply",
-    desktopPetAttached: "Desktop Pet attached",
-    desktopPetAttachedTitle:
-      "Desktop Pet attached · Open this conversation to detach",
     supervisorCreated: "Created by Supervisor",
     scheduledCreated: "Created by scheduled task",
     newReplyTitle: "New reply",
@@ -425,9 +422,6 @@ export const enCopy: AppCopy = {
     moreConversationActions: (title) => `${title} · More conversation actions`,
     findInChat: "Find in chat…",
     rename: "Rename",
-    reinjectTools: "Reinject tools",
-    desktopPet: "Desktop Pet",
-    closeDesktopPet: "Close Desktop Pet",
     resetMainChat: "Reset main chat…",
   },
   browserControlAttention: {
@@ -1924,13 +1918,6 @@ export const enCopy: AppCopy = {
     textDropBlocked: "Text can't be dropped here",
     textDropBlockedMessage:
       "Dragged text or links can't be received. Use copy & paste instead.",
-    toolsReinjected: "Tools reinjected",
-    toolsReinjectedMessage: (count) =>
-      `Injected ${count} tool definitions into this conversation.`,
-    petStarted: "Desktop Pet started",
-    petStartedMessage:
-      "It will show this conversation's progress in real time.",
-    petClosed: "Desktop Pet closed",
     archived: "Archived",
     archivedCount: (count) => `Archived ${count} conversations`,
     deleteFailed: "Delete failed",

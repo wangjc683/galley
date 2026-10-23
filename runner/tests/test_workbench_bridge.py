@@ -128,9 +128,8 @@ def test_classify_case_insensitive() -> None:
     assert hint == "check_llm_config"
 
 
-# Parent-watchdog liveness logic moved to runner/_watchdog.py — covered by
-# test_watchdog.py. Only the workbench-specific pet-cleanup wiring is tested
-# here (see test_bridge_registers_parent_loss_pet_cleanup below).
+# Parent-watchdog liveness logic lives in runner/_watchdog.py — covered by
+# test_watchdog.py.
 
 
 # ---------------- _llm_display_name ----------------
@@ -679,17 +678,12 @@ def test_user_message_command_passes_images_to_agent() -> None:
     assert event["turnIndex"] == 1
 
 
-def test_shutdown_detaches_pet_and_sets_shutdown_event() -> None:
+def test_shutdown_sets_shutdown_event() -> None:
     bridge = _new_test_bridge()
     bridge.agent = SimpleNamespace()
-    detach_calls: list[bool] = []
-    bridge._handle_detach_pet = (  # type: ignore[method-assign]
-        lambda silent=False: detach_calls.append(silent)
-    )
 
     bridge.dispatch_command(ShutdownCommand())
 
-    assert detach_calls == [True]
     assert bridge.shutdown_event.is_set()
 
 
@@ -1294,39 +1288,6 @@ def test_done_while_abort_is_in_flight_leaves_completion_to_abort() -> None:
     assert not bridge.run_in_progress.is_set()
 
 
-def test_run_loop_exit_detaches_pet() -> None:
-    """The pet subprocess must not outlive the bridge on ANY loop exit
-    (stdin EOF, stdout failure) — not just the Shutdown command path.
-    An orphan pet keeps holding its fixed port and blocks re-attach."""
-    bridge = _new_test_bridge()
-    detach_calls: list[bool] = []
-    bridge._handle_detach_pet = (  # type: ignore[method-assign]
-        lambda silent=False: detach_calls.append(silent)
-    )
-    bridge.shutdown_event.set()
-    bridge.run_in_progress.set()  # skip the shutdown grace wait
-
-    assert bridge.run() == 0
-    assert detach_calls == [True]
-
-
-def test_bridge_registers_parent_loss_pet_cleanup(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import runner.workbench_bridge as wb
-
-    registry: list[Any] = []
-    monkeypatch.setattr(wb, "_PARENT_LOSS_CLEANUP", registry)
-    bridge = _new_test_bridge()
-    detach_calls: list[bool] = []
-    bridge._handle_detach_pet = (  # type: ignore[method-assign]
-        lambda silent=False: detach_calls.append(silent)
-    )
-    assert len(registry) == 1
-    registry[0]()
-    assert detach_calls == [True]
-
-
 def test_silence_python_stdout_redirects_os_level_fd_one() -> None:
     """sys.stdout rebinding alone leaves OS fd 1 pointing at the IPC
     pipe: subprocesses and C extensions writing fd 1 would corrupt the
@@ -1363,7 +1324,6 @@ def test_run_flushes_queued_events_before_exit() -> None:
     line having been written; the writer-exit sentinel makes it
     deterministic."""
     bridge = _new_test_bridge()
-    bridge._handle_detach_pet = lambda silent=False: None  # type: ignore[method-assign]
     for i in range(50):
         bridge.event_queue.put(json.dumps({"kind": "turn_progress", "n": i}))
     bridge.shutdown_event.set()

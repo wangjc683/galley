@@ -107,16 +107,9 @@ function menu(props: { title: string; mainChat: boolean }) {
 const RESET_REASON = "有对话正在运行，结束后才能重置主对话";
 
 describe("the title menu's find and reset", () => {
-  it("main chat: find, the engine's two, then reset", () => {
+  it("main chat: find, a separator, then reset", () => {
     const { body, items } = menu({ title: "Galley", mainChat: true });
-    expect(items).toEqual([
-      "查找聊天记录…",
-      "─",
-      "重新注入工具",
-      "桌面宠物",
-      "─",
-      "重置主对话…",
-    ]);
+    expect(items).toEqual(["查找聊天记录…", "─", "重置主对话…"]);
     // ⌘F as the sidebar writes ⌘N, after the name.
     const find = body.slice(0, body.indexOf("</div>"));
     expect(find).toContain(
@@ -127,15 +120,9 @@ describe("the title menu's find and reset", () => {
     expect(body).not.toMatch(/data-disabled=""[^>]*>.*重置主对话/);
   });
 
-  it("any other conversation: find and rename, the engine's two, no reset", () => {
+  it("any other conversation: find and rename, no separator, no reset", () => {
     const { body, items } = menu({ title: "订机票", mainChat: false });
-    expect(items).toEqual([
-      "查找聊天记录…",
-      "重命名",
-      "─",
-      "重新注入工具",
-      "桌面宠物",
-    ]);
+    expect(items).toEqual(["查找聊天记录…", "重命名"]);
     expect(body).not.toContain("重置主对话");
   });
 
@@ -150,8 +137,8 @@ describe("the title menu's find and reset", () => {
 
   it("has no reset on the external runtime", () => {
     seed.runtime = "external";
-    const { body } = menu({ title: "Galley", mainChat: true });
-    expect(body).toContain("查找聊天记录…");
+    const { body, items } = menu({ title: "Galley", mainChat: true });
+    expect(items).toEqual(["查找聊天记录…"]);
     expect(body).not.toContain("重置主对话");
   });
 });

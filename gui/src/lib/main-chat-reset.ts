@@ -4,7 +4,6 @@ import { dropComposerDraft } from "@/lib/composer-draft";
 import { resolveLanguagePreference } from "@/lib/language";
 import { findMainChat, openMainChat } from "@/lib/main-chat";
 import { usePrefsStore } from "@/stores/prefs";
-import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import type { SessionBriefWire } from "@/stores/sessions/shared";
 import { useSubtasksStore } from "@/stores/subtasks";
@@ -82,25 +81,13 @@ export async function resetMainChat(): Promise<void> {
 /**
  * Forget deleted sessions everywhere the page keeps them: the list and
  * the active pointer, the conversation, the subtask cards' records and
- * run errors, the desktop pet's binding, an unsent draft. Core's
- * `session-deleted-external` covers the first two as well; every step
- * is idempotent.
+ * run errors, an unsent draft. Core's `session-deleted-external` covers
+ * the first two as well; every step is idempotent.
  */
 function forgetSessions(ids: readonly string[]): void {
   if (ids.length === 0) return;
   const sessions = useSessionsStore.getState();
   for (const id of ids) sessions.applyExternalSessionDeleted(id);
   useSubtasksStore.getState().forgetSessions(ids);
-  const runtime = useRuntimeStore.getState();
-  if (
-    runtime.petAttachedSessionId &&
-    ids.includes(runtime.petAttachedSessionId)
-  ) {
-    runtime.setPetAttachedSession(null);
-  }
-  const ui = useUiStore.getState();
-  if (ui.pendingPetMigrationTo && ids.includes(ui.pendingPetMigrationTo)) {
-    ui.setPendingPetMigration(null);
-  }
   for (const id of ids) dropComposerDraft(id);
 }

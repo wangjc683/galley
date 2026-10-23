@@ -11,7 +11,7 @@ import { create } from "zustand";
  *                   pending EmptyState pre-picks + warmup
  *   - bridge-slice: subprocess lifecycle (spawn/attach/shutdown/IPC)
  *                   plus the module-private client handles + LRU
- *   - info-slice:   runtimeInfo + desktop-pet attachment
+ *   - info-slice:   runtimeInfo
  */
 
 import { createBridgeSlice } from "./runtime/bridge-slice";

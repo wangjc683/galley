@@ -49,36 +49,16 @@ def test_register_turn_hook_creates_dict_and_registers() -> None:
 
 
 def test_register_turn_hook_preserves_other_writers() -> None:
-    # The hooks dict has two Galley consumers (workbench + pet); a
-    # second registration must not clobber the first.
-    agent = SimpleNamespace()
+    # The hooks dict lives on GA's agent and other writers (an upstream
+    # frontend running against the same agent) may hold keys in it; a
+    # Galley registration must not clobber them.
+    agent = SimpleNamespace(_turn_end_hooks={"upstream": lambda: None})
     ga = GaSession(agent)
     ga.register_turn_hook("workbench_s1", lambda: None)
-    ga.register_turn_hook("galley_pet_s1", lambda: None)
-    assert set(agent._turn_end_hooks) == {"workbench_s1", "galley_pet_s1"}
-
-
-def test_unregister_turn_hook_is_idempotent_and_safe() -> None:
-    agent = SimpleNamespace()
-    ga = GaSession(agent)
-    # No hooks dict at all: must not raise.
-    ga.unregister_turn_hook("nope")
-    ga.register_turn_hook("galley_pet_s1", lambda: None)
-    ga.unregister_turn_hook("galley_pet_s1")
-    ga.unregister_turn_hook("galley_pet_s1")
-    assert agent._turn_end_hooks == {}
+    assert set(agent._turn_end_hooks) == {"upstream", "workbench_s1"}
 
 
 # ---------------- backend history ----------------
-
-
-def test_history_returns_live_list_and_extend_appends() -> None:
-    backend = NativeClaudeSession(history=[{"role": "user", "content": "x"}])
-    ga = GaSession(_agent_with_backend(backend))
-
-    assert ga.history() is backend.history
-    ga.extend_history([{"role": "assistant", "content": "y"}])
-    assert len(backend.history) == 2
 
 
 def test_set_history_adapts_to_blocks_on_validated_backend() -> None:
@@ -123,18 +103,6 @@ def test_set_history_warns_loudly_on_unvalidated_backend() -> None:
     assert warning is not None
     assert "LLMSession" in warning
     assert len(backend.history) == 1
-
-
-def test_clear_last_tools_tolerates_missing_attribute() -> None:
-    class Rigid:
-        __slots__ = ()  # setattr raises
-
-    ga = GaSession(SimpleNamespace(llmclient=Rigid()))
-    ga.clear_last_tools()  # must not raise (older GA versions)
-
-    client = SimpleNamespace(last_tools="stale")
-    GaSession(SimpleNamespace(llmclient=client)).clear_last_tools()
-    assert client.last_tools == ""
 
 
 # ---------------- context usage ----------------

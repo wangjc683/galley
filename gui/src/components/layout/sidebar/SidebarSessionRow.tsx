@@ -7,7 +7,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
-  Cat,
   Clock,
   DotsThree,
   PauseCircle,
@@ -37,7 +36,6 @@ import { SidebarSessionMenuItems } from "./SidebarSessionMenuItems";
 export const SidebarSessionRow = memo(function SidebarSessionRow({
   session,
   active,
-  petAttached = false,
   projects,
   onClick,
   onArchive,
@@ -52,10 +50,6 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
 }: {
   session: Session;
   active?: boolean;
-  /** True when Desktop Pet is bound to this session. Renders a small
-   * Cat icon next to the title — status only, not clickable (the
-   * row itself is the click target for switching sessions). */
-  petAttached?: boolean;
   /** Full project list — used to populate the "Move to project"
    * submenu. Caller passes navigation-sorted projects so the menu
    * matches the Projects section order. */
@@ -433,16 +427,6 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
             >
               {session.title}
             </div>
-          )}
-          {petAttached && (
-            <IconTooltip text={copy.sidebar.desktopPetAttachedTitle}>
-              <span
-                aria-label={copy.sidebar.desktopPetAttached}
-                className="inline-flex shrink-0 text-ink-soft"
-              >
-                <Cat size={12} weight="thin" />
-              </span>
-            </IconTooltip>
           )}
           {schedulerCreated && (
             <IconTooltip text={copy.sidebar.scheduledCreated}>

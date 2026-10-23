@@ -1,8 +1,6 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
-  ArrowsClockwise,
   CaretDown,
-  Cat,
   Eraser,
   MagnifyingGlass,
   PencilSimple,
@@ -43,19 +41,7 @@ export function SessionTitleCaret() {
 /**
  * Title-as-dropdown trigger for session-scoped actions. The session
  * title text and a caret form a single button; clicking opens a menu
- * with low-frequency / power-user actions attached to "this current
- * session":
- *
- *   - Reinject Tools: one-shot — re-injects GA's
- *     tool definitions into the active session's LLM history.
- *   - Desktop Pet: 2-state toggle. Label is
- *     "关闭桌面宠物" when this session holds the pet and "桌面宠物"
- *     otherwise; clicking "桌面宠物" from a non-holder session
- *     implicitly migrates the pet here. "Where is the pet right
- *     now" lives in the Sidebar Cat badge, not in this label.
- *
- * Future V0.2 entries (`/branch`, `/rewind`) slot in here too — see
- * discussion thread 2026-05-13.
+ * of actions attached to "this current session".
  *
  * Why title-as-trigger instead of a sibling `⋯` button: a bare title +
  * trailing dots reads as CSS text-overflow ellipsis. The whole-block
@@ -74,16 +60,13 @@ export function SessionTitleCaret() {
  * main chat's ends with 重置主对话…, Settings' hold-to-confirm dialog,
  * greyed with the reason while a conversation runs. The groups:
  *
- *   main chat:  查找 ─ 重新注入工具 / 桌面宠物 ─ 重置主对话
- *   others:     查找 / 重命名 ─ 重新注入工具 / 桌面宠物
+ *   main chat:  查找 ─ 重置主对话
+ *   others:     查找 / 重命名
  */
 export function SessionTitleMenu({
   title,
   label,
   onFind,
-  onReinjectTools,
-  onTogglePet,
-  currentSessionHasPet,
   onRename,
   onResetMainChat,
   resetMainChatBlocked = false,
@@ -92,9 +75,6 @@ export function SessionTitleMenu({
   label?: ReactNode;
   /** 查找聊天记录…: the palette scoped to this conversation. */
   onFind?: () => void;
-  onReinjectTools?: () => void;
-  onTogglePet?: () => void;
-  currentSessionHasPet?: boolean;
   onRename?: (newTitle: string) => void;
   /** 重置主对话…: only the main chat on the managed runtime has it. */
   onResetMainChat?: () => void;
@@ -102,7 +82,6 @@ export function SessionTitleMenu({
   resetMainChatBlocked?: boolean;
 }) {
   const copy = useCopy();
-  const petHere = !!currentSessionHasPet;
   const [editing, setEditing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const titleClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -270,42 +249,11 @@ export function SessionTitleMenu({
               <span>{copy.topbar.rename}</span>
             </DropdownMenu.Item>
           )}
-          {(onFind || onRename) && (
-            <DropdownMenu.Separator className="my-1 h-px bg-line" />
-          )}
-          <DropdownMenu.Item
-            onSelect={() => onReinjectTools?.()}
-            className={cn(
-              "flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none",
-              "data-[highlighted]:bg-hover",
-            )}
-          >
-            <ArrowsClockwise
-              size={14}
-              weight="thin"
-              className="text-ink-soft"
-            />
-            <span>{copy.topbar.reinjectTools}</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={() => onTogglePet?.()}
-            className={cn(
-              "flex items-center gap-2 rounded-callout px-2 py-1.5 outline-none",
-              "data-[highlighted]:bg-hover",
-            )}
-          >
-            <Cat
-              size={14}
-              weight="thin"
-              className={petHere ? "text-brand" : "text-ink-soft"}
-            />
-            <span className="text-ink">
-              {petHere ? copy.topbar.closeDesktopPet : copy.topbar.desktopPet}
-            </span>
-          </DropdownMenu.Item>
           {onResetMainChat && (
             <>
-              <DropdownMenu.Separator className="my-1 h-px bg-line" />
+              {(onFind || onRename) && (
+                <DropdownMenu.Separator className="my-1 h-px bg-line" />
+              )}
               <DropdownMenu.Item
                 disabled={resetMainChatBlocked}
                 onSelect={() => {

@@ -11,10 +11,6 @@ Entrypoint-specific bits are parameters, not forks:
 
 - ``label``       — process tag in the exit log line.
 - ``thread_name`` — the watchdog thread's name.
-- ``cleanup``     — best-effort hooks run before the hard exit (e.g. the
-                    workbench bridge tears down its desktop-pet child). The
-                    iterable is read at exit time, so a live list that other
-                    code appends to after the watchdog starts is honored.
 """
 from __future__ import annotations
 
@@ -22,7 +18,6 @@ import os
 import sys
 import threading
 import time
-from collections.abc import Callable, Iterable
 
 GALLEY_CORE_PID_ENV = "GALLEY_CORE_PID"
 PARENT_WATCH_INTERVAL_SEC = 2.0
@@ -93,17 +88,11 @@ def exit_parentless(
     reason: str,
     *,
     label: str,
-    cleanup: Iterable[Callable[[], None]] = (),
 ) -> None:
     try:
         print(f"[{label}] exiting: {reason}", file=sys.__stderr__, flush=True)
     except Exception:
         pass
-    for hook in list(cleanup):
-        try:
-            hook()
-        except Exception:
-            pass
     _EXIT_FOR_PARENT_LOSS(0)
     raise SystemExit(0)
 
@@ -113,7 +102,6 @@ def start_parent_watchdog(
     *,
     label: str,
     thread_name: str,
-    cleanup: Iterable[Callable[[], None]] = (),
 ) -> None:
     if parent_pid is None:
         return
@@ -124,6 +112,6 @@ def start_parent_watchdog(
             time.sleep(PARENT_WATCH_INTERVAL_SEC)
             reason = parent_loss_reason(parent_pid, original_ppid)
             if reason:
-                exit_parentless(reason, label=label, cleanup=cleanup)
+                exit_parentless(reason, label=label)
 
     threading.Thread(target=_watch, name=thread_name, daemon=True).start()
