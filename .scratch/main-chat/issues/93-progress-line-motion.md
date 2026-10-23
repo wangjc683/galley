@@ -65,3 +65,67 @@ Status: ready-for-agent
 - `node scripts/check-docs-links.mjs`
 - `git diff --check`
 - 报告写在本票末尾「## Comments」下：改了哪些文件、怎么实现滚动与相位接续、没验证到的（例如真机上扫光与渐隐遮罩叠加的样子、四样一起动的观感）原样列出。
+
+## Comments
+
+### 2026-10-23 回报（票 93 代理）
+
+**1. 提交列表**（`git log --oneline main..HEAD`，写本回报之前；本回报另起一个提交）
+
+````text
+ba403c4a Ticket 93: design docs for the moving progress line (ruling 137)
+203b970d Ticket 93: the progress line rolls a new sentence in and sweeps slowly (ruling 137)
+````
+
+**2. 改了哪些文件**
+
+- 新文件 `gui/src/lib/progress-line-motion.ts`：换句的规则（纯函数 `progressRollStart`、`progressRollNext`、`progressRollSettle`，关键帧 `progressRollIn` / `progressRollOut`，`progressRollMotion` 按减少动态选滚或淡），时长与曲线从 token 读（`readProgressRollTiming`：`--motion-slow`、`--ease-firm`，读不到就是瞬间替换），扫光动画名常量 `PROGRESS_SHIMMER_ANIMATION`。
+- 新文件 `gui/src/hooks/useProgressRoll.ts`：页面上的滚动（下面第 3 条）。
+- `gui/src/components/conversation/TypingBubble.tsx`：`ProgressLine` 的「在做什么」换成 `ProgressDoing`；文件不导出新东西。
+- `gui/src/styles/globals.css`：`thinking-shimmer` 旁边新加 `@keyframes progress-shimmer` 与 `.progress-shimmer`（减少动态的 `@media` 同 `thinking-shimmer` 的写法）。`thinking-shimmer` 的样式一个字没动，只改了它注释里一句「This is the one sanctioned shimmer」，改成工作台那一处、主对话另有 `progress-shimmer`（一个视图一处），免得两处注释打架。
+- `gui/src/hooks/useTypingBubbleHandoff.ts`：交接拷贝（下面第 4 条）。
+- 测试：新 `gui/src/lib/progress-line-motion.test.ts`、新 `gui/src/components/conversation/TypingBubble.test.tsx`；`gui/src/hooks/useTypingBubbleHandoff.test.tsx` 加两条；`gui/src/components/screens/MainView.assistant.test.tsx` 改一条（原来断言这一行「no sweep, no motion」、类名是 `truncate-fade min-w-0`，按裁决 137 改成「在做什么」带一次 `progress-shimmer`、外面一层裁切盒，用时照旧不带）。
+- 文档：`docs/design/conversation.md`「在跑时：三点气泡」（标题行引用、「为什么」末尾、交接的「怎么长」与「减少动态」、「写法」改写并新增「动起来」一条、这一行的「交接」、「代价」补裁决 137 第 7 条）；`docs/design/foundations.md` §2.7（豁免边界、主对话那一段）。`grep -n "不扫光" docs/design` 现在剩下的五处，都是讲裁决 134 当时的写法（及被裁决 137 推翻），或减少动态下不扫光的规则。
+
+**3. 滚动怎么实现**
+
+- 「在做什么」那段是一个裁切盒（`<span data-role="assistant-progress-doing-box" class="grid min-w-0 overflow-hidden">`），里面每句一个 `<span>`，都放在同一个格子里（`col-start-1 row-start-1`），类是 `truncate-fade progress-shimmer … max-w-full min-w-0 justify-self-start`。盒子的宽度是格子里最宽那句（封顶照旧是这一行的 `ASSISTANT_BUBBLE_MAX`），所以过渡期间取新旧两句里宽的那个、离场那句拿掉后落到新句，「 · 用时」一步跟过去。`justify-self-start` 让每句只有自己的宽度，截断按自己判（`truncationFadeRef` 照旧挂在每句上），离场那句再宽也不会把新句判成截断；扫光的 `background-size` 也跟着各自的宽度，离场那句拿掉时光带不跳。
+- 状态在 `useProgressRoll`：`{ current, leaving[] }`，句子按出现顺序编号当 key。字变了才换（guarded setState-in-render，同 `ExpandSection` 的写法，离场那句与新句在同一次提交上屏）；同一句重渲染返回同一个对象，什么都不放。第一次出现编号 0，记为已放过，不滚。盒子里按 `[...leaving, current]` 画，key 不变，所以屏上那句开始离场时还是同一个元素。
+- `useLayoutEffect` 在带来新句的那次提交里放一次：先 `getComputedStyle` 读刚变成离场那句当下的 `transform` / `opacity`，再停掉它自己还在跑的滚进，从读到的位置往上滚出（`translateY(-100%)`，`fill: "forwards"`，滚完之前不会弹回原位），新句从 `translateY(100%)` 滚到 0；时长、曲线读 token，每次读 `matchMedia`，减少动态下改成原位 `opacity` 淡出淡入。离场那句的动画结束后从状态里拿掉（promise 回调里 setState，不是 effect 里同步 setState）。
+- 上一次没滚完又来新句：正在滚进的那句从当下位置掉头往上滚出，更早还在滚出的那句不打断、走完自己的；最新那句从下滚进；不排队，中间那句不补放。票面写「从当前位置直接换到最新那句」，我理解成这样；另一种读法是更早那句当场拿掉，那样它会在半截处闪没，所以没选。
+- 离场的句子 `aria-hidden`、`pointer-events-none`，没有 `onPointerEnter`；悬停全文只挂在新句上（`syncTruncatedTitle`）。
+- 没有 Web Animations（jsdom）时换句就是瞬间替换，不留离场那句；token 读不到时离场那句在下一个微任务里拿掉，也是瞬间替换。
+
+**4. 交接的拷贝与扫光相位**
+
+- 拷贝只带屏上那句：克隆这一行后，把 `[data-role="assistant-progress-doing-leaving"]` 从拷贝里删掉。宽度：这一行本身是块级 flex，宽度是这一行能占的宽度（封顶 88%），与说了什么无关，所以 `lineBox.width` 照旧可用；离场那句删掉后，拷贝里的裁切盒按屏上那句排，用时跟在它后面。拷贝里那句停在原位，不接着滚（Web Animations 不随 `cloneNode` 复制）。
+- 扫光相位：照三个点的做法。`measureTyping` 每次量的时候一起读那句扫光动画开始的时刻（`getAnimations()` 里 `animationName === "progress-shimmer"` 的那个的 `startTime`，滚动用的 Web Animations 被这个名字筛掉），记在 `TypingRecord.sweepStart`；交接时 `ran = now - sweepStart`，给拷贝里那句设 `animation-delay: (原 delay − ran)ms`。和三个点不同的一处：每换一句是一个新元素、新的一段扫光，而量的那次提交正是把它带上屏的那次，那时它的 `startTime` 还是 `null`（下一帧才开始），这时按当下的时间线时刻算，差不到一帧。减少动态时没有这个动画，`sweepStart` 为 `null`，什么都不设。
+
+**5. 测试**
+
+- `lib/progress-line-motion.test.ts`（7 条）：第一次出现不滚；字变了才滚、同一句返回同一个对象；连续两次换句最新那句在屏上、中间那句排在离场里、不排队，拿掉按编号；没有动画时不留离场；滚 / 淡的关键帧，半途掉头从读到的位置出发；token 读得到、读不到。
+- `components/conversation/TypingBubble.test.tsx`（9 条，jsdom，`animate` 用可手动结束的假实现）：「在做什么」带 `progress-shimmer`、用时不带；第一次出现与同一句重渲染不调 `animate`、没有离场那句；换句时同一个元素变成离场那句、关键帧与 `{ duration: 240, easing: cubic-bezier(0.2, 0, 0, 1) }`、离场那句 `fill: "forwards"`；离场那句 `aria-hidden`，`status` 区去掉 `aria-hidden` 后的文字只有「Galley 正在输入」加新句；滚完离场那句被拿掉；滚到半途再换句：滚进的动画被取消、从 `translateY(6px)` 掉头滚出、更早那句不被打断、屏上是最新那句；减少动态每次换句时读、走淡入淡出；token 读不到时瞬间替换；没有 Web Animations 时瞬间替换。
+- `hooks/useTypingBubbleHandoff.test.tsx`（加 2 条）：滚到半途交接，拷贝里没有离场那句，文字是「新句 · 12 秒」，裁切盒里只有一句；扫光相位接续（假 `getAnimations` 与 `document.timeline`：开始于 1000ms、交接在 1600ms，拷贝那句 `animation-delay` 是 `-600ms`，混在一起的滚动动画不被当成扫光，用时不设）。
+- 现有 `TypingBubble` / `MainView.assistant.test.tsx` / `useTypingBubbleHandoff` / `assistant-progress` 相关测试照旧全过（`MainView.assistant.test.tsx` 那一条按上面第 2 条改过）。
+
+**6. 验证**（都在 worktree 里，提交之后重跑）
+
+- `pnpm --dir gui typecheck`：通过
+- `pnpm --dir gui lint`：通过（0 warning）
+- `CI=true pnpm --dir gui test`：207 个文件、2281 条全过
+- `TZ=UTC CI=true pnpm --dir gui test`：207 个文件、2281 条全过
+- `node scripts/check-docs-links.mjs`：`docs link gate OK: 474 files checked.`
+- `git diff --check main HEAD`：无输出
+- 文档新增行全角标点：用临时脚本扫了 diff 新增行里贴着中文的半角 `, ; : ( ) ? !`（反引号与链接目标除外），0 处。
+- 格式：新文件整篇 prettier；旧的 TS 文件 prettier 输出与现状一致；`globals.css` 只看自己的 hunk（整文件本来就不是 prettier-clean）。
+- 额外：用一个临时 Swift 脚本在真 WKWebView 里按同一套 CSS（手写，不是 Tailwind 编译产物）排了四种情况并量宽度：长旧句（截断）加短新句同在时，盒宽取长的（311.4px），新句 `scrollWidth == clientWidth` 不被判成截断，用时跟在 311.4px；短句单独时盒宽 57.6px、用时跟过去；长句单独照旧截断；短旧句加长新句时盒宽取新句。又截了一张静帧：扫光冻结在一个相位、截断那句带渐隐遮罩、滚动冻结在半途（旧句露下半截、新句露上半截，被盒子裁掉）、减少动态的实色——WebKit 里 `background-clip: text` 与遮罩、`transform` 叠在一起都画得出来。离屏窗口不跑动画，所以动起来的样子没看。
+
+**7. Open risks / not verified**
+
+- 真机 WebKit 里扫光与截断渐隐遮罩叠加的动态观感没看过：只在离屏 WKWebView 里截了静帧（扫光、遮罩、半途的滚动都冻结），动画没跑。
+- 三点、扫光、跳秒加侧栏那张脸，四样一起动的观感没看；一直扫的光会不会放大等待感、长句扫得快不快，也没看（裁决 137 第 7 条，等 JC 在 dev 里看）。
+- 扫光的实际节奏与裁决的说法对不上：几何照抄 `thinking-shimmer`（`background-size: 200%`、`background-position` 从 200% 到 -200%），背景是平铺的，所以一个周期里光带穿过文字两次。2.4 秒的周期实际是约每 1.2 秒扫过一次、每次横穿约 0.6 秒（工作台同理：1.4 秒的周期是约每 0.7 秒一次），不是裁决 137 第 3 条写的「约 2.4 秒扫一趟」。我照票面写了 2.4s；要真的 2.4 秒一趟，把周期改成 4.8s 或把行程改成 200% → 0%，等 JC 看过再定。
+- 交接正好撞上换句半途时（例如它向你提问：提问那一步派发后问题很快就到，裁决 135 第 3 条），拷贝里那句直接停在原位，等于从半途的位置往上跳了不到 18px，接着 120ms 淡出；减少动态时半透明的新句在拷贝里是不透明的。都没在真机上看。
+- 扫光相位接续只在 jsdom 里用假的 `getAnimations` / `document.timeline` 测过；真 WebKit 里 `CSSAnimation` 的 `animationName` / `startTime` 在 app 里是否如预期、刚换上那句「按当下算」差的那一帧看不看得出来，没验证。
+- 连续换句时格子里同时有三句（两句在滚出、一句在滚进）的样子只在 jsdom 里验证了排列与动画参数，没看过真机。
+- 读屏：离场那句加 `aria-hidden` 与插入新句在同一次提交里，VoiceOver 实际念出什么没测（jsdom 只验证了去掉 `aria-hidden` 后的文字）。
