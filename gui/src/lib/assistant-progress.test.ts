@@ -181,12 +181,10 @@ describe("assistantProgressHalf: the half of a summary the line says", () => {
     expect(assistantProgressHalf("我查雄鹿.")).toBe("我查雄鹿");
   });
 
-  it("says the whole sentence when nothing follows the separator", () => {
-    expect(assistantProgressHalf("提醒规则已确认；")).toBe("提醒规则已确认；");
-    expect(assistantProgressHalf("提醒规则已确认；。")).toBe(
-      "提醒规则已确认；",
-    );
-    expect(assistantProgressHalf("提醒规则已确认;  ")).toBe("提醒规则已确认;");
+  it("says the whole sentence, without its separator, when nothing follows it", () => {
+    expect(assistantProgressHalf("提醒规则已确认；")).toBe("提醒规则已确认");
+    expect(assistantProgressHalf("提醒规则已确认；。")).toBe("提醒规则已确认");
+    expect(assistantProgressHalf("提醒规则已确认;  ")).toBe("提醒规则已确认");
   });
 
   it("is cleaned as the header cleans a summary first", () => {

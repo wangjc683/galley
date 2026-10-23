@@ -24,7 +24,9 @@ import type { Turn } from "@/types/conversation";
 
 // ---- 在做什么 ----------------------------------------------------------------
 
-const END_PERIODS = /[。.]+$/;
+// A trailing 「；」 / 「;」 too: a summary that ends at its separator says
+// the whole sentence (below), which should not end in one.
+const END_PERIODS = /[。.；;]+$/;
 
 function trimHalf(text: string): string {
   return text.trim().replace(END_PERIODS, "").trim();
@@ -40,7 +42,7 @@ function trimHalf(text: string): string {
  * none. Then the part after the last separator, its surrounding
  * whitespace and the 「。」 / 「.」 it ends with taken off; without a
  * separator, or with nothing after it, the whole sentence, trimmed the
- * same way. Nothing is cut further (no cut at a comma): a long one is
+ * same way and without the separator it ends with. Nothing is cut further (no cut at a comma): a long one is
  * the CSS truncation's. Null when nothing is left.
  */
 export function assistantProgressHalf(
