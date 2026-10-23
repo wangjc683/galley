@@ -13,9 +13,10 @@ import { MainHeader } from "./MainHeader";
 /**
  * The open main chat's header (main chat ticket 18): the assistant's
  * identity row is the trigger of the main chat's title menu — the
- * session's menu without rename — and its second line only says a
- * state. Static rendering never opens a Radix menu, so the menu renders
- * its items inline here.
+ * session's menu without rename — and its second line only says a state
+ * that needs you, nothing while it runs (rulings 134, 135). Static
+ * rendering never opens a Radix menu, so the menu renders its items
+ * inline here.
  */
 vi.mock("@radix-ui/react-dropdown-menu", () => {
   const Pass = ({ children }: { children?: ReactNode }) => <>{children}</>;
@@ -63,26 +64,9 @@ vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
   };
 });
 
-// While it runs, the header says the newest settled step's sentence,
-// from the store, which a static render cannot see; seed it here
-// (hooks/useAssistantSentence.test.ts covers how it is worked out).
-const running = vi.hoisted(() => ({
-  sentence: null as string | null,
-}));
-vi.mock("@/hooks/useAssistantSentence", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/hooks/useAssistantSentence")>();
-  return {
-    ...actual,
-    useAssistantSettledSentence: (_id: string, isRunning: boolean) =>
-      isRunning ? running.sentence : null,
-  };
-});
-
 afterEach(() => {
   live.clear();
   subtaskAsking.on = false;
-  running.sentence = null;
 });
 
 const mainChat = makeSession({
@@ -114,6 +98,13 @@ function header(
         {...props}
       />
     </Tooltip.Provider>,
+  );
+}
+
+/** The identity row alone. */
+function identity(): string {
+  return renderToStaticMarkup(
+    <AssistantIdentity mainChat={mainChat} subtasks={[]} />,
   );
 }
 
@@ -168,28 +159,26 @@ describe("the open main chat's header", () => {
     expect(statusLine(header())).toBeNull();
   });
 
-  it("says what it is doing while it runs, else only a state: waiting without the question, an error, a subtask's", () => {
-    // Running: the newest settled step's sentence, 「思考中」 before one
-    // (rulings 107, 110) — never 「第 N 步 · 摘要」, never a clock, never
-    // 「正在输入…」 (the conversation's dots and the card say that).
+  it("says nothing while it runs, else only a state: waiting without the question, an error, a subtask's", () => {
+    // Running: nothing (rulings 134, 135) — never 「思考中」, a step's
+    // sentence, 「第 N 步 · 摘要」, a clock or 「正在输入…」 (the line
+    // under the conversation's dots and the card say what it is doing).
     live.set("s-main", { status: "running" });
-    expect(statusLine(header())).toBe("思考中");
-    running.sentence = "我按 10 月 17 日和 18 日这两天查。";
-    expect(statusLine(header())).toBe("我按 10 月 17 日和 18 日这两天查。");
     const html = header();
-    expect(html).toMatch(
-      /data-role="assistant-status-line"[^>]*text-brand-strong\/85/,
-    );
-    // One line, cut with a fade when too long (the whole of it on hover).
-    expect(html).toMatch(/data-role="assistant-status-line"[^>]*truncate-fade/);
+    expect(statusLine(html)).toBeNull();
+    expect(html).not.toContain("思考中");
     expect(html).not.toContain("正在输入");
     expect(html).not.toMatch(/\d+ 秒/);
-    // A sentence, but asking or erroring: the state, as before.
+    // Asking or erroring: the state, as before.
     live.set("s-main", { status: "running", hasPendingAskUser: true });
     const asking = header();
     expect(statusLine(asking)).toBe("等你回复");
     expect(asking).toMatch(
       /data-role="assistant-status-line"[^>]*text-warning/,
+    );
+    // One line, cut with a fade when too long (the whole of it on hover).
+    expect(asking).toMatch(
+      /data-role="assistant-status-line"[^>]*truncate-fade/,
     );
 
     live.set("s-main", { status: "error" });
@@ -201,5 +190,26 @@ describe("the open main chat's header", () => {
     // At rest it says nothing, a sentence or not.
     subtaskAsking.on = false;
     expect(statusLine(header())).toBeNull();
+  });
+});
+
+describe("the header has no second line while it runs", () => {
+  it("is a single line running, as at rest", () => {
+    const rest = identity();
+    expect(rest).not.toContain("assistant-status-line");
+    live.set("s-main", { status: "running" });
+    expect(identity()).toBe(rest);
+  });
+
+  it("still says waiting for you and an error", () => {
+    for (const [view, said] of [
+      [{ status: "running", hasPendingAskUser: true }, "等你回复"],
+      [{ status: "error" }, "出错"],
+    ] as const) {
+      live.set("s-main", view);
+      const html = identity();
+      expect(html).toContain("assistant-status-line");
+      expect(statusLine(html)).toBe(said);
+    }
   });
 });

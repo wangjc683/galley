@@ -21,10 +21,11 @@ import {
  * on the same clock). The tint opens from the typing bubble's box to the
  * reply's (or the question's) — the same ground, so no leaving copy of a
  * bubble: only the dots, copied where they stood, fade out in the first
- * segment (`--motion-fast`), while the words and what hangs under the
- * bubble fade in from half of it to the end of the growth
- * (`handoffFadeIn`). Under reduced motion the dots fade out and the
- * bubble fades in, nothing opens. A round Core woke it for that lands
+ * segment (`--motion-fast`), and with them the line under the dots in a
+ * round you started (rulings 134, 135), while the words and what hangs
+ * under the bubble fade in from half of it to the end of the growth
+ * (`handoffFadeIn`). Under reduced motion the dots and the line fade out
+ * and the bubble fades in, nothing opens. A round Core woke it for that lands
  * without the dots on screen (it did not stream, or a tool step had just
  * put them away) grows from a one-line typing bubble at the bubble's own
  * top-left corner.
@@ -40,9 +41,9 @@ interface TypingRecord {
   /** When the dots' loop started (document timeline, ms): the leaving
    * copy carries on in step instead of starting the loop over. */
   loopStart: number | null;
-  /** TEMP variant switcher (main chat 90): the line under the dots
-   * (TypingBubble's `progress`), when drawn, and where it stood in the
-   * column (px): copied into the leaving line. */
+  /** The line under the dots (TypingBubble's `progress`), when drawn,
+   * and where it stood in the column (px): copied into the leaving
+   * line. */
   line: HTMLElement | null;
   lineBox: Box | null;
 }
@@ -86,7 +87,7 @@ function measureTyping(
     '[data-role="assistant-typing-dots"]',
   );
   if (!column || !bubble || !dots) return null;
-  // TEMP variant switcher (main chat 90): the line under the dots.
+  // The line under the dots, in a round you started.
   const line = row.querySelector<HTMLElement>(
     '[data-role="assistant-progress"]',
   );
@@ -298,9 +299,9 @@ function playTypingHandoff(
       { duration: timing.fadeMs, easing: timing.easing, fill: "forwards" },
     );
     animations.push(leavingFade);
-    // TEMP variant switcher (main chat 90): the line under the dots leaves
-    // as they do — a copy where it stood, out of the layout, faded on the
-    // same duration and curve (gone with the layer).
+    // The line under the dots leaves as they do — a copy where it stood,
+    // out of the layout, faded on the same duration and curve (gone with
+    // the layer).
     if (record.line && record.lineBox) {
       leavingLine = record.line.cloneNode(true) as HTMLElement;
       leavingLine.setAttribute("data-role", "assistant-progress-leaving");
@@ -353,7 +354,6 @@ function playTypingHandoff(
         animations.push(child.animate(lifted, options));
       }
       if (leaving) animations.push(leaving.animate(lifted, options));
-      // TEMP variant switcher (main chat 90): the line under the dots.
       if (leavingLine) animations.push(leavingLine.animate(lifted, options));
     }
   } else {

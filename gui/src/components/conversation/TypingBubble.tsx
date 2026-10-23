@@ -1,6 +1,5 @@
 import { useEffect, useState, type Ref } from "react";
 
-// TEMP variant switcher (main chat 90): the line under the dots.
 import { ASSISTANT_BUBBLE_MAX } from "@/components/conversation/AssistantParts";
 import { TYPING_DOT_EM, TYPING_DOT_GAP_EM } from "@/lib/assistant-conversation";
 import { assistantProgressElapsed } from "@/lib/assistant-progress";
@@ -27,7 +26,10 @@ const DOT_STYLE = {
  * a one-line reply), just wide enough for the dots. They are LiveDots' (the `live-dot` loop: 1.4s, 0.16s stagger,
  * opacity rising one after another, iMessage's way), `ink-muted`, at
  * twice its size (TYPING_DOT_EM); still under reduced motion (the
- * class's own rule). Read as 「Galley 正在输入」 (`role="status"`).
+ * class's own rule). Read as 「Galley 正在输入」 (`role="status"`). In a
+ * round you started a line under it says what it is doing and for how
+ * long (`ProgressLine`, rulings 134, 135): with the card, the only two
+ * places that speak while it runs; the header says nothing then.
  *
  * The row has no top margin: the reply that takes its place stands right
  * under the row above (`assistantRowGap` gives it `mt-0` under either
@@ -39,8 +41,8 @@ export function TypingBubble({
   progress,
 }: {
   ref?: Ref<HTMLDivElement>;
-  /** TEMP variant switcher (main chat 90): 「新」's line under the dots,
-   * in a round you started; absent, the bubble alone. */
+  /** The line under the dots, in a round you started (MainView); absent
+   * (a round Core woke it for), the bubble alone. */
   progress?: TypingProgress | null;
 }) {
   const copy = useCopy();
@@ -76,7 +78,7 @@ export function TypingBubble({
   );
 }
 
-// ---- TEMP variant switcher (main chat 90): the line under the dots -------
+// ---- The line under the dots ---------------------------------------------
 
 /** What the line says (MainView): what it is doing, and the run clock. */
 export interface TypingProgress {
@@ -89,8 +91,8 @@ export interface TypingProgress {
 }
 
 /**
- * 「{在做什么} · {用时}」 under the typing bubble (main chat PRD ruling
- * 134): 6px under it, its left edge on the bubble's, one 18px line
+ * 「{在做什么} · {用时}」 under the typing bubble (main chat PRD rulings
+ * 134, 135): 6px under it, its left edge on the bubble's, one 18px line
  * whatever it says, no wider than a reply bubble may be. 12px `ink-soft`,
  * tabular numbers, no sweep, no motion. The doing part gives way: cut
  * with a fade when too long, the whole of it on hover (the header

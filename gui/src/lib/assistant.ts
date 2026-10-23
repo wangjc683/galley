@@ -20,31 +20,32 @@ import type { SessionStatus } from "@/types/session";
  *   - The card's second line (`assistantCardLine`) is what a chat list
  *     says: the last message, or a state when there is one — an error
  *     over a question over running over an unsent draft over the last
- *     message. Running, it says 「正在输入…」, the main chat open or not
- *     (main chat PRD rulings 107, 110: an IM list row says its contact
- *     is typing, nothing more); in a round Core woke it for only while
- *     the conversation shows its dots (`assistantTyping`), else the
- *     last message, the face at work. Away from the main chat (in
- *     the workbench, or in one of its subtasks) it speaks for it at
- *     rest: the question itself, the draft. With the main chat on
- *     screen it is the selected row of the list and, unless it runs,
- *     says only the last message, whatever the state — a question it
- *     asked is what it said; the avatar's mark and the name's weight
- *     carry the state, the header and the conversation the words
- *     (ruling 104, overturning ruling 87's 「等你回复」 there).
+ *     message. Running, it says only what the screen does not (main chat
+ *     PRD rulings 134, 135): in a round you started 「正在工作…」 with the
+ *     main chat on screen; away from it 「正在输入…」 while it writes
+ *     (an IM chat list's way), else 「正在工作…」, from a minute on
+ *     「正在工作 · N 分钟」 (`workingLine`). In a round Core woke it for
+ *     「正在输入…」 only while the conversation shows its dots
+ *     (`assistantTyping`, rulings 107, 110), else the last message, the
+ *     face at work. Away from the main chat (in the workbench, or in one
+ *     of its subtasks) it speaks for it at rest: the question itself,
+ *     the draft. With the main chat on screen it is the selected row of
+ *     the list and, unless it runs, says only the last message, whatever
+ *     the state — a question it asked is what it said; the avatar's mark
+ *     and the name's weight carry the state, the header and the
+ *     conversation the words (ruling 104, overturning ruling 87's
+ *     「等你回复」 there).
  *   - The header's second line (`AssistantState.line`) is what a chat's
- *     own title bar says: a state — running, waiting for a reply (not
- *     the question: it is right below, in the conversation), an error,
- *     a subtask's — and nothing at rest. Running, it says the sentence
- *     of the newest step that settled (`assistantSettledSentence`: its
- *     narration, else its summary), 「思考中」 before there is one, and
- *     no clock (rulings 107, 110). The last message and the draft are
- *     both on screen there already.
+ *     own title bar says: only a state that needs you — waiting for a
+ *     reply (not the question: it is right below, in the conversation),
+ *     an error, a subtask's. Nothing at rest, and nothing while it runs
+ *     (rulings 134, 135: the header was where nobody looked). The last
+ *     message and the draft are both on screen there already.
  *
- * Running, each thing is said once, in one place: the conversation
- * shows that it is typing (the typing bubble) and then what it says,
- * the header what it is doing, the card that it is busy (ruling 107:
- * one in each place, after ruling 87's 「只说一次」). The assistant
+ * Running, two places speak (rulings 134, 135): the conversation, the
+ * typing bubble and, in a round you started, the line under it — what
+ * it is doing and for how long (lib/assistant-progress.ts) — and then
+ * what it says; the card, what the screen does not show. The assistant
  * reports no steps anywhere; the subtasks it sends off are task
  * conversations and keep their 「第 N 步」 (lib/subtasks.ts), as the
  * workbench's session rows do.
@@ -59,15 +60,15 @@ export type AssistantStateKind =
 
 export interface AssistantLine {
   text: string;
-  tone: "running" | "warning" | "error";
+  tone: "warning" | "error";
 }
 
 export interface AssistantState {
   /** The avatar's mark and the name's weight: error, a question,
    * running, a new reply while the assistant is not open, or nothing. */
   kind: AssistantStateKind;
-  /** The state's words — the header identity's second line; null for a
-   * new reply and at rest. */
+  /** The state's words — the header identity's second line; null while
+   * it runs, for a new reply and at rest. */
   line: AssistantLine | null;
   /** The error or the question is an unpromoted subtask's, not the main
    * chat's own (its words say so; the card then has no question to
@@ -85,9 +86,6 @@ export interface AssistantStateInput {
   /** The main chat itself is on screen (not one of its subtasks: its
    * conversation is not in front of you there): nothing is unread. */
   open: boolean;
-  /** While it runs: the header's sentence, the newest settled step's
-   * (`assistantSettledSentence`), null for 「思考中」. */
-  sentence?: string | null;
   errorCount?: number;
 }
 
@@ -101,8 +99,10 @@ export const ASSISTANT_IDLE: AssistantState = {
  * The assistant's state, in the session row's priority (layout-and-
  * chrome.md, Session Row): an error — its own or an unpromoted
  * subtask's — over a question — its own or a subtask's — over running,
- * over a new reply, over nothing. A stop or a step-cap pause is
- * nothing here: the card goes back to the last message.
+ * over a new reply, over nothing. Running has no words (rulings 134,
+ * 135): the header says nothing, the card its own (`assistantCardLine`).
+ * A stop or a step-cap pause is nothing here: the card goes back to the
+ * last message.
  */
 export function assistantState(
   input: AssistantStateInput,
@@ -140,14 +140,7 @@ export function assistantState(
     };
   }
   if (input.status === "running") {
-    return {
-      kind: "running",
-      line: {
-        text: input.sentence || copy.sidebar.thinking,
-        tone: "running",
-      },
-      fromSubtask: false,
-    };
+    return { kind: "running", line: null, fromSubtask: false };
   }
   if (input.hasUnread && !input.open) {
     return { kind: "unread", line: null, fromSubtask: false };
@@ -174,13 +167,16 @@ export interface AssistantLastMessage {
 
 /**
  * What the card's second line says, its prefix in its own colour —
- * running, 「正在输入…」 (rulings 107, 110); with the main chat on screen
- * otherwise only the last message, whatever the state (ruling 104):
+ * running, only what the screen does not (rulings 134, 135; below); with
+ * the main chat on screen otherwise only the last message, whatever the
+ * state (ruling 104):
  *
  *   error    「出错」 / 「出错 · N」 / 「子任务出错」          red
  *   ask      「等你回复：」 + the question, or 「等你回复」,   amber prefix
  *            or 「子任务在问你」
- *   running  「正在输入…」                                       brand
+ *   running  「正在工作…」 / 「正在工作 · N 分钟」 /             brand
+ *            「正在输入…」 (`workingLine`); a woken round
+ *            「正在输入…」 or the last message
  *   draft    「草稿：」 + the draft, or 「[图片]」 / 「[引用]」 brand prefix
  *   message  「你：」 for the user's own, then the message      muted
  *            (your own words: quotes it opens with are left out,
@@ -222,26 +218,26 @@ export function assistantCardLine(
      * in the composer right there all leave it be; the avatar's mark
      * and the name's weight say the state. */
     open: boolean;
-    /** While it runs: it reads as typing (`assistantTyping`) — a round
-     * you started throughout, one Core woke it for only while it writes
-     * words, as the conversation's dots. */
+    /** While a round Core woke it for runs: it reads as typing
+     * (`assistantTyping`) — only while it writes words, as the
+     * conversation's dots. */
     typing?: boolean;
-    /** TEMP variant switcher (main chat 90): 「新」, a round you started
-     * — whether it writes words now (`assistantWriting`) and the run's
-     * whole minutes (hooks/useAssistantProgress.ts); absent in a woken
-     * round and in 「现状」, which keep `typing`. */
+    /** While a round you started runs: whether it writes words now
+     * (`assistantWriting`) and the run's whole minutes
+     * (hooks/useAssistantProgress.ts); absent in a woken round, which
+     * keeps `typing`. */
     working?: { writing: boolean; minutes: number };
   },
   copy: AppCopy,
 ): AssistantCardLine | null {
   if (state.kind === "running") {
-    // TEMP variant switcher (main chat 90): 「新」 (ruling 134).
+    // A round you started (rulings 134, 135).
     if (working) {
       return { kind: "running", text: workingLine(working, open, copy) };
     }
-    // Open or not (rulings 107, 110): what it is doing is in the header,
-    // what it says in the conversation. Not typing (a woken round
-    // between its words): the last message, the face at work.
+    // A woken round, open or not (rulings 107, 110): 「正在输入…」 with
+    // the conversation's dots; between its words the last message, the
+    // face at work.
     if (typing) return { kind: "running", text: copy.assistant.typing };
     return lastMessage ? messageLine(lastMessage, copy) : null;
   }
@@ -284,10 +280,10 @@ export function assistantCardLine(
 }
 
 /**
- * TEMP variant switcher (main chat 90) — 「新」's card while a round you
- * started runs (ruling 134): it says only what the screen does not. With
- * the main chat on screen 「正在工作…」 throughout, the last seconds too
- * (the dots are right there); away from it 「正在输入…」 while it writes
+ * The card while a round you started runs (rulings 134, 135): it says
+ * only what the screen does not. With the main chat on screen
+ * 「正在工作…」 throughout, the last seconds too (the dots and the line
+ * under them are right there); away from it 「正在输入…」 while it writes
  * (an IM chat list's way), else 「正在工作…」, from a minute on
  * 「正在工作 · N 分钟」.
  */
@@ -332,7 +328,7 @@ function messageLine(
  * `liveRound` (the card while it runs, main chat PRD rulings 104, 110):
  * the round since your last message is live, and the main chat draws
  * none of its steps as a message — a step that called tools stands
- * behind the typing bubble and the header's sentence, not in a bubble.
+ * behind the typing bubble and the line under it, not in a bubble.
  * Those steps are skipped, so the card stays on what the conversation
  * shows as its last bubble: your message, a question it asked, or the
  * reply once it lands. At rest a narrating step still counts (a run

@@ -4,8 +4,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-// TEMP variant switcher (main chat 90): 「新」's words while it runs.
-import { useLiveProgressVariant } from "@/components/conversation/live-progress-variants/live-progress-variants";
 import {
   AssistantAvatar,
   AssistantAvatarBadge,
@@ -153,23 +151,26 @@ function lineText(line: AssistantCardLine): string {
  * second line (ruling 65) —
  *
  *   error > a question (「等你回复：」 + the question itself) > running
- *   (「正在输入…」) > an unsent draft (「草稿：」) > the last message
+ *   (「正在工作…」) > an unsent draft (「草稿：」) > the last message
  *   (「你：」 for the user's own)
  *
- * (lib/assistant.ts). Running, it says 「正在输入…」 whether the main
- * chat is on screen or not; in a round Core woke it for only while the
- * conversation shows its dots (main chat PRD rulings 107, 110). With
- * the main chat itself on screen the card is the sidebar's selected
- * place and otherwise says only the last message, whatever the state —
- * the question when it asks (ruling 104, overturning ruling 87's 「等你
- * 回复」 there); the badge and the name's weight carry the state, the
- * header and the conversation the words. One of its subtasks open is
- * not the main chat on screen. The avatar wears a session row's status
- * glyph in its corner for a question, an error and a new reply — and
- * for running only under reduced motion, where the face holds still
- * (ruling 117 point 8); the name goes semibold for those; a draft and
- * the resting card stay medium. A new reply shows only while the main
- * chat is not on screen.
+ * (lib/assistant.ts). Running, it says only what the screen does not
+ * (main chat PRD rulings 134, 135): in a round you started 「正在工作…」
+ * with the main chat on screen (the dots and the line under them are
+ * right there); away from it 「正在输入…」 while it writes, else
+ * 「正在工作…」, from a minute on 「正在工作 · N 分钟」. In a round Core
+ * woke it for 「正在输入…」 only while the conversation shows its dots,
+ * else the last message (rulings 107, 110). With the main chat itself on
+ * screen the card is the sidebar's selected place and otherwise says
+ * only the last message, whatever the state — the question when it asks
+ * (ruling 104, overturning ruling 87's 「等你回复」 there); the badge and
+ * the name's weight carry the state, the header and the conversation the
+ * words. One of its subtasks open is not the main chat on screen. The
+ * avatar wears a session row's status glyph in its corner for a
+ * question, an error and a new reply — and for running only under
+ * reduced motion, where the face holds still (ruling 117 point 8); the
+ * name goes semibold for those; a draft and the resting card stay
+ * medium. A new reply shows only while the main chat is not on screen.
  *
  * The time is the last message's (lib/message-time.ts `formatListTime`:
  * 11:50 / 昨天 / 周一 / 10月7日 / 2025年10月7日), the session's last
@@ -213,19 +214,15 @@ export function SidebarAssistantCard({
   // No key while it is open: its draft is in the composer right there,
   // and typing there then never re-renders the card.
   const draft = useComposerDraft(open ? undefined : mainChat.id);
-  // Running, the card says 「正在输入…」, open or not; in a round Core
-  // woke it for only while the conversation shows its dots, else the
-  // last message, the live round's steps skipped (rulings 107, 110).
+  // Running, a round Core woke it for says 「正在输入…」 only while the
+  // conversation shows its dots, else the last message, the live round's
+  // steps skipped (rulings 107, 110).
   const typing = useAssistantTyping(mainChat.id, state.kind === "running");
-  // TEMP variant switcher (main chat 90): 「新」 — a round you started
-  // says 「正在工作…」; away from the main chat 「正在输入…」 while it
-  // writes and the whole minutes from one on (ruling 134). The minutes
-  // re-render the card only when one turns. A woken round as before.
-  const liveProgressVariant = useLiveProgressVariant();
-  const round = useAssistantRound(
-    mainChat.id,
-    liveProgressVariant === "new" && state.kind === "running",
-  );
+  // A round you started says 「正在工作…」; away from the main chat
+  // 「正在输入…」 while it writes and the whole minutes from one on
+  // (rulings 134, 135). The minutes re-render the card only when one
+  // turns.
+  const round = useAssistantRound(mainChat.id, state.kind === "running");
   const ownRound = round === "own" || round === "own-writing";
   const minutes = useAssistantRunMinutes(mainChat.id, ownRound);
   const working = ownRound

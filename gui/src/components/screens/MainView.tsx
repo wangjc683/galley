@@ -16,8 +16,6 @@ import {
   TypingBubble,
   type TypingProgress,
 } from "@/components/conversation/TypingBubble";
-// TEMP variant switcher (main chat 90): 「新」's line under the dots.
-import { useLiveProgressVariant } from "@/components/conversation/live-progress-variants/live-progress-variants";
 import { ConversationSkeleton } from "@/components/conversation/ConversationSkeleton";
 import { StepLimitTail } from "@/components/conversation/StepLimitTail";
 import { Button } from "@/components/ui/button";
@@ -474,16 +472,12 @@ function MainViewContent({
     () => typingBubbleShown(roundLive, turns, inFlightContent),
     [roundLive, turns, inFlightContent],
   );
-  // TEMP variant switcher (main chat 90): 「新」 — under the dots, in a
-  // round you started, what it is doing and the round's time (ruling
-  // 134; lib/assistant-progress.ts). Switching shows or drops it at once.
-  const liveProgressVariant = useLiveProgressVariant();
+  // The line under the dots (rulings 134, 135): in a round you started,
+  // what it is doing and the round's time (lib/assistant-progress.ts
+  // `assistantDoing`, null in a round Core woke it for).
   const progressDoing = useMemo(
-    () =>
-      liveProgressVariant === "new" && typingShown
-        ? assistantDoing(turns, inFlightContent, copy)
-        : null,
-    [liveProgressVariant, typingShown, turns, inFlightContent, copy],
+    () => (typingShown ? assistantDoing(turns, inFlightContent, copy) : null),
+    [typingShown, turns, inFlightContent, copy],
   );
   const typingProgress: TypingProgress | null = progressDoing
     ? {

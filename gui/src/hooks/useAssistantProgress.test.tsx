@@ -26,11 +26,10 @@ import { resetStores } from "@/test/store-reset";
 import type { AgentTurn, Turn, UserTurn } from "@/types/conversation";
 
 /*
- * TEMP variant switcher (main chat 90) — 「新」's reads off the store
- * while the main chat runs (main chat PRD ruling 134): a round driven
- * event by event as the runner's events reach the page, for the line
- * under the dots and the card; the card's minutes and their timer. Kept
- * with hooks/useAssistantProgress.ts if 「新」 wins.
+ * The reads off the store while the main chat runs (main chat PRD
+ * rulings 134, 135): a round driven event by event as the runner's events
+ * reach the page, for the line under the dots and the card; the card's
+ * minutes and their timer.
  */
 
 const zh = copyForLanguage("zh-CN");

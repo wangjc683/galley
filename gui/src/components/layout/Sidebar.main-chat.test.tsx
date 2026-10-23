@@ -2,7 +2,7 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SessionStatusView } from "@/hooks/useSessionStatusView";
 import type { AssistantLastMessage } from "@/lib/assistant";
@@ -71,17 +71,22 @@ vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
 });
 
 // The card reads the pending question, the last message and, while it
-// runs, whether it types (a woken round only while it writes words) from
-// the messages store, which static rendering only sees in its initial
-// state (lib/assistant.test.ts and hooks/useAssistantSentence.test.ts
-// cover how they are worked out); seed them here. Drafts come from the
-// real composer-draft module.
+// runs, whose round it is and its minutes (a round you started: 「正在工作…」,
+// rulings 134, 135) and whether it types (a woken round only while it
+// writes words) from the messages store, which static rendering only
+// sees in its initial state (lib/assistant.test.ts,
+// lib/assistant-progress.test.ts, hooks/useAssistantSentence.test.ts and
+// hooks/useAssistantProgress.test.tsx cover how they are worked out);
+// seed them here. Drafts come from the real composer-draft module.
 const card = vi.hoisted(() => ({
   question: null as string | null,
   lastMessage: null as AssistantLastMessage | null,
   // A round you started types throughout; a woken one between its words
   // does not.
   typing: true,
+  // A round you started, not writing, under a minute.
+  round: "own" as "own" | "own-writing" | "woken",
+  minutes: 0,
 }));
 vi.mock("@/hooks/useAssistantState", async (importOriginal) => {
   const actual =
@@ -99,6 +104,17 @@ vi.mock("@/hooks/useAssistantSentence", async (importOriginal) => {
     ...actual,
     useAssistantTyping: (_id: string, running: boolean) =>
       running && card.typing,
+  };
+});
+vi.mock("@/hooks/useAssistantProgress", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/hooks/useAssistantProgress")>();
+  return {
+    ...actual,
+    useAssistantRound: (_id: string, running: boolean) =>
+      running ? card.round : null,
+    useAssistantRunMinutes: (_id: string, active: boolean) =>
+      active ? card.minutes : 0,
   };
 });
 
@@ -224,6 +240,8 @@ afterEach(() => {
   card.question = null;
   card.lastMessage = null;
   card.typing = true;
+  card.round = "own";
+  card.minutes = 0;
   motion.reduced = false;
   dropComposerDraft("s-main");
 });
@@ -545,10 +563,10 @@ describe("the assistant's card", () => {
     expect(asking).toMatch(/text-warning[^>]*>等你回复：</);
     expect(asking).toContain("text-ink-muted");
 
-    // Running: 「正在输入…」 (rulings 107, 110) — never the header's
+    // Running: 「正在工作…」 (rulings 134, 135) — never a step's
     // sentence, never 「第 N 步 · 摘要」.
     live.set("s-main", { status: "running" });
-    expect(textOf(say())).toBe("正在输入…");
+    expect(textOf(say())).toBe("正在工作…");
     expect(say()).toContain("text-brand-strong/85");
     expect(say()).toContain("sidebar-step-tick");
 
@@ -562,7 +580,8 @@ describe("the assistant's card", () => {
   });
 
   // Ruling 104 (ticket 52), overturning ruling 87's 2nd and 3rd points;
-  // rulings 107, 110 (tickets 55, 58) for running.
+  // rulings 134, 135 (tickets 90, 91) for running, rulings 107, 110
+  // (tickets 55, 58) for a woken round.
   it("says only the last message with the main chat on screen, the state on the avatar; the words away from it", () => {
     card.question = "去哪个花市？";
     card.lastMessage = { fromUser: true, text: "周六去花市" };
@@ -603,7 +622,8 @@ describe("the assistant's card", () => {
       expect(body).toMatch(/font-semibold[^>]*>Galley</);
     }
 
-    // Running: 「正在输入…」 on screen and away alike, in the running tone.
+    // Running: 「正在工作…」 on screen and away alike (under a minute, not
+    // writing), in the running tone.
     live.clear();
     attentionKind.clear();
     live.set("s-main", { status: "running" });
@@ -612,7 +632,7 @@ describe("the assistant's card", () => {
       inSubtask(),
       lineOf(render([used, sideChat], { activeId: "s-side" })),
     ]) {
-      expect(textOf(said)).toBe("正在输入…");
+      expect(textOf(said)).toBe("正在工作…");
       expect(said).toContain('data-kind="running"');
       expect(said).toContain("text-brand-strong/85");
     }
@@ -622,6 +642,7 @@ describe("the assistant's card", () => {
     // A woken round between its words: the last message, open or not —
     // never the draft — the face saying it is busy (the spinner only
     // under reduced motion, where the face holds still).
+    card.round = "woken";
     card.typing = false;
     for (const html of [
       onScreen(),
@@ -634,6 +655,7 @@ describe("the assistant's card", () => {
     motion.reduced = true;
     expect(between(onScreen(), CARD, "</button>")).toContain(SPINNER);
     motion.reduced = false;
+    card.round = "own";
     card.typing = true;
 
     // Away in its subtask, not running: the words, as before.
@@ -659,7 +681,7 @@ describe("the assistant's card", () => {
     live.set("s-main", { status: "running" });
     live.set("s-side", { status: "running" });
     const html = render([used, stepping]);
-    expect(textOf(lineOf(html))).toBe("正在输入…");
+    expect(textOf(lineOf(html))).toBe("正在工作…");
     expect(between(html, CARD, "</button>")).not.toMatch(/第 \d+ 步/);
     expect(between(html, 'data-session-id="s-side"', "</button>")).toContain(
       "第 3 步 · 比较两班车",
@@ -814,6 +836,67 @@ describe("the assistant's card", () => {
       "Workbench: conversations you start will appear here.",
     );
     expect(empty).not.toContain("Your conversations will appear here.");
+  });
+});
+
+// Rulings 134, 135 (tickets 90, 91): in a round you started the card
+// says only what the screen does not.
+describe("the card says 「正在工作…」, and away from the main chat what the screen would", () => {
+  const lineOf = (html: string) => {
+    const body = between(html, CARD, "</button>");
+    const i = body.indexOf(LINE);
+    return i < 0 ? null : body.slice(body.lastIndexOf("<", i));
+  };
+  const textOf = (fragment: string | null) =>
+    fragment === null ? null : fragment.replace(/<[^>]*>/g, "");
+  const sidebar = (activeId: string) =>
+    render([mainChat, sideChat], { activeId });
+
+  beforeEach(() => {
+    card.lastMessage = {
+      fromUser: true,
+      text: "新赛季 NBA 东部你怎么预测？",
+    };
+    live.set("s-main", { status: "running" });
+  });
+
+  it("fills the six cells", () => {
+    const say = (open: boolean) =>
+      textOf(lineOf(sidebar(open ? "s-main" : "s-side")));
+    for (const [round, minutes, open, away] of [
+      ["own-writing", 0, "正在工作…", "正在输入…"],
+      ["own", 0, "正在工作…", "正在工作…"],
+      ["own", 1, "正在工作…", "正在工作 · 1 分钟"],
+      ["own", 3, "正在工作…", "正在工作 · 3 分钟"],
+    ] as const) {
+      card.round = round;
+      card.minutes = minutes;
+      expect([round, minutes, say(true), say(false)]).toEqual([
+        round,
+        minutes,
+        open,
+        away,
+      ]);
+    }
+  });
+
+  it("keeps the running tone", () => {
+    card.minutes = 2;
+    const away = lineOf(sidebar("s-side"))!;
+    expect(away).toContain('data-kind="running"');
+    expect(away).toContain("text-brand-strong/85");
+    expect(tagWith(sidebar("s-side"), CARD)).toContain(
+      'aria-label="Galley · 正在工作 · 2 分钟"',
+    );
+  });
+
+  it("leaves a woken round as before: 「正在输入…」 with the dots, else the last message", () => {
+    card.round = "woken";
+    expect(textOf(lineOf(sidebar("s-side")))).toBe("正在输入…");
+    card.typing = false;
+    expect(textOf(lineOf(sidebar("s-side")))).toBe(
+      "你：新赛季 NBA 东部你怎么预测？",
+    );
   });
 });
 

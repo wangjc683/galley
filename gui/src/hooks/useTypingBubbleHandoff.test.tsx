@@ -17,17 +17,9 @@ import {
 } from "@/components/conversation/TypingBubble";
 import { useTypingBubbleHandoff } from "@/hooks/useTypingBubbleHandoff";
 
-import {
-  useLiveProgressStore,
-  useLiveProgressVariant,
-} from "./live-progress-variants";
-import { LiveProgressVariantsPill } from "./LiveProgressVariantsPill";
-
 /*
- * TEMP variant switcher (main chat 90) — the pill (a dev build's only,
- * switching at once), and 「新」's line leaving with the dots when the
- * reply takes their place. If 「新」 wins, the hand-off half moves next to
- * useTypingBubbleHandoff; the rest goes with this folder.
+ * The line under the dots in the hand-off (main chat PRD rulings 134,
+ * 135): it leaves with the dots when the reply takes their place.
  */
 
 beforeAll(() => {
@@ -51,81 +43,9 @@ afterEach(() => {
   host?.remove();
   root = null;
   host = null;
-  useLiveProgressStore.setState({ variant: "now" });
-  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
-
-// ---- The pill ---------------------------------------------------------------------
-
-/** What a surface reads, shown. */
-function Probe() {
-  return <span data-role="probe">{useLiveProgressVariant()}</span>;
-}
-
-describe("the pill", () => {
-  it("is in a dev build: 「临时 · 在跑」, 现状 / 新, under the header at the window's centre", () => {
-    mount(<LiveProgressVariantsPill />);
-    const pill = document.body.querySelector<HTMLElement>(
-      '[data-role="live-progress-variants-pill"]',
-    );
-    expect(pill).not.toBeNull();
-    // Portalled to <body>, clickable over any overlay.
-    expect(pill!.parentElement).toBe(document.body);
-    expect(pill!.style.pointerEvents).toBe("auto");
-    expect(pill!.className).toContain("fixed left-1/2 top-[52px]");
-    expect(pill!.textContent?.startsWith("临时 · 在跑")).toBe(true);
-    const options = [...pill!.querySelectorAll("button")];
-    expect(options.map((b) => b.textContent)).toEqual(["现状", "新"]);
-    expect(options.map((b) => b.getAttribute("aria-pressed"))).toEqual([
-      "true",
-      "false",
-    ]);
-  });
-
-  it("switches what the surfaces read at once, back and forth", () => {
-    mount(
-      <>
-        <LiveProgressVariantsPill />
-        <Probe />
-      </>,
-    );
-    const probe = () =>
-      document.body.querySelector('[data-role="probe"]')?.textContent;
-    const option = (name: string) =>
-      [
-        ...document.body.querySelectorAll<HTMLButtonElement>(
-          '[data-role="live-progress-variants-pill"] button',
-        ),
-      ].find((b) => b.textContent === name)!;
-    expect(probe()).toBe("now");
-    act(() => option("新").click());
-    expect(probe()).toBe("new");
-    expect(option("新").getAttribute("aria-pressed")).toBe("true");
-    act(() => option("现状").click());
-    expect(probe()).toBe("now");
-  });
-
-  it("is nothing outside a dev build, which always reads 现状", () => {
-    vi.stubEnv("DEV", false);
-    useLiveProgressStore.setState({ variant: "new" });
-    mount(
-      <>
-        <LiveProgressVariantsPill />
-        <Probe />
-      </>,
-    );
-    expect(
-      document.body.querySelector('[data-role="live-progress-variants-pill"]'),
-    ).toBeNull();
-    expect(
-      document.body.querySelector('[data-role="probe"]')?.textContent,
-    ).toBe("now");
-  });
-});
-
-// ---- The hand-off -------------------------------------------------------------------
 
 /** What `animate` was asked for, by the element's role. */
 interface Played {
@@ -134,7 +54,7 @@ interface Played {
   options: KeyframeAnimationOptions | number | undefined;
 }
 
-describe("新's line in the hand-off", () => {
+describe("the line under the dots in the hand-off", () => {
   const NOW = Date.UTC(2026, 9, 23, 4, 0, 0);
   let played: Played[] = [];
 
@@ -270,7 +190,7 @@ describe("新's line in the hand-off", () => {
     ).toBe(true);
   });
 
-  it("copies nothing more in 现状 (no line)", () => {
+  it("copies nothing more without a line (a round Core woke it for)", () => {
     const scroller = handOff(null);
     expect(
       scroller.querySelector('[data-role="assistant-progress-leaving"]'),

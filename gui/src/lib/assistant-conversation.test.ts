@@ -1,14 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  assistantCachedSettledSentence,
   assistantFirstLine,
   assistantFollowBottom,
   assistantFollowTop,
   assistantLinePlan,
   assistantRowGap,
   assistantScrollToBottom,
-  assistantSettledSentence,
   assistantTyping,
   assistantWriting,
   endsWithActionRow,
@@ -137,157 +135,13 @@ describe("assistantRowGap", () => {
   });
 });
 
-// Rulings 107, 110 (tickets 55, 58): the header's second line while it
-// runs, from the steps that settled; what streams is never read.
-describe("the header's sentence", () => {
-  it("takes this stretch's newest settled narration, nothing before one", () => {
-    const run: Turn[] = [user("查一下天气"), step("我先查一下明天的天气。", 1)];
-    expect(assistantSettledSentence(run)).toBe("我先查一下明天的天气。");
-    // Nothing settled yet: 「思考中」.
-    expect(assistantSettledSentence([user("查一下天气")])).toBeNull();
-    // An answer starts a new stretch: the narration before the question
-    // is not the latest thing it wrote any more.
-    const answered: Turn[] = [
-      user("订船票"),
-      step("我先看船班。", 1),
-      ask("订哪一班？", ["8:30"], 2),
-      user("8:30"),
-    ];
-    expect(assistantSettledSentence(answered)).toBeNull();
+// A step's first line, as the line under the dots cleans a summary
+// (lib/assistant-progress.ts `assistantProgressHalf`).
+describe("assistantFirstLine", () => {
+  it("takes the first line that says something, block markers and markdown out", () => {
     expect(assistantFirstLine("  > 1. `code_run` 跑完了")).toBe(
       "code_run 跑完了",
     );
-  });
-
-  it("is no step's sentence when it is the round's answer", () => {
-    // The answer lands as the bubble, and run_complete follows: the
-    // header keeps the step before it until then.
-    expect(
-      assistantSettledSentence([
-        user("查一下天气"),
-        step("我先查一下明天的天气。", 1),
-        answer("明天多云，22 到 27 度。", 2),
-      ]),
-    ).toBe("我先查一下明天的天气。");
-    expect(
-      assistantSettledSentence([user("早"), answer("早，今天多云。", 1)]),
-    ).toBeNull();
-  });
-
-  // Ruling 100 (ticket 47): a step that wrote no narration says its
-  // summary; the newest step with words wins.
-  describe("a step without narration says its summary", () => {
-    /** A tool step that wrote only `<summary>`: no narration. */
-    function summaryOnly(summary: string, index: number): AgentTurn {
-      return {
-        role: "agent",
-        turnIndex: index,
-        finalAnswer: null,
-        summary,
-        tools: [tool("code_run")],
-      };
-    }
-    /** A tool step that wrote nothing at all (no summary either). */
-    function bare(index: number): AgentTurn {
-      return {
-        role: "agent",
-        turnIndex: index,
-        finalAnswer: null,
-        tools: [tool("code_run")],
-      };
-    }
-    const water = "本机时间为10月19日10:34；先检查是否已有喝水提醒，避免重复。";
-
-    it("the newest step only has a summary: the summary", () => {
-      expect(
-        assistantSettledSentence([user("提醒我喝水"), summaryOnly(water, 1)]),
-      ).toBe(water);
-    });
-
-    it("the newest step has narration: the narration, not its summary", () => {
-      const narrated: AgentTurn = {
-        ...summaryOnly("已列出提醒；接下来新建。", 2),
-        finalAnswer: "我先看看有没有重复的提醒。",
-      };
-      expect(
-        assistantSettledSentence([
-          user("提醒我喝水"),
-          summaryOnly(water, 1),
-          narrated,
-        ]),
-      ).toBe("我先看看有没有重复的提醒。");
-    });
-
-    it("step 1 narrated, step 2 only a summary: step 2's summary", () => {
-      expect(
-        assistantSettledSentence([
-          user("提醒我喝水"),
-          step("我先看一下现在几点。", 1),
-          summaryOnly("没有重复的提醒；接下来建一个每小时的。", 2),
-        ]),
-      ).toBe("没有重复的提醒；接下来建一个每小时的。");
-    });
-
-    it("a step with no words at all is passed over for the one before it", () => {
-      expect(
-        assistantSettledSentence([
-          user("提醒我喝水"),
-          summaryOnly(water, 1),
-          bare(2),
-        ]),
-      ).toBe(water);
-    });
-
-    it("stops at your last message: an older round's summary is not this one's", () => {
-      expect(
-        assistantSettledSentence([
-          user("提醒我喝水"),
-          summaryOnly(water, 1),
-          user("改成半小时"),
-        ]),
-      ).toBeNull();
-      // Your answer to its question too.
-      expect(
-        assistantSettledSentence([
-          user("提醒我喝水"),
-          summaryOnly(water, 1),
-          ask("多久一次？", ["每小时"], 2),
-          user("每小时"),
-        ]),
-      ).toBeNull();
-    });
-
-    it("cleans the summary as the narration, and a protocol failure's says nothing", () => {
-      // An old row's 「第 N 步 · 」 prefix, markdown, GA's 「...」 elision.
-      expect(
-        assistantSettledSentence([
-          user("提醒我喝水"),
-          summaryOnly("第 2 步 · 读取 **提醒列表** ... 接下来新建", 2),
-        ]),
-      ).toBe("读取 提醒列表 … 接下来新建");
-      // The runner's fixed marker, and raw leaked markup: no sentence.
-      for (const failed of [
-        "回合协议错误：工具调用未能送达",
-        '<invoke name="code_run"><parameter name="code">x',
-      ]) {
-        expect(
-          assistantSettledSentence([
-            user("提醒我喝水"),
-            summaryOnly(failed, 1),
-          ]),
-        ).toBeNull();
-      }
-    });
-  });
-
-  it("keeps the sentence for the last turns array", () => {
-    const run: Turn[] = [user("查一下天气"), step("我先查一下明天的天气。", 1)];
-    expect(assistantCachedSettledSentence(run)).toBe("我先查一下明天的天气。");
-    expect(assistantCachedSettledSentence(run)).toBe(
-      assistantSettledSentence(run),
-    );
-    const next = [...run, step("再看看后天。", 2)];
-    expect(assistantCachedSettledSentence(next)).toBe("再看看后天。");
   });
 });
 

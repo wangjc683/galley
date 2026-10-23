@@ -10,15 +10,12 @@ import { isProtocolFailureSummary } from "@/lib/session-summary";
 import type { Turn } from "@/types/conversation";
 
 /*
- * TEMP variant switcher (main chat 90) — what 「新」 says while the main
- * chat runs (main chat PRD ruling 134; switcher and removal steps in
- * components/conversation/live-progress-variants/live-progress-variants.ts).
- * Kept if 「新」 wins, deleted with its test if 「现状」 does.
- *
- * In a round you started, a line under the typing bubble says
- * 「{在做什么} · {用时}」 (TypingBubble), and the sidebar card says
- * 「正在工作…」, away from the main chat 「正在输入…」 while it writes
- * and the whole minutes from one on (lib/assistant.ts
+ * What the main chat says while it runs (main chat PRD rulings 134, 135;
+ * spec: docs/design/conversation.md 「在跑时：三点气泡」). Two places
+ * speak, the header none: in a round you started, a line under the
+ * typing bubble says 「{在做什么} · {用时}」 (TypingBubble), and the
+ * sidebar card says 「正在工作…」, away from the main chat 「正在输入…」
+ * while it writes and the whole minutes from one on (lib/assistant.ts
  * `assistantCardLine`). A round Core woke it for draws no line.
  */
 
@@ -36,13 +33,13 @@ function trimHalf(text: string): string {
  * The half of a step's summary the line says. GA's summary is 「上次结果
  * 的新信息 + 本次意图」 (managed-ga llmcore's protocol prompts), so the
  * part after the last 「；」 or 「;」 is what it is doing now. The summary
- * is cleaned first as the header cleaned it (`assistantFirstLine`: one
- * line, block markers and markdown out, protocol tags and GA's 「...」
- * repaired); a turn-protocol failure's (`isProtocolFailureSummary`) is
- * none. Then the part after the last separator, its surrounding
- * whitespace and the 「。」 / 「.」 it ends with taken off; without a
- * separator, or with nothing after it, the whole sentence, trimmed the
- * same way and without the separator it ends with. Nothing is cut further (no cut at a comma): a long one is
+ * is cleaned first (`assistantFirstLine`: one line, block markers and
+ * markdown out, protocol tags and GA's 「...」 repaired); a turn-protocol
+ * failure's (`isProtocolFailureSummary`) is none. Then the part after
+ * the last separator, its surrounding whitespace and the 「。」 / 「.」 it
+ * ends with taken off; without a separator, or with nothing after it,
+ * the whole sentence, trimmed the same way and without the separator it
+ * ends with. Nothing is cut further (no cut at a comma): a long one is
  * the CSS truncation's. Null when nothing is left.
  */
 export function assistantProgressHalf(
@@ -123,11 +120,10 @@ function settledStepHalf(turns: readonly Turn[]): string | null {
 }
 
 /**
- * What the line under the typing bubble says it is doing (ruling 134),
- * for a round you started; null for a round Core woke it for (no line:
- * nobody is waiting on it). Within this stretch — from your last message,
- * or from your answer to its question (`assistantSettledSentence`'s
- * stretch):
+ * What the line under the typing bubble says it is doing (rulings 134,
+ * 135), for a round you started; null for a round Core woke it for (no
+ * line: nobody is waiting on it). Within this stretch — from your last
+ * message, or from your answer to its question:
  *
  *   1. writing words now (`assistantWriting`): 「正在写回复」;
  *   2. else this step's dispatch has shown with a closed summary before

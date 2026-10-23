@@ -23,7 +23,6 @@ const base: AssistantStateInput = {
   status: "idle",
   hasPendingAskUser: false,
   open: false,
-  sentence: "我查一下厦门明天的天气。",
 };
 const state = (input: Partial<AssistantStateInput> = {}, copy = zh) =>
   assistantState({ ...base, ...input }, copy);
@@ -72,24 +71,13 @@ describe("the assistant's state, in a session row's priority", () => {
     expect(state({ status: "cancelled" }).kind).toBe("idle");
   });
 
-  it("words the state for the header: its own ahead of a subtask's, nothing at rest", () => {
-    // Running: the newest settled step's sentence, else 「思考中」 (rulings
-    // 107, 110) — never a step count, never a clock, never 「正在输入…」
-    // (the conversation's dots say that).
-    expect(state({ status: "running" }).line).toEqual({
-      text: "我查一下厦门明天的天气。",
-      tone: "running",
-    });
-    for (const sentence of [null, undefined, ""]) {
-      expect(state({ status: "running", sentence }).line).toEqual({
-        text: "思考中",
-        tone: "running",
-      });
-    }
-    expect(state({ status: "running", sentence: null }, en).line?.text).toBe(
-      "Thinking",
-    );
-    // Not running, the sentence says nothing: a question, an error, rest.
+  it("words the state for the header: its own ahead of a subtask's, nothing running or at rest", () => {
+    // Running: nothing, as at rest (rulings 134, 135) — what it is doing
+    // and for how long is the line under the conversation's dots.
+    expect(state({ status: "running" }).line).toBeNull();
+    expect(state({ status: "running" }, en).line).toBeNull();
+    expect(state({ status: "running", hasUnread: true }).line).toBeNull();
+    // A question, an error: the state's words.
     expect(state({ hasPendingAskUser: true }).line?.text).toBe("等你回复");
     expect(state({ status: "error" }).line?.text).toBe("出错");
     expect(state().line).toBeNull();
@@ -169,7 +157,7 @@ describe("the card's second line: error > question > running > draft > last mess
   // Ruling 104 (ticket 52), overturning ruling 87's 2nd and 3rd points:
   // with the main chat on screen the card is the list's selected row and
   // says the last message whatever the state but running (rulings 107,
-  // 110: 「正在输入…」, below); the avatar and the name carry the state.
+  // 110, 134, 135: below); the avatar and the name carry the state.
   it("says only the last message with the main chat on screen, whatever the state but running", () => {
     const message = {
       kind: "message",
@@ -255,16 +243,16 @@ describe("the card's second line: error > question > running > draft > last mess
     expect(line({})).toMatchObject({ kind: "draft", text: "下周三的会" });
   });
 
-  // Rulings 107, 110 (tickets 55, 58): running, the card says that it is
-  // typing, open or not; what it is doing is the header's, what it says
-  // the conversation's.
-  it("says 「正在输入…」 while it runs, the main chat open or not, never the header's sentence", () => {
+  // Rulings 107, 110 (tickets 55, 58): a round Core woke it for says it
+  // is typing while the conversation shows its dots, open or not. A round
+  // you started has its own words (`working`, rulings 134, 135:
+  // lib/assistant-progress.test.ts).
+  it("says 「正在输入…」 while a woken round types, the main chat open or not", () => {
     for (const open of [true, false]) {
-      for (const sentence of ["我查一下厦门明天的天气。", null]) {
-        expect(
-          line({ status: "running", sentence }, { open, typing: true }),
-        ).toEqual({ kind: "running", text: "正在输入…" });
-      }
+      expect(line({ status: "running" }, { open, typing: true })).toEqual({
+        kind: "running",
+        text: "正在输入…",
+      });
     }
     expect(
       assistantCardLine(

@@ -1,15 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  selectAssistantSettledSentence,
-  selectAssistantTyping,
-} from "@/hooks/useAssistantSentence";
-import { assistantState } from "@/lib/assistant";
-import {
-  assistantSettledSentence,
-  typingBubbleShown,
-} from "@/lib/assistant-conversation";
-import { copyForLanguage } from "@/lib/i18n";
+import { selectAssistantTyping } from "@/hooks/useAssistantSentence";
+import { typingBubbleShown } from "@/lib/assistant-conversation";
 import { dispatchIPCEvent } from "@/lib/ipc-handlers";
 import { buildRunGroups } from "@/lib/run-groups";
 import { endsInSilentReport, SUBTASK_REPORT_SUPERVISOR } from "@/lib/subtasks";
@@ -34,7 +26,6 @@ vi.mock("@/lib/ipc/ga-output-cleaning", async (importOriginal) => {
   };
 });
 
-const zh = copyForLanguage("zh-CN");
 const MAIN = "s-main";
 const DISPATCH =
   '🛠️ Tool: `code_run`  📥 args:\n````text\n{"script": "x"}\n````\n';
@@ -282,28 +273,6 @@ function dotsNow(): boolean {
   return typingBubbleShown(liveNow(), m.turns, m.inFlightContent);
 }
 
-/** The header's second line (AssistantIdentity: useAssistantState with
- * `header`). */
-function headerNow(): string {
-  const m = slice();
-  const running = m.agentRunning;
-  return (
-    assistantState(
-      {
-        status: running ? "running" : "idle",
-        hasPendingAskUser: m.pendingAskUser !== null,
-        open: true,
-        sentence: selectAssistantSettledSentence(
-          useMessagesStore.getState(),
-          MAIN,
-          running,
-        ),
-      },
-      zh,
-    ).line?.text ?? ""
-  );
-}
-
 /** Runs `beats`, reading `read` after each one. */
 function play<T>(beats: Beat[], read: () => T): [string, T][] {
   return beats.map(([label, run]) => {
@@ -445,76 +414,6 @@ describe("the typing bubble, and the card's 「正在输入…」 with it", () =
     expect(selectAssistantTyping(state(), MAIN, true)).toBe(false);
     expect(cleaning.calls).toBe(1);
   });
-});
-
-// ---- The header's sentence -------------------------------------------------
-
-describe("the header's sentence: the newest settled step's", () => {
-  it("is the newest settled step's sentence, never what streams, no clock; 「思考中」 before one", () => {
-    const lines: string[] = [];
-    for (const [, text] of play(youStart(), headerNow)) {
-      if (lines[lines.length - 1] !== text) lines.push(text);
-    }
-    expect(lines).toEqual([
-      "思考中",
-      STEP_ONE,
-      STEP_TWO,
-      // run_complete: only the name.
-      "",
-    ]);
-  });
-
-  it("says each step of a woken round that only dispatched, as of any woken round", () => {
-    const lines: string[] = [];
-    for (const [, text] of play(dispatchOnly(), headerNow)) {
-      if (lines[lines.length - 1] !== text) lines.push(text);
-    }
-    expect(lines).toEqual(["思考中", STEP_ONE_SUMMARY, STEP_TWO_SUMMARY, ""]);
-  });
-
-  it("takes the narration first, else the summary", () => {
-    const beats: Beat[] = [
-      ...sendBeats("查船票"),
-      ...toolStepBeats(1, "查船班", "我先查船班。"),
-    ];
-    play(beats, () => null);
-    expect(headerNow()).toBe("我先查船班。");
-    play(toolStepBeats(2, "已查到两班"), () => null);
-    // Step 2 wrote only its summary: the header moves on to it, not
-    // holding step 1's narration (ruling 100).
-    expect(headerNow()).toBe("已查到两班");
-    expect(
-      selectAssistantSettledSentence(useMessagesStore.getState(), MAIN, true),
-    ).toBe(assistantSettledSentence(slice().turns));
-  });
-
-  it("is null at rest without looking at the turns", () => {
-    play(youStart().slice(0, 9), () => null);
-    expect(
-      selectAssistantSettledSentence(useMessagesStore.getState(), MAIN, false),
-    ).toBeNull();
-    expect(
-      selectAssistantSettledSentence(useMessagesStore.getState(), MAIN, true),
-    ).toBe(STEP_ONE);
-  });
-
-  it("re-reads only when a step lands: a chunk returns the same string", () => {
-    let changes = 0;
-    let last = selectAssistantSettledSentence(
-      useMessagesStore.getState(),
-      MAIN,
-      true,
-    );
-    const unsubscribe = useMessagesStore.subscribe((state) => {
-      const next = selectAssistantSettledSentence(state, MAIN, true);
-      if (next !== last) changes += 1;
-      last = next;
-    });
-    play(youStart(), () => null);
-    unsubscribe();
-    // Step 1 lands, step 2 lands; the reply and every chunk change nothing.
-    expect(changes).toBe(2);
-  });
 
   it("reads the main chat's cache while another session is on screen", () => {
     useSessionsStore.setState({
@@ -525,12 +424,16 @@ describe("the header's sentence: the newest settled step's", () => {
       activeSessionId: "s-other",
     });
     useMessagesStore.getState().ensureMessages("s-other");
-    const sentence = () =>
-      selectAssistantSettledSentence(useMessagesStore.getState(), MAIN, true);
-    play(sendBeats("看看周六的船票"), () => null);
-    expect(sentence()).toBeNull();
+    const card = () =>
+      selectAssistantTyping(useMessagesStore.getState(), MAIN, true);
+    // A woken round: the card follows its words, the main chat not on
+    // screen.
+    wakeBeat[1]();
+    expect(card()).toBe(false);
     play(toolStepBeats(1, "已查到周六的船班；接下来核对余票。"), () => null);
-    expect(sentence()).toBe("已查到周六的船班；接下来核对余票。");
+    expect(card()).toBe(false);
+    progress("查好了，");
+    expect(card()).toBe(true);
     // Nothing went to the session on screen.
     expect(useMessagesStore.getState().byId["s-other"].inFlightContent).toBe(
       "",
@@ -560,13 +463,12 @@ describe("re-renders", () => {
     };
     const running = (s: State) => s.byId[MAIN]?.agentRunning ?? false;
     const readers = {
-      // AssistantIdentity: useAssistantState({ open: true, header: true }).
-      header: (s: State) => [
-        status(s),
-        selectAssistantSettledSentence(s, MAIN, running(s)),
-      ],
-      // SidebarAssistantCard: its state (no sentence), whether it types,
-      // the question, the turns its last message comes from.
+      // AssistantIdentity: useAssistantState({ open: true }) — its state
+      // only, nothing while it runs (rulings 134, 135).
+      header: (s: State) => [status(s)],
+      // SidebarAssistantCard: its state, whether it types, the question,
+      // the turns its last message comes from (its round and minutes:
+      // hooks/useAssistantProgress.test.tsx).
       card: (s: State) => [
         status(s),
         selectAssistantTyping(s, MAIN, running(s)),
@@ -608,11 +510,11 @@ describe("re-renders", () => {
         /chunk|header|summary|dispatch|output/.test(label),
       ),
     ).toHaveLength(14);
-    // No chunk re-renders either: the header when its run starts, each
-    // step lands and the run ends; the card on each write to the turns
-    // and when the run starts and ends.
+    // No chunk re-renders either: the header when its run starts and
+    // ends; the card on each write to the turns and when the run starts
+    // and ends.
     expect(renders(you)).toEqual({
-      header: ["you send", "step 1 settles", "step 2 settles", "run complete"],
+      header: ["you send", "run complete"],
       card: [
         "you send",
         "persisted",
@@ -628,7 +530,7 @@ describe("re-renders", () => {
     // no other chunk.
     resetStores();
     expect(renders(woken())).toEqual({
-      header: ["report row", "step 1 settles", "run complete"],
+      header: ["report row", "run complete"],
       card: [
         "report row",
         "step 1 settles",

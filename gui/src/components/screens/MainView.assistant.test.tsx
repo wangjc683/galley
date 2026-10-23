@@ -3,8 +3,9 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { zhCopy } from "@/i18n/locales/zh";
 import { dropComposerDraft, saveComposerDraft } from "@/lib/composer-draft";
 import { ASSISTANT_BUBBLE_TEXT_CLASS } from "@/lib/conversation-font-size";
@@ -16,6 +17,7 @@ import type {
   AgentTurn,
   ConversationToolEvent,
   Turn,
+  UserTurn,
 } from "@/types/conversation";
 
 import { EmptyState } from "./EmptyState";
@@ -522,7 +524,7 @@ describe("the assistant's typing bubble", () => {
   ];
   const TYPING = 'data-role="assistant-typing"';
 
-  it("while it runs, shows only the typing bubble: no steps, no streaming prose, no sentence", () => {
+  it("while it runs, shows the typing bubble and the line under it: no steps, no streaming prose", () => {
     const turns: Turn[] = [...sent, step("我先查一下周六的船班。", 1)];
     live.slice = { inFlightContent: "周六上午还有三班船。" };
     const html = render({ isMainChat: true, isRunning: true, turns });
@@ -533,7 +535,12 @@ describe("the assistant's typing bubble", () => {
     expect(typing).toContain(zhCopy.assistant.typingLabel);
     expect(typing).toContain("bg-assistant-tint");
     expect(count(typing, "live-dot rounded-full")).toBe(3);
-    // What it is doing is the header's; what streams, nobody's.
+    // What it is doing is the line under the dots (rulings 134, 135: here
+    // it writes words); what streams, nobody's.
+    expect(count(html, 'data-role="assistant-progress"')).toBe(1);
+    expect(typing).toMatch(
+      /data-role="assistant-progress-doing"[^>]*>正在写回复</,
+    );
     expect(html).not.toContain("我先查一下周六的船班。");
     expect(html).not.toContain("周六上午还有三班船。");
     expect(html).not.toContain('data-role="step-marker"');
@@ -575,10 +582,14 @@ describe("the assistant's typing bubble", () => {
     expect(asked).toContain('data-role="ask-user-bubble"');
   });
 
-  it("shows no clock: neither in the conversation nor in the corner", () => {
+  it("keeps the time to the line under the dots: no clock in the corner", () => {
     live.slice = { currentRunStartedAtMs: Date.now() - 14_000 };
     const html = render({ isMainChat: true, isRunning: true, turns: sent });
-    expect(html).not.toContain("14 秒");
+    // Rulings 134, 135: the round's time is the line's, once.
+    expect(count(html, "14 秒")).toBe(1);
+    expect(html).toContain(
+      'data-role="assistant-progress-elapsed" class="shrink-0 whitespace-pre"> · 14 秒<',
+    );
     expect(html).not.toContain(CORNER_CLOCK);
     // Elsewhere the corner clock stays.
     const other = render({ isMainChat: false, isRunning: true, turns: sent });
@@ -630,6 +641,262 @@ describe("the assistant's typing bubble", () => {
     expect(settled).not.toContain(TYPING);
     expect(settled).not.toContain("我让它再查一家。");
     expect(settled).not.toContain('data-role="step-marker"');
+  });
+});
+
+// Rulings 134, 135 (tickets 90, 91): in a round you started, a line
+// under the dots says what it is doing and for how long.
+describe("the line under the dots, in a round you started", () => {
+  const NOW = Date.UTC(2026, 9, 23, 4, 0, 0);
+
+  beforeEach(() => {
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function user(content: string, id: string): UserTurn {
+    return { role: "user", content, messageId: id };
+  }
+
+  /** A tool step that wrote only its `<summary>` (no narration). */
+  function toolStep(summary: string, index: number): AgentTurn {
+    return {
+      role: "agent",
+      turnIndex: index,
+      finalAnswer: null,
+      summary,
+      tools: [tool("web_scan")],
+      telemetry: { elapsedMs: 21_000 },
+    };
+  }
+
+  /** Your message, nothing back yet. */
+  const SENT: Turn[] = [user("新赛季 NBA 东部你怎么预测？", "u-2")];
+
+  const STEPPED: Turn[] = [
+    ...SENT,
+    toolStep("已拿到东部各队休赛期动向；我查各队伤病与轮换。", 1),
+  ];
+
+  /** It asked, and you answered: the run's first segment banked 26s. */
+  const ANSWERED: Turn[] = [
+    ...STEPPED,
+    {
+      role: "agent",
+      turnIndex: 2,
+      finalAnswer: null,
+      summary: "需要用户选东部还是西部；我问用户",
+      tools: [tool("ask_user")],
+      telemetry: { elapsedMs: 26_000 },
+    },
+    user("东部", "u-3"),
+  ];
+
+  /** A round Core woke it for, after a reply. */
+  const REPORT: UserTurn = {
+    role: "user",
+    content: "[Galley — not a message from the user] …",
+    messageId: "u-report",
+    origin: { via: "system", supervisor: "galley-report", reason: "s-2" },
+  };
+
+  /** GA's verbose dispatch marker after a reply (the runner drops the
+   * 5-backtick output fence that follows it: workbench_bridge
+   * `_FenceFilter`). */
+  const DISPATCH =
+    '\n\n🛠️ Tool: `web_scan`  📥 args:\n````text\n{\n  "tabs_only": false\n}\n````\n';
+
+  const DISPATCHED_STREAM = `<thinking>先看伤病。</thinking>\n<summary>伤病已查完；我对比各队近三季的胜场</summary>${DISPATCH}`;
+
+  function mainView(props: Partial<ComponentProps<typeof MainView>>): string {
+    return render({
+      turns: SENT,
+      activeSessionId: "s-main",
+      isMainChat: true,
+      isRunning: true,
+      ...props,
+    });
+  }
+
+  /** Every SVG as an empty one: the icons are not what this is about. */
+  function withoutSvg(html: string): string {
+    return html.replace(/<svg[\s\S]*?<\/svg>/g, "<svg/>");
+  }
+
+  /** The conversation area (the column, the corner clock's place, the
+   * scroll button), up to the composer's stack. */
+  function conversationArea(html: string): string {
+    const start = html.indexOf("<div data-conversation-area");
+    const end = html.indexOf('<div class="bg-app px-8 pb-6">', start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    return withoutSvg(html.slice(start, end));
+  }
+
+  /** The `<div` at `start` up to its own `</div>`. */
+  function element(html: string, start: number): string {
+    let depth = 0;
+    const tag = /<div[\s>]|<\/div>/g;
+    tag.lastIndex = start;
+    for (let m = tag.exec(html); m; m = tag.exec(html)) {
+      depth += m[0] === "</div>" ? -1 : 1;
+      if (depth === 0) return html.slice(start, m.index + 6);
+    }
+    throw new Error("unclosed <div>");
+  }
+
+  /** The typing bubble's row (its `role="status"` root), or null. */
+  function typingRow(html: string): string | null {
+    const i = html.indexOf('<div data-role="assistant-typing"');
+    return i < 0 ? null : element(html, i);
+  }
+
+  /** The line under the dots, or null. */
+  function progressLine(html: string): string | null {
+    const i = html.indexOf('<div data-role="assistant-progress"');
+    return i < 0 ? null : element(html, i);
+  }
+
+  const textOf = (fragment: string | null) =>
+    fragment === null ? null : fragment.replace(/<[^>]*>/g, "");
+
+  it("hangs 「{在做什么} · {用时}」 in the dots' row, under the bubble, from the send on", () => {
+    live.slice = { currentRunStartedAtMs: NOW - 75_000 };
+    const row = typingRow(mainView({}))!;
+    // The row is the typing bubble's, the line after the bubble inside it.
+    expect(row).toMatch(
+      /^<div data-role="assistant-typing" role="status"><span class="sr-only">Galley 正在输入<\/span><div data-role="assistant-typing-bubble"/,
+    );
+    const line = progressLine(row)!;
+    expect(row.endsWith(`${line}</div>`)).toBe(true);
+    expect(textOf(line)).toBe("思考中 · 1 分 15 秒");
+    // 6px under the bubble, one 18px line, 12px ink-soft, tabular
+    // numbers, no wider than a reply bubble; no sweep, no motion.
+    const box = line.slice(0, line.indexOf(">") + 1);
+    for (const cls of [
+      "mt-1.5",
+      "flex",
+      "h-[18px]",
+      "text-[12px]",
+      "leading-[18px]",
+      "text-ink-soft",
+      "tabular-nums",
+      "max-w-[88%]",
+    ]) {
+      expect([cls, box.includes(cls)]).toEqual([cls, true]);
+    }
+    expect(line).not.toMatch(/shimmer|animate-|live-dot/);
+    // The doing part gives way (fade, whole on hover); the time never.
+    expect(line).toMatch(
+      /<span data-role="assistant-progress-doing" class="truncate-fade min-w-0">思考中<\/span>/,
+    );
+    expect(line).toContain(
+      '<span aria-hidden="true" data-role="assistant-progress-elapsed" class="shrink-0 whitespace-pre"> · 1 分 15 秒</span>',
+    );
+  });
+
+  it("says what it is doing: before a dispatch, between steps, at a dispatch, writing", () => {
+    for (const [turns, inFlightContent, said] of [
+      [SENT, "<thinking>先想想", "思考中"],
+      [STEPPED, "", "我查各队伤病与轮换"],
+      [
+        STEPPED,
+        "<summary>伤病已查完；我对比各队近三季的胜场</summary>",
+        "我查各队伤病与轮换",
+      ],
+      [STEPPED, DISPATCHED_STREAM, "我对比各队近三季的胜场"],
+      [STEPPED, "<summary>都查完了</summary>\n东部我看好", "正在写回复"],
+      [ANSWERED, "", "思考中"],
+    ] as const) {
+      live.slice = { currentRunStartedAtMs: NOW - 75_000, inFlightContent };
+      const doing = progressLine(mainView({ turns: [...turns] }))!;
+      expect(textOf(doing)?.split(" · ")[0]).toBe(said);
+    }
+  });
+
+  it("has no time under a second, nor before the run has a clock", () => {
+    live.slice = { currentRunStartedAtMs: NOW - 400 };
+    expect(textOf(progressLine(mainView({})))).toBe("思考中");
+    expect(mainView({})).not.toContain("assistant-progress-elapsed");
+    live.slice = { inFlightContent: "<thinking>" };
+    expect(textOf(progressLine(mainView({})))).toBe("思考中");
+  });
+
+  it("counts the time as the workbench's corner clock: its words, the answered segments added up", () => {
+    const hud = (startedAtMs: number, baseMs = 0) =>
+      textOf(
+        renderToStaticMarkup(
+          <RunElapsedHud startedAtMs={startedAtMs} baseMs={baseMs} />,
+        ),
+      )!.replace("工作中", "");
+    for (const [ago, said] of [
+      [1_000, "1 秒"],
+      [59_000, "59 秒"],
+      [60_000, "1 分 0 秒"],
+      [75_000, "1 分 15 秒"],
+    ] as const) {
+      live.slice = { currentRunStartedAtMs: NOW - ago };
+      expect(textOf(progressLine(mainView({})))).toBe(`思考中 · ${said}`);
+      expect(hud(NOW - ago)).toBe(said);
+    }
+    // Answered its question: 26s banked, 10s since your answer; the time
+    // it waited on you is in neither.
+    live.slice = { currentRunStartedAtMs: NOW - 10_000 };
+    expect(textOf(progressLine(mainView({ turns: ANSWERED })))).toBe(
+      "思考中 · 36 秒",
+    );
+    expect(hud(NOW - 10_000, 26_000)).toBe("36 秒");
+  });
+
+  it("reads out what it is doing, never the ticking time", () => {
+    live.slice = { currentRunStartedAtMs: NOW - 75_000 };
+    const row = typingRow(mainView({ turns: STEPPED }))!;
+    // The row is the polite live region; inside it the time is hidden.
+    expect(row).toMatch(/^<div[^>]*role="status"/);
+    const elapsed = row.slice(
+      row.lastIndexOf("<span", row.indexOf("assistant-progress-elapsed")),
+    );
+    expect(elapsed).toMatch(/^<span aria-hidden="true"/);
+    expect(row).toMatch(/<span data-role="assistant-progress-doing"[^>]*>我查/);
+    expect(row.match(/aria-hidden/g)).toHaveLength(2); // the dots, the time
+  });
+
+  it("draws no line in a round Core woke it for, nor while it asks", () => {
+    live.slice = {
+      currentRunStartedAtMs: NOW - 12_000,
+      inFlightContent: "子任务查好了，",
+    };
+    const woken = conversationArea(
+      mainView({ turns: [...SENT, answer("交给子任务去查了。", 1), REPORT] }),
+    );
+    expect(woken).toContain('data-role="assistant-typing"');
+    expect(woken).not.toContain("assistant-progress");
+    live.slice = { currentRunStartedAtMs: NOW - 12_000 };
+    const asking = mainView({
+      turns: ANSWERED.slice(0, -1),
+      pendingAskUser: { question: "看东部还是西部？", candidates: ["东部"] },
+    });
+    expect(asking).not.toContain('data-role="assistant-typing"');
+    expect(asking).not.toContain("assistant-progress");
+  });
+
+  it("leaves the workbench and a subtask without it", () => {
+    live.slice = {
+      currentRunStartedAtMs: NOW - 75_000,
+      inFlightContent: DISPATCHED_STREAM,
+    };
+    const others = [
+      mainView({ turns: STEPPED, isMainChat: false }),
+      mainView({
+        turns: STEPPED,
+        isMainChat: false,
+        activeSessionId: "s-sub",
+      }),
+    ].join("\n");
+    expect(others).not.toContain("assistant-progress");
   });
 });
 

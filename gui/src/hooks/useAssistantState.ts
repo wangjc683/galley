@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
-import { useAssistantSettledSentence } from "@/hooks/useAssistantSentence";
 import { useSessionStatusView } from "@/hooks/useSessionStatusView";
 import { useSessionsAttention } from "@/hooks/useSessionsAttention";
 import {
@@ -27,27 +26,22 @@ import type { Session } from "@/types/session";
  * main chat's unpromoted subtasks. `open` is the main chat itself on
  * screen — its header identity always, the card while the main chat is
  * the open session (one of its subtasks is not: its conversation is not
- * in front of you there). `header` is the header identity: running, it
- * reads the newest settled step's sentence (useAssistantSettledSentence;
- * main chat PRD rulings 107, 110), 「思考中」 before there is one. The
- * card reads no sentence: running, it says 「正在输入…」
- * (SidebarAssistant, useAssistantTyping).
+ * in front of you there). Running has no words here (main chat PRD
+ * rulings 134, 135): the header says nothing then, and the card reads
+ * its own (SidebarAssistant: useAssistantRound, useAssistantRunMinutes,
+ * useAssistantTyping).
  */
 export function useAssistantState({
   mainChat,
   subtasks,
   open,
-  header = false,
 }: {
   mainChat: Session;
   subtasks: Session[];
   open: boolean;
-  header?: boolean;
 }): AssistantState {
   const copy = useCopy();
   const view = useSessionStatusView(mainChat);
-  const running = view.status === "running";
-  const sentence = useAssistantSettledSentence(mainChat.id, running && header);
   const subtaskAttention = useSessionsAttention(subtasks, undefined);
   return assistantState(
     {
@@ -59,7 +53,6 @@ export function useAssistantState({
           : undefined,
       hasUnread: mainChat.hasUnread,
       open,
-      sentence,
       errorCount: mainChat.errorCount,
     },
     copy,

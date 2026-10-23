@@ -16,10 +16,10 @@ import {
 } from "@/stores/messages";
 
 /*
- * TEMP variant switcher (main chat 90) — the sidebar card's reads for
- * 「新」 while the main chat runs (main chat PRD ruling 134; removal in
- * components/conversation/live-progress-variants/live-progress-variants.ts).
- * Kept if 「新」 wins.
+ * The sidebar card's reads while the main chat runs (main chat PRD
+ * rulings 134, 135): whose round it is, whether it writes words, and the
+ * run's whole minutes — what the card says in a round you started
+ * (lib/assistant.ts `assistantCardLine`'s `working`).
  */
 
 /** Whose round runs: one you started (`own`; `own-writing` while it

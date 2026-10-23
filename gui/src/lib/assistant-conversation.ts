@@ -1,24 +1,20 @@
-import { isFinalAnswerTurn } from "@/lib/agent-turn";
 import {
   cleanPartialContent,
   extractLiveThinking,
   modelReplyEnd,
 } from "@/lib/ipc/ga-output-cleaning";
 import type { RunGroup, RunStats } from "@/lib/run-groups";
-import {
-  cleanSessionSummary,
-  isProtocolFailureSummary,
-} from "@/lib/session-summary";
+import { cleanSessionSummary } from "@/lib/session-summary";
 import { inReportRound, isReportRound, isSilentReport } from "@/lib/subtasks";
 import type { Turn } from "@/types/conversation";
 
 /**
- * The assistant's conversation (main chat PRD rulings 66–69, 107, 110;
- * spec: docs/design/conversation.md 「助手的对话」): the main chat, open
- * in the main area, reads as a long IM with one person rather than as
- * the workbench's task record. MainView's `isMainChat` is the gate; every
- * other conversation (the workbench's, a subtask opened from the
- * assistant, the external runtime's) keeps the workbench rendering.
+ * The assistant's conversation (main chat PRD rulings 66–69, 107, 110,
+ * 134, 135; spec: docs/design/conversation.md 「助手的对话」): the main
+ * chat, open in the main area, reads as a long IM with one person rather
+ * than as the workbench's task record. MainView's `isMainChat` is the
+ * gate; every other conversation (the workbench's, a subtask opened from
+ * the assistant, the external runtime's) keeps the workbench rendering.
  *
  *   bubbles   on both sides: the user's words on the right (apricot),
  *             the assistant's replies, questions and greeting on the
@@ -30,11 +26,16 @@ import type { Turn } from "@/types/conversation";
  *   process   while it works, the typing bubble at the conversation's
  *             end (three dots, `typingBubbleShown`: a round you
  *             started from the send on, a woken one only while it
- *             writes words) and nothing else, no clock; it grows into
- *             the reply (lib/typing-bubble-handoff.ts). The header's
- *             second line says the newest settled step's sentence
- *             (`assistantSettledSentence`), the sidebar card
- *             「正在输入…」 (`assistantTyping`, the dots' own rule).
+ *             writes words), and in a round you started a line under
+ *             it, 「{在做什么} · {用时}」 (lib/assistant-progress.ts);
+ *             no steps, no streaming prose. The bubble grows into the
+ *             reply, the line fading out with the dots
+ *             (lib/typing-bubble-handoff.ts). The header's second line
+ *             says nothing while it runs; the sidebar card says what
+ *             the screen does not — 「正在工作…」, away from the main
+ *             chat 「正在输入…」 while it writes and the minutes from
+ *             one on, in a woken round 「正在输入…」 with the dots
+ *             (`assistantTyping`, the dots' own rule).
  *             The reply appears whole once the round has its answer.
  *             Under it nothing shows at rest: the action bar comes in
  *             on hover, icons only (copy, quote, save, for a reply of
@@ -134,9 +135,11 @@ function cachedReportRound(turns: readonly Turn[]): boolean {
 
 /**
  * Whether the assistant reads as typing while its round runs (main chat
- * PRD rulings 107, 110): the conversation's dots and the card's
- * 「正在输入…」 say the same thing. A round you started types from the
- * send on; a round Core woke it for (its opener a report row: lib/
+ * PRD rulings 107, 110): the conversation's dots, and in a round Core
+ * woke it for the card's 「正在输入…」 too, say the same thing (a round
+ * you started has the card's own words, rulings 134, 135: lib/
+ * assistant.ts `workingLine`). A round you started types from the send
+ * on; a round Core woke it for (its opener a report row: lib/
  * subtasks.ts `inReportRound`) only while it writes words
  * (`assistantWriting`) — it stops when a tool dispatch shows and starts
  * again when it writes again, as someone in an IM types on and off; a
@@ -166,11 +169,11 @@ export function typingBubbleShown(
   return assistantTyping(turns, inFlightContent);
 }
 
-// ---- While it runs: the header's sentence ---------------------------------
+// ---- While it runs: a step's first line -----------------------------------
 
 const BLOCK_MARKER = /^\s*(?:#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)+/;
-/** More than the widest line shows (the header's second line, cut to
- * its width). */
+/** More than the widest line shows (the line under the typing bubble,
+ * cut to its width). */
 const LINE_MAX_CHARS = 240;
 
 /** The first line of `text` that says something, as one plain line:
@@ -194,81 +197,6 @@ export function assistantFirstLine(
     start = end + 1;
   }
   return null;
-}
-
-/**
- * The header's second line while it runs (main chat PRD rulings 107,
- * 110): the sentence of the newest step that settled since your last
- * message (or the report row a woken round starts from) and has words —
- * its narration, or, when it wrote none, its summary (ruling 100) —
- * else null for 「思考中」. An ask_user answer starts a new stretch: what
- * it wrote before the question is stale once it has asked. What streams
- * is not read, so the reply's first line never shows here before the
- * reply; nor is the round's answer (a closing step, no tools) any
- * step's sentence: it lands as the bubble, and run_complete follows.
- * No clock: the dots and a sentence that changes with each step say it
- * is moving; the time is in the process card's first line.
- *
- * The summary (ruling 100, partly overturning ruling 68's 4th point,
- * which read the narration only): the main model writes none on most
- * tool steps — in October, 24 of gpt-6.1-sol's 29 rounds with tool
- * steps had no narration on any of them — so a narration-only rule said
- * 「思考中」 through a whole round. The summary is GA's working note
- * (「已查到…；接下来…」), but once the round settles the process card
- * shows it to the reader anyway (ticket 22). The newest step wins: a
- * step-1 narration does not hold the line once step 2 has written only
- * its summary.
- */
-export function assistantSettledSentence(
-  turns: readonly Turn[],
-): string | null {
-  for (let i = turns.length - 1; i >= 0; i--) {
-    const turn = turns[i];
-    if (turn.role === "user") break;
-    if (turn.role !== "agent" || isFinalAnswerTurn(turn.tools)) continue;
-    const line =
-      assistantFirstLine(turn.finalAnswer ?? turn.preamble) ??
-      assistantSummaryLine(turn.summary);
-    if (line) return line;
-  }
-  return null;
-}
-
-/**
- * A step's summary as the header says it: the same cleaning as the
- * narration (`assistantFirstLine`: its first line, block markers and
- * markdown out, protocol tags and GA's 「...」 elision repaired by the
- * sidebar's recap cleaner). The runner already sends it clean and on one
- * line (GA joins its lines; workbench_bridge `_clean_turn_summary`), and
- * GA takes the inside of `<summary>`, so no tag is left to strip; the
- * cleaning covers rows from before that. A turn-protocol failure's
- * summary (the runner's fixed marker, or leaked tool-call markup) is no
- * sentence: nothing, as a step without one.
- */
-function assistantSummaryLine(summary: string | undefined): string | null {
-  if (!summary || isProtocolFailureSummary(summary)) return null;
-  return assistantFirstLine(summary);
-}
-
-let settledCache: { turns: readonly Turn[]; sentence: string | null } | null =
-  null;
-
-/**
- * `assistantSettledSentence`, kept for the last turns array: the
- * header's selector runs on every store write (any session's, every
- * chunk), and a chunk leaves the turns as they were. A step's narration
- * and summary come with its turn_end, which appends a new turn (a new
- * `turns` array). The string result is what keeps the header from
- * re-rendering per chunk: a selector that returns an equal string
- * updates nothing.
- */
-export function assistantCachedSettledSentence(
-  turns: readonly Turn[],
-): string | null {
-  if (settledCache?.turns === turns) return settledCache.sentence;
-  const sentence = assistantSettledSentence(turns);
-  settledCache = { turns, sentence };
-  return sentence;
 }
 
 // ---- While it runs: whether it writes words -------------------------------
@@ -296,13 +224,16 @@ let writingCache: { inFlightContent: string; writing: boolean } | null = null;
 /**
  * Whether the assistant is writing words right now — in a round Core
  * woke it for, the typing bubble and the card's 「正在输入…」
- * (`assistantTyping`; main chat PRD rulings 104, 110). A deterministic
- * reading of this step's raw stream (`inFlightContent`; turn_end clears
- * it), no guess: no `<thinking>` left open (`extractLiveThinking`), no
- * tool dispatch started (`modelReplyEnd`: GA's dispatch marker or its
- * output fence follows the reply in the same buffer, and the words
- * before it are done), and words left once it is cleaned as the
- * conversation cleans it (`cleanedStream`). A reply that is only
+ * (`assistantTyping`; main chat PRD rulings 104, 110); in a round you
+ * started, the line under the dots' 「正在写回复」 and, away from the
+ * main chat, the card's 「正在输入…」 (rulings 134, 135;
+ * lib/assistant-progress.ts, hooks/useAssistantProgress.ts). A
+ * deterministic reading of this step's raw stream (`inFlightContent`;
+ * turn_end clears it), no guess: no `<thinking>` left open
+ * (`extractLiveThinking`), no tool dispatch started (`modelReplyEnd`:
+ * GA's dispatch marker or its output fence follows the reply in the
+ * same buffer, and the words before it are done), and words left once it
+ * is cleaned as the conversation cleans it (`cleanedStream`). A reply that is only
  * `<no-reply/>` — or the start of one, held back by the cleaning — has
  * none, nor has a step that so far wrote only tags, GA's markers or
  * whitespace.
@@ -356,8 +287,8 @@ export interface AssistantProcessToggle {
  *             for no time either (`userTimeMarks`' `skip`).
  *
  * A live run shows its opener and its answered questions and their
- * answers; its steps show nothing (the typing bubble and the header's
- * sentence stand for them). A report round's opener is no message; a
+ * answers; its steps show nothing (the typing bubble and the line under
+ * it stand for them). A report round's opener is no message; a
  * silent one settles with its questions and their answers alone — no
  * answer, no process button, no steps.
  *

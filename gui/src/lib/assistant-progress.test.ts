@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { type AssistantDraft, assistantCardLine } from "@/lib/assistant";
-import { assistantSettledSentence } from "@/lib/assistant-conversation";
 import {
   assistantDoing,
   assistantProgressElapsed,
@@ -19,8 +18,8 @@ import type {
 } from "@/types/conversation";
 
 /*
- * TEMP variant switcher (main chat 90) — 「新」's rules (main chat PRD
- * ruling 134). Kept with lib/assistant-progress.ts if 「新」 wins.
+ * What the main chat says while it runs (main chat PRD rulings 134, 135):
+ * the line under the dots and the card.
  */
 
 const zh = copyForLanguage("zh-CN");
@@ -187,7 +186,7 @@ describe("assistantProgressHalf: the half of a summary the line says", () => {
     expect(assistantProgressHalf("提醒规则已确认;  ")).toBe("提醒规则已确认");
   });
 
-  it("is cleaned as the header cleans a summary first", () => {
+  it("is cleaned first, as a step's first line (`assistantFirstLine`)", () => {
     // An old row's 「第 N 步 · 」, markdown, GA's 「...」 elision.
     expect(
       assistantProgressHalf("第 2 步 · 读取 **提醒列表** ... 接下来；新建"),
@@ -430,7 +429,6 @@ describe("assistantDoing: what the line under the dots says", () => {
       user("东部"),
     ];
     expect(assistantDoing(answered, "", zh)).toBe("思考中");
-    expect(assistantSettledSentence(answered)).toBeNull();
   });
 
   it("stops at your last message: an earlier round's steps are not this one's", () => {
@@ -538,10 +536,10 @@ describe("the card's minutes", () => {
 
 // ---- 卡片 -------------------------------------------------------------------
 
-describe("assistantCardLine in 「新」: a round you started", () => {
+describe("assistantCardLine: a round you started", () => {
   const running = {
     kind: "running" as const,
-    line: { text: "思考中", tone: "running" as const },
+    line: null,
     fromSubtask: false,
   };
   const lastMessage = { fromUser: true, text: "新赛季 NBA 东部你怎么预测？" };
