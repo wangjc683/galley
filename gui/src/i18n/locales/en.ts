@@ -311,6 +311,11 @@ export const enCopy: AppCopy = {
     timeYesterday: "Yesterday",
     typing: "Typing…",
     typingLabel: "Galley is typing",
+    // TEMP variant switcher (main chat 90): the 「新」 variant's words.
+    working: "Working…",
+    workingMinutes: (n) => `Working · ${n} min`,
+    progressThinking: "Thinking",
+    progressWriting: "Writing the reply",
   },
   topbar: {
     newConversation: "New chat",

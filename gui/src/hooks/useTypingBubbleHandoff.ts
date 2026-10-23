@@ -40,6 +40,11 @@ interface TypingRecord {
   /** When the dots' loop started (document timeline, ms): the leaving
    * copy carries on in step instead of starting the loop over. */
   loopStart: number | null;
+  /** TEMP variant switcher (main chat 90): the line under the dots
+   * (TypingBubble's `progress`), when drawn, and where it stood in the
+   * column (px): copied into the leaving line. */
+  line: HTMLElement | null;
+  lineBox: Box | null;
 }
 
 /** One commit as the hand-off reads it. */
@@ -81,6 +86,10 @@ function measureTyping(
     '[data-role="assistant-typing-dots"]',
   );
   if (!column || !bubble || !dots) return null;
+  // TEMP variant switcher (main chat 90): the line under the dots.
+  const line = row.querySelector<HTMLElement>(
+    '[data-role="assistant-progress"]',
+  );
   const inner = column.getBoundingClientRect();
   const inColumn = (rect: DOMRect): Box => ({
     top: rect.top - inner.top,
@@ -102,6 +111,8 @@ function measureTyping(
         : previous?.dots === dots
           ? previous.loopStart
           : null,
+    line,
+    lineBox: line ? inColumn(line.getBoundingClientRect()) : null,
   };
 }
 
@@ -254,6 +265,7 @@ function playTypingHandoff(
   // skips boxes without height).
   let layer: HTMLDivElement | null = null;
   let leaving: HTMLElement | null = null;
+  let leavingLine: HTMLElement | null = null;
   if (record) {
     layer = document.createElement("div");
     layer.setAttribute("aria-hidden", "true");
@@ -286,6 +298,29 @@ function playTypingHandoff(
       { duration: timing.fadeMs, easing: timing.easing, fill: "forwards" },
     );
     animations.push(leavingFade);
+    // TEMP variant switcher (main chat 90): the line under the dots leaves
+    // as they do — a copy where it stood, out of the layout, faded on the
+    // same duration and curve (gone with the layer).
+    if (record.line && record.lineBox) {
+      leavingLine = record.line.cloneNode(true) as HTMLElement;
+      leavingLine.setAttribute("data-role", "assistant-progress-leaving");
+      leavingLine.style.position = "absolute";
+      leavingLine.style.margin = "0";
+      leavingLine.style.top = `${columnTop + record.lineBox.top}px`;
+      leavingLine.style.left = `${columnLeft + record.lineBox.left}px`;
+      leavingLine.style.width = `${record.lineBox.width}px`;
+      leavingLine.style.height = `${record.lineBox.height}px`;
+      // Its cap is a share of the column; in the zero-size layer that
+      // would be nothing.
+      leavingLine.style.maxWidth = "none";
+      layer.append(leavingLine);
+      animations.push(
+        leavingLine.animate(
+          { opacity: [1, 0] },
+          { duration: timing.fadeMs, easing: timing.easing, fill: "forwards" },
+        ),
+      );
+    }
     // Gone once faded.
     const remove = () => layer?.remove();
     void leavingFade.finished.then(remove, remove);
@@ -318,6 +353,8 @@ function playTypingHandoff(
         animations.push(child.animate(lifted, options));
       }
       if (leaving) animations.push(leaving.animate(lifted, options));
+      // TEMP variant switcher (main chat 90): the line under the dots.
+      if (leavingLine) animations.push(leavingLine.animate(lifted, options));
     }
   } else {
     fadeIn(bubble);

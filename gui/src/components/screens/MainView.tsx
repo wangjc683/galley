@@ -12,7 +12,12 @@ import {
   Conversation,
   TurnMarker,
 } from "@/components/conversation/Conversation";
-import { TypingBubble } from "@/components/conversation/TypingBubble";
+import {
+  TypingBubble,
+  type TypingProgress,
+} from "@/components/conversation/TypingBubble";
+// TEMP variant switcher (main chat 90): 「新」's line under the dots.
+import { useLiveProgressVariant } from "@/components/conversation/live-progress-variants/live-progress-variants";
 import { ConversationSkeleton } from "@/components/conversation/ConversationSkeleton";
 import { StepLimitTail } from "@/components/conversation/StepLimitTail";
 import { Button } from "@/components/ui/button";
@@ -44,6 +49,7 @@ import { useTypewriter } from "@/hooks/useTypewriter";
 import { useTypingBubbleHandoff } from "@/hooks/useTypingBubbleHandoff";
 import { useMarkdownStream } from "@/hooks/useMarkdownStream";
 import { typingBubbleShown } from "@/lib/assistant-conversation";
+import { assistantDoing } from "@/lib/assistant-progress";
 import { filesByMessage } from "@/lib/file-cards";
 import { openMainChat } from "@/lib/main-chat";
 import { endsInSilentReport, subtaskQuestionLocked } from "@/lib/subtasks";
@@ -468,6 +474,24 @@ function MainViewContent({
     () => typingBubbleShown(roundLive, turns, inFlightContent),
     [roundLive, turns, inFlightContent],
   );
+  // TEMP variant switcher (main chat 90): 「新」 — under the dots, in a
+  // round you started, what it is doing and the round's time (ruling
+  // 134; lib/assistant-progress.ts). Switching shows or drops it at once.
+  const liveProgressVariant = useLiveProgressVariant();
+  const progressDoing = useMemo(
+    () =>
+      liveProgressVariant === "new" && typingShown
+        ? assistantDoing(turns, inFlightContent, copy)
+        : null,
+    [liveProgressVariant, typingShown, turns, inFlightContent, copy],
+  );
+  const typingProgress: TypingProgress | null = progressDoing
+    ? {
+        doing: progressDoing,
+        startedAtMs: currentRunStartedAtMs,
+        baseMs: runElapsedBaseMs,
+      }
+    : null;
   // The hand-off (rulings 103, 110; tickets 51, 58): the render where
   // the live round's place goes to its bubble — the answer, or its
   // question — grows the bubble out of the typing bubble, and the follow
@@ -732,7 +756,9 @@ function MainViewContent({
                 row, its reasoning and the streaming prose — gone once
                 the round has its answer or asks, its bubble growing out
                 of it (useTypingBubbleHandoff). */}
-            {typingShown && <TypingBubble ref={typingBubbleRef} />}
+            {typingShown && (
+              <TypingBubble ref={typingBubbleRef} progress={typingProgress} />
+            )}
             {isRunning && !isMainChat && (
               // The elapsed clock inside TurnMarker resets whenever
               // `index` changes — step 1 took 30s; step 2's clock

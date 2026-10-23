@@ -1,3 +1,5 @@
+// TEMP variant switcher (main chat 90): 「新」 has no second line in a run.
+import { useLiveProgressVariant } from "@/components/conversation/live-progress-variants/live-progress-variants";
 import { SessionTitleCaret } from "@/components/layout/header/SessionTitleMenu";
 import { useAssistantState } from "@/hooks/useAssistantState";
 import { useCopy } from "@/lib/i18n";
@@ -43,12 +45,18 @@ export function AssistantIdentity({
   subtasks: Session[];
 }) {
   const copy = useCopy();
-  const { line } = useAssistantState({
+  const state = useAssistantState({
     mainChat,
     subtasks,
     open: true,
     header: true,
   });
+  // TEMP variant switcher (main chat 90): 「新」 says nothing here while
+  // it runs, as at rest — what it is doing is under the dots (ruling 134);
+  // waiting for you, an error, a subtask's state as before.
+  const liveProgressVariant = useLiveProgressVariant();
+  const quiet = liveProgressVariant === "new" && state.kind === "running";
+  const line = quiet ? null : state.line;
   // The avatar here stays still, whatever the sidebar's face does (main
   // chat PRD ruling 119 point 6): the line under the name says what it
   // is doing, and one face moving at a time is enough.

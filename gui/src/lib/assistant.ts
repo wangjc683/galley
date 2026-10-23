@@ -209,6 +209,7 @@ export function assistantCardLine(
     lastMessage,
     open,
     typing = false,
+    working,
   }: {
     /** The pending question's text (`PendingAskUser.question`), if the
      * page has it. */
@@ -225,10 +226,19 @@ export function assistantCardLine(
      * you started throughout, one Core woke it for only while it writes
      * words, as the conversation's dots. */
     typing?: boolean;
+    /** TEMP variant switcher (main chat 90): 「新」, a round you started
+     * — whether it writes words now (`assistantWriting`) and the run's
+     * whole minutes (hooks/useAssistantProgress.ts); absent in a woken
+     * round and in 「现状」, which keep `typing`. */
+    working?: { writing: boolean; minutes: number };
   },
   copy: AppCopy,
 ): AssistantCardLine | null {
   if (state.kind === "running") {
+    // TEMP variant switcher (main chat 90): 「新」 (ruling 134).
+    if (working) {
+      return { kind: "running", text: workingLine(working, open, copy) };
+    }
     // Open or not (rulings 107, 110): what it is doing is in the header,
     // what it says in the conversation. Not typing (a woken round
     // between its words): the last message, the face at work.
@@ -271,6 +281,26 @@ export function assistantCardLine(
       return { kind: "draft", prefix: copy.assistant.draftPrefix, text };
   }
   return lastMessage ? messageLine(lastMessage, copy) : null;
+}
+
+/**
+ * TEMP variant switcher (main chat 90) — 「新」's card while a round you
+ * started runs (ruling 134): it says only what the screen does not. With
+ * the main chat on screen 「正在工作…」 throughout, the last seconds too
+ * (the dots are right there); away from it 「正在输入…」 while it writes
+ * (an IM chat list's way), else 「正在工作…」, from a minute on
+ * 「正在工作 · N 分钟」.
+ */
+function workingLine(
+  working: { writing: boolean; minutes: number },
+  open: boolean,
+  copy: AppCopy,
+): string {
+  if (open) return copy.assistant.working;
+  if (working.writing) return copy.assistant.typing;
+  return working.minutes >= 1
+    ? copy.assistant.workingMinutes(working.minutes)
+    : copy.assistant.working;
 }
 
 function messageLine(

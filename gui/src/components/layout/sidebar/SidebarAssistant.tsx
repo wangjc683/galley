@@ -4,6 +4,8 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+// TEMP variant switcher (main chat 90): 「新」's words while it runs.
+import { useLiveProgressVariant } from "@/components/conversation/live-progress-variants/live-progress-variants";
 import {
   AssistantAvatar,
   AssistantAvatarBadge,
@@ -14,6 +16,10 @@ import {
   useComposerDraft,
   usePendingQuestion,
 } from "@/hooks/useAssistantState";
+import {
+  useAssistantRound,
+  useAssistantRunMinutes,
+} from "@/hooks/useAssistantProgress";
 import { useAssistantTyping } from "@/hooks/useAssistantSentence";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
@@ -211,10 +217,24 @@ export function SidebarAssistantCard({
   // woke it for only while the conversation shows its dots, else the
   // last message, the live round's steps skipped (rulings 107, 110).
   const typing = useAssistantTyping(mainChat.id, state.kind === "running");
+  // TEMP variant switcher (main chat 90): 「新」 — a round you started
+  // says 「正在工作…」; away from the main chat 「正在输入…」 while it
+  // writes and the whole minutes from one on (ruling 134). The minutes
+  // re-render the card only when one turns. A woken round as before.
+  const liveProgressVariant = useLiveProgressVariant();
+  const round = useAssistantRound(
+    mainChat.id,
+    liveProgressVariant === "new" && state.kind === "running",
+  );
+  const ownRound = round === "own" || round === "own-writing";
+  const minutes = useAssistantRunMinutes(mainChat.id, ownRound);
+  const working = ownRound
+    ? { writing: round === "own-writing", minutes }
+    : undefined;
   const lastMessage = useAssistantLastMessage(mainChat);
   const line = assistantCardLine(
     state,
-    { question, draft, lastMessage, open, typing },
+    { question, draft, lastMessage, open, typing, working },
     copy,
   );
   const time = formatListTime(

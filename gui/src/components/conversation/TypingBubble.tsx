@@ -1,7 +1,13 @@
-import type { Ref } from "react";
+import { useEffect, useState, type Ref } from "react";
 
+// TEMP variant switcher (main chat 90): the line under the dots.
+import { ASSISTANT_BUBBLE_MAX } from "@/components/conversation/AssistantParts";
 import { TYPING_DOT_EM, TYPING_DOT_GAP_EM } from "@/lib/assistant-conversation";
+import { assistantProgressElapsed } from "@/lib/assistant-progress";
 import { useCopy } from "@/lib/i18n";
+import { syncTruncatedTitle } from "@/lib/truncated-title";
+import { truncationFadeRef } from "@/lib/truncation-fade";
+import { cn } from "@/lib/utils";
 
 const DOT_STYLE = {
   width: `${TYPING_DOT_EM}em`,
@@ -28,7 +34,15 @@ const DOT_STYLE = {
  * bar row — your bubble's 30px, or the last reply's action bar), so the
  * bubble opens where the dots were (hooks/useTypingBubbleHandoff.ts).
  */
-export function TypingBubble({ ref }: { ref?: Ref<HTMLDivElement> }) {
+export function TypingBubble({
+  ref,
+  progress,
+}: {
+  ref?: Ref<HTMLDivElement>;
+  /** TEMP variant switcher (main chat 90): 「新」's line under the dots,
+   * in a round you started; absent, the bubble alone. */
+  progress?: TypingProgress | null;
+}) {
   const copy = useCopy();
   return (
     <div ref={ref} data-role="assistant-typing" role="status">
@@ -57,6 +71,91 @@ export function TypingBubble({ ref }: { ref?: Ref<HTMLDivElement> }) {
           />
         </span>
       </div>
+      {progress && <ProgressLine progress={progress} />}
     </div>
+  );
+}
+
+// ---- TEMP variant switcher (main chat 90): the line under the dots -------
+
+/** What the line says (MainView): what it is doing, and the run clock. */
+export interface TypingProgress {
+  /** lib/assistant-progress.ts `assistantDoing`. */
+  doing: string;
+  /** The round's run clock (`currentRunStartedAtMs`), null before one. */
+  startedAtMs: number | null;
+  /** What its answered segments banked (`liveRunElapsedBaseMs`). */
+  baseMs: number;
+}
+
+/**
+ * 「{在做什么} · {用时}」 under the typing bubble (main chat PRD ruling
+ * 134): 6px under it, its left edge on the bubble's, one 18px line
+ * whatever it says, no wider than a reply bubble may be. 12px `ink-soft`,
+ * tabular numbers, no sweep, no motion. The doing part gives way: cut
+ * with a fade when too long, the whole of it on hover (the header
+ * identity row's way); 「 · 」 and the time never. Inside the bubble's
+ * row, so following the bottom and the hand-off take it as part of it
+ * (useTypingBubbleHandoff copies it out with the dots). The row is the
+ * `status` live region: a new doing part is read out, the time, ticking
+ * every second, is not (`aria-hidden`).
+ */
+function ProgressLine({ progress }: { progress: TypingProgress }) {
+  return (
+    <div
+      data-role="assistant-progress"
+      className={cn(
+        "mt-1.5 flex h-[18px] items-center text-[12px] leading-[18px] text-ink-soft tabular-nums",
+        ASSISTANT_BUBBLE_MAX,
+      )}
+    >
+      <span
+        data-role="assistant-progress-doing"
+        ref={truncationFadeRef}
+        onPointerEnter={(e) =>
+          syncTruncatedTitle(e.currentTarget, progress.doing)
+        }
+        className="truncate-fade min-w-0"
+      >
+        {progress.doing}
+      </span>
+      <ProgressElapsed
+        startedAtMs={progress.startedAtMs}
+        baseMs={progress.baseMs}
+      />
+    </div>
+  );
+}
+
+/**
+ * 「 · 12 秒」, from the first second: `RunElapsedHud`'s figure and words,
+ * kept the same way — a timer writes the time once a second, so only
+ * this re-renders, and a render never reads the clock.
+ */
+function ProgressElapsed({
+  startedAtMs,
+  baseMs,
+}: {
+  startedAtMs: number | null;
+  baseMs: number;
+}) {
+  const copy = useCopy();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (startedAtMs == null) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [startedAtMs]);
+  if (startedAtMs == null) return null;
+  const elapsed = assistantProgressElapsed(baseMs + (now - startedAtMs), copy);
+  if (!elapsed) return null;
+  return (
+    <span
+      aria-hidden
+      data-role="assistant-progress-elapsed"
+      className="shrink-0 whitespace-pre"
+    >
+      {` · ${elapsed}`}
+    </span>
   );
 }

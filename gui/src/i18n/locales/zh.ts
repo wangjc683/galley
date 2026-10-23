@@ -341,6 +341,16 @@ export const zhCopy = {
     typing: "正在输入…",
     /** 主对话末尾三点气泡的读屏文字（裁决 107、110）。 */
     typingLabel: "Galley 正在输入",
+    // TEMP variant switcher (main chat 90)：切换器「新」档的四句（裁决 134）。
+    /** 卡片第二行：你发起的一轮在跑时；主对话不在屏上时它写字换成 typing，
+     * 满 1 分钟起写 workingMinutes。 */
+    working: "正在工作…",
+    /** n 是整分钟数，向下取整。 */
+    workingMinutes: (n: number) => `正在工作 · ${n} 分钟`,
+    /** 三点气泡下面那行小字：还没派出过工具（你答完它的提问后也回到这句）。 */
+    progressThinking: "思考中",
+    /** 同一行：它正在写字。 */
+    progressWriting: "正在写回复",
   },
   topbar: {
     newConversation: "新对话",
