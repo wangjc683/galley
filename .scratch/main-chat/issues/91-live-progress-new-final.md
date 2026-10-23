@@ -1,6 +1,6 @@
 # 91 在跑时的进展定「新」：写死、拆切换器、改设计文档
 
-Status: ready-for-agent
+Status: done（2026-10-23 机器验收过、合入 main）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 135（2026-10-23；JC 真机比完票 90：「选『新』，体验会好很多」）。只改 GUI 与设计文档。
 
@@ -378,3 +378,10 @@ $ git diff --check
 1. 真机：没跑 `tauri dev`。「新」的外观、交接、读屏没动，只靠测试断言（同票 90 的「没验证到」）。
 2. VoiceOver 实听、Windows 都没跑。
 3. 合入后的状态只在 scratchpad 的 `git archive` 副本里跑了 gui 的测试、eslint、tsc；这张票没动 Rust，没跑 `cargo`。
+
+### 2026-10-23 主会话验收
+
+- 在 worktree 里 `git rebase main`：票 92 的 `bf613e4f` 改过切换器快照、本票删了整个目录，modify/delete 冲突按预告保留删除（`git rm`）；`docs/design/conversation.md` 两票不同节，自动合并，裁决 135 与 136 的段落都在。
+- 抽查 `MainView`、`AssistantIdentity`、`lib/assistant.ts` 的改动与注释，与裁决 134、135 一致。
+- 代理报的 `docs/design/foundations.md` 三处旧说法改掉（第 572 行一带「在跑时不读秒」、§2.7 的三点豁免段「唯一的在忙信号，计时不在同一处」、助理的脸那条「那一行字已经说它在做什么」），顺手更新两处过时的行号（`AssistantIdentity.tsx:53`、`App.tsx:826`）。
+- 门禁在 rebase 后的最终状态上重跑：`pnpm --dir gui typecheck`、`pnpm --dir gui lint` exit 0；`CI=true pnpm --dir gui test` 与 `TZ=UTC CI=true pnpm --dir gui test` 各 205 文件 2263 测试全过；`node scripts/check-docs-links.mjs` 通过；`git diff --check` 干净；`grep` 切换器与 `assistantSettledSentence` 残留为空。
