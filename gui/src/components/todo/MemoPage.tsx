@@ -134,7 +134,7 @@ function MemoRow({
       onClick={() => onGo(target)}
       className={cn(
         "max-w-full break-words rounded-sm text-left outline-none",
-        "decoration-ink-muted/60 underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-brand/30",
+        "underline-offset-2 hover:underline hover:decoration-ink-muted/60 focus-visible:ring-2 focus-visible:ring-brand/30",
       )}
     >
       {memo.text}

@@ -915,7 +915,7 @@ describe("the card under the reply", () => {
     // Underlined on hover, a ring on keyboard focus, cut with the full
     // text on hover — the panel's title button.
     expect(listed).toMatch(
-      /<button type="button" class="block max-w-full truncate rounded-sm text-left outline-none decoration-ink-muted\/60 underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-brand\/30 [^"]*">交季度报告<\/button>/,
+      /<button type="button" class="block max-w-full truncate rounded-sm text-left outline-none underline-offset-2 hover:underline hover:decoration-ink-muted\/60 focus-visible:ring-2 focus-visible:ring-brand\/30 [^"]*">交季度报告<\/button>/,
     );
     // Not in the panel (cancelled, or done long ago): words.
     const gone = html.slice(html.indexOf('data-todo-id="todo_gone"'));
@@ -1058,6 +1058,30 @@ describe("the card under the reply", () => {
         </CopyProvider>,
       ),
     ).toContain(">Deleted<");
+  });
+
+  it("strikes a done title and a deleted one alike, full ink-muted: a title button's 60% is for its hover underline only (ticket 99, ruling 144 point 1)", () => {
+    const classes = (html: string, text: string) =>
+      html.match(new RegExp(`class="([^"]*)">${text}<`))![1].split(" ");
+    // Done today: the panel lists it, so its title is a button, on the
+    // card and under 已完成; deleted, the card's title is words.
+    store.todo = FULL;
+    const done = classes(cards([DONE_TODO]), "订餐厅");
+    const deleted = classes(cards([CANCELLED]), "买营养土");
+    const panelDone = classes(
+      row(panel(FULL, { doneOpen: true }), "todo_done"),
+      "订餐厅",
+    );
+    for (const title of [done, deleted, panelDone]) {
+      expect(title).toContain("line-through");
+      expect(title).toContain("text-ink-muted");
+      // No decoration colour of its own: the strike takes the text's.
+      expect(title.filter((c) => c.startsWith("decoration-"))).toEqual([]);
+    }
+    for (const button of [done, panelDone]) {
+      expect(button).toContain("hover:underline");
+      expect(button).toContain("hover:decoration-ink-muted/60");
+    }
   });
 
   // Ticket 88: deleted from the panel, its undo toast still up.

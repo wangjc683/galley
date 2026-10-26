@@ -550,7 +550,7 @@ function RowShell({
       onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, text)}
       className={cn(
         "block max-w-full truncate rounded-sm text-left outline-none",
-        "decoration-ink-muted/60 underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-brand/30",
+        "underline-offset-2 hover:underline hover:decoration-ink-muted/60 focus-visible:ring-2 focus-visible:ring-brand/30",
         titleClass,
       )}
     >
