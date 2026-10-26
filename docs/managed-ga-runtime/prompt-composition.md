@@ -25,8 +25,9 @@ prompt value. The runner appends it as `extra_sys_prompt` and needs no
 knowledge of the composition. The main chat gets one more state-block
 section (below): `compose_main_chat_runtime_prompt`, chosen in
 `runner_commands::prepare_managed_spawn_args` by session id, adds
-`## Main Chat`, its "In Hand" lines when there are any, and, after them,
-the main chat entry layer (below). Since ticket 36 its static rules also
+`## Main Chat`, its "In Hand" lines when there are any, its "Memo" lines
+when there are any (since ticket 95), and, after them, the main chat entry
+layer (below). Since ticket 36 its static rules also
 differ in one paragraph of "What Only The User Changes In Galley"
 (below); every other session's prompt is unchanged byte for byte.
 
@@ -368,6 +369,63 @@ Follow-ups the user turned down (to-dos and reminders you set that were cancelle
 - **Switch**: none; main chat only (attach mode has no main chat, and
   every other prompt is tested never to carry it). Data: outside the
   static budget and the prompt hash.
+
+### Memo (main chat only)
+
+Since ticket 95 (main chat PRD rulings 140, 141, 142 point 3), the main
+chat's state block carries what Galley noted about the user, as a `### Memo`
+subsection right after the In Hand lines, or after the Main Chat paragraph
+when nothing is in hand (`memo_section` in `core/src/managed_prompt.rs`).
+GA's memory does not hold this kind of thing (its L0 keeps only what a tool
+call produced, ruling 140 point 1), and a segment carries at most 10 turns
+of what was said before it; the state block is set when the runner starts
+and GA's compression and trimming never touch it. Sample (made-up data):
+
+```text
+### Memo
+
+As of 2026-10-26 09:05, local time (it may have changed since: `memo list` reads it now; `memo add`, `memo update` and `memo delete` change it).
+
+What you noted about the user, oldest first, each with the day you last noted or changed it:
+- `memo_1a2b3c4d5e6f7a8b` 2026-10-20: 用户叫小林，在一家设计公司做产品经理
+- `memo_2b3c4d5e6f7a8b9c` 2026-10-24: 不吃香菜
+- `memo_3c4d5e6f7a8b9c0d` 2026-10-26: 看他这周常问 76 人 的比赛
+- `memo_4d5e6f7a8b9c0d1e` 2026-10-26, until 2026-11-06 (Fri): 下周三起在上海出差
+```
+
+- **Source**: `SqliteGalley::memos_today` — the memos that hold today (one
+  past its last day is in no reader), in the order they were noted (the
+  first noted are mostly what the rest rests on: what the user is called,
+  their family). The desktop's 「备忘」 page lists the same ones (ticket
+  97), so what the user sees is what the main chat is told. Deterministic,
+  no model call.
+- **When**: at every main chat runner spawn, with In Hand. It changes
+  within a segment (the model writes memos, the user deletes one), so it
+  is a dated snapshot whose first line names the command that reads it now
+  and the ones that change it. A failed read is logged and leaves the
+  subsection out; the runner still starts. No memo, no subsection.
+- **Per line**: the memo's id, the local day it was last noted or changed
+  (`updatedAt`), its last day with the weekday when it has one (`until
+  2026-11-06 (Fri)`), and its text, whole, on one line (whitespace
+  collapsed).
+- **Bounded**: by the memos' text, which goes in, in order, until the next
+  memo would take it past 2,000 characters (`MEMO_TOTAL_MAX_CHARS`, the
+  same total a write is measured against, ruling 141 point 6); that one and
+  the rest are counted on a last line, ``- and N more, past the 2000
+  characters this section holds: `memo list` ``. Each memo is at most 100
+  characters (`MEMO_TEXT_MAX_CHARS`). The words around the text have caps of
+  their own, measured on the longest they get, no headroom, `\r` not counted:
+  `MEMO_HEAD_BUDGET_BYTES` = 322 for the heading, the as-of line, the line
+  before the memos and the last line with a four-digit count, and
+  `MEMO_LINE_BUDGET_BYTES` = 63 for each memo's line around its text (id,
+  day, `until` with its weekday). Two numbers, since the number of lines is
+  not fixed; twenty memos of a hundred characters come to 1,582 bytes of
+  these words. The words are `\n`-escaped strings, not raw strings, so a
+  Windows checkout does not change them. How to use the memos (what to note,
+  one thing a memo, merging past the total) is the manual's (ticket 96).
+- **Switch**: none; main chat only, as In Hand (every other prompt is
+  tested never to carry it). Data: outside the static budget and the prompt
+  hash.
 
 ## Main Chat Entry Layer
 
@@ -741,6 +799,7 @@ row.
 | What Only The User Changes, main chat only: scheduled tasks off the list, "you set them yourself with the Galley CLI, as your manual (named below) says" | assistant PRD rulings 3 and 9, main chat PRD ruling 84, ticket 36 (2026-10-16): the CLI got the `schedule` family (ticket 34), so the assistant sets reminders itself; galley#31's failure (saying a schedule is set when nothing will run) was a model with no hands, and the command now exists. Workbench sessions, subtasks and IM keep the shared paragraph word for word. The main chat's static text got 70 bytes shorter; the static cap is unchanged |
 | State block: In Hand (the user's to-dos not done, subtasks not finished and one-off reminders and tasks to come, routines, as of when) | assistant PRD rulings 5 and 9, main chat PRD rulings 86 and 91, tickets 36 and 39: at each segment the main chat knows what the user has to do, what it promised and what it handed off, from the same read as the desktop's 「待办」, in the same order. Own cap `IN_HAND_BUDGET_BYTES` |
 | State block: In Hand, "Follow-ups the user turned down" (Galley's to-dos and reminders cancelled at the desktop or at the user's request in the last 90 days: when, who, the words, the reason) | main chat PRD ruling 113, ticket 61 (2026-10-19): ruling 112 lets the model decide what to follow up, with "don't remind me of this kind" as a firm floor; written only into GA memory that preference would be out of sight by the next segment (L2 is not in the prompt, a segment carries 3 turns), so Galley records who cancelled and why (migration 051) and puts the record in front of the model at every segment. Not on the panel. Cap raised 4230 → 6161 in the same diff; empty, the subsection is unchanged |
+| State block: Memo (what Galley noted about the user, as of when; id, the day last written, the last day, the text; up to 2,000 characters of text, then how many more) | main chat PRD rulings 140, 141, ticket 95 (2026-10-26): the main chat did not keep what the user is (L2 held 278 bytes after six days; L0 keeps only what a tool call produced), and what was said is lost at a segment boundary. Galley keeps the memos itself and puts them in the state block, which compression and trimming never touch. Own caps `MEMO_HEAD_BUDGET_BYTES` (322) and `MEMO_LINE_BUDGET_BYTES` (63 a line); no memo, no subsection |
 | Main chat entry layer: set a reminder unasked when the user mentions a date or time or the model promises a follow-up, naming the manual's section; the write list as command families | assistant PRD ruling 9, ticket 36: JC wanted reminders the user never has to ask for; without a line in the always-present layer the model would not open the manual on a remark. Run on the main chat's model with the manual's new section (`.scratch/main-chat/entry-layer-eval/schedule/`). Cap raised 1699 → 1920 (+221 bytes) in the same diff |
 | Main chat entry layer: the reminder paragraph rewritten for the user's to-dos (note what the user has to do as a to-do with a reminder when it has a date, tick it off when done, a reminder of its own for a promised follow-up, `todo list` before saying what is left, the manual's "To-dos and reminders"); `to-do` in the write list | main chat PRD ruling 91, ticket 41 (2026-10-17): to-dos became their own record (tickets 39, 40), and noting one, ticking one off and answering 「还有什么没办」 all start from a remark with no CLI write in sight. Run on the main chat's model with the manual's rewritten section (`.scratch/main-chat/entry-layer-eval/todo/`, and the `schedule/` suite rerun). Cap raised 1920 → 2026 (+106 bytes) in the same diff |
 | Main chat entry layer: the manual in parts, "Your manual is in `<dir>`, one file per part", each part by its bare name with when to read it, read together before each write (not only the first), and the identity every write carries; the to-do sentence names `todos.md` | main chat PRD ruling 111, ticket 59 (2026-10-19): the manual was read whole again for each write (GA's `file_read` takes 200 lines, and GA cuts old tool results to 800 characters), about 2k tokens each time; a part is a few hundred. The identity sentence came from the eval of the first wording: a tick or a cancel read one part and left `--supervisor=galley-assistant` off. Run on the main chat's model (`.scratch/main-chat/entry-layer-eval/`: `todo`, `schedule`, `wake`). Cap raised 2026 → 2463 (+437 bytes) in the same diff |

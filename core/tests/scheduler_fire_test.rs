@@ -81,6 +81,7 @@ const MIG_049: &str = include_str!("../migrations/049_scheduled_tasks_once_and_w
 const MIG_050: &str = include_str!("../migrations/050_todos.sql");
 const MIG_051: &str = include_str!("../migrations/051_cancelled_by.sql");
 const MIG_052: &str = include_str!("../migrations/052_provider_auth_kind_none.sql");
+const MIG_053: &str = include_str!("../migrations/053_memos.sql");
 
 async fn fresh_galley() -> SqliteGalley {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -96,6 +97,7 @@ async fn fresh_galley() -> SqliteGalley {
         MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_027, MIG_028, MIG_029, MIG_030,
         MIG_031, MIG_032, MIG_033, MIG_034, MIG_035, MIG_036, MIG_037, MIG_038, MIG_040, MIG_042,
         MIG_043, MIG_044, MIG_045, MIG_046, MIG_047, MIG_048, MIG_049, MIG_050, MIG_051, MIG_052,
+        MIG_053,
     ] {
         sqlx::raw_sql(sql).execute(&pool).await.expect("migration");
     }

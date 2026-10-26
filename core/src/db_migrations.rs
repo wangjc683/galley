@@ -323,5 +323,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/052_provider_auth_kind_none.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 53,
+            description: "add memos and memo_events (what Galley knows about the user)",
+            sql: include_str!("../migrations/053_memos.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

@@ -807,6 +807,73 @@ async fn a_reset_clears_every_to_do_and_its_reminder() {
     assert!(names.contains(&"scheduled-tasks:changed".to_string()));
 }
 
+/// Ticket 95: a reset deletes every memo and every record of a memo's
+/// writes (the cards' source), one deleted already included, and tells the
+/// desktop.
+#[tokio::test]
+async fn a_reset_clears_every_memo_and_the_record_of_its_writes() {
+    use galley_core_lib::api::{CreateMemoInput, MemoId, OriginVia, ASSISTANT_SUPERVISOR};
+    let (pool, galley) = fresh("managed").await;
+    let disk = Disk::new();
+    let main = populated(&pool, &galley, &disk).await;
+    let galley_said = Origin {
+        via: OriginVia::Supervisor,
+        supervisor: Some(ASSISTANT_SUPERVISOR.into()),
+        reason: None,
+        client: None,
+    };
+    let turn = galley
+        .latest_user_turn_index(&main)
+        .await
+        .unwrap()
+        .expect("a user turn");
+    for text in ["不吃香菜", "下周三起在上海出差"] {
+        galley
+            .create_memo(
+                CreateMemoInput {
+                    text: text.into(),
+                    until: None,
+                },
+                galley_said.clone(),
+                Some((SessionId(main.clone()), turn)),
+            )
+            .await
+            .expect("memo");
+    }
+    let gone = galley.memos_today().await.unwrap()[1].id.clone();
+    galley
+        .delete_memo(&MemoId(gone.0), Origin::desktop(), None)
+        .await
+        .expect("deleted on the desktop");
+    let count = |sql: &'static str| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query_scalar::<_, i64>(sql)
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+        }
+    };
+    assert_eq!(count("SELECT COUNT(*) FROM memos").await, 1);
+    assert_eq!(count("SELECT COUNT(*) FROM memo_events").await, 3);
+    let runner = Runner::default();
+    let rec = Recorder::default();
+    reset(&galley, &runner, &rec, &disk, None)
+        .await
+        .expect("reset");
+    assert_eq!(count("SELECT COUNT(*) FROM memos").await, 0);
+    assert_eq!(count("SELECT COUNT(*) FROM memo_events").await, 0);
+    assert!(galley.memos_today().await.unwrap().is_empty());
+    let names: Vec<String> = rec
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect();
+    assert!(names.contains(&"memos:changed".to_string()), "{names:?}");
+}
+
 #[tokio::test]
 async fn the_new_main_chat_greets_in_the_ui_language() {
     let (pool, galley) = fresh("managed").await;

@@ -28,15 +28,16 @@ mod envelope;
 mod error_tag;
 
 pub use commands::{
-    GitReviewRequest, LlmSetArgs, LlmSetDefaultArgs, LocalFileRequest, ProjectArchiveSessionsArgs,
-    ProjectCreateArgs, ProjectDeleteArgs, ProjectPinArgs, ProjectUnpinArgs, ProjectUpdateArgs,
-    ScheduleCreateArgs, ScheduleDeleteArgs, ScheduleDisableArgs, ScheduleEnableArgs,
-    ScheduleListArgs, ScheduleRunArgs, ScheduleShowArgs, ScheduleUpdateArgs, SessionArchiveArgs,
-    SessionBtwArgs, SessionCheckpointArgs, SessionDeleteArgs, SessionMoveArgs, SessionNewArgs,
-    SessionNewResult, SessionPinArgs, SessionRenameArgs, SessionRestoreArgs, SessionRunStateArgs,
-    SessionSendArgs, SessionShutdownRunnerArgs, SessionStopArgs, SessionUnpinArgs,
-    SessionWatchArgs, SessionsRunStateArgs, SocketCommand, TodoAddArgs, TodoCancelArgs,
-    TodoDoneArgs, TodoListArgs, TodoReopenArgs, TodoShowArgs, TodoUpdateArgs,
+    GitReviewRequest, LlmSetArgs, LlmSetDefaultArgs, LocalFileRequest, MemoAddArgs, MemoDeleteArgs,
+    MemoListArgs, MemoUpdateArgs, ProjectArchiveSessionsArgs, ProjectCreateArgs, ProjectDeleteArgs,
+    ProjectPinArgs, ProjectUnpinArgs, ProjectUpdateArgs, ScheduleCreateArgs, ScheduleDeleteArgs,
+    ScheduleDisableArgs, ScheduleEnableArgs, ScheduleListArgs, ScheduleRunArgs, ScheduleShowArgs,
+    ScheduleUpdateArgs, SessionArchiveArgs, SessionBtwArgs, SessionCheckpointArgs,
+    SessionDeleteArgs, SessionMoveArgs, SessionNewArgs, SessionNewResult, SessionPinArgs,
+    SessionRenameArgs, SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs,
+    SessionShutdownRunnerArgs, SessionStopArgs, SessionUnpinArgs, SessionWatchArgs,
+    SessionsRunStateArgs, SocketCommand, TodoAddArgs, TodoCancelArgs, TodoDoneArgs, TodoListArgs,
+    TodoReopenArgs, TodoShowArgs, TodoUpdateArgs,
 };
 pub use envelope::{
     SocketRequest, SocketResponse, StreamEnvelope, WatchFrame, ACCEPTED_SCHEMA_VERSIONS,

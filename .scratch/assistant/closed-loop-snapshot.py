@@ -12,7 +12,9 @@ to-dos it noted with no date, what was cancelled of what it set and by
 whom (ticket 61's cancel columns), and the morning review: how often it
 came due, was skipped (nothing to look at: since ticket 81 it wakes only
 for a to-do with no date or due within three days, or a subtask not
-finished), woke the main chat, spoke (a reply that is not only
+finished; since ticket 95 also for a memo noted or changed since the last
+review's day in a turn the user started), woke the main chat, spoke (a
+reply that is not only
 <no-reply/>), and how many subtasks those turns started.
 The review's comings due and skips are read from its log, the
 `assistant_review_log` pref Core keeps (scheduler.rs `REVIEW_LOG_PREF`):

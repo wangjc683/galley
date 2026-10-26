@@ -12,6 +12,7 @@
 //! ownership migrates into Rust.
 
 pub mod health;
+pub mod memo;
 pub mod message;
 pub mod model;
 pub mod origin;
@@ -26,6 +27,11 @@ pub mod todo;
 pub mod transcript_window;
 
 pub use health::{HealthCheck, HealthReport, HealthStatus};
+pub use memo::{
+    CreateMemoInput, MemoAction, MemoBrief, MemoEventItem, MemoId, MemoItem, MemoOverLimit,
+    MemoPatch, MemoReviewWindow, MemoWrite, MEMOS_CHANGED_EVENT, MEMO_TEXT_MAX_CHARS,
+    MEMO_TOTAL_MAX_CHARS,
+};
 pub use message::{
     AskUserBrief, MessageAttachmentBrief, MessageBrief, MessageId, MessageRole, MessageTelemetry,
     MessageVisibility,

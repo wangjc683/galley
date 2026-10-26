@@ -232,6 +232,10 @@ pub struct MainChatDeletion {
     /// How many to-dos went with it (every one, ticket 39), their
     /// reminders' tasks with them.
     pub todos: u64,
+    /// How many memos went with it (every one, ticket 95), and how many
+    /// records of their writes (`memo_events`).
+    pub memos: u64,
+    pub memo_events: u64,
 }
 
 impl MainChatDeletion {
@@ -271,7 +275,9 @@ impl SqliteGalley {
     /// session references. Every to-do goes too (ticket 39: they are this
     /// conversation's by-products, the notebook Galley kept in it), with
     /// the scheduled tasks that were their reminders — explicitly, as no
-    /// foreign key links the two (migration 050). The assistant's own
+    /// foreign key links the two (migration 050); so does every memo, with
+    /// every record of its writes (ticket 95, migration 053: what Galley
+    /// learned about the user in this conversation). The assistant's own
     /// tasks, linked to no to-do, stay, but not who cancelled the
     /// cancelled ones or why (ticket 61, migration 051): what the user
     /// turned down goes with the conversation it was said in, as the
@@ -324,6 +330,16 @@ impl SqliteGalley {
             .await
             .map_err(map_sqlx_err)?
             .rows_affected();
+        let memo_events = sqlx::query("DELETE FROM memo_events")
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?
+            .rows_affected();
+        let memos = sqlx::query("DELETE FROM memos")
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?
+            .rows_affected();
         sqlx::query(
             "UPDATE scheduled_tasks SET cancelled_via = NULL, cancelled_by_supervisor = NULL, \
                 cancelled_origin_note = NULL \
@@ -337,6 +353,8 @@ impl SqliteGalley {
             main_chat: id.clone(),
             subtasks: subtasks.into_iter().map(SessionId).collect(),
             todos,
+            memos,
+            memo_events,
         })
     }
 

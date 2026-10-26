@@ -268,6 +268,11 @@ pub fn run() {
             reopen_todo,
             cancel_todo_reminder,
             cancel_todo,
+            // The memos (main chat ticket 95): the panel's page, the
+            // cards' writes, the desktop's delete
+            list_memos,
+            list_memo_events,
+            delete_memo,
             // B2 runner commands
             runner_commands::spawn_runner,
             runner_commands::send_to_runner,

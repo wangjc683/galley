@@ -70,6 +70,74 @@ pub(crate) enum Command {
     /// the to-do stays readable with `cancelledAt`.
     #[command(subcommand)]
     Todo(TodoCmd),
+
+    /// Memos: what Galley knows about the user (who they are, what they
+    /// prefer, the people and places they deal with, interests), one thing
+    /// per memo, 1 to 100 characters, a last day optional. `list` reads
+    /// SQLite directly; the writes go through Galley Core and need the
+    /// managed runtime with its main chat. `delete` deletes.
+    #[command(subcommand)]
+    Memo(MemoCmd),
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum MemoCmd {
+    /// List the memos that hold today, NDJSON, in the order they were
+    /// noted. One past its last day is not listed. Read-only — opens
+    /// SQLite directly.
+    List,
+    /// Note a memo. When the memos then total more than 2000 characters
+    /// it is kept, and the result carries `overLimit`.
+    Add {
+        /// The memo, 1 to 100 characters.
+        text: String,
+        /// Its last day, a local date `YYYY-MM-DD`, not before today
+        /// (`time_in_past:`, exit 2). After that day it is in no list.
+        #[arg(long, value_name = "DATE", value_parser = NonEmptyStringValueParser::new())]
+        until: Option<String>,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Change a memo; only what is given changes.
+    #[command(group(
+        clap::ArgGroup::new("change")
+            .required(true)
+            .multiple(true)
+            .args(["text", "until", "no_until"])
+    ))]
+    Update {
+        /// Memo id (`memo_<16-hex>`).
+        memo_id: String,
+        /// The new text, 1 to 100 characters.
+        #[arg(long)]
+        text: Option<String>,
+        /// The new last day (`add --until`'s form).
+        #[arg(
+            long,
+            value_name = "DATE",
+            conflicts_with = "no_until",
+            value_parser = NonEmptyStringValueParser::new()
+        )]
+        until: Option<String>,
+        /// No last day any more.
+        #[arg(long)]
+        no_until: bool,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Delete a memo. The record of its writes stays (the cards under the
+    /// replies read it); the memo is gone from every read.
+    Delete {
+        memo_id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]

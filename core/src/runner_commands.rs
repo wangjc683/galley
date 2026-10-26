@@ -433,6 +433,17 @@ pub(crate) async fn prepare_managed_spawn_args(
                 None
             }
         };
+        // What it noted about the user (ticket 95, main chat PRD rulings
+        // 140 and 141), after In Hand: the memos that hold today. A
+        // failed read is logged and the section is left out; the runner
+        // still starts.
+        let memo = match app.state::<SqliteGalley>().memos_today().await {
+            Ok(memos) => managed_prompt::memo_section(&memos, now, &chrono::Local),
+            Err(e) => {
+                eprintln!("[main chat] reading the memos failed: {e}");
+                None
+            }
+        };
         if let Some(entry) = context
             .env
             .iter_mut()
@@ -442,6 +453,7 @@ pub(crate) async fn prepare_managed_spawn_args(
                 &app.package_info().version.to_string(),
                 &main_chat,
                 in_hand.as_deref(),
+                memo.as_deref(),
                 &manual_dir.to_string_lossy(),
             );
         }

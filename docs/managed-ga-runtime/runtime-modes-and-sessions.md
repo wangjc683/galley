@@ -335,13 +335,22 @@ ruling 9; `core/src/scheduler.rs`, `core/src/subtask_report.rs`, migration
   `review_has_something_to_look_at`): a to-do of the user's with no due
   date, or due on or before today plus `REVIEW_LOOKAHEAD_DAYS` (3) in this
   machine's zone, overdue ones and ones with a reminder included; or a
-  subtask not finished. A to-do due later, Galley's own one-off tasks
-  (they go off at their time by themselves) and routines do not count; a
-  failed read wakes it. With nothing to look at, the fire is consumed with
-  `last_wake` NULL and no wake; otherwise it wakes the main chat as a
-  reminder does, with words of its own (`subtask_report.rs`
-  `review_paragraph`: read "The morning review" in `wake.md`, at most two
-  subtasks, silent unless something got done). A review wake that cannot be
+  subtask not finished; or (main chat ticket 95, PRD ruling 143) a memo
+  noted or changed since the day the review last came due, in a turn the
+  user started (`MemoReviewWindow`: from that day's local midnight, woken
+  or skipped, or yesterday's when it never came due, to today's, today out;
+  `memos.fresh_at` in it, the memo holding today and still there). A to-do
+  due later, Galley's own one-off tasks (they go off at their time by
+  themselves) and routines do not count; a failed read wakes it. With
+  nothing to look at, the fire is consumed with `last_wake` NULL and no
+  wake; otherwise it wakes the main chat as a reminder does, with words of
+  its own (`subtask_report.rs` `review_paragraph`: read "The morning
+  review" in `wake.md`, at most two subtasks, silent unless something got
+  done; with new memos, a paragraph after it names each by id and text).
+  The window is kept with the fire in the `assistant_review_memo_window`
+  pref, so a wake written after a restart names the same ones; a run by
+  hand (`schedule run`) names the memos of its own window, which is empty
+  when the review already came due that day. A review wake that cannot be
   delivered is dropped (`last_wake` NULL), never notified: its words are for
   the model. Its fires stay out of the to-do list's 已完成. The user stops
   it by asking the main chat, which pauses it (`schedule disable`). Each
@@ -408,6 +417,42 @@ Managed runtime with a main chat only: every write is refused with
   were their reminders; the assistant's own tasks stay.
 - Every write broadcasts `todos:changed` (and `scheduled-tasks:changed` when
   a reminder moved). The remote module forwards neither.
+
+### The User's Memos
+
+Main chat ticket 95 (PRD rulings 140, 141, 143; `core/src/api/memo.rs`,
+`core/src/db/memo.rs`, migration 053): a memo is something Galley knows
+about the user (what they are called, their family, preferences, the
+people and places they deal with, an interest that keeps coming up), which
+it notes in the turn it learns it through the CLI `galley memo`
+([memo-commands](../agent-api/memo-commands.md)). A to-do gets done; a
+memo holds or stops holding. The user can only delete one at the desktop
+(Tauri `delete_memo`, recorded as `gui`); the desktop reads them with
+`list_memos` (each with where it was last written in the main chat) and
+the cards with `list_memo_events`. Managed runtime with a main chat only:
+every write is refused with `assistant_unavailable:` otherwise.
+
+- **Limits** (Core, ruling 141): 1 to 100 characters a memo, refused
+  past it; the memos that hold come to at most 2,000 characters, and a
+  write past that is kept and says so (`overLimit`).
+- **Last day** (`until_date`, `YYYY-MM-DD`, a floating local date, not
+  before today when written): after it the memo is in no reader (the
+  segment start, `memo list`, the panel, the total) and its row stays.
+- **Record of writes** (`memo_events`): each add, update and delete, its
+  text after it (before it, for a delete), who wrote it, and the main chat
+  turn (the run's starting turn, its reply's `turn_index` when the run
+  ends); a delete keeps the record.
+- **Fresh** (`fresh_at`): stamped by an add or update in a main chat run
+  whose opening user row is not one Galley wrote (`created_via` not
+  `system`: not a review's, a reminder's or a subtask's wake). The morning
+  review reads it (above); a memo written in a wake's own turn never wakes
+  the next review.
+- **At the start of each segment**: the "Memo" lines after In Hand
+  ([prompt composition](./prompt-composition.md#memo-main-chat-only)).
+- **Reset**: resetting the main chat deletes every memo and every record of
+  their writes.
+- Every write broadcasts `memos:changed`. The remote module does not
+  forward it.
 
 ### The Assistant's To-Do List
 

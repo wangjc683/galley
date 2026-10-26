@@ -166,7 +166,10 @@ impl AssistantTodo {
     /// nothing yet to get ready), nor Galley's own one-off tasks, either
     /// target (each goes off at its time by itself), nor routines (the
     /// review is one), nor what is done. Woken, the review goes over
-    /// everything in hand; this decides only whether it wakes.
+    /// everything in hand; this decides only whether it wakes. Since main
+    /// chat ticket 95 this is the to-dos' half: the review also wakes for
+    /// the memos new since the one before it
+    /// ([`crate::scheduler::fire_review`]).
     ///
     /// `today` is the day in the zone the list was built in
     /// ([`build_todo`]'s `tz`, this machine's in production): a to-do's

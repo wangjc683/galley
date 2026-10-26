@@ -71,8 +71,8 @@ is stable; the text after it is not.
 | Prefix                   | Where                                             | When |
 | ------------------------ | ------------------------------------------------- | ---- |
 | `schema_mismatch:`       | any command, `--schema=N`                         | `N` is outside the accepted set (§1.2) |
-| `time_in_past:`          | `schedule create` / `update` `--at`; `todo add` / `update` `--remind-at` | The one-off's or the reminder's time is already past (additive 2026-10-16; `todo` 2026-10-17) |
-| `assistant_unavailable:` | `schedule create` / `update` / `run`, target `assistant`; every `todo` write | The active runtime is the external one, or the managed runtime has no main chat (additive 2026-10-16; `todo` 2026-10-17) |
+| `time_in_past:`          | `schedule create` / `update` `--at`; `todo add` / `update` `--remind-at`; `memo add` / `update` `--until` | The one-off's or the reminder's time is already past, or the memo's last day is before today (additive 2026-10-16; `todo` 2026-10-17; `memo` 2026-10-26) |
+| `assistant_unavailable:` | `schedule create` / `update` / `run`, target `assistant`; every `todo` and `memo` write | The active runtime is the external one, or the managed runtime has no main chat (additive 2026-10-16; `todo` 2026-10-17; `memo` 2026-10-26) |
 | `main_chat_protected:`   | `session rename` / `pin` / `unpin` / `delete`      | The session is the main chat, which takes none of these (additive 2026-10-16) |
 | `managed_runtime_only:`  | `llm set-default`                                 | The active runtime is the external one: its default model is GenericAgent's own config (additive 2026-10-16) |
 
@@ -232,6 +232,13 @@ and error discriminants unchanged):
   field only; no command, flag, exit code or error changed. Also under
   `--schema=1` and `--schema=2`. See [todo-commands.md](./todo-commands.md)
   §5.28 and [schedule-commands.md](./schedule-commands.md) §5.20.
+- 2026-10-26 — The `memo` family (main chat ticket 95): `memo list / add /
+  update / delete` (socket `memo.*`), the `Memo` shape and, on `add` and
+  `update`, the optional `overLimit` past the total; the `time_in_past:`
+  and `assistant_unavailable:` prefixes now also mark `memo` refusals. New
+  commands only; no existing command, field or exit code changed. Also
+  served under `--schema=1` and `--schema=2`. See
+  [memo-commands.md](./memo-commands.md).
 
 ### 7.2 `schemaVersion: 2` (served for unchanged commands, since 2026-09-16)
 

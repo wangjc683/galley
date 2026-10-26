@@ -5,7 +5,7 @@
 //! content in the managed runtime resource directory.
 
 use crate::api::schedule::{ScheduleTarget, ScheduledTaskRepeat};
-use crate::api::TodoReminderState;
+use crate::api::{MemoBrief, TodoReminderState, MEMO_TOTAL_MAX_CHARS};
 use crate::assistant_todo::{
     AssistantTodo, DeclinedBy, DeclinedFollowUp, TodoCreator, TodoItem, TodoKind, TodoState,
     DECLINED_WINDOW_DAYS,
@@ -251,7 +251,8 @@ pub(crate) fn compose_runtime_prompt(app_version: &str) -> String {
 /// followed by a "Main Chat" section (ticket 03b: this is the main chat,
 /// its id, where the segment its runner holds begins, and how to look up
 /// earlier parts), the "In Hand" lines when there are any (ticket 36,
-/// [`in_hand_section`]) and the main chat entry layer, which names the
+/// [`in_hand_section`]), the memos when there are any (ticket 95,
+/// [`memo_section`]) and the main chat entry layer, which names the
 /// assistant manual's directory `manual_dir` (ticket 30, in parts since
 /// ticket 59; [`crate::assistant_manual`]). Its static rules differ from the
 /// workbench's in one paragraph: scheduled tasks are no longer the
@@ -261,9 +262,27 @@ pub(crate) fn compose_main_chat_runtime_prompt(
     app_version: &str,
     main_chat: &MainChatPromptState,
     in_hand: Option<&str>,
+    memo: Option<&str>,
     manual_dir: &str,
 ) -> String {
-    compose(app_version, true, Some((main_chat, in_hand, manual_dir)))
+    compose(
+        app_version,
+        true,
+        Some(MainChatParts {
+            state: main_chat,
+            in_hand,
+            memo,
+            manual_dir,
+        }),
+    )
+}
+
+/// What only the main chat's prompt carries ([`compose`]).
+struct MainChatParts<'a> {
+    state: &'a MainChatPromptState,
+    in_hand: Option<&'a str>,
+    memo: Option<&'a str>,
+    manual_dir: &'a str,
 }
 
 /// IM-supervisor variant: same runtime rules WITHOUT the suggestion
@@ -465,7 +484,7 @@ Reply at the weight of what they said:
 fn compose(
     app_version: &str,
     with_suggestion: bool,
-    main_chat: Option<(&MainChatPromptState, Option<&str>, &str)>,
+    main_chat: Option<MainChatParts<'_>>,
 ) -> String {
     let static_rules = if main_chat.is_some() {
         main_chat_static_prompt()
@@ -475,14 +494,18 @@ fn compose(
         RUNTIME_PROMPT_STATIC.to_string()
     };
     let main_chat = main_chat
-        .map(|(state, in_hand, manual_dir)| {
-            let in_hand = in_hand
-                .map(|lines| format!("\n\n{lines}"))
-                .unwrap_or_default();
+        .map(|parts| {
+            let block = |lines: Option<&str>| {
+                lines
+                    .map(|lines| format!("\n\n{lines}"))
+                    .unwrap_or_default()
+            };
             format!(
-                "\n\n{}{in_hand}\n\n{}",
-                main_chat_section(state),
-                main_chat_entry_layer(manual_dir)
+                "\n\n{}{}{}\n\n{}",
+                main_chat_section(parts.state),
+                block(parts.in_hand),
+                block(parts.memo),
+                main_chat_entry_layer(parts.manual_dir)
             )
         })
         .unwrap_or_default();
@@ -800,6 +823,86 @@ fn in_hand_subtask_line(item: &TodoItem) -> String {
     format!("`{}` {title}: {state}", item.id)
 }
 
+/// The main chat's memo lines (ticket 95; main chat PRD rulings 140,
+/// 141): what Galley noted about the user, after the "In Hand" lines —
+/// the panel's 「备忘」 page is this list (ruling 142 point 3: "what you
+/// see is what it sees"). `memos` are the ones that hold today
+/// ([`crate::db::SqliteGalley::memos_today`]), in the order they were
+/// noted: the first noted are mostly what everything else rests on (what
+/// the user is called, their family). Each line: its id, the local day it
+/// was last noted or changed, its last day when it has one, and its text
+/// on one line, whole. Core writes it at every runner spawn with the rest
+/// of the state block, so like In Hand it says when it was read and which
+/// command reads it now.
+///
+/// Bounded by the memos' text: they go in, in order, until the next would
+/// take it past [`MEMO_TOTAL_MAX_CHARS`] characters; that one and every
+/// one after it are left out, counted on a last line that names `memo
+/// list`. The total a write is measured against is the same number, so
+/// nothing is left out while the memos are within it. `None` when there
+/// is no memo: no section at all. Data, main chat only.
+pub(crate) fn memo_section<Tz: chrono::TimeZone>(
+    memos: &[MemoBrief],
+    now: chrono::DateTime<chrono::Utc>,
+    tz: &Tz,
+) -> Option<String>
+where
+    Tz::Offset: std::fmt::Display,
+{
+    if memos.is_empty() {
+        return None;
+    }
+    let mut out = format!(
+        "### Memo\n\nAs of {}, local time (it may have changed since: `memo list` reads it \
+         now; `memo add`, `memo update` and `memo delete` change it).\n\nWhat you noted about \
+         the user, oldest first, each with the day you last noted or changed it:",
+        now.with_timezone(tz).format("%Y-%m-%d %H:%M")
+    );
+    let mut chars = 0;
+    let mut shown = 0;
+    for memo in memos {
+        chars += memo.chars();
+        if chars > MEMO_TOTAL_MAX_CHARS {
+            break;
+        }
+        shown += 1;
+        let _ = write!(out, "\n- {}", memo_line(memo, tz));
+    }
+    if shown < memos.len() {
+        let _ = write!(
+            out,
+            "\n- and {} more, past the {MEMO_TOTAL_MAX_CHARS} characters this section holds: \
+             `memo list`",
+            memos.len() - shown
+        );
+    }
+    Some(out)
+}
+
+/// `` `memo_…` 2026-10-20: <text> ``; `` `memo_…` 2026-10-26, until
+/// 2026-10-31 (Sat): <text> `` for one with a last day.
+fn memo_line<Tz: chrono::TimeZone>(memo: &MemoBrief, tz: &Tz) -> String
+where
+    Tz::Offset: std::fmt::Display,
+{
+    let mut facts: Vec<String> = Vec::new();
+    if let Ok(at) = chrono::DateTime::parse_from_rfc3339(&memo.updated_at) {
+        facts.push(at.with_timezone(tz).format("%Y-%m-%d").to_string());
+    }
+    if let Some(until) = memo.until.as_deref() {
+        match chrono::NaiveDate::parse_from_str(until, "%Y-%m-%d") {
+            Ok(day) => facts.push(format!("until {}", day.format("%Y-%m-%d (%a)"))),
+            Err(_) => facts.push(format!("until {until}")),
+        }
+    }
+    let text = memo.text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if facts.is_empty() {
+        format!("`{}`: {text}", memo.id)
+    } else {
+        format!("`{}` {}: {text}", memo.id, facts.join(", "))
+    }
+}
+
 /// `text` on one line, whitespace collapsed, cut at `max` characters
 /// with an ellipsis.
 fn in_hand_cut(text: &str, max: usize) -> String {
@@ -1065,7 +1168,7 @@ mod tests {
     fn main_chat_section_names_the_conversation_and_its_segment() {
         let state = main_chat_state();
         let ordinary = compose_runtime_prompt("t");
-        let main = compose_main_chat_runtime_prompt("t", &state, None, MANUAL_DIR);
+        let main = compose_main_chat_runtime_prompt("t", &state, None, None, MANUAL_DIR);
         assert_eq!(
             main,
             format!(
@@ -1101,7 +1204,7 @@ mod tests {
 
         // Data, not behavior: the prompt generation does not change.
         let hash = prompt_hash();
-        let _ = compose_main_chat_runtime_prompt("t", &state, None, MANUAL_DIR);
+        let _ = compose_main_chat_runtime_prompt("t", &state, None, None, MANUAL_DIR);
         assert_eq!(prompt_hash(), hash);
     }
 
@@ -1193,7 +1296,8 @@ mod tests {
     /// main chat and nowhere else.
     #[test]
     fn main_chat_entry_layer_is_main_chat_only() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
+        let main =
+            compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
         let section = main.find("## Main Chat").expect("the Main Chat section");
         let layer = main
             .find("## Galley Main Chat Entry Layer")
@@ -1224,7 +1328,8 @@ mod tests {
     /// the model instead of it looking the subtask up when asked.
     #[test]
     fn main_chat_entry_layer_dispatches_long_work_to_a_subtask() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
+        let main =
+            compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
         // Single-line fragments only (a Windows checkout makes the raw
         // string CRLF).
         assert!(main.contains("free: end your reply with <subtask>what to do</subtask>. Galley"));
@@ -1255,7 +1360,8 @@ mod tests {
     /// write, not only the first; it names no file that is not a part.
     #[test]
     fn main_chat_entry_layer_sends_the_model_to_the_manual() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
+        let main =
+            compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
         // Single-line fragments only (a Windows checkout makes the raw
         // string CRLF).
         assert!(main.contains(&format!(
@@ -1452,7 +1558,8 @@ mod tests {
     /// on Windows).
     #[test]
     fn only_the_main_chat_sets_scheduled_tasks_itself() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
+        let main =
+            compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
         assert!(main.contains("## What Only The User Changes In Galley"));
         assert!(main.contains(
             "interface: model providers and API keys, Channels, Browser Control and its"
@@ -1556,7 +1663,8 @@ mod tests {
     /// Main chat only.
     #[test]
     fn main_chat_entry_layer_asks_for_reminders_unasked() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
+        let main =
+            compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
         // Single-line fragments only (CRLF on Windows).
         assert!(main
             .contains("Note what the user has to do (a deadline, a call, a flight, a purchase),"));
@@ -1592,7 +1700,8 @@ mod tests {
     /// to-do, a reminder, the memory). Main chat only.
     #[test]
     fn main_chat_entry_layer_says_noted_only_after_a_write() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
+        let main =
+            compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
         // Single-line fragments only (CRLF on Windows).
         assert!(main.contains(
             "Say 「记下了」 or the like only after you wrote it down this turn (a to-do, a"
@@ -1613,7 +1722,8 @@ mod tests {
     /// it is sent to holds that test. Main chat only.
     #[test]
     fn main_chat_entry_layer_reads_todos_before_saying_it_will_note() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
+        let main =
+            compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
         // Single-line fragments only (CRLF on Windows).
         assert!(main.contains("Do it unasked, but read `todos.md` in your manual before"));
         assert!(main.contains("saying you will (it says when),"));
@@ -1640,7 +1750,8 @@ mod tests {
     /// Main chat only.
     #[test]
     fn main_chat_entry_layer_acts_unasked_and_hands_over_files() {
-        let main = compose_main_chat_runtime_prompt("t", &main_chat_state(), None, MANUAL_DIR);
+        let main =
+            compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
         // Single-line fragments only (CRLF on Windows).
         assert!(main.contains("what they are in the middle of and set aside to come back to,"));
         assert!(
@@ -2129,8 +2240,8 @@ mod tests {
             ..AssistantTodo::default()
         };
         let lines = in_hand_section(&todo, &[], at("2026-10-16T06:05:00Z"), &shanghai()).unwrap();
-        let without = compose_main_chat_runtime_prompt("t", &state, None, MANUAL_DIR);
-        let with = compose_main_chat_runtime_prompt("t", &state, Some(&lines), MANUAL_DIR);
+        let without = compose_main_chat_runtime_prompt("t", &state, None, None, MANUAL_DIR);
+        let with = compose_main_chat_runtime_prompt("t", &state, Some(&lines), None, MANUAL_DIR);
         let section = main_chat_section(&state);
         assert_eq!(
             with,
@@ -2442,6 +2553,267 @@ mod tests {
         assert!(
             len <= IN_HAND_BUDGET_BYTES,
             "In Hand lines are {len} bytes, budget {IN_HAND_BUDGET_BYTES}"
+        );
+    }
+
+    // ---------------- memos (ticket 95) ----------------
+
+    use crate::api::MEMO_TEXT_MAX_CHARS;
+
+    fn memo(id: &str, text: &str, updated_at: &str, until: Option<&str>) -> MemoBrief {
+        MemoBrief {
+            id: crate::api::MemoId(id.into()),
+            text: text.into(),
+            until: until.map(str::to_string),
+            origin: crate::api::Origin {
+                via: crate::api::OriginVia::Supervisor,
+                supervisor: Some(crate::api::ASSISTANT_SUPERVISOR.into()),
+                reason: None,
+                client: None,
+            },
+            created_in: None,
+            created_at: updated_at.into(),
+            updated_at: updated_at.into(),
+        }
+    }
+
+    /// The memo lines as the main chat reads them (ticket 95): when they
+    /// were read, then each memo in the order it was noted, with the local
+    /// day it was last written and its last day, its text on one line.
+    #[test]
+    fn memo_lines_read_like_this() {
+        let memos = [
+            memo(
+                "memo_1a2b3c4d5e6f7a8b",
+                "用户叫小林，在一家设计公司做产品经理",
+                "2026-10-20T01:10:00+00:00",
+                None,
+            ),
+            memo(
+                "memo_2b3c4d5e6f7a8b9c",
+                "不吃香菜",
+                "2026-10-24T12:30:00+00:00",
+                None,
+            ),
+            memo(
+                "memo_3c4d5e6f7a8b9c0d",
+                "看他这周常问 76 人\n的比赛",
+                "2026-10-26T00:40:00+00:00",
+                None,
+            ),
+            memo(
+                "memo_4d5e6f7a8b9c0d1e",
+                "下周三起在上海出差",
+                "2026-10-26T01:02:00+00:00",
+                Some("2026-11-06"),
+            ),
+        ];
+        let text = memo_section(&memos, at("2026-10-26T01:05:00Z"), &shanghai()).unwrap();
+        assert_eq!(
+            text,
+            "### Memo\n\
+             \n\
+             As of 2026-10-26 09:05, local time (it may have changed since: `memo list` reads it \
+             now; `memo add`, `memo update` and `memo delete` change it).\n\
+             \n\
+             What you noted about the user, oldest first, each with the day you last noted or \
+             changed it:\n\
+             - `memo_1a2b3c4d5e6f7a8b` 2026-10-20: 用户叫小林，在一家设计公司做产品经理\n\
+             - `memo_2b3c4d5e6f7a8b9c` 2026-10-24: 不吃香菜\n\
+             - `memo_3c4d5e6f7a8b9c0d` 2026-10-26: 看他这周常问 76 人 的比赛\n\
+             - `memo_4d5e6f7a8b9c0d1e` 2026-10-26, until 2026-11-06 (Fri): 下周三起在上海出差"
+        );
+        // No memo, no section.
+        assert_eq!(
+            memo_section(&[], at("2026-10-26T01:05:00Z"), &shanghai()),
+            None
+        );
+    }
+
+    /// The memos go in, in order, until the next would take their text
+    /// past 2,000 characters; that one and the rest are counted on the
+    /// last line (ticket 95, main chat PRD ruling 141 point 6).
+    #[test]
+    fn memo_lines_stop_at_two_thousand_characters_and_say_how_many_more() {
+        let now = at("2026-10-26T01:05:00Z");
+        let full = |n: usize| -> Vec<MemoBrief> {
+            (0..n)
+                .map(|i| {
+                    memo(
+                        &format!("memo_{i:016x}"),
+                        &"字".repeat(MEMO_TEXT_MAX_CHARS),
+                        "2026-10-26T01:00:00+00:00",
+                        None,
+                    )
+                })
+                .collect()
+        };
+        // Exactly 2,000: all of them, no last line.
+        let exactly = full(20);
+        let text = memo_section(&exactly, now, &shanghai()).unwrap();
+        assert_eq!(text.matches("\n- `memo_").count(), 20);
+        assert!(!text.contains(" more, past the "));
+        // Past it: the first 20, then how many more.
+        let text = memo_section(&full(23), now, &shanghai()).unwrap();
+        assert_eq!(text.matches("\n- `memo_").count(), 20);
+        assert!(text
+            .ends_with("\n- and 3 more, past the 2000 characters this section holds: `memo list`"));
+        assert!(text.contains(&format!("`memo_{:016x}`", 19)));
+        assert!(!text.contains(&format!("`memo_{:016x}`", 20)));
+        // 1,999, then one of two characters: left out, and a short one
+        // after it with it — oldest first, no gaps.
+        let mut memos = full(19);
+        memos.push(memo(
+            "memo_aaaaaaaaaaaaaaaa",
+            &"字".repeat(99),
+            "2026-10-26T01:00:00+00:00",
+            None,
+        ));
+        memos.push(memo(
+            "memo_bbbbbbbbbbbbbbbb",
+            "两字",
+            "2026-10-26T01:00:00+00:00",
+            None,
+        ));
+        memos.push(memo(
+            "memo_cccccccccccccccc",
+            "一",
+            "2026-10-26T01:00:00+00:00",
+            None,
+        ));
+        let text = memo_section(&memos, now, &shanghai()).unwrap();
+        assert!(text.contains("`memo_aaaaaaaaaaaaaaaa`"));
+        assert!(!text.contains("`memo_bbbbbbbbbbbbbbbb`"));
+        assert!(!text.contains("`memo_cccccccccccccccc`"));
+        assert!(text
+            .ends_with("\n- and 2 more, past the 2000 characters this section holds: `memo list`"));
+    }
+
+    /// Ticket 95: the memo lines follow the "In Hand" lines in the main
+    /// chat, before the entry layer, and nowhere else; without memos the
+    /// prompt is as it was.
+    #[test]
+    fn memo_lines_are_main_chat_only_after_in_hand() {
+        let state = main_chat_state();
+        let now = at("2026-10-26T01:05:00Z");
+        let todo = AssistantTodo {
+            yours: YourTodos {
+                anytime: vec![open_todo(
+                    "todo_1a2b3c4d5e6f7a8b",
+                    "买营养土",
+                    None,
+                    false,
+                    None,
+                )],
+                ..YourTodos::default()
+            },
+            ..AssistantTodo::default()
+        };
+        let in_hand = in_hand_section(&todo, &[], now, &shanghai()).unwrap();
+        let memos = memo_section(
+            &[memo(
+                "memo_2b3c4d5e6f7a8b9c",
+                "不吃香菜",
+                "2026-10-24T12:30:00+00:00",
+                None,
+            )],
+            now,
+            &shanghai(),
+        )
+        .unwrap();
+        let without =
+            compose_main_chat_runtime_prompt("t", &state, Some(&in_hand), None, MANUAL_DIR);
+        let with =
+            compose_main_chat_runtime_prompt("t", &state, Some(&in_hand), Some(&memos), MANUAL_DIR);
+        assert_eq!(
+            with,
+            without.replacen(&in_hand, &format!("{in_hand}\n\n{memos}"), 1)
+        );
+        let in_hand_at = with.find("### In Hand").unwrap();
+        let memo_at = with.find("### Memo").unwrap();
+        let layer = with.find("## Galley Main Chat Entry Layer").unwrap();
+        assert!(in_hand_at < memo_at && memo_at < layer);
+        // Memos without anything in hand: right after the Main Chat
+        // section.
+        let alone = compose_main_chat_runtime_prompt("t", &state, None, Some(&memos), MANUAL_DIR);
+        let section = main_chat_section(&state);
+        assert!(alone.contains(&format!(
+            "{section}\n\n{memos}\n\n## Galley Main Chat Entry Layer"
+        )));
+        assert!(!without.contains("### Memo"));
+        for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
+            assert!(!prompt.contains("### Memo"));
+            assert!(!prompt.contains("What you noted about the user"));
+        }
+    }
+
+    /// Byte caps on the memo lines' own words (ticket 95), the memos'
+    /// text not counted: that is bounded by characters
+    /// ([`MEMO_TOTAL_MAX_CHARS`], 2,000), up to four bytes each. Two
+    /// numbers, as the number of lines is not fixed: the head (the
+    /// heading, when it was read and which commands read and change it,
+    /// the line before the memos, and the last line with a four-digit
+    /// count), and each memo's line around its text (its id, the day,
+    /// `until` with a last day and its weekday). Measured on the longest
+    /// they get, no headroom, `\r` not counted (the words are escaped
+    /// `\n`, not raw strings, so a Windows checkout does not change them).
+    /// A memo's line costs at most `MEMO_LINE_BUDGET_BYTES` on top of its
+    /// text; twenty memos of a hundred characters come to about 1.3 KB of
+    /// lines on top of 2,000 characters. Data, main chat only: outside
+    /// the static budget and the prompt hash.
+    const MEMO_HEAD_BUDGET_BYTES: usize = 322;
+    const MEMO_LINE_BUDGET_BYTES: usize = 63;
+
+    #[test]
+    fn memo_lines_stay_within_budget() {
+        let now = at("2026-10-26T01:05:00Z");
+        let longest = memo(
+            "memo_ffffffffffffffff",
+            &"🏀".repeat(MEMO_TEXT_MAX_CHARS),
+            "2026-10-26T01:02:00+00:00",
+            Some("2026-12-31"),
+        );
+        let fit = MEMO_TOTAL_MAX_CHARS / MEMO_TEXT_MAX_CHARS;
+        let tiny = memo(
+            "memo_ffffffffffffffff",
+            "🏀",
+            "2026-10-26T01:02:00+00:00",
+            Some("2026-12-31"),
+        );
+        for (memos, shown) in [
+            (vec![longest; fit + 9_999], fit),
+            (
+                vec![tiny; MEMO_TOTAL_MAX_CHARS + 9_999],
+                MEMO_TOTAL_MAX_CHARS,
+            ),
+        ] {
+            let text = memo_section(&memos, now, &shanghai()).unwrap();
+            let bytes = text.bytes().filter(|&byte| byte != b'\r').count();
+            let lines = text.matches("\n- `memo_").count();
+            assert_eq!(lines, shown);
+            let texts: usize = memos[..shown].iter().map(|m| m.text.len()).sum();
+            let words = bytes - texts;
+            let budget = MEMO_HEAD_BUDGET_BYTES + lines * MEMO_LINE_BUDGET_BYTES;
+            assert!(
+                words <= budget,
+                "memo lines are {words} bytes besides the memos' text ({lines} lines), budget \
+                 {MEMO_HEAD_BUDGET_BYTES} + {lines} × {MEMO_LINE_BUDGET_BYTES} = {budget}"
+            );
+        }
+        // Each line on its own.
+        let one = memo_line(
+            &memo(
+                "memo_ffffffffffffffff",
+                "x",
+                "2026-10-26T01:02:00+00:00",
+                Some("2026-12-31"),
+            ),
+            &shanghai(),
+        );
+        let line = format!("\n- {one}").len() - 1;
+        assert!(
+            line <= MEMO_LINE_BUDGET_BYTES,
+            "a memo's line is {line} bytes besides its text"
         );
     }
 

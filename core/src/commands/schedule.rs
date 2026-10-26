@@ -249,3 +249,67 @@ pub(crate) async fn cancel_todo(
         .await
         .map_err(stringify_error)
 }
+
+// ---------------- memos (main chat ticket 95) ----------------
+//
+// The desktop's 「备忘」 page and the cards under the main chat's replies
+// (ticket 97) read through these; the user's one action on a memo is to
+// delete it (PRD ruling 142 point 5: anything else they say to Galley,
+// which writes through the CLI). The delete is the user at the desktop
+// (`Origin::desktop()`: `via = 'gui'`, no turn), goes through Core's write
+// path and broadcasts `memos:changed`. Errors are Core's JSON.
+
+/// The memos that hold today (none past its last day), in the order they
+/// were noted, each with where in the main chat it was last noted or
+/// changed (`changedIn`: the row jumps there). What the main chat reads at
+/// the start of each segment, so the page shows what it sees. Read-only;
+/// the page reads it again on `memos:changed`.
+#[tauri::command]
+pub(crate) async fn list_memos(
+    galley: State<'_, SqliteGalley>,
+) -> std::result::Result<Vec<crate::api::MemoItem>, String> {
+    galley
+        .memo_items(chrono::Local::now().date_naive())
+        .await
+        .map_err(stringify_error)
+}
+
+/// Every write of a memo made in the main chat, in the order it was made
+/// (main chat ticket 95, for ticket 97's cards): noted, changed or
+/// deleted, the words after it (before it, for a delete), the reply it
+/// hangs under once its run ended, and whether the memo is still there.
+/// Read-only; empty on the external runtime and before there is a main
+/// chat, as `list_noted_todos` is.
+#[tauri::command]
+pub(crate) async fn list_memo_events(
+    galley: State<'_, SqliteGalley>,
+) -> std::result::Result<Vec<crate::api::MemoEventItem>, String> {
+    let main = match galley
+        .active_runtime_kind()
+        .await
+        .map_err(stringify_error)?
+    {
+        RuntimeKind::Managed => galley.main_chat_id().await.map_err(stringify_error)?,
+        _ => None,
+    };
+    match main {
+        Some(main) => galley.memo_events_in(&main).await.map_err(stringify_error),
+        None => Ok(Vec::new()),
+    }
+}
+
+/// Delete a memo (main chat PRD ruling 142 point 5: the panel's 「删除」,
+/// once its undo toast has gone): its row goes, a `delete` event recorded
+/// as the user at the desktop stays. Returns the memo as it was.
+#[tauri::command]
+pub(crate) async fn delete_memo(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+    id: crate::api::MemoId,
+) -> std::result::Result<crate::api::MemoBrief, String> {
+    let notifier = TauriNotifier::new(app);
+    Writes::new(&galley, notifier.as_ref(), VIA_GUI)
+        .delete_memo(&id, Origin::desktop(), None)
+        .await
+        .map_err(stringify_error)
+}

@@ -23,6 +23,7 @@
 //! | create / update / delete a project | `project-created-external` / `project-updated-external` / `project-deleted-external` |
 //! | create / update / delete a scheduled task | `scheduled-tasks:changed` (empty payload) |
 //! | create / update / tick off / untick / cancel a to-do, cancel its reminder | `todos:changed` (empty payload), and `scheduled-tasks:changed` unless unticking |
+//! | note / change / delete a memo | `memos:changed` (empty payload) |
 //!
 //! Session events carry [`SessionBriefEvent`], not [`SessionBrief`]: the
 //! brief is also the CLI's JSON output and skips `None` fields, so a
@@ -49,11 +50,11 @@
 //! the start, through [`refuse_main_chat`] and the same guard.
 
 use crate::api::{
-    CreateProjectInput, CreateScheduledTaskInput, CreateSessionInput, CreateTodoInput, GalleyApi,
-    Origin, ProjectBrief, ProjectId, ProjectPatch, RuntimeKind, ScheduledTaskBrief,
-    ScheduledTaskId, ScheduledTaskPatch, SessionBrief, SessionFilter, SessionId, SessionStatus,
-    TodoBrief, TodoId, TodoPatch, MAIN_CHAT_PROTECTED, SCHEDULED_TASKS_CHANGED_EVENT,
-    TODOS_CHANGED_EVENT,
+    CreateMemoInput, CreateProjectInput, CreateScheduledTaskInput, CreateSessionInput,
+    CreateTodoInput, GalleyApi, MemoBrief, MemoId, MemoPatch, MemoWrite, Origin, ProjectBrief,
+    ProjectId, ProjectPatch, RuntimeKind, ScheduledTaskBrief, ScheduledTaskId, ScheduledTaskPatch,
+    SessionBrief, SessionFilter, SessionId, SessionStatus, TodoBrief, TodoId, TodoPatch,
+    MAIN_CHAT_PROTECTED, MEMOS_CHANGED_EVENT, SCHEDULED_TASKS_CHANGED_EVENT, TODOS_CHANGED_EVENT,
 };
 use crate::db::{
     main_chat_greeting, MainChatEnsured, MainChatSeed, RenameTitleSource, SqliteGalley,
@@ -852,5 +853,51 @@ impl<'a> Writes<'a> {
     pub async fn cancel_todo_reminder(&self, id: &TodoId, origin: Origin) -> Result<TodoBrief> {
         let result = self.galley.cancel_todo_reminder(id, origin).await;
         self.todos_changed(result, true)
+    }
+
+    // ---------------- memos (main chat ticket 95) ----------------
+
+    /// Broadcast after a memo write that went through; a refused one
+    /// changed nothing (each write is one transaction).
+    fn memos_changed<T>(&self, result: Result<T>) -> Result<T> {
+        if result.is_ok() {
+            notify(self.notifier, MEMOS_CHANGED_EVENT, &());
+        }
+        result
+    }
+
+    /// [`SqliteGalley::create_memo`]: Galley's `memo add`.
+    pub async fn create_memo(
+        &self,
+        input: CreateMemoInput,
+        origin: Origin,
+        created_in: Option<(SessionId, i64)>,
+    ) -> Result<MemoWrite> {
+        let result = self.galley.create_memo(input, origin, created_in).await;
+        self.memos_changed(result)
+    }
+
+    /// [`SqliteGalley::update_memo`]: Galley's `memo update`.
+    pub async fn update_memo(
+        &self,
+        id: &MemoId,
+        patch: MemoPatch,
+        origin: Origin,
+        created_in: Option<(SessionId, i64)>,
+    ) -> Result<MemoWrite> {
+        let result = self.galley.update_memo(id, patch, origin, created_in).await;
+        self.memos_changed(result)
+    }
+
+    /// [`SqliteGalley::delete_memo`]: Galley's `memo delete`, the
+    /// desktop's 「删除」.
+    pub async fn delete_memo(
+        &self,
+        id: &MemoId,
+        origin: Origin,
+        created_in: Option<(SessionId, i64)>,
+    ) -> Result<MemoBrief> {
+        let result = self.galley.delete_memo(id, origin, created_in).await;
+        self.memos_changed(result)
     }
 }

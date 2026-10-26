@@ -66,11 +66,13 @@
 //! can. Coming due, it first looks without the model ([`fire_review`]),
 //! and wakes only for what has no alarm of its own (ticket 81): a to-do of
 //! the user's with no date or due within three days, or a subtask not
-//! finished; with none it wakes nobody. Its wake travels as a reminder's,
-//! with words of its own (`crate::subtask_report`), and one that cannot be
-//! delivered is dropped, never handed to a notification (its words are
-//! for the model). The user stops it by asking the main chat, which
-//! pauses it; Galley never makes it again.
+//! finished; or, since ticket 95, for a memo noted or changed since the
+//! last review's day, in a turn the user started; with none it wakes
+//! nobody. Its wake travels as a reminder's, with words of its own
+//! (`crate::subtask_report`), and one that cannot be delivered is dropped,
+//! never handed to a notification (its words are for the model). The user
+//! stops it by asking the main chat, which pauses it; Galley never makes
+//! it again.
 
 use std::sync::Arc;
 
@@ -82,7 +84,7 @@ use crate::api::schedule::{
     resolve_wall_clock, FirePreview, ScheduleTarget, ScheduledFireFailed, ScheduledTaskBrief,
     SCHEDULED_TASKS_CHANGED_EVENT, SCHEDULED_TASK_FIRE_FAILED_EVENT,
 };
-use crate::api::{GalleyApi, Origin, ScheduledTaskId};
+use crate::api::{GalleyApi, MemoBrief, MemoReviewWindow, Origin, ScheduledTaskId};
 use crate::db::SqliteGalley;
 use crate::error::GalleyError;
 use crate::notify::{notify, Notifier};
@@ -158,6 +160,15 @@ pub const REVIEW_LOG_PREF: &str = "assistant_review_log";
 
 /// How many entries the review's log keeps (about a year of fires).
 pub const REVIEW_LOG_MAX: usize = 400;
+
+/// The pref the morning review's memo window is kept under from its fire
+/// to its wake (main chat ticket 95): `{taskId, firedAt, window}`, the
+/// window as [`MemoReviewWindow::to_json`] writes it, for the review's
+/// last fire only. The window is measured from the review before this one
+/// (`last_fired_at` before the fire), which the fire overwrites; its wake
+/// is written later, from the database (a restart included), and reads it
+/// back here ([`review_wake_memos`]).
+pub const REVIEW_MEMO_WINDOW_PREF: &str = "assistant_review_memo_window";
 
 /// What became of the morning review once, in its log.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -429,9 +440,15 @@ pub enum ReviewFire {
 /// [`crate::assistant_todo::REVIEW_LOOKAHEAD_DAYS`] days of today (overdue
 /// ones included), or a subtask not finished. A to-do due later, Galley's
 /// own one-off tasks (each goes off at its time by itself) and routines
-/// (the review is one) do not. With nothing to look at, the fire is
-/// stamped skipped — the period consumed, so it does not come due again
-/// today, and no wake ([`SqliteGalley::mark_scheduled_wake_skipped`]);
+/// (the review is one) do not. Ticket 95 (main chat PRD ruling 143): nor
+/// does it skip while a memo was noted or changed in a turn the user
+/// started, since the day of the review before this one
+/// ([`MemoReviewWindow`], read off `task.last_fired_at` as it stood
+/// before this fire, in this machine's zone); the window is kept for the
+/// wake to name them ([`REVIEW_MEMO_WINDOW_PREF`]). With nothing to look
+/// at, the fire is stamped skipped — the period consumed, so it does not
+/// come due again today, and no wake
+/// ([`SqliteGalley::mark_scheduled_wake_skipped`]);
 /// otherwise it fires like a reminder ([`fire_reminder`]) and the wake
 /// pipeline takes it from there, and the review goes over everything in
 /// hand. Either way its log says so ([`log_review`]). A failed read wakes
@@ -453,7 +470,7 @@ pub async fn fire_review<Tz: TimeZone>(
     // Today in the zone the list reads its due dates in: `assistant_todo`
     // builds it in this machine's.
     let today = at.with_timezone(&Local).date_naive();
-    let worth_a_look = match crate::assistant_todo::assistant_todo(galley, runners, at).await {
+    let todo_says = match crate::assistant_todo::assistant_todo(galley, runners, at).await {
         Ok(todo) => todo.review_has_something_to_look_at(today),
         Err(e) => {
             eprintln!(
@@ -463,7 +480,23 @@ pub async fn fire_review<Tz: TimeZone>(
             true
         }
     };
-    if worth_a_look {
+    // Ticket 95: the memos new since the review before this one, read in
+    // the zone the to-do list reads its days in.
+    let window = MemoReviewWindow::before(task.last_fired_at.as_deref(), at, &Local);
+    let memos_say = match galley.review_memos(&window).await {
+        Ok(memos) => !memos.is_empty(),
+        Err(e) => {
+            eprintln!(
+                "[scheduler] review {}: reading the memos failed, waking it: {e:?}",
+                task.id
+            );
+            true
+        }
+    };
+    if todo_says || memos_say {
+        // Kept before the fire is stamped: a wake read from the pending
+        // fire right after it then finds its window.
+        keep_review_memo_window(galley, task.id.as_str(), &fired_at, &window).await;
         if !fire_reminder(galley, notifier, task, due_at, now).await {
             return ReviewFire::Failed;
         }
@@ -485,9 +518,10 @@ pub async fn fire_review<Tz: TimeZone>(
         Ok(_) => {
             eprintln!(
                 "[scheduler] review {}: nothing to look at (no to-do any time or due within \
-                 {} days, no unfinished subtask), skipped",
+                 {} days, no unfinished subtask, no new memo since {}), skipped",
                 task.id,
-                crate::assistant_todo::REVIEW_LOOKAHEAD_DAYS
+                crate::assistant_todo::REVIEW_LOOKAHEAD_DAYS,
+                window.since
             );
             notify(notifier, SCHEDULED_TASKS_CHANGED_EVENT, &());
             log_review(
@@ -504,6 +538,66 @@ pub async fn fire_review<Tz: TimeZone>(
         Err(e) => {
             eprintln!("[scheduler] review {} mark skipped failed: {e:?}", task.id);
             ReviewFire::Failed
+        }
+    }
+}
+
+/// Keep the memo window of the review's fire at `fired_at` for its wake
+/// ([`REVIEW_MEMO_WINDOW_PREF`]). A failed write is logged: the wake then
+/// names no memo, and the review still wakes.
+pub async fn keep_review_memo_window(
+    galley: &SqliteGalley,
+    task_id: &str,
+    fired_at: &str,
+    window: &MemoReviewWindow,
+) {
+    let kept = serde_json::json!({
+        "taskId": task_id,
+        "firedAt": fired_at,
+        "window": window.to_json(),
+    });
+    if let Err(e) = galley.set_pref_json(REVIEW_MEMO_WINDOW_PREF, kept).await {
+        eprintln!("[scheduler] review {task_id}: keeping its memo window failed: {e:?}");
+    }
+}
+
+/// The memos the wake of `task`'s last fire names (ticket 95, main chat PRD
+/// ruling 143 point 3): the ones in the window kept for that fire
+/// ([`keep_review_memo_window`]), read now — one deleted or changed again
+/// since is left out (a change moves it to the next window). None when no
+/// window was kept for this fire, or reading fails (logged): the wake then
+/// reads as it did before memos.
+pub async fn review_wake_memos(galley: &SqliteGalley, task: &ScheduledTaskBrief) -> Vec<MemoBrief> {
+    let Some(fired_at) = task.last_fired_at.as_deref() else {
+        return Vec::new();
+    };
+    let kept = match galley.get_pref_json(REVIEW_MEMO_WINDOW_PREF).await {
+        Ok(Some(kept)) => kept,
+        Ok(None) => return Vec::new(),
+        Err(e) => {
+            eprintln!(
+                "[scheduler] review {}: reading its memo window failed: {e:?}",
+                task.id
+            );
+            return Vec::new();
+        }
+    };
+    if kept["taskId"].as_str() != Some(task.id.as_str())
+        || kept["firedAt"].as_str() != Some(fired_at)
+    {
+        return Vec::new();
+    }
+    let Some(window) = MemoReviewWindow::from_json(&kept["window"]) else {
+        return Vec::new();
+    };
+    match galley.review_memos(&window).await {
+        Ok(memos) => memos,
+        Err(e) => {
+            eprintln!(
+                "[scheduler] review {}: reading its memos failed: {e:?}",
+                task.id
+            );
+            Vec::new()
         }
     }
 }
@@ -568,6 +662,18 @@ pub async fn run_now(
             galley
                 .ensure_assistant_available("run_scheduled_task")
                 .await?;
+            if task.is_review() {
+                // Ticket 95: run by hand, the review names the memos of
+                // its own window, from the day of the one before it (run
+                // again the same day: none).
+                let window = MemoReviewWindow::before(
+                    task.last_fired_at.as_deref(),
+                    now.with_timezone(&Utc),
+                    &Local,
+                );
+                let fired = instant_to_utc_iso(&now);
+                keep_review_memo_window(&galley, id, &fired, &window).await;
+            }
             if !fire_reminder(&galley, ctx.notifier.as_ref(), &task, &now, &now).await {
                 return Err(GalleyError::Internal {
                     message: format!("scheduled task {id}: recording the fire failed"),

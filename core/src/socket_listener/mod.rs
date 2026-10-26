@@ -99,6 +99,7 @@ mod common;
 mod ctx;
 mod hands_cmds;
 mod llm_cmds;
+mod memo_cmds;
 mod project_cmds;
 mod schedule_cmds;
 mod session_cmds;
@@ -110,6 +111,7 @@ use crate::notify::{NullNotifier, TauriNotifier};
 pub use ctx::{DbSource, HandlerCtx, RunnerPort};
 use hands_cmds::*;
 use llm_cmds::*;
+use memo_cmds::*;
 use project_cmds::*;
 use schedule_cmds::*;
 use session_cmds::*;
@@ -745,6 +747,15 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
         }
         "todo.cancel" => {
             DispatchResult::Unary(dispatch_todo_cancel(request_id, req.args, ctx).await)
+        }
+        // ---- memos (main chat ticket 95, additive inside 3) ----
+        "memo.list" => DispatchResult::Unary(dispatch_memo_list(request_id, req.args, ctx).await),
+        "memo.add" => DispatchResult::Unary(dispatch_memo_add(request_id, req.args, ctx).await),
+        "memo.update" => {
+            DispatchResult::Unary(dispatch_memo_update(request_id, req.args, ctx).await)
+        }
+        "memo.delete" => {
+            DispatchResult::Unary(dispatch_memo_delete(request_id, req.args, ctx).await)
         }
         other => DispatchResult::Unary(SocketResponse::err(
             request_id,

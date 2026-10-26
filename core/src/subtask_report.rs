@@ -81,7 +81,9 @@
 //! - The **morning review** (main chat ticket 73,
 //!   `crate::scheduler::fire_review`) travels as a due task, with words of
 //!   its own ([`DueReminder::review`]): what it is, the part of the manual
-//!   to read, at most two subtasks, silent unless something got done.
+//!   to read, at most two subtasks, silent unless something got done; since
+//!   ticket 95, the memos new since the review before it, by id and text
+//!   ([`DueReminder::memos`]), when there are any.
 //!   Not delivered, it is dropped with no notification
 //!   (`drop_review_wake`): its words are for the model, not the user.
 
@@ -196,6 +198,28 @@ pub struct DueReminder {
     /// [`ScheduledTaskBrief::is_review`]): words of its own, and dropped
     /// silently when it cannot be delivered.
     pub review: bool,
+    /// For the morning review (ticket 95, main chat PRD ruling 143 point
+    /// 3): the memos noted or changed in turns the user started since the
+    /// review before it (`crate::scheduler::review_wake_memos`), which its
+    /// words name. Empty otherwise, and then the words are as before.
+    pub memos: Vec<DueMemo>,
+}
+
+/// A memo the morning review's wake names (ticket 95): its id and its
+/// text, read when the report is made.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DueMemo {
+    pub id: String,
+    pub text: String,
+}
+
+impl DueMemo {
+    pub fn from_memo(memo: &crate::api::MemoBrief) -> Self {
+        Self {
+            id: memo.id.as_str().to_string(),
+            text: memo.text.clone(),
+        }
+    }
 }
 
 /// The to-do a reminder is on, as its wake tells it (ticket 39). Read when
@@ -250,6 +274,7 @@ impl DueReminder {
             fired_at,
             todo: None,
             review: task.is_review(),
+            memos: Vec::new(),
         })
     }
 }
@@ -363,14 +388,17 @@ impl SubtaskReport {
     }
 
     /// The report of `task`'s last fire, for `main_chat_id`; `todo` is the
-    /// to-do it reminds of, when it is one's reminder.
+    /// to-do it reminds of, when it is one's reminder; `memos` the memos a
+    /// morning review names (ticket 95).
     pub fn reminder(
         main_chat_id: &str,
         task: &ScheduledTaskBrief,
         todo: Option<DueTodo>,
+        memos: Vec<DueMemo>,
     ) -> Option<Self> {
         let mut due = DueReminder::from_task(task, &chrono::Local)?;
         due.todo = todo;
+        due.memos = memos;
         Some(Self {
             main_chat_id: main_chat_id.to_string(),
             subtask_id: None,
@@ -477,9 +505,32 @@ fn review_paragraph(due: &DueReminder) -> String {
          Speak only when you got something done the user will want to know, in one message, \
          in your own words, with no fixed heading. If you only started subtasks, write nothing \
          else for the user and {NO_REPLY_END}; if you did nothing, your whole reply is exactly \
-         <no-reply/>.",
-        due.rule
+         <no-reply/>.{}",
+        due.rule,
+        review_memos_paragraph(&due.memos)
     )
+}
+
+/// The memos a morning review names (ticket 95, main chat PRD ruling 143
+/// point 3), after a blank line: each by id and text, on one line, and
+/// what to ask of each, with the part of the manual that says more.
+/// Nothing at all without memos: the wake reads as before.
+fn review_memos_paragraph(memos: &[DueMemo]) -> String {
+    if memos.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from(
+        "\n\nMemos noted or changed since the last review, in turns the user started:",
+    );
+    for memo in memos {
+        let text = memo.text.split_whitespace().collect::<Vec<_>>().join(" ");
+        out.push_str(&format!("\n- `{}`: {text}", memo.id));
+    }
+    out.push_str(
+        "\nFor each, ask whether there is something you could get done for the user that they \
+         would want to know, as \"The morning review\" in `wake.md` says; most need nothing.",
+    );
+    out
 }
 
 /// The planned time, and how late it went off when it did (ticket 33's
@@ -1783,7 +1834,18 @@ pub async fn restore_pending_reminders(
             },
             None => None,
         };
-        if let Some(report) = SubtaskReport::reminder(&main, task, todo) {
+        // A morning review names the memos new since the one before it
+        // (ticket 95), as they read now.
+        let memos = if task.is_review() {
+            crate::scheduler::review_wake_memos(galley, task)
+                .await
+                .iter()
+                .map(DueMemo::from_memo)
+                .collect()
+        } else {
+            Vec::new()
+        };
+        if let Some(report) = SubtaskReport::reminder(&main, task, todo, memos) {
             added |= reports.add(report);
         }
     }
@@ -1841,6 +1903,7 @@ mod tests {
             fired_local: "2026-10-22 09:15 (Thu)".into(),
             late: late.map(str::to_string),
             todo: None,
+            memos: Vec::new(),
         }
     }
 
@@ -1950,6 +2013,46 @@ mod tests {
         let mixed = report_text(&[report(Some("s-1"), 0, done("x")), due_report(review)]);
         assert!(mixed.starts_with(OPENING_MIXED));
         assert!(mixed.ends_with(CLOSING_MANY));
+    }
+
+    /// Ticket 95 (main chat PRD ruling 143 point 3): a review with new
+    /// memos names each by id and text, one line each, after what it says
+    /// without them, and sends the model to the manual's part; without
+    /// memos the words are as they were, byte for byte.
+    #[test]
+    fn the_morning_review_names_the_new_memos() {
+        let mut review = due(false, None);
+        review.review = true;
+        let without = report_text(&[due_report(review.clone())]);
+        review.memos = vec![
+            DueMemo {
+                id: "memo_1a2b3c4d5e6f7a8b".into(),
+                text: "看他这周常问 76 人\n的比赛".into(),
+            },
+            DueMemo {
+                id: "memo_4d5e6f7a8b9c0d1e".into(),
+                text: "想学吉他".into(),
+            },
+        ];
+        let with = report_text(&[due_report(review.clone())]);
+        assert_eq!(
+            with,
+            format!(
+                "{without}\n\nMemos noted or changed since the last review, in turns the user \
+                 started:\n\
+                 - `memo_1a2b3c4d5e6f7a8b`: 看他这周常问 76 人 的比赛\n\
+                 - `memo_4d5e6f7a8b9c0d1e`: 想学吉他\n\
+                 For each, ask whether there is something you could get done for the user that \
+                 they would want to know, as \"The morning review\" in `wake.md` says; most \
+                 need nothing."
+            )
+        );
+        // The replay line does not carry them.
+        assert_eq!(
+            replay_lines(&[due_report(review)]),
+            "[Galley: the morning review sched_a came due (2026-10-20 20:00 (Tue)) — details: \
+             schedule show sched_a]"
+        );
     }
 
     /// Ticket 39: a reminder on one of the user's to-dos says which to-do,

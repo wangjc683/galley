@@ -22,6 +22,7 @@ mod client;
 mod common;
 mod hands;
 mod llm;
+mod memo;
 mod project;
 mod schedule;
 mod session;
@@ -284,5 +285,6 @@ async fn run(cli: Cli) -> Result<(), GalleyError> {
         }) => hands::llm_set_default(llm_name, supervisor, reason).await,
         Command::Schedule(cmd) => schedule::run(cmd).await,
         Command::Todo(cmd) => todo::run(cmd).await,
+        Command::Memo(cmd) => memo::run(cmd).await,
     }
 }

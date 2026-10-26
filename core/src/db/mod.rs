@@ -138,6 +138,7 @@ mod api_impl;
 mod helpers;
 mod main_chat;
 mod managed_model;
+mod memo;
 mod message_delete;
 mod prefs;
 mod project;

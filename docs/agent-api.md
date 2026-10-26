@@ -19,4 +19,5 @@ Section map (original § numbers preserved inside each file):
 | §5.19 goal (retired in `schemaVersion: 3`) | [agent-api/goal-commands.md](./agent-api/goal-commands.md) |
 | §5.20–§5.27 schedule | [agent-api/schedule-commands.md](./agent-api/schedule-commands.md) |
 | §5.28–§5.34 todo | [agent-api/todo-commands.md](./agent-api/todo-commands.md) |
+| §5.35–§5.39 memo | [agent-api/memo-commands.md](./agent-api/memo-commands.md) |
 | §8 Deferred additions, §8A trait surface, §9 See also | [agent-api/roadmap-and-references.md](./agent-api/roadmap-and-references.md) |

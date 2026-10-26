@@ -31,6 +31,12 @@
 //!   cannot be delivered;
 //! - a routine that fired stays out of 已完成 too, a one-off that fired
 //!   for its time is in it (ticket 82).
+//! - since ticket 95 the review also wakes for the memos noted or changed
+//!   in turns the user started since the day of the review before it (a
+//!   day skipped reaches back, this morning's wait for tomorrow, one past
+//!   its day or deleted does not count) and names them; its words are as
+//!   before without them; run by hand it names its own window, and none
+//!   the second time that day.
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration as ChronoDuration, Local, Utc};
@@ -1857,5 +1863,304 @@ async fn a_review_whose_turn_ends_on_an_error_is_dropped_and_waits_under_the_ext
     assert_eq!(
         wake_state(&galley, review.id.as_str()).await,
         Some(ScheduledWake::Pending)
+    );
+}
+
+// ---------------- the morning review and new memos (ticket 95) ----------------
+
+use chrono::TimeZone;
+use galley_core_lib::api::{CreateMemoInput, MemoId};
+
+/// `days` from today at `hour`:00, this machine's wall clock (the zone the
+/// review reads its days in).
+fn local_at(days: i64, hour: u32) -> DateTime<Local> {
+    let day = Local::now().date_naive() + ChronoDuration::days(days);
+    Local
+        .from_local_datetime(&day.and_hms_opt(hour, 0, 0).unwrap())
+        .earliest()
+        .expect("a wall-clock time")
+}
+
+/// The review came due before, at `at` (`None`: it never did).
+async fn last_review(pool: &SqlitePool, id: &str, at: Option<DateTime<Local>>) {
+    let at = at.map(|at| instant_to_utc_iso(&at));
+    sqlx::query("UPDATE scheduled_tasks SET last_fired_at = ?, last_due_at = ? WHERE id = ?")
+        .bind(&at)
+        .bind(&at)
+        .bind(id)
+        .execute(pool)
+        .await
+        .expect("last review");
+}
+
+/// A memo Galley noted in a turn the user started, as if that turn was at
+/// `at`.
+async fn memo_noted(
+    galley: &SqliteGalley,
+    pool: &SqlitePool,
+    text: &str,
+    at: DateTime<Local>,
+) -> MemoId {
+    let turn = user_says(galley, MAIN, text, Origin::desktop()).await;
+    let memo = galley
+        .create_memo(
+            CreateMemoInput {
+                text: text.into(),
+                until: None,
+            },
+            assistant(),
+            Some((SessionId(MAIN.into()), turn)),
+        )
+        .await
+        .expect("memo")
+        .memo;
+    sqlx::query("UPDATE memos SET fresh_at = ? WHERE id = ?")
+        .bind(instant_to_utc_iso(&at))
+        .bind(memo.id.as_str())
+        .execute(pool)
+        .await
+        .expect("when");
+    memo.id
+}
+
+/// Deliver what is pending: the words the main chat got.
+async fn delivered_words(galley: &SqliteGalley, runner: &Runner, rec: Arc<Recorder>) -> String {
+    let reports = SubtaskReports::new();
+    assert_eq!(
+        restore_pending_reminders(&reports, galley).await.as_deref(),
+        Some(MAIN)
+    );
+    let env = FakeEnv;
+    let host = host(galley, runner, &env, rec);
+    let before = runner.user_messages(MAIN).len();
+    let Some(WakeOutcome::Delivered { .. }) = wake_if_due(&reports, &host, MAIN).await else {
+        panic!("not delivered");
+    };
+    let sent = runner.user_messages(MAIN);
+    assert_eq!(sent.len(), before + 1);
+    sent.last().unwrap().clone()
+}
+
+const MEMOS_HEADER: &str =
+    "Memos noted or changed since the last review, in turns the user started:";
+
+#[tokio::test]
+async fn the_review_wakes_for_the_memos_new_since_the_last_one_and_names_them() {
+    let (pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let rec = Arc::new(Recorder::default());
+    let review = ensure_review(&galley, rec.as_ref()).await.expect("made");
+    // Nothing to do, so only the memos can wake it. The last review came
+    // due yesterday at nine.
+    last_review(&pool, review.id.as_str(), Some(local_at(-1, 9))).await;
+    // In: yesterday before that review and after it.
+    let early = memo_noted(&galley, &pool, "不吃香菜", local_at(-1, 8)).await;
+    let late = memo_noted(&galley, &pool, "看他这周常问 76 人", local_at(-1, 20)).await;
+    // Out: the day before yesterday (the last review's window), this
+    // morning (tomorrow's), one past its day, one deleted, one Galley
+    // wrote in a wake's turn (never fresh).
+    let older = memo_noted(&galley, &pool, "住在思明区", local_at(-2, 20)).await;
+    let today = memo_noted(&galley, &pool, "今天早上说的", local_at(0, 0)).await;
+    let ended = memo_noted(&galley, &pool, "上周在上海出差", local_at(-1, 12)).await;
+    sqlx::query("UPDATE memos SET until_date = ? WHERE id = ?")
+        .bind(day_from_today(-1))
+        .bind(ended.as_str())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let deleted = memo_noted(&galley, &pool, "说错了的一条", local_at(-1, 13)).await;
+    galley
+        .delete_memo(&deleted, Origin::desktop(), None)
+        .await
+        .expect("deleted");
+    let wake_row = galley
+        .persist_subtask_report(
+            &SessionId(MAIN.into()),
+            "[Galley — not a message from the user] A reminder you set came due.".into(),
+            Origin::subtask_report(&["sched_x".to_string()]),
+            "[Galley: reminder sched_x came due]",
+        )
+        .await
+        .unwrap();
+    let woke = galley
+        .create_memo(
+            CreateMemoInput {
+                text: "76 人进了次轮".into(),
+                until: None,
+            },
+            assistant(),
+            Some((
+                SessionId(MAIN.into()),
+                i64::from(wake_row.turn_index.unwrap()),
+            )),
+        )
+        .await
+        .unwrap()
+        .memo
+        .id;
+
+    assert_eq!(
+        fire_review_now(&galley, rec.as_ref(), review.id.as_str()).await,
+        ReviewFire::Woke
+    );
+    let log = review_log(&galley).await;
+    assert_eq!(log.last().unwrap()["event"], "woke");
+    let words = delivered_words(&galley, &runner, rec.clone()).await;
+    assert!(words
+        .starts_with("[Galley — not a message from the user] It is time for the morning review."));
+    let (said, memos) = words.split_once(MEMOS_HEADER).expect("the memos named");
+    assert!(said.ends_with("your whole reply is exactly <no-reply/>.\n\n"));
+    assert_eq!(
+        memos,
+        format!(
+            "\n- `{early}`: 不吃香菜\n- `{late}`: 看他这周常问 76 人\nFor each, ask whether \
+             there is something you could get done for the user that they would want to know, \
+             as \"The morning review\" in `wake.md` says; most need nothing."
+        )
+    );
+    for out in [&older, &today, &ended, &deleted, &woke] {
+        assert!(!words.contains(out.as_str()), "{out}");
+    }
+}
+
+#[tokio::test]
+async fn the_reviews_window_reaches_back_to_the_last_review_and_no_further() {
+    // (when the review last came due, when the memo was noted) → wakes.
+    for (last, noted, wakes, case) in [
+        (Some(-1), -1, true, "reviewed yesterday, noted yesterday"),
+        (
+            Some(-1),
+            -2,
+            false,
+            "reviewed yesterday, noted the day before",
+        ),
+        (
+            Some(-2),
+            -2,
+            true,
+            "a day skipped: noted the day before yesterday",
+        ),
+        (Some(-2), -1, true, "a day skipped: noted yesterday"),
+        (None, -1, true, "never reviewed, noted yesterday"),
+        (
+            None,
+            -2,
+            false,
+            "never reviewed, noted the day before yesterday",
+        ),
+        (Some(0), -1, false, "it came due already today"),
+    ] {
+        let (pool, galley) = with_main_chat().await;
+        let rec = Recorder::default();
+        let review = ensure_review(&galley, &rec).await.expect("made");
+        last_review(&pool, review.id.as_str(), last.map(|d| local_at(d, 0))).await;
+        memo_noted(&galley, &pool, "不吃香菜", local_at(noted, 12)).await;
+        let want = if wakes {
+            ReviewFire::Woke
+        } else {
+            ReviewFire::Skipped
+        };
+        assert_eq!(
+            fire_review_now(&galley, &rec, review.id.as_str()).await,
+            want,
+            "{case}"
+        );
+    }
+    // Only one past its day, or only one deleted: nobody woken.
+    for deleted in [false, true] {
+        let (pool, galley) = with_main_chat().await;
+        let rec = Recorder::default();
+        let review = ensure_review(&galley, &rec).await.expect("made");
+        last_review(&pool, review.id.as_str(), Some(local_at(-1, 9))).await;
+        let id = memo_noted(&galley, &pool, "上周在上海出差", local_at(-1, 12)).await;
+        if deleted {
+            galley
+                .delete_memo(&id, assistant(), None)
+                .await
+                .expect("deleted");
+        } else {
+            sqlx::query("UPDATE memos SET until_date = ? WHERE id = ?")
+                .bind(day_from_today(-1))
+                .bind(id.as_str())
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        assert_eq!(
+            fire_review_now(&galley, &rec, review.id.as_str()).await,
+            ReviewFire::Skipped,
+            "deleted {deleted}"
+        );
+        let task = galley.scheduled_task(review.id.as_str()).await.unwrap();
+        assert_eq!(task.last_wake, None);
+        assert_eq!(
+            review_log(&galley).await.last().unwrap()["event"],
+            "skipped"
+        );
+    }
+}
+
+#[tokio::test]
+async fn with_a_to_do_and_no_new_memo_the_reviews_words_are_as_before() {
+    let (pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let rec = Arc::new(Recorder::default());
+    let review = ensure_review(&galley, rec.as_ref()).await.expect("made");
+    last_review(&pool, review.id.as_str(), Some(local_at(-1, 9))).await;
+    users_todo(&galley, "回头查物流", None, false).await;
+    memo_noted(&galley, &pool, "住在思明区", local_at(-3, 12)).await;
+    assert_eq!(
+        fire_review_now(&galley, rec.as_ref(), review.id.as_str()).await,
+        ReviewFire::Woke
+    );
+    let words = delivered_words(&galley, &runner, rec).await;
+    assert!(!words.contains("Memos noted"), "{words}");
+    assert!(words.ends_with("your whole reply is exactly <no-reply/>."));
+}
+
+#[tokio::test]
+async fn run_by_hand_the_review_names_its_own_window_and_again_today_none() {
+    use galley_core_lib::socket_listener::{DbSource, HandlerCtx};
+    let (pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let rec = Arc::new(Recorder::default());
+    let review = ensure_review(&galley, rec.as_ref()).await.expect("made");
+    last_review(&pool, review.id.as_str(), Some(local_at(-1, 9))).await;
+    let memo = memo_noted(&galley, &pool, "想学吉他", local_at(-1, 21)).await;
+    let db = DbSource::Pool(galley.clone());
+    let run = || {
+        let ctx = HandlerCtx {
+            db: &db,
+            runner: &runner,
+            notifier: rec.clone(),
+            app: None,
+        };
+        let id = review.id.as_str().to_string();
+        async move {
+            galley_core_lib::scheduler::run_now(&ctx, None, &id)
+                .await
+                .expect("run")
+        }
+    };
+    let ran = run().await;
+    assert_eq!(ran.last_wake, Some(ScheduledWake::Pending));
+    let words = delivered_words(&galley, &runner, rec.clone()).await;
+    assert!(
+        words.contains(&format!("{MEMOS_HEADER}\n- `{memo}`: 想学吉他\n")),
+        "{words}"
+    );
+    runner.run_ended(MAIN, "CURRENT_TASK_DONE", false);
+    let reports = SubtaskReports::new();
+    record_wake_run_end(&reports, &galley, &runner, rec.as_ref(), &complete(MAIN)).await;
+    runner.settle(MAIN);
+    // Again the same day: its window is empty.
+    run().await;
+    let words = delivered_words(&galley, &runner, rec.clone()).await;
+    assert!(!words.contains("Memos noted"), "{words}");
+    // And the scheduled one today, after it: nothing new, nothing to do.
+    let rec = Recorder::default();
+    assert_eq!(
+        fire_review_now(&galley, &rec, review.id.as_str()).await,
+        ReviewFire::Skipped
     );
 }

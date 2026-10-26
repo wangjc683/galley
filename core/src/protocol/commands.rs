@@ -559,6 +559,56 @@ id_write_command!(
     "todo.cancel"
 );
 
+// ---- memos (main chat ticket 95, additive inside 3) ----
+//
+// New commands, so their optional fields skip when absent, like the to-do
+// family's.
+
+/// `memo.list`: the memos that hold today, in the order they were noted.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoListArgs {}
+socket_command!(MemoListArgs, "memo.list");
+
+/// `memo.add`: note a memo. `until` is its last day, a local date
+/// `YYYY-MM-DD` not before today.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoAddArgs {
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervisor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+socket_command!(MemoAddArgs, "memo.add");
+
+/// `memo.update`: only the fields given change. An empty `until` takes the
+/// last day off, as an empty value clears a field on `todo.update`.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoUpdateArgs {
+    pub memo_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervisor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+socket_command!(MemoUpdateArgs, "memo.update");
+
+id_write_command!(
+    /// `memo.delete`: the memo goes; the record of its writes stays.
+    MemoDeleteArgs,
+    memo_id,
+    "memo.delete"
+);
+
 /// Legacy-equivalence pins: each args struct must serialize to the same
 /// `Value` the CLI's hand-written `json!` literal produced before this
 /// module existed (2026-07-11). These tests are what makes a field rename
@@ -785,6 +835,49 @@ mod legacy_equivalence {
         assert_eq!(TodoDoneArgs::NAME, "todo.done");
         assert_eq!(TodoReopenArgs::NAME, "todo.reopen");
         assert_eq!(TodoCancelArgs::NAME, "todo.cancel");
+        assert_eq!(MemoListArgs::NAME, "memo.list");
+        assert_eq!(MemoAddArgs::NAME, "memo.add");
+        assert_eq!(MemoUpdateArgs::NAME, "memo.update");
+        assert_eq!(MemoDeleteArgs::NAME, "memo.delete");
+    }
+
+    #[test]
+    fn memo_commands_wire_shape() {
+        assert_matches_legacy(&MemoListArgs::default(), json!({}));
+        assert_matches_legacy(
+            &MemoAddArgs {
+                text: "不吃香菜".into(),
+                supervisor: Some("galley-assistant".into()),
+                ..MemoAddArgs::default()
+            },
+            json!({"text": "不吃香菜", "supervisor": "galley-assistant"}),
+        );
+        assert_matches_legacy(
+            &MemoAddArgs {
+                text: "下周三起在上海出差".into(),
+                until: Some("2026-11-06".into()),
+                reason: Some("user mentioned it".into()),
+                ..MemoAddArgs::default()
+            },
+            json!({"text": "下周三起在上海出差", "until": "2026-11-06",
+                   "reason": "user mentioned it"}),
+        );
+        assert_matches_legacy(
+            &MemoUpdateArgs {
+                memo_id: "memo_1".into(),
+                until: Some(String::new()),
+                ..MemoUpdateArgs::default()
+            },
+            json!({"memoId": "memo_1", "until": ""}),
+        );
+        assert_matches_legacy(
+            &MemoDeleteArgs {
+                memo_id: "memo_1".into(),
+                supervisor: Some("galley-assistant".into()),
+                reason: None,
+            },
+            json!({"memoId": "memo_1", "supervisor": "galley-assistant"}),
+        );
     }
 
     #[test]
