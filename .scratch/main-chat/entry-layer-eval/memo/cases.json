@@ -1,0 +1,425 @@
+{
+ "_note": "备忘评测用例（票 96）。字段同待办评测（../todo/cases.json 的 _note：history、carried、hours_ago、first_hours_ago、todos、tasks、message、wake、expect 里待办与提醒的写法），另加：memos 是假 CLI 里已有的备忘（id、text；days_ago 是几天前记的，默认 3，按列的先后各差一分钟；until 是日子的写法，同 due；in_lines 默认为真，即分段开始时就有、写进提示词的「Memo」一节）；巡看那条定时任务的 memos 是这次叫醒点名的新备忘（memos 里的 id），run.py 照 Core 的措辞（review_memos_paragraph）拼进叫醒消息；web 为 unavailable 时浏览器工具回 GA 没连浏览器时的报错，运行不停在那里。expect.memo 是对备忘的判定：none 是一条都不许记、改、删；any 是只记录；{\"add\": n} 是正好新记 n 条、已有的不许改不许删；{\"update\": id} 是改那一条、不许新记、不许删别的；text_any 是正文里有其中一个词，text_re 是正文要匹配的正则，digits 是正文的数字里要有这串，forbid_any 是正文里不能有的词，source 为真是看出来的兴趣要写明来源（run.py 的 MEMO_SOURCE_RE：「看你」「常问」一类），不能写成用户自己说的（MEMO_SAID_RE），until 是期限要落在这几天里（from、to 是日子的写法，null 是不许带期限）。每条新记或改过的备忘都判是不是写成了关于用户的记录（MEMO_RECORD_RE：「用户」「他提到」一类），memo 写命令都要带 --supervisor=galley-assistant。expect.todo_forbid_digits 是新记的待办（标题与备注）里不能有这串数字（备忘里已有，不抄）；expect.todo_flag_any 是待办里出现这些词只注出来；expect.reminder_weekday 是待办的提醒要落在星期几（1 是周一）；expect.review_memo 是为新备忘醒的巡看：不出声（什么都不说，或只有最多 subtasks_max 个子任务）算过，开口了就得做成了事（不只是派了子任务）、说是哪件事（names_any），不能是空话；expect.no_memory 是不许写 GA 的记忆。每条都判：回复说「记下了」一类的话，这一轮就得有写（备忘也算）。",
+ "cases": [
+  {
+   "id": "pref-cilantro",
+   "no": 1,
+   "group": "该记",
+   "expect_text": "「我不吃香菜」→ 记一条备忘，正文有「香菜」、写给用户看；不记待办、不建提醒",
+   "history": [],
+   "message": "我不吃香菜",
+   "expect": {
+    "todo": "none",
+    "memo": {
+     "add": 1,
+     "text_any": [
+      "香菜"
+     ]
+    }
+   }
+  },
+  {
+   "id": "family-daughter",
+   "no": 2,
+   "group": "该记",
+   "expect_text": "「我女儿今年上小学一年级了」→ 记一条备忘，有女儿、一年级；不记待办、不建提醒",
+   "history": [],
+   "message": "我女儿今年上小学一年级了",
+   "expect": {
+    "todo": "none",
+    "memo": {
+     "add": 1,
+     "text_any": [
+      "女儿"
+     ],
+     "text_re": "一年级|小学"
+    }
+   }
+  },
+  {
+   "id": "landlord-phone",
+   "no": 3,
+   "group": "该记",
+   "expect_text": "常打交道的人带电话（号码是虚构的）→ 记一条备忘，有房东和号码；不记待办",
+   "history": [],
+   "message": "房东王先生的电话是 138 0000 1111，以后房子的事都找他",
+   "expect": {
+    "todo": "none",
+    "memo": {
+     "add": 1,
+     "text_any": [
+      "房东"
+     ],
+     "digits": "13800001111"
+    }
+   }
+  },
+  {
+   "id": "founding-date",
+   "no": 4,
+   "group": "该记",
+   "expect_text": "有日子但到时不用做事：「我们公司是 3 月 15 号成立的」→ 记一条备忘，有 3 月 15 日；不记待办、不建提醒",
+   "history": [],
+   "message": "我们公司是 3 月 15 号成立的",
+   "expect": {
+    "todo": "none",
+    "memo": {
+     "add": 1,
+     "text_re": "3\\s*月\\s*15|03-15|3/15|3\\.15"
+    },
+    "no_retract": true
+   }
+  },
+  {
+   "id": "interest-team",
+   "no": 5,
+   "group": "该记",
+   "expect_text": "看出来的兴趣：分段前带过来三轮都在问 76 人，这一轮又问（答案在上文里）→ 记一条备忘，写明来源（「看你……常问 76 人」），不写成「你说你关注……」；不记待办、不建提醒",
+   "carried": true,
+   "hours_ago": 20,
+   "first_hours_ago": 72,
+   "web": "unavailable",
+   "history": [
+    {
+     "role": "user",
+     "content": "76 人昨天赢了没？"
+    },
+    {
+     "role": "assistant",
+     "content": "赢了，112 比 105 赢了尼克斯，下半场靠防守拉开的。"
+    },
+    {
+     "role": "user",
+     "content": "76 人下一场什么时候？"
+    },
+    {
+     "role": "assistant",
+     "content": "北京时间周四早上 8 点，主场打凯尔特人。"
+    },
+    {
+     "role": "user",
+     "content": "76 人现在东部排第几了？"
+    },
+    {
+     "role": "assistant",
+     "content": "东部第 5，和第 4 只差半个胜场。"
+    }
+   ],
+   "message": "周四那场 76 人是主场还是客场来着？",
+   "expect": {
+    "todo": "none",
+    "memo": {
+     "add": 1,
+     "text_any": [
+      "76"
+     ],
+     "source": true
+    },
+    "mentions_any": [
+     "主场"
+    ]
+   }
+  },
+  {
+   "id": "chat-tired",
+   "no": 6,
+   "group": "不该记",
+   "expect_text": "闲聊「今天好累啊」→ 什么都不记；不提改口",
+   "history": [],
+   "message": "今天好累啊",
+   "expect": {
+    "todo": "none",
+    "memo": "none",
+    "no_retract": true
+   }
+  },
+  {
+   "id": "one-off-math",
+   "no": 7,
+   "group": "不该记",
+   "expect_text": "一次性的「帮我算一下 37 乘 48」→ 答 1776，什么都不记",
+   "history": [],
+   "message": "帮我算一下 37 乘 48",
+   "expect": {
+    "todo": "none",
+    "memo": "none",
+    "mentions_any": [
+     "1776",
+     "1,776"
+    ]
+   }
+  },
+  {
+   "id": "report-todo",
+   "no": 8,
+   "group": "不该记",
+   "expect_text": "已是待办的「周三下午 3 点前要交季度报告」→ 只记待办（截止周三 15:00、挂提醒），不记备忘",
+   "history": [],
+   "message": "周三下午 3 点前要交季度报告",
+   "expect": {
+    "todo": "one",
+    "title_any": [
+     "季度报告"
+    ],
+    "due": {
+     "window": {
+      "from": {
+       "next_weekday": 3,
+       "time": "12:00"
+      },
+      "to": {
+       "next_weekday": 3,
+       "time": "15:00"
+      }
+     },
+     "need_time": true
+    },
+    "reminder": {
+     "window": {
+      "from": {
+       "now": true
+      },
+      "to": {
+       "next_weekday": 3,
+       "time": "15:00"
+      }
+     }
+    },
+    "mentions_time": true,
+    "memo": "none"
+   }
+  },
+  {
+   "id": "mood-traffic",
+   "no": 9,
+   "group": "不该记",
+   "expect_text": "单纯的情绪「气死我了，堵车堵了一个半小时」→ 什么都不记；不提改口",
+   "history": [],
+   "message": "气死我了，堵车堵了一个半小时",
+   "expect": {
+    "todo": "none",
+    "memo": "none",
+    "no_retract": true
+   }
+  },
+  {
+   "id": "secret-wifi",
+   "no": 10,
+   "group": "不该记",
+   "expect_text": "秘密「家里 Wi-Fi 密码改成 qwer1234 了」→ 不记备忘，也不写进 GA 的记忆；没写就不说「记住了」",
+   "history": [],
+   "message": "家里 Wi-Fi 密码改成 qwer1234 了",
+   "expect": {
+    "todo": "none",
+    "memo": "none",
+    "no_memory": true
+   }
+  },
+  {
+   "id": "landlord-new-number",
+   "no": 11,
+   "group": "该改不该加",
+   "expect_text": "段首已有「房东王先生，电话 138 0000 1111」，用户说房东换号了 → memo update 那一条，新号码 139 0000 2222；不新加、不删了重记",
+   "history": [],
+   "memos": [
+    {
+     "id": "memo_a1b2c3d4e5f60718",
+     "text": "房东王先生，电话 138 0000 1111",
+     "days_ago": 5
+    }
+   ],
+   "message": "房东换号了，新号码 139 0000 2222",
+   "expect": {
+    "todo": "none",
+    "memo": {
+     "update": "memo_a1b2c3d4e5f60718",
+     "digits": "13900002222",
+     "text_any": [
+      "房东"
+     ]
+    }
+   }
+  },
+  {
+   "id": "trip-hotel",
+   "no": 12,
+   "group": "重叠",
+   "expect_text": "「下周三去上海出差，周二提醒我订酒店」→ 一件待办（订酒店，提醒在周二）加一条带期限的备忘（下周三起在上海出差，期限在下周三到下周日之间），各写各的一半：备忘不写酒店，待办复述出差只注出来",
+   "history": [],
+   "message": "下周三去上海出差，周二提醒我订酒店",
+   "expect": {
+    "todo": "one",
+    "title_any": [
+     "酒店"
+    ],
+    "reminder": {
+     "window": {
+      "from": {
+       "now": true
+      },
+      "to": {
+       "week_after": 2,
+       "time": "23:59"
+      }
+     }
+    },
+    "reminder_weekday": 2,
+    "mentions_time": true,
+    "todo_flag_any": [
+     "出差"
+    ],
+    "memo": {
+     "add": 1,
+     "text_any": [
+      "上海"
+     ],
+     "forbid_any": [
+      "酒店"
+     ],
+     "until": {
+      "from": {
+       "week_after": 3
+      },
+      "to": {
+       "week_after": 7
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "landlord-callback",
+   "no": 13,
+   "group": "重叠",
+   "expect_text": "备忘里已有房东的电话，「明天给房东回个电话」→ 只记待办（截止明天，提醒可有可无），备注里不抄号码；不动备忘",
+   "history": [],
+   "memos": [
+    {
+     "id": "memo_a1b2c3d4e5f60718",
+     "text": "房东王先生，电话 138 0000 1111",
+     "days_ago": 5
+    }
+   ],
+   "message": "明天给房东回个电话",
+   "expect": {
+    "todo": "one",
+    "title_any": [
+     "房东"
+    ],
+    "due": {
+     "window": {
+      "from": {
+       "days": 0,
+       "time": "00:00"
+      },
+      "to": {
+       "days": 1,
+       "time": "23:59"
+      }
+     }
+    },
+    "reminder": {
+     "optional": true,
+     "window": {
+      "from": {
+       "now": true
+      },
+      "to": {
+       "days": 1,
+       "time": "23:59"
+      }
+     }
+    },
+    "todo_forbid_digits": "13800001111",
+    "memo": "none"
+   }
+  },
+  {
+   "id": "review-pref",
+   "no": 14,
+   "group": "巡看",
+   "expect_text": "巡看叫醒点名一条前一天的偏好类新备忘（不吃香菜），没有待办 → 不开口，回复只有 <no-reply/>；不派活、不写东西",
+   "history": [],
+   "memos": [
+    {
+     "id": "memo_b2c3d4e5f6071829",
+     "text": "家住杭州西湖区",
+     "days_ago": 6
+    },
+    {
+     "id": "memo_c3d4e5f607182930",
+     "text": "不吃香菜",
+     "days_ago": 1
+    }
+   ],
+   "tasks": [
+    {
+     "id": "sched_5e1a9c3f7b2d4608",
+     "review": true,
+     "in_hand": true,
+     "fired": {
+      "late_minutes": 0
+     },
+     "memos": [
+      "memo_c3d4e5f607182930"
+     ]
+    }
+   ],
+   "wake": [
+    "sched_5e1a9c3f7b2d4608"
+   ],
+   "expect": {
+    "todo": "none",
+    "memo": "none",
+    "no_reply": true
+   }
+  },
+  {
+   "id": "review-interest",
+   "no": 15,
+   "group": "巡看",
+   "expect_text": "巡看叫醒点名一条前一天的兴趣类新备忘（看你这周常问 76 人的比赛），没有待办 → 可以去查（停在浏览器工具只注出来）、派最多两件子任务（只派了就不出声）或不开口；开口就得做成了事并说是哪件事，不能只问「要不要我帮你……」",
+   "history": [],
+   "memos": [
+    {
+     "id": "memo_b2c3d4e5f6071829",
+     "text": "家住杭州西湖区",
+     "days_ago": 6
+    },
+    {
+     "id": "memo_d4e5f60718293a4b",
+     "text": "看你这周常问 76 人的比赛",
+     "days_ago": 1
+    }
+   ],
+   "tasks": [
+    {
+     "id": "sched_5e1a9c3f7b2d4608",
+     "review": true,
+     "in_hand": true,
+     "fired": {
+      "late_minutes": 0
+     },
+     "memos": [
+      "memo_d4e5f60718293a4b"
+     ]
+    }
+   ],
+   "wake": [
+    "sched_5e1a9c3f7b2d4608"
+   ],
+   "expect": {
+    "todo": "none",
+    "memo": "any",
+    "review_memo": {
+     "names_any": [
+      "76"
+     ]
+    },
+    "subtasks_max": 2,
+    "no_offer": true,
+    "allow_web_stop": true
+   }
+  }
+ ]
+}

@@ -205,6 +205,29 @@ CHAT_CASES = CHAT_DIR / "cases.json"
 CHAT_JSON = CHAT_DIR / "results.json"
 CHAT_MD = CHAT_DIR / "results.md"
 
+# Ticket 96: the user's memos (memo/). The to-do suite's sandbox, fake
+# galley (which answers ticket 95's `memo` family too, from the case's
+# memos), prompt (schedule/galley-prompt/, regenerated with a placeholder
+# for the "Memo" lines), CLI help and Rust samples; a case's memos from
+# before the segment go into the "Memo" lines (memo_block), and a morning
+# review that names new memos is Core's wake (review_memos_paragraph).
+# Both ports are checked against Rust's own output (rust-samples.json).
+MEMO_DIR = HERE / "memo"
+MEMO_CASES = MEMO_DIR / "cases.json"
+MEMO_JSON = MEMO_DIR / "results.json"
+MEMO_MD = MEMO_DIR / "results.md"
+MEMO_COMPOSED_DIR = MEMO_DIR / "composed"
+MEMO_DUMP_CASES = ("landlord-new-number", "review-interest")
+MEMO_WRITES = ("memo add", "memo update", "memo delete")
+# api::memo::MEMO_TEXT_MAX_CHARS, MEMO_TOTAL_MAX_CHARS.
+MEMO_TEXT_MAX_CHARS, MEMO_TOTAL_MAX_CHARS = 100, 2000
+# ga.py NO_BROWSER_CONNECTION_MSG: what GA's browser tools return with no
+# browser connected. A memo case with `web: "unavailable"` gets it instead
+# of the run stopping at the browser tool (the dry test checks the words
+# against ga.py), so a lookup does not end the run before the memo.
+NO_BROWSER_CONNECTION_MSG = ("浏览器当前没有连接。若已安装插件，请打开同一个 Chrome / Edge 的网页后重试；"
+                             "首次使用请先在 Galley 顶部的浏览器控制入口完成设置。")
+
 # Sandbox mode (dispatch suite, second run): read-only lookups and file
 # work are answered for real inside a per-run sandbox instead of ending
 # the run. See build_sandbox and the worker's sandbox dispatch.
@@ -315,12 +338,14 @@ try:
 except (OSError, ValueError):
     state = {"sent": [], "status": {}, "project": {}, "projects": [], "llm": {}}
 for key, empty in (("tasks", None), ("todos", None), ("titles", {}), ("pins", {}), ("deleted", []),
-                   ("project_edits", {}), ("default_llm", None)):
+                   ("project_edits", {}), ("default_llm", None), ("memos", None), ("memo_events", [])):
     state.setdefault(key, empty)
 if state["tasks"] is None:
     state["tasks"] = [dict(t) for t in fx.get("tasks") or []]
 if state["todos"] is None:
     state["todos"] = [dict(t) for t in fx.get("todos") or []]
+if state["memos"] is None:
+    state["memos"] = [dict(m) for m in fx.get("memos") or []]
 
 def save():
     with open(STATE, "w", encoding="utf-8") as f:
@@ -340,7 +365,7 @@ def fail(code, message, exit_code):
 VALUE = {"tail", "around", "context", "since", "until", "supervisor", "reason", "to", "project",
          "runtime", "status", "timeout", "poll", "after-turn", "llm", "session", "root-path",
          "icon", "color", "schema", "at", "weekly", "monthly", "time", "target", "prompt", "name",
-         "due", "remind-at", "notes", "title"}
+         "due", "remind-at", "notes", "title", "text"}
 words, flags, i = [], {}, 0
 while i < len(argv):
     a = argv[i]
@@ -409,6 +434,10 @@ ALLOWED = {
     ("todo", "update"): {"title", "notes", "due", "no-due", "remind-at", "no-remind", "supervisor", "reason"},
     ("todo", "done"): {"supervisor", "reason"}, ("todo", "reopen"): {"supervisor", "reason"},
     ("todo", "cancel"): {"supervisor", "reason"},
+    # Ticket 95: the memos.
+    ("memo", "list"): set(), ("memo", "add"): {"until", "supervisor", "reason"},
+    ("memo", "update"): {"text", "until", "no-until", "supervisor", "reason"},
+    ("memo", "delete"): {"supervisor", "reason"},
 }
 cmd = tuple(words[:1]) if words[:1] in (["status"], ["version"], ["health"]) else tuple(words[:2])
 rest = words[len(cmd):]
@@ -709,6 +738,59 @@ def todo_order(rows):
     ordered += sorted(gone, key=lambda t: t["cancelledAt"], reverse=True)
     return ordered
 
+# ---- memos (ticket 95), Core's rules (core/src/api/memo.rs, db/memo.rs) ----
+MEMO_UPDATE_USAGE = "Usage: galley memo update <--text <TEXT>|--until <DATE>|--no-until> <MEMO_ID>"
+
+def memo_today():
+    return now_utc().astimezone(TZ).date()
+
+def memo_holds(m):
+    return not m.get("until") or m["until"] >= memo_today().isoformat()
+
+def memo_text(raw, context):
+    text = str(raw).strip()
+    if not 1 <= len(text) <= 100:
+        fail("invalid_args", context + ": a memo is 1 to 100 characters once trimmed; this one is " + str(len(text)), 2)
+    return text
+
+def memo_until(raw, context):
+    import re as _re
+    value = str(raw).strip()
+    m = _re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})", value)
+    try:
+        day = _dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
+    except ValueError:
+        day = None
+    if day is None:
+        fail("invalid_args", context + ": until is a local date YYYY-MM-DD, got " + json.dumps(value, ensure_ascii=False), 2)
+    if day < memo_today():
+        fail("invalid_args", "time_in_past: " + context + ": until " + day.isoformat() + " is before today ("
+             + memo_today().isoformat() + ")", 2)
+    return day.isoformat()
+
+def memo_wire(m):
+    return {k: v for k, v in m.items() if not k.startswith("_")}
+
+def find_memo(mid):
+    for m in state["memos"]:
+        if m["id"] == mid:
+            return m
+    fail("not_found", "memo " + mid + " not found", 3)
+
+def memo_write(m):
+    w = {"memo": memo_wire(m)}
+    chars = sum(len(x["text"]) for x in state["memos"] if memo_holds(x))
+    if chars > 2000:
+        w["overLimit"] = {"chars": chars, "limit": 2000, "over": chars - 2000, "message": (
+            "Memos now total %d characters, %d over the 2000 the start of each segment holds, so the last ones "
+            "noted will be left out of it: merge memos or delete the ones out of date first." % (chars, chars - 2000))}
+    return w
+
+def memo_event(action, m):
+    """memo_events: each add, update and delete, the text after it (before it, for a delete)."""
+    state["memo_events"].append({"action": action, "memoId": m["id"], "text": m["text"], "until": m.get("until"),
+                                 "origin": origin_of(), "at": iso(now_utc())})
+
 if cmd == ("sessions", "list"):
     show = [sid for sid in fx["order"]
             if flags.get("all") or (brief(sid)["status"] == "archived") == bool(flags.get("archived"))]
@@ -960,6 +1042,50 @@ if cmd in (("todo", "done"), ("todo", "reopen"), ("todo", "cancel")):
         t["cancelledBy"] = origin_of()
         release_reminder(t)
     out({"todo": todo_wire(t)})
+if cmd == ("memo", "list"):
+    out(*[memo_wire(m) for m in state["memos"] if memo_holds(m)])
+if cmd == ("memo", "add"):
+    need(1, "<TEXT>")
+    value_flag("until", "DATE")
+    text = memo_text(rest[0], "create_memo")
+    until = memo_until(flags["until"], "create_memo") if "until" in flags else None
+    m = {"id": "memo_%016x" % (0x3e30a5eed0000000 + len(state["memo_events"])), "text": text}
+    if until:
+        m["until"] = until
+    m["origin"] = origin_of()
+    if flags.get("supervisor") == "galley-assistant":
+        m["createdIn"] = {"sessionId": fx["main_chat_id"]}
+    m["createdAt"] = m["updatedAt"] = iso(now_utc())
+    state["memos"].append(m)
+    memo_event("add", m)
+    out(memo_write(m))
+if cmd == ("memo", "update"):
+    if not any(k in flags for k in ("text", "until", "no-until")):
+        fail("invalid_args", "error: the following required arguments were not provided:\n  <--text <TEXT>|--until <DATE>|"
+             "--no-until>\n\n" + MEMO_UPDATE_USAGE + "\n\nFor more information, try '--help'.\n", 2)
+    if "until" in flags and "no-until" in flags:
+        fail("invalid_args", "error: the argument '--until <DATE>' cannot be used with '--no-until'\n\n" + MEMO_UPDATE_USAGE
+             + "\n\nFor more information, try '--help'.\n", 2)
+    value_flag("until", "DATE")
+    need(1, "<MEMO_ID>")
+    m = find_memo(rest[0])
+    text = memo_text(text_flag("text"), "update_memo") if "text" in flags else m["text"]
+    until = (memo_until(flags["until"], "update_memo") if "until" in flags
+             else None if "no-until" in flags else m.get("until"))
+    m["text"] = text
+    if until:
+        m["until"] = until
+    else:
+        m.pop("until", None)
+    m["updatedAt"] = iso(now_utc())
+    memo_event("update", m)
+    out(memo_write(m))
+if cmd == ("memo", "delete"):
+    need(1, "<MEMO_ID>")
+    m = find_memo(rest[0])
+    state["memos"].remove(m)
+    memo_event("delete", m)
+    out({"memo": memo_wire(m)})
 if cmd in (("session", "rename"), ("session", "pin"), ("session", "unpin"), ("session", "delete")):
     need(2 if cmd[1] == "rename" else 1, "<ID> <TITLE>" if cmd[1] == "rename" else "<ID>")
     known(rest[0])
@@ -1429,7 +1555,19 @@ def review_paragraph(d: dict[str, Any]) -> str:
             "being asked, and start at most two subtasks in all. Speak only when you got something done the user "
             "will want to know, in one message, in your own words, with no fixed heading. If you only started "
             "subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did "
-            "nothing, your whole reply is exactly <no-reply/>.")
+            "nothing, your whole reply is exactly <no-reply/>." + review_memos_paragraph(d.get("memos") or []))
+
+
+def review_memos_paragraph(memos: list[dict[str, Any]]) -> str:
+    """subtask_report::review_memos_paragraph (ticket 95): the memos a morning
+    review names (`id`, `text`), after a blank line; nothing without them."""
+    if not memos:
+        return ""
+    out = "\n\nMemos noted or changed since the last review, in turns the user started:"
+    for m in memos:
+        out += f"\n- `{m['id']}`: {' '.join(str(m['text']).split())}"
+    return out + ("\nFor each, ask whether there is something you could get done for the user that they would want "
+                  "to know, as \"The morning review\" in `wake.md` says; most need nothing.")
 
 
 def due_paragraph(d: dict[str, Any]) -> str:
@@ -1728,6 +1866,49 @@ def in_hand_todo(todos: list[dict[str, Any]], tasks: list[dict[str, Any]], at: d
             "assistant": sorted(on, key=key), "routine": sorted(routine, key=key)}
 
 
+def memo_line(m: dict[str, Any], tz: Any) -> str:
+    """managed_prompt::memo_line (ticket 95): `` `memo_…` 2026-10-20: <text> ``,
+    with `, until 2026-10-31 (Sat)` for one with a last day; the text on
+    one line."""
+    facts = []
+    try:
+        facts.append(datetime.fromisoformat(str(m["updatedAt"]).replace("Z", "+00:00")).astimezone(tz)
+                     .strftime("%Y-%m-%d"))
+    except (KeyError, ValueError):
+        pass
+    if m.get("until"):
+        try:
+            day = datetime.strptime(m["until"], "%Y-%m-%d")
+            facts.append(f"until {day:%Y-%m-%d} ({WEEKDAYS_EN[day.weekday()]})")
+        except ValueError:
+            facts.append(f"until {m['until']}")
+    text = " ".join(str(m["text"]).split())
+    return f"`{m['id']}` {', '.join(facts)}: {text}" if facts else f"`{m['id']}`: {text}"
+
+
+def memo_block(memos: list[dict[str, Any]], now: datetime, tz: Any) -> str | None:
+    """managed_prompt::memo_section (ticket 95): the memos that hold (`memo
+    list`'s shape, in the order they were noted), until the next would take
+    their text past MEMO_TOTAL_MAX_CHARS; the rest counted on a last line.
+    None without memos (no section)."""
+    if not memos:
+        return None
+    out = (f"### Memo\n\nAs of {now.astimezone(tz):%Y-%m-%d %H:%M}, local time (it may have changed since: `memo list` "
+           "reads it now; `memo add`, `memo update` and `memo delete` change it).\n\nWhat you noted about the user, "
+           "oldest first, each with the day you last noted or changed it:")
+    chars = shown = 0
+    for m in memos:
+        chars += len(str(m["text"]))
+        if chars > MEMO_TOTAL_MAX_CHARS:
+            break
+        shown += 1
+        out += "\n- " + memo_line(m, tz)
+    if shown < len(memos):
+        out += (f"\n- and {len(memos) - shown} more, past the {MEMO_TOTAL_MAX_CHARS} characters this section holds: "
+                "`memo list`")
+    return out
+
+
 def clock_words(case: dict[str, Any], now: datetime) -> tuple[str, datetime]:
     """Ticket 63: the time a case's message names (todo/cases.json `_note`,
     `clock`), the one still far enough ahead when the suite runs, with its
@@ -1969,6 +2150,36 @@ def todo_wire_at(todo: dict[str, Any], tasks: list[dict[str, Any]], tz: Any,
     return w
 
 
+def memo_specs(case: dict[str, Any]) -> list[dict[str, Any]]:
+    return case.get("memos") or []
+
+
+def memo_stored(m: dict[str, Any], now: datetime, k: int) -> dict[str, Any]:
+    """One of a case's memos (memo/cases.json `_note`) as `memo list` prints
+    it: noted by Galley in the main chat `days_ago` days before now (default
+    3, a few minutes apart in the case's order), `until` a day spec."""
+    made = now - timedelta(days=float(m.get("days_ago", 3)), minutes=30 - k)
+    w: dict[str, Any] = {"id": m["id"], "text": m["text"]}
+    if m.get("until"):
+        w["until"] = sched_day(m["until"], now)
+    w["origin"] = {"via": "supervisor", "supervisor": "galley-assistant", "reason": "user mentioned it"}
+    w["createdIn"] = {"sessionId": SESSION_ID, "turnIndex": SEGMENT_START_TURN - 3}
+    w["createdAt"] = w["updatedAt"] = iso_utc(made)
+    return w
+
+
+def sched_memo_lines(case: dict[str, Any], now: datetime) -> str | None:
+    """The case's "Memo" lines: its memos from before the segment (all of
+    them unless `in_lines` is false) that hold then, in the order they were
+    noted, read an hour before the message, as In Hand is
+    (SqliteGalley::memos_today, then memo_section)."""
+    as_of = now - timedelta(hours=SCHED_IN_HAND_HOURS_BEFORE)
+    today = as_of.date().isoformat()
+    memos = [memo_stored(m, now, k) for k, m in enumerate(memo_specs(case)) if m.get("in_lines", True)]
+    memos = sorted((m for m in memos if not m.get("until") or m["until"] >= today), key=lambda m: m["createdAt"])
+    return memo_block(memos, as_of, now.tzinfo)
+
+
 def sched_in_hand(case: dict[str, Any], now: datetime) -> str | None:
     """The case's In Hand lines: its to-dos and tasks from before the
     segment, grouped and ordered as the to-do read does it, read an hour
@@ -2011,10 +2222,15 @@ def sched_prompt(case: dict[str, Any], now: datetime) -> str:
     text = (text.replace("__SESSION_ID__", SESSION_ID)
             .replace("__SEGMENT_START_TURN__", str(SEGMENT_START_TURN))
             .replace("__SEGMENT_START_DATE__", now.strftime("%Y-%m-%d")))
-    if text.count("\n\n__IN_HAND__") != 1 or "__MANUAL_DIR__" not in text:
+    if (text.count("\n\n__IN_HAND__") != 1 or text.count("\n\n__MEMO__") != 1
+            or "__MANUAL_DIR__" not in text):
         fail("schedule prompt: placeholders missing")
     lines = sched_in_hand(case, now)
-    return text.replace("\n\n__IN_HAND__", "\n\n" + lines if lines else "")
+    text = text.replace("\n\n__IN_HAND__", "\n\n" + lines if lines else "")
+    # Ticket 96: the "Memo" lines after In Hand (or after Main Chat without
+    # it), none without memos, as Core composes them.
+    memo = sched_memo_lines(case, now)
+    return text.replace("\n\n__MEMO__", "\n\n" + memo if memo else "")
 
 
 def sched_note(case: dict[str, Any], now: datetime) -> str:
@@ -2037,10 +2253,15 @@ def sched_note(case: dict[str, Any], now: datetime) -> str:
             tod, due, _ = review_times(t, now)
             fired = due + timedelta(minutes=t["fired"].get("late_minutes", 0))
             late = int((fired - due).total_seconds())
+            # Ticket 96: the memos new since the last review it names
+            # (`memos`: ids of the case's memos), in Core's words.
+            named = [{"id": m["id"], "text": m["text"]} for mid in t.get("memos") or []
+                     for m in memo_specs(case) if m["id"] == mid]
             dues.append({"task_id": tid, "prompt": REVIEW_PROMPT, "once": False, "review": True,
                          "rule": f"every day at {tod}", "due_local": local_words(due),
                          "fired_local": local_words(fired),
-                         "late": lateness_words(late) if late >= LATE_AFTER_SECS else None, "todo": None})
+                         "late": lateness_words(late) if late >= LATE_AFTER_SECS else None, "todo": None,
+                         "memos": named})
             continue
         if t is None:
             k, spec = next((k, x) for k, x in enumerate(todo_specs(case)) if (x.get("reminder") or {}).get("id") == tid)
@@ -2067,6 +2288,7 @@ def sched_fixture(case: dict[str, Any], now: datetime) -> dict[str, Any]:
     fx["tasks"] = [sched_task(t, now) for t in case.get("tasks") or []]
     fx["tasks"] += [r for r in (todo_reminder_task(t, now) for t in todo_specs(case)) if r]
     fx["todos"] = [todo_stored(t, now, k) for k, t in enumerate(todo_specs(case))]
+    fx["memos"] = [memo_stored(m, now, k) for k, m in enumerate(memo_specs(case))]
     fx["tz_minutes"] = int(now.utcoffset().total_seconds() // 60) if now.utcoffset() else 0
     fx["main_chat_id"] = SESSION_ID
     return fx
@@ -2491,6 +2713,35 @@ AT="$(date -v+2H +%Y-%m-%dT%H:%M)"
 "$GALLEY" schedule list --all | grep -c cancelledBy | sed 's/^/tasks_cancelledby=/'
 '''
 
+# Ticket 96: the memo family as the real CLI and Core answer it — the
+# list, the refusals (101 characters, empty, a past --until, a bad one, an
+# empty one, no text, an update with nothing to change, --until with
+# --no-until, an unknown id, an unknown flag), an update, an add with a
+# last day, the total past 2,000 characters (overLimit), deleting, deleting
+# again, a help page.
+MEMO_DRY_BASH = r'''GALLEY="$(sed -n '1p' "${XDG_CONFIG_HOME:-$HOME/.config}/galley/cli-path")"
+UNTIL="$(date -v+3d +%Y-%m-%d)"
+"$GALLEY" memo list | wc -l | sed 's/ //g; s/^/listed=/'
+"$GALLEY" memo add "$(python3 -c 'print("菜" * 101)')" --supervisor=galley-assistant; echo "long=$?"
+"$GALLEY" memo add "   " --supervisor=galley-assistant; echo "empty=$?"
+"$GALLEY" memo add "x" --until=2020-01-01 --supervisor=galley-assistant; echo "past=$?"
+"$GALLEY" memo add "x" --until=明天 --supervisor=galley-assistant; echo "baddate=$?"
+"$GALLEY" memo add "x" --until= --supervisor=galley-assistant; echo "emptyuntil=$?"
+"$GALLEY" memo add --supervisor=galley-assistant; echo "notext=$?"
+"$GALLEY" memo update memo_a1b2c3d4e5f60718 --supervisor=galley-assistant; echo "nochange=$?"
+"$GALLEY" memo update memo_a1b2c3d4e5f60718 --until="$UNTIL" --no-until --supervisor=galley-assistant; echo "conflict=$?"
+"$GALLEY" memo update memo_nope --text=x --supervisor=galley-assistant; echo "unknown=$?"
+"$GALLEY" memo list --all; echo "listall=$?"
+"$GALLEY" memo update memo_a1b2c3d4e5f60718 --text="房东王先生，电话 139 0000 2222" --supervisor=galley-assistant --reason="new number" | grep -c "139 0000 2222" | sed 's/^/updated=/'
+"$GALLEY" memo add "下周三起在上海出差" --until="$UNTIL" --supervisor=galley-assistant --reason="user mentioned it" | grep -c '"until"' | sed 's/^/until=/'
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do "$GALLEY" memo add "$(python3 -c "print('长' * 100)")" --supervisor=galley-assistant > "$TMPDIR/last-memo.json"; done
+grep -c overLimit "$TMPDIR/last-memo.json" | sed 's/^/over=/'
+"$GALLEY" memo list | wc -l | sed 's/ //g; s/^/listed=/'
+"$GALLEY" memo delete memo_a1b2c3d4e5f60718 --supervisor=galley-assistant --reason="moved" | grep -c "139 0000 2222" | sed 's/^/deleted=/'
+"$GALLEY" memo delete memo_a1b2c3d4e5f60718 --supervisor=galley-assistant; echo "delete2=$?"
+"$GALLEY" memo add --help | head -1
+'''
+
 
 SANDBOX_PROBE = r'''import json, os, socket, subprocess
 res = {}
@@ -2719,6 +2970,19 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                  '"$G" session show "$S" --around="msg_${S}_0_user"; "$G" session show "$S" --tail=40'})),
             call("<summary>Relay</summary>\n下周三上午的三班查到了：G7502 09:12 开、G7348 09:41 开、G1374 10:05 开，"
                  "二等座都是 73 元，前两班有票，G1374 余 9 张（12306 余票查询页）。")],
+        # Ticket 96: the memo family through the fake galley; a lookup with
+        # no browser connected, then a memo; the review left quiet.
+        "memo-cli": [
+            call("<summary>Read the manual</summary>\n先看手册。",
+                 ("file_read", {"path": os.path.join(ctx.get("manual_dir", ""), "memo.md")})),
+            call("<summary>Memos</summary>\n改一下。", ("code_run", {"type": "bash", "script": MEMO_DRY_BASH})),
+            call("<summary>Done</summary>\n记下了。")],
+        "memo-web": [
+            call("<summary>Look it up</summary>\n查一下。", ("web_scan", {"tabs_only": True})),
+            call("<summary>Note it</summary>\n记一下。", ("code_run", {"type": "bash", "script":
+                 'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; "$G" memo list >/dev/null; '
+                 '"$G" memo add "看你这周常问 76 人的比赛" --supervisor=galley-assistant --reason="interest seen"'})),
+            call("<summary>Answer</summary>\n周四是主场，打凯尔特人。")],
         "sbx-inline": [
             call("<summary>Inline</summary>\n直接算。",
                  ("code_run", {"script": f"open({canary + '-inline'!r}, 'w').write('x')", "inline_eval": True}))],
@@ -2898,6 +3162,16 @@ def worker() -> int:
             entry.update(outcome="fake result", result=result)
             note_dispatch(n, "tool", clean.get("task"))
             return StepOutcome(result, next_prompt=handler._get_anchor_prompt(skip=index > 0))
+        if tool_name in ("web_scan", "web_execute_js") and job.get("web_unavailable"):
+            # Ticket 96: no browser connected, in GA's own words and shape
+            # (ga.py web_scan / web_execute_js), so a lookup does not end
+            # the run before the memo; nothing is opened.
+            result: Any = {"status": "error", "msg": NO_BROWSER_CONNECTION_MSG}
+            entry.update(outcome="fake result: no browser connected", result=result)
+            if tool_name == "web_scan":
+                return StepOutcome(result, next_prompt="\n")
+            return StepOutcome(json.dumps(result, ensure_ascii=False),
+                               next_prompt=handler._get_anchor_prompt(skip=index > 0))
         if tool_name in SANDBOX_STOPS:
             return stop(SANDBOX_STOPS[tool_name], "not run: run stopped here")
         if tool_name not in SANDBOX_RUNNABLE:
@@ -3168,7 +3442,7 @@ def build_result(job: dict[str, Any], rec: dict[str, Any], done: Any, latency: f
             "stop_reason": stop,
             "final_reply": reply,
         })
-        if job.get("suite") in ("schedule", "todo", "chat"):
+        if job.get("suite") in ("schedule", "todo", "chat", "memo"):
             result.update({"suite": job["suite"], "now": job["now"], "started_at": rec.get("started_at")})
     elif variant:
         call = rec["dispatch_call"]
@@ -3447,14 +3721,16 @@ def run_job(job: dict[str, Any], python: str, workdir: Path) -> dict[str, Any]:
         # What the manual's directory held when the run ended (a part the
         # model wrote or removed would show here).
         result["manual_files"] = sorted(os.listdir(job["manual_dir"]))
-    if job.get("suite") in ("schedule", "todo", "chat"):
+    if job.get("suite") in ("schedule", "todo", "chat", "memo"):
         # What the fake galley ended with (tasks and to-dos made, changed,
-        # cancelled), and what it started with.
+        # cancelled; since ticket 96 memos and their writes), and what it
+        # started with.
         state_path = Path(sandbox["fake_state"]) if sandbox and sandbox.get("fake_state") else None
         if state_path and state_path.is_file():
             result["fake_state"] = json.loads(state_path.read_text(encoding="utf-8"))
         result["fixture_tasks"] = job["wake"]["fixture"]["tasks"]
         result["fixture_todos"] = job["wake"]["fixture"].get("todos") or []
+        result["fixture_memos"] = job["wake"]["fixture"].get("memos") or []
     if sandbox:
         after = downloads_snapshot(Path(sandbox["home"]))
         result["downloads_changes"] = {
@@ -3585,8 +3861,11 @@ def make_sched_jobs(cases: list[dict[str, Any]], now: datetime, mykeys: dict[str
                 "mykeys": mykeys,
                 "ga_lang": ga_lang,
                 "allowed_hosts": sorted(allowed_hosts),
-                "keep_request": (case["id"] in (TODO_DUMP_CASES if suite == "todo" else SCHED_DUMP_CASES)
-                                 and n == 1) or bool(dry),
+                "keep_request": (case["id"] in {"todo": TODO_DUMP_CASES, "memo": MEMO_DUMP_CASES}.get(
+                    suite, SCHED_DUMP_CASES) and n == 1) or bool(dry),
+                # Ticket 96: a case's browser lookup answers "no browser
+                # connected" instead of ending the run.
+                "web_unavailable": case.get("web") == "unavailable",
                 "dry": dry,
                 "sandbox": True,
                 "tool_cap": SCHED_TOOL_CAP,
@@ -3848,6 +4127,8 @@ def outcome_label(outcome: str) -> str:
         return "在沙盒里执行"
     if outcome == "fake result":
         return "没有执行，回了假的成功结果"
+    if outcome == "fake result: no browser connected":
+        return "没有执行，回了 GA 没连浏览器时的报错"
     if outcome.startswith("refused"):
         return "越界，按 GA 原本的报错格式拒绝"
     if outcome.startswith("not run: cap"):
@@ -5376,6 +5657,10 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
                     reasons.append("复述了提醒的原话：" + body.strip()[:40])
             if exp.get("max_chars") and shown_len(body) > exp["max_chars"]:
                 reasons.append(f"太长：{shown_len(body)} 字，上限 {exp['max_chars']}")
+    elif "review_memo" in exp:
+        # Ticket 96: the morning review woken for a memo; memo_facts judges
+        # the reply (quiet, or something done; never an offer).
+        pass
     elif exp.get("no_reply"):
         if not is_no_reply:
             reasons.append("回复不是只有 <no-reply/>")
@@ -5419,9 +5704,14 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     if exp.get("no_retract") and retract:
         reasons.append("回复提了改口（没设的不提本来要设）：" + "".join(f"「{w}」" for w in retract))
     mem = memory_changed(r)
+    # Ticket 96: a memo written is a write too (the fake galley's record of
+    # them); outside the memo suite it is only noted.
+    memo_events = st.get("memo_events") or []
+    if memo_events and "memo" not in exp:
+        flags.append("写了备忘：" + "、".join(f"{e['action']}「{e['text']}」" for e in memo_events))
     wrote = bool([t for t in todos if t["id"] not in fx_todos] or [t for t in tasks if t["id"] not in fx_tasks]
                  or [t for t in todos if t["id"] in fx_todos and t != fx_todos[t["id"]]]
-                 or [t for t in tasks if t["id"] in fx_tasks and t != fx_tasks[t["id"]]] or mem)
+                 or [t for t in tasks if t["id"] in fx_tasks and t != fx_tasks[t["id"]]] or mem or memo_events)
     claim = unwritten_claim(body, wrote)
     if claim:
         reasons.append(claim)
@@ -5661,6 +5951,177 @@ def chat_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+# Ticket 96 (main chat PRD ruling 140 point 6): a memo is written for the
+# user, not as a record about them (「用户说……」「他提到……」); an interest
+# it noticed says where it comes from (「看你这周常问 76 人」), and does not
+# put it in the user's mouth (「你说你关注 NBA」).
+MEMO_RECORD_RE = re.compile(r"用户|^(他|她)|(他|她)(说|提到|表示|告知|称)|告知")
+MEMO_SOURCE_RE = re.compile(r"看你|常问|经常问|老问|总问|总在问|多次问|几次问|反复问|一直问|问了好几|问过好几|你最近常|最近常")
+MEMO_SAID_RE = re.compile(r"你说你|你说过你|你提到你")
+
+
+def digits_of(text: Any) -> str:
+    return re.sub(r"\D", "", str(text or ""))
+
+
+def memo_gist(m: dict[str, Any]) -> str:
+    """A memo in one line, as `memo list` prints it."""
+    return f"`{m['id']}` {m['text']}" + (f"（到 {m['until']}）" if m.get("until") else "")
+
+
+def memo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
+    """Ticket 96: what a memo run did and whether it met the case's
+    expectations (memo/cases.json `expect`). The to-dos and reminders are
+    judged by todo_facts on the to-do suite's keys; the memos from the fake
+    galley's final memos against its fixture, and its record of memo writes:
+    `memo` is "none" (no memo noted, changed or deleted), "any" (only
+    recorded), {"add": 1, …} (exactly one memo noted, no other memo
+    changed or deleted) or {"update": <id>, …} (that memo changed, none
+    added or deleted); with `text_any` (its text has one of these words),
+    `text_re`, `digits` (its digits hold these), `forbid_any`, `source`
+    (an interest says where it comes from), `until` (its last day in this
+    window, or null for none). Every memo written is checked for a record
+    about the user (MEMO_RECORD_RE) and for --supervisor=galley-assistant.
+    `todo_forbid_digits`: the to-do noted does not copy this number;
+    `todo_flag_any`: words in the to-do only noted; `reminder_weekday`: the
+    to-do's reminder falls on that ISO weekday; `review_memo`: the morning
+    review woken for a memo, quiet (nothing, or at most `subtasks_max`
+    subtasks) or with something done it names, never an offer;
+    `no_memory`: GA's memory not written."""
+    f = todo_facts(r, case)
+    now = datetime.fromisoformat(r["now"])
+    case = clock_case(case, now)
+    exp = case["expect"]
+    tz = now.tzinfo
+    st = r.get("fake_state") or {}
+    fx_memos = {m["id"]: m for m in r.get("fixture_memos") or []}
+    after = st["memos"] if st.get("memos") is not None else list(fx_memos.values())
+    after_by_id = {m["id"]: m for m in after}
+    events = st.get("memo_events") or []
+    new = [m for m in after if m["id"] not in fx_memos]
+    changed = [m for m in after if m["id"] in fx_memos and m != fx_memos[m["id"]]]
+    deleted = [m for mid, m in fx_memos.items() if mid not in after_by_id]
+    log = [c.get("argv") or [] for c in r.get("galley_log") or []]
+    names = [cli_name(a) for a in log]
+    reasons = list(f["reasons"])
+    flags = list(f["flags"])
+    for a in log:
+        if cli_name(a) in MEMO_WRITES and parse_cli(a)[1].get("supervisor") != "galley-assistant":
+            reasons.append(f"{cli_name(a)} 没带 --supervisor=galley-assistant")
+            break
+    want = exp.get("memo", "none")
+    targets: list[dict[str, Any]] = []
+    if want == "none":
+        if new or changed or deleted:
+            reasons.append("不该记备忘却" + "、".join(
+                [f"记了「{m['text']}」" for m in new] + [f"改了「{m['text']}」" for m in changed]
+                + [f"删了「{m['text']}」" for m in deleted]))
+    elif want == "any":
+        pass
+    elif "add" in want:
+        if len(new) != want["add"]:
+            reasons.append(f"该记 {want['add']} 条备忘，记了 {len(new)} 条"
+                           + ("（" + "；".join(m["text"] for m in new) + "）" if new else ""))
+        if changed or deleted:
+            reasons.append("动了已有的备忘：" + "、".join(m["text"] for m in changed + deleted))
+        targets = new
+    elif "update" in want:
+        mid = want["update"]
+        if mid not in after_by_id:
+            reasons.append("该 memo update 那条，却把它删了" + ("、另记了一条（删了重加）" if new else ""))
+        elif mid not in [m["id"] for m in changed]:
+            reasons.append("该改的那条没改：" + fx_memos.get(mid, {}).get("text", mid))
+        else:
+            targets = [after_by_id[mid]]
+        if new and mid in after_by_id:
+            reasons.append("另记了一条，没有只改那条：" + "、".join(m["text"] for m in new))
+        others = [m for m in changed + deleted if m["id"] != mid]
+        if others:
+            reasons.append("动了别的备忘：" + "、".join(m["text"] for m in others))
+    spec = want if isinstance(want, dict) else {}
+    for m in targets:
+        text = m["text"]
+        if spec.get("text_any") and not any(w in text for w in spec["text_any"]):
+            reasons.append("备忘里没有：" + " / ".join(spec["text_any"]) + f"（「{text}」）")
+        if spec.get("text_re") and not re.search(spec["text_re"], text):
+            reasons.append(f"备忘不对：「{text}」")
+        if spec.get("digits") and spec["digits"] not in digits_of(text):
+            reasons.append(f"备忘里没有那个号码：「{text}」")
+        if spec.get("forbid_any") and any(w in text for w in spec["forbid_any"]):
+            reasons.append("备忘里不该有：" + " / ".join(w for w in spec["forbid_any"] if w in text) + f"（「{text}」）")
+        if spec.get("source"):
+            if MEMO_SAID_RE.search(text):
+                reasons.append(f"看出来的兴趣写成了用户说的：「{text}」")
+            elif not MEMO_SOURCE_RE.search(text):
+                reasons.append(f"看出来的兴趣没写明来源（「看你……常问」）：「{text}」")
+        if "until" in spec:
+            if spec["until"] is None:
+                if m.get("until"):
+                    reasons.append(f"不该带期限：到 {m['until']}")
+            elif not m.get("until"):
+                reasons.append(f"会过期的没带期限（--until）：「{text}」")
+            else:
+                lo = sched_time(dict(spec["until"]["from"], time="00:00"), now).date()
+                hi = sched_time(dict(spec["until"]["to"], time="00:00"), now).date()
+                if not lo <= date.fromisoformat(m["until"]) <= hi:
+                    reasons.append(f"期限不对：到 {m['until']}")
+    for m in new + changed:
+        if MEMO_RECORD_RE.search(m["text"]):
+            reasons.append(f"写成了关于用户的记录：「{m['text']}」")
+    made = f["made_todos"]
+    for t in made:
+        blob = (t.get("title") or "") + " " + (t.get("notes") or "")
+        if exp.get("todo_forbid_digits") and exp["todo_forbid_digits"] in digits_of(blob):
+            reasons.append("待办里抄了备忘里已有的号码：" + blob.strip())
+        hits = [w for w in exp.get("todo_flag_any") or [] if w in blob]
+        if hits:
+            flags.append("待办里复述了：" + "、".join(hits) + f"（{blob.strip()}）")
+    timed = f.get("timed") or {}
+    if exp.get("reminder_weekday") and timed.get("fireAt"):
+        at = datetime.fromisoformat(timed["fireAt"]).astimezone(tz)
+        if at.isoweekday() != exp["reminder_weekday"]:
+            reasons.append("提醒不在说的那天：" + local_words(at))
+    rm = exp.get("review_memo")
+    if rm is not None and f["stop"] == "final_reply":
+        body = f["body"]
+        if f["quiet"]:
+            if f["subtasks"] and not NO_REPLY_RE.search(r.get("final_reply") or ""):
+                flags.append("只派了子任务、没写 <no-reply/>（Core 照样不显示）")
+        else:
+            calls = r.get("calls") or []
+            worked = any(c.get("name") in ("file_write", "file_patch")
+                         or (c.get("name") == "code_run" and not c.get("galley_calls")
+                             and MANUAL_STATE_PATH not in json.dumps(c.get("args"), ensure_ascii=False))
+                         for c in calls)
+            if not worked:
+                reasons.append("只派了子任务却开口了（该只有标签和 <no-reply/>）" if f["subtasks"]
+                               else "没做成什么却开口了")
+            topic = rm.get("names_any") or []
+            if topic and not any(n in body for n in topic):
+                reasons.append("开口了却没说是哪件事")
+            empty = REVIEW_EMPTY_RE.search(body)
+            if empty:
+                reasons.append(f"开口说的是空话（「{empty.group(0)}」）")
+    if exp.get("no_memory") and (f["memory_changed"] or f["memory_writes"]):
+        reasons.append("写进了 GA 的记忆：" + "、".join(dict.fromkeys(os.path.basename(x) for x in
+                                                             f["memory_writes"] + f["memory_changed"])))
+    calls = r.get("calls") or []
+    write_at = next((c["n"] for c in calls
+                     if any(cli_name(a) in ALL_WRITES + MEMO_WRITES for a in c.get("galley_calls") or [])), None)
+    manual, reads = manual_column(calls, write_at)
+    first_list = next((i for i, n in enumerate(names) if n == "memo list"), None)
+    first_write = next((i for i, n in enumerate(names) if n in MEMO_WRITES), None)
+    if first_write is None:
+        memo_listed = "读了备忘" if first_list is not None else "—"
+    else:
+        memo_listed = "查了" if first_list is not None and first_list < first_write else "没查"
+    record = f["pass"] is None
+    out = dict(f, reasons=reasons, flags=flags, manual=manual, manual_reads=reads, memos_new=new,
+               memos_changed=changed, memos_deleted=deleted, memo_events=events, memo_listed=memo_listed)
+    out["pass"] = None if record else not reasons
+    return out
+
+
 def render_chat_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     meta = data["meta"]
     by_id = {c["id"]: c for c in cases}
@@ -5707,6 +6168,133 @@ def render_chat_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
             out.append(f"| {case['no']} | {case['id']} | {case['group']} | {one_line(case['message'])} | "
                        f"{case['expect_text'].replace('|', '/')} | {cmds.replace('|', '/')} | {reply.replace('|', '/')} | "
                        f"{f['manual']} | {verdict_words(f).replace('|', '/')} | {aside.replace('|', '/') or '—'} |")
+    return "\n".join(line.rstrip() for line in "\n".join(out).split("\n")).rstrip() + "\n"
+
+
+def memo_writes_words(f: dict[str, Any]) -> str:
+    """What a run did to the memos, in one line (the final text of each)."""
+    bits = ([f"记「{m['text']}」" + (f"（到 {m['until']}）" if m.get("until") else "") for m in f["memos_new"]]
+            + [f"改为「{m['text']}」" + (f"（到 {m['until']}）" if m.get("until") else "") for m in f["memos_changed"]]
+            + [f"删「{m['text']}」" for m in f["memos_deleted"]])
+    return "；".join(bits) or "没动备忘"
+
+
+def render_memo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
+    """Ticket 96: the memo suite's results, in the to-do suite's layout."""
+    meta = data["meta"]
+    by_case: dict[str, list[dict[str, Any]]] = {}
+    for r in data["results"]:
+        by_case.setdefault(r["id"], []).append(r)
+    by_id = {c["id"]: c for c in cases}
+    facts = {(r["id"], r["variant"]): memo_facts(r, by_id[r["id"]]) for r in data["results"] if r["id"] in by_id}
+    out = [
+        "# 备忘评测结果（票 96）",
+        "",
+        f"模型：{meta['model']['name']}（{meta['model_source']}，与主对话同一个模型），推理强度 "
+        f"{meta['model']['options'].get('reasoning_effort', '默认')}；首次运行于 {meta['ran_at']}。",
+        "",
+        "- **提示词**：真实 Rust 代码 `compose_main_chat_runtime_prompt` 生成的主对话提示词（`../schedule/galley-prompt/`，"
+        "票 96 重新生成：入口层多了记备忘那一句、「记下了」那句的「a memo」、写命令与手册列表里的 `memo`）。用例里分段开始前就有的"
+        "备忘照 `memo_section` 的格式写进「Memo」一节，接在「In Hand」后面（没有「In Hand」时接在 Main Chat 那段后面），时间写成"
+        "消息前一小时（`run.py` 的 `memo_block`，干跑测试逐字对过 Rust 的输出）。手册是仓库里的 "
+        "`docs/managed-ga-runtime/galley-assistant-manual/`（票 96 起十个部分，新的一部分是 `memo.md`），整套放在这次运行状态根下"
+        "（`assistant/reference/manual/`）。",
+        "- **新消息**：用户这句；巡看用例是照 Core 措辞拼的叫醒消息（`subtask_report::review_paragraph` 加票 95 的 "
+        "`review_memos_paragraph`，点名前一天的新备忘，同样逐字对过）。",
+        "- **工具**：同待办评测的沙盒与假 CLI，另外回答 `memo list / add / update / delete`（形状照 Agent API §5.35–§5.39，"
+        "校验照真实 CLI 与 Core：单条 1 到 100 字、`--until` 不早于今天（`time_in_past:`）、`update` 什么都没给与 `--until` "
+        "`--no-until` 同给是参数错误、未知的 id 退出码 3、总量过 2,000 字照记并回 `overLimit`），每次写都记一行（同 Core 的 "
+        "`memo_events`）。带 `web: unavailable` 的用例，浏览器工具回 GA 没连浏览器时的报错（`ga.py` 的原话），不让运行停在那里。"
+        f"每次运行最多 {SCHED_TOOL_CAP} 次工具调用。",
+        "- **判定**：按 `cases.json` 每条的 `expect` 自动判（写法见 `_note`）：记了几条、记在哪（备忘、待办、提醒）、备忘的正文"
+        "（该有的词与号码、期限、看出来的兴趣写明来源），每条新记或改过的备忘都查是不是写成了关于用户的记录"
+        "（「用户……」「他提到……」），`memo` 写命令带没带 `--supervisor=galley-assistant`；待办与提醒用待办评测的判法。"
+        "每条都判：回复说「记下了」一类的话，这一轮就得有写（备忘也算）。",
+        "",
+    ]
+    sup = meta.get("superseded_runs") or []
+    for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
+        out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
+                f"`meta.superseded_runs[{n - 1}]` 里。", ""]
+    total = passed = 0
+    out += ["## 通过率", "", "| # | 用例 | 分组 | 期望 | 遍数 | 过 | 通过率 |", "| --- | --- | --- | --- | --- | --- | --- |"]
+    for case in cases:
+        runs = by_case.get(case["id"], [])
+        if not runs:
+            continue
+        ok = sum(1 for r in runs if facts[(r["id"], r["variant"])]["pass"])
+        total, passed = total + len(runs), passed + ok
+        out.append(f"| {case['no']} | {case['id']} | {case['group']} | {case['expect_text'].replace('|', '/')} | "
+                   f"{len(runs)} | {ok} | {round(100 * ok / len(runs))}% |")
+    if total:
+        out.append(f"| | 合计 | | | {total} | {passed} | {round(100 * passed / total)}% |")
+    out += ["", "## 一览", "",
+            "| # | 用例 | 遍 | 备忘（记了什么） | 待办与提醒 | 回复原文 | 读手册 | 判定 |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for case in cases:
+        for r in sorted(by_case.get(case["id"], []), key=lambda r: r.get("repeat", 0)):
+            f = facts[(r["id"], r["variant"])]
+            todos = "；".join(todo_gist(t) for t in f["made_todos"])
+            tasks = "；".join(f"`{t['id']}` {t.get('fireAt', '')}" + (f" 挂在 `{t['todoId']}` 上" if t.get("todoId") else "")
+                             for t in f["made_tasks"] if not t.get("cancelledAt"))
+            reply = one_line(f["body"]) or "（空）"
+            out.append(f"| {case['no']} | {case['id']} | {r['repeat']} | {memo_writes_words(f).replace('|', '/')} | "
+                       f"{('；'.join(x for x in (todos, tasks) if x) or '—').replace('|', '/')} | "
+                       f"{reply.replace('|', '/')} | {f['manual']} | {verdict_words(f).replace('|', '/')} |")
+    out.append("")
+    for case in cases:
+        runs = sorted(by_case.get(case["id"], []), key=lambda r: r.get("repeat", 0))
+        if not runs:
+            continue
+        out += [f"## {case['no']}. {case['id']}（{case['group']}）", "", f"**期望**：{case['expect_text']}", ""]
+        if case["history"]:
+            out += ["上下文" + ("（分段前带过来的）" if case.get("carried") else "") + "：", ""]
+            for m in case["history"]:
+                who = "用户" if m["role"] == "user" else "助手"
+                out += [f"> {who}：" + m["content"].replace("\n", "\n> "), ">"]
+            out.pop()
+            out.append("")
+        first = runs[0]
+        if first.get("fixture_memos"):
+            out += ["已有的备忘（运行那一刻，都在「Memo」一节里）：", ""]
+            out += [f"- {memo_gist(m)}，{m['updatedAt']}" for m in first["fixture_memos"]]
+            out.append("")
+        if first.get("fixture_todos"):
+            out += ["已有的待办：", ""] + [f"- {todo_gist(t)}" for t in first["fixture_todos"]] + [""]
+        out += [("叫醒消息：" if case.get("wake") else "用户：")] + [""] + fenced(first.get("message") or "")
+        for r in runs:
+            f = facts[(r["id"], r["variant"])]
+            head = "只记录" if f["pass"] is None else "过" if f["pass"] else "不过"
+            out += [f"### 第 {r['repeat']} 遍：{head}", ""]
+            if f["pass"] is False:
+                out += ["不过的原因：" + "；".join(f["reasons"]), ""]
+            if f["flags"]:
+                out += ["注：" + "；".join(f["flags"]), ""]
+            calls = r.get("calls") or []
+            if calls:
+                out += ["工具调用：", ""]
+                for c in calls:
+                    line = f"{c['n']}. {call_gist(c)}"
+                    for argv in c.get("galley_calls") or []:
+                        line += "；galley " + " ".join(argv).replace("`", "'")
+                    out.append(line.replace("\n", " "))
+                out.append("")
+            made = "；".join(todo_gist(t) for t in f["made_todos"]) or "无"
+            tasks = "；".join(f"`{t['id']}` {t.get('fireAt', '')}" + (f" 挂在 `{t['todoId']}` 上" if t.get("todoId")
+                                                                     else f" target={t.get('target')}")
+                             + ("（已取消）" if t.get("cancelledAt") else "") + f"：{t['prompt']}"
+                             for t in f["made_tasks"]) or "无"
+            out += [f"结束：{STOP_LABELS.get(f['stop'], f['stop'])}；读手册：{f['manual']}；写备忘前查过：{f['memo_listed']}；"
+                    f"手册版本：`{r.get('manual_sha', '?')}`。", "",
+                    f"备忘：{memo_writes_words(f)}；新记的待办：{made}；新建的提醒：{tasks}。", ""]
+            if f["memory_writes"] or f["memory_changed"]:
+                out += ["写进 GA 记忆：" + "、".join(dict.fromkeys(f"`{os.path.basename(x)}`" for x in
+                                                             f["memory_writes"] + f["memory_changed"])), ""]
+            if f["asked_via_tool"]:
+                out += ["ask_user 的问题：", ""] + fenced(json.dumps(f["asked_via_tool"], ensure_ascii=False, indent=1), "json")
+            out += ["回复（去掉 summary 与建议标签）：", ""] + fenced(f["body"] or "（空）")
+            if f["suggestion"]:
+                out += [f"建议标签：{f['suggestion']}", ""]
     return "\n".join(line.rstrip() for line in "\n".join(out).split("\n")).rstrip() + "\n"
 
 
@@ -5825,6 +6413,13 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
         for job in make_sched_jobs([tcases[case_id]], snow, mykeys, ga_lang, set(), 1, script, suite="todo"):
             job["case_id"] = run_id
             jobs.append(job)
+    mcases = {c["id"]: c for c in json.loads(MEMO_CASES.read_text(encoding="utf-8"))["cases"]}
+    memo_scripts = {"memo-cli": ("landlord-new-number", "memo-cli"), "memo-web": ("interest-team", "memo-web"),
+                    "memo-review-quiet": ("review-interest", "sched-no-reply")}
+    for run_id, (case_id, script) in memo_scripts.items():
+        for job in make_sched_jobs([mcases[case_id]], snow, mykeys, ga_lang, set(), 1, script, suite="memo"):
+            job["case_id"] = run_id
+            jobs.append(job)
     ccases = {c["id"]: c for c in chat_cases()}
     chat_scripts = {"chat-carry-quote": ("carry-quote", "final"), "chat-errand-rent": ("errand-rent", "final")}
     for run_id, (case_id, script) in chat_scripts.items():
@@ -5848,6 +6443,7 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
     dry_test_sched([r for r in results if r["id"].startswith("sched-")], sched_scripts, scases, snow, check)
     dry_test_todo([r for r in results if r["id"].startswith("todo-")], todo_scripts, tcases, snow, check)
     dry_test_chat([r for r in results if r["id"].startswith("chat-")], chat_scripts, ccases, check)
+    dry_test_memo([r for r in results if r["id"].startswith("memo-")], memo_scripts, mcases, snow, check)
     sbx_results = [r for r in results if r["id"].startswith("sbx-")]
     entry_results = [r for r in results if r["variant"] in VARIANTS]
     dispatch_results = [r for r in results if r["variant"] in DISPATCH_VARIANTS
@@ -6145,9 +6741,10 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, 
           and "`[FILE:<absolute path>]` on a line of its own and say what it is: the" in plain
           and "`todos.md` and `unasked.md` to note a to-do;" in plain
           and "`unasked.md`" in WAKE_PROMPT.read_text(encoding="utf-8"), "the ticket 73 prompt (schedule and wake)")
-    # Ticket 73: the review's words are Core's (the samples carry them).
+    # Ticket 73: the review's words are Core's (the samples carry them;
+    # ticket 96 added two that name new memos).
     review_samples = [w for w in samples["wake"] if all(d.get("review") for d in w["reports"])]
-    check(len(review_samples) == 2 and all(w["text"].startswith(OPENING_REVIEW) for w in review_samples)
+    check(len(review_samples) == 4 and all(w["text"].startswith(OPENING_REVIEW) for w in review_samples)
           and all(d["prompt"] == REVIEW_PROMPT for w in review_samples for d in w["reports"]),
           "the morning review: REVIEW_PROMPT and OPENING_REVIEW are Rust's")
     # Ticket 78: the review beside a to-do's reminder, beside a subtask that
@@ -6737,7 +7334,7 @@ def dry_test_chat(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     check(galley_runtime_prompt(quote, "without", mon, "") == filled(GALLEY_PROMPT_DIR / "main_chat.carried-1.txt",
                                                                      quote["hours_ago"])
           and sched_prompt(quote, mon) == filled(SCHED_PROMPT.with_name("main_chat.carried-1.txt"), quote["hours_ago"])
-          .replace("\n\n__IN_HAND__", "\n\n" + lines if lines else ""),
+          .replace("\n\n__IN_HAND__", "\n\n" + lines if lines else "").replace("\n\n__MEMO__", ""),
           "one carried turn: Rust's carried-1 wording, byte for byte (main and schedule prompts)")
     three = dict(quote, history=quote["history"] * 3, first_hours_ago=50)
     span = (f"with 3 exchanges from before it, said between {(mon - timedelta(hours=50)).strftime('%Y-%m-%d %H:%M')} "
@@ -6785,6 +7382,236 @@ def dry_test_chat(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
         else:
             check(f["pass"] is False and any("该记 1 件待办" in x for x in f["reasons"]),
                   f"asked to be reminded, nothing noted: fails ({f['reasons']})")
+
+
+def synth_memo_run(case: dict[str, Any], at: datetime, reply: str, memos: list[dict[str, Any]] | None = None,
+                   events: tuple[dict[str, Any], ...] = (), log: tuple[tuple[str, ...], ...] = (),
+                   todos: tuple[dict[str, Any], ...] = (), tasks: tuple[dict[str, Any], ...] = (),
+                   memory: dict[str, list[str]] | None = None, calls: list[dict[str, Any]] | None = None,
+                   stop: str = "final_reply") -> dict[str, Any]:
+    """Dry test (ticket 96): synth_run plus the memos the run left (`memos`,
+    by default the case's own, untouched) and the fake galley's record of
+    its memo writes."""
+    r = synth_run(case, at, reply, todos=todos, tasks=tasks, log=tuple(list(a) for a in log), memory=memory)
+    fx = sched_fixture(clock_case(case, at), at)
+    r["fixture_memos"] = fx["memos"]
+    r["fake_state"]["memos"] = fx["memos"] if memos is None else memos
+    r["fake_state"]["memo_events"] = list(events)
+    r["calls"] = calls or []
+    r["stop_reason"] = stop
+    return r
+
+
+SYNTH_MEMO_ADD = ("memo", "add", "dry", "--supervisor=galley-assistant", "--reason=dry")
+
+
+def synth_memo(text: str, mid: str = "memo_dry0000000000001", until: str | None = None) -> dict[str, Any]:
+    m: dict[str, Any] = {"id": mid, "text": text, "origin": {"via": "supervisor", "supervisor": "galley-assistant"},
+                         "createdAt": "2026-10-19T10:25:00+00:00", "updatedAt": "2026-10-19T10:25:00+00:00"}
+    if until:
+        m["until"] = until
+    return m
+
+
+def dry_test_memo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, str]],
+                  cases: dict[str, dict[str, Any]], now: datetime, check: Any) -> None:
+    """Memo suite (ticket 96): the Python ports reproduce Rust's "Memo" lines
+    and the morning review's memo paragraph byte for byte; the prompt carries
+    the ticket 96 entry layer and, only when a case has memos from before
+    the segment, the "Memo" lines in Core's place; the fake galley's memo
+    family answers, refuses and keeps state as the real CLI and Core do; a
+    browser lookup gets GA's own "no browser" answer; the judge reads it."""
+    from datetime import timezone
+
+    print("memo: ports against Rust (rust-samples.json) and the prompt")
+    samples = json.loads(SCHED_SAMPLES.read_text(encoding="utf-8"))
+    for ms in samples["memo_section"]:
+        got = memo_block(ms["memos"], datetime.fromisoformat(ms["now"].replace("Z", "+00:00")),
+                         timezone(timedelta(minutes=ms["tz_offset_minutes"])))
+        check(got == ms["text"], f"memo_block == managed_prompt::memo_section ({ms['name']})")
+    check({ms["name"] for ms in samples["memo_section"]} >= {"shanghai", "utc", "past-the-total"}
+          and any("- and 3 more, past the 2000 characters" in ms["text"] for ms in samples["memo_section"]),
+          "the samples cover two zones and the total")
+    with_memos = [w for w in samples["wake"] if any(d.get("memos") for d in w["reports"])]
+    check(len(with_memos) == 2 and all(reminder_note(w["reports"]) == w["text"] for w in with_memos)
+          and all("\n\nMemos noted or changed since the last review, in turns the user started:\n- `memo_" in w["text"]
+                  and w["text"].endswith("most need nothing.") for w in with_memos),
+          "review_memos_paragraph == subtask_report::review_memos_paragraph (on time and late)")
+    rust = (REPO / "core" / "src" / "api" / "memo.rs").read_text(encoding="utf-8")
+    check(f"pub const MEMO_TEXT_MAX_CHARS: usize = {MEMO_TEXT_MAX_CHARS};" in rust
+          and "pub const MEMO_TOTAL_MAX_CHARS: usize = 2_000;" in rust and MEMO_TOTAL_MAX_CHARS == 2000,
+          "the limits are Core's")
+    ga = (GA_CODE / "ga.py").read_text(encoding="utf-8")
+    m = re.search(r'^NO_BROWSER_CONNECTION_MSG = "(.*)"$', ga, re.MULTILINE)
+    check(bool(m) and m.group(1) == NO_BROWSER_CONNECTION_MSG, "the no-browser answer is ga.py's")
+    plain = sched_prompt(cases["chat-tired"], now)
+    held = sched_prompt(cases["landlord-new-number"], now)
+    review = sched_prompt(cases["review-pref"], now)
+    check("### Memo" not in plain and "__MEMO__" not in plain and "__IN_HAND__" not in plain,
+          "no memo from before the segment: no Memo lines")
+    check(held.index("## Main Chat\n") < held.index("### Memo") < held.index("## Galley Main Chat Entry Layer")
+          and "### In Hand" not in held and "- `memo_a1b2c3d4e5f60718` " in held
+          and ": 房东王先生，电话 138 0000 1111\n\n## Galley Main Chat Entry Layer" in held,
+          "the Memo lines after Main Chat when nothing is in hand, right before the entry layer")
+    check(review.index("### In Hand") < review.index("### Memo") < review.index("## Galley Main Chat Entry Layer")
+          and review.index("`memo_b2c3d4e5f6071829`") < review.index("`memo_c3d4e5f607182930`"),
+          "the Memo lines after In Hand, oldest first")
+    check("Note what you learn about the user that you will need later as a memo (see\n`memo.md`)." in plain
+          and "reminder, a memo); if you write nothing down, do not bring up\nnoting it." in plain
+          and "write (a session, project, model, schedule, to-do or memo command), read the" in plain
+          and "`memo.md` to note or\nchange what you know about the user;" in plain, "the ticket 96 entry layer")
+    gone = {"id": "dry-gone", "expect": {}, "memos": [{"id": "memo_dry0000000000002", "text": "过期的", "until": {"days": -1}},
+                                                       {"id": "memo_dry0000000000003", "text": "今天到期", "until": {"days": 0}}]}
+    lines = sched_memo_lines(gone, now) or ""
+    check("过期的" not in lines and "今天到期" in lines, "a memo past its last day is not in the lines; one ending today is")
+    carried = sched_prompt(cases["interest-team"], now)
+    check("opens\nwith 3 exchanges from before it, said between" in carried and "### Memo" not in carried,
+          "the carried case: three exchanges, no memo yet")
+    note = sched_note(cases["review-interest"], now)
+    check(note.startswith(OPENING_REVIEW) and note.endswith(
+              "Memos noted or changed since the last review, in turns the user started:\n"
+              "- `memo_d4e5f60718293a4b`: 看你这周常问 76 人的比赛\nFor each, ask whether there is something you could "
+              "get done for the user that they would want to know, as \"The morning review\" in `wake.md` says; most "
+              "need nothing."), "the review's wake names its new memo in Core's words")
+    fx = sched_fixture(cases["landlord-new-number"], now)
+    check([x["id"] for x in fx["memos"]] == ["memo_a1b2c3d4e5f60718"]
+          and fx["memos"][0]["origin"]["supervisor"] == "galley-assistant", "fake galley: the case's memos")
+
+    print("memo: the judge")
+    mon = datetime(2026, 10, 19, 18, 25, tzinfo=now.tzinfo)
+
+    def judged(case_id: str, reply: str, **kw: Any) -> dict[str, Any]:
+        return memo_facts(synth_memo_run(cases[case_id], mon, reply, **kw), cases[case_id])
+
+    added = ({"action": "add", "memoId": "memo_dry0000000000001", "text": "dry"},)
+    f = judged("pref-cilantro", "记下了。", memos=[synth_memo("不吃香菜")], events=added, log=(SYNTH_MEMO_ADD,))
+    check(f["pass"] is True, f"a preference noted for the user, 「记下了」 after it, passes ({f['reasons']})")
+    f = judged("pref-cilantro", "好。", memos=[synth_memo("用户不吃香菜")], events=added, log=(SYNTH_MEMO_ADD,))
+    check(f["pass"] is False and any("关于用户的记录" in x for x in f["reasons"]), f"「用户……」 fails ({f['reasons']})")
+    f = judged("pref-cilantro", "记下了。")
+    check(f["pass"] is False and any("记了 0 条" in x for x in f["reasons"])
+          and any("这一轮却什么都没写下" in x for x in f["reasons"]), f"nothing noted, 「记下了」 said, fails ({f['reasons']})")
+    f = judged("pref-cilantro", "好。", memos=[synth_memo("不吃香菜"), synth_memo("不吃葱", "memo_dry0000000000009")],
+               events=added * 2, log=(SYNTH_MEMO_ADD, SYNTH_MEMO_ADD))
+    check(f["pass"] is False and any("记了 2 条" in x for x in f["reasons"]), f"two memos for one thing fail ({f['reasons']})")
+    f = judged("pref-cilantro", "好。", memos=[synth_memo("不吃香菜")], events=added, log=(("memo", "add", "不吃香菜"),))
+    check(f["pass"] is False and any("memo add 没带 --supervisor" in x for x in f["reasons"]),
+          f"a memo write without the identity fails ({f['reasons']})")
+    for text, ok, why in (("看你这周常问 76 人的比赛", True, ""), ("关注 76 人", False, "没写明来源"),
+                          ("你说你关注 NBA，常问 76 人", False, "写成了用户说的")):
+        f = judged("interest-team", "主场。", memos=[synth_memo(text)], events=added, log=(SYNTH_MEMO_ADD,))
+        check(f["pass"] is ok and (ok or any(why in x for x in f["reasons"])),
+              f"interest 「{text}」 {'passes' if ok else 'fails'} ({f['reasons']})")
+    old = cases["landlord-new-number"]["memos"][0]["id"]
+    fixture = sched_fixture(cases["landlord-new-number"], mon)["memos"]
+    moved = [dict(fixture[0], text="房东王先生，电话 139 0000 2222", updatedAt="2026-10-19T10:30:00+00:00")]
+    upd = ({"action": "update", "memoId": old, "text": "房东王先生，电话 139 0000 2222"},)
+    f = judged("landlord-new-number", "已改成新号码。", memos=moved, events=upd,
+               log=(("memo", "update", old, "--text=x", "--supervisor=galley-assistant"),))
+    check(f["pass"] is True, f"the memo changed in place passes ({f['reasons']})")
+    f = judged("landlord-new-number", "已改成新号码。", memos=[synth_memo("房东王先生，电话 139 0000 2222")],
+               events=upd, log=(("memo", "delete", old, "--supervisor=galley-assistant"), SYNTH_MEMO_ADD))
+    check(f["pass"] is False and any("删了重加" in x for x in f["reasons"]), f"deleted and noted again fails ({f['reasons']})")
+    f = judged("landlord-new-number", "记下了。", memos=fixture + [synth_memo("房东新号码 139 0000 2222")], events=added,
+               log=(SYNTH_MEMO_ADD,))
+    check(f["pass"] is False and any("该改的那条没改" in x for x in f["reasons"])
+          and any("另记了一条" in x for x in f["reasons"]), f"a second memo beside the old fails ({f['reasons']})")
+    tue, mon_next = datetime(2026, 10, 20, 20, 0, tzinfo=now.tzinfo), datetime(2026, 10, 26, 20, 0, tzinfo=now.tzinfo)
+    hotel = synth_todo("订上海的酒店", due="2026-10-27")
+    trip = synth_memo("下周三起在上海出差", until="2026-10-30")
+    for rem_at, memo, ok, why in ((tue, trip, True, ""), (mon_next, trip, False, "提醒不在说的那天"),
+                                  (tue, synth_memo("下周三起在上海出差，记得订酒店", until="2026-10-30"), False, "不该有"),
+                                  (tue, synth_memo("下周三起在上海出差"), False, "没带期限")):
+        f = judged("trip-hotel", f"记下了：{local_words(rem_at)}提醒你订酒店。", memos=[memo], events=added,
+                   todos=(hotel,), tasks=(synth_reminder(rem_at, hotel["id"]),), log=(SYNTH_ADD, SYNTH_MEMO_ADD))
+        check(f["pass"] is ok and (ok or any(why in x for x in f["reasons"])),
+              f"the trip: {memo['text']} to {memo.get('until')}, reminded {local_words(rem_at)}: "
+              f"{'passes' if ok else 'fails'} ({f['reasons']})")
+    call = dict(synth_todo("给房东回电话", due="2026-10-20"), notes="王先生，138 0000 1111")
+    f = judged("landlord-callback", "记下了，明天给房东回电话。", todos=(call,), log=(SYNTH_ADD,))
+    check(f["pass"] is False and any("抄了备忘里已有的号码" in x for x in f["reasons"]),
+          f"the to-do copying the memo's number fails ({f['reasons']})")
+    f = judged("landlord-callback", "记下了，明天给房东回电话。", todos=(dict(call, notes="问押金的事"),), log=(SYNTH_ADD,))
+    check(f["pass"] is True and any("没挂提醒" in x for x in f["flags"]),
+          f"the to-do alone passes, no reminder noted ({f['reasons']} {f['flags']})")
+    f = judged("review-pref", "<no-reply/>")
+    check(f["pass"] is True, f"the review, a preference: <no-reply/> passes ({f['reasons']})")
+    f = judged("review-pref", "记得你不吃香菜，今天点外卖注意一下。")
+    check(f["pass"] is False and any("<no-reply/>" in x for x in f["reasons"]), f"speaking up for it fails ({f['reasons']})")
+    for reply, ok, why in (("<no-reply/>", True, ""), ("<subtask>查 76 人昨晚的比赛结果，交回比分与来源</subtask>\n<no-reply/>", True, ""),
+                           ("要不要我帮你看看 76 人最近的比赛？", False, "提了建议"),
+                           ("76 人昨晚的比赛我还没查。", False, "没做成什么却开口了"),
+                           ("<subtask>查 76 人昨晚的比赛结果</subtask>\n我让子任务去查 76 人了。", False, "只派了子任务却开口了")):
+        f = judged("review-interest", reply)
+        check(f["pass"] is ok and (ok or any(why in x for x in f["reasons"])),
+              f"the review, an interest: {reply[:24]!r} {'passes' if ok else 'fails'} ({f['reasons']})")
+    f = judged("review-interest", "", stop="web_tool")
+    check(f["pass"] is True and any("浏览器" in x for x in f["flags"]), f"looking it up passes, noted ({f['flags']})")
+    f = judged("secret-wifi", "好的。", memory={"added": [], "changed": ["global_mem.txt"], "removed": []})
+    check(f["pass"] is False and any("GA 的记忆" in x for x in f["reasons"]), f"the password into memory fails ({f['reasons']})")
+    f = judged("secret-wifi", "好的，记住了。")
+    check(f["pass"] is False and any("这一轮却什么都没写下" in x for x in f["reasons"]), f"「记住了」 unwritten fails ({f['reasons']})")
+    f = judged("chat-tired", "辛苦了。", memos=[synth_memo("最近很累")], events=added, log=(SYNTH_MEMO_ADD,))
+    check(f["pass"] is False and any("不该记备忘" in x for x in f["reasons"]), f"a mood noted fails ({f['reasons']})")
+    f = judged("founding-date", "记下了。", memos=[synth_memo("公司 3 月 15 日成立")], events=added, log=(SYNTH_MEMO_ADD,))
+    check(f["pass"] is True, f"the founding date as a memo passes ({f['reasons']})")
+    tcase = next(c for c in json.loads(TODO_CASES.read_text(encoding="utf-8"))["cases"] if c["id"] == "founding-date")
+    tr = synth_run(tcase, mon, "记下了。")
+    tr["fake_state"]["memo_events"] = [{"action": "add", "memoId": "memo_dry0000000000001", "text": "公司成立日"}]
+    tf = todo_facts(tr, tcase)
+    check(tf["pass"] is True and any("写了备忘" in x for x in tf["flags"]),
+          f"the to-do suite: a memo counts as a write, noted ({tf['reasons']} {tf['flags']})")
+
+    for r in sorted(results, key=lambda r: r["id"]):
+        case_id, script = scripts[r["id"]]
+        case = cases[case_id]
+        print(f"memo {r['id']} / {r['variant']} ({script})")
+        check(r["status"] == "ok", f"run completed (status {r['status']} {r.get('error', '')[:300]})")
+        if r["status"] != "ok":
+            continue
+        check(not r["blocked"] and not r["do_calls"] and not r["canaries"],
+              f"nothing left the sandbox ({r['blocked']} {r['do_calls']} {r['canaries']})")
+        check(r.get("manual_files") == [x.name for x in manual_parts()] and "memo.md" in r["manual_files"],
+              f"the directory holds every part, memo.md among them ({r.get('manual_files')})")
+        system = r["requests"][0]["messages"][0]["content"]
+        f = memo_facts(r, case)
+        if script == "memo-cli":
+            out = str((r["calls"][1].get("result") or {}).get("stdout", ""))
+            for piece in ("listed=1", "long=2", "a memo is 1 to 100 characters once trimmed; this one is 101", "empty=2",
+                          "this one is 0", "past=2", "time_in_past: create_memo: until 2020-01-01 is before today",
+                          "baddate=2", 'until is a local date YYYY-MM-DD, got \\"明天\\"', "emptyuntil=2",
+                          "a value is required for '--until <DATE>'", "notext=2", "nochange=2",
+                          "<--text <TEXT>|--until <DATE>|--no-until>", "conflict=2",
+                          "cannot be used with '--no-until'", "unknown=3", "memo memo_nope not found", "listall=2",
+                          "unexpected argument '--all'", "updated=1", "until=1", "over=1", "listed=22", "deleted=1",
+                          "delete2=3", "Note a memo."):
+                check(piece in out, f"shell output has {piece!r}")
+            st = r.get("fake_state") or {}
+            check([e["action"] for e in st.get("memo_events") or []] == ["update", "add"] + ["add"] * 20 + ["delete"],
+                  "the record of memo writes: update, add, twenty adds, delete (none for a refused write)")
+            check(len(f["memos_new"]) == 21 and [m["id"] for m in f["memos_deleted"]] == ["memo_a1b2c3d4e5f60718"]
+                  and f["memos_new"][0].get("until") and not f["pass"]
+                  and any("删了重加" in x or "却把它删了" in x for x in f["reasons"]),
+                  f"the judge reads the memos the run left ({f['reasons']})")
+            check(f["manual"].startswith("读了（第 1 次调用）：memo.md；1 次 1 轮，"), f"the part read ({f['manual']})")
+            check("- `memo_a1b2c3d4e5f60718` " in system, "the Memo lines carry the case's memo")
+        elif script == "memo-web":
+            web = r["calls"][0]
+            check(web["name"] == "web_scan" and web["outcome"] == "fake result: no browser connected"
+                  and web["result"] == {"status": "error", "msg": NO_BROWSER_CONNECTION_MSG}
+                  and r["stop_reason"] == "final_reply", "a lookup gets GA's no-browser answer and the run goes on")
+            check(f["pass"] is True and [m["text"] for m in f["memos_new"]] == ["看你这周常问 76 人的比赛"]
+                  and f["memo_listed"] == "查了", f"the interest noted, after `memo list`, passes ({f['reasons']})")
+        else:
+            want = sched_note(case, datetime.fromisoformat(r["now"]))
+            last = r["requests"][0]["messages"][-1]["content"]
+            if not isinstance(last, str):
+                last = "\n".join(b.get("text", "") for b in last if isinstance(b, dict))
+            check(want in last and "- `memo_d4e5f60718293a4b`: 看你这周常问 76 人的比赛" in want,
+                  "the wake note is Core's, naming the new memo")
+            check(system.index("### In Hand") < system.index("### Memo") < system.index("## Galley Main Chat Entry Layer"),
+                  "the Memo lines after In Hand")
+            check(f["pass"] is True and f["no_reply"], f"<no-reply/> passes ({f['reasons']})")
 
 
 def dry_test_dispatch(results: list[dict[str, Any]], scripts: dict[tuple[str, str], str],
@@ -6864,11 +7691,12 @@ def main() -> int:
     ap.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--dry-test", action="store_true", help="verify interception, no model")
     ap.add_argument("--render-only", action="store_true", help="rebuild the .md from the .json")
-    ap.add_argument("--suite", choices=("entry", "dispatch", "wake", "schedule", "todo", "chat"), default="entry",
+    ap.add_argument("--suite", choices=("entry", "dispatch", "wake", "schedule", "todo", "chat", "memo"), default="entry",
                     help="entry: cases.json WITHOUT / WITH; dispatch: dispatch-cases.json T / C / P; "
                          "wake: wake/cases.json under the wordings of wake/wording.md; "
                          "schedule: schedule/cases.json (ticket 36); todo: todo/cases.json (ticket 41); "
-                         "chat: cases.json under today's main chat prompt, judged by chat/cases.json (ticket 60)")
+                         "chat: cases.json under today's main chat prompt, judged by chat/cases.json (ticket 60); "
+                         "memo: memo/cases.json (ticket 96)")
     ap.add_argument("--variant", default="all",
                     help="entry: without | with | both; dispatch: comma list of T,C,P; "
                          "wake: comma list of wording names; or all")
@@ -6908,9 +7736,12 @@ def main() -> int:
     wake = args.suite == "wake"
     todo = args.suite == "todo"
     chat = args.suite == "chat"
-    sched = args.suite == "schedule" or todo or chat
+    memo = args.suite == "memo"
+    sched = args.suite == "schedule" or todo or chat or memo
     sandbox_mode = dispatch and args.mode == "sandbox"
-    if todo:
+    if memo:
+        suite_files = (MEMO_CASES, MEMO_JSON, MEMO_MD, ("manual",), render_memo_md)
+    elif todo:
         suite_files = (TODO_CASES, TODO_JSON, TODO_MD, ("manual",), render_todo_md)
     elif chat:
         suite_files = (CHAT_CASES, CHAT_JSON, CHAT_MD, ("manual",), render_chat_md)
@@ -7011,7 +7842,7 @@ def main() -> int:
     for r in results:
         if r.get("request") and r["status"] == "ok":
             if sched:
-                write_composed(r, "", TODO_COMPOSED_DIR if todo else SCHED_COMPOSED_DIR)
+                write_composed(r, "", MEMO_COMPOSED_DIR if memo else TODO_COMPOSED_DIR if todo else SCHED_COMPOSED_DIR)
             elif wake:
                 write_composed(r, "", WAKE_COMPOSED_DIR)
             else:
@@ -7090,7 +7921,14 @@ def main() -> int:
             data["meta"][key] = previous_meta[key]
     if sched:
         data["meta"].update({
-            "suite": ("chat (ticket 60, rerun for tickets 63 and 64): the entry layer's cases.json under the main chat prompt of ticket 64 "
+            "suite": ("memo (ticket 96): the main chat prompt of ticket 96 (schedule/galley-prompt/, regenerated: the "
+                      "entry layer's memo sentence, \"a memo\" in the floor, memo in the write and manual lists; "
+                      "carried-1 for a carried case), the case's memos from before the segment in the \"Memo\" lines "
+                      "(memo_section's port), In Hand for its to-dos and tasks, the assistant manual's ten parts "
+                      "(memo.md new) in the state root, the to-do suite's sandbox and fake galley with ticket 95's "
+                      "memo family; a morning review's wake names its new memos in Core's words; judged on the memos, "
+                      "to-dos and reminders it wrote (memo/cases.json)" if memo else
+                      "chat (ticket 60, rerun for tickets 63 and 64): the entry layer's cases.json under the main chat prompt of ticket 64 "
                       "(schedule/galley-prompt/, carried-1 for the carried cases), the assistant manual's parts in "
                       "the state root, the to-do suite's sandbox and fake galley with nothing in it; judged only on "
                       "the to-dos and reminders set (chat/cases.json), since ticket 64 also on a reply taking back a "
