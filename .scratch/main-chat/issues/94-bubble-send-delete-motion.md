@@ -1,6 +1,6 @@
 # 94 气泡的发出与删除有动效
 
-Status: ready-for-agent
+Status: needs-dogfood
 
 来源：[主聊天 PRD](../PRD.md) 裁决 138（2026-10-26；JC：「都你推荐推进，不用切换器，直接做」）。只改 GUI 与设计文档，不上切换器，JC 在 dev 里看。
 
@@ -141,3 +141,13 @@ Status: ready-for-agent
 - 回复落地的交接还在放（240ms 内）就又发出一句、且对话不满一屏时：交接按住内容的 transform 与发出的滑动叠在同一批元素上，后来的那段盖住前面的，没处理也没看过。
 - 撤销被拒（主对话这时已经在跑）时放回与跟随同时发生：跟随在起播之前决定终点，放回的滑动之后若再有跟随，会读到带 transform 的位置，概率小，没覆盖。
 - 发出那一下的 `overflow: clip` 在 240–600ms 里也会裁掉栏左右两边伸出去的投影（交接一向如此），没在真机上找过有没有这样的东西。
+
+### 2026-10-26 主会话验收
+
+- 门禁在 worktree 里重跑（代理停手后）：`pnpm --dir gui typecheck`、`lint` 过；`CI=true pnpm --dir gui test` 211 个文件 2338 个测试全过，`TZ=UTC` 再跑一遍同样全过；`node scripts/check-docs-links.mjs` 过（474 个文件）；`git diff --check main..HEAD` 干净。
+- `vite build` 产物里有 `--ease-exit:cubic-bezier(.4, 0, 1, 1)`（Tailwind 会丢没人引用的主题变量，丢了时整套动效读不到 token、什么都不放，所以单独核了）。
+- 读过的改动：`useStickyScroll` 只多了主对话发出时在 layout 阶段的钉底（工作台的发出滚动不变）与 `startLanding` 前的放完；`useTypingBubbleHandoff` 只有互斥、从当时的不透明度淡出、相位代码挪到 `lib/typing-bubble-phase.ts`；`useRemovedTurnsAnchor` 在原来的时机先放完、再量动画要的，锚点照旧先保位；`MessageActions`、`MessageUser` 只加 `data-hover-row` 标记；`MainView` 只接线，门照旧是 `isMainChat`。
+- 文档新增 57 行扫过全角标点，0 处；diff 里没有本机路径与密钥。
+- 合入：`--ff-only` 到 main（`d04049c0`），纯 GUI，没等 `busy:0`。
+- 真机待 JC：发出时整栏滑上来与三点晚一拍、删除收回那一角与合拢（0.9 的大小）、撤销放回、停止时三点淡出、叫醒那一轮三点进出；以及上面代理列的没验证到的几条，尤其多行消息发出与输入框变矮叠在一起、长回复里删一条。
+
