@@ -421,8 +421,9 @@ look it up with the Galley CLI (search, then
 ///
 /// Ticket 96 (main chat PRD rulings 140–142): a sentence after the to-do
 /// one sends what the model learns about the user and will need later to
-/// a memo (ticket 95's `galley memo`), naming `memo.md`, where the rules
-/// are; the floor's 「记下了」 names a memo in place of the memory, where
+/// a memo (ticket 95's `galley memo`), an interest it notices in what the
+/// user keeps asking too, naming `memo.md`, where the rules are; the
+/// floor's 「记下了」 names a memo in place of the memory, where
 /// this kind of thing no longer goes; `memo` joins the write list and
 /// `memo.md` the manual list.
 fn main_chat_entry_layer(manual_dir: &str) -> String {
@@ -448,8 +449,8 @@ to finish, a lease ending), as a to-do, with a reminder when it has a date,
 and tick it off when it is done; set yourself a reminder when you promise
 to follow up. Do it unasked, but read `todos.md` in your manual before
 saying you will (it says when), and `todo list` before saying what is left.
-Note what you learn about the user that you will need later as a memo (see
-`memo.md`).
+Note what you learn about the user that you will need later as a memo,
+an interest you notice in what they keep asking too (see `memo.md`).
 Say 「记下了」 or the like only after you wrote it down this turn (a to-do, a
 reminder, a memo); if you write nothing down, do not bring up
 noting it.
@@ -1519,16 +1520,20 @@ mod tests {
     /// taught the main chat the marker, and its replies never carried
     /// one, so what it made by itself showed only as a sentence. The
     /// manual list names `unasked.md` with `todos.md` (+17). Raised
-    /// 3140 → 3286 by ticket 96 (main chat PRD rulings 140–142): +146
+    /// 3140 → 3339 by ticket 96 (main chat PRD rulings 140–142): +199
     /// bytes. A sentence after the to-do one, "Note what you learn about
-    /// the user that you will need later as a memo (see `memo.md`)." (+87,
-    /// with its break): 「我不吃香菜」 or 「我女儿今年上小学一年级」 has no CLI
-    /// write in sight, so without it the model would not open the part
-    /// where what to note and what not is. The floor's list says "a memo"
+    /// the user that you will need later as a memo, an interest you notice
+    /// in what they keep asking too (see `memo.md`)." (+140, with its
+    /// break): 「我不吃香菜」 or 「我女儿今年上小学一年级」 has no CLI write in
+    /// sight, so without it the model would not open the part where what
+    /// to note and what not is. Its first wording (+87) stopped at "as a
+    /// memo": in the memo eval's first round a fourth question about the
+    /// same team, its answer in the context, got a reply and no tool call
+    /// at all, so the interest is named here (+53, ruling 140 point 6). The floor's list says "a memo"
     /// in place of "your memory" (−5): information goes to the memos now
     /// (ruling 140). `memo` in the write list (+6) and `memo.md` in the
     /// manual list, with when to read it (+58).
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 3286;
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 3339;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {
@@ -1770,17 +1775,19 @@ mod tests {
 
     /// Ticket 96 (main chat PRD rulings 140–142): after the to-do sentence,
     /// what the model learns about the user and will need later is noted
-    /// as a memo, with the part named (one on the table, holding the rules);
+    /// as a memo, an interest it notices included, with the part named (one on the table, holding the rules);
     /// the floor before the manual list. Main chat only.
     #[test]
     fn main_chat_entry_layer_notes_what_it_learns_as_a_memo() {
         let main =
             compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
         // Single-line fragments only (CRLF on Windows).
-        assert!(main.contains(
-            "Note what you learn about the user that you will need later as a memo (see"
-        ));
-        assert!(main.contains("`memo.md`)."));
+        assert!(
+            main.contains("Note what you learn about the user that you will need later as a memo,")
+        );
+        assert!(
+            main.contains("an interest you notice in what they keep asking too (see `memo.md`).")
+        );
         assert!(crate::assistant_manual::part("memo.md").contains("## The user's memos"));
         let todo = main
             .find("`todo list` before saying what is left.")

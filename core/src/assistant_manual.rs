@@ -223,8 +223,10 @@ mod tests {
         // to wake.md, subtasks.md and authority.md, and reminders.md to
         // wake.md for stopping the morning review. Ticket 96's three:
         // todos.md to memo.md for information, memo.md to todos.md for
-        // what will end and to wake.md for what waits for the review.
-        assert_eq!(referred, 21);
+        // what will end and to wake.md for what waits for the review, and
+        // todos.md to memo.md again for a sentence that is both (the memo
+        // eval's first round: the trip went into the to-do's notes).
+        assert_eq!(referred, 22);
         assert!(part("todos.md")
             .contains("is a memo (see `memo.md`), and so is a date with nothing to do when it"));
         assert!(part("memo.md").contains("with the to-dos and reminders (see `todos.md`)."));
@@ -511,8 +513,9 @@ mod tests {
             // Information is a memo (memory until ticket 96); no tidying
             // unasked.
             "Neither holds information: an address, a flight number or a preference",
-            "be of use to raise then is not information: follow it up. Do not tidy the",
-            "(search the history if you need to), show them the list first, and note",
+            "be of use to raise then is not information: follow it up. One sentence",
+            "Do not tidy the list on your own. When the user asks you to turn what you",
+            "conversation (search the history if you need to), show them the list first,",
             // When: unasked, with a time or without.
             "Note one without being asked when the user mentions something they have",
             // When not, and list first.
@@ -1021,6 +1024,9 @@ mod tests {
             "they are in the middle of. A wish with nothing to do yet can be a memo",
             "into a memo alone.",
             "and not as a record about them (「用户说……」). What is of use beyond this",
+            // One sentence, two lifetimes, read where the to-do is noted.
+            "can be both: 「下周三去上海出差，周二提醒我订酒店」 is the to-do 「订上海的酒店」",
+            "and the memo 「下周三起在上海出差」, each with its own half (see `memo.md`).",
             "to-do (the landlord's number) is a memo instead, not copied here.",
         ] {
             assert!(todos.contains(rule), "todos.md lost: {rule}");

@@ -7456,7 +7456,8 @@ def dry_test_memo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     check(review.index("### In Hand") < review.index("### Memo") < review.index("## Galley Main Chat Entry Layer")
           and review.index("`memo_b2c3d4e5f6071829`") < review.index("`memo_c3d4e5f607182930`"),
           "the Memo lines after In Hand, oldest first")
-    check("Note what you learn about the user that you will need later as a memo (see\n`memo.md`)." in plain
+    check("Note what you learn about the user that you will need later as a memo,\nan interest you notice in what "
+          "they keep asking too (see `memo.md`)." in plain
           and "reminder, a memo); if you write nothing down, do not bring up\nnoting it." in plain
           and "write (a session, project, model, schedule, to-do or memo command), read the" in plain
           and "`memo.md` to note or\nchange what you know about the user;" in plain, "the ticket 96 entry layer")

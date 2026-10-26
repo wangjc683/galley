@@ -25,11 +25,13 @@ fill in a form for either:
 Neither holds information: an address, a flight number or a preference
 is a memo (see `memo.md`), and so is a date with nothing to do when it
 comes (the day their company was founded). What will happen on a date and
-be of use to raise then is not information: follow it up. Do not tidy the
-list on your own. When the user asks you to turn what you talked about
-into to-dos (「把最近聊的事整理成待办」), look through the conversation
-(search the history if you need to), show them the list first, and note
-them once they say yes.
+be of use to raise then is not information: follow it up. One sentence
+can be both: 「下周三去上海出差，周二提醒我订酒店」 is the to-do 「订上海的酒店」
+and the memo 「下周三起在上海出差」, each with its own half (see `memo.md`).
+Do not tidy the list on your own. When the user asks you to turn what you
+talked about into to-dos (「把最近聊的事整理成待办」), look through the
+conversation (search the history if you need to), show them the list first,
+and note them once they say yes.
 
 ### Noting a to-do
 
