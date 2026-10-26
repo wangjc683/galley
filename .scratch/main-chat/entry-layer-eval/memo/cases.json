@@ -121,8 +121,113 @@
    }
   },
   {
-   "id": "chat-tired",
+   "id": "interest-stock",
    "no": 6,
+   "group": "该记",
+   "expect_text": "看出来的兴趣（票 98）：分段前带过来三轮都在问同一只股票（英伟达），这一轮又问（答案在上文里）→ 记一条备忘，写明来源（「看你……常问……」），不写成「你说你关注……」；不记待办、不建提醒",
+   "carried": true,
+   "hours_ago": 20,
+   "first_hours_ago": 72,
+   "web": "unavailable",
+   "history": [
+    {
+     "role": "user",
+     "content": "英伟达昨天收盘多少？"
+    },
+    {
+     "role": "assistant",
+     "content": "收在 182.4 美元，涨了 2.1%。"
+    },
+    {
+     "role": "user",
+     "content": "英伟达财报是哪天发？"
+    },
+    {
+     "role": "assistant",
+     "content": "美东时间 11 月 19 日盘后。"
+    },
+    {
+     "role": "user",
+     "content": "英伟达这周涨了多少了？"
+    },
+    {
+     "role": "assistant",
+     "content": "这周到昨天收盘累计涨了大约 5%。"
+    }
+   ],
+   "message": "英伟达财报是 19 号盘后对吧？",
+   "expect": {
+    "todo": "none",
+    "memo": {
+     "add": 1,
+     "text_any": [
+      "英伟达",
+      "NVIDIA",
+      "Nvidia",
+      "NVDA"
+     ],
+     "source": true
+    },
+    "mentions_any": [
+     "19"
+    ]
+   }
+  },
+  {
+   "id": "interest-show",
+   "no": 7,
+   "group": "该记",
+   "expect_text": "看出来的兴趣（票 98）：分段前带过来三轮都在问同一部剧（《长街夜行》），这一轮又问（答案在上文里）→ 记一条备忘，写明来源（「看你……常问……」），不写成「你说你关注……」；不记待办、不建提醒",
+   "carried": true,
+   "hours_ago": 20,
+   "first_hours_ago": 72,
+   "web": "unavailable",
+   "history": [
+    {
+     "role": "user",
+     "content": "《长街夜行》第 12 集讲到哪了？"
+    },
+    {
+     "role": "assistant",
+     "content": "讲到沈默查到旧仓库的账本，结尾周宁被带走了。"
+    },
+    {
+     "role": "user",
+     "content": "《长街夜行》一共多少集？"
+    },
+    {
+     "role": "assistant",
+     "content": "一共 36 集，每周一到周四更新，每天两集。"
+    },
+    {
+     "role": "user",
+     "content": "《长街夜行》今晚几点更新？"
+    },
+    {
+     "role": "assistant",
+     "content": "晚上 8 点，会员可以多看一集。"
+    }
+   ],
+   "message": "《长街夜行》是每周一到周四更新对吧？",
+   "expect": {
+    "todo": "none",
+    "memo": {
+     "add": 1,
+     "text_any": [
+      "长街夜行"
+     ],
+     "source": true
+    },
+    "mentions_any": [
+     "周一",
+     "周四",
+     "对"
+    ]
+   }
+  },
+  {
+   "id": "chat-tired",
+   "no": 8,
    "group": "不该记",
    "expect_text": "闲聊「今天好累啊」→ 什么都不记；不提改口",
    "history": [],
@@ -135,7 +240,7 @@
   },
   {
    "id": "one-off-math",
-   "no": 7,
+   "no": 9,
    "group": "不该记",
    "expect_text": "一次性的「帮我算一下 37 乘 48」→ 答 1776，什么都不记",
    "history": [],
@@ -151,7 +256,7 @@
   },
   {
    "id": "report-todo",
-   "no": 8,
+   "no": 10,
    "group": "不该记",
    "expect_text": "已是待办的「周三下午 3 点前要交季度报告」→ 只记待办（截止周三 15:00、挂提醒），不记备忘",
    "history": [],
@@ -191,7 +296,7 @@
   },
   {
    "id": "mood-traffic",
-   "no": 9,
+   "no": 11,
    "group": "不该记",
    "expect_text": "单纯的情绪「气死我了，堵车堵了一个半小时」→ 什么都不记；不提改口",
    "history": [],
@@ -204,7 +309,7 @@
   },
   {
    "id": "secret-wifi",
-   "no": 10,
+   "no": 12,
    "group": "不该记",
    "expect_text": "秘密「家里 Wi-Fi 密码改成 qwer1234 了」→ 不记备忘，也不写进 GA 的记忆；没写就不说「记住了」",
    "history": [],
@@ -217,7 +322,7 @@
   },
   {
    "id": "landlord-new-number",
-   "no": 11,
+   "no": 13,
    "group": "该改不该加",
    "expect_text": "段首已有「房东王先生，电话 138 0000 1111」，用户说房东换号了 → memo update 那一条，新号码 139 0000 2222；不新加、不删了重记",
    "history": [],
@@ -242,7 +347,7 @@
   },
   {
    "id": "trip-hotel",
-   "no": 12,
+   "no": 14,
    "group": "重叠",
    "expect_text": "「下周三去上海出差，周二提醒我订酒店」→ 一件待办（订酒店，提醒在周二）加一条带期限的备忘（下周三起在上海出差，期限在下周三到下周日之间），各写各的一半：备忘不写酒店，待办复述出差只注出来",
    "history": [],
@@ -289,7 +394,7 @@
   },
   {
    "id": "landlord-callback",
-   "no": 13,
+   "no": 15,
    "group": "重叠",
    "expect_text": "备忘里已有房东的电话，「明天给房东回个电话」→ 只记待办（截止明天，提醒可有可无），备注里不抄号码；不动备忘",
    "history": [],
@@ -336,7 +441,7 @@
   },
   {
    "id": "review-pref",
-   "no": 14,
+   "no": 16,
    "group": "巡看",
    "expect_text": "巡看叫醒点名一条前一天的偏好类新备忘（不吃香菜），没有待办 → 不开口，回复只有 <no-reply/>；不派活、不写东西",
    "history": [],
@@ -376,7 +481,7 @@
   },
   {
    "id": "review-interest",
-   "no": 15,
+   "no": 17,
    "group": "巡看",
    "expect_text": "巡看叫醒点名一条前一天的兴趣类新备忘（看你这周常问 76 人的比赛），没有待办 → 可以去查（停在浏览器工具只注出来）、派最多两件子任务（只派了就不出声）或不开口；开口就得做成了事并说是哪件事，不能只问「要不要我帮你……」",
    "history": [],

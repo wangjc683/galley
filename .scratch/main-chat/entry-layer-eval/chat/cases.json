@@ -1,5 +1,5 @@
 {
- "_note": "票 60：入口层评测的 15 条（../cases.json，消息与上下文只写在那里）在票 60 的主对话提示词下重跑，看闲聊里会不会乱设待办或提醒。每条的 group、expect_text 与 expect（字段同 ../todo/cases.json 的 _note）；只判它设了什么，回答本身不判（run.py 的 chat_facts）。票 63：personal-surgery 从两可改成判定（裁决 115 第 3 条），该设次日的问候并在回复里说出来；有 follow_up 的用例，「回复没说出」算进判定。票 64：不该设的 12 条加了 expect.no_retract（最终回复不能提改口，见 ../todo/cases.json 的 _note）。",
+ "_note": "票 60：入口层评测的 15 条（../cases.json，消息与上下文只写在那里）在票 60 的主对话提示词下重跑，看闲聊里会不会乱设待办或提醒。每条的 group、expect_text 与 expect（字段同 ../todo/cases.json 的 _note）；只判它设了什么，回答本身不判（run.py 的 chat_facts）。票 63：personal-surgery 从两可改成判定（裁决 115 第 3 条），该设次日的问候并在回复里说出来；有 follow_up 的用例，「回复没说出」算进判定。票 64：不该设的 12 条加了 expect.no_retract（最终回复不能提改口，见 ../todo/cases.json 的 _note）。票 98：expect.memo 是对备忘的判定，写法同 ../memo/cases.json 的 _note（optional 是可以记一条、记了只注出来），只对手册里有 memo.md 的运行（票 96 起）判，票 96 之前的运行没有这个命令，照旧不判。",
  "cases": {
   "chat-tired": {
    "group": "闲聊",
@@ -109,8 +109,9 @@
   },
   "carry-older": {
    "group": "两可",
-   "expect_text": "两可：只记录它设没设、回复原文，不判",
+   "expect_text": "两可：只记录它设没设、回复原文，不判；票 98：去成都可以记成一条备忘",
    "expect": {
+    "memo": "optional",
     "record_only": true
    }
   },
@@ -140,8 +141,9 @@
   },
   "personal-surgery": {
    "group": "该跟进",
-   "expect_text": "「我妈明天做手术，有点紧张」（票 60 两可，票 63 判定：照票 60 的做法算过）→ 安慰之后设次日问一声（它自己的提醒，或待办挂提醒），并在回复里说出来",
+   "expect_text": "「我妈明天做手术，有点紧张」（票 60 两可，票 63 判定：照票 60 的做法算过）→ 安慰之后设次日问一声（它自己的提醒，或待办挂提醒），并在回复里说出来；票 98：妈妈做手术可以记成一条备忘，记了只注出来",
    "expect": {
+    "memo": "optional",
     "follow_up": {
      "via": "either",
      "prefer": "assistant",

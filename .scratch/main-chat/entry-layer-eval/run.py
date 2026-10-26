@@ -1072,6 +1072,10 @@ if cmd == ("memo", "update"):
     text = memo_text(text_flag("text"), "update_memo") if "text" in flags else m["text"]
     until = (memo_until(flags["until"], "update_memo") if "until" in flags
              else None if "no-until" in flags else m.get("until"))
+    if text == m["text"] and until == m.get("until"):
+        # Ticket 98: an update that changes nothing is no write (Core's
+        # update_memo): nothing moves, nothing is recorded.
+        out(memo_write(m))
     m["text"] = text
     if until:
         m["until"] = until
@@ -2733,6 +2737,7 @@ UNTIL="$(date -v+3d +%Y-%m-%d)"
 "$GALLEY" memo update memo_nope --text=x --supervisor=galley-assistant; echo "unknown=$?"
 "$GALLEY" memo list --all; echo "listall=$?"
 "$GALLEY" memo update memo_a1b2c3d4e5f60718 --text="房东王先生，电话 139 0000 2222" --supervisor=galley-assistant --reason="new number" | grep -c "139 0000 2222" | sed 's/^/updated=/'
+"$GALLEY" memo update memo_a1b2c3d4e5f60718 --text="  房东王先生，电话 139 0000 2222 " --supervisor=galley-assistant >/dev/null; echo "same=$?"
 "$GALLEY" memo add "下周三起在上海出差" --until="$UNTIL" --supervisor=galley-assistant --reason="user mentioned it" | grep -c '"until"' | sed 's/^/until=/'
 for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do "$GALLEY" memo add "$(python3 -c "print('长' * 100)")" --supervisor=galley-assistant > "$TMPDIR/last-memo.json"; done
 grep -c overLimit "$TMPDIR/last-memo.json" | sed 's/^/over=/'
@@ -5282,7 +5287,7 @@ def memory_changed(r: dict[str, Any]) -> list[str]:
     return sorted(set(mc.get("added") or []) | set(mc.get("changed") or []) | set(mc.get("removed") or []))
 
 
-def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
+def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True) -> dict[str, Any]:
     """What a to-do run did, and whether it met the case's expectations
     (todo/cases.json `expect`). Commands from the fake galley's log; to-dos
     and tasks made, changed, ticked off and cancelled from its final
@@ -5707,7 +5712,18 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     # Ticket 96: a memo written is a write too (the fake galley's record of
     # them); outside the memo suite it is only noted.
     memo_events = st.get("memo_events") or []
-    if memo_events and "memo" not in exp:
+    # Ticket 98: the to-do and chat suites' `expect.memo` (as the memo
+    # suite's, "optional" may note one), judged only for a run whose manual
+    # had the memos' part (ticket 96 on): the runs before it never had the
+    # command. Elsewhere a memo written is only noted.
+    judged_memos = (judge_memos and exp.get("memo") is not None
+                    and "memo.md" in (r.get("manual_files") or []))
+    if judged_memos:
+        mj = memo_judgement(r, exp["memo"], now)
+        reasons += mj["reasons"]
+        if exp["memo"] == "optional" and (mj["new"] or mj["changed"]):
+            flags.append("记了备忘（也对）：" + "、".join(f"「{m['text']}」" for m in mj["new"] + mj["changed"]))
+    elif memo_events and judge_memos:
         flags.append("写了备忘：" + "、".join(f"{e['action']}「{e['text']}」" for e in memo_events))
     wrote = bool([t for t in todos if t["id"] not in fx_todos] or [t for t in tasks if t["id"] not in fx_tasks]
                  or [t for t in todos if t["id"] in fx_todos and t != fx_todos[t["id"]]]
@@ -5969,30 +5985,14 @@ def memo_gist(m: dict[str, Any]) -> str:
     return f"`{m['id']}` {m['text']}" + (f"（到 {m['until']}）" if m.get("until") else "")
 
 
-def memo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
-    """Ticket 96: what a memo run did and whether it met the case's
-    expectations (memo/cases.json `expect`). The to-dos and reminders are
-    judged by todo_facts on the to-do suite's keys; the memos from the fake
-    galley's final memos against its fixture, and its record of memo writes:
-    `memo` is "none" (no memo noted, changed or deleted), "any" (only
-    recorded), {"add": 1, …} (exactly one memo noted, no other memo
-    changed or deleted) or {"update": <id>, …} (that memo changed, none
-    added or deleted); with `text_any` (its text has one of these words),
-    `text_re`, `digits` (its digits hold these), `forbid_any`, `source`
-    (an interest says where it comes from), `until` (its last day in this
-    window, or null for none). Every memo written is checked for a record
-    about the user (MEMO_RECORD_RE) and for --supervisor=galley-assistant.
-    `todo_forbid_digits`: the to-do noted does not copy this number;
-    `todo_flag_any`: words in the to-do only noted; `reminder_weekday`: the
-    to-do's reminder falls on that ISO weekday; `review_memo`: the morning
-    review woken for a memo, quiet (nothing, or at most `subtasks_max`
-    subtasks) or with something done it names, never an offer;
-    `no_memory`: GA's memory not written."""
-    f = todo_facts(r, case)
-    now = datetime.fromisoformat(r["now"])
-    case = clock_case(case, now)
-    exp = case["expect"]
-    tz = now.tzinfo
+def memo_judgement(r: dict[str, Any], want: Any, now: datetime) -> dict[str, Any]:
+    """Ticket 96 (shared since ticket 98): what a run did to the memos, from
+    the fake galley's final memos against its fixture and its record of memo
+    writes, judged against `want` (an `expect.memo`, memo/cases.json
+    `_note`; "optional" as "any"): the memos noted, changed and deleted, the
+    record of writes, and the reasons it fails. Every memo written is
+    checked for a record about the user and every memo write for
+    --supervisor=galley-assistant."""
     st = r.get("fake_state") or {}
     fx_memos = {m["id"]: m for m in r.get("fixture_memos") or []}
     after = st["memos"] if st.get("memos") is not None else list(fx_memos.values())
@@ -6003,20 +6003,18 @@ def memo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     deleted = [m for mid, m in fx_memos.items() if mid not in after_by_id]
     log = [c.get("argv") or [] for c in r.get("galley_log") or []]
     names = [cli_name(a) for a in log]
-    reasons = list(f["reasons"])
-    flags = list(f["flags"])
+    reasons: list[str] = []
     for a in log:
         if cli_name(a) in MEMO_WRITES and parse_cli(a)[1].get("supervisor") != "galley-assistant":
             reasons.append(f"{cli_name(a)} 没带 --supervisor=galley-assistant")
             break
-    want = exp.get("memo", "none")
     targets: list[dict[str, Any]] = []
     if want == "none":
         if new or changed or deleted:
             reasons.append("不该记备忘却" + "、".join(
                 [f"记了「{m['text']}」" for m in new] + [f"改了「{m['text']}」" for m in changed]
                 + [f"删了「{m['text']}」" for m in deleted]))
-    elif want == "any":
+    elif want in ("any", "optional"):
         pass
     elif "add" in want:
         if len(new) != want["add"]:
@@ -6068,6 +6066,38 @@ def memo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     for m in new + changed:
         if MEMO_RECORD_RE.search(m["text"]):
             reasons.append(f"写成了关于用户的记录：「{m['text']}」")
+    return {"reasons": reasons, "new": new, "changed": changed, "deleted": deleted, "events": events,
+            "names": names}
+
+
+def memo_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
+    """Ticket 96: what a memo run did and whether it met the case's
+    expectations (memo/cases.json `expect`). The to-dos and reminders are
+    judged by todo_facts on the to-do suite's keys; the memos from the fake
+    galley's final memos against its fixture, and its record of memo writes:
+    `memo` is "none" (no memo noted, changed or deleted), "any" (only
+    recorded), {"add": 1, …} (exactly one memo noted, no other memo
+    changed or deleted) or {"update": <id>, …} (that memo changed, none
+    added or deleted); with `text_any` (its text has one of these words),
+    `text_re`, `digits` (its digits hold these), `forbid_any`, `source`
+    (an interest says where it comes from), `until` (its last day in this
+    window, or null for none). Every memo written is checked for a record
+    about the user (MEMO_RECORD_RE) and for --supervisor=galley-assistant.
+    `todo_forbid_digits`: the to-do noted does not copy this number;
+    `todo_flag_any`: words in the to-do only noted; `reminder_weekday`: the
+    to-do's reminder falls on that ISO weekday; `review_memo`: the morning
+    review woken for a memo, quiet (nothing, or at most `subtasks_max`
+    subtasks) or with something done it names, never an offer;
+    `no_memory`: GA's memory not written."""
+    f = todo_facts(r, case, judge_memos=False)
+    now = datetime.fromisoformat(r["now"])
+    case = clock_case(case, now)
+    exp = case["expect"]
+    tz = now.tzinfo
+    j = memo_judgement(r, exp.get("memo", "none"), now)
+    new, changed, deleted, events, names = j["new"], j["changed"], j["deleted"], j["events"], j["names"]
+    reasons = list(f["reasons"]) + j["reasons"]
+    flags = list(f["flags"])
     made = f["made_todos"]
     for t in made:
         blob = (t.get("title") or "") + " " + (t.get("notes") or "")
@@ -7287,8 +7317,13 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
                   f"「记下了」 with nothing written fails; a run that writes nothing leaves memory as it was "
                   f"({f['reasons']} {r.get('memory_changes')})")
         elif r["id"] == "todo-founding-memory":
-            check(f["pass"] is True and f["memory_changed"] == ["global_mem.txt"] and not f["memory_writes"]
-                  and any("写了记忆" in x for x in f["flags"]),
+            # Since ticket 98 the founding date is a memo once the manual has
+            # memo.md (this run's does), so the memory line alone fails on
+            # that; what this checks is that it counts as written.
+            check(f["memory_changed"] == ["global_mem.txt"] and not f["memory_writes"]
+                  and any("写了记忆" in x for x in f["flags"])
+                  and not any("这一轮却什么都没写下" in x for x in f["reasons"])
+                  and f["reasons"] == ["该记 1 条备忘，记了 0 条"],
                   f"a memory line its own code wrote counts as written ({f['reasons']} {f['memory_changed']})")
         elif r["id"] == "todo-wake-offer":
             check("What you noted when you set it:\n<<<\n问问 offer 结果\n>>>\nAct on it now: tell the user what is of "
@@ -7469,8 +7504,8 @@ def dry_test_memo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     check(review.index("### In Hand") < review.index("### Memo") < review.index("## Galley Main Chat Entry Layer")
           and review.index("`memo_b2c3d4e5f6071829`") < review.index("`memo_c3d4e5f607182930`"),
           "the Memo lines after In Hand, oldest first")
-    check("Note what you learn about the user that you will need later as a memo,\nan interest you notice in what "
-          "they keep asking too (see `memo.md`)." in plain
+    check("Note what you learn about the user that you will need later as a memo;\nonce they have asked about the "
+          "same thing three times (a team, a stock),\nnote it as an interest (see `memo.md`)." in plain
           and "reminder, a memo); if you write nothing down, do not bring up\nnoting it." in plain
           and "write (a session, project, model, schedule, to-do or memo command), read the" in plain
           and "`memo.md` to note or\nchange what you know about the user;" in plain, "the ticket 96 entry layer")
@@ -7569,6 +7604,45 @@ def dry_test_memo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     check(f["pass"] is False and any("不该记备忘" in x for x in f["reasons"]), f"a mood noted fails ({f['reasons']})")
     f = judged("founding-date", "记下了。", memos=[synth_memo("公司 3 月 15 日成立")], events=added, log=(SYNTH_MEMO_ADD,))
     check(f["pass"] is True, f"the founding date as a memo passes ({f['reasons']})")
+    # Ticket 98: the two new interest cases, judged as interest-team.
+    for case_id, text, ok in (("interest-stock", "看你这周常问英伟达的股价和财报", True),
+                              ("interest-stock", "关注英伟达股价", False),
+                              ("interest-show", "看你这几天常问《长街夜行》", True)):
+        f = judged(case_id, "对，19 号盘后，每周一到周四更新。", memos=[synth_memo(text)], events=added,
+                   log=(SYNTH_MEMO_ADD,))
+        check(f["pass"] is ok, f"{case_id}: 「{text}」 {'passes' if ok else 'fails'} ({f['reasons']})")
+    # Ticket 98: the to-do and chat suites judge `expect.memo` only for a
+    # run whose manual had memo.md.
+    tcases_all = {c["id"]: c for c in json.loads(TODO_CASES.read_text(encoding="utf-8"))["cases"]}
+    knew = [x.name for x in manual_parts()]
+
+    def todo_judged(case_id: str, reply: str, memos: list[dict[str, Any]] | None = None,
+                    manual: list[str] | None = None) -> dict[str, Any]:
+        r = synth_memo_run(tcases_all[case_id], mon, reply, memos=memos,
+                           events=added if memos else (), log=(SYNTH_MEMO_ADD,) if memos else ())
+        r["manual_files"] = manual if manual is not None else knew
+        return todo_facts(r, tcases_all[case_id])
+
+    f = todo_judged("founding-date", "好的，2019 年 11 月 20 日。")
+    check(f["pass"] is False and any("该记 1 条备忘，记了 0 条" in x for x in f["reasons"]),
+          f"to-do suite, founding date: no memo fails once the manual has memo.md ({f['reasons']})")
+    f = todo_judged("founding-date", "记下了。", memos=[synth_memo("公司 2019 年 11 月 20 日成立")])
+    check(f["pass"] is True, f"to-do suite, founding date as a memo passes ({f['reasons']})")
+    f = todo_judged("founding-date", "好的，2019 年 11 月 20 日。", manual=["todos.md", "wake.md"])
+    check(f["pass"] is True, f"to-do suite, a run from before memos is judged as before ({f['reasons']})")
+    f = todo_judged("guitar", "好呀。", memos=[synth_memo("想学吉他")])
+    check(f["pass"] is True and any("记了备忘（也对）" in x for x in f["flags"]),
+          f"to-do suite, guitar: a memo is fine, noted ({f['reasons']} {f['flags']})")
+    f = todo_judged("guitar", "好呀。", memos=[synth_memo("用户想学吉他")])
+    check(f["pass"] is False and any("关于用户的记录" in x for x in f["reasons"]),
+          f"to-do suite: a memo written as a record about the user fails there too ({f['reasons']})")
+    ccases_all = {c["id"]: c for c in chat_cases()}
+    cr = synth_memo_run(ccases_all["carry-older"], mon, "好，玩得开心。", memos=[synth_memo("下周去成都")],
+                        events=added, log=(SYNTH_MEMO_ADD,))
+    cr["manual_files"] = knew
+    cf = chat_facts(cr, ccases_all["carry-older"])
+    check(cf["pass"] is None and any("也对" in x for x in cf["flags"]),
+          f"chat suite, a two-sided case: recorded, the memo noted ({cf['flags']})")
     tcase = next(c for c in json.loads(TODO_CASES.read_text(encoding="utf-8"))["cases"] if c["id"] == "founding-date")
     tr = synth_run(tcase, mon, "记下了。")
     tr["fake_state"]["memo_events"] = [{"action": "add", "memoId": "memo_dry0000000000001", "text": "公司成立日"}]
@@ -7597,12 +7671,13 @@ def dry_test_memo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
                           "a value is required for '--until <DATE>'", "notext=2", "nochange=2",
                           "<--text <TEXT>|--until <DATE>|--no-until>", "conflict=2",
                           "cannot be used with '--no-until'", "unknown=3", "memo memo_nope not found", "listall=2",
-                          "unexpected argument '--all'", "updated=1", "until=1", "over=1", "listed=22", "deleted=1",
+                          "unexpected argument '--all'", "updated=1", "same=0", "until=1", "over=1", "listed=22", "deleted=1",
                           "delete2=3", "Note a memo."):
                 check(piece in out, f"shell output has {piece!r}")
             st = r.get("fake_state") or {}
             check([e["action"] for e in st.get("memo_events") or []] == ["update", "add"] + ["add"] * 20 + ["delete"],
-                  "the record of memo writes: update, add, twenty adds, delete (none for a refused write)")
+                  "the record of memo writes: update, add, twenty adds, delete (none for a refused write, "
+                  "none for an update that changes nothing)")
             check(len(f["memos_new"]) == 21 and [m["id"] for m in f["memos_deleted"]] == ["memo_a1b2c3d4e5f60718"]
                   and f["memos_new"][0].get("until") and not f["pass"]
                   and any("删了重加" in x or "却把它删了" in x for x in f["reasons"]),
