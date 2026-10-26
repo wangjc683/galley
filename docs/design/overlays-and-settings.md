@@ -54,7 +54,7 @@ Scheduled Tasks 从中档提到内容工作台档——palette 长出全文命�
   420px 宽、`bg-elevated`；不放 X，关闭走「取消」与 Esc（见上节）。
 - 「取消」默认聚焦，回车不会误触执行；确认键在它右边。
 - 正文写全删什么（例：渠道的解除接入，见「Channels」）；正文是块，可以放段落与列表。
-- 主对话里删一条消息不弹确认，用撤销提示条（[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 85，票 38；推翻裁决 83 的「只删一条、标题已说全时确认框可以没有正文」：JC 真机嫌它像正文被删了、空间浪费）：气泡立刻藏起，提示条给 5 秒「撤销」，走掉才真删，见 [conversation](./conversation.md)「助手的对话」的「消息菜单」与 [onboarding-and-cards](./onboarding-and-cards.md) 的提示条。`ConfirmActionDialog` 的正文仍可省略，现在没有调用方这样用。
+- 主对话里删一条消息不弹确认，用撤销提示条（[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 85，票 38；推翻裁决 83 的「只删一条、标题已说全时确认框可以没有正文」：JC 真机嫌它像正文被删了、空间浪费）：气泡收回自己那一角藏起、空位合拢（裁决 138，票 94），提示条给 5 秒「撤销」，走掉才真删，见 [conversation](./conversation.md)「助手的对话」的「消息菜单」与 [onboarding-and-cards](./onboarding-and-cards.md) 的提示条。`ConfirmActionDialog` 的正文仍可省略，现在没有调用方这样用。
 
 **做了收不回的，用长按确认**（2026-10-14，[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 59，票 15；
 目前只有「重置主对话」用）：确认键换成一颗要按住 5 秒的按钮（`ui/hold-to-confirm-button.tsx`；时长是
