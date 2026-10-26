@@ -752,7 +752,8 @@ dogfooded by JC in dev:
 - GA baseline `b70079d` -> `a9a36b4` (audited 2026-10-26,
   [devlog](./devlog/2026-10-26-ga-upstream-upgrade-b70079d-to-a9a36b4.md)):
   `web_execute_js` no longer ends the run on a non-string script, and the
-  DSML retry also catches an unclosed marker. Not dogfooded in dev.
+  DSML retry also catches an unclosed marker. One browser task passed in
+  dev (2026-10-26); the DeepSeek case was not run.
 
 **Owed from the `v0.7.0` smoke** (JC approved publish after part of it,
 2026-10-23; the plan and results are in the release devlog):

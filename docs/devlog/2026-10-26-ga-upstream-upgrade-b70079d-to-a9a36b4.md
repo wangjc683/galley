@@ -76,12 +76,16 @@ Galley 没有耦合：`WorkbenchHandler` 只把 `no_tool` 经 `dispatch` 转给�
 - 打包 Python 探针（`python -B`，不花额度）：上面两张表。
 - 没有 Rust 改动，cargo 没跑：Core 用 `include_str!` 嵌入 `managed-ga/manifest.json`，这次只改了 `upstream` 块的值。
 
-## SOP 第 8 步：待在 tauri dev 里走
+## SOP 第 8 步：在 tauri dev 里走
 
-本次没跑。两处都是引擎在异常输入下的兜底，正常路径不变；要在 dev 里看，重点是：
+两处都是引擎在异常输入下的兜底，正常路径不变。
 
-1. 内置，桌面：做一个用浏览器的多步任务，执行 JS 的步骤正常出结果。
-2. 内置，桌面：用 DeepSeek 预设做一个多步任务，最终回答里没有 `｜DSML｜` 原文。
+1. **内置，桌面，浏览器多步任务：过了**（10-26，JC 同意后主会话用 CLI 在 dev 里发，默认模型，Vivaldi 扩展连着 dev 的浏览器桥）。
+   runner 12:39:50 起，晚于重建 `ga.py` 的 12:23:30，加载的是新 payload。任务是只读的四步：开 example.com、用 JS 读标题与链接数、点唯一的链接、用 JS 读新页面标题与网址。
+   9 步跑完，`lastExit: CURRENT_TASK_DONE`：`web_execute_js` 5 次、`web_scan` 2 次。第一次 `tabs.create` 的脚本尾巴多了一个字，JS 报语法错误，
+   模型自己改正重试，这是原来就有的报错回给模型的路径。答案与页面一致（Example Domain、1 个链接、Example Domains、`https://www.iana.org/help/example-domains`）。
+   5 次的 `script` 都是字符串，新加的非字符串分支没被触发，这一轮验的是正常路径没被改坏。测试会话事后已永久删除。
+2. 内置，桌面：用 DeepSeek 预设做一个多步任务，最终回答里没有 `｜DSML｜` 原文。没跑；漏标签本来就少见，跑一轮也不一定能复现。
 
 ## 起源纪律
 
