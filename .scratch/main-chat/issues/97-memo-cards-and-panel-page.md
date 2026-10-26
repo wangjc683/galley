@@ -1,6 +1,6 @@
 # 97 备忘的卡片与面板页：回复下的备忘卡片、面板 header 两个页签、「备忘」页
 
-Status: ready-for-agent（等票 95 合入 main 后开工）
+Status: ready-for-agent
 
 来源：[主聊天 PRD](../PRD.md) 裁决 140、142 第 5 条（2026-10-26，主对话的备忘；面板 JC：「3，甲」，文字稿 JC：「4，暂无」；最后 JC：「按你建议推进」）；devlog [主对话的备忘](../../../docs/devlog/2026-10-26-main-chat-memo.md)。依赖票 [95](./95-memo-core-and-cli.md)（IPC 命令、`gui/src/types/ipc.ts` 的类型、`memos:changed` 事件）。与票 96（手册与评测）同时在跑，不碰同一处。不上切换器：JC 定了先写文字稿，本票照文字稿直接做。
 
@@ -47,6 +47,12 @@ Status: ready-for-agent（等票 95 合入 main 后开工）
 4. **文案**：中英两套（`gui/src/i18n/locales/`），照 `docs/copy-language-guidelines.md`；新增的中文用全角标点。页签名「待办」「备忘」；卡片三种前缀；期限「到 {日子}」；删除菜单与撤销条照待办现有的写法。重置主对话的确认文案若列了会清掉什么，补上「备忘」（票 95 的回报会说有没有）。
 5. **设计文档**：`docs/design/conversation.md`「待办面板」一节加页签与「备忘」页的规则（写清没选的乙、丙与理由，链裁决 142），「待办卡片」后面加「备忘卡片」一节；`docs/design/overlays-and-settings.md` 里讲待办面板与 ⌘K 的那几处，有要补的补（⌘K 不加新项）。
 6. **测试**：vitest 覆盖分组与排序、期限的显示、点正文的跳转目标与没有出处时不是按钮、删除与撤销、空状态、页签默认与从卡片打开时在「备忘」、卡片三种文字与能不能点、卡片排在待办卡片后面。静态渲染测试读不到 store 里塞的值（renderToStaticMarkup 下 zustand 读初始状态），照现有面板测试的 mock 写法。
+
+## 票 95 合入后补（主会话）
+
+- 票 95 已合入 main（`64d1489e`、`4d78db86`）。IPC 命令名与字段在票 95 的 Comments「实现报告」第 6 条。
+- 票 95 把备忘的 Tauri 类型放进了 `gui/src/types/ipc.ts`（单独一节、没有 `kind` 字段，漂移检查不管它）；待办的 Tauri 类型其实在 `gui/src/lib/assistant-todo.ts`。照待办的放法挪到 `gui/src/lib/` 下（如 `memo.ts`）更一致，你定，挪了就删掉 `ipc.ts` 里那一节。
+- 重置主对话的确认里「会删除」的清单（`resetMainChat.deletes`）没有备忘，补一行，如「备忘里它记下的关于你的事」（中英两套）。
 
 ## 别动
 
