@@ -488,6 +488,26 @@ Core 在「In Hand」的三组之后加了第四组「Follow-ups the user turned
 - **用量**：30 次运行（第 1 遍 15 次 44 次模型调用，第 2 遍 15 次 46 次），共 90 次模型调用；`--dry-test` 不连模型。
 - **没测到的**：改后的措辞每条只跑了一遍；interest-team 改了一次仍然不过，原因没有再验证；「同一件事再说一次、没有新内容」时会不会去 `memo update`（每次 update 都会让它在第二天的巡看里再醒一次）没有用例；巡看为兴趣醒之后真去查了、查到东西时怎么开口，沙盒里看不到。
 
+### 票 98：看出来的兴趣（2026-10-26，gpt-6.1-sol，推理强度 high）
+
+票 96 的 interest-team 两份措辞都没记成（模型的注意力在「上文的赛程靠不靠得住」）。票 98 选了给一个看得见的判据：入口层那句改成「Note what you learn about the user that you will need later as a memo; once they have asked about the same thing three times (a team, a stock), note it as an interest (see `memo.md`).」（3339 → 3383 字节），`memo.md`「What to note」的兴趣一条写同样的判据（一支球队、一只股票、一部剧、一个地方），「一件事一条」那段改成同一件在那里就留着、有变化才 `memo update`（同票 98 的 Core：原样的 update 不算写，不再让巡看第二天醒）。不在 Core 里加计数。
+
+- **跟着换的输入**：`schedule/galley-prompt/` 两份照「怎么跑」的办法重新生成（只差入口层那一句）。`memo/cases.json` 加两条同类用例：interest-stock（分段前带过来三轮问英伟达，这一轮问财报是不是 19 号盘后）、interest-show（三轮问《长街夜行》，这一轮问是不是每周一到周四更新），答案都在上文里，`web: unavailable`。假 CLI 的 `memo update` 照 Core 改：正文（去首尾空白）与期限都没变时不写、不记。
+- **判定跟着改的**：`memo_facts` 的备忘判法抽成 `memo_judgement`，待办、闲聊两套也用它判 `expect.memo`（见那两节的票 98 一条）。
+- **只跑了这几条**（第 3、4 遍）：三条兴趣各两遍，trip-hotel 两遍，pref-cilantro 一遍，共 9 次运行、39 次模型调用（18:39 开跑），9 次全过。
+
+| 用例 | 第 3 遍 | 第 4 遍 | 记了什么 |
+| --- | --- | --- | --- |
+| interest-team | 过 | 过 | 「看你最近几次问76人的比赛和排名，关注费城76人。」「看你这几次常问费城76人的赛果、赛程和排名，关注这支球队。」 |
+| interest-stock | 过 | 过 | 「最近持续关注英伟达（NVDA），这几次常问股价、周涨幅和财报日期。」「关注英伟达（NVDA）的股价表现和财报时间，这几天多次问起。」 |
+| interest-show | 过 | 过 | 「看你最近连续问起《长街夜行》，你在关注这部剧。」「最近在关注《长街夜行》，这几次常问剧情、集数和更新安排。」 |
+| trip-hotel | 过 | 过 | 两遍都是待办「订上海的酒店」（11 月 3 日上午 9 点提醒，备注空）加备忘「11月4日（周三）起在上海出差」到 11 月 6 日 |
+| pref-cilantro | 过 | — | 「不吃香菜」 |
+
+- **兴趣**：六遍都先读 `memo.md`、先 `memo list` 再记一条，正文都写明了是从哪几次问里看出来的；回复本身照旧答上文的问题。
+- **另记**：三条兴趣的回复都说上文那句「当时没核实」（「那条赛程当时没有核实」「先别把 19 号当作确定日期」），票 96 的两遍也是这样：上文里助手的回答没有工具调用的痕迹，模型就不认它。与备忘无关，没改。
+- **没测到的**：别的 12 条用例这次没跑；「同一件事又说一遍、没有新内容」时模型会不会还去 `memo update`，没有用例（Core 那边原样 update 已不算写）。
+
 ## 安全措施
 
 - 拦截点在 GA 的工具分发：worker 把 `agentmain` 里的 `GenericAgentHandler` 换成子类（runner 自己装处理器子类用的也是这个接口 `GaSession.install_handler`）。子类的 `dispatch` 遇到任何真实工具就记录并返回 `should_exit`，一次模型调用后整个运行结束；只有 GA 自己判断最终回答的 `no_tool`（只读回复文本）和格式错误的重试提示 `bad_json` 走原路。子类上除 `do_no_tool` 外的所有 `do_*` 方法都换成一调用就报错的版本，作为第二道保险。
