@@ -65,7 +65,8 @@ export interface TypingBubbleNow {
  * an earlier page or a message put back after a delete never hand off:
  * the round was not just live, or it still is. A stop or an error
  * leaves nothing to grow; nor does a reply that said nothing
- * (`<no-reply/>`): the typing bubble, if it was up, just goes. A woken
+ * (`<no-reply/>`): the typing bubble, if it was up, fades where it
+ * stood (ruling 138, hooks/useBubbleMotion.ts), no hand-off. A woken
  * round whose dots were not up at the landing still hands off: its
  * bubble grows from a typing bubble's box at its own corner
  * (hooks/useTypingBubbleHandoff.ts).

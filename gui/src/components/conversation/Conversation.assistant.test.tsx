@@ -374,7 +374,9 @@ describe("the assistant's conversation: the row under your bubble", () => {
     expect(tags[2]).toContain('aria-haspopup="menu"');
     // 2px apart, as on a reply's bar.
     const chips = row.slice(row.indexOf(CHIP_ROW));
-    expect(chips).toContain('<div class="flex items-center gap-0.5">');
+    expect(chips).toContain(
+      '<div data-hover-row="" class="flex items-center gap-0.5">',
+    );
     // Every bubble of yours has one, your answer to its question too.
     expect(count(html, CHIP_ROW)).toBe(5);
   });
@@ -430,7 +432,9 @@ describe("the assistant's conversation: the row under your bubble", () => {
     const row = rowOf(html, "帮我排个行程");
     expect(chipTags(row).map(label)).toEqual([words.copy]);
     expect(row).not.toContain(zhCopy.common.more);
-    expect(row).not.toContain('<div class="flex items-center gap-0.5">');
+    expect(row).not.toContain(
+      '<div data-hover-row="" class="flex items-center gap-0.5">',
+    );
   });
 
   it("makes the 30px under your bubble part of its hover region, in both conversations (ruling 109)", () => {

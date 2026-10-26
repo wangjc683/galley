@@ -36,6 +36,7 @@ import { TodoCards } from "@/components/conversation/TodoCards";
 import { ThinkingPreview } from "@/components/conversation/ThinkingPreview";
 import { UserQuestionRail } from "@/components/conversation/UserQuestionRail";
 import { useActiveMessages } from "@/hooks/useActiveSession";
+import { useBubbleMotion } from "@/hooks/useBubbleMotion";
 import { useEarlierTurns } from "@/hooks/useEarlierTurns";
 import { useRemovedTurnsAnchor } from "@/hooks/useRemovedTurnsAnchor";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
@@ -550,6 +551,16 @@ function MainViewContent({
     scrollContainerRef,
     handoff,
   });
+  // The rest of a message's coming and going (ruling 138, ticket 94):
+  // your send slides the conversation up, the typing bubble fades in
+  // and out when nothing grows out of it. After the hand-off, which
+  // claims the typing bubble's going when it plays.
+  useBubbleMotion({
+    enabled: isMainChat,
+    sessionId: activeSessionId,
+    live: typingFrameNow.live,
+    scrollContainerRef,
+  });
   // Earlier pages of the conversation: read near the top, prepended
   // without moving what is on screen. See useEarlierTurns.
   useEarlierTurns({
@@ -559,10 +570,11 @@ function MainViewContent({
     prependedTurns,
   });
   // A deleted message leaves (and one put back returns) without moving
-  // what is on screen.
+  // what is on screen; in the main chat the way there moves (ruling 138).
   useRemovedTurnsAnchor({
     sessionId: activeSessionId,
     scrollContainerRef,
+    animate: isMainChat,
   });
 
   // Unread-final-answer tracking for the scroll-to-bottom button's

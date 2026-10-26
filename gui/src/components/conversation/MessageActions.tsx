@@ -192,6 +192,8 @@ export function MessageActions({
       "pointer-events-none opacity-0 group-hover/answer:pointer-events-auto group-hover/answer:opacity-100";
   return (
     <div
+      // A deleted reply's leaving copy hides it (lib/bubble-motion-play).
+      data-hover-row=""
       className={cn(
         "mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1",
         hidden,

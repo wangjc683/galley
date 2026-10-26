@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 
+import { settleBubbleMotion } from "@/lib/bubble-motion";
 import {
   captureScrollAnchor,
   holdScrollAnchor,
@@ -92,6 +93,8 @@ export function useEarlierTurns({
       const before = prev.byId[sessionId]?.prependedTurns ?? 0;
       if (now <= before) return;
       const container = scrollContainerRef.current;
+      // A motion of ruling 138 still moving rows would skew the anchor.
+      if (container) settleBubbleMotion(container);
       pendingSnapshot.current = container
         ? {
             anchor: captureScrollAnchor(container),

@@ -150,7 +150,7 @@ describe("the assistant's reply bar", () => {
     const markup = reply({ open: true });
     expect(barTag(markup)).not.toContain("opacity-0");
     expect(barTag(markup)).toBe(
-      '<div class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">',
+      '<div data-hover-row="" class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">',
     );
     const process = buttonTags(markup)[3];
     expect(label(process)).toBe(zhCopy.conversation.foldCollapse);

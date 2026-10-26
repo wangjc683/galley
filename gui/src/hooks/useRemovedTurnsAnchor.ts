@@ -1,5 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 
+import { settleBubbleMotion } from "@/lib/bubble-motion";
+import {
+  captureRemoval,
+  playRemoval,
+  type RemovalBefore,
+} from "@/lib/bubble-motion-play";
 import {
   captureScrollAnchors,
   holdFirstScrollAnchor,
@@ -33,20 +39,34 @@ function hiddenKey(
  * read inside the store write that drops or hides the turns (React has
  * not rendered it yet), and put back before paint. The webview has no
  * CSS scroll anchoring.
+ *
+ * In the main chat (`animate`) the way there moves (ruling 138, ticket
+ * 94; lib/bubble-motion-play.ts `playRemoval`): read in the same store
+ * write, first, what the motion needs — the rows near the viewport and
+ * a copy of those on screen, before React can take one out — then the
+ * anchors as before; once the anchor has held, the rows gone shrink
+ * away where they stood and the rest slide into place. Anything of
+ * ruling 138 still moving goes to its end before either is read.
  */
 export function useRemovedTurnsAnchor({
   sessionId,
   scrollContainerRef,
+  animate = false,
 }: {
   /** Active session; its slice in the messages store is the one read. */
   sessionId?: string;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
+  /** The main chat: the removal moves. */
+  animate?: boolean;
 }): void {
   const pending = useRef<ScrollAnchor[] | null>(null);
+  const motion = useRef<RemovalBefore | null>(null);
   useEffect(() => {
     if (sessionId === undefined) return;
     const capture = () => {
       const container = scrollContainerRef.current;
+      if (container) settleBubbleMotion(container);
+      motion.current = container && animate ? captureRemoval(container) : null;
       pending.current = container ? captureScrollAnchors(container) : null;
     };
     const offMessages = useMessagesStore.subscribe((state, prev) => {
@@ -63,17 +83,21 @@ export function useRemovedTurnsAnchor({
       offMessages();
       offDeletes();
     };
-  }, [sessionId, scrollContainerRef]);
+  }, [sessionId, scrollContainerRef, animate]);
 
   // After every render of the page that holds the conversation: both
   // stores it reads re-render it, and a Core deletion of what was hidden
-  // already renders nothing new (the hold is then a no-op), so no count
-  // to watch.
+  // already renders nothing new (the hold is then a no-op, and nothing
+  // moves), so no count to watch.
   useLayoutEffect(() => {
     const anchors = pending.current;
+    const before = motion.current;
     if (!anchors) return;
     pending.current = null;
+    motion.current = null;
     const container = scrollContainerRef.current;
-    if (container) holdFirstScrollAnchor(container, anchors);
+    if (!container) return;
+    holdFirstScrollAnchor(container, anchors);
+    if (before) playRemoval(container, before);
   });
 }

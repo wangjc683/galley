@@ -449,6 +449,8 @@ export const MessageUser = memo(function MessageUser({
       <div className="absolute top-full right-0 z-10 mt-1.5 flex h-6 items-center gap-1">
         {assistant ? (
           <div
+            // A deleted message's leaving copy hides it (lib/bubble-motion-play).
+            data-hover-row=""
             className={cn(
               "flex items-center gap-0.5",
               yielded && "pointer-events-none opacity-0",

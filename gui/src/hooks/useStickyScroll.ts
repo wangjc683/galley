@@ -12,6 +12,7 @@ import {
   assistantReplyStart,
   assistantScrollToBottom,
 } from "@/lib/assistant-conversation";
+import { settleBubbleMotion } from "@/lib/bubble-motion";
 import { chaseBottom } from "@/lib/chase-bottom";
 import { altArrowBelongsToField } from "@/lib/composer-focus";
 import {
@@ -101,6 +102,10 @@ function startLanding(
   el: HTMLElement,
   landingRef: { current: Landing | null },
 ): boolean {
+  // A send's slide still moving the conversation (ruling 138, ticket 94)
+  // goes to its end first: the reply's start is read below, and the
+  // instant follow reads it too.
+  settleBubbleMotion(el);
   const timing = landingScrollTiming();
   if (!timing || prefersReducedMotion()) return false;
   const previous = landingRef.current;
@@ -651,6 +656,17 @@ export function useStickyScroll({
       if (timeoutId !== null) window.clearTimeout(timeoutId);
     };
   }, [activeSessionId]);
+
+  // 贴底's send lands at the bottom in the commit that draws it, before
+  // paint (main chat ruling 138, ticket 94): the send's slide measures
+  // the column where it ends, and the first frame shows the slide's
+  // start, not the end. The frame below still runs (following picks up
+  // from there); the workbench's send is its own, below.
+  useLayoutEffect(() => {
+    if (!stickBottom || userSubmitTick <= scrolledForSubmitTick) return;
+    const container = scrollContainerRef.current;
+    if (container) assistantScrollToBottom(container);
+  }, [userSubmitTick, stickBottom]);
 
   // Stick-to-user-message-top scroll behaviour (DESIGN.md §4.3).
   // Effect fires only when the user submits a new message — keying
