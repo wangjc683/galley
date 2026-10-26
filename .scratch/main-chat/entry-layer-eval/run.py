@@ -6212,22 +6212,35 @@ def render_memo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         "每条都判：回复说「记下了」一类的话，这一轮就得有写（备忘也算）。",
         "",
     ]
+    if meta.get("history_note"):
+        out += [meta["history_note"], ""]
     sup = meta.get("superseded_runs") or []
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
-    total = passed = 0
-    out += ["## 通过率", "", "| # | 用例 | 分组 | 期望 | 遍数 | 过 | 通过率 |", "| --- | --- | --- | --- | --- | --- | --- |"]
+    # Each repeat in its own column: they may have run on different
+    # wordings (meta.history_note).
+    repeats = sorted({r.get("repeat", 0) for r in data["results"] if r["id"] in by_id})
+    tally = {n: [0, 0] for n in repeats}
+    out += ["## 通过率", "", "| # | 用例 | 分组 | 期望 | " + " | ".join(f"第 {n} 遍" for n in repeats) + " |",
+            "| --- | --- | --- | --- | " + " | ".join("---" for _ in repeats) + " |"]
     for case in cases:
-        runs = by_case.get(case["id"], [])
+        runs = {r.get("repeat", 0): r for r in by_case.get(case["id"], [])}
         if not runs:
             continue
-        ok = sum(1 for r in runs if facts[(r["id"], r["variant"])]["pass"])
-        total, passed = total + len(runs), passed + ok
+        cells = []
+        for n in repeats:
+            if n not in runs:
+                cells.append("—")
+                continue
+            ok = bool(facts[(runs[n]["id"], runs[n]["variant"])]["pass"])
+            tally[n][0] += 1
+            tally[n][1] += ok
+            cells.append("过" if ok else "不过")
         out.append(f"| {case['no']} | {case['id']} | {case['group']} | {case['expect_text'].replace('|', '/')} | "
-                   f"{len(runs)} | {ok} | {round(100 * ok / len(runs))}% |")
-    if total:
-        out.append(f"| | 合计 | | | {total} | {passed} | {round(100 * passed / total)}% |")
+                   + " | ".join(cells) + " |")
+    if repeats:
+        out.append("| | 合计 | | | " + " | ".join(f"{p}/{t}" for t, p in (tally[n] for n in repeats)) + " |")
     out += ["", "## 一览", "",
             "| # | 用例 | 遍 | 备忘（记了什么） | 待办与提醒 | 回复原文 | 读手册 | 判定 |",
             "| --- | --- | --- | --- | --- | --- | --- | --- |"]
