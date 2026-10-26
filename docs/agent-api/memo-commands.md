@@ -110,6 +110,10 @@ total.
 - `--until` (`add`'s form) sets the last day; `--no-until` removes it. A
   memo past its last day can be given a later one, and holds again.
 - `origin` is not changed: it says who noted the memo.
+- An update that changes nothing (the same text once trimmed, the same
+  last day) is not a write (main chat ticket 98): it answers with the memo
+  as it is, its `updatedAt` stays, it does not make the memo new for the
+  morning review, and no write is recorded (no card under the reply).
 
 On the socket (`memo.update`), an empty `until` removes the last day, as an
 empty value clears a field on `todo.update`; the CLI sends one for

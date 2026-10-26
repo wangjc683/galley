@@ -382,6 +382,15 @@ impl SqliteGalley {
     /// again for the next morning review when the user started the turn,
     /// as when it was noted; an `update` event records it.
     ///
+    /// An update that changes nothing (main chat ticket 98) — the same text
+    /// once trimmed and the same last day — is not a write: `updated_at`
+    /// and `fresh_at` stay as they were, and no event is recorded (its card
+    /// would read 「改为」 the words it already had). Otherwise the
+    /// assistant writing the same memo again each time the user brings the
+    /// thing up would wake the next morning review for it every day (PRD
+    /// ruling 143 point 1). It answers as a write does: the memo, and
+    /// `overLimit` when the memos are past the total.
+    ///
     /// **Errors**: `not_found`, `invalid_args` (as [`Self::create_memo`]).
     pub async fn update_memo(
         &self,
@@ -407,6 +416,9 @@ impl SqliteGalley {
             Some(None) => None,
             None => row.until_date.clone(),
         };
+        if text == row.text && until == row.until_date {
+            return self.memo_write(id.as_str(), today).await;
+        }
         let now = chrono_now_iso();
         let fresh_at = if self.turn_the_user_started(created_in.as_ref()).await? {
             Some(now.clone())

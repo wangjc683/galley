@@ -765,6 +765,137 @@ async fn a_memo_is_fresh_only_when_written_in_a_turn_the_user_started() {
     assert_eq!(fresh_at(&pool, &outside.id).await, None);
 }
 
+/// Ticket 98: an update that changes nothing (the same text once trimmed,
+/// the same last day, or no last day taken off one that has none) is no
+/// write: `updated_at` and `fresh_at` stay, no event is recorded, and it
+/// answers with the memo as it is. A new last day alone, or new words
+/// alone, is a change, and makes the memo fresh again in a turn the user
+/// started.
+#[tokio::test]
+async fn an_update_that_changes_nothing_is_no_write() {
+    let (pool, galley) = with_main_chat().await;
+    let main = SessionId(MAIN.into());
+    let noted_in = user_turn(&galley, "76 人昨天赢了没？").await;
+    let memo = galley
+        .create_memo(
+            input("看你这周常问 76 人的比赛"),
+            assistant(),
+            Some(noted_in),
+        )
+        .await
+        .unwrap()
+        .memo;
+    let stamp = "2026-10-20T01:00:00+00:00";
+    let stamps = |pool: SqlitePool, id: MemoId| async move {
+        sqlx::query_as::<_, (Option<String>, String)>(
+            "SELECT fresh_at, updated_at FROM memos WHERE id = ?",
+        )
+        .bind(id.as_str())
+        .fetch_one(&pool)
+        .await
+        .expect("memo row")
+    };
+    let reset = |pool: SqlitePool, id: MemoId| async move {
+        sqlx::query("UPDATE memos SET fresh_at = ?, updated_at = ? WHERE id = ?")
+            .bind(stamp)
+            .bind(stamp)
+            .bind(id.as_str())
+            .execute(&pool)
+            .await
+            .unwrap();
+    };
+    let unchanged = (Some(stamp.to_string()), stamp.to_string());
+    reset(pool.clone(), memo.id.clone()).await;
+    // The same words (spaces around them trimmed), in a turn the user
+    // started; then no last day, on a memo that has none.
+    for patch in [
+        MemoPatch {
+            text: Some("  看你这周常问 76 人的比赛 ".into()),
+            until: None,
+        },
+        MemoPatch {
+            text: None,
+            until: Some(None),
+        },
+    ] {
+        let again = user_turn(&galley, "76 人下一场什么时候？").await;
+        let same = galley
+            .update_memo(&memo.id, patch, assistant(), Some(again))
+            .await
+            .expect("an update with nothing new still answers");
+        assert_eq!(same.memo.text, "看你这周常问 76 人的比赛");
+        assert_eq!(same.memo.updated_at, stamp);
+        assert_eq!(stamps(pool.clone(), memo.id.clone()).await, unchanged);
+    }
+    assert_eq!(
+        galley.memo_events_in(&main).await.unwrap().len(),
+        1,
+        "the add only"
+    );
+    // A last day alone is a change.
+    let trip = user_turn(&galley, "我这周在外地，看不了直播").await;
+    galley
+        .update_memo(
+            &memo.id,
+            MemoPatch {
+                text: None,
+                until: Some(Some(day(5))),
+            },
+            assistant(),
+            Some(trip),
+        )
+        .await
+        .unwrap();
+    let (fresh, updated) = stamps(pool.clone(), memo.id.clone()).await;
+    assert_ne!(fresh.as_deref(), Some(stamp));
+    assert_ne!(updated, stamp);
+    // And the same last day again is not.
+    reset(pool.clone(), memo.id.clone()).await;
+    let same_day = user_turn(&galley, "对，这周都不在").await;
+    galley
+        .update_memo(
+            &memo.id,
+            MemoPatch {
+                text: None,
+                until: Some(Some(day(5))),
+            },
+            assistant(),
+            Some(same_day),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stamps(pool.clone(), memo.id.clone()).await, unchanged);
+    // New words alone are a change.
+    let words = user_turn(&galley, "季后赛我也会一直看").await;
+    galley
+        .update_memo(
+            &memo.id,
+            MemoPatch {
+                text: Some("看你这两周常问 76 人的比赛".into()),
+                until: None,
+            },
+            assistant(),
+            Some(words),
+        )
+        .await
+        .unwrap();
+    let (fresh, updated) = stamps(pool.clone(), memo.id.clone()).await;
+    assert_ne!(fresh.as_deref(), Some(stamp));
+    assert_ne!(updated, stamp);
+    let actions: Vec<MemoAction> = galley
+        .memo_events_in(&main)
+        .await
+        .unwrap()
+        .iter()
+        .map(|e| e.action)
+        .collect();
+    assert_eq!(
+        actions,
+        [MemoAction::Add, MemoAction::Update, MemoAction::Update],
+        "a write recorded for each change, none for the updates that changed nothing"
+    );
+}
+
 // ---------------- the external runtime ----------------
 
 #[tokio::test]

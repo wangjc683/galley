@@ -446,7 +446,11 @@ every write is refused with `assistant_unavailable:` otherwise.
   whose opening user row is not one Galley wrote (`created_via` not
   `system`: not a review's, a reminder's or a subtask's wake). The morning
   review reads it (above); a memo written in a wake's own turn never wakes
-  the next review.
+  the next review. An update that changes nothing (the same text once
+  trimmed, the same last day; ticket 98) is no write: neither `fresh_at`
+  nor `updated_at` moves and no event is recorded, so writing the same
+  memo again each time the user brings the thing up does not wake the
+  review every day.
 - **At the start of each segment**: the "Memo" lines after In Hand
   ([prompt composition](./prompt-composition.md#memo-main-chat-only)).
 - **How Galley keeps them**: the [assistant manual](./galley-assistant-manual/)'s

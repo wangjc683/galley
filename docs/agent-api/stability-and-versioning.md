@@ -239,6 +239,12 @@ and error discriminants unchanged):
   commands only; no existing command, field or exit code changed. Also
   served under `--schema=1` and `--schema=2`. See
   [memo-commands.md](./memo-commands.md).
+- 2026-10-26 — `memo update` that changes nothing (main chat ticket 98):
+  the same text once trimmed and the same last day is not a write. It
+  answers as before (`{"memo": …}`, with `overLimit` past the total) but
+  leaves `updatedAt` as it was, which is what §5.35 says the field means,
+  and records nothing. No command, field, flag or exit code changed. See
+  [memo-commands.md](./memo-commands.md) §5.38.
 
 ### 7.2 `schemaVersion: 2` (served for unchanged commands, since 2026-09-16)
 
