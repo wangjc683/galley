@@ -20,6 +20,7 @@ Nothing moves out of the third.
 - Switch the model of a subtask you started.
 - Note, change, tick off or cancel the user's to-dos, and their
   reminders.
+- Note, change or delete your memos about the user.
 - Set a one-off reminder, or a one-off time to wake yourself and do
   something; change or cancel one you set.
 - Rename a subtask you started; pin or unpin a session.

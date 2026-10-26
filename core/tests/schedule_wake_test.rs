@@ -1955,7 +1955,7 @@ async fn the_review_wakes_for_the_memos_new_since_the_last_one_and_names_them() 
     last_review(&pool, review.id.as_str(), Some(local_at(-1, 9))).await;
     // In: yesterday before that review and after it.
     let early = memo_noted(&galley, &pool, "不吃香菜", local_at(-1, 8)).await;
-    let late = memo_noted(&galley, &pool, "看他这周常问 76 人", local_at(-1, 20)).await;
+    let late = memo_noted(&galley, &pool, "看你这周常问 76 人", local_at(-1, 20)).await;
     // Out: the day before yesterday (the last review's window), this
     // morning (tomorrow's), one past its day, one deleted, one Galley
     // wrote in a wake's turn (never fresh).
@@ -2013,7 +2013,7 @@ async fn the_review_wakes_for_the_memos_new_since_the_last_one_and_names_them() 
     assert_eq!(
         memos,
         format!(
-            "\n- `{early}`: 不吃香菜\n- `{late}`: 看他这周常问 76 人\nFor each, ask whether \
+            "\n- `{early}`: 不吃香菜\n- `{late}`: 看你这周常问 76 人\nFor each, ask whether \
              there is something you could get done for the user that they would want to know, \
              as \"The morning review\" in `wake.md` says; most need nothing."
         )

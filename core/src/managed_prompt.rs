@@ -421,9 +421,9 @@ look it up with the Galley CLI (search, then
 ///
 /// Ticket 96 (main chat PRD rulings 140–142): a sentence after the to-do
 /// one sends what the model learns about the user and will need later to
-/// a memo (ticket 95's `galley memo`), an interest it notices in what the
-/// user keeps asking too, naming `memo.md`, where the rules are; the
-/// floor's 「记下了」 names a memo in place of the memory, where
+/// a memo (ticket 95's `galley memo`), naming `memo.md`, where the rules
+/// are, and (ticket 98) a count to see an interest by: the same thing
+/// asked about three times; the floor's 「记下了」 names a memo in place of the memory, where
 /// this kind of thing no longer goes; `memo` joins the write list and
 /// `memo.md` the manual list.
 fn main_chat_entry_layer(manual_dir: &str) -> String {
@@ -449,8 +449,9 @@ to finish, a lease ending), as a to-do, with a reminder when it has a date,
 and tick it off when it is done; set yourself a reminder when you promise
 to follow up. Do it unasked, but read `todos.md` in your manual before
 saying you will (it says when), and `todo list` before saying what is left.
-Note what you learn about the user that you will need later as a memo,
-an interest you notice in what they keep asking too (see `memo.md`).
+Note what you learn about the user that you will need later as a memo;
+once they have asked about the same thing three times (a team, a stock),
+note it as an interest (see `memo.md`).
 Say 「记下了」 or the like only after you wrote it down this turn (a to-do, a
 reminder, a memo); if you write nothing down, do not bring up
 noting it.
@@ -1529,11 +1530,17 @@ mod tests {
     /// to note and what not is. Its first wording (+87) stopped at "as a
     /// memo": in the memo eval's first round a fourth question about the
     /// same team, its answer in the context, got a reply and no tool call
-    /// at all, so the interest is named here (+53, ruling 140 point 6). The floor's list says "a memo"
+    /// at all, so the interest is named here (+53, ruling 140 point 6).
+    /// Raised 3339 → 3383 by ticket 98: +44 bytes. The interest named
+    /// that way still got no memo on the model in either round, its
+    /// attention on whether the earlier answer was right; the sentence now
+    /// gives a count to see it by, "once they have asked about the same
+    /// thing three times (a team, a stock), note it as an interest" in
+    /// place of "an interest you notice in what they keep asking too". The floor's list says "a memo"
     /// in place of "your memory" (−5): information goes to the memos now
     /// (ruling 140). `memo` in the write list (+6) and `memo.md` in the
     /// manual list, with when to read it (+58).
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 3339;
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 3383;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {
@@ -1775,19 +1782,21 @@ mod tests {
 
     /// Ticket 96 (main chat PRD rulings 140–142): after the to-do sentence,
     /// what the model learns about the user and will need later is noted
-    /// as a memo, an interest it notices included, with the part named (one on the table, holding the rules);
-    /// the floor before the manual list. Main chat only.
+    /// as a memo, and (ticket 98) the same thing asked about three times as
+    /// an interest, with the part named (one on the table, holding the
+    /// rules); the floor before the manual list. Main chat only.
     #[test]
     fn main_chat_entry_layer_notes_what_it_learns_as_a_memo() {
         let main =
             compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
         // Single-line fragments only (CRLF on Windows).
         assert!(
-            main.contains("Note what you learn about the user that you will need later as a memo,")
+            main.contains("Note what you learn about the user that you will need later as a memo;")
         );
-        assert!(
-            main.contains("an interest you notice in what they keep asking too (see `memo.md`).")
-        );
+        // Ticket 98: a count to see an interest by.
+        assert!(main
+            .contains("once they have asked about the same thing three times (a team, a stock),"));
+        assert!(main.contains("note it as an interest (see `memo.md`)."));
         assert!(crate::assistant_manual::part("memo.md").contains("## The user's memos"));
         let todo = main
             .find("`todo list` before saying what is left.")
@@ -2645,7 +2654,7 @@ mod tests {
         let memos = [
             memo(
                 "memo_1a2b3c4d5e6f7a8b",
-                "用户叫小林，在一家设计公司做产品经理",
+                "叫你小林，在一家设计公司做产品经理",
                 "2026-10-20T01:10:00+00:00",
                 None,
             ),
@@ -2657,7 +2666,7 @@ mod tests {
             ),
             memo(
                 "memo_3c4d5e6f7a8b9c0d",
-                "看他这周常问 76 人\n的比赛",
+                "看你这周常问 76 人\n的比赛",
                 "2026-10-26T00:40:00+00:00",
                 None,
             ),
@@ -2678,9 +2687,9 @@ mod tests {
              \n\
              What you noted about the user, oldest first, each with the day you last noted or \
              changed it:\n\
-             - `memo_1a2b3c4d5e6f7a8b` 2026-10-20: 用户叫小林，在一家设计公司做产品经理\n\
+             - `memo_1a2b3c4d5e6f7a8b` 2026-10-20: 叫你小林，在一家设计公司做产品经理\n\
              - `memo_2b3c4d5e6f7a8b9c` 2026-10-24: 不吃香菜\n\
-             - `memo_3c4d5e6f7a8b9c0d` 2026-10-26: 看他这周常问 76 人 的比赛\n\
+             - `memo_3c4d5e6f7a8b9c0d` 2026-10-26: 看你这周常问 76 人 的比赛\n\
              - `memo_4d5e6f7a8b9c0d1e` 2026-10-26, until 2026-11-06 (Fri): 下周三起在上海出差"
         );
         // No memo, no section.

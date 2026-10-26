@@ -226,7 +226,9 @@ mod tests {
         // what will end and to wake.md for what waits for the review, and
         // todos.md to memo.md again for a sentence that is both (the memo
         // eval's first round: the trip went into the to-do's notes).
-        assert_eq!(referred, 22);
+        // Ticket 98's one: cli.md's command list to memo.md.
+        assert_eq!(referred, 23);
+        assert!(part("cli.md").contains("- `memo add`, `update`, `delete`: see `memo.md`."));
         assert!(part("todos.md")
             .contains("is a memo (see `memo.md`), and so is a date with nothing to do when it"));
         assert!(part("memo.md").contains("with the to-dos and reminders (see `todos.md`)."));
@@ -341,6 +343,8 @@ mod tests {
                     "`schedule show <task-id>`",
                     "`todo list`",
                     "`todo show <todo-id>`",
+                    // Ticket 98: the memos in the command list too.
+                    "`memo list`",
                 ][..],
             ),
             (
@@ -565,6 +569,14 @@ mod tests {
         // Authority.
         assert!(part("authority.md")
             .contains("- Note, change, tick off or cancel the user's to-dos, and their"));
+        // Ticket 98: and the memos, among what it does without asking.
+        let authority = part("authority.md");
+        let own = authority.find("### Do it yourself").unwrap();
+        let ask = authority.find("### Ask the user first").unwrap();
+        let memos = authority
+            .find("- Note, change or delete your memos about the user.")
+            .expect("authority.md names the memos");
+        assert!(own < memos && memos < ask);
         for (name, body) in PARTS {
             assert!(!body.contains("## Reminders and scheduled tasks"), "{name}");
         }
@@ -918,16 +930,22 @@ mod tests {
             "- Who they are: what they are called, their family, their work.",
             "- What they prefer or avoid.",
             "- The people and places they deal with (their landlord, and the number).",
-            "- An interest that keeps coming up, said or seen (the same team asked",
+            // Ticket 98: a count to see it by (the memo eval's interest
+            // cases had noted nothing on "keeps coming up" alone).
+            "- An interest that keeps coming up, said or seen: once they have asked",
+            "about the same thing three times (a team, a stock, a show, a place),",
             "- A date with nothing to do when it comes (the day their company was",
             "Not what you talked about (the history has it), what is of no use once",
             "this turn is done, what is already a to-do or a reminder, a passing mood,",
             "or a secret such as a password or a verification code.",
             // One thing, one memo.
             "One thing, one memo. Before you note one, look at your \"Memo\" lines and",
-            "what you noted since: when the same thing is there, `memo update` that",
-            "one instead of adding a second (「常问 76 人」 asked ten more times is",
-            "memo; when you see one is out of date, delete it then, in any turn.",
+            // Ticket 98: updated only when something changed (Core leaves an
+            // update that changes nothing unwritten).
+            "what you noted since: when the same thing is there, keep it, or",
+            "`memo update` it when something changed, instead of adding a second",
+            "(「常问 76 人」 asked ten more times is still one memo). When a fact",
+            "of date, delete it then, in any turn.",
             // Written for the user.
             "Write it for the user, who reads the list: one sentence, in their words,",
             "not a record about them (not 「用户说……」 or 「他提到……」). An interest",

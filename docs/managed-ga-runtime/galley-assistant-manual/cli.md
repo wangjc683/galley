@@ -39,6 +39,7 @@ Read:
 - `schedule list` (add `--all` for fired, paused and cancelled ones),
   `schedule show <task-id>`: the scheduled tasks. Both: see `todos.md`,
   `todos-change.md` and `reminders.md`.
+- `memo list`: what you noted about the user.
 
 Write:
 
@@ -66,6 +67,7 @@ Write:
 - `todo add`, `update`, `done`, `reopen`, `cancel`, and `schedule create`,
   `update`, `delete`, `enable`, `disable`, `run`: see `todos.md`,
   `todos-change.md` and `reminders.md`.
+- `memo add`, `update`, `delete`: see `memo.md`.
 
 Start new work with the `<subtask>` tag, not `session new`: only a subtask
 wakes you when it is done.

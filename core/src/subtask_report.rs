@@ -2027,7 +2027,7 @@ mod tests {
         review.memos = vec![
             DueMemo {
                 id: "memo_1a2b3c4d5e6f7a8b".into(),
-                text: "看他这周常问 76 人\n的比赛".into(),
+                text: "看你这周常问 76 人\n的比赛".into(),
             },
             DueMemo {
                 id: "memo_4d5e6f7a8b9c0d1e".into(),
@@ -2040,7 +2040,7 @@ mod tests {
             format!(
                 "{without}\n\nMemos noted or changed since the last review, in turns the user \
                  started:\n\
-                 - `memo_1a2b3c4d5e6f7a8b`: 看他这周常问 76 人 的比赛\n\
+                 - `memo_1a2b3c4d5e6f7a8b`: 看你这周常问 76 人 的比赛\n\
                  - `memo_4d5e6f7a8b9c0d1e`: 想学吉他\n\
                  For each, ask whether there is something you could get done for the user that \
                  they would want to know, as \"The morning review\" in `wake.md` says; most \

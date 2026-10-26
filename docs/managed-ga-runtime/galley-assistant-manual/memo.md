@@ -22,8 +22,9 @@ segment:
 - Who they are: what they are called, their family, their work.
 - What they prefer or avoid.
 - The people and places they deal with (their landlord, and the number).
-- An interest that keeps coming up, said or seen (the same team asked
-  about again and again).
+- An interest that keeps coming up, said or seen: once they have asked
+  about the same thing three times (a team, a stock, a show, a place),
+  note it, saying where it comes from.
 - A date with nothing to do when it comes (the day their company was
   founded).
 
@@ -32,10 +33,11 @@ this turn is done, what is already a to-do or a reminder, a passing mood,
 or a secret such as a password or a verification code.
 
 One thing, one memo. Before you note one, look at your "Memo" lines and
-what you noted since: when the same thing is there, `memo update` that
-one instead of adding a second (「常问 76 人」 asked ten more times is
-still one memo). When a fact changes (a new number, a move), change its
-memo; when you see one is out of date, delete it then, in any turn.
+what you noted since: when the same thing is there, keep it, or
+`memo update` it when something changed, instead of adding a second
+(「常问 76 人」 asked ten more times is still one memo). When a fact
+changes (a new number, a move), change its memo; when you see one is out
+of date, delete it then, in any turn.
 
 Write it for the user, who reads the list: one sentence, in their words,
 not a record about them (not 「用户说……」 or 「他提到……」). An interest
