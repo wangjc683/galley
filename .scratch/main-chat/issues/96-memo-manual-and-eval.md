@@ -1,6 +1,6 @@
 # 96 备忘的手册与评测：`memo.md`、待办与叫醒两份手册改指备忘、入口层一句、「备忘」评测套件
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-10-26 rebase 到含票 97 的 main 后快进合入 `bc4af9d9`–`98e25d55`；主会话机器验收：worktree 里复跑 `cargo test --workspace` 本机时区与 `TZ=UTC` 各 1254 条全过，评测 `--dry-test` 过、没有 `__pycache__`，`git diff --check` 过，新增行无本机路径、key 与真实会话 id（`s-mgn4k2x1-…` 是评测旧样例里就有的假 id）。评测改后的措辞 14/15，「看出来的兴趣」两遍都没记成；它与回报里「看到但没改」的三条交给票 [98](./98-memo-interest-and-follow-ups.md)。与票 95、97 一起真机走）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 140–143（2026-10-26，主对话的备忘；JC：「按你建议推进」）；devlog [主对话的备忘](../../../docs/devlog/2026-10-26-main-chat-memo.md)。依赖票 [95](./95-memo-core-and-cli.md)（`galley memo` 命令、段首的备忘一节、巡看叫醒说明里点名的那一段）。与票 97（GUI）同时在跑，不碰同一处。
 

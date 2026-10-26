@@ -953,6 +953,7 @@ README「dense context instead of long」（`README.md:54`）。
 | [95](./issues/95-memo-core-and-cli.md) | — | 备忘的 Core 与命令：记录、`galley memo`、上限与期限、段首一节、巡看为前一天的新备忘叫醒、重置时清掉、给面板的 IPC | — |
 | [96](./issues/96-memo-manual-and-eval.md) | — | 备忘的手册与评测：`memo.md`、待办与叫醒两份手册改指备忘、入口层一句、「备忘」评测套件 | 95 |
 | [97](./issues/97-memo-cards-and-panel-page.md) | — | 备忘的卡片与面板页：回复下的备忘卡片、面板 header 两个页签、「备忘」页、改设计文档 | 95 |
+| [98](./issues/98-memo-interest-and-follow-ups.md) | — | 备忘的收尾：看出来的兴趣记得上（手册与评测）；没变化的 `memo update` 不再叫醒巡看；样例写法与手册对齐；`authority.md`、`cli.md` 补备忘；旧套件判卷跟上 | 95、96、97 |
 
 ## 参考：OpenMuse（2026-10-09 读码，`CopilotKit/openmuse` @ `1ac68f39`，MIT）
 
