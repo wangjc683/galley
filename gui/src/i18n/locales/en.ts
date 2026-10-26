@@ -878,6 +878,7 @@ export const enCopy: AppCopy = {
         deletes: [
           "The main chat's messages, including its attachments and the subtasks it sent out that haven't become ordinary conversations",
           "Your to-dos and the reminders on them (its own reminders and routines stay)",
+          "Its memos: what it noted about you",
           "Its long-term memory (shared by every conversation and IM chat, so it forgets in those too)",
           "The automatic backups made before data migrations",
         ],
@@ -2120,6 +2121,21 @@ export const enCopy: AppCopy = {
     timeTomorrow: (time: string) => `Tomorrow ${time}`,
     timeYesterday: (time: string) => `Yesterday ${time}`,
     reminder: "Reminder",
+  },
+  memo: {
+    tab: "Memos",
+    tabsLabel: "To-do and memos",
+    empty: "Galley keeps what's worth remembering here.",
+    emptyExample: "For example: “I don't eat cilantro.”",
+    until: (day: string) => `Until ${day}`,
+    cardNoted: "Noted",
+    cardChanged: "Changed to",
+    cardDropped: "No longer noted",
+    deleteMemo: {
+      deleted: (text: string) => `Deleted "${text}"`,
+      deletedCount: (n: number) => `Deleted ${n} memos`,
+      undo: "Undo",
+    },
   },
   updates: {
     check: "Check for updates",

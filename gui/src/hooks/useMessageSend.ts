@@ -9,6 +9,7 @@ import {
 } from "@/lib/session-send";
 import { isSideQuestion } from "@/lib/side-question";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
+import { useMemoStore } from "@/stores/memo";
 import { useMessageDeleteStore } from "@/stores/message-delete";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
@@ -56,7 +57,8 @@ export type SendEcho = "turn" | "side_question" | "none";
  * before a send into the main chat (main chat ticket 88, PRD ruling 132
  * point 4): Galley reads its list before it answers, and the to-do must
  * not be on it; one Core refuses comes back on the panel
- * (stores/assistant-todo.ts).
+ * (stores/assistant-todo.ts). A memo deleted on the panel's 备忘 page
+ * goes the same way (main chat ticket 97, stores/memo.ts).
  *
  * Resolves to Core's outcome; throws Core's failure
  * (`SendUserMessageError`). An echo Core persisted before failing stays
@@ -98,6 +100,9 @@ export async function sendThroughCore(
   ) {
     const deletingTodos = useAssistantTodoStore.getState().flushDeletes();
     if (deletingTodos) await deletingTodos;
+    // …and the memos deleted on the 备忘 page (ticket 97), the same way.
+    const deletingMemos = useMemoStore.getState().flushDeletes();
+    if (deletingMemos) await deletingMemos;
   }
   const result = await runtime.deliverUserMessage({
     sessionId: sid,

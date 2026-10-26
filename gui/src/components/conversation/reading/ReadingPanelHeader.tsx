@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,10 @@ import { cn } from "@/lib/utils";
  * DialogCloseButton in the narrow-window dialog). The panels used to
  * grow their own headers at different densities; keeping the shell here
  * means the two views read as the same surface.
+ *
+ * A title that is not a string is drawn as given in the title's place:
+ * the to-do panel's two tabs (main chat ticket 97), set in the title's
+ * type.
  */
 export function ReadingPanelHeader({
   title,
@@ -20,7 +24,7 @@ export function ReadingPanelHeader({
   actions,
   close,
 }: {
-  title: string;
+  title: string | ReactElement;
   subtitle?: string;
   subtitleTooltip?: string;
   /** Paths and ids read better in the mono register; prose subtitles
@@ -42,7 +46,11 @@ export function ReadingPanelHeader({
   return (
     <div className="flex items-start gap-1 border-b border-line px-4 py-3">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-sm font-medium text-ink">{title}</span>
+        {typeof title === "string" ? (
+          <span className="truncate text-sm font-medium text-ink">{title}</span>
+        ) : (
+          title
+        )}
         {subtitleNode &&
           (subtitleTooltip ? (
             <TooltipLabel text={subtitleTooltip}>{subtitleNode}</TooltipLabel>

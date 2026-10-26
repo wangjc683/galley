@@ -30,6 +30,7 @@ import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToolbar";
 import { StepRegion } from "@/components/conversation/StepRegion";
 import { FileCards } from "@/components/conversation/FileCards";
+import { MemoCards } from "@/components/conversation/MemoCards";
 import { ReminderCards } from "@/components/conversation/ReminderCards";
 import { SubtaskCards } from "@/components/conversation/SubtaskCards";
 import { TodoCards } from "@/components/conversation/TodoCards";
@@ -41,6 +42,7 @@ import { useEarlierTurns } from "@/hooks/useEarlierTurns";
 import { useRemovedTurnsAnchor } from "@/hooks/useRemovedTurnsAnchor";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
 import { useSubtaskQuestionHolder } from "@/hooks/useSubtaskQuestionHolder";
+import { useMemosByMessage } from "@/hooks/useMemoCards";
 import { useRemindersByMessage } from "@/hooks/useReminderCards";
 import { useSubtaskDispatchesByMessage } from "@/hooks/useSubtaskCards";
 import { useTodosByMessage } from "@/hooks/useTodoCards";
@@ -265,6 +267,9 @@ function MainViewContent({
   const reminders = useRemindersByMessage(
     isMainChat ? activeSessionId : undefined,
   );
+  // …and what it noted about you (ticket 97), last: the panel's 待办
+  // page's cards, then its 备忘 page's.
+  const memos = useMemosByMessage(isMainChat ? activeSessionId : undefined);
   // …and the files it handed over (ticket 74), read off the replies
   // themselves (their `[FILE:]` markers), first under each: the reply's
   // own deliverable before the work it handed off.
@@ -684,13 +689,21 @@ function MainViewContent({
                   deliveredFiles.size > 0 ||
                   subtaskDispatches.size > 0 ||
                   todos.size > 0 ||
-                  reminders.size > 0
+                  reminders.size > 0 ||
+                  memos.size > 0
                     ? (messageId) => {
                         const files = deliveredFiles.get(messageId);
                         const dispatches = subtaskDispatches.get(messageId);
                         const noted = todos.get(messageId);
                         const tasks = reminders.get(messageId);
-                        if (!files && !dispatches && !noted && !tasks) {
+                        const memoWrites = memos.get(messageId);
+                        if (
+                          !files &&
+                          !dispatches &&
+                          !noted &&
+                          !tasks &&
+                          !memoWrites
+                        ) {
                           return null;
                         }
                         // `afterSubtasks`: under any cards above, 8px.
@@ -714,6 +727,14 @@ function MainViewContent({
                                 tasks={tasks}
                                 afterSubtasks={
                                   !!files || !!dispatches || !!noted
+                                }
+                              />
+                            )}
+                            {memoWrites && (
+                              <MemoCards
+                                events={memoWrites}
+                                afterCards={
+                                  !!files || !!dispatches || !!noted || !!tasks
                                 }
                               />
                             )}

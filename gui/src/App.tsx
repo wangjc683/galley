@@ -46,6 +46,7 @@ import {
 import { TODO_PANEL_ID, TODO_PANEL_WIDTH } from "@/lib/todo-panel";
 import { useAppHydrationEffects } from "@/hooks/useAppHydrationEffects";
 import { useAssistantTodoSync } from "@/hooks/useAssistantTodoSync";
+import { useMemoSync } from "@/hooks/useMemoSync";
 import { useTodoGlanceFollow } from "@/hooks/useTodoGlanceFollow";
 import { useTodoPanelIntroduction } from "@/hooks/useTodoPanelIntroduction";
 import { useBrowserControlLiveStatus } from "@/hooks/useBrowserControlLiveStatus";
@@ -468,6 +469,8 @@ function App() {
   // The assistant's to-do list (main chat ticket 42): one copy for the
   // top bar's count, the panel and the cards under replies.
   useAssistantTodoSync(hasMainChat);
+  // …and its memos (ticket 97): the panel's 备忘 page and their cards.
+  useMemoSync(hasMainChat);
   // With a main chat every conversation's top bar has the 待办 button
   // (tickets 45, 46; ruling 95), and the to-do panel opens beside
   // whatever is on screen. Open or closed is kept in two places: beside

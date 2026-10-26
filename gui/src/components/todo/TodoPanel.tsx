@@ -1,6 +1,5 @@
 import {
   BellSimpleSlash,
-  CaretRight,
   ChatTeardropText,
   Clock,
   PauseCircle,
@@ -14,8 +13,10 @@ import {
 } from "@tauri-apps/plugin-autostart";
 import {
   useEffect,
+  useId,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -65,7 +66,10 @@ import {
   writeAutostartHintClosed,
 } from "@/lib/todo-panel-memory";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
+import { useUiStore, type TodoPanelPage } from "@/stores/ui";
 
+import { GroupLabel } from "./GroupLabel";
+import { MemoPage } from "./MemoPage";
 import { TodoCheck } from "./TodoCheck";
 import { TodoMetaText } from "./TodoMetaText";
 import {
@@ -133,6 +137,17 @@ export interface TodoPanelProps {
  * useTodoPanelFlash): what Galley moves while the panel is on screen,
  * and the row a card's title points at. A to-do Galley ticks off holds
  * where it stood, ticked, before it goes to 已完成.
+ *
+ * Two pages since ticket 97 (PRD ruling 142 point 5, 甲): the header's
+ * title is two tabs, 「待办」 and 「备忘」 (MemoPage: what Galley noted
+ * about you), the same place and the same ways in and out, no new
+ * container — to-dos are actions, memos information, and the two
+ * sections the main chat reads at each segment's start are these two
+ * pages. 「+」 and × stay, on both. Every opening lands on 待办 but a
+ * memo card's words, which ask for 备忘 (`todoPageRequest`); ⌘K's
+ * 「待办」 asks for 待办, so it also turns the page back. The page is
+ * this panel's own state: closed and opened again, it is 待办 —
+ * nothing remembers it, neither this machine nor Core.
  */
 export function TodoPanel({
   mainChatId,
@@ -143,6 +158,21 @@ export function TodoPanel({
   defaultDoneOpen = false,
 }: TodoPanelProps) {
   const copy = useCopy();
+  const pageRequest = useUiStore((s) => s.todoPageRequest);
+  const [page, setPage] = useState<TodoPanelPage>(pageRequest?.page ?? "todo");
+  const [pageAsked, setPageAsked] = useState(pageRequest);
+  if (pageRequest !== pageAsked) {
+    setPageAsked(pageRequest);
+    if (pageRequest) setPage(pageRequest.page);
+  }
+  useEffect(() => {
+    if (pageRequest) {
+      useUiStore.getState().clearTodoPageRequest(pageRequest.nonce);
+    }
+  }, [pageRequest]);
+  const ids = useId();
+  const tabId = (of: TodoPanelPage) => `${ids}-tab-${of}`;
+  const pageId = `${ids}-page`;
   const listed = useAssistantTodoStore((s) => s.todo);
   const deleting = useAssistantTodoStore((s) => s.deleting);
   // The rows deleted here wait off the panel for their undo (ticket 88).
@@ -187,7 +217,14 @@ export function TodoPanel({
       className="flex h-full min-h-0 min-w-0 flex-col bg-app"
     >
       <ReadingPanelHeader
-        title={copy.todo.title}
+        title={
+          <PanelTabs
+            page={page}
+            onPage={setPage}
+            tabId={tabId}
+            pageId={pageId}
+          />
+        }
         // The way to a new one (main chat ticket 89, PRD ruling 133 point
         // 3): new to-dos are still said, not typed — the panel has no
         // input box, as a new one needs judging (when, whether to remind,
@@ -217,24 +254,99 @@ export function TodoPanel({
           </IconButton>
         }
       />
+      {/* Keyed by its page: each page starts at its top. */}
       <div
+        key={page}
         ref={list}
+        id={pageId}
+        role="tabpanel"
+        aria-labelledby={tabId(page)}
+        data-todo-page={page}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-4 pt-2"
       >
-        {loaded && todoPanelEmpty(todo) && <TodoPanelEmpty onTalk={talk} />}
-        {/* Empty, this draws 例行 alone, when the daily review is there
-            (ticket 80); before the first read, nothing. */}
-        <TodoPanelGroups
-          todo={todo}
-          mainChatId={mainChatId}
-          onGo={go}
-          onTalkAbout={talkAbout}
-          defaultDoneOpen={defaultDoneOpen}
-          held={held}
-          revealDone={revealDone}
-        />
-        <AutostartHint todo={todo} />
+        {page === "memo" ? (
+          <MemoPage mainChatId={mainChatId} onGo={go} />
+        ) : (
+          <>
+            {loaded && todoPanelEmpty(todo) && <TodoPanelEmpty onTalk={talk} />}
+            {/* Empty, this draws 例行 alone, when the daily review is
+                there (ticket 80); before the first read, nothing. */}
+            <TodoPanelGroups
+              todo={todo}
+              mainChatId={mainChatId}
+              onGo={go}
+              onTalkAbout={talkAbout}
+              defaultDoneOpen={defaultDoneOpen}
+              held={held}
+              revealDone={revealDone}
+            />
+            <AutostartHint todo={todo} />
+          </>
+        )}
       </div>
+    </div>
+  );
+}
+
+const PAGES: readonly TodoPanelPage[] = ["todo", "memo"];
+
+/**
+ * The header's two tabs in the title's place (ticket 97): its type, 14px
+ * medium — no tab or segmented control in the app draws a bare title
+ * (SegmentedControl is a track with a raised thumb, for settings) — the
+ * page shown in full ink, the other `ink-muted`. Arrow keys move between
+ * them, as a tab list's do.
+ */
+function PanelTabs({
+  page,
+  onPage,
+  tabId,
+  pageId,
+}: {
+  page: TodoPanelPage;
+  onPage: (page: TodoPanelPage) => void;
+  tabId: (page: TodoPanelPage) => string;
+  pageId: string;
+}) {
+  const copy = useCopy();
+  const label = (of: TodoPanelPage) =>
+    of === "todo" ? copy.todo.title : copy.memo.tab;
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const next = page === "todo" ? "memo" : "todo";
+    onPage(next);
+    document.getElementById(tabId(next))?.focus();
+  };
+  return (
+    <div
+      role="tablist"
+      aria-label={copy.memo.tabsLabel}
+      className="flex min-w-0 items-center gap-3"
+    >
+      {PAGES.map((of) => {
+        const selected = of === page;
+        return (
+          <button
+            key={of}
+            id={tabId(of)}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            aria-controls={pageId}
+            tabIndex={selected ? 0 : -1}
+            data-todo-tab={of}
+            onClick={() => onPage(of)}
+            onKeyDown={onKeyDown}
+            className={cn(
+              "shrink-0 rounded-sm text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
+              selected ? "text-ink" : "text-ink-muted hover:text-ink-soft",
+            )}
+          >
+            {label(of)}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -361,63 +473,6 @@ export function TodoPanelGroups({
         </section>
       )}
     </div>
-  );
-}
-
-/** A group's label: 11px semibold, muted — the sidebar's section
- * register without its uppercase, as one group is named 「Galley 在办」 and
- * the product name is never set in capitals (AGENTS.md, Names And
- * Terms). 已完成 folds: the whole label toggles it, its count and a caret
- * on the right. 3px above and below, about 22px tall (main chat ticket
- * 86, ruling 130: 6px before; beside Apple's Reminders the labels were
- * where the room went), so a label sits about 9px from its own group
- * and about 21px from the one above. The space over it is the groups'
- * gap (TodoPanelGroups); its own top margin, never in force as the
- * first child of its section, went with ticket 83. */
-function GroupLabel({
-  label,
-  count,
-  open,
-  onToggle,
-}: {
-  label: string;
-  count?: number;
-  open?: boolean;
-  onToggle?: () => void;
-}) {
-  const register =
-    "flex w-full items-center gap-1.5 rounded-sm px-2.5 py-[3px] text-left text-[11px] font-semibold text-ink-muted";
-  if (!onToggle) {
-    return (
-      <div className={register}>
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-      </div>
-    );
-  }
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={open}
-      className={cn(
-        register,
-        "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm active:translate-y-px",
-        "outline-none hover:bg-hover hover:text-ink-soft focus-visible:ring-2 focus-visible:ring-brand/30",
-      )}
-    >
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="flex shrink-0 items-center gap-0.5 tabular-nums">
-        {count}
-        <CaretRight
-          size={9}
-          weight="thin"
-          className={cn(
-            "opacity-70 transition-transform duration-(--motion-fast) motion-reduce:transition-none",
-            open && "rotate-90",
-          )}
-        />
-      </span>
-    </button>
   );
 }
 

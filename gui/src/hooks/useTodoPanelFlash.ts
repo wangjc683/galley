@@ -26,7 +26,10 @@ const REVEAL_MARGIN_PX = 8;
  *   their way are never lit.
  * - **A request** (`todoRowRequest`): a card's title, or the panel's one
  *   opening by itself. 已完成 unfolds for a row only there (TodoPanel
- *   passes the request on), then the rows light up and it is cleared.
+ *   passes the request on), then the rows light up and it is cleared. A
+ *   memo card's words ask for a row of the 备忘 page the same way (ticket
+ *   97, `data-memo-row`); what Galley moves among the memos lights
+ *   nothing.
  *
  * Several rows light together; the first in the panel's order is
  * scrolled into view when it is out of it. `list` is the panel's
@@ -98,8 +101,9 @@ export function useTodoPanelFlash(list: RefObject<HTMLElement | null>): {
   return { held, request };
 }
 
-/** Light up the rows of `ids` drawn in `list`, the first in the
- * panel's order scrolled into view when it is out of it. */
+/** Light up the rows of `ids` drawn in `list` — the 待办 page's, or the
+ * 备忘 page's — the first in the panel's order scrolled into view when it
+ * is out of it. */
 function flashRows(
   list: HTMLElement | null,
   ids: readonly string[],
@@ -108,8 +112,10 @@ function flashRows(
   if (!list) return;
   const wanted = new Set(ids);
   const rows = Array.from(
-    list.querySelectorAll<HTMLElement>("[data-todo-row]"),
-  ).filter((row) => wanted.has(row.dataset.todoRow ?? ""));
+    list.querySelectorAll<HTMLElement>("[data-todo-row], [data-memo-row]"),
+  ).filter((row) =>
+    wanted.has(row.dataset.todoRow ?? row.dataset.memoRow ?? ""),
+  );
   if (rows.length === 0) return;
   reveal(list, rows[0]);
   for (const row of rows) {

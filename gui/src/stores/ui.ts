@@ -94,6 +94,16 @@ interface UiState {
   todoRowRequest: TodoRowRequest | null;
 
   /**
+   * "Show this page of the panel" (main chat ticket 97): a memo card's
+   * words want 备忘, ⌘K's 「待办」 wants 待办. The panel takes it as it
+   * mounts or while it is on screen, then clears it. Which page is up is
+   * the panel's own state, not this: every opening that asks for nothing
+   * lands on 待办, and nothing remembers the page once the panel is gone.
+   * Pure UI coordination.
+   */
+  todoPageRequest: TodoPageRequest | null;
+
+  /**
    * "Quote this into that conversation's composer" — the to-do panel's
    * 「说说这件」 (ticket 42), which sits outside MainView and so cannot
    * reach its composer. The MainView showing that session quotes it and
@@ -122,6 +132,15 @@ export interface SettingsRequest {
 export interface QuoteRequest {
   sessionId: string;
   text: string;
+  nonce: number;
+}
+
+/** The to-do panel's two pages (main chat ticket 97, PRD ruling 142
+ * point 5): the to-do list, and the memos. */
+export type TodoPanelPage = "todo" | "memo";
+
+export interface TodoPageRequest {
+  page: TodoPanelPage;
   nonce: number;
 }
 
@@ -169,6 +188,9 @@ interface UiActions {
   requestTodoRows: (ids: readonly string[]) => void;
   /** The panel took the request with this nonce. */
   clearTodoRowRequest: (nonce: number) => void;
+  requestTodoPage: (page: TodoPanelPage) => void;
+  /** The panel took the page request with this nonce. */
+  clearTodoPageRequest: (nonce: number) => void;
   requestQuote: (sessionId: string, text: string) => void;
   clearQuote: () => void;
   requestSettings: (
@@ -197,6 +219,7 @@ export const useUiStore = create<UiStore>((set, get) => ({
   todoGlance: null,
   todoPanelIntroduced: readTodoPanelIntroduced(),
   todoRowRequest: null,
+  todoPageRequest: null,
   quoteRequest: null,
   settingsRequest: null,
 
@@ -270,6 +293,16 @@ export const useUiStore = create<UiStore>((set, get) => ({
     })),
   clearTodoRowRequest: (nonce) => {
     if (get().todoRowRequest?.nonce === nonce) set({ todoRowRequest: null });
+  },
+  requestTodoPage: (page) =>
+    set((state) => ({
+      todoPageRequest: {
+        page,
+        nonce: (state.todoPageRequest?.nonce ?? 0) + 1,
+      },
+    })),
+  clearTodoPageRequest: (nonce) => {
+    if (get().todoPageRequest?.nonce === nonce) set({ todoPageRequest: null });
   },
   requestQuote: (sessionId, text) =>
     set((state) => ({

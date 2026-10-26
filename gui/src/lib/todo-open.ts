@@ -166,9 +166,11 @@ function openHere(spot: TodoSpot): void {
 
 /** ⌘K's 「待办」: open beside what is on screen, in its place (ticket 46;
  * until then it landed on Galley first); a look when narrow (ticket 87).
- * It always opens; the button toggles. */
+ * It always opens; the button toggles. On its 待办 page, also when the
+ * panel is already up on 备忘 (ticket 97). */
 export function openTodoPanel(spot: TodoSpot): void {
   openHere(spot);
+  useUiStore.getState().requestTodoPage("todo");
 }
 
 /** The panel's × and Esc (ticket 87): a look folds; wide, this place is
@@ -305,6 +307,28 @@ export function talkToGalley(
  * button (`todoListed`).
  */
 export function showTodoRow(id: string, mainChatId: string): void {
+  showPanelBesideGalley(mainChatId);
+  useUiStore.getState().requestTodoRows([id]);
+}
+
+/**
+ * A memo card's words (main chat ticket 97, PRD ruling 142 point 5), as a
+ * to-do card's title: the panel opens beside Galley's conversation the
+ * same way (`showTodoRow`), on its 备忘 page, and the memo's row lights
+ * up. Only a card whose memo the page lists has a button
+ * (lib/memo.ts `memoCardOpens`).
+ */
+export function showMemoRow(id: string, mainChatId: string): void {
+  showPanelBesideGalley(mainChatId);
+  const ui = useUiStore.getState();
+  ui.requestTodoPage("memo");
+  ui.requestTodoRows([id]);
+}
+
+/** The panel on screen beside Galley's conversation, where a card is:
+ * opened if it is not (remembered open when wide, a look when narrow),
+ * left as it is if it is. */
+function showPanelBesideGalley(mainChatId: string): void {
   const ui = useUiStore.getState();
   const view = todoView(
     true,
@@ -319,7 +343,6 @@ export function showTodoRow(id: string, mainChatId: string): void {
   );
   if (view.shown) met();
   else openHere(view);
-  ui.requestTodoRows([id]);
 }
 
 /** What `todoPanelIntroduces` decides on. */

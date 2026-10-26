@@ -76,6 +76,7 @@ const cards = vi.hoisted(() => ({
   dispatches: new Map<string, unknown[]>(),
   reminders: new Map<string, unknown[]>(),
   todos: new Map<string, unknown[]>(),
+  memos: new Map<string, unknown[]>(),
 }));
 vi.mock("@/hooks/useSubtaskCards", () => ({
   useSubtaskDispatchesByMessage: (id: string | undefined) =>
@@ -88,11 +89,15 @@ vi.mock("@/hooks/useReminderCards", () => ({
 vi.mock("@/hooks/useTodoCards", () => ({
   useTodosByMessage: (id: string | undefined) => (id ? cards.todos : new Map()),
 }));
+vi.mock("@/hooks/useMemoCards", () => ({
+  useMemosByMessage: (id: string | undefined) => (id ? cards.memos : new Map()),
+}));
 
 afterEach(() => {
   cards.dispatches = new Map();
   cards.reminders = new Map();
   cards.todos = new Map();
+  cards.memos = new Map();
   live.slice = {};
   useSessionsStore.setState({ activeSessionId: undefined });
   useQueueStore.setState({ bySession: {} });
@@ -368,6 +373,83 @@ describe("the main chat is the assistant's conversation", () => {
     );
     // Only the main chat has them.
     expect(render({ isMainChat: false })).not.toContain('data-role="todo-card');
+  });
+
+  it("hangs what it noted about you under that reply, after its to-do and reminder cards (ticket 97)", () => {
+    const noted = {
+      id: 7,
+      memoId: "memo_cilantro",
+      action: "add",
+      text: "你不吃香菜",
+      sessionId: "s-1",
+      turnIndex: 2,
+      memoExists: true,
+      createdAt: "2026-10-26T08:00:00Z",
+    };
+    cards.memos = new Map([["a-排好了。", [noted]]]);
+    const alone = render({ isMainChat: true });
+    expect(count(alone, 'data-role="memo-card"')).toBe(1);
+    // 12px off the bubble with nothing above it.
+    expect(alone).toContain(
+      'data-role="memo-cards" class="flex flex-col gap-2 mt-3"',
+    );
+    const card = alone.indexOf('data-role="memo-card"');
+    expect(alone.lastIndexOf("排好了。", card)).toBeGreaterThan(
+      alone.lastIndexOf("多云，记得带伞。", card),
+    );
+    // With a to-do card and a reminder card: the to-dos, the reminders,
+    // then the memos, 8px apart.
+    cards.todos = new Map([
+      [
+        "a-排好了。",
+        [
+          {
+            kind: "todo",
+            id: "todo_hotel",
+            text: "订上海的酒店",
+            state: "open",
+            createdBy: "assistant",
+            createdIn: { sessionId: "s-1", turnIndex: 2 },
+          },
+        ],
+      ],
+    ]);
+    const two = render({ isMainChat: true });
+    expect(two.indexOf('data-role="todo-cards"')).toBeLessThan(
+      two.indexOf('data-role="memo-cards"'),
+    );
+    expect(two).toContain(
+      'data-role="memo-cards" class="flex flex-col gap-2 mt-2"',
+    );
+    cards.reminders = new Map([
+      [
+        "a-排好了。",
+        [
+          {
+            id: "sched_visa",
+            prompt: "问一下签证进度",
+            repeat: { kind: "once" },
+            timeOfDay: "09:00",
+            enabled: true,
+            fireAt: "2099-10-16T01:00:00.000Z",
+            target: "assistant",
+            createdIn: { sessionId: "s-1", turnIndex: 2 },
+            createdAt: "2026-10-16T08:00:00Z",
+            updatedAt: "2026-10-16T08:00:00Z",
+          },
+        ],
+      ],
+    ]);
+    const all = render({ isMainChat: true });
+    const order = [
+      'data-role="todo-cards"',
+      'data-role="reminder-cards"',
+      'data-role="memo-cards"',
+    ].map((needle) => all.indexOf(needle));
+    expect(order.every((at) => at > -1)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    // Only the main chat has them.
+    expect(render({ isMainChat: false })).not.toContain('data-role="memo-card');
   });
 
   it("hangs the files a reply handed over under it, first, in marker order; nowhere else (ticket 74)", () => {

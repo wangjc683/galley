@@ -15,6 +15,7 @@ import type {
   UserMessagePersistedPayload,
 } from "@/lib/session-send";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
+import { useMemoStore } from "@/stores/memo";
 import { useMessageDeleteStore } from "@/stores/message-delete";
 import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
@@ -508,6 +509,45 @@ describe("a send through Core (send_user_message)", () => {
       ]);
       useAssistantTodoStore.getState().undoDelete();
     });
+  });
+
+  // Main chat ticket 97: a memo deleted on the panel's 备忘 page goes
+  // the same way.
+  it("sends a memo deleted within its five seconds to Core before a send into the main chat", async () => {
+    const sid = "s-main-memo";
+    seed(sid, { mainChat: true });
+    const order: string[] = [];
+    const memo = {
+      id: "memo_1",
+      text: "你不吃香菜",
+      origin: { via: "supervisor" },
+      createdAt: "2026-10-26T01:00:00Z",
+      updatedAt: "2026-10-26T01:00:00Z",
+    };
+    tauriMocks.invoke.mockImplementation(async (command) => {
+      order.push(command);
+      if (command === "delete_memo") return memo;
+      if (command === "list_memos" || command === "list_memo_events") {
+        return [];
+      }
+      if (command === "send_user_message") {
+        return dispatched(row(sid, 2, "你还记得我什么？"));
+      }
+      if (command === "list_live_runners" || command === "runner_stderr_tail") {
+        return [];
+      }
+      return undefined;
+    });
+    useMemoStore.setState({ memos: [memo], deleting: {}, deleteToastId: null });
+    useMemoStore.getState().deleteMemo(memo);
+
+    await sendThroughCore(sid, { text: "你还记得我什么？", echo: "turn" });
+
+    expect(order.indexOf("delete_memo")).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf("delete_memo")).toBeLessThan(
+      order.indexOf("send_user_message"),
+    );
+    expect(useMemoStore.getState().deleting).toEqual({});
   });
 
   it("Core queued it (the page thought the session idle): the echo is taken back", async () => {

@@ -8,6 +8,7 @@ import {
   formatScheduleTime,
   formatMessageTime,
   formatMessageTimeFull,
+  formatPastDay,
   userTimeMarks,
   type MessageTimeDayWords,
 } from "@/lib/message-time";
@@ -564,5 +565,38 @@ describe("formatScheduleDay (a to-do due on a day, ticket 42)", () => {
     expect(zh("nope")).toBeNull();
     expect(zh("2026-10-16T09:00")).toBeNull();
     expect(calendarDaysBefore("", today)).toBeNull();
+  });
+});
+
+describe("formatPastDay (the 备忘 page's group headings, ticket 97)", () => {
+  // Friday 2026-10-16, today.
+  const today = local(2026, 10, 16).getTime();
+  const zh = (at: Date) =>
+    formatPastDay(at.getTime(), today, "zh-CN", {
+      today: "今天",
+      yesterday: "昨天",
+    });
+  const en = (at: Date) =>
+    plain(
+      formatPastDay(at.getTime(), today, "en-US", {
+        today: "Today",
+        yesterday: "Yesterday",
+      }),
+    );
+
+  it("writes today and yesterday as words, then the date, never a weekday", () => {
+    expect(zh(local(2026, 10, 16, 23, 59))).toBe("今天");
+    expect(zh(local(2026, 10, 15, 0, 1))).toBe("昨天");
+    expect(zh(local(2026, 10, 14, 9))).toBe("10月14日");
+    expect(zh(local(2026, 10, 10, 9))).toBe("10月10日");
+    expect(zh(local(2025, 12, 31, 9))).toBe("2025年12月31日");
+    expect(en(local(2026, 10, 16, 9))).toBe("Today");
+    expect(en(local(2026, 10, 15, 9))).toBe("Yesterday");
+    expect(en(local(2026, 10, 13, 9))).toBe("Oct 13");
+    expect(en(local(2025, 12, 31, 9))).toBe("Dec 31, 2025");
+  });
+
+  it("reads a day after today (a skewed clock) as today", () => {
+    expect(zh(local(2026, 10, 17, 9))).toBe("今天");
   });
 });

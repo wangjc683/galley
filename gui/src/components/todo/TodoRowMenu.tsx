@@ -35,14 +35,19 @@ import { useCopy } from "@/lib/i18n";
  * sidebar's context / dropdown seam. Closing it moves no focus (说说这件
  * puts the caret in the composer), and Esc closes the menu alone, not
  * the panel.
+ *
+ * A memo's row on the 备忘 page (main chat ticket 97, PRD ruling 142
+ * point 5) has the same menu with 「删除」 alone: no 说说这件 (a memo
+ * is changed by telling Galley, from the composer), no separator.
  */
 
 /** What a row's menu does, built by the row. */
 export interface TodoRowMenuModel {
+  /** 说说这件, first; none on a memo's row. */
+  onTalkAbout?: () => void;
   /** 取消提醒 is on it: a reminder still to go off (`todoReminderCancellable`). */
-  canCancelReminder: boolean;
-  onTalkAbout: () => void;
-  onCancelReminder: () => void;
+  canCancelReminder?: boolean;
+  onCancelReminder?: () => void;
   onDelete: () => void;
 }
 
@@ -55,27 +60,34 @@ function TodoRowMenuRows({
   model: TodoRowMenuModel;
 }) {
   const copy = useCopy();
+  const cancelReminder = model.canCancelReminder
+    ? model.onCancelReminder
+    : undefined;
   return (
     <>
-      <SidebarRowMenuItem
-        kind={kind}
-        onSelect={model.onTalkAbout}
-        className={MENU_ITEM_CLASS}
-      >
-        <ChatTeardropText size={13} weight="thin" />
-        {copy.todo.talkAbout}
-      </SidebarRowMenuItem>
-      {model.canCancelReminder && (
+      {model.onTalkAbout && (
         <SidebarRowMenuItem
           kind={kind}
-          onSelect={model.onCancelReminder}
+          onSelect={model.onTalkAbout}
+          className={MENU_ITEM_CLASS}
+        >
+          <ChatTeardropText size={13} weight="thin" />
+          {copy.todo.talkAbout}
+        </SidebarRowMenuItem>
+      )}
+      {cancelReminder && (
+        <SidebarRowMenuItem
+          kind={kind}
+          onSelect={cancelReminder}
           className={MENU_ITEM_CLASS}
         >
           <BellSimpleSlash size={13} weight="thin" />
           {copy.todo.cancelReminder}
         </SidebarRowMenuItem>
       )}
-      <SidebarRowMenuSeparator kind={kind} className="my-1 h-px bg-line" />
+      {(model.onTalkAbout || cancelReminder) && (
+        <SidebarRowMenuSeparator kind={kind} className="my-1 h-px bg-line" />
+      )}
       <SidebarRowMenuItem
         kind={kind}
         onSelect={model.onDelete}

@@ -12,6 +12,7 @@ import {
   openTodoPanel,
   quoteForComposer,
   quoteTodo,
+  showMemoRow,
   showTodoRow,
   takeQuote,
   talkToGalley,
@@ -54,6 +55,7 @@ afterEach(() => {
     todoGlance: null,
     todoPanelIntroduced: false,
     todoRowRequest: null,
+    todoPageRequest: null,
     quoteRequest: null,
     locateRequest: null,
   });
@@ -590,6 +592,44 @@ describe("a card's title (ticket 87, ruling 131 point 3)", () => {
     expect(glance()).toEqual({ at: "main:s-main", arrived: true });
     expect(open()).toEqual({ galley: true, elsewhere: false });
     expect(rows()).toEqual(["todo_2"]);
+  });
+});
+
+describe("the panel's page (ticket 97)", () => {
+  const page = () => useUiStore.getState().todoPageRequest?.page;
+  const rows = () => useUiStore.getState().todoRowRequest?.ids;
+
+  it("a memo card's words open the panel beside Galley as a to-do card's title does, on 备忘, its row lit", () => {
+    useUiStore.setState({ todoNarrow: false });
+    showMemoRow("memo_1", "s-main");
+    expect(open()).toEqual({ galley: true, elsewhere: false });
+    expect(page()).toBe("memo");
+    expect(rows()).toEqual(["memo_1"]);
+    expect(introduced()).toBe(true);
+  });
+
+  it("a memo card's words open a look when narrow, and leave a panel on screen as it is", () => {
+    showMemoRow("memo_1", "s-main");
+    expect(open()).toEqual(CLOSED);
+    expect(glance()).toEqual({ at: "main:s-main", arrived: true });
+    expect(page()).toBe("memo");
+    useUiStore.setState({
+      todoNarrow: false,
+      todoGlance: null,
+      todoPanelOpen: { galley: true, elsewhere: false },
+    });
+    showMemoRow("memo_2", "s-main");
+    expect(open()).toEqual({ galley: true, elsewhere: false });
+    expect(rows()).toEqual(["memo_2"]);
+  });
+
+  it("⌘K's 「待办」 asks for 待办; the button and a to-do card's title ask for nothing", () => {
+    openTodoPanel(WORK);
+    expect(page()).toBe("todo");
+    useUiStore.setState({ todoPageRequest: null });
+    toggleTodoPanel(WORK, false);
+    showTodoRow("todo_1", "s-main");
+    expect(useUiStore.getState().todoPageRequest).toBeNull();
   });
 });
 

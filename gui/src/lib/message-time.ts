@@ -430,6 +430,40 @@ export function formatScheduleDay(
   return (sameYear ? EN_DATE : EN_YEAR_DATE).format(date);
 }
 
+/**
+ * A day gone by, as a list's heading (main chat ticket 97: the to-do
+ * panel's 备忘 page, grouped by the day each memo was last noted or
+ * changed): the time line's day words, then the date — never a weekday,
+ * a list going back reads by date (`formatMessageTime` without its
+ * clock; `formatScheduleDay`'s date shapes):
+ *
+ *   today            今天             Today
+ *   yesterday        昨天             Yesterday
+ *   earlier this year 10月23日        Oct 23
+ *   an earlier year  2025年10月23日   Oct 23, 2025
+ *
+ * `dayMs` is any moment of that day; one later than today (a skewed
+ * clock) reads as today. Pure over `todayStartMs` (`useDayStamp()`).
+ */
+export function formatPastDay(
+  dayMs: number,
+  todayStartMs: number,
+  language: ResolvedLanguage,
+  words: { today: string; yesterday: string },
+): string {
+  const date = new Date(dayMs);
+  const today = localDayStart(todayStartMs);
+  const back = daysBefore(dayMs, today);
+  if (back <= 0) return words.today;
+  if (back === 1) return words.yesterday;
+  const sameYear = date.getFullYear() === new Date(today).getFullYear();
+  if (language === "zh-CN") {
+    const monthDay = `${date.getMonth() + 1}月${date.getDate()}日`;
+    return sameYear ? monthDay : `${date.getFullYear()}年${monthDay}`;
+  }
+  return (sameYear ? EN_DATE : EN_YEAR_DATE).format(date);
+}
+
 /** How many local calendar days `day` (`YYYY-MM-DD`) lies before the
  * day `todayStartMs` falls on: 0 today, negative ahead; null when it is
  * not a date. */
