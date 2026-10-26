@@ -8,8 +8,9 @@
 //! hold the main chat), times, the user's to-dos and changing them, its
 //! own reminders, what a wake note from Galley is (the morning review
 //! among them, ticket 73), what it does without being asked and what it
-//! asks first (`unasked.md`, ticket 73), and who it is with how to check
-//! a subtask's result and report it. It is the built-in
+//! asks first (`unasked.md`, ticket 73), what it knows about the user
+//! and keeps as memos (`memo.md`, ticket 96), and who it is with how to
+//! check a subtask's result and report it. It is the built-in
 //! assistant's counterpart of the Supervisor SOP an outside agent copies
 //! ([`crate::sop_install`]), which stays as it is.
 //!
@@ -44,12 +45,13 @@ macro_rules! part {
 /// The manual's parts in reading order, file name and text, bundled at
 /// build time from the files a developer reads in the repo. The entry
 /// layer names every one of them.
-pub(crate) const PARTS: [(&str, &str); 9] = [
+pub(crate) const PARTS: [(&str, &str); 10] = [
     part!("authority.md"),
     part!("cli.md"),
     part!("times.md"),
     part!("todos.md"),
     part!("todos-change.md"),
+    part!("memo.md"),
     part!("reminders.md"),
     part!("wake.md"),
     part!("unasked.md"),
@@ -219,8 +221,15 @@ mod tests {
         // reference to wake.md is now the sentence left in its place.
         // Ticket 73's six: todos.md and wake.md to unasked.md, unasked.md
         // to wake.md, subtasks.md and authority.md, and reminders.md to
-        // wake.md for stopping the morning review.
-        assert_eq!(referred, 18);
+        // wake.md for stopping the morning review. Ticket 96's three:
+        // todos.md to memo.md for information, memo.md to todos.md for
+        // what will end and to wake.md for what waits for the review.
+        assert_eq!(referred, 21);
+        assert!(part("todos.md")
+            .contains("is a memo (see `memo.md`), and so is a date with nothing to do when it"));
+        assert!(part("memo.md").contains("with the to-dos and reminders (see `todos.md`)."));
+        assert!(part("memo.md")
+            .contains("then: what you could get done for it waits for the morning review (see"));
         assert!(
             part("authority.md").contains("needs their yes to what and when (see `reminders.md`).")
         );
@@ -381,6 +390,23 @@ mod tests {
             "todo add \"<title>\" --due=<date or time> --remind-at=<YYYY-MM-DDTHH:MM> \
              --notes=\"<details>\" --supervisor=galley-assistant --reason=\"<why>\""
         ));
+        // Ticket 95's `memo` family (ticket 96), as the CLI parses it
+        // (`cli/src/args.rs` `MemoCmd`): the text, `--until`; `update`
+        // takes `--text`, `--until` or `--no-until`.
+        assert!(part("memo.md").contains(
+            "memo add \"<text>\" --until=<YYYY-MM-DD> --supervisor=galley-assistant \
+             --reason=\"<why>\""
+        ));
+        for command in [
+            "`memo update <memo-id>`",
+            "`--text=`",
+            "`--until=`",
+            "`--no-until`",
+            "`memo delete <memo-id>`",
+            "`memo list`",
+        ] {
+            assert!(part("memo.md").contains(command), "memo.md lost: {command}");
+        }
     }
 
     /// Ticket 36: the rules on reminders and scheduled tasks — when to
@@ -482,7 +508,8 @@ mod tests {
             "untick it, cancel its reminder, or delete it there. Everything else, a",
             "new one, a new time, new words, they tell you, and you change it; do not",
             "- **Your own reminders**: times Galley wakes you to do something yourself,",
-            // Information is memory; no tidying unasked.
+            // Information is a memo (memory until ticket 96); no tidying
+            // unasked.
             "Neither holds information: an address, a flight number or a preference",
             "be of use to raise then is not information: follow it up. Do not tidy the",
             "(search the history if you need to), show them the list first, and note",
@@ -586,9 +613,10 @@ mod tests {
     /// Ticket 60 (main chat PRD rulings 112, 113): the list takes what
     /// the user will want followed up, whoever does it, and the model
     /// follows it up unasked when three tests hold; a date with nothing
-    /// to do then is information. Where it goes is the nudge-or-to-do
+    /// to do then is information (a memo since ticket 96). Where it goes is the nudge-or-to-do
     /// question, its time what it is for (ahead, on the day, after). The
-    /// floor: 「记一下」 with a date is never memory alone; every one is
+    /// floor: 「记一下」 with a date is never memory (since ticket 96: a
+    /// memo) alone; every one is
     /// said, the unasked with why and when; a kind turned down is
     /// cancelled with the kind in `--reason`, and "Follow-ups the user
     /// turned down" (the In Hand group's title) is read before setting
@@ -601,7 +629,7 @@ mod tests {
             // What the list holds.
             "landlord back, buy potting soil), or something coming up on a date that",
             "they will want to act on or hear about then, whoever does it (their",
-            "belongs in your memory, and so does a date with nothing to do when it",
+            "is a memo (see `memo.md`), and so is a date with nothing to do when it",
             // Unasked, by three tests.
             "Follow up something they mention without being asked, too, when all three",
             "1. It will happen, fall due or have an outcome at a time to come: a date,",
@@ -612,9 +640,10 @@ mod tests {
             "second. Before you follow something up unasked, read",
             "\"Follow-ups the user turned down\" in your \"In Hand\" lines: one of the",
             "same kind there means leave it, unless the user asks for it outright.",
-            // The floor: asked with a date, never memory alone.
+            // The floor: asked with a date, never a memo alone (memory
+            // alone until ticket 96).
             "When the user says 「记一下」, 「帮我记着」 or 「提醒我」 about something with",
-            "into your memory alone.",
+            "into a memo alone.",
             // Where: an answer to ask after is a nudge; a renovation or a
             // lease a to-do.
             "「HR 说这周五给 offer 答复」: ask on Friday evening how it went); once it",
@@ -805,14 +834,17 @@ mod tests {
             // Ticket 81: it wakes only for what has no alarm of its own,
             // and woken goes over all of it.
             "skips the morning when there is nothing to look at (what is due further",
-            "off and your own reminders come up at their own time); when it wakes",
-            "you, go over everything in hand.",
+            // Ticket 96: and no memo new since the last review.
+            "off and your own reminders come up at their own time) and no memo is new",
+            "since the last review; when it wakes you, go over everything in hand.",
             "- Read what is current first: `todo list`, `schedule list`, and your",
             "`unasked.md` says, at most two subtasks in all. Do not raise early a",
             "to-dos, overdue ones included: their reminders do that.",
             "- Speak only when you got something done that the user will want to",
             "to decide on. Not that you looked and nothing changed, nor what they",
-            "(「阿里云那件我早上查了一下：……」); no fixed heading. When you only",
+            // Since ticket 96 the line goes on with where a memo came from.
+            "(「阿里云那件我早上查了一下：……」), and for a memo where it came from",
+            "started subtasks, with no result yet, write nothing for the user: the",
             "subtask tags and `<no-reply/>`, nothing else (you tell them when the",
             "subtasks are back). When you did nothing worth telling, your whole",
             "- When the user says to stop it (「别每天过了」, 「早上那个不用了」),",
@@ -849,5 +881,153 @@ mod tests {
             .unwrap();
         assert!(reminders.find("Never set one without saying so.").unwrap() < both);
         assert!(reminders.find("set it once they say yes.").unwrap() < both);
+    }
+
+    /// Ticket 96 (main chat PRD rulings 140–143): the user's memos, in
+    /// `memo.md`. A memo is what it knows, a to-do what is to be done, told
+    /// apart by "will it end?" (ruling 140 point 3); what to note, unasked,
+    /// and what not (ruling 141 point 2); one thing, one memo, updated
+    /// rather than added again, and one out of date deleted in any turn
+    /// (point 3, ruling 142 point 3); written for the user, an interest it
+    /// noticed saying where it comes from (ruling 140 point 6); the four
+    /// overlaps by how long a thing lasts, and how memos and to-dos work
+    /// together (ruling 142 points 1, 3); what waits for the morning
+    /// review; GA's memory keeps how to do things (ruling 140 point 2); the
+    /// commands, the limits and `overLimit` (ruling 141 points 4–6), named
+    /// as Core names them; the card, and 「记下了」 only after a write. The
+    /// review's question for each new memo is `wake.md`'s (ruling 143
+    /// point 4), the two subtasks shared with the to-dos, which come first;
+    /// `todos.md` sends information, a wish and what is of use beyond one
+    /// to-do to the memos. Single-line fragments only (CRLF on Windows).
+    #[test]
+    fn manual_keeps_the_users_memos() {
+        use crate::api::{MEMO_TEXT_MAX_CHARS, MEMO_TOTAL_MAX_CHARS};
+
+        let memo = part("memo.md");
+        assert!(memo.contains("## The user's memos"));
+        for rule in [
+            // What a memo is; the question.
+            "something to do; a memo is something you know. When you are not sure",
+            "which, ask: will it end? When it gets done, dropped or reminded, it goes",
+            "true or no longer true, it is a memo, with a last day when it will stop",
+            // What to note, unasked, and what not.
+            "Note, without being asked, only what you will still need in a later",
+            "- Who they are: what they are called, their family, their work.",
+            "- What they prefer or avoid.",
+            "- The people and places they deal with (their landlord, and the number).",
+            "- An interest that keeps coming up, said or seen (the same team asked",
+            "- A date with nothing to do when it comes (the day their company was",
+            "Not what you talked about (the history has it), what is of no use once",
+            "this turn is done, what is already a to-do or a reminder, a passing mood,",
+            "or a secret such as a password or a verification code.",
+            // One thing, one memo.
+            "One thing, one memo. Before you note one, look at your \"Memo\" lines and",
+            "what you noted since: when the same thing is there, `memo update` that",
+            "one instead of adding a second (「常问 76 人」 asked ten more times is",
+            "memo; when you see one is out of date, delete it then, in any turn.",
+            // Written for the user.
+            "Write it for the user, who reads the list: one sentence, in their words,",
+            "not a record about them (not 「用户说……」 or 「他提到……」). An interest",
+            "you noticed says where it comes from (「看你这周常问 76 人」), not",
+            // The overlaps.
+            "- A date: when the user will act on it or want to hear of it then, a",
+            "to-do; when it is worth your asking after then, your own reminder; when",
+            "nothing is to be done then, a memo.",
+            "- What only one to-do needs goes in its `--notes` and ends with it",
+            "(「A 座 3 楼，带身份证」); what is of use beyond it (the landlord's",
+            "number) is a memo, not copied into the notes.",
+            "- What they want to be reminded of each time is a repeating reminder",
+            "(「工作日 9 点到公司」).",
+            "「下周三去上海出差，周二提醒我订酒店」 is the to-do 「订上海的酒店」 and the",
+            "memo 「下周三起在上海出差」 until that Friday; the to-do does not retell",
+            "- A wish with nothing to do yet (「我最近想学吉他」) is no to-do; it can be",
+            "a memo, as an interest.",
+            // Together; what waits for the review; GA's memory.
+            "A memo shapes how you note a to-do: 「提醒提前一天」 or 「早上 9 点前别吵我」",
+            "(「搬去 702」) changes that memo too. Noting a memo is all you do for it",
+            "What is about the user goes here; how to do things (their setup, paths,",
+            "what went wrong before) stays in your own memory, as before.",
+            // The commands, the total, saying it.
+            "day, for something that will stop holding (a trip, a stay); leave it",
+            "- The memos come to at most 2,000 characters at the start of a segment.",
+            "A write past that is kept, and its result carries `overLimit`: merge",
+            "memos, or delete the ones out of date, before you note another.",
+            "These are yours to do without asking. The desktop shows a card under your",
+            "reply for each memo you note, change or delete (「记下了 · 不吃香菜」,",
+            "so; do not describe the card. Say 「记下了」 only when you wrote one this",
+        ] {
+            assert!(memo.contains(rule), "memo.md lost: {rule}");
+        }
+        // The names and numbers are Core's: the state block's heading, the
+        // limits, the write result's field.
+        assert!(memo.contains(&format!(
+            "- The text is one sentence, 1 to {MEMO_TEXT_MAX_CHARS} characters."
+        )));
+        assert_eq!(MEMO_TOTAL_MAX_CHARS, 2_000, "memo.md says 2,000");
+        let brief = crate::api::MemoBrief {
+            id: crate::api::MemoId("memo_1a2b3c4d5e6f7a8b".into()),
+            text: "不吃香菜".into(),
+            until: None,
+            origin: crate::api::Origin {
+                via: crate::api::OriginVia::Supervisor,
+                supervisor: Some(crate::api::ASSISTANT_SUPERVISOR.into()),
+                reason: None,
+                client: None,
+            },
+            created_in: None,
+            created_at: "2026-10-26T01:00:00+00:00".into(),
+            updated_at: "2026-10-26T01:00:00+00:00".into(),
+        };
+        let lines =
+            crate::managed_prompt::memo_section(&[brief.clone()], chrono::Utc::now(), &chrono::Utc)
+                .expect("a memo makes the section");
+        assert!(lines.starts_with("### Memo\n"));
+        let write = crate::api::MemoWrite {
+            memo: brief,
+            over_limit: crate::api::MemoOverLimit::of(MEMO_TOTAL_MAX_CHARS + 1),
+        };
+        assert!(serde_json::to_value(&write)
+            .expect("json")
+            .get("overLimit")
+            .is_some());
+
+        // The morning review, for each new memo (Core's wake note sends the
+        // model to this section: "most need nothing").
+        let wake = part("wake.md");
+        let review = wake.find("## The morning review").unwrap();
+        for rule in [
+            "- When the note lists memos noted or changed since the last review, ask",
+            "get done for the user that they would want to know. Most need nothing.",
+            "A settled fact or a preference (「不吃香菜」): skip it, and usually a",
+            "situation with an end date too (a trip). Something out in the world",
+            "that changes (a team they follow, a policy they watch): look it up, and",
+            "speak only when there is something they would want to know. Something",
+            "they want to do but gave no next step for (「想学吉他」): speak only with",
+            "groundwork you can hand them, never 「要不要我帮你找」. The two subtasks",
+            "are for the to-dos and the memos together, the to-dos first.",
+            "(「阿里云那件我早上查了一下：……」), and for a memo where it came from",
+            "(「你昨天说想学吉他，……」); no fixed heading. When you only",
+        ] {
+            let at = wake
+                .find(rule)
+                .unwrap_or_else(|| panic!("wake.md lost: {rule}"));
+            assert!(review < at, "{rule} is not under its heading");
+        }
+
+        // The to-dos' part sends what is not to be done to the memos.
+        let todos = part("todos.md");
+        for rule in [
+            "is a memo (see `memo.md`), and so is a date with nothing to do when it",
+            "they are in the middle of. A wish with nothing to do yet can be a memo",
+            "into a memo alone.",
+            "and not as a record about them (「用户说……」). What is of use beyond this",
+            "to-do (the landlord's number) is a memo instead, not copied here.",
+        ] {
+            assert!(todos.contains(rule), "todos.md lost: {rule}");
+        }
+        for (name, body) in PARTS {
+            assert!(!body.contains("belongs in your memory"), "{name}");
+            assert!(!body.contains("into your memory alone"), "{name}");
+        }
     }
 }

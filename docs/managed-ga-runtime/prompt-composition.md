@@ -422,7 +422,8 @@ What you noted about the user, oldest first, each with the day you last noted or
   not fixed; twenty memos of a hundred characters come to 1,582 bytes of
   these words. The words are `\n`-escaped strings, not raw strings, so a
   Windows checkout does not change them. How to use the memos (what to note,
-  one thing a memo, merging past the total) is the manual's (ticket 96).
+  one thing a memo, merging past the total) is the manual's `memo.md`
+  (ticket 96); the entry layer sends the model there.
 - **Switch**: none; main chat only, as In Hand (every other prompt is
   tested never to carry it). Data: outside the static budget and the prompt
   hash.
@@ -475,7 +476,9 @@ that finishes a task and restates the result. The layer says three things:
   asks to be reminded; `times.md` for any date or time; `authority.md` and
   `cli.md` for sessions, projects and models; `wake.md` and `subtasks.md`
   when Galley wakes it; since ticket 73 `todos.md` and `unasked.md` to note
-  a to-do), then "Every write but `llm set` carries
+  a to-do; since ticket 96 "a session, project, model, schedule, to-do or
+  memo command", and `memo.md` to note or change what it knows about the
+  user), then "Every write but `llm set` carries
   `--supervisor=galley-assistant --reason="<why>"`": the one rule every
   part with a write needs and only `cli.md` states. Until ticket 59 it
   read "Before your first Galley CLI write (…), read your manual at
@@ -574,6 +577,35 @@ that finishes a task and restates the result. The layer says three things:
   had never carried it, as nothing taught it. The morning review itself
   is a wake (`core/src/scheduler.rs` `fire_review`, words in
   `subtask_report.rs`), its rules in `wake.md`'s "The morning review".
+- **Note what it learns about the user as a memo** (ticket 96, main chat
+  PRD rulings 140–143): after the to-do sentence, "Note what you learn
+  about the user that you will need later as a memo (see `memo.md`).";
+  the floor says "(a to-do, a reminder, a memo)" in place of "(…, your
+  memory)", since information now goes to the memos (ticket 95's
+  `galley memo`, the "Memo" lines of the state block). The manual's new
+  part `memo.md` has the rest: a to-do is something to do, a memo
+  something it knows, told apart by "will it end?"; what to note unasked
+  (who the user is, what they prefer or avoid, the people and places they
+  deal with, an interest that keeps coming up, said or seen, a date with
+  nothing to do then) and what not (what was talked about, what is of no
+  use after this turn, what is already a to-do or a reminder, a passing
+  mood, a secret); one thing a memo, updated rather than added again, one
+  out of date deleted in any turn; written for the user, an interest
+  noticed saying where it comes from (「看你这周常问 76 人」); the four
+  overlaps by how long a thing lasts (a date with nothing to do then is a
+  memo; what only one to-do needs is its notes, what is of use beyond it
+  a memo; a routine to be reminded of is a repeating reminder, knowing it
+  a memo; one sentence of two lifetimes is split, 「订上海的酒店」 and
+  「下周三起在上海出差」 until that Friday); what the user is (memo) apart
+  from how to do things (GA memory); the commands, the 100 and 2,000
+  character limits and `overLimit`; the card under the reply. Noting a
+  memo is all it does for it then: what it could get done for one waits
+  for the next morning review, whose wake note names the new memos, and
+  `wake.md`'s "The morning review" has the question for each (most need
+  nothing; something out in the world that changes is looked up, a wish
+  with no next step is spoken of only with groundwork done; the two
+  subtasks shared with the to-dos, which come first). `todos.md` sends
+  information, a wish and what is of use beyond one to-do to the memos.
 
 - **Evidence**: compared with and without on the main chat's own model
   (`.scratch/main-chat/entry-layer-eval/`, 15 messages, tools intercepted).
@@ -684,7 +716,7 @@ that finishes a task and restates the result. The layer says three things:
   after writing memory. Ticket 64: of the seven cases that set nothing,
   the first turns that said they would note something fell from 5 to 1,
   with the same number of requests.
-- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 2767, no headroom,
+- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 3286, no headroom,
   `\r` not counted, measured with an empty manual directory (the user's state
   root does not count, as for the IM layer). 827 for the 03d layer;
   ticket 06a added 619 for the dispatch clause (the `T` text 522, the
@@ -703,7 +735,9 @@ that finishes a task and restates the result. The layer says three things:
   nothing was written +54): 2767; ticket 73 added 373 (what the user is in
   the middle of and sets aside +62, the paragraph on acting unasked and
   handing over a file with its break +294, `unasked.md` in the manual list
-  +17): 3140.
+  +17): 3140; ticket 96 added 146 (the memo sentence with its break +87,
+  "a memo" in place of "your memory" in the floor −5, `memo` in the write
+  list +6, `memo.md` in the manual list +58): 3286.
   Behavior, but main chat only, so it stays out of the static budget and
   the prompt hash.
 
@@ -804,6 +838,7 @@ row.
 | Main chat entry layer: the reminder paragraph rewritten for the user's to-dos (note what the user has to do as a to-do with a reminder when it has a date, tick it off when done, a reminder of its own for a promised follow-up, `todo list` before saying what is left, the manual's "To-dos and reminders"); `to-do` in the write list | main chat PRD ruling 91, ticket 41 (2026-10-17): to-dos became their own record (tickets 39, 40), and noting one, ticking one off and answering 「还有什么没办」 all start from a remark with no CLI write in sight. Run on the main chat's model with the manual's rewritten section (`.scratch/main-chat/entry-layer-eval/todo/`, and the `schedule/` suite rerun). Cap raised 1920 → 2026 (+106 bytes) in the same diff |
 | Main chat entry layer: the manual in parts, "Your manual is in `<dir>`, one file per part", each part by its bare name with when to read it, read together before each write (not only the first), and the identity every write carries; the to-do sentence names `todos.md` | main chat PRD ruling 111, ticket 59 (2026-10-19): the manual was read whole again for each write (GA's `file_read` takes 200 lines, and GA cuts old tool results to 800 characters), about 2k tokens each time; a part is a few hundred. The identity sentence came from the eval of the first wording: a tick or a cancel read one part and left `--supervisor=galley-assistant` off. Run on the main chat's model (`.scratch/main-chat/entry-layer-eval/`: `todo`, `schedule`, `wake`). Cap raised 2026 → 2463 (+437 bytes) in the same diff |
 | Main chat entry layer: what comes up on a date and will be worth raising then; 「记下了」 only after a write this turn; read `todos.md` before saying you will note, and no talk of noting when nothing was written | main chat PRD rulings 112, 115, 116, tickets 60, 63, 64 (2026-10-19): 「帮我记一下，702 办公室装修预计完工时间 11 月 20 号」 went into GA memory alone (the sentence named only what the user has to do); a founding date got 「记下了」 with no tool call; 「今晚和朋友吃火锅」 said it would note it before reading the threshold, then took it back in the reply. Run on the main chat's model (`.scratch/main-chat/entry-layer-eval/todo/`, `chat/`). Cap raised 2463 → 2568 → 2675 → 2767 |
+| Main chat entry layer: note what it learns about the user and will need later as a memo, naming `memo.md`; the 「记下了」 floor counts "a memo" in place of "your memory"; `memo` in the write list and `memo.md` in the manual list | main chat PRD rulings 140–143, ticket 96 (2026-10-26): what the user is had nowhere that lasted (GA's L2 held 278 bytes after six days, and its L0 keeps only what a tool call produced), so Galley keeps memos (ticket 95) and the manual's new part `memo.md` says what to note, what not, one thing a memo, where a thing goes beside the to-dos, and what the morning review does with a new one (in `wake.md`). Like the to-do sentence, a remark such as 「我不吃香菜」 has no CLI write in sight, so the part would not be opened without a line here. Run on the main chat's model (`.scratch/main-chat/entry-layer-eval/memo/`). Cap raised 3140 → 3286 (+146 bytes) in the same diff |
 | Past Galley Conversations: `--around` example; coverage sentence reworded to 「This reaches every Galley session, but not direct IM chats …」 | ticket 03b (2026-10-12): `session show` gained `--around`, and `--tail=20` reads the end of a session, not where a search hit is. Paid for in the same diff: the two coverage sentences became one (−51 bytes against the +51-byte line on both platforms), so the static text stays at 6855 bytes (Windows) / 6837 (POSIX) and the cap is unchanged |
 | Feature map and redirect sentence for every conversation: "Every conversation's top bar: the to-do (…), opening beside it"; "To-dos, reminders and scheduled tasks are kept by the assistant, in the Galley conversation atop the sidebar: … never say one is noted or set." (the redirect sentence rewritten 2026-10-22, below) | main chat PRD ruling 95 (2026-10-17): the to-do panel opens beside any conversation, read-only outside Galley, and a workbench model could otherwise `galley todo add` or say 「记下了」 when the user asks there. Paid for in the same diff ("at the top of" → "atop", "which opens" → "opening", "The Galley conversation's … its" → "Every conversation's … the"): the static text stays at 6826 bytes (Windows) / 6808 (POSIX) and the cap is unchanged |
 | Feature map: the to-do on its own line, "The Galley conversation's top bar: its to-do (…), which opens beside it", off the sidebar line (rewritten by ruling 95, above) | main chat PRD ruling 93 (2026-10-17): the to-do's entry moved from the row under the sidebar's Galley card to the Galley conversation's top bar; the map names where things are, so the old sidebar line would send the user to the wrong place. Static cap 6775 → 6826 (Windows; POSIX 6808), +44 for this line and +7 owed by ruling 90 (see the budget paragraph above) |

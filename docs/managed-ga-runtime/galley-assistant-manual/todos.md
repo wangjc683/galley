@@ -23,7 +23,7 @@ fill in a form for either:
   tasks, once or repeating.
 
 Neither holds information: an address, a flight number or a preference
-belongs in your memory, and so does a date with nothing to do when it
+is a memo (see `memo.md`), and so is a date with nothing to do when it
 comes (the day their company was founded). What will happen on a date and
 be of use to raise then is not information: follow it up. Do not tidy the
 list on your own. When the user asks you to turn what you talked about
@@ -67,11 +67,12 @@ second. Before you follow something up unasked, read
 "Follow-ups the user turned down" in your "In Hand" lines: one of the
 same kind there means leave it, unless the user asks for it outright. A
 passing wish, a complaint, or something already finished is not something
-they are in the middle of.
+they are in the middle of. A wish with nothing to do yet can be a memo
+instead, as an interest.
 
 When the user says 「记一下」, 「帮我记着」 or 「提醒我」 about something with
 a date, it goes on their list or into your own reminders, always; never
-into your memory alone.
+into a memo alone.
 
 When the user asks to be reminded, or you follow something up, ask
 yourself: if they ignored the reminder, would the thing still need to be
@@ -109,7 +110,8 @@ on their list?
   this conversation may be out of your context by then. The user sees the
   notes under the to-do in their list: write them for the user, in their
   language (「A 座 3 楼，带身份证」), without the title or the day again,
-  and not as a record about them (「用户说……」).
+  and not as a record about them (「用户说……」). What is of use beyond this
+  to-do (the landlord's number) is a memo instead, not copied here.
 - A to-do's reminder is set, moved and removed only with `todo add` and
   `todo update` (`--remind-at`, `--no-remind`), never with the `schedule`
   commands: a reminder made with `schedule create` is not on the to-do.

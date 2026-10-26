@@ -418,6 +418,13 @@ look it up with the Galley CLI (search, then
 /// rules, and the manual list names it with `todos.md`) — and teaches
 /// handing over a file as `[FILE:<absolute path>]` on a line of its own,
 /// which the desktop draws as a card under the reply (ticket 74).
+///
+/// Ticket 96 (main chat PRD rulings 140–142): a sentence after the to-do
+/// one sends what the model learns about the user and will need later to
+/// a memo (ticket 95's `galley memo`), naming `memo.md`, where the rules
+/// are; the floor's 「记下了」 names a memo in place of the memory, where
+/// this kind of thing no longer goes; `memo` joins the write list and
+/// `memo.md` the manual list.
 fn main_chat_entry_layer(manual_dir: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
@@ -441,8 +448,10 @@ to finish, a lease ending), as a to-do, with a reminder when it has a date,
 and tick it off when it is done; set yourself a reminder when you promise
 to follow up. Do it unasked, but read `todos.md` in your manual before
 saying you will (it says when), and `todo list` before saying what is left.
+Note what you learn about the user that you will need later as a memo (see
+`memo.md`).
 Say 「记下了」 or the like only after you wrote it down this turn (a to-do, a
-reminder, your memory); if you write nothing down, do not bring up
+reminder, a memo); if you write nothing down, do not bring up
 noting it.
 
 When you note something, think a step ahead: do what you can for it
@@ -452,9 +461,10 @@ unasked, then say what you did; offer nothing you have not done (see
 desktop shows it as a card.
 
 Your manual is in `{manual_dir}`, one file per part. Before a Galley CLI
-write (a session, project, model, schedule or to-do command), read the
+write (a session, project, model, schedule, to-do or memo command), read the
 parts it needs, together: `todos.md` and `unasked.md` to note a to-do;
-`todos-change.md` to change, tick off or list to-dos; `reminders.md` for
+`todos-change.md` to change, tick off or list to-dos; `memo.md` to note or
+change what you know about the user; `reminders.md` for
 your own reminders, changing them, and when the user asks to be reminded;
 `times.md` for any date or time; `authority.md` and `cli.md` for sessions,
 projects and models; `wake.md` and `subtasks.md` when Galley wakes you. Every
@@ -1367,12 +1377,17 @@ mod tests {
         assert!(main.contains(&format!(
             "Your manual is in `{MANUAL_DIR}`, one file per part. Before a Galley CLI"
         )));
-        assert!(
-            main.contains("write (a session, project, model, schedule or to-do command), read the")
-        );
+        assert!(main.contains(
+            "write (a session, project, model, schedule, to-do or memo command), read the"
+        ));
         assert!(
             main.contains("parts it needs, together: `todos.md` and `unasked.md` to note a to-do;")
         );
+        // Ticket 96: the memos' part, with when to read it.
+        assert!(main.contains(
+            "`todos-change.md` to change, tick off or list to-dos; `memo.md` to note or"
+        ));
+        assert!(main.contains("change what you know about the user; `reminders.md` for"));
         assert!(main
             .contains("your own reminders, changing them, and when the user asks to be reminded;"));
         // The identity every write carries is the one rule all the parts
@@ -1503,8 +1518,17 @@ mod tests {
     /// `[FILE:<absolute path>]` on a line of its own (+142): nothing had
     /// taught the main chat the marker, and its replies never carried
     /// one, so what it made by itself showed only as a sentence. The
-    /// manual list names `unasked.md` with `todos.md` (+17).
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 3140;
+    /// manual list names `unasked.md` with `todos.md` (+17). Raised
+    /// 3140 → 3286 by ticket 96 (main chat PRD rulings 140–142): +146
+    /// bytes. A sentence after the to-do one, "Note what you learn about
+    /// the user that you will need later as a memo (see `memo.md`)." (+87,
+    /// with its break): 「我不吃香菜」 or 「我女儿今年上小学一年级」 has no CLI
+    /// write in sight, so without it the model would not open the part
+    /// where what to note and what not is. The floor's list says "a memo"
+    /// in place of "your memory" (−5): information goes to the memos now
+    /// (ruling 140). `memo` in the write list (+6) and `memo.md` in the
+    /// manual list, with when to read it (+58).
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 3286;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {
@@ -1697,7 +1721,8 @@ mod tests {
 
     /// Ticket 63 (main chat PRD ruling 115): the to-do paragraph closes
     /// with the floor that 「记下了」 follows a write in the same turn (a
-    /// to-do, a reminder, the memory). Main chat only.
+    /// to-do, a reminder, the memory; since ticket 96 a memo). Main chat
+    /// only.
     #[test]
     fn main_chat_entry_layer_says_noted_only_after_a_write() {
         let main =
@@ -1706,7 +1731,8 @@ mod tests {
         assert!(main.contains(
             "Say 「记下了」 or the like only after you wrote it down this turn (a to-do, a"
         ));
-        assert!(main.contains("reminder, your memory); if you write nothing down, do not bring up"));
+        assert!(main.contains("reminder, a memo); if you write nothing down, do not bring up"));
+        assert!(!main.contains("your memory);"));
         let todo = main.find("Note what the user has to do").unwrap();
         let floor = main.find("Say 「记下了」").unwrap();
         let manual = main.find("Your manual is in").unwrap();
@@ -1739,6 +1765,33 @@ mod tests {
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(!prompt.contains("saying you will"));
             assert!(!prompt.contains("do not bring up"));
+        }
+    }
+
+    /// Ticket 96 (main chat PRD rulings 140–142): after the to-do sentence,
+    /// what the model learns about the user and will need later is noted
+    /// as a memo, with the part named (one on the table, holding the rules);
+    /// the floor before the manual list. Main chat only.
+    #[test]
+    fn main_chat_entry_layer_notes_what_it_learns_as_a_memo() {
+        let main =
+            compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
+        // Single-line fragments only (CRLF on Windows).
+        assert!(main.contains(
+            "Note what you learn about the user that you will need later as a memo (see"
+        ));
+        assert!(main.contains("`memo.md`)."));
+        assert!(crate::assistant_manual::part("memo.md").contains("## The user's memos"));
+        let todo = main
+            .find("`todo list` before saying what is left.")
+            .unwrap();
+        let memo = main.find("Note what you learn about the user").unwrap();
+        let floor = main.find("Say 「记下了」").unwrap();
+        let manual = main.find("Your manual is in").unwrap();
+        assert!(todo < memo && memo < floor && floor < manual);
+        for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
+            assert!(!prompt.contains("memo.md"));
+            assert!(!prompt.contains("as a memo"));
         }
     }
 

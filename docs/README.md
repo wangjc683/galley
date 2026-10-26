@@ -90,7 +90,7 @@ the doc on the right is part of your change, not a follow-up:
 | Write a devlog entry | add its row to [devlog README](./devlog/README.md) in the same change |
 | Change UI copy rules or visual specs | [copy guidelines](./copy-language-guidelines.md) / [design](./design/README.md) |
 | Update the Supervisor SOP | re-sync both `references/` copies (`.claude/skills/…` and `.agents/skills/…`, bump their "Last synced" header), check `core/src/managed_prompt.rs` still agrees, then run `node scripts/check-supervisor-sop-drift.mjs` |
-| Change a CLI command the assistant uses, or the [assistant manual](./managed-ga-runtime/galley-assistant-manual/) | the manual's parts, one file each (embedded by `core/src/assistant_manual.rs`, whose tests pin its spellings, each in its part; the entry layer names every part with when to read it) and the [prompt composition](./managed-ga-runtime/prompt-composition.md#main-chat-entry-layer) notes; rerun the eval suite for the rule (`.scratch/main-chat/entry-layer-eval/`: `--suite wake`, `schedule` or `todo`) when one changes |
+| Change a CLI command the assistant uses, or the [assistant manual](./managed-ga-runtime/galley-assistant-manual/) | the manual's parts, one file each (embedded by `core/src/assistant_manual.rs`, whose tests pin its spellings, each in its part; the entry layer names every part with when to read it) and the [prompt composition](./managed-ga-runtime/prompt-composition.md#main-chat-entry-layer) notes; rerun the eval suite for the rule (`.scratch/main-chat/entry-layer-eval/`: `--suite wake`, `schedule`, `todo` or `memo`) when one changes |
 
 ## Keep Docs Lean
 

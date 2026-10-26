@@ -449,6 +449,15 @@ every write is refused with `assistant_unavailable:` otherwise.
   the next review.
 - **At the start of each segment**: the "Memo" lines after In Hand
   ([prompt composition](./prompt-composition.md#memo-main-chat-only)).
+- **How Galley keeps them**: the [assistant manual](./galley-assistant-manual/)'s
+  part `memo.md` (ticket 96): what to note unasked and what not, one thing
+  a memo (update it, do not add it again; delete one out of date), written
+  for the user, and where a thing goes beside the to-dos (a date with
+  nothing to do then, what is of use beyond one to-do, a routine, a
+  sentence of two lifetimes); what the user is goes here, how to do things
+  stays in GA's memory. The entry layer carries one sentence for it, as a
+  remark like 「我不吃香菜」 has no CLI write in sight; the morning review's
+  question for each new memo is `wake.md`'s.
 - **Reset**: resetting the main chat deletes every memo and every record of
   their writes.
 - Every write broadcasts `memos:changed`. The remote module does not
