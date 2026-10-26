@@ -1,6 +1,6 @@
 # 95 备忘的 Core 与命令：记录、`galley memo`、上限与期限、段首一节、巡看为前一天的新备忘叫醒
 
-Status: needs-dogfood（2026-10-26 快进合入 `64d1489e`、`4d78db86`；主会话机器验收：worktree 里复跑 `cargo test --workspace` 本机时区与 `TZ=UTC` 各 1252 条全过，`pnpm --dir gui typecheck`、`git diff --check` 过，`rustfmt --check` 报的几处在 main 上原样就有；新增行无本机路径与真实数据。合入后 dev 重启 Core，主会话重编 CLI sidecar 并替换 `core/target/debug/galley`，`galley memo --help`、`memo list` 可用。真机与票 96、97 一起走，见票 97）
+Status: needs-dogfood（2026-10-26 合入 `64d1489e`、`4d78db86`，JC 真机：「真机看了 OK」；库里有记、改期限、桌面删除的事件。剩一步：巡看为前一天的新备忘醒。10-26 记的「不喜欢喝酒。」在你发起的一轮里（`fresh_at` 有值），10-27 早上巡看应当醒、且不出声；看 dev 日志 `[scheduler] review`、pref `assistant_review_memo_window` 与主对话那一轮是否 `<no-reply/>`，过了就改 done）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 140、141、143（2026-10-26，主对话的上下文与备忘；JC：「按你建议推进」）；devlog [主对话的备忘](../../../docs/devlog/2026-10-26-main-chat-memo.md)。改写 [助手 PRD](../../assistant/PRD.md) 裁决 10 与主聊天裁决 128 第 4 条的叫醒判据。本票只做 Core、CLI、Agent API 文档与 GUI 的 IPC 类型；手册与评测是票 96，卡片与面板页是票 97，两张都等本票合入后再开。
 

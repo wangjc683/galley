@@ -751,7 +751,15 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Release-scope truth is `git log v0.7.1..HEAD`. Nothing user-facing yet.
+Release-scope truth is `git log v0.7.1..HEAD`. User-facing so far
+(2026-10-26): the main chat's memo (what Galley knows about you, written in
+the turn, carried at every segment start, a 「备忘」 page beside 「待办」,
+cards under the replies, the morning review also wakes for the day before's
+new memos; main chat rulings 139–144, tickets 95–99); prompt cache hits on
+the ChatGPT plan backend again (SIWC 08, patch `0007` sends `session_id`);
+cards for what is gone are struck through, and the panel's two pages use
+`SegmentedControl`. Dogfood still owed: ticket 95's morning review waking
+for a new memo, ticket 98's noticed interest.
 
 **Owed from the `v0.7.1` smoke** (JC approved publish without reporting
 smoke items, 2026-10-26; the list is in the release devlog). JC installed the
