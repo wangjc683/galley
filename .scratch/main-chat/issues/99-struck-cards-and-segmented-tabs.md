@@ -54,3 +54,140 @@ Status: ready-for-agent
 2. 让它记一件待办再在面板里删掉：回复下那张卡片的标题划线，右边「已删除」。
 3. 在备忘页删一条：回复下「记下了 · ……」那张的正文划线，右边「已删除」；让它删一条（「别记我不喝酒了」），「不再记 · ……」那张正文划线。
 4. 取消一个它自己的提醒：提醒卡片的时间与那句话划线，右边「已取消」。
+
+## Comments
+
+### 2026-10-26 实现报告（代理，分支 `ticket-99-struck-cards`）
+
+**1. 提交**（`git log --oneline main..HEAD`，本条报告另起一个提交）：
+
+- `2b0888b2 main-chat ticket 99: strike what is gone on the cards, SegmentedControl for the panel's pages`
+
+**2. 四种卡片状态的 className diff**（原样，注释行略）
+
+待办卡片被删（`gui/src/components/todo/todo-styles.ts`；卡片的标题按钮与字两条路径都用它，`TodoCards.tsx` 只改了注释）：
+
+```diff
+     "transition-colors duration-(--motion-base) motion-reduce:transition-none",
+-    cancelled
+-      ? "text-ink-muted"
+-      : checked
+-        ? "text-ink-muted line-through"
+-        : "text-ink",
++    checked || cancelled ? "text-ink-muted line-through" : "text-ink",
+```
+
+备忘卡片（`gui/src/components/conversation/MemoCards.tsx`；状态由新函数 `lib/memo.ts` 的 `memoCardState` 给：`listed` / `deleted` / `dropped` / `expired`，取代 `memoCardOpens`）：
+
+```diff
+-  const opens = useMemoStore((s) => memoCardOpens(event, s.memos, s.deleting));
++  const state = useMemoStore((s) => memoCardState(event, s.memos, s.deleting));
++  const struck = state === "deleted" || state === "dropped";
++  const side =
++    state === "deleted"
++      ? copy.todo.stateDeleted
++      : state === "expired"
++        ? copy.memo.stateExpired
++        : null;
+   const line = (
+     <>
+       <span className="text-ink-muted">{prefix} · </span>
+-      {text}
++      <span className={struck ? "line-through" : undefined}>{text}</span>
+     </>
+   );
+…
++      data-memo-state={state}
+…
+-        {opens ? (
++        {state === "listed" ? (
+…
+-            className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink"
++            className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-muted"
+…
++        {side && (
++          <span
++            data-role="memo-card-state"
++            className="shrink-0 select-none text-[12px] tabular-nums text-ink-muted"
++          >
++            {side}
++          </span>
++        )}
+```
+
+即：还在的照旧（正文 `ink`、按钮）；不在了的正文划线、整行 `ink-muted`、右边「已删除」；「不再记」正文划线、`ink-muted`、右边无字；过期的 `ink-muted`、不划、右边「已过期」。前缀那一段从来不划。右边那一格的 className 与待办卡片的 `todo-meta` 一格逐字相同。
+
+提醒卡片已取消（`gui/src/components/conversation/ReminderCards.tsx`）：
+
+```diff
+   const settled = state === "fired" || state === "cancelled";
++  const struck = state === "cancelled";
+…
+             settled ? "text-ink-muted" : "text-ink-soft",
++            struck && "line-through",
+           )}
+…
+             settled ? "text-ink-muted" : "text-ink",
++            struck && "line-through",
+           )}
+```
+
+「已取消」三个字那一格不变、不划。
+
+新增文案只有一条：`memo.stateExpired`「已过期」/「Expired」。「已删除」沿用 `todo.stateDeleted`（一件事一个词）。
+
+**3. 页签**
+
+- **档位**：md（`size="md"`）。宽度够：最窄 280px 的面板标题栏 182px，中文两段共 96px，英文（To-do / Memos）125.4px，没用到 sm。
+- **量法**：worktree 里临时起一个 Vite 静态页（假数据、真 CSS、真 `TodoPanel` 与真 store，不走 Tauri），并排放票 97 的旧 header（从 main 抄的 `PanelTabs`）与新面板（320px、280px、280px 英文），headless Chrome 跑完后用 `getBoundingClientRect` 量 header、页签／分段、「+」「×」相对 header 顶边的上下沿，再截浅色、深色两张图看样子。量完删掉，没提交。
+- **数值**（相对 header 顶边，px）：
+
+  | | header 高 | 页签／轨道 | 每段 | 「+」「×」 | 中线 |
+  |---|---|---|---|---|---|
+  | 票 97（前） | 53 | 12–32（字，20 高） | 同左 | 12–40 | 页签 22，按钮 26，差 4 |
+  | 票 99（后） | 59 | 轨道 12–46（34 高） | 15–43（28 高） | 15–43 | 都是 29 |
+
+- **和票面不一样的一处**：票面与裁决说「md 档 28px 高，与右边「+」「×」同高」。28px 是每一段（`h-7`），整个控件还有 `p-0.5` 内边距与 1px 边框，共 34px。所以做法是让「+」「×」在 header 里竖直居中（两颗 `IconButton` 加 `self-center`），结果是选中那一段的上下沿与两颗按钮正好齐平（都是 15–43），代价是 header 从 53px 高到 59px。控件本身加 `self-start`，只贴着两段，不然它在标题那一栏（`flex-col`）里会被撑满整栏宽。没选：给控件加负的上下外边距把 header 留在 53px（等于为面板改控件的摆法）；sm 档（轨道 30px、每段 24px，与 28px 的按钮对不齐）。
+- **键盘与无障碍**，和票 97 的差别：
+  - 角色用 `SegmentedControl` 自己的：`role="radiogroup"`（无障碍名照旧「待办与备忘」），每段 `role="radio"` + `aria-checked`；原来是 `tablist` / `tab` + `aria-selected`。
+  - 组件本身没有方向键。面板在控件外层用 `onKeyDown` 补回票 97 的左右方向键：切页并把焦点带到另一段（走组件已有的 `...rest` 透传，组件文件没动；设置页等别处的 `SegmentedControl` 照旧没有方向键）。
+  - Tab 现在两段都停（组件没有 roving tabindex）；票 97 只停选中的那一页。
+  - 组件的按钮不带 `id`，列表没法再用 `aria-labelledby` 指回页签，所以去掉了列表的 `role="tabpanel"`，改由控件 `aria-controls` 指着列表。
+  - 面板无障碍名照旧「待办」；开在哪一页的规则（每次打开是待办、备忘卡片打开是备忘、⌘K 翻回待办、关了再开回到待办）与换页回到顶上（列表按页 `key` 重挂）都没动，测试照旧过。
+- `PanelTabs` 只此一处用，删了；`ReadingPanelHeader` 只改了注释。
+
+**4. 设计文档**（`docs/design/conversation.md`）
+
+- 「提醒卡片」：「形态」一条补已取消的时间与那句话划线、「已取消」不划；「取消」一条补划线。
+- 「待办卡片」：「三种样子」的「删除」改成标题删除线（同 `todoTitleClass`），下面新增「为什么划线」（推翻票 88 的「不划线」，链裁决 144 第 1 条），并写明下面第 6 节那一档 60% 的差别。
+- 「备忘卡片」：新增「不在了的划线」（四种状态、只划正文、`memoCardState`、理由）；「点字」改指 `memoCardState` 为 `listed`。
+- 「待办面板」：「顶部」补票 99 起是 `SegmentedControl`；「两个页签」的「样子」改写（T1、md、量法与数值），新增「键盘与无障碍」与「由来」（票 97 原来的做法、推翻「放在 header 里太重」、代价、没选 T2、T3、T4）。
+
+**5. 验证**（都在 worktree 里跑过，看到输出）
+
+- `pnpm --dir gui typecheck`：通过（`tsc --noEmit` 无输出）。
+- `pnpm --dir gui lint`：通过（`eslint src --max-warnings 0` 无输出）。
+- `pnpm --dir gui test`：`Test Files  215 passed (215)`，`Tests  2394 passed (2394)`。
+- 改过的七个测试文件再用 `TZ=UTC`、`TZ=America/Los_Angeles` 各跑一遍：两遍都是 `Test Files  7 passed (7)`、`Tests  118 passed (118)`。
+- `git diff --check`：干净。`node scripts/check-docs-links.mjs`：`docs link gate OK: 479 files checked.`
+- prettier：改前干净的文件改后 `prettier --check` 全过；`zh.ts`、`en.ts` 改前就不干净，没整篇跑，prettier 差异块数改前改后相同（4、13）。
+- 全角标点：scratchpad 里的脚本扫新增行，中文语境零处；命中的都是英文注释、测试名里引用的中文词，与 Markdown 链接的右括号。
+- 新增行查过本机路径、会话 id、密钥格式：没有。
+
+新测试：`MemoPage.test.tsx` 加一组「strike what is gone, the words only」（还在、不在了、页上刚删撤销条还在、「不再记」、过期：划线只在正文、颜色、右边小字、能不能点、英文）；`lib/memo.test.ts` 的 `memoCardOpens` 一条换成 `memoCardState` 各状态；`TodoPanel.test.tsx` 被删的卡片改为带划线、与勾掉的同一个 class、没做的不带；`ReminderCards.test.tsx` 加已取消划时间与那句话、「已取消」不划，已提醒、已暂停、待提醒不划；`TodoPanel.memo.test.tsx` 页签改用分段：radiogroup、md、选中的 `brand-strong`、`self-start`、「+」「×」`self-center`、`aria-controls`，点击与左右方向键切页、焦点跟过去、别的键不动，换页是新的列表，从备忘卡片打开在「备忘」（原有用例照旧过）。
+
+**6. 看到但没改的、没验证到的**
+
+看到但没改：
+
+- **两种划线差一档**：做完 7 天内、面板里还有这一件的待办卡片，标题是按钮，按钮为悬停下划线设的 `decoration-ink-muted/60` 也作用在删除线上，划线是 60% 的 `ink-muted`（computed `oklab(… / 0.6)`）；被删的卡片标题不是按钮，划线是满的 `ink-muted`（`rgb(135, 130, 122)`），同做完超过 7 天的卡片。截图里做完的那条划线明显更淡。票面同时要「两种划线看起来一样」和「勾掉的不变」，我守了后一条，没动。要拉齐只需一处：把卡片标题按钮的 `decoration-ink-muted/60` 改成 `hover:decoration-ink-muted/60`（划线都变满色；面板 `TodoPanel.tsx:553`、`MemoPage.tsx:137` 同样的写法要不要一起改另说），或者反过来给被删的字也加 60%（更淡，与「不够直观」相反）。
+- **悬停做完的标题时划线换成下划线**：按 CSS 推的（`hover:underline` 覆盖 `line-through`，都是 `text-decoration-line`），面板与卡片的标题按钮原来就这样，没在浏览器里悬停看。
+- **深色下选中那一段与轨道明度差小**，主要靠杏色字认出选中的；这是 `SegmentedControl` 全局的配色（只在面板的预览截图里看到，别处没截），没改。
+- 过期的判定按票面用「`memoExists` 为真但不在 `list_memos` 里」，不看卡片自己的 `until`（那是那一次改动时的期限，后来可能改过）。将来 `list_memos` 若因别的原因不列某条，卡片也会写「已过期」。
+- 票 97 回报里「`memoExists` 没用上」这条，这张票用上了。
+
+没验证到的：
+
+- 没跑 `tauri dev`（按要求）：真 Core 的 `memos:changed`、删备忘与取消提醒后卡片跟着变，只在 mock 与静态预览里看过；票面「给 JC 的真机步骤」都等 JC。
+- 布局只在一次性静态预览里看过（浅色、深色各一张，2x），没进真窗口；窄窗口覆盖态、Windows 低 DPR 下的划线粗细、读屏软件、截断时省略号的颜色都没看。
+- 没跑 CI。
