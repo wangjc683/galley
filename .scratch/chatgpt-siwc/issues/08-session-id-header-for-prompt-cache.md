@@ -1,6 +1,6 @@
 # 08 · 订阅后端的请求带上 `session_id` 头，让提示词缓存命中
 
-Status: needs-triage（2026-10-26 主会话诊断完，修法与验证见下；等 JC 定是否派单）
+Status: needs-dogfood（2026-10-26 合入 `1ead009c`；主会话机器验收：worktree 里复跑 pytest 628 通过、mypy、ruff、`git diff --check`、两个补丁载荷检查都过；合入后对真后端复测通过，见 Comments 末条）
 
 来源：2026-10-26 主对话上下文管理讨论的 T1（JC：「先做 T1」）。只改补丁 `0007` 与它的测试；外置运行时零变化，非订阅后端零变化。
 
@@ -74,3 +74,12 @@ Status: needs-triage（2026-10-26 主会话诊断完，修法与验证见下；�
 - **测试**：`test_chatgpt_plan_sends_galley_headers_and_codex_body` 加 `headers["session_id"] == payload["prompt_cache_key"]`（同函数里已有 `prompt_cache_key` 非空断言）；`test_without_the_codex_backend_ga_headers_are_unchanged` 加 `"session_id" not in headers`。先写断言，对旧载荷跑出 `KeyError: 'session_id'`（红），重放后通过。全量 pytest 628 通过，mypy、ruff 无问题。
 - **账本与文档**：`managed-ga/patches/manifest.md` 的 `0007` 行补上 `session_id` 头的用途并链到本票，顶部新增一条 2026-10-26 重放记录（原记录改为 Previous replay）。`docs/managed-ga-runtime/model-configuration.md`「Engine side (patch `0007`)」一段补一句。`docs/ipc-protocol.md` 没有描述订阅后端请求头的现行说法，未改。
 - **没验证到的**：没打真后端（按派单要求），命中率复测留给主会话的探针。Core 发的请求（连接测试 `POST /v1/responses`）不带 `session_id`，本票不涉及 `core/`，没动。
+
+### 2026-10-26 合入后复测（主会话）
+
+用合入后的 `managed-ga/code` 原样发请求，不再在探针里手动加头：
+
+- 同一请求原样连发 6 次：后 5 次中 4 次（每次 4,096）；不带这个头的对照是 6 次约中 1 次。
+- 会增长的 6 步对话（GA 的工具定义、真实系统提示词与 Galley 运行时层）：后 5 步全部命中，命中 95%–97%。
+- 代理报的 Core 连接测试不带 `session_id`：那是单次请求，不涉及缓存，不改。
+- 已经开着的 runner 还在用旧代码：主对话下一段起生效，IM 渠道要重启 Channels。
