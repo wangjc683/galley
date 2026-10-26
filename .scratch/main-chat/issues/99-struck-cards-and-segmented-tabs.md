@@ -191,3 +191,15 @@ Status: ready-for-agent
 - 没跑 `tauri dev`（按要求）：真 Core 的 `memos:changed`、删备忘与取消提醒后卡片跟着变，只在 mock 与静态预览里看过；票面「给 JC 的真机步骤」都等 JC。
 - 布局只在一次性静态预览里看过（浅色、深色各一张，2x），没进真窗口；窄窗口覆盖态、Windows 低 DPR 下的划线粗细、读屏软件、截断时省略号的颜色都没看。
 - 没跑 CI。
+
+### 2026-10-26 补记：两种划线拉齐（代理，同分支）
+
+主会话按上面第 6 节第一条要拉齐（JC 读「做完」是「打了勾加上横线划去」，淡的那条是错的一方）。
+
+- **提交**：`5143684b main-chat ticket 99: one full-colour strike for done and deleted`。
+- **改法**：标题按钮的 `decoration-ink-muted/60` 改成 `hover:decoration-ink-muted/60`，悬停下划线照旧 60%，平时删除线跟字的颜色走。改了四处：待办卡片标题（`TodoCards.tsx`）、面板待办页标题（`TodoPanel.tsx` 的 `RowShell`）、备忘页正文（`MemoPage.tsx`），以及主会话没点名的备忘卡片正文按钮（`MemoCards.tsx`）。最后这处从来不划线，改它只为四颗标题按钮写法一致，行为不变。面板里自启提示那颗常驻下划线的按钮（`TodoPanel.tsx` 的 `underline decoration-ink-muted/60`）不是标题、不划线，没动。
+- **预览**（一次性静态页重搭，量完删掉，没提交）：面板「已完成」里的「交房租」、卡片上做完的「交房租」、删掉的「买营养土」、已取消提醒的时间与那句话、备忘的「不在了」与「不再记」，computed `text-decoration-color` 都是 `rgb(135, 130, 122)`，与字同色（改前做完的两处是 `oklab(… / 0.6)`）。截图里做完那条现在和删掉那条一样清楚。悬停的样子没看（headless 不悬停）。
+- **测试**：`TodoPanel.test.tsx` 新增一条，钉住卡片上做完的标题按钮、删掉的标题、面板已完成的标题按钮都带 `line-through` 与 `text-ink-muted`、自己不带任何 `decoration-*`，两颗按钮带 `hover:underline` 与 `hover:decoration-ink-muted/60`；临时把卡片按钮改回旧写法，这条会挂（`expected [ 'decoration-ink-muted/60' ] to deeply equal []`）。原有一条按钮 class 的正则跟着改了。
+- **设计文档**（`docs/design/conversation.md`）：「待办卡片」的「做完」注明满色、与「删除」同一条线（裁决 144 第 1 条）；「为什么划线」里原来写的「还差一档没拉齐」改成现在的写法与由来；「勾掉的样子」补删除线满色、按钮的 60% 只在悬停时给。
+- **验证**：`pnpm --dir gui typecheck`、`pnpm --dir gui lint` 通过、无输出；`pnpm --dir gui test`：`Test Files  215 passed (215)`，`Tests  2395 passed (2395)`；`git diff --check` 干净；`docs link gate OK: 479 files checked.`；改过的文件 `prettier --check` 全过；新增中文全角，没有本机路径。
+- **一处连带变化**：面板里勾下去停留的 1.5 秒（标题是按钮）划线也从 60% 变成满色，同已完成。
