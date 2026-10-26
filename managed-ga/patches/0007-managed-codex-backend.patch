@@ -125,7 +125,7 @@ diff --git a/llmcore.py b/llmcore.py
 +
 @@ -551,0 +668,2 @@ def _openai_stream(sess, messages):
 +    if getattr(sess, 'codex_backend', False):  # Galley (Sign in with ChatGPT): Core's access token, Galley's own UA, no originator
-+        headers["Authorization"] = f"Bearer {_galley_codex_access_token(sess)}"; headers.pop('originator', None); headers["User-Agent"] = _chatgpt_plan_user_agent()
++        headers["Authorization"] = f"Bearer {_galley_codex_access_token(sess)}"; headers.pop('originator', None); headers["User-Agent"] = _chatgpt_plan_user_agent(); headers["session_id"] = _RESP_CACHE_KEY
 @@ -553 +671 @@ def _openai_stream(sess, messages):
 -        url = auto_make_url(sess.api_base, "responses")
 +        url = f"{sess.api_base.rstrip('/')}/responses" if getattr(sess, 'codex_backend', False) else auto_make_url(sess.api_base, "responses")

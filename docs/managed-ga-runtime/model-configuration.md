@@ -315,7 +315,10 @@ Engine side (patch `0007`): with `codex_backend` the engine takes the access
 token from Core's credential IPC, keeps the Codex request body against
 `https://api.openai.com/v1`, sends Galley's own `User-Agent`
 (`Galley (<system>; <machine>)`) without `originator` or
-`ChatGPT-Account-ID`, and handles plan errors by `error.code`: terminal codes
+`ChatGPT-Account-ID`, sends a `session_id` header equal to the body's
+`prompt_cache_key` (the plan backend routes a session's requests to its
+prompt cache by this header; without it nearly every request missed the
+cache), and handles plan errors by `error.code`: terminal codes
 (usage limit, not eligible, unsupported capability, a revoked or disconnected
 sign-in, and the other rejections) fail at once with an English message that
 names the code, and the two `*_unavailable` codes use GA's normal backoff. The ledger row for `0007` in `managed-ga/patches/manifest.md` lists

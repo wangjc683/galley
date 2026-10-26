@@ -719,7 +719,7 @@ def _openai_stream(sess, messages):
     headers = {"Authorization": f"Bearer {sess.api_key}", "Content-Type": "application/json", "Accept": "text/event-stream", 'originator': 'codex_exec'}
     headers["User-Agent"] = sess.user_agent
     if getattr(sess, 'codex_backend', False):  # Galley (Sign in with ChatGPT): Core's access token, Galley's own UA, no originator
-        headers["Authorization"] = f"Bearer {_galley_codex_access_token(sess)}"; headers.pop('originator', None); headers["User-Agent"] = _chatgpt_plan_user_agent()
+        headers["Authorization"] = f"Bearer {_galley_codex_access_token(sess)}"; headers.pop('originator', None); headers["User-Agent"] = _chatgpt_plan_user_agent(); headers["session_id"] = _RESP_CACHE_KEY
     if api_mode == "responses":
         url = f"{sess.api_base.rstrip('/')}/responses" if getattr(sess, 'codex_backend', False) else auto_make_url(sess.api_base, "responses")
         payload = {"model": model, "input": _to_responses_input(messages), "stream": sess.stream,

@@ -669,6 +669,9 @@ def test_chatgpt_plan_sends_galley_headers_and_codex_body(
     assert payload["stream"] is True
     assert "max_output_tokens" not in payload
     assert payload["prompt_cache_key"]
+    # The plan backend routes a session's requests to its cache by this
+    # header; `prompt_cache_key` in the body alone does not (ticket siwc 08).
+    assert headers["session_id"] == payload["prompt_cache_key"]
     assert payload["include"] == ["reasoning.encrypted_content"]
 
 
@@ -782,6 +785,7 @@ def test_without_the_codex_backend_ga_headers_are_unchanged(
     assert headers["User-Agent"] == sess.user_agent
     assert headers["originator"] == "codex_exec"
     assert headers["Authorization"] == f"Bearer {sess.api_key}"
+    assert "session_id" not in headers
     assert "store" not in net.posts[0]["payload"]
 
 
