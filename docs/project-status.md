@@ -758,7 +758,9 @@ cards under the replies, the morning review also wakes for the day before's
 new memos; main chat rulings 139–144, tickets 95–99); prompt cache hits on
 the ChatGPT plan backend again (SIWC 08, patch `0007` sends `session_id`);
 cards for what is gone are struck through, and the panel's two pages use
-`SegmentedControl`. Dogfood still owed: ticket 95's morning review waking
+`SegmentedControl`; the to-do panel no longer draws the morning review's
+row (it still runs daily; ruling 145, ticket 100), and a to-do's time line
+is a step darker than its notes (ruling 146). Dogfood still owed: ticket 95's morning review waking
 for a new memo, ticket 98's noticed interest.
 
 **Owed from the `v0.7.1` smoke** (JC approved publish without reporting

@@ -1,6 +1,6 @@
 # 100 巡看那一行拿出待办面板
 
-Status: needs-dogfood（2026-10-26 合入 `ed75957f`、`78b13d43`；主会话在 worktree 重跑 typecheck、lint、2401 个测试、`git diff --check` 全过；`core/src/managed_prompt.rs`「In Hand」注释里「what you see is what it sees」的例外说法随下一次 Core 改动补上）
+Status: done（2026-10-26 合入 `ed75957f`、`78b13d43`；JC 真机 OK（10-27）：「例行」里没有巡看、空状态下面没有「例行」；主会话在 worktree 重跑 typecheck、lint、2401 个测试、`git diff --check` 全过；`core/src/managed_prompt.rs`「In Hand」注释里「what you see is what it sees」的例外说法收尾时补上）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 145（2026-10-26，JC：「按建议推进」）。推翻 [助手 PRD](../../assistant/PRD.md) 裁决 10「巡看要无感」里的「面板『例行』里那一条留着」与票 80 的「巡看那一行不因为空状态而消失」。只改 GUI 与设计文档；`core/`、手册、评测不动。
 
