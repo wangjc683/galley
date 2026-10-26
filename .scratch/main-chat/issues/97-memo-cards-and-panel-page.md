@@ -84,3 +84,82 @@ Status: ready-for-agent
 3. 说一句要办的事加一句信息，比如「下周三去上海出差，周二提醒我订酒店」：回复下先是待办卡片、再是备忘卡片，各写各的那一半。
 4. 在备忘页里删一条：5 秒内能撤销；过了 5 秒再说「你还记得我……吗」，它不再提。
 5. 第二天早上巡看过后：前一天记的备忘若有能推进的，它可能来说一句；多数时候不出声。主会话查库与 dev 日志看它醒没醒、为什么。
+
+## Comments
+
+### 2026-10-26 实现报告（代理，分支 `ticket-97-memo-gui`）
+
+**1. 提交**（`git log --oneline main..HEAD`，本条报告另起一个提交）：
+
+- `5214b98e main-chat ticket 97: memo cards, the panel's two tabs, the 备忘 page`
+
+**2. 页签、图标、日期函数**
+
+- **页签**：仓库里没有现成的页签组件。`SegmentedControl`（`gui/src/components/ui/segmented-control.tsx`）是带轨道、浮起滑块、选中写 `brand-strong` 的设置控件，和票面「选中满墨色、另一页 `ink-muted`」对不上，放进 header 也太重。所以照 header 原来的标题字做：`TodoPanel.tsx` 里的 `PanelTabs`，14px medium（`text-sm font-medium`，同 `ReadingPanelHeader` 的标题），选中 `ink`、另一页 `ink-muted`（悬停 `ink-soft`），间距 12px，`focus-visible` 圈，`role="tablist"`/`tab`，左右方向键切换。`ReadingPanelHeader` 的 `title` 改成 `string | ReactElement`，不是字符串就原样放在标题的位置（GitReviewPane 照旧传字符串，不受影响）。
+- **图标**：`Notepad`，16px thin，`ink-muted`，放在待办卡片放方框的那一列（16px）。`docs/design/` 里没有禁用记事类图标的规定（查了 foundations §2.3 与各节的「不要」）。挑法：在 scratchpad 里用真 Phosphor SVG 拼了一页（文件卡片、待办卡片、提醒卡片、备忘卡片，加顶栏的 `ListChecks`、`GitDiff`、`TextAa`、`Gear`、`ChatCircleText` 与面板的 `Plus`、`X`），headless Chrome 截图逐个比：`Note` 是折角的纸，和回复下文件卡片的文件图标一家；`NoteBlank` 只剩一个方块，像待办卡片的空方框；`NotePencil` 读作「编辑」；`Notebook` 像侧栏、版式类图标；`Notepad` 顶上一排线圈，同屏没有撞脸的。同一张截图里也比了 14px regular（提醒卡片的 `Alarm` 是 14px regular）：照票面与 foundations「默认 16px、Phosphor Thin」定 16px thin，代价是和提醒卡片叠在一起时笔画比 `Alarm` 细一档，要统一改一行。
+- **日期**：组名用新加的 `formatPastDay`（`gui/src/lib/message-time.ts`）。没有现成函数正好是「今天、昨天，再早写日子」：`formatScheduleDay` 前后 2–6 天写星期，`formatMessageTime` 带钟点，`formatListTime` 今天写钟点、2–6 天写星期。新函数用时间条的日子词加 `formatScheduleDay` 的日期写法（「10月23日」，跨年带年份；英文「Oct 23」「Oct 23, 2025」），不写星期，比今天晚的（钟不准）当今天。期限「到 …」的日子直接用 `formatScheduleDay`（今天、明天、周五、11月6日），照待办截止的写法。
+
+**3. 新增文案**（中 / 英原样）
+
+| key | 中文 | English |
+|---|---|---|
+| `memo.tab`（第二个页签；第一个沿用 `todo.title`「待办」） | 备忘 | Memos |
+| `memo.tabsLabel`（页签组的无障碍名） | 待办与备忘 | To-do and memos |
+| `memo.empty` | 值得记住的事，Galley 会记在这里。 | Galley keeps what's worth remembering here. |
+| `memo.emptyExample` | 比如「我不吃香菜」 | For example: “I don't eat cilantro.” |
+| `memo.until(day)` | 到 {day} | Until {day} |
+| `memo.cardNoted` / `cardChanged` / `cardDropped`（卡片写成「{前缀} · {正文}」） | 记下了 / 改为 / 不再记 | Noted / Changed to / No longer noted |
+| `memo.deleteMemo.deleted(text)` | 已删除「{text}」 | Deleted "{text}" |
+| `memo.deleteMemo.deletedCount(n)` | 已删除 {n} 条备忘 | Deleted {n} memos |
+| `memo.deleteMemo.undo` | 撤销 | Undo |
+| `settings…resetMainChat.deletes` 新增一行（排在待办那条后面） | 备忘里它记下的关于你的事 | Its memos: what it noted about you |
+
+菜单里的「删除」沿用 `todo.deleteTodo.menuItem`；组名、期限里的「今天」「明天」「昨天」沿用 `todo.dayToday` 等；失败原因沿用 `todo.actionFailed` / `actionGone`。
+
+空状态和票面不一样的两处（自己定的，没回头问，设计文档里写了由来）：票面与裁决 142 的文字稿是「值得记住的事，它会记在这里。比如：「我不吃香菜」。」。① 「它」改成「Galley」：文案规范「Galley」一行明写面板里不写没有先行词的「它」（10-16 JC 看待办空状态：「这个它是谁？」），面板也开在工作台旁边。② 拆成一句加一个例子两行，例子不加冒号与句号，照「待办」页空状态（「比如「周三下午 3 点前要交季度报告」」）：两页挨着，切页签时写法一致。要回到文字稿原样，改 `zh.ts` 两个字符串即可。
+
+**4. 设计文档**
+
+- `docs/design/conversation.md`：「提醒卡片」的「位置」补一句备忘卡片在最后；新增「备忘卡片」一节（在「待办卡片」后面）；「待办面板」开头一句说两页、「顶部」改成两个页签，末尾新增「两个页签」（样子、开在哪一页、没选乙与丙的理由，链裁决 142）与「「备忘」页」（分组、每行、点正文、菜单与删除、空状态、刷新）。
+- `docs/design/overlays-and-settings.md`：⌘K「待办」项补「打开的是待办页，面板在备忘页时翻回，不加备忘项」；「待办（内置运行时）」开头补两个页签与备忘卡片的去处；重置主对话的「会删除」四条改五条。
+- `docs/copy-language-guidelines.md`：「重置主对话」表的说明与「会删除」中英两格加备忘；「Galley」一行补备忘页空状态的写法与改「它」的由来。
+
+**5. 验证**（都在 worktree 里跑过，看到输出；pnpm 命令在 `gui/` 里跑，等同 `pnpm --dir gui …`）
+
+- `pnpm typecheck`：通过（`tsc --noEmit` 无输出）。
+- `pnpm lint`：通过（`eslint src --max-warnings 0` 无输出）。
+- `pnpm test`：`Test Files  215 passed (215)`，`Tests  2387 passed (2387)`。
+- 新测试与改过的几组再用 `TZ=UTC`、`TZ=America/Los_Angeles` 各跑一遍：两遍都是 `Test Files  12 passed (12)`、`Tests  247 passed (247)`。
+- `git diff --check`：干净。`node scripts/check-docs-links.mjs`：`docs link gate OK: 478 files checked.`。`node scripts/check-ipc-protocol-drift.mjs`：aligned（15 events、8 commands；挪走 `ipc.ts` 的备忘一节后，那个文件与票 95 之前逐字节相同）。
+- prettier：新文件整篇格式化；旧文件里 `TodoPanel.tsx` 改前是干净的，整篇格式化只动了自己的 hunk；`App.tsx`、`en.ts`、`zh.ts` 改前就不干净，没整篇跑，核过 prettier 差异块数改前改后相同（2、13、4），自己的 hunk 没有新增差异；其余旧文件 `prettier --check` 通过。
+- 全角标点：scratchpad 里一个脚本扫新增行（中文旁边的半角 `,;:?!()`），中文语境零处；命中的 16 行都是英文注释与测试名里引用的中文词（如 `/** 删除: a memo off the page at once */`），照现有注释的写法。
+- 新增行查过本机路径、会话 id、密钥格式：没有。
+
+新测试：`gui/src/lib/memo.test.ts`（分组与排序、组名、期限、跳转目标与没有出处、卡片三种文字、能不能点）、`gui/src/stores/memo.test.ts`（一起读、删除与撤销、5 秒后交给 Core、连删合并、按删的先后、发送前提交、拒绝后带原因）、`gui/src/components/todo/MemoPage.test.tsx`（静态渲染照面板测试的 mock 写法：分组顺序、13px 不截断、期限样式、按钮与字、删除中的行不画、失败原因、空状态与读回来之前不画；卡片的三种文字、外形、能不能点、12px / 8px）、`gui/src/components/todo/TodoPanel.memo.test.tsx`（jsdom 走真 store：页签默认待办、点击与方向键切换、关了再开回到待办、⌘K 翻回待办、从卡片打开在备忘页且那一行亮、面板已开在待办时翻到备忘、点正文跳回、「⋯」菜单只有删除且无分隔线、右键同一份、删除撤销、Core 拒绝回来带原因）；`message-time.test.ts`、`todo-open.test.ts`、`MainView.assistant.test.tsx`（卡片排在待办卡片、提醒卡片后面，8px / 12px，只在主对话）、`useMessageSend.test.ts`（发送前先提交备忘删除）各加了几条。
+
+**6. 我自己定的细节、看到但没改的、没验证到的**
+
+自己定的：
+
+- **卡片位置排在提醒卡片后面**：票面写「跟在待办卡片后面」，没说提醒卡片。回复下的卡片照面板的页序排：「待办」页上的（子任务、待办、提醒）在前，「备忘」页的在后；没有提醒卡片时就是紧跟待办卡片。前缀与「 · 」用 `ink-muted`，正文 `ink`。
+- **页签是面板组件自己的状态**（`useState`），卸载就回到待办；卡片与 ⌘K 通过 `ui` store 新加的 `todoPageRequest` 要页，面板挂上或在屏上时取走、清掉。换页时列表容器按页重挂，回到顶上（「待办」页的「已完成」展开状态因此回到收起）。
+- **亮行复用待办的 `todoRowRequest`**：`useTodoPanelFlash` 的查找加上 `[data-memo-row]`。
+- **备忘的删除也在主对话发送前提交**（`sendThroughCore` 里挨着待办的提交），照票 88 的理由：它回答前若 `memo list`，删掉的不该还在。
+- `GroupLabel` 从 `TodoPanel.tsx` 原样挪到 `components/todo/GroupLabel.tsx`，两页共用。`TodoRowMenu` 的 `onTalkAbout`、`canCancelReminder`、`onCancelReminder` 改成可选，没有上面两项时不画分隔线；待办行照旧全传，行为不变。
+- 备忘的 Tauri 类型从 `gui/src/types/ipc.ts` 挪到 `gui/src/lib/memo.ts`（和调用放在一起，同待办的放法），`ipc.ts` 那一节删了。
+- 备忘行：正文与期限顶端对齐、都是 20px 行高。先用过基线对齐，静态预览里期限跑到了折行正文的最后一行（正文按钮是 inline-block，基线取最后一行），改成顶端对齐。「⋯」对着第一行，悬停时这一行右边让出 42px（同待办标题的 pr-8 加行的 10px），期限跟着往左让。
+
+看到但没改的：
+
+- IPC 这张票用到的都有，没缺。`MemoEventItem.memoExists` 没用上：卡片能不能点看「备忘」页的列表（过了期限的备忘 `memoExists` 为真，却不在页上，没有可亮的行）。
+- 只自动开一次（票 87 的 `todoPanelIntroduces`）只认待办卡片，第一次出现备忘卡片不会自动开面板；票面没要，没加。
+- 面板开着时主区跨过 760px（并排与覆盖两种画法在 `LocalFileWorkspace` 里是两处 JSX），面板会重挂，页签回到「待办」。
+- header 里页签贴在上沿、「+」和 × 在 28px 按钮里居中、看着低一点：是 `ReadingPanelHeader` 原来的 `items-start` 版式，标题「待办」原来也在这个位置，没动。
+- 英文的期限写「Until Tomorrow」「Until Today」（`formatScheduleDay` 的英文日子词首字母大写），同现有「Next Tomorrow 8:00 AM」的写法，没单独处理。
+- 重置弹窗正文里「它记住的关于你的事」原指 GA 记忆，现在和备忘那一行意思有重叠；票面只要补清单，正文没动。
+
+没验证到的：
+
+- 没跑 `tauri dev`（按要求）：真 Core 的 `list_memos` / `list_memo_events` / `delete_memo` 与 `memos:changed` 只在 mock 的 invoke 下测过；真机的一轮结束后卡片出现、点卡片开面板与亮行、5 秒撤销后 Core 真删，都等 JC 走真机步骤。
+- 布局只在 scratchpad 的一次性 Vite 静态预览里看过（假数据、无 Tauri，浅色与深色各一张，悬停用 CSS 覆盖模拟），没进真窗口；窄窗口覆盖态、Windows 低 DPR 下 16px thin 图标的粗细、读屏软件都没看。
+- 没跑 CI。
