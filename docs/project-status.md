@@ -696,8 +696,10 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.7.0` → `v0.7.1` is not reported
-   yet (promoted 2026-10-26 05:28 UTC). `v0.6.2` → `v0.7.0` passed on JC's
+1. App-update dogfood (SOP step 10): `v0.7.0` → `v0.7.1` is owed. JC's Mac
+   was installed straight from the draft, so it needs a machine still on
+   `v0.7.0` (the Windows one, for instance); the CDN served 0.7.1 without
+   cache-bust at 05:30 UTC (promoted 05:28). `v0.6.2` → `v0.7.0` passed on JC's
    Windows machine (2026-10-23, same session as the release; H1 in the
    release devlog): after the restart the app reads 0.7.0, the old sessions
    and model settings are there, and the main chat works, so migrations
@@ -752,12 +754,14 @@ Post-release follow-up:
 Release-scope truth is `git log v0.7.1..HEAD`. Nothing user-facing yet.
 
 **Owed from the `v0.7.1` smoke** (JC approved publish without reporting
-smoke items, 2026-10-26; the list is in the release devlog): on a packaged
-build, the main chat's progress line and its card, no flash of old messages
-when a reply lands, bubble motion on send and delete, the title menus
-without the pet, a browser multi-step task through the `a9a36b4` engine (it
-passed once in dev) and a model switch in a new workbench session; that
-quitting with a live runner leaves no Python process; no Windows install.
+smoke items, 2026-10-26; the list is in the release devlog). JC installed the
+draft on the Mac and the main chat ran two browser tasks on it
+(`web_execute_js` ×6, `web_scan` ×3, both to a final answer, read from the
+database), so the `a9a36b4` engine's browser path ran on a packaged build.
+Not reported: the main chat's progress line and its card, no flash of old
+messages when a reply lands, bubble motion on send and delete, the title
+menus without the pet; not done: a model switch in a new workbench session,
+quitting with a live runner leaves no Python process, a Windows install.
 
 **Owed from the `v0.7.0` smoke** (JC approved publish after part of it,
 2026-10-23; the plan and results are in the release devlog):
