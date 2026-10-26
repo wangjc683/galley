@@ -118,8 +118,9 @@ export interface TodoPanelProps {
  *               to-dos (their box in neutral grey), reminders that went
  *               off, subtasks back
  *
- * Empty groups are not drawn; with nothing but the daily review, the
- * empty state is, and 例行 under it (ticket 80, `todoPanelEmpty`). The
+ * Empty groups are not drawn; with nothing in any, the empty state is
+ * (`todoPanelEmpty`). The daily review is in none of them: the store
+ * keeps the list without it (`withoutDailyReview`, PRD ruling 145). The
  * actions are only these: tick and untick the user's own (TodoCheck),
  * cancel a to-do's reminder or one of Galley's own one-off reminders
  * (ticket 80), delete one of the user's own not done (ticket 88, its
@@ -267,8 +268,7 @@ export function TodoPanel({
         ) : (
           <>
             {loaded && todoPanelEmpty(todo) && <TodoPanelEmpty onTalk={talk} />}
-            {/* Empty, this draws 例行 alone, when the daily review is
-                there (ticket 80); before the first read, nothing. */}
+            {/* Empty, or before the first read, this draws no group. */}
             <TodoPanelGroups
               todo={todo}
               mainChatId={mainChatId}
@@ -397,9 +397,9 @@ export function TodoPanelGroups({
   // Galley ticked off holds its place among them a moment (ticket 87).
   const rows = todoPanelRows(todo, held);
   const yours = rows.yours;
-  // 12px between groups, none over the first — under the empty state
-  // too, where 例行 is the first (main chat ticket 83, ruling 128 point
-  // 9): a gap between the sections, whichever are drawn.
+  // 12px between groups, none over the first (main chat ticket 83,
+  // ruling 128 point 9): a gap between the sections, whichever are
+  // drawn.
   return (
     <div data-role="todo-groups" className="space-y-3">
       {yours.length > 0 && (

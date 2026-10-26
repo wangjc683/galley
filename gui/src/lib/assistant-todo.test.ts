@@ -8,6 +8,7 @@ import {
   cancelTodoReminder,
   completeTodo,
   EMPTY_TODO,
+  isDailyReview,
   listAssistantTodo,
   onceFired,
   reminderCardState,
@@ -25,6 +26,8 @@ import {
   todoToastTitle,
   TODO_REFRESH_EVENTS,
   TODO_TOAST_TITLE_CHARS,
+  withoutDailyReview,
+  type AssistantTodo,
   type TodoItem,
 } from "@/lib/assistant-todo";
 import type { ScheduledTask } from "@/lib/scheduled-tasks";
@@ -62,6 +65,18 @@ function item(extra: Partial<TodoItem> = {}): TodoItem {
     ...extra,
   };
 }
+
+// The routine Core seeds with the main chat (ticket 73): its maker's
+// label in `agent`, its prompt English for the model.
+const REVIEW = item({
+  id: "sched_review",
+  text: "Daily review: read wake.md and go over what is in hand.",
+  createdBy: "agent",
+  agent: "galley-review",
+  repeat: { kind: "daily" },
+  timeOfDay: "09:00",
+  createdIn: undefined,
+});
 
 function task(extra: Partial<ScheduledTask> = {}): ScheduledTask {
   return {
@@ -312,18 +327,19 @@ describe("the list", () => {
     ).toBe(true);
   });
 
-  it("leaves the daily review out of what is set to go off (ticket 83)", () => {
-    const review = item({
-      id: "sched_review",
-      text: "Daily review: read wake.md and go over what is in hand.",
-      createdBy: "agent",
-      agent: "galley-review",
-      repeat: { kind: "daily" },
-      timeOfDay: "09:00",
-      createdIn: undefined,
-    });
-    const alone = { ...EMPTY_TODO, routine: [review] };
-    expect(todoAutostartHintVisible(false, alone, false)).toBe(false);
+  // Ruling 145: the panel's list goes without the daily review, so with
+  // nothing else set it is never the hint's reason (ticket 83 had left it
+  // out here by name).
+  it("is not shown for the daily review alone, running or paused, in the panel's list", () => {
+    const panel = (todo: AssistantTodo) =>
+      todoAutostartHintVisible(false, withoutDailyReview(todo), false);
+    expect(panel({ ...EMPTY_TODO, routine: [REVIEW] })).toBe(false);
+    expect(
+      panel({
+        ...EMPTY_TODO,
+        routine: [{ ...REVIEW, state: "paused", at: undefined }],
+      }),
+    ).toBe(false);
     // Beside a to-do's reminder still to go off: shown, as ever.
     const reminded = item({
       kind: "todo",
@@ -336,36 +352,105 @@ describe("the list", () => {
       },
     });
     expect(
-      todoAutostartHintVisible(
-        false,
-        {
-          ...alone,
-          yours: { today: [], later: [reminded], anytime: [] },
-        },
-        false,
-      ),
+      panel({
+        ...EMPTY_TODO,
+        yours: { today: [], later: [reminded], anytime: [] },
+        routine: [REVIEW],
+      }),
     ).toBe(true);
     // Beside Galley's own one-off reminder, or another routine: shown.
     expect(
-      todoAutostartHintVisible(false, { ...alone, assistant: [item()] }, false),
+      panel({ ...EMPTY_TODO, assistant: [item()], routine: [REVIEW] }),
     ).toBe(true);
     expect(
-      todoAutostartHintVisible(
-        false,
-        {
-          ...alone,
-          routine: [
-            review,
-            item({
-              id: "sched_daily",
-              repeat: { kind: "daily" },
-              timeOfDay: "08:00",
-            }),
-          ],
-        },
-        false,
-      ),
+      panel({
+        ...EMPTY_TODO,
+        routine: [
+          REVIEW,
+          item({
+            id: "sched_daily",
+            repeat: { kind: "daily" },
+            timeOfDay: "08:00",
+          }),
+        ],
+      }),
     ).toBe(true);
+  });
+});
+
+// Main chat PRD ruling 145: the daily review's row is off the panel; it
+// still runs, and Core still lists it.
+describe("the list without the daily review", () => {
+  const OTHER_ROUTINE = item({
+    id: "sched_daily",
+    text: "早报",
+    repeat: { kind: "daily" },
+    timeOfDay: "08:00",
+  });
+
+  it("takes the review out of 例行, running or paused, and leaves the rest", () => {
+    const listed: AssistantTodo = {
+      ...EMPTY_TODO,
+      yours: { today: [], later: [], anytime: [item({ kind: "todo" })] },
+      assistant: [item()],
+      routine: [OTHER_ROUTINE, REVIEW],
+      done: [item({ id: "sched_fired", state: "fired" })],
+      doneOmitted: 1,
+      todayCount: 2,
+    };
+    const shown = withoutDailyReview(listed);
+    expect(shown.routine).toEqual([OTHER_ROUTINE]);
+    expect(shown.yours).toBe(listed.yours);
+    expect(shown.assistant).toBe(listed.assistant);
+    expect(shown.done).toBe(listed.done);
+    expect(shown.doneOmitted).toBe(1);
+    expect(shown.todayCount).toBe(2);
+    const paused = { ...REVIEW, state: "paused" as const, at: undefined };
+    expect(
+      withoutDailyReview({ ...EMPTY_TODO, routine: [paused] }).routine,
+    ).toEqual([]);
+  });
+
+  it("takes it out of 「Galley 在办」 too, made a one-off by hand", () => {
+    const once = { ...REVIEW, repeat: { kind: "once" as const } };
+    const own = item();
+    expect(
+      withoutDailyReview({ ...EMPTY_TODO, assistant: [own, once] }).assistant,
+    ).toEqual([own]);
+  });
+
+  it("is the same list when the review is not there", () => {
+    const listed = {
+      ...EMPTY_TODO,
+      assistant: [item()],
+      routine: [OTHER_ROUTINE],
+    };
+    expect(withoutDailyReview(listed)).toBe(listed);
+    expect(withoutDailyReview(EMPTY_TODO)).toBe(EMPTY_TODO);
+  });
+
+  it("knows the review by its label on a task: another agent's routine, or a to-do with the label, stays", () => {
+    const theirs = item({
+      id: "sched_theirs",
+      createdBy: "agent",
+      agent: "claude-code",
+      repeat: { kind: "daily" },
+    });
+    const labelled = item({
+      kind: "todo",
+      id: "todo_labelled",
+      state: "open",
+      agent: "galley-review",
+    });
+    expect(isDailyReview(REVIEW)).toBe(true);
+    expect(isDailyReview(theirs)).toBe(false);
+    expect(isDailyReview(labelled)).toBe(false);
+    const listed: AssistantTodo = {
+      ...EMPTY_TODO,
+      yours: { today: [], later: [], anytime: [labelled] },
+      routine: [theirs],
+    };
+    expect(withoutDailyReview(listed)).toBe(listed);
   });
 });
 

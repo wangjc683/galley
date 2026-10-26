@@ -300,9 +300,16 @@ describe("「说说这件」", () => {
     expect(useUiStore.getState().quoteRequest).toBeNull();
   });
 
-  it("quotes what the row shows when it names a row its own way (the daily review, ticket 74)", () => {
-    quoteTodo(ITEM, GALLEY, "s-main", "过一遍在办的事");
-    expect(takeQuote("s-main", true)).toBe("过一遍在办的事");
+  it("quotes what the row shows when it is not the words it carries (a subtask without a title)", () => {
+    const untitled: TodoItem = {
+      kind: "subtask",
+      id: "s-sub",
+      text: "",
+      state: "running",
+      createdBy: "assistant",
+    };
+    quoteTodo(untitled, GALLEY, "s-main", "子任务");
+    expect(takeQuote("s-main", true)).toBe("子任务");
   });
 
   it("a second click quotes again (the composer drops a duplicate)", () => {

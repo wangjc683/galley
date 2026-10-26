@@ -32,7 +32,8 @@ import { SUBTASK_DISPATCHED_EVENT } from "@/lib/subtasks";
  * is on, its routines, what was done lately — one Core read
  * (`list_assistant_todo`, core/src/assistant_todo.rs), the same one
  * Core writes the main chat's 「在办的事」 from (ticket 36), so what the
- * user sees is what the assistant sees.
+ * user sees is what the assistant sees, but for the daily review: the
+ * desktop leaves it out (`withoutDailyReview`, PRD ruling 145).
  *
  * Everything here is pure but the Core calls: the wire shapes, the
  * card's state, the words and times a row shows, where a row leads.
@@ -358,6 +359,37 @@ export function isDailyReview(item: TodoItem): boolean {
   return item.kind === "task" && item.agent === REVIEW_SUPERVISOR;
 }
 
+/**
+ * Core's list without the daily review (main chat PRD ruling 145): the
+ * one place the desktop drops it, as the store takes each read in
+ * (stores/assistant-todo.ts), so nothing that draws or compares the
+ * panel's list meets it — its groups, its empty state, the launch at
+ * login hint, the rows lit up. Its row showed how Galley works, not
+ * what it did: what it dispatches is under 「Galley 在办」, and when it
+ * speaks it says where it came from. It still runs every day, and the
+ * assistant still reads it in its 「在办的事」; only the panel goes
+ * without it. A routine, but a review made a one-off by hand would
+ * stand under 「Galley 在办」, so every group of tasks goes without it.
+ * The same object when it is not there.
+ */
+export function withoutDailyReview(todo: AssistantTodo): AssistantTodo {
+  const keep = (items: TodoItem[]) =>
+    items.some(isDailyReview)
+      ? items.filter((item) => !isDailyReview(item))
+      : items;
+  const assistant = keep(todo.assistant);
+  const routine = keep(todo.routine);
+  const done = keep(todo.done);
+  if (
+    assistant === todo.assistant &&
+    routine === todo.routine &&
+    done === todo.done
+  ) {
+    return todo;
+  }
+  return { ...todo, assistant, routine, done };
+}
+
 // ---- Where a row leads -----------------------------------------------------
 
 /** What clicking a row's title does. */
@@ -392,10 +424,11 @@ export function todoRowTarget(item: TodoItem): TodoTarget | null {
  * main chat PRD ruling 96 moved it down and gave it a ×): launch at
  * login is off and something is set to go off — a task, or a to-do's
  * reminder — and the user has not closed it. Unknown (`null`) never
- * warns. The daily review does not count (main chat ticket 83, ruling
- * 128 point 9): with nothing else in hand a late review loses nothing,
- * and every main chat has one, so a new user's empty list would carry
- * the hint. */
+ * warns. The daily review is never among them: the panel's list goes
+ * without it (`withoutDailyReview`, PRD ruling 145). From ticket 83
+ * (ruling 128 point 9) until then it was left out here by name: with
+ * nothing else in hand a late review loses nothing, and every main chat
+ * has one, so a new user's empty list would have carried the hint. */
 export function todoAutostartHintVisible(
   autostartEnabled: boolean | null,
   todo: AssistantTodo,
@@ -409,12 +442,8 @@ export function todoAutostartHintVisible(
     ...todo.yours.anytime,
   ];
   return (
-    tasks.some(
-      (item) =>
-        item.kind === "task" &&
-        item.state === "scheduled" &&
-        !isDailyReview(item),
-    ) || yours.some((item) => item.reminder?.state === "scheduled")
+    tasks.some((item) => item.kind === "task" && item.state === "scheduled") ||
+    yours.some((item) => item.reminder?.state === "scheduled")
   );
 }
 

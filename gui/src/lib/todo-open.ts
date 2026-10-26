@@ -268,8 +268,8 @@ export function goToTodoTarget(
  * 07's quote strip, its limit and its dedupe) and the caret there; the
  * panel stays open. From elsewhere Galley opens first and its composer
  * takes the quote as it appears (MainView). `title` is what the row
- * shows (lib/todo-panel.ts `todoRowText`: the daily review's name, not
- * its English prompt, ticket 74). */
+ * shows (lib/todo-panel.ts `todoRowText`: 「子任务」 for a subtask
+ * without a title). */
 export function quoteTodo(
   item: TodoItem,
   spot: TodoSpot,

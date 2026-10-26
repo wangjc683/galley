@@ -193,6 +193,62 @@ describe("a tick", () => {
   });
 });
 
+// PRD ruling 145: the one place the daily review leaves the panel's
+// list, so every reader of the store's copy goes without it.
+describe("the daily review", () => {
+  const ROUTINE: TodoItem = {
+    kind: "task",
+    id: "sched_daily",
+    text: "早报",
+    state: "scheduled",
+    createdBy: "assistant",
+    target: "assistant",
+    repeat: { kind: "daily" },
+    timeOfDay: "08:00",
+    at: "2026-10-17T00:00:00Z",
+  };
+  const REVIEW: TodoItem = {
+    ...ROUTINE,
+    id: "sched_review",
+    text: "Daily review: read wake.md and go over what is in hand.",
+    createdBy: "agent",
+    agent: "galley-review",
+    timeOfDay: "09:00",
+    at: "2026-10-17T01:00:00Z",
+  };
+
+  it("is left out of the list as each read comes in; the rest as Core gave it", async () => {
+    const core: AssistantTodo = {
+      ...before,
+      routine: [ROUTINE, REVIEW],
+    };
+    answer([core]);
+    await useAssistantTodoStore.getState().load();
+    const { todo } = useAssistantTodoStore.getState();
+    expect(todo.routine).toEqual([ROUTINE]);
+    expect(todo.yours).toEqual(core.yours);
+    expect(todo.todayCount).toBe(1);
+    // Alone, running or paused: nothing is left in 例行.
+    answer([
+      {
+        ...EMPTY_TODO,
+        routine: [{ ...REVIEW, state: "paused", at: undefined }],
+      },
+    ]);
+    await useAssistantTodoStore.getState().load();
+    expect(useAssistantTodoStore.getState().todo).toEqual(EMPTY_TODO);
+  });
+
+  it("is left out of the read a write ends with too", async () => {
+    answer([{ ...EMPTY_TODO, done: [DONE], routine: [REVIEW] }]);
+    useAssistantTodoStore.getState().toggle(OPEN);
+    await vi.runAllTimersAsync();
+    const { todo } = useAssistantTodoStore.getState();
+    expect(todo.routine).toEqual([]);
+    expect(todo.done).toEqual([DONE]);
+  });
+});
+
 describe("the to-dos noted in the main chat (ticket 43)", () => {
   const LONG_DONE: TodoItem = {
     ...DONE,

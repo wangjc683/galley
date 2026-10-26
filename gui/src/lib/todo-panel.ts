@@ -1,6 +1,5 @@
 import type { AppCopy } from "@/i18n/types";
 import {
-  isDailyReview,
   replyMessageId,
   scheduleTime,
   todoRowTarget,
@@ -312,15 +311,12 @@ export function assistantRowLine(
 
 /**
  * What a row is called (its title, and what 「说说这件」 quotes): the
- * words it carries, 「子任务」 for a subtask without a title, and for the
- * daily review a name of its own (main chat ticket 74) — its `prompt` is
- * English for the model, never shown. The name carries no time: the
- * rule and the next time are the second line's, as every routine's
- * (`routineRowLine`), so the time is said once and follows the task's
- * own `timeOfDay` when the user has it moved.
+ * words it carries, 「子任务」 for a subtask without a title. The daily
+ * review had a name of its own here from main chat ticket 74 (its
+ * `prompt` is English for the model); since PRD ruling 145 the panel's
+ * list goes without it (`withoutDailyReview`), so no row needs one.
  */
 export function todoRowText(item: TodoItem, copy: AppCopy): string {
-  if (isDailyReview(item)) return copy.todo.dailyReview;
   return item.text || (item.kind === "subtask" ? copy.subtask.label : "");
 }
 
@@ -375,13 +371,14 @@ export function todoTitleTarget(
 }
 
 /**
- * Nothing in any group but the daily review: the panel's empty state.
- * Core seeds the review with the main chat (ticket 73), so counting it
- * kept the empty state from ever showing (main chat ticket 80, PRD
- * ruling 128 point 3); paused, it is still the review. The panel draws
- * 例行 under the empty state then, the review's row as it always looks
- * (assistant PRD ruling 10: in sight, and it can be let go). Cancelled,
- * 例行 is empty and so is everything.
+ * Nothing in any group: the panel's empty state. The daily review, which
+ * Core seeds with every main chat (ticket 73), is not in the panel's
+ * list (`withoutDailyReview`, PRD ruling 145), so a list with only the
+ * review is empty here with no exception. From main chat ticket 80 (PRD
+ * ruling 128 point 3) until then the review did not count by name, and
+ * 例行 was drawn under the empty state with its row alone (assistant PRD
+ * ruling 10: in sight, and it can be let go) — ruling 145 overturned
+ * that.
  */
 export function todoPanelEmpty(todo: AssistantTodo): boolean {
   return (
@@ -389,7 +386,7 @@ export function todoPanelEmpty(todo: AssistantTodo): boolean {
     todo.yours.later.length === 0 &&
     todo.yours.anytime.length === 0 &&
     todo.assistant.length === 0 &&
-    todo.routine.every(isDailyReview) &&
+    todo.routine.length === 0 &&
     todo.done.length === 0
   );
 }

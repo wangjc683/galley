@@ -2122,8 +2122,6 @@ export const zhCopy = {
     reminderPaused: (when: string) => `提醒 ${when} · 已暂停`,
     /** 例行的下次时刻。 */
     nextAt: (when: string) => `下次 ${when}`,
-    /** 每天巡看那条例行（`galley-review`，主聊天票 74）的名字，替代它给模型看的英文；不带时间，规则与时刻只在第二行。 */
-    dailyReview: "过一遍在办的事",
     /** 只有日期的截止。 */
     dayToday: "今天",
     dayTomorrow: "明天",

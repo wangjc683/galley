@@ -15,13 +15,16 @@
  * opens it but you, except once (main chat ticket 87, PRD ruling 131
  * point 4): the first time a to-do card appears under a reply to a round
  * you sent, Galley's panel opens by itself, remembered open, and the row
- * lights up. The daily review must be in sight and able to be let go
- * (assistant PRD ruling 10), and a panel that starts closed with nothing
- * leading to it could leave a new user never knowing Galley goes over
- * their things each morning. After that, never again
- * (`TODO_PANEL_INTRODUCED_KEY`). In a narrow main area the remembered
- * open is not shown at all and nothing there reads or writes it (ruling
- * 131 point 2, lib/todo-open.ts): a look there is this run's alone.
+ * lights up: a panel that starts closed with nothing leading to it is
+ * shown once, at the first card, where what Galley notes is kept. It
+ * was first argued for the daily review, to be in sight and able to be
+ * let go (assistant PRD ruling 10), lest a new user never know Galley
+ * goes over their things each morning; since main chat PRD ruling 145
+ * the panel does not draw the review, and the once stays on its own
+ * reason. After that, never again (`TODO_PANEL_INTRODUCED_KEY`). In a
+ * narrow main area the remembered open is not shown at all and nothing
+ * there reads or writes it (ruling 131 point 2, lib/todo-open.ts): a
+ * look there is this run's alone.
  *
  * Anything unreadable counts as closed: no window (a static render), a
  * WebView with storage disabled, a value that is not ours. A write that

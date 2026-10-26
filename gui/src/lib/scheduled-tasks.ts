@@ -53,7 +53,8 @@ export const SCHEDULER_SUPERVISOR = "galley-scheduler";
  * `created_by_supervisor = 'galley-review'`, which wakes the assistant
  * a little before or after 09:00 (a time Core picks once when it seeds
  * it, ticket 78) to go over what is in hand. Its `prompt` is English for
- * the model; the to-do panel shows a name of its own instead. Pinned by
+ * the model, never shown; the to-do panel does not draw it (main chat
+ * PRD ruling 145, lib/assistant-todo.ts `withoutDailyReview`). Pinned by
  * `scheduled-tasks.test.ts`, as the label above is. */
 export const REVIEW_SUPERVISOR = "galley-review";
 

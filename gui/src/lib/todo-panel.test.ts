@@ -4,6 +4,7 @@ import { enCopy } from "@/i18n/locales/en";
 import { zhCopy } from "@/i18n/locales/zh";
 import {
   EMPTY_TODO,
+  withoutDailyReview,
   type AssistantTodo,
   type TodoItem,
 } from "@/lib/assistant-todo";
@@ -86,6 +87,19 @@ function task(extra: Partial<TodoItem> = {}): TodoItem {
     ...extra,
   };
 }
+
+// The routine Core seeds with the main chat (ticket 73): its maker's
+// label in `agent` (core/src/assistant_todo.rs `creator`), its prompt
+// English for the model. Off the panel since PRD ruling 145.
+const REVIEW = task({
+  id: "sched_review",
+  text: "Daily review: read wake.md and go over what is in hand.",
+  createdBy: "agent",
+  agent: "galley-review",
+  repeat: { kind: "daily" },
+  timeOfDay: "09:00",
+  createdIn: undefined,
+});
 
 describe("a to-do's second line (ruling 97)", () => {
   const line = (
@@ -399,53 +413,10 @@ describe("a to-do's notes (ticket 80)", () => {
   });
 });
 
-describe("the daily review's name (ticket 74)", () => {
-  // The routine Core seeds (ticket 73): its maker's label comes in
-  // `agent` (core/src/assistant_todo.rs `creator`), its prompt is English
-  // for the model.
-  const review = task({
-    id: "sched_review",
-    text: "Daily review: read wake.md and go over what is in hand.",
-    createdBy: "agent",
-    agent: "galley-review",
-    repeat: { kind: "daily" },
-    timeOfDay: "09:00",
-    at: local(2026, 10, 17, 9, 0),
-    createdIn: undefined,
-  });
-
-  it("shows a name of its own, never its prompt, and no time in it", () => {
-    expect(todoRowText(review, zh)).toBe("过一遍在办的事");
-    expect(todoRowText(review, en)).toBe("Go over what’s in hand");
-  });
-
-  it("says the time once, on the second line, following the task's own time", () => {
-    const moved = {
-      ...review,
-      timeOfDay: "07:30",
-      at: local(2026, 10, 17, 7, 30),
-    };
-    expect(todoRowText(moved, zh)).toBe("过一遍在办的事");
-    expect(routineRowLine(moved, TODAY, "zh-CN", zh)).toBe(
-      "每天 07:30 · 下次 明天 07:30",
-    );
-    const paused = { ...review, state: "paused" as const, at: undefined };
-    expect(todoRowText(paused, zh)).toBe("过一遍在办的事");
-    expect(routineRowLine(paused, TODAY, "zh-CN", zh)).toBe(
-      "每天 09:00 · 已暂停",
-    );
-  });
-
-  it("leaves every other row's words as they are", () => {
+describe("a row's name", () => {
+  it("is the words it carries, 「子任务」 for a subtask without a title", () => {
     expect(todoRowText(task(), zh)).toBe("看看快递到了没有");
-    // Another agent's routine, by its own label.
-    expect(
-      todoRowText(task({ createdBy: "agent", agent: "claude-code" }), zh),
-    ).toBe("看看快递到了没有");
-    // The label on something that is not a task is not the review.
-    expect(todoRowText(todo({ agent: "galley-review" }), zh)).toBe(
-      "交季度报告",
-    );
+    expect(todoRowText(todo(), zh)).toBe("交季度报告");
     expect(
       todoRowText(
         {
@@ -631,74 +602,67 @@ describe("the list", () => {
     expect(
       todoPanelEmpty({
         ...EMPTY_TODO,
+        routine: [task({ repeat: { kind: "daily" } })],
+      }),
+    ).toBe(false);
+    expect(
+      todoPanelEmpty({
+        ...EMPTY_TODO,
         yours: { today: [], later: [], anytime: [todo()] },
       }),
     ).toBe(false);
   });
 
-  // Ticket 80 (ruling 128 point 3): the review Core seeds with the main
-  // chat does not count.
+  // Ruling 145: the panel's list goes without the review Core seeds with
+  // the main chat, so with it alone the panel is empty, no exception
+  // needed (ticket 80 had made one here, ruling 128 point 3).
   describe("with the daily review", () => {
-    const review = task({
-      id: "sched_review",
-      text: "Daily review: read wake.md and go over what is in hand.",
-      createdBy: "agent",
-      agent: "galley-review",
-      repeat: { kind: "daily" },
-      timeOfDay: "09:00",
-      createdIn: undefined,
-    });
     const routine = task({
       id: "sched_daily",
       text: "早报",
       repeat: { kind: "daily" },
       timeOfDay: "08:00",
     });
+    const empty = (todo: AssistantTodo) =>
+      todoPanelEmpty(withoutDailyReview(todo));
 
     it("is empty with the review alone, running or paused", () => {
-      expect(todoPanelEmpty({ ...EMPTY_TODO, routine: [review] })).toBe(true);
+      expect(empty({ ...EMPTY_TODO, routine: [REVIEW] })).toBe(true);
       expect(
-        todoPanelEmpty({
+        empty({
           ...EMPTY_TODO,
-          routine: [{ ...review, state: "paused", at: undefined }],
+          routine: [{ ...REVIEW, state: "paused", at: undefined }],
         }),
       ).toBe(true);
     });
 
-    it("is not with another routine beside it", () => {
-      expect(
-        todoPanelEmpty({ ...EMPTY_TODO, routine: [review, routine] }),
-      ).toBe(false);
-      expect(todoPanelEmpty({ ...EMPTY_TODO, routine: [routine] })).toBe(false);
+    it("is not with another routine beside it, which is all 例行 draws", () => {
+      const listed = withoutDailyReview({
+        ...EMPTY_TODO,
+        routine: [REVIEW, routine],
+      });
+      expect(todoPanelEmpty(listed)).toBe(false);
+      expect(listed.routine).toEqual([routine]);
     });
 
     it("is not with a to-do, or anything in another group", () => {
       expect(
-        todoPanelEmpty({
+        empty({
           ...EMPTY_TODO,
           yours: { today: [], later: [todo()], anytime: [] },
-          routine: [review],
+          routine: [REVIEW],
         }),
       ).toBe(false);
       expect(
-        todoPanelEmpty({
-          ...EMPTY_TODO,
-          assistant: [task()],
-          routine: [review],
-        }),
+        empty({ ...EMPTY_TODO, assistant: [task()], routine: [REVIEW] }),
       ).toBe(false);
       expect(
-        todoPanelEmpty({
+        empty({
           ...EMPTY_TODO,
           done: [todo({ state: "done" })],
-          routine: [review],
+          routine: [REVIEW],
         }),
       ).toBe(false);
-    });
-
-    it("is empty, as it always was, once the review is cancelled", () => {
-      // Core leaves a cancelled task out of every group.
-      expect(todoPanelEmpty({ ...EMPTY_TODO, routine: [] })).toBe(true);
     });
   });
 
@@ -1023,6 +987,29 @@ describe("what lights up (ticket 87, ruling 131 points 3 and 5)", () => {
     ).toEqual(["sched_daily"]);
     // It went off: the next time moved on.
     expect(lit(before, after({ at: local(2026, 10, 18, 8, 0) }))).toEqual([]);
+  });
+
+  it("never lights the daily review: not its time moved, paused or resumed, nor its arrival (ruling 145)", () => {
+    // As the store keeps each read: without the review.
+    const shown = (routine: TodoItem[]) =>
+      withoutDailyReview(list({ routine }));
+    const before = shown([DAILY, REVIEW]);
+    for (const extra of [
+      { timeOfDay: "07:30", at: local(2026, 10, 17, 7, 30) },
+      { state: "paused" as const, at: undefined },
+      { text: "Daily review: go over what is in hand." },
+    ]) {
+      expect(lit(before, shown([DAILY, { ...REVIEW, ...extra }]))).toEqual([]);
+    }
+    expect(lit(shown([DAILY, { ...REVIEW, state: "paused" }]), before)).toEqual(
+      [],
+    );
+    // Seeded with a main chat while the panel is on screen.
+    expect(lit(shown([DAILY]), before)).toEqual([]);
+    // Another routine beside it lights as ever.
+    expect(
+      lit(before, shown([{ ...DAILY, timeOfDay: "08:30" }, REVIEW])),
+    ).toEqual(["sched_daily"]);
   });
 
   it("does not light what goes off into 已完成, anything else new there, or what leaves", () => {

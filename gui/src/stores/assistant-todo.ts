@@ -11,6 +11,7 @@ import {
   reopenTodo,
   todoFailureKind,
   todoToastTitle,
+  withoutDailyReview,
   type AssistantTodo,
   type TodoFailure,
   type TodoItem,
@@ -32,7 +33,11 @@ import { makeAppError } from "@/types/app-error";
  * however long ago, or cancelled), read together so the three always
  * agree. `useAssistantTodoSync` (App, with a main chat) reads them and
  * reads them again on Core's events, at midnight, and when a to-do falls
- * due.
+ * due. The list is kept without the daily review (`withoutDailyReview`,
+ * PRD ruling 145), taken out as each read comes in: this is the one
+ * copy every reader of the panel's list has — the panel, its lit rows
+ * (useTodoPanelFlash), a card's title (`todoListed`) — so none of them
+ * meets it.
  *
  * The writes the user has here (PRD ruling 91 point 3) go through it
  * too:
@@ -145,8 +150,9 @@ function without<T>(record: Record<string, T>, id: string): Record<string, T> {
   return rest;
 }
 
-/** Read the list and the noted to-dos, together; null when a later
- * read has already landed or either failed. */
+/** Read the list (without the daily review) and the noted to-dos,
+ * together; null when a later read has already landed or either
+ * failed. */
 async function read(): Promise<{
   todo: AssistantTodo;
   noted: TodoItem[];
@@ -159,7 +165,7 @@ async function read(): Promise<{
     ]);
     if (ticket <= applied) return null;
     applied = ticket;
-    return { todo, noted };
+    return { todo: withoutDailyReview(todo), noted };
   } catch (e) {
     console.warn("[todo] list failed.", e);
     return null;

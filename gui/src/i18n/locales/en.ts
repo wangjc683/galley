@@ -2097,7 +2097,6 @@ export const enCopy: AppCopy = {
     reminderAt: (when: string) => `Reminder ${when}`,
     reminderPaused: (when: string) => `Reminder ${when} · Paused`,
     nextAt: (when: string) => `Next ${when}`,
-    dailyReview: "Go over what’s in hand",
     dayToday: "Today",
     dayTomorrow: "Tomorrow",
     dayYesterday: "Yesterday",
