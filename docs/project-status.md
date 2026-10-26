@@ -23,7 +23,9 @@ live in [refactor](./archive/refactor/README.md).
   2026-10-18, never shipped on its own; upstream's new mykey store broke the
   managed loader, fixed in the runner). The previous `f308ee7` shipped
   `v0.6.1` … `v0.6.2`, `1b6442f` `v0.5.1` … `v0.6.0`, `efb3bc6` before it
-  `v0.4.11` … `v0.5.0`. See [GA baseline](./ga-baseline.md).
+  `v0.4.11` … `v0.5.0`. Audited on main, not yet shipped: `a9a36b4`
+  (2026-10-26; two `ga.py` fixes, no Galley change). See
+  [GA baseline](./ga-baseline.md).
 - Product shape: a personal assistant on the user's own computer that
   scales into a local agent team (since `v0.7.0`; before it, a dual-native
   local agent team orchestrator)
@@ -747,6 +749,10 @@ dogfooded by JC in dev:
 - The desktop pet and Reinject Tools are gone from runner, Core and GUI
   ([devlog](./devlog/2026-10-23-remove-desktop-pet-and-reinject-tools.md));
   neither worked in the bundled runtime.
+- GA baseline `b70079d` -> `a9a36b4` (audited 2026-10-26,
+  [devlog](./devlog/2026-10-26-ga-upstream-upgrade-b70079d-to-a9a36b4.md)):
+  `web_execute_js` no longer ends the run on a non-string script, and the
+  DSML retry also catches an unclosed marker. Not dogfooded in dev.
 
 **Owed from the `v0.7.0` smoke** (JC approved publish after part of it,
 2026-10-23; the plan and results are in the release devlog):

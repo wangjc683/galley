@@ -2,8 +2,24 @@
 
 Patch stack id: `galley-managed-ga-patches-v1`
 
-Last replay verified: `2026-10-22` against upstream
-`b70079dce7d7768338a17c693f67b9d8dac541b5` (27-patch stack through `0029`;
+Last replay verified: `2026-10-26` against upstream
+`a9a36b4b219593369de01c3e5973e56ac02e568b` (27-patch stack through `0029`;
+GA baseline bump from `b70079d`,
+[devlog](../../docs/devlog/2026-10-26-ga-upstream-upgrade-b70079d-to-a9a36b4.md)).
+Upstream's two commits each replace one `ga.py` line with two
+(`do_web_execute_js`, `do_no_tool`), so the three zero-context hunks
+below them moved down two lines: `0001`'s `load_L1` and
+`get_global_memory` hunks and `0003`'s `get_global_memory` hunk.
+`rebase-managed-ga-patches.sh` replayed the stack on `b70079d`,
+byte-verified it against the checked-in payload, rebased it onto
+`a9a36b4` with no conflict and re-exported it; only those three hunk
+headers changed, no patch body. `build-managed-ga.sh` applied all 27 from
+a clean clone of `a9a36b4` and its `py_compile` sweep passed. The rebuilt
+payload's diff against the previous one equals upstream's
+`b70079d..a9a36b4` diff line for line (`ga.py`, 6 lines).
+`check-managed-ga-payload.mjs` and `check-ga-baseline-drift.mjs` passed.
+
+Previous replay (`2026-10-22`, `b70079d`, 27-patch stack through `0029`;
 GA baseline bump from `5205f40`,
 [devlog](../../docs/devlog/2026-10-22-ga-upstream-upgrade-5205f40-to-b70079d.md)).
 No patch file changed and none was re-exported. Upstream's only edits to

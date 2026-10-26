@@ -15,16 +15,67 @@ audited against.
 
 ## Current Baseline
 
-Locked commit: `b70079dce7d7768338a17c693f67b9d8dac541b5`
+Locked commit: `a9a36b4b219593369de01c3e5973e56ac02e568b`
 
-- Tree hash: `bf14c4fd4387c65759f534bb972ebff019ac12a1`
+- Tree hash: `f039f97493294d9bc74f832e5de60b9042230226`
 - Source: `lsdefine/GenericAgent` upstream `main`
-- Date audited: 2026-10-22
-- Shipped in: `v0.7.0` (2026-10-23; audited after `v0.6.2`)
+- Date audited: 2026-10-26
+- Shipped in: not yet; audited for `v0.7.1` (after `v0.7.0`)
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
-- Previous baseline: `5205f4080ff234f0ce84d8453f22fe236fc4008e`
+- Previous baseline: `b70079dce7d7768338a17c693f67b9d8dac541b5`
+  (tree `bf14c4fd4387c65759f534bb972ebff019ac12a1`, audited 2026-10-22,
+  shipped `v0.7.0`)
+- Delta (`b70079d..a9a36b4` = 2 commits): one file, `ga.py` +4 / −2, two
+  bug fixes in tool handlers. `agent_loop.py`, `agentmain.py`,
+  `llmcore.py` and root `pyproject.toml` had **zero diff** (`GA_DEPS`
+  untouched); no frontend, `memory/` seed or packaging change.
+- Result: **no break in either mode, and no Galley code change.** Each
+  upstream edit replaces one line with two, so the three zero-context
+  hunks below them moved down two lines: `0001` (`load_L1`,
+  `get_global_memory`) and `0003` (`get_global_memory`). The stack was
+  re-exported with `rebase-managed-ga-patches.sh`; only those three hunk
+  headers changed, no patch body. The rebuilt payload's diff against the
+  previous one equals upstream's `b70079d..a9a36b4` diff line for line.
+- Standing guard re-run: `grep -rn "hub.connect" managed-ga/code/` shows
+  the same hits as the last audit (`agentmain.py --reflect`, `hub.py`
+  itself, `stapp.py`, `frontends/desktop_bridge.py` `make_agent`), none on
+  Galley's path.
+- Devlog: [GA upstream upgrade b70079d -> a9a36b4](./devlog/2026-10-26-ga-upstream-upgrade-b70079d-to-a9a36b4.md)
+
+New in the `b70079d` -> `a9a36b4` range:
+
+- `ga.py` — **`web_execute_js` no longer crashes on a non-string script**
+  (upstream `545017c`, `do_web_execute_js`): a dict or list `script`
+  argument is JSON-encoded, any other non-string goes through `str()`, and
+  a whitespace-only script returns the "Script missing" error. Before, a
+  dict, list or number raised `AttributeError` on `.strip()`, which ends
+  the agent loop, and a whitespace script ran as is. Checked with the
+  bundled Python against both payloads (the browser call stubbed): the
+  previous payload raises for a dict, a list and `42`; the new one runs
+  them as the script text and returns "Script missing" for `"   "`. A
+  JSON-encoded object is not a working page script, so the model now gets
+  a JS error back and can retry instead of the run ending. Galley has no
+  coupling: `0006` patches the module-level `web_execute_js` (driver
+  recovery), not this `do_` method, and the runner reads none of these
+  strings. Positive for browser control.
+- `ga.py` — **the DSML retry also catches an unclosed marker** (upstream
+  `a9a36b4`, `do_no_tool`): a final reply is regenerated when its last 50
+  characters (after `rstrip`) contain both `DSML` and `｜` and it ends in
+  `>`, where the previous range required `</｜DSML｜`. Checked with the
+  bundled Python against both payloads: a reply ending in an opening
+  `<｜DSML｜invoke name="…">` or `<｜DSML｜parameter …>` is now retried
+  (the previous payload took it as the answer); a closed
+  `</｜DSML｜function_calls>` is retried as before; a managed reply ending
+  in `</next-suggestion>`, a plain answer ending in `>` and an answer with
+  a full-width `｜` but no `DSML` are not. The gap noted below (a leak
+  followed by a long `<next-suggestion>` block) remains. Galley has no
+  coupling. Positive for managed DeepSeek presets.
+
+Carried forward from the `5205f40` -> `b70079d` range (2026-10-22):
+
+- Previous-previous baseline: `5205f4080ff234f0ce84d8453f22fe236fc4008e`
   (tree `02d1a54070e237a180e4eb01a7c0df04dc500b8f`, audited 2026-10-18,
   never shipped)
 - Delta (`5205f40..b70079d` = 11 commits): 12 files, +702 / −315. Nine

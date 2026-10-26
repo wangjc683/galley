@@ -16,6 +16,9 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 
 ## 时间线
 
+### 2026-10-26
+- [GA 上游升级 b70079d -> a9a36b4](./2026-10-26-ga-upstream-upgrade-b70079d-to-a9a36b4.md) — v0.7.1 发版前例行审计；2 提交只改 `ga.py` 6 行：`web_execute_js` 遇到非字符串脚本不再抛 `AttributeError` 打断运行（对象 / 数组转 JSON 文本、纯空白报「Script missing」），DSML 重试也接住未闭合的开标签；两种模式无断点、Galley 代码零改动；`0001`、`0003` 三个 hunk 下移两行，用 rebase 脚本重新导出、只改行号；payload diff 与上游逐行相同；打包 Python 对新旧 payload 两张探针表；runner 628 passed、兼容矩阵 628、bundle mac-x64 冒烟、drift gate OK
+
 ### 2026-10-23
 - [删掉桌面宠物与重新注入工具：标题菜单里两个从上游搬来的项](./2026-10-23-remove-desktop-pet-and-reinject-tools.md) — 两项都是 05-13 从上游搬来的、都已坏：宠物在内置运行时里从没打开过（缺 PyObjC / tkinter），外置下上游 08-10 拆了它的端口；重新注入读的文件 06-23 起就不在，引擎在五种情况下自动重发工具说明；runner、Core、GUI 三边删三条命令、三条事件（漂移门禁 15 个事件、8 条命令），`GaSession` 删 `extend_history`、`clear_last_tools` 与删后无调用方的两个方法，看门狗的清理钩子随之删；上游文件不动；删后菜单：主对话「查找 ─ 重置」，普通会话「查找 / 重命名」
 
