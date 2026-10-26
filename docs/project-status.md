@@ -9,22 +9,21 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.7.0`.
-- Git tag / GitHub Release: `v0.7.0` is the current published stable release
-  (tagged at `c2e88df1` on 2026-10-22, published 2026-10-23, GitHub Latest).
+- Package version: `0.7.1`.
+- Git tag / GitHub Release: `v0.7.1` is the current published stable release
+  (tagged at `243d35a1` on 2026-10-26, published 2026-10-26, GitHub Latest).
 - Agent API schema: `schemaVersion: 3` (since the Goal removal on
   2026-10-13, first shipped in `v0.7.0`; `2` first shipped in `v0.5.0`). The
   server keeps answering `1` and `2` for every command that did not change;
   every goal command, v1 and v2, is `unknown_command` under every pin.
-- Release tier: stable minor; default update channel points at `v0.7.0`.
+- Release tier: stable patch; default update channel points at `v0.7.1`.
   `beta` is kept as a legacy alias for older builds.
-- Shipped GA baseline: `b70079d` (audited 2026-10-22, first shipped in
-  `v0.7.0`; no break, no Galley change), on top of `5205f40` (audited
-  2026-10-18, never shipped on its own; upstream's new mykey store broke the
-  managed loader, fixed in the runner). The previous `f308ee7` shipped
-  `v0.6.1` … `v0.6.2`, `1b6442f` `v0.5.1` … `v0.6.0`, `efb3bc6` before it
-  `v0.4.11` … `v0.5.0`. Audited on main, not yet shipped: `a9a36b4`
-  (2026-10-26; two `ga.py` fixes, no Galley change). See
+- Shipped GA baseline: `a9a36b4` (audited 2026-10-26, first shipped in
+  `v0.7.1`; two `ga.py` fixes, no Galley change). The previous `b70079d`
+  shipped `v0.7.0`, on top of `5205f40` (audited 2026-10-18, never shipped
+  on its own; upstream's new mykey store broke the managed loader, fixed in
+  the runner); `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` `v0.5.1` …
+  `v0.6.0`, `efb3bc6` before it `v0.4.11` … `v0.5.0`. See
   [GA baseline](./ga-baseline.md).
 - Product shape: a personal assistant on the user's own computer that
   scales into a local agent team (since `v0.7.0`; before it, a dual-native
@@ -33,6 +32,26 @@ live in [refactor](./archive/refactor/README.md).
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
+
+`v0.7.1` (2026-10-26) is a patch three days after `v0.7.0`, 47 commits
+plus the GA baseline bump. The main chat while it runs: a line under the
+typing dots says what it is doing and for how long from the first second, a
+new sentence rolls in under a slow shimmer, the top bar stays quiet and the
+card says 「正在工作…」 (rulings 134, 135, 137). Main chat bubbles slide in
+on send and shrink away on delete, undo playing it back (ruling 138); short
+table columns no longer wrap (ruling 136); the desktop pet and Reinject
+Tools are gone. GA baseline `b70079d` -> `a9a36b4`: two `ga.py` fixes
+(`web_execute_js` on a non-string script, the DSML retry on an unclosed
+marker). Graded patch: the largest addition is main chat polish, and the
+removal does not trigger "removals grade too" (both items had long been
+broken; two menu items and a badge). Pre-flight: `check.yml` green on the
+bump commit `243d35a1` (run 40269618238, all seven jobs); the
+bundled-runtime gate on `mac-x64`; one browser task through the new engine
+in dev. The agent checked the draft's Intel DMG read-only (version, the
+bundled `ga.py`, no pet code) and the `latest.json` candidate; JC approved
+publish without reporting the smoke items (owed under Unreleased On Main).
+Stable promoted and verified the same session (run 40274354913). Full
+narrative: devlog [2026-10-26-v0.7.1-release](./devlog/2026-10-26-v0.7.1-release.md).
 
 `v0.7.0` (tagged 2026-10-22, published 2026-10-23) is a minor two weeks
 after `v0.6.2`, 687 commits (665 non-merge). The product turned from a
@@ -582,21 +601,20 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.7.0` is published and promoted as the live stable release (published
-2026-10-23 02:39 UTC). The default `updates/stable/latest.json` channel points
-at `v0.7.0`, with the legacy `updates/beta/latest.json` alias pointing at the
+`v0.7.1` is published and promoted as the live stable release (published
+2026-10-26 05:27 UTC). The default `updates/stable/latest.json` channel points
+at `v0.7.1`, with the legacy `updates/beta/latest.json` alias pointing at the
 same version for older installed builds. The live verifier passed with
 `--cache-bust` for both channels across all three platforms (darwin-aarch64,
 darwin-x86_64, windows-x86_64), in the promote run and again locally (channel
-branch at `43e40165`). One draft cut (release run 39802407918); JC smoked part
-of it and approved publishing without the rest, so the items owed under
-Unreleased On Main are still owed. The bundled-runtime gate passed on
-`mac-x64`; `check.yml` was green on the bump commit (run 39799034805, all
-seven jobs).
+branch at `3912754f`). One draft cut (release run 40269618292); JC approved
+publishing without reporting smoke items, so they are owed under Unreleased
+On Main. The bundled-runtime gate passed on `mac-x64`; `check.yml` was green
+on the bump commit (run 40269618238, all seven jobs).
 
-`v0.6.2` (2026-10-09) went through the same path: one draft cut (release run
-37883912570), JC approved publishing without reporting smoke items, both
-channels verified with `--cache-bust`, bundled-runtime gate passed on
+`v0.7.0` (2026-10-23) went through the same path: one draft cut (release run
+39802407918), JC smoked part of it and approved publishing without the rest,
+both channels verified with `--cache-bust`, bundled-runtime gate passed on
 `mac-x64`.
 
 `v0.6.1` (2026-10-07) went through the same path: one draft cut (release run
@@ -678,7 +696,8 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.6.2` → `v0.7.0` passed on JC's
+1. App-update dogfood (SOP step 10): `v0.7.0` → `v0.7.1` is not reported
+   yet (promoted 2026-10-26 05:28 UTC). `v0.6.2` → `v0.7.0` passed on JC's
    Windows machine (2026-10-23, same session as the release; H1 in the
    release devlog): after the restart the app reads 0.7.0, the old sessions
    and model settings are there, and the main chat works, so migrations
@@ -730,30 +749,15 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Release-scope truth is `git log v0.7.0..HEAD`. As of 2026-10-26, all
-dogfooded by JC in dev:
+Release-scope truth is `git log v0.7.1..HEAD`. Nothing user-facing yet.
 
-- Main chat while it runs (rulings 134, 135, 137; tickets 90, 91, 93): the
-  header says nothing; a line under the typing dots says 「{在做什么} ·
-  {用时}」 from the first second, a new sentence rolls in and a slow band
-  sweeps it; the card says 「正在工作…」. From a user report after
-  `v0.7.0` (a long round read as frozen).
-- Tables: short columns no longer wrap (ruling 136, ticket 92), workbench
-  and main chat alike.
-- Main chat bubbles move when they come and go (ruling 138, ticket 94):
-  a send slides the conversation up on the programmatic scroll's timing
-  (no slide past 800px), your bubble fades in and the typing dots a beat
-  later; a deleted message shrinks to 0.9 toward its own corner while the
-  rest closes up, and undo plays it back; the typing dots fade out when
-  nothing takes their place. New token `--ease-exit`. Main chat only.
-- The desktop pet and Reinject Tools are gone from runner, Core and GUI
-  ([devlog](./devlog/2026-10-23-remove-desktop-pet-and-reinject-tools.md));
-  neither worked in the bundled runtime.
-- GA baseline `b70079d` -> `a9a36b4` (audited 2026-10-26,
-  [devlog](./devlog/2026-10-26-ga-upstream-upgrade-b70079d-to-a9a36b4.md)):
-  `web_execute_js` no longer ends the run on a non-string script, and the
-  DSML retry also catches an unclosed marker. One browser task passed in
-  dev (2026-10-26); the DeepSeek case was not run.
+**Owed from the `v0.7.1` smoke** (JC approved publish without reporting
+smoke items, 2026-10-26; the list is in the release devlog): on a packaged
+build, the main chat's progress line and its card, no flash of old messages
+when a reply lands, bubble motion on send and delete, the title menus
+without the pet, a browser multi-step task through the `a9a36b4` engine (it
+passed once in dev) and a model switch in a new workbench session; that
+quitting with a live runner leaves no Python process; no Windows install.
 
 **Owed from the `v0.7.0` smoke** (JC approved publish after part of it,
 2026-10-23; the plan and results are in the release devlog):
@@ -909,7 +913,8 @@ shipped in `v0.6.1` and again in `v0.6.2`, both times with upstream still at
 collided with patch `0007` twice in a row — expect it again. `5205f40`
 (2026-10-18) and `b70079d` (2026-10-22) were audited on their own too;
 `b70079d` shipped in `v0.7.0`, with upstream `main` still at it when the tag
-was cut.
+was cut. `a9a36b4` was audited in the `v0.7.1` pre-flight (2026-10-26) and
+shipped in it.
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
 `api_key_header` a GUI entry point in the Settings -> Models advanced panel,
@@ -953,10 +958,10 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications (gone with approval, 2026-10-05), missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.7.0 stable minor is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.7.1 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Audited upstream `b70079d` (2026-10-22), shipped since `v0.7.0` (`f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Audited upstream `a9a36b4` (2026-10-26), shipped since `v0.7.1` (`b70079d` shipped `v0.7.0`, `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 
@@ -979,7 +984,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.7.0`. For the next release, bump every
+- Current package metadata uses `0.7.1`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
