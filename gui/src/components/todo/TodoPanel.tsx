@@ -698,6 +698,7 @@ function YourRow({
       line={
         <MetaLine
           parts={parts}
+          checked={checked}
           after={
             canCancelReminder && (
               <CancelReminder
@@ -767,19 +768,27 @@ function NotesLine({ text, full }: { text: string; full: string }) {
 /** A to-do's second line: when it is due (warning when overdue) and the
  * reminder, a bell and its time (ruling 97: the day it was noted is not
  * on it), and `after` it the reminder's cancel, on hover — outside what
- * the line cuts, so a narrow row cuts the words, never the button. */
+ * the line cuts, so a narrow row cuts the words, never the button.
+ * `ink-soft`, a step over the notes' `ink-muted` (main chat PRD ruling
+ * 146): the title, when, then what to bring, in the three inks; ticked
+ * and holding its place it goes `ink-muted` with the struck title. */
 function MetaLine({
   parts,
+  checked,
   after,
 }: {
   parts: readonly TodoMetaPart[];
+  checked: boolean;
   after?: ReactNode;
 }) {
   if (parts.length === 0) return null;
   return (
     <div
       data-role="todo-meta"
-      className="mt-0.5 flex min-w-0 items-center text-[12px] leading-[1.4] tabular-nums text-ink-muted"
+      className={cn(
+        "mt-0.5 flex min-w-0 items-center text-[12px] leading-[1.4] tabular-nums",
+        checked ? "text-ink-muted" : "text-ink-soft",
+      )}
     >
       <span className="min-w-0 truncate">
         <TodoMetaText parts={parts} />

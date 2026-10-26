@@ -602,6 +602,31 @@ describe("a to-do's notes (ticket 80)", () => {
     );
   });
 
+  // Main chat PRD ruling 146: the title, when, then the notes, in the
+  // three inks.
+  it("sit a step under the time: the time ink-soft, the notes ink-muted", () => {
+    const html = panel({
+      ...FULL,
+      yours: {
+        today: [],
+        later: [{ ...REMINDED, notes: NOTES }],
+        anytime: [ANYTIME],
+      },
+    });
+    const report = row(html, "todo_report");
+    expect(report).toMatch(/data-role="todo-meta" class="[^"]*text-ink-soft"/);
+    expect(report).not.toMatch(
+      /data-role="todo-meta" class="[^"]*text-ink-muted/,
+    );
+    expect(report).toMatch(
+      /data-role="todo-notes" class="[^"]*text-ink-muted"/,
+    );
+    // Ticked and holding its place, the time goes muted with the title.
+    store.flips = { todo_report: { done: true, phase: "settling" } };
+    const held = row(panel(FULL), "todo_report");
+    expect(held).toMatch(/data-role="todo-meta" class="[^"]*text-ink-muted"/);
+  });
+
   it("go right under the title when there is no time line", () => {
     const html = panel({
       ...FULL,
