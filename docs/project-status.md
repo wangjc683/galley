@@ -728,7 +728,7 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Release-scope truth is `git log v0.7.0..HEAD`. As of 2026-10-23, all
+Release-scope truth is `git log v0.7.0..HEAD`. As of 2026-10-26, all
 dogfooded by JC in dev:
 
 - Main chat while it runs (rulings 134, 135, 137; tickets 90, 91, 93): the
@@ -738,6 +738,12 @@ dogfooded by JC in dev:
   `v0.7.0` (a long round read as frozen).
 - Tables: short columns no longer wrap (ruling 136, ticket 92), workbench
   and main chat alike.
+- Main chat bubbles move when they come and go (ruling 138, ticket 94):
+  a send slides the conversation up on the programmatic scroll's timing
+  (no slide past 800px), your bubble fades in and the typing dots a beat
+  later; a deleted message shrinks to 0.9 toward its own corner while the
+  rest closes up, and undo plays it back; the typing dots fade out when
+  nothing takes their place. New token `--ease-exit`. Main chat only.
 - The desktop pet and Reinject Tools are gone from runner, Core and GUI
   ([devlog](./devlog/2026-10-23-remove-desktop-pet-and-reinject-tools.md));
   neither worked in the bundled runtime.
