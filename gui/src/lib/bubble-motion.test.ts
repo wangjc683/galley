@@ -118,12 +118,15 @@ describe("the send's slide: the programmatic scroll's numbers", () => {
     });
   });
 
-  it("slides only the last 800px of a longer way, as a far scroll jumps first", () => {
-    expect(columnSlide(2400)).toEqual({
+  it("does not slide a way longer than a scroll animates: it is just there", () => {
+    // Its first frame would be a stretch you never saw (ticket 94).
+    expect(columnSlide(SCROLL_ANIMATED_MAX_PX)).toEqual({
       distance: SCROLL_ANIMATED_MAX_PX,
       durationMs: scrollDurationMs(SCROLL_ANIMATED_MAX_PX),
     });
-    expect(columnSlide(-2400)?.distance).toBe(-SCROLL_ANIMATED_MAX_PX);
+    expect(columnSlide(SCROLL_ANIMATED_MAX_PX + 1)).toBeNull();
+    expect(columnSlide(2400)).toBeNull();
+    expect(columnSlide(-2400)).toBeNull();
   });
 
   it("does not slide under half a pixel", () => {

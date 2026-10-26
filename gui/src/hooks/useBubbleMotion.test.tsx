@@ -209,8 +209,24 @@ describe("a send (S2)", () => {
         easing: "linear",
       });
     }
-    // Clipped while it is moved down: no scroll range from it.
+    // Clipped while it is moved down: no scroll range from it — and not
+    // shrunk by the clip (WebKit drops a clipped flex item's minimum
+    // height to 0: the conversation drawn from its first rows, ticket 94).
     expect(column().style.overflow).toBe("clip");
+    expect(column().style.flexShrink).toBe("0");
+  });
+
+  it("does not slide a send that moved it farther than a scroll animates", () => {
+    mount({ rows: [A1, U1, A2], typing: false, live: false });
+    render({ rows: [A1, U1, A2, U2], typing: true, live: true }, send);
+    // Parked at a long reply's start, 1200px above the bottom: the send
+    // lands at the bottom at once, as before ruling 138.
+    page.layout.columnTop -= 1200;
+    page.frame();
+    expect(slides()).toEqual([]);
+    expect(column().style.overflow).toBe("");
+    // Your bubble still fades in.
+    expect(page.played.filter(on(rowOf("u-2")))).toHaveLength(1);
   });
 
   it("fades your bubble in with it, and the typing bubble once it is in place", () => {
@@ -253,6 +269,7 @@ describe("a send (S2)", () => {
     for (const p of page.played) p.animation.end();
     await act(async () => {});
     expect(column().style.overflow).toBe("");
+    expect(column().style.flexShrink).toBe("");
     for (const p of page.played) expect(p.animation.cancel).toHaveBeenCalled();
   });
 

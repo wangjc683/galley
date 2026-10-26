@@ -215,12 +215,20 @@ class Run implements RunningBubbleMotion {
   /** Clip the column's content to its box while it is moved down, so the
    * part pushed past its end adds no scroll range: the scroll listener
    * would read 「not at the bottom」 and stop following (the hand-off's
-   * way, ticket 51). */
+   * way, ticket 51). It must not shrink: the main chat's scroller is a
+   * flex column, and WebKit takes a flex item's automatic minimum height
+   * to be 0 once its overflow is not visible — the column squeezed to
+   * the viewport's height, the scroll range gone, the conversation
+   * drawn from its first rows until the clip came off (ticket 94, the
+   * flash on send in tauri dev). */
   clip(column: HTMLElement): void {
     const previous = column.style.overflow;
+    const previousShrink = column.style.flexShrink;
     column.style.overflow = "clip";
+    column.style.flexShrink = "0";
     this.onEnd(() => {
       column.style.overflow = previous;
+      column.style.flexShrink = previousShrink;
     });
   }
 

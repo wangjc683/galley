@@ -710,7 +710,7 @@ namespace）、`ease-firm`（`--ease-*` 有 namespace，直接成为 utility）�
   先瞬移，曲线也按距离分两档，数值集中在 `lib/animate-scroll.ts`，见
   [conversation](./conversation.md)「Scroll behaviour」的「平滑滚动」。例外一处：主对话里回复从三点气泡撑开的那次落地跟随，
   时长与曲线跟着气泡展开（`--motion-slow`、`--ease-pop`），整段都动画、不瞬移（2026-10-19，主聊天 PRD 裁决 103、110，票 51、58）。
-  主对话里发出时整栏滑上来（2026-10-26，主聊天 PRD 裁决 138，票 94）借的也是这套公式（时长、曲线、超过 800px 先瞬移只滑最后 800px）：它看上去就是一次滚动，只是终点版面在提交时已经到位，动的是 `transform`；数值从 `lib/animate-scroll.ts` 取、不另抄，曲线采样成 Web Animations 的关键帧（`lib/bubble-motion.ts` 的 `columnSlide`、`slideKeyframes`）。
+  主对话里发出时整栏滑上来（2026-10-26，主聊天 PRD 裁决 138，票 94）借的也是这套公式（时长、曲线、超过 800px 不滑、直接到位，不学程序滚动的先瞬移再滑：第一帧必须是你刚才看着的那一屏）：它看上去就是一次滚动，只是终点版面在提交时已经到位，动的是 `transform`；数值从 `lib/animate-scroll.ts` 取、不另抄，曲线采样成 Web Animations 的关键帧（`lib/bubble-motion.ts` 的 `columnSlide`、`slideKeyframes`）。
 - 输入框长高、变矮（人触发的交互反馈，Telegram 的 `round(50 × ln|Δh|)` ms，多一
   行 155ms、贴满 8 行 253ms）：时长随距离变，**缓动仍用 token** `--ease-firm`。逐帧
   写高度，所以在 JS 里按这条三次贝塞尔求值，数从 token 的定义读（`getComputedStyle`

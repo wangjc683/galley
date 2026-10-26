@@ -130,16 +130,18 @@ export interface ColumnSlide {
 /**
  * How the conversation slides into place after it moved by `delta` px
  * at once (its top in the viewport before less after: positive, it
- * moved up): the programmatic scroll's numbers, since it reads as one —
- * only the last SCROLL_ANIMATED_MAX_PX of a longer way, the rest a jump
- * first (as `scrollJumpFrom`), over `scrollDurationMs`. Null when it did
- * not move.
+ * moved up): the programmatic scroll's numbers, since it reads as one,
+ * over `scrollDurationMs`. Null when it did not move, or moved farther
+ * than a scroll animates (SCROLL_ANIMATED_MAX_PX): then it is just there,
+ * as before ruling 138. The first frame must be what you were looking
+ * at; a far scroll's 「jump to 800px short, slide the rest」 would open
+ * on a stretch you never saw — 30 lines up a long reply, read as old
+ * messages flashing past (ticket 94, tauri dev).
  */
 export function columnSlide(delta: number): ColumnSlide | null {
   if (!Number.isFinite(delta) || Math.abs(delta) < MIN_SHIFT_PX) return null;
-  const distance =
-    Math.sign(delta) * Math.min(Math.abs(delta), SCROLL_ANIMATED_MAX_PX);
-  return { distance, durationMs: scrollDurationMs(distance) };
+  if (Math.abs(delta) > SCROLL_ANIMATED_MAX_PX) return null;
+  return { distance: delta, durationMs: scrollDurationMs(delta) };
 }
 
 /** About one keyframe a frame: Web Animations take a CSS easing, and the

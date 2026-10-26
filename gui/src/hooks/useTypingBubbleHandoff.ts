@@ -356,6 +356,7 @@ function playTypingHandoff(
   }
 
   const previousOverflow = column.style.overflow;
+  const previousShrink = column.style.flexShrink;
   if (motion === "grow") {
     animations.push(
       bubble.animate(
@@ -374,8 +375,11 @@ function playTypingHandoff(
       // viewport): held where it was and let up on the growth's curve.
       // Its own box is not moved, so the scroller's height and the
       // follow's numbers stay; what it carries is, clipped at its edge
-      // so it adds no overflow (no scrollbar for a frame).
+      // so it adds no overflow (no scrollbar for a frame). Not shrunk by
+      // it: in the main chat's flex scroller WebKit drops a clipped flex
+      // item's minimum height to 0 (lib/bubble-motion-play.ts `clip`).
       column.style.overflow = "clip";
+      column.style.flexShrink = "0";
       const lifted = { transform: [`translateY(${lift}px)`, "none"] };
       const options = { duration: timing.growMs, easing: timing.easing };
       for (const child of Array.from(column.children)) {
@@ -395,7 +399,10 @@ function playTypingHandoff(
     done = true;
     for (const animation of animations) animation.cancel();
     layer?.remove();
-    if (lift !== 0) column.style.overflow = previousOverflow;
+    if (lift !== 0) {
+      column.style.overflow = previousOverflow;
+      column.style.flexShrink = previousShrink;
+    }
   };
   void Promise.all(animations.map((animation) => animation.finished)).then(
     stop,
