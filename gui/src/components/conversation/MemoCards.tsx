@@ -1,7 +1,7 @@
 import { Notepad } from "@phosphor-icons/react";
 
 import { useCopy } from "@/lib/i18n";
-import { memoCardOpens, memoCardParts, type MemoEventItem } from "@/lib/memo";
+import { memoCardParts, memoCardState, type MemoEventItem } from "@/lib/memo";
 import { showMemoRow } from "@/lib/todo-open";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { cn } from "@/lib/utils";
@@ -30,6 +30,13 @@ import { useMemoStore } from "@/stores/memo";
  * the page lists it; a memo deleted since, past its last day, deleted
  * here and waiting for its undo, or a 「不再记」 card: words, not a
  * button. No delete or undo on a card.
+ *
+ * What is gone is struck (main chat ticket 99, PRD ruling 144 point 2,
+ * `memoCardState`): the words only, never the prefix, in `ink-muted`.
+ * A memo deleted since — by you, by Galley, or on the page with its undo
+ * toast up — says 「已删除」 on the right, in the to-do card's cell; a
+ * 「不再记」 card says nothing more, its prefix has. One past its last
+ * day is muted and not struck — it held until then — with 「已过期」.
  */
 export function MemoCards({
   events,
@@ -54,13 +61,21 @@ export function MemoCards({
 
 function MemoCard({ event }: { event: MemoEventItem }) {
   const copy = useCopy();
-  const opens = useMemoStore((s) => memoCardOpens(event, s.memos, s.deleting));
+  const state = useMemoStore((s) => memoCardState(event, s.memos, s.deleting));
   const { prefix, text } = memoCardParts(event, copy);
   const full = `${prefix} · ${text}`;
+  // Only the words are struck, never the prefix (ruling 144 point 2).
+  const struck = state === "deleted" || state === "dropped";
+  const side =
+    state === "deleted"
+      ? copy.todo.stateDeleted
+      : state === "expired"
+        ? copy.memo.stateExpired
+        : null;
   const line = (
     <>
       <span className="text-ink-muted">{prefix} · </span>
-      {text}
+      <span className={struck ? "line-through" : undefined}>{text}</span>
     </>
   );
   return (
@@ -68,13 +83,14 @@ function MemoCard({ event }: { event: MemoEventItem }) {
       data-role="memo-card"
       data-memo-id={event.memoId}
       data-memo-action={event.action}
+      data-memo-state={state}
       className="rounded-md border border-line bg-app"
     >
       <div className="flex min-h-10 items-center gap-2.5 py-1.5 pl-4 pr-3">
         <span className="flex h-5 w-4 shrink-0 items-center justify-center text-ink-muted">
           <Notepad size={16} weight="thin" aria-hidden />
         </span>
-        {opens ? (
+        {state === "listed" ? (
           // The to-do card's title button: as wide as its words,
           // underlined on hover, a ring on keyboard focus.
           <span className="min-w-0 flex-1 text-[13px] leading-5 text-ink">
@@ -92,10 +108,19 @@ function MemoCard({ event }: { event: MemoEventItem }) {
           </span>
         ) : (
           <span
-            className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink"
+            className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-muted"
             onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, full)}
           >
             {line}
+          </span>
+        )}
+        {side && (
+          // The to-do card's right-hand cell, where its 「已删除」 is.
+          <span
+            data-role="memo-card-state"
+            className="shrink-0 select-none text-[12px] tabular-nums text-ink-muted"
+          >
+            {side}
           </span>
         )}
       </div>

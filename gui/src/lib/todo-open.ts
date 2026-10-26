@@ -316,7 +316,7 @@ export function showTodoRow(id: string, mainChatId: string): void {
  * to-do card's title: the panel opens beside Galley's conversation the
  * same way (`showTodoRow`), on its 备忘 page, and the memo's row lights
  * up. Only a card whose memo the page lists has a button
- * (lib/memo.ts `memoCardOpens`).
+ * (lib/memo.ts `memoCardState`, `listed`).
  */
 export function showMemoRow(id: string, mainChatId: string): void {
   showPanelBesideGalley(mainChatId);

@@ -2131,6 +2131,7 @@ export const enCopy: AppCopy = {
     cardNoted: "Noted",
     cardChanged: "Changed to",
     cardDropped: "No longer noted",
+    stateExpired: "Expired",
     deleteMemo: {
       deleted: (text: string) => `Deleted "${text}"`,
       deletedCount: (n: number) => `Deleted ${n} memos`,

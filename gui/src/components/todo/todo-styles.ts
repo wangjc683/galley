@@ -6,16 +6,14 @@ import { cn } from "@/lib/utils";
  * `ink-muted`, Markdown's strike-through (MarkdownView `del`), and
  * nothing more — the row is not faded too (ticket 42's C1, JC's pick,
  * ruling 93; C2 also took the row to 60%). A cancelled one's (a card's,
- * main chat ticket 43) is `ink-muted` and not struck: it was not done.
- * The change rides `--motion-base`; none under reduced motion.
+ * main chat ticket 43) is struck the same way since ticket 99 (PRD
+ * ruling 144 point 1): a line through reads as not wanted; the box left
+ * unticked and 「已删除」 beside it tell it from one done. The change
+ * rides `--motion-base`; none under reduced motion.
  */
 export function todoTitleClass(checked: boolean, cancelled = false): string {
   return cn(
     "transition-colors duration-(--motion-base) motion-reduce:transition-none",
-    cancelled
-      ? "text-ink-muted"
-      : checked
-        ? "text-ink-muted line-through"
-        : "text-ink",
+    checked || cancelled ? "text-ink-muted line-through" : "text-ink",
   );
 }

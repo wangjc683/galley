@@ -85,6 +85,33 @@ describe("ReminderCards", () => {
     );
   });
 
+  // Ticket 99, PRD ruling 144 point 2: cancelled is struck, as a deleted
+  // to-do or memo is; reminded, paused and set are not.
+  it("strikes a cancelled one's time and words, and no other's", () => {
+    const cancelled = render([task({ cancelledAt: "2026-10-16T09:00:00Z" })]);
+    expect(cancelled).toMatch(
+      /shrink-0 text-\[12\.5px\] tabular-nums text-ink-muted line-through">明天 09:00</,
+    );
+    expect(cancelled).toContain(
+      'truncate text-[13px] leading-5 text-ink-muted line-through"',
+    );
+    expect(count(cancelled, "line-through")).toBe(2);
+    // 「已取消」 itself is not struck.
+    expect(cancelled).toContain(
+      '<span class="shrink-0 text-[12px] text-ink-muted">已取消</span>',
+    );
+    const fired = render([
+      task({ fireAt: inDays(0, 0), lastFiredAt: inDays(0, 1) }),
+    ]);
+    const paused = render([
+      task({ repeat: { kind: "daily" }, timeOfDay: "08:00", enabled: false }),
+    ]);
+    for (const html of [fired, paused, render([task()])]) {
+      expect(html).not.toContain("line-through");
+    }
+    expect(fired).toContain("truncate text-[13px] leading-5 text-ink-muted");
+  });
+
   it("writes a repeating task's rule and 已暂停 when switched off", () => {
     const html = render([
       task({ repeat: { kind: "daily" }, timeOfDay: "08:00", enabled: false }),

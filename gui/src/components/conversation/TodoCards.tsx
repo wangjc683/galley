@@ -35,9 +35,12 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
  * every one noted in the main chat, not the list): done however long
  * ago, it looks as 已完成 does in the panel — its box ticked in neutral
  * grey, not brand (ticket 84) — and can be unticked;
- * cancelled, its box stays unticked and takes no click, its title goes
- * `ink-muted` (not struck: it was not done) and 「已删除」 takes the
- * place of when it was due — deleted at the desktop or by Galley, one
+ * cancelled, its box stays unticked and takes no click, its title is
+ * struck through in `ink-muted` as a ticked one's is (ticket 99, PRD
+ * ruling 144 point 1: a line through reads as not wanted, where it was
+ * not struck before — it was not done; the unticked box and the words
+ * beside it tell the two apart) and 「已删除」 takes the place of when
+ * it was due — deleted at the desktop or by Galley, one
  * thing, one word (main chat ticket 88, PRD ruling 132 point 5; a
  * reminder card's 「已取消」 is cancelling a reminder, and stays). A
  * to-do deleted from the panel reads so at once, while its undo toast is

@@ -13,8 +13,8 @@ import { cn } from "@/lib/utils";
  * means the two views read as the same surface.
  *
  * A title that is not a string is drawn as given in the title's place:
- * the to-do panel's two tabs (main chat ticket 97), set in the title's
- * type.
+ * the to-do panel's two pages (main chat ticket 97), on a
+ * SegmentedControl since ticket 99.
  */
 export function ReadingPanelHeader({
   title,

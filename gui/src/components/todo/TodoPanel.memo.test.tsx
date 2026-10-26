@@ -29,9 +29,10 @@ import { TodoPanel } from "./TodoPanel";
 
 /**
  * The to-do panel's two pages (main chat ticket 97, PRD ruling 142 point
- * 5), through the real stores: the header's tabs, 待办 on every opening
- * but a memo card's, which opens 备忘 at its row lit up; ⌘K's 「待办」
- * turning the page back; closed and opened again, 待办. On the 备忘 page:
+ * 5), through the real stores: the header's pages (a SegmentedControl
+ * since ticket 99), 待办 on every opening but a memo card's, which opens
+ * 备忘 at its row lit up; ⌘K's 「待办」 turning the page back; closed and
+ * opened again, 待办. On the 备忘 page:
  * a memo's words jump back to the sentence, its ⋯ and right-click menu
  * hold 删除 alone, which takes the row off under an undo toast. The
  * page's markup is pinned in MemoPage.test.tsx, the store's timing in
@@ -148,19 +149,28 @@ const panel = () => (
   />
 );
 
-/** The page shown, and which tab says so. */
-function shown(container: HTMLElement) {
-  const tabs = Array.from(
-    container.querySelectorAll<HTMLElement>('[role="tab"]'),
+/** The header's pages: the SegmentedControl's segments (ticket 99). */
+const PAGES = '[data-role="todo-panel-pages"]';
+function pageButtons(container: HTMLElement): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(`${PAGES} [role="radio"]`),
   );
+}
+function pageButton(container: HTMLElement, label: string): HTMLElement {
+  return pageButtons(container).find((el) => el.textContent === label)!;
+}
+
+/** The page shown, and which segment says so. */
+function shown(container: HTMLElement) {
+  const pages = pageButtons(container);
   return {
     page: container
-      .querySelector<HTMLElement>('[role="tabpanel"]')
+      .querySelector<HTMLElement>("[data-todo-page]")
       ?.getAttribute("data-todo-page"),
-    tabs: tabs.map((tab) => tab.textContent),
-    selected: tabs
-      .filter((tab) => tab.getAttribute("aria-selected") === "true")
-      .map((tab) => tab.textContent),
+    tabs: pages.map((el) => el.textContent),
+    selected: pages
+      .filter((el) => el.getAttribute("aria-checked") === "true")
+      .map((el) => el.textContent),
   };
 }
 
@@ -182,23 +192,42 @@ async function settle(): Promise<void> {
   });
 }
 
-describe("the header's tabs", () => {
-  it("are 待办 and 备忘, 待办 shown on opening, the other muted; + and × stay", () => {
+describe("the header's pages", () => {
+  it("are 待办 and 备忘 on the shared SegmentedControl, md, 待办 shown on opening; + and × stay", () => {
     const container = mount(panel());
     expect(shown(container)).toEqual({
       page: "todo",
       tabs: ["待办", "备忘"],
       selected: ["待办"],
     });
-    const memoTab = container.querySelector('[data-todo-tab="memo"]')!;
-    expect(memoTab.className).toContain("text-ink-muted");
-    expect(
-      container.querySelector('[data-todo-tab="todo"]')!.className,
-    ).toContain("text-ink");
+    // The control as it is everywhere (ticket 99, ruling 144 point 3):
+    // its track, the page shown raised on it, md segments.
+    const group = container.querySelector<HTMLElement>(PAGES)!;
+    expect(group.getAttribute("role")).toBe("radiogroup");
+    expect(group.getAttribute("aria-label")).toBe("待办与备忘");
+    expect(group.className).toContain("bg-hover");
+    // Hugging its segments, not stretched across the title's column.
+    expect(group.className).toContain("self-start");
+    const todoPage = pageButton(container, "待办");
+    expect(todoPage.className).toContain("h-7");
+    expect(todoPage.className).toContain(
+      "bg-elevated font-medium text-brand-strong",
+    );
+    expect(pageButton(container, "备忘").className).toContain("text-ink-soft");
+    // The list it switches.
+    expect(group.getAttribute("aria-controls")).toBe(
+      container.querySelector("[data-todo-page]")!.id,
+    );
     expect(
       container.querySelector('button[aria-label="跟 Galley 说"]'),
     ).not.toBeNull();
     expect(container.querySelector('button[aria-label="关闭"]')).not.toBeNull();
+    // Both centred on the control, whose track is taller than they are.
+    for (const name of ["跟 Galley 说", "关闭"]) {
+      expect(
+        container.querySelector(`button[aria-label="${name}"]`)!.className,
+      ).toContain("self-center");
+    }
     // The region keeps its name.
     expect(
       container.querySelector('[role="region"]')?.getAttribute("aria-label"),
@@ -207,33 +236,45 @@ describe("the header's tabs", () => {
 
   it("switch the page by a click or the arrow keys, + and × still there", () => {
     const container = mount(panel());
-    act(() =>
-      container.querySelector<HTMLElement>('[data-todo-tab="memo"]')!.click(),
-    );
+    act(() => pageButton(container, "备忘").click());
     expect(shown(container).page).toBe("memo");
+    expect(shown(container).selected).toEqual(["备忘"]);
     expect(memoRow(container, CILANTRO.id)).not.toBeNull();
     expect(
       container.querySelector('button[aria-label="跟 Galley 说"]'),
     ).not.toBeNull();
-    const memoTab = container.querySelector<HTMLElement>(
-      '[data-todo-tab="memo"]',
-    )!;
-    act(() =>
-      memoTab.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }),
-      ),
-    );
+    const key = (el: HTMLElement, name: string) =>
+      act(() =>
+        el.dispatchEvent(
+          new KeyboardEvent("keydown", { key: name, bubbles: true }),
+        ),
+      );
+    key(pageButton(container, "备忘"), "ArrowLeft");
     expect(shown(container).selected).toEqual(["待办"]);
-    expect(document.activeElement).toBe(
-      container.querySelector('[data-todo-tab="todo"]'),
-    );
+    expect(shown(container).page).toBe("todo");
+    expect(document.activeElement).toBe(pageButton(container, "待办"));
+    key(pageButton(container, "待办"), "ArrowRight");
+    expect(shown(container).page).toBe("memo");
+    expect(document.activeElement).toBe(pageButton(container, "备忘"));
+    // Other keys leave the page alone.
+    key(pageButton(container, "备忘"), "ArrowDown");
+    expect(shown(container).page).toBe("memo");
+  });
+
+  it("start each page at its top", () => {
+    const container = mount(panel());
+    const list = () =>
+      container.querySelector<HTMLElement>("[data-todo-page]")!;
+    const before = list();
+    act(() => pageButton(container, "备忘").click());
+    // A new list, not the old one scrolled: keyed by its page (jsdom
+    // does not scroll, so the element is what can be pinned).
+    expect(list()).not.toBe(before);
   });
 
   it("come back to 待办 when the panel is closed and opened again: nothing remembers the page", () => {
     let container = mount(panel());
-    act(() =>
-      container.querySelector<HTMLElement>('[data-todo-tab="memo"]')!.click(),
-    );
+    act(() => pageButton(container, "备忘").click());
     expect(shown(container).page).toBe("memo");
     act(() => root?.unmount());
     container = mount(panel());
@@ -242,9 +283,7 @@ describe("the header's tabs", () => {
 
   it("turn back to 待办 on ⌘K's 「待办」 while the panel is up on 备忘", () => {
     const container = mount(panel());
-    act(() =>
-      container.querySelector<HTMLElement>('[data-todo-tab="memo"]')!.click(),
-    );
+    act(() => pageButton(container, "备忘").click());
     act(() =>
       openTodoPanel({ here: "galley", at: "main:s-main", narrow: false }),
     );

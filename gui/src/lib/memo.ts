@@ -242,19 +242,29 @@ export function memoCardParts(
 }
 
 /**
- * A card's words open the panel at the memo's row: only while the page
- * lists it — not one deleted since (or past its last day), not one
- * deleted here and waiting for its undo — and never on a 「不再记」 card,
- * whose memo is gone.
+ * Where a card's memo stands now (main chat ticket 99, PRD ruling 144
+ * point 2), which is how the card draws:
+ *
+ *   listed   on the page: the words as they are, a button that opens
+ *            the panel at its row (the only state that does: not one
+ *            deleted, past its last day, or a 「不再记」 card)
+ *   deleted  gone — you deleted it or Galley did (`memoExists` false), or
+ *            you deleted it on the page and its undo toast is up: the
+ *            words struck, 「已删除」 on the right
+ *   dropped  a 「不再记」 card, the write that deleted it: the words
+ *            struck, nothing on the right (its prefix says so)
+ *   expired  still there but past its last day, so off the page (Core
+ *            keeps the row, ticket 95): the words muted, not struck —
+ *            it held until that day — 「已过期」 on the right
  */
-export function memoCardOpens(
-  event: Pick<MemoEventItem, "action" | "memoId">,
+export type MemoCardState = "listed" | "deleted" | "dropped" | "expired";
+
+export function memoCardState(
+  event: Pick<MemoEventItem, "action" | "memoId" | "memoExists">,
   memos: readonly MemoItem[],
   deleting: Readonly<Record<string, unknown>>,
-): boolean {
-  return (
-    event.action !== "delete" &&
-    !(event.memoId in deleting) &&
-    memos.some((memo) => memo.id === event.memoId)
-  );
+): MemoCardState {
+  if (event.action === "delete") return "dropped";
+  if (!event.memoExists || event.memoId in deleting) return "deleted";
+  return memos.some((memo) => memo.id === event.memoId) ? "listed" : "expired";
 }

@@ -222,8 +222,11 @@ describe("the memo cards under a reply", () => {
     const listed = renderCards([event(1)]);
     expect(count(listed, "<button")).toBe(1);
     expect(listed).toContain("hover:underline");
-    // Deleted since (or past its last day): words.
+    // Deleted since, or past its last day: words.
     store.memos = [];
+    expect(renderCards([event(1, { memoExists: false })])).not.toContain(
+      "<button",
+    );
     expect(renderCards([event(1)])).not.toContain("<button");
     // 「不再记」: words, though a memo with that id were listed.
     store.memos = [CILANTRO];
@@ -233,6 +236,99 @@ describe("the memo cards under a reply", () => {
     // Deleted on the page, its undo toast up: words.
     store.deleting = { [CILANTRO.id]: { order: 1, committing: false } };
     expect(renderCards([event(1)])).not.toContain("<button");
+  });
+
+  // Ticket 99, PRD ruling 144 point 2.
+  describe("strike what is gone, the words only", () => {
+    const STATE_CELL =
+      'data-role="memo-card-state" class="shrink-0 select-none text-[12px] tabular-nums text-ink-muted"';
+    const MUTED_LINE = "truncate text-[13px] leading-5 text-ink-muted";
+
+    it("still there: the words as they are, a button, nothing on the right", () => {
+      store.memos = [CILANTRO];
+      const html = renderCards([event(1)]);
+      expect(html).toContain('data-memo-state="listed"');
+      expect(html).toContain('leading-5 text-ink"><button');
+      expect(html).toContain("<span>你不吃香菜</span>");
+      expect(html).not.toContain("line-through");
+      expect(html).not.toContain('data-role="memo-card-state"');
+    });
+
+    it("gone, by you or by Galley: the words struck and muted, 「已删除」 on the right, not a button", () => {
+      store.memos = [];
+      const html = renderCards([event(1, { memoExists: false })]);
+      expect(html).toContain('data-memo-state="deleted"');
+      expect(html).not.toContain("<button");
+      expect(html).toContain(MUTED_LINE);
+      // The words alone struck: 「记下了 ·」 is not.
+      expect(html).toContain('<span class="line-through">你不吃香菜</span>');
+      expect(count(html, "line-through")).toBe(1);
+      expect(html).toMatch(
+        /<span class="text-ink-muted">记下了[^<]*(<!-- -->)?[^<]*<\/span>/,
+      );
+      // Where a deleted to-do card says 「已删除」, and the same way.
+      expect(html).toContain(`${STATE_CELL}>已删除</span>`);
+      // A 「改为」 card of a memo gone since, the same.
+      const changed = renderCards([
+        event(2, {
+          action: "update",
+          text: "你不吃香菜和葱",
+          memoExists: false,
+        }),
+      ]);
+      expect(changed).toContain(
+        '<span class="line-through">你不吃香菜和葱</span>',
+      );
+      expect(changed).toContain(`${STATE_CELL}>已删除</span>`);
+      expect(
+        renderCards([event(1, { memoExists: false })], false, "en-US"),
+      ).toContain(">Deleted</span>");
+    });
+
+    it("deleted on the page, its undo toast up: already so", () => {
+      store.memos = [CILANTRO];
+      store.deleting = { [CILANTRO.id]: { order: 1, committing: false } };
+      const html = renderCards([event(1)]);
+      expect(html).toContain('data-memo-state="deleted"');
+      expect(html).toContain('<span class="line-through">你不吃香菜</span>');
+      expect(html).toContain(`${STATE_CELL}>已删除</span>`);
+      expect(html).not.toContain("<button");
+    });
+
+    it("「不再记」: the words struck and muted, nothing on the right — its prefix says so", () => {
+      store.memos = [];
+      const html = renderCards([
+        event(3, {
+          action: "delete",
+          text: "这周在上海出差",
+          memoId: TRIP.id,
+          memoExists: false,
+        }),
+      ]);
+      expect(html).toContain('data-memo-state="dropped"');
+      expect(html).toContain(MUTED_LINE);
+      expect(html).toContain(
+        '<span class="line-through">这周在上海出差</span>',
+      );
+      expect(count(html, "line-through")).toBe(1);
+      expect(html).not.toContain('data-role="memo-card-state"');
+      expect(html).not.toContain("<button");
+    });
+
+    it("past its last day: muted, not struck, 「已过期」 on the right, not a button", () => {
+      // Still there in Core, off the page (ticket 95).
+      store.memos = [];
+      const html = renderCards([event(1, { until: dayIn(-1) })]);
+      expect(html).toContain('data-memo-state="expired"');
+      expect(html).toContain(MUTED_LINE);
+      expect(html).not.toContain("line-through");
+      expect(html).toContain("<span>你不吃香菜</span>");
+      expect(html).toContain(`${STATE_CELL}>已过期</span>`);
+      expect(html).not.toContain("<button");
+      expect(renderCards([event(1)], false, "en-US")).toContain(
+        ">Expired</span>",
+      );
+    });
   });
 
   it("sit 12px off the bubble, 8px under other cards", () => {

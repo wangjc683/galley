@@ -2171,6 +2171,9 @@ export const zhCopy = {
     cardNoted: "记下了",
     cardChanged: "改为",
     cardDropped: "不再记",
+    /** 卡片右边：备忘还在、过了期限不在「备忘」页上（票 99，裁决 144 第 2 条）；不在了的写
+     * todo.stateDeleted「已删除」。 */
+    stateExpired: "已过期",
     /** 删了以后的撤销提示条，照待办的删除（票 88）；「⋯」与右键菜单里的「删除」沿用 todo.deleteTodo.menuItem。 */
     deleteMemo: {
       deleted: (text: string) => `已删除「${text}」`,

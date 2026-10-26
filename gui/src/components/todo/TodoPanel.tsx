@@ -23,6 +23,7 @@ import {
 
 import { ReadingPanelHeader } from "@/components/conversation/reading/ReadingPanelHeader";
 import { Button, IconButton } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { useTodoPanelFlash } from "@/hooks/useTodoPanelFlash";
 import {
@@ -138,9 +139,10 @@ export interface TodoPanelProps {
  * and the row a card's title points at. A to-do Galley ticks off holds
  * where it stood, ticked, before it goes to 已完成.
  *
- * Two pages since ticket 97 (PRD ruling 142 point 5, 甲): the header's
- * title is two tabs, 「待办」 and 「备忘」 (MemoPage: what Galley noted
- * about you), the same place and the same ways in and out, no new
+ * Two pages since ticket 97 (PRD ruling 142 point 5, 甲), in the
+ * header's title's place: 「待办」 and 「备忘」 (MemoPage: what Galley
+ * noted about you), on a SegmentedControl since ticket 99 (ruling 144
+ * point 3, `PanelPages`), the same place and the same ways in and out, no new
  * container — to-dos are actions, memos information, and the two
  * sections the main chat reads at each segment's start are these two
  * pages. 「+」 and × stay, on both. Every opening lands on 待办 but a
@@ -170,9 +172,7 @@ export function TodoPanel({
       useUiStore.getState().clearTodoPageRequest(pageRequest.nonce);
     }
   }, [pageRequest]);
-  const ids = useId();
-  const tabId = (of: TodoPanelPage) => `${ids}-tab-${of}`;
-  const pageId = `${ids}-page`;
+  const pageId = useId();
   const listed = useAssistantTodoStore((s) => s.todo);
   const deleting = useAssistantTodoStore((s) => s.deleting);
   // The rows deleted here wait off the panel for their undo (ticket 88).
@@ -217,14 +217,7 @@ export function TodoPanel({
       className="flex h-full min-h-0 min-w-0 flex-col bg-app"
     >
       <ReadingPanelHeader
-        title={
-          <PanelTabs
-            page={page}
-            onPage={setPage}
-            tabId={tabId}
-            pageId={pageId}
-          />
-        }
+        title={<PanelPages page={page} onPage={setPage} pageId={pageId} />}
         // The way to a new one (main chat ticket 89, PRD ruling 133 point
         // 3): new to-dos are still said, not typed — the panel has no
         // input box, as a new one needs judging (when, whether to remind,
@@ -239,8 +232,14 @@ export function TodoPanel({
         // (`ChatCircleText`) and read as the same thing. Its name says
         // where it leads, and it puts the caret in Galley's composer
         // (`talkToGalley`), nothing prefilled.
+        // Both centred on the pages' control (ticket 99): its track is
+        // taller than they are, its segments as tall.
         actions={
-          <IconButton ariaLabel={copy.todo.emptyTalk} onClick={talk}>
+          <IconButton
+            ariaLabel={copy.todo.emptyTalk}
+            className="self-center"
+            onClick={talk}
+          >
             <Plus size={16} weight="thin" />
           </IconButton>
         }
@@ -248,6 +247,7 @@ export function TodoPanel({
           <IconButton
             ariaLabel={copy.common.close}
             tooltip={false}
+            className="self-center"
             onClick={onClose}
           >
             <X size={14} weight="thin" />
@@ -259,8 +259,6 @@ export function TodoPanel({
         key={page}
         ref={list}
         id={pageId}
-        role="tabpanel"
-        aria-labelledby={tabId(page)}
         data-todo-page={page}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-4 pt-2"
       >
@@ -291,63 +289,49 @@ export function TodoPanel({
 const PAGES: readonly TodoPanelPage[] = ["todo", "memo"];
 
 /**
- * The header's two tabs in the title's place (ticket 97): its type, 14px
- * medium — no tab or segmented control in the app draws a bare title
- * (SegmentedControl is a track with a raised thumb, for settings) — the
- * page shown in full ink, the other `ink-muted`. Arrow keys move between
- * them, as a tab list's do.
+ * The header's two pages (ticket 99, PRD ruling 144 point 3): the shared
+ * SegmentedControl, md, as the app's small set of exclusive choices is
+ * drawn everywhere (docs/design/foundations.md) — a track, the page shown
+ * raised on it. Ticket 97 had set two words in the title's type; JC: not
+ * enough like buttons. The control's own roles stand (a radio group, a
+ * radio each), and the arrow keys ticket 97's tabs had are kept here:
+ * either one turns the page and takes the focus along. Hugging its
+ * segments (`self-start`), not stretched across the title's column.
  */
-function PanelTabs({
+function PanelPages({
   page,
   onPage,
-  tabId,
   pageId,
 }: {
   page: TodoPanelPage;
   onPage: (page: TodoPanelPage) => void;
-  tabId: (page: TodoPanelPage) => string;
   pageId: string;
 }) {
   const copy = useCopy();
-  const label = (of: TodoPanelPage) =>
-    of === "todo" ? copy.todo.title : copy.memo.tab;
-  const onKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
     const next = page === "todo" ? "memo" : "todo";
     onPage(next);
-    document.getElementById(tabId(next))?.focus();
+    event.currentTarget
+      .querySelectorAll<HTMLElement>('[role="radio"]')
+      [PAGES.indexOf(next)]?.focus();
   };
   return (
-    <div
-      role="tablist"
-      aria-label={copy.memo.tabsLabel}
-      className="flex min-w-0 items-center gap-3"
-    >
-      {PAGES.map((of) => {
-        const selected = of === page;
-        return (
-          <button
-            key={of}
-            id={tabId(of)}
-            type="button"
-            role="tab"
-            aria-selected={selected}
-            aria-controls={pageId}
-            tabIndex={selected ? 0 : -1}
-            data-todo-tab={of}
-            onClick={() => onPage(of)}
-            onKeyDown={onKeyDown}
-            className={cn(
-              "shrink-0 rounded-sm text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-              selected ? "text-ink" : "text-ink-muted hover:text-ink-soft",
-            )}
-          >
-            {label(of)}
-          </button>
-        );
-      })}
-    </div>
+    <SegmentedControl<TodoPanelPage>
+      size="md"
+      ariaLabel={copy.memo.tabsLabel}
+      value={page}
+      options={PAGES.map((of) => ({
+        value: of,
+        label: of === "todo" ? copy.todo.title : copy.memo.tab,
+      }))}
+      onValueChange={onPage}
+      onKeyDown={onKeyDown}
+      aria-controls={pageId}
+      data-role="todo-panel-pages"
+      className="self-start"
+    />
   );
 }
 

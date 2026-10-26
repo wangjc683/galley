@@ -29,8 +29,8 @@ import { cn } from "@/lib/utils";
  * words it noted (one line, cut), the state (待提醒 / 已提醒 / 已取消 /
  * 已暂停) and 「取消」 while it may still go off. A cancel needs no
  * confirm (it touches this one thing) and is not told to the assistant;
- * the card stays, saying 已取消. A cancel that fails says why on a line
- * under it.
+ * the card stays, saying 已取消, its time and words struck through
+ * (ticket 99). A cancel that fails says why on a line under it.
  */
 export function ReminderCards({
   tasks,
@@ -62,6 +62,9 @@ function ReminderCard({ task }: { task: ScheduledTask }) {
   const state = reminderCardState(task);
   const time = reminderTimeLabel(task, todayStartMs, language, copy);
   const settled = state === "fired" || state === "cancelled";
+  // Cancelled is struck, as a deleted to-do or memo is (ticket 99, PRD
+  // ruling 144 point 2): one meaning, the three cards alike.
+  const struck = state === "cancelled";
   const canCancel = state === "scheduled" || state === "paused";
 
   const cancel = () => {
@@ -90,6 +93,7 @@ function ReminderCard({ task }: { task: ScheduledTask }) {
           className={cn(
             "shrink-0 text-[12.5px] tabular-nums",
             settled ? "text-ink-muted" : "text-ink-soft",
+            struck && "line-through",
           )}
         >
           {time}
@@ -98,6 +102,7 @@ function ReminderCard({ task }: { task: ScheduledTask }) {
           className={cn(
             "min-w-0 flex-1 truncate text-[13px] leading-5",
             settled ? "text-ink-muted" : "text-ink",
+            struck && "line-through",
           )}
           onPointerEnter={(e) =>
             syncTruncatedTitle(e.currentTarget, task.prompt)

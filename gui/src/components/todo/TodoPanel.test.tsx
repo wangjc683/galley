@@ -12,6 +12,7 @@ import { CopyProvider } from "@/lib/i18n";
 import type { TodoFlip } from "@/lib/todo-panel";
 
 import { TodoPanel } from "./TodoPanel";
+import { todoTitleClass } from "./todo-styles";
 
 /**
  * The to-do panel and the to-do card (main chat tickets 42 and 43),
@@ -984,6 +985,7 @@ describe("the card under the reply", () => {
     expect(html).toContain('data-todo-checked="false"');
     expect(html).not.toContain('disabled=""');
     expect(html).toMatch(/text-ink"[^>]*>交季度报告</);
+    expect(html).not.toContain("line-through");
   });
 
   it("done a month ago: still there, as 已完成 looks in the panel, and can be unticked", () => {
@@ -1017,16 +1019,19 @@ describe("the card under the reply", () => {
     ).toContain(EMPTY_BOX);
   });
 
-  it("cancelled: the box takes no click, the title faded, 「已删除」 beside it", () => {
+  it("cancelled: the box takes no click, the title struck, 「已删除」 beside it", () => {
     const html = cards([CANCELLED]);
     expect(html).toContain('data-todo-state="cancelled"');
     expect(html).toContain('data-todo-checked="false"');
     expect(html).not.toContain('checked=""');
     expect(html).toContain('disabled=""');
     expect(html).toContain("cursor-not-allowed");
-    // Faded, not struck: it was not done.
-    expect(html).toMatch(/text-ink-muted"[^>]*>买营养土</);
-    expect(html).not.toContain("line-through");
+    // Struck through as a ticked one is, the same line and colour (ticket
+    // 99, PRD ruling 144 point 1: a line through reads as not wanted);
+    // the unticked box and 「已删除」 tell it from one done.
+    expect(html).toMatch(/text-ink-muted line-through"[^>]*>买营养土</);
+    expect(todoTitleClass(false, true)).toBe(todoTitleClass(true));
+    expect(count(html, "line-through")).toBe(1);
     // Deleted at the desktop or by Galley, one word (ticket 88, ruling
     // 132 point 5); a reminder card keeps 「已取消」.
     expect(html).toMatch(/data-role="todo-meta"[^>]*><span>[^]*>已删除</);
@@ -1070,9 +1075,10 @@ describe("the card under the reply", () => {
     expect(html).toContain('disabled=""');
     expect(html).toMatch(/data-role="todo-meta"[^>]*><span>[^]*>已删除</);
     expect(html).not.toContain("提醒");
-    // Not a way into the panel: the panel no longer draws it.
+    // Not a way into the panel: the panel no longer draws it. Struck
+    // already, as one deleted is (ticket 99).
     expect(html).not.toMatch(/<button[^>]*>交季度报告<\/button>/);
-    expect(html).toMatch(/text-ink-muted"[^>]*>交季度报告</);
+    expect(html).toMatch(/text-ink-muted line-through"[^>]*>交季度报告</);
     // A tick on its way does not tick it either.
     store.flips = { todo_report: { done: true, phase: "settling" } };
     expect(cards([REMINDED])).not.toContain('checked=""');

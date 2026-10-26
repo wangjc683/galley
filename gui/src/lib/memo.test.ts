@@ -4,8 +4,8 @@ import { enCopy } from "@/i18n/locales/en";
 import { zhCopy } from "@/i18n/locales/zh";
 
 import {
-  memoCardOpens,
   memoCardParts,
+  memoCardState,
   memoDayLabel,
   memoPageGroups,
   memoRowTarget,
@@ -21,7 +21,8 @@ import {
  * by the local day each was last noted or changed, the latest first; a
  * last day reads 「到 …」 as a to-do's due day; a row leads back to the
  * reply it was last noted in, or nowhere; a card a write, in the order
- * made, its words opening the panel only while the page lists the memo.
+ * made, its words opening the panel only while the page lists the memo,
+ * and where its memo stands now drawing it (ticket 99).
  */
 
 // Built from local wall-clock parts, so the days hold in any zone.
@@ -217,22 +218,32 @@ describe("the cards", () => {
     );
   });
 
-  it("open the panel only while the page lists the memo, never for 「不再记」", () => {
+  it("stand as the memo does now: listed, deleted, dropped or expired (ticket 99)", () => {
     const listed = [memo("memo_1")];
-    expect(memoCardOpens(event(1), listed, {})).toBe(true);
-    expect(memoCardOpens(event(1, { action: "update" }), listed, {})).toBe(
-      true,
+    const toast = { memo_1: { order: 1, committing: false } };
+    // On the page: the only state whose words open the panel.
+    expect(memoCardState(event(1), listed, {})).toBe("listed");
+    expect(memoCardState(event(1, { action: "update" }), listed, {})).toBe(
+      "listed",
     );
-    // Deleted since, or past its last day: not listed.
-    expect(memoCardOpens(event(1), [], {})).toBe(false);
-    // Deleted here, its undo toast up.
+    // Gone, by you or by Galley.
+    expect(memoCardState(event(1, { memoExists: false }), [], {})).toBe(
+      "deleted",
+    );
     expect(
-      memoCardOpens(event(1), listed, {
-        memo_1: { order: 1, committing: false },
-      }),
-    ).toBe(false);
-    expect(memoCardOpens(event(1, { action: "delete" }), listed, {})).toBe(
-      false,
+      memoCardState(event(1, { action: "update", memoExists: false }), [], {}),
+    ).toBe("deleted");
+    // Deleted here, its undo toast up: already deleted, though Core still
+    // lists it.
+    expect(memoCardState(event(1), listed, toast)).toBe("deleted");
+    // Still there, off the page: past its last day.
+    expect(memoCardState(event(1), [], {})).toBe("expired");
+    // A 「不再记」 card, whatever the memo's state: its own.
+    expect(
+      memoCardState(event(1, { action: "delete", memoExists: false }), [], {}),
+    ).toBe("dropped");
+    expect(memoCardState(event(1, { action: "delete" }), listed, {})).toBe(
+      "dropped",
     );
   });
 });
