@@ -1,6 +1,6 @@
 # 98 备忘的收尾：看出来的兴趣记得上；没变化的 update 不再叫醒巡看；样例写法与手册对齐
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-10-26 rebase 到含裁决 144 的 main 后快进合入 `f27da084`–`fff57ec3`；主会话机器验收：worktree 里复跑 `cargo test --workspace` 本机时区与 `TZ=UTC` 各 1255 条全过，评测 `--dry-test` 过、没有 `__pycache__`，`git diff --check` 过，新增行无本机路径与 key（评测结果里的搜索网址是模型自己发的工具调用）。评测：兴趣三条各两遍 6/6、trip-hotel 2/2、pref-cilantro 1/1，共 9 次运行。真机并进票 97 的步骤）
 
 来源：票 [96](./96-memo-manual-and-eval.md) 的实现回报（「没验证到的」第 1 条与「看到但没改的」三条），主会话验收时定下全做（2026-10-26，JC 对这一组的授权：「按你建议推进」）。依赖票 95、96、97（都已合入 main）。只改 Core 的一个判断、手册、几处样例与评测；外置运行时零变化。
 
