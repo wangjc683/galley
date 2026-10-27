@@ -67,11 +67,11 @@ Status: needs-dogfood（2026-10-27 合入 main，`657e002f`–`ce6be295`；主�
 - 跑：`pnpm --dir gui typecheck`、`pnpm --dir gui lint`、`TZ=UTC pnpm --dir gui test`，再用 `TZ=America/Los_Angeles` 全量跑一遍；`git diff --check`；全角标点自查（自写脚本扫 diff 新增行，脚本放 scratchpad、文件名带 `wb03` 前缀，别覆盖别人的）。gui 不是 prettier-clean：旧文件只格式化自己改的 hunk，新文件可整篇格式化。React 编译器 lint：effect 内同步 setState、渲染期 `Date.now` 都是 error。
 - **测试**至少覆盖：判断函数的各类输入（`galley-assistant`、`galley-im/wechat`、`galley-im/discord/ch:123`、`codex-supervisor/v1`、`via=cli` 无标签、`via=cli` 带标签、`gui`、`system`、`subtask`、无 origin）；消息三种画法的图标与 aria（改写 `Conversation.test.tsx:509`、`Conversation.assistant.test.tsx:491` 现有断言）；侧栏三种（Galley、CLI、`galley-scheduler` 仍是时钟、`via=cli` 的会话有 CLI 徽标）；`via=cli` 的消息总有时间。
 - **反向检查**：改坏几处确认测试会挂，例如 `galley-im/` 前缀判成 CLI、`via=cli` 不画、提示退回写死的英文；恢复后逐字节一致。
-- **JC 在 tauri dev 里走一遍**（数据都在本机库里）：
-  1. 侧栏找 2026-05-21 那批 Codex 开的对话（「其他来源」里），悬停标题右端的图标，读「Galley CLI」；点开，第一条消息上方的图标同样读「Galley CLI」；
-  2. 找 10-10 在微信里让它查厦门天气开的那个对话，侧栏是房子图标「Galley 创建」，第一条消息上方同样「Galley 创建」；
-  3. 找 10-10 的「天空为什么是蓝色」（不带标签的 CLI），现在有「Galley CLI」图标，第一条消息上面有时间；
-  4. 打开 Galley，点一张子任务卡片的「打开」，第一条消息上方的房子读「Galley 创建」；
+- **JC 在 tauri dev 里走一遍**（内置运行时，数据都在本机库里；2026-10-27 合入时主会话按库更正：原写的 05-21 Codex 那批与「天空为什么是蓝色」都已归档、多在外置运行时）：
+  1. 侧栏「其他来源」里找 05-27「用户原始示例：用 Galley 帮我规划上海到杭……」（`codex-galley-supervisor/v1`），悬停标题右端的图标，读「Galley CLI」；点开，第一条消息上方的图标同样读「Galley CLI」；
+  2. 找 10-10「用户从微信请求：开一个Galley对话，查询明天……」（`galley-im/wechat`），侧栏是房子「Galley 创建」，第一条消息上方同样「Galley 创建」；
+  3. 找 10-18「基线升级算术检查」（不带标签的 CLI），现在有「Galley CLI」图标，第一条消息上面有时间；
+  4. 打开 Galley，翻到 10-21 或 10-23 派 NBA 子任务的那条回复，点卡片的「打开」（或 ⌘K 搜「NBA」），第一条消息上方的房子读「Galley 创建」；
   5. 切到英文界面看一眼上面任意两处。
 
 ## 回报格式
