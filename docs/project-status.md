@@ -763,8 +763,8 @@ row (it still runs daily; ruling 145, ticket 100), and a to-do's time line
 is a step darker than its notes (ruling 146); provenance markers no longer
 say Supervisor: what Galley itself wrote through the CLI reads 「Galley 创建」,
 everything else through the CLI (unlabelled `via=cli` included) reads
-「Galley CLI」 (workbench conversation ruling 8, ticket 03). Dogfood still owed: ticket 95's morning review waking
-for a new memo, ticket 98's noticed interest.
+「Galley CLI」 (workbench conversation ruling 8, ticket 03). Dogfood still owed: ticket 98's noticed interest (ticket
+95's morning review waking for a new memo passed in dev on 2026-10-27).
 
 **Owed from the `v0.7.1` smoke** (JC approved publish without reporting
 smoke items, 2026-10-26; the list is in the release devlog). JC installed the
