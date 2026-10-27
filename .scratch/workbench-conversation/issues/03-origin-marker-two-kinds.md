@@ -123,3 +123,10 @@ Status: in-progress（2026-10-27 派出）
 - 指角色、不指标记，保留：`docs/design/conversation.md:98`「Supervisor、CLI 发进主对话、靠右的消息也一样」、`:354`「别的 supervisor 用 CLI 直接答……」、`:757`「CLI、Supervisor、system 发进来的（`external`）」；`docs/design/layout-and-chrome.md:295`、`:328`、`:363`。
 - `docs/devlog/deferred.md:245` 一带照票面不改；`.scratch/main-chat/issues/31-subtask-wake-gui.md:161`、`.scratch/scheduled-tasks/` 里描述「Supervisor 创建」的是当时的记录，没改。
 - `gui/src/stores/messages.ts:898` 的 `lastSubmitSource` 按 `cli / supervisor / system` 分滚动来源，与标记无关，没动。iOS 端（`ios/GalleyRemote/.../Types.swift`）只有 `OriginVia` 类型，没有来源标记的界面。
+
+### 追加（2026-10-27，主会话验收后两处）
+
+- **定时任务**（上面「看到但没改」第 1 条，主会话定）：`originMarker` 的类型变成 `"galley" | "cli" | "scheduled"`，标签等于 `SCHEDULER_SUPERVISOR`（`galley-scheduler`）时返回 `"scheduled"`，判在最前面、不看 `via`。侧栏的时钟改读这个返回值，不再单独判标签；消息上 `"scheduled"` 画 `Clock`（12px thin），提示与读屏同一句，新加 `conversation.scheduledCreated`（zh「定时任务创建」，en「Created by scheduled task」，与 `sidebar.scheduledCreated` 同值，测试钉住两者一致）。时间规则没动。补测试：判断函数（含 `via=cli` / `system` 带这个标签也是 `"scheduled"`，`galley-review` 不标）、消息（图标、提示、读屏、英文）、侧栏（`via=cli` 带这个标签照样是时钟）。`origin-marker.ts` 注释、`layout-and-chrome.md`「来源徽标」、`conversation.md` 的「来源图标」一条与 `:86`、`copy-language-guidelines.md` 术语表照实补上第三种。
+- **README**：`README.md:180`、`README.zh-CN.md:180` 改为经 CLI 创建的会话和消息，带不带 `--supervisor` 都带「Galley CLI」标记（Galley 自己写的标 Galley，定时任务标时钟），`--supervisor` 的标签照旧记在 `origin`、界面不显示；英文用「Galley CLI mark」。`docs/screenshot-playbook.md` 照旧不改。
+- **门禁**：`pnpm --dir gui typecheck` 退出 0；`pnpm --dir gui lint` 退出 0；`TZ=UTC` 与 `TZ=America/Los_Angeles` 全量各 219 个文件、2423 条全过；`git diff --check` 退出 0；全角标点扫新增行，5 处命中都是 Markdown 链接括号与英文注释里的英文标点。
+- **反向检查**：去掉 `originMarker` 里的 `"scheduled"` 分支，4 条挂（判断、消息、侧栏两条）；恢复后 `cmp` 逐字节一致。
