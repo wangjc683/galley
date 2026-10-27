@@ -79,3 +79,47 @@ Status: in-progress（2026-10-27 派出）
 在本票末尾 `## Comments` 下写：改了哪些文件；新判断函数的位置与签名；会话 `origin` 的来源核对结果（第 3 步）；门禁输出摘要（两个时区的测试数）；反向检查做了哪几处；看到但没改的（票外问题、文档里拿不准该不该改的「Supervisor」）。代码、文档、记录分开提交，提交号只抄命令输出。
 
 ## Comments
+
+### 实现回报（2026-10-27，worktree 分支 `workbench-origin-03`）
+
+**文案按 2026-10-27 更新过**：Galley 那一类在消息、子任务说明、侧栏三处都是「Galley 创建」（消息读屏「Galley 创建的消息」，CLI 读屏「Galley CLI 创建的消息」），上面的文案表、第 2 条与验收第 2、4 步已同步。
+
+**改了哪些文件**
+
+- 新增 `gui/src/lib/origin-marker.ts`（判断与两个标签常量）、`gui/src/lib/origin-marker.test.ts`、`gui/src/components/conversation/MessageUser.origin.test.tsx`、`gui/src/components/layout/sidebar/SidebarSessionRow.origin.test.tsx`。
+- 改 `gui/src/components/conversation/MessageUser.tsx`（图标行只画一个图标：子任务说明与 Galley 画 `House`，CLI 画 `PlugsConnected`，提示走 locale；写死的 `"Supervisor"` 删掉；文件头与 props 注释）、`gui/src/components/layout/sidebar/SidebarSessionRow.tsx`（先判时钟，再用判断）、`gui/src/lib/message-time.ts`（`via` 为 `supervisor` 或 `cli` 总有时间）、`gui/src/i18n/locales/zh.ts` 与 `en.ts`、`gui/src/types/conversation.ts`、`gui/src/types/db.ts`、`gui/src/types/session.ts`（`:107`「Sidebar only surfaces Supervisor-created rows」也因这次改动失真，一并改了，票面没点名）。
+- 测试：`Conversation.test.tsx`（`:509` 一带改为 `galleyCreatedAria`，并补了 `> -1` 的守卫：原断言在找不到 aria 时 `indexOf` 为 -1 也会通过；子任务说明那条 `:334` 改成「Galley 创建」；新增不带标签的 `via=cli` 有图标、有时间一条）、`Conversation.assistant.test.tsx:491`（改为 `cliCreatedAria`）、`lib/message-time.test.ts`（原来断言 `via=cli` 不钉时间，改为钉）。
+- 文档：`docs/design/layout-and-chrome.md`（「Supervisor 来源徽标」改为「来源徽标」两类，守住 provenance 那句）、`docs/design/conversation.md`（`:84`、`:86`、`:98`、`:355`，并在 `:355` 下加「来源图标只分两类」一条）、`docs/copy-language-guidelines.md`（术语表 `Supervisor` 那行补一句；`:363` 的「主对话派来的」也是来源图标的文案，照实改成「Galley 创建」，票面没点名）。
+- 键名：`conversation.galleyCreated / galleyCreatedAria / cliCreated / cliCreatedAria`、`subtask.galleyCreated`（取代 `fromMainChat`）、`sidebar.galleyCreated / cliCreated / cliCreatedAria`（取代 `supervisorCreated`）；`supervisorMessage`、`supervisorCreated`、`fromMainChat` 已删，全仓 grep 无残留。
+
+**判断函数**：`gui/src/lib/origin-marker.ts`，`export function originMarker(origin: Origin | undefined): OriginMarker | null`，`OriginMarker = "galley" | "cli"`；常量 `ASSISTANT_SUPERVISOR = "galley-assistant"`、`IM_SUPERVISOR_PREFIX = "galley-im/"`，注释指向 `core/src/managed_prompt.rs`（助理手册那句与 `im_supervisor_id`），测试钉住字面值。`via=cli` 一律 `"cli"`（带 `galley-assistant` 标签也是，`via` 说了算）；`via=supervisor` 缺标签也算 `"cli"`。
+
+**会话 `origin` 核对（第 3 步）**：下发得到，没改 Rust。Core `SessionRow::into_brief`（`core/src/db/rows.rs:47`）把 `created_via` 经 `origin_from_stored`（`core/src/db/helpers.rs:175`）读回，只滤掉 `gui`，`cli` 照下发；`SessionBriefEvent` 从 brief 逐字段搬（`core/src/session_writes.rs:112`），事件也带；GUI `sessionFromBrief`（`gui/src/stores/sessions/shared.ts:173`）原样接。本机库只读查过：`sessions` 里 `cli` 无标签 8 个，`messages` 里 `cli` 无标签 10 条，与票面一致。
+
+**门禁**（输出都在本机跑过）
+
+- `pnpm --dir gui typecheck`：`tsc --noEmit` 无输出、退出 0。
+- `pnpm --dir gui lint`：`eslint src --max-warnings 0` 退出 0。
+- `TZ=UTC pnpm --dir gui test`：219 个文件、2420 条全过。
+- `TZ=America/Los_Angeles pnpm --dir gui test`：219 个文件、2420 条全过。
+- `git diff --check`：退出 0（新文件 `git add -N` 后一起查）。
+- prettier：新文件整篇格式化；旧文件只看自己的 hunk，`SidebarSessionRow.tsx`、`zh.ts`、`en.ts`、`types/conversation.ts` 的 prettier 差异在 HEAD 上就有、条数没变，没碰。
+- 全角标点：自写 `wb03-cjk-punct.py` 扫 diff 新增行与新文件，7 处命中都是 Markdown 链接的 `](`、`)` 与英文注释 / 英文测试标题里的英文标点，中文文案与文档无半角。
+
+**反向检查**（每处改坏后跑六个相关测试文件，恢复后 `cmp` 逐字节一致）
+
+1. `galley-im/` 前缀判成 CLI：4 条挂（判断、消息、侧栏、英文界面）。
+2. `via=cli` 不画：7 条挂（判断、消息、侧栏、对话里的时间与图标）。
+3. 消息提示退回写死的 `"Supervisor"`：5 条挂。
+4. `via=cli` 不再总有时间：2 条挂（`message-time.test.ts`、`Conversation.test.tsx`）。
+5. 侧栏不先判定时任务：1 条挂（时钟那条）。
+6. 侧栏 CLI 的读屏丢掉「创建」：2 条挂。
+
+**看到但没改**
+
+- 定时任务开的会话，第一条消息的来源是 `via=supervisor`、`galley-scheduler`（`core/src/scheduler.rs:878` 经 `session.new`）。票面只让侧栏先排除时钟，消息这边照判断落到 `"cli"`：气泡上方会读「Galley CLI」（今天读「Supervisor」），侧栏同一个会话是时钟「定时任务创建」。本机库里眼下 0 条这样的消息。要不要在消息上也先排除定时任务（例如不画，或画时钟），留给主会话定。
+- `README.md:180`、`README.zh-CN.md:180` 写「Supervisor 创建的 session 和发出的消息……带一个 Supervisor 标记」（英文版「carry a Supervisor mark」），描述的正是这次改掉的标记，且只说了 `via=supervisor`。
+- `docs/screenshot-playbook.md:113`、`:169` 写 `tools.png` 里派活说明「标『主对话派来的』」：那是 v3 已拍截图的样子，重拍前改文字会与图不符。
+- 指角色、不指标记，保留：`docs/design/conversation.md:98`「Supervisor、CLI 发进主对话、靠右的消息也一样」、`:354`「别的 supervisor 用 CLI 直接答……」、`:757`「CLI、Supervisor、system 发进来的（`external`）」；`docs/design/layout-and-chrome.md:295`、`:328`、`:363`。
+- `docs/devlog/deferred.md:245` 一带照票面不改；`.scratch/main-chat/issues/31-subtask-wake-gui.md:161`、`.scratch/scheduled-tasks/` 里描述「Supervisor 创建」的是当时的记录，没改。
+- `gui/src/stores/messages.ts:898` 的 `lastSubmitSource` 按 `cli / supervisor / system` 分滚动来源，与标记无关，没动。iOS 端（`ios/GalleyRemote/.../Types.swift`）只有 `OriginVia` 类型，没有来源标记的界面。
