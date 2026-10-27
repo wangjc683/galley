@@ -9,6 +9,7 @@ import {
 import {
   Clock,
   DotsThree,
+  House,
   PauseCircle,
   PlugsConnected,
 } from "@phosphor-icons/react";
@@ -17,6 +18,7 @@ import { IconButton } from "@/components/ui/button";
 import { IconTooltip } from "@/components/ui/tooltip";
 import { useSessionStatusView } from "@/hooks/useSessionStatusView";
 import { useCopy } from "@/lib/i18n";
+import { originMarker } from "@/lib/origin-marker";
 import { SCHEDULER_SUPERVISOR } from "@/lib/scheduled-tasks";
 import {
   displaySessionSummary,
@@ -118,13 +120,16 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     !hasBlockingError &&
     !isRunning;
   // Scheduler-created sessions carry via=supervisor on the wire but
-  // must not read as "Supervisor 创建" — the user configured a
-  // scheduled task, not a supervisor; explain provenance in their own
-  // vocabulary (clock, 定时任务创建).
+  // must not read as Galley CLI — the user configured a scheduled
+  // task; explain provenance in their own vocabulary (clock,
+  // 定时任务创建). The clock comes first.
   const schedulerCreated =
     session.origin?.supervisor === SCHEDULER_SUPERVISOR;
-  const supervisorCreated =
-    session.origin?.via === "supervisor" && !schedulerCreated;
+  // Otherwise who opened it, when not you (workbench conversation PRD
+  // ruling 8, lib/origin-marker): Galley's house when Galley itself
+  // did through its CLI (the assistant, a chat-app channel), the plug
+  // for anything else through Galley CLI.
+  const marker = schedulerCreated ? null : originMarker(session.origin);
   // Left status-rail kind — one continuous-state channel scanned down
   // the left edge. running breathes (in progress); waiting / error are
   // static color (needs you / stuck). completed / idle = no rail.
@@ -443,18 +448,32 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
               </span>
             </IconTooltip>
           )}
-          {supervisorCreated && (
-            <IconTooltip text={copy.sidebar.supervisorCreated}>
+          {marker && (
+            <IconTooltip
+              text={
+                marker === "galley"
+                  ? copy.sidebar.galleyCreated
+                  : copy.sidebar.cliCreated
+              }
+            >
               <span
                 role="img"
                 tabIndex={-1}
-                aria-label={copy.sidebar.supervisorCreated}
+                aria-label={
+                  marker === "galley"
+                    ? copy.sidebar.galleyCreated
+                    : copy.sidebar.cliCreatedAria
+                }
                 className={cn(
                   "inline-flex shrink-0 items-center rounded-sm text-ink-muted",
                   "hover:text-ink-soft",
                 )}
               >
-                <PlugsConnected size={12} weight="thin" />
+                {marker === "galley" ? (
+                  <House size={12} weight="thin" />
+                ) : (
+                  <PlugsConnected size={12} weight="thin" />
+                )}
               </span>
             </IconTooltip>
           )}

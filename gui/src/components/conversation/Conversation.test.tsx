@@ -314,7 +314,7 @@ describe("Conversation slot under a reply (main chat ticket 06a)", () => {
     expect(render()).toBe(render(() => null));
   });
 
-  it("marks a subtask's instructions as the main chat's, not the user's", () => {
+  it("marks a subtask's instructions as Galley's, not the user's", () => {
     const html = renderToStaticMarkup(
       <Tooltip.Provider>
         <LocalFilesContext.Provider value={() => undefined}>
@@ -331,8 +331,8 @@ describe("Conversation slot under a reply (main chat ticket 06a)", () => {
         </LocalFilesContext.Provider>
       </Tooltip.Provider>,
     );
-    expect(html.split('aria-label="主对话派来的"').length - 1).toBe(1);
-    expect(html.indexOf('aria-label="主对话派来的"')).toBeLessThan(
+    expect(html.split('aria-label="Galley 创建"').length - 1).toBe(1);
+    expect(html.indexOf('aria-label="Galley 创建"')).toBeLessThan(
       html.indexOf("把下载文件夹里的 PDF"),
     );
   });
@@ -478,7 +478,8 @@ describe("the workbench's grammar (workbench conversation ticket 01)", () => {
     const turns: Turn[] = [
       user("把 PDF 分类", at(9), { origin: { via: "subtask" } }),
       answer("分好了。", 1),
-      // Within the hour, but a Supervisor message always shows its time.
+      // Within the hour, but a message through Galley CLI always shows
+      // its time.
       user("发票按月份分", at(9, 4), {
         origin: { via: "supervisor", supervisor: "galley-assistant" },
       }),
@@ -505,12 +506,34 @@ describe("the workbench's grammar (workbench conversation ticket 01)", () => {
     expect(supervisor).toContain(
       '<div class="mb-1 flex items-center gap-1.5 justify-end">',
     );
-    expect(
-      supervisor.indexOf(zhCopy.conversation.supervisorMessage),
-    ).toBeLessThan(supervisor.indexOf('data-role="user-msg"'));
-    expect(rowOf(html, "把 PDF 分类")).toContain(
-      `aria-label="${zhCopy.subtask.fromMainChat}"`,
+    // Galley's own label: Galley's marker, above the bubble.
+    const marker = supervisor.indexOf(
+      `aria-label="${zhCopy.conversation.galleyCreatedAria}"`,
     );
+    expect(marker).toBeGreaterThan(-1);
+    expect(marker).toBeLessThan(supervisor.indexOf('data-role="user-msg"'));
+    expect(rowOf(html, "把 PDF 分类")).toContain(
+      `aria-label="${zhCopy.subtask.galleyCreated}"`,
+    );
+  });
+
+  it("marks and dates a message through Galley CLI without a label (ruling 8)", () => {
+    // Untagged `via=cli` drew nothing before workbench conversation PRD
+    // ruling 8; now the 「Galley CLI」 marker, and always a time, as
+    // any message through the CLI.
+    const turns: Turn[] = [
+      user("早", at(9)),
+      answer("早。", 1),
+      user("天空为什么是蓝色", at(9, 2), { origin: { via: "cli" } }),
+      answer("瑞利散射。", 1),
+    ];
+    const html = render(turns);
+    expect(count(html, 'data-role="message-time-divider"')).toBe(2);
+    const row = rowOf(html, "天空为什么是蓝色");
+    expect(
+      html.lastIndexOf('data-role="message-time-divider"', html.indexOf(row)),
+    ).toBeGreaterThan(html.indexOf("早。"));
+    expect(row).toContain(`aria-label="${zhCopy.conversation.cliCreatedAria}"`);
   });
 
   it("puts each time line right before its message's row, the bubble a child of the row (what parking reads)", () => {

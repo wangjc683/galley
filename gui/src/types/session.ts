@@ -104,7 +104,8 @@ export interface Session {
   lastActivityAt: string;
   createdAt: string;
   updatedAt: string;
-  /** Creation provenance. Sidebar only surfaces Supervisor-created rows. */
+  /** Creation provenance. The sidebar marks rows opened through Galley
+   * CLI (Galley or Galley CLI, lib/origin-marker) and the scheduler's. */
   origin?: Origin;
 
   /** Subprocess identity (when bridge is alive for this session). */

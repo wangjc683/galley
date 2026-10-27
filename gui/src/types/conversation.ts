@@ -108,11 +108,12 @@ export type BrowserFacts =
 /**
  * Audit metadata for any persisted write. Three-field tuple persisted in
  * SQLite (messages.created_via / supervisor / origin_note since B2 mig
- * 006). Drives the M7 supervisor provenance marker: when `via` is
- * `supervisor`, the UserTurn renders a small robot icon beside the
- * message. Other `via` values (`gui` / `cli` / `system`) render no
- * annotation — they're the default Galley-driven origin and don't need
- * to interrupt the reading flow.
+ * 006). Drives the provenance marker above a user message and after a
+ * sidebar row's title, one of two kinds (lib/origin-marker, workbench
+ * conversation PRD ruling 8): `supervisor` with Galley's own label
+ * (`galley-assistant`, `galley-im/…`) is Galley, drawn with a house;
+ * any other `supervisor` label and `cli` read 「Galley CLI」. `gui` and
+ * `system` render none; `subtask` has its own house (MessageUser).
  *
  * agent-api.md §6A is the canonical contract.
  */
@@ -186,9 +187,10 @@ export interface UserTurn {
    */
   clientRequestId?: string;
   attachments?: MessageAttachment[];
-  /** Audit origin for the user message. When `origin.via ===
-   * "supervisor"`, MessageUser renders a small provenance icon (B4 M7).
-   * Absent / `gui` means the local user typed it directly. */
+  /** Audit origin for the user message. When it came in through Galley
+   * CLI (`supervisor` / `cli`), MessageUser renders a small provenance
+   * icon, Galley or Galley CLI (B4 M7; lib/origin-marker). Absent /
+   * `gui` means the local user typed it directly. */
   origin?: Origin;
   /** ISO send time: `messages.created_at` on a persisted row, the
    * client clock on an optimistic / transient turn. Drives the user

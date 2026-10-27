@@ -55,7 +55,8 @@ export function localDayStart(ms: number): number {
  *   - on a different local day than the previous user message — a
  *     backstop (0 cases in the data) so a 「今天 / 昨天」 label never
  *     goes missing at a day change;
- *   - Supervisor-originated — its provenance row is there anyway.
+ *   - in through Galley CLI (`via` supervisor or cli, workbench
+ *     conversation PRD ruling 8) — its provenance row is there anyway.
  *
  * A turn without a usable `createdAt` gets no mark and is not a
  * baseline either: the next dated turn compares against the dated one
@@ -115,7 +116,8 @@ export function userTimeMarks(
       prevMs === null ||
       ms - prevMs > thresholdMs ||
       newDay ||
-      turn.origin?.via === "supervisor";
+      turn.origin?.via === "supervisor" ||
+      turn.origin?.via === "cli";
     marks.set(index, { pinned, withTodayWord: newDay });
     prevMs = ms;
   }

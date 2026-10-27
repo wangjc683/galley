@@ -24,6 +24,7 @@ import { ChipRootsContext } from "@/lib/chip-roots";
 import { splitQuotedMessage } from "@/lib/composer-quote";
 import { useCopy } from "@/lib/i18n";
 import { userMessageCopyText } from "@/lib/message-menu";
+import { originMarker } from "@/lib/origin-marker";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { useYieldsToSelection } from "@/lib/selection-copy";
 import { pointerInRegion, userRowChipsShown } from "@/lib/user-row-hover";
@@ -95,8 +96,9 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *   first user message; more than 60 minutes since the previous user
  *   message (ask_user replies count as user messages); a change of
  *   local day (a backstop, so 「今天 / 昨天」 never goes missing — 0
- *   cases in the data); or a Supervisor-originated message, whose
- *   provenance row is there anyway. Dogfood data
+ *   cases in the data); or a message that came in through Galley CLI
+ *   (`via` supervisor or cli), whose provenance row is there anyway.
+ *   Dogfood data
  *   (workbench.db, 2026-05-15 → 09-23): 95% of sessions asked every
  *   question on one day, and 21 of 285 gaps between questions ran past
  *   an hour. Rules and label format live in lib/message-time.ts;
@@ -104,7 +106,7 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *   line of its own before the message (MessageTimeDivider): it
  *   belongs to the conversation, not to the bubble. Until 2026-10-16
  *   the workbench put it on a row above the bubble, left-aligned,
- *   shared with the Supervisor icon; the icon stays above the bubble,
+ *   shared with the provenance icon; the icon stays above the bubble,
  *   on the right.
  *   A time on hover for every other message, riding the copy chip,
  *   was cut in the first live test (2026-09-28) — JC:
@@ -118,9 +120,10 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *   (overnight runs, scheduled tasks) is deferred.
  *
  * Message actions:
- *   Supervisor provenance renders as a small icon in the row above the
- *   block; its tooltip names the source only (the relative time it
- *   used to carry retired with the pinned send time, 2026-09-28).
+ *   Provenance renders as a small icon in the row above the block
+ *   (lib/origin-marker); its tooltip names the source only, never the
+ *   raw label (the relative time it used to carry retired with the
+ *   pinned send time, 2026-09-28).
  *   Copy is a transient chip that fades in on hover UNDER the bubble,
  *   its right edge on the bubble's right edge, 6px below it — the
  *   reply's action row geometry (2026-10-16; until then it hung just
@@ -173,12 +176,13 @@ export interface MessageUserProps {
   content: string;
   attachments?: MessageAttachment[];
   /**
-   * Audit origin for this user message (B4 M7). When `origin.via ===
-   * "supervisor"`, a small provenance icon renders above the bubble;
-   * `subtask` (a subtask's instructions, written by the main chat —
-   * ticket 06a) gets the main chat's house there. Other via
-   * values (gui / cli / system) render no annotation — the default
-   * Galley-driven origin shouldn't interrupt the reading flow.
+   * Audit origin for this user message (B4 M7). A message that came in
+   * through Galley CLI gets a small provenance icon above the bubble,
+   * one of two kinds (lib/origin-marker, workbench conversation PRD
+   * ruling 8): Galley's house when Galley itself wrote it, the plug
+   * for anything else. `subtask` (a subtask's instructions, written by
+   * the main chat — ticket 06a) gets the house too, with its own
+   * tooltip. `gui` and `system` render none.
    */
   origin?: Origin;
   /**
@@ -256,11 +260,33 @@ export const MessageUser = memo(function MessageUser({
     assistant ? selectionYieldKey : undefined,
   );
 
-  const isSupervisor = origin?.via === "supervisor";
-  // A subtask's first message is the instructions the main chat wrote
-  // (ticket 06a), not something the user typed: the main chat's house
-  // marks it, in the row the Supervisor icon uses.
-  const fromMainChat = origin?.via === "subtask";
+  // Who it came from when not you at the desktop (workbench
+  // conversation PRD ruling 8), one icon at most. A subtask's first
+  // message is the instructions the main chat wrote (ticket 06a), not
+  // something the user typed: Galley's house, 「Galley 创建」.
+  // Through Galley CLI (lib/origin-marker): the house again when Galley
+  // itself wrote it, the plug for anyone else.
+  const marker = originMarker(origin);
+  const provenance =
+    origin?.via === "subtask"
+      ? {
+          house: true,
+          text: copy.subtask.galleyCreated,
+          label: copy.subtask.galleyCreated,
+        }
+      : marker === "galley"
+        ? {
+            house: true,
+            text: copy.conversation.galleyCreated,
+            label: copy.conversation.galleyCreatedAria,
+          }
+        : marker === "cli"
+          ? {
+              house: false,
+              text: copy.conversation.cliCreated,
+              label: copy.conversation.cliCreatedAria,
+            }
+          : null;
 
   useEffect(() => {
     return () => {
@@ -336,42 +362,29 @@ export const MessageUser = memo(function MessageUser({
       onMouseLeave={() => setHovered(false)}
       data-selection-yield={assistant ? selectionYieldKey : undefined}
     >
-      {/* Provenance above the bubble, on its side: Supervisor, or the
-          main chat for a subtask's instructions. In flow — it takes its
-          real height. The send time is no longer here: it is a centred
-          line before the message (MessageTimeDivider). */}
-      {(isSupervisor || fromMainChat) && (
+      {/* Provenance above the bubble, on its side: Galley, or Galley
+          CLI. In flow — it takes its real height. The send time is no
+          longer here: it is a centred line before the message
+          (MessageTimeDivider). */}
+      {provenance && (
         <div className="mb-1 flex items-center gap-1.5 justify-end">
-          {fromMainChat && (
-            <IconTooltip text={copy.subtask.fromMainChat} side="top">
-              <span
-                role="img"
-                tabIndex={-1}
-                aria-label={copy.subtask.fromMainChat}
-                className={cn(
-                  "inline-flex items-center rounded-sm text-ink-muted",
-                  "hover:text-ink-soft",
-                )}
-              >
+          <IconTooltip text={provenance.text} side="top">
+            <span
+              role="img"
+              tabIndex={-1}
+              aria-label={provenance.label}
+              className={cn(
+                "inline-flex items-center rounded-sm text-ink-muted",
+                "hover:text-ink-soft",
+              )}
+            >
+              {provenance.house ? (
                 <House size={12} weight="thin" />
-              </span>
-            </IconTooltip>
-          )}
-          {isSupervisor && (
-            <IconTooltip text="Supervisor" side="top">
-              <span
-                role="img"
-                tabIndex={-1}
-                aria-label={copy.conversation.supervisorMessage}
-                className={cn(
-                  "inline-flex items-center rounded-sm text-ink-muted",
-                  "hover:text-ink-soft",
-                )}
-              >
+              ) : (
                 <PlugsConnected size={12} weight="thin" />
-              </span>
-            </IconTooltip>
-          )}
+              )}
+            </span>
+          </IconTooltip>
         </div>
       )}
       <div

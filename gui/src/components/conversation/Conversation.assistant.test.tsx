@@ -479,7 +479,7 @@ describe("the assistant's conversation: the row under your bubble", () => {
     expect(row).not.toContain('<div class="mt-1 flex justify-end">');
   });
 
-  it("gives a Supervisor's message on the right the same row", () => {
+  it("gives a message through Galley CLI on the right the same row", () => {
     const turns: Turn[] = [
       {
         ...user("帮我看看日程", at(9)),
@@ -488,7 +488,7 @@ describe("the assistant's conversation: the row under your bubble", () => {
       answer("今天没有安排。", 1),
     ];
     const row = rowOf(assistant(turns, { messageMenu: MENU }), "帮我看看日程");
-    expect(row).toContain(`aria-label="${words.supervisorMessage}"`);
+    expect(row).toContain(`aria-label="${words.cliCreatedAria}"`);
     expect(chipTags(row).map(label)).toEqual([
       words.copy,
       words.quoteSelection,

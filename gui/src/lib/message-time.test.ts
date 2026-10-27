@@ -102,16 +102,26 @@ describe("userTimeMarks", () => {
     expect(marks.get(4)?.pinned).toBe(false);
   });
 
-  it("always pins a Supervisor-originated message", () => {
+  it("always pins a message through Galley CLI, with a label or without", () => {
+    // Untagged `via=cli` joined in workbench conversation PRD ruling 8,
+    // with its own marker.
     const marks = userTimeMarks([
       user(local(2026, 9, 28, 9, 0)),
       user(local(2026, 9, 28, 9, 1), {
         origin: { via: "supervisor", supervisor: "ga-claude-1" },
       }),
       user(local(2026, 9, 28, 9, 2), { origin: { via: "cli" } }),
+      user(local(2026, 9, 28, 9, 3), {
+        origin: { via: "supervisor", supervisor: "galley-assistant" },
+      }),
+      user(local(2026, 9, 28, 9, 4), { origin: { via: "gui" } }),
+      user(local(2026, 9, 28, 9, 5), { origin: { via: "subtask" } }),
     ]);
     expect(marks.get(1)?.pinned).toBe(true);
-    expect(marks.get(2)?.pinned).toBe(false);
+    expect(marks.get(2)?.pinned).toBe(true);
+    expect(marks.get(3)?.pinned).toBe(true);
+    expect(marks.get(4)?.pinned).toBe(false);
+    expect(marks.get(5)?.pinned).toBe(false);
   });
 
   it("skips a turn without createdAt and compares past it", () => {

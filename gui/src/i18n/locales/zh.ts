@@ -201,7 +201,11 @@ export const zhCopy = {
     thinking: "思考中",
     waitingForYou: "等你回复",
     unread: "未读",
-    supervisorCreated: "Supervisor 创建",
+    /** 标题右端的来源徽标（工作台对话 PRD 裁决 8）：Galley 自己经 CLI 开的（助理、聊天软件渠道）。 */
+    galleyCreated: "Galley 创建",
+    /** 其余经 Galley CLI 开的：提示只写名字，读屏多说一个「创建」。 */
+    cliCreated: "Galley CLI",
+    cliCreatedAria: "Galley CLI 创建",
     scheduledCreated: "定时任务创建",
     newReplyTitle: "有新回复",
     emptySessions: "你的对话会出现在这里。",
@@ -294,8 +298,8 @@ export const zhCopy = {
     didNotFinish: "没有跑完",
     /** 卡片在跑那一行：助手打回过（票 29、31），前面写第几轮，后面照旧。 */
     roundPrefix: (round: number) => `第 ${round} 轮 · `,
-    /** 子任务第一条消息（主对话写的说明）上方的来源图标提示。 */
-    fromMainChat: "主对话派来的",
+    /** 子任务第一条消息（Galley 写的说明）上方的来源图标，提示与读屏同一句（工作台对话 PRD 裁决 8）。 */
+    galleyCreated: "Galley 创建",
     /** 子任务在问你、出错时，状态汇到侧栏的助手卡片与顶栏的身份行（裁决 30）。 */
     sidebarWaiting: "子任务在问你",
     sidebarErrored: "子任务出错",
@@ -1819,7 +1823,12 @@ export const zhCopy = {
     collapse: "收起",
     expandFull: "展开全文",
     expandLines: (count: number) => `展开（共 ${count} 行）`,
-    supervisorMessage: "Supervisor 添加的消息",
+    /** 你那侧气泡上方的来源图标（工作台对话 PRD 裁决 8）：Galley 自己经 CLI 写的（助理、聊天软件渠道）。 */
+    galleyCreated: "Galley 创建",
+    galleyCreatedAria: "Galley 创建的消息",
+    /** 其余经 Galley CLI 写的：提示只写名字。 */
+    cliCreated: "Galley CLI",
+    cliCreatedAria: "Galley CLI 创建的消息",
     questionIndex: "提问索引",
     questionEmpty: "（空消息）",
     railStatusRunning: "进行中",
