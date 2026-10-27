@@ -9,17 +9,17 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.7.1`.
-- Git tag / GitHub Release: `v0.7.1` is the current published stable release
-  (tagged at `243d35a1` on 2026-10-26, published 2026-10-26, GitHub Latest).
+- Package version: `0.7.2`.
+- Git tag / GitHub Release: `v0.7.2` is the current published stable release
+  (tagged at `725a7435` on 2026-10-27, published 2026-10-27, GitHub Latest).
 - Agent API schema: `schemaVersion: 3` (since the Goal removal on
   2026-10-13, first shipped in `v0.7.0`; `2` first shipped in `v0.5.0`). The
   server keeps answering `1` and `2` for every command that did not change;
   every goal command, v1 and v2, is `unknown_command` under every pin.
-- Release tier: stable patch; default update channel points at `v0.7.1`.
+- Release tier: stable patch; default update channel points at `v0.7.2`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `a9a36b4` (audited 2026-10-26, first shipped in
-  `v0.7.1`; two `ga.py` fixes, no Galley change). The previous `b70079d`
+  `v0.7.1`, again in `v0.7.2`; two `ga.py` fixes, no Galley change). The previous `b70079d`
   shipped `v0.7.0`, on top of `5205f40` (audited 2026-10-18, never shipped
   on its own; upstream's new mykey store broke the managed loader, fixed in
   the runner); `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` `v0.5.1` …
@@ -32,6 +32,28 @@ live in [refactor](./archive/refactor/README.md).
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
+
+`v0.7.2` (2026-10-27) is a patch one day after `v0.7.1`, 48 commits. The
+main chat keeps memos about the user: noted in the turn under a 「记下了 · …」
+card, read at every segment start, listed on a 「备忘」 page beside 「待办」 in
+the to-do panel (now a `SegmentedControl`), and the morning review also wakes
+for the day before's new memos (main chat rulings 139–144, tickets 95–99).
+Also in it: models on the ChatGPT plan hit the prompt cache again (SIWC 08,
+patch `0007` sends `session_id`); cards strike through what is gone; the to-do
+panel drops the morning review's row and darkens a to-do's time line (rulings
+145, 146); provenance markers read 「Galley 创建」 / 「Galley CLI」 instead of
+Supervisor (workbench conversation ruling 8). The `memo` family is additive
+inside `schemaVersion: 3`; migration 053. Graded patch: the memo extends the
+`v0.7.0` main chat line, like the to-dos. GA baseline unchanged (upstream
+`main` still at `a9a36b4`). Pre-flight: `check.yml` green on `32ab129e` before
+the tag (run 40439045595) and on the bump commit `725a7435` (run 40440956083),
+all seven jobs; the bundled-runtime gate on `mac-x64`, run in a `git archive`
+copy to leave dev's `core/python-bundle` alone (patch `0007` had changed
+`llmcore.py` without it). The agent checked the draft's Intel DMG read-only
+and the `latest.json` candidate; JC installed the draft and approved publish
+without reporting the smoke items. Stable promoted and verified the same
+session (run 40448924436). Full narrative: devlog
+[2026-10-27-v0.7.2-release](./devlog/2026-10-27-v0.7.2-release.md).
 
 `v0.7.1` (2026-10-26) is a patch three days after `v0.7.0`, 47 commits
 plus the GA baseline bump. The main chat while it runs: a line under the
@@ -601,16 +623,22 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.7.1` is published and promoted as the live stable release (published
-2026-10-26 05:27 UTC). The default `updates/stable/latest.json` channel points
-at `v0.7.1`, with the legacy `updates/beta/latest.json` alias pointing at the
+`v0.7.2` is published and promoted as the live stable release (published
+2026-10-27 04:17 UTC). The default `updates/stable/latest.json` channel points
+at `v0.7.2`, with the legacy `updates/beta/latest.json` alias pointing at the
 same version for older installed builds. The live verifier passed with
 `--cache-bust` for both channels across all three platforms (darwin-aarch64,
 darwin-x86_64, windows-x86_64), in the promote run and again locally (channel
-branch at `3912754f`). One draft cut (release run 40269618292); JC approved
-publishing without reporting smoke items, so they are owed under Unreleased
-On Main. The bundled-runtime gate passed on `mac-x64`; `check.yml` was green
-on the bump commit (run 40269618238, all seven jobs).
+branch at `bdd4920d`); a plain `curl` read 0.7.2 a minute after promote. One
+draft cut (release run 40440956486); JC approved publishing without reporting
+smoke items, so they are owed under Unreleased On Main. The bundled-runtime
+gate passed on `mac-x64`; `check.yml` was green on the bump commit (run
+40440956083, all seven jobs).
+
+`v0.7.1` (2026-10-26) went through the same path: one draft cut (release run
+40269618292), JC approved publishing without reporting smoke items, both
+channels verified with `--cache-bust`, bundled-runtime gate passed on
+`mac-x64`.
 
 `v0.7.0` (2026-10-23) went through the same path: one draft cut (release run
 39802407918), JC smoked part of it and approved publishing without the rest,
@@ -696,10 +724,11 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.7.0` → `v0.7.1` is owed. JC's Mac
-   was installed straight from the draft, so it needs a machine still on
-   `v0.7.0` (the Windows one, for instance); the CDN served 0.7.1 without
-   cache-bust at 05:30 UTC (promoted 05:28). `v0.6.2` → `v0.7.0` passed on JC's
+1. App-update dogfood (SOP step 10): `v0.7.1` → `v0.7.2` (and `v0.7.0` →
+   `v0.7.1` before it) is owed. JC's Mac was installed straight from the
+   draft both times, so it needs a machine still on an older build (the
+   Windows one, for instance); the CDN served 0.7.2 without cache-bust at
+   04:18 UTC (promoted 04:17). `v0.6.2` → `v0.7.0` passed on JC's
    Windows machine (2026-10-23, same session as the release; H1 in the
    release devlog): after the restart the app reads 0.7.0, the old sessions
    and model settings are there, and the main chat works, so migrations
@@ -751,20 +780,20 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Release-scope truth is `git log v0.7.1..HEAD`. User-facing so far
-(2026-10-26): the main chat's memo (what Galley knows about you, written in
-the turn, carried at every segment start, a 「备忘」 page beside 「待办」,
-cards under the replies, the morning review also wakes for the day before's
-new memos; main chat rulings 139–144, tickets 95–99); prompt cache hits on
-the ChatGPT plan backend again (SIWC 08, patch `0007` sends `session_id`);
-cards for what is gone are struck through, and the panel's two pages use
-`SegmentedControl`; the to-do panel no longer draws the morning review's
-row (it still runs daily; ruling 145, ticket 100), and a to-do's time line
-is a step darker than its notes (ruling 146); provenance markers no longer
-say Supervisor: what Galley itself wrote through the CLI reads 「Galley 创建」,
-everything else through the CLI (unlabelled `via=cli` included) reads
-「Galley CLI」 (workbench conversation ruling 8, ticket 03). Dogfood still owed: ticket 98's noticed interest (ticket
-95's morning review waking for a new memo passed in dev on 2026-10-27).
+Release-scope truth is `git log v0.7.2..HEAD`. Nothing user-facing yet
+(2026-10-27). Dogfood still owed from `v0.7.2`'s scope: ticket 98's noticed
+interest (the 「看你……常问」 memo has no live record yet).
+
+**Owed from the `v0.7.2` smoke** (JC approved publish without reporting
+smoke items, 2026-10-27; the list is in the release devlog). JC installed the
+draft on the Mac at 03:17 UTC and the main chat ran one browser task on it
+(`web_execute_js` ×3, `web_scan` ×1, to a final answer; ChatGPT plan, six
+requests with 77,952 tokens read from cache against 18,464 uncached, read from
+the database), so M3 (the prompt cache on a packaged build) passed. Migration
+053 did not run on the packaged build: dev had already migrated the shared
+database on 2026-10-26, so no new `app.galley.backup.*`. Not reported: a memo
+card and deleting it on the 「备忘」 page (M2); not done: a model switch in a
+new workbench session (M4), a Windows install (W1).
 
 **Owed from the `v0.7.1` smoke** (JC approved publish without reporting
 smoke items, 2026-10-26; the list is in the release devlog). JC installed the
@@ -931,7 +960,7 @@ collided with patch `0007` twice in a row — expect it again. `5205f40`
 (2026-10-18) and `b70079d` (2026-10-22) were audited on their own too;
 `b70079d` shipped in `v0.7.0`, with upstream `main` still at it when the tag
 was cut. `a9a36b4` was audited in the `v0.7.1` pre-flight (2026-10-26) and
-shipped in it.
+shipped in it, then again in `v0.7.2` with upstream `main` still at it.
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
 `api_key_header` a GUI entry point in the Settings -> Models advanced panel,
@@ -975,10 +1004,10 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications (gone with approval, 2026-10-05), missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.7.1 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.7.2 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Audited upstream `a9a36b4` (2026-10-26), shipped since `v0.7.1` (`b70079d` shipped `v0.7.0`, `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Audited upstream `a9a36b4` (2026-10-26), shipped since `v0.7.1` (again in `v0.7.2`; `b70079d` shipped `v0.7.0`, `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 
@@ -1001,7 +1030,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.7.1`. For the next release, bump every
+- Current package metadata uses `0.7.2`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
