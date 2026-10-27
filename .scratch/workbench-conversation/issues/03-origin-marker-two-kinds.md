@@ -25,9 +25,9 @@ Status: in-progress（2026-10-27 派出）
    - 两个 Galley 标签在 GUI 里写成常量，注释指向上面的 Core 出处，照 `lib/scheduled-tasks.ts` 的 `SCHEDULER_SUPERVISOR`、`lib/subtasks.ts` 的 `SUBTASK_REPORT_SUPERVISOR` 的写法。
    - 侧栏仍先排除 `galley-scheduler`（时钟优先），再用这个判断。
 2. **消息**（`MessageUser.tsx`）：
-   - `"galley"`：`House`，提示「Galley 发来的」，aria「Galley 发来的消息」；
-   - `"cli"`：`PlugsConnected`，提示「Galley CLI」，aria「Galley CLI 发来的消息」；
-   - 子任务说明（`subtask`）：图标不变，提示与 aria 改为「Galley 派来的」；
+   - `"galley"`：`House`，提示「Galley 创建」，aria「Galley 创建的消息」；
+   - `"cli"`：`PlugsConnected`，提示「Galley CLI」，aria「Galley CLI 创建的消息」；
+   - 子任务说明（`subtask`）：图标不变，提示与 aria 改为「Galley 创建」；
    - 写死的英文 `"Supervisor"` 删掉，提示走 locale。图标行的位置、尺寸、颜色不变。
 3. **侧栏**（`SidebarSessionRow.tsx`）：
    - `"galley"`：`House`，提示与 aria「Galley 创建」；
@@ -38,11 +38,11 @@ Status: in-progress（2026-10-27 派出）
 
    | 处 | zh | en |
    |---|---|---|
-   | 消息 · Galley 提示 | Galley 发来的 | Sent by Galley |
-   | 消息 · Galley aria | Galley 发来的消息 | Message sent by Galley |
+   | 消息 · Galley 提示 | Galley 创建 | Created by Galley |
+   | 消息 · Galley aria | Galley 创建的消息 | Message created by Galley |
    | 消息 · CLI 提示 | Galley CLI | Galley CLI |
-   | 消息 · CLI aria | Galley CLI 发来的消息 | Message sent through Galley CLI |
-   | 子任务说明（提示与 aria） | Galley 派来的 | Assigned by Galley |
+   | 消息 · CLI aria | Galley CLI 创建的消息 | Message created through Galley CLI |
+   | 子任务说明（提示与 aria） | Galley 创建 | Created by Galley |
    | 侧栏 · Galley（提示与 aria） | Galley 创建 | Created by Galley |
    | 侧栏 · CLI 提示 | Galley CLI | Galley CLI |
    | 侧栏 · CLI aria | Galley CLI 创建 | Created through Galley CLI |
@@ -53,7 +53,7 @@ Status: in-progress（2026-10-27 派出）
 
 - `docs/design/layout-and-chrome.md:352`「Supervisor 来源徽标」一条改写为两类（标题也改，例如「来源徽标」），守住原来的那句：是 provenance，不参与排序，不覆盖 running / waiting / error 的 rail、icon、subline。
 - `docs/design/conversation.md`：`:355`（子任务第一条消息与 `galley-assistant` 那句，「不显示来源的原字符串」保留）、`:84`（时间断点里的「Supervisor 来源消息」）、`:86`、`:98` 里指来源图标的「Supervisor」照实改。**只改指来源标记的地方**；`:354`「别的 supervisor 用 CLI 直接答……」这类指角色的保留。其余位置你 grep「Supervisor 来源」「Supervisor 图标」自己找全。
-- `docs/copy-language-guidelines.md`：`:190` 那张术语表里加一行或在 `Supervisor` 那行补一句：来源标记写「Galley CLI」「Galley 发来的 / 创建」，不写 Supervisor（2026-10-27，工作台对话 PRD 裁决 8）。
+- `docs/copy-language-guidelines.md`：`:190` 那张术语表里加一行或在 `Supervisor` 那行补一句：来源标记写「Galley CLI」「Galley 创建」，不写 Supervisor（2026-10-27，工作台对话 PRD 裁决 8）。
 - 不写 devlog、不改 PRD 与 deferred、不改本票 Status 行（主会话写）。`docs/devlog/deferred.md:245` 一带描述的是 10-16 当时的样子，不改。
 
 ## 不做
@@ -69,9 +69,9 @@ Status: in-progress（2026-10-27 派出）
 - **反向检查**：改坏几处确认测试会挂，例如 `galley-im/` 前缀判成 CLI、`via=cli` 不画、提示退回写死的英文；恢复后逐字节一致。
 - **JC 在 tauri dev 里走一遍**（数据都在本机库里）：
   1. 侧栏找 2026-05-21 那批 Codex 开的对话（「其他来源」里），悬停标题右端的图标，读「Galley CLI」；点开，第一条消息上方的图标同样读「Galley CLI」；
-  2. 找 10-10 在微信里让它查厦门天气开的那个对话，侧栏是房子图标「Galley 创建」，第一条消息上方「Galley 发来的」；
+  2. 找 10-10 在微信里让它查厦门天气开的那个对话，侧栏是房子图标「Galley 创建」，第一条消息上方同样「Galley 创建」；
   3. 找 10-10 的「天空为什么是蓝色」（不带标签的 CLI），现在有「Galley CLI」图标，第一条消息上面有时间；
-  4. 打开 Galley，点一张子任务卡片的「打开」，第一条消息上方的房子读「Galley 派来的」；
+  4. 打开 Galley，点一张子任务卡片的「打开」，第一条消息上方的房子读「Galley 创建」；
   5. 切到英文界面看一眼上面任意两处。
 
 ## 回报格式

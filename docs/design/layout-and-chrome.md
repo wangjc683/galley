@@ -349,7 +349,7 @@ motion 语义专属于 running：静态彩条表示「卡在这、需要你」�
 - 标题与状态行截断时用原生 `title` 补全文（§4.1 icon-only 不用原生 `title` 的例外），且**只在确实截断时**挂：悬停时量 `scrollWidth > clientWidth`（`lib/truncated-title.ts`），放得下的文字不再弹一个重复自己的系统提示框（2026-10-03）。悬停时量是有意的：悬停时行右侧给 ⋯ 让出 28px，静止时放得下的标题悬停时可能被截。
 - **一次性入场 pop**（`sidebar-state-pop`）：进入 error / ask / unread 时图标弹一下（keyed on `attentionKey`，replay on entry，不在 in-state 时循环）。强 overshoot（scale 0.42→1.38→0.94→1，0.44s `cubic-bezier(0.22,1,0.36,1)`）确保在繁忙状态板上是明确的「看这里」一拍。**running 不 pop**（它已有呼吸 rail + 旋转图标）。**挂载不 pop**（2026-07-05）：entry 指状态迁移；启动时全列齐射「看这里」不是信息，是噪音。
 - 所有 sidebar 状态动效都遵守 §2.7 与 reduced-motion：呼吸 rail 属外围 liveness 例外保留；pop / step-tick 是一次性入场，禁止无限闪烁 / shimmer / 大面积背景呼吸；`prefers-reduced-motion` 下 `sidebar-liveness-rail` / `sidebar-liveness-tick` / `sidebar-step-tick` / `sidebar-state-pop` 全部关停。
-- **Supervisor 来源徽标**：`origin.via === "supervisor"` 的 session 在标题右侧显示 `PlugsConnected` 小徽标，tooltip / aria 为「Supervisor 创建」。这是 provenance，不是运行状态；不得参与排序，也不得覆盖 running / waiting / error 的 rail、icon、subline。
+- **来源徽标**（2026-10-27 起只分两类，[工作台对话 PRD](../../.scratch/workbench-conversation/PRD.md) 裁决 8）：经 Galley CLI 开的 session 在标题右侧显示一个 12px thin 小徽标，判断在 `lib/origin-marker.ts`（消息上的来源图标用同一个判断，见 [conversation.md](./conversation.md)「子任务卡片」）。Galley 自己经 CLI 开的（标签是 `galley-assistant`，或以 `galley-im/` 开头：助理、聊天软件渠道）画 `House`，tooltip / aria「Galley 创建」；其余经 CLI 开的（`via=supervisor` 的其他标签，以及带不带标签的 `via=cli`）画 `PlugsConnected`，tooltip「Galley CLI」、aria「Galley CLI 创建」。定时任务开的（`galley-scheduler`）先判，照旧画时钟「定时任务创建」。不显示标签的原字符串；标签照旧存在库里与 CLI JSON 的 `origin`。外置运行时没有助理与聊天软件渠道，只会出现「Galley CLI」。这是 provenance，不是运行状态；不得参与排序，也不得覆盖 running / waiting / error 的 rail、icon、subline。
 
 #### Project 组行
 
