@@ -59,7 +59,7 @@ JC：「1，认可；2，按你推荐；3，按你推荐；4，这条我也还�
 JC：「目前通过 galley cli 新建的消息，都会带图标……比如现在显示 Supervisor，其实对于用户并不友好，是不是直接用「galley cli」呢？」主会话先给了按发话方分四类的 C，JC：「C 有点太复杂了，为了普通用户友好，我现在更倾向于 B，比如给用户看就简洁一点就显示「galley CLI」，当然可以在用户看不到的地方保留更多信息，方便其他功能展开」。主会话同意 B，只留 Galley 自己那一类例外，JC：「按建议推进」。
 
 8. **来源标记只分两类**：你那侧气泡上方的来源图标（今天提示写死英文「Supervisor」，`MessageUser.tsx:361`）与侧栏会话行标题右端的徽标（「Supervisor 创建」，`SidebarSessionRow.tsx:447`）改为：
-   - **Galley 自己经 CLI 写的**：标签是 `galley-assistant`（助理替你答子任务、打回、开对话），或以 `galley-im/` 开头（聊天软件渠道代你开的对话）。图标 `House`，同子任务说明；消息上「Galley 发来的」，侧栏「Galley 创建」。子任务说明的「主对话派来的」改为「Galley 派来的」（「主对话」已退为内部用语，`layout-and-chrome.md`「叫法」）。
+   - **Galley 自己经 CLI 写的**：标签是 `galley-assistant`（助理替你答子任务、打回、开对话），或以 `galley-im/` 开头（聊天软件渠道代你开的对话）。图标 `House`，同子任务说明；提示一律「Galley 创建」：消息、侧栏、子任务说明三处同一句（子任务说明此前是「主对话派来的」，「主对话」已退为内部用语，`layout-and-chrome.md`「叫法」）。初稿是消息上「Galley 发来的」、说明「Galley 派来的」，JC：「『Galley 发来的』有点奇怪，用户会觉得我本来就是在 Galley 软件里面，不如都统一为『Galley 创建』？」主会话同意并把说明一起改：「X 发来的」是软件通知的句式（「微信团队发来的」），读成软件在给你发东西；子任务里那句是写给子任务的，「发来」还把收件人说成了你；「派」的意思面包屑「Galley ›」与主对话里的卡片已经交代。「Galley」作发话方的名字不变：内置运行时里它就是助理的名字（侧栏卡片、「回到 Galley」）。
    - **其余经 CLI 来的**：`via=supervisor` 的其他标签，以及不带标签的 `via=cli`。图标 `PlugsConnected` 不换（「智能体接入」那页讲的就是让 Agent 用 CLI 操作 Galley）；提示两处都是「Galley CLI」。推翻 2026-05-21 决策 4 的「普通 CLI 消息不标」：「Galley CLI」对人敲的、Agent 发的都成立，当年怕的误认不存在了。
    - **时间**（主会话补的默认做法）：经 CLI 进来的消息照旧总有时间，范围随之加上 `via=cli`（`lib/message-time.ts:118`）。
    - **不变**：标签照旧存在库里（`messages.supervisor`、`sessions.created_by_supervisor`）与 CLI JSON 的 `origin`，界面不显示；以后的审计、按 Agent 筛选从那里读。定时任务的时钟徽标、`via=system` 不画、说明行的位置都不变。Core、CLI、Agent API 不动。外置运行时没有助理与聊天软件渠道，只会出现「Galley CLI」一类。
