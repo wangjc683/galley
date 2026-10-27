@@ -177,7 +177,7 @@ galley session archive <id> --supervisor=ga-claude-1 --reason="done"
 galley session restore <id>
 ```
 
-Write commands take `--supervisor` and `--reason`; with `--supervisor` set, the work is recorded as `via=supervisor` (otherwise `via=cli`). Sessions and messages a Supervisor creates carry a Supervisor mark in the sidebar and the timeline, so the human can see at a glance what came from an agent.
+Write commands take `--supervisor` and `--reason`; with `--supervisor` set, the work is recorded as `via=supervisor` (otherwise `via=cli`). Sessions and messages created through the CLI, with or without `--supervisor`, carry a Galley CLI mark in the sidebar and the conversation (what Galley itself writes through the CLI is marked Galley, and scheduled tasks get a clock), so the human can see at a glance what came from an agent. The `--supervisor` label is still recorded in `origin`; the interface does not show it.
 
 Full command reference, JSON schemas, and exit codes live in the [Agent API docs](./docs/agent-api/README.md).
 

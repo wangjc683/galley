@@ -177,7 +177,7 @@ galley session archive <id> --supervisor=ga-claude-1 --reason="done"
 galley session restore <id>
 ```
 
-写命令接受 `--supervisor` 与 `--reason`；带上 `--supervisor` 就记为 `via=supervisor`，否则是 `via=cli`。Supervisor 创建的 session 和发出的消息，在侧栏和时间线上都带一个 Supervisor 标记，human 一眼就能看出哪些出自 agent。
+写命令接受 `--supervisor` 与 `--reason`；带上 `--supervisor` 就记为 `via=supervisor`，否则是 `via=cli`。经 CLI 创建的 session 和发出的消息，不管带不带 `--supervisor`，在侧栏和对话里都带一个「Galley CLI」标记（Galley 自己经 CLI 写的标 Galley，定时任务标时钟），human 一眼就能看出哪些出自 agent；`--supervisor` 的标签照旧记在 `origin` 里，界面不显示。
 
 完整命令清单、JSON schema 与 exit code 见 [Agent API 文档](./docs/agent-api/README.md)。
 

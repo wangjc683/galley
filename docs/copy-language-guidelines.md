@@ -187,7 +187,7 @@ Section 标签（2026-10-07 JC 裁）：
 | `GenericAgent` | 正式说明、首次接触、Onboarding、About、Runtime 中保留全称 |
 | `GA` | 紧凑状态、重复标签、路径、短 UI 中使用缩写 |
 | `Agent` | 外部操作者 / 生态角色，保留英文；不要翻成「代理」 |
-| `Supervisor` | `Supervisor SOP` 或 supervisor 集成语境保留；来源标记（消息上方的来源图标、侧栏会话行的来源徽标）不写 Supervisor，写「Galley CLI」「Galley 创建」（2026-10-27，[工作台对话 PRD](../.scratch/workbench-conversation/PRD.md) 裁决 8） |
+| `Supervisor` | `Supervisor SOP` 或 supervisor 集成语境保留；来源标记（消息上方的来源图标、侧栏会话行的来源徽标）不写 Supervisor，写「Galley CLI」「Galley 创建」，定时任务开的写「定时任务创建」（2026-10-27，[工作台对话 PRD](../.scratch/workbench-conversation/PRD.md) 裁决 8） |
 | `SOP` | 保留；必要时用中文短句补语义 |
 | `Runtime` | 只作 Settings 侧栏英文副标签；页头标题、「设置 → 运行环境」引用和正文都说「运行环境」（2026-10-07 起页头同侧栏） |
 | `Channels` | 只在 TopBar 的徽标、tooltip、菜单项里保留（如「Channels · 需处理」）；Settings 侧栏主标签和页头标题用「聊天软件」，`Channels` 只作侧栏英文副标签（2026-10-07 起页头同侧栏）；设置页正文、按钮、确认框、toast、首次关闭弹窗、通用页一律说「渠道」（「重启全部渠道」「渠道正在使用旧模型配置」，2026-10-08 起；不用「聊天软件」做动作宾语——「重启聊天软件」读作重启微信本身） |
