@@ -1792,6 +1792,7 @@ export const enCopy: AppCopy = {
     galleyCreatedAria: "Message created by Galley",
     cliCreated: "Galley CLI",
     cliCreatedAria: "Message created through Galley CLI",
+    scheduledCreated: "Created by scheduled task",
     questionIndex: "Question index",
     questionEmpty: "(empty message)",
     railStatusRunning: "in progress",

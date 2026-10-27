@@ -1,5 +1,5 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { House, PlugsConnected } from "@phosphor-icons/react";
+import { Clock, House, PlugsConnected } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -36,6 +36,7 @@ vi.mock("@/components/ui/tooltip", async (importOriginal) => {
 const ROW = '<div class="mb-1 flex items-center gap-1.5 justify-end">';
 const HOUSE = renderToStaticMarkup(<House size={12} weight="thin" />);
 const PLUG = renderToStaticMarkup(<PlugsConnected size={12} weight="thin" />);
+const CLOCK = renderToStaticMarkup(<Clock size={12} weight="thin" />);
 
 function render(
   origin: Origin | undefined,
@@ -108,11 +109,35 @@ describe("the provenance icon above your side's bubble", () => {
     expect(row).toContain(`aria-label="${created}"`);
   });
 
+  it("gives a scheduled task's first message the sidebar row's clock: 「定时任务创建」", () => {
+    const row = provenance(
+      render({
+        via: "supervisor",
+        supervisor: "galley-scheduler",
+        reason: "scheduled_task:t1",
+      }),
+    );
+    expect(row).toContain(CLOCK);
+    expect(row).not.toContain(PLUG);
+    expect(row).not.toContain(HOUSE);
+    expect(words.scheduledCreated).toBe("定时任务创建");
+    expect(words.scheduledCreated).toBe(zhCopy.sidebar.scheduledCreated);
+    expect(row).toContain(`data-tooltip="${words.scheduledCreated}"`);
+    expect(row).toContain(`aria-label="${words.scheduledCreated}"`);
+    expect(row).not.toContain("galley-scheduler");
+    const en = provenance(
+      render({ via: "supervisor", supervisor: "galley-scheduler" }, "en-US"),
+    );
+    expect(en).toContain('data-tooltip="Created by scheduled task"');
+    expect(en).toContain('aria-label="Created by scheduled task"');
+  });
+
   it("draws one icon in the same place, the same size and ink", () => {
     for (const origin of [
       { via: "supervisor", supervisor: "galley-assistant" },
       { via: "cli" },
       { via: "subtask" },
+      { via: "supervisor", supervisor: "galley-scheduler" },
     ] satisfies Origin[]) {
       const row = provenance(render(origin));
       expect(row.split('role="img"').length - 1).toBe(1);

@@ -114,9 +114,22 @@ describe("the origin badge after a sidebar row's title", () => {
     expect(badges(html)).toEqual([
       `<span role="img" tabindex="-1" aria-label="${words.scheduledCreated}" class="inline-flex shrink-0 items-center rounded-sm text-ink-muted hover:text-ink-soft">`,
     ]);
+    expect(html).toContain(`data-tooltip="${words.scheduledCreated}"`);
     expect(html).toContain(CLOCK);
     expect(html).not.toContain(PLUG);
     expect(html).not.toContain(HOUSE);
+  });
+
+  it("reads the scheduler's clock off the label alone, as before", () => {
+    // originMarker judges the label first, whatever the via: a CLI
+    // origin with the scheduler's label still gets the clock, not the
+    // plug.
+    const html = render({ via: "cli", supervisor: "galley-scheduler" });
+    expect(badges(html)).toEqual([
+      `<span role="img" tabindex="-1" aria-label="${words.scheduledCreated}" class="inline-flex shrink-0 items-center rounded-sm text-ink-muted hover:text-ink-soft">`,
+    ]);
+    expect(html).toContain(CLOCK);
+    expect(html).not.toContain(PLUG);
   });
 
   it("marks nothing on yours, Core's own or a subtask", () => {

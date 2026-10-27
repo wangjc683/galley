@@ -19,7 +19,6 @@ import { IconTooltip } from "@/components/ui/tooltip";
 import { useSessionStatusView } from "@/hooks/useSessionStatusView";
 import { useCopy } from "@/lib/i18n";
 import { originMarker } from "@/lib/origin-marker";
-import { SCHEDULER_SUPERVISOR } from "@/lib/scheduled-tasks";
 import {
   displaySessionSummary,
   settledSessionSubline,
@@ -119,17 +118,14 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
     !hasPendingAsk &&
     !hasBlockingError &&
     !isRunning;
-  // Scheduler-created sessions carry via=supervisor on the wire but
-  // must not read as Galley CLI — the user configured a scheduled
-  // task; explain provenance in their own vocabulary (clock,
-  // 定时任务创建). The clock comes first.
-  const schedulerCreated =
-    session.origin?.supervisor === SCHEDULER_SUPERVISOR;
-  // Otherwise who opened it, when not you (workbench conversation PRD
-  // ruling 8, lib/origin-marker): Galley's house when Galley itself
-  // did through its CLI (the assistant, a chat-app channel), the plug
-  // for anything else through Galley CLI.
-  const marker = schedulerCreated ? null : originMarker(session.origin);
+  // Who opened it, when not you (workbench conversation PRD ruling 8,
+  // lib/origin-marker). Scheduler-created sessions carry via=supervisor
+  // on the wire but must not read as Galley CLI — the user configured a
+  // scheduled task; explain provenance in their own vocabulary (clock,
+  // 定时任务创建). Otherwise Galley's house when Galley itself did
+  // through its CLI (the assistant, a chat-app channel), the plug for
+  // anything else through Galley CLI.
+  const marker = originMarker(session.origin);
   // Left status-rail kind — one continuous-state channel scanned down
   // the left edge. running breathes (in progress); waiting / error are
   // static color (needs you / stuck). completed / idle = no rail.
@@ -433,7 +429,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
               {session.title}
             </div>
           )}
-          {schedulerCreated && (
+          {marker === "scheduled" && (
             <IconTooltip text={copy.sidebar.scheduledCreated}>
               <span
                 role="img"
@@ -448,7 +444,7 @@ export const SidebarSessionRow = memo(function SidebarSessionRow({
               </span>
             </IconTooltip>
           )}
-          {marker && (
+          {(marker === "galley" || marker === "cli") && (
             <IconTooltip
               text={
                 marker === "galley"

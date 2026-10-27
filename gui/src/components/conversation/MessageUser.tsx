@@ -3,6 +3,7 @@ import {
   CaretDown,
   CaretUp,
   Check,
+  Clock,
   Copy,
   House,
   PlugsConnected,
@@ -182,7 +183,8 @@ export interface MessageUserProps {
    * ruling 8): Galley's house when Galley itself wrote it, the plug
    * for anything else. `subtask` (a subtask's instructions, written by
    * the main chat — ticket 06a) gets the house too, with its own
-   * tooltip. `gui` and `system` render none.
+   * tooltip; a scheduled task's first message the clock. `gui` and
+   * `system` render none.
    */
   origin?: Origin;
   /**
@@ -265,28 +267,35 @@ export const MessageUser = memo(function MessageUser({
   // message is the instructions the main chat wrote (ticket 06a), not
   // something the user typed: Galley's house, 「Galley 创建」.
   // Through Galley CLI (lib/origin-marker): the house again when Galley
-  // itself wrote it, the plug for anyone else.
+  // itself wrote it, the plug for anyone else. A scheduled task's first
+  // message gets the sidebar row's clock.
   const marker = originMarker(origin);
   const provenance =
     origin?.via === "subtask"
       ? {
-          house: true,
+          icon: "house",
           text: copy.subtask.galleyCreated,
           label: copy.subtask.galleyCreated,
         }
-      : marker === "galley"
+      : marker === "scheduled"
         ? {
-            house: true,
-            text: copy.conversation.galleyCreated,
-            label: copy.conversation.galleyCreatedAria,
+            icon: "clock",
+            text: copy.conversation.scheduledCreated,
+            label: copy.conversation.scheduledCreated,
           }
-        : marker === "cli"
+        : marker === "galley"
           ? {
-              house: false,
-              text: copy.conversation.cliCreated,
-              label: copy.conversation.cliCreatedAria,
+              icon: "house",
+              text: copy.conversation.galleyCreated,
+              label: copy.conversation.galleyCreatedAria,
             }
-          : null;
+          : marker === "cli"
+            ? {
+                icon: "plug",
+                text: copy.conversation.cliCreated,
+                label: copy.conversation.cliCreatedAria,
+              }
+            : null;
 
   useEffect(() => {
     return () => {
@@ -362,10 +371,10 @@ export const MessageUser = memo(function MessageUser({
       onMouseLeave={() => setHovered(false)}
       data-selection-yield={assistant ? selectionYieldKey : undefined}
     >
-      {/* Provenance above the bubble, on its side: Galley, or Galley
-          CLI. In flow — it takes its real height. The send time is no
-          longer here: it is a centred line before the message
-          (MessageTimeDivider). */}
+      {/* Provenance above the bubble, on its side: Galley, Galley CLI
+          or a scheduled task. In flow — it takes its real height. The
+          send time is no longer here: it is a centred line before the
+          message (MessageTimeDivider). */}
       {provenance && (
         <div className="mb-1 flex items-center gap-1.5 justify-end">
           <IconTooltip text={provenance.text} side="top">
@@ -378,8 +387,10 @@ export const MessageUser = memo(function MessageUser({
                 "hover:text-ink-soft",
               )}
             >
-              {provenance.house ? (
+              {provenance.icon === "house" ? (
                 <House size={12} weight="thin" />
+              ) : provenance.icon === "clock" ? (
+                <Clock size={12} weight="thin" />
               ) : (
                 <PlugsConnected size={12} weight="thin" />
               )}

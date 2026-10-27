@@ -1829,6 +1829,8 @@ export const zhCopy = {
     /** 其余经 Galley CLI 写的：提示只写名字。 */
     cliCreated: "Galley CLI",
     cliCreatedAria: "Galley CLI 创建的消息",
+    /** 定时任务开的会话的第一条消息（不经 CLI，Core 自己开的），同侧栏那一行的时钟，提示与读屏同一句。 */
+    scheduledCreated: "定时任务创建",
     questionIndex: "提问索引",
     questionEmpty: "（空消息）",
     railStatusRunning: "进行中",

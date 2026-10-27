@@ -1,3 +1,4 @@
+import { SCHEDULER_SUPERVISOR } from "@/lib/scheduled-tasks";
 import type { Origin } from "@/types/conversation";
 
 /**
@@ -19,10 +20,16 @@ export const ASSISTANT_SUPERVISOR = "galley-assistant";
 export const IM_SUPERVISOR_PREFIX = "galley-im/";
 
 /**
- * The two kinds of origin marker (workbench conversation PRD ruling 8,
+ * The kinds of origin marker (workbench conversation PRD ruling 8,
  * 2026-10-27), on your side of the conversation above a message and on
- * a sidebar row after its title:
+ * a sidebar row after its title. Two for what came in through the CLI,
+ * and the scheduler's own:
  *
+ *   - `"scheduled"`: a scheduled task opened it ({@link
+ *     SCHEDULER_SUPERVISOR}). Core fires it through `session.new`
+ *     itself (`core/src/scheduler.rs`), not through the CLI, so it is
+ *     neither of the two below: the clock, 「定时任务创建」, on the
+ *     sidebar row and on the session's first message alike.
  *   - `"galley"`: Galley itself wrote it through its own CLI — the
  *     assistant ({@link ASSISTANT_SUPERVISOR}) or a chat-app channel
  *     opening a conversation for you ({@link IM_SUPERVISOR_PREFIX}).
@@ -31,7 +38,7 @@ export const IM_SUPERVISOR_PREFIX = "galley-im/";
  *     supervisor label, or `via: "cli"` with or without one. Drawn
  *     with `PlugsConnected`, read as 「Galley CLI」.
  */
-export type OriginMarker = "galley" | "cli";
+export type OriginMarker = "galley" | "cli" | "scheduled";
 
 /**
  * Which origin marker a message or a session gets, or `null` for none:
@@ -43,10 +50,12 @@ export type OriginMarker = "galley" | "cli";
  * The label is the caller's own claim: an outside agent calling itself
  * `galley-assistant` is drawn as Galley, accepted within the local
  * trust boundary (ruling 8). The label itself is never shown; it stays
- * in the database and the CLI JSON. The sidebar puts the scheduler's
- * clock (`SCHEDULER_SUPERVISOR`) before this.
+ * in the database and the CLI JSON. The scheduler's label is judged
+ * first and by the label alone, whatever the `via` (as the sidebar's
+ * clock always was).
  */
 export function originMarker(origin: Origin | undefined): OriginMarker | null {
+  if (origin?.supervisor === SCHEDULER_SUPERVISOR) return "scheduled";
   if (origin?.via === "cli") return "cli";
   if (origin?.via !== "supervisor") return null;
   const label = origin.supervisor ?? "";

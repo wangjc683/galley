@@ -47,6 +47,22 @@ describe("originMarker", () => {
     );
   });
 
+  it("is the scheduler's own for its label, first and whatever the via", () => {
+    // Core fires a scheduled task through `session.new` itself, not
+    // through the CLI: neither Galley's nor Galley CLI's.
+    expect(originMarker(supervisor("galley-scheduler"))).toBe("scheduled");
+    expect(originMarker({ via: "cli", supervisor: "galley-scheduler" })).toBe(
+      "scheduled",
+    );
+    expect(
+      originMarker({ via: "system", supervisor: "galley-scheduler" }),
+    ).toBe("scheduled");
+    // The daily review is `system` with a label of its own: not marked.
+    expect(
+      originMarker({ via: "system", supervisor: "galley-review" }),
+    ).toBeNull();
+  });
+
   it("marks nothing else: you, Core's own rows, a subtask's instructions, no origin", () => {
     expect(originMarker({ via: "gui" })).toBeNull();
     expect(
