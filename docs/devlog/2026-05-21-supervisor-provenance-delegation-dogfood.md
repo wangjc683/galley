@@ -37,7 +37,10 @@ LLM switching, concurrent creation, error handling, and lifecycle operations.
 4. **Supervisor identity is explicit, not inferred from CLI**. A normal CLI
    message remains CLI-originated. Only commands that pass `--supervisor=...`
    become supervisor-originated, because humans can also create messages through
-   the CLI.
+   the CLI. (Superseded for the UI marker on 2026-10-27: every CLI origin is
+   marked, read as 「Galley CLI」; see
+   [origin marker](./2026-10-27-origin-marker-galley-cli.md). The stored `via`
+   distinction is unchanged.)
 5. **`session new` means real delegation**. The rejected `persisted_only` shape
    acted like a saved prompt note. For the Supervisor mental model, creating a
    new session should create the session, persist the first prompt, start the

@@ -1,6 +1,6 @@
 # 03 来源标记只分两类：Galley 与 Galley CLI
 
-Status: needs-dogfood（2026-10-27 合入 main，`657e002f`–`ce6be295`；主会话复跑门禁：typecheck、lint、两个时区各 2423 条全过）
+Status: done（2026-10-27 JC 真机验收：「真机看了OK」；合入 main，`657e002f`–`ce6be295`；主会话复跑门禁：typecheck、lint、两个时区各 2423 条全过）
 
 来源：[工作台对话 PRD](../PRD.md) 裁决 8（2026-10-27，JC：「按建议推进」）。只改 GUI 与文档，不碰 Rust、runner、CLI。
 
