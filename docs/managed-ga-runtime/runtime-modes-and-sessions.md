@@ -364,10 +364,12 @@ Main chat ticket 39 (PRD ruling 91; `core/src/api/todo.rs`,
 do, which Galley notes in the conversation (through the CLI `galley todo`,
 ticket 40, [todo-commands](../agent-api/todo-commands.md)) —
 title, notes, a due date, a reminder. The user only ticks it off, unticks it,
-cancels its reminder or deletes it at the desktop (Tauri `complete_todo`,
-`reopen_todo`, `cancel_todo_reminder`, and since main chat ticket 88
-`cancel_todo`, Core's soft delete recorded as `gui`); everything else they
-say to Galley.
+cancels its reminder, deletes it or changes its title and notes at the
+desktop (Tauri `complete_todo`, `reopen_todo`, `cancel_todo_reminder`, since
+main chat ticket 88 `cancel_todo`, Core's soft delete recorded as `gui`, and
+since ticket 107 `update_todo`, the title and the notes only, as
+`todo update --title` / `--notes` change them); everything else, a new time
+among it, they say to Galley.
 Managed runtime with a main chat only: every write is refused with
 `assistant_unavailable:` otherwise.
 

@@ -5,9 +5,11 @@
 A **to-do** is something the user has to do: Galley's notebook, kept for the
 user by the assistant (the managed runtime's main chat). It has a title,
 optional notes, an optional due date, and optionally one reminder. The user
-can only tick a to-do off, untick it, cancel its reminder, or delete it (the
-same soft delete as `cancel`, recorded as `{"via":"gui"}`) on the desktop;
-everything else goes through Galley, which uses these commands.
+can only tick a to-do off, untick it, cancel its reminder, delete it (the
+same soft delete as `cancel`, recorded as `{"via":"gui"}`), or change its
+title and notes (as `update --title` / `--notes` do; since main chat ticket
+107) on the desktop; everything else goes through Galley, which uses these
+commands.
 
 - **Due date**: either a day with no time ("by Friday", stored as that local
   calendar day: it stays Friday wherever the computer goes) or a day with a
