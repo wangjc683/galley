@@ -1428,6 +1428,116 @@ async fn the_desktop_deletes_a_to_do_and_it_is_turned_down() {
     );
 }
 
+/// Main chat ticket 107 (PRD ruling 153 point 4): the panel changes a
+/// to-do's title and notes in place, through the desktop's `update_todo`
+/// (`TodoPatch::words`) — the due date and the reminder stay where they
+/// were (point 5), a new title goes on to the reminder's task, empty
+/// notes take the notes away, an empty title is refused, and the desktop
+/// hears of it as of every to-do write.
+#[tokio::test]
+async fn the_desktop_changes_a_to_dos_title_and_notes_and_nothing_else() {
+    let (_pool, galley) = with_main_chat().await;
+    let rec = Recorder::default();
+    let writes = Writes::new(&galley, &rec, "test");
+    let at = hours(4);
+    let hotel = note(
+        &galley,
+        CreateTodoInput {
+            due: Some("2026-11-20".into()),
+            remind_at: Some(at.clone()),
+            notes: Some("收集要点：具体位置".into()),
+            ..titled("希尔顿酒店项目上下文资料收集")
+        },
+    )
+    .await;
+    let task = reminder_id(&hotel);
+    rec.take();
+
+    // The notes alone: the title, the due date and the reminder as they were.
+    let notes = writes
+        .update_todo(
+            &id(&hotel),
+            TodoPatch::words(None, Some("收集要点：具体位置、预算\n联系人".into())),
+            Origin::desktop(),
+        )
+        .await
+        .expect("change the notes");
+    assert_eq!(
+        notes.notes.as_deref(),
+        Some("收集要点：具体位置、预算\n联系人")
+    );
+    assert_eq!(notes.title, "希尔顿酒店项目上下文资料收集");
+    assert_eq!(notes.due, hotel.due);
+    assert_eq!(notes.reminder, hotel.reminder);
+    assert_eq!(
+        rec.take(),
+        [
+            TODOS_CHANGED_EVENT.to_string(),
+            SCHEDULED_TASKS_CHANGED_EVENT.to_string(),
+        ]
+    );
+
+    // The title: its reminder's words follow, its time does not move.
+    let title = writes
+        .update_todo(
+            &id(&hotel),
+            TodoPatch::words(Some("希尔顿酒店项目资料收集".into()), None),
+            Origin::desktop(),
+        )
+        .await
+        .expect("change the title");
+    assert_eq!(title.title, "希尔顿酒店项目资料收集");
+    assert_eq!(title.notes, notes.notes);
+    assert_eq!(title.due, hotel.due);
+    assert_eq!(reminder_id(&title), task);
+    assert_eq!(title.reminder.as_ref().unwrap().at, at);
+    assert_eq!(
+        galley.scheduled_task(task.as_str()).await.unwrap().prompt,
+        "希尔顿酒店项目资料收集"
+    );
+
+    // Empty notes take them away.
+    let cleared = writes
+        .update_todo(
+            &id(&hotel),
+            TodoPatch::words(None, Some("  ".into())),
+            Origin::desktop(),
+        )
+        .await
+        .expect("clear the notes");
+    assert!(cleared.notes.is_none());
+    assert_eq!(cleared.title, "希尔顿酒店项目资料收集");
+
+    // An empty title is refused and changes nothing.
+    let err = writes
+        .update_todo(
+            &id(&hotel),
+            TodoPatch::words(Some(" ".into()), Some("不该写进去".into())),
+            Origin::desktop(),
+        )
+        .await
+        .unwrap_err();
+    assert!(invalid_with(err, "update_todo: a to-do needs a title"));
+    let now = galley.todo(hotel.id.as_str()).await.unwrap();
+    assert_eq!(now.title, "希尔顿酒店项目资料收集");
+    assert!(now.notes.is_none());
+
+    // One deleted meanwhile: not there any more.
+    writes
+        .cancel_todo(&id(&hotel), Origin::desktop())
+        .await
+        .expect("delete");
+    let err = writes
+        .update_todo(
+            &id(&hotel),
+            TodoPatch::words(Some("改了".into()), None),
+            Origin::desktop(),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(err, GalleyError::NotFound { .. }), "{err:?}");
+}
+
 // ---------------- reset ----------------
 
 #[tokio::test]

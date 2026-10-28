@@ -4,10 +4,10 @@
 //! Galley notes one in the conversation when the user mentions something
 //! they have to do — with a due date or without — and may hang a reminder
 //! on it. The user only ticks it off, unticks it, cancels its reminder or,
-//! since main chat ticket 88, deletes it (the desktop's four commands);
-//! everything else they say to Galley, which changes it through the CLI
-//! (ticket 40). Core holds the record (`todos`, migration 050) and decides
-//! every write (Rule 5).
+//! since main chat ticket 88, deletes it, and since ticket 107 changes its
+//! title and notes (the desktop's five commands); everything else they say
+//! to Galley, which changes it through the CLI (ticket 40). Core holds the
+//! record (`todos`, migration 050) and decides every write (Rule 5).
 //!
 //! A reminder is a scheduled task (main chat ticket 33): a one-off that
 //! wakes the assistant, linked to its to-do (`scheduled_tasks.todo_id`,
@@ -333,6 +333,23 @@ pub struct TodoPatch {
     pub remind_at: Option<Option<String>>,
 }
 
+impl TodoPatch {
+    /// The desktop's change (main chat ticket 107, PRD ruling 153 point
+    /// 4): the title and the notes, edited in place in the to-do panel,
+    /// and nothing else — the due date and the reminder are said to
+    /// Galley (point 5: moving one leaves the other where it was). Only
+    /// what is given; empty notes take the notes away (Core trims them,
+    /// and empty is none), as `todo update --notes=""` does.
+    pub fn words(title: Option<String>, notes: Option<String>) -> Self {
+        Self {
+            title,
+            notes: notes.map(Some),
+            due: None,
+            remind_at: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -402,6 +419,20 @@ mod tests {
         // A time is on time until it passes.
         assert!(StoredDue::At(utc("2026-10-16T05:59:00Z")).overdue(now, &Shanghai));
         assert!(!StoredDue::At(utc("2026-10-16T06:01:00Z")).overdue(now, &Shanghai));
+    }
+
+    #[test]
+    fn the_desktops_change_is_the_title_and_the_notes_only() {
+        let both = TodoPatch::words(Some("交周报".into()), Some("A 座 3 楼".into()));
+        assert_eq!(both.title.as_deref(), Some("交周报"));
+        assert_eq!(both.notes, Some(Some("A 座 3 楼".to_string())));
+        assert!(both.due.is_none() && both.remind_at.is_none());
+        // Only what is given; empty notes are given, and clear them.
+        let notes = TodoPatch::words(None, Some(String::new()));
+        assert!(notes.title.is_none());
+        assert_eq!(notes.notes, Some(Some(String::new())));
+        let none = TodoPatch::words(None, None);
+        assert!(none.title.is_none() && none.notes.is_none());
     }
 
     #[test]

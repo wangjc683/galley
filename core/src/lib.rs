@@ -260,13 +260,14 @@ pub fn run() {
             delete_scheduled_task,
             // The assistant's to-do list (main chat ticket 37), the
             // actions the desktop has on a to-do (ticket 39; its delete,
-            // ticket 88) and the to-dos noted in the main chat, for its
-            // cards (ticket 43)
+            // ticket 88; its title and notes, ticket 107) and the to-dos
+            // noted in the main chat, for its cards (ticket 43)
             list_assistant_todo,
             list_noted_todos,
             complete_todo,
             reopen_todo,
             cancel_todo_reminder,
+            update_todo,
             cancel_todo,
             // The memos (main chat ticket 95): the panel's page, the
             // cards' writes, the desktop's delete

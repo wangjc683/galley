@@ -179,9 +179,10 @@ pub(crate) async fn list_noted_todos(
 // ---------------- to-dos (main chat ticket 39) ----------------
 //
 // The desktop's direct actions on a to-do (PRD ruling 91 point 3): tick
-// it off, untick it, cancel its reminder, and since main chat ticket 88
-// (PRD ruling 132) delete it. Everything else the user says to Galley,
-// which writes through the CLI. Each is the user at the desktop
+// it off, untick it, cancel its reminder, since main chat ticket 88 (PRD
+// ruling 132) delete it, and since ticket 107 (PRD ruling 153) change its
+// title and notes. Everything else the user says to Galley, which writes
+// through the CLI. Each is the user at the desktop
 // (`Origin::desktop()`: `done_via` / `cancelled_via = 'gui'`), goes
 // through Core's write path, broadcasts `todos:changed` (and
 // `scheduled-tasks:changed` when a reminder moved), and returns the to-do
@@ -227,6 +228,34 @@ pub(crate) async fn cancel_todo_reminder(
     let notifier = TauriNotifier::new(app);
     Writes::new(&galley, notifier.as_ref(), VIA_GUI)
         .cancel_todo_reminder(&id, Origin::desktop())
+        .await
+        .map_err(stringify_error)
+}
+
+/// Change a to-do's title or notes (main chat ticket 107, PRD ruling 153
+/// point 4): the to-do panel's edit in place, only what is given — the
+/// due date and the reminder are not taken (point 5: they are said to
+/// Galley). Empty notes take the notes away; an empty title is refused
+/// (`invalid_args`, the panel never sends one). Core's `update_todo`, the
+/// one Galley's `todo update` makes: a new title is carried to the
+/// reminder's task, and the reminder's wake reads both as they are then.
+/// Recorded as nothing more than the to-do's `updated_at` (`todos` keeps
+/// no `updated_via`).
+#[tauri::command]
+pub(crate) async fn update_todo(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+    id: crate::api::TodoId,
+    title: Option<String>,
+    notes: Option<String>,
+) -> std::result::Result<crate::api::TodoBrief, String> {
+    let notifier = TauriNotifier::new(app);
+    Writes::new(&galley, notifier.as_ref(), VIA_GUI)
+        .update_todo(
+            &id,
+            crate::api::TodoPatch::words(title, notes),
+            Origin::desktop(),
+        )
         .await
         .map_err(stringify_error)
 }
