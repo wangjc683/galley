@@ -500,8 +500,9 @@ mod tests {
     /// [`manual_tells_a_nudge_from_a_to_do`]). Ticket 59: noting is
     /// `todos.md`, changing `todos-change.md`. Ticket 81: the notes are
     /// written for the user, who sees them in the list. Ticket 88: the
-    /// list's controls include deleting one. Single-line fragments only
-    /// (CRLF on Windows).
+    /// list's controls include deleting one. Ticket 107: the user may
+    /// have changed the title or notes there, so a change starts from the
+    /// to-do as it is now. Single-line fragments only (CRLF on Windows).
     #[test]
     fn manual_covers_the_users_to_dos() {
         let todos = part("todos.md");
@@ -539,6 +540,11 @@ mod tests {
             "notes under the to-do in their list: write them for the user, in their",
             "language (「A 座 3 楼，带身份证」), without the title or the day again,",
             "and not as a record about them (「用户说……」).",
+            // Ticket 107 (PRD ruling 153 point 6): changed in the list,
+            // so read before changing; nothing more is asked of them.
+            "user may have changed the title or the notes in their list: before you",
+            "change either, read the to-do as it is now (`todo show <todo-id>`) and",
+            "change that, not what you wrote; `--notes=` replaces the notes whole.",
             "- A to-do's reminder is set, moved and removed only with `todo add` and",
             "commands: a reminder made with `schedule create` is not on the to-do.",
             // Say it.

@@ -113,7 +113,10 @@ on their list?
   notes under the to-do in their list: write them for the user, in their
   language (「A 座 3 楼，带身份证」), without the title or the day again,
   and not as a record about them (「用户说……」). What is of use beyond this
-  to-do (the landlord's number) is a memo instead, not copied here.
+  to-do (the landlord's number) is a memo instead, not copied here. The
+  user may have changed the title or the notes in their list: before you
+  change either, read the to-do as it is now (`todo show <todo-id>`) and
+  change that, not what you wrote; `--notes=` replaces the notes whole.
 - A to-do's reminder is set, moved and removed only with `todo add` and
   `todo update` (`--remind-at`, `--no-remind`), never with the `schedule`
   commands: a reminder made with `schedule create` is not on the to-do.
