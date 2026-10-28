@@ -93,12 +93,18 @@ function ReminderCard({ task }: { task: ScheduledTask }) {
     <div
       data-role="reminder-card"
       data-reminder-state={state}
+      data-reminder-id={task.id}
       aria-label={`${copy.todo.reminder} · ${task.prompt}`}
       className="rounded-md border border-line bg-app"
     >
       {/* min-h-10: the same height with 「取消」 or without it. */}
       <div className="flex min-h-10 select-none items-center gap-2.5 py-1.5 pl-4 pr-2.5">
-        <span className="flex h-5 w-4 shrink-0 items-center justify-center text-ink-muted">
+        {/* data-card-icon: what flies into the top bar's 待办 button
+            (ticket 102, lib/todo-flight-run.ts). */}
+        <span
+          data-card-icon=""
+          className="flex h-5 w-4 shrink-0 items-center justify-center text-ink-muted"
+        >
           <Alarm size={14} weight="regular" aria-hidden />
         </span>
         <span

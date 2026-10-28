@@ -103,7 +103,12 @@ function TodoCard({ item }: { item: TodoItem }) {
       className="rounded-md border border-line bg-app"
     >
       <div className="flex min-h-10 items-center gap-2.5 py-1.5 pl-4 pr-3">
-        <span className="flex h-5 w-4 shrink-0 items-center justify-center">
+        {/* data-card-icon: the glyph a new card flies into the top
+            bar's 待办 button (ticket 102, lib/todo-flight-run.ts). */}
+        <span
+          data-card-icon=""
+          className="flex h-5 w-4 shrink-0 items-center justify-center"
+        >
           <TodoCheck
             item={item}
             checked={checked}

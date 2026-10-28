@@ -1214,6 +1214,43 @@ code {
   animation: sidebar-state-pop 0.44s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* The top bar's 「待办」 button catching a card's glyph (main chat ticket
+   102, PRD ruling 147 point 6; lib/todo-flight-run.ts adds the class for
+   the animation's length). sidebar-state-pop's feel on the whole button,
+   from rest: up to the level's peak, a dip under 1, back. The peak and
+   dip come per level as custom properties (big: 1.25, 0.96). Its icon
+   and count in full ink for the while — no colour, no badge: the top
+   bar's colours are warnings, errors and invitations
+   (layout-and-chrome.md). One-shot, never looping. Reduced motion: no
+   pop (the JS washes instead; the guard below holds anyway) — the wash
+   lays `bg-hover` on its ground and fades back over 600ms. */
+@keyframes todo-catch-pop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(var(--todo-catch-peak, 1.25));
+  }
+  75% {
+    transform: scale(var(--todo-catch-dip, 0.96));
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.todo-catch-pop {
+  animation: todo-catch-pop 0.44s cubic-bezier(0.22, 1, 0.36, 1);
+  color: var(--color-ink);
+}
+@keyframes todo-catch-wash {
+  from {
+    background-color: var(--color-hover);
+  }
+}
+.todo-catch-wash {
+  animation: todo-catch-wash 0.6s ease-out;
+}
+
 /* Scroll-to-bottom button state signal (MainView). Two states, two
    visual grammars: while the agent is running the button carries a
    looping pulse ring — motion = content is landing below, click
@@ -1404,6 +1441,7 @@ code {
   .sidebar-liveness-tick,
   .sidebar-step-tick,
   .sidebar-state-pop,
+  .todo-catch-pop,
   .live-dot {
     animation: none;
     opacity: 1;

@@ -1,5 +1,10 @@
 import { useEffect } from "react";
 
+// TEMP variant switcher (main chat 102): the picked form and size.
+import {
+  FLIGHT_LEVELS,
+  useFlightVariants,
+} from "@/components/todo/flight-variants/flight-variants";
 import { subscribeReminderReads } from "@/hooks/useReminderCards";
 import {
   freshCardsGatherer,
@@ -10,10 +15,12 @@ import {
   type FreshCard,
 } from "@/lib/fresh-cards";
 import { inReportRound } from "@/lib/subtasks";
+import { flyFreshCards } from "@/lib/todo-flight-run";
 import {
   introduceTodoPanel,
   mainChatOnScreen,
   todoPanelIntroduces,
+  todoView,
 } from "@/lib/todo-open";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
 import { useMemoStore } from "@/stores/memo";
@@ -31,9 +38,12 @@ import { useUiStore } from "@/stores/ui";
  * Galley's conversation on screen and wide enough, read as the wait
  * ends — and when it says so Galley's panel opens on that page at those
  * rows (`introduceTodoPanel`). Until ticket 101 only the to-dos were
- * read, here as useTodoPanelIntroduction (ticket 87). Mounted once, in
- * App, while there is a main chat. Store and read callbacks, not render
- * or an effect body.
+ * read, here as useTodoPanelIntroduction (ticket 87). Otherwise, with
+ * the panel not on screen, the cards' glyphs fly into the top bar's
+ * 「待办」 button (ticket 102, ruling 147 point 6; lib/todo-flight.ts),
+ * in a round Core woke Galley for too. Mounted once, in App, while
+ * there is a main chat. Store and read callbacks, not render or an
+ * effect body.
  */
 export function useFreshCards(mainChatId: string | undefined): void {
   useEffect(() => {
@@ -82,21 +92,38 @@ export function useFreshCards(mainChatId: string | undefined): void {
   }, [mainChatId]);
 }
 
-/** One round's new cards, gathered: the panel opens by itself, the once,
- * if it is due (ticket 101), on the conditions as they stand now. */
+/** One round's new cards, gathered, on the conditions as they stand
+ * now: the panel opens by itself, the once, if it is due (ticket 101);
+ * when it does, nothing flies — otherwise they fly (ticket 102). */
 function afterFreshCards(batch: FreshBatch, mainChatId: string): void {
   const ui = useUiStore.getState();
   const sessions = useSessionsStore.getState();
   const active = sessions.sessions.find(
     (session) => session.id === sessions.activeSessionId,
   );
+  const onScreen =
+    active?.id === mainChatId && mainChatOnScreen(ui.screen, active);
   const introducing = todoPanelIntroduces({
     introduced: ui.todoPanelIntroduced,
     fresh: batch.cards,
     yourRound: batch.yourRound,
-    mainChatOnScreen:
-      active?.id === mainChatId && mainChatOnScreen(ui.screen, active),
+    mainChatOnScreen: onScreen,
     narrow: ui.todoNarrow,
   });
-  if (introducing) introduceTodoPanel(introducing);
+  if (introducing) {
+    introduceTodoPanel(introducing);
+    return;
+  }
+  const { form, magnitude } = useFlightVariants.getState();
+  flyFreshCards({
+    fresh: batch.cards,
+    mainChatOnScreen: onScreen,
+    panelShown: todoView(true, ui.todoPanelOpen, ui.screen, active, {
+      sessionId: sessions.activeSessionId,
+      narrow: ui.todoNarrow,
+      glance: ui.todoGlance,
+    }).shown,
+    form,
+    level: FLIGHT_LEVELS[magnitude],
+  });
 }

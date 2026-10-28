@@ -26,6 +26,8 @@ import { EarlierDialog } from "@/components/screens/earlier/EarlierDialog";
 import { CreateProjectDialog } from "@/components/screens/project/CreateProjectDialog";
 import { ScheduledTasksDialog } from "@/components/screens/scheduled/ScheduledTasksDialog";
 import { TodoPanel } from "@/components/todo/TodoPanel";
+// TEMP variant switcher (main chat 102): the pill.
+import { FlightVariantsPill } from "@/components/todo/flight-variants/FlightVariantsPill";
 import {
   ConfirmDeleteProjectDialog,
   EditProjectDialog,
@@ -989,6 +991,10 @@ function App() {
           setEditingProjectId(null);
         }}
       />
+
+      {/* TEMP variant switcher (main chat 102): the pill, in a dev build
+          (the pill checks too) while there is a main chat. */}
+      {import.meta.env.DEV && hasMainChat && <FlightVariantsPill />}
 
       <ToastHost
         toasts={toasts}

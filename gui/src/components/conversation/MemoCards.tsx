@@ -84,10 +84,16 @@ function MemoCard({ event }: { event: MemoEventItem }) {
       data-memo-id={event.memoId}
       data-memo-action={event.action}
       data-memo-state={state}
+      data-memo-event={event.id}
       className="rounded-md border border-line bg-app"
     >
       <div className="flex min-h-10 items-center gap-2.5 py-1.5 pl-4 pr-3">
-        <span className="flex h-5 w-4 shrink-0 items-center justify-center text-ink-muted">
+        {/* data-card-icon: what flies into the top bar's 待办 button
+            (ticket 102, lib/todo-flight-run.ts). */}
+        <span
+          data-card-icon=""
+          className="flex h-5 w-4 shrink-0 items-center justify-center text-ink-muted"
+        >
           <Notepad size={16} weight="thin" aria-hidden />
         </span>
         {state === "listed" ? (

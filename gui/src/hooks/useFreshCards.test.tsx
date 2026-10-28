@@ -52,6 +52,11 @@ vi.mock("@/hooks/useReminderCards", () => ({
   },
 }));
 
+// The flight's DOM half is lib/todo-flight-run.test.ts's; here, what it
+// is told (main chat ticket 102).
+const flyFreshCards = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/todo-flight-run", () => ({ flyFreshCards }));
+
 import { useFreshCards } from "./useFreshCards";
 
 beforeAll(() => {
@@ -123,6 +128,7 @@ function mount(mainChatId: string | undefined = MAIN) {
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   reminderReads.listeners.clear();
+  flyFreshCards.mockReset();
   useSessionsStore.setState({
     sessions: [makeSession({ id: MAIN, mainChat: true })],
     activeSessionId: MAIN,
@@ -301,5 +307,136 @@ describe("the panel opens by itself once, for any card the panel lists", () => {
     expect(reminderReads.listeners.size).toBe(0);
     wait(FRESH_CARDS_GATHER_MS);
     expect(ui().todoPanelOpen.galley).toBe(false);
+  });
+});
+
+describe("the cards fly into the top bar's button (ticket 102, ruling 147 point 6)", () => {
+  const fresh = (row: string, kind: "todo" | "reminder" = "todo") => ({
+    kind,
+    row,
+    card: row,
+  });
+  const told = () => flyFreshCards.mock.calls.map(([input]) => input);
+
+  beforeEach(() => {
+    useUiStore.setState({ todoPanelIntroduced: true });
+  });
+
+  it("the once the panel opens by itself, nothing flies", () => {
+    useUiStore.setState({ todoPanelIntroduced: false });
+    mount();
+    firstReads();
+    useAssistantTodoStore.setState({
+      noted: [todo("todo_old", 3), todo("todo_new", 7)],
+    });
+    wait(FRESH_CARDS_GATHER_MS);
+    expect(ui().todoPanelOpen.galley).toBe(true);
+    expect(flyFreshCards).not.toHaveBeenCalled();
+  });
+
+  it("once the panel is met, the new cards are flown, at the trial's pick", () => {
+    mount();
+    firstReads();
+    useAssistantTodoStore.setState({
+      noted: [todo("todo_old", 3), todo("todo_new", 7)],
+    });
+    reminderRead([], [task("sched_new", 7)]);
+    wait(FRESH_CARDS_GATHER_MS);
+    expect(told()).toEqual([
+      {
+        fresh: [fresh("todo_new"), fresh("sched_new", "reminder")],
+        mainChatOnScreen: true,
+        panelShown: false,
+        form: "fly",
+        level: { lift: 160, peak: 24, durationMs: 700, popScale: 1.25 },
+      },
+    ]);
+  });
+
+  it("a round Core woke Galley for flies too", () => {
+    useMessagesStore.setState({
+      byId: {
+        [MAIN]: {
+          turns: [
+            {
+              role: "user",
+              content: "[Galley — not a message from the user] …",
+              createdAt: "2026-10-28T06:50:00Z",
+              origin: {
+                via: "system",
+                supervisor: "galley-report",
+                reason: "s-sub",
+              },
+            },
+          ],
+        },
+      } as never,
+    });
+    mount();
+    firstReads();
+    reminderRead([], [task("sched_new", 7)]);
+    wait(FRESH_CARDS_GATHER_MS);
+    expect(told()[0]?.fresh).toEqual([fresh("sched_new", "reminder")]);
+  });
+
+  it("is told the panel is on screen, or Galley is not, as things stand when the wait ends", () => {
+    mount();
+    firstReads();
+    act(() =>
+      useUiStore.setState({
+        todoPanelOpen: { galley: true, elsewhere: false },
+      }),
+    );
+    reminderRead([], [task("sched_new", 7)]);
+    wait(FRESH_CARDS_GATHER_MS);
+    expect(told()[0]).toMatchObject({
+      panelShown: true,
+      mainChatOnScreen: true,
+    });
+
+    // Narrow: the remembered open is not shown, so it is not on screen.
+    act(() => useUiStore.setState({ todoNarrow: true }));
+    reminderRead(
+      [task("sched_new", 7)],
+      [task("sched_new", 7), task("sched_two", 8)],
+    );
+    wait(FRESH_CARDS_GATHER_MS);
+    expect(told()[1]).toMatchObject({ panelShown: false });
+
+    act(() =>
+      useUiStore.setState({
+        todoNarrow: false,
+        todoPanelOpen: { galley: false, elsewhere: false },
+      }),
+    );
+    useMemoStore.setState({ events: [write(1, 3), write(2, 7)] });
+    act(() => useUiStore.setState({ screen: "empty" }));
+    wait(FRESH_CARDS_GATHER_MS);
+    expect(told()[2]).toMatchObject({
+      mainChatOnScreen: false,
+      panelShown: false,
+    });
+  });
+
+  it("a card changing — ticked, cancelled, gone off, its memo deleted — flies nothing", () => {
+    mount();
+    firstReads(
+      [todo("todo_a", 3), todo("todo_b", 3)],
+      [write(1, 3)],
+      [task("sched_a", 3)],
+    );
+    useAssistantTodoStore.setState({
+      noted: [
+        { ...todo("todo_a", 3), state: "done" },
+        { ...todo("todo_b", 3), cancelledAt: "2026-10-28T07:00:00Z" },
+      ],
+    });
+    reminderRead(
+      [task("sched_a", 3)],
+      [{ ...task("sched_a", 3), lastFiredAt: "2026-10-28T07:00:00Z" }],
+    );
+    useMemoStore.setState({ events: [{ ...write(1, 3), memoExists: false }] });
+    wait(FRESH_CARDS_GATHER_MS * 2);
+    expect(flyFreshCards).not.toHaveBeenCalled();
   });
 });
