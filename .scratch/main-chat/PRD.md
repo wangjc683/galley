@@ -862,8 +862,14 @@ README「dense context instead of long」（`README.md:54`）。
     4. **只写你的事**，不写 Galley 在办（它自己的提醒、子任务）：那是它的事，忙不忙侧栏那张脸在说。代价：只设了提醒的新用户，胶囊停在「待办」。另一层原因见第 7 条：它的提醒原文现在写给它自己看。
     5. **窄时胶囊先让**：先截胶囊里的标题，再收成甲（图标加今天的数），最后才截左边身份行。
     6. **代价**：宽 120–220px，比现在多 60–160px；一件事的标题一直挂在每条对话顶上（工作台也是），下周的事挂一整周，截图与共享屏幕会露出来（侧栏的对话标题本来就一直露着，增量有限）；细线圆角框是顶栏没有过的材料，定稿时写进规范；飞入的 pop 在胶囊上改成只弹图标（200px 的胶囊放大 1.15 会左右甩出约 15px）。
-    7. **走查里发现的提醒卡片原文**：卡片直接显示定时任务的原文（`gui/src/components/conversation/ReminderCards.tsx` 约 110 行），手册要它「Write the words for yourself at that moment」（`docs/managed-ga-runtime/galley-assistant-manual/reminders.md:34`），库里主对话 Galley 自己的提醒 3 条全是写给自己看的（如「提醒用户：该喝水了。用户在主聊天要求三分钟后提醒喝水；到时简短提醒即可。」）。同一段字两个读者。另议（主会话 10-28 给推荐，待 JC 定）。
+    7. **走查里发现的提醒卡片原文**：卡片直接显示定时任务的原文（`gui/src/components/conversation/ReminderCards.tsx` 约 110 行），手册要它「Write the words for yourself at that moment」（`docs/managed-ga-runtime/galley-assistant-manual/reminders.md:34`），库里主对话 Galley 自己的提醒 3 条全是写给自己看的（如「提醒用户：该喝水了。用户在主聊天要求三分钟后提醒喝水；到时简短提醒即可。」）。同一段字两个读者。JC 定甲，见裁决 151。
     8. **切换器**（票 [104](./issues/104-flight-final-and-topbar-capsule-trial.md)）：位置已定（裁决 149 第 2 条），四档从最克制排起：甲 / 丁 / 戊2 / 戊；演示：真实、空、只有以后、今天 3 件、逾期、只有随时、长标题。真机觉得胶囊太重，退路是丁。同一张票把飞入定稿（中档，拆飞入切换器）。只改 GUI 与设计文档；外置运行时没有这颗按钮，零变化。
+151. **它自己的提醒：原文第一行写给你看，空一行再写给到点时的自己；卡片与面板只显示第一行**（JC 2026-10-28：「甲，可以花」，指主会话推荐的甲与重跑提醒评测的额度）：
+    1. **根子**：手册要它「Write the words for yourself at that moment」（`docs/managed-ga-runtime/galley-assistant-manual/reminders.md:34`），卡片与面板直接显示原文（`gui/src/components/conversation/ReminderCards.tsx` 约 137、151 行）；到点时 Core 交回给它的也只有这段原文（「What you noted when you set it」，`core/src/subtask_report.rs:466-473`），`--reason` 不到它眼前，挪不过去。库里主对话 Galley 自己的提醒 3 条全是写给自己看的（如「提醒用户：该喝水了。用户在主聊天要求三分钟后提醒喝水；到时简短提醒即可。」），这是规则造成的，不是偶尔写坏。
+    2. **甲**：手册改为第一行是要提醒的那件事，写给用户看，像待办标题（「该喝水了」「订上海的酒店」），不写时间、不写「用户要求」、不用第三人称；需要时空一行，再写到点时自己要的（是什么、为什么、到时做什么、名字地点数字链接会话 id）。卡片、面板（Galley 在办、例行）、「说说这件」引用、触发失败的系统通知只取第一行；到点时它照样拿到全文。同待办「标题 + 备注」的分法，不加字段。
+    3. **没选**：乙 Core 加给人看的标题字段（迁移、CLI 参数、Agent API 加法、IPC、GUI、手册、评测，重得多，甲已经与待办同构）；丙进 deferred。
+    4. **代价**：库里已有的旧提醒照旧显示整段，直到响过；模型可能不守第一行的规矩（评测量）；第一行之后的字只有它看得到，用户在卡片上看不到它记下了什么细节（悬停也不给，那是写给它自己的）。
+    5. 评测：`schedule/` 套件 14 个用例各两遍，模型 `mm_1792576875658`（API key 接入），加第一行的判定。外置运行时零变化（它的定时任务对话框显示用户自己填的原文）；Core 与 Agent API 不动。票 [105](./issues/105-reminder-first-line-for-the-user.md)。
 
 ## 事实依据（2026-10-12 核对）
 
