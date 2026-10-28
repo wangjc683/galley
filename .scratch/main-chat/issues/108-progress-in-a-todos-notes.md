@@ -1,4 +1,4 @@
-# 108 待办上的进展写进备注：它做成了什么、你告诉它的新消息，补一行在备注末尾
+# 108 待办上的进展写进备注：它做成了什么、你告诉它的新消息，补一行在备注最前面
 
 Status: ready-for-agent（2026-10-28 裁决 154，JC：「按你推荐推进」。合入要等 10-29 巡看跑完、主会话查库记下它做了什么之后）
 
@@ -14,10 +14,11 @@ Status: ready-for-agent（2026-10-28 裁决 154，JC：「按你推荐推进」�
 
 1. **手册 `todos-change.md`**：在第一条（用户让你改）之后加一条。起点措辞如下，评测里可以改，改了在回报里写原因：
 
-   > - How it is going: when you got something done for a to-do (something you found, a file you made, something ready for them to decide on), or the user tells you news of it (「业主说预算下周给」), add one line to the end of its notes, the day first, in the user's language (「10月29日：公开资料整理好了，还缺证照进度和预算」), a file by its absolute path. It is there when they open the to-do, and for you when you next look at it. Read the to-do first (`todo show <todo-id>`) and keep what is there. Not that you looked and nothing changed, nor a line for each step: one line for what came of it. When the news moves the time, move the due date and the reminder too.
+   > - How it is going: when you got something done for a to-do (something you found, a file you made, something ready for them to decide on), or the user tells you news of it (「业主说预算下周给」), add one line at the start of its notes, above what is there (newest first), the day first, in the user's language (「10月29日：公开资料整理好了，还缺证照进度和预算」), a file by its absolute path. It is there when they open the to-do, and for you when you next look at it. Read the to-do first (`todo show <todo-id>`) and keep what is there below it, word for word. Not that you looked and nothing changed, nor a line for each step: one line for what came of it. When the news moves the time, move the due date and the reminder too.
 
 2. **手册 `unasked.md`**：「Tell the user」那一条末尾补半句：做的是为某件待办，也在它的备注里补一行（见 `todos-change.md`）。只加指向，规则只写在 `todos-change.md` 一处。
-3. **别处的事实同步**：grep 描写备注里写什么的散文（`docs/design/conversation.md`「待办面板」的备注一节、`docs/managed-ga-runtime/runtime-modes-and-sessions.md`、`docs/agent-api/todo-commands.md`、`todos.md` 的 `--notes` 那条），只在说法与新规则冲突时改；设计文档备注一节补半句「备注末尾也会有它补的进展，一行一个日子（2026-10-28，票 108，裁决 154）」。
+3. **别处的事实同步**：grep 描写备注里写什么的散文（`docs/design/conversation.md`「待办面板」的备注一节、`docs/managed-ga-runtime/runtime-modes-and-sessions.md`、`docs/agent-api/todo-commands.md`、`todos.md` 的 `--notes` 那条），只在说法与新规则冲突时改；设计文档备注一节补半句「备注最前面也会有它补的进展，最新的在上，一行一个日子（2026-10-28，票 108，裁决 154）」。
+   - **为什么在最前面**（派票后改，主会话 10-28 当晚通知过代理）：收起时备注压成一行从头截断（`gui/src/lib/todo-panel.ts:282`，约 21 字），补在末尾的进展在有备注的那件上收起时永远看不见。
 4. **Core 的手册测试**：手册 `include_str!` 进 Core（`core/src/assistant_manual.rs`），改了要让它的测试（片段、预算）全过；预算按本机加 18 字节留 Windows CRLF 的余量。
 
 ## 评测
@@ -26,11 +27,11 @@ Status: ready-for-agent（2026-10-28 裁决 154，JC：「按你推荐推进」�
 
 新用例（每条跑 3 遍，WITH 新手册；能对照的给一组旧手册的 WITHOUT）：
 
-1. **你告诉它的新消息**：清单里有「希尔顿酒店项目上下文资料收集」（带它原来那段备注），用户说「业主说筹开预算下周给我」。该：先读这件事，`todo update --notes=` 是原备注一字不差加一行「<今天>：业主说筹开预算下周给」；不另记备忘。顺带给自己挂一个下周问预算的提醒可以，不算错，记下次数。
+1. **你告诉它的新消息**：清单里有「希尔顿酒店项目上下文资料收集」（带它原来那段备注），用户说「业主说筹开预算下周给我」。该：先读这件事，`todo update --notes=` 是一行「<今天>：业主说筹开预算下周给」在上、换行、原备注一字不差在下；不另记备忘。顺带给自己挂一个下周问预算的提醒可以，不算错，记下次数。
 2. **新消息挪了时间**：702 那件（11-20 截止、挂着提醒），用户说「装修队说要拖到 12 月 5 号」。该：截止与提醒一起挪，备注补一行原因。
 3. **巡看做成了东西**：巡看叫醒，有一件它能推进的待办（参考已有的 `review-advance`），它做完之后，该：备注补一行写做了什么、文件写绝对路径，对用户那条消息照旧。
 4. **巡看看过没变化**：该：备注不动，`<no-reply/>`。
-5. **用户改过备注**：`todo show` 返回的备注与它当初写的不一样（用户在面板里删了一条要点）。该：在用户改后的那份上补，不把删掉的写回来。
+5. **用户改过备注**：`todo show` 返回的备注与它当初写的不一样（用户在面板里删了一条要点）。该：新的一行补在用户改后的那份上面，不把删掉的写回来。
 6. **和待办无关的一句**：用户说的事不属于清单里任何一件。该：不动任何待办的备注。
 
 另外重跑待办套件里写备注的旧用例（`note-*`、`reno-*`、`wake-todo`、`review-*`）各一遍，看有没有回退。
@@ -66,6 +67,6 @@ Status: ready-for-agent（2026-10-28 裁决 154，JC：「按你推荐推进」�
 合入前主会话看 `busy:0`；合入后 touch `core/src/assistant_manual.rs` 让 dev 重编 Core，手册等主对话 runner 下次启动才写进状态根。
 
 1. 打开待办面板，点开希尔顿那件，在备注里删掉一个字，点别处（顺带补走票 107 第 2 步，主会话查库核）。
-2. 在主对话里说「业主说筹开预算下周给我」。再点开希尔顿那件：你改过的备注还在，末尾多一行「<今天>：业主说筹开预算下周给」。它可能顺带挂一个下周问预算的提醒，不算错。
+2. 在主对话里说「业主说筹开预算下周给我」。先看收起的那一行：备注那一行变成「<今天>：业主说筹开预算下周给」开头。再点开：最上面是这一行，下面是你改过的备注，原样。它可能顺带挂一个下周问预算的提醒，不算错。
 
 ## Comments
