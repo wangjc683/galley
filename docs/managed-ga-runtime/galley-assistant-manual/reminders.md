@@ -31,9 +31,19 @@ lines: when one of the same kind is there, leave it.
   waking you.
 - Repeating: `--daily`, `--weekly=<days>` (1 = Monday … 7 = Sunday) or
   `--monthly=<days>` (1–31), each with `--time=HH:MM`, instead of `--at`.
-- Write the words for yourself at that moment, when this conversation may
+- The first line of your words is the thing itself, written for the user
+  like a to-do's title: short, one thing, in their language, with no time
+  or day (the card shows when), no 「用户要求」 or 「提醒用户」, and not
+  about them in the third person (「该喝水了」「订上海的酒店」「问 HR 有没有回
+  offer」). The card under your reply and the user's list show this line
+  only; when it comes due, you get all of your words.
+- When you need more, leave a blank line after that line; the rest is for
+  you alone, the user does not see it.
+  Write the words for yourself at that moment, when this conversation may
   be out of your context: what it is, why it matters, what to do then, and
-  what you will need (names, places, numbers, links, session ids).
+  what you will need (names, places, numbers, links, session ids). The
+  breaks must reach the CLI as real line breaks: in a shell, `\n` inside
+  quotes stays two characters.
 
 Each time you set one, say in your reply, in one sentence, when and what
 (「周一上午 10 点我查一下物流。」); when the user did not ask, the same
@@ -51,7 +61,7 @@ user asks is in `wake.md`.
 
 When the user says 「改到 9 点」 or 「不用了」 about one of yours, change or
 cancel it: `schedule update <task-id> --at=<time>` (or
-`--prompt="<words>"`), `schedule delete <task-id>`.
+`--prompt="<words>"`, written the same way), `schedule delete <task-id>`.
 `schedule disable <task-id>` pauses a repeating one and `enable` resumes
 it; `schedule run <task-id>` fires it now. Find the id with
 `schedule list`; the "In Hand" lines list them too. In `schedule list`, a
