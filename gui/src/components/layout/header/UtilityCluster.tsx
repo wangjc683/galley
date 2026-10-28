@@ -39,7 +39,9 @@ export function TopBarUtilityCluster({
 }: {
   /** The to-do panel is on screen: its button is pressed. */
   todoOpen?: boolean;
-  /** Omitted (no button) without a main chat: the external runtime. */
+  /** Omitted (no button) without a main chat: the external runtime.
+   * TEMP variant switcher (main chat 103): omitted too while the pill's
+   * 甲 / 乙 / 丙 stand it in a group of its own (MainHeader). */
   onToggleTodo?: () => void;
   changesOpen?: boolean;
   onToggleChanges?: (source: HTMLElement) => void;

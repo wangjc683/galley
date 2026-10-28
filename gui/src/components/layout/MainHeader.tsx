@@ -2,6 +2,12 @@ import { CaretRight } from "@phosphor-icons/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ReactNode } from "react";
 
+// TEMP variant switcher (main chat 103): where the 待办 button stands.
+import {
+  todoButtonApart,
+  todoButtonWord,
+  useTodoButtonVariants,
+} from "@/components/todo/todo-button-variants/todo-button-variants";
 import { useCopy } from "@/lib/i18n";
 import { isMac, isWindowActionTarget } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -15,6 +21,7 @@ import type { BrowserControlIndicatorInput } from "./header/browser-control-indi
 import type { RuntimeIndicator } from "./header/runtime-indicator";
 import { SessionTitleMenu } from "./header/SessionTitleMenu";
 import { TopBarStatusCluster } from "./header/StatusCluster";
+import { TodoToggleButton } from "./header/TodoToggleButton";
 import { updateIndicatorVisible } from "./header/update-indicator-status";
 import { TopBarUtilityCluster } from "./header/UtilityCluster";
 
@@ -23,7 +30,8 @@ export interface MainHeaderProps {
    * 待办 (main chat ticket 45): the tool cluster's first button, opening
    * and closing the to-do panel. Passed in every conversation's top bar
    * while there is a main chat (ticket 46), on the managed runtime only
-   * (MainHeaderHost).
+   * (MainHeaderHost). On ticket 103's trial pill it can stand as a group
+   * of its own, first on the right, with or without its word.
    */
   onToggleTodo?: () => void;
   /** The to-do panel is on screen. */
@@ -130,6 +138,11 @@ export interface MainHeaderProps {
  *
  *   [ title ▾  ········ drag ········  status │ utility │ (win ctrls) ]
  *
+ * (TEMP variant switcher, main chat 103: on the pill's 甲 / 乙 / 丙 the
+ * 待办 button leaves the tool cluster for a group of its own in front —
+ * `待办 │ status │ utility`, one divider before the tools when there is
+ * no status — PRD ruling 148 point 2: content, state, view and settings.)
+ *
  * Sits at the top of the main panel (above the conversation / empty
  * state), as a sibling of the resizable Sidebar column — which grows
  * its own header (SidebarHeader). The two column headers are the same
@@ -212,6 +225,10 @@ export function MainHeader({
   identity,
 }: MainHeaderProps) {
   const copy = useCopy();
+  // TEMP variant switcher (main chat 103): the 待办 button's place and
+  // word. Only with the button: every other header is as it was.
+  const todoLook = useTodoButtonVariants((s) => s.look);
+  const todoApart = Boolean(onToggleTodo) && todoButtonApart(todoLook);
   const hasTopBarStatusItems =
     runtimeIndicator !== "hidden" ||
     browserControl !== null ||
@@ -243,6 +260,10 @@ export function MainHeader({
         // "the darker column". Bottom border matches SidebarHeader so
         // the two column headers line up into one continuous top strip.
         "flex h-11 shrink-0 items-stretch border-b border-line/60 bg-app text-[13px]",
+        // TEMP variant switcher (main chat 103): 乙's and 丙's word gives
+        // way on a narrow header (TodoToggleButton `WORD`); only while it
+        // can show is the header a size container.
+        onToggleTodo && todoButtonWord(todoLook) && "@container/main-header",
         // Windows: no right padding — WindowControls owns the right edge
         // and hugs the window corner (= window top-right). Mac keeps its
         // 12px breathing room since the right cluster ends the header.
@@ -328,6 +349,26 @@ export function MainHeader({
           Buttons are auto-excluded from drag region by Tauri so they remain
           clickable. */}
       <div className="flex shrink-0 items-center gap-2">
+        {/* TEMP variant switcher (main chat 103): 甲 / 乙 / 丙 — the
+            待办 button first, a group of its own named as the button is
+            (it holds that one button), a divider after it whatever
+            follows: it is not one of 「视图与设置」. */}
+        {todoApart && onToggleTodo && (
+          <div
+            role="group"
+            aria-label={copy.topbar.todoLabel}
+            className="flex items-center"
+          >
+            <TodoToggleButton
+              open={todoOpen}
+              onToggle={onToggleTodo}
+              look={todoLook}
+            />
+          </div>
+        )}
+        {todoApart && (
+          <div aria-hidden="true" className="h-5 w-px bg-line/80" />
+        )}
         {hasTopBarStatusItems && (
           <TopBarStatusCluster
             runtimeIndicator={runtimeIndicator}
@@ -349,7 +390,7 @@ export function MainHeader({
         )}
         <TopBarUtilityCluster
           todoOpen={todoOpen}
-          onToggleTodo={onToggleTodo}
+          onToggleTodo={todoApart ? undefined : onToggleTodo}
           changesOpen={changesOpen}
           onToggleChanges={onToggleChanges}
           conversationWidth={conversationWidth}

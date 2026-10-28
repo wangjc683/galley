@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FreshCard } from "@/lib/fresh-cards";
-import type { FlightLevel } from "@/lib/todo-flight";
+import { flightFrame, type FlightLevel } from "@/lib/todo-flight";
 
 import { flyFreshCards, replayFlight } from "./todo-flight-run";
 
@@ -237,6 +237,40 @@ describe("flying the new cards", () => {
     expect(button.classList.contains("todo-catch-wash")).toBe(true);
     vi.advanceTimersByTime(600);
     expect(button.classList.contains("todo-catch-wash")).toBe(false);
+  });
+});
+
+describe("where it lands (ticket 103's 乙 and 丙)", () => {
+  it("lands on the button's glyph, not the middle of a button with its word", () => {
+    const { reply } = page();
+    card(reply, "todo-card", "data-todo-id", "todo_a", 340, 600);
+    // 乙: 「☑ 待办 2」, 62px wide; the glyph at its left, 6px in.
+    button.getBoundingClientRect = box(1100, 10, 62, 28);
+    button.querySelector("svg")!.getBoundingClientRect = box(1106, 16, 16, 16);
+    flyFreshCards(flyInput([T]));
+    const node = flights()[0];
+    vi.advanceTimersByTime(600);
+    // How far the glyph is from the path to `to` at its closest moment:
+    // where it is and how big, against every millisecond of that path.
+    const from = { x: 348, y: 610 };
+    const now = at(node);
+    const off = (to: { x: number; y: number }) =>
+      Math.min(
+        ...Array.from({ length: 701 }, (_, ms) => {
+          const f = flightFrame(from, to, BIG, ms);
+          return Math.max(
+            Math.abs(f.x - now.x),
+            Math.abs(f.y - now.y),
+            Math.abs(f.size / 16 - now.scale) * 16,
+          );
+        }),
+      );
+    // On the way to the glyph's centre (1114, 24), not the button's (1131).
+    expect(off({ x: 1114, y: 24 })).toBeLessThan(0.01);
+    expect(off({ x: 1131, y: 24 })).toBeGreaterThan(1);
+    // The pop is the whole button's.
+    vi.advanceTimersByTime(100);
+    expect(button.classList.contains("todo-catch-pop")).toBe(true);
   });
 });
 

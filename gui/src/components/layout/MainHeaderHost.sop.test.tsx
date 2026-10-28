@@ -46,9 +46,36 @@ vi.mock("./MainHeader", async (importOriginal) => {
   };
 });
 
+// TEMP variant switcher (main chat 103): the 待办 button's look, seeded
+// per test (a static render reads a store's initial state).
+const look = vi.hoisted(() => ({ value: "now" as "now" | "A" | "B" | "C" }));
+vi.mock(
+  "@/components/todo/todo-button-variants/todo-button-variants",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/components/todo/todo-button-variants/todo-button-variants")
+      >();
+    const get = () => ({
+      look: look.value,
+      demo: "real" as const,
+      setLook: () => {},
+      setDemo: () => {},
+    });
+    return {
+      ...actual,
+      useTodoButtonVariants: Object.assign(
+        <R,>(select: (s: ReturnType<typeof get>) => R) => select(get()),
+        { getState: get },
+      ),
+    };
+  },
+);
+
 afterEach(() => {
   seed.runtime = "managed";
   seed.props = null;
+  look.value = "now";
 });
 
 function header(
@@ -104,19 +131,36 @@ describe("the top bar's Supervisor SOP icon", () => {
       }
     }
     expect(seed.props?.onOpenSupervisorSop).toBeUndefined();
-    // What is left, in the same order: 待办, 改动, 显示, 设置.
+    // What is left, in the same order: 待办, 改动, 显示, 设置 (待办 named
+    // 「待办与备忘」 since ticket 103).
     expect(toolButtons(header())).toEqual([
-      "待办",
+      "待办与备忘",
       "工作区改动",
       "显示设置",
       "打开设置",
     ]);
+    // Ticket 103's 甲 / 乙 / 丙 take 待办 out to a group of its own: the
+    // rest in the same order.
+    for (const value of ["A", "B", "C"] as const) {
+      look.value = value;
+      expect(toolButtons(header()), value).toEqual([
+        "工作区改动",
+        "显示设置",
+        "打开设置",
+      ]);
+    }
   });
 
   it("stays on the external runtime, between 显示 and 设置, opening Settings → Agent", () => {
     seed.runtime = "external";
     const openSettings = vi.fn();
     const html = header({ openSettings });
+    // Ticket 103's pill changes nothing there (no 待办 button).
+    for (const value of ["A", "B", "C"] as const) {
+      look.value = value;
+      expect(header({ openSettings }), value).toBe(html);
+    }
+    look.value = "now";
     expect(html).toContain(SOP);
     expect(toolButtons(html)).toEqual([
       "工作区改动",

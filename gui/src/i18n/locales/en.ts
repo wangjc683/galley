@@ -328,7 +328,8 @@ export const enCopy: AppCopy = {
     sidebarNeedsYou: (count) =>
       count === 1 ? "1 chat needs you" : `${count} chats need you`,
     todo: "To-do",
-    todoWithToday: (count) => `To-do · Today ${count}`,
+    todoLabel: "To-do and memos",
+    todoWithToday: (count) => `To-do and memos · Today ${count}`,
     display: {
       tooltip: "Display",
       aria: "Display settings",
