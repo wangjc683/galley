@@ -430,6 +430,35 @@ describe("the panel's rows", () => {
     expect(daily).toContain('aria-label="说说这件"');
   });
 
+  // Main chat ticket 105, PRD ruling 151: a task's words are their first
+  // line, in 「Galley 在办」, 「例行」 and 「已完成」; the notes to itself
+  // after the blank line are on no row.
+  it("names Galley's tasks by their first line only, the notes nowhere", () => {
+    const notes = "\n\n用户周五说的；到时查物流，单号 JD8812345678。";
+    const html = panel(
+      {
+        ...FULL,
+        assistant: [{ ...OWN_REMINDER, text: `看看快递到了没有${notes}` }],
+        routine: [{ ...ROUTINE, text: `早报${notes}` }],
+        done: [
+          {
+            ...OWN_REMINDER,
+            id: "sched_gone",
+            state: "fired",
+            at: inDays(0, 7),
+            text: `取快递${notes}`,
+          },
+        ],
+      },
+      { doneOpen: true },
+    );
+    expect(row(html, "sched_water")).toMatch(/>看看快递到了没有</);
+    expect(row(html, "sched_daily")).toMatch(/>早报</);
+    expect(row(html, "sched_gone")).toMatch(/>取快递</);
+    expect(html).not.toContain("JD8812345678");
+    expect(html).not.toContain("用户周五说的");
+  });
+
   it("holds a tick in place: ticked, struck through, its reminder gone", () => {
     store.flips = { todo_report: { done: true, phase: "settling" } };
     const report = row(panel(FULL), "todo_report");

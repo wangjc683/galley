@@ -186,6 +186,34 @@ describe("「取消提醒」 on Galley's own reminder", () => {
   });
 });
 
+// Main chat ticket 105, PRD ruling 151: what the row shows, the first
+// line, not the assistant's notes to itself after the blank line.
+describe("「说说这件」 on Galley's own reminder", () => {
+  it("quotes its first line into Galley's composer, nothing after it", () => {
+    useAssistantTodoStore.setState({
+      todo: {
+        ...EMPTY_TODO,
+        assistant: [
+          {
+            ...OWN,
+            text: "该喝水了\n\n用户在主聊天要求三分钟后提醒喝水；到时简短提醒即可。",
+          },
+        ],
+      },
+    });
+    const container = mount();
+    const talk = ownRow(container)?.querySelector(
+      'button[aria-label="说说这件"]',
+    );
+    if (!(talk instanceof HTMLElement)) throw new Error("no 说说这件");
+    act(() => talk.click());
+    expect(useUiStore.getState().quoteRequest).toMatchObject({
+      sessionId: "s-main",
+      text: "该喝水了",
+    });
+  });
+});
+
 describe("your to-do's menu (ticket 88)", () => {
   const REPORT: TodoItem = {
     kind: "todo",

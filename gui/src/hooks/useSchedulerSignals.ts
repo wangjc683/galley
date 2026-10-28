@@ -57,13 +57,17 @@ export function useSchedulerActionCount(): number {
  * action" contract, extended 2026-07-30 to cover failures). Core emits
  * the event; the GUI owns the OS notification so the two sides never
  * double-send (issue 05). Gating — window focus, permission, per-task
- * throttle — lives in `sendGatedSystemNotification`.
+ * throttle — lives in `sendGatedSystemNotification`. Its body carries
+ * the task's words whole: only a task that starts a conversation
+ * (`target: session`, Core's `scheduler::fire`) fails this way, and its
+ * words are the user's own from the external runtime's form or another
+ * agent's, not one of the assistant's reminders (main chat ticket 105).
  *
  * Also the fallback for a reminder that could not reach the assistant
  * (main chat tickets 33, 37): Core consumed the fire, and the user gets
- * the task's own words — a system notification that lands the window on
- * the assistant, or a toast when the window is in front
- * (lib/reminder-notify.ts).
+ * the task's own words (their first line since ticket 105) — a system
+ * notification that lands the window on the assistant, or a toast when
+ * the window is in front (lib/reminder-notify.ts).
  */
 export function useScheduledFireFailedNotification(): void {
   const copy = useCopy();

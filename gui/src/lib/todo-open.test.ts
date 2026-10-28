@@ -313,6 +313,19 @@ describe("「说说这件」", () => {
     expect(takeQuote("s-main", true)).toBe("子任务");
   });
 
+  // Main chat ticket 105, PRD ruling 151.
+  it("left to itself, quotes a task's first line, not its notes", () => {
+    const reminder: TodoItem = {
+      kind: "task",
+      id: "sched_1",
+      text: "看看快递到了没有\n\n单号 JD8812345678，到时查物流。",
+      state: "scheduled",
+      createdBy: "assistant",
+    };
+    quoteTodo(reminder, GALLEY, "s-main");
+    expect(takeQuote("s-main", true)).toBe("看看快递到了没有");
+  });
+
   it("a second click quotes again (the composer drops a duplicate)", () => {
     quoteTodo(ITEM, GALLEY, "s-main");
     expect(takeQuote("s-main", true)).toBe("交季度报告");

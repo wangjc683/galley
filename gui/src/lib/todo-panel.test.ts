@@ -430,6 +430,20 @@ describe("a row's name", () => {
       ),
     ).toBe(zh.subtask.label);
   });
+
+  // Main chat ticket 105, PRD ruling 151: the line for the user, not the
+  // assistant's notes to itself after it.
+  it("is a task's first line only, in Galley 在办, 例行 and 已完成 alike", () => {
+    const text =
+      "看看快递到了没有\n\n京东单号 JD8812345678，到时查物流告诉用户。";
+    expect(todoRowText(task({ text }), zh)).toBe("看看快递到了没有");
+    expect(
+      todoRowText(task({ text, repeat: { kind: "daily" }, at: undefined }), zh),
+    ).toBe("看看快递到了没有");
+    expect(todoRowText(task({ text, state: "fired" }), zh)).toBe(
+      "看看快递到了没有",
+    );
+  });
 });
 
 describe("where a title leads", () => {

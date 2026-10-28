@@ -56,4 +56,25 @@ describe("remindUndelivered", () => {
       autoDismissMs: 0,
     });
   });
+
+  // Main chat ticket 105, PRD ruling 151: the line for the user, not the
+  // assistant's notes to itself after the blank line.
+  it("says only the first line of its words, in a notification or a toast", async () => {
+    const payload = {
+      ...PAYLOAD,
+      prompt:
+        "该喝水了\n\n用户在主聊天要求三分钟后提醒喝水；到时简短提醒即可。",
+    };
+    const back = deps(false);
+    await remindUndelivered(payload, zhCopy, back);
+    expect(back.notify).toHaveBeenCalledWith(
+      "scheduleFailed",
+      expect.objectContaining({ body: "该喝水了" }),
+    );
+    const front = deps(true);
+    await remindUndelivered(payload, zhCopy, front);
+    expect(front.pushToast.mock.calls[0][0]).toMatchObject({
+      message: "该喝水了",
+    });
+  });
 });

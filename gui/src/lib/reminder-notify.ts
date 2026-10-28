@@ -1,5 +1,6 @@
 import type { AppCopy } from "@/i18n/types";
 import type { NotifyTone, SystemNotifyKind } from "@/lib/notify";
+import { reminderFirstLine } from "@/lib/reminder-first-line";
 import type { ScheduledReminderUndeliveredPayload } from "@/lib/scheduled-tasks";
 import { makeAppError, type AppError } from "@/types/app-error";
 
@@ -25,6 +26,11 @@ import { makeAppError, type AppError } from "@/types/app-error";
  *     a subtask's fallback, ticket 31), and the words as an in-app toast
  *     that stays until closed — a subtask's state is on its card, a
  *     reminder's words are nowhere else on screen.
+ *
+ * In both, the words are their first line only (main chat ticket 105,
+ * PRD ruling 151; lib/reminder-first-line.ts): that line is written for
+ * the user, what follows the blank line is the assistant's notes to
+ * itself.
  */
 
 export interface ReminderFallbackDeps {
@@ -49,6 +55,7 @@ export async function remindUndelivered(
   deps: ReminderFallbackDeps,
 ): Promise<"toast" | "notification"> {
   const title = copy.scheduled.reminderNotifyTitle;
+  const words = reminderFirstLine(payload.prompt);
   if (await deps.windowFocused()) {
     deps.pushToast(
       makeAppError({
@@ -56,7 +63,7 @@ export async function remindUndelivered(
         category: "business",
         severity: "info",
         title,
-        message: payload.prompt,
+        message: words,
         hint: null,
         retryable: false,
         context: "scheduled_reminder",
@@ -69,7 +76,7 @@ export async function remindUndelivered(
   }
   await deps.notify("scheduleFailed", {
     title,
-    body: payload.prompt,
+    body: words,
     throttleKey: `schedule-reminder:${payload.taskId}`,
     tone: "needsYou",
   });

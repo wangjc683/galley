@@ -1,6 +1,7 @@
 import type { TodoItem, TodoTarget } from "@/lib/assistant-todo";
 import type { FreshCard } from "@/lib/fresh-cards";
 import { openMainChat } from "@/lib/main-chat";
+import { todoItemWords } from "@/lib/reminder-first-line";
 import type { TodoPlace } from "@/lib/todo-panel-memory";
 import {
   useUiStore,
@@ -275,12 +276,13 @@ export function goToTodoTarget(
  * panel stays open. From elsewhere Galley opens first and its composer
  * takes the quote as it appears (MainView). `title` is what the row
  * shows (lib/todo-panel.ts `todoRowText`: 「子任务」 for a subtask
- * without a title). */
+ * without a title); left out, a task's first line and nothing after it
+ * (main chat ticket 105, PRD ruling 151). */
 export function quoteTodo(
   item: TodoItem,
   spot: TodoSpot,
   mainChatId: string,
-  title: string = item.text,
+  title: string = todoItemWords(item),
 ): void {
   const ui = useUiStore.getState();
   ui.requestQuote(mainChatId, title);

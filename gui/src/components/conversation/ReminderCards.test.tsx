@@ -68,6 +68,21 @@ describe("ReminderCards", () => {
     expect(html).not.toContain("w-[3px]");
   });
 
+  // Main chat ticket 105, PRD ruling 151: the line for the user; the
+  // notes to itself after the blank line are nowhere on the card.
+  it("shows only the first line of its words, in the line and its accessible name", () => {
+    const html = render([
+      task({
+        prompt:
+          "开会带上周报\n\n明早 9 点的周会，用户要讲 Q3 数据；到时提醒带上周报。",
+      }),
+    ]);
+    expect(html).toContain(">开会带上周报<");
+    expect(html).toContain('aria-label="提醒 · 开会带上周报"');
+    expect(html).not.toContain("Q3");
+    expect(html).not.toContain("周会");
+  });
+
   it("keeps a fired or cancelled card, without 取消", () => {
     const fired = render([
       task({ fireAt: inDays(0, 0), lastFiredAt: inDays(0, 1) }),

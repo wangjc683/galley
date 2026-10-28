@@ -11,6 +11,7 @@ import {
   todoActionFailure,
 } from "@/lib/assistant-todo";
 import { useCopy, useLanguage } from "@/lib/i18n";
+import { reminderFirstLine } from "@/lib/reminder-first-line";
 import type { ScheduledTask } from "@/lib/scheduled-tasks";
 import { showTodoRow } from "@/lib/todo-open";
 import { reminderListed } from "@/lib/todo-panel";
@@ -29,11 +30,11 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
  * 「提醒卡片」): hairline `border-line`, `rounded-md`, the page ground,
  * no state bar — a reminder asks nothing of the user. One line: the
  * alarm glyph, the time (「明天 09:00」, or a rule, 「每天 08:00」), the
- * words it noted (one line, cut), the state (待提醒 / 已提醒 / 已取消 /
- * 已暂停) and 「取消」 while it may still go off. A cancel needs no
- * confirm (it touches this one thing) and is not told to the assistant;
- * the card stays, saying 已取消, its time and words struck through
- * (ticket 99). A cancel that fails says why on a line under it.
+ * first line of the words it noted (one line, cut), the state (待提醒 /
+ * 已提醒 / 已取消 / 已暂停) and 「取消」 while it may still go off. A
+ * cancel needs no confirm (it touches this one thing) and is not told to
+ * the assistant; the card stays, saying 已取消, its time and words struck
+ * through (ticket 99). A cancel that fails says why on a line under it.
  *
  * Its words open the to-do panel at the task's row (main chat ticket
  * 101, PRD ruling 147 point 5), as a to-do card's title does
@@ -41,6 +42,12 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
  * lit up, 已完成 unfolded for one that went off. Only while the panel
  * lists it (`reminderListed`) — not cancelled, not gone off more than
  * seven days ago — otherwise words; the three cards alike.
+ *
+ * Only the first line of its words, everywhere the card shows them —
+ * the line, its accessible name, the hover on a cut line (main chat
+ * ticket 105, PRD ruling 151): that line is written for the user; what
+ * follows the blank line is the assistant's notes to itself, for when
+ * it comes due (lib/reminder-first-line.ts).
  */
 export function ReminderCards({
   tasks,
@@ -78,6 +85,7 @@ function ReminderCard({ task }: { task: ScheduledTask }) {
   const canCancel = state === "scheduled" || state === "paused";
   const listed = useAssistantTodoStore((s) => reminderListed(s.todo, task.id));
   const mainChatId = task.createdIn?.sessionId;
+  const words = reminderFirstLine(task.prompt);
 
   const cancel = () => {
     if (busy) return;
@@ -94,7 +102,7 @@ function ReminderCard({ task }: { task: ScheduledTask }) {
       data-role="reminder-card"
       data-reminder-state={state}
       data-reminder-id={task.id}
-      aria-label={`${copy.todo.reminder} · ${task.prompt}`}
+      aria-label={`${copy.todo.reminder} · ${words}`}
       className="rounded-md border border-line bg-app"
     >
       {/* min-h-10: the same height with 「取消」 or without it. */}
@@ -124,9 +132,7 @@ function ReminderCard({ task }: { task: ScheduledTask }) {
             <button
               type="button"
               onClick={() => showTodoRow(task.id, mainChatId)}
-              onPointerEnter={(e) =>
-                syncTruncatedTitle(e.currentTarget, task.prompt)
-              }
+              onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, words)}
               className={cn(
                 "block max-w-full truncate rounded-sm text-left outline-none",
                 "underline-offset-2 hover:underline hover:decoration-ink-muted/60 focus-visible:ring-2 focus-visible:ring-brand/30",
@@ -134,7 +140,7 @@ function ReminderCard({ task }: { task: ScheduledTask }) {
                 struck && "line-through",
               )}
             >
-              {task.prompt}
+              {words}
             </button>
           </span>
         ) : (
@@ -144,11 +150,9 @@ function ReminderCard({ task }: { task: ScheduledTask }) {
               settled ? "text-ink-muted" : "text-ink",
               struck && "line-through",
             )}
-            onPointerEnter={(e) =>
-              syncTruncatedTitle(e.currentTarget, task.prompt)
-            }
+            onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, words)}
           >
-            {task.prompt}
+            {words}
           </span>
         )}
         <span className="shrink-0 text-[12px] text-ink-muted">

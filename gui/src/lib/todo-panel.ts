@@ -17,6 +17,7 @@ import {
   localDayMs,
   localDayStart,
 } from "@/lib/message-time";
+import { todoItemWords } from "@/lib/reminder-first-line";
 import { repeatSummary } from "@/lib/scheduled-tasks";
 import type { TodoGlance } from "@/lib/todo-open";
 import { TODO_PLACES, type TodoPlace } from "@/lib/todo-panel-memory";
@@ -310,14 +311,19 @@ export function assistantRowLine(
 }
 
 /**
- * What a row is called (its title, and what 「说说这件」 quotes): the
- * words it carries, 「子任务」 for a subtask without a title. The daily
- * review had a name of its own here from main chat ticket 74 (its
- * `prompt` is English for the model); since PRD ruling 145 the panel's
- * list goes without it (`withoutDailyReview`), so no row needs one.
+ * What a row is called (its title, its hover when cut, and what
+ * 「说说这件」 quotes): the words it carries, 「子任务」 for a subtask
+ * without a title. A task's are only their first line (main chat ticket
+ * 105, PRD ruling 151; lib/reminder-first-line.ts `todoItemWords`): the
+ * rest is the assistant's notes to itself. The daily review had a name
+ * of its own here from main chat ticket 74 (its `prompt` is English for
+ * the model); since PRD ruling 145 the panel's list goes without it
+ * (`withoutDailyReview`), so no row needs one.
  */
 export function todoRowText(item: TodoItem, copy: AppCopy): string {
-  return item.text || (item.kind === "subtask" ? copy.subtask.label : "");
+  return (
+    todoItemWords(item) || (item.kind === "subtask" ? copy.subtask.label : "")
+  );
 }
 
 /** The second line of a routine: its rule and next time (「每天 08:00 ·
