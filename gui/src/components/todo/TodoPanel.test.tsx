@@ -412,9 +412,25 @@ describe("the panel's rows", () => {
     expect(meta.indexOf("提醒 ")).toBeLessThan(meta.indexOf("取消提醒"));
     expect(late).toContain('aria-label="说说这件"');
     expect(late).not.toContain('aria-label="取消提醒"');
-    // A title noted in a reply leads there; one noted nowhere does not.
-    expect(late).toMatch(/<button[^>]*hover:underline[^>]*>回房东电话</);
-    expect(row(html, "todo_soil")).toMatch(/<span[^>]*>买营养土</);
+    // Since ticket 107 (PRD ruling 153 point 3) your title opens the
+    // row, noted in a reply or not: a button, folded, never underlined;
+    // the jump is the open row's foot. Galley's still jump.
+    for (const [id, text] of [
+      ["todo_late", "回房东电话"],
+      ["todo_soil", "买营养土"],
+    ]) {
+      const title = row(html, id).match(
+        new RegExp(
+          `<button type="button" aria-expanded="false" class="([^"]*)">${text}<`,
+        ),
+      );
+      expect(title, id).not.toBeNull();
+      expect(title![1]).toContain("truncate");
+      expect(title![1]).not.toContain("underline");
+    }
+    expect(row(html, "s-sub")).toMatch(
+      /<button[^>]*hover:underline[^>]*>查周五去上海的机票</,
+    );
   });
 
   it("gives what Galley is on no box but the session rows' glyph", () => {

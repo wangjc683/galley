@@ -1,6 +1,7 @@
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
+  ArrowBendUpLeft,
   BellSimpleSlash,
   ChatTeardropText,
   DotsThree,
@@ -24,7 +25,9 @@ import { useCopy } from "@/lib/i18n";
 
 /**
  * The menu of one of your to-dos not done (main chat ticket 88, PRD
- * ruling 132 point 3): 「说说这件」, 「取消提醒」 when it has a reminder
+ * ruling 132 point 3): 「说说这件」, 「在对话里查看」 when it was noted in
+ * a reply (ticket 107, PRD ruling 153 point 3: the jump its title made
+ * before the row opened on a click), 「取消提醒」 when it has a reminder
  * still to go off, a separator, 「删除」. Two ways in, one list, as the
  * message menu's (MessageMenu.tsx, rulings 85, 99, 105): a right-click
  * on the row (`TodoRowContextMenu`) and the ⋯ that ends the row's hover
@@ -45,6 +48,9 @@ import { useCopy } from "@/lib/i18n";
 export interface TodoRowMenuModel {
   /** 说说这件, first; none on a memo's row. */
   onTalkAbout?: () => void;
+  /** 在对话里查看, after it: back to the sentence that noted it (ticket
+   * 107); none when it has nowhere to go. */
+  onViewInChat?: () => void;
   /** 取消提醒 is on it: a reminder still to go off (`todoReminderCancellable`). */
   canCancelReminder?: boolean;
   onCancelReminder?: () => void;
@@ -75,6 +81,16 @@ function TodoRowMenuRows({
           {copy.todo.talkAbout}
         </SidebarRowMenuItem>
       )}
+      {model.onViewInChat && (
+        <SidebarRowMenuItem
+          kind={kind}
+          onSelect={model.onViewInChat}
+          className={MENU_ITEM_CLASS}
+        >
+          <ArrowBendUpLeft size={13} weight="thin" />
+          {copy.todo.viewInChat}
+        </SidebarRowMenuItem>
+      )}
       {cancelReminder && (
         <SidebarRowMenuItem
           kind={kind}
@@ -85,7 +101,7 @@ function TodoRowMenuRows({
           {copy.todo.cancelReminder}
         </SidebarRowMenuItem>
       )}
-      {(model.onTalkAbout || cancelReminder) && (
+      {(model.onTalkAbout || model.onViewInChat || cancelReminder) && (
         <SidebarRowMenuSeparator kind={kind} className="my-1 h-px bg-line" />
       )}
       <SidebarRowMenuItem

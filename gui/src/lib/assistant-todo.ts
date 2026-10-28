@@ -220,6 +220,25 @@ export async function cancelTodoReminder(id: string): Promise<TodoBrief> {
   return invoke<TodoBrief>("cancel_todo_reminder", { id });
 }
 
+/** What the to-do panel changes in place (main chat ticket 107, PRD
+ * ruling 153 point 4): the title, the notes, or both; only what is
+ * given. Empty notes take them away; a title is never sent empty. */
+export interface TodoWordsChange {
+  title?: string;
+  notes?: string;
+}
+
+/** Change a to-do's title or notes (`update_todo`, main chat ticket
+ * 107): its due date and reminder stay as they are (ruling 153 point 5,
+ * they are said to Galley). Core sends `todos:changed`; `not_found` for
+ * one cancelled or gone. */
+export async function updateTodo(
+  id: string,
+  change: TodoWordsChange,
+): Promise<TodoBrief> {
+  return invoke<TodoBrief>("update_todo", { id, ...change });
+}
+
 /** Delete a to-do (`cancel_todo`, main chat ticket 88, PRD ruling 132):
  * Core's soft delete, as Galley's `todo cancel`, recorded as the user at
  * the desktop (a follow-up turned down, ruling 113); its reminder goes

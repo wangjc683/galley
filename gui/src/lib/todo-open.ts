@@ -307,23 +307,25 @@ export function talkToGalley(
 
 /**
  * A to-do card's title (main chat ticket 87, PRD ruling 131 point 3),
- * as the panel's title leads back to the sentence: the panel opens
+ * as the panel's title led back to the sentence: the panel opens
  * beside the conversation the card is in — Galley's, `mainChatId` —
  * remembered open when wide, a look when narrow, as the top bar's button
  * opens it; already on screen, it is left as it is. Then the row lights
- * up (`requestTodoRows`). Only a card whose to-do the panel lists has a
- * button (`todoListed`). A reminder card's words do the same for its
- * task's row (main chat ticket 101, PRD ruling 147 point 5), while the
- * panel lists it (lib/todo-panel.ts `reminderListed`). Both turn the
- * panel to its 待办 page, as a memo card's words turn it to 备忘
- * (`showMemoRow`): a panel already up on 备忘 had no row there to light
- * (ticket 101).
+ * up (`requestTodoRows`), and since main chat ticket 107 (PRD ruling
+ * 153) it opens too when it is one of your to-dos not done (`open`; the
+ * panel opens no other row, a reminder's task or a done one). Only a
+ * card whose to-do the panel lists has a button (`todoListed`). A
+ * reminder card's words do the same for its task's row (main chat ticket
+ * 101, PRD ruling 147 point 5), while the panel lists it
+ * (lib/todo-panel.ts `reminderListed`). Both turn the panel to its 待办
+ * page, as a memo card's words turn it to 备忘 (`showMemoRow`): a panel
+ * already up on 备忘 had no row there to light (ticket 101).
  */
 export function showTodoRow(id: string, mainChatId: string): void {
   showPanelBesideGalley(mainChatId);
   const ui = useUiStore.getState();
   ui.requestTodoPage("todo");
-  ui.requestTodoRows([id]);
+  ui.requestTodoRows([id], { open: true });
 }
 
 /**

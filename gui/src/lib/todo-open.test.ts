@@ -595,6 +595,16 @@ describe("a card's title (ticket 87, ruling 131 point 3)", () => {
     expect(rows()).toEqual(["todo_1"]);
   });
 
+  // Ticket 107 (PRD ruling 153): the row opens too; the panel opening by
+  // itself only lights.
+  it("asks the panel to open the row as well; the panel opening by itself does not", () => {
+    showTodoRow("todo_1", "s-main");
+    expect(useUiStore.getState().todoRowRequest?.open).toBe(true);
+    introduceTodoPanel({ page: "todo", rows: ["todo_2"] });
+    expect(useUiStore.getState().todoRowRequest?.ids).toEqual(["todo_2"]);
+    expect(useUiStore.getState().todoRowRequest?.open).toBeUndefined();
+  });
+
   it("leaves a panel already on screen as it is, and only lights the row", () => {
     useUiStore.setState({
       todoNarrow: false,

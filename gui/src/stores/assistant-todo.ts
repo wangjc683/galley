@@ -10,11 +10,13 @@ import {
   listNotedTodos,
   reopenTodo,
   todoFailureKind,
+  updateTodo,
   todoToastTitle,
   withoutDailyReview,
   type AssistantTodo,
   type TodoFailure,
   type TodoItem,
+  type TodoWordsChange,
 } from "@/lib/assistant-todo";
 import { copyForLanguage } from "@/lib/i18n";
 import { resolveLanguagePreference } from "@/lib/language";
@@ -75,6 +77,13 @@ import { makeAppError } from "@/types/app-error";
  *   deleted row never shows between; one Core refused comes back with
  *   its reason (`failures`). One ticked off meanwhile (Galley's tick, in
  *   the list's 已完成 when the toast goes) is not sent: it stays done.
+ * - **Change a title or notes** (`editTodo`, main chat ticket 107, PRD
+ *   ruling 153 point 4): straight to Core (`update_todo`), no hold, no
+ *   confirm, then read again; on its way it is this window's own write
+ *   (`editing`, counted: a title and the notes can be on their way
+ *   together), so the row does not light. What failed comes back to the
+ *   caller, not into `failures`: the panel keeps the words typed in their
+ *   box and says why under it.
  *
  * A write that fails puts the row back as it was and leaves a reason by
  * its id (`failures`), cleared by the next try. A to-do's id and a
@@ -99,6 +108,9 @@ interface AssistantTodoState {
   deleting: Record<string, TodoDelete>;
   /** The undo toast up now, if any. */
   deleteToastId: string | null;
+  /** Title and notes changes on their way to Core, by to-do id: how
+   * many (ticket 107). */
+  editing: Record<string, number>;
   /** Read the list and the noted to-dos from Core. */
   load: () => Promise<void>;
   /** The box was clicked (a cancelled to-do's box does nothing). */
@@ -117,6 +129,12 @@ interface AssistantTodoState {
   /** Before a send into the main chat: commit, and the promise to wait
    * for; null when no deletion is waiting or on its way. */
   flushDeletes: () => Promise<void> | null;
+  /** Change a to-do's title or notes (ticket 107); resolves once Core
+   * has it and the list is read again, with why it failed, or null. */
+  editTodo: (
+    id: string,
+    change: TodoWordsChange,
+  ) => Promise<TodoFailure | null>;
 }
 
 /** A to-do deleted on the page and not yet by Core (ticket 88). */
@@ -253,6 +271,7 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
     cancelling: {},
     deleting: {},
     deleteToastId: null,
+    editing: {},
 
     load: async () => {
       const lists = await read();
@@ -378,5 +397,30 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
 
     flushDeletes: () =>
       Object.keys(get().deleting).length > 0 ? get().commitDeletes() : null,
+
+    editTodo: async (id, change) => {
+      set((s) => ({
+        editing: { ...s.editing, [id]: (s.editing[id] ?? 0) + 1 },
+      }));
+      // One fewer on its way; none left, the id is off the record.
+      const done = (editing: Record<string, number>) => {
+        const left = (editing[id] ?? 1) - 1;
+        return left > 0 ? { ...editing, [id]: left } : without(editing, id);
+      };
+      try {
+        await updateTodo(id, change);
+      } catch (e) {
+        set((s) => ({ editing: done(s.editing) }));
+        return todoFailureKind(e);
+      }
+      // The fresh words and this write off the record in one set: the
+      // row never lights for its own change.
+      const lists = await read();
+      set((s) => ({
+        ...(lists ? { ...lists, loaded: true } : {}),
+        editing: done(s.editing),
+      }));
+      return null;
+    },
   };
 });

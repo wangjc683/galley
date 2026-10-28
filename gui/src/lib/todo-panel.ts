@@ -13,6 +13,7 @@ import type { ResolvedLanguage } from "@/lib/language";
 import {
   calendarDaysBefore,
   formatClock,
+  formatPastDay,
   formatScheduleDay,
   localDayMs,
   localDayStart,
@@ -362,10 +363,13 @@ export function doneRowLine(
 }
 
 /**
- * Where a row's title leads from the panel: the reply in the main chat
- * that noted it (the 查找聊天记录 jump), a subtask, a scheduled run's
- * session; null when it has nowhere (made outside a reply, by another
- * agent, or in a main chat since reset).
+ * Where a row leads from the panel: the reply in the main chat that
+ * noted it (the 查找聊天记录 jump), a subtask, a scheduled run's session;
+ * null when it has nowhere (made outside a reply, by another agent, or
+ * in a main chat since reset). A row's title, but for your to-dos not
+ * done: since main chat ticket 107 (PRD ruling 153 point 3) theirs
+ * opens the row, and the jump is the open row's 「在对话里查看」 and its
+ * menu's.
  */
 export function todoTitleTarget(
   item: TodoItem,
@@ -465,13 +469,15 @@ export interface TodoPanelChange {
 /** Ids with a write of this window's on its way — a tick or untick
  * (`flips`), a reminder being cancelled (`cancelling`), a to-do deleted
  * and not yet by Core (`deleting`, main chat ticket 88: staged under its
- * undo toast or sent) — in either of two reads of the store: the read a
- * write ends with clears its record in the same set. */
+ * undo toast or sent), a title or notes changed in place (`editing`,
+ * ticket 107) — in either of two reads of the store: the read a write
+ * ends with clears its record in the same set. */
 export function todoWritesOnTheirWay(
   ...states: readonly {
     flips: Readonly<Record<string, unknown>>;
     cancelling: Readonly<Record<string, unknown>>;
     deleting: Readonly<Record<string, unknown>>;
+    editing: Readonly<Record<string, unknown>>;
   }[]
 ): Set<string> {
   const ids = new Set<string>();
@@ -479,8 +485,58 @@ export function todoWritesOnTheirWay(
     for (const id of Object.keys(state.flips)) ids.add(id);
     for (const id of Object.keys(state.cancelling)) ids.add(id);
     for (const id of Object.keys(state.deleting)) ids.add(id);
+    for (const id of Object.keys(state.editing)) ids.add(id);
   }
   return ids;
+}
+
+/** The two words of a to-do the panel changes in place (main chat
+ * ticket 107, PRD ruling 153 point 4). */
+export type TodoWordsField = "title" | "notes";
+
+/**
+ * What saving an edit in place writes (main chat ticket 107, PRD ruling
+ * 153 point 4), or null for nothing: `start` is what the box opened
+ * with, `draft` what is in it now. Nothing when the words are as they
+ * opened (only a trim apart) — not against the to-do as it is now: a
+ * change Galley made meanwhile is not written over by a box left as it
+ * was, and one that was changed is written whole, the later write
+ * standing. A title is one line, its breaks a space, and never empty:
+ * emptied, it is given up (删除 is for not wanting it). Notes keep their
+ * lines; emptied, they are written empty, which takes them away.
+ */
+export function todoEditWrite(
+  field: TodoWordsField,
+  start: string,
+  draft: string,
+): string | null {
+  const words =
+    field === "title" ? draft.replace(/\s*\n\s*/g, " ").trim() : draft.trim();
+  if (field === "title" && !words) return null;
+  return words === start.trim() ? null : words;
+}
+
+/**
+ * The day an open to-do was noted, at the foot of its row (main chat
+ * ticket 107, PRD ruling 153 point 2): 「10月28日记下」, 「今天记下」 —
+ * today, yesterday, then the date, as the 备忘 page's days
+ * (`formatPastDay`), never a weekday. Null without a day to say (Core
+ * always gives one).
+ */
+export function todoNotedLine(
+  item: TodoItem,
+  todayStartMs: number,
+  language: ResolvedLanguage,
+  copy: AppCopy,
+): string | null {
+  const at = item.createdAt ? Date.parse(item.createdAt) : Number.NaN;
+  if (Number.isNaN(at)) return null;
+  return copy.todo.notedOn(
+    formatPastDay(at, todayStartMs, language, {
+      today: copy.todo.notedToday,
+      yesterday: copy.todo.notedYesterday,
+    }),
+  );
 }
 
 /**

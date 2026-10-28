@@ -117,7 +117,7 @@ function flashRows(
     wanted.has(row.dataset.todoRow ?? row.dataset.memoRow ?? ""),
   );
   if (rows.length === 0) return;
-  reveal(list, rows[0]);
+  revealInList(list, rows[0]);
   for (const row of rows) {
     // Again on a row still washing: start it over.
     row.classList.remove(LOCATE_FLASH_CLASS);
@@ -132,8 +132,9 @@ function flashRows(
 }
 
 /** Scroll `list` just enough to show `row`, only when it is out of
- * view. */
-function reveal(list: HTMLElement, row: HTMLElement): void {
+ * view; one taller than the view shows its top. A row lit here, and
+ * since main chat ticket 107 a row opened (TodoPanel). */
+export function revealInList(list: HTMLElement, row: HTMLElement): void {
   const view = list.getBoundingClientRect();
   const box = row.getBoundingClientRect();
   if (box.top < view.top) {

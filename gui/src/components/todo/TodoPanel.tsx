@@ -17,6 +17,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -24,15 +25,18 @@ import {
 import { ReadingPanelHeader } from "@/components/conversation/reading/ReadingPanelHeader";
 import { Button, IconButton } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { TooltipLabel } from "@/components/ui/tooltip";
 import { useDayStamp } from "@/hooks/useDayStamp";
-import { useTodoPanelFlash } from "@/hooks/useTodoPanelFlash";
+import { revealInList, useTodoPanelFlash } from "@/hooks/useTodoPanelFlash";
 import {
   todoAutostartHintVisible,
   todoFailureText,
   type AssistantTodo,
+  type TodoFailure,
   type TodoItem,
   type TodoTarget,
 } from "@/lib/assistant-todo";
+import { caretOffsetAt } from "@/lib/caret-point";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { StatusIcon } from "@/lib/status-icon";
 import {
@@ -41,8 +45,10 @@ import {
   doneRowLine,
   routineRowLine,
   todoChecked,
+  todoEditWrite,
   todoMetaParts,
   type TodoMetaPart,
+  todoNotedLine,
   todoNotesLine,
   todoPanelEmpty,
   todoPanelRows,
@@ -53,6 +59,8 @@ import {
   todoWithoutDeleting,
   type TodoHold,
   type TodoLineTone,
+  type TodoWordsField,
+  yourTodos,
 } from "@/lib/todo-panel";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { cn } from "@/lib/utils";
@@ -78,6 +86,7 @@ import {
   TodoRowMenuButton,
   type TodoRowMenuModel,
 } from "./TodoRowMenu";
+import { TodoTextEditor } from "./TodoTextEditor";
 import { todoTitleClass } from "./todo-styles";
 
 export interface TodoPanelProps {
@@ -100,9 +109,10 @@ export interface TodoPanelProps {
 
 /**
  * The to-do panel (main chat ticket 42, PRD ruling 91): Galley's
- * notebook, where the user can tick off their own things and nothing
- * else is edited — new things, new times, other words are said to Galley
- * (ruling 91 points 3 and 6), so there is no input here. In the reading
+ * notebook, where the user can tick off their own things and, since
+ * ticket 107, change the words of one opened — new things and new times
+ * are said to Galley (ruling 91 points 3 and 6, ruling 153 point 5), so
+ * there is no box for a new one here. In the reading
  * panel's place (LocalFileWorkspace), its own width, beside whichever
  * conversation is open (ticket 46, ruling 95): looking is for anywhere,
  * noting and changing stay with Galley.
@@ -130,10 +140,22 @@ export interface TodoPanelProps {
  * Core hears of it when its undo toast goes (stores/assistant-todo.ts);
  * meanwhile the panel draws the list without it (`todoWithoutDeleting`).
  * A title goes where the thing came from: the reply that noted it
- * (the 查找聊天记录 jump), a subtask, a scheduled run's session. A jump
- * out of the panel takes the panel along (lib/todo-open.ts). Escape
- * closes it from anywhere but a text field, as it does the reading
- * panel.
+ * (the 查找聊天记录 jump), a subtask, a scheduled run's session — but
+ * on your to-dos not done, which open (below). A jump out of the panel
+ * takes the panel along (lib/todo-open.ts). Escape closes it from
+ * anywhere but a text field, as it does the reading panel; with a row
+ * open it folds the row first.
+ *
+ * One of your to-dos not done opens in place on a click (main chat
+ * ticket 107, PRD ruling 153 points 2–4; `YourRow`): one at a time, its
+ * title and notes in full and changed in place, its time a way to
+ * Galley, its foot the day it was noted and 「在对话里查看」 — the jump
+ * its title made before. Which one is open is this panel's own state
+ * (`openId`), not remembered: closed and opened again, or turned to 备忘
+ * and back, none is. It folds on Esc (out of a text box), on a click in
+ * the panel outside it that is not on a control, on a click on its own
+ * blank, and when it leaves your to-dos (ticked, held by Galley's tick,
+ * deleted). A to-do card's title opens its row (`todoRowRequest.open`).
  *
  * Rows light up (ticket 87, PRD ruling 131 points 3–5,
  * useTodoPanelFlash): what Galley moves while the panel is on screen,
@@ -163,10 +185,16 @@ export function TodoPanel({
   const copy = useCopy();
   const pageRequest = useUiStore((s) => s.todoPageRequest);
   const [page, setPage] = useState<TodoPanelPage>(pageRequest?.page ?? "todo");
+  // The row open (ticket 107): one of your to-dos not done, or none.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const turnPage = (next: TodoPanelPage) => {
+    setPage(next);
+    setOpenId(null);
+  };
   const [pageAsked, setPageAsked] = useState(pageRequest);
   if (pageRequest !== pageAsked) {
     setPageAsked(pageRequest);
-    if (pageRequest) setPage(pageRequest.page);
+    if (pageRequest) turnPage(pageRequest.page);
   }
   useEffect(() => {
     if (pageRequest) {
@@ -184,7 +212,29 @@ export function TodoPanel({
   // A row a request lights only under 已完成: it unfolds first.
   const revealDone =
     request && todoRowsInDone(todo, request.ids) ? request.nonce : null;
+  // A card's title opens its row too, when it is one of yours not done
+  // (ticket 107): taken once per request, as the page request is.
+  const yours = yourTodos(todo);
+  const [openAsked, setOpenAsked] = useState<number | null>(null);
+  let opening: string | null = null;
+  if (request?.open && request.nonce !== openAsked) {
+    setOpenAsked(request.nonce);
+    const id = request.ids[0];
+    if (id !== undefined && yours.some((item) => item.id === id)) {
+      opening = id;
+      setOpenId(id);
+    }
+  }
+  // Ticked off and gone to 已完成 (yours after its hold, Galley's at
+  // once: held where it stood, it is no longer yours), deleted, gone:
+  // the row folds, and does not open again if it comes back.
+  const asked = opening ?? openId;
+  const shownOpen =
+    asked !== null && yours.some((item) => item.id === asked) ? asked : null;
+  if (opening === null && shownOpen !== openId) setOpenId(null);
 
+  // Esc folds the open row first, then closes the panel; never from a
+  // text box (the row's own box takes it to give up first).
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
@@ -198,11 +248,40 @@ export function TodoPanel({
         return;
       }
       event.preventDefault();
-      onClose();
+      if (shownOpen !== null) setOpenId(null);
+      else onClose();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, [onClose, shownOpen]);
+
+  // An opened row out of view scrolls just into it, a frame after it is
+  // drawn open.
+  useEffect(() => {
+    if (shownOpen === null) return;
+    const frame = requestAnimationFrame(() => {
+      const scroller = list.current;
+      const row = Array.from(
+        scroller?.querySelectorAll<HTMLElement>("[data-todo-row]") ?? [],
+      ).find((each) => each.dataset.todoRow === shownOpen);
+      if (scroller && row) revealInList(scroller, row);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [shownOpen]);
+
+  // A click in the panel outside the open row folds it, but on a control
+  // (which does its own thing) or another of your rows (which opens
+  // itself). A menu's portal is not in the panel.
+  const onPanelClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (shownOpen === null) return;
+    const target = event.target as Element;
+    if (!event.currentTarget.contains(target)) return;
+    const row = target.closest<HTMLElement>("[data-todo-row]");
+    if (row?.dataset.todoRow === shownOpen) return;
+    if (row?.hasAttribute("data-todo-openable")) return;
+    if (target.closest(ROW_CONTROLS)) return;
+    setOpenId(null);
+  };
 
   const go = (target: TodoTarget) =>
     goToTodoTarget(target, spot, mainChatId, onOpenSession);
@@ -216,9 +295,10 @@ export function TodoPanel({
       aria-label={copy.todo.title}
       data-role="todo-panel"
       className="flex h-full min-h-0 min-w-0 flex-col bg-app"
+      onClick={onPanelClick}
     >
       <ReadingPanelHeader
-        title={<PanelPages page={page} onPage={setPage} pageId={pageId} />}
+        title={<PanelPages page={page} onPage={turnPage} pageId={pageId} />}
         // The way to a new one (main chat ticket 89, PRD ruling 133 point
         // 3): new to-dos are still said, not typed — the panel has no
         // input box, as a new one needs judging (when, whether to remind,
@@ -277,6 +357,8 @@ export function TodoPanel({
               defaultDoneOpen={defaultDoneOpen}
               held={held}
               revealDone={revealDone}
+              openId={shownOpen}
+              onOpen={setOpenId}
             />
             <AutostartHint todo={todo} />
           </>
@@ -363,6 +445,8 @@ export function TodoPanelGroups({
   defaultDoneOpen = false,
   held = NO_HOLDS,
   revealDone = null,
+  openId = null,
+  onOpen = () => {},
 }: {
   todo: AssistantTodo;
   mainChatId: string;
@@ -375,6 +459,10 @@ export function TodoPanelGroups({
   /** A request's nonce when a row it lights is under 已完成: unfold it
    * (ticket 87). */
   revealDone?: number | null;
+  /** The one of your to-dos open (ticket 107), and opening or folding
+   * one (`null`). */
+  openId?: string | null;
+  onOpen?: (id: string | null) => void;
 }) {
   const copy = useCopy();
   const [doneOpen, setDoneOpen] = useState(
@@ -409,6 +497,8 @@ export function TodoPanelGroups({
               key={item.id}
               item={item}
               held={rows.holding.has(item.id)}
+              open={item.id === openId}
+              onOpenChange={(open) => onOpen(open ? item.id : null)}
               {...rowProps}
             />
           ))}
@@ -467,6 +557,11 @@ interface RowProps {
   onTalkAbout: (item: TodoItem) => void;
 }
 
+/** What in the panel does its own thing on a click: a row's box (its
+ * label and input), its buttons, a text box, a link, a menu's row. A
+ * click there neither opens nor folds a row (ticket 107). */
+const ROW_CONTROLS = 'button, input, textarea, label, a, [role="menuitem"]';
+
 const LINE_TONES: Record<TodoLineTone, string> = {
   muted: "text-ink-muted",
   warning: "font-medium text-warning",
@@ -491,6 +586,13 @@ const LINE_TONES: Record<TodoLineTone, string> = {
  * its ⋯ is open. `menuOff` (a row ticked and holding its place) takes
  * the ⋯ away and opens nothing on a right-click, with the row's tree as
  * it was: a tick does not mount the row afresh.
+ *
+ * Your to-dos not done open (ticket 107, `YourRow`): they bring their
+ * own `title`, a click on the row (`onRowClick`), and, `open`, the
+ * selected ground (`bg-selected`, the sidebar's selected row's, no
+ * border or shadow) and the actions in sight at the end of the title's
+ * first line, the title giving way to them all the way down; `foot`
+ * goes under the notes.
  */
 function RowShell({
   item,
@@ -498,24 +600,33 @@ function RowShell({
   onGo,
   leading,
   titleClass,
+  title: ownTitle,
   line,
   notes,
+  foot,
   actions,
   menu,
   menuOff = false,
   failure,
+  open = false,
+  onRowClick,
 }: {
   item: TodoItem;
   mainChatId: string;
   onGo: (target: TodoTarget) => void;
   leading: ReactNode;
   titleClass?: string;
+  /** The row's own title in place of the jump button (ticket 107). */
+  title?: ReactNode;
   line?: ReactNode;
   notes?: ReactNode;
+  foot?: ReactNode;
   actions?: ReactNode[];
   menu?: TodoRowMenuModel;
   menuOff?: boolean;
   failure?: string | null;
+  open?: boolean;
+  onRowClick?: (event: ReactMouseEvent<HTMLDivElement>) => void;
 }) {
   const copy = useCopy();
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -543,7 +654,9 @@ function RowShell({
         ]
       : []),
   ];
-  const title = target ? (
+  const title = ownTitle ? (
+    ownTitle
+  ) : target ? (
     <button
       type="button"
       onClick={() => onGo(target)}
@@ -569,9 +682,13 @@ function RowShell({
       data-todo-row={item.id}
       data-todo-kind={item.kind}
       data-todo-state={item.state}
+      data-todo-openable={onRowClick ? "" : undefined}
+      data-todo-open={open ? "" : undefined}
+      onClick={onRowClick}
       className={cn(
-        "group/todo-row rounded-sm hover:bg-hover",
-        menuOpen && "bg-hover",
+        "group/todo-row rounded-sm",
+        open ? "bg-selected" : "hover:bg-hover",
+        menuOpen && !open && "bg-hover",
       )}
     >
       <div className="relative flex gap-2.5 px-2.5 py-1.5">
@@ -585,7 +702,7 @@ function RowShell({
               (shown.length > 1
                 ? "group-focus-within/todo-row:pr-[60px] group-hover/todo-row:pr-[60px]"
                 : "group-focus-within/todo-row:pr-8 group-hover/todo-row:pr-8"),
-            menuOpen && (shown.length > 1 ? "pr-[60px]" : "pr-8"),
+            (menuOpen || open) && (shown.length > 1 ? "pr-[60px]" : "pr-8"),
           )}
         >
           <div className="text-[13px] leading-5">{title}</div>
@@ -594,7 +711,12 @@ function RowShell({
         {shown.length > 0 && (
           <div
             className={cn(
-              "absolute inset-y-0 right-1.5 flex items-center gap-0.5 opacity-0 group-focus-within/todo-row:opacity-100 group-hover/todo-row:opacity-100",
+              // Open, the title may run to several lines: the actions
+              // stay by its first (28px buttons on its 20px line).
+              "absolute right-1.5 flex items-center gap-0.5",
+              open
+                ? "top-0.5 opacity-100"
+                : "inset-y-0 opacity-0 group-focus-within/todo-row:opacity-100 group-hover/todo-row:opacity-100",
               menuOpen && "opacity-100",
             )}
           >
@@ -603,6 +725,7 @@ function RowShell({
         )}
       </div>
       {notes}
+      {foot}
       {failure && (
         <p
           role="alert"
@@ -656,34 +779,260 @@ function useTodoWrite(id: string) {
  * precise targets side by side make the row's hover loud). Since ticket
  * 88 (PRD ruling 132 point 3) the ⋯ after 「说说这件」 is that second
  * target, ruling 85's way in to 删除: its menu, and the row's
- * right-click, hold 说说这件, 取消提醒 and 删除. Not on a row ticked and
- * holding its place (yours, or Galley's tick, ticket 87): that one is
- * on its way to 已完成, where no row has it. */
+ * right-click, hold 说说这件, 在对话里查看 (ticket 107), 取消提醒 and 删除.
+ * Not on a row ticked and holding its place (yours, or Galley's tick,
+ * ticket 87): that one is on its way to 已完成, where no row has it.
+ *
+ * Since ticket 107 (PRD ruling 153 points 2–4) a click anywhere on it
+ * but its box and its buttons opens it — its title is no longer the
+ * jump; still a button, Enter or Space opens it (`aria-expanded`) — and
+ * a click on its blank folds it; a row ticked and holding does not open.
+ * Open, folded the same otherwise:
+ *
+ *   the box and the title     the title whole, wrapped; a click changes
+ *                             it in place
+ *   when it is due            a button: 「说说这件」 (「改时间跟 Galley
+ *                             说」), the time is said, not set here
+ *   the notes                 whole, their own lines kept; a click
+ *                             changes them; none: 「添加备注」
+ *   「10月28日记下 · 在对话里查看」 the day it was noted, and the jump
+ *
+ * A title or the notes in their box (`TodoTextEditor`): saved straight
+ * to Core (`editTodo`), no confirm; nothing written when the words are
+ * as they opened (`todoEditWrite`), an emptied title given up. Failed,
+ * the box is back with the words and the reason under it, Esc giving up
+ * back to what Core has; folded meanwhile, the reason is under the row
+ * and the box is back on opening. A box open with nothing failed goes
+ * when the row folds. */
 function YourRow({
   held = false,
+  open = false,
+  onOpenChange = () => {},
   ...props
 }: RowProps & {
   /** Galley ticked it off: held where it stood a moment, ticked as a
    * tick of yours holds, the box still (ticket 87). */
   held?: boolean;
+  /** Open (ticket 107): one row of yours at a time. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const { item, onTalkAbout } = props;
+  const { item, mainChatId, onGo, onTalkAbout } = props;
   const copy = useCopy();
   const language = useLanguage();
   const todayStartMs = useDayStamp();
   const cancelReminder = useAssistantTodoStore((s) => s.cancelReminder);
   const deleteTodo = useAssistantTodoStore((s) => s.deleteTodo);
+  const editTodo = useAssistantTodoStore((s) => s.editTodo);
   const { flip, failure, cancelling } = useTodoWrite(item.id);
   const checked = held || todoChecked(item, flip);
   const parts = todoMetaParts(item, checked, todayStartMs, language, copy);
   const canCancelReminder = !checked && todoReminderCancellable(item);
   const notes = todoNotesLine(item);
+  const target = todoTitleTarget(item, mainChatId);
+  const editable = open && !checked;
+
+  const [edit, setEdit] = useState<TodoEdit | null>(null);
+  // Folded, or ticked, with a box open and nothing failed in it: the box
+  // goes (a failed one waits for the row to open again).
+  if (!editable && edit?.phase === "editing" && !edit.failure) setEdit(null);
+  const titleButton = useRef<HTMLButtonElement>(null);
+  const notesButton = useRef<HTMLButtonElement>(null);
+  // A box closed from the keyboard hands the focus back to its words.
+  const refocus = useRef<TodoWordsField | null>(null);
+  useEffect(() => {
+    const field = refocus.current;
+    if (!field) return;
+    // Once: a row that stopped being editable meanwhile has no words to
+    // take it, and must not take it later.
+    refocus.current = null;
+    (field === "title" ? titleButton.current : notesButton.current)?.focus();
+  });
+
+  const startEdit = (
+    field: TodoWordsField,
+    event: ReactMouseEvent<HTMLElement>,
+  ) => {
+    if (!editable) return;
+    const start = field === "title" ? item.text : (notes?.full ?? "");
+    // The caret where the click was; from the keyboard (no pointer), at
+    // the end.
+    const caret =
+      event.detail > 0
+        ? caretOffsetAt(event.currentTarget, event.clientX, event.clientY)
+        : null;
+    setEdit({
+      field,
+      start,
+      draft: start,
+      caret,
+      phase: "editing",
+      failure: null,
+      keyboard: event.detail === 0,
+    });
+  };
+  const save = (keyboard: boolean) => {
+    if (!edit || edit.phase !== "editing") return;
+    const field = edit.field;
+    if (keyboard) refocus.current = field;
+    const write = todoEditWrite(field, edit.start, edit.draft);
+    if (write === null) {
+      setEdit(null);
+      return;
+    }
+    setEdit({
+      ...edit,
+      draft: write,
+      phase: "saving",
+      failure: null,
+      keyboard,
+    });
+    void editTodo(
+      item.id,
+      field === "title" ? { title: write } : { notes: write },
+    ).then((failed) =>
+      setEdit((now) => {
+        if (now?.field !== field || now.phase !== "saving") return now;
+        return failed
+          ? { ...now, phase: "editing", failure: failed, caret: null }
+          : null;
+      }),
+    );
+  };
+  const cancel = () => {
+    if (edit) refocus.current = edit.field;
+    setEdit(null);
+  };
+  const editing = (field: TodoWordsField): TodoEdit | null =>
+    editable && edit?.field === field && edit.phase === "editing" ? edit : null;
+  const shownWords = (field: TodoWordsField, words: string): string =>
+    edit?.field === field && edit.phase === "saving" ? edit.draft : words;
+
+  const titleEdit = editing("title");
+  const title = titleEdit ? (
+    <>
+      <TodoTextEditor
+        value={titleEdit.draft}
+        onChange={(draft) => setEdit({ ...titleEdit, draft })}
+        onSave={save}
+        onCancel={cancel}
+        multiline={false}
+        caret={titleEdit.caret}
+        autoFocus={!titleEdit.failure || titleEdit.keyboard}
+        ariaLabel={copy.todo.editTitle}
+        className={todoTitleClass(false)}
+      />
+      {titleEdit.failure && <EditFailure kind={titleEdit.failure} />}
+    </>
+  ) : (
+    <button
+      ref={titleButton}
+      type="button"
+      aria-expanded={open}
+      onClick={(event) => {
+        if (open) startEdit("title", event);
+        else if (!checked) onOpenChange(true);
+      }}
+      onPointerEnter={(e) =>
+        syncTruncatedTitle(e.currentTarget, todoRowText(item, copy))
+      }
+      className={cn(
+        "block max-w-full rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
+        open ? "break-words" : "truncate",
+        editable && "cursor-text",
+        todoTitleClass(checked),
+      )}
+    >
+      {shownWords("title", todoRowText(item, copy))}
+    </button>
+  );
+
+  const notesEdit = editing("notes");
+  const notesWords = shownWords("notes", notes?.full ?? "");
+  let notesBlock: ReactNode = null;
+  if (!open) {
+    notesBlock = notes && <NotesLine text={notes.text} full={notes.full} />;
+  } else if (notesEdit) {
+    notesBlock = (
+      <OpenNotes>
+        <TodoTextEditor
+          value={notesEdit.draft}
+          onChange={(draft) => setEdit({ ...notesEdit, draft })}
+          onSave={save}
+          onCancel={cancel}
+          multiline
+          caret={notesEdit.caret}
+          autoFocus={!notesEdit.failure || notesEdit.keyboard}
+          ariaLabel={copy.todo.editNotes}
+          className={NOTES_TYPE}
+        />
+        {notesEdit.failure && <EditFailure kind={notesEdit.failure} />}
+      </OpenNotes>
+    );
+  } else if (editable) {
+    notesBlock = (
+      <OpenNotes>
+        <button
+          ref={notesButton}
+          type="button"
+          data-role={notesWords ? "todo-notes" : "todo-add-notes"}
+          onClick={(event) => startEdit("notes", event)}
+          className={cn(
+            "block w-full cursor-text whitespace-pre-wrap break-words rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
+            NOTES_TYPE,
+          )}
+        >
+          {notesWords || copy.todo.addNotes}
+        </button>
+      </OpenNotes>
+    );
+  } else if (notesWords) {
+    notesBlock = (
+      <OpenNotes>
+        <p
+          data-role="todo-notes"
+          className={cn("whitespace-pre-wrap break-words", NOTES_TYPE)}
+        >
+          {notesWords}
+        </p>
+      </OpenNotes>
+    );
+  }
+
+  const noted = open ? todoNotedLine(item, todayStartMs, language, copy) : null;
+  const foot =
+    open && (noted || target) ? (
+      <div
+        data-role="todo-noted"
+        className="pb-1.5 pl-9 pr-2.5 text-[12px] leading-[1.4] text-ink-muted"
+      >
+        {noted}
+        {noted && target && " · "}
+        {target && (
+          <button
+            type="button"
+            onClick={() => onGo(target)}
+            className={cn(
+              "rounded-sm text-ink-soft underline decoration-ink-muted/60 underline-offset-2 outline-none",
+              "hover:text-ink hover:decoration-ink focus-visible:ring-2 focus-visible:ring-brand/30",
+            )}
+          >
+            {copy.todo.viewInChat}
+          </button>
+        )}
+      </div>
+    ) : null;
+
   const menu: TodoRowMenuModel = {
     canCancelReminder,
     onTalkAbout: () => onTalkAbout(item),
+    onViewInChat: target ? () => onGo(target) : undefined,
     onCancelReminder: () => cancelReminder(item.id),
     onDelete: () => deleteTodo(item),
   };
+  // Open, a failed save says why under its box; folded, under the row.
+  const editFailure = !open && edit?.failure ? edit.failure : null;
+  const rowFailure = editFailure ?? failure;
   return (
     <RowShell
       {...props}
@@ -695,10 +1044,12 @@ function YourRow({
         />
       }
       titleClass={todoTitleClass(checked)}
+      title={title}
       line={
         <MetaLine
           parts={parts}
           checked={checked}
+          onTalk={open ? () => onTalkAbout(item) : undefined}
           after={
             canCancelReminder && (
               <CancelReminder
@@ -709,12 +1060,62 @@ function YourRow({
           }
         />
       }
-      notes={notes && <NotesLine text={notes.text} full={notes.full} />}
+      notes={notesBlock}
+      foot={foot}
       actions={[<TalkAbout key="talk" item={item} onTalkAbout={onTalkAbout} />]}
       menu={menu}
       menuOff={checked}
-      failure={failure && todoFailureText(failure, copy)}
+      failure={rowFailure && todoFailureText(rowFailure, copy)}
+      open={open}
+      onRowClick={(event) => {
+        const hit = event.target as Element;
+        // A menu's row (its portal) is not on the row; a control does
+        // its own thing.
+        if (!event.currentTarget.contains(hit)) return;
+        if (hit.closest(ROW_CONTROLS)) return;
+        if (open) onOpenChange(false);
+        else if (!checked) onOpenChange(true);
+      }}
     />
+  );
+}
+
+/** A title or the notes of an open to-do being changed in place
+ * (ticket 107). */
+interface TodoEdit {
+  field: TodoWordsField;
+  /** What the box opened with: nothing is written while it holds it. */
+  start: string;
+  /** What is in the box. */
+  draft: string;
+  /** Where the caret lands as the box appears; null at the end. */
+  caret: number | null;
+  /** `saving`: on its way to Core, its words drawn as they will stand. */
+  phase: "editing" | "saving";
+  /** Why the last save failed: the box back, the words in it. */
+  failure: TodoFailure | null;
+  /** From the keyboard: a box back after a failure takes the focus (one
+   * left by a click elsewhere does not take it back from there). */
+  keyboard: boolean;
+}
+
+/** The notes' type: 12px `ink-muted` (ruling 146), folded or open. */
+const NOTES_TYPE = "text-[12px] leading-[1.4] text-ink-muted";
+
+/** An open to-do's notes, or 「添加备注」, where the folded line sits: at
+ * the title's start, 2px under the line above. */
+function OpenNotes({ children }: { children: ReactNode }) {
+  return <div className="-mt-1 pb-1 pl-9 pr-2.5">{children}</div>;
+}
+
+/** Why a title or notes did not save, under their box: the tick's two
+ * words (「没能完成，再试一次。」, 「这件事已经不在了。」). */
+function EditFailure({ kind }: { kind: TodoFailure }) {
+  const copy = useCopy();
+  return (
+    <p role="alert" className="mt-1 text-[11.5px] leading-[1.45] text-error">
+      {todoFailureText(kind, copy)}
+    </p>
   );
 }
 
@@ -743,9 +1144,10 @@ function CancelReminder({
 }
 
 /**
- * A to-do's notes (ticket 80, ruling 128 point 5): 12px `ink-muted`, one
- * line, cut, its breaks and runs of space one space; cut, the hover
- * gives them in full, as a title's does. Under the second line, or the
+ * A to-do's notes folded (ticket 80, ruling 128 point 5): 12px
+ * `ink-muted`, one line, cut, its breaks and runs of space one space;
+ * cut, the hover gives them in full, as a title's does — open, they are
+ * whole (ticket 107, `OpenNotes`). Under the second line, or the
  * title when there is none, at the title's start (the leading column
  * and its gap: 36px). Its own block under the row's box, pulled up 4px
  * into the box's 6px foot so it sits 2px under the line above, as the
@@ -756,7 +1158,7 @@ function NotesLine({ text, full }: { text: string; full: string }) {
     <div className="-mt-1 pb-1.5 pl-9 pr-2.5">
       <p
         data-role="todo-notes"
-        className="truncate text-[12px] leading-[1.4] text-ink-muted"
+        className={cn("truncate", NOTES_TYPE)}
         onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, full)}
       >
         {text}
@@ -771,16 +1173,22 @@ function NotesLine({ text, full }: { text: string; full: string }) {
  * the line cuts, so a narrow row cuts the words, never the button.
  * `ink-soft`, a step over the notes' `ink-muted` (main chat PRD ruling
  * 146): the title, when, then what to bring, in the three inks; ticked
- * and holding its place it goes `ink-muted` with the struck title. */
+ * and holding its place it goes `ink-muted` with the struck title. With
+ * `onTalk` (an open row, ticket 107, PRD ruling 153 point 5) the words
+ * are a button, 「改时间跟 Galley 说」 on hover, that does 「说说这件」:
+ * the time is said to Galley, not set here. None drawn without a time. */
 function MetaLine({
   parts,
   checked,
   after,
+  onTalk,
 }: {
   parts: readonly TodoMetaPart[];
   checked: boolean;
   after?: ReactNode;
+  onTalk?: () => void;
 }) {
+  const copy = useCopy();
   if (parts.length === 0) return null;
   return (
     <div
@@ -790,9 +1198,22 @@ function MetaLine({
         checked ? "text-ink-muted" : "text-ink-soft",
       )}
     >
-      <span className="min-w-0 truncate">
-        <TodoMetaText parts={parts} />
-      </span>
+      {onTalk ? (
+        <TooltipLabel text={copy.todo.timeTalkHint}>
+          <button
+            type="button"
+            data-role="todo-meta-talk"
+            onClick={onTalk}
+            className="min-w-0 truncate rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+          >
+            <TodoMetaText parts={parts} />
+          </button>
+        </TooltipLabel>
+      ) : (
+        <span className="min-w-0 truncate">
+          <TodoMetaText parts={parts} />
+        </span>
+      )}
       {after}
     </div>
   );

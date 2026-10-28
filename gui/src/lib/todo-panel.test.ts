@@ -21,7 +21,9 @@ import {
   TODO_SETTLE_MS,
   todoCancelled,
   todoChecked,
+  todoEditWrite,
   todoMetaParts,
+  todoNotedLine,
   todoNotesLine,
   todoOverdueDays,
   todoGlanceOpened,
@@ -410,6 +412,72 @@ describe("a to-do's notes (ticket 80)", () => {
     expect(
       todoNotesLine(todo({ overdue: true, notes: "A 座 3 楼" }))?.text,
     ).toBe("A 座 3 楼");
+  });
+});
+
+// Main chat ticket 107, PRD ruling 153 point 4: what saving a title or
+// notes changed in place writes, and nothing when nothing changed.
+describe("a title or notes changed in place (ticket 107)", () => {
+  it("writes the words as typed, a title on one line", () => {
+    expect(todoEditWrite("title", "交周报", "交周报和月报")).toBe(
+      "交周报和月报",
+    );
+    expect(todoEditWrite("title", "交周报", "  交周报\n和月报 ")).toBe(
+      "交周报 和月报",
+    );
+    expect(todoEditWrite("notes", "A 座", "A 座 3 楼\n带身份证\n")).toBe(
+      "A 座 3 楼\n带身份证",
+    );
+  });
+
+  it("writes nothing when the words are as the box opened, a trim apart", () => {
+    expect(todoEditWrite("title", "交周报", "交周报")).toBeNull();
+    expect(todoEditWrite("title", "交周报", " 交周报 ")).toBeNull();
+    expect(todoEditWrite("notes", "A 座", "A 座\n")).toBeNull();
+    expect(todoEditWrite("notes", "", "  ")).toBeNull();
+  });
+
+  it("gives an emptied title up, and empties emptied notes", () => {
+    expect(todoEditWrite("title", "交周报", "")).toBeNull();
+    expect(todoEditWrite("title", "交周报", " \n ")).toBeNull();
+    expect(todoEditWrite("notes", "A 座 3 楼", "")).toBe("");
+    expect(todoEditWrite("notes", "A 座 3 楼", " \n")).toBe("");
+  });
+
+  it("measures against what the box opened with, not what Galley wrote since", () => {
+    // Opened on 「交周报」, Galley renamed it meanwhile: a box left as it
+    // opened writes nothing; one changed is written whole.
+    expect(todoEditWrite("title", "交周报", "交周报")).toBeNull();
+    expect(todoEditWrite("title", "交周报", "交周报！")).toBe("交周报！");
+  });
+});
+
+describe("the day an open to-do was noted (ticket 107)", () => {
+  it("is today, yesterday, then the date, never a weekday, in either language", () => {
+    const at = (d: number, h = 10) =>
+      todo({ createdAt: local(2026, 10, d, h) });
+    expect(todoNotedLine(at(16), TODAY, "zh-CN", zh)).toBe("今天记下");
+    expect(todoNotedLine(at(15, 23), TODAY, "zh-CN", zh)).toBe("昨天记下");
+    // Three days back: a date, not 「周二」 as the time line would say.
+    expect(todoNotedLine(at(13), TODAY, "zh-CN", zh)).toBe("10月13日记下");
+    expect(
+      todoNotedLine(
+        todo({ createdAt: local(2025, 12, 30) }),
+        TODAY,
+        "zh-CN",
+        zh,
+      ),
+    ).toBe("2025年12月30日记下");
+    expect(todoNotedLine(at(16), TODAY, "en-US", en)).toBe("Noted today");
+    expect(todoNotedLine(at(15), TODAY, "en-US", en)).toBe("Noted yesterday");
+    expect(todoNotedLine(at(13), TODAY, "en-US", en)).toBe("Noted Oct 13");
+  });
+
+  it("says nothing without a day", () => {
+    expect(todoNotedLine(todo(), TODAY, "zh-CN", zh)).toBeNull();
+    expect(
+      todoNotedLine(todo({ createdAt: "not a time" }), TODAY, "zh-CN", zh),
+    ).toBeNull();
   });
 });
 
@@ -1063,11 +1131,16 @@ describe("what lights up (ticket 87, ruling 131 points 3 and 5)", () => {
     expect(
       [
         ...todoWritesOnTheirWay(
-          { flips: { todo_a: {} }, cancelling: {}, deleting: {} },
-          { flips: {}, cancelling: { sched_x: true }, deleting: {} },
+          { flips: { todo_a: {} }, cancelling: {}, deleting: {}, editing: {} },
+          {
+            flips: {},
+            cancelling: { sched_x: true },
+            deleting: {},
+            editing: { todo_e: 1 },
+          },
         ),
       ].sort(),
-    ).toEqual(["sched_x", "todo_a"]);
+    ).toEqual(["sched_x", "todo_a", "todo_e"]);
   });
 
   // Ticket 88: a to-do deleted here, under its undo or sent, is this
@@ -1075,8 +1148,8 @@ describe("what lights up (ticket 87, ruling 131 points 3 and 5)", () => {
   // holds — Galley ticking it off meanwhile included.
   it("counts a to-do deleted here as this window's own write", () => {
     const mine = todoWritesOnTheirWay(
-      { flips: {}, cancelling: {}, deleting: { todo_b: {} } },
-      { flips: {}, cancelling: {}, deleting: {} },
+      { flips: {}, cancelling: {}, deleting: { todo_b: {} }, editing: {} },
+      { flips: {}, cancelling: {}, deleting: {}, editing: {} },
     );
     expect([...mine]).toEqual(["todo_b"]);
     const before = list({ yours: yours(A, B) });

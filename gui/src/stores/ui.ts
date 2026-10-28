@@ -88,8 +88,9 @@ interface UiState {
    * "Light these rows up" — a card's title, or the panel's one opening
    * by itself (ticket 87). The panel takes it once its rows are on
    * screen: unfolds 已完成 for one there, scrolls the first into view
-   * and flashes them (useTodoPanelFlash), then clears it. Pure UI
-   * coordination.
+   * and flashes them (useTodoPanelFlash), then clears it; a card's title
+   * on one of your to-dos opens that row too (`open`, ticket 107). Pure
+   * UI coordination.
    */
   todoRowRequest: TodoRowRequest | null;
 
@@ -148,6 +149,10 @@ export interface TodoRowRequest {
   /** The rows' ids (`data-todo-row`). */
   ids: readonly string[];
   nonce: number;
+  /** Open the row too: a to-do card's title (main chat ticket 107, PRD
+   * ruling 153), on one of your to-dos not done. The panel opening by
+   * itself only lights. */
+  open?: boolean;
 }
 
 export interface LocateRequest {
@@ -185,7 +190,10 @@ interface UiActions {
   setTodoGlance: (glance: TodoGlance | null) => void;
   /** Write that the panel has been met (ticket 87). */
   markTodoPanelIntroduced: () => void;
-  requestTodoRows: (ids: readonly string[]) => void;
+  requestTodoRows: (
+    ids: readonly string[],
+    options?: { open?: boolean },
+  ) => void;
   /** The panel took the request with this nonce. */
   clearTodoRowRequest: (nonce: number) => void;
   requestTodoPage: (page: TodoPanelPage) => void;
@@ -284,11 +292,12 @@ export const useUiStore = create<UiStore>((set, get) => ({
     writeTodoPanelIntroduced();
     if (!get().todoPanelIntroduced) set({ todoPanelIntroduced: true });
   },
-  requestTodoRows: (ids) =>
+  requestTodoRows: (ids, options) =>
     set((state) => ({
       todoRowRequest: {
         ids,
         nonce: (state.todoRowRequest?.nonce ?? 0) + 1,
+        ...(options?.open ? { open: true } : {}),
       },
     })),
   clearTodoRowRequest: (nonce) => {

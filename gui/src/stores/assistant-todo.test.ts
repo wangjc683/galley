@@ -72,6 +72,7 @@ beforeEach(() => {
     cancelling: {},
     deleting: {},
     deleteToastId: null,
+    editing: {},
   });
   useUiStore.setState({ toasts: [] });
   usePrefsStore.setState({ languagePreference: "zh-CN" });
@@ -310,6 +311,74 @@ describe("the to-dos noted in the main chat (ticket 43)", () => {
     expect(useAssistantTodoStore.getState().flips).toEqual({});
     await vi.runAllTimersAsync();
     expect(calls(invoke)).toEqual([]);
+  });
+});
+
+// Main chat ticket 107 (PRD ruling 153 point 4): a title or notes
+// changed in place in the panel.
+describe("changing a title or notes", () => {
+  it("goes straight to Core with only what changed, reads again, and is this window's own on its way", async () => {
+    const renamed: AssistantTodo = {
+      ...before,
+      yours: {
+        today: [{ ...OPEN, text: "交季度报告初稿" }],
+        later: [],
+        anytime: [],
+      },
+    };
+    const invoke = answer([renamed]);
+    const saved = useAssistantTodoStore
+      .getState()
+      .editTodo("todo_1", { title: "交季度报告初稿" });
+    expect(useAssistantTodoStore.getState().editing).toEqual({ todo_1: 1 });
+    await expect(saved).resolves.toBeNull();
+    expect(calls(invoke)).toEqual(["update_todo", ...READ]);
+    expect(invoke).toHaveBeenCalledWith("update_todo", {
+      id: "todo_1",
+      title: "交季度报告初稿",
+    });
+    // The fresh words and the record gone, together.
+    expect(useAssistantTodoStore.getState().todo).toEqual(renamed);
+    expect(useAssistantTodoStore.getState().editing).toEqual({});
+  });
+
+  it("counts two on their way: the record goes with the last", async () => {
+    let finish: (() => void)[] = [];
+    const { invoke } = getTauriMocks();
+    invoke.mockImplementation(async (command) => {
+      if (command === "update_todo") {
+        await new Promise<void>((resolve) => finish.push(resolve));
+        return { id: "todo_1" };
+      }
+      if (command === "list_assistant_todo") return before;
+      return [];
+    });
+    const { editTodo } = useAssistantTodoStore.getState();
+    const title = editTodo("todo_1", { title: "交初稿" });
+    const notes = editTodo("todo_1", { notes: "带 U 盘" });
+    expect(useAssistantTodoStore.getState().editing).toEqual({ todo_1: 2 });
+    await vi.waitFor(() => expect(finish).toHaveLength(2));
+    finish[0]();
+    await title;
+    expect(useAssistantTodoStore.getState().editing).toEqual({ todo_1: 1 });
+    finish[1]();
+    await notes;
+    expect(useAssistantTodoStore.getState().editing).toEqual({});
+    finish = [];
+  });
+
+  it("gives back why it failed, not into `failures`, the list as it was", async () => {
+    const { invoke } = getTauriMocks();
+    invoke.mockRejectedValue(
+      JSON.stringify({ error: "not_found", message: "gone" }),
+    );
+    await expect(
+      useAssistantTodoStore.getState().editTodo("todo_1", { notes: "" }),
+    ).resolves.toBe("gone");
+    expect(calls(invoke)).toEqual(["update_todo"]);
+    expect(useAssistantTodoStore.getState().failures).toEqual({});
+    expect(useAssistantTodoStore.getState().editing).toEqual({});
+    expect(useAssistantTodoStore.getState().todo).toBe(before);
   });
 });
 
