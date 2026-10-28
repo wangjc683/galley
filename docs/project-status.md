@@ -811,8 +811,16 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Release-scope truth is `git log v0.7.3..HEAD`. Nothing user-facing since
-`v0.7.3` yet. The 10-28 trial review (the morning review's "cancelled or
+Release-scope truth is `git log v0.7.3..HEAD`. Since `v0.7.3`: a to-do of
+yours opens in place in the to-do panel, with its whole title and notes, and
+its title and notes change right there; the time is still changed by telling
+Galley; the jump to the sentence that noted it moves to the open row's last
+line and the ⋯ menu (main chat ruling 153, ticket 107). One Core desktop
+command (`update_todo`, title and notes only) and one manual sentence (read
+the to-do as it is now before changing its words); no CLI, Agent API or
+migration change. JC dogfooded it on dev the same day; the database has no
+write from the edit steps, so saving an edit has only vitest and Core
+integration coverage. The 10-28 trial review (the morning review's "cancelled or
 found noisy by half, tighten the bar" from tickets 73–79, and the deferred
 start signals tied to the first-phase trial) did not go into `v0.7.3` by
 JC's choice; it goes into the next release. Still owed from `v0.7.2`'s
