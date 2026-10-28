@@ -12,8 +12,11 @@ import {
 } from "@/lib/assistant-todo";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import type { ScheduledTask } from "@/lib/scheduled-tasks";
+import { showTodoRow } from "@/lib/todo-open";
+import { reminderListed } from "@/lib/todo-panel";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { cn } from "@/lib/utils";
+import { useAssistantTodoStore } from "@/stores/assistant-todo";
 
 /**
  * The reminders the assistant set in one reply, one card each, under
@@ -31,6 +34,13 @@ import { cn } from "@/lib/utils";
  * confirm (it touches this one thing) and is not told to the assistant;
  * the card stays, saying 已取消, its time and words struck through
  * (ticket 99). A cancel that fails says why on a line under it.
+ *
+ * Its words open the to-do panel at the task's row (main chat ticket
+ * 101, PRD ruling 147 point 5), as a to-do card's title does
+ * (lib/todo-open.ts `showTodoRow`): beside this conversation, the row
+ * lit up, 已完成 unfolded for one that went off. Only while the panel
+ * lists it (`reminderListed`) — not cancelled, not gone off more than
+ * seven days ago — otherwise words; the three cards alike.
  */
 export function ReminderCards({
   tasks,
@@ -66,6 +76,8 @@ function ReminderCard({ task }: { task: ScheduledTask }) {
   // ruling 144 point 2): one meaning, the three cards alike.
   const struck = state === "cancelled";
   const canCancel = state === "scheduled" || state === "paused";
+  const listed = useAssistantTodoStore((s) => reminderListed(s.todo, task.id));
+  const mainChatId = task.createdIn?.sessionId;
 
   const cancel = () => {
     if (busy) return;
@@ -98,18 +110,41 @@ function ReminderCard({ task }: { task: ScheduledTask }) {
         >
           {time}
         </span>
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate text-[13px] leading-5",
-            settled ? "text-ink-muted" : "text-ink",
-            struck && "line-through",
-          )}
-          onPointerEnter={(e) =>
-            syncTruncatedTitle(e.currentTarget, task.prompt)
-          }
-        >
-          {task.prompt}
-        </span>
+        {listed && mainChatId ? (
+          // A to-do card's title button (ticket 101): as wide as its
+          // words, underlined on hover at 60%, a ring on keyboard focus;
+          // the colour and any strike take the words' own, as there.
+          <span className="min-w-0 flex-1 text-[13px] leading-5">
+            <button
+              type="button"
+              onClick={() => showTodoRow(task.id, mainChatId)}
+              onPointerEnter={(e) =>
+                syncTruncatedTitle(e.currentTarget, task.prompt)
+              }
+              className={cn(
+                "block max-w-full truncate rounded-sm text-left outline-none",
+                "underline-offset-2 hover:underline hover:decoration-ink-muted/60 focus-visible:ring-2 focus-visible:ring-brand/30",
+                settled ? "text-ink-muted" : "text-ink",
+                struck && "line-through",
+              )}
+            >
+              {task.prompt}
+            </button>
+          </span>
+        ) : (
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate text-[13px] leading-5",
+              settled ? "text-ink-muted" : "text-ink",
+              struck && "line-through",
+            )}
+            onPointerEnter={(e) =>
+              syncTruncatedTitle(e.currentTarget, task.prompt)
+            }
+          >
+            {task.prompt}
+          </span>
+        )}
         <span className="shrink-0 text-[12px] text-ink-muted">
           {reminderStateLabel(task, copy)}
         </span>

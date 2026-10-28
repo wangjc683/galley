@@ -48,7 +48,7 @@ import { useAppHydrationEffects } from "@/hooks/useAppHydrationEffects";
 import { useAssistantTodoSync } from "@/hooks/useAssistantTodoSync";
 import { useMemoSync } from "@/hooks/useMemoSync";
 import { useTodoGlanceFollow } from "@/hooks/useTodoGlanceFollow";
-import { useTodoPanelIntroduction } from "@/hooks/useTodoPanelIntroduction";
+import { useFreshCards } from "@/hooks/useFreshCards";
 import { useBrowserControlLiveStatus } from "@/hooks/useBrowserControlLiveStatus";
 import { useChannelsStatus } from "@/hooks/useChannelsStatus";
 import { useExternalCoreEvents } from "@/hooks/useExternalCoreEvents";
@@ -490,9 +490,10 @@ function App() {
   // A look arrives where a jump out of the panel took it, and folds once
   // you leave the conversation it is open in (ticket 87).
   useTodoGlanceFollow(todoPanel.at);
-  // The panel opens by itself once, the first time a to-do card appears
-  // under your round (ticket 87, ruling 131 point 4).
-  useTodoPanelIntroduction(mainChatId);
+  // The panel opens by itself once, the first time a card appears under
+  // your round (ticket 87, ruling 131 point 4; a to-do's, a reminder's
+  // or a memo's since ticket 101, ruling 147 point 4).
+  useFreshCards(mainChatId);
   const paletteSessions = useMemo(
     () =>
       visibleSessions.map((s) =>

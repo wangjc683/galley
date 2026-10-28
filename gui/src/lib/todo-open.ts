@@ -1,8 +1,13 @@
 import type { TodoItem, TodoTarget } from "@/lib/assistant-todo";
+import type { FreshCard } from "@/lib/fresh-cards";
 import { openMainChat } from "@/lib/main-chat";
-import { todoCancelled } from "@/lib/todo-panel";
 import type { TodoPlace } from "@/lib/todo-panel-memory";
-import { useUiStore, type QuoteRequest, type Screen } from "@/stores/ui";
+import {
+  useUiStore,
+  type QuoteRequest,
+  type Screen,
+  type TodoPanelPage,
+} from "@/stores/ui";
 import type { Session } from "@/types/session";
 
 /**
@@ -23,8 +28,9 @@ import type { Session } from "@/types/session";
  * instead (`TodoGlance`), which nothing remembers; a to-do card's title
  * opens the panel at its row (`showTodoRow`); and the panel opens by
  * itself once, the first time a card appears under your round
- * (`todoPanelIntroduces`). Every open and close of yours marks the panel
- * met (lib/todo-panel-memory.ts).
+ * (`todoPanelIntroduces`; a to-do's, a reminder's or a memo's since
+ * ticket 101). Every open and close of yours marks the panel met
+ * (lib/todo-panel-memory.ts).
  */
 
 /**
@@ -304,11 +310,18 @@ export function talkToGalley(
  * remembered open when wide, a look when narrow, as the top bar's button
  * opens it; already on screen, it is left as it is. Then the row lights
  * up (`requestTodoRows`). Only a card whose to-do the panel lists has a
- * button (`todoListed`).
+ * button (`todoListed`). A reminder card's words do the same for its
+ * task's row (main chat ticket 101, PRD ruling 147 point 5), while the
+ * panel lists it (lib/todo-panel.ts `reminderListed`). Both turn the
+ * panel to its 待办 page, as a memo card's words turn it to 备忘
+ * (`showMemoRow`): a panel already up on 备忘 had no row there to light
+ * (ticket 101).
  */
 export function showTodoRow(id: string, mainChatId: string): void {
   showPanelBesideGalley(mainChatId);
-  useUiStore.getState().requestTodoRows([id]);
+  const ui = useUiStore.getState();
+  ui.requestTodoPage("todo");
+  ui.requestTodoRows([id]);
 }
 
 /**
@@ -349,13 +362,12 @@ function showPanelBesideGalley(mainChatId: string): void {
 export interface TodoIntroduction {
   /** The panel has been met (lib/todo-panel-memory.ts). */
   introduced: boolean;
-  /** The noted to-dos (the cards) before this read; null before the
-   * first, which only says what is already there. */
-  previous: readonly TodoItem[] | null;
-  next: readonly TodoItem[];
-  mainChatId: string | undefined;
-  /** The round settling is one you sent, not one Core woke Galley for
-   * (lib/subtasks.ts `inReportRound`, the typing dots' own rule in
+  /** The cards that have just appeared under the main chat's replies,
+   * gathered from the three reads (lib/fresh-cards.ts; the first read of
+   * each says only what is there, and brings none). */
+  fresh: readonly FreshCard[];
+  /** The round they came with is one you sent, not one Core woke Galley
+   * for (lib/subtasks.ts `inReportRound`, the typing dots' own rule in
    * lib/assistant-conversation.ts). */
   yourRound: boolean;
   /** Galley's conversation itself is in the main area
@@ -365,49 +377,62 @@ export interface TodoIntroduction {
   narrow: boolean;
 }
 
+/** The panel opening by itself: on which page, lighting which rows. */
+export interface TodoIntroducing {
+  page: TodoPanelPage;
+  rows: string[];
+}
+
 /**
  * The one time the panel opens by itself (main chat ticket 87, PRD
- * ruling 131 point 4): the to-dos whose cards have just appeared under
- * the reply to a round you sent, while you look at it — Galley's
- * conversation on screen, wide enough to have the panel beside it — and
- * the panel has never been met. Empty: it does not open. Not on the
- * first read (what is there is not news), nor in a round Core woke it
- * for; only your to-dos (subtasks and its own reminders have no such
- * card); not one cancelled before its card came. A card appears when its
- * reply settles: Core fills `turnIndex` at the run's end, so a to-do
- * newly carded here is one the round now settling noted. Narrow, it
- * waits for the next one, and the flag is not written either.
+ * ruling 131 point 4): cards have just appeared under the reply to a
+ * round you sent, while you look at it — Galley's conversation on
+ * screen, wide enough to have the panel beside it — and the panel has
+ * never been met. Null: it does not open. Not in a round Core woke it
+ * for. Narrow, it waits for the next one, and the flag is not written
+ * either.
+ *
+ * Since ticket 101 (PRD ruling 147 point 4) any card the panel lists
+ * counts, not only a to-do of yours: a new user's first thing noted is
+ * as often 「明天 10 点提醒我……」, Galley's own reminder (ruling 92), or
+ * something about them, a memo. Which cards count is
+ * lib/fresh-cards.ts's (no subtask, nothing cancelled, no 「不再记」).
+ * The page: 待办 when there is a to-do or a reminder among them, its
+ * rows lit; 备忘 when there are only memos, theirs.
  */
-export function todoPanelIntroduces(input: TodoIntroduction): string[] {
-  const { previous, mainChatId } = input;
+export function todoPanelIntroduces(
+  input: TodoIntroduction,
+): TodoIntroducing | null {
   if (
     input.introduced ||
-    previous === null ||
-    !mainChatId ||
     !input.yourRound ||
     !input.mainChatOnScreen ||
     input.narrow
   ) {
-    return [];
+    return null;
   }
-  const carded = (item: TodoItem) =>
-    item.kind === "todo" &&
-    !todoCancelled(item) &&
-    item.createdIn?.sessionId === mainChatId &&
-    item.createdIn.turnIndex != null;
-  const before = new Set(previous.filter(carded).map((item) => item.id));
-  return input.next
-    .filter((item) => carded(item) && !before.has(item.id))
-    .map((item) => item.id);
+  const page: TodoPanelPage = input.fresh.some((card) => card.kind !== "memo")
+    ? "todo"
+    : "memo";
+  const rows = [
+    ...new Set(
+      input.fresh
+        .filter((card) => (card.kind === "memo") === (page === "memo"))
+        .map((card) => card.row),
+    ),
+  ];
+  return rows.length > 0 ? { page, rows } : null;
 }
 
 /** Open the panel by itself, the once (`todoPanelIntroduces`): Galley's
- * place, remembered open, the rows lit, the panel met. */
-export function introduceTodoPanel(ids: readonly string[]): void {
+ * place, remembered open, on its page (ticket 101), the rows lit, the
+ * panel met. */
+export function introduceTodoPanel(introducing: TodoIntroducing): void {
   const ui = useUiStore.getState();
   ui.setTodoPanelOpen("galley", true);
   met();
-  ui.requestTodoRows(ids);
+  ui.requestTodoPage(introducing.page);
+  ui.requestTodoRows(introducing.rows);
 }
 
 /** The text MainView's composer quotes for a request, or null: only one

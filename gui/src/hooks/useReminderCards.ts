@@ -21,6 +21,32 @@ let lastRead: { tasks: ScheduledTask[]; json: string } = {
   json: "[]",
 };
 
+/** Hears each read as it lands: the tasks before it, null for a mount's
+ * first (it says only what is there), and after. */
+export type ReminderReadListener = (
+  previous: readonly ScheduledTask[] | null,
+  next: readonly ScheduledTask[],
+) => void;
+
+const readListeners = new Set<ReminderReadListener>();
+
+/**
+ * Hear the reads the main chat's reminder cards come from (main chat
+ * ticket 101, PRD ruling 147 point 4): the to-do panel's one opening by
+ * itself counts Galley's own reminders too (hooks/useFreshCards.ts).
+ * They are read only while the main chat is mounted, a mount's first
+ * read standing for what was already there — what was made while you
+ * were elsewhere is not news on coming back. Returns the unsubscribe.
+ */
+export function subscribeReminderReads(
+  listener: ReminderReadListener,
+): () => void {
+  readListeners.add(listener);
+  return () => {
+    readListeners.delete(listener);
+  };
+}
+
 /**
  * The reminders the assistant set in the main chat's replies, by the
  * reply they hang under (main chat ticket 37). Reads every task,
@@ -37,12 +63,20 @@ export function useRemindersByMessage(
     if (!mainChatId) return;
     let cancelled = false;
     let unlisten: (() => void) | null = null;
+    // This mount's first read lands as a starting point (ticket 101).
+    let first = true;
     const load = () => {
       listScheduledTasks(true)
         .then((all) => {
           const json = JSON.stringify(all);
+          const previous = first ? null : lastRead.tasks;
           if (json !== lastRead.json) lastRead = { tasks: all, json };
-          if (!cancelled) setTasks(lastRead.tasks);
+          if (cancelled) return;
+          first = false;
+          setTasks(lastRead.tasks);
+          for (const listener of readListeners) {
+            listener(previous, lastRead.tasks);
+          }
         })
         .catch((e) => console.warn("[reminders] list failed.", e));
     };

@@ -406,6 +406,17 @@ export function todoListed(todo: AssistantTodo, id: string): boolean {
   ].some((group) => group.some((item) => item.id === id));
 }
 
+/** Whether the panel lists one of Galley's own tasks (`kind: "task"`,
+ * its id): a reminder card's words are a button then (main chat ticket
+ * 101, PRD ruling 147 point 5), as a to-do card's title is
+ * (`todoListed`). Not one cancelled, nor one that went off more than
+ * seven days ago. */
+export function reminderListed(todo: AssistantTodo, taskId: string): boolean {
+  return [todo.assistant, todo.routine, todo.done].some((group) =>
+    group.some((item) => item.kind === "task" && item.id === taskId),
+  );
+}
+
 /** Whether lighting up `ids` needs 已完成 unfolded: one of them is only
  * there (ticket 87: a card's title on a done to-do). */
 export function todoRowsInDone(

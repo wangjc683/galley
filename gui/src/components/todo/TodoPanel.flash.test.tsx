@@ -12,6 +12,7 @@ import {
   vi,
 } from "vitest";
 
+import { ReminderCards } from "@/components/conversation/ReminderCards";
 import { TodoCards } from "@/components/conversation/TodoCards";
 import {
   EMPTY_TODO,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/assistant-todo";
 import { CopyProvider } from "@/lib/i18n";
 import { LOCATE_FLASH_CLASS } from "@/lib/locate-flash";
+import type { ScheduledTask } from "@/lib/scheduled-tasks";
 import { TODO_SETTLE_MS } from "@/lib/todo-panel";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
 import { useUiStore } from "@/stores/ui";
@@ -225,5 +227,106 @@ describe("a card's title (ruling 131 point 3)", () => {
     await frame();
     expect(lit(container)).toEqual(["todo_b"]);
     expect(useUiStore.getState().todoRowRequest).toBeNull();
+  });
+});
+
+describe("a reminder card's words (ticket 101, ruling 147 point 5)", () => {
+  function task(id: string, extra: Partial<ScheduledTask> = {}): ScheduledTask {
+    return {
+      id,
+      prompt: `提醒 ${id}`,
+      repeat: { kind: "once" },
+      timeOfDay: "15:00",
+      enabled: true,
+      fireAt: "2099-10-28T07:00:00Z",
+      target: "assistant",
+      createdIn: { sessionId: "s-main", turnIndex: 4 },
+      createdAt: "2026-10-28T06:50:00Z",
+      updatedAt: "2026-10-28T06:50:00Z",
+      ...extra,
+    };
+  }
+  /** The task as the panel lists it. */
+  const row = (id: string, extra: Partial<TodoItem> = {}): TodoItem => ({
+    kind: "task",
+    id,
+    text: `提醒 ${id}`,
+    state: "scheduled",
+    createdBy: "assistant",
+    ...extra,
+  });
+  /** The words' cell: a span, holding the button when there is one. */
+  const words = (card: Element) =>
+    card.querySelector<HTMLElement>("span.min-w-0");
+
+  it("are a button while the panel lists the task, words when it does not", () => {
+    useAssistantTodoStore.setState({
+      todo: { ...list([A]), assistant: [row("sched_a")] },
+    });
+    const container = mount(
+      <ReminderCards
+        tasks={[
+          task("sched_a"),
+          // Cancelled: in no group of the panel.
+          task("sched_x", { cancelledAt: "2026-10-28T06:55:00Z" }),
+          // Listed, but a to-do of that id, not a task.
+          task("todo_a"),
+        ]}
+      />,
+    );
+    const cards = container.querySelectorAll('[data-role="reminder-card"]');
+    const first = cards[0].querySelector("span.min-w-0 > button");
+    expect(first?.textContent).toBe("提醒 sched_a");
+    // The to-do card's title button: hover underline at 60%, the ring.
+    expect(first?.className).toContain(
+      "hover:underline hover:decoration-ink-muted/60 focus-visible:ring-2",
+    );
+    expect(first?.className).toContain("text-ink");
+    expect(first?.className).not.toContain("line-through");
+    for (const card of [cards[1], cards[2]]) {
+      expect(card.querySelector("span.min-w-0 > button")).toBeNull();
+      expect(words(card)?.tagName).toBe("SPAN");
+    }
+    // The cancelled one keeps its strike.
+    expect(words(cards[1])?.className).toContain("line-through");
+  });
+
+  it("opens the panel at the task's row and lights it", async () => {
+    useAssistantTodoStore.setState({
+      todo: { ...list([A]), assistant: [row("sched_a")] },
+    });
+    const cards = mount(<ReminderCards tasks={[task("sched_a")]} />);
+    act(() =>
+      cards.querySelector<HTMLButtonElement>("span.min-w-0 > button")!.click(),
+    );
+    expect(useUiStore.getState().todoPanelOpen.galley).toBe(true);
+    expect(useUiStore.getState().todoPanelIntroduced).toBe(true);
+    expect(useUiStore.getState().todoRowRequest?.ids).toEqual(["sched_a"]);
+    act(() => root?.unmount());
+    const container = mount(panel());
+    await frame();
+    expect(lit(container)).toEqual(["sched_a"]);
+  });
+
+  it("a reminder that went off: muted, a button while 已完成 has it, which unfolds", async () => {
+    const fired = task("sched_f", {
+      fireAt: "2026-10-28T07:00:00Z",
+      lastFiredAt: "2026-10-28T07:00:01Z",
+    });
+    useAssistantTodoStore.setState({
+      todo: list([A], [row("sched_f", { state: "fired" })]),
+    });
+    const cards = mount(<ReminderCards tasks={[fired]} />);
+    const button = cards.querySelector<HTMLButtonElement>(
+      "span.min-w-0 > button",
+    )!;
+    expect(button.className).toContain("text-ink-muted");
+    expect(button.className).not.toContain("line-through");
+    act(() => button.click());
+    act(() => root?.unmount());
+    const container = mount(panel());
+    expect(order(container, "done")).toEqual(["sched_f"]);
+    await frame();
+    expect(lit(container)).toEqual(["sched_f"]);
   });
 });

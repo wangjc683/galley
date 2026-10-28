@@ -13,10 +13,12 @@
  * Default closed in both — a panel standing open on the right is what
  * made Galley read like an IDE (tools-and-approvals.md §4.7), so nothing
  * opens it but you, except once (main chat ticket 87, PRD ruling 131
- * point 4): the first time a to-do card appears under a reply to a round
- * you sent, Galley's panel opens by itself, remembered open, and the row
- * lights up: a panel that starts closed with nothing leading to it is
- * shown once, at the first card, where what Galley notes is kept. It
+ * point 4): the first time a card appears under a reply to a round you
+ * sent — a to-do's, or since ticket 101 (PRD ruling 147 point 4) one of
+ * Galley's own reminders or a memo's — Galley's panel opens by itself,
+ * remembered open, on that card's page, and the row lights up: a panel
+ * that starts closed with nothing leading to it is shown once, at the
+ * first card, where what Galley notes is kept. It
  * was first argued for the daily review, to be in sight and able to be
  * let go (assistant PRD ruling 10), lest a new user never know Galley
  * goes over their things each morning; since main chat PRD ruling 145

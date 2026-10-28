@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { TodoItem } from "@/lib/assistant-todo";
+import type { FreshCard } from "@/lib/fresh-cards";
 import { useUiStore } from "@/stores/ui";
 
 import {
@@ -630,107 +631,144 @@ describe("the panel's page (ticket 97)", () => {
     expect(rows()).toEqual(["memo_2"]);
   });
 
-  it("⌘K's 「待办」 asks for 待办; the button and a to-do card's title ask for nothing", () => {
+  it("⌘K's 「待办」 asks for 待办; the button asks for nothing", () => {
     openTodoPanel(WORK);
     expect(page()).toBe("todo");
     useUiStore.setState({ todoPageRequest: null });
     toggleTodoPanel(WORK, false);
-    showTodoRow("todo_1", "s-main");
     expect(useUiStore.getState().todoPageRequest).toBeNull();
+  });
+
+  it("a to-do card's title, a reminder card's words, ask for 待办: a panel up on 备忘 turns back (ticket 101)", () => {
+    useUiStore.setState({
+      todoNarrow: false,
+      todoPanelOpen: { galley: true, elsewhere: false },
+    });
+    showTodoRow("sched_1", "s-main");
+    expect(page()).toBe("todo");
+    expect(rows()).toEqual(["sched_1"]);
   });
 });
 
-describe("opening by itself, once (ticket 87, ruling 131 point 4)", () => {
-  const carded = (id: string, turnIndex?: number): TodoItem => ({
-    ...ITEM,
-    id,
-    createdIn: { sessionId: "s-main", turnIndex },
+describe("opening by itself, once (ticket 87, ruling 131 point 4; ticket 101, ruling 147 point 4)", () => {
+  const todo = (row: string): FreshCard => ({ kind: "todo", row, card: row });
+  const reminder = (row: string): FreshCard => ({
+    kind: "reminder",
+    row,
+    card: row,
+  });
+  const memo = (row: string, card: string): FreshCard => ({
+    kind: "memo",
+    row,
+    card,
   });
   const BASE: TodoIntroduction = {
     introduced: false,
-    previous: [carded("todo_old", 3), carded("todo_new")],
-    next: [carded("todo_old", 3), carded("todo_new", 7)],
-    mainChatId: "s-main",
+    fresh: [todo("todo_new")],
     yourRound: true,
     mainChatOnScreen: true,
     narrow: false,
   };
 
-  it("opens for the card that has just appeared under your round", () => {
-    expect(todoPanelIntroduces(BASE)).toEqual(["todo_new"]);
-    // Noted and settled between two reads: new to the list as well.
-    expect(
-      todoPanelIntroduces({ ...BASE, previous: [carded("todo_old", 3)] }),
-    ).toEqual(["todo_new"]);
+  it("opens on 待办 for a to-do card that has just appeared under your round", () => {
+    expect(todoPanelIntroduces(BASE)).toEqual({
+      page: "todo",
+      rows: ["todo_new"],
+    });
     // Two in one reply: both.
     expect(
       todoPanelIntroduces({
         ...BASE,
-        next: [...BASE.next, carded("todo_two", 7)],
+        fresh: [todo("todo_new"), todo("todo_two")],
       }),
-    ).toEqual(["todo_new", "todo_two"]);
+    ).toEqual({ page: "todo", rows: ["todo_new", "todo_two"] });
   });
 
-  it("not once met", () => {
-    expect(todoPanelIntroduces({ ...BASE, introduced: true })).toEqual([]);
-  });
-
-  it("not on the first read", () => {
-    expect(todoPanelIntroduces({ ...BASE, previous: null })).toEqual([]);
-  });
-
-  it("not for a round Core woke Galley for", () => {
-    expect(todoPanelIntroduces({ ...BASE, yourRound: false })).toEqual([]);
-  });
-
-  it("not unless Galley's conversation is on screen", () => {
-    expect(todoPanelIntroduces({ ...BASE, mainChatOnScreen: false })).toEqual(
-      [],
-    );
-  });
-
-  it("not in a narrow main area", () => {
-    expect(todoPanelIntroduces({ ...BASE, narrow: true })).toEqual([]);
-  });
-
-  it("not without a main chat", () => {
-    expect(todoPanelIntroduces({ ...BASE, mainChatId: undefined })).toEqual([]);
-  });
-
-  it("not for a card already there, nor one whose reply has not settled", () => {
+  it("opens on 待办 for one of Galley's own reminders", () => {
     expect(
-      todoPanelIntroduces({ ...BASE, previous: BASE.next, next: BASE.next }),
-    ).toEqual([]);
+      todoPanelIntroduces({ ...BASE, fresh: [reminder("sched_1")] }),
+    ).toEqual({ page: "todo", rows: ["sched_1"] });
+  });
+
+  it("opens on 备忘 when only memos came, their rows lit, each once", () => {
     expect(
       todoPanelIntroduces({
         ...BASE,
-        next: [carded("todo_old", 3), carded("todo_new")],
+        fresh: [
+          memo("memo_1", "11"),
+          memo("memo_2", "12"),
+          memo("memo_1", "13"),
+        ],
       }),
-    ).toEqual([]);
+    ).toEqual({ page: "memo", rows: ["memo_1", "memo_2"] });
   });
 
-  it("only your to-dos, in this main chat, not cancelled", () => {
-    const other = (item: Partial<TodoItem>): TodoIntroduction => ({
-      ...BASE,
-      next: [carded("todo_old", 3), { ...carded("todo_new", 7), ...item }],
-    });
-    expect(todoPanelIntroduces(other({ kind: "task" }))).toEqual([]);
-    expect(todoPanelIntroduces(other({ kind: "subtask" }))).toEqual([]);
+  it("opens on 待办 when a to-do or a reminder came with memos, lighting those alone", () => {
     expect(
-      todoPanelIntroduces(
-        other({ createdIn: { sessionId: "s-other", turnIndex: 7 } }),
-      ),
-    ).toEqual([]);
+      todoPanelIntroduces({
+        ...BASE,
+        fresh: [todo("todo_new"), memo("memo_1", "11")],
+      }),
+    ).toEqual({ page: "todo", rows: ["todo_new"] });
     expect(
-      todoPanelIntroduces(other({ cancelledAt: "2026-10-22T09:00:00Z" })),
-    ).toEqual([]);
+      todoPanelIntroduces({
+        ...BASE,
+        fresh: [reminder("sched_1"), memo("memo_1", "11")],
+      }),
+    ).toEqual({ page: "todo", rows: ["sched_1"] });
+    expect(
+      todoPanelIntroduces({
+        ...BASE,
+        fresh: [todo("todo_new"), reminder("sched_1"), memo("memo_1", "11")],
+      }),
+    ).toEqual({ page: "todo", rows: ["todo_new", "sched_1"] });
   });
 
-  it("opens Galley's place, remembered open, marks the panel met and lights the rows", () => {
+  it("not without a card", () => {
+    expect(todoPanelIntroduces({ ...BASE, fresh: [] })).toBeNull();
+  });
+
+  it("not once met", () => {
+    expect(todoPanelIntroduces({ ...BASE, introduced: true })).toBeNull();
+  });
+
+  it("not for a round Core woke Galley for", () => {
+    expect(todoPanelIntroduces({ ...BASE, yourRound: false })).toBeNull();
+    expect(
+      todoPanelIntroduces({
+        ...BASE,
+        fresh: [memo("memo_1", "11")],
+        yourRound: false,
+      }),
+    ).toBeNull();
+  });
+
+  it("not unless Galley's conversation is on screen", () => {
+    expect(
+      todoPanelIntroduces({ ...BASE, mainChatOnScreen: false }),
+    ).toBeNull();
+  });
+
+  it("not in a narrow main area", () => {
+    expect(todoPanelIntroduces({ ...BASE, narrow: true })).toBeNull();
+    expect(
+      todoPanelIntroduces({
+        ...BASE,
+        fresh: [reminder("sched_1")],
+        narrow: true,
+      }),
+    ).toBeNull();
+  });
+
+  it("opens Galley's place, remembered open, on its page, marks the panel met and lights the rows", () => {
     useUiStore.setState({ todoNarrow: false });
-    introduceTodoPanel(["todo_new"]);
+    introduceTodoPanel({ page: "todo", rows: ["todo_new"] });
     expect(open()).toEqual({ galley: true, elsewhere: false });
     expect(introduced()).toBe(true);
+    expect(useUiStore.getState().todoPageRequest?.page).toBe("todo");
     expect(useUiStore.getState().todoRowRequest?.ids).toEqual(["todo_new"]);
+    introduceTodoPanel({ page: "memo", rows: ["memo_1"] });
+    expect(useUiStore.getState().todoPageRequest?.page).toBe("memo");
+    expect(useUiStore.getState().todoRowRequest?.ids).toEqual(["memo_1"]);
   });
 });
