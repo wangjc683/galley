@@ -2723,6 +2723,17 @@ AT="$(date -v+2H +%Y-%m-%dT%H:%M)"
 # --no-until, an unknown id, an unknown flag), an update, an add with a
 # last day, the total past 2,000 characters (overLimit), deleting, deleting
 # again, a help page.
+# Ticket 108: the review's comparison, made in the fake HOME, and a line on
+# top of the notes the fake galley shows (read with todo show, kept below).
+TODO_PROGRESS_BASH = r'''G="$(sed -n '1p' "${XDG_CONFIG_HOME:-$HOME/.config}/galley/cli-path")"
+"$G" todo list >/dev/null
+cat "$HOME/Downloads/搬家报价/"*.txt >/dev/null
+python3 -c 'import os; d = os.path.expanduser("~/Documents"); os.makedirs(d, exist_ok=True); open(os.path.join(d, "搬家报价对比.md"), "w").write("蚂蚁最便宜\\n")'
+OLD="$("$G" todo show todo_9d2e4f6a8b0c1e35 | python3 -c 'import json, sys; print(json.load(sys.stdin)["notes"])')"
+DAY="$(date +%-m月%-d日)"
+"$G" todo update todo_9d2e4f6a8b0c1e35 --notes="${DAY}：三家报价比好了，蚂蚁最便宜，对比表在 $HOME/Documents/搬家报价对比.md
+${OLD}" --supervisor=galley-assistant --reason="morning review: compared the quotes"
+'''
 MEMO_DRY_BASH = r'''GALLEY="$(sed -n '1p' "${XDG_CONFIG_HOME:-$HOME/.config}/galley/cli-path")"
 UNTIL="$(date -v+3d +%Y-%m-%d)"
 "$GALLEY" memo list | wc -l | sed 's/ //g; s/^/listed=/'
@@ -2975,6 +2986,18 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                  '"$G" session show "$S" --around="msg_${S}_0_user"; "$G" session show "$S" --tail=40'})),
             call("<summary>Relay</summary>\n下周三上午的三班查到了：G7502 09:12 开、G7348 09:41 开、G1374 10:05 开，"
                  "二等座都是 73 元，前两班有票，G1374 余 9 张（12306 余票查询页）。")],
+        # Ticket 108: the review that compares the quotes in ~/Downloads,
+        # writes the comparison to ~/Documents and puts a line on top of
+        # the notes it read; the review that reads yesterday's line, the
+        # file it names, and stays quiet.
+        "todo-progress-done": [
+            call("<summary>Compare</summary>\n比一下。", ("code_run", {"type": "bash", "script": TODO_PROGRESS_BASH})),
+            call("<summary>Tell</summary>\n搬家报价我早上比了一下：全包算下来蚂蚁最便宜，2,380 元。")],
+        "todo-progress-quiet": [
+            call("<summary>Look</summary>\n看一下。", ("code_run", {"type": "bash", "script":
+                 'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; "$G" todo list; '
+                 '"$G" todo show todo_9d2e4f6a8b0c1e35; cat ~/Downloads/搬家报价/三家报价对比.md'})),
+            call("<summary>Quiet</summary>\n<no-reply/>")],
         # Ticket 96: the memo family through the fake galley; a lookup with
         # no browser connected, then a memo; the review left quiet.
         "memo-cli": [
@@ -3657,6 +3680,15 @@ def downloads_snapshot(home: Path) -> dict[str, int]:
     return {str(p.relative_to(base)): p.stat().st_size for p in sorted(base.rglob("*")) if p.is_file()}
 
 
+def home_snapshot(home: Path) -> dict[str, int]:
+    """Ticket 108: every file in the fake HOME but the fake galley's
+    discovery file (~/.config), by path relative to it, with its size."""
+    if not home.is_dir():
+        return {}
+    return {str(p.relative_to(home)): p.stat().st_size for p in sorted(home.rglob("*"))
+            if p.is_file() and p.relative_to(home).parts[:1] != (".config",)}
+
+
 def seeded_state_root(parent: Path) -> Path:
     """A fresh managed state root as a first launch leaves it: the memory
     seed copied in (managed_runtime::ensure_memory_seed copies missing
@@ -3691,6 +3723,7 @@ def run_job(job: dict[str, Any], python: str, workdir: Path) -> dict[str, Any]:
             job["manual_sha"] = manual_sha()
             job["galley_prompt"] = job["galley_prompt"].replace("__MANUAL_DIR__", str(manual))
         before = downloads_snapshot(Path(sandbox["home"]))
+        home_before = home_snapshot(Path(sandbox["home"]))
     else:
         job["state_root"] = str(seeded_state_root(run_dir))
     job["result_path"] = str(run_dir / "result.json")
@@ -3734,7 +3767,11 @@ def run_job(job: dict[str, Any], python: str, workdir: Path) -> dict[str, Any]:
         if state_path and state_path.is_file():
             result["fake_state"] = json.loads(state_path.read_text(encoding="utf-8"))
         result["fixture_tasks"] = job["wake"]["fixture"]["tasks"]
-        result["fixture_todos"] = job["wake"]["fixture"].get("todos") or []
+        # Ticket 108: as the fake galley started with them, the case's
+        # `{{HOME}}` paths this run's fake HOME (build_sandbox fills the
+        # fixture so), so the judge compares notes with what it read.
+        result["fixture_todos"] = json.loads(json.dumps(job["wake"]["fixture"].get("todos") or [],
+                                                        ensure_ascii=False).replace(HOME_MARK, sandbox["home"]))
         result["fixture_memos"] = job["wake"]["fixture"].get("memos") or []
     if sandbox:
         after = downloads_snapshot(Path(sandbox["home"]))
@@ -3743,6 +3780,11 @@ def run_job(job: dict[str, Any], python: str, workdir: Path) -> dict[str, Any]:
             "added": sorted(set(after) - set(before)),
             "resized": sorted(k for k in set(before) & set(after) if before[k] != after[k]),
         }
+        # Ticket 108: the files the run made anywhere in its fake HOME (a
+        # comparison it wrote to ~/Documents as well as to ~/Downloads),
+        # by absolute path, as a progress line would name them.
+        home_after = home_snapshot(Path(sandbox["home"]))
+        result["home_added"] = sorted(str(Path(sandbox["home"]) / k) for k in set(home_after) - set(home_before))
         log_path = Path(sandbox["galley_log"])
         result["galley_log"] = ([json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()
                                  if line.strip()] if log_path.is_file() else [])
@@ -3874,8 +3916,10 @@ def make_sched_jobs(cases: list[dict[str, Any]], now: datetime, mykeys: dict[str
                 "dry": dry,
                 "sandbox": True,
                 "tool_cap": SCHED_TOOL_CAP,
-                "wake": {"fixture": sched_fixture(case, now), "files": {}, "help": str(SCHED_CLI_HELP),
-                         "extra_exec": list(SCHED_EXTRA_EXEC)},
+                # Ticket 108: a case's files go in ~/Downloads, as the
+                # wake suite's do (the to-do whose quotes are there).
+                "wake": {"fixture": sched_fixture(case, now), "files": case.get("files") or {},
+                         "help": str(SCHED_CLI_HELP), "extra_exec": list(SCHED_EXTRA_EXEC)},
             })
     return jobs
 
@@ -4502,6 +4546,11 @@ RERUN_INTROS = {
            "`galley-prompt/`、`rust-samples.json`、`cli-help.json` 都没动。三条叫醒用例（`wake-on-time`、`wake-late`、"
            "`wake-obsolete`）预先放着的任务原文换成了新写法（第一行给人、空行、写给自己的，内容不变），叫醒消息照 Core 的措辞把全文"
            "交给它，让叫醒那一侧在新写法下也测到。这张表比的是原有判定（第一行另见下一节「票 105：第一行」），两次都用现在的原有判定重判。",
+    "108": "上一次是这几条最近一次的第 1 遍（`reno-asked` 是票 81，巡看几条是票 75、78，其余是票 73），这一次是票 108 "
+           "改了手册之后（`todos-change.md` 加「How it is going」一条：做成了东西或听到新消息，在备注最前面补一行；"
+           "`todos.md` 的 `--notes` 一条与 `unasked.md` 的「Tell the user」各补一句指向它），同一个模型（API key 接入的 gpt-6.1-sol，`mm_1792576875658`）。"
+           "只重跑写备注的旧用例各一遍（`note-*`、`reno-*`、`wake-todo`、`review-*`），看有没有回退；两次都用现在的判定重判"
+           "（票 108 起改了备注的都注出来）。",
     "64": "上一次是票 63 的结果，这一次是票 64 改了入口层的待办那一段之后（「Do it unasked」改成先读 `todos.md` 再说要记，"
           "底线加了「没写下就不提记」）。两次都用现在的判定重判（票 64 起什么都不该设的用例判「最终回复不提改口」）。"
           "待办评测另有「同日对照」：同一时段用票 63 的提示词跑的基线（`meta.ticket64_control`，只跑了不该设的那 7 条）。",
@@ -5453,6 +5502,130 @@ def memory_changed(r: dict[str, Any]) -> list[str]:
     return sorted(set(mc.get("added") or []) | set(mc.get("changed") or []) | set(mc.get("removed") or []))
 
 
+# Ticket 108 (main chat PRD ruling 154): how a to-do is going goes into its
+# notes, one line on top of what is there (newest first: the collapsed row
+# shows the start), the day first. The day: 「10月28日」「2026-10-28」
+# 「10/28」, in brackets or not, then a colon, a comma or a space (none
+# needed after 日 or a bracket).
+PROGRESS_DAY_RE = re.compile(r"^[\s【\[（(「]*(?:(\d{4})\s*[年/.\-]\s*)?(\d{1,2})\s*[月/.\-]\s*(\d{1,2})"
+                             r"(?:\s*[日号]\s*[】\]）)」]?|\s*[】\]）)」]|(?=\s*(?:[：:，,、]|\s|$)))")
+
+
+def notes_of(t: dict[str, Any] | None) -> str:
+    return (t or {}).get("notes") or ""
+
+
+def progress_facts(r: dict[str, Any], exp: dict[str, Any], now: datetime, started: datetime,
+                   log: list[list[str]], fx_todos: dict[str, dict[str, Any]],
+                   todo_by_id: dict[str, dict[str, Any]], quiet: bool, subtask_tags: list[str],
+                   stop: Any) -> dict[str, Any]:
+    """Ticket 108: the notes the run left against those it started with.
+
+    `expect.progress` ({id, groups, forbid, when_done}): that to-do's notes
+    are one new line, then a line break, then the notes it started with
+    word for word (none: the line alone). The line starts with the run's
+    day, holds a word of each of `groups`, and names by absolute path a
+    file the run made in its HOME (when it made one); none of `forbid` is
+    anywhere in the notes (what the user took out); the to-do was read
+    (`todo show` or `todo list`) before the notes were written; no other
+    to-do's notes changed. With `when_done` (a morning review): only when
+    it got something done this run (made a file, or spoke without only
+    starting subtasks); otherwise the notes stay as they were.
+    `expect.notes_same`: no to-do's notes change. Elsewhere a change of
+    notes is only noted."""
+    reasons: list[str] = []
+    flags: list[str] = []
+    changed = {tid: (notes_of(fx), notes_of(todo_by_id.get(tid))) for tid, fx in fx_todos.items()
+               if notes_of(fx) != notes_of(todo_by_id.get(tid))}
+
+    def gist(tid: str) -> str:
+        return f"{fx_todos[tid]['title']}（「{one_line(changed[tid][1]) or '（清空）'}」）"
+
+    want = exp.get("progress")
+    out: dict[str, Any] = {"changed": {k: v[1] for k, v in changed.items()}, "line": None, "base": None,
+                           "final": None, "applies": bool(want)}
+    if not want:
+        if changed:
+            words = "改了备注：" + "、".join(gist(t) for t in changed)
+            (reasons if exp.get("notes_same") else flags).append(("不该动备注却" if exp.get("notes_same") else "")
+                                                                  + words)
+        return dict(out, reasons=reasons, flags=flags)
+    tid = want["id"]
+    base, final = notes_of(fx_todos.get(tid)), notes_of(todo_by_id.get(tid))
+    out.update(base=base, final=final)
+    others = [t for t in changed if t != tid]
+    if others:
+        reasons.append("动了别的待办的备注：" + "、".join(gist(t) for t in others))
+    added = r.get("home_added") or []
+    if want.get("when_done"):
+        done = bool(added) or (stop == "final_reply" and not quiet and not subtask_tags)
+        out["done"] = done
+        if not done:
+            if final != base:
+                reasons.append("这一轮没做成什么（只派了子任务、停在浏览器或没出声），却补了进展：「"
+                               + one_line(final) + "」")
+            else:
+                flags.append("这一轮没做成什么，备注没动（进展这一条没用上）")
+            out["applies"] = False
+            return dict(out, reasons=reasons, flags=flags)
+    if final == base:
+        reasons.append("备注没补进展那一行")
+        return dict(out, reasons=reasons, flags=flags)
+    if base and not final.endswith(base):
+        if final.startswith(base):
+            reasons.append("补在了原来的备注后面（该在最前面）")
+            top = final[len(base):]
+        else:
+            reasons.append("原来的备注没有一字不差留在新的那一行下面")
+            top = final.split("\n", 1)[0]
+    else:
+        top = final[:len(final) - len(base)] if base else final
+        if base and not top.endswith("\n"):
+            reasons.append("新的一行没有单独成行（和原来的备注接在同一行）")
+        elif base and top.endswith("\n\n"):
+            flags.append("新的一行和原来的备注之间空了一行")
+    line = top.strip()
+    out["line"] = line
+    if "\n" in line:
+        reasons.append("补了不止一行")
+    if "\\n" in line:
+        reasons.append("原文里有字面的「\\n」（两个字符），不是换行")
+    m = PROGRESS_DAY_RE.match(line)
+    if not m:
+        reasons.append("这一行不是日子打头")
+    else:
+        days = {(now.month, now.day), (started.month, started.day)}
+        if (int(m.group(2)), int(m.group(3))) not in days or (m.group(1) and int(m.group(1)) != now.year):
+            reasons.append(f"打头的日子不是今天：「{m.group(0).strip()}」")
+    for group in want.get("groups") or []:
+        if not any(w in line for w in group):
+            reasons.append("这一行里没有：" + " / ".join(group))
+    for w in want.get("forbid") or []:
+        if w in final:
+            reasons.append(f"备注里出现了「{w}」（用户删掉的）")
+    if added:
+        out["files"] = added
+        if not any(scrub(p) in scrub(line) for p in added):
+            reasons.append("做了文件，这一行没写它的绝对路径" + ("（写成了 ~/ 开头）" if "~/" in line else ""))
+    writes = [i for i, a in enumerate(log) if cli_name(a) == "todo update" and "notes" in parse_cli(a)[1]
+              and parse_cli(a)[0][2:3] == [tid]]
+    if writes:
+        reads = [i for i, a in enumerate(log[:writes[0]])
+                 if cli_name(a) == "todo list" or (cli_name(a) == "todo show" and parse_cli(a)[0][2:3] == [tid])]
+        if not reads:
+            reasons.append("改备注之前没读这件事（todo show 或 todo list）")
+        elif not any(cli_name(log[i]) == "todo show" for i in reads):
+            flags.append("改备注之前只读了 todo list（没 todo show）")
+        if len(writes) > 1:
+            flags.append(f"改了 {len(writes)} 次备注")
+    t, old = todo_by_id.get(tid) or {}, fx_todos.get(tid) or {}
+    if t.get("title") != old.get("title"):
+        reasons.append(f"标题被改了：{t.get('title')}")
+    if not exp.get("update") and (t.get("dueAt"), t.get("dueDate")) != (old.get("dueAt"), old.get("dueDate")):
+        flags.append("顺手改了截止：" + str(t.get("dueAt") or t.get("dueDate") or "去掉了"))
+    return dict(out, reasons=reasons, flags=flags)
+
+
 def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True) -> dict[str, Any]:
     """What a to-do run did, and whether it met the case's expectations
     (todo/cases.json `expect`). Commands from the fake galley's log; to-dos
@@ -5688,6 +5861,14 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
                 reasons.append("时间不对：" + local_words(local(timed["fireAt"])))
             if exp.get("words_any") and not any(w in timed["prompt"] for w in exp["words_any"]):
                 reasons.append("记下的话里没有：" + " / ".join(exp["words_any"]))
+    elif exp.get("schedule") == "optional":
+        # Ticket 108: a reminder of its own may go with the news (to ask
+        # after the budget next week); counted, not judged.
+        allowed.add("schedule create")
+        if standalone:
+            flags.append(f"给自己挂了 {len(standalone)} 个提醒：" + "、".join(
+                f"{local_words(local(x['fireAt'])) if x.get('fireAt') else '（不是一次性）'}「{first_line(x['prompt'])}」"
+                for x in standalone))
     elif standalone or sched_creates:
         reasons.append("不该建它自己的提醒（schedule create）却建了")
     for tid in exp.get("done") or []:
@@ -5762,6 +5943,12 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
     if exp.get("reads_list"):
         if first_list is None:
             reasons.append("回答之前没读 `todo list`")
+    # Ticket 108: the notes, against what the run started with.
+    progress = progress_facts(r, exp, now, started, log, fx_todos, todo_by_id, quiet, subtask_tags, stop)
+    if exp.get("progress"):
+        allowed.add("todo update")
+    reasons += progress["reasons"]
+    flags += progress["flags"]
     extra = sorted({n for n in writes if n not in allowed})
     if extra:
         reasons.append("多余的写命令：" + "、".join(extra))
@@ -5779,7 +5966,9 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
             elif not has_no_reply:
                 flags.append("只派了子任务、没写 <no-reply/>（Core 照样不显示）")
         else:
-            acted = bool(subtask_tags) or any(
+            # Ticket 108: a file it made in the fake HOME is work done too,
+            # in the same script as its galley calls or not.
+            acted = bool(subtask_tags) or bool(r.get("home_added")) or any(
                 c.get("name") in ("file_write", "file_patch")
                 or (c.get("name") == "code_run" and not c.get("galley_calls")
                     and MANUAL_STATE_PATH not in json.dumps(c.get("args"), ensure_ascii=False))
@@ -5789,7 +5978,9 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
             topic = (exp["review_advance"] or {}).get("names_any") or []
             if topic and not any(n in body for n in topic):
                 reasons.append("开口了却没说是哪件事")
-            if not REVIEW_DID_RE.search(body):
+            # Ticket 108: a case's own words for what it did (「比了一下」).
+            did_any = (exp["review_advance"] or {}).get("did_any") or []
+            if not REVIEW_DID_RE.search(body) and not any(w in body for w in did_any):
                 reasons.append("开口了却没说做了什么")
             empty = REVIEW_EMPTY_RE.search(body)
             if empty:
@@ -5932,6 +6123,7 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
         "stop": stop,
         "retract": retract,
         "stance": first_turn_stance(r),
+        "progress": progress,
         "pass": None if record else not reasons,
         "reasons": reasons,
     }
@@ -5944,6 +6136,61 @@ def verdict_words(f: dict[str, Any]) -> str:
     if f.get("flags"):
         verdict += "（注：" + "；".join(f["flags"]) + "）"
     return verdict
+
+
+PROGRESS_GROUP = "进展写进备注（票 108）"
+PROGRESS_SOURCES = (("新手册", None), ("旧手册（同日对照）", "ticket108w_control"),
+                    ("反向检查（只拿掉 todos-change.md 那一条）", "ticket108r_control"))
+
+
+def progress_section(data: dict[str, Any], cases: list[dict[str, Any]]) -> list[str]:
+    """Ticket 108: the cases of how a to-do is going, under the new manual
+    (the results), the manual of before it (meta.ticket108w_control) and
+    the new one without the todos-change.md line (meta.ticket108r_control):
+    passes per case, then each run's notes as it left them."""
+    meta = data["meta"]
+    want = [c for c in cases if c.get("group") == PROGRESS_GROUP]
+    if not want:
+        return []
+    by_id = {c["id"]: c for c in want}
+    sources = [(label, [r for r in (data["results"] if key is None else meta.get(key) or []) if r["id"] in by_id])
+               for label, key in PROGRESS_SOURCES]
+    sources = [(label, runs) for label, runs in sources if runs]
+    if not sources:
+        return []
+    facts = {(label, r["id"], r["variant"]): todo_facts(r, by_id[r["id"]]) for label, runs in sources for r in runs}
+    out = ["## 票 108：进展写进备注", "",
+           "主聊天 PRD 裁决 154：替一件待办做成了东西、或用户说了它的新消息，在备注最前面补一行，日子打头，文件写绝对路径；"
+           "先读再补，原来的备注一字不差留在下面；看过没变化不写。每格是「过 / 运行」。旧手册是这一票之前的 "
+           "`todos-change.md`、`todos.md` 与 `unasked.md`，反向检查只拿掉 `todos-change.md` 那一条（`todos.md`、"
+           "`unasked.md` 的两句指向留着）；"
+           "两组都用同一套判定，在旧手册下「不过」是预期的（不该补的两条除外）。", "",
+           "| # | 用例 | " + " | ".join(label for label, _ in sources) + " |",
+           "| --- | --- |" + " --- |" * len(sources)]
+    for case in want:
+        cells = []
+        for label, runs in sources:
+            mine = [r for r in runs if r["id"] == case["id"]]
+            ok = sum(1 for r in mine if facts[(label, r["id"], r["variant"])]["pass"])
+            cells.append(f"{ok} / {len(mine)}" if mine else "—")
+        out.append(f"| {case['no']} | {case['id']} | " + " | ".join(cells) + " |")
+    out += ["", "每一遍留下的备注（新的一行；没补的写「没动」）：", ""]
+    for case in want:
+        out.append(f"- **{case['id']}**：")
+        for label, runs in sources:
+            for r in sorted((x for x in runs if x["id"] == case["id"]), key=lambda x: x.get("repeat", 0)):
+                f = facts[(label, r["id"], r["variant"])]
+                p = f["progress"]
+                if p["applies"] and p["final"] is not None and p["final"] != p["base"]:
+                    got = f"「{one_line(p['line'] or '')}」"
+                elif p.get("changed"):
+                    got = "改了别的：" + "、".join(f"「{one_line(v)}」" for v in p["changed"].values())
+                else:
+                    got = "没动"
+                verdict = "过" if f["pass"] else "不过：" + "；".join(f["reasons"])
+                out.append(f"  - {label}第 {r.get('repeat', 1)} 遍：{got}；{verdict}".replace("|", "/"))
+    out.append("")
+    return out
 
 
 def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
@@ -5994,7 +6241,8 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
-    out += (rerun_section(data, cases, todo_facts, "73")
+    out += (progress_section(data, cases) + rerun_section(data, cases, todo_facts, "108")
+            + rerun_section(data, cases, todo_facts, "73")
             + rerun_section(data, cases, todo_facts, "64") + retract_section(data, cases, todo_facts)
             + rerun_section(data, cases, todo_facts, "63") + rerun_section(data, cases, todo_facts, "60")
             + rerun_section(data, cases, todo_facts, "59"))
@@ -6617,7 +6865,10 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
                     "todo-wake-offer": ("wake-offer", "todo-offer-ask"),
                     # Ticket 78.
                     "todo-mix-checked": ("review-with-subtask-done", "todo-mix-checked"),
-                    "todo-mix-swallowed": ("review-with-reminder", "sched-no-reply")}
+                    "todo-mix-swallowed": ("review-with-reminder", "sched-no-reply"),
+                    # Ticket 108.
+                    "todo-progress-done": ("progress-review-done", "todo-progress-done"),
+                    "todo-progress-quiet": ("progress-review-unchanged", "todo-progress-quiet")}
     for run_id, (case_id, script) in todo_scripts.items():
         for job in make_sched_jobs([tcases[case_id]], snow, mykeys, ga_lang, set(), 1, script, suite="todo"):
             job["case_id"] = run_id
@@ -7136,6 +7387,168 @@ def dry_test_first_line(cases: dict[str, dict[str, Any]], now: datetime, check: 
           "the wake cases' words are in the new form, handed over whole as Core does")
 
 
+def dry_test_progress(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) -> None:
+    """Ticket 108: the judge of how a to-do is going on notes left by hand
+    (a line on top, at the end, none, the old notes changed, no day, the
+    wrong day, a literal \\n, not read first, read by the list only, a
+    reminder of its own beside it, another to-do's notes), the time moved
+    with the line, the review that made a file or only started a subtask,
+    the review that found nothing new, the notes the user changed, the
+    news of something not on the list; the fixture's files and {{HOME}}."""
+    print("todo: how a to-do is going (ticket 108)")
+    tz = mon.tzinfo
+    day = f"{mon.month}月{mon.day}日"
+    hid, rid, mid = "todo_4c8e1a7d2b9f3605", "todo_6f7a8b9c0d1e2f3a", "todo_9d2e4f6a8b0c1e35"
+    show = ("todo", "show", hid)
+
+    def upd(tid: str, notes: str) -> tuple[str, ...]:
+        return ("todo", "update", tid, f"--notes={notes}", "--supervisor=galley-assistant", "--reason=dry")
+
+    def run(case_id: str, reply: str, notes: dict[str, str] | None = None, log: tuple[Any, ...] = (),
+            tasks: tuple[dict[str, Any], ...] = (), patch: dict[str, dict[str, Any]] | None = None,
+            home_added: list[str] | None = None) -> dict[str, Any]:
+        case = cases[case_id]
+        r = synth_run(case, mon, reply, tasks=tasks, log=log)
+        if home_added:
+            # The run wrote them (the review judge looks for the work).
+            r["calls"] = [{"n": k + 1, "name": "file_write", "args": {"path": p}} for k, p in enumerate(home_added)]
+        todos = []
+        for t in r["fake_state"]["todos"]:
+            t = dict(t)
+            if notes and t["id"] in notes:
+                t["notes"] = notes[t["id"]]
+            t.update((patch or {}).get(t["id"]) or {})
+            todos.append(t)
+        r["fake_state"]["todos"] = todos
+        if home_added:
+            r["home_added"] = home_added
+        return todo_facts(r, case)
+
+    for words, ok in ((f"{day}：业主说下周给", True), ("2026-10-19 业主说下周给", True), ("10/19：下周给", True),
+                      (f"【{day}】下周给", True), (f"{day}业主说下周给", True), ("10/19下周给", False),
+                      ("今天：业主说下周给", False), ("业主说下周给", False)):
+        check(bool(PROGRESS_DAY_RE.match(words)) is ok, f"the day first: {words!r} {'is' if ok else 'is not'}")
+    base = cases["news-budget"]["todos"][0]["notes"]
+    line = f"{day}：业主说筹开预算下周给"
+    said = "记在希尔顿那件的备注里了：业主下周给筹开预算。"
+    f = run("news-budget", said, {hid: line + "\n" + base}, (show, upd(hid, line + "\n" + base)))
+    check(f["pass"] is True and f["progress"]["line"] == line and not f["flags"],
+          f"news: a line on top, the old notes below word for word: passes ({f['reasons']} {f['flags']})")
+    f = run("news-budget", said, {hid: base + "\n" + line}, (show, upd(hid, base + "\n" + line)))
+    check(f["pass"] is False and any("后面" in x for x in f["reasons"]), f"news: at the end fails ({f['reasons']})")
+    f = run("news-budget", said, log=(show,))
+    check(f["pass"] is False and any("没补" in x for x in f["reasons"]), f"news: notes left alone fail ({f['reasons']})")
+    cut = line + "\n" + base.replace("；证照办理进度", "")
+    f = run("news-budget", said, {hid: cut}, (show, upd(hid, cut)))
+    check(f["pass"] is False and any("一字不差" in x for x in f["reasons"]), f"news: old notes changed fail ({f['reasons']})")
+    for top, why in (("业主说筹开预算下周给", "日子打头"), ("10月18日：业主说筹开预算下周给", "不是今天"),
+                     (line + "\\n", "字面"), (f"{day}：业主下周给钱", "没有：预算")):
+        f = run("news-budget", said, {hid: top + "\n" + base}, (show, upd(hid, top + "\n" + base)))
+        check(f["pass"] is False and any(why in x for x in f["reasons"]), f"news: {top!r} fails on {why} ({f['reasons']})")
+    f = run("news-budget", said, {hid: line + base}, (show, upd(hid, line + base)))
+    check(f["pass"] is False and any("单独成行" in x for x in f["reasons"]), f"news: on the same line fails ({f['reasons']})")
+    f = run("news-budget", said, {hid: line + "\n\n" + base}, (show, upd(hid, line + "\n\n" + base)))
+    check(f["pass"] is True and any("空了一行" in x for x in f["flags"]), f"news: a blank line between is noted ({f['flags']})")
+    f = run("news-budget", said, {hid: line + "\n" + base}, (upd(hid, line + "\n" + base), show))
+    check(f["pass"] is False and any("没读" in x for x in f["reasons"]), f"news: written before read fails ({f['reasons']})")
+    f = run("news-budget", said, {hid: line + "\n" + base}, (("todo", "list"), upd(hid, line + "\n" + base)))
+    check(f["pass"] is True and any("只读了 todo list" in x for x in f["flags"]),
+          f"news: read by the list only passes, noted ({f['reasons']} {f['flags']})")
+    ask = synth_reminder(datetime(2026, 10, 26, 10, 0, tzinfo=tz), prompt="问业主的筹开预算到了没")
+    f = run("news-budget", said + "下周一上午我问你一下。", {hid: line + "\n" + base},
+            (show, upd(hid, line + "\n" + base), SYNTH_CREATE), tasks=(ask,))
+    check(f["pass"] is True and any("给自己挂了 1 个提醒" in x for x in f["flags"]),
+          f"news: a reminder of its own beside it passes, counted ({f['reasons']} {f['flags']})")
+    f = run("news-budget", said, {hid: line + "\n" + base, rid: "预算下周给"},
+            (show, upd(hid, line + "\n" + base), upd(rid, "预算下周给")))
+    check(f["pass"] is False and any("别的待办的备注" in x for x in f["reasons"]),
+          f"news: another to-do's notes changed fail ({f['reasons']})")
+    # The news that moves the time: due, reminder and the line.
+    reno = cases["news-moves-time"]["todos"][0]
+    moved = f"{day}：装修队说要拖到 12 月 5 日"
+    fx = sched_fixture(clock_case(cases["news-moves-time"], mon), mon)
+    rem = next(t for t in fx["tasks"] if t.get("todoId") == rid)
+    new_rem = dict(rem, fireAt=iso_utc(datetime(2026, 12, 5, 9, 0, tzinfo=tz)))
+    r = synth_run(cases["news-moves-time"], mon, "改好了：702 装修顺延到 12 月 5 日，当天早上 9 点提醒你。",
+                  log=(("todo", "show", rid), ("todo", "update", rid, "--due=2026-12-05", "--remind-at=2026-12-05T09:00",
+                                               "--notes=" + moved + "\n" + reno["notes"],
+                                               "--supervisor=galley-assistant", "--reason=dry")))
+    r["fake_state"]["todos"] = [dict(t, dueDate="2026-12-05", notes=moved + "\n" + reno["notes"]) if t["id"] == rid
+                                else t for t in r["fake_state"]["todos"]]
+    r["fake_state"]["tasks"] = [new_rem if t["id"] == rem["id"] else t for t in r["fake_state"]["tasks"]]
+    f = todo_facts(r, cases["news-moves-time"])
+    check(f["pass"] is True, f"moved: due, reminder and the line: passes ({f['reasons']})")
+    r["fake_state"]["tasks"] = [rem if t["id"] == rem["id"] else t for t in r["fake_state"]["tasks"]]
+    f = todo_facts(r, cases["news-moves-time"])
+    check(f["pass"] is False and any("提醒没跟着挪" in x for x in f["reasons"]), f"moved: the reminder left fails ({f['reasons']})")
+    # The review that got something done, and the one that only started.
+    rv = cases["progress-review-done"]
+    mbase = rv["todos"][0]["notes"]
+    fx = sched_fixture(clock_case(rv, mon), mon)
+    check(sorted(rv["files"]) == ["搬家报价/好邻居搬家.txt", "搬家报价/蚂蚁搬家.txt", "搬家报价/速达搬家.txt"]
+          and make_sched_jobs([rv], mon, {}, "en", set(), 1, "dry", suite="todo")[0]["wake"]["files"] == rv["files"]
+          and "### In Hand" in sched_prompt(rv, mon) and "no due date: 定搬家公司" in sched_prompt(rv, mon),
+          "review-done: the quotes go into the run's ~/Downloads; In Hand has the to-do")
+    path = "/sandbox/home/Downloads/搬家报价/三家报价对比.md"
+    good = f"{day}：三家报价比好了，全包算下来蚂蚁最便宜（2,380 元），对比表在 {path}"
+    told = f"搬家报价我早上比了一下：全包算下来蚂蚁最便宜，2,380 元。\n[FILE:{path}]"
+    f = run("progress-review-done", told, {mid: good + "\n" + mbase}, (("todo", "list"), upd(mid, good + "\n" + mbase)),
+            home_added=[path])
+    check(f["pass"] is True, f"review-done: compared, a file, the line with its path: passes ({f['reasons']} {f['flags']})")
+    bare = f"{day}：三家报价比好了，蚂蚁最便宜"
+    f = run("progress-review-done", told, {mid: bare + "\n" + mbase}, (("todo", "list"), upd(mid, bare + "\n" + mbase)),
+            home_added=[path])
+    check(f["pass"] is False and any("绝对路径" in x for x in f["reasons"]), f"review-done: no path fails ({f['reasons']})")
+    tilde = bare + "，对比表在 ~/Downloads/搬家报价/三家报价对比.md"
+    f = run("progress-review-done", told, {mid: tilde + "\n" + mbase}, (("todo", "list"), upd(mid, tilde + "\n" + mbase)),
+            home_added=[path])
+    check(f["pass"] is False and any("~/" in x for x in f["reasons"]), f"review-done: a ~/ path fails ({f['reasons']})")
+    f = run("progress-review-done", told, log=(("todo", "list"),), home_added=[path])
+    check(f["pass"] is False and any("没补" in x for x in f["reasons"]), f"review-done: done, notes alone fail ({f['reasons']})")
+    sub = "<subtask>比一比三家搬家报价</subtask>\n<no-reply/>"
+    f = run("progress-review-done", sub, log=(("todo", "list"),))
+    check(f["pass"] is True and any("没用上" in x for x in f["flags"]),
+          f"review-done: only a subtask, notes alone: passes, noted ({f['reasons']} {f['flags']})")
+    f = run("progress-review-done", sub, {mid: f"{day}：派人去比了\n" + mbase},
+            (("todo", "list"), upd(mid, f"{day}：派人去比了\n" + mbase)))
+    check(f["pass"] is False and any("没做成什么" in x for x in f["reasons"]),
+          f"review-done: a line for a subtask only started fails ({f['reasons']})")
+    # The review that found nothing new.
+    un = cases["progress-review-unchanged"]
+    check("{{HOME}}/Downloads/搬家报价/三家报价对比.md" in un["todos"][0]["notes"] and "搬家报价/三家报价对比.md" in un["files"],
+          "review-unchanged: yesterday's line names the comparison by HOME, and the file is there")
+    f = run("progress-review-unchanged", "<no-reply/>", log=(("todo", "list"),))
+    check(f["pass"] is True, f"review-unchanged: <no-reply/>, nothing touched: passes ({f['reasons']})")
+    ubase = un["todos"][0]["notes"]
+    f = run("progress-review-unchanged", "<no-reply/>", {mid: f"{day}：看了一下，还没定\n" + ubase},
+            (("todo", "list"), upd(mid, f"{day}：看了一下，还没定\n" + ubase)))
+    check(f["pass"] is False and any("不该动备注" in x for x in f["reasons"]),
+          f"review-unchanged: a line for a look fails ({f['reasons']})")
+    # The notes the user changed in the list.
+    ed = cases["news-user-edited"]
+    ebase = ed["todos"][0]["notes"]
+    fire = f"{day}：业主说消防验收下周能过"
+    f = run("news-user-edited", "记在希尔顿那件上了。", {hid: fire + "\n" + ebase}, (show, upd(hid, fire + "\n" + ebase)))
+    check(f["pass"] is True and "品牌定位与客房数量" not in ebase, f"edited: on the user's notes: passes ({f['reasons']})")
+    f = run("news-user-edited", "记在希尔顿那件上了。", {hid: fire + "\n" + base}, (show, upd(hid, fire + "\n" + base)))
+    check(f["pass"] is False and any("用户删掉的" in x for x in f["reasons"]) and any("一字不差" in x for x in f["reasons"]),
+          f"edited: the point the user took out written back fails ({f['reasons']})")
+    # News of something not on the list.
+    f = run("news-unrelated", "万豪那边下个月开始招标，我先记着。")
+    check(f["pass"] is True, f"unrelated: nothing touched passes ({f['reasons']})")
+    f = run("news-unrelated", "记在希尔顿那件上了。", {hid: f"{day}：万豪业主说下个月招标\n" + base},
+            (show, upd(hid, f"{day}：万豪业主说下个月招标\n" + base)))
+    check(f["pass"] is False and any("不该动备注" in x for x in f["reasons"]), f"unrelated: into the Hilton notes fails ({f['reasons']})")
+    # Elsewhere a change of notes is only noted.
+    qm = cases["quote-move"]
+    r = synth_run(qm, mon, "改到周四了。")
+    r["fake_state"]["todos"] = [dict(t, notes="改过") if t["id"] == "todo_2b3c4d5e6f7a8b9c" else t
+                                for t in r["fake_state"]["todos"]]
+    f = todo_facts(r, qm)
+    check(any("改了备注" in x for x in f["flags"]) and not any("备注" in x for x in f["reasons"]),
+          f"an old case: a change of notes is noted, not judged ({f['flags']})")
+
+
 def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, str]],
                   cases: dict[str, dict[str, Any]], now: datetime, check: Any) -> None:
     """To-do suite: the In Hand lines carry the case's to-dos as they stood
@@ -7449,6 +7862,7 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     note = sched_note(cases["wake-todo"], now)
     check("on the user's to-do `todo_2b3c4d5e6f7a8b9c` came due." in note and "交给王经理\n>>>\nIt is due " in note,
           "the wake note for a to-do's reminder, in Core's words")
+    dry_test_progress(cases, mon, check)
     for r in sorted(results, key=lambda r: r["id"]):
         case_id, script = scripts[r["id"]]
         case = cases[case_id]
@@ -7583,6 +7997,26 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
                   f"the fake galley shows the subtask: in the list, its instructions, its answer ({out[-300:]})")
             check(f["pass"] is True and f["names"] == ["sessions list", "session show", "session show"],
                   f"checked, then passed on: passes ({f['reasons']}, {f['names']})")
+        elif r["id"] == "todo-progress-done":
+            p = f["progress"]
+            made = r.get("home_added") or []
+            check(len(made) == 1 and made[0].startswith("/") and made[0].endswith("/home/Documents/搬家报价对比.md")
+                  and sorted(r.get("downloads_changes", {}).get("added") or []) == [],
+                  f"the comparison it made is seen in its HOME ({r.get('home_added')})")
+            check(p["base"] == "三家发来的报价在 ~/Downloads/搬家报价/，比一比再定"
+                  and p["final"].endswith("\n" + p["base"]) and p["line"].endswith("/Documents/搬家报价对比.md"),
+                  f"a line on top of the notes it read, the file by its path ({p})")
+            check(f["pass"] is True, f"compared, told, the line: passes ({f['reasons']} {f['flags']})")
+        elif r["id"] == "todo-progress-quiet":
+            out = str((r["calls"][0].get("result") or {}).get("stdout", ""))
+            named = (r["fixture_todos"][0].get("notes") or "").split("对比表在 ")[-1].split("\n")[0]
+            check(HOME_MARK not in out and named.startswith("/") and named.endswith("/home/Downloads/搬家报价/三家报价对比.md")
+                  and named in out
+                  and "蚂蚁最便宜，报价 11 月 10 日前有效" in out,
+                  f"todo show names the comparison by this run's HOME, and the file is there ({out[-300:]})")
+            check(all(HOME_MARK not in (t.get("notes") or "") for t in r["fixture_todos"]),
+                  "the judge reads the notes as the fake galley started with them")
+            check(f["pass"] is True and not r.get("home_added"), f"quiet, nothing touched: passes ({f['reasons']})")
         elif r["id"] == "todo-mix-swallowed":
             check(r["message"].startswith(OPENING_MIXED) and "on the user's to-do `todo_6f7a8b9c0d1e2f3a`" in r["message"],
                   "the wake: mixed, the to-do's reminder and the review")
@@ -8241,7 +8675,8 @@ def main() -> int:
         data["meta"]["history_note"] = previous_meta["history_note"]
     for key in ("ticket59_note", "ticket59_control", "ticket60_note", "ticket63_note", "ticket64_note",
                 "ticket64_control", "ticket64_control_at", "ticket73_note", "ticket73_control",
-                "ticket73_control_at"):
+                "ticket73_control_at", "ticket108_note", "ticket108w_control", "ticket108w_control_at",
+                "ticket108r_control", "ticket108r_control_at"):
         if previous_meta.get(key):
             data["meta"][key] = previous_meta[key]
     if sched:
@@ -8267,7 +8702,11 @@ def main() -> int:
                       "layer's floor on 「记下了」; the two-sided cases judged, ticket 63's cases added); rerun for "
                       "ticket 64 (the entry layer reads todos.md before saying it will note, and does not bring noting "
                       "up when it wrote nothing; the cases where nothing is to be set judged on a reply taking back a "
-                      "noting; a same-hour baseline of those under ticket 63's prompt in meta.ticket64_control)"
+                      "noting; a same-hour baseline of those under ticket 63's prompt in meta.ticket64_control); "
+                      "rerun for ticket 108 (todos-change.md: how a to-do is going, one dated line on top of its "
+                      "notes; unasked.md points to it; the new cases' files in the fake HOME; a same-hour baseline "
+                      "under the manual of before it in meta.ticket108w_control, and the new manual without that "
+                      "line in meta.ticket108r_control)"
                       if todo else
                       "schedule (ticket 36, rerun for tickets 41 and 44): the main chat prompt with the ticket 41 "
                       "entry layer and its own configuration paragraph, In Hand lines (ticket 39's three groups) for "

@@ -1,5 +1,5 @@
 {
- "_note": "待办评测用例（票 41）。history 是主对话当前段里已有的轮次；todos 是假 CLI 里已有的待办：due 是时间（next_weekday 是今天之后第一个星期几，days 是今天之后第几天，in_minutes 是几分钟后，带 date_only 的只有日期），reminder 是挂在它上面的提醒（fired 表示已经到点、等着叫醒），in_hand 默认为真，即分段开始时就有、写在提示词的「In Hand」一节（为假的是这一段里刚记的），done_since 表示分段开始后用户在面板上勾掉了（快照里还是没做）；tasks 是它自己的定时任务（同 schedule/cases.json）；message 是用户这句，wake 列出这次叫醒里到点的提醒，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 44：expect.reminder.clock 是提醒必须落在的钟点（用户说了几点提醒）。票 60：时间还可以写成一年里的某天（month、day，day 可为 \"last\"；带 year_offset 是今年之后第几年，不带是今天起最近的那一天）或下周的星期几（week_after，周一起算的下一周）；cancelled 表示假 CLI 起始就已取消（days_ago，via 为 supervisor 是 Galley 照用户的话、gui 是用户在桌面上，reason），它的提醒随之由 Core 取消（system），分段开始前取消的写进「In Hand」的「最近不要的跟进」。expect.follow_up 是该设 1 个跟进（via：todo、assistant 或 either；prefer 是期望的那种，另一种也算过但标出来；window 是提醒时间），expect.todo 为 optional 是可以记 1 件（reminder 为 null 时不许挂提醒），expect.cancel 是这次运行里该由 Galley 照用户的话取消其中之一、原因里写明是哪一类（reason_any），expect.asks_or_any 是回复要问一句或给出其中一个下一步，expect.record_only 是两可的、只记录不判。票 63：clock 是消息里说的今天的钟点（tonight 取 hours 里第一个离运行时刻还有 lead_minutes 的整点，写成「今晚 H 点」；afternoon 取今天的 hour，离运行时刻不足 lead_minutes 就改成「明天下午 H 点」），填进 message 的 {{clock}}；时间写法 {\"stated\": true, \"minutes\": k} 是那个钟点加 k 分钟。expect.follow_up.windows 是几个窗口里任一个，follow_up.clock 是提醒必须落在的钟点；expect.reminder.optional 是可以不挂提醒（挂了就要在窗口里）；expect.no_recite 是回复不能是这些原话（或「提醒」加原话），也不能以「提醒：」开头。每条都判：回复里有「记下了 / 记住了 / 记好了 / 已记」时，这一轮必须有写（改动了假 CLI 的清单或提醒，或写了 GA 记忆）。票 64：expect.no_retract 是什么都不该设的用例（不记待办、不设它自己的提醒；reno-no-remind 可以记一件不挂提醒的）：最终回复（去掉 <summary>、<next-suggestion>）不能提改口，正则是 run.py 的 RETRACT_RE（「刚才说」「多此一举」「多余」「本来要」「就不加了」「不特意设」一类）；第一轮（不是最后一轮时）的正文与 <summary> 里有没有「记到待办」「设个提醒」一类的表态，按 STANCE_RE 只记录、不判。火锅两条的 hours 加了 23（「今晚 11 点」，夜宵），21:15 到 22:15 也能跑。票 73：tasks 里 review 为真的是早上的巡看（Galley 建的每天一条，origin 是 system + galley-review；time 是钟点，不写就取运行那一分钟，好让叫醒按时；fired 表示这一次到点、等着叫醒，叫醒消息照 Core 的巡看措辞拼）。expect.subtasks_max 是回复里最多几个 <subtask>（不写就一个都不许）；expect.no_offer 是回复和末尾的建议里不能有「要不要我」「需要的话我可以」一类（run.py 的 OFFER_RE；不判的用例只注出来）；expect.allow_web_stop 是停在浏览器工具只注出来、不算没走到最终回复（它在做一步只读的事，沙盒里看不到结果）；expect.review_advance 是巡看有事可推进：不出声时得派了子任务，开口时得做成了事。票 75：开口时不要固定开头，改判说了是哪件事（names_any 里任一个词）、做了什么（REVIEW_DID_RE），说的是「没什么要推进」「看了一下没有新进展」一类空话（REVIEW_EMPTY_RE）判不过；没说是早上做的（REVIEW_MORNING_RE）只注出来；expect.disable 是该 schedule disable 那一条，用了 delete 或没停都算不过。票 78：wake 里还可以写 {\"kind\": \"done\", \"subtask\": <id>, \"send_backs\": n}，是 subtasks 里（写法同叫醒套件）一件刚做完的子任务的回报，照 Core 的措辞（subtask_report 的 Done 一段）拼进同一次叫醒；几件的次序就是 wake 列的次序（Core 按到达的先后，同一分钟到点的定时任务按 id 排）。expect.review_mixed 是巡看与另一件事在同一次叫醒：整条不出声（只有 <no-reply/> 或只有标签）、开口了却没提那件事（names_any 里一个词都没有）算吞掉，判不过；巡看没做成值得说的事，提了巡看（run.py 的 REVIEW_TALK_RE、REVIEW_EMPTY_RE）判不过；开口了又写了 <no-reply/> 只注出来；no_recite、max_chars 同上。票 98：expect.memo 是对备忘的判定，写法同 ../memo/cases.json 的 _note（optional 是可以记一条、记了只注出来），只对手册里有 memo.md 的运行（票 96 起）判，票 96 之前的运行没有这个命令，照旧不判。",
+ "_note": "待办评测用例（票 41）。history 是主对话当前段里已有的轮次；todos 是假 CLI 里已有的待办：due 是时间（next_weekday 是今天之后第一个星期几，days 是今天之后第几天，in_minutes 是几分钟后，带 date_only 的只有日期），reminder 是挂在它上面的提醒（fired 表示已经到点、等着叫醒），in_hand 默认为真，即分段开始时就有、写在提示词的「In Hand」一节（为假的是这一段里刚记的），done_since 表示分段开始后用户在面板上勾掉了（快照里还是没做）；tasks 是它自己的定时任务（同 schedule/cases.json）；message 是用户这句，wake 列出这次叫醒里到点的提醒，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 44：expect.reminder.clock 是提醒必须落在的钟点（用户说了几点提醒）。票 60：时间还可以写成一年里的某天（month、day，day 可为 \"last\"；带 year_offset 是今年之后第几年，不带是今天起最近的那一天）或下周的星期几（week_after，周一起算的下一周）；cancelled 表示假 CLI 起始就已取消（days_ago，via 为 supervisor 是 Galley 照用户的话、gui 是用户在桌面上，reason），它的提醒随之由 Core 取消（system），分段开始前取消的写进「In Hand」的「最近不要的跟进」。expect.follow_up 是该设 1 个跟进（via：todo、assistant 或 either；prefer 是期望的那种，另一种也算过但标出来；window 是提醒时间），expect.todo 为 optional 是可以记 1 件（reminder 为 null 时不许挂提醒），expect.cancel 是这次运行里该由 Galley 照用户的话取消其中之一、原因里写明是哪一类（reason_any），expect.asks_or_any 是回复要问一句或给出其中一个下一步，expect.record_only 是两可的、只记录不判。票 63：clock 是消息里说的今天的钟点（tonight 取 hours 里第一个离运行时刻还有 lead_minutes 的整点，写成「今晚 H 点」；afternoon 取今天的 hour，离运行时刻不足 lead_minutes 就改成「明天下午 H 点」），填进 message 的 {{clock}}；时间写法 {\"stated\": true, \"minutes\": k} 是那个钟点加 k 分钟。expect.follow_up.windows 是几个窗口里任一个，follow_up.clock 是提醒必须落在的钟点；expect.reminder.optional 是可以不挂提醒（挂了就要在窗口里）；expect.no_recite 是回复不能是这些原话（或「提醒」加原话），也不能以「提醒：」开头。每条都判：回复里有「记下了 / 记住了 / 记好了 / 已记」时，这一轮必须有写（改动了假 CLI 的清单或提醒，或写了 GA 记忆）。票 64：expect.no_retract 是什么都不该设的用例（不记待办、不设它自己的提醒；reno-no-remind 可以记一件不挂提醒的）：最终回复（去掉 <summary>、<next-suggestion>）不能提改口，正则是 run.py 的 RETRACT_RE（「刚才说」「多此一举」「多余」「本来要」「就不加了」「不特意设」一类）；第一轮（不是最后一轮时）的正文与 <summary> 里有没有「记到待办」「设个提醒」一类的表态，按 STANCE_RE 只记录、不判。火锅两条的 hours 加了 23（「今晚 11 点」，夜宵），21:15 到 22:15 也能跑。票 73：tasks 里 review 为真的是早上的巡看（Galley 建的每天一条，origin 是 system + galley-review；time 是钟点，不写就取运行那一分钟，好让叫醒按时；fired 表示这一次到点、等着叫醒，叫醒消息照 Core 的巡看措辞拼）。expect.subtasks_max 是回复里最多几个 <subtask>（不写就一个都不许）；expect.no_offer 是回复和末尾的建议里不能有「要不要我」「需要的话我可以」一类（run.py 的 OFFER_RE；不判的用例只注出来）；expect.allow_web_stop 是停在浏览器工具只注出来、不算没走到最终回复（它在做一步只读的事，沙盒里看不到结果）；expect.review_advance 是巡看有事可推进：不出声时得派了子任务，开口时得做成了事。票 75：开口时不要固定开头，改判说了是哪件事（names_any 里任一个词）、做了什么（REVIEW_DID_RE），说的是「没什么要推进」「看了一下没有新进展」一类空话（REVIEW_EMPTY_RE）判不过；没说是早上做的（REVIEW_MORNING_RE）只注出来；expect.disable 是该 schedule disable 那一条，用了 delete 或没停都算不过。票 78：wake 里还可以写 {\"kind\": \"done\", \"subtask\": <id>, \"send_backs\": n}，是 subtasks 里（写法同叫醒套件）一件刚做完的子任务的回报，照 Core 的措辞（subtask_report 的 Done 一段）拼进同一次叫醒；几件的次序就是 wake 列的次序（Core 按到达的先后，同一分钟到点的定时任务按 id 排）。expect.review_mixed 是巡看与另一件事在同一次叫醒：整条不出声（只有 <no-reply/> 或只有标签）、开口了却没提那件事（names_any 里一个词都没有）算吞掉，判不过；巡看没做成值得说的事，提了巡看（run.py 的 REVIEW_TALK_RE、REVIEW_EMPTY_RE）判不过；开口了又写了 <no-reply/> 只注出来；no_recite、max_chars 同上。票 98：expect.memo 是对备忘的判定，写法同 ../memo/cases.json 的 _note（optional 是可以记一条、记了只注出来），只对手册里有 memo.md 的运行（票 96 起）判，票 96 之前的运行没有这个命令，照旧不判。票 108：expect.progress 是进展那一行（id 是哪一件；groups 每组至少一个词在那一行里；forbid 是备注里不许出现的字，即用户删掉的；when_done 是巡看用：这一轮做成了东西才该补，只派了子任务或停在浏览器时备注不动；判法见 run.py 的 progress_facts：新的一行在上、日子打头，原来的备注一字不差在下，做了文件就写它的绝对路径，先读过这一件再改，别的待办的备注不动）；expect.notes_same 是不许动任何待办的备注；expect.schedule 为 optional 是可以给自己挂提醒（记下个数，不判）；review_advance.did_any 是这条用例自己算「做了什么」的词；files 同叫醒套件，放进假 HOME 的 ~/Downloads；待办备注里的 {{HOME}} 换成那次运行的假 HOME。",
  "cases": [
   {
    "id": "note-report",
@@ -1667,6 +1667,378 @@
      ]
     },
     "no_offer": true
+   }
+  },
+  {
+   "id": "news-budget",
+   "no": 44,
+   "group": "进展写进备注（票 108）",
+   "expect_text": "清单里有「希尔顿酒店项目上下文资料收集」（没日子，备注是它记的 5 条收集要点）和 702 装修，用户说「业主说筹开预算下周给我」→ 先读这件事，todo update --notes= 是新的一行「<今天>：业主说筹开预算下周给」在上、原来的备注一字不差在下；不另记备忘、不记新待办、不动 702；顺带给自己挂一个下周问预算的提醒可以，记下个数",
+   "history": [],
+   "todos": [
+    {
+     "id": "todo_4c8e1a7d2b9f3605",
+     "title": "希尔顿酒店项目上下文资料收集",
+     "notes": "收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制"
+    },
+    {
+     "id": "todo_6f7a8b9c0d1e2f3a",
+     "title": "702 办公室装修完工",
+     "notes": "装修师傅说预计这天完工",
+     "due": {
+      "month": 11,
+      "day": 20,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_4b8c2d6e0f1a3957",
+      "at": {
+       "month": 11,
+       "day": 20,
+       "time": "09:00"
+      }
+     }
+    }
+   ],
+   "message": "业主说筹开预算下周给我",
+   "expect": {
+    "todo": "none",
+    "progress": {
+     "id": "todo_4c8e1a7d2b9f3605",
+     "groups": [
+      [
+       "预算"
+      ]
+     ]
+    },
+    "schedule": "optional",
+    "memo": "none",
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "news-moves-time",
+   "no": 45,
+   "group": "进展写进备注（票 108）",
+   "expect_text": "702 装修（11 月 20 日截止、当天 9 点提醒）与希尔顿那件在清单上，用户说「装修队说要拖到 12 月 5 号」→ 截止挪到 12 月 5 日、提醒跟着挪（不晚于新截止），备注最前面补一行日子打头、写明原因（装修队说拖），原来的「装修师傅说预计这天完工」一字不差留在下面；不新建、不动希尔顿；回复说出新日子",
+   "history": [],
+   "todos": [
+    {
+     "id": "todo_6f7a8b9c0d1e2f3a",
+     "title": "702 办公室装修完工",
+     "notes": "装修师傅说预计这天完工",
+     "due": {
+      "month": 11,
+      "day": 20,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_4b8c2d6e0f1a3957",
+      "at": {
+       "month": 11,
+       "day": 20,
+       "time": "09:00"
+      }
+     }
+    },
+    {
+     "id": "todo_4c8e1a7d2b9f3605",
+     "title": "希尔顿酒店项目上下文资料收集",
+     "notes": "收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制"
+    }
+   ],
+   "message": "装修队说要拖到 12 月 5 号",
+   "expect": {
+    "todo": "none",
+    "update": {
+     "id": "todo_6f7a8b9c0d1e2f3a",
+     "due_window": {
+      "from": {
+       "month": 12,
+       "day": 5,
+       "time": "00:00"
+      },
+      "to": {
+       "month": 12,
+       "day": 5,
+       "time": "23:59"
+      }
+     }
+    },
+    "progress": {
+     "id": "todo_6f7a8b9c0d1e2f3a",
+     "groups": [
+      [
+       "拖",
+       "延",
+       "推迟",
+       "晚",
+       "改到",
+       "改为",
+       "改成",
+       "顺延"
+      ]
+     ]
+    },
+    "memo": "none",
+    "mentions_any": [
+     "12 月 5",
+     "12月5",
+     "12 月5",
+     "12月 5"
+    ],
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "progress-review-done",
+   "no": 46,
+   "group": "进展写进备注（票 108）",
+   "expect_text": "巡看到点，在办的有没日子的「定搬家公司」（三份报价单在 ~/Downloads/搬家报价/），另有 702 装修（挂着提醒）（要定的是用户）→ 当场比完（读三份、可以写一份对比文件），开口时说是哪件事、比出了什么、文件用 [FILE:…]，不替用户定、不勾掉；备注最前面补一行日子打头、写比出的结果，做了文件就写它的绝对路径，原来的备注一字不差留在下面；只派子任务没结果时备注不动、只回 <no-reply/>；不提建议；回复上限 350 字（比价要列三家）",
+   "history": [],
+   "todos": [
+    {
+     "id": "todo_9d2e4f6a8b0c1e35",
+     "title": "定搬家公司",
+     "notes": "三家发来的报价在 ~/Downloads/搬家报价/，比一比再定"
+    },
+    {
+     "id": "todo_6f7a8b9c0d1e2f3a",
+     "title": "702 办公室装修完工",
+     "notes": "装修师傅说预计这天完工",
+     "due": {
+      "month": 11,
+      "day": 20,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_4b8c2d6e0f1a3957",
+      "at": {
+       "month": 11,
+       "day": 20,
+       "time": "09:00"
+      }
+     }
+    }
+   ],
+   "files": {
+    "搬家报价/蚂蚁搬家.txt": "蚂蚁搬家 报价单\n起点：浦东新区张杨路 1588 弄 6 楼（有电梯）\n终点：闵行区七莘路 3300 号 12 楼（有电梯）\n车型：4.2 米厢式货车 1 辆，搬运工 3 人\n基础运费：1,680 元（含 30 公里）\n大件拆装：床 2 张、衣柜 1 个，400 元\n打包材料：纸箱 30 个，300 元\n合计：2,380 元\n可约：11 月 14 日（周六）、11 月 15 日（周日）\n报价有效期至 11 月 10 日\n",
+    "搬家报价/好邻居搬家.txt": "好邻居搬家 报价\n4.2 米厢式货车 + 4 名师傅\n运费 1,850 元\n床、衣柜拆装 360 元\n空调移机 1 台 300 元\n纸箱 30 个 140 元\n总价 2,650 元\n只能约 11 月 14 日上午\n",
+    "搬家报价/速达搬家.txt": "速达搬家\n4.2 米厢式货车，3 名搬运工\n一口价 2,180 元（运费与搬运）\n不含：大件拆装（每件 150 元）、打包材料（纸箱每个 8 元）\n可约：11 月 14 日、15 日、21 日\n"
+   },
+   "tasks": [
+    {
+     "id": "sched_5e1a9c3f7b2d4608",
+     "review": true,
+     "in_hand": true,
+     "fired": {
+      "late_minutes": 0
+     }
+    }
+   ],
+   "wake": [
+    "sched_5e1a9c3f7b2d4608"
+   ],
+   "expect": {
+    "todo": "none",
+    "allow": [
+     "todo update"
+    ],
+    "review_advance": {
+     "names_any": [
+      "搬家",
+      "报价",
+      "蚂蚁",
+      "好邻居",
+      "速达"
+     ],
+     "did_any": [
+      "比了",
+      "比较",
+      "比过",
+      "比好",
+      "对比"
+     ]
+    },
+    "progress": {
+     "id": "todo_9d2e4f6a8b0c1e35",
+     "when_done": true,
+     "groups": [
+      [
+       "蚂蚁",
+       "好邻居",
+       "速达",
+       "报价",
+       "对比",
+       "比好",
+       "比完",
+       "比了"
+      ]
+     ]
+    },
+    "subtasks_max": 2,
+    "no_offer": true,
+    "allow_web_stop": true,
+    "memo": "none",
+    "max_chars": 350
+   }
+  },
+  {
+   "id": "progress-review-unchanged",
+   "no": 47,
+   "group": "进展写进备注（票 108）",
+   "expect_text": "巡看到点，「定搬家公司」的备注最前面已有它前一天补的一行（比好了、蚂蚁最便宜、对比表的绝对路径），对比表就在那里，用户还没定，另有 702 装修（挂着提醒）→ 看过没变化：不重做、不补「看过了」一类的行，备注不动，回复只有 <no-reply/>",
+   "history": [],
+   "todos": [
+    {
+     "id": "todo_9d2e4f6a8b0c1e35",
+     "title": "定搬家公司",
+     "notes": "10月27日：三家报价比好了，全包算下来蚂蚁最便宜（2,380 元），对比表在 {{HOME}}/Downloads/搬家报价/三家报价对比.md\n三家发来的报价在 ~/Downloads/搬家报价/，比一比再定"
+    },
+    {
+     "id": "todo_6f7a8b9c0d1e2f3a",
+     "title": "702 办公室装修完工",
+     "notes": "装修师傅说预计这天完工",
+     "due": {
+      "month": 11,
+      "day": 20,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_4b8c2d6e0f1a3957",
+      "at": {
+       "month": 11,
+       "day": 20,
+       "time": "09:00"
+      }
+     }
+    }
+   ],
+   "files": {
+    "搬家报价/蚂蚁搬家.txt": "蚂蚁搬家 报价单\n起点：浦东新区张杨路 1588 弄 6 楼（有电梯）\n终点：闵行区七莘路 3300 号 12 楼（有电梯）\n车型：4.2 米厢式货车 1 辆，搬运工 3 人\n基础运费：1,680 元（含 30 公里）\n大件拆装：床 2 张、衣柜 1 个，400 元\n打包材料：纸箱 30 个，300 元\n合计：2,380 元\n可约：11 月 14 日（周六）、11 月 15 日（周日）\n报价有效期至 11 月 10 日\n",
+    "搬家报价/好邻居搬家.txt": "好邻居搬家 报价\n4.2 米厢式货车 + 4 名师傅\n运费 1,850 元\n床、衣柜拆装 360 元\n空调移机 1 台 300 元\n纸箱 30 个 140 元\n总价 2,650 元\n只能约 11 月 14 日上午\n",
+    "搬家报价/速达搬家.txt": "速达搬家\n4.2 米厢式货车，3 名搬运工\n一口价 2,180 元（运费与搬运）\n不含：大件拆装（每件 150 元）、打包材料（纸箱每个 8 元）\n可约：11 月 14 日、15 日、21 日\n",
+    "搬家报价/三家报价对比.md": "# 三家搬家报价对比\n\n| | 蚂蚁 | 好邻居 | 速达 |\n| --- | --- | --- | --- |\n| 报价 | 2,380 元（全包） | 2,650 元（含空调移机） | 2,180 元起 |\n| 床 2 张、衣柜 1 个拆装 | 含 | 含 | 另计 450 元 |\n| 纸箱 30 个 | 含 | 含 | 另计 240 元 |\n| 算下来 | 2,380 元 | 2,650 元 | 2,870 元 |\n| 可约 | 11/14、11/15 | 11/14 上午 | 11/14、11/15、11/21 |\n\n蚂蚁最便宜，报价 11 月 10 日前有效；要移空调就看好邻居。\n"
+   },
+   "tasks": [
+    {
+     "id": "sched_5e1a9c3f7b2d4608",
+     "review": true,
+     "in_hand": true,
+     "fired": {
+      "late_minutes": 0
+     }
+    }
+   ],
+   "wake": [
+    "sched_5e1a9c3f7b2d4608"
+   ],
+   "expect": {
+    "todo": "none",
+    "no_reply": true,
+    "subtasks_max": 0,
+    "notes_same": true,
+    "memo": "none"
+   }
+  },
+  {
+   "id": "news-user-edited",
+   "no": 48,
+   "group": "进展写进备注（票 108）",
+   "expect_text": "希尔顿那件是这一段里刚记的（回复里念过 5 条收集要点），之后用户在面板里删掉了「品牌定位与客房数量」，todo show 返回的是删过的 4 条；用户说「业主说消防验收下周能过」→ 在用户改过的那份上补：新的一行在上，删过的 4 条一字不差在下，不把删掉的写回来；不另记备忘",
+   "history": [
+    {
+     "role": "user",
+     "content": "记一个待办：希尔顿酒店项目上下文资料收集"
+    },
+    {
+     "role": "assistant",
+     "content": "记下了：希尔顿酒店项目上下文资料收集，没设截止。备注里附了收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制。"
+    }
+   ],
+   "todos": [
+    {
+     "id": "todo_4c8e1a7d2b9f3605",
+     "title": "希尔顿酒店项目上下文资料收集",
+     "notes": "收集要点：项目地址与业主方；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制",
+     "in_hand": false
+    },
+    {
+     "id": "todo_6f7a8b9c0d1e2f3a",
+     "title": "702 办公室装修完工",
+     "notes": "装修师傅说预计这天完工",
+     "due": {
+      "month": 11,
+      "day": 20,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_4b8c2d6e0f1a3957",
+      "at": {
+       "month": 11,
+       "day": 20,
+       "time": "09:00"
+      }
+     }
+    }
+   ],
+   "message": "业主说消防验收下周能过",
+   "expect": {
+    "todo": "none",
+    "progress": {
+     "id": "todo_4c8e1a7d2b9f3605",
+     "groups": [
+      [
+       "消防",
+       "验收"
+      ]
+     ],
+     "forbid": [
+      "品牌定位与客房数量"
+     ]
+    },
+    "schedule": "optional",
+    "memo": "none",
+    "max_chars": 150
+   }
+  },
+  {
+   "id": "news-unrelated",
+   "no": 49,
+   "group": "进展写进备注（票 108）",
+   "expect_text": "清单上是希尔顿那件与 702 装修，用户说「万豪那个项目业主说下个月开始招标」（清单里没有万豪）→ 不动任何待办的备注（不补进希尔顿那件）；可以另记一件待办、给自己挂提醒或记一条备忘，记了只注出来",
+   "history": [],
+   "todos": [
+    {
+     "id": "todo_4c8e1a7d2b9f3605",
+     "title": "希尔顿酒店项目上下文资料收集",
+     "notes": "收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制"
+    },
+    {
+     "id": "todo_6f7a8b9c0d1e2f3a",
+     "title": "702 办公室装修完工",
+     "notes": "装修师傅说预计这天完工",
+     "due": {
+      "month": 11,
+      "day": 20,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_4b8c2d6e0f1a3957",
+      "at": {
+       "month": 11,
+       "day": 20,
+       "time": "09:00"
+      }
+     }
+    }
+   ],
+   "message": "万豪那个项目业主说下个月开始招标",
+   "expect": {
+    "todo": "optional",
+    "schedule": "optional",
+    "memo": "optional",
+    "notes_same": true
    }
   }
  ]

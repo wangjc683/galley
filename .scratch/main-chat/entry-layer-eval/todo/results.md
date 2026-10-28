@@ -32,6 +32,83 @@
 
 注 11：票 81：手册 todos.md 的 --notes 一条补了「用户在清单里看得到备注，写给用户看，用用户的语言，不复述标题与日子，不写成关于用户的记录」；挑会写备注的六条各重跑第 1 遍，第 2 遍仍是旧手册被替换的 6 次运行原样留在 results.json 的 `meta.superseded_runs[10]` 里。
 
+注 12：第一轮（票 108）：手册第一版（todos.md 还没有指向 todos-change.md 的那一句），巡看两条的待办叫「比较三家搬家公司的报价」（三遍都比完就勾掉了，比价本身就是那件事），回复上限 200 字。news-budget 第 1 遍没读 todos-change.md、没补备注，话只写在 <summary> 里；之后 todos.md 的 --notes 一条补了指向，巡看两条的待办改叫「定搬家公司」、上限 350 字，六条整组重跑。被替换的 18 次运行原样留在 results.json 的 `meta.superseded_runs[11]` 里。
+
+注 13：第二轮补跑（票 108）：news-unrelated 第 3 遍最后一次模型调用回了 HTTP 499（请求被断开，398 秒），运行没走完；它前面已经另记了一件待办「跟进万豪项目招标安排」，没动别的备注。单独补跑一遍。被替换的 1 次运行原样留在 results.json 的 `meta.superseded_runs[12]` 里。
+
+注 14：票 108 回归：手册 todos-change.md 加了「How it is going」一条（做成了东西或听到新消息，在备注最前面补一行），todos.md 的 --notes 一条与 unasked.md 的「Tell the user」各补一句指向它；写备注的旧用例（note-*、reno-*、wake-todo、review-*）各重跑第 1 遍，看有没有回退。被替换的 13 次运行原样留在 results.json 的 `meta.superseded_runs[13]` 里。
+
+## 票 108：进展写进备注
+
+主聊天 PRD 裁决 154：替一件待办做成了东西、或用户说了它的新消息，在备注最前面补一行，日子打头，文件写绝对路径；先读再补，原来的备注一字不差留在下面；看过没变化不写。每格是「过 / 运行」。旧手册是这一票之前的 `todos-change.md`、`todos.md` 与 `unasked.md`，反向检查只拿掉 `todos-change.md` 那一条（`todos.md`、`unasked.md` 的两句指向留着）；两组都用同一套判定，在旧手册下「不过」是预期的（不该补的两条除外）。
+
+| # | 用例 | 新手册 | 旧手册（同日对照） | 反向检查（只拿掉 todos-change.md 那一条） |
+| --- | --- | --- | --- | --- |
+| 44 | news-budget | 3 / 3 | 0 / 1 | 0 / 1 |
+| 45 | news-moves-time | 3 / 3 | 0 / 1 | — |
+| 46 | progress-review-done | 3 / 3 | 0 / 1 | 0 / 1 |
+| 47 | progress-review-unchanged | 3 / 3 | — | — |
+| 48 | news-user-edited | 3 / 3 | 0 / 1 | — |
+| 49 | news-unrelated | 3 / 3 | — | — |
+
+每一遍留下的备注（新的一行；没补的写「没动」）：
+
+- **news-budget**：
+  - 新手册第 1 遍：「10月28日：业主说筹开预算下周（11月2日至8日）给。」；过
+  - 新手册第 2 遍：「10月28日：业主说筹开预算下周（11月2日—8日）给。」；过
+  - 新手册第 3 遍：「10月28日：业主说筹开预算下周给（11月2日至8日），待接收。」；过
+  - 旧手册（同日对照）第 1 遍：「。筹开预算：业主表示下周（11 月 2—8 日）提供，具体日期未定，待收到。」；不过：补在了原来的备注后面（该在最前面）；这一行不是日子打头
+  - 反向检查（只拿掉 todos-change.md 那一条）第 1 遍：没动；不过：备注没补进展那一行
+- **news-moves-time**：
+  - 新手册第 1 遍：「10月28日：装修队说完工要拖到12月5日，原定11月20日。」；过
+  - 新手册第 2 遍：「10月28日：装修队说完工要拖到12月5日，原定11月20日。」；过
+  - 新手册第 3 遍：「10月28日：装修队说完工日期从11月20日推迟到12月5日。」；过
+  - 旧手册（同日对照）第 1 遍：「装修队最新通知预计延期至2026年12月5日完工，原定2026年11月20日。」；不过：原来的备注没有一字不差留在新的那一行下面；这一行不是日子打头
+- **progress-review-done**：
+  - 新手册第 1 遍：「10月28日：三家报价已对比，文件：$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r1/sandbox/home/Downloads/搬家报价/搬家报价对比.md；待确认搬家日期、同路线及空调/拆装范围，尚未预订。」；过
+  - 新手册第 2 遍：「10月28日：三家报价对比已整理：$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r2/sandbox/home/Downloads/搬家报价/搬家报价对比-2026-10-28.md。速达补齐3件拆装和30个纸箱后估算2,870元；蚂蚁2,380元（报价有效至11月10日）；好邻居2,650元含1台空调移机，不含空调为2,350元但拆装数量待确认。档期与实际搬家日期待核对，未联系或预订。」；过
+  - 新手册第 3 遍：「10月28日：已比较三家报价，统一暂按3件拆装和30个纸箱，蚂蚁2380元、速达2870元（均未列空调），好邻居2650元含1台空调但拆装件数待确认；若搬入702，现列档期仅速达11月21日在预计完工后。对比文件：$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r3/sandbox/home/Downloads/搬家报价对比.md」；过
+  - 旧手册（同日对照）第 1 遍：没动；不过：备注没补进展那一行
+  - 反向检查（只拿掉 todos-change.md 那一条）第 1 遍：「已按3件拆装、30个纸箱整理对比：蚂蚁2380元；好邻居2650元（含1台空调移机，拆装数量待确认）；速达2870元。对比文件：$TMPDIR/entry-layer-eval-vxphb51g/progress-review-done.r1/sandbox/home/Downloads/搬家报价/搬家报价对比.md。未预订。」；不过：补在了原来的备注后面（该在最前面）；这一行不是日子打头
+- **progress-review-unchanged**：
+  - 新手册第 1 遍：没动；过
+  - 新手册第 2 遍：没动；过
+  - 新手册第 3 遍：没动；过
+- **news-user-edited**：
+  - 新手册第 1 遍：「10月28日：业主称消防验收预计下周（11月2日—8日）能通过，实际结果待确认。」；过
+  - 新手册第 2 遍：「10月28日：业主说消防验收预计下周（11月2日至8日）能通过，尚待确认实际结果。」；过
+  - 新手册第 3 遍：「10月28日：业主说消防验收预计下周（11月2日至8日）能过，尚待确认验收结果。」；过
+  - 旧手册（同日对照）第 1 遍：「消防验收：业主称预计下周（11月2日至8日）能通过，尚未确认验收结果。后续核实实际结果并收集正式验收文件。」；不过：补在了原来的备注后面（该在最前面）；这一行不是日子打头
+- **news-unrelated**：
+  - 新手册第 1 遍：没动；过
+  - 新手册第 2 遍：没动；过
+  - 新手册第 3 遍：没动；过
+
+## 票 108 重跑（2026-10-28，gpt-6.1-sol，推理强度 high）
+
+上一次是这几条最近一次的第 1 遍（`reno-asked` 是票 81，巡看几条是票 75、78，其余是票 73），这一次是票 108 改了手册之后（`todos-change.md` 加「How it is going」一条：做成了东西或听到新消息，在备注最前面补一行；`todos.md` 的 `--notes` 一条与 `unasked.md` 的「Tell the user」各补一句指向它），同一个模型（API key 接入的 gpt-6.1-sol，`mm_1792576875658`）。只重跑写备注的旧用例各一遍（`note-*`、`reno-*`、`wake-todo`、`review-*`），看有没有回退；两次都用现在的判定重判（票 108 起改了备注的都注出来）。请求次数是每次运行的模型调用数（GA 的轮数），用时是整次运行的墙钟时间；读手册的字节是返回给模型的工具结果的字节数，「轮」是读手册的那几次落在几个模型轮次里（一轮里并发读几份算一轮）。
+
+| | 运行 | 过 | 请求次数（均） | 用时 s（均） | 读手册次数（均） | 读手册轮数（均） | 读手册字节（均） | 读过的部分（次数） |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 上一次 | 13 | 13 | 3.62 | 36.9 | 2.08 | 1.77 | 14120 | todos-change.md 12、unasked.md 10、times.md 7、todos.md 7、wake.md 7、subtasks.md 6、reminders.md 4、cli.md 3、authority.md 1 |
+| 这一次 | 13 | 13 | 3.62 | 36.6 | 1.54 | 1.54 | 14466 | todos-change.md 12、unasked.md 9、times.md 8、todos.md 7、wake.md 7、reminders.md 6、subtasks.md 5、cli.md 2 |
+
+| # | 用例 | 写 | 过 | 请求次数 | 用时 s | 读手册：上一次 | 读手册：这一次 | 标记 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | note-report | 是 | 1/1 → 1/1 | 5.0 → 4.0 | 56 → 59 | 6.0 次 2.0 轮，16219 字节：todos.md 2、reminders.md 1、times.md 1、todos-change.md 1、unasked.md 1 | 2.0 次 2.0 轮，14523 字节：times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 |  |
+| 2 | note-soil | 是 | 1/1 → 1/1 | 5.0 → 4.0 | 40 → 36 | 2.0 次 2.0 轮，10825 字节：todos-change.md 1、todos.md 1、unasked.md 1 | 2.0 次 2.0 轮，12865 字节：todos-change.md 1、todos.md 1、unasked.md 1 |  |
+| 3 | note-landlord | 是 | 1/1 → 1/1 | 4.0 → 4.0 | 35 → 32 | 2.0 次 2.0 轮，11456 字节：times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 | 1.0 次 1.0 轮，17927 字节：reminders.md 1、times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 |  |
+| 12 | wake-todo | 否 | 1/1 → 1/1 | 3.0 → 3.0 | 34 → 31 | 1.0 次 1.0 轮，8496 字节：subtasks.md 1、times.md 1、todos-change.md 1、wake.md 1 | 1.0 次 1.0 轮，9936 字节：subtasks.md 1、todos-change.md 1、wake.md 1 |  |
+| 13 | reno-asked | 是 | 1/1 → 1/1 | 4.0 → 5.0 | 35 → 46 | 2.0 次 2.0 轮，15703 字节：reminders.md 1、times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 | 3.0 次 3.0 轮，18401 字节：reminders.md 2、times.md 2、todos.md 2、unasked.md 2、todos-change.md 1 |  |
+| 14 | reno-mention | 是 | 1/1 → 1/1 | 4.0 → 4.0 | 40 → 35 | 2.0 次 2.0 轮，21065 字节：cli.md 1、reminders.md 1、times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 | 1.0 次 1.0 轮，17926 字节：reminders.md 1、times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 |  |
+| 20 | reno-no-remind | 否 | 1/1 → 1/1 | 2.0 → 3.0 | 24 → 32 | 1.0 次 1.0 轮，11317 字节：times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 | 1.0 次 1.0 轮，13398 字节：times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 |  |
+| 38 | review-nothing-to-do | 否 | 1/1 → 1/1 | 3.0 → 3.0 | 33 → 29 | 2.0 次 2.0 轮，14310 字节：subtasks.md 1、todos-change.md 1、unasked.md 1、wake.md 1 | 1.0 次 1.0 轮，9983 字节：subtasks.md 1、todos-change.md 1、wake.md 1 |  |
+| 39 | review-advance | 否 | 1/1 → 1/1 | 4.0 → 4.0 | 51 → 52 | 2.0 次 2.0 轮，17299 字节：cli.md 1、subtasks.md 1、todos-change.md 1、unasked.md 1、wake.md 1 | 2.0 次 2.0 轮，15646 字节：subtasks.md 1、todos-change.md 1、unasked.md 1、wake.md 1 |  |
+| 40 | review-overdue | 否 | 1/1 → 1/1 | 3.0 → 3.0 | 24 → 25 | 1.0 次 1.0 轮，8116 字节：subtasks.md 1、todos-change.md 1、wake.md 1 | 2.0 次 2.0 轮，15637 字节：subtasks.md 1、todos-change.md 1、unasked.md 1、wake.md 1 |  |
+| 41 | review-stop | 是 | 1/1 → 1/1 | 4.0 → 4.0 | 31 → 34 | 2.0 次 2.0 轮，9601 字节：reminders.md 1、times.md 1、wake.md 1 | 2.0 次 2.0 轮，15040 字节：cli.md 1、reminders.md 1、times.md 1、wake.md 1 |  |
+| 42 | review-with-reminder | 否 | 1/1 → 1/1 | 3.0 → 3.0 | 36 → 30 | 2.0 次 2.0 轮，13802 字节：subtasks.md 1、todos-change.md 1、unasked.md 1、wake.md 1 | 1.0 次 1.0 轮，13171 字节：reminders.md 1、times.md 1、todos-change.md 1、wake.md 1 |  |
+| 43 | review-with-subtask-done | 否 | 1/1 → 1/1 | 3.0 → 3.0 | 40 → 35 | 2.0 次 2.0 轮，25345 字节：authority.md 1、cli.md 1、subtasks.md 1、todos-change.md 1、unasked.md 1、wake.md 1 | 1.0 次 1.0 轮，13607 字节：cli.md 1、subtasks.md 1、todos-change.md 1、wake.md 1 |  |
+
 ## 票 73 重跑（2026-10-21，gpt-6.1-sol，推理强度 high）
 
 上一次是 main 上这一套最近一次的结果（待办、闲聊是票 64，定时、叫醒是票 63，都是 gpt-6.1-sol），这一次是票 73 改了手册（`todos.md` 加没日子的在办之事、新的一部分 `unasked.md`、`wake.md` 的早上巡看、`reminders.md` 的例外）、入口层（在推进的事也记、记下时想一步、交文件用 `[FILE:…]`、手册列表多了 `unasked.md`）与 Core 的巡看叫醒之后，同一个模型（票 73 起是API key 接入的 gpt-6.1-sol，`mm_1792576875658`；之前的API key 条目已从库里删掉）。两次都用现在的判定重判（票 73 起回复里有「要不要我」一类建议的都注出来，`no_offer` 的用例判它）。只比两次都有的用例；票 73 新加的用例只有这一次，它们在票 73 之前的提示词与手册下各跑了一遍，是「同日对照」（`meta.ticket73_control`）。请求次数是每次运行的模型调用数（GA 的轮数），用时是整次运行的墙钟时间；读手册的字节是返回给模型的工具结果的字节数，「轮」是读手册的那几次落在几个模型轮次里（一轮里并发读几份算一轮）。
@@ -132,11 +209,11 @@
 | 7 | flight-number | 0 / 0 / 2 | 0 / 0 / 2 | 0 / 0 / 2 |
 | 18 | past-trip | 0 / 0 / 2 | 0 / 0 / 2 | 0 / 0 / 2 |
 | 19 | founding-date | 0 / 1 / 2 | 0 / 1 / 2 | 0 / 0 / 2 |
-| 20 | reno-no-remind | 0 / 1 / 2 | 0 / 2 / 2 | 0 / 0 / 2 |
+| 20 | reno-no-remind | 0 / 1 / 2 | 0 / 2 / 2 | 0 / 1 / 2 |
 | 23 | hotpot-tonight | 2 / 2 / 2 | 0 / 1 / 2 | 0 / 2 / 2 |
 | 26 | declined-before | 0 / 1 / 2 | 0 / 1 / 2 | 0 / 0 / 2 |
 | 35 | tired-today | — | — | 0 / 0 / 2 |
-| | 合计 | 2 / 5 / 14 | 0 / 5 / 14 | 0 / 2 / 16 |
+| | 合计 | 2 / 5 / 14 | 0 / 5 / 14 | 0 / 3 / 16 |
 
 - 票 63 的运行（2026-10-19 20:04 开跑），founding-date 第 1 遍：第一轮在summary里表态（「记下」），正文「（空）」，summary「公司成立日期是 2019 年 11 月 20 日，我先把这条信息记下来。」；最终回复没改口：「记下了，你们公司成立于 **2019 年 11 月 20 日**。」
 - 票 63 的运行（2026-10-19 20:04 开跑），reno-no-remind 第 1 遍：第一轮在正文、summary里表态（「记在待办」「记待办」），正文「我只把完工日期记在待办里，不设提醒，你自己盯着。」，summary「装修预计 11 月 20 日完工；只记待办，不设提醒。」；最终回复没改口：「好，11 月 20 号装修完工，你自己盯着，我就不提醒你了。」
@@ -148,6 +225,7 @@
 - 基线：票 63 的提示词（2026-10-19 21:23），reno-no-remind 第 2 遍：第一轮在正文里表态（「记在待办」），正文「我把完工日期记在待办里，不设提醒，你自己盯进度。」，summary「装修预计 11 月 20 日完工；只记事项，不设提醒。」；最终回复没改口：「好，11 月 20 号完工，你自己盯着。我不设提醒，也不加待办。」
 - 基线：票 63 的提示词（2026-10-19 21:23），hotpot-tonight 第 1 遍：第一轮在summary里表态（「记下」），正文「（空）」，summary「今晚 11 点有火锅聚餐；先查看待办和时间规则，记下安排。」；最终回复没改口：「11 点才开吃，夜猫子局呀 😄 和朋友吃得开心！」
 - 基线：票 63 的提示词（2026-10-19 21:23），declined-before 第 2 遍：第一轮在summary里表态（「我先记下」），正文「（空）」，summary「801 的装修预计 12 月 1 日完工；我先记下日期，不设装修进度提醒。」；最终回复没改口：「那就看他们能不能在 12 月 1 日如期收尾了，希望到时候能清静些。按你之前的意思，装修进度就不另设提醒了。」
+- 这一次：票 64 的提示词，reno-no-remind 第 1 遍：第一轮在summary里表态（「记进待办」），正文「（空）」，summary「装修 11 月 20 日完工，你自己盯着；我只记进待办，不设提醒。」；最终回复没改口：「好，装修 11 月 20 日完工，你自己盯着；我不设提醒，也不加待办。」
 - 这一次：票 64 的提示词，hotpot-tonight 第 1 遍：第一轮在summary里表态（「帮你记到」），正文「（空）」，summary「今晚 7 点和朋友吃火锅；先查看时间和待办规则，帮你记到日程里。」；最终回复没改口：「火锅局不错，和朋友吃得开心！🍲」
 - 这一次：票 64 的提示词，hotpot-tonight 第 2 遍：第一轮在summary里表态（「记进待办」），正文「（空）」，summary「你今晚 7 点和朋友吃火锅；我先确认时间并记进待办。」；最终回复没改口：「好呀，和朋友好好聚聚，吃得开心！🍲」
 
@@ -254,8 +332,8 @@
 | 3 | note-landlord | 该记待办 | 「明天要给房东回电话」→ todo add，截止明天（凌晨说的「明天」两天都算），挂一个截止之前的提醒；回复说出几点提醒 | 2 | 2 | 100% |
 | 4 | remind-landlord-8am | 该记待办 | 「明天早上 8 点提醒我给房东回电话」（票 44）→ 要办完的事加一个时刻：todo add，截止明天（凌晨说的「明天」两天都算），提醒挂在待办上、就在说的 8 点；不用 schedule create；回复说出几点提醒 | 2 | 2 | 100% |
 | 5 | logistics-mon | 它自己的提醒 | 让它回头查的事 → schedule create --target=assistant 在下周一，记下的话里带单号；不记待办；回复说出时间 | 2 | 2 | 100% |
-| 6 | guitar | 不该记 | 没有可办的事 → 不记待办、不建提醒，不动任何东西；票 64：最终回复不提改口 | 2 | 2 | 100% |
-| 7 | flight-number | 不该记 | 信息（航班号）→ 不记成待办、不建提醒（可以记进记忆）；票 64：最终回复不提改口 | 2 | 2 | 100% |
+| 6 | guitar | 不该记 | 没有可办的事 → 不记待办、不建提醒，不动任何东西；票 64：最终回复不提改口；票 98：可以记成一条备忘（兴趣），记了只注出来 | 2 | 2 | 100% |
+| 7 | flight-number | 不该记 | 信息（航班号）→ 不记成待办、不建提醒（可以记进记忆）；票 64：最终回复不提改口；票 98：可以记成一条备忘，记了只注出来 | 2 | 2 | 100% |
 | 8 | tick-soil | 勾掉 | 「在办的事」里有「买营养土」，说「营养土买好了」→ todo done 那一件；一句话说已勾掉，不复述清单 | 2 | 2 | 100% |
 | 9 | quote-move | 引用改 | 输入框带引用块「交季度报告」，说「改到周四」→ todo update 那一件：截止挪到周四、提醒跟着挪（在周四截止之前）；不新建；回复说出新时间 | 2 | 2 | 100% |
 | 10 | whats-left | 问还有什么没办 | 「In Hand」是段首快照（买营养土那时还没做；续签合同是这段里刚记的、不在快照里），之后用户在面板上勾掉了营养土 → 先 todo list 读最新的，答季度报告、房东、续签合同，不把营养土当成没办 | 2 | 1 | 50% |
@@ -267,8 +345,8 @@
 | 16 | offer-friday | 该跟进 | 「HR 说这周五给我 offer 答复」→ 它自己的提醒（schedule create --target=assistant），周五下午或傍晚问一句结果；记成待办挂提醒也算过，但在结果里标出来；回复说出来 | 2 | 2 | 100% |
 | 17 | flight-wed | 该跟进 | 「我下周三早上的航班去上海」→ 待办（赶航班），截止下周三上午（不是这周三），提醒在前一天；回复说出什么时候提醒 | 2 | 2 | 100% |
 | 18 | past-trip | 不该跟进 | 「上个月 20 号去了趟上海，挺累的」→ 过去的事：什么都不设；票 64：最终回复不提改口 | 2 | 2 | 100% |
-| 19 | founding-date | 不该跟进 | 「我们公司是 2019 年 11 月 20 号成立的」→ 只是个日子：不设待办、不设提醒（可以写进记忆）；票 63：回复说「记下了」一类的话，这一轮就得写过（写进记忆，或别的写）；票 64：最终回复不提改口 | 2 | 2 | 100% |
-| 20 | reno-no-remind | 不该跟进 | 「装修 11 月 20 号完工，这个不用提醒我，我自己盯着」→ 不挂提醒、不设它自己的提醒（记一件不带提醒的待办不算错，标出来）；票 64：最终回复不提改口 | 2 | 2 | 100% |
+| 19 | founding-date | 不该跟进 | 「我们公司是 2019 年 11 月 20 号成立的」→ 只是个日子：不设待办、不设提醒（可以写进记忆）；票 63：回复说「记下了」一类的话，这一轮就得写过（写进记忆，或别的写）；票 64：最终回复不提改口；票 98：手册有备忘以后（票 96 起）该记成一条备忘，有 11 月 20 日 | 2 | 2 | 100% |
+| 20 | reno-no-remind | 不该跟进 | 「装修 11 月 20 号完工，这个不用提醒我，我自己盯着」→ 不挂提醒、不设它自己的提醒（记一件不带提醒的待办不算错，标出来）；票 64：最终回复不提改口；票 98：完工日到时不用它做事，可以记成一条备忘，记了只注出来 | 2 | 2 | 100% |
 | 21 | hospital-tomorrow | 该跟进 | 「明天去医院复查」（票 60 两可，票 63 判定）→ 跟进（待办挂提醒，或它自己的提醒），提醒在今晚或明天早上（带报告、证件）；回复说出何时提醒 | 2 | 2 | 100% |
 | 22 | school-monday | 该跟进 | 「下周一孩子开学」（票 60 两可，票 63 判定）→ 跟进（待办挂提醒，或它自己的提醒），提醒在开学前一天（周日）；回复说出何时提醒 | 2 | 2 | 100% |
 | 23 | hotpot-tonight | 不该跟进 | 「今晚 7 点和朋友吃火锅」（票 60 两可，票 63 判定；钟点取晚上第一个离运行时刻还有 45 分钟以上的整点）→ 今晚就去、刚说出口、没什么要准备：不记待办、不设它自己的提醒；票 64：最终回复不提改口 | 2 | 2 | 100% |
@@ -284,7 +362,7 @@
 | 33 | half-done | 在推进（票 73） | 查阿里云费用暴涨查到一半、还没结论，用户说「先吃饭，回来再说」→ 记一条没日子的待办（查清阿里云费用暴涨的原因），不写截止、不挂提醒；可以当场做一步只读的（停在浏览器工具只记下）或派一件子任务；回复一句说记了什么、做了什么；不出现「要不要我……」一类的建议（回复和末尾的建议都不行） | 2 | 1 | 50% |
 | 34 | supplier-quote | 在推进（票 73） | 「供应商的报价还没回，我在等」（之前说过今天下班前发）→ 它自己回头查的提醒（等外部结果，schedule create --target=assistant），在今晚到明天中午之间，不是没日子的待办；回复说出什么时候问；不提建议 | 2 | 1 | 50% |
 | 35 | tired-today | 在推进（票 73） | 「今天好累，不想动」→ 什么都不记、不设、不派；最终回复不提改口 | 2 | 2 | 100% |
-| 36 | shanghai-trip | 两可（票 73） | 「下周三去上海出差」→ 只记录：会不会记待办、挂提醒，会不会去查车次（派活或查网页），怎么说 | 2 | 只记录 | — |
+| 36 | shanghai-trip | 两可（票 73） | 「下周三去上海出差」→ 只记录：会不会记待办、挂提醒，会不会去查车次（派活或查网页），怎么说；票 98：出差可以记成一条带期限的备忘 | 2 | 只记录 | — |
 | 37 | report-half | 两可（票 73） | 「季度报告我写了一半」→ 只记录：会不会记成没日子的待办，会不会主动做一步（派活、起草）、提建议 | 2 | 只记录 | — |
 | 38 | review-nothing-to-do | 早上巡看（票 73） | 巡看到点（Core 的巡看叫醒措辞），在办的只有一条 11 月 20 号的装修待办、提醒挂好了 → 什么都不做，回复只有 <no-reply/>（票 81 起按新判据，真机上这一种巡看会跳过、不叫醒，用例测的是醒了以后） | 2 | 2 | 100% |
 | 39 | review-advance | 早上巡看（票 73） | 巡看到点，在办的有没日子的「查清阿里云费用暴涨的原因」→ 往前推一步：当场做（停在浏览器工具只记下）或派 1～2 件子任务；只派出去、没结果时只回 <no-reply/>；开口时用自己的话说是哪件事、做了什么（不要固定开头），不说「看了一下没有新进展」一类的空话；不提建议 | 2 | 2 | 100% |
@@ -292,17 +370,23 @@
 | 41 | review-stop | 早上巡看（票 73） | 用户说「早上那个巡看别弄了」→ schedule disable 巡看那条（不是 delete），回复一句说已经停了、想恢复跟它说 | 2 | 2 | 100% |
 | 42 | review-with-reminder | 巡看与别的事同一次叫醒（票 78） | 巡看与待办「702 办公室装修完工」的提醒同一分钟到点，Core 合成一次叫醒（混合的开头，提醒在前、巡看在后：同一分钟到点的按 id 排，结尾「Reply once, covering all of them.」）；在办的只有这一件 → 用自己的话告诉用户装修的事（问完工了没、给下一步），不是整条 <no-reply/>，不复述提醒原文，不勾掉；巡看没做成值得说的事，不提巡看；不提建议 | 3 | 3 | 100% |
 | 43 | review-with-subtask-done | 巡看与别的事同一次叫醒（票 78） | 用户这一段让查的高铁，子任务查好交回（Core 的子任务完成措辞），与巡看在同一次叫醒（子任务的回报先到、巡看在后）；在办的另有一条 11 月 20 号的装修待办、提醒挂好了 → 转达查到的三班车（车次、时刻、票价、有没有票），点出证据；不是整条 <no-reply/>、不打回；巡看没做成值得说的事，不提巡看；不提建议 | 3 | 3 | 100% |
-| | 合计 | | | 84 | 81 | 96% |
+| 44 | news-budget | 进展写进备注（票 108） | 清单里有「希尔顿酒店项目上下文资料收集」（没日子，备注是它记的 5 条收集要点）和 702 装修，用户说「业主说筹开预算下周给我」→ 先读这件事，todo update --notes= 是新的一行「<今天>：业主说筹开预算下周给」在上、原来的备注一字不差在下；不另记备忘、不记新待办、不动 702；顺带给自己挂一个下周问预算的提醒可以，记下个数 | 3 | 3 | 100% |
+| 45 | news-moves-time | 进展写进备注（票 108） | 702 装修（11 月 20 日截止、当天 9 点提醒）与希尔顿那件在清单上，用户说「装修队说要拖到 12 月 5 号」→ 截止挪到 12 月 5 日、提醒跟着挪（不晚于新截止），备注最前面补一行日子打头、写明原因（装修队说拖），原来的「装修师傅说预计这天完工」一字不差留在下面；不新建、不动希尔顿；回复说出新日子 | 3 | 3 | 100% |
+| 46 | progress-review-done | 进展写进备注（票 108） | 巡看到点，在办的有没日子的「定搬家公司」（三份报价单在 ~/Downloads/搬家报价/），另有 702 装修（挂着提醒）（要定的是用户）→ 当场比完（读三份、可以写一份对比文件），开口时说是哪件事、比出了什么、文件用 [FILE:…]，不替用户定、不勾掉；备注最前面补一行日子打头、写比出的结果，做了文件就写它的绝对路径，原来的备注一字不差留在下面；只派子任务没结果时备注不动、只回 <no-reply/>；不提建议；回复上限 350 字（比价要列三家） | 3 | 3 | 100% |
+| 47 | progress-review-unchanged | 进展写进备注（票 108） | 巡看到点，「定搬家公司」的备注最前面已有它前一天补的一行（比好了、蚂蚁最便宜、对比表的绝对路径），对比表就在那里，用户还没定，另有 702 装修（挂着提醒）→ 看过没变化：不重做、不补「看过了」一类的行，备注不动，回复只有 <no-reply/> | 3 | 3 | 100% |
+| 48 | news-user-edited | 进展写进备注（票 108） | 希尔顿那件是这一段里刚记的（回复里念过 5 条收集要点），之后用户在面板里删掉了「品牌定位与客房数量」，todo show 返回的是删过的 4 条；用户说「业主说消防验收下周能过」→ 在用户改过的那份上补：新的一行在上，删过的 4 条一字不差在下，不把删掉的写回来；不另记备忘 | 3 | 3 | 100% |
+| 49 | news-unrelated | 进展写进备注（票 108） | 清单上是希尔顿那件与 702 装修，用户说「万豪那个项目业主说下个月开始招标」（清单里没有万豪）→ 不动任何待办的备注（不补进希尔顿那件）；可以另记一件待办、给自己挂提醒或记一条备忘，记了只注出来 | 3 | 3 | 100% |
+| | 合计 | | | 102 | 99 | 97% |
 
 ## 一览
 
 | # | 用例 | 遍 | 调了什么命令 | 回复原文 | 字数 | 读手册 | 写前读过清单 | 判定 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | note-report | 1 | todo list；todo add 交季度报告 --due=2026-10-28T15:00 --remind-at=2026-10-27T15:00 --notes=用户说周三下午3点前要交季度报告。记录时为10月21日周三18点，按下一个周三10月28日理解。提交前检查：关键指标与数据来源、目标完成情况、差异原因、下季度计划、附件与提交渠道。 --supervisor=galley-assistant --reason=用户提到季度报告提交期限，记录… | 今天周三的下午 3 点已过，我按**下周三（10 月 28 日）下午 3 点前**交报告记下了，**10 月 27 日下午 3 点**提醒你，留一天检查和修改。 ⏎ 待办里也附了提交前检查项：关键数据、目标完成情况、差异原因、下季度计划及附件。 | 121 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；6 次 2 轮，16219 字节 | 查了 | 过 |
+| 1 | note-report | 1 | todo list；todo add 交季度报告 --due=2026-11-04T15:00 --remind-at=2026-11-03T15:00 --notes=交稿检查：核心指标与数据口径、目标完成情况、主要成果、风险与下季度计划、附件与审批。 --supervisor=galley-assistant --reason=用户提到周三下午3点前交季度报告；本周时间已过，按下一个周三记录并提前一天提醒；todo list | 记下了：**11 月 4 日（下周三）下午 3 点前交季度报告，11 月 3 日下午 3 点提醒你**。今天周三的下午 3 点已过，所以按下周三记了。 ⏎ 待办里也附上了交稿检查清单：核心指标、目标完成情况、主要成果、风险与下季度计划、附件与审批。 | 123 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；2 次 2 轮，14523 字节 | 查了 | 过 |
 | 1 | note-report | 2 | todo list；todo add 交季度报告 --due=2026-10-28T15:00 --remind-at=2026-10-27T15:00 --notes=用户说周三下午3点前要交季度报告。记录时为10月21日周三18点，按下一个周三10月28日15点截止；提前一天提醒准备并提交。 --supervisor=galley-assistant --reason=用户提到季度报告截止时间，记录待办并提前一天提醒 | 记下了：**10 月 28 日（周三）下午 3 点前交季度报告，10 月 27 日下午 3 点提醒你。** ⏎ 今天已经是周三傍晚，我先按下周三记了。 | 74 | 读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md、todos-change.md；2 次 2 轮，15360 字节 | 查了 | 过 |
-| 2 | note-soil | 1 | todo list；todo add 买营养土 --supervisor=galley-assistant --reason=用户要求记下要买营养土 | 记下了：买营养土。 | 9 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md；2 次 2 轮，10825 字节 | 查了 | 过 |
+| 2 | note-soil | 1 | todo list；todo add 买营养土 --supervisor=galley-assistant --reason=用户要求记下要买营养土，未指定日期 | 记下了：买营养土。 | 9 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md；2 次 2 轮，12865 字节 | 查了 | 过 |
 | 2 | note-soil | 2 | todo list；todo add 买营养土 --supervisor=galley-assistant --reason=用户要求记下要买营养土，未指定日期 | 记下了：买营养土。 | 9 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md；2 次 2 轮，10833 字节 | 查了 | 过 |
-| 3 | note-landlord | 1 | todo list；todo add 给房东回电话 --due=2026-10-22 --remind-at=2026-10-22T09:00 --notes=用户说明明天要给房东回电话，未指定具体通话时间。 --supervisor=galley-assistant --reason=用户明天需要给房东回电话，记为待办并在当天上午提醒 | 记下了：明天（10月22日）给房东回电话，明早9点提醒你。 | 29 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；2 次 2 轮，11456 字节 | 查了 | 过 |
+| 3 | note-landlord | 1 | todo list；todo add 给房东回电话 --due=2026-10-29 --remind-at=2026-10-29T10:00 --supervisor=galley-assistant --reason=用户提到明天要给房东回电话，记录待办并在当天上午提醒 | 记下了：明天（10月29日）给房东回电话，上午10点提醒你。 | 30 | 读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md、todos-change.md；1 次 1 轮，17927 字节 | 查了 | 过 |
 | 3 | note-landlord | 2 | todo list；todo add 给房东回电话 --due=2026-10-22 --remind-at=2026-10-22T09:00 --notes=用户说：明天要给房东回电话。未指定具体通话时间，上午9点提醒安排回电。 --supervisor=galley-assistant --reason=用户提到明天要给房东回电话，记入待办并于当天上午提醒 | 记下了：明天（10月22日）给房东回电话，上午9点提醒你。 | 29 | 读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md、todos-change.md；2 次 2 轮，15334 字节 | 查了 | 过 |
 | 4 | remind-landlord-8am | 1 | todo list；todo add 给房东回电话 --due=2026-10-22 --remind-at=2026-10-22T08:00 --notes=用户要求明天早上8点提醒给房东回电话。 --supervisor=galley-assistant --reason=用户明确要求明天早上8点提醒给房东回电话 | 明天（10 月 22 日）早上 8 点提醒你给房东回电话。 | 29 | 读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md、todos-change.md；2 次 2 轮，15312 字节 | 查了 | 过 |
 | 4 | remind-landlord-8am | 2 | schedule list；todo list；todo add 给房东回电话 --due=2026-10-22 --remind-at=2026-10-22T08:00 --notes=用户要求明天早上8点提醒给房东回电话。 --supervisor=galley-assistant --reason=用户要求明天早上8点提醒给房东回电话 | 记下了，明天（10 月 22 日）早上 8 点提醒你给房东回电话。 | 33 | 读了（第 1 次调用）：reminders.md、times.md、todos.md、unasked.md、todos-change.md；2 次 2 轮，15613 字节 | 查了 | 过 |
@@ -320,11 +404,11 @@
 | 10 | whats-left | 2 | todo list | 还有 **3 件没办**，按截止时间排： ⏎ - **明天（10 月 22 日）给房东回电话**：上午 10 点提醒。 ⏎ - **周五（10 月 23 日）前续签房屋合同**：明晚 8 点提醒。 ⏎ - **下周三（10 月 28 日）下午 3 点前交季度报告**：当天中午 12 点提醒，交给王经理。 ⏎ 买营养土已经不在未完成清单里了。 | 165 | 读了（第 1 次调用）：todos-change.md、todos.md、unasked.md、reminders.md、times.md；1 次 1 轮，15166 字节 | 读了清单 | 不过：把已勾掉的「营养土」当成还没办：买营养土已经不在未完成清单里了 |
 | 11 | already-noted | 1 | todo list | 这项待办已经在了：**10 月 28 日（周三）下午 3 点前**交季度报告，当天中午 **12 点**提醒你，不用重复添加。 | 63 | 读了（第 1 次调用）：todos-change.md、times.md；1 次 1 轮，2547 字节 | 读了清单 | 过 |
 | 11 | already-noted | 2 | todo list | 这项已经在待办里了：**下周三（10 月 28 日）下午 3 点前交季度报告**，当天中午 12 点会提醒你。 | 55 | 读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、times.md；1 次 1 轮，11316 字节 | 读了清单 | 过 |
-| 12 | wake-todo | 1 | todo list | 季度报告发给王经理了吗？还没发的话，今晚 **21:25 截止**，发送前记得检查附件是不是最终版。 | 50 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、times.md；1 次 1 轮，8496 字节 | 读了清单 | 过 |
+| 12 | wake-todo | 1 | todo show todo_2b3c4d5e6f7a8b9c | 季度报告交给王经理了吗？截止是明天（10 月 29 日）凌晨 01:42，还没交的话，现在可以把 `~/Documents/Q3 季度报告.docx` 发给他。 | 80 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，9936 字节 | — | 过 |
 | 12 | wake-todo | 2 | todo list | 季度报告交给王经理了吗？今晚 21:25 截止；还没交的话，可以打开 `~/Documents/Q3 季度报告.docx`，检查后发给他。 | 69 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，7872 字节 | 读了清单 | 过 |
-| 13 | reno-asked | 1 | todo list；todo add 确认 702 办公室装修完工情况 --due=2026-11-20 --remind-at=2026-11-20T09:00 --notes=预计完工，届时确认实际进度。 --supervisor=galley-assistant --reason=用户要求记录702办公室装修预计11月20日完工，设置当天提醒确认 | 记下了：702 办公室装修预计 **2026 年 11 月 20 日完工**，当天上午 9 点提醒你确认进度。 | 55 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；2 次 2 轮，15703 字节 | 查了 | 过 |
+| 13 | reno-asked | 1 | todo list；todo add 确认702办公室装修完工情况 --due=2026-11-20 --remind-at=2026-11-20T09:00 --notes=装修预计完工，届时确认实际进度。 --supervisor=galley-assistant --reason=用户要求记录702办公室装修预计11月20日完工，设置当天提醒确认进度 | 记下了：702 办公室装修预计 **2026 年 11 月 20 日完工**，当天上午 9 点提醒你确认进度。 | 55 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；3 次 3 轮，18401 字节 | 查了 | 过 |
 | 13 | reno-asked | 2 | todo list；todo add 确认702办公室装修是否完工 --due=2026-11-20 --remind-at=2026-11-20T09:00 --notes=用户告知：702 办公室装修预计于 2026 年 11 月 20 日完工。当天确认实际完工情况；此日期为预计日期，并非已确认完工。 --supervisor=galley-assistant --reason=用户要求记录702办公室装修预计完工时间11月20日，并在当天提醒确认 | 记下了：702 办公室装修预计 **2026 年 11 月 20 日完工**，当天上午 9 点提醒你确认完工情况。 | 57 | 读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md、todos-change.md；1 次 1 轮，15170 字节 | 查了 | 过 |
-| 14 | reno-mention | 1 | todo list；todo add 确认 702 办公室装修完工 --due=2026-11-20 --remind-at=2026-11-20T09:00 --notes=装修师傅说 702 办公室预计 2026 年 11 月 20 日能完工，尚未确认实际完工。当天核实进度；验收时检查水电、墙地面、门窗及收尾清洁，记录未完成项目。 --supervisor=galley-assistant --reason=用户提到办公室装修预计完工日期，记录节点并在… | 记下了：702 办公室预计 **11 月 20 日完工**，当天上午 9 点提醒你确认进度；待办里也附了水电、墙地面、门窗和收尾清洁的验收要点。 | 72 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md、cli.md；2 次 2 轮，21065 字节 | 查了 | 过 |
+| 14 | reno-mention | 1 | todo list；todo add 确认 702 办公室装修完工 --due=2026-11-20 --remind-at=2026-11-20T09:00 --notes=师傅给的是预计完工时间，届时确认实际进度。验收核对：水电与插座、门窗和墙地面、遗留收尾项。 --supervisor=galley-assistant --reason=装修预计于11月20日完工，当天提醒确认进度，并附简要验收核对项 | 记下了：702 办公室预计 11 月 20 号完工，当天上午 9 点提醒你确认进度。待办里也附了水电、门窗、墙地面和收尾项的验收核对要点。 | 69 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、reminders.md、times.md；1 次 1 轮，17926 字节 | 查了 | 过 |
 | 14 | reno-mention | 2 | todo list；todo add 确认 702 办公室装修完工 --due=2026-11-20 --remind-at=2026-11-20T09:00 --notes=装修师傅说 702 办公室预计 2026 年 11 月 20 日能完工，尚未确认实际完工。当天向用户确认进度；验收时核对水电、收尾整改和清洁是否完成。 --supervisor=galley-assistant --reason=用户提及办公室装修预计完工日期，记录并在当天上午提醒确… | 记下了：702 办公室**预计 11 月 20 日完工**，我会在当天上午 9 点提醒你确认是否按期完成。 | 53 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；1 次 1 轮，15204 字节 | 查了 | 过 |
 | 15 | lease-expiry | 1 | todo list；todo list；todo add 处理办公室租约到期事宜 --due=2027-03-31 --remind-at=2027-01-04T09:00 --notes=先核对合同里的续租、退租提前通知期限及自动续约条款，再决定续租或搬迁；到期日按“3月底”暂记，具体以合同为准。 --supervisor=galley-assistant --reason=办公室租约明年3月底到期，提前提醒核对通知期限并准备续租或搬迁 | 记下了：办公室租约 **2027 年 3 月底到期**，我会在 **1 月 4 日上午 9 点**提醒你提前处理续租或搬迁。待办里也加了核对续租、退租通知期限和自动续约条款，避免错过合同要求的提前通知时间。 | 103 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；2 次 2 轮，17977 字节 | 查了 | 过 |
 | 15 | lease-expiry | 2 | todo list；todo add 处理办公室租约到期事宜 --due=2027-03-31 --remind-at=2027-01-04T10:00 --notes=用户说办公室租约明年3月底到期（2026-10-21提及），按2027-03-31记录。具体合同日期及提前通知期限尚未核实。准备事项：核对续租/退租通知期限与自动续约条款；确定续租或搬迁；如搬迁，倒排选址、装修和交接时间。提醒时先核实进展，不替用户决定或联系房东。 --supervisor… | 记下了：办公室租约 **2027 年 3 月底到期**，先按 **3 月 31 日**登记；我会在 **1 月 4 日上午 10 点**提醒你处理续租或搬迁。 ⏎ 准备事项里也列了核对**提前通知期限和自动续约条款**——这两项最好现在就确认，以免合同要求提前三个月甚至半年通知。 | 139 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；2 次 2 轮，15317 字节 | 查了 | 过 |
@@ -336,7 +420,7 @@
 | 18 | past-trip | 2 | — | 那趟挺辛苦啊。是来回赶路累，还是在上海那几天事情太多、没休息好？ | 32 | 没读（没写） | — | 过 |
 | 19 | founding-date | 1 | — | 记下了，你们公司成立于 **2019 年 11 月 20 日**。 | 33 | 读了（第 2 次调用）：unasked.md、times.md、todos.md；3 次 1 轮，8508 字节 | — | 过（注：写了记忆：global_mem.txt、global_mem_insight.txt） |
 | 19 | founding-date | 2 | — | 记住了，你们公司是 **2019 年 11 月 20 日**成立的，今年 **11 月 20 日就满七周年**。 | 56 | 读了（第 3 次调用）：todos.md、unasked.md、times.md；3 次 1 轮，8508 字节 | — | 过（注：写了记忆：global_mem.txt、global_mem_insight.txt） |
-| 20 | reno-no-remind | 1 | — | 好，11 月 20 号完工这件事你自己盯，我不设提醒。 | 27 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、times.md；1 次 1 轮，11317 字节 | — | 过 |
+| 20 | reno-no-remind | 1 | todo list；schedule list | 好，装修 11 月 20 日完工，你自己盯着；我不设提醒，也不加待办。 | 35 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；1 次 1 轮，13398 字节 | 读了清单 | 过 |
 | 20 | reno-no-remind | 2 | todo list | 好，装修这件事你自己盯，我不设提醒，也不主动追问进度。 | 27 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；2 次 2 轮，11444 字节 | 读了清单 | 过 |
 | 21 | hospital-tomorrow | 1 | todo list；todo add 去医院复查 --due=2026-10-23 --remind-at=2026-10-22T20:00 --notes=准备身份证、医保卡、既往检查报告和用药清单；核对预约时间、院区及医生告知的检查准备要求，是否空腹按医嘱。 --supervisor=galley-assistant --reason=用户明天去医院复查，今晚提醒准备就诊资料 | 记下了：明天（10月23日）去医院复查，今晚8点提醒你准备证件、既往检查报告和用药清单。是否需要空腹，按医院或医生的要求来。 | 62 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；2 次 2 轮，15709 字节 | 查了 | 过 |
 | 21 | hospital-tomorrow | 2 | todo list；todo add 去医院复查 --due=2026-10-22 --remind-at=2026-10-21T20:00 --notes=用户说10月22日去医院复查，具体医院和预约时间未提供。今晚提醒准备身份证、医保卡、既往病历和检查报告，核对预约时间及医院的检查准备要求；是否空腹、是否调整用药按医院或医生要求，不自行决定。 --supervisor=galley-assistant --reason=用户提到明天去医院复查，记录待办…；todo list | 记下了：明天（10 月 22 日）去医院复查，今晚八点提醒你准备身份证、医保卡、既往病历和检查报告。 ⏎ 是否需要空腹、药物怎么服用，以医院或医生的要求为准，别自行停药。祝复查顺利。 | 90 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；2 次 2 轮，15457 字节 | 查了 | 过 |
@@ -372,20 +456,57 @@
 | 36 | shanghai-trip | 2 | todo list；sessions search 上海 --runtime all --all；todo add 去上海出差 --due=2026-10-28 --remind-at=2026-10-27T20:00 --notes=用户说下周三去上海出差，即2026年10月28日。出发地、交通、住宿、返程日期尚未提供。出发前检查：车票或机票、酒店、身份证、电脑和充电器、会议资料。 --supervisor=galley-assistant --reason=用户提及有明确日期的出差安排，提前一晚提醒准备行程和随身物品；todo list | 记下了：**10 月 28 日（下周三）去上海出差**，10 月 27 日晚 8 点提醒你准备。也附上了出发前检查清单：车票或机票、酒店、身份证、电脑和充电器、会议资料。 | 85 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、cli.md、todos-change.md；2 次 2 轮，15323 字节 | 查了 | 只记录 |
 | 37 | report-half | 1 | — | 后半段有思路了吗，还是卡在哪一部分？ | 18 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md；1 次 1 轮，11243 字节 | — | 只记录 |
 | 37 | report-half | 2 | todo list；todo add 写完季度报告 --notes=用户说季度报告已写一半；继续完成剩余部分。未提供截止日期。续写备选提纲：问题与原因、改进措施、下季度重点；应以现有报告结构为准。 --supervisor=galley-assistant --reason=用户季度报告写到一半，记录尚未完成的工作以便继续 | 剩下主要是哪部分，是还没写到，还是卡住了？ | 21 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md；1 次 1 轮，10904 字节 | 查了 | 只记录（注：记了不带提醒的待办：写完季度报告） |
-| 38 | review-nothing-to-do | 1 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，14310 字节 | 读了清单 | 过 |
+| 38 | review-nothing-to-do | 1 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，9983 字节 | 读了清单 | 过 |
 | 38 | review-nothing-to-do | 2 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6374 字节 | 读了清单 | 过 |
-| 39 | review-advance | 1 | todo list；schedule list；sessions list --runtime all --all；sessions search 阿里云 --runtime all --all；session show s-…9w0e --tail=16 | <subtask>继续只读调查阿里云费用暴涨，找出 OSS 外网下行对应的业务，并尽可能核实 ECS 新增实例的费用贡献。背景：主会话 s-mgn4k2x1-7q3z9w0e；待办 todo_7a8b9c0d1e2f3a4b「查清阿里云费用暴涨的原因」仍未完成。已有待办备注：ECS 多了两台按量付费实例，由子账号 deploy-bot 在 10 月 9 日创建；公网流量大头是一个 OSS 桶的外网下行，尚不知对应哪个业务。这些是已有线索，不是本轮核实结果。当前没有我们启动的运行中子任务；读取历史搜索和主会话尾部未返回内容，不要假设有更多上下文。 ⏎ 先检查 Browser Control 已连接的真实浏览器标签页，利用现有已登录阿里云控制台和可用账单、资源信息进行只读核查。不要用代码/API 替代浏览器操作，不读取密钥文件，不创建收费资源，不启用收费日志，不修改权限、资源、配置或用户文件，不停止、删除实例，不替用户联系他人。若未登录或缺少权限，仅记录确切阻碍，勿反复尝试。重点：确认异常费用的时间段、产品和金额；定位 OSS 桶、主要下载对象或前缀、可见访问来源，依据现有日志/监控/域名/资源标签关联具体业务；核实两台 ECS 的创建时间、部署用途及账单贡献。仅使用已有数据，不为调查打开新计费功能。 ⏎ 交回简洁的已证实结论、仍属推断的部分、证据链接或控制台记录，以及无法确认时最小的缺失信息。任何金额、日期、实例或桶标识都需对应直接证据，不能只用汇总或猜测。若产生报告或截图，提供绝对路径。不要标记待办完成，也不要改写其他会话。</subtask> ⏎ <no-reply/> | 693 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、cli.md、unasked.md；2 次 2 轮，17299 字节 | 读了清单 | 过 |
+| 39 | review-advance | 1 | todo list；schedule list；sessions list --runtime all --all；sessions search 阿里云 --runtime all --all；session show s-…9w0e --tail=15 | <subtask> ⏎ 继续查清阿里云费用暴涨的原因，重点追查 OSS 外网下行流量对应哪个业务。已有待办 todo_7a8b9c0d1e2f3a4b，现有线索：ECS 多了两台按量付费实例，由子账号 deploy-bot 在 10 月 9 日开通；公网流量的大头来自一个 OSS 桶的外网下行，但桶对应的业务尚未查到。当前没有其他运行中的排查子任务。 ⏎ 先读相关操作手册及浏览器 SOP，使用 Browser Control 的真实浏览器，只读检查已有登录的阿里云控制台、账单及可访问的监控、访问日志等证据。核对费用增长的时间、产品和资源，尽可能确定 OSS 桶、主要访问对象或路径、来源及业务归属，并与两台 ECS 的已知线索区分。只采用实际可见的数据，不把推断当结论；没有日志就明确缺口，不创建收费日志或开启付费功能。不读取密钥、不更改云资源、权限、计费或配置，不停机、不删除、不对外发送信息。若未登录或缺少权限，报告具体阻碍，不反复尝试，不打扰用户索取凭据。 ⏎ 交回简洁结果：已证实的费用来源、OSS 对应业务的证据或尚缺的具体证据、相关控制台链接或已有报表路径，以及是否需要用户做决定。若需要制作报告，仅在工作目录内创建文件并提供完整绝对路径。不要只交一份泛泛排查清单，不写入用户其他会话，不勾掉待办。主会话会核对结果并更新待办。 ⏎ </subtask> ⏎ <no-reply/> | 591 | 读了（第 1 次调用）：wake.md、subtasks.md、unasked.md、todos-change.md；2 次 2 轮，15646 字节 | 读了清单 | 过 |
 | 39 | review-advance | 2 | todo list；schedule list；sessions list --runtime all --all；sessions search 阿里云 --runtime all --all；session show s-…9w0e --tail=20 | （空） | 0 | 读了（第 1 次调用）：wake.md、subtasks.md、unasked.md、todos-change.md、cli.md；2 次 2 轮，17303 字节 | 读了清单 | 过（注：停在浏览器工具：在做一步（只读），结果与回复看不到） |
-| 40 | review-overdue | 1 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8116 字节 | 读了清单 | 过 |
+| 40 | review-overdue | 1 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，15637 字节 | 读了清单 | 过 |
 | 40 | review-overdue | 2 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，13748 字节 | 读了清单 | 过 |
-| 41 | review-stop | 1 | schedule list；schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；schedule list | 关掉了，以后早上不再自动巡看。想恢复时跟我说一声就行。 | 27 | 读了（第 1 次调用）：reminders.md、times.md、wake.md；2 次 2 轮，9601 字节 | — | 过 |
+| 41 | review-stop | 1 | schedule list --all；schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；schedule show sched_5e1a9c3f7b2d4608 | 关掉了，以后早上不再巡看。想恢复时跟我说一声就行。 | 25 | 读了（第 1 次调用）：reminders.md、times.md、cli.md、wake.md；2 次 2 轮，15040 字节 | — | 过 |
 | 41 | review-stop | 2 | schedule list；schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；schedule list | 关掉了，以后早上不再巡看。想恢复时跟我说一声就行。 | 25 | 读了（第 1 次调用）：reminders.md、times.md、wake.md；2 次 2 轮，9601 字节 | — | 过 |
-| 42 | review-with-reminder | 1 | todo list；schedule list；sessions list --runtime all --all | 702 办公室装修今天能按计划完工吗？先跟师傅确认是否还有收尾项目，再约现场验收，免得白跑一趟。 | 48 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，13802 字节 | 读了清单 | 过 |
+| 42 | review-with-reminder | 1 | todo list；schedule list；sessions list --runtime all --all | 师傅原先预计 702 办公室今天完工，现在收尾了吗？如果已完工，验收时记得核对水电、墙地面和门窗，有问题先拍照留底。 | 58 | 读了（第 1 次调用）：wake.md、todos-change.md、reminders.md、times.md；1 次 1 轮，13171 字节 | 读了清单 | 过 |
 | 42 | review-with-reminder | 2 | todo list；schedule list；sessions list --runtime all --all | 师傅之前说 702 办公室预计今天完工，现在收尾了吗？如果已经完工，可以约个时间现场验收，先查水电、墙面和门窗，再确认尾款。 | 62 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8142 字节 | 读了清单 | 过 |
 | 42 | review-with-reminder | 3 | todo list；schedule list；sessions list --runtime all --all | 702 办公室的装修今天按计划完工了吗？如果师傅已经收工，可以约个时间现场验收，看看水电、墙面和收尾清理是否到位。 | 57 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8142 字节 | 读了清单 | 过 |
-| 43 | review-with-subtask-done | 1 | session show s-…5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user；session show s-…5n1x --tail=40；todo list；schedule list；sessions list --runtime all --all | 下周三（**10 月 28 日**）杭州东 → 上海虹桥，挑了这三班： ⏎ \/ 车次 \/ 出发 → 到达 \/ 耗时 \/ 二等座票价 \/ 查询时余票 \/ ⏎ \/---\/---\/---\/---\/---\/ ⏎ \/ G7502 \/ 09:12 → 10:06 \/ 54 分钟 \/ 73 元 \/ 有票 \/ ⏎ \/ G7348 \/ 09:41 → 10:39 \/ 58 分钟 \/ 73 元 \/ 有票 \/ ⏎ \/ G1374 \/ 10:05 → 10:58 \/ 53 分钟 \/ 73 元 \/ 余 9 张 \/ ⏎ 来源：[12306 余票查询页](https://kyfw.12306.cn/otn/leftTicket/init)。余票会变化，以购票时显示为准。 | 314 | 读了（第 1 次调用）：wake.md、subtasks.md、cli.md、authority.md、todos-change.md、unasked.md；2 次 2 轮，25345 字节 | 读了清单 | 过 |
+| 43 | review-with-subtask-done | 1 | session show s-…5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user；session show s-…5n1x --tail=40；todo list；schedule list；sessions list --runtime all --all | 下周三（**11月4日**）杭州东 → 上海虹桥，可选这三班： ⏎ \/ 车次 \/ 出发 \/ 到达 \/ 二等座 \/ 查询时余票 \/ ⏎ \/---\/---\/---\/---\/---\/ ⏎ \/ G7502 \/ 09:12 \/ 10:06 \/ 73元 \/ 有票 \/ ⏎ \/ G7348 \/ 09:41 \/ 10:39 \/ 73元 \/ 有票 \/ ⏎ \/ G1374 \/ 10:05 \/ 10:58 \/ 73元 \/ 余9张 \/ ⏎ 来源：[12306余票查询页](https://kyfw.12306.cn/otn/leftTicket/init)；余票会变化，以购票时显示为准。 | 273 | 读了（第 1 次调用）：wake.md、subtasks.md、cli.md、todos-change.md；1 次 1 轮，13607 字节 | 读了清单 | 过 |
 | 43 | review-with-subtask-done | 2 | session show s-…5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user；session show s-…5n1x --tail=40；todo list；schedule list；sessions list --runtime all --all | 下周三（**10 月 28 日**）杭州东 → 上海虹桥，上午 9 点以后出发的三班： ⏎ \/ 车次 \/ 出发—到达 \/ 二等座 \/ 查询时余票 \/ ⏎ \/---\/---\/---\/---\/ ⏎ \/ G7502 \/ 09:12—10:06 \/ 73 元 \/ 有票 \/ ⏎ \/ G7348 \/ 09:41—10:39 \/ 73 元 \/ 有票 \/ ⏎ \/ G1374 \/ 10:05—10:58 \/ 73 元 \/ 余 9 张 \/ ⏎ 来源：[12306 余票查询页](https://kyfw.12306.cn/otn/leftTicket/init)。余票会变动，以购票时显示为准。 | 279 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、cli.md；1 次 1 轮，11705 字节 | 读了清单 | 过 |
 | 43 | review-with-subtask-done | 3 | session show s-…5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user；session show s-…5n1x --tail=40；todo list；schedule list；sessions list --runtime all --all | 下周三（**10 月 28 日**）杭州东 → 上海虹桥，上午 9 点以后出发可选这三班： ⏎ \/ 车次 \/ 出发—到达 \/ 二等座票价 \/ 查询时余票 \/ ⏎ \/---\/---\/---:\/---\/ ⏎ \/ G7502 \/ 09:12—10:06 \/ 73 元 \/ 有票 \/ ⏎ \/ G7348 \/ 09:41—10:39 \/ 73 元 \/ 有票 \/ ⏎ \/ G1374 \/ 10:05—10:58 \/ 73 元 \/ 余 9 张 \/ ⏎ 来源：[12306 余票查询页](https://kyfw.12306.cn/otn/leftTicket/init)。余票随时变化，以购票时显示为准。 | 285 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8146 字节 | 读了清单 | 过 |
+| 44 | news-budget | 1 | todo list；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=10月28日：业主说筹开预算下周（11月2日至8日）给。
+收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户更新筹开预算进度，补充到现有项目资料收集待办 | 记下了，已更新到「希尔顿酒店项目上下文资料收集」：业主说筹开预算下周（11月2日—8日）给你，其他待收集项保留不变。 | 58 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；1 次 1 轮，13359 字节 | 查了 | 过 |
+| 44 | news-budget | 2 | todo list；schedule list；sessions search 筹开预算 --runtime all --all；sessions search 希尔顿 --runtime all --all；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=10月28日：业主说筹开预算下周（11月2日—8日）给。
+收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户告知筹开预算交付进展，补入现有项目待办；schedule create 确认筹开预算是否收到
+
+10月28日业主说筹开预算下周给。11月6日傍晚问一下是否收到，不替用户催业主。相关待办：todo_4c8e1a7d2b9f3605，希尔顿酒店项目上下文资料收集。 --at=2026-11-06T17:00 --target=assistant --supervisor=galley-assistant --reason=业主预计下周交付筹开预算，在周末前询问结果 | 记下了，已补到希尔顿项目资料收集的待办里：业主说筹开预算下周给。下周五（11月6日）下午5点我问你一下收到了没。 | 56 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、memo.md、reminders.md、todos-change.md；3 次 3 轮，25573 字节 | 查了 | 过（注：给自己挂了 1 个提醒：2026-11-06 17:00 (Fri)「确认筹开预算是否收到」） |
+| 44 | news-budget | 3 | todo list；todo show todo_4c8e1a7d2b9f3605；sessions search 筹开预算 --runtime all --all；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=10月28日：业主说筹开预算下周给（11月2日至8日），待接收。
+收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户补充业主下周提供筹开预算，更新现有项目资料收集进展 | 记下了：业主下周（11月2日至8日）给你筹开预算，已更新到「希尔顿酒店项目上下文资料收集」的备注里，其他资料仍保留待收集。 | 61 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、times.md、cli.md；1 次 1 轮，17013 字节 | 查了 | 过 |
+| 45 | news-moves-time | 1 | todo show todo_6f7a8b9c0d1e2f3a；todo update todo_6f7a8b9c0d1e2f3a --due=2026-12-05 --remind-at=2026-12-05T09:00 --notes=10月28日：装修队说完工要拖到12月5日，原定11月20日。
+装修师傅说预计这天完工 --supervisor=galley-assistant --reason=装修队将702办公室完工日期推迟至12月5日，同步顺延待办和提醒 | 已把 702 办公室装修完工日期从 11 月 20 日改到 **12 月 5 日**，提醒也移到当天上午 **9 点**，原来的 11 月提醒已替换。 | 75 | 读了（第 1 次调用）：todos-change.md、times.md、reminders.md、todos.md、unasked.md；1 次 1 轮，17929 字节 | 没查 | 过 |
+| 45 | news-moves-time | 2 | todo show todo_6f7a8b9c0d1e2f3a；todo update todo_6f7a8b9c0d1e2f3a --due=2026-12-05 --remind-at=2026-12-05T09:00 --notes=10月28日：装修队说完工要拖到12月5日，原定11月20日。
+装修师傅说预计这天完工 --supervisor=galley-assistant --reason=user reported renovation completion delayed to De…；todo show todo_6f7a8b9c0d1e2f3a | 已把 702 办公室装修完工日期从 **11 月 20 日改到 12 月 5 日**，提醒也同步改到 **12 月 5 日上午 9 点**，延期情况已补进待办备注。 | 82 | 读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，7946 字节 | 没查 | 过 |
+| 45 | news-moves-time | 3 | todo list；todo show todo_6f7a8b9c0d1e2f3a；todo update todo_6f7a8b9c0d1e2f3a --due=2026-12-05 --remind-at=2026-12-05T09:00 --notes=10月28日：装修队说完工日期从11月20日推迟到12月5日。
+装修师傅说预计这天完工 --supervisor=galley-assistant --reason=用户告知装修延期，顺延原待办完工日期及提醒并保留原备注；todo show todo_6f7a8b9c0d1e2f3a | 已把 702 办公室装修完工日从 11 月 20 日改到 **12 月 5 日**，提醒也移到当天上午 **9 点**，并在备注里记下了装修队延期的消息。 | 77 | 读了（第 1 次调用）：todos-change.md、times.md、reminders.md；1 次 1 轮，7954 字节 | 查了 | 过 |
+| 46 | progress-review-done | 1 | todo list；schedule list；sessions list --runtime all --all；todo show todo_9d2e4f6a8b0c1e35；todo update todo_9d2e4f6a8b0c1e35 --notes=10月28日：三家报价已对比，文件：$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r1/sandbox/home/Downloads/搬家报价/搬家报价对比.md；待确认搬家日期、同路线及空调/拆装范围，尚未预订。
+三家发来的报价在 ~/Downloads/搬家报价/，比一比再定 --sup… | 我把三家搬家报价比好了，**速达标价最低，但加上拆装和纸箱后并不最便宜**： ⏎ - **蚂蚁：2,380 元**，含两张床、一个衣柜拆装及30个纸箱。 ⏎ - **速达：同样项目估算2,870元**，比蚂蚁贵490元；空调移机费用仍不明确。 ⏎ - **好邻居：2,650元**，多一名师傅，还含一台空调移机；拆装数量要再确认，不能只比总价。 ⏎ 档期也有个关键差异：**只有速达列了11月21日**。如果这次搬家要等702办公室11月20日装修完工，另外两家目前给的日期都偏早；蚂蚁报价还注明11月10日到期。 ⏎ 完整对比已整理好，尚未联系商家或预订： ⏎ [FILE:$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r1/sandbox/home/Downloads/搬家报价/搬家报价对比.md] | 375 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，16667 字节 | 查了 | 过（注：没说是早上做的） |
+| 46 | progress-review-done | 2 | todo list；schedule list；sessions list --runtime all --all；sessions search 搬家 --runtime all --all；todo show todo_9d2e4f6a8b0c1e35；todo update todo_9d2e4f6a8b0c1e35 --notes=10月28日：三家报价对比已整理：$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r2/sandbox/home/Downloads/搬家报价/搬家报价对比-2026-10-28.md。速达补齐3件拆装和30个纸箱后估算2,870元；蚂蚁2,380元（报价有效至11月10日）；好邻居2,650…；todo show todo_9d2e4f6a8b0c1e35 | 刚把三家搬家报价按相同项目比了一遍，**速达标价最低，但补齐拆装和纸箱后反而最贵**： ⏎ - **蚂蚁：2,380元**，含两张床、一个衣柜拆装及30个纸箱，报价有效至 **11月10日**。 ⏎ - **好邻居：2,650元**，含一台空调移机；若能去掉空调项目则为2,350元，但拆装数量尚未写清，而且只列了11月14日上午的档期。 ⏎ - **速达：约2,870元**，是2,180元加上三件拆装和30个纸箱后的估算。 ⏎ 如果这次搬家是搬进702办公室，14、15日都早于预计装修完工日11月20日；三家中只有速达明确列了21日，另外两家还需询问后续档期。 ⏎ 详细对照和待确认事项已整理成文件，也放进了“定搬家公司”的待办备注： ⏎ [FILE:$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r2/sandbox/home/Downloads/搬家报价/搬家报价对比-2026-10-28.md] | 428 | 读了（第 1 次调用）：wake.md、subtasks.md、unasked.md、todos-change.md、times.md；3 次 3 轮，19163 字节 | 查了 | 过（注：没说是早上做的） |
+| 46 | progress-review-done | 3 | todo list；schedule list；sessions list --runtime all --all；todo show todo_9d2e4f6a8b0c1e35；todo update todo_9d2e4f6a8b0c1e35 --notes=10月28日：已比较三家报价，统一暂按3件拆装和30个纸箱，蚂蚁2380元、速达2870元（均未列空调），好邻居2650元含1台空调但拆装件数待确认；若搬入702，现列档期仅速达11月21日在预计完工后。对比文件：$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r3/sandbox/home/…；todo show todo_9d2e4f6a8b0c1e35 | 今晚把三家搬家报价比了一遍，**速达的2180元不含拆装和纸箱，不能直接当作最低价**： ⏎ - **蚂蚁：2380元**，含两张床、一个衣柜拆装和30个纸箱，未列空调移机。 ⏎ - **好邻居：2650元**，含一台空调移机、多一名搬运工，但拆装是否覆盖上述三件还需确认。 ⏎ - **速达：按同样三件拆装、30个纸箱算是2870元**，未列空调移机。 ⏎ 还有个日期冲突：**如果这次是搬进702办公室**，蚂蚁和好邻居列出的档期都早于预计11月20日完工；目前只有速达明确列出11月21日可约，另外两家要另问。 ⏎ 完整对比及待确认费用已整理好，尚未联系或预订任何一家。 ⏎ [FILE:$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r3/sandbox/home/Downloads/搬家报价对比.md] | 380 | 读了（第 1 次调用）：wake.md、todos-change.md、unasked.md、subtasks.md；2 次 2 轮，16749 字节 | 查了 | 过（注：没说是早上做的） |
+| 47 | progress-review-unchanged | 1 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，16968 字节 | 读了清单 | 过 |
+| 47 | progress-review-unchanged | 2 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，16895 字节 | 读了清单 | 过 |
+| 47 | progress-review-unchanged | 3 | todo list；schedule list；sessions list --runtime all --all | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、cli.md、unasked.md、todos-change.md；2 次 2 轮，20599 字节 | 读了清单 | 过 |
+| 48 | news-user-edited | 1 | todo list；todo show todo_4c8e1a7d2b9f3605；schedule list；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=10月28日：业主称消防验收预计下周（11月2日—8日）能通过，实际结果待确认。
+收集要点：项目地址与业主方；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户补充希尔顿酒店项目消防验收进展；保留当前原备注；schedule create 确认希尔顿酒店项目消防验收结果
+
+10月28日业主称消防验收下周（11月2日—8日）能通过，尚未确认。届时询问实际是否通过、是否取得验收文件；如有新进展，先读取 todo_4c8e1a7d2b9f3605，再在现有备注上方补充，保留下方原文。关联主会话 s-…9w0e。 --at=2026-11-06T17:00 --target=assistant --supervisor=galley-assista… | 已补进希尔顿项目待办：**业主预计下周消防验收能通过，实际结果待确认**，原有备注保留。下周五（11月6日）17:00 我再问你验收结果。 | 69 | 读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、times.md、reminders.md；2 次 2 轮，19265 字节 | 查了 | 过（注：给自己挂了 1 个提醒：2026-11-06 17:00 (Fri)「确认希尔顿酒店项目消防验收结果」） |
+| 48 | news-user-edited | 2 | todo list；schedule list；todo show todo_4c8e1a7d2b9f3605；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=10月28日：业主说消防验收预计下周（11月2日至8日）能通过，尚待确认实际结果。
+收集要点：项目地址与业主方；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户补充希尔顿酒店项目消防验收进展，保留现有备注；schedule create 确认希尔顿酒店项目消防验收结果
+
+10月28日业主说消防验收预计下周（11月2日至8日）能通过，尚未确认。向用户询问是否已通过；关联待办 todo_4c8e1a7d2b9f3605，更新前先读取当前备注并保留原文。 --at=2026-11-06T17:00 --target=assistant --supervisor=galley-assistant --reason=业主预计下周消防验收通过，下周五… | 已补进希尔顿项目待办：**业主预计消防验收下周能通过，结果待确认**，原有备注保留。下周五（11月6日）17:00 我再问你验收结果。 | 67 | 读了（第 1 次调用）：todos-change.md、todos.md、unasked.md、times.md、reminders.md；2 次 2 轮，19718 字节 | 查了 | 过（注：给自己挂了 1 个提醒：2026-11-06 17:00 (Fri)「确认希尔顿酒店项目消防验收结果」） |
+| 48 | news-user-edited | 3 | todo list；todo show todo_4c8e1a7d2b9f3605；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=10月28日：业主说消防验收预计下周（11月2日至8日）能过，尚待确认验收结果。
+收集要点：项目地址与业主方；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户补充希尔顿项目消防验收预计下周通过，追加进展并保留现有备注 | 已补到希尔顿项目待办备注：业主预计消防验收下周（11月2日至8日）能过，结果待确认。原有收集要点保留，没改截止时间。 | 58 | 读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、times.md；1 次 1 轮，13364 字节 | 查了 | 过 |
+| 49 | news-unrelated | 1 | sessions search 万豪 --runtime all --all；todo list；todo add 跟进万豪项目招标安排 --due=2026-10-30 --remind-at=2026-10-30T09:00 --notes=10月28日：业主说预计11月开始招标，具体日期未定。
+跟进时确认：招标范围、公告及报名时间、投标资格与所需材料。 --supervisor=galley-assistant --reason=业主预计下个月启动招标，月底提前跟进以便准备报名材料 | 记下了：万豪项目业主说预计 **11 月开始招标**。我设了 **10 月 30 日早上 9 点**提醒你提前跟进，并列好要确认的几项：招标范围、公告和报名时间、投标资格及所需材料。 | 91 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、memo.md、todos-change.md；2 次 2 轮，19412 字节 | 查了 | 过 |
+| 49 | news-unrelated | 2 | sessions search 万豪 --runtime all --all；todo list；todo add 确认万豪项目招标安排 --due=2026-11-01 --remind-at=2026-11-01T09:00 --notes=10月28日：业主说11月开始招标，具体日期尚未确定；11月1日为跟进日期，并非开标日期。
+向业主确认：招标范围、公告及招标文件获取方式、报名条件、报名与截标时间。
+询问草稿：您提到万豪项目11月开始招标，方便时请发一下具体时间安排、招标范围和报名要求，我们好提前准备。 --supervis… | 记下了：万豪项目预计 **11 月开始招标**，具体日期还没定。我设了 **11 月 1 日上午 9 点**提醒你跟进，免得错过报名；待办里也放了向业主确认时间、招标范围和报名要求的询问草稿，还没发送。 | 101 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；2 次 2 轮，14690 字节 | 查了 | 过 |
+| 49 | news-unrelated | 3 | todo list；sessions search 万豪 --runtime all --all；todo add 跟进万豪项目招标安排 --due=2026-11-02 --remind-at=2026-11-02T09:00 --notes=10月28日：业主说预计11月开始招标，具体日期尚未确认。11月2日为跟进日，不是开标日。先向业主确认招标范围、公告或邀标时间、报名条件及投标截止时间。 --supervisor=galley-assistant --reason=业主预计下月启动招标，月初跟进具体安排，避免错过报名 | 记下了：万豪项目业主说 **11月开始招标**，具体日期还没定。**11月2日上午9点**提醒你跟进，确认招标范围、报名条件和投标截止时间，免得错过报名。 | 77 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、times.md、cli.md；1 次 1 轮，17016 字节 | 查了 | 过 |
 
 ## 1. note-report（该记待办）
 
@@ -401,29 +522,23 @@
 
 工具调用：
 
-1. file_read（todos.md）
-2. file_read（unasked.md）
-3. file_read（times.md）
-4. file_read（reminders.md）
-5. code_run
-6. file_read（todos.md）
-7. file_read（todos-change.md）
-8. code_run（galley todo list）；galley todo list
-9. code_run（galley todo add）；galley todo add 交季度报告 --due=2026-10-28T15:00 --remind-at=2026-10-27T15:00 --notes=用户说周三下午3点前要交季度报告。记录时为10月21日周三18点，按下一个周三10月28日理解。提交前检查：关键指标与数据来源、目标完成情况、差异原因、下季度计划、附件与提交渠道。 --supervisor=galley-assistant --reason=用户提到季度报告提交期限，记录待办并提前一天提醒以留出修改时间。
+1. code_run
+2. code_run（galley todo list，galley todo add）；galley todo list；galley todo add --help
+3. code_run（galley todo add，galley todo list）；galley todo add 交季度报告 --due=2026-11-04T15:00 --remind-at=2026-11-03T15:00 --notes=交稿检查：核心指标与数据口径、目标完成情况、主要成果、风险与下季度计划、附件与审批。 --supervisor=galley-assistant --reason=用户提到周三下午3点前交季度报告；本周时间已过，按下一个周三记录并提前一天提醒；galley todo list
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；6 次 2 轮，16219 字节；写前读过清单：查了；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；2 次 2 轮，14523 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
 
-新记的待办：`todo_7d0d5eed00000000` 交季度报告（备注：用户说周三下午3点前要交季度报告。记录时为10月21日周三18点，按下一个周三10月28日理解。提交前检查：关键指标与数据来源、目标完成情况、差异原因、下季度计划、附件与提交渠道。），截止 2026-10-28T07:00:00+00:00，没做；新建的提醒：`sched_7e4a5c0000000000` 2026-10-27T07:00:00+00:00 挂在 `todo_7d0d5eed00000000` 上：交季度报告；改过的已有待办：无；取消的已有提醒：无。
+新记的待办：`todo_7d0d5eed00000000` 交季度报告（备注：交稿检查：核心指标与数据口径、目标完成情况、主要成果、风险与下季度计划、附件与审批。），截止 2026-11-04T07:00:00+00:00，没做；新建的提醒：`sched_7e4a5c0000000000` 2026-11-03T07:00:00+00:00 挂在 `todo_7d0d5eed00000000` 上：交季度报告；改过的已有待办：无；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-今天周三的下午 3 点已过，我按**下周三（10 月 28 日）下午 3 点前**交报告记下了，**10 月 27 日下午 3 点**提醒你，留一天检查和修改。
+记下了：**11 月 4 日（下周三）下午 3 点前交季度报告，11 月 3 日下午 3 点提醒你**。今天周三的下午 3 点已过，所以按下周三记了。
 
-待办里也附了提交前检查项：关键数据、目标完成情况、差异原因、下季度计划及附件。
+待办里也附上了交稿检查清单：核心指标、目标完成情况、主要成果、风险与下季度计划、附件与审批。
 ```
 
-建议标签：帮我列一份季度报告提纲
+建议标签：帮我列一个季度报告提纲
 
 ### 第 2 遍：过
 
@@ -462,11 +577,10 @@
 工具调用：
 
 1. code_run
-2. file_read（todos-change.md）
-3. code_run（galley todo list）；galley todo list
-4. code_run（galley todo add）；galley todo add 买营养土 --supervisor=galley-assistant --reason=用户要求记下要买营养土
+2. code_run（galley todo list）；galley todo list
+3. code_run（galley todo add）；galley todo add 买营养土 --supervisor=galley-assistant --reason=用户要求记下要买营养土，未指定日期
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、todos-change.md；2 次 2 轮，10825 字节；写前读过清单：查了；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、todos-change.md；2 次 2 轮，12865 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
 
 新记的待办：`todo_7d0d5eed00000000` 买营养土，截止 无截止，没做；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
@@ -476,7 +590,7 @@
 记下了：买营养土。
 ```
 
-建议标签：明天上午9点提醒我买营养土
+建议标签：帮我看看营养土怎么选
 
 ### 第 2 遍：过
 
@@ -514,19 +628,19 @@
 
 1. code_run
 2. code_run（galley todo list）；galley todo list
-3. code_run（galley todo add）；galley todo add 给房东回电话 --due=2026-10-22 --remind-at=2026-10-22T09:00 --notes=用户说明明天要给房东回电话，未指定具体通话时间。 --supervisor=galley-assistant --reason=用户明天需要给房东回电话，记为待办并在当天上午提醒
+3. code_run（galley todo add）；galley todo add 给房东回电话 --due=2026-10-29 --remind-at=2026-10-29T10:00 --supervisor=galley-assistant --reason=用户提到明天要给房东回电话，记录待办并在当天上午提醒
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；2 次 2 轮，11456 字节；写前读过清单：查了；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md、todos-change.md；1 次 1 轮，17927 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
 
-新记的待办：`todo_7d0d5eed00000000` 给房东回电话（备注：用户说明明天要给房东回电话，未指定具体通话时间。），截止 2026-10-22，没做；新建的提醒：`sched_7e4a5c0000000000` 2026-10-22T01:00:00+00:00 挂在 `todo_7d0d5eed00000000` 上：给房东回电话；改过的已有待办：无；取消的已有提醒：无。
+新记的待办：`todo_7d0d5eed00000000` 给房东回电话，截止 2026-10-29，没做；新建的提醒：`sched_7e4a5c0000000000` 2026-10-29T02:00:00+00:00 挂在 `todo_7d0d5eed00000000` 上：给房东回电话；改过的已有待办：无；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-记下了：明天（10月22日）给房东回电话，明早9点提醒你。
+记下了：明天（10月29日）给房东回电话，上午10点提醒你。
 ```
 
-建议标签：把房东回电话的提醒改到明天下午2点
+建议标签：把给房东回电话的提醒改到明天下午2点
 
 ### 第 2 遍：过
 
@@ -656,7 +770,7 @@
 
 ## 6. guitar（不该记）
 
-**期望**：没有可办的事 → 不记待办、不建提醒，不动任何东西；票 64：最终回复不提改口
+**期望**：没有可办的事 → 不记待办、不建提醒，不动任何东西；票 64：最终回复不提改口；票 98：可以记成一条备忘（兴趣），记了只注出来
 
 用户：
 
@@ -698,7 +812,7 @@
 
 ## 7. flight-number（不该记）
 
-**期望**：信息（航班号）→ 不记成待办、不建提醒（可以记进记忆）；票 64：最终回复不提改口
+**期望**：信息（航班号）→ 不记成待办、不建提醒（可以记进记忆）；票 64：最终回复不提改口；票 98：可以记成一条备忘，记了只注出来
 
 用户：
 
@@ -994,19 +1108,19 @@
 
 已有的待办（运行那一刻）：
 
-- `todo_2b3c4d5e6f7a8b9c` 交季度报告（备注：报告在 ~/Documents/Q3 季度报告.docx，交给王经理），截止 2026-10-21T13:25:58+00:00，没做，提醒 2026-10-21T10:25:58+00:00（已到点），在「In Hand」里
+- `todo_2b3c4d5e6f7a8b9c` 交季度报告（备注：报告在 ~/Documents/Q3 季度报告.docx，交给王经理），截止 2026-10-28T17:42:35+00:00，没做，提醒 2026-10-28T14:42:35+00:00（已到点），在「In Hand」里
 
 叫醒消息：
 
 ```text
 [Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.
 
-Reminder `sched_8c1e0a7b3d2f4965` on the user's to-do `todo_2b3c4d5e6f7a8b9c` came due. Planned for 2026-10-21 18:25 (Wed), local time. The to-do is on the user's list, something to do or something coming up they want to hear about:
+Reminder `sched_8c1e0a7b3d2f4965` on the user's to-do `todo_2b3c4d5e6f7a8b9c` came due. Planned for 2026-10-28 22:42 (Wed), local time. The to-do is on the user's list, something to do or something coming up they want to hear about:
 <<<
 交季度报告
 报告在 ~/Documents/Q3 季度报告.docx，交给王经理
 >>>
-It is due 2026-10-21 21:25 (Wed), local time. Act on it now: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.
+It is due 2026-10-29 01:42 (Thu), local time. Act on it now: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.
 ```
 
 ### 第 1 遍：过
@@ -1014,19 +1128,19 @@ It is due 2026-10-21 21:25 (Wed), local time. Act on it now: tell the user what 
 工具调用：
 
 1. code_run
-2. code_run（galley todo list）；galley todo list
+2. code_run（galley todo show）；galley todo show todo_2b3c4d5e6f7a8b9c
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、times.md；1 次 1 轮，8496 字节；写前读过清单：读了清单；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，9936 字节；写前读过清单：—；手册版本：`15f1d4d2`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-季度报告发给王经理了吗？还没发的话，今晚 **21:25 截止**，发送前记得检查附件是不是最终版。
+季度报告交给王经理了吗？截止是明天（10 月 29 日）凌晨 01:42，还没交的话，现在可以把 `~/Documents/Q3 季度报告.docx` 发给他。
 ```
 
-建议标签：报告已经交给王经理了，帮我勾掉待办
+建议标签：帮我检查季度报告有没有遗漏
 
 ### 第 2 遍：过
 
@@ -1062,12 +1176,13 @@ It is due 2026-10-21 21:25 (Wed), local time. Act on it now: tell the user what 
 工具调用：
 
 1. code_run
-2. code_run（galley todo list）；galley todo list
-3. code_run（galley todo add）；galley todo add 确认 702 办公室装修完工情况 --due=2026-11-20 --remind-at=2026-11-20T09:00 --notes=预计完工，届时确认实际进度。 --supervisor=galley-assistant --reason=用户要求记录702办公室装修预计11月20日完工，设置当天提醒确认
+2. code_run
+3. code_run（galley todo list）；galley todo list
+4. code_run（galley todo add）；galley todo add 确认702办公室装修完工情况 --due=2026-11-20 --remind-at=2026-11-20T09:00 --notes=装修预计完工，届时确认实际进度。 --supervisor=galley-assistant --reason=用户要求记录702办公室装修预计11月20日完工，设置当天提醒确认进度
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；2 次 2 轮，15703 字节；写前读过清单：查了；手册版本：`9887abb2`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；3 次 3 轮，18401 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
 
-新记的待办：`todo_7d0d5eed00000000` 确认 702 办公室装修完工情况（备注：预计完工，届时确认实际进度。），截止 2026-11-20，没做；新建的提醒：`sched_7e4a5c0000000000` 2026-11-20T01:00:00+00:00 挂在 `todo_7d0d5eed00000000` 上：确认 702 办公室装修完工情况；改过的已有待办：无；取消的已有提醒：无。
+新记的待办：`todo_7d0d5eed00000000` 确认702办公室装修完工情况（备注：装修预计完工，届时确认实际进度。），截止 2026-11-20，没做；新建的提醒：`sched_7e4a5c0000000000` 2026-11-20T01:00:00+00:00 挂在 `todo_7d0d5eed00000000` 上：确认702办公室装修完工情况；改过的已有待办：无；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
 
@@ -1075,7 +1190,7 @@ It is due 2026-10-21 21:25 (Wed), local time. Act on it now: tell the user what 
 记下了：702 办公室装修预计 **2026 年 11 月 20 日完工**，当天上午 9 点提醒你确认进度。
 ```
 
-建议标签：把装修提醒改到 11 月 19 日下午 3 点
+建议标签：帮我把装修提醒提前到 11 月 19 日
 
 ### 第 2 遍：过
 
@@ -1112,20 +1227,20 @@ It is due 2026-10-21 21:25 (Wed), local time. Act on it now: tell the user what 
 工具调用：
 
 1. code_run
-2. code_run（galley todo list，galley ）；galley todo list；galley --help
-3. code_run（galley todo add）；galley todo add 确认 702 办公室装修完工 --due=2026-11-20 --remind-at=2026-11-20T09:00 --notes=装修师傅说 702 办公室预计 2026 年 11 月 20 日能完工，尚未确认实际完工。当天核实进度；验收时检查水电、墙地面、门窗及收尾清洁，记录未完成项目。 --supervisor=galley-assistant --reason=用户提到办公室装修预计完工日期，记录节点并在当天提醒核实
+2. code_run（galley todo list）；galley todo list
+3. code_run（galley todo add）；galley todo add 确认 702 办公室装修完工 --due=2026-11-20 --remind-at=2026-11-20T09:00 --notes=师傅给的是预计完工时间，届时确认实际进度。验收核对：水电与插座、门窗和墙地面、遗留收尾项。 --supervisor=galley-assistant --reason=装修预计于11月20日完工，当天提醒确认进度，并附简要验收核对项
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md、cli.md；2 次 2 轮，21065 字节；写前读过清单：查了；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、reminders.md、times.md；1 次 1 轮，17926 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
 
-新记的待办：`todo_7d0d5eed00000000` 确认 702 办公室装修完工（备注：装修师傅说 702 办公室预计 2026 年 11 月 20 日能完工，尚未确认实际完工。当天核实进度；验收时检查水电、墙地面、门窗及收尾清洁，记录未完成项目。），截止 2026-11-20，没做；新建的提醒：`sched_7e4a5c0000000000` 2026-11-20T01:00:00+00:00 挂在 `todo_7d0d5eed00000000` 上：确认 702 办公室装修完工；改过的已有待办：无；取消的已有提醒：无。
+新记的待办：`todo_7d0d5eed00000000` 确认 702 办公室装修完工（备注：师傅给的是预计完工时间，届时确认实际进度。验收核对：水电与插座、门窗和墙地面、遗留收尾项。），截止 2026-11-20，没做；新建的提醒：`sched_7e4a5c0000000000` 2026-11-20T01:00:00+00:00 挂在 `todo_7d0d5eed00000000` 上：确认 702 办公室装修完工；改过的已有待办：无；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-记下了：702 办公室预计 **11 月 20 日完工**，当天上午 9 点提醒你确认进度；待办里也附了水电、墙地面、门窗和收尾清洁的验收要点。
+记下了：702 办公室预计 11 月 20 号完工，当天上午 9 点提醒你确认进度。待办里也附了水电、门窗、墙地面和收尾项的验收核对要点。
 ```
 
-建议标签：帮我列一份 702 办公室的装修验收清单
+建议标签：帮我列一份 702 办公室的详细验收清单
 
 ### 第 2 遍：过
 
@@ -1341,7 +1456,7 @@ HR 说这周五给我 offer 答复
 
 ## 19. founding-date（不该跟进）
 
-**期望**：「我们公司是 2019 年 11 月 20 号成立的」→ 只是个日子：不设待办、不设提醒（可以写进记忆）；票 63：回复说「记下了」一类的话，这一轮就得写过（写进记忆，或别的写）；票 64：最终回复不提改口
+**期望**：「我们公司是 2019 年 11 月 20 号成立的」→ 只是个日子：不设待办、不设提醒（可以写进记忆）；票 63：回复说「记下了」一类的话，这一轮就得写过（写进记忆，或别的写）；票 64：最终回复不提改口；票 98：手册有备忘以后（票 96 起）该记成一条备忘，有 11 月 20 日
 
 用户：
 
@@ -1411,7 +1526,7 @@ HR 说这周五给我 offer 答复
 
 ## 20. reno-no-remind（不该跟进）
 
-**期望**：「装修 11 月 20 号完工，这个不用提醒我，我自己盯着」→ 不挂提醒、不设它自己的提醒（记一件不带提醒的待办不算错，标出来）；票 64：最终回复不提改口
+**期望**：「装修 11 月 20 号完工，这个不用提醒我，我自己盯着」→ 不挂提醒、不设它自己的提醒（记一件不带提醒的待办不算错，标出来）；票 64：最终回复不提改口；票 98：完工日到时不用它做事，可以记成一条备忘，记了只注出来
 
 用户：
 
@@ -1424,18 +1539,19 @@ HR 说这周五给我 offer 答复
 工具调用：
 
 1. code_run
+2. code_run（galley todo list，galley schedule list）；galley todo list；galley schedule list
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、times.md；1 次 1 轮，11317 字节；写前读过清单：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；1 次 1 轮，13398 字节；写前读过清单：读了清单；手册版本：`15f1d4d2`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-好，11 月 20 号完工这件事你自己盯，我不设提醒。
+好，装修 11 月 20 日完工，你自己盯着；我不设提醒，也不加待办。
 ```
 
-建议标签：帮我列一份装修完工验收清单
+建议标签：帮我列一份装修竣工验收清单
 
 ### 第 2 遍：过
 
@@ -2283,7 +2399,7 @@ Act on it now: tell the user what is of use to them now, in a sentence or two (n
 
 ## 36. shanghai-trip（两可（票 73））
 
-**期望**：「下周三去上海出差」→ 只记录：会不会记待办、挂提醒，会不会去查车次（派活或查网页），怎么说
+**期望**：「下周三去上海出差」→ 只记录：会不会记待办、挂提醒，会不会去查车次（派活或查网页），怎么说；票 98：出差可以记成一条带期限的备忘
 
 用户：
 
@@ -2398,7 +2514,7 @@ Act on it now: tell the user what is of use to them now, in a sentence or two (n
 ```text
 [Galley — not a message from the user] It is time for the morning review. Act on it as below. Do not mention this note.
 
-The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Planned for 2026-10-21 19:21 (Wed), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
+The morning review `sched_5e1a9c3f7b2d4608` (every day at 22:42) came due. Planned for 2026-10-28 22:42 (Wed), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
 ```
 
 ### 第 1 遍：过
@@ -2408,7 +2524,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 1. code_run
 2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，14310 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，9983 字节；写前读过清单：读了清单；手册版本：`15f1d4d2`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
@@ -2452,7 +2568,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 ```text
 [Galley — not a message from the user] It is time for the morning review. Act on it as below. Do not mention this note.
 
-The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Planned for 2026-10-21 19:21 (Wed), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
+The morning review `sched_5e1a9c3f7b2d4608` (every day at 22:42) came due. Planned for 2026-10-28 22:42 (Wed), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
 ```
 
 ### 第 1 遍：过
@@ -2461,20 +2577,22 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 
 1. code_run
 2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
-3. code_run（galley sessions search，galley session show）；galley sessions search 阿里云 --runtime all --all；galley session show s-mgn4k2x1-7q3z9w0e --tail=16
+3. code_run（galley sessions search，galley session show）；galley sessions search 阿里云 --runtime all --all；galley session show s-mgn4k2x1-7q3z9w0e --tail=15
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、cli.md、unasked.md；2 次 2 轮，17299 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、unasked.md、todos-change.md；2 次 2 轮，15646 字节；写前读过清单：读了清单；手册版本：`15f1d4d2`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-<subtask>继续只读调查阿里云费用暴涨，找出 OSS 外网下行对应的业务，并尽可能核实 ECS 新增实例的费用贡献。背景：主会话 s-mgn4k2x1-7q3z9w0e；待办 todo_7a8b9c0d1e2f3a4b「查清阿里云费用暴涨的原因」仍未完成。已有待办备注：ECS 多了两台按量付费实例，由子账号 deploy-bot 在 10 月 9 日创建；公网流量大头是一个 OSS 桶的外网下行，尚不知对应哪个业务。这些是已有线索，不是本轮核实结果。当前没有我们启动的运行中子任务；读取历史搜索和主会话尾部未返回内容，不要假设有更多上下文。
+<subtask>
+继续查清阿里云费用暴涨的原因，重点追查 OSS 外网下行流量对应哪个业务。已有待办 todo_7a8b9c0d1e2f3a4b，现有线索：ECS 多了两台按量付费实例，由子账号 deploy-bot 在 10 月 9 日开通；公网流量的大头来自一个 OSS 桶的外网下行，但桶对应的业务尚未查到。当前没有其他运行中的排查子任务。
 
-先检查 Browser Control 已连接的真实浏览器标签页，利用现有已登录阿里云控制台和可用账单、资源信息进行只读核查。不要用代码/API 替代浏览器操作，不读取密钥文件，不创建收费资源，不启用收费日志，不修改权限、资源、配置或用户文件，不停止、删除实例，不替用户联系他人。若未登录或缺少权限，仅记录确切阻碍，勿反复尝试。重点：确认异常费用的时间段、产品和金额；定位 OSS 桶、主要下载对象或前缀、可见访问来源，依据现有日志/监控/域名/资源标签关联具体业务；核实两台 ECS 的创建时间、部署用途及账单贡献。仅使用已有数据，不为调查打开新计费功能。
+先读相关操作手册及浏览器 SOP，使用 Browser Control 的真实浏览器，只读检查已有登录的阿里云控制台、账单及可访问的监控、访问日志等证据。核对费用增长的时间、产品和资源，尽可能确定 OSS 桶、主要访问对象或路径、来源及业务归属，并与两台 ECS 的已知线索区分。只采用实际可见的数据，不把推断当结论；没有日志就明确缺口，不创建收费日志或开启付费功能。不读取密钥、不更改云资源、权限、计费或配置，不停机、不删除、不对外发送信息。若未登录或缺少权限，报告具体阻碍，不反复尝试，不打扰用户索取凭据。
 
-交回简洁的已证实结论、仍属推断的部分、证据链接或控制台记录，以及无法确认时最小的缺失信息。任何金额、日期、实例或桶标识都需对应直接证据，不能只用汇总或猜测。若产生报告或截图，提供绝对路径。不要标记待办完成，也不要改写其他会话。</subtask>
+交回简洁结果：已证实的费用来源、OSS 对应业务的证据或尚缺的具体证据、相关控制台链接或已有报表路径，以及是否需要用户做决定。若需要制作报告，仅在工作目录内创建文件并提供完整绝对路径。不要只交一份泛泛排查清单，不写入用户其他会话，不勾掉待办。主会话会核对结果并更新待办。
+</subtask>
 <no-reply/>
 ```
 
@@ -2505,7 +2623,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 
 已有的待办（运行那一刻）：
 
-- `todo_2b3c4d5e6f7a8b9c` 交季度报告（备注：交给王经理），截止 2026-10-20，没做，提醒 2026-10-20T02:00:00+00:00（已到点），在「In Hand」里
+- `todo_2b3c4d5e6f7a8b9c` 交季度报告（备注：交给王经理），截止 2026-10-27，没做，提醒 2026-10-27T02:00:00+00:00（已到点），在「In Hand」里
 
 已有的定时任务（运行那一刻）：
 
@@ -2516,7 +2634,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 ```text
 [Galley — not a message from the user] It is time for the morning review. Act on it as below. Do not mention this note.
 
-The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Planned for 2026-10-21 19:21 (Wed), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
+The morning review `sched_5e1a9c3f7b2d4608` (every day at 22:42) came due. Planned for 2026-10-28 22:42 (Wed), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
 ```
 
 ### 第 1 遍：过
@@ -2526,7 +2644,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 1. code_run
 2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8116 字节；写前读过清单：读了清单；手册版本：`b9cbda42`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，15637 字节；写前读过清单：读了清单；手册版本：`15f1d4d2`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
@@ -2572,20 +2690,20 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 工具调用：
 
 1. code_run
-2. code_run（galley schedule list）；galley schedule list
-3. code_run（galley schedule disable，galley schedule list）；galley schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；galley schedule list
+2. code_run（galley schedule list）；galley schedule list --all
+3. code_run（galley schedule disable，galley schedule show）；galley schedule disable sched_5e1a9c3f7b2d4608 --supervisor=galley-assistant --reason=user: stop morning review；galley schedule show sched_5e1a9c3f7b2d4608
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、wake.md；2 次 2 轮，9601 字节；写前读过清单：—；手册版本：`b9cbda42`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、cli.md、wake.md；2 次 2 轮，15040 字节；写前读过清单：—；手册版本：`15f1d4d2`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-关掉了，以后早上不再自动巡看。想恢复时跟我说一声就行。
+关掉了，以后早上不再巡看。想恢复时跟我说一声就行。
 ```
 
-建议标签：帮我看看还有哪些定时提醒
+建议标签：帮我看看还有哪些定时任务
 
 ### 第 2 遍：过
 
@@ -2613,7 +2731,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 
 已有的待办（运行那一刻）：
 
-- `todo_6f7a8b9c0d1e2f3a` 702 办公室装修完工（备注：装修师傅说预计这天完工），截止 2026-10-22，没做，提醒 2026-10-22T02:38:57+00:00（已到点），在「In Hand」里
+- `todo_6f7a8b9c0d1e2f3a` 702 办公室装修完工（备注：装修师傅说预计这天完工），截止 2026-10-28，没做，提醒 2026-10-28T14:42:35+00:00（已到点），在「In Hand」里
 
 已有的定时任务（运行那一刻）：
 
@@ -2624,14 +2742,14 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 19:21) came due. Plann
 ```text
 [Galley — not a message from the user] Things you are looking after have updates. Act on them, then reply to the user. Do not mention this note.
 
-Reminder `sched_4b8c2d6e0f1a3957` on the user's to-do `todo_6f7a8b9c0d1e2f3a` came due. Planned for 2026-10-22 10:38 (Thu), local time. The to-do is on the user's list, something to do or something coming up they want to hear about:
+Reminder `sched_4b8c2d6e0f1a3957` on the user's to-do `todo_6f7a8b9c0d1e2f3a` came due. Planned for 2026-10-28 22:42 (Wed), local time. The to-do is on the user's list, something to do or something coming up they want to hear about:
 <<<
 702 办公室装修完工
 装修师傅说预计这天完工
 >>>
-It is due 2026-10-22 (Thu), local time. Act on it now: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.
+It is due 2026-10-28 (Wed), local time. Act on it now: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.
 
-The morning review `sched_5e1a9c3f7b2d4608` (every day at 10:38) came due. Planned for 2026-10-22 10:38 (Thu), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
+The morning review `sched_5e1a9c3f7b2d4608` (every day at 22:42) came due. Planned for 2026-10-28 22:42 (Wed), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
 
 Reply once, covering all of them.
 ```
@@ -2643,14 +2761,14 @@ Reply once, covering all of them.
 1. code_run
 2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，13802 字节；写前读过清单：读了清单；手册版本：`497d19f9`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、todos-change.md、reminders.md、times.md；1 次 1 轮，13171 字节；写前读过清单：读了清单；手册版本：`15f1d4d2`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-702 办公室装修今天能按计划完工吗？先跟师傅确认是否还有收尾项目，再约现场验收，免得白跑一趟。
+师傅原先预计 702 办公室今天完工，现在收尾了吗？如果已完工，验收时记得核对水电、墙地面和门窗，有问题先拍照留底。
 ```
 
 建议标签：帮我列一份702办公室装修验收清单
@@ -2728,7 +2846,7 @@ Subtask `s-mgu2r7k4-8c3v5n1x` "查下周三上午杭州东到上海虹桥的高�
 >>>
 Check it against what you asked for in its instructions (its first message: `session show s-mgu2r7k4-8c3v5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user`; its last steps: `session show s-mgu2r7k4-8c3v5n1x --tail=40`). If it holds, tell the user the result in a sentence or two and name the evidence (a confirmation number, a file path, a link). If something is missing or wrong, send it back with `session send s-mgu2r7k4-8c3v5n1x "<what is missing>" --supervisor=galley-assistant --reason="send back" --ensure-runner` and end your reply with exactly <no-reply/> and nothing else.
 
-The morning review `sched_5e1a9c3f7b2d4608` (every day at 10:38) came due. Planned for 2026-10-22 10:38 (Thu), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
+The morning review `sched_5e1a9c3f7b2d4608` (every day at 22:42) came due. Planned for 2026-10-28 22:42 (Wed), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
 
 Reply once, covering all of them.
 ```
@@ -2740,25 +2858,25 @@ Reply once, covering all of them.
 1. code_run
 2. code_run（galley session show，galley session show，galley todo list，galley schedule list，galley sessions list）；galley session show s-mgu2r7k4-8c3v5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user；galley session show s-mgu2r7k4-8c3v5n1x --tail=40；galley todo list；galley schedule list；galley sessions list --runtime all --all
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、cli.md、authority.md、todos-change.md、unasked.md；2 次 2 轮，25345 字节；写前读过清单：读了清单；手册版本：`497d19f9`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、cli.md、todos-change.md；1 次 1 轮，13607 字节；写前读过清单：读了清单；手册版本：`15f1d4d2`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-下周三（**10 月 28 日**）杭州东 → 上海虹桥，挑了这三班：
+下周三（**11月4日**）杭州东 → 上海虹桥，可选这三班：
 
-| 车次 | 出发 → 到达 | 耗时 | 二等座票价 | 查询时余票 |
+| 车次 | 出发 | 到达 | 二等座 | 查询时余票 |
 |---|---|---|---|---|
-| G7502 | 09:12 → 10:06 | 54 分钟 | 73 元 | 有票 |
-| G7348 | 09:41 → 10:39 | 58 分钟 | 73 元 | 有票 |
-| G1374 | 10:05 → 10:58 | 53 分钟 | 73 元 | 余 9 张 |
+| G7502 | 09:12 | 10:06 | 73元 | 有票 |
+| G7348 | 09:41 | 10:39 | 73元 | 有票 |
+| G1374 | 10:05 | 10:58 | 73元 | 余9张 |
 
-来源：[12306 余票查询页](https://kyfw.12306.cn/otn/leftTicket/init)。余票会变化，以购票时显示为准。
+来源：[12306余票查询页](https://kyfw.12306.cn/otn/leftTicket/init)；余票会变化，以购票时显示为准。
 ```
 
-建议标签：帮我查一下当天傍晚上海虹桥回杭州东的高铁
+建议标签：帮我比较一下这三班，推荐一班
 
 ### 第 2 遍：过
 
@@ -2813,3 +2931,535 @@ Reply once, covering all of them.
 ```
 
 建议标签：帮我比较一下这三班，推荐一班
+
+## 44. news-budget（进展写进备注（票 108））
+
+**期望**：清单里有「希尔顿酒店项目上下文资料收集」（没日子，备注是它记的 5 条收集要点）和 702 装修，用户说「业主说筹开预算下周给我」→ 先读这件事，todo update --notes= 是新的一行「<今天>：业主说筹开预算下周给」在上、原来的备注一字不差在下；不另记备忘、不记新待办、不动 702；顺带给自己挂一个下周问预算的提醒可以，记下个数
+
+已有的待办（运行那一刻）：
+
+- `todo_4c8e1a7d2b9f3605` 希尔顿酒店项目上下文资料收集（备注：收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制），截止 无截止，没做，在「In Hand」里
+- `todo_6f7a8b9c0d1e2f3a` 702 办公室装修完工（备注：装修师傅说预计这天完工），截止 2026-11-20，没做，提醒 2026-11-20T01:00:00+00:00，在「In Hand」里
+
+用户：
+
+```text
+业主说筹开预算下周给我
+```
+
+### 第 1 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list，galley todo show）；galley todo list；galley todo show todo_4c8e1a7d2b9f3605
+3. code_run（galley todo update）；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月28日：业主说筹开预算下周（11月2日至8日）给。 收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户更新筹开预算进度，补充到现有项目资料收集待办
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；1 次 1 轮，13359 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 希尔顿酒店项目上下文资料收集（备注：10月28日：业主说筹开预算下周（11月2日至8日）给。
+收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制），截止 无截止，没做；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+记下了，已更新到「希尔顿酒店项目上下文资料收集」：业主说筹开预算下周（11月2日—8日）给你，其他待收集项保留不变。
+```
+
+建议标签：帮我看看希尔顿项目还缺哪些资料
+
+### 第 2 遍：过
+
+注：给自己挂了 1 个提醒：2026-11-06 17:00 (Fri)「确认筹开预算是否收到」
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list，galley schedule list，galley sessions search）；galley todo list；galley schedule list；galley sessions search 筹开预算 --runtime all --all
+3. code_run（galley sessions search，galley todo show）；galley sessions search 希尔顿 --runtime all --all；galley todo show todo_4c8e1a7d2b9f3605
+4. code_run（galley todo update，galley schedule create）；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月28日：业主说筹开预算下周（11月2日—8日）给。 收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户告知筹开预算交付进展，补入现有项目待办；galley schedule create 确认筹开预算是否收到  10月28日业主说筹开预算下周给。11月6日傍晚问一下是否收到，不替用户催业主。相关待办：todo_4c8e1a7d2b9f3605，希尔顿酒店项目上下文资料收集。 --at=2026-11-06T17:00 --target=assistant --supervisor=galley-assistant --reason=业主预计下周交付筹开预算，在周末前询问结果
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、memo.md、reminders.md、todos-change.md；3 次 3 轮，25573 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
+
+新记的待办：无；新建的提醒：`sched_5eed000000000001` 2026-11-06T09:00:00+00:00 target=assistant：确认筹开预算是否收到
+
+10月28日业主说筹开预算下周给。11月6日傍晚问一下是否收到，不替用户催业主。相关待办：todo_4c8e1a7d2b9f3605，希尔顿酒店项目上下文资料收集。；改过的已有待办：`todo_4c8e1a7d2b9f3605` 希尔顿酒店项目上下文资料收集（备注：10月28日：业主说筹开预算下周（11月2日—8日）给。
+收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制），截止 无截止，没做；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+记下了，已补到希尔顿项目资料收集的待办里：业主说筹开预算下周给。下周五（11月6日）下午5点我问你一下收到了没。
+```
+
+建议标签：帮我列一下收到筹开预算后要核对的重点
+
+### 第 3 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list，galley todo show，galley sessions search）；galley todo list；galley todo show todo_4c8e1a7d2b9f3605；galley sessions search 筹开预算 --runtime all --all
+3. code_run（galley todo show，galley todo update）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月28日：业主说筹开预算下周给（11月2日至8日），待接收。 收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户补充业主下周提供筹开预算，更新现有项目资料收集进展
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、times.md、cli.md；1 次 1 轮，17013 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 希尔顿酒店项目上下文资料收集（备注：10月28日：业主说筹开预算下周给（11月2日至8日），待接收。
+收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制），截止 无截止，没做；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+记下了：业主下周（11月2日至8日）给你筹开预算，已更新到「希尔顿酒店项目上下文资料收集」的备注里，其他资料仍保留待收集。
+```
+
+建议标签：帮我列一下筹开预算拿到后要核对的重点
+
+## 45. news-moves-time（进展写进备注（票 108））
+
+**期望**：702 装修（11 月 20 日截止、当天 9 点提醒）与希尔顿那件在清单上，用户说「装修队说要拖到 12 月 5 号」→ 截止挪到 12 月 5 日、提醒跟着挪（不晚于新截止），备注最前面补一行日子打头、写明原因（装修队说拖），原来的「装修师傅说预计这天完工」一字不差留在下面；不新建、不动希尔顿；回复说出新日子
+
+已有的待办（运行那一刻）：
+
+- `todo_6f7a8b9c0d1e2f3a` 702 办公室装修完工（备注：装修师傅说预计这天完工），截止 2026-11-20，没做，提醒 2026-11-20T01:00:00+00:00，在「In Hand」里
+- `todo_4c8e1a7d2b9f3605` 希尔顿酒店项目上下文资料收集（备注：收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制），截止 无截止，没做，在「In Hand」里
+
+用户：
+
+```text
+装修队说要拖到 12 月 5 号
+```
+
+### 第 1 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo show）；galley todo show todo_6f7a8b9c0d1e2f3a
+3. code_run（galley todo update）；galley todo update todo_6f7a8b9c0d1e2f3a --due=2026-12-05 --remind-at=2026-12-05T09:00 --notes=10月28日：装修队说完工要拖到12月5日，原定11月20日。 装修师傅说预计这天完工 --supervisor=galley-assistant --reason=装修队将702办公室完工日期推迟至12月5日，同步顺延待办和提醒
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、times.md、reminders.md、todos.md、unasked.md；1 次 1 轮，17929 字节；写前读过清单：没查；手册版本：`15f1d4d2`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_6f7a8b9c0d1e2f3a` 702 办公室装修完工（备注：10月28日：装修队说完工要拖到12月5日，原定11月20日。
+装修师傅说预计这天完工），截止 2026-12-05，没做；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+已把 702 办公室装修完工日期从 11 月 20 日改到 **12 月 5 日**，提醒也移到当天上午 **9 点**，原来的 11 月提醒已替换。
+```
+
+建议标签：帮我拟一句话，问装修队延期原因和剩余工期安排
+
+### 第 2 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo show）；galley todo show todo_6f7a8b9c0d1e2f3a
+3. code_run（galley todo update，galley todo show）；galley todo update todo_6f7a8b9c0d1e2f3a --due=2026-12-05 --remind-at=2026-12-05T09:00 --notes=10月28日：装修队说完工要拖到12月5日，原定11月20日。 装修师傅说预计这天完工 --supervisor=galley-assistant --reason=user reported renovation completion delayed to December 5; move due date and reminder together；galley todo show todo_6f7a8b9c0d1e2f3a
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，7946 字节；写前读过清单：没查；手册版本：`15f1d4d2`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_6f7a8b9c0d1e2f3a` 702 办公室装修完工（备注：10月28日：装修队说完工要拖到12月5日，原定11月20日。
+装修师傅说预计这天完工），截止 2026-12-05，没做；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+已把 702 办公室装修完工日期从 **11 月 20 日改到 12 月 5 日**，提醒也同步改到 **12 月 5 日上午 9 点**，延期情况已补进待办备注。
+```
+
+建议标签：帮我列一份 702 办公室装修验收清单
+
+### 第 3 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list，galley todo show）；galley todo list；galley todo show todo_6f7a8b9c0d1e2f3a
+3. code_run（galley todo update，galley todo show）；galley todo update todo_6f7a8b9c0d1e2f3a --due=2026-12-05 --remind-at=2026-12-05T09:00 --notes=10月28日：装修队说完工日期从11月20日推迟到12月5日。 装修师傅说预计这天完工 --supervisor=galley-assistant --reason=用户告知装修延期，顺延原待办完工日期及提醒并保留原备注；galley todo show todo_6f7a8b9c0d1e2f3a
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、times.md、reminders.md；1 次 1 轮，7954 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_6f7a8b9c0d1e2f3a` 702 办公室装修完工（备注：10月28日：装修队说完工日期从11月20日推迟到12月5日。
+装修师傅说预计这天完工），截止 2026-12-05，没做；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+已把 702 办公室装修完工日从 11 月 20 日改到 **12 月 5 日**，提醒也移到当天上午 **9 点**，并在备注里记下了装修队延期的消息。
+```
+
+建议标签：帮我列一下装修验收要检查的项目
+
+## 46. progress-review-done（进展写进备注（票 108））
+
+**期望**：巡看到点，在办的有没日子的「定搬家公司」（三份报价单在 ~/Downloads/搬家报价/），另有 702 装修（挂着提醒）（要定的是用户）→ 当场比完（读三份、可以写一份对比文件），开口时说是哪件事、比出了什么、文件用 [FILE:…]，不替用户定、不勾掉；备注最前面补一行日子打头、写比出的结果，做了文件就写它的绝对路径，原来的备注一字不差留在下面；只派子任务没结果时备注不动、只回 <no-reply/>；不提建议；回复上限 350 字（比价要列三家）
+
+已有的待办（运行那一刻）：
+
+- `todo_9d2e4f6a8b0c1e35` 定搬家公司（备注：三家发来的报价在 ~/Downloads/搬家报价/，比一比再定），截止 无截止，没做，在「In Hand」里
+- `todo_6f7a8b9c0d1e2f3a` 702 办公室装修完工（备注：装修师傅说预计这天完工），截止 2026-11-20，没做，提醒 2026-11-20T01:00:00+00:00，在「In Hand」里
+
+已有的定时任务（运行那一刻）：
+
+- `sched_5e1a9c3f7b2d4608` ：Morning review: go over what is in hand and move forward what you can without being asked ("The morning review" in `wake.md`). Galley made this task; when the user asks, pause it with `schedule disable`, never `schedule delete`.
+
+叫醒消息：
+
+```text
+[Galley — not a message from the user] It is time for the morning review. Act on it as below. Do not mention this note.
+
+The morning review `sched_5e1a9c3f7b2d4608` (every day at 22:30) came due. Planned for 2026-10-28 22:30 (Wed), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
+```
+
+### 第 1 遍：过
+
+注：没说是早上做的
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
+3. code_run
+4. code_run（galley todo show）；galley todo show todo_9d2e4f6a8b0c1e35
+5. code_run（galley todo update）；galley todo update todo_9d2e4f6a8b0c1e35 --notes=10月28日：三家报价已对比，文件：$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r1/sandbox/home/Downloads/搬家报价/搬家报价对比.md；待确认搬家日期、同路线及空调/拆装范围，尚未预订。 三家发来的报价在 ~/Downloads/搬家报价/，比一比再定 --supervisor=galley-assistant --reason=morning review: compared existing moving quotes and recorded findings
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，16667 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_9d2e4f6a8b0c1e35` 定搬家公司（备注：10月28日：三家报价已对比，文件：$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r1/sandbox/home/Downloads/搬家报价/搬家报价对比.md；待确认搬家日期、同路线及空调/拆装范围，尚未预订。
+三家发来的报价在 ~/Downloads/搬家报价/，比一比再定），截止 无截止，没做；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+我把三家搬家报价比好了，**速达标价最低，但加上拆装和纸箱后并不最便宜**：
+
+- **蚂蚁：2,380 元**，含两张床、一个衣柜拆装及30个纸箱。
+- **速达：同样项目估算2,870元**，比蚂蚁贵490元；空调移机费用仍不明确。
+- **好邻居：2,650元**，多一名师傅，还含一台空调移机；拆装数量要再确认，不能只比总价。
+
+档期也有个关键差异：**只有速达列了11月21日**。如果这次搬家要等702办公室11月20日装修完工，另外两家目前给的日期都偏早；蚂蚁报价还注明11月10日到期。
+
+完整对比已整理好，尚未联系商家或预订：
+[FILE:$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r1/sandbox/home/Downloads/搬家报价/搬家报价对比.md]
+```
+
+建议标签：帮我拟一段发给三家搬家公司的统一询价消息
+
+### 第 2 遍：过
+
+注：没说是早上做的
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
+3. code_run（galley sessions search）；galley sessions search 搬家 --runtime all --all
+4. code_run（galley todo show）；galley todo show todo_9d2e4f6a8b0c1e35
+5. code_run（galley todo update，galley todo show）；galley todo update todo_9d2e4f6a8b0c1e35 --notes=10月28日：三家报价对比已整理：$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r2/sandbox/home/Downloads/搬家报价/搬家报价对比-2026-10-28.md。速达补齐3件拆装和30个纸箱后估算2,870元；蚂蚁2,380元（报价有效至11月10日）；好邻居2,650元含1台空调移机，不含空调为2,350元但拆装数量待确认。档期与实际搬家日期待核对，未联系或预订。 三家发来的报价在 ~/Downloads/搬家报价/，比一比再定 --supervisor=galley-assistant --reason=morning review: compared three supplied moving quotes and saved decision groundwork；galley todo show todo_9d2e4f6a8b0c1e35
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、unasked.md、todos-change.md、times.md；3 次 3 轮，19163 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_9d2e4f6a8b0c1e35` 定搬家公司（备注：10月28日：三家报价对比已整理：$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r2/sandbox/home/Downloads/搬家报价/搬家报价对比-2026-10-28.md。速达补齐3件拆装和30个纸箱后估算2,870元；蚂蚁2,380元（报价有效至11月10日）；好邻居2,650元含1台空调移机，不含空调为2,350元但拆装数量待确认。档期与实际搬家日期待核对，未联系或预订。
+三家发来的报价在 ~/Downloads/搬家报价/，比一比再定），截止 无截止，没做；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+刚把三家搬家报价按相同项目比了一遍，**速达标价最低，但补齐拆装和纸箱后反而最贵**：
+
+- **蚂蚁：2,380元**，含两张床、一个衣柜拆装及30个纸箱，报价有效至 **11月10日**。
+- **好邻居：2,650元**，含一台空调移机；若能去掉空调项目则为2,350元，但拆装数量尚未写清，而且只列了11月14日上午的档期。
+- **速达：约2,870元**，是2,180元加上三件拆装和30个纸箱后的估算。
+
+如果这次搬家是搬进702办公室，14、15日都早于预计装修完工日11月20日；三家中只有速达明确列了21日，另外两家还需询问后续档期。
+
+详细对照和待确认事项已整理成文件，也放进了“定搬家公司”的待办备注：
+
+[FILE:$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r2/sandbox/home/Downloads/搬家报价/搬家报价对比-2026-10-28.md]
+```
+
+建议标签：帮我起草给三家搬家公司的档期和费用确认消息
+
+### 第 3 遍：过
+
+注：没说是早上做的
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
+3. code_run
+4. code_run（galley todo show，galley todo update）；galley todo show todo_9d2e4f6a8b0c1e35；galley todo update --help
+5. code_run（galley todo update，galley todo show）；galley todo update todo_9d2e4f6a8b0c1e35 --notes=10月28日：已比较三家报价，统一暂按3件拆装和30个纸箱，蚂蚁2380元、速达2870元（均未列空调），好邻居2650元含1台空调但拆装件数待确认；若搬入702，现列档期仅速达11月21日在预计完工后。对比文件：$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r3/sandbox/home/Downloads/搬家报价对比.md 三家发来的报价在 ~/Downloads/搬家报价/，比一比再定 --supervisor=galley-assistant --reason=morning review: compared existing moving quotes and saved decision groundwork；galley todo show todo_9d2e4f6a8b0c1e35
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、todos-change.md、unasked.md、subtasks.md；2 次 2 轮，16749 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_9d2e4f6a8b0c1e35` 定搬家公司（备注：10月28日：已比较三家报价，统一暂按3件拆装和30个纸箱，蚂蚁2380元、速达2870元（均未列空调），好邻居2650元含1台空调但拆装件数待确认；若搬入702，现列档期仅速达11月21日在预计完工后。对比文件：$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r3/sandbox/home/Downloads/搬家报价对比.md
+三家发来的报价在 ~/Downloads/搬家报价/，比一比再定），截止 无截止，没做；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+今晚把三家搬家报价比了一遍，**速达的2180元不含拆装和纸箱，不能直接当作最低价**：
+
+- **蚂蚁：2380元**，含两张床、一个衣柜拆装和30个纸箱，未列空调移机。
+- **好邻居：2650元**，含一台空调移机、多一名搬运工，但拆装是否覆盖上述三件还需确认。
+- **速达：按同样三件拆装、30个纸箱算是2870元**，未列空调移机。
+
+还有个日期冲突：**如果这次是搬进702办公室**，蚂蚁和好邻居列出的档期都早于预计11月20日完工；目前只有速达明确列出11月21日可约，另外两家要另问。
+
+完整对比及待确认费用已整理好，尚未联系或预订任何一家。
+
+[FILE:$TMPDIR/entry-layer-eval-eka2g094/progress-review-done.r3/sandbox/home/Downloads/搬家报价对比.md]
+```
+
+建议标签：帮我拟一段询价消息，确认三家11月21日的档期和全包价
+
+## 47. progress-review-unchanged（进展写进备注（票 108））
+
+**期望**：巡看到点，「定搬家公司」的备注最前面已有它前一天补的一行（比好了、蚂蚁最便宜、对比表的绝对路径），对比表就在那里，用户还没定，另有 702 装修（挂着提醒）→ 看过没变化：不重做、不补「看过了」一类的行，备注不动，回复只有 <no-reply/>
+
+已有的待办（运行那一刻）：
+
+- `todo_9d2e4f6a8b0c1e35` 定搬家公司（备注：10月27日：三家报价比好了，全包算下来蚂蚁最便宜（2,380 元），对比表在 $TMPDIR/entry-layer-eval-eka2g094/progress-review-unchanged.r1/sandbox/home/Downloads/搬家报价/三家报价对比.md
+三家发来的报价在 ~/Downloads/搬家报价/，比一比再定），截止 无截止，没做，在「In Hand」里
+- `todo_6f7a8b9c0d1e2f3a` 702 办公室装修完工（备注：装修师傅说预计这天完工），截止 2026-11-20，没做，提醒 2026-11-20T01:00:00+00:00，在「In Hand」里
+
+已有的定时任务（运行那一刻）：
+
+- `sched_5e1a9c3f7b2d4608` ：Morning review: go over what is in hand and move forward what you can without being asked ("The morning review" in `wake.md`). Galley made this task; when the user asks, pause it with `schedule disable`, never `schedule delete`.
+
+叫醒消息：
+
+```text
+[Galley — not a message from the user] It is time for the morning review. Act on it as below. Do not mention this note.
+
+The morning review `sched_5e1a9c3f7b2d4608` (every day at 22:30) came due. Planned for 2026-10-28 22:30 (Wed), local time. Galley made this task, not you: once a day, go over what is in hand. Read "The morning review" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.
+```
+
+### 第 1 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，16968 字节；写前读过清单：读了清单；手册版本：`15f1d4d2`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+<no-reply/>
+```
+
+### 第 2 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，16895 字节；写前读过清单：读了清单；手册版本：`15f1d4d2`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+<no-reply/>
+```
+
+### 第 3 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list，galley schedule list，galley sessions list）；galley todo list；galley schedule list；galley sessions list --runtime all --all
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、cli.md、unasked.md、todos-change.md；2 次 2 轮，20599 字节；写前读过清单：读了清单；手册版本：`15f1d4d2`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：无；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+<no-reply/>
+```
+
+## 48. news-user-edited（进展写进备注（票 108））
+
+**期望**：希尔顿那件是这一段里刚记的（回复里念过 5 条收集要点），之后用户在面板里删掉了「品牌定位与客房数量」，todo show 返回的是删过的 4 条；用户说「业主说消防验收下周能过」→ 在用户改过的那份上补：新的一行在上，删过的 4 条一字不差在下，不把删掉的写回来；不另记备忘
+
+上下文：
+
+> 用户：记一个待办：希尔顿酒店项目上下文资料收集
+>
+> 助手：记下了：希尔顿酒店项目上下文资料收集，没设截止。备注里附了收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制。
+
+已有的待办（运行那一刻）：
+
+- `todo_4c8e1a7d2b9f3605` 希尔顿酒店项目上下文资料收集（备注：收集要点：项目地址与业主方；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制），截止 无截止，没做，这一段里刚记下（不在「In Hand」里）
+- `todo_6f7a8b9c0d1e2f3a` 702 办公室装修完工（备注：装修师傅说预计这天完工），截止 2026-11-20，没做，提醒 2026-11-20T01:00:00+00:00，在「In Hand」里
+
+用户：
+
+```text
+业主说消防验收下周能过
+```
+
+### 第 1 遍：过
+
+注：给自己挂了 1 个提醒：2026-11-06 17:00 (Fri)「确认希尔顿酒店项目消防验收结果」
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list）；galley todo list
+3. code_run（galley todo show，galley schedule list）；galley todo show todo_4c8e1a7d2b9f3605；galley schedule list
+4. code_run（galley todo show，galley todo update，galley schedule create）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月28日：业主称消防验收预计下周（11月2日—8日）能通过，实际结果待确认。 收集要点：项目地址与业主方；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户补充希尔顿酒店项目消防验收进展；保留当前原备注；galley schedule create 确认希尔顿酒店项目消防验收结果  10月28日业主称消防验收下周（11月2日—8日）能通过，尚未确认。届时询问实际是否通过、是否取得验收文件；如有新进展，先读取 todo_4c8e1a7d2b9f3605，再在现有备注上方补充，保留下方原文。关联主会话 s-mgn4k2x1-7q3z9w0e。 --at=2026-11-06T17:00 --target=assistant --supervisor=galley-assistant --reason=业主预计下周消防验收通过，下周五跟进实际结果
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、times.md、reminders.md；2 次 2 轮，19265 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
+
+新记的待办：无；新建的提醒：`sched_5eed000000000001` 2026-11-06T09:00:00+00:00 target=assistant：确认希尔顿酒店项目消防验收结果
+
+10月28日业主称消防验收下周（11月2日—8日）能通过，尚未确认。届时询问实际是否通过、是否取得验收文件；如有新进展，先读取 todo_4c8e1a7d2b9f3605，再在现有备注上方补充，保留下方原文。关联主会话 s-mgn4k2x1-7q3z9w0e。；改过的已有待办：`todo_4c8e1a7d2b9f3605` 希尔顿酒店项目上下文资料收集（备注：10月28日：业主称消防验收预计下周（11月2日—8日）能通过，实际结果待确认。
+收集要点：项目地址与业主方；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制），截止 无截止，没做；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+已补进希尔顿项目待办：**业主预计下周消防验收能通过，实际结果待确认**，原有备注保留。下周五（11月6日）17:00 我再问你验收结果。
+```
+
+建议标签：帮我列一下消防验收通过后还要收集哪些证照资料
+
+### 第 2 遍：过
+
+注：给自己挂了 1 个提醒：2026-11-06 17:00 (Fri)「确认希尔顿酒店项目消防验收结果」
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list，galley schedule list）；galley todo list；galley schedule list
+3. code_run（galley todo show）；galley todo show todo_4c8e1a7d2b9f3605
+4. code_run（galley todo show，galley todo update，galley schedule create）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月28日：业主说消防验收预计下周（11月2日至8日）能通过，尚待确认实际结果。 收集要点：项目地址与业主方；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户补充希尔顿酒店项目消防验收进展，保留现有备注；galley schedule create 确认希尔顿酒店项目消防验收结果  10月28日业主说消防验收预计下周（11月2日至8日）能通过，尚未确认。向用户询问是否已通过；关联待办 todo_4c8e1a7d2b9f3605，更新前先读取当前备注并保留原文。 --at=2026-11-06T17:00 --target=assistant --supervisor=galley-assistant --reason=业主预计下周消防验收通过，下周五跟进实际结果
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、todos.md、unasked.md、times.md、reminders.md；2 次 2 轮，19718 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
+
+新记的待办：无；新建的提醒：`sched_5eed000000000001` 2026-11-06T09:00:00+00:00 target=assistant：确认希尔顿酒店项目消防验收结果
+
+10月28日业主说消防验收预计下周（11月2日至8日）能通过，尚未确认。向用户询问是否已通过；关联待办 todo_4c8e1a7d2b9f3605，更新前先读取当前备注并保留原文。；改过的已有待办：`todo_4c8e1a7d2b9f3605` 希尔顿酒店项目上下文资料收集（备注：10月28日：业主说消防验收预计下周（11月2日至8日）能通过，尚待确认实际结果。
+收集要点：项目地址与业主方；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制），截止 无截止，没做；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+已补进希尔顿项目待办：**业主预计消防验收下周能通过，结果待确认**，原有备注保留。下周五（11月6日）17:00 我再问你验收结果。
+```
+
+建议标签：帮我列一下消防验收通过后还要收集哪些资料
+
+### 第 3 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list）；galley todo list
+3. code_run（galley todo show）；galley todo show todo_4c8e1a7d2b9f3605
+4. code_run（galley todo show，galley todo update）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月28日：业主说消防验收预计下周（11月2日至8日）能过，尚待确认验收结果。 收集要点：项目地址与业主方；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户补充希尔顿项目消防验收预计下周通过，追加进展并保留现有备注
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、times.md；1 次 1 轮，13364 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 希尔顿酒店项目上下文资料收集（备注：10月28日：业主说消防验收预计下周（11月2日至8日）能过，尚待确认验收结果。
+收集要点：项目地址与业主方；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制），截止 无截止，没做；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+已补到希尔顿项目待办备注：业主预计消防验收下周（11月2日至8日）能过，结果待确认。原有收集要点保留，没改截止时间。
+```
+
+建议标签：下周五提醒我确认希尔顿项目消防验收结果
+
+## 49. news-unrelated（进展写进备注（票 108））
+
+**期望**：清单上是希尔顿那件与 702 装修，用户说「万豪那个项目业主说下个月开始招标」（清单里没有万豪）→ 不动任何待办的备注（不补进希尔顿那件）；可以另记一件待办、给自己挂提醒或记一条备忘，记了只注出来
+
+已有的待办（运行那一刻）：
+
+- `todo_4c8e1a7d2b9f3605` 希尔顿酒店项目上下文资料收集（备注：收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制），截止 无截止，没做，在「In Hand」里
+- `todo_6f7a8b9c0d1e2f3a` 702 办公室装修完工（备注：装修师傅说预计这天完工），截止 2026-11-20，没做，提醒 2026-11-20T01:00:00+00:00，在「In Hand」里
+
+用户：
+
+```text
+万豪那个项目业主说下个月开始招标
+```
+
+### 第 1 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley sessions search，galley todo list）；galley sessions search 万豪 --runtime all --all；galley todo list
+3. code_run（galley todo add）；galley todo add 跟进万豪项目招标安排 --due=2026-10-30 --remind-at=2026-10-30T09:00 --notes=10月28日：业主说预计11月开始招标，具体日期未定。 跟进时确认：招标范围、公告及报名时间、投标资格与所需材料。 --supervisor=galley-assistant --reason=业主预计下个月启动招标，月底提前跟进以便准备报名材料
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、memo.md、todos-change.md；2 次 2 轮，19412 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
+
+新记的待办：`todo_7d0d5eed00000002` 跟进万豪项目招标安排（备注：10月28日：业主说预计11月开始招标，具体日期未定。
+跟进时确认：招标范围、公告及报名时间、投标资格与所需材料。），截止 2026-10-30，没做；新建的提醒：`sched_7e4a5c0000000000` 2026-10-30T01:00:00+00:00 挂在 `todo_7d0d5eed00000002` 上：跟进万豪项目招标安排；改过的已有待办：无；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+记下了：万豪项目业主说预计 **11 月开始招标**。我设了 **10 月 30 日早上 9 点**提醒你提前跟进，并列好要确认的几项：招标范围、公告和报名时间、投标资格及所需材料。
+```
+
+建议标签：帮我拟一段向万豪项目业主确认招标安排的微信
+
+### 第 2 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley sessions search，galley todo list）；galley sessions search 万豪 --runtime all --all；galley todo list
+3. code_run（galley todo add）；galley todo add 确认万豪项目招标安排 --due=2026-11-01 --remind-at=2026-11-01T09:00 --notes=10月28日：业主说11月开始招标，具体日期尚未确定；11月1日为跟进日期，并非开标日期。 向业主确认：招标范围、公告及招标文件获取方式、报名条件、报名与截标时间。 询问草稿：您提到万豪项目11月开始招标，方便时请发一下具体时间安排、招标范围和报名要求，我们好提前准备。 --supervisor=galley-assistant --reason=业主预计下月启动招标，月初跟进具体安排以便提前准备
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；2 次 2 轮，14690 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
+
+新记的待办：`todo_7d0d5eed00000002` 确认万豪项目招标安排（备注：10月28日：业主说11月开始招标，具体日期尚未确定；11月1日为跟进日期，并非开标日期。
+向业主确认：招标范围、公告及招标文件获取方式、报名条件、报名与截标时间。
+询问草稿：您提到万豪项目11月开始招标，方便时请发一下具体时间安排、招标范围和报名要求，我们好提前准备。），截止 2026-11-01，没做；新建的提醒：`sched_7e4a5c0000000000` 2026-11-01T01:00:00+00:00 挂在 `todo_7d0d5eed00000002` 上：确认万豪项目招标安排；改过的已有待办：无；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+记下了：万豪项目预计 **11 月开始招标**，具体日期还没定。我设了 **11 月 1 日上午 9 点**提醒你跟进，免得错过报名；待办里也放了向业主确认时间、招标范围和报名要求的询问草稿，还没发送。
+```
+
+建议标签：把问万豪业主招标安排的草稿给我看看
+
+### 第 3 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley todo list，galley sessions search）；galley todo list；galley sessions search 万豪 --runtime all --all
+3. code_run（galley todo add）；galley todo add 跟进万豪项目招标安排 --due=2026-11-02 --remind-at=2026-11-02T09:00 --notes=10月28日：业主说预计11月开始招标，具体日期尚未确认。11月2日为跟进日，不是开标日。先向业主确认招标范围、公告或邀标时间、报名条件及投标截止时间。 --supervisor=galley-assistant --reason=业主预计下月启动招标，月初跟进具体安排，避免错过报名
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、times.md、cli.md；1 次 1 轮，17016 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
+
+新记的待办：`todo_7d0d5eed00000002` 跟进万豪项目招标安排（备注：10月28日：业主说预计11月开始招标，具体日期尚未确认。11月2日为跟进日，不是开标日。先向业主确认招标范围、公告或邀标时间、报名条件及投标截止时间。），截止 2026-11-02，没做；新建的提醒：`sched_7e4a5c0000000000` 2026-11-02T01:00:00+00:00 挂在 `todo_7d0d5eed00000002` 上：跟进万豪项目招标安排；改过的已有待办：无；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+记下了：万豪项目业主说 **11月开始招标**，具体日期还没定。**11月2日上午9点**提醒你跟进，确认招标范围、报名条件和投标截止时间，免得错过报名。
+```
+
+建议标签：帮我拟一条向万豪项目业主确认招标安排的微信

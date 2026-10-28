@@ -545,6 +545,62 @@ Core 在「In Hand」的三组之后加了第四组「Follow-ups the user turned
 - **用量**：29 次运行（保留 28 次，替换 1 次），89 次模型调用；`--dry-test` 不连模型。
 - **没测到的**：`schedule update --prompt` 一次也没出现，它的第一行规则只有 `--dry-test` 的合成数据测过；待办、叫醒、闲聊、备忘四套没在新手册下重跑（它们也会读 `reminders.md`）；第一行的判定是写死的词表，「过两天」「年底」「节后」「晚点」这类没列进去的时间说法判不出来。
 
+## 进展写进备注（票 108）
+
+主聊天 PRD 裁决 154：替一件待办做成了东西（查到的、做好的文件、等用户拍板的准备），或用户说了它的新消息，在它的备注最前面补一行，日子打头，用户的语言，文件写绝对路径；先读这一件（`todo show`），原来的备注一字不差留在下面；看过没变化不写，不一步一行；新消息挪了时间，截止与提醒一起挪。新的在上，是因为收起的那一行只显示得下备注开头（`gui/src/lib/todo-panel.ts` 把空白压成空格、`TodoPanel.tsx` 截断）。手册 `todos-change.md` 在第一条之后加「How it is going」一条，`unasked.md` 的「Tell the user」补半句、`todos.md` 的 `--notes` 一条补一句，都只指向它；入口层、Core、`galley-prompt/`、`rust-samples.json`、`cli-help.json` 没动。待办套件加 6 条，`run.py --suite todo`。
+
+- **跟着换的输入**：只有手册（`run.py` 直接读仓库里的那份）。
+- **用例**（组名「进展写进备注（票 108）」，`todo/cases.json` 第 44–49 条，每条 3 遍）：
+  - `news-budget`：清单上有「希尔顿酒店项目上下文资料收集」（没日子，备注是它记的 5 条收集要点）和 702 装修，用户说「业主说筹开预算下周给我」。备注是照库里那条的样子重写的（PRD 裁决 153 记的是 48 字、「收集要点：……」开头的 5 条，原文没读库，评测只读库里的模型 key）。
+  - `news-moves-time`：702 装修（11 月 20 日截止、当天 9 点提醒），用户说「装修队说要拖到 12 月 5 号」。
+  - `progress-review-done`：巡看到点，在办的有没日子的「定搬家公司」，三家报价单在 `~/Downloads/搬家报价/`（用例的 `files`，同叫醒套件）；比价是它能当场做完的，定哪家是用户的。
+  - `progress-review-unchanged`：同一件，备注最前面已有它前一天补的一行（比好了、对比表的绝对路径，`{{HOME}}` 换成那次运行的假 HOME），对比表就在那里，用户还没定。
+  - `news-user-edited`：希尔顿那件是这一段里刚记的（回复里念过 5 条要点），之后用户在面板里删了「品牌定位与客房数量」，`todo show` 给的是删过的 4 条；用户说「业主说消防验收下周能过」。
+  - `news-unrelated`：清单上是希尔顿与 702，用户说「万豪那个项目业主说下个月开始招标」。
+- **判定加的**（`progress_facts`，写法见 `todo/cases.json` 的 `_note`）：`expect.progress` 那一件的备注是新的一行、换行、一开始的备注一字不差（没有备注时只有那一行）：补在后面、原来的被改过、同一行接着写、补了不止一行、字面的 `\n` 都不过；那一行日子打头（`PROGRESS_DAY_RE`：「10月28日」「2026-10-28」「10/28」，括号可有可无）且是运行那天；`groups` 每组至少一个词在那一行；`forbid` 的字（用户删掉的）不许出现在备注里；这一轮在假 HOME 里做了文件，那一行就得有它的绝对路径（写成 `~/` 开头另说出来）；改备注之前读过这一件（`todo show` 或 `todo list`，只读了清单的注出来）；别的待办的备注不许动；标题不许改。`when_done`（巡看）：做了文件、或开口时不只是派了子任务，才该补；只派了子任务、停在浏览器时备注不许动（注「进展这一条没用上」）。`expect.notes_same`：任何待办的备注都不许动。`expect.schedule` 为 `optional`：可以给自己挂提醒，记下个数，不判。`review_advance.did_any`：这条用例自己算「做了什么」的词（「比了」）。别的用例改了备注只注出来（重判已有结果，一条也没有）。
+- **脚本跟着改的**：定时、待办、闲聊、备忘四套的用例可以带 `files`（放进假 HOME 的 `~/Downloads`）；结果多记一项 `home_added`（这次运行在假 HOME 里新做的文件，绝对路径，`~/.config` 不算）；`fixture_todos` 里的 `{{HOME}}` 换成那次运行的假 HOME，同假 CLI 起始的样子；巡看的「做成了」也认 `home_added`（比价与 CLI 写在同一段脚本里时，原来的判法认不出）。`--render-only` 重出已有结果，除了票 98 改过、一直没重出的几条 `expect_text`，逐字不变。
+- **`--dry-test` 加的**（`dry_test_progress`、两段假模型）：日子打头的几种写法与不算的；新的一行在上过，补在后面、没补、原来的被改、没日子、不是今天、字面 `\n`、同一行、没有该有的词各自不过，空一行注出来；先写后读不过，只读清单过但注出来；给自己挂提醒记个数；改了 702 的备注不过；挪时间的截止、提醒、那一行都对过，提醒没挪不过；巡看做了文件、路径对过，没写路径、写成 `~/` 不过，做了却没补不过，只派子任务不补过、补了不过；看过没变化的 `<no-reply/>` 过，补「看了一下，还没定」不过；用户改过的备注上补过，把删掉的写回来不过；万豪的事补进希尔顿不过；旧用例改了备注只注出来。两段假模型在真沙盒里跑：一段读三份报价、往 `~/Documents` 写对比、`todo show` 后把一行补在上面（`home_added` 认出那个文件，判过）；一段 `todo show` 前一天那一行、`cat` 它点名的文件（假 CLI 给的是这次运行的真路径，判定读到的起始备注也是），回 `<no-reply/>`。
+- **对照**：旧手册（这一票之前的 `todos-change.md`、`unasked.md`、`todos.md`，手册版本 `19040ed8`）跑 44、45、46、48 各一遍，在 `meta.ticket108w_control`；反向检查（新手册只拿掉 `todos-change.md` 那一条，两句指向留着，`65fab0d8`）跑 44、46 各一遍，在 `meta.ticket108r_control`；跑之前备份三份新手册到临时目录，跑完拷回、校验和对过。写备注的旧用例（`note-*`、`reno-*`、`wake-todo`、`review-*`，13 条）各重跑第 1 遍，被替换的在 `meta.superseded_runs` 的「票 108 回归」一组，`results.md` 的「票 108 重跑」表对比。
+- **怎么跑**：
+
+```bash
+PY=/Library/Frameworks/Python.framework/Versions/3.14/bin/python3
+export PYTHONDONTWRITEBYTECODE=1
+NEW=news-budget,news-moves-time,progress-review-done,progress-review-unchanged,news-user-edited,news-unrelated
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases $NEW --repeats 3 --parallel 6
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases note-report,note-soil,note-landlord,wake-todo,reno-asked,reno-mention,reno-no-remind,review-nothing-to-do,review-advance,review-overdue,review-stop,review-with-reminder,review-with-subtask-done --repeats 1 --first-repeat 1 --supersede "票 108 回归：……"
+# 手册换成旧的三份之后：
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases news-budget,news-moves-time,progress-review-done,news-user-edited --repeats 1 --control 108w
+# 只拿掉 todos-change.md 那一条之后：
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases news-budget,progress-review-done --repeats 1 --control 108r
+```
+
+### 结果（2026-10-28，gpt-6.1-sol，推理强度 high）
+
+模型 `mm_1792576875658`（API key 接入的 gpt-6.1-sol，同票 73）。先 `--dry-test`（不连模型，全过）。改了一轮措辞（见下），表里「这一次」是第二轮（手册版本 `15f1d4d2`，22:30 开跑）。
+
+| 用例 | 第一轮 | 这一次 | 旧手册 | 反向检查 |
+| --- | --- | --- | --- | --- |
+| `news-budget` | 2/3 | 3/3 | 0/1 | 0/1 |
+| `news-moves-time` | 3/3 | 3/3 | 0/1 | — |
+| `progress-review-done` | 0/3 | 3/3 | 0/1 | 0/1 |
+| `progress-review-unchanged` | 3/3 | 3/3 | — | — |
+| `news-user-edited` | 3/3 | 3/3 | 0/1 | — |
+| `news-unrelated` | 3/3 | 3/3（补跑 1 次） | — | — |
+| 写备注的旧用例 13 条 | — | 13/13（上一次 13/13） | — | — |
+
+- **改了一轮措辞**：第一轮不过的有两处。`news-budget` 第 1 遍只读了 `todos.md`、`unasked.md`、`times.md`、`reminders.md`，没读 `todos-change.md`，给自己挂了下周五问预算的提醒，备注没动，话只写在 `<summary>` 里：听到一件事的新消息，入口层的手册列表让它想到的是「记」和「提醒」，不是「改」。`todos.md` 的 `--notes` 一条末尾补了一句「What you get done for it later, and news of it, go on top of its notes (see `todos-change.md`).」（规则仍只写在 `todos-change.md`），第二轮 9 遍听到新消息的都读了 `todos-change.md`。`progress-review-done` 三遍都比完、做了文件、补了一行（带绝对路径），又都 `todo done` 把待办勾掉了：那件当时叫「比较三家搬家公司的报价」，比完就是办完，照手册该勾，是用例写错了；改叫「定搬家公司」（要定的是用户），回复上限从 200 字改到 350 字（三家价格要列出来，第一轮 283–308 字）。第一轮 18 次运行（78 次模型调用）在 `meta.superseded_runs` 的「第一轮（票 108）」一组。
+- **新消息**（`news-budget`、`news-user-edited`）：六遍都先 `todo list`、`todo show` 那一件，再整段 `--notes=`，新的一行在上，原来的备注一字不差在下；那一行 28–41 字：「10月28日：业主说筹开预算下周（11月2日至8日）给。」「10月28日：业主说消防验收预计下周（11月2日至8日）能过，尚待确认验收结果。」，都把「下周」写成了日子。用户删掉的「品牌定位与客房数量」三遍都没写回来。没记新待办、没记备忘。顺带给自己挂了下周五 17:00 问一下的提醒：`news-budget` 1/3，`news-user-edited` 2/3（第一轮 `news-budget` 3 遍里 2 遍）。回复一句，「记下了，已补到希尔顿项目资料收集的待办里：……」。
+- **挪时间**（`news-moves-time`）：三遍都把截止改到 12 月 5 日、提醒挪到当天 9 点，备注最前面「10月28日：装修队说完工要拖到12月5日，原定11月20日。」一类，原来的「装修师傅说预计这天完工」留在下面；回复说出了新日子与提醒时刻。
+- **巡看做成了**（`progress-review-done`）：三遍都当场读完三份报价，算出速达补齐拆装和纸箱是 2,870 元，写了一份对比（两遍在 `~/Downloads/搬家报价/`，一遍在 `~/Downloads/`），回复列三家价格、点出只有速达的档期在 702 完工之后、`[FILE:…]` 交出对比，没勾掉、没替用户定、没有「要不要我」。那一行都带对比的绝对路径，但长：139–227 字（假 HOME 的路径约 100 字，真机上家目录下的路径短得多），把价格、待确认的项、档期都塞进了一行。三遍都是晚上 22 点多跑的，回复说「刚把」「今晚」，没说早上（只注出来）。
+- **巡看没变化**（`progress-review-unchanged`）：三遍都读了清单与那一件，回复只有 `<no-reply/>`，没重做对比、没补「看过了」一类的行。
+- **不相干的事**（`news-unrelated`）：三遍都没碰希尔顿与 702 的备注，都另记了一件「跟进／确认万豪项目招标安排」（挂了 10 月 30 日到 11 月 2 日之间的提醒），算过（另记可以）。第 3 遍最后一次模型调用回了 HTTP 499（请求被断开），单独补跑一遍过；被替换的在「第二轮补跑（票 108）」一组。
+- **旧手册**：听到新消息的三条也都往备注里写了，但两条接在原来的备注后面、没有日子（「。筹开预算：业主表示下周（11 月 2—8 日）提供，具体日期未定，待收到。」接在同一行末尾；「消防验收：业主称……」另起一行在最后），挪时间那条把原来的「装修师傅说预计这天完工」整段换成了「装修队最新通知预计延期至2026年12月5日完工，原定2026年11月20日。」。截止与提醒照样挪对了。巡看比完、做了文件，备注没动。也就是说，往备注里写新消息模型自己会做一半，这一条管的是位置、日子、原文不动，和巡看做成的东西也写进去。
+- **反向检查**（只拿掉 `todos-change.md` 那一条，`todos.md`、`unasked.md` 的两句指向留着）：`news-budget` 没补备注，只给自己挂了提醒；`progress-review-done` 补了，但接在最后、没有日子（`unasked.md` 那半句让它写，`todos.md` 那句说的「on top」没起作用）。两条都不过，符合预期：备注最前面、日子打头靠的是那一条。
+- **回归**：13 条各一遍都过，没有一条改了备注；请求次数 3.62 → 3.62，读手册字节 14120 → 14519。
+- **用量**：56 次运行，238 次模型调用（第一轮 18 次 78 次调用、第二轮 18 次 79 次、出错被替换的 1 次 4 次、回归 13 次 47 次、旧手册 4 次 19 次、反向检查 2 次 11 次）；`--dry-test` 不连模型。
+- **没测到的**：子任务做完、带着文件回来的那次叫醒（`unasked.md` 那半句最常用到的地方）没有用例，巡看这条是它当场做完的；真机上巡看为希尔顿醒时要查公开资料，沙盒里没有浏览器，这一种没测；那一行写多长没有判，巡看的三遍都很长；同一件事接连几条新消息、备注最前面已经有好几行时怎么补，没有用例；旧手册与反向检查每条只跑了一遍。
+
 ## 安全措施
 
 - 拦截点在 GA 的工具分发：worker 把 `agentmain` 里的 `GenericAgentHandler` 换成子类（runner 自己装处理器子类用的也是这个接口 `GaSession.install_handler`）。子类的 `dispatch` 遇到任何真实工具就记录并返回 `should_exit`，一次模型调用后整个运行结束；只有 GA 自己判断最终回答的 `no_tool`（只读回复文本）和格式错误的重试提示 `bad_json` 走原路。子类上除 `do_no_tool` 外的所有 `do_*` 方法都换成一调用就报错的版本，作为第二道保险。
