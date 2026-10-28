@@ -1,4 +1,4 @@
-# 定时与提醒评测结果（票 36，票 44、票 59、票 60、票 63 重跑）
+# 定时与提醒评测结果（票 36，票 44、票 59、票 60、票 63、票 73、票 105 重跑）
 
 模型：gpt-6.1-sol（Galley 托管模型 mm_1792576875658，从 Galley 数据库只读取得，即 JC 主对话现在用的模型），推理强度 high；首次运行于 2026-10-17 05:50。
 
@@ -8,6 +8,7 @@
 - **新消息**：用户这句；叫醒用例是照 Core 措辞（`subtask_report::report_text`，同样逐字对过）拼出的叫醒消息。
 - **工具**：`code_run` 与文件工具在每次运行自己的 macOS 沙盒里真的执行（同票 30 的沙盒，另允许 `date`）；Galley CLI 是假的：`schedule` 命令族按 Agent API §5.20–§5.27 的形状回答、照真实 CLI 校验参数（过去的时刻报 `time_in_past:`，`--target` 默认 `session`），票 35 的手（改名、置顶、删除、项目、默认模型）也接着；`--help` 是真实 CLI 的原文。每次调用都记下，写命令只改假 CLI 自己的状态。每次运行最多 10 次工具调用。
 - **判定**：按 `cases.json` 每条的 `expect` 自动判，看它发出的命令（假 CLI 的日志与最后的状态）和回复里有没有说出时间。每条都查：`schedule create` 带没带 `--target=assistant`，`schedule` 写命令带没带 `--supervisor=galley-assistant`。
+- **票 105 的改动**（主对话 PRD 裁决 151）：手册 `reminders.md` 改成原文第一行写给用户看（像待办的标题），需要时空一行再写给到点时的自己；卡片与面板只显示第一行。判定加了第一行（每一次 `schedule create` 与 `schedule update --prompt`，规则见下「票 105：第一行」），旧判定照旧；三条叫醒用例预先放着的任务原文换成新写法（第一行给人、空行、写给自己的）。
 
 注 1：票 59：手册按部分拆开。被替换的 28 次运行原样留在 results.json 的 `meta.superseded_runs[0]` 里。
 
@@ -24,6 +25,56 @@
 注 7：票 73：手册（todos.md 加没日子的在办之事、新的 unasked.md、wake.md 的早上巡看、reminders.md 的例外）、入口层（在推进的事也记、记下时想一步、[FILE:] 交文件、手册列表多了 unasked.md）与 Core 的巡看叫醒之后重跑；模型同票 63、64 是 gpt-6.1-sol，条目换成 mm_1792576875658（API key 接入；之前的API key 条目已从库里删掉）被替换的 28 次运行原样留在 results.json 的 `meta.superseded_runs[6]` 里。
 
 注 8：票 73 补跑：「不用了」第 1 遍删对了那一个、带着身份参数，话只写进了 <summary>，回复正文是空的（票 36、59、63 都见过的随机失误），补跑一遍被替换的 1 次运行原样留在 results.json 的 `meta.superseded_runs[7]` 里。
+
+注 9：票 105：手册 reminders.md 改成原文第一行写给用户看（像待办的标题，不写时间、不写「用户要求」「提醒用户」、不用第三人称），需要时空一行再写给到点时的自己；三条叫醒用例预先放着的任务原文换成新写法（第一行给人、空行、写给自己的）；判定加了第一行，旧判定照旧。这一组是票 73 的结果（含票 73 补跑的那一遍）。被替换的 28 次运行原样留在 results.json 的 `meta.superseded_runs[8]` 里。
+
+注 10：票 105 补跑：「按时叫醒」第 1 遍排在第 23 个，比叫醒消息写的到点时刻晚了约 4 分钟才开跑，它看了钟、照实说「晚了约 5 分钟」，判成不过（票 64、73 都见过的排队晚到），这一条单独补跑一遍。被替换的 1 次运行原样留在 results.json 的 `meta.superseded_runs[9]` 里。
+
+## 票 105 重跑（2026-10-28，gpt-6.1-sol，推理强度 high）
+
+上一次是票 73 的结果，这一次是票 105 改了手册 `reminders.md` 之后（主对话 PRD 裁决 151：原文第一行写给用户看，像待办的标题，不写时间、不写「用户要求」「提醒用户」、不用第三人称；需要时空一行，再写到点时自己要的；`schedule update --prompt` 同样写），同一个模型（API key 接入的 gpt-6.1-sol，`mm_1792576875658`）。入口层、Core 的叫醒说明、`galley-prompt/`、`rust-samples.json`、`cli-help.json` 都没动。三条叫醒用例（`wake-on-time`、`wake-late`、`wake-obsolete`）预先放着的任务原文换成了新写法（第一行给人、空行、写给自己的，内容不变），叫醒消息照 Core 的措辞把全文交给它，让叫醒那一侧在新写法下也测到。这张表比的是原有判定（第一行另见下一节「票 105：第一行」），两次都用现在的原有判定重判。请求次数是每次运行的模型调用数（GA 的轮数），用时是整次运行的墙钟时间；读手册的字节是返回给模型的工具结果的字节数，「轮」是读手册的那几次落在几个模型轮次里（一轮里并发读几份算一轮）。
+
+| | 运行 | 过 | 请求次数（均） | 用时 s（均） | 读手册次数（均） | 读手册轮数（均） | 读手册字节（均） | 读过的部分（次数） |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 上一次 | 28 | 28 | 3.11 | 28.2 | 1.04 | 0.96 | 9225 | times.md 19、reminders.md 18、todos-change.md 14、todos.md 13、unasked.md 12、wake.md 5、subtasks.md 4、cli.md 2 |
+| 这一次 | 28 | 28 | 3.07 | 35.1 | 1.14 | 1.11 | 9871 | reminders.md 20、times.md 19、todos-change.md 14、todos.md 12、unasked.md 11、wake.md 6、subtasks.md 5、cli.md 2 |
+
+| # | 用例 | 写 | 过 | 请求次数 | 用时 s | 读手册：上一次 | 读手册：这一次 | 标记 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | report-wed | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 50 → 45 | 2.0 次 2.0 轮，15490 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 | 2.0 次 2.0 轮，12236 字节：times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  |
+| 2 | flight-fri | 是 | 2/2 → 2/2 | 4.5 → 4.0 | 49 → 53 | 3.0 次 2.0 轮，13526 字节：times.md 2、todos-change.md 2、todos.md 2、unasked.md 2、reminders.md 1 | 1.5 次 1.5 轮，16725 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  |
+| 3 | logistics-mon | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 30 → 38 | 1.0 次 1.0 轮，13471 字节：reminders.md 2、times.md 2、todos.md 2、unasked.md 2 | 1.0 次 1.0 轮，14937 字节：reminders.md 2、times.md 2、todos.md 2、unasked.md 2 |  |
+| 4 | water-10min | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 25 → 29 | 1.0 次 1.0 轮，4723 字节：reminders.md 2、times.md 2 | 1.5 次 1.5 轮，9284 字节：reminders.md 2、times.md 2、todos.md 1 |  |
+| 5 | stove-30min | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 32 → 46 | 1.0 次 1.0 轮，13451 字节：reminders.md 2、times.md 2、todos.md 2、unasked.md 2 | 2.0 次 2.0 轮，15124 字节：reminders.md 2、times.md 2、todos.md 2、unasked.md 2 |  |
+| 6 | guitar | 否 | 2/2 → 2/2 | 1.0 → 1.0 | 13 → 18 | 没读 | 没读 |  |
+| 7 | tired-meeting | 否 | 2/2 → 2/2 | 1.0 → 1.0 | 11 → 12 | 没读 | 没读 |  |
+| 8 | daily-news | 否 | 2/2 → 2/2 | 2.0 → 2.5 | 19 → 39 | 1.0 次 1.0 轮，13450 字节：reminders.md 2、times.md 2、todos.md 2、unasked.md 2 | 1.5 次 1.5 轮，16946 字节：reminders.md 3、times.md 3、todos.md 3、unasked.md 3、cli.md 2 |  |
+| 9 | already-set | 否 | 2/2 → 2/2 | 3.0 → 3.0 | 28 → 37 | 1.0 次 1.0 轮，15187 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 | 1.0 次 1.0 轮，7105 字节：reminders.md 2、times.md 2、todos-change.md 2 |  |
+| 10 | no-need | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 36 → 39 | 1.0 次 1.0 轮，9825 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 1 | 1.0 次 1.0 轮，7105 字节：reminders.md 2、times.md 2、todos-change.md 2 |  |
+| 11 | move-time | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 32 → 40 | 1.0 次 1.0 轮，6408 字节：reminders.md 2、times.md 2、todos-change.md 2 | 1.0 次 1.0 轮，7103 字节：reminders.md 2、times.md 2、todos-change.md 2 |  |
+| 12 | wake-on-time | 否 | 2/2 → 2/2 | 1.5 → 2.0 | 15 → 23 | 0.5 次 0.5 轮，3042 字节：subtasks.md 1、wake.md 1 | 1.5 次 1.0 轮，7466 字节：subtasks.md 2、wake.md 2 |  |
+| 13 | wake-late | 否 | 2/2 → 2/2 | 3.5 → 3.0 | 34 → 47 | 1.0 次 1.0 轮，10921 字节：todos-change.md 2、wake.md 2、cli.md 1、reminders.md 1、subtasks.md 1、times.md 1 | 1.0 次 1.0 轮，10466 字节：todos-change.md 2、wake.md 2、reminders.md 1、subtasks.md 1 |  |
+| 14 | wake-obsolete | 否 | 2/2 → 2/2 | 3.0 → 2.5 | 22 → 25 | 1.0 次 1.0 轮，9650 字节：subtasks.md 2、todos-change.md 2、wake.md 2、cli.md 1 | 1.0 次 1.0 轮，13705 字节：reminders.md 2、subtasks.md 2、todos-change.md 2、wake.md 2 |  |
+
+## 票 105：第一行
+
+每一次 `schedule create` 与 `schedule update --prompt` 的原文取第一行（同 GUI 的 `reminderFirstLine`：第一个非空行、去首尾空白），判它能不能当给用户看的标题：不含「用户」「JC」，不以「提醒」开头，不含时间或日子（`FIRST_LINE_TIME_RE`），不超过 20 个字；原文里是字面的 `\n` 也不过。每格是「第一行过 / 命令数」，「上一次」是票 73 的运行（那时手册要它写给自己看），用同一条判定重判。
+
+| # | 用例 | 上一次 | 这一次 |
+| --- | --- | --- | --- |
+| 3 | logistics-mon | 0 / 2 | 2 / 2 |
+| 4 | water-10min | 0 / 2 | 2 / 2 |
+| 5 | stove-30min | 0 / 2 | 2 / 2 |
+| | 合计 | 0 / 6 | 6 / 6 |
+
+这一次的每一个第一行：
+
+- logistics-mon 第 1 遍：「查看京东显示器物流」（create，后面有给自己的话；过）
+- logistics-mon 第 2 遍：「查看京东显示器物流」（create，后面有给自己的话；过）
+- water-10min 第 1 遍：「该喝水了」（create，没有后面的话；过）
+- water-10min 第 2 遍：「该喝水了」（create，没有后面的话；过）
+- stove-30min 第 1 遍：「关火」（create，没有后面的话；过）
+- stove-30min 第 2 遍：「关火」（create，没有后面的话；过）
 
 ## 票 73 重跑（2026-10-21，gpt-6.1-sol，推理强度 high）
 
@@ -159,36 +210,40 @@
 
 ## 一览
 
-| # | 用例 | 遍 | 调了什么命令 | 回复原文 | 字数 | 读手册 | 建前查过 | 判定 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | report-wed | 1 | todo list；todo add 交报告 --due=2026-10-28 --remind-at=2026-10-27T15:00 --notes=用户说周三下午要交报告。提及时本地时间为2026-10-21周三傍晚，按下一个尚未来到的周三10月28日记录；下午提交，具体时刻未说明。交前核对：数据及引用、结论、附件和提交渠道。 --supervisor=galley-assistant --reason=用户提及周三下午交报告，记录截止日期并提前一天… | 记下了：**10月28日（下周三）下午交报告，27日下午3点提醒你**。现在已是本周三傍晚，我先按下周三记了；交前核对项也附在待办里了。 | 68 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；2 次 2 轮，15327 字节 | 查了 | 过 |
-| 1 | report-wed | 2 | todo list；sessions search 报告 --runtime all --all；todo add 交报告 --due=2026-10-28 --remind-at=2026-10-27T18:00 --notes=用户说“周三下午要交报告”；记录时为2026-10-21周三18:09，今天下午已过，按下一个周三10月28日下午理解。具体提交时间及报告主题未提供。 --supervisor=galley-assistant --reason=用户提及交报告的截止事项，记录待办并提前一天提醒 | 今天已是周三傍晚，我先按**下周三（10 月 28 日）下午交报告**记下了，**10 月 27 日傍晚 6 点**提醒你。 | 62 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；2 次 2 轮，15652 字节 | 查了 | 过 |
-| 2 | flight-fri | 1 | todo list；todo add 赶周五早上 7 点的航班 --due=2026-10-23T07:00 --remind-at=2026-10-22T20:00 --notes=用户已订周五早上7点的航班。前晚提醒准备证件、行李，核对值机及登机时间。航班号、出发机场和是否国际航班尚未知，不推定出门时间。 --supervisor=galley-assistant --reason=用户提及已订周五早班机，记录赶飞机待办并于前晚提醒准备，避免临近起飞才… | 记下了：本周五（10 月 23 日）早上 7 点的航班，周四晚 8 点提醒你准备证件、行李并核对值机时间，免得当天太赶。 | 60 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；4 次 2 轮，11735 字节 | 查了 | 过 |
-| 2 | flight-fri | 2 | todo list；sessions search 航班 --runtime all --all；todo list；todo add 赶周五早上 7 点的航班 --due=2026-10-23T07:00 --remind-at=2026-10-22T20:00 --notes=周五早上7点起飞。前一晚准备证件、行李并核对值机与机场出发时间；航班号、机场、国内或国际航班尚未提供。 --supervisor=galley-assistant --reason=用户已订周五早班机，记录赶航班待办并在前一晚提醒准备；todo list | 记下了：这周五（10 月 23 日）早上 7 点的航班，**周四晚 8 点提醒你准备证件、行李，核对值机和去机场的时间**。 ⏎ 你从哪个机场出发，是国内还是国际航班？ | 83 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；2 次 2 轮，15318 字节 | 查了 | 过 |
-| 3 | logistics-mon | 1 | schedule list；schedule create 查询京东显示器物流：用户在京东买了一台显示器，物流单号 JD8812345678，商家说2026年10月26日（下周一）前能到。用户明确要求下周一帮忙查看物流。请通过浏览器查询最新轨迹、预计送达时间及有无延误，核实后在主会话 s-…9w0e 告知用户；若需登录或查询受限，如实说明并请求必要协助，不要编造物流状态。 --at=2026-10-26T10:00 --target=assistant --sup… | 记下了：下周一（10月26日）上午10点，我帮你查显示器的物流，单号 **JD8812345678**，查完告诉你。 | 58 | 读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md；1 次 1 轮，13453 字节 | 查了 | 过 |
-| 3 | logistics-mon | 2 | schedule list；schedule create 查看用户在京东购买的显示器物流，单号 JD8812345678。商家称下周一前能到；今天是约定跟进日2026年10月26日。通过浏览器查看真实物流进度，向用户报告是否签收、预计送达及是否延误；如查询需要登录或验证，向用户说明并请求必要协助，不臆测物流状态。原会话 s-…9w0e。 --at=2026-10-26T10:00 --target=assistant --supervisor=galley-as… | 安排好了：下周一（10月26日）上午10点，我帮你查显示器的物流，单号 **JD8812345678**，查完告诉你进展。 | 61 | 读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md；1 次 1 轮，13489 字节 | 查了 | 过 |
-| 4 | water-10min | 1 | schedule list；schedule create 提醒用户喝水：用户在主聊天中要求十分钟后提醒喝水。到时直接在主聊天提醒：该喝水啦。主聊天 session s-…9w0e。 --at=2026-10-21T18:20 --target=assistant --supervisor=galley-assistant --reason=用户要求十分钟后提醒喝水 | 好的，十分钟后（18:20）提醒你喝水。 | 20 | 读了（第 1 次调用）：reminders.md、times.md；1 次 1 轮，4770 字节 | 查了 | 过 |
-| 4 | water-10min | 2 | schedule list；schedule create 用户在主聊天 s-…9w0e 请求十分钟后提醒喝水。到时直接提醒用户：该喝水啦。 --at=2026-10-21T18:20 --target=assistant --supervisor=galley-assistant --reason=用户要求十分钟后提醒喝水 | 已设好，十分钟后（18:20）提醒你喝水。 | 21 | 读了（第 1 次调用）：reminders.md、times.md；1 次 1 轮，4676 字节 | 查了 | 过 |
-| 5 | stove-30min | 1 | schedule list；schedule create 提醒用户：时间到了，请现在关火。用户在主聊天要求半小时后提醒关火。 --at=2026-10-21T18:40 --target=assistant --supervisor=galley-assistant --reason=用户要求半小时后提醒关火 | 好的，半小时后（18:40）提醒你关火。 | 20 | 读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md；1 次 1 轮，13451 字节 | 查了 | 过 |
-| 5 | stove-30min | 2 | schedule list；schedule create 提醒用户：时间到了，请关火。用户在18:10要求半小时后提醒关火；在主聊天 s-…9w0e 及时提醒。 --at=2026-10-21T18:40 --target=assistant --supervisor=galley-assistant --reason=用户要求半小时后提醒关火 | 设好了，半小时后（18:40）提醒你关火。 | 21 | 读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md；1 次 1 轮，13451 字节 | 查了 | 过 |
-| 6 | guitar | 1 | — | 想学就试试呀，不用一开始就奔着“练得很专业”，先能弹一首自己喜欢的歌就很有成就感。 ⏎ 你是被哪首歌勾起兴趣的，还是一直想学、最近终于想开始了？家里已经有吉他了吗？ | 81 | 没读（没写） | — | 过 |
-| 6 | guitar | 2 | — | 有没有一首歌，让你特别想自己弹出来？ ⏎ 如果是想**边弹边唱**，可以从木吉他入门；如果喜欢乐队里的失真音色、独奏，也完全可以直接学电吉他，不用先学木吉他。 ⏎ 你之前接触过吗，还是准备从零开始？ | 97 | 没读（没写） | — | 过 |
-| 7 | tired-meeting | 1 | — | 辛苦了。是会开得太久，还是会上要应付的人和事太多？ | 25 | 没读（没写） | — | 过 |
-| 7 | tired-meeting | 2 | — | 辛苦了。是会开得太久，还是讨论的事情特别耗神？ | 23 | 没读（没写） | — | 过 |
-| 8 | daily-news | 1 | — | 每天早上 **8 点**，我查阅当天新闻，整理 **5 条综合要闻，附简短摘要和来源链接**发给你，可以吗？这会每天使用模型并产生相应费用。 | 70 | 读了（第 1 次调用）：reminders.md、times.md、todos.md、unasked.md；1 次 1 轮，13451 字节 | — | 过 |
-| 8 | daily-news | 2 | — | 每天早上 **8 点（本机时间）**，我查当天的国内、国际和科技新闻，整理 **5 条重点摘要，附来源链接**；这会每天调用模型并产生费用，按这样安排可以吗？ | 79 | 读了（第 1 次调用）：reminders.md、times.md、todos.md、unasked.md；1 次 1 轮，13450 字节 | — | 过 |
-| 9 | already-set | 1 | todo list；schedule list | 这件事已经设好提醒了：**10 月 28 日（周三）上午 10 点**提醒你，下午 3 点前把季度报告交给王经理，提交前再核对第 4 页的数据。 | 72 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、reminders.md、times.md；1 次 1 轮，15187 字节 | — | 过 |
-| 9 | already-set | 2 | todo list；schedule list；sessions search 季度报告 --runtime all --all | 这件事已有提醒：**10 月 28 日（周三）上午 10 点**提醒你，下午 3 点前把季度报告交给王经理，提交前再核对第 4 页的数据。不重复设置了。 | 76 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、reminders.md、times.md；1 次 1 轮，15187 字节 | — | 过 |
-| 10 | no-need | 1 | todo list；schedule list；schedule delete sched_2d8e5a1c9f0b7364 --supervisor=galley-assistant --reason=用户已给妈妈打过电话，要求取消周日晚上9点提醒；schedule list | 好，周日晚上 9 点不会再提醒你给妈妈打电话了。 | 24 | 读了（第 1 次调用）：todos.md、todos-change.md、reminders.md、times.md；1 次 1 轮，13256 字节 | — | 过 |
-| 10 | no-need | 2 | todo list；schedule list；schedule delete sched_2d8e5a1c9f0b7364 --supervisor=galley-assistant --reason=user already called mother and requested cancellation of Sunday reminder；schedule list | 周日晚上 9 点不会再提醒你给妈妈打电话了。 | 22 | 读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，6394 字节 | — | 过 |
-| 11 | move-time | 1 | schedule list；todo list；schedule update sched_9a4b2c7e1d0f5836 --at=2026-10-22T09:00 --supervisor=galley-assistant --reason=user requested moving rent reminder to 9am | 已改到明天（10 月 22 日）上午 9 点，提醒你给房东转房租。 | 33 | 读了（第 1 次调用）：reminders.md、times.md、todos-change.md；1 次 1 轮，6390 字节 | — | 过 |
-| 11 | move-time | 2 | todo list；schedule list；schedule update sched_9a4b2c7e1d0f5836 --at=2026-10-22T09:00 --supervisor=galley-assistant --reason=user requested moving rent reminder to tomorrow at 09:00；schedule list | 已改到明天（10 月 22 日）上午 9 点，提醒你给房东转房租。 | 33 | 读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，6427 字节 | — | 过 |
-| 12 | wake-on-time | 1 | — | 明早 8:05 从虹桥站坐 G7 去北京出差，今晚把行李收好，身份证放进随身包。明早记得 **7 点前出门**，留足进站安检的时间。 | 66 | 没读（没写） | — | 过 |
-| 12 | wake-on-time | 2 | — | 明早要赶 8:05 从虹桥站出发去北京的 G7，今晚先把行李收好，身份证、充电器和出差电脑装进包里，免得早上匆忙。闹钟留足洗漱和吃早饭的时间，明早 7 点前出门，路上和进站都留些余量。 | 92 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6083 字节 | — | 过 |
-| 13 | wake-late | 1 | sessions search 王经理 --runtime all --all；todo list --all；session show s-…9w0e --tail=20 | 这条提醒晚了 **9 小时**才送到，抱歉。如果还没给王经理回电话，现在可以联系他确认下周签约的具体日期和几点；不方便通话的话，就先发条消息约个回电时间。 | 77 | 读了（第 1 次调用）：wake.md、reminders.md、times.md、todos-change.md、cli.md；1 次 1 轮，13970 字节 | — | 过 |
-| 13 | wake-late | 2 | sessions search 王经理 --runtime all --all；todo list | 这条提醒晚了 **9小时**。如果还没给王经理回电话，现在可以先发消息问他是否方便通话，把下周合同签约的具体日期和时间确认下来。 | 64 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，7872 字节 | — | 过 |
-| 14 | wake-obsolete | 1 | todo list | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，7869 字节 | — | 过 |
-| 14 | wake-obsolete | 2 | todo list | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、cli.md；1 次 1 轮，11431 字节 | — | 过 |
+| # | 用例 | 遍 | 调了什么命令 | 回复原文 | 字数 | 读手册 | 建前查过 | 第一行（票 105） | 判定 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | report-wed | 1 | todo list；todo add 交报告 --due=2026-10-28 --remind-at=2026-10-28T15:00 --notes=下午提交，具体截止时间未指定。 --supervisor=galley-assistant --reason=用户提到周三下午要交报告，记录截止事项并在今天下午提醒 | 记下了：今天（10月28日，周三）下午交报告，15:00 提醒你。 | 33 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；2 次 2 轮，12233 字节 | 查了 | — | 过 |
+| 1 | report-wed | 2 | todo list；todo add 交报告 --due=2026-10-28 --remind-at=2026-10-28T15:00 --notes=下午提交，具体截止时刻未定。提交前核对：结论、数据、附件、文件版本。 --supervisor=galley-assistant --reason=用户提到周三下午要交报告，今天周三下午尚未结束，记录待办并设置当日下午提醒 | 记下了：今天（10月28日，周三）下午交报告，15:00提醒你。也在待办里加了提交前核对项：结论、数据、附件和文件版本。 | 60 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；2 次 2 轮，12238 字节 | 查了 | — | 过 |
+| 2 | flight-fri | 1 | todo list；todo add 赶早上 7 点的航班 --due=2026-10-30T07:00 --remind-at=2026-10-29T20:00 --notes=提前准备有效乘机证件，核对出发机场、航站楼及值机截止时间，安排去机场的交通。 --supervisor=galley-assistant --reason=用户已订周五早上7点的航班，前一晚提醒准备出行 | 记下了：**10 月 30 日（周五）早上 7 点的航班**。怕当天太赶，已设好周四晚 8 点提醒你准备证件、核对航站楼和安排去机场的交通。 ⏎ 你从哪个机场出发？ | 81 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；2 次 2 轮，16800 字节 | 查了 | — | 过 |
+| 2 | flight-fri | 2 | todo list；todo add 赶早上 7 点的航班 --due=2026-10-30T07:00 --remind-at=2026-10-29T20:00 --notes=出发前核对机场、航站楼和航司值机截止时间，准备有效证件，设好早起闹钟。 --supervisor=galley-assistant --reason=用户已订周五早上7点航班，提前一晚提醒准备出行；todo list | 记下了：本周五（10 月 30 日）早上 7 点的航班，周四晚上 8 点提醒你准备证件、核对航站楼、设好闹钟，免得当天早上太赶。 ⏎ 从哪个机场出发？ | 74 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；1 次 1 轮，16650 字节 | 查了 | — | 过 |
+| 3 | logistics-mon | 1 | schedule list；schedule create 查看京东显示器物流
+
+用户在京东购买了一台显示器，运单号 JD8812345678，商家说下周一前能到。用户明确要求下周一帮忙查看物流。请查询该运单最新物流和是否送达，并在主聊天告知用户；使用真实浏览器查询，不猜测状态。如需要登录或验证，明确告诉用户所需操作。主聊天 session：s-…9w0e。 --at=2026-11-02T10:00 --target=assistant --supervisor… | 记下了，下周一（11月2日）上午10点，我会帮你查显示器的物流，单号 **JD8812345678**，查完告诉你。 | 58 | 读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md；1 次 1 轮，14937 字节 | 查了 | 「查看京东显示器物流」（create，后面有给自己的话；过） | 过 |
+| 3 | logistics-mon | 2 | schedule list；schedule list；schedule create 查看京东显示器物流
+
+京东购买的显示器，物流单号 JD8812345678，承诺2026年11月2日（下周一）前送达。届时通过浏览器查询最新物流和签收状态，并在主聊天 s-…9w0e 告知用户。若未送达，说明可核实的最新节点和预计到达时间；若查询需要登录或验证，明确说明，不编造状态。 --at=2026-11-02T10:00 --target=assistant --supervisor=galley-… | 记下了，下周一（11月2日）上午10点，我会帮你查显示器的物流，单号 **JD8812345678**，查完告诉你。 | 58 | 读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md；1 次 1 轮，14937 字节 | 查了 | 「查看京东显示器物流」（create，后面有给自己的话；过） | 过 |
+| 4 | water-10min | 1 | schedule list；schedule create 该喝水了 --at=2026-10-28T14:57 --target=assistant --supervisor=galley-assistant --reason=用户要求十分钟后提醒喝水；schedule list | 好的，十分钟后（14:57）提醒你喝水。 | 20 | 读了（第 1 次调用）：reminders.md、times.md；1 次 1 轮，5389 字节 | 查了 | 「该喝水了」（create，没有后面的话；过） | 过 |
+| 4 | water-10min | 2 | schedule list；schedule create 该喝水了 --at=2026-10-28T14:57 --target=assistant --supervisor=galley-assistant --reason=用户要求十分钟后提醒喝水 | 好的，十分钟后（14:57）提醒你喝水。 | 20 | 读了（第 1 次调用）：reminders.md、times.md、todos.md；2 次 2 轮，13179 字节 | 查了 | 「该喝水了」（create，没有后面的话；过） | 过 |
+| 5 | stove-30min | 1 | schedule list；schedule create 关火 --at=2026-10-28T15:17 --target=assistant --supervisor=galley-assistant --reason=用户要求半小时后提醒关火；schedule list | 好的，半小时后（15:17）提醒你关火。 | 20 | 读了（第 1 次调用）：reminders.md、times.md、todos.md、unasked.md；2 次 2 轮，15100 字节 | 查了 | 「关火」（create，没有后面的话；过） | 过 |
+| 5 | stove-30min | 2 | schedule list；schedule list；schedule create 关火 --at=2026-10-28T15:17 --target=assistant --supervisor=galley-assistant --reason=用户要求半小时后提醒关火 | 好的，半小时后（15:17）提醒你关火。 | 20 | 读了（第 1 次调用）：reminders.md、times.md、todos.md、unasked.md；2 次 2 轮，15147 字节 | 查了 | 「关火」（create，没有后面的话；过） | 过 |
+| 6 | guitar | 1 | — | 不错啊，你是想学**抱着吉他弹唱**，还是更喜欢**电吉他的独奏、乐队那种感觉**？ ⏎ 还没想好也没关系——有没有哪首歌，让你特别想自己弹出来？从喜欢的歌入门，比一上来啃练习更有动力。 | 92 | 没读（没写） | — | — | 过 |
+| 6 | guitar | 2 | — | 有哪首歌是你特别想自己弹出来的？还是单纯觉得弹吉他很酷，想试试？ ⏎ 零基础也没关系，不用急着买琴、啃乐理，先找到你喜欢的声音和想弹的东西。 | 69 | 没读（没写） | — | — | 过 |
+| 7 | tired-meeting | 1 | — | 辛苦了。今天缓过来一点了吗，还是觉得累？ | 20 | 没读（没写） | — | — | 过 |
+| 7 | tired-meeting | 2 | — | 辛苦了，开会有时候比干活还累。今天缓过来一点了吗？ | 25 | 没读（没写） | — | — | 过 |
+| 8 | daily-news | 1 | — | 每天早上 **8 点**（按电脑本地时间），我查阅最新新闻，给你整理一份**国内、国际、科技要闻简报，附来源链接**；这会每天消耗模型额度，按这个安排可以吗？ | 79 | 读了（第 1 次调用）：reminders.md、times.md、todos.md、unasked.md；1 次 1 轮，14939 字节 | — | — | 过 |
+| 8 | daily-news | 2 | — | 每天早上 **8 点**（按这台电脑的本地时间），给你整理 **5 条国内外重要新闻**，附简短摘要和来源链接；每天会产生模型调用费用，这样安排可以吗？ | 76 | 读了（第 1 次调用）：reminders.md、times.md、todos.md、unasked.md、cli.md；2 次 2 轮，18952 字节 | — | — | 过 |
+| 9 | already-set | 1 | schedule list；sessions search 季度报告 --runtime all --all | 这件事已经安排了：**11 月 4 日（周三）上午 10 点**提醒你，下午 3 点前把季度报告交给王经理，交前再核对第 4 页的数据。 | 68 | 读了（第 1 次调用）：reminders.md、times.md、todos-change.md；1 次 1 轮，7105 字节 | — | — | 过 |
+| 9 | already-set | 2 | schedule list；todo list；sessions search 季度报告 --runtime all --all | 之前已经设好了：**11 月 4 日（周三）上午 10 点**提醒你，下午 3 点前交给王经理，提交前再核对第 4 页的数据。 ⏎ 不过今天也是周三——你这次说的是**今天下午**，还是原来的**下周三**？ | 103 | 读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，7105 字节 | — | — | 过 |
+| 10 | no-need | 1 | todo list；schedule list；schedule delete sched_2d8e5a1c9f0b7364 --supervisor=galley-assistant --reason=用户已给妈妈打过电话，要求取消周日晚上9点的提醒；schedule list | 周日晚上 9 点不会再提醒你给妈妈打电话了。 | 22 | 读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，7105 字节 | — | — | 过 |
+| 10 | no-need | 2 | todo list；schedule list；schedule delete sched_2d8e5a1c9f0b7364 --supervisor=galley-assistant --reason=用户已给妈妈打过电话，要求取消周日晚9点的提醒；schedule list | 已取消，周日晚上 9 点不会再提醒你给妈妈打电话了。 | 26 | 读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，7105 字节 | — | — | 过 |
+| 11 | move-time | 1 | todo list；schedule list；schedule update sched_9a4b2c7e1d0f5836 --at=2026-10-29T09:00 --supervisor=galley-assistant --reason=user requested moving the rent reminder to 9 AM；schedule list | 已改到明天（10 月 29 日）上午 9 点，提醒你给房东转房租。 | 33 | 读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，7103 字节 | — | — | 过 |
+| 11 | move-time | 2 | todo list；schedule list；schedule update sched_9a4b2c7e1d0f5836 --at=2026-10-29T09:00 --supervisor=galley-assistant --reason=user requested moving rent reminder from 10am to 9am；schedule list | 已改到明天（10 月 29 日）上午 9 点，提醒你给房东转房租。 | 33 | 读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，7103 字节 | — | — | 过 |
+| 12 | wake-on-time | 1 | — | 明早要赶 8:05 从虹桥站出发去北京的 G7，今晚把行李收好，身份证先放进随身包，充电器也别漏了。睡前设好闹钟，给洗漱和路程留足时间，明早 7 点前出门。 | 78 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，7342 字节 | — | — | 过 |
+| 12 | wake-on-time | 2 | — | 身份证现在就放进随身包，今晚把行李收好、手机和充电宝充上电，免得明早忙乱。明天是 **8:05 虹桥站出发的 G7**，记得 **7 点前出门**，留足进站安检的时间。 | 84 | 读了（第 1 次调用）：wake.md、subtasks.md；2 次 1 轮，7589 字节 | — | — | 过 |
+| 13 | wake-late | 1 | sessions search 王经理 --runtime all --all；todo list | 这条回电提醒晚了 **9 小时**才送到。如果还没联系王经理，现在可以回个电话，把下周合同签约的具体日期、时间和地点一起确认好。 | 64 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，9135 字节 | — | — | 过 |
+| 13 | wake-late | 2 | todo list；sessions search 王经理 --runtime all --all | 这条提醒晚了 **9 小时**才送到。现在若方便，给王经理回个电话，把下周合同签约的具体日期、时间，以及需要提前准备的材料一起确认好。 | 67 | 读了（第 1 次调用）：wake.md、reminders.md、todos-change.md；1 次 1 轮，11798 字节 | — | — | 过 |
+| 14 | wake-obsolete | 1 | — | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、reminders.md；1 次 1 轮，13705 字节 | — | — | 过 |
+| 14 | wake-obsolete | 2 | todo list；schedule list | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、reminders.md；1 次 1 轮，13705 字节 | — | — | 过 |
 
 ## 1. report-wed（该记待办）
 
@@ -206,39 +261,39 @@
 
 1. code_run
 2. code_run（galley todo list）；galley todo list
-3. code_run（galley todo add）；galley todo add 交报告 --due=2026-10-28 --remind-at=2026-10-27T15:00 --notes=用户说周三下午要交报告。提及时本地时间为2026-10-21周三傍晚，按下一个尚未来到的周三10月28日记录；下午提交，具体时刻未说明。交前核对：数据及引用、结论、附件和提交渠道。 --supervisor=galley-assistant --reason=用户提及周三下午交报告，记录截止日期并提前一天提醒准备
+3. code_run（galley todo add）；galley todo add 交报告 --due=2026-10-28 --remind-at=2026-10-28T15:00 --notes=下午提交，具体截止时间未指定。 --supervisor=galley-assistant --reason=用户提到周三下午要交报告，记录截止事项并在今天下午提醒
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；2 次 2 轮，15327 字节；建前查过：查了；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；2 次 2 轮，12233 字节；建前查过：查了；手册版本：`8b5bd898`。
 
-新建：`sched_7e4a5c0000000000` 2026-10-27T07:00:00+00:00 target=assistant 挂在待办 `todo_7d0d5eed00000000` 上：交报告；记下的待办：`todo_7d0d5eed00000000` 交报告（备注：用户说周三下午要交报告。提及时本地时间为2026-10-21周三傍晚，按下一个尚未来到的周三10月28日记录；下午提交，具体时刻未说明。交前核对：数据及引用、结论、附件和提交渠道。），截止 2026-10-28，没做；删除：无；改动：无。
+新建：`sched_7e4a5c0000000000` 2026-10-28T07:00:00+00:00 target=assistant 挂在待办 `todo_7d0d5eed00000000` 上：交报告；记下的待办：`todo_7d0d5eed00000000` 交报告（备注：下午提交，具体截止时间未指定。），截止 2026-10-28，没做；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-记下了：**10月28日（下周三）下午交报告，27日下午3点提醒你**。现在已是本周三傍晚，我先按下周三记了；交前核对项也附在待办里了。
+记下了：今天（10月28日，周三）下午交报告，15:00 提醒你。
 ```
 
-建议标签：帮我把交报告的提醒改到下周三上午9点
+建议标签：帮我检查报告有没有遗漏
 
 ### 第 2 遍：过
 
 工具调用：
 
 1. code_run
-2. code_run（galley todo list，galley sessions search）；galley todo list；galley sessions search 报告 --runtime all --all
-3. code_run（galley todo add）；galley todo add 交报告 --due=2026-10-28 --remind-at=2026-10-27T18:00 --notes=用户说“周三下午要交报告”；记录时为2026-10-21周三18:09，今天下午已过，按下一个周三10月28日下午理解。具体提交时间及报告主题未提供。 --supervisor=galley-assistant --reason=用户提及交报告的截止事项，记录待办并提前一天提醒
+2. code_run（galley todo list）；galley todo list
+3. code_run（galley todo add）；galley todo add 交报告 --due=2026-10-28 --remind-at=2026-10-28T15:00 --notes=下午提交，具体截止时刻未定。提交前核对：结论、数据、附件、文件版本。 --supervisor=galley-assistant --reason=用户提到周三下午要交报告，今天周三下午尚未结束，记录待办并设置当日下午提醒
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；2 次 2 轮，15652 字节；建前查过：查了；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；2 次 2 轮，12238 字节；建前查过：查了；手册版本：`8b5bd898`。
 
-新建：`sched_7e4a5c0000000000` 2026-10-27T10:00:00+00:00 target=assistant 挂在待办 `todo_7d0d5eed00000000` 上：交报告；记下的待办：`todo_7d0d5eed00000000` 交报告（备注：用户说“周三下午要交报告”；记录时为2026-10-21周三18:09，今天下午已过，按下一个周三10月28日下午理解。具体提交时间及报告主题未提供。），截止 2026-10-28，没做；删除：无；改动：无。
+新建：`sched_7e4a5c0000000000` 2026-10-28T07:00:00+00:00 target=assistant 挂在待办 `todo_7d0d5eed00000000` 上：交报告；记下的待办：`todo_7d0d5eed00000000` 交报告（备注：下午提交，具体截止时刻未定。提交前核对：结论、数据、附件、文件版本。），截止 2026-10-28，没做；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-今天已是周三傍晚，我先按**下周三（10 月 28 日）下午交报告**记下了，**10 月 27 日傍晚 6 点**提醒你。
+记下了：今天（10月28日，周三）下午交报告，15:00提醒你。也在待办里加了提交前核对项：结论、数据、附件和文件版本。
 ```
 
-建议标签：帮我列个报告提纲
+建议标签：把交报告的提醒改到今天16点
 
 ## 2. flight-fri（该记待办）
 
@@ -254,49 +309,45 @@
 
 工具调用：
 
-1. file_read（todos.md）
-2. file_read（unasked.md）
-3. file_read（times.md）
-4. file_read（global_mem.txt）
-5. file_read（todos-change.md）
-6. code_run
-7. update_working_checkpoint
-8. code_run（galley todo list）；galley todo list
-9. code_run（galley todo add）；galley todo add 赶周五早上 7 点的航班 --due=2026-10-23T07:00 --remind-at=2026-10-22T20:00 --notes=用户已订周五早上7点的航班。前晚提醒准备证件、行李，核对值机及登机时间。航班号、出发机场和是否国际航班尚未知，不推定出门时间。 --supervisor=galley-assistant --reason=用户提及已订周五早班机，记录赶飞机待办并于前晚提醒准备，避免临近起飞才提醒
+1. code_run
+2. code_run（galley todo list）；galley todo list
+3. code_run（galley todo add）；galley todo add 赶早上 7 点的航班 --due=2026-10-30T07:00 --remind-at=2026-10-29T20:00 --notes=提前准备有效乘机证件，核对出发机场、航站楼及值机截止时间，安排去机场的交通。 --supervisor=galley-assistant --reason=用户已订周五早上7点的航班，前一晚提醒准备出行
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；4 次 2 轮，11735 字节；建前查过：查了；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；2 次 2 轮，16800 字节；建前查过：查了；手册版本：`8b5bd898`。
 
-新建：`sched_7e4a5c0000000000` 2026-10-22T12:00:00+00:00 target=assistant 挂在待办 `todo_7d0d5eed00000000` 上：赶周五早上 7 点的航班；记下的待办：`todo_7d0d5eed00000000` 赶周五早上 7 点的航班（备注：用户已订周五早上7点的航班。前晚提醒准备证件、行李，核对值机及登机时间。航班号、出发机场和是否国际航班尚未知，不推定出门时间。），截止 2026-10-22T23:00:00+00:00，没做；删除：无；改动：无。
+新建：`sched_7e4a5c0000000000` 2026-10-29T12:00:00+00:00 target=assistant 挂在待办 `todo_7d0d5eed00000000` 上：赶早上 7 点的航班；记下的待办：`todo_7d0d5eed00000000` 赶早上 7 点的航班（备注：提前准备有效乘机证件，核对出发机场、航站楼及值机截止时间，安排去机场的交通。），截止 2026-10-29T23:00:00+00:00，没做；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-记下了：本周五（10 月 23 日）早上 7 点的航班，周四晚 8 点提醒你准备证件、行李并核对值机时间，免得当天太赶。
+记下了：**10 月 30 日（周五）早上 7 点的航班**。怕当天太赶，已设好周四晚 8 点提醒你准备证件、核对航站楼和安排去机场的交通。
+
+你从哪个机场出发？
 ```
 
-建议标签：帮我算算这趟航班几点出门合适
+建议标签：帮我算算这趟早班机几点出门合适
 
 ### 第 2 遍：过
 
 工具调用：
 
 1. code_run
-2. code_run（galley todo list，galley sessions search）；galley todo list；galley sessions search 航班 --runtime all --all
-3. code_run（galley todo list，galley todo add，galley todo list）；galley todo list；galley todo add 赶周五早上 7 点的航班 --due=2026-10-23T07:00 --remind-at=2026-10-22T20:00 --notes=周五早上7点起飞。前一晚准备证件、行李并核对值机与机场出发时间；航班号、机场、国内或国际航班尚未提供。 --supervisor=galley-assistant --reason=用户已订周五早班机，记录赶航班待办并在前一晚提醒准备；galley todo list
+2. code_run（galley todo list）；galley todo list
+3. code_run（galley todo add，galley todo list）；galley todo add 赶早上 7 点的航班 --due=2026-10-30T07:00 --remind-at=2026-10-29T20:00 --notes=出发前核对机场、航站楼和航司值机截止时间，准备有效证件，设好早起闹钟。 --supervisor=galley-assistant --reason=用户已订周五早上7点航班，提前一晚提醒准备出行；galley todo list
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；2 次 2 轮，15318 字节；建前查过：查了；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md、todos-change.md；1 次 1 轮，16650 字节；建前查过：查了；手册版本：`8b5bd898`。
 
-新建：`sched_7e4a5c0000000000` 2026-10-22T12:00:00+00:00 target=assistant 挂在待办 `todo_7d0d5eed00000000` 上：赶周五早上 7 点的航班；记下的待办：`todo_7d0d5eed00000000` 赶周五早上 7 点的航班（备注：周五早上7点起飞。前一晚准备证件、行李并核对值机与机场出发时间；航班号、机场、国内或国际航班尚未提供。），截止 2026-10-22T23:00:00+00:00，没做；删除：无；改动：无。
+新建：`sched_7e4a5c0000000000` 2026-10-29T12:00:00+00:00 target=assistant 挂在待办 `todo_7d0d5eed00000000` 上：赶早上 7 点的航班；记下的待办：`todo_7d0d5eed00000000` 赶早上 7 点的航班（备注：出发前核对机场、航站楼和航司值机截止时间，准备有效证件，设好早起闹钟。），截止 2026-10-29T23:00:00+00:00，没做；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-记下了：这周五（10 月 23 日）早上 7 点的航班，**周四晚 8 点提醒你准备证件、行李，核对值机和去机场的时间**。
+记下了：本周五（10 月 30 日）早上 7 点的航班，周四晚上 8 点提醒你准备证件、核对航站楼、设好闹钟，免得当天早上太赶。
 
-你从哪个机场出发，是国内还是国际航班？
+从哪个机场出发？
 ```
 
-建议标签：帮我算一下这趟早班机几点出门合适
+建议标签：帮我算算这趟早班机几点出门合适
 
 ## 3. logistics-mon（它自己的提醒）
 
@@ -320,19 +371,21 @@
 
 1. code_run
 2. code_run（galley schedule list）；galley schedule list
-3. code_run（galley schedule create）；galley schedule create 查询京东显示器物流：用户在京东买了一台显示器，物流单号 JD8812345678，商家说2026年10月26日（下周一）前能到。用户明确要求下周一帮忙查看物流。请通过浏览器查询最新轨迹、预计送达时间及有无延误，核实后在主会话 s-mgn4k2x1-7q3z9w0e 告知用户；若需登录或查询受限，如实说明并请求必要协助，不要编造物流状态。 --at=2026-10-26T10:00 --target=assistant --supervisor=galley-assistant --reason=用户要求下周一帮忙查看京东显示器物流 JD8812345678
+3. code_run（galley schedule create）；galley schedule create 查看京东显示器物流  用户在京东购买了一台显示器，运单号 JD8812345678，商家说下周一前能到。用户明确要求下周一帮忙查看物流。请查询该运单最新物流和是否送达，并在主聊天告知用户；使用真实浏览器查询，不猜测状态。如需要登录或验证，明确告诉用户所需操作。主聊天 session：s-mgn4k2x1-7q3z9w0e。 --at=2026-11-02T10:00 --target=assistant --supervisor=galley-assistant --reason=用户要求下周一查看京东显示器运单 JD8812345678 的物流
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md；1 次 1 轮，13453 字节；建前查过：查了；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md；1 次 1 轮，14937 字节；建前查过：查了；手册版本：`8b5bd898`。
 
-新建：`sched_5eed000000000000` 2026-10-26T02:00:00+00:00 target=assistant：查询京东显示器物流：用户在京东买了一台显示器，物流单号 JD8812345678，商家说2026年10月26日（下周一）前能到。用户明确要求下周一帮忙查看物流。请通过浏览器查询最新轨迹、预计送达时间及有无延误，核实后在主会话 s-mgn4k2x1-7q3z9w0e 告知用户；若需登录或查询受限，如实说明并请求必要协助，不要编造物流状态。；删除：无；改动：无。
+新建：`sched_5eed000000000000` 2026-11-02T02:00:00+00:00 target=assistant：查看京东显示器物流 ⏎ 用户在京东购买了一台显示器，运单号 JD8812345678，商家说下周一前能到。用户明确要求下周一帮忙查看物流。请查询该运单最新物流和是否送达，并在主聊天告知用户；使用真实浏览器查询，不猜测状态。如需要登录或验证，明确告诉用户所需操作。主聊天 session：s-mgn4k2x1-7q3z9w0e。；删除：无；改动：无。
+
+第一行（票 105）：「查看京东显示器物流」（create，后面有给自己的话；过）
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-记下了：下周一（10月26日）上午10点，我帮你查显示器的物流，单号 **JD8812345678**，查完告诉你。
+记下了，下周一（11月2日）上午10点，我会帮你查显示器的物流，单号 **JD8812345678**，查完告诉你。
 ```
 
-建议标签：把查物流的时间改到周一早上9点
+建议标签：帮我现在也查一下这单物流
 
 ### 第 2 遍：过
 
@@ -340,19 +393,21 @@
 
 1. code_run
 2. code_run（galley schedule list）；galley schedule list
-3. code_run（galley schedule create）；galley schedule create 查看用户在京东购买的显示器物流，单号 JD8812345678。商家称下周一前能到；今天是约定跟进日2026年10月26日。通过浏览器查看真实物流进度，向用户报告是否签收、预计送达及是否延误；如查询需要登录或验证，向用户说明并请求必要协助，不臆测物流状态。原会话 s-mgn4k2x1-7q3z9w0e。 --at=2026-10-26T10:00 --target=assistant --supervisor=galley-assistant --reason=用户明确要求下周一帮忙查看京东显示器物流，单号JD8812345678
+3. code_run（galley schedule list，galley schedule create）；galley schedule list；galley schedule create 查看京东显示器物流  京东购买的显示器，物流单号 JD8812345678，承诺2026年11月2日（下周一）前送达。届时通过浏览器查询最新物流和签收状态，并在主聊天 s-mgn4k2x1-7q3z9w0e 告知用户。若未送达，说明可核实的最新节点和预计到达时间；若查询需要登录或验证，明确说明，不编造状态。 --at=2026-11-02T10:00 --target=assistant --supervisor=galley-assistant --reason=用户要求下周一查看京东显示器物流，单号JD8812345678
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md；1 次 1 轮，13489 字节；建前查过：查了；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md；1 次 1 轮，14937 字节；建前查过：查了；手册版本：`8b5bd898`。
 
-新建：`sched_5eed000000000000` 2026-10-26T02:00:00+00:00 target=assistant：查看用户在京东购买的显示器物流，单号 JD8812345678。商家称下周一前能到；今天是约定跟进日2026年10月26日。通过浏览器查看真实物流进度，向用户报告是否签收、预计送达及是否延误；如查询需要登录或验证，向用户说明并请求必要协助，不臆测物流状态。原会话 s-mgn4k2x1-7q3z9w0e。；删除：无；改动：无。
+新建：`sched_5eed000000000000` 2026-11-02T02:00:00+00:00 target=assistant：查看京东显示器物流 ⏎ 京东购买的显示器，物流单号 JD8812345678，承诺2026年11月2日（下周一）前送达。届时通过浏览器查询最新物流和签收状态，并在主聊天 s-mgn4k2x1-7q3z9w0e 告知用户。若未送达，说明可核实的最新节点和预计到达时间；若查询需要登录或验证，明确说明，不编造状态。；删除：无；改动：无。
+
+第一行（票 105）：「查看京东显示器物流」（create，后面有给自己的话；过）
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-安排好了：下周一（10月26日）上午10点，我帮你查显示器的物流，单号 **JD8812345678**，查完告诉你进展。
+记下了，下周一（11月2日）上午10点，我会帮你查显示器的物流，单号 **JD8812345678**，查完告诉你。
 ```
 
-建议标签：帮我改到下周一下午3点查物流
+建议标签：改到下周一下午3点查物流
 
 ## 4. water-10min（只要提醒）
 
@@ -370,19 +425,21 @@
 
 1. code_run
 2. code_run（galley schedule list）；galley schedule list
-3. code_run（galley schedule create）；galley schedule create 提醒用户喝水：用户在主聊天中要求十分钟后提醒喝水。到时直接在主聊天提醒：该喝水啦。主聊天 session s-mgn4k2x1-7q3z9w0e。 --at=2026-10-21T18:20 --target=assistant --supervisor=galley-assistant --reason=用户要求十分钟后提醒喝水
+3. code_run（galley schedule create，galley schedule list）；galley schedule create 该喝水了 --at=2026-10-28T14:57 --target=assistant --supervisor=galley-assistant --reason=用户要求十分钟后提醒喝水；galley schedule list
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md；1 次 1 轮，4770 字节；建前查过：查了；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md；1 次 1 轮，5389 字节；建前查过：查了；手册版本：`8b5bd898`。
 
-新建：`sched_5eed000000000000` 2026-10-21T10:20:00+00:00 target=assistant：提醒用户喝水：用户在主聊天中要求十分钟后提醒喝水。到时直接在主聊天提醒：该喝水啦。主聊天 session s-mgn4k2x1-7q3z9w0e。；删除：无；改动：无。
+新建：`sched_5eed000000000000` 2026-10-28T06:57:00+00:00 target=assistant：该喝水了；删除：无；改动：无。
+
+第一行（票 105）：「该喝水了」（create，没有后面的话；过）
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-好的，十分钟后（18:20）提醒你喝水。
+好的，十分钟后（14:57）提醒你喝水。
 ```
 
-建议标签：把喝水提醒改到二十分钟后
+建议标签：帮我把喝水提醒改到十五分钟后
 
 ### 第 2 遍：过
 
@@ -390,19 +447,21 @@
 
 1. code_run
 2. code_run（galley schedule list）；galley schedule list
-3. code_run（galley schedule create）；galley schedule create 用户在主聊天 s-mgn4k2x1-7q3z9w0e 请求十分钟后提醒喝水。到时直接提醒用户：该喝水啦。 --at=2026-10-21T18:20 --target=assistant --supervisor=galley-assistant --reason=用户要求十分钟后提醒喝水
+3. code_run（galley schedule create）；galley schedule create 该喝水了 --at=2026-10-28T14:57 --target=assistant --supervisor=galley-assistant --reason=用户要求十分钟后提醒喝水
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md；1 次 1 轮，4676 字节；建前查过：查了；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、todos.md；2 次 2 轮，13179 字节；建前查过：查了；手册版本：`8b5bd898`。
 
-新建：`sched_5eed000000000000` 2026-10-21T10:20:00+00:00 target=assistant：用户在主聊天 s-mgn4k2x1-7q3z9w0e 请求十分钟后提醒喝水。到时直接提醒用户：该喝水啦。；删除：无；改动：无。
+新建：`sched_5eed000000000000` 2026-10-28T06:57:00+00:00 target=assistant：该喝水了；删除：无；改动：无。
+
+第一行（票 105）：「该喝水了」（create，没有后面的话；过）
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-已设好，十分钟后（18:20）提醒你喝水。
+好的，十分钟后（14:57）提醒你喝水。
 ```
 
-建议标签：把喝水提醒改成二十分钟后
+建议标签：把喝水提醒改到二十分钟后
 
 ## 5. stove-30min（只要提醒）
 
@@ -420,19 +479,21 @@
 
 1. code_run
 2. code_run（galley schedule list）；galley schedule list
-3. code_run（galley schedule create）；galley schedule create 提醒用户：时间到了，请现在关火。用户在主聊天要求半小时后提醒关火。 --at=2026-10-21T18:40 --target=assistant --supervisor=galley-assistant --reason=用户要求半小时后提醒关火
+3. code_run（galley schedule create，galley schedule list）；galley schedule create 关火 --at=2026-10-28T15:17 --target=assistant --supervisor=galley-assistant --reason=用户要求半小时后提醒关火；galley schedule list
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md；1 次 1 轮，13451 字节；建前查过：查了；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、todos.md、unasked.md；2 次 2 轮，15100 字节；建前查过：查了；手册版本：`8b5bd898`。
 
-新建：`sched_5eed000000000000` 2026-10-21T10:40:00+00:00 target=assistant：提醒用户：时间到了，请现在关火。用户在主聊天要求半小时后提醒关火。；删除：无；改动：无。
+新建：`sched_5eed000000000000` 2026-10-28T07:17:00+00:00 target=assistant：关火；删除：无；改动：无。
+
+第一行（票 105）：「关火」（create，没有后面的话；过）
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-好的，半小时后（18:40）提醒你关火。
+好的，半小时后（15:17）提醒你关火。
 ```
 
-建议标签：把关火提醒提前5分钟
+建议标签：取消关火提醒
 
 ### 第 2 遍：过
 
@@ -440,19 +501,21 @@
 
 1. code_run
 2. code_run（galley schedule list）；galley schedule list
-3. code_run（galley schedule create）；galley schedule create 提醒用户：时间到了，请关火。用户在18:10要求半小时后提醒关火；在主聊天 s-mgn4k2x1-7q3z9w0e 及时提醒。 --at=2026-10-21T18:40 --target=assistant --supervisor=galley-assistant --reason=用户要求半小时后提醒关火
+3. code_run（galley schedule list，galley schedule create）；galley schedule list；galley schedule create 关火 --at=2026-10-28T15:17 --target=assistant --supervisor=galley-assistant --reason=用户要求半小时后提醒关火
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、reminders.md、times.md；1 次 1 轮，13451 字节；建前查过：查了；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、todos.md、unasked.md；2 次 2 轮，15147 字节；建前查过：查了；手册版本：`8b5bd898`。
 
-新建：`sched_5eed000000000000` 2026-10-21T10:40:00+00:00 target=assistant：提醒用户：时间到了，请关火。用户在18:10要求半小时后提醒关火；在主聊天 s-mgn4k2x1-7q3z9w0e 及时提醒。；删除：无；改动：无。
+新建：`sched_5eed000000000000` 2026-10-28T07:17:00+00:00 target=assistant：关火；删除：无；改动：无。
+
+第一行（票 105）：「关火」（create，没有后面的话；过）
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-设好了，半小时后（18:40）提醒你关火。
+好的，半小时后（15:17）提醒你关火。
 ```
 
-建议标签：火已经关了，取消提醒
+建议标签：把关火提醒提前五分钟
 
 ## 6. guitar（不该建）
 
@@ -466,37 +529,35 @@
 
 ### 第 1 遍：过
 
-结束：以最终回复结束；读手册：没读（没写）；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：没读（没写）；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-想学就试试呀，不用一开始就奔着“练得很专业”，先能弹一首自己喜欢的歌就很有成就感。
+不错啊，你是想学**抱着吉他弹唱**，还是更喜欢**电吉他的独奏、乐队那种感觉**？
 
-你是被哪首歌勾起兴趣的，还是一直想学、最近终于想开始了？家里已经有吉他了吗？
+还没想好也没关系——有没有哪首歌，让你特别想自己弹出来？从喜欢的歌入门，比一上来啃练习更有动力。
 ```
 
-建议标签：帮我看看学吉他该从哪开始
+建议标签：帮我看看我喜欢的歌适合用哪种吉他弹
 
 ### 第 2 遍：过
 
-结束：以最终回复结束；读手册：没读（没写）；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：没读（没写）；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-有没有一首歌，让你特别想自己弹出来？
+有哪首歌是你特别想自己弹出来的？还是单纯觉得弹吉他很酷，想试试？
 
-如果是想**边弹边唱**，可以从木吉他入门；如果喜欢乐队里的失真音色、独奏，也完全可以直接学电吉他，不用先学木吉他。
-
-你之前接触过吗，还是准备从零开始？
+零基础也没关系，不用急着买琴、啃乐理，先找到你喜欢的声音和想弹的东西。
 ```
 
-建议标签：帮我看看零基础学吉他从哪开始
+建议标签：帮我理一理，零基础学吉他该从哪开始
 
 ## 7. tired-meeting（不该建）
 
@@ -510,31 +571,31 @@
 
 ### 第 1 遍：过
 
-结束：以最终回复结束；读手册：没读（没写）；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：没读（没写）；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-辛苦了。是会开得太久，还是会上要应付的人和事太多？
+辛苦了。今天缓过来一点了吗，还是觉得累？
 ```
 
-建议标签：陪我聊聊昨天开会的事
+建议标签：陪我聊聊昨天的会
 
 ### 第 2 遍：过
 
-结束：以最终回复结束；读手册：没读（没写）；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：没读（没写）；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-辛苦了。是会开得太久，还是讨论的事情特别耗神？
+辛苦了，开会有时候比干活还累。今天缓过来一点了吗？
 ```
 
-建议标签：陪我聊聊昨天开会的事
+建议标签：陪我吐槽一下昨天的会
 
 ## 8. daily-news（该先问）
 
@@ -552,35 +613,36 @@
 
 1. code_run
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、todos.md、unasked.md；1 次 1 轮，13451 字节；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、todos.md、unasked.md；1 次 1 轮，14939 字节；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-每天早上 **8 点**，我查阅当天新闻，整理 **5 条综合要闻，附简短摘要和来源链接**发给你，可以吗？这会每天使用模型并产生相应费用。
+每天早上 **8 点**（按电脑本地时间），我查阅最新新闻，给你整理一份**国内、国际、科技要闻简报，附来源链接**；这会每天消耗模型额度，按这个安排可以吗？
 ```
 
-建议标签：可以，就每天早上8点，给我5条综合要闻
+建议标签：可以，就按每天早上8点安排新闻简报
 
 ### 第 2 遍：过
 
 工具调用：
 
 1. code_run
+2. code_run
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、todos.md、unasked.md；1 次 1 轮，13450 字节；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、todos.md、unasked.md、cli.md；2 次 2 轮，18952 字节；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-每天早上 **8 点（本机时间）**，我查当天的国内、国际和科技新闻，整理 **5 条重点摘要，附来源链接**；这会每天调用模型并产生费用，按这样安排可以吗？
+每天早上 **8 点**（按这台电脑的本地时间），给你整理 **5 条国内外重要新闻**，附简短摘要和来源链接；每天会产生模型调用费用，这样安排可以吗？
 ```
 
-建议标签：可以，就按每天早上8点，整理5条重点新闻
+建议标签：可以，就按每天早上8点安排
 
 ## 9. already-set（已有同一件）
 
@@ -588,7 +650,7 @@
 
 已有的定时任务（运行那一刻的时间）：
 
-- `sched_6c1f0e9a2b7d4385` 2026-10-28T02:00:00+00:00，在「In Hand」里：提醒用户周三下午 3 点前把季度报告交给王经理。报告在 ~/Documents/Q3 季度报告.docx，交之前再核对一遍第 4 页的数据。
+- `sched_6c1f0e9a2b7d4385` 2026-11-04T02:00:00+00:00，在「In Hand」里：提醒用户周三下午 3 点前把季度报告交给王经理。报告在 ~/Documents/Q3 季度报告.docx，交之前再核对一遍第 4 页的数据。
 
 用户：
 
@@ -601,16 +663,16 @@
 工具调用：
 
 1. code_run
-2. code_run（galley todo list，galley schedule list）；galley todo list；galley schedule list
+2. code_run（galley schedule list，galley sessions search）；galley schedule list；galley sessions search 季度报告 --runtime all --all
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、reminders.md、times.md；1 次 1 轮，15187 字节；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、todos-change.md；1 次 1 轮，7105 字节；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-这件事已经设好提醒了：**10 月 28 日（周三）上午 10 点**提醒你，下午 3 点前把季度报告交给王经理，提交前再核对第 4 页的数据。
+这件事已经安排了：**11 月 4 日（周三）上午 10 点**提醒你，下午 3 点前把季度报告交给王经理，交前再核对第 4 页的数据。
 ```
 
 建议标签：帮我检查季度报告第 4 页的数据
@@ -620,19 +682,21 @@
 工具调用：
 
 1. code_run
-2. code_run（galley todo list，galley schedule list，galley sessions search）；galley todo list；galley schedule list；galley sessions search 季度报告 --runtime all --all
+2. code_run（galley schedule list，galley todo list，galley sessions search）；galley schedule list；galley todo list；galley sessions search 季度报告 --runtime all --all
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、reminders.md、times.md；1 次 1 轮，15187 字节；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，7105 字节；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-这件事已有提醒：**10 月 28 日（周三）上午 10 点**提醒你，下午 3 点前把季度报告交给王经理，提交前再核对第 4 页的数据。不重复设置了。
+之前已经设好了：**11 月 4 日（周三）上午 10 点**提醒你，下午 3 点前交给王经理，提交前再核对第 4 页的数据。
+
+不过今天也是周三——你这次说的是**今天下午**，还是原来的**下周三**？
 ```
 
-建议标签：帮我列一下季度报告提交前的检查项
+建议标签：帮我确认一下季度报告的截止日期
 
 ## 10. no-need（不用了）
 
@@ -646,7 +710,7 @@
 
 已有的定时任务（运行那一刻的时间）：
 
-- `sched_2d8e5a1c9f0b7364` 2026-10-25T13:00:00+00:00：提醒用户给妈妈打电话（用户周五说的，周日晚上 9 点）。
+- `sched_2d8e5a1c9f0b7364` 2026-11-01T13:00:00+00:00：提醒用户给妈妈打电话（用户周五说的，周日晚上 9 点）。
 
 用户：
 
@@ -660,16 +724,16 @@
 
 1. code_run
 2. code_run（galley todo list，galley schedule list）；galley todo list；galley schedule list
-3. code_run（galley schedule delete，galley schedule list）；galley schedule delete sched_2d8e5a1c9f0b7364 --supervisor=galley-assistant --reason=用户已给妈妈打过电话，要求取消周日晚上9点提醒；galley schedule list
+3. code_run（galley schedule delete，galley schedule list）；galley schedule delete sched_2d8e5a1c9f0b7364 --supervisor=galley-assistant --reason=用户已给妈妈打过电话，要求取消周日晚上9点的提醒；galley schedule list
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、todos-change.md、reminders.md、times.md；1 次 1 轮，13256 字节；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，7105 字节；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：sched_2d8e5a1c9f0b7364；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-好，周日晚上 9 点不会再提醒你给妈妈打电话了。
+周日晚上 9 点不会再提醒你给妈妈打电话了。
 ```
 
 建议标签：帮我看看还有哪些提醒
@@ -680,16 +744,16 @@
 
 1. code_run
 2. code_run（galley todo list，galley schedule list）；galley todo list；galley schedule list
-3. code_run（galley schedule delete，galley schedule list）；galley schedule delete sched_2d8e5a1c9f0b7364 --supervisor=galley-assistant --reason=user already called mother and requested cancellation of Sunday reminder；galley schedule list
+3. code_run（galley schedule delete，galley schedule list）；galley schedule delete sched_2d8e5a1c9f0b7364 --supervisor=galley-assistant --reason=用户已给妈妈打过电话，要求取消周日晚9点的提醒；galley schedule list
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，6394 字节；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，7105 字节；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：sched_2d8e5a1c9f0b7364；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-周日晚上 9 点不会再提醒你给妈妈打电话了。
+已取消，周日晚上 9 点不会再提醒你给妈妈打电话了。
 ```
 
 建议标签：帮我看看还有哪些提醒
@@ -706,7 +770,7 @@
 
 已有的定时任务（运行那一刻的时间）：
 
-- `sched_9a4b2c7e1d0f5836` 2026-10-22T02:00:00+00:00：提醒用户给房东转这个月的房租。
+- `sched_9a4b2c7e1d0f5836` 2026-10-29T02:00:00+00:00：提醒用户给房东转这个月的房租。
 
 用户：
 
@@ -719,20 +783,20 @@
 工具调用：
 
 1. code_run
-2. code_run（galley schedule list，galley todo list）；galley schedule list；galley todo list
-3. code_run（galley schedule update）；galley schedule update sched_9a4b2c7e1d0f5836 --at=2026-10-22T09:00 --supervisor=galley-assistant --reason=user requested moving rent reminder to 9am
+2. code_run（galley todo list，galley schedule list）；galley todo list；galley schedule list
+3. code_run（galley schedule update，galley schedule list）；galley schedule update sched_9a4b2c7e1d0f5836 --at=2026-10-29T09:00 --supervisor=galley-assistant --reason=user requested moving the rent reminder to 9 AM；galley schedule list
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、times.md、todos-change.md；1 次 1 轮，6390 字节；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，7103 字节；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：无；改动：sched_9a4b2c7e1d0f5836。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-已改到明天（10 月 22 日）上午 9 点，提醒你给房东转房租。
+已改到明天（10 月 29 日）上午 9 点，提醒你给房东转房租。
 ```
 
-建议标签：帮我看看还有哪些提醒
+建议标签：帮我把房租提醒设成每月重复
 
 ### 第 2 遍：过
 
@@ -740,19 +804,19 @@
 
 1. code_run
 2. code_run（galley todo list，galley schedule list）；galley todo list；galley schedule list
-3. code_run（galley schedule update，galley schedule list）；galley schedule update sched_9a4b2c7e1d0f5836 --at=2026-10-22T09:00 --supervisor=galley-assistant --reason=user requested moving rent reminder to tomorrow at 09:00；galley schedule list
+3. code_run（galley schedule update，galley schedule list）；galley schedule update sched_9a4b2c7e1d0f5836 --at=2026-10-29T09:00 --supervisor=galley-assistant --reason=user requested moving rent reminder from 10am to 9am；galley schedule list
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，6427 字节；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，7103 字节；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：无；改动：sched_9a4b2c7e1d0f5836。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-已改到明天（10 月 22 日）上午 9 点，提醒你给房东转房租。
+已改到明天（10 月 29 日）上午 9 点，提醒你给房东转房租。
 ```
 
-建议标签：帮我查看目前所有提醒
+建议标签：帮我看看还有哪些提醒
 
 ## 12. wake-on-time（叫醒）
 
@@ -760,51 +824,58 @@
 
 已有的定时任务（运行那一刻的时间）：
 
-- `sched_4e7a1b9c2d3f0685` 2026-10-21T10:08:47+00:00，已到点：提醒用户：明早 8:05 虹桥站的 G7 次高铁去北京出差。今晚把行李收好、身份证放进包里，明早 7 点前出门。
+- `sched_4e7a1b9c2d3f0685` 2026-10-28T06:52:09+00:00，已到点：收好行李，带上身份证 ⏎ 明早 8:05 虹桥站的 G7 次高铁去北京出差。今晚把行李收好、身份证放进包里，明早 7 点前出门。
 
 叫醒消息：
 
 ```text
 [Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.
 
-Reminder `sched_4e7a1b9c2d3f0685` (one-off) came due. Planned for 2026-10-21 18:08 (Wed), local time. What you noted when you set it:
+Reminder `sched_4e7a1b9c2d3f0685` (one-off) came due. Planned for 2026-10-28 14:52 (Wed), local time. What you noted when you set it:
 <<<
-提醒用户：明早 8:05 虹桥站的 G7 次高铁去北京出差。今晚把行李收好、身份证放进包里，明早 7 点前出门。
+收好行李，带上身份证
+
+明早 8:05 虹桥站的 G7 次高铁去北京出差。今晚把行李收好、身份证放进包里，明早 7 点前出门。
 >>>
 Act on it now: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.
 ```
 
 ### 第 1 遍：过
 
-结束：以最终回复结束；读手册：没读（没写）；建前查过：—；手册版本：`42fc37c8`。
+工具调用：
+
+1. code_run
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，7342 字节；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-明早 8:05 从虹桥站坐 G7 去北京出差，今晚把行李收好，身份证放进随身包。明早记得 **7 点前出门**，留足进站安检的时间。
+明早要赶 8:05 从虹桥站出发去北京的 G7，今晚把行李收好，身份证先放进随身包，充电器也别漏了。睡前设好闹钟，给洗漱和路程留足时间，明早 7 点前出门。
 ```
 
-建议标签：帮我列一份明早出门前的检查清单
+建议标签：帮我列个这次北京出差的行李清单
 
 ### 第 2 遍：过
 
 工具调用：
 
-1. code_run
+1. file_read（wake.md）
+2. file_read（subtasks.md）
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，6083 字节；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；2 次 1 轮，7589 字节；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-明早要赶 8:05 从虹桥站出发去北京的 G7，今晚先把行李收好，身份证、充电器和出差电脑装进包里，免得早上匆忙。闹钟留足洗漱和吃早饭的时间，明早 7 点前出门，路上和进站都留些余量。
+身份证现在就放进随身包，今晚把行李收好、手机和充电宝充上电，免得明早忙乱。明天是 **8:05 虹桥站出发的 G7**，记得 **7 点前出门**，留足进站安检的时间。
 ```
 
-建议标签：帮我列一份明早出门前的检查清单
+建议标签：帮我列一份北京出差行李清单
 
 ## 13. wake-late（叫醒）
 
@@ -812,16 +883,18 @@ Act on it now: tell the user what is of use to them now, in a sentence or two (n
 
 已有的定时任务（运行那一刻的时间）：
 
-- `sched_7b3d9e0f1a2c6548` 2026-10-21T01:08:47+00:00，已到点：提醒用户给王经理回电话，确认下周合同签约的时间。
+- `sched_7b3d9e0f1a2c6548` 2026-10-27T21:45:38+00:00，已到点：给王经理回电话 ⏎ 确认下周合同签约的时间。
 
 叫醒消息：
 
 ```text
 [Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.
 
-Reminder `sched_7b3d9e0f1a2c6548` (one-off) came due. Planned for 2026-10-21 09:08 (Wed), local time; it went off at 2026-10-21 18:08 (Wed), 9 hours late (the computer was asleep or Galley was closed). What you noted when you set it:
+Reminder `sched_7b3d9e0f1a2c6548` (one-off) came due. Planned for 2026-10-28 05:45 (Wed), local time; it went off at 2026-10-28 14:45 (Wed), 9 hours late (the computer was asleep or Galley was closed). What you noted when you set it:
 <<<
-提醒用户给王经理回电话，确认下周合同签约的时间。
+给王经理回电话
+
+确认下周合同签约的时间。
 >>>
 Act on it now, and say in the reply itself (the user does not see your summary) that it comes 9 hours late: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.
 ```
@@ -831,39 +904,38 @@ Act on it now, and say in the reply itself (the user does not see your summary) 
 工具调用：
 
 1. code_run
-2. code_run（galley sessions search，galley todo list）；galley sessions search 王经理 --runtime all --all；galley todo list --all
-3. code_run（galley session show）；galley session show s-mgn4k2x1-7q3z9w0e --tail=20
+2. code_run（galley sessions search，galley todo list）；galley sessions search 王经理 --runtime all --all；galley todo list
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、reminders.md、times.md、todos-change.md、cli.md；1 次 1 轮，13970 字节；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，9135 字节；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-这条提醒晚了 **9 小时**才送到，抱歉。如果还没给王经理回电话，现在可以联系他确认下周签约的具体日期和几点；不方便通话的话，就先发条消息约个回电时间。
+这条回电提醒晚了 **9 小时**才送到。如果还没联系王经理，现在可以回个电话，把下周合同签约的具体日期、时间和地点一起确认好。
 ```
 
-建议标签：帮我拟一条给王经理确认下周签约时间的微信
+建议标签：帮我拟一条发给王经理确认签约时间的消息
 
 ### 第 2 遍：过
 
 工具调用：
 
 1. code_run
-2. code_run（galley sessions search，galley todo list）；galley sessions search 王经理 --runtime all --all；galley todo list
+2. code_run（galley todo list，galley sessions search）；galley todo list；galley sessions search 王经理 --runtime all --all
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，7872 字节；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、reminders.md、todos-change.md；1 次 1 轮，11798 字节；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-这条提醒晚了 **9小时**。如果还没给王经理回电话，现在可以先发消息问他是否方便通话，把下周合同签约的具体日期和时间确认下来。
+这条提醒晚了 **9 小时**才送到。现在若方便，给王经理回个电话，把下周合同签约的具体日期、时间，以及需要提前准备的材料一起确认好。
 ```
 
-建议标签：帮我拟一条发给王经理、确认下周签约时间的微信
+建议标签：帮我拟一句给王经理确认签约时间的微信
 
 ## 14. wake-obsolete（叫醒）
 
@@ -877,16 +949,18 @@ Act on it now, and say in the reply itself (the user does not see your summary) 
 
 已有的定时任务（运行那一刻的时间）：
 
-- `sched_0f5c8a3e6b1d2947` 2026-10-21T10:08:47+00:00，已到点：提醒用户去菜鸟驿站取快递（取件码 8-3-2041）。
+- `sched_0f5c8a3e6b1d2947` 2026-10-28T06:45:38+00:00，已到点：去菜鸟驿站取快递 ⏎ 取件码 8-3-2041。
 
 叫醒消息：
 
 ```text
 [Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.
 
-Reminder `sched_0f5c8a3e6b1d2947` (one-off) came due. Planned for 2026-10-21 18:08 (Wed), local time. What you noted when you set it:
+Reminder `sched_0f5c8a3e6b1d2947` (one-off) came due. Planned for 2026-10-28 14:45 (Wed), local time. What you noted when you set it:
 <<<
-提醒用户去菜鸟驿站取快递（取件码 8-3-2041）。
+去菜鸟驿站取快递
+
+取件码 8-3-2041。
 >>>
 Act on it now: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.
 ```
@@ -896,9 +970,8 @@ Act on it now: tell the user what is of use to them now, in a sentence or two (n
 工具调用：
 
 1. code_run
-2. code_run（galley todo list）；galley todo list
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，7869 字节；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、reminders.md；1 次 1 轮，13705 字节；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：无；改动：无。
 
@@ -913,9 +986,9 @@ Act on it now: tell the user what is of use to them now, in a sentence or two (n
 工具调用：
 
 1. code_run
-2. code_run（galley todo list）；galley todo list
+2. code_run（galley todo list，galley schedule list）；galley todo list；galley schedule list
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、cli.md；1 次 1 轮，11431 字节；建前查过：—；手册版本：`42fc37c8`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、reminders.md；1 次 1 轮，13705 字节；建前查过：—；手册版本：`8b5bd898`。
 
 新建：无；删除：无；改动：无。
 

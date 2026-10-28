@@ -1,5 +1,5 @@
 {
- "_note": "定时与提醒评测用例（票 36）。history 是主对话当前段里已有的轮次；tasks 是假 CLI 里已有的定时任务（时间按运行那一刻算：next_weekday 是今天之后第一个星期几，days 是今天之后第几天，minutes_ago 是几分钟前；in_hand 为真的在提示词的「In Hand」一节里列出，即分段开始时就有；fired 表示已经到点、等着叫醒）；message 是用户这句，wake 列出这次叫醒里到点的任务，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 41：expect.via 为 either 的，挂在待办上的提醒（todo add --remind-at）也算建了那一个；不写 via 的只认 schedule create；票 44 起两边分开：via 为 todo 的（要办完的事：交报告、航班）只认挂在待办上的提醒，建成它自己的提醒算错；只要提醒一下、没有要办完的事（喝水、关火）不写 via，只认 schedule create，记成待办算错；keep_or_replace 是已有的那个留着、或删了换成一个在窗口里的。",
+ "_note": "定时与提醒评测用例（票 36）。history 是主对话当前段里已有的轮次；tasks 是假 CLI 里已有的定时任务（时间按运行那一刻算：next_weekday 是今天之后第一个星期几，days 是今天之后第几天，minutes_ago 是几分钟前；in_hand 为真的在提示词的「In Hand」一节里列出，即分段开始时就有；fired 表示已经到点、等着叫醒）；message 是用户这句，wake 列出这次叫醒里到点的任务，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 41：expect.via 为 either 的，挂在待办上的提醒（todo add --remind-at）也算建了那一个；不写 via 的只认 schedule create；票 44 起两边分开：via 为 todo 的（要办完的事：交报告、航班）只认挂在待办上的提醒，建成它自己的提醒算错；只要提醒一下、没有要办完的事（喝水、关火）不写 via，只认 schedule create，记成待办算错；keep_or_replace 是已有的那个留着、或删了换成一个在窗口里的。票 105（主对话 PRD 裁决 151）：每一次 schedule create 与 schedule update --prompt 的原文另判第一行（run.py 的 first_line_problems，取法同 GUI 的 reminderFirstLine：第一个非空行、去首尾空白）：不含「用户」「JC」（那是关于用户的记录，不是给用户看的标题），不以「提醒」开头（卡片本来就是提醒），不含时间或日子（数字加点、冒号、号、日、月，中文数字加点、号，今天、明天、早上、下午、周X、下周、月底、N 分钟后等；卡片旁边已经写着时间），不超过 20 个字（一件事的标题，卡片上一行）；原文里是字面的 \\n 也不过（GUI 会把它和后面的字一起显示）。旧判定照旧。三条叫醒用例的 tasks[].prompt 换成新写法（第一行给人、空行、写给自己的），内容同票 105 之前。",
  "cases": [
   {
    "id": "report-wed",
@@ -321,7 +321,7 @@
      "id": "sched_4e7a1b9c2d3f0685",
      "in_hand": false,
      "origin": "assistant",
-     "prompt": "提醒用户：明早 8:05 虹桥站的 G7 次高铁去北京出差。今晚把行李收好、身份证放进包里，明早 7 点前出门。",
+     "prompt": "收好行李，带上身份证\n\n明早 8:05 虹桥站的 G7 次高铁去北京出差。今晚把行李收好、身份证放进包里，明早 7 点前出门。",
      "at": {
       "minutes_ago": 0
      },
@@ -358,7 +358,7 @@
      "id": "sched_7b3d9e0f1a2c6548",
      "in_hand": false,
      "origin": "assistant",
-     "prompt": "提醒用户给王经理回电话，确认下周合同签约的时间。",
+     "prompt": "给王经理回电话\n\n确认下周合同签约的时间。",
      "at": {
       "minutes_ago": 540
      },
@@ -408,7 +408,7 @@
      "id": "sched_0f5c8a3e6b1d2947",
      "in_hand": false,
      "origin": "assistant",
-     "prompt": "提醒用户去菜鸟驿站取快递（取件码 8-3-2041）。",
+     "prompt": "去菜鸟驿站取快递\n\n取件码 8-3-2041。",
      "at": {
       "minutes_ago": 0
      },

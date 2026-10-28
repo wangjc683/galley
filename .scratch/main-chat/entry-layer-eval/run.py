@@ -2877,8 +2877,8 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
         "sched-nudge": [
             call("<summary>Set it</summary>\n设一个。", ("code_run", {"type": "bash", "script":
                  'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; AT="$(date -v+30M +%Y-%m-%dT%H:%M)"; '
-                 '"$G" schedule list >/dev/null; "$G" schedule create "提醒用户关火" --at="$AT" --target=assistant '
-                 '--supervisor=galley-assistant --reason="user asked"'})),
+                 '"$G" schedule list >/dev/null; "$G" schedule create $\'关火\\n\\n用户要半小时后提醒；到时简短提醒。\' '
+                 '--at="$AT" --target=assistant --supervisor=galley-assistant --reason="user asked"'})),
             call("<summary>Set</summary>\n好，半小时后提醒你关火。")],
         "sched-own-for-todo": [
             call("<summary>Set it</summary>\n设一个。", ("code_run", {"type": "bash", "script":
@@ -4496,6 +4496,12 @@ RERUN_INTROS = {
           "同一个模型（票 73 起是API key 接入的 gpt-6.1-sol，`mm_1792576875658`；之前的API key 条目已从库里删掉）。两次都用现在的"
           "判定重判（票 73 起回复里有「要不要我」一类建议的都注出来，`no_offer` 的用例判它）。只比两次都有的用例；票 73 新加的"
           "用例只有这一次，它们在票 73 之前的提示词与手册下各跑了一遍，是「同日对照」（`meta.ticket73_control`）。",
+    "105": "上一次是票 73 的结果，这一次是票 105 改了手册 `reminders.md` 之后（主对话 PRD 裁决 151：原文第一行写给用户看，"
+           "像待办的标题，不写时间、不写「用户要求」「提醒用户」、不用第三人称；需要时空一行，再写到点时自己要的；`schedule update "
+           "--prompt` 同样写），同一个模型（API key 接入的 gpt-6.1-sol，`mm_1792576875658`）。入口层、Core 的叫醒说明、"
+           "`galley-prompt/`、`rust-samples.json`、`cli-help.json` 都没动。三条叫醒用例（`wake-on-time`、`wake-late`、"
+           "`wake-obsolete`）预先放着的任务原文换成了新写法（第一行给人、空行、写给自己的，内容不变），叫醒消息照 Core 的措辞把全文"
+           "交给它，让叫醒那一侧在新写法下也测到。这张表比的是原有判定（第一行另见下一节「票 105：第一行」），两次都用现在的原有判定重判。",
     "64": "上一次是票 63 的结果，这一次是票 64 改了入口层的待办那一段之后（「Do it unasked」改成先读 `todos.md` 再说要记，"
           "底线加了「没写下就不提记」）。两次都用现在的判定重判（票 64 起什么都不该设的用例判「最终回复不提改口」）。"
           "待办评测另有「同日对照」：同一时段用票 63 的提示词跑的基线（`meta.ticket64_control`，只跑了不该设的那 7 条）。",
@@ -4853,6 +4859,85 @@ def says_time(text: str, at: datetime, now: datetime, started: datetime) -> bool
     return hour_ok and day_ok
 
 
+# Ticket 105 (main chat PRD ruling 151): the first line of the words of
+# each `schedule create` and `schedule update --prompt` is for the user,
+# like a to-do's title; the reminder card, the to-do panel's rows,
+# 「说说这件」 and an undelivered reminder's notification show it alone
+# (gui/src/lib/reminder-first-line.ts `reminderFirstLine`), and what
+# follows a blank line is the model's notes to itself. Judged on every
+# such command in the schedule suite, beside the earlier rules (which
+# stay as they were): the first line names no 「用户」 or 「JC」 (a record
+# about the user, not a title for them), does not open with 「提醒」 (the
+# card already says it is a reminder), carries no time or day (the card
+# shows when; FIRST_LINE_TIME_RE), and is at most FIRST_LINE_MAX
+# characters (a title, one line on the card). A literal backslash-n in
+# the words fails too: the GUI would show it and all that follows.
+FIRST_LINE_MAX = 20
+FIRST_LINE_TIME_RE = re.compile(
+    # Digits then a clock or calendar unit: 3点, 15:00, 20号, 10月, 28日.
+    r"[0-9\uff10-\uff19]+\s*(?:点|时|:|：|号|日|月)"
+    # Chinese numerals then 点 or 号 (三点, 十一点, 二十号); not a lone
+    # 一点, which mostly means 「a bit」 (少喝一点).
+    r"|[二三四五六七八九十两][一二三四五六七八九十]*\s*(?:点|号)"
+    r"|今天|明天|后天|昨天|今晚|明晚|今早|明早|今日|明日"
+    r"|早上|上午|中午|下午|傍晚|晚上|凌晨"
+    r"|(?:周|星期|礼拜)[一二三四五六日天末]|下周|这周|本周|下个?月|月底|月初"
+    r"|(?:分钟|小时)后")
+
+
+def first_line(words: str) -> str:
+    """The rule of gui/src/lib/reminder-first-line.ts `reminderFirstLine`:
+    the first line that is not blank, trimmed; words with no line break
+    are the whole of them."""
+    for line in re.split(r"\r\n|\r|\n", words):
+        if line.strip():
+            return line.strip()
+    return ""
+
+
+def first_line_problems(words: str) -> tuple[str, list[str]]:
+    """Ticket 105: the first line of a reminder's words and what is wrong
+    with it as the user's title (empty when nothing is)."""
+    line = first_line(words)
+    problems = []
+    if "\\n" in words:
+        problems.append("原文里是字面的「\\n」，不是换行")
+    if not line:
+        return line, problems + ["第一行是空的"]
+    if "用户" in line:
+        problems.append("写了「用户」")
+    if "jc" in line.lower():
+        problems.append("写了「JC」")
+    if line.startswith("提醒"):
+        problems.append("以「提醒」开头")
+    hits = list(dict.fromkeys(m.group(0) for m in FIRST_LINE_TIME_RE.finditer(line)))
+    if hits:
+        problems.append("有时间或日子：" + "、".join(f"「{h}」" for h in hits))
+    if len(line) > FIRST_LINE_MAX:
+        problems.append(f"{len(line)} 字，上限 {FIRST_LINE_MAX}")
+    return line, problems
+
+
+def first_line_checks(log: list[list[str]]) -> list[dict[str, Any]]:
+    """Ticket 105: each `schedule create` and `schedule update --prompt`
+    in the fake galley's log (refused ones too: the words are what the
+    model wrote), its words, their first line and what is wrong with it."""
+    out = []
+    for argv in log:
+        name = cli_name(argv)
+        words, flags = parse_cli(argv)
+        if name == "schedule create":
+            text = " ".join(words[2:])
+        elif name == "schedule update" and isinstance(flags.get("prompt"), str):
+            text = flags["prompt"]
+        else:
+            continue
+        line, problems = first_line_problems(text)
+        out.append({"command": name, "words": text, "first_line": line, "notes": text.strip() != line,
+                    "problems": problems, "pass": not problems})
+    return out
+
+
 def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     """What a schedule run did, and whether it met the case's
     expectations (schedule/cases.json `expect`). Commands from the fake
@@ -4862,7 +4947,10 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     counts as the one to set, with `via: schedule` (the default) only
     `schedule create` does. Ticket 44 (main chat PRD ruling 92) split the
     two: `via: todo` (something to get done) takes only a reminder on a
-    to-do, and a nudge with nothing to finish keeps the default."""
+    to-do, and a nudge with nothing to finish keeps the default. Ticket
+    105 added the first line of each `schedule create` and `schedule
+    update --prompt` (`first_line_checks`): `pass` takes it in,
+    `pass_before_105` is the verdict on the earlier rules alone."""
     exp = case["expect"]
     now = datetime.fromisoformat(r["now"])
     tz = now.tzinfo
@@ -5052,6 +5140,11 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
                                        or [t for t in todos_now if fx_todos.get(t["id"]) != t]))
     if claim:
         reasons.append(claim)
+    before_105 = not reasons
+    first_lines = first_line_checks(log)
+    for fl in first_lines:
+        if fl["problems"]:
+            reasons.append(f"{fl['command']} 的第一行「{fl['first_line']}」：" + "，".join(fl["problems"]))
     return {
         "commands": [" ".join(a) for a in log],
         "names": names,
@@ -5071,9 +5164,68 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         "listed": listed,
         "stop": stop,
         "made_todos": made_todos,
+        "first_lines": first_lines,
         "pass": not reasons,
+        "pass_before_105": before_105,
         "reasons": reasons,
     }
+
+
+def sched_facts_before_105(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
+    """`sched_facts` with the verdict on the rules before ticket 105: the
+    reruns of tickets 59 to 73 compare as they did, and ticket 105's says
+    whether the earlier rules went back."""
+    f = sched_facts(r, case)
+    return {**f, "pass": f["pass_before_105"]}
+
+
+def first_line_gist(fl: dict[str, Any]) -> str:
+    """One first line for the tables: the line, then what is wrong."""
+    verdict = "过" if fl["pass"] else "不过：" + "，".join(fl["problems"])
+    tail = "，后面有给自己的话" if fl["notes"] else "，没有后面的话"
+    return f"「{fl['first_line']}」（{fl['command'].split()[1]}{tail}；{verdict}）"
+
+
+def first_line_section(data: dict[str, Any], cases: list[dict[str, Any]]) -> list[str]:
+    """Ticket 105: the first lines, against the runs it replaced (ticket
+    73's, the first group in meta.superseded_runs whose reason starts
+    with 票 105): per case, how many `schedule create` / `schedule update
+    --prompt` commands and how many first lines pass, then every first
+    line of this time word for word. Empty until that group exists."""
+    meta = data["meta"]
+    groups = meta.get("superseded_runs") or []
+    groups = [groups] if isinstance(groups, dict) else groups
+    base = next((g for g in groups if str(g.get("reason", "")).startswith("票 105")), None)
+    if base is None:
+        return []
+    by_id = {c["id"]: c for c in cases}
+    before = [r for r in base["runs"] if r["id"] in by_id]
+    after = [r for r in data["results"] if r["id"] in by_id]
+
+    def lines(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [fl for r in runs for fl in sched_facts(r, by_id[r["id"]])["first_lines"]]
+
+    out = ["## 票 105：第一行", "",
+           "每一次 `schedule create` 与 `schedule update --prompt` 的原文取第一行（同 GUI 的 `reminderFirstLine`：第一个非空行、去首尾空白），"
+           f"判它能不能当给用户看的标题：不含「用户」「JC」，不以「提醒」开头，不含时间或日子（`FIRST_LINE_TIME_RE`），不超过 {FIRST_LINE_MAX} 个字；"
+           "原文里是字面的 `\\n` 也不过。每格是「第一行过 / 命令数」，「上一次」是票 73 的运行（那时手册要它写给自己看），用同一条判定重判。", "",
+           "| # | 用例 | 上一次 | 这一次 |", "| --- | --- | --- | --- |"]
+    tb = ta = pb = pa = 0
+    for case in cases:
+        lb = lines([r for r in before if r["id"] == case["id"]])
+        la = lines([r for r in after if r["id"] == case["id"]])
+        if not lb and not la:
+            continue
+        kb, ka = sum(fl["pass"] for fl in lb), sum(fl["pass"] for fl in la)
+        tb, ta, pb, pa = tb + len(lb), ta + len(la), pb + kb, pa + ka
+        out.append(f"| {case['no']} | {case['id']} | {kb} / {len(lb)} | {ka} / {len(la)} |")
+    out += [f"| | 合计 | {pb} / {tb} | {pa} / {ta} |", "", "这一次的每一个第一行：", ""]
+    for case in cases:
+        for r in sorted((r for r in after if r["id"] == case["id"]), key=lambda r: r.get("repeat", 0)):
+            for fl in sched_facts(r, case)["first_lines"]:
+                out.append(f"- {case['id']} 第 {r.get('repeat', 1)} 遍：" + first_line_gist(fl).replace("|", "/"))
+    out.append("")
+    return out
 
 
 def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
@@ -5084,7 +5236,7 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     facts = {(r["id"], r["variant"]): sched_facts(r, next(c for c in cases if c["id"] == r["id"]))
              for r in data["results"] if any(c["id"] == r["id"] for c in cases)}
     out = [
-        "# 定时与提醒评测结果（票 36，票 44、票 59、票 60、票 63 重跑）",
+        "# 定时与提醒评测结果（票 36，票 44、票 59、票 60、票 63、票 73、票 105 重跑）",
         "",
         f"模型：{meta['model']['name']}（{meta['model_source']}，即 JC 主对话现在用的模型），推理强度 "
         f"{meta['model']['options'].get('reasoning_effort', '默认')}；首次运行于 {meta['ran_at']}。",
@@ -5106,6 +5258,9 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         f"每次运行最多 {SCHED_TOOL_CAP} 次工具调用。",
         "- **判定**：按 `cases.json` 每条的 `expect` 自动判，看它发出的命令（假 CLI 的日志与最后的状态）和回复里有没有说出时间。"
         "每条都查：`schedule create` 带没带 `--target=assistant`，`schedule` 写命令带没带 `--supervisor=galley-assistant`。",
+        "- **票 105 的改动**（主对话 PRD 裁决 151）：手册 `reminders.md` 改成原文第一行写给用户看（像待办的标题），需要时空一行再写给到点时的自己；"
+        "卡片与面板只显示第一行。判定加了第一行（每一次 `schedule create` 与 `schedule update --prompt`，规则见下「票 105：第一行」），"
+        "旧判定照旧；三条叫醒用例预先放着的任务原文换成新写法（第一行给人、空行、写给自己的）。",
         "",
     ]
     if meta.get("history_note"):
@@ -5114,9 +5269,15 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
-    out += (rerun_section(data, cases, sched_facts, "73")
-            + rerun_section(data, cases, sched_facts, "63") + rerun_section(data, cases, sched_facts, "60")
-            + rerun_section(data, cases, sched_facts, "59"))
+    # Ticket 105: the reruns compare on the rules of their day (the first
+    # line was not asked for before it); ticket 105's own says whether the
+    # earlier rules went back, and its first lines have a section of their
+    # own.
+    out += (rerun_section(data, cases, sched_facts_before_105, "105") + first_line_section(data, cases)
+            + rerun_section(data, cases, sched_facts_before_105, "73")
+            + rerun_section(data, cases, sched_facts_before_105, "63")
+            + rerun_section(data, cases, sched_facts_before_105, "60")
+            + rerun_section(data, cases, sched_facts_before_105, "59"))
     total = passed = 0
     out += ["## 通过率", "", "| # | 用例 | 分组 | 期望 | 遍数 | 过 | 通过率 |", "| --- | --- | --- | --- | --- | --- | --- |"]
     for case in cases:
@@ -5130,8 +5291,8 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     if total:
         out.append(f"| | 合计 | | | {total} | {passed} | {round(100 * passed / total)}% |")
     out += ["", "## 一览", "",
-            "| # | 用例 | 遍 | 调了什么命令 | 回复原文 | 字数 | 读手册 | 建前查过 | 判定 |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+            "| # | 用例 | 遍 | 调了什么命令 | 回复原文 | 字数 | 读手册 | 建前查过 | 第一行（票 105） | 判定 |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for case in cases:
         for r in sorted(by_case.get(case["id"], []), key=lambda r: r.get("repeat", 0)):
             f = facts[(r["id"], r["variant"])]
@@ -5141,8 +5302,10 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
             else:
                 reply = one_line(f["body"]) or "（空）"
             verdict = "过" if f["pass"] else "不过：" + "；".join(f["reasons"])
+            lines = "；".join(first_line_gist(fl) for fl in f["first_lines"]) or "—"
             out.append(f"| {case['no']} | {case['id']} | {r['repeat']} | {cmds.replace('|', '/')} | {reply} | "
-                       f"{f['chars']} | {f['manual']} | {f['listed']} | {verdict.replace('|', '/')} |")
+                       f"{f['chars']} | {f['manual']} | {f['listed']} | {lines.replace('|', '/')} | "
+                       f"{verdict.replace('|', '/')} |")
     out.append("")
     for case in cases:
         runs = sorted(by_case.get(case["id"], []), key=lambda r: r.get("repeat", 0))
@@ -5163,7 +5326,7 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                 spec = next((x for x in case["tasks"] if x["id"] == t["id"]), {})
                 where = "，在「In Hand」里" if spec.get("in_hand") else ""
                 fired = "，已到点" if t.get("lastFiredAt") else ""
-                out.append(f"- `{t['id']}` {t['fireAt']}{where}{fired}：{t['prompt']}")
+                out.append(f"- `{t['id']}` {t['fireAt']}{where}{fired}：{one_line(t['prompt'])}")
             out.append("")
         first = runs[0]
         out += [("叫醒消息：" if case.get("wake") else "用户：")] + [""] + fenced(first.get("message") or "")
@@ -5182,13 +5345,16 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                     out.append(line.replace("\n", " "))
                 out.append("")
             made = "；".join(f"`{t['id']}` {t.get('fireAt', '')} target={t.get('target')}"
-                            + (f" 挂在待办 `{t['todoId']}` 上" if t.get("todoId") else "") + f"：{t['prompt']}"
+                            + (f" 挂在待办 `{t['todoId']}` 上" if t.get("todoId") else "")
+                            + f"：{one_line(t['prompt'])}"
                             for t in f["made"]) or "无"
             if f["made_todos"]:
                 made += "；记下的待办：" + "；".join(todo_gist(t) for t in f["made_todos"])
             out += [f"结束：{STOP_LABELS.get(f['stop'], f['stop'])}；读手册：{f['manual']}；建前查过：{f['listed']}；"
                     f"手册版本：`{r.get('manual_sha', '?')}`。", "",
                     f"新建：{made}；删除：{'、'.join(f['cancelled']) or '无'}；改动：{'、'.join(f['changed']) or '无'}。", ""]
+            if f["first_lines"]:
+                out += ["第一行（票 105）：" + "；".join(first_line_gist(fl) for fl in f["first_lines"]), ""]
             if f["asked_via_tool"]:
                 out += ["ask_user 的问题：", ""] + fenced(json.dumps(f["asked_via_tool"], ensure_ascii=False, indent=1), "json")
             out += ["回复（去掉 summary 与建议标签）：", ""] + fenced(f["body"] or "（空）")
@@ -6805,6 +6971,7 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, 
           "the morning review's In Hand line is Rust's")
     check(held.index("### In Hand") < held.index("What you are on (") and "The user's to-dos" not in held,
           "a case's own reminder is in the What-you-are-on group")
+    dry_test_first_line(cases, now, check)
     for r in sorted(results, key=lambda r: r["id"]):
         case_id, script = scripts[r["id"]]
         case = cases[case_id]
@@ -6839,6 +7006,11 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, 
                   and any("建了 2 个" in x for x in f["reasons"])
                   and any("多余的写命令" in x for x in f["reasons"]) and not f["pass"],
                   f"the judge flags the missing target, the second task and the rename ({f['reasons']})")
+            # Ticket 105: the three creates' words, refused ones too.
+            check([fl["first_line"] for fl in f["first_lines"]] == ["提醒用户喝水"] * 3
+                  and all(fl["problems"] == ["写了「用户」", "以「提醒」开头"] for fl in f["first_lines"])
+                  and any(x.startswith("schedule create 的第一行「提醒用户喝水」") for x in f["reasons"]),
+                  f"the first-line judge reads each create from the log ({f['first_lines']})")
             check(f["listed"] == "查了" and f["manual"].startswith("读了（第 1 次调用）：times.md；1 次 1 轮，"),
                   f"list-before-create and the part read ({f['manual']})")
             check(says_time("好，十分钟后提醒你喝水。", datetime.fromisoformat(f["made"][0]["fireAt"]).astimezone(),
@@ -6855,6 +7027,11 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, 
             check(f["names"] == ["schedule list", "schedule create"] and not f["made_todos"],
                   f"its own one-off reminder ({f['names']})")
             check(f["pass"], f"a nudge as its own reminder, 「半小时后」 said, passes ({f['reasons']})")
+            # Ticket 105: the line breaks reach the fake galley and its
+            # state as line breaks; the first line is the user's.
+            check(len(f["made"]) == 1 and f["made"][0]["prompt"] == "关火\n\n用户要半小时后提醒；到时简短提醒。"
+                  and [(fl["first_line"], fl["notes"], fl["pass"]) for fl in f["first_lines"]] == [("关火", True, True)],
+                  f"words in the new form: stored with their breaks, the first line passes ({f['first_lines']})")
         elif script == "sched-own-for-todo":
             check(not f["pass"] and any("却建成了它自己的提醒" in x for x in f["reasons"])
                   and any("该记 1 件待办，记了 0 件" in x for x in f["reasons"])
@@ -6898,6 +7075,65 @@ def synth_reminder(at: datetime, todo_id: str | None = None, prompt: str = "dry"
 SYNTH_ADD = ("todo", "add", "dry", "--supervisor=galley-assistant", "--reason=dry")
 SYNTH_CREATE = ("schedule", "create", "dry", "--at=dry", "--target=assistant", "--supervisor=galley-assistant",
                 "--reason=dry")
+
+
+def dry_test_first_line(cases: dict[str, dict[str, Any]], now: datetime, check: Any) -> None:
+    """Ticket 105: the first-line judge on words that pass and words that
+    fail each rule, the GUI's way of taking the first line, a create and
+    an update read from the log, the verdict before ticket 105 kept apart,
+    and the wake cases' words in the new form handed over whole."""
+    print("schedule: the first line (ticket 105)")
+    passes = ["该喝水了", "订上海的酒店", "问 HR 有没有回 offer", "给妈妈打电话\n\n用户周五说的，周日晚上 9 点打。",
+              "\n  关火  \n\n半小时后", "少喝一点咖啡", "周报发给王经理", "取快递（取件码 8-3-2041）",
+              "收好行李，带上身份证\r\n\r\n明早 8:05 的高铁"]
+    for words in passes:
+        line, problems = first_line_problems(words)
+        check(not problems, f"first line passes: {words!r} -> {line!r} {problems}")
+    fails = {
+        "提醒用户喝水": ["写了「用户」", "以「提醒」开头"],
+        "该喝水了（用户要求）": ["写了「用户」"],
+        "JC 的快递": ["写了「JC」"],
+        "明天下午 4 点给妈妈打电话": ["有时间或日子：「明天」、「下午」、「4 点」"],
+        "周三交报告": ["有时间或日子：「周三」"],
+        "15:30 开会": ["有时间或日子：「15:」"],
+        "20号交房租": ["有时间或日子：「20号」"],
+        "三点开会": ["有时间或日子：「三点」"],
+        "十分钟后关火": ["有时间或日子：「分钟后」"],
+        "把季度报告的第四页数据再核对一遍然后交给王经理": ["23 字，上限 20"],
+        "该喝水了\\n\\n到时简短提醒": ["原文里是字面的「\\n」，不是换行"],
+        " \n \n": ["第一行是空的"],
+    }
+    for words, want in fails.items():
+        line, problems = first_line_problems(words)
+        check(problems == want, f"first line fails: {words!r} -> {problems}")
+    check(first_line("  订酒店  \n\n备注") == "订酒店" and first_line("没有换行的整段") == "没有换行的整段"
+          and first_line("\r\n\r\n关火\r半小时") == "关火", "first_line: the GUI's reminderFirstLine")
+    log = [["schedule", "list"],
+           ["schedule", "create", "该喝水了\n\n用户要的", "--at=2026-10-28T15:00", "--target=assistant"],
+           ["schedule", "create", "--help"],
+           ["schedule", "update", "sched_x", "--at=2026-10-28T16:00", "--supervisor=galley-assistant"],
+           ["schedule", "update", "sched_x", "--prompt=明天 9 点转房租", "--supervisor=galley-assistant"],
+           ["schedule", "update", "sched_y", "--prompt", "转房租", "--supervisor=galley-assistant"]]
+    got = [(fl["command"], fl["first_line"], fl["notes"], fl["pass"]) for fl in first_line_checks(log)]
+    check(got == [("schedule create", "该喝水了", True, True), ("schedule update", "明天 9 点转房租", False, False),
+                  ("schedule update", "转房租", False, True)],
+          f"first_line_checks: creates and updates with --prompt, not a help page or a new time alone ({got})")
+    water = cases["water-10min"]
+    at = datetime(2026, 10, 28, 15, 0, tzinfo=now.tzinfo)
+    for words, ok in (("该喝水了\n\n用户在主聊天要的；到时简短提醒。", True), ("提醒用户十分钟后喝水", False)):
+        argv = ("schedule", "create", words, "--at=dry", "--target=assistant", "--supervisor=galley-assistant",
+                "--reason=dry")
+        f = sched_facts(synth_run(water, at, "好，十分钟后提醒你喝水。",
+                                  tasks=(synth_reminder(at + timedelta(minutes=10), prompt=words),),
+                                  log=(("schedule", "list"), argv)), water)
+        check(f["pass_before_105"] and f["pass"] is ok
+              and (ok or any("以「提醒」开头" in x and "「分钟后」" in x for x in f["reasons"])),
+              f"sched_facts: the earlier rules pass, the first line {'passes' if ok else 'fails'} ({f['reasons']})")
+    note = sched_note(cases["wake-on-time"], now)
+    check("<<<\n收好行李，带上身份证\n\n明早 8:05 虹桥站的 G7 次高铁去北京出差。" in note
+          and all(first_line(c["tasks"][0]["prompt"]) != c["tasks"][0]["prompt"].strip()
+                  for c in cases.values() if c.get("wake")),
+          "the wake cases' words are in the new form, handed over whole as Core does")
 
 
 def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, str]],
@@ -8036,7 +8272,10 @@ def main() -> int:
                       "schedule (ticket 36, rerun for tickets 41 and 44): the main chat prompt with the ticket 41 "
                       "entry layer and its own configuration paragraph, In Hand lines (ticket 39's three groups) for "
                       "tasks from before the segment, the assistant manual (ticket 44's text, in parts since ticket "
-                      "59) in the state root, the case's tasks in the fake galley; rerun for tickets 59, 60 and 63"),
+                      "59) in the state root, the case's tasks in the fake galley; rerun for tickets 59, 60, 63 and 73; "
+                      "rerun for ticket 105 (reminders.md: the first line of a reminder's words is for the user, the "
+                      "notes for itself after a blank line; the wake cases' task words in that form; each schedule "
+                      "create / update --prompt judged on its first line)"),
             "repeats": args.repeats,
             "tool_cap": SCHED_TOOL_CAP,
             "extra_exec": list(SCHED_EXTRA_EXEC),
