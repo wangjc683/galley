@@ -226,8 +226,14 @@ mod tests {
         // what will end and to wake.md for what waits for the review, and
         // todos.md to memo.md again for a sentence that is both (the memo
         // eval's first round: the trip went into the to-do's notes).
-        // Ticket 98's one: cli.md's command list to memo.md.
-        assert_eq!(referred, 23);
+        // Ticket 98's one: cli.md's command list to memo.md. Ticket 108's
+        // two: unasked.md's telling the user and todos.md's notes to the
+        // progress line in todos-change.md (the rule is written there
+        // only; the eval's first round: told news, it read todos.md and
+        // reminders.md, not todos-change.md).
+        assert_eq!(referred, 25);
+        assert!(part("unasked.md").contains("its notes (see `todos-change.md`)."));
+        assert!(part("todos.md").contains("\n  (see `todos-change.md`)."));
         assert!(part("cli.md").contains("- `memo add`, `update`, `delete`: see `memo.md`."));
         assert!(part("todos.md")
             .contains("is a memo (see `memo.md`), and so is a date with nothing to do when it"));
@@ -502,7 +508,9 @@ mod tests {
     /// written for the user, who sees them in the list. Ticket 88: the
     /// list's controls include deleting one. Ticket 107: and changing the
     /// title and notes, so a change starts from the to-do as it is now.
-    /// Single-line fragments only (CRLF on Windows).
+    /// Ticket 108: what came of it, done or told, is a dated line on top
+    /// of the notes (`todos-change.md`). Single-line fragments only (CRLF
+    /// on Windows).
     #[test]
     fn manual_covers_the_users_to_dos() {
         let todos = part("todos.md");
@@ -547,6 +555,9 @@ mod tests {
             "user may have changed the title or the notes in their list: before you",
             "change either, read the to-do as it is now (`todo show <todo-id>`) and",
             "change that, not what you wrote; `--notes=` replaces the notes whole.",
+            // Ticket 108: what comes of it later goes on top, by the rule
+            // in todos-change.md.
+            "What you get done for it later, and news of it, go on top of its notes",
             "- A to-do's reminder is set, moved and removed only with `todo add` and",
             "commands: a reminder made with `schedule create` is not on the to-do.",
             // Say it.
@@ -565,9 +576,26 @@ mod tests {
             "- When the user says it is done (「营养土买好了」), or you saw it done",
             "so in a few words (「已勾掉。」); do not recite the list.",
             "- Asked what is left (「我还有什么没办」), run `todo list` first and answer",
+            // Ticket 108 (PRD ruling 154): how it is going goes into the
+            // notes, one line on top (the collapsed row shows the start),
+            // over what is there, read first; not a look that found
+            // nothing; the news that moves the time moves both.
+            "- How it is going: when you got something done for a to-do (something",
+            "the user tells you news of it (「业主说预算下周给」), add one line at the",
+            "start of its notes, above what is there (newest first), the day first,",
+            "a file by its absolute path. It is there when they open the to-do, and",
+            "(`todo show <todo-id>`) and keep what is there word for word below the",
+            "new line. Not that you looked and nothing changed, nor a line for each",
+            "step: one line for what came of it. When the news moves the time, move",
+            "the due date and the reminder too.",
         ] {
             assert!(change.contains(rule), "todos-change.md lost: {rule}");
         }
+        // Right after the user's own changes, before the kinds turned down.
+        let cancel = change.find("when they no longer need it.").unwrap();
+        let going = change.find("- How it is going:").unwrap();
+        let kinds = change.find("- When the user says not to").unwrap();
+        assert!(cancel < going && going < kinds);
         // A to-do's reminder only reminds (wake.md's since ticket 63).
         let wake = part("wake.md");
         assert!(
@@ -844,6 +872,8 @@ mod tests {
             "- **Limits**: when you note something, at most one subtask for it; in a",
             "morning review, at most two in all.",
             "`[FILE:<absolute path>]` on a line of its own: the desktop shows it as",
+            // Ticket 108: done for a to-do, a line in its notes too.
+            "a card under your reply. When it was for a to-do, also add a line to",
             "- **Not**: deciding for the user, changing what is theirs (their files,",
         ] {
             assert!(unasked.contains(rule), "unasked.md lost: {rule}");

@@ -118,6 +118,8 @@ on their list?
   user may have changed the title or the notes in their list: before you
   change either, read the to-do as it is now (`todo show <todo-id>`) and
   change that, not what you wrote; `--notes=` replaces the notes whole.
+  What you get done for it later, and news of it, go on top of its notes
+  (see `todos-change.md`).
 - A to-do's reminder is set, moved and removed only with `todo add` and
   `todo update` (`--remind-at`, `--no-remind`), never with the `schedule`
   commands: a reminder made with `schedule create` is not on the to-do.

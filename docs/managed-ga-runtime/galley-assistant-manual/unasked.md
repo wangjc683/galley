@@ -29,6 +29,7 @@ review (see `wake.md`): what will the user want next for this?
 - **Tell the user**: once it is done, one sentence on what you did and
   where the result is. For a file you made or found, also put
   `[FILE:<absolute path>]` on a line of its own: the desktop shows it as
-  a card under your reply.
+  a card under your reply. When it was for a to-do, also add a line to
+  its notes (see `todos-change.md`).
 - **Not**: deciding for the user, changing what is theirs (their files,
   their documents, their conversations), or a subtask over small talk.
