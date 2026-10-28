@@ -1,6 +1,6 @@
 # 106 顶栏待办按钮定稿：戊2，拆切换器，写设计文档
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-10-28 快进合入 `936c587c`；主会话机器验收：rebase 到 `c04cc9f4` 后在 worktree 重跑 `pnpm --dir gui typecheck`、`lint`、`git diff --check` 全过，`test` 本地与 `TZ=UTC` 各 228 个文件、2523 条全过；读过设计文档 §4.1「待办按钮」整段；切换器残留 grep 为空）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 152（2026-10-28，JC：「按建议推进，定戊2」），连同裁决 148 第 2、4 条（位置、悬停提示）、149 第 2 条、150 第 2、5、6 条（胶囊的内容、窄时让位、pop 落点）。接票 [104](./104-flight-final-and-topbar-capsule-trial.md)（已合入 main，切换器还在）。只改 GUI 与设计文档。外置运行时没有这颗按钮，零变化。
 

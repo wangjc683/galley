@@ -1,6 +1,6 @@
 # 104 飞入定稿（中档）；顶栏按钮试胶囊（切换器：甲 / 丁 / 戊2 / 戊）
 
-Status: needs-dogfood（2026-10-28 快进合入 `067a42dc`；主会话机器验收：读过 `lib/todo-button.ts` 的 `todoFirstRow`、切换器的 `todoButtonShape`、代理的 headless 截图；在 worktree 重跑 `pnpm --dir gui typecheck`、`lint`、`git diff --check` 全过，`test` 本地与 `TZ=UTC` 各 227 个文件、2519 条全过；合入后 dev 整页重载正常，真实数据下胶囊写「周五 · 取快递」、宽 107.5px；真窗口截图与胶囊上的飞行没看）
+Status: done（2026-10-28 JC 真机比过四档，定戊2（裁决 152），由票 106 定稿；2026-10-28 快进合入 `067a42dc`；主会话机器验收：读过 `lib/todo-button.ts` 的 `todoFirstRow`、切换器的 `todoButtonShape`、代理的 headless 截图；在 worktree 重跑 `pnpm --dir gui typecheck`、`lint`、`git diff --check` 全过，`test` 本地与 `TZ=UTC` 各 227 个文件、2519 条全过；合入后 dev 整页重载正常，真实数据下胶囊写「周五 · 取快递」、宽 107.5px；真窗口截图与胶囊上的飞行没看）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 149 第 1、2 条（飞入「飞 + pop、中档」，位置定为右边最左、单独成组）、裁决 150（胶囊方向，2026-10-28，JC：「按建议推进」）。接票 [102](./102-cards-fly-into-the-todo-button-trial.md)、[103](./103-topbar-todo-button-place-and-word-trial.md)（都已合入 main，两颗临时 pill 还在）。一半是定稿（飞入），一半是新的试用（胶囊）。只改 GUI 与设计文档。外置运行时没有这颗按钮与卡片，零变化。
 
