@@ -1,6 +1,6 @@
 # 107 待办能打开：点一行在原地打开，标题与备注全文、就地改
 
-Status: ready-for-agent（2026-10-28 JC 看过下面的「文字稿」：「没问题，开始做」）
+Status: needs-dogfood（2026-10-28 JC 看过「文字稿」：「没问题，开始做」。2026-10-28 快进合入 `c5443ecd`–`f61032a4`；主会话机器验收：读过 `update_todo` 命令与 `TodoPatch::words`、手册两处（`--notes` 那句与「用户能做的」那句的事实同步）、`YourRow` 的编辑流程与 `TodoTextEditor`、设计文档新增各段；在 worktree 重跑 `pnpm --dir gui typecheck`、`lint`、`git diff --check`、文档链接全过，`test` 本地与 `TZ=UTC` 各 229 个文件、2553 条全过，`cargo test --workspace` 1257 条全过；主会话补设计文档「待办面板」开头的总述（`f61032a4`）。代理查出票面前提错：待办命令的 TS 封装与 `TodoBrief` 镜像在 `gui/src/lib/assistant-todo.ts`，`gui/src/types/ipc.ts` 只镜像 runner 协议。面板的 `bg-selected` 是全局值 #f8edda，配面板的 `bg-app`；侧栏的 #e7d8c0 是侧栏底色上的覆盖，不用跟。真机六步待 JC）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 153（2026-10-28，JC：「按你推荐推进」）。改写裁决 91 第 3、4 条与裁决 128 第 5 条的「悬停看全文」。Core 一条桌面命令、GUI、手册一句、设计文档。只在内置运行时；外置运行时没有主对话与待办，零变化。
 
