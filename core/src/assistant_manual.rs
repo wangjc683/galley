@@ -500,20 +500,22 @@ mod tests {
     /// [`manual_tells_a_nudge_from_a_to_do`]). Ticket 59: noting is
     /// `todos.md`, changing `todos-change.md`. Ticket 81: the notes are
     /// written for the user, who sees them in the list. Ticket 88: the
-    /// list's controls include deleting one. Ticket 107: the user may
-    /// have changed the title or notes there, so a change starts from the
-    /// to-do as it is now. Single-line fragments only (CRLF on Windows).
+    /// list's controls include deleting one. Ticket 107: and changing the
+    /// title and notes, so a change starts from the to-do as it is now.
+    /// Single-line fragments only (CRLF on Windows).
     #[test]
     fn manual_covers_the_users_to_dos() {
         let todos = part("todos.md");
         assert!(todos.contains("### Noting a to-do"));
         for rule in [
             // Two lists; the user's only controls on theirs (deleting one
-            // since main chat ticket 88, PRD ruling 132).
+            // since main chat ticket 88, PRD ruling 132; its title and
+            // notes since ticket 107, PRD ruling 153).
             "- **The user's to-dos**: what they have to do (hand in a report, call the",
             "user sees it in 「待办」 beside this chat and can only tick a to-do off,",
-            "untick it, cancel its reminder, or delete it there. Everything else, a",
-            "new one, a new time, new words, they tell you, and you change it; do not",
+            "untick it, change its title and notes, cancel its reminder, or delete it",
+            "there. Everything else, a new one, a new time, they tell you, and you",
+            "change it, as you change its words when they tell you; do not send them",
             "- **Your own reminders**: times Galley wakes you to do something yourself,",
             // Information is a memo (memory until ticket 96); no tidying
             // unasked.
