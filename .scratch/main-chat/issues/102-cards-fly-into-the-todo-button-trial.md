@@ -79,12 +79,12 @@ Status: ready-for-agent
 
 分支 `ticket-101-102-todo-discovery`，接在票 101 之后，同一个 worktree。未 push、未合入。
 
-**1. 提交列表**（`git log --oneline main..HEAD` 在本票做完时的样子，含票 101 的；两张票的回报提交在它之后）
+**1. 提交列表**（`git log --oneline main..HEAD` 在本票做完时的样子，含票 101 的，号是 rebase 到本地 main `88001d3c` 之后的；两张票的回报提交在它之后）
 
 ```
-7dacbeb8 Ticket 102: a temporary switcher for cards flying into the top bar's 待办 button (现状 / 只 pop / 飞 + pop, 大 / 中 / 小, 重放)
-725f0f2f Design: the panel opens once for any card it lists; a reminder card's words open it (ticket 101, ruling 147)
-d73a995c Ticket 101: the panel opens once for reminder and memo cards too; a reminder card's words open it
+38f1d259 Ticket 102: a temporary switcher for cards flying into the top bar's 待办 button (现状 / 只 pop / 飞 + pop, 大 / 中 / 小, 重放)
+58a5c4ce Design: the panel opens once for any card it lists; a reminder card's words open it (ticket 101, ruling 147)
+0c518a36 Ticket 101: the panel opens once for reminder and memo cards too; a reminder card's words open it
 ```
 
 **2. 飞行层放在哪、怎么拿起点与终点、缓动的选择与理由；与票 101 共用的判断怎么接**

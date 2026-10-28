@@ -73,13 +73,13 @@ Status: ready-for-agent
 
 ### 2026-10-28 实现回报（票 101 代理）
 
-分支 `ticket-101-102-todo-discovery`，从本地 main 的 `00b3dd1c` 起，与票 102 同一个 worktree。未 push、未合入。
+分支 `ticket-101-102-todo-discovery`，从本地 main 的 `00b3dd1c` 起，做完两张票后 rebase 到 `88001d3c`（只多了裁决 148 与票 103 两个文件，没有冲突），与票 102 同一个 worktree。未 push、未合入。
 
-**1. 提交列表**（`git log --oneline main..HEAD` 在本票做完时的样子；这条回报自己的提交、票 102 的提交在它之后）
+**1. 提交列表**（`git log --oneline main..HEAD` 在本票做完时的样子，号是 rebase 到本地 main `88001d3c` 之后的；这条回报自己的提交、票 102 的提交在它之后）
 
 ```
-725f0f2f Design: the panel opens once for any card it lists; a reminder card's words open it (ticket 101, ruling 147)
-d73a995c Ticket 101: the panel opens once for reminder and memo cards too; a reminder card's words open it
+58a5c4ce Design: the panel opens once for any card it lists; a reminder card's words open it (ticket 101, ruling 147)
+0c518a36 Ticket 101: the panel opens once for reminder and memo cards too; a reminder card's words open it
 ```
 
 **2. 判定纯函数的新签名；三个来源怎么收齐、窗口值与理由**
