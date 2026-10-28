@@ -1,6 +1,6 @@
 # 105 它自己的提醒：第一行写给用户看，卡片与面板只显示第一行
 
-Status: needs-dogfood（2026-10-28 快进合入 `d8f09da6`；主会话机器验收：读过手册 diff 与改动文件表；在 worktree 重跑 `pnpm --dir gui typecheck`、`lint`、`git diff --check` 全过，`test` 本地与 `TZ=UTC` 各 229 个文件、2534 条全过，`cargo test -p galley-core --lib assistant_manual` 12 条全过；评测 28/28、第一行 6/6 照代理回报与结果文件；合入后 touch `core/src/assistant_manual.rs` 让 dev 重编 Core，新手册才装进状态根）
+Status: needs-dogfood（2026-10-28 真机两步没走：库里没有新记的提醒。2026-10-28 快进合入 `d8f09da6`；主会话机器验收：读过手册 diff 与改动文件表；在 worktree 重跑 `pnpm --dir gui typecheck`、`lint`、`git diff --check` 全过，`test` 本地与 `TZ=UTC` 各 229 个文件、2534 条全过，`cargo test -p galley-core --lib assistant_manual` 12 条全过；评测 28/28、第一行 6/6 照代理回报与结果文件；合入后 touch `core/src/assistant_manual.rs` 让 dev 重编 Core，新手册才装进状态根）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 151（2026-10-28，JC：「甲，可以花」：手册改写法、GUI 只显示第一行、为它重跑提醒评测花额度）。改手册、GUI、评测与设计文档；Core、Agent API、入口层提示词不动。外置运行时零变化（它的定时任务对话框 `ScheduledTasksDialog.tsx` 显示的是用户自己在表单里填的原文，不改）。
 

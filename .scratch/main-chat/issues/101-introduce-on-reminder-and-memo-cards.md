@@ -1,6 +1,6 @@
 # 101 只自动开一次也认提醒与备忘卡片；提醒卡片那句话打开面板
 
-Status: needs-dogfood（2026-10-28 快进合入 `83a7bb28`；主会话机器验收：读过 `lib/fresh-cards.ts`、`hooks/useFreshCards.ts`、`lib/todo-flight-run.ts` 的层级与清理；在 worktree 重跑 `pnpm --dir gui typecheck`、`lint`、`git diff --check` 全过，`test` 本地与 `TZ=UTC` 各 226 个文件、2500 条全过；真窗口第一帧与截图待做）
+Status: needs-dogfood（2026-10-28 JC 跟 Galley 说了「取快递」「喝水」两轮（库里有记录，主会话量到三样读回相隔约 150ms，400ms 够），第 1 站自动开在哪一页、亮没亮没报；第 2 站（备忘那页）没走（当天没有新备忘）；第 3 站（点提醒卡片的字）没报。2026-10-28 快进合入 `83a7bb28`；主会话机器验收：读过 `lib/fresh-cards.ts`、`hooks/useFreshCards.ts`、`lib/todo-flight-run.ts` 的层级与清理；在 worktree 重跑 `pnpm --dir gui typecheck`、`lint`、`git diff --check` 全过，`test` 本地与 `TZ=UTC` 各 226 个文件、2500 条全过；真窗口第一帧与截图待做）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 147 第 4、5 条（2026-10-28，JC：「1，直接推进；2，按你的推荐做 A+B」）。前情：票 [87](./87-todo-panel-open-and-close.md)（只自动开一次、卡片标题打开面板、亮行）、票 [97](./97-memo-cards-and-panel-page.md)（备忘卡片、面板两页）。同一个代理接着做票 [102](./102-cards-fly-into-the-todo-button-trial.md)（每次记下都飞进顶栏按钮，切换器），两张票共用「回复下新出现了哪些卡片」的判断，先做本票。只改 GUI 与设计文档。外置运行时没有主对话与待办面板，零变化。
 

@@ -780,9 +780,19 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Release-scope truth is `git log v0.7.2..HEAD`. Nothing user-facing yet
-(2026-10-27). Dogfood still owed from `v0.7.2`'s scope: ticket 98's noticed
-interest (the 「看你……常问」 memo has no live record yet).
+Release-scope truth is `git log v0.7.2..HEAD`. User-facing since `v0.7.2`
+(2026-10-28, main chat rulings 147–152, tickets 101–106, devlog
+[新用户找得到待办面板](./devlog/2026-10-28-new-users-find-the-todo-panel.md)):
+the to-do panel opens by itself once for a reminder or memo card too, and a
+reminder card's words open it; each new card's glyph flies into the top
+bar's 待办 button; the button moves to the far left of the right side, its
+own group, and shows 「待办」 when you have nothing, a capsule with the first
+of today's / overdue items, otherwise the icon (tooltip 「待办与备忘」); the
+assistant's own reminders write their first line for the user and the cards
+show only that line (manual change, schedule eval 28/28). Dogfood owed:
+ticket 101's memo page and clicking a reminder card's words, ticket 105's
+new reminder. Still owed from `v0.7.2`'s scope: ticket 98's noticed interest
+(the 「看你……常问」 memo has no live record yet).
 
 **Owed from the `v0.7.2` smoke** (JC approved publish without reporting
 smoke items, 2026-10-27; the list is in the release devlog). JC installed the

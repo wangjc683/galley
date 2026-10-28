@@ -1,6 +1,6 @@
 # 103 顶栏待办按钮：挪到右边最左、重比加字（切换器试用）
 
-Status: needs-dogfood（2026-10-28 快进合入 `83a7bb28`；主会话机器验收：读过 `lib/fresh-cards.ts`、`hooks/useFreshCards.ts`、`lib/todo-flight-run.ts` 的层级与清理；在 worktree 重跑 `pnpm --dir gui typecheck`、`lint`、`git diff --check` 全过，`test` 本地与 `TZ=UTC` 各 226 个文件、2500 条全过；真窗口第一帧与截图待做）
+Status: done（2026-10-28 JC 真机比过：挪位定，写字被嫌「楞」，换胶囊方向（裁决 149、150），由票 104 试、票 106 定稿。2026-10-28 快进合入 `83a7bb28`；主会话机器验收：读过 `lib/fresh-cards.ts`、`hooks/useFreshCards.ts`、`lib/todo-flight-run.ts` 的层级与清理；在 worktree 重跑 `pnpm --dir gui typecheck`、`lint`、`git diff --check` 全过，`test` 本地与 `TZ=UTC` 各 226 个文件、2500 条全过；真窗口第一帧与截图待做）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 148（2026-10-28，JC：「按你推荐推进」）。接在票 [102](./102-cards-fly-into-the-todo-button-trial.md) 后面，同一个代理、同一个 worktree：两张票都动 `TodoToggleButton`（102 加 pop，本票改位置与长相），飞行终点仍按 `[data-role="topbar-todo"]` 里的图标现量。这是试用票：临时切换器，JC 真机比完定档，另开定稿票拆切换器、写设计文档。只改 GUI。外置运行时没有这颗按钮，零变化。
 

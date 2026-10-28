@@ -1,6 +1,6 @@
 # 102 每次记下都飞进顶栏按钮（切换器试用）
 
-Status: needs-dogfood（2026-10-28 快进合入 `83a7bb28`；主会话机器验收：读过 `lib/fresh-cards.ts`、`hooks/useFreshCards.ts`、`lib/todo-flight-run.ts` 的层级与清理；在 worktree 重跑 `pnpm --dir gui typecheck`、`lint`、`git diff --check` 全过，`test` 本地与 `TZ=UTC` 各 226 个文件、2500 条全过；真窗口第一帧与截图待做）
+Status: done（2026-10-28 JC 真机比过，定「飞 + pop、中档」（裁决 149），票 104 定稿；10-28 JC 真机看胶囊时飞入一起过，「胶囊效果 OK」。2026-10-28 快进合入 `83a7bb28`；主会话机器验收：读过 `lib/fresh-cards.ts`、`hooks/useFreshCards.ts`、`lib/todo-flight-run.ts` 的层级与清理；在 worktree 重跑 `pnpm --dir gui typecheck`、`lint`、`git diff --check` 全过，`test` 本地与 `TZ=UTC` 各 226 个文件、2500 条全过；真窗口第一帧与截图待做）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 147 第 6、7 条（2026-10-28，JC：「按你的推荐做 A+B」）。紧接票 [101](./101-introduce-on-reminder-and-memo-cards.md)，同一个代理、同一个 worktree，先做完 101 再做本票；两张票共用「回复下新出现了哪些卡片」的判断。这是试用票：临时切换器，JC 真机比完定档，另开定稿票拆切换器、写设计文档。只改 GUI。外置运行时零变化（没有主对话与待办按钮）。
 
