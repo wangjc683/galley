@@ -6,6 +6,7 @@ import {
   FLIGHT_EASE,
   FLIGHT_END_PX,
   FLIGHT_FADE_MS,
+  FLIGHT_LEVEL,
   FLIGHT_START_PX,
   FLIGHT_STAGGER_MS,
   cardFlightPlan,
@@ -20,28 +21,18 @@ import {
 /**
  * A card's glyph flying into the top bar's 「待办」 button (main chat
  * ticket 102, PRD ruling 147 point 6): whether anything flies or pops,
- * when, and where a glyph is at each moment. The DOM half is
+ * when, and where a glyph is at each moment — fly and pop at the middle
+ * size since ticket 104 (ruling 149 point 1). The DOM half is
  * lib/todo-flight-run.test.ts.
  */
 
-// The trial's three sizes (components/todo/flight-variants).
+// Ticket 102's big level, `sidebar-state-pop`'s pop: only to pin the
+// path's and the dip's arithmetic against another size.
 const BIG: FlightLevel = {
   lift: 160,
   peak: 24,
   durationMs: 700,
   popScale: 1.25,
-};
-const MID: FlightLevel = {
-  lift: 100,
-  peak: 20,
-  durationMs: 560,
-  popScale: 1.15,
-};
-const SMALL: FlightLevel = {
-  lift: 60,
-  peak: 16,
-  durationMs: 450,
-  popScale: 1.08,
 };
 
 const T: FreshCard = { kind: "todo", row: "todo_a", card: "todo_a" };
@@ -53,7 +44,6 @@ describe("whether the new cards fly", () => {
     fresh: [T, R, M],
     mainChatOnScreen: true,
     panelShown: false,
-    form: "fly",
     reducedMotion: false,
     inView: () => true,
   };
@@ -65,9 +55,6 @@ describe("whether the new cards fly", () => {
   it("does not fly while the panel is on screen: its rows light instead", () => {
     expect(cardFlightPlan({ ...BASE, panelShown: true })).toBeNull();
     expect(
-      cardFlightPlan({ ...BASE, panelShown: true, form: "pop" }),
-    ).toBeNull();
-    expect(
       cardFlightPlan({ ...BASE, panelShown: true, reducedMotion: true }),
     ).toBeNull();
   });
@@ -75,14 +62,6 @@ describe("whether the new cards fly", () => {
   it("does nothing unless Galley's conversation is on screen, or without a card", () => {
     expect(cardFlightPlan({ ...BASE, mainChatOnScreen: false })).toBeNull();
     expect(cardFlightPlan({ ...BASE, fresh: [] })).toBeNull();
-  });
-
-  it("follows the form: 现状 nothing, 只 pop the button alone", () => {
-    expect(cardFlightPlan({ ...BASE, form: "none" })).toBeNull();
-    expect(cardFlightPlan({ ...BASE, form: "pop" })).toEqual({
-      fly: [],
-      catch: "pop",
-    });
   });
 
   it("does not fly a card scrolled out of view; with none in view, only pops", () => {
@@ -100,32 +79,36 @@ describe("whether the new cards fly", () => {
       fly: [],
       catch: "wash",
     });
-    expect(
-      cardFlightPlan({ ...BASE, reducedMotion: true, form: "pop" }),
-    ).toEqual({ fly: [], catch: "wash" });
-    expect(
-      cardFlightPlan({ ...BASE, reducedMotion: true, form: "none" }),
-    ).toBeNull();
+  });
+});
+
+describe("the size JC picked (ruling 149 point 1)", () => {
+  it("is ticket 102's middle level: 100px up, 20px halfway, 560ms, a pop to 1.15", () => {
+    expect(FLIGHT_LEVEL).toEqual({
+      lift: 100,
+      peak: 20,
+      durationMs: 560,
+      popScale: 1.15,
+    });
   });
 });
 
 describe("when", () => {
   it("takes off 90ms apart and pops as the last lands", () => {
-    expect(flightSchedule(3, BIG)).toEqual({
+    expect(flightSchedule(3, FLIGHT_LEVEL)).toEqual({
       starts: [0, FLIGHT_STAGGER_MS, 2 * FLIGHT_STAGGER_MS],
-      popAt: 2 * FLIGHT_STAGGER_MS + 700,
+      popAt: 2 * FLIGHT_STAGGER_MS + 560,
     });
-    expect(flightSchedule(1, SMALL)).toEqual({ starts: [0], popAt: 450 });
+    expect(flightSchedule(1, BIG)).toEqual({ starts: [0], popAt: 700 });
   });
 
   it("pops at once when nothing flies", () => {
-    expect(flightSchedule(0, BIG)).toEqual({ starts: [], popAt: 0 });
+    expect(flightSchedule(0, FLIGHT_LEVEL)).toEqual({ starts: [], popAt: 0 });
   });
 
-  it("dips after the pop in proportion, 1.25 to 0.96", () => {
+  it("dips after the pop in proportion: 1.15 to 0.976, 1.25 to 0.96", () => {
+    expect(catchDip(FLIGHT_LEVEL.popScale)).toBe(0.976);
     expect(catchDip(BIG.popScale)).toBe(0.96);
-    expect(catchDip(MID.popScale)).toBe(0.976);
-    expect(catchDip(SMALL.popScale)).toBe(0.987);
   });
 });
 
@@ -150,13 +133,13 @@ describe("the path", () => {
   });
 
   it("leaves the card glyph's centre at 16px and lands on the button's at 12px, faded", () => {
-    expect(flightFrame(from, to, BIG, 0)).toEqual({
+    expect(flightFrame(from, to, FLIGHT_LEVEL, 0)).toEqual({
       x: 400,
       y: 700,
       size: FLIGHT_START_PX,
       opacity: 1,
     });
-    const end = flightFrame(from, to, BIG, 700);
+    const end = flightFrame(from, to, FLIGHT_LEVEL, 560);
     expect(end.x).toBeCloseTo(1200, 6);
     expect(end.y).toBeCloseTo(20, 6);
     expect(end.size).toBeCloseTo(FLIGHT_END_PX, 6);
@@ -173,7 +156,7 @@ describe("the path", () => {
       if (ease(mid) < 0.5) lo = mid;
       else hi = mid;
     }
-    for (const level of [BIG, MID, SMALL]) {
+    for (const level of [FLIGHT_LEVEL, BIG]) {
       const half = flightFrame(from, to, level, lo * level.durationMs);
       // B(½) = ¼ from + ½ control + ¼ to, the control the midpoint lifted.
       expect(half.x).toBeCloseTo(800, 3);
@@ -183,17 +166,8 @@ describe("the path", () => {
   });
 
   it("is opaque until the last 80ms", () => {
-    expect(flightFrame(from, to, BIG, 700 - FLIGHT_FADE_MS).opacity).toBe(1);
-    expect(flightFrame(from, to, BIG, 700 - FLIGHT_FADE_MS / 2).opacity).toBe(
-      0.5,
-    );
-  });
-
-  it("does not grow at the small level: 16px to the middle, then 12px", () => {
-    for (const ms of [50, 150, 250]) {
-      const size = flightFrame(from, to, SMALL, ms).size;
-      expect(size).toBeLessThanOrEqual(16);
-      expect(size).toBeGreaterThanOrEqual(12);
-    }
+    const at = (ms: number) => flightFrame(from, to, FLIGHT_LEVEL, ms);
+    expect(at(560 - FLIGHT_FADE_MS).opacity).toBe(1);
+    expect(at(560 - FLIGHT_FADE_MS / 2).opacity).toBe(0.5);
   });
 });

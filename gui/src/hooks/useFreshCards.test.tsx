@@ -334,7 +334,7 @@ describe("the cards fly into the top bar's button (ticket 102, ruling 147 point 
     expect(flyFreshCards).not.toHaveBeenCalled();
   });
 
-  it("once the panel is met, the new cards are flown, at the trial's pick", () => {
+  it("once the panel is met, the new cards are flown", () => {
     mount();
     firstReads();
     useAssistantTodoStore.setState({
@@ -347,8 +347,6 @@ describe("the cards fly into the top bar's button (ticket 102, ruling 147 point 
         fresh: [fresh("todo_new"), fresh("sched_new", "reminder")],
         mainChatOnScreen: true,
         panelShown: false,
-        form: "fly",
-        level: { lift: 160, peak: 24, durationMs: 700, popScale: 1.25 },
       },
     ]);
   });

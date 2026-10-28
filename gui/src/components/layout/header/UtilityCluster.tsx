@@ -9,22 +9,19 @@ import type { ConversationFontSize } from "@/lib/conversation-font-size";
 import { TopBarIconButton } from "../TopBarIconButton";
 import { ChangesToggleButton } from "./ChangesToggleButton";
 import { DisplayMenu } from "./DisplayMenu";
-import { TodoToggleButton } from "./TodoToggleButton";
 
 /**
- * Right half of the MainHeader right group: global tools — 待办 (in
- * every conversation while there is a main chat; tickets 45, 46), Changes
- * (only while a repository is known or the review is open; the host
+ * Last of the MainHeader right group: global tools — Changes (only
+ * while a repository is known or the review is open; the host
  * omits `onToggleChanges` otherwise), 显示 (width / font size / theme),
  * Supervisor SOP (the external runtime only: the host omits
  * `onOpenSupervisorSop` on the managed one, where the assistant is the
  * supervisor; main chat ruling 106, ticket 54), and Settings. 显示 and
  * Settings never gate on state, so the cluster and its ARIA landmark
- * render unconditionally.
+ * render unconditionally. 待办 was its first from main chat ticket 45 to
+ * ticket 104, which gave it a group of its own in front (MainHeader).
  */
 export function TopBarUtilityCluster({
-  todoOpen = false,
-  onToggleTodo,
   changesOpen = false,
   onToggleChanges,
   conversationWidth,
@@ -37,12 +34,6 @@ export function TopBarUtilityCluster({
   onOpenSupervisorSop,
   onOpenSettings,
 }: {
-  /** The to-do panel is on screen: its button is pressed. */
-  todoOpen?: boolean;
-  /** Omitted (no button) without a main chat: the external runtime.
-   * TEMP variant switcher (main chat 103): omitted too while the pill's
-   * 甲 / 乙 / 丙 stand it in a group of its own (MainHeader). */
-  onToggleTodo?: () => void;
   changesOpen?: boolean;
   onToggleChanges?: (source: HTMLElement) => void;
   conversationWidth: "compact" | "wide";
@@ -69,9 +60,6 @@ export function TopBarUtilityCluster({
           icon, and ⌘K opens the palette from anywhere. Two click
           affordances for the same thing was chrome clutter without
           payoff. */}
-      {onToggleTodo && (
-        <TodoToggleButton open={todoOpen} onToggle={onToggleTodo} />
-      )}
       {onToggleChanges && (
         <ChangesToggleButton open={changesOpen} onToggle={onToggleChanges} />
       )}

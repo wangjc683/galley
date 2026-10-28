@@ -330,6 +330,8 @@ export const enCopy: AppCopy = {
     todo: "To-do",
     todoLabel: "To-do and memos",
     todoWithToday: (count) => `To-do and memos · Today ${count}`,
+    todoAnytime: "Anytime",
+    todoWithFirst: (when, title) => `To-do and memos · ${when} · ${title}`,
     display: {
       tooltip: "Display",
       aria: "Display settings",

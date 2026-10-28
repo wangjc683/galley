@@ -1,10 +1,5 @@
 import { useEffect } from "react";
 
-// TEMP variant switcher (main chat 102): the picked form and size.
-import {
-  FLIGHT_LEVELS,
-  useFlightVariants,
-} from "@/components/todo/flight-variants/flight-variants";
 import { subscribeReminderReads } from "@/hooks/useReminderCards";
 import {
   freshCardsGatherer,
@@ -114,7 +109,6 @@ function afterFreshCards(batch: FreshBatch, mainChatId: string): void {
     introduceTodoPanel(introducing);
     return;
   }
-  const { form, magnitude } = useFlightVariants.getState();
   flyFreshCards({
     fresh: batch.cards,
     mainChatOnScreen: onScreen,
@@ -123,7 +117,5 @@ function afterFreshCards(batch: FreshBatch, mainChatId: string): void {
       narrow: ui.todoNarrow,
       glance: ui.todoGlance,
     }).shown,
-    form,
-    level: FLIGHT_LEVELS[magnitude],
   });
 }

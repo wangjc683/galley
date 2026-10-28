@@ -2,13 +2,12 @@ import type { FreshCard } from "@/lib/fresh-cards";
 import {
   CATCH_POP_MS,
   CATCH_WASH_MS,
+  FLIGHT_LEVEL,
   FLIGHT_START_PX,
   cardFlightPlan,
   catchDip,
   flightFrame,
   flightSchedule,
-  type FlightForm,
-  type FlightLevel,
   type Point,
 } from "@/lib/todo-flight";
 
@@ -23,18 +22,20 @@ import {
  *   out of the conversation's view (`data-conversation-backdrop`) or
  *   the window does not fly.
  * - **Where to**: the button's own glyph, `[data-role="topbar-todo"]`,
- *   measured as each takes off: the top bar is being reworked, so
- *   nothing about its place is written here.
+ *   measured as each takes off: the button changes width with what it
+ *   shows (TodoToggleButton), so nothing about its place is written
+ *   here.
  * - **The layer**: one fixed, full-window layer on <body>, inert and
  *   `pointer-events: none`, at z 40 — over the conversation and the top
  *   bar (z 10–30), under the dialogs and menus (z 50 up). A copy of the
  *   glyph flies in it, its colour the card's; the card's own glyph
  *   stays where it is.
  * - **The catch**: the button pops (`todo-catch-pop`, its peak and dip
- *   as custom properties), in full ink for the while; under reduced
- *   motion its ground washes `bg-hover` and fades back
- *   (`todo-catch-wash`). The class is the button's for the animation's
- *   length, as a panel row takes the locate wash (useTodoPanelFlash).
+ *   as custom properties), in full ink for the while — only its glyph
+ *   while it stands as a capsule (`popTarget`, main chat ticket 104);
+ *   under reduced motion its ground washes `bg-hover` and fades back
+ *   (`todo-catch-wash`). The class is there for the animation's length,
+ *   as a panel row takes the locate wash (useTodoPanelFlash).
  */
 
 /** A glyph to fly: where it starts (measured at takeoff; null when it
@@ -65,7 +66,8 @@ function catcher(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[data-role="topbar-todo"]');
 }
 
-/** The centre of the button's glyph (its list icon), or of the button. */
+/** The centre of the button's glyph (its list icon), or of the button:
+ * the glyph stays at the button's left whatever it shows. */
 function catcherCentre(): Point | null {
   const button = catcher();
   if (!button) return null;
@@ -148,7 +150,8 @@ function layer(): HTMLElement {
 }
 
 /** One glyph's flight, from its source to the button, frame by frame. */
-function fly(source: FlightSource, level: FlightLevel): void {
+function fly(source: FlightSource): void {
+  const level = FLIGHT_LEVEL;
   const from = source.measure();
   const to = catcherCentre();
   if (!from || !to) return;
@@ -191,29 +194,48 @@ function fly(source: FlightSource, level: FlightLevel): void {
   requestAnimationFrame(step);
 }
 
-let catchTimer: ReturnType<typeof setTimeout> | null = null;
+/**
+ * What the pop scales (main chat ticket 104, PRD ruling 150 point 6):
+ * the whole button, or only its glyph while the button stands as a
+ * capsule (`data-shape="capsule"`, its body drawn): 1.15 on a 200px
+ * capsule would swing its ends out about 15px. A narrow header folds
+ * the capsule to the icon and today's count (TodoToggleButton), the
+ * body no longer drawn: the whole button again, as 甲's.
+ */
+function popTarget(button: HTMLElement): HTMLElement | SVGElement {
+  if (button.dataset.shape !== "capsule") return button;
+  const body = button.querySelector("[data-capsule-body]");
+  if (!body || body.getClientRects().length === 0) return button;
+  return button.querySelector("svg") ?? button;
+}
 
-/** The button catches: a pop at `level`'s scale, or under reduced
- * motion a wash of its ground. Again while one runs: it starts over. */
-function catchOn(kind: "pop" | "wash", level: FlightLevel): void {
+let catchTimer: ReturnType<typeof setTimeout> | null = null;
+let caught: HTMLElement | SVGElement | null = null;
+
+/** The button catches: a pop at `FLIGHT_LEVEL`'s scale, or under
+ * reduced motion a wash of its ground. Again while one runs: it starts
+ * over. */
+function catchOn(kind: "pop" | "wash"): void {
   const button = catcher();
   if (!button) return;
+  const target = kind === "pop" ? popTarget(button) : button;
   const cls = kind === "pop" ? POP_CLASS : WASH_CLASS;
+  caught?.classList.remove(POP_CLASS, WASH_CLASS);
   button.classList.remove(POP_CLASS, WASH_CLASS);
   if (catchTimer !== null) clearTimeout(catchTimer);
   void button.offsetWidth;
   if (kind === "pop") {
-    button.style.setProperty("--todo-catch-peak", String(level.popScale));
-    button.style.setProperty(
-      "--todo-catch-dip",
-      String(catchDip(level.popScale)),
-    );
+    const { popScale } = FLIGHT_LEVEL;
+    target.style.setProperty("--todo-catch-peak", String(popScale));
+    target.style.setProperty("--todo-catch-dip", String(catchDip(popScale)));
   }
-  button.classList.add(cls);
+  target.classList.add(cls);
+  caught = target;
   catchTimer = setTimeout(
     () => {
       catchTimer = null;
-      button.classList.remove(cls);
+      caught = null;
+      target.classList.remove(cls);
     },
     kind === "pop" ? CATCH_POP_MS : CATCH_WASH_MS,
   );
@@ -221,24 +243,21 @@ function catchOn(kind: "pop" | "wash", level: FlightLevel): void {
 
 /** Fly `sources` one after another, the button popping as the last
  * lands; with none, it pops at once. */
-function flyAll(sources: readonly FlightSource[], level: FlightLevel): void {
-  const { starts, popAt } = flightSchedule(sources.length, level);
+function flyAll(sources: readonly FlightSource[]): void {
+  const { starts, popAt } = flightSchedule(sources.length, FLIGHT_LEVEL);
   sources.forEach((source, i) => {
-    if (starts[i] === 0) fly(source, level);
-    else setTimeout(() => fly(source, level), starts[i]);
+    if (starts[i] === 0) fly(source);
+    else setTimeout(() => fly(source), starts[i]);
   });
-  if (popAt === 0) catchOn("pop", level);
-  else setTimeout(() => catchOn("pop", level), popAt);
+  if (popAt === 0) catchOn("pop");
+  else setTimeout(() => catchOn("pop"), popAt);
 }
 
-/** What `flyFreshCards` is told: the new cards and how things stand, and
- * the form and level picked (the trial's switcher until a ruling). */
+/** What `flyFreshCards` is told: the new cards and how things stand. */
 export interface FreshCardFlight {
   fresh: readonly FreshCard[];
   mainChatOnScreen: boolean;
   panelShown: boolean;
-  form: FlightForm;
-  level: FlightLevel;
 }
 
 /**
@@ -262,30 +281,25 @@ export function flyFreshCards(input: FreshCardFlight): void {
   });
   if (!plan) return;
   if (plan.catch === "wash") {
-    catchOn("wash", input.level);
+    catchOn("wash");
     return;
   }
-  flyAll(
-    plan.fly.map((card) => glyphSource(glyphOf(card)!)),
-    input.level,
-  );
+  flyAll(plan.fly.map((card) => glyphSource(glyphOf(card)!)));
 }
 
 /**
- * TEMP variant switcher (main chat 102): the pill's 「重放」. The cards
- * under the main chat's last reply that has any fly at the current pick,
- * the panel open or not; their glyphs scrolled out of view, the button
- * only pops, as for real. With no card on screen, one empty box (a
- * to-do's) takes off from the composer's left end.
+ * TEMP variant switcher (main chat 104): the top bar pill's 「重放」, so
+ * each look's catch can be seen without noting a to-do (ticket 102's
+ * flight pill had it; the flight is settled, the button's look is not).
+ * The cards under the main chat's last reply that has any fly, the
+ * panel open or not; their glyphs scrolled out of view, the button only
+ * pops, as for real. With no card on screen, one empty box (a to-do's)
+ * takes off from the composer's left end.
  */
-export function replayFlight(form: FlightForm, level: FlightLevel): void {
-  if (typeof document === "undefined" || form === "none") return;
+export function replayFlight(): void {
+  if (typeof document === "undefined") return;
   if (prefersReducedMotion()) {
-    catchOn("wash", level);
-    return;
-  }
-  if (form === "pop") {
-    catchOn("pop", level);
+    catchOn("wash");
     return;
   }
   const cards = document.querySelectorAll<HTMLElement>(
@@ -298,33 +312,30 @@ export function replayFlight(form: FlightForm, level: FlightLevel): void {
       .filter((card) => (reply ? reply.contains(card) : card === last))
       .map((card) => card.querySelector<HTMLElement>("[data-card-icon]"))
       .filter((glyph): glyph is HTMLElement => !!glyph && glyphInView(glyph));
-    flyAll(glyphs.map(glyphSource), level);
+    flyAll(glyphs.map(glyphSource));
     return;
   }
   const composer =
     document.querySelector<HTMLElement>('[data-role="composer-one-line"]') ??
     document.querySelector<HTMLElement>("textarea");
   if (!composer) {
-    catchOn("pop", level);
+    catchOn("pop");
     return;
   }
-  flyAll(
-    [
-      {
-        measure: () => {
-          const box = composer.getBoundingClientRect();
-          return { x: box.left + 24, y: box.top + box.height / 2 };
-        },
-        copy: () => {
-          // ui/checkbox.tsx's empty md box.
-          const box = document.createElement("span");
-          box.className =
-            "inline-flex size-4 rounded-sm border border-line-strong bg-elevated";
-          return box;
-        },
-        color: "inherit",
+  flyAll([
+    {
+      measure: () => {
+        const box = composer.getBoundingClientRect();
+        return { x: box.left + 24, y: box.top + box.height / 2 };
       },
-    ],
-    level,
-  );
+      copy: () => {
+        // ui/checkbox.tsx's empty md box.
+        const box = document.createElement("span");
+        box.className =
+          "inline-flex size-4 rounded-sm border border-line-strong bg-elevated";
+        return box;
+      },
+      color: "inherit",
+    },
+  ]);
 }

@@ -12,20 +12,12 @@ import type { FreshCard } from "@/lib/fresh-cards";
  *
  * Everything here is pure — the plan, the timing, the path — so it is
  * pinned in tests; lib/todo-flight-run.ts measures and moves the DOM.
- * Which form and how big comes from the trial's temporary switcher
- * (components/todo/flight-variants/, ticket 102) until a ruling picks.
+ * Fly and pop at the middle size, since JC compared the three forms and
+ * sizes on ticket 102's pill (main chat ticket 104, PRD ruling 149
+ * point 1; `FLIGHT_LEVEL`).
  */
 
-/** What a card's arrival does to the button (the trial's 形态). */
-export type FlightForm =
-  /** 现状: nothing. */
-  | "none"
-  /** 只 pop: the button pops, nothing flies. */
-  | "pop"
-  /** 飞 + pop: the glyphs fly, the button pops as the last lands. */
-  | "fly";
-
-/** How big (the trial's 幅度). */
+/** How big a flight and its pop are. */
 export interface FlightLevel {
   /** The arc's control point, this far above the midpoint, px. */
   lift: number;
@@ -36,6 +28,19 @@ export interface FlightLevel {
   /** The button's pop at its fullest; it dips under 1 once after. */
   popScale: number;
 }
+
+/**
+ * The size JC picked (ruling 149 point 1): ticket 102's middle level —
+ * the arc's control point 100px up, the glyph 20px halfway, 560ms; the
+ * pop to 1.15. The big (160px, 24px, 700ms, 1.25) and the small (60px,
+ * 16px, 450ms, 1.08) went with the trial's switcher.
+ */
+export const FLIGHT_LEVEL: FlightLevel = {
+  lift: 100,
+  peak: 20,
+  durationMs: 560,
+  popScale: 1.15,
+};
 
 /** The glyph's size as it leaves the card (its 16px column) and as it
  * lands in the button. */
@@ -170,8 +175,8 @@ export function flightSchedule(
 }
 
 /** The pop's dip after its fullest, as deep in proportion: 1.25 dips to
- * 0.96 (the ticket's big level, `sidebar-state-pop`'s shape), smaller
- * pops shallower. */
+ * 0.96 (`sidebar-state-pop`'s shape, ticket 102's big level), the 1.15
+ * picked to 0.976. */
 export function catchDip(popScale: number): number {
   return Math.round((1 - (popScale - 1) * 0.16) * 1000) / 1000;
 }
@@ -187,7 +192,6 @@ export interface CardFlightInput {
   /** The panel is on screen (lib/todo-open.ts `todoView(...).shown`): it
    * lights the rows instead (ticket 87). */
   panelShown: boolean;
-  form: FlightForm;
   /** The system's 「减少动态效果」. */
   reducedMotion: boolean;
   /** Whether a card's glyph is in view (not scrolled out). */
@@ -204,7 +208,7 @@ export interface CardFlightPlan {
 /**
  * Whether the new cards fly (main chat ticket 102, PRD ruling 147 point
  * 6). Null: nothing happens — the main chat not on screen, the panel on
- * screen (its rows light), no card, or 现状. The panel's one opening by
+ * screen (its rows light), or no card. The panel's one opening by
  * itself is decided first, and when it opens nothing flies (the caller,
  * hooks/useFreshCards.ts). A round you sent and one Core woke Galley for
  * alike. Reduced motion: nothing flies or scales, the button's ground
@@ -212,15 +216,9 @@ export interface CardFlightPlan {
  * when none is in view, the button only pops.
  */
 export function cardFlightPlan(input: CardFlightInput): CardFlightPlan | null {
-  if (
-    input.fresh.length === 0 ||
-    !input.mainChatOnScreen ||
-    input.panelShown ||
-    input.form === "none"
-  ) {
+  if (input.fresh.length === 0 || !input.mainChatOnScreen || input.panelShown) {
     return null;
   }
   if (input.reducedMotion) return { fly: [], catch: "wash" };
-  if (input.form === "pop") return { fly: [], catch: "pop" };
   return { fly: input.fresh.filter(input.inView), catch: "pop" };
 }
