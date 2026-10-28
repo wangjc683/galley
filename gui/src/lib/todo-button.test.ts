@@ -8,15 +8,18 @@ import type { TodoItem, YourTodos } from "@/lib/assistant-todo";
 import {
   TODO_CAPSULE_MAX_PX,
   todoButtonFit,
+  todoButtonShape,
   todoCapsule,
   todoFirstRow,
 } from "./todo-button";
 
 /**
- * The top bar's 待办 button as a capsule (main chat ticket 104, PRD
- * ruling 150): the first row of your things in the panel's order, its
- * time as the panel's row writes it, 「+N」 only for today's, and the
- * header widths the word and the capsule give way at. Today is
+ * The top bar's 待办 button (main chat ticket 106, PRD ruling 152): its
+ * look by your things — the word with none, the capsule while the first
+ * is one of today's or overdue, the icon otherwise; the capsule's row
+ * (ticket 104, ruling 150), the first of your things in the panel's
+ * order, its time as the panel's row writes it, 「+N」 only for today's;
+ * and the header widths the word and the capsule give way at. Today is
  * Wednesday 28 October 2026 in whatever zone the run is in.
  */
 
@@ -70,6 +73,30 @@ describe("the first row", () => {
       group: "anytime",
     });
     expect(todoFirstRow(none)).toBeNull();
+  });
+});
+
+describe("the look (ruling 152)", () => {
+  it("writes 「待办」 with none of yours", () => {
+    expect(todoButtonShape(none)).toBe("word");
+  });
+
+  it("is the capsule while the first of yours is one of today's, overdue too", () => {
+    const today = [todo("交周报", 0, 15)];
+    const late = todo("交季度报告", -2, undefined, { overdue: true });
+    const later = [todo("取快递", 2, 15)];
+    const anytime = [todo("整理发票")];
+    expect(todoButtonShape({ ...none, today })).toBe("capsule");
+    expect(todoButtonShape({ ...none, today: [late] })).toBe("capsule");
+    expect(todoButtonShape({ today, later, anytime })).toBe("capsule");
+  });
+
+  it("is the icon while the first of yours is later's or anytime's", () => {
+    const later = [todo("取快递", 2, 15)];
+    const anytime = [todo("整理发票")];
+    expect(todoButtonShape({ ...none, later })).toBe("icon");
+    expect(todoButtonShape({ ...none, later, anytime })).toBe("icon");
+    expect(todoButtonShape({ ...none, anytime })).toBe("icon");
   });
 });
 

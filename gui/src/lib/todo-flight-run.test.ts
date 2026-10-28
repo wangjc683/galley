@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FreshCard } from "@/lib/fresh-cards";
 import { FLIGHT_LEVEL, flightFrame } from "@/lib/todo-flight";
 
-import { flyFreshCards, replayFlight } from "./todo-flight-run";
+import { flyFreshCards } from "./todo-flight-run";
 
 /**
  * The DOM half of a card's glyph flying into the top bar's 「待办」
@@ -284,7 +284,7 @@ describe("where it lands, and what pops (ticket 104's capsule)", () => {
     vi.advanceTimersByTime(440);
     expect(glyph.classList.contains("todo-catch-pop")).toBe(false);
 
-    // 甲, 丁, a word, 戊2 without today: the whole button.
+    // The icon look and the word: the whole button.
     for (const shape of ["icon", "word"]) {
       button.dataset.shape = shape;
       flyFreshCards(flyInput([T]));
@@ -315,49 +315,5 @@ describe("where it lands, and what pops (ticket 104's capsule)", () => {
     flyFreshCards(flyInput([T]));
     expect(button.classList.contains("todo-catch-wash")).toBe(true);
     expect(glyph.classList.contains("todo-catch-pop")).toBe(false);
-  });
-});
-
-// TEMP variant switcher (main chat 104): the top bar pill's 「重放」.
-describe("重放", () => {
-  it("flies the cards of the last reply that has any, the panel open or not", () => {
-    const { scroller, reply } = page();
-    const older = document.createElement("div");
-    older.dataset.messageId = "msg_s-main_3_assistant";
-    scroller.insertBefore(older, reply);
-    card(older, "todo-card", "data-todo-id", "todo_old", 340, 200);
-    card(reply, "reminder-card", "data-reminder-id", "sched_a", 340, 600);
-    card(reply, "memo-card", "data-memo-event", "11", 340, 648);
-    replayFlight();
-    expect(flights().map((el) => at(el).y)).toEqual([610]);
-    vi.advanceTimersByTime(90);
-    expect(flights()).toHaveLength(2);
-    expect(at(flights()[1]).y).toBe(658);
-    // The last lands at 90 + 560ms, and the button pops.
-    vi.advanceTimersByTime(560);
-    expect(button.classList.contains("todo-catch-pop")).toBe(true);
-  });
-
-  it("with no card, flies one box from the composer's left end", () => {
-    page();
-    const composer = document.createElement("div");
-    composer.dataset.role = "composer-one-line";
-    composer.getBoundingClientRect = box(320, 780, 800, 48);
-    document.body.appendChild(composer);
-    replayFlight();
-    expect(flights()).toHaveLength(1);
-    expect(at(flights()[0])).toEqual({ x: 344, y: 804, scale: 1 });
-    expect(flights()[0].querySelector("span.rounded-sm")).not.toBeNull();
-  });
-
-  it("pops the glyph alone on a capsule, as for real", () => {
-    const { reply } = page();
-    card(reply, "todo-card", "data-todo-id", "todo_a", 340, 600);
-    const glyph = capsule(true);
-    replayFlight();
-    expect(flights()).toHaveLength(1);
-    vi.advanceTimersByTime(560);
-    expect(glyph.classList.contains("todo-catch-pop")).toBe(true);
-    expect(button.classList.contains("todo-catch-pop")).toBe(false);
   });
 });

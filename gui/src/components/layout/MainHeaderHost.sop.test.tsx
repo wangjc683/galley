@@ -47,39 +47,9 @@ vi.mock("./MainHeader", async (importOriginal) => {
   };
 });
 
-// TEMP variant switcher (main chat 104): the 待办 button's look, seeded
-// per test (a static render reads a store's initial state).
-const look = vi.hoisted(() => ({ value: "E" as "A" | "D" | "E2" | "E" }));
-vi.mock(
-  "@/components/todo/todo-button-variants/todo-button-variants",
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import("@/components/todo/todo-button-variants/todo-button-variants")
-      >();
-    const get = () => ({
-      look: look.value,
-      demo: "real" as const,
-      pretendNew: false,
-      introducedAtLaunch: true,
-      setLook: () => {},
-      setDemo: () => {},
-      setPretendNew: () => {},
-    });
-    return {
-      ...actual,
-      useTodoButtonVariants: Object.assign(
-        <R,>(select: (s: ReturnType<typeof get>) => R) => select(get()),
-        { getState: get },
-      ),
-    };
-  },
-);
-
 afterEach(() => {
   seed.runtime = "managed";
   seed.props = null;
-  look.value = "E";
 });
 
 function header(
@@ -136,27 +106,18 @@ describe("the top bar's Supervisor SOP icon", () => {
     }
     expect(seed.props?.onOpenSupervisorSop).toBeUndefined();
     // What is left, in the same order: 改动, 显示, 设置 — 待办 a group of
-    // its own in front since ticket 104, whatever the trial's look.
-    for (const value of ["A", "D", "E2", "E"] as const) {
-      look.value = value;
-      expect(toolButtons(header()), value).toEqual([
-        "工作区改动",
-        "显示设置",
-        "打开设置",
-      ]);
-    }
+    // its own in front since ticket 104.
+    expect(toolButtons(header())).toEqual([
+      "工作区改动",
+      "显示设置",
+      "打开设置",
+    ]);
   });
 
   it("stays on the external runtime, between 显示 and 设置, opening Settings → Agent", () => {
     seed.runtime = "external";
     const openSettings = vi.fn();
     const html = header({ openSettings });
-    // Ticket 104's pill changes nothing there (no 待办 button).
-    for (const value of ["A", "D", "E2", "E"] as const) {
-      look.value = value;
-      expect(header({ openSettings }), value).toBe(html);
-    }
-    look.value = "E";
     expect(html).toContain(SOP);
     expect(toolButtons(html)).toEqual([
       "工作区改动",

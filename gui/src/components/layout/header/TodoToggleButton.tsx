@@ -1,17 +1,11 @@
 import { ListChecks } from "@phosphor-icons/react";
 import { useRef, useState } from "react";
 
-// TEMP variant switcher (main chat 104): the look, the demo, 丁's launch read.
-import {
-  todoButtonDemo,
-  todoButtonShape,
-  useTodoButtonVariants,
-} from "@/components/todo/todo-button-variants/todo-button-variants";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { isMac } from "@/lib/platform";
-import { todoCapsule, todoFirstRow } from "@/lib/todo-button";
+import { todoButtonShape, todoCapsule } from "@/lib/todo-button";
 import { todoWithoutDeleting } from "@/lib/todo-panel";
 import { cn } from "@/lib/utils";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
@@ -37,31 +31,30 @@ import { TopBarIconButton } from "../TopBarIconButton";
  * panel's two pages (ticket 103, ruling 148 point 4, as the panel's own
  * page control is named) — and what N counts.
  *
- * What else it shows is on the trial's pill (ruling 150,
- * todo-button-variants.ts): the icon and N alone (`icon`, 甲); 「待办」
- * after the icon, 13px regular in the button's ink, N after it (`word`,
- * 丁 before the panel is met, 戊 / 戊2 with nothing to write; it gives
- * way first on a narrow header, `WORD`); or the capsule (`capsule`, 戊 /
- * 戊2) — the first row of your things, 「时间 · 标题」 and 「+N」 for
- * today's others (lib/todo-button.ts), in a hairline pill 28px high,
- * 220px at most, its title cut past that; on a narrow header the title
- * is cut further, then the capsule folds to the icon and N (`CAPSULE`).
- * The list it reads is the panel's: without the to-dos deleted there
- * and waiting on their undo (ticket 88).
+ * Three looks by your things (ticket 106, ruling 152; the rule is
+ * lib/todo-button.ts `todoButtonShape`): with none of yours, 「待办」
+ * after the icon, 13px regular in the button's ink, N after it (`word`;
+ * it gives way first on a narrow header, `WORD`); while the first of
+ * yours is one of today's, overdue too, the capsule (`capsule`) — its
+ * row, 「时间 · 标题」 and 「+N」 for today's others (`todoCapsule`), in a
+ * hairline pill 28px high, 220px at most, its title cut past that; on a
+ * narrow header the title is cut further, then the capsule folds to the
+ * icon and N (`CAPSULE`); otherwise the icon and N alone (`icon`). The
+ * list it reads is the panel's: without the to-dos deleted there and
+ * waiting on their undo (ticket 88).
  */
 
 /**
- * Where the word shows (丁, and 戊 / 戊2 with nothing to write), as
- * container-query classes against the `@container/main-header` that
- * MainHeader sets while the look can show more than the icon (ticket
- * 103's way): from lib/todo-button.ts `todoButtonFit`'s `word` up —
- * what the header's content box needs with the word and a two-digit N
- * in the busiest common state, so that while the word shows Galley's
- * identity is never cut for it (620 / 731 on macOS, 766 / 877 on
- * Windows / Linux; a main area of 632 / 743px on macOS). Below it the
- * word goes and the button is 甲's, 28px, 40–48px with N. With no room
- * left after that, the identity's second line fades out, then its name,
- * as before.
+ * Where the word shows (none of yours), as container-query classes
+ * against the `@container/main-header` that MainHeader sets while the
+ * button is there (ticket 103's way): from lib/todo-button.ts
+ * `todoButtonFit`'s `word` up — what the header's content box needs
+ * with the word and a two-digit N in the busiest common state, so that
+ * while the word shows Galley's identity is never cut for it (620 / 731
+ * on macOS, 766 / 877 on Windows / Linux; a main area of 632 / 743px on
+ * macOS). Below it the word goes and the button is the icon look's,
+ * 28px, 40–48px with N. With no room left after that, the identity's
+ * second line fades out, then its name, as before.
  */
 const WORD = isMac
   ? {
@@ -97,9 +90,9 @@ const WORD = isMac
  * glyph's ~2px inside its box), at most `min(220px, 100cqw - rest)` wide
  * (541 / 640, 687 / 786): as the header narrows its title is cut
  * further, and under `fold`, with under four characters of it left, the
- * body goes and the button is 甲's, the icon and N. It grows and shrinks
- * from its left edge: the right group is pinned to the header's right,
- * the capsule first in it.
+ * body goes and the button is the icon look's, the icon and N. It
+ * grows and shrinks from its left edge: the right group is pinned to
+ * the header's right, the capsule first in it.
  */
 const CAPSULE = isMac
   ? {
@@ -145,20 +138,8 @@ export function TodoToggleButton({
   const todayStartMs = useDayStamp();
   const listed = useAssistantTodoStore((s) => s.todo);
   const deleting = useAssistantTodoStore((s) => s.deleting);
-  // TEMP variant switcher (main chat 104): the look, the demo in place of
-  // the list, and whether the panel was met at launch (丁).
-  const look = useTodoButtonVariants((s) => s.look);
-  const demo = useTodoButtonVariants((s) => s.demo);
-  const introduced = useTodoButtonVariants(
-    (s) => s.introducedAtLaunch && !s.pretendNew,
-  );
-  const { yours, todayCount } =
-    todoButtonDemo(demo, todayStartMs) ?? todoWithoutDeleting(listed, deleting);
-  const shape = todoButtonShape(
-    look,
-    todoFirstRow(yours)?.group ?? null,
-    introduced,
-  );
+  const { yours, todayCount } = todoWithoutDeleting(listed, deleting);
+  const shape = todoButtonShape(yours);
   const capsule =
     shape === "capsule"
       ? todoCapsule(yours, todayCount, todayStartMs, language, allCopy)

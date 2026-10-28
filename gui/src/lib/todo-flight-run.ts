@@ -200,7 +200,8 @@ function fly(source: FlightSource): void {
  * capsule (`data-shape="capsule"`, its body drawn): 1.15 on a 200px
  * capsule would swing its ends out about 15px. A narrow header folds
  * the capsule to the icon and today's count (TodoToggleButton), the
- * body no longer drawn: the whole button again, as 甲's.
+ * body no longer drawn: the whole button again, as the icon look's and
+ * the word's (main chat ticket 106, PRD ruling 152).
  */
 function popTarget(button: HTMLElement): HTMLElement | SVGElement {
   if (button.dataset.shape !== "capsule") return button;
@@ -285,57 +286,4 @@ export function flyFreshCards(input: FreshCardFlight): void {
     return;
   }
   flyAll(plan.fly.map((card) => glyphSource(glyphOf(card)!)));
-}
-
-/**
- * TEMP variant switcher (main chat 104): the top bar pill's 「重放」, so
- * each look's catch can be seen without noting a to-do (ticket 102's
- * flight pill had it; the flight is settled, the button's look is not).
- * The cards under the main chat's last reply that has any fly, the
- * panel open or not; their glyphs scrolled out of view, the button only
- * pops, as for real. With no card on screen, one empty box (a to-do's)
- * takes off from the composer's left end.
- */
-export function replayFlight(): void {
-  if (typeof document === "undefined") return;
-  if (prefersReducedMotion()) {
-    catchOn("wash");
-    return;
-  }
-  const cards = document.querySelectorAll<HTMLElement>(
-    '[data-role="todo-card"], [data-role="reminder-card"], [data-role="memo-card"]',
-  );
-  const last = cards[cards.length - 1];
-  if (last) {
-    const reply = last.closest("[data-message-id]");
-    const glyphs = Array.from(cards)
-      .filter((card) => (reply ? reply.contains(card) : card === last))
-      .map((card) => card.querySelector<HTMLElement>("[data-card-icon]"))
-      .filter((glyph): glyph is HTMLElement => !!glyph && glyphInView(glyph));
-    flyAll(glyphs.map(glyphSource));
-    return;
-  }
-  const composer =
-    document.querySelector<HTMLElement>('[data-role="composer-one-line"]') ??
-    document.querySelector<HTMLElement>("textarea");
-  if (!composer) {
-    catchOn("pop");
-    return;
-  }
-  flyAll([
-    {
-      measure: () => {
-        const box = composer.getBoundingClientRect();
-        return { x: box.left + 24, y: box.top + box.height / 2 };
-      },
-      copy: () => {
-        // ui/checkbox.tsx's empty md box.
-        const box = document.createElement("span");
-        box.className =
-          "inline-flex size-4 rounded-sm border border-line-strong bg-elevated";
-        return box;
-      },
-      color: "inherit",
-    },
-  ]);
 }

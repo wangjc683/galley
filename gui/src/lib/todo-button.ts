@@ -4,17 +4,30 @@ import type { ResolvedLanguage } from "@/lib/language";
 import { todoMetaParts } from "@/lib/todo-panel";
 
 /**
- * The top bar's 「待办」 button as a capsule (main chat ticket 104, PRD
- * ruling 150): the first row of the panel's 你的事 — 「时间 · 标题」, and
- * 「+N」 after it while that row is one of today's — so the button always
- * says the one thing worth saying now, its weight earned; 「待办」 only
- * when there is nothing to write, which is where a new user starts.
- * Galley's own work (its reminders, its subtasks) stays out: what it is
- * on, the face in the sidebar says (point 4).
+ * The top bar's 「待办」 button (main chat ticket 106, PRD ruling 152;
+ * 戊2 of ticket 104's trial): three looks, read from the panel's 你的事
+ * alone (`todoButtonShape`) —
  *
- * Pure: the row and the words here (`todoCapsule`), the header widths it
- * gives way at (`todoButtonFit`); TodoToggleButton draws it, and which
- * look draws a capsule at all is the trial's (todo-button-variants.ts).
+ *   word     none of yours: 「待办」 after the icon. A new user starts
+ *            here, so the word says what the button is until the first
+ *            to-do is noted; the list decides, no flag of the panel's
+ *            (point 3).
+ *   capsule  the first of yours is one of today's (overdue too): its
+ *            row as the panel has it, 「时间 · 标题」, and 「+N」 for
+ *            today's others (ruling 150 point 2) — what today holds, at
+ *            a glance.
+ *   icon     otherwise, the first later's or anytime's: the icon and
+ *            today's count, the icon alone at 0. Quiet, as JC wanted the
+ *            bar when the word read stiff (ruling 149 point 3); a far-off
+ *            to-do is not hung over every conversation for weeks, its
+ *            reminder calls when it is due (point 5, 戊 not picked).
+ *
+ * Galley's own work (its reminders, its subtasks) stays out: what it is
+ * on, the face in the sidebar says (ruling 150 point 4).
+ *
+ * Pure: the look (`todoButtonShape`), the capsule's row and words
+ * (`todoCapsule`), the header widths the word and the capsule give way
+ * at (`todoButtonFit`); TodoToggleButton draws them.
  */
 
 /** Which of Core's three lists of the user's to-dos a row is in. */
@@ -35,6 +48,27 @@ export function todoFirstRow(yours: YourTodos): TodoFirstRow | null {
     if (item) return { item, group };
   }
   return null;
+}
+
+/** What the button draws: the icon (and today's count), 「待办」 after
+ * the icon, or the capsule. */
+export type TodoButtonShape = "icon" | "word" | "capsule";
+
+/**
+ * The button's look (ruling 152): 「待办」 with none of yours; the
+ * capsule while the first of yours is one of today's (`todoFirstRow`;
+ * Core lists the overdue first among today's); else the icon. `yours`
+ * is the panel's list: without the rows deleted there and waiting on
+ * their undo (lib/todo-panel.ts `todoWithoutDeleting`). Core's
+ * `todayCount` is the length of today's list, so the icon look itself
+ * has no number but while a deleted one of today's waits on its undo;
+ * the icon with today's count is mostly the capsule folded on a narrow
+ * header (TodoToggleButton).
+ */
+export function todoButtonShape(yours: YourTodos): TodoButtonShape {
+  const first = todoFirstRow(yours);
+  if (!first) return "word";
+  return first.group === "today" ? "capsule" : "icon";
 }
 
 /** What the capsule writes. */
@@ -88,16 +122,16 @@ export const TODO_CAPSULE_MAX_PX = 220;
  * The header widths the button's word and capsule give way at (ruling
  * 150 point 5; ticket 103 for the word): the capsule's title is cut
  * first, then, with under four characters of it left, the whole capsule
- * folds to 甲 (the icon and today's count); the word simply goes; only
- * then is Galley's identity on the left cut, as before. Ticket 103's
- * way: the header is a size container (`@container/main-header`; its
- * content box is the main area less the header's `pr-3` on macOS, the
- * whole main area on Windows / Linux, whose window controls are inside
- * it) and the thresholds are what that box needs in the busiest common
- * state, so that while the word or the capsule shows, the identity is
- * never cut for it. TodoToggleButton writes them out as classes
- * (`WORD`, `CAPSULE`; Tailwind needs them literal), pinned to these
- * numbers by its test.
+ * folds to the icon look (the icon and today's count); the word simply
+ * goes; only then is Galley's identity on the left cut, as before.
+ * Ticket 103's way: the header is a size container
+ * (`@container/main-header`; its content box is the main area less the
+ * header's `pr-3` on macOS, the whole main area on Windows / Linux,
+ * whose window controls are inside it) and the thresholds are what
+ * that box needs in the busiest common state, so that while the word or
+ * the capsule shows, the identity is never cut for it. TodoToggleButton
+ * writes them out as classes (`WORD`, `CAPSULE`; Tailwind needs them
+ * literal), pinned to these numbers by its test.
  *
  * - **The rest**: everything in that box but the 待办 button. The left:
  *   pl 10 + the sidebar toggle 28 + gap 6 + Galley's identity with its

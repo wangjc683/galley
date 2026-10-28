@@ -1,13 +1,9 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type {
-  TodoButtonDemo,
-  TodoButtonLook,
-} from "@/components/todo/todo-button-variants/todo-button-variants";
 import {
   EMPTY_TODO,
   type TodoItem,
@@ -22,13 +18,13 @@ import { TodoToggleButton } from "./TodoToggleButton";
  * Galley's 待办 in its top bar (main chat ticket 45): the list icon, N
  * beside it only when N > 0 (Core's `todayCount`, plain text, never a
  * badge), pressed and `bg-selected` while the panel is open; named
- * 「待办与备忘」 since ticket 103 (PRD ruling 148 point 4). On ticket 104's
- * trial pill (ruling 150): 甲 the icon and N, 丁 the word 「待办」 before
- * the panel was met at launch, 戊2 and 戊 the capsule — the first row of
- * your things in a hairline pill — or the word with nothing to write;
- * the word and the capsule give way on a narrow header by its width.
- * Static rendering reads a store's initial state, so the list, today and
- * the trial's look are handed in by mocking the hooks. Today is
+ * 「待办与备忘」 since ticket 103 (PRD ruling 148 point 4). Three looks
+ * by your things since ticket 106 (ruling 152, 戊2 of ticket 104's
+ * pick): the word 「待办」 with none of yours, the capsule — the first
+ * row in a hairline pill — while that row is one of today's or overdue,
+ * the icon otherwise; the word and the capsule give way on a narrow
+ * header by its width. Static rendering reads a store's initial state,
+ * so the list and today are handed in by mocking the hooks. Today is
  * Wednesday 28 October 2026 in whatever zone the run is in.
  */
 
@@ -47,46 +43,26 @@ vi.mock("@/stores/assistant-todo", () => ({
       deleting: list.deleting,
     }),
 }));
-// TEMP variant switcher (main chat 104): the look, the demo, 丁's read.
-const trial = vi.hoisted(() => ({
-  look: "A" as TodoButtonLook,
-  demo: "real" as TodoButtonDemo,
-  pretendNew: false,
-  introducedAtLaunch: true,
-}));
-vi.mock(
-  "@/components/todo/todo-button-variants/todo-button-variants",
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import("@/components/todo/todo-button-variants/todo-button-variants")
-      >();
-    return {
-      ...actual,
-      useTodoButtonVariants: (select: (state: unknown) => unknown) =>
-        select({ ...trial }),
-    };
-  },
-);
 afterEach(() => {
   list.yours = { today: [], later: [], anytime: [] };
   list.todayCount = 0;
   list.deleting = {};
-  Object.assign(trial, {
-    look: "A",
-    demo: "real",
-    pretendNew: false,
-    introducedAtLaunch: true,
-  });
 });
 
-function todo(id: string, text: string, days?: number, hh?: number): TodoItem {
+function todo(
+  id: string,
+  text: string,
+  days?: number,
+  hh?: number,
+  extra: Partial<TodoItem> = {},
+): TodoItem {
   const item: TodoItem = {
     kind: "todo",
     id,
     text,
     state: "open",
     createdBy: "assistant",
+    ...extra,
   };
   if (days === undefined) return item;
   const d = new Date(2026, 9, 28 + days);
@@ -118,23 +94,104 @@ const tag = (html: string) =>
     html.indexOf(">", html.indexOf("<button")),
   );
 
-describe("the top bar's 待办 button", () => {
-  it("is the list icon alone at 0: a 28px square, named 待办与备忘", () => {
+/** Three of today's (「+2」) and one later. */
+const today3 = () => {
+  list.yours = {
+    today: [
+      todo("t1", "交周报", 0, 15),
+      todo("t2", "回邮件", 0, 18),
+      todo("t3", "订机票", 0),
+    ],
+    later: [todo("l1", "取快递", 2, 15)],
+    anytime: [],
+  };
+  list.todayCount = 3;
+};
+
+describe("the three looks (ticket 106, PRD ruling 152)", () => {
+  it("writes 待办 after the icon with none of yours, 13px in the button's ink, the count after it", () => {
     const html = render();
-    expect(html).toContain('data-role="topbar-todo"');
-    expect(html).toContain('data-shape="icon"');
+    expect(html).toContain('data-shape="word"');
     expect(html).toContain('aria-label="待办与备忘"');
-    expect(html).toContain("size-7");
-    expect(html).not.toContain("w-auto");
-    expect(html).not.toContain("tabular-nums");
-    expect(render({ language: "en-US" })).toContain(
-      'aria-label="To-do and memos"',
-    );
+    const icon = html.indexOf("<svg");
+    const word = html.indexOf(">待办<");
+    expect(icon).toBeGreaterThan(-1);
+    expect(word).toBeGreaterThan(icon);
+    expect(html).toMatch(/class="text-\[13px\] leading-none [^"]*">待办</);
+    // 4px after the icon, the icon where the square has it.
+    expect(html).toContain("w-auto gap-1 px-[5px]");
+    // No colour of its own, no capsule frame.
+    expect(html).not.toMatch(/text-(ink|warning|brand)[^-]*">待办</);
+    expect(html).not.toContain("rounded-full");
+    expect(html).not.toContain("data-capsule-body");
+    expect(render({ language: "en-US" })).toContain(">To-do<");
+    // A count Core still has for today's deleted ones comes after it.
+    list.todayCount = 2;
+    const counted = render();
+    expect(counted.indexOf(">2<")).toBeGreaterThan(counted.indexOf(">待办<"));
   });
 
-  it("writes today's count beside the icon, as text and not a badge", () => {
-    list.todayCount = 3;
+  it("is the list icon alone while the first of yours is later's or anytime's: a 28px square", () => {
+    const fills: Record<string, YourTodos> = {
+      later: { today: [], later: [todo("l1", "取快递", 2, 15)], anytime: [] },
+      anytime: { today: [], later: [], anytime: [todo("a1", "整理发票")] },
+    };
+    for (const [name, yours] of Object.entries(fills)) {
+      list.yours = yours;
+      const html = render();
+      expect(html, name).toContain('data-role="topbar-todo"');
+      expect(html, name).toContain('data-shape="icon"');
+      expect(html, name).toContain('aria-label="待办与备忘"');
+      expect(html, name).toContain("size-7");
+      expect(html, name).not.toContain("w-auto");
+      expect(html, name).not.toContain("tabular-nums");
+      // Neither the row nor the word.
+      expect(html, name).not.toContain("取快递");
+      expect(html, name).not.toContain("整理发票");
+      expect(html, name).not.toContain(">待办<");
+      expect(html, name).not.toContain("data-capsule-body");
+      expect(render({ language: "en-US" }), name).toContain(
+        'aria-label="To-do and memos"',
+      );
+    }
+  });
+
+  it("is the capsule while the first of yours is one of today's, 「+N」 for today's others", () => {
+    today3();
     const html = render();
+    expect(html).toContain('data-shape="capsule"');
+    expect(html).toContain(">今天 15:00<");
+    expect(html).toContain(">交周报<");
+    expect(html).toContain(">+2<");
+    expect(html).not.toContain(">待办<");
+  });
+
+  it("is the capsule while the first of yours is overdue, 「+N」 for today's others", () => {
+    list.yours = {
+      today: [
+        todo("q1", "交季度报告", -2, undefined, { overdue: true }),
+        todo("t1", "交周报", 0, 15),
+      ],
+      later: [todo("l1", "取快递", 2, 15)],
+      anytime: [],
+    };
+    list.todayCount = 2;
+    const html = render();
+    expect(html).toContain('data-shape="capsule"');
+    expect(html).toContain(">逾期 2 天<");
+    expect(html).toContain(">交季度报告<");
+    expect(html).toContain(">+1<");
+  });
+});
+
+describe("the top bar's 待办 button", () => {
+  it("writes today's count beside the icon, as text and not a badge", () => {
+    // The icon look with a count: today's three deleted in the panel and
+    // waiting on their undo, Core still counting them.
+    today3();
+    list.deleting = { t1: {}, t2: {}, t3: {} };
+    const html = render();
+    expect(html).toContain('data-shape="icon"');
     expect(html).toContain('aria-label="待办与备忘 · 今天 3"');
     expect(html).toMatch(/text-\[12px\] leading-none tabular-nums">3</);
     // Widened from the square's left edge, the icon where it was.
@@ -160,39 +217,8 @@ describe("the top bar's 待办 button", () => {
   });
 });
 
-describe("丁 on ticket 104's pill: the word until the panel is met", () => {
-  it("writes 待办 after the icon, 13px in the button's ink, the count after it, while the panel was not met at launch", () => {
-    trial.look = "D";
-    trial.introducedAtLaunch = false;
-    list.todayCount = 2;
-    const html = render();
-    expect(html).toContain('data-shape="word"');
-    const icon = html.indexOf("<svg");
-    const word = html.indexOf(">待办<");
-    const count = html.indexOf(">2<");
-    expect(icon).toBeGreaterThan(-1);
-    expect(word).toBeGreaterThan(icon);
-    expect(count).toBeGreaterThan(word);
-    expect(html).toMatch(/class="text-\[13px\] leading-none [^"]*">待办</);
-    // 4px between each, the icon where the square has it.
-    expect(html).toContain("w-auto gap-1 px-[5px]");
-    // No colour of its own: the button's ink.
-    expect(html).not.toMatch(/text-(ink|warning|brand)[^-]*">待办</);
-    expect(render({ language: "en-US" })).toContain(">To-do<");
-  });
-
-  it("is 甲 once the panel was met at launch, and the word again as 「当作没认识」", () => {
-    trial.look = "D";
-    trial.introducedAtLaunch = true;
-    expect(render()).not.toContain(">待办<");
-    expect(render()).toContain('data-shape="icon"');
-    trial.pretendNew = true;
-    expect(render()).toContain(">待办<");
-  });
-
-  it("gives the word way first on a narrow header, by the header's width", () => {
-    trial.look = "D";
-    trial.introducedAtLaunch = false;
+describe("the word", () => {
+  it("gives way first on a narrow header, by the header's width", () => {
     const html = render();
     // jsdom-free: the classes say it — hidden, inline from the header's
     // threshold, 7px on the right only with the word.
@@ -203,22 +229,8 @@ describe("丁 on ticket 104's pill: the word until the panel is met", () => {
   });
 });
 
-describe("戊 and 戊2 on ticket 104's pill: the capsule (PRD ruling 150)", () => {
-  const today3 = () => {
-    list.yours = {
-      today: [
-        todo("t1", "交周报", 0, 15),
-        todo("t2", "回邮件", 0, 18),
-        todo("t3", "订机票", 0),
-      ],
-      later: [todo("l1", "取快递", 2, 15)],
-      anytime: [],
-    };
-    list.todayCount = 3;
-  };
-
+describe("the capsule (ticket 104, PRD ruling 150)", () => {
   it("writes the first row 「时间 · 标题」 and 「+N」 for today's others, named in full", () => {
-    trial.look = "E";
     today3();
     const html = render();
     expect(html).toContain('data-shape="capsule"');
@@ -236,7 +248,6 @@ describe("戊 and 戊2 on ticket 104's pill: the capsule (PRD ruling 150)", () =
   });
 
   it("draws time and 「 · 」 ink-muted, the title ink-soft and cut, 「+N」 tabular ink-muted", () => {
-    trial.look = "E";
     today3();
     const html = render();
     expect(html).toMatch(
@@ -253,8 +264,12 @@ describe("戊 and 戊2 on ticket 104's pill: the capsule (PRD ruling 150)", () =
   });
 
   it("writes the overdue part in warning, as the panel's row, and nothing else in colour", () => {
-    trial.look = "E";
-    trial.demo = "overdue";
+    list.yours = {
+      today: [todo("q1", "交季度报告", -2, undefined, { overdue: true })],
+      later: [],
+      anytime: [],
+    };
+    list.todayCount = 1;
     const html = render();
     expect(html).toMatch(
       /class="shrink-0 whitespace-nowrap tabular-nums font-medium text-warning">逾期 2 天</,
@@ -264,7 +279,6 @@ describe("戊 and 戊2 on ticket 104's pill: the capsule (PRD ruling 150)", () =
   });
 
   it("is a 28px hairline pill from the fold up: rounded-full, border-line, 5px left, 9px right, 220px at most", () => {
-    trial.look = "E";
     today3();
     const button = tag(render());
     for (const cls of [
@@ -290,8 +304,7 @@ describe("戊 and 戊2 on ticket 104's pill: the capsule (PRD ruling 150)", () =
     expect(button).toContain("aria-pressed:bg-selected");
   });
 
-  it("folds to 甲 under the fold: the body hidden, today's count shown, until the header is wide enough", () => {
-    trial.look = "E";
+  it("folds to the icon and today's count under the fold: the body hidden until the header is wide enough", () => {
     today3();
     const html = render();
     expect(html).toMatch(
@@ -302,58 +315,17 @@ describe("戊 and 戊2 on ticket 104's pill: the capsule (PRD ruling 150)", () =
     );
   });
 
-  it("writes the word with nothing of yours, no capsule frame; 戊2 is 甲 with nothing today", () => {
-    trial.look = "E";
-    let html = render();
-    expect(html).toContain('data-shape="word"');
-    expect(html).toContain(">待办<");
-    expect(html).not.toContain("rounded-full");
-    expect(html).not.toContain("data-capsule-body");
-
-    trial.look = "E2";
-    expect(render()).toContain(">待办<");
-    list.yours = {
-      today: [],
-      later: [todo("l1", "取快递", 2, 15)],
-      anytime: [],
-    };
-    html = render();
-    expect(html).toContain('data-shape="icon"');
-    expect(html).not.toContain("取快递");
-    expect(html).not.toContain(">待办<");
-    // 戊 writes the same later one as a capsule.
-    trial.look = "E";
-    expect(render()).toContain(">周五 15:00<");
-    expect(render()).toContain(">取快递<");
-  });
-
   it("reads the panel's list: a to-do deleted there and waiting on its undo is not the first row", () => {
-    trial.look = "E";
     today3();
     list.deleting = { t1: {} };
     expect(render()).toContain(">回邮件<");
     expect(render()).not.toContain(">交周报<");
   });
 
-  it("shows a demo in place of the list, and only the button changes", () => {
-    trial.look = "E";
+  it("writes To-do and memos in English", () => {
     today3();
-    trial.demo = "anytime";
-    expect(render()).toContain(">随时<");
-    expect(render()).toContain(">整理发票<");
-    expect(render()).toContain('aria-label="待办与备忘 · 随时 · 整理发票"');
-    trial.demo = "empty";
-    expect(render()).toContain(">待办<");
-    trial.demo = "real";
-    expect(render()).toContain(">交周报<");
-  });
-
-  it("writes Anytime and To-do and memos in English", () => {
-    trial.look = "E";
-    trial.demo = "anytime";
-    expect(render({ language: "en-US" })).toContain(">Anytime<");
     expect(render({ language: "en-US" })).toContain(
-      'aria-label="To-do and memos · Anytime · 整理发票"',
+      'aria-label="To-do and memos · Today 3:00 PM · 交周报"',
     );
   });
 });
@@ -423,19 +395,58 @@ describe("the narrow-header classes, pinned to lib/todo-button.ts", () => {
   });
 
   it("renders this platform's numbers (Windows / Linux in a test run)", () => {
-    trial.look = "E";
-    trial.demo = "today3";
+    today3();
     const zh = todoButtonFit("zh", "other");
     const en = todoButtonFit("en", "other");
     expect(render()).toContain(`@min-[${zh.fold}px]/main-header:rounded-full`);
     expect(render({ language: "en-US" })).toContain(
       `@min-[${en.fold}px]/main-header:rounded-full`,
     );
-    trial.look = "D";
-    trial.introducedAtLaunch = false;
+    list.yours = { today: [], later: [], anytime: [] };
+    list.todayCount = 0;
     expect(render()).toContain(`@min-[${zh.word}px]/main-header:inline`);
     expect(render({ language: "en-US" })).toContain(
       `@min-[${en.word}px]/main-header:inline`,
     );
+  });
+});
+
+describe("ticket 104's switcher is gone (ticket 106)", () => {
+  const SRC = path.resolve(__dirname, "../../..");
+  function sources(dir: string): string[] {
+    return readdirSync(dir).flatMap((name) => {
+      const full = path.join(dir, name);
+      if (statSync(full).isDirectory()) return sources(full);
+      return /\.(ts|tsx|css)$/.test(name) ? [full] : [];
+    });
+  }
+
+  it("leaves no pill, store, storage key, replay or marker behind", () => {
+    // Spelled in pieces, so a grep of the tree for them finds none (the
+    // ticket's check), this file included. Tickets 102's and 103's
+    // switchers went with ticket 104; their markers and keys too.
+    const marker = ["TEMP variant switcher", "(main chat 10"].join(" ");
+    const leftovers = [
+      ["todo-button", "variants"].join("-"),
+      ["useTodoButton", "Variants"].join(""),
+      ["TodoButton", "VariantsPill"].join(""),
+      ["galley.tmp.todoButton", "Place"].join(""),
+      ["galley.tmp.todoButton", "Capsule"].join(""),
+      ["galley.tmp.todo", "Flight"].join(""),
+      ["introduced", "AtLaunch"].join(""),
+      ["replay", "Flight"].join(""),
+      `${marker}2)`,
+      `${marker}3)`,
+      `${marker}4)`,
+    ];
+    const hits = sources(SRC)
+      .filter((file) => !file.includes("zz-harness"))
+      .flatMap((file) => {
+        const text = readFileSync(file, "utf8");
+        return leftovers
+          .filter((needle) => text.includes(needle))
+          .map((needle) => `${path.relative(SRC, file)}: ${needle}`);
+      });
+    expect(hits).toEqual([]);
   });
 });

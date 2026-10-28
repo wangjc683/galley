@@ -2,8 +2,6 @@ import { CaretRight } from "@phosphor-icons/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ReactNode } from "react";
 
-// TEMP variant switcher (main chat 104): the 待办 button's look.
-import { useTodoButtonVariants } from "@/components/todo/todo-button-variants/todo-button-variants";
 import { useCopy } from "@/lib/i18n";
 import { isMac, isWindowActionTarget } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -221,8 +219,6 @@ export function MainHeader({
   identity,
 }: MainHeaderProps) {
   const copy = useCopy();
-  // TEMP variant switcher (main chat 104): the 待办 button's look.
-  const todoLook = useTodoButtonVariants((s) => s.look);
   const hasTopBarStatusItems =
     runtimeIndicator !== "hidden" ||
     browserControl !== null ||
@@ -255,10 +251,9 @@ export function MainHeader({
         // the two column headers line up into one continuous top strip.
         "flex h-11 shrink-0 items-stretch border-b border-line/60 bg-app text-[13px]",
         // The 待办 button's word and capsule give way on a narrow header
-        // (TodoToggleButton `WORD`, `CAPSULE`). TEMP variant switcher
-        // (main chat 104): only while the look can show more than the
-        // icon is the header a size container — not at 甲.
-        onToggleTodo && todoLook !== "A" && "@container/main-header",
+        // (TodoToggleButton `WORD`, `CAPSULE`): a size container while
+        // the button is there (main chat ticket 106, PRD ruling 152).
+        onToggleTodo && "@container/main-header",
         // Windows: no right padding — WindowControls owns the right edge
         // and hugs the window corner (= window top-right). Mac keeps its
         // 12px breathing room since the right cluster ends the header.
