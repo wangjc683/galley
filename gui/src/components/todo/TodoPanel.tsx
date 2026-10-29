@@ -55,6 +55,8 @@ import {
   todoReminderCancellable,
   todoRowsInDone,
   todoRowText,
+  todoSubitemCount,
+  todoSubitemsShown,
   todoTitleTarget,
   todoWithoutDeleting,
   type TodoHold,
@@ -86,6 +88,7 @@ import {
   TodoRowMenuButton,
   type TodoRowMenuModel,
 } from "./TodoRowMenu";
+import { TodoSubitems } from "./TodoSubitems";
 import { TodoTextEditor } from "./TodoTextEditor";
 import { todoTitleClass } from "./todo-styles";
 
@@ -156,6 +159,12 @@ export interface TodoPanelProps {
  * the panel outside it that is not on a control, on a click on its own
  * blank, and when it leaves your to-dos (ticked, held by Galley's tick,
  * deleted). A to-do card's title opens its row (`todoRowRequest.open`).
+ *
+ * Since main chat ticket 111 (PRD ruling 157) one of your to-dos may have
+ * items under it: folded, its time line ends with their count
+ * (「2/5 项」); open, they are drawn between the time line and the notes,
+ * each ticked, changed or deleted in place, 「添加一项」 at their foot
+ * (TodoSubitems). Nothing else in the panel names or counts them.
  *
  * Rows light up (ticket 87, PRD ruling 131 points 3–5,
  * useTodoPanelFlash): what Galley moves while the panel is on screen,
@@ -825,8 +834,14 @@ function YourRow({
   const deleteTodo = useAssistantTodoStore((s) => s.deleteTodo);
   const editTodo = useAssistantTodoStore((s) => s.editTodo);
   const { flip, failure, cancelling } = useTodoWrite(item.id);
+  const subitemTicks = useAssistantTodoStore((s) => s.subitemTicks);
+  const subitemDeleting = useAssistantTodoStore((s) => s.subitemDeleting);
   const checked = held || todoChecked(item, flip);
   const parts = todoMetaParts(item, checked, todayStartMs, language, copy);
+  // The items under it (ticket 111): as drawn, their count on the time
+  // line folded or open.
+  const subitems = todoSubitemsShown(item, subitemTicks, subitemDeleting);
+  const count = todoSubitemCount(subitems, copy);
   const canCancelReminder = !checked && todoReminderCancellable(item);
   const notes = todoNotesLine(item);
   const target = todoTitleTarget(item, mainChatId);
@@ -999,6 +1014,17 @@ function YourRow({
     );
   }
 
+  // Open, the items go between the time line and the notes (ticket 111):
+  // there whether it has any or not, 「添加一项」 at their foot.
+  if (open) {
+    notesBlock = (
+      <>
+        <TodoSubitems todoId={item.id} items={subitems} editable={editable} />
+        {notesBlock}
+      </>
+    );
+  }
+
   const noted = open ? todoNotedLine(item, todayStartMs, language, copy) : null;
   const foot =
     open && (noted || target) ? (
@@ -1049,6 +1075,7 @@ function YourRow({
         <MetaLine
           parts={parts}
           checked={checked}
+          count={count}
           onTalk={open ? () => onTalkAbout(item) : undefined}
           after={
             canCancelReminder && (
@@ -1176,20 +1203,29 @@ function NotesLine({ text, full }: { text: string; full: string }) {
  * and holding its place it goes `ink-muted` with the struck title. With
  * `onTalk` (an open row, ticket 107, PRD ruling 153 point 5) the words
  * are a button, 「改时间跟 Galley 说」 on hover, that does 「说说这件」:
- * the time is said to Galley, not set here. None drawn without a time. */
+ * the time is said to Galley, not set here. None drawn without a time.
+ *
+ * `count` (main chat ticket 111, PRD ruling 157 point 6): how many of the
+ * items under it are ticked, 「2/5 项」, at the line's end before `after`,
+ * 8px from the time as the bell's part is set apart, no 「·」; the line's
+ * own ink, never warning (that is overdue's), the digits tabular. Outside
+ * the open row's time button: it is not a time to say to Galley. With no
+ * time it is the line alone, the notes under it as ever. */
 function MetaLine({
   parts,
   checked,
+  count = null,
   after,
   onTalk,
 }: {
   parts: readonly TodoMetaPart[];
   checked: boolean;
+  count?: string | null;
   after?: ReactNode;
   onTalk?: () => void;
 }) {
   const copy = useCopy();
-  if (parts.length === 0) return null;
+  if (parts.length === 0 && !count) return null;
   return (
     <div
       data-role="todo-meta"
@@ -1198,7 +1234,7 @@ function MetaLine({
         checked ? "text-ink-muted" : "text-ink-soft",
       )}
     >
-      {onTalk ? (
+      {parts.length === 0 ? null : onTalk ? (
         <TooltipLabel text={copy.todo.timeTalkHint}>
           <button
             type="button"
@@ -1212,6 +1248,17 @@ function MetaLine({
       ) : (
         <span className="min-w-0 truncate">
           <TodoMetaText parts={parts} />
+        </span>
+      )}
+      {count && (
+        <span
+          data-role="todo-item-count"
+          className={cn(
+            "shrink-0 whitespace-nowrap",
+            parts.length > 0 && "ml-2",
+          )}
+        >
+          {count}
         </span>
       )}
       {after}

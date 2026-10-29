@@ -84,6 +84,17 @@ export interface TodoReminder {
   state: TodoReminderState;
 }
 
+/** Mirror of Core `ListedSubitem` (main chat ticket 111, PRD ruling
+ * 157): an item under a to-do as the list carries it — its words and its
+ * box, in the order it was added. The panel says no noun for it
+ * (「添加一项」, 「2/5 项」). */
+export interface TodoSubitem {
+  /** `item_<16 hex>`. */
+  id: string;
+  text: string;
+  done: boolean;
+}
+
 /** Mirror of Core `TodoItem`. */
 export interface TodoItem {
   kind: TodoKind;
@@ -124,6 +135,9 @@ export interface TodoItem {
   /** To-dos cancelled: when, UTC ISO; `state` says how it stood. Only
    * `listNotedTodos` returns one (its card says 已取消). */
   cancelledAt?: string;
+  /** To-dos: the items under it, in their order (ticket 111); absent
+   * when it has none. */
+  items?: TodoSubitem[];
 }
 
 /** Mirror of Core `YourTodos`: the user's to-dos not done. */
@@ -198,6 +212,14 @@ export interface TodoBrief {
   cancelledAt?: string;
   /** Who cancelled it and why (main chat ticket 61). */
   cancelledBy?: { via: string; supervisor?: string; reason?: string };
+  /** The items under it (ticket 111), each with who ticked it. */
+  items?: (TodoSubitem & {
+    doneAt?: string;
+    doneBy?: { via: string; supervisor?: string; reason?: string };
+    createdAt: string;
+  })[];
+  /** How many items, how many ticked. */
+  itemCount?: { done: number; total: number };
   createdAt: string;
   updatedAt: string;
 }
@@ -246,6 +268,42 @@ export async function updateTodo(
  * Core sends `todos:changed`; `not_found` for one cancelled or gone. */
 export async function cancelTodo(id: string): Promise<TodoBrief> {
   return invoke<TodoBrief>("cancel_todo", { id });
+}
+
+/** Add items under a to-do (`add_todo_subitems`, main chat ticket 111):
+ * after the ones there, in this order — 「添加一项」, or a pasted block one
+ * item a line. Core sends `todos:changed`; `not_found` for a to-do
+ * deleted or gone, `invalid_args` for an item with no words. */
+export async function addTodoSubitems(
+  id: string,
+  texts: readonly string[],
+): Promise<TodoBrief> {
+  return invoke<TodoBrief>("add_todo_subitems", { id, texts });
+}
+
+/** Tick an item (`complete_todo_subitem`); its to-do stays as it is
+ * (PRD ruling 157 point 4). */
+export async function completeTodoSubitem(id: string): Promise<TodoBrief> {
+  return invoke<TodoBrief>("complete_todo_subitem", { id });
+}
+
+/** Untick an item (`reopen_todo_subitem`). */
+export async function reopenTodoSubitem(id: string): Promise<TodoBrief> {
+  return invoke<TodoBrief>("reopen_todo_subitem", { id });
+}
+
+/** Change an item's words (`update_todo_subitem`); never sent empty. */
+export async function updateTodoSubitem(
+  id: string,
+  text: string,
+): Promise<TodoBrief> {
+  return invoke<TodoBrief>("update_todo_subitem", { id, text });
+}
+
+/** Delete an item for good (`remove_todo_subitem`), sent once the undo
+ * toast has gone (stores/assistant-todo.ts). */
+export async function removeTodoSubitem(id: string): Promise<TodoBrief> {
+  return invoke<TodoBrief>("remove_todo_subitem", { id });
 }
 
 /** How much of a to-do's title the undo toast quotes (main chat ticket

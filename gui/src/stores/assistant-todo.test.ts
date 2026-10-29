@@ -736,3 +736,55 @@ describe("deleting a to-do", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 });
+
+// Main chat ticket 111 (PRD ruling 157): an item's tick goes straight to
+// Core, one after another per item; the box stays as the last click left
+// it until the read after the last write is in.
+describe("an item's tick", () => {
+  const ITEM = { id: "item_1", text: "订酒店", done: false };
+
+  it("sends a tick and its untick in order, the second after the first is back", async () => {
+    vi.useRealTimers();
+    const { invoke } = getTauriMocks();
+    const order: string[] = [];
+    let release: () => void = () => {};
+    invoke.mockImplementation(async (command) => {
+      if (command === "list_assistant_todo") return before;
+      if (command === "list_noted_todos") return [];
+      order.push(`${command}:start`);
+      if (command === "complete_todo_subitem") {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+      order.push(`${command}:end`);
+      return { id: "todo_1" };
+    });
+    const store = useAssistantTodoStore.getState();
+    store.toggleSubitem("todo_1", ITEM);
+    // Drawn at once, sent at once.
+    expect(useAssistantTodoStore.getState().subitemTicks.item_1).toEqual({
+      todoId: "todo_1",
+      done: true,
+      sending: 1,
+    });
+    expect(order).toEqual(["complete_todo_subitem:start"]);
+    // A second click: the box back at once; its write waits its turn.
+    store.toggleSubitem("todo_1", ITEM);
+    expect(useAssistantTodoStore.getState().subitemTicks.item_1).toMatchObject({
+      done: false,
+      sending: 2,
+    });
+    expect(order).toEqual(["complete_todo_subitem:start"]);
+    release();
+    await vi.waitFor(() =>
+      expect(useAssistantTodoStore.getState().subitemTicks).toEqual({}),
+    );
+    expect(order).toEqual([
+      "complete_todo_subitem:start",
+      "complete_todo_subitem:end",
+      "reopen_todo_subitem:start",
+      "reopen_todo_subitem:end",
+    ]);
+  });
+});

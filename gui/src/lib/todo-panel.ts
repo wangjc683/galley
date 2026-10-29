@@ -7,6 +7,7 @@ import {
   type AssistantTodo,
   type TodoDue,
   type TodoItem,
+  type TodoSubitem,
   type TodoTarget,
 } from "@/lib/assistant-todo";
 import type { ResolvedLanguage } from "@/lib/language";
@@ -470,14 +471,21 @@ export interface TodoPanelChange {
  * (`flips`), a reminder being cancelled (`cancelling`), a to-do deleted
  * and not yet by Core (`deleting`, main chat ticket 88: staged under its
  * undo toast or sent), a title or notes changed in place (`editing`,
- * ticket 107) — in either of two reads of the store: the read a write
- * ends with clears its record in the same set. */
+ * ticket 107), and since ticket 111 a write of an item under it — added
+ * or its words changed (`subitemWriting`, by to-do id), ticked or
+ * unticked (`subitemTicks`), deleted (`subitemDeleting`; both by item id,
+ * naming their to-do) — in either of two reads of the store: the read a
+ * write ends with clears its record in the same set. A row is a to-do,
+ * so an item's write names its to-do's id. */
 export function todoWritesOnTheirWay(
   ...states: readonly {
     flips: Readonly<Record<string, unknown>>;
     cancelling: Readonly<Record<string, unknown>>;
     deleting: Readonly<Record<string, unknown>>;
     editing: Readonly<Record<string, unknown>>;
+    subitemWriting?: Readonly<Record<string, unknown>>;
+    subitemTicks?: Readonly<Record<string, { todoId: string }>>;
+    subitemDeleting?: Readonly<Record<string, { todoId: string }>>;
   }[]
 ): Set<string> {
   const ids = new Set<string>();
@@ -486,8 +494,71 @@ export function todoWritesOnTheirWay(
     for (const id of Object.keys(state.cancelling)) ids.add(id);
     for (const id of Object.keys(state.deleting)) ids.add(id);
     for (const id of Object.keys(state.editing)) ids.add(id);
+    for (const id of Object.keys(state.subitemWriting ?? {})) ids.add(id);
+    for (const tick of Object.values(state.subitemTicks ?? {})) {
+      ids.add(tick.todoId);
+    }
+    for (const gone of Object.values(state.subitemDeleting ?? {})) {
+      ids.add(gone.todoId);
+    }
   }
   return ids;
+}
+
+/**
+ * The items under one of your to-dos as its row draws them (main chat
+ * ticket 111, PRD ruling 157): Core's, in their order, without the ones
+ * deleted on the panel and waiting under their undo toast
+ * (`subitemDeleting`), each box as a tick on its way will leave it
+ * (`subitemTicks`: a tick is drawn at once and Core hears of it at once,
+ * with no hold — an item has no reminder for a misclick to cancel, and a
+ * second click takes it back). The same array when nothing changes it.
+ */
+export function todoSubitemsShown(
+  item: TodoItem,
+  ticks: Readonly<Record<string, { done: boolean }>>,
+  deleting: Readonly<Record<string, unknown>>,
+): TodoSubitem[] {
+  const items = item.items ?? [];
+  if (!items.some((each) => each.id in ticks || each.id in deleting)) {
+    return items;
+  }
+  return items
+    .filter((each) => !(each.id in deleting))
+    .map((each) =>
+      each.id in ticks && ticks[each.id].done !== each.done
+        ? { ...each, done: ticks[each.id].done }
+        : each,
+    );
+}
+
+/**
+ * The count at the end of a row's time line (main chat ticket 111, PRD
+ * ruling 157 point 6): 「2/5 项」, ticked of all — with 「项」, so 「2/5」
+ * does not read as 5 February; 「5/5 项」 when every one is ticked, no
+ * other look (the to-do is the user's to tick, point 4). Null for a to-do
+ * with none: its row is as it was. The noun is the count's own: the panel
+ * names the items nowhere else (point 5).
+ */
+export function todoSubitemCount(
+  items: readonly TodoSubitem[],
+  copy: AppCopy,
+): string | null {
+  if (items.length === 0) return null;
+  const done = items.filter((each) => each.done).length;
+  return copy.todo.itemCount(done, items.length);
+}
+
+/**
+ * The items a block of words pasted into 「添加一项」 makes (main chat
+ * ticket 111): one a line, each trimmed, blank lines skipped. One line
+ * is one item, as typed.
+ */
+export function todoSubitemLines(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
 }
 
 /** The two words of a to-do the panel changes in place (main chat
@@ -590,14 +661,33 @@ function sameRepeat(a: TodoItem["repeat"], b: TodoItem["repeat"]): boolean {
   return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 }
 
+/** The items under a to-do, the same: as many, in the same order, each
+ * with the same words and box (main chat ticket 111). */
+function sameSubitems(a: TodoItem["items"], b: TodoItem["items"]): boolean {
+  const left = a ?? [];
+  const right = b ?? [];
+  return (
+    left.length === right.length &&
+    left.every(
+      (item, at) =>
+        item.id === right[at].id &&
+        item.text === right[at].text &&
+        item.done === right[at].done,
+    )
+  );
+}
+
 /** One of the user's to-dos Galley changed: its words, when it is due,
- * its reminder (time or paused), its notes. */
+ * its reminder (time or paused), its notes, and since ticket 111 the
+ * items under it (one added, ticked, unticked, changed or removed: a
+ * field of the to-do's, as its notes are, PRD ruling 157). */
 function yourTodoChanged(before: TodoItem, after: TodoItem): boolean {
   return (
     before.text !== after.text ||
     !sameDue(before.due, after.due) ||
     !sameReminder(before.reminder, after.reminder) ||
-    (before.notes ?? "") !== (after.notes ?? "")
+    (before.notes ?? "") !== (after.notes ?? "") ||
+    !sameSubitems(before.items, after.items)
   );
 }
 
@@ -636,7 +726,7 @@ function byId(items: readonly TodoItem[]): Map<string, TodoItem> {
  *
  * Lit: a row new to the user's to-dos, 「Galley 在办」 (a subtask too) or
  * 例行; one of the user's to-dos with new words, due time, reminder
- * (time or paused) or notes; one of Galley's own one-off reminders with
+ * (time or paused), notes or items (ticket 111); one of Galley's own one-off reminders with
  * new words or time; a routine with new words, rule, time of day, or
  * paused or resumed; and one of the user's to-dos Galley ticked off —
  * held where it stood a moment (`held`), lit there, then in 已完成.

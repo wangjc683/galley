@@ -2108,6 +2108,17 @@ export const enCopy: AppCopy = {
     addNotes: "Add notes",
     editTitle: "Title",
     editNotes: "Notes",
+    itemCount: (done: number, total: number) => `${done} of ${total} done`,
+    addItem: "Add an item",
+    newItem: "New item",
+    editItem: "Item",
+    deleteItem: "Delete this item",
+    deleteItems: {
+      deleted: (text: string) => `Deleted "${text}"`,
+      deletedCount: (n: number) =>
+        n === 1 ? "Deleted 1 item" : `Deleted ${n} items`,
+      undo: "Undo",
+    },
     overdueDays: (days: number) =>
       days === 1 ? "1 day overdue" : `${days} days overdue`,
     overdueAt: (when: string) => `Overdue · ${when}`,

@@ -1,21 +1,27 @@
 import { create } from "zustand";
 
 import {
+  addTodoSubitems,
   cancelScheduledTask,
   cancelTodo,
   cancelTodoReminder,
   completeTodo,
+  completeTodoSubitem,
   EMPTY_TODO,
   listAssistantTodo,
   listNotedTodos,
+  removeTodoSubitem,
   reopenTodo,
+  reopenTodoSubitem,
   todoFailureKind,
   updateTodo,
+  updateTodoSubitem,
   todoToastTitle,
   withoutDailyReview,
   type AssistantTodo,
   type TodoFailure,
   type TodoItem,
+  type TodoSubitem,
   type TodoWordsChange,
 } from "@/lib/assistant-todo";
 import { copyForLanguage } from "@/lib/i18n";
@@ -85,6 +91,22 @@ import { makeAppError } from "@/types/app-error";
  *   caller, not into `failures`: the panel keeps the words typed in their
  *   box and says why under it.
  *
+ * - **The items under a to-do** (main chat ticket 111, PRD ruling 157):
+ *   a tick or untick (`toggleSubitem`) is drawn at once and sent at once
+ *   — no hold, as an item has no reminder a misclick would cancel; a
+ *   second click takes it back the same way — each item's writes one
+ *   after another (`subitemTicks` holds the box as it will stand until
+ *   the fresh list is in); adding (`addSubitems`) and changing words
+ *   (`editSubitem`) go straight to Core as a title does, counted by to-do
+ *   (`subitemWriting`), their failure handed back to the box that keeps
+ *   the words; deleting (`deleteSubitem`) is a to-do's delete: off the
+ *   row at once (`subitemDeleting`), 「已删除「…」 · 撤销」 for five
+ *   seconds, its own toast (「已删除 N 项」 for several), then Core; a
+ *   send into the main chat commits these too (`flushDeletes`). All of
+ *   them are this window's own writes, so the row does not light. A tick
+ *   that fails puts the box back and says why under the item
+ *   (`subitemFailures`).
+ *
  * A write that fails puts the row back as it was and leaves a reason by
  * its id (`failures`), cleared by the next try. A to-do's id and a
  * task's never meet (`todo_…`, `sched_…`), so the two cancels share
@@ -135,6 +157,52 @@ interface AssistantTodoState {
     id: string,
     change: TodoWordsChange,
   ) => Promise<TodoFailure | null>;
+  /** Items' ticks on their way (ticket 111), by item id. */
+  subitemTicks: Record<string, SubitemTick>;
+  /** Why an item's last tick failed, by item id. */
+  subitemFailures: Record<string, TodoFailure>;
+  /** Items added or changed on their way, by to-do id: how many. */
+  subitemWriting: Record<string, number>;
+  /** Items deleted on the panel and not yet by Core, by item id. */
+  subitemDeleting: Record<string, SubitemDelete>;
+  /** The items' undo toast up now, if any. */
+  subitemDeleteToastId: string | null;
+  /** An item's box was clicked: ticked or unticked at once. */
+  toggleSubitem: (todoId: string, item: TodoSubitem) => void;
+  /** Add items under a to-do, in order; resolves once Core has them and
+   * the list is read again, with why it failed, or null. */
+  addSubitems: (
+    todoId: string,
+    texts: readonly string[],
+  ) => Promise<TodoFailure | null>;
+  /** Change an item's words; as `addSubitems`. */
+  editSubitem: (
+    todoId: string,
+    itemId: string,
+    text: string,
+  ) => Promise<TodoFailure | null>;
+  /** An item's ×: off the row at once, 撤销 offered. */
+  deleteSubitem: (todoId: string, item: TodoSubitem) => void;
+  /** 撤销 on the items' toast: every item deletion not yet sent put
+   * back. */
+  undoSubitemDelete: () => void;
+  /** Send every item deletion not yet sent; as `commitDeletes`. */
+  commitSubitemDeletes: () => Promise<void>;
+}
+
+/** An item's tick on its way (ticket 111): the box as it will stand, and
+ * how many of its writes are still with Core. */
+export interface SubitemTick {
+  todoId: string;
+  done: boolean;
+  sending: number;
+}
+
+/** An item deleted on the panel and not yet by Core (ticket 111). */
+export interface SubitemDelete {
+  todoId: string;
+  order: number;
+  committing: boolean;
 }
 
 /** A to-do deleted on the page and not yet by Core (ticket 88). */
@@ -154,6 +222,18 @@ let applied = 0;
 // way, one after another, each batch after the one before.
 let staging = 0;
 let inflightDeletes: Promise<void> | null = null;
+// Items (ticket 111): each one's writes one after another, so a tick and
+// the untick after it reach Core in that order; their deletions as the
+// to-dos'.
+const subitemChains = new Map<string, Promise<void>>();
+let subitemStaging = 0;
+let inflightSubitemDeletes: Promise<void> | null = null;
+
+function deleteItemCopy() {
+  return copyForLanguage(
+    resolveLanguagePreference(usePrefsStore.getState().languagePreference),
+  ).todo.deleteItems;
+}
 
 function deleteCopy() {
   return copyForLanguage(
@@ -262,6 +342,62 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
     });
   };
 
+  // A write of items on its way (add, words), counted by to-do: none
+  // left, the id is off the record — in the same set as the fresh list,
+  // so the row never lights for its own change.
+  const writeSubitems = async (
+    todoId: string,
+    write: () => Promise<unknown>,
+  ): Promise<TodoFailure | null> => {
+    set((s) => ({
+      subitemWriting: {
+        ...s.subitemWriting,
+        [todoId]: (s.subitemWriting[todoId] ?? 0) + 1,
+      },
+    }));
+    const done = (writing: Record<string, number>) => {
+      const left = (writing[todoId] ?? 1) - 1;
+      return left > 0
+        ? { ...writing, [todoId]: left }
+        : without(writing, todoId);
+    };
+    try {
+      await write();
+    } catch (e) {
+      set((s) => ({ subitemWriting: done(s.subitemWriting) }));
+      return todoFailureKind(e);
+    }
+    const lists = await read();
+    set((s) => ({
+      ...(lists ? { ...lists, loaded: true } : {}),
+      subitemWriting: done(s.subitemWriting),
+    }));
+    return null;
+  };
+
+  // Ask Core to delete each of `ids` (items), in order, then read again:
+  // as `sendDeletes`, one refused back on its row with its reason.
+  const sendSubitemDeletes = async (ids: readonly string[]) => {
+    const refused: Record<string, TodoFailure> = {};
+    for (const id of ids) {
+      try {
+        await removeTodoSubitem(id);
+      } catch (e) {
+        refused[id] = todoFailureKind(e);
+      }
+    }
+    const lists = await read();
+    set((s) => {
+      const subitemDeleting = { ...s.subitemDeleting };
+      for (const id of ids) delete subitemDeleting[id];
+      return {
+        ...(lists ? { ...lists, loaded: true } : {}),
+        subitemDeleting,
+        subitemFailures: { ...s.subitemFailures, ...refused },
+      };
+    });
+  };
+
   return {
     todo: EMPTY_TODO,
     noted: [],
@@ -272,6 +408,11 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
     deleting: {},
     deleteToastId: null,
     editing: {},
+    subitemTicks: {},
+    subitemFailures: {},
+    subitemWriting: {},
+    subitemDeleting: {},
+    subitemDeleteToastId: null,
 
     load: async () => {
       const lists = await read();
@@ -395,8 +536,18 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
       return run;
     },
 
-    flushDeletes: () =>
-      Object.keys(get().deleting).length > 0 ? get().commitDeletes() : null,
+    // Since ticket 111 the items' deletions too: Galley reads the to-do
+    // before it answers, and an item deleted must not be under it.
+    flushDeletes: () => {
+      const todos =
+        Object.keys(get().deleting).length > 0 ? get().commitDeletes() : null;
+      const items =
+        Object.keys(get().subitemDeleting).length > 0
+          ? get().commitSubitemDeletes()
+          : null;
+      if (todos && items) return Promise.all([todos, items]).then(() => {});
+      return todos ?? items;
+    },
 
     editTodo: async (id, change) => {
       set((s) => ({
@@ -421,6 +572,167 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
         editing: done(s.editing),
       }));
       return null;
+    },
+
+    toggleSubitem: (todoId, item) => {
+      const id = item.id;
+      if (id in get().subitemDeleting) return;
+      const tick = get().subitemTicks[id];
+      const done = !(tick ? tick.done : item.done);
+      set((s) => ({
+        subitemTicks: {
+          ...s.subitemTicks,
+          [id]: { todoId, done, sending: (tick?.sending ?? 0) + 1 },
+        },
+        subitemFailures: without(s.subitemFailures, id),
+      }));
+      const send = async () => {
+        let failed: TodoFailure | null = null;
+        try {
+          await (done ? completeTodoSubitem(id) : reopenTodoSubitem(id));
+        } catch (e) {
+          failed = todoFailureKind(e);
+        }
+        const now = get().subitemTicks[id];
+        if (now && now.sending > 1) {
+          // A later click is on its way: it decides the box.
+          set((s) => ({
+            subitemTicks: {
+              ...s.subitemTicks,
+              [id]: { ...now, sending: now.sending - 1 },
+            },
+          }));
+          return;
+        }
+        // The last one back: the box as Core has it, with the fresh
+        // list in the same set; a refusal says why under the item. A
+        // click while the list was read is still on its way: it keeps
+        // the box.
+        const lists = await read();
+        set((s) => {
+          const current = s.subitemTicks[id];
+          const later = current !== undefined && current.sending > 1;
+          return {
+            ...(lists ? { ...lists, loaded: true } : {}),
+            subitemTicks: later
+              ? {
+                  ...s.subitemTicks,
+                  [id]: { ...current, sending: current.sending - 1 },
+                }
+              : without(s.subitemTicks, id),
+            subitemFailures:
+              failed && !later
+                ? { ...s.subitemFailures, [id]: failed }
+                : s.subitemFailures,
+          };
+        });
+      };
+      // Idle, it goes now; else after the one before it.
+      const before = subitemChains.get(id);
+      const run = before ? before.then(send) : send();
+      subitemChains.set(id, run);
+      void run.finally(() => {
+        if (subitemChains.get(id) === run) subitemChains.delete(id);
+      });
+    },
+
+    addSubitems: (todoId, texts) =>
+      writeSubitems(todoId, () => addTodoSubitems(todoId, texts)),
+
+    editSubitem: (todoId, itemId, text) =>
+      writeSubitems(todoId, () => updateTodoSubitem(itemId, text)),
+
+    deleteSubitem: (todoId, item) => {
+      const id = item.id;
+      if (get().subitemDeleting[id]) return;
+      subitemStaging += 1;
+      const subitemDeleting = {
+        ...get().subitemDeleting,
+        [id]: { todoId, order: subitemStaging, committing: false },
+      };
+      const waiting = Object.values(subitemDeleting).filter(
+        (entry) => !entry.committing,
+      ).length;
+      const previousToast = get().subitemDeleteToastId;
+      const toastId = `todo-item-delete-undo-${subitemStaging}`;
+      set((s) => ({
+        subitemDeleting,
+        subitemDeleteToastId: toastId,
+        subitemFailures: without(s.subitemFailures, id),
+      }));
+      const copy = deleteItemCopy();
+      const ui = useUiStore.getState();
+      ui.pushToast(
+        makeAppError({
+          id: toastId,
+          category: "business",
+          severity: "info",
+          title:
+            waiting === 1
+              ? copy.deleted(todoToastTitle(item.text))
+              : copy.deletedCount(waiting),
+          message: "",
+          hint: null,
+          retryable: false,
+          context: "delete_todo_item",
+          traceback: null,
+          autoDismissMs: UNDO_DELETE_MS,
+          action: {
+            kind: "undo",
+            label: copy.undo,
+            run: () => get().undoSubitemDelete(),
+          },
+          onClose: () => {
+            if (get().subitemDeleteToastId === toastId) {
+              void get().commitSubitemDeletes();
+            }
+          },
+        }),
+      );
+      if (previousToast) ui.dismissToast(previousToast);
+    },
+
+    undoSubitemDelete: () => {
+      const { subitemDeleting, subitemDeleteToastId } = get();
+      set({
+        subitemDeleting: Object.fromEntries(
+          Object.entries(subitemDeleting).filter(
+            ([, entry]) => entry.committing,
+          ),
+        ),
+        subitemDeleteToastId: null,
+      });
+      if (subitemDeleteToastId) {
+        useUiStore.getState().dismissToast(subitemDeleteToastId);
+      }
+    },
+
+    commitSubitemDeletes: () => {
+      const { subitemDeleting, subitemDeleteToastId } = get();
+      const batch = Object.entries(subitemDeleting)
+        .filter(([, entry]) => !entry.committing)
+        .sort(([, a], [, b]) => a.order - b.order)
+        .map(([id]) => id);
+      if (subitemDeleteToastId) {
+        set({ subitemDeleteToastId: null });
+        useUiStore.getState().dismissToast(subitemDeleteToastId);
+      }
+      if (batch.length === 0) {
+        return inflightSubitemDeletes ?? Promise.resolve();
+      }
+      set((s) => {
+        const next = { ...s.subitemDeleting };
+        for (const id of batch) next[id] = { ...next[id], committing: true };
+        return { subitemDeleting: next };
+      });
+      const run = (inflightSubitemDeletes ?? Promise.resolve()).then(() =>
+        sendSubitemDeletes(batch),
+      );
+      inflightSubitemDeletes = run;
+      void run.finally(() => {
+        if (inflightSubitemDeletes === run) inflightSubitemDeletes = null;
+      });
+      return run;
     },
   };
 });

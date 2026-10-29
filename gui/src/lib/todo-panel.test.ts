@@ -36,6 +36,9 @@ import {
   todoRowsInDone,
   todoRowText,
   todosByMessage,
+  todoSubitemCount,
+  todoSubitemLines,
+  todoSubitemsShown,
   todoTitleTarget,
   todoWithoutDeleting,
   todoWritesOnTheirWay,
@@ -1253,5 +1256,88 @@ describe("what lights up (ticket 87, ruling 131 points 3 and 5)", () => {
     expect(todoRowsInDone(now, ["todo_a"])).toBe(false);
     expect(todoRowsInDone(now, ["todo_a", "todo_b"])).toBe(true);
     expect(todoRowsInDone(now, [])).toBe(false);
+  });
+});
+
+// Main chat ticket 111 (PRD ruling 157): the items under a to-do.
+describe("the items under a to-do", () => {
+  const items = (...words: [string, boolean][]) =>
+    words.map(([text, done], at) => ({ id: `item_${at}`, text, done }));
+  const list = (anytime: TodoItem[]): AssistantTodo => ({
+    ...EMPTY_TODO,
+    yours: { today: [], later: [], anytime },
+  });
+
+  it("counts them ticked of all, with 「项」 in Chinese and words in English; none, no count", () => {
+    const three = items(["订酒店", true], ["订机票", false], ["换港币", false]);
+    expect(todoSubitemCount(three, zh)).toBe("1/3 项");
+    expect(todoSubitemCount(three, en)).toBe("1 of 3 done");
+    // All ticked: the same count, nothing else.
+    expect(
+      todoSubitemCount(
+        three.map((item) => ({ ...item, done: true })),
+        zh,
+      ),
+    ).toBe("3/3 项");
+    expect(todoSubitemCount([], zh)).toBeNull();
+  });
+
+  it("makes one item of each pasted line, trimmed, blank lines skipped", () => {
+    expect(todoSubitemLines("订酒店\n\n  订机票 \r\n换港币\n")).toEqual([
+      "订酒店",
+      "订机票",
+      "换港币",
+    ]);
+    expect(todoSubitemLines("一行")).toEqual(["一行"]);
+    expect(todoSubitemLines(" \n \n")).toEqual([]);
+  });
+
+  it("draws them without the ones deleted here and with the ticks on their way", () => {
+    const trip = todo({
+      items: items(["订酒店", true], ["订机票", false], ["换港币", false]),
+    });
+    // Nothing on its way: Core's own array.
+    expect(todoSubitemsShown(trip, {}, {})).toBe(trip.items);
+    expect(todoSubitemsShown(todo(), {}, {})).toEqual([]);
+    expect(
+      todoSubitemsShown(
+        trip,
+        { item_1: { done: true }, item_0: { done: true } },
+        { item_2: {} },
+      ),
+    ).toEqual([
+      { id: "item_0", text: "订酒店", done: true },
+      { id: "item_1", text: "订机票", done: true },
+    ]);
+  });
+
+  it("lights a to-do whose items Galley added, ticked, changed or removed; not one this window wrote", () => {
+    const before = list([
+      todo({ id: "todo_a", items: items(["订酒店", false]) }),
+      todo({ id: "todo_b" }),
+    ]);
+    const lit = (next: AssistantTodo, mine = new Set<string>()) =>
+      todoPanelChanges(before, next, mine).flash;
+    const withItems = (change: TodoItem["items"]) =>
+      list([todo({ id: "todo_a", items: change }), todo({ id: "todo_b" })]);
+    expect(lit(withItems(items(["订酒店", true])))).toEqual(["todo_a"]);
+    expect(lit(withItems(items(["订虹桥的酒店", false])))).toEqual(["todo_a"]);
+    expect(lit(withItems(items(["订酒店", false], ["订机票", false])))).toEqual(
+      ["todo_a"],
+    );
+    expect(lit(withItems(undefined))).toEqual(["todo_a"]);
+    expect(lit(withItems(items(["订酒店", false])))).toEqual([]);
+    // This window's own: an item's tick, add or delete names its to-do.
+    const mine = todoWritesOnTheirWay({
+      flips: {},
+      cancelling: {},
+      deleting: {},
+      editing: {},
+      subitemWriting: { todo_x: 1 },
+      subitemTicks: { item_0: { todoId: "todo_a" } },
+      subitemDeleting: { item_7: { todoId: "todo_y" } },
+    });
+    expect([...mine].sort()).toEqual(["todo_a", "todo_x", "todo_y"]);
+    expect(lit(withItems(items(["订酒店", true])), mine)).toEqual([]);
   });
 });

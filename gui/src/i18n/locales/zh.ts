@@ -2145,6 +2145,21 @@ export const zhCopy = {
     /** 就地改的两个输入框的无障碍名。 */
     editTitle: "标题",
     editNotes: "备注",
+    /** 待办下面的子项（主聊天票 111，裁决 157）：界面上不起名字，只写「添加一项」与计数。
+     * 计数在时间那一行末尾，勾了几项 / 一共几项，带「项」字，免得「2/5」读成 2 月 5 日。 */
+    itemCount: (done: number, total: number) => `${done}/${total} 项`,
+    /** 打开后子项最后一行：点了变成输入框，回车存下并接着开一个空的。 */
+    addItem: "添加一项",
+    /** 加一项与改一项那两个输入框、子项行尾 × 的无障碍名。 */
+    newItem: "新的一项",
+    editItem: "这一项",
+    deleteItem: "删除这一项",
+    /** 删了一项以后的撤销提示条，照删待办（票 88）：5 秒走了才交给 Core，连删几项合成一条。 */
+    deleteItems: {
+      deleted: (text: string) => `已删除「${text}」`,
+      deletedCount: (n: number) => `已删除 ${n} 项`,
+      undo: "撤销",
+    },
     // 待办第二行：一个时间，不写「截止」；提醒是铃铛加时刻（裁决 97）。
     overdueDays: (days: number) => `逾期 ${days} 天`,
     /** 今天有时刻的截止已经过了。 */
