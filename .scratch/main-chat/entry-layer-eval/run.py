@@ -4654,12 +4654,25 @@ def rerun_section(data: dict[str, Any], cases: list[dict[str, Any]], facts_fn: A
     if at is None:
         return []
     base = groups[at]
-    later = next((g for g in groups[at + 1:] if not str(g.get("reason", "")).startswith(mark)), None)
     by_id = {c["id"]: c for c in cases}
     keys = {(r["id"], r["variant"]) for r in base["runs"]}
     before = [r for r in base["runs"] if r["id"] in by_id]
-    after = [r for r in (later["runs"] if later else data["results"])
-             if (r["id"], r["variant"]) in keys and r["id"] in by_id]
+    # Ticket 110: run by run, the one a later ticket's group replaced it
+    # with, else the current one. A later group that holds none of these
+    # runs (another ticket's own first round) is not this one's "this
+    # time"; one that holds some of them (a make-up of one case) takes
+    # only those.
+    later: dict[tuple[str, str], dict[str, Any]] = {}
+    for g in groups[at + 1:]:
+        if str(g.get("reason", "")).startswith(mark):
+            continue
+        for r in g["runs"]:
+            later.setdefault((r["id"], r["variant"]), r)
+    current = {(r["id"], r["variant"]): r for r in data["results"]}
+    after = [later.get(k) or current.get(k) for k in sorted(keys, key=lambda k: (k[0], k[1]))]
+    order = {c["id"]: i for i, c in enumerate(cases)}
+    after = sorted((r for r in after if r and r["id"] in by_id),
+                   key=lambda r: (order.get(r["id"], 99), r.get("repeat", 0)))
 
     def facts(r: dict[str, Any]) -> dict[str, Any]:
         return facts_fn(r, by_id[r["id"]])

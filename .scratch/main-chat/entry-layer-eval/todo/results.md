@@ -44,6 +44,8 @@
 
 注 17：票 110 回归：手册 wake.md「The morning review」第一段换成只为上次巡看以来动过的事醒，「Take each thing in turn」之后加一条（先读那件事；备注最前面是它做成的、用户之后没提过，下一步在用户手里；对话里做过、备注没写的先补；隔几天再看一眼的给自己挂提醒，巡看里挂的不用对用户说、不进备注）；巡看与写备注的旧用例各重跑第 1 遍，这是被替换的那一遍。被替换的 13 次运行原样留在 results.json 的 `meta.superseded_runs[16]` 里。
 
+注 18：news-budget 补跑（票 110）：验收时补跑 3 遍（最终手册：wake.md 第一段按判据范围改过，news-budget 不读它）；这是被替换的三遍：第 1 遍是票 110 回归那一遍（没读 todos-change.md、备注没补），第 2、3 遍是票 108 第二轮的。被替换的 3 次运行原样留在 results.json 的 `meta.superseded_runs[17]` 里。
+
 ## 票 110：巡看只为动过的事醒
 
 主聊天 PRD 裁决 155：巡看先读那件事；备注最前面是它做成的东西、用户之后没提过，下一步在用户手里，不再为它做事；对话里看得出做过、备注还没写的，先补那一行；隔几天要再看一眼的，给自己挂提醒。每格是「过 / 运行」。旧手册是这一票之前的 `wake.md`，反向检查只拿掉「Take each thing in turn」之后新加的那一条（第一段的新说法留着）；两组都用同一套判定。评测不经 Core 判醒不醒：用例直接拼到点的叫醒消息。
@@ -121,7 +123,7 @@
 
 | # | 用例 | 新手册 | 旧手册（同日对照） | 反向检查（只拿掉 todos-change.md 那一条） |
 | --- | --- | --- | --- | --- |
-| 44 | news-budget | 2 / 3 | 0 / 1 | 0 / 1 |
+| 44 | news-budget | 3 / 3 | 0 / 1 | 0 / 1 |
 | 45 | news-moves-time | 3 / 3 | 0 / 1 | — |
 | 46 | progress-review-done | 3 / 3 | 0 / 1 | 0 / 1 |
 | 47 | progress-review-unchanged | 3 / 3 | — | — |
@@ -131,9 +133,9 @@
 每一遍留下的备注（新的一行；没补的写「没动」）：
 
 - **news-budget**：
-  - 新手册第 1 遍：没动；不过：备注没补进展那一行
-  - 新手册第 2 遍：「10月28日：业主说筹开预算下周（11月2日—8日）给。」；过
-  - 新手册第 3 遍：「10月28日：业主说筹开预算下周给（11月2日至8日），待接收。」；过
+  - 新手册第 1 遍：「10月29日：业主说筹开预算下周提供。」；过
+  - 新手册第 2 遍：「10月29日：业主说筹开预算下周提供（11月2日至8日），待收到。」；过
+  - 新手册第 3 遍：「10月29日：业主说筹开预算下周（11月2日—8日）提供。」；过
   - 旧手册（同日对照）第 1 遍：「。筹开预算：业主表示下周（11 月 2—8 日）提供，具体日期未定，待收到。」；不过：补在了原来的备注后面（该在最前面）；这一行不是日子打头
   - 反向检查（只拿掉 todos-change.md 那一条）第 1 遍：没动；不过：备注没补进展那一行
 - **news-moves-time**：
@@ -168,23 +170,23 @@
 | | 运行 | 过 | 请求次数（均） | 用时 s（均） | 读手册次数（均） | 读手册轮数（均） | 读手册字节（均） | 读过的部分（次数） |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 上一次 | 13 | 13 | 3.62 | 36.9 | 2.08 | 1.77 | 14120 | todos-change.md 12、unasked.md 10、times.md 7、todos.md 7、wake.md 7、subtasks.md 6、reminders.md 4、cli.md 3、authority.md 1 |
-| 这一次 | 0 | 0 | 0.00 | 0.0 | 0.00 | 0.00 | 0 | — |
+| 这一次 | 13 | 13 | 3.62 | 36.6 | 1.54 | 1.54 | 14466 | todos-change.md 12、unasked.md 9、times.md 8、todos.md 7、wake.md 7、reminders.md 6、subtasks.md 5、cli.md 2 |
 
 | # | 用例 | 写 | 过 | 请求次数 | 用时 s | 读手册：上一次 | 读手册：这一次 | 标记 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | note-report | 是 | 1/1 → 0/0 | 5.0 → 0.0 | 56 → 0 | 6.0 次 2.0 轮，16219 字节：todos.md 2、reminders.md 1、times.md 1、todos-change.md 1、unasked.md 1 | 没读 |  |
-| 2 | note-soil | 是 | 1/1 → 0/0 | 5.0 → 0.0 | 40 → 0 | 2.0 次 2.0 轮，10825 字节：todos-change.md 1、todos.md 1、unasked.md 1 | 没读 |  |
-| 3 | note-landlord | 是 | 1/1 → 0/0 | 4.0 → 0.0 | 35 → 0 | 2.0 次 2.0 轮，11456 字节：times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 | 没读 |  |
-| 12 | wake-todo | 否 | 1/1 → 0/0 | 3.0 → 0.0 | 34 → 0 | 1.0 次 1.0 轮，8496 字节：subtasks.md 1、times.md 1、todos-change.md 1、wake.md 1 | 没读 |  |
-| 13 | reno-asked | 是 | 1/1 → 0/0 | 4.0 → 0.0 | 35 → 0 | 2.0 次 2.0 轮，15703 字节：reminders.md 1、times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 | 没读 |  |
-| 14 | reno-mention | 是 | 1/1 → 0/0 | 4.0 → 0.0 | 40 → 0 | 2.0 次 2.0 轮，21065 字节：cli.md 1、reminders.md 1、times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 | 没读 |  |
-| 20 | reno-no-remind | 否 | 1/1 → 0/0 | 2.0 → 0.0 | 24 → 0 | 1.0 次 1.0 轮，11317 字节：times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 | 没读 |  |
-| 38 | review-nothing-to-do | 否 | 1/1 → 0/0 | 3.0 → 0.0 | 33 → 0 | 2.0 次 2.0 轮，14310 字节：subtasks.md 1、todos-change.md 1、unasked.md 1、wake.md 1 | 没读 |  |
-| 39 | review-advance | 否 | 1/1 → 0/0 | 4.0 → 0.0 | 51 → 0 | 2.0 次 2.0 轮，17299 字节：cli.md 1、subtasks.md 1、todos-change.md 1、unasked.md 1、wake.md 1 | 没读 |  |
-| 40 | review-overdue | 否 | 1/1 → 0/0 | 3.0 → 0.0 | 24 → 0 | 1.0 次 1.0 轮，8116 字节：subtasks.md 1、todos-change.md 1、wake.md 1 | 没读 |  |
-| 41 | review-stop | 是 | 1/1 → 0/0 | 4.0 → 0.0 | 31 → 0 | 2.0 次 2.0 轮，9601 字节：reminders.md 1、times.md 1、wake.md 1 | 没读 |  |
-| 42 | review-with-reminder | 否 | 1/1 → 0/0 | 3.0 → 0.0 | 36 → 0 | 2.0 次 2.0 轮，13802 字节：subtasks.md 1、todos-change.md 1、unasked.md 1、wake.md 1 | 没读 |  |
-| 43 | review-with-subtask-done | 否 | 1/1 → 0/0 | 3.0 → 0.0 | 40 → 0 | 2.0 次 2.0 轮，25345 字节：authority.md 1、cli.md 1、subtasks.md 1、todos-change.md 1、unasked.md 1、wake.md 1 | 没读 |  |
+| 1 | note-report | 是 | 1/1 → 1/1 | 5.0 → 4.0 | 56 → 59 | 6.0 次 2.0 轮，16219 字节：todos.md 2、reminders.md 1、times.md 1、todos-change.md 1、unasked.md 1 | 2.0 次 2.0 轮，14523 字节：times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 |  |
+| 2 | note-soil | 是 | 1/1 → 1/1 | 5.0 → 4.0 | 40 → 36 | 2.0 次 2.0 轮，10825 字节：todos-change.md 1、todos.md 1、unasked.md 1 | 2.0 次 2.0 轮，12865 字节：todos-change.md 1、todos.md 1、unasked.md 1 |  |
+| 3 | note-landlord | 是 | 1/1 → 1/1 | 4.0 → 4.0 | 35 → 32 | 2.0 次 2.0 轮，11456 字节：times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 | 1.0 次 1.0 轮，17927 字节：reminders.md 1、times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 |  |
+| 12 | wake-todo | 否 | 1/1 → 1/1 | 3.0 → 3.0 | 34 → 31 | 1.0 次 1.0 轮，8496 字节：subtasks.md 1、times.md 1、todos-change.md 1、wake.md 1 | 1.0 次 1.0 轮，9936 字节：subtasks.md 1、todos-change.md 1、wake.md 1 |  |
+| 13 | reno-asked | 是 | 1/1 → 1/1 | 4.0 → 5.0 | 35 → 46 | 2.0 次 2.0 轮，15703 字节：reminders.md 1、times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 | 3.0 次 3.0 轮，18401 字节：reminders.md 2、times.md 2、todos.md 2、unasked.md 2、todos-change.md 1 |  |
+| 14 | reno-mention | 是 | 1/1 → 1/1 | 4.0 → 4.0 | 40 → 35 | 2.0 次 2.0 轮，21065 字节：cli.md 1、reminders.md 1、times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 | 1.0 次 1.0 轮，17926 字节：reminders.md 1、times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 |  |
+| 20 | reno-no-remind | 否 | 1/1 → 1/1 | 2.0 → 3.0 | 24 → 32 | 1.0 次 1.0 轮，11317 字节：times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 | 1.0 次 1.0 轮，13398 字节：times.md 1、todos-change.md 1、todos.md 1、unasked.md 1 |  |
+| 38 | review-nothing-to-do | 否 | 1/1 → 1/1 | 3.0 → 3.0 | 33 → 29 | 2.0 次 2.0 轮，14310 字节：subtasks.md 1、todos-change.md 1、unasked.md 1、wake.md 1 | 1.0 次 1.0 轮，9983 字节：subtasks.md 1、todos-change.md 1、wake.md 1 |  |
+| 39 | review-advance | 否 | 1/1 → 1/1 | 4.0 → 4.0 | 51 → 52 | 2.0 次 2.0 轮，17299 字节：cli.md 1、subtasks.md 1、todos-change.md 1、unasked.md 1、wake.md 1 | 2.0 次 2.0 轮，15646 字节：subtasks.md 1、todos-change.md 1、unasked.md 1、wake.md 1 |  |
+| 40 | review-overdue | 否 | 1/1 → 1/1 | 3.0 → 3.0 | 24 → 25 | 1.0 次 1.0 轮，8116 字节：subtasks.md 1、todos-change.md 1、wake.md 1 | 2.0 次 2.0 轮，15637 字节：subtasks.md 1、todos-change.md 1、unasked.md 1、wake.md 1 |  |
+| 41 | review-stop | 是 | 1/1 → 1/1 | 4.0 → 4.0 | 31 → 34 | 2.0 次 2.0 轮，9601 字节：reminders.md 1、times.md 1、wake.md 1 | 2.0 次 2.0 轮，15040 字节：cli.md 1、reminders.md 1、times.md 1、wake.md 1 |  |
+| 42 | review-with-reminder | 否 | 1/1 → 1/1 | 3.0 → 3.0 | 36 → 30 | 2.0 次 2.0 轮，13802 字节：subtasks.md 1、todos-change.md 1、unasked.md 1、wake.md 1 | 1.0 次 1.0 轮，13171 字节：reminders.md 1、times.md 1、todos-change.md 1、wake.md 1 |  |
+| 43 | review-with-subtask-done | 否 | 1/1 → 1/1 | 3.0 → 3.0 | 40 → 35 | 2.0 次 2.0 轮，25345 字节：authority.md 1、cli.md 1、subtasks.md 1、todos-change.md 1、unasked.md 1、wake.md 1 | 1.0 次 1.0 轮，13607 字节：cli.md 1、subtasks.md 1、todos-change.md 1、wake.md 1 |  |
 
 ## 票 73 重跑（2026-10-21，gpt-6.1-sol，推理强度 high）
 
@@ -193,43 +195,43 @@
 | | 运行 | 过 | 请求次数（均） | 用时 s（均） | 读手册次数（均） | 读手册轮数（均） | 读手册字节（均） | 读过的部分（次数） |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 上一次 | 64 | 64 | 3.55 | 27.9 | 1.39 | 1.33 | 8776 | todos.md 45、todos-change.md 41、times.md 40、reminders.md 30、wake.md 8、subtasks.md 7、cli.md 3 |
-| 这一次 | 0 | 0 | 0.00 | 0.0 | 0.00 | 0.00 | 0 | — |
+| 这一次 | 64 | 63 | 3.67 | 34.4 | 1.50 | 1.33 | 11287 | times.md 48、todos.md 46、todos-change.md 45、unasked.md 45、reminders.md 34、wake.md 8、subtasks.md 7、cli.md 4 |
 | 同日对照 | 9 | 5 | 3.00 | 27.0 | 1.11 | 1.11 | 7066 | todos-change.md 5、cli.md 3、subtasks.md 3、times.md 3、wake.md 3、reminders.md 2、todos.md 2、目录 2 |
 
 | # | 用例 | 写 | 过 | 请求次数 | 用时 s | 读手册：上一次 | 读手册：这一次 | 标记 | 同日对照：过、请求次数、用时 s |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | note-report | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 39 → 0 | 2.0 次 2.0 轮，12682 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
-| 2 | note-soil | 是 | 2/2 → 0/0 | 5.0 → 0.0 | 30 → 0 | 2.0 次 2.0 轮，8501 字节：todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
-| 3 | note-landlord | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 30 → 0 | 2.0 次 2.0 轮，10868 字节：times.md 2、todos-change.md 2、todos.md 2、reminders.md 1 | 没读 |  | 0/0，0.0，0 |
-| 4 | remind-landlord-8am | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 30 → 0 | 2.0 次 2.0 轮，12702 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
-| 5 | logistics-mon | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 32 → 0 | 1.0 次 1.0 轮，10847 字节：reminders.md 2、times.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
-| 6 | guitar | 否 | 2/2 → 0/0 | 1.0 → 0.0 | 11 → 0 | 没读 | 没读 |  | 0/0，0.0，0 |
-| 7 | flight-number | 否 | 2/2 → 0/0 | 4.0 → 0.0 | 32 → 0 | 0.5 次 0.5 轮，4460 字节：times.md 1、todos-change.md 1、todos.md 1 | 没读 |  | 0/0，0.0，0 |
-| 8 | tick-soil | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 26 → 0 | 1.0 次 1.0 轮，8319 字节：todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
-| 9 | quote-move | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 30 → 0 | 1.0 次 1.0 轮，4341 字节：times.md 2、todos-change.md 2、reminders.md 1 | 没读 |  | 0/0，0.0，0 |
-| 10 | whats-left | 否 | 2/2 → 0/0 | 3.0 → 0.0 | 21 → 0 | 1.0 次 1.0 轮，5421 字节：todos-change.md 2、times.md 1、todos.md 1 | 没读 |  | 0/0，0.0，0 |
-| 11 | already-noted | 否 | 2/2 → 0/0 | 3.0 → 0.0 | 24 → 0 | 1.0 次 1.0 轮，5386 字节：todos-change.md 2、times.md 1、todos.md 1 | 没读 |  | 0/0，0.0，0 |
-| 12 | wake-todo | 否 | 2/2 → 0/0 | 3.0 → 0.0 | 24 → 0 | 1.0 次 1.0 轮，6301 字节：subtasks.md 2、todos-change.md 2、wake.md 2 | 没读 |  | 0/0，0.0，0 |
-| 13 | reno-asked | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 30 → 0 | 2.0 次 2.0 轮，10858 字节：times.md 2、todos-change.md 2、todos.md 2、reminders.md 1 | 没读 |  | 0/0，0.0，0 |
-| 14 | reno-mention | 是 | 2/2 → 0/0 | 4.5 → 0.0 | 35 → 0 | 1.5 次 1.5 轮，12613 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
-| 15 | lease-expiry | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 36 → 0 | 2.0 次 2.0 轮，13747 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
-| 16 | offer-friday | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 37 → 0 | 1.5 次 1.5 轮，12754 字节：reminders.md 2、times.md 2、todos.md 2、cli.md 1 | 没读 |  | 0/0，0.0，0 |
-| 17 | flight-wed | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 30 → 0 | 1.5 次 1.5 轮，10886 字节：times.md 2、todos-change.md 2、todos.md 2、reminders.md 1 | 没读 |  | 0/0，0.0，0 |
-| 18 | past-trip | 否 | 2/2 → 0/0 | 1.0 → 0.0 | 12 → 0 | 没读 | 没读 |  | 0/0，0.0，0 |
-| 19 | founding-date | 否 | 2/2 → 0/0 | 4.5 → 0.0 | 40 → 0 | 0.5 次 0.5 轮，3339 字节：todos.md 1 | 没读 |  | 0/0，0.0，0 |
-| 20 | reno-no-remind | 否 | 2/2 → 0/0 | 2.5 → 0.0 | 21 → 0 | 1.5 次 1.5 轮，7590 字节：todos.md 2、todos-change.md 1 | 没读 |  | 0/0，0.0，0 |
-| 21 | hospital-tomorrow | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 36 → 0 | 3.0 次 2.0 轮，11104 字节：times.md 2、todos-change.md 2、todos.md 2、reminders.md 1 | 没读 |  | 0/0，0.0，0 |
-| 22 | school-monday | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 33 → 0 | 2.0 次 2.0 轮，13060 字节：times.md 2、todos-change.md 2、todos.md 2、cli.md 1、reminders.md 1 | 没读 |  | 0/0，0.0，0 |
-| 23 | hotpot-tonight | 否 | 2/2 → 0/0 | 2.0 → 0.0 | 16 → 0 | 1.0 次 1.0 轮，10842 字节：reminders.md 2、times.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
-| 24 | wake-reno | 否 | 2/2 → 0/0 | 2.0 → 0.0 | 16 → 0 | 1.0 次 1.0 轮，3544 字节：wake.md 2、subtasks.md 1 | 没读 |  | 0/0，0.0，0 |
-| 25 | stop-this-kind | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 31 → 0 | 1.0 次 1.0 轮，14153 字节：reminders.md 2、todos-change.md 2、cli.md 1、times.md 1、todos.md 1 | 没读 |  | 0/0，0.0，0 |
-| 26 | declined-before | 否 | 2/2 → 0/0 | 2.0 → 0.0 | 18 → 0 | 1.5 次 1.0 轮，7466 字节：times.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
-| 27 | declined-before-asked | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 27 → 0 | 1.5 次 1.5 轮，11750 字节：reminders.md 2、times.md 2、todos.md 2、todos-change.md 1 | 没读 |  | 0/0，0.0，0 |
-| 28 | hotpot-asked | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 27 → 0 | 2.0 次 2.0 轮，12688 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
-| 29 | meeting-3pm | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 30 → 0 | 2.0 次 2.0 轮，12688 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
-| 30 | remind-named-time | 是 | 2/2 → 0/0 | 4.0 → 0.0 | 27 → 0 | 2.0 次 2.0 轮，12684 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 没读 |  | 0/0，0.0，0 |
-| 31 | wake-offer | 否 | 2/2 → 0/0 | 4.0 → 0.0 | 29 → 0 | 1.0 次 1.0 轮，4605 字节：subtasks.md 2、wake.md 2 | 没读 |  | 0/0，0.0，0 |
-| 32 | wake-surgery | 否 | 2/2 → 0/0 | 4.0 → 0.0 | 31 → 0 | 1.5 次 1.0 轮，4630 字节：subtasks.md 2、wake.md 2 | 没读 |  | 0/0，0.0，0 |
+| 1 | note-report | 是 | 2/2 → 2/2 | 4.0 → 4.5 | 39 → 54 | 2.0 次 2.0 轮，12682 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 4.0 次 2.0 轮，15790 字节：todos.md 3、reminders.md 2、times.md 2、todos-change.md 2、unasked.md 2 |  | 0/0，0.0，0 |
+| 2 | note-soil | 是 | 2/2 → 2/2 | 5.0 → 4.5 | 30 → 37 | 2.0 次 2.0 轮，8501 字节：todos-change.md 2、todos.md 2 | 2.0 次 2.0 轮，10829 字节：todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
+| 3 | note-landlord | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 30 → 36 | 2.0 次 2.0 轮，10868 字节：times.md 2、todos-change.md 2、todos.md 2、reminders.md 1 | 2.0 次 2.0 轮，13395 字节：times.md 2、todos-change.md 2、todos.md 2、unasked.md 2、reminders.md 1 |  | 0/0，0.0，0 |
+| 4 | remind-landlord-8am | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 30 → 38 | 2.0 次 2.0 轮，12702 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 2.0 次 2.0 轮，15462 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
+| 5 | logistics-mon | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 32 → 32 | 1.0 次 1.0 轮，10847 字节：reminders.md 2、times.md 2、todos.md 2 | 1.0 次 1.0 轮，13456 字节：reminders.md 2、times.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
+| 6 | guitar | 否 | 2/2 → 2/2 | 1.0 → 1.0 | 11 → 12 | 没读 | 没读 |  | 0/0，0.0，0 |
+| 7 | flight-number | 否 | 2/2 → 2/2 | 4.0 → 5.5 | 32 → 54 | 0.5 次 0.5 轮，4460 字节：times.md 1、todos-change.md 1、todos.md 1 | 1.0 次 1.0 轮，10416 字节：times.md 2、todos.md 2、unasked.md 2、todos-change.md 1 |  | 0/0，0.0，0 |
+| 8 | tick-soil | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 26 → 29 | 1.0 次 1.0 轮，8319 字节：todos-change.md 2、todos.md 2 | 1.0 次 1.0 轮，1865 字节：todos-change.md 2 |  | 0/0，0.0，0 |
+| 9 | quote-move | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 30 → 32 | 1.0 次 1.0 轮，4341 字节：times.md 2、todos-change.md 2、reminders.md 1 | 1.0 次 1.0 轮，4468 字节：times.md 2、todos-change.md 2、reminders.md 1 |  | 0/0，0.0，0 |
+| 10 | whats-left | 否 | 2/2 → 1/2 | 3.0 → 3.0 | 21 → 24 | 1.0 次 1.0 轮，5421 字节：todos-change.md 2、times.md 1、todos.md 1 | 1.0 次 1.0 轮，13238 字节：times.md 2、todos-change.md 2、todos.md 2、unasked.md 2、reminders.md 1 |  | 0/0，0.0，0 |
+| 11 | already-noted | 否 | 2/2 → 2/2 | 3.0 → 3.0 | 24 → 32 | 1.0 次 1.0 轮，5386 字节：todos-change.md 2、times.md 1、todos.md 1 | 1.0 次 1.0 轮，6932 字节：times.md 2、todos-change.md 2、todos.md 1、unasked.md 1 |  | 0/0，0.0，0 |
+| 12 | wake-todo | 否 | 2/2 → 2/2 | 3.0 → 3.0 | 24 → 29 | 1.0 次 1.0 轮，6301 字节：subtasks.md 2、todos-change.md 2、wake.md 2 | 1.0 次 1.0 轮，8184 字节：subtasks.md 2、todos-change.md 2、wake.md 2、times.md 1 |  | 0/0，0.0，0 |
+| 13 | reno-asked | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 30 → 33 | 2.0 次 2.0 轮，10858 字节：times.md 2、todos-change.md 2、todos.md 2、reminders.md 1 | 1.5 次 1.5 轮，15226 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
+| 14 | reno-mention | 是 | 2/2 → 2/2 | 4.5 → 4.0 | 35 → 41 | 1.5 次 1.5 轮，12613 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 1.5 次 1.5 轮，18134 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2、cli.md 1 |  | 0/0，0.0，0 |
+| 15 | lease-expiry | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 36 → 46 | 2.0 次 2.0 轮，13747 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 2.0 次 2.0 轮，17183 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2、cli.md 1 |  | 0/0，0.0，0 |
+| 16 | offer-friday | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 37 → 42 | 1.5 次 1.5 轮，12754 字节：reminders.md 2、times.md 2、todos.md 2、cli.md 1 | 1.0 次 1.0 轮，13479 字节：reminders.md 2、times.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
+| 17 | flight-wed | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 30 → 37 | 1.5 次 1.5 轮，10886 字节：times.md 2、todos-change.md 2、todos.md 2、reminders.md 1 | 1.5 次 1.5 轮，15332 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
+| 18 | past-trip | 否 | 2/2 → 2/2 | 1.0 → 1.0 | 12 → 16 | 没读 | 没读 |  | 0/0，0.0，0 |
+| 19 | founding-date | 否 | 2/2 → 2/2 | 4.5 → 4.0 | 40 → 42 | 0.5 次 0.5 轮，3339 字节：todos.md 1 | 3.0 次 1.0 轮，8508 字节：times.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
+| 20 | reno-no-remind | 否 | 2/2 → 2/2 | 2.5 → 3.0 | 21 → 30 | 1.5 次 1.5 轮，7590 字节：todos.md 2、todos-change.md 1 | 1.5 次 1.5 轮，11380 字节：times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
+| 21 | hospital-tomorrow | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 36 → 35 | 3.0 次 2.0 轮，11104 字节：times.md 2、todos-change.md 2、todos.md 2、reminders.md 1 | 2.0 次 2.0 轮，16484 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
+| 22 | school-monday | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 33 → 40 | 2.0 次 2.0 轮，13060 字节：times.md 2、todos-change.md 2、todos.md 2、cli.md 1、reminders.md 1 | 1.5 次 1.5 轮，14429 字节：times.md 2、todos-change.md 2、todos.md 2、unasked.md 2、reminders.md 1 |  | 0/0，0.0，0 |
+| 23 | hotpot-tonight | 否 | 2/2 → 2/2 | 2.0 → 2.0 | 16 → 20 | 1.0 次 1.0 轮，10842 字节：reminders.md 2、times.md 2、todos.md 2 | 1.0 次 1.0 轮，13476 字节：reminders.md 2、times.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
+| 24 | wake-reno | 否 | 2/2 → 2/2 | 2.0 → 3.0 | 16 → 23 | 1.0 次 1.0 轮，3544 字节：wake.md 2、subtasks.md 1 | 1.0 次 1.0 轮，6898 字节：todos-change.md 2、wake.md 2、subtasks.md 1 |  | 0/0，0.0，0 |
+| 25 | stop-this-kind | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 31 → 36 | 1.0 次 1.0 轮，14153 字节：reminders.md 2、todos-change.md 2、cli.md 1、times.md 1、todos.md 1 | 1.0 次 1.0 轮，11182 字节：reminders.md 2、todos-change.md 2、cli.md 1、times.md 1 |  | 0/0，0.0，0 |
+| 26 | declined-before | 否 | 2/2 → 2/2 | 2.0 → 2.0 | 18 → 29 | 1.5 次 1.0 轮，7466 字节：times.md 2、todos.md 2 | 1.0 次 1.0 轮，9801 字节：times.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
+| 27 | declined-before-asked | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 27 → 37 | 1.5 次 1.5 轮，11750 字节：reminders.md 2、times.md 2、todos.md 2、todos-change.md 1 | 3.5 次 2.0 轮，17309 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2、cli.md 1 |  | 0/0，0.0，0 |
+| 28 | hotpot-asked | 是 | 2/2 → 2/2 | 4.0 → 4.5 | 27 → 37 | 2.0 次 2.0 轮，12688 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 2.0 次 2.0 轮，15316 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
+| 29 | meeting-3pm | 是 | 2/2 → 2/2 | 4.0 → 4.0 | 30 → 37 | 2.0 次 2.0 轮，12688 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 2.0 次 2.0 轮，15322 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
+| 30 | remind-named-time | 是 | 2/2 → 2/2 | 4.0 → 4.5 | 27 → 34 | 2.0 次 2.0 轮，12684 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2 | 2.0 次 2.0 轮，15343 字节：reminders.md 2、times.md 2、todos-change.md 2、todos.md 2、unasked.md 2 |  | 0/0，0.0，0 |
+| 31 | wake-offer | 否 | 2/2 → 2/2 | 4.0 → 4.0 | 29 → 33 | 1.0 次 1.0 轮，4605 字节：subtasks.md 2、wake.md 2 | 1.0 次 1.0 轮，6156 字节：subtasks.md 2、wake.md 2 |  | 0/0，0.0，0 |
+| 32 | wake-surgery | 否 | 2/2 → 2/2 | 4.0 → 5.0 | 31 → 49 | 1.5 次 1.0 轮，4630 字节：subtasks.md 2、wake.md 2 | 1.0 次 1.0 轮，6178 字节：subtasks.md 2、wake.md 2 |  | 0/0，0.0，0 |
 
 ## 票 64 重跑（2026-10-19，gpt-6.1-sol，推理强度 high）
 
@@ -447,7 +449,7 @@
 | 41 | review-stop | 早上巡看（票 73） | 用户说「早上那个巡看别弄了」→ schedule disable 巡看那条（不是 delete），回复一句说已经停了、想恢复跟它说 | 2 | 2 | 100% |
 | 42 | review-with-reminder | 巡看与别的事同一次叫醒（票 78） | 巡看与待办「702 办公室装修完工」的提醒同一分钟到点，Core 合成一次叫醒（混合的开头，提醒在前、巡看在后：同一分钟到点的按 id 排，结尾「Reply once, covering all of them.」）；在办的只有这一件 → 用自己的话告诉用户装修的事（问完工了没、给下一步），不是整条 <no-reply/>，不复述提醒原文，不勾掉；巡看没做成值得说的事，不提巡看；不提建议 | 3 | 3 | 100% |
 | 43 | review-with-subtask-done | 巡看与别的事同一次叫醒（票 78） | 用户这一段让查的高铁，子任务查好交回（Core 的子任务完成措辞），与巡看在同一次叫醒（子任务的回报先到、巡看在后）；在办的另有一条 11 月 20 号的装修待办、提醒挂好了 → 转达查到的三班车（车次、时刻、票价、有没有票），点出证据；不是整条 <no-reply/>、不打回；巡看没做成值得说的事，不提巡看；不提建议 | 3 | 3 | 100% |
-| 44 | news-budget | 进展写进备注（票 108） | 清单里有「希尔顿酒店项目上下文资料收集」（没日子，备注是它记的 5 条收集要点）和 702 装修，用户说「业主说筹开预算下周给我」→ 先读这件事，todo update --notes= 是新的一行「<今天>：业主说筹开预算下周给」在上、原来的备注一字不差在下；不另记备忘、不记新待办、不动 702；顺带给自己挂一个下周问预算的提醒可以，记下个数 | 3 | 2 | 67% |
+| 44 | news-budget | 进展写进备注（票 108） | 清单里有「希尔顿酒店项目上下文资料收集」（没日子，备注是它记的 5 条收集要点）和 702 装修，用户说「业主说筹开预算下周给我」→ 先读这件事，todo update --notes= 是新的一行「<今天>：业主说筹开预算下周给」在上、原来的备注一字不差在下；不另记备忘、不记新待办、不动 702；顺带给自己挂一个下周问预算的提醒可以，记下个数 | 3 | 3 | 100% |
 | 45 | news-moves-time | 进展写进备注（票 108） | 702 装修（11 月 20 日截止、当天 9 点提醒）与希尔顿那件在清单上，用户说「装修队说要拖到 12 月 5 号」→ 截止挪到 12 月 5 日、提醒跟着挪（不晚于新截止），备注最前面补一行日子打头、写明原因（装修队说拖），原来的「装修师傅说预计这天完工」一字不差留在下面；不新建、不动希尔顿；回复说出新日子 | 3 | 3 | 100% |
 | 46 | progress-review-done | 进展写进备注（票 108） | 巡看到点，在办的有没日子的「定搬家公司」（三份报价单在 ~/Downloads/搬家报价/），另有 702 装修（挂着提醒）（要定的是用户）→ 当场比完（读三份、可以写一份对比文件），开口时说是哪件事、比出了什么、文件用 [FILE:…]，不替用户定、不勾掉；备注最前面补一行日子打头、写比出的结果，做了文件就写它的绝对路径，原来的备注一字不差留在下面；只派子任务没结果时备注不动、只回 <no-reply/>；不提建议；回复上限 350 字（比价要列三家） | 3 | 3 | 100% |
 | 47 | progress-review-unchanged | 进展写进备注（票 108） | 巡看到点，「定搬家公司」的备注最前面已有它前一天补的一行（比好了、蚂蚁最便宜、对比表的绝对路径），对比表就在那里，用户还没定，另有 702 装修（挂着提醒）→ 看过没变化：不重做、不补「看过了」一类的行，备注不动，回复只有 <no-reply/> | 3 | 3 | 100% |
@@ -457,7 +459,7 @@
 | 51 | review-done-not-noted | 巡看只为动过的事醒（票 110） | 巡看叫醒（JC 库里 10-29 早上的样子）：带过来的两轮是前一晚记下希尔顿、子任务带着模板回来它对用户说了两句（没给路径）；希尔顿的备注里还没有那一行 → 在备注最前面补一行（日子打头，今天或模板做成的前一天都算；写做了什么、模板的绝对路径），原备注一字不差在下；不重做模板、不派子任务、不做新文件；回复照手册：只回 <no-reply/>，或只为交出模板开口（带 [FILE:…]，也算过，注出来） | 3 | 3 | 100% |
 | 52 | review-user-news-on-top | 巡看只为动过的事醒（票 110） | 巡看叫醒，这一段里用户早上说了业主发来的项目地址，它补在了希尔顿的备注最前面「10月29日：业主发来了项目地址：……」，下面才是它前一天那一行（模板）和原备注 → 最新一行是用户的：不被「下一步在用户手里」挡住，可以为它做事、不要求一定做（只派子任务或停在浏览器也算；不出声也算，注出来）；不重做模板（新文件名里有「模板」、派子任务去重做或重新生成模板都不过；子任务里只说读旧模板、不要重做的，注出来）；做成了东西就照票 108 在最前面补一行；开口时说是哪件事、做了什么，不提建议 | 3 | 3 | 100% |
 | 53 | review-look-again-later | 巡看只为动过的事醒（票 110） | 巡看叫醒，有一件昨晚刚记的「等签证审批结果」，备注里有申请号和进度在哪看；评测里查不了网，「查」降成读备注点名的那份查询结果（~/Downloads/签证进度查询.html，写着审理中）→ 看过没变化：备注不补，给自己挂一个之后几天的提醒（schedule create --target=assistant，明天到两周内），整条回复 <no-reply/>；不派子任务、不勾掉 | 3 | 3 | 100% |
-| | 合计 | | | 114 | 110 | 96% |
+| | 合计 | | | 114 | 111 | 97% |
 
 ## 一览
 
@@ -551,15 +553,14 @@
 | 43 | review-with-subtask-done | 1 | session show s-…5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user；session show s-…5n1x --tail=40；todo list；schedule list；sessions list | 下周三是 **11 月 4 日**，杭州东 → 上海虹桥挑了这三班： ⏎ \/ 车次 \/ 出发 → 到达 \/ 耗时 \/ 二等座 \/ 查询时余票 \/ ⏎ \/---\/---\/---\/---\/---\/ ⏎ \/ G7502 \/ 09:12 → 10:06 \/ 54 分钟 \/ 73 元 \/ 有票 \/ ⏎ \/ G7348 \/ 09:41 → 10:39 \/ 58 分钟 \/ 73 元 \/ 有票 \/ ⏎ \/ G1374 \/ 10:05 → 10:58 \/ 53 分钟 \/ 73 元 \/ 余 9 张 \/ ⏎ 来源：[12306 余票查询页](https://kyfw.12306.cn/otn/leftTicket/init)。余票会变化，以购票时显示为准。 | 311 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、cli.md；1 次 1 轮，14348 字节 | 读了清单 | 过 |
 | 43 | review-with-subtask-done | 2 | session show s-…5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user；session show s-…5n1x --tail=40；todo list；schedule list；sessions list --runtime all --all | 下周三（**10 月 28 日**）杭州东 → 上海虹桥，上午 9 点以后出发的三班： ⏎ \/ 车次 \/ 出发—到达 \/ 二等座 \/ 查询时余票 \/ ⏎ \/---\/---\/---\/---\/ ⏎ \/ G7502 \/ 09:12—10:06 \/ 73 元 \/ 有票 \/ ⏎ \/ G7348 \/ 09:41—10:39 \/ 73 元 \/ 有票 \/ ⏎ \/ G1374 \/ 10:05—10:58 \/ 73 元 \/ 余 9 张 \/ ⏎ 来源：[12306 余票查询页](https://kyfw.12306.cn/otn/leftTicket/init)。余票会变动，以购票时显示为准。 | 279 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、cli.md；1 次 1 轮，11705 字节 | 读了清单 | 过 |
 | 43 | review-with-subtask-done | 3 | session show s-…5n1x --around=msg_s-mgu2r7k4-8c3v5n1x_0_user；session show s-…5n1x --tail=40；todo list；schedule list；sessions list --runtime all --all | 下周三（**10 月 28 日**）杭州东 → 上海虹桥，上午 9 点以后出发可选这三班： ⏎ \/ 车次 \/ 出发—到达 \/ 二等座票价 \/ 查询时余票 \/ ⏎ \/---\/---\/---:\/---\/ ⏎ \/ G7502 \/ 09:12—10:06 \/ 73 元 \/ 有票 \/ ⏎ \/ G7348 \/ 09:41—10:39 \/ 73 元 \/ 有票 \/ ⏎ \/ G1374 \/ 10:05—10:58 \/ 73 元 \/ 余 9 张 \/ ⏎ 来源：[12306 余票查询页](https://kyfw.12306.cn/otn/leftTicket/init)。余票随时变化，以购票时显示为准。 | 285 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md；1 次 1 轮，8146 字节 | 读了清单 | 过 |
-| 44 | news-budget | 1 | schedule list；todo list；sessions search 筹开预算 --runtime all --all；schedule create 问一下筹开预算收到没有
+| 44 | news-budget | 1 | todo list；sessions search 筹开预算 --runtime all --all；todo show todo_4c8e1a7d2b9f3605；sessions search 希尔顿 --runtime all --all；todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周提供。
+收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户补充希尔顿项目筹开预算的提供时间，更新现有资料收集待办进展；schedule list；schedule create 确认筹开预算是否收到
 
-2026年10月29日，业主说筹开预算下周给。下周为11月2日至8日，没有承诺具体哪天；11月6日傍晚轻问用户是否收到，不要把这天说成业主承诺的截止日。 --at=2026-11-06T17:00 --target=assistant --supervisor=galley-assistant --reason=业主预计下周给筹开预算，届时询问是否收到 | 记下了，等业主下周给预算。下周五（11月6日）17点我问你一下收到没有。 | 36 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md；2 次 2 轮，17347 字节 | 读了清单 | 不过：备注没补进展那一行（注：给自己挂了 1 个提醒：2026-11-06 17:00 (Fri)「问一下筹开预算收到没有」） |
-| 44 | news-budget | 2 | todo list；schedule list；sessions search 筹开预算 --runtime all --all；sessions search 希尔顿 --runtime all --all；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=10月28日：业主说筹开预算下周（11月2日—8日）给。
-收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户告知筹开预算交付进展，补入现有项目待办；schedule create 确认筹开预算是否收到
-
-10月28日业主说筹开预算下周给。11月6日傍晚问一下是否收到，不替用户催业主。相关待办：todo_4c8e1a7d2b9f3605，希尔顿酒店项目上下文资料收集。 --at=2026-11-06T17:00 --target=assistant --supervisor=galley-assistant --reason=业主预计下周交付筹开预算，在周末前询问结果 | 记下了，已补到希尔顿项目资料收集的待办里：业主说筹开预算下周给。下周五（11月6日）下午5点我问你一下收到了没。 | 56 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、memo.md、reminders.md、todos-change.md；3 次 3 轮，25573 字节 | 查了 | 过（注：给自己挂了 1 个提醒：2026-11-06 17:00 (Fri)「确认筹开预算是否收到」） |
-| 44 | news-budget | 3 | todo list；todo show todo_4c8e1a7d2b9f3605；sessions search 筹开预算 --runtime all --all；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=10月28日：业主说筹开预算下周给（11月2日至8日），待接收。
-收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户补充业主下周提供筹开预算，更新现有项目资料收集进展 | 记下了：业主下周（11月2日至8日）给你筹开预算，已更新到「希尔顿酒店项目上下文资料收集」的备注里，其他资料仍保留待收集。 | 61 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、times.md、cli.md；1 次 1 轮，17013 字节 | 查了 | 过 |
+10月29日业主说筹开预算下周给。到时问一句预算是否收到；关联待办 todo_4c8e1a7d2b9f3605（希尔顿酒店项目上下文资料收集），主会话 s-…9w0e。先查现有待办进展，若已收到则不重复问；不联系业主，不将整个资料收集事项设为到期。 --at=2026-11-06T17:00 --target=assistant --supervisor=galley-assist… | 记下了，已补到希尔顿项目资料收集待办：业主说筹开预算下周给。下周五（11月6日）17点我问你一下收到没有。 | 53 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md、reminders.md；2 次 2 轮，18116 字节 | 查了 | 过（注：给自己挂了 1 个提醒：2026-11-06 17:00 (Fri)「确认筹开预算是否收到」） |
+| 44 | news-budget | 2 | todo list；todo show todo_4c8e1a7d2b9f3605；sessions search 筹开预算 --runtime all --all；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周提供（11月2日至8日），待收到。
+收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=业主筹开预算交付进展，补充现有资料收集待办，不新建重复事项 | 记下了，已补到「希尔顿酒店项目上下文资料收集」：业主说筹开预算下周（11月2日至8日）给你，目前待收到。 | 52 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；1 次 1 轮，13359 字节 | 查了 | 过 |
+| 44 | news-budget | 3 | sessions search 筹开预算 --runtime all --all；todo list；sessions search 希尔顿 --runtime all --all；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周（11月2日—8日）提供。
+收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=user reported owner will provide pre-opening budget next … | 记下了：业主说筹开预算下周（11月2日—8日）给你，已补到「希尔顿酒店项目上下文资料收集」的备注里。 | 50 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；1 次 1 轮，14532 字节 | 查了 | 过 |
 | 45 | news-moves-time | 1 | todo show todo_6f7a8b9c0d1e2f3a；todo update todo_6f7a8b9c0d1e2f3a --due=2026-12-05 --remind-at=2026-12-05T09:00 --notes=10月29日：装修队说完工要延期至12月5日，原定11月20日。
 装修师傅说预计这天完工 --supervisor=galley-assistant --reason=user reported renovation completion delayed to D… | 已把 702 办公室装修完工日期从 11 月 20 日改到 **12 月 5 日**，提醒也同步改为当天上午 **9 点**，备注里保留了这次延期记录。 | 76 | 读了（第 1 次调用）：todos-change.md、times.md、cli.md；1 次 1 轮，7000 字节 | 没查 | 过 |
 | 45 | news-moves-time | 2 | todo show todo_6f7a8b9c0d1e2f3a；todo update todo_6f7a8b9c0d1e2f3a --due=2026-12-05 --remind-at=2026-12-05T09:00 --notes=10月28日：装修队说完工要拖到12月5日，原定11月20日。
@@ -3046,75 +3047,73 @@ Reply once, covering all of them.
 业主说筹开预算下周给我
 ```
 
-### 第 1 遍：不过
-
-不过的原因：备注没补进展那一行
-
-注：给自己挂了 1 个提醒：2026-11-06 17:00 (Fri)「问一下筹开预算收到没有」
-
-工具调用：
-
-1. code_run
-2. code_run（galley schedule list，galley todo list，galley sessions search）；galley schedule list；galley todo list；galley sessions search 筹开预算 --runtime all --all
-3. code_run（galley schedule create）；galley schedule create 问一下筹开预算收到没有  2026年10月29日，业主说筹开预算下周给。下周为11月2日至8日，没有承诺具体哪天；11月6日傍晚轻问用户是否收到，不要把这天说成业主承诺的截止日。 --at=2026-11-06T17:00 --target=assistant --supervisor=galley-assistant --reason=业主预计下周给筹开预算，届时询问是否收到
-
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、reminders.md；2 次 2 轮，17347 字节；写前读过清单：读了清单；手册版本：`637a33b8`。
-
-新记的待办：无；新建的提醒：`sched_5eed000000000001` 2026-11-06T09:00:00+00:00 target=assistant：问一下筹开预算收到没有
-
-2026年10月29日，业主说筹开预算下周给。下周为11月2日至8日，没有承诺具体哪天；11月6日傍晚轻问用户是否收到，不要把这天说成业主承诺的截止日。；改过的已有待办：无；取消的已有提醒：无。
-
-回复（去掉 summary 与建议标签）：
-
-```text
-记下了，等业主下周给预算。下周五（11月6日）17点我问你一下收到没有。
-```
-
-建议标签：帮我列一下筹开预算要核对的重点
-
-### 第 2 遍：过
+### 第 1 遍：过
 
 注：给自己挂了 1 个提醒：2026-11-06 17:00 (Fri)「确认筹开预算是否收到」
 
 工具调用：
 
 1. code_run
-2. code_run（galley todo list，galley schedule list，galley sessions search）；galley todo list；galley schedule list；galley sessions search 筹开预算 --runtime all --all
-3. code_run（galley sessions search，galley todo show）；galley sessions search 希尔顿 --runtime all --all；galley todo show todo_4c8e1a7d2b9f3605
-4. code_run（galley todo update，galley schedule create）；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月28日：业主说筹开预算下周（11月2日—8日）给。 收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户告知筹开预算交付进展，补入现有项目待办；galley schedule create 确认筹开预算是否收到  10月28日业主说筹开预算下周给。11月6日傍晚问一下是否收到，不替用户催业主。相关待办：todo_4c8e1a7d2b9f3605，希尔顿酒店项目上下文资料收集。 --at=2026-11-06T17:00 --target=assistant --supervisor=galley-assistant --reason=业主预计下周交付筹开预算，在周末前询问结果
+2. code_run（galley todo list，galley sessions search）；galley todo list；galley sessions search 筹开预算 --runtime all --all
+3. code_run（galley todo show，galley sessions search）；galley todo show todo_4c8e1a7d2b9f3605；galley sessions search 希尔顿 --runtime all --all
+4. code_run（galley todo update）；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周提供。 收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户补充希尔顿项目筹开预算的提供时间，更新现有资料收集待办进展
+5. file_read（reminders.md）
+6. code_run（galley schedule list）；galley schedule list
+7. code_run（galley schedule create）；galley schedule create 确认筹开预算是否收到  10月29日业主说筹开预算下周给。到时问一句预算是否收到；关联待办 todo_4c8e1a7d2b9f3605（希尔顿酒店项目上下文资料收集），主会话 s-mgn4k2x1-7q3z9w0e。先查现有待办进展，若已收到则不重复问；不联系业主，不将整个资料收集事项设为到期。 --at=2026-11-06T17:00 --target=assistant --supervisor=galley-assistant --reason=业主承诺下周提供筹开预算，周五傍晚确认结果
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、memo.md、reminders.md、todos-change.md；3 次 3 轮，25573 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md、reminders.md；2 次 2 轮，18116 字节；写前读过清单：查了；手册版本：`5a216a29`。
 
 新记的待办：无；新建的提醒：`sched_5eed000000000001` 2026-11-06T09:00:00+00:00 target=assistant：确认筹开预算是否收到
 
-10月28日业主说筹开预算下周给。11月6日傍晚问一下是否收到，不替用户催业主。相关待办：todo_4c8e1a7d2b9f3605，希尔顿酒店项目上下文资料收集。；改过的已有待办：`todo_4c8e1a7d2b9f3605` 希尔顿酒店项目上下文资料收集（备注：10月28日：业主说筹开预算下周（11月2日—8日）给。
+10月29日业主说筹开预算下周给。到时问一句预算是否收到；关联待办 todo_4c8e1a7d2b9f3605（希尔顿酒店项目上下文资料收集），主会话 s-mgn4k2x1-7q3z9w0e。先查现有待办进展，若已收到则不重复问；不联系业主，不将整个资料收集事项设为到期。；改过的已有待办：`todo_4c8e1a7d2b9f3605` 希尔顿酒店项目上下文资料收集（备注：10月29日：业主说筹开预算下周提供。
 收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制），截止 无截止，没做；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-记下了，已补到希尔顿项目资料收集的待办里：业主说筹开预算下周给。下周五（11月6日）下午5点我问你一下收到了没。
+记下了，已补到希尔顿项目资料收集待办：业主说筹开预算下周给。下周五（11月6日）17点我问你一下收到没有。
 ```
 
-建议标签：帮我列一下收到筹开预算后要核对的重点
+建议标签：预算收到后帮我核一下有没有漏项
 
-### 第 3 遍：过
+### 第 2 遍：过
 
 工具调用：
 
 1. code_run
 2. code_run（galley todo list，galley todo show，galley sessions search）；galley todo list；galley todo show todo_4c8e1a7d2b9f3605；galley sessions search 筹开预算 --runtime all --all
-3. code_run（galley todo show，galley todo update）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月28日：业主说筹开预算下周给（11月2日至8日），待接收。 收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=用户补充业主下周提供筹开预算，更新现有项目资料收集进展
+3. code_run（galley todo show，galley todo update）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周提供（11月2日至8日），待收到。 收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=业主筹开预算交付进展，补充现有资料收集待办，不新建重复事项
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、times.md、cli.md；1 次 1 轮，17013 字节；写前读过清单：查了；手册版本：`15f1d4d2`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；1 次 1 轮，13359 字节；写前读过清单：查了；手册版本：`5a216a29`。
 
-新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 希尔顿酒店项目上下文资料收集（备注：10月28日：业主说筹开预算下周给（11月2日至8日），待接收。
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 希尔顿酒店项目上下文资料收集（备注：10月29日：业主说筹开预算下周提供（11月2日至8日），待收到。
 收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制），截止 无截止，没做；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-记下了：业主下周（11月2日至8日）给你筹开预算，已更新到「希尔顿酒店项目上下文资料收集」的备注里，其他资料仍保留待收集。
+记下了，已补到「希尔顿酒店项目上下文资料收集」：业主说筹开预算下周（11月2日至8日）给你，目前待收到。
+```
+
+建议标签：帮我列一下筹开预算要核对的重点
+
+### 第 3 遍：过
+
+工具调用：
+
+1. code_run（galley sessions search，galley todo list）；galley sessions search 筹开预算 --runtime all --all；galley todo list
+2. code_run（galley sessions search，galley todo show）；galley sessions search 希尔顿 --runtime all --all；galley todo show todo_4c8e1a7d2b9f3605
+3. code_run（galley todo update）；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周（11月2日—8日）提供。 收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=user reported owner will provide pre-opening budget next week; update existing project progress
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；1 次 1 轮，14532 字节；写前读过清单：查了；手册版本：`5a216a29`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 希尔顿酒店项目上下文资料收集（备注：10月29日：业主说筹开预算下周（11月2日—8日）提供。
+收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制），截止 无截止，没做；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+记下了：业主说筹开预算下周（11月2日—8日）给你，已补到「希尔顿酒店项目上下文资料收集」的备注里。
 ```
 
 建议标签：帮我列一下筹开预算拿到后要核对的重点
