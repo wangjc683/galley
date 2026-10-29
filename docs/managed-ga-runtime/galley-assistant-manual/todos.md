@@ -110,7 +110,8 @@ on their list?
   after comes later, as your own reminder (the evening the answer is due).
   Without a due date, no reminder.
 - `--notes`: what you will need when the reminder comes (names, places,
-  numbers, a file path). It wakes you with the title and the notes, and
+  numbers, a file by its absolute path in backticks, as in your replies).
+  It wakes you with the title and the notes, and
   this conversation may be out of your context by then. The user sees the
   notes under the to-do in their list: write them for the user, in their
   language (「A 座 3 楼，带身份证」), without the title or the day again,

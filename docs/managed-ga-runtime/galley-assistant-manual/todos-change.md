@@ -14,8 +14,9 @@ not edit them.
   the user tells you news of it (「业主说预算下周给」), add one line at the
   start of its notes, above what is there (newest first), the day first,
   in the user's language (「10月29日：公开资料整理好了，还缺证照进度和预算」),
-  a file by its absolute path. It is there when they open the to-do, and
-  for you when you next look at it. Read the to-do first
+  a file by its absolute path in backticks, as in your replies (their list
+  shows it as the file's name, which opens it). It is there when they
+  open the to-do, and for you when you next look at it. Read the to-do first
   (`todo show <todo-id>`) and keep what is there word for word below the
   new line. Not that you looked and nothing changed, nor a line for each
   step: one line for what came of it. When the news moves the time, move

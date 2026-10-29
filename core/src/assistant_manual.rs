@@ -570,7 +570,10 @@ mod tests {
             "flight, the day before a deadline, half an hour before a call, a few",
             "Without a due date, no reminder.",
             "- `--notes`: what you will need when the reminder comes (names, places,",
-            "numbers, a file path). It wakes you with the title and the notes, and",
+            // Ticket 112 (PRD ruling 158 point 3): a path in backticks,
+            // as in a reply, which the list shows as a file to open.
+            "numbers, a file by its absolute path in backticks, as in your replies).",
+            "It wakes you with the title and the notes, and",
             // Ticket 81 (PRD ruling 128 point 5): the panel shows the
             // notes, so they are written for the user.
             "this conversation may be out of your context by then. The user sees the",
@@ -624,7 +627,10 @@ mod tests {
             "- How it is going: when you got something done for a to-do (something",
             "the user tells you news of it (「业主说预算下周给」), add one line at the",
             "start of its notes, above what is there (newest first), the day first,",
-            "a file by its absolute path. It is there when they open the to-do, and",
+            // Ticket 112 (PRD ruling 158 point 3): the path in backticks.
+            "a file by its absolute path in backticks, as in your replies (their list",
+            "shows it as the file's name, which opens it). It is there when they",
+            "open the to-do, and for you when you next look at it.",
             "(`todo show <todo-id>`) and keep what is there word for word below the",
             "new line. Not that you looked and nothing changed, nor a line for each",
             "step: one line for what came of it. When the news moves the time, move",
