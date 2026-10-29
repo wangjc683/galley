@@ -741,6 +741,56 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases <第 1–53 
 - **用量**：第二轮 38 次运行（33 次加补跑 5 次），150 次模型调用（留下的 33 次 135 次，接口出错的 5 次 15 次）。两轮合计 112 次运行、431 次模型调用；`--dry-test` 不连模型。
 - **没测到的**：用户说出几样、但没说要记成子项时（「出差前要订酒店和机票，记一下」以外的说法），它会不会只写进备注；这一轮没有重跑旧用例的全套，只跑了加了子项的四条。
 
+## 子项挪次序与备注里的路径（票 112）
+
+主聊天 PRD 裁决 158：子项能挪次序，Core 加了 `todo item move <item-id> --to=<n>`（`schemaVersion 3` 内加法，socket `todo.item_move`；n 从 1 起，大于项数放到最后，小于 1 报 `invalid_args`，已在那个位置的什么都不写）；面板里子项能拖动排序。手册 `todos-change.md` 的子项一条加挪次序：用户要排次序时（「把筹开预算挪到最前」「酒店放到最后」）才挪，次序是用户的，没说就不动；先读那一件这一句补上「用户可能挪过」与「按次序列出」。`todos.md` 里用户自己能做的那一句补「或排次序」。往备注里写文件：`todos-change.md` 进展一条与 `todos.md` 的 `--notes` 一条都改成「绝对路径放进反引号，同回复里写路径」（面板把反引号里的完整路径画成回复里那种文件引用，只写文件名）。旧的、没有反引号的路径不自己补：手册原有的「原来的备注一字不差」照旧。入口层、Core 的叫醒说明、`galley-prompt/`、`rust-samples.json` 没动。待办套件加 2 条，`run.py --suite todo`。
+
+- **跟着换的输入**：手册（`run.py` 直接读仓库里的那份）；`schedule/cli-help.json` 里 `todo item` 重抓（多了 `move` 一行）、加 `todo item move`（开发版 `galley` 二进制、假 HOME，只跑 `--help`；别的几条 `todo` 帮助页重抓后逐字相同，没换）。
+- **用例**（组名「子项挪次序与备注里的路径（票 112）」，`todo/cases.json` 第 61、62 条，每条 3 遍）：
+  - `items-move-first`：清单上有「希尔顿酒店项目上下文资料收集」（没日子，备注两行进展，七项子项，「项目位置和当前阶段」已勾，「筹开预算」排第 4）和 702 装修，用户说「把筹开预算挪到第一个」。该：先 `todo show` 这一件，再 `todo item move <筹开预算那一项> --to=1`；别的六项次序不变，不加、不删、不勾、不改字；备注不动，不碰 702。
+  - `items-move-news`：同一件，用户说「业主说筹开预算下周给」。该：照票 108 在备注最前面补一行进展，原来两行一字不差在下；不挪次序、不勾、不加子项。
+  - 写文件进备注的三条旧用例（`progress-review-done`、`review-done-not-noted`、`review-user-news-on-top`）各重跑 3 遍，原来的判定之外加判路径在反引号里。
+- **判定加的**（写法见 `todo/cases.json` 的 `_note`，判法在 `run.py` 的 `items_facts`、`progress_facts`）：`expect.items_move`（`{id, text_any, to}`）：那一件里对上的那一项最后在第 to 位，别的项次序不变，每项的字与方框不变，不加不删；第一次 `todo item move` 之前 `todo show` 过这一件；挪了不止一次只注出来。子项换了次序也算动了子项（`items: none` 的用例挪了就不过）。进展那一行写到的文件路径（这一轮做的文件、`progress.path` 点名的文件）要在反引号里，反引号里正好是那个绝对路径（CommonMark 的规矩：两头各有一个空格时各去一个，同面板）；只判票 112 起的手册：`run.py` 的 `MANUALS_BEFORE_112` 记着之前结果里出现过的全部手册版本，这些运行与干跑测试自己造的（不带手册版本）照旧判，重出旧结果判定一条不变（`--render-only` 之后 `results.md` 逐字不变）。
+- **脚本跟着改的**：假 CLI 回答 `todo item move`，参数与报错照真实 CLI 与 Core（开发版二进制在假 HOME 下抓的：没给 `--to` 或项的 id、`--to` 没给值、不是整数、超出 i64 是 clap 的，退出码 2；负数过得了 clap，交给 Core；Core 先拒小于 1 的「move_todo_subitem: a place counts from 1」，退出码 2，再找子项，未知的子项与已取消的待办下面的子项退出码 3；超出项数放到最后；已在那个位置的不改 `updatedAt`）；`TODO_ITEM_WRITES` 加 `todo item move`，照「多余的写命令」判；写进展的那段假模型（`TODO_PROGRESS_BASH`）路径改成写进反引号。结果里新加「票 112 重跑」一节；保留的 meta 键加 `ticket112_note`、`ticket112w_control`。
+- **`--dry-test` 加的**（`dry_test_item_move`，`todo-items-cli` 那段假模型多走七次 `move`）：七项的样子与「In Hand」的计数（`1 of 7 items done`，子项的字不进提示词）；挪到第一个过，没先 `todo show`、挪错位置、连另一项一起挪、没挪、勾了、改了字、删了再加、在备注里补一行都不过，挪了两次才到位过但注出来；新消息补一行过，顺手挪了次序不过；反引号：新手册下路径在反引号里过（两头各一个空格也过），没放进去、反引号里还有别的字不过，旧手册与不带手册版本的照旧过；`review-done-not-noted` 写模板路径的那一行同样三种。假模型在真沙盒里把 `move` 走一遍：挪到第一个、`--to 99` 放到最后、`--to=0` 与 `--to -1` 的 Core 报错、没给 `--to`、`--to=first`、未知的项、帮助页的第一行。
+- **怎么跑**：
+
+```bash
+PY=/Library/Frameworks/Python.framework/Versions/3.14/bin/python3
+export PYTHONDONTWRITEBYTECODE=1
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases items-move-first,items-move-news,progress-review-done,review-done-not-noted,review-user-news-on-top --repeats 3 --parallel 4 --supersede "路径写进反引号（票 112）：……"
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases <第 1–60 条除上面三条外的 id> --repeats 1 --first-repeat 1 --parallel 4 --supersede "票 112 回归：……"
+# todos.md、todos-change.md 换成 main 上（这一票之前）的之后：
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases progress-review-done --repeats 3 --parallel 3 --control 112w
+```
+
+### 结果（2026-10-29，gpt-6.1-sol，推理强度 high）
+
+模型 `mm_1792576875658`（API key 接入的 gpt-6.1-sol，同票 73）。先 `--dry-test`（不连模型，全过）。一轮跑完，没有改手册的措辞。接口今天下午不慢（单次 20–168 秒），没有超时与断连；17:29 开跑。
+
+| 用例 | 这一次 | 旧手册（同日对照） |
+| --- | --- | --- |
+| `items-move-first` | 3/3 | — |
+| `items-move-news` | 3/3 | — |
+| `review-done-not-noted` | 3/3（路径三遍都在反引号里） | — |
+| `review-user-news-on-top` | 2/3 | — |
+| `progress-review-done` | 0/3 | 1/3 |
+| 旧用例 57 条 | 52/57（上一次 52/57；两条只记录不算过） | — |
+
+- **挪到第一个**（`items-move-first`）：三遍都只 `todo show` 这一件、`todo item move <筹开预算那一项> --to=1`、再 `todo show` 核对，一共三条命令，没读别的、没碰备注与 702；回复一句「已把“筹开预算”挪到第一个，其余项目顺序不变。」一类。
+- **新消息不挪**（`items-move-news`）：三遍都先 `todo list`、`todo show`，再整段 `--notes=`，最前面「10月29日：业主说筹开预算下周给」，原来两行一字不差在下；七项次序、方框都没动；回复都说收到后再勾这一项。第 3 遍的建议是「把筹开预算挪到子项最前面」（只是末尾的下一步建议，没有动手）。
+- **路径进反引号**（`review-done-not-noted`）：三遍都在备注最前面补了一行，模板的绝对路径都写成 `` `…/希尔顿酒店资料收集模板.md` ``，原备注一字不差在下，整条 `<no-reply/>`。备注里原有的那条没有反引号的路径（`review-user-news-on-top` 的「10月28日：资料收集模板做好了：<路径>」）三遍都一字未动，没有自己去补反引号。
+- **`review-user-news-on-top` 第 3 遍不过**：判成「重做了「模板」」，原文是子任务说明里的「不要只重做模板」：`REDO_WORDS_RE` 前面的否定词表认「不要」「避免」「别」，没认出中间隔了一个「只」，是判定误判；这一遍做法与另两遍相同（派 1 件子任务按新地址查公开资料，明说先读旧模板、不改它）。判定没改，照记不过。
+- **`progress-review-done` 0/3，旧手册 1/3**：不是这一票带来的。三遍都没把对比做成文件写进 `~/` 下：第 1 遍读了一圈对话（`session show` 五次、`sessions search` 两次）后在状态根下写了对比，撞上工具调用上限，没补备注；第 2 遍心算比完、备注补了一行（没有文件，所以没有路径），判定认不出做过事（「没做成什么却开口了」：没写文件、脚本都只调了 CLI）；第 3 遍同样翻了一圈对话，最后只回 `<no-reply/>`。同一时段用 main 上的 `todos.md`、`todos-change.md` 跑的 3 遍是同一个样子（两遍翻对话后撞上上限，其中一遍已经做了文件；一遍做了文件、路径写进备注、过），都在 `meta.ticket112w_control`；跑之前把新的两份备份到临时目录，跑完拷回、校验和对过。翻对话这一步在票 111 回归里已经出现（那次 10 次调用、过了），看起来是票 110 `wake.md` 那一条（对话里看得出做过、备注还没写的先补）让它先去翻对话，十次工具调用的上限在这条用例上不够。这三遍没有写出带路径的进展，所以「做了文件、路径进反引号」在这条用例上没测到。
+- **回归**（第 1–60 条除上面三条外各一遍，被替换的在 `meta.superseded_runs` 的「票 112 回归」一组，`results.md` 的「票 112 重跑」表对比）：52/57 → 52/57。变了的：
+  - `tick-soil` 过 → 不过（「回复正文是空的」）：它照常 `todo done`，话只写在 `<summary>` 里「已勾掉“买营养土”。」，正文空着；没碰子项与备注。之前 15 遍这条都写了正文，看不出与这一票的两句有关，不是接口的问题，没有补跑。
+  - `review-look-again-later` 不过 → 过。
+  - `wake-todo`：这一遍排在 57 次运行的队里，比叫醒消息写的到点时刻晚了约 2 分钟才开跑，它照实说了「提醒晚了约两分钟」，判成「不该说：晚了」；同票 73 补跑那样单独补跑一遍，过了（被替换的在「票 112 补跑」一组）。
+  - `whats-left`、`hotpot-tonight` 照旧不过，原因同票 111 回归（周四跑碰上用例的 `next_weekday: 4`；「刚才说」一类改口）。
+  - 其余与上一次判定相同。请求次数 3.60 → 3.75，读手册字节 15132 → 15655（`todos.md`、`todos-change.md` 各长了一句）。
+- **用量**：76 次运行，327 次模型调用（新用例与三条旧用例 15 次 80 次调用、回归 57 次 214 次、`wake-todo` 补跑 1 次 3 次、旧手册对照 3 次 30 次）；`--dry-test` 不连模型。
+- **没测到的**：`progress-review-done` 这一轮没有写出带文件路径的进展，反引号只在 `review-done-not-noted` 一条上测到；「酒店放到最后」（挪到末尾、`--to` 大于项数）、一次挪几项、用户在面板里挪过之后它再挪，没有用例；旧手册对照只跑了 `progress-review-done`；面板的画法（反引号里的路径画成文件名、拖动）不在评测里，见 GUI 的 vitest；假 CLI 是照真实 CLI 与 Core 的规则写的仿品。
+
 ## 安全措施
 
 - 拦截点在 GA 的工具分发：worker 把 `agentmain` 里的 `GenericAgentHandler` 换成子类（runner 自己装处理器子类用的也是这个接口 `GaSession.install_handler`）。子类的 `dispatch` 遇到任何真实工具就记录并返回 `should_exit`，一次模型调用后整个运行结束；只有 GA 自己判断最终回答的 `no_tool`（只读回复文本）和格式错误的重试提示 `bad_json` 走原路。子类上除 `do_no_tool` 外的所有 `do_*` 方法都换成一调用就报错的版本，作为第二道保险。

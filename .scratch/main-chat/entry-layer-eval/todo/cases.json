@@ -1,5 +1,5 @@
 {
- "_note": "待办评测用例（票 41）。history 是主对话当前段里已有的轮次；todos 是假 CLI 里已有的待办：due 是时间（next_weekday 是今天之后第一个星期几，days 是今天之后第几天，in_minutes 是几分钟后，带 date_only 的只有日期），reminder 是挂在它上面的提醒（fired 表示已经到点、等着叫醒），in_hand 默认为真，即分段开始时就有、写在提示词的「In Hand」一节（为假的是这一段里刚记的），done_since 表示分段开始后用户在面板上勾掉了（快照里还是没做）；tasks 是它自己的定时任务（同 schedule/cases.json）；message 是用户这句，wake 列出这次叫醒里到点的提醒，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 44：expect.reminder.clock 是提醒必须落在的钟点（用户说了几点提醒）。票 60：时间还可以写成一年里的某天（month、day，day 可为 \"last\"；带 year_offset 是今年之后第几年，不带是今天起最近的那一天）或下周的星期几（week_after，周一起算的下一周）；cancelled 表示假 CLI 起始就已取消（days_ago，via 为 supervisor 是 Galley 照用户的话、gui 是用户在桌面上，reason），它的提醒随之由 Core 取消（system），分段开始前取消的写进「In Hand」的「最近不要的跟进」。expect.follow_up 是该设 1 个跟进（via：todo、assistant 或 either；prefer 是期望的那种，另一种也算过但标出来；window 是提醒时间），expect.todo 为 optional 是可以记 1 件（reminder 为 null 时不许挂提醒），expect.cancel 是这次运行里该由 Galley 照用户的话取消其中之一、原因里写明是哪一类（reason_any），expect.asks_or_any 是回复要问一句或给出其中一个下一步，expect.record_only 是两可的、只记录不判。票 63：clock 是消息里说的今天的钟点（tonight 取 hours 里第一个离运行时刻还有 lead_minutes 的整点，写成「今晚 H 点」；afternoon 取今天的 hour，离运行时刻不足 lead_minutes 就改成「明天下午 H 点」），填进 message 的 {{clock}}；时间写法 {\"stated\": true, \"minutes\": k} 是那个钟点加 k 分钟。expect.follow_up.windows 是几个窗口里任一个，follow_up.clock 是提醒必须落在的钟点；expect.reminder.optional 是可以不挂提醒（挂了就要在窗口里）；expect.no_recite 是回复不能是这些原话（或「提醒」加原话），也不能以「提醒：」开头。每条都判：回复里有「记下了 / 记住了 / 记好了 / 已记」时，这一轮必须有写（改动了假 CLI 的清单或提醒，或写了 GA 记忆）。票 64：expect.no_retract 是什么都不该设的用例（不记待办、不设它自己的提醒；reno-no-remind 可以记一件不挂提醒的）：最终回复（去掉 <summary>、<next-suggestion>）不能提改口，正则是 run.py 的 RETRACT_RE（「刚才说」「多此一举」「多余」「本来要」「就不加了」「不特意设」一类）；第一轮（不是最后一轮时）的正文与 <summary> 里有没有「记到待办」「设个提醒」一类的表态，按 STANCE_RE 只记录、不判。火锅两条的 hours 加了 23（「今晚 11 点」，夜宵），21:15 到 22:15 也能跑。票 73：tasks 里 review 为真的是早上的巡看（Galley 建的每天一条，origin 是 system + galley-review；time 是钟点，不写就取运行那一分钟，好让叫醒按时；fired 表示这一次到点、等着叫醒，叫醒消息照 Core 的巡看措辞拼）。expect.subtasks_max 是回复里最多几个 <subtask>（不写就一个都不许）；expect.no_offer 是回复和末尾的建议里不能有「要不要我」「需要的话我可以」一类（run.py 的 OFFER_RE；不判的用例只注出来）；expect.allow_web_stop 是停在浏览器工具只注出来、不算没走到最终回复（它在做一步只读的事，沙盒里看不到结果）；expect.review_advance 是巡看有事可推进：不出声时得派了子任务，开口时得做成了事。票 75：开口时不要固定开头，改判说了是哪件事（names_any 里任一个词）、做了什么（REVIEW_DID_RE），说的是「没什么要推进」「看了一下没有新进展」一类空话（REVIEW_EMPTY_RE）判不过；没说是早上做的（REVIEW_MORNING_RE）只注出来；expect.disable 是该 schedule disable 那一条，用了 delete 或没停都算不过。票 78：wake 里还可以写 {\"kind\": \"done\", \"subtask\": <id>, \"send_backs\": n}，是 subtasks 里（写法同叫醒套件）一件刚做完的子任务的回报，照 Core 的措辞（subtask_report 的 Done 一段）拼进同一次叫醒；几件的次序就是 wake 列的次序（Core 按到达的先后，同一分钟到点的定时任务按 id 排）。expect.review_mixed 是巡看与另一件事在同一次叫醒：整条不出声（只有 <no-reply/> 或只有标签）、开口了却没提那件事（names_any 里一个词都没有）算吞掉，判不过；巡看没做成值得说的事，提了巡看（run.py 的 REVIEW_TALK_RE、REVIEW_EMPTY_RE）判不过；开口了又写了 <no-reply/> 只注出来；no_recite、max_chars 同上。票 98：expect.memo 是对备忘的判定，写法同 ../memo/cases.json 的 _note（optional 是可以记一条、记了只注出来），只对手册里有 memo.md 的运行（票 96 起）判，票 96 之前的运行没有这个命令，照旧不判。票 108：expect.progress 是进展那一行（id 是哪一件；groups 每组至少一个词在那一行里；forbid 是备注里不许出现的字，即用户删掉的；when_done 是巡看用：这一轮做成了东西才该补，只派了子任务或停在浏览器时备注不动；判法见 run.py 的 progress_facts：新的一行在上、日子打头，原来的备注一字不差在下，做了文件就写它的绝对路径，先读过这一件再改，别的待办的备注不动）；expect.notes_same 是不许动任何待办的备注；expect.schedule 为 optional 是可以给自己挂提醒（记下个数，不判）；review_advance.did_any 是这条用例自己算「做了什么」的词；files 同叫醒套件，放进假 HOME 的 ~/Downloads；待办备注里的 {{HOME}} 换成那次运行的假 HOME。票 110：carried 为真的用例 history 是从上一段带过来的轮次（hours_ago 是最后一轮、first_hours_ago 是第一轮在几小时前），可以有子任务交回的那一轮（Core 的措辞，干跑测试对过）；subtasks 里的 started_minutes_ago、ended_minutes_ago 是它几分钟前开始、几分钟前结束（不写是 35 − 3k 到 1 分钟前）；todos 里的 created、changed 是几小时前记下、几小时前改过的（hours_ago；不写照旧，改过的时刻同记下的）；expect.no_files 是这一轮不许在假 HOME 里做新文件；expect.no_redo 是新文件名与派出的子任务里不许有这些词；expect.quiet_or_file 是只回 <no-reply/>，或开口时只为交出文件（带 [FILE:…]，注出来）；expect.progress.path 是那一行要写这份 ~/Downloads 下的文件的绝对路径（文件不是这一轮做的也要），progress.days_back 是那一行打头的日子可以早到几天前；review_advance.may_rest 是巡看可以什么都不做（不出声也不派子任务，注出来）。票 111：todos 里的 items 是这件待办下面已有的子项（text、done，done 为真的是分段开始后不久用户在面板上勾的，via 可写成 assistant；id 可写，不写按待办 id 生成），假 CLI 照真实 CLI 与 Core 回答 `todo add --item`、`todo item add / done / reopen / update / remove`，`todo show` 带 items 与 itemCount，`todo list` 只带 itemCount，「In Hand」那一行末尾是「N of M items done」。expect.items 为 none 是这一轮不许动任何子项（加、勾、改、删）；为 {id, groups} 是那一件（made 是这一轮记的那一件）这一轮加的子项正好一组一项（组里一个词在那一项的字里），都没勾，原有的不动，别的待办的子项不动。expect.items_done 是 [{id, text_any}]：那一件里字里有这些词的子项这一轮被勾上（记成 Galley 勾的），别的子项的框、字都不动，不加不删。expect.notes_after 是 {id, keep, drop}：那一件的备注里 keep 每一行一字不差、各成一行、次序不变，以 drop 打头的那一行没了，别的新行只注出来。expect.todo 还可以是 {count, each}：这一轮记了 count 件，each 里每一项按 title_any 认一件，截止在 due 的窗口里，挂了提醒要在截止之前（没挂只注出来）。别的用例动了子项只注出来，item 写命令照「多余的写命令」判。票 111 第二轮（裁决 157 第 12 条：子项只来自用户）：expect.no_items 是用户没说出几样东西，这一轮不许 `todo add --item`、不许 `todo item add`，记下的待办不许带子项；不过就是不过，只记录的用例也判不过。",
+ "_note": "待办评测用例（票 41）。history 是主对话当前段里已有的轮次；todos 是假 CLI 里已有的待办：due 是时间（next_weekday 是今天之后第一个星期几，days 是今天之后第几天，in_minutes 是几分钟后，带 date_only 的只有日期），reminder 是挂在它上面的提醒（fired 表示已经到点、等着叫醒），in_hand 默认为真，即分段开始时就有、写在提示词的「In Hand」一节（为假的是这一段里刚记的），done_since 表示分段开始后用户在面板上勾掉了（快照里还是没做）；tasks 是它自己的定时任务（同 schedule/cases.json）；message 是用户这句，wake 列出这次叫醒里到点的提醒，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 44：expect.reminder.clock 是提醒必须落在的钟点（用户说了几点提醒）。票 60：时间还可以写成一年里的某天（month、day，day 可为 \"last\"；带 year_offset 是今年之后第几年，不带是今天起最近的那一天）或下周的星期几（week_after，周一起算的下一周）；cancelled 表示假 CLI 起始就已取消（days_ago，via 为 supervisor 是 Galley 照用户的话、gui 是用户在桌面上，reason），它的提醒随之由 Core 取消（system），分段开始前取消的写进「In Hand」的「最近不要的跟进」。expect.follow_up 是该设 1 个跟进（via：todo、assistant 或 either；prefer 是期望的那种，另一种也算过但标出来；window 是提醒时间），expect.todo 为 optional 是可以记 1 件（reminder 为 null 时不许挂提醒），expect.cancel 是这次运行里该由 Galley 照用户的话取消其中之一、原因里写明是哪一类（reason_any），expect.asks_or_any 是回复要问一句或给出其中一个下一步，expect.record_only 是两可的、只记录不判。票 63：clock 是消息里说的今天的钟点（tonight 取 hours 里第一个离运行时刻还有 lead_minutes 的整点，写成「今晚 H 点」；afternoon 取今天的 hour，离运行时刻不足 lead_minutes 就改成「明天下午 H 点」），填进 message 的 {{clock}}；时间写法 {\"stated\": true, \"minutes\": k} 是那个钟点加 k 分钟。expect.follow_up.windows 是几个窗口里任一个，follow_up.clock 是提醒必须落在的钟点；expect.reminder.optional 是可以不挂提醒（挂了就要在窗口里）；expect.no_recite 是回复不能是这些原话（或「提醒」加原话），也不能以「提醒：」开头。每条都判：回复里有「记下了 / 记住了 / 记好了 / 已记」时，这一轮必须有写（改动了假 CLI 的清单或提醒，或写了 GA 记忆）。票 64：expect.no_retract 是什么都不该设的用例（不记待办、不设它自己的提醒；reno-no-remind 可以记一件不挂提醒的）：最终回复（去掉 <summary>、<next-suggestion>）不能提改口，正则是 run.py 的 RETRACT_RE（「刚才说」「多此一举」「多余」「本来要」「就不加了」「不特意设」一类）；第一轮（不是最后一轮时）的正文与 <summary> 里有没有「记到待办」「设个提醒」一类的表态，按 STANCE_RE 只记录、不判。火锅两条的 hours 加了 23（「今晚 11 点」，夜宵），21:15 到 22:15 也能跑。票 73：tasks 里 review 为真的是早上的巡看（Galley 建的每天一条，origin 是 system + galley-review；time 是钟点，不写就取运行那一分钟，好让叫醒按时；fired 表示这一次到点、等着叫醒，叫醒消息照 Core 的巡看措辞拼）。expect.subtasks_max 是回复里最多几个 <subtask>（不写就一个都不许）；expect.no_offer 是回复和末尾的建议里不能有「要不要我」「需要的话我可以」一类（run.py 的 OFFER_RE；不判的用例只注出来）；expect.allow_web_stop 是停在浏览器工具只注出来、不算没走到最终回复（它在做一步只读的事，沙盒里看不到结果）；expect.review_advance 是巡看有事可推进：不出声时得派了子任务，开口时得做成了事。票 75：开口时不要固定开头，改判说了是哪件事（names_any 里任一个词）、做了什么（REVIEW_DID_RE），说的是「没什么要推进」「看了一下没有新进展」一类空话（REVIEW_EMPTY_RE）判不过；没说是早上做的（REVIEW_MORNING_RE）只注出来；expect.disable 是该 schedule disable 那一条，用了 delete 或没停都算不过。票 78：wake 里还可以写 {\"kind\": \"done\", \"subtask\": <id>, \"send_backs\": n}，是 subtasks 里（写法同叫醒套件）一件刚做完的子任务的回报，照 Core 的措辞（subtask_report 的 Done 一段）拼进同一次叫醒；几件的次序就是 wake 列的次序（Core 按到达的先后，同一分钟到点的定时任务按 id 排）。expect.review_mixed 是巡看与另一件事在同一次叫醒：整条不出声（只有 <no-reply/> 或只有标签）、开口了却没提那件事（names_any 里一个词都没有）算吞掉，判不过；巡看没做成值得说的事，提了巡看（run.py 的 REVIEW_TALK_RE、REVIEW_EMPTY_RE）判不过；开口了又写了 <no-reply/> 只注出来；no_recite、max_chars 同上。票 98：expect.memo 是对备忘的判定，写法同 ../memo/cases.json 的 _note（optional 是可以记一条、记了只注出来），只对手册里有 memo.md 的运行（票 96 起）判，票 96 之前的运行没有这个命令，照旧不判。票 108：expect.progress 是进展那一行（id 是哪一件；groups 每组至少一个词在那一行里；forbid 是备注里不许出现的字，即用户删掉的；when_done 是巡看用：这一轮做成了东西才该补，只派了子任务或停在浏览器时备注不动；判法见 run.py 的 progress_facts：新的一行在上、日子打头，原来的备注一字不差在下，做了文件就写它的绝对路径，先读过这一件再改，别的待办的备注不动）；expect.notes_same 是不许动任何待办的备注；expect.schedule 为 optional 是可以给自己挂提醒（记下个数，不判）；review_advance.did_any 是这条用例自己算「做了什么」的词；files 同叫醒套件，放进假 HOME 的 ~/Downloads；待办备注里的 {{HOME}} 换成那次运行的假 HOME。票 110：carried 为真的用例 history 是从上一段带过来的轮次（hours_ago 是最后一轮、first_hours_ago 是第一轮在几小时前），可以有子任务交回的那一轮（Core 的措辞，干跑测试对过）；subtasks 里的 started_minutes_ago、ended_minutes_ago 是它几分钟前开始、几分钟前结束（不写是 35 − 3k 到 1 分钟前）；todos 里的 created、changed 是几小时前记下、几小时前改过的（hours_ago；不写照旧，改过的时刻同记下的）；expect.no_files 是这一轮不许在假 HOME 里做新文件；expect.no_redo 是新文件名与派出的子任务里不许有这些词；expect.quiet_or_file 是只回 <no-reply/>，或开口时只为交出文件（带 [FILE:…]，注出来）；expect.progress.path 是那一行要写这份 ~/Downloads 下的文件的绝对路径（文件不是这一轮做的也要），progress.days_back 是那一行打头的日子可以早到几天前；review_advance.may_rest 是巡看可以什么都不做（不出声也不派子任务，注出来）。票 111：todos 里的 items 是这件待办下面已有的子项（text、done，done 为真的是分段开始后不久用户在面板上勾的，via 可写成 assistant；id 可写，不写按待办 id 生成），假 CLI 照真实 CLI 与 Core 回答 `todo add --item`、`todo item add / done / reopen / update / remove`，`todo show` 带 items 与 itemCount，`todo list` 只带 itemCount，「In Hand」那一行末尾是「N of M items done」。expect.items 为 none 是这一轮不许动任何子项（加、勾、改、删）；为 {id, groups} 是那一件（made 是这一轮记的那一件）这一轮加的子项正好一组一项（组里一个词在那一项的字里），都没勾，原有的不动，别的待办的子项不动。expect.items_done 是 [{id, text_any}]：那一件里字里有这些词的子项这一轮被勾上（记成 Galley 勾的），别的子项的框、字都不动，不加不删。expect.notes_after 是 {id, keep, drop}：那一件的备注里 keep 每一行一字不差、各成一行、次序不变，以 drop 打头的那一行没了，别的新行只注出来。expect.todo 还可以是 {count, each}：这一轮记了 count 件，each 里每一项按 title_any 认一件，截止在 due 的窗口里，挂了提醒要在截止之前（没挂只注出来）。别的用例动了子项只注出来，item 写命令照「多余的写命令」判。票 111 第二轮（裁决 157 第 12 条：子项只来自用户）：expect.no_items 是用户没说出几样东西，这一轮不许 `todo add --item`、不许 `todo item add`，记下的待办不许带子项；不过就是不过，只记录的用例也判不过。票 112：子项挪次序（主对话 PRD 裁决 158 第 1 条）。假 CLI 照真实 CLI 与 Core 回答 `todo item move <item-id> --to=<n>`（`--to` 必给、是整数，负数过得了 clap；Core 先拒小于 1 的，再找子项；大于项数放到最后；已在那个位置的什么都不写、不改 updatedAt）。别的用例里子项换了次序也算动了子项（items 为 none 的不过）。expect.items_move 是 {id, text_any, to}：那一件里字里有这些词的那一项最后排在第 to 位（从 1 起，超出放到最后），别的项次序不变，每项的字与方框不变，不加不删；第一次 todo item move 之前 todo show 过这一件；挪了不止一次只注出来。备注里的路径（裁决 158 第 3 条）：手册是票 112 起的（不在 run.py 的 MANUALS_BEFORE_112 里）运行，进展那一行写的文件路径要放进反引号，反引号里正好是那个绝对路径；之前手册的运行照旧判，干跑测试自己造的运行不带手册版本，也照旧判。",
  "cases": [
   {
    "id": "note-report",
@@ -2819,6 +2819,174 @@
     ],
     "drop": "收集要点"
    },
+   "memo": "none",
+   "max_chars": 150
+  }
+ },
+ {
+  "id": "items-move-first",
+  "no": 61,
+  "group": "子项挪次序与备注里的路径（票 112）",
+  "expect_text": "清单上有「希尔顿酒店项目上下文资料收集」（没日子，备注两行进展，七项子项，「项目位置和当前阶段」已勾，「筹开预算」排第 4）和 702 装修，用户说「把筹开预算挪到第一个」→ 先 todo show 这一件，再 todo item move <筹开预算那一项> --to=1；别的六项次序不变，不加、不删、不勾、不改字；备注不动，不碰 702",
+  "history": [],
+  "todos": [
+   {
+    "id": "todo_4c8e1a7d2b9f3605",
+    "title": "希尔顿酒店项目上下文资料收集",
+    "notes": "10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号\n10月28日：资料收集模板做好了，等业主把资料发来再填",
+    "items": [
+     {
+      "id": "item_4c8e1a7d00000001",
+      "text": "具体品牌与管理模式",
+      "done": false
+     },
+     {
+      "id": "item_4c8e1a7d00000002",
+      "text": "项目位置和当前阶段",
+      "done": true
+     },
+     {
+      "id": "item_4c8e1a7d00000003",
+      "text": "工程及证照进度",
+      "done": false
+     },
+     {
+      "id": "item_4c8e1a7d00000004",
+      "text": "筹开预算",
+      "done": false
+     },
+     {
+      "id": "item_4c8e1a7d00000005",
+      "text": "人员与系统准备情况",
+      "done": false
+     },
+     {
+      "id": "item_4c8e1a7d00000006",
+      "text": "开业时间表",
+      "done": false
+     },
+     {
+      "id": "item_4c8e1a7d00000007",
+      "text": "业主方对接人",
+      "done": false
+     }
+    ]
+   },
+   {
+    "id": "todo_6f7a8b9c0d1e2f3a",
+    "title": "702 办公室装修完工",
+    "notes": "装修师傅说预计这天完工",
+    "due": {
+     "month": 11,
+     "day": 20,
+     "date_only": true
+    },
+    "reminder": {
+     "id": "sched_4b8c2d6e0f1a3957",
+     "at": {
+      "month": 11,
+      "day": 20,
+      "time": "09:00"
+     }
+    }
+   }
+  ],
+  "message": "把筹开预算挪到第一个",
+  "expect": {
+   "todo": "none",
+   "items_move": {
+    "id": "todo_4c8e1a7d2b9f3605",
+    "text_any": [
+     "筹开预算"
+    ],
+    "to": 1
+   },
+   "notes_same": true,
+   "memo": "none",
+   "max_chars": 80
+  }
+ },
+ {
+  "id": "items-move-news",
+  "no": 62,
+  "group": "子项挪次序与备注里的路径（票 112）",
+  "expect_text": "同一件（七项子项，「筹开预算」是其中一项），用户说「业主说筹开预算下周给」→ 照票 108 在备注最前面补一行进展（<今天>：业主说筹开预算下周给），原来两行一字不差在下；不挪次序、不勾、不加子项；顺带给自己挂提醒可以，记下个数",
+  "history": [],
+  "todos": [
+   {
+    "id": "todo_4c8e1a7d2b9f3605",
+    "title": "希尔顿酒店项目上下文资料收集",
+    "notes": "10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号\n10月28日：资料收集模板做好了，等业主把资料发来再填",
+    "items": [
+     {
+      "id": "item_4c8e1a7d00000001",
+      "text": "具体品牌与管理模式",
+      "done": false
+     },
+     {
+      "id": "item_4c8e1a7d00000002",
+      "text": "项目位置和当前阶段",
+      "done": true
+     },
+     {
+      "id": "item_4c8e1a7d00000003",
+      "text": "工程及证照进度",
+      "done": false
+     },
+     {
+      "id": "item_4c8e1a7d00000004",
+      "text": "筹开预算",
+      "done": false
+     },
+     {
+      "id": "item_4c8e1a7d00000005",
+      "text": "人员与系统准备情况",
+      "done": false
+     },
+     {
+      "id": "item_4c8e1a7d00000006",
+      "text": "开业时间表",
+      "done": false
+     },
+     {
+      "id": "item_4c8e1a7d00000007",
+      "text": "业主方对接人",
+      "done": false
+     }
+    ]
+   },
+   {
+    "id": "todo_6f7a8b9c0d1e2f3a",
+    "title": "702 办公室装修完工",
+    "notes": "装修师傅说预计这天完工",
+    "due": {
+     "month": 11,
+     "day": 20,
+     "date_only": true
+    },
+    "reminder": {
+     "id": "sched_4b8c2d6e0f1a3957",
+     "at": {
+      "month": 11,
+      "day": 20,
+      "time": "09:00"
+     }
+    }
+   }
+  ],
+  "message": "业主说筹开预算下周给",
+  "expect": {
+   "todo": "none",
+   "progress": {
+    "id": "todo_4c8e1a7d2b9f3605",
+    "groups": [
+     [
+      "预算"
+     ]
+    ]
+   },
+   "items": "none",
+   "schedule": "optional",
    "memo": "none",
    "max_chars": 150
   }

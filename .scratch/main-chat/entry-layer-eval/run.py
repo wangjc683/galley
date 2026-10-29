@@ -179,8 +179,9 @@ HAND_WRITES = ("session rename", "session pin", "session unpin", "session delete
                "project pin", "project unpin", "project archive-sessions", "llm set-default")
 # Ticket 41: the user's to-dos (`galley todo`, ticket 40).
 TODO_WRITES = ("todo add", "todo update", "todo done", "todo reopen", "todo cancel")
-# Ticket 111: the items under a to-do (`galley todo item`).
-TODO_ITEM_WRITES = ("todo item add", "todo item done", "todo item reopen", "todo item update", "todo item remove")
+# Ticket 111: the items under a to-do (`galley todo item`); ticket 112's move.
+TODO_ITEM_WRITES = ("todo item add", "todo item done", "todo item reopen", "todo item update", "todo item remove",
+                    "todo item move")
 TODO_WRITES += TODO_ITEM_WRITES
 ALL_WRITES = WRITE_COMMANDS + SCHEDULE_WRITES + HAND_WRITES + TODO_WRITES
 # The In Hand lines' "as of": the runner started an hour before the
@@ -454,6 +455,8 @@ ALLOWED = {
     ("todo", "item", "reopen"): {"supervisor", "reason"},
     ("todo", "item", "update"): {"text", "supervisor", "reason"},
     ("todo", "item", "remove"): {"supervisor", "reason"},
+    # Ticket 112: an item moved to its place.
+    ("todo", "item", "move"): {"to", "supervisor", "reason"},
     # Ticket 95: the memos.
     ("memo", "list"): set(), ("memo", "add"): {"until", "supervisor", "reason"},
     ("memo", "update"): {"text", "until", "no-until", "supervisor", "reason"},
@@ -1136,6 +1139,43 @@ if cmd == ("todo", "item", "add"):
     t = find_todo(rest[0])
     add_items(t, texts)
     t["updatedAt"] = iso(now_utc())
+    out({"todo": todo_wire(t)})
+if cmd == ("todo", "item", "move"):
+    # Ticket 112, as clap and Core answer (captured from the dev binary):
+    # `--to <N>` is required and an i64 (a negative one passes clap), the
+    # item id one word; Core refuses a place below 1 before it looks the
+    # item up, puts one past the last last, and writes nothing (no stamp)
+    # when it is already there.
+    usage = "Usage: galley todo item move --to <N> <ITEM_ID>\n\nFor more information, try '--help'.\n"
+    missing = [w for w, gone in (("--to <N>", "to" not in flags), ("<ITEM_ID>", not rest)) if gone]
+    if missing:
+        fail("invalid_args", "error: the following required arguments were not provided:\n  "
+             + "\n  ".join(missing) + "\n\n" + usage, 2)
+    if len(rest) > 1:
+        fail("invalid_args", "error: unexpected argument '" + rest[1] + "' found\n\nUsage: galley todo item "
+             "move [OPTIONS] --to <N> <ITEM_ID>\n\nFor more information, try '--help'.\n", 2)
+    raw = flags["to"]
+    if raw is True:
+        fail("invalid_args", "error: a value is required for '--to <N>' but none was supplied\n\n"
+             "For more information, try '--help'.\n", 2)
+    digits = raw[1:] if raw[:1] in ("+", "-") else raw
+    if not (digits.isascii() and digits.isdigit()):
+        why = "cannot parse integer from empty string" if raw == "" else "invalid digit found in string"
+        fail("invalid_args", "error: invalid value '" + raw + "' for '--to <N>': " + why
+             + "\n\nFor more information, try '--help'.\n", 2)
+    to = int(raw)
+    if not -2 ** 63 <= to < 2 ** 63:
+        fail("invalid_args", "error: invalid value '" + raw + "' for '--to <N>': number too "
+             + ("large" if to > 0 else "small") + " to fit in target type\n\nFor more information, try '--help'.\n", 2)
+    if to < 1:
+        fail("invalid_args", "move_todo_subitem: a place counts from 1", 2)
+    t, x = find_item(rest[0])
+    items = t["items"]
+    at = min(to, len(items)) - 1
+    if items.index(x) != at:
+        items.remove(x)
+        items.insert(at, x)
+        t["updatedAt"] = iso(now_utc())
     out({"todo": todo_wire(t)})
 if cmd[:2] == ("todo", "item"):
     if cmd[2] == "update" and "text" not in flags:
@@ -2879,7 +2919,8 @@ DUE="$(date -v+1d +%Y-%m-%d)"
 # `todo add --item` (the words made one line), the refusals (no words, an
 # empty item, an unknown to-do or item, a missing or empty --text, an
 # unknown subcommand, an item under a cancelled to-do), changing words,
-# removing, a help page.
+# removing, a help page; since ticket 112 moving (first, past the last,
+# the refusals: below 1, no --to, not a number, an unknown item).
 TODO_ITEMS_DRY_BASH = r'''G="$(sed -n '1p' "${XDG_CONFIG_HOME:-$HOME/.config}/galley/cli-path")"
 T=todo_3a7c5e9b1d2f4086
 J='import json, sys; t = json.load(sys.stdin); t = t.get("todo", t); '
@@ -2900,6 +2941,13 @@ A2="$("$G" todo show $T | python3 -c "$J"'print(t["items"][0]["doneAt"])')"
 "$G" todo item update item_3a7c5e9b00000002 --text= --supervisor=galley-assistant; echo "emptyflag=$?"
 "$G" todo item update item_3a7c5e9b00000002 --text="   " --supervisor=galley-assistant; echo "blankflag=$?"
 "$G" todo item remove item_3a7c5e9b00000003 --supervisor=galley-assistant | python3 -c "$J"'print("removed=" + "|".join(x["text"] for x in t["items"]))'
+"$G" todo item move item_3a7c5e9b00000002 --to=1 --supervisor=galley-assistant | python3 -c "$J"'print("moved=" + "|".join(x["text"] for x in t["items"]))'
+"$G" todo item move item_3a7c5e9b00000002 --to 99 --supervisor=galley-assistant | python3 -c "$J"'print("last=" + "|".join(x["text"] for x in t["items"]))'
+"$G" todo item move item_3a7c5e9b00000002 --to=0 --supervisor=galley-assistant; echo "tozero=$?"
+"$G" todo item move item_3a7c5e9b00000002 --to -1 --supervisor=galley-assistant; echo "tonegative=$?"
+"$G" todo item move item_3a7c5e9b00000002 --supervisor=galley-assistant; echo "notoflag=$?"
+"$G" todo item move item_3a7c5e9b00000002 --to=first; echo "tonotnumber=$?"
+"$G" todo item move item_nope --to=1; echo "moveunknown=$?"
 "$G" todo item done item_nope --supervisor=galley-assistant; echo "unknownitem=$?"
 "$G" todo item frob x; echo "badsub=$?"
 "$G" todo add "去杭州" --item=订酒店 --item="订
@@ -2908,6 +2956,7 @@ A2="$("$G" todo show $T | python3 -c "$J"'print(t["items"][0]["doneAt"])')"
 "$G" todo cancel $T --supervisor=galley-assistant >/dev/null
 "$G" todo item done item_3a7c5e9b00000002 --supervisor=galley-assistant; echo "cancelleditem=$?"
 "$G" todo item add --help | head -1
+"$G" todo item move --help | head -1
 '''
 
 # Ticket 61: who cancelled, as the real Core records it — `todo cancel`
@@ -2934,14 +2983,15 @@ AT="$(date -v+2H +%Y-%m-%dT%H:%M)"
 # last day, the total past 2,000 characters (overLimit), deleting, deleting
 # again, a help page.
 # Ticket 108: the review's comparison, made in the fake HOME, and a line on
-# top of the notes the fake galley shows (read with todo show, kept below).
+# top of the notes the fake galley shows (read with todo show, kept below);
+# since ticket 112 its path in backticks, as the manual asks.
 TODO_PROGRESS_BASH = r'''G="$(sed -n '1p' "${XDG_CONFIG_HOME:-$HOME/.config}/galley/cli-path")"
 "$G" todo list >/dev/null
 cat "$HOME/Downloads/搬家报价/"*.txt >/dev/null
 python3 -c 'import os; d = os.path.expanduser("~/Documents"); os.makedirs(d, exist_ok=True); open(os.path.join(d, "搬家报价对比.md"), "w").write("蚂蚁最便宜\\n")'
 OLD="$("$G" todo show todo_9d2e4f6a8b0c1e35 | python3 -c 'import json, sys; print(json.load(sys.stdin)["notes"])')"
 DAY="$(date +%-m月%-d日)"
-"$G" todo update todo_9d2e4f6a8b0c1e35 --notes="${DAY}：三家报价比好了，蚂蚁最便宜，对比表在 $HOME/Documents/搬家报价对比.md
+"$G" todo update todo_9d2e4f6a8b0c1e35 --notes="${DAY}：三家报价比好了，蚂蚁最便宜，对比表 \`$HOME/Documents/搬家报价对比.md\`
 ${OLD}" --supervisor=galley-assistant --reason="morning review: compared the quotes"
 '''
 MEMO_DRY_BASH = r'''GALLEY="$(sed -n '1p' "${XDG_CONFIG_HOME:-$HOME/.config}/galley/cli-path")"
@@ -4605,7 +4655,8 @@ def cli_name(argv: list[str]) -> str:
     if flags.get("help") or words[:1] == ["help"]:
         return "help"
     if words[:2] == ["todo", "item"]:
-        # Ticket 111: `todo item add / done / reopen / update / remove`.
+        # Ticket 111: `todo item add / done / reopen / update / remove`;
+        # ticket 112: `move`.
         return " ".join(words[:3])
     return " ".join(words[:1] if words[:1] in (["status"], ["version"], ["health"]) else words[:2])
 
@@ -4763,6 +4814,12 @@ RERUN_INTROS = {
            "`galley-prompt/`、`rust-samples.json`、`cli-help.json` 都没动。三条叫醒用例（`wake-on-time`、`wake-late`、"
            "`wake-obsolete`）预先放着的任务原文换成了新写法（第一行给人、空行、写给自己的，内容不变），叫醒消息照 Core 的措辞把全文"
            "交给它，让叫醒那一侧在新写法下也测到。这张表比的是原有判定（第一行另见下一节「票 105：第一行」），两次都用现在的原有判定重判。",
+    "112": "上一次是第 1–60 条中除写文件进备注的三条外各条最近一次的第 1 遍（多为票 111 的回归与第二轮），这一次是票 112 "
+           "改了手册之后（`todos-change.md` 的子项一条加 `todo item move <item-id> --to=<n>`：用户要排次序时才挪，次序是用户的；"
+           "进展一条与 `todos.md` 的 `--notes` 一条：写文件时绝对路径放进反引号，同回复里写路径），同一个模型（API key 接入的 "
+           "gpt-6.1-sol，`mm_1792576875658`）。入口层、Core 的叫醒说明、`galley-prompt/`、`rust-samples.json` 都没动，"
+           "`cli-help.json` 重抓了 `todo item` 并加了 `todo item move`。两次都用现在的判定重判（票 112 起子项换了次序也算动了"
+           "子项；备注里的路径放没放进反引号只判票 112 起的手册）。",
     "110": "上一次是这几条最近一次的第 1 遍（票 108 的回归与它的六条新用例），这一次是票 110 改了手册之后（`wake.md`「The "
            "morning review」：第一段换成只为上次巡看以来动过的事醒；「Take each thing in turn」之后加一条：先读那件事，"
            "备注最前面是它做成的东西、用户之后没提过，下一步在用户手里；对话里做过、备注没写的先补；隔几天再看一眼的给自己挂提醒），"
@@ -5757,6 +5814,36 @@ PROGRESS_DAY_RE = re.compile(r"^[\s【\[（(「]*(?:(\d{4})\s*[年/.\-]\s*)?(\d{
                              r"(?:\s*[日号]\s*[】\]）)」]?|\s*[】\]）)」]|(?=\s*(?:[：:，,、]|\s|$)))")
 
 
+# Ticket 112: a span in backticks (one backtick each side, as Markdown's
+# inline code the panel reads), one space stripped from each end when both
+# have one (CommonMark's rule, and the panel's).
+BACKTICK_SPAN_RE = re.compile(r"`([^`\n]+)`")
+
+
+def backtick_spans(line: str) -> list[str]:
+    out = []
+    for x in BACKTICK_SPAN_RE.findall(line):
+        if len(x) > 2 and x.startswith(" ") and x.endswith(" ") and x.strip():
+            x = x[1:-1]
+        out.append(x)
+    return out
+# The manuals before ticket 112 (every `manual_sha` in the results then):
+# their runs never heard of backticks in the notes, so a path there is
+# judged as before. A run with no sha (the dry test's own) is too.
+MANUALS_BEFORE_112 = frozenset((
+    "15f1d4d2", "19040ed8", "1b9bd92d", "3d94b0d0", "42fc37c8", "4826765f", "497d19f9", "553d0a8f",
+    "5a216a29", "637a33b8", "65fab0d8", "8b5bd898", "8e258bc4", "8e2fdbc9", "9887abb2", "9da329b9",
+    "9e81e131", "a2437779", "b9cbda42", "bc1fc271", "c00483a6", "c0260c4f", "c0ec25be", "c3cd6798",
+    "d40e36ab", "e4c40a96"))
+
+
+def backtick_paths_due(r: dict[str, Any]) -> bool:
+    """Ticket 112: whether a run's manual asked for a path in the notes in
+    backticks (a manual not among those before it)."""
+    sha = r.get("manual_sha")
+    return bool(sha) and sha not in MANUALS_BEFORE_112
+
+
 def notes_of(t: dict[str, Any] | None) -> str:
     return (t or {}).get("notes") or ""
 
@@ -5808,7 +5895,16 @@ def items_facts(exp: dict[str, Any], log: list[list[str]], fx_todos: dict[str, d
     to-do's notes keep each of `keep` as a line of its own, word for word
     and in order, and no longer hold `drop` (a line that starts with it);
     another line is noted. Elsewhere a change to an item is noted, and
-    the item commands are writes no case allows unless it says so."""
+    the item commands are writes no case allows unless it says so.
+
+    Ticket 112 (main chat PRD ruling 158 point 1): a change of the order
+    of the items it started with is a change too (so `items: "none"`
+    refuses a move). `expect.items_move` (`{id, text_any, to}`): in that
+    to-do, the one item with one of these words ends at place `to`
+    (counted from 1, past the last the last), the others in their order
+    around it, every item's words and box as they were, none added or
+    removed; the to-do was read (`todo show`) before the first `todo item
+    move`; more than one move is noted."""
     reasons: list[str] = []
     flags: list[str] = []
     hard: list[str] = []
@@ -5838,6 +5934,10 @@ def items_facts(exp: dict[str, Any], log: list[list[str]], fx_todos: dict[str, d
                     said.append(("勾了" if x.get("done") else "取消勾") + x.get("text", ""))
         gone = [x for xid, x in before.items() if xid not in {y["id"] for y in after}]
         said += ["删了" + item_gist(x) for x in gone]
+        # Ticket 112: the ones it started with in another order.
+        kept = [x["id"] for x in after if x["id"] in before]
+        if kept != [xid for xid in before if xid in set(kept)]:
+            said.append("挪了次序（" + "、".join(x.get("text", "") for x in after) + "）")
         if said:
             changes[tid] = said
 
@@ -5903,7 +6003,40 @@ def items_facts(exp: dict[str, Any], log: list[list[str]], fx_todos: dict[str, d
         others = {t: c for t, c in changes.items() if t not in {w["id"] for w in done_want}}
         if others:
             reasons.append("动了别的待办的子项：" + "；".join(f"{where(t)}：{'、'.join(c)}" for t, c in others.items()))
-    if want is None and not done_want and changes:
+    move = exp.get("items_move")
+    if move:
+        allowed |= {"todo item move"}
+        tid = move["id"]
+        start = items_of(fx_todos.get(tid))
+        got = items_of(todo_by_id.get(tid))
+        hit = [x for x in start if any(w in x["text"] for w in move["text_any"])]
+        if len(hit) != 1:
+            reasons.append(f"用例写错了：text_any 对上 {len(hit)} 项")
+        else:
+            order = [x["id"] for x in start if x["id"] != hit[0]["id"]]
+            order.insert(min(int(move["to"]), len(start)) - 1, hit[0]["id"])
+            names = {x["id"]: x["text"] for x in start}
+            if sorted(x["id"] for x in got) != sorted(order):
+                reasons.append("子项被加了或删了：" + "、".join(item_gist(x) for x in got))
+            elif [x["id"] for x in got] != order:
+                reasons.append("次序不对：" + "、".join(x["text"] for x in got) + "（要："
+                               + "、".join(names[i] for i in order) + "）")
+            was = {x["id"]: x for x in start}
+            for x in got:
+                old = was.get(x["id"])
+                if old and old.get("text") != x.get("text"):
+                    reasons.append(f"子项「{old['text']}」被改成了「{x.get('text')}」")
+                if old and bool(old.get("done")) != bool(x.get("done")):
+                    reasons.append(f"动了子项的方框：「{old['text']}」" + ("勾上了" if x.get("done") else "取消了勾"))
+        moves = [i for i, a in enumerate(log) if cli_name(a) == "todo item move"]
+        if moves and not any(cli_name(a) == "todo show" and parse_cli(a)[0][2:3] == [tid] for a in log[:moves[0]]):
+            reasons.append("挪之前没 todo show 这一件")
+        if len(moves) > 1:
+            flags.append(f"挪了 {len(moves)} 次")
+        others = {t: c for t, c in changes.items() if t != tid}
+        if others:
+            reasons.append("动了别的待办的子项：" + "；".join(f"{where(t)}：{'、'.join(c)}" for t, c in others.items()))
+    if want is None and not done_want and not move and changes:
         flags.append("动了子项：" + "；".join(f"{where(t)}：{'、'.join(c)}" for t, c in changes.items()))
     keep = exp.get("notes_after")
     if keep:
@@ -6023,16 +6156,26 @@ def progress_facts(r: dict[str, Any], exp: dict[str, Any], now: datetime, starte
     for w in want.get("forbid") or []:
         if w in final:
             reasons.append(f"备注里出现了「{w}」（用户删掉的）")
+    # Ticket 112 (main chat PRD ruling 158 point 3): from its manual on, a
+    # path written in the line is in backticks, the whole path and nothing
+    # else in them, as in a reply: the panel draws that as the file.
+    ticks = backtick_paths_due(r)
+    out["backticks"] = ticks
+    spans = [scrub(x) for x in backtick_spans(line)]
     if added:
         out["files"] = added
         if not any(scrub(p) in scrub(line) for p in added):
             reasons.append("做了文件，这一行没写它的绝对路径" + ("（写成了 ~/ 开头）" if "~/" in line else ""))
+        elif ticks and not any(scrub(p) in spans for p in added):
+            reasons.append("做了文件，这一行写了它的绝对路径，但没放进反引号")
     if want.get("path"):
         # Ticket 110: a file in ~/Downloads made before this run, by its
         # absolute path in the run's fake HOME (`<sandbox>/home/`).
         rel = "Downloads/" + want["path"]
         if "/home/" + rel not in scrub(line):
             reasons.append(f"这一行没写 {want['path']} 的绝对路径" + ("（写成了 ~/ 开头）" if "~/" + rel in line else ""))
+        elif ticks and not any(x.endswith("/home/" + rel) and x[:1] in ("/", "$") for x in spans):
+            reasons.append(f"这一行写了 {want['path']} 的绝对路径，但没放进反引号")
     writes = [i for i, a in enumerate(log) if cli_name(a) == "todo update" and "notes" in parse_cli(a)[1]
               and parse_cli(a)[0][2:3] == [tid]]
     if writes:
@@ -6818,7 +6961,7 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
-    out += (rerun_section(data, cases, todo_facts, "111")
+    out += (rerun_section(data, cases, todo_facts, "112") + rerun_section(data, cases, todo_facts, "111")
             + moved_section(data, cases) + rerun_section(data, cases, todo_facts, "110")
             + progress_section(data, cases) + rerun_section(data, cases, todo_facts, "108")
             + rerun_section(data, cases, todo_facts, "73")
@@ -8339,6 +8482,135 @@ def dry_test_items(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) 
           f"no items: the trip with an item fails, record-only or not ({f['reasons']})")
 
 
+def dry_test_item_move(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) -> None:
+    """Ticket 112: the two cases' fixture (seven items, one ticked, in In
+    Hand as a count) and the judge on runs left by hand: an item moved to
+    its place, read first or not, to the wrong place, another moved too,
+    a box or words touched, one added, done by removing and adding, moved
+    twice, not moved; the news that moves nothing, and a move beside it;
+    a path in the notes in backticks under a manual since ticket 112, and
+    as before under one before it or with none."""
+    print("todo: an item moved, a path in backticks (ticket 112)")
+    day = f"{mon.month}月{mon.day}日"
+    hid = "todo_4c8e1a7d2b9f3605"
+    first, news = cases["items-move-first"], cases["items-move-news"]
+    ga = {"via": "supervisor", "supervisor": "galley-assistant", "reason": "dry"}
+    now_sha = manual_sha()
+
+    def run(case: dict[str, Any], reply: str, items: list[str] | None = None, log: tuple[Any, ...] = (),
+            notes: dict[str, str] | None = None, edit: Any = None, home_added: list[str] | None = None,
+            sha: str | None = None, tasks: tuple[dict[str, Any], ...] = ()) -> dict[str, Any]:
+        r = synth_run(case, mon, reply, log=log, tasks=tasks)
+        if sha:
+            r["manual_sha"] = sha
+        if home_added:
+            r["calls"] = [{"n": k + 1, "name": "file_write", "args": {"path": p}} for k, p in enumerate(home_added)]
+            r["home_added"] = home_added
+        todos = [json.loads(json.dumps(t)) for t in r["fake_state"]["todos"]]
+        by = {t["id"]: t for t in todos}
+        if items is not None:
+            was = {x["id"]: x for x in by[hid]["items"]}
+            by[hid]["items"] = [was[i] for i in items]
+        for tid, words in (notes or {}).items():
+            by[tid]["notes"] = words
+        if edit:
+            edit(by)
+        r["fake_state"]["todos"] = todos
+        return todo_facts(r, case)
+
+    fx = sched_fixture(clock_case(first, mon), mon)
+    hilton = next(t for t in fx["todos"] if t["id"] == hid)
+    ids = [x["id"] for x in hilton["items"]]
+    words = [x["text"] for x in hilton["items"]]
+    check(words == ["具体品牌与管理模式", "项目位置和当前阶段", "工程及证照进度", "筹开预算", "人员与系统准备情况",
+                    "开业时间表", "业主方对接人"]
+          and [x["done"] for x in hilton["items"]] == [False, True, False, False, False, False, False],
+          "fixture: Hilton's seven items, the second ticked in the panel")
+    prompt = sched_prompt(first, mon)
+    check(", 1 of 7 items done: 希尔顿酒店项目上下文资料收集" in prompt and "筹开预算" not in prompt,
+          "In Hand: the count, not the items")
+    budget = ids[3]
+    show = ("todo", "show", hid)
+    move = ("todo", "item", "move", budget, "--to=1", "--supervisor=galley-assistant", "--reason=dry")
+    moved = [budget] + ids[:3] + ids[4:]
+    said = "已把「筹开预算」挪到第一个。"
+    f = run(first, said, moved, (show, move))
+    check(f["pass"] is True and not f["flags"], f"moved: read, moved to the first place: passes ({f['reasons']} {f['flags']})")
+    f = run(first, said, moved, (("todo", "list"), move))
+    check(f["pass"] is False and any("挪之前没 todo show" in x for x in f["reasons"]), f"moved: not read first fails ({f['reasons']})")
+    for order, why in ((ids[:2] + [budget, ids[2]] + ids[4:], "次序不对"),
+                       ([budget, ids[1], ids[0]] + ids[2:3] + ids[4:], "次序不对"),
+                       (ids, "次序不对")):
+        f = run(first, said, order, (show, move))
+        check(f["pass"] is False and any(why in x for x in f["reasons"]), f"moved: {why} fails ({f['reasons']})")
+
+    def tick_one(by: dict[str, dict[str, Any]]) -> None:
+        x = next(y for y in by[hid]["items"] if y["id"] == budget)
+        x.update(done=True, doneAt=iso_utc(mon), doneBy=ga)
+
+    f = run(first, said, moved, (show, move), edit=tick_one)
+    check(f["pass"] is False and any("动了子项的方框" in x for x in f["reasons"]), f"moved: ticked too fails ({f['reasons']})")
+
+    def reword(by: dict[str, dict[str, Any]]) -> None:
+        by[hid]["items"][0]["text"] = "筹开预算（下周给）"
+
+    f = run(first, said, moved, (show, move), edit=reword)
+    check(f["pass"] is False and any("被改成了" in x for x in f["reasons"]), f"moved: reworded fails ({f['reasons']})")
+
+    def remade(by: dict[str, dict[str, Any]]) -> None:
+        by[hid]["items"][0] = dict(by[hid]["items"][0], id="item_dry00000000aa")
+
+    f = run(first, said, moved, (show, ("todo", "item", "remove", budget, "--supervisor=galley-assistant"),
+                                 ("todo", "item", "add", hid, "筹开预算", "--supervisor=galley-assistant")), edit=remade)
+    check(f["pass"] is False and any("加了或删了" in x for x in f["reasons"])
+          and any("多余的写命令" in x and "todo item add" in x and "todo item remove" in x for x in f["reasons"]),
+          f"moved: removed and added again fails ({f['reasons']})")
+    twice = ("todo", "item", "move", budget, "--to=2", "--supervisor=galley-assistant")
+    f = run(first, said, moved, (show, twice, move))
+    check(f["pass"] is True and any("挪了 2 次" in x for x in f["flags"]), f"moved: twice to the place passes, noted ({f['flags']})")
+    f = run(first, said, moved, (show, move), notes={hid: f"{day}：筹开预算挪到了第一个\n" + hilton["notes"]})
+    check(f["pass"] is False and any("不该动备注" in x for x in f["reasons"]), f"moved: a line in the notes fails ({f['reasons']})")
+    # The news: a line on top, the items as they were.
+    base = hilton["notes"]
+    line = f"{day}：业主说筹开预算下周给"
+    upd = ("todo", "update", hid, f"--notes={line}\n{base}", "--supervisor=galley-assistant", "--reason=dry")
+    f = run(news, "记在希尔顿那件的备注里了。", log=(show, upd), notes={hid: line + "\n" + base})
+    check(f["pass"] is True, f"news: a line on top, nothing moved: passes ({f['reasons']} {f['flags']})")
+    f = run(news, "记在希尔顿那件的备注里了。", moved, (show, upd, move), notes={hid: line + "\n" + base})
+    check(f["pass"] is False and any("不该动子项却动了" in x and "挪了次序" in x for x in f["reasons"])
+          and any("多余的写命令" in x and "todo item move" in x for x in f["reasons"]),
+          f"news: a move beside it fails ({f['reasons']})")
+    # A path in the notes, in backticks from this manual on.
+    rv = cases["progress-review-done"]
+    mid, mbase = rv["todos"][0]["id"], rv["todos"][0]["notes"]
+    path = "/sandbox/home/Downloads/搬家报价/三家报价对比.md"
+    told = f"搬家报价我早上比了一下：全包算下来蚂蚁最便宜，2,380 元。\n[FILE:{path}]"
+    for lead, sha, ok, why in (
+            (f"{day}：三家报价比好了，蚂蚁最便宜，对比表 `{path}`", now_sha, True, ""),
+            (f"{day}：三家报价比好了，蚂蚁最便宜，对比表 ` {path} `", now_sha, True, ""),
+            (f"{day}：三家报价比好了，蚂蚁最便宜，对比表在 {path}", now_sha, False, "没放进反引号"),
+            (f"{day}：三家报价比好了，蚂蚁最便宜，对比表 `{path}，蚂蚁最便宜`", now_sha, False, "没放进反引号"),
+            (f"{day}：三家报价比好了，蚂蚁最便宜，对比表在 {path}", "8e258bc4", True, ""),
+            (f"{day}：三家报价比好了，蚂蚁最便宜，对比表在 {path}", None, True, "")):
+        f = run(rv, told, notes={mid: lead + "\n" + mbase},
+                log=(("todo", "list"), ("todo", "update", mid, "--notes=…", "--supervisor=galley-assistant")),
+                home_added=[path], sha=sha)
+        check(f["pass"] is ok and (ok or any(why in x for x in f["reasons"])),
+              f"backticks: {lead[-30:]!r} under {sha} {'passes' if ok else 'fails'} ({f['reasons']})")
+    missed = cases["review-done-not-noted"]
+    tpl = "/sandbox/home/Downloads/希尔顿酒店资料收集模板.md"
+    nbase = missed["todos"][0]["notes"]
+    for line, ok in ((f"{day}：资料收集模板做好了：`{tpl}`", True), (f"{day}：资料收集模板做好了：{tpl}", False),
+                     (f"{day}：资料收集模板做好了：`~/Downloads/希尔顿酒店资料收集模板.md`", False)):
+        r = synth_run(missed, mon, "<no-reply/>", log=(show, ("todo", "update", hid, "--notes=…",
+                                                              "--supervisor=galley-assistant")))
+        r["manual_sha"] = now_sha
+        r["fake_state"]["todos"] = [dict(t, notes=line + "\n" + nbase) if t["id"] == hid else t
+                                    for t in r["fake_state"]["todos"]]
+        f = todo_facts(r, missed)
+        check(f["pass"] is ok, f"backticks: the template's line {line[-24:]!r} {'passes' if ok else 'fails'} ({f['reasons']})")
+
+
 def dry_test_progress(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) -> None:
     """Ticket 108: the judge of how a to-do is going on notes left by hand
     (a line on top, at the end, none, the old notes changed, no day, the
@@ -8817,6 +9089,7 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     dry_test_progress(cases, mon, check)
     dry_test_moved(cases, mon, check)
     dry_test_items(cases, mon, check)
+    dry_test_item_move(cases, mon, check)
     for r in sorted(results, key=lambda r: r["id"]):
         case_id, script = scripts[r["id"]]
         case = cases[case_id]
@@ -8901,10 +9174,19 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
                           "unknownitem=3", "todo item item_nope not found", "badsub=2",
                           "unrecognized subcommand 'frob'", "noted=订酒店|订 高铁", "emptyitem=2",
                           "create_todo: an item needs words", "cancelleditem=3", "is cancelled",
-                          "Add items under a to-do, after the ones there, in this order"):
+                          "Add items under a to-do, after the ones there, in this order",
+                          # Ticket 112: the move, as the real CLI and Core answer it.
+                          "moved=订周二晚的机票|订酒店|带证件|带 充电器",
+                          "last=订酒店|带证件|带 充电器|订周二晚的机票", "tozero=2",
+                          "move_todo_subitem: a place counts from 1", "tonegative=2", "notoflag=2",
+                          "the following required arguments were not provided:\\n  --to <N>\\n\\nUsage: galley todo item move",
+                          "tonotnumber=2", "invalid value 'first' for '--to <N>': invalid digit found in string",
+                          "moveunknown=3",
+                          "Move an item to another place among its to-do's items. Moving it to where it is changes nothing"):
                 check(piece in out, f"shell output has {piece!r}")
             check(f["names"].count("todo item done") == 4 and f["names"].count("todo item add") == 4
-                  and "todo item remove" in f["names"] and "todo item update" in f["names"],
+                  and "todo item remove" in f["names"] and "todo item update" in f["names"]
+                  and f["names"].count("todo item move") == 7,
                   f"fake galley logged the item commands by three words ({f['names']})")
             check(not f["pass"] and any("多余的写命令" in x for x in f["reasons"])
                   and any("多加了子项" in x for x in f["reasons"]),
@@ -8985,7 +9267,7 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
                   and sorted(r.get("downloads_changes", {}).get("added") or []) == [],
                   f"the comparison it made is seen in its HOME ({r.get('home_added')})")
             check(p["base"] == "三家发来的报价在 ~/Downloads/搬家报价/，比一比再定"
-                  and p["final"].endswith("\n" + p["base"]) and p["line"].endswith("/Documents/搬家报价对比.md"),
+                  and p["final"].endswith("\n" + p["base"]) and p["line"].endswith("/Documents/搬家报价对比.md`"),
                   f"a line on top of the notes it read, the file by its path ({p})")
             check(f["pass"] is True, f"compared, told, the line: passes ({f['reasons']} {f['flags']})")
         elif r["id"] == "todo-progress-quiet":
@@ -9659,7 +9941,8 @@ def main() -> int:
                 "ticket64_control", "ticket64_control_at", "ticket73_note", "ticket73_control",
                 "ticket73_control_at", "ticket108_note", "ticket108w_control", "ticket108w_control_at",
                 "ticket108r_control", "ticket108r_control_at", "ticket110_note", "ticket110w_control",
-                "ticket110w_control_at", "ticket110r_control", "ticket110r_control_at"):
+                "ticket110w_control_at", "ticket110r_control", "ticket110r_control_at", "ticket112_note",
+                "ticket112w_control", "ticket112w_control_at"):
         if previous_meta.get(key):
             data["meta"][key] = previous_meta[key]
     if sched:
@@ -9693,7 +9976,10 @@ def main() -> int:
                       "for what moved since the last review; what it handed over waits for the user, a line the notes "
                       "miss goes in first, another look later is a reminder; four cases, carried turns with a subtask's "
                       "report; the manual of before it in meta.ticket110w_control, the new one without that bullet in "
-                      "meta.ticket110r_control)"
+                      "meta.ticket110r_control); rerun for ticket 112 (todos-change.md: `todo item move` only when the "
+                      "user asks for an order; a file's path in a to-do's notes in backticks, there and in todos.md's "
+                      "--notes; two cases on Hilton's seven items, the three cases that write a file into the notes "
+                      "judged on the backticks)"
                       if todo else
                       "schedule (ticket 36, rerun for tickets 41 and 44): the main chat prompt with the ticket 41 "
                       "entry layer and its own configuration paragraph, In Hand lines (ticket 39's three groups) for "
