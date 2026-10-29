@@ -95,6 +95,8 @@ const list = (yours: TodoItem[]): AssistantTodo => ({
 /** What Core holds, as the item commands change it and the reads return. */
 let core: AssistantTodo = list([TRIP, SOIL]);
 let refuse: string | null = null;
+/** While set, Core holds every add until it is called. */
+let holdAdds: Promise<void> | null = null;
 let minted = 10;
 
 function changeItems(
@@ -117,6 +119,7 @@ let root: Root | null = null;
 beforeEach(() => {
   core = list([TRIP, SOIL]);
   refuse = null;
+  holdAdds = null;
   minted = 10;
   useAssistantTodoStore.setState({
     todo: core,
@@ -133,6 +136,8 @@ beforeEach(() => {
     subitemWriting: {},
     subitemDeleting: {},
     subitemDeleteToastId: null,
+    subitemAdds: {},
+    subitemAddFailures: {},
   });
   useUiStore.setState({
     toasts: [],
@@ -150,6 +155,7 @@ beforeEach(() => {
     if (command === "list_noted_todos") return [];
     const a = args as { id: string; texts?: string[]; text?: string };
     if (command === "add_todo_subitems") {
+      if (holdAdds) await holdAdds;
       if (refuse) throw refuse;
       changeItems(a.id, (now) => [
         ...now,
@@ -501,6 +507,79 @@ describe("「添加一项」", () => {
       "  花盆",
       "  铲子",
     ]);
+  });
+
+  it("typing during a save is kept: the item drawn at once, the line clear and editable, the writes in order", async () => {
+    let release: () => void = () => {};
+    holdAdds = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const container = mount();
+    open(container, "todo_trip");
+    click(
+      row(container, "todo_trip").querySelector('[data-role="todo-add-item"]')!,
+    );
+    const box = focused()!;
+    type(box, "带证件");
+    key(box, "Enter");
+    // At once: drawn under the others, counted, the line empty.
+    const pending = () =>
+      Array.from(
+        row(container, "todo_trip").querySelectorAll<HTMLElement>(
+          "[data-todo-subitem-pending]",
+        ),
+      ).map((each) => each.textContent);
+    expect(pending()).toEqual(["带证件"]);
+    expect(countOf(container, "todo_trip")).toBe("1/4 项");
+    expect(box.value).toBe("");
+    expect(box.readOnly).toBe(false);
+    // Core still holds the first: what is typed now stays, and goes next.
+    type(box, "买转换插头");
+    expect(box.value).toBe("买转换插头");
+    key(box, "Enter");
+    expect(pending()).toEqual(["带证件", "买转换插头"]);
+    type(box, "订接");
+    await settle();
+    // The second waits for the first.
+    expect(calls("add_todo_subitems")).toEqual([
+      { id: "todo_trip", texts: ["带证件"] },
+    ]);
+    release();
+    await settle();
+    expect(calls("add_todo_subitems")).toEqual([
+      { id: "todo_trip", texts: ["带证件"] },
+      { id: "todo_trip", texts: ["买转换插头"] },
+    ]);
+    expect(pending()).toEqual([]);
+    expect(shown(container, "todo_trip").slice(-2)).toEqual([
+      "  带证件",
+      "  买转换插头",
+    ]);
+    // Still typing: nothing lost, nothing written over.
+    expect(box.value).toBe("订接");
+    expect(useAssistantTodoStore.getState().subitemWriting).toEqual({});
+  });
+
+  it("refused after the box closed: the item leaves, the box opens again with the words and the reason", async () => {
+    refuse = JSON.stringify({ error: "internal", message: "boom" });
+    const container = mount();
+    open(container, "todo_trip");
+    click(
+      row(container, "todo_trip").querySelector('[data-role="todo-add-item"]')!,
+    );
+    const box = focused()!;
+    type(box, "订接机");
+    act(() => box.blur());
+    await settle();
+    const add = row(container, "todo_trip").querySelector(
+      '[data-role="todo-item-add"]',
+    )!;
+    expect(add.querySelector("textarea")!.value).toBe("订接机");
+    expect(add.textContent).toContain("没能完成，再试一次。");
+    expect(
+      row(container, "todo_trip").querySelector("[data-todo-subitem-pending]"),
+    ).toBeNull();
+    expect(useAssistantTodoStore.getState().subitemAddFailures).toEqual({});
   });
 
   it("refused: the words stay in the box with the reason under it", async () => {

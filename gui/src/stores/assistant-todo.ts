@@ -96,10 +96,14 @@ import { makeAppError } from "@/types/app-error";
  *   — no hold, as an item has no reminder a misclick would cancel; a
  *   second click takes it back the same way — each item's writes one
  *   after another (`subitemTicks` holds the box as it will stand until
- *   the fresh list is in); adding (`addSubitems`) and changing words
- *   (`editSubitem`) go straight to Core as a title does, counted by to-do
- *   (`subitemWriting`), their failure handed back to the box that keeps
- *   the words; deleting (`deleteSubitem`) is a to-do's delete: off the
+ *   the fresh list is in); adding (`addSubitems`) draws the new items at
+ *   once (`subitemAdds`) and queues the writes, each to-do's one after
+ *   another, so the box clears and takes the next while Core writes; a
+ *   refused one leaves the list and its words come back to the box with
+ *   the reason (`subitemAddFailures`); changing words (`editSubitem`) goes
+ *   straight to Core as a title does, its failure handed back to the box
+ *   that keeps the words; both counted by to-do (`subitemWriting`);
+ *   deleting (`deleteSubitem`) is a to-do's delete: off the
  *   row at once (`subitemDeleting`), 「已删除「…」 · 撤销」 for five
  *   seconds, its own toast (「已删除 N 项」 for several), then Core; a
  *   send into the main chat commits these too (`flushDeletes`). All of
@@ -169,13 +173,23 @@ interface AssistantTodoState {
   subitemDeleteToastId: string | null;
   /** An item's box was clicked: ticked or unticked at once. */
   toggleSubitem: (todoId: string, item: TodoSubitem) => void;
-  /** Add items under a to-do, in order; resolves once Core has them and
-   * the list is read again, with why it failed, or null. */
+  /** Items added on the panel and not yet in Core's list, by to-do id,
+   * in order: drawn at once, under the ones there. */
+  subitemAdds: Record<string, PendingSubitem[]>;
+  /** Adds Core refused, by to-do id: their words, to go back into the
+   * box, and why. */
+  subitemAddFailures: Record<string, SubitemAddFailure>;
+  /** Add items under a to-do, in order: drawn at once, written after the
+   * adds before them; resolves once Core has them and the list is read
+   * again, with why it failed, or null. */
   addSubitems: (
     todoId: string,
     texts: readonly string[],
   ) => Promise<TodoFailure | null>;
-  /** Change an item's words; as `addSubitems`. */
+  /** The box took a refused add's words back (`nonce`): off the record. */
+  takeSubitemAddFailure: (todoId: string, nonce: number) => void;
+  /** Change an item's words; resolves once Core has them and the list is
+   * read again, with why it failed, or null. */
   editSubitem: (
     todoId: string,
     itemId: string,
@@ -188,6 +202,22 @@ interface AssistantTodoState {
   undoSubitemDelete: () => void;
   /** Send every item deletion not yet sent; as `commitDeletes`. */
   commitSubitemDeletes: () => Promise<void>;
+}
+
+/** An item added on the panel, on its way to Core (ticket 111). */
+export interface PendingSubitem {
+  /** This window's own key, never an item id. */
+  key: string;
+  text: string;
+}
+
+/** Adds under a to-do Core refused (ticket 111). */
+export interface SubitemAddFailure {
+  /** Their words, in order, for the box. */
+  texts: string[];
+  kind: TodoFailure;
+  /** Which refusal: the box takes each once. */
+  nonce: number;
 }
 
 /** An item's tick on its way (ticket 111): the box as it will stand, and
@@ -226,6 +256,10 @@ let inflightDeletes: Promise<void> | null = null;
 // the untick after it reach Core in that order; their deletions as the
 // to-dos'.
 const subitemChains = new Map<string, Promise<void>>();
+// Each to-do's adds one after another, so items land in the order typed.
+const subitemAddChains = new Map<string, Promise<unknown>>();
+let subitemAddKeys = 0;
+let subitemAddRefusals = 0;
 let subitemStaging = 0;
 let inflightSubitemDeletes: Promise<void> | null = null;
 
@@ -411,6 +445,8 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
     subitemTicks: {},
     subitemFailures: {},
     subitemWriting: {},
+    subitemAdds: {},
+    subitemAddFailures: {},
     subitemDeleting: {},
     subitemDeleteToastId: null,
 
@@ -636,8 +672,88 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
       });
     },
 
-    addSubitems: (todoId, texts) =>
-      writeSubitems(todoId, () => addTodoSubitems(todoId, texts)),
+    addSubitems: (todoId, texts) => {
+      const pending = texts.map((text) => ({
+        key: `pending_item_${(subitemAddKeys += 1)}`,
+        text,
+      }));
+      const keys = new Set(pending.map((each) => each.key));
+      set((s) => ({
+        subitemAdds: {
+          ...s.subitemAdds,
+          [todoId]: [...(s.subitemAdds[todoId] ?? []), ...pending],
+        },
+        subitemWriting: {
+          ...s.subitemWriting,
+          [todoId]: (s.subitemWriting[todoId] ?? 0) + 1,
+        },
+      }));
+      // These off the drawn list, and one fewer write on its way.
+      const settled = (s: AssistantTodoState) => {
+        const left = (s.subitemAdds[todoId] ?? []).filter(
+          (each) => !keys.has(each.key),
+        );
+        const writing = (s.subitemWriting[todoId] ?? 1) - 1;
+        return {
+          subitemAdds:
+            left.length > 0
+              ? { ...s.subitemAdds, [todoId]: left }
+              : without(s.subitemAdds, todoId),
+          subitemWriting:
+            writing > 0
+              ? { ...s.subitemWriting, [todoId]: writing }
+              : without(s.subitemWriting, todoId),
+        };
+      };
+      const send = async (): Promise<TodoFailure | null> => {
+        try {
+          await addTodoSubitems(todoId, texts);
+        } catch (e) {
+          const kind = todoFailureKind(e);
+          subitemAddRefusals += 1;
+          const nonce = subitemAddRefusals;
+          set((s) => ({
+            ...settled(s),
+            subitemAddFailures: {
+              ...s.subitemAddFailures,
+              [todoId]: {
+                texts: [
+                  ...(s.subitemAddFailures[todoId]?.texts ?? []),
+                  ...texts,
+                ],
+                kind,
+                nonce,
+              },
+            },
+          }));
+          return kind;
+        }
+        // The fresh list and these off the drawn ones in one set: they
+        // never blink.
+        const lists = await read();
+        set((s) => ({
+          ...(lists ? { ...lists, loaded: true } : {}),
+          ...settled(s),
+        }));
+        return null;
+      };
+      const before = subitemAddChains.get(todoId);
+      const run = before ? before.then(send) : send();
+      subitemAddChains.set(todoId, run);
+      void run.finally(() => {
+        if (subitemAddChains.get(todoId) === run) {
+          subitemAddChains.delete(todoId);
+        }
+      });
+      return run;
+    },
+
+    takeSubitemAddFailure: (todoId, nonce) => {
+      if (get().subitemAddFailures[todoId]?.nonce !== nonce) return;
+      set((s) => ({
+        subitemAddFailures: without(s.subitemAddFailures, todoId),
+      }));
+    },
 
     editSubitem: (todoId, itemId, text) =>
       writeSubitems(todoId, () => updateTodoSubitem(itemId, text)),

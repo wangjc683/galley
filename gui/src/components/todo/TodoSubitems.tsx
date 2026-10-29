@@ -20,7 +20,10 @@ import { useCopy } from "@/lib/i18n";
 import { isImeCompositionKeydown } from "@/lib/ime";
 import { todoEditWrite, todoSubitemLines } from "@/lib/todo-panel";
 import { cn } from "@/lib/utils";
-import { useAssistantTodoStore } from "@/stores/assistant-todo";
+import {
+  useAssistantTodoStore,
+  type PendingSubitem,
+} from "@/stores/assistant-todo";
 
 import { TodoTextEditor } from "./TodoTextEditor";
 import { todoTitleClass } from "./todo-styles";
@@ -48,8 +51,11 @@ const BOX_ON_LINE = "mt-[3px]";
  * takes it back); a click on the words changes them in place, as a
  * title (`TodoTextEditor`); the × on hover or focus deletes it with the
  * five-second undo (`deleteSubitem`); 「添加一项」 opens a box that adds
- * one on Enter and opens the next (`SubitemAdd`). `editable` off (the
- * to-do ticked and holding its place) draws them and does nothing.
+ * one on Enter and opens the next (`SubitemAdd`): the new one is drawn
+ * at once, under the others, while Core writes it (`subitemAdds`), and a
+ * refused one comes back into the box, opened again if it had closed.
+ * `editable` off (the to-do ticked and holding its place) draws them and
+ * does nothing.
  */
 export function TodoSubitems({
   todoId,
@@ -63,10 +69,17 @@ export function TodoSubitems({
   editable: boolean;
 }) {
   const copy = useCopy();
+  const pending =
+    useAssistantTodoStore((s) => s.subitemAdds[todoId]) ?? NO_PENDING;
+  const refused = useAssistantTodoStore(
+    (s) => s.subitemAddFailures[todoId] !== undefined,
+  );
   const [adding, setAdding] = useState(false);
+  // An add Core refused: the box opens again to take its words back.
+  if (editable && refused && !adding) setAdding(true);
   return (
     <div data-role="todo-items" className="-mt-1 pb-1.5 pl-9 pr-2.5">
-      {items.length > 0 && (
+      {items.length + pending.length > 0 && (
         <ul>
           {items.map((item) => (
             <SubitemRow
@@ -75,6 +88,9 @@ export function TodoSubitems({
               item={item}
               editable={editable}
             />
+          ))}
+          {pending.map((each) => (
+            <PendingRow key={each.key} item={each} />
           ))}
         </ul>
       )}
@@ -95,6 +111,42 @@ export function TodoSubitems({
           </button>
         ))}
     </div>
+  );
+}
+
+const NO_PENDING: readonly PendingSubitem[] = [];
+
+/** An item added here and on its way to Core: drawn as it will stand, an
+ * empty box and its words, nothing to click until Core has it. */
+function PendingRow({ item }: { item: PendingSubitem }) {
+  return (
+    <li
+      data-todo-subitem-pending={item.key}
+      className="flex items-start gap-2 py-0.5 pr-6"
+    >
+      <EmptyBox />
+      <span
+        className={cn(
+          "min-w-0 flex-1 whitespace-pre-wrap break-words text-ink",
+          ITEM_TYPE,
+        )}
+      >
+        {item.text}
+      </span>
+    </li>
+  );
+}
+
+/** The box an item will have: empty, not one to click. */
+function EmptyBox() {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "inline-flex size-3.5 shrink-0 rounded-sm border border-line-strong bg-elevated",
+        BOX_ON_LINE,
+      )}
+    />
   );
 }
 
@@ -249,12 +301,15 @@ function SubitemRow({
 
 /**
  * 「添加一项」 open: an empty box (not one to click) and a line to type
- * in, where an item's words go. Enter adds it and opens the next, empty;
- * Enter on nothing, Esc, or a click elsewhere closes it (a click
- * elsewhere with words adds them first). A block of lines pasted is one
- * item a line, blank ones skipped (`todoSubitemLines`). Straight to Core,
- * no confirm; nothing empty is sent. Failed, the words stay in the box
- * and the reason is under it.
+ * in, where an item's words go. Enter adds it and clears the line for the
+ * next: the item is drawn at once and Core writes it behind, each to-do's
+ * adds in the order typed, so nothing typed meanwhile is lost; Enter on
+ * nothing, Esc, or a click elsewhere closes it (a click elsewhere with
+ * words adds them first). A block of lines pasted is one item a line,
+ * blank ones skipped (`todoSubitemLines`). No confirm; nothing empty is
+ * sent. Refused, the item leaves the list and its words come back into
+ * the line, in front of anything typed since, with the reason under it
+ * (`subitemAddFailures`, taken once by its nonce).
  */
 function SubitemAdd({
   todoId,
@@ -265,9 +320,22 @@ function SubitemAdd({
 }) {
   const copy = useCopy();
   const addSubitems = useAssistantTodoStore((s) => s.addSubitems);
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [failure, setFailure] = useState<TodoFailure | null>(null);
+  const takeFailure = useAssistantTodoStore((s) => s.takeSubitemAddFailure);
+  const refused = useAssistantTodoStore((s) => s.subitemAddFailures[todoId]);
+  const [draft, setDraft] = useState(() => refused?.texts.join(" ") ?? "");
+  const [reason, setReason] = useState<TodoFailure | null>(
+    refused?.kind ?? null,
+  );
+  const [taken, setTaken] = useState<number | null>(refused?.nonce ?? null);
+  if (refused && refused.nonce !== taken) {
+    setTaken(refused.nonce);
+    setDraft([refused.texts.join(" "), draft.trim()].filter(Boolean).join(" "));
+    setReason(refused.kind);
+  }
+  // Taken: off the store's record, so it comes back only once.
+  useEffect(() => {
+    if (taken !== null) takeFailure(todoId, taken);
+  }, [taken, takeFailure, todoId]);
   const box = useRef<HTMLTextAreaElement>(null);
   // Closed by Esc or an empty Enter: the blur as the box goes is not a
   // save.
@@ -278,6 +346,15 @@ function SubitemAdd({
   };
 
   useLayoutEffect(() => {
+    // Opened again for a refused add while another box has the caret:
+    // that one keeps it.
+    const active = document.activeElement;
+    if (
+      active instanceof HTMLTextAreaElement ||
+      active instanceof HTMLInputElement
+    ) {
+      return;
+    }
     box.current?.focus();
   }, []);
   // As tall as its words, as a title's box.
@@ -288,55 +365,31 @@ function SubitemAdd({
     el.style.height = `${el.scrollHeight}px`;
   }, [draft]);
 
-  const add = async (texts: readonly string[], then: "next" | "close") => {
-    setSaving(true);
-    setFailure(null);
-    const failed = await addSubitems(todoId, texts);
-    setSaving(false);
-    if (failed) {
-      setFailure(failed);
-      return;
-    }
-    if (then === "close") {
-      close();
-      return;
-    }
-    setDraft("");
-    box.current?.focus();
+  const add = (texts: readonly string[]) => {
+    setReason(null);
+    void addSubitems(todoId, texts);
   };
 
   const onPaste = (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
     const pasted = event.clipboardData.getData("text");
     if (!/\r?\n/.test(pasted)) return;
     event.preventDefault();
-    if (saving) return;
     const el = event.currentTarget;
     const lines = todoSubitemLines(
       draft.slice(0, el.selectionStart) + pasted + draft.slice(el.selectionEnd),
     );
-    if (lines.length === 0) {
-      setDraft("");
-      return;
-    }
-    void add(lines, "next");
+    setDraft("");
+    if (lines.length > 0) add(lines);
   };
 
   return (
     <div data-role="todo-item-add" className="flex items-start gap-2 py-0.5">
-      {/* The box an item will have: empty, not one to click. */}
-      <span
-        aria-hidden
-        className={cn(
-          "inline-flex size-3.5 shrink-0 rounded-sm border border-line-strong bg-elevated",
-          BOX_ON_LINE,
-        )}
-      />
+      <EmptyBox />
       <div className="min-w-0 flex-1">
         <textarea
           ref={box}
           rows={1}
           value={draft}
-          readOnly={saving}
           aria-label={copy.todo.newItem}
           spellCheck={false}
           onChange={(event) =>
@@ -350,17 +403,20 @@ function SubitemAdd({
               close();
             } else if (event.key === "Enter") {
               event.preventDefault();
-              if (saving) return;
               const words = draft.trim();
-              if (!words) close();
-              else void add([words], "next");
+              if (!words) {
+                close();
+                return;
+              }
+              setDraft("");
+              add([words]);
             }
           }}
           onBlur={() => {
-            if (saving || closed.current) return;
+            if (closed.current) return;
             const words = draft.trim();
-            if (!words) close();
-            else void add([words], "close");
+            if (words) add([words]);
+            close();
           }}
           className={cn(
             "block w-full resize-none overflow-hidden rounded-sm border-0 bg-transparent p-0",
@@ -368,7 +424,7 @@ function SubitemAdd({
             ITEM_TYPE,
           )}
         />
-        {failure && <SubitemFailure kind={failure} />}
+        {reason && <SubitemFailure kind={reason} />}
       </div>
     </div>
   );
