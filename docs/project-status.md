@@ -818,9 +818,19 @@ Galley; the jump to the sentence that noted it moves to the open row's last
 line and the ⋯ menu (main chat ruling 153, ticket 107). One Core desktop
 command (`update_todo`, title and notes only) and one manual sentence (read
 the to-do as it is now before changing its words); no CLI, Agent API or
-migration change. JC dogfooded it on dev the same day; the database has no
-write from the edit steps, so saving an edit has only vitest and Core
-integration coverage. The 10-28 trial review (the morning review's "cancelled or
+migration change. JC dogfooded it on dev the same day; the database first
+showed an edit's save on 10-29, when ticket 108's dogfood walked it again.
+Galley now adds a line at the top of a to-do's notes when it gets
+something done for it or hears news of it, newest first, the day first, a
+file by its absolute path (ruling 154, ticket 108; manual only; JC
+dogfooded it on dev on 10-29, both steps in the database). The morning
+review wakes only for what moved since the last one: of the to-dos it
+looked at before (no date, or due within three days), those noted or
+changed since or only now within the three days, a subtask with activity
+since, a new memo; and it leaves a to-do alone while the newest line of
+its notes is something it handed over that the user has not answered
+(ruling 155, ticket 110; Core's wake check and the manual; no CLI, Agent
+API or migration change; its first morning on dev is 10-30). The 10-28 trial review (the morning review's "cancelled or
 found noisy by half, tighten the bar" from tickets 73–79, and the deferred
 start signals tied to the first-phase trial) did not go into `v0.7.3` by
 JC's choice; it goes into the next release. Still owed from `v0.7.2`'s
