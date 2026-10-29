@@ -788,3 +788,129 @@ describe("an item's tick", () => {
     ]);
   });
 });
+
+// Main chat ticket 112 (PRD ruling 158 point 1): a drag dropped is drawn
+// at once in its new order and sent, each to-do's moves one after another,
+// each one's place counted on the order the one before it leaves; the
+// order goes with the read after the last; a refused one puts the items
+// back as Core has them and says why.
+describe("an item moved", () => {
+  const ITEMS = [
+    { id: "item_a", text: "订酒店", done: false },
+    { id: "item_b", text: "订机票", done: false },
+    { id: "item_c", text: "换港币", done: false },
+  ];
+  const trip = (items = ITEMS): AssistantTodo => ({
+    ...EMPTY_TODO,
+    yours: { today: [], later: [], anytime: [{ ...OPEN, items }] },
+  });
+  const ids = (todo: AssistantTodo) =>
+    (todo.yours.anytime[0].items ?? []).map((each) => each.id);
+
+  it("draws the new order at once and sends the moves in turn, each place counted on the one before", async () => {
+    vi.useRealTimers();
+    useAssistantTodoStore.setState({
+      todo: trip(),
+      subitemOrders: {},
+      subitemMoveFailures: {},
+    });
+    const { invoke } = getTauriMocks();
+    let core = ITEMS;
+    const order: string[] = [];
+    let release: () => void = () => {};
+    invoke.mockImplementation(async (command, args) => {
+      if (command === "list_assistant_todo") return trip(core);
+      if (command === "list_noted_todos") return [];
+      const { id, to } = args as { id: string; to: number };
+      order.push(`${command} ${id} ${to}`);
+      if (order.length === 1) {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+      const rest = core.filter((each) => each.id !== id);
+      core = [
+        ...rest.slice(0, to - 1),
+        core.find((each) => each.id === id)!,
+        ...rest.slice(to - 1),
+      ];
+      return { id: "todo_1" };
+    });
+    const store = useAssistantTodoStore.getState();
+    // 换港币 to the top: drawn at once, sent at once.
+    store.moveSubitem("todo_1", "item_c", ["item_c", "item_a", "item_b"]);
+    expect(useAssistantTodoStore.getState().subitemOrders.todo_1).toEqual({
+      ids: ["item_c", "item_a", "item_b"],
+      sending: 1,
+    });
+    expect(order).toEqual(["move_todo_subitem item_c 1"]);
+    // Then 订酒店 to the bottom, counted on the order the first leaves:
+    // drawn at once, its write waits its turn.
+    store.moveSubitem("todo_1", "item_a", ["item_c", "item_b", "item_a"]);
+    expect(useAssistantTodoStore.getState().subitemOrders.todo_1).toEqual({
+      ids: ["item_c", "item_b", "item_a"],
+      sending: 2,
+    });
+    expect(order).toEqual(["move_todo_subitem item_c 1"]);
+    release();
+    await vi.waitFor(() =>
+      expect(useAssistantTodoStore.getState().subitemOrders).toEqual({}),
+    );
+    expect(order).toEqual([
+      "move_todo_subitem item_c 1",
+      "move_todo_subitem item_a 3",
+    ]);
+    // The fresh list, in Core's new order, came in with the order's going.
+    expect(ids(useAssistantTodoStore.getState().todo)).toEqual([
+      "item_c",
+      "item_b",
+      "item_a",
+    ]);
+    // Dropped back where it was: nothing drawn, nothing sent.
+    store.moveSubitem("todo_1", "item_b", ["item_c", "item_b", "item_a"]);
+    expect(useAssistantTodoStore.getState().subitemOrders).toEqual({});
+    expect(order).toHaveLength(2);
+  });
+
+  it("puts them back as Core has them when Core refuses, and says why", async () => {
+    vi.useRealTimers();
+    useAssistantTodoStore.setState({
+      todo: trip(),
+      subitemOrders: {},
+      subitemMoveFailures: {},
+    });
+    const { invoke } = getTauriMocks();
+    invoke.mockImplementation(async (command) => {
+      if (command === "list_assistant_todo") return trip();
+      if (command === "list_noted_todos") return [];
+      throw JSON.stringify({
+        error: "not_found",
+        message: "todo todo_1 is cancelled",
+      });
+    });
+    useAssistantTodoStore
+      .getState()
+      .moveSubitem("todo_1", "item_c", ["item_c", "item_a", "item_b"]);
+    await vi.waitFor(() =>
+      expect(useAssistantTodoStore.getState().subitemOrders).toEqual({}),
+    );
+    expect(ids(useAssistantTodoStore.getState().todo)).toEqual([
+      "item_a",
+      "item_b",
+      "item_c",
+    ]);
+    expect(useAssistantTodoStore.getState().subitemMoveFailures).toEqual({
+      todo_1: "gone",
+    });
+    // The next drag clears it.
+    invoke.mockImplementation(async (command) => {
+      if (command === "list_assistant_todo") return trip();
+      if (command === "list_noted_todos") return [];
+      return { id: "todo_1" };
+    });
+    useAssistantTodoStore
+      .getState()
+      .moveSubitem("todo_1", "item_b", ["item_b", "item_a", "item_c"]);
+    expect(useAssistantTodoStore.getState().subitemMoveFailures).toEqual({});
+  });
+});

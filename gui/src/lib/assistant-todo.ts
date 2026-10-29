@@ -86,8 +86,8 @@ export interface TodoReminder {
 
 /** Mirror of Core `ListedSubitem` (main chat ticket 111, PRD ruling
  * 157): an item under a to-do as the list carries it — its words and its
- * box, in the order it was added. The panel says no noun for it
- * (「添加一项」, 「2/5 项」). */
+ * box, in its order (the order it was added, unless moved since: ticket
+ * 112). The panel says no noun for it (「添加一项」, 「2/5 项」). */
 export interface TodoSubitem {
   /** `item_<16 hex>`. */
   id: string;
@@ -298,6 +298,18 @@ export async function updateTodoSubitem(
   text: string,
 ): Promise<TodoBrief> {
   return invoke<TodoBrief>("update_todo_subitem", { id, text });
+}
+
+/** Move an item to place `to` among its to-do's items, 1 the first
+ * (`move_todo_subitem`, main chat ticket 112, PRD ruling 158): a drag
+ * dropped. Past the last is the last; already there, Core writes
+ * nothing. Core sends `todos:changed`; `not_found` for an item gone or
+ * under a to-do deleted. */
+export async function moveTodoSubitem(
+  id: string,
+  to: number,
+): Promise<TodoBrief> {
+  return invoke<TodoBrief>("move_todo_subitem", { id, to });
 }
 
 /** Delete an item for good (`remove_todo_subitem`), sent once the undo

@@ -2113,6 +2113,7 @@ export const enCopy: AppCopy = {
     newItem: "New item",
     editItem: "Item",
     deleteItem: "Delete this item",
+    dragItem: (text: string) => `Drag to reorder "${text}"`,
     deleteItems: {
       deleted: (text: string) => `Deleted "${text}"`,
       deletedCount: (n: number) =>

@@ -10,6 +10,7 @@ import {
   EMPTY_TODO,
   listAssistantTodo,
   listNotedTodos,
+  moveTodoSubitem,
   removeTodoSubitem,
   reopenTodo,
   reopenTodoSubitem,
@@ -26,7 +27,13 @@ import {
 } from "@/lib/assistant-todo";
 import { copyForLanguage } from "@/lib/i18n";
 import { resolveLanguagePreference } from "@/lib/language";
-import { TODO_SETTLE_MS, todoCancelled, type TodoFlip } from "@/lib/todo-panel";
+import {
+  TODO_SETTLE_MS,
+  todoCancelled,
+  todoSubitemMove,
+  yourTodos,
+  type TodoFlip,
+} from "@/lib/todo-panel";
 import { UNDO_DELETE_MS } from "@/stores/message-delete";
 import { usePrefsStore } from "@/stores/prefs";
 import { useUiStore } from "@/stores/ui";
@@ -109,7 +116,14 @@ import { makeAppError } from "@/types/app-error";
  *   send into the main chat commits these too (`flushDeletes`). All of
  *   them are this window's own writes, so the row does not light. A tick
  *   that fails puts the box back and says why under the item
- *   (`subitemFailures`).
+ *   (`subitemFailures`). Since ticket 112 (PRD ruling 158 point 1) a drag
+ *   dropped (`moveSubitem`) is drawn at once in its new order
+ *   (`subitemOrders`, every item's id as Core will have them) and sent
+ *   after the moves before it under the same to-do, one after another;
+ *   the last one back reads the list again and lets the order go in the
+ *   same set, so nothing blinks and the row does not light. One that
+ *   fails puts the items back as Core has them and says why under them
+ *   (`subitemMoveFailures`).
  *
  * A write that fails puts the row back as it was and leaves a reason by
  * its id (`failures`), cleared by the next try. A to-do's id and a
@@ -188,6 +202,20 @@ interface AssistantTodoState {
   ) => Promise<TodoFailure | null>;
   /** The box took a refused add's words back (`nonce`): off the record. */
   takeSubitemAddFailure: (todoId: string, nonce: number) => void;
+  /** Items' order on its way (ticket 112), by to-do id: every item's id
+   * as Core will have them once the moves sent land, and how many of
+   * those moves are still with Core. */
+  subitemOrders: Record<string, SubitemOrder>;
+  /** Why the last move under a to-do failed, by to-do id. */
+  subitemMoveFailures: Record<string, TodoFailure>;
+  /** A drag dropped: `itemId` where the row now draws it (`shown`, the
+   * ids of the row's items in their new order). Drawn at once, sent
+   * after the moves before it; nothing when it is where it was. */
+  moveSubitem: (
+    todoId: string,
+    itemId: string,
+    shown: readonly string[],
+  ) => void;
   /** Change an item's words; resolves once Core has them and the list is
    * read again, with why it failed, or null. */
   editSubitem: (
@@ -228,6 +256,13 @@ export interface SubitemTick {
   sending: number;
 }
 
+/** A to-do's items moved on the panel (ticket 112): their order as Core
+ * will have it, and how many moves are still with Core. */
+export interface SubitemOrder {
+  ids: string[];
+  sending: number;
+}
+
 /** An item deleted on the panel and not yet by Core (ticket 111). */
 export interface SubitemDelete {
   todoId: string;
@@ -258,6 +293,9 @@ let inflightDeletes: Promise<void> | null = null;
 const subitemChains = new Map<string, Promise<void>>();
 // Each to-do's adds one after another, so items land in the order typed.
 const subitemAddChains = new Map<string, Promise<unknown>>();
+// Each to-do's moves one after another (ticket 112): each one's place is
+// counted on the order the ones before it leave.
+const subitemMoveChains = new Map<string, Promise<void>>();
 let subitemAddKeys = 0;
 let subitemAddRefusals = 0;
 let subitemStaging = 0;
@@ -449,6 +487,8 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
     subitemAddFailures: {},
     subitemDeleting: {},
     subitemDeleteToastId: null,
+    subitemOrders: {},
+    subitemMoveFailures: {},
 
     load: async () => {
       const lists = await read();
@@ -757,6 +797,86 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
 
     editSubitem: (todoId, itemId, text) =>
       writeSubitems(todoId, () => updateTodoSubitem(itemId, text)),
+
+    moveSubitem: (todoId, itemId, shown) => {
+      // Every item Core has, in the order it will have them: the one a
+      // move on its way leaves, a new one of Galley's after it.
+      const core = (
+        yourTodos(get().todo).find(
+          (item) => item.kind === "todo" && item.id === todoId,
+        )?.items ?? []
+      ).map((each) => each.id);
+      const before = get().subitemOrders[todoId];
+      const has = new Set(core);
+      const all = before
+        ? [
+            ...before.ids.filter((id) => has.has(id)),
+            ...core.filter((id) => !before.ids.includes(id)),
+          ]
+        : core;
+      const move = todoSubitemMove(all, shown, itemId);
+      if (!move) return;
+      set((s) => ({
+        subitemOrders: {
+          ...s.subitemOrders,
+          [todoId]: {
+            ids: move.order,
+            sending: (s.subitemOrders[todoId]?.sending ?? 0) + 1,
+          },
+        },
+        subitemMoveFailures: without(s.subitemMoveFailures, todoId),
+      }));
+      const send = async () => {
+        let failed: TodoFailure | null = null;
+        try {
+          await moveTodoSubitem(itemId, move.to);
+        } catch (e) {
+          failed = todoFailureKind(e);
+        }
+        const now = get().subitemOrders[todoId];
+        if (now && now.sending > 1) {
+          // A later move is on its way: it reads the list once it lands.
+          set((s) => ({
+            subitemOrders: {
+              ...s.subitemOrders,
+              [todoId]: { ...now, sending: now.sending - 1 },
+            },
+            subitemMoveFailures: failed
+              ? { ...s.subitemMoveFailures, [todoId]: failed }
+              : s.subitemMoveFailures,
+          }));
+          return;
+        }
+        // The last one back: the order as Core has it, with the fresh
+        // list in the same set (after a refusal, as it was before the
+        // drag); a drag dropped while the list was read keeps its own.
+        const lists = await read();
+        set((s) => {
+          const current = s.subitemOrders[todoId];
+          const later = current !== undefined && current.sending > 1;
+          return {
+            ...(lists ? { ...lists, loaded: true } : {}),
+            subitemOrders: later
+              ? {
+                  ...s.subitemOrders,
+                  [todoId]: { ...current, sending: current.sending - 1 },
+                }
+              : without(s.subitemOrders, todoId),
+            subitemMoveFailures: failed
+              ? { ...s.subitemMoveFailures, [todoId]: failed }
+              : s.subitemMoveFailures,
+          };
+        });
+      };
+      const queued = subitemMoveChains.get(todoId);
+      const run = queued ? queued.then(send) : send();
+      subitemMoveChains.set(todoId, run);
+      void run.finally(() => {
+        if (subitemMoveChains.get(todoId) === run) {
+          subitemMoveChains.delete(todoId);
+        }
+      });
+    },
 
     deleteSubitem: (todoId, item) => {
       const id = item.id;

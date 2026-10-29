@@ -2154,6 +2154,8 @@ export const zhCopy = {
     newItem: "新的一项",
     editItem: "这一项",
     deleteItem: "删除这一项",
+    /** 子项左边把手的无障碍名与悬停提示（主聊天票 112，裁决 158），照模型设置那一颗的句式。 */
+    dragItem: (text: string) => `拖动调整「${text}」的位置`,
     /** 删了一项以后的撤销提示条，照删待办（票 88）：5 秒走了才交给 Core，连删几项合成一条。 */
     deleteItems: {
       deleted: (text: string) => `已删除「${text}」`,

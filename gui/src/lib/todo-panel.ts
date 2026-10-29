@@ -474,9 +474,10 @@ export interface TodoPanelChange {
  * ticket 107), and since ticket 111 a write of an item under it — added
  * or its words changed (`subitemWriting`, by to-do id), ticked or
  * unticked (`subitemTicks`), deleted (`subitemDeleting`; both by item id,
- * naming their to-do) — in either of two reads of the store: the read a
- * write ends with clears its record in the same set. A row is a to-do,
- * so an item's write names its to-do's id. */
+ * naming their to-do), and since ticket 112 moved by a drag
+ * (`subitemOrders`, by to-do id) — in either of two reads of the store:
+ * the read a write ends with clears its record in the same set. A row
+ * is a to-do, so an item's write names its to-do's id. */
 export function todoWritesOnTheirWay(
   ...states: readonly {
     flips: Readonly<Record<string, unknown>>;
@@ -486,6 +487,7 @@ export function todoWritesOnTheirWay(
     subitemWriting?: Readonly<Record<string, unknown>>;
     subitemTicks?: Readonly<Record<string, { todoId: string }>>;
     subitemDeleting?: Readonly<Record<string, { todoId: string }>>;
+    subitemOrders?: Readonly<Record<string, unknown>>;
   }[]
 ): Set<string> {
   const ids = new Set<string>();
@@ -495,6 +497,7 @@ export function todoWritesOnTheirWay(
     for (const id of Object.keys(state.deleting)) ids.add(id);
     for (const id of Object.keys(state.editing)) ids.add(id);
     for (const id of Object.keys(state.subitemWriting ?? {})) ids.add(id);
+    for (const id of Object.keys(state.subitemOrders ?? {})) ids.add(id);
     for (const tick of Object.values(state.subitemTicks ?? {})) {
       ids.add(tick.todoId);
     }
@@ -512,14 +515,27 @@ export function todoWritesOnTheirWay(
  * (`subitemDeleting`), each box as a tick on its way will leave it
  * (`subitemTicks`: a tick is drawn at once and Core hears of it at once,
  * with no hold — an item has no reminder for a misclick to cancel, and a
- * second click takes it back). The same array when nothing changes it.
+ * second click takes it back). Since ticket 112, in the order a drag on
+ * its way will leave them (`order`, every item's id as Core will have
+ * them; one Core has that the order does not name, Galley's new one, at
+ * the end in Core's order). The same array when nothing changes it.
  */
 export function todoSubitemsShown(
   item: TodoItem,
   ticks: Readonly<Record<string, { done: boolean }>>,
   deleting: Readonly<Record<string, unknown>>,
+  order?: readonly string[],
 ): TodoSubitem[] {
-  const items = item.items ?? [];
+  const core = item.items ?? [];
+  let items: TodoSubitem[] = core;
+  if (order) {
+    const place = new Map(order.map((id, at) => [id, at]));
+    const sorted = [...core].sort(
+      (a, b) =>
+        (place.get(a.id) ?? order.length) - (place.get(b.id) ?? order.length),
+    );
+    if (sorted.some((each, at) => each.id !== core[at].id)) items = sorted;
+  }
   if (!items.some((each) => each.id in ticks || each.id in deleting)) {
     return items;
   }
@@ -530,6 +546,35 @@ export function todoSubitemsShown(
         ? { ...each, done: ticks[each.id].done }
         : each,
     );
+}
+
+/**
+ * What a drag dropped writes (main chat ticket 112, PRD ruling 158 point
+ * 1): `moved` goes after the item it now follows in the drawn order
+ * (`shown`, the row's items after the drop), or first when it follows
+ * none, among every item Core has (`all`, in the order Core will have
+ * them once the moves on their way land — the ones deleted on the panel
+ * and waiting under their undo toast among them, which the row does not
+ * draw). `to` is its place there, from 1, as `todo item move --to`
+ * takes it; `order` every id after the move. Null when the drawn order
+ * is the one it was (dropped back): nothing is written.
+ */
+export function todoSubitemMove(
+  all: readonly string[],
+  shown: readonly string[],
+  moved: string,
+): { to: number; order: string[] } | null {
+  if (!all.includes(moved)) return null;
+  const drawn = all.filter((id) => shown.includes(id));
+  if (drawn.every((id, at) => id === shown[at])) return null;
+  const rest = all.filter((id) => id !== moved);
+  const at = shown.indexOf(moved);
+  const after = at > 0 ? shown[at - 1] : null;
+  const into = after === null ? 0 : rest.indexOf(after) + 1;
+  if (after !== null && into === 0) return null;
+  const order = [...rest.slice(0, into), moved, ...rest.slice(into)];
+  if (order.every((id, place) => id === all[place])) return null;
+  return { to: into + 1, order };
 }
 
 /**

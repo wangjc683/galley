@@ -837,11 +837,18 @@ function YourRow({
   const subitemTicks = useAssistantTodoStore((s) => s.subitemTicks);
   const subitemDeleting = useAssistantTodoStore((s) => s.subitemDeleting);
   const subitemAdds = useAssistantTodoStore((s) => s.subitemAdds[item.id]);
+  const subitemOrder = useAssistantTodoStore((s) => s.subitemOrders[item.id]);
   const checked = held || todoChecked(item, flip);
   const parts = todoMetaParts(item, checked, todayStartMs, language, copy);
   // The items under it (ticket 111): as drawn, their count on the time
-  // line folded or open — the ones added here and on their way included.
-  const subitems = todoSubitemsShown(item, subitemTicks, subitemDeleting);
+  // line folded or open — the ones added here and on their way included,
+  // in the order a drag on its way leaves them (ticket 112).
+  const subitems = todoSubitemsShown(
+    item,
+    subitemTicks,
+    subitemDeleting,
+    subitemOrder?.ids,
+  );
   const count = todoSubitemCount(
     subitemAdds
       ? [

@@ -1,4 +1,22 @@
-import { X } from "@phosphor-icons/react";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type Modifier,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { DotsSixVertical, X } from "@phosphor-icons/react";
 import {
   useEffect,
   useLayoutEffect,
@@ -10,8 +28,11 @@ import {
 
 import { IconButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { TooltipLabel } from "@/components/ui/tooltip";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import {
   todoFailureText,
+  todoToastTitle,
   type TodoFailure,
   type TodoSubitem,
 } from "@/lib/assistant-todo";
@@ -30,6 +51,38 @@ import { todoTitleClass } from "./todo-styles";
 
 /** An item's words: 13px, as the title, wrapping, never cut. */
 const ITEM_TYPE = "text-[13px] leading-5";
+
+/** A drag keeps to the list (ticket 112): up and down only, and never
+ * past its first or last item (`containerNodeRect` is the dragged row's
+ * parent, the list). */
+const WITHIN_LIST: Modifier = ({
+  transform,
+  draggingNodeRect,
+  containerNodeRect,
+}) => {
+  const vertical = { ...transform, x: 0 };
+  if (!draggingNodeRect || !containerNodeRect) return vertical;
+  const up = containerNodeRect.top - draggingNodeRect.top;
+  const down = containerNodeRect.bottom - draggingNodeRect.bottom;
+  return { ...vertical, y: Math.min(Math.max(vertical.y, up), down) };
+};
+
+/** A pointer drag ends on a pointerup, and the click that follows lands
+ * on whatever is under it — the row's blank, which folds the row. Swallow
+ * that one click; a keyboard drag has none. */
+function swallowTheClickAfter(event: DragEndEvent["activatorEvent"]): void {
+  if (typeof KeyboardEvent !== "undefined" && event instanceof KeyboardEvent) {
+    return;
+  }
+  const swallow = (click: MouseEvent) => {
+    click.stopPropagation();
+    click.preventDefault();
+  };
+  window.addEventListener("click", swallow, { capture: true, once: true });
+  setTimeout(() => {
+    window.removeEventListener("click", swallow, { capture: true });
+  }, 0);
+}
 
 /** The box on an item's first line: `ui/checkbox.tsx`'s `sm` (14px), 3px
  * down to sit on the 20px line. */
@@ -56,6 +109,17 @@ const BOX_ON_LINE = "mt-[3px]";
  * refused one comes back into the box, opened again if it had closed.
  * `editable` off (the to-do ticked and holding its place) draws them and
  * does nothing.
+ *
+ * Since ticket 112 (PRD ruling 158) they are dragged into order: a handle
+ * on hover or focus in the column under the to-do's box (`SubitemRow`),
+ * Model settings' way (`ConfiguredModelsPanel`): 4px of travel before a
+ * pointer drag starts, Space and the arrows from the keyboard, Esc to
+ * give up; up and down only, inside the list (`WITHIN_LIST`), the others
+ * sliding aside (none under reduced motion). Dropped, the new order is
+ * drawn at once and sent (`moveSubitem`); back where it was, nothing.
+ * A refused move puts them back, the reason under the list. No handle
+ * with one item, on the ones still on their way to Core, or on one whose
+ * words are being changed.
  */
 export function TodoSubitems({
   todoId,
@@ -74,26 +138,78 @@ export function TodoSubitems({
   const refused = useAssistantTodoStore(
     (s) => s.subitemAddFailures[todoId] !== undefined,
   );
+  const moveFailure = useAssistantTodoStore(
+    (s) => s.subitemMoveFailures[todoId] ?? null,
+  );
+  const moveSubitem = useAssistantTodoStore((s) => s.moveSubitem);
+  const reduced = usePrefersReducedMotion();
   const [adding, setAdding] = useState(false);
   // An add Core refused: the box opens again to take its words back.
   if (editable && refused && !adding) setAdding(true);
+  // Pointer drags need a few px of travel so a click on the handle is
+  // never a drag; the keyboard gives the focused handle Space + arrows.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+  const [dragging, setDragging] = useState(false);
+  // While a drag is on, Esc is the drag's to give up: the panel takes Esc
+  // to fold the row, and must not fold it from under the drag.
+  useEffect(() => {
+    if (!dragging) return;
+    const claim = (event: KeyboardEvent) => {
+      if (event.key === "Escape") event.preventDefault();
+    };
+    window.addEventListener("keydown", claim, true);
+    return () => window.removeEventListener("keydown", claim, true);
+  }, [dragging]);
+  const ids = items.map((item) => item.id);
+  const canDrag = editable && items.length > 1;
+  const dropped = ({ active, over, activatorEvent }: DragEndEvent) => {
+    setDragging(false);
+    swallowTheClickAfter(activatorEvent);
+    if (!over || active.id === over.id) return;
+    const from = ids.indexOf(String(active.id));
+    const to = ids.indexOf(String(over.id));
+    if (from < 0 || to < 0) return;
+    moveSubitem(todoId, String(active.id), arrayMove(ids, from, to));
+  };
   return (
     <div data-role="todo-items" className="-mt-1 pb-1.5 pl-9 pr-2.5">
       {items.length + pending.length > 0 && (
-        <ul>
-          {items.map((item) => (
-            <SubitemRow
-              key={item.id}
-              todoId={todoId}
-              item={item}
-              editable={editable}
-            />
-          ))}
-          {pending.map((each) => (
-            <PendingRow key={each.key} item={each} />
-          ))}
-        </ul>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={[WITHIN_LIST]}
+          onDragStart={() => setDragging(true)}
+          onDragEnd={dropped}
+          onDragCancel={({ activatorEvent }) => {
+            setDragging(false);
+            swallowTheClickAfter(activatorEvent);
+          }}
+        >
+          <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+            <ul>
+              {items.map((item) => (
+                <SubitemRow
+                  key={item.id}
+                  todoId={todoId}
+                  item={item}
+                  editable={editable}
+                  canDrag={canDrag}
+                  slide={!reduced}
+                />
+              ))}
+              {pending.map((each) => (
+                <PendingRow key={each.key} item={each} />
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       )}
+      {moveFailure && <SubitemFailure kind={moveFailure} />}
       {editable &&
         (adding ? (
           <SubitemAdd todoId={todoId} onClose={() => setAdding(false)} />
@@ -162,15 +278,25 @@ interface SubitemEdit {
 }
 
 /** One item: its box, its words, the × at the end on hover or focus, and
- * under them why its last tick, change or delete failed. */
+ * under them why its last tick, change or delete failed. Since ticket 112
+ * the handle that drags it, on hover or focus, in the column under the
+ * to-do's box (its centre under that box's: the row's 10px and half the
+ * box's 16px; 8px from the item's box), the items where they were;
+ * dragged, the row is lifted (`bg-elevated`, over the others). */
 function SubitemRow({
   todoId,
   item,
   editable,
+  canDrag,
+  slide,
 }: {
   todoId: string;
   item: TodoSubitem;
   editable: boolean;
+  /** More than one item, the to-do not holding a tick. */
+  canDrag: boolean;
+  /** The others slide aside (off under reduced motion: they swap). */
+  slide: boolean;
 }) {
   const copy = useCopy();
   const toggle = useAssistantTodoStore((s) => s.toggleSubitem);
@@ -234,12 +360,57 @@ function SubitemRow({
   const editing = editable && edit?.phase === "editing" ? edit : null;
   const words = edit?.phase === "saving" ? edit.draft : item.text;
   const reason = editing?.failure ?? failure;
+  // Not while its words are being changed.
+  const draggable = canDrag && edit === null;
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: item.id,
+    disabled: !draggable,
+    ...(slide ? {} : { transition: null }),
+  });
   return (
     <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       data-todo-subitem={item.id}
       data-done={item.done ? "" : undefined}
-      className="group/subitem relative flex items-start gap-2 py-0.5 pr-6"
+      className={cn(
+        "group/subitem relative flex items-start gap-2 py-0.5 pr-6",
+        isDragging && "z-10 rounded-sm bg-elevated",
+      )}
     >
+      {draggable && (
+        // 28px from the row's 8px to the item's box, so the pointer on
+        // its way from the words to the handle never leaves the row.
+        <span className="absolute -left-7 top-0.5 flex h-5 w-7 items-center">
+          <TooltipLabel text={copy.todo.dragItem(todoToastTitle(item.text))}>
+            <button
+              ref={setActivatorNodeRef}
+              type="button"
+              data-role="todo-item-handle"
+              aria-label={copy.todo.dragItem(item.text)}
+              className={cn(
+                "flex size-5 shrink-0 touch-none items-center justify-center rounded-sm outline-none",
+                "text-ink-muted hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/30",
+                isDragging
+                  ? "cursor-grabbing opacity-100"
+                  : "cursor-grab opacity-0 focus-visible:opacity-100 group-focus-within/subitem:opacity-100 group-hover/subitem:opacity-100",
+              )}
+              {...attributes}
+              {...listeners}
+            >
+              <DotsSixVertical size={13} weight="bold" />
+            </button>
+          </TooltipLabel>
+        </span>
+      )}
       <Checkbox
         size="sm"
         checked={item.done}
@@ -430,8 +601,9 @@ function SubitemAdd({
   );
 }
 
-/** Why an item's write failed, under it: the tick's two words
- * (「没能完成，再试一次。」, 「这件事已经不在了。」). */
+/** Why an item's write failed, under it — or a move, under the list
+ * (ticket 112): the tick's two words (「没能完成，再试一次。」,
+ * 「这件事已经不在了。」). */
 function SubitemFailure({ kind }: { kind: TodoFailure }) {
   const copy = useCopy();
   return (

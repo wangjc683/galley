@@ -36,6 +36,9 @@ const store = vi.hoisted(() => ({
   subitemDeleting: {} as Record<string, unknown>,
   subitemAdds: {} as Record<string, unknown>,
   subitemAddFailures: {} as Record<string, unknown>,
+  // Their order on its way and a refused move (ticket 112): none.
+  subitemOrders: {} as Record<string, unknown>,
+  subitemMoveFailures: {} as Record<string, unknown>,
 }));
 vi.mock("@/stores/assistant-todo", () => ({
   useAssistantTodoStore: (select: (state: unknown) => unknown) =>

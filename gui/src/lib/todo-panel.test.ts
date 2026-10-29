@@ -38,6 +38,7 @@ import {
   todosByMessage,
   todoSubitemCount,
   todoSubitemLines,
+  todoSubitemMove,
   todoSubitemsShown,
   todoTitleTarget,
   todoWithoutDeleting,
@@ -1339,5 +1340,102 @@ describe("the items under a to-do", () => {
     });
     expect([...mine].sort()).toEqual(["todo_a", "todo_x", "todo_y"]);
     expect(lit(withItems(items(["订酒店", true])), mine)).toEqual([]);
+  });
+
+  // Main chat ticket 112 (PRD ruling 158 point 1): dragged into order.
+  it("lights a to-do whose items Galley moved; not one this window is moving", () => {
+    const before = list([
+      todo({
+        id: "todo_a",
+        items: items(["订酒店", false], ["订机票", false]),
+      }),
+    ]);
+    const moved = list([
+      todo({
+        id: "todo_a",
+        items: [
+          { id: "item_1", text: "订机票", done: false },
+          { id: "item_0", text: "订酒店", done: false },
+        ],
+      }),
+    ]);
+    expect(todoPanelChanges(before, moved, new Set()).flash).toEqual([
+      "todo_a",
+    ]);
+    const mine = todoWritesOnTheirWay({
+      flips: {},
+      cancelling: {},
+      deleting: {},
+      editing: {},
+      subitemOrders: { todo_a: { ids: ["item_1", "item_0"], sending: 1 } },
+    });
+    expect([...mine]).toEqual(["todo_a"]);
+    expect(todoPanelChanges(before, moved, mine).flash).toEqual([]);
+  });
+
+  it("draws them in the order a drag on its way leaves them, Galley's new one last", () => {
+    const trip = todo({
+      items: items(["订酒店", true], ["订机票", false], ["换港币", false]),
+    });
+    expect(
+      todoSubitemsShown(trip, {}, {}, ["item_2", "item_0", "item_1"]).map(
+        (each) => each.id,
+      ),
+    ).toEqual(["item_2", "item_0", "item_1"]);
+    // One Core has that the order does not name: at the end.
+    expect(
+      todoSubitemsShown(trip, {}, {}, ["item_1", "item_0"]).map(
+        (each) => each.id,
+      ),
+    ).toEqual(["item_1", "item_0", "item_2"]);
+    // With the ticks and deletions on their way too.
+    expect(
+      todoSubitemsShown(trip, { item_2: { done: true } }, { item_0: {} }, [
+        "item_2",
+        "item_0",
+        "item_1",
+      ]),
+    ).toEqual([
+      { id: "item_2", text: "换港币", done: true },
+      { id: "item_1", text: "订机票", done: false },
+    ]);
+    // Core's order already: Core's own array.
+    expect(
+      todoSubitemsShown(trip, {}, {}, ["item_0", "item_1", "item_2"]),
+    ).toBe(trip.items);
+  });
+
+  it("writes a drag as the place after the item it now follows, first when it follows none", () => {
+    const all = ["a", "b", "c", "d"];
+    // To the top, to the bottom, into the middle.
+    expect(todoSubitemMove(all, ["c", "a", "b", "d"], "c")).toEqual({
+      to: 1,
+      order: ["c", "a", "b", "d"],
+    });
+    expect(todoSubitemMove(all, ["b", "c", "d", "a"], "a")).toEqual({
+      to: 4,
+      order: ["b", "c", "d", "a"],
+    });
+    expect(todoSubitemMove(all, ["a", "d", "b", "c"], "d")).toEqual({
+      to: 2,
+      order: ["a", "d", "b", "c"],
+    });
+    // Dropped back where it was: nothing.
+    expect(todoSubitemMove(all, all, "b")).toBeNull();
+    expect(todoSubitemMove(all, ["a", "b", "c", "d"], "a")).toBeNull();
+    // One deleted here and waiting under its undo toast is still Core's:
+    // the place is counted among all of them, so once it goes the order
+    // is the one drawn.
+    expect(todoSubitemMove(all, ["a", "c", "d"], "c")).toBeNull();
+    expect(todoSubitemMove(all, ["c", "a", "d"], "a")).toEqual({
+      to: 3,
+      order: ["b", "c", "a", "d"],
+    });
+    expect(todoSubitemMove(all, ["c", "a", "d"], "c")).toEqual({
+      to: 1,
+      order: ["c", "a", "b", "d"],
+    });
+    // An id Core does not have: nothing.
+    expect(todoSubitemMove(all, ["x", "a"], "x")).toBeNull();
   });
 });
