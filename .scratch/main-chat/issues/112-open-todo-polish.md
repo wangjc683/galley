@@ -1,6 +1,6 @@
 # 112 打开一件后的两处打磨：子项能拖动排序；排版拉开层级，备注里的路径能点
 
-Status: ready-for-agent（2026-10-29 JC 看过「文字稿」：「没问题，开始做」）
+Status: needs-dogfood（2026-10-29 18:24 快进合入 `34ed9d09`…`7f329b3e`（基点 `586a9c04`），合入前 `busy:0`；touch `core/src/assistant_manual.rs`，重编 CLI sidecar 并替换 `core/target/debug/galley`，核过：18:25:30 编出的 `galley-core` 与在跑进程同一 inode、二进制里有「never move one they did not ask you to」。主会话验收：门禁复跑全过（cargo 1282/0，gui 2608 本机与 `TZ=UTC`，typecheck、lint、文档链接、`git diff --check`）；`main..HEAD` 扫过接口主机、服务商名、密钥 0 处，`/Users/jc/…` 10 处是测试里的虚构路径（仓库已有 47 处同写法）；`gui/src/lib/caret-point.ts` 票面没点名，看过：备注分段画、路径只画文件名后，点备注进入修改要把点的位置换回原文位置，原函数行为不变。评测：`items-move-first`、`items-move-news`、`review-done-not-noted` 各 3/3（后者路径三遍都在反引号里），`review-user-news-on-top` 2/3（判定的否定词表认不出「不要只重做」，误判），`progress-review-done` 0/3、main 旧手册对照 1/3（不是本票带来的，反引号在这条上没测到），回归 52/57 同上次，`tick-soil` 过变不过（话只写在 `<summary>` 里）。代理报告没验证到的：真窗口鼠标拖动与松手吞点击（jsdom 无 PointerEvent，只测了键盘与队列）、减少动态下不滑、点文件换掉待办面板与回来时那件收起、实际视觉；文件引用旁 20px 的文件夹按钮会把 16.8px 那一行撑高一点。上一轮 Status：ready-for-agent（2026-10-29 JC 看过「文字稿」：「没问题，开始做」））
 
 来源：[主聊天 PRD](../PRD.md) 裁决 158（2026-10-29，JC：「按你的建议推进」）。第 1 点拖动排序选甲，第 2 点排版选乙。Core、桌面命令、CLI 与 Agent API（`schemaVersion 3` 内加法）、手册与评测、GUI、设计文档。不加迁移（次序已有 `todo_subitems.position`）。只在内置运行时；外置运行时没有主对话与待办，零变化。
 
