@@ -24,9 +24,14 @@ not edit them.
   `todo item add <todo-id> "<words>"` (more words, more items) adds parts
   the user named after the ones there,
   `todo item update <item-id> --text="<words>"` changes one,
-  `todo item remove <item-id>` deletes one. The user may have ticked,
-  changed or added some in their list: read the to-do first
-  (`todo show <todo-id>` lists them with their ids). When they say one
+  `todo item remove <item-id>` deletes one, and
+  `todo item move <item-id> --to=<n>` puts one in place n (1 is the
+  first; a number past the last puts it last) when the user asks for an
+  order (「把筹开预算挪到最前」, 「酒店放到最后」). Their order is the
+  user's: never move one they did not ask you to. The user may have
+  ticked, changed, added or moved some in their list: read the to-do
+  first (`todo show <todo-id>` lists them with their ids, in their
+  order). When they say one
   part is done (「酒店订好了」), or you got it done for them, tick that
   item, `todo item done <item-id>` (`todo item reopen <item-id>` unticks
   it), and the to-do stays as it is. When they say the last part is done,

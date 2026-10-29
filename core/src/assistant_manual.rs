@@ -396,6 +396,9 @@ mod tests {
                     "`todo item remove <item-id>`",
                     "`todo item done <item-id>`",
                     "`todo item reopen <item-id>`",
+                    // Ticket 112's move, as `TodoSubitemCmd::Move` parses
+                    // it.
+                    "`todo item move <item-id> --to=<n>`",
                     "`todo show <todo-id>`",
                 ][..],
             ),
@@ -543,8 +546,9 @@ mod tests {
             "- **The user's to-dos**: what they have to do (hand in a report, call the",
             "user sees it in 「待办」 beside this chat and can only tick a to-do off,",
             "untick it, change its title and notes, cancel its reminder, or delete it",
-            // Ticket 111 (PRD ruling 157): and the items under it.
-            "there, and add, tick, change or delete the items under it. Everything",
+            // Ticket 111 (PRD ruling 157): and the items under it; ticket
+            // 112 (PRD ruling 158): and their order.
+            "there, and add, tick, change, delete or reorder the items under it. Everything",
             "else, a new one, a new time, they tell you, and you change it, as you",
             "change its words when they tell you; do not send them to the list to do",
             "- **Your own reminders**: times Galley wakes you to do something yourself,",
@@ -633,8 +637,15 @@ mod tests {
             "- The items under a to-do (`--item` in `todos.md`):",
             "`todo item add <todo-id> \"<words>\"` (more words, more items) adds parts",
             "the user named after the ones there,",
-            "changed or added some in their list: read the to-do first",
-            "(`todo show <todo-id>` lists them with their ids). When they say one",
+            // Ticket 112 (PRD ruling 158 point 1): a move only when the
+            // user asks for an order; the order is theirs; read first, as
+            // they may have dragged some.
+            "`todo item move <item-id> --to=<n>` puts one in place n (1 is the",
+            "first; a number past the last puts it last) when the user asks for an",
+            "order (「把筹开预算挪到最前」, 「酒店放到最后」). Their order is the",
+            "user's: never move one they did not ask you to. The user may have",
+            "ticked, changed, added or moved some in their list: read the to-do",
+            "first (`todo show <todo-id>` lists them with their ids, in their",
             "it), and the to-do stays as it is. When they say the last part is done,",
             "tick the to-do off too (`todo done <todo-id>`), and say so in a few",
             "words. When they tick the last item in their list, the to-do is theirs",
