@@ -1,6 +1,6 @@
 # 111 待办下面的子项：一层，只有字和方框，你和 Galley 都能加、能勾
 
-Status: needs-info（2026-10-29 等 JC 看下面的「文字稿」，看过改 ready-for-agent 再派）
+Status: ready-for-agent（2026-10-29 JC 看过「文字稿」：「没问题，开始做」）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 157（2026-10-29，JC：「按你推荐推进，先出文字稿」）。迁移、Core、桌面命令、CLI 与 Agent API（`schemaVersion 3` 内加法）、In Hand、手册与评测、GUI、设计文档。只在内置运行时；外置运行时没有主对话与待办，IM 渠道的 agent 不读待办，零变化。
 
@@ -87,3 +87,59 @@ Status: needs-info（2026-10-29 等 JC 看下面的「文字稿」，看过改 r
 - 手册：`docs/managed-ga-runtime/galley-assistant-manual/todos.md`（记下）、`todos-change.md`（勾、进展）。dev 里改了手册要 touch `core/src/assistant_manual.rs`。
 - 评测：`.scratch/main-chat/entry-layer-eval/todo/`。
 - 设计文档：`docs/design/conversation.md`「待办面板」里的「打开一件」「三行三档墨」「勾掉与取消勾」「它动过的行亮一下」「动作只有这几个」。
+
+## 要做
+
+1. **迁移 054 与 Core**：子项存成结构（单独一张表或待办上的一列，你定，回报里写理由）：字、勾没勾（时刻与谁勾的，照 `todos` 的 `done_at` / `done_via` 写法）、次序、记下的时刻。删待办、重置主对话时子项跟着走。子项的增删改勾都更新所属待办的 `updated_at`。面板与 `todo show` 读到子项；`TodoItem` 带上子项（或计数加子项，你定）。补六处手写迁移列表。
+2. **桌面命令**：GUI 要的加、勾、取消勾、改字、删（删照删待办的 5 秒撤销：GUI 先藏、5 秒后才调）。
+3. **CLI 与 Agent API**：见文字稿「CLI」那条，`schemaVersion 3` 内加法，`--schema=1`、`2` 是否也认照 `todo` 现有命令；`docs/agent-api/todo-commands.md` 同步（`Todo` 对象加字段、新命令各一节、错误码照现有的）。
+4. **In Hand**：`in_hand_todo_line` 加计数那一个事实，守住预算测试。
+5. **手册**：`todos.md`、`todos-change.md` 按文字稿「Galley 那一边」写；照现有手册的英文写法，例句用中文。
+6. **GUI**：照文字稿做收起的计数、打开后的子项、勾、加、改、删、亮行；文案进 `zh.ts` 与 `en.ts`（英文计数写法你定，回报里列出）。
+7. **评测**（真模型）：在 `.scratch/main-chat/entry-layer-eval/todo/` 加用例，模型写死 `mm_1792576875658`（gpt-6.1-sol，API key 接入；`meta` 写明模型 id），每条跑 3 遍：
+   1. 「下周三去上海出差，走之前要订酒店、订机票、换点港币」：一件带三项，截止在周三之前；不拆成三件待办。
+   2. 「周三交报告，周五交周报」：两件待办，不是一件带两项。
+   3. 「周五前交季度报告」：一件，没有子项（不替它拆写、改、交）。
+   4. 一件带三项的待办在清单上，用户说「酒店订好了」：只勾那一项，这件不勾。
+   5. 同一件，另两项已勾，用户说「港币也换好了」：勾那一项，并勾掉这件，说一句。
+   6. 希尔顿那种（备注里有两行进展与「收集要点：……」那一行，没有子项），用户说「业主说筹开预算下周给」：备注最前面补一行进展，不建子项、不勾。
+   7. 同一件，用户说「把希尔顿那几条收集要点拆成子项」：建 5 项，备注里「收集要点」那一行拿掉，两行进展一字不差留着。
+   旧的 `todo` 用例与票 108、110 的用例各重跑一遍看有没有回退。判定写进结果文件：该做的、实际做的、过没过。
+8. **设计文档**：`docs/design/conversation.md`「待办面板」里补子项（收起的计数、打开一件、勾、加、改、删、亮行、卡片不变），照周围写法写理由与没选的；「打开后的那一块是它将来的位置」那句改成现在的样子。
+
+## 别动
+
+- 主工作树：只在你的 worktree 里做，不碰主树，不跑 `tauri dev`。
+- runner、`managed-ga/`、入口层提示词里待办以外的部分；不升 `schemaVersion`；「已完成」「Galley 在办」「例行」的行；回复下的卡片。改「要做」以外的东西先停下来问。
+- 不加叫醒、不加后台调用（裁决 49、154 第 5 条）。
+- `core/` 不是 rustfmt-clean，只用 `rustfmt --check` 核对自己动过的文件；`gui/` 不是 prettier-clean，旧文件只格式化自己的 hunk，新文件可整篇。
+- 跑评测用 `PYTHONDONTWRITEBYTECODE=1`，`managed-ga/code/` 下不许出现 `__pycache__`；结果里不写服务商名、接口地址、本机路径（`/Users/…`、临时目录），提交前对整个分支全量扫一遍。
+- 注释与提交说明照周围写法；提交只点名文件，`git add <文件…> && git commit …`，禁用 `git add -A` / `git commit -a`；提交说明英文，结尾 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`。不 push、不合入 main。
+- 中文全角标点：手册例句、设计文档、文案、结果文件新增的中文行，自写正则扫，脚本放 scratchpad、文件名带 `t111-` 前缀。
+
+## 验证
+
+- `cargo test --manifest-path core/Cargo.toml --workspace`（新迁移、子项读写、删待办连带、`updated_at` 跟着动、In Hand 预算、CLI 集成测试）。
+- `pnpm --dir gui typecheck`、`pnpm --dir gui lint`、`pnpm --dir gui test`（本机与 `TZ=UTC` 各一遍）；新 vitest 覆盖计数文字、勾不停留、加一项连续输入与粘贴多行、删的撤销、它动了子项那一行亮。
+- `node scripts/check-docs-links.mjs`、`git diff --check`。
+- 评测见「要做」第 7 条。
+
+## 回报格式
+
+1. 提交列表（`git log --oneline main..HEAD` 原样）。
+2. 存储怎么定的、为什么；迁移原文。
+3. CLI 命令与 JSON 的最终样子；Agent API 文档改了哪几节。
+4. 手册的最终原文（新增与改动的段落）。
+5. GUI 要点：组件、store 的在途写怎么算、英文文案。
+6. 评测：每条过了几遍，没过的原文摘录；回归有没有掉；花了多少次真调用。
+7. 验证命令与结果原样。
+8. 票面没写到、你自己定的边界；看到但没改的问题；没验证到的（逐条）。
+
+## 给 JC 的真机步骤
+
+合入前主会话看 `busy:0`；合入后 touch `core/src/assistant_manual.rs`、重编 CLI sidecar 并替换 `core/target/debug/galley`（`tauri dev` 不重编 CLI），核二进制与进程。
+
+1. 跟 Galley 说「把希尔顿那几条收集要点拆成子项」：面板里希尔顿收起时写「0/5 项」；打开看到 5 项；备注里「收集要点」那一行没了，两行进展还在。
+2. 在面板里勾一项、再取消勾；加一项，回车后接着再加一项；改一项的字；删一项，再点撤销。
+3. 跟 Galley 说「品牌和管理模式确认了」：那一项勾上，这件不动，计数跟着变。
+4. 看收起时计数的位置与样子、打开后子项的大小与墨色（文字稿里主会话替你定的几处视觉）。
