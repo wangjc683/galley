@@ -66,9 +66,11 @@
 //! can. Coming due, it first looks without the model ([`fire_review`]),
 //! and wakes only for what has no alarm of its own (ticket 81): a to-do of
 //! the user's with no date or due within three days, or a subtask not
-//! finished; or, since ticket 95, for a memo noted or changed since the
-//! last review's day, in a turn the user started; with none it wakes
-//! nobody. Its wake travels as a reminder's, with words of its own
+//! finished — since ticket 110, only those that moved since the last
+//! review (noted or changed, newly within the three days, with activity);
+//! or, since ticket 95, for a memo noted or changed since the last
+//! review's day, in a turn the user started; with none it wakes nobody.
+//! Its wake travels as a reminder's, with words of its own
 //! (`crate::subtask_report`), and one that cannot be delivered is dropped,
 //! never handed to a notification (its words are for the model). The user
 //! stops it by asking the main chat, which pauses it; Galley never makes
@@ -440,14 +442,19 @@ pub enum ReviewFire {
 /// [`crate::assistant_todo::REVIEW_LOOKAHEAD_DAYS`] days of today (overdue
 /// ones included), or a subtask not finished. A to-do due later, Galley's
 /// own one-off tasks (each goes off at its time by itself) and routines
-/// (the review is one) do not. Ticket 95 (main chat PRD ruling 143): nor
-/// does it skip while a memo was noted or changed in a turn the user
-/// started, since the day of the review before this one
-/// ([`MemoReviewWindow`], read off `task.last_fired_at` as it stood
-/// before this fire, in this machine's zone); the window is kept for the
-/// wake to name them ([`REVIEW_MEMO_WINDOW_PREF`]). With nothing to look
-/// at, the fire is stamped skipped — the period consumed, so it does not
-/// come due again today, and no wake
+/// (the review is one) do not. Ticket 110 (main chat PRD ruling 155): of
+/// those, only what moved since the review before this one
+/// ([`LastReview`], read off `task.last_fired_at` as it stood before this
+/// fire, in this machine's zone: woken, skipped or run by hand) — a to-do
+/// noted or changed since, one whose due date came within the days only
+/// now, a subtask with activity since; never come due, as before. Ticket
+/// 95 (main chat PRD ruling 143): nor does it skip while a memo was noted
+/// or changed in a turn the user started, since the day of the review
+/// before this one ([`MemoReviewWindow`], off the same `last_fired_at`);
+/// the window is kept for the wake to name them
+/// ([`REVIEW_MEMO_WINDOW_PREF`]). With nothing to look at, the fire is
+/// stamped skipped — the period consumed, so it does not come due again
+/// today, and no wake
 /// ([`SqliteGalley::mark_scheduled_wake_skipped`]);
 /// otherwise it fires like a reminder ([`fire_reminder`]) and the wake
 /// pipeline takes it from there, and the review goes over everything in
@@ -456,6 +463,7 @@ pub enum ReviewFire {
 /// computer asleep at its time) comes through here too.
 ///
 /// [`AssistantTodo::review_has_something_to_look_at`]: crate::assistant_todo::AssistantTodo::review_has_something_to_look_at
+/// [`LastReview`]: crate::assistant_todo::LastReview
 pub async fn fire_review<Tz: TimeZone>(
     galley: &SqliteGalley,
     runners: &RunnerManager,
@@ -468,10 +476,12 @@ pub async fn fire_review<Tz: TimeZone>(
     let planned = instant_to_utc_iso(due_at);
     let at = now.with_timezone(&Utc);
     // Today in the zone the list reads its due dates in: `assistant_todo`
-    // builds it in this machine's.
+    // builds it in this machine's. Ticket 110: the review before this one,
+    // read there too.
     let today = at.with_timezone(&Local).date_naive();
+    let last = crate::assistant_todo::LastReview::read(task.last_fired_at.as_deref(), &Local);
     let todo_says = match crate::assistant_todo::assistant_todo(galley, runners, at).await {
-        Ok(todo) => todo.review_has_something_to_look_at(today),
+        Ok(todo) => todo.review_has_something_to_look_at(today, last),
         Err(e) => {
             eprintln!(
                 "[scheduler] review {}: reading the to-do list failed, waking it: {e:?}",
@@ -516,13 +526,25 @@ pub async fn fire_review<Tz: TimeZone>(
         .await
     {
         Ok(_) => {
-            eprintln!(
-                "[scheduler] review {}: nothing to look at (no to-do any time or due within \
-                 {} days, no unfinished subtask, no new memo since {}), skipped",
-                task.id,
-                crate::assistant_todo::REVIEW_LOOKAHEAD_DAYS,
-                window.since
-            );
+            match &task.last_fired_at {
+                // Ticket 110: what moved since the review before this one.
+                Some(before) if last.is_some() => eprintln!(
+                    "[scheduler] review {}: nothing to look at since the last review at {} (no \
+                     to-do noted or changed, none newly due within {} days, no unfinished \
+                     subtask with activity, no new memo since {}), skipped",
+                    task.id,
+                    before,
+                    crate::assistant_todo::REVIEW_LOOKAHEAD_DAYS,
+                    window.since
+                ),
+                _ => eprintln!(
+                    "[scheduler] review {}: nothing to look at (no to-do any time or due within \
+                     {} days, no unfinished subtask, no new memo since {}), skipped",
+                    task.id,
+                    crate::assistant_todo::REVIEW_LOOKAHEAD_DAYS,
+                    window.since
+                ),
+            }
             notify(notifier, SCHEDULED_TASKS_CHANGED_EVENT, &());
             log_review(
                 galley,

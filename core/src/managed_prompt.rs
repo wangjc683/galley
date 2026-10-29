@@ -1914,6 +1914,7 @@ mod tests {
             reminder: None,
             done_by: None,
             created_at: None,
+            updated_at: None,
             cancelled_at: None,
         }
     }

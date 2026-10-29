@@ -12,7 +12,9 @@ to-dos it noted with no date, what was cancelled of what it set and by
 whom (ticket 61's cancel columns), and the morning review: how often it
 came due, was skipped (nothing to look at: since ticket 81 it wakes only
 for a to-do with no date or due within three days, or a subtask not
-finished; since ticket 95 also for a memo noted or changed since the last
+finished, and since ticket 110 only for those that moved since the last
+review: noted or changed, newly within the three days, with activity;
+since ticket 95 also for a memo noted or changed since the last
 review's day in a turn the user started), woke the main chat, spoke (a
 reply that is not only
 <no-reply/>), and how many subtasks those turns started.

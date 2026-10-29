@@ -335,7 +335,15 @@ ruling 9; `core/src/scheduler.rs`, `core/src/subtask_report.rs`, migration
   `review_has_something_to_look_at`): a to-do of the user's with no due
   date, or due on or before today plus `REVIEW_LOOKAHEAD_DAYS` (3) in this
   machine's zone, overdue ones and ones with a reminder included; or a
-  subtask not finished; or (main chat ticket 95, PRD ruling 143) a memo
+  subtask not finished. Since main chat ticket 110 (PRD ruling 155) only
+  those that moved since the review before (`last_fired_at`, woken,
+  skipped or run by hand; `LastReview`): a to-do noted or changed at or
+  after it (`todos.updated_at`, read into the list's item but not
+  serialized), one whose due date came within the three days only now
+  (after that review's local day plus three, by today's), a subtask not
+  finished with activity since (`sessions.last_activity_at`); never come
+  due, as before. What did not move, an any-time or overdue one included,
+  does not wake it; or (main chat ticket 95, PRD ruling 143) a memo
   noted or changed since the day the review last came due, in a turn the
   user started (`MemoReviewWindow`: from that day's local midnight, woken
   or skipped, or yesterday's when it never came due, to today's, today out;
@@ -350,7 +358,9 @@ ruling 9; `core/src/scheduler.rs`, `core/src/subtask_report.rs`, migration
   The window is kept with the fire in the `assistant_review_memo_window`
   pref, so a wake written after a restart names the same ones; a run by
   hand (`schedule run`) names the memos of its own window, which is empty
-  when the review already came due that day. A review wake that cannot be
+  when the review already came due that day. A run by hand takes no look
+  (it always wakes) but stamps `last_fired_at` like any fire, so what moved
+  before it no longer wakes the next coming due (ticket 110). A review wake that cannot be
   delivered is dropped (`last_wake` NULL), never notified: its words are for
   the model. Its fires stay out of the to-do list's 已完成. The user stops
   it by asking the main chat, which pauses it (`schedule disable`). Each

@@ -1556,7 +1556,7 @@ async fn with_nothing_to_look_at_the_review_wakes_nobody() {
     // were; only the review does not wake for them.
     assert_eq!(todo.yours.later.len(), 2);
     assert_eq!(todo.assistant.len(), 2);
-    assert!(!todo.review_has_something_to_look_at(Local::now().date_naive()));
+    assert!(!todo.review_has_something_to_look_at(Local::now().date_naive(), None));
 }
 
 #[tokio::test]
@@ -2162,5 +2162,225 @@ async fn run_by_hand_the_review_names_its_own_window_and_again_today_none() {
     assert_eq!(
         fire_review_now(&galley, &rec, review.id.as_str()).await,
         ReviewFire::Skipped
+    );
+}
+
+// ---------------- only what moved since the last review (ticket 110) ----------------
+
+use galley_core_lib::api::{CreateTodoInput, TodoBrief, TodoPatch};
+
+/// The Hilton to-do's notes as Galley noted them.
+const HILTON_NOTES: &str = "收集要点：项目地址与业主方；品牌定位与客房数量";
+
+/// A to-do of the user's the assistant noted, due `due` (`None`: any
+/// time), as if noted at `noted` and last changed at `changed`.
+async fn todo_at(
+    galley: &SqliteGalley,
+    pool: &SqlitePool,
+    title: &str,
+    due: Option<String>,
+    noted: DateTime<Local>,
+    changed: DateTime<Local>,
+) -> TodoBrief {
+    let todo = galley
+        .create_todo(
+            CreateTodoInput {
+                title: title.into(),
+                notes: Some(HILTON_NOTES.into()),
+                due,
+                remind_at: None,
+            },
+            assistant(),
+            None,
+        )
+        .await
+        .expect("to-do");
+    sqlx::query("UPDATE todos SET created_at = ?, updated_at = ? WHERE id = ?")
+        .bind(instant_to_utc_iso(&noted))
+        .bind(instant_to_utc_iso(&changed))
+        .bind(todo.id.as_str())
+        .execute(pool)
+        .await
+        .expect("when");
+    todo
+}
+
+#[tokio::test]
+async fn the_review_wakes_only_for_what_moved_since_the_last_one() {
+    let (pool, galley) = with_main_chat().await;
+    let rec = Recorder::default();
+    let review = ensure_review(&galley, &rec).await.expect("made");
+    // The Hilton to-do, no date: noted three days ago; the review the day
+    // before yesterday got something done for it and added a line on top
+    // of its notes at 9:05. An overdue one and one due in two days, noted
+    // a week ago.
+    let hilton = todo_at(
+        &galley,
+        &pool,
+        "希尔顿酒店项目上下文资料收集",
+        None,
+        local_at(-3, 17),
+        local_at(-2, 9) + ChronoDuration::minutes(5),
+    )
+    .await;
+    for (title, due) in [("交季度报告", -1), ("续签合同", 2)] {
+        todo_at(
+            &galley,
+            &pool,
+            title,
+            Some(day_from_today(due)),
+            local_at(-7, 10),
+            local_at(-7, 10),
+        )
+        .await;
+    }
+    // Measured from the review that added it, the line is a change since:
+    // the morning after it adds one, the review wakes once more (ruling
+    // 155 point 3's cost ②; the manual has it leave the thing alone)...
+    last_review(&pool, review.id.as_str(), Some(local_at(-2, 9))).await;
+    assert_eq!(
+        fire_review_now(&galley, &rec, review.id.as_str()).await,
+        ReviewFire::Woke
+    );
+    // ...and measured from yesterday's, nothing moved: it wakes nobody.
+    // What was handed over waits for the user; the overdue one and the
+    // one yesterday's three days already reached do not wake it either.
+    last_review(&pool, review.id.as_str(), Some(local_at(-1, 9))).await;
+    assert_eq!(
+        fire_review_now(&galley, &rec, review.id.as_str()).await,
+        ReviewFire::Skipped
+    );
+    assert_eq!(
+        review_log(&galley).await.last().unwrap()["event"],
+        "skipped"
+    );
+    let task = galley.scheduled_task(review.id.as_str()).await.unwrap();
+    assert_eq!(task.last_wake, None, "no wake");
+    // The skip is a review too: again right after it, still nothing.
+    assert_eq!(
+        fire_review_now(&galley, &rec, review.id.as_str()).await,
+        ReviewFire::Skipped
+    );
+
+    // The user's news of it (「业主说下周给项目地址」, a line on top of its
+    // notes): changed since, so the next one wakes.
+    galley
+        .update_todo(
+            &hilton.id,
+            TodoPatch {
+                notes: Some(Some(format!(
+                    "10月29日：业主说下周给项目地址\n{HILTON_NOTES}"
+                ))),
+                ..TodoPatch::default()
+            },
+            assistant(),
+        )
+        .await
+        .expect("news");
+    assert_eq!(
+        fire_review_now(&galley, &rec, review.id.as_str()).await,
+        ReviewFire::Woke
+    );
+    assert_eq!(review_log(&galley).await.last().unwrap()["event"], "woke");
+}
+
+#[tokio::test]
+async fn the_review_wakes_for_what_is_new_or_newly_near_and_memos_as_before() {
+    // (what there is, when the review last came due) → wakes.
+    let noted = || local_at(-7, 10);
+    for (case, due, made, last, wakes) in [
+        ("never came due: as before", None, noted(), None, true),
+        (
+            "noted since",
+            None,
+            local_at(-1, 20),
+            Some(local_at(-1, 9)),
+            true,
+        ),
+        ("noted before", None, noted(), Some(local_at(-1, 9)), false),
+        (
+            "three days on, not yesterday's",
+            Some(3),
+            noted(),
+            Some(local_at(-1, 9)),
+            true,
+        ),
+        (
+            "two days on, yesterday's three",
+            Some(2),
+            noted(),
+            Some(local_at(-1, 9)),
+            false,
+        ),
+        (
+            "overdue, not moved",
+            Some(-1),
+            noted(),
+            Some(local_at(-1, 9)),
+            false,
+        ),
+        (
+            "a day skipped: two days on is new",
+            Some(2),
+            noted(),
+            Some(local_at(-2, 9)),
+            true,
+        ),
+        (
+            "came due today already",
+            Some(3),
+            noted(),
+            Some(local_at(0, 0)),
+            false,
+        ),
+    ] {
+        let (pool, galley) = with_main_chat().await;
+        let rec = Recorder::default();
+        let review = ensure_review(&galley, &rec).await.expect("made");
+        last_review(&pool, review.id.as_str(), last).await;
+        todo_at(
+            &galley,
+            &pool,
+            "交季度报告",
+            due.map(day_from_today),
+            made,
+            made,
+        )
+        .await;
+        let want = if wakes {
+            ReviewFire::Woke
+        } else {
+            ReviewFire::Skipped
+        };
+        assert_eq!(
+            fire_review_now(&galley, &rec, review.id.as_str()).await,
+            want,
+            "{case}"
+        );
+    }
+    // A memo new since the last review wakes it by itself, beside what
+    // did not move (ticket 95, as before).
+    let (pool, galley) = with_main_chat().await;
+    let rec = Recorder::default();
+    let review = ensure_review(&galley, &rec).await.expect("made");
+    last_review(&pool, review.id.as_str(), Some(local_at(-1, 9))).await;
+    todo_at(
+        &galley,
+        &pool,
+        "希尔顿酒店项目上下文资料收集",
+        None,
+        noted(),
+        noted(),
+    )
+    .await;
+    assert_eq!(
+        fire_review_now(&galley, &rec, review.id.as_str()).await,
+        ReviewFire::Skipped
+    );
+    last_review(&pool, review.id.as_str(), Some(local_at(-1, 9))).await;
+    memo_noted(&galley, &pool, "想学吉他", local_at(-1, 21)).await;
+    assert_eq!(
+        fire_review_now(&galley, &rec, review.id.as_str()).await,
+        ReviewFire::Woke
     );
 }
