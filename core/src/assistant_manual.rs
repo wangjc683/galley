@@ -533,6 +533,9 @@ mod tests {
     fn manual_covers_the_users_to_dos() {
         let todos = part("todos.md");
         assert!(todos.contains("### Noting a to-do"));
+        // Ticket 111 point 12: the sentence that sent its own thinking into
+        // items is gone.
+        assert!(!todos.contains("they go in as items"));
         for rule in [
             // Two lists; the user's only controls on theirs (deleting one
             // since main chat ticket 88, PRD ruling 132; its title and
@@ -578,19 +581,20 @@ mod tests {
             // Ticket 108: what comes of it later goes on top, by the rule
             // in todos-change.md.
             "What you get done for it later, and news of it, go on top of its notes",
-            // Ticket 111 (PRD ruling 157): items for parts that share the
-            // to-do's time and are done together; not parts with times of
-            // their own, nor steps; its own thinking through goes into
-            // items, not the notes; the rest in todos-change.md.
-            "- `--item=\"<words>\"`, once for each part, when the thing is made of a few",
-            "separate parts that share its due date and are done only together",
-            "items): each item is words and a box, with no time of its own, and the",
-            "user ticks them in their list. Parts that each have their own time are",
-            "separate to-dos (「周三交报告，周五交周报」: two), and the steps of doing",
-            "one thing (write, revise, hand in) are not items: 「周五前交季度报告」 is",
-            "one to-do with none. When you think a to-do through on your own and set",
-            "out the parts it takes, they go in as items, not as a list in its notes.",
-            "Ticking and changing them is in `todos-change.md`.",
+            // Ticket 111 (PRD ruling 157): items for parts the user named
+            // that share the to-do's time and are done together; not parts
+            // with times of their own, nor steps; point 12: items come only
+            // from the user, what it thinks of on its own goes into the
+            // notes; the rest in todos-change.md.
+            "- `--item=\"<words>\"`, once for each part the user named, when the thing is",
+            "made of a few separate parts that share its due date and are done only",
+            "own, and the user ticks them in their list. Parts that each have their",
+            "own time are separate to-dos (「周三交报告，周五交周报」: two), and the",
+            "steps of doing one thing (write, revise, hand in) are not items:",
+            "「周五前交季度报告」 is one to-do with none. Items come only from the",
+            "user: the parts they named, or a list they asked you to make items of.",
+            "What you think of for a to-do on your own (what to check, what to bring)",
+            "goes into its notes, never into items. Ticking and changing them is in",
             "- A to-do's reminder is set, moved and removed only with `todo add` and",
             "commands: a reminder made with `schedule create` is not on the to-do.",
             // Say it.
@@ -627,7 +631,9 @@ mod tests {
             // a line in the notes, not a tick; a list in the notes made
             // items leaves the notes.
             "- The items under a to-do (`--item` in `todos.md`):",
-            "ticked, changed or added some in their list: read the to-do first",
+            "`todo item add <todo-id> \"<words>\"` (more words, more items) adds parts",
+            "the user named after the ones there,",
+            "changed or added some in their list: read the to-do first",
             "(`todo show <todo-id>` lists them with their ids). When they say one",
             "it), and the to-do stays as it is. When they say the last part is done,",
             "tick the to-do off too (`todo done <todo-id>`), and say so in a few",

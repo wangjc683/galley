@@ -21,10 +21,11 @@ not edit them.
   step: one line for what came of it. When the news moves the time, move
   the due date and the reminder too.
 - The items under a to-do (`--item` in `todos.md`):
-  `todo item add <todo-id> "<words>"` (more words, more items) adds them
-  after the ones there, `todo item update <item-id> --text="<words>"`
-  changes one, `todo item remove <item-id>` deletes one. The user may have
-  ticked, changed or added some in their list: read the to-do first
+  `todo item add <todo-id> "<words>"` (more words, more items) adds parts
+  the user named after the ones there,
+  `todo item update <item-id> --text="<words>"` changes one,
+  `todo item remove <item-id>` deletes one. The user may have ticked,
+  changed or added some in their list: read the to-do first
   (`todo show <todo-id>` lists them with their ids). When they say one
   part is done (「酒店订好了」), or you got it done for them, tick that
   item, `todo item done <item-id>` (`todo item reopen <item-id>` unticks
