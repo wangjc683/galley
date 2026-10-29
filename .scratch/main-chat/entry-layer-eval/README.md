@@ -655,7 +655,7 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases review-hande
 
 ## 待办下面的子项（票 111）
 
-主聊天 PRD 裁决 157：一件待办下面可以有一层子项，每项只有字和方框，不带时间；用户与 Galley 都能加、能勾；全勾完不自动勾掉这件。Core 加了 `todo_subitems` 表与 `galley todo add --item`、`todo item add / done / reopen / update / remove`（`schemaVersion 3` 内加法），`todo show` 带 `items` 与 `itemCount`，`todo list` 只带 `itemCount`，「In Hand」那一行末尾多一个事实「N of M items done」。手册 `todos.md` 加 `--item` 一条（几样分开的东西共用一个截止、合起来才算办完才记成子项；各有时间的分开记，做一件事的步骤不拆；它自己替一件事展开时拆出的几样写成子项，不写进备注），`todos-change.md` 加子项一条（命令；先 `todo show`；用户说某一样办好了只勾那一项、这件不动；说最后一样办完连这件一起勾、说一句；用户在面板里勾完最后一项它不替用户勾；新消息不是勾；把备注里的清单拆成子项时那一串从备注拿掉、其余一字不差）。入口层、`galley-prompt/` 没动。待办套件加 7 条，`run.py --suite todo`。
+主聊天 PRD 裁决 157：一件待办下面可以有一层子项，每项只有字和方框，不带时间；用户与 Galley 都能加、能勾；全勾完不自动勾掉这件。Core 加了 `todo_subitems` 表与 `galley todo add --item`、`todo item add / done / reopen / update / remove`（`schemaVersion 3` 内加法），`todo show` 带 `items` 与 `itemCount`，`todo list` 只带 `itemCount`，「In Hand」那一行末尾多一个事实「N of M items done」。手册 `todos.md` 加 `--item` 一条（几样分开的东西共用一个截止、合起来才算办完才记成子项；各有时间的分开记，做一件事的步骤不拆；第一轮时还有一句「它自己替一件事展开时拆出的几样写成子项，不写进备注」，第二轮按裁决 157 第 12 条改成子项只来自用户、它自己想到的写进备注，见下「第二轮」），`todos-change.md` 加子项一条（命令；先 `todo show`；用户说某一样办好了只勾那一项、这件不动；说最后一样办完连这件一起勾、说一句；用户在面板里勾完最后一项它不替用户勾；新消息不是勾；把备注里的清单拆成子项时那一串从备注拿掉、其余一字不差）。入口层、`galley-prompt/` 没动。待办套件加 7 条，`run.py --suite todo`。
 
 - **跟着换的输入**：手册（`run.py` 直接读仓库里的那份）；`schedule/cli-help.json` 里 `todo`、`todo list`、`todo show`、`todo add` 四条重抓、加 `todo item` 与它的五个子命令（开发版 `galley` 二进制、假 HOME，只跑 `--help`）；`schedule/rust-samples.json` 的 `in_hand` 加一条 `items`（Rust 的 `in_hand_section` 写出的原文：一件逾期的、一件带提醒的、一件没日子的各带子项，一件不带；用一个临时测试写出，跑完删掉，`core/` 没有留下改动）。
 - **用例**（组名「待办下面的子项（票 111）」，`todo/cases.json` 第 54–60 条，每条 3 遍）：
@@ -708,9 +708,38 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases <第 1–53 
   - `review-look-again-later` 过 → 不过（停在浏览器工具）：它想用浏览器标签页打开本地的签证查询页，沙盒里不执行，运行停在那里；票 110 第二轮这条也补跑过一次（撞上工具调用上限）。没碰子项。
   - `supplier-quote` 不过 → 过。
   - 其余 47 条与上一次判定相同。请求次数 3.89 → 3.70，读手册字节 12859 → 15456（`todos.md`、`todos-change.md` 各长了一段）。
-- **注出来、没判的**：记下待办的 17 遍里有 4 遍自己给待办加了子项：`lease-expiry`「处理办公室租约到期事宜」（☐核对续租或退租通知期限与自动续租条款、☐确定续租或搬迁安排、☐核对押金退还及交还办公室条件）、`flight-wed`「乘早班机去上海」（☐核对起飞时间、出发机场和航站楼、☐准备乘机证件和行李）、`school-monday`「孩子开学前准备」（三项）、`shanghai-trip`「去上海出差」（☐核对交通和住宿安排、☐准备身份证件及工作资料）。上一次这四遍同样的准备清单写在备注里（如开学那件「前一晚按学校通知核对报到时间、需交材料和携带物品，整理书包、衣物、水杯，确认接送安排及闹钟」），这一次挪进了子项，正是 `todos.md` 新加那句「When you think a to-do through on your own and set out the parts it takes, they go in as items」要的去处；这几项是准备的几样还是「做一件事的步骤」，判定不判，留给主会话。`note-report` 的报告提纲照旧写在备注里，没有拆成子项。
+- **注出来、没判的**：记下待办的 17 遍里有 4 遍自己给待办加了子项：`lease-expiry`「处理办公室租约到期事宜」（☐核对续租或退租通知期限与自动续租条款、☐确定续租或搬迁安排、☐核对押金退还及交还办公室条件）、`flight-wed`「乘早班机去上海」（☐核对起飞时间、出发机场和航站楼、☐准备乘机证件和行李）、`school-monday`「孩子开学前准备」（三项）、`shanghai-trip`「去上海出差」（☐核对交通和住宿安排、☐准备身份证件及工作资料）。上一次这四遍同样的准备清单写在备注里（如开学那件「前一晚按学校通知核对报到时间、需交材料和携带物品，整理书包、衣物、水杯，确认接送安排及闹钟」），这一次挪进了子项，是当时 `todos.md` 那句「When you think a to-do through on your own and set out the parts it takes, they go in as items」要的去处；判定当时只注出来，交主会话定。JC 定了裁决 157 第 12 条（子项只来自用户），那句已删，见下「第二轮」。`note-report` 的报告提纲照旧写在备注里，没有拆成子项。
 - **用量**：74 次运行，281 次模型调用（新用例 21 次 85 次调用、回归 53 次 196 次）；`--dry-test` 不连模型。
 - **没测到的**：用户在面板里加、改、删过子项之后它再改（用例里只有面板上勾过的）；用户说整件办完而子项还没勾时它勾不勾子项（手册没说，没有用例）；巡看与提醒到点时「In Hand」的计数怎么用、它会不会为没勾的子项做事；第 4、5 条待办的标题写成「……前的准备」，标题是「下周三去上海出差」时最后一项勾完它勾不勾这件没测；子项的界面画法（这里不调界面）；假 CLI 是按真实 CLI 与 Core 的规则写的仿品，不是真二进制；回归每条只跑了一遍。
+
+### 第二轮：子项只来自用户（2026-10-29，裁决 157 第 12 条）
+
+第一轮回归里记下待办的 17 遍有 4 遍自己给待办加了子项（见上「注出来、没判的」），JC 定裁决 157 第 12 条：子项只来自用户。手册跟着改（`fcac1382`）：`todos.md` 的 `--item` 一条改成只给用户说出的几样（「once for each part the user named」），并说「Items come only from the user: the parts they named, or a list they asked you to make items of. What you think of for a to-do on your own (what to check, what to bring) goes into its notes, never into items.」，第一轮那句「When you think a to-do through on your own … they go in as items」删了；`todos-change.md` 的 `todo item add` 改成「adds parts the user named」；`cli.md` 的写命令里列上 `item`。入口层、`galley-prompt/` 没动。
+
+- **判定加的**：`expect.no_items`（`items_facts`）：用户没说出几样东西，这一轮不许 `todo add --item`、不许 `todo item add`，记下的待办不许带子项；不过就是不过，只记录的用例（`shanghai-trip`）也判不过。加在第一轮自己加了子项的四条上，四条用户的话都没说出几样：`lease-expiry`「我们办公室租约明年 3 月底到期」、`flight-wed`「我下周三早上的航班去上海」、`school-monday`「下周一孩子开学」、`shanghai-trip`「下周三去上海出差」。
+- **脚本跟着改的**：结果里不写接口主机：这一轮有一次读超时的报错原文带着模型的接口主机，`scrub` 改成把读到的那个主机与连接报错里的 `host='…'` 都换成 `$API_HOST`，写结果时整份过一遍。
+- **`--dry-test` 加的**：航班那条不带子项过，`todo add --item` 或记下后再 `todo item add` 都判不过；出差那条（只记录）不带子项仍是只记录，带了一项判不过。
+- **跑的**：这四条与七条新用例各 3 遍，共 33 次，被替换的在 `meta.superseded_runs` 的「票 111 第二轮」一组。其中 5 次是接口的问题，不是判定：`shanghai-trip` 第 1 遍、`items-two-dates` 第 1 遍各调了 4 次模型，最后一次一直没回，撞上整次运行 900 秒的上限（两遍的待办都已经写好）；`shanghai-trip` 第 3 遍第 3 次调用连接被对方断开（RemoteDisconnected）；`items-one-step` 第 1 遍第 3 次、`items-hilton-split` 第 1 遍第 1 次读超时（180 秒，GA 照配置重试，所以整次 506–850 秒）。这 5 次各补跑一遍（`--parallel 2`，最后一遍 `1`），都跑完了，但接口仍慢（221–598 秒，只有最后一遍 33 秒），被替换的在「票 111 第二轮补跑（接口超时）」两组。
+
+| 用例 | 第二轮 | 加了子项 |
+| --- | --- | --- |
+| `lease-expiry` | 2/3 | 0/3 |
+| `flight-wed` | 3/3 | 0/3 |
+| `school-monday` | 3/3 | 0/3 |
+| `shanghai-trip` | 只记录 3 遍 | 0/3 |
+| `items-trip` | 3/3 | 三遍都三项 |
+| `items-two-dates` | 3/3 | 0/3 |
+| `items-one-step` | 3/3 | 0/3 |
+| `items-tick-one` | 3/3 | — |
+| `items-tick-last` | 3/3 | — |
+| `items-hilton-news` | 3/3 | 0/3 |
+| `items-hilton-split` | 3/3 | 三遍都五项（用户要的） |
+
+- **四条记待办的用例**：12 遍都没带子项，第一轮挪进子项的准备清单都回到了备注，如航班那件「出发前核对起飞机场、航站楼和起飞时间，确认值机安排；带好有效乘机证件，安排去机场的交通。」、开学那件「开学前核对学校通知中的到校时间和需带材料，整理书包、文具和水杯，确认接送安排。」，出差那件回复里说「待办备注里也列好了出发前的核对清单」。
+- **唯一不过的一遍**：`lease-expiry` 第 3 遍 `todo add 处理办公室租约到期事宜 --due=2027-03-31 --remind-at=2026-11-02T09:00`，回复「我会在 **11 月 2 日上午 9 点**提醒你先核对合同里的续租、退租通知期限，避免错过提前通知的窗口。」，提醒早于用例的窗口（12 月 1 日到次年 3 月 24 日）。没带子项；这条用例之前的 10 遍提醒都在窗口里（2026-12-01 到 2027-03-01），这是第一次挂到一个月后，改的那句只讲子项与备注，看不出有关系，没有补跑。
+- **七条新用例**：做法与第一轮相同：一件带三项（备注里写的是要确认的细节，不是三项的清单）、两件分开记、季度报告不带子项（三遍都把提交前要核对的写进了备注，第一轮三遍没写备注）、只勾那一项、最后一项连这件一起勾并说一句、新消息补一行进展、清单拆成五项后备注只留两行进展。
+- **用量**：第二轮 38 次运行（33 次加补跑 5 次），150 次模型调用（留下的 33 次 135 次，接口出错的 5 次 15 次）。两轮合计 112 次运行、431 次模型调用；`--dry-test` 不连模型。
+- **没测到的**：用户说出几样、但没说要记成子项时（「出差前要订酒店和机票，记一下」以外的说法），它会不会只写进备注；这一轮没有重跑旧用例的全套，只跑了加了子项的四条。
 
 ## 安全措施
 

@@ -2647,11 +2647,22 @@ def ga_mykeys_from_mykey_file(path: Path, entry: str) -> dict[str, Any]:
     return {entry: dict(cfg)}
 
 
+# Ticket 111: the model's API host, known once the key is read (main), so
+# an error a run hit (「Read timed out」 with the host in it) leaves no host
+# in the committed results.
+API_HOSTS: set[str] = set()
+CONNECTION_HOST_RE = re.compile(r"(ConnectionPool\(host=)'[^']*'")
+
+
 def scrub(text: str) -> str:
     """Committed files name no machine-specific path: the system temp
     directory (sandbox and state roots live under it) becomes $TMPDIR, and
     the interpreter the workers run on (ticket 41) $PYTHON, its install
-    root $PYTHON_ROOT."""
+    root $PYTHON_ROOT. Since ticket 111 no API host either: the model's
+    ($API_HOST), and any in a connection error's text."""
+    for host in sorted(API_HOSTS, key=len, reverse=True):
+        text = text.replace(host, "$API_HOST")
+    text = CONNECTION_HOST_RE.sub(r"\1'$API_HOST'", text)
     tmp = tempfile.gettempdir().rstrip("/")
     prefixes = {tmp, os.path.realpath(tmp)}
     prefixes |= {p[len("/private"):] for p in prefixes if p.startswith("/private/")}
@@ -5789,15 +5800,29 @@ def items_facts(exp: dict[str, Any], log: list[list[str]], fx_todos: dict[str, d
     ones it started with as they were. `expect.items_done`: `[{id,
     text_any}]` — in that to-do, the items with one of these words ticked
     in this run by Galley, every other item's box as it was, none added,
-    removed or reworded. `expect.notes_after` (`{id, keep, drop}`): that
+    removed or reworded. `expect.no_items` (main chat PRD ruling 157 point
+    12: items come only from the user): the user named no parts, so no
+    `todo add --item` and no `todo item add` in the run, and no to-do it
+    noted carries an item — a fail that stands even in a record-only case
+    (`hard`). `expect.notes_after` (`{id, keep, drop}`): that
     to-do's notes keep each of `keep` as a line of its own, word for word
     and in order, and no longer hold `drop` (a line that starts with it);
     another line is noted. Elsewhere a change to an item is noted, and
     the item commands are writes no case allows unless it says so."""
     reasons: list[str] = []
     flags: list[str] = []
+    hard: list[str] = []
     allowed: set[str] = set()
     changes: dict[str, list[str]] = {}
+    if exp.get("no_items"):
+        with_item = [a for a in log if cli_name(a) == "todo add" and any(str(x).startswith("--item") for x in a)]
+        item_adds = [a for a in log if cli_name(a) == "todo item add"]
+        carried = [t for t in made_todos if items_of(t)]
+        if with_item or item_adds or carried:
+            what = [f"todo add --item（{len(with_item)} 次）"] if with_item else []
+            what += [f"todo item add（{len(item_adds)} 次）"] if item_adds else []
+            what += [f"{t['title']}：{'、'.join(item_gist(x) for x in items_of(t))}" for t in carried]
+            hard.append("用户没说出几样，却加了子项：" + "；".join(what))
     for tid, t in todo_by_id.items():
         before = {x["id"]: x for x in items_of(fx_todos.get(tid))}
         after = items_of(t)
@@ -5904,7 +5929,7 @@ def items_facts(exp: dict[str, Any], log: list[list[str]], fx_todos: dict[str, d
                   and parse_cli(a)[0][2:3] == [tid]]
         if writes and not any(cli_name(a) == "todo show" and parse_cli(a)[0][2:3] == [tid] for a in log[:writes[0]]):
             flags.append("改备注之前没 todo show 这一件")
-    return {"reasons": reasons, "flags": flags, "allowed": allowed, "changes": changes}
+    return {"reasons": reasons + hard, "flags": flags, "allowed": allowed, "changes": changes, "hard": hard}
 
 
 def progress_facts(r: dict[str, Any], exp: dict[str, Any], now: datetime, started: datetime,
@@ -6396,7 +6421,7 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
     allowed |= items_j["allowed"]
     reasons += items_j["reasons"]
     flags += items_j["flags"]
-    if not isinstance(exp.get("items"), dict):
+    if not isinstance(exp.get("items"), dict) and not exp.get("no_items"):
         noted_with = [t for t in made_todos if items_of(t)]
         if noted_with and exp.get("items") != "none":
             flags.append("记待办时带了子项：" + "、".join(
@@ -6599,7 +6624,9 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
         "retract": retract,
         "stance": first_turn_stance(r),
         "progress": progress,
-        "pass": None if record else not reasons,
+        # Ticket 111 round 2: an item the user did not name fails even a
+        # record-only case (items_facts' `hard`).
+        "pass": False if items_j["hard"] else None if record else not reasons,
         "reasons": reasons,
     }
 
@@ -8285,6 +8312,32 @@ def dry_test_items(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) 
         f = run("items-hilton-split", "拆好了。", log=split_log, edit=split(notes, items))
         check(f["pass"] is False and any(why in x for x in f["reasons"]), f"split: {why} fails ({f['reasons']})")
 
+    # Round 2 (PRD ruling 157 point 12): items come only from the user. A
+    # flight named with no parts: noted plainly passes; with --item, or
+    # `todo item add` after, fails; the two-sided trip, record-only, fails
+    # on an item too.
+    flight_due = sched_time({"week_after": 3, "time": "08:00"}, mon)
+    flight_rem = sched_time({"week_after": 2, "time": "20:00"}, mon)
+    flight = dict(synth_todo("乘早班机去上海", due_at=flight_due), id="todo_dry0000000000f")
+    said = f"记下了：{local_words(flight_due)}的航班，{local_words(flight_rem)}提醒你。"
+    rem = (synth_reminder(flight_rem, flight["id"]),)
+    f = run("flight-wed", said, made=(flight,), log=(SYNTH_ADD,), tasks=rem)
+    check(f["pass"] is True, f"no items: the flight noted plainly passes ({f['reasons']})")
+    packed = dict(flight, items=[item("核对起飞时间", 40), item("准备证件和行李", 41)])
+    for log, why in (((SYNTH_ADD + ("--item=核对起飞时间", "--item=准备证件和行李"),), "todo add --item"),
+                     ((SYNTH_ADD, ("todo", "item", "add", flight["id"], "核对起飞时间", "准备证件和行李",
+                                   "--supervisor=galley-assistant")), "todo item add")):
+        f = run("flight-wed", said, made=(packed,), log=log, tasks=rem)
+        check(f["pass"] is False and any("用户没说出几样，却加了子项" in x and why in x for x in f["reasons"]),
+              f"no items: {why} fails ({f['reasons']})")
+    trip_plain = synth_todo("去上海出差", due=sched_day({"week_after": 3}, mon))
+    f = run("shanghai-trip", "记下了：下周三去上海出差。", made=(trip_plain,), log=(SYNTH_ADD,))
+    check(f["pass"] is None, f"no items: the trip, record-only, noted plainly is only recorded ({f['reasons']})")
+    f = run("shanghai-trip", "记下了。", made=(dict(trip_plain, items=[item("核对交通和住宿安排", 42)]),),
+            log=(SYNTH_ADD + ("--item=核对交通和住宿安排",),))
+    check(f["pass"] is False and any("用户没说出几样" in x for x in f["reasons"]),
+          f"no items: the trip with an item fails, record-only or not ({f['reasons']})")
+
 
 def dry_test_progress(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) -> None:
     """Ticket 108: the judge of how a to-do is going on notes left by hand
@@ -9480,6 +9533,7 @@ def main() -> int:
     host = urlparse(str(next(iter(mykeys.values())).get("apibase", ""))).hostname
     if not host:
         fail("model config has no api host")
+    API_HOSTS.add(host)
     allowed = {host}
     for var in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"):
         if os.environ.get(var):
