@@ -1,5 +1,5 @@
 {
- "_note": "待办评测用例（票 41）。history 是主对话当前段里已有的轮次；todos 是假 CLI 里已有的待办：due 是时间（next_weekday 是今天之后第一个星期几，days 是今天之后第几天，in_minutes 是几分钟后，带 date_only 的只有日期），reminder 是挂在它上面的提醒（fired 表示已经到点、等着叫醒），in_hand 默认为真，即分段开始时就有、写在提示词的「In Hand」一节（为假的是这一段里刚记的），done_since 表示分段开始后用户在面板上勾掉了（快照里还是没做）；tasks 是它自己的定时任务（同 schedule/cases.json）；message 是用户这句，wake 列出这次叫醒里到点的提醒，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 44：expect.reminder.clock 是提醒必须落在的钟点（用户说了几点提醒）。票 60：时间还可以写成一年里的某天（month、day，day 可为 \"last\"；带 year_offset 是今年之后第几年，不带是今天起最近的那一天）或下周的星期几（week_after，周一起算的下一周）；cancelled 表示假 CLI 起始就已取消（days_ago，via 为 supervisor 是 Galley 照用户的话、gui 是用户在桌面上，reason），它的提醒随之由 Core 取消（system），分段开始前取消的写进「In Hand」的「最近不要的跟进」。expect.follow_up 是该设 1 个跟进（via：todo、assistant 或 either；prefer 是期望的那种，另一种也算过但标出来；window 是提醒时间），expect.todo 为 optional 是可以记 1 件（reminder 为 null 时不许挂提醒），expect.cancel 是这次运行里该由 Galley 照用户的话取消其中之一、原因里写明是哪一类（reason_any），expect.asks_or_any 是回复要问一句或给出其中一个下一步，expect.record_only 是两可的、只记录不判。票 63：clock 是消息里说的今天的钟点（tonight 取 hours 里第一个离运行时刻还有 lead_minutes 的整点，写成「今晚 H 点」；afternoon 取今天的 hour，离运行时刻不足 lead_minutes 就改成「明天下午 H 点」），填进 message 的 {{clock}}；时间写法 {\"stated\": true, \"minutes\": k} 是那个钟点加 k 分钟。expect.follow_up.windows 是几个窗口里任一个，follow_up.clock 是提醒必须落在的钟点；expect.reminder.optional 是可以不挂提醒（挂了就要在窗口里）；expect.no_recite 是回复不能是这些原话（或「提醒」加原话），也不能以「提醒：」开头。每条都判：回复里有「记下了 / 记住了 / 记好了 / 已记」时，这一轮必须有写（改动了假 CLI 的清单或提醒，或写了 GA 记忆）。票 64：expect.no_retract 是什么都不该设的用例（不记待办、不设它自己的提醒；reno-no-remind 可以记一件不挂提醒的）：最终回复（去掉 <summary>、<next-suggestion>）不能提改口，正则是 run.py 的 RETRACT_RE（「刚才说」「多此一举」「多余」「本来要」「就不加了」「不特意设」一类）；第一轮（不是最后一轮时）的正文与 <summary> 里有没有「记到待办」「设个提醒」一类的表态，按 STANCE_RE 只记录、不判。火锅两条的 hours 加了 23（「今晚 11 点」，夜宵），21:15 到 22:15 也能跑。票 73：tasks 里 review 为真的是早上的巡看（Galley 建的每天一条，origin 是 system + galley-review；time 是钟点，不写就取运行那一分钟，好让叫醒按时；fired 表示这一次到点、等着叫醒，叫醒消息照 Core 的巡看措辞拼）。expect.subtasks_max 是回复里最多几个 <subtask>（不写就一个都不许）；expect.no_offer 是回复和末尾的建议里不能有「要不要我」「需要的话我可以」一类（run.py 的 OFFER_RE；不判的用例只注出来）；expect.allow_web_stop 是停在浏览器工具只注出来、不算没走到最终回复（它在做一步只读的事，沙盒里看不到结果）；expect.review_advance 是巡看有事可推进：不出声时得派了子任务，开口时得做成了事。票 75：开口时不要固定开头，改判说了是哪件事（names_any 里任一个词）、做了什么（REVIEW_DID_RE），说的是「没什么要推进」「看了一下没有新进展」一类空话（REVIEW_EMPTY_RE）判不过；没说是早上做的（REVIEW_MORNING_RE）只注出来；expect.disable 是该 schedule disable 那一条，用了 delete 或没停都算不过。票 78：wake 里还可以写 {\"kind\": \"done\", \"subtask\": <id>, \"send_backs\": n}，是 subtasks 里（写法同叫醒套件）一件刚做完的子任务的回报，照 Core 的措辞（subtask_report 的 Done 一段）拼进同一次叫醒；几件的次序就是 wake 列的次序（Core 按到达的先后，同一分钟到点的定时任务按 id 排）。expect.review_mixed 是巡看与另一件事在同一次叫醒：整条不出声（只有 <no-reply/> 或只有标签）、开口了却没提那件事（names_any 里一个词都没有）算吞掉，判不过；巡看没做成值得说的事，提了巡看（run.py 的 REVIEW_TALK_RE、REVIEW_EMPTY_RE）判不过；开口了又写了 <no-reply/> 只注出来；no_recite、max_chars 同上。票 98：expect.memo 是对备忘的判定，写法同 ../memo/cases.json 的 _note（optional 是可以记一条、记了只注出来），只对手册里有 memo.md 的运行（票 96 起）判，票 96 之前的运行没有这个命令，照旧不判。票 108：expect.progress 是进展那一行（id 是哪一件；groups 每组至少一个词在那一行里；forbid 是备注里不许出现的字，即用户删掉的；when_done 是巡看用：这一轮做成了东西才该补，只派了子任务或停在浏览器时备注不动；判法见 run.py 的 progress_facts：新的一行在上、日子打头，原来的备注一字不差在下，做了文件就写它的绝对路径，先读过这一件再改，别的待办的备注不动）；expect.notes_same 是不许动任何待办的备注；expect.schedule 为 optional 是可以给自己挂提醒（记下个数，不判）；review_advance.did_any 是这条用例自己算「做了什么」的词；files 同叫醒套件，放进假 HOME 的 ~/Downloads；待办备注里的 {{HOME}} 换成那次运行的假 HOME。",
+ "_note": "待办评测用例（票 41）。history 是主对话当前段里已有的轮次；todos 是假 CLI 里已有的待办：due 是时间（next_weekday 是今天之后第一个星期几，days 是今天之后第几天，in_minutes 是几分钟后，带 date_only 的只有日期），reminder 是挂在它上面的提醒（fired 表示已经到点、等着叫醒），in_hand 默认为真，即分段开始时就有、写在提示词的「In Hand」一节（为假的是这一段里刚记的），done_since 表示分段开始后用户在面板上勾掉了（快照里还是没做）；tasks 是它自己的定时任务（同 schedule/cases.json）；message 是用户这句，wake 列出这次叫醒里到点的提醒，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 44：expect.reminder.clock 是提醒必须落在的钟点（用户说了几点提醒）。票 60：时间还可以写成一年里的某天（month、day，day 可为 \"last\"；带 year_offset 是今年之后第几年，不带是今天起最近的那一天）或下周的星期几（week_after，周一起算的下一周）；cancelled 表示假 CLI 起始就已取消（days_ago，via 为 supervisor 是 Galley 照用户的话、gui 是用户在桌面上，reason），它的提醒随之由 Core 取消（system），分段开始前取消的写进「In Hand」的「最近不要的跟进」。expect.follow_up 是该设 1 个跟进（via：todo、assistant 或 either；prefer 是期望的那种，另一种也算过但标出来；window 是提醒时间），expect.todo 为 optional 是可以记 1 件（reminder 为 null 时不许挂提醒），expect.cancel 是这次运行里该由 Galley 照用户的话取消其中之一、原因里写明是哪一类（reason_any），expect.asks_or_any 是回复要问一句或给出其中一个下一步，expect.record_only 是两可的、只记录不判。票 63：clock 是消息里说的今天的钟点（tonight 取 hours 里第一个离运行时刻还有 lead_minutes 的整点，写成「今晚 H 点」；afternoon 取今天的 hour，离运行时刻不足 lead_minutes 就改成「明天下午 H 点」），填进 message 的 {{clock}}；时间写法 {\"stated\": true, \"minutes\": k} 是那个钟点加 k 分钟。expect.follow_up.windows 是几个窗口里任一个，follow_up.clock 是提醒必须落在的钟点；expect.reminder.optional 是可以不挂提醒（挂了就要在窗口里）；expect.no_recite 是回复不能是这些原话（或「提醒」加原话），也不能以「提醒：」开头。每条都判：回复里有「记下了 / 记住了 / 记好了 / 已记」时，这一轮必须有写（改动了假 CLI 的清单或提醒，或写了 GA 记忆）。票 64：expect.no_retract 是什么都不该设的用例（不记待办、不设它自己的提醒；reno-no-remind 可以记一件不挂提醒的）：最终回复（去掉 <summary>、<next-suggestion>）不能提改口，正则是 run.py 的 RETRACT_RE（「刚才说」「多此一举」「多余」「本来要」「就不加了」「不特意设」一类）；第一轮（不是最后一轮时）的正文与 <summary> 里有没有「记到待办」「设个提醒」一类的表态，按 STANCE_RE 只记录、不判。火锅两条的 hours 加了 23（「今晚 11 点」，夜宵），21:15 到 22:15 也能跑。票 73：tasks 里 review 为真的是早上的巡看（Galley 建的每天一条，origin 是 system + galley-review；time 是钟点，不写就取运行那一分钟，好让叫醒按时；fired 表示这一次到点、等着叫醒，叫醒消息照 Core 的巡看措辞拼）。expect.subtasks_max 是回复里最多几个 <subtask>（不写就一个都不许）；expect.no_offer 是回复和末尾的建议里不能有「要不要我」「需要的话我可以」一类（run.py 的 OFFER_RE；不判的用例只注出来）；expect.allow_web_stop 是停在浏览器工具只注出来、不算没走到最终回复（它在做一步只读的事，沙盒里看不到结果）；expect.review_advance 是巡看有事可推进：不出声时得派了子任务，开口时得做成了事。票 75：开口时不要固定开头，改判说了是哪件事（names_any 里任一个词）、做了什么（REVIEW_DID_RE），说的是「没什么要推进」「看了一下没有新进展」一类空话（REVIEW_EMPTY_RE）判不过；没说是早上做的（REVIEW_MORNING_RE）只注出来；expect.disable 是该 schedule disable 那一条，用了 delete 或没停都算不过。票 78：wake 里还可以写 {\"kind\": \"done\", \"subtask\": <id>, \"send_backs\": n}，是 subtasks 里（写法同叫醒套件）一件刚做完的子任务的回报，照 Core 的措辞（subtask_report 的 Done 一段）拼进同一次叫醒；几件的次序就是 wake 列的次序（Core 按到达的先后，同一分钟到点的定时任务按 id 排）。expect.review_mixed 是巡看与另一件事在同一次叫醒：整条不出声（只有 <no-reply/> 或只有标签）、开口了却没提那件事（names_any 里一个词都没有）算吞掉，判不过；巡看没做成值得说的事，提了巡看（run.py 的 REVIEW_TALK_RE、REVIEW_EMPTY_RE）判不过；开口了又写了 <no-reply/> 只注出来；no_recite、max_chars 同上。票 98：expect.memo 是对备忘的判定，写法同 ../memo/cases.json 的 _note（optional 是可以记一条、记了只注出来），只对手册里有 memo.md 的运行（票 96 起）判，票 96 之前的运行没有这个命令，照旧不判。票 108：expect.progress 是进展那一行（id 是哪一件；groups 每组至少一个词在那一行里；forbid 是备注里不许出现的字，即用户删掉的；when_done 是巡看用：这一轮做成了东西才该补，只派了子任务或停在浏览器时备注不动；判法见 run.py 的 progress_facts：新的一行在上、日子打头，原来的备注一字不差在下，做了文件就写它的绝对路径，先读过这一件再改，别的待办的备注不动）；expect.notes_same 是不许动任何待办的备注；expect.schedule 为 optional 是可以给自己挂提醒（记下个数，不判）；review_advance.did_any 是这条用例自己算「做了什么」的词；files 同叫醒套件，放进假 HOME 的 ~/Downloads；待办备注里的 {{HOME}} 换成那次运行的假 HOME。票 110：carried 为真的用例 history 是从上一段带过来的轮次（hours_ago 是最后一轮、first_hours_ago 是第一轮在几小时前），可以有子任务交回的那一轮（Core 的措辞，干跑测试对过）；subtasks 里的 started_minutes_ago、ended_minutes_ago 是它几分钟前开始、几分钟前结束（不写是 35 − 3k 到 1 分钟前）；todos 里的 created、changed 是几小时前记下、几小时前改过的（hours_ago；不写照旧，改过的时刻同记下的）；expect.no_files 是这一轮不许在假 HOME 里做新文件；expect.no_redo 是新文件名与派出的子任务里不许有这些词；expect.quiet_or_file 是只回 <no-reply/>，或开口时只为交出文件（带 [FILE:…]，注出来）；expect.progress.path 是那一行要写这份 ~/Downloads 下的文件的绝对路径（文件不是这一轮做的也要），progress.days_back 是那一行打头的日子可以早到几天前；review_advance.may_rest 是巡看可以什么都不做（不出声也不派子任务，注出来）。",
  "cases": [
   {
    "id": "note-report",
@@ -2039,6 +2039,390 @@
     "schedule": "optional",
     "memo": "optional",
     "notes_same": true
+   }
+  },
+  {
+   "id": "review-handed-over",
+   "no": 50,
+   "group": "巡看只为动过的事醒（票 110）",
+   "expect_text": "巡看叫醒（用户昨晚以来没说过话；带过来的是前一晚记下希尔顿与子任务交回模板那两轮），希尔顿的备注最前面是它补的一行「10月28日：资料收集模板做好了：<绝对路径>」，下面是原备注，模板就在那里；另有 702 装修（挂着提醒）→ 下一步在用户手里：不为它派子任务、不做新文件、备注不动、不给自己挂提醒，整条回复 <no-reply/>",
+   "carried": true,
+   "hours_ago": 10,
+   "first_hours_ago": 16,
+   "history": [
+    {
+     "role": "user",
+     "content": "记一个待办：希尔顿酒店项目上下文资料收集"
+    },
+    {
+     "role": "assistant",
+     "content": "记下了：希尔顿酒店项目上下文资料收集，没设截止。备注里附了收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制。"
+    },
+    {
+     "role": "user",
+     "content": "[Galley — not a message from the user] A subtask you started has an update. Act on it, then reply to the user. Do not mention this note.\n\nSubtask `s-mgv8h2k5-3n7q1x4z` \"做希尔顿酒店项目资料收集模板\" (round 1) finished. Its final answer:\n<<<\n模板做好了，在 {{HOME}}/Downloads/希尔顿酒店资料收集模板.md。\n内容：项目概况填空（地址、业主方、品牌与客房数、开业日期）、分三轮的资料清单、9 个首轮要问业主的问题、向业主索取资料的消息草稿、资料登记表。\n>>>\nCheck it against what you asked for in its instructions (its first message: `session show s-mgv8h2k5-3n7q1x4z --around=msg_s-mgv8h2k5-3n7q1x4z_0_user`; its last steps: `session show s-mgv8h2k5-3n7q1x4z --tail=40`). If it holds, tell the user the result in a sentence or two and name the evidence (a confirmation number, a file path, a link). If something is missing or wrong, send it back with `session send s-mgv8h2k5-3n7q1x4z \"<what is missing>\" --supervisor=galley-assistant --reason=\"send back\" --ensure-runner` and end your reply with exactly <no-reply/> and nothing else."
+    },
+    {
+     "role": "assistant",
+     "content": "希尔顿那件我先做了一份资料收集模板：项目概况填空、分三轮的资料清单、首轮要问业主的 9 个问题，还有一段向业主要资料的消息草稿。你拿到业主那边的资料，照着填就行。"
+    }
+   ],
+   "subtasks": [
+    {
+     "id": "s-mgv8h2k5-3n7q1x4z",
+     "title": "做希尔顿酒店项目资料收集模板",
+     "instructions": "做希尔顿酒店项目资料收集模板\n\n目标：为待办「希尔顿酒店项目上下文资料收集」做一份资料收集模板，用户拿到业主资料时照着填。\n交回：模板文件的绝对路径，一句话说里面有什么。",
+     "started_minutes_ago": 604,
+     "ended_minutes_ago": 600,
+     "live": {
+      "lastExit": "CURRENT_TASK_DONE"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "写模板文件",
+       "content": "按收集要点分三轮，写成一份 Markdown 模板。"
+      },
+      {
+       "role": "agent",
+       "final": true,
+       "content": "模板做好了，在 {{HOME}}/Downloads/希尔顿酒店资料收集模板.md。\n内容：项目概况填空（地址、业主方、品牌与客房数、开业日期）、分三轮的资料清单、9 个首轮要问业主的问题、向业主索取资料的消息草稿、资料登记表。"
+      }
+     ]
+    }
+   ],
+   "todos": [
+    {
+     "id": "todo_4c8e1a7d2b9f3605",
+     "title": "希尔顿酒店项目上下文资料收集",
+     "notes": "10月28日：资料收集模板做好了：{{HOME}}/Downloads/希尔顿酒店资料收集模板.md\n收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制",
+     "created": {
+      "hours_ago": 16
+     },
+     "changed": {
+      "hours_ago": 10
+     }
+    },
+    {
+     "id": "todo_6f7a8b9c0d1e2f3a",
+     "title": "702 办公室装修完工",
+     "notes": "装修师傅说预计这天完工",
+     "due": {
+      "month": 11,
+      "day": 20,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_4b8c2d6e0f1a3957",
+      "at": {
+       "month": 11,
+       "day": 20,
+       "time": "09:00"
+      }
+     }
+    }
+   ],
+   "files": {
+    "希尔顿酒店资料收集模板.md": "# 希尔顿酒店项目资料收集模板\n\n## 一、项目概况（先填）\n\n| 项 | 内容 |\n| --- | --- |\n| 项目地址 | |\n| 业主方与对接人 | |\n| 品牌与定位 | |\n| 客房数量 | |\n| 计划开业日期 | |\n\n## 二、分轮资料清单\n\n- 第一轮（本周）：项目地址与业主方、品牌定位与客房数量、开业日期\n- 第二轮：筹开时间表、证照办理进度\n- 第三轮：筹开预算与人员编制\n\n## 三、首轮要问业主的 9 个问题\n\n1. 项目的准确地址与产权方？\n2. 签约品牌与管理模式？\n3. 客房数量与房型配比？\n4. 计划开业日期？\n5. 筹开团队现在有谁？\n6. 证照办到哪一步？\n7. 设计与施工进度？\n8. 筹开预算的口径？\n9. 下一次碰头的时间？\n\n## 四、向业主索取资料的消息草稿\n\n王总您好，为了把希尔顿项目的筹开准备做扎实，想请您方便时发一下：项目地址与产权方、签约品牌与客房数、计划开业日期。其余资料我们分两轮再对。谢谢！\n\n## 五、资料登记表\n\n| 资料 | 来源 | 收到日期 | 备注 |\n| --- | --- | --- | --- |\n| | | | |\n"
+   },
+   "tasks": [
+    {
+     "id": "sched_5e1a9c3f7b2d4608",
+     "review": true,
+     "in_hand": true,
+     "fired": {
+      "late_minutes": 0
+     }
+    }
+   ],
+   "wake": [
+    "sched_5e1a9c3f7b2d4608"
+   ],
+   "expect": {
+    "todo": "none",
+    "no_reply": true,
+    "subtasks_max": 0,
+    "notes_same": true,
+    "no_files": true,
+    "memo": "none"
+   }
+  },
+  {
+   "id": "review-done-not-noted",
+   "no": 51,
+   "group": "巡看只为动过的事醒（票 110）",
+   "expect_text": "巡看叫醒（JC 库里 10-29 早上的样子）：带过来的两轮是前一晚记下希尔顿、子任务带着模板回来它对用户说了两句（没给路径）；希尔顿的备注里还没有那一行 → 在备注最前面补一行（日子打头，今天或模板做成的前一天都算；写做了什么、模板的绝对路径），原备注一字不差在下；不重做模板、不派子任务、不做新文件；回复照手册：只回 <no-reply/>，或只为交出模板开口（带 [FILE:…]，也算过，注出来）",
+   "carried": true,
+   "hours_ago": 10,
+   "first_hours_ago": 16,
+   "history": [
+    {
+     "role": "user",
+     "content": "记一个待办：希尔顿酒店项目上下文资料收集"
+    },
+    {
+     "role": "assistant",
+     "content": "记下了：希尔顿酒店项目上下文资料收集，没设截止。备注里附了收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制。"
+    },
+    {
+     "role": "user",
+     "content": "[Galley — not a message from the user] A subtask you started has an update. Act on it, then reply to the user. Do not mention this note.\n\nSubtask `s-mgv8h2k5-3n7q1x4z` \"做希尔顿酒店项目资料收集模板\" (round 1) finished. Its final answer:\n<<<\n模板做好了，在 {{HOME}}/Downloads/希尔顿酒店资料收集模板.md。\n内容：项目概况填空（地址、业主方、品牌与客房数、开业日期）、分三轮的资料清单、9 个首轮要问业主的问题、向业主索取资料的消息草稿、资料登记表。\n>>>\nCheck it against what you asked for in its instructions (its first message: `session show s-mgv8h2k5-3n7q1x4z --around=msg_s-mgv8h2k5-3n7q1x4z_0_user`; its last steps: `session show s-mgv8h2k5-3n7q1x4z --tail=40`). If it holds, tell the user the result in a sentence or two and name the evidence (a confirmation number, a file path, a link). If something is missing or wrong, send it back with `session send s-mgv8h2k5-3n7q1x4z \"<what is missing>\" --supervisor=galley-assistant --reason=\"send back\" --ensure-runner` and end your reply with exactly <no-reply/> and nothing else."
+    },
+    {
+     "role": "assistant",
+     "content": "希尔顿那件我先做了一份资料收集模板：项目概况填空、分三轮的资料清单、首轮要问业主的 9 个问题，还有一段向业主要资料的消息草稿。你拿到业主那边的资料，照着填就行。"
+    }
+   ],
+   "subtasks": [
+    {
+     "id": "s-mgv8h2k5-3n7q1x4z",
+     "title": "做希尔顿酒店项目资料收集模板",
+     "instructions": "做希尔顿酒店项目资料收集模板\n\n目标：为待办「希尔顿酒店项目上下文资料收集」做一份资料收集模板，用户拿到业主资料时照着填。\n交回：模板文件的绝对路径，一句话说里面有什么。",
+     "started_minutes_ago": 604,
+     "ended_minutes_ago": 600,
+     "live": {
+      "lastExit": "CURRENT_TASK_DONE"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "写模板文件",
+       "content": "按收集要点分三轮，写成一份 Markdown 模板。"
+      },
+      {
+       "role": "agent",
+       "final": true,
+       "content": "模板做好了，在 {{HOME}}/Downloads/希尔顿酒店资料收集模板.md。\n内容：项目概况填空（地址、业主方、品牌与客房数、开业日期）、分三轮的资料清单、9 个首轮要问业主的问题、向业主索取资料的消息草稿、资料登记表。"
+      }
+     ]
+    }
+   ],
+   "todos": [
+    {
+     "id": "todo_4c8e1a7d2b9f3605",
+     "title": "希尔顿酒店项目上下文资料收集",
+     "notes": "收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制",
+     "created": {
+      "hours_ago": 16
+     }
+    },
+    {
+     "id": "todo_6f7a8b9c0d1e2f3a",
+     "title": "702 办公室装修完工",
+     "notes": "装修师傅说预计这天完工",
+     "due": {
+      "month": 11,
+      "day": 20,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_4b8c2d6e0f1a3957",
+      "at": {
+       "month": 11,
+       "day": 20,
+       "time": "09:00"
+      }
+     }
+    }
+   ],
+   "files": {
+    "希尔顿酒店资料收集模板.md": "# 希尔顿酒店项目资料收集模板\n\n## 一、项目概况（先填）\n\n| 项 | 内容 |\n| --- | --- |\n| 项目地址 | |\n| 业主方与对接人 | |\n| 品牌与定位 | |\n| 客房数量 | |\n| 计划开业日期 | |\n\n## 二、分轮资料清单\n\n- 第一轮（本周）：项目地址与业主方、品牌定位与客房数量、开业日期\n- 第二轮：筹开时间表、证照办理进度\n- 第三轮：筹开预算与人员编制\n\n## 三、首轮要问业主的 9 个问题\n\n1. 项目的准确地址与产权方？\n2. 签约品牌与管理模式？\n3. 客房数量与房型配比？\n4. 计划开业日期？\n5. 筹开团队现在有谁？\n6. 证照办到哪一步？\n7. 设计与施工进度？\n8. 筹开预算的口径？\n9. 下一次碰头的时间？\n\n## 四、向业主索取资料的消息草稿\n\n王总您好，为了把希尔顿项目的筹开准备做扎实，想请您方便时发一下：项目地址与产权方、签约品牌与客房数、计划开业日期。其余资料我们分两轮再对。谢谢！\n\n## 五、资料登记表\n\n| 资料 | 来源 | 收到日期 | 备注 |\n| --- | --- | --- | --- |\n| | | | |\n"
+   },
+   "tasks": [
+    {
+     "id": "sched_5e1a9c3f7b2d4608",
+     "review": true,
+     "in_hand": true,
+     "fired": {
+      "late_minutes": 0
+     }
+    }
+   ],
+   "wake": [
+    "sched_5e1a9c3f7b2d4608"
+   ],
+   "expect": {
+    "todo": "none",
+    "allow": [
+     "todo update"
+    ],
+    "subtasks_max": 0,
+    "no_files": true,
+    "quiet_or_file": true,
+    "memo": "none",
+    "progress": {
+     "id": "todo_4c8e1a7d2b9f3605",
+     "groups": [
+      [
+       "模板"
+      ]
+     ],
+     "path": "希尔顿酒店资料收集模板.md",
+     "days_back": 1
+    }
+   }
+  },
+  {
+   "id": "review-user-news-on-top",
+   "no": 52,
+   "group": "巡看只为动过的事醒（票 110）",
+   "expect_text": "巡看叫醒，这一段里用户早上说了业主发来的项目地址，它补在了希尔顿的备注最前面「10月29日：业主发来了项目地址：……」，下面才是它前一天那一行（模板）和原备注 → 最新一行是用户的：不被「下一步在用户手里」挡住，可以为它做事、不要求一定做（只派子任务或停在浏览器也算；不出声也算，注出来）；不重做模板（新文件名里有「模板」、派子任务去重做或重新生成模板都不过；子任务里只说读旧模板、不要重做的，注出来）；做成了东西就照票 108 在最前面补一行；开口时说是哪件事、做了什么，不提建议",
+   "history": [
+    {
+     "role": "user",
+     "content": "业主发来了希尔顿项目的地址：厦门市思明区环岛东路 1999 号，原会展北片区那块地，计划 2027 年 6 月开业"
+    },
+    {
+     "role": "assistant",
+     "content": "记下了，补在希尔顿那件的备注最前面：项目在思明区环岛东路 1999 号，计划 2027 年 6 月开业。"
+    }
+   ],
+   "todos": [
+    {
+     "id": "todo_4c8e1a7d2b9f3605",
+     "title": "希尔顿酒店项目上下文资料收集",
+     "notes": "10月29日：业主发来了项目地址：厦门市思明区环岛东路 1999 号（原会展北片区），计划 2027 年 6 月开业\n10月28日：资料收集模板做好了：{{HOME}}/Downloads/希尔顿酒店资料收集模板.md\n收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制",
+     "created": {
+      "hours_ago": 40
+     },
+     "changed": {
+      "hours_ago": 0.5
+     }
+    },
+    {
+     "id": "todo_6f7a8b9c0d1e2f3a",
+     "title": "702 办公室装修完工",
+     "notes": "装修师傅说预计这天完工",
+     "due": {
+      "month": 11,
+      "day": 20,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_4b8c2d6e0f1a3957",
+      "at": {
+       "month": 11,
+       "day": 20,
+       "time": "09:00"
+      }
+     }
+    }
+   ],
+   "files": {
+    "希尔顿酒店资料收集模板.md": "# 希尔顿酒店项目资料收集模板\n\n## 一、项目概况（先填）\n\n| 项 | 内容 |\n| --- | --- |\n| 项目地址 | |\n| 业主方与对接人 | |\n| 品牌与定位 | |\n| 客房数量 | |\n| 计划开业日期 | |\n\n## 二、分轮资料清单\n\n- 第一轮（本周）：项目地址与业主方、品牌定位与客房数量、开业日期\n- 第二轮：筹开时间表、证照办理进度\n- 第三轮：筹开预算与人员编制\n\n## 三、首轮要问业主的 9 个问题\n\n1. 项目的准确地址与产权方？\n2. 签约品牌与管理模式？\n3. 客房数量与房型配比？\n4. 计划开业日期？\n5. 筹开团队现在有谁？\n6. 证照办到哪一步？\n7. 设计与施工进度？\n8. 筹开预算的口径？\n9. 下一次碰头的时间？\n\n## 四、向业主索取资料的消息草稿\n\n王总您好，为了把希尔顿项目的筹开准备做扎实，想请您方便时发一下：项目地址与产权方、签约品牌与客房数、计划开业日期。其余资料我们分两轮再对。谢谢！\n\n## 五、资料登记表\n\n| 资料 | 来源 | 收到日期 | 备注 |\n| --- | --- | --- | --- |\n| | | | |\n"
+   },
+   "tasks": [
+    {
+     "id": "sched_5e1a9c3f7b2d4608",
+     "review": true,
+     "in_hand": true,
+     "fired": {
+      "late_minutes": 0
+     }
+    }
+   ],
+   "wake": [
+    "sched_5e1a9c3f7b2d4608"
+   ],
+   "expect": {
+    "todo": "none",
+    "allow": [
+     "todo update"
+    ],
+    "subtasks_max": 2,
+    "no_offer": true,
+    "allow_web_stop": true,
+    "no_redo": [
+     "模板"
+    ],
+    "memo": "none",
+    "review_advance": {
+     "may_rest": true,
+     "names_any": [
+      "希尔顿",
+      "项目",
+      "地址",
+      "环岛东路",
+      "会展",
+      "开业",
+      "思明"
+     ]
+    },
+    "progress": {
+     "id": "todo_4c8e1a7d2b9f3605",
+     "when_done": true,
+     "groups": []
+    },
+    "max_chars": 350
+   }
+  },
+  {
+   "id": "review-look-again-later",
+   "no": 53,
+   "group": "巡看只为动过的事醒（票 110）",
+   "expect_text": "巡看叫醒，有一件昨晚刚记的「等签证审批结果」，备注里有申请号和进度在哪看；评测里查不了网，「查」降成读备注点名的那份查询结果（~/Downloads/签证进度查询.html，写着审理中）→ 看过没变化：备注不补，给自己挂一个之后几天的提醒（schedule create --target=assistant，明天到两周内），整条回复 <no-reply/>；不派子任务、不勾掉",
+   "history": [],
+   "todos": [
+    {
+     "id": "todo_8e3f5a1c7b9d2046",
+     "title": "等签证审批结果",
+     "notes": "申请号 XM20261028-0417，10月28日递交，一般 5–10 个工作日出结果；进度查询页存在 {{HOME}}/Downloads/签证进度查询.html（打开就是最新进度）",
+     "created": {
+      "hours_ago": 14
+     }
+    },
+    {
+     "id": "todo_6f7a8b9c0d1e2f3a",
+     "title": "702 办公室装修完工",
+     "notes": "装修师傅说预计这天完工",
+     "due": {
+      "month": 11,
+      "day": 20,
+      "date_only": true
+     },
+     "reminder": {
+      "id": "sched_4b8c2d6e0f1a3957",
+      "at": {
+       "month": 11,
+       "day": 20,
+       "time": "09:00"
+      }
+     }
+    }
+   ],
+   "files": {
+    "签证进度查询.html": "<!doctype html><meta charset=\"utf-8\"><title>签证申请进度查询</title>\n<h1>签证申请进度查询</h1>\n<table>\n<tr><th>申请号</th><td>XM20261028-0417</td></tr>\n<tr><th>递交日期</th><td>2026-10-28</td></tr>\n<tr><th>当前状态</th><td>审理中</td></tr>\n<tr><th>说明</th><td>审理一般需要 5–10 个工作日，结果出来后会以短信通知。</td></tr>\n</table>\n"
+   },
+   "tasks": [
+    {
+     "id": "sched_5e1a9c3f7b2d4608",
+     "review": true,
+     "in_hand": true,
+     "fired": {
+      "late_minutes": 0
+     }
+    }
+   ],
+   "wake": [
+    "sched_5e1a9c3f7b2d4608"
+   ],
+   "expect": {
+    "todo": "none",
+    "no_reply": true,
+    "subtasks_max": 0,
+    "notes_same": true,
+    "memo": "none",
+    "schedule": "one",
+    "window": {
+     "from": {
+      "days": 1,
+      "time": "00:00"
+     },
+     "to": {
+      "days": 14,
+      "time": "23:59"
+     }
+    }
    }
   }
  ]

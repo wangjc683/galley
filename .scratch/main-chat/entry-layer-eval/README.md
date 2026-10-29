@@ -601,6 +601,58 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases news-budget,
 - **用量**：56 次运行，238 次模型调用（第一轮 18 次 78 次调用、第二轮 18 次 79 次、出错被替换的 1 次 4 次、回归 13 次 47 次、旧手册 4 次 19 次、反向检查 2 次 11 次）；`--dry-test` 不连模型。
 - **没测到的**：子任务做完、带着文件回来的那次叫醒（`unasked.md` 那半句最常用到的地方）没有用例，巡看这条是它当场做完的；真机上巡看为希尔顿醒时要查公开资料，沙盒里没有浏览器，这一种没测；那一行写多长没有判，巡看的三遍都很长；同一件事接连几条新消息、备注最前面已经有好几行时怎么补，没有用例；旧手册与反向检查每条只跑了一遍。
 
+## 巡看只为动过的事醒（票 110）
+
+主聊天 PRD 裁决 155：Core 的巡看判据改成只算上次巡看以来动过的事（新记的或改过的待办、这次才进 3 天窗口的、有新动静的没结束的子任务，新备忘照旧；`assistant_todo.rs` 的 `review_has_something_to_look_at` 与 `LastReview`）；手册 `wake.md`「The morning review」第一段换成这个说法，「Take each thing in turn」之后加一条：先 `todo show` 读那件事；备注最前面是它做成的东西、用户之后没提过，下一步在用户手里，留着等用户；对话里看得出做过、备注还没写的，先补那一行（`todos-change.md`）；隔几天要再看一眼的，给自己挂提醒（`reminders.md`），巡看里挂的不用对用户说、不进备注。入口层、Core 的叫醒说明、`galley-prompt/`、`rust-samples.json`、`cli-help.json` 没动。待办套件加 4 条，`run.py --suite todo`。
+
+- **评测里没有巡看判据的镜像**（同票 81）：用例直接拼到点的叫醒消息，不经 Core 判醒不醒，Core 的判据靠 Rust 测试。按新判据，`review-done-not-noted` 那种样子（JC 库里 10-29 早上：23:49 手动跑过巡看之后只有子任务做完、没有一件待办动过）真机上不会再叫醒；这条测的是巡看为别的事醒了以后。`review-handed-over` 正是新判据的代价②：它前一晚补了那一行，备注算改过，第二天会醒一次，靠手册不动手。
+- **跟着换的输入**：只有手册（`run.py` 直接读仓库里的那份，即 worktree 里改过的）。
+- **用例**（组名「巡看只为动过的事醒（票 110）」，`todo/cases.json` 第 50–53 条，每条 3 遍）：
+  - `review-handed-over`：带过来的两轮是前一晚记下希尔顿、子任务交回资料收集模板（Core 的子任务完成措辞）它对用户说了两句；希尔顿的备注最前面已有它补的「10月28日：资料收集模板做好了：<绝对路径>」，模板在 `~/Downloads`；另有 702 装修。该：不派子任务、不做新文件、备注不动、不给自己挂提醒，整条 `<no-reply/>`。
+  - `review-done-not-noted`：同样带过来的两轮，备注里还没有那一行。该：备注最前面补一行（日子打头，今天或模板做成的前一天都算，写模板的绝对路径），原备注一字不差在下；不重做、不派子任务、不做新文件；只回 `<no-reply/>`，或只为交出模板开口（带 `[FILE:…]`，也算过，注出来：前一晚那句回复没给路径，用户确实没拿到文件）。
+  - `review-user-news-on-top`：这一段里用户早上说了业主发来的项目地址，它补在了备注最前面「10月29日：业主发来了项目地址：……」，下面才是模板那一行。该：不被「下一步在用户手里」挡住，可以为它做事、不要求一定做（派子任务、停在浏览器、不出声都算过，没做的注出来）；不重做模板；做成了东西照票 108 补一行；开口时说是哪件事、做了什么，不提建议。
+  - `review-look-again-later`：昨晚刚记的「等签证审批结果」，备注里有申请号和进度在哪看。沙盒里没有浏览器、网络不通，「查」这一步撑不起来，降成读备注点名的一份本地查询结果（`~/Downloads/签证进度查询.html`，写着「审理中」，用例的 `files`）。该：备注不补（看过没变化不写），给自己挂一个明天到两周内的提醒（`schedule create --target=assistant`），整条 `<no-reply/>`。
+- **判定加的**（写法见 `todo/cases.json` 的 `_note`）：`no_files`（这一轮不许在假 HOME 里做新文件）；`no_redo`（新文件名里有这个词，或派子任务去「重做 / 重新生成……模板」的不过，`REDO_WORDS_RE`，前面是「不要」「避免」「别」一类的不算；子任务里只说读旧模板的注出来）；`quiet_or_file`（只回 `<no-reply/>`，或开口时带绝对路径的 `[FILE:…]`）；`progress.path`（那一行要写这份 `~/Downloads` 下文件的绝对路径，文件不是这一轮做的也要）、`progress.days_back`（打头的日子可以早到几天前）；`review_advance.may_rest`（巡看可以什么都不做）。另修了一处：`<subtask>` 标签里的字是子任务的说明，不再拿来查「说了记下了却没写」（第二轮一遍子任务里写了「备注已记录该消息」被判成没写却说记下了）；改完重判全部已有结果，只有这一遍变了。
+- **脚本跟着改的**：用例的 `carried` 带两轮（`hours_ago`、`first_hours_ago`），其中一轮的用户那条是 Core 的子任务完成措辞（干跑测试逐字对过移植的 `reminder_note`）；子任务可以写 `started_minutes_ago`、`ended_minutes_ago`（前一晚跑的），待办可以写 `created`、`changed`（几小时前记下、几小时前改过），不写照旧；结果里新加「票 110：巡看只为动过的事醒」一节（三组：新手册、旧手册、反向检查）和「票 110 重跑」表；`meta.ticket110w_control`、`meta.ticket110r_control` 照旧保留。
+- **`--dry-test` 加的**（`dry_test_moved`）：带过来的两轮与 Core 措辞逐字一致、说了几小时前；子任务前一晚跑的、待办几时记下几时改过；模板进那次运行的 `~/Downloads`；四条各造了过与不过的运行（不动过；派子任务、做文件、改备注、挂提醒、开口各自不过；补那一行今天、前一天过，前两天、没路径、`~/`、没补、开口没交文件、做了新文件不过，开口交文件过并注出来；用户新消息在上时不做、派子任务、停在浏览器、做成并补行都过，重做模板、空开口、提建议不过，子任务里只提到模板、写着「已记录」的不误判；挂三天后的提醒加 `<no-reply/>` 过，不挂、挂在今天、开口、补备注不过）。
+- **对照**：旧手册（这一票之前的 `wake.md`，`b29a2594`）跑 50、51 各 3 遍，52、53 各 1 遍，在 `meta.ticket110w_control`；反向检查（新手册只拿掉「Take each thing in turn」之后新加那一条，第一段的新说法留着）同样的遍数，在 `meta.ticket110r_control`。跑之前把新的 `wake.md` 备份到临时目录，跑完拷回、校验和对过。巡看与写备注的旧用例（`review-*` 六条、票 108 的六条、`wake-todo`）各重跑第 1 遍，被替换的在 `meta.superseded_runs` 的「票 110 回归」一组。
+- **怎么跑**：
+
+```bash
+PY=/Library/Frameworks/Python.framework/Versions/3.14/bin/python3
+export PYTHONDONTWRITEBYTECODE=1
+NEW=review-handed-over,review-done-not-noted,review-user-news-on-top,review-look-again-later
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases $NEW --repeats 3 --parallel 6
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases review-nothing-to-do,review-advance,review-overdue,review-stop,review-with-reminder,review-with-subtask-done,news-budget,news-moves-time,progress-review-done,progress-review-unchanged,news-user-edited,news-unrelated,wake-todo --repeats 1 --first-repeat 1 --supersede "票 110 回归：……"
+# wake.md 换成这一票之前的之后：
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases review-handed-over,review-done-not-noted --repeats 3 --control 110w
+# 只拿掉新加那一条之后：
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases review-handed-over,review-done-not-noted --repeats 3 --control 110r
+```
+
+### 结果（2026-10-29，gpt-6.1-sol，推理强度 high）
+
+模型 `mm_1792576875658`（API key 接入的 gpt-6.1-sol，同票 73）。先 `--dry-test`（不连模型，全过）。改了一轮措辞（见下），表里「这一次」是第二轮（10:04 开跑）。
+
+| 用例 | 第一轮 | 这一次 | 旧手册 | 反向检查 |
+| --- | --- | --- | --- | --- |
+| `review-handed-over` | 3/3 | 3/3 | 2/3 | 3/3 |
+| `review-done-not-noted` | 3/3 | 3/3 | 3/3 | 3/3 |
+| `review-user-news-on-top` | 3/3 | 3/3 | 1/1 | 1/1 |
+| `review-look-again-later` | 0/3 | 3/3（补跑 1 次） | 0/1 | 0/1 |
+| 巡看与写备注的旧用例 13 条 | — | 12/13（上一次 13/13） | — | — |
+
+- **改了一轮措辞**：第一轮新加那一条末尾只到「set yourself a reminder for then (`reminders.md`) rather than waiting for the review.」。`review-look-again-later` 三遍都读了查询页、挂了 11 月 4 日 10:00 的提醒，但都开口说了（「签证这件事我早上查了一下，目前仍在审理中……我已安排11月4日上午10点再查一次」：`reminders.md` 的「Never set one without saying so」赢了巡看的「没做成值得说的就不出声」），两遍还在备注最前面补了「10月29日：已安排11月4日10:00复查签证进度……」。这一条末尾补了一句「Set in the review, it needs no sentence to the user (their list shows it) and no line in the notes: nothing came of the look yet.」，四条整组重跑；第一轮 12 次运行（59 次调用）在 `meta.superseded_runs` 的「第一轮（票 110）」一组。第二轮 `review-look-again-later` 第 3 遍一份一份地读手册，第 11 次工具调用撞上评测的上限（待办套件 10 次）停下，没走到挂提醒，单独补跑一遍过（被替换的在「第二轮补跑（票 110）」一组；判定那句写成「第 9 次、8 次上限」，是停止原因的标签不分套件，见下「看到但没改」）。
+- **交出去了、用户没回话**（`review-handed-over`）：三遍都读了清单与两件待办（`todo show`），没去看子任务，备注没动、没派子任务、没做文件、没挂提醒，整条 `<no-reply/>`。旧手册下 3 遍里 1 遍把子任务打回去改模板（「消息草稿中的『王总』改为『[业主方称呼]』……『第一轮（本周）』改为『第一轮』」），就是「交出去的东西又做一份」的那种；另两遍不动。
+- **做过、备注还没写**（`review-done-not-noted`）：三遍都先 `session show` 子任务核对，再在备注最前面补了一行，日子是今天，写了模板的绝对路径，原备注一字不差在下：「10月29日：资料收集模板已做好并已告知，待拿到业主资料后填写；模板路径：<绝对路径>」，另两遍把模板里有什么也写进去（那一行 133–169 字，假 HOME 的路径约占 96 字）；没重做、没派子任务，三遍都只回 `<no-reply/>`。旧手册与反向检查下也都补了这一行（票 108 的 `todos-change.md` 与 `unasked.md` 已经在推它），但 6 遍里 5 遍开口把模板交出来（「上次没把文件发给你，这里补上：[FILE:…]」），新手册下 0 遍。
+- **用户的新消息在上**（`review-user-news-on-top`）：三遍都派了 1 件子任务，按新地址查公开资料、另写一份核对简报，明说读旧模板、不要重做或不改原文件，回复只有子任务和 `<no-reply/>`，备注没动（还没有结果）。没有一遍被「下一步在用户手里」挡住。旧手册、反向检查各一遍也是这样。
+- **隔几天再看一眼**（`review-look-again-later`）：三遍都 `todo show` 后读了查询页，`schedule create … --target=assistant` 挂在 11 月 4 日 10:00（递交后约第 5 个工作日），第一行「查签证审批进度」，空一行后写申请号、递交日、这次看到的状态与到时先 `todo show` 再查；备注没动，整条 `<no-reply/>`。旧手册那一遍挂了同样的提醒，但开口说了；反向检查那一遍什么都没挂，只回 `<no-reply/>`。
+- **反向检查的结论**：50、51 两条拿掉新加那一条也过（3/3、3/3），这两条在这个沙盒里分不出那一条：模型自己就倾向于不重做，补行靠的是票 108 的规则；那一条在 51 上可见的作用是让它不为交文件开口。53 拿掉就不挂提醒、旧手册挂了却开口，靠的是这一条（含补的那句）。票面「应当不过」只在 53 上成立。
+- **回归**：13 条 12 条过。`news-budget`（用户说「业主说筹开预算下周给我」，不是叫醒，不读 `wake.md`）这一遍只读了 `todos.md`、`unasked.md`、`times.md`、`reminders.md`，没读 `todos-change.md`，给自己挂了下周五问预算的提醒，备注没补：和票 108 第一轮那一遍同一个样子，它读到的手册各部分与票 108 一字不差，不是这一票带来的；只跑了一遍。其余 12 条与上一次做法相同（`review-advance` 停在浏览器，`progress-review-done` 比完价、做了文件、补了带路径的一行、开口交出，`progress-review-unchanged` `<no-reply/>`）；请求次数 3.77 → 4.23，读手册字节 15125 → 14429。
+- **界面画法**（用例 5，不调模型）：`gui/src/lib/review-silent-notes.test.ts` 用 Core 落库的样子拼一轮巡看（叫醒那条、`todo show`、`todo update --notes=…`、只有 `<no-reply/>` 的回复）：这一轮判为静默（`isSilentReply`、`isSilentReport`），对话里一行都不画（没有步骤、回复、过程按钮），侧栏卡片的最后一句是它之前那条回复；待办卡片只挂在记下那件事的那一轮（`todosByMessage` 按 `createdIn`），改备注不出新卡片。面板开着时那一行会亮一下（`todoPanelChanges` 比到备注变了，票 87），收起那一行的备注变成新的那一行开头。
+- **用量**：54 次运行，245 次模型调用（第一轮 12 次 59 次调用、第二轮 12 次 56 次、撞上限被替换的 1 次 5 次、回归 13 次 55 次、旧手册 8 次 38 次、反向检查 8 次 32 次）；`--dry-test` 不连模型。
+- **没测到的**：Core 的判据不在评测里（靠 `assistant_todo`、`schedule_wake_test` 的 Rust 测试）；真「查」网页的那一步（53 降成读本地文件）；巡看为希尔顿查公开资料、子任务带着简报回来的那次叫醒；用户回了话之后（备注最前面换成用户的一行）它会不会重做模板之外的东西，只有 52 一条；旧手册与反向检查在 52、53 上各只一遍；`news-budget` 的回退只有一遍，没再补跑。
+
 ## 安全措施
 
 - 拦截点在 GA 的工具分发：worker 把 `agentmain` 里的 `GenericAgentHandler` 换成子类（runner 自己装处理器子类用的也是这个接口 `GaSession.install_handler`）。子类的 `dispatch` 遇到任何真实工具就记录并返回 `should_exit`，一次模型调用后整个运行结束；只有 GA 自己判断最终回答的 `no_tool`（只读回复文本）和格式错误的重试提示 `bad_json` 走原路。子类上除 `do_no_tool` 外的所有 `do_*` 方法都换成一调用就报错的版本，作为第二道保险。
