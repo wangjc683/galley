@@ -1249,6 +1249,53 @@ async fn a_to_dos_reminder_says_which_to_do_and_when_it_is_due() {
     );
 }
 
+/// Main chat ticket 111: a reminder on a to-do with items carries the ones
+/// not ticked yet, read when the wake is made (a tick in the panel since the
+/// reminder was set counts); none left open, nothing is added.
+#[tokio::test]
+async fn a_to_dos_reminder_carries_its_items_not_ticked_yet() {
+    let (pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let reports = SubtaskReports::new();
+    let todo = todo_with_reminder(&galley, "上海出差前的准备", None, Some("2026-11-04")).await;
+    let todo = galley
+        .add_todo_subitems(
+            &todo.id,
+            &[
+                "订酒店".to_string(),
+                "订机票".to_string(),
+                "换港币".to_string(),
+            ],
+            assistant(),
+        )
+        .await
+        .expect("items");
+    galley
+        .complete_todo_subitem(&todo.items[0].id, Origin::desktop())
+        .await
+        .expect("tick");
+    slept_through(&pool, &reminder_of(&todo), ChronoDuration::seconds(30)).await;
+    assert_eq!(tick(&galley, &rec).await, 1);
+    restore_pending_reminders(&reports, &galley).await;
+    let host = host(&galley, &runner, &env, rec.clone());
+    assert!(matches!(
+        wake_if_due(&reports, &host, MAIN).await,
+        Some(WakeOutcome::Delivered { .. })
+    ));
+    let sent = runner.user_messages(MAIN);
+    assert!(
+        sent[0].contains(
+            "<<<\n上海出差前的准备\n>>>\nIts items not ticked yet:\n<<<\n订机票\n换港币\n>>>\n\
+             It is due 2026-11-04 (Wed), local time."
+        ),
+        "{}",
+        sent[0]
+    );
+    assert!(!sent[0].contains("订酒店"));
+}
+
 #[tokio::test]
 async fn a_to_do_ticked_off_is_not_reminded_of() {
     let (pool, galley) = with_main_chat().await;

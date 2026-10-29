@@ -233,6 +233,10 @@ pub struct DueTodo {
     /// When it is due, local (`2026-10-21 15:00 (Wed)`, `2026-10-23
     /// (Fri)`); `None` for no due date.
     pub due: Option<String>,
+    /// The words of the items under it not ticked yet, in their order
+    /// (main chat ticket 111): what is still open of it. Ticked ones are
+    /// left out; empty when it has none or every one is ticked.
+    pub open_items: Vec<String>,
 }
 
 impl DueTodo {
@@ -246,6 +250,12 @@ impl DueTodo {
             title: todo.title.clone(),
             notes: todo.notes.clone(),
             due: todo.stored_due().map(|due| due.words(tz)),
+            open_items: todo
+                .items
+                .iter()
+                .filter(|item| !item.done)
+                .map(|item| item.text.clone())
+                .collect(),
         }
     }
 }
@@ -562,13 +572,24 @@ fn due_when_and_act(due: &DueReminder) -> (String, String) {
 /// as well as what the user has to do (ruling 112: a renovation due to
 /// finish), so the model says what is of use now (did it happen, what
 /// next) instead of reminding them of the title, and still leaves the
-/// to-do open until the user says it is done.
+/// to-do open until the user says it is done. Main chat ticket 111: the
+/// items under it not ticked yet follow its words, one a line in their
+/// own block (what is left of it); nothing when there are none or every
+/// one is ticked.
 fn todo_due_paragraph(due: &DueReminder, todo: &DueTodo) -> String {
     let id = &due.task_id;
     let (when, act) = due_when_and_act(due);
     let body = match todo.notes.as_deref().map(str::trim) {
         Some(notes) if !notes.is_empty() => format!("{}\n{notes}", todo.title.trim()),
         _ => todo.title.trim().to_string(),
+    };
+    let open_items = if todo.open_items.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "Its items not ticked yet:\n<<<\n{}\n>>>\n",
+            todo.open_items.join("\n")
+        )
     };
     let due_line = match &todo.due {
         Some(at) => format!("It is due {at}, local time."),
@@ -577,11 +598,11 @@ fn todo_due_paragraph(due: &DueReminder, todo: &DueTodo) -> String {
     format!(
         "Reminder `{id}` on the user's to-do `{}` came due. {when} The to-do is on the user's \
          list, something to do or something coming up they want to hear about:\n\
-         <<<\n{body}\n>>>\n{due_line} {act} tell the user what is of use to them now, in a \
-         sentence or two (not the to-do read back: ask whether it is done or has happened, or \
-         give the next step), look something up first, or start a subtask. Do not tick it off \
-         until they say it is done or has happened. If it no longer applies (the user already \
-         did it), {NO_REPLY_END}.",
+         <<<\n{body}\n>>>\n{open_items}{due_line} {act} tell the user what is of use to them \
+         now, in a sentence or two (not the to-do read back: ask whether it is done or has \
+         happened, or give the next step), look something up first, or start a subtask. Do not \
+         tick it off until they say it is done or has happened. If it no longer applies (the \
+         user already did it), {NO_REPLY_END}.",
         todo.id
     )
 }
@@ -2069,6 +2090,7 @@ mod tests {
             title: "交季度报告".into(),
             notes: Some("发给王总".into()),
             due: Some("2026-10-21 15:00 (Wed)".into()),
+            open_items: Vec::new(),
         });
         let text = report_text(&[due_report(on_todo.clone())]);
         assert!(text.starts_with(OPENING_REMINDER));
@@ -2089,6 +2111,17 @@ mod tests {
         ));
         // Not the words it noted: the to-do's title is.
         assert!(!text.contains("提醒他喝水") && !text.contains("What you noted"));
+        // Main chat ticket 111: the items not ticked yet follow its words,
+        // one a line in their own block; none, or every one ticked,
+        // adds nothing (the text above is that case).
+        let mut with_items = on_todo.clone();
+        with_items.todo.as_mut().unwrap().open_items = vec!["订机票".into(), "换港币".into()];
+        let text = report_text(&[due_report(with_items)]);
+        assert!(text.contains(
+            "something coming up they want to hear about:\n<<<\n交季度报告\n发给王总\n>>>\n\
+             Its items not ticked yet:\n<<<\n订机票\n换港币\n>>>\nIt is due 2026-10-21 15:00 \
+             (Wed), local time. Act on it now: tell the user"
+        ));
         let mut late = on_todo.clone();
         late.late = Some("9 hours".into());
         late.todo.as_mut().unwrap().due = None;

@@ -407,8 +407,9 @@ Managed runtime with a main chat only: every write is refused with
   none back. A reminder whose to-do is no longer open never wakes the
   assistant: the scheduler cancels it instead of firing it, the restart read
   of pending wakes leaves it out, and the wake drops it when it reads its
-  reports again. Its wake says which to-do, its title and notes, when it is
-  due, with the reminder's planned and actual times
+  reports again. Its wake says which to-do, its title and notes, the items
+  under it not ticked yet (ticket 111; none when there are none or all are
+  ticked), when it is due, with the reminder's planned and actual times
   (`[Galley: reminder <id> for to-do <todo> came due (…)]` in replay).
 - **Who cancelled** (ticket 61, PRD ruling 113, migration 051): a to-do's
   or a task's cancel records who made it and why (`cancelled_via`,
