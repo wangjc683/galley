@@ -1280,6 +1280,107 @@
         }
       },
       "tz_offset_minutes": 480
+    },
+    {
+      "name": "items",
+      "now": "2026-10-16T06:05:00Z",
+      "text": "### In Hand\n\nAs of 2026-10-16 14:05, local time (it may have changed since: `todo list`, `schedule list` and `session brief <id>` read it now).\n\nThe user's to-dos (not done):\n- `todo_7a8b9c0d1e2f3a4b` due 2026-10-15 20:00 (Thu), overdue, 1 of 1 items done: 带齐材料\n- `todo_5e6f7a8b9c0d1e2f` due 2026-10-21 (Wed), reminder 2026-10-20 20:00 (Tue), 2 of 3 items done: 去上海出差\n- `todo_6f7a8b9c0d1e2f3a` no due date, 0 of 2 items done: 希尔顿酒店项目资料收集\n- `todo_4d5e6f7a8b9c0d1e` no due date: 买营养土",
+      "todo": {
+        "assistant": [],
+        "done": [],
+        "doneOmitted": 0,
+        "routine": [],
+        "todayCount": 0,
+        "yours": {
+          "anytime": [
+            {
+              "createdBy": "assistant",
+              "id": "todo_6f7a8b9c0d1e2f3a",
+              "items": [
+                {
+                  "done": false,
+                  "id": "item_4d5e6f7a8b9c0d1e",
+                  "text": "品牌"
+                },
+                {
+                  "done": false,
+                  "id": "item_5e6f7a8b9c0d1e2f",
+                  "text": "预算"
+                }
+              ],
+              "kind": "todo",
+              "state": "open",
+              "text": "希尔顿酒店项目资料收集"
+            },
+            {
+              "createdBy": "assistant",
+              "id": "todo_4d5e6f7a8b9c0d1e",
+              "kind": "todo",
+              "state": "open",
+              "text": "买营养土"
+            }
+          ],
+          "later": [
+            {
+              "createdBy": "assistant",
+              "due": {
+                "date": "2026-10-21",
+                "hasTime": false
+              },
+              "id": "todo_5e6f7a8b9c0d1e2f",
+              "items": [
+                {
+                  "done": true,
+                  "id": "item_1a2b3c4d5e6f7a8b",
+                  "text": "订酒店"
+                },
+                {
+                  "done": true,
+                  "id": "item_2b3c4d5e6f7a8b9c",
+                  "text": "订机票"
+                },
+                {
+                  "done": false,
+                  "id": "item_3c4d5e6f7a8b9c0d",
+                  "text": "换港币"
+                }
+              ],
+              "kind": "todo",
+              "reminder": {
+                "at": "2026-10-20T12:00:00+00:00",
+                "state": "scheduled",
+                "taskId": "sched_of_todo_5e6f7a8b9c0d1e2f"
+              },
+              "state": "open",
+              "text": "去上海出差"
+            }
+          ],
+          "today": [
+            {
+              "createdBy": "assistant",
+              "due": {
+                "at": "2026-10-15T12:00:00+00:00",
+                "date": "2026-10-15",
+                "hasTime": true,
+                "time": "20:00"
+              },
+              "id": "todo_7a8b9c0d1e2f3a4b",
+              "items": [
+                {
+                  "done": true,
+                  "id": "item_6f7a8b9c0d1e2f3a",
+                  "text": "身份证"
+                }
+              ],
+              "kind": "todo",
+              "overdue": true,
+              "state": "open",
+              "text": "带齐材料"
+            }
+          ]
+        }
+      },
+      "tz_offset_minutes": 480
     }
   ],
   "lateness_words": [

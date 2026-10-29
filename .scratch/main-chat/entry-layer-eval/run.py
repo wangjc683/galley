@@ -179,6 +179,9 @@ HAND_WRITES = ("session rename", "session pin", "session unpin", "session delete
                "project pin", "project unpin", "project archive-sessions", "llm set-default")
 # Ticket 41: the user's to-dos (`galley todo`, ticket 40).
 TODO_WRITES = ("todo add", "todo update", "todo done", "todo reopen", "todo cancel")
+# Ticket 111: the items under a to-do (`galley todo item`).
+TODO_ITEM_WRITES = ("todo item add", "todo item done", "todo item reopen", "todo item update", "todo item remove")
+TODO_WRITES += TODO_ITEM_WRITES
 ALL_WRITES = WRITE_COMMANDS + SCHEDULE_WRITES + HAND_WRITES + TODO_WRITES
 # The In Hand lines' "as of": the runner started an hour before the
 # message (the segment's start).
@@ -365,7 +368,9 @@ def fail(code, message, exit_code):
 VALUE = {"tail", "around", "context", "since", "until", "supervisor", "reason", "to", "project",
          "runtime", "status", "timeout", "poll", "after-turn", "llm", "session", "root-path",
          "icon", "color", "schema", "at", "weekly", "monthly", "time", "target", "prompt", "name",
-         "due", "remind-at", "notes", "title", "text"}
+         "due", "remind-at", "notes", "title", "text", "item"}
+# Ticket 111: `todo add --item=<text>` repeats, in order (clap's Vec).
+items_given = []
 words, flags, i = [], {}, 0
 while i < len(argv):
     a = argv[i]
@@ -375,9 +380,18 @@ while i < len(argv):
             flags[k] = v
         elif k in VALUE and i + 1 < len(argv):
             flags[k] = argv[i + 1]
+            v = argv[i + 1]
             i += 1
         else:
             flags[k] = True
+            v = None
+        if k == "item":
+            if v is None:
+                print(json.dumps({"error": "invalid_args", "message": "error: a value is required for "
+                                  "'--item <TEXT>' but none was supplied\n\nFor more information, try "
+                                  "'--help'.\n"}, ensure_ascii=False))
+                sys.exit(2)
+            items_given.append(v)
     elif a in ("-h", "-V"):
         flags["help" if a == "-h" else "version"] = True
     else:
@@ -430,16 +444,32 @@ ALLOWED = {
     ("llm", "set-default"): {"supervisor", "reason"},
     # Ticket 40: the to-dos.
     ("todo", "list"): {"all"}, ("todo", "show"): set(),
-    ("todo", "add"): {"notes", "due", "remind-at", "supervisor", "reason"},
+    ("todo", "add"): {"notes", "due", "remind-at", "item", "supervisor", "reason"},
     ("todo", "update"): {"title", "notes", "due", "no-due", "remind-at", "no-remind", "supervisor", "reason"},
     ("todo", "done"): {"supervisor", "reason"}, ("todo", "reopen"): {"supervisor", "reason"},
     ("todo", "cancel"): {"supervisor", "reason"},
+    # Ticket 111: the items under a to-do, `todo item …`.
+    ("todo", "item", "add"): {"supervisor", "reason"},
+    ("todo", "item", "done"): {"supervisor", "reason"},
+    ("todo", "item", "reopen"): {"supervisor", "reason"},
+    ("todo", "item", "update"): {"text", "supervisor", "reason"},
+    ("todo", "item", "remove"): {"supervisor", "reason"},
     # Ticket 95: the memos.
     ("memo", "list"): set(), ("memo", "add"): {"until", "supervisor", "reason"},
     ("memo", "update"): {"text", "until", "no-until", "supervisor", "reason"},
     ("memo", "delete"): {"supervisor", "reason"},
 }
 cmd = tuple(words[:1]) if words[:1] in (["status"], ["version"], ["health"]) else tuple(words[:2])
+if cmd == ("todo", "item"):
+    # Ticket 111: three words; `todo item` alone prints its help, an unknown
+    # one is clap's refusal under `todo item`.
+    if len(words) < 3:
+        print(helps.get("todo item", helps[""]), end="")
+        sys.exit(0)
+    cmd = tuple(words[:3])
+    if cmd not in ALLOWED:
+        fail("invalid_args", "error: unrecognized subcommand '" + words[2] + "'\n\nUsage: galley todo item "
+             "[OPTIONS] <COMMAND>\n\nFor more information, try '--help'.\n", 2)
 rest = words[len(cmd):]
 if flags.get("version") and not cmd:
     print("galley 0.6.2")
@@ -449,6 +479,9 @@ if cmd not in ALLOWED:
 for k in flags:
     if k not in ALLOWED[cmd] and k != "schema":
         fail("invalid_args", "error: unexpected argument '--" + k + "' found\n\nUsage: galley " + " ".join(cmd) + "\n\nFor more information, try '--help'.\n", 2)
+if cmd[:2] == ("todo", "item") and "text" in flags and (flags["text"] is True or flags["text"] == ""):
+    fail("invalid_args", "error: a value is required for '--text <TEXT>' but none was supplied\n\n"
+         "For more information, try '--help'.\n", 2)
 
 sessions = fx["sessions"]
 
@@ -660,7 +693,7 @@ def reminder_task(todo_id):
     live = [t for t in state["tasks"] if t.get("todoId") == todo_id and not t.get("cancelledAt")]
     return sorted(live, key=lambda t: (t.get("createdAt", ""), t["id"]))[-1] if live else None
 
-def todo_wire(t):
+def todo_wire(t, listed=False):
     w = {"id": t["id"], "title": t["title"]}
     if t.get("notes"):
         w["notes"] = t["notes"]
@@ -675,10 +708,49 @@ def todo_wire(t):
         st = "fired" if once_fired(task) else ("scheduled" if task.get("enabled", True) else "paused")
         w["reminder"] = {"taskId": task["id"], "at": task["fireAt"], "state": st}
     w["status"] = "cancelled" if t.get("cancelledAt") else ("done" if t.get("doneAt") else "open")
-    for k in ("doneAt", "doneBy", "origin", "createdIn", "cancelledAt", "cancelledBy", "createdAt", "updatedAt"):
+    for k in ("doneAt", "doneBy", "origin", "createdIn", "cancelledAt", "cancelledBy"):
+        if t.get(k):
+            w[k] = t[k]
+    # Ticket 111: the items under it on `show` and every write, their count
+    # on every shape (`list` leaves the items out).
+    items = t.get("items") or []
+    if items and not listed:
+        w["items"] = [item_wire(x) for x in items]
+    if items:
+        w["itemCount"] = {"done": sum(1 for x in items if x.get("done")), "total": len(items)}
+    for k in ("createdAt", "updatedAt"):
         if t.get(k):
             w[k] = t[k]
     return w
+
+def item_wire(x):
+    w = {"id": x["id"], "text": x["text"], "done": bool(x.get("done"))}
+    for k in ("doneAt", "doneBy"):
+        if x.get(k):
+            w[k] = x[k]
+    w["createdAt"] = x["createdAt"]
+    return w
+
+def item_words(raw):
+    """api::todo::todo_subitem_text: one line, each run of white space one space."""
+    return " ".join(str(raw).split())
+
+def find_item(iid):
+    """The item and its to-do, for a write: there, under a to-do not cancelled."""
+    for t in state["todos"]:
+        for x in t.get("items") or []:
+            if x["id"] == iid:
+                if t.get("cancelledAt"):
+                    fail("not_found", "todo " + t["id"] + " is cancelled", 3)
+                return t, x
+    fail("not_found", "todo item " + iid + " not found", 3)
+
+def add_items(t, texts):
+    items = t.setdefault("items", [])
+    n = sum(len(x.get("items") or []) for x in state["todos"])
+    for k, text in enumerate(texts):
+        items.append({"id": "item_%016x" % (0x17e5eed000000000 + n + k), "text": text, "done": False,
+                      "createdAt": iso(now_utc())})
 
 def find_todo(tid, live=True):
     for t in state["todos"]:
@@ -956,7 +1028,7 @@ if cmd == ("schedule", "run"):
     out({"task": task_out(t)})
 if cmd == ("todo", "list"):
     rows = [t for t in state["todos"] if flags.get("all") or not (t.get("doneAt") or t.get("cancelledAt"))]
-    out(*[todo_wire(t) for t in todo_order(rows)])
+    out(*[todo_wire(t, listed=True) for t in todo_order(rows)])
 if cmd == ("todo", "show"):
     need(1, "<TODO_ID>")
     out(todo_wire(find_todo(rest[0], live=False)))
@@ -968,6 +1040,9 @@ if cmd == ("todo", "add"):
         fail("invalid_args", "create_todo: a to-do needs a title", 2)
     due = parse_due(flags["due"]) if "due" in flags else {}
     at = future_at(flags["remind-at"], "create_todo") if "remind-at" in flags else None
+    texts = [item_words(x) for x in items_given]
+    if any(not x for x in texts):
+        fail("invalid_args", "create_todo: an item needs words", 2)
     t = {"id": "todo_%016x" % (0x7d0d5eed00000000 + len(state["todos"])), "title": rest[0].strip()}
     if text_flag("notes").strip():
         t["notes"] = text_flag("notes").strip()
@@ -977,6 +1052,8 @@ if cmd == ("todo", "add"):
         t["createdIn"] = {"sessionId": fx["main_chat_id"]}
     t["createdAt"] = t["updatedAt"] = iso(now_utc())
     state["todos"].append(t)
+    if texts:
+        add_items(t, texts)
     if at is not None:
         set_reminder(t, at)
     out({"todo": todo_wire(t)})
@@ -1041,6 +1118,56 @@ if cmd in (("todo", "done"), ("todo", "reopen"), ("todo", "cancel")):
         t["cancelledAt"] = t["updatedAt"] = iso(now_utc())
         t["cancelledBy"] = origin_of()
         release_reminder(t)
+    out({"todo": todo_wire(t)})
+# Ticket 111: the items, Core's rules (core/src/db/todo.rs): words checked
+# before the to-do or item is looked up; every write stamps the to-do's
+# updatedAt; a write that changes nothing changes nothing.
+if cmd == ("todo", "item", "add"):
+    if not rest:
+        fail("invalid_args", "error: the following required arguments were not provided:\n  <TODO_ID>\n"
+             "  <TEXT>...\n\nUsage: galley todo item add <TODO_ID> <TEXT>...\n\nFor more information, try "
+             "'--help'.\n", 2)
+    if len(rest) < 2:
+        fail("invalid_args", "error: the following required arguments were not provided:\n  <TEXT>...\n\n"
+             "Usage: galley todo item add <TODO_ID> <TEXT>...\n\nFor more information, try '--help'.\n", 2)
+    texts = [item_words(x) for x in rest[1:]]
+    if any(not x for x in texts):
+        fail("invalid_args", "add_todo_subitems: an item needs words", 2)
+    t = find_todo(rest[0])
+    add_items(t, texts)
+    t["updatedAt"] = iso(now_utc())
+    out({"todo": todo_wire(t)})
+if cmd[:2] == ("todo", "item"):
+    if cmd[2] == "update" and "text" not in flags:
+        fail("invalid_args", "error: the following required arguments were not provided:\n  --text <TEXT>\n\n"
+             "Usage: galley todo item update --text <TEXT> <ITEM_ID>\n\nFor more information, try '--help'.\n", 2)
+    if not rest:
+        usage = ("todo item update --text <TEXT> <ITEM_ID>" if cmd[2] == "update"
+                 else "todo item " + cmd[2] + " <ITEM_ID>")
+        fail("invalid_args", "error: the following required arguments were not provided:\n  <ITEM_ID>\n\n"
+             "Usage: galley " + usage + "\n\nFor more information, try '--help'.\n", 2)
+    if cmd[2] == "update":
+        text = item_words(text_flag("text"))
+        if not text:
+            fail("invalid_args", "update_todo_subitem: an item needs words", 2)
+    t, x = find_item(rest[0])
+    changed = False
+    if cmd[2] == "done" and not x.get("done"):
+        x.update(done=True, doneAt=iso(now_utc()), doneBy=origin_of())
+        changed = True
+    elif cmd[2] == "reopen" and x.get("done"):
+        x["done"] = False
+        x.pop("doneAt", None)
+        x.pop("doneBy", None)
+        changed = True
+    elif cmd[2] == "update" and x["text"] != text:
+        x["text"] = text
+        changed = True
+    elif cmd[2] == "remove":
+        t["items"] = [y for y in t["items"] if y["id"] != x["id"]]
+        changed = True
+    if changed:
+        t["updatedAt"] = iso(now_utc())
     out({"todo": todo_wire(t)})
 if cmd == ("memo", "list"):
     out(*[memo_wire(m) for m in state["memos"] if memo_holds(m)])
@@ -1718,6 +1845,10 @@ def in_hand_block(todo: dict[str, Any], now: datetime, tz: Any,
         if rem and at:
             facts.append({"scheduled": f"reminder {at}", "paused": f"reminder {at} (paused)",
                           "fired": f"reminded {at}"}[rem["state"]])
+        # Ticket 111: how many of the items under it are ticked, the count only.
+        items = it.get("items") or []
+        if items:
+            facts.append(f"{sum(1 for x in items if x.get('done'))} of {len(items)} items done")
         return f"`{it['id']}` {', '.join(facts)}: {in_hand_cut(it.get('text', ''), IN_HAND_TEXT_CHARS)}"
 
     def task_line(it: dict[str, Any]) -> str:
@@ -1828,6 +1959,9 @@ def in_hand_todo(todos: list[dict[str, Any]], tasks: list[dict[str, Any]], at: d
         for k in ("notes", "due", "reminder"):
             if t.get(k):
                 item[k] = t[k]
+        # Ticket 111: the list's rows carry the items (ListedSubitem).
+        if t.get("items"):
+            item["items"] = [{"id": x["id"], "text": x["text"], "done": bool(x.get("done"))} for x in t["items"]]
         due = t.get("due")
         if not due:
             anytime.append(((t["createdAt"], t["id"]), item))
@@ -2116,6 +2250,20 @@ def todo_stored(t: dict[str, Any], now: datetime, k: int) -> dict[str, Any]:
         todo["doneBy"] = {"via": t["done_since"].get("via", "gui")}
     if t.get("cancelled"):
         cancel_before(todo, t["cancelled"], now)
+    # Ticket 111: the items under it (`items`: {text, done, via?}), added
+    # with it; a ticked one ticked a few minutes later, by the user at the
+    # desktop unless `via` says otherwise.
+    if t.get("items"):
+        todo["items"] = []
+        for j, x in enumerate(t["items"]):
+            row: dict[str, Any] = {"id": x.get("id") or f"item_{t['id'][5:13]}{j:08x}", "text": x["text"],
+                                   "done": bool(x.get("done")), "createdAt": todo["createdAt"]}
+            if x.get("done"):
+                ticked = min(made + timedelta(minutes=5 + j), now - timedelta(minutes=1))
+                row["doneAt"] = iso_utc(ticked)
+                row["doneBy"] = ({"via": "gui"} if x.get("via", "gui") == "gui"
+                                 else {"via": "supervisor", "supervisor": "galley-assistant"})
+            todo["items"].append(row)
     return todo
 
 
@@ -2158,6 +2306,12 @@ def todo_wire_at(todo: dict[str, Any], tasks: list[dict[str, Any]], tz: Any,
     done = todo.get("doneAt") and (as_of is None or datetime.fromisoformat(todo["doneAt"]) <= as_of)
     gone = todo.get("cancelledAt") and (as_of is None or datetime.fromisoformat(todo["cancelledAt"]) <= as_of)
     w["status"] = "cancelled" if gone else "done" if done else "open"
+    # Ticket 111: as `todo show` prints them.
+    items = todo.get("items") or []
+    if items:
+        w["items"] = [{k: x[k] for k in ("id", "text", "done", "doneAt", "doneBy", "createdAt") if k in x}
+                      for x in items]
+        w["itemCount"] = {"done": sum(1 for x in items if x.get("done")), "total": len(items)}
     w["createdAt"] = todo["createdAt"]
     return w
 
@@ -2708,6 +2862,43 @@ DUE="$(date -v+1d +%Y-%m-%d)"
 "$GALLEY" todo add --help | head -1
 '''
 
+# Ticket 111: the items under a to-do as the real CLI and Core answer them
+# — `list` with the count and no items, `show` with them, ticking (twice:
+# the first tick kept), unticking, adding several words at once and with
+# `todo add --item` (the words made one line), the refusals (no words, an
+# empty item, an unknown to-do or item, a missing or empty --text, an
+# unknown subcommand, an item under a cancelled to-do), changing words,
+# removing, a help page.
+TODO_ITEMS_DRY_BASH = r'''G="$(sed -n '1p' "${XDG_CONFIG_HOME:-$HOME/.config}/galley/cli-path")"
+T=todo_3a7c5e9b1d2f4086
+J='import json, sys; t = json.load(sys.stdin); t = t.get("todo", t); '
+"$G" todo list | python3 -c 'import json, sys; ts = [json.loads(l) for l in sys.stdin if l.strip()]; print("list_counts=%d list_items=%d" % (sum("itemCount" in t for t in ts), sum("items" in t for t in ts)))'
+"$G" todo show $T | python3 -c "$J"'print("show_items=%d count=%s" % (len(t["items"]), json.dumps(t["itemCount"])))'
+"$G" todo item done item_3a7c5e9b00000001 --supervisor=galley-assistant --reason=dry | python3 -c "$J"'print("ticked=%s by=%s status=%s count=%s" % (t["items"][0]["done"], t["items"][0]["doneBy"]["supervisor"], t["status"], json.dumps(t["itemCount"])))'
+A1="$("$G" todo show $T | python3 -c "$J"'print(t["items"][0]["doneAt"])')"
+"$G" todo item done item_3a7c5e9b00000001 --supervisor=galley-assistant >/dev/null
+A2="$("$G" todo show $T | python3 -c "$J"'print(t["items"][0]["doneAt"])')"
+[ "$A1" = "$A2" ] && echo "tick_kept=1"
+"$G" todo item reopen item_3a7c5e9b00000001 --supervisor=galley-assistant | python3 -c "$J"'print("reopened=%s nobody=%s" % (t["items"][0]["done"], "doneBy" not in t["items"][0]))'
+"$G" todo item add $T "带证件" "  带  充电器 " --supervisor=galley-assistant | python3 -c "$J"'print("added=" + "|".join(x["text"] for x in t["items"]))'
+"$G" todo item add $T --supervisor=galley-assistant; echo "notext=$?"
+"$G" todo item add $T "带证件" "  " --supervisor=galley-assistant; echo "emptytext=$?"
+"$G" todo item add todo_nope "x" --supervisor=galley-assistant; echo "unknowntodo=$?"
+"$G" todo item update item_3a7c5e9b00000002 --text="订周二晚的机票" --supervisor=galley-assistant | python3 -c "$J"'print("updated=" + t["items"][1]["text"])'
+"$G" todo item update item_3a7c5e9b00000002 --supervisor=galley-assistant; echo "notextflag=$?"
+"$G" todo item update item_3a7c5e9b00000002 --text= --supervisor=galley-assistant; echo "emptyflag=$?"
+"$G" todo item update item_3a7c5e9b00000002 --text="   " --supervisor=galley-assistant; echo "blankflag=$?"
+"$G" todo item remove item_3a7c5e9b00000003 --supervisor=galley-assistant | python3 -c "$J"'print("removed=" + "|".join(x["text"] for x in t["items"]))'
+"$G" todo item done item_nope --supervisor=galley-assistant; echo "unknownitem=$?"
+"$G" todo item frob x; echo "badsub=$?"
+"$G" todo add "去杭州" --item=订酒店 --item="订
+高铁" --supervisor=galley-assistant | python3 -c "$J"'print("noted=" + "|".join(x["text"] for x in t["items"]))'
+"$G" todo add "去苏州" --item= --supervisor=galley-assistant; echo "emptyitem=$?"
+"$G" todo cancel $T --supervisor=galley-assistant >/dev/null
+"$G" todo item done item_3a7c5e9b00000002 --supervisor=galley-assistant; echo "cancelleditem=$?"
+"$G" todo item add --help | head -1
+'''
+
 # Ticket 61: who cancelled, as the real Core records it — `todo cancel`
 # with its label and reason, the reminder Core takes along (`system`),
 # `todo update --no-remind` (the caller's own), `schedule delete` with no
@@ -2920,6 +3111,10 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
         "todo-cancel-by": [
             call("<summary>Cancel</summary>\n取消。", ("code_run", {"type": "bash", "script": TODO_CANCEL_BY_BASH})),
             call("<summary>Cancelled</summary>\n好，不提醒了。")],
+        # Ticket 111: the items' commands through the fake galley.
+        "todo-items-cli": [
+            call("<summary>Items</summary>\n动一下子项。", ("code_run", {"type": "bash", "script": TODO_ITEMS_DRY_BASH})),
+            call("<summary>Done</summary>\n已勾上。")],
         "todo-tick": [
             call("<summary>Tick it</summary>\n勾掉。", ("code_run", {"type": "bash", "script":
                  'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; "$G" todo list >/dev/null; '
@@ -4354,7 +4549,7 @@ def render_sandbox_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
 CLI_VALUE_FLAGS = {"tail", "around", "context", "since", "until", "supervisor", "reason", "to", "project",
                    "runtime", "status", "timeout", "poll", "after-turn", "llm", "session", "root-path",
                    "icon", "color", "schema", "at", "weekly", "monthly", "time", "target", "prompt", "name",
-                   "due", "remind-at", "notes", "title"}
+                   "due", "remind-at", "notes", "title", "item"}
 NO_REPLY_RE = re.compile(r"<\s*no-reply\s*/\s*>", re.IGNORECASE)
 # Ticket 73: the file marker (gui/src/lib/ipc/ga-output-cleaning.ts
 # FILE_REF_PATTERN), its path.
@@ -4398,6 +4593,9 @@ def cli_name(argv: list[str]) -> str:
     words, flags = parse_cli(argv)
     if flags.get("help") or words[:1] == ["help"]:
         return "help"
+    if words[:2] == ["todo", "item"]:
+        # Ticket 111: `todo item add / done / reopen / update / remove`.
+        return " ".join(words[:3])
     return " ".join(words[:1] if words[:1] in (["status"], ["version"], ["health"]) else words[:2])
 
 
@@ -5448,7 +5646,9 @@ def todo_gist(t: dict[str, Any]) -> str:
         who = {"gui": "用户在桌面上", "system": "Core 顺带"}.get(by.get("via"), by.get("supervisor") or by.get("via"))
         state += f"（{t['cancelledAt']}，{who}" + (f"，原因：{by['reason']}" if by.get("reason") else "") + "）"
     notes = f"（备注：{t['notes']}）" if t.get("notes") else ""
-    return f"`{t['id']}` {t['title']}{notes}，截止 {due}，{state}"
+    # Ticket 111: the items under it, each its box and words.
+    items = f"（子项：{'、'.join(item_gist(x) for x in t['items'])}）" if t.get("items") else ""
+    return f"`{t['id']}` {t['title']}{notes}{items}，截止 {due}，{state}"
 
 
 # Ticket 63 (main chat PRD ruling 115): a reply that says it noted
@@ -5548,6 +5748,163 @@ PROGRESS_DAY_RE = re.compile(r"^[\s【\[（(「]*(?:(\d{4})\s*[年/.\-]\s*)?(\d{
 
 def notes_of(t: dict[str, Any] | None) -> str:
     return (t or {}).get("notes") or ""
+
+
+def items_of(t: dict[str, Any] | None) -> list[dict[str, Any]]:
+    return list((t or {}).get("items") or [])
+
+
+def item_gist(x: dict[str, Any]) -> str:
+    return ("☑" if x.get("done") else "☐") + x.get("text", "")
+
+
+def match_groups(items: list[dict[str, Any]], groups: list[list[str]]) -> list[int] | None:
+    """Ticket 111: one item for each group (one of its words in the item's
+    words), no item for two groups; the item's index per group, or None."""
+    picked: list[int] = []
+
+    def go(k: int) -> bool:
+        if k == len(groups):
+            return True
+        for i, x in enumerate(items):
+            if i not in picked and any(w in x.get("text", "") for w in groups[k]):
+                picked.append(i)
+                if go(k + 1):
+                    return True
+                picked.pop()
+        return False
+
+    return list(picked) if go(0) else None
+
+
+def items_facts(exp: dict[str, Any], log: list[list[str]], fx_todos: dict[str, dict[str, Any]],
+                todo_by_id: dict[str, dict[str, Any]], made_todos: list[dict[str, Any]]) -> dict[str, Any]:
+    """Ticket 111: the items under the to-dos the run left, against what it
+    started with (main chat PRD ruling 157).
+
+    `expect.items`: `"none"` — no to-do ends with an item it did not have,
+    and none of theirs changed; or `{id, groups}` — that to-do (`"made"`:
+    the one the run noted) ends with exactly one item a group (one of the
+    group's words in it), as many as there are groups, none ticked, the
+    ones it started with as they were. `expect.items_done`: `[{id,
+    text_any}]` — in that to-do, the items with one of these words ticked
+    in this run by Galley, every other item's box as it was, none added,
+    removed or reworded. `expect.notes_after` (`{id, keep, drop}`): that
+    to-do's notes keep each of `keep` as a line of its own, word for word
+    and in order, and no longer hold `drop` (a line that starts with it);
+    another line is noted. Elsewhere a change to an item is noted, and
+    the item commands are writes no case allows unless it says so."""
+    reasons: list[str] = []
+    flags: list[str] = []
+    allowed: set[str] = set()
+    changes: dict[str, list[str]] = {}
+    for tid, t in todo_by_id.items():
+        before = {x["id"]: x for x in items_of(fx_todos.get(tid))}
+        after = items_of(t)
+        said: list[str] = []
+        for x in after:
+            old = before.get(x["id"])
+            if old is None:
+                said.append("加了" + item_gist(x))
+            else:
+                if old.get("text") != x.get("text"):
+                    said.append(f"改了「{old.get('text')}」→「{x.get('text')}」")
+                if bool(old.get("done")) != bool(x.get("done")):
+                    said.append(("勾了" if x.get("done") else "取消勾") + x.get("text", ""))
+        gone = [x for xid, x in before.items() if xid not in {y["id"] for y in after}]
+        said += ["删了" + item_gist(x) for x in gone]
+        if said:
+            changes[tid] = said
+
+    def where(tid: str) -> str:
+        return (todo_by_id.get(tid) or fx_todos.get(tid) or {}).get("title", tid)
+
+    want = exp.get("items")
+    done_want = exp.get("items_done") or []
+    target: str | None = None
+    if want == "none":
+        if changes:
+            reasons.append("不该动子项却动了：" + "；".join(f"{where(t)}：{'、'.join(c)}" for t, c in changes.items()))
+    elif isinstance(want, dict):
+        allowed |= {"todo item add"}
+        target = want["id"]
+        if target == "made":
+            target = made_todos[0]["id"] if len(made_todos) == 1 else None
+        if target is None:
+            reasons.append("没有一件刚记的待办可以看子项")
+        else:
+            got = items_of(todo_by_id.get(target))
+            start = items_of(fx_todos.get(target))
+            groups = want["groups"]
+            new = [x for x in got if x["id"] not in {y["id"] for y in start}]
+            if len(new) != len(groups):
+                reasons.append(f"该有 {len(groups)} 项子项，加了 {len(new)} 项" + (
+                    "：" + "、".join(item_gist(x) for x in new) if new else ""))
+            elif match_groups(new, groups) is None:
+                reasons.append("子项和要的几样对不上：" + "、".join(item_gist(x) for x in new) + "（要："
+                               + "；".join("/".join(g) for g in groups) + "）")
+            if any(x.get("done") for x in new):
+                reasons.append("加的子项被勾上了：" + "、".join(x["text"] for x in new if x.get("done")))
+            if start and [(x["id"], x["text"], bool(x.get("done"))) for x in got[:len(start)]] != [
+                    (x["id"], x["text"], bool(x.get("done"))) for x in start]:
+                reasons.append("原来的子项被动了")
+        others = {t: c for t, c in changes.items() if t != target}
+        if others:
+            reasons.append("动了别的待办的子项：" + "；".join(f"{where(t)}：{'、'.join(c)}" for t, c in others.items()))
+    if done_want:
+        allowed |= {"todo item done"}
+        for want_done in done_want:
+            tid = want_done["id"]
+            got = {x["id"]: x for x in items_of(todo_by_id.get(tid))}
+            start = items_of(fx_todos.get(tid))
+            hit = [x for x in start if any(w in x["text"] for w in want_done["text_any"])]
+            for x in start:
+                now_x = got.get(x["id"])
+                if now_x is None:
+                    reasons.append(f"子项「{x['text']}」被删了")
+                    continue
+                if now_x.get("text") != x["text"]:
+                    reasons.append(f"子项「{x['text']}」被改成了「{now_x.get('text')}」")
+                if x in hit:
+                    if not now_x.get("done"):
+                        reasons.append(f"该勾上子项「{x['text']}」，没勾")
+                    elif not x.get("done") and (now_x.get("doneBy") or {}).get("supervisor") != "galley-assistant":
+                        reasons.append(f"勾子项「{x['text']}」时没记成 Galley 勾的")
+                elif bool(now_x.get("done")) != bool(x.get("done")):
+                    reasons.append(f"动了不该动的子项：「{x['text']}」" + ("勾上了" if now_x.get("done") else "取消了勾"))
+            added = [x for xid, x in got.items() if xid not in {y["id"] for y in start}]
+            if added:
+                reasons.append("多加了子项：" + "、".join(item_gist(x) for x in added))
+        others = {t: c for t, c in changes.items() if t not in {w["id"] for w in done_want}}
+        if others:
+            reasons.append("动了别的待办的子项：" + "；".join(f"{where(t)}：{'、'.join(c)}" for t, c in others.items()))
+    if want is None and not done_want and changes:
+        flags.append("动了子项：" + "；".join(f"{where(t)}：{'、'.join(c)}" for t, c in changes.items()))
+    keep = exp.get("notes_after")
+    if keep:
+        allowed.add("todo update")
+        tid = keep["id"]
+        final = notes_of(todo_by_id.get(tid))
+        lines = [ln.strip() for ln in final.split("\n") if ln.strip()]
+        at = -1
+        for line in keep["keep"]:
+            if line not in lines:
+                reasons.append(f"备注里少了（或改了）这一行：「{line}」")
+            elif lines.index(line) < at:
+                reasons.append(f"备注里这一行的次序变了：「{line}」")
+            else:
+                at = lines.index(line)
+        stale = [ln for ln in lines if ln.startswith(keep["drop"])]
+        if stale:
+            reasons.append(f"备注里还留着「{keep['drop']}」那一行：「{one_line(stale[0])[:40]}」")
+        extra = [ln for ln in lines if ln not in keep["keep"] and not ln.startswith(keep["drop"])]
+        if extra:
+            flags.append("备注里多了：" + "；".join(f"「{one_line(x)[:40]}」" for x in extra))
+        writes = [i for i, a in enumerate(log) if cli_name(a) == "todo update" and "notes" in parse_cli(a)[1]
+                  and parse_cli(a)[0][2:3] == [tid]]
+        if writes and not any(cli_name(a) == "todo show" and parse_cli(a)[0][2:3] == [tid] for a in log[:writes[0]]):
+            flags.append("改备注之前没 todo show 这一件")
+    return {"reasons": reasons, "flags": flags, "allowed": allowed, "changes": changes}
 
 
 def progress_facts(r: dict[str, Any], exp: dict[str, Any], now: datetime, started: datetime,
@@ -5860,6 +6217,30 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
                 reasons.append("待办标题里没有：" + " / ".join(exp["title_any"]))
         if bare:
             flags.append("另记了不带提醒的待办：" + "、".join(t["title"] for t in bare))
+    elif isinstance(want, dict):
+        # Ticket 111: several to-dos, each its own (`count`, `each`: a
+        # title word, a due window; a reminder optional, before its due).
+        allowed.add("todo add")
+        if len(made_todos) != want["count"]:
+            reasons.append(f"该记 {want['count']} 件待办，记了 {len(made_todos)} 件"
+                           + ("：" + "、".join(t["title"] for t in made_todos) if made_todos else ""))
+        else:
+            left = list(made_todos)
+            for spec in want["each"]:
+                t = next((x for x in left if any(w in x["title"] for w in spec["title_any"])), None)
+                if t is None:
+                    reasons.append("没有标题里有 " + " / ".join(spec["title_any"]) + " 的待办")
+                    continue
+                left.remove(t)
+                if "due" in spec:
+                    bad = due_ok(t, spec["due"])
+                    if bad:
+                        reasons.append(f"「{t['title']}」的{bad}")
+                rem = reminder_of(t["id"])
+                if not rem:
+                    flags.append(f"「{t['title']}」没挂提醒")
+                elif due_end(t) and local(rem["fireAt"]) > due_end(t):
+                    reasons.append(f"「{t['title']}」的提醒在截止之后：" + local_words(local(rem["fireAt"])))
     elif want == "optional":
         allowed.add("todo add")
         if len(made_todos) > 1:
@@ -6010,6 +6391,16 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
         allowed.add("todo update")
     reasons += progress["reasons"]
     flags += progress["flags"]
+    # Ticket 111: the items under the to-dos.
+    items_j = items_facts(exp, log, fx_todos, todo_by_id, made_todos)
+    allowed |= items_j["allowed"]
+    reasons += items_j["reasons"]
+    flags += items_j["flags"]
+    if not isinstance(exp.get("items"), dict):
+        noted_with = [t for t in made_todos if items_of(t)]
+        if noted_with and exp.get("items") != "none":
+            flags.append("记待办时带了子项：" + "、".join(
+                f"{t['title']}（{'、'.join(item_gist(x) for x in items_of(t))}）" for t in noted_with))
     extra = sorted({n for n in writes if n not in allowed})
     if extra:
         reasons.append("多余的写命令：" + "、".join(extra))
@@ -6400,7 +6791,8 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
-    out += (moved_section(data, cases) + rerun_section(data, cases, todo_facts, "110")
+    out += (rerun_section(data, cases, todo_facts, "111")
+            + moved_section(data, cases) + rerun_section(data, cases, todo_facts, "110")
             + progress_section(data, cases) + rerun_section(data, cases, todo_facts, "108")
             + rerun_section(data, cases, todo_facts, "73")
             + rerun_section(data, cases, todo_facts, "64") + retract_section(data, cases, todo_facts)
@@ -7007,6 +7399,9 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
     tcases = {c["id"]: c for c in json.loads(TODO_CASES.read_text(encoding="utf-8"))["cases"]}
     todo_scripts = {"todo-tick-soil": ("tick-soil", "todo-cli"), "todo-tick-ok": ("tick-soil", "todo-tick"),
                     "todo-cancel-by": ("tick-soil", "todo-cancel-by"),
+                    # Ticket 111.
+                    "todo-items-cli": ("items-tick-one", "todo-items-cli"),
+                    "todo-items-last": ("items-tick-last", "sched-no-reply"),
                     "todo-wake-todo": ("wake-todo", "todo-remind"),
                     "todo-landlord-8am": ("remind-landlord-8am", "todo-at-named"),
                     "todo-landlord-early": ("remind-landlord-8am", "todo-early"),
@@ -7691,6 +8086,206 @@ def dry_test_moved(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) 
         check(f["pass"] is False and any(why in x for x in f["reasons"]), f"look again later: {why} fails ({f['reasons']})")
 
 
+def dry_test_items(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) -> None:
+    """Ticket 111: the seven cases' fixtures (items in the fake galley and
+    in In Hand) and the judge on runs left by hand: items made with the
+    to-do or not, the wrong number or parts, ticked; two to-dos or one with
+    two items; one ticked item, the to-do too or not, another item touched;
+    news as a line, not an item; the list made items, the notes as they
+    should be left."""
+    print("todo: the items under a to-do (ticket 111)")
+    day = f"{mon.month}月{mon.day}日"
+    trip_id, hid = "todo_3a7c5e9b1d2f4086", "todo_4c8e1a7d2b9f3605"
+    ga = {"via": "supervisor", "supervisor": "galley-assistant", "reason": "dry"}
+
+    def item(text: str, n: int, done: bool = False, by: dict[str, Any] | None = None) -> dict[str, Any]:
+        x: dict[str, Any] = {"id": f"item_dry{n:012x}", "text": text, "done": done,
+                             "createdAt": iso_utc(mon)}
+        if done:
+            x.update(doneAt=iso_utc(mon), doneBy=by or ga)
+        return x
+
+    def run(case_id: str, reply: str, made: tuple[dict[str, Any], ...] = (), log: tuple[Any, ...] = (),
+            edit: Any = None, tasks: tuple[dict[str, Any], ...] = ()) -> dict[str, Any]:
+        case = cases[case_id]
+        r = synth_run(case, mon, reply, todos=made, log=log, tasks=tasks)
+        todos = [json.loads(json.dumps(t)) for t in r["fake_state"]["todos"]]
+        if edit:
+            edit({t["id"]: t for t in todos})
+        r["fake_state"]["todos"] = todos
+        return todo_facts(r, case)
+
+    # Fixtures.
+    fx = sched_fixture(clock_case(cases["items-tick-last"], mon), mon)
+    trip = next(t for t in fx["todos"] if t["id"] == trip_id)
+    check([(x["id"], x["text"], x["done"]) for x in trip["items"]]
+          == [("item_3a7c5e9b00000001", "订酒店", True), ("item_3a7c5e9b00000002", "订机票", True),
+              ("item_3a7c5e9b00000003", "换港币", False)]
+          and trip["items"][0]["doneBy"] == {"via": "gui"} and trip["items"][0]["doneAt"] < iso_utc(mon),
+          "fixture: the trip's items, two ticked in the panel before the run")
+    wire = todo_wire_at(trip, fx["tasks"], mon.tzinfo)
+    check(wire["itemCount"] == {"done": 2, "total": 3} and [x["text"] for x in wire["items"]] == ["订酒店", "订机票", "换港币"],
+          "todo show's shape: the items and their count")
+    prompt = sched_prompt(cases["items-tick-last"], mon)
+    check(", 2 of 3 items done: 上海出差前的准备" in prompt and "订酒店" not in prompt,
+          "In Hand: the count, not the items")
+    hilton = next(t for t in sched_fixture(clock_case(cases["items-hilton-split"], mon), mon)["todos"] if t["id"] == hid)
+    check(not hilton.get("items") and hilton["notes"].split("\n")[2].startswith("收集要点："),
+          "fixture: Hilton has no items, the list as its notes' last line")
+
+    # 1. The trip: one to-do with three items.
+    due = sched_day({"week_after": 3}, mon)
+    noted = dict(synth_todo("去上海出差", due=due), items=[item("订酒店", 1), item("订机票", 2), item("换港币", 3)])
+    add = ("todo", "add", "去上海出差", "--item=订酒店", "--item=订机票", "--item=换港币",
+           "--supervisor=galley-assistant", "--reason=dry")
+    f = run("items-trip", "记下了：下周三去上海出差，订酒店、订机票、换港币三项都在下面。", made=(noted,), log=(add,))
+    check(f["pass"] is True, f"trip: one to-do with three items passes ({f['reasons']} {f['flags']})")
+    f = run("items-trip", "记下了。", made=(noted,), log=(("todo", "add", "去上海出差", "--supervisor=galley-assistant"),
+                                                 ("todo", "item", "add", noted["id"], "订酒店", "订机票", "换港币",
+                                                  "--supervisor=galley-assistant")))
+    check(f["pass"] is True, f"trip: items added after the to-do pass too ({f['reasons']})")
+    for made, why in (
+            (dict(noted, items=[]), "该有 3 项子项，加了 0 项"),
+            (dict(noted, items=[item("订酒店", 1), item("订机票", 2)]), "该有 3 项子项，加了 2 项"),
+            (dict(noted, items=[item("订酒店", 1), item("订机票", 2), item("带证件", 3)]), "对不上"),
+            (dict(noted, items=[item("订酒店", 1, True), item("订机票", 2), item("换港币", 3)]), "被勾上了"),
+            (dict(noted, dueDate=sched_day({"week_after": 4}, mon)), "截止那天不对")):
+        f = run("items-trip", "记下了。", made=(made,), log=(add,))
+        check(f["pass"] is False and any(why in x for x in f["reasons"]), f"trip: {why} fails ({f['reasons']})")
+    three = tuple(dict(synth_todo(t, due=due), id=f"todo_dry00000000000{k}") for k, t in enumerate(("订酒店", "订机票", "换港币")))
+    f = run("items-trip", "记下了三件。", made=three, log=(SYNTH_ADD,) * 3)
+    check(f["pass"] is False and any("该记 1 件待办，记了 3 件" in x for x in f["reasons"]),
+          f"trip: three to-dos fail ({f['reasons']})")
+
+    # 2. Two dates, two to-dos.
+    wed, fri = sched_day({"next_weekday": 3}, mon), sched_day({"next_weekday": 5}, mon)
+    report = dict(synth_todo("交报告", due=wed), id="todo_dry0000000000a")
+    weekly = dict(synth_todo("交周报", due=fri), id="todo_dry0000000000b")
+    f = run("items-two-dates", "记下了两件。", made=(report, weekly), log=(SYNTH_ADD, SYNTH_ADD))
+    check(f["pass"] is True and any("没挂提醒" in x for x in f["flags"]),
+          f"two dates: two to-dos pass, no reminder noted ({f['reasons']} {f['flags']})")
+    both = dict(synth_todo("交报告和周报", due=fri), items=[item("交报告", 4), item("交周报", 5)])
+    f = run("items-two-dates", "记下了。", made=(both,), log=(SYNTH_ADD,))
+    check(f["pass"] is False and any("该记 2 件待办，记了 1 件" in x for x in f["reasons"])
+          and any("不该动子项" in x for x in f["reasons"]), f"two dates: one to-do with two items fails ({f['reasons']})")
+    f = run("items-two-dates", "记下了两件。", made=(report, dict(weekly, dueDate=wed)), log=(SYNTH_ADD, SYNTH_ADD))
+    check(f["pass"] is False and any("「交周报」的截止那天不对" in x for x in f["reasons"]),
+          f"two dates: the weekly report due Wednesday fails ({f['reasons']})")
+
+    # 3. One thing, no steps.
+    q = synth_todo("交季度报告", due=fri)
+    f = run("items-one-step", "记下了：周五前交季度报告。", made=(q,), log=(SYNTH_ADD,))
+    check(f["pass"] is True, f"one step: a to-do with no items passes ({f['reasons']})")
+    f = run("items-one-step", "记下了。", made=(dict(q, items=[item("写", 6), item("改", 7), item("交", 8)]),),
+            log=(SYNTH_ADD,))
+    check(f["pass"] is False and any("不该动子项" in x for x in f["reasons"]), f"one step: write, revise, hand in fail ({f['reasons']})")
+
+    # 4. The hotel booked: that item alone.
+    show = ("todo", "show", trip_id)
+
+    def tick(*ids: str, by: dict[str, Any] | None = None) -> Any:
+        def edit(todos: dict[str, dict[str, Any]]) -> None:
+            for x in todos[trip_id]["items"]:
+                if x["id"] in ids:
+                    x.update(done=True, doneAt=iso_utc(mon), doneBy=by or ga)
+        return edit
+
+    hotel, flight, hkd = "item_3a7c5e9b00000001", "item_3a7c5e9b00000002", "item_3a7c5e9b00000003"
+    done_hotel = ("todo", "item", "done", hotel, "--supervisor=galley-assistant", "--reason=dry")
+    f = run("items-tick-one", "已勾上订酒店。", log=(show, done_hotel), edit=tick(hotel))
+    check(f["pass"] is True and f["names"] == ["todo show", "todo item done"], f"one ticked: passes ({f['reasons']})")
+    f = run("items-tick-one", "已勾上。", log=(show, done_hotel), edit=tick(hotel, flight))
+    check(f["pass"] is False and any("动了不该动的子项：「订机票」勾上了" in x for x in f["reasons"]),
+          f"one ticked: another item ticked too fails ({f['reasons']})")
+    f = run("items-tick-one", "好的。")
+    check(f["pass"] is False and any("该勾上子项「订酒店」，没勾" in x for x in f["reasons"]), f"one ticked: none ticked fails ({f['reasons']})")
+    f = run("items-tick-one", "已勾上。", log=(show, done_hotel), edit=tick(hotel, by={"via": "cli"}))
+    check(f["pass"] is False and any("没记成 Galley 勾的" in x for x in f["reasons"]), f"one ticked: not as Galley fails ({f['reasons']})")
+
+    def whole(todos: dict[str, dict[str, Any]]) -> None:
+        tick(hotel)(todos)
+        todos[trip_id].update(doneAt=iso_utc(mon), doneBy=ga)
+
+    f = run("items-tick-one", "已勾上，这件也勾掉了。", log=(show, done_hotel, ("todo", "done", trip_id, "--supervisor=galley-assistant")),
+            edit=whole)
+    check(f["pass"] is False and any("动了不该动的待办" in x for x in f["reasons"]),
+          f"one ticked: the to-do ticked off too fails ({f['reasons']})")
+
+    def renamed(todos: dict[str, dict[str, Any]]) -> None:
+        tick(hotel)(todos)
+        todos[trip_id]["items"].append(item("订高铁", 9))
+
+    f = run("items-tick-one", "已勾上。", log=(show, done_hotel, ("todo", "item", "add", trip_id, "订高铁",
+                                                                 "--supervisor=galley-assistant")), edit=renamed)
+    check(f["pass"] is False and any("多加了子项" in x for x in f["reasons"])
+          and any("多余的写命令" in x and "todo item add" in x for x in f["reasons"]),
+          f"one ticked: an item added fails ({f['reasons']})")
+
+    # 5. The last one: the item and the to-do.
+    done_hkd = ("todo", "item", "done", hkd, "--supervisor=galley-assistant", "--reason=dry")
+    done_trip = ("todo", "done", trip_id, "--supervisor=galley-assistant", "--reason=dry")
+
+    def last(todos: dict[str, dict[str, Any]]) -> None:
+        tick(hkd)(todos)
+        todos[trip_id].update(doneAt=iso_utc(mon), doneBy=ga)
+
+    f = run("items-tick-last", "三项都齐了，这件已勾掉。", log=(show, done_hkd, done_trip), edit=last)
+    check(f["pass"] is True, f"the last one: item and to-do ticked, said: passes ({f['reasons']})")
+    f = run("items-tick-last", "已勾上换港币。", log=(show, done_hkd), edit=tick(hkd))
+    check(f["pass"] is False and any("该勾掉 todo_3a7c5e9b1d2f4086" in x for x in f["reasons"]),
+          f"the last one: the to-do left fails ({f['reasons']})")
+    f = run("items-tick-last", "好的。", log=(show, done_hkd, done_trip), edit=last)
+    check(f["pass"] is False and any("没点到" in x for x in f["reasons"]), f"the last one: not said fails ({f['reasons']})")
+
+    # 6. News about Hilton: a line, not an item.
+    base = hilton["notes"]
+    line = f"{day}：业主说筹开预算下周给"
+    news = ("todo", "update", hid, f"--notes={line}\n{base}", "--supervisor=galley-assistant", "--reason=dry")
+
+    def noted_line(todos: dict[str, dict[str, Any]]) -> None:
+        todos[hid]["notes"] = line + "\n" + base
+
+    f = run("items-hilton-news", "记下了，补在希尔顿那件的备注里。", log=(("todo", "show", hid), news), edit=noted_line)
+    check(f["pass"] is True, f"news: a line on top passes ({f['reasons']})")
+
+    def as_item(todos: dict[str, dict[str, Any]]) -> None:
+        noted_line(todos)
+        todos[hid]["items"] = [item("筹开预算下周给", 10)]
+
+    f = run("items-hilton-news", "记下了。", log=(("todo", "show", hid), news,
+                                                  ("todo", "item", "add", hid, "筹开预算下周给", "--supervisor=galley-assistant")),
+            edit=as_item)
+    check(f["pass"] is False and any("不该动子项" in x for x in f["reasons"]), f"news: an item for it fails ({f['reasons']})")
+
+    # 7. Hilton's list made items.
+    l1, l2, l3 = base.split("\n")
+    five = [item(t, 20 + k) for k, t in enumerate(("具体品牌与管理模式", "项目位置和当前阶段", "工程及证照进度", "筹开预算",
+                                                    "人员与系统准备情况"))]
+    split_log = (("todo", "show", hid), ("todo", "item", "add", hid, "具体品牌与管理模式", "…", "--supervisor=galley-assistant"),
+                 ("todo", "update", hid, f"--notes={l1}\n{l2}", "--supervisor=galley-assistant"))
+
+    def split(notes: str, items: list[dict[str, Any]]) -> Any:
+        def edit(todos: dict[str, dict[str, Any]]) -> None:
+            todos[hid]["notes"] = notes
+            todos[hid]["items"] = items
+        return edit
+
+    f = run("items-hilton-split", "拆好了，5 项都在希尔顿那件下面。", log=split_log, edit=split(f"{l1}\n{l2}", five))
+    check(f["pass"] is True and not any("备注里多了" in x for x in f["flags"]), f"split: five items, the list out passes ({f['reasons']} {f['flags']})")
+    f = run("items-hilton-split", "拆好了。", log=split_log, edit=split(f"{day}：收集要点拆成了 5 项\n{l1}\n{l2}", five))
+    check(f["pass"] is True and any("备注里多了" in x for x in f["flags"]), f"split: a line more is noted ({f['reasons']} {f['flags']})")
+    for notes, items, why in (
+            (base, five, "还留着「收集要点」那一行"),
+            (f"{l1}", five, f"少了（或改了）这一行：「{l2}」"),
+            (f"{l1}\n{l2.replace('做好了', '已做好')}", five, "少了（或改了）这一行"),
+            (f"{l2}\n{l1}", five, "次序变了"),
+            (f"{l1}\n{l2}", five[:4], "该有 5 项子项，加了 4 项"),
+            (f"{l1}\n{l2}", five + [item("开业时间表", 30)], "该有 5 项子项，加了 6 项"),
+            (f"{l1}\n{l2}", five[:4] + [item("其他", 31)], "对不上")):
+        f = run("items-hilton-split", "拆好了。", log=split_log, edit=split(notes, items))
+        check(f["pass"] is False and any(why in x for x in f["reasons"]), f"split: {why} fails ({f['reasons']})")
+
+
 def dry_test_progress(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) -> None:
     """Ticket 108: the judge of how a to-do is going on notes left by hand
     (a line on top, at the end, none, the old notes changed, no day, the
@@ -8168,6 +8763,7 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
           "the wake note for a to-do's reminder, in Core's words")
     dry_test_progress(cases, mon, check)
     dry_test_moved(cases, mon, check)
+    dry_test_items(cases, mon, check)
     for r in sorted(results, key=lambda r: r["id"]):
         case_id, script = scripts[r["id"]]
         case = cases[case_id]
@@ -8236,6 +8832,33 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
             check("all_cancelledby=1" in out and "tasks_cancelledby=3" in out, f"--all carries it ({out[-200:]})")
         elif script == "todo-tick":
             check(f["pass"] and f["names"] == ["todo list", "todo done"], f"ticked off, passes ({f['reasons']})")
+        elif script == "todo-items-cli":
+            out = str((r["calls"][0].get("result") or {}).get("stdout", ""))
+            check("`todo_3a7c5e9b1d2f4086` due " in system and ", reminder " in system
+                  and ", 0 of 3 items done: 上海出差前的准备" in system,
+                  "In Hand: the to-do's line ends with how many of its items are ticked")
+            for piece in ("list_counts=1 list_items=0", 'show_items=3 count={"done": 0, "total": 3}',
+                          'ticked=True by=galley-assistant status=open count={"done": 1, "total": 3}', "tick_kept=1",
+                          "reopened=False nobody=True", "added=订酒店|订机票|换港币|带证件|带 充电器", "notext=2",
+                          "the following required arguments were not provided:\\n  <TEXT>...", "emptytext=2",
+                          "add_todo_subitems: an item needs words", "unknowntodo=3", "todo todo_nope not found",
+                          "updated=订周二晚的机票", "notextflag=2", "--text <TEXT>\\n\\nUsage: galley todo item update",
+                          "emptyflag=2", "a value is required for '--text <TEXT>'", "blankflag=2",
+                          "update_todo_subitem: an item needs words", "removed=订酒店|订周二晚的机票|带证件|带 充电器",
+                          "unknownitem=3", "todo item item_nope not found", "badsub=2",
+                          "unrecognized subcommand 'frob'", "noted=订酒店|订 高铁", "emptyitem=2",
+                          "create_todo: an item needs words", "cancelleditem=3", "is cancelled",
+                          "Add items under a to-do, after the ones there, in this order"):
+                check(piece in out, f"shell output has {piece!r}")
+            check(f["names"].count("todo item done") == 4 and f["names"].count("todo item add") == 4
+                  and "todo item remove" in f["names"] and "todo item update" in f["names"],
+                  f"fake galley logged the item commands by three words ({f['names']})")
+            check(not f["pass"] and any("多余的写命令" in x for x in f["reasons"])
+                  and any("多加了子项" in x for x in f["reasons"]),
+                  f"the judge flags the extra writes and items ({f['reasons']})")
+        elif r["id"] == "todo-items-last":
+            check(", 2 of 3 items done: 上海出差前的准备" in system,
+                  "In Hand: two of three ticked in the panel, counted")
         elif script == "todo-at-named":
             check(f["pass"] and f["names"] == ["todo list", "todo add"],
                   f"reminded at the time named (08:00), passes ({f['reasons']})")
