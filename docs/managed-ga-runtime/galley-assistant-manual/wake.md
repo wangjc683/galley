@@ -72,7 +72,9 @@ time); when it wakes you, go over everything in hand.
   notes do not say yet, add that line first (`todos-change.md`). When
   something is worth another look on a later day (a status that
   changes), set yourself a reminder for then (`reminders.md`) rather
-  than waiting for the review.
+  than waiting for the review. Set in the review, it needs no sentence
+  to the user (their list shows it) and no line in the notes: nothing
+  came of the look yet.
 - When the note lists memos noted or changed since the last review, ask
   of each whether, now a night has passed, there is something you could
   get done for the user that they would want to know. Most need nothing.

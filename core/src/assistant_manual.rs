@@ -910,7 +910,9 @@ mod tests {
             "nothing of it since, it is in their hands: leave it until they do.",
             "When the conversation shows you got something done for it that its",
             "something is worth another look on a later day (a status that",
-            "than waiting for the review.",
+            "than waiting for the review. Set in the review, it needs no sentence",
+            "to the user (their list shows it) and no line in the notes: nothing",
+            "came of the look yet.",
             "- Speak only when you got something done that the user will want to",
             "to decide on. Not that you looked and nothing changed, nor what they",
             // Since ticket 96 the line goes on with where a memo came from.
