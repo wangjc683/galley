@@ -233,7 +233,11 @@ mod tests {
         // reminders.md, not todos-change.md). Ticket 110's two: wake.md's
         // morning review to todos-change.md for a line the notes do not
         // say yet, and to reminders.md for another look on a later day.
-        assert_eq!(referred, 27);
+        // Ticket 111's two: todos.md's items to todos-change.md for ticking
+        // and changing them (a part done is news a turn may read only
+        // todos.md for, as ticket 108's first round showed), and
+        // todos-change.md back to `--item` in todos.md.
+        assert_eq!(referred, 29);
         assert!(part("wake.md")
             .contains("notes do not say yet, add that line first (`todos-change.md`). When"));
         assert!(part("wake.md")
@@ -385,6 +389,14 @@ mod tests {
                     "`todo done <todo-id>`",
                     "`todo reopen <todo-id>`",
                     "`todo cancel <todo-id>`",
+                    // Ticket 111's items, as `cli/src/args.rs`
+                    // `TodoSubitemCmd` parses them.
+                    "`todo item add <todo-id> \"<words>\"`",
+                    "`todo item update <item-id> --text=\"<words>\"`",
+                    "`todo item remove <item-id>`",
+                    "`todo item done <item-id>`",
+                    "`todo item reopen <item-id>`",
+                    "`todo show <todo-id>`",
                 ][..],
             ),
         ] {
@@ -528,8 +540,10 @@ mod tests {
             "- **The user's to-dos**: what they have to do (hand in a report, call the",
             "user sees it in 「待办」 beside this chat and can only tick a to-do off,",
             "untick it, change its title and notes, cancel its reminder, or delete it",
-            "there. Everything else, a new one, a new time, they tell you, and you",
-            "change it, as you change its words when they tell you; do not send them",
+            // Ticket 111 (PRD ruling 157): and the items under it.
+            "there, and add, tick, change or delete the items under it. Everything",
+            "else, a new one, a new time, they tell you, and you change it, as you",
+            "change its words when they tell you; do not send them to the list to do",
             "- **Your own reminders**: times Galley wakes you to do something yourself,",
             // Information is a memo (memory until ticket 96); no tidying
             // unasked.
@@ -564,6 +578,19 @@ mod tests {
             // Ticket 108: what comes of it later goes on top, by the rule
             // in todos-change.md.
             "What you get done for it later, and news of it, go on top of its notes",
+            // Ticket 111 (PRD ruling 157): items for parts that share the
+            // to-do's time and are done together; not parts with times of
+            // their own, nor steps; its own thinking through goes into
+            // items, not the notes; the rest in todos-change.md.
+            "- `--item=\"<words>\"`, once for each part, when the thing is made of a few",
+            "separate parts that share its due date and are done only together",
+            "items): each item is words and a box, with no time of its own, and the",
+            "user ticks them in their list. Parts that each have their own time are",
+            "separate to-dos (「周三交报告，周五交周报」: two), and the steps of doing",
+            "one thing (write, revise, hand in) are not items: 「周五前交季度报告」 is",
+            "one to-do with none. When you think a to-do through on your own and set",
+            "out the parts it takes, they go in as items, not as a list in its notes.",
+            "Ticking and changing them is in `todos-change.md`.",
             "- A to-do's reminder is set, moved and removed only with `todo add` and",
             "commands: a reminder made with `schedule create` is not on the to-do.",
             // Say it.
@@ -594,9 +621,28 @@ mod tests {
             "new line. Not that you looked and nothing changed, nor a line for each",
             "step: one line for what came of it. When the news moves the time, move",
             "the due date and the reminder too.",
+            // Ticket 111 (PRD ruling 157): the items' commands, read first;
+            // a part done ticks its item, the last one said ticks the
+            // to-do too, the last one ticked in the list does not; news is
+            // a line in the notes, not a tick; a list in the notes made
+            // items leaves the notes.
+            "- The items under a to-do (`--item` in `todos.md`):",
+            "ticked, changed or added some in their list: read the to-do first",
+            "(`todo show <todo-id>` lists them with their ids). When they say one",
+            "it), and the to-do stays as it is. When they say the last part is done,",
+            "tick the to-do off too (`todo done <todo-id>`), and say so in a few",
+            "words. When they tick the last item in their list, the to-do is theirs",
+            "to tick. News of a part (「业主说预算下周给」) is not a tick: it is a line",
+            "on top of the notes, as above, and so is a file you made for one. Asked",
+            "to make items of a list in the notes (「把收集要点拆成子项」), add them",
+            "and take that list out of the notes, keeping the rest word for word.",
         ] {
             assert!(change.contains(rule), "todos-change.md lost: {rule}");
         }
+        // Ticket 111: after how it is going, before the kinds turned down.
+        let items = change.find("- The items under a to-do").unwrap();
+        let kinds_at = change.find("- When the user says not to").unwrap();
+        assert!(change.find("- How it is going:").unwrap() < items && items < kinds_at);
         // Right after the user's own changes, before the kinds turned down.
         let cancel = change.find("when they no longer need it.").unwrap();
         let going = change.find("- How it is going:").unwrap();

@@ -20,6 +20,21 @@ not edit them.
   new line. Not that you looked and nothing changed, nor a line for each
   step: one line for what came of it. When the news moves the time, move
   the due date and the reminder too.
+- The items under a to-do (`--item` in `todos.md`):
+  `todo item add <todo-id> "<words>"` (more words, more items) adds them
+  after the ones there, `todo item update <item-id> --text="<words>"`
+  changes one, `todo item remove <item-id>` deletes one. The user may have
+  ticked, changed or added some in their list: read the to-do first
+  (`todo show <todo-id>` lists them with their ids). When they say one
+  part is done (「酒店订好了」), or you got it done for them, tick that
+  item, `todo item done <item-id>` (`todo item reopen <item-id>` unticks
+  it), and the to-do stays as it is. When they say the last part is done,
+  tick the to-do off too (`todo done <todo-id>`), and say so in a few
+  words. When they tick the last item in their list, the to-do is theirs
+  to tick. News of a part (「业主说预算下周给」) is not a tick: it is a line
+  on top of the notes, as above, and so is a file you made for one. Asked
+  to make items of a list in the notes (「把收集要点拆成子项」), add them
+  and take that list out of the notes, keeping the rest word for word.
 - When the user says not to be reminded of that kind of thing
   (「这类别提醒我」), cancel the one you set, and say the kind, briefly, at
   the start of `--reason`
