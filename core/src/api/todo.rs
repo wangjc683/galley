@@ -16,7 +16,9 @@
 //! does through the CLI (`todo item …`), as none of it needs judging; the
 //! to-do is never ticked off for them, nor they for it (point 4). The CLI
 //! calls one an `item`; Core's code a sub-item, as [`crate::assistant_todo::TodoItem`]
-//! is a row of the to-do list.
+//! is a row of the to-do list. Since ticket 112 (PRD ruling 158) the user
+//! drags them into order on the desktop, and Galley moves one when asked
+//! (`todo item move`).
 //!
 //! A reminder is a scheduled task (main chat ticket 33): a one-off that
 //! wakes the assistant, linked to its to-do (`scheduled_tasks.todo_id`,
@@ -42,7 +44,8 @@ use crate::error::{GalleyError, Result};
 
 /// Tauri event fired after any to-do change: made, changed, ticked off,
 /// unticked, cancelled, its reminder cancelled, an item under it added,
-/// ticked, unticked, changed or removed (ticket 111), the turn it was
+/// ticked, unticked, changed or removed (ticket 111) or moved (ticket
+/// 112), the turn it was
 /// noted in settled, every to-do cleared by a main chat reset. Payload is empty —
 /// the desktop reads again, as for
 /// [`super::SCHEDULED_TASKS_CHANGED_EVENT`]. A write that also touched the
@@ -295,7 +298,7 @@ pub struct TodoReminder {
 
 /// One item under a to-do (main chat ticket 111, PRD ruling 157): its
 /// words and its box. In the order it was added, the user's and Galley's
-/// in one list (point 7).
+/// in one list (point 7), unless moved since (ticket 112, PRD ruling 158).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TodoSubitem {

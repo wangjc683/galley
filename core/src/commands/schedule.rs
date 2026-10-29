@@ -285,8 +285,9 @@ pub(crate) async fn cancel_todo(
 // them is the panel's own, as none needs judging (rulings 91, 153): add
 // (「添加一项」, a pasted block one item a line), tick and untick (straight
 // to Core, no hold: an item has no reminder for a tick to cancel), change
-// the words in place, and delete (sent once the undo toast has gone, as a
-// to-do's delete). Each is the user at the desktop (`Origin::desktop()`:
+// the words in place, move (a drag, ticket 112, PRD ruling 158), and
+// delete (sent once the undo toast has gone, as a to-do's delete). Each
+// is the user at the desktop (`Origin::desktop()`:
 // a tick records `done_via = 'gui'`), goes through Core's write path,
 // broadcasts `todos:changed`, stamps the to-do's `updated_at`, and returns
 // the to-do as it now stands. Errors are Core's JSON (`not_found` for an
@@ -346,6 +347,22 @@ pub(crate) async fn update_todo_subitem(
     let notifier = TauriNotifier::new(app);
     Writes::new(&galley, notifier.as_ref(), VIA_GUI)
         .update_todo_subitem(&id, &text, Origin::desktop())
+        .await
+        .map_err(stringify_error)
+}
+
+/// Move an item to place `to` (1 the first) among its to-do's items: a
+/// drag dropped (ticket 112). Already there changes nothing.
+#[tauri::command]
+pub(crate) async fn move_todo_subitem(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+    id: crate::api::TodoSubitemId,
+    to: i64,
+) -> std::result::Result<crate::api::TodoBrief, String> {
+    let notifier = TauriNotifier::new(app);
+    Writes::new(&galley, notifier.as_ref(), VIA_GUI)
+        .move_todo_subitem(&id, to, Origin::desktop())
         .await
         .map_err(stringify_error)
 }

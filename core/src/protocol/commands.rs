@@ -565,9 +565,9 @@ id_write_command!(
 
 // ---- items under a to-do (main chat ticket 111, additive inside 3) ----
 //
-// `todo item add / done / reopen / update / remove`: one level under a
-// to-do, words and a box. An item is named by its own id (`item_…`), not
-// its to-do's, but for `add`.
+// `todo item add / done / reopen / update / remove`, and `move` since
+// ticket 112: one level under a to-do, words and a box. An item is named
+// by its own id (`item_…`), not its to-do's, but for `add`.
 
 /// `todo.item_add`: items under a to-do, after the ones there, in order.
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -607,6 +607,20 @@ pub struct TodoSubitemUpdateArgs {
     pub reason: Option<String>,
 }
 socket_command!(TodoSubitemUpdateArgs, "todo.item_update");
+
+/// `todo.item_move` (main chat ticket 112): an item to place `to` among
+/// its to-do's items, 1 the first; past the last is the last.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoSubitemMoveArgs {
+    pub item_id: String,
+    pub to: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervisor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+socket_command!(TodoSubitemMoveArgs, "todo.item_move");
 
 id_write_command!(
     /// `todo.item_remove`: delete an item for good.
@@ -895,6 +909,7 @@ mod legacy_equivalence {
         assert_eq!(TodoSubitemDoneArgs::NAME, "todo.item_done");
         assert_eq!(TodoSubitemReopenArgs::NAME, "todo.item_reopen");
         assert_eq!(TodoSubitemUpdateArgs::NAME, "todo.item_update");
+        assert_eq!(TodoSubitemMoveArgs::NAME, "todo.item_move");
         assert_eq!(TodoSubitemRemoveArgs::NAME, "todo.item_remove");
         assert_eq!(MemoListArgs::NAME, "memo.list");
         assert_eq!(MemoAddArgs::NAME, "memo.add");
@@ -1021,6 +1036,16 @@ mod legacy_equivalence {
                 ..TodoSubitemUpdateArgs::default()
             },
             json!({"itemId": "item_1", "text": "订虹桥的酒店"}),
+        );
+        // Ticket 112: a move names the item and its place.
+        assert_matches_legacy(
+            &TodoSubitemMoveArgs {
+                item_id: "item_1".into(),
+                to: 1,
+                supervisor: Some("galley-assistant".into()),
+                reason: None,
+            },
+            json!({"itemId": "item_1", "to": 1, "supervisor": "galley-assistant"}),
         );
         assert_matches_legacy(
             &TodoSubitemRemoveArgs {

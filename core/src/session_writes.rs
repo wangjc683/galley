@@ -23,7 +23,7 @@
 //! | create / update / delete a project | `project-created-external` / `project-updated-external` / `project-deleted-external` |
 //! | create / update / delete a scheduled task | `scheduled-tasks:changed` (empty payload) |
 //! | create / update / tick off / untick / cancel a to-do, cancel its reminder | `todos:changed` (empty payload), and `scheduled-tasks:changed` unless unticking |
-//! | add / tick / untick / change / remove an item under a to-do | `todos:changed` (empty payload) |
+//! | add / tick / untick / change / move / remove an item under a to-do | `todos:changed` (empty payload) |
 //! | note / change / delete a memo | `memos:changed` (empty payload) |
 //!
 //! Session events carry [`SessionBriefEvent`], not [`SessionBrief`]: the
@@ -896,6 +896,17 @@ impl<'a> Writes<'a> {
         origin: Origin,
     ) -> Result<TodoBrief> {
         let result = self.galley.update_todo_subitem(id, text, origin).await;
+        self.todos_changed(result, false)
+    }
+
+    /// [`SqliteGalley::move_todo_subitem`] (main chat ticket 112).
+    pub async fn move_todo_subitem(
+        &self,
+        id: &TodoSubitemId,
+        to: i64,
+        origin: Origin,
+    ) -> Result<TodoBrief> {
+        let result = self.galley.move_todo_subitem(id, to, origin).await;
         self.todos_changed(result, false)
     }
 

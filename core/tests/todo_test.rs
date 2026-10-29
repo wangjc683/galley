@@ -5,7 +5,7 @@
 //! this machine's zone, the turn a to-do was noted in, the events the
 //! write path sends, who cancelled a to-do or a task and the follow-ups
 //! the user turned down (ticket 61), a main chat reset, and the items under
-//! a to-do (ticket 111). The wake a
+//! a to-do (ticket 111; moved, ticket 112). The wake a
 //! reminder sends is
 //! in `schedule_wake_test.rs`; the pure grouping, ordering and zones in
 //! the module's unit tests.
@@ -1899,6 +1899,196 @@ async fn items_are_added_ticked_unticked_changed_and_removed() {
     assert_eq!(galley.todo(trip.id.as_str()).await.unwrap().items.len(), 3);
 }
 
+/// The positions Core keeps under a to-do, in their order.
+async fn positions(pool: &SqlitePool, todo: &TodoId) -> Vec<(String, i64)> {
+    sqlx::query_as(
+        "SELECT text, position FROM todo_subitems WHERE todo_id = ? ORDER BY position, id",
+    )
+    .bind(todo.as_str())
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn an_item_moves_to_its_place_and_the_rest_close_up_around_it() {
+    // Main chat ticket 112 (PRD ruling 158): the panel's drag, `todo item
+    // move --to`.
+    let (pool, galley) = with_main_chat().await;
+    let hilton = note(
+        &galley,
+        items(
+            titled("希尔顿酒店项目资料收集"),
+            &["品牌", "位置", "证照", "预算", "人员"],
+        ),
+    )
+    .await;
+    let budget = item_id(&hilton, 3);
+    galley
+        .complete_todo_subitem(&item_id(&hilton, 1), Origin::desktop())
+        .await
+        .unwrap();
+    // To the first place: the ones before it move down one.
+    let moved = galley
+        .move_todo_subitem(&budget, 1, assistant())
+        .await
+        .unwrap();
+    assert_eq!(texts(&moved), ["预算", "品牌", "位置", "证照", "人员"]);
+    // Its box and the others' as they were.
+    let boxes: Vec<bool> = moved.items.iter().map(|item| item.done).collect();
+    assert_eq!(boxes, [false, false, true, false, false]);
+    assert_eq!(
+        moved.item_count,
+        Some(TodoSubitemCount { done: 1, total: 5 })
+    );
+    // Written 1, 2, … in the new order, and read back so.
+    let want = [
+        ("预算", 1),
+        ("品牌", 2),
+        ("位置", 3),
+        ("证照", 4),
+        ("人员", 5),
+    ];
+    let kept = positions(&pool, &id(&hilton)).await;
+    assert_eq!(
+        kept.iter()
+            .map(|(t, p)| (t.as_str(), *p))
+            .collect::<Vec<_>>(),
+        want
+    );
+    assert_eq!(
+        texts(&galley.todo(hilton.id.as_str()).await.unwrap()),
+        ["预算", "品牌", "位置", "证照", "人员"]
+    );
+    // Down: the ones after it move up one.
+    let moved = galley
+        .move_todo_subitem(&budget, 3, Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(texts(&moved), ["品牌", "位置", "预算", "证照", "人员"]);
+    // Past the last is the last.
+    let moved = galley
+        .move_todo_subitem(&budget, 99, Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(texts(&moved), ["品牌", "位置", "证照", "人员", "预算"]);
+    let moved = galley
+        .move_todo_subitem(&budget, i64::MAX, Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(texts(&moved), ["品牌", "位置", "证照", "人员", "预算"]);
+    // A place below 1: refused, nothing moved.
+    for to in [0, -1] {
+        let err = galley
+            .move_todo_subitem(&budget, to, assistant())
+            .await
+            .unwrap_err();
+        assert!(
+            invalid_with(err, "move_todo_subitem: a place counts from 1"),
+            "{to}"
+        );
+    }
+    assert_eq!(
+        texts(&galley.todo(hilton.id.as_str()).await.unwrap()),
+        ["品牌", "位置", "证照", "人员", "预算"]
+    );
+    // Added after a move: after the last, wherever it was moved from.
+    let more = galley
+        .add_todo_subitems(&id(&hilton), &strings(&["系统"]), assistant())
+        .await
+        .unwrap();
+    assert_eq!(
+        texts(&more),
+        ["品牌", "位置", "证照", "人员", "预算", "系统"]
+    );
+    // Gaps a removal left are closed by the next move.
+    galley
+        .remove_todo_subitem(&item_id(&more, 0), Origin::desktop())
+        .await
+        .unwrap();
+    let moved = galley
+        .move_todo_subitem(&item_id(&more, 5), 1, Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(texts(&moved), ["系统", "位置", "证照", "人员", "预算"]);
+    let kept: Vec<i64> = positions(&pool, &id(&hilton))
+        .await
+        .into_iter()
+        .map(|(_, p)| p)
+        .collect();
+    assert_eq!(kept, [1, 2, 3, 4, 5]);
+    // Another to-do's items are not touched.
+    let other = note(&galley, items(titled("去上海出差"), &["订酒店", "订机票"])).await;
+    galley
+        .move_todo_subitem(&item_id(&moved, 4), 1, Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(
+        texts(&galley.todo(other.id.as_str()).await.unwrap()),
+        ["订酒店", "订机票"]
+    );
+}
+
+#[tokio::test]
+async fn a_move_stamps_its_to_do_and_one_to_where_it_is_writes_nothing() {
+    // PRD ruling 158: a move moves the to-do for the review, as every item
+    // write (ruling 157 point 8); a drag dropped back writes nothing.
+    let (pool, galley) = with_main_chat().await;
+    let trip = note(
+        &galley,
+        items(titled("去上海出差"), &["订酒店", "订机票", "换港币"]),
+    )
+    .await;
+    let trip_id = id(&trip);
+    let ticket = item_id(&trip, 1);
+    let item_stamp = |pool: &SqlitePool, id: &TodoSubitemId| {
+        let pool = pool.clone();
+        let id = id.as_str().to_string();
+        async move {
+            sqlx::query_scalar::<_, String>("SELECT updated_at FROM todo_subitems WHERE id = ?")
+                .bind(id)
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+        }
+    };
+    let old = stamp_back(&pool, &trip_id).await;
+    sqlx::query("UPDATE todo_subitems SET updated_at = ? WHERE todo_id = ?")
+        .bind(&old)
+        .bind(trip_id.as_str())
+        .execute(&pool)
+        .await
+        .unwrap();
+    // Where it is: nothing written, no stamp.
+    let same = galley
+        .move_todo_subitem(&ticket, 2, Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(same.updated_at, old, "in place");
+    assert_eq!(item_stamp(&pool, &ticket).await, old);
+    let last = item_id(&trip, 2);
+    let same = galley
+        .move_todo_subitem(&last, 7, Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(same.updated_at, old, "the last, past the last");
+    // Moved: the to-do and the moved item stamped, the others not.
+    let moved = galley
+        .move_todo_subitem(&ticket, 1, Origin::desktop())
+        .await
+        .unwrap();
+    assert_ne!(moved.updated_at, old, "moved");
+    assert_ne!(item_stamp(&pool, &ticket).await, old);
+    assert_eq!(item_stamp(&pool, &item_id(&trip, 0)).await, old);
+    assert_eq!(item_stamp(&pool, &last).await, old);
+    // The review reads that stamp: moved after it, the to-do moved.
+    let last_review = LastReview::read(Some(&hours(-1)), &Local).unwrap();
+    let today = Local::now().date_naive();
+    assert!(read(&galley)
+        .await
+        .review_has_something_to_look_at(today, Some(last_review)));
+}
+
 #[tokio::test]
 async fn the_last_item_does_not_tick_the_to_do_nor_the_to_do_its_items() {
     let (_pool, galley) = with_main_chat().await;
@@ -2080,6 +2270,7 @@ async fn a_deleted_to_dos_items_are_gone_for_every_write_and_stay_with_its_row()
         galley.complete_todo_subitem(&hotel, assistant()).await,
         galley.reopen_todo_subitem(&hotel, assistant()).await,
         galley.update_todo_subitem(&hotel, "x", assistant()).await,
+        galley.move_todo_subitem(&hotel, 2, assistant()).await,
         galley.remove_todo_subitem(&hotel, assistant()).await,
         galley
             .add_todo_subitems(&id(&trip), &strings(&["x"]), assistant())
@@ -2099,6 +2290,9 @@ async fn a_deleted_to_dos_items_are_gone_for_every_write_and_stay_with_its_row()
     for result in [
         galley
             .complete_todo_subitem(&TodoSubitemId("item_nope".into()), assistant())
+            .await,
+        galley
+            .move_todo_subitem(&TodoSubitemId("item_nope".into()), 1, assistant())
             .await,
         galley
             .add_todo_subitems(&TodoId("todo_nope".into()), &strings(&["x"]), assistant())
@@ -2131,6 +2325,10 @@ async fn items_are_the_assistants_only_on_the_managed_runtime() {
             .unwrap_err(),
         galley
             .remove_todo_subitem(&hotel, assistant())
+            .await
+            .unwrap_err(),
+        galley
+            .move_todo_subitem(&hotel, 1, assistant())
             .await
             .unwrap_err(),
     ] {
@@ -2221,6 +2419,23 @@ async fn every_item_write_tells_the_desktop_of_the_to_do_alone() {
     assert_eq!(rec.take(), [TODOS_CHANGED_EVENT]);
     writes
         .update_todo_subitem(&hotel, "订虹桥的酒店", Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(rec.take(), [TODOS_CHANGED_EVENT]);
+    // Ticket 112: a move, and one to where it is (nothing written, the
+    // broadcast as for any write that went through).
+    writes
+        .add_todo_subitems(&id(&trip), &strings(&["订机票"]), Origin::desktop())
+        .await
+        .unwrap();
+    rec.take();
+    writes
+        .move_todo_subitem(&hotel, 2, Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(rec.take(), [TODOS_CHANGED_EVENT]);
+    writes
+        .move_todo_subitem(&hotel, 2, Origin::desktop())
         .await
         .unwrap();
     assert_eq!(rec.take(), [TODOS_CHANGED_EVENT]);

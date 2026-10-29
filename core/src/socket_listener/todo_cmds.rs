@@ -5,8 +5,8 @@ use crate::api::{CreateTodoInput, TodoBrief, TodoId, TodoPatch, TodoSubitemId};
 use crate::assistant_todo::todo_list;
 use crate::protocol::{
     TodoAddArgs, TodoCancelArgs, TodoDoneArgs, TodoListArgs, TodoReopenArgs, TodoShowArgs,
-    TodoSubitemAddArgs, TodoSubitemDoneArgs, TodoSubitemRemoveArgs, TodoSubitemReopenArgs,
-    TodoSubitemUpdateArgs, TodoUpdateArgs,
+    TodoSubitemAddArgs, TodoSubitemDoneArgs, TodoSubitemMoveArgs, TodoSubitemRemoveArgs,
+    TodoSubitemReopenArgs, TodoSubitemUpdateArgs, TodoUpdateArgs,
 };
 use crate::session_writes::Writes;
 use serde::de::DeserializeOwned;
@@ -27,7 +27,7 @@ use serde::de::DeserializeOwned;
 // Since main chat ticket 111 the items under a to-do too: `todo item add /
 // done / reopen / update / remove` (`todo.item_*`), each answering with
 // the to-do as it now stands, items and all, and broadcasting
-// `todos:changed`.
+// `todos:changed`; since ticket 112 `todo item move` (`todo.item_move`).
 
 fn parse<T: DeserializeOwned>(
     request_id: &Option<String>,
@@ -333,6 +333,29 @@ pub(super) async fn dispatch_todo_item_update(
     let origin = origin_from_args(parsed.supervisor, parsed.reason);
     match Writes::new(&galley, ctx.notifier.as_ref(), "todo.item_update")
         .update_todo_subitem(&TodoSubitemId(parsed.item_id), &parsed.text, origin)
+        .await
+    {
+        Ok(todo) => todo_result(request_id, &todo),
+        Err(e) => map_galley_err(request_id, e),
+    }
+}
+
+pub(super) async fn dispatch_todo_item_move(
+    request_id: Option<String>,
+    args: Value,
+    ctx: &HandlerCtx<'_>,
+) -> SocketResponse {
+    let parsed: TodoSubitemMoveArgs = match parse(&request_id, args, "todo.item_move") {
+        Ok(a) => a,
+        Err(resp) => return resp,
+    };
+    let galley = match open(&request_id, ctx).await {
+        Ok(g) => g,
+        Err(resp) => return resp,
+    };
+    let origin = origin_from_args(parsed.supervisor, parsed.reason);
+    match Writes::new(&galley, ctx.notifier.as_ref(), "todo.item_move")
+        .move_todo_subitem(&TodoSubitemId(parsed.item_id), parsed.to, origin)
         .await
     {
         Ok(todo) => todo_result(request_id, &todo),

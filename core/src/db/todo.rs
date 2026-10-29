@@ -892,6 +892,70 @@ impl SqliteGalley {
         self.todo(&item.todo_id).await
     }
 
+    /// Move an item to place `to` among its to-do's items (main chat
+    /// ticket 112, PRD ruling 158: the panel's drag, `todo item move
+    /// --to`): 1 is the first, and a place past the last is the last.
+    /// The to-do's items get their positions again, 1, 2, … in their new
+    /// order, in one transaction with the stamp of the to-do's
+    /// `updated_at` (ruling 157 point 8: every item write moves it) and
+    /// the moved item's own. Already there (a drag dropped back where it
+    /// started) changes nothing, the stamps included.
+    ///
+    /// **Errors**: `not_found` (no such item, or its to-do cancelled),
+    /// `invalid_args` (`to` below 1, no assistant).
+    pub async fn move_todo_subitem(
+        &self,
+        id: &TodoSubitemId,
+        to: i64,
+        _origin: Origin,
+    ) -> Result<TodoBrief> {
+        const CONTEXT: &str = "move_todo_subitem";
+        self.ensure_assistant_available(CONTEXT).await?;
+        if to < 1 {
+            return Err(invalid(format!("{CONTEXT}: a place counts from 1")));
+        }
+        let item = self.live_subitem(id.as_str()).await?;
+        let now = chrono_now_iso();
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        // The order every read gives (`todo_subitems`).
+        let mut order: Vec<String> = sqlx::query_scalar(
+            "SELECT id FROM todo_subitems WHERE todo_id = ? ORDER BY position, id",
+        )
+        .bind(&item.todo_id)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+        let from = order
+            .iter()
+            .position(|each| each == id.as_str())
+            .ok_or_else(|| subitem_not_found(id.as_str()))?;
+        let at = usize::try_from(to - 1)
+            .unwrap_or(usize::MAX)
+            .min(order.len() - 1);
+        if at == from {
+            return self.todo(&item.todo_id).await;
+        }
+        let moved = order.remove(from);
+        order.insert(at, moved);
+        for (place, each) in order.iter().enumerate() {
+            sqlx::query("UPDATE todo_subitems SET position = ? WHERE id = ?")
+                .bind(place as i64 + 1)
+                .bind(each)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| map_constraint_err(CONTEXT, e))?;
+        }
+        sqlx::query("UPDATE todo_subitems SET updated_at = ? WHERE id = ?")
+            .bind(&now)
+            .bind(id.as_str())
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+        touch_live_todo(&mut tx, &item.todo_id, &now).await?;
+        tx.commit().await.map_err(map_sqlx_err)?;
+        self.todo(&item.todo_id).await
+    }
+
     /// Delete an item for good (the panel's ×, once its undo toast has
     /// gone; `todo item remove`): nothing keeps a record of it, as nothing
     /// reads one.

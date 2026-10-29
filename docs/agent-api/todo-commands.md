@@ -1,6 +1,6 @@
 # Agent API — To-do Commands
 
-> Part of the [Galley Agent API](./README.md) contract. Command reference §5.28–§5.34d: the `todo` family (the user's to-dos), with `todo item` (the items under a to-do) since 2026-10-29. Additive inside `schemaVersion: 3` since 2026-10-17 (main chat ticket 40; items, main chat ticket 111), and served under `1` and `2` too.
+> Part of the [Galley Agent API](./README.md) contract. Command reference §5.28–§5.34e: the `todo` family (the user's to-dos), with `todo item` (the items under a to-do) since 2026-10-29. Additive inside `schemaVersion: 3` since 2026-10-17 (main chat ticket 40; items, main chat ticket 111; `item move`, main chat ticket 112), and served under `1` and `2` too.
 
 A **to-do** is something the user has to do: Galley's notebook, kept for the
 user by the assistant (the managed runtime's main chat). It has a title,
@@ -8,9 +8,10 @@ optional notes, an optional due date, and optionally one reminder. The user
 can only tick a to-do off, untick it, cancel its reminder, delete it (the
 same soft delete as `cancel`, recorded as `{"via":"gui"}`), change its
 title and notes (as `update --title` / `--notes` do; since main chat ticket
-107), or add, tick, untick, change and delete the items under it (as
-`todo item …` does; since main chat ticket 111) on the desktop; everything
-else goes through Galley, which uses these commands.
+107), or add, tick, untick, change, delete and drag into order the items
+under it (as `todo item …` does; since main chat tickets 111 and 112) on
+the desktop; everything else goes through Galley, which uses these
+commands.
 
 - **Due date**: either a day with no time ("by Friday", stored as that local
   calendar day: it stays Friday wherever the computer goes) or a day with a
@@ -23,7 +24,8 @@ else goes through Galley, which uses these commands.
   longer open does not go off.
 - **Items** (since 2026-10-29): a to-do may have items under it, one
   level, each only its words and a box — no due date, no reminder, no
-  items of its own — in the order they were added (§5.34a–§5.34d).
+  items of its own — in the order they were added, unless one was moved
+  since (§5.34a–§5.34e).
   Ticking the last item does not tick the to-do off, and ticking the
   to-do off or on leaves its items as they are. Every write of an item
   changes its to-do's `updatedAt`. A cancelled to-do keeps its items
@@ -36,7 +38,8 @@ else goes through Galley, which uses these commands.
 command goes through the socket (`todo.list`, `todo.show`, `todo.add`,
 `todo.update`, `todo.done`, `todo.reopen`, `todo.cancel`, `todo.item_add`,
 `todo.item_done`, `todo.item_reopen`, `todo.item_update`,
-`todo.item_remove`; the socket also serves `list` and `show`). Every write
+`todo.item_move`, `todo.item_remove`; the socket also serves `list` and
+`show`). Every write
 takes `--supervisor=<x>` / `--reason=<y>` (§6A `Origin`): `add` records
 them as the to-do's `origin`, `done` as its `doneBy`, `cancel` as its
 `cancelledBy`, `item done` as the item's `doneBy`, and a reminder that
@@ -65,7 +68,7 @@ optional fields omitted when empty.
 | `createdIn`   | object?          | `{sessionId, turnIndex?}`: the main chat run Galley noted it in, as for a scheduled task (§5.20). Recorded when `add` carries `--supervisor=galley-assistant` while a main chat run is open; `turnIndex` (the run's reply, where the desktop hangs its card) is filled when that run ends |
 | `cancelledAt` | string?          | Set by `cancel`. A cancelled to-do is gone for every write |
 | `cancelledBy` | `Origin`?        | Added 2026-10-19 (main chat ticket 61). Who cancelled it and why, as `doneBy` says who ticked it off: `cancel`'s `--supervisor` / `--reason` (`{"via":"supervisor","supervisor":"galley-assistant","reason":"…"}` is Galley at the user's request; `{"via":"cli"}` when no label was given). Absent while it is not cancelled, and on a to-do cancelled before 2026-10-19 (not known, not guessed) |
-| `items`       | `Item[]`?    | Added 2026-10-29 (main chat ticket 111). The items under it, in the order they were added. On `show` and every write; not on `list`. Absent when it has none |
+| `items`       | `Item[]`?    | Added 2026-10-29 (main chat ticket 111). The items under it, in their order: the order they were added, unless one was moved since (§5.34e). On `show` and every write; not on `list`. Absent when it has none |
 | `itemCount`   | object?          | Added 2026-10-29. `{done, total}`: how many items are ticked, how many there are. On every shape, `list` included; absent when it has none |
 | `createdAt`   | string (ISO8601) | |
 | `updatedAt`   | string (ISO8601) | |
@@ -247,3 +250,28 @@ of it stays, and no list reads it again. Prints `{"todo": …}`.
 
 Exit codes: `0` / `2 invalid_args` (`assistant_unavailable:`) /
 `3 not_found` / `4 db_unavailable`.
+
+### 5.34e · `galley todo item move <item-id> --to=<n> [--supervisor=<x>] [--reason=<y>]`
+
+**Write command.** Added 2026-10-29 (main chat ticket 112). Moves the item
+to place `<n>` among its to-do's items, counted from 1 once it is there:
+`--to=1` puts it first, and a number past the last puts it last. The
+others keep their order around it. Moving it to where it is changes
+nothing (`updatedAt` included). Like every item write, a move changes the
+to-do's `updatedAt`; who moved it is not recorded. Prints `{"todo": …}`:
+the to-do with its `items` in their new order. Socket: `todo.item_move`
+with `{"itemId", "to"}`. The user drags the items into order on the
+desktop; the same write.
+
+```bash
+$ galley todo item move item_2b3c4d5e6f7a8b9c --to=1 --supervisor=galley-assistant
+{"todo":{"id":"todo_5e6f7a8b9c0d1e2f","title":"去上海出差",…,"items":[{"id":"item_2b3c4d5e6f7a8b9c","text":"订机票",…},{"id":"item_1a2b3c4d5e6f7a8b","text":"订酒店",…},…],"itemCount":{"done":1,"total":3},…}}
+```
+
+Errors (`invalid_args`, exit `2`): no `--to`, or one that is not a whole
+number (clap's); `--to` below 1 (Core's
+`move_todo_subitem: a place counts from 1`, nothing moved);
+`assistant_unavailable:`.
+
+Exit codes: `0` / `2 invalid_args` / `3 not_found` (unknown item, or its
+to-do cancelled) / `4 db_unavailable`.

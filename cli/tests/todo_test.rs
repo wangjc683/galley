@@ -9,8 +9,8 @@
 //! the exit-4 path with no Core; and the old commands printing the same
 //! bytes with to-dos about. Since main chat ticket 111 the items under a
 //! to-do: `add --item`, `todo item add / done / reopen / update / remove`,
-//! `show` listing them and `list` counting them. Unix only: the server is
-//! a Unix socket.
+//! `show` listing them and `list` counting them; since ticket 112 `todo
+//! item move --to`. Unix only: the server is a Unix socket.
 #![cfg(unix)]
 
 use std::os::unix::fs::MetadataExt;
@@ -635,5 +635,88 @@ async fn the_items_under_a_to_do() {
     // Under every pin, as the family.
     for schema in ["--schema=1", "--schema=2"] {
         ok(dir, &[schema, "todo", "item", "done", &hotel]).await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn todo_item_move_puts_an_item_in_its_place() {
+    // Main chat ticket 112 (PRD ruling 158): `todo item move <item-id>
+    // --to=<n>`, 1 the first, past the last the last, below 1 refused.
+    let td = short_tempdir();
+    let dir = td.path();
+    serve(dir, database(dir, true).await);
+    let out = ok(
+        dir,
+        &[
+            "todo",
+            "add",
+            "希尔顿酒店项目资料收集",
+            "--item=品牌",
+            "--item=位置",
+            "--item=证照",
+            "--item=预算",
+            "--supervisor=galley-assistant",
+        ],
+    )
+    .await;
+    let hilton = json_of(&out)["todo"].clone();
+    let tid = hilton["id"].as_str().unwrap().to_string();
+    let budget = hilton["items"][3]["id"].as_str().unwrap().to_string();
+    // Printed as every item write: the to-do with all its items.
+    let out = ok(
+        dir,
+        &[
+            "--schema=3",
+            "todo",
+            "item",
+            "move",
+            &budget,
+            "--to=1",
+            "--supervisor=galley-assistant",
+            "--reason=user asked",
+        ],
+    )
+    .await;
+    let moved = json_of(&out)["todo"].clone();
+    assert_eq!(item_texts(&moved), ["预算", "品牌", "位置", "证照"]);
+    assert_eq!(moved["id"], tid.as_str());
+    assert_eq!(moved["itemCount"], json!({"done": 0, "total": 4}));
+    // `--to N` and `--to=N` alike; past the last is the last.
+    let moved =
+        json_of(&ok(dir, &["todo", "item", "move", &budget, "--to", "3"]).await)["todo"].clone();
+    assert_eq!(item_texts(&moved), ["品牌", "位置", "预算", "证照"]);
+    let moved =
+        json_of(&ok(dir, &["todo", "item", "move", &budget, "--to=40"]).await)["todo"].clone();
+    assert_eq!(item_texts(&moved), ["品牌", "位置", "证照", "预算"]);
+    let shown = json_of(&ok(dir, &["todo", "show", &tid]).await);
+    assert_eq!(item_texts(&shown), ["品牌", "位置", "证照", "预算"]);
+    // Below 1: Core's invalid_args, exit 2, nothing moved.
+    for to in ["--to=0", "--to=-2"] {
+        let (out, code) = galley(dir, &["todo", "item", "move", &budget, to]).await;
+        assert_refused(&out, code, "move_todo_subitem: a place counts from 1");
+    }
+    let (out, code) = galley(dir, &["todo", "item", "move", &budget, "--to", "-2"]).await;
+    assert_refused(&out, code, "move_todo_subitem: a place counts from 1");
+    // clap's: no --to, not a number.
+    for args in [
+        vec!["todo", "item", "move", budget.as_str()],
+        vec!["todo", "item", "move", budget.as_str(), "--to=first"],
+        vec!["todo", "item", "move", "--to=1"],
+    ] {
+        let (out, code) = galley(dir, &args).await;
+        assert_eq!(code, Some(2), "{args:?}: {out}");
+        assert_eq!(json_of(&out)["error"], "invalid_args", "{args:?}");
+    }
+    // An unknown item: not_found, exit 3.
+    let (out, code) = galley(dir, &["todo", "item", "move", "item_nope", "--to=1"]).await;
+    assert_eq!(code, Some(3), "{out}");
+    assert_eq!(json_of(&out)["error"], "not_found");
+    assert_eq!(
+        item_texts(&json_of(&ok(dir, &["todo", "show", &tid]).await)),
+        ["品牌", "位置", "证照", "预算"]
+    );
+    // Under every pin, as the family.
+    for schema in ["--schema=1", "--schema=2"] {
+        ok(dir, &[schema, "todo", "item", "move", &budget, "--to=1"]).await;
     }
 }

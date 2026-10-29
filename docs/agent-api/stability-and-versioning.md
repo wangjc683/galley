@@ -256,6 +256,14 @@ and error discriminants unchanged):
   field, exit code or error changed. Also served under `--schema=1` and
   `--schema=2`. See [todo-commands.md](./todo-commands.md) §5.28,
   §5.34a–§5.34d.
+- 2026-10-29 — An item moved into its place (main chat ticket 112): `todo
+  item move <item-id> --to=<n>` (socket `todo.item_move`, `{itemId, to}`),
+  the desktop's drag through the same write. `Todo.items` is in the
+  items' order, which a move changes; it was the order they were added,
+  and still is for a to-do none was moved in. A new command only; no
+  existing command, field, exit code or error changed. Also served under
+  `--schema=1` and `--schema=2`. See
+  [todo-commands.md](./todo-commands.md) §5.34e.
 
 ### 7.2 `schemaVersion: 2` (served for unchanged commands, since 2026-09-16)
 

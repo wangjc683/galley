@@ -8,7 +8,8 @@
 //! Galley notes is tied to, the events, and the pins that serve the
 //! family. Since main chat ticket 111 the items under a to-do too: `add`'s
 //! `items`, `todo.item_add / item_done / item_reopen / item_update /
-//! item_remove`, `show`'s items and `list`'s count. The CLI over a real socket is `cli/tests/todo_test.rs`; the
+//! item_remove`, `show`'s items and `list`'s count; since ticket 112
+//! `todo.item_move`. The CLI over a real socket is `cli/tests/todo_test.rs`; the
 //! record itself is `todo_test.rs`.
 
 use async_trait::async_trait;
@@ -619,6 +620,11 @@ async fn every_pin_serves_the_new_commands() {
             .await;
         assert!(resp.ok, "schema {schema}");
         let item = resp.result.unwrap()["todo"]["items"][0]["id"].clone();
+        // Ticket 112's move, as the family's.
+        let resp = h
+            .call_pinned("todo.item_move", json!({"itemId": item, "to": 1}), schema)
+            .await;
+        assert!(resp.ok, "todo.item_move schema {schema}");
         for command in ["todo.item_done", "todo.item_reopen", "todo.item_remove"] {
             let resp = h
                 .call_pinned(command, json!({"itemId": item}), schema)
@@ -722,10 +728,28 @@ async fn item_writes_answer_with_the_to_do_and_record_who_ticked() {
         )
         .await;
     assert_eq!(item_texts(&changed), ["订虹桥的酒店", "订机票"]);
+    // Ticket 112: moved to its place, past the last the last.
+    let moved = h
+        .todo(
+            "todo.item_move",
+            json!({"itemId": hotel, "to": 2, "supervisor": "galley-assistant",
+                   "reason": "user asked"}),
+        )
+        .await;
+    assert_eq!(item_texts(&moved), ["订机票", "订虹桥的酒店"]);
+    let moved = h
+        .todo("todo.item_move", json!({"itemId": hotel, "to": 1}))
+        .await;
+    assert_eq!(item_texts(&moved), ["订虹桥的酒店", "订机票"]);
+    let moved = h
+        .todo("todo.item_move", json!({"itemId": hotel, "to": 9}))
+        .await;
+    assert_eq!(item_texts(&moved), ["订机票", "订虹桥的酒店"]);
+    assert_eq!(moved["itemCount"], json!({"done": 0, "total": 2}));
     let removed = h.todo("todo.item_remove", json!({"itemId": hotel})).await;
     assert_eq!(item_texts(&removed), ["订机票"]);
-    // Five writes, five broadcasts; no reminder moved.
-    assert_eq!(h.rec.count("todos:changed") - rec_before, 5);
+    // Eight writes, eight broadcasts; no reminder moved.
+    assert_eq!(h.rec.count("todos:changed") - rec_before, 8);
     assert_eq!(h.rec.count("scheduled-tasks:changed"), 0);
 }
 
@@ -758,6 +782,21 @@ async fn item_refusals_are_the_familys() {
             .await,
     );
     assert_eq!(tag, "invalid_args");
+    // Ticket 112: a move to a place below 1, or with none, is invalid_args;
+    // an unknown item not_found.
+    let (tag, message) = error_of(
+        &h.call("todo.item_move", json!({"itemId": hotel, "to": 0}))
+            .await,
+    );
+    assert_eq!(tag, "invalid_args");
+    assert!(message.contains("a place counts from 1"), "{message}");
+    let (tag, _) = error_of(&h.call("todo.item_move", json!({"itemId": hotel})).await);
+    assert_eq!(tag, "invalid_args");
+    let (tag, _) = error_of(
+        &h.call("todo.item_move", json!({"itemId": "item_nope", "to": 1}))
+            .await,
+    );
+    assert_eq!(tag, "not_found");
     // The to-do cancelled: every item write is not_found.
     h.todo("todo.cancel", json!({"todoId": todo["id"]})).await;
     let (tag, message) = error_of(&h.call("todo.item_done", json!({"itemId": hotel})).await);

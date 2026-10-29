@@ -386,10 +386,12 @@ Managed runtime with a main chat only: every write is refused with
 
 - **Items** (main chat ticket 111, PRD ruling 157; migration 054,
   `todo_subitems`): one level under a to-do, each only its words and a box,
-  in the order added, no time of its own. The user adds, ticks, unticks,
-  changes and deletes them at the desktop (Tauri `add_todo_subitems`,
-  `complete_todo_subitem`, `reopen_todo_subitem`, `update_todo_subitem`,
-  `remove_todo_subitem`), Galley through `todo item …`. Every item write
+  in the order added unless moved, no time of its own. The user adds,
+  ticks, unticks, changes, deletes and (since ticket 112) drags them into
+  order at the desktop (Tauri `add_todo_subitems`, `complete_todo_subitem`,
+  `reopen_todo_subitem`, `update_todo_subitem`, `move_todo_subitem`,
+  `remove_todo_subitem`), Galley through `todo item …` (`move` only when
+  the user asks). Every item write
   stamps the to-do's `updated_at` (the morning review's "moved"); ticking
   the last item does not tick the to-do off, nor does the to-do's tick
   touch them. A cancelled to-do keeps its items and refuses their writes; a

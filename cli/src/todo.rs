@@ -2,8 +2,8 @@
 //! notebook (ticket 39). `list` / `show` read SQLite directly, like every
 //! read command; the writes go through Galley Core's socket (`todo.*`),
 //! which decides them (Core's to-do functions), records the origin, and
-//! broadcasts. `todo item …` (ticket 111) writes the items under a to-do
-//! the same way (`todo.item_*`).
+//! broadcasts. `todo item …` (ticket 111; `move` since ticket 112) writes
+//! the items under a to-do the same way (`todo.item_*`).
 
 use crate::args::{TodoCmd, TodoSubitemCmd};
 use crate::client::call_print;
@@ -13,8 +13,8 @@ use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
 use galley_core_lib::protocol::{
     TodoAddArgs, TodoCancelArgs, TodoDoneArgs, TodoReopenArgs, TodoSubitemAddArgs,
-    TodoSubitemDoneArgs, TodoSubitemRemoveArgs, TodoSubitemReopenArgs, TodoSubitemUpdateArgs,
-    TodoUpdateArgs,
+    TodoSubitemDoneArgs, TodoSubitemMoveArgs, TodoSubitemRemoveArgs, TodoSubitemReopenArgs,
+    TodoSubitemUpdateArgs, TodoUpdateArgs,
 };
 
 pub(crate) async fn run(cmd: TodoCmd) -> Result<(), GalleyError> {
@@ -154,6 +154,20 @@ async fn item(cmd: TodoSubitemCmd) -> Result<(), GalleyError> {
             call_print(TodoSubitemUpdateArgs {
                 item_id,
                 text,
+                supervisor,
+                reason,
+            })
+            .await
+        }
+        TodoSubitemCmd::Move {
+            item_id,
+            to,
+            supervisor,
+            reason,
+        } => {
+            call_print(TodoSubitemMoveArgs {
+                item_id,
+                to,
                 supervisor,
                 reason,
             })

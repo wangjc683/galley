@@ -303,6 +303,19 @@ pub(crate) enum TodoSubitemCmd {
         #[arg(long)]
         reason: Option<String>,
     },
+    /// Move an item to another place among its to-do's items. Moving it to
+    /// where it is changes nothing.
+    Move {
+        item_id: String,
+        /// Its place once moved: 1 is the first; a number past the last
+        /// puts it last.
+        #[arg(long, value_name = "N", allow_negative_numbers = true)]
+        to: i64,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
     /// Delete an item for good.
     Remove {
         item_id: String,

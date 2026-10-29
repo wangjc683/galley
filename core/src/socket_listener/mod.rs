@@ -761,6 +761,10 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
         "todo.item_update" => {
             DispatchResult::Unary(dispatch_todo_item_update(request_id, req.args, ctx).await)
         }
+        // Ticket 112: an item moved to its place.
+        "todo.item_move" => {
+            DispatchResult::Unary(dispatch_todo_item_move(request_id, req.args, ctx).await)
+        }
         "todo.item_remove" => {
             DispatchResult::Unary(dispatch_todo_item_remove(request_id, req.args, ctx).await)
         }
