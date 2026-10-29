@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { DotsSixVertical, X } from "@phosphor-icons/react";
+import { DotsSixVertical, Plus, X } from "@phosphor-icons/react";
 import {
   useEffect,
   useLayoutEffect,
@@ -51,6 +51,14 @@ import { todoTitleClass } from "./todo-styles";
 
 /** An item's words: 13px, as the title, wrapping, never cut. */
 const ITEM_TYPE = "text-[13px] leading-5";
+
+/** An item's ink (ticket 112, PRD ruling 158 point 2): not ticked,
+ * `ink-soft`, a step under the title, so the title is the open row's one
+ * line in full ink (ruling 146: one size, the inks tell the ranks);
+ * ticked, a done title's strike in `ink-muted`. */
+function itemInk(done: boolean): string {
+  return cn(todoTitleClass(done), !done && "text-ink-soft");
+}
 
 /** A drag keeps to the list (ticket 112): up and down only, and never
  * past its first or last item (`containerNodeRect` is the dragged row's
@@ -119,7 +127,8 @@ const BOX_ON_LINE = "mt-[3px]";
  * drawn at once and sent (`moveSubitem`); back where it was, nothing.
  * A refused move puts them back, the reason under the list. No handle
  * with one item, on the ones still on their way to Core, or on one whose
- * words are being changed.
+ * words are being changed. The items' ink is `ink-soft` (`itemInk`), and
+ * 「添加一项」 carries a plus in the box column.
  */
 export function TodoSubitems({
   todoId,
@@ -177,7 +186,7 @@ export function TodoSubitems({
     moveSubitem(todoId, String(active.id), arrayMove(ids, from, to));
   };
   return (
-    <div data-role="todo-items" className="-mt-1 pb-1.5 pl-9 pr-2.5">
+    <div data-role="todo-items" className="-mt-1 pl-9 pr-2.5">
       {items.length + pending.length > 0 && (
         <DndContext
           sensors={sensors}
@@ -219,11 +228,19 @@ export function TodoSubitems({
             data-role="todo-add-item"
             onClick={() => setAdding(true)}
             className={cn(
-              "block rounded-sm py-0.5 text-left text-[12px] leading-5 text-ink-muted outline-none",
+              "flex w-full items-start gap-2 rounded-sm py-0.5 text-left text-[12px] leading-5 text-ink-muted outline-none",
               "hover:text-ink-soft focus-visible:ring-2 focus-visible:ring-brand/30",
             )}
           >
-            {copy.todo.addItem}
+            {/* The plus in the box column, the words where an item's
+                start: the list's last line, not the notes' first. */}
+            <span
+              aria-hidden
+              className="flex h-5 w-3.5 shrink-0 items-center justify-center"
+            >
+              <Plus size={12} weight="regular" />
+            </span>
+            <span className="min-w-0">{copy.todo.addItem}</span>
           </button>
         ))}
     </div>
@@ -243,7 +260,7 @@ function PendingRow({ item }: { item: PendingSubitem }) {
       <EmptyBox />
       <span
         className={cn(
-          "min-w-0 flex-1 whitespace-pre-wrap break-words text-ink",
+          "min-w-0 flex-1 whitespace-pre-wrap break-words text-ink-soft",
           ITEM_TYPE,
         )}
       >
@@ -431,7 +448,7 @@ function SubitemRow({
             caret={editing.caret}
             autoFocus={!editing.failure || editing.keyboard}
             ariaLabel={copy.todo.editItem}
-            className={cn(ITEM_TYPE, "text-ink")}
+            className={cn(ITEM_TYPE, "text-ink-soft")}
           />
         ) : (
           <button
@@ -445,7 +462,7 @@ function SubitemRow({
               "focus-visible:ring-2 focus-visible:ring-brand/30 disabled:cursor-default",
               editable && "cursor-text",
               ITEM_TYPE,
-              todoTitleClass(item.done),
+              itemInk(item.done),
             )}
           >
             {words}
@@ -591,7 +608,7 @@ function SubitemAdd({
           }}
           className={cn(
             "block w-full resize-none overflow-hidden rounded-sm border-0 bg-transparent p-0",
-            "text-ink outline-none ring-2 ring-brand/30",
+            "text-ink-soft outline-none ring-2 ring-brand/30",
             ITEM_TYPE,
           )}
         />

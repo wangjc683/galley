@@ -238,6 +238,10 @@ function type(field: HTMLTextAreaElement, value: string) {
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
+/** An open row's notes as drawn (ticket 112): a paragraph a line, read
+ * back with their breaks. */
+const lines = (notes: Element) =>
+  Array.from(notes.querySelectorAll("p"), (p) => p.textContent).join("\n");
 const updates = () =>
   getTauriMocks().invoke.mock.calls.filter(
     ([command]) => command === "update_todo",
@@ -258,8 +262,10 @@ describe("opening a row (ruling 153 points 2 and 3)", () => {
     const notes = row(container, "todo_hotel")!.querySelector(
       '[data-role="todo-notes"]',
     )!;
-    expect(notes.textContent).toBe(HOTEL.notes);
-    expect(notes.className).toContain("whitespace-pre-wrap");
+    expect(lines(notes)).toBe(HOTEL.notes);
+    expect(notes.querySelector("p")!.className).toContain(
+      "whitespace-pre-wrap",
+    );
     expect(
       row(container, "todo_hotel")!.querySelector('[data-role="todo-noted"]')
         ?.textContent,
@@ -525,7 +531,7 @@ describe("changing the notes (ruling 153 point 4)", () => {
       ["update_todo", { id: "todo_hotel", notes: `${HOTEL.notes}\n3. 联系人` }],
     ]);
     expect(box()).toBeNull();
-    expect(notesOf(container, "todo_hotel").textContent).toBe(
+    expect(lines(notesOf(container, "todo_hotel"))).toBe(
       `${HOTEL.notes}\n3. 联系人`,
     );
   });
@@ -551,7 +557,7 @@ describe("changing the notes (ruling 153 point 4)", () => {
     type(box()!, "不要了");
     key(box()!, "Escape");
     expect(updates()).toEqual([]);
-    expect(notesOf(container, "todo_hotel").textContent).toBe(HOTEL.notes);
+    expect(lines(notesOf(container, "todo_hotel"))).toBe(HOTEL.notes);
     click(notesOf(container, "todo_hotel"));
     type(box()!, "");
     key(box()!, "Enter", { metaKey: true });

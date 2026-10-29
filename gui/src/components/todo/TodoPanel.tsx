@@ -22,6 +22,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { LocalFileReference } from "@/components/conversation/LocalFileReference";
 import { ReadingPanelHeader } from "@/components/conversation/reading/ReadingPanelHeader";
 import { Button, IconButton } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -36,7 +37,7 @@ import {
   type TodoItem,
   type TodoTarget,
 } from "@/lib/assistant-todo";
-import { caretOffsetAt } from "@/lib/caret-point";
+import { caretOffsetAt, caretSourceOffsetAt } from "@/lib/caret-point";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { StatusIcon } from "@/lib/status-icon";
 import {
@@ -64,6 +65,7 @@ import {
   type TodoWordsField,
   yourTodos,
 } from "@/lib/todo-panel";
+import { todoNotesParagraphs } from "@/lib/todo-notes";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { cn } from "@/lib/utils";
 import {
@@ -567,9 +569,12 @@ interface RowProps {
 }
 
 /** What in the panel does its own thing on a click: a row's box (its
- * label and input), its buttons, a text box, a link, a menu's row. A
- * click there neither opens nor folds a row (ticket 107). */
-const ROW_CONTROLS = 'button, input, textarea, label, a, [role="menuitem"]';
+ * label and input), its buttons, a text box, a link, a menu's row, and
+ * since ticket 112 an open row's notes (a block, not a button, as they
+ * hold a file's button). A click there neither opens nor folds a row
+ * (ticket 107). */
+const ROW_CONTROLS =
+  'button, input, textarea, label, a, [role="menuitem"], [role="button"]';
 
 const LINE_TONES: Record<TodoLineTone, string> = {
   muted: "text-ink-muted",
@@ -872,7 +877,7 @@ function YourRow({
   // goes (a failed one waits for the row to open again).
   if (!editable && edit?.phase === "editing" && !edit.failure) setEdit(null);
   const titleButton = useRef<HTMLButtonElement>(null);
-  const notesButton = useRef<HTMLButtonElement>(null);
+  const notesButton = useRef<HTMLElement>(null);
   // A box closed from the keyboard hands the focus back to its words.
   const refocus = useRef<TodoWordsField | null>(null);
   useEffect(() => {
@@ -884,18 +889,15 @@ function YourRow({
     (field === "title" ? titleButton.current : notesButton.current)?.focus();
   });
 
+  // `caret` where the click was in the words (null: at the end);
+  // `keyboard`, opened with no pointer.
   const startEdit = (
     field: TodoWordsField,
-    event: ReactMouseEvent<HTMLElement>,
+    caret: number | null,
+    keyboard: boolean,
   ) => {
     if (!editable) return;
     const start = field === "title" ? item.text : (notes?.full ?? "");
-    // The caret where the click was; from the keyboard (no pointer), at
-    // the end.
-    const caret =
-      event.detail > 0
-        ? caretOffsetAt(event.currentTarget, event.clientX, event.clientY)
-        : null;
     setEdit({
       field,
       start,
@@ -903,9 +905,15 @@ function YourRow({
       caret,
       phase: "editing",
       failure: null,
-      keyboard: event.detail === 0,
+      keyboard,
     });
   };
+  // The caret where the click was; from the keyboard (no pointer), at
+  // the end.
+  const clickCaret = (event: ReactMouseEvent<HTMLElement>) =>
+    event.detail > 0
+      ? caretOffsetAt(event.currentTarget, event.clientX, event.clientY)
+      : null;
   const save = (keyboard: boolean) => {
     if (!edit || edit.phase !== "editing") return;
     const field = edit.field;
@@ -965,7 +973,7 @@ function YourRow({
       type="button"
       aria-expanded={open}
       onClick={(event) => {
-        if (open) startEdit("title", event);
+        if (open) startEdit("title", clickCaret(event), event.detail === 0);
         else if (!checked) onOpenChange(true);
       }}
       onPointerEnter={(e) =>
@@ -1007,29 +1015,34 @@ function YourRow({
   } else if (editable) {
     notesBlock = (
       <OpenNotes>
-        <button
-          ref={notesButton}
-          type="button"
-          data-role={notesWords ? "todo-notes" : "todo-add-notes"}
-          onClick={(event) => startEdit("notes", event)}
-          className={cn(
-            "block w-full cursor-text whitespace-pre-wrap break-words rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
-            NOTES_TYPE,
-          )}
-        >
-          {notesWords || copy.todo.addNotes}
-        </button>
+        {notesWords ? (
+          <NotesText
+            notes={notesWords}
+            focusRef={notesButton}
+            onEdit={(caret, keyboard) => startEdit("notes", caret, keyboard)}
+          />
+        ) : (
+          <button
+            ref={(element) => {
+              notesButton.current = element;
+            }}
+            type="button"
+            data-role="todo-add-notes"
+            onClick={(event) => startEdit("notes", null, event.detail === 0)}
+            className={cn(
+              "block w-full cursor-text rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
+              NOTES_TYPE,
+            )}
+          >
+            {copy.todo.addNotes}
+          </button>
+        )}
       </OpenNotes>
     );
   } else if (notesWords) {
     notesBlock = (
       <OpenNotes>
-        <p
-          data-role="todo-notes"
-          className={cn("whitespace-pre-wrap break-words", NOTES_TYPE)}
-        >
-          {notesWords}
-        </p>
+        <NotesText notes={notesWords} />
       </OpenNotes>
     );
   }
@@ -1046,11 +1059,12 @@ function YourRow({
   }
 
   const noted = open ? todoNotedLine(item, todayStartMs, language, copy) : null;
+  // 10px under the notes (ticket 112), the row's 6px foot below.
   const foot =
     open && (noted || target) ? (
       <div
         data-role="todo-noted"
-        className="pb-1.5 pl-9 pr-2.5 text-[12px] leading-[1.4] text-ink-muted"
+        className="mt-2.5 pb-1.5 pl-9 pr-2.5 text-[12px] leading-[1.4] text-ink-muted"
       >
         {noted}
         {noted && target && " · "}
@@ -1149,10 +1163,119 @@ interface TodoEdit {
 /** The notes' type: 12px `ink-muted` (ruling 146), folded or open. */
 const NOTES_TYPE = "text-[12px] leading-[1.4] text-ink-muted";
 
-/** An open to-do's notes, or 「添加备注」, where the folded line sits: at
- * the title's start, 2px under the line above. */
+/** An open to-do's notes, or 「添加备注」, at the title's start, 10px
+ * under 「添加一项」 (ticket 112, PRD ruling 158 point 2: its 2px foot
+ * and 8px; before it 2px under the line above, the blocks running
+ * together). */
 function OpenNotes({ children }: { children: ReactNode }) {
-  return <div className="-mt-1 pb-1 pl-9 pr-2.5">{children}</div>;
+  return <div className="mt-2 pl-9 pr-2.5">{children}</div>;
+}
+
+/**
+ * An open to-do's notes drawn apart (main chat ticket 112, PRD ruling
+ * 158 point 3; `lib/todo-notes.ts`): a paragraph a line, 6px between
+ * (blank lines one gap), each in the notes' type; a leading day and its
+ * colon (「10月29日：」) a step darker, `ink-soft` with tabular digits —
+ * ruling 146's notes in `ink-muted`, but for that stretch; a full path
+ * in backticks the reply's file reference (`LocalFileReference`) by the
+ * file's name alone, the backticks gone: preview or reveal on a click,
+ * the path to copy on a right-click.
+ *
+ * With `onEdit` (the row open, not holding a tick) a click anywhere but
+ * a file opens the box that changes them (ticket 107), the caret where
+ * the click was in the words as written (each piece knows where it
+ * starts: `caretSourceOffsetAt`); from the keyboard it is a button,
+ * Enter or Space. A block, not a `<button>`: a file's button cannot sit
+ * in a button.
+ */
+function NotesText({
+  notes,
+  onEdit,
+  focusRef,
+}: {
+  notes: string;
+  onEdit?: (caret: number | null, keyboard: boolean) => void;
+  focusRef?: { current: HTMLElement | null };
+}) {
+  const paragraphs = todoNotesParagraphs(notes);
+  return (
+    <div
+      ref={
+        focusRef
+          ? (element) => {
+              focusRef.current = element;
+            }
+          : undefined
+      }
+      data-role="todo-notes"
+      role={onEdit ? "button" : undefined}
+      tabIndex={onEdit ? 0 : undefined}
+      onClick={
+        onEdit
+          ? (event) => {
+              const control = (event.target as Element).closest(
+                'button, a, [role="menuitem"]',
+              );
+              // A file's own click (and its folder button's).
+              if (control && event.currentTarget.contains(control)) return;
+              onEdit(
+                event.detail > 0
+                  ? caretSourceOffsetAt(
+                      event.currentTarget,
+                      event.clientX,
+                      event.clientY,
+                    )
+                  : null,
+                event.detail === 0,
+              );
+            }
+          : undefined
+      }
+      onKeyDown={
+        onEdit
+          ? (event) => {
+              if (event.target !== event.currentTarget) return;
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              onEdit(null, true);
+            }
+          : undefined
+      }
+      className={cn(
+        "flex flex-col gap-1.5 rounded-sm outline-none",
+        onEdit &&
+          "cursor-text focus-visible:ring-2 focus-visible:ring-brand/30",
+      )}
+    >
+      {paragraphs.map((paragraph) => (
+        <p
+          key={paragraph.start}
+          className={cn("whitespace-pre-wrap break-words", NOTES_TYPE)}
+        >
+          {paragraph.pieces.map((piece) =>
+            piece.kind === "path" ? (
+              <LocalFileReference key={piece.start} path={piece.path}>
+                <span data-caret-at={piece.end}>{piece.name}</span>
+              </LocalFileReference>
+            ) : (
+              <span
+                key={piece.start}
+                data-caret-from={piece.start}
+                data-role={piece.kind === "day" ? "todo-notes-day" : undefined}
+                className={
+                  piece.kind === "day"
+                    ? "tabular-nums text-ink-soft"
+                    : undefined
+                }
+              >
+                {piece.text}
+              </span>
+            ),
+          )}
+        </p>
+      ))}
+    </div>
+  );
 }
 
 /** Why a title or notes did not save, under their box: the tick's two

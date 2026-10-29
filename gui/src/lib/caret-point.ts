@@ -14,25 +14,72 @@ export function caretOffsetAt(
   y: number,
 ): number | null {
   const doc = within.ownerDocument;
-  if (!doc) return null;
+  const hit = doc ? caretHit(doc, x, y) : null;
+  if (!doc || !hit || !within.contains(hit.node)) return null;
+  return textBefore(doc, within, hit.node, hit.offset);
+}
+
+/**
+ * Where in some source text a click at (`x`, `y`) falls, when the text
+ * is drawn in pieces that are not all as written (main chat ticket 112:
+ * a to-do's notes, a file's path in backticks drawn as its name, blank
+ * lines drawn as gaps). Each piece is an element inside `within` with
+ * either `data-caret-from` (its text is the source's, as written, from
+ * that offset) or `data-caret-at` (one place for the whole piece). The
+ * engine's hit test as `caretOffsetAt`; null when there is none, or the
+ * point is in no piece: the caller puts the caret at the end.
+ */
+export function caretSourceOffsetAt(
+  within: Element,
+  x: number,
+  y: number,
+): number | null {
+  const doc = within.ownerDocument;
+  const hit = caretHit(doc, x, y);
+  if (!hit || !within.contains(hit.node)) return null;
+  const element =
+    hit.node.nodeType === 1
+      ? (hit.node as Element)
+      : (hit.node.parentElement as Element | null);
+  const piece = element?.closest<HTMLElement>(
+    "[data-caret-from], [data-caret-at]",
+  );
+  if (!piece || !within.contains(piece)) return null;
+  if (piece.dataset.caretAt !== undefined) return Number(piece.dataset.caretAt);
+  const into = textBefore(doc, piece, hit.node, hit.offset);
+  return into === null ? null : Number(piece.dataset.caretFrom) + into;
+}
+
+/** The engine's hit test at a point, whichever of the two it has. */
+function caretHit(
+  doc: Document,
+  x: number,
+  y: number,
+): { node: Node; offset: number } | null {
   // Typed apart from `Document`: an engine may lack either.
   const hits = doc as unknown as CaretHitTests;
-  let node: Node | null = null;
-  let offset = 0;
   if (typeof hits.caretPositionFromPoint === "function") {
     const position = hits.caretPositionFromPoint.call(doc, x, y);
-    if (position) {
-      node = position.offsetNode;
-      offset = position.offset;
-    }
-  } else if (typeof hits.caretRangeFromPoint === "function") {
-    const range = hits.caretRangeFromPoint.call(doc, x, y);
-    if (range) {
-      node = range.startContainer;
-      offset = range.startOffset;
-    }
+    return position
+      ? { node: position.offsetNode, offset: position.offset }
+      : null;
   }
-  if (!node || !within.contains(node)) return null;
+  if (typeof hits.caretRangeFromPoint === "function") {
+    const range = hits.caretRangeFromPoint.call(doc, x, y);
+    return range
+      ? { node: range.startContainer, offset: range.startOffset }
+      : null;
+  }
+  return null;
+}
+
+/** How much of `within`'s text comes before (`node`, `offset`). */
+function textBefore(
+  doc: Document,
+  within: Node,
+  node: Node,
+  offset: number,
+): number | null {
   const before = doc.createRange();
   before.selectNodeContents(within);
   try {
