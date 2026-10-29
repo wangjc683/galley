@@ -230,8 +230,14 @@ mod tests {
         // two: unasked.md's telling the user and todos.md's notes to the
         // progress line in todos-change.md (the rule is written there
         // only; the eval's first round: told news, it read todos.md and
-        // reminders.md, not todos-change.md).
-        assert_eq!(referred, 25);
+        // reminders.md, not todos-change.md). Ticket 110's two: wake.md's
+        // morning review to todos-change.md for a line the notes do not
+        // say yet, and to reminders.md for another look on a later day.
+        assert_eq!(referred, 27);
+        assert!(part("wake.md")
+            .contains("notes do not say yet, add that line first (`todos-change.md`). When"));
+        assert!(part("wake.md")
+            .contains("changes), set yourself a reminder for then (`reminders.md`) rather"));
         assert!(part("unasked.md").contains("its notes (see `todos-change.md`)."));
         assert!(part("todos.md").contains("\n  (see `todos-change.md`)."));
         assert!(part("cli.md").contains("- `memo add`, `update`, `delete`: see `memo.md`."));
@@ -837,7 +843,9 @@ mod tests {
     /// nothing in the user's name, asked first with the groundwork done
     /// otherwise, no offers, the subtask limits, a file handed over as
     /// `[FILE:…]`; the morning review in `wake.md` (ticket 81: skipped with
-    /// nothing to look at, woken it goes over everything), stopped by
+    /// nothing to look at, woken it goes over everything; ticket 110: woken
+    /// only for what moved, what it handed over left to the user, a line
+    /// the notes miss added first, another look a reminder), stopped by
     /// pausing it, and Galley's, so nothing to say or ask for it. Single-line
     /// fragments only (CRLF on Windows).
     #[test]
@@ -885,14 +893,24 @@ mod tests {
             "Every morning a little before or after 9:00 (the time is in",
             "`schedule list`) Galley wakes you to go over what is in hand; the note",
             // Ticket 81: it wakes only for what has no alarm of its own,
-            // and woken goes over all of it.
-            "skips the morning when there is nothing to look at (what is due further",
-            // Ticket 96: and no memo new since the last review.
-            "off and your own reminders come up at their own time) and no memo is new",
-            "since the last review; when it wakes you, go over everything in hand.",
+            // and woken goes over all of it; ticket 96: a new memo too;
+            // ticket 110: only for what moved since the last review.
+            "wakes you only for what moved since the last review: a to-do noted or",
+            "changed, one now due within three days, a subtask with news, a new memo",
+            "(what is due further off and your own reminders come up at their own",
+            "time); when it wakes you, go over everything in hand.",
             "- Read what is current first: `todo list`, `schedule list`, and your",
             "`unasked.md` says, at most two subtasks in all. Do not raise early a",
             "to-dos, overdue ones included: their reminders do that.",
+            // Ticket 110 (main chat PRD ruling 155): what it handed over
+            // waits for the user; what the notes do not say yet goes in
+            // first; another look on a later day is a reminder.
+            "- Read a to-do (`todo show`) before you do anything for it. When its",
+            "notes start with something you got done for it and the user has said",
+            "nothing of it since, it is in their hands: leave it until they do.",
+            "When the conversation shows you got something done for it that its",
+            "something is worth another look on a later day (a status that",
+            "than waiting for the review.",
             "- Speak only when you got something done that the user will want to",
             "to decide on. Not that you looked and nothing changed, nor what they",
             // Since ticket 96 the line goes on with where a memo came from.
@@ -911,6 +929,13 @@ mod tests {
                 .unwrap_or_else(|| panic!("wake.md lost: {rule}"));
             assert!(review < at, "{rule} is not under its heading");
         }
+        // Ticket 110: right after taking each thing in turn, before the
+        // memos.
+        let turn = wake.find("- Take each thing in turn").unwrap();
+        let read = wake.find("- Read a to-do (`todo show`)").unwrap();
+        let memos = wake.find("- When the note lists memos").unwrap();
+        assert!(review < turn && turn < read && read < memos);
+        assert!(!wake.contains("skips the morning"));
         // The label the manual names is the one Core makes it with.
         assert!(wake.contains(&format!(
             "`\"supervisor\": \"{}\"`",

@@ -54,9 +54,10 @@ gist in a sentence or two, not all of it.
 Every morning a little before or after 9:00 (the time is in
 `schedule list`) Galley wakes you to go over what is in hand; the note
 says it is the morning review. Galley made this task, not you, and
-skips the morning when there is nothing to look at (what is due further
-off and your own reminders come up at their own time) and no memo is new
-since the last review; when it wakes you, go over everything in hand.
+wakes you only for what moved since the last review: a to-do noted or
+changed, one now due within three days, a subtask with news, a new memo
+(what is due further off and your own reminders come up at their own
+time); when it wakes you, go over everything in hand.
 
 - Read what is current first: `todo list`, `schedule list`, and your
   subtasks still running (`sessions list`).
@@ -64,6 +65,14 @@ since the last review; when it wakes you, go over everything in hand.
   `unasked.md` says, at most two subtasks in all. Do not raise early a
   reminder that has its own time, and do not chase the user's own
   to-dos, overdue ones included: their reminders do that.
+- Read a to-do (`todo show`) before you do anything for it. When its
+  notes start with something you got done for it and the user has said
+  nothing of it since, it is in their hands: leave it until they do.
+  When the conversation shows you got something done for it that its
+  notes do not say yet, add that line first (`todos-change.md`). When
+  something is worth another look on a later day (a status that
+  changes), set yourself a reminder for then (`reminders.md`) rather
+  than waiting for the review.
 - When the note lists memos noted or changed since the last review, ask
   of each whether, now a night has passed, there is something you could
   get done for the user that they would want to know. Most need nothing.
