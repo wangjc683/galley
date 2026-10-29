@@ -384,6 +384,17 @@ among it, they say to Galley.
 Managed runtime with a main chat only: every write is refused with
 `assistant_unavailable:` otherwise.
 
+- **Items** (main chat ticket 111, PRD ruling 157; migration 054,
+  `todo_subitems`): one level under a to-do, each only its words and a box,
+  in the order added, no time of its own. The user adds, ticks, unticks,
+  changes and deletes them at the desktop (Tauri `add_todo_subitems`,
+  `complete_todo_subitem`, `reopen_todo_subitem`, `update_todo_subitem`,
+  `remove_todo_subitem`), Galley through `todo item …`. Every item write
+  stamps the to-do's `updated_at` (the morning review's "moved"); ticking
+  the last item does not tick the to-do off, nor does the to-do's tick
+  touch them. A cancelled to-do keeps its items and refuses their writes; a
+  main chat reset deletes them.
+
 - **Due date**: a day without a time (`due_date`, `YYYY-MM-DD`, a floating
   local date) or a day with a time (`due_at`, a UTC instant); never both.
   Readers group by day in this machine's zone.
