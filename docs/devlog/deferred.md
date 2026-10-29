@@ -116,6 +116,16 @@
 - **关联**：主聊天 PRD 裁决 49、91、112、124、125、128、153、154、155；助手 PRD 裁决 5（D4：记录是做事的副产品）、10。
 ---
 
+## Galley 做的文件放哪
+
+- **状态**：先不做（2026-10-29 [主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 156，JC：「如果用户有指定文件夹放 artfacts 的需求，可以直接和 Galley 助理说需求也能实现」）。
+- **提出**：2026-10-28 巡看对照（裁决 154 第 7 条）：子任务把希尔顿模板写进状态根的 `temp/`（引擎跑代码的当前目录，`managed-ga/code/ga.py:29`），回复没挂 `[FILE:]`、没说路径；手册没说文件放哪。
+- **启动信号**（任一条）：① 有人（含 JC）问「文件在哪」，或在 Finder / 资源管理器里找不到它做的文件；② 说过位置偏好（记成了备忘）之后，子任务还是没照着放。
+- **方案**：默认放系统「文档」下的 `Galley`（Mac `~/Documents/Galley/`，Windows「文档\Galley」），用户指定了照指定的放。路径由 Core 用 `directories` 的 `UserDirs::document_dir()` 查好，写进提示词「Galley State」那几行（`core/src/managed_prompt.rs:528` 起），不让模型拼：Windows 上「文档」可能被 OneDrive 文件夹备份挪到 `OneDrive\Documents`，`~/Documents` 就不是资源管理器里那个「文档」。提示词举例的 `~/Downloads/report.csv`（`managed_prompt.rs:183`）跟着换。代价：开了 iCloud「桌面与文稿」或 OneDrive 文件夹备份的，这些文件会同步上去。没选：「下载」（时间长了和别的下载混在一起）、用户文件夹下的 `Galley`（Windows 资源管理器左栏默认不显示，不好找）。
+- **另一半不在这里**：交文件时挂 `[FILE:]`、说完整路径是现成规则（`subtasks.md:32`、`unasked.md:30`），10-28 没照做一次；主会话从 10-29 起每次子任务带文件回来查库核，再漏一次开小票，不等本条。
+- **关联**：主聊天票 [74](../../.scratch/main-chat/issues/74-files-in-the-bubble-and-review-label.md)（文件卡片）；主聊天 PRD 裁决 154、156。
+---
+
 ## 待办的回执卡
 
 - **状态**：暂缓（2026-10-22 [主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 131 第 6 条，JC：「按建议推进」）。
