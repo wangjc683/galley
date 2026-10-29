@@ -67,7 +67,8 @@ pub(crate) enum Command {
     /// with a due date or without, a reminder optional. `list` / `show`
     /// read SQLite directly; the writes go through Galley Core and need
     /// the managed runtime with its main chat. `cancel` is a soft delete:
-    /// the to-do stays readable with `cancelledAt`.
+    /// the to-do stays readable with `cancelledAt`. `item` writes the items
+    /// under a to-do (one level, words and a box).
     #[command(subcommand)]
     Todo(TodoCmd),
 
@@ -144,15 +145,16 @@ pub(crate) enum MemoCmd {
 pub(crate) enum TodoCmd {
     /// List to-dos, NDJSON. Default: the ones not done, in the order the
     /// desktop's to-do list shows them (due today or overdue, then later,
-    /// then no due date). Read-only — opens SQLite directly.
+    /// then no due date). Each with the count of its items (`itemCount`),
+    /// not the items: `show` reads them. Read-only — opens SQLite directly.
     List {
         /// Also done ones (most recently ticked off first) and cancelled
         /// ones, after the open ones.
         #[arg(long)]
         all: bool,
     },
-    /// One to-do, done or cancelled or not. Read-only — opens SQLite
-    /// directly.
+    /// One to-do, done or cancelled or not, with its items. Read-only —
+    /// opens SQLite directly.
     Show {
         /// To-do id (`todo_<16-hex>`).
         todo_id: String,
@@ -173,6 +175,10 @@ pub(crate) enum TodoCmd {
         /// (`time_in_past:`, exit 2).
         #[arg(long, value_name = "TIME", value_parser = NonEmptyStringValueParser::new())]
         remind_at: Option<String>,
+        /// An item under it: words and a box, no time. Repeat for more, in
+        /// order.
+        #[arg(long = "item", value_name = "TEXT")]
+        items: Vec<String>,
         #[arg(long)]
         supervisor: Option<String>,
         #[arg(long)]
@@ -242,6 +248,64 @@ pub(crate) enum TodoCmd {
     /// the lists; `show` and `list --all` still read it.
     Cancel {
         todo_id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// The items under a to-do: one level, each only its words and a box,
+    /// no due date and no reminder. Ticking the last one does not tick the
+    /// to-do off. Every write prints the to-do with its items.
+    #[command(subcommand)]
+    Item(TodoSubitemCmd),
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum TodoSubitemCmd {
+    /// Add items under a to-do, after the ones there, in this order.
+    Add {
+        /// To-do id (`todo_<16-hex>`).
+        todo_id: String,
+        /// The item's words; give several for several items.
+        #[arg(required = true, value_name = "TEXT")]
+        texts: Vec<String>,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Tick an item. The to-do stays as it is. Ticking a ticked one
+    /// changes nothing.
+    Done {
+        /// Item id (`item_<16-hex>`).
+        item_id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Untick an item.
+    Reopen {
+        item_id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Change an item's words.
+    Update {
+        item_id: String,
+        /// The new words.
+        #[arg(long, value_parser = NonEmptyStringValueParser::new())]
+        text: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Delete an item for good.
+    Remove {
+        item_id: String,
         #[arg(long)]
         supervisor: Option<String>,
         #[arg(long)]

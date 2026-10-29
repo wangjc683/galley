@@ -701,7 +701,9 @@ where
 
 /// `` `todo_…` due 2026-10-21 15:00 (Wed), overdue, reminder 2026-10-21
 /// 14:00 (Wed): <title> ``; `due 2026-10-23 (Fri)` for a day without a
-/// time; `no due date`; `reminded …` once the reminder went off.
+/// time; `no due date`; `reminded …` once the reminder went off; `2 of 5
+/// items done` when it has items under it (main chat ticket 111: the
+/// count, not the items — `todo show` reads them).
 fn in_hand_todo_line<Tz: chrono::TimeZone>(item: &TodoItem, tz: &Tz) -> String
 where
     Tz::Offset: std::fmt::Display,
@@ -722,6 +724,10 @@ where
                 TodoReminderState::Fired => format!("reminded {at}"),
             });
         }
+    }
+    if !item.items.is_empty() {
+        let done = item.items.iter().filter(|each| each.done).count();
+        facts.push(format!("{done} of {} items done", item.items.len()));
     }
     format!(
         "`{}` {}: {}",
@@ -1916,6 +1922,7 @@ mod tests {
             created_at: None,
             updated_at: None,
             cancelled_at: None,
+            items: Vec::new(),
         }
     }
 
@@ -2564,7 +2571,61 @@ mod tests {
     /// group, the follow-ups the user turned down (main chat PRD ruling
     /// 113: at most five, each with its words and its reason), whose line
     /// carries two cut texts where the others carry one.
-    const IN_HAND_BUDGET_BYTES: usize = 6161;
+    ///
+    /// Main chat ticket 111 raised it from 6161 to 6276: a to-do's line may
+    /// end its facts with the count of its items (`, 998 of 999 items
+    /// done`, 23 bytes at three digits), on each of the five.
+    const IN_HAND_BUDGET_BYTES: usize = 6276;
+
+    /// Main chat ticket 111: a to-do with items under it says how many are
+    /// ticked, last among its facts; the items themselves are `todo
+    /// show`'s. One without items reads as before.
+    #[test]
+    fn in_hand_counts_a_to_dos_items() {
+        let listed = |text: &str, done: bool| crate::assistant_todo::ListedSubitem {
+            id: format!("item_{text}"),
+            text: text.into(),
+            done,
+        };
+        let mut trip = open_todo(
+            "todo_5e6f7a8b9c0d1e2f",
+            "去上海出差",
+            Some(day(2026, 10, 21)),
+            false,
+            Some(("2026-10-20T12:00:00+00:00", TodoReminderState::Scheduled)),
+        );
+        trip.items = vec![
+            listed("订酒店", true),
+            listed("订机票", true),
+            listed("换港币", false),
+        ];
+        let mut hilton = open_todo(
+            "todo_6f7a8b9c0d1e2f3a",
+            "希尔顿酒店项目资料收集",
+            None,
+            false,
+            None,
+        );
+        hilton.items = vec![listed("品牌", false), listed("预算", false)];
+        let soil = open_todo("todo_4d5e6f7a8b9c0d1e", "买营养土", None, false, None);
+        let todo = AssistantTodo {
+            yours: YourTodos {
+                later: vec![trip],
+                anytime: vec![hilton, soil],
+                ..YourTodos::default()
+            },
+            ..AssistantTodo::default()
+        };
+        let text = in_hand_section(&todo, &[], at("2026-10-16T06:05:00Z"), &shanghai()).unwrap();
+        for line in [
+            "- `todo_5e6f7a8b9c0d1e2f` due 2026-10-21 (Wed), reminder 2026-10-20 20:00 (Tue), 2 of 3 items done: 去上海出差",
+            "- `todo_6f7a8b9c0d1e2f3a` no due date, 0 of 2 items done: 希尔顿酒店项目资料收集",
+            "- `todo_4d5e6f7a8b9c0d1e` no due date: 买营养土",
+        ] {
+            assert!(text.contains(line), "{line}\n{text}");
+        }
+        assert!(!text.contains("订酒店"), "the items are todo show's");
+    }
 
     #[test]
     fn in_hand_lines_stay_within_budget() {
@@ -2582,13 +2643,22 @@ mod tests {
             t.target = Some(ScheduleTarget::Session);
             t
         };
-        let longest_todo = open_todo(
+        let mut longest_todo = open_todo(
             "todo_ffffffffffffffff",
             &long,
             Some(StoredDue::At(at("2026-10-15T12:00:00Z"))),
             true,
             Some(("2026-10-20T12:00:00+00:00", TodoReminderState::Paused)),
         );
+        // Ticket 111: its items counted (three digits each way; nothing caps
+        // how many, a to-do with a thousand is not one the user keeps).
+        longest_todo.items = (0..999)
+            .map(|n| crate::assistant_todo::ListedSubitem {
+                id: format!("item_{n:016x}"),
+                text: "项".into(),
+                done: n > 0,
+            })
+            .collect();
         let many = IN_HAND_MAX_PER_GROUP + 999;
         let longest_declined = declined(
             TodoKind::Task,

@@ -1151,6 +1151,7 @@ async fn todo_with_reminder(
                 remind_at: Some(instant_to_utc_iso(
                     &(Utc::now() + ChronoDuration::minutes(10)),
                 )),
+                items: Vec::new(),
             },
             assistant(),
             None,
@@ -1381,6 +1382,7 @@ async fn users_todo(galley: &SqliteGalley, title: &str, due: Option<String>, rem
                 due,
                 remind_at: remind
                     .then(|| instant_to_utc_iso(&(Utc::now() + ChronoDuration::minutes(10)))),
+                items: Vec::new(),
             },
             assistant(),
             None,
@@ -1575,6 +1577,7 @@ async fn with_something_to_look_at_the_review_wakes_the_main_chat() {
                 notes: None,
                 due: None,
                 remind_at: None,
+                items: Vec::new(),
             },
             assistant(),
             None,
@@ -2189,6 +2192,7 @@ async fn todo_at(
                 notes: Some(HILTON_NOTES.into()),
                 due,
                 remind_at: None,
+                items: Vec::new(),
             },
             assistant(),
             None,

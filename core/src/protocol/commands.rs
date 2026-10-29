@@ -498,7 +498,8 @@ socket_command!(TodoShowArgs, "todo.show");
 
 /// `todo.add`: note a to-do. `due` is a local date `YYYY-MM-DD` (no time)
 /// or a time in `schedule.create`'s `fireAt` forms; `remindAt` hangs a
-/// reminder on it (a one-off that wakes the assistant).
+/// reminder on it (a one-off that wakes the assistant); `items` puts items
+/// under it (main chat ticket 111).
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TodoAddArgs {
@@ -509,6 +510,9 @@ pub struct TodoAddArgs {
     pub due: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remind_at: Option<String>,
+    /// Items under it, in order (main chat ticket 111, `--item`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supervisor: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -557,6 +561,58 @@ id_write_command!(
     TodoCancelArgs,
     todo_id,
     "todo.cancel"
+);
+
+// ---- items under a to-do (main chat ticket 111, additive inside 3) ----
+//
+// `todo item add / done / reopen / update / remove`: one level under a
+// to-do, words and a box. An item is named by its own id (`item_…`), not
+// its to-do's, but for `add`.
+
+/// `todo.item_add`: items under a to-do, after the ones there, in order.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoSubitemAddArgs {
+    pub todo_id: String,
+    pub texts: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervisor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+socket_command!(TodoSubitemAddArgs, "todo.item_add");
+
+id_write_command!(
+    /// `todo.item_done`: tick an item (its to-do stays as it is).
+    TodoSubitemDoneArgs,
+    item_id,
+    "todo.item_done"
+);
+id_write_command!(
+    /// `todo.item_reopen`: untick an item.
+    TodoSubitemReopenArgs,
+    item_id,
+    "todo.item_reopen"
+);
+
+/// `todo.item_update`: an item's new words.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoSubitemUpdateArgs {
+    pub item_id: String,
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervisor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+socket_command!(TodoSubitemUpdateArgs, "todo.item_update");
+
+id_write_command!(
+    /// `todo.item_remove`: delete an item for good.
+    TodoSubitemRemoveArgs,
+    item_id,
+    "todo.item_remove"
 );
 
 // ---- memos (main chat ticket 95, additive inside 3) ----
@@ -835,6 +891,11 @@ mod legacy_equivalence {
         assert_eq!(TodoDoneArgs::NAME, "todo.done");
         assert_eq!(TodoReopenArgs::NAME, "todo.reopen");
         assert_eq!(TodoCancelArgs::NAME, "todo.cancel");
+        assert_eq!(TodoSubitemAddArgs::NAME, "todo.item_add");
+        assert_eq!(TodoSubitemDoneArgs::NAME, "todo.item_done");
+        assert_eq!(TodoSubitemReopenArgs::NAME, "todo.item_reopen");
+        assert_eq!(TodoSubitemUpdateArgs::NAME, "todo.item_update");
+        assert_eq!(TodoSubitemRemoveArgs::NAME, "todo.item_remove");
         assert_eq!(MemoListArgs::NAME, "memo.list");
         assert_eq!(MemoAddArgs::NAME, "memo.add");
         assert_eq!(MemoUpdateArgs::NAME, "memo.update");
@@ -926,6 +987,48 @@ mod legacy_equivalence {
                 reason: Some("user said so".into()),
             },
             json!({"todoId": "todo_1", "reason": "user said so"}),
+        );
+        // Items (main chat ticket 111): `todo.add` sends none unless given.
+        assert_matches_legacy(
+            &TodoAddArgs {
+                title: "去上海出差".into(),
+                items: vec!["订酒店".into(), "订机票".into()],
+                ..TodoAddArgs::default()
+            },
+            json!({"title": "去上海出差", "items": ["订酒店", "订机票"]}),
+        );
+        assert_matches_legacy(
+            &TodoSubitemAddArgs {
+                todo_id: "todo_1".into(),
+                texts: vec!["换港币".into()],
+                supervisor: Some("galley-assistant".into()),
+                reason: None,
+            },
+            json!({"todoId": "todo_1", "texts": ["换港币"], "supervisor": "galley-assistant"}),
+        );
+        assert_matches_legacy(
+            &TodoSubitemDoneArgs {
+                item_id: "item_1".into(),
+                supervisor: Some("galley-assistant".into()),
+                reason: None,
+            },
+            json!({"itemId": "item_1", "supervisor": "galley-assistant"}),
+        );
+        assert_matches_legacy(
+            &TodoSubitemUpdateArgs {
+                item_id: "item_1".into(),
+                text: "订虹桥的酒店".into(),
+                ..TodoSubitemUpdateArgs::default()
+            },
+            json!({"itemId": "item_1", "text": "订虹桥的酒店"}),
+        );
+        assert_matches_legacy(
+            &TodoSubitemRemoveArgs {
+                item_id: "item_1".into(),
+                supervisor: None,
+                reason: None,
+            },
+            json!({"itemId": "item_1"}),
         );
     }
 

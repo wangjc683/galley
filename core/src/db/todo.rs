@@ -1,6 +1,8 @@
 //! To-dos (main chat ticket 39): the record and every write, shared by the
 //! desktop's three commands and the CLI (ticket 40). Reminders go through
-//! the scheduled-task functions (`db/schedule.rs`, ticket 33).
+//! the scheduled-task functions (`db/schedule.rs`, ticket 33). The items
+//! under a to-do (ticket 111, `todo_subitems`) are read with it and
+//! written here too.
 
 use std::collections::{HashMap, HashSet};
 
@@ -11,8 +13,9 @@ use crate::api::schedule::{
     ScheduledTaskPatch, ScheduledTaskRepeat, ScheduledWake,
 };
 use crate::api::todo::{
-    parse_todo_due, CreateTodoInput, StoredDue, TodoBrief, TodoId, TodoPatch, TodoReminder,
-    TodoReminderState, TodoStatus,
+    mint_todo_subitem_id, parse_todo_due, todo_subitem_text, CreateTodoInput, StoredDue, TodoBrief,
+    TodoId, TodoPatch, TodoReminder, TodoReminderState, TodoStatus, TodoSubitem, TodoSubitemCount,
+    TodoSubitemId,
 };
 
 use super::helpers::origin_from_stored;
@@ -48,6 +51,43 @@ const TODO_COLUMNS: &str = "id, title, notes, due_date, due_at, done_at, done_vi
     cancelled_origin_note, created_via, created_by_supervisor, created_origin_note, \
     created_in_session_id, created_in_turn_index, created_at, updated_at";
 
+/// An item under a to-do (main chat ticket 111, migration 054).
+#[derive(Debug, FromRow)]
+struct TodoSubitemRow {
+    id: String,
+    todo_id: String,
+    text: String,
+    done_at: Option<String>,
+    done_via: Option<String>,
+    done_by_supervisor: Option<String>,
+    done_origin_note: Option<String>,
+    created_at: String,
+}
+
+const TODO_SUBITEM_COLUMNS: &str = "id, todo_id, text, done_at, done_via, done_by_supervisor, \
+    done_origin_note, created_at";
+
+impl TodoSubitemRow {
+    fn into_item(self) -> Result<TodoSubitem> {
+        let done_by = match self.done_via.as_deref() {
+            Some(via) => Some(origin_from_stored(
+                via,
+                self.done_by_supervisor,
+                self.done_origin_note,
+            )?),
+            None => None,
+        };
+        Ok(TodoSubitem {
+            id: TodoSubitemId(self.id),
+            text: self.text,
+            done: self.done_at.is_some(),
+            done_at: self.done_at,
+            done_by,
+            created_at: self.created_at,
+        })
+    }
+}
+
 /// Which to-dos a list read returns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TodoListScope {
@@ -71,7 +111,11 @@ impl TodoRow {
         }
     }
 
-    fn into_brief(self, reminder: Option<TodoReminder>) -> Result<TodoBrief> {
+    fn into_brief(
+        self,
+        reminder: Option<TodoReminder>,
+        items: Vec<TodoSubitem>,
+    ) -> Result<TodoBrief> {
         let status = self.status();
         let due = StoredDue::from_columns(self.due_date.as_deref(), self.due_at.as_deref())?
             .map(|due| due.to_wire(&Local));
@@ -115,6 +159,8 @@ impl TodoRow {
             created_in,
             cancelled_at: self.cancelled_at,
             cancelled_by,
+            item_count: TodoSubitemCount::of(&items),
+            items,
             created_at: self.created_at,
             updated_at: self.updated_at,
         })
@@ -187,6 +233,23 @@ fn clean_notes(raw: Option<&str>) -> Option<String> {
         .map(str::to_string)
 }
 
+/// Items' words as Core keeps them ([`todo_subitem_text`]), every one
+/// checked before anything is written: one with no words refuses them all.
+fn checked_subitem_texts(raw: &[String], context: &str) -> Result<Vec<String>> {
+    raw.iter()
+        .map(|text| {
+            todo_subitem_text(text)
+                .ok_or_else(|| invalid(format!("{context}: an item needs words")))
+        })
+        .collect()
+}
+
+fn subitem_not_found(id: &str) -> GalleyError {
+    GalleyError::NotFound {
+        message: format!("todo item {id} not found"),
+    }
+}
+
 impl SqliteGalley {
     async fn todo_row(&self, id: &str) -> Result<TodoRow> {
         let sql = format!("SELECT {TODO_COLUMNS} FROM todos WHERE id = ?");
@@ -230,7 +293,7 @@ impl SqliteGalley {
         }
     }
 
-    /// One to-do, cancelled or not (`todo show`).
+    /// One to-do, cancelled or not (`todo show`), with its items.
     ///
     /// **Errors**: `not_found`.
     pub async fn todo(&self, id: &str) -> Result<TodoBrief> {
@@ -240,7 +303,46 @@ impl SqliteGalley {
             .await?
             .as_ref()
             .and_then(reminder_of);
-        row.into_brief(reminder)
+        let items = self
+            .todo_subitems(Some(id))
+            .await?
+            .remove(id)
+            .unwrap_or_default();
+        row.into_brief(reminder, items)
+    }
+
+    /// The items under one to-do (`Some(id)`) or under every one (`None`),
+    /// by to-do id, each to-do's in its order (main chat ticket 111). Per
+    /// row tolerance, as for the to-dos: one unreadable item must not hide
+    /// the others.
+    async fn todo_subitems(
+        &self,
+        todo_id: Option<&str>,
+    ) -> Result<HashMap<String, Vec<TodoSubitem>>> {
+        let filter = if todo_id.is_some() {
+            "WHERE todo_id = ? "
+        } else {
+            ""
+        };
+        let sql = format!(
+            "SELECT {TODO_SUBITEM_COLUMNS} FROM todo_subitems {filter}\
+             ORDER BY todo_id, position, id"
+        );
+        let mut query = sqlx::query_as::<_, TodoSubitemRow>(&sql);
+        if let Some(id) = todo_id {
+            query = query.bind(id);
+        }
+        let rows = query.fetch_all(&self.pool).await.map_err(map_sqlx_err)?;
+        let mut by_todo: HashMap<String, Vec<TodoSubitem>> = HashMap::new();
+        for row in rows {
+            let todo = row.todo_id.clone();
+            let id = row.id.clone();
+            match row.into_item() {
+                Ok(item) => by_todo.entry(todo).or_default().push(item),
+                Err(e) => eprintln!("[db] todo item {id} unreadable, skipped: {e:?}"),
+            }
+        }
+        Ok(by_todo)
     }
 
     /// The to-dos `scope` names, oldest first (the readers sort).
@@ -256,6 +358,7 @@ impl SqliteGalley {
             .await
             .map_err(map_sqlx_err)?;
         let reminders = self.todo_reminders().await?;
+        let mut items = self.todo_subitems(None).await?;
         // Per-row tolerance, as for scheduled tasks: one unreadable row
         // must not hide the others.
         Ok(rows
@@ -263,7 +366,7 @@ impl SqliteGalley {
             .filter_map(|row| {
                 let id = row.id.clone();
                 let reminder = reminders.get(&id).and_then(reminder_of);
-                row.into_brief(reminder)
+                row.into_brief(reminder, items.remove(&id).unwrap_or_default())
                     .map_err(|e| eprintln!("[db] todo {id} unreadable, skipped: {e:?}"))
                     .ok()
             })
@@ -310,12 +413,14 @@ impl SqliteGalley {
     /// that run ends), as for a scheduled task. With `remind_at`, a
     /// reminder: a one-off scheduled task that wakes the assistant, made
     /// by [`Self::create_scheduled_task_in`] and linked to the to-do.
+    /// With `items` (main chat ticket 111), the items under it, in that
+    /// order, written with it.
     ///
     /// To-dos are the assistant's notebook: refused with
     /// [`crate::api::ASSISTANT_UNAVAILABLE`] unless the managed runtime
     /// is active and has a main chat. A reminder time already past is
     /// refused with [`crate::api::TIME_IN_PAST`] before anything is
-    /// written.
+    /// written, as is an item with no words.
     ///
     /// **Errors**: `invalid_args`.
     pub async fn create_todo(
@@ -337,6 +442,7 @@ impl SqliteGalley {
         if let Some(raw) = remind_at {
             future_fire_at(raw, CONTEXT)?;
         }
+        let items = checked_subitem_texts(&input.items, CONTEXT)?;
         let (due_date, due_at) = due.as_ref().map(StoredDue::columns).unwrap_or_default();
         let (in_session, in_run_turn) = match created_in {
             Some((session, turn)) => (Some(session.0), Some(turn)),
@@ -344,6 +450,7 @@ impl SqliteGalley {
         };
         let id = crate::api::todo::mint_todo_id();
         let now = chrono_now_iso();
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
         sqlx::query(
             "INSERT INTO todos (id, title, notes, due_date, due_at, created_via, \
                 created_by_supervisor, created_origin_note, created_in_session_id, \
@@ -362,12 +469,19 @@ impl SqliteGalley {
         .bind(in_run_turn)
         .bind(&now)
         .bind(&now)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| map_constraint_err(CONTEXT, e))?;
+        insert_subitems(&mut tx, &id, 0, &items, &now, CONTEXT).await?;
+        tx.commit().await.map_err(map_sqlx_err)?;
         if let Some(raw) = remind_at {
             if let Err(e) = self.set_todo_reminder(&id, &title, raw, &origin).await {
-                // Nothing half made: the to-do goes with its reminder.
+                // Nothing half made: the to-do goes with its reminder,
+                // and its items with it.
+                let _ = sqlx::query("DELETE FROM todo_subitems WHERE todo_id = ?")
+                    .bind(&id)
+                    .execute(&self.pool)
+                    .await;
                 let _ = sqlx::query("DELETE FROM todos WHERE id = ?")
                     .bind(&id)
                     .execute(&self.pool)
@@ -631,6 +745,200 @@ impl SqliteGalley {
         self.todo(id.as_str()).await
     }
 
+    // ---------------- items under a to-do (main chat ticket 111) ----------------
+    //
+    // PRD ruling 157: one level, words and a box, no time. The user adds,
+    // ticks, unticks, changes and deletes them on the desktop, Galley through
+    // `todo item …`; each write is Core's alone (Rule 5), needs the managed
+    // runtime with its main chat as every to-do write does, is refused on a
+    // cancelled to-do (`not_found`, as any write on it), and stamps the
+    // to-do's `updated_at` (the morning review reads it, ruling 157 point 8).
+    // A done to-do's items may be written (as its title may): the panel
+    // opens none, Galley may. Nothing here ticks the to-do off or on
+    // (point 4). Each returns the to-do as it now stands, items and all.
+
+    /// Add items under a to-do, after the ones there, in this order (the
+    /// panel's 「添加一项」, a pasted block of lines; `todo item add`).
+    /// `origin` is who asked; nothing records it (who added an item is not
+    /// kept, migration 054).
+    ///
+    /// **Errors**: `not_found` (no such to-do, or cancelled),
+    /// `invalid_args` (no items, an item with no words, no assistant).
+    pub async fn add_todo_subitems(
+        &self,
+        todo_id: &TodoId,
+        texts: &[String],
+        _origin: Origin,
+    ) -> Result<TodoBrief> {
+        const CONTEXT: &str = "add_todo_subitems";
+        self.ensure_assistant_available(CONTEXT).await?;
+        if texts.is_empty() {
+            return Err(invalid(format!("{CONTEXT}: give at least one item")));
+        }
+        let items = checked_subitem_texts(texts, CONTEXT)?;
+        self.live_todo_row(todo_id.as_str()).await?;
+        let now = chrono_now_iso();
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        let last: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(position), 0) FROM todo_subitems WHERE todo_id = ?",
+        )
+        .bind(todo_id.as_str())
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+        insert_subitems(&mut tx, todo_id.as_str(), last, &items, &now, CONTEXT).await?;
+        touch_live_todo(&mut tx, todo_id.as_str(), &now).await?;
+        tx.commit().await.map_err(map_sqlx_err)?;
+        self.todo(todo_id.as_str()).await
+    }
+
+    /// Tick an item: when, and who (the user at the desktop, Galley through
+    /// the CLI). Ticking one already ticked changes nothing (its `doneBy`
+    /// keeps the first tick), and the to-do stays as it is, the last item
+    /// ticked or not (ruling 157 point 4).
+    ///
+    /// **Errors**: `not_found` (no such item, or its to-do cancelled),
+    /// `invalid_args` (no assistant).
+    pub async fn complete_todo_subitem(
+        &self,
+        id: &TodoSubitemId,
+        origin: Origin,
+    ) -> Result<TodoBrief> {
+        const CONTEXT: &str = "complete_todo_subitem";
+        self.ensure_assistant_available(CONTEXT).await?;
+        let item = self.live_subitem(id.as_str()).await?;
+        if !item.done {
+            let now = chrono_now_iso();
+            let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+            sqlx::query(
+                "UPDATE todo_subitems SET done_at = ?, done_via = ?, done_by_supervisor = ?, \
+                    done_origin_note = ?, updated_at = ? \
+                 WHERE id = ? AND done_at IS NULL",
+            )
+            .bind(&now)
+            .bind(origin.via.as_sql())
+            .bind(origin.stored_supervisor())
+            .bind(origin.reason.as_deref())
+            .bind(&now)
+            .bind(id.as_str())
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| map_constraint_err(CONTEXT, e))?;
+            touch_live_todo(&mut tx, &item.todo_id, &now).await?;
+            tx.commit().await.map_err(map_sqlx_err)?;
+        }
+        self.todo(&item.todo_id).await
+    }
+
+    /// Untick an item: its done stamps cleared. Unticking one not ticked
+    /// changes nothing.
+    ///
+    /// **Errors**: `not_found`, `invalid_args` (no assistant).
+    pub async fn reopen_todo_subitem(
+        &self,
+        id: &TodoSubitemId,
+        _origin: Origin,
+    ) -> Result<TodoBrief> {
+        const CONTEXT: &str = "reopen_todo_subitem";
+        self.ensure_assistant_available(CONTEXT).await?;
+        let item = self.live_subitem(id.as_str()).await?;
+        if item.done {
+            let now = chrono_now_iso();
+            let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+            sqlx::query(
+                "UPDATE todo_subitems SET done_at = NULL, done_via = NULL, \
+                    done_by_supervisor = NULL, done_origin_note = NULL, updated_at = ? \
+                 WHERE id = ?",
+            )
+            .bind(&now)
+            .bind(id.as_str())
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| map_constraint_err(CONTEXT, e))?;
+            touch_live_todo(&mut tx, &item.todo_id, &now).await?;
+            tx.commit().await.map_err(map_sqlx_err)?;
+        }
+        self.todo(&item.todo_id).await
+    }
+
+    /// Change an item's words ([`todo_subitem_text`]); ticked or not, it
+    /// stays so. The same words change nothing.
+    ///
+    /// **Errors**: `not_found`, `invalid_args` (no words, no assistant).
+    pub async fn update_todo_subitem(
+        &self,
+        id: &TodoSubitemId,
+        text: &str,
+        _origin: Origin,
+    ) -> Result<TodoBrief> {
+        const CONTEXT: &str = "update_todo_subitem";
+        self.ensure_assistant_available(CONTEXT).await?;
+        let text = todo_subitem_text(text)
+            .ok_or_else(|| invalid(format!("{CONTEXT}: an item needs words")))?;
+        let item = self.live_subitem(id.as_str()).await?;
+        if item.text != text {
+            let now = chrono_now_iso();
+            let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+            sqlx::query("UPDATE todo_subitems SET text = ?, updated_at = ? WHERE id = ?")
+                .bind(&text)
+                .bind(&now)
+                .bind(id.as_str())
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| map_constraint_err(CONTEXT, e))?;
+            touch_live_todo(&mut tx, &item.todo_id, &now).await?;
+            tx.commit().await.map_err(map_sqlx_err)?;
+        }
+        self.todo(&item.todo_id).await
+    }
+
+    /// Delete an item for good (the panel's ×, once its undo toast has
+    /// gone; `todo item remove`): nothing keeps a record of it, as nothing
+    /// reads one.
+    ///
+    /// **Errors**: `not_found`, `invalid_args` (no assistant).
+    pub async fn remove_todo_subitem(
+        &self,
+        id: &TodoSubitemId,
+        _origin: Origin,
+    ) -> Result<TodoBrief> {
+        const CONTEXT: &str = "remove_todo_subitem";
+        self.ensure_assistant_available(CONTEXT).await?;
+        let item = self.live_subitem(id.as_str()).await?;
+        let now = chrono_now_iso();
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        sqlx::query("DELETE FROM todo_subitems WHERE id = ?")
+            .bind(id.as_str())
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+        touch_live_todo(&mut tx, &item.todo_id, &now).await?;
+        tx.commit().await.map_err(map_sqlx_err)?;
+        self.todo(&item.todo_id).await
+    }
+
+    /// An item that may be written: there, under a to-do not cancelled.
+    async fn live_subitem(&self, id: &str) -> Result<LiveSubitem> {
+        let row: Option<(String, String, Option<String>, Option<String>)> = sqlx::query_as(
+            "SELECT s.todo_id, s.text, s.done_at, t.cancelled_at \
+             FROM todo_subitems s JOIN todos t ON t.id = s.todo_id \
+             WHERE s.id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        let (todo_id, text, done_at, cancelled_at) = row.ok_or_else(|| subitem_not_found(id))?;
+        if cancelled_at.is_some() {
+            return Err(gone(&todo_id));
+        }
+        Ok(LiveSubitem {
+            todo_id,
+            text,
+            done: done_at.is_some(),
+        })
+    }
+
     /// When a run of `session_id` ends: the to-dos Galley noted in that
     /// run get the run's reply turn, as
     /// [`Self::settle_scheduled_created_in`] does for tasks. Returns how
@@ -663,4 +971,55 @@ impl SqliteGalley {
         .map_err(map_sqlx_err)?;
         Ok(res.rows_affected())
     }
+}
+
+/// An item about to be written ([`SqliteGalley::live_subitem`]).
+struct LiveSubitem {
+    todo_id: String,
+    text: String,
+    done: bool,
+}
+
+/// Write `texts` as items under `todo_id`, after `last` (the largest
+/// position there), in their order.
+async fn insert_subitems(
+    tx: &mut Transaction<'_, Sqlite>,
+    todo_id: &str,
+    last: i64,
+    texts: &[String],
+    now: &str,
+    context: &str,
+) -> Result<()> {
+    for (at, text) in texts.iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO todo_subitems (id, todo_id, text, position, created_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(mint_todo_subitem_id())
+        .bind(todo_id)
+        .bind(text)
+        .bind(last + 1 + at as i64)
+        .bind(now)
+        .bind(now)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| map_constraint_err(context, e))?;
+    }
+    Ok(())
+}
+
+/// Stamp a to-do's `updated_at` for a write of its items, inside that
+/// write: the to-do moved (main chat PRD ruling 157 point 8). `not_found`,
+/// and the write rolls back, when it was cancelled meanwhile.
+async fn touch_live_todo(tx: &mut Transaction<'_, Sqlite>, todo_id: &str, now: &str) -> Result<()> {
+    let res = sqlx::query("UPDATE todos SET updated_at = ? WHERE id = ? AND cancelled_at IS NULL")
+        .bind(now)
+        .bind(todo_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(map_sqlx_err)?;
+    if res.rows_affected() == 0 {
+        return Err(gone(todo_id));
+    }
+    Ok(())
 }

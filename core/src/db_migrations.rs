@@ -329,5 +329,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/053_memos.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 54,
+            description: "add todo_subitems (the items under a to-do: words and a box)",
+            sql: include_str!("../migrations/054_todo_subitems.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

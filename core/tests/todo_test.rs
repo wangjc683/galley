@@ -4,7 +4,8 @@
 //! groups of the to-do list (`galley_core_lib::assistant_todo`) read in
 //! this machine's zone, the turn a to-do was noted in, the events the
 //! write path sends, who cancelled a to-do or a task and the follow-ups
-//! the user turned down (ticket 61), and a main chat reset. The wake a
+//! the user turned down (ticket 61), a main chat reset, and the items under
+//! a to-do (ticket 111). The wake a
 //! reminder sends is
 //! in `schedule_wake_test.rs`; the pure grouping, ordering and zones in
 //! the module's unit tests.
@@ -17,11 +18,12 @@ use galley_core_lib::api::schedule::{
 };
 use galley_core_lib::api::{
     CreateTodoInput, GalleyApi, MessageVisibility, Origin, OriginVia, SessionId, TodoBrief, TodoId,
-    TodoPatch, TodoReminderState, TodoStatus, ASSISTANT_SUPERVISOR, TODOS_CHANGED_EVENT,
+    TodoPatch, TodoReminderState, TodoStatus, TodoSubitemCount, TodoSubitemId,
+    ASSISTANT_SUPERVISOR, TODOS_CHANGED_EVENT,
 };
 use galley_core_lib::assistant_todo::{
-    assistant_todo, declined_follow_ups, in_hand_read, noted_todos, AssistantTodo, DeclinedBy,
-    TodoCreator, TodoKind, TodoState,
+    assistant_todo, declined_follow_ups, in_hand_read, noted_todos, todo_list, AssistantTodo,
+    DeclinedBy, LastReview, ListedSubitem, TodoCreator, TodoKind, TodoState,
 };
 use galley_core_lib::db::{MainChatSeed, PersistAssistantMessage, SqliteGalley, TodoListScope};
 use galley_core_lib::error::GalleyError;
@@ -125,6 +127,7 @@ async fn a_to_do_is_noted_with_its_due_date_and_who() {
                 notes: Some("发给王总".into()),
                 due: Some("2026-10-21T15:00".into()),
                 remind_at: None,
+                items: Vec::new(),
             },
             assistant(),
             Some((SessionId(MAIN.into()), 4)),
@@ -1699,4 +1702,556 @@ async fn a_pending_wake_of_a_closed_to_do_is_not_read_back() {
         .await
         .unwrap();
     assert_eq!(task.last_wake, Some(ScheduledWake::Pending));
+}
+
+// ---------------- items under a to-do (ticket 111) ----------------
+
+fn items(input: CreateTodoInput, texts: &[&str]) -> CreateTodoInput {
+    CreateTodoInput {
+        items: texts.iter().map(|t| t.to_string()).collect(),
+        ..input
+    }
+}
+
+fn texts(todo: &TodoBrief) -> Vec<&str> {
+    todo.items.iter().map(|item| item.text.as_str()).collect()
+}
+
+fn item_id(todo: &TodoBrief, at: usize) -> TodoSubitemId {
+    todo.items[at].id.clone()
+}
+
+fn strings(texts: &[&str]) -> Vec<String> {
+    texts.iter().map(|t| t.to_string()).collect()
+}
+
+/// Put a to-do's `updated_at` back to a known instant, to see whether a
+/// write stamps it (Core's stamps are to the second).
+async fn stamp_back(pool: &SqlitePool, todo: &TodoId) -> String {
+    let old = "2026-01-01T00:00:00+00:00".to_string();
+    sqlx::query("UPDATE todos SET updated_at = ? WHERE id = ?")
+        .bind(&old)
+        .bind(todo.as_str())
+        .execute(pool)
+        .await
+        .unwrap();
+    old
+}
+
+#[tokio::test]
+async fn items_are_noted_with_a_to_do_and_read_with_it() {
+    let (pool, galley) = with_main_chat().await;
+    let trip = note(
+        &galley,
+        items(
+            titled("下周三去上海出差"),
+            &["订酒店", "  订机票 ", "换\n港币", "带  证件"],
+        ),
+    )
+    .await;
+    // In order, each one line, trimmed, a run of white space one space.
+    assert_eq!(texts(&trip), ["订酒店", "订机票", "换 港币", "带 证件"]);
+    assert!(trip.items.iter().all(|item| !item.done));
+    assert!(trip.items[0].id.as_str().starts_with("item_"));
+    assert_eq!(trip.items[0].id.as_str().len(), "item_".len() + 16);
+    assert_eq!(
+        trip.item_count,
+        Some(TodoSubitemCount { done: 0, total: 4 })
+    );
+    let positions: Vec<i64> = sqlx::query_scalar(
+        "SELECT position FROM todo_subitems WHERE todo_id = ? ORDER BY position",
+    )
+    .bind(trip.id.as_str())
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(positions, [1, 2, 3, 4]);
+    // `todo show` lists them; `todo list` gives their count alone.
+    let shown = serde_json::to_value(galley.todo(trip.id.as_str()).await.unwrap()).unwrap();
+    assert_eq!(shown["items"][1]["text"], "订机票");
+    assert_eq!(shown["items"][1]["done"], false);
+    assert!(shown["items"][1].get("doneBy").is_none());
+    assert_eq!(shown["itemCount"], json!({"done": 0, "total": 4}));
+    let listed = todo_list(&galley, false).await.unwrap();
+    let listed = serde_json::to_value(&listed[0]).unwrap();
+    assert!(listed.get("items").is_none(), "{listed}");
+    assert_eq!(listed["itemCount"], json!({"done": 0, "total": 4}));
+    // A to-do without items carries neither.
+    let soil = serde_json::to_value(note(&galley, titled("买营养土")).await).unwrap();
+    assert!(soil.get("items").is_none() && soil.get("itemCount").is_none());
+    // An item with no words refuses the to-do with it: nothing written.
+    let err = galley
+        .create_todo(items(titled("交报告"), &["写", " \n "]), assistant(), None)
+        .await
+        .unwrap_err();
+    assert!(invalid_with(err, "create_todo: an item needs words"));
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM todos WHERE title = '交报告'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+    // A reminder refused takes the to-do and its items with it.
+    let err = galley
+        .create_todo(
+            CreateTodoInput {
+                remind_at: Some(hours(-1)),
+                ..items(titled("交报告"), &["写"])
+            },
+            assistant(),
+            None,
+        )
+        .await
+        .unwrap_err();
+    assert!(invalid_with(err, TIME_IN_PAST));
+    let orphans: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM todo_subitems WHERE todo_id NOT IN (SELECT id FROM todos)",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(orphans, 0);
+}
+
+#[tokio::test]
+async fn items_are_added_ticked_unticked_changed_and_removed() {
+    let (_pool, galley) = with_main_chat().await;
+    let trip = note(&galley, items(titled("去上海出差"), &["订酒店"])).await;
+    // Added after the ones there, in order.
+    let trip = galley
+        .add_todo_subitems(&id(&trip), &strings(&["订机票", "换港币"]), assistant())
+        .await
+        .unwrap();
+    assert_eq!(texts(&trip), ["订酒店", "订机票", "换港币"]);
+    // Ticked: when and who.
+    let hotel = item_id(&trip, 0);
+    let trip = galley
+        .complete_todo_subitem(&hotel, Origin::desktop())
+        .await
+        .unwrap();
+    assert!(trip.items[0].done);
+    assert!(trip.items[0].done_at.is_some());
+    assert_eq!(trip.items[0].done_by.as_ref().unwrap().via, OriginVia::Gui);
+    assert_eq!(
+        trip.item_count,
+        Some(TodoSubitemCount { done: 1, total: 3 })
+    );
+    // Ticked again: unchanged, the first tick kept.
+    let again = galley
+        .complete_todo_subitem(&hotel, assistant())
+        .await
+        .unwrap();
+    assert_eq!(again.items[0].done_by.as_ref().unwrap().via, OriginVia::Gui);
+    assert_eq!(again.items[0].done_at, trip.items[0].done_at);
+    // Galley's tick records Galley.
+    let trip = galley
+        .complete_todo_subitem(&item_id(&trip, 1), assistant())
+        .await
+        .unwrap();
+    let by = trip.items[1].done_by.as_ref().unwrap();
+    assert_eq!(by.supervisor.as_deref(), Some(ASSISTANT_SUPERVISOR));
+    assert_eq!(by.reason.as_deref(), Some("noted"));
+    // Unticked: the stamps go.
+    let trip = galley
+        .reopen_todo_subitem(&hotel, Origin::desktop())
+        .await
+        .unwrap();
+    assert!(!trip.items[0].done);
+    assert!(trip.items[0].done_at.is_none() && trip.items[0].done_by.is_none());
+    // Changed: its words, its box as it was; no words refused.
+    let trip = galley
+        .update_todo_subitem(&item_id(&trip, 1), " 订周二晚的机票\n", Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(trip.items[1].text, "订周二晚的机票");
+    assert!(trip.items[1].done);
+    let err = galley
+        .update_todo_subitem(&item_id(&trip, 1), "  ", Origin::desktop())
+        .await
+        .unwrap_err();
+    assert!(invalid_with(
+        err,
+        "update_todo_subitem: an item needs words"
+    ));
+    // Removed: gone for good, the others in their order.
+    let trip = galley
+        .remove_todo_subitem(&hotel, Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(texts(&trip), ["订周二晚的机票", "换港币"]);
+    assert!(matches!(
+        galley.complete_todo_subitem(&hotel, assistant()).await,
+        Err(GalleyError::NotFound { .. })
+    ));
+    // Added after the last, though one before it went.
+    let trip = galley
+        .add_todo_subitems(&id(&trip), &strings(&["带证件"]), Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(texts(&trip), ["订周二晚的机票", "换港币", "带证件"]);
+    // Nothing to add, or an item with no words: refused.
+    for bad in [vec![], strings(&["", "x"])] {
+        let err = galley
+            .add_todo_subitems(&id(&trip), &bad, assistant())
+            .await
+            .unwrap_err();
+        assert!(matches!(err, GalleyError::InvalidArgs { .. }), "{bad:?}");
+    }
+    assert_eq!(galley.todo(trip.id.as_str()).await.unwrap().items.len(), 3);
+}
+
+#[tokio::test]
+async fn the_last_item_does_not_tick_the_to_do_nor_the_to_do_its_items() {
+    let (_pool, galley) = with_main_chat().await;
+    let trip = note(&galley, items(titled("去上海出差"), &["订酒店", "订机票"])).await;
+    for at in 0..2 {
+        galley
+            .complete_todo_subitem(&item_id(&trip, at), Origin::desktop())
+            .await
+            .unwrap();
+    }
+    let all_ticked = galley.todo(trip.id.as_str()).await.unwrap();
+    assert_eq!(all_ticked.status, TodoStatus::Open);
+    assert_eq!(
+        all_ticked.item_count,
+        Some(TodoSubitemCount { done: 2, total: 2 })
+    );
+    // Ticking the to-do off and on leaves its items as they were.
+    let reopened = galley
+        .reopen_todo_subitem(&item_id(&trip, 1), Origin::desktop())
+        .await
+        .unwrap();
+    galley
+        .complete_todo(&id(&trip), Origin::desktop())
+        .await
+        .unwrap();
+    let done = galley.todo(trip.id.as_str()).await.unwrap();
+    assert_eq!(done.status, TodoStatus::Done);
+    let boxes = |todo: &TodoBrief| todo.items.iter().map(|i| i.done).collect::<Vec<_>>();
+    assert_eq!(boxes(&done), boxes(&reopened));
+    galley
+        .reopen_todo(&id(&trip), Origin::desktop())
+        .await
+        .unwrap();
+    let back = galley.todo(trip.id.as_str()).await.unwrap();
+    assert_eq!(boxes(&back), [true, false]);
+    // A done to-do's items may still be written (Galley may; the panel
+    // opens none).
+    galley.complete_todo(&id(&trip), assistant()).await.unwrap();
+    let still = galley
+        .complete_todo_subitem(&item_id(&trip, 1), assistant())
+        .await
+        .unwrap();
+    assert_eq!(still.status, TodoStatus::Done);
+    assert_eq!(boxes(&still), [true, true]);
+}
+
+#[tokio::test]
+async fn every_item_write_stamps_its_to_do_and_a_write_that_changes_nothing_does_not() {
+    let (pool, galley) = with_main_chat().await;
+    let trip = note(&galley, items(titled("去上海出差"), &["订酒店"])).await;
+    let trip_id = id(&trip);
+    let hotel = item_id(&trip, 0);
+    let stamped = |todo: &TodoBrief, old: &str| todo.updated_at != old;
+
+    let old = stamp_back(&pool, &trip_id).await;
+    let after = galley
+        .add_todo_subitems(&trip_id, &strings(&["订机票"]), assistant())
+        .await
+        .unwrap();
+    assert!(stamped(&after, &old), "add");
+    let ticket = item_id(&after, 1);
+
+    let old = stamp_back(&pool, &trip_id).await;
+    assert!(
+        stamped(
+            &galley
+                .complete_todo_subitem(&hotel, assistant())
+                .await
+                .unwrap(),
+            &old
+        ),
+        "tick"
+    );
+    let old = stamp_back(&pool, &trip_id).await;
+    assert!(
+        !stamped(
+            &galley
+                .complete_todo_subitem(&hotel, assistant())
+                .await
+                .unwrap(),
+            &old
+        ),
+        "tick again"
+    );
+    let old = stamp_back(&pool, &trip_id).await;
+    assert!(
+        stamped(
+            &galley
+                .reopen_todo_subitem(&hotel, assistant())
+                .await
+                .unwrap(),
+            &old
+        ),
+        "untick"
+    );
+    let old = stamp_back(&pool, &trip_id).await;
+    assert!(
+        !stamped(
+            &galley
+                .reopen_todo_subitem(&hotel, assistant())
+                .await
+                .unwrap(),
+            &old
+        ),
+        "untick again"
+    );
+    let old = stamp_back(&pool, &trip_id).await;
+    assert!(
+        stamped(
+            &galley
+                .update_todo_subitem(&ticket, "订高铁", assistant())
+                .await
+                .unwrap(),
+            &old
+        ),
+        "change"
+    );
+    let old = stamp_back(&pool, &trip_id).await;
+    assert!(
+        !stamped(
+            &galley
+                .update_todo_subitem(&ticket, " 订高铁 ", assistant())
+                .await
+                .unwrap(),
+            &old
+        ),
+        "same words"
+    );
+    let old = stamp_back(&pool, &trip_id).await;
+    assert!(
+        stamped(
+            &galley
+                .remove_todo_subitem(&ticket, assistant())
+                .await
+                .unwrap(),
+            &old
+        ),
+        "remove"
+    );
+}
+
+#[tokio::test]
+async fn an_item_write_wakes_the_next_review_as_a_change_to_the_notes_does() {
+    // PRD ruling 157 point 8: the review reads the to-do's `updated_at`.
+    let (pool, galley) = with_main_chat().await;
+    let hilton = note(
+        &galley,
+        items(titled("希尔顿酒店项目资料收集"), &["品牌", "预算"]),
+    )
+    .await;
+    let last = LastReview::read(Some(&hours(1)), &Local).unwrap();
+    // Noted before the review: it does not wake for it.
+    stamp_back(&pool, &id(&hilton)).await;
+    let today = Local::now().date_naive();
+    assert!(!read(&galley)
+        .await
+        .review_has_something_to_look_at(today, Some(last)));
+    // An item ticked after the review moved it.
+    let last = LastReview::read(Some(&hours(-1)), &Local).unwrap();
+    galley
+        .complete_todo_subitem(&item_id(&hilton, 0), Origin::desktop())
+        .await
+        .unwrap();
+    assert!(read(&galley)
+        .await
+        .review_has_something_to_look_at(today, Some(last)));
+}
+
+#[tokio::test]
+async fn a_deleted_to_dos_items_are_gone_for_every_write_and_stay_with_its_row() {
+    let (_pool, galley) = with_main_chat().await;
+    let trip = note(&galley, items(titled("去上海出差"), &["订酒店", "订机票"])).await;
+    galley
+        .cancel_todo(&id(&trip), Origin::desktop())
+        .await
+        .unwrap();
+    let hotel = item_id(&trip, 0);
+    for result in [
+        galley.complete_todo_subitem(&hotel, assistant()).await,
+        galley.reopen_todo_subitem(&hotel, assistant()).await,
+        galley.update_todo_subitem(&hotel, "x", assistant()).await,
+        galley.remove_todo_subitem(&hotel, assistant()).await,
+        galley
+            .add_todo_subitems(&id(&trip), &strings(&["x"]), assistant())
+            .await,
+    ] {
+        match result {
+            Err(GalleyError::NotFound { message }) => assert!(message.contains("cancelled")),
+            other => panic!("{other:?}"),
+        }
+    }
+    // `todo show` still reads them with the cancelled row.
+    assert_eq!(
+        texts(&galley.todo(trip.id.as_str()).await.unwrap()),
+        ["订酒店", "订机票"]
+    );
+    // No such item, no such to-do.
+    for result in [
+        galley
+            .complete_todo_subitem(&TodoSubitemId("item_nope".into()), assistant())
+            .await,
+        galley
+            .add_todo_subitems(&TodoId("todo_nope".into()), &strings(&["x"]), assistant())
+            .await,
+    ] {
+        assert!(
+            matches!(result, Err(GalleyError::NotFound { .. })),
+            "{result:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn items_are_the_assistants_only_on_the_managed_runtime() {
+    let (_pool, galley) = with_main_chat().await;
+    let trip = note(&galley, items(titled("去上海出差"), &["订酒店"])).await;
+    galley
+        .set_pref_json("active_runtime_kind", json!("external"))
+        .await
+        .unwrap();
+    let hotel = item_id(&trip, 0);
+    for err in [
+        galley
+            .complete_todo_subitem(&hotel, assistant())
+            .await
+            .unwrap_err(),
+        galley
+            .add_todo_subitems(&id(&trip), &strings(&["x"]), assistant())
+            .await
+            .unwrap_err(),
+        galley
+            .remove_todo_subitem(&hotel, assistant())
+            .await
+            .unwrap_err(),
+    ] {
+        assert!(invalid_with(err, ASSISTANT_UNAVAILABLE));
+    }
+    // Reads still answer.
+    assert_eq!(
+        texts(&galley.todo(trip.id.as_str()).await.unwrap()),
+        ["订酒店"]
+    );
+}
+
+#[tokio::test]
+async fn the_list_and_the_cards_carry_the_items_words_and_boxes() {
+    let (_pool, galley) = with_main_chat().await;
+    let trip = galley
+        .create_todo(
+            items(titled("去上海出差"), &["订酒店", "订机票"]),
+            assistant(),
+            Some((SessionId(MAIN.into()), 1)),
+        )
+        .await
+        .unwrap();
+    galley
+        .complete_todo_subitem(&item_id(&trip, 1), assistant())
+        .await
+        .unwrap();
+    let want = vec![
+        ListedSubitem {
+            id: trip.items[0].id.as_str().to_string(),
+            text: "订酒店".into(),
+            done: false,
+        },
+        ListedSubitem {
+            id: trip.items[1].id.as_str().to_string(),
+            text: "订机票".into(),
+            done: true,
+        },
+    ];
+    let list = read(&galley).await;
+    let row = list
+        .yours
+        .anytime
+        .iter()
+        .find(|i| i.id == trip.id.as_str())
+        .unwrap();
+    assert_eq!(row.items, want);
+    let wire = serde_json::to_value(row).unwrap();
+    assert_eq!(
+        wire["items"][1],
+        json!({"id": trip.items[1].id.as_str(), "text": "订机票", "done": true})
+    );
+    let cards = noted_todos(&galley, Utc::now()).await.unwrap();
+    assert_eq!(cards[0].items, want);
+    // One with none: the field left out.
+    let soil = note(&galley, titled("买营养土")).await;
+    let list = read(&galley).await;
+    let row = list
+        .yours
+        .anytime
+        .iter()
+        .find(|i| i.id == soil.id.as_str())
+        .unwrap();
+    assert!(serde_json::to_value(row).unwrap().get("items").is_none());
+}
+
+#[tokio::test]
+async fn every_item_write_tells_the_desktop_of_the_to_do_alone() {
+    let (_pool, galley) = with_main_chat().await;
+    let trip = note(&galley, titled("去上海出差")).await;
+    let rec = Recorder::default();
+    let writes = Writes::new(&galley, &rec, "test");
+    let trip = writes
+        .add_todo_subitems(&id(&trip), &strings(&["订酒店"]), Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(rec.take(), [TODOS_CHANGED_EVENT]);
+    let hotel = item_id(&trip, 0);
+    writes
+        .complete_todo_subitem(&hotel, Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(rec.take(), [TODOS_CHANGED_EVENT]);
+    writes
+        .reopen_todo_subitem(&hotel, Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(rec.take(), [TODOS_CHANGED_EVENT]);
+    writes
+        .update_todo_subitem(&hotel, "订虹桥的酒店", Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(rec.take(), [TODOS_CHANGED_EVENT]);
+    writes
+        .remove_todo_subitem(&hotel, Origin::desktop())
+        .await
+        .unwrap();
+    assert_eq!(rec.take(), [TODOS_CHANGED_EVENT]);
+    // A refused one still says so.
+    assert!(writes
+        .remove_todo_subitem(&hotel, Origin::desktop())
+        .await
+        .is_err());
+    assert_eq!(rec.take(), [TODOS_CHANGED_EVENT]);
+}
+
+#[tokio::test]
+async fn a_main_chat_reset_deletes_every_item() {
+    let (pool, galley) = with_main_chat().await;
+    note(&galley, items(titled("去上海出差"), &["订酒店", "订机票"])).await;
+    let gone = note(&galley, items(titled("交报告"), &["写"])).await;
+    galley.cancel_todo(&id(&gone), assistant()).await.unwrap();
+    let deletion = galley
+        .delete_main_chat_for_reset(&SessionId(MAIN.into()))
+        .await
+        .expect("reset");
+    assert_eq!(deletion.todos, 2);
+    assert_eq!(deletion.todo_items, 3);
+    let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM todo_subitems")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
 }

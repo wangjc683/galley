@@ -515,8 +515,9 @@ carries its kind (`todo`, `task`, `subtask`), id, title or words, state,
 the instant it is ordered by (UTC), who made it (the assistant, the user's
 form, another agent), where it leads (the reply it was noted or set in, a
 subtask's session, a scheduled run's session), and for a to-do its notes,
-due date, overdue mark, reminder, who ticked it and when it was noted
-(`createdAt`, ticket 43). Deterministic and
+due date, overdue mark, reminder, who ticked it, when it was noted
+(`createdAt`, ticket 43) and the items under it (`items`, ticket 111: each
+its id, words and box, in the order added). Deterministic and
 read-only; the desktop reads it again on the existing events
 (`todos:changed`, `scheduled-tasks:changed`, `subtask-dispatched`,
 `session-run-state`, session updates), at local midnight, and when a to-do

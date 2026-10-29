@@ -9,6 +9,15 @@
 //! to Galley, which changes it through the CLI (ticket 40). Core holds the
 //! record (`todos`, migration 050) and decides every write (Rule 5).
 //!
+//! Since main chat ticket 111 (PRD ruling 157) a to-do may have items
+//! under it ([`TodoSubitem`], `todo_subitems`, migration 054): one level,
+//! each only its words and a box, no due date and no reminder. The user
+//! adds, ticks, unticks, changes and deletes them on the desktop as Galley
+//! does through the CLI (`todo item …`), as none of it needs judging; the
+//! to-do is never ticked off for them, nor they for it (point 4). The CLI
+//! calls one an `item`; Core's code a sub-item, as [`crate::assistant_todo::TodoItem`]
+//! is a row of the to-do list.
+//!
 //! A reminder is a scheduled task (main chat ticket 33): a one-off that
 //! wakes the assistant, linked to its to-do (`scheduled_tasks.todo_id`,
 //! [`super::ScheduledTaskBrief::todo_id`]). Setting, moving and removing it
@@ -32,8 +41,9 @@ use super::Origin;
 use crate::error::{GalleyError, Result};
 
 /// Tauri event fired after any to-do change: made, changed, ticked off,
-/// unticked, cancelled, its reminder cancelled, the turn it was noted in
-/// settled, every to-do cleared by a main chat reset. Payload is empty —
+/// unticked, cancelled, its reminder cancelled, an item under it added,
+/// ticked, unticked, changed or removed (ticket 111), the turn it was
+/// noted in settled, every to-do cleared by a main chat reset. Payload is empty —
 /// the desktop reads again, as for
 /// [`super::SCHEDULED_TASKS_CHANGED_EVENT`]. A write that also touched the
 /// reminder fires that event too. Desktop only: the remote module does not
@@ -61,6 +71,38 @@ impl std::fmt::Display for TodoId {
 /// task's ([`super::schedule::mint_scheduled_task_id`]).
 pub fn mint_todo_id() -> String {
     format!("todo_{}", super::schedule::mint_hex16())
+}
+
+/// Opaque identifier of an item under a to-do (main chat ticket 111),
+/// `item_<16 hex>` ([`mint_todo_subitem_id`]): the CLI's `<item-id>`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct TodoSubitemId(pub String);
+
+impl TodoSubitemId {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for TodoSubitemId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// Mint an item's id: `item_` and 16 hex digits, as a to-do's.
+pub fn mint_todo_subitem_id() -> String {
+    format!("item_{}", super::schedule::mint_hex16())
+}
+
+/// An item's words as Core keeps them (main chat ticket 111): one line,
+/// trimmed, each run of white space (a line break among them) one space —
+/// the panel's box takes no break, and a pasted block is split into items
+/// before it gets here. `None` when nothing is left: an item needs words.
+pub fn todo_subitem_text(raw: &str) -> Option<String> {
+    let line = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!line.is_empty()).then_some(line)
 }
 
 /// Where a to-do stands. Read off its stamps: cancelled wins, then done.
@@ -251,6 +293,49 @@ pub struct TodoReminder {
     pub state: TodoReminderState,
 }
 
+/// One item under a to-do (main chat ticket 111, PRD ruling 157): its
+/// words and its box. In the order it was added, the user's and Galley's
+/// in one list (point 7).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoSubitem {
+    pub id: TodoSubitemId,
+    pub text: String,
+    /// Ticked.
+    pub done: bool,
+    /// When it was ticked, UTC ISO.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub done_at: Option<String>,
+    /// Who ticked it: `gui` is the user at the desktop, `supervisor` +
+    /// `galley-assistant` is Galley, as a to-do's `doneBy`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub done_by: Option<Origin>,
+    /// When it was added, UTC ISO.
+    pub created_at: String,
+}
+
+/// How many items a to-do has and how many are ticked (`todo list`'s
+/// count, and In Hand's `2 of 5 items done`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoSubitemCount {
+    pub done: u32,
+    pub total: u32,
+}
+
+impl TodoSubitemCount {
+    /// The count of `items`; `None` when there are none.
+    pub fn of(items: &[TodoSubitem]) -> Option<Self> {
+        if items.is_empty() {
+            return None;
+        }
+        Some(Self {
+            done: items.iter().filter(|item| item.done).count() as u32,
+            total: items.len() as u32,
+        })
+    }
+}
+
 /// The record (`todo show`, and what every write returns).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -285,6 +370,15 @@ pub struct TodoBrief {
     /// cancelled, and on a to-do cancelled before this was recorded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cancelled_by: Option<Origin>,
+    /// The items under it (main chat ticket 111), in their order: `todo
+    /// show` and every write. Absent when it has none, and in `todo list`,
+    /// which gives [`Self::item_count`] alone ([`Self::listed`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<TodoSubitem>,
+    /// How many items, how many ticked; on every shape, absent when it has
+    /// none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_count: Option<TodoSubitemCount>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -292,6 +386,13 @@ pub struct TodoBrief {
 impl TodoBrief {
     pub fn is_open(&self) -> bool {
         self.status == TodoStatus::Open
+    }
+
+    /// As `todo list` prints it (main chat ticket 111): the count of its
+    /// items without the items, which `todo show` reads.
+    pub fn listed(mut self) -> Self {
+        self.items.clear();
+        self
     }
 
     /// The due date in its stored form.
@@ -314,6 +415,10 @@ pub struct CreateTodoInput {
     /// refused ([`super::TIME_IN_PAST`]).
     #[serde(default)]
     pub remind_at: Option<String>,
+    /// Items under it, in this order (main chat ticket 111, `todo add
+    /// --item`); each needs words ([`todo_subitem_text`]).
+    #[serde(default)]
+    pub items: Vec<String>,
 }
 
 /// A change: only what is given. The double `Option`s clear with

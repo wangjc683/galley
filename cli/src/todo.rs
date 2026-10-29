@@ -2,16 +2,19 @@
 //! notebook (ticket 39). `list` / `show` read SQLite directly, like every
 //! read command; the writes go through Galley Core's socket (`todo.*`),
 //! which decides them (Core's to-do functions), records the origin, and
-//! broadcasts.
+//! broadcasts. `todo item …` (ticket 111) writes the items under a to-do
+//! the same way (`todo.item_*`).
 
-use crate::args::TodoCmd;
+use crate::args::{TodoCmd, TodoSubitemCmd};
 use crate::client::call_print;
 use crate::common::emit_json;
 use galley_core_lib::assistant_todo::todo_list;
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::error::GalleyError;
 use galley_core_lib::protocol::{
-    TodoAddArgs, TodoCancelArgs, TodoDoneArgs, TodoReopenArgs, TodoUpdateArgs,
+    TodoAddArgs, TodoCancelArgs, TodoDoneArgs, TodoReopenArgs, TodoSubitemAddArgs,
+    TodoSubitemDoneArgs, TodoSubitemRemoveArgs, TodoSubitemReopenArgs, TodoSubitemUpdateArgs,
+    TodoUpdateArgs,
 };
 
 pub(crate) async fn run(cmd: TodoCmd) -> Result<(), GalleyError> {
@@ -23,6 +26,7 @@ pub(crate) async fn run(cmd: TodoCmd) -> Result<(), GalleyError> {
             notes,
             due,
             remind_at,
+            items,
             supervisor,
             reason,
         } => {
@@ -31,6 +35,7 @@ pub(crate) async fn run(cmd: TodoCmd) -> Result<(), GalleyError> {
                 notes,
                 due,
                 remind_at,
+                items,
                 supervisor,
                 reason,
             })
@@ -90,6 +95,77 @@ pub(crate) async fn run(cmd: TodoCmd) -> Result<(), GalleyError> {
         } => {
             call_print(TodoCancelArgs {
                 todo_id,
+                supervisor,
+                reason,
+            })
+            .await
+        }
+        TodoCmd::Item(cmd) => item(cmd).await,
+    }
+}
+
+/// `todo item …` (main chat ticket 111): every write through Core.
+async fn item(cmd: TodoSubitemCmd) -> Result<(), GalleyError> {
+    match cmd {
+        TodoSubitemCmd::Add {
+            todo_id,
+            texts,
+            supervisor,
+            reason,
+        } => {
+            call_print(TodoSubitemAddArgs {
+                todo_id,
+                texts,
+                supervisor,
+                reason,
+            })
+            .await
+        }
+        TodoSubitemCmd::Done {
+            item_id,
+            supervisor,
+            reason,
+        } => {
+            call_print(TodoSubitemDoneArgs {
+                item_id,
+                supervisor,
+                reason,
+            })
+            .await
+        }
+        TodoSubitemCmd::Reopen {
+            item_id,
+            supervisor,
+            reason,
+        } => {
+            call_print(TodoSubitemReopenArgs {
+                item_id,
+                supervisor,
+                reason,
+            })
+            .await
+        }
+        TodoSubitemCmd::Update {
+            item_id,
+            text,
+            supervisor,
+            reason,
+        } => {
+            call_print(TodoSubitemUpdateArgs {
+                item_id,
+                text,
+                supervisor,
+                reason,
+            })
+            .await
+        }
+        TodoSubitemCmd::Remove {
+            item_id,
+            supervisor,
+            reason,
+        } => {
+            call_print(TodoSubitemRemoveArgs {
+                item_id,
                 supervisor,
                 reason,
             })

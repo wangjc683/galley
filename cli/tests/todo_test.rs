@@ -7,7 +7,10 @@
 //! clap's), a due date's two forms, a reminder made and cancelled when
 //! the to-do is ticked off, the default list and `--all`, `--schema=3`;
 //! the exit-4 path with no Core; and the old commands printing the same
-//! bytes with to-dos about. Unix only: the server is a Unix socket.
+//! bytes with to-dos about. Since main chat ticket 111 the items under a
+//! to-do: `add --item`, `todo item add / done / reopen / update / remove`,
+//! `show` listing them and `list` counting them. Unix only: the server is
+//! a Unix socket.
 #![cfg(unix)]
 
 use std::os::unix::fs::MetadataExt;
@@ -510,5 +513,127 @@ async fn the_old_commands_print_the_same_bytes_with_todos_about() {
     ok(dir, &["todo", "cancel", &id]).await;
     for (args, was) in old.iter().zip(&before) {
         assert_eq!(&ok(dir, args).await, was, "{args:?}");
+    }
+}
+
+/// The items' words of a `Todo`.
+fn item_texts(todo: &Value) -> Vec<String> {
+    todo["items"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .map(|i| i["text"].as_str().unwrap().to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_items_under_a_to_do() {
+    let td = short_tempdir();
+    let dir = td.path();
+    serve(dir, database(dir, true).await);
+
+    // `add --item`, repeated, in order.
+    let out = ok(
+        dir,
+        &[
+            "--schema=3",
+            "todo",
+            "add",
+            "下周三去上海出差",
+            "--item=订酒店",
+            "--item=订机票",
+            "--supervisor=galley-assistant",
+        ],
+    )
+    .await;
+    let trip = json_of(&out)["todo"].clone();
+    let tid = trip["id"].as_str().unwrap().to_string();
+    assert_eq!(item_texts(&trip), ["订酒店", "订机票"]);
+    assert_eq!(trip["itemCount"], json!({"done": 0, "total": 2}));
+    // `item add`, several words at once, after the ones there.
+    let trip = json_of(
+        &ok(
+            dir,
+            &[
+                "todo",
+                "item",
+                "add",
+                &tid,
+                "换港币",
+                "带证件",
+                "--supervisor=galley-assistant",
+            ],
+        )
+        .await,
+    )["todo"]
+        .clone();
+    assert_eq!(item_texts(&trip), ["订酒店", "订机票", "换港币", "带证件"]);
+    let hotel = trip["items"][0]["id"].as_str().unwrap().to_string();
+    let papers = trip["items"][3]["id"].as_str().unwrap().to_string();
+    // `item done`: who ticked it; the to-do stays open.
+    let trip = json_of(
+        &ok(
+            dir,
+            &[
+                "todo",
+                "item",
+                "done",
+                &hotel,
+                "--supervisor=galley-assistant",
+                "--reason=user booked it",
+            ],
+        )
+        .await,
+    )["todo"]
+        .clone();
+    assert_eq!(trip["items"][0]["done"], true);
+    assert_eq!(trip["items"][0]["doneBy"]["supervisor"], "galley-assistant");
+    assert_eq!(trip["status"], "open");
+    assert_eq!(trip["itemCount"], json!({"done": 1, "total": 4}));
+    // `item reopen`, `item update`, `item remove`.
+    let trip = json_of(&ok(dir, &["todo", "item", "reopen", &hotel]).await)["todo"].clone();
+    assert_eq!(trip["items"][0]["done"], false);
+    let trip = json_of(
+        &ok(
+            dir,
+            &["todo", "item", "update", &hotel, "--text=订虹桥的酒店"],
+        )
+        .await,
+    )["todo"]
+        .clone();
+    assert_eq!(trip["items"][0]["text"], "订虹桥的酒店");
+    let trip = json_of(&ok(dir, &["todo", "item", "remove", &papers]).await)["todo"].clone();
+    assert_eq!(item_texts(&trip), ["订虹桥的酒店", "订机票", "换港币"]);
+    // `show` lists them; `list` counts them.
+    let shown = json_of(&ok(dir, &["todo", "show", &tid]).await);
+    assert_eq!(shown, trip);
+    let listed = ndjson(&ok(dir, &["todo", "list"]).await);
+    assert!(listed[0].get("items").is_none(), "{}", listed[0]);
+    assert_eq!(listed[0]["itemCount"], json!({"done": 0, "total": 3}));
+    // Refusals: no words (Core, exit 2), an unknown item (exit 3), clap's
+    // (no words given, an empty --text, no --text).
+    let (out, code) = galley(dir, &["todo", "item", "update", &hotel, "--text= "]).await;
+    assert_refused(&out, code, "update_todo_subitem: an item needs words");
+    let (out, code) = galley(dir, &["todo", "add", "x", "--item= "]).await;
+    assert_refused(&out, code, "create_todo: an item needs words");
+    let (out, code) = galley(dir, &["todo", "item", "done", "item_nope"]).await;
+    assert_eq!(code, Some(3), "{out}");
+    assert_eq!(json_of(&out)["error"], "not_found");
+    for args in [
+        vec!["todo", "item", "add", tid.as_str()],
+        vec!["todo", "item", "update", hotel.as_str(), "--text="],
+        vec!["todo", "item", "update", hotel.as_str()],
+        vec!["todo", "item", "done"],
+    ] {
+        let (out, code) = galley(dir, &args).await;
+        assert_eq!(code, Some(2), "{args:?}: {out}");
+        assert_eq!(json_of(&out)["error"], "invalid_args", "{args:?}");
+    }
+    // Under every pin, as the family.
+    for schema in ["--schema=1", "--schema=2"] {
+        ok(dir, &[schema, "todo", "item", "done", &hotel]).await;
     }
 }

@@ -245,6 +245,17 @@ and error discriminants unchanged):
   leaves `updatedAt` as it was, which is what §5.35 says the field means,
   and records nothing. No command, field, flag or exit code changed. See
   [memo-commands.md](./memo-commands.md) §5.38.
+- 2026-10-29 — The items under a to-do (main chat ticket 111): `todo item
+  add / done / reopen / update / remove` (socket `todo.item_add`,
+  `todo.item_done`, `todo.item_reopen`, `todo.item_update`,
+  `todo.item_remove`), `todo add --item` (socket `items`), and on `Todo`
+  the optional `items` (`Item[]`: on `show` and every write, not on
+  `list`) and `itemCount` (`{done, total}`, every shape). Absent on a to-do
+  with none, so a to-do without items prints the same bytes as before. New
+  commands, one new flag and new optional fields only; no existing command,
+  field, exit code or error changed. Also served under `--schema=1` and
+  `--schema=2`. See [todo-commands.md](./todo-commands.md) §5.28,
+  §5.34a–§5.34d.
 
 ### 7.2 `schemaVersion: 2` (served for unchanged commands, since 2026-09-16)
 

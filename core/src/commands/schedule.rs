@@ -279,6 +279,91 @@ pub(crate) async fn cancel_todo(
         .map_err(stringify_error)
 }
 
+// ---------------- items under a to-do (main chat ticket 111) ----------------
+//
+// PRD ruling 157: one level, words and a box, no time — so every write on
+// them is the panel's own, as none needs judging (rulings 91, 153): add
+// (「添加一项」, a pasted block one item a line), tick and untick (straight
+// to Core, no hold: an item has no reminder for a tick to cancel), change
+// the words in place, and delete (sent once the undo toast has gone, as a
+// to-do's delete). Each is the user at the desktop (`Origin::desktop()`:
+// a tick records `done_via = 'gui'`), goes through Core's write path,
+// broadcasts `todos:changed`, stamps the to-do's `updated_at`, and returns
+// the to-do as it now stands. Errors are Core's JSON (`not_found` for an
+// item gone, or under a to-do deleted; `invalid_args` for no words).
+
+/// Add items under a to-do, after the ones there, in this order.
+#[tauri::command]
+pub(crate) async fn add_todo_subitems(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+    id: crate::api::TodoId,
+    texts: Vec<String>,
+) -> std::result::Result<crate::api::TodoBrief, String> {
+    let notifier = TauriNotifier::new(app);
+    Writes::new(&galley, notifier.as_ref(), VIA_GUI)
+        .add_todo_subitems(&id, &texts, Origin::desktop())
+        .await
+        .map_err(stringify_error)
+}
+
+/// Tick an item; its to-do stays as it is (ruling 157 point 4).
+#[tauri::command]
+pub(crate) async fn complete_todo_subitem(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+    id: crate::api::TodoSubitemId,
+) -> std::result::Result<crate::api::TodoBrief, String> {
+    let notifier = TauriNotifier::new(app);
+    Writes::new(&galley, notifier.as_ref(), VIA_GUI)
+        .complete_todo_subitem(&id, Origin::desktop())
+        .await
+        .map_err(stringify_error)
+}
+
+/// Untick an item.
+#[tauri::command]
+pub(crate) async fn reopen_todo_subitem(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+    id: crate::api::TodoSubitemId,
+) -> std::result::Result<crate::api::TodoBrief, String> {
+    let notifier = TauriNotifier::new(app);
+    Writes::new(&galley, notifier.as_ref(), VIA_GUI)
+        .reopen_todo_subitem(&id, Origin::desktop())
+        .await
+        .map_err(stringify_error)
+}
+
+/// Change an item's words, edited in place.
+#[tauri::command]
+pub(crate) async fn update_todo_subitem(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+    id: crate::api::TodoSubitemId,
+    text: String,
+) -> std::result::Result<crate::api::TodoBrief, String> {
+    let notifier = TauriNotifier::new(app);
+    Writes::new(&galley, notifier.as_ref(), VIA_GUI)
+        .update_todo_subitem(&id, &text, Origin::desktop())
+        .await
+        .map_err(stringify_error)
+}
+
+/// Delete an item, once the panel's undo toast has gone.
+#[tauri::command]
+pub(crate) async fn remove_todo_subitem(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+    id: crate::api::TodoSubitemId,
+) -> std::result::Result<crate::api::TodoBrief, String> {
+    let notifier = TauriNotifier::new(app);
+    Writes::new(&galley, notifier.as_ref(), VIA_GUI)
+        .remove_todo_subitem(&id, Origin::desktop())
+        .await
+        .map_err(stringify_error)
+}
+
 // ---------------- memos (main chat ticket 95) ----------------
 //
 // The desktop's 「备忘」 page and the cards under the main chat's replies

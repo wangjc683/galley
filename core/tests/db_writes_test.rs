@@ -78,6 +78,7 @@ const MIG_050: &str = include_str!("../migrations/050_todos.sql");
 const MIG_051: &str = include_str!("../migrations/051_cancelled_by.sql");
 const MIG_052: &str = include_str!("../migrations/052_provider_auth_kind_none.sql");
 const MIG_053: &str = include_str!("../migrations/053_memos.sql");
+const MIG_054: &str = include_str!("../migrations/054_todo_subitems.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -115,7 +116,7 @@ async fn fresh_file_pool() -> (tempfile::TempDir, SqlitePool) {
 
 async fn run_migrations(pool: &SqlitePool) {
     run_migrations_through_051(pool).await;
-    for sql in [MIG_052, MIG_053] {
+    for sql in [MIG_052, MIG_053, MIG_054] {
         sqlx::raw_sql(sql)
             .execute(pool)
             .await
@@ -3504,6 +3505,74 @@ async fn migration_050_adds_todos_and_leaves_tasks_on_no_to_do() {
 }
 
 #[tokio::test]
+async fn migration_054_adds_the_items_under_a_to_do_and_leaves_the_to_dos_as_they_were() {
+    // Main chat ticket 111: to-dos noted before 054 have no items; the new
+    // table's CHECKs hold (words, done with who, the origin values).
+    let pool = SqlitePool::connect("sqlite::memory:")
+        .await
+        .expect("open in-memory sqlite");
+    sqlx::raw_sql("PRAGMA foreign_keys = ON;")
+        .execute(&pool)
+        .await
+        .expect("enable foreign keys");
+    run_migrations_through_051(&pool).await;
+    for sql in [MIG_052, MIG_053] {
+        sqlx::raw_sql(sql).execute(&pool).await.expect("migration");
+    }
+    sqlx::query(
+        "INSERT INTO todos (id, title, notes, created_via, created_at, updated_at) \
+         VALUES ('todo_before', '希尔顿酒店项目资料收集', '收集要点：品牌、预算', \
+                 'supervisor', '2026-10-28T09:46:38+00:00', '2026-10-28T09:46:38+00:00')",
+    )
+    .execute(&pool)
+    .await
+    .expect("seed pre-054 to-do");
+    sqlx::raw_sql(MIG_054)
+        .execute(&pool)
+        .await
+        .expect("migration 054");
+    let galley = SqliteGalley::from_pool(pool.clone());
+    let todo = galley.todo("todo_before").await.expect("read");
+    assert_eq!(todo.notes.as_deref(), Some("收集要点：品牌、预算"));
+    assert!(todo.items.is_empty() && todo.item_count.is_none());
+    assert_eq!(todo.updated_at, "2026-10-28T09:46:38+00:00");
+    let ok = "INSERT INTO todo_subitems (id, todo_id, text, position, created_at, updated_at) \
+              VALUES ('item_ok', 'todo_before', '品牌', 1, 't', 't')";
+    sqlx::query(ok).execute(&pool).await.expect("an item");
+    let ticked = "INSERT INTO todo_subitems \
+                  (id, todo_id, text, position, done_at, done_via, created_at, updated_at) \
+                  VALUES ('item_ticked', 'todo_before', '预算', 2, 't', 'gui', 't', 't')";
+    sqlx::query(ticked)
+        .execute(&pool)
+        .await
+        .expect("a ticked item");
+    for bad in [
+        // No words.
+        "INSERT INTO todo_subitems (id, todo_id, text, position, created_at, updated_at) \
+         VALUES ('b1', 'todo_before', '  ', 3, 't', 't')",
+        // Ticked without who.
+        "INSERT INTO todo_subitems (id, todo_id, text, position, done_at, created_at, updated_at) \
+         VALUES ('b2', 'todo_before', 'x', 3, 't', 't', 't')",
+        // Who without the tick.
+        "INSERT INTO todo_subitems (id, todo_id, text, position, done_via, created_at, updated_at) \
+         VALUES ('b3', 'todo_before', 'x', 3, 'gui', 't', 't')",
+        // An origin the CHECK does not name.
+        "INSERT INTO todo_subitems \
+         (id, todo_id, text, position, done_at, done_via, created_at, updated_at) \
+         VALUES ('b4', 'todo_before', 'x', 3, 't', 'robot', 't', 't')",
+        // A to-do is required.
+        "INSERT INTO todo_subitems (id, text, position, created_at, updated_at) \
+         VALUES ('b5', 'x', 3, 't', 't')",
+    ] {
+        assert!(sqlx::query(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+    let todo = galley.todo("todo_before").await.expect("read");
+    let words: Vec<&str> = todo.items.iter().map(|i| i.text.as_str()).collect();
+    assert_eq!(words, ["品牌", "预算"]);
+    assert!(todo.items[1].done);
+}
+
+#[tokio::test]
 async fn migration_051_records_who_cancelled_and_leaves_older_cancels_unknown() {
     // Main chat ticket 61: rows cancelled before 051 keep NULL (who it
     // was is not known, and is not guessed); the CHECKs name the origin
@@ -3547,6 +3616,11 @@ async fn migration_051_records_who_cancelled_and_leaves_older_cancels_unknown() 
         .execute(&pool)
         .await
         .expect("migration 051");
+    // Read with today's code, which reads a to-do's items (054, main chat
+    // ticket 111).
+    for sql in [MIG_052, MIG_053, MIG_054] {
+        sqlx::raw_sql(sql).execute(&pool).await.expect("migration");
+    }
     let galley = SqliteGalley::from_pool(pool.clone());
     let task = galley.scheduled_task("sched_gone").await.expect("read");
     assert!(task.cancelled_at.is_some());

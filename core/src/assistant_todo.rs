@@ -35,7 +35,9 @@
 //!   what the review got done shows as itself.
 //!
 //! A to-do's reminder is part of its to-do ([`TodoItem::reminder`]), in no
-//! group of its own. A cancelled to-do or task is in no group (a task's
+//! group of its own; so are the items under it ([`TodoItem::items`], main
+//! chat ticket 111), which the panel draws when it is open and counts when
+//! it is not. A cancelled to-do or task is in no group (a task's
 //! card in the conversation says 已取消). A routine is in routine alone,
 //! however often it has fired (ticket 82).
 //!
@@ -392,6 +394,24 @@ pub struct TodoItem {
     /// says 已取消); no group of the list holds one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cancelled_at: Option<String>,
+    /// To-dos: the items under it, in their order (main chat ticket 111,
+    /// PRD ruling 157) — the open row's boxes, the folded row's 「2/5 项」,
+    /// In Hand's count. Absent when it has none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<ListedSubitem>,
+}
+
+/// An item under a to-do as the list carries it (main chat ticket 111):
+/// its words and its box. Who ticked it and when are the record's
+/// ([`crate::api::TodoSubitem`], `todo show`); the panel draws Galley's and
+/// the user's alike (PRD ruling 157 point 7).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListedSubitem {
+    /// `item_<16 hex>`.
+    pub id: String,
+    pub text: String,
+    pub done: bool,
 }
 
 /// Who turned a follow-up down ([`DeclinedFollowUp::by`]).
@@ -487,7 +507,9 @@ pub async fn assistant_todo(
 /// What `todo list` prints (main chat ticket 40), read for the socket's
 /// `todo.list` and the CLI's direct read alike: the to-dos not done, or
 /// with `all` every one (done and cancelled too), in
-/// [`todo_list_order`] — read now, in this machine's zone.
+/// [`todo_list_order`] — read now, in this machine's zone. Each with the
+/// count of its items, not the items (main chat ticket 111,
+/// [`TodoBrief::listed`]): `todo show` reads them.
 pub async fn todo_list(galley: &SqliteGalley, all: bool) -> Result<Vec<TodoBrief>> {
     let scope = if all {
         TodoListScope::All
@@ -495,7 +517,10 @@ pub async fn todo_list(galley: &SqliteGalley, all: bool) -> Result<Vec<TodoBrief
         TodoListScope::Open
     };
     let todos = galley.list_todos(scope).await?;
-    Ok(todo_list_order(todos, Utc::now(), &chrono::Local))
+    Ok(todo_list_order(todos, Utc::now(), &chrono::Local)
+        .into_iter()
+        .map(TodoBrief::listed)
+        .collect())
 }
 
 /// The to-dos Galley noted in the main chat (main chat ticket 43), every
@@ -958,6 +983,7 @@ fn blank(kind: TodoKind, id: String, text: String, state: TodoState) -> TodoItem
         created_at: None,
         updated_at: None,
         cancelled_at: None,
+        items: Vec::new(),
     }
 }
 
@@ -985,6 +1011,15 @@ where
         created_at: Some(todo.created_at.clone()),
         updated_at: Some(todo.updated_at.clone()),
         cancelled_at: todo.cancelled_at.clone(),
+        items: todo
+            .items
+            .iter()
+            .map(|item| ListedSubitem {
+                id: item.id.as_str().to_string(),
+                text: item.text.clone(),
+                done: item.done,
+            })
+            .collect(),
         ..blank(
             TodoKind::Todo,
             todo.id.as_str().to_string(),
@@ -1149,6 +1184,8 @@ mod tests {
             }),
             cancelled_at: None,
             cancelled_by: None,
+            items: Vec::new(),
+            item_count: None,
             created_at: noted.into(),
             updated_at: noted.into(),
         }

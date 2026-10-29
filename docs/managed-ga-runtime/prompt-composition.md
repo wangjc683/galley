@@ -293,6 +293,7 @@ The user's to-dos (not done):
 - `todo_2b3c4d5e6f7a8b9c` due 2026-10-21 15:00 (Wed), reminder 2026-10-21 14:00 (Wed): 交季度报告
 - `todo_3c4d5e6f7a8b9c0d` due 2026-10-23 (Fri), reminded 2026-10-16 09:00 (Fri): 交材料
 - `todo_4d5e6f7a8b9c0d1e` no due date: 买营养土
+- `todo_6f7a8b9c0d1e2f3a` no due date, 0 of 5 items done: 希尔顿酒店项目资料收集
 
 What you are on (subtasks not finished, then one-off reminders and tasks to come):
 - `s-mgq3c1d8-2k7v4p0a` 查三家本周螺纹钢报价: working
@@ -342,7 +343,9 @@ Follow-ups the user turned down (to-dos and reminders you set that were cancelle
 - **Per line**: a to-do's id, its due date in local time (`due 2026-10-21
   15:00 (Wed)`, `due 2026-10-23 (Fri)` for a day without a time, or `no due
   date`), `overdue`, its reminder (`reminder …`, `reminder … (paused)`,
-  `reminded …` once it went off), and its title; a task's id, next fire in
+  `reminded …` once it went off), how many of the items under it are
+  ticked when it has items (`2 of 5 items done`, main chat ticket 111: the
+  count only, `todo show` lists them), and its title; a task's id, next fire in
   local time (the wake note's `2026-10-20 20:00 (Tue)`; a paused routine
   has none), one-off / daily / weekly / monthly, paused, who set it (you /
   the user / the outside agent and its label), "starts a new
@@ -356,14 +359,15 @@ Follow-ups the user turned down (to-dos and reminders you set that were cancelle
   "and N more" with the command that lists them all (`todo list --all`,
   `schedule list --all` for the follow-ups turned down); titles, words and
   reasons on one line, cut at 40 characters (`IN_HAND_TEXT_CHARS`), an
-  agent label at 24. `IN_HAND_BUDGET_BYTES` = 6161, measured on the longest
+  agent label at 24. `IN_HAND_BUDGET_BYTES` = 6276, measured on the longest
   it gets (five in each of the four groups at the cuts in three-byte
   characters, the longest line forms, three-digit counts), no headroom,
   `\r` not counted. Ticket 36 had 2467 for two groups of five; ticket 39
   keeps the rule and the cuts, so the cap grew to 4230 with the third group
   (the user's to-dos) and the tasks splitting between the second and third;
   ticket 61 raised it to 6161 for the fourth, whose line carries two cut
-  texts (the words and the reason). Typical is a few lines; nothing in
+  texts (the words and the reason); ticket 111 to 6276 for a to-do's count
+  of its items (`, 998 of 999 items done`, five of them). Typical is a few lines; nothing in
   hand, no subsection at all. With no follow-ups turned down the
   subsection is byte for byte what it was before ticket 61.
 - **Switch**: none; main chat only (attach mode has no main chat, and

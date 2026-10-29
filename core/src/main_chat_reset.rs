@@ -3,8 +3,8 @@
 //!
 //! One action, no options. The main chat and the subtasks it dispatched
 //! that never became ordinary conversations are deleted, and with them
-//! every to-do Galley noted and its reminder (ticket 39) and every memo
-//! (ticket 95), a new main chat
+//! every to-do Galley noted, its reminder (ticket 39) and the items under
+//! it (ticket 111), and every memo (ticket 95), a new main chat
 //! starts from its greeting, the engine's long-term memory
 //! (`managed-ga-state/memory/`, shared by every conversation and IM
 //! channel) goes back to the seed it was installed with, and the

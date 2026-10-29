@@ -6,7 +6,9 @@
 //! prefixes), update (only what is given; an empty value clears), done,
 //! reopen, cancel; the origin a write records, the main chat run a to-do
 //! Galley notes is tied to, the events, and the pins that serve the
-//! family. The CLI over a real socket is `cli/tests/todo_test.rs`; the
+//! family. Since main chat ticket 111 the items under a to-do too: `add`'s
+//! `items`, `todo.item_add / item_done / item_reopen / item_update /
+//! item_remove`, `show`'s items and `list`'s count. The CLI over a real socket is `cli/tests/todo_test.rs`; the
 //! record itself is `todo_test.rs`.
 
 use async_trait::async_trait;
@@ -606,6 +608,23 @@ async fn every_pin_serves_the_new_commands() {
             .call_pinned("todo.add", json!({"title": "x"}), schema)
             .await;
         assert!(resp.ok, "schema {schema}");
+        // The items' commands (ticket 111), as the family's.
+        let todo = resp.result.unwrap()["todo"]["id"].clone();
+        let resp = h
+            .call_pinned(
+                "todo.item_add",
+                json!({"todoId": todo, "texts": ["y"]}),
+                schema,
+            )
+            .await;
+        assert!(resp.ok, "schema {schema}");
+        let item = resp.result.unwrap()["todo"]["items"][0]["id"].clone();
+        for command in ["todo.item_done", "todo.item_reopen", "todo.item_remove"] {
+            let resp = h
+                .call_pinned(command, json!({"itemId": item}), schema)
+                .await;
+            assert!(resp.ok, "{command} schema {schema}");
+        }
     }
     let resp = h.call_pinned("todo.list", json!({}), 4).await;
     assert_eq!(resp.error.as_deref(), Some("schema_mismatch"));
@@ -613,4 +632,144 @@ async fn every_pin_serves_the_new_commands() {
     assert_eq!(resp.error.as_deref(), Some("unknown_command"));
     let resp = h.call("todo.show", json!({})).await;
     assert_eq!(resp.error.as_deref(), Some("invalid_args"));
+}
+
+// ---------------- items under a to-do (main chat ticket 111) ----------------
+
+/// The items' words of a `Todo` as the wire carries them.
+fn item_texts(todo: &Value) -> Vec<String> {
+    todo["items"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .map(|i| i["text"].as_str().unwrap().to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[tokio::test]
+async fn add_takes_items_and_show_lists_them_while_list_counts_them() {
+    let h = Harness::new().await;
+    let todo = h
+        .todo(
+            "todo.add",
+            json!({"title": "下周三去上海出差", "due": local_day(5),
+                   "items": ["订酒店", " 订机票 ", "换港币"],
+                   "supervisor": "galley-assistant"}),
+        )
+        .await;
+    assert_eq!(item_texts(&todo), ["订酒店", "订机票", "换港币"]);
+    assert_eq!(todo["itemCount"], json!({"done": 0, "total": 3}));
+    let item = &todo["items"][0];
+    assert!(item["id"].as_str().unwrap().starts_with("item_"));
+    assert_eq!(item["done"], false);
+    assert!(item["createdAt"].is_string());
+    let shown = h.todo("todo.show", json!({"todoId": todo["id"]})).await;
+    assert_eq!(item_texts(&shown), ["订酒店", "订机票", "换港币"]);
+    let resp = h.call("todo.list", json!({})).await;
+    let listed = &resp.result.unwrap()["todos"][0];
+    assert!(listed.get("items").is_none(), "{listed}");
+    assert_eq!(listed["itemCount"], json!({"done": 0, "total": 3}));
+    // An item with no words: invalid_args, nothing written.
+    let resp = h
+        .call("todo.add", json!({"title": "交报告", "items": ["写", ""]}))
+        .await;
+    let (tag, message) = error_of(&resp);
+    assert_eq!(tag, "invalid_args");
+    assert!(message.contains("an item needs words"), "{message}");
+    assert_eq!(h.listed(false).await.len(), 1);
+}
+
+#[tokio::test]
+async fn item_writes_answer_with_the_to_do_and_record_who_ticked() {
+    let h = Harness::new().await;
+    let todo = h.add("去上海出差").await;
+    let rec_before = h.rec.count("todos:changed");
+    let todo = h
+        .todo(
+            "todo.item_add",
+            json!({"todoId": todo["id"], "texts": ["订酒店", "订机票"],
+                   "supervisor": "galley-assistant"}),
+        )
+        .await;
+    assert_eq!(item_texts(&todo), ["订酒店", "订机票"]);
+    let hotel = todo["items"][0]["id"].clone();
+    let ticked = h
+        .todo(
+            "todo.item_done",
+            json!({"itemId": hotel, "supervisor": "galley-assistant",
+                   "reason": "user said the hotel is booked"}),
+        )
+        .await;
+    assert_eq!(ticked["items"][0]["done"], true);
+    assert_eq!(
+        ticked["items"][0]["doneBy"],
+        json!({"via": "supervisor", "supervisor": "galley-assistant",
+               "reason": "user said the hotel is booked"})
+    );
+    assert_eq!(ticked["itemCount"], json!({"done": 1, "total": 2}));
+    // The to-do itself stays open.
+    assert_eq!(ticked["status"], "open");
+    let unticked = h.todo("todo.item_reopen", json!({"itemId": hotel})).await;
+    assert_eq!(unticked["items"][0]["done"], false);
+    assert!(unticked["items"][0].get("doneBy").is_none());
+    let changed = h
+        .todo(
+            "todo.item_update",
+            json!({"itemId": hotel, "text": "订虹桥的酒店"}),
+        )
+        .await;
+    assert_eq!(item_texts(&changed), ["订虹桥的酒店", "订机票"]);
+    let removed = h.todo("todo.item_remove", json!({"itemId": hotel})).await;
+    assert_eq!(item_texts(&removed), ["订机票"]);
+    // Five writes, five broadcasts; no reminder moved.
+    assert_eq!(h.rec.count("todos:changed") - rec_before, 5);
+    assert_eq!(h.rec.count("scheduled-tasks:changed"), 0);
+}
+
+#[tokio::test]
+async fn item_refusals_are_the_familys() {
+    let h = Harness::new().await;
+    let todo = h
+        .todo(
+            "todo.add",
+            json!({"title": "去上海出差", "items": ["订酒店"]}),
+        )
+        .await;
+    let hotel = todo["items"][0]["id"].clone();
+    // Unknown item: not_found; no words: invalid_args; a missing field:
+    // invalid_args.
+    let (tag, _) = error_of(
+        &h.call("todo.item_done", json!({"itemId": "item_nope"}))
+            .await,
+    );
+    assert_eq!(tag, "not_found");
+    let (tag, _) = error_of(
+        &h.call("todo.item_update", json!({"itemId": hotel, "text": "  "}))
+            .await,
+    );
+    assert_eq!(tag, "invalid_args");
+    let (tag, _) = error_of(&h.call("todo.item_add", json!({"todoId": todo["id"]})).await);
+    assert_eq!(tag, "invalid_args");
+    let (tag, _) = error_of(
+        &h.call("todo.item_add", json!({"todoId": todo["id"], "texts": []}))
+            .await,
+    );
+    assert_eq!(tag, "invalid_args");
+    // The to-do cancelled: every item write is not_found.
+    h.todo("todo.cancel", json!({"todoId": todo["id"]})).await;
+    let (tag, message) = error_of(&h.call("todo.item_done", json!({"itemId": hotel})).await);
+    assert_eq!(tag, "not_found");
+    assert!(message.contains("cancelled"), "{message}");
+    // No main chat: assistant_unavailable.
+    let bare = Harness::with(false).await;
+    let (tag, message) = error_of(
+        &bare
+            .call("todo.item_add", json!({"todoId": "todo_x", "texts": ["y"]}))
+            .await,
+    );
+    assert_eq!(tag, "invalid_args");
+    assert!(message.starts_with("assistant_unavailable:"), "{message}");
 }

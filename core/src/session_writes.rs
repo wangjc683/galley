@@ -23,6 +23,7 @@
 //! | create / update / delete a project | `project-created-external` / `project-updated-external` / `project-deleted-external` |
 //! | create / update / delete a scheduled task | `scheduled-tasks:changed` (empty payload) |
 //! | create / update / tick off / untick / cancel a to-do, cancel its reminder | `todos:changed` (empty payload), and `scheduled-tasks:changed` unless unticking |
+//! | add / tick / untick / change / remove an item under a to-do | `todos:changed` (empty payload) |
 //! | note / change / delete a memo | `memos:changed` (empty payload) |
 //!
 //! Session events carry [`SessionBriefEvent`], not [`SessionBrief`]: the
@@ -54,7 +55,8 @@ use crate::api::{
     CreateTodoInput, GalleyApi, MemoBrief, MemoId, MemoPatch, MemoWrite, Origin, ProjectBrief,
     ProjectId, ProjectPatch, RuntimeKind, ScheduledTaskBrief, ScheduledTaskId, ScheduledTaskPatch,
     SessionBrief, SessionFilter, SessionId, SessionStatus, TodoBrief, TodoId, TodoPatch,
-    MAIN_CHAT_PROTECTED, MEMOS_CHANGED_EVENT, SCHEDULED_TASKS_CHANGED_EVENT, TODOS_CHANGED_EVENT,
+    TodoSubitemId, MAIN_CHAT_PROTECTED, MEMOS_CHANGED_EVENT, SCHEDULED_TASKS_CHANGED_EVENT,
+    TODOS_CHANGED_EVENT,
 };
 use crate::db::{
     main_chat_greeting, MainChatEnsured, MainChatSeed, RenameTitleSource, SqliteGalley,
@@ -853,6 +855,58 @@ impl<'a> Writes<'a> {
     pub async fn cancel_todo_reminder(&self, id: &TodoId, origin: Origin) -> Result<TodoBrief> {
         let result = self.galley.cancel_todo_reminder(id, origin).await;
         self.todos_changed(result, true)
+    }
+
+    /// [`SqliteGalley::add_todo_subitems`] (main chat ticket 111).
+    pub async fn add_todo_subitems(
+        &self,
+        todo_id: &TodoId,
+        texts: &[String],
+        origin: Origin,
+    ) -> Result<TodoBrief> {
+        let result = self.galley.add_todo_subitems(todo_id, texts, origin).await;
+        self.todos_changed(result, false)
+    }
+
+    /// [`SqliteGalley::complete_todo_subitem`].
+    pub async fn complete_todo_subitem(
+        &self,
+        id: &TodoSubitemId,
+        origin: Origin,
+    ) -> Result<TodoBrief> {
+        let result = self.galley.complete_todo_subitem(id, origin).await;
+        self.todos_changed(result, false)
+    }
+
+    /// [`SqliteGalley::reopen_todo_subitem`].
+    pub async fn reopen_todo_subitem(
+        &self,
+        id: &TodoSubitemId,
+        origin: Origin,
+    ) -> Result<TodoBrief> {
+        let result = self.galley.reopen_todo_subitem(id, origin).await;
+        self.todos_changed(result, false)
+    }
+
+    /// [`SqliteGalley::update_todo_subitem`].
+    pub async fn update_todo_subitem(
+        &self,
+        id: &TodoSubitemId,
+        text: &str,
+        origin: Origin,
+    ) -> Result<TodoBrief> {
+        let result = self.galley.update_todo_subitem(id, text, origin).await;
+        self.todos_changed(result, false)
+    }
+
+    /// [`SqliteGalley::remove_todo_subitem`].
+    pub async fn remove_todo_subitem(
+        &self,
+        id: &TodoSubitemId,
+        origin: Origin,
+    ) -> Result<TodoBrief> {
+        let result = self.galley.remove_todo_subitem(id, origin).await;
+        self.todos_changed(result, false)
     }
 
     // ---------------- memos (main chat ticket 95) ----------------

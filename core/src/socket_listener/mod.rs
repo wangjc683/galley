@@ -748,6 +748,22 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
         "todo.cancel" => {
             DispatchResult::Unary(dispatch_todo_cancel(request_id, req.args, ctx).await)
         }
+        // ---- items under a to-do (main chat ticket 111, additive inside 3) ----
+        "todo.item_add" => {
+            DispatchResult::Unary(dispatch_todo_item_add(request_id, req.args, ctx).await)
+        }
+        "todo.item_done" => {
+            DispatchResult::Unary(dispatch_todo_item_done(request_id, req.args, ctx).await)
+        }
+        "todo.item_reopen" => {
+            DispatchResult::Unary(dispatch_todo_item_reopen(request_id, req.args, ctx).await)
+        }
+        "todo.item_update" => {
+            DispatchResult::Unary(dispatch_todo_item_update(request_id, req.args, ctx).await)
+        }
+        "todo.item_remove" => {
+            DispatchResult::Unary(dispatch_todo_item_remove(request_id, req.args, ctx).await)
+        }
         // ---- memos (main chat ticket 95, additive inside 3) ----
         "memo.list" => DispatchResult::Unary(dispatch_memo_list(request_id, req.args, ctx).await),
         "memo.add" => DispatchResult::Unary(dispatch_memo_add(request_id, req.args, ctx).await),

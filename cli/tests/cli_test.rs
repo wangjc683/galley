@@ -67,6 +67,7 @@ const MIG_050: &str = include_str!("../../core/migrations/050_todos.sql");
 const MIG_051: &str = include_str!("../../core/migrations/051_cancelled_by.sql");
 const MIG_052: &str = include_str!("../../core/migrations/052_provider_auth_kind_none.sql");
 const MIG_053: &str = include_str!("../../core/migrations/053_memos.sql");
+const MIG_054: &str = include_str!("../../core/migrations/054_todo_subitems.sql");
 
 /// Build a temp .db file with all migrations applied + (optionally)
 /// seed rows. Returns the path; caller stashes it for the spawned
@@ -82,7 +83,7 @@ async fn seeded_db_at(path: &std::path::Path) -> SqlitePool {
         MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
         MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_031, MIG_034, MIG_035, MIG_036,
         MIG_037, MIG_040, MIG_042, MIG_043, MIG_044, MIG_045, MIG_046, MIG_047, MIG_048, MIG_049,
-        MIG_050, MIG_051, MIG_052, MIG_053,
+        MIG_050, MIG_051, MIG_052, MIG_053, MIG_054,
     ] {
         sqlx::raw_sql(sql)
             .execute(&pool)
