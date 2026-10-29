@@ -2299,6 +2299,13 @@ async fn the_review_wakes_for_what_is_new_or_newly_near_and_memos_as_before() {
         ),
         ("noted before", None, noted(), Some(local_at(-1, 9)), false),
         (
+            "noted since, four days on",
+            Some(4),
+            local_at(-1, 20),
+            Some(local_at(-1, 9)),
+            false,
+        ),
+        (
             "three days on, not yesterday's",
             Some(3),
             noted(),

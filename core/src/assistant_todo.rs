@@ -171,11 +171,14 @@ impl AssistantTodo {
     ///
     /// Main chat ticket 110 (PRD ruling 155): of those, only what moved
     /// since the review before this one (`last`; it came due woken,
-    /// skipped or run by hand). A to-do of the user's noted or changed at
-    /// or after it ([`TodoItem::updated_at`]: its words, notes, due date
-    /// or reminder, by the user or by Galley); one whose due date came
-    /// within the days only now — after `last`'s day plus
-    /// [`REVIEW_LOOKAHEAD_DAYS`], by `today`'s; a subtask not finished
+    /// skipped or run by hand). One of those to-dos (any time, or due by
+    /// `today` plus [`REVIEW_LOOKAHEAD_DAYS`]) noted or changed at or
+    /// after it ([`TodoItem::updated_at`]: its words, notes, due date or
+    /// reminder, by the user or by Galley); one of them whose due date
+    /// came within the days only now — after `last`'s day plus
+    /// [`REVIEW_LOOKAHEAD_DAYS`], by `today`'s. A to-do due later stays
+    /// out, noted or changed since or not: its reminder raises it. A
+    /// subtask not finished
     /// whose latest activity ([`TodoItem::at`]: a message, a turn's end)
     /// is at or after it. What did not move does not wake it, an any-time
     /// one or an overdue one included: a thing handed over with no word
@@ -207,23 +210,27 @@ impl AssistantTodo {
             .assistant
             .iter()
             .filter(|item| item.kind == TodoKind::Subtask);
+        // Ticket 81's lot: any time, or due by the horizon (overdue ones
+        // included).
+        let near = |item: &&TodoItem| match &item.due {
+            None => true,
+            Some(due) => due_day(due).map_or(true, |day| day <= horizon),
+        };
         let Some(last) = last else {
             // Never come due: ticket 81's look.
-            let yours = self.yours.iter().any(|item| match &item.due {
-                None => true,
-                Some(due) => due_day(due).map_or(true, |day| day <= horizon),
-            });
-            return yours || subtasks.next().is_some();
+            return self.yours.iter().any(|item| near(&item)) || subtasks.next().is_some();
         };
         // An instant that does not read (Core never writes one) moved.
         let moved = |at: Option<&str>| at.and_then(parse_utc_secs).map_or(true, |at| at >= last.at);
         // The days already this near at the review before.
         let seen = last.day + chrono::Duration::days(REVIEW_LOOKAHEAD_DAYS);
-        let yours = self.yours.iter().any(|item| {
+        // Of ticket 81's lot, what moved since, or came this near only now.
+        let yours = self.yours.iter().filter(near).any(|item| {
             moved(item.updated_at.as_deref().or(item.created_at.as_deref()))
-                || item.due.as_ref().is_some_and(|due| {
-                    due_day(due).map_or(true, |day| seen < day && day <= horizon)
-                })
+                || item
+                    .due
+                    .as_ref()
+                    .is_some_and(|due| due_day(due).map_or(true, |day| seen < day))
         });
         yours || subtasks.any(|item| moved(item.at.as_deref()))
     }
@@ -2388,6 +2395,41 @@ mod tests {
             with.push(moved.clone());
             assert!(looks_since(&quiet, &tasks, &with, YESTERDAY), "{id}");
             assert!(looks_since(&[], &[], &[moved], YESTERDAY), "{id} alone");
+        }
+        // Due beyond today's three days stays out, changed since (702's
+        // kind: news moved it) or noted since: its reminder raises it.
+        let beyond = [
+            changed(
+                "t-tuesday-changed",
+                Some(date(2026, 10, 20)),
+                noted,
+                "2026-10-15T20:00:00+00:00",
+            ),
+            todo(
+                "t-tuesday-new",
+                Some(date(2026, 10, 20)),
+                "2026-10-15T20:00:00+00:00",
+            ),
+            changed(
+                "t-far-changed",
+                Some(date(2026, 11, 20)),
+                noted,
+                "2026-10-16T08:00:00+00:00",
+            ),
+        ];
+        for one in &beyond {
+            let mut with = quiet.clone();
+            with.push(one.clone());
+            assert!(
+                !looks_since(&with, &tasks, &subtasks, YESTERDAY),
+                "{}",
+                one.id
+            );
+            assert!(
+                !looks_since(std::slice::from_ref(one), &[], &[], YESTERDAY),
+                "{} alone",
+                one.id
+            );
         }
         // One that finished since is done, not in hand: it does not.
         let finished = SubtaskFacts {

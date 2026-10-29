@@ -337,10 +337,11 @@ ruling 9; `core/src/scheduler.rs`, `core/src/subtask_report.rs`, migration
   machine's zone, overdue ones and ones with a reminder included; or a
   subtask not finished. Since main chat ticket 110 (PRD ruling 155) only
   those that moved since the review before (`last_fired_at`, woken,
-  skipped or run by hand; `LastReview`): a to-do noted or changed at or
-  after it (`todos.updated_at`, read into the list's item but not
-  serialized), one whose due date came within the three days only now
-  (after that review's local day plus three, by today's), a subtask not
+  skipped or run by hand; `LastReview`): one of those to-dos noted or
+  changed at or after it (`todos.updated_at`, read into the list's item
+  but not serialized), one of them whose due date came within the three
+  days only now (after that review's local day plus three, by today's);
+  a to-do due later stays out, noted or changed since or not; a subtask not
   finished with activity since (`sessions.last_activity_at`); never come
   due, as before. What did not move, an any-time or overdue one included,
   does not wake it; or (main chat ticket 95, PRD ruling 143) a memo

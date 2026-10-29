@@ -895,10 +895,11 @@ mod tests {
             // Ticket 81: it wakes only for what has no alarm of its own,
             // and woken goes over all of it; ticket 96: a new memo too;
             // ticket 110: only for what moved since the last review.
-            "wakes you only for what moved since the last review: a to-do noted or",
-            "changed, one now due within three days, a subtask with news, a new memo",
-            "(what is due further off and your own reminders come up at their own",
-            "time); when it wakes you, go over everything in hand.",
+            "wakes you only for what moved since the last review: a to-do with no",
+            "date or due within three days that was noted or changed, one only now",
+            "due within three days, a subtask with news, a new memo (what is due",
+            "further off and your own reminders come up at their own time); when it",
+            "wakes you, go over everything in hand.",
             "- Read what is current first: `todo list`, `schedule list`, and your",
             "`unasked.md` says, at most two subtasks in all. Do not raise early a",
             "to-dos, overdue ones included: their reminders do that.",

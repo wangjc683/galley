@@ -445,9 +445,10 @@ pub enum ReviewFire {
 /// (the review is one) do not. Ticket 110 (main chat PRD ruling 155): of
 /// those, only what moved since the review before this one
 /// ([`LastReview`], read off `task.last_fired_at` as it stood before this
-/// fire, in this machine's zone: woken, skipped or run by hand) — a to-do
-/// noted or changed since, one whose due date came within the days only
-/// now, a subtask with activity since; never come due, as before. Ticket
+/// fire, in this machine's zone: woken, skipped or run by hand) — one of
+/// those to-dos noted or changed since, one of them whose due date came
+/// within the days only now, a subtask with activity since (a to-do due
+/// later stays out, changed or not); never come due, as before. Ticket
 /// 95 (main chat PRD ruling 143): nor does it skip while a memo was noted
 /// or changed in a turn the user started, since the day of the review
 /// before this one ([`MemoReviewWindow`], off the same `last_fired_at`);
@@ -530,8 +531,8 @@ pub async fn fire_review<Tz: TimeZone>(
                 // Ticket 110: what moved since the review before this one.
                 Some(before) if last.is_some() => eprintln!(
                     "[scheduler] review {}: nothing to look at since the last review at {} (no \
-                     to-do noted or changed, none newly due within {} days, no unfinished \
-                     subtask with activity, no new memo since {}), skipped",
+                     to-do any time or due within {} days noted or changed since or newly that \
+                     near, no unfinished subtask with activity, no new memo since {}), skipped",
                     task.id,
                     before,
                     crate::assistant_todo::REVIEW_LOOKAHEAD_DAYS,
