@@ -46,3 +46,105 @@ Status: ready-for-agent（等主聊天票 114 合入 main 后开工，由做 114
 2. 打开会话「测试：请分五步完成……」，把第一句再发一遍，跑到第 3 步时按停止：在跑那一行离开，头的字换成「中途停下 · 3 步」，其余不动、不闪。
 
 ## Comments
+
+### 2026-10-30 实现报告（代理）
+
+基线是 main `e9f2cf51`（主聊天票 114 已合入），实现提交 `8a293a6e`，分支 `workbench-04`。只改了 `gui/` 与 `docs/design/conversation.md`；Core、CLI、Agent API、迁移都没动。
+
+**改了什么**
+
+- **判据挪到 `run-groups`**：`stoppedPartway(group, turns, liveGroup)` 从 `assistant-conversation.ts` 挪到 `gui/src/lib/run-groups.ts:371`，两边共用，主对话的那一行与工作台的定住窗口用同一个判据。原来主对话里显式的 `isSilentReport` 检查删了，因为它已经包含在「最后一步调过工具」里：静默回复的那一步只有 `no_tool`（`buildAgentTurn` 只在那时置 `silent`）。另外 `run-groups` 不能反过来 import `subtasks`，否则成环。114 的用例全绿。
+- **计划层**（`gui/src/lib/run-fold-plan.ts:151`）：停下的运行直接走 live 窗口那条分支，所以锚点、窗口成员、卡片的行、`foldedSteps`、开合，都和停下前一帧算得一样。`FoldHead` 新增 `stopped`。只在一处与 live 不同：live 头后面收着的提问与回答（在跑时不画）停下后进 `outside`，画在头前面，同落定的运行。头注释加了 `stopped` 一条，`flat` 那条删掉「stopped, failed, at the step cap」，改写成「GA 自己收了尾、只剩标签的」。
+- **头**：`RunFoldHeader` 新增 `stopped` 变体。结构段写「中途停下 · N 步」，复用 `conversation.stoppedPartway` 与 `foldSteps`，N 是 `stats.stepCount`（同 live 头，停下那一下数字不变）。没有用时，气味段照旧。英文是 `Stopped partway · N steps`。
+- **Conversation**：
+  - `renderHead` 遇到 `stopped` 且 `foldedSteps === 0`（只落定一步）时不画头，同 live。
+  - 新增 `stoppingOpener`：在眼前停下的那一次，在定住的窗口下面放一个 `SettleGap`（`:967`），300ms 后撤掉（见下「在跑那一行怎么离开」）。
+  - 只在工作台（`!assistant`）设这个状态。
+- **注释**：`liveRunGroup`、`SettleGap`、Conversation 的 settling 段、`AssistantProcessCard` 与 `assistant.ts` 里指向判据的两处注释都同步了。
+- **文档**：`conversation.md`「Turn 结构」开头示意图下面那句；新加一段「停下的运行：live 窗口原样定住」，带一张小示意图，写了为什么、头、卡片、最后一步、提问与回答、判据、按停止那一下和不变的；「一步就答完」一段的末尾；「助手的对话」→「没有回答的运行」里的判据出处与工作台那一条；步数上限一节；提问一节「没有回答的运行」的工作台部分；「live 两行窗口」一条（中止那句，外加「停下瞬间」）。都引工作台对话 PRD 裁决 9。
+
+**114 的第六条（最后一步调过工具）在工作台也用了**
+
+- 理由：最后一步只有 `no_tool`、又没话说的一轮，是 GA 自己收了尾，不是中途停下，头上写「中途停下」是假话。工作台里这种轮次只可能是标签之外什么都没写，或误用了 `<no-reply/>`。
+- 数据：只读查了库，工作台（`main_chat = 0`）474 个只有 `no_tool` 的收口步全都有回答，一次也没出现过。所以这一条在工作台实际不改变任何画面，只保证字不说谎。
+- 代价：万一出现，这一轮照旧整段平铺，停下那一下也会铺开（与今天一样）。
+- 两边共用一个判据，以后改一处，两种对话一起变。
+
+**在跑那一行怎么离开**（票面让我定）
+
+- 现成的做法有两种：
+  - 瞬间消失：每一轮 `run_complete` 时、提问到来时都是这样，在跑那一行由 MainView 画，`isRunning` 一假就卸载。
+  - `SettleGap`：一步就答完的落定，占住那一行的位置一帧，再随 `ExpandSection` 扫掉。
+- 我选了 `SettleGap`，放在定住的窗口下面，只在眼前发生的那次停下才放（`watchedOpener` 判出「live → 没有回答且 `stoppedPartway`」，同 settling 的守卫式 setState-in-render，所以第一帧就在），重载、切回来都不放。
+- 理由：
+  - 停下以后窗口留着，下面要么什么都没有，要么是新出现的步数上限尾巴。瞬间撤掉时，贴着底部的长对话会被滚动钳位往下推一整行高度，就是一跳。用 `SettleGap` 以后，尾巴从那一行的位置滑上来，贴底的对话往下滑而不是跳。
+  - 对话不满一屏、没贴底时，它是空白，看不出来。
+- 高度：`SettleGap` 是「步骤字号 × 1.6 + 段距」。在跑那一行是它的 marker 一行加上方 10px（窗口 `-mb-2.5` 之后 marker 的 `mt-2.5`），标准档约差 2px。
+- 停下时那一行如果正带着思考预览或流式正文，会更高，多出的部分照旧瞬间消失。
+
+**按停止那一下：不重挂载**
+
+- 没有 DOM 测不了真动画，但节点同一性可以测。新文件 `Conversation.stop.dom.test.tsx`（jsdom）的做法：先以在跑渲染并点开头，再以停下重渲。
+- 断言结果：
+  - 头、卡片、最后一步都还是同一个 DOM 节点（`toBe`），`aria-expanded` 仍为 true。
+  - 头的字从「已完成 4 步」换成「中途停下 · 4 步」。
+  - 只落定一步的那一步也还是同一个节点，且没有头。
+  - 停下那一帧有收合的空位，约 300ms 后消失；直接以停下状态挂载（重载）则没有。
+- 静态渲染测试「draws the live window's markup but for the header's words」比对了停下前后整段 markup：除了头的字与 live 头的 `animate-fade-in`，逐字相同，收着与展开都比了。`animate-fade-in` 没有 fill-mode，停下时去掉它不影响画面；只有头刚出现、淡入那 160ms 内正好按停止，淡入会直接到底。
+
+**提问与回答**（票面「在头前面」的一处细化）
+
+- live 头后面收着的（在跑时不画）：停下后画在头前面，顺序同落定的运行（裁决 6）。
+- 还是窗口末尾的（你答完、它还没跑出下一步就停了）：留在窗口里原来的位置，带回显，按裁决 9 的「停下时画面原样定住」。如果照落定的做法把它们也拿到头前面，停下那一下回显和回答会从窗口里跳到头上面，窗口里只剩一个光秃秃的「问用户」步。主会话要统一成全部在头前面，改 `run-fold-plan.ts` 里一个条件即可。
+
+**核对（票面「不变的」）**
+
+- 有回答的运行、一步就答完的、在跑的 live 窗口：计划层那几条分支没改，`stopped` 只在 `!live && !complete` 时为真。工作台既有的计划与渲染用例全绿；新增的「leaves an answered run as it was」作为守卫，改前改后都绿。
+- 步数上限尾巴、输入框灰字「继续」、出错 toast、侧栏「已中止 / 已暂停 · 摘要」：MainView、`ipc-handlers.ts`、侧栏都没动。
+- 主对话：`assistantLinePlan` 只换了判据的出处；工作台计划在主对话里不跑（`linePlan` 存在时 `foldPlan` 为 null）。新用例断言同一组轮次在主对话里仍是那一行。
+- 分组、步数、replySet、`askUserReplyContent`、侧栏「第 N 步」：都是 `run-groups` 的，没动（只加了一个函数）。
+- 问题轨：只索引开场的 `user-msg`，开场照旧画在自己的位置。
+
+**测试**（先写后改，改前 15 条红）
+
+- `gui/src/lib/run-fold-plan.test.ts`，5 条红：
+  - 「folds every step but the last behind its header…」
+  - 「is the live window's plan from the stop on…」（含正在扫出窗口的那一步）
+  - 「puts the questions and answers behind the header out before it…」
+  - 「leaves a question and its answer in the window while they are its tail, as live」
+  - 「draws a run stopped after one step as that step alone…」
+  - 旧的「draws a run without an answer that is not running in full」换成守卫「draws a run GA ended on its own with nothing but tags in full」，改前改后都绿。
+- `Conversation.steps.test.tsx`，5 条红：
+  - 「folds behind 「中途停下 · 4 步」 with its tool scent and no time…」
+  - 「opens the card of every step but the last」
+  - 「draws the live window's markup but for the header's words」
+  - 「puts its questions and your answers out before the header…」
+  - 「says it in English」
+  - 另外两条是守卫，改前就绿：「draws a run stopped after one step as that step alone, no header」（今天平铺的那一步也是一个 marker）、「leaves an answered run as it was, and the main chat its one line」。
+  - 旧的「unfolds a run without an answer in full, the step region as before」删了。
+- `Conversation.test.tsx`，1 条红：「folds a run without an answer behind its header, its last step out (ruling 9)」，替换旧的「unfolds a run without an answer in full, as before」。
+- `Conversation.stop.dom.test.tsx`（新），4 条全红。
+- 改后又调整了几条，代码都没因此改动：
+  - 「draws the live window's markup…」里我比对时没考虑数字是单独的 span，改成替换「已完成 <span」。
+  - 「Conversation browser step site」两条：两步没回答的运行现在第一步收在头后面，加了 `expand.all` 打开卡片与那一行再看工具条。
+  - 114 的守卫「leaves the workbench's rendering of the same turns flat, in full」改成工作台的新画法。
+  - 改前还修了两处测试自身的错：收合空位的选择器写宽了，会匹配到序号栏；有一处没去掉标签就比文字。
+
+**门禁**（提交 `8a293a6e` 的树）
+
+- `pnpm --dir gui typecheck`：通过。
+- `pnpm --dir gui lint`：通过，0 warning。
+- `pnpm --dir gui exec vitest run`：238 个文件、2648 条全过（基线 237 / 2633）；`TZ=UTC` 再跑一遍，238 / 2648 全过。
+- `git diff --check e9f2cf51..HEAD`：干净。
+- prettier：
+  - 改前就是 prettier-clean 的 `run-fold-plan.ts`、`run-fold-plan.test.ts`、`Conversation.steps.test.tsx` 与新文件整篇格式化。
+  - 其余旧文件改前改后的漂移行数相同：`Conversation.tsx` 8、`RunFoldHeader.tsx` 9、`run-groups.ts` 5，其他为 0。
+  - 中文新增行用脚本扫过半角标点，0 处。
+
+**看到但没改 / Open risks**
+
+1. 停下那一下，live 头后面收着的提问与回答会出现在头前面，头连同窗口被往下推它们的高度。落定的运行在 settling 时也是这样，而且中途提问罕见（裁决 6：同期 7 次）。
+2. `SettleGap` 的高度是估的（见上）。停下时在跑那一行正带着思考预览或流式正文的，多出的部分瞬间消失。
+3. 主对话删了显式的 `isSilentReport` 检查，靠「静默的那一步只有 `no_tool`」这条构造上的不变式；以后要是有别的路径给带工具的步置 `silent`，主对话会把静默叫醒画成那一行。
+4. 没起 tauri dev，真机步骤 1、2 都没走。头换字时是否不闪、`SettleGap` 和在跑那一行的高度是否接得上、贴底时的滑动，都留给 JC。
+5. 汕尾那一轮只读查过库：开场之后 18 个助理行，下一句是「继续」，第 18 步调的是带路径参数的工具，不是提问。按判据它会是「中途停下 · 18 步」加第 18 步，但没有拿库里的行实际渲染过。
