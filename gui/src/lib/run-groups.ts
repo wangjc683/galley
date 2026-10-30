@@ -326,9 +326,10 @@ export function buildRunGroups(
  * last run, while it is still open (no answer yet), window-eligible,
  * and being worked on — the agent running, or waiting on an ask_user
  * reply, so the pause does not flicker the window away and back. An
- * open run that is neither (aborted, or a restored tail) gets no
- * window: a run without an answer is never hidden (the main chat draws
- * it as one line that opens its steps: main chat PRD ruling 159).
+ * open run that is neither (aborted, or a restored tail) is no live
+ * window: one that stopped partway (`stoppedPartway`) is drawn folded
+ * — in the workbench as this window, frozen, its header saying so —
+ * and one that is not, in full.
  */
 export function liveRunGroup(
   groups: RunGroup[],
@@ -338,6 +339,53 @@ export function liveRunGroup(
   const last = groups[groups.length - 1];
   if (!last || last.complete || !last.foldEligible) return null;
   return agentRunning || askUserPending ? last : null;
+}
+
+/**
+ * Whether run `group` stopped partway: it ended without an answer —
+ * stopped, failed, at the step cap; none of the three is stored, so
+ * after a reload all the page knows is that no answer came. Both
+ * conversations draw such a run folded, with the same words,
+ * 「中途停下 · N 步」: the main chat as one line where its reply would be
+ * (main chat PRD ruling 159, ticket 114; lib/assistant-conversation.ts
+ * `assistantLinePlan`), the workbench as its live window, frozen
+ * (workbench conversation PRD ruling 9, ticket 04;
+ * lib/run-fold-plan.ts). That is a run
+ *
+ *   - not live (`liveGroup`, run-groups `liveRunGroup` or the main
+ *     chat's: the live window or the typing bubble stands for it then),
+ *   - without an answer (`complete`),
+ *   - run-shaped (`foldEligible`: an opener, no system rows — a /btw
+ *     exchange stays a flat region),
+ *   - with a step landed (stopped before one, nothing is drawn),
+ *   - whose last step did not end the run: a last step with no tool but
+ *     `no_tool` and no question is GA's loop ending on its own, only
+ *     with nothing to say but tags — a dispatch, whose cards under that
+ *     step are its words (main chat ruling 125 kept the user's own as it
+ *     was), or `<no-reply/>` (a main chat report round's silent reply,
+ *     which draws nothing, is one too). Such a run did not stop partway
+ *     and stays a flat region, its cards under it. A stop, an error or
+ *     the step cap leaves a step that called a tool last (a step that
+ *     calls none ends the loop).
+ */
+export function stoppedPartway(
+  group: RunGroup,
+  turns: readonly Turn[],
+  liveGroup: RunGroup | null,
+): boolean {
+  if (group === liveGroup || group.complete || !group.foldEligible) {
+    return false;
+  }
+  let last: AgentTurn | null = null;
+  for (const i of group.memberIndices) {
+    const turn = turns[i];
+    if (turn.role === "agent") last = turn;
+  }
+  return (
+    last !== null &&
+    last.tools.length > 0 &&
+    !last.tools.every((tool) => tool.name === "no_tool")
+  );
 }
 
 /**

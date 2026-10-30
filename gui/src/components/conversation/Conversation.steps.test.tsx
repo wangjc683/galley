@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Conversation } from "./Conversation";
 import { zhCopy } from "@/i18n/locales/zh";
+import { CopyProvider } from "@/lib/i18n";
 import { LocalFilesContext } from "@/lib/local-files";
 import type {
   AgentTurn,
@@ -344,26 +345,148 @@ describe("the workbench's fold header: one line a step", () => {
     expect(window).toContain(zhCopy.tools.web_scan);
     expect(count(html, 'data-role="step-marker"')).toBe(1);
   });
+});
 
-  it("unfolds a run without an answer in full, the step region as before", () => {
+// ---- A stopped run (workbench conversation PRD ruling 9, ticket 04) -------
+
+/** Stopped at its fourth step: four landed, no answer, not running. */
+function stopped(): Turn[] {
+  return [
+    user("把这一周的船票都查一遍"),
+    did("我查第 1 天的船班。", 1),
+    did("我查第 2 天的船班。", 2),
+    did("我查第 3 天的船班。", 3),
+    did("我查第 4 天的船班。", 4),
+  ];
+}
+
+describe("the workbench's stopped run: the live window, frozen", () => {
+  it("folds behind 「中途停下 · 4 步」 with its tool scent and no time, the last step out in the reading form", () => {
+    const html = render(stopped());
+    expect(count(html, 'data-role="run-fold"')).toBe(1);
+    const header = text(
+      html.slice(
+        html.indexOf('data-role="run-fold"'),
+        html.indexOf('data-role="step-marker"'),
+      ),
+    );
+    expect(header).toContain(
+      `${zhCopy.conversation.stoppedPartway} · ${zhCopy.conversation.foldSteps(4)}`,
+    );
+    expect(header).not.toContain(zhCopy.conversation.foldStepsLive(4));
+    expect(header).not.toContain("用时");
+    expect(header).toContain(`${zhCopy.tools.web_scan} ×4`);
+    // Under it, the last step only, as the live window drew it: its
+    // numeral, the rail, its narration and its tool row.
+    expect(count(html, 'data-role="step-marker"')).toBe(1);
+    const window = html.slice(html.indexOf('data-role="step-marker"'));
+    expect(window).toContain("我查第 4 天的船班。");
+    expect(window).toContain(">04</span>");
+    expect(window).toContain(zhCopy.tools.web_scan);
+    expect(html).toContain("absolute bottom-0 left-[5px] w-px bg-line");
+    expect(text(html)).not.toContain("我查第 1 天的船班。");
+    // Closed at rest.
+    expect(html).not.toContain('data-role="process-card"');
+    expect(tagOf(html, 'data-role="run-fold"')).toContain(
+      'aria-expanded="false"',
+    );
+  });
+
+  it("opens the card of every step but the last", () => {
     expand.all = true;
+    const html = render(stopped());
+    expect(rowsOf(cardOf(html))).toEqual([
+      "我查第 1 天的船班。",
+      "我查第 2 天的船班。",
+      "我查第 3 天的船班。",
+    ]);
+    expect(html.indexOf('data-role="process-card"')).toBeLessThan(
+      html.indexOf('data-role="step-marker"'),
+    );
+  });
+
+  it("draws the live window's markup but for the header's words", () => {
+    // What the stop changes: the header's words and nothing else
+    // (MainView's in-flight row is not in Conversation).
+    for (const open of [false, true]) {
+      expand.all = open;
+      const live = render(stopped(), { agentRunning: true });
+      const still = render(stopped());
+      // The figures are spans of their own: the words around them.
+      const words = (html: string) =>
+        html
+          .replace("已完成 <span", "N <span")
+          .replace(`${zhCopy.conversation.stoppedPartway} · <span`, "N <span")
+          // The live header eases in when it first appears.
+          .replace(" animate-fade-in", "");
+      expect(words(still)).toBe(words(live));
+    }
+  });
+
+  it("puts its questions and your answers out before the header, as an answered run's", () => {
     const turns: Turn[] = [
-      user("订船票"),
+      user("帮我订周六的船票"),
       did("我先看船班。", 1),
       ask("订哪一班？", ["8:30", "9:00"], 2),
       user("8:30"),
       did("我去下单。", 3),
+      did("我核对订单。", 4),
     ];
     const html = render(turns);
+    const at = (needle: string) => {
+      const i = html.indexOf(needle);
+      expect(i).toBeGreaterThan(-1);
+      return i;
+    };
+    const order = [
+      at('data-message-id="u-帮我订周六的船票"'),
+      at("订哪一班？"),
+      at('data-message-id="u-8:30"'),
+      at('data-role="run-fold"'),
+      at('data-role="step-marker"'),
+    ];
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(text(html)).toContain(
+      `${zhCopy.conversation.stoppedPartway} · ${zhCopy.conversation.foldSteps(4)}`,
+    );
+    expect(count(html, 'data-role="step-marker"')).toBe(1);
+    expect(html.slice(at('data-role="step-marker"'))).toContain("我核对订单。");
+    expand.all = true;
+    expect(rowsOf(cardOf(render(turns)))).toEqual([
+      "我先看船班。",
+      "我去下单。",
+    ]);
+  });
+
+  it("draws a run stopped after one step as that step alone, no header", () => {
+    const html = render(stopped().slice(0, 2));
     expect(html).not.toContain('data-role="run-fold"');
-    expect(html).not.toContain('data-role="process-card"');
-    expect(count(html, 'data-role="step-marker"')).toBe(3);
+    expect(count(html, 'data-role="step-marker"')).toBe(1);
     expect(html).toContain(">01</span>");
-    expect(html).toContain("absolute bottom-0 left-[5px] w-px bg-line");
-    // Its question and the answer stay in the region, after its step.
-    const region = html.slice(html.indexOf("absolute bottom-0 left-[5px]"));
-    expect(region).toContain('data-role="answered-ask-user"');
-    expect(region.indexOf("问用户")).toBeLessThan(region.indexOf("订哪一班？"));
+    expect(html).toContain("我查第 1 天的船班。");
+  });
+
+  it("says it in English", () => {
+    const html = renderToStaticMarkup(
+      <CopyProvider language="en-US">
+        <Tooltip.Provider>
+          <LocalFilesContext.Provider value={() => undefined}>
+            <Conversation turns={stopped()} />
+          </LocalFilesContext.Provider>
+        </Tooltip.Provider>
+      </CopyProvider>,
+    );
+    expect(text(html)).toContain("Stopped partway · 4 steps");
+  });
+
+  it("leaves an answered run as it was, and the main chat its one line", () => {
+    expect(text(render(rich()))).toContain(
+      zhCopy.conversation.foldDurationSeconds(9),
+    );
+    const im = render(stopped(), { assistant: true });
+    expect(im).not.toContain('data-role="run-fold"');
+    expect(im).not.toContain('data-role="step-marker"');
+    expect(im).toContain('data-role="assistant-stopped"');
   });
 });
 

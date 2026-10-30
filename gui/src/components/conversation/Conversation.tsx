@@ -72,6 +72,7 @@ import {
   liveRunGroup,
   replyUserIndices,
   runStepNumbers,
+  stoppedPartway,
 } from "@/lib/run-groups";
 import { saveReplyMarkdown } from "@/lib/reply-save";
 import { isSubtaskReportTurn } from "@/lib/subtasks";
@@ -399,10 +400,19 @@ export function Conversation({
   // them: lib/run-fold-plan.ts). Skipped when the reader had opened the
   // live header (the run settles open: its card stays, the window's
   // steps join it as rows, the answer comes in under it) and when
-  // the run did not complete (aborts unfold in full). A run that
-  // answered in one step has no window and settles to its answer
-  // alone; its sweep closes the in-flight row's place above the answer
-  // instead (SettleGap), so the answer glides up rather than jumps.
+  // the run did not complete. A run that answered in one step has no
+  // window and settles to its answer alone; its sweep closes the
+  // in-flight row's place above the answer instead (SettleGap), so the
+  // answer glides up rather than jumps.
+  // Stopping (workbench conversation PRD ruling 9, ticket 04): a run
+  // that stopped partway keeps its live shape for good — the plan draws
+  // it as the live window, frozen (lib/run-fold-plan.ts `stopped`), so
+  // the stop changes the header's words and nothing else. What goes is
+  // MainView's in-flight row under the window; its place closes for one
+  // sweep (SettleGap after the window), so what is under it, the
+  // step-limit tail, glides up, and a conversation pinned to its bottom
+  // glides down rather than jumps. Only on a stop you watch: a reload
+  // or a switch back draws the stopped run as it is.
   // Guarded setState-in-render: the decision has to land in THIS
   // render, an effect would commit the settled structure first.
   // Openers here are ordinals, like every index this component keeps
@@ -410,6 +420,7 @@ export function Conversation({
   const liveOpenerNow = liveGroup ? ordinal(liveGroup.openerIndex) : null;
   const [watchedOpener, setWatchedOpener] = useState<number | null>(null);
   const [settlingOpener, setSettlingOpener] = useState<number | null>(null);
+  const [stoppingOpener, setStoppingOpener] = useState<number | null>(null);
   if (liveOpenerNow !== null && liveOpenerNow !== watchedOpener) {
     setWatchedOpener(liveOpenerNow);
   }
@@ -419,6 +430,12 @@ export function Conversation({
     );
     if (watched?.complete && foldOverrides[watchedOpener] !== true) {
       setSettlingOpener(watchedOpener);
+    } else if (
+      !assistant &&
+      watched !== undefined &&
+      stoppedPartway(watched, turns, null)
+    ) {
+      setStoppingOpener(watchedOpener);
     }
     setWatchedOpener(null);
   }
@@ -430,6 +447,14 @@ export function Conversation({
     );
     return () => window.clearTimeout(timer);
   }, [settlingOpener]);
+  useEffect(() => {
+    if (stoppingOpener === null) return;
+    const timer = window.setTimeout(
+      () => setStoppingOpener(null),
+      SETTLE_SWEEP_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [stoppingOpener]);
   const settlingGroup =
     settlingOpener !== null
       ? (groups.find(
@@ -842,8 +867,8 @@ export function Conversation({
     }
     // The live header appears once a step has folded behind it (the
     // third step landing, for a two-row window); before that the run
-    // is its own short list.
-    if (head.live && head.foldedSteps === 0) return;
+    // is its own short list. A run stopped after one step stays so.
+    if ((head.live || head.stopped) && head.foldedSteps === 0) return;
     const opener = head.group.openerIndex;
     rendered.push(
       <RunFoldHeader
@@ -851,6 +876,7 @@ export function Conversation({
         stats={head.group.stats}
         open={!head.folded}
         live={head.live}
+        stopped={head.stopped}
         onToggle={() => toggleFold(opener, head.folded)}
       />,
       <RunFoldSection
@@ -934,6 +960,13 @@ export function Conversation({
           </StepRegion>
         </ExpandSection>,
       );
+      // The run just stopped: the in-flight row's place under its
+      // window closes (see 「Stopping」 above).
+      if (ordinal(section.opener) === stoppingOpener) {
+        rendered.push(
+          <SettleGap key={`stop-gap-${ordinal(section.opener)}`} />,
+        );
+      }
     }
     section = null;
   };
@@ -1917,6 +1950,13 @@ function StrongHr() {
  * (ExpandSection, --motion-slow), so it glides. Gone with the settle.
  * (The in-flight row itself stays under the answer until run_complete,
  * as it does for every run.)
+ *
+ * The stop of a run that stopped partway (workbench conversation PRD
+ * ruling 9, ticket 04) uses it too, under the run's window, frozen:
+ * the in-flight row goes there with the stop itself (MainView draws it
+ * only while running), the window stays, and this holds that row's
+ * place — its marker line and the 10px over it, about this tall — and
+ * sweeps it shut.
  */
 function SettleGap() {
   const [open, setOpen] = useState(true);

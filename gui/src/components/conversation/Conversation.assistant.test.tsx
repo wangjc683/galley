@@ -827,14 +827,19 @@ describe("the assistant's conversation: a run without an answer", () => {
     expect(en(stoppedRun().slice(0, 4))).toBe("Stopped partway · 1 step");
   });
 
-  it("leaves the workbench's rendering of the same turns flat, in full", () => {
+  it("leaves the workbench its own rendering of the same turns: the live window, frozen", () => {
+    // Workbench conversation PRD ruling 9 (ticket 04): the fold header
+    // 「中途停下 · 3 步」 and the last step in the step region's reading
+    // form; no line.
     const html = render(stoppedRun());
     expect(html).not.toContain('data-role="assistant-stopped"');
-    expect(count(html, 'data-role="step-marker"')).toBe(3);
-    expect(html).toContain(">01</span>");
+    expect(count(html, 'data-role="run-fold"')).toBe(1);
+    expect(count(html, 'data-role="step-marker"')).toBe(1);
+    expect(html).toContain(">03</span>");
     expect(html).toContain("absolute bottom-0 left-[5px] w-px bg-line");
     expect(html).toContain(zhCopy.tools.code_run);
     expect(html).toContain("结束卡住的进程。");
+    expect(html).not.toContain("我先看一下进程。");
   });
 });
 

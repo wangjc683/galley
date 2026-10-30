@@ -34,9 +34,10 @@ afterEach(() => {
   expand.all = false;
 });
 
-// One user request and one settled tool step, no closing turn: an
-// incomplete run that is not running renders flat in full, so the
-// step's marker and body are both in the markup.
+// One user request and one settled tool step, no closing turn: a run
+// stopped after one step is that step alone in the step region's
+// reading form (workbench conversation PRD ruling 9), so the step's
+// marker and body are both in the markup.
 function renderStep(step: Omit<AgentTurn, "role" | "tools">): string {
   const turns: Turn[] = [
     { role: "user", content: "帮我查一下营业时间" },
@@ -208,7 +209,11 @@ describe("Conversation browser step site", () => {
     );
   }
 
+  // Two steps and no answer: the first is behind the stopped run's
+  // header (workbench conversation PRD ruling 9), so its card and its row
+  // are opened to show the pill.
   it("puts the page title and host on a scan, the host on a script", () => {
+    expand.all = true;
     const html = render([
       { name: "web_scan", args: { switch_tab_id: "11" }, content: scan(false) },
       {
@@ -222,6 +227,7 @@ describe("Conversation browser step site", () => {
   });
 
   it("counts tabs on a tab-list scan and shows nothing for an unknown tab", () => {
+    expand.all = true;
     const html = render([
       { name: "web_scan", args: { tabs_only: true }, content: scan(true) },
       {
@@ -652,14 +658,18 @@ describe("the workbench's grammar (workbench conversation ticket 01)", () => {
     expect(header).toBeLessThan(html.indexOf("排好了。"));
   });
 
-  it("unfolds a run without an answer in full, as before", () => {
+  it("folds a run without an answer behind its header, its last step out (ruling 9)", () => {
     const html = render([
       user("订船票", at(9)),
       step("我先看船班。", 1),
       step("我点进 8:30 那一班。", 2),
     ]);
-    expect(html).not.toContain('data-role="run-fold"');
-    expect(count(html, 'data-role="step-marker"')).toBe(2);
+    expect(count(html, 'data-role="run-fold"')).toBe(1);
+    expect(html).toContain(zhCopy.conversation.stoppedPartway);
+    expect(count(html, 'data-role="step-marker"')).toBe(1);
+    expect(html.indexOf('data-role="run-fold"')).toBeLessThan(
+      html.indexOf("我点进 8:30 那一班。"),
+    );
     expect(html).toContain("absolute bottom-0 left-[5px] w-px bg-line");
   });
 

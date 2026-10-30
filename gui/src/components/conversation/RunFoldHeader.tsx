@@ -89,6 +89,7 @@ export function RunFoldHeader({
   open,
   onToggle,
   live = false,
+  stopped = false,
 }: {
   stats: RunStats;
   open: boolean;
@@ -105,13 +106,27 @@ export function RunFoldHeader({
    * settled header in place.
    */
   live?: boolean;
+  /**
+   * Stopped variant (workbench conversation PRD ruling 9, ticket 04):
+   * the live header of a run that stopped without an answer, in place —
+   * the live window frozen. The structure segment reads
+   * 「中途停下 · N 步」, N the run's step count as the live header had
+   * it, so the number does not change at the stop; the words are the
+   * main chat's for the same run (ruling 159: stopped, failed or at the
+   * step cap, one word for all three). No duration: such a run stores
+   * none. The scent stays.
+   */
+  stopped?: boolean;
 }) {
   const copy = useCopy();
 
-  const duration = live ? null : formatDuration(stats.elapsedMs, copy);
+  const duration =
+    live || stopped ? null : formatDuration(stats.elapsedMs, copy);
   const steps = live
     ? copy.conversation.foldStepsLive(stats.stepCount)
-    : copy.conversation.foldSteps(stats.stepCount);
+    : stopped
+      ? `${copy.conversation.stoppedPartway} · ${copy.conversation.foldSteps(stats.stepCount)}`
+      : copy.conversation.foldSteps(stats.stepCount);
   const structureText = duration ? `${steps} · ${duration}` : steps;
   const toolLabels = copy.tools as Record<string, string>;
   // File tools first, then count-desc; the sort is stable, so

@@ -161,7 +161,7 @@ function lineFigures(text: string, lifted: boolean): ReactNode {
 /**
  * A round of the assistant's conversation that ended without an answer
  * — stopped, failed, at the step cap (main chat PRD ruling 159, ticket
- * 114; rules in lib/assistant-conversation.ts `stoppedPartway`): one
+ * 114; rules in lib/run-groups.ts `stoppedPartway`): one
  * line where its reply would be, 「中途停下 · 4 步」, and under it the
  * card the process button opens under a reply, every step but the ones
  * that only asked (its questions and your answers are out as messages,

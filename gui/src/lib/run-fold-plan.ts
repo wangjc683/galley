@@ -1,5 +1,9 @@
 import { assistantProcessSteps } from "@/lib/assistant-process";
-import { answeredInOneStep, type RunGroup } from "@/lib/run-groups";
+import {
+  answeredInOneStep,
+  stoppedPartway,
+  type RunGroup,
+} from "@/lib/run-groups";
 import type { Turn } from "@/types/conversation";
 
 /*
@@ -34,9 +38,20 @@ import type { Turn } from "@/types/conversation";
  *             header, no card, no step marker, no StrongHr; settling, the
  *             in-flight row's place closes above the answer
  *             (`settleGapAbove`, Conversation's SettleGap).
- *   flat      a run without an answer that is not being worked on
- *             (stopped, failed, at the step cap), a /btw exchange, a
- *             headless lead-in: the step region in full, its questions
+ *   stopped   a run that stopped without an answer (stopped, failed,
+ *             at the step cap; lib/run-groups.ts `stoppedPartway`;
+ *             PRD ruling 9, ticket 04) is its live window, frozen: the
+ *             stop only takes the in-flight row away. Its header reads
+ *             「中途停下 · N 步」 (RunFoldHeader `stopped`) over the card
+ *             of every step but the last, which stays out under it in
+ *             the step region's reading form — reloaded, the same. The
+ *             questions and answers the live header had behind it come
+ *             out before it, as a settled run's; one still the window's
+ *             tail stays there, as it was. A run stopped after one step
+ *             is that step alone: nothing behind a header, no header.
+ *   flat      a /btw exchange, a headless lead-in, and a run without an
+ *             answer that ended on its own saying nothing but tags (not
+ *             `stoppedPartway`): the step region in full, its questions
  *             and answers inside it, as before.
  *
  * Grouping, step counts, times, tokens, the reply set and the sidebar's
@@ -50,6 +65,9 @@ export interface FoldHead {
   folded: boolean;
   /** The live header of the run being worked on. */
   live: boolean;
+  /** The header of a run that stopped partway: the live window, frozen
+   * (the header's words change, nothing else). */
+  stopped: boolean;
   /** Steps behind the header so far: the live header shows from the
    * first one on. */
   foldedSteps: number;
@@ -58,17 +76,19 @@ export interface FoldHead {
    * (lib/assistant-process.ts `assistantProcessSteps`). */
   rows: number[];
   /** Drawn before the header, in order: the questions it asked (ask_user
-   * turns, as their answered echo) and the user's answers. */
+   * turns, as their answered echo) and the user's answers — for a
+   * stopped run, those behind its header only. */
   outside: number[];
 }
 
 export interface WorkbenchFoldPlan {
   /** Turn index → the run whose questions and answers, header and card
    * are drawn right before that turn: a settled run's answer; the live
-   * window's first step. */
+   * (or stopped) window's first step. */
   heads: Map<number, FoldHead>;
-  /** The live window's members by opener: the run's last completed
-   * step and what follows it, and the steps sweeping out of it. */
+  /** The live (or stopped) window's members by opener: the run's last
+   * completed step and what follows it, and the steps sweeping out of
+   * it. */
   windowOwner: Map<number, number>;
   /** Members of runs drawn flat in a step region, by opener. */
   regionOwner: Map<number, number>;
@@ -126,7 +146,10 @@ export function workbenchFoldPlan({
       continue;
     }
     const folded = !isOpened(g.openerIndex);
-    if (g === liveGroup || g === settlingGroup) {
+    // A stopped run takes the live window's path as it is, so the stop
+    // moves nothing: the same anchor, window members and rows.
+    const stopped = stoppedPartway(g, turns, liveGroup);
+    if (g === liveGroup || g === settlingGroup || stopped) {
       const live = g === liveGroup;
       // While settling, the closing turn is not a window candidate: its
       // answer renders flat below and nothing of it is behind the header.
@@ -142,7 +165,7 @@ export function workbenchFoldPlan({
       for (const i of g.memberIndices) {
         if (i === g.openerIndex || i === g.finalTurnIndex) continue;
         const turn = turns[i];
-        if (!live && (turn.role === "user" || asksUser(turn))) {
+        if (!live && !stopped && (turn.role === "user" || asksUser(turn))) {
           outside.push(i);
           if (turn.role === "user") {
             plan.elsewhere.add(i);
@@ -161,6 +184,11 @@ export function workbenchFoldPlan({
           } else {
             plan.elsewhere.add(i);
             if (turn.role === "agent") behind.push(i);
+            // Stopped: out before the header, as a settled run's; live,
+            // not drawn until the run settles.
+            if (stopped && (turn.role === "user" || asksUser(turn))) {
+              outside.push(i);
+            }
           }
         } else {
           plan.windowOwner.set(i, g.openerIndex);
@@ -173,6 +201,7 @@ export function workbenchFoldPlan({
           group: g,
           folded,
           live,
+          stopped,
           foldedSteps,
           rows: assistantProcessSteps(behind, turns, -1),
           outside,
@@ -208,6 +237,7 @@ export function workbenchFoldPlan({
       group: g,
       folded,
       live: false,
+      stopped: false,
       foldedSteps: g.stats.stepCount,
       rows: assistantProcessSteps(g.memberIndices, turns, final),
       outside,

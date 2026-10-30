@@ -221,11 +221,106 @@ describe("workbenchFoldPlan: a run that answered in one step", () => {
   });
 });
 
+// Ruling 9 (ticket 04): a run that stopped without an answer keeps the
+// live window's shape, frozen — the header 「中途停下 · N 步」 over every
+// step but the last, the last in the step region's reading form.
+describe("workbenchFoldPlan: a stopped run", () => {
+  /** 0 request, 1–4 four steps, no answer. */
+  const four = (): Turn[] => [
+    user("查一周的船票"),
+    step(),
+    step(),
+    step(),
+    step(),
+  ];
+
+  it("folds every step but the last behind its header, the last out in the window", () => {
+    const p = plan(four());
+    const [anchor, head] = onlyHead(p);
+    expect(anchor).toBe(4);
+    expect(head.stopped).toBe(true);
+    expect(head.live).toBe(false);
+    expect(head.folded).toBe(true);
+    expect(head.foldedSteps).toBe(3);
+    expect(head.rows).toEqual([1, 2, 3]);
+    expect(head.outside).toEqual([]);
+    expect(head.group.stats.stepCount).toBe(4);
+    expect([...p.windowOwner.keys()]).toEqual([4]);
+    expect([...p.elsewhere].sort()).toEqual([1, 2, 3]);
+    expect(p.regionOwner.size).toBe(0);
+  });
+
+  it("is the live window's plan from the stop on: same anchor, window, rows and open state", () => {
+    for (const opened of [[], [0]]) {
+      const live = plan(four(), { running: true, opened });
+      const stopped = plan(four(), { opened });
+      const [liveAnchor, liveHead] = onlyHead(live);
+      const [anchor, head] = onlyHead(stopped);
+      expect(anchor).toBe(liveAnchor);
+      expect([...stopped.windowOwner]).toEqual([...live.windowOwner]);
+      expect(head.rows).toEqual(liveHead.rows);
+      expect(head.foldedSteps).toBe(liveHead.foldedSteps);
+      expect(head.folded).toBe(liveHead.folded);
+      expect(head.group.stats.stepCount).toBe(liveHead.group.stats.stepCount);
+    }
+    // A step still sweeping out of the window when it stopped stays a
+    // window member until its sweep ends.
+    const departing = plan(four(), { departing: [3] });
+    expect([...departing.windowOwner.keys()]).toEqual([3, 4]);
+    expect(onlyHead(departing)[0]).toBe(3);
+    expect(onlyHead(departing)[1].rows).toEqual([1, 2]);
+  });
+
+  it("puts the questions and answers behind the header out before it; the steps that only asked are no rows", () => {
+    // 0 request, 1 step, 2 ask, 3 answer, 4 step, 5 step; stopped.
+    const p = plan(asked().slice(0, 6));
+    const [anchor, head] = onlyHead(p);
+    expect(anchor).toBe(5);
+    expect(head.outside).toEqual([2, 3]);
+    expect(head.rows).toEqual([1, 4]);
+    expect(head.foldedSteps).toBe(3);
+    expect([...p.windowOwner.keys()]).toEqual([5]);
+    expect([...p.elsewhere].sort()).toEqual([1, 2, 3, 4]);
+  });
+
+  it("leaves a question and its answer in the window while they are its tail, as live", () => {
+    // Stopped right after the user answered: the window is the
+    // question's step and the answer, frozen as it was.
+    const p = plan(asked().slice(0, 4));
+    const [anchor, head] = onlyHead(p);
+    expect(anchor).toBe(2);
+    expect(head.outside).toEqual([]);
+    expect(head.rows).toEqual([1]);
+    expect([...p.windowOwner.keys()]).toEqual([2, 3]);
+    expect(p.echoOutside.size).toBe(0);
+  });
+
+  it("draws a run stopped after one step as that step alone: nothing behind a header", () => {
+    const p = plan([user("查船票"), step()]);
+    const [anchor, head] = onlyHead(p);
+    expect(anchor).toBe(1);
+    expect(head.stopped).toBe(true);
+    expect(head.foldedSteps).toBe(0);
+    expect([...p.windowOwner.keys()]).toEqual([1]);
+    expect(p.regionOwner.size).toBe(0);
+    // None landed: nothing.
+    const none = plan([user("查船票")]);
+    expect(none.heads.size).toBe(0);
+    expect(none.windowOwner.size).toBe(0);
+    expect(none.regionOwner.size).toBe(0);
+  });
+});
+
 describe("workbenchFoldPlan: runs drawn flat", () => {
-  it("draws a run without an answer that is not running in full, its question inside", () => {
-    const p = plan(asked().slice(0, 5));
+  it("draws a run GA ended on its own with nothing but tags in full: it did not stop partway", () => {
+    const ended: AgentTurn = {
+      role: "agent",
+      tools: [tool("no_tool")],
+      finalAnswer: null,
+    };
+    const p = plan([user("查船票"), step(), step(), ended]);
     expect(p.heads.size).toBe(0);
-    expect([...p.regionOwner.keys()]).toEqual([1, 2, 3, 4]);
+    expect([...p.regionOwner.keys()]).toEqual([1, 2, 3]);
     expect(p.elsewhere.size).toBe(0);
   });
 

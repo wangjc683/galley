@@ -334,8 +334,8 @@ function messageLine(
  * shows as its last bubble: your message, a question it asked, or the
  * reply once it lands. At rest the same holds for a run that stopped
  * without an answer: the conversation draws it as one line,
- * 「中途停下 · N 步」 (ruling 159, lib/assistant-conversation.ts
- * `stoppedPartway`), no bubble, so the card stays where it was when
+ * 「中途停下 · N 步」 (ruling 159, lib/run-groups.ts `stoppedPartway`),
+ * no bubble, so the card stays where it was when
  * the typing bubble went. A narrating step of a run still drawn the
  * workbench way (a /btw exchange; a dispatch that said nothing but its
  * tags) counts as before.

@@ -1,13 +1,17 @@
-import { isFinalAnswerTurn } from "@/lib/agent-turn";
 import {
   cleanPartialContent,
   extractLiveThinking,
   modelReplyEnd,
 } from "@/lib/ipc/ga-output-cleaning";
-import { buildRunGroups, type RunGroup, type RunStats } from "@/lib/run-groups";
+import {
+  buildRunGroups,
+  stoppedPartway,
+  type RunGroup,
+  type RunStats,
+} from "@/lib/run-groups";
 import { cleanSessionSummary } from "@/lib/session-summary";
 import { inReportRound, isReportRound, isSilentReport } from "@/lib/subtasks";
-import type { AgentTurn, Turn } from "@/types/conversation";
+import type { Turn } from "@/types/conversation";
 
 /**
  * The assistant's conversation (main chat PRD rulings 66–69, 107, 110,
@@ -289,11 +293,11 @@ export interface AssistantRunSteps {
  *   steps     closing turn → its run's steps, for runs of two steps or
  *             more: the process card the button opens draws them.
  *   stopped   a run's last turn → its steps, for a run without an
- *             answer that is not live (`stoppedPartway`; ruling 159,
- *             ticket 114): right after that turn — after its questions
- *             and your answers, drawn as messages — one line,
- *             「中途停下 · N 步」, which opens the same card over every
- *             step but the ones that only asked.
+ *             answer that is not live (run-groups `stoppedPartway`;
+ *             ruling 159, ticket 114): right after that turn — after
+ *             its questions and your answers, drawn as messages — one
+ *             line, 「中途停下 · N 步」, which opens the same card over
+ *             every step but the ones that only asked.
  *   flat      turns of runs drawn the workbench way, by opener: /btw
  *             exchanges, a run that ended on its own with nothing to
  *             say but tags (a dispatch whose cards are its words),
@@ -348,45 +352,9 @@ function asksUser(turn: Turn): boolean {
 }
 
 /**
- * Whether the main chat draws run `g` as one line, 「中途停下 · N 步」
- * (main chat PRD ruling 159, ticket 114): the run ended without an
- * answer — stopped, failed, at the step cap; none of the three is
- * stored, so after a reload all the page knows is that no answer came.
- * That is a run
- *
- *   - not live (`liveGroup`: the typing bubble stands for it then),
- *   - without an answer (`complete`),
- *   - run-shaped (`foldEligible`: an opener, no system rows — a /btw
- *     exchange stays the workbench way),
- *   - not a silent report round (nothing of it is drawn),
- *   - with a step landed (stopped before one, nothing is drawn),
- *   - whose last step did not end the run: a last step with no tool but
- *     `no_tool` and no question is GA's loop ending on its own, only
- *     with nothing to say but tags — a dispatch, whose cards under that
- *     step are its words (ruling 125 kept the user's own as it was), or
- *     `<no-reply/>` outside a report round. Such a run did not stop
- *     partway and stays the workbench way, its cards under it. A stop,
- *     an error or the step cap leaves a step that called a tool last (a
- *     step that calls none ends the loop).
- */
-export function stoppedPartway(
-  g: RunGroup,
-  turns: readonly Turn[],
-  liveGroup: RunGroup | null,
-): boolean {
-  if (g === liveGroup || g.complete || !g.foldEligible) return false;
-  if (isSilentReport(g, turns)) return false;
-  let last: AgentTurn | null = null;
-  for (const i of g.memberIndices) {
-    const turn = turns[i];
-    if (turn.role === "agent") last = turn;
-  }
-  return last !== null && !isFinalAnswerTurn(last.tools);
-}
-
-/**
  * The agent turns of the runs the main chat draws as the 「中途停下」
- * line at rest (`stoppedPartway`, the conversation's grouping): steps
+ * line at rest (run-groups `stoppedPartway`, the conversation's
+ * grouping): steps
  * that are no message — the sidebar card's last message skips them but
  * a question among them (lib/assistant.ts `lastVisibleMessage`).
  */
