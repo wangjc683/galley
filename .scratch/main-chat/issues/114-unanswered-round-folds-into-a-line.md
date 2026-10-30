@@ -47,3 +47,73 @@ Status: ready-for-agent
 2. 在主对话里让它做一件要好几步的事（例如「看看我下载文件夹里最大的五个文件」），跑出两三步后按停止：三点淡出，原位出现这一行，没有一闪而过的平铺步骤。
 
 ## Comments
+
+### 2026-10-30 实现报告（代理）
+
+基线 `81709d39`，实现提交 `9cb17c2c`（本分支 `ticket-114`）。只改了 `gui/` 与 `docs/design/conversation.md`；Core、CLI、Agent API、迁移都没动。
+
+**改了什么**
+
+- 计划层（`gui/src/lib/assistant-conversation.ts`）：`AssistantLinePlan` 新增 `stopped`，键是这一轮的最后一行（这一行画在它后面），值同 `steps` 的形状（`AssistantRunSteps`：`opener`、`members`、`stats`）。判据是新的 `stoppedPartway`（`:372`），票面五条之外加了一条，见下「看到但没改」第 1 条：最后一步调过工具。这一轮的消息照有回答的轮次处理：开场（叫醒行除外）、你的回答、它的提问进 `message`，提问另进 `question`；`firstDrawn` 也认 `stopped`，所以叫醒那一轮的时间在这一行就是第一样东西时画在它上面。
+- 画法：`AssistantProcessCard.tsx` 新增 `AssistantStoppedRun`（`:188`），Conversation 新增 `renderStoppedRun`（`:769`），在这一轮最后一行之后画出来（`:989`）。行首 `Footprints` 14px thin，图标离气泡左缘 5px（`pl-[5px]`，正好落在行动条里过程按钮的图标位置）；隔 6px 写字，字 `ink-muted`、数字 `ink-soft`，`--conversation-step-size`，一行 24px（`h-6`），不加气泡底。整行是 `role="button"`、`tabIndex=0`、回车 / 空格、`aria-expanded`；悬停或聚焦时 `bg-hover`，字与数字提到 `ink`；悬停提示用 `foldExpand` / `foldCollapse`。展开期间字停在 `ink`，底不常显，同过程卡片里展开的一步。卡片就是 `AssistantProcessCard`：`assistantProcessSteps(members, turns, -1)`，所有步都进，只做了提问的不进；不传 telemetry，`stats.elapsedMs` 为空，第一行只有「N 步」。开合用 `foldOverrides`，按开场的 ordinal 记，默认收着。
+- 文案键：`conversation.stoppedPartway`，中文「中途停下」，英文 `Stopped partway`。整行是 `${stoppedPartway} · ${foldSteps(n)}`，英文单复数随 `foldSteps`。
+- 侧栏卡片的「最后一句」：`lastVisibleMessage` 在静止时也跳过这类轮次里的步（`stoppedRunTurns`，`assistant.ts:350`），提问照旧算。理由见下「看到但没改」第 2 条。
+- 文档：`conversation.md`「助手的对话」一节开头的沿革、字号「只两种气泡跟」、分组间距、`:128`「对话里」、「没人接替时走」、「为什么是按钮」、`:207`「没有回答的运行」（重写成一整条规则，引裁决 159）、贴底「回复的开头」、步数上限一节、提问一节的「没有回答的运行」。工作台的 `:23`、`:36` 没改：`:36` 的「助手的对话本来就不画」主语是一步回复的折叠头、步骤标记与 StrongHr，现在仍然成立。代码注释同步了 `assistant-conversation.ts` 文件头的 `process` 段与计划注释（`flat` 那条）、Conversation 的 `agentRunning` 与 `assistant` 两处 prop 注释、`run-groups.ts` 的 `liveRunGroup` 注释，以及 `useBubbleMotion.test.tsx` 里一句测试注释。
+
+**票面让我定的**
+
+- 下边距：这一行自带 24px（`pb-6`），下一条照 `agent-bar` 不再加（`prevSide = "agent-bar"`）。算法：回复气泡底到你的下一条是 30px；这一行没有底色，看得见的下缘是字形，字形离 24px 行框底约 5px（14px 图标居中），所以留 24px，你的气泡离字形约 29–30px。展开时这 24px 用 `padding-bottom` 过渡到 0，与卡片的 `mt-1.5` 和 `pb-5` 同一段 `--motion-slow` / `ease-firm` 扫开，展开后就是卡片原有的 6px 和 20px。上边距照 `assistantRowGap(previous, "agent")`：跟在你的气泡后面是 `mt-0`，正好是三点气泡原来站的位置；跟在它的提问后面 4px；隔着时间条 20px。都没在真窗口量过。
+- 淡入：不另写。按停止那一下，这一行是同一次提交里出现在 `lastRow` 后面的根节点子元素，裁决 138 现成的 `typingSuccessors` / `playTypingLeave` 会让它从三点淡出的一半开始淡入（`--motion-base`、`--ease-pop`）。只在 `track.live` 的那次提交播放，切会话、重载、冷启动恢复都直接出现。`useBubbleMotion.test.tsx`「fades a copy of its row where it stood… (a stop)」用的是通用的「新的一行」，已经覆盖这条路径。也不会先闪一帧平铺：这一轮一不在跑，计划就直接产出 `stopped`，中间没有走 `flat` 的状态。中止不追加系统行（`system_message` 只有 `/btw` 与斜杠命令会发），所以 `foldEligible` 不会在停止的那一下变假。
+- 每一步都只做了提问（问了、你答了、然后停了）：卡片里一行都没有。这时这一行只是字，不是开关，没有底、没有提示、不可 Tab，沿用 `ProcessStepRow`「没东西可开就是纯文字」的语法。工作台遇到同样情况是折叠头照旧可点、点开什么都没有，我没照搬。
+
+**核对（票面「不变的」）**
+
+- 一步都没落定：没有 agent 轮，`stoppedPartway` 为假，照旧只有你那一句；叫醒那一轮的时间也不记（`reports` 没有条目）。
+- 步数上限的 `StepLimitTail`、输入框灰字「继续」、出错 toast：`MainView` 与 `ipc-handlers.ts` 没动，尾巴照旧画在对话后面，接在这一行下面。
+- 侧栏卡片 / 顶栏的「最后一句」：这一行不是 turn，`lastVisibleMessage` 本来就碰不到它。票面说「照旧停在『你：……』」，Tailscale 那一轮成立（四步的 `final_answer` 全是空的）；一般情况下原代码在静止时会把带旁白的步算作最后一句，见下「看到但没改」第 2 条。改后停在你那一句，或停在它问你的问题上。
+- 贴底：`assistantReplyStart` 取你那一句后面第一个有高度的元素，就是这一行（叫醒轮在断点时是时间条）。这一行连同下边距 48px，跟随不会因它停下；在底部展开卡片时跟随卡片长高，与回复下面的卡片是同一套机制。
+- 消息菜单：这一行没有 `data-message-id`，右键的 `closest("[data-message-id]")` 取不到它，也没有「⋯」，删不掉。它前面你那一句照旧有菜单。
+- `AssistantRunSummary` 退成只写步数：已核对，`elapsedMs` 为空所以不写用时，不传 telemetry 所以没有 token 段；测试断言卡片第一行是「3 步」。
+- 工作台与子任务（`assistant` 为假）：只有 `linePlan` 分支变了（`renderStoppedRun` 只在那里调用，跳过条件也只在 `linePlan` 时生效），`ProcessCard` 与原 `AssistantProcessCard` 没改。测试「leaves the workbench's rendering of the same turns flat, in full」改前改后都绿，工作台的全部既有用例也都绿。
+
+**票 32 的删除路径**（拿计划层逐例跑过）
+
+- 删一条回复（它的回答、提问或一步）：Core 的 `message_unit` 会删掉这一轮里它说的每一行（`core/src/message_delete.rs`），剩下你的话和你的回答，没有一步了，所以什么都不画，不会变成这一行。改前改后一样。
+- 删这一行前面你那一句（Core 只删那一行），剩下的步跟着前一轮走（`splitAfterAnswer`）：
+  - 前一轮有回答：这些步自成一个没有开场的组，`foldEligible` 为假，进 `flat`。改前本来就平铺，删前删后都平铺；改后删前是这一行，删后又摊开成工作台的步骤区（没有开场）。
+  - 前一轮也是这一行：两轮并成一行。例如「2 步」与「3 步」并成「中途停下 · 5 步」，一张卡片装两轮的步。
+  - 前一轮是只派了活的一轮（照旧平铺、卡片挂在派活那条下面）：并起来的这一轮最后一步调过工具，就变成一行「5 步」。派活那条不再画，它下面的子任务卡片也跟着不见了。
+  - 这三种都不是想要的，要不要处理交回主会话判断。
+- 这一轮里的提问与你的回答：改前它们在平铺区里，`isMenuBubble` 判否，没有菜单；改后它们是消息，有菜单，同有回答的轮次。所以删它的提问会删掉这一轮它说的每一行，这一行也随之消失：「这一行不能删」可以经由提问绕过去。删你的回答只删那一行。
+
+**测试**（先写后改，改前 15 条红）
+
+- `gui/src/lib/assistant-conversation.test.ts`，7 条红：
+  - 「draws a live run as its opener and its asked-and-answered pairs, and a run without an answer as one line after them」：旧用例「…and a run without an answer in full」改写，旧断言是 `flat` 为 `[1, 2, 3, 4]`。
+  - 新加 `describe("a run without an answer")` 的 5 条：「is one line after its last step…」「comes after your answer when it stopped right after you answered」「draws nothing when no step landed before it stopped」「stands for a woken round that said something and stopped, its time above the line」「leaves /btw and system rows the workbench way, and a live run to the typing bubble」。
+  - 「draws the user's own dispatch as before…」：只加了一条 `stopped.size === 0`，红在字段不存在，是守卫。
+  - 7 条的红法：断言值不对，或 `plan.stopped` 不存在（TypeError）。
+- `gui/src/lib/assistant.test.ts`，2 条红：「stays on your message while a step narrates before its tools」（静止时的旧断言是旁白，改成你那一句）、新加的「stays on what the conversation draws once a run stopped…」。
+- `gui/src/components/conversation/Conversation.assistant.test.tsx`，6 条红：
+  - 新加 `describe("…: a run without an answer")` 的 5 条：一行与它的墨色、可达性、没有平铺；展开是卡片、第一行只有「3 步」；提问与回答在这一行之前；只做了提问时是纯文字；英文单复数。
+  - 「draws a report round with no answer as the line, its time above it」：替换旧的「…the workbench way, minus the report」。
+  - 改后「is plain words…」又红了一次，是我测试里的 `"role="` 匹配到了 `data-role=`，改成 `' role="'` 后变绿；代码没因此改动。
+- 守卫（改前改后都绿）：「leaves the workbench's rendering of the same turns flat, in full」、「keeps the card under the user's own dispatch…」。
+
+**门禁**（实现提交 `9cb17c2c` 的树）
+
+- `pnpm --dir gui typecheck`：通过。
+- `pnpm --dir gui lint`：通过，0 warning。
+- `pnpm --dir gui exec vitest run`：237 个文件、2633 条全过；`TZ=UTC` 再跑一遍，237 / 2633 全过。
+- `git diff --check`（`81709d39..HEAD`，本报告提交前后各跑一次）：干净。
+- prettier：改前就是 prettier-clean 的四个文件（`AssistantProcessCard.tsx`、`Conversation.assistant.test.tsx`、`assistant-conversation.ts`、`assistant-conversation.test.ts`）整篇格式化；其余旧文件改前改后的 prettier 漂移行数相同（`Conversation.tsx` 8、`en.ts` 40、`zh.ts` 13、`run-groups.ts` 5），自己的 hunk 没有引入新的漂移。中文新增行用脚本扫过半角标点，0 处。
+
+**看到但没改 / Open risks**
+
+1. **票面前提缺了一类轮次**。票面说落进 `plan.flat` 的没有回答的轮次都是中止、出错、停在步数上限。还有第四类：GA 自己收了尾，只是除了标签没话说。最后一步只有 `no_tool`，回复只有 `<subtask>`，或在叫醒以外写了 `<no-reply/>`。照票面五条判，你自己发起、只派了活的那一轮会画成「中途停下 · 3 步」，它的子任务卡片（挂在那条回复下面）就没了。这违背裁决 125「用户自己发起的一轮不动」，也会让既有用例「keeps the card under the user's own dispatch」变红。所以我加了第六条：最后一步调过工具。这类轮次照旧平铺、卡片照旧。中止、出错、步数上限留下的最后一步都调过工具（不调工具的那一步就是 GA 收尾），不受影响。叫醒、只派了活、又没写 `<no-reply/>` 的一轮同理照旧平铺。要不要给它们另一种画法，交回主会话。
+2. **「卡片照旧停在『你：……』」只在实践中成立**。原 `lastVisibleMessage` 有意在静止时把带旁白（`finalAnswer` 非空）的步算作最后一句，注释写「a run stopped half-way is drawn in full」，`assistant.test.ts` 也断言了这一点。改后旁白不在屏上，卡片却会说一句屏上没有、它也没对你说过的话，与裁决 159 第 3 条否掉丙的理由相反。只读查了 `workbench.db`：主对话 197 个调过工具的步里，`final_answer` 非空的 0 个，所以实际一直停在「你：……」。我让它在构造上也成立（`stoppedRunTurns`），并改了那条断言。主会话不同意的话，回退 `assistant.ts` 的两处改动和那条断言即可。
+3. **删除路径**：见上「票 32 的删除路径」。删这一行前面你那一句后，步会摊回平铺区，或并进前一轮；新增的删除入口是这一轮里的提问。都没改。
+4. **分页**：已加载的第一页如果从一轮中途开始（开场在更早那页），这一轮是没有开场的组，在更早那页加载前照旧平铺。与第 3 条同类，没改。
+5. **没在真窗口看**：没起 tauri dev。24px 下边距读起来像不像「回复 → 你」、图标的 5px 内缩、悬停底的位置、展开时 padding 过渡与卡片扫开是否同步、停止那一下的淡入，都只在静态渲染与计划层验过，留给 JC 的真机步骤 1、2。
+6. 这一行的提示框在挂载时就挂上 Radix 根，没有像票 72 的 chip 那样等第一次悬停。这类轮次很少（库里 10-20 起 49 轮里 1 轮），代价可以忽略。
+7. 这一行是对话里的一个 Tab 停靠点（`tabIndex=0`，票面要求键盘焦点）。回复下面的过程按钮是 `tabIndex=-1`，两者对键盘不一致，这是有意的：这一行是这类轮次看过程的唯一入口。
