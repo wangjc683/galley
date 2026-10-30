@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import { resolveLanguagePreference } from "@/lib/language";
+import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
 import { useSessionsStore } from "@/stores/sessions";
 import type { SessionBriefWire } from "@/stores/sessions/shared";
@@ -37,7 +38,8 @@ let opening: Promise<boolean> | null = null;
  * Resolves `false` when there is no main chat to land on (the external
  * runtime is active, or Core failed — logged); the caller then lands on
  * the empty composer as before. Concurrent calls share one landing, and
- * a call while the main chat is already on screen changes nothing.
+ * a call while the main chat is already on screen changes nothing —
+ * unless its history read failed, which the landing then tries again.
  */
 export function openMainChat(): Promise<boolean> {
   opening ??= landOnMainChat().finally(() => {
@@ -67,9 +69,12 @@ async function landOnMainChat(): Promise<boolean> {
   sessions.applyExternalSessionCreated(brief);
   sessions.applyExternalSessionUpdated(brief);
   const ui = useUiStore.getState();
+  // On screen and read: nothing to do. On screen but its history never
+  // came in (the read at launch failed): land again, which reads it.
   if (
     ui.screen === "main" &&
-    useSessionsStore.getState().activeSessionId === brief.id
+    useSessionsStore.getState().activeSessionId === brief.id &&
+    useMessagesStore.getState().byId[brief.id]?.historyRead
   ) {
     return true;
   }

@@ -307,13 +307,13 @@ async function _attachLive(runner: LiveRunner): Promise<void> {
   const { sessionId } = runner;
   if (_bridgeClients.has(sessionId)) return;
   if (runner.runOpen) {
-    // Restore before the listener goes up: once live turns land in an
-    // empty transcript, activation no longer restores (it reads a
-    // non-empty transcript as already loaded) and the history before
-    // the reload would stay missing. Core persisted every turn, so the
-    // read is complete up to now.
+    // Read the history before the listener goes up, so the rows Core
+    // wrote while no page listened come before the live ones. Core
+    // persisted every turn, so the read is complete up to now; turns
+    // that land meanwhile are merged, and an activation that comes later
+    // reads nothing again (`historyRead`, ticket 113).
     const messages = useMessagesStore.getState();
-    if ((messages.byId[sessionId]?.turns.length ?? 0) === 0) {
+    if (!messages.byId[sessionId]?.historyRead) {
       await messages.restoreSessionTurns(sessionId);
     }
   }

@@ -117,6 +117,29 @@ describe("re-attaching to runners Core still holds", () => {
     expect(ensureSessionRunner).not.toHaveBeenCalled();
   });
 
+  it("activating a running session reads its history once, re-attach included (ticket 113)", async () => {
+    useSessionsStore.setState({
+      sessions: [makeSession({ id: "s-live-read", turnCount: 3 })],
+    });
+    tauriMocks.invoke.mockImplementation(async (command) => {
+      if (command === "list_live_runners") {
+        return [{ sessionId: "s-live-read", pid: 21, runOpen: true }];
+      }
+      if (command === "session_message_turns_page") {
+        return { rows: [], hasMore: false, previousUserCreatedAt: null };
+      }
+      return undefined;
+    });
+
+    await useSessionsStore.getState().activateSession("s-live-read");
+
+    expect(invoked("session_message_turns_page")).toBe(1);
+    expect(useRuntimeStore.getState().hasBridgeClient("s-live-read")).toBe(
+      true,
+    );
+    expect(ensureSessionRunner).not.toHaveBeenCalled();
+  });
+
   it("concurrent attaches register one listener set", async () => {
     coreHolds([]);
     const runtime = useRuntimeStore.getState();

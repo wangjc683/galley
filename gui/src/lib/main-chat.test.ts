@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   sessionFromBrief,
   type SessionBriefWire,
 } from "@/stores/sessions/shared";
+import { useMessagesStore } from "@/stores/messages";
 import { usePrefsStore } from "@/stores/prefs";
 import { useSessionsStore } from "@/stores/sessions";
 import { useUiStore } from "@/stores/ui";
@@ -40,12 +41,21 @@ function calls(command: string): number {
   return tauriMocks.invoke.mock.calls.filter(([c]) => c === command).length;
 }
 
+/** The main chat's messages as the page holds them. */
+function mainMessages() {
+  return useMessagesStore.getState().byId["s-main"];
+}
+
 beforeEach(() => {
   resetStores();
   usePrefsStore.setState({ activeRuntimeKind: "managed" });
-  tauriMocks.invoke.mockImplementation(async (command) =>
-    command === "get_or_create_main_chat" ? MAIN_BRIEF : undefined,
-  );
+  tauriMocks.invoke.mockImplementation(async (command) => {
+    if (command === "get_or_create_main_chat") return MAIN_BRIEF;
+    if (command === "session_message_turns_page") {
+      return { rows: [], hasMore: false, previousUserCreatedAt: null };
+    }
+    return undefined;
+  });
 });
 
 describe("the wire", () => {
@@ -97,11 +107,40 @@ describe("openMainChat", () => {
 
   it("asks again but changes nothing while the main chat is on screen", async () => {
     await openMainChat();
+    await vi.waitFor(() => expect(mainMessages()?.historyRead).toBe(true));
     const before = useSessionsStore.getState().sessions;
 
     await expect(openMainChat()).resolves.toBe(true);
 
     expect(useSessionsStore.getState().sessions).toBe(before);
+    expect(useSessionsStore.getState().activeSessionId).toBe("s-main");
+    expect(calls("session_message_turns_page")).toBe(1);
+  });
+
+  it("lands again while on screen when its history read failed, and reads it (ticket 113)", async () => {
+    let failNext = true;
+    tauriMocks.invoke.mockImplementation(async (command) => {
+      if (command === "get_or_create_main_chat") return MAIN_BRIEF;
+      if (command === "session_message_turns_page") {
+        if (failNext) {
+          failNext = false;
+          throw new Error("database is locked");
+        }
+        return { rows: [], hasMore: false, previousUserCreatedAt: null };
+      }
+      return undefined;
+    });
+    await openMainChat();
+    await vi.waitFor(() => {
+      expect(calls("session_message_turns_page")).toBe(1);
+      expect(mainMessages()?.restoring).toBe(false);
+    });
+    expect(mainMessages()?.historyRead).toBe(false);
+
+    await expect(openMainChat()).resolves.toBe(true);
+
+    await vi.waitFor(() => expect(mainMessages()?.historyRead).toBe(true));
+    expect(calls("session_message_turns_page")).toBe(2);
     expect(useSessionsStore.getState().activeSessionId).toBe("s-main");
   });
 

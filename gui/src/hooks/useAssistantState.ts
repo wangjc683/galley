@@ -17,6 +17,7 @@ import { loadMessageTurnsPage } from "@/lib/db";
 import { useCopy } from "@/lib/i18n";
 import { EMPTY_TURNS, useMessagesStore } from "@/stores/messages";
 import { rowsToTurns } from "@/stores/messages/rowsToTurns";
+import type { Turn } from "@/types/conversation";
 import type { Session } from "@/types/session";
 
 /**
@@ -96,14 +97,15 @@ export function useComposerDraft(
 /**
  * The main chat's last visible message (lib/assistant.ts), from the
  * page's message cache — the main chat opens at launch, so it is
- * normally there. When the cache holds no turns for it (the launch did
- * not open it, or a fresh main chat whose greeting is no turn and was
- * never read back), the latest page is read once with the transcript
- * reader activation uses (`session_message_turns_page`), straight into
- * this hook: the cache, the active session, the unread flag and every
- * scroll position stay as they were. It is read again only when the
- * session's activity moves while the cache still holds nothing; once
- * the cache has turns, they win.
+ * normally there. Until this page has read its history
+ * (`historyRead`: the launch did not open it, or the read failed — live
+ * turns that landed before it are not the history, ticket 113), the
+ * latest page is read with the transcript reader activation uses
+ * (`session_message_turns_page`), straight into this hook: the cache,
+ * the active session, the unread flag and every scroll position stay
+ * as they were. It is read again only when the session's activity
+ * moves while the history is still unread; once it is read, the cache
+ * wins.
  *
  * While it runs, the live round's tool steps are no message
  * (`lastVisibleMessage`'s `liveRound`, main chat PRD rulings 104, 110):
@@ -115,6 +117,9 @@ export function useAssistantLastMessage(
 ): AssistantLastMessage | null {
   const copy = useCopy();
   const turns = useMessagesStore((s) => s.byId[mainChat.id]?.turns);
+  const historyRead = useMessagesStore(
+    (s) => s.byId[mainChat.id]?.historyRead ?? false,
+  );
   const restoring = useMessagesStore(
     (s) => s.byId[mainChat.id]?.restoring ?? false,
   );
@@ -125,21 +130,15 @@ export function useAssistantLastMessage(
     [cached, copy, liveRound],
   );
   const readKey = `${mainChat.id}@${mainChat.lastActivityAt}`;
-  const needsRead = cached.length === 0 && !restoring;
-  const [read, setRead] = useState<{
-    key: string;
-    message: AssistantLastMessage | null;
-  } | null>(null);
+  const needsRead = !historyRead && !restoring;
+  const [read, setRead] = useState<{ key: string; turns: Turn[] } | null>(null);
   useEffect(() => {
     if (!needsRead) return;
     let cancelled = false;
     loadMessageTurnsPage(mainChat.id)
       .then((page) => {
         if (cancelled) return;
-        setRead({
-          key: readKey,
-          message: lastVisibleMessage(rowsToTurns(page.rows), copy),
-        });
+        setRead({ key: readKey, turns: rowsToTurns(page.rows) });
       })
       .catch((e: unknown) => {
         console.debug("[assistant] reading the last message failed.", e);
@@ -147,7 +146,12 @@ export function useAssistantLastMessage(
     return () => {
       cancelled = true;
     };
-  }, [needsRead, readKey, mainChat.id, copy]);
-  if (cached.length > 0) return fromCache;
-  return read?.key === readKey ? read.message : null;
+  }, [needsRead, readKey, mainChat.id]);
+  const readTurns = read?.key === readKey ? read.turns : null;
+  const fromRead = useMemo(
+    () =>
+      readTurns ? lastVisibleMessage(readTurns, copy, { liveRound }) : null,
+    [readTurns, copy, liveRound],
+  );
+  return historyRead ? fromCache : fromRead;
 }
