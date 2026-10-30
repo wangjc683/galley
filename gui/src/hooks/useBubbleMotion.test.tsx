@@ -391,7 +391,8 @@ describe("the typing bubble going with nothing growing out of it", () => {
     mount({ rows: [A1, U1], typing: true, live: true, progress: PROGRESS });
     page.frame();
     timeline.currentTime = 1600;
-    // Stopped: the run drawn in full takes its place (a new row).
+    // Stopped: what stands for the run takes its place (a new row: the
+    // main chat's 「中途停下」 line, ruling 159).
     const run: Row = { id: "s-1", side: "assistant", h: 100 };
     render({ rows: [A1, U1, run], typing: false, live: false }, stop);
     page.frame();

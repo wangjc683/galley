@@ -2,7 +2,10 @@ import { CaretDown } from "@phosphor-icons/react";
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { ASSISTANT_BUBBLE_MAX } from "@/components/conversation/AssistantParts";
-import { AssistantProcessCard } from "@/components/conversation/AssistantProcessCard";
+import {
+  AssistantProcessCard,
+  AssistantStoppedRun,
+} from "@/components/conversation/AssistantProcessCard";
 import { AnsweredAskUser } from "@/components/conversation/AskUserBubble";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import {
@@ -26,6 +29,7 @@ import { useDayStamp } from "@/hooks/useDayStamp";
 import {
   type AssistantProcessToggle,
   type AssistantRowSide,
+  type AssistantRunSteps,
   assistantLinePlan,
   assistantRowGap,
   endsWithActionRow,
@@ -95,7 +99,9 @@ export interface ConversationProps {
    * only its latest completed step; the ones before fold behind a
    * live header. An incomplete run that is neither running nor
    * waiting on the user (aborted, or a restored tail) renders flat in
-   * full — a run without an answer is never hidden.
+   * full — a run without an answer is never hidden (the assistant's
+   * conversation draws it as one line that opens its steps instead:
+   * main chat PRD ruling 159).
    */
   agentRunning?: boolean;
   /**
@@ -132,8 +138,10 @@ export interface ConversationProps {
    * gaps; under a settled reply of two steps or more, a process button
    * in its hover action bar opens its steps in place as a card, one line
    * a step (AssistantProcessCard), its questions and the user's answers
-   * staying out as messages; a time line above the greeting too. Off
-   * for every other conversation: the workbench's, a subtask, the
+   * staying out as messages; a run without an answer is one line where
+   * its reply would be, 「中途停下 · N 步」, which opens the same card
+   * (AssistantStoppedRun, ruling 159); a time line above the greeting
+   * too. Off for every other conversation: the workbench's, a subtask, the
    * external runtime's. The two share their grammar (workbench
    * conversation PRD): the user's words on the right, the send times
    * at breaks as centred lines, a one-step reply with nothing over it.
@@ -751,6 +759,46 @@ export function Conversation({
     );
   };
 
+  // A run without an answer in the assistant's conversation (ruling 159,
+  // ticket 114): one line where its reply would be, right after the
+  // run's last turn, its card under it (AssistantStoppedRun). Open state
+  // in the fold overrides by its opener, closed by default. A report
+  // round's time at a break goes above it when the line is the first
+  // thing its round draws (a question before it carries the time
+  // otherwise). `previous`: the side of the row right above.
+  const renderStoppedRun = (
+    run: AssistantRunSteps,
+    turnIndex: number,
+    previous: AssistantRowSide | null,
+  ): ReactNode => {
+    const reportTime = linePlan?.message.has(turnIndex)
+      ? undefined
+      : reportTimeAbove.get(turnIndex);
+    const open = foldOverrides[ordinal(run.opener)] === true;
+    return (
+      <Fragment key={`stopped-${ordinal(run.opener)}`}>
+        {reportTime && (
+          <MessageTimeDivider
+            label={reportTime.label}
+            full={reportTime.full}
+            iso={reportTime.iso}
+            afterActionRow={endsWithActionRow(previous)}
+          />
+        )}
+        <AssistantStoppedRun
+          stats={run.stats}
+          open={open}
+          onToggle={() => toggleFold(run.opener, !open)}
+          className={reportTime ? "mt-5" : assistantRowGap(previous, "agent")}
+          steps={assistantProcessSteps(run.members, turns, -1).map((m) => ({
+            key: `step-${ordinal(m)}`,
+            turn: turns[m] as AgentTurn,
+          }))}
+        />
+      </Fragment>
+    );
+  };
+
   // An ask_user question drawn out before its run's fold header (the
   // answered echo, as the step region drew it; lib/run-fold-plan.ts).
   const renderQuestion = (turn: AgentTurn, turnIndex: number) => {
@@ -895,11 +943,13 @@ export function Conversation({
   let prevSide: AssistantRowSide | null = null;
   turns.forEach((turn, turnIndex) => {
     // The assistant's conversation shows a run's steps only under its
-    // answer's process button, and not at all while it runs.
+    // answer's process button or the line of a run without one, and not
+    // at all while it runs.
     if (
       linePlan &&
       !linePlan.message.has(turnIndex) &&
-      !linePlan.flat.has(turnIndex)
+      !linePlan.flat.has(turnIndex) &&
+      !linePlan.stopped.has(turnIndex)
     ) {
       return;
     }
@@ -918,7 +968,9 @@ export function Conversation({
     if (owner === undefined) {
       flushSection();
       if (linePlan) {
-        const row = renderLineRow(turn, turnIndex, prevSide);
+        const row = linePlan.message.has(turnIndex)
+          ? renderLineRow(turn, turnIndex, prevSide)
+          : null;
         if (row) {
           rendered.push(row);
           // Your message ends with its row of chips (ruling 105), a
@@ -931,6 +983,13 @@ export function Conversation({
                 : linePlan.question.has(turnIndex)
                   ? "agent"
                   : "agent-bar";
+        }
+        // A run without an answer: its line after its last turn, which
+        // ends with its own gap under it, as a reply ends with its bar.
+        const stopped = linePlan.stopped.get(turnIndex);
+        if (stopped) {
+          rendered.push(renderStoppedRun(stopped, turnIndex, prevSide));
+          prevSide = "agent-bar";
         }
         return;
       }

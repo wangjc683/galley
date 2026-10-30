@@ -503,10 +503,36 @@ describe("the last visible message", () => {
         fromUser: true,
         text: "明天早上 9 点提醒我喝水",
       });
-      // At rest: as before, the narration.
-      expect(lastVisibleMessage(turns, zh)?.text).toBe(
-        "再看看有没有重复的提醒。",
-      );
+      // At rest, stopped without an answer: the run is one line,
+      // 「中途停下 · 2 步」 (ruling 159), no bubble; still your message.
+      expect(lastVisibleMessage(turns, zh)).toMatchObject({
+        fromUser: true,
+        text: "明天早上 9 点提醒我喝水",
+      });
+    });
+
+    it("stays on what the conversation draws once a run stopped: its question, not its steps", () => {
+      expect(
+        lastVisibleMessage(
+          [
+            user("提醒我喝水"),
+            narrated("我先看一下现在几点。", 1),
+            asked,
+            user("每天"),
+            narrated("我按每天建。", 4),
+          ],
+          zh,
+        ),
+      ).toMatchObject({ fromUser: true, text: "每天" });
+      expect(
+        lastVisibleMessage(
+          [user("提醒我喝水"), narrated("我先看一下现在几点。", 1), asked],
+          zh,
+        ),
+      ).toMatchObject({
+        fromUser: false,
+        text: "每天都提醒，还是只提醒明天？",
+      });
     });
 
     it("still says a question it asks", () => {

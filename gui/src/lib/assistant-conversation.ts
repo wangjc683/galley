@@ -1,16 +1,17 @@
+import { isFinalAnswerTurn } from "@/lib/agent-turn";
 import {
   cleanPartialContent,
   extractLiveThinking,
   modelReplyEnd,
 } from "@/lib/ipc/ga-output-cleaning";
-import type { RunGroup, RunStats } from "@/lib/run-groups";
+import { buildRunGroups, type RunGroup, type RunStats } from "@/lib/run-groups";
 import { cleanSessionSummary } from "@/lib/session-summary";
 import { inReportRound, isReportRound, isSilentReport } from "@/lib/subtasks";
-import type { Turn } from "@/types/conversation";
+import type { AgentTurn, Turn } from "@/types/conversation";
 
 /**
  * The assistant's conversation (main chat PRD rulings 66–69, 107, 110,
- * 134, 135; spec: docs/design/conversation.md 「助手的对话」): the main
+ * 134, 135, 159; spec: docs/design/conversation.md 「助手的对话」): the main
  * chat, open in the main area, reads as a long IM with one person rather
  * than as the workbench's task record. MainView's `isMainChat` is the
  * gate; every other conversation (the workbench's, a subtask opened from
@@ -45,8 +46,11 @@ import type { Turn } from "@/types/conversation";
  *             then one line a step, eight at most before it scrolls
  *             (lib/assistant-process.ts); no context percentage
  *             anywhere). Its questions and the user's answers stay in
- *             the conversation as messages; a run without an answer
- *             unfolds in full (`assistantLinePlan`).
+ *             the conversation as messages. A run without an answer
+ *             (stopped, failed, at the step cap; ruling 159) is one
+ *             line where its reply would be, 「中途停下 · N 步」, the
+ *             same card opening under it (`assistantLinePlan`'s
+ *             `stopped`).
  *   time      the send time at a break as a centred line between two
  *             messages, and one above the greeting.
  *   reports   a round Core woke it for (a subtask finished, asks or
@@ -262,6 +266,19 @@ export interface AssistantProcessToggle {
   onToggle: () => void;
 }
 
+/** A run's steps behind one control: the process button under its
+ * answer, or the 「中途停下」 line of a run without one. */
+export interface AssistantRunSteps {
+  /** What the card's open state is kept by (Conversation's fold
+   * overrides): the opener, else the run's first turn. */
+  opener: number;
+  /** The run's agent turns, in order: the card's rows are these minus
+   * the answer and the steps that only asked (lib/assistant-process.ts
+   * `assistantProcessSteps`). */
+  members: number[];
+  stats: RunStats;
+}
+
 /**
  * What the conversation draws of each run (Conversation renders it):
  *
@@ -269,22 +286,29 @@ export interface AssistantProcessToggle {
  *             (openers and ask_user answers), the greeting, a run's
  *             questions and its answer.
  *   question  agent turns drawn as their ask_user question only.
- *   steps     closing turn → its run's agent turns, for runs of two
- *             steps or more: the process card the button opens draws
- *             them, minus the answer and the steps that only asked
- *             (lib/assistant-process.ts `assistantProcessSteps`).
- *   flat      turns of runs drawn the workbench way, by opener: runs
- *             without an answer that are not live, /btw exchanges,
+ *   steps     closing turn → its run's steps, for runs of two steps or
+ *             more: the process card the button opens draws them.
+ *   stopped   a run's last turn → its steps, for a run without an
+ *             answer that is not live (`stoppedPartway`; ruling 159,
+ *             ticket 114): right after that turn — after its questions
+ *             and your answers, drawn as messages — one line,
+ *             「中途停下 · N 步」, which opens the same card over every
+ *             step but the ones that only asked.
+ *   flat      turns of runs drawn the workbench way, by opener: /btw
+ *             exchanges, a run that ended on its own with nothing to
+ *             say but tags (a dispatch whose cards are its words),
  *             headless lead-ins (the greeting excepted).
  *   reports   report row → the first row its round draws (lib/subtasks
  *             report rounds, tickets 29 / 31). The report row itself is
  *             never drawn: the reply after it is a left bubble with no
  *             bubble of yours before it, and the report's time, at a
  *             break, is the line above that first row (as the
- *             greeting's is above the greeting). A round that draws
- *             nothing — a silent reply (`<no-reply/>`) without a
- *             question to the user — has no entry: its report counts
- *             for no time either (`userTimeMarks`' `skip`).
+ *             greeting's is above the greeting) — the 「中途停下」 line
+ *             when that is the first. A round that draws nothing — a
+ *             silent reply (`<no-reply/>`) without a question to the
+ *             user, or one stopped before a step landed — has no entry:
+ *             its report counts for no time either (`userTimeMarks`'
+ *             `skip`).
  *
  * A live run shows its opener and its answered questions and their
  * answers; its steps show nothing (the typing bubble and the line under
@@ -301,7 +325,8 @@ export interface AssistantProcessToggle {
 export interface AssistantLinePlan {
   message: Set<number>;
   question: Set<number>;
-  steps: Map<number, { opener: number; members: number[]; stats: RunStats }>;
+  steps: Map<number, AssistantRunSteps>;
+  stopped: Map<number, AssistantRunSteps>;
   flat: Map<number, number>;
   reports: Map<number, number>;
 }
@@ -322,6 +347,61 @@ function asksUser(turn: Turn): boolean {
   );
 }
 
+/**
+ * Whether the main chat draws run `g` as one line, 「中途停下 · N 步」
+ * (main chat PRD ruling 159, ticket 114): the run ended without an
+ * answer — stopped, failed, at the step cap; none of the three is
+ * stored, so after a reload all the page knows is that no answer came.
+ * That is a run
+ *
+ *   - not live (`liveGroup`: the typing bubble stands for it then),
+ *   - without an answer (`complete`),
+ *   - run-shaped (`foldEligible`: an opener, no system rows — a /btw
+ *     exchange stays the workbench way),
+ *   - not a silent report round (nothing of it is drawn),
+ *   - with a step landed (stopped before one, nothing is drawn),
+ *   - whose last step did not end the run: a last step with no tool but
+ *     `no_tool` and no question is GA's loop ending on its own, only
+ *     with nothing to say but tags — a dispatch, whose cards under that
+ *     step are its words (ruling 125 kept the user's own as it was), or
+ *     `<no-reply/>` outside a report round. Such a run did not stop
+ *     partway and stays the workbench way, its cards under it. A stop,
+ *     an error or the step cap leaves a step that called a tool last (a
+ *     step that calls none ends the loop).
+ */
+export function stoppedPartway(
+  g: RunGroup,
+  turns: readonly Turn[],
+  liveGroup: RunGroup | null,
+): boolean {
+  if (g === liveGroup || g.complete || !g.foldEligible) return false;
+  if (isSilentReport(g, turns)) return false;
+  let last: AgentTurn | null = null;
+  for (const i of g.memberIndices) {
+    const turn = turns[i];
+    if (turn.role === "agent") last = turn;
+  }
+  return last !== null && !isFinalAnswerTurn(last.tools);
+}
+
+/**
+ * The agent turns of the runs the main chat draws as the 「中途停下」
+ * line at rest (`stoppedPartway`, the conversation's grouping): steps
+ * that are no message — the sidebar card's last message skips them but
+ * a question among them (lib/assistant.ts `lastVisibleMessage`).
+ */
+export function stoppedRunTurns(turns: readonly Turn[]): Set<number> {
+  const indices = new Set<number>();
+  const groups = buildRunGroups(turns as Turn[], { splitAfterAnswer: true });
+  for (const g of groups) {
+    if (!stoppedPartway(g, turns, null)) continue;
+    for (const i of g.memberIndices) {
+      if (turns[i].role === "agent") indices.add(i);
+    }
+  }
+  return indices;
+}
+
 export function assistantLinePlan(
   groups: readonly RunGroup[],
   turns: readonly Turn[],
@@ -331,6 +411,7 @@ export function assistantLinePlan(
     message: new Set(),
     question: new Set(),
     steps: new Map(),
+    stopped: new Map(),
     flat: new Map(),
     reports: new Map(),
   };
@@ -340,15 +421,17 @@ export function assistantLinePlan(
     const firstDrawn = () => {
       if (!report) return;
       const first = g.memberIndices.find(
-        (i) => plan.message.has(i) || plan.flat.has(i),
+        (i) => plan.message.has(i) || plan.flat.has(i) || plan.stopped.has(i),
       );
       if (first !== undefined) plan.reports.set(g.openerIndex, first);
     };
+    const stopped = stoppedPartway(g, turns, liveGroup);
     if (
       g === liveGroup ||
       g.foldable ||
       isSilentReport(g, turns) ||
-      orphanReply(g, turns)
+      orphanReply(g, turns) ||
+      stopped
     ) {
       const members: number[] = [];
       for (const i of g.memberIndices) {
@@ -372,6 +455,15 @@ export function assistantLinePlan(
       if (g !== liveGroup && g.finalTurnIndex != null && members.length >= 2) {
         plan.steps.set(g.finalTurnIndex, {
           opener: g.openerIndex >= 0 ? g.openerIndex : g.memberIndices[0],
+          members,
+          stats: g.stats,
+        });
+      }
+      // Where its reply would be: after its last turn, your answer to
+      // its last question included.
+      if (stopped) {
+        plan.stopped.set(g.memberIndices[g.memberIndices.length - 1], {
+          opener: g.openerIndex,
           members,
           stats: g.stats,
         });

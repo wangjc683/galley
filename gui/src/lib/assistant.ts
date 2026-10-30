@@ -1,6 +1,7 @@
 import type { AppCopy } from "@/i18n/types";
 import { isFinalAnswerTurn } from "@/lib/agent-turn";
 import { mergedAskUserArgs } from "@/lib/ask-user-candidates";
+import { stoppedRunTurns } from "@/lib/assistant-conversation";
 import { splitQuotedMessage } from "@/lib/composer-quote";
 import { dropPathBasename } from "@/lib/file-drop";
 import { stripGATags } from "@/lib/ipc/ga-output-cleaning";
@@ -331,8 +332,13 @@ function messageLine(
  * behind the typing bubble and the line under it, not in a bubble.
  * Those steps are skipped, so the card stays on what the conversation
  * shows as its last bubble: your message, a question it asked, or the
- * reply once it lands. At rest a narrating step still counts (a run
- * stopped half-way is drawn in full).
+ * reply once it lands. At rest the same holds for a run that stopped
+ * without an answer: the conversation draws it as one line,
+ * 「中途停下 · N 步」 (ruling 159, lib/assistant-conversation.ts
+ * `stoppedPartway`), no bubble, so the card stays where it was when
+ * the typing bubble went. A narrating step of a run still drawn the
+ * workbench way (a /btw exchange; a dispatch that said nothing but its
+ * tags) counts as before.
  */
 export function lastVisibleMessage(
   turns: readonly Turn[],
@@ -340,6 +346,8 @@ export function lastVisibleMessage(
   { liveRound = false }: { liveRound?: boolean } = {},
 ): AssistantLastMessage | null {
   const hidden = hiddenReportTurns(turns);
+  // The steps of a run drawn as the 「中途停下」 line.
+  const stopped = stoppedRunTurns(turns);
   // Still inside the live round: nothing from the end back to the last
   // message (yours, or the report row a woken round starts from).
   let live = liveRound;
@@ -378,9 +386,9 @@ export function lastVisibleMessage(
       continue;
     }
     // A live step that called tools and asks nothing: behind the typing
-    // bubble, not a bubble.
+    // bubble, not a bubble; at rest, behind the 「中途停下」 line.
     if (
-      live &&
+      (live || stopped.has(i)) &&
       !isFinalAnswerTurn(turn.tools) &&
       !mergedAskUserArgs(turn.tools)
     ) {

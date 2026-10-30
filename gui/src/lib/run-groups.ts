@@ -327,7 +327,8 @@ export function buildRunGroups(
  * and being worked on — the agent running, or waiting on an ask_user
  * reply, so the pause does not flicker the window away and back. An
  * open run that is neither (aborted, or a restored tail) gets no
- * window: a run without an answer is never hidden.
+ * window: a run without an answer is never hidden (the main chat draws
+ * it as one line that opens its steps: main chat PRD ruling 159).
  */
 export function liveRunGroup(
   groups: RunGroup[],

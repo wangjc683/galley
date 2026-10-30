@@ -335,7 +335,7 @@ describe("assistantLinePlan", () => {
     expect(plan.steps.has(1)).toBe(false);
   });
 
-  it("draws a live run as its opener and its asked-and-answered pairs, and a run without an answer in full", () => {
+  it("draws a live run as its opener and its asked-and-answered pairs, and a run without an answer as one line after them", () => {
     const turns: Turn[] = [
       user("订船票"),
       step("我先看船班。", 1),
@@ -351,11 +351,137 @@ describe("assistantLinePlan", () => {
     );
     expect([...live.message].sort()).toEqual([0, 2, 3]);
     expect(live.steps.size).toBe(0);
-    // Not running and no answer (stopped, failed, at the step cap): the
-    // workbench way, every turn in its run's region.
+    expect(live.stopped.size).toBe(0);
+    // Not running and no answer (stopped, failed, at the step cap;
+    // ruling 159): the same messages, then one line after the run's
+    // last turn, its card over every step; nothing the workbench way.
     const stopped = assistantLinePlan(groups, turns, null);
-    expect([...stopped.flat.keys()]).toEqual([1, 2, 3, 4]);
+    expect(stopped.flat.size).toBe(0);
     expect(stopped.steps.size).toBe(0);
+    expect([...stopped.message].sort()).toEqual([0, 2, 3]);
+    expect(stopped.question).toEqual(new Set([2]));
+    expect([...stopped.stopped.keys()]).toEqual([4]);
+    expect(stopped.stopped.get(4)?.opener).toBe(0);
+    expect(stopped.stopped.get(4)?.members).toEqual([1, 2, 4]);
+    // The question's step counts, as on the card's first line.
+    expect(stopped.stopped.get(4)?.stats.stepCount).toBe(3);
+  });
+
+  // Ruling 159 (ticket 114): a round that ended without an answer —
+  // stopped, failed, at the step cap — is one line, 「中途停下 · N 步」,
+  // where its reply would be.
+  describe("a run without an answer", () => {
+    const linePlanOf = (turns: Turn[], live = false) => {
+      const groups = buildRunGroups(turns, { splitAfterAnswer: true });
+      return assistantLinePlan(
+        groups,
+        turns,
+        live ? liveRunGroup(groups, true, false) : null,
+      );
+    };
+    const report: UserTurn = {
+      role: "user",
+      content: "[Galley — not a message from the user] …",
+      messageId: "u-report",
+      origin: { via: "system", supervisor: "galley-report", reason: "s-1" },
+    };
+
+    it("is one line after its last step, not the workbench's region", () => {
+      const turns: Turn[] = [
+        user("早"),
+        answer("早。", 1),
+        user("看看 Tailscale 为什么连不上"),
+        step("我先看进程。", 1),
+        step("再看安装日志。", 2),
+        step("结束卡住的进程。", 3),
+      ];
+      const plan = linePlanOf(turns);
+      expect(plan.flat.size).toBe(0);
+      expect(plan.steps.size).toBe(0);
+      expect([...plan.message]).toEqual([0, 1, 2]);
+      expect([...plan.stopped.keys()]).toEqual([5]);
+      expect(plan.stopped.get(5)?.opener).toBe(2);
+      expect(plan.stopped.get(5)?.members).toEqual([3, 4, 5]);
+      expect(plan.stopped.get(5)?.stats.stepCount).toBe(3);
+      // Its steps are no messages.
+      for (const i of [3, 4, 5]) expect(plan.message.has(i)).toBe(false);
+    });
+
+    it("comes after your answer when it stopped right after you answered", () => {
+      const turns: Turn[] = [
+        user("订船票"),
+        step("我先看船班。", 1),
+        ask("订哪一班？", ["8:30"], 2),
+        user("8:30"),
+      ];
+      const plan = linePlanOf(turns);
+      expect([...plan.message].sort()).toEqual([0, 2, 3]);
+      expect([...plan.stopped.keys()]).toEqual([3]);
+      expect(plan.stopped.get(3)?.members).toEqual([1, 2]);
+      expect(plan.flat.size).toBe(0);
+    });
+
+    it("draws nothing when no step landed before it stopped", () => {
+      const plan = linePlanOf([user("早"), answer("早。", 1), user("帮我查")]);
+      expect([...plan.message]).toEqual([0, 1, 2]);
+      expect(plan.stopped.size).toBe(0);
+      expect(plan.flat.size).toBe(0);
+      // A woken round with nothing landed: nothing, and no time.
+      const woken = linePlanOf([user("早"), answer("早。", 1), report]);
+      expect([...woken.message]).toEqual([0, 1]);
+      expect(woken.stopped.size).toBe(0);
+      expect(woken.reports.size).toBe(0);
+    });
+
+    it("stands for a woken round that said something and stopped, its time above the line", () => {
+      const turns: Turn[] = [
+        user("比三家报价"),
+        answer("好，交给子任务。", 1),
+        report,
+        step("我看一下它的结果。", 1),
+        step("再核对第二家。", 2),
+      ];
+      const plan = linePlanOf(turns);
+      expect(plan.message.has(2)).toBe(false);
+      expect(plan.flat.size).toBe(0);
+      expect([...plan.stopped.keys()]).toEqual([4]);
+      expect(plan.stopped.get(4)?.opener).toBe(2);
+      expect(plan.stopped.get(4)?.members).toEqual([3, 4]);
+      expect([...plan.reports]).toEqual([[2, 4]]);
+      // With a question first, the report's time goes above the question.
+      const asked: Turn[] = [
+        ...turns.slice(0, 3),
+        ask("要付定金吗？", ["付"], 1),
+        user("付"),
+        step("我替你回了它。", 2),
+      ];
+      const withQuestion = linePlanOf(asked);
+      expect([...withQuestion.stopped.keys()]).toEqual([5]);
+      expect([...withQuestion.reports]).toEqual([[2, 3]]);
+    });
+
+    it("leaves /btw and system rows the workbench way, and a live run to the typing bubble", () => {
+      const btw: Turn[] = [
+        user("看看 Tailscale"),
+        step("我先看进程。", 1),
+        {
+          role: "system",
+          content: "> 🟡 /btw 几点了",
+          variant: "side_question",
+        },
+        step("再看安装日志。", 2),
+      ];
+      const plan = linePlanOf(btw);
+      expect(plan.stopped.size).toBe(0);
+      expect([...plan.flat.keys()]).toEqual([1, 2, 3]);
+      const live = linePlanOf(
+        [user("看看 Tailscale"), step("我先看进程。", 1)],
+        true,
+      );
+      expect(live.stopped.size).toBe(0);
+      expect(live.flat.size).toBe(0);
+      expect([...live.message]).toEqual([0]);
+    });
   });
 
   // Ticket 31: a round Core woke it for opens with a report row nobody
@@ -466,6 +592,9 @@ describe("assistantLinePlan", () => {
       expect(plan.steps.size).toBe(0);
       expect(plan.reports.size).toBe(0);
       expect(hiddenReportTurns(turns).size).toBe(0);
+      // It ended on its own, with its cards for words: not stopped
+      // partway (ruling 159 covers stops, errors, the step cap).
+      expect(plan.stopped.size).toBe(0);
     }
     expect(lastVisibleMessage(tagged, zh)).toEqual(
       lastVisibleMessage(bare, zh),

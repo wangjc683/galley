@@ -1756,6 +1756,11 @@ export const zhCopy = {
     foldDenied: (n: number) => `${n} 次拒绝`,
     foldExpand: "展开过程",
     foldCollapse: "收起过程",
+    /** 主对话里没有回答的一轮（中止、出错、停在步数上限，裁决 159）：
+     *  回复的位置只剩一行「中途停下 · N 步」，点开是过程卡片。三种退出
+     *  原因都不落库，重载后只知道「没有回答」，所以只用一个对三种都
+     *  成立的词；步数照 foldSteps。 */
+    stoppedPartway: "中途停下",
     thinking: "思考中…",
     answering: "正在回答…",
     runWorking: "工作中",

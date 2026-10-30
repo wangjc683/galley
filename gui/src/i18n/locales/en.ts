@@ -1723,6 +1723,7 @@ export const enCopy: AppCopy = {
     foldDenied: (n) => (n === 1 ? "1 denial" : `${n} denials`),
     foldExpand: "Show steps",
     foldCollapse: "Hide steps",
+    stoppedPartway: "Stopped partway",
     thinking: "Thinking…",
     answering: "Answering…",
     runWorking: "Working",

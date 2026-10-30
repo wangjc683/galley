@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Conversation } from "./Conversation";
 import { zhCopy } from "@/i18n/locales/zh";
+import { CopyProvider } from "@/lib/i18n";
 import { LocalFilesContext } from "@/lib/local-files";
 import { userTimeMarks } from "@/lib/message-time";
 import { rowsToTurns } from "@/stores/messages/rowsToTurns";
@@ -671,10 +672,101 @@ describe("the assistant's conversation: the process", () => {
     expect(card).not.toContain('data-role="step-marker"');
     expect(count(html, 'data-role="answered-ask-user"')).toBe(1);
   });
+});
 
-  it("unfolds a run without an answer in full, the workbench way", () => {
-    // Stopped after it asked and the user answered: not running, no
-    // answer.
+// ---- A run without an answer (ruling 159) --------------------------------
+
+/** Stopped at its third step (as the Tailscale round of 10-30): three
+ * script steps, the second failed, no answer, not running. */
+function stoppedRun(): Turn[] {
+  return [
+    user("早，天气怎么样？", at(9)),
+    answer("多云，记得带伞。", 1),
+    user("看看 Tailscale 为什么连不上", at(15, 59)),
+    did("我先看一下进程。", 1, tool("code_run", { script: "ps aux" })),
+    did("再看安装日志。", 2, {
+      ...tool("code_run", { script: "log show" }),
+      status: "failed-historical",
+    }),
+    did("结束卡住的进程。", 3, tool("code_run", { script: "kill 4242" })),
+  ];
+}
+
+/** The line in a render, from its tag to the end of its words. */
+function stoppedLineOf(html: string): string {
+  const at = html.indexOf('data-role="assistant-stopped"');
+  if (at < 0) return "";
+  const start = html.lastIndexOf("<div", at);
+  return html.slice(start, html.indexOf("</div>", at) + "</div>".length);
+}
+
+describe("the assistant's conversation: a run without an answer", () => {
+  it("draws one line where its reply would be, 「中途停下 · 3 步」, none of the workbench's region", () => {
+    const html = assistant(stoppedRun());
+    expect(count(html, 'data-role="assistant-stopped"')).toBe(1);
+    const line = stoppedLineOf(html);
+    expect(text(line)).toBe("中途停下 · 3 步");
+    // Words ink-muted, the figure ink-soft, at the step size, on a 24px
+    // line; the process button's Footprints first.
+    expect(line).toContain("text-ink-muted");
+    expect(line).toContain("[font-size:var(--conversation-step-size)]");
+    expect(line).toContain("h-6");
+    expect(line).toMatch(/<span class="[^"]*text-ink-soft[^"]*">3<\/span>/);
+    expect(line.indexOf("<svg")).toBeGreaterThan(-1);
+    expect(line.indexOf("<svg")).toBeLessThan(line.indexOf("中途停下"));
+    // The whole line is the toggle: a disclosure you can tab to.
+    expect(line).toContain('role="button"');
+    expect(line).toContain('tabindex="0"');
+    expect(line).toContain('aria-expanded="false"');
+    expect(line).toContain("hover:bg-hover");
+    expect(line).toContain("focus-visible:bg-hover");
+    // No bubble ground, no menu (no row id to right-click).
+    expect(line).not.toContain("bg-assistant-tint");
+    expect(line).not.toContain("data-message-id");
+    // After your message, on its side: nothing between them (your row
+    // under the bubble is the gap), the same place the typing bubble
+    // stood.
+    expect(html.indexOf("看看 Tailscale 为什么连不上")).toBeLessThan(
+      html.indexOf('data-role="assistant-stopped"'),
+    );
+    // Nothing of the steps: no numerals, rail, markers, tool pills,
+    // narration; no card while it is closed.
+    expect(html).not.toContain('data-role="step-marker"');
+    expect(html).not.toContain(">01</span>");
+    expect(html).not.toContain("absolute bottom-0 left-[5px] w-px bg-line");
+    expect(html).not.toContain(zhCopy.tools.code_run);
+    expect(html).not.toContain("我先看一下进程。");
+    expect(html).not.toContain("结束卡住的进程。");
+    expect(html).not.toContain('data-role="process-card"');
+    // The reply before it is its only left bubble.
+    expect(count(html, 'data-role="assistant-bubble"')).toBe(1);
+  });
+
+  it("opens the reply's process card under it: one row a step, the step count alone on top", () => {
+    expand.all = true;
+    const html = assistant(stoppedRun());
+    expect(count(html, 'data-role="process-card"')).toBe(1);
+    const card = cardOf(html);
+    expect(html.indexOf('data-role="assistant-stopped"')).toBeLessThan(
+      html.indexOf('data-role="process-card"'),
+    );
+    expect(rowsOf(card)).toEqual([
+      ["我先看一下进程。", null],
+      ["再看安装日志。", null],
+      ["结束卡住的进程。", null],
+    ]);
+    // No telemetry on a run without an answer: the steps alone.
+    const summary = card.slice(
+      card.indexOf('data-role="assistant-run-summary"'),
+    );
+    expect(text(`<x ${summary.slice(0, summary.indexOf("</div>"))}`)).toBe(
+      "3 步",
+    );
+    // A step opens to its tools: the failed script is there.
+    expect(card).toContain(zhCopy.tools.code_run);
+  });
+
+  it("keeps a question and your answer out as messages, before the line", () => {
     const turns: Turn[] = [
       user("订船票", at(9)),
       step("我先看船班。", 1),
@@ -683,14 +775,66 @@ describe("the assistant's conversation: the process", () => {
       step("我去下单。", 3),
     ];
     const html = assistant(turns);
-    expect(count(html, 'data-role="step-marker"')).toBe(3);
-    expect(html).toContain("我去下单。");
-    expect(buttons(html, zhCopy.conversation.foldExpand).length).toBe(0);
+    expect(count(html, 'data-role="answered-ask-user"')).toBe(1);
+    expect(count(html, 'data-role="user-msg-reply"')).toBe(1);
+    expect(text(stoppedLineOf(html))).toBe("中途停下 · 3 步");
+    expect(html.indexOf('data-role="user-msg-reply"')).toBeLessThan(
+      html.indexOf('data-role="assistant-stopped"'),
+    );
+    expect(html).not.toContain('data-role="step-marker"');
+    expect(html).not.toContain("我去下单。");
+    // Opened: the steps but the one that only asked.
+    expand.all = true;
+    expect(rowsOf(cardOf(assistant(turns)))).toEqual([
+      ["我先看船班。", null],
+      ["我去下单。", null],
+    ]);
+  });
+
+  it("is plain words when every step only asked: nothing to open", () => {
+    const turns: Turn[] = [
+      user("订船票", at(9)),
+      ask("订哪一班？", ["8:30", "9:00"], 1),
+      user("8:30", at(9, 1)),
+    ];
+    expand.all = true;
+    const html = assistant(turns);
+    const line = stoppedLineOf(html);
+    expect(text(line)).toBe("中途停下 · 1 步");
+    expect(line).not.toContain(' role="');
+    expect(line).not.toContain("tabindex");
+    expect(line).not.toContain("aria-expanded");
+    expect(line).not.toContain("hover:bg-hover");
     expect(html).not.toContain('data-role="process-card"');
-    // The workbench's step region: numerals, the rail, the tool pills.
+  });
+
+  it("says it in English, one step or more", () => {
+    const en = (turns: Turn[]) =>
+      text(
+        stoppedLineOf(
+          renderToStaticMarkup(
+            <CopyProvider language="en-US">
+              <Tooltip.Provider>
+                <LocalFilesContext.Provider value={() => undefined}>
+                  <Conversation turns={turns} assistant />
+                </LocalFilesContext.Provider>
+              </Tooltip.Provider>
+            </CopyProvider>,
+          ),
+        ),
+      );
+    expect(en(stoppedRun())).toBe("Stopped partway · 3 steps");
+    expect(en(stoppedRun().slice(0, 4))).toBe("Stopped partway · 1 step");
+  });
+
+  it("leaves the workbench's rendering of the same turns flat, in full", () => {
+    const html = render(stoppedRun());
+    expect(html).not.toContain('data-role="assistant-stopped"');
+    expect(count(html, 'data-role="step-marker"')).toBe(3);
     expect(html).toContain(">01</span>");
     expect(html).toContain("absolute bottom-0 left-[5px] w-px bg-line");
-    expect(html).toContain(zhCopy.tools.web_scan);
+    expect(html).toContain(zhCopy.tools.code_run);
+    expect(html).toContain("结束卡住的进程。");
   });
 });
 
@@ -1150,19 +1294,26 @@ describe("the assistant's conversation: subtask reports", () => {
     expect(html).not.toContain("我替你回了它。");
   });
 
-  it("draws a report round with no answer the workbench way, minus the report", () => {
+  it("draws a report round with no answer as the line, its time above it (ruling 159)", () => {
     const turns: Turn[] = [
       ...before,
       reportRow(at(14)),
       step("我让它再查一家。", 1),
+      step("再核对一处。", 2),
     ];
     const html = assistant(turns);
-    expect(html).toContain("我让它再查一家。");
+    expect(html).not.toContain("我让它再查一家。");
+    expect(html).not.toContain('data-role="step-marker"');
     expect(html).not.toContain("A subtask you started");
-    // Its time sits above the region.
+    expect(text(stoppedLineOf(html))).toBe("中途停下 · 2 步");
+    // Its time sits above the line, which comes right under the reply
+    // before it (that reply's action row is the gap above the time).
     const lines = [...html.matchAll(/data-role="message-time-divider"/g)];
     expect(lines).toHaveLength(2);
-    expect(lines[1].index).toBeLessThan(html.indexOf("我让它再查一家。"));
+    expect(lines[1].index).toBeLessThan(
+      html.indexOf('data-role="assistant-stopped"'),
+    );
+    expect(text(html.slice(lines[1].index))).toContain("14:00");
   });
 
   it("keeps the report's time above a question still waiting for you", () => {
