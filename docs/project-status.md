@@ -9,17 +9,17 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.7.3`.
-- Git tag / GitHub Release: `v0.7.3` is the current published stable release
-  (tagged at `acf35a30` on 2026-10-28, published 2026-10-28, GitHub Latest).
+- Package version: `0.7.4`.
+- Git tag / GitHub Release: `v0.7.4` is the current published stable release
+  (tagged at `6c3bf7b2` on 2026-10-30, published 2026-10-30, GitHub Latest).
 - Agent API schema: `schemaVersion: 3` (since the Goal removal on
   2026-10-13, first shipped in `v0.7.0`; `2` first shipped in `v0.5.0`). The
   server keeps answering `1` and `2` for every command that did not change;
   every goal command, v1 and v2, is `unknown_command` under every pin.
-- Release tier: stable patch; default update channel points at `v0.7.3`.
+- Release tier: stable patch; default update channel points at `v0.7.4`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `a9a36b4` (audited 2026-10-26, first shipped in
-  `v0.7.1`, again in `v0.7.2` and `v0.7.3`; two `ga.py` fixes, no Galley change). The previous `b70079d`
+  `v0.7.1`, again in `v0.7.2`, `v0.7.3` and `v0.7.4`; two `ga.py` fixes, no Galley change). The previous `b70079d`
   shipped `v0.7.0`, on top of `5205f40` (audited 2026-10-18, never shipped
   on its own; upstream's new mykey store broke the managed loader, fixed in
   the runner); `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` `v0.5.1` …
@@ -32,6 +32,41 @@ live in [refactor](./archive/refactor/README.md).
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
+
+`v0.7.4` (2026-10-30) is a patch two days after `v0.7.3`, 67 commits. A
+to-do of yours opens in place in the to-do panel and its title and notes
+change right there (ruling 153, ticket 107); Galley adds a dated line at the
+top of a to-do's notes when it gets something done for it or hears news of
+it (ruling 154, ticket 108); the morning review wakes only for what moved
+since the last one and leaves a to-do alone while what it handed over waits
+for an answer (ruling 155, ticket 110); a to-do of yours can have one level
+of items, added only for the parts the user named, ticked, edited, deleted
+and dragged into order, with a count on the time line (rulings 157–158,
+tickets 111–112); a conversation with activity right at launch no longer
+opens blank (ticket 113). Migration 054 (`todo_subitems`); the Agent API adds
+`todo item add|done|reopen|update|remove|move` and `todo add --item`, with
+`Todo.items` and `Todo.itemCount`, all additions within schema 3 (also
+served under `1` and `2`). Graded patch: the largest piece is the items, an
+extension of the `v0.7.0` to-dos (`v0.7.2`'s memos were bigger and graded
+patch); ticket 107 moves the jump to the noting sentence, it does not remove
+it. GA baseline unchanged: upstream `main` was still at `e4d956f`, same
+reasoning as `v0.7.3`. The 10-28 trial review ran in the pre-flight: do not
+tighten, though the bar was never tested (no to-do noted unasked, no
+scheduled review that spoke); the deferred 「主动的第二阶段」 signal ① fired;
+JC's answers are owed (Unreleased On Main). The first draft was withdrawn:
+on JC's Mac the morning review caught up 7 seconds after launch and the main
+chat opened blank (history intact in the database, back after a relaunch),
+a GUI restore race that dates from `v0.4.0` and that the main chat and its
+review made reachable. Ticket 113 fixed it and `v0.7.4` was re-tagged on
+`6c3bf7b2` (JC chose this over shipping as is or moving the fix to
+`v0.7.5`). Pre-flight: `check.yml` green on `3ead0ed5` before the tag (run
+40858973594) and on the re-tag commit (run 41007507288), all seven jobs; no
+bundled-runtime gate (no runner, managed GA or packaging change). On the
+second draft the main session fired the review 8 seconds after launch and
+the main chat kept its history; JC approved publish without reporting the
+rest of S2. Stable promoted and verified the same session (run
+41016335053). Full narrative: devlog
+[2026-10-30-v0.7.4-release](./devlog/2026-10-30-v0.7.4-release.md).
 
 `v0.7.3` (2026-10-28) is a patch one day after `v0.7.2`, 34 commits. New
 users find the to-do panel (main chat rulings 147–152, tickets 101–106): the
@@ -648,18 +683,25 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.7.3` is published and promoted as the live stable release (published
-2026-10-28 09:48 UTC). The default `updates/stable/latest.json` channel points
-at `v0.7.3`, with the legacy `updates/beta/latest.json` alias pointing at the
+`v0.7.4` is published and promoted as the live stable release (published
+2026-10-30 06:49 UTC). The default `updates/stable/latest.json` channel points
+at `v0.7.4`, with the legacy `updates/beta/latest.json` alias pointing at the
 same version for older installed builds. The live verifier passed with
 `--cache-bust` for both channels across all three platforms (darwin-aarch64,
 darwin-x86_64, windows-x86_64), in the promote run and again locally (channel
-branch at `cc1038f5`; the first local beta check hit a transient `fetch
-failed`, the retry passed); a plain `curl` read 0.7.3 about a minute after
-promote. One draft cut (release run 40662506980); JC approved publishing
-without reporting smoke items, so they are owed under Unreleased On Main. No
+branch at `f9835f20`); a plain `curl` read 0.7.4 about a minute after
+promote. Two draft cuts: the first (release run 40998075988, on the bump
+commit `abf7f3c9`) was withdrawn and its tag deleted after JC's smoke found
+the main chat blank at launch; the second (release run 41007507310, on
+`6c3bf7b2` with ticket 113) passed S1, and JC approved publishing without
+reporting the rest, which is owed under Unreleased On Main. No
 bundled-runtime gate (no managed GA change); `check.yml` was green on the
-bump commit (run 40662506839, all seven jobs).
+re-tag commit (run 41007507288, all seven jobs).
+
+`v0.7.3` (2026-10-28) went through the same path as `v0.7.2`: one draft cut
+(release run 40662506980), JC approved publishing without reporting smoke
+items, both channels verified with `--cache-bust`, no bundled-runtime gate
+(no managed GA change).
 
 `v0.7.2` (2026-10-27) went through the same path: one draft cut (release run
 40440956486), JC approved publishing without reporting smoke items, both
@@ -755,11 +797,11 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.7.2` → `v0.7.3` (and `v0.7.0` →
-   `v0.7.1` → `v0.7.2` before it) is owed. JC's Mac was installed straight
-   from the draft all three times, so it needs a machine still on an older
-   build (the Windows one, for instance); the CDN served 0.7.3 without
-   cache-bust at about 09:50 UTC (promoted 09:49). `v0.6.2` → `v0.7.0` passed on JC's
+1. App-update dogfood (SOP step 10): `v0.7.3` → `v0.7.4` (and `v0.7.0` →
+   `v0.7.1` → `v0.7.2` → `v0.7.3` before it) is owed. JC's Mac was installed
+   straight from the draft all four times, so it needs a machine still on an
+   older build (the Windows one, for instance); the CDN served 0.7.4 without
+   cache-bust at about 06:51 UTC (promoted 06:50). `v0.6.2` → `v0.7.0` passed on JC's
    Windows machine (2026-10-23, same session as the release; H1 in the
    release devlog): after the restart the app reads 0.7.0, the old sessions
    and model settings are there, and the main chat works, so migrations
@@ -811,31 +853,40 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Release-scope truth is `git log v0.7.3..HEAD`. Since `v0.7.3`: a to-do of
-yours opens in place in the to-do panel, with its whole title and notes, and
-its title and notes change right there; the time is still changed by telling
-Galley; the jump to the sentence that noted it moves to the open row's last
-line and the ⋯ menu (main chat ruling 153, ticket 107). One Core desktop
-command (`update_todo`, title and notes only) and one manual sentence (read
-the to-do as it is now before changing its words); no CLI, Agent API or
-migration change. JC dogfooded it on dev the same day; the database first
-showed an edit's save on 10-29, when ticket 108's dogfood walked it again.
-Galley now adds a line at the top of a to-do's notes when it gets
-something done for it or hears news of it, newest first, the day first, a
-file by its absolute path (ruling 154, ticket 108; manual only; JC
-dogfooded it on dev on 10-29, both steps in the database). The morning
-review wakes only for what moved since the last one: of the to-dos it
-looked at before (no date, or due within three days), those noted or
-changed since or only now within the three days, a subtask with activity
-since, a new memo; and it leaves a to-do alone while the newest line of
-its notes is something it handed over that the user has not answered
-(ruling 155, ticket 110; Core's wake check and the manual; no CLI, Agent
-API or migration change; its first morning on dev is 10-30). A to-do of yours can have items under it, one level, each only its words and a box with no time; you and Galley both add, tick, change, delete and reorder them in place; ticking the last one does not tick the to-do off; the panel names no noun, only 「添加一项」 and a count such as 「2/5 项」 (ruling 157, ticket 111; migration 054, `todo item add|done|reopen|update|remove` and `todo add --item` as additions within schema 3, `Todo.items` and `Todo.itemCount`; the reminder wake carries the items not ticked yet). Items come only from the user: the parts they named or a list they asked to split; what Galley thinks of on its own stays in the notes (ruling 157 point 12, after the eval showed it adding unasked items in 4 of 17 noting runs). The open to-do then got its polish (ruling 158, ticket 112): items drag into order by a handle that shows on hover in the gutter under the to-do's box, or move from the keyboard, and `todo item move` lets Galley move one when asked (also within schema 3, no migration); unticked items step down to `ink-soft`, blocks get space between them, the notes are drawn a paragraph a line with a leading date one ink darker, and a full path in backticks in the notes is drawn as the file's name and opens like a path in a reply (the manual now writes paths in notes that way). JC dogfooded both tickets on dev on 10-29; every step that writes is in the database (ticket 111's two steps that talk to Galley were sent by the main session through the CLI, on JC's go-ahead). The 10-28 trial review (the morning review's "cancelled or
-found noisy by half, tighten the bar" from tickets 73–79, and the deferred
-start signals tied to the first-phase trial) did not go into `v0.7.3` by
-JC's choice; it goes into the next release. Still owed from `v0.7.2`'s
-scope: ticket 98's noticed interest (the 「看你……常问」 memo has no live
-record yet).
+Release-scope truth is `git log v0.7.4..HEAD`. Nothing user-facing since
+`v0.7.4` yet. Still owed from `v0.7.2`'s scope: ticket 98's noticed interest
+(the 「看你……常问」 memo has no live record yet).
+
+**Owed from the 10-28 trial review** (run in the `v0.7.4` pre-flight, verdict
+do not tighten; the report is in the release devlog). JC's answers: whether
+the two times it spoke unasked were useful (10-21 21:50, the NBA answer it
+thought was missing; 10-28 23:53, the Hilton intake template); whether the
+10-28 invoice run counts as 「别这样」 (a ticket 106 test sentence meant to
+note a to-do; it renamed six real invoice files in the Downloads folder,
+wrote a summary sheet and put the folder rule into GA memory) and whether
+that memory stays; why 702's reminder was cancelled on 10-29; and the
+feelings the remaining deferred signals ask for. One mismatch to settle: the
+10-28 23:53 reply's `content` does carry a `[FILE:]` line, while ruling 154
+point 7 and the deferred 「Galley 做的文件放哪」 say it did not; if JC saw no
+file card that night, the cause is elsewhere.
+
+**Owed from the `v0.7.4` smoke** (the list is in the release devlog). S1
+passed on the second draft: the main session fired the morning review 8
+seconds after launch (the first draft went blank with the catch-up 7 seconds
+after), and the main chat showed its history while the review ran and after
+it ended silent (window screenshots; 312 messages in the database). Whether
+the GUI got the live turns before its history read that time cannot be seen
+from outside (the timing logs stay in the webview console), so ticket 113's
+real-window repro is still owed: the next launch where the morning review
+catches up and wakes is the natural one. S2: the drag is in the database (an
+item moved to first at 06:45 UTC, while the review ran); ticking and
+unticking an item and opening the file named in the notes were not
+reported. Not done: W1, a Windows install, which would also be the first
+packaged build to run migration 054 on an older database (dev migrated the
+Mac's database on 10-29) and the first Windows run of the item drag. Ticket
+110's first morning ran on the first draft: the catch-up at launch woke (the
+Hilton to-do changed on 10-29; the review log records only `woke`), read the
+lists, wrote nothing and ended `<no-reply/>`.
 
 **Owed from the `v0.7.3` smoke** (JC approved publish without reporting
 smoke items, 2026-10-28; the list is in the release devlog). JC installed the
@@ -1031,7 +1082,8 @@ was cut. `a9a36b4` was audited in the `v0.7.1` pre-flight (2026-10-26) and
 shipped in it, then again in `v0.7.2` with upstream `main` still at it, and
 in `v0.7.3` with upstream at `e4d956f`: six commits that touch only
 `frontends/conductor.py` and `memory/` seed files, so the audit was skipped
-(reasoning in the `v0.7.3` release devlog).
+(reasoning in the `v0.7.3` release devlog), and in `v0.7.4` with upstream
+still at `e4d956f`.
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
 `api_key_header` a GUI entry point in the Settings -> Models advanced panel,
@@ -1075,10 +1127,10 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications (gone with approval, 2026-10-05), missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.7.3 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.7.4 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Audited upstream `a9a36b4` (2026-10-26), shipped since `v0.7.1` (again in `v0.7.2` and `v0.7.3`; `b70079d` shipped `v0.7.0`, `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Audited upstream `a9a36b4` (2026-10-26), shipped since `v0.7.1` (again in `v0.7.2`, `v0.7.3` and `v0.7.4`; `b70079d` shipped `v0.7.0`, `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 
@@ -1101,7 +1153,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.7.3`. For the next release, bump every
+- Current package metadata uses `0.7.4`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
