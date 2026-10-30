@@ -109,12 +109,19 @@ function AssistantRunSummary({
  * it (the change-of-side gap, assistantRowGap's mt-5), so the next
  * message or time line no longer sits on its edge; both inside the
  * sweep, so they open and close with it.
+ *
+ * `numbers`: the first line (AssistantRunSummary). Off for the card the
+ * 「中途停下 · N 步」 line opens (main chat PRD ruling 159 item 8): that
+ * line is the card's heading, and its count written again right under
+ * it said the same number twice; the card starts at its first step,
+ * 4px under its top edge, as the workbench's card does (ProcessCard).
  */
 export function AssistantProcessCard({
   open,
   stats,
   telemetry,
   steps,
+  numbers = true,
 }: {
   open: boolean;
   stats: RunStats;
@@ -124,13 +131,18 @@ export function AssistantProcessCard({
   /** The steps with a row (lib/assistant-process.ts
    * `assistantProcessSteps`), keyed by their turn's place. */
   steps: ProcessCardStep[];
+  numbers?: boolean;
 }) {
   return (
     <ExpandSection open={open} openClassName="mt-1.5" closedClassName="mt-0">
       <div className="pb-5">
         <ProcessCard
           steps={steps}
-          heading={<AssistantRunSummary stats={stats} telemetry={telemetry} />}
+          heading={
+            numbers ? (
+              <AssistantRunSummary stats={stats} telemetry={telemetry} />
+            ) : undefined
+          }
           capped
           className={ASSISTANT_BUBBLE_MAX}
         />
@@ -165,7 +177,8 @@ function lineFigures(text: string, lifted: boolean): ReactNode {
  * line where its reply would be, 「中途停下 · 4 步」, and under it the
  * card the process button opens under a reply, every step but the ones
  * that only asked (its questions and your answers are out as messages,
- * before the line).
+ * before the line), without its first line: the line is its heading
+ * (ruling 159 item 8).
  *
  * The line: the process button's `Footprints` first, sitting where that
  * chip's glyph sits under a reply (5px in from the bubble's left edge),
@@ -249,7 +262,12 @@ export function AssistantStoppedRun({
         line
       )}
       {toggle && (
-        <AssistantProcessCard open={open} stats={stats} steps={steps} />
+        <AssistantProcessCard
+          open={open}
+          stats={stats}
+          steps={steps}
+          numbers={false}
+        />
       )}
     </div>
   );

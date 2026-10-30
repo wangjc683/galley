@@ -148,3 +148,21 @@ Status: ready-for-agent（等主聊天票 114 合入 main 后开工，由做 114
 3. 主对话删了显式的 `isSilentReport` 检查，靠「静默的那一步只有 `no_tool`」这条构造上的不变式；以后要是有别的路径给带工具的步置 `silent`，主对话会把静默叫醒画成那一行。
 4. 没起 tauri dev，真机步骤 1、2 都没走。头换字时是否不闪、`SettleGap` 和在跑那一行的高度是否接得上、贴底时的滑动，都留给 JC。
 5. 汕尾那一轮只读查过库：开场之后 18 个助理行，下一句是「继续」，第 18 步调的是带路径参数的工具，不是提问。按判据它会是「中途停下 · 18 步」加第 18 步，但没有拿库里的行实际渲染过。
+
+### 2026-10-30 附：主对话「中途停下」那一行点开的卡片不画第一行（代理）
+
+主聊天 PRD 裁决 159 第 8 条，随本票顺手改，单独一个提交。这条写在这里而不是票 114：main 上票 114 的文件这期间改过，避免合并冲突。
+
+- 代码：`AssistantProcessCard` 新增 `numbers`（默认开），开着才画第一行 `AssistantRunSummary`。`AssistantStoppedRun` 传 `numbers={false}`。回复下面的卡片不变。
+- 卡片顶部：没有第一行时，第一步那一行离卡片上边框 4px（`ProcessCard` 自己的 `pt-1`），下面照旧 4px，左右照旧 4px，与工作台没有数字行的卡片一样，不会贴着边框。8 行上限的滚动盒不变，卡片整体矮 24px。顶部渐隐照旧挂在滚动盒顶上，步骤往上滚时出现。
+- 测试（`Conversation.assistant.test.tsx`）：
+  - 改写「opens the reply's process card under it…」：卡片里没有 `assistant-run-summary`，`process-card` 带 `pt-1`，后面直接是滚动盒。
+  - 新加「keeps the first line on the card under a reply, and drops it only from the line's card」：同一段对话里，那一行的卡片没有第一行，回复下面的卡片仍有，内容是「2 步 · 用时 9 秒…」。
+  - 两条在旧的 `AssistantProcessCard` 上都红，换回新代码后都绿。
+- 文档：`conversation.md`「助手的对话」→「没有回答的运行」→「卡片」那一句改成没有第一行、引第 8 条；「字只一类」里的「卡片第一行的算法」改成「回复下面卡片第一行的算法」。
+- 门禁（这个提交的树）：
+  - typecheck 通过；lint 通过，0 warning。
+  - vitest 238 个文件、2649 条全过；`TZ=UTC` 再跑一遍，238 / 2649 全过。
+  - `git diff --check` 干净。
+  - 两个改动文件改前就是 prettier-clean，整篇格式化。
+- 没在真窗口看。

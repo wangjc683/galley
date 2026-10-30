@@ -742,7 +742,7 @@ describe("the assistant's conversation: a run without an answer", () => {
     expect(count(html, 'data-role="assistant-bubble"')).toBe(1);
   });
 
-  it("opens the reply's process card under it: one row a step, the step count alone on top", () => {
+  it("opens the reply's process card under it: one row a step, no first line (the line is its heading)", () => {
     expand.all = true;
     const html = assistant(stoppedRun());
     expect(count(html, 'data-role="process-card"')).toBe(1);
@@ -755,15 +755,37 @@ describe("the assistant's conversation: a run without an answer", () => {
       ["再看安装日志。", null],
       ["结束卡住的进程。", null],
     ]);
-    // No telemetry on a run without an answer: the steps alone.
-    const summary = card.slice(
-      card.indexOf('data-role="assistant-run-summary"'),
-    );
-    expect(text(`<x ${summary.slice(0, summary.indexOf("</div>"))}`)).toBe(
-      "3 步",
+    // Ruling 159 item 8: no 「3 步」 under 「中途停下 · 3 步」; the card
+    // starts at its first step, 4px under its top edge, as the
+    // workbench's card does.
+    expect(card).not.toContain('data-role="assistant-run-summary"');
+    expect(card).toMatch(
+      /^data-role="process-card" class="[^"]*\bpt-1\b[^"]*"><div class="relative"><div data-role="process-steps"/,
     );
     // A step opens to its tools: the failed script is there.
     expect(card).toContain(zhCopy.tools.code_run);
+  });
+
+  it("keeps the first line on the card under a reply, and drops it only from the line's card", () => {
+    expand.all = true;
+    const turns: Turn[] = [
+      ...stoppedRun(),
+      user("那先别动它，帮我排个行程", at(16, 30)),
+      step("我先查一下船票。", 1),
+      answer("排好了。", 2),
+    ];
+    const html = assistant(turns);
+    const cards = html.split('data-role="process-card"').slice(1);
+    expect(cards).toHaveLength(2);
+    // The stopped round's card first, then the reply's.
+    expect(cards[0]).not.toContain('data-role="assistant-run-summary"');
+    expect(cards[1]).toContain('data-role="assistant-run-summary"');
+    const summary = cards[1].slice(
+      cards[1].indexOf('data-role="assistant-run-summary"'),
+    );
+    expect(text(`<x ${summary.slice(0, summary.indexOf("</div>"))}`)).toMatch(
+      /^2 步 · 用时 9 秒/,
+    );
   });
 
   it("keeps a question and your answer out as messages, before the line", () => {
