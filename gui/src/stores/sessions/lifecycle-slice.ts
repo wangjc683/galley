@@ -342,19 +342,22 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     // Step 3: lazy-init the messages entry for this session.
     const messagesStore = useMessagesStore.getState();
     messagesStore.ensureMessages(id);
-    // Step 4: restore conversation turns from SQLite on first touch
-    // in this app instance. `byId[id].turns.length === 0` is a safe
-    // proxy for "fresh runtime" — once IPC starts streaming, even an
-    // empty SQLite history won't keep turns at zero.
-    const msgs = useMessagesStore.getState().byId[id];
-    const looksFresh = !msgs || msgs.turns.length === 0;
+    // Step 4: read the conversation back from SQLite until this page
+    // has read it once (`historyRead`, set only by a read that got its
+    // page — a failed one is tried again here next time). Not "no turns
+    // in memory": a session can get live turns before its first
+    // activation (ticket 113: the morning review woke the main chat
+    // seconds after launch, and skipping the read left only that silent
+    // round on screen). The read merges what arrived live.
+    const historyRead =
+      useMessagesStore.getState().byId[id]?.historyRead === true;
     // The main chat's greeting is shown but is no turn (Core keeps its
     // turn_count at 0, ticket 04c): a fresh main chat has a transcript
     // to read back all the same, or it opens blank — at first launch
     // and after a reset — while the sidebar's card quotes the greeting.
     const hasHistory =
       (session?.turnCount ?? 0) > 0 || session?.mainChat === true;
-    const needsRestore = looksFresh && hasHistory;
+    const needsRestore = !historyRead && hasHistory;
     // Atomic swap: when another conversation is on screen and this one
     // still needs its SQLite restore, keep the old transcript visible
     // and flip the active pointer only after the turns are in memory —
@@ -508,6 +511,8 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       selectedLlmKey: llmSelection?.key,
       selectedLlmDisplayName: llmSelection?.displayName,
     };
+    // Nothing of it exists yet that this page will not see arrive.
+    useMessagesStore.getState().markHistoryRead(id);
     set((state) => ({
       sessions: [newSession, ...state.sessions],
       activeSessionId: id,
@@ -572,6 +577,8 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       selectedLlmKey: llmSelection?.key,
       selectedLlmDisplayName: llmSelection?.displayName,
     };
+    // Nothing of it exists yet that this page will not see arrive.
+    useMessagesStore.getState().markHistoryRead(id);
     set((state) => ({
       sessions: [newSession, ...state.sessions],
       activeSessionId: id,

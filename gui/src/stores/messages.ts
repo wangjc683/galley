@@ -8,6 +8,7 @@ import { turnOrdinals } from "@/lib/turn-ordinals";
 import type { UserMessagePersistedPayload } from "@/lib/session-send";
 import { isSubtaskReport } from "@/lib/subtasks";
 import { useSessionsStore } from "@/stores/sessions";
+import { mergeRestoredTurns } from "@/stores/messages/mergeRestoredTurns";
 import {
   derivePendingAskUser,
   rowsToTurns,
@@ -77,6 +78,10 @@ function earlierThan(page: MessageTurnPage): EarlierTurns | null {
  * joins it instead of reading the same page again. */
 const earlierReads = new Map<string, Promise<boolean>>();
 
+/** The `restoreSessionTurns` read in flight per session: an activation
+ * while a reload's re-attach reads (or the other way round) joins it. */
+const restoreReads = new Map<string, Promise<void>>();
+
 // ============================================================
 // Per-session conversation state
 // ============================================================
@@ -115,10 +120,21 @@ export interface PerSessionMessages {
    */
   restoring: boolean;
   /**
+   * This page read the session's transcript back from SQLite (a
+   * `restoreSessionTurns` that got its page, an empty one included), or
+   * holds all of it without a read (`markHistoryRead`: a session this
+   * page created). Set only by a read that succeeded, so a failed one is
+   * tried again on the next activation; gone only with the entry.
+   * Whether to read decides on this, not on `turns` being empty: live
+   * turns can land before the first activation (ticket 113, a wake at
+   * launch), and they are not the history.
+   */
+  historyRead: boolean;
+  /**
    * The transcript before `turns`, while some of it is not loaded
    * (main-chat ticket 12): `restoreSessionTurns` reads only the latest
    * page of whole turns, `loadEarlierTurns` prepends the page before.
-   * null once the first turn is in — and for a session never restored,
+   * null once the first turn is in — and for a session never read,
    * whose turns all arrived live.
    */
   earlier: EarlierTurns | null;
@@ -198,6 +214,7 @@ export const EMPTY_MESSAGES: PerSessionMessages = Object.freeze({
   sendPhase: null,
   isStopping: false,
   restoring: false,
+  historyRead: false,
   earlier: null,
   prependedTurns: 0,
   removedOrdinals: EMPTY_ORDINALS,
@@ -221,6 +238,7 @@ function emptyMessages(): PerSessionMessages {
     sendPhase: null,
     isStopping: false,
     restoring: false,
+    historyRead: false,
     earlier: null,
     prependedTurns: 0,
     removedOrdinals: EMPTY_ORDINALS,
@@ -262,6 +280,12 @@ interface MessagesActions {
   // ---- lifecycle ----
   /** Create an entry for `sid` if missing. Idempotent. */
   ensureMessages: (sid: string) => void;
+  /**
+   * Record that this page holds `sid`'s whole transcript without a read
+   * (`historyRead`): a session this page just created has no row the
+   * page did not see, so opening it again reads nothing.
+   */
+  markHistoryRead: (sid: string) => void;
   /** Drop the entry for `sid`. Called from sessions.deleteSession. */
   clearSessionMessages: (sid: string) => void;
   /**
@@ -275,13 +299,17 @@ interface MessagesActions {
   // ---- read path ----
   /**
    * Restore a session's `turns` from SQLite — Stage 3 Task 3 Session
-   * Restore. Called by `activateSession` when the runtime is fresh
-   * (no in-memory turns yet) and the session has prior turn history
-   * on disk. Idempotent: safe to call when there are no rows.
+   * Restore. Called by `activateSession` the first time this page opens
+   * a session with history on disk (`historyRead` still false).
+   * Idempotent: safe to call when there are no rows; a call while one is
+   * in flight joins it.
    *
    * Reads the latest page of whole turns only (main-chat ticket 12);
    * `earlier` says where it begins, `loadEarlierTurns` reads further
-   * back.
+   * back. Turns that arrived live before (or during) the read are
+   * merged in, not replaced (ticket 113, `mergeRestoredTurns`): what the
+   * page holds is drawn once, what is not persisted yet stays. Sets
+   * `historyRead` once the page is in; a failed read leaves it false.
    *
    * Only writes to `byId[sid].turns`; does NOT touch GA
    * `backend.history`. The bridge-side history injection happens in
@@ -552,47 +580,77 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
 
   // ---- read path ----
 
-  restoreSessionTurns: async (sid) => {
-    const startedAt = perfNow();
-    set({ byId: patchMessages(get(), sid, (m) => ({ ...m, restoring: true })).byId });
-    try {
-      let page: MessageTurnPage;
-      try {
-        page = await loadMessageTurnsPage(sid);
-      } catch (e) {
-        console.debug("[messages] restoreSessionTurns: SQLite unavailable.", e);
-        return;
-      }
-      logPerf("messages.restoreSessionTurns", startedAt, {
-        sessionId: sid,
-        rowCount: page.rows.length,
-        hasMore: page.hasMore,
-        completedTurnCount: sessionCompletedTurnCount(sid),
-      });
-      if (page.rows.length === 0) return;
-      const turns = rowsToTurns(page.rows);
-      const state = get();
-      const { byId } = patchMessages(state, sid, (m) => ({
-        ...m,
-        turns,
-        earlier: earlierThan(page),
-        prependedTurns: 0,
-        removedOrdinals: EMPTY_ORDINALS,
-        // A restart (or bridge death) while a GA question was pending
-        // dropped the transient pendingAskUser — rebuild it from the
-        // persisted tool args so the live bubble / chips / sidebar dot
-        // come back instead of degrading to the quiet echo. A live
-        // in-memory value wins: restore only runs on fresh runtimes,
-        // but if a race ever lands one, the IPC event is fresher than
-        // the derivation.
-        pendingAskUser: m.pendingAskUser ?? derivePendingAskUser(turns),
-      }));
-      set({ byId });
-    } finally {
+  markHistoryRead: (sid) =>
+    set((state) =>
+      state.byId[sid]?.historyRead
+        ? {}
+        : {
+            byId: patchMessages(state, sid, (m) => ({
+              ...m,
+              historyRead: true,
+            })).byId,
+          },
+    ),
+
+  restoreSessionTurns: (sid) => {
+    const inFlight = restoreReads.get(sid);
+    if (inFlight) return inFlight;
+    const read = (async () => {
+      const startedAt = perfNow();
       set({
-        byId: patchMessages(get(), sid, (m) => ({ ...m, restoring: false })).byId,
+        byId: patchMessages(get(), sid, (m) => ({ ...m, restoring: true }))
+          .byId,
       });
-    }
+      try {
+        let page: MessageTurnPage;
+        try {
+          page = await loadMessageTurnsPage(sid);
+        } catch (e) {
+          console.debug(
+            "[messages] restoreSessionTurns: SQLite unavailable.",
+            e,
+          );
+          return;
+        }
+        logPerf("messages.restoreSessionTurns", startedAt, {
+          sessionId: sid,
+          rowCount: page.rows.length,
+          hasMore: page.hasMore,
+          completedTurnCount: sessionCompletedTurnCount(sid),
+        });
+        const restored = rowsToTurns(page.rows);
+        const { byId } = patchMessages(get(), sid, (m) => {
+          if (restored.length === 0) return { ...m, historyRead: true };
+          // Read against what is in memory now: turns that landed live
+          // before the first open, or while this read was out.
+          const turns = mergeRestoredTurns(restored, m.turns);
+          return {
+            ...m,
+            turns,
+            earlier: earlierThan(page),
+            prependedTurns: 0,
+            removedOrdinals: EMPTY_ORDINALS,
+            // A restart (or bridge death) while a GA question was
+            // pending dropped the transient pendingAskUser — rebuild it
+            // from the persisted tool args so the live bubble / chips /
+            // sidebar dot come back instead of degrading to the quiet
+            // echo. A live in-memory value wins (a question asked while
+            // the session was not read yet): the IPC event is fresher
+            // than the derivation.
+            pendingAskUser: m.pendingAskUser ?? derivePendingAskUser(turns),
+            historyRead: true,
+          };
+        });
+        set({ byId });
+      } finally {
+        set({
+          byId: patchMessages(get(), sid, (m) => ({ ...m, restoring: false }))
+            .byId,
+        });
+      }
+    })().finally(() => restoreReads.delete(sid));
+    restoreReads.set(sid, read);
+    return read;
   },
 
   loadEarlierTurns: (sid) => {
