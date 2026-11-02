@@ -7773,7 +7773,8 @@ def render_crit_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
             out += ["**上下文**（同一段里前面的轮次）：", ""]
             for m in case["history"]:
                 who = "用户" if m["role"] == "user" else "助理"
-                out += [f"> **{who}**：" + m["content"].replace("\n", "\n> "), ">"]
+                quoted = f"> **{who}**：" + m["content"].replace("\n", "\n> ")
+                out += [re.sub(r"[ \t]+$", "", quoted, flags=re.MULTILINE), ">"]
             out[-1] = ""
         else:
             out += ["**上下文**：无", ""]
