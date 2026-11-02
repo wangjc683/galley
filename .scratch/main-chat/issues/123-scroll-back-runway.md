@@ -1,6 +1,6 @@
 # 123 往回翻不撞墙、不跳页：垫层接住补页，提前十屏补
 
-Status: needs-review
+Status: needs-dogfood（2026-11-02 快进合入 `54cece1a`…`8cd9e39b`。主会话验收：rebase 到 `094bc395`（含票 124）后 typecheck、lint 退出码 0，`TZ=UTC` 全量 vitest 244 个文件 2714 条过，`diff --check` 干净；读过 `scroll-runway.ts` 与 `useEarlierTurns.ts` 的改动。垫层从探针验证过的 `margin-top` 改成了对话列的 `padding-top`（报告第 1 条的理由成立：margin 会让交接与气泡动效读成列顶上移），这个版本还没真机甩过；等 JC 在 tauri dev 里用只记录的探针（第五遍）再甩一遍）
 
 来源：[主对话 PRD](../PRD.md) 裁决 170（诊断）与裁决 172（做法，修正 170 第 2 条）。只改 GUI 的对话分页滚动、它的测试与设计文档；不动 Core、CLI、Agent API、迁移、页大小（`MESSAGE_TURN_PAGE` 照旧 50）。所有对话一条分页路径：主对话、工作台、内置与外置运行时都生效；没有更早的页的对话零变化。
 
