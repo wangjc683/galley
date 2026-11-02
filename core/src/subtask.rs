@@ -3,8 +3,9 @@
 //! rulings 9, 25, 52, 53).
 //!
 //! The main chat's entry layer tells the model to end a reply with
-//! `<subtask>what to do</subtask>` for work that would keep the chat busy
-//! for a long time ([`crate::managed_prompt`]). Nothing about the tag
+//! `<subtask>what to do</subtask>` for the work it hands off (which work,
+//! since ticket 115 an errand rather than a question, is the layer's to
+//! say: [`crate::managed_prompt`]). Nothing about the tag
 //! reaches the engine: when the reply's run settles, Core reads it from
 //! the persisted reply and starts each tag as a **subtask** — an ordinary
 //! managed session whose parent is the main chat, whose origin is

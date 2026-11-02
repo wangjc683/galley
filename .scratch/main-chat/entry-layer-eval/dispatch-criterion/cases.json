@@ -1,0 +1,34 @@
+{
+  "_note": "票 115（主对话 PRD 裁决 160）：派活判据从「会占多久」换成「你在不在等」。每条在 old（main 上今天的主对话提示词）与 new（本票改过的）两组下各跑，提示词都是 Rust 的 compose_main_chat_runtime_prompt 生成的（galley-prompt/）。should_dispatch 按裁决 160 标：你在问、在等答案的自己答（false）；交办的差事、拿回来的是一件东西或一个状态、超过两三步的派（true）；你明说派的照派；材料是这段对话本身的、记待办提醒备忘的自己做。from 写了 dispatch-cases.json 的，消息沿用那里（只写在一处）。history 是同一段里前面的轮次（不是从分段前带过来的）。found_any：做着做着交出去的用例，派活说明里提到其中任何一个名字就算带上了已经查到的（只记，不判）。",
+  "cases": [
+    {"id": "q-injuries", "group": "问答", "should_dispatch": false, "message": "NBA 历史上还有哪些很严重的伤病？"},
+    {"id": "q-east", "group": "问答", "should_dispatch": false, "message": "东部呢？",
+     "history": [
+       {"role": "user", "content": "新赛季 NBA 西部你怎么预测？"},
+       {"role": "assistant", "content": "我的预测（只代表现在的判断，伤病会改变很多）：\n\n1. 雷霆：核心阵容基本完整，亚历山大和霍姆格伦的组合还在上升期，常规赛头名最稳。\n2. 掘金：约基奇在就是保底前三，替补深度比去年好。\n3. 火箭：年轻核心再进一步，防守是联盟前列，杜兰特的出勤率是变数。\n4. 森林狼：爱德华兹继续扛进攻，内线轮换够厚。\n5. 湖人：东契奇领衔，上限高，但防守是隐患。\n6. 勇士：库里还能打出顶级效率，能不能进前六看巴特勒的状态。\n\n附加赛区间大概是快船、灰熊、马刺、国王里出三队；马刺的文班亚马如果全勤，有机会直接冲进前六。"}
+     ]},
+    {"id": "q-story", "group": "问答", "should_dispatch": false, "message": "讲讲保罗·乔治当年断腿那件事"},
+    {"id": "q-weather", "group": "问答", "should_dispatch": false, "message": "厦门明天天气怎么样？"},
+    {"id": "q-notes-apps", "group": "问答", "should_dispatch": false, "message": "Mac 上有哪些好用的本地笔记软件？"},
+    {"id": "quick-usd", "group": "问答", "should_dispatch": false, "from": "dispatch-cases.json"},
+    {"id": "quick-downloads", "group": "问答", "should_dispatch": false, "from": "dispatch-cases.json"},
+    {"id": "todo-note", "group": "记事", "should_dispatch": false, "message": "记一个待办：周五前把酒店项目的资料清单发给业主"},
+    {"id": "conv-writeup", "group": "材料是这段对话", "should_dispatch": false, "message": "把我们今天聊的整理成一份 Markdown，放到桌面",
+     "history": [
+       {"role": "user", "content": "家里想买个 NAS 存照片和文档，两个人用，预算三千左右，有什么思路？"},
+       {"role": "assistant", "content": "两个人、主要存照片和文档，三千左右够了。思路分三块：\n\n- **机器**：两盘位就够，群晖 DS224+ 或威联通 TS-264 一类，整机两千出头。\n- **硬盘**：两块 4TB NAS 盘做 RAID 1（镜像），一块坏了数据还在，大约一千。\n- **备份**：RAID 不是备份。重要照片再定期拷一份到移动硬盘或云盘。\n\n要是只想省钱，也可以先买单盘位，但坏盘就要靠外部备份兜底。"},
+       {"role": "user", "content": "群晖和威联通怎么选？"},
+       {"role": "assistant", "content": "简单说：\n\n- **群晖**：系统更省心，相册（Synology Photos）和手机自动备份做得好，适合不想折腾的家庭。\n- **威联通**：同价位硬件更强（比如 2.5G 网口、能装更多应用），但系统设置项多，要愿意花点时间。\n\n你们主要存照片、两个人用，我倾向群晖：手机备份和共享相册开箱就能用。"},
+       {"role": "user", "content": "那硬盘买什么？要不要上 8TB？"},
+       {"role": "assistant", "content": "照片和文档一年大概新增几十到一两百 GB，4TB 做镜像能用好几年；8TB 单价更低一些，但一次多花七八百。\n\n建议：先上两块 4TB 的 NAS 专用盘（希捷酷狼或西数红盘 Plus），满了再换大盘扩容，群晖支持逐块替换扩容。别买 SMR 叠瓦盘，做 RAID 重建很慢。"}
+     ]},
+    {"id": "e-invoices", "group": "差事", "should_dispatch": true, "message": "今天下午五点前把下载文件夹里的发票整理好"},
+    {"id": "e-template", "group": "差事", "should_dispatch": true, "message": "帮我做一份酒店开业前的资料收集模板，能直接发给同事填"},
+    {"id": "big-quotes", "group": "差事", "should_dispatch": true, "from": "dispatch-cases.json"},
+    {"id": "big-pdfs", "group": "差事", "should_dispatch": true, "from": "dispatch-cases.json"},
+    {"id": "big-research", "group": "差事", "should_dispatch": true, "from": "dispatch-cases.json"},
+    {"id": "ask-dispatch", "group": "明说派", "should_dispatch": true, "message": "派个子任务，把昨天 NBA 的主要新闻整理一份给我"},
+    {"id": "midway-invoices", "group": "做着做着发现是差事", "should_dispatch": true, "message": "下载文件夹里有发票吗？有的话帮我按类型归个档",
+     "found_any": ["阿里云", "Figma", "GitHub", "京东", "滴滴", "酒店水单", "Apple", "餐饮", "物业"]}
+  ]
+}

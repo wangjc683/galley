@@ -362,7 +362,8 @@ look it up with the Galley CLI (search, then
 /// wording is the `T` clause the same eval compared against a CLI command
 /// and a native tool (`dispatch-clauses.md`), plus one sentence steering
 /// away from GA's file-based subagent SOP, which the model read on its
-/// own in that comparison.
+/// own in that comparison. Since ticket 115 (below) what goes is decided
+/// by whether the user is waiting, not by how long the work would take.
 ///
 /// Ticket 30 (assistant PRD rulings 2, 3, 8) closed the loop: the
 /// instructions also name the evidence to hand back, Galley wakes the
@@ -426,21 +427,49 @@ look it up with the Galley CLI (search, then
 /// asked about three times; the floor's 「记下了」 names a memo in place of the memory, where
 /// this kind of thing no longer goes; `memo` joins the write list and
 /// `memo.md` the manual list.
+///
+/// Ticket 115 (main chat PRD ruling 160) changed the dispatch clause's
+/// test from "work that would keep this chat busy for a long time (many
+/// steps, several websites, a long batch of files)" to whether the user
+/// is waiting: what they ask is answered here, even when it takes a few
+/// minutes of looking things up (the progress line under the reply shows
+/// what it is doing, ruling 135); an errand they hand over, where what
+/// comes back is a thing or a change rather than an answer, goes to a
+/// subtask past two or three steps, and so does anything they ask to hand
+/// off. The instructions carry what was found so far; a question that
+/// turns into an errand partway hands the rest over; an errand whose
+/// material is this conversation (a subtask cannot see it), a to-do, a
+/// reminder or a memo stays here. The model cannot tell how long work
+/// will take before it starts, and a subtask costs more than it saves for
+/// a question: it starts from nothing, takes two to three times the
+/// steps, splits one answer into two messages, and its findings do not
+/// come back for a follow-up. The test is written here only; `subtasks.md`
+/// and `unasked.md` do not repeat it (`unasked.md`'s "longer work goes to
+/// a subtask" is for what the model does unasked, a step ahead of a note
+/// or in the morning review, which no one is waiting for).
 fn main_chat_entry_layer(manual_dir: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
 
-Work that would keep this chat busy for a long time (many steps, several
-websites, a long batch of files) goes to a subtask, so the main chat stays
-free: end your reply with <subtask>what to do</subtask>. Galley starts it
-after this reply, as a separate conversation that cannot see this one, so
-write everything it needs: the goal, the facts the user gave, and what to
-hand back, with the evidence for it (a confirmation number, a file path, a
-link, a screenshot path). Tell the user in a sentence that it is on its way.
-When it finishes, asks something or fails, Galley wakes you to check it and
-tell the user, so do not wait on it or watch it. Do quick work yourself.
-Use this, not the file-based subagent in your memory (subagent.md), which
-the user cannot see.
+Answer what the user asks you yourself, even when it takes a few minutes
+of looking things up: they are waiting for that answer, and Galley shows
+them what you are doing meanwhile. An errand they hand you, where what
+comes back is a thing or a change rather than an answer (files sorted or
+renamed, a template or a report drafted, a booking), goes to a subtask
+once it takes more than two or three steps, and so does anything they ask
+you to hand off: end your reply with <subtask>what to do</subtask>.
+Galley starts it after this reply, as a separate conversation that cannot
+see this one, so write everything it needs: the goal, the facts the user
+gave, what you have found so far, and what to hand back, with the evidence
+for it (a confirmation number, a file path, a link, a screenshot path).
+Tell the user in a sentence that it is on its way. When it finishes, asks
+something or fails, Galley wakes you to check it and tell the user, so do
+not wait on it or watch it. If a question turns into an errand partway
+through, stop there and hand the rest over the same way. Do it yourself
+when the errand's material is this conversation (writing up what you two
+discussed), and when it is a to-do, a reminder or a memo. Use this, not
+the file-based subagent in your memory (subagent.md), which the user
+cannot see.
 
 Note what the user has to do (a deadline, a call, a flight, a purchase),
 what they are in the middle of and set aside to come back to,
@@ -1344,27 +1373,63 @@ mod tests {
     /// carry, no waiting, and Galley's subtask over GA's file-based
     /// subagent. Main chat only, like the rest of the layer. Ticket 30:
     /// the instructions name the evidence to hand back, and Galley wakes
-    /// the model instead of it looking the subtask up when asked.
+    /// the model instead of it looking the subtask up when asked. Ticket
+    /// 115 (main chat PRD ruling 160): what goes is decided by whether
+    /// the user is waiting, not by how long it would keep the chat busy —
+    /// a question is answered here, an errand past two or three steps is
+    /// handed off, and so is one the user asks to hand off; one found
+    /// partway through hands off the rest, what was found so far in the
+    /// instructions; this conversation's own material, a to-do, a
+    /// reminder or a memo stay here.
     #[test]
-    fn main_chat_entry_layer_dispatches_long_work_to_a_subtask() {
+    fn main_chat_entry_layer_answers_questions_and_hands_errands_to_a_subtask() {
         let main =
             compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
         // Single-line fragments only (a Windows checkout makes the raw
         // string CRLF).
-        assert!(main.contains("free: end your reply with <subtask>what to do</subtask>. Galley"));
-        assert!(main.contains("write everything it needs: the goal, the facts the user gave, and"));
+        assert!(main
+            .contains("Answer what the user asks you yourself, even when it takes a few minutes"));
+        assert!(main
+            .contains("of looking things up: they are waiting for that answer, and Galley shows"));
+        assert!(
+            main.contains("them what you are doing meanwhile. An errand they hand you, where what")
+        );
+        assert!(main
+            .contains("comes back is a thing or a change rather than an answer (files sorted or"));
+        assert!(main
+            .contains("once it takes more than two or three steps, and so does anything they ask"));
+        assert!(
+            main.contains("you to hand off: end your reply with <subtask>what to do</subtask>.")
+        );
+        assert!(main
+            .contains("see this one, so write everything it needs: the goal, the facts the user"));
         assert!(main.contains(
-            "hand back, with the evidence for it (a confirmation number, a file path, a"
-        ));
-        assert!(main.contains(
-            "When it finishes, asks something or fails, Galley wakes you to check it and"
+            "gave, what you have found so far, and what to hand back, with the evidence"
         ));
         assert!(main
-            .contains("tell the user, so do not wait on it or watch it. Do quick work yourself."));
+            .contains("for it (a confirmation number, a file path, a link, a screenshot path)."));
+        assert!(main
+            .contains("something or fails, Galley wakes you to check it and tell the user, so do"));
+        assert!(
+            main.contains("not wait on it or watch it. If a question turns into an errand partway")
+        );
+        assert!(main
+            .contains("through, stop there and hand the rest over the same way. Do it yourself"));
+        assert!(main
+            .contains("when the errand's material is this conversation (writing up what you two"));
+        assert!(main
+            .contains("discussed), and when it is a to-do, a reminder or a memo. Use this, not"));
+        assert!(
+            main.contains("the file-based subagent in your memory (subagent.md), which the user")
+        );
         assert!(!main.contains("look it up when they ask"));
-        assert!(main.contains("Use this, not the file-based subagent in your memory (subagent.md)"));
+        // The test it replaced: how long the work would keep the chat
+        // busy, several websites among the reasons to hand it off.
+        assert!(!main.contains("keep this chat busy"));
+        assert!(!main.contains("Do quick work yourself"));
         let layer = main.find("Main Chat Entry Layer").unwrap();
-        let clause = main.find("goes to a subtask").unwrap();
+        assert!(!main[layer..].contains("websites"));
+        let clause = main.find("Answer what the user asks you yourself").unwrap();
         assert!(layer < clause, "the clause closes the entry layer");
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(!prompt.contains("<subtask>"));
@@ -1546,8 +1611,26 @@ mod tests {
     /// place of "an interest you notice in what they keep asking too". The floor's list says "a memo"
     /// in place of "your memory" (−5): information goes to the memos now
     /// (ruling 140). `memo` in the write list (+6) and `memo.md` in the
-    /// manual list, with when to read it (+58).
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 3383;
+    /// manual list, with when to read it (+58). Raised 3383 → 3931 by
+    /// ticket 115 (main chat PRD ruling 160): +548 bytes, the dispatch
+    /// clause's test changed from how long the work would keep the chat
+    /// busy to whether the user is waiting for it. A first sentence: what
+    /// the user asks is answered here, even when it takes a few minutes,
+    /// since they are waiting and Galley shows what the model is doing
+    /// (+181). What goes is an errand, what comes back a thing or a change
+    /// rather than an answer, with examples, past two or three steps, and
+    /// anything the user asks to hand off, in place of "work that would
+    /// keep this chat busy for a long time (many steps, several websites,
+    /// a long batch of files)" (+117). The instructions carry what was
+    /// found so far (+28). A question that turns into an errand partway
+    /// hands the rest over (+100). "Do quick work yourself" became the
+    /// errands kept here: this conversation's own material, a to-do, a
+    /// reminder or a memo (+122). In two weeks of the main chat the model
+    /// never handed off work on its own reading of the old test: it
+    /// cannot tell how long work will take before it starts, so a
+    /// ten-minute errand (sorting invoices) ran here while questions that
+    /// read several websites were rightly answered here only by chance.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 3931;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {

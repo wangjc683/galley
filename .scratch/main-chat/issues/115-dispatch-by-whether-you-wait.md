@@ -116,4 +116,92 @@ git diff --check
 
 ## 报告
 
-（代理填写）
+（2026-11-02，执行代理。第 1–4、6 条是放行前写的；第 5 条等主会话放行真模型后补。）
+
+### 1. 条款最终原文
+
+与票面原文逐字相同，换行也照票面，没有收紧：
+
+```text
+Answer what the user asks you yourself, even when it takes a few minutes
+of looking things up: they are waiting for that answer, and Galley shows
+them what you are doing meanwhile. An errand they hand you, where what
+comes back is a thing or a change rather than an answer (files sorted or
+renamed, a template or a report drafted, a booking), goes to a subtask
+once it takes more than two or three steps, and so does anything they ask
+you to hand off: end your reply with <subtask>what to do</subtask>.
+Galley starts it after this reply, as a separate conversation that cannot
+see this one, so write everything it needs: the goal, the facts the user
+gave, what you have found so far, and what to hand back, with the evidence
+for it (a confirmation number, a file path, a link, a screenshot path).
+Tell the user in a sentence that it is on its way. When it finishes, asks
+something or fails, Galley wakes you to check it and tell the user, so do
+not wait on it or watch it. If a question turns into an errand partway
+through, stop there and hand the rest over the same way. Do it yourself
+when the errand's material is this conversation (writing up what you two
+discussed), and when it is a to-do, a reminder or a memo. Use this, not
+the file-based subagent in your memory (subagent.md), which the user
+cannot see.
+```
+
+为什么没收紧：多出来的 548 字节分属裁决 160 第 2 条的五条规则（见第 2 条的分项），每一块删掉都少一条规则；能省的只有措辞上的几处（比如「once it takes more than two or three steps」写成「past two or three steps」、「that answer」写成「it」），合起来不到 40 字节，读起来反而更拗或更含糊，所以照票面原文、抬预算。
+
+### 2. 字节预算
+
+- 旧值 3383（main 上实测入口层正好 3383 字节，没有余量）。
+- 新值 3931；本机实测 3931（`main_chat_entry_layer("")`，`\r` 不计）。
+- 分项共 +548：开头那句「问的自己答，哪怕要查几分钟，因为对方在等、Galley 显示你在做什么」+181；差事的定义（拿回来的是东西或状态、不是答案，三个例子）、超过两三步、明说派的照派，替换「work that would keep this chat busy for a long time (many steps, several websites, a long batch of files)」那半句，+117；派活说明里写上「what you have found so far」+28；「问着问着变成差事就交出剩下的」一句 +100；「Do quick work yourself.」换成「材料是这段对话的、待办提醒备忘自己做」+122。
+- Windows：这条预算本来就不数 `\r`，CRLF 检出不影响，不用按「本机 +18」设；「+18」是静态提示词预算 `STATIC_PROMPT_BUDGET_BYTES` 的规矩，入口层不在静态提示词里，静态提示词这一票没变。
+- 理由写进了 `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` 的注释（「Raised 3383 → 3931 by ticket 115」一段）。
+
+### 3. 改了哪些文件、哪些断言
+
+- `core/src/managed_prompt.rs`
+  - 条款换成上面的原文。
+  - `main_chat_entry_layer` 的文档注释：票 06a 那段末尾加一句「Since ticket 115 (below) what goes is decided by whether the user is waiting」；末尾加票 115（裁决 160）一段：新判据、为什么换（模型开工前判断不了多长；问答派出去从头核实、步数两三倍、一问拆成两条、追问时查到的回不来）、判据只写在入口层、`unasked.md` 那句是给没人在等的活用的。
+  - 测试 `main_chat_entry_layer_dispatches_long_work_to_a_subtask` 改名为 `main_chat_entry_layer_answers_questions_and_hands_errands_to_a_subtask`，文档注释补了票 115。拿掉钉旧原文的 5 条（`free: end your reply with <subtask>…`、`write everything it needs: the goal, the facts the user gave, and`、`hand back, with the evidence for it (…`、`When it finishes, asks something or fails, …`、`… Do quick work yourself.`），换成新原文的 15 个单行片段（每一行一个，不跨行）；加反向断言：整个主对话提示词里没有 `keep this chat busy`、`Do quick work yourself`，入口层里没有 `websites`。「条款收在入口层末尾」那条位置断言保留，锚点从 `goes to a subtask` 换成 `Answer what the user asks you yourself`。`look it up when they ask`、`<subtask>` 不进别的提示词两条照旧。
+  - `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` 3383 → 3931，注释写理由。
+  - 这个文件在 HEAD 上 rustfmt 是干净的，只对它跑了 rustfmt。
+- `core/src/subtask.rs`：模块文档第 6 行原来复述旧判据（「for work that would keep the chat busy for a long time」），改成「交出去的活，哪些活由入口层说（票 115 起是差事而不是问答）」，只动注释。这一处票面没点名：它说的是 `keep the chat busy`，票面让 grep 的 `keep this chat busy` 搜不到。
+- `docs/managed-ga-runtime/prompt-composition.md`：「Hand long work to a subtask」那一条改写为新判据，旧判据与为什么换写在里面。票面没点名；票 96、98 改入口层时都一起改了这份，照那个做法。
+- 没动：手册（`subtasks.md`、`unasked.md`）、`core/src/assistant_manual.rs` 的断言、IM 提示词（第 1027 行一带那句「keep this chat busy」，票面写的是 `:998`，行号随上面的注释挪了）、GUI、runner、CLI、Agent API、迁移。
+- grep 全仓 `keep this chat busy`、`Do quick work yourself`（用 `grep`）：其余命中都是各套件已经生成好的 `galley-prompt/`、`composed/`，和 `dispatch-clauses.md`（票 06 对照的三段原文），按票面不改；`core/tests/` 与 CLI 测试里没有钉这段的。
+- 评测（`.scratch/main-chat/entry-layer-eval/`）：
+  - `run.py`：新套件 `--suite dispatch-criterion`。`crit_cases`（`from` 的用例消息从 `dispatch-cases.json` 读，标注要一致）、`crit_prompt`（`sched_prompt` 加了可选的模板参数，别的套件不受影响）、`make_crit_jobs`、`crit_facts`、`render_crit_md`、`dry_test_crit`，假模型加了三段脚本；`build_sandbox` 的 `dispatch_fixtures` 让这一套用待办评测的假 `galley` 时也放派活对照那套 `~/Downloads`；`build_result` 对这一套按 T 组的办法读标签，另记标签个数、在不在最后一条回复里；`--repeats` 不写时这一套是 1 遍（别的套件照旧 2）。
+  - `dispatch-criterion/cases.json`：票面 15 条，加了可选的 `midway-invoices`（「下载文件夹里有发票吗？有的话帮我按类型归个档」：先问，看了文件夹才知道要归档一批；判派没派，另记派活说明里有没有提到已经看到的文件名）。harness 显示得出来：结果里有标签之前几次调用和派活说明全文。
+  - `dispatch-criterion/galley-prompt/main_chat.old.txt`、`main_chat.new.txt`：在 `managed_prompt.rs` 的测试模块里临时加一个测试，改条款前写出 old、改条款后写出 new，跑完删掉（产品代码没留改动，删后 `git diff` 里没有它）。占位与 `schedule/galley-prompt/` 相同；old 与 `schedule/galley-prompt/main_chat.plain.txt` 只差版本号那一行（0.7.4 对 0.6.2），两份之间只差派活那一段。
+  - `README.md`：文件列表加一行，新加「派活判据（票 115）」一节（输入、沙盒、判定、干跑测了什么、怎么跑）。
+  - 沙盒是待办评测那套（假 HOME、按 fixture 回答的假 `galley`、`sandbox-exec`、手册放在状态根、几个系统命令可用），不是票 06 那个只认 `subtask start` 的假 `galley`：新旧提示词都是真主对话提示词，会读手册、会 `todo add`，票 06 的假 `galley` 对这些一律回 `unknown_command`。票面要的几样都在：派活对照那套 `~/Downloads`、浏览器工具停下、最多 8 次工具调用。
+
+### 4. `--dry-test` 与预计真调用次数
+
+- 模型 `mm_1792576875658` 在库里（只读、immutable 打开查的：gpt-6.1-sol，API key 接入）。
+- `--dry-test`（不连模型）：`DRY TEST PASSED`，952 条 PASS，0 条 FAIL。这一套的检查：16 条用例（9 条不该派，沿用的 5 条逐字相同）；两份提示词（old 即待办评测那份、两份只差派活一段且位置相同、新的一段里裁决 160 的几句都在、占位填好、没有 In Hand 与 Memo）；判定（问答派了不过；差事做到 8 次上限、或直接回复，不过；差事停在问用户不计；问答做到上限过；超时不过；派活说明没提已经看到的照实记）；假模型在真沙盒里走五次：看一眼下载文件夹再派（新旧各一次，占位文件真的列得出，标签之前 1 次调用），停在浏览器（问答过、差事不计），带上下文的直接回复（问答过、差事不过），记一个待办（落进假 `galley`，手册从状态根读到）；再出一份 `results.md`。沙盒越界、金丝雀文件、护栏都照旧检查，全过。
+- 别的套件 `--render-only` 重出：entry、wake、schedule、todo、chat、memo、dispatch（firststop）逐字不变；dispatch（沙盒）的 `dispatch-results.md` 在截断处差几个字，用 HEAD 的 `run.py` 重出也是同样的差异，是此前就有的，已还原、没提交。
+- Core：`cargo test -p galley-core managed_prompt` 46 过，`assistant_manual` 12 过，`subtask` 33 过；`cargo test --workspace` 全过（1282 过、0 失败）；`git diff --check` 干净。
+- 真跑的命令（放行后）：
+
+```bash
+PY=/Library/Frameworks/Python.framework/Versions/3.14/bin/python3
+PYTHONDONTWRITEBYTECODE=1 $PY .scratch/main-chat/entry-layer-eval/run.py --suite dispatch-criterion --parallel 4
+```
+
+- 预计：16 条 × 2 组 × 1 遍 = 32 次运行。每次运行最多 9 次模型调用（8 次工具调用的上限，加上回复或撞上限的那一次），上限约 288 次；按以往套件的平均（票 06 的 T 组每次 1–3 次，闲聊套件约 2.2 次，备忘套件约 3.3 次），估 80–130 次。如果新条款有用例没过、改一轮措辞，只重跑没过的 new 用例，最多 7 次运行、63 次调用。
+- 这一步停在这里，没有连真模型。
+
+### 5. 放行后
+
+（待放行后补。）
+
+### 6. 看到但没改的（Open risks）
+
+1. 沙盒可能太容易：占位 PDF 每个只有一行字，`e-invoices`、`big-pdfs`、`midway-invoices` 可能一两次 `code_run` 就做完，「超过两三步」在沙盒里不一定成立；这三条没派，不一定是条款没起作用。真实环境要逐个读 PDF（10-28 那次 11 步）。
+2. 「两三步」怎么数由模型自己定：一个脚本挪完十个文件算一步还是十步，条款没说。
+3. `unasked.md` 的「Quick work you do this turn; longer work goes to a subtask」仍按长短判，用在「记下一件事时多想一步」和巡看。`todo-note` 这类记完待办顺手做准备的，可能照它派一个子任务；入口层「待办自己做」说的是记这一下，两处的边界没写明。
+4. 别的套件的提示词模板还是旧派活条款：`schedule/galley-prompt/`（schedule、todo、chat、memo 四套用它）、`wake/galley-prompt/`、入口层套件的 `galley-prompt/`。按票面没重新生成；下次重跑这些套件测到的是旧条款，除非先重生成。
+5. IM 提示词仍按「keep this chat busy for a long time」判（`managed_prompt.rs` 第 1027 行一带），与主对话的判据现在不一致（按票面不改）。
+6. Core 只派最终回复里的 `<subtask>`（`core/src/subtask.rs` 的 `pending_reply` 要求是最终回答）；评测把任何一条回复里的标签都算派，另记了 `in_final`。带工具调用的中间回复里写的标签，真机上不会派出去。
+7. 每条用例每组只跑 1 遍，不衡量随机波动。
+8. 入口层每次主对话请求多 548 字节（多半命中缓存）。
+9. 票 06 沙盒结果的 `dispatch-results.md` 用 HEAD 或本分支的 `run.py` 重出都在截断处差几个字，此前就有，与这一票无关。
+10. `e-invoices` 的「今天下午五点前」：17:00 以后跑，期限已过，模型可能为此先问或改口；17:00 前开跑更接近真实。

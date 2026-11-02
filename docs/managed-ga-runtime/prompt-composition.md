@@ -450,14 +450,26 @@ that finishes a task and restates the result. The layer says three things:
   the core prompt's reply shape as the IM layer).
 - **Pick up what a break left open** (ticket 11's carried turns) when the
   user comes back to it, without recapping it unasked.
-- **Hand long work to a subtask** (ticket 06a, PRD rulings 52, 53): work
-  that would keep the chat busy for a long time (many steps, several
-  websites, a long batch of files) ends the reply with
-  `<subtask>what to do</subtask>`; the instructions carry the goal, the
-  facts the user gave and what to hand back, with the evidence for it
+- **Hand errands to a subtask** (ticket 06a, PRD rulings 52, 53; the test
+  since ticket 115, main chat PRD ruling 160): what the user asks is
+  answered in the main chat, even when it takes a few minutes of looking
+  things up (they are waiting for it, and the progress line shows what it
+  is doing); an errand they hand over, where what comes back is a thing or
+  a change rather than an answer (files sorted or renamed, a template or a
+  report drafted, a booking), goes to a subtask once it takes more than two
+  or three steps, and so does anything they ask to hand off; a question
+  that turns into an errand partway hands the rest over; an errand whose
+  material is this conversation (a subtask cannot see it), and a to-do, a
+  reminder or a memo, stay. Until ticket 115 the test was "work that would
+  keep the chat busy for a long time (many steps, several websites, a long
+  batch of files)", quick work staying: the model cannot tell how long work
+  will take before it starts, and in two weeks it never handed work off on
+  its own. A hand-off ends the reply with `<subtask>what to do</subtask>`;
+  the instructions carry the goal, the facts the user gave, what it has
+  found so far (ticket 115) and what to hand back, with the evidence for it
   (ticket 30: a confirmation number, a file path, a link, a screenshot
   path), since the subtask cannot see the main chat; one sentence tells
-  the user it is on its way; quick work stays in the main chat. Since
+  the user it is on its way. Since
   ticket 30 (assistant PRD rulings 2, 8) the clause no longer says "its
   card shows the progress, and you can look it up when they ask": Galley
   wakes the model when a subtask finishes, asks or fails, to check it and
