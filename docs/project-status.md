@@ -864,7 +864,11 @@ chat now decides what to hand to a subtask by whether you are waiting: what
 you ask it answers itself, even when that takes minutes of looking things
 up; an errand you hand it goes to a subtask past two or three steps (main
 chat PRD ruling 160, ticket 115; eval new 16 of 16; managed only, not yet
-dogfooded). Owed:
+dogfooded). The managed engine cuts a tool call whose arguments run into
+2,000 whitespace characters in a row, so a model that degenerates that way
+no longer stalls a run for fifteen minutes (managed GA patch `0030`, main
+chat PRD ruling 162, ticket 118; unit tests and a local fake stream only).
+Owed:
 ticket 04's second real-machine step, stopping a workbench run you watch
 (no workbench run in the database since the merge). Still owed from
 `v0.7.2`'s scope: ticket 98's noticed interest (the 「看你……常问」 memo has

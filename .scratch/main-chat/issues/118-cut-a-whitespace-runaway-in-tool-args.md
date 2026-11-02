@@ -1,6 +1,6 @@
 # 118 工具参数吐空白时截断：内置 GA 收参数时加一道闸
 
-Status: ready-for-agent（2026-11-02 开票）
+Status: done（2026-11-02 快进合入 `3d255190`…`6ed3a2f9`。主会话验收：读过 `llmcore.py` 三条分支的 diff 与两条 OpenAI 分支、Anthropic 分支的收尾代码（截断后照常组块，不落「流异常中断」，不进重试）；worktree 里 `test_managed_ga_llmcore.py` 66 条、runner 全量 635 条过，`check-managed-ga-payload`、`check-ga-baseline-drift` 通过，`diff --check` 干净，`managed-ga/` 下没有 `__pycache__`。只有单测与本机假流探针，没有真模型端到端；新起的 runner 才带上补丁）
 
 来源：[主对话 PRD](../PRD.md) 裁决 162；诊断见票 [116](./116-subtask-fifteen-minute-stall.md)。只改内置 GA（`managed-ga/` 的补丁栈与 payload）和 runner 的测试；不动 Core、GUI、CLI、Agent API、迁移。外置运行时零变化（外置 GA 不打补丁，宪法第 1 条）。
 
