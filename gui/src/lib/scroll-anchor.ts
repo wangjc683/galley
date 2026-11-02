@@ -3,8 +3,11 @@
 // and the late layout inside them (Shiki, images). The macOS webview
 // (WebKit) has no CSS scroll anchoring (`overflow-anchor`), so the
 // conversation does it by hand: remember one row at the top of the
-// viewport and where it sat, and after the layout changes scroll by
-// however far that row moved.
+// viewport and where it sat, and after the layout changes put it back
+// by however far that row moved — out of the runway above the loaded
+// turns while there is one, else by scrolling (lib/scroll-runway.ts).
+
+import { keepInPlace } from "@/lib/scroll-runway";
 
 /** The conversation's rows: the children of Conversation's root. */
 const ROWS_SELECTOR = '[data-role="conversation"]';
@@ -76,18 +79,29 @@ export function captureScrollAnchor(
   };
 }
 
-/** Scroll `container` so `anchor`'s row sits where it was read. False
- * when the row has left the document. */
+/** How far the layout above `anchor`'s row has moved it since it was
+ * read (`anchorCorrection`); null when the row has left the document. */
+export function scrollAnchorDrift(
+  container: HTMLElement,
+  anchor: ScrollAnchor,
+): number | null {
+  if (!anchor.el.isConnected) return null;
+  const offsetNow =
+    anchor.el.getBoundingClientRect().top -
+    container.getBoundingClientRect().top;
+  return anchorCorrection(anchor, offsetNow, container.scrollTop);
+}
+
+/** Put `anchor`'s row back where it was read (lib/scroll-runway.ts
+ * `keepInPlace`: out of the runway, else by scrolling). False when the
+ * row has left the document. */
 export function holdScrollAnchor(
   container: HTMLElement,
   anchor: ScrollAnchor,
 ): boolean {
-  if (!anchor.el.isConnected) return false;
-  const offsetNow =
-    anchor.el.getBoundingClientRect().top -
-    container.getBoundingClientRect().top;
-  const delta = anchorCorrection(anchor, offsetNow, container.scrollTop);
-  if (Math.abs(delta) >= 1) container.scrollTop += delta;
+  const delta = scrollAnchorDrift(container, anchor);
+  if (delta === null) return false;
+  keepInPlace(container, delta);
   return true;
 }
 

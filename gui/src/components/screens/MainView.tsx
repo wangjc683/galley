@@ -568,8 +568,9 @@ function MainViewContent({
     scrollContainerRef,
   });
   // Earlier pages of the conversation: read near the top, prepended
-  // without moving what is on screen. See useEarlierTurns.
-  useEarlierTurns({
+  // without moving what is on screen, out of a runway the column carries
+  // above them (`runwayRef`). See useEarlierTurns.
+  const runwayRef = useEarlierTurns({
     sessionId: activeSessionId,
     scrollContainerRef,
     turnsLength: turns.length,
@@ -656,6 +657,7 @@ function MainViewContent({
           )}
         >
           <div
+            ref={runwayRef}
             className={cn(
               "mx-auto",
               conversationWidth === "wide" ? "max-w-[1200px]" : "max-w-[760px]",

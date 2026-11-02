@@ -306,6 +306,12 @@ export function holdBubbleMotion(
   running.set(container, motion);
 }
 
+/** Whether a motion of this ticket is playing on `container` (its rows
+ * carry transforms, its copies stand where rows were). */
+export function bubbleMotionRunning(container: object): boolean {
+  return running.has(container);
+}
+
 /** `motion` ended by itself. */
 export function releaseBubbleMotion(
   container: object,

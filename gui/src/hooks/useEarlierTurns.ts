@@ -1,19 +1,47 @@
-import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type RefObject,
+} from "react";
 
-import { settleBubbleMotion } from "@/lib/bubble-motion";
+import { scrollDestination } from "@/lib/animate-scroll";
+import { bubbleMotionRunning, settleBubbleMotion } from "@/lib/bubble-motion";
+import { columnOf, typingRowOf } from "@/lib/bubble-motion-play";
 import {
   captureScrollAnchor,
   holdScrollAnchor,
+  scrollAnchorDrift,
   type ScrollAnchor,
 } from "@/lib/scroll-anchor";
+import {
+  RUNWAY_ATTR,
+  RUNWAY_MIN_PX,
+  hasRunway,
+  keepInPlace,
+  layRunway,
+  resizeRunway,
+  runwayHeight,
+} from "@/lib/scroll-runway";
 import { useMessagesStore } from "@/stores/messages";
 
-/** Read the page before the loaded turns once the reader is within
- * this many viewport heights of the top. */
-const EARLIER_TRIGGER_VIEWPORTS = 1;
+/** Read the page before the loaded turns once the top of the viewport
+ * is within this many viewport heights of the loaded turns' top (main
+ * chat ruling 172: a page reads in tens of ms and renders in a few
+ * hundred in dev, while a flick back covers ten to thirty thousand px a
+ * second). */
+export const EARLIER_TRIGGER_VIEWPORTS = 10;
 /** How long after a prepend the reader's row is held still while the
  * new page's late layout (Shiki, images) settles above it. */
 const PREPEND_SETTLE_MS = 1500;
+/** No scroll event for this long: the reader has stopped (a flick's
+ * momentum sends scroll events until it ends), and a `scrollTop` written
+ * now lands. The runway is refilled and taken away only then. */
+export const RUNWAY_IDLE_MS = 200;
+/** Within this of the bottom counts as at the bottom (useStickyScroll's
+ * tolerance). */
+const AT_BOTTOM_PX = 24;
 
 /** Where the reader was when a page was prepended. */
 interface PrependSnapshot {
@@ -21,6 +49,50 @@ interface PrependSnapshot {
   anchor: ScrollAnchor | null;
   /** Fallback when it has none: everything that grew, grew above. */
   scrollHeight: number;
+}
+
+/** The runway's height to refill to: twice the tallest page this mount
+ * has seen land, and never under RUNWAY_MIN_PX. */
+function runwayTarget(tallestPage: number): number {
+  return Math.max(RUNWAY_MIN_PX, 2 * tallestPage);
+}
+
+function atBottom(container: HTMLElement): boolean {
+  return (
+    container.scrollHeight - container.scrollTop - container.clientHeight <
+    AT_BOTTOM_PX
+  );
+}
+
+/** Something else is moving the page and holds positions a runway
+ * resize would move under it: a smooth scroll (lib/animate-scroll.ts
+ * targets a `scrollTop`, and a write makes it let go), a bubble motion
+ * of ruling 138 (its copies stand where rows were), or the main chat's
+ * typing bubble, whose place in the column the hand-off and the bubble
+ * motions remember from one commit to the next. */
+function pageBusy(container: HTMLElement): boolean {
+  if (scrollDestination(container) !== null) return true;
+  if (bubbleMotionRunning(container)) return true;
+  const column = columnOf(container);
+  return column !== null && typingRowOf(column) !== null;
+}
+
+/**
+ * A runway resize while the reader is idle (lib/scroll-runway.ts
+ * `resizeRunway`), then: the row a settle holds is read again where it
+ * now is — it did not move on screen, but the scroll position did, which
+ * the hold would take for layout above it — and the scroll listeners
+ * hear of the new position at once rather than on the next frame.
+ */
+function resizeAtRest(
+  container: HTMLElement,
+  height: number,
+  held: { current: ScrollAnchor | null },
+): void {
+  if (resizeRunway(container, height) === 0) return;
+  if (held.current)
+    held.current = captureScrollAnchor(container) ?? held.current;
+  container.dispatchEvent(new Event("scroll"));
 }
 
 /**
@@ -32,6 +104,15 @@ interface PrependSnapshot {
  * shows no loading state (2026-07-15 ruling). Owns no scroll position
  * otherwise — the session-switch snap, follow-the-bottom and ⌘K locate
  * stay in useStickyScroll.
+ *
+ * While earlier pages remain, a runway stands above the loaded turns
+ * (main chat ruling 172, ticket 123; lib/scroll-runway.ts): a page that
+ * lands is taken out of it instead of scrolled for, since WebKit drops a
+ * `scrollTop` written during a flick's momentum. The runway is laid in
+ * the render that first shows earlier pages, refilled whenever the
+ * reader stops away from the bottom, and taken away once they stop after
+ * the conversation's first turn has gone in. Returns the ref for the
+ * conversation column, which carries it.
  */
 export function useEarlierTurns({
   sessionId,
@@ -47,37 +128,123 @@ export function useEarlierTurns({
   /** The slice's `prependedTurns`: changes in the commit that renders
    * an earlier page. */
   prependedTurns: number;
-}): void {
-  // Near the top: read the page before. A position counts only after
-  // the reader scrolled — right after a commit the session-switch snap
-  // to the bottom may not have landed yet. A page shorter than the
-  // trigger distance counts without scrolling: there may be nothing to
-  // scroll.
+}): (column: HTMLDivElement | null) => void {
+  const hasEarlier = useMessagesStore(
+    (s) => sessionId !== undefined && s.byId[sessionId]?.earlier != null,
+  );
+  /** The tallest page this mount has seen land (px): what the runway
+   * gave up for it, or what was scrolled for once it ran out. */
+  const tallestPageRef = useRef(0);
+  /** The row the settle after a prepend holds, while it holds one. */
+  const heldRef = useRef<ScrollAnchor | null>(null);
+  /** Wakes the idle check below, unless it is already waiting. */
+  const wakeRef = useRef<(() => void) | null>(null);
+
+  // The runway is there in the commit that first shows the session with
+  // earlier pages, before anything places the scroll position: the ref
+  // is attached before any layout effect of the page runs (the bottom
+  // snap and its measures, useStickyScroll).
+  const columnRef = useCallback(
+    (column: HTMLDivElement | null) => {
+      if (!column || sessionId === undefined) return;
+      if (column.hasAttribute(RUNWAY_ATTR)) return;
+      if (!useMessagesStore.getState().byId[sessionId]?.earlier) return;
+      layRunway(column, RUNWAY_MIN_PX);
+    },
+    [sessionId],
+  );
+
+  // Earlier pages coming after the mount (a cold start draws the
+  // skeleton first; the restore lands later): laid then, the scroll
+  // position moving with it, before paint. The last page gone in: the
+  // runway goes once the reader stops.
+  useLayoutEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    if (!hasEarlier) {
+      if (hasRunway(container)) wakeRef.current?.();
+      return;
+    }
+    const column = columnOf(container);
+    if (!column || hasRunway(container)) return;
+    layRunway(column, 0);
+    resizeAtRest(container, runwayTarget(tallestPageRef.current), heldRef);
+  }, [hasEarlier, scrollContainerRef]);
+
+  // Stopped (no scroll event for RUNWAY_IDLE_MS): refill the runway to
+  // its target unless at the bottom (where it is not used, and the
+  // follow is at home), or take it away once no earlier page is left.
+  // `scrollTop` moves with it, written while nothing scrolls, and lands.
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || sessionId === undefined) return;
+    const sid = sessionId;
+    let timer: number | null = null;
+    const arm = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(rest, RUNWAY_IDLE_MS);
+    };
+    const rest = () => {
+      timer = null;
+      if (!hasRunway(container)) return;
+      const earlier = useMessagesStore.getState().byId[sid]?.earlier;
+      let height: number;
+      if (!earlier) {
+        height = 0;
+      } else {
+        height = runwayTarget(tallestPageRef.current);
+        if (atBottom(container) || runwayHeight(container) >= height) return;
+      }
+      if (pageBusy(container)) {
+        arm();
+        return;
+      }
+      resizeAtRest(container, height, heldRef);
+    };
+    container.addEventListener("scroll", arm, { passive: true });
+    wakeRef.current = () => {
+      if (timer === null) arm();
+    };
+    return () => {
+      container.removeEventListener("scroll", arm);
+      if (timer !== null) window.clearTimeout(timer);
+      wakeRef.current = null;
+    };
+  }, [sessionId, scrollContainerRef]);
+
+  // Within EARLIER_TRIGGER_VIEWPORTS of the loaded turns' top (the
+  // runway does not count): read the page before, one at a time, and
+  // look again once it is in. Not only on scroll: the mount and every
+  // change of the loaded turns look once, on the next frame, so an open
+  // conversation reads on before the reader scrolls (the main chat reads
+  // one page right away). That frame reads a settled position:
+  // useStickyScroll places a mount at the bottom in its layout effect,
+  // before paint, and its session-switch snap asked for its frame first;
+  // while the restore is out nothing is read, and the restore's commit
+  // changes `turnsLength`, which looks again.
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container || sessionId === undefined) return;
     let disposed = false;
-    const check = (scrolled: boolean) => {
+    const check = () => {
       if (disposed) return;
       const slice = useMessagesStore.getState().byId[sessionId];
       if (!slice?.earlier || slice.restoring) return;
-      const trigger = container.clientHeight * EARLIER_TRIGGER_VIEWPORTS;
-      const short = container.scrollHeight - container.clientHeight < trigger;
-      if (!short && !(scrolled && container.scrollTop < trigger)) return;
+      const above = container.scrollTop - runwayHeight(container);
+      if (above >= container.clientHeight * EARLIER_TRIGGER_VIEWPORTS) return;
       void useMessagesStore
         .getState()
         .loadEarlierTurns(sessionId)
         .then((applied) => {
-          // Still near the top after it landed (a short page): go on.
-          if (applied) requestAnimationFrame(() => check(true));
+          // Still near the top after it landed: go on.
+          if (applied) requestAnimationFrame(check);
         });
     };
-    const onScroll = () => check(true);
-    container.addEventListener("scroll", onScroll, { passive: true });
-    const rafId = requestAnimationFrame(() => check(false));
+    container.addEventListener("scroll", check, { passive: true });
+    const rafId = requestAnimationFrame(check);
     return () => {
       disposed = true;
-      container.removeEventListener("scroll", onScroll);
+      container.removeEventListener("scroll", check);
       cancelAnimationFrame(rafId);
     };
   }, [sessionId, scrollContainerRef, turnsLength]);
@@ -105,22 +272,28 @@ export function useEarlierTurns({
   }, [sessionId, scrollContainerRef]);
 
   // The commit that renders the page, before paint: put the reader's
-  // row back where it was. Then hold it there while the page settles —
-  // late layout above it (code highlighting, images decoding) would
-  // otherwise push the view down — following the reader's own
-  // scrolling (each settle re-reads the row at the top).
+  // row back where it was — out of the runway while there is one
+  // (lib/scroll-runway.ts `keepInPlace`). Then hold it there while the
+  // page settles — late layout above it (code highlighting, images
+  // decoding) would otherwise push the view down — following the
+  // reader's own scrolling (each settle re-reads the row at the top).
   useLayoutEffect(() => {
     const snapshot = pendingSnapshot.current;
     pendingSnapshot.current = null;
     const container = scrollContainerRef.current;
     if (!snapshot || !container) return;
-    if (!snapshot.anchor || !holdScrollAnchor(container, snapshot.anchor)) {
-      container.scrollTop += container.scrollHeight - snapshot.scrollHeight;
-    }
-    let held = captureScrollAnchor(container);
+    const grown =
+      (snapshot.anchor
+        ? scrollAnchorDrift(container, snapshot.anchor)
+        : null) ?? container.scrollHeight - snapshot.scrollHeight;
+    keepInPlace(container, grown);
+    tallestPageRef.current = Math.max(tallestPageRef.current, grown);
+    wakeRef.current?.();
+    heldRef.current = captureScrollAnchor(container);
     const settle = () => {
+      const held = heldRef.current;
       if (held) holdScrollAnchor(container, held);
-      held = captureScrollAnchor(container) ?? held;
+      heldRef.current = captureScrollAnchor(container) ?? held;
     };
     const observer = new ResizeObserver(settle);
     const inner = container.firstElementChild;
@@ -131,8 +304,11 @@ export function useEarlierTurns({
       observer.disconnect();
       container.removeEventListener("scroll", settle);
       window.clearTimeout(timer);
+      heldRef.current = null;
     };
     timer = window.setTimeout(release, PREPEND_SETTLE_MS);
     return release;
   }, [prependedTurns, scrollContainerRef]);
+
+  return columnRef;
 }

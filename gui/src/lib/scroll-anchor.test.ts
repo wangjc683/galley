@@ -95,6 +95,27 @@ describe("captureScrollAnchors / holdFirstScrollAnchor (ticket 32)", () => {
     };
   }
 
+  /** The same, under a runway of `runway` px above the rows (ticket
+   * 123, lib/scroll-runway.ts): the rows sit below it, and growing it
+   * moves them down by as much. */
+  function withRunway(heights: number[], scrollTop: number, runway: number) {
+    const page = layout(heights, scrollTop);
+    const column = {
+      style: { paddingTop: `${runway}px`, minHeight: "" },
+      hasAttribute: (name: string) => name === "data-scroll-runway",
+    };
+    Object.assign(page.container, { firstElementChild: column });
+    for (const row of page.rows) {
+      const at = row.getBoundingClientRect;
+      row.getBoundingClientRect = () => {
+        const above = Number.parseFloat(column.style.paddingTop);
+        const { top, bottom } = at();
+        return { top: top + above, bottom: bottom + above };
+      };
+    }
+    return { ...page, column };
+  }
+
   it("reads the rows from the top of the viewport down", () => {
     const { container, rows } = layout([100, 100, 100, 100], 150);
     const anchors = captureScrollAnchors(container, 2);
@@ -112,6 +133,22 @@ describe("captureScrollAnchors / holdFirstScrollAnchor (ticket 32)", () => {
     expect(holdFirstScrollAnchor(container, anchors)).toBe(true);
     // Scrolled back by the 200px, so row 2 sits where it was.
     expect(container.scrollTop).toBe(150 - 200);
+  });
+
+  it("with a runway, grows it back instead of scrolling", () => {
+    const { container, rows, moveUp, column } = withRunway(
+      [100, 100, 100, 100],
+      20_150,
+      20_000,
+    );
+    const anchors = captureScrollAnchors(container);
+    rows[1].isConnected = false;
+    moveUp(200);
+    expect(holdFirstScrollAnchor(container, anchors)).toBe(true);
+    // The runway took the 200px back; scrollTop is where it was.
+    expect(column.style.paddingTop).toBe("20200px");
+    expect(container.scrollTop).toBe(20_150);
+    expect(rows[2].getBoundingClientRect().top).toBe(anchors[1].offset);
   });
 
   it("is false when no row is left", () => {

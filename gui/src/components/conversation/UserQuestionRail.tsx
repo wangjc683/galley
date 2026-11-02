@@ -9,6 +9,7 @@ import {
 } from "@/lib/conversation-anchor";
 import { preventMouseFocus } from "@/lib/pointer-focus";
 import { buildRailExchanges } from "@/lib/rail-preview";
+import { runwayHeight } from "@/lib/scroll-runway";
 import { StatusIcon } from "@/lib/status-icon";
 import { cn } from "@/lib/utils";
 import type { Turn } from "@/types/conversation";
@@ -22,8 +23,10 @@ import type { Turn } from "@/types/conversation";
  * only partially address.
  *
  * Position model:
- *   - Each dot at the user message's top edge within the scroll content,
- *     expressed as a percentage of `scrollContent.scrollHeight`. Adjacent
+ *   - Each dot at the user message's top edge within the loaded
+ *     content, expressed as a percentage of its height (the scroll
+ *     content's `scrollHeight` less the runway above it while earlier
+ *     pages remain, lib/scroll-runway.ts). Adjacent
  *     user-msgs in agent-heavy stretches naturally spread apart on the
  *     rail; clusters of follow-up questions show as adjacent dots.
  *     Mirrors the native scrollbar's position semantics.
@@ -311,8 +314,12 @@ export function UserQuestionRail({
       const userMsgs = container.querySelectorAll<HTMLElement>(
         '[data-role="user-msg"]',
       );
-      const scrollHeight = container.scrollHeight;
-      if (scrollHeight === 0 || userMsgs.length === 0) {
+      // The loaded content, not the runway above it while earlier pages
+      // remain (lib/scroll-runway.ts): the dots stay put as it shrinks
+      // for a page and is refilled.
+      const runway = runwayHeight(container);
+      const contentHeight = container.scrollHeight - runway;
+      if (contentHeight <= 0 || userMsgs.length === 0) {
         setRailItems([]);
         return;
       }
@@ -324,8 +331,9 @@ export function UserQuestionRail({
       const containerTop = container.getBoundingClientRect().top;
       const scrollTop = container.scrollTop;
       userMsgs.forEach((el, i) => {
-        const topInContent = getTopInScrollContent(containerTop, scrollTop, el);
-        const topPercent = (topInContent / scrollHeight) * 100;
+        const topInContent =
+          getTopInScrollContent(containerTop, scrollTop, el) - runway;
+        const topPercent = (topInContent / contentHeight) * 100;
         const topPx = (topPercent / 100) * railHeightPx;
         const exchange = exchanges[i];
         positions.push({
