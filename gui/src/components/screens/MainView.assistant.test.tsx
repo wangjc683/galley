@@ -535,6 +535,22 @@ describe("the main chat is the assistant's conversation", () => {
     );
   });
 
+  it("floats the day at the top of the conversation area in the main chat only (ruling 171, ticket 124)", () => {
+    const OVERLAY =
+      'aria-hidden="true" data-role="floating-day" class="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center"';
+    const main = render({ isMainChat: true });
+    expect(count(main, 'data-role="floating-day"')).toBe(1);
+    expect(main).toContain(OVERLAY);
+    // In 「回到底部」's material, and transparent until you scroll.
+    expect(main).toContain(
+      "border border-line bg-elevated/92 px-2.5 shadow-[var(--shadow-float)] backdrop-blur-md",
+    );
+    expect(main).toContain("opacity-0");
+    expect(render({ isMainChat: false })).not.toContain(
+      'data-role="floating-day"',
+    );
+  });
+
   it("stacks a short conversation up from the composer (贴底)", () => {
     const main = render({ isMainChat: true, turns: [GREETING] });
     expect(main).toContain("overflow-y-auto px-8 py-6 flex flex-col");

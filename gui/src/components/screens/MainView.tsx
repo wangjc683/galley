@@ -30,6 +30,7 @@ import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { SelectionCopyToolbar } from "@/components/conversation/SelectionCopyToolbar";
 import { StepRegion } from "@/components/conversation/StepRegion";
 import { FileCards } from "@/components/conversation/FileCards";
+import { FloatingDay } from "@/components/conversation/FloatingDay";
 import { MemoCards } from "@/components/conversation/MemoCards";
 import { ReminderCards } from "@/components/conversation/ReminderCards";
 import { SubtaskCards } from "@/components/conversation/SubtaskCards";
@@ -963,6 +964,16 @@ function MainViewContent({
               />
             </div>
           </div>
+        )}
+
+        {/* The day at the top of the viewport while you scroll back
+            (main chat PRD ruling 171, ticket 124): top centre, mirroring
+            the button below. The main chat only. */}
+        {isMainChat && (
+          <FloatingDay
+            scrollContainerRef={scrollContainerRef}
+            atBottom={atBottom}
+          />
         )}
 
         {/* Scroll-to-bottom floating button (DESIGN.md §4.3 streaming

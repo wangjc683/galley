@@ -326,6 +326,7 @@ export function AnsweredAskUser({
   bubble = false,
   messageId,
   className,
+  at,
 }: {
   question: string;
   /** The candidates as offered (persisted tool args). */
@@ -341,6 +342,10 @@ export function AnsweredAskUser({
    * `data-message-id` on the bubble, where the assistant's right-click
    * menu reads it (main chat ticket 32). */
   messageId?: string;
+  /** When it asked (ms), on the bubble's row as `data-at`: the main
+   * chat's floating day reads the row at the top of the viewport by it
+   * (lib/floating-day.ts, ticket 124). */
+  at?: number;
 }) {
   const copy = useCopy();
   const cleaned = stripGATags(question);
@@ -390,6 +395,7 @@ export function AnsweredAskUser({
       <div
         data-role="answered-ask-user"
         data-message-id={messageId}
+        data-at={at}
         className={className ?? "my-4"}
       >
         <AssistantBubble>

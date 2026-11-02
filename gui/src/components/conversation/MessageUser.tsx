@@ -219,6 +219,10 @@ export interface MessageUserProps {
    * workbench's `mt-5` (the IM gaps, lib/assistant-conversation.ts
    * `assistantRowGap`); the bottom one is the chip row's 30px in both. */
   rowClassName?: string;
+  /** When it was sent (ms), on the row as `data-at`: the main chat's
+   * floating day reads the row at the top of the viewport by it
+   * (lib/floating-day.ts, ticket 124). */
+  at?: number;
 }
 
 export const MessageUser = memo(function MessageUser({
@@ -229,6 +233,7 @@ export const MessageUser = memo(function MessageUser({
   messageId,
   assistant = false,
   rowClassName,
+  at,
 }: MessageUserProps) {
   const copy = useCopy();
   const { quotes, body } = useMemo(
@@ -370,6 +375,7 @@ export const MessageUser = memo(function MessageUser({
       }}
       onMouseLeave={() => setHovered(false)}
       data-selection-yield={assistant ? selectionYieldKey : undefined}
+      data-at={at}
     >
       {/* Provenance above the bubble, on its side: Galley, Galley CLI
           or a scheduled task. In flow — it takes its real height. The

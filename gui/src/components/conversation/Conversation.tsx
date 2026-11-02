@@ -44,6 +44,7 @@ import {
   buildWrittenFileResolver,
 } from "@/lib/written-files";
 import { copyTextToClipboard } from "@/lib/clipboard";
+import { rowAt } from "@/lib/floating-day";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { isMenuBubble, messageDeleteBlock } from "@/lib/message-delete";
 import {
@@ -598,6 +599,7 @@ export function Conversation({
           askUserReply={replySet.has(turnIndex)}
           messageId={turn.messageId}
           assistant={assistant}
+          at={assistant ? rowAt(turn.createdAt) : undefined}
           rowClassName={
             assistant
               ? pinned
@@ -656,6 +658,7 @@ export function Conversation({
             askUserAnswer={askUserReplyContent(turns, turnIndex, replySet)}
             runTelemetry={runTelemetryOf.get(turnIndex)}
             bubble={assistant}
+            at={assistant ? rowAt(turn.settledAt) : undefined}
             attachment={
               assistant && turn.messageId
                 ? afterAnswer(turn.messageId)
@@ -730,6 +733,7 @@ export function Conversation({
             answer={askUserReplyContent(turns, turnIndex, replySet)}
             bubble
             messageId={turn.messageId}
+            at={rowAt(turn.settledAt)}
             className={reportDivider ? "mt-5" : gap}
           />
         </Fragment>
@@ -759,6 +763,7 @@ export function Conversation({
           stepNumber={stepNumberOf.get(turnIndex)}
           runTelemetry={runTelemetryOf.get(turnIndex)}
           bubble
+          at={rowAt(turn.settledAt ?? turn.createdAt)}
           answerClassName={divider ? "mt-5" : gap}
           attachment={turn.messageId ? afterAnswer(turn.messageId) : undefined}
           process={
@@ -800,6 +805,8 @@ export function Conversation({
       ? undefined
       : reportTimeAbove.get(turnIndex);
     const open = foldOverrides[ordinal(run.opener)] === true;
+    // Its moment: when its last step landed.
+    const last = turns[turnIndex];
     return (
       <Fragment key={`stopped-${ordinal(run.opener)}`}>
         {reportTime && (
@@ -812,6 +819,7 @@ export function Conversation({
         )}
         <AssistantStoppedRun
           stats={run.stats}
+          at={last?.role === "agent" ? rowAt(last.settledAt) : undefined}
           open={open}
           onToggle={() => toggleFold(run.opener, !open)}
           className={reportTime ? "mt-5" : assistantRowGap(previous, "agent")}
@@ -1206,6 +1214,7 @@ function AgentTurnView({
   answerClassName,
   process,
   attachment,
+  at,
 }: {
   turn: AgentTurn;
   /** The answer alone, for every closing turn: a folded run's closing
@@ -1248,6 +1257,10 @@ function AgentTurnView({
   /** The subtask cards in the assistant's conversation, held right under
    * the answer bubble (after the turn's content when it has no answer). */
   attachment?: ReactNode;
+  /** When it was said (ms), on the row as `data-at`: the main chat's
+   * floating day reads the row at the top of the viewport by it
+   * (lib/floating-day.ts, ticket 124). */
+  at?: number;
 }) {
   const stepNumber = stepNumberProp ?? turn.turnIndex;
   // `finalAnswer` is what's left of GA's responseContent after the
@@ -1389,7 +1402,7 @@ function AgentTurnView({
   );
 
   return (
-    <div>
+    <div data-at={at}>
       {showMarker && (
         <TurnMarker
           index={stepNumber}

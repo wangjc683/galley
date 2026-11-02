@@ -204,6 +204,7 @@ export function AssistantStoppedRun({
   onToggle,
   steps,
   className,
+  at,
 }: {
   stats: RunStats;
   open: boolean;
@@ -212,6 +213,10 @@ export function AssistantStoppedRun({
    * `assistantProcessSteps`, no answer to leave out). None: no toggle. */
   steps: ProcessCardStep[];
   className?: string;
+  /** When its last step landed (ms), on the row as `data-at`: the main
+   * chat's floating day reads the row at the top of the viewport by it
+   * (lib/floating-day.ts, ticket 124). */
+  at?: number;
 }) {
   const copy = useCopy();
   const toggle = steps.length > 0;
@@ -244,6 +249,7 @@ export function AssistantStoppedRun({
   );
   return (
     <div
+      data-at={at}
       className={cn(
         "transition-[padding-bottom] duration-(--motion-slow) ease-firm motion-reduce:transition-none",
         shown ? "pb-0" : "pb-6",
