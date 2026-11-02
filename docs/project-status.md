@@ -876,8 +876,8 @@ the two times it spoke unasked were useful (10-21 21:50, the NBA answer it
 thought was missing; 10-28 23:53, the Hilton intake template); whether the
 10-28 invoice run counts as 「别这样」 (a ticket 106 test sentence meant to
 note a to-do; it renamed six real invoice files in the Downloads folder,
-wrote a summary sheet and put the folder rule into GA memory) and whether
-that memory stays; why 702's reminder was cancelled on 10-29; and the
+wrote a summary sheet and put the folder rule into GA memory; the memory
+goes, JC 2026-11-02, main chat PRD ruling 163); why 702's reminder was cancelled on 10-29; and the
 feelings the remaining deferred signals ask for. One mismatch to settle: the
 10-28 23:53 reply's `content` does carry a `[FILE:]` line, while ruling 154
 point 7 and the deferred 「Galley 做的文件放哪」 say it did not; if JC saw no
