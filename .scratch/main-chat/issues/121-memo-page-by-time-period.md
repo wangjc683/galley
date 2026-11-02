@@ -1,6 +1,6 @@
 # 121 「备忘」页按时间段分组；具体哪天悬停时在「⋯」左边露出来
 
-Status: ready-for-agent（2026-11-02 开票）
+Status: needs-dogfood（2026-11-02 快进合入 `305263fa`…`c3c876de`。主会话验收：看过 6 条、25 条演示、悬停最长那条与有期限那条悬停的截图；rebase 到 `0e72f6b4` 后 typecheck、lint 退出码 0，`TZ=UTC` 下 todo、memo、sessions 测试 176 条过，`diff --check` 干净；对整个分支 diff 与提交说明逐条比对 `memos` 正文，只命中通用词。只在 Chrome 无头里量过，等 JC 真窗口看）
 
 来源：[主对话 PRD](../PRD.md) 裁决 166，推翻裁决 164 第 2 条（票 [119](./119-memo-day-in-a-left-column.md) 的左栏）。只改 GUI 的「备忘」页、它的测试与设计文档；不动 Core、CLI、Agent API、迁移、「待办」页、回复下的备忘卡片。外置运行时零变化。
 
