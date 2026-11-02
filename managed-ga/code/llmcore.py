@@ -624,8 +624,8 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
             err = f"\n\n[!!! 流异常中断 {type(e).__name__}: {e} !!!]" if streamed else f"!!!Error: {type(e).__name__}: {e}"
             yield err; return [{"type": "text", "text": err}]
 
-def _galley_codex_access_token(sess):
-    """Core's current access token for this model, over Galley's credential IPC."""
+def _galley_codex_access_token(sess, min_wait=30):
+    """Core's current access token for this model, over Galley's credential IPC. Waits at least `min_wait` s: Core first refreshes a token near expiry, and its refresh may take its whole 20 s HTTP timeout."""
     ipc = getattr(sess, 'galley_credential_ipc', None)
     api_key_ref = getattr(sess, 'galley_api_key_ref', '')
     if not isinstance(ipc, dict) or not api_key_ref:
@@ -635,7 +635,7 @@ def _galley_codex_access_token(sess):
     try:
         if kind == "unix":
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-                s.settimeout(max(5, int(getattr(sess, 'connect_timeout', 10))))
+                s.settimeout(max(min_wait, int(getattr(sess, 'connect_timeout', 10))))
                 s.connect(address); s.sendall(req)
                 chunks = []
                 while True:

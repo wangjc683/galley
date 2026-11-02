@@ -1916,6 +1916,66 @@ async fn a_review_whose_turn_ends_on_an_error_is_dropped_and_waits_under_the_ext
     );
 }
 
+#[tokio::test]
+async fn a_dropped_review_keeps_the_error_its_turn_ended_on() {
+    // Main chat ticket 122: the review of 2026-11-02 died on a token fetch
+    // that timed out, and its log said only `no_reply`. The runner's error
+    // now goes with it, scrubbed and on one line.
+    let (_pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let reports = SubtaskReports::new();
+    let review = ensure_review(&galley, rec.as_ref()).await.expect("made");
+    users_todo(&galley, "回头查物流", None, false).await;
+    fire_review_now(&galley, rec.as_ref(), review.id.as_str()).await;
+    restore_pending_reminders(&reports, &galley).await;
+    let h = host(&galley, &runner, &env, rec.clone());
+    assert!(matches!(
+        wake_if_due(&reports, &h, MAIN).await,
+        Some(WakeOutcome::Delivered { .. })
+    ));
+    runner.errors.lock().unwrap().insert(
+        MAIN.into(),
+        "RuntimeError: Galley Codex credential refresh failed: timed out\n\
+         (Authorization: Bearer abcdefgh12345678)"
+            .into(),
+    );
+    runner.run_ended(MAIN, "DONE_WITHOUT_EXIT", false);
+    record_wake_run_end(&reports, &galley, &runner, rec.as_ref(), &complete(MAIN)).await;
+    let log = review_log(&galley).await;
+    assert_eq!(log[1]["event"], "dropped");
+    assert_eq!(log[1]["reason"], "no_reply");
+    assert_eq!(
+        log[1]["detail"],
+        "RuntimeError: Galley Codex credential refresh failed: timed out (Authorization: \
+         Bearer [redacted])"
+    );
+
+    // A runner that exits mid-turn with no error reported: no `detail`.
+    let (_pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let rec = Arc::new(Recorder::default());
+    let reports = SubtaskReports::new();
+    let review = ensure_review(&galley, rec.as_ref()).await.expect("made");
+    users_todo(&galley, "回头查物流", None, false).await;
+    fire_review_now(&galley, rec.as_ref(), review.id.as_str()).await;
+    restore_pending_reminders(&reports, &galley).await;
+    let h = host(&galley, &runner, &env, rec.clone());
+    assert!(matches!(
+        wake_if_due(&reports, &h, MAIN).await,
+        Some(WakeOutcome::Delivered { .. })
+    ));
+    let closed = RunSignal::Closed {
+        session_id: MAIN.into(),
+    };
+    record_wake_run_end(&reports, &galley, &runner, rec.as_ref(), &closed).await;
+    let log = review_log(&galley).await;
+    assert_eq!(log[1]["event"], "dropped");
+    assert_eq!(log[1]["reason"], "no_reply");
+    assert!(log[1].get("detail").is_none(), "{}", log[1]);
+}
+
 // ---------------- the morning review and new memos (ticket 95) ----------------
 
 use chrono::TimeZone;

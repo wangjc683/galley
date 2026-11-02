@@ -38,8 +38,8 @@ use super::login::{
 use super::logout::{logout, revoke_with_retry};
 use super::probe::{clear_if_revoked, http_error, probe_payload, visible_models_from_body};
 use super::refresh::{
-    classify_token_error, read_secret, refresh_body_to_secret, resolve_access_token_with_refresh,
-    save_secret, RefreshFailure,
+    classify_token_error, read_secret, refresh_body_to_secret, refresh_log_line,
+    resolve_access_token_with_refresh, save_secret, RefreshFailure,
 };
 use super::secret::{
     new_host_id, parse_timestamp, read_registration, save_registration, SiwcRegistration,
@@ -1325,6 +1325,54 @@ async fn temporary_refresh_failure_keeps_the_credential() {
     assert_eq!(kept.access_token, "access-old");
     assert_eq!(kept.refresh_token, "refresh-old");
     assert_eq!(kept.last_refresh_error.as_deref(), Some("HTTP 503"));
+}
+
+#[test]
+fn a_refresh_is_logged_with_its_time_and_end_never_a_token() {
+    // Main chat ticket 122: the line Core prints for each refresh.
+    let r = "managed-provider:mp_chatgpt_codex";
+    let refreshed = siwc_secret("access-NEW-SECRET", "refresh-NEW-SECRET", 3600);
+    let lines = [
+        refresh_log_line(r, Duration::from_millis(11_240), &Ok(refreshed)),
+        refresh_log_line(
+            r,
+            Duration::from_secs(20),
+            &Err(RefreshFailure::Temporary {
+                detail: "token request failed: error sending request for url \
+                         (https://auth.example/oauth/token?client_secret=cs-SECRET)"
+                    .into(),
+            }),
+        ),
+        refresh_log_line(
+            r,
+            Duration::from_millis(800),
+            &Err(RefreshFailure::Rejected {
+                detail: "HTTP 400: {\"error\":\"x\",\"refresh_token\":\"rt-SECRET\"}".into(),
+            }),
+        ),
+        refresh_log_line(
+            r,
+            Duration::from_millis(800),
+            &Err(RefreshFailure::Terminal {
+                code: "refresh_token_invalidated".into(),
+            }),
+        ),
+    ];
+    assert_eq!(
+        lines,
+        [
+            "[chatgpt-siwc] managed-provider:mp_chatgpt_codex: refreshed the access token in \
+             11.2s",
+            "[chatgpt-siwc] managed-provider:mp_chatgpt_codex: refreshing the access token \
+             failed for now after 20.0s: token request failed: error sending request for url \
+             (https://auth.example/oauth/token?[redacted])",
+            "[chatgpt-siwc] managed-provider:mp_chatgpt_codex: refreshing the access token was \
+             rejected after 0.8s: HTTP 400: {\"error\":\"x\",\"refresh_token\":\"[redacted]\"}",
+            "[chatgpt-siwc] managed-provider:mp_chatgpt_codex: refreshing the access token was \
+             rejected after 0.8s, sign in again: refresh_token_invalidated",
+        ]
+    );
+    assert!(lines.iter().all(|line| !line.contains("SECRET")));
 }
 
 // ---------------------------------------------------------------------

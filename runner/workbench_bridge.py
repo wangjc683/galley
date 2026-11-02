@@ -14,7 +14,8 @@ Stdout discipline: GA's tool implementations call print() in places we don't
 control (e.g. ga.code_run streaming subprocess output). To keep our JSON
 Lines stream clean, we capture the original stdout fd at startup and route
 sys.stdout to /dev/null. All bridge events go through self._emit() which
-writes to the captured fd.
+writes to the captured fd. Two kinds of GA print, `Backend Error` and
+`[LLM Retry]` lines, go to stderr instead (runner.ga_print_forward).
 """
 from __future__ import annotations
 
@@ -28,9 +29,10 @@ import threading
 import time
 import traceback
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, TextIO, cast
 
 from runner import _watchdog, managed_runtime, process_command
+from runner.ga_print_forward import GaPrintForwarder
 from runner.ga_session import GaSession
 from runner.ipc import (
     PROTOCOL_VERSION,
@@ -79,13 +81,18 @@ def _silence_python_stdout() -> None:
     inherit it, and C extensions write to it directly — either injects
     garbage lines that corrupt the whole session's event framing. dup2
     /dev/null over fd 1 so only the captured handle can reach the pipe.
+
+    sys.stdout drops what GA prints except two kinds of line, `Backend
+    Error` and `[LLM Retry]`, which go to stderr (main chat ticket 122,
+    `runner.ga_print_forward`); its fileno is still /dev/null's.
     """
     devnull_fd = os.open(os.devnull, os.O_WRONLY)
     try:
         os.dup2(devnull_fd, 1)
     finally:
         os.close(devnull_fd)
-    sys.stdout = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+    devnull = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+    sys.stdout = cast(TextIO, GaPrintForwarder(sys.stderr, devnull))
 
 
 # ---------------- Cleanup helpers (mirror frontends/chatapp_common.py spirit) ----------------

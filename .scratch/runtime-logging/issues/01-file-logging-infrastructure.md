@@ -142,3 +142,11 @@ JC 的裁决:**暂缓**。理由是日志对用户体验贡献为零,受益人�
 
 讨论中另有一项与日志解耦的独立发现(bridge 管了 fd 1 未管 fd 2),已单开
 `.scratch/bridge-stderr-fd2/`,避免与本 issue 绑死后一并被推迟。
+
+### 2026-11-02 — 主对话票 122，几行新的标准错误日志
+
+票 [122](../../main-chat/issues/122-token-wait-and-visible-errors.md) 为巡看补跑失败（票 120 诊断）补了几行日志，仍只打到标准错误，不落盘（巡看日志里的报错除外，它在 `prefs` 里）。上面「敏感信息」一节的分类因此要加一类：
+
+- **runner 转发的 GA 打印**：GA 打到标准输出的 `Backend Error`、`[LLM Retry]` 两类行，runner 转到标准错误（`runner/ga_print_forward.py`，只认行首、按行缓冲、截到 1000 字符），其余打印照旧丢掉；fd 1 照旧接 /dev/null。
+- **Core 自己打的**：`[runner error <会话>] <category>/<context>: <message>`（`severity = error` 的错误事件，`runner_manager/manager.rs`）；`[chatgpt-siwc] <apiKeyRef>: refreshed the access token in 11.2s` 一类的刷新耗时与结果（`chatgpt_siwc/refresh.rs`）；`[credential-ipc] runner_error: the runner stopped waiting: …`（回写失败，`credential_ipc/mod.rs`）。
+- **脱敏**：上面每一行引用的报错原文都先过同一套规则（Core `core/src/log_excerpt.rs`、runner `scrub_log_text`）：去掉 URL 的 query 串与 user info，遮住 `Bearer` / `Basic` 后的值、键名像凭据的 `key=value`、`sk-` 开头的 key、JWT、Google API key 与 40 字符以上字母数字混排的串；主机名与路径保留。报错原文里的路径与片段（异常信息可能引到用户文件或模型回复）没有处理，日后落盘时要再看。

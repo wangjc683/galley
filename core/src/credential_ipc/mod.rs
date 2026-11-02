@@ -16,7 +16,7 @@ mod tests;
 
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock, RwLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ring::rand::{SecureRandom, SystemRandom};
 use serde::{Deserialize, Serialize};
@@ -203,7 +203,7 @@ async fn start_platform_credential_ipc(
             let token = token_for_task.clone();
             let allowed_credentials = allowed_credentials.clone();
             tokio::spawn(async move {
-                let _ = handle_credential_ipc_stream(stream, token, allowed_credentials).await;
+                serve_credential_ipc_stream(stream, token, allowed_credentials).await;
             });
         }
     });
@@ -247,7 +247,7 @@ async fn start_platform_credential_ipc(
             let token = token_for_task.clone();
             let allowed_credentials = allowed_credentials.clone();
             tokio::spawn(async move {
-                let _ = handle_credential_ipc_stream(server, token, allowed_credentials).await;
+                serve_credential_ipc_stream(server, token, allowed_credentials).await;
             });
         }
     });
@@ -309,6 +309,38 @@ fn create_secure_credential_pipe(
     result
 }
 
+/// Serve one connection. What goes wrong is logged: nobody is left to
+/// tell, as the runner hung up or never asked properly. Until main chat
+/// ticket 122 it was dropped, which hid a refresh that outlasted the
+/// runner's wait.
+async fn serve_credential_ipc_stream<S>(
+    stream: S,
+    expected_token: String,
+    allowed_credentials: Arc<RwLock<CredentialIpcAllowlist>>,
+) where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    if let Err(e) = handle_credential_ipc_stream(stream, expected_token, allowed_credentials).await
+    {
+        eprintln!("[credential-ipc] {e}");
+    }
+}
+
+/// What a connection whose answer could not be written back failed with:
+/// the runner stopped waiting and closed its end (managed GA's token
+/// fetch waits at most 30 s, patch `0007`), typically while Core was
+/// still refreshing the token. `elapsed` runs from the request read to
+/// the failed write.
+fn runner_gave_up(elapsed: Duration, error: &std::io::Error) -> GalleyError {
+    GalleyError::RunnerError {
+        message: format!(
+            "the runner stopped waiting: answering took {:.1}s and the answer could not \
+             be written back ({error})",
+            elapsed.as_secs_f64()
+        ),
+    }
+}
+
 async fn handle_credential_ipc_stream<S>(
     stream: S,
     expected_token: String,
@@ -326,6 +358,7 @@ where
         .map_err(|e| GalleyError::RunnerError {
             message: format!("reading credential IPC request failed: {e}"),
         })?;
+    let started = Instant::now();
     let response = match serde_json::from_str::<CredentialIpcRequest>(&line) {
         Ok(req) => {
             // Snapshot under the read lock; never hold it across await.
@@ -339,25 +372,18 @@ where
             message: format!("credential IPC request is invalid JSON: {e}"),
         }),
     };
-    let body = match response {
+    let mut body = match response {
         Ok(response) => serde_json::to_vec(&response),
         Err(err) => serde_json::to_vec(&err),
     }
     .map_err(|e| GalleyError::Internal {
         message: format!("serializing credential IPC response failed: {e}"),
     })?;
+    body.push(b'\n');
     writer
         .write_all(&body)
         .await
-        .map_err(|e| GalleyError::RunnerError {
-            message: format!("writing credential IPC response failed: {e}"),
-        })?;
-    writer
-        .write_all(b"\n")
-        .await
-        .map_err(|e| GalleyError::RunnerError {
-            message: format!("writing credential IPC response failed: {e}"),
-        })?;
+        .map_err(|e| runner_gave_up(started.elapsed(), &e))?;
     Ok(())
 }
 

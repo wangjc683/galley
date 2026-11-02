@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 use std::future::Future;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use reqwest::StatusCode;
@@ -67,7 +68,13 @@ where
         return Ok(secret.into_resolved());
     }
 
-    match refresh(secret.clone()).await {
+    let started = Instant::now();
+    let refreshed = refresh(secret.clone()).await;
+    eprintln!(
+        "{}",
+        refresh_log_line(api_key_ref, started.elapsed(), &refreshed)
+    );
+    match refreshed {
         Ok(refreshed) => {
             save_secret(galley, api_key_ref, &refreshed).await?;
             Ok(refreshed.into_resolved())
@@ -100,6 +107,40 @@ where
             }
         }
     }
+}
+
+/// How many characters of a failed refresh's detail Core logs.
+const REFRESH_DETAIL_MAX_CHARS: usize = 300;
+
+/// The stderr line for one refresh of the access token on the way to a
+/// request (main chat ticket 122): how long it took and how it ended. On
+/// 2026-11-02 one took about 11 s while managed GA waited 10, and nothing
+/// recorded it. Never a token: a failure's detail is the classified
+/// status, error code or redacted body ([`classify_token_error`]) or the
+/// network error, scrubbed again ([`crate::log_excerpt`]).
+pub(super) fn refresh_log_line(
+    api_key_ref: &str,
+    elapsed: Duration,
+    result: &Result<SiwcSecret, RefreshFailure>,
+) -> String {
+    let secs = elapsed.as_secs_f64();
+    let detail = |detail: &str| crate::log_excerpt::log_excerpt(detail, REFRESH_DETAIL_MAX_CHARS);
+    let outcome = match result {
+        Ok(_) => format!("refreshed the access token in {secs:.1}s"),
+        Err(RefreshFailure::Temporary { detail: d }) => format!(
+            "refreshing the access token failed for now after {secs:.1}s: {}",
+            detail(d)
+        ),
+        Err(RefreshFailure::Rejected { detail: d }) => format!(
+            "refreshing the access token was rejected after {secs:.1}s: {}",
+            detail(d)
+        ),
+        Err(RefreshFailure::Terminal { code }) => format!(
+            "refreshing the access token was rejected after {secs:.1}s, sign in again: {}",
+            detail(code)
+        ),
+    };
+    format!("[chatgpt-siwc] {api_key_ref}: {outcome}")
 }
 
 fn ensure_has_tokens(secret: &SiwcSecret) -> PlanResult<()> {

@@ -15,7 +15,7 @@ Galley (Galley) bridge 与 desktop 之间的通信契约。本文件是**唯一�
 - **格式**：JSON Lines（每行一个 JSON 对象，UTF-8 编码，以 `\n` 结尾）
 - **stdin**：Galley Core → runner 的命令
 - **stdout**：runner → Galley Core 的事件
-- **stderr**：仅用于 runner 自身崩溃日志，Galley Core 不解析事件（只 rolling buffer 最后 8 行给 abnormal-exit toast）
+- **stderr**：runner 自身的日志与崩溃信息，外加 GA 打到标准输出的两类行：`Backend Error` 与 `[LLM Retry]` 开头的行由 runner 转到 stderr（只认行首、按行缓冲、脱敏、截到 1000 字符，其余打印照旧丢掉，`runner/ga_print_forward.py`，主对话票 122）。Galley Core 不解析事件，逐行加 `[runner stderr <会话>]` 前缀打到自己的标准错误，只 rolling buffer 最后 8 行给 abnormal-exit toast
 - **字段命名**：camelCase
 - **时间戳**：ISO 8601 带时区（如 `2026-05-07T13:51:00+08:00`）
 - **空字符串 vs null**：缺失用 `null` 或省略字段；不要用空字符串当"无"
@@ -381,6 +381,8 @@ agent 主动调用 `ask_user` 工具时发出。bridge 此时 agent_runner_loop 
   - 未命中分类时省略此字段
 - `context`：错误发生时正在处理的命令名或阶段（debug 用）
 - `traceback`：完整 Python traceback（power user / debug 用，desktop 默认折叠）
+
+Core 收到 `severity: "error"` 的 `error` 时，往自己的标准错误打一行 `[runner error <会话>] <category>/<context>: <message>`（`message` 脱敏、单行、截到 500 字符，`core/src/log_excerpt.rs`；主对话票 122），并把 `message` 留在内存里给子任务回报和巡看日志用；`warning` / `info` 不打。
 
 **为什么 bridge 给结构化字段而不是 desktop 推断**：bridge 离异常源最近，分类最准；desktop 做字符串模式匹配是反模式，新增错误类型时容易漏判。一致原则：bridge 是 truth，desktop 是 view。
 

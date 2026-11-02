@@ -210,7 +210,18 @@ What sets it apart from an API-key provider:
   metadata, never a token.
 - Managed GA asks Core for a short-lived access token over the local credential
   IPC (`core/src/credential_ipc/`) before each request. The reply carries the
-  access token and its expiry, never the refresh token.
+  access token and its expiry, never the refresh token. A token within 120 s of
+  expiry is refreshed first, on the way to that request, and Core's refresh may
+  take its whole 20 s HTTP timeout, so the engine waits at least 30 s for the
+  reply (the larger of 30 s and the model's `connect_timeout`; on macOS, the
+  Windows named pipe has no timeout). Until main chat ticket 122 it waited
+  `max(5, connect_timeout)`, 10 s on the plan preset, and on 2026-11-02 the
+  first request after a long idle gave up on an 11 s refresh. Core logs every
+  refresh to stderr with its time and end (`[chatgpt-siwc] <apiKeyRef>:
+  refreshed the access token in 11.2s`, or failed for now / rejected / rejected,
+  sign in again, with the scrubbed detail) and an answer it could not write back
+  because the runner stopped waiting (`[credential-ipc] runner_error: the
+  runner stopped waiting: answering took 31.0s …`); never a token.
 - The engine sends a Codex-shaped Responses request (`{api_base}/responses`,
   `store: false`, forced streaming, no `max_output_tokens`); a configured
   `minimal` reasoning effort is raised to `medium`.

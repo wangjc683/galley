@@ -21,6 +21,7 @@ pub mod error;
 pub mod im_supervisor;
 pub mod ipc;
 pub mod local_file;
+mod log_excerpt;
 pub mod git_review;
 pub mod main_chat_reset;
 pub mod managed_model_config;

@@ -677,10 +677,14 @@ def test_chatgpt_plan_sends_galley_headers_and_codex_body(
 
 class _FakeIpcSocket:
     """Stands in for the AF_UNIX socket to Core's credential IPC: records what
-    the engine sends and answers one line."""
+    the engine sends and answers one line, `answers_after` seconds after the
+    request. No clock runs: like a real socket's `recv`, it times out when the
+    engine's timeout is shorter than that, and answers otherwise."""
 
-    def __init__(self, reply: dict[str, Any]) -> None:
+    def __init__(self, reply: dict[str, Any], answers_after: float = 0.0) -> None:
         self.reply: bytes | None = json.dumps(reply).encode() + b"\n"
+        self.answers_after = answers_after
+        self.timeout: float | None = None
         self.address: str | None = None
         self.sent: list[bytes] = []
 
@@ -690,8 +694,8 @@ class _FakeIpcSocket:
     def __exit__(self, *_args: object) -> None:
         return None
 
-    def settimeout(self, _timeout: float) -> None:
-        return None
+    def settimeout(self, timeout: float) -> None:
+        self.timeout = timeout
 
     def connect(self, address: str) -> None:
         self.address = address
@@ -700,14 +704,20 @@ class _FakeIpcSocket:
         self.sent.append(data)
 
     def recv(self, _size: int) -> bytes:
+        if self.timeout is not None and self.timeout < self.answers_after:
+            raise TimeoutError("timed out")
         reply, self.reply = self.reply or b"", None
         return reply
 
 
 def _ipc_session(
-    monkeypatch: pytest.MonkeyPatch, reply: dict[str, Any]
+    monkeypatch: pytest.MonkeyPatch,
+    reply: dict[str, Any],
+    *,
+    answers_after: float = 0.0,
+    extra: dict[str, Any] | None = None,
 ) -> tuple[Any, _FakeIpcSocket]:
-    ipc = _FakeIpcSocket(reply)
+    ipc = _FakeIpcSocket(reply, answers_after)
     monkeypatch.setattr(
         llmcore,
         "socket",
@@ -723,6 +733,7 @@ def _ipc_session(
             "codex_backend": True,
             "galley_api_key_ref": "managed-provider:mp_chatgpt_codex",
             "galley_credential_ipc": {"kind": "unix", "address": "/galley.sock", "token": "t"},
+            **(extra or {}),
         }
     )
     return sess, ipc
@@ -771,6 +782,46 @@ def test_codex_backend_names_the_code_core_refused_with(
     message = str(raised.value)
     assert message.startswith("Galley Codex credential refresh failed: ")
     assert "chatgpt_plan_reauth_required" in message
+
+
+def test_codex_backend_waits_for_a_token_core_refreshes_slowly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Main chat ticket 122: the first request after an hour idle waits for
+    Core to refresh the token, which took 11 s on 2026-11-02 and may take
+    Core's whole 20 s HTTP timeout. The plan preset's `connect_timeout` is
+    10 s; the token fetch waits at least 30."""
+    net = _install_network(monkeypatch, _OK_STREAM)
+    sess, ipc = _ipc_session(
+        monkeypatch,
+        {"accessToken": "access-after-refresh"},
+        answers_after=12,
+        extra={"timeout": 10},
+    )
+    assert sess.connect_timeout == 10
+
+    chunks, _ = _run(sess)
+
+    assert chunks == ["ok"]
+    assert ipc.timeout == 30
+    assert net.posts[0]["headers"]["Authorization"] == "Bearer access-after-refresh"
+
+
+def test_codex_backend_token_wait_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Past the wait, the fetch fails as before, outside GA's retry loop:
+    the error names the timeout."""
+    _install_network(monkeypatch, _OK_STREAM)
+    sess, _ = _ipc_session(
+        monkeypatch,
+        {"accessToken": "too-late"},
+        answers_after=31,
+        extra={"timeout": 10},
+    )
+
+    with pytest.raises(RuntimeError) as raised:
+        _run(sess)
+
+    assert str(raised.value) == "Galley Codex credential refresh failed: timed out"
 
 
 def test_without_the_codex_backend_ga_headers_are_unchanged(

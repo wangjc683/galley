@@ -3,6 +3,7 @@
 //! listener's own Unix socket file.
 
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use chrono::Utc;
 use serde_json::Value;
@@ -15,8 +16,8 @@ use crate::db::SqliteGalley;
 use crate::error::GalleyError;
 
 use super::{
-    fulfill_credential_ipc_request, handle_credential_ipc_stream, validate_credential_ipc_request,
-    CredentialIpcAllowlist, CredentialIpcRequest, CredentialKind,
+    fulfill_credential_ipc_request, handle_credential_ipc_stream, runner_gave_up,
+    validate_credential_ipc_request, CredentialIpcAllowlist, CredentialIpcRequest, CredentialKind,
 };
 
 const CHATGPT_REF: &str = "managed-provider:mp_chatgpt_codex";
@@ -117,6 +118,51 @@ async fn credential_ipc_disallowed_ref_returns_json_error() {
     assert_eq!(value["error"], "invalid_args");
     assert!(value["message"].as_str().unwrap().contains("not allowed"));
     task.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn credential_ipc_reports_a_runner_that_stopped_waiting() {
+    // Main chat ticket 122: the runner's token fetch timed out and closed
+    // its end while Core was still answering. The failed write-back is an
+    // error, which `serve_credential_ipc_stream` logs, not a silent drop.
+    let (mut client, server) = tokio::io::duplex(1024);
+    client
+        .write_all(
+            br#"{"token":"bad","apiKeyRef":"managed-provider:mp_test","credentialKind":"api_key"}"#,
+        )
+        .await
+        .unwrap();
+    client.write_all(b"\n").await.unwrap();
+    drop(client);
+
+    let err = handle_credential_ipc_stream(
+        server,
+        "expected".into(),
+        Arc::new(RwLock::new(CredentialIpcAllowlist::new())),
+    )
+    .await
+    .expect_err("nobody is left to answer");
+
+    assert!(matches!(err, GalleyError::RunnerError { .. }));
+    let message = err.to_string();
+    assert!(
+        message.starts_with("runner_error: the runner stopped waiting: answering took "),
+        "{message}"
+    );
+    assert!(message.contains("could not be written back"), "{message}");
+}
+
+#[test]
+fn runner_gave_up_names_how_long_answering_took() {
+    let err = runner_gave_up(
+        Duration::from_millis(11_240),
+        &std::io::Error::from(std::io::ErrorKind::BrokenPipe),
+    );
+    assert_eq!(
+        err.to_string(),
+        "runner_error: the runner stopped waiting: answering took 11.2s and the answer could \
+         not be written back (broken pipe)"
+    );
 }
 
 #[tokio::test]

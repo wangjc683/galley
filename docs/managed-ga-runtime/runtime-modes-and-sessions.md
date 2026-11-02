@@ -367,6 +367,10 @@ ruling 9; `core/src/scheduler.rs`, `core/src/subtask_report.rs`, migration
   it by asking the main chat, which pauses it (`schedule disable`). Each
   coming due, skip, hand run and dropped wake is appended to the
   `assistant_review_log` pref (at most 400 entries) for the trial snapshot.
+  A wake dropped because the turn it woke ended on an error or lost its
+  runner (`reason: no_reply`) also carries `detail`, the error the runner
+  reported for that turn (scrubbed, one line, at most 300 characters;
+  absent when it reported none; main chat ticket 122).
 
 ### The User's To-Dos
 

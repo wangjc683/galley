@@ -163,6 +163,9 @@ pub const REVIEW_LOG_PREF: &str = "assistant_review_log";
 /// How many entries the review's log keeps (about a year of fires).
 pub const REVIEW_LOG_MAX: usize = 400;
 
+/// How many characters of the runner's error a dropped entry keeps.
+pub const REVIEW_LOG_DETAIL_MAX_CHARS: usize = 300;
+
 /// The pref the morning review's memo window is kept under from its fire
 /// to its wake (main chat ticket 95): `{taskId, firedAt, window}`, the
 /// window as [`MemoReviewWindow::to_json`] writes it, for the review's
@@ -518,6 +521,7 @@ pub async fn fire_review<Tz: TimeZone>(
             &fired_at,
             Some(&planned),
             None,
+            None,
         )
         .await;
         return ReviewFire::Woke;
@@ -553,6 +557,7 @@ pub async fn fire_review<Tz: TimeZone>(
                 task.id.as_str(),
                 &fired_at,
                 Some(&planned),
+                None,
                 None,
             )
             .await;
@@ -627,7 +632,10 @@ pub async fn review_wake_memos(galley: &SqliteGalley, task: &ScheduledTaskBrief)
 
 /// One entry in the morning review's log ([`REVIEW_LOG_PREF`]): what
 /// happened, to which fire (`firedAt`, the planned `dueAt` when there is
-/// one), when, and for a dropped wake why. A failed write is logged and
+/// one), when, and for a dropped wake why: its `reason` and, when the
+/// turn it woke failed, the runner's error as `detail` (main chat ticket
+/// 122; scrubbed, one line, at most [`REVIEW_LOG_DETAIL_MAX_CHARS`]
+/// characters; absent when there is none). A failed write is logged and
 /// otherwise ignored: the log is the trial's count, not the review.
 pub async fn log_review(
     galley: &SqliteGalley,
@@ -636,6 +644,7 @@ pub async fn log_review(
     fired_at: &str,
     due_at: Option<&str>,
     reason: Option<&str>,
+    detail: Option<&str>,
 ) {
     let mut entry = serde_json::json!({
         "event": event,
@@ -648,6 +657,12 @@ pub async fn log_review(
     }
     if let Some(reason) = reason {
         entry["reason"] = serde_json::json!(reason);
+    }
+    if let Some(detail) = detail
+        .map(|detail| crate::log_excerpt::log_excerpt(detail, REVIEW_LOG_DETAIL_MAX_CHARS))
+        .filter(|detail| !detail.is_empty())
+    {
+        entry["detail"] = serde_json::json!(detail);
     }
     if let Err(e) = galley
         .append_pref_log(REVIEW_LOG_PREF, entry, REVIEW_LOG_MAX)
@@ -704,7 +719,16 @@ pub async fn run_now(
             }
             if task.is_review() {
                 let fired = instant_to_utc_iso(&now);
-                log_review(&galley, ReviewEvent::Run, id, &fired, Some(&fired), None).await;
+                log_review(
+                    &galley,
+                    ReviewEvent::Run,
+                    id,
+                    &fired,
+                    Some(&fired),
+                    None,
+                    None,
+                )
+                .await;
             }
             if let Some(reports) = reports {
                 match ctx.app {

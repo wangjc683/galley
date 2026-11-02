@@ -1370,6 +1370,7 @@ pub async fn take_due(
             host.notifier.as_ref(),
             reports.take_due_tasks(main_chat_id),
             ReminderUndeliveredReason::Asking,
+            None,
         )
         .await;
         announce_undelivered(
@@ -1571,6 +1572,7 @@ async fn still_due(host: &RunnerHost<'_>, main: &str, taken: Vec<Waiting>) -> Ve
                 host.notifier.as_ref(),
                 due_tasks,
                 ReminderUndeliveredReason::NoMainChat,
+                None,
             )
             .await;
             return Vec::new();
@@ -1658,6 +1660,7 @@ async fn keep_for_later(
         host.notifier.as_ref(),
         due_tasks.into_iter().map(|w| w.report).collect(),
         ReminderUndeliveredReason::NotStarted,
+        None,
     )
     .await;
     let ids = mark_announced(&mut kept);
@@ -1672,11 +1675,14 @@ async fn keep_for_later(
 /// settled as notified and the desktop is told to show the task's own
 /// words ([`SCHEDULED_REMINDER_UNDELIVERED_EVENT`]). A fire that is no
 /// longer pending (cancelled, fired again, settled) says nothing.
+/// `error` is what the runner reported when the turn that carried them
+/// failed ([`record_wake_run_end`]); the review's log keeps it.
 pub async fn return_due_tasks(
     galley: &SqliteGalley,
     notifier: &dyn Notifier,
     due_tasks: Vec<SubtaskReport>,
     reason: ReminderUndeliveredReason,
+    error: Option<&str>,
 ) {
     if due_tasks.is_empty() {
         return;
@@ -1686,7 +1692,7 @@ pub async fn return_due_tasks(
             continue;
         };
         if due.review {
-            drop_review_wake(galley, report, due, reason).await;
+            drop_review_wake(galley, report, due, reason, error).await;
             continue;
         }
         match galley
@@ -1722,12 +1728,14 @@ pub async fn return_due_tasks(
 /// (ticket 73): dropped, with no notification — its words are for the
 /// model, and a system notification would show them to the user. The
 /// fire stays consumed (it does not come due again today) and its log
-/// says why. A fire no longer pending says nothing.
+/// says why, with the runner's `error` when the turn it woke failed
+/// (main chat ticket 122). A fire no longer pending says nothing.
 async fn drop_review_wake(
     galley: &SqliteGalley,
     report: &SubtaskReport,
     due: &DueReminder,
     reason: ReminderUndeliveredReason,
+    error: Option<&str>,
 ) {
     match galley
         .drop_scheduled_wake(&due.task_id, &due.fired_at)
@@ -1748,6 +1756,7 @@ async fn drop_review_wake(
                 &due.fired_at,
                 Some(&due.due_at),
                 why.as_deref(),
+                error,
             )
             .await;
         }
@@ -1763,8 +1772,9 @@ async fn drop_review_wake(
 /// queue step: when a delivered wake carried due tasks, the turn it
 /// started has ended. A turn that ended on an error or lost its runner
 /// before replying did not deliver them — they are handed to a
-/// notification; any other end delivered them (a `<no-reply/>`, a stop
-/// by the user included).
+/// notification, with the error the runner reported when there is one;
+/// any other end delivered them (a `<no-reply/>`, a stop by the user
+/// included).
 pub async fn record_wake_run_end(
     reports: &SubtaskReports,
     galley: &SqliteGalley,
@@ -1784,11 +1794,13 @@ pub async fn record_wake_run_end(
         run_end(signal, &state),
         Some(RunEnd::NoExit | RunEnd::RunnerExited)
     ) {
+        let error = runner.last_run_error(session_id).await;
         return_due_tasks(
             galley,
             notifier,
             carried,
             ReminderUndeliveredReason::NoReply,
+            error.as_deref(),
         )
         .await;
         return;

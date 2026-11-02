@@ -5,7 +5,7 @@
 
 use crate::api::QueuedMessage;
 use crate::db::SqliteGalley;
-use crate::ipc::{IpcCommand, IpcEvent};
+use crate::ipc::{ErrorEvent, IpcCommand, IpcEvent};
 use crate::notify::Notifier;
 use crate::runner_manager::error::{RunnerSpawnError, SendCommandError, ShutdownError};
 use crate::runner_manager::process::{BroadcastItem, HeldClose, RunnerProcess};
@@ -1113,6 +1113,28 @@ fn pump_watched_events(
     out
 }
 
+/// How many characters of an error event's message Core logs.
+const ERROR_LINE_MAX_CHARS: usize = 500;
+
+/// The stderr line for an `error`-severity error event (main chat ticket
+/// 122): what the runner reported going wrong, e.g. the engine's
+/// exception before a `DONE_WITHOUT_EXIT`. Until then it lived only in
+/// memory ([`RunnerManager::last_run_error`]) and in a desktop toast,
+/// which is not stored. One line, scrubbed, cut to
+/// [`ERROR_LINE_MAX_CHARS`].
+fn error_event_line(sid: &str, e: &ErrorEvent) -> String {
+    let context = e
+        .context
+        .as_deref()
+        .map(|context| format!("/{context}"))
+        .unwrap_or_default();
+    format!(
+        "[runner error {sid}] {}{context}: {}",
+        e.category,
+        crate::log_excerpt::log_excerpt(&e.message, ERROR_LINE_MAX_CHARS)
+    )
+}
+
 /// Queue-side handling of one watched event (galley#19/#20).
 /// Returns `false` once the drain task's channel is gone.
 async fn queue_bookkeeping(
@@ -1127,6 +1149,7 @@ async fn queue_bookkeeping(
             q.entry(sid.to_string()).or_default().ask_pending = true;
         }
         IpcEvent::Error(e) if e.severity == "error" => {
+            eprintln!("{}", error_event_line(sid, &e));
             // What went wrong, for a subtask report (ticket 29).
             let mut q = queues.lock().await;
             q.entry(sid.to_string()).or_default().last_error = Some(e.message);
@@ -1446,6 +1469,50 @@ mod tests {
         assert_eq!(
             mgr.last_run_error("s").await.as_deref(),
             Some("429 Too Many")
+        );
+    }
+
+    #[test]
+    fn an_error_event_is_logged_on_one_scrubbed_line() {
+        let event = |message: &str, context: Option<&str>| -> ErrorEvent {
+            serde_json::from_value(serde_json::json!({
+                "sessionId": "s-main",
+                "message": message,
+                "category": "runtime",
+                "severity": "error",
+                "context": context,
+                "timestamp": "t",
+            }))
+            .expect("error event")
+        };
+        assert_eq!(
+            error_event_line(
+                "s-main",
+                &event(
+                    "RuntimeError: Galley Codex credential refresh failed: timed out",
+                    Some("task_end"),
+                ),
+            ),
+            "[runner error s-main] runtime/task_end: RuntimeError: Galley Codex credential \
+             refresh failed: timed out"
+        );
+        let line = error_event_line(
+            "s-main",
+            &event(
+                "ConnectionError: Max retries exceeded with url: /v1/x?key=k\n\
+                 Authorization: Bearer abcdefgh12345678",
+                None,
+            ),
+        );
+        assert_eq!(
+            line,
+            "[runner error s-main] runtime: ConnectionError: Max retries exceeded with url: \
+             /v1/x?[redacted] Authorization: Bearer [redacted]"
+        );
+        let long = error_event_line("s-main", &event(&"x ".repeat(1000), None));
+        assert_eq!(
+            long.chars().count(),
+            "[runner error s-main] runtime: ".chars().count() + ERROR_LINE_MAX_CHARS
         );
     }
 
