@@ -91,7 +91,14 @@ function render(language: ResolvedLanguage = "zh-CN"): string {
 const count = (html: string, needle: string) => html.split(needle).length - 1;
 
 describe("the 备忘 page", () => {
-  it("groups by the day last noted or changed, the latest first, under the to-do page's labels", () => {
+  /** A day's section: from its tag to the next one's, or the end. */
+  function sections(html: string): string[] {
+    return html.split("<section").slice(1);
+  }
+  const DAY_CELL =
+    'data-role="memo-day" class="w-[76px] shrink-0 break-words py-1.5 pl-2.5 text-[12px] leading-5 tabular-nums text-ink-muted"';
+
+  it("groups by the day last noted or changed, the latest first, 8px between days", () => {
     store.memos = [NAME, CILANTRO, TRIP];
     const html = render();
     expect(count(html, "data-memo-group")).toBe(2);
@@ -101,10 +108,75 @@ describe("the 备忘 page", () => {
     );
     expect(order.every((at) => at > -1)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
-    // The group label's register (GroupLabel): 11px semibold, muted.
-    expect(html).toContain("text-[11px] font-semibold text-ink-muted");
-    // 12px between groups, as the to-do page's.
-    expect(html).toContain('data-role="memo-groups" class="space-y-3"');
+    // 8px between days (ticket 119; 12px under the to-do page's labels
+    // before), none over the first.
+    expect(html).toContain('data-role="memo-groups" class="space-y-2"');
+  });
+
+  // Ticket 119, PRD ruling 164.
+  it("writes each day once, in a left column beside its first memo, as the 「到 …」 is written", () => {
+    store.memos = [NAME, CILANTRO, TRIP];
+    const html = render();
+    // No group label on a line of its own: the to-do page's register
+    // (GroupLabel) is not on this page.
+    expect(html).not.toContain("font-semibold");
+    expect(count(html, 'data-role="memo-day"')).toBe(2);
+    const [today, yesterday] = sections(html);
+    // The section a row of two: the day's column first (a screen reader
+    // reads the day, then its memos), then the memos' column, every memo
+    // of the day in it.
+    expect(
+      today.startsWith(
+        ` data-memo-group="" class="flex items-start"><div ${DAY_CELL}>今天</div><div class="min-w-0 flex-1"><div data-memo-row="${TRIP.id}"`,
+      ),
+    ).toBe(true);
+    expect(count(today, "data-memo-row=")).toBe(2);
+    expect(count(today, 'data-role="memo-day"')).toBe(1);
+    // Beside the first memo: the same 6px over a 20px line box as its
+    // words (the row's py-1.5, the words' leading-5), and the day
+    // 12px, regular, muted, tabular figures, as the 「到 …」.
+    expect(today).toContain("px-2.5 py-1.5");
+    expect(today).toContain("text-[13px] leading-5 text-ink");
+    expect(yesterday).toContain(`${DAY_CELL}>昨天</div>`);
+    expect(count(yesterday, "data-memo-row=")).toBe(1);
+    // The day is no memo's: it stands outside every row, so a row's
+    // hover ground (and its flash) covers the words' cell alone.
+    for (const section of [today, yesterday]) {
+      const dayAt = section.indexOf('data-role="memo-day"');
+      expect(dayAt).toBeLessThan(section.indexOf("data-memo-row="));
+      expect(section.slice(0, dayAt)).not.toContain("hover:bg-hover");
+    }
+    expect(count(html, "group/memo-row rounded-sm hover:bg-hover")).toBe(3);
+  });
+
+  it("folds a day from an earlier year after the year, inside its column, the rest as on any day", () => {
+    const now = new Date();
+    // Dec 30 last year: never 昨天, whatever today is.
+    const year = now.getFullYear() - 1;
+    const OLD = memo("memo_old", {
+      text: "年底写回顾",
+      updatedAt: new Date(year, 11, 30, 9).toISOString(),
+    });
+    const OLDER = memo("memo_older", {
+      text: "爱喝乌龙",
+      updatedAt: new Date(year, 11, 30, 8).toISOString(),
+    });
+    store.memos = [OLDER, OLD, CILANTRO];
+    const html = render();
+    expect(count(html, 'data-role="memo-day"')).toBe(2);
+    const old = sections(html)[1];
+    // The year and the date each kept whole, so a fold comes between
+    // them, never inside 「12月」.
+    expect(old).toContain(
+      `${DAY_CELL}><span class="whitespace-nowrap">${year}年</span><span class="whitespace-nowrap">12月30日</span></div><div class="min-w-0 flex-1"><div data-memo-row="${OLD.id}"`,
+    );
+    expect(count(old, "data-memo-row=")).toBe(2);
+    // Any other day is one piece of text.
+    expect(sections(html)[0]).toContain(`${DAY_CELL}>今天</div>`);
+    // In English, one piece too: it folds at its space.
+    expect(render("en-US")).toMatch(
+      new RegExp(`data-role="memo-day" [^>]+>Dec 30, ${year}</div>`),
+    );
   });
 
   it("writes each memo whole in 13px, a last day 「到 …」 on the right in 12px muted, no icon or box", () => {

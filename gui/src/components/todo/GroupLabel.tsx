@@ -11,8 +11,9 @@ import { cn } from "@/lib/utils";
  * where the room went), so a label sits about 9px from its own group
  * and about 21px from the one above. The space over it is the groups'
  * gap (TodoPanelGroups); its own top margin, never in force as the
- * first child of its section, went with ticket 83. The 备忘 page's day
- * labels are the same (main chat ticket 97). */
+ * first child of its section, went with ticket 83. The 备忘 page used it
+ * for its days from ticket 97 until ticket 119 moved them into a column
+ * beside the memos (MemoPage's `MemoDay`). */
 export function GroupLabel({
   label,
   count,

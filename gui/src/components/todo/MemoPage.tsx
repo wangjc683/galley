@@ -14,7 +14,6 @@ import {
 import { cn } from "@/lib/utils";
 import { useMemoStore } from "@/stores/memo";
 
-import { GroupLabel } from "./GroupLabel";
 import {
   TodoRowContextMenu,
   TodoRowMenuButton,
@@ -29,12 +28,14 @@ import {
  *
  * Grouped by the local day each was last noted or changed, the latest
  * day first (lib/memo.ts `memoPageGroups`; a memo changed moves to that
- * day), under the to-do page's group labels (GroupLabel; 今天, 昨天, then
- * the date, `formatPastDay`) and its 12px between groups. One sentence
- * a row, 13px, never cut: it wraps. A memo with a last day says
- * 「到 11月1日」 on the right of its first line, 12px `ink-muted` as a
- * to-do's time; no icon, box or tag (a noticed interest says so in its
- * own words, ruling 140 point 6).
+ * day). The day sits in a left column beside its first memo's first
+ * line (ticket 119, PRD ruling 164), not on a line of its own as the
+ * to-do page's group labels do (ruling 142 point 5: the two pages kept
+ * apart in form): see `MemoDay`. 8px between days. One sentence a row,
+ * 13px, never cut: it wraps under itself, not under the day. A memo
+ * with a last day says 「到 11月1日」 on the right of its first line,
+ * 12px `ink-muted` as a to-do's time; no icon, box or tag (a noticed
+ * interest says so in its own words, ruling 140 point 6).
  *
  * Its words lead back to the sentence it was last noted or changed in
  * (Core's `changedIn`, the jump a to-do's title makes); one noted
@@ -65,24 +66,81 @@ export function MemoPage({
   const memos = memosWithoutDeleting(listed, deleting);
   if (memos.length === 0) return <MemoEmpty />;
   return (
-    <div data-role="memo-groups" className="space-y-3">
+    <div data-role="memo-groups" className="space-y-2">
       {memoPageGroups(memos).map((group) => (
-        <section key={group.dayMs} data-memo-group="">
-          <GroupLabel
+        <section
+          key={group.dayMs}
+          data-memo-group=""
+          className="flex items-start"
+        >
+          {/* First in the section, so a screen reader reads the day and
+              then its memos, as under the group label before. */}
+          <MemoDay
             label={memoDayLabel(group.dayMs, todayStartMs, language, copy)}
           />
-          {group.memos.map((memo) => (
-            <MemoRow
-              key={memo.id}
-              memo={memo}
-              mainChatId={mainChatId}
-              onGo={onGo}
-            />
-          ))}
+          <div className="min-w-0 flex-1">
+            {group.memos.map((memo) => (
+              <MemoRow
+                key={memo.id}
+                memo={memo}
+                mainChatId={mainChatId}
+                onGo={onGo}
+              />
+            ))}
+          </div>
         </section>
       ))}
     </div>
   );
+}
+
+/**
+ * A day's column (ticket 119, PRD ruling 164): the day beside its first
+ * memo, in the same 20px line box under the same 6px as the row's words,
+ * so the two first lines sit level; the day's other memos leave it
+ * empty. Written as the 「到 …」 on the right of a row is (12px, regular,
+ * `ink-muted`, tabular figures): one line, one way to write a day.
+ *
+ * A fixed 76px, whatever the day says: 10px in, as the to-do page's
+ * group labels start, then 66px, room for the widest label in common
+ * use with a few pixels to spare (measured in Chrome with the app's
+ * fonts: 「10月28日」 and 「12月31日」 59.6px, 「Yesterday」 56.3px, 「May
+ * 28」 42.9px). A label from an earlier year (「2025年12月31日」 105.8px,
+ * 「Dec 31, 2025」 78.9px) folds onto a second line inside the column
+ * rather than widen it or be cut: after the year (`memoDayParts`), as
+ * the English one folds at its last space. The row's hover ground
+ * starts where the column ends: about 6px after the widest day, the
+ * words 10px further in.
+ */
+function MemoDay({ label }: { label: string }) {
+  const parts = memoDayParts(label);
+  return (
+    <div
+      data-role="memo-day"
+      className="w-[76px] shrink-0 break-words py-1.5 pl-2.5 text-[12px] leading-5 tabular-nums text-ink-muted"
+    >
+      {parts.length === 1
+        ? label
+        : parts.map((part) => (
+            <span key={part} className="whitespace-nowrap">
+              {part}
+            </span>
+          ))}
+    </div>
+  );
+}
+
+/**
+ * A Chinese day from an earlier year in two pieces, the year and the
+ * date (「2025年」「12月31日」), each kept whole: left to the line
+ * breaker, 「2025年12月31日」 folded inside 「12月」 (「2025年12」 fits the
+ * column). Any other label is one piece and wraps as text does: the
+ * English 「Dec 31, 2025」 folds at its space.
+ */
+function memoDayParts(label: string): string[] {
+  const year = label.indexOf("年");
+  if (year <= 0 || year === label.length - 1) return [label];
+  return [label.slice(0, year + 1), label.slice(year + 1)];
 }
 
 /** Empty: one sentence and an example, as the to-do page's, without its
@@ -106,7 +164,9 @@ function MemoEmpty() {
  * the room and wrapping, the day never shrinking. On hover or keyboard
  * focus the ⋯ floats over the row's right end beside the first line, and
  * the row gives way to it as a to-do's title does; while its menu is
- * open the row stays as the hover left it.
+ * open the row stays as the hover left it. The row is the words' cell
+ * alone: its hover ground and its flash leave the day's column out, the
+ * day belonging to no one memo (ticket 119).
  */
 function MemoRow({
   memo,

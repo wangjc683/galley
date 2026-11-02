@@ -350,6 +350,31 @@ describe("a row on the 备忘 page", () => {
     return mount(panel());
   }
 
+  // Ticket 119, PRD ruling 164: the day in a left column.
+  it("sits in its day's memo column, the day first in the section and in no row", () => {
+    const container = onMemoPage();
+    const days = container.querySelectorAll("[data-memo-group]");
+    expect(days).toHaveLength(1);
+    const [day, column] = Array.from(days[0].children) as HTMLElement[];
+    expect(days[0].children).toHaveLength(2);
+    // First, so a screen reader reads the day, then the day's memos.
+    expect(day.dataset.role).toBe("memo-day");
+    expect(day.textContent).toBe("今天");
+    const rows = Array.from(
+      column.querySelectorAll<HTMLElement>("[data-memo-row]"),
+    );
+    expect(rows.map((row) => row.dataset.memoRow).sort()).toEqual(
+      [CILANTRO.id, NAME.id].sort(),
+    );
+    // The day is no memo's: a row's hover ground, its menu-open ground
+    // and the flash a card's words light are on the row, beside it.
+    expect(day.closest("[data-memo-row]")).toBeNull();
+    for (const row of rows) {
+      expect(row.className).toContain("hover:bg-hover");
+      expect(row.contains(day)).toBe(false);
+    }
+  });
+
   it("jumps back to the sentence it was last noted in; one noted elsewhere is words", () => {
     const container = onMemoPage();
     const words = memoRow(container, CILANTRO.id)!.querySelector(
