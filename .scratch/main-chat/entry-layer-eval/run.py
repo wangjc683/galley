@@ -7699,7 +7699,8 @@ def render_crit_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     """Ticket 115: a table (each case under old and new), the tallies, then
     each case with its message, context and every run: handed off or not,
     after how many calls, the instructions in full, the calls, the final
-    reply."""
+    reply. Text is scrubbed before it is cut (a path cut short would no
+    longer match the prefixes `scrub` replaces)."""
     meta = data["meta"]
     results = data["results"]
     variants = [v for v in CRIT_VARIANTS if any(r.get("crit_variant") == v for r in results)] or list(CRIT_VARIANTS)
@@ -7787,7 +7788,7 @@ def render_crit_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                 out += [f"**结果**：{f['label']}；{f['verdict']}。工具调用 {f['tool_calls']} 次。结束："
                         f"{STOP_LABELS.get(r.get('stop_reason') or '', r.get('stop_reason'))}。", ""]
                 if r.get("status") != "ok":
-                    out += [f"（{trunc(r.get('error') or '', 600)}）", ""]
+                    out += [f"（{trunc(scrub(r.get('error') or ''), 600)}）", ""]
                     continue
                 d = r.get("dispatch") or {}
                 for k, brief in enumerate(d.get("briefs") or [], 1):
@@ -7812,13 +7813,13 @@ def render_crit_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                         args = dict(c["args"])
                         script = args.pop("script", None) or args.pop("code", None)
                         if args:
-                            out += fenced(trunc(json.dumps(args, ensure_ascii=False, indent=1), 600), "json")
+                            out += fenced(trunc(scrub(json.dumps(args, ensure_ascii=False, indent=1)), 600), "json")
                         if script:
-                            out += fenced(trunc(script, 1200), "")
+                            out += fenced(trunc(scrub(str(script)), 1200), "")
                         if "result" in c:
                             res = c["result"]
                             res_text = res if isinstance(res, str) else json.dumps(res, ensure_ascii=False, indent=1)
-                            out += ["   返回：", ""] + fenced(trunc(res_text, 500), "")
+                            out += ["   返回：", ""] + fenced(trunc(scrub(res_text), 500), "")
                 out += ["最终回复：" if r.get("stop_reason") == "final_reply" else "最后一条回复：", ""]
                 out += reply_lines(r.get("final_reply")) or ["（空）", ""]
                 if r.get("next_suggestion"):

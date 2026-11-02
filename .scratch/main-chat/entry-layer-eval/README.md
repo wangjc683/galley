@@ -813,6 +813,23 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --suite dispatch-criterion --vari
 
 - **别的套件还是旧条款**：`schedule/galley-prompt/`（schedule、todo、chat、memo 四套用它）、`wake/galley-prompt/` 与入口层套件的 `galley-prompt/` 是这一票之前生成的，派活那一段还是旧的「会长时间占着这个对话」；重跑那些套件之前，先照「怎么跑」的办法重新生成它们的模板。
 
+### 结果（2026-11-02，gpt-6.1-sol，推理强度 high）
+
+模型 `mm_1792576875658`（API key 接入的 gpt-6.1-sol，同票 73）。先 `--dry-test`（不连模型，全过）。13:09 开跑，一轮跑完：32 次运行没有失败、超时与断连（单次 7–228 秒）；新条款没有不合格的，没有改措辞。
+
+| 组 | 合格 | 合规（三次以内自己做完） | 不合格 | 单列 |
+| --- | --- | --- | --- | --- |
+| old | 13 | 3 | 0 | 0 |
+| new | 16 | 0 | 0 | 0 |
+
+- **不该派的 9 条，两组都没派**：问答 7 条里 4 条（`q-east`、`q-story`、`q-weather`、`quick-usd`）第一或第二次调用就开浏览器，运行停在那里，算它自己在做；`q-injuries` 搜了一下对话历史就凭记忆答了；`q-notes-apps` 直接答；`quick-downloads` 两次 `code_run` 列出那两个大文件。`todo-note` 两组都是读手册、`todo list`、`todo add`（周五截止、前一天 9 点提醒），没有派准备活。`conv-writeup` 两组都把前面聊的 NAS 写成 Markdown 放到桌面。
+- **该派的 7 条**：new 全部在最终回复里派了。old 派了 4 条（`e-invoices`、`big-pdfs`、`big-research`、`ask-dispatch`），另 3 条落在②：`e-template` 自己用 3 次调用做了一个 xlsx（放在状态根的 `temp` 下）；`big-quotes` 搜了两次对话历史，回复里请用户给三家的官网链接（没开浏览器，也没派）；`midway-invoices` 列了文件夹、读了内容，自己把 7 张发票挪进「发票归档」下的 5 个子文件夹（收据和水单留在原处）。
+- **中间回复里写标签的**：0。**停在浏览器的该派用例**：0。
+- **派活说明里带上已经查到的**：`midway-invoices` new 列了看到的 10 个候选文件名（`found_any` 命中）；`big-quotes` new 写了「三家在对话历史里都搜不到」。old 的 `e-invoices`、`big-pdfs` 也列了看到的文件，old 本来就会写。new 的 `e-invoices`、`big-pdfs` 派之前的调用都是读手册（`todos.md`、`subtasks.md` 等），没看文件夹，说明里照实写了还没看。
+- **顺带看到的**：new 派之前常先读 `subtasks.md`（7 条里 5 条），问答之前常先读 `web_setup_sop.md` 或 GA 的 `global_mem.txt`。`e-invoices` 两组都在派之前记了一件待办（明天 17:00 截止、15:00 提醒），派活说明里写了待办 id。
+- **用量**：32 次运行，80 次模型调用（old 40、new 40）；工具调用 old 29、new 33；提示 480,394 token（命中缓存 225,408），输出 37,926。
+- **没测到的**：问答在浏览器第一步就停下，看不到「看了好几个网站之后」会不会改派（10-28 前后那批 NBA 问答的情形）；每条只跑一遍；`results.md` 的截断原来在 `scrub` 之前做，一段被截短的临时目录路径没被换掉，改成先换再截后重出（`results.json` 本来就是干净的）。
+
 ## 安全措施
 
 - 拦截点在 GA 的工具分发：worker 把 `agentmain` 里的 `GenericAgentHandler` 换成子类（runner 自己装处理器子类用的也是这个接口 `GaSession.install_handler`）。子类的 `dispatch` 遇到任何真实工具就记录并返回 `should_exit`，一次模型调用后整个运行结束；只有 GA 自己判断最终回答的 `no_tool`（只读回复文本）和格式错误的重试提示 `bad_json` 走原路。子类上除 `do_no_tool` 外的所有 `do_*` 方法都换成一调用就报错的版本，作为第二道保险。
