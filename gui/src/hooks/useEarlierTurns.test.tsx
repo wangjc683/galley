@@ -15,6 +15,7 @@ import {
 import {
   EARLIER_TRIGGER_VIEWPORTS,
   RUNWAY_IDLE_MS,
+  RUNWAY_STILL_FRAMES,
   useEarlierTurns,
 } from "@/hooks/useEarlierTurns";
 import { RUNWAY_ATTR, RUNWAY_MIN_PX } from "@/lib/scroll-runway";
@@ -305,6 +306,17 @@ function idle(ms: number) {
   });
 }
 
+/** The frames a rest waits out, the position held. */
+function still() {
+  for (let i = 0; i < RUNWAY_STILL_FRAMES; i++) act(() => frames.tick());
+}
+
+/** Stopped: the quiet, then the frames. */
+function rest(ms = RUNWAY_IDLE_MS) {
+  idle(ms);
+  still();
+}
+
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   frames = stubFrames();
@@ -379,19 +391,40 @@ describe("the runway (ruling 172)", () => {
     expect(runwayOf(scroller)).toBe(RUNWAY_MIN_PX - 3_200);
     expect(writes).toEqual([]);
     idle(1);
+    // The position has to hold for the frames, too.
+    for (let i = 1; i < RUNWAY_STILL_FRAMES; i++) act(() => frames.tick());
+    expect(writes).toEqual([]);
+    act(() => frames.tick());
     expect(runwayOf(scroller)).toBe(RUNWAY_MIN_PX);
     expect(writes).toEqual([RUNWAY_MIN_PX + 600 + 3_200]);
     expect(topOf("a2")).toBe(before);
     // Nothing more to do on the next rest.
-    idle(RUNWAY_IDLE_MS * 3);
+    rest(RUNWAY_IDLE_MS * 3);
     expect(writes).toHaveLength(1);
+  });
+
+  it("is not refilled while the position still moves after a quiet spell", () => {
+    // A page render held the main thread past the quiet: no scroll event
+    // came, but the flick's momentum ran on (tauri dev, ticket 123).
+    const scroller = mount({ rows: rowsOf("a", 10, 300) });
+    place(scroller, RUNWAY_MIN_PX + 6_000);
+    prepend(rowsOf("b", 10, 320));
+    idle(RUNWAY_IDLE_MS);
+    act(() => frames.tick());
+    place(scroller, scroller.scrollTop - 400);
+    act(() => frames.tick());
+    expect(runwayOf(scroller)).toBe(RUNWAY_MIN_PX - 3_200);
+    expect(writes).toEqual([]);
+    // Then it holds: refilled.
+    rest();
+    expect(runwayOf(scroller)).toBe(RUNWAY_MIN_PX);
   });
 
   it("is refilled to twice the tallest page seen", () => {
     const scroller = mount({ rows: rowsOf("a", 10, 300) });
     place(scroller, RUNWAY_MIN_PX + 600);
     prepend(rowsOf("b", 10, 1_500));
-    idle(RUNWAY_IDLE_MS);
+    rest();
     expect(runwayOf(scroller)).toBe(30_000);
   });
 
@@ -404,7 +437,7 @@ describe("the runway (ruling 172)", () => {
     const fromBottom =
       scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
     scrolled(scroller);
-    idle(RUNWAY_IDLE_MS);
+    rest();
     expect(runwayOf(scroller)).toBe(RUNWAY_MIN_PX);
     expect(
       scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
@@ -420,7 +453,7 @@ describe("the runway (ruling 172)", () => {
     });
     place(scroller, RUNWAY_MIN_PX + 600);
     scrolled(scroller);
-    idle(RUNWAY_IDLE_MS);
+    rest();
     expect(runwayOf(scroller)).toBe(
       Math.round(((30_000 + 2 * PAD) / 50) * 101 * 1.2),
     );
@@ -430,7 +463,7 @@ describe("the runway (ruling 172)", () => {
       turns: [{ turnIndex: 10_049 }] as unknown as PerSessionMessages["turns"],
     });
     scrolled(scroller);
-    idle(RUNWAY_IDLE_MS);
+    rest();
     expect(runwayOf(scroller)).toBe(200_000);
   });
 
@@ -438,11 +471,11 @@ describe("the runway (ruling 172)", () => {
     const scroller = mount({ rows: rowsOf("a", 10, 300), typing: true });
     place(scroller, RUNWAY_MIN_PX + 600);
     prepend(rowsOf("b", 10, 320));
-    idle(RUNWAY_IDLE_MS * 2);
+    rest(RUNWAY_IDLE_MS * 2);
     expect(runwayOf(scroller)).toBe(RUNWAY_MIN_PX - 3_200);
     shown = { ...shown, typing: false };
     act(render);
-    idle(RUNWAY_IDLE_MS);
+    rest();
     expect(runwayOf(scroller)).toBe(RUNWAY_MIN_PX);
   });
 
@@ -454,7 +487,7 @@ describe("the runway (ruling 172)", () => {
     scrolled(scroller);
     idle(RUNWAY_IDLE_MS - 1);
     expect(columnOf(scroller).hasAttribute(RUNWAY_ATTR)).toBe(true);
-    idle(1);
+    rest(1);
     expect(columnOf(scroller).hasAttribute(RUNWAY_ATTR)).toBe(false);
     expect(columnOf(scroller).style.paddingTop).toBe("");
     expect(writes).toEqual([600 + 3_200]);

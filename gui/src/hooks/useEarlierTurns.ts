@@ -39,6 +39,13 @@ const PREPEND_SETTLE_MS = 1500;
  * momentum sends scroll events until it ends), and a `scrollTop` written
  * now lands. The runway is refilled and taken away only then. */
 export const RUNWAY_IDLE_MS = 200;
+/** …and the scroll position held for this many frames since. A page
+ * render can hold the main thread past RUNWAY_IDLE_MS while a flick's
+ * momentum runs on (no scroll event reaches the page meanwhile); the
+ * first frames after it show the position still moving (tauri dev,
+ * ticket 123: a refill timed on the events alone was written mid-flick
+ * and lost). */
+export const RUNWAY_STILL_FRAMES = 3;
 /** The most the runway is refilled to (px). */
 const RUNWAY_MAX_PX = 200_000;
 /** The runway is refilled to the estimate of what is left to read, and
@@ -213,7 +220,12 @@ export function useEarlierTurns({
     if (!container || sessionId === undefined) return;
     const sid = sessionId;
     let timer: number | null = null;
+    let stillFrame: number | null = null;
     const arm = () => {
+      if (stillFrame !== null) {
+        cancelAnimationFrame(stillFrame);
+        stillFrame = null;
+      }
       if (timer !== null) window.clearTimeout(timer);
       timer = window.setTimeout(rest, RUNWAY_IDLE_MS);
     };
@@ -236,7 +248,22 @@ export function useEarlierTurns({
         arm();
         return;
       }
-      resizeAtRest(container, height, heldRef);
+      // Still for RUNWAY_STILL_FRAMES frames, or not at rest after all.
+      const from = container.scrollTop;
+      let held = 0;
+      const look = () => {
+        stillFrame = null;
+        if (container.scrollTop !== from) {
+          arm();
+          return;
+        }
+        if (++held < RUNWAY_STILL_FRAMES) {
+          stillFrame = requestAnimationFrame(look);
+          return;
+        }
+        resizeAtRest(container, height, heldRef);
+      };
+      stillFrame = requestAnimationFrame(look);
     };
     // A flick that runs past the conversation's first turn into the
     // runway left above it (no earlier page is coming to land there)
@@ -277,6 +304,7 @@ export function useEarlierTurns({
     return () => {
       container.removeEventListener("scroll", onScroll);
       if (timer !== null) window.clearTimeout(timer);
+      if (stillFrame !== null) cancelAnimationFrame(stillFrame);
       if (stopFrame !== null) {
         cancelAnimationFrame(stopFrame);
         container.style.overflowY = "";
