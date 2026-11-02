@@ -868,7 +868,9 @@ dogfooded). The managed engine cuts a tool call whose arguments run into
 2,000 whitespace characters in a row, so a model that degenerates that way
 no longer stalls a run for fifteen minutes (managed GA patch `0030`, main
 chat PRD ruling 162, ticket 118; unit tests and a local fake stream only).
-Owed:
+The memo page keeps its days but writes each in a left column beside that
+day's first memo, so a day no longer costs a heading row (main chat PRD
+ruling 164, ticket 119; awaiting JC's look in the real window). Owed:
 ticket 04's second real-machine step, stopping a workbench run you watch
 (no workbench run in the database since the merge). Still owed from
 `v0.7.2`'s scope: ticket 98's noticed interest (the 「看你……常问」 memo has

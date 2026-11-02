@@ -1,6 +1,6 @@
 # 119 「备忘」页：日子挪进左边一栏，与那天的第一条并排
 
-Status: ready-for-agent（2026-11-02 开票）
+Status: needs-dogfood（2026-11-02 快进合入 `51573435`…`31a3b4dd`，分支先 `rebase --onto` 掉改写前的 `4769b25f`。主会话验收：读过 `MemoPage.tsx` 的 diff，看过 6 条与 25 条演示、悬停的截图；worktree 里 typecheck、lint 退出码 0，`TZ=UTC` 下 todo 与 memo 测试 157 条过，`diff --check` 干净；对 main..分支的 diff 与提交说明 grep JC 备忘原文的几个词 0 处。等 JC 真机看；报告第 5 节第 1 条「悬停时更多的备忘多折一行」待 JC 定）
 
 来源：[主对话 PRD](../PRD.md) 裁决 164。只改 GUI 的「备忘」页与它的测试、设计文档；不动 Core、CLI、Agent API、迁移、「待办」页、回复下的备忘卡片。外置运行时零变化（备忘只在内置主对话）。
 
