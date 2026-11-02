@@ -1,6 +1,6 @@
 # 123 往回翻不撞墙、不跳页：垫层接住补页，提前十屏补
 
-Status: ready-for-agent
+Status: needs-review
 
 来源：[主对话 PRD](../PRD.md) 裁决 170（诊断）与裁决 172（做法，修正 170 第 2 条）。只改 GUI 的对话分页滚动、它的测试与设计文档；不动 Core、CLI、Agent API、迁移、页大小（`MESSAGE_TURN_PAGE` 照旧 50）。所有对话一条分页路径：主对话、工作台、内置与外置运行时都生效；没有更早的页的对话零变化。
 
@@ -90,3 +90,99 @@ git diff --check
 4. 设计文档改了哪几条。
 5. 主会话真机复测时该盯的点（你认为最可能出问题的两三处）。
 6. 看到但没改的（Open risks），原样列出。
+
+## 报告
+
+（2026-11-02，执行代理。只在 worktree 分支 `t123-scroll-back-spacer` 上改，没碰主工作树、没跑 `tauri dev`。代码、测试与文档在提交 `20c439f9`，行号按这个提交。）
+
+### 1. 改了什么；垫层放哪；「放回原位」的接口
+
+- `gui/src/lib/scroll-runway.ts`（新）：垫层的全部 DOM 操作：`RUNWAY_ATTR`（`data-scroll-runway`）、`RUNWAY_MIN_PX`（20,000）、`hasRunway`、`runwayHeight`、`layRunway`、`keepInPlace`、`resizeRunway`。
+- `gui/src/lib/scroll-anchor.ts`：拆出 `scrollAnchorDrift`（`:84`，锚点行被上面的排版挪了多少），`holdScrollAnchor`（`:98`）改为把这个量交给 `keepInPlace`。删除消息的 `holdFirstScrollAnchor` 经它走，`useRemovedTurnsAnchor.ts` 本身没改。
+- `gui/src/hooks/useEarlierTurns.ts`：
+  - 返回对话列的 callback ref（`:147`）：首次显示更早的页的那次提交就垫上 20,000px。
+  - 冷启动恢复后才有更早的页时，在那次提交的 layout 阶段垫上，`scrollTop` 同加（`:161`）；最后一页插上后叫醒停手检查。
+  - 停手检查（`:178`）：200ms 没有滚动事件、不在底部、低于目标（20,000 与见过的最高一页的两倍取大）就补回；没有更早的页就收掉。平滑滚动、气泡动效在跑或三点气泡在屏上时，过 200ms 再看。缩放后重读 settle 记着的锚点，再同步派一次 `scroll` 事件。
+  - 触发（`:225`）：`scrollTop − 垫层 < 10 × clientHeight`；挂载与每次 `turnsLength` 变化的下一帧都看一次，不再等第一次滚动。原先的「页太短」判断并进这一条。
+  - 补页 commit（`:280`）：用 `scrollAnchorDrift`（没有锚点时用 `scrollHeight` 增量）算出量交给 `keepInPlace`，记最高一页，叫醒停手检查；settle 照旧走 `holdScrollAnchor`。
+- `gui/src/components/screens/MainView.tsx`：两处：`const runwayRef = useEarlierTurns(...)`（`:572`，注释改一行）与对话列 `ref={runwayRef}`（`:659`）。调用位置没挪。
+- `gui/src/components/conversation/UserQuestionRail.tsx`：摆点扣垫层（`:320` 起）与头注释。
+- `gui/src/lib/bubble-motion.ts`：加 `bubbleMotionRunning`（`:311`），停手检查用。
+- 测试：`lib/scroll-runway.test.ts`（新，9 条）、`hooks/useEarlierTurns.test.tsx`（新，16 条）、`components/conversation/UserQuestionRail.runway.test.tsx`（新，1 条）、`lib/scroll-anchor.test.ts`（加 1 条：删除时垫层长回）。新测试做过变异检查：把 `keepInPlace` 改回写 `scrollTop`、去掉等三点气泡、去掉底部不补、触发改回 1 屏、去掉停手后重读锚点、问题轨不扣垫层，每一种都有测试变红。
+- 没动：`Conversation.tsx`、`useStickyScroll.ts`、`live-tail.ts`、`firstRowBelow`、messages store、`MESSAGE_TURN_PAGE`、Core、CLI。
+
+**垫层放在对话列（滚动容器的第一个子元素，MainView `:658` 的 div）的 `padding-top`**，带标记 `data-scroll-runway`。为什么：
+
+- 不进 `[data-role="conversation"]`（锚点按它的子元素找行）；不用滚动容器自己的内边距（探针踩过）。
+- 不做成空元素：对话列被一串 ResizeObserver 盯着（跟随贴底、切会话的 500ms 窗口、交接、问题轨、settle）。空元素变高变矮改的是对话列的内容盒，而 settle 本身就是 RO 回调，在回调里改会报 ResizeObserver loop。内边距不改内容盒（RO 默认看 content-box）：补页时内容盒的变化与原先一样，settle 缩垫层也不再惊动谁。
+- 不用探针的 `margin-top`：交接（`useTypingBubbleHandoff` 的 `columnTopOf` → `columnLift`）和气泡动效（`useBubbleMotion` 的 `track.columnTop`）记着对话列的顶在滚动内容里的位置。margin 为一页缩时列顶跟着上移一页高，若下一次提交正好是交接，会读成「列上移了几千像素」，把整列平移再滑回来。内边距下列顶不动，垫层下面每样东西离列顶的距离也不变。主对话列的 `mt-auto` 也不会被行内样式盖掉。
+- 代价：列的 border-box 含垫层，所以必须首次提交就垫好：`useStickyScroll` 挂载时记下列盒（票 72 的 `placedBoxRef`），RO 首报的 border-box 要与它相等，才不会多走一次 `assistantFollowBottom`。callback ref 在页面所有 layout effect 之前挂上，满足这一点（测试 `is laid in the first commit…` 断言）。工作台 live tail 的 `min-height`（border-box）也含垫层，所以 `resizeRunway` 停手缩放时把它同挪；补页时垫层缩、内容长，二者相抵，不用挪。
+
+**「放回原位」**：`keepInPlace(container: HTMLElement, delta: number): void`（`lib/scroll-runway.ts:74`）。`delta` = 读者上面长高的量（负数 = 变矮）。有垫层：垫层缩 `delta`（变矮则长回），不写 `scrollTop`；垫层不够：缩到 0，剩下的写 `scrollTop`；没有垫层：`scrollTop += delta`，与原先一样（`|delta| < 1` 不动，同原先的 `holdScrollAnchor`）。三处共用：补页 commit 直接调，settle 与删除经 `holdScrollAnchor` / `holdFirstScrollAnchor`。停手时的补回与收掉是另一个函数 `resizeRunway(container, height): number`（`:99`）：垫层改到 `height`，`scrollTop` 同挪，为 0 时连标记一起去掉。
+
+### 2. 第 6 条的表
+
+`grep -rn "scrollTop\|scrollHeight" gui/src --include='*.ts' --include='*.tsx'`，测试文件除外；行号按 `20c439f9`。
+
+| 位置 | 做什么 | 要扣垫层吗 | 改了没有 |
+|---|---|---|---|
+| `hooks/useEarlierTurns.ts:233` | 触发：视口顶离已加载内容的顶 | 要 | 改了（原 `:65–66` 的一屏与「页太短」并成 10 屏这一条） |
+| `hooks/useEarlierTurns.ts:62` | 停手检查：在不在底部 | 不用，离底距离 | 新加 |
+| `hooks/useEarlierTurns.ts:268, 288` | 补页前后 `scrollHeight` 的差（没有锚点时的退路） | 不用，同一垫层高度下的差 | 改为交给 `keepInPlace` |
+| `lib/scroll-anchor.ts:21, 56, 78, 92, 138` | 锚点读数：行离视口顶、`scrollTop` 的差 | 不用，都是差值 | 写入处（原 `:90`）改为 `keepInPlace` |
+| `components/conversation/UserQuestionRail.tsx:114, 321, 332, 335` | 问题轨按比例摆点 | 要 | 改了 |
+| `components/conversation/UserQuestionRail.tsx:404` | 点点跳转：元素位移 | 不用 | 没改 |
+| `hooks/useStickyScroll.ts:88–94, 118` | 交接落地的目标：离底、回复开头离视口 | 不用 | 没改 |
+| `hooks/useStickyScroll.ts:136, 379, 404, 523, 628, 644` | 贴底、跟随、切会话：`scrollTop = scrollHeight` | 不用，到底 | 没改 |
+| `hooks/useStickyScroll.ts:330, 496, 565` | 离底距离（at-bottom） | 不用 | 没改 |
+| `hooks/useStickyScroll.ts:741, 820–821, 853` | 发出停靠、⌥↑ / ⌥↓：元素位移 | 不用 | 没改 |
+| `hooks/useStickyScroll.ts:936–942, 980` | ⌘K 定位与重停：元素位移、与停靠位置比 | 不用；停手缩放时比出超过 4px，当成用户滚走而松手，不会拉回 | 没改 |
+| `lib/assistant-conversation.ts:475–491, 528–562` | 主对话跟随上限、钉底：离底、回复开头 | 不用 | 没改 |
+| `lib/chase-bottom.ts:41–75` | 「回到底部」追底：离底、帧间 `scrollTop` 的差 | 不用；它跑着动画，停手缩放会等 | 没改 |
+| `lib/animate-scroll.ts:162, 269, 282–305` | 平滑滚动：绝对目标，别人挪了就放手 | 不用；垫层接住时不写 `scrollTop`，动画不再被补页打断，停手缩放等它 | 没改 |
+| `lib/live-tail.ts:78, 96, 102, 335, 377–443` | 工作台留白：绝对的 `parkTop`、border-box 的 `min-height` | 量的时候一致，不用扣；停手缩放会让它记的数过期 | `live-tail.ts` 没改；`resizeRunway` 把 `min-height` 同挪 |
+| `lib/viewport-resize.ts:27–65` | 视口变高变矮时钉底 | 不用 | 没改 |
+| `hooks/useBubbleMotion.ts:43–63, 150, 200` | 列顶（内容坐标）减 `scrollTop` | 不用，内边距下列顶不动 | 没改；停手缩放等动效、等三点气泡，并同步派 `scroll` 事件 |
+| `hooks/useTypingBubbleHandoff.ts:100, 247` | 交接：列顶在内容里的位置 | 不用，同上 | 没改 |
+| `lib/bubble-motion-play.ts:383, 747` | 动效拷贝层的内容原点 | 不用 | 没改（动效在跑时不缩放） |
+| `lib/scroll-runway.ts:78–119` | 垫层自己的写入 | — | 新文件 |
+| `Composer.tsx`、`composer-grow.ts`、`diff/GitReviewPane.tsx`、`LocalFileWorkspace.tsx`、`MessageQuotes.tsx`、`ProcessCard.tsx`、`Sidebar.tsx`、`SidebarProjectGroup.tsx`、`TodoSubitems.tsx`、`TodoTextEditor.tsx`、`ui/scroll-fade.tsx`、`lib/scroll-edges.ts`、`useTodoPanelFlash.ts` | 别的滚动容器或文本框 | 无关 | 没改 |
+
+票面说不受影响的几项都核过：贴底、跟随、「回到底部」按离底距离算；⌘K 定位、⌥↑ / ⌥↓、问题轨跳转按元素位置算。
+
+### 3. 门禁
+
+```
+pnpm --dir gui typecheck    → tsc --noEmit，无输出
+pnpm --dir gui lint         → eslint src --max-warnings 0，无输出
+pnpm --dir gui exec vitest run src/hooks src/lib/scroll-anchor src/components/conversation src/stores/messages
+                            → Test Files  54 passed (54)；Tests  438 passed (438)
+TZ=UTC 同上                 → Test Files  54 passed (54)；Tests  438 passed (438)
+pnpm --dir gui test         → Test Files  241 passed (241)；Tests  2686 passed (2686)
+git diff --check            → 无输出
+```
+
+`src/lib/scroll-runway.test.ts` 不在票面那组路径里，全量那次跑了。新文件整篇 prettier；旧文件只格式化自己的 hunk（`UserQuestionRail.tsx` 里 prettier 会改的几行不是我的）。全角标点用 `<scratchpad>/t123-cjk-punct.py` 扫过新增行：只剩数字的千分位逗号，以及英文注释、代码字符串里的半角。
+
+### 4. 设计文档（`docs/design/conversation.md`）
+
+- 「长对话按轮分页」的「往上翻自动加载」改写成一条加五个子条：10 屏、打开后先补；垫层与为什么（WebKit 惯性途中盖掉 `scrollTop`、探针的数，不写本机路径）；首次显示就在；停手补回与收掉（200ms、目标、在底部不补、等平滑滚动 / 气泡动效 / 三点气泡、live tail 的 `min-height` 同挪）；退路与代价（单页高过垫层、滚动条多算、甩过开头先进空白、打开后先补一页的停顿、问题轨扣垫层、「顶端不回弹」撤掉）；垫层放哪。末尾把「真机看出停顿再议」改成已在 2026-11-02 再议（裁决 170、172，票 123）。
+- 同节「不做：虚拟列表」补一句为什么垫层不算虚拟列表。
+- 「Right Question Rail」的「只含已加载部分的提问」补一句：按已加载内容的高度摆点、扣掉垫层。
+- 「Scroll behaviour」平滑滚动的「谁说了算」里，「往上加载一页的保位」改成「往上加载一页而垫层接不住时的保位」：垫层接住时不写 `scrollTop`，动画不会被它打断。
+
+### 5. 真机复测该盯的点
+
+- **padding 版本没有真机验证过**：探针第四遍验证的是对话列的 `margin-top`，我按上面的理由改成了 `padding-top`。两者在惯性途中都只改内容在文档里的位置、不写 `scrollTop`，理论上一样，但请照第四遍的量法（总高、逐帧位置、途中补的几次）再甩一遍确认。
+- **停手补回那一下**：200ms 没有滚动事件就写 `scrollTop`。JC 两次甩之间常隔零点三到零点六秒，补回会落在两次之间；盯下一次甩起手时有没有一帧跳，或补回被盖掉（被盖掉的话垫层高了、内容会往下错一段）。
+- **打开主对话与翻到开头**：首次提交就带两万像素垫层，再贴底，再先补一页。盯打开那一下有没有闪白、贴底准不准（票 72 的列盒比较）、dev 下打开后那两三百毫秒的停顿；翻到最开头停手时收垫层（`scrollTop` 一次减两万左右）有没有闪。
+
+### 6. Open risks（看到但没改的）
+
+- 在底部不补回（照票面第 4 条）：打开时先补的页从垫层里扣（主对话一页约五千像素，剩约一万五），停在底部时不补；从底部起手的第一串连甩只有剩下的量。我核过在底部补也不影响贴底（`scrollTop` 与垫层同加，离底距离不变；对话列内容盒不变，跟随的 RO 不触发；有平滑滚动时本来就等）。真机若看到第一串甩就把垫层用完、退回写 `scrollTop`，去掉「不在底部」这个条件即可。
+- 停手缩放时交接与气泡动效记着的位置：用「平滑滚动 / 气泡动效在跑、三点气泡在屏上就等」挡住，并同步派一次 `scroll` 事件补上 `useBubbleMotion` 记的 `scrollTop`。挡不住的窄缝：三点气泡刚被交接接走后的 240ms 内若正好收垫层，离场的那颗拷贝会错位一个垫层高（多半在屏外；收垫层每个对话只发生一次）。
+- 工作台 live tail：停手缩放时 `min-height` 同挪了，但 `live-tail.ts` 自己记的 `parkTop` / `minHeight` 要到它下次 refresh 才更新；其间「停在线上」读成 false（不会拉回），回到底部时「到内容真正的末尾才重新跟随」可能提前或推后一次。只在工作台、有更早的页、发出后往上翻并停手时出现。
+- 读页失败（SQLite 不可用，`loadEarlierTurns` 返回 false）时垫层一直留着，往上能滑进一段两万像素的空白；原先是停在已加载的顶。每次滚动照旧重试读页。
+- 在露出的垫层空白上按一下，目标是对话列，不是滚动容器的空白背景（`data-conversation-backdrop`），输入框会失焦（与在行间空处按一样）；探针的 margin 版本那块算背景。
+- 停手缩放同步派发的 `scroll` 事件（以及随后真实的那次）会收起划词复制工具条；只在停手 200ms 后、垫层低于目标时发生一次。
+- jsdom 不排版：新测试里的布局都是手写模型（行按 `data-h` 叠，`scrollTop` 按范围夹住），WebKit 的真实行为只能真机看。
