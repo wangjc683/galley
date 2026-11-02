@@ -188,6 +188,20 @@ describe("the 备忘 page", () => {
     );
   });
 
+  it("puts a faint dot where a to-do has its box, before every memo", () => {
+    store.memos = [TRIP, CILANTRO];
+    const html = render();
+    // One per row, in the to-do row's 16px-by-20px cell, 10px from the
+    // words, the empty box's border colour, hidden from screen readers.
+    expect(count(html, 'data-role="memo-dot"')).toBe(2);
+    expect(html).toContain(
+      'data-role="memo-dot" aria-hidden="true" class="-mr-0.5 flex h-5 w-4 shrink-0 items-center justify-center"',
+    );
+    expect(count(html, 'class="size-[5px] rounded-full bg-line-strong"')).toBe(
+      2,
+    );
+  });
+
   it("floats the day and the ⋯ over the first line's right end, the row giving them no width", () => {
     store.memos = [TRIP, CILANTRO];
     const html = render();

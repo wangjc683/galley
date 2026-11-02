@@ -172,6 +172,19 @@ function MemoRow({
             hover cluster below floats, it takes no width. 4px above and
             below, a 28px row (ruling 168; the to-do page keeps 6px). */}
         <div className="relative flex items-start gap-3 px-2.5 py-1">
+          {/* A faint dot where a to-do has its box (ruling 169): the
+              to-do row's 16px-by-20px cell and its 10px to the words
+              (-mr-0.5 takes the row's 12px gap down to 10px), so the
+              words start where a to-do title does and a wrapped line
+              stays under the words. The empty box's border colour; not
+              a control, so hidden from screen readers. */}
+          <span
+            data-role="memo-dot"
+            aria-hidden="true"
+            className="-mr-0.5 flex h-5 w-4 shrink-0 items-center justify-center"
+          >
+            <span className="size-[5px] rounded-full bg-line-strong" />
+          </span>
           <div className="min-w-0 flex-1 text-[13px] leading-5 text-ink">
             {words}
           </div>
