@@ -1,6 +1,6 @@
 # 115 派活判据换成「你在不在等」：你问的自己答，你交办的差事派出去
 
-Status: ready-for-agent（2026-11-02 开票）
+Status: done（2026-11-02 快进合入 `4884730b`…`d7bb1791`。主会话验收：读过 `managed_prompt.rs` 的 diff，worktree 里 `managed_prompt` 46 条过，分支相对 main `diff --check` 干净，评测目录与票面扫过没有本机路径；评测 new 16 / 16 合格，old 13 条合格、3 条落在②（`e-template`、`big-quotes`、`midway-invoices` 自己做了），80 次模型调用。合入时 tauri dev 没开，下次起 dev 或发版后生效；真机靠日常使用，回看点：差事派没派、问答有没有被派出去）
 
 来源：[主对话 PRD](../PRD.md) 裁决 160。只改入口层提示词、对应 Core 断言，和评测；不动 GUI、runner、CLI、Agent API、迁移。外置运行时零变化（外置没有主对话）。
 

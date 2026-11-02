@@ -859,7 +859,12 @@ step cap) no longer unfolds in full. The main chat draws it as one line,
 「中途停下 · N 步」, that opens the process card (main chat PRD ruling 159,
 ticket 114; dogfooded). The workbench keeps the live window as it was at
 the stop, the header reading 「中途停下 · N 步」 and the last step left out
-(workbench conversation PRD ruling 9, ticket 04; both runtimes). Owed:
+(workbench conversation PRD ruling 9, ticket 04; both runtimes). The main
+chat now decides what to hand to a subtask by whether you are waiting: what
+you ask it answers itself, even when that takes minutes of looking things
+up; an errand you hand it goes to a subtask past two or three steps (main
+chat PRD ruling 160, ticket 115; eval new 16 of 16; managed only, not yet
+dogfooded). Owed:
 ticket 04's second real-machine step, stopping a workbench run you watch
 (no workbench run in the database since the merge). Still owed from
 `v0.7.2`'s scope: ticket 98's noticed interest (the 「看你……常问」 memo has
