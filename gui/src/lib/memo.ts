@@ -12,14 +12,15 @@ import {
   formatScheduleDay,
   localDayStart,
 } from "@/lib/message-time";
+import { bucketForTimestamp } from "@/lib/sessions";
 
 /**
  * The memos (main chat tickets 95 and 97, PRD rulings 140 and 142): what
  * Galley noted about you — information, where a to-do is an action. It
  * notes one in the round you said it, a card under that reply says so
  * (`memosByMessage`), and the to-do panel's 备忘 page lists every one
- * that still holds, grouped by the day it was last noted or changed
- * (`memoPageGroups`). The page is what the main chat reads at the start
+ * that still holds, grouped by the sidebar's time periods of when it was
+ * last noted or changed (`memoPageGroups`). The page is what the main chat reads at the start
  * of each segment (Core's `list_memos`), so what you see is what it
  * sees. Your one action on a memo is to delete it; anything else you say
  * to Galley.
@@ -99,10 +100,21 @@ export const memoToastText = todoToastTitle;
 
 // ---- The 备忘 page -----------------------------------------------------------
 
-/** One day's memos on the page. */
+/** The page's time periods (ticket 121, PRD ruling 166): the sidebar's,
+ * as `bucketForTimestamp` places a moment — 今天, the 7 days before
+ * (本周), the 30 days before (本月), then 更早 — the latest first. */
+export type MemoBucket = ReturnType<typeof bucketForTimestamp>;
+const MEMO_BUCKETS: readonly MemoBucket[] = [
+  "today",
+  "week",
+  "month",
+  "earlier",
+];
+
+/** One time period's memos on the page. */
 export interface MemoGroup {
-  /** The local midnight the day starts on: its key and its heading. */
-  dayMs: number;
+  /** Its key and, in the sidebar's words, its label. */
+  bucket: MemoBucket;
   memos: MemoItem[];
 }
 
@@ -112,29 +124,46 @@ function parsed(iso: string): number {
 }
 
 /**
- * The page's groups (ticket 97, ruling 142 point 5): by the local day a
- * memo was last noted or changed (`updatedAt`), the latest day first, so
- * a memo changed moves to that day and the page reads as what Galley
- * noted each day. In a day, the latest change first; two at the same
- * moment, the one noted later first (Core lists them in the order
- * noted).
+ * The page's groups (ticket 121, PRD ruling 166; by the day from ticket
+ * 97): by when a memo was last noted or changed (`updatedAt`), put in the
+ * sidebar's time periods by the sidebar's own rule (`bucketForTimestamp`
+ * against `todayStartMs`, `useDayStamp()`, so midnight moves them), the
+ * latest period first, an empty one left out. A memo changed moves to
+ * the period of its change. In a period, the latest change first; two at
+ * the same moment, the one noted later first (Core lists them in the
+ * order noted). The day itself shows on a row's hover (`memoDayMs`).
  */
-export function memoPageGroups(memos: readonly MemoItem[]): MemoGroup[] {
+export function memoPageGroups(
+  memos: readonly MemoItem[],
+  todayStartMs: number,
+): MemoGroup[] {
+  const now = new Date(todayStartMs);
   const sorted = memos
     .map((memo, index) => ({ memo, index, at: parsed(memo.updatedAt) }))
     .sort((a, b) => b.at - a.at || b.index - a.index);
-  const groups: MemoGroup[] = [];
-  for (const { memo, at } of sorted) {
-    const dayMs = localDayStart(at);
-    const last = groups[groups.length - 1];
-    if (last && last.dayMs === dayMs) last.memos.push(memo);
-    else groups.push({ dayMs, memos: [memo] });
+  const byBucket = new Map<MemoBucket, MemoItem[]>();
+  for (const { memo } of sorted) {
+    const bucket = bucketForTimestamp(memo.updatedAt, now);
+    const group = byBucket.get(bucket);
+    if (group) group.push(memo);
+    else byBucket.set(bucket, [memo]);
   }
-  return groups;
+  return MEMO_BUCKETS.flatMap((bucket) => {
+    const group = byBucket.get(bucket);
+    return group ? [{ bucket, memos: group }] : [];
+  });
 }
 
-/** A group's heading: 今天, 昨天, then the date (`formatPastDay`, the
- * time line's day words). */
+/** The local midnight of the day a memo was last noted or changed: the
+ * day its row shows on hover (`memoDayLabel`). */
+export function memoDayMs(memo: Pick<MemoBrief, "updatedAt">): number {
+  return localDayStart(parsed(memo.updatedAt));
+}
+
+/** A memo's day, shown on its row's hover (ticket 121; the group heading
+ * from ticket 97, the left column's from ticket 119): 今天, 昨天, then the
+ * date, with the year when it is not this one (`formatPastDay`, the time
+ * line's day words). */
 export function memoDayLabel(
   dayMs: number,
   todayStartMs: number,

@@ -91,91 +91,131 @@ function render(language: ResolvedLanguage = "zh-CN"): string {
 const count = (html: string, needle: string) => html.split(needle).length - 1;
 
 describe("the 备忘 page", () => {
-  /** A day's section: from its tag to the next one's, or the end. */
+  /** A group's section: from its tag to the next one's, or the end. */
   function sections(html: string): string[] {
     return html.split("<section").slice(1);
   }
-  const DAY_CELL =
-    'data-role="memo-day" class="w-[76px] shrink-0 break-words py-1.5 pl-2.5 text-[12px] leading-5 tabular-nums text-ink-muted"';
+  /** The to-do page's group label (GroupLabel), its words. */
+  const label = (words: string) =>
+    `<div class="flex w-full items-center gap-1.5 rounded-sm px-2.5 py-[3px] text-left text-[11px] font-semibold text-ink-muted"><span class="min-w-0 flex-1 truncate">${words}</span></div>`;
 
-  it("groups by the day last noted or changed, the latest first, 8px between days", () => {
-    store.memos = [NAME, CILANTRO, TRIP];
-    const html = render();
-    expect(count(html, "data-memo-group")).toBe(2);
-    // 今天 before 昨天; in today, the latest change first.
-    const order = ["今天", TRIP.text, CILANTRO.text, "昨天", NAME.text].map(
-      (needle) => html.indexOf(needle),
-    );
-    expect(order.every((at) => at > -1)).toBe(true);
-    expect(order).toEqual([...order].sort((a, b) => a - b));
-    // 8px between days (ticket 119; 12px under the to-do page's labels
-    // before), none over the first.
-    expect(html).toContain('data-role="memo-groups" class="space-y-2"');
-  });
-
-  // Ticket 119, PRD ruling 164.
-  it("writes each day once, in a left column beside its first memo, as the 「到 …」 is written", () => {
-    store.memos = [NAME, CILANTRO, TRIP];
-    const html = render();
-    // No group label on a line of its own: the to-do page's register
-    // (GroupLabel) is not on this page.
-    expect(html).not.toContain("font-semibold");
-    expect(count(html, 'data-role="memo-day"')).toBe(2);
-    const [today, yesterday] = sections(html);
-    // The section a row of two: the day's column first (a screen reader
-    // reads the day, then its memos), then the memos' column, every memo
-    // of the day in it.
-    expect(
-      today.startsWith(
-        ` data-memo-group="" class="flex items-start"><div ${DAY_CELL}>今天</div><div class="min-w-0 flex-1"><div data-memo-row="${TRIP.id}"`,
-      ),
-    ).toBe(true);
-    expect(count(today, "data-memo-row=")).toBe(2);
-    expect(count(today, 'data-role="memo-day"')).toBe(1);
-    // Beside the first memo: the same 6px over a 20px line box as its
-    // words (the row's py-1.5, the words' leading-5), and the day
-    // 12px, regular, muted, tabular figures, as the 「到 …」.
-    expect(today).toContain("px-2.5 py-1.5");
-    expect(today).toContain("text-[13px] leading-5 text-ink");
-    expect(yesterday).toContain(`${DAY_CELL}>昨天</div>`);
-    expect(count(yesterday, "data-memo-row=")).toBe(1);
-    // The day is no memo's: it stands outside every row, so a row's
-    // hover ground (and its flash) covers the words' cell alone.
-    for (const section of [today, yesterday]) {
-      const dayAt = section.indexOf('data-role="memo-day"');
-      expect(dayAt).toBeLessThan(section.indexOf("data-memo-row="));
-      expect(section.slice(0, dayAt)).not.toContain("hover:bg-hover");
-    }
-    expect(count(html, "group/memo-row rounded-sm hover:bg-hover")).toBe(3);
-  });
-
-  it("folds a day from an earlier year after the year, inside its column, the rest as on any day", () => {
+  // Ticket 121, PRD ruling 166.
+  it("groups by the sidebar's time periods, in its words, under the to-do page's labels, 12px apart", () => {
     const now = new Date();
-    // Dec 30 last year: never 昨天, whatever today is.
-    const year = now.getFullYear() - 1;
-    const OLD = memo("memo_old", {
-      text: "年底写回顾",
-      updatedAt: new Date(year, 11, 30, 9).toISOString(),
-    });
-    const OLDER = memo("memo_older", {
+    const MONTH = memo("memo_month", {
       text: "爱喝乌龙",
-      updatedAt: new Date(year, 11, 30, 8).toISOString(),
+      updatedAt: daysAgo(12),
     });
-    store.memos = [OLDER, OLD, CILANTRO];
+    // Mid-January last year: past 30 days and in another year, whatever
+    // today is.
+    const LAST_YEAR = memo("memo_last_year", {
+      text: "年初写计划",
+      updatedAt: new Date(now.getFullYear() - 1, 0, 15, 9).toISOString(),
+    });
+    store.memos = [LAST_YEAR, NAME, MONTH, CILANTRO, TRIP];
     const html = render();
-    expect(count(html, 'data-role="memo-day"')).toBe(2);
-    const old = sections(html)[1];
-    // The year and the date each kept whole, so a fold comes between
-    // them, never inside 「12月」.
-    expect(old).toContain(
-      `${DAY_CELL}><span class="whitespace-nowrap">${year}年</span><span class="whitespace-nowrap">12月30日</span></div><div class="min-w-0 flex-1"><div data-memo-row="${OLD.id}"`,
+    const groups = sections(html);
+    expect(groups.map((g) => g.match(/data-memo-group="(\w+)"/)?.[1])).toEqual([
+      "today",
+      "week",
+      "month",
+      "earlier",
+    ]);
+    // The sidebar's words, the label first in its section.
+    const words = [
+      zhCopy.sidebar.bucketToday,
+      zhCopy.sidebar.bucketWeek,
+      zhCopy.sidebar.bucketMonth,
+      zhCopy.sidebar.bucketEarlier,
+    ];
+    expect(words).toEqual(["今天", "本周", "本月", "更早"]);
+    groups.forEach((group, at) =>
+      expect(group).toContain(
+        ` data-memo-group="${["today", "week", "month", "earlier"][at]}">${label(words[at])}<div data-memo-row=`,
+      ),
     );
-    expect(count(old, "data-memo-row=")).toBe(2);
-    // Any other day is one piece of text.
-    expect(sections(html)[0]).toContain(`${DAY_CELL}>今天</div>`);
-    // In English, one piece too: it folds at its space.
-    expect(render("en-US")).toMatch(
-      new RegExp(`data-role="memo-day" [^>]+>Dec 30, ${year}</div>`),
+    // In a period, the latest change first.
+    expect(groups[0].indexOf(TRIP.text)).toBeLessThan(
+      groups[0].indexOf(CILANTRO.text),
+    );
+    expect(count(groups[1], "data-memo-row=")).toBe(1);
+    expect(groups[1]).toContain(NAME.text);
+    expect(groups[3]).toContain(LAST_YEAR.text);
+    // 12px between groups, none over the first, as the to-do page's.
+    expect(html).toContain('data-role="memo-groups" class="space-y-3"');
+    // In English, the sidebar's English.
+    const en = render("en-US");
+    for (const word of ["Today", "This week", "This month", "Earlier"]) {
+      expect(en).toContain(`truncate">${word}</span>`);
+    }
+  });
+
+  it("leaves an empty period out", () => {
+    store.memos = [CILANTRO, memo("memo_old", { updatedAt: daysAgo(45) })];
+    const html = render();
+    expect(count(html, "data-memo-group=")).toBe(2);
+    expect(html).toContain('data-memo-group="today"');
+    expect(html).toContain('data-memo-group="earlier"');
+    expect(html).not.toContain("本周");
+    expect(html).not.toContain("本月");
+  });
+
+  // Ticket 121, PRD ruling 166 point 3.
+  it("writes a row's day left of its ⋯, shown with it on hover, focus or the menu open, as the 「到 …」 is written", () => {
+    store.memos = [NAME, CILANTRO];
+    const html = render();
+    const cluster = (id: string) => {
+      const row = html.slice(html.indexOf(`data-memo-row="${id}"`));
+      return row.slice(row.indexOf('data-role="memo-hover"'));
+    };
+    expect(count(html, 'data-role="memo-hover"')).toBe(2);
+    // The day first, then the ⋯; 今天 in the 今天 group too.
+    expect(cluster(CILANTRO.id)).toMatch(
+      /^data-role="memo-hover" class="[^"]*"><span data-role="memo-day" class="whitespace-nowrap text-\[12px\] leading-5 tabular-nums text-ink-muted">今天<\/span><button[^>]*aria-label="更多"/,
+    );
+    expect(cluster(NAME.id)).toContain(
+      'tabular-nums text-ink-muted">昨天</span><button',
+    );
+    // At rest, not shown; on hover, keyboard focus in the row, or (in
+    // TodoPanel.memo.test.tsx) the menu open, shown.
+    const shownBy = cluster(CILANTRO.id).match(/class="([^"]*)"/)![1];
+    expect(shownBy.split(" ")).toEqual(
+      expect.arrayContaining([
+        "opacity-0",
+        "group-focus-within/memo-row:opacity-100",
+        "group-hover/memo-row:opacity-100",
+      ]),
+    );
+  });
+
+  it("floats the day and the ⋯ over the first line's right end, the row giving them no width", () => {
+    store.memos = [TRIP, CILANTRO];
+    const html = render();
+    // The row's padding is the same however it is: no room made.
+    expect(
+      count(html, 'class="relative flex items-start gap-3 px-2.5 py-1.5"'),
+    ).toBe(2);
+    expect(html).not.toMatch(/pr-\[42px\]|hover\/memo-row:pr-/);
+    // Out of the flow, on the first line's 20px box, 6px from the right,
+    // on the row's ground, fading in at its left edge.
+    const cls = html
+      .match(/data-role="memo-hover" class="([^"]*)"/)![1]
+      .split(" ");
+    expect(cls).toEqual(
+      expect.arrayContaining([
+        "absolute",
+        "right-1.5",
+        "top-1.5",
+        "h-5",
+        "pl-5",
+        "bg-[linear-gradient(to_right,transparent,var(--memo-ground)_12px)]",
+        "[--memo-ground:var(--color-app)]",
+        "group-hover/memo-row:[--memo-ground:var(--color-hover)]",
+      ]),
+    );
+    // The 「到 …」 stays in its place, under the cluster while it shows.
+    expect(html).toMatch(
+      /data-role="memo-until" class="[^"]*group-focus-within\/memo-row:opacity-0 group-hover\/memo-row:opacity-0">到 /,
     );
   });
 
@@ -185,7 +225,7 @@ describe("the 备忘 page", () => {
     expect(count(html, "data-memo-row=")).toBe(2);
     expect(count(html, 'data-role="memo-until"')).toBe(1);
     expect(html).toMatch(
-      /data-role="memo-until" class="shrink-0 text-\[12px\] leading-5 tabular-nums text-ink-muted">到 [^<]+<\/span>/,
+      /data-role="memo-until" class="shrink-0 text-\[12px\] leading-5 tabular-nums text-ink-muted [^"]*">到 [^<]+<\/span>/,
     );
     // Never cut: the words wrap; the day does not shrink.
     const rows = html.slice(html.indexOf("data-memo-row="));

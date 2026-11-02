@@ -350,29 +350,65 @@ describe("a row on the 备忘 page", () => {
     return mount(panel());
   }
 
-  // Ticket 119, PRD ruling 164: the day in a left column.
-  it("sits in its day's memo column, the day first in the section and in no row", () => {
+  // Ticket 121, PRD ruling 166.
+  it("sits under its time period's label, in the sidebar's words", () => {
     const container = onMemoPage();
-    const days = container.querySelectorAll("[data-memo-group]");
-    expect(days).toHaveLength(1);
-    const [day, column] = Array.from(days[0].children) as HTMLElement[];
-    expect(days[0].children).toHaveLength(2);
-    // First, so a screen reader reads the day, then the day's memos.
+    const groups = container.querySelectorAll<HTMLElement>("[data-memo-group]");
+    expect(groups).toHaveLength(1);
+    expect(groups[0].dataset.memoGroup).toBe("today");
+    // The label first, then the period's memos.
+    expect(groups[0].firstElementChild?.textContent).toBe("今天");
+    expect(
+      Array.from(groups[0].querySelectorAll<HTMLElement>("[data-memo-row]"))
+        .map((row) => row.dataset.memoRow)
+        .sort(),
+    ).toEqual([CILANTRO.id, NAME.id].sort());
+  });
+
+  it("shows its day left of the ⋯ while its menu is open, the row keeping its width", async () => {
+    const container = onMemoPage();
+    const row = memoRow(container, CILANTRO.id)!;
+    const cluster = row.querySelector<HTMLElement>('[data-role="memo-hover"]')!;
+    const line = cluster.parentElement!;
+    const lineAtRest = line.className;
+    expect(cluster.classList.contains("opacity-0")).toBe(true);
+    expect(cluster.classList.contains("[--memo-ground:var(--color-app)]")).toBe(
+      true,
+    );
+    // The day first, then the ⋯.
+    const [day, more] = Array.from(cluster.children) as HTMLElement[];
     expect(day.dataset.role).toBe("memo-day");
     expect(day.textContent).toBe("今天");
-    const rows = Array.from(
-      column.querySelectorAll<HTMLElement>("[data-memo-row]"),
+    expect(more.getAttribute("aria-label")).toBe("更多");
+    await act(async () => {
+      more.dispatchEvent(
+        new MouseEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }),
+      );
+    });
+    await settle();
+    expect(menuRows()).toEqual(["删除"]);
+    // Shown on the hover ground while the menu is open.
+    expect(cluster.classList.contains("opacity-100")).toBe(true);
+    expect(cluster.classList.contains("opacity-0")).toBe(false);
+    expect(
+      cluster.classList.contains("[--memo-ground:var(--color-hover)]"),
+    ).toBe(true);
+    expect(cluster.classList.contains("[--memo-ground:var(--color-app)]")).toBe(
+      false,
     );
-    expect(rows.map((row) => row.dataset.memoRow).sort()).toEqual(
-      [CILANTRO.id, NAME.id].sort(),
-    );
-    // The day is no memo's: a row's hover ground, its menu-open ground
-    // and the flash a card's words light are on the row, beside it.
-    expect(day.closest("[data-memo-row]")).toBeNull();
-    for (const row of rows) {
-      expect(row.className).toContain("hover:bg-hover");
-      expect(row.contains(day)).toBe(false);
-    }
+    expect(row.className).toContain("bg-hover");
+    // The row's line gives it no room: the same classes as at rest.
+    expect(line.className).toBe(lineAtRest);
+    // The other row, at rest.
+    expect(
+      memoRow(container, NAME.id)!
+        .querySelector('[data-role="memo-hover"]')!
+        .classList.contains("opacity-0"),
+    ).toBe(true);
   });
 
   it("jumps back to the sentence it was last noted in; one noted elsewhere is words", () => {
