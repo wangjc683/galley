@@ -22,7 +22,8 @@
        {"role": "user", "content": "那硬盘买什么？要不要上 8TB？"},
        {"role": "assistant", "content": "照片和文档一年大概新增几十到一两百 GB，4TB 做镜像能用好几年；8TB 单价更低一些，但一次多花七八百。\n\n建议：先上两块 4TB 的 NAS 专用盘（希捷酷狼或西数红盘 Plus），满了再换大盘扩容，群晖支持逐块替换扩容。别买 SMR 叠瓦盘，做 RAID 重建很慢。"}
      ]},
-    {"id": "e-invoices", "group": "差事", "should_dispatch": true, "message": "今天下午五点前把下载文件夹里的发票整理好"},
+    {"id": "e-invoices", "group": "差事", "should_dispatch": true, "message": "明天下午五点前把下载文件夹里的发票整理好",
+     "note": "仿 10-28 那轮「今天下午五点前把发票整理好」（主对话自己干了 10 分 23 秒、11 步）。改成「明天」：「今天下午五点」在 17:00 以后开跑时已经过了，模型会为此先问或改口，结果随开跑时刻变；「明天」任何时刻跑都还没到。"},
     {"id": "e-template", "group": "差事", "should_dispatch": true, "message": "帮我做一份酒店开业前的资料收集模板，能直接发给同事填"},
     {"id": "big-quotes", "group": "差事", "should_dispatch": true, "from": "dispatch-cases.json"},
     {"id": "big-pdfs", "group": "差事", "should_dispatch": true, "from": "dispatch-cases.json"},

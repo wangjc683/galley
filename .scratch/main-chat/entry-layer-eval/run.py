@@ -3309,6 +3309,10 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                  "<subtask>把 ~/Downloads 里的发票和收据（发票_阿里云_2026-08.pdf、Invoice_Figma_2026-09.pdf 等）"
                  "按类型归档到 ~/Downloads/发票/ 下，交回归档后的清单和路径</subtask>")],
         "crit-web": [call("<summary>Look it up</summary>\n查一下。", ("web_scan", {"tabs_only": True}))],
+        "crit-mid-tag": [
+            call("<summary>Hand off, then look</summary>\n交给子任务。\n<subtask>把 ~/Downloads 里的 PDF 按内容分类</subtask>",
+                 ("code_run", {"script": "import os\nprint(len(os.listdir(os.path.expanduser('~/Downloads'))))"})),
+            call("<summary>Done</summary>\n看了一下，一共 35 个文件，已经交出去了。")],
         "crit-todo": [
             call("<summary>Read the manual</summary>\n先看手册。",
                  ("file_read", {"path": os.path.join(ctx.get("manual_dir", ""), "todos.md")})),
@@ -3778,20 +3782,22 @@ def build_result(job: dict[str, Any], rec: dict[str, Any], done: Any, latency: f
         if job.get("suite") in ("schedule", "todo", "chat", "memo", CRIT_SUITE):
             result.update({"suite": job["suite"], "now": job["now"], "started_at": rec.get("started_at")})
         if job.get("suite") == CRIT_SUITE:
-            # Ticket 115: judged as T was, a `<subtask>` tag in a reply
-            # (the first one; every tag of every reply counted).
-            tag = rec["tag"]
+            # Ticket 115: a dispatch is what Core starts: the `<subtask>`
+            # tags of the run's final answer (a reply with no tool call,
+            # subtask::pending_reply), each one a subtask. A tag in a reply
+            # that also called a tool is listed apart: Core never reads it.
+            final = stop == "final_reply"
+            briefs = [m.strip() for m in SUBTASK_TAG_RE.findall(reply)] if final else []
+            mid = [{"turn": x["turn"], "brief": m.strip()} for x in (responses if not final else responses[:-1])
+                   for m in SUBTASK_TAG_RE.findall(x["content"])]
             result.update({
                 "crit_variant": job["crit_variant"],
                 "should_dispatch": job["should_dispatch"],
-                "dispatch": {"dispatched": bool(tag), "via": "tag" if tag else None,
-                             "brief": tag["brief"] if tag else None,
-                             "lookups_before": tag["calls_before"] if tag else None,
-                             "turn": tag["turn"] if tag else None,
-                             "count": sum(len(SUBTASK_TAG_RE.findall(x["content"])) for x in responses),
-                             "in_final": bool(SUBTASK_TAG_RE.search(reply))},
-                "after_dispatch": ({"calls": [c["n"] for c in rec["calls"] if c["turn"] >= tag["turn"]]}
-                                   if tag else None),
+                "tool_calls": len(rec["calls"]),
+                "dispatch": {"dispatched": bool(briefs), "via": "tag" if briefs else None,
+                             "brief": briefs[0] if briefs else None, "briefs": briefs,
+                             "lookups_before": len(rec["calls"]) if briefs else None,
+                             "count": len(briefs), "in_final": bool(briefs), "mid_tags": mid},
                 "first_reply": responses[0]["content"] if responses else "",
             })
     elif variant:
@@ -7604,63 +7610,89 @@ def render_memo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     return "\n".join(line.rstrip() for line in "\n".join(out).split("\n")).rstrip() + "\n"
 
 
-# Ticket 115: a run that stops before it would have decided, neither a
-# pass nor a fail where it should have handed off: it was still looking
-# (a browser tool) or asking. Where it should not have, any run that did
-# not hand off was doing it itself, so it passes.
+# Ticket 115 (ruling 160): an errand goes to a subtask "past two or three
+# steps". Where a case should be handed off, a run that finished it itself
+# in at most this many tool calls is within the clause (listed apart, not
+# a fail: the sandbox's placeholder files can make an errand that small);
+# one that went past it without handing off fails.
+CRIT_SMALL_CALLS = 3
+# Stops before it would have decided: still looking (a browser tool) or
+# asking. Listed apart where the case should be handed off; where it
+# should not, it was doing it itself, so it passes.
 CRIT_UNDECIDED = {"web_tool": "停在浏览器", "ask_user": "停在问用户"}
+CRIT_MID_TAG = "中间回复里写了标签（真机不会派）"
+# Verdicts, in the order the tallies list them.
+CRIT_VERDICTS = ("合格", "合规（三次以内自己做完）", "不合格", "单列", "运行失败")
 
 
 def crit_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
-    """Ticket 115: whether a run handed off (a `<subtask>` tag in a reply),
-    after how many tool calls, where it stopped, and whether that is what
-    ruling 160 asks of this case (`should_dispatch`). `pass` is None for
-    a run that should have handed off and stopped at a browser tool or
-    ask_user first. Also noted: for `found_any`, whether the instructions
-    name anything it had found; the to-dos it noted; files it made; what
-    it moved in ~/Downloads."""
+    """Ticket 115: what a run did with the case and whether that is what
+    ruling 160 asks (`should_dispatch`). A dispatch is a `<subtask>` tag
+    in the final answer (what Core starts); a tag only in a reply that also
+    called a tool is listed apart, not a dispatch. Where the case should be
+    handed off: handed off passes; finished itself within
+    CRIT_SMALL_CALLS tool calls is within the clause (`合规`, listed
+    apart); past them without handing off fails; a browser tool or
+    ask_user first is listed apart. Where it should not: handed off fails,
+    anything else passes (a browser stop or ask_user: doing it itself).
+    `pass`: True, False, or None (listed apart, `合规` among them).
+    Also noted: for `found_any`, whether the instructions name anything it
+    had found; the to-dos it noted; files it made; what it moved in
+    ~/Downloads."""
     should = case["should_dispatch"]
-    out: dict[str, Any] = {"should": should, "found_in_brief": None, "todos_added": [], "home_added": [],
-                           "downloads_changes": r.get("downloads_changes") or {}}
-    if r.get("status") != "ok":
-        return dict(out, **{"pass": False, "verdict": f"运行失败（{r.get('status')}）",
-                            "label": f"运行失败（{r.get('status')}）"})
-    d = r.get("dispatch") or {}
     calls = r.get("calls") or []
+    n = len(calls)
+    out: dict[str, Any] = {"should": should, "tool_calls": n, "found_in_brief": None, "todos_added": [],
+                           "home_added": list(r.get("home_added") or []),
+                           "downloads_changes": r.get("downloads_changes") or {}}
+
+    def verdict(category: str, label: str, passed: bool | None, words: str) -> dict[str, Any]:
+        return dict(out, category=category, label=label, **{"pass": passed}, verdict=words)
+
+    if r.get("status") != "ok":
+        return verdict("failed", f"运行失败（{r.get('status')}）", False, "运行失败")
+    d = r.get("dispatch") or {}
     stop = r.get("stop_reason")
     fx = {t["id"] for t in r.get("fixture_todos") or []}
     out["todos_added"] = [t.get("title") for t in (r.get("fake_state") or {}).get("todos") or []
                           if t.get("id") not in fx and not t.get("cancelledAt")]
-    out["home_added"] = list(r.get("home_added") or [])
     if d.get("dispatched"):
-        n = d.get("lookups_before") or 0
-        label = f"派了（之前 {n} 次工具调用）" if n else "派了（没有先调用工具）"
+        label = f"最终回复派了（之前 {n} 次工具调用）"
         if d.get("count", 1) > 1:
             label += f"，共 {d['count']} 个 `<subtask>`"
         if case.get("found_any"):
-            brief = str(d.get("brief") or "")
+            brief = "\n".join(d.get("briefs") or [str(d.get("brief") or "")])
             out["found_in_brief"] = any(w in brief for w in case["found_any"])
-        return dict(out, **{"pass": should, "verdict": "合格" if should else "不合格", "label": label})
+        return verdict("dispatched", label, should, "合格" if should else "不合格")
+    if d.get("mid_tags"):
+        return verdict("mid_tag", f"{CRIT_MID_TAG}（{n} 次工具调用）", None, "单列")
     if stop in CRIT_UNDECIDED:
-        at = calls[-1]["n"] if calls else 0
-        label = f"{CRIT_UNDECIDED[stop]}（第 {at} 次调用）"
+        label = f"{CRIT_UNDECIDED[stop]}（第 {calls[-1]['n'] if calls else 0} 次调用）"
         if should:
-            return dict(out, **{"pass": None, "verdict": f"{label}，不计", "label": label})
-        return dict(out, **{"pass": True, "verdict": "合格（自己在做）", "label": label})
+            return verdict("web" if stop == "web_tool" else "ask", label, None, "单列")
+        return verdict("web" if stop == "web_tool" else "ask", label, True, "合格（自己在做）")
+    if not should:
+        if stop == "final_reply":
+            label = f"没派，自己答完（{n} 次工具调用）" if n else "没派，直接回复（0 次工具调用）"
+        elif stop == "cap_reached":
+            label = f"没派，做到 {SANDBOX_TOOL_CAP} 次调用的上限"
+        else:
+            label = f"没派，{STOP_LABELS.get(stop or '', stop)}（{n} 次工具调用）"
+        return verdict("self", label, True, "合格")
+    if n > CRIT_SMALL_CALLS:
+        how = (f"做到 {SANDBOX_TOOL_CAP} 次调用的上限" if stop == "cap_reached" else
+               "自己做完" if stop == "final_reply" else STOP_LABELS.get(stop or "", stop))
+        return verdict("over", f"超过 {CRIT_SMALL_CALLS} 次还没派（{n} 次工具调用，{how}）", False, "不合格")
     if stop == "final_reply":
-        label = f"没派，自己答完（{len(calls)} 次工具调用）" if calls else "没派，直接回复"
-    elif stop == "cap_reached":
-        label = f"没派，做到 {SANDBOX_TOOL_CAP} 次调用的上限"
-    else:
-        label = f"没派，{STOP_LABELS.get(stop or '', stop)}"
-    return dict(out, **{"pass": not should, "verdict": "不合格" if should else "合格", "label": label})
+        return verdict("small", f"{CRIT_SMALL_CALLS} 次以内自己做完（{n} 次工具调用）", None, "合规（三次以内自己做完）")
+    return verdict("other", f"没派，{STOP_LABELS.get(stop or '', stop)}（{n} 次工具调用）", None, "单列")
 
 
 def crit_cell(r: dict[str, Any] | None, case: dict[str, Any]) -> str:
     if r is None:
         return "未运行"
     f = crit_facts(r, case)
-    return f"{f['label']}：{f['verdict']}" if not f["verdict"].startswith(f["label"]) else f["verdict"]
+    return f"{f['label']}：{f['verdict']}"
 
 
 def render_crit_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
@@ -7690,8 +7722,12 @@ def render_crit_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         "- **沙盒**：待办评测的沙盒与假 `galley`（里面什么都没有，记下的待办留在它的状态里），手册各部分放在状态根里，"
         "`~/Downloads` 是派活对照（票 06）那套占位文件（30 个 PDF，其中十来个是发票、收据、水单），"
         f"每次运行最多 {SANDBOX_TOOL_CAP} 次工具调用；浏览器工具与 `ask_user` 不执行，运行停在那里。",
-        "- **判定**：回复里有 `<subtask>…</subtask>` 算派（同票 06 的 T 组）。该派的派了、不该派的没派算合格。"
-        "停在浏览器或问用户的：不该派的用例算它自己在做，合格；该派的用例不计合格也不计失败，单列。",
+        "- **判定**：最终回复（不再调用工具的那一条，Core 只读它）里有 `<subtask>…</subtask>` 算派；"
+        f"只写在还调用了工具的中间回复里的单列为「{CRIT_MID_TAG}」，不算派。"
+        "不该派的用例：派了不合格，没派合格（停在浏览器或问用户算它自己在做）。"
+        f"该派的用例按裁决 160「超过两三步就派」分四类：①最终回复派了，合格；②{CRIT_SMALL_CALLS} 次工具调用以内自己做完、"
+        f"给了最终回复，合规（条款允许，单列）；③超过 {CRIT_SMALL_CALLS} 次工具调用还没派，不合格；④停在浏览器，单列"
+        "（停在问用户同样单列）。每格写明用了几次工具调用。",
         "",
         "回复正文去掉了 `<summary>`、`<next-suggestion>` 与 `<subtask>` 标签（派活说明单列全文），"
         "工具参数与返回在这里截断，全文见 results.json。",
@@ -7701,7 +7737,7 @@ def render_crit_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         "| # | 用例 | 组 | 该派 | " + " | ".join(variants) + " |",
         "| --- | --- | --- | --- | " + " | ".join("---" for _ in variants) + " |",
     ]
-    tally: dict[str, dict[str, int]] = {v: {"合格": 0, "不合格": 0, "不计": 0, "未运行": 0} for v in variants}
+    tally: dict[str, dict[str, int]] = {v: dict.fromkeys(CRIT_VERDICTS + ("未运行",), 0) for v in variants}
     for case in cases:
         cells = []
         for v in variants:
@@ -7711,18 +7747,16 @@ def render_crit_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                 cells.append("未运行")
                 continue
             for r in runs:
-                p = crit_facts(r, case)["pass"]
-                tally[v]["合格" if p else "不计" if p is None else "不合格"] += 1
+                w = crit_facts(r, case)["verdict"]
+                tally[v][w if w in tally[v] else "合格" if w.startswith("合格") else "单列"] += 1
             cells.append("<br>".join(crit_cell(r, case) for r in runs).replace("|", "\\|"))
         should = "是" if case["should_dispatch"] else "否"
         out.append(f"| {case['no']} | {case['id']} | {case['group']} | {should} | " + " | ".join(cells) + " |")
     out += [""]
     for v in variants:
         t = tally[v]
-        line = f"- **{v}**：合格 {t['合格']}，不合格 {t['不合格']}，停在浏览器或问用户不计 {t['不计']}"
-        if t["未运行"]:
-            line += f"，未运行 {t['未运行']}"
-        out.append(line + "。")
+        shown = [k for k in CRIT_VERDICTS + ("未运行",) if t[k] or k in ("合格", "不合格")]
+        out.append(f"- **{v}**：" + "，".join(f"{k} {t[k]}" for k in shown) + "。")
     out += [""]
     if meta.get("superseded_runs"):
         out += ["被替换的运行原样留在 results.json 的 `meta.superseded_runs`："]
@@ -7732,6 +7766,8 @@ def render_crit_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for case in cases:
         should = "是" if case["should_dispatch"] else "否"
         out += [f"## {case['no']}. {case['id']}（{case['group']}；该派：{should}）", "", f"**消息**：{case['message']}", ""]
+        if case.get("note"):
+            out += [f"**说明**：{case['note']}", ""]
         if case["history"]:
             out += ["**上下文**（同一段里前面的轮次）：", ""]
             for m in case["history"]:
@@ -7748,20 +7784,18 @@ def render_crit_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                     out += ["（未运行）", ""]
                     continue
                 f = crit_facts(r, case)
-                out += [f"**结果**：{f['label']}；{f['verdict']}。结束：{STOP_LABELS.get(r.get('stop_reason') or '', r.get('stop_reason'))}。", ""]
+                out += [f"**结果**：{f['label']}；{f['verdict']}。工具调用 {f['tool_calls']} 次。结束："
+                        f"{STOP_LABELS.get(r.get('stop_reason') or '', r.get('stop_reason'))}。", ""]
                 if r.get("status") != "ok":
                     out += [f"（{trunc(r.get('error') or '', 600)}）", ""]
                     continue
                 d = r.get("dispatch") or {}
-                if d.get("dispatched"):
-                    out += ["派活说明：", ""] + fenced(str(d.get("brief") or "（空）"))
-                    if f["found_in_brief"] is not None:
-                        out += ["派活说明里" + ("带上了" if f["found_in_brief"] else "没有带上") + "已经查到的文件名。", ""]
-                    if not d.get("in_final"):
-                        out += ["（`<subtask>` 不在最后一条回复里。）", ""]
-                    after = (r.get("after_dispatch") or {}).get("calls") or []
-                    if after:
-                        out += [f"派完之后又调用了 {len(after)} 次工具（第 {', '.join(map(str, after))} 次）。", ""]
+                for k, brief in enumerate(d.get("briefs") or [], 1):
+                    out += [f"派活说明{'' if d.get('count', 1) == 1 else f' {k}'}：", ""] + fenced(brief or "（空）")
+                if f["found_in_brief"] is not None:
+                    out += ["派活说明里" + ("带上了" if f["found_in_brief"] else "没有带上") + "已经查到的文件名。", ""]
+                for m in d.get("mid_tags") or []:
+                    out += [f"{CRIT_MID_TAG}，在第 {m['turn']} 轮回复：", ""] + fenced(m["brief"] or "（空）")
                 if f["todos_added"]:
                     out += ["记下的待办：" + "；".join(f"「{x}」" for x in f["todos_added"]), ""]
                 ch = f["downloads_changes"]
@@ -7932,7 +7966,8 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
                     "crit-midway": ("midway-invoices", "old", "crit-look-tag"),
                     "crit-q-injuries": ("q-injuries", "old", "crit-web"),
                     "crit-q-east": ("q-east", "new", "final"),
-                    "crit-todo-note": ("todo-note", "new", "crit-todo")}
+                    "crit-todo-note": ("todo-note", "new", "crit-todo"),
+                    "crit-mid-tag": ("big-pdfs", "new", "crit-mid-tag")}
     for run_id, (case_id, variant, script) in crit_scripts.items():
         for job in make_crit_jobs([crcases[case_id]], [variant], snow, mykeys, ga_lang, set(), 1, script):
             job["case_id"] = run_id
@@ -10008,28 +10043,58 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
               f"{v}: segment facts filled, no In Hand or Memo lines, the manual's directory left for the run")
 
     def synth(case_id: str, dispatched: bool = False, stop: str = "final_reply", calls: int = 0,
-              brief: str | None = None, status: str = "ok") -> dict[str, Any]:
+              brief: str | None = None, status: str = "ok", mid: str | None = None) -> dict[str, Any]:
         names = ["code_run"] * calls
         if calls and stop in CRIT_UNDECIDED:
             names[-1] = "web_scan" if stop == "web_tool" else "ask_user"
+        briefs = [brief or ""] if dispatched else []
         return {"id": case_id, "variant": "new-1", "status": status, "stop_reason": stop,
                 "calls": [{"n": i, "turn": i, "name": n, "args": {}} for i, n in enumerate(names, 1)],
-                "dispatch": {"dispatched": dispatched, "brief": brief, "lookups_before": calls if dispatched else None,
-                             "count": 1 if dispatched else 0, "in_final": dispatched}}
+                "dispatch": {"dispatched": dispatched, "brief": brief if dispatched else None, "briefs": briefs,
+                             "lookups_before": calls if dispatched else None, "count": len(briefs),
+                             "in_final": dispatched, "mid_tags": [{"turn": 1, "brief": mid}] if mid else []}}
 
-    f = crit_facts(synth("q-weather", True, brief="查厦门明天天气"), cases["q-weather"])
+    def judged(r: dict[str, Any], case_id: str) -> dict[str, Any]:
+        f = crit_facts(r, cases[case_id])
+        print(f"    {case_id}: {crit_cell(r, cases[case_id])}")
+        return f
+
+    # Should not be handed off.
+    f = judged(synth("q-weather", True, brief="查厦门明天天气"), "q-weather")
     check(f["pass"] is False and f["verdict"] == "不合格", f"a question handed off: fails ({f['verdict']})")
-    f = crit_facts(synth("e-template", stop="cap_reached", calls=SANDBOX_TOOL_CAP), cases["e-template"])
-    check(f["pass"] is False and "上限" in f["label"], f"an errand worked on to the cap: fails ({f['label']})")
-    f = crit_facts(synth("e-template"), cases["e-template"])
-    check(f["pass"] is False and f["label"] == "没派，直接回复", f"an errand answered straight away: fails ({f['label']})")
-    f = crit_facts(synth("big-quotes", stop="ask_user", calls=1), cases["big-quotes"])
-    check(f["pass"] is None and f["label"] == "停在问用户（第 1 次调用）", f"an errand asking first: not counted ({f['verdict']})")
-    f = crit_facts(synth("q-story", stop="cap_reached", calls=SANDBOX_TOOL_CAP), cases["q-story"])
-    check(f["pass"] is True, f"a question worked on to the cap: passes ({f['verdict']})")
-    f = crit_facts(synth("q-story", status="timeout"), cases["q-story"])
-    check(f["pass"] is False and f["verdict"].startswith("运行失败"), f"a timeout: fails ({f['verdict']})")
-    f = crit_facts(synth("midway-invoices", True, calls=1, brief="把下载文件夹里的发票按类型归档"), cases["midway-invoices"])
+    f = judged(synth("q-story", stop="cap_reached", calls=SANDBOX_TOOL_CAP), "q-story")
+    check(f["pass"] is True and f["category"] == "self", f"a question worked on to the cap: passes ({f['verdict']})")
+    f = judged(synth("q-story", mid="查保罗·乔治受伤经过"), "q-story")
+    check(f["pass"] is None and f["category"] == "mid_tag" and f["label"].startswith(CRIT_MID_TAG),
+          f"a question with a tag only in a reply that called a tool: listed apart, not a dispatch ({f['label']})")
+    f = judged(synth("q-story", status="timeout"), "q-story")
+    check(f["pass"] is False and f["verdict"] == "运行失败", f"a timeout: fails ({f['verdict']})")
+    # Should be handed off: ruling 160's four kinds.
+    f = judged(synth("e-template", True, calls=2, brief="做一份酒店开业前资料收集模板"), "e-template")
+    check(f["pass"] is True and f["category"] == "dispatched" and f["label"] == "最终回复派了（之前 2 次工具调用）",
+          f"1. handed off in the final reply: passes ({f['label']})")
+    f = judged(synth("e-template", calls=CRIT_SMALL_CALLS), "e-template")
+    check(f["pass"] is None and f["category"] == "small" and f["verdict"] == "合规（三次以内自己做完）"
+          and f"（{CRIT_SMALL_CALLS} 次工具调用）" in f["label"],
+          f"2. done itself within {CRIT_SMALL_CALLS} tool calls: within the clause, listed apart ({f['label']})")
+    f = judged(synth("e-template"), "e-template")
+    check(f["category"] == "small" and "（0 次工具调用）" in f["label"],
+          f"2. answered with no tool call at all: the same kind ({f['label']})")
+    f = judged(synth("e-template", calls=CRIT_SMALL_CALLS + 1), "e-template")
+    check(f["pass"] is False and f["category"] == "over" and "自己做完" in f["label"],
+          f"3. done itself past {CRIT_SMALL_CALLS} tool calls: fails ({f['label']})")
+    f = judged(synth("e-template", stop="cap_reached", calls=SANDBOX_TOOL_CAP), "e-template")
+    check(f["pass"] is False and f["category"] == "over" and "上限" in f["label"],
+          f"3. worked on to the cap: fails ({f['label']})")
+    f = judged(synth("big-quotes", stop="web_tool", calls=2), "big-quotes")
+    check(f["pass"] is None and f["category"] == "web" and f["label"] == "停在浏览器（第 2 次调用）",
+          f"4. at the browser: listed apart ({f['label']})")
+    f = judged(synth("big-quotes", stop="ask_user", calls=1), "big-quotes")
+    check(f["pass"] is None and f["label"] == "停在问用户（第 1 次调用）", f"asking first: listed apart ({f['label']})")
+    f = judged(synth("big-pdfs", calls=5, mid="把 PDF 分类"), "big-pdfs")
+    check(f["pass"] is None and f["category"] == "mid_tag",
+          f"an errand whose tag is only in a reply that called a tool: listed apart, not a dispatch ({f['label']})")
+    f = judged(synth("midway-invoices", True, calls=1, brief="把下载文件夹里的发票按类型归档"), "midway-invoices")
     check(f["pass"] is True and f["found_in_brief"] is False, "midway: handed off, nothing found named: noted as such")
     by_run = {r["id"]: r for r in results}
     for run_id, (case_id, variant, script) in sorted(scripts.items()):
@@ -10059,10 +10124,11 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
                   "the dispatch suite's ~/Downloads fixtures, listed for real in the sandbox")
             d = r["dispatch"]
             check(d["dispatched"] and d["lookups_before"] == 1 and d["in_final"] and d["count"] == 1
-                  and "发票" in str(d["brief"]) and r["llm_calls"] == 2 and r["stop_reason"] == "final_reply",
-                  f"the tag read after one call, its instructions kept ({d})")
-            check(f["pass"] is True and f["label"] == "派了（之前 1 次工具调用）",
-                  f"an errand handed off after a look: passes ({f['label']})")
+                  and not d["mid_tags"] and "发票" in str(d["brief"]) and r["llm_calls"] == 2
+                  and r["stop_reason"] == "final_reply" and r["tool_calls"] == 1,
+                  f"the final reply's tag read after one call, its instructions kept ({d})")
+            check(f["pass"] is True and f["label"] == "最终回复派了（之前 1 次工具调用）",
+                  f"an errand handed off after a look: passes ({crit_cell(r, case)})")
             check("<subtask>" not in "".join(reply_lines(r["final_reply"])),
                   "the tag is not in the reply as shown")
             if case_id == "midway-invoices":
@@ -10073,17 +10139,26 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
             check(f["pass"] is True and f["label"] == "停在浏览器（第 1 次调用）",
                   f"a question at the browser: it was doing it itself, passes ({f['verdict']})")
             g = crit_facts(dict(r, id="big-quotes"), cases["big-quotes"])
-            check(g["pass"] is None and g["verdict"] == "停在浏览器（第 1 次调用），不计",
-                  f"an errand at the browser: not counted ({g['verdict']})")
+            check(g["pass"] is None and g["category"] == "web" and g["verdict"] == "单列",
+                  f"an errand at the browser: listed apart ({crit_cell(r, cases['big-quotes'])})")
         elif script == "final":
             roles = r["request_shape"]["message_roles"]
             check(roles == ["system", "user", "assistant", "user"]
                   and case["history"][1]["content"][:20] in json.dumps(r["requests"][0]["messages"], ensure_ascii=False),
                   f"the turns before it in the history ({roles})")
-            check(f["pass"] is True and not r["dispatch"]["dispatched"] and f["label"] == "没派，直接回复",
+            check(f["pass"] is True and not r["dispatch"]["dispatched"] and f["label"] == "没派，直接回复（0 次工具调用）",
                   f"a question answered here: passes ({f['label']})")
             g = crit_facts(dict(r, id="e-template"), cases["e-template"])
-            check(g["pass"] is False, f"the same reply to an errand: fails ({g['verdict']})")
+            check(g["category"] == "small", f"the same reply to an errand: within the clause, listed apart "
+                                            f"({crit_cell(r, cases['e-template'])})")
+        elif script == "crit-mid-tag":
+            d = r["dispatch"]
+            check(not d["dispatched"] and not d["in_final"] and len(d["mid_tags"]) == 1
+                  and "PDF" in d["mid_tags"][0]["brief"] and d["mid_tags"][0]["turn"] == 1
+                  and r["stop_reason"] == "final_reply" and r["tool_calls"] == 1 and r["llm_calls"] == 2,
+                  f"a tag in a reply that also called a tool is not a dispatch, kept apart ({d})")
+            check(f["pass"] is None and f["category"] == "mid_tag",
+                  f"listed apart ({crit_cell(r, case)})")
         elif script == "crit-todo":
             log = [c.get("argv") or [] for c in r.get("galley_log") or []]
             check(any(cli_name(a) == "todo add" for a in log) and f["todos_added"] == ["把酒店项目的资料清单发给业主"],
@@ -10095,7 +10170,7 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     md = render_crit_md({"meta": {"model": {"name": "dry", "options": {}}, "model_access": "dry", "ran_at": "dry"},
                          "results": shown}, list(cases.values()))
     check("## 一览" in md and all(f"| {c['id']} |" in md for c in cases.values()) and "派活说明：" in md
-          and "未运行" in md,
+          and "未运行" in md and CRIT_MID_TAG in md and "工具调用 1 次" in md,
           "results.md renders (every case in the table, the instructions in full)")
 
 

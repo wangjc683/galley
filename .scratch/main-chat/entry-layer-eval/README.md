@@ -797,10 +797,10 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases progress-rev
 主对话 PRD 裁决 160：派活判据从「会长时间占着这个对话」换成「用户在不在等」。用户在问、在等答案的自己答，哪怕要查几分钟；交办的差事（拿回来的是一件东西或一个状态，不是一个答案）超过两三步派出去，用户明说派的照派；问着问着发现是差事的，把已经查到的写进派活说明，剩下的交出去；材料就是这段对话本身的、记待办提醒备忘的自己做。只改了入口层那一段（`core/src/managed_prompt.rs` 的 `main_chat_entry_layer`），手册没动。`run.py --suite dispatch-criterion`。
 
 - **两组提示词**：`dispatch-criterion/galley-prompt/main_chat.old.txt` 是 main 上这一票之前的主对话提示词，`main_chat.new.txt` 是这一票改过的，都照「怎么跑」的办法由 `compose_main_chat_runtime_prompt` 写出（临时测试，跑完删掉），占位与 `schedule/galley-prompt/` 相同，版本号写的是 0.7.4。old 与 `schedule/galley-prompt/main_chat.plain.txt` 只差版本号那一行；两份之间只差派活那一段。
-- **用例**（`dispatch-criterion/cases.json`，16 条）：照这两周的真实轮次仿写，人名、项目名不照抄。不该派的 9 条：问答 7 条（`quick-usd`、`quick-downloads` 的消息沿用 `dispatch-cases.json`），记一个待办 1 条，材料是这段对话的 1 条（`conv-writeup`，前面三轮聊 NAS 选购）。该派的 7 条：差事 5 条（`big-quotes`、`big-pdfs`、`big-research` 沿用 `dispatch-cases.json`），明说派 1 条，问着问着发现是差事 1 条（`midway-invoices`：先问有没有发票，看了文件夹才知道要归档一批）。沿用的用例写 `from`，消息只写在 `dispatch-cases.json`，标注要与那里一致。`q-east` 带上一轮西部预测的问答。
+- **用例**（`dispatch-criterion/cases.json`，16 条）：照这两周的真实轮次仿写，人名、项目名不照抄；`e-invoices` 仿 10-28 那轮「今天下午五点前把发票整理好」，改成「明天」，结果不随开跑时刻变（写在它的 `note` 里）。不该派的 9 条：问答 7 条（`quick-usd`、`quick-downloads` 的消息沿用 `dispatch-cases.json`），记一个待办 1 条，材料是这段对话的 1 条（`conv-writeup`，前面三轮聊 NAS 选购）。该派的 7 条：差事 5 条（`big-quotes`、`big-pdfs`、`big-research` 沿用 `dispatch-cases.json`），明说派 1 条，问着问着发现是差事 1 条（`midway-invoices`：先问有没有发票，看了文件夹才知道要归档一批）。沿用的用例写 `from`，消息只写在 `dispatch-cases.json`，标注要与那里一致。`q-east` 带上一轮西部预测的问答。
 - **沙盒**：待办评测的沙盒与假 `galley`（里面什么都没有，记下的待办留在它的状态里），手册各部分放进状态根，`~/Downloads` 是派活对照（票 06）那套占位文件（`build_sandbox` 的 `dispatch_fixtures`）；每次运行最多 8 次工具调用（同票 06）；浏览器工具与 `ask_user` 不执行，运行停在那里；`sed`、`cat`、`ls` 等几个系统命令能用（同待办评测）。
-- **判定**（`crit_facts`）：同票 06 的 T 组，回复里有 `<subtask>…</subtask>` 算派，记下标签内容全文、之前几次工具调用、标签在不在最后一条回复里。该派的派了、不该派的没派算合格。停在浏览器或问用户的：不该派的用例算它自己在做，合格；该派的用例不计合格也不计失败，单列。另记（不判）：`midway-invoices` 的派活说明里有没有提到已经看到的文件名（`found_any`），记下的待办，在假 HOME 里新建的文件，下载文件夹的变化。
-- **`--dry-test` 加的**（`dry_test_crit`）：用例（沿用的 5 条逐字相同、9 条不该派）；两份提示词（old 即待办评测那份，两份只差派活那一段、位置相同，新的一段里裁决 160 的几句都在，占位填好、没有 In Hand 与 Memo）；判定（问答派了不过，差事做到上限或直接回复不过，差事停在问用户不计，问答做到上限过，超时不过，派活说明没提已经看到的照实记）；假模型在真沙盒里走一遍：看一眼下载文件夹再派（占位文件真的列得出，标签之前 1 次调用），停在浏览器（问答过、差事不计），带上下文的直接回复（问答过、差事不过），记一个待办（落进假 `galley`，手册从状态根读到）；再出一份 `results.md`。
+- **判定**（`crit_facts`）：最终回复（不再调用工具的那一条）里有 `<subtask>…</subtask>` 才算派，同 Core（`subtask::pending_reply` 只读最终回答）；只写在还调用了工具的中间回复里的，单列为「中间回复里写了标签（真机不会派）」，不算派。记下标签内容全文与之前几次工具调用。不该派的用例：派了不合格，没派合格（停在浏览器或问用户算它自己在做）。该派的用例按裁决 160「超过两三步就派」分四类：①最终回复派了，合格；②三次工具调用以内（`CRIT_SMALL_CALLS`）自己做完、给了最终回复，合规（条款允许，单列；沙盒的占位文件让差事变小时落在这里，不算条款失效）；③超过三次工具调用还没派，不合格；④停在浏览器，单列（停在问用户同样单列）。`results.md` 每格写明用了几次工具调用。另记（不判）：`midway-invoices` 的派活说明里有没有提到已经看到的文件名（`found_any`），记下的待办，在假 HOME 里新建的文件，下载文件夹的变化。
+- **`--dry-test` 加的**（`dry_test_crit`）：用例（沿用的 5 条逐字相同、9 条不该派）；两份提示词（old 即待办评测那份，两份只差派活那一段、位置相同，新的一段里裁决 160 的几句都在，占位填好、没有 In Hand 与 Memo）；判定（问答派了不过、做到上限过、标签只在中间回复里单列、超时不过；差事的四类各一条，另有 0 次调用直接回复算②、做到上限算③、停在问用户单列、标签只在中间回复里单列；派活说明没提已经看到的照实记）；假模型在真沙盒里走一遍：看一眼下载文件夹再在最终回复里派（占位文件真的列得出，之前 1 次调用），停在浏览器（问答过、差事单列），带上下文的直接回复（问答过、差事算②），记一个待办（落进假 `galley`，手册从状态根读到），标签写在调用了工具的那条回复里、最终回复没有（不算派、单列）；再出一份 `results.md`。
 - **怎么跑**：
 
 ```bash
@@ -810,6 +810,8 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --dry-test
 $PY .scratch/main-chat/entry-layer-eval/run.py --suite dispatch-criterion --parallel 4      # 16 × 2 = 32 次运行
 $PY .scratch/main-chat/entry-layer-eval/run.py --suite dispatch-criterion --variant new --cases <没过的> --supersede "改措辞：……"
 ```
+
+- **别的套件还是旧条款**：`schedule/galley-prompt/`（schedule、todo、chat、memo 四套用它）、`wake/galley-prompt/` 与入口层套件的 `galley-prompt/` 是这一票之前生成的，派活那一段还是旧的「会长时间占着这个对话」；重跑那些套件之前，先照「怎么跑」的办法重新生成它们的模板。
 
 ## 安全措施
 
