@@ -871,8 +871,9 @@ chat PRD ruling 162, ticket 118; unit tests and a local fake stream only).
 The memo page groups by the sidebar's time periods (today, this week, this
 month, earlier), full width, the exact day showing beside the ⋯ on hover;
 ticket 119's left column came and went the same day (main chat PRD rulings
-164 and 166, tickets 119 and 121; awaiting JC's look in the real window;
-rows 28px since ruling 168). The managed engine waits at least 30 seconds
+164 and 166, tickets 119 and 121; rows 28px and a faint dot before each
+memo, where a to-do has its box, rulings 168 and 169; JC looked in the real
+window, 2026-11-02). The managed engine waits at least 30 seconds
 for Core's token, so a refresh after a long idle no longer fails the first
 request (it cost the 11-02 morning review); Core, the runner and the review
 log now keep what went wrong (main chat PRD ruling 167, ticket 122). Owed:

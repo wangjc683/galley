@@ -1,6 +1,6 @@
 # 120 诊断：巡看补跑失败，被当成「没话说」丢掉了
 
-Status: ready-for-human（2026-11-02 诊断完成。主会话核过：`llmcore.py:638` 取令牌超时 `max(5, connect_timeout)` 即 10 秒；`managed_model_secrets.updated_at` 最后一次是 05:34:23，比巡看那次 Prompt 晚 11 秒；`sched_bd75f9d3f8392096` 的 `last_fired_at` 05:34:10、`last_wake` 为空。修不修等 JC 定）
+Status: done（2026-11-02 诊断完成；JC 选乙，取令牌至少等 30 秒与报错落地由票 122 做完；失败的叫醒补跑一次挂在 deferred「失败的叫醒补跑一次」）
 
 来源：[主对话 PRD](../PRD.md) 裁决 165。
 
