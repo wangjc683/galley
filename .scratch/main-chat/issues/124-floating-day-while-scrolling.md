@@ -1,6 +1,6 @@
 # 124 往回翻主对话时，顶上浮一颗日期胶囊
 
-Status: needs-review
+Status: needs-dogfood（2026-11-02 快进合入 `43833a24`。主会话验收：rebase 到 `d20164d4` 后 typecheck、lint 退出码 0，`TZ=UTC` 下本票四个测试文件 56 条过，`diff --check` 干净；看过浅色压回复、深色压你的气泡两张截图。偏离票面两处主会话认可：贴底不算滚动用 `atBottom`（报告第 1 条的理由成立：500ms 窗口管不到之后的跟随滚动）；读行的线下移到胶囊下沿 36px（报告第 6 条）。只在无头 Chrome 与 jsdom 里验过，等 JC 在 tauri dev 里看，报告 Open risks 第 1、6、7 条是真机要盯的）
 
 来源：[主对话 PRD](../PRD.md) 裁决 171；落实 deferred「滚动时浮动日期（主对话往回翻）」（`docs/devlog/deferred.md:840`）。只改 GUI 的主对话、它的测试与文档；不动 Core、CLI、Agent API、迁移；工作台会话零变化；外置运行时没有主对话，零变化。
 
