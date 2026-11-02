@@ -201,13 +201,49 @@ export function useEarlierTurns({
       }
       resizeAtRest(container, height, heldRef);
     };
-    container.addEventListener("scroll", arm, { passive: true });
+    // A flick that runs past the conversation's first turn into the
+    // runway left above it (no earlier page is coming to land there)
+    // ends on that turn, as at a top, instead of drifting through the
+    // blank until the momentum dies and the runway goes (ticket 123,
+    // measured: about a second of blank). WebKit keeps the momentum on
+    // its scrolling thread and drops a `scrollTop` written meanwhile;
+    // taking the scroller's overflow away ends it, and two frames later
+    // the runway goes and the write lands (tauri dev probe: 354px of
+    // blank for one frame, then on the first turn, still). The overflow
+    // comes back a frame after that.
+    let stopFrame: number | null = null;
+    const stopFlick = () => {
+      if (stopFrame !== null) return;
+      if (useMessagesStore.getState().byId[sid]?.earlier) return;
+      if (!hasRunway(container)) return;
+      if (container.scrollTop >= runwayHeight(container)) return;
+      if (pageBusy(container)) return;
+      container.style.overflowY = "hidden";
+      stopFrame = requestAnimationFrame(() => {
+        stopFrame = requestAnimationFrame(() => {
+          resizeAtRest(container, 0, heldRef);
+          stopFrame = requestAnimationFrame(() => {
+            stopFrame = null;
+            container.style.overflowY = "";
+          });
+        });
+      });
+    };
+    const onScroll = () => {
+      arm();
+      stopFlick();
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
     wakeRef.current = () => {
       if (timer === null) arm();
     };
     return () => {
-      container.removeEventListener("scroll", arm);
+      container.removeEventListener("scroll", onScroll);
       if (timer !== null) window.clearTimeout(timer);
+      if (stopFrame !== null) {
+        cancelAnimationFrame(stopFrame);
+        container.style.overflowY = "";
+      }
       wakeRef.current = null;
     };
   }, [sessionId, scrollContainerRef]);

@@ -432,16 +432,45 @@ describe("the runway (ruling 172)", () => {
     expect(topOf("a2")).toBe(before);
   });
 
-  it("lands a reader inside it on the top when it goes", () => {
+  it("ends a flick that runs into it on the first turn, then gives the overflow back", () => {
     const scroller = mount({ rows: rowsOf("a", 10, 300) });
     place(scroller, RUNWAY_MIN_PX + 600);
     prepend(rowsOf("b", 10, 320), { last: true });
-    // Flicked past the first message, into the blank.
+    // Flicked past the first message, into the blank: the momentum is
+    // taken away at once, the runway goes two frames later.
     place(scroller, 5_000);
     scrolled(scroller);
-    idle(RUNWAY_IDLE_MS);
+    expect(scroller.style.overflowY).toBe("hidden");
+    expect(writes).toEqual([]);
+    act(() => frames.tick());
+    expect(columnOf(scroller).hasAttribute(RUNWAY_ATTR)).toBe(true);
+    act(() => frames.tick());
+    expect(columnOf(scroller).hasAttribute(RUNWAY_ATTR)).toBe(false);
     expect(writes).toEqual([0]);
     expect(topOf("b0")).toBe(PAD);
+    expect(scroller.style.overflowY).toBe("hidden");
+    act(() => frames.tick());
+    expect(scroller.style.overflowY).toBe("");
+  });
+
+  it("does not stop a flick into it while earlier pages are still coming", () => {
+    const scroller = mount({ rows: rowsOf("a", 10, 300) });
+    // Outran the reads: in the blank, a page still to land there.
+    place(scroller, 5_000);
+    scrolled(scroller);
+    expect(scroller.style.overflowY).toBe("");
+    act(() => frames.tick());
+    act(() => frames.tick());
+    expect(columnOf(scroller).hasAttribute(RUNWAY_ATTR)).toBe(true);
+  });
+
+  it("does not stop a flick above the first turn's top", () => {
+    const scroller = mount({ rows: rowsOf("a", 10, 300) });
+    place(scroller, RUNWAY_MIN_PX + 600);
+    prepend(rowsOf("b", 10, 320), { last: true });
+    place(scroller, runwayOf(scroller) + 10);
+    scrolled(scroller);
+    expect(scroller.style.overflowY).toBe("");
   });
 
   it("is laid when earlier pages arrive after the mount, scrollTop with it", () => {
