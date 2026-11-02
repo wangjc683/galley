@@ -876,7 +876,16 @@ memo, where a to-do has its box, rulings 168 and 169; JC looked in the real
 window, 2026-11-02). The managed engine waits at least 30 seconds
 for Core's token, so a refresh after a long idle no longer fails the first
 request (it cost the 11-02 morning review); Core, the runner and the review
-log now keep what went wrong (main chat PRD ruling 167, ticket 122). Owed:
+log now keep what went wrong (main chat PRD ruling 167, ticket 122).
+Scrolling back a long conversation no longer runs into blank and jumps: a
+blank runway above the loaded turns takes each page that lands, since
+WebKit drops a `scrollTop` written during a flick's momentum; the next
+page is read ten screens ahead, the runway is refilled at rest and goes
+once the first turn is in, and a flick past the first turn stops there
+(main chat PRD rulings 170–172, ticket 123; all conversations, GUI only;
+JC flicked it nine times in tauri dev with a probe, 2026-11-02). Scrolling
+back the main chat, a capsule at the top says which day you are on, not
+while that is today (ruling 171, ticket 124; JC looked). Owed:
 ticket 04's second real-machine step, stopping a workbench run you watch
 (no workbench run in the database since the merge). Still owed from
 `v0.7.2`'s scope: ticket 98's noticed interest (the 「看你……常问」 memo has
