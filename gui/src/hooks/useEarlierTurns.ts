@@ -39,9 +39,11 @@ const PREPEND_SETTLE_MS = 1500;
  * momentum sends scroll events until it ends), and a `scrollTop` written
  * now lands. The runway is refilled and taken away only then. */
 export const RUNWAY_IDLE_MS = 200;
-/** Within this of the bottom counts as at the bottom (useStickyScroll's
- * tolerance). */
-const AT_BOTTOM_PX = 24;
+/** The most the runway is refilled to (px). */
+const RUNWAY_MAX_PX = 200_000;
+/** The runway is refilled to the estimate of what is left to read, and
+ * this much over it. */
+const RUNWAY_ESTIMATE_MARGIN = 1.2;
 
 /** Where the reader was when a page was prepended. */
 interface PrependSnapshot {
@@ -51,16 +53,41 @@ interface PrependSnapshot {
   scrollHeight: number;
 }
 
-/** The runway's height to refill to: twice the tallest page this mount
- * has seen land, and never under RUNWAY_MIN_PX. */
-function runwayTarget(tallestPage: number): number {
-  return Math.max(RUNWAY_MIN_PX, 2 * tallestPage);
-}
-
-function atBottom(container: HTMLElement): boolean {
-  return (
-    container.scrollHeight - container.scrollTop - container.clientHeight <
-    AT_BOTTOM_PX
+/**
+ * The runway's height to refill to: about as tall as what is left to
+ * read — the turns before the loaded ones, at the loaded turns' height
+ * per turn index, RUNWAY_ESTIMATE_MARGIN over — so one long run of
+ * flicks back, with no stop to refill in, does not use it up (tauri dev,
+ * ticket 123: from the bottom, 5,557px went with the first page and the
+ * next was scrolled for, mid-flick, and lost); and so the scrollbar
+ * roughly tells the length of the whole conversation. Never under
+ * twice the tallest page this mount has seen land or RUNWAY_MIN_PX,
+ * never over RUNWAY_MAX_PX. What is left over above the first turn
+ * goes when that turn is in (the stop or the flick into it).
+ */
+function runwayTarget(
+  container: HTMLElement,
+  sessionId: string,
+  tallestPage: number,
+): number {
+  let estimate = 0;
+  const slice = useMessagesStore.getState().byId[sessionId];
+  const earlier = slice?.earlier;
+  if (slice && earlier) {
+    let last: number | undefined;
+    for (let i = slice.turns.length - 1; i >= 0 && last === undefined; i--) {
+      last = (slice.turns[i] as { turnIndex?: number }).turnIndex;
+    }
+    if (last !== undefined && last >= earlier.beforeTurnIndex) {
+      const loaded = container.scrollHeight - runwayHeight(container);
+      const perIndex = loaded / (last - earlier.beforeTurnIndex + 1);
+      // Turn indices start at -1 (the main chat's greeting).
+      estimate =
+        perIndex * (earlier.beforeTurnIndex + 1) * RUNWAY_ESTIMATE_MARGIN;
+    }
+  }
+  return Math.round(
+    Math.min(RUNWAY_MAX_PX, Math.max(RUNWAY_MIN_PX, 2 * tallestPage, estimate)),
   );
 }
 
@@ -109,8 +136,8 @@ function resizeAtRest(
  * (main chat ruling 172, ticket 123; lib/scroll-runway.ts): a page that
  * lands is taken out of it instead of scrolled for, since WebKit drops a
  * `scrollTop` written during a flick's momentum. The runway is laid in
- * the render that first shows earlier pages, refilled whenever the
- * reader stops away from the bottom, and taken away once they stop after
+ * the render that first shows earlier pages, resized to about what is
+ * left to read whenever the reader stops, and taken away once they stop after
  * the conversation's first turn has gone in. Returns the ref for the
  * conversation column, which carries it.
  */
@@ -168,12 +195,18 @@ export function useEarlierTurns({
     const column = columnOf(container);
     if (!column || hasRunway(container)) return;
     layRunway(column, 0);
-    resizeAtRest(container, runwayTarget(tallestPageRef.current), heldRef);
-  }, [hasEarlier, scrollContainerRef]);
+    if (sessionId === undefined) return;
+    resizeAtRest(
+      container,
+      runwayTarget(container, sessionId, tallestPageRef.current),
+      heldRef,
+    );
+  }, [hasEarlier, scrollContainerRef, sessionId]);
 
-  // Stopped (no scroll event for RUNWAY_IDLE_MS): refill the runway to
-  // its target unless at the bottom (where it is not used, and the
-  // follow is at home), or take it away once no earlier page is left.
+  // Stopped (no scroll event for RUNWAY_IDLE_MS): resize the runway to
+  // its target (runwayTarget; at the bottom too — scrollTop moves with
+  // it, the distance from the bottom does not), or take it away once no
+  // earlier page is left.
   // `scrollTop` moves with it, written while nothing scrolls, and lands.
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -192,8 +225,12 @@ export function useEarlierTurns({
       if (!earlier) {
         height = 0;
       } else {
-        height = runwayTarget(tallestPageRef.current);
-        if (atBottom(container) || runwayHeight(container) >= height) return;
+        height = runwayTarget(container, sid, tallestPageRef.current);
+        // Within a screen of it: not worth a write. At the bottom too:
+        // the first run of flicks back starts there (tauri dev: left
+        // short there, it ran out a page in).
+        if (Math.abs(runwayHeight(container) - height) < container.clientHeight)
+          return;
       }
       if (pageBusy(container)) {
         arm();

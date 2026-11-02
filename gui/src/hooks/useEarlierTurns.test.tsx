@@ -395,14 +395,43 @@ describe("the runway (ruling 172)", () => {
     expect(runwayOf(scroller)).toBe(30_000);
   });
 
-  it("is not refilled at the bottom", () => {
+  it("is refilled at the bottom too, keeping the distance from the bottom", () => {
+    // tauri dev: left short at the bottom, the first run of flicks back
+    // used it up a page in.
     const scroller = mount({ rows: rowsOf("a", 10, 300) });
     place(scroller, scroller.scrollHeight - VIEW);
     prepend(rowsOf("b", 10, 320));
+    const fromBottom =
+      scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
     scrolled(scroller);
     idle(RUNWAY_IDLE_MS);
-    expect(runwayOf(scroller)).toBe(RUNWAY_MIN_PX - 3_200);
-    expect(writes).toEqual([]);
+    expect(runwayOf(scroller)).toBe(RUNWAY_MIN_PX);
+    expect(
+      scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+    ).toBe(fromBottom);
+  });
+
+  it("is refilled to about what is left to read, capped", () => {
+    // 50 turn indices loaded (100…149), 30,000px of them: 600.96px an
+    // index with the scroller's padding; 101 indices left (-1…99).
+    const scroller = mount({ rows: rowsOf("a", 10, 3_000) });
+    patchSlice({
+      turns: [{ turnIndex: 149 }] as unknown as PerSessionMessages["turns"],
+    });
+    place(scroller, RUNWAY_MIN_PX + 600);
+    scrolled(scroller);
+    idle(RUNWAY_IDLE_MS);
+    expect(runwayOf(scroller)).toBe(
+      Math.round(((30_000 + 2 * PAD) / 50) * 101 * 1.2),
+    );
+    // A long way left: no more than 200,000px.
+    patchSlice({
+      earlier: { ...EARLIER, beforeTurnIndex: 10_000 },
+      turns: [{ turnIndex: 10_049 }] as unknown as PerSessionMessages["turns"],
+    });
+    scrolled(scroller);
+    idle(RUNWAY_IDLE_MS);
+    expect(runwayOf(scroller)).toBe(200_000);
   });
 
   it("waits while the typing bubble is up", () => {
