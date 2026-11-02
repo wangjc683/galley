@@ -1058,3 +1058,267 @@ def test_without_the_codex_backend_plan_codes_keep_ga_retry(
     assert len(net.posts) == 3
     assert net.gets == []
     assert chunks == [f"!!!Error: HTTP 429: {json.dumps(body)}"]
+
+
+# Patch 0030 (ticket 118): a whitespace runaway in a tool call's arguments.
+# On 2026-10-21 a model opened `web_execute_js` normally, then streamed 400k
+# tabs and newlines for 15 minutes over the plan backend. The fakes stream
+# that opening, then 18 times the threshold in the same shape (a newline and
+# 17 tabs per delta), then the events that would close the call; the guard
+# stops reading near the threshold, closes the response unread, posts once,
+# and keeps the bulk out of the returned blocks and the session history.
+
+_SUMMARY = "<summary>open the search page</summary>\n"
+_OPENING = (
+    '{"script":"{\\"cmd\\":\\"tabs\\",\\"method\\":\\"create\\",\\"active\\":true}'
+    'x switching?}("'
+)
+_WS_PIECE = "\n" + "\t" * 17
+_WS_RUNAWAY = (_WS_PIECE,) * 2000
+# Deltas read until the run reaches the threshold.
+_WS_PIECES_TO_TRIP = -(-llmcore._GALLEY_ARGS_WS_RUN // len(_WS_PIECE))
+_ARGS_MARKER: str = llmcore._GALLEY_ARGS_MARKER
+# Valid arguments: escaped newlines and tabs inside a string, indentation and
+# newlines between tokens, longer than the threshold.
+_NORMAL_ARGS: dict[str, Any] = {
+    "path": "a.py",
+    "content": "def f():\n\treturn 1\n" * 200,
+    "flags": {"overwrite": True, "mode": "w"},
+}
+
+
+def _deltas(text: str, size: int = 7) -> tuple[str, ...]:
+    return tuple(text[i : i + size] for i in range(0, len(text), size))
+
+
+def _responses_lines(arg_deltas: tuple[str, ...]) -> list[str]:
+    return _sse(
+        {"type": "response.output_text.delta", "delta": _SUMMARY},
+        {
+            "type": "response.output_item.added",
+            "output_index": 1,
+            "item": {"type": "function_call", "call_id": "call_1", "name": "web_execute_js"},
+        },
+        *(
+            {"type": "response.function_call_arguments.delta", "output_index": 1, "delta": d}
+            for d in arg_deltas
+        ),
+        {
+            "type": "response.function_call_arguments.done",
+            "output_index": 1,
+            "arguments": "".join(arg_deltas),
+        },
+        {
+            "type": "response.completed",
+            "response": {"usage": {"input_tokens": 10, "output_tokens": 5}},
+        },
+    )
+
+
+def _chat_lines(arg_deltas: tuple[str, ...]) -> list[str]:
+    call = {"index": 0, "id": "call_1", "function": {"name": "web_execute_js", "arguments": ""}}
+    return _oai_stream(
+        {"content": _SUMMARY},
+        {"tool_calls": [call]},
+        *({"tool_calls": [{"index": 0, "function": {"arguments": d}}]} for d in arg_deltas),
+    )
+
+
+def _claude_lines(arg_deltas: tuple[str, ...]) -> list[str]:
+    return _sse(
+        {"type": "message_start", "message": {"usage": {"input_tokens": 10}}},
+        {"type": "content_block_start", "index": 0, "content_block": {"type": "text"}},
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "text_delta", "text": _SUMMARY},
+        },
+        {"type": "content_block_stop", "index": 0},
+        {
+            "type": "content_block_start",
+            "index": 1,
+            "content_block": {"type": "tool_use", "id": "call_1", "name": "web_execute_js"},
+        },
+        *(
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {"type": "input_json_delta", "partial_json": d},
+            }
+            for d in arg_deltas
+        ),
+        {"type": "content_block_stop", "index": 1},
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": "tool_use"},
+            "usage": {"output_tokens": 5},
+        },
+        {"type": "message_stop"},
+    )
+
+
+class _Counted:
+    """Yields the lines one by one and counts how many were read."""
+
+    def __init__(self, lines: list[str]) -> None:
+        self.lines = lines
+        self.read = 0
+
+    def __iter__(self) -> Any:
+        for line in self.lines:
+            self.read += 1
+            yield line
+
+
+_PROTOCOLS: dict[str, tuple[Any, Any]] = {
+    "responses": (_responses_lines, lambda ls: llmcore._parse_openai_sse(ls, "responses")),
+    "chat_completions": (
+        _chat_lines,
+        lambda ls: llmcore._parse_openai_sse(ls, "chat_completions"),
+    ),
+    "claude": (_claude_lines, llmcore._parse_claude_sse),
+}
+
+
+def test_whitespace_runaway_threshold_is_a_run_at_the_tail() -> None:
+    cut = llmcore._galley_args_cut
+    n = llmcore._GALLEY_ARGS_WS_RUN
+
+    assert n == 2000 and llmcore._GALLEY_ARGS_KEEP == 800
+    assert cut('{"a": 1' + " \t\r\n" * 499 + "\t" * 3) is None  # 1,999
+    assert cut('{"a": 1' + " \t\r\n" * 500) == '{"a": 1'  # 2,000
+    # A run broken by one token does not count.
+    assert cut('{"a": 1' + "\t" * 1000 + "," + "\t" * 1999) is None
+    # Other Unicode whitespace is not JSON whitespace.
+    assert cut('{"a": 1' + "　" * 3000) is None
+    long_opening = '{"script":"' + "x" * 1500
+    assert cut(long_opening + "\n" * n) == long_opening[:800]
+    # The cut drops whitespace the first 800 characters end in.
+    assert cut('{"a":' + " " * 3000) == '{"a":'
+
+
+@pytest.mark.parametrize("protocol", sorted(_PROTOCOLS))
+def test_normal_tool_arguments_are_untouched(protocol: str) -> None:
+    build, parse = _PROTOCOLS[protocol]
+    args = json.dumps(_NORMAL_ARGS, indent=2)
+    assert "\\n\\t" in args and "\n  " in args and len(args) > 2000
+    lines = _Counted(build(_deltas(args)))
+
+    chunks, blocks = _collect(parse(iter(lines)))
+
+    assert lines.read == len(lines.lines)
+    assert chunks == [_SUMMARY]
+    [tool_use] = [b for b in blocks if b["type"] == "tool_use"]
+    assert tool_use["input"] == _NORMAL_ARGS
+
+
+class _StreamedResponse(_FakeHTTPResponse):
+    """A 200 SSE response that counts the lines the engine read and when it
+    left the `with` block (real `requests` closes the connection of a
+    response left unread there)."""
+
+    def __init__(self, lines: list[str]) -> None:
+        super().__init__(200, lines=tuple(lines))
+        self.read = 0
+        self.closed_after: int | None = None
+
+    def __exit__(self, *_args: object) -> None:
+        self.closed_after = self.read
+
+    def iter_lines(self, *_args: object, **_kwargs: object) -> Any:
+        for line in self._lines:
+            self.read += 1
+            yield line
+
+
+def _serve_once(monkeypatch: pytest.MonkeyPatch, resp: _StreamedResponse) -> list[str]:
+    _install_network(monkeypatch, _OK_STREAM)
+    posts: list[str] = []
+
+    def post(url: str, **_kwargs: Any) -> _StreamedResponse:
+        posts.append(url)
+        return resp
+
+    monkeypatch.setattr(llmcore.requests, "post", post, raising=False)
+    return posts
+
+
+def _ask_native_oai(cfg: dict[str, Any]) -> tuple[Any, list[str], Any]:
+    sess = llmcore.NativeOAISession(
+        {"name": "t118", "apikey": "k", "model": "gpt-5.6-sol", "max_retries": 2, **cfg}
+    )
+    msg = {"role": "user", "content": [{"type": "text", "text": "open the search page"}]}
+    chunks, response = _collect(sess.ask(msg))
+    return sess, chunks, response
+
+
+def _assert_cut(
+    sess: Any, chunks: list[str], response: Any, kept: str, resp: _StreamedResponse, before: int
+) -> None:
+    # Reading stopped on the delta that made the run 2,000 long, and the
+    # response was closed right there, unread.
+    assert resp.read == before + _WS_PIECES_TO_TRIP
+    assert resp.closed_after == resp.read < len(resp._lines)
+    # The model's reply text says why its call was cut.
+    assert chunks == [_SUMMARY, "\n\n" + _ARGS_MARKER]
+    assert response.content == (_SUMMARY + "\n\n" + _ARGS_MARKER).strip()
+    [call] = response.tool_calls
+    assert call.function.name == "web_execute_js"
+    # Not valid JSON, so it lands as `_raw` as before: `do_web_execute_js`
+    # finds no script and says so, and the model sends the call again.
+    assert json.loads(call.function.arguments) == {"_raw": kept}
+    assert sess.history[-1]["content"] == [
+        {"type": "text", "text": _SUMMARY + "\n\n" + _ARGS_MARKER},
+        {"type": "tool_use", "id": "call_1", "name": "web_execute_js", "input": {"_raw": kept}},
+    ]
+    assert len(json.dumps(sess.history, ensure_ascii=False)) < 2000
+
+
+def test_whitespace_runaway_cut_on_the_plan_backend_responses_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The 10-21 route: Sign in with ChatGPT, Responses API, no output cap."""
+    resp = _StreamedResponse(_responses_lines((_OPENING, *_WS_RUNAWAY)))
+    posts = _serve_once(monkeypatch, resp)
+    usage: list[Any] = []
+    monkeypatch.setattr(llmcore, "_record_usage", lambda u, _mode: usage.append(u))
+
+    sess, chunks, response = _ask_native_oai(
+        {"apibase": "https://api.example.test/v1", "api_mode": "responses", "codex_backend": True}
+    )
+
+    assert len(posts) == 1
+    _assert_cut(sess, chunks, response, _OPENING, resp, before=3)
+    # `response.completed` was never read: no usage is recorded, none made up.
+    assert usage == []
+
+
+def test_whitespace_runaway_cut_on_a_chat_completions_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An opening past 800 characters keeps its first 800."""
+    opening = '{"script":"' + "document.title;" * 100
+    resp = _StreamedResponse(_chat_lines((opening, *_WS_RUNAWAY)))
+    posts = _serve_once(monkeypatch, resp)
+
+    sess, chunks, response = _ask_native_oai(
+        {"apibase": "https://api.example.test/v1", "api_mode": "chat_completions"}
+    )
+
+    assert len(posts) == 1
+    _assert_cut(sess, chunks, response, opening[:800], resp, before=3)
+
+
+def test_whitespace_runaway_cut_on_a_claude_stream() -> None:
+    lines = _Counted(_claude_lines((_OPENING, *_WS_RUNAWAY)))
+
+    chunks, blocks = _collect(llmcore._parse_claude_sse(iter(lines)))
+
+    assert lines.read == 6 + _WS_PIECES_TO_TRIP
+    assert chunks == [_SUMMARY, "\n\n" + _ARGS_MARKER]
+    # Upstream's warning slot: a text block right before the tool call.
+    assert blocks == [
+        {"type": "text", "text": _SUMMARY},
+        {"type": "text", "text": "\n\n" + _ARGS_MARKER},
+        {"type": "tool_use", "id": "call_1", "name": "web_execute_js", "input": {"_raw": _OPENING}},
+    ]

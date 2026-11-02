@@ -1,0 +1,36 @@
+diff --git a/llmcore.py b/llmcore.py
+--- a/llmcore.py
++++ b/llmcore.py
+@@ -208,0 +209,19 @@ class _GalleyThinkTag:
++# Galley (ticket 118): a whitespace runaway inside a tool call's arguments. On 2026-10-21 a model
++# wrote a normal opening, then 400k tabs and newlines for 15 minutes: arguments never reach the
++# display, the read timeout only measures the gap between chunks, and a route may send no output
++# cap. Inside a JSON string a newline or tab must be escaped, so such a run sits between tokens,
++# where valid arguments never need 2,000 in a row (only a string of 2,000 spaces would trip it).
++# On that run the parser stops reading: returning ends _stream_with_retry's `with requests.post`,
++# which closes the unread response, and nothing retries. The arguments keep at most their first
++# 800 characters (compress_history_tags' cut for an old tool input) and then parse, or fail to
++# as `_raw`, as before; the marker in the reply text says why.
++_GALLEY_ARGS_WS = " \t\r\n"
++_GALLEY_ARGS_WS_RUN = 2000
++_GALLEY_ARGS_KEEP = 800
++_GALLEY_ARGS_MARKER = f"[!!! output truncated: tool call arguments ran into {_GALLEY_ARGS_WS_RUN} whitespace characters in a row and were cut to at most {_GALLEY_ARGS_KEEP} characters]"
++def _galley_args_cut(buf):
++    """Cut arguments once buf ends in a whitespace runaway, else None; the check reads only the tail."""
++    n = _GALLEY_ARGS_WS_RUN
++    if len(buf) < n or buf[-1] not in _GALLEY_ARGS_WS or buf[-n:].strip(_GALLEY_ARGS_WS): return None
++    return buf[:_GALLEY_ARGS_KEEP].rstrip(_GALLEY_ARGS_WS)
++
+@@ -259 +278,3 @@ def _parse_claude_sse(resp_lines):
+-            elif delta.get("type") == "input_json_delta": tool_json_buf += delta.get("partial_json", "")
++            elif delta.get("type") == "input_json_delta":
++                tool_json_buf += delta.get("partial_json", "")
++                if (cut := _galley_args_cut(tool_json_buf)) is not None: tool_json_buf = cut; warn = "\n\n" + _GALLEY_ARGS_MARKER; break  # Galley: whitespace runaway
+@@ -358,0 +380,2 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
++                if idx in fc_buf and (cut := _galley_args_cut(fc_buf[idx]["args"])) is not None:  # Galley: whitespace runaway
++                    fc_buf[idx]["args"] = cut; m = ("\n\n" if content_text else "") + _GALLEY_ARGS_MARKER; content_text += m; yield m; break
+@@ -404,0 +428 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
++        ws_cut = None  # Galley: _galley_args_cut's result once a tool call's arguments run away
+@@ -430,0 +455,2 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
++                if (ws_cut := _galley_args_cut(tc_buf[idx]["args"])) is not None: tc_buf[idx]["args"] = ws_cut; break
++            if ws_cut is not None: m = ("\n\n" if content_text else "") + _GALLEY_ARGS_MARKER; content_text += m; yield m; break

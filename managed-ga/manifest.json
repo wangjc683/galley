@@ -37,7 +37,8 @@
       "0026-managed-discord-restart-continuity.patch",
       "0027-managed-url-version-qualifier.patch",
       "0028-managed-remote-driver-default-tab.patch",
-      "0029-managed-feishu-conversation-ux.patch"
+      "0029-managed-feishu-conversation-ux.patch",
+      "0030-managed-tool-args-whitespace-runaway.patch"
     ]
   },
   "stateSchemaVersion": 1

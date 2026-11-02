@@ -206,6 +206,25 @@ class _GalleyThinkTag:
         s = self.hold + self.END if self.open else ""
         self.open = False; self.hold = ""; return s
 
+# Galley (ticket 118): a whitespace runaway inside a tool call's arguments. On 2026-10-21 a model
+# wrote a normal opening, then 400k tabs and newlines for 15 minutes: arguments never reach the
+# display, the read timeout only measures the gap between chunks, and a route may send no output
+# cap. Inside a JSON string a newline or tab must be escaped, so such a run sits between tokens,
+# where valid arguments never need 2,000 in a row (only a string of 2,000 spaces would trip it).
+# On that run the parser stops reading: returning ends _stream_with_retry's `with requests.post`,
+# which closes the unread response, and nothing retries. The arguments keep at most their first
+# 800 characters (compress_history_tags' cut for an old tool input) and then parse, or fail to
+# as `_raw`, as before; the marker in the reply text says why.
+_GALLEY_ARGS_WS = " \t\r\n"
+_GALLEY_ARGS_WS_RUN = 2000
+_GALLEY_ARGS_KEEP = 800
+_GALLEY_ARGS_MARKER = f"[!!! output truncated: tool call arguments ran into {_GALLEY_ARGS_WS_RUN} whitespace characters in a row and were cut to at most {_GALLEY_ARGS_KEEP} characters]"
+def _galley_args_cut(buf):
+    """Cut arguments once buf ends in a whitespace runaway, else None; the check reads only the tail."""
+    n = _GALLEY_ARGS_WS_RUN
+    if len(buf) < n or buf[-1] not in _GALLEY_ARGS_WS or buf[-n:].strip(_GALLEY_ARGS_WS): return None
+    return buf[:_GALLEY_ARGS_KEEP].rstrip(_GALLEY_ARGS_WS)
+
 def _parse_claude_sse(resp_lines):
     """Parse Anthropic SSE stream. Yields text chunks, returns list[content_block]."""
     content_blocks = []; current_block = None; tool_json_buf = ""
@@ -256,7 +275,9 @@ def _parse_claude_sse(resp_lines):
             elif delta.get("type") == "signature_delta":
                 if current_block and current_block.get("type") == "thinking":
                     current_block["signature"] = current_block.get("signature", "") + delta.get("signature", "")
-            elif delta.get("type") == "input_json_delta": tool_json_buf += delta.get("partial_json", "")
+            elif delta.get("type") == "input_json_delta":
+                tool_json_buf += delta.get("partial_json", "")
+                if (cut := _galley_args_cut(tool_json_buf)) is not None: tool_json_buf = cut; warn = "\n\n" + _GALLEY_ARGS_MARKER; break  # Galley: whitespace runaway
         elif evt_type == "content_block_stop":
             if (s := think.close()): yield s  # Galley: a thinking block ends here
             if current_block:
@@ -356,6 +377,8 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
             elif etype == "response.function_call_arguments.delta":
                 idx = evt.get("output_index", current_fc_idx or 0)
                 if idx in fc_buf: fc_buf[idx]["args"] += evt.get("delta", "")
+                if idx in fc_buf and (cut := _galley_args_cut(fc_buf[idx]["args"])) is not None:  # Galley: whitespace runaway
+                    fc_buf[idx]["args"] = cut; m = ("\n\n" if content_text else "") + _GALLEY_ARGS_MARKER; content_text += m; yield m; break
             elif etype == "response.function_call_arguments.done":
                 idx = evt.get("output_index", current_fc_idx or 0)
                 if idx in fc_buf: fc_buf[idx]["args"] = evt.get("arguments", fc_buf[idx]["args"])
@@ -402,6 +425,7 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
         tc_buf = {}  # index -> {id, name, args}
         reasoning_text = ""
         think = _GalleyThinkTag()  # Galley: in-band <thinking> for native reasoning
+        ws_cut = None  # Galley: _galley_args_cut's result once a tool call's arguments run away
         for line in resp_lines:
             if not line: continue
             line = line.decode('utf-8', errors='replace') if isinstance(line, bytes) else line
@@ -428,6 +452,8 @@ def _parse_openai_sse(resp_lines, api_mode="chat_completions"):
                 if has_name: tc_buf[idx]["name"] = tc["function"]["name"]
                 if tc.get("function", {}).get("arguments"): tc_buf[idx]["args"] += tc["function"]["arguments"]
                 if tc.get("id") and not tc_buf[idx]["id"]: tc_buf[idx]["id"] = tc["id"]
+                if (ws_cut := _galley_args_cut(tc_buf[idx]["args"])) is not None: tc_buf[idx]["args"] = ws_cut; break
+            if ws_cut is not None: m = ("\n\n" if content_text else "") + _GALLEY_ARGS_MARKER; content_text += m; yield m; break
             usage = evt.get("usage")
             if usage: _record_usage(usage, api_mode)
         if (s := think.close()): yield s  # Galley: [DONE] or stream end
