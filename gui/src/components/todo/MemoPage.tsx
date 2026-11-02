@@ -169,8 +169,9 @@ function MemoRow({
         {/* Top-aligned, both in 20px lines, the last day on the words'
             first line: a baseline alignment would take the words
             button's last line. The same padding however the row is: the
-            hover cluster below floats, it takes no width. */}
-        <div className="relative flex items-start gap-3 px-2.5 py-1.5">
+            hover cluster below floats, it takes no width. 4px above and
+            below, a 28px row (ruling 168; the to-do page keeps 6px). */}
+        <div className="relative flex items-start gap-3 px-2.5 py-1">
           <div className="min-w-0 flex-1 text-[13px] leading-5 text-ink">
             {words}
           </div>
@@ -203,7 +204,7 @@ function MemoRow({
           <div
             data-role="memo-hover"
             className={cn(
-              "absolute right-1.5 top-1.5 flex h-5 items-center gap-0.5 pl-5",
+              "absolute right-1.5 top-1 flex h-5 items-center gap-0.5 pl-5",
               "bg-[linear-gradient(to_right,transparent,var(--memo-ground)_12px)] [--memo-ground:var(--color-app)]",
               "group-hover/memo-row:[--memo-ground:var(--color-hover)]",
               "opacity-0 group-focus-within/memo-row:opacity-100 group-hover/memo-row:opacity-100",

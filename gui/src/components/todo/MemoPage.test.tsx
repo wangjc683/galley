@@ -193,7 +193,7 @@ describe("the 备忘 page", () => {
     const html = render();
     // The row's padding is the same however it is: no room made.
     expect(
-      count(html, 'class="relative flex items-start gap-3 px-2.5 py-1.5"'),
+      count(html, 'class="relative flex items-start gap-3 px-2.5 py-1"'),
     ).toBe(2);
     expect(html).not.toMatch(/pr-\[42px\]|hover\/memo-row:pr-/);
     // Out of the flow, on the first line's 20px box, 6px from the right,
@@ -205,7 +205,7 @@ describe("the 备忘 page", () => {
       expect.arrayContaining([
         "absolute",
         "right-1.5",
-        "top-1.5",
+        "top-1",
         "h-5",
         "pl-5",
         "bg-[linear-gradient(to_right,transparent,var(--memo-ground)_12px)]",
