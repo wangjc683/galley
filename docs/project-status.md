@@ -871,7 +871,11 @@ chat PRD ruling 162, ticket 118; unit tests and a local fake stream only).
 The memo page groups by the sidebar's time periods (today, this week, this
 month, earlier), full width, the exact day showing beside the ⋯ on hover;
 ticket 119's left column came and went the same day (main chat PRD rulings
-164 and 166, tickets 119 and 121; awaiting JC's look in the real window). Owed:
+164 and 166, tickets 119 and 121; awaiting JC's look in the real window;
+rows 28px since ruling 168). The managed engine waits at least 30 seconds
+for Core's token, so a refresh after a long idle no longer fails the first
+request (it cost the 11-02 morning review); Core, the runner and the review
+log now keep what went wrong (main chat PRD ruling 167, ticket 122). Owed:
 ticket 04's second real-machine step, stopping a workbench run you watch
 (no workbench run in the database since the merge). Still owed from
 `v0.7.2`'s scope: ticket 98's noticed interest (the 「看你……常问」 memo has

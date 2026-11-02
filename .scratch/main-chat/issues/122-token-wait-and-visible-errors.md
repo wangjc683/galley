@@ -1,6 +1,6 @@
 # 122 取令牌等够 Core 刷完；叫醒失败的报错落到看得见的地方
 
-Status: ready-for-agent（2026-11-02 开票）
+Status: done（2026-11-02 快进合入 `3622f096`…`fe98a13f`。主会话验收：读过 `llmcore.py` 的改动（行数不变）与 runner 转发器；rebase 到 `38bcd43d` 后 Core 全量测试 1290 条过、runner 全量 655 条过、`check-managed-ga-payload` 通过、`managed-ga/` 下没有 `__pycache__`、`diff --check` 干净；对分支扫本机路径与服务商主机，只命中公开的官方地址。没有真机复现：取令牌慢于 10 秒的那一下要等令牌过期后的第一次请求，下次巡看或隔夜后第一句话时看 dev 日志的 `[chatgpt-siwc] … refreshed the access token in N s`）
 
 来源：[主对话 PRD](../PRD.md) 裁决 167；诊断见票 [120](./120-review-failure-read-as-no-reply.md) 的报告（证据链、行号、「没查实的，下次要补的日志」一节都在那里，先读）。改内置 GA 补丁 0007、Core、runner 与它们的测试和文档；不动 GUI、CLI、Agent API、迁移。失败的叫醒补跑（120 报告里的甲 2）不在本票，挂在 deferred「失败的叫醒补跑一次」。
 
