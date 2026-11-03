@@ -924,7 +924,10 @@ without a retry and the model sees an interrupted-stream marker (ruling
 model has a `tell_user` tool (runner layer, not the patch stack): a line
 to the user mid-run, saved right after the step that said it and drawn
 as a bubble while the run goes on; no notification of its own (ruling
-186, ticket 137). A
+186, ticket 137). In a run you started, words the model writes outside
+`<summary>` in a step that calls tools reach you the same way before the
+tools run; Galley's own wakes send nothing mid-run (ruling 191, ticket
+142). A
 reminder that says to check something hands the check to a subtask and
 stays silent until it is back; the morning review's look-ups go the same
 way (ruling 184 point 9; `wake.md`, `unasked.md`). Answer-like results
