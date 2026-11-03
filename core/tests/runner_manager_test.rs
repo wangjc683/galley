@@ -399,6 +399,7 @@ async fn send_command_reaches_subprocess() {
             images: vec![],
             visibility: None,
             absolute_turn_index: None,
+            wake: false,
         }),
     )
     .await
@@ -443,6 +444,7 @@ async fn agent_running_toggles_with_turn_lifecycle() {
             images: vec![],
             visibility: None,
             absolute_turn_index: None,
+            wake: false,
         }),
     )
     .await
@@ -749,6 +751,7 @@ fn huge_user_message() -> IpcCommand {
         images: vec![],
         visibility: None,
         absolute_turn_index: None,
+        wake: false,
     })
 }
 
@@ -846,6 +849,7 @@ async fn wedged_session_does_not_block_other_sessions() {
                 images: vec![],
                 visibility: None,
                 absolute_turn_index: None,
+                wake: false,
             }),
         ),
     )
@@ -1061,6 +1065,7 @@ async fn dispatch(
             images: vec![],
             visibility: (visibility == MessageVisibility::Internal).then(|| "internal".into()),
             absolute_turn_index: Some(i64::from(base)),
+            wake: false,
         }),
     )
     .await
@@ -1325,6 +1330,7 @@ async fn turn_without_absolute_index_keys_on_the_latest_user_row() {
             images: vec![],
             visibility: None,
             absolute_turn_index: None,
+            wake: false,
         }),
     )
     .await
@@ -2423,6 +2429,15 @@ while True:
             step(3, base, "答案", FINISH, content="明天晴。")
             done()
             continue
+        if kind == "user_message" and text == "said":
+            # Main chat ticket 142: the step's own words, before its tools.
+            emit({"kind": "tell_user", "message": "我先看一下这份笔记。",
+                  "turnIndex": 1, "index": 1, "absoluteTurnIndex": base,
+                  "visibility": "visible", "stepText": True})
+            step(1, base, "读笔记", content="<summary>读笔记</summary>\n我先看一下这份笔记。")
+            step(2, base, "答案", FINISH, content="笔记里只有一行。")
+            done()
+            continue
         if kind == "user_message" and text in ("work", "quick", "askme"):
             if text == "work":
                 step(1, base, "读文件")
@@ -2694,6 +2709,77 @@ async fn a_line_told_mid_run_lands_after_its_step() {
         .unwrap()
         .expect("a reply");
     assert_eq!(reply.turn_index, base + 2);
+
+    mgr.shutdown_all(Duration::from_secs(1)).await;
+}
+
+#[tokio::test]
+async fn a_line_said_in_a_step_shows_once_and_replays_once() {
+    if mock_python_path().is_none() {
+        eprintln!("[skip] no python on this machine");
+        return;
+    }
+    let sid = "s-said";
+    let (bridge, _db, galley, mgr, mut signals, _notifier) = interjecting_main_chat(sid).await;
+    let base = i64::from(dispatch(&mgr, &galley, sid, "said", MessageVisibility::Visible).await);
+    assert_eq!(next_run_complete(&mut signals).await, sid);
+
+    // A line told mid-run like any (ticket 137): after its step, no index
+    // of its own.
+    let rows = galley
+        .persisted_message_rows(&SessionId(sid.into()))
+        .await
+        .expect("rows");
+    let shape: Vec<(&str, i64, i64)> = rows
+        .iter()
+        .map(|r| (r.role.as_str(), r.turn_index, r.sequence))
+        .collect();
+    assert_eq!(
+        shape,
+        vec![
+            ("user", base, 0),
+            ("assistant", base, 1),
+            ("assistant", base, 2),
+            ("assistant", base + 1, 1),
+        ]
+    );
+    let said = &rows[2];
+    assert_eq!(said.id, format!("msg_{sid}_{base}_tell_1"));
+    assert_eq!(said.content, "我先看一下这份笔记。");
+    assert_eq!(said.final_answer.as_deref(), Some("我先看一下这份笔记。"));
+    // Marked as the step's own words: shown only.
+    assert_eq!(said.created_via.as_deref(), Some("system"));
+    assert_eq!(
+        said.supervisor.as_deref(),
+        Some(galley_core_lib::db::MAIN_CHAT_STEP_TEXT_SUPERVISOR)
+    );
+    assert_eq!(turn_count(&galley, sid).await, 2);
+
+    // A cold replay gives the model the words once: in the step that said
+    // them, where it wrote them.
+    let history = rows_to_conversation_messages(
+        rows.into_iter().map(Into::into),
+        i64::from(turn_count(&galley, sid).await),
+    );
+    let roles: Vec<&str> = history.iter().map(|m| m.role.as_str()).collect();
+    assert_eq!(roles, vec!["user", "assistant"]);
+    assert_eq!(
+        history[1].content.matches("我先看一下这份笔记").count(),
+        1,
+        "{}",
+        history[1].content
+    );
+    assert!(history[1].content.contains("<summary>读笔记</summary>"));
+    assert!(history[1].content.ends_with("笔记里只有一行。"));
+
+    // The user's message: no `wake` on the wire.
+    let commands = read_log(bridge.path(), "commands.jsonl");
+    let sent: Vec<_> = commands
+        .iter()
+        .filter(|c| c["kind"] == "user_message")
+        .collect();
+    assert_eq!(sent.len(), 1);
+    assert!(sent[0].get("wake").is_none(), "{:?}", sent[0]);
 
     mgr.shutdown_all(Duration::from_secs(1)).await;
 }

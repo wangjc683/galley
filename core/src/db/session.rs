@@ -1092,6 +1092,13 @@ impl SqliteGalley {
     /// last activity stay (the step's `turn_end` moves them next). Id
     /// `msg_{session}_{turn}_tell_{index}`, the runner's count within the
     /// step; a repeat writes nothing. Returns whether a row was written.
+    ///
+    /// `step_text` (main chat ticket 142): the line is the words the step's
+    /// own reply wrote outside its tags, sent before its tools ran. The
+    /// step's row holds them already, so this row carries the origin that
+    /// marks it shown only ([`super::is_main_chat_step_text`]: `system`,
+    /// [`super::MAIN_CHAT_STEP_TEXT_SUPERVISOR`]); a `tell_user` call's
+    /// line has none, as every assistant row a runner's turn writes.
     pub async fn persist_told_line(
         &self,
         session_id: &SessionId,
@@ -1099,10 +1106,16 @@ impl SqliteGalley {
         index: i64,
         message: &str,
         visibility: MessageVisibility,
+        step_text: bool,
     ) -> Result<bool> {
         let id = format!("msg_{}_{}_tell_{}", session_id.as_str(), turn_index, index);
         let final_answer =
             Some(crate::turn_persistence::clean_final_answer(message)).filter(|s| !s.is_empty());
+        let (created_via, supervisor) = if step_text {
+            ("system", Some(super::MAIN_CHAT_STEP_TEXT_SUPERVISOR))
+        } else {
+            ("gui", None)
+        };
         let mut tx = self
             .pool
             .begin_with("BEGIN IMMEDIATE")
@@ -1112,11 +1125,11 @@ impl SqliteGalley {
         let written = sqlx::query(
             "INSERT INTO messages ( \
                id, session_id, turn_index, sequence, role, content, final_answer, \
-               created_at, visibility \
+               created_at, visibility, created_via, supervisor \
              ) VALUES (?, ?, ?, \
                MAX(2, COALESCE((SELECT MAX(sequence) FROM messages \
                  WHERE session_id = ? AND turn_index = ?), 0) + 1), \
-               'assistant', ?, ?, ?, ?) \
+               'assistant', ?, ?, ?, ?, ?, ?) \
              ON CONFLICT(id) DO NOTHING",
         )
         .bind(&id)
@@ -1128,6 +1141,8 @@ impl SqliteGalley {
         .bind(&final_answer)
         .bind(chrono_now_iso())
         .bind(message_visibility_sql(visibility))
+        .bind(created_via)
+        .bind(supervisor)
         .execute(&mut *tx)
         .await
         .map_err(map_sqlx_err)?

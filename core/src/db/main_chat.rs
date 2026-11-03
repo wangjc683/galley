@@ -53,6 +53,28 @@ pub fn main_chat_greeting(language: Option<&str>) -> &'static str {
     }
 }
 
+/// Origin supervisor label (with `created_via = 'system'`) of a line the
+/// main chat said in a step that called tools (main chat ticket 142,
+/// [`crate::tell_user`]): the step's own words outside its tags, shown to
+/// the user as a line told mid-run before its tools ran. The step's row
+/// holds them already, so like the greeting this row is shown only
+/// ([`is_main_chat_step_text`]). No runner's turn gives an assistant row
+/// an origin of its own, so the pair names these rows and nothing else.
+pub const MAIN_CHAT_STEP_TEXT_SUPERVISOR: &str = "galley-step-text";
+
+/// Whether a persisted message is a line the main chat said in a step that
+/// called tools ([`MAIN_CHAT_STEP_TEXT_SUPERVISOR`]) — shown to the user,
+/// never the model's history: the step's own row has the words.
+pub fn is_main_chat_step_text(
+    role: &str,
+    created_via: Option<&str>,
+    supervisor: Option<&str>,
+) -> bool {
+    role == "assistant"
+        && created_via == Some("system")
+        && supervisor == Some(MAIN_CHAT_STEP_TEXT_SUPERVISOR)
+}
+
 /// Whether a persisted message is the main chat's greeting — shown to
 /// the user, never the model's history.
 pub fn is_main_chat_greeting(

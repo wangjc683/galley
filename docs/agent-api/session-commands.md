@@ -217,6 +217,14 @@ run's reply comes after every line it told; a run that ended on a question
 lists a line told in that same step after the asking row, so read the
 question from the row that carries `askUser`.
 
+Since 2026-11-03 (main chat ticket 142, additive) such a line can also be
+the words a step wrote while calling tools: in a run the user started, what
+the model wrote outside its tags in a step that called tools reaches the
+user before the tools run, as the same kind of `agent` message after that
+step. It carries `origin` `{ "via": "system", "supervisor":
+"galley-step-text" }`; the step's own row (listed just before it) holds the
+same words in its `content`. No field changed meaning.
+
 `MessageAttachment` fields:
 
 | Field       | Type            | Notes                                                                       |

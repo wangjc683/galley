@@ -131,6 +131,7 @@ pub async fn dispatch_queued_item(
             images: vec![],
             visibility: None,
             absolute_turn_index,
+            wake: false,
         })
     };
     let dispatch = match manager.send_command(session_id, &cmd).await {

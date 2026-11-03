@@ -499,12 +499,12 @@ async fn a_line_told_beside_a_question_hides_neither() {
         .await
         .unwrap();
     assert!(galley
-        .persist_told_line(&main, t0, 1, "在查", MessageVisibility::Visible)
+        .persist_told_line(&main, t0, 1, "在查", MessageVisibility::Visible, false)
         .await
         .unwrap());
     // A repeat writes nothing.
     assert!(!galley
-        .persist_told_line(&main, t0, 1, "在查", MessageVisibility::Visible)
+        .persist_told_line(&main, t0, 1, "在查", MessageVisibility::Visible, false)
         .await
         .unwrap());
     galley

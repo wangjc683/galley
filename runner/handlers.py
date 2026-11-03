@@ -132,6 +132,7 @@ class WorkbenchHandler(GenericAgentHandler):  # type: ignore[misc]  # GA has no 
         *,
         turn_started_callback: Callable[[int], None] | None = None,
         tell_user_callback: Callable[[str, int], bool] | None = None,
+        step_text_callback: Callable[[Any, int], None] | None = None,
     ) -> None:
         super().__init__(parent, last_history, cwd)
         # The main chat's `tell_user` (ticket 137): hands the message and
@@ -139,6 +140,12 @@ class WorkbenchHandler(GenericAgentHandler):  # type: ignore[misc]  # GA has no 
         # False when it was not sent (the run had already ended).
         self._tell_user_callback: Callable[[str, int], bool] | None = (
             tell_user_callback
+        )
+        # A step's words before its tools run (ticket 142,
+        # runner/step_text.py): hands the step's reply and its GA step
+        # number to the bridge, which decides whether they go out.
+        self._step_text_callback: Callable[[Any, int], None] | None = (
+            step_text_callback
         )
         # GA has no turn_start_callback extension point, so we synthesize
         # one around dispatch. Older GA called tool_before_callback
@@ -238,6 +245,20 @@ class WorkbenchHandler(GenericAgentHandler):  # type: ignore[misc]  # GA has no 
                 dict(tell_user.SENT),
                 next_prompt=self._get_anchor_prompt(skip=index > 0),
             )
+        if index == 0 and self._step_text_callback is not None:
+            # A step's words before its tools run (main chat ticket 142):
+            # GA dispatches a reply's calls in order once the whole reply
+            # is in, so the first dispatch is the earliest moment it is
+            # complete and no tool of it has run. Read-only on `response`;
+            # the bridge decides (runner/step_text.py: the managed main
+            # chat, a run the user started). Never lets an emit error
+            # reach GA's loop, like the turn signal.
+            try:
+                self._step_text_callback(
+                    response, int(getattr(self, "current_turn", 0) or 0)
+                )
+            except Exception:
+                pass
         # `tool_num` reaches us only on GA versions ≥ 3205f4a (post-
         # cf65515 baseline). Older GA's `agent_runner_loop` doesn't
         # pass it; default `1` keeps us valid in that case. Forwarding

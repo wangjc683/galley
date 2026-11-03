@@ -329,7 +329,13 @@ class TellUserEvent:
     goes on. Sent while step `turnIndex` runs its tools, before that step's
     `turn_end`. `index` counts the step's messages from 1; Core writes the
     message after that step (`absoluteTurnIndex`) as row
-    `msg_{session}_{absoluteTurnIndex}_tell_{index}`."""
+    `msg_{session}_{absoluteTurnIndex}_tell_{index}`.
+
+    `stepText` (main chat ticket 142): the message is the words the step's
+    own reply wrote outside its tags, sent before its tools ran
+    (runner/step_text.py), not a `tell_user` call. They are already in the
+    step's reply, so Core marks the row as shown only: a replayed history
+    has them once."""
 
     sessionId: str
     message: str
@@ -337,6 +343,7 @@ class TellUserEvent:
     index: int
     absoluteTurnIndex: int | None = None
     visibility: str = "visible"
+    stepText: bool = False
     timestamp: str = field(default_factory=_now_iso)
     kind: str = "tell_user"
 
@@ -372,6 +379,10 @@ class UserMessageCommand:
     images: list[str] = field(default_factory=list)
     visibility: str = "visible"
     absoluteTurnIndex: int | None = None
+    # Core woke the main chat with this message (a subtask report, a
+    # reminder, the morning review; main chat ticket 142): not the user's.
+    # Core writes it only when true.
+    wake: bool = False
     kind: str = "user_message"
 
 

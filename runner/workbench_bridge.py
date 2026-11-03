@@ -31,7 +31,7 @@ import traceback
 from pathlib import Path
 from typing import IO, Any, TextIO, cast
 
-from runner import _watchdog, managed_runtime, process_command, tell_user
+from runner import _watchdog, managed_runtime, process_command, step_text, tell_user
 from runner.ga_print_forward import GaPrintForwarder
 from runner.ga_session import GaSession
 from runner.interject import Interjections
@@ -689,6 +689,12 @@ class Bridge:
         # message and how many that step has sent, for each message's
         # `index`. Reset on every put_task.
         self._told_in_step: tuple[int, int] = (0, 0)
+        # Whether the user started the run in progress (main chat ticket
+        # 142): set when a run opens. Core marks the runs it wakes the main
+        # chat for (`user_message.wake`); an answer to the model's
+        # question is the user's. A step's words go out mid-run only in
+        # the user's runs (`_tell_step_text`).
+        self._run_from_user: bool = False
 
     def _current_absolute_turn_index(self, turn_index: int) -> int | None:
         if self._current_message_turn_base is None:
@@ -1156,6 +1162,9 @@ class Bridge:
                     # The main chat's `tell_user` (ticket 137); the
                     # handler only calls it there (runner/tell_user.py).
                     tell_user_callback=bridge_self._tell_user,
+                    # A step's words before its tools run (ticket 142);
+                    # the bridge decides where (runner/step_text.py).
+                    step_text_callback=bridge_self._tell_step_text,
                 )
 
         self.ga.install_handler(self.agentmain, _ConfiguredWorkbenchHandler)
@@ -1174,6 +1183,26 @@ class Bridge:
         as `tell_user` while the run is open. Under the completion lock, so
         a message never follows the run's `run_complete` (a stop racing the
         call). False when the run had already ended: nothing was sent."""
+        return self._send_told_line(message, turn, from_step=False)
+
+    def _tell_step_text(self, response: Any, turn: int) -> None:
+        """GA is about to run the tools of step `turn`, whose reply is
+        `response` (main chat ticket 142): its words outside the tags
+        (`step_text.to_tell`) go out now as a line told mid-run, marked
+        `stepText`. Only in the managed main chat (`tell_user.offered_here`,
+        CLAUDE.md Rule 1) and only in a run the user started: a run Core
+        woke the main chat for (a subtask report, a reminder, the morning
+        review) may end in `<no-reply/>` and must not say anything on the
+        way."""
+        if not (self._run_from_user and tell_user.offered_here()):
+            return
+        words = step_text.to_tell(response)
+        if words:
+            self._send_told_line(words, turn, from_step=True)
+
+    def _send_told_line(self, message: str, turn: int, *, from_step: bool) -> bool:
+        """Send `message`, said in step `turn`, as `tell_user` while the run
+        is open (`_tell_user`, `_tell_step_text`); False when it was not."""
         try:
             with self._run_complete_lock:
                 if not self.run_in_progress.is_set():
@@ -1189,6 +1218,7 @@ class Bridge:
                         index=index,
                         absoluteTurnIndex=self._current_absolute_turn_index(turn),
                         visibility=self._current_message_visibility,
+                        stepText=from_step,
                     )
                 )
                 return True
@@ -1807,6 +1837,7 @@ class Bridge:
             self._return_unread_interjections()
             self._current_message_visibility = cmd.visibility or "visible"
             self._current_message_turn_base = cmd.absoluteTurnIndex
+            self._run_from_user = not cmd.wake
             self._begin_run_tracking()
             run_generation = self._open_run()
             self._emit_turn_start(1)
@@ -1836,6 +1867,8 @@ class Bridge:
             self._return_unread_interjections()
             self._current_message_visibility = "visible"
             self._current_message_turn_base = cmd.absoluteTurnIndex
+            # The user's answer to the model's question (ticket 142).
+            self._run_from_user = True
             self._begin_run_tracking()
             run_generation = self._open_run()
             self._emit_turn_start(1)

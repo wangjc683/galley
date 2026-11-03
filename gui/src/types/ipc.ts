@@ -363,6 +363,10 @@ export interface InterjectReturnedEvent {
  * after that step as row `msg_${sessionId}_${absoluteTurnIndex}_tell_${index}`;
  * the page draws it from this event (`interim` agent turn), as it draws
  * `turn_end`.
+ *
+ * `stepText` (main chat ticket 142): the message is the words the step's
+ * own reply wrote outside its tags, sent before its tools ran. Drawn the
+ * same; Core marks the row shown only, as the step's row has the words.
  */
 export interface TellUserEvent {
   kind: "tell_user";
@@ -372,6 +376,7 @@ export interface TellUserEvent {
   index: number;
   absoluteTurnIndex?: number | null;
   visibility?: MessageVisibility;
+  stepText?: boolean;
   timestamp: string;
 }
 
@@ -403,6 +408,8 @@ export interface UserMessageCommand {
   images?: string[];
   visibility?: MessageVisibility;
   absoluteTurnIndex?: number | null;
+  /** Core woke the main chat with it (main chat ticket 142); only when true. */
+  wake?: boolean;
 }
 
 export interface AskUserResponseCommand {

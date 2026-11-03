@@ -277,6 +277,7 @@ async fn send_now(
                     images: vec![],
                     visibility: None,
                     absolute_turn_index: brief.turn_index.map(i64::from),
+                    wake: false,
                 }),
             )
             .await
@@ -466,6 +467,7 @@ pub(super) async fn dispatch_session_btw(
         images: vec![],
         visibility: None,
         absolute_turn_index: None,
+        wake: false,
     });
     match ctx.runner.send_command(&parsed.session_id, &cmd).await {
         Ok(()) => SocketResponse::ok(request_id, serde_json::json!({ "dispatch": "dispatched" })),

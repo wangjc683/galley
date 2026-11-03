@@ -1509,6 +1509,24 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     `test_tell_user_never_reaches_a_request_elsewhere` (a workbench
     session's and attach mode's requests do not). JC chose on 2026-11-03 to
     keep the tool out of the patch stack on this condition.
+23. The reply GA hands `dispatch`, and when (2026-11-03, main chat ticket
+    142; managed main chat only, no managed patch). `agent_runner_loop`
+    takes the model's whole reply, then calls `handler.dispatch(tool_name,
+    args, response, index=ii, tool_num=...)` once per tool call in order;
+    Galley reads `response.content` and each `response.tool_calls[].function.name`
+    on the `index == 0` call (`WorkbenchHandler.dispatch` →
+    `Bridge._tell_step_text`, `runner/step_text.py`) and sends the reply's
+    words before that call reaches GA's tool. Read-only; dispatch and
+    results unchanged. Re-check on upgrade: (a) dispatch still runs after
+    the whole reply is in and before any of its tools, with `index` 0 for
+    the first call; (b) `response.content` still holds the reply's text with
+    its `<summary>` and `response.tool_calls` the calls with
+    `function.name`; (c) a reply without tool calls still dispatches only
+    `no_tool`. **Run first on an upgrade**: `runner/tests/test_step_text.py`'s
+    `test_the_engine_sends_the_words_before_the_first_tool_runs` (the
+    payload's own `run()` / `agent_runner_loop` in a child process: the words
+    are out when GA's `file_read` starts, the answer is not sent, a woken run
+    sends nothing).
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
@@ -1528,6 +1546,9 @@ start the audit there instead of grepping the bridge:
 - **[`runner/tell_user.py`](../runner/tell_user.py)** and
   **`runner/handlers.py::WorkbenchHandler.dispatch`** — item 22: the main
   chat's own tool and the call GA never sees.
+- **[`runner/step_text.py`](../runner/step_text.py)** and the `index == 0`
+  hand-over in **`runner/handlers.py::WorkbenchHandler.dispatch`** — item
+  23: what a step's reply sends before its tools run.
 - **[`runner/interject.py`](../runner/interject.py)** and
   **`runner/workbench_bridge.py::_on_turn_end`** — item 21: what counts
   as delivered.

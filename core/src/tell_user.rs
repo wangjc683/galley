@@ -21,6 +21,15 @@
 //!   it already gets, as it draws `turn_end`, with the same row id; a phone
 //!   gets the event in its `runner.event` batch and the row on a re-read.
 //!
+//! **A step's own words** (main chat ticket 142, PRD ruling 191): when a
+//! step's reply calls tools and has words outside its tags, in a run the
+//! user started, the runner sends them the same way before the tools run
+//! (`runner/step_text.py`), marked `step_text`. Same row, same drawing; the
+//! row carries the origin `system` / [`crate::db::MAIN_CHAT_STEP_TEXT_SUPERVISOR`],
+//! which makes it shown only ([`crate::db::is_main_chat_step_text`]): the
+//! step's own row has the words, so a replayed history (and what a new
+//! segment carries, and a subtask's background) holds them once.
+//!
 //! **Only the managed main chat** ([`crate::interject::takes_interjections`],
 //! the same test): the runner offers the tool nowhere else, and a message
 //! from any other session is logged and dropped (CLAUDE.md Rule 1: attach
@@ -65,7 +74,14 @@ pub async fn persist(galley: &SqliteGalley, session_id: &str, event: &TellUserEv
     );
     let sid = SessionId(session_id.to_string());
     crate::turn_persistence::with_contention_retry("told line", &ids, || {
-        galley.persist_told_line(&sid, turn_index, event.index, &event.message, visibility)
+        galley.persist_told_line(
+            &sid,
+            turn_index,
+            event.index,
+            &event.message,
+            visibility,
+            event.step_text,
+        )
     })
     .await;
 }

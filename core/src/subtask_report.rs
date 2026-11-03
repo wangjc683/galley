@@ -1495,6 +1495,7 @@ pub async fn deliver(reports: &SubtaskReports, host: &RunnerHost<'_>, job: WakeJ
                 images: Vec::new(),
                 visibility: None,
                 absolute_turn_index: message.turn_index.map(i64::from),
+                wake: true,
             }),
         )
         .await;

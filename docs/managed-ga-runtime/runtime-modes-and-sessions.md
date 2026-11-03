@@ -306,6 +306,40 @@ chat PRD ruling 186 point 2, ticket 137,
   and in attach mode, a call to it reaches GA, which answers that it knows no
   such tool.
 
+### What It Writes While Calling Tools Reaches You Too
+
+Models talk to the user in the same reply that calls a tool ("I'll look at
+the downloads folder first."), as if the user saw it; the main chat used to
+draw only a run's reply, and a step's words landed with its `turn_end`,
+after its tools ran (main chat PRD ruling 191, ticket 142,
+`.scratch/main-chat/issues/142-step-text-reaches-you.md`;
+`runner/step_text.py`):
+
+- **When**: GA's loop dispatches a reply's tool calls in order once the
+  whole reply is in. On the first of them (`index == 0`)
+  `WorkbenchHandler.dispatch` hands the reply to the bridge before any of
+  its tools runs; read-only, the dispatch itself unchanged.
+- **What**: the reply's text cleaned by the reply rules (the Python port of
+  `cleanFinalAnswer`, pinned to the GUI's golden rows), when it is not
+  empty, the reply calls tools, and none of them is `tell_user` (the step
+  already says what it chose) or `ask_user` (GA ends the run there; the
+  question is that step's message). A reply without tool calls is the run's
+  answer and is drawn as always.
+- **Where**: only under the main chat's mark and the managed runtime (the
+  test `tell_user` uses), and only in a run the user started: Core writes
+  `wake: true` on the `user_message` it wakes the main chat with (a subtask
+  report, a reminder, the morning review), whose run may end in
+  `<no-reply/>`; an `ask_user_response` run is the user's.
+- **How it travels**: the `tell_user` event with `stepText: true`
+  ([IPC](../ipc-protocol.md) §4.21). Core writes the same row as for a
+  `tell_user` line, plus the origin `system` / `galley-step-text`; the
+  history replay, a new segment's carried turns and a subtask's background
+  skip that row (`ReplayRow.shown_only`, as for the greeting), since the
+  step's own row has the words. The desktop draws it as the line told
+  mid-run.
+- Workbench sessions, subtasks, the IM channels and attach mode send
+  nothing.
+
 ### Subtask Reports
 
 A subtask's result comes back to the main chat by itself (ticket 29,

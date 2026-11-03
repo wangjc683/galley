@@ -398,6 +398,11 @@ pub struct InterjectReturnedEvent {
 /// `turn_end`; `index` counts the step's messages from 1. Core writes it
 /// after that step (`crate::tell_user`), as row
 /// `msg_{session}_{absolute_turn_index}_tell_{index}`.
+///
+/// `step_text` (main chat ticket 142): the message is the words the step's
+/// own reply wrote outside its tags, sent before its tools ran, not a
+/// `tell_user` call. They are already in the step's row, so Core marks the
+/// row as shown only ([`crate::db::is_main_chat_step_text`]).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TellUserEvent {
@@ -409,6 +414,8 @@ pub struct TellUserEvent {
     pub absolute_turn_index: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visibility: Option<String>,
+    #[serde(default)]
+    pub step_text: bool,
     pub timestamp: String,
 }
 
@@ -438,6 +445,12 @@ pub struct UserMessageCommand {
     pub visibility: Option<String>,
     #[serde(default)]
     pub absolute_turn_index: Option<i64>,
+    /// Core wakes the main chat with this message (a subtask report, a
+    /// reminder, the morning review: [`crate::subtask_report`]), not the
+    /// user: the runner says nothing mid-run in such a run (main chat
+    /// ticket 142). Written only when true.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub wake: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -545,6 +558,13 @@ mod tests {
         assert_eq!((e.turn_index, e.index), (2, 1));
         assert_eq!(e.absolute_turn_index, Some(11));
         assert_eq!(e.visibility.as_deref(), Some("visible"));
+        // Main chat ticket 142: absent is a `tell_user` call's line.
+        assert!(!e.step_text);
+        let said = r#"{"kind":"tell_user","sessionId":"s","message":"我先看看","turnIndex":1,"index":1,"stepText":true,"timestamp":"t"}"#;
+        let IpcEvent::TellUser(e) = serde_json::from_str(said).unwrap() else {
+            panic!("expected TellUser");
+        };
+        assert!(e.step_text);
     }
 
     #[test]
@@ -718,6 +738,7 @@ mod tests {
             images: vec![],
             visibility: None,
             absolute_turn_index: None,
+            wake: false,
         });
         let s = serde_json::to_string(&cmd).unwrap();
         // The wire format uses "kind" tag + snake_case variants.
@@ -733,6 +754,17 @@ mod tests {
             IpcCommand::UserMessage(m) => assert_eq!(m.text, "hello"),
             _ => panic!("wrong"),
         }
+        // `wake` (main chat ticket 142) only when true.
+        assert!(!s.contains("wake"), "{s}");
+        let woken = IpcCommand::UserMessage(UserMessageCommand {
+            text: "report".to_string(),
+            images: vec![],
+            visibility: None,
+            absolute_turn_index: Some(3),
+            wake: true,
+        });
+        let s = serde_json::to_string(&woken).unwrap();
+        assert!(s.contains("\"wake\":true"), "{s}");
     }
 
     #[test]

@@ -240,7 +240,13 @@ step's own row, before the words the user said that the step's end read),
 so the transcript and the replayed history hold it where the model said it.
 An assistant row with `sequence` 1 is a step; every query about a step or a
 run's reply reads only those. The page draws the line from the runner event
-it already gets, as it draws `turn_end`.
+it already gets, as it draws `turn_end`. The same path carries the words a
+step's own reply writes outside its tags when it calls tools (main chat
+ticket 142): in a run the user started (Core marks its wakes with
+`user_message.wake`), the runner sends them as `tell_user` with `stepText`
+before the step's first tool runs. Their row carries the origin
+`system` / `galley-step-text`, which makes it shown only, like the greeting:
+the step's own row already gives the model those words on a replay.
 
 Socket `session send` keeps its own contract next to this one;
 [ADR-0003](./adr/0003-gui-and-phone-send-through-core.md) records why. The

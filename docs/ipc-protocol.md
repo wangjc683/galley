@@ -541,6 +541,7 @@ desktop 用两者驱动 Composer 推理强度 pill 的当前档与「跟随 / �
 - `index`：这一步里的第几句，从 1 起；一轮里每次 `put_task` 重新计。
 - 只在内置运行时的主对话里发（`GALLEY_RUNTIME_KIND=managed` 且 `GALLEY_MAIN_CHAT=1`，与浏览器闸门同一组条件，`runner/tell_user.py`）；别处没有这个工具。runner 在发 `run_complete` 的同一把锁下发它，所以它不会落在 `run_complete` 之后。
 - 消费方：Core 的 runner watcher（`core/src/tell_user.rs`）再核一次「内置运行时的主对话」，写一行 `assistant`：`turn_index` = `absoluteTurnIndex`，`sequence` 取这个 `turn_index` 已有的最大值加一、至少 2（排在那一步 `(t, 1)` 之后，那一步结束时读到的插话之前），`content` 为原文，`final_answer` 为按回复规则洗过的字，id `msg_{session}_{absoluteTurnIndex}_tell_{index}`，同 id 再来不重写；不动 `turn_count`。Core 不另发广播：GUI 的 runner-event 分发器直接把它画成这一轮的一条消息（`interim` agent turn，行 id 同上），手机在 `runner.event` 批里原样收到。
+- `stepText`（2026-11-03 加，主对话票 142；runner 总是写，缺省为 `false`）：为 `true` 时这句不是 `tell_user` 的调用，是那一步自己的回复在标签之外写的字：回复带工具调用、同一步没有 `tell_user` / `ask_user`、洗过（回复的清洗规则）不空，runner 在第一个工具开跑之前发出（`runner/step_text.py`，`WorkbenchHandler.dispatch` 的 `index == 0` 那一次）。只在用户发起的一轮：`user_message` 带 `wake`（§5.1）的那一轮不发，`ask_user_response` 开的一轮算用户的。Core 照上一条写行，另写来源 `created_via = 'system'`、`supervisor = 'galley-step-text'`；这段字已经在那一步自己的行里，所以回放、新段带过来的轮次、子任务的背景都跳过这一行（`ReplayRow.shown_only`，同问候），模型只看到一遍。GUI 画法不变。
 
 ## 5. Commands (workbench → bridge)
 
@@ -559,6 +560,8 @@ desktop 用两者驱动 Composer 推理强度 pill 的当前档与「跟随 / �
 ```
 
 `images` 是本地文件绝对路径数组（V0.1 可空）。
+
+`wake`（2026-11-03 加，主对话票 142）：Core 叫醒主对话的那条（子任务汇报、到点提醒、巡看，`core/src/subtask_report.rs` 的 `deliver`）写 `"wake": true`；别的都不写（缺省 `false`）。runner 据此记下这一轮是不是用户发起的：叫醒的一轮可能以 `<no-reply/>` 收尾，中途不发步骤里的字（§4.21 `stepText`）。
 
 **运行中拒绝（galley#19/#20，v0.4.6-dev 起）**：`run_in_progress`
 期间收到主 agent `user_message` / `ask_user_response`，bridge 以

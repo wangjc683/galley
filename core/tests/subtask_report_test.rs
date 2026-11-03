@@ -849,6 +849,14 @@ async fn an_idle_main_chat_is_woken_at_once_with_the_report_row() {
     // Dispatched to the main chat, whose run gate it now holds.
     let sent = runner.user_messages(MAIN);
     assert_eq!(sent.len(), 1);
+    // Marked as Core's wake (main chat ticket 142): the runner says nothing
+    // mid-run in a run Core woke the main chat for.
+    assert!(runner
+        .sent
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|(s, cmd)| s == MAIN && matches!(cmd, IpcCommand::UserMessage(m) if m.wake)));
     assert!(sent[0].starts_with("[Galley — not a message from the user]"));
     assert!(sent[0].contains("Subtask `s-sub` \"把 PDF 分类\" (round 1) finished."));
     assert!(runner.gate(MAIN).open_run);

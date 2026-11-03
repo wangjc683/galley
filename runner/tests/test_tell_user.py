@@ -257,7 +257,7 @@ def test_offer_tool_without_a_list() -> None:
 def test_tell_user_event_round_trips() -> None:
     raw = (
         '{"kind":"tell_user","sessionId":"s","message":"记上了","turnIndex":2,"index":1,'
-        '"absoluteTurnIndex":11,"visibility":"visible","timestamp":"t"}'
+        '"absoluteTurnIndex":11,"visibility":"visible","stepText":false,"timestamp":"t"}'
     )
     event = decode_event(raw)
     assert isinstance(event, TellUserEvent)

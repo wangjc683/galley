@@ -706,6 +706,7 @@ async fn run_instructions(
                     images: Vec::new(),
                     visibility: None,
                     absolute_turn_index: message.turn_index.map(i64::from),
+                    wake: false,
                 }),
             )
             .await

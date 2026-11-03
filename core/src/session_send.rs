@@ -367,6 +367,7 @@ async fn send_reserved(host: &RunnerHost<'_>, req: SendRequest) -> Result<SendOu
             images: message.attachments.iter().map(|a| a.path.clone()).collect(),
             visibility: None,
             absolute_turn_index,
+            wake: false,
         })
     };
     if let Err(e) = host.runner.send_command(sid, &cmd).await {
@@ -432,6 +433,7 @@ async fn send_side_question(
                 images: vec![],
                 visibility: None,
                 absolute_turn_index: None,
+                wake: false,
             }),
         )
         .await

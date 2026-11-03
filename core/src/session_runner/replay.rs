@@ -92,7 +92,10 @@ pub struct ReplayRow {
     #[serde(default)]
     pub attachments: Vec<ReplayAttachment>,
     /// Shown to the user, never the model's history: the main chat's
-    /// greeting (PRD ruling 47, [`crate::db::is_main_chat_greeting`]).
+    /// greeting (PRD ruling 47, [`crate::db::is_main_chat_greeting`]), and
+    /// a line it said in a step that called tools (main chat ticket 142,
+    /// [`crate::db::is_main_chat_step_text`]), whose words the step's own
+    /// row already gives the model.
     #[serde(default)]
     pub shown_only: bool,
     /// When the row was written (as stored): when a turn a new main chat
@@ -171,6 +174,10 @@ impl From<PersistedMessageRow> for ReplayRow {
                 &row.role,
                 row.created_via.as_deref(),
                 row.supervisor.as_deref(),
+            ) || crate::db::is_main_chat_step_text(
+                &row.role,
+                row.created_via.as_deref(),
+                row.supervisor.as_deref(),
             ),
             role: row.role,
             turn_index: row.turn_index,
@@ -197,7 +204,8 @@ impl From<PersistedMessageRow> for ReplayRow {
 ///
 /// - Only `user` / `assistant` rows count, and not one that is shown
 ///   only (the main chat's greeting, Galley's words in the AI's voice:
-///   the model never said it, ticket 04c).
+///   the model never said it, ticket 04c; a line it said in a step that
+///   called tools, already in that step's row, ticket 142).
 /// - A row past `completed_turn_count` is input still waiting for its
 ///   reply (the message just persisted for this very dispatch), not
 ///   history: replayed, GA would see it twice.
