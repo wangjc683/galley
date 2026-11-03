@@ -1,0 +1,24 @@
+-- 055_main_chat_title_galley.sql · The main chat's title becomes "Galley"
+-- (.scratch/main-chat/issues/125-one-name-galley.md; main chat PRD ruling
+-- 173).
+--
+-- Core created the main chat titled 「主聊天」 (044, `MAIN_CHAT_TITLE`).
+-- The sidebar and the header never showed that title, they write
+-- "Galley"; but the two notifications that put the title before the
+-- summary (a reply done, a question for the user) read 「主聊天 · …」,
+-- an English user saw a Chinese title, and the model, reading it from
+-- the CLI's output, wrote 「主聊天」 into subtask briefs, step lines and a
+-- reminder's note. Ruling 173: on screen this conversation has no name
+-- of its own, its name is the assistant's, "Galley", the same in every
+-- language. `MAIN_CHAT_TITLE` changes with this migration, so a main
+-- chat created or reset from now on is born "Galley".
+--
+-- Only the row still wearing the old default changes. The socket's write
+-- path (CLI / supervisor) does not refuse the main chat, so its title may
+-- have been renamed; a renamed one is left as it is, and so is an
+-- ordinary conversation that happens to be called 「主聊天」. Nothing
+-- else moves: not `updated_at` (nothing happened in the conversation),
+-- not `title_source` (the main chat's is 'user', so the auto-title never
+-- touches it, before or after).
+
+UPDATE sessions SET title = 'Galley' WHERE main_chat = 1 AND title = '主聊天';

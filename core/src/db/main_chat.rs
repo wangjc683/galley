@@ -1,12 +1,15 @@
 use super::*;
 use crate::api::SUBTASK_REPORT_SUPERVISOR;
 
-/// Title the main chat is created with. Not the GUI's label — the
-/// sidebar and the header show their own localized 主聊天 / Main chat —
-/// but what the CLI and the database see. Not the `新对话` seed title, so
-/// neither the auto-title nor the derived title ever renames it, and the
-/// launch sweep of empty `新对话` rows never matches it.
-pub const MAIN_CHAT_TITLE: &str = "主聊天";
+/// Title the main chat is created with: the assistant's name, the same
+/// in every language (PRD ruling 173: on screen this conversation has no
+/// name of its own). The CLI and the database see it, and so do the
+/// notifications that put the title before the summary («Galley · …»);
+/// the sidebar and the header write "Galley" themselves. Migration 055
+/// renamed a main chat still wearing the old 主聊天. Not the `新对话` seed
+/// title, so neither the auto-title nor the derived title ever renames
+/// it, and the launch sweep of empty `新对话` rows never matches it.
+pub const MAIN_CHAT_TITLE: &str = "Galley";
 
 /// The main chat's first message, said by the AI the moment Core
 /// creates it (PRD ruling 47, ticket 04c; ruling 49 kept its first

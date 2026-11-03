@@ -67,8 +67,21 @@ const MIG_051: &str = include_str!("../migrations/051_cancelled_by.sql");
 const MIG_052: &str = include_str!("../migrations/052_provider_auth_kind_none.sql");
 const MIG_053: &str = include_str!("../migrations/053_memos.sql");
 const MIG_054: &str = include_str!("../migrations/054_todo_subitems.sql");
+const MIG_055: &str = include_str!("../migrations/055_main_chat_title_galley.sql");
 
 async fn fresh_pool() -> SqlitePool {
+    let pool = pool_through_054().await;
+    for sql in [MIG_055] {
+        sqlx::raw_sql(sql)
+            .execute(&pool)
+            .await
+            .expect("run migration");
+    }
+    pool
+}
+
+/// [`fresh_pool`] before 055: the database migration 055 finds.
+async fn pool_through_054() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
         .await
         .expect("open in-memory sqlite");
@@ -184,6 +197,62 @@ async fn seed_session_with_runtime(
     .execute(pool)
     .await
     .expect("seed session");
+}
+
+#[tokio::test]
+async fn migration_055_renames_only_the_main_chat_still_titled_zhu_liao_tian() {
+    // Main chat ticket 125 (PRD ruling 173): Core created the main chat
+    // titled 主聊天; 055 makes that row "Galley" and touches nothing else:
+    // not a main chat renamed over the socket before it, not an ordinary
+    // conversation that happens to be called 主聊天, not `updated_at` or
+    // `title_source`.
+    async fn rows(pool: &SqlitePool) -> Vec<(String, String, String, String)> {
+        sqlx::query_as("SELECT id, title, title_source, updated_at FROM sessions ORDER BY id")
+            .fetch_all(pool)
+            .await
+            .expect("read sessions")
+    }
+    async fn flag_main_chat(pool: &SqlitePool, id: &str) {
+        sqlx::query("UPDATE sessions SET main_chat = 1 WHERE id = ?")
+            .bind(id)
+            .execute(pool)
+            .await
+            .expect("flag the main chat");
+    }
+    fn row(id: &str, title: &str) -> (String, String, String, String) {
+        (id.into(), title.into(), "user".into(), TS.into())
+    }
+    const TS: &str = "2026-10-21T08:00:00Z";
+
+    // The main chat still wearing the old default, beside two ordinary
+    // conversations of the same name.
+    let pool = pool_through_054().await;
+    seed_session_with_runtime(&pool, "s-ext", "主聊天", "idle", TS, "external").await;
+    seed_session_with_runtime(&pool, "s-main", "主聊天", "idle", TS, "managed").await;
+    seed_session_with_runtime(&pool, "s-side", "主聊天", "idle", TS, "managed").await;
+    flag_main_chat(&pool, "s-main").await;
+    sqlx::raw_sql(MIG_055)
+        .execute(&pool)
+        .await
+        .expect("migration 055");
+    assert_eq!(
+        rows(&pool).await,
+        vec![
+            row("s-ext", "主聊天"),
+            row("s-main", "Galley"),
+            row("s-side", "主聊天"),
+        ]
+    );
+
+    // A main chat renamed before 055 keeps its name.
+    let pool = pool_through_054().await;
+    seed_session_with_runtime(&pool, "s-main", "我的助理", "idle", TS, "managed").await;
+    flag_main_chat(&pool, "s-main").await;
+    sqlx::raw_sql(MIG_055)
+        .execute(&pool)
+        .await
+        .expect("migration 055");
+    assert_eq!(rows(&pool).await, vec![row("s-main", "我的助理")]);
 }
 
 #[allow(clippy::too_many_arguments)] // Test seed helper — 8 args is fine.

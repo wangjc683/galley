@@ -163,6 +163,8 @@ async fn the_first_ask_creates_it_and_later_asks_hand_the_same_row_back() {
     let first = ask(&galley, &rec).await.unwrap();
     assert_eq!(first.main_chat, Some(true));
     assert_eq!(first.title, MAIN_CHAT_TITLE);
+    // Ruling 173: its name is the assistant's, in every language.
+    assert_eq!(first.title, "Galley");
     assert_eq!(first.ga_runtime_kind, RuntimeKind::Managed);
     assert_eq!(first.status, SessionStatus::Idle);
     assert_eq!(first.project_id, None);

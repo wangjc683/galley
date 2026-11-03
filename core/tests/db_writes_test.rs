@@ -79,6 +79,7 @@ const MIG_051: &str = include_str!("../migrations/051_cancelled_by.sql");
 const MIG_052: &str = include_str!("../migrations/052_provider_auth_kind_none.sql");
 const MIG_053: &str = include_str!("../migrations/053_memos.sql");
 const MIG_054: &str = include_str!("../migrations/054_todo_subitems.sql");
+const MIG_055: &str = include_str!("../migrations/055_main_chat_title_galley.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -116,7 +117,7 @@ async fn fresh_file_pool() -> (tempfile::TempDir, SqlitePool) {
 
 async fn run_migrations(pool: &SqlitePool) {
     run_migrations_through_051(pool).await;
-    for sql in [MIG_052, MIG_053, MIG_054] {
+    for sql in [MIG_052, MIG_053, MIG_054, MIG_055] {
         sqlx::raw_sql(sql)
             .execute(pool)
             .await

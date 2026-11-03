@@ -335,5 +335,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/054_todo_subitems.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 55,
+            description: "main chat: the default title 主聊天 becomes Galley",
+            sql: include_str!("../migrations/055_main_chat_title_galley.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
