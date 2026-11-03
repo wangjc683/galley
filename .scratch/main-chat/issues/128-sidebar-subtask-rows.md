@@ -80,7 +80,7 @@ git diff --check main...HEAD
 
 ## 别动
 
-- 只在 worktree 里改，绝不碰主工作树 `/Users/inkstone/Documents/genericagent-webui`；不跑 `tauri dev`、不跑 `galley` 写命令、不读写用户的应用数据目录。
+- 只在 worktree 里改，绝不碰主工作树 `~/Documents/genericagent-webui`；不跑 `tauri dev`、不跑 `galley` 写命令、不读写用户的应用数据目录。
 - Core、CLI、`gui/src/lib/ipc/ga-output-cleaning.ts`、`core/src/managed_prompt.rs`（票 126 / 127 在改）不动。待办面板、子任务卡片、工作台列表、「其他来源」不动。主区顶栏身份行不动。
 
 ## 提交与回报

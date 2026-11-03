@@ -104,7 +104,7 @@ git diff --check main...HEAD
 
 ## 别动
 
-- 只在 worktree 里改，绝不碰主工作树 `/Users/inkstone/Documents/genericagent-webui`；不跑 `tauri dev`、不跑 `galley` 写命令、不读写用户的 `~/Library/Application Support/app.galley`。
+- 只在 worktree 里改，绝不碰主工作树 `~/Documents/genericagent-webui`；不跑 `tauri dev`、不跑 `galley` 写命令、不读写用户的 `~/Library/Application Support/app.galley`。
 - Agent API 的结构、`docs/agent-api/`、Supervisor SOP、`core/src/assistant_manual*` 与手册各部分、`runner/`、`managed-ga/` 都不动（裁决 173 第 4 条：不预先加手册条款）。
 - 侧栏卡片、顶栏身份行、面包屑现在就写「Galley」，不动。
 - locale 的键名不改；⌘K 搜索别名不删。

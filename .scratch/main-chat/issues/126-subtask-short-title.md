@@ -67,7 +67,7 @@ PYTHONDONTWRITEBYTECODE=1 /Library/Frameworks/Python.framework/Versions/3.14/bin
 
 ## 别动
 
-- 只在 worktree 里改，绝不碰主工作树 `/Users/inkstone/Documents/genericagent-webui`；不跑 `tauri dev`，不跑 `galley` 写命令，不写用户的 `~/Library/Application Support/app.galley`（评测脚本只读打开库，照旧）。
+- 只在 worktree 里改，绝不碰主工作树 `~/Documents/genericagent-webui`；不跑 `tauri dev`，不跑 `galley` 写命令，不写用户的 `~/Library/Application Support/app.galley`（评测脚本只读打开库，照旧）。
 - Agent API 结构、迁移、手册、runner、managed-ga 不动。已有子任务的标题不回填。
 
 ## 提交与回报

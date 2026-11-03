@@ -38,7 +38,7 @@ git diff --check main...HEAD
 
 ## 别动
 
-- 只在 worktree 里改，绝不碰主工作树 `/Users/inkstone/Documents/genericagent-webui`；不跑 `tauri dev`、不跑 `galley` 写命令、不读写用户的应用数据目录。
+- 只在 worktree 里改，绝不碰主工作树 `~/Documents/genericagent-webui`；不跑 `tauri dev`、不跑 `galley` 写命令、不读写用户的应用数据目录。
 - GUI、runner、CLI、Agent API、迁移、入口层提示词、手册不动。不加补跑。
 
 ## 提交与回报
