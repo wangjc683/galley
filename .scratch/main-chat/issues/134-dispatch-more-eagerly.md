@@ -306,3 +306,4 @@ README 三节（「派活判据（票 115）」「并行派活（票 127）」�
 9. `docs/project-status.md`「Unreleased On Main」还写着裁决 160 的判据（「what you ask it answers itself, even when that takes minutes」），合入时要改；我没碰。
 10. `dispatch-parallel` 的 v2 没重跑带进来的 19 条（理由见 4），与票面「重跑全部用例」不同。
 11. `dispatch-criterion/composed/` 的 `e-invoices.new-1.txt`、`q-east.new-1.txt` 被这次的 new-1 覆盖（new 换了提示词），票 115 的版本只在 git 历史里。
+12. 裁决 183 第 6 条（main 上 `236f5702`，在本分支的基点之后）要本票的评测量两个误判方向。快的「讲讲」被派出去：`q-notes-apps`（凭自己知道就能答的推荐）v2 三遍都派了，其余 7 条该自己答的在最终措辞下没有一遍派出去（`quick-downloads` 在第一轮措辞下三遍都派了，见 1）。慢的事实题留下：沙盒里浏览器不执行，`q-weather`、`q-fact-injury` 停在第 1–2 次调用，量不出自己答要多久，这个方向本评测测不到，要等真机。
