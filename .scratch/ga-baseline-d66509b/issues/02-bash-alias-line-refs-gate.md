@@ -1,6 +1,6 @@
 # 02 基线收尾：`Bash` / `PowerShell` 在界面里当 `code_run` 画；过期行号；门禁要求 `legacy_llmcore.py`
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-03 快进合入 `524fe7f9` 的 rebase 版。主会话验收：读过 `gui/src/lib/tool-name.ts` 与调用处，分支相对 main `diff --check` 干净、新增行没有本机路径；代理报 typecheck、lint、vitest 本机与 `TZ=UTC` 各 2,780 条全过，两个检查脚本在缺 `legacy_llmcore.py` 时报错。真机要等模型真的调一次 `Bash`（Kimi 预设开着 Claude Code 兼容时更容易），只改 GUI，热更即可）
 
 来源：票 01（基线 `a9a36b4 → d66509b`）报告的 Open risks 第 1、4、9 条；2026-11-03 JC：「按你的建议推进」。只改 GUI、两个检查脚本与几处注释和文档；不动 Core、runner、CLI、Agent API、迁移、内置 GA 补丁栈。两种运行时都受益（外置用户更新到上游新版后同样会遇到 `Bash`）。
 
