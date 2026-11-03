@@ -14,8 +14,8 @@
      "note": "裁决 185：一件事的经过是世上的事实，派，凭已有知识自己答不合格（裁决 184 下凭已有知识自己答算合规，裁决 183 下按「讲讲某件事」派，裁决 160 下是自己答）。"},
     {"id": "q-weather", "group": "问答", "should_dispatch": true, "fact": true, "message": "厦门明天天气怎么样？",
      "note": "裁决 184：要上网，派，天气不留例外（裁决 160、183 下是自己答）。"},
-    {"id": "q-notes-apps", "group": "问答", "should_dispatch": false, "message": "Mac 上有哪些好用的本地笔记软件？",
-     "note": "裁决 184：凭已有知识答，自己做（裁决 183 下不计分）。"},
+    {"id": "q-notes-apps", "group": "问答", "should_dispatch": true, "fact": true, "message": "Mac 上有哪些好用的本地笔记软件？",
+     "note": "JC 2026-11-03 定（票 134 第四轮）：推荐靠世上的事实（有哪些软件、收不收费），按裁决 185 派；凭已有知识自己答不合格。裁决 184 下标自己答，183 下不计分。"},
     {"id": "quick-usd", "group": "问答", "should_dispatch": true, "fact": true, "from": "dispatch-cases.json",
      "note": "裁决 184：「现在」的汇率要上网查，派（dispatch-cases.json 里按票 06 标的是不派）。"},
     {"id": "quick-downloads", "group": "问答", "should_dispatch": false, "from": "dispatch-cases.json"},
@@ -43,8 +43,8 @@
      "note": "票 134：v0.7.5 草稿冒烟那句（11-03 主对话自己答了，13 步、4 分 4 秒）。要一张对比表：派；要合成一份，只一个标签，两个以上不合格。"},
     {"id": "q-fact-injury", "group": "问一个事实", "should_dispatch": true, "fact": true, "message": "查一下湖人队的里夫斯最近是不是受伤了？",
      "note": "票 134 第一轮按裁决 183 标自己答（一个事实）；第三轮按裁决 184：要上网查，派。"},
-    {"id": "q-followup-quick", "group": "凭这段对话接的追问", "should_dispatch": false, "message": "那他大概什么时候能复出？",
-     "note": "票 134：上一轮的回答里已经写明伤情与预计复出时间，凭这段对话就能接，自己答。伤情是为用例编的。",
+    {"id": "q-followup-quick", "group": "凭这段对话接的追问", "should_dispatch": false, "scored": false, "message": "那他大概什么时候能复出？",
+     "note": "JC 2026-11-03 定（票 134 第四轮）：不计分。上一轮是助理凭记忆答的、没出处，正是裁决 185 不要的样子，派出去核实也说得通；真会出现的是 q-followup-sourced（上一轮由子任务查回）。原标注：凭这段对话就能接，自己答。伤情是为用例编的。",
      "history": [
        {"role": "user", "content": "掘金的穆雷最近是不是受伤了？"},
        {"role": "assistant", "content": "是的。穆雷在 10 月 30 日对国王的比赛里扭伤了右脚踝，第三节就没再回来。球队 11 月 1 日公布了检查结果：右踝扭伤，没有骨折，预计缺阵两到三周，11 月中旬复查后再定复出时间。"}
