@@ -1,6 +1,6 @@
 # 03 步骤行的兜底写中文名；`ga-output-cleaning` 的过期行号
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-03 快进合入 `583a7f71`。主会话验收：读过 `stepToolsLine` 与调用处，分支 `diff --check` 干净、新增行没有本机路径，合入后主树 typecheck 过；代理报 vitest 本机与 `TZ=UTC` 各 2,785 条全过。要 JC 在 dev 里看：工作台里兜底那一行「运行代码」正好压在同字的工具条上面（报告 Open risks 第 1 条，09-23 嫌过的重复），过程卡片里兜底变多以后各行读起来怎样）
 
 来源：票 02 报告的 Open risks 第 1、2 条；2026-11-03 JC：「按你的建议推进」（并进 v0.7.6 收尾）。只改 GUI（一处文案逻辑、注释与测试）和设计文档；不动 Core、runner、CLI、Agent API。两种运行时都受益。
 
