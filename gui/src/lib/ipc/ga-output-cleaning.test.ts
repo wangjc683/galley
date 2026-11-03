@@ -13,9 +13,10 @@ import {
 } from "@/lib/ipc/ga-output-cleaning";
 
 /**
- * Reproduces GA's fallback (ga.py:594-601) so the tests exercise the
- * shape the bug actually produces rather than a hand-written guess:
- * strip fences + thinking, drop newlines, then smart_format at 80.
+ * Reproduces GA's fallback (ga.py:575-581: no `<summary>`, so the
+ * whole reply) so the tests exercise the shape the bug actually
+ * produces rather than a hand-written guess: strip fences + thinking,
+ * drop newlines, then smart_format at 80.
  */
 function gaFallbackSummary(responseContent: string): string {
   const cleaned = responseContent

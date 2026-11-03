@@ -1744,7 +1744,8 @@ export const zhCopy = {
      *  GA 从不产出空 summary，所以裸步号是 Galley 自己造出来的形态，
      *  两个分支都必须有词可填。工具步的回声就是它的旁白：自 2026-09-23
      *  起旁白本身做步骤行文字，stepCalledTools 只在旁白清洗后为空时
-     *  兜底。 */
+     *  兜底。只调了一个工具、且它在 tools 里有名字时不用这句，写它的
+     *  名字（step-heading.ts 的 stepToolsLine，2026-11-03）。 */
     stepDirectAnswer: "直接回答了用户问题",
     stepCalledTools: (names: string[]) =>
       names.length === 1 ? `调用了 ${names[0]}` : `调用了 ${names.length} 个工具`,

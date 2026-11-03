@@ -4,8 +4,10 @@ import {
   isEchoNarrationStep,
   stepMarkerLine,
   stepMarkerSummary,
+  stepToolsLine,
   type StepHeadingFacts,
 } from "./step-heading";
+import { enCopy } from "@/i18n/locales/en";
 import { zhCopy } from "@/i18n/locales/zh";
 
 const NARRATION =
@@ -76,7 +78,7 @@ describe("isEchoNarrationStep", () => {
 });
 
 describe("stepMarkerSummary / stepMarkerLine (the marker's words)", () => {
-  const words = zhCopy.conversation;
+  const words = zhCopy;
 
   it("keeps a summary the model wrote", () => {
     expect(
@@ -89,7 +91,10 @@ describe("stepMarkerSummary / stepMarkerLine (the marker's words)", () => {
 
   it("falls back to GA's two lines when the summary only echoes", () => {
     expect(stepMarkerSummary(NARRATION, NARRATION, ["web_scan"], words)).toBe(
-      "调用了 web_scan",
+      "读取网页",
+    );
+    expect(stepMarkerSummary(NARRATION, NARRATION, ["foo_tool"], words)).toBe(
+      "调用了 foo_tool",
     );
     expect(stepMarkerSummary(NARRATION, NARRATION, [], words)).toBe(
       "直接回答了用户问题",
@@ -109,6 +114,45 @@ describe("stepMarkerSummary / stepMarkerLine (the marker's words)", () => {
     // Narration that cleans to nothing keeps the fallback.
     expect(stepMarkerLine("调用了 web_scan", "**", true)).toBe(
       "调用了 web_scan",
+    );
+  });
+});
+
+describe("stepToolsLine (the fallback for a step that ran tools)", () => {
+  it("reads a lone named tool as its name, Bash / PowerShell as code_run", () => {
+    expect(stepToolsLine(["code_run"], zhCopy)).toBe("运行代码");
+    expect(stepToolsLine(["Bash"], zhCopy)).toBe("运行代码");
+    expect(stepToolsLine(["PowerShell"], zhCopy)).toBe("运行代码");
+    expect(stepToolsLine(["code_run"], enCopy)).toBe("Run code");
+    expect(stepToolsLine(["Bash"], enCopy)).toBe("Run code");
+  });
+
+  it("names every tool in copy.tools by its label", () => {
+    for (const copy of [zhCopy, enCopy]) {
+      for (const [name, label] of Object.entries(copy.tools)) {
+        expect(stepToolsLine([name], copy)).toBe(label);
+      }
+    }
+  });
+
+  it("keeps 「调用了 X」 for a tool without a name, raw", () => {
+    expect(stepToolsLine(["foo_tool"], zhCopy)).toBe("调用了 foo_tool");
+    expect(stepToolsLine(["foo_tool"], enCopy)).toBe("Called foo_tool");
+    // Case-exact, like the alias table: lowercase bash is not Bash.
+    expect(stepToolsLine(["bash"], zhCopy)).toBe("调用了 bash");
+    // Not an own key of copy.tools, though every object has it.
+    expect(stepToolsLine(["constructor"], zhCopy)).toBe("调用了 constructor");
+  });
+
+  it("counts several tools, named or not", () => {
+    expect(stepToolsLine(["code_run", "web_scan"], zhCopy)).toBe(
+      "调用了 2 个工具",
+    );
+    expect(stepToolsLine(["code_run", "code_run"], zhCopy)).toBe(
+      "调用了 2 个工具",
+    );
+    expect(stepToolsLine(["code_run", "web_scan"], enCopy)).toBe(
+      "Called 2 tools",
     );
   });
 });

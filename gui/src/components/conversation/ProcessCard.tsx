@@ -171,10 +171,7 @@ function StepRows({ steps }: { steps: ProcessCardStep[] }) {
   const copy = useCopy();
   const resolveSite = useContext(BrowserSitesContext);
   return steps.map(({ key, turn }) => (
-    <ProcessStepRow
-      key={key}
-      step={assistantStep(turn, copy.conversation, resolveSite)}
-    />
+    <ProcessStepRow key={key} step={assistantStep(turn, copy, resolveSite)} />
   ));
 }
 

@@ -130,7 +130,7 @@ const LLM_RUNNING_MARKER =
   /^\s*\*{0,2}LLM Running \(Turn \d+\) \.\.\.\*{0,2}\s*$/gm;
 
 /**
- * GA's `agent_loop.py:73` yields a display-only line of the form
+ * GA's `agent_loop.py:80` yields a display-only line of the form
  * `🛠️ tool_name(compact_args)` to the display queue every time a
  * tool dispatches. It's meant for GA's terminal frontends (dcapp /
  * tgapp / qtapp) — the structured tool call arrives separately via
@@ -155,7 +155,7 @@ const TOOL_DISPATCH_MARKER_LINE = /^🛠️?\s+\w+\(.*\)[ \t]*$/gm;
 const TOOL_DISPATCH_MARKER_PARTIAL = /🛠️?\s+\w+\(/;
 
 /**
- * Verbose-mode tool dispatch marker — emitted by `agent_loop.py:72`
+ * Verbose-mode tool dispatch marker — emitted by `agent_loop.py:79`
  * when GA runs with `verbose=True` (which Galley's bridge sets so
  * the LLM streams per-token). Format:
  *
@@ -184,7 +184,7 @@ const TOOL_DISPATCH_VERBOSE_PARTIAL = /🛠️?\s+Tool:\s+`/;
 /**
  * 5-backtick fenced block — wraps the streamed stdout/stderr of a
  * tool's dispatch generator while GA is in verbose mode
- * (`agent_loop.py:79-81`):
+ * (`agent_loop.py:85-87`):
  *
  *   `````
  *   <tool's yielded output, potentially many lines / chunks>
@@ -208,9 +208,10 @@ const FIVE_BACKTICK_BLOCK = /`{5}\n[\s\S]*?\n`{5}\n?/g;
 const FIVE_BACKTICK_PARTIAL = /`{5}\n?$/;
 
 /**
- * GA tool-dispatch yields all start with `[Action] ...` — first
- * line of every `do_*` tool method (ga.py:18, :360, :378, :408,
- * etc.) ahead of any subprocess output. These live INSIDE the
+ * GA's code and file tools start their output with `[Action] ...` —
+ * the first line `code_run` (ga.py:28) and `do_file_patch` /
+ * `do_file_write` / `do_file_read` (:405, :423, :456) yield, ahead of
+ * any subprocess output. These live INSIDE the
  * 5-backtick fence that wraps tool output in verbose mode, so the
  * fence truncation below `should` catch them — but if chunk timing
  * ever delivers the [Action] line without the fence-open in the
@@ -355,7 +356,7 @@ export function cleanPartialContent(text: string): string {
   out = out.replace(LLM_RUNNING_MARKER, "");
 
   // 1c. Strip GA's compact `🛠️ tool_name(args)` dispatch markers.
-  //     Emitted by `agent_loop.py:73` in verbose=False mode. Galley
+  //     Emitted by `agent_loop.py:80` in verbose=False mode. Galley
   //     now runs verbose=True so these don't appear in practice, but
   //     the stripper stays as backstop in case the user runs against
   //     an older GA baseline where the bridge still falls back.
@@ -463,13 +464,18 @@ export function cleanPartialContent(text: string): string {
 }
 
 /**
- * GA's `turn_end_callback` (ga.py:594-601) asks the LLM for a one-line
- * `<summary>` snapshot of the turn, and when the reply carries no
- * `<summary>` tag it falls back to using the ENTIRE cleaned response:
+ * GA's `turn_end_callback` (ga.py:575-581) takes the turn's one-line
+ * `<summary>` snapshot (the system prompt asks for one), and when the
+ * reply carries no `<summary>` tag it uses the ENTIRE cleaned response:
  *
  *   _c = response.content minus ``` fences and <thinking> blocks
- *   summary = _c.strip()                            # the whole answer
- *   summary = smart_format(summary.replace('\n',''), max_str_len=80)
+ *   raw = _c.strip()                                # the whole answer
+ *   summary = smart_format(raw.replace('\n',''), max_str_len=80)
+ *
+ * A reply that cleans to nothing writes no summary at all. Until
+ * baseline `f06d550` that case fell back further, to
+ * 「直接回答了用户问题」 or the first tool's name and arguments;
+ * upstream removed it.
  *
  * `smart_format` (ga.py:291) returns the string unchanged below 90
  * chars, otherwise elides the middle: `head40 + ' ... ' + tail40`.

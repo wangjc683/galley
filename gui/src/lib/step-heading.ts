@@ -10,6 +10,7 @@
 
 import { summaryEchoesAnswer } from "@/lib/ipc/ga-output-cleaning";
 import { cleanSessionSummary } from "@/lib/session-summary";
+import { canonicalToolName } from "@/lib/tool-name";
 
 export interface StepHeadingFacts {
   /** A TurnMarker row renders for this step: settled, numbered, not a
@@ -38,10 +39,32 @@ export function isEchoNarrationStep(facts: StepHeadingFacts): boolean {
   return summaryEchoesAnswer(facts.summary, narration);
 }
 
-/** The marker's two fallback lines (`copy.conversation`). */
+/** The marker's fallback words, from the app copy: the two lines in
+ * `copy.conversation` and the tool names in `copy.tools`. */
 export interface StepMarkerWords {
-  stepDirectAnswer: string;
-  stepCalledTools: (names: string[]) => string;
+  conversation: {
+    stepDirectAnswer: string;
+    stepCalledTools: (names: string[]) => string;
+  };
+  tools: Readonly<Record<string, string>>;
+}
+
+/**
+ * The fallback line for a step that ran tools (2026-11-03): one tool
+ * with a name in `copy.tools` reads as that name, the same words as its
+ * pill (「运行代码」), looked up through `canonicalToolName` so a
+ * `Bash` / `PowerShell` call reads as `code_run` does; any other single
+ * tool keeps 「调用了 X」 with the name the model used, and several
+ * tools 「调用了 N 个工具」.
+ */
+export function stepToolsLine(names: string[], words: StepMarkerWords): string {
+  if (names.length === 1) {
+    const name = canonicalToolName(names[0]);
+    if (Object.prototype.hasOwnProperty.call(words.tools, name)) {
+      return words.tools[name];
+    }
+  }
+  return words.conversation.stepCalledTools(names);
 }
 
 /**
@@ -50,7 +73,7 @@ export interface StepMarkerWords {
  * the model wrote no `<summary>`, ga.py:578); then the two-way fallback
  * GA's `turn_end_callback` had until baseline `f06d550` — the
  * direct-answer line for a step without real tools, 「调用了 X」
- * otherwise. Undefined when GA wrote no summary at all (a
+ * otherwise (`stepToolsLine`: one named tool reads as its name). Undefined when GA wrote no summary at all (a
  * bare step). The step marker (Conversation's AgentTurnView) and the
  * assistant's process card (lib/assistant-process.ts) both read it.
  */
@@ -62,8 +85,8 @@ export function stepMarkerSummary(
 ): string | undefined {
   if (!summaryEchoesAnswer(summary, prose)) return summary;
   return realToolNames.length === 0
-    ? words.stepDirectAnswer
-    : words.stepCalledTools(realToolNames);
+    ? words.conversation.stepDirectAnswer
+    : stepToolsLine(realToolNames, words);
 }
 
 /**

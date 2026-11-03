@@ -1325,7 +1325,8 @@ function AgentTurnView({
   // fallback GA's `turn_end_callback` had until baseline `f06d550`
   // (today it falls back to the whole answer only, ga.py:578) — the
   // direct-answer line for a turn with no real tools, the tool name
-  // otherwise. On a tool step the echo is of
+  // otherwise (a lone tool with a name in `copy.tools` reads as that
+  // name, `stepToolsLine`). On a tool step the echo is of
   // its narration, and a marked step shows that narration as its
   // marker line instead (`narrationIsHeading` below); the tool name is
   // left for narration that cleans to nothing.
@@ -1334,7 +1335,7 @@ function AgentTurnView({
     turn.summary,
     answerText,
     realTools.map((t) => t.name),
-    copy.conversation,
+    copy,
   );
 
   // Bare-marker merge (2026-08-23 density pass): when GA emitted no

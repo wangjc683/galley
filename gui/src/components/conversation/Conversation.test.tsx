@@ -131,7 +131,14 @@ describe("Conversation echo-narration step", () => {
       "营业时间只在搜索摘要里，我去 厦门网 原文核对。",
     );
     expect(narrationRows(html)).toBe(0);
-    expect(html).not.toContain("调用了 web_scan");
+    // The tools fallback stays off the line.
+    expect(markerRow(html)).not.toContain("读取网页");
+  });
+
+  it("falls back to the lone tool's name when the narration cleans to nothing", () => {
+    const html = renderStep({ finalAnswer: "**", summary: "**" });
+    expect(markerRow(html)).toContain("读取网页");
+    expect(markerRow(html)).not.toContain("调用了");
   });
 
   it("keeps the summary and the narration row on a step with its own summary", () => {

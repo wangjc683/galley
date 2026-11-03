@@ -4,6 +4,7 @@ import {
   isEchoNarrationStep,
   stepMarkerLine,
   stepMarkerSummary,
+  stepToolsLine,
   type StepMarkerWords,
 } from "@/lib/step-heading";
 import type {
@@ -121,13 +122,14 @@ function inline(value?: string | null): string {
 /**
  * A step's row and detail, from the same rules as the step marker
  * (lib/step-heading.ts; AgentTurnView): the narration on an echo step,
- * GA's summary when the model wrote one, 「调用了 X」 when the summary
- * only echoes. A bare step (GA wrote no summary at all, so its marker
- * row merges into its tool pill) falls back to 「调用了 X」 too: the row
- * needs words. The detail is what the step region drew under the marker
- * (its own narration row, its tools) and what the marker's caret opened
- * (reasoning, preamble), with the same dedupe of a preamble that only
- * repeats the narration.
+ * GA's summary when the model wrote one, the tools fallback
+ * (`stepToolsLine`: a lone named tool's name, else 「调用了 X」) when
+ * the summary only echoes. A bare step (GA wrote no summary at all, so
+ * its marker row merges into its tool pill) takes that fallback too:
+ * the row needs words. The detail is what the step region drew under
+ * the marker (its own narration row, its tools) and what the marker's
+ * caret opened (reasoning, preamble), with the same dedupe of a
+ * preamble that only repeats the narration.
  */
 export function assistantStep(
   turn: AgentTurn,
@@ -149,7 +151,9 @@ export function assistantStep(
   const line = inline(stepMarkerLine(markerSummary, prose, narrationIsHeading));
   const sentence =
     line ||
-    (names.length > 0 ? words.stepCalledTools(names) : words.stepDirectAnswer);
+    (names.length > 0
+      ? stepToolsLine(names, words)
+      : words.conversation.stepDirectAnswer);
   const narration =
     prose && !closingShaped && !narrationIsHeading ? prose : null;
   const preambleRepeats =

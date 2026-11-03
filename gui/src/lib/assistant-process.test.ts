@@ -15,7 +15,7 @@ import type {
   Turn,
 } from "@/types/conversation";
 
-const words = zhCopy.conversation;
+const words = zhCopy;
 
 let seq = 0;
 function tool(
@@ -194,17 +194,30 @@ describe("assistantStep: the row's words and what opening it shows", () => {
     expect(step.thinking).toBe("先看携程。");
   });
 
-  it("falls back to 「调用了 X」: an echoed summary without narration words, a bare step", () => {
+  it("falls back to the tools line: an echoed summary without narration words, a bare step", () => {
     expect(
       assistantStep(
         agent({ summary: "**", finalAnswer: "**", tools: [tool("code_run")] }),
         words,
         null,
       ).sentence,
-    ).toBe("调用了 code_run");
+    ).toBe("运行代码");
     expect(
       assistantStep(agent({ tools: [tool("web_scan")] }), words, null).sentence,
-    ).toBe("调用了 web_scan");
+    ).toBe("读取网页");
+    expect(
+      assistantStep(agent({ tools: [tool("Bash")] }), words, null).sentence,
+    ).toBe("运行代码");
+    expect(
+      assistantStep(agent({ tools: [tool("foo_tool")] }), words, null).sentence,
+    ).toBe("调用了 foo_tool");
+    expect(
+      assistantStep(
+        agent({ tools: [tool("code_run"), tool("web_scan")] }),
+        words,
+        null,
+      ).sentence,
+    ).toBe("调用了 2 个工具");
   });
 
   it("collapses a sentence onto one line", () => {
