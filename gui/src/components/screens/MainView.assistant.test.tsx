@@ -232,10 +232,8 @@ describe("the main chat is the assistant's conversation", () => {
     expect(main.lastIndexOf("排好了。", card)).toBeGreaterThan(
       main.lastIndexOf("多云，记得带伞。", card),
     );
-    expect(main).toContain(
-      'data-role="reminder-cards" class="flex flex-col gap-2 mt-3"',
-    );
-    // With the reply's subtask cards: theirs first, then 8px.
+    expect(main).toContain('data-role="reminder-cards" class="flex flex-col"');
+    // With the reply's subtask cards: theirs first, in the same frame.
     cards.dispatches = new Map([
       [
         "a-排好了。",
@@ -259,9 +257,7 @@ describe("the main chat is the assistant's conversation", () => {
     expect(both.indexOf('data-role="subtask-cards"')).toBeLessThan(
       both.indexOf('data-role="reminder-cards"'),
     );
-    expect(both).toContain(
-      'data-role="reminder-cards" class="flex flex-col gap-2 mt-2"',
-    );
+    expect(both).toContain('data-role="reminder-cards" class="flex flex-col"');
     // A workbench session, a subtask, the external runtime: none.
     const other = render({ isMainChat: false });
     expect(other).not.toContain('data-role="reminder-card');
@@ -281,14 +277,13 @@ describe("the main chat is the assistant's conversation", () => {
     cards.todos = new Map([["a-排好了。", [noted]]]);
     const alone = render({ isMainChat: true });
     expect(count(alone, 'data-role="todo-card"')).toBe(1);
-    expect(alone).toContain(
-      'data-role="todo-cards" class="flex flex-col gap-2 mt-3"',
-    );
+    expect(alone).toContain('data-role="todo-cards" class="flex flex-col"');
     const card = alone.indexOf('data-role="todo-card"');
     expect(alone.lastIndexOf("排好了。", card)).toBeGreaterThan(
       alone.lastIndexOf("多云，记得带伞。", card),
     );
-    // With a reminder card: the to-dos first, the reminders 8px under.
+    // With a reminder card: the to-dos first, then the reminders, in the
+    // same frame.
     cards.reminders = new Map([
       [
         "a-排好了。",
@@ -312,14 +307,10 @@ describe("the main chat is the assistant's conversation", () => {
     expect(two.indexOf('data-role="todo-cards"')).toBeLessThan(
       two.indexOf('data-role="reminder-cards"'),
     );
-    expect(two).toContain(
-      'data-role="todo-cards" class="flex flex-col gap-2 mt-3"',
-    );
-    expect(two).toContain(
-      'data-role="reminder-cards" class="flex flex-col gap-2 mt-2"',
-    );
+    expect(two).toContain('data-role="todo-cards" class="flex flex-col"');
+    expect(two).toContain('data-role="reminder-cards" class="flex flex-col"');
     // With a subtask card too: subtasks, then the to-dos, then the
-    // reminders, 8px apart.
+    // reminders, line after line in one frame.
     cards.dispatches = new Map([
       [
         "a-排好了。",
@@ -365,12 +356,8 @@ describe("the main chat is the assistant's conversation", () => {
     ].map((needle) => all.indexOf(needle));
     expect(order.every((at) => at > -1)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
-    expect(all).toContain(
-      'data-role="todo-cards" class="flex flex-col gap-2 mt-2"',
-    );
-    expect(all).toContain(
-      'data-role="reminder-cards" class="flex flex-col gap-2 mt-2"',
-    );
+    expect(all).toContain('data-role="todo-cards" class="flex flex-col"');
+    expect(all).toContain('data-role="reminder-cards" class="flex flex-col"');
     // Only the main chat has them.
     expect(render({ isMainChat: false })).not.toContain('data-role="todo-card');
   });
@@ -389,16 +376,14 @@ describe("the main chat is the assistant's conversation", () => {
     cards.memos = new Map([["a-排好了。", [noted]]]);
     const alone = render({ isMainChat: true });
     expect(count(alone, 'data-role="memo-card"')).toBe(1);
-    // 12px off the bubble with nothing above it.
-    expect(alone).toContain(
-      'data-role="memo-cards" class="flex flex-col gap-2 mt-3"',
-    );
+    // In the reply's frame (12px off the bubble), a line.
+    expect(alone).toContain('data-role="memo-cards" class="flex flex-col"');
     const card = alone.indexOf('data-role="memo-card"');
     expect(alone.lastIndexOf("排好了。", card)).toBeGreaterThan(
       alone.lastIndexOf("多云，记得带伞。", card),
     );
     // With a to-do card and a reminder card: the to-dos, the reminders,
-    // then the memos, 8px apart.
+    // then the memos, line after line in one frame.
     cards.todos = new Map([
       [
         "a-排好了。",
@@ -418,9 +403,7 @@ describe("the main chat is the assistant's conversation", () => {
     expect(two.indexOf('data-role="todo-cards"')).toBeLessThan(
       two.indexOf('data-role="memo-cards"'),
     );
-    expect(two).toContain(
-      'data-role="memo-cards" class="flex flex-col gap-2 mt-2"',
-    );
+    expect(two).toContain('data-role="memo-cards" class="flex flex-col"');
     cards.reminders = new Map([
       [
         "a-排好了。",
@@ -463,9 +446,7 @@ describe("the main chat is the assistant's conversation", () => {
     const turns: Turn[] = [...conversation().slice(0, -1), delivered];
     const main = render({ isMainChat: true, turns });
     expect(count(main, 'data-role="file-card"')).toBe(2);
-    expect(main).toContain(
-      'data-role="file-cards" class="mt-3 flex flex-col gap-2"',
-    );
+    expect(main).toContain('data-role="file-cards" class="flex flex-col"');
     // Under the reply that handed them over, in the order it wrote them.
     const first = main.indexOf('data-role="file-card"');
     expect(main.lastIndexOf("排好了。", first)).toBeGreaterThan(
@@ -477,7 +458,7 @@ describe("the main chat is the assistant's conversation", () => {
     expect(main).not.toContain("[FILE:");
     expect(main).not.toContain(">/Users/jc/Documents/五一行程.html<");
     // With the reply's subtask and reminder cards: the files first, the
-    // rest 8px under them.
+    // rest under them, all in one frame (ruling 182).
     cards.dispatches = new Map([
       [
         "a-排好了。",
@@ -523,12 +504,16 @@ describe("the main chat is the assistant's conversation", () => {
     ].map((needle) => all.indexOf(needle));
     expect(order.every((at) => at > -1)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(all).toContain('data-role="subtask-cards" class="flex flex-col"');
+    expect(all).toContain('data-role="reminder-cards" class="flex flex-col"');
+    // One frame per reply: the process card's, as wide as its widest
+    // line, up to the bubble's cap, 12px off the bubble.
+    expect(count(all, 'data-role="reply-cards"')).toBe(1);
     expect(all).toContain(
-      'data-role="subtask-cards" class="mt-2 flex flex-col gap-2"',
+      'data-role="reply-cards" class="mt-3 w-fit max-w-full rounded-md border border-line bg-app p-1',
     );
-    expect(all).toContain(
-      'data-role="reminder-cards" class="flex flex-col gap-2 mt-2"',
-    );
+    const frame = all.indexOf('data-role="reply-cards"');
+    expect(frame).toBeLessThan(all.indexOf('data-role="file-cards"'));
     // A workbench session, a subtask, the external runtime: none.
     expect(render({ isMainChat: false, turns })).not.toContain(
       'data-role="file-card',

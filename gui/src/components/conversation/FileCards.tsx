@@ -26,6 +26,10 @@ import {
   ImagePreviewDialog,
   type ImagePreviewItem,
 } from "@/components/conversation/ImagePreviewDialog";
+import {
+  REPLY_CARD_ICON,
+  REPLY_CARD_LINE,
+} from "@/components/conversation/ReplyCards";
 import { IconButton } from "@/components/ui/button";
 import { FolderPathText } from "@/components/ui/folder-path";
 import { useFilePresences } from "@/hooks/useFilePresence";
@@ -48,22 +52,26 @@ import { cn } from "@/lib/utils";
 
 /**
  * The files the assistant handed over in one reply, under its bubble
- * (main chat ticket 74, assistant PRD ruling 10): one card per
- * `[FILE:<path>]` marker, in marker order, first of the cards a reply
- * can carry (the reply's own deliverable, then the work it handed off,
- * the to-dos, the reminders). The main chat only; MainView hands the
- * paths in.
+ * (main chat ticket 74, assistant PRD ruling 10): one line per
+ * `[FILE:<path>]` marker, in marker order, first in the reply's frame
+ * (ReplyCards: the reply's own deliverable, then the work it handed off,
+ * the to-dos, the reminders, the memos). The main chat only; MainView
+ * hands the paths in.
  *
- * A card is the reminder card's frame (hairline `border-line`,
- * `rounded-md`, the page ground, one 40px line, no shadow, no lift): the
- * file's glyph, its name cut in the middle so the extension stays, and
- * its folder with the home part as `~`. Never the whole path. A click
- * opens a document in its default application (pdf, docx, xlsx, pptx,
- * pages, numbers, and HTML: a delivered page is seen rendered, not as
- * source; `fileCardClick`); anything else goes where a file reference in
- * the text goes (LocalFileWorkspace's `activate`): Markdown, images and
- * text into the reading panel, the rest shown in its folder. On hover,
- * and on a right-click with 复制路径, 「在文件夹中显示」.
+ * A line is the frame's 24px line (ReplyCards, ruling 182; spec:
+ * conversation.md 「回复下的卡片（一框列表）」): the file's glyph, its name
+ * cut in the middle so the extension stays (ink-soft, ink on hover), and
+ * 8px on its folder in ink-muted with the home part as `~`, at most 16em
+ * — a length, not a share: the frame sizes itself to its widest line,
+ * and a percentage is not known then, so a long folder would set the
+ * frame's width at its full length (ticket 132b). Never the whole path.
+ * The whole line is the button; it lights on hover and keyboard focus.
+ * A click opens a document in its default application (pdf, docx, xlsx,
+ * pptx, pages, numbers, and HTML: a delivered page is seen rendered, not
+ * as source; `fileCardClick`); anything else goes where a file reference
+ * in the text goes (LocalFileWorkspace's `activate`): Markdown, images
+ * and text into the reading panel, the rest shown in its folder. On
+ * hover, and on a right-click with 复制路径, 「在文件夹中显示」.
  *
  * A png / jpg / jpeg / gif / webp draws as the user's own image
  * attachment does: a 96px thumbnail through the asset protocol, opening
@@ -128,12 +136,14 @@ export function FileCards({ paths }: { paths: readonly string[] }) {
 
   return (
     <>
-      <div data-role="file-cards" className="mt-3 flex flex-col gap-2">
+      <div data-role="file-cards" className="flex flex-col">
         {runs.map((run) =>
           run.kind === "images" ? (
+            // A band of its own in the frame, its left on the icon
+            // column (8px in), 4px above and below.
             <div
               key={`images:${run.paths[0]}`}
-              className="flex flex-wrap gap-2"
+              className="flex flex-wrap gap-2 px-2 py-1"
             >
               {run.paths.map((path) => (
                 <ThumbnailCard
@@ -218,30 +228,32 @@ function FileCard({
           }
           onClick={(event) => onOpen(event.currentTarget)}
           className={cn(
-            "flex min-h-10 w-full select-none items-center gap-2.5 rounded-md border border-line bg-app py-1.5 pl-4 pr-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
+            REPLY_CARD_LINE,
+            "group/file-line w-full select-none text-left outline-none",
             // The hover lives on the card, so the 在文件夹中显示 button
-            // over its right end keeps it; the press is the session
+            // beside its right end keeps it; the press is the session
             // row's 1px, no shadow (the conversation is paper).
             !missing &&
               cn(
-                "group-hover/file-card:bg-hover",
+                "group-hover/file-card:bg-hover focus-visible:bg-hover",
                 "transition-none active:transition-transform active:duration-(--motion-press) active:ease-firm active:translate-y-px",
-                // Room for that button, as a sidebar row's text gives
-                // way to its ⋯.
-                "group-focus-within/file-card:pr-11 group-hover/file-card:pr-11",
               ),
           )}
         >
-          <span className="flex h-5 w-4 shrink-0 items-center justify-center text-ink-muted">
+          <span className={cn(REPLY_CARD_ICON, "text-ink-muted")}>
             <Glyph size={14} weight="thin" aria-hidden />
           </span>
-          <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="flex min-w-0 items-center gap-2">
             <FileNameText
               name={name}
-              className={missing ? "text-ink-muted" : "text-ink"}
+              className={
+                missing
+                  ? "text-ink-muted"
+                  : "text-ink-soft group-hover/file-card:text-ink group-focus-visible/file-line:text-ink"
+              }
             />
             {missing && (
-              <span className="shrink-0 text-[12px] text-ink-muted">
+              <span className="shrink-0 text-ink-muted">
                 {copy.localFiles.cardMissing}
               </span>
             )}
@@ -249,12 +261,18 @@ function FileCard({
           {folder && (
             <FolderPathText
               path={folder}
-              className="max-w-[45%] shrink-0 text-[12px] text-ink-muted"
+              className="ml-2 max-w-[16em] shrink-0 text-ink-muted"
             />
           )}
         </button>
         {!missing && (
-          <div className="absolute inset-y-0 right-1.5 flex items-center opacity-0 group-focus-within/file-card:opacity-100 group-hover/file-card:opacity-100">
+          // Outside the frame's right edge (9px past the line: the
+          // frame's 4px and border, then 4px), the frame not widened for
+          // it; it starts at the line's edge, still inside
+          // `group/file-card`, so the hover holds on the way, and takes
+          // the pointer only while the line is hovered or focused, so the
+          // empty space beside the frame does not light it.
+          <div className="pointer-events-none absolute inset-y-0 left-full flex items-center pl-[9px] opacity-0 group-focus-within/file-card:pointer-events-auto group-focus-within/file-card:opacity-100 group-hover/file-card:pointer-events-auto group-hover/file-card:opacity-100">
             <IconButton
               ariaLabel={copy.localFiles.locate}
               onClick={() => void fileOperation(path, "reveal", copy)}
@@ -281,7 +299,7 @@ function FileNameText({
   return (
     <span
       data-role="file-name"
-      className={cn("flex min-w-0 text-[13px] leading-5", className)}
+      className={cn("flex min-w-0 leading-5", className)}
       onPointerEnter={(event) => {
         const cut = event.currentTarget.firstElementChild;
         if (cut instanceof HTMLElement) syncTruncatedTitle(cut, name);

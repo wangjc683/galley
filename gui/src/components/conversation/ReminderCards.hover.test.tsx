@@ -90,12 +90,12 @@ function wordsIn(tag: "span" | "button"): HTMLElement | undefined {
 }
 
 /** The element holding the words, made to measure as cut (jsdom lays
- * nothing out), then hovered. */
-function hoverCut(el: HTMLElement): void {
+ * nothing out), then `hovered` (the element itself unless given). */
+function hoverCut(el: HTMLElement, hovered: HTMLElement = el): void {
   Object.defineProperty(el, "scrollWidth", { configurable: true, value: 600 });
   Object.defineProperty(el, "clientWidth", { configurable: true, value: 200 });
   act(() => {
-    el.dispatchEvent(
+    hovered.dispatchEvent(
       new MouseEvent("pointerover", { bubbles: true, relatedTarget: null }),
     );
   });
@@ -118,7 +118,10 @@ describe("a reminder card's cut words, hovered", () => {
     mount();
     const button = wordsIn("button");
     expect(button).toBeDefined();
-    hoverCut(button as HTMLElement);
+    // The button reaches over the whole line (ReplyCards): its words are
+    // a span of their own, which is what cuts them and what is measured;
+    // the hover's title goes on the button, over the line.
+    hoverCut(button!.firstElementChild as HTMLElement, button);
     expect(button?.getAttribute("title")).toBe(FIRST);
   });
 });

@@ -277,11 +277,13 @@ describe("a reminder card's words (ticket 101, ruling 147 point 5)", () => {
     const cards = container.querySelectorAll('[data-role="reminder-card"]');
     const first = cards[0].querySelector("span.min-w-0 > button");
     expect(first?.textContent).toBe("提醒 sched_a");
-    // The to-do card's title button: hover underline at 60%, the ring.
+    // Reaching over its line (ruling 182): the line lights instead of
+    // an underline or a ring; ink-soft, ink on hover or focus.
+    expect(first?.className).toContain("-ml-[30px] -mr-[100vw]");
+    expect(first?.className).not.toContain("hover:underline");
     expect(first?.className).toContain(
-      "hover:underline hover:decoration-ink-muted/60 focus-visible:ring-2",
+      "text-ink-soft group-hover/line:text-ink focus-visible:text-ink",
     );
-    expect(first?.className).toContain("text-ink");
     expect(first?.className).not.toContain("line-through");
     for (const card of [cards[1], cards[2]]) {
       expect(card.querySelector("span.min-w-0 > button")).toBeNull();

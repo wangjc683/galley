@@ -876,27 +876,41 @@ describe("the card under the reply", () => {
     );
   }
 
-  it("its title is the panel's title button while the panel lists it (ticket 87)", () => {
+  it("its title is a button while the panel lists it (ticket 87), opening from anywhere on its line (ruling 182)", () => {
     store.todo = FULL;
     const html = cards([REMINDED, { ...REMINDED, id: "todo_gone" }]);
     const listed = html.match(
       /<div data-role="todo-card" data-todo-id="todo_report"[^]*?<\/button>/,
     )![0];
-    // Underlined on hover, a ring on keyboard focus, cut with the full
-    // text on hover — the panel's title button.
+    // Reaching over its line (ReplyCards), cut with the full text on
+    // hover; the line lights instead of an underline or a ring.
     expect(listed).toMatch(
-      /<button type="button" class="block max-w-full truncate rounded-sm text-left outline-none underline-offset-2 hover:underline hover:decoration-ink-muted\/60 focus-visible:ring-2 focus-visible:ring-brand\/30 [^"]*">交季度报告<\/button>/,
+      /<button type="button" class="-ml-\[30px\] -mr-\[100vw\] min-w-0 pl-\[30px\] pr-\[100vw\] text-left outline-none [^"]*"><span class="block truncate">交季度报告<\/span><\/button>/,
     );
+    expect(listed).not.toContain("hover:underline");
+    expect(listed).toContain("group/line overflow-hidden hover:bg-hover");
+    // The box ticks: lifted over the title's reach.
+    expect(listed).toContain("[&amp;&gt;label]:relative [&amp;&gt;label]:z-10");
     // Not in the panel (cancelled, or done long ago): words.
     const gone = html.slice(html.indexOf('data-todo-id="todo_gone"'));
-    expect(gone).not.toContain('<button type="button" class="block');
+    expect(gone).not.toContain('<button type="button" class="-ml-[30px]');
+    expect(gone).not.toContain("group/line");
     expect(gone).toContain(">交季度报告</span>");
   });
 
   it("is a box, the title, when it is due and its reminder", () => {
     const html = cards([OVERDUE, REMINDED]);
     expect(count(html, 'data-role="todo-card"')).toBe(2);
-    expect(html).toContain('class="rounded-md border border-line bg-app"');
+    // A 24px line in the reply's frame (ruling 182), no frame of its own;
+    // when it is due 8px after the title, at most 16em, letting a click
+    // through (the bell keeps its tooltip).
+    expect(html).toContain('data-todo-checked="false" class="rounded-sm"');
+    expect(html).toContain("flex h-6 min-w-0 items-center rounded-sm px-2");
+    expect(html).not.toContain("border-line bg-app");
+    expect(html).toContain(
+      'data-role="todo-meta" class="pointer-events-none ml-2 max-w-[16em] shrink-0',
+    );
+    expect(count(html, "data-card-icon")).toBe(2);
     expect(html).toContain(">交季度报告<");
     expect(html).toMatch(/text-warning[^>]*>逾期 2 天</);
     expect(html).toContain("提醒 ");
@@ -954,7 +968,9 @@ describe("the card under the reply", () => {
     expect(html).toContain('data-todo-state="open"');
     expect(html).toContain('data-todo-checked="false"');
     expect(html).not.toContain('disabled=""');
-    expect(html).toMatch(/text-ink"[^>]*>交季度报告</);
+    expect(html).toMatch(
+      /text-ink-soft group-hover\/line:text-ink[^"]*"[^>]*>交季度报告</,
+    );
     expect(html).not.toContain("line-through");
   });
 
@@ -1031,8 +1047,16 @@ describe("the card under the reply", () => {
   });
 
   it("strikes a done title and a deleted one alike, full ink-muted: a title button's 60% is for its hover underline only (ticket 99, ruling 144 point 1)", () => {
+    // The element whose class carries the title's look: on a card the
+    // button, its words in a span of their own (ReplyCards' reach).
     const classes = (html: string, text: string) =>
-      html.match(new RegExp(`class="([^"]*)">${text}<`))![1].split(" ");
+      html
+        .match(
+          new RegExp(
+            `class="([^"]*)">(?:<span class="block truncate">)?${text}<`,
+          ),
+        )![1]
+        .split(" ");
     // Done today: the panel lists it, so its title is a button, on the
     // card and under 已完成; deleted, the card's title is words.
     store.todo = FULL;
@@ -1048,10 +1072,11 @@ describe("the card under the reply", () => {
       // No decoration colour of its own: the strike takes the text's.
       expect(title.filter((c) => c.startsWith("decoration-"))).toEqual([]);
     }
-    for (const button of [done, panelDone]) {
-      expect(button).toContain("hover:underline");
-      expect(button).toContain("hover:decoration-ink-muted/60");
-    }
+    // The panel's title is underlined on hover; the card's line lights
+    // instead (ruling 182).
+    expect(panelDone).toContain("hover:underline");
+    expect(panelDone).toContain("hover:decoration-ink-muted/60");
+    expect(done).not.toContain("hover:underline");
   });
 
   // Ticket 88: deleted from the panel, its undo toast still up.
@@ -1061,7 +1086,9 @@ describe("the card under the reply", () => {
       yours: { ...EMPTY_TODO.yours, later: [REMINDED] },
     };
     const listedHtml = cards([REMINDED]);
-    expect(listedHtml).toMatch(/<button[^>]*>交季度报告<\/button>/);
+    expect(listedHtml).toMatch(
+      /<button[^>]*><span[^>]*>交季度报告<\/span><\/button>/,
+    );
     store.deleting = { todo_report: { order: 1, committing: false } };
     const html = cards([REMINDED]);
     expect(html).toContain('data-todo-state="cancelled"');
@@ -1071,7 +1098,9 @@ describe("the card under the reply", () => {
     expect(html).not.toContain("提醒");
     // Not a way into the panel: the panel no longer draws it. Struck
     // already, as one deleted is (ticket 99).
-    expect(html).not.toMatch(/<button[^>]*>交季度报告<\/button>/);
+    expect(html).not.toMatch(
+      /<button[^>]*><span[^>]*>交季度报告<\/span><\/button>/,
+    );
     expect(html).toMatch(/text-ink-muted line-through"[^>]*>交季度报告</);
     // A tick on its way does not tick it either.
     store.flips = { todo_report: { done: true, phase: "settling" } };

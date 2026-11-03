@@ -7,9 +7,13 @@ import { useEffect, useState, type KeyboardEvent } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { AskUserBubble } from "@/components/conversation/AskUserBubble";
+import {
+  REPLY_CARD_ICON,
+  REPLY_CARD_LINE,
+  REPLY_CARD_LINE_OPENS,
+  ReplyCardTitle,
+} from "@/components/conversation/ReplyCards";
 import { IconButton } from "@/components/ui/button";
-// TEMP variant switcher (main chat 131): the demo states.
-import { useReplyCardsDemoState } from "@/dev/reply-cards-trial";
 import { useCopy } from "@/lib/i18n";
 import { isImeCompositionKeydown } from "@/lib/ime";
 import { StatusIcon } from "@/lib/status-icon";
@@ -38,24 +42,25 @@ import type { Turn } from "@/types/conversation";
  *
  * A card is a one-line receipt of what the reply sent off (main chat
  * PRD ruling 179, ticket 130; spec: docs/design/conversation.md
- * 「子任务卡片」), of the to-do card's family (TodoCards): a hairline
- * `border-line`, `rounded-md`, the page ground, one line of at least
- * 40px — a still status icon, the title, and a short word at the right
- * end only for what needs you or did not get done. No state bar, no
- * tinted ground, no step or result line: the sidebar row says who runs
- * and who waits for you (ticket 128), Galley says how it went, the card
- * says what this reply sent and opens it. The title is the way in, as
- * a to-do card's: as wide as its words, underlined on hover, a ring on
- * keyboard focus; it opens the subtask in the main area. The state
- * comes from `deriveSubtaskCard` over the same stores the sidebar row
- * reads; the word from `subtaskCardWord`:
+ * 「子任务卡片」), a 24px line in the reply's frame (ReplyCards, ruling
+ * 182: 「回复下的卡片（一框列表）」) — a still status icon, the title, and
+ * 8px after it a short word only for what needs you or did not get
+ * done. No state bar, no tinted ground, no step or result line: the
+ * sidebar row says who runs and who waits for you (ticket 128), Galley
+ * says how it went, the card says what this reply sent and opens it. The
+ * title's button opens the subtask in the main area from anywhere on the
+ * line (`REPLY_CARD_TITLE_REACH`): the line lights on hover and keyboard
+ * focus; a word with a reason keeps its own hover, a word without one
+ * lets the click through. The state comes from `deriveSubtaskCard` over
+ * the same stores the sidebar row reads; the word from `subtaskCardWord`:
  *
  *   running      a still dashed ring, muted (the sidebar row spins)
  *   asking       the amber pause, 「等你回复」: the assistant takes the
  *                question to the main chat and the user answers there
  *                (ruling 101); only when Core could not wake it for this
  *                question is it drawn and answered right here, under
- *                the line, the card on a faint amber ground
+ *                the line, on a faint amber ground (the frame then goes
+ *                to the bubble's cap)
  *   done         the muted check, no word
  *   failed       the red cross, 「出错」 (the reason on hover), or
  *                「没有跑完」 in muted ink for a run cut short
@@ -65,31 +70,17 @@ import type { Turn } from "@/types/conversation";
  */
 export function SubtaskCards({
   dispatches,
-  afterFiles = false,
 }: {
   dispatches: readonly SubtaskDispatch[];
-  /** Under the reply's file cards (ticket 74): their 8px gap instead of
-   * the 12px off the bubble. */
-  afterFiles?: boolean;
 }) {
   return (
-    <div
-      data-role="subtask-cards"
-      className={cn(afterFiles ? "mt-2" : "mt-3", "flex flex-col gap-2")}
-    >
+    <div data-role="subtask-cards" className="flex flex-col">
       {dispatches.map((d) => (
         <SubtaskCard key={`${d.turnIndex}:${d.ordinal}`} dispatch={d} />
       ))}
     </div>
   );
 }
-
-// TEMP variant switcher (main chat 131): in a dev build a card may draw
-// a demo state instead of its own (the pill's 状态,
-// src/dev/reply-cards-trial.tsx); a production build draws its own.
-const useShownState = import.meta.env.DEV
-  ? useReplyCardsDemoState
-  : (state: SubtaskCardState, _ordinal: number) => state;
 
 /** Sessions whose history a card already asked to read, this page
  * lifetime: a read that brings nothing back must not loop. */
@@ -131,19 +122,18 @@ function SubtaskCard({ dispatch }: { dispatch: SubtaskDispatch }) {
   const askInCard = useSubtasksStore((s) =>
     sid && sid in s.askInCard ? s.askInCard[sid] : undefined,
   );
-  const derived = deriveSubtaskCard(dispatch, session, {
+  const state = deriveSubtaskCard(dispatch, session, {
     ...live,
     ...runtime,
     runError,
     askInCard,
   });
-  const state = useShownState(derived, dispatch.ordinal);
 
   // A subtask from before this page (a restart, a reload) has history
   // the page has not read: read its latest page once, so the card can
   // tell done from asking from stopped short.
   const needsRestore =
-    derived.kind === "loading" && !live.restoring && sid !== null;
+    state.kind === "loading" && !live.restoring && sid !== null;
   useEffect(() => {
     if (!needsRestore || !sid || restoreRequested.has(sid)) return;
     restoreRequested.add(sid);
@@ -170,33 +160,26 @@ function SubtaskCard({ dispatch }: { dispatch: SubtaskDispatch }) {
       data-session-id={sid ?? undefined}
       aria-label={[copy.subtask.label, title, said].filter(Boolean).join(" · ")}
       className={cn(
-        "rounded-md border border-line",
+        "rounded-sm",
         // Answered here, the card is the place to act: the faint amber of
         // a question, no bar, under the conversation's bubbles.
-        answering ? "bg-warning/[var(--opacity-subtle)]" : "bg-app",
+        answering && "bg-warning/[var(--opacity-subtle)]",
       )}
     >
-      <div className="flex min-h-10 items-center gap-2.5 py-1.5 pl-4 pr-3">
-        <span className="flex h-5 w-4 shrink-0 items-center justify-center">
+      <div
+        className={cn(REPLY_CARD_LINE, canOpen && sid && REPLY_CARD_LINE_OPENS)}
+      >
+        <span className={REPLY_CARD_ICON}>
           <CardIcon state={state} />
         </span>
         {canOpen && sid ? (
-          // The to-do card's title button: as wide as its words,
-          // underlined on hover, a ring on keyboard focus.
-          <span className="min-w-0 flex-1 text-[13px] leading-5">
-            <button
-              type="button"
-              data-role="subtask-card-title"
-              onClick={() => openSubtask(sid)}
-              onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, title)}
-              className={cn(
-                "block max-w-full truncate rounded-sm text-left text-ink outline-none",
-                "underline-offset-2 hover:underline hover:decoration-ink-muted/60 focus-visible:ring-2 focus-visible:ring-brand/30",
-              )}
-            >
-              {title}
-            </button>
-          </span>
+          // Opens from anywhere on the line (ReplyCards).
+          <ReplyCardTitle
+            role="subtask-card-title"
+            text={title}
+            onClick={() => openSubtask(sid)}
+            className="text-ink-soft group-hover/line:text-ink focus-visible:text-ink"
+          />
         ) : (
           <span
             data-role="subtask-card-title"
@@ -207,7 +190,7 @@ function SubtaskCard({ dispatch }: { dispatch: SubtaskDispatch }) {
                 ? undefined
                 : (e) => syncTruncatedTitle(e.currentTarget, title)
             }
-            className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink"
+            className="min-w-0 truncate leading-5 text-ink-soft"
           >
             {title}
           </span>
@@ -219,16 +202,18 @@ function SubtaskCard({ dispatch }: { dispatch: SubtaskDispatch }) {
   );
 }
 
-/** The word at the right end: 12px, in its state's colour, the reason in
+/** The word 8px after the title, in its state's colour, the reason in
  * full on hover (a native tooltip; the card's name carries it for a
- * screen reader). */
+ * screen reader). Without a reason it lets a click through to the
+ * title's button (its line opens from anywhere on it). */
 function CardWord({ word }: { word: SubtaskCardWord }) {
   return (
     <span
       data-role="subtask-card-word"
       title={word.reason}
       className={cn(
-        "shrink-0 select-none text-[12px] leading-5",
+        "ml-2 shrink-0 select-none leading-5",
+        !word.reason && "pointer-events-none",
         WORD_TONES[word.tone],
       )}
     >
@@ -268,9 +253,9 @@ function SubtaskAnswer({
       onPickCandidate={send}
       onFillCandidate={setReply}
       // The card carries the faint amber; the bubble sits in it bare,
-      // under the card's line, on the title's 42px edge (pl-4 + the
-      // 16px icon column + gap-2.5).
-      className="my-0 rounded-none border-l-0 bg-transparent pb-3 pl-[42px] pr-3 pt-0"
+      // under the card's line, on the title's 30px edge (px-2 + the
+      // 16px icon column + 6px).
+      className="my-0 rounded-none border-l-0 bg-transparent pb-3 pl-[30px] pr-3 pt-0"
     >
       <div className="mt-2.5 flex items-center gap-1.5">
         <input

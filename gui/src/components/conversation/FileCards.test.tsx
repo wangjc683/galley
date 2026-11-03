@@ -37,21 +37,24 @@ function render(paths: string[], language: "zh-CN" | "en-US" = "zh-CN") {
 const count = (html: string, needle: string) => html.split(needle).length - 1;
 
 describe("FileCards", () => {
-  it("draws one card per file, in marker order, 12px under the bubble", () => {
+  it("draws one line per file, in marker order, in the reply's frame", () => {
     const html = render([
       "/Users/jc/Documents/计划/五一出行计划.html",
       "/Users/jc/Documents/报告/q3.pdf",
       "/Users/jc/notes.md",
     ]);
-    expect(html).toContain(
-      'data-role="file-cards" class="mt-3 flex flex-col gap-2"',
-    );
+    // No margin, no gap: lines one after another in ReplyCards' frame.
+    expect(html).toContain('data-role="file-cards" class="flex flex-col"');
     expect(count(html, 'data-role="file-card"')).toBe(3);
     const order = ["五一出行计划", "q3", "notes"].map((n) => html.indexOf(n));
     expect(order).toEqual([...order].sort((a, b) => a - b));
-    // The reminder card's frame, one 40px line, no state bar.
-    expect(html).toContain("min-h-10");
-    expect(html).toContain("rounded-md border border-line bg-app");
+    // A 24px line at the step size (ruling 182), no frame of its own, no
+    // state bar.
+    expect(html).toContain(
+      "flex h-6 min-w-0 items-center rounded-sm px-2 [font-size:var(--conversation-step-size)]",
+    );
+    expect(html).not.toContain("min-h-10");
+    expect(html).not.toContain("border-line bg-app");
     expect(html).not.toContain("w-[3px]");
   });
 
@@ -64,9 +67,33 @@ describe("FileCards", () => {
     expect(html).toContain('title="/Users/jc/Documents/报告"');
     expect(html).not.toContain(path);
     expect(html).toContain('aria-label="2026年第三季度经营分析报告.pdf"');
-    // A glyph for the kind, and 在文件夹中显示 over the right end on hover.
+    // A glyph for the kind, and 在文件夹中显示 beside the right end on
+    // hover: outside the frame (9px past the line), the line not making
+    // room for it.
     expect(html).toContain('aria-label="在文件夹中显示"');
     expect(html).toContain("group-hover/file-card:opacity-100");
+    expect(html).toContain("absolute inset-y-0 left-full");
+    expect(html).toContain("pl-[9px]");
+    // The line no longer makes room for it on hover.
+    expect(html).not.toMatch(/group-hover\/file-card:pr-/);
+  });
+
+  // The folder 8px after the name, ink-muted, capped by a length: the
+  // frame sizes itself to its widest line, and a percentage is not known
+  // then, so a long folder set the frame's width (ticket 132b).
+  it("caps the folder at 16em, never a share of the line", () => {
+    const html = render([
+      "/Users/jc/Library/Application Support/app.galley/managed/state/temp/模板.md",
+    ]);
+    expect(html).toContain("ml-2 max-w-[16em] shrink-0 text-ink-muted");
+    expect(html).not.toMatch(/max-w-\[\d+%\]/);
+    // The name ink-soft, to ink on hover or focus; the line lights.
+    expect(html).toContain(
+      "text-ink-soft group-hover/file-card:text-ink group-focus-visible/file-line:text-ink",
+    );
+    expect(html).toContain(
+      "group-hover/file-card:bg-hover focus-visible:bg-hover",
+    );
   });
 
   it("draws an image as the attachment thumbnail, side by side with the next", () => {
@@ -83,8 +110,10 @@ describe("FileCards", () => {
       `src="asset://localhost/${encodeURIComponent("/Users/jc/Pictures/banner.png")}"`,
     );
     expect(html).toContain('aria-label="预览图片 · banner.png"');
-    // The two thumbnails share a wrapping row; the page is a line.
-    expect(html).toContain('<div class="flex flex-wrap gap-2">');
+    // The two thumbnails share a wrapping row, a band of its own in the
+    // frame (4px above and below, its left on the icon column); the page
+    // is a line.
+    expect(html).toContain('<div class="flex flex-wrap gap-2 px-2 py-1">');
     expect(count(html, 'data-file-state="present"')).toBe(3);
   });
 

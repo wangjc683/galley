@@ -1,5 +1,11 @@
 import { Notepad } from "@phosphor-icons/react";
 
+import {
+  REPLY_CARD_ICON,
+  REPLY_CARD_LINE,
+  REPLY_CARD_LINE_OPENS,
+  ReplyCardTitle,
+} from "@/components/conversation/ReplyCards";
 import { useCopy } from "@/lib/i18n";
 import { memoCardParts, memoCardState, type MemoEventItem } from "@/lib/memo";
 import { showMemoRow } from "@/lib/todo-open";
@@ -16,20 +22,20 @@ import { useMemoStore } from "@/stores/memo";
  * change, 「不再记 · …」 when it deleted one — the words as they were at
  * that write.
  *
- * The to-do card's form (docs/design/conversation.md 「备忘卡片」):
- * hairline `border-line`, `rounded-md`, the page ground, one line of at
- * least 40px, a 16px glyph in the 16px column a to-do card's box takes
- * (`Notepad`, thin, `ink-muted`), the line cut, the hover giving it in
- * full. After the reply's to-do cards — what asks something of you
+ * A 24px line in the reply's frame (ReplyCards, ruling 182; spec:
+ * docs/design/conversation.md 「回复下的卡片（一框列表）」 and 「备忘卡片」):
+ * a 16px glyph in the 16px column a to-do card's box takes (`Notepad`,
+ * thin, `ink-muted`), the line cut, the hover giving it in full. Last in
+ * the frame, after the reply's to-do cards — what asks something of you
  * first — and after its reminder cards too: the cards go in the panel's
- * page order, 待办's then 备忘's. 8px under any cards above, 12px off
- * the bubble.
+ * page order, 待办's then 备忘's.
  *
  * The words open the panel on its 备忘 page at the memo's row, lit up
- * (lib/todo-open.ts `showMemoRow`, a to-do card's title's way), while
- * the page lists it; a memo deleted since, past its last day, deleted
- * here and waiting for its undo, or a 「不再记」 card: words, not a
- * button. No delete or undo on a card.
+ * (lib/todo-open.ts `showMemoRow`, a to-do card's title's way), from
+ * anywhere on the line (`REPLY_CARD_TITLE_REACH`), while the page lists
+ * it; a memo deleted since, past its last day, deleted here and waiting
+ * for its undo, or a 「不再记」 card: words, not a button, and the line
+ * does not light. No delete or undo on a card.
  *
  * What is gone is struck (main chat ticket 99, PRD ruling 144 point 2,
  * `memoCardState`): the words only, never the prefix, in `ink-muted`.
@@ -38,20 +44,9 @@ import { useMemoStore } from "@/stores/memo";
  * 「不再记」 card says nothing more, its prefix has. One past its last
  * day is muted and not struck — it held until then — with 「已过期」.
  */
-export function MemoCards({
-  events,
-  afterCards = false,
-}: {
-  events: readonly MemoEventItem[];
-  /** Under the reply's other cards: their 8px gap instead of the 12px
-   * off the bubble. */
-  afterCards?: boolean;
-}) {
+export function MemoCards({ events }: { events: readonly MemoEventItem[] }) {
   return (
-    <div
-      data-role="memo-cards"
-      className={cn("flex flex-col gap-2", afterCards ? "mt-2" : "mt-3")}
-    >
+    <div data-role="memo-cards" className="flex flex-col">
       {events.map((event) => (
         <MemoCard key={event.id} event={event} />
       ))}
@@ -64,6 +59,7 @@ function MemoCard({ event }: { event: MemoEventItem }) {
   const state = useMemoStore((s) => memoCardState(event, s.memos, s.deleting));
   const { prefix, text } = memoCardParts(event, copy);
   const full = `${prefix} · ${text}`;
+  const listed = state === "listed";
   // Only the words are struck, never the prefix (ruling 144 point 2).
   const struck = state === "deleted" || state === "dropped";
   const side =
@@ -85,46 +81,39 @@ function MemoCard({ event }: { event: MemoEventItem }) {
       data-memo-action={event.action}
       data-memo-state={state}
       data-memo-event={event.id}
-      className="rounded-md border border-line bg-app"
+      className="rounded-sm"
     >
-      <div className="flex min-h-10 items-center gap-2.5 py-1.5 pl-4 pr-3">
+      <div className={cn(REPLY_CARD_LINE, listed && REPLY_CARD_LINE_OPENS)}>
         {/* data-card-icon: what flies into the top bar's 待办 button
             (ticket 102, lib/todo-flight-run.ts). */}
         <span
           data-card-icon=""
-          className="flex h-5 w-4 shrink-0 items-center justify-center text-ink-muted"
+          className={cn(REPLY_CARD_ICON, "text-ink-muted")}
         >
           <Notepad size={16} weight="thin" aria-hidden />
         </span>
-        {state === "listed" ? (
-          // The to-do card's title button: as wide as its words,
-          // underlined on hover, a ring on keyboard focus.
-          <span className="min-w-0 flex-1 text-[13px] leading-5 text-ink">
-            <button
-              type="button"
-              onClick={() => showMemoRow(event.memoId, event.sessionId)}
-              onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, full)}
-              className={cn(
-                "block max-w-full truncate rounded-sm text-left outline-none",
-                "underline-offset-2 hover:underline hover:decoration-ink-muted/60 focus-visible:ring-2 focus-visible:ring-brand/30",
-              )}
-            >
-              {line}
-            </button>
-          </span>
+        {listed ? (
+          // Opens from anywhere on the line (ReplyCards).
+          <ReplyCardTitle
+            text={full}
+            onClick={() => showMemoRow(event.memoId, event.sessionId)}
+            className="text-ink-soft group-hover/line:text-ink focus-visible:text-ink"
+          >
+            {line}
+          </ReplyCardTitle>
         ) : (
           <span
-            className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-muted"
+            className="min-w-0 truncate leading-5 text-ink-muted"
             onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, full)}
           >
             {line}
           </span>
         )}
         {side && (
-          // The to-do card's right-hand cell, where its 「已删除」 is.
+          // 8px after the words, where a to-do card's 「已删除」 is.
           <span
             data-role="memo-card-state"
-            className="shrink-0 select-none text-[12px] tabular-nums text-ink-muted"
+            className="pointer-events-none ml-2 shrink-0 select-none tabular-nums text-ink-muted"
           >
             {side}
           </span>

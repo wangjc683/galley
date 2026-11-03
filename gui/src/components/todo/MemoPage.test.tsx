@@ -311,18 +311,17 @@ function event(id: number, extra: Partial<MemoEventItem> = {}): MemoEventItem {
 
 function renderCards(
   events: MemoEventItem[],
-  afterCards = false,
   language: ResolvedLanguage = "zh-CN",
 ): string {
   return renderToStaticMarkup(
     <CopyProvider language={language}>
-      <MemoCards events={events} afterCards={afterCards} />
+      <MemoCards events={events} />
     </CopyProvider>,
   );
 }
 
 describe("the memo cards under a reply", () => {
-  it("say what each write did, a card each, in the to-do card's form", () => {
+  it("say what each write did, a line each, in the reply's frame", () => {
     store.memos = [CILANTRO];
     const html = renderCards([
       event(1),
@@ -334,20 +333,28 @@ describe("the memo cards under a reply", () => {
     expect(text).toContain("记下了 · 你不吃香菜");
     expect(text).toContain("改为 · 你不吃香菜和葱");
     expect(text).toContain("不再记 · 这周在上海出差");
-    expect(html).toContain('class="rounded-md border border-line bg-app"');
-    expect(html).toContain("flex min-h-10 items-center");
+    // A 24px line (ruling 182), no frame of its own.
+    expect(html).toContain('data-memo-event="1" class="rounded-sm"');
+    expect(html).toContain("flex h-6 min-w-0 items-center rounded-sm px-2");
+    expect(html).not.toContain("border-line");
+    // data-card-icon: what flies into the top bar's 待办 button.
+    expect(count(html, "data-card-icon")).toBe(3);
     // A 16px glyph in the box's 16px column.
     expect(html).toContain('width="16"');
-    expect(
-      renderCards([event(1)], false, "en-US").replace(/<[^>]+>/g, ""),
-    ).toContain("Noted · 你不吃香菜");
+    expect(renderCards([event(1)], "en-US").replace(/<[^>]+>/g, "")).toContain(
+      "Noted · 你不吃香菜",
+    );
   });
 
   it("open the panel from their words only while the page lists the memo, never for 「不再记」", () => {
     store.memos = [CILANTRO];
     const listed = renderCards([event(1)]);
     expect(count(listed, "<button")).toBe(1);
-    expect(listed).toContain("hover:underline");
+    // From anywhere on the line: it lights, the words' button reaches
+    // over it; no underline.
+    expect(listed).toContain("group/line overflow-hidden hover:bg-hover");
+    expect(listed).toContain("-ml-[30px] -mr-[100vw]");
+    expect(listed).not.toContain("hover:underline");
     // Deleted since, or past its last day: words.
     store.memos = [];
     expect(renderCards([event(1, { memoExists: false })])).not.toContain(
@@ -366,15 +373,17 @@ describe("the memo cards under a reply", () => {
 
   // Ticket 99, PRD ruling 144 point 2.
   describe("strike what is gone, the words only", () => {
+    // 8px after the words, letting a click through.
     const STATE_CELL =
-      'data-role="memo-card-state" class="shrink-0 select-none text-[12px] tabular-nums text-ink-muted"';
-    const MUTED_LINE = "truncate text-[13px] leading-5 text-ink-muted";
+      'data-role="memo-card-state" class="pointer-events-none ml-2 shrink-0 select-none tabular-nums text-ink-muted"';
+    const MUTED_LINE = "min-w-0 truncate leading-5 text-ink-muted";
 
     it("still there: the words as they are, a button, nothing on the right", () => {
       store.memos = [CILANTRO];
       const html = renderCards([event(1)]);
       expect(html).toContain('data-memo-state="listed"');
-      expect(html).toContain('leading-5 text-ink"><button');
+      expect(html).toContain('<span class="flex min-w-0 leading-5"><button');
+      expect(html).toContain("text-ink-soft group-hover/line:text-ink");
       expect(html).toContain("<span>你不吃香菜</span>");
       expect(html).not.toContain("line-through");
       expect(html).not.toContain('data-role="memo-card-state"');
@@ -406,9 +415,9 @@ describe("the memo cards under a reply", () => {
         '<span class="line-through">你不吃香菜和葱</span>',
       );
       expect(changed).toContain(`${STATE_CELL}>已删除</span>`);
-      expect(
-        renderCards([event(1, { memoExists: false })], false, "en-US"),
-      ).toContain(">Deleted</span>");
+      expect(renderCards([event(1, { memoExists: false })], "en-US")).toContain(
+        ">Deleted</span>",
+      );
     });
 
     it("deleted on the page, its undo toast up: already so", () => {
@@ -451,18 +460,13 @@ describe("the memo cards under a reply", () => {
       expect(html).toContain("<span>你不吃香菜</span>");
       expect(html).toContain(`${STATE_CELL}>已过期</span>`);
       expect(html).not.toContain("<button");
-      expect(renderCards([event(1)], false, "en-US")).toContain(
-        ">Expired</span>",
-      );
+      expect(renderCards([event(1)], "en-US")).toContain(">Expired</span>");
     });
   });
 
-  it("sit 12px off the bubble, 8px under other cards", () => {
+  it("sit line after line, no gaps: the reply's frame holds them", () => {
     expect(renderCards([event(1)])).toContain(
-      'data-role="memo-cards" class="flex flex-col gap-2 mt-3"',
-    );
-    expect(renderCards([event(1)], true)).toContain(
-      'data-role="memo-cards" class="flex flex-col gap-2 mt-2"',
+      'data-role="memo-cards" class="flex flex-col"',
     );
   });
 });

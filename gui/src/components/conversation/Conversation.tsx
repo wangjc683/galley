@@ -612,15 +612,13 @@ export function Conversation({
     );
   };
 
-  // What hangs under a reply (the subtask cards). In the assistant's
-  // conversation they sit right under the reply bubble (before its
-  // action row), on the left, at most the bubble's width.
+  // What hangs under a reply (its frame of cards, ReplyCards). In the
+  // assistant's conversation it sits right under the reply bubble
+  // (before its action row), on the left, at most the bubble's width.
   const afterAnswer = (messageId: string) => {
     const node = renderAfterAnswer?.(messageId);
     return assistant && node ? (
-      <div data-role="reply-cards" className={ASSISTANT_BUBBLE_MAX}>
-        {node}
-      </div>
+      <div className={ASSISTANT_BUBBLE_MAX}>{node}</div>
     ) : (
       node
     );

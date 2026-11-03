@@ -1,6 +1,12 @@
 import { Alarm } from "@phosphor-icons/react";
 import { useState } from "react";
 
+import {
+  REPLY_CARD_ICON,
+  REPLY_CARD_LINE,
+  REPLY_CARD_LINE_OPENS,
+  ReplyCardTitle,
+} from "@/components/conversation/ReplyCards";
 import { Button } from "@/components/ui/button";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import {
@@ -26,22 +32,25 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
  * Galley holds. After the reply's subtask cards when it has both — the
  * work it handed off first, then what it will come back to.
  *
- * The form is the subtask card's (spec: docs/design/conversation.md
- * 「提醒卡片」): hairline `border-line`, `rounded-md`, the page ground,
- * no state bar — a reminder asks nothing of the user. One line: the
- * alarm glyph, the time (「明天 09:00」, or a rule, 「每天 08:00」), the
- * first line of the words it noted (one line, cut), the state (待提醒 /
- * 已提醒 / 已取消 / 已暂停) and 「取消」 while it may still go off. A
- * cancel needs no confirm (it touches this one thing) and is not told to
- * the assistant; the card stays, saying 已取消, its time and words struck
- * through (ticket 99). A cancel that fails says why on a line under it.
+ * A 24px line in the reply's frame (ReplyCards, ruling 182; spec:
+ * docs/design/conversation.md 「回复下的卡片（一框列表）」 and 「提醒卡片」),
+ * no state bar — a reminder asks nothing of the user: the alarm glyph,
+ * the first line of the words it noted (one line, cut, ink-soft), then
+ * 8px on in ink-muted the time (「明天 09:00」, or a rule, 「每天 08:00」)
+ * and the state (待提醒 / 已提醒 / 已取消 / 已暂停), and at the line's
+ * end 「取消」 while it may still go off (20px, `h-5`). A cancel needs no
+ * confirm (it touches this one thing) and is not told to the assistant;
+ * the card stays, saying 已取消, its time and words struck through
+ * (ticket 99). A cancel that fails says why on a line under it.
  *
  * Its words open the to-do panel at the task's row (main chat ticket
  * 101, PRD ruling 147 point 5), as a to-do card's title does
  * (lib/todo-open.ts `showTodoRow`): beside this conversation, the row
- * lit up, 已完成 unfolded for one that went off. Only while the panel
+ * lit up, 已完成 unfolded for one that went off — from anywhere on the
+ * line but 「取消」 (`REPLY_CARD_TITLE_REACH`). Only while the panel
  * lists it (`reminderListed`) — not cancelled, not gone off more than
- * seven days ago — otherwise words; the three cards alike.
+ * seven days ago — otherwise words, and the line does not light; the
+ * three cards alike.
  *
  * Only the first line of its words, everywhere the card shows them —
  * the line, its accessible name, the hover on a cut line (main chat
@@ -49,20 +58,9 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
  * follows the blank line is the assistant's notes to itself, for when
  * it comes due (lib/reminder-first-line.ts).
  */
-export function ReminderCards({
-  tasks,
-  afterSubtasks = false,
-}: {
-  tasks: readonly ScheduledTask[];
-  /** Under the reply's subtask cards: their 8px gap instead of the 12px
-   * off the bubble. */
-  afterSubtasks?: boolean;
-}) {
+export function ReminderCards({ tasks }: { tasks: readonly ScheduledTask[] }) {
   return (
-    <div
-      data-role="reminder-cards"
-      className={cn("flex flex-col gap-2", afterSubtasks ? "mt-2" : "mt-3")}
-    >
+    <div data-role="reminder-cards" className="flex flex-col">
       {tasks.map((task) => (
         <ReminderCard key={task.id} task={task} />
       ))}
@@ -86,6 +84,15 @@ function ReminderCard({ task }: { task: ScheduledTask }) {
   const listed = useAssistantTodoStore((s) => reminderListed(s.todo, task.id));
   const mainChatId = task.createdIn?.sessionId;
   const words = reminderFirstLine(task.prompt);
+  const opens = listed && Boolean(mainChatId);
+  // The words in ink-soft, ink while the line is hovered or they have
+  // focus; gone off or cancelled, muted (and struck when cancelled).
+  const wordsInk = cn(
+    settled
+      ? "text-ink-muted"
+      : "text-ink-soft group-hover/line:text-ink focus-visible:text-ink",
+    struck && "line-through",
+  );
 
   const cancel = () => {
     if (busy) return;
@@ -103,66 +110,62 @@ function ReminderCard({ task }: { task: ScheduledTask }) {
       data-reminder-state={state}
       data-reminder-id={task.id}
       aria-label={`${copy.todo.reminder} · ${words}`}
-      className="rounded-md border border-line bg-app"
+      className="rounded-sm"
     >
-      {/* min-h-10: the same height with 「取消」 or without it. */}
-      <div className="flex min-h-10 select-none items-center gap-2.5 py-1.5 pl-4 pr-2.5">
+      <div
+        className={cn(
+          REPLY_CARD_LINE,
+          "select-none",
+          opens && REPLY_CARD_LINE_OPENS,
+        )}
+      >
         {/* data-card-icon: what flies into the top bar's 待办 button
             (ticket 102, lib/todo-flight-run.ts). */}
         <span
           data-card-icon=""
-          className="flex h-5 w-4 shrink-0 items-center justify-center text-ink-muted"
+          className={cn(REPLY_CARD_ICON, "text-ink-muted")}
         >
           <Alarm size={14} weight="regular" aria-hidden />
         </span>
-        <span
-          className={cn(
-            "shrink-0 text-[12.5px] tabular-nums",
-            settled ? "text-ink-muted" : "text-ink-soft",
-            struck && "line-through",
-          )}
-        >
-          {time}
-        </span>
-        {listed && mainChatId ? (
-          // A to-do card's title button (ticket 101): as wide as its
-          // words, underlined on hover at 60%, a ring on keyboard focus;
-          // the colour and any strike take the words' own, as there.
-          <span className="min-w-0 flex-1 text-[13px] leading-5">
-            <button
-              type="button"
-              onClick={() => showTodoRow(task.id, mainChatId)}
-              onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, words)}
-              className={cn(
-                "block max-w-full truncate rounded-sm text-left outline-none",
-                "underline-offset-2 hover:underline hover:decoration-ink-muted/60 focus-visible:ring-2 focus-visible:ring-brand/30",
-                settled ? "text-ink-muted" : "text-ink",
-                struck && "line-through",
-              )}
-            >
-              {words}
-            </button>
-          </span>
+        {opens && mainChatId ? (
+          // Opens from anywhere on the line (ReplyCards); the colour and
+          // any strike take the words' own.
+          <ReplyCardTitle
+            text={words}
+            onClick={() => showTodoRow(task.id, mainChatId)}
+            className={wordsInk}
+          />
         ) : (
           <span
-            className={cn(
-              "min-w-0 flex-1 truncate text-[13px] leading-5",
-              settled ? "text-ink-muted" : "text-ink",
-              struck && "line-through",
-            )}
+            className={cn("min-w-0 truncate leading-5", wordsInk)}
             onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, words)}
           >
             {words}
           </span>
         )}
-        <span className="shrink-0 text-[12px] text-ink-muted">
+        {/* The time and the state let a click through to the words. */}
+        <span
+          className={cn(
+            "pointer-events-none ml-2 shrink-0 tabular-nums text-ink-muted",
+            struck && "line-through",
+          )}
+        >
+          {time}
+        </span>
+        <span
+          className={cn(
+            "pointer-events-none ml-2 shrink-0 text-ink-muted",
+            canCancel && "mr-2",
+          )}
+        >
           {reminderStateLabel(task, copy)}
         </span>
         {canCancel && (
+          // At the line's end, 20px: as tall with it as without.
           <Button
             variant="ghost"
             size="sm"
-            className="shrink-0"
+            className="ml-auto h-5 shrink-0 px-1.5 py-0 text-[length:var(--conversation-step-size)]"
             disabled={busy}
             onClick={cancel}
           >
@@ -173,7 +176,7 @@ function ReminderCard({ task }: { task: ScheduledTask }) {
       {error && (
         <div
           role="alert"
-          className="pb-2 pl-[42px] pr-3 text-[12px] leading-[1.45] text-error"
+          className="pb-2 pl-[30px] pr-3 text-[12px] leading-[1.45] text-error"
         >
           {error}
         </div>

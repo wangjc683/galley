@@ -33,6 +33,7 @@ import { FileCards } from "@/components/conversation/FileCards";
 import { FloatingDay } from "@/components/conversation/FloatingDay";
 import { MemoCards } from "@/components/conversation/MemoCards";
 import { ReminderCards } from "@/components/conversation/ReminderCards";
+import { ReplyCards } from "@/components/conversation/ReplyCards";
 import { SubtaskCards } from "@/components/conversation/SubtaskCards";
 import { TodoCards } from "@/components/conversation/TodoCards";
 import { ThinkingPreview } from "@/components/conversation/ThinkingPreview";
@@ -54,11 +55,7 @@ import { typingBubbleShown } from "@/lib/assistant-conversation";
 import { assistantDoing } from "@/lib/assistant-progress";
 import { filesByMessage } from "@/lib/file-cards";
 import { openMainChat } from "@/lib/main-chat";
-import {
-  endsInSilentReport,
-  subtaskQuestionLocked,
-  type SubtaskDispatch,
-} from "@/lib/subtasks";
+import { endsInSilentReport, subtaskQuestionLocked } from "@/lib/subtasks";
 import {
   composerRegisterCopyKey,
   resolveComposerRegister,
@@ -95,11 +92,6 @@ import type {
   Turn,
 } from "@/types/conversation";
 import type { ComposerHandle } from "@/components/conversation/composer-props";
-// TEMP variant switcher (main chat 131): the trial.
-import {
-  ReplyCardsTrial,
-  useReplyCardsMixedFiles,
-} from "@/dev/reply-cards-trial";
 
 export interface MainViewProps {
   turns: Turn[];
@@ -203,17 +195,6 @@ export function MainView(props: MainViewProps) {
 /** Every conversation but the main chat: no file cards, one map. */
 const NO_FILES = new Map<string, readonly string[]>();
 
-// TEMP variant switcher (main chat 131): in a dev build the files under
-// the replies go through the trial (the pill's 数据 · 混排,
-// src/dev/reply-cards-trial.tsx); a production build draws them as
-// delivered.
-const useCardFiles = import.meta.env.DEV
-  ? useReplyCardsMixedFiles
-  : (
-      files: ReadonlyMap<string, readonly string[]>,
-      _dispatches: ReadonlyMap<string, readonly SubtaskDispatch[]>,
-    ) => files;
-
 function MainViewContent({
   turns,
   llmDisplayName,
@@ -298,8 +279,6 @@ function MainViewContent({
     () => (isMainChat ? filesByMessage(turns) : NO_FILES),
     [isMainChat, turns],
   );
-  // TEMP variant switcher (main chat 131): 混排 in a dev build.
-  const cardFiles = useCardFiles(deliveredFiles, subtaskDispatches);
 
   // Streaming state, subscribed locally so token churn stays inside
   // this subtree instead of re-rendering the whole app. These were
@@ -640,8 +619,6 @@ function MainViewContent({
       className="relative flex min-h-0 flex-1 flex-col bg-app"
       style={conversationTypographyStyle(conversationFontSize)}
     >
-      {/* TEMP variant switcher (main chat 131): the pill, dev build only. */}
-      {import.meta.env.DEV && <ReplyCardsTrial />}
       {/* Scrollable conversation column. Width follows the TopBar
           toggle: 760px (typography sweet spot) by default, 1200px
           in wide mode. Bottom stack matches — see MainViewProps doc
@@ -713,13 +690,13 @@ function MainViewContent({
                 askUserPending={Boolean(pendingAskUser)}
                 agentRunning={isRunning}
                 renderAfterAnswer={
-                  cardFiles.size > 0 ||
+                  deliveredFiles.size > 0 ||
                   subtaskDispatches.size > 0 ||
                   todos.size > 0 ||
                   reminders.size > 0 ||
                   memos.size > 0
                     ? (messageId) => {
-                        const files = cardFiles.get(messageId);
+                        const files = deliveredFiles.get(messageId);
                         const dispatches = subtaskDispatches.get(messageId);
                         const noted = todos.get(messageId);
                         const tasks = reminders.get(messageId);
@@ -733,39 +710,18 @@ function MainViewContent({
                         ) {
                           return null;
                         }
-                        // `afterSubtasks`: under any cards above, 8px.
+                        // One frame, one line an item, in this order
+                        // (ReplyCards, ruling 182).
                         return (
-                          <>
+                          <ReplyCards>
                             {files && <FileCards paths={files} />}
                             {dispatches && (
-                              <SubtaskCards
-                                dispatches={dispatches}
-                                afterFiles={!!files}
-                              />
+                              <SubtaskCards dispatches={dispatches} />
                             )}
-                            {noted && (
-                              <TodoCards
-                                items={noted}
-                                afterSubtasks={!!files || !!dispatches}
-                              />
-                            )}
-                            {tasks && (
-                              <ReminderCards
-                                tasks={tasks}
-                                afterSubtasks={
-                                  !!files || !!dispatches || !!noted
-                                }
-                              />
-                            )}
-                            {memoWrites && (
-                              <MemoCards
-                                events={memoWrites}
-                                afterCards={
-                                  !!files || !!dispatches || !!noted || !!tasks
-                                }
-                              />
-                            )}
-                          </>
+                            {noted && <TodoCards items={noted} />}
+                            {tasks && <ReminderCards tasks={tasks} />}
+                            {memoWrites && <MemoCards events={memoWrites} />}
+                          </ReplyCards>
                         );
                       }
                     : undefined

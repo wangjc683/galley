@@ -113,9 +113,10 @@ const part = (html: string, role: string) => {
   return html.slice(html.lastIndexOf("<", at), html.indexOf("</", at));
 };
 
-// Ruling 179 (ticket 130): a one-line receipt in the to-do card's frame.
+// Ruling 179 (ticket 130): a one-line receipt; ruling 182 (ticket 133):
+// a 24px line in the reply's frame (ReplyCards).
 describe("a subtask card", () => {
-  it("is the to-do card's frame: one line, the page ground, no bar, no tint", () => {
+  it("is a 24px line in the reply's frame: no frame of its own, no bar, no tint", () => {
     liveMessages({ agentRunning: true });
     for (const html of [
       render([dispatch()]),
@@ -131,12 +132,12 @@ describe("a subtask card", () => {
         return render([dispatch()]);
       })(),
     ]) {
-      expect(cardTag(html)).toContain(
-        'class="rounded-md border border-line bg-app"',
-      );
+      expect(cardTag(html)).toContain('class="rounded-sm"');
       expect(html).toContain(
-        'class="flex min-h-10 items-center gap-2.5 py-1.5 pl-4 pr-3"',
+        'class="flex h-6 min-w-0 items-center rounded-sm px-2 [font-size:var(--conversation-step-size)] group/line overflow-hidden hover:bg-hover has-[&gt;span&gt;button:focus-visible]:bg-hover"',
       );
+      expect(html).not.toContain("min-h-10");
+      expect(html).not.toContain("border-line");
       expect(html).not.toContain("w-[3px]");
       expect(html).not.toMatch(/bg-(brand|warning|error|surface)/);
       expect(html).not.toContain(">打开<");
@@ -150,7 +151,7 @@ describe("a subtask card", () => {
     liveMessages({ agentRunning: true });
     const html = render([dispatch({ sendBacks: 1 })]);
     expect(html).toContain('data-subtask-state="running"');
-    expect(html).toContain(">把下载文件夹里的 PDF 按内容分类</button>");
+    expect(html).toContain(">把下载文件夹里的 PDF 按内容分类</span></button>");
     // Still: the sidebar row spins.
     expect(html).not.toContain("spin");
     expect(html).toMatch(/<svg[^>]*class="text-ink-muted"/);
@@ -161,19 +162,61 @@ describe("a subtask card", () => {
     expect(html).not.toContain("思考中");
   });
 
-  it("titles itself as the to-do card does: 13px ink at regular weight, a button as wide as its words", () => {
+  it("titles itself as the process card's rows do: the step size, ink-soft, ink on hover", () => {
     liveMessages({ agentRunning: true });
     const title = part(render([dispatch()]), "subtask-card-title")!;
     expect(title).toMatch(/^<button type="button"/);
     expect(title).toContain(
-      "block max-w-full truncate rounded-sm text-left text-ink outline-none",
+      "text-ink-soft group-hover/line:text-ink focus-visible:text-ink",
     );
-    expect(title).toContain("hover:underline");
-    expect(title).toContain("focus-visible:ring-2");
+    // The line's ground says it opens: no underline, no ring.
+    expect(title).not.toContain("hover:underline");
+    expect(title).not.toContain("focus-visible:ring");
     expect(title).not.toContain("font-medium");
+    // As wide as its words (no flex-1): the word follows it 8px on.
     expect(render([dispatch()])).toContain(
-      '<span class="min-w-0 flex-1 text-[13px] leading-5"><button',
+      '<span class="flex min-w-0 leading-5"><button',
     );
+  });
+
+  // Ticket 132b: the title's button reaches over the whole line by
+  // padding a negative margin takes back, the line clipping it; not a
+  // stretched ::after, which WebKit sizes without the CJK / Latin
+  // autospace, cutting 「制作76人赛季战况网页」 in a frame as wide as it.
+  it("opens from anywhere on its line: the title's button reaches over it", () => {
+    liveMessages({ agentRunning: true });
+    const title = part(render([dispatch()]), "subtask-card-title")!;
+    expect(title).toContain(
+      "-ml-[30px] -mr-[100vw] min-w-0 pl-[30px] pr-[100vw] text-left outline-none",
+    );
+    // Its words a span of their own that cuts them (what the hover
+    // measures); the button a flex item that shrinks to the line's room.
+    expect(title).toContain('<span class="block truncate">');
+    expect(title).not.toContain("max-w-full");
+    expect(title).not.toContain("after:");
+  });
+
+  it("lets a word without a reason pass the click, and keeps one with a reason", () => {
+    liveMessages({
+      pendingAskUser: { question: "要把发票单独放吗？", candidates: [] },
+    });
+    expect(part(render([dispatch()]), "subtask-card-word")).toContain(
+      "pointer-events-none",
+    );
+    liveMessages({});
+    state.runErrors = { "s-sub": "quota exceeded" };
+    expect(part(render([dispatch()]), "subtask-card-word")).not.toContain(
+      "pointer-events-none",
+    );
+  });
+
+  it("does not light a line that opens nothing", () => {
+    const html = render([
+      dispatch({ sessionId: null, title: "", failure: "unclosed" }),
+    ]);
+    expect(html).not.toContain("group/line");
+    expect(html).not.toContain("hover:bg-hover");
+    expect(html).not.toContain("-mr-[100vw]");
   });
 
   // Ruling 101: the question is the assistant's to take to the main
@@ -188,7 +231,7 @@ describe("a subtask card", () => {
     const html = render([dispatch()]);
     expect(html).toContain('data-subtask-state="asking"');
     expect(part(html, "subtask-card-word")).toMatch(
-      /class="shrink-0 select-none text-\[12px\] leading-5 font-medium text-warning">等你回复$/,
+      /class="ml-2 shrink-0 select-none leading-5 pointer-events-none font-medium text-warning">等你回复$/,
     );
     expect(html).toMatch(/<svg[^>]*class="text-warning"/);
     expect(cardTag(html)).toContain(
@@ -211,14 +254,14 @@ describe("a subtask card", () => {
     const html = render([dispatch()]);
     expect(html).toContain('data-subtask-state="asking"');
     expect(cardTag(html)).toContain(
-      'class="rounded-md border border-line bg-warning/[var(--opacity-subtle)]"',
+      'class="rounded-sm bg-warning/[var(--opacity-subtle)]"',
     );
     expect(html).not.toContain("w-[3px]");
     // Under the line, on the title's edge.
     expect(html.indexOf('data-role="ask-user-bubble"')).toBeGreaterThan(
       html.indexOf('data-role="subtask-card-title"'),
     );
-    expect(html).toMatch(/data-role="ask-user-bubble"[^>]*pl-\[42px\]/);
+    expect(html).toMatch(/data-role="ask-user-bubble"[^>]*pl-\[30px\]/);
     expect(html).toContain("要把发票单独放吗？");
     expect(html).toContain(">不要<");
     expect(html).toContain('placeholder="回复…"');
@@ -244,7 +287,7 @@ describe("a subtask card", () => {
     expect(part(asked, "subtask-card-word")).toMatch(/>等你回复$/);
     expect(asked).not.toContain("合同放哪一类？");
     expect(asked).not.toContain('placeholder="回复…"');
-    expect(cardTag(asked)).toContain("bg-app");
+    expect(cardTag(asked)).toContain('class="rounded-sm"');
     liveMessages({ agentRunning: true });
     const running = render([dispatch()]);
     expect(running).toContain('data-subtask-state="running"');

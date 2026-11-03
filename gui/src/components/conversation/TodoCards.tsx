@@ -1,3 +1,9 @@
+import {
+  REPLY_CARD_ICON,
+  REPLY_CARD_LINE,
+  REPLY_CARD_LINE_OPENS,
+  ReplyCardTitle,
+} from "@/components/conversation/ReplyCards";
 import { TodoCheck } from "@/components/todo/TodoCheck";
 import { todoTitleClass } from "@/components/todo/todo-styles";
 import { useDayStamp } from "@/hooks/useDayStamp";
@@ -24,12 +30,12 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
  * to-do's reminder records no reply of its own, so no reminder card
  * repeats it); what Galley will come back to by itself keeps that card.
  *
- * The reminder card's form (docs/design/conversation.md 「待办卡片」):
- * hairline `border-line`, `rounded-md`, the page ground, one line of at
- * least 40px — the box, the title (one line, cut), then when it is due
- * (「逾期 2 天」 in warning) and its reminder, 12px `ink-muted`. A tick
- * strikes the title through; a failed one puts it back with a line
- * under it.
+ * A 24px line in the reply's frame (ReplyCards, ruling 182; spec:
+ * docs/design/conversation.md 「回复下的卡片（一框列表）」 and 「待办卡片」):
+ * the box, the title (one line, cut, ink-soft), then 8px on when it is
+ * due (「逾期 2 天」 in warning) and its reminder in ink-muted, at most
+ * 16em (a length: the frame sizes itself to its content). A tick strikes
+ * the title through; a failed one puts it back with a line under it.
  *
  * A card stays under its reply for good (ticket 43; the to-dos come from
  * every one noted in the main chat, not the list): done however long
@@ -49,24 +55,15 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
  * Its title opens the to-do panel at its row (main chat ticket 87, PRD
  * ruling 131 point 3), as the panel's title leads back to the sentence:
  * beside this conversation, the row lit up (lib/todo-open.ts
- * `showTodoRow`). Only while the panel lists it — not cancelled, not
- * done more than seven days ago — otherwise the title is words, as a
- * panel title with nowhere to lead is.
+ * `showTodoRow`) — from anywhere on the line but the box, which ticks
+ * (`REPLY_CARD_TITLE_REACH`), and the reminder's bell, which keeps its
+ * tooltip. Only while the panel lists it — not cancelled, not done more
+ * than seven days ago — otherwise the title is words, as a panel title
+ * with nowhere to lead is, and the line does not light.
  */
-export function TodoCards({
-  items,
-  afterSubtasks = false,
-}: {
-  items: readonly TodoItem[];
-  /** Under the reply's subtask cards: their 8px gap instead of the 12px
-   * off the bubble. */
-  afterSubtasks?: boolean;
-}) {
+export function TodoCards({ items }: { items: readonly TodoItem[] }) {
   return (
-    <div
-      data-role="todo-cards"
-      className={cn("flex flex-col gap-2", afterSubtasks ? "mt-2" : "mt-3")}
-    >
+    <div data-role="todo-cards" className="flex flex-col">
       {items.map((item) => (
         <TodoCard key={item.id} item={item} />
       ))}
@@ -92,6 +89,13 @@ function TodoCard({ item }: { item: TodoItem }) {
   const parts = cancelled
     ? [{ text: copy.todo.stateDeleted, tone: "muted" as const }]
     : todoMetaParts(item, checked, todayStartMs, language, copy);
+  const opens = listed && !deleting && Boolean(mainChatId);
+  // The name in ink-soft, ink while its line is hovered or it has focus;
+  // a ticked or cancelled one keeps its muted strike.
+  const titleInk =
+    !checked &&
+    !cancelled &&
+    "text-ink-soft group-hover/line:text-ink focus-visible:text-ink";
   return (
     <div
       data-role="todo-card"
@@ -100,14 +104,15 @@ function TodoCard({ item }: { item: TodoItem }) {
         cancelled ? "cancelled" : item.state === "done" ? "done" : "open"
       }
       data-todo-checked={checked ? "true" : "false"}
-      className="rounded-md border border-line bg-app"
+      className="rounded-sm"
     >
-      <div className="flex min-h-10 items-center gap-2.5 py-1.5 pl-4 pr-3">
+      <div className={cn(REPLY_CARD_LINE, opens && REPLY_CARD_LINE_OPENS)}>
         {/* data-card-icon: the glyph a new card flies into the top
-            bar's 待办 button (ticket 102, lib/todo-flight-run.ts). */}
+            bar's 待办 button (ticket 102, lib/todo-flight-run.ts). The
+            box is lifted over the title's reach: it ticks. */}
         <span
           data-card-icon=""
-          className="flex h-5 w-4 shrink-0 items-center justify-center"
+          className={cn(REPLY_CARD_ICON, "[&>label]:relative [&>label]:z-10")}
         >
           <TodoCheck
             item={item}
@@ -116,30 +121,19 @@ function TodoCard({ item }: { item: TodoItem }) {
             checkedTone={done ? "quiet" : undefined}
           />
         </span>
-        {listed && !deleting && mainChatId ? (
-          // The panel's title button (TodoPanel's RowShell): as wide as
-          // its words, underlined on hover, a ring on keyboard focus.
-          <span className="min-w-0 flex-1 text-[13px] leading-5">
-            <button
-              type="button"
-              onClick={() => showTodoRow(item.id, mainChatId)}
-              onPointerEnter={(e) =>
-                syncTruncatedTitle(e.currentTarget, item.text)
-              }
-              className={cn(
-                "block max-w-full truncate rounded-sm text-left outline-none",
-                "underline-offset-2 hover:underline hover:decoration-ink-muted/60 focus-visible:ring-2 focus-visible:ring-brand/30",
-                todoTitleClass(checked, cancelled),
-              )}
-            >
-              {item.text}
-            </button>
-          </span>
+        {opens && mainChatId ? (
+          // Opens from anywhere on the line (ReplyCards).
+          <ReplyCardTitle
+            text={item.text}
+            onClick={() => showTodoRow(item.id, mainChatId)}
+            className={cn(todoTitleClass(checked, cancelled), titleInk)}
+          />
         ) : (
           <span
             className={cn(
-              "min-w-0 flex-1 truncate text-[13px] leading-5",
+              "min-w-0 truncate leading-5",
               todoTitleClass(checked, cancelled),
+              titleInk,
             )}
             onPointerEnter={(e) =>
               syncTruncatedTitle(e.currentTarget, item.text)
@@ -149,9 +143,11 @@ function TodoCard({ item }: { item: TodoItem }) {
           </span>
         )}
         {parts.length > 0 && (
+          // Lets a click through to the title's button; the bell keeps
+          // its tooltip (the reminder's time in words).
           <span
             data-role="todo-meta"
-            className="shrink-0 select-none text-[12px] tabular-nums text-ink-muted"
+            className="pointer-events-none ml-2 max-w-[16em] shrink-0 select-none truncate tabular-nums text-ink-muted [&_[title]]:pointer-events-auto"
           >
             <TodoMetaText parts={parts} />
           </span>
@@ -160,7 +156,7 @@ function TodoCard({ item }: { item: TodoItem }) {
       {failure && (
         <div
           role="alert"
-          className="pb-2 pl-[42px] pr-3 text-[12px] leading-[1.45] text-error"
+          className="pb-2 pl-[30px] pr-3 text-[12px] leading-[1.45] text-error"
         >
           {todoFailureText(failure, copy)}
         </div>
