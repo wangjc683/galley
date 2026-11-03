@@ -26,6 +26,7 @@ import { useCopy } from "@/lib/i18n";
 import { previewKindByPath } from "@/lib/local-file-path";
 import { LocalFilesContext } from "@/lib/local-files";
 import { formatStepNumeral } from "@/lib/step-numeral";
+import { canonicalToolName } from "@/lib/tool-name";
 import { cn } from "@/lib/utils";
 import type {
   ConversationToolEvent,
@@ -461,7 +462,9 @@ function ResultBlock({ content }: { content: string }) {
  * Unknown / future GA tools fall back to a name-only pill via
  * `TOOL_META[name] ?? null`; no icon, no Chinese label, just the
  * raw GA name in mono — visually quieter than an arbitrary icon
- * picked under uncertainty.
+ * picked under uncertainty. Lookups go through `canonicalToolName`
+ * (lib/tool-name.ts), so a `Bash` / `PowerShell` call GA ran as
+ * `code_run` draws as `code_run`; the mono name stays the model's.
  */
 const TOOL_META: Record<string, { icon: Icon; zh: string }> = {
   web_scan: { icon: GlobeSimple, zh: "读取网页" },
@@ -507,10 +510,11 @@ function InlineToolPill({
   const copy = useCopy();
   const [open, setOpen] = useState(false);
   const activateFile = useContext(LocalFilesContext);
-  const meta = TOOL_META[tool.name];
+  const toolName = canonicalToolName(tool.name);
+  const meta = TOOL_META[toolName];
   const ToolIcon = meta?.icon;
   const toolLabel =
-    (copy.tools as Record<string, string>)[tool.name] ?? meta?.zh;
+    (copy.tools as Record<string, string>)[toolName] ?? meta?.zh;
   // Browser steps preview the site they touched, read from the results
   // across the session (lib/browser-site.ts) — GA's browser tools take
   // no URL argument, so previewArgs has nothing to offer them. A step
@@ -524,7 +528,7 @@ function InlineToolPill({
       ? copy.conversation.browserTabCount(browserStep.count)
       : site
         ? null
-        : previewArgs(tool.name, tool.args);
+        : previewArgs(toolName, tool.args);
   // A settled file_write / file_patch knows where the file went (the
   // bridge resolved it against GA's cwd, 2026-09-17). The step is then
   // the one entrance that never depends on the model spelling the path
@@ -758,8 +762,12 @@ function previewArgs(
       return null;
     case "code_run":
       // First non-comment, non-empty line of the script. GA scripts
-      // are bash or python; both use `#` for comments.
-      return truncate(firstCodeLine(get("script") ?? get("command")));
+      // are bash or python; both use `#` for comments. A `Bash` /
+      // `PowerShell` call keeps its command in `command` (or `cmd`),
+      // the keys GA reads it from (agent_loop.py:19).
+      return truncate(
+        firstCodeLine(get("script") ?? get("command") ?? get("cmd")),
+      );
     case "update_working_checkpoint":
       // Args are structured nested context; no single-line preview
       // captures the intent. Action label suffices.

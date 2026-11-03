@@ -1,4 +1,5 @@
 import { isSubtaskReportTurn } from "@/lib/subtasks";
+import { canonicalToolName } from "@/lib/tool-name";
 import type { Turn } from "@/types/conversation";
 
 /**
@@ -109,9 +110,11 @@ const GALLEY_WRITE =
  * to-do or reminder write notes, any other `code_run` works by hand.
  * Anything else — `update_working_checkpoint` (its own working notes),
  * `ask_user` (its face is the question's), `no_tool`, a name this list
- * does not know — is thinking.
+ * does not know — is thinking. A `Bash` / `PowerShell` call is the
+ * `code_run` GA ran it as (lib/tool-name.ts).
  */
-export function classifyTool(name: string, args: string): ToolKind {
+export function classifyTool(toolName: string, args: string): ToolKind {
+  const name = canonicalToolName(toolName);
   if (BROWSE_TOOLS.has(name)) return "browse";
   if (name === "file_read") return "read";
   if (NOTE_TOOLS.has(name)) return "note";
@@ -121,13 +124,13 @@ export function classifyTool(name: string, args: string): ToolKind {
   return "think";
 }
 
-/** GA's dispatch line in verbose mode (managed-ga/code/agent_loop.py:78,
+/** GA's dispatch line in verbose mode (managed-ga/code/agent_loop.py:79,
  * which the bridge forwards: its fence filter drops only the tool's
  * five-backtick output): the tool's name, then its arguments as JSON in
  * a four-backtick block, the closing fence once they are all there. */
 const VERBOSE_DISPATCH =
   /🛠️?\s+Tool:\s+`([^`\n]+)`[^\n]*(?:\n````text\n([\s\S]*?)(?:\n````|$))?/g;
-/** The compact form (agent_loop.py:79), `🛠️ name(args)`. */
+/** The compact form (agent_loop.py:80), `🛠️ name(args)`. */
 const COMPACT_DISPATCH = /🛠️?\s+(\w+)\(([^\n]*)/g;
 
 /** A tool call the stream shows: its name and its arguments' text. */

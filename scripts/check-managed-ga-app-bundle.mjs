@@ -115,6 +115,9 @@ requireFile(path.join(managedRoot, "patches", "manifest.md"));
 requireFile(path.join(codeRoot, "agentmain.py"));
 requireFile(path.join(codeRoot, "agent_loop.py"));
 requireFile(path.join(codeRoot, "llmcore.py"));
+// llmcore.py imports it at its end (upstream 4ca9028); a missing file
+// fails `import llmcore` with ModuleNotFoundError.
+requireFile(path.join(codeRoot, "legacy_llmcore.py"));
 if (fs.existsSync(path.join(managedRoot, "galley-prompts"))) {
   fail("managed prompt profile is embedded in Core; app bundle must not ship managed-ga/galley-prompts");
 }

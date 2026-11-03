@@ -47,9 +47,10 @@ export interface StepMarkerWords {
 /**
  * The marker's summary before the echo-narration swap: GA's turn
  * summary, unless it only echoes the step's prose (GA's fallback when
- * the model wrote no `<summary>`); then GA's own two-way fallback
- * (ga.py:599) — the direct-answer line for a step without real tools,
- * 「调用了 X」 otherwise. Undefined when GA wrote no summary at all (a
+ * the model wrote no `<summary>`, ga.py:578); then the two-way fallback
+ * GA's `turn_end_callback` had until baseline `f06d550` — the
+ * direct-answer line for a step without real tools, 「调用了 X」
+ * otherwise. Undefined when GA wrote no summary at all (a
  * bare step). The step marker (Conversation's AgentTurnView) and the
  * assistant's process card (lib/assistant-process.ts) both read it.
  */

@@ -1035,10 +1035,10 @@ Follow-ups noted at the release (no tickets yet): prompt checklist item 10 answe
 AI 助手」 without saying it is Galley (the role word is still 助手; only the
 IM entry layer says 助理) and item 14's reply repeats its verdict in a closing
 line, both for one `0.7.x` prompt ticket with its eval; Feishu, Telegram and
-Discord memory distillation cannot read L0 (`ga.py:538` opens a relative
-path from the channel's working directory), older than this release (on
-main since the `d66509b` bump, where `0001` reads L0 from the state root,
-they can); the
+Discord memory distillation cannot read L0 (`ga.py` opened it by a path
+relative to the channel's working directory), older than this release (on
+main since the `d66509b` bump, where `0001` reads L0 from the state root at
+`ga.py:542`, they can); the
 comment at `core/src/migration_backup.rs:13` says the opposite of its test.
 
 Carried forward. The README screenshots were re-shot (v3, 2026-10-21).

@@ -1321,9 +1321,11 @@ function AgentTurnView({
   // `<summary>` — the same product showing two different shapes for a
   // compliance difference the user cannot see. GA never emits an empty
   // summary (686/686 rows carry one), so that bare shape would be ours
-  // alone; both branches need words. Wording follows GA's own two-way
-  // fallback at ga.py:599 — the direct-answer line for a turn with no
-  // real tools, the tool name otherwise. On a tool step the echo is of
+  // alone; both branches need words. Wording follows the two-way
+  // fallback GA's `turn_end_callback` had until baseline `f06d550`
+  // (today it falls back to the whole answer only, ga.py:578) — the
+  // direct-answer line for a turn with no real tools, the tool name
+  // otherwise. On a tool step the echo is of
   // its narration, and a marked step shows that narration as its
   // marker line instead (`narrationIsHeading` below); the tool name is
   // left for narration that cleans to nothing.

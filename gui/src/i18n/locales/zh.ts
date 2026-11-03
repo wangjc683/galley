@@ -1737,8 +1737,10 @@ export const zhCopy = {
       "回合协议错误：这一轮的工具调用被当作纯文本返回，未能送达引擎。",
     turnProtocolFailureRaw: "原始输出",
     step: (index: number) => `第 ${index} 步`,
-    /** GA 的兜底口径（ga.py:599）。模型漏写 <summary> 时 GA 会把整段
-     *  回答当摘要，Galley 抑制该回声后用这两句占位，避免步号后空一片。
+    /** GA 的兜底口径（基线 f06d550 以前 ga.py 的 turn_end_callback；
+     *  现在只剩整段回答这一种兜底，ga.py:578）。模型漏写 <summary> 时
+     *  GA 会把整段回答当摘要，Galley 抑制该回声后用这两句占位，避免步号
+     *  后空一片。
      *  GA 从不产出空 summary，所以裸步号是 Galley 自己造出来的形态，
      *  两个分支都必须有词可填。工具步的回声就是它的旁白：自 2026-09-23
      *  起旁白本身做步骤行文字，stepCalledTools 只在旁白清洗后为空时

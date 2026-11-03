@@ -58,3 +58,69 @@ git diff --check
 写在本文件末尾的「## 报告」一节，并在最后一条消息里给主会话：改了哪些文件、别名放在哪、新加的测试、验证命令逐条结果、看到但没改的（Open risks）。
 
 ## 报告
+
+2026-11-03，执行代理，worktree 分支 `gab02-bash-alias`（从 `c14e8591` 起）。只动 GUI、两个检查脚本和几处注释与文档；Core、runner、CLI、Agent API、迁移、补丁栈一行没动，票 134、135 的文件没碰。
+
+### 1. 别名
+
+- 集中在新文件 `gui/src/lib/tool-name.ts`：`canonicalToolName(name)`，`Bash`、`PowerShell` 归成 `code_run`，别的名字原样返回（大小写照上游精确匹配，`bash` 不算）。runner 与库里的工具名不改。
+- 用它的地方（`grep -rn "code_run\|tool.name\|toolName" gui/src` 逐处过了一遍）：
+  - `ToolCallout.tsx` 的 `InlineToolPill`：`TOOL_META` 查图标、`copy.tools` 查中文名（中英两份 locale 都走这一次查表，所以 locale 不用加键）、`previewArgs` 的分支。`code_run` 预览原来就读 `script` 再读 `command`，这次补上 `cmd`，与上游 `agent_loop.py:19` 取命令的三个键一致。展开后的等宽名字、失败与运行中的块状卡片仍写模型用的原名 `Bash`，便于核对。
+  - `assistant-face.ts` 的 `classifyTool`：先归一再判，`Bash` 写 `galley todo add` 算「记一笔」，其他命令算「干活」。
+  - `run-groups.ts` 的工具计数：按归一后的名字计，折叠头（`RunFoldHeader`）不会出现两个「运行代码」。
+- 没改的按名字分支：`browser-site.ts`、`assistant-process.ts` 的浏览器与文件工具集合与这两个名字无关；「调用了 X」（`step-heading.ts`、`stepCalledTools`）写的是原样的工具名，`code_run` 本来也写原名，保持一致没改。
+
+### 2. 过期行号
+
+- `agent_loop.py:78` / `:79` → `:79` / `:80`：`assistant-face.ts` 两处、`assistant-face.test.ts` 一处、`docs/ipc-protocol.md` 第 195 行。
+- 同一行里 `assistant-face.ts:148` / `:114` 因这次加了 import 和归一行，改成 `:151` / `:116`；`docs/design/foundations.md` 第 665 行的 `assistant-face.ts:209` 同理改成 `:212`。`docs/ipc-protocol.md` 只改了第 195 行。
+- `ga.py:599`：票面说改成 `:601`，打开核对后不对。现在的 `ga.py:601` 是 `def load_L1()`；这三处注释说的「两种兜底」（不调工具写「直接回答了用户问题」，调了工具写工具名）在基线 `f06d550` 的审计提交 `a95bdd57` 里已被上游删掉，旧代码在当时的 `ga.py:599`。现在的 `turn_end_callback` 只剩一种兜底：没有 `<summary>` 就拿整段回答（`ga.py:578`）。所以三处（`Conversation.tsx`、`zh.ts`、`step-heading.ts`）改写成「沿用 `f06d550` 以前 GA 的两种兜底；现在只剩整段回答，`ga.py:578`」，不写一个指向别处的行号。
+- `docs/project-status.md`：票 01 只加了注，`ga.py:538` 还在（那是 `v0.7.0` 的行号，`v0.7.1` 起是 `:540`）。直接换成 `:542` 会变成「`:542` 用相对路径打开」，与事实相反；改成「旧版 `ga.py` 按渠道工作目录的相对路径打开 L0……主线上 `0001` 在 `ga.py:542` 从状态根读」。
+
+### 3. 门禁
+
+`scripts/check-managed-ga-payload.mjs` 与 `scripts/check-managed-ga-app-bundle.mjs` 在 `llmcore.py` 后面都加了 `legacy_llmcore.py` 必须存在（附一行注释：`llmcore.py` 末尾的 `try: import legacy_llmcore` 只接 `AttributeError`，缺文件就是 `ModuleNotFoundError`）。
+
+- payload 检查：现状 OK；挪走 `legacy_llmcore.py` 后报 `missing file: managed-ga/code/legacy_llmcore.py`、退出码 1；挪回后 OK。
+- app 包检查：没有现成的 `.app`，在 scratchpad 造了只有 `Contents/Resources/managed-ga`（APFS 克隆）的假包：有这个文件时输出里没有它，删掉后报 `missing file: …/managed-ga/code/legacy_llmcore.py`；假包已删。真包没跑。
+
+### 4. 新测试
+
+- `gui/src/lib/tool-name.test.ts`（新）：两个名字归成 `code_run`；其他名字（含小写 `bash`、`powershell`）原样。
+- `gui/src/components/conversation/ToolCallout.test.tsx`（新）：静态渲染，`Bash` / `PowerShell` 带 `command`（以及 `Bash` 带 `cmd`）的药丸与 `code_run` 带 `script` 的逐字节相同；`code_run` 那个有图标、「运行代码」、跳过注释后的第一行命令；不认识的 `bash` 仍是只有名字的药丸。
+- `gui/src/lib/assistant-face.test.ts`：`Bash` / `PowerShell` 写 `galley todo add` 判「记一笔」（`note`），`todo list` 与普通命令判「干活」；从派发行读出的 `Bash` 同样。
+- `gui/src/lib/run-groups.test.ts`：`code_run`、`Bash`、`PowerShell` 合计成一条 `code_run ×3`。
+- 反证：把 `canonicalToolName` 临时改成原样返回，上面新加的 5 条全部失败，改回后通过。
+
+### 5. 验证
+
+| 命令 | 结果 |
+|---|---|
+| `pnpm --dir gui typecheck` | 退出码 0 |
+| `pnpm --dir gui lint` | 退出码 0 |
+| `pnpm --dir gui exec vitest run` | 250 个文件，2780 条通过 |
+| `TZ=UTC pnpm --dir gui exec vitest run` | 250 个文件，2780 条通过 |
+| `node scripts/check-managed-ga-payload.mjs` | OK；挪走 `legacy_llmcore.py` 时报缺、退出码 1 |
+| `node scripts/check-ga-baseline-drift.mjs` | OK（`d66509bf`） |
+| `node scripts/check-docs-links.mjs` | OK，493 个文件 |
+| `git diff --check` | 干净 |
+| 全角标点扫描（scratchpad 的 `gab02-cjk-punct.py`，扫新增行） | 只命中 `step-heading.ts` 英文注释里 `tools, 「调用了 X」` 的英文逗号，原文就是这样，不算 |
+
+prettier：新文件整篇格式化；旧文件只核了自己的 hunk（`assistant-face.test.ts` 一处按 prettier 手改），其余文件 prettier 报的都是原有的行。
+
+### 6. 改了的文件
+
+- 新：`gui/src/lib/tool-name.ts`、`gui/src/lib/tool-name.test.ts`、`gui/src/components/conversation/ToolCallout.test.tsx`。
+- GUI：`gui/src/components/conversation/ToolCallout.tsx`、`gui/src/lib/assistant-face.ts`、`gui/src/lib/assistant-face.test.ts`、`gui/src/lib/run-groups.ts`、`gui/src/lib/run-groups.test.ts`；只改注释的 `gui/src/components/conversation/Conversation.tsx`、`gui/src/lib/step-heading.ts`、`gui/src/i18n/locales/zh.ts`。
+- 脚本：`scripts/check-managed-ga-payload.mjs`、`scripts/check-managed-ga-app-bundle.mjs`。
+- 文档：`docs/ipc-protocol.md`（第 195 行）、`docs/design/foundations.md`（第 665 行）、`docs/project-status.md`（一句）、本票报告。
+
+### 7. 看到但没改的（Open risks）
+
+1. 「调用了 X」兜底写原名：模型漏写 `<summary>` 且旁白清洗后为空时，`Bash` 的步骤写「调用了 Bash」，`code_run` 写「调用了 code_run」，两者都是原名，没归一。要显示成中文名得另开一票，两种名字一起改。
+2. `gui/src/lib/ipc/ga-output-cleaning.ts` 的 `agent_loop.py:72` / `:73` / `:79-81` 和 `ga.py:594-601`（还有 `ga-output-cleaning.test.ts:16`）早就不准，票面没列，没改；`ga.py:594-601` 说的也是 `f06d550` 以前的兜底，改时要像本票第 2 节那样改写，不是换个数字。
+3. 没在真机看：GUI 改动只有静态渲染与单测；要实地看，得让模型真调一次 `Bash`（开着 Kimi 预设的 Claude Code 兼容更容易出现）。这是 GUI 改动，合入后 HMR 即可，不用重启 Core。
+4. 运行中、失败、被拒的块状卡片标题仍写 `Bash`（与所有工具一样，块状卡片只写等宽原名，没有图标和中文名），这是现有设计，不是别名问题。
+5. app 包检查只在假包上验过，真 `.app` 没跑；这个文件随 `managed-ga/` 整目录打包，按理会在。
+6. 合并：`docs/project-status.md` 与 `docs/ipc-protocol.md` 票 134 / 135 的分支也可能改，只要不是同一行就不冲突；`assistant-face.ts` 的行号若别的分支也加了行，第 195 行与 `foundations.md` 的行号会再偏。
+7. worktree 里留着被 gitignore 的 `gui/node_modules`（主树 APFS 克隆）；scratchpad 里有 `gab02-cjk-punct.py`、`gab02-vitest-local.log`、`gab02-vitest-utc.log`。

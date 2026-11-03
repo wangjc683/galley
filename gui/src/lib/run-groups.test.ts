@@ -219,6 +219,19 @@ describe("buildRunGroups", () => {
     expect(g.stats.deniedCount).toBe(1);
   });
 
+  it("counts a Bash or PowerShell call as the code_run GA ran it as", () => {
+    const turns: Turn[] = [
+      user("q"),
+      step(tool("code_run"), tool("Bash")),
+      step(tool("PowerShell"), tool("file_read")),
+      closing(),
+    ];
+    expect(buildRunGroups(turns)[0].stats.toolCounts).toEqual([
+      { name: "code_run", count: 3 },
+      { name: "file_read", count: 1 },
+    ]);
+  });
+
   it("closing turn must carry a non-empty answer", () => {
     const turns: Turn[] = [
       user("q"),

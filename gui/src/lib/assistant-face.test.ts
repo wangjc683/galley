@@ -13,7 +13,7 @@ import {
 } from "@/lib/assistant-face";
 import type { Turn } from "@/types/conversation";
 
-/** GA's verbose dispatch line (managed-ga/code/agent_loop.py:78). */
+/** GA's verbose dispatch line (managed-ga/code/agent_loop.py:79). */
 const dispatch = (name: string, args: Record<string, unknown>) =>
   `🛠️ Tool: \`${name}\`  📥 args:\n\`\`\`\`text\n${JSON.stringify(args, null, 2)}\n\`\`\`\`\n`;
 
@@ -91,6 +91,26 @@ describe("the face for a tool (ticket 65's table)", () => {
     for (const script of others) {
       expect(classifyTool("code_run", galley(script)), script).toBe("work");
     }
+  });
+
+  it("takes a Bash or PowerShell call for the code_run GA runs it as", () => {
+    const command = (cmd: string) => JSON.stringify({ command: cmd }, null, 2);
+    for (const name of ["Bash", "PowerShell"]) {
+      expect(
+        classifyTool(name, command(`"$GALLEY" todo add 交报销单`)),
+        name,
+      ).toBe("note");
+      expect(classifyTool(name, command(`"$GALLEY" todo list`)), name).toBe(
+        "work",
+      );
+      expect(classifyTool(name, command("ls -la")), name).toBe("work");
+    }
+    expect(
+      liveToolKind(dispatch("Bash", { command: '"$GALLEY" todo add x' })),
+    ).toBe("note");
+    expect(liveToolKind(dispatch("PowerShell", { command: "dir" }))).toBe(
+      "work",
+    );
   });
 
   it("thinks for anything else", () => {

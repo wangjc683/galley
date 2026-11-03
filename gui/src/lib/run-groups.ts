@@ -37,6 +37,7 @@
 // worse than none.
 
 import { askUserQuestionCount } from "@/lib/ask-user-candidates";
+import { canonicalToolName } from "@/lib/tool-name";
 import type { AgentTurn, MessageTelemetry, Turn } from "@/types/conversation";
 
 export interface RunToolCount {
@@ -56,8 +57,10 @@ export interface RunStats {
    * any segment lacks is null — and the context snapshot taken from
    * the last segment. null while the run is open. */
   telemetry: MessageTelemetry | null;
-  /** Per-tool dispatch counts, first-appearance order. Excludes
-   * `no_tool` (null-op) and `ask_user` (surfaced as askUserCount). */
+  /** Per-tool dispatch counts, first-appearance order, keyed by the
+   * tool a call ran as (`canonicalToolName`: a `Bash` call counts as
+   * `code_run`). Excludes `no_tool` (null-op) and `ask_user` (surfaced
+   * as askUserCount). */
   toolCounts: RunToolCount[];
   /** Tools the user denied. The only settled anomaly with a durable
    * signal — `failed` is live-only (tool-outcome.ts refuses to guess
@@ -241,9 +244,10 @@ export function buildRunGroups(
         if (tool.status === "denied") deniedCount++;
         if (tool.name === "ask_user") continue;
         if (tool.name === "no_tool") continue;
-        const entry = toolCounts.find((c) => c.name === tool.name);
+        const name = canonicalToolName(tool.name);
+        const entry = toolCounts.find((c) => c.name === name);
         if (entry) entry.count++;
-        else toolCounts.push({ name: tool.name, count: 1 });
+        else toolCounts.push({ name, count: 1 });
       }
     }
 
