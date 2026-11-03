@@ -917,7 +917,10 @@ sent while a run is going is interjected: Core hands it to the runner,
 which writes GA's `intervene`, the next step reads it, and it is saved
 right after that step; unread at the run's end, it goes out as the next
 turn (ruling 186, ticket 136; `session send` may answer
-`dispatch: "interjected"`). A
+`dispatch: "interjected"`). In the managed runtime each model request gets 300
+seconds from sending to its last line read; past that the stream is cut
+without a retry and the model sees an interrupted-stream marker (ruling
+188, ticket 140, patch `0031`; two degenerate requests ran ~900 s). A
 reminder that says to check something hands the check to a subtask and
 stays silent until it is back; the morning review's look-ups go the same
 way (ruling 184 point 9; `wake.md`, `unasked.md`). Answer-like results

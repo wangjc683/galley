@@ -87,7 +87,7 @@ New in the `a9a36b4` -> `d66509b` range:
   code with `llmcore.` prefixes. Every name the moved classes call that a
   patch changes (`_write_llm_log` `0001`, `tryparse` `0002`,
   `_parse_claude_sse` `0016` / `0017` / `0030`, `_stream_with_retry`
-  `0021`, `auto_make_url` `0027`) stays in `llmcore` and is looked up at
+  `0021` / `0031`, `auto_make_url` `0027`) stays in `llmcore` and is looked up at
   call time. Probe (bundled Python, three import orders: the runner's
   `llmcore` first, attach mode's `agentmain` first, `legacy_llmcore`
   first): one `llmcore` module, `llmcore.ToolClient` and
