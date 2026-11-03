@@ -1483,6 +1483,32 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     and the hook call after it; (b) the local is still named `injprompt`;
     (c) the post-loop call still reads `intervene`; (d) `_done_hooks`
     still unused.
+22. `agentmain.TOOLS_SCHEMA` and tool dispatch for a tool GA does not have
+    (2026-11-03, main chat ticket 137; managed main chat only, no managed
+    patch). The main chat's runner offers `tell_user` by appending its entry
+    to `agentmain.TOOLS_SCHEMA` before every `put_task`
+    (`GaSession.offer_tool`, from `runner/workbench_bridge.py`
+    `_offer_tell_user`), and `WorkbenchHandler.dispatch` answers the call
+    without calling GA's dispatch (`runner/handlers.py`; GA has no
+    `do_tell_user`). It relies on `GenericAgent.run()` reading the module
+    global `TOOLS_SCHEMA` when each task starts (`agent_runner_loop(...,
+    TOOLS_SCHEMA, ...)`), on `load_tool_schema()` rebinding that global
+    (GA calls it in `next_llm`; hence the offer before every run, not
+    once), on the entries being OpenAI function entries whose `function.name`
+    is the dispatched tool name, and on `NativeToolClient.chat` sending the
+    list it is handed on every request. GA's `tool_before` / `tool_after`
+    plugin hooks do not fire for it. Re-check on upgrade: (a) `run()` still
+    hands the loop the module global, read at task start; (b) the schema
+    format; (c) no upstream tool named `tell_user` (it would be shadowed in
+    the main chat); (d) the handler subclass still sees every dispatch
+    first. **Run first on an upgrade**: `runner/tests/test_tell_user.py`'s
+    `test_tell_user_survives_gas_tool_list_reload` (the payload's own
+    `run()` / `agent_runner_loop` / `NativeToolClient` in a child process:
+    every request of two main chat runs, the second after GA's `next_llm`
+    reloaded the list, carries `tell_user`) and
+    `test_tell_user_never_reaches_a_request_elsewhere` (a workbench
+    session's and attach mode's requests do not). JC chose on 2026-11-03 to
+    keep the tool out of the patch stack on this condition.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
@@ -1493,11 +1519,15 @@ Since 2026-07-11 the agent-object couplings have a single code home —
 start the audit there instead of grepping the bridge:
 
 - **[`runner/ga_session.py`](../runner/ga_session.py)** — items 5, 6, 7,
-  11, 12, 21: every internal/underscore/backend touch (`_turn_end_hooks`,
+  11, 12, 21, 22: every internal/underscore/backend touch (`_turn_end_hooks`,
   `backend.history` set + context estimation, the `GenericAgentHandler`
   module rebinding, the one-shot `backend.ask` image wrapper, the main
-  chat's `intervene` write and `injprompt` read). Read the
+  chat's `intervene` write and `injprompt` read, the main chat's
+  `TOOLS_SCHEMA` entry). Read the
   file top to bottom against the new baseline.
+- **[`runner/tell_user.py`](../runner/tell_user.py)** and
+  **`runner/handlers.py::WorkbenchHandler.dispatch`** — item 22: the main
+  chat's own tool and the call GA never sees.
 - **[`runner/interject.py`](../runner/interject.py)** and
   **`runner/workbench_bridge.py::_on_turn_end`** — item 21: what counts
   as delivered.

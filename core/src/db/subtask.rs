@@ -220,11 +220,15 @@ impl SqliteGalley {
         self.session_brief_db(session_id.clone()).await.map(Some)
     }
 
-    /// The latest visible assistant row of a session, if any.
+    /// The latest visible step of a session (an assistant row, `sequence`
+    /// 1), if any. A line the main chat's model told the user mid-run
+    /// (`sequence` above 1, main chat ticket 137) is no reply: a subtask tag
+    /// is read from the reply only.
     pub async fn latest_reply(&self, session_id: &SessionId) -> Result<Option<LatestReply>> {
         let row: Option<(i64, String, Option<String>)> = sqlx::query_as(
             "SELECT turn_index, content, tool_calls FROM messages \
              WHERE session_id = ? AND role = 'assistant' AND visibility = 'visible' \
+               AND sequence = 1 \
              ORDER BY turn_index DESC, sequence DESC LIMIT 1",
         )
         .bind(session_id.as_str())

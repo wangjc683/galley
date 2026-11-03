@@ -1405,3 +1405,47 @@ describe("the assistant's conversation: subtask reports", () => {
     expect(html).not.toContain("A subtask you started");
   });
 });
+
+describe("the assistant's conversation: a line told mid-run (ticket 137)", () => {
+  function told(line: string, index: number): AgentTurn {
+    return {
+      role: "agent",
+      turnIndex: index,
+      finalAnswer: line,
+      tools: [],
+      interim: true,
+      messageId: `t-${line}`,
+    };
+  }
+
+  const run: Turn[] = [
+    user("查明天天气", at(9)),
+    step("我先查一下城市。", 1),
+    told("记上了，天气还在查。", 2),
+    { ...user("顺便提醒我买牛奶", at(9, 1)), interjected: true },
+    step("我查上海的预报。", 3),
+    answer("上海明天晴。", 4),
+  ];
+
+  it("is its own bubble on its side, between your words and the reply, with no process", () => {
+    const html = assistant(run);
+    const bubbles = count(html, 'data-role="assistant-bubble"');
+    expect(bubbles).toBe(2);
+    const line = html.indexOf("记上了，天气还在查。");
+    const yours = html.indexOf("查明天天气");
+    const reply = html.indexOf("上海明天晴。");
+    expect(yours).toBeGreaterThan(-1);
+    expect(line).toBeGreaterThan(yours);
+    expect(reply).toBeGreaterThan(line);
+    // One process button, under the reply; the steps behind it.
+    expect(buttons(html, zhCopy.conversation.foldExpand)).toHaveLength(1);
+    expect(html).not.toContain("我查上海的预报。");
+  });
+
+  it("while it runs, is drawn and the steps are not", () => {
+    const html = assistant(run.slice(0, 4), { agentRunning: true });
+    expect(html).toContain("记上了，天气还在查。");
+    expect(html).not.toContain("我先查一下城市。");
+    expect(buttons(html, zhCopy.conversation.foldExpand)).toHaveLength(0);
+  });
+});

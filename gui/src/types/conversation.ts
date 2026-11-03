@@ -326,6 +326,16 @@ export interface AgentTurn {
    * else it reads as a reply that was only tags, its cards under it.
    */
   silent?: true;
+  /**
+   * A line the model told the user mid-run (main chat ticket 137, its
+   * `tell_user` tool): a Galley message of the run, said before its
+   * reply; the run went on. No tools; `finalAnswer` is the line. A member
+   * of its run, never one of its steps (run-groups), drawn as a bubble of
+   * its own. Persisted as an assistant row with `sequence` above 1, after
+   * its step's own row (rowsToTurns); live from the `tell_user` event,
+   * landing after its step (`turnIndex`, GA's per-loop step).
+   */
+  interim?: true;
 }
 
 export type Turn = UserTurn | AgentTurn | SystemTurn;

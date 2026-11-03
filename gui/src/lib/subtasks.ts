@@ -621,6 +621,8 @@ export function isSilentReport(
   if (group.complete || !isReportRound(group, turns)) return false;
   for (let k = group.memberIndices.length - 1; k >= 0; k -= 1) {
     const turn = turns[group.memberIndices[k]];
+    // A line it told you mid-run (main chat ticket 137) is no reply.
+    if (turn.role === "agent" && turn.interim) continue;
     if (turn.role === "agent") return turn.silent === true;
     if (turn.role === "user") return false;
   }
@@ -654,7 +656,8 @@ function asksUser(turn: Turn): boolean {
 /**
  * The indices of the main chat's rows the user never sees as a
  * message: every report row, and the agent turns of a silent report
- * round but its questions. The sidebar card's last message skips them
+ * round but its questions and the lines it told you mid-run (main chat
+ * ticket 137: you saw them). The sidebar card's last message skips them
  * (lib/assistant.ts); the conversation's plan draws none of them
  * (lib/assistant-conversation.ts).
  */
@@ -666,7 +669,10 @@ export function hiddenReportTurns(turns: readonly Turn[]): Set<number> {
     hidden.add(group.openerIndex);
     if (!isSilentReport(group, turns)) continue;
     for (const i of group.memberIndices) {
-      if (turns[i].role === "agent" && !asksUser(turns[i])) hidden.add(i);
+      const turn = turns[i];
+      if (turn.role === "agent" && !asksUser(turn) && !turn.interim) {
+        hidden.add(i);
+      }
     }
   }
   return hidden;

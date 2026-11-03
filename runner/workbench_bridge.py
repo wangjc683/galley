@@ -31,7 +31,7 @@ import traceback
 from pathlib import Path
 from typing import IO, Any, TextIO, cast
 
-from runner import _watchdog, managed_runtime, process_command
+from runner import _watchdog, managed_runtime, process_command, tell_user
 from runner.ga_print_forward import GaPrintForwarder
 from runner.ga_session import GaSession
 from runner.interject import Interjections
@@ -58,6 +58,7 @@ from runner.ipc import (
     SetReasoningEffortCommand,
     ShutdownCommand,
     SystemMessageEvent,
+    TellUserEvent,
     TitleGeneratedEvent,
     TurnEndEvent,
     TurnProgressEvent,
@@ -684,6 +685,10 @@ class Bridge:
         # `intervene`. Taken under `_run_complete_lock` (`_handle_interject`)
         # so a message never lands in a run that has already ended.
         self._interjections = Interjections(lambda text: self.ga.set_intervene(text))
+        # The main chat's `tell_user` (ticket 137): the GA step of the last
+        # message and how many that step has sent, for each message's
+        # `index`. Reset on every put_task.
+        self._told_in_step: tuple[int, int] = (0, 0)
 
     def _current_absolute_turn_index(self, turn_index: int) -> int | None:
         if self._current_message_turn_base is None:
@@ -1148,9 +1153,48 @@ class Bridge:
                     # this callback around dispatch so the desktop sidebar
                     # can show "正在工作 · 第 N 步" live.
                     turn_started_callback=bridge_self._emit_turn_start,
+                    # The main chat's `tell_user` (ticket 137); the
+                    # handler only calls it there (runner/tell_user.py).
+                    tell_user_callback=bridge_self._tell_user,
                 )
 
         self.ga.install_handler(self.agentmain, _ConfiguredWorkbenchHandler)
+
+    def _offer_tell_user(self) -> None:
+        """Before a run: the main chat's runner in the managed runtime
+        offers `tell_user` (ticket 137) in the tool list GA hands the
+        run's loop. Again for every run: a model switch reloads GA's list
+        (`GaSession.offer_tool`)."""
+        if self.agentmain is None or not tell_user.offered_here():
+            return
+        self.ga.offer_tool(self.agentmain, tell_user.tool_entry)
+
+    def _tell_user(self, message: str, turn: int) -> bool:
+        """The model called `tell_user` in step `turn` (ticket 137): send it
+        as `tell_user` while the run is open. Under the completion lock, so
+        a message never follows the run's `run_complete` (a stop racing the
+        call). False when the run had already ended: nothing was sent."""
+        try:
+            with self._run_complete_lock:
+                if not self.run_in_progress.is_set():
+                    return False
+                step, count = self._told_in_step
+                index = count + 1 if step == turn else 1
+                self._told_in_step = (turn, index)
+                self._emit(
+                    TellUserEvent(
+                        sessionId=self.session_id,
+                        message=message,
+                        turnIndex=turn,
+                        index=index,
+                        absoluteTurnIndex=self._current_absolute_turn_index(turn),
+                        visibility=self._current_message_visibility,
+                    )
+                )
+                return True
+        except Exception as e:
+            self._emit_error(f"tell_user failed: {e}", traceback.format_exc())
+            return False
 
     def _register_turn_end_hook(self) -> None:
         self.ga.register_turn_hook(f"workbench_{self.session_id}", self._on_turn_end)
@@ -1767,6 +1811,8 @@ class Bridge:
             run_generation = self._open_run()
             self._emit_turn_start(1)
             self._settle_llm_clients()
+            self._told_in_step = (0, 0)
+            self._offer_tell_user()
             self._arm_image_delivery(cmd.images)
             display_queue = self.agent.put_task(
                 cmd.text, source="workbench", images=cmd.images
@@ -1794,6 +1840,8 @@ class Bridge:
             run_generation = self._open_run()
             self._emit_turn_start(1)
             self._settle_llm_clients()
+            self._told_in_step = (0, 0)
+            self._offer_tell_user()
             display_queue = self.agent.put_task(cmd.text, source="workbench")
             self._start_progress_drain(display_queue, run_generation)
         elif isinstance(cmd, AbortCommand):

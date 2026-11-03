@@ -355,6 +355,26 @@ export interface InterjectReturnedEvent {
   timestamp: string;
 }
 
+/**
+ * The main chat's model told the user something mid-run (main chat ticket
+ * 137, its `tell_user` tool): a Galley message now, and the run goes on.
+ * Sent while step `turnIndex` runs its tools, before that step's
+ * `turn_end`; `index` counts the step's messages from 1. Core writes it
+ * after that step as row `msg_${sessionId}_${absoluteTurnIndex}_tell_${index}`;
+ * the page draws it from this event (`interim` agent turn), as it draws
+ * `turn_end`.
+ */
+export interface TellUserEvent {
+  kind: "tell_user";
+  sessionId: string;
+  message: string;
+  turnIndex: number;
+  index: number;
+  absoluteTurnIndex?: number | null;
+  visibility?: MessageVisibility;
+  timestamp: string;
+}
+
 export type IPCEvent =
   | ReadyEvent
   | TurnStartEvent
@@ -372,7 +392,8 @@ export type IPCEvent =
   | TitleGeneratedEvent
   | SystemMessageEvent
   | InterjectDeliveredEvent
-  | InterjectReturnedEvent;
+  | InterjectReturnedEvent
+  | TellUserEvent;
 
 // ---------------- Commands (desktop → bridge) ----------------
 

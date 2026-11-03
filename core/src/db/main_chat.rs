@@ -478,7 +478,7 @@ impl SqliteGalley {
                (SELECT MAX(g.start_turn_index) FROM main_chat_segments g \
                  WHERE g.session_id = s.id), \
                (SELECT r.tool_calls FROM messages r \
-                 WHERE r.session_id = s.id AND r.role = 'assistant' \
+                 WHERE r.session_id = s.id AND r.role = 'assistant' AND r.sequence = 1 \
                  ORDER BY r.turn_index DESC, r.sequence DESC LIMIT 1) \
              FROM sessions s WHERE s.id = ?",
         )

@@ -115,6 +115,9 @@ function settledStepHalf(turns: readonly Turn[]): string | null {
     // stretch: the line goes on saying what it was doing.
     if (turn.role === "user" && turn.interjected) continue;
     if (turn.role === "user") break;
+    // A line it told you mid-run (ticket 137) is no step: the line goes
+    // on saying what it was doing.
+    if (turn.role === "agent" && turn.interim) continue;
     if (turn.role !== "agent" || isFinalAnswerTurn(turn.tools)) continue;
     const half = assistantProgressHalf(turn.summary);
     if (half) return half;

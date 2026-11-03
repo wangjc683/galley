@@ -20,6 +20,7 @@ import {
 } from "@/lib/notify";
 import {
   buildAgentTurn,
+  interimTurn,
   isFinalAnswerTurn,
   toolEventsFromRaw,
 } from "@/lib/agent-turn";
@@ -723,6 +724,21 @@ export function dispatchIPCEvent(event: IPCEvent): void {
     case "tool_call_start":
     case "tool_call_progress": {
       console.debug(`[ipc] ${event.kind}`, event);
+      return;
+    }
+
+    case "tell_user": {
+      // A line the main chat's model told the user mid-run (main chat
+      // ticket 137): a message of the run, now; the run goes on. Core
+      // wrote its row before this reached the page (the runner watcher),
+      // with the id built the same way; nothing else moves — no unread,
+      // no notification, no hand-off: its round is not over.
+      if (eventVisibility(event) !== "visible") return;
+      const offset = messages.byId[event.sessionId]?.turnIndexOffset ?? 0;
+      const absoluteTurnIndex = resolveAbsoluteTurnIndex(event, offset);
+      const turn = interimTurn(event.message, event.turnIndex, event.timestamp);
+      turn.messageId = `msg_${event.sessionId}_${absoluteTurnIndex}_tell_${event.index}`;
+      messages.appendInterimTurn(event.sessionId, turn);
       return;
     }
 

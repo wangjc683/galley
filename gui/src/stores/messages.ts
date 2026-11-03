@@ -404,6 +404,13 @@ interface MessagesActions {
   appendSideQuestionUserTurn: (sid: string, text: string) => void;
   appendAgentTurn: (sid: string, turn: AgentTurn) => void;
   /**
+   * A line the model told the user mid-run (main chat ticket 137, an
+   * `interim` turn from the `tell_user` event): at the end, before any
+   * interjection still waiting to be read; the run's live state is left
+   * as it is.
+   */
+  appendInterimTurn: (sid: string, turn: AgentTurn) => void;
+  /**
    * Append a non-agent-loop system message (currently from /btw
    * side-question replies; future: /session.x=v confirmations).
    * Distinct from `appendAgentTurn`:
@@ -514,6 +521,28 @@ function pendingInterjectionsStart(turns: Turn[]): number {
  * interjection. */
 function withLandedTurn(turns: Turn[], turn: Turn): Turn[] {
   const at = pendingInterjectionsStart(turns);
+  if (at === turns.length) return [...turns, turn];
+  return [...turns.slice(0, at), turn, ...turns.slice(at)];
+}
+
+/** `turns` with step `turn` landed: as `withLandedTurn`, and before the
+ * lines told mid-run that this same step said (main chat ticket 137: the
+ * `tell_user` events of a step reach the page before its `turn_end`), so
+ * the live order is the restored one — the step's row (`sequence` 1),
+ * then its lines. */
+function withLandedStep(turns: Turn[], turn: AgentTurn): Turn[] {
+  let at = pendingInterjectionsStart(turns);
+  while (at > 0) {
+    const before = turns[at - 1];
+    if (
+      before.role !== "agent" ||
+      !before.interim ||
+      before.turnIndex !== turn.turnIndex
+    ) {
+      break;
+    }
+    at -= 1;
+  }
   if (at === turns.length) return [...turns, turn];
   return [...turns.slice(0, at), turn, ...turns.slice(at)];
 }
@@ -1167,8 +1196,11 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
       // Before any interjection still waiting to be read (main chat
-      // ticket 136): it stays at the conversation's end.
-      turns: withLandedTurn(m.turns, turn),
+      // ticket 136): it stays at the conversation's end. A step also
+      // lands before the lines it told the user mid-run (ticket 137).
+      turns: turn.interim
+        ? withLandedTurn(m.turns, turn)
+        : withLandedStep(m.turns, turn),
       // turn_end is per-step inside GA's agent_runner_loop, NOT the
       // terminal signal — a single user message can produce 20+
       // turn_end events before the run actually exits. Keep
@@ -1185,6 +1217,18 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       sendPhase: null,
     }));
     set({ byId });  },
+
+  appendInterimTurn: (sid, turn) => {
+    // A line told mid-run (main chat ticket 137): a message of the run,
+    // the run going on — the step streaming now, its turn index and the
+    // send phase stay as they are (its `turn_end` moves them).
+    const state = get();
+    const { byId } = patchMessages(state, sid, (m) => ({
+      ...m,
+      turns: withLandedTurn(m.turns, turn),
+    }));
+    set({ byId });
+  },
 
   appendSystemTurn: (sid, turn) => {
     // Transient append — no DB persistence for V0.1. The /btw side

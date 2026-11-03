@@ -519,6 +519,29 @@ desktop 用两者驱动 Composer 推理强度 pill 的当前档与「跟随 / �
 
 发之前 runner 已清掉 `intervene`，它们到不了下一轮的第一步。Core 只记日志：这些项一直在队列里，`run_complete` 之后照常作为下一轮发出（上一轮停在 `ask_user` 上时作为回答）。
 
+### 4.21 `tell_user`
+
+主对话的模型在一轮中间先给用户发一句话（它自己的工具 `tell_user`，主对话票 137），这一轮接着跑。在说出它的那一步执行工具时发出，早于那一步的 `turn_end`。
+
+```json
+{
+  "kind": "tell_user",
+  "sessionId": "sess_abc123",
+  "message": "记上了，天气还在查",
+  "turnIndex": 2,
+  "index": 1,
+  "absoluteTurnIndex": 11,
+  "visibility": "visible",
+  "timestamp": "..."
+}
+```
+
+- `message`：模型写的原文（去掉首尾空白），不会是空串。
+- `turnIndex` / `absoluteTurnIndex`：说出它的那一步（与那一步之后的 `turn_end` 的同名字段相同）。
+- `index`：这一步里的第几句，从 1 起；一轮里每次 `put_task` 重新计。
+- 只在内置运行时的主对话里发（`GALLEY_RUNTIME_KIND=managed` 且 `GALLEY_MAIN_CHAT=1`，与浏览器闸门同一组条件，`runner/tell_user.py`）；别处没有这个工具。runner 在发 `run_complete` 的同一把锁下发它，所以它不会落在 `run_complete` 之后。
+- 消费方：Core 的 runner watcher（`core/src/tell_user.rs`）再核一次「内置运行时的主对话」，写一行 `assistant`：`turn_index` = `absoluteTurnIndex`，`sequence` 取这个 `turn_index` 已有的最大值加一、至少 2（排在那一步 `(t, 1)` 之后，那一步结束时读到的插话之前），`content` 为原文，`final_answer` 为按回复规则洗过的字，id `msg_{session}_{absoluteTurnIndex}_tell_{index}`，同 id 再来不重写；不动 `turn_count`。Core 不另发广播：GUI 的 runner-event 分发器直接把它画成这一轮的一条消息（`interim` agent turn，行 id 同上），手机在 `runner.event` 批里原样收到。
+
 ## 5. Commands (workbench → bridge)
 
 每个命令必有 `kind` 字段。

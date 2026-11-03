@@ -322,6 +322,25 @@ class InterjectReturnedEvent:
     kind: str = "interject_returned"
 
 
+@dataclass
+class TellUserEvent:
+    """The main chat's model told the user something mid-run (main chat
+    ticket 137, its `tell_user` tool): a Galley message now, and the run
+    goes on. Sent while step `turnIndex` runs its tools, before that step's
+    `turn_end`. `index` counts the step's messages from 1; Core writes the
+    message after that step (`absoluteTurnIndex`) as row
+    `msg_{session}_{absoluteTurnIndex}_tell_{index}`."""
+
+    sessionId: str
+    message: str
+    turnIndex: int
+    index: int
+    absoluteTurnIndex: int | None = None
+    visibility: str = "visible"
+    timestamp: str = field(default_factory=_now_iso)
+    kind: str = "tell_user"
+
+
 Event = (
     ReadyEvent
     | TurnStartEvent
@@ -340,6 +359,7 @@ Event = (
     | SystemMessageEvent
     | InterjectDeliveredEvent
     | InterjectReturnedEvent
+    | TellUserEvent
 )
 
 
@@ -464,6 +484,7 @@ EVENT_KINDS: dict[str, type] = {
     "system_message": SystemMessageEvent,
     "interject_delivered": InterjectDeliveredEvent,
     "interject_returned": InterjectReturnedEvent,
+    "tell_user": TellUserEvent,
 }
 
 COMMAND_KINDS: dict[str, type] = {

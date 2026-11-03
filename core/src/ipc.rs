@@ -68,6 +68,7 @@ pub enum IpcEvent {
     ReasoningEffortChanged(ReasoningEffortChangedEvent),
     InterjectDelivered(InterjectDeliveredEvent),
     InterjectReturned(InterjectReturnedEvent),
+    TellUser(TellUserEvent),
 }
 
 impl IpcEvent {
@@ -92,6 +93,7 @@ impl IpcEvent {
             IpcEvent::ReasoningEffortChanged(e) => &e.session_id,
             IpcEvent::InterjectDelivered(e) => &e.session_id,
             IpcEvent::InterjectReturned(e) => &e.session_id,
+            IpcEvent::TellUser(e) => &e.session_id,
         }
     }
 }
@@ -390,6 +392,26 @@ pub struct InterjectReturnedEvent {
     pub timestamp: String,
 }
 
+/// The main chat's model told the user something mid-run (main chat ticket
+/// 137, its `tell_user` tool): a Galley message now, and the run goes on.
+/// Sent while step `turn_index` runs its tools, before that step's
+/// `turn_end`; `index` counts the step's messages from 1. Core writes it
+/// after that step (`crate::tell_user`), as row
+/// `msg_{session}_{absolute_turn_index}_tell_{index}`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TellUserEvent {
+    pub session_id: String,
+    pub message: String,
+    pub turn_index: i64,
+    pub index: i64,
+    #[serde(default)]
+    pub absolute_turn_index: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visibility: Option<String>,
+    pub timestamp: String,
+}
+
 // ---------------- Commands (Galley Core -> runner) ----------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -509,6 +531,20 @@ mod tests {
         let event: IpcEvent = serde_json::from_str(returned).unwrap();
         assert_eq!(event.session_id(), "s");
         assert!(matches!(event, IpcEvent::InterjectReturned(_)));
+    }
+
+    #[test]
+    fn tell_user_wire_parses() {
+        let line = r#"{"kind":"tell_user","sessionId":"s","message":"记上了，天气还在查","turnIndex":2,"index":1,"absoluteTurnIndex":11,"visibility":"visible","timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(line).unwrap();
+        assert_eq!(event.session_id(), "s");
+        let IpcEvent::TellUser(e) = event else {
+            panic!("expected TellUser");
+        };
+        assert_eq!(e.message, "记上了，天气还在查");
+        assert_eq!((e.turn_index, e.index), (2, 1));
+        assert_eq!(e.absolute_turn_index, Some(11));
+        assert_eq!(e.visibility.as_deref(), Some("visible"));
     }
 
     #[test]

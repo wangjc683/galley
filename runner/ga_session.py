@@ -34,6 +34,11 @@ upgrade can silently move:
                                     (read-only: what GA's
                                     ``turn_end_callback`` took from
                                     ``intervene``, ``ga.py:594``)
+- ``agentmain.TOOLS_SCHEMA``      → offer_tool (managed main chat only,
+                                    main chat ticket 137: the tool list
+                                    ``run()`` hands each task's loop gains
+                                    ``tell_user``, which the handler
+                                    subclass answers)
 
 GA's *public* API (``next_llm``, ``verbose``, ``inc_out``, ``put_task``,
 ``list_llms``) stays direct on ``bridge.agent`` — the constitution
@@ -175,6 +180,36 @@ class GaSession:
         (its `injprompt` local), or None."""
         value = ctx.get("injprompt")
         return value if isinstance(value, str) and value else None
+
+    # ---------------- a tool of Galley's own (main chat ticket 137) ----------------
+    # `GenericAgent.run()` hands each task's loop the module global
+    # `agentmain.TOOLS_SCHEMA` (read when the task starts), and
+    # `load_tool_schema()` rebinds that global to a fresh list (GA calls it
+    # in `next_llm`), so a tool added once is gone after a model switch:
+    # the bridge offers it again before every `put_task`. GA has no
+    # `do_<name>` for it; `runner.handlers.WorkbenchHandler.dispatch`
+    # answers the call. Managed main chat only (runner/tell_user.py): an
+    # in-memory write to GA's module state, which attach mode never gets
+    # (CLAUDE.md Rule 1). Coupling point, re-audit at GA baseline upgrades.
+
+    @staticmethod
+    def offer_tool(
+        agentmain_module: Any, entry: Callable[[list[Any]], dict[str, Any]]
+    ) -> bool:
+        """Add the tool `entry(tools)` describes to the tool list the next
+        task's loop gets, unless one of that name is there. False when
+        agentmain holds no tool list."""
+        tools = getattr(agentmain_module, "TOOLS_SCHEMA", None)
+        if not isinstance(tools, list):
+            return False
+        wanted = entry(tools)
+        name = wanted.get("function", {}).get("name")
+        if not any(
+            isinstance(t, dict) and t.get("function", {}).get("name") == name
+            for t in tools
+        ):
+            tools.append(wanted)
+        return True
 
     # ---------------- backend history ----------------
 

@@ -68,6 +68,9 @@ export function askUserReplyContent(
   for (let j = agentIndex + 1; j < turns.length; j++) {
     const t = turns[j];
     if (t.role === "system") continue;
+    // A line told in the asking step (main chat ticket 137) sorts after
+    // it: a bystander too.
+    if (t.role === "agent" && t.interim) continue;
     if (t.role === "user") return replySet.has(j) ? t.content : undefined;
     return undefined;
   }

@@ -1,0 +1,61 @@
+{
+  "note": "票 137：主对话的 tell_user（先说一句）。interject 用例在 after_step 那一步结束时把 text 写进 GA 的 intervene（照 runner 的写法），下一步读到；plain 用例中途没人说话。plain 的 expect：none 是短事，不该用；sparing 是长事，可以发进展，但不该每步都发。第一轮（2026-11-03 22:58）的两条插话用例手上的事一步就做完，测不到「还要做几步」，改长后重跑，原结果在 meta.superseded_runs。人名均为虚构。",
+  "cases": [
+    {
+      "id": "i-question",
+      "kind": "interject",
+      "message": "把下载文件夹里的 PDF 按用途建子文件夹分好（发票、合同、论文、说明书、其他），挪进去以后逐个子文件夹核对一遍数量，最后在下载文件夹里写一个「分类说明.md」，写清每类有哪些文件",
+      "interject": {"after_step": 1, "text": "对了，顺便问一下：扫描件存成 PDF 好还是存成 PNG 好？"},
+      "note": "插话问一件不相干、马上能答的事，手上的事还要好几步：先回一句再接着做是这只手的本意"
+    },
+    {
+      "id": "i-howlong",
+      "kind": "interject",
+      "message": "每隔 20 秒看一次下载文件夹，一共看 4 次，最后告诉我这段时间里有没有新增或删掉的文件",
+      "interject": {"after_step": 1, "text": "还要多久？"},
+      "note": "插话问进度，手上的事还要等几轮"
+    },
+    {
+      "id": "i-correction",
+      "kind": "interject",
+      "message": "看看下载文件夹里有哪些文件，按类型数一下",
+      "interject": {"after_step": 1, "text": "只数 PDF 和图片就行"},
+      "note": "票 136 真机那一句：改方向，手上的事短；先回一句可有可无"
+    },
+    {
+      "id": "i-todo",
+      "kind": "interject",
+      "message": "把下载文件夹里的发票和收据逐张读一下内容，按月份整理成一张表（日期、商家、金额），存到 ~/Documents/报销清单.md，最后把金额加总核对一遍",
+      "interject": {"after_step": 1, "text": "另外帮我记一下：周五下午三点前给许明远回电话"},
+      "note": "插话交代一件要记的事，手上的事还要好几步"
+    },
+    {
+      "id": "n-short",
+      "kind": "plain",
+      "expect": "none",
+      "message": "下载文件夹里有几个 PDF？",
+      "note": "不插话、一两步的事"
+    },
+    {
+      "id": "n-chat",
+      "kind": "plain",
+      "expect": "none",
+      "message": "挡拆和掩护有什么区别？用两三句话说",
+      "note": "不插话、不用工具"
+    },
+    {
+      "id": "n-long",
+      "kind": "plain",
+      "expect": "sparing",
+      "message": "把下载文件夹里的 PDF 按用途建子文件夹分好（发票、合同、论文、说明书、其他），挪进去以后逐个子文件夹核对一遍数量，最后在下载文件夹里写一个「分类说明.md」，写清每类有哪些文件",
+      "note": "不插话、要做好几步（同 i-question 的事）：发一两句进展可以，每步都发是滥用"
+    },
+    {
+      "id": "n-wait",
+      "kind": "plain",
+      "expect": "sparing",
+      "message": "每隔 20 秒看一次下载文件夹，一共看 4 次，最后告诉我这段时间里有没有新增或删掉的文件",
+      "note": "不插话、要等几轮（同 i-howlong 的事）：发一两句进展可以，每步都发是滥用"
+    }
+  ]
+}

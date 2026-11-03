@@ -15,8 +15,12 @@
 //!   said while it worked, main chat ticket 136): that row, and its
 //!   attachment files.
 //! - The greeting: that row.
+//! - A line it told you mid-run (main chat ticket 137, an assistant row
+//!   with `sequence` above 1): that row. A message of its own, as yours
+//!   are.
 //! - Any row of its reply — the answer, a question it asked, a step of
-//!   the process the process card lists: every assistant row of that run,
+//!   the process the process card lists: every assistant row of that run
+//!   but the lines it told you mid-run,
 //!   tool results included (they may hold what the message was about);
 //!   your rows in it stay. A run Core woke it for (a subtask report,
 //!   tickets 29 / 31) goes with its hidden report row, so a replay never
@@ -201,6 +205,12 @@ fn is_greeting(row: &MessageUnitRow) -> bool {
     )
 }
 
+/// A line the model told the user mid-run (main chat ticket 137): an
+/// assistant row after its step's own (`sequence` 1).
+fn is_told_line(row: &MessageUnitRow) -> bool {
+    row.role == "assistant" && row.sequence > 1
+}
+
 fn is_report(row: &MessageUnitRow) -> bool {
     row.role == "user"
         && Origin::is_stored_subtask_report(row.created_via.as_deref(), row.supervisor.as_deref())
@@ -219,7 +229,8 @@ struct Run {
 /// step asked or was said while the run worked (`sequence` above 0, main
 /// chat ticket 136); an assistant row after an answer (a closing step)
 /// starts a run of its own, which only happens once the user row between
-/// them was deleted; system rows join the run they are in. Other roles
+/// them was deleted; system rows, and the lines the model told the user
+/// mid-run (main chat ticket 137), join the run they are in. Other roles
 /// are no turn and belong to no run.
 fn runs(rows: &[MessageUnitRow]) -> Vec<Run> {
     let mut runs = Vec::new();
@@ -246,6 +257,13 @@ fn runs(rows: &[MessageUnitRow]) -> Vec<Run> {
                 awaiting_reply = false;
                 last_closes = false;
             }
+            "assistant" if is_told_line(row) => current
+                .get_or_insert_with(|| Run {
+                    opener: None,
+                    members: Vec::new(),
+                })
+                .members
+                .push(index),
             "assistant" => {
                 if current.is_some() && !awaiting_reply && last_closes {
                     runs.extend(current.take());
@@ -288,7 +306,7 @@ pub fn message_unit(rows: &[MessageUnitRow], anchor: &str) -> Result<MessageUnit
             ids: vec![row.id.clone()],
             reply_turns: Vec::new(),
         }),
-        "assistant" if is_greeting(row) => Ok(MessageUnit {
+        "assistant" if is_greeting(row) || is_told_line(row) => Ok(MessageUnit {
             ids: vec![row.id.clone()],
             reply_turns: Vec::new(),
         }),
@@ -302,7 +320,9 @@ pub fn message_unit(rows: &[MessageUnitRow], anchor: &str) -> Result<MessageUnit
                 .members
                 .iter()
                 .copied()
-                .filter(|&i| rows[i].role == "assistant" && !is_greeting(&rows[i]))
+                .filter(|&i| {
+                    rows[i].role == "assistant" && !is_greeting(&rows[i]) && !is_told_line(&rows[i])
+                })
                 .collect();
             picked.extend(report);
             picked.sort_unstable();
@@ -640,6 +660,39 @@ mod tests {
         assert_eq!(unit.reply_turns, [0, 1, 2]);
         // …and your words stay a message of their own.
         assert_eq!(ids(&message_unit(&rows, "i0").unwrap()), ["i0"]);
+    }
+
+    /// A line the model told the user mid-run (main chat ticket 137): an
+    /// assistant row after its step's own.
+    fn told(id: &str, turn: i64) -> MessageUnitRow {
+        MessageUnitRow {
+            sequence: 2,
+            final_answer: Some(format!("{id} body")),
+            ..row(id, "assistant", turn)
+        }
+    }
+
+    #[test]
+    fn a_line_told_mid_run_is_a_message_of_its_own() {
+        // Told in step 1, which also asked; you answered; then the reply.
+        let rows = vec![
+            user("u0", 0),
+            step("s0", 0),
+            told("t0", 0),
+            interjection("i0", 0),
+            question("q1", 1),
+            told("t1", 1),
+            user("u2", 2),
+            answer("a2", 2),
+        ];
+        assert_eq!(ids(&message_unit(&rows, "t0").unwrap()), ["t0"]);
+        assert!(message_unit(&rows, "t0").unwrap().reply_turns.is_empty());
+        // The reply takes its steps and question, not the lines it told,
+        // and your answer still answers the question across one.
+        let unit = message_unit(&rows, "a2").unwrap();
+        assert_eq!(ids(&unit), ["s0", "q1", "a2"]);
+        assert_eq!(unit.reply_turns, [0, 1, 2]);
+        assert_eq!(ids(&message_unit(&rows, "u2").unwrap()), ["u2"]);
     }
 
     #[test]

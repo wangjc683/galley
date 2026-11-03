@@ -386,6 +386,13 @@ impl RunnerManager {
                         );
                     }
                 }
+                // A line the main chat's model told the user mid-run (main
+                // chat ticket 137): written now, during its step, so it
+                // lands before that step's `turn_end` and stays after the
+                // step's row by its `sequence`.
+                if let (IpcEvent::TellUser(told), Some((galley, _))) = (&event, &store) {
+                    crate::tell_user::persist(galley, &sid, told).await;
+                }
                 if let IpcEvent::InterjectReturned(returned) = &event {
                     // Still queued: it goes out after the run completes.
                     eprintln!(
@@ -1239,6 +1246,7 @@ fn is_watched(event: &IpcEvent) -> bool {
             | IpcEvent::RunComplete(_)
             | IpcEvent::InterjectDelivered(_)
             | IpcEvent::InterjectReturned(_)
+            | IpcEvent::TellUser(_)
     )
 }
 

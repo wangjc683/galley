@@ -37,6 +37,11 @@ mod derive;
 /// a row (deleting a main chat message, `crate::message_delete`).
 pub(crate) use derive::js_trim;
 
+/// The reply's cleaning (`cleanFinalAnswer`), for a line the main chat's
+/// model told the user mid-run (main chat ticket 137): its words are drawn
+/// as a reply's are.
+pub(crate) use derive::clean_final_answer;
+
 /// The `<subtask>` tag as the display strips it, for [`crate::subtask`]
 /// to read and strip the same text, and JavaScript's `\s` for the title
 /// it reads in the opener (main chat ticket 126).

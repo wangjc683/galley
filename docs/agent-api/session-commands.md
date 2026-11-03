@@ -207,6 +207,16 @@ Invocations without the new flags print exactly what they printed before
 | `attachments` | `MessageAttachment[]`? | optional additive read metadata for Galley-owned message attachments; V1 supports image attachments created by the GUI only |
 | `askUser`     | `AskUser`?      | **Additive (2026-10-01, galley#30).** Present only on an `agent` row whose step called `ask_user`: the question the agent put to the user, `{ "question": string, "candidates": string[] }`. Derived on read from the row's stored tool calls. When one step makes several `ask_user` calls (some models split one question into one call per candidate), the first call's question wins, later calls with the same question (ignoring surrounding whitespace) add their candidates in order without duplicates, and calls with a different question are ignored, because the engine only ever serves the first. `candidates` may be empty (a free-form question). Unreadable stored data leaves the field out rather than failing the read. `live.askPending` (§5.2) tells you a question is waiting; this row tells you what it is. Answer with `session send` (§5.5a). |
 
+**A line told mid-run (main chat, additive since 2026-11-03, main chat
+ticket 137)**: in the main chat (Galley's managed runtime) the model can
+tell the user something before its reply while its run goes on. Such a
+line is an `agent` message of its own, with its text in `content` and
+`finalAnswer`, no `summary` and no `askUser`, listed right after the step
+that said it (same `turnIndex` as that step). No field changed meaning. A
+run's reply comes after every line it told; a run that ended on a question
+lists a line told in that same step after the asking row, so read the
+question from the row that carries `askUser`.
+
 `MessageAttachment` fields:
 
 | Field       | Type            | Notes                                                                       |

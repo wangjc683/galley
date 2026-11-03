@@ -1818,6 +1818,7 @@ export const enCopy: AppCopy = {
     code_run: "Run code",
     update_working_checkpoint: "Save key context",
     start_long_term_update: "Write long-term memory",
+    tell_user: "Message you",
   },
   errors: {
     runtimeTitle: "Tool execution failed",

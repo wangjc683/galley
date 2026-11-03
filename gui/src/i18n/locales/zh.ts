@@ -1875,6 +1875,7 @@ export const zhCopy = {
     code_run: "运行代码",
     update_working_checkpoint: "保存关键上下文",
     start_long_term_update: "写入长期记忆",
+    tell_user: "给你发消息",
   },
   errors: {
     runtimeTitle: "工具执行失败",

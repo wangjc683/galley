@@ -32,7 +32,10 @@ differ in one paragraph of "What Only The User Changes In Galley"
 (below); every other session's prompt is unchanged byte for byte. Since
 ticket 135 the same place also gives the main chat's runner, and no other,
 `GALLEY_MAIN_CHAT=1`, which the runner reads to refuse browser tools
-([runtime modes](./runtime-modes-and-sessions.md#the-main-chat-does-not-browse)).
+([runtime modes](./runtime-modes-and-sessions.md#the-main-chat-does-not-browse))
+and, since ticket 137, to offer its own `tell_user` tool
+([runtime modes](./runtime-modes-and-sessions.md#the-main-chat-can-tell-you-something-mid-run)):
+a tool entry, not prompt text, so the prompt is unchanged.
 Since ticket 138 a subtask the main chat dispatched gets one more section
 after its state block, the main chat's last turns
 (`compose_subtask_runtime_prompt`, below); its prompt is otherwise the

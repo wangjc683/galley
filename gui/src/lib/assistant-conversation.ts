@@ -5,6 +5,7 @@ import {
 } from "@/lib/ipc/ga-output-cleaning";
 import {
   buildRunGroups,
+  isStep,
   stoppedPartway,
   type RunGroup,
   type RunStats,
@@ -36,7 +37,10 @@ import type { Turn } from "@/types/conversation";
  *             it, 「{在做什么} · {用时}」 (lib/assistant-progress.ts);
  *             what you say while it works (main chat ticket 136) is
  *             your bubble at the end, the dots and the line under it,
- *             going on; the reply answers it with the rest;
+ *             going on; the reply answers it with the rest; a line
+ *             it tells you before its reply (main chat ticket 137,
+ *             `tell_user`) is a bubble of its own on its side, the
+ *             dots and the line under it going on below it;
  *             no steps, no streaming prose. The bubble grows into the
  *             reply, the line fading out with the dots
  *             (lib/typing-bubble-handoff.ts). The header's second line
@@ -304,7 +308,8 @@ export interface AssistantRunSteps {
  *
  *   message   turns drawn as messages, outside any region: user turns
  *             (openers and ask_user answers), the greeting, a run's
- *             questions and its answer.
+ *             questions, the lines it told you mid-run (ticket 137) and
+ *             its answer.
  *   question  agent turns drawn as their ask_user question only.
  *   steps     closing turn → its run's steps, for runs of two steps or
  *             more: the process card the button opens draws them.
@@ -380,7 +385,7 @@ export function stoppedRunTurns(turns: readonly Turn[]): Set<number> {
   for (const g of groups) {
     if (!stoppedPartway(g, turns, null)) continue;
     for (const i of g.memberIndices) {
-      if (turns[i].role === "agent") indices.add(i);
+      if (isStep(turns[i])) indices.add(i);
     }
   }
   return indices;
@@ -429,6 +434,12 @@ export function assistantLinePlan(
           continue;
         }
         if (turn.role !== "agent") continue;
+        // A line told mid-run (ticket 137): a message, no step of the
+        // card.
+        if (turn.interim) {
+          if (turn.finalAnswer !== null) plan.message.add(i);
+          continue;
+        }
         members.push(i);
         if (asksUser(turn)) {
           plan.message.add(i);
@@ -462,9 +473,14 @@ export function assistantLinePlan(
         continue;
       }
       // The greeting heads a headless group of its own and renders as
-      // the plain answer it is (the workbench plan does the same).
+      // the plain answer it is (the workbench plan does the same); a line
+      // told mid-run (ticket 137) is a bubble here too.
       if (turn.role === "agent" && turn.greeting) {
         plan.message.add(i);
+        continue;
+      }
+      if (turn.role === "agent" && turn.interim) {
+        if (turn.finalAnswer !== null) plan.message.add(i);
         continue;
       }
       plan.flat.set(i, g.openerIndex);

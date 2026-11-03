@@ -6,11 +6,13 @@ synthesizes Galley's live turn signal around dispatch and forwards `tool_num`
 when the loaded GA accepts it. GA upgrades can move internals around; this
 module uses runtime feature detection for the pieces Galley depends on.
 
-One exception, managed runtime only: the main chat's browser guard (main
-chat PRD ruling 184, ticket 135). In Galley's own runtime the main chat's
-runner refuses browser tools and tells the model to hand the work to a
-subtask; see `_main_chat_refuses`. Attach mode never reaches it (CLAUDE.md
-Rule 1: there the subclass only emits signals).
+Two exceptions, managed runtime only, both the main chat's: its browser
+guard (main chat PRD ruling 184, ticket 135): the runner refuses browser
+tools and tells the model to hand the work to a subtask (see
+`_main_chat_refuses`); and its own tool `tell_user` (ticket 137,
+`runner/tell_user.py`), which GA does not have: the call never reaches GA's
+dispatch. Attach mode never reaches either (CLAUDE.md Rule 1: there the
+subclass only emits signals).
 
 This module imports GA modules (`agent_loop`, `ga`). The caller must put
 the GA installation path on sys.path before importing this module.
@@ -27,7 +29,7 @@ from typing import Any
 from agent_loop import BaseHandler
 from ga import GenericAgentHandler
 
-from runner import managed_runtime
+from runner import managed_runtime, tell_user
 
 # Upstream GA commit 3205f4a (post-cf65515 baseline) added a `tool_num`
 # kwarg to `BaseHandler.dispatch` so do_* tools can scale output length
@@ -117,8 +119,9 @@ class WorkbenchHandler(GenericAgentHandler):  # type: ignore[misc]  # GA has no 
     """GA handler that emits Galley's turn signal and forwards `tool_num`.
 
     It must not change tool dispatch or results (CLAUDE.md Rule 1): every
-    call is delegated to GA's own dispatch unchanged, except a browser
-    tool in the managed runtime's main chat (`_main_chat_refuses`).
+    call is delegated to GA's own dispatch unchanged, except, in the
+    managed runtime's main chat, a browser tool (`_main_chat_refuses`) and
+    the main chat's own `tell_user` (`runner/tell_user.py`).
     """
 
     def __init__(
@@ -128,8 +131,15 @@ class WorkbenchHandler(GenericAgentHandler):  # type: ignore[misc]  # GA has no 
         cwd: str = "./temp",
         *,
         turn_started_callback: Callable[[int], None] | None = None,
+        tell_user_callback: Callable[[str, int], bool] | None = None,
     ) -> None:
         super().__init__(parent, last_history, cwd)
+        # The main chat's `tell_user` (ticket 137): hands the message and
+        # the GA step that said it to the bridge, which sends it to Core;
+        # False when it was not sent (the run had already ended).
+        self._tell_user_callback: Callable[[str, int], bool] | None = (
+            tell_user_callback
+        )
         # GA has no turn_start_callback extension point, so we synthesize
         # one around dispatch. Older GA called tool_before_callback
         # inside BaseHandler.dispatch. Newer GA switched to plugins.hooks,
@@ -204,6 +214,29 @@ class WorkbenchHandler(GenericAgentHandler):  # type: ignore[misc]  # GA has no 
             return StepOutcome(
                 {"status": "error", "msg": MAIN_CHAT_BROWSER_REFUSAL},
                 next_prompt="\n",
+            )
+        if tool_name == tell_user.TOOL_NAME and tell_user.offered_here():
+            # The managed main chat's own tool (ticket 137): GA has no
+            # `do_tell_user`, so GA's dispatch is not called. The step
+            # shows as any tool's (its turn signal here, its call and this
+            # result in turn_end). Sent, the result says so and the run
+            # goes on with GA's usual next prompt; otherwise GA's error
+            # envelope and next_prompt="\n", as its own tools refuse.
+            from agent_loop import StepOutcome
+
+            self.tool_before_callback(tool_name, args, response)
+            message = tell_user.message_of(args)
+            if not message:
+                return StepOutcome(dict(tell_user.EMPTY), next_prompt="\n")
+            current = int(getattr(self, "current_turn", 0) or 0)
+            sent = self._tell_user_callback is not None and self._tell_user_callback(
+                message, current
+            )
+            if not sent:
+                return StepOutcome(dict(tell_user.CLOSED), next_prompt="\n")
+            return StepOutcome(
+                dict(tell_user.SENT),
+                next_prompt=self._get_anchor_prompt(skip=index > 0),
             )
         # `tool_num` reaches us only on GA versions ≥ 3205f4a (post-
         # cf65515 baseline). Older GA's `agent_runner_loop` doesn't

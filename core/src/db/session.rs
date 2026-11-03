@@ -349,7 +349,9 @@ impl SqliteGalley {
     /// answer an `ask_user` and was not said mid-run. The rule is `buildRunGroups`
     /// (`gui/src/lib/run-groups.ts`) read backwards: a user row answers
     /// when the last user or assistant row before it (system rows are
-    /// bystanders) is an assistant row with an `ask_user` call. `None`
+    /// bystanders, and so is a line the model told the user mid-run,
+    /// `sequence` above 1, main chat ticket 137) is an assistant row with
+    /// an `ask_user` call. `None`
     /// when no run opens at or before `turn` — it sits in the
     /// transcript's headless lead-in (the main chat's greeting).
     async fn run_opener_at_or_before(
@@ -384,6 +386,7 @@ impl SqliteGalley {
                 "SELECT role, {ASK_USER_TOOL_CALLS_COL} FROM messages \
                  WHERE session_id = ? AND visibility = 'visible' \
                    AND role IN ('user', 'assistant') \
+                   AND NOT (role = 'assistant' AND sequence > 1) \
                    AND (turn_index, sequence) < (?, ?) \
                  ORDER BY turn_index DESC, sequence DESC \
                  LIMIT 1"
@@ -1075,6 +1078,69 @@ impl SqliteGalley {
         }
         tx.commit().await.map_err(map_sqlx_err)?;
         Ok(briefs)
+    }
+
+    /// Write a line the main chat's model told the user mid-run (main chat
+    /// ticket 137, [`crate::tell_user`]): an `assistant` row on
+    /// `turn_index` (the step that said it), after whatever that index
+    /// already holds — `sequence` one past the highest, 2 at least, the
+    /// space interjections share (`persist_interjections`): a step's own
+    /// row is `sequence` 1, and the words the user said that its end read
+    /// come after what it said. `content` is the message as the model wrote
+    /// it, `final_answer` its cleaned words (a reply's cleaning,
+    /// `cleanFinalAnswer`). No step, so `turn_count`, the summary and the
+    /// last activity stay (the step's `turn_end` moves them next). Id
+    /// `msg_{session}_{turn}_tell_{index}`, the runner's count within the
+    /// step; a repeat writes nothing. Returns whether a row was written.
+    pub async fn persist_told_line(
+        &self,
+        session_id: &SessionId,
+        turn_index: i64,
+        index: i64,
+        message: &str,
+        visibility: MessageVisibility,
+    ) -> Result<bool> {
+        let id = format!("msg_{}_{}_tell_{}", session_id.as_str(), turn_index, index);
+        let final_answer =
+            Some(crate::turn_persistence::clean_final_answer(message)).filter(|s| !s.is_empty());
+        let mut tx = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(map_sqlx_err)?;
+        check_session_writable(&mut tx, session_id).await?;
+        let written = sqlx::query(
+            "INSERT INTO messages ( \
+               id, session_id, turn_index, sequence, role, content, final_answer, \
+               created_at, visibility \
+             ) VALUES (?, ?, ?, \
+               MAX(2, COALESCE((SELECT MAX(sequence) FROM messages \
+                 WHERE session_id = ? AND turn_index = ?), 0) + 1), \
+               'assistant', ?, ?, ?, ?) \
+             ON CONFLICT(id) DO NOTHING",
+        )
+        .bind(&id)
+        .bind(session_id.as_str())
+        .bind(turn_index)
+        .bind(session_id.as_str())
+        .bind(turn_index)
+        .bind(message)
+        .bind(&final_answer)
+        .bind(chrono_now_iso())
+        .bind(message_visibility_sql(visibility))
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?
+        .rows_affected()
+            > 0;
+        tx.commit().await.map_err(map_sqlx_err)?;
+        if written && visibility == MessageVisibility::Visible {
+            if let (Some(body), Ok(turn)) = (final_answer.as_deref(), u32::try_from(turn_index)) {
+                self.index_message_fts(&id, session_id.as_str(), "assistant", turn, body)
+                    .await;
+            }
+        }
+        Ok(written)
     }
 
     pub(super) async fn send_message_with_visibility_db(

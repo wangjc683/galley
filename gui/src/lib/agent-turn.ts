@@ -23,6 +23,10 @@
 // data" is pinned by agent-turn.test.ts.
 
 import { browserFactsFromResult } from "@/lib/browser-site";
+import {
+  cleanFinalAnswer,
+  finalAnswerFileRefs,
+} from "@/lib/ipc/ga-output-cleaning";
 import { settledToolStatus, toolErrorDisplay } from "@/lib/tool-outcome";
 import type { AgentTurn, ConversationToolEvent } from "@/types/conversation";
 
@@ -204,5 +208,30 @@ export function buildAgentTurn(fields: AgentTurnFields): AgentTurn {
     turn.silent = true;
   }
   if (fields.settledAt) turn.settledAt = fields.settledAt;
+  return turn;
+}
+
+/**
+ * A line the model told the user mid-run (main chat ticket 137, its
+ * `tell_user` tool): an `interim` agent turn, no tools, the line as its
+ * answer — cleaned as a reply's is (`cleanFinalAnswer`, which Core's row
+ * derivation mirrors), its `[FILE:]` paths kept for the sidebar card.
+ * One builder for both paths: the live `tell_user` event (`message`,
+ * GA's step, the event's time) and a restored row (`content`, the
+ * stepper's step, `created_at`).
+ */
+export function interimTurn(
+  raw: string,
+  step: number,
+  settledAt?: string,
+): AgentTurn {
+  const turn = buildAgentTurn({
+    tools: [],
+    finalAnswer: cleanFinalAnswer(raw),
+    turnIndex: step,
+    files: finalAnswerFileRefs(raw),
+    settledAt,
+  });
+  turn.interim = true;
   return turn;
 }

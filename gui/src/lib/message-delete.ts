@@ -14,8 +14,9 @@ import type { Turn } from "@/types/conversation";
  * offers 「撤销」 for five seconds; only when that toast goes does Core
  * delete (stores/message-delete.ts). Core decides which rows the message
  * is and deletes them (`delete_main_chat_message`, Rule 5: your row; the
- * greeting; or the reply's whole run, its process and questions
- * included); the page hides the same rows meanwhile, worked out the same
+ * greeting; a line it told you mid-run, main chat ticket 137; or the
+ * reply's whole run, its process and questions included, its lines told
+ * mid-run left); the page hides the same rows meanwhile, worked out the same
  * way ({@link messageRowIds}), and drops exactly the rows Core names,
  * from the answer and from the `message-deleted` broadcast (which
  * reaches every page and the phone).
@@ -87,7 +88,7 @@ export function deletableAt(
   const turn = turns[index];
   if (turn.role === "system" || !turn.messageId) return null;
   const messageId = turn.messageId;
-  if (turn.role === "user" || turn.greeting) {
+  if (turn.role === "user" || turn.greeting || turn.interim) {
     return { messageId, replyAnswerId: null };
   }
   const group = groupAt(groups, index);
@@ -120,8 +121,9 @@ export function deletableMessage(
  * The rows deleting the bubble at `index` takes out, in conversation
  * order: what the page hides until Core has deleted them. The same unit
  * Core works out from the row (`message_unit`, core/src/message_delete.rs):
- * your row, or the greeting's; for a reply, every row of its run that it
- * said (answer, questions, steps; your answers in the run stay), with the
+ * your row, the greeting's, or a line told mid-run (ticket 137); for a
+ * reply, every row of its run that it said (answer, questions, steps; your
+ * answers in the run and its lines told mid-run stay), with the
  * hidden report row of a round Core woke it for. Only the loaded turns:
  * Core's answer names the rest, if any.
  */
@@ -132,14 +134,17 @@ export function messageRowIds(
 ): string[] {
   const turn = turns[index];
   if (!turn || turn.role === "system" || !turn.messageId) return [];
-  if (turn.role === "user" || turn.greeting) return [turn.messageId];
+  if (turn.role === "user" || turn.greeting || turn.interim) {
+    return [turn.messageId];
+  }
   const group = groupAt(groups, index);
   if (!group) return [turn.messageId];
   const ids: string[] = [];
   for (const i of group.memberIndices) {
     const member = turns[i];
     if (member.role === "system" || !member.messageId) continue;
-    const reply = member.role === "agent" && !member.greeting;
+    const reply =
+      member.role === "agent" && !member.greeting && !member.interim;
     const report = i === group.openerIndex && isSubtaskReportTurn(member);
     if (reply || report) ids.push(member.messageId);
   }

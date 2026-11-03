@@ -75,3 +75,64 @@ worktree 里跑 runner 测试借主树的 venv：在 worktree 根目录用 `<主
 ## 依赖
 
 - 票 136 已合入（`f6dfe347`…`e25f079f`）。
+
+## 设计
+
+（2026-11-03，执行代理写于实现之前。）
+
+### 一句话
+
+`tell_user` 是主对话 runner 自己给 GA 加的一个工具：模型调用它，这句话立刻作为 Galley 的一条消息落库、画成气泡，工具结果告诉它「已发、接着做」，这一轮照常往下走。落库照票 136：同一个 `turn_index`、`sequence` 2 起，排在说出它的那一步后面；回放不改规则，它就是那一步之后的一段 assistant 文字。
+
+### 工具放在哪一层：runner 的 handler 子类，不加 GA 补丁
+
+- **做法**：工具不进 `managed-ga/code/assets/tools_schema*.json`、不在 `ga.py` 加 `do_tell_user`。runner 在每次 `put_task` 前把这一条声明补进 `agentmain.TOOLS_SCHEMA`（`GaSession.offer_tool`），调用由 `WorkbenchHandler.dispatch` 在交给 GA 之前接住（同票 135 的浏览器闸那一处）。
+- **理由**：
+  1. 只有主对话有。GA 的工具表是整个内置 payload 共用的文件，工作台会话、子任务、IM 渠道读的都是它；改文件就得再在 `agentmain` 里按环境变量删掉它（又一处补丁）。主对话本来就是自己一个进程，在它的 runner 里补一条最小。
+  2. 缝是现成的：handler 子类已经在主对话里接住浏览器工具（票 135）；评测脚本也一直这样给模型加工具（票 06 的 `start_subtask`）。
+  3. 零补丁：没有要重放、要 rebase 的东西，不和票 140 抢编号；上游没有同样的东西可等。
+- **代价（耦合点，写进 `runner/ga_session.py` 文件头与 `docs/ga-baseline.md` 契约面第 22 项）**：`run()` 每个任务开始时把模块全局 `TOOLS_SCHEMA` 交给 `agent_runner_loop`；`next_llm` 里的 `load_tool_schema()` 会重新绑定它，所以每次 `put_task` 前补一次（有就不补）；没有 `do_tell_user`，GA 自己的 `tool_before` / `tool_after` 插件钩子不为它触发。
+- **2026-11-03 JC 选留在 runner 层（甲），不进补丁栈**，条件是一条「会响」的测试：`runner/tests/test_tell_user.py` 的 `test_tell_user_survives_gas_tool_list_reload` 在子进程里跑内置 payload 自己的 `agentmain`（`run()`、`agent_runner_loop`、`NativeToolClient`），假后端记下每次请求真正拿到的工具清单：主对话两轮共三次请求都有 `tell_user`，第二轮在 GA 自己的 `next_llm` 重新载入工具表之后（测试同时断言那次重新载入确实换掉了清单、里面没有它）；`test_tell_user_never_reaches_a_request_elsewhere` 断言工作台会话（没有 `GALLEY_MAIN_CHAT`）与外置模式的请求里没有。上游改了重新载入工具表或 `run()` 交出 `TOOLS_SCHEMA` 的方式，前一条先变红。
+- **只在内置运行时的主对话**：同浏览器闸的两个条件，`GALLEY_MAIN_CHAT` 正好是 `"1"`，且 `managed_runtime.is_managed_runtime()`。不成立时既不补声明，也不接调用：模型硬调，GA 照常回「未知工具」。外置零变化（宪法第 1 条）。
+
+### 名字、说明、参数、结果
+
+- 名字 `tell_user`（与 `ask_user` 成对），一个参数 `message`（必填）。
+- 说明（英文，工具表里那一条）：`Send the user a message right away, without ending your turn; until your final reply, nothing else you write reaches them. Useful when the user says something while you are working, or when what you are doing will take a while and they would want to know how it is going.`（第二版。第一版没有分号后那半句，评测里「还要多久？」被答在调用工具那一步的文字里，主对话不画那段字；那半句是主对话的事实，不是规则。两版对照见评测。）
+- 参数说明：`What to tell them: a sentence or a short paragraph.`
+- 中文配对（GA 已载入中文工具表时用，判据是表里 `ask_user` 的说明有没有中文，同 GA 的 `tools_schema_cn.json` 做法）：「立即给用户发一条消息，不结束这一轮；在你最后回复之前，你写的别的话用户都看不到。用户在你干活时说了话，或手上的事要做很久、用户该知道进展时有用。」，参数「要告诉用户的话：一句或一小段。」
+- 结果（模型读到的，GA 的结果写法）：`{"status": "success", "msg": "Sent to the user. Carry on; your turn has not ended."}`；下一步提示同 GA 的工具（`_get_anchor_prompt`）。`message` 为空：`{"status": "error", "msg": "message is empty; nothing was sent."}`，什么也不发。这一轮已经关了（停止和它赛跑）：`{"status": "error", "msg": "Not sent: this turn has already ended."}`。
+
+### 事件与落库
+
+1. **runner**：`tell_user` 调用 → bridge 在 `_run_complete_lock` 下确认这一轮还开着，发 IPC 事件 `tell_user { message, turnIndex, absoluteTurnIndex, index, visibility }`；`index` 是这一步里第几句（1 起），给行 id 用。
+2. **Core 的 runner watcher**（同一个有序消费者，在这一步的 `turn_end` 之前收到）：再核一次「内置运行时的主对话」，然后写一行：`role = 'assistant'`、`turn_index` = `absoluteTurnIndex`（没有时同 `turn_end` 的兜底）、`sequence` = 这个 `turn_index` 已有的最大值加一、至少 2（与插话共用这段空间：先说的一句在这一步结束时读到的插话之前）、`content` = 原文、`final_answer` = 按回复的清洗规则洗过的字、`visibility` 同事件；id `msg_{session}_{turn}_tell_{index}`，同 id 再来不重写。可见且有字时进搜索索引。不动 `turn_count`、`summary`、`last_activity_at`（这一步的 `turn_end` 马上就会动）。
+3. **不新增 Core 广播**：GUI 同画 `turn_end` 一样直接从 `runner-event` 画它（行 id 两边按同一个公式算）；手机在 `runner.event` 里原样收到这个事件，冷读 `session.messages` 时这一行是 `sequence` ≥ 2 的 assistant 行。
+4. **一条判据**：assistant 行 `sequence` 1 是一步（问候也是 1），`sequence` ≥ 2 是一轮中间先说的一句。凡是「最新一步 / 这一轮的回复」的查询都只看 `sequence = 1`：`latest_reply`（派子任务只读最后的回复）、`main_chat_segment_facts` 的「停在提问上」、分页的 `run_opener_at_or_before`（找上一条是不是提问）。待办 / 备忘 / 定时的 settle 取最大 `turn_index`，先说的一句不会比回复晚，不改。
+
+### 回放
+
+不改转换规则。先说的一句是 assistant 行，夹在那一步与下一步之间，按既有规则与相邻 assistant 行合并：…第 k 步的文字、这句话、第 k+1 步的文字…，正是模型当时说过的话（工具调用本身从来不回放，同所有工具）。新段带过来的轮次、子任务带出门的背景（票 138）读的是同样的行，也都带上这句。
+
+### GUI 画法
+
+- **类型**：`AgentTurn.interim: true`（先说的一句）：没有工具，`finalAnswer` 是这句话。直播时 `tell_user` 事件追加它（在等它读的插话前面）；这一步的 `turn_end` 落在它自己那几句前面（同一个 `turnIndex`），所以直播与冷恢复顺序一致；冷恢复 `rowsToTurns` 把 `sequence` > 1 的 assistant 行读成它。
+- **分组**（`run-groups`）：是这一轮的成员（同插话），但不是一步：不计步数，不算回答、不算提问、不切段、不进 `runStepNumbers`；判断「最后一步」的地方都跳过它（`stoppedPartway`、`liveWindowHasSettledStep`、`pendingReplyStepBase`、`derivePendingAskUser`）。
+- **对话里**：一条左侧气泡，同回复（行动条：复制 · 引用 · 保存 · ⋯，没有「过程」，下面不挂卡片：卡片只挂在回复的行 id 上）。落在插话之后、这一轮后面的回复之前；三点气泡与下面那一行在对话末尾，也就在它下面接着跑，用时不重置；那一行跨过它接着说上一步在做什么（`settledStepHalf` 跳过它）。这一轮没结束，所以不做「三点长成回复」的交接；它出现时不加新动效，直接落在三点上面。
+- **过程卡片**：它不是一行；调用它的那一步照常是一行（模型的 `<summary>`，没有时是工具名「给你发消息」），工具条显示「给你发消息」与这句话的开头。
+- **侧栏卡片第二行**：按现有优先级，在跑时说在跑的那句（「正在工作…」等），不说这句；叫醒那一轮写字间隙、停在半路的那一轮静止时，最后一条消息就是它（它是一条消息）。顶栏不变。
+- **删除**：它是单独一条消息：删它只删这一行；删回复删这一轮的步骤与回答，不带走它（同微信，各删各的）。Core 的 `message_unit` 与 GUI 的 `messageRowIds` 同一规则。
+- **不变的**：工作台、子任务、IM 渠道、外置。
+
+### 通知与「回复完成」
+
+不单发系统通知，不算「回复完成」，不标未读，不动三点交接；这一轮结束时的通知照旧。理由：插话之后你多半就在跟前，一句一通知是噪音；「回复完成」说的是这件事做完了，先说的一句恰好是「还没完」；通知已有的节流键按回复走，不为它另开一套。
+
+### Agent API 与 IPC
+
+- IPC（加法）：事件 `tell_user`。`docs/ipc-protocol.md`、`runner/ipc.py`、`core/src/ipc.rs`、`gui/src/types/ipc.ts` 同步。
+- Agent API：字段不变；主对话的消息列表里多了这种 agent 消息（一轮中间的一句，`turnIndex` 不晚于那一轮的回复）。加法，写进 `session-commands.md`。`session wait` 默认「有 agent 输出就完成」本来就会被中间一步的文字触发，`--until-idle` 不受影响。
+
+### 评测设计
+
+在 `.scratch/main-chat/entry-layer-eval/` 加一套 `tell-user`（`run.py --suite tell-user`）：沙盒、假 `galley`、下载文件夹占位文件同派活判据那套；提示词用主对话现在的那份（`dispatch-criterion/galley-prompt/main_chat.v4.txt`，票 134 第四轮之后 `managed_prompt.rs` 的主对话部分没改过）加浏览器闸；工具表补上 runner 自己的 `tell_user` 声明，调用由 runner 的同一段代码回结果；插话照 runner 的写法（Core 的 `INTERJECTION_PREAMBLE` 加用户的话，`runner/interject.py` 的 `compose`）在指定那一步结束时写进 `intervene`。用例三类：插话后手上的事还长（用不用、先说了什么、接着做得对不对）；不插话的短事（滥用）；不插话的长事（是否每步都发）。模型 `mm_1792576875658`，每个用例 3 遍。

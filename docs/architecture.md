@@ -230,6 +230,18 @@ Rows that open a run are therefore the user rows with `sequence` 0; every
 sessions, subtasks, the IM channels and the external runtime queue as
 before.
 
+The other way round, the managed main chat's model can tell the user
+something before its reply (main chat ticket 137,
+[`tell_user.rs`](../core/src/tell_user.rs)): its runner offers a tool of
+Galley's own, `tell_user`, and reports each call as the IPC event
+`tell_user` during the step that made it. The runner watcher writes it as an
+`assistant` row on that step's `turn_index`, `sequence` 2 and up (after the
+step's own row, before the words the user said that the step's end read),
+so the transcript and the replayed history hold it where the model said it.
+An assistant row with `sequence` 1 is a step; every query about a step or a
+run's reply reads only those. The page draws the line from the runner event
+it already gets, as it draws `turn_end`.
+
 Socket `session send` keeps its own contract next to this one;
 [ADR-0003](./adr/0003-gui-and-phone-send-through-core.md) records why. The
 first-message title is shared: every path that persists a user message

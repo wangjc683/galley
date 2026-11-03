@@ -462,6 +462,88 @@ async fn the_greeting_is_no_turn_and_never_history() {
 }
 
 /// A creation writes the row and the greeting, nothing else: no pref.
+/// A line the model told the user in the same step it asked (main chat
+/// ticket 137): the line's row (`sequence` 2) sorts after the asking
+/// step's (`sequence` 1), yet the main chat still ends on the question,
+/// your answer still answers it (paging keeps the run whole), and the
+/// reply a subtask tag is read from is a step, never the line.
+#[tokio::test]
+async fn a_line_told_beside_a_question_hides_neither() {
+    use galley_core_lib::api::MessageVisibility;
+    use galley_core_lib::db::PersistAssistantMessage;
+
+    let galley = fresh_galley(RuntimeKind::Managed).await;
+    let rec = Recorder::default();
+    let main = main_chat(&galley, &rec).await;
+    let opener = galley
+        .send_message(main.clone(), "查明天天气".into(), gui())
+        .await
+        .unwrap();
+    let t0 = i64::from(opener.turn_index.unwrap());
+    let ask = json!([{"toolName": "tell_user", "args": {"message": "在查"}},
+                     {"toolName": "ask_user", "args": {"question": "哪个城市？", "candidates": []}}]);
+    galley
+        .persist_assistant_message(PersistAssistantMessage {
+            session_id: main.clone(),
+            turn_index: u32::try_from(t0).unwrap(),
+            content: "哪个城市？".into(),
+            tool_calls: Some(ask.to_string()),
+            tool_results: Some("[]".into()),
+            thinking: None,
+            final_answer: Some("哪个城市？".into()),
+            summary: Some("问城市".into()),
+            preamble: None,
+            visibility: MessageVisibility::Visible,
+            telemetry: None,
+        })
+        .await
+        .unwrap();
+    assert!(galley
+        .persist_told_line(&main, t0, 1, "在查", MessageVisibility::Visible)
+        .await
+        .unwrap());
+    // A repeat writes nothing.
+    assert!(!galley
+        .persist_told_line(&main, t0, 1, "在查", MessageVisibility::Visible)
+        .await
+        .unwrap());
+    galley
+        .bump_session_after_turn(main.clone(), Some("问城市".into()), None, false)
+        .await
+        .unwrap();
+
+    let facts = galley.main_chat_segment_facts(&main).await.unwrap();
+    assert!(facts.ends_on_question);
+    let reply = galley.latest_reply(&main).await.unwrap().expect("a step");
+    assert_eq!(reply.turn_index, t0);
+    assert!(reply.tool_calls.unwrap().contains("ask_user"));
+
+    // Your answer, then the reply: a page of the last turn reaches back to
+    // the run's opener, across the line.
+    let answer = galley
+        .send_message(main.clone(), "上海".into(), gui())
+        .await
+        .unwrap();
+    let page = galley
+        .persisted_message_turns_page(&main, None, 1)
+        .await
+        .unwrap();
+    let firsts: Vec<(String, i64, i64)> = page
+        .rows
+        .iter()
+        .map(|r| (r.role.clone(), r.turn_index, r.sequence))
+        .collect();
+    assert_eq!(
+        firsts,
+        vec![
+            ("user".to_string(), t0, 0),
+            ("assistant".to_string(), t0, 1),
+            ("assistant".to_string(), t0, 2),
+            ("user".to_string(), i64::from(answer.turn_index.unwrap()), 0),
+        ]
+    );
+}
+
 #[tokio::test]
 async fn creating_it_writes_no_pref() {
     let pool = fresh_pool().await;

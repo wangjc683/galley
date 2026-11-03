@@ -4,7 +4,11 @@
 // the parent store hit the B3-I5 600-line budget. Pure functions —
 // no store dependency.
 
-import { buildAgentTurn, toolEventsFromRaw } from "@/lib/agent-turn";
+import {
+  buildAgentTurn,
+  interimTurn,
+  toolEventsFromRaw,
+} from "@/lib/agent-turn";
 import { mergedAskUserArgs } from "@/lib/ask-user-candidates";
 import {
   finalAnswerFileRefs,
@@ -30,7 +34,10 @@ import type { MessageRow } from "@/types/db";
  * ConversationToolEvent[]. A user row with a higher sequence is what the
  * user said while the run worked (main chat ticket 136), written after
  * the step that read it: an `interjected` UserTurn, which neither opens a
- * run nor restarts its step count.
+ * run nor restarts its step count. Likewise an assistant row with a
+ * `sequence` above 1 is a line the model told the user mid-run (main chat
+ * ticket 137), written after the step that said it: an `interim`
+ * AgentTurn, a message of the run and none of its steps.
  *
  * `system` and `tool` rows are skipped — V0.1 collapses tools into the
  * assistant row's JSON columns; future Memory Inspector work can
@@ -68,6 +75,8 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
       const origin = originFromRow(row);
       if (origin) userTurn.origin = origin;
       turns.push(userTurn);
+    } else if (row.role === "assistant" && row.sequence > 1) {
+      turns.push(interimTurnFromRow(row, stepper.stepFor(row.turn_index)));
     } else if (row.role === "assistant") {
       // Construction rules shared with the live turn_end path live in
       // lib/agent-turn.ts — one home, so a restored session renders
@@ -131,6 +140,14 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
   return turns;
 }
 
+/** A line told mid-run (main chat ticket 137), as the live `tell_user`
+ * event draws it (lib/agent-turn `interimTurn`). */
+function interimTurnFromRow(row: MessageRow, step: number) {
+  const turn = interimTurn(row.content, step, row.created_at);
+  turn.messageId = row.id;
+  return turn;
+}
+
 /**
  * Reconstruct a live `pendingAskUser` from restored turns — the app
  * restarted (or the bridge died) while a GA question was unanswered.
@@ -150,14 +167,16 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
  * agent turn decides. A user turn means it was answered (replies
  * append a user turn before anything else); a later agent turn means
  * a newer run superseded the question (e.g. a Supervisor/CLI-driven
- * run); system turns (/btw exchanges, narration) are bystanders
- * and skipped. Args come through `mergedAskUserArgs`, which mirrors the
+ * run); system turns (/btw exchanges, narration) and lines told mid-run
+ * (`interim`, main chat ticket 137: one said in the asking step sorts
+ * after it) are bystanders and skipped. Args come through `mergedAskUserArgs`, which mirrors the
  * bridge's coercion and merges split same-question calls.
  */
 export function derivePendingAskUser(turns: Turn[]): PendingAskUser | null {
   for (let i = turns.length - 1; i >= 0; i--) {
     const turn = turns[i];
     if (turn.role === "system") continue;
+    if (turn.role === "agent" && turn.interim) continue;
     if (turn.role !== "agent") return null;
     const args = mergedAskUserArgs(turn.tools);
     if (!args) return null;

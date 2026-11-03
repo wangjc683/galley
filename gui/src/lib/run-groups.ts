@@ -29,6 +29,12 @@
 // same `agent_runner_loop`, so it splits no segment and restarts no step
 // count.
 //
+// Lines told mid-run (main chat ticket 137): what the model told the user
+// before its reply (`AgentTurn.interim`, durable as an assistant row's
+// `sequence` above 1) is a member of the run too, and none of its steps:
+// it counts as no step, answers nothing, asks nothing, closes no segment
+// and is never "the last step" of anything below (`isStep`).
+//
 // Segments (2026-09-18): every ask_user pause ends one GA
 // `agent_runner_loop` and the reply starts another, so a run with N
 // answered questions is N+1 GA loops. The runner's per-loop clock and
@@ -111,6 +117,12 @@ function hasAskUserTool(turn: AgentTurn): boolean {
   return turn.tools.some((t) => t.name === "ask_user");
 }
 
+/** An agent turn that is one of the run's steps: not a line it told the
+ * user mid-run (main chat ticket 137). */
+export function isStep(turn: Turn): turn is AgentTurn {
+  return turn.role === "agent" && !turn.interim;
+}
+
 interface SegmentCloser {
   /** The last agent turn of one GA loop inside the run — the turn that
    * carries that loop's cumulative telemetry. */
@@ -138,7 +150,7 @@ function segmentClosers(
     if (t.role === "user") {
       if (last) closers.push({ turn: last, answered: true });
       last = null;
-    } else if (t.role === "agent") {
+    } else if (isStep(t)) {
       last = t;
     }
   }
@@ -232,7 +244,7 @@ export function buildRunGroups(
     let lastAgentIndex: number | null = null;
     for (const i of g.memberIndices) {
       const t = turns[i];
-      if (t.role === "agent") {
+      if (isStep(t)) {
         agentTurns.push(t);
         lastAgentIndex = i;
       }
@@ -305,6 +317,20 @@ export function buildRunGroups(
         awaitingReply: false,
         answered: false,
       };
+      return;
+    }
+    if (turn.role === "agent" && turn.interim) {
+      // Told mid-run (ticket 137): inside whatever run it is in.
+      if (!current) {
+        current = {
+          openerIndex: -1,
+          memberIndices: [],
+          hasSystem: false,
+          awaitingReply: false,
+          answered: false,
+        };
+      }
+      current.memberIndices.push(index);
       return;
     }
     if (
@@ -398,7 +424,7 @@ export function stoppedPartway(
   let last: AgentTurn | null = null;
   for (const i of group.memberIndices) {
     const turn = turns[i];
-    if (turn.role === "agent") last = turn;
+    if (isStep(turn)) last = turn;
   }
   return (
     last !== null &&
@@ -442,7 +468,7 @@ export function runStepNumbers(
     if (g.openerIndex < 0) continue;
     let step = 0;
     for (const i of g.memberIndices) {
-      if (turns[i].role === "agent") stepNumberOf.set(i, ++step);
+      if (isStep(turns[i])) stepNumberOf.set(i, ++step);
     }
   }
   return stepNumberOf;
@@ -460,7 +486,7 @@ export function liveWindowHasSettledStep(
     (i) =>
       i !== liveGroup.openerIndex &&
       i !== liveGroup.finalTurnIndex &&
-      turns[i].role === "agent",
+      isStep(turns[i]),
   );
 }
 
@@ -477,6 +503,7 @@ export function pendingReplyStepBase(turns: Turn[]): number {
   for (let i = turns.length - 1; i >= 0; i--) {
     const turn = turns[i];
     if (turn.role === "system") continue;
+    if (turn.role === "agent" && turn.interim) continue;
     if (turn.role !== "agent" || !hasAskUserTool(turn)) return 0;
     const groups = buildRunGroups(turns);
     return groups.length ? groups[groups.length - 1].stats.stepCount : 0;

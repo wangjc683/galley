@@ -1,5 +1,6 @@
 import {
   BookmarkSimple,
+  ChatCircleText,
   Brain,
   CaretDown,
   CheckCircle,
@@ -475,6 +476,9 @@ const TOOL_META: Record<string, { icon: Icon; zh: string }> = {
   code_run: { icon: Terminal, zh: "运行代码" },
   update_working_checkpoint: { icon: BookmarkSimple, zh: "保存关键上下文" },
   start_long_term_update: { icon: Brain, zh: "写入长期记忆" },
+  // The main chat's own tool (main chat ticket 137): a line to the user
+  // mid-run; the line is its bubble, this is its step's record.
+  tell_user: { icon: ChatCircleText, zh: "给你发消息" },
 };
 
 /**
@@ -778,6 +782,8 @@ function previewArgs(
     }
     case "recall":
       return truncate(get("query") ?? get("key"));
+    case "tell_user":
+      return truncate(get("message"));
     default:
       return truncate(get("path") ?? get("query") ?? get("command"));
   }

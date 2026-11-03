@@ -148,9 +148,12 @@ impl SqliteGalley {
             });
         }
 
+        // The latest step (a line told mid-run, `sequence` above 1, main
+        // chat ticket 137, carries no summary).
         let latest_reply: Option<String> = sqlx::query_scalar(
             "SELECT id FROM messages \
              WHERE session_id = ? AND role = 'assistant' AND visibility = 'visible' \
+               AND sequence = 1 \
              ORDER BY turn_index DESC, sequence DESC LIMIT 1",
         )
         .bind(sid)

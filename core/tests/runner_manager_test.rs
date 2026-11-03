@@ -2344,7 +2344,9 @@ use galley_core_lib::session_runner::rows_to_conversation_messages;
 /// after that step's `turn_end`) and answers; on `quick` and `askme` the
 /// message arrives while it writes its last step, so it hands it back
 /// (`interject_returned`) before `run_complete`, `askme` ending on a
-/// question. Any other message, and an `ask_user_response`, gets a
+/// question. On `tell` it tells the user a line in its second step (main
+/// chat ticket 137: `tell_user` before that step's `turn_end`) and answers
+/// in the third. Any other message, and an `ask_user_response`, gets a
 /// one-step reply quoting it. Each command is logged to `commands.jsonl`.
 fn write_interjecting_runner(dir: &std::path::Path) {
     let runner_dir = dir.join("runner");
@@ -2410,6 +2412,17 @@ while True:
         text = cmd.get("text", "")
         base = cmd.get("absoluteTurnIndex")
         emit({"kind": "turn_start", "turnIndex": 1, "visibility": "visible"})
+        if kind == "user_message" and text == "tell":
+            step(1, base, "读文件")
+            emit({"kind": "tell_user", "message": "记上了，<summary>告知</summary>天气还在查",
+                  "turnIndex": 2, "index": 1, "absoluteTurnIndex": base + 1,
+                  "visibility": "visible"})
+            told = [{"args": {"message": "记上了，天气还在查"}, "toolName": "tell_user",
+                     "toolUseId": "call-t"}]
+            step(2, base, "先回用户一句", tools=told, content="<summary>先回用户一句</summary>")
+            step(3, base, "答案", FINISH, content="明天晴。")
+            done()
+            continue
         if kind == "user_message" and text in ("work", "quick", "askme"):
             if text == "work":
                 step(1, base, "读文件")
@@ -2618,6 +2631,98 @@ async fn an_interjection_lands_after_the_step_that_read_it() {
     assert_eq!(history[2].content, "上海的");
     assert!(history[1].content.contains("再读一个"));
 
+    mgr.shutdown_all(Duration::from_secs(1)).await;
+}
+
+#[tokio::test]
+async fn a_line_told_mid_run_lands_after_its_step() {
+    if mock_python_path().is_none() {
+        eprintln!("[skip] no python on this machine");
+        return;
+    }
+    let sid = "s-tell";
+    let (_bridge, _db, galley, mgr, mut signals, _notifier) = interjecting_main_chat(sid).await;
+    let base = i64::from(dispatch(&mgr, &galley, sid, "tell", MessageVisibility::Visible).await);
+    assert_eq!(next_run_complete(&mut signals).await, sid);
+
+    // After the step that said it (its row is `sequence` 1), before the
+    // next step; it takes no index and no step of its own.
+    let rows = galley
+        .persisted_message_rows(&SessionId(sid.into()))
+        .await
+        .expect("rows");
+    let shape: Vec<(&str, i64, i64)> = rows
+        .iter()
+        .map(|r| (r.role.as_str(), r.turn_index, r.sequence))
+        .collect();
+    assert_eq!(
+        shape,
+        vec![
+            ("user", base, 0),
+            ("assistant", base, 1),
+            ("assistant", base + 1, 1),
+            ("assistant", base + 1, 2),
+            ("assistant", base + 2, 1),
+        ]
+    );
+    let told = &rows[3];
+    assert_eq!(told.id, format!("msg_{sid}_{}_tell_1", base + 1));
+    assert_eq!(told.content, "记上了，<summary>告知</summary>天气还在查");
+    // Its words as a reply's are cleaned.
+    assert_eq!(told.final_answer.as_deref(), Some("记上了，天气还在查"));
+    assert!(told.tool_calls.is_none());
+    assert_eq!(turn_count(&galley, sid).await, 3);
+
+    // A cold replay: the model said it, in place, inside the turn's
+    // assistant text.
+    let history = rows_to_conversation_messages(
+        rows.into_iter().map(Into::into),
+        i64::from(turn_count(&galley, sid).await),
+    );
+    let roles: Vec<&str> = history.iter().map(|m| m.role.as_str()).collect();
+    assert_eq!(roles, vec!["user", "assistant"]);
+    let said = history[1].content.find("天气还在查").expect("the line");
+    let step = history[1].content.find("先回用户一句").expect("its step");
+    let answer = history[1].content.find("明天晴。").expect("the answer");
+    assert!(step < said && said < answer, "{}", history[1].content);
+
+    // The reply a subtask tag would be read from is the answer, not the
+    // line; and it is searchable like a reply.
+    let reply = galley
+        .latest_reply(&SessionId(sid.into()))
+        .await
+        .unwrap()
+        .expect("a reply");
+    assert_eq!(reply.turn_index, base + 2);
+
+    mgr.shutdown_all(Duration::from_secs(1)).await;
+}
+
+#[tokio::test]
+async fn a_line_told_outside_the_managed_main_chat_is_dropped() {
+    if mock_python_path().is_none() {
+        eprintln!("[skip] no python on this machine");
+        return;
+    }
+    let sid = "s-tell-elsewhere";
+    let bridge = TempDir::new().expect("tempdir");
+    write_interjecting_runner(bridge.path());
+    let (_db, pool, galley) = persistence_db().await;
+    seed_session(&pool, sid).await;
+    let notifier = Arc::new(RecordingNotifier::default());
+    let mgr = RunnerManager::new();
+    mgr.set_turn_store(galley.clone(), notifier.clone());
+    let (tx, mut signals) = mpsc::unbounded_channel();
+    mgr.set_run_signal(tx);
+    spawn_persisting(&mgr, sid, bridge.path()).await;
+    dispatch(&mgr, &galley, sid, "tell", MessageVisibility::Visible).await;
+    assert_eq!(next_run_complete(&mut signals).await, sid);
+    let rows = galley
+        .persisted_message_rows(&SessionId(sid.into()))
+        .await
+        .expect("rows");
+    assert!(rows.iter().all(|r| r.sequence <= 1), "{rows:#?}");
+    assert_eq!(rows.len(), 4);
     mgr.shutdown_all(Duration::from_secs(1)).await;
 }
 

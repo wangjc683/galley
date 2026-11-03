@@ -18,6 +18,7 @@ Usage:
   python3 run.py --cases carry-quote --variant with   partial rerun (merged)
   python3 run.py --render-only              rebuild results.md from results.json
   python3 run.py --suite dispatch           ticket 06: dispatch-cases.json x T / C / P
+  python3 run.py --suite tell-user          ticket 137: tell-user/cases.json, the main chat's tell_user
 
 Dispatch suite: WITH plus one clause of dispatch-clauses.md (P also gets a
 start_subtask tool). If a run's first tool call starts a subtask (C: a
@@ -307,6 +308,49 @@ PAR_COMPOSED_DIR = PAR_DIR / "composed"
 PAR_VARIANTS = ("new", "v2", "v3", "v4")
 PAR_DUMP_CASES = ("p-three-errands", "p-errand-and-question")
 PAR_TITLE_MAX = 20
+# Ticket 137 (main chat PRD ruling 186 point 2): the main chat's own tool,
+# tell_user, which sends the user a line mid-run while the run goes on.
+# The cases run under the main chat prompt of today (CRIT_PROMPTS["v4"]: the
+# Rust main chat section has not changed since ticket 134's fourth round)
+# with the browser guard (runner/handlers.py's words), in ticket 115's
+# sandbox; the tool is offered and answered by the runner's own code
+# (runner/tell_user.py, runner.ga_session.GaSession.offer_tool); a case's
+# `interject` writes what the user said, as the runner does (Core's
+# INTERJECTION_PREAMBLE and runner/interject.py's compose), into GA's
+# `intervene` at the end of its `after_step`, which GA reads into the next
+# step's prompt.
+TELL_SUITE = "tell-user"
+TELL_DIR = HERE / TELL_SUITE
+TELL_CASES = TELL_DIR / "cases.json"
+TELL_JSON = TELL_DIR / "results.json"
+TELL_MD = TELL_DIR / "results.md"
+TELL_COMPOSED_DIR = TELL_DIR / "composed"
+# The tool's wordings: r1 the first (what it is and when it helps); r2,
+# runner/tell_user.py's now, adds that until the final reply nothing else
+# the model writes reaches the user (r1's runs answered "还要多久？" in the
+# text of a step that called tools, which the main chat never draws).
+# r3: r2's tool, and the interjection's preamble (Core's, ticket 136) with
+# the new hand among its options; only an interject case differs from r2.
+# An eval variant only: Core's preamble is unchanged (the main session's
+# call, ticket 137's report).
+TELL_VARIANTS = ("r1", "r2", "r3")
+TELL_PREAMBLES = {
+    "r3": ("The user sent this while you were working. It is your call whether to carry on, change course, "
+           "tell them something now with tell_user and go on, or hand what you are doing to a subtask and "
+           "answer them first."),
+}
+TELL_DESCRIPTIONS = {
+    "r1": ("Send the user a message right away, without ending your turn. Useful when the user says something "
+           "while you are working, or when what you are doing will take a while and they would want to know how "
+           "it is going.",
+           "立即给用户发一条消息，不结束这一轮。用户在你干活时说了话，或手上的事要做很久、用户该知道进展时有用。"),
+}
+TELL_PROMPT_VARIANT = "v4"
+TELL_REPEATS = 3
+# Tool calls a run may make besides tell_user (which never counts).
+TELL_TOOL_CAP = 12
+TELL_DUMP_CASES = ("i-question",)
+INTERJECT_RS = REPO / "core" / "src" / "interject.rs"
 # Ticket 134 (main chat PRD ruling 183): only what takes a step or two is
 # answered in the main chat; a thing to hand back, a change on the user's
 # computer or accounts, and a question or story that needs several places
@@ -3474,6 +3518,18 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                  "<subtask title=\"归档发票\">把 ~/Downloads 里的发票和收据（发票_阿里云_2026-08.pdf、Invoice_Figma_2026-09.pdf 等）"
                  "按类型归档到 ~/Downloads/发票/ 下，交回归档后的清单和路径</subtask>")],
         "crit-web": [call("<summary>Look it up</summary>\n查一下。", ("web_scan", {"tabs_only": True}))],
+        # Ticket 137: a look, then a line to the user beside the next
+        # look, then the reply; and a line alone, empty, in a short run.
+        "tell-run": [
+            call("<summary>Look first</summary>\n先看看。",
+                 ("code_run", {"script": "import os\nprint(len(os.listdir(os.path.expanduser('~/Downloads'))))"})),
+            call("<summary>Tell them, go on</summary>",
+                 ("tell_user", {"message": "PDF 更适合扫描件。文件还在数。"}),
+                 ("code_run", {"script": "print('pdf')"})),
+            call("<summary>Answer</summary>\n数好了：三十个 PDF。")],
+        "tell-empty": [
+            call("<summary>Tell</summary>", ("tell_user", {"message": "  "})),
+            call("<summary>Answer</summary>\n有三十个 PDF。")],
         # Ticket 127: a look at the case's own folders in the fake HOME,
         # then three titled tags in the final reply; a bare tag at once.
         "par-three-tags": [
@@ -3534,7 +3590,7 @@ def worker() -> int:
     rec: dict[str, Any] = {"responses": [], "requests": [], "usage": [], "intercepted": None,
                            "do_calls": [], "blocked": BLOCKED, "tools_seen": 0,
                            "dispatch_call": None, "calls": [], "dispatches": [], "tag": None,
-                           "stop_reason": None}
+                           "stop_reason": None, "told": [], "interjected_at": None}
     dispatch_variant = job.get("dispatch_variant")
     sandbox = job.get("sandbox_info")
 
@@ -3617,6 +3673,20 @@ def worker() -> int:
     # process only, never into managed-ga/code.
     for tool in job.get("extra_tools") or []:
         agentmain.TOOLS_SCHEMA.append(json.loads(json.dumps(tool)))
+    if job.get("tell_user"):
+        # Ticket 137: offered as the main chat's runner offers it, the
+        # runner's own entry and the same GaSession call.
+        from runner import tell_user as tell_user_mod
+        from runner.ga_session import GaSession as _GaSession
+
+        _GaSession.offer_tool(agentmain, tell_user_mod.tool_entry)
+        if job.get("tell_description"):
+            # An earlier wording (TELL_DESCRIPTIONS), in the same entry.
+            en, cn = job["tell_description"]
+            for tool in agentmain.TOOLS_SCHEMA:
+                fn = tool.get("function", {})
+                if fn.get("name") == "tell_user":
+                    fn["description"] = cn if fn["description"] == tell_user_mod.DESCRIPTION_CN else en
     managed_runtime.install_managed_prompt_profile(agent)
     agent.verbose = True
     agent.inc_out = True
@@ -3672,6 +3742,22 @@ def worker() -> int:
         ask_user, inline_eval and unknown tools end the run; the 9th call
         ends it unrun. Every call is recorded with what came back."""
         clean = {k: v for k, v in (args or {}).items() if not str(k).startswith("_")}
+        if tool_name == "tell_user" and job.get("tell_user"):
+            # Ticket 137: answered as runner/handlers.py answers it (the
+            # message "shown"); never counted against the cap.
+            from runner import tell_user as tell_user_mod
+
+            message = tell_user_mod.message_of(args)
+            told_entry = {"turn": handler.current_turn, "message": message,
+                          "after_s": round(time.time() - rec.get("started_at", time.time()), 1),
+                          "calls_before": rec["tools_seen"]}
+            rec["told"].append(told_entry)
+            rec["calls"].append({"n": None, "turn": handler.current_turn, "name": tool_name, "args": clean,
+                                 "outcome": "shown to the user" if message else "empty: nothing sent"})
+            if not message:
+                return StepOutcome(dict(tell_user_mod.EMPTY), next_prompt="\n")
+            return StepOutcome(dict(tell_user_mod.SENT),
+                               next_prompt=handler._get_anchor_prompt(skip=index > 0))
         n = rec["tools_seen"] = rec["tools_seen"] + 1
         entry: dict[str, Any] = {"n": n, "turn": handler.current_turn, "name": tool_name, "args": clean}
         rec["calls"].append(entry)
@@ -3775,6 +3861,13 @@ def worker() -> int:
 
         def turn_end_callback(self, response: Any, tool_calls: Any, tool_results: Any,
                               turn: int, next_prompt: str, exit_reason: Any) -> Any:
+            spec = job.get("interject")
+            if spec and not exit_reason and rec["interjected_at"] is None and turn >= spec["after_step"]:
+                # Ticket 137: what the user said while it worked, where the
+                # runner puts it (GA's `intervene`), read just below by
+                # GA's own turn_end_callback into the next step's prompt.
+                self.parent.intervene = spec["text"]
+                rec["interjected_at"] = turn
             tag = SUBTASK_TAG_RE.search(getattr(response, "content", "") or "")
             if tag and rec["tag"] is None:
                 rec["tag"] = {"turn": turn, "brief": tag.group(1).strip(),
@@ -3977,9 +4070,12 @@ def build_result(job: dict[str, Any], rec: dict[str, Any], done: Any, latency: f
             "stop_reason": stop,
             "final_reply": reply,
         })
-        if job.get("suite") in ("schedule", "todo", "chat", "memo", CRIT_SUITE, PAR_SUITE):
+        if job.get("suite") in ("schedule", "todo", "chat", "memo", CRIT_SUITE, PAR_SUITE, TELL_SUITE):
             result.update({"suite": job["suite"], "now": job["now"], "started_at": rec.get("started_at")})
-        if job.get("suite") in (CRIT_SUITE, PAR_SUITE):
+        if job.get("suite") == TELL_SUITE:
+            result.update({"told": rec["told"], "interject": job.get("interject"),
+                           "interjected_at": rec["interjected_at"]})
+        if job.get("suite") in (CRIT_SUITE, PAR_SUITE, TELL_SUITE):
             # Ticket 115: a dispatch is what Core starts: the `<subtask>`
             # tags of the run's final answer (a reply with no tool call,
             # subtask::pending_reply), each one a subtask. A tag in a reply
@@ -3993,7 +4089,8 @@ def build_result(job: dict[str, Any], rec: dict[str, Any], done: Any, latency: f
             result.update({
                 "crit_variant": job["crit_variant"],
                 "should_dispatch": job["should_dispatch"],
-                "tool_calls": len(rec["calls"]),
+                # Ticket 137: tell_user is no tool call here (no cap, no step).
+                "tool_calls": len([c for c in rec["calls"] if c["name"] != "tell_user"]),
                 "dispatch": {"dispatched": bool(briefs), "via": "tag" if briefs else None,
                              "brief": briefs[0] if briefs else None, "briefs": briefs,
                              "titles": [t["title"] for t in tags],
@@ -4295,7 +4392,7 @@ def run_job(job: dict[str, Any], python: str, workdir: Path) -> dict[str, Any]:
         # What the manual's directory held when the run ended (a part the
         # model wrote or removed would show here).
         result["manual_files"] = sorted(os.listdir(job["manual_dir"]))
-    if job.get("suite") in ("schedule", "todo", "chat", "memo", CRIT_SUITE, PAR_SUITE):
+    if job.get("suite") in ("schedule", "todo", "chat", "memo", CRIT_SUITE, PAR_SUITE, TELL_SUITE):
         # What the fake galley ended with (tasks and to-dos made, changed,
         # cancelled; since ticket 96 memos and their writes), and what it
         # started with.
@@ -4557,6 +4654,83 @@ def make_crit_jobs(cases: list[dict[str, Any]], variants: list[str], now: dateti
                              "extra_exec": list(SCHED_EXTRA_EXEC), "dispatch_fixtures": True,
                              "home_files": case.get("home_files") or {}},
                 })
+    return jobs
+
+
+def interjection_preamble() -> str:
+    """Core's INTERJECTION_PREAMBLE (core/src/interject.rs), read from the
+    Rust source: a string with `\\` line continuations."""
+    src = INTERJECT_RS.read_text(encoding="utf-8")
+    m = re.search(r'pub const INTERJECTION_PREAMBLE: &str = "((?:[^"\\]|\\.)*)";', src, re.S)
+    if not m:
+        fail("core/src/interject.rs: no INTERJECTION_PREAMBLE")
+    return re.sub(r"\\\n\s*", "", m.group(1))
+
+
+def tell_cases() -> list[dict[str, Any]]:
+    """Ticket 137: tell-user/cases.json, numbered. `kind` is interject (the
+    user says `interject.text` at the end of step `interject.after_step`)
+    or plain (nobody says anything mid-run)."""
+    spec = json.loads(TELL_CASES.read_text(encoding="utf-8"))["cases"]
+    out = []
+    for n, c in enumerate(spec, 1):
+        c = dict(c, no=n, history=c.get("history") or [])
+        if c.get("kind") not in ("interject", "plain") or not c.get("message"):
+            fail(f"{TELL_CASES.name}: {c['id']}: a message and a kind (interject / plain)")
+        if (c["kind"] == "interject") != bool(c.get("interject")):
+            fail(f"{TELL_CASES.name}: {c['id']}: interject needs `interject`, plain has none")
+        out.append(c)
+    return out
+
+
+def make_tell_jobs(cases: list[dict[str, Any]], now: datetime, mykeys: dict[str, Any], ga_lang: str,
+                   allowed_hosts: set[str], repeats: int, dry: str | None = None,
+                   first: int = 1, variants: tuple[str, ...] | list[str] = ("r2",)) -> list[dict[str, Any]]:
+    """Ticket 137: each case `repeats` times numbered from `first`, as
+    ticket 115's runs (sandbox, fake galley, ~/Downloads, the manual in the
+    state root) under today's main chat prompt with the browser guard; the
+    runner's tell_user offered; an interject case's words written into
+    `intervene` at the end of its step."""
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from runner.interject import compose
+
+    preamble = interjection_preamble()
+    jobs = []
+    for case, wording in [(c, v) for c in cases for v in variants]:
+        prompt = crit_prompt(case, TELL_PROMPT_VARIANT, now)
+        spec = case.get("interject")
+        for n in range(first, first + repeats):
+            jobs.append({
+                "case_id": case["id"],
+                "variant": f"{wording}-{n}",
+                "wording": wording,
+                "tell_wording": wording,
+                "tell_description": TELL_DESCRIPTIONS.get(wording),
+                "crit_variant": TELL_PROMPT_VARIANT,
+                "repeat": n,
+                "suite": TELL_SUITE,
+                "now": now.isoformat(timespec="seconds"),
+                "should_dispatch": None,
+                "message": case["message"],
+                "history": [{"role": m["role"], "content": m["content"]} for m in case["history"]],
+                "galley_prompt": prompt,
+                "mykeys": mykeys,
+                "ga_lang": ga_lang,
+                "allowed_hosts": sorted(allowed_hosts),
+                "keep_request": (case["id"] in TELL_DUMP_CASES and n == first) or bool(dry),
+                "web_guard": guard_text(TELL_PROMPT_VARIANT),
+                "dry": dry,
+                "sandbox": True,
+                "tool_cap": TELL_TOOL_CAP,
+                "tell_user": True,
+                "interject": ({"after_step": int(spec["after_step"]), "said": spec["text"],
+                               "text": compose(TELL_PREAMBLES.get(wording, preamble), [spec["text"]])}
+                              if spec else None),
+                "wake": {"fixture": sched_fixture(case, now), "files": {}, "help": str(SCHED_CLI_HELP),
+                         "extra_exec": list(SCHED_EXTRA_EXEC), "dispatch_fixtures": True,
+                         "home_files": case.get("home_files") or {}},
+            })
     return jobs
 
 
@@ -8324,6 +8498,154 @@ def summarize_usage(results: list[dict[str, Any]]) -> dict[str, int]:
                 (u.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0)
     return total
 
+# ---------------- ticket 137: a line to the user mid-run ----------------
+
+TELL_VERDICTS = ("用了", "没用", "插话没读到", "合格（没用）", "不必要地用了", "适度", "每步都发", "运行失败")
+
+
+def _tell_norm(text: str) -> str:
+    return re.sub(r"[\s，。、！？,.!?：:；;“”\"'（）()]+", "", text or "")
+
+
+def tell_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
+    """Ticket 137: what a run did with tell_user. An interject case: did a
+    line go out after the step that read the user's words (`used`), how
+    many tool calls came after the first such line and whether the run
+    still ended in a reply (going on), whether the reply repeats a line.
+    A plain case: how many lines, in how many of its steps (`expect`:
+    `none` for a short thing, `sparing` for a long one, where one in every
+    step is too many)."""
+    told = [t for t in r.get("told") or [] if t.get("message")]
+    at = r.get("interjected_at")
+    calls = [c for c in r.get("calls") or [] if c.get("name") != "tell_user"]
+    steps = len(r.get("turns") or [])
+    tool_steps = len({c["turn"] for c in calls})
+    told_steps = sorted({t["turn"] for t in told})
+    stop = r.get("stop_reason")
+    final = strip_for_display(r.get("final_reply") or "") if stop == "final_reply" else ""
+    repeats = [t["message"] for t in told
+               if _tell_norm(t["message"]) and (_tell_norm(t["message"]) in _tell_norm(final)
+                                                or (len(_tell_norm(final)) >= 8
+                                                    and _tell_norm(final) in _tell_norm(t["message"])))]
+    after = [t for t in told if at is not None and t["turn"] > at]
+    first_after = after[0] if after else None
+    calls_after = (sum(1 for c in calls if c["turn"] >= first_after["turn"]) if first_after else None)
+    # Words written in a step that called tools (its summary and thinking
+    # aside): the main chat never draws them, so they reach nobody.
+    unseen = [{"turn": x["turn"], "text": strip_for_display(x.get("content") or "")}
+              for x in r.get("turns") or [] if x.get("tool_calls")]
+    unseen = [u for u in unseen if u["text"]]
+    facts = {"told": len(told), "told_steps": told_steps, "steps": steps, "tool_steps": tool_steps,
+             "unseen": unseen,
+             "calls": len(calls), "stop": stop, "final": final, "repeats": repeats,
+             "dispatched": bool((r.get("dispatch") or {}).get("dispatched")),
+             "interjected_at": at, "after": len(after), "calls_after": calls_after}
+    if r.get("status") != "ok":
+        verdict = "运行失败"
+    elif case["kind"] == "interject":
+        verdict = "插话没读到" if at is None else "用了" if after else "没用"
+    elif case.get("expect") == "sparing":
+        verdict = ("合格（没用）" if not told else
+                   "每步都发" if len(told_steps) >= max(2, tool_steps) else "适度")
+    else:
+        verdict = "合格（没用）" if not told else "不必要地用了"
+    facts["verdict"] = verdict
+    return facts
+
+
+def render_tell_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
+    """Ticket 137: a table (each case: runs, verdicts, lines), then each case
+    with its message, what the user said mid-run and every run: the lines
+    it told and at which step, its tool calls, how it ended, the reply."""
+    meta = data["meta"]
+    results = data["results"]
+    model = meta.get("model") or {}
+    by_case: dict[str, list[dict[str, Any]]] = {}
+    for r in results:
+        by_case.setdefault(r["id"], []).append(r)
+    order = {v: i for i, v in enumerate(TELL_VARIANTS)}
+    for runs in by_case.values():
+        runs.sort(key=lambda r: (order.get(r.get("tell_wording") or r.get("wording"), 9), r.get("repeat", 0)))
+    out = [
+        "# 先说一句评测结果（票 137）",
+        "",
+        f"模型：{model.get('name')}（{meta.get('model_access', '')}），推理强度 "
+        f"{(model.get('options') or {}).get('reasoning_effort', '默认')}；运行于 {meta.get('ran_at')}"
+        + (f"，补跑 {len(meta['partial_reruns'])} 次" if meta.get("partial_reruns") else "") + "。",
+        "",
+        "- **提示词**：主对话今天的那份（`dispatch-criterion/galley-prompt/main_chat.v4.txt`，票 134 第四轮之后 "
+        "`managed_prompt.rs` 的主对话部分没改过），加浏览器闸（runner 的原话）；工具表里多一条 runner 自己的 "
+        "`tell_user`（`runner/tell_user.py` 的声明，由 `GaSession.offer_tool` 补进去，调用由同一段代码回结果）。",
+        "- **两版说明**：r1 是第一版（它是什么、什么时候有用）；r2 是 `runner/tell_user.py` 现在的（在 r1 上加一句事实："
+        "在最后回复之前，它写的别的话用户都看不到）。r1 下「还要多久？」被答在调用工具那一步的文字里，主对话不画那段字。",
+        "- **r3**：说明同 r2，插话的开场白（Core 的 `INTERJECTION_PREAMBLE`）在几个选项里加上这只手（「tell them something "
+        "now with tell_user and go on」）；只评测用，产品里的开场白没改。只跑插话用例（不插话的用例与 r2 相同）。",
+        "- **插话**：照 runner 的写法（Core 的 `INTERJECTION_PREAMBLE`、`runner/interject.py` 的 `compose`），"
+        "在用例写的那一步结束时写进 GA 的 `intervene`，下一步的提示里读到。",
+        f"- **沙盒**：同派活判据（票 115）：假 HOME、下载文件夹占位文件、假 `galley`；每次运行最多 {TELL_TOOL_CAP} 次工具调用"
+        "（`tell_user` 不算）；浏览器工具回闸门那句话、运行接着走；`ask_user` 运行停在那里。",
+        "- **判定**：插话用例看插话读到之后有没有先说一句（用了 / 没用 / 插话没读到：这一轮在读到之前就结束了），"
+        "说了之后还做了几次工具调用、最后有没有回复、回复有没有重复那句；不插话的短事用了算「不必要地用了」；"
+        "不插话的长事，调用工具的每一步都发算「每步都发」，发了但没那么多算「适度」。",
+        "",
+        "| 用例 | 说明 | 遍 | 判定 | 先说的句数（第几步） | 调用工具那几步里写的字（没人看到） | 工具调用 | 结束 | 回复重复那句 |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    case_by_id = {c["id"]: c for c in cases}
+    for c in cases:
+        for r in by_case.get(c["id"], []):
+            f = tell_facts(r, c)
+            steps = "、".join(str(s) for s in f["told_steps"]) or "-"
+            out.append(f"| `{c['id']}` | {r.get('tell_wording') or r.get('wording')} | {r.get('repeat')} | {f['verdict']} | {f['told']}（{steps}） | {len(f['unseen'])} 步 | {f['calls']} | "
+                       f"{f['stop']}{'，派了子任务' if f['dispatched'] else ''} | {'是' if f['repeats'] else '否'} |")
+    tallies: dict[str, dict[str, int]] = {}
+    for c in cases:
+        for r in by_case.get(c["id"], []):
+            v = f"{r.get('tell_wording') or r.get('wording')} {tell_facts(r, c)['verdict']}"
+            tallies.setdefault(c["id"], {}).setdefault(v, 0)
+            tallies[c["id"]][v] += 1
+    out += ["", "## 每个用例", ""]
+    for c in cases:
+        runs = by_case.get(c["id"], [])
+        tally = "，".join(f"{k} {v}" for k, v in (tallies.get(c["id"]) or {}).items())
+        out += [f"### {c['no']}. `{c['id']}`（{tally}）", "", f"消息：{c['message']}", ""]
+        if c.get("interject"):
+            out += [f"插话（第 {c['interject']['after_step']} 步结束时）：{c['interject']['text']}", ""]
+        if c.get("note"):
+            out += [f"说明：{c['note']}", ""]
+        for r in runs:
+            f = tell_facts(r, case_by_id[c["id"]])
+            out += [f"#### {r.get('tell_wording') or r.get('wording')} 第 {r.get('repeat')} 遍：{f['verdict']}", ""]
+            if r.get("status") != "ok":
+                out += [f"运行失败：{trunc(r.get('error', ''), 400)}", ""]
+                continue
+            if f["interjected_at"] is not None:
+                out.append(f"- 插话在第 {f['interjected_at']} 步结束时读到，下一步看到。")
+            for t in [t for t in r.get("told") or []]:
+                out.append(f"- 第 {t['turn']} 步先说：「{t['message']}」（此前 {t['calls_before']} 次工具调用，"
+                           f"开跑后 {t['after_s']} 秒）")
+            if f["calls_after"] is not None:
+                out.append(f"- 先说之后又做了 {f['calls_after']} 次工具调用（含那一步）。")
+            for u in f["unseen"]:
+                out.append(f"- 第 {u['turn']} 步调用工具时写的字（主对话不画）：「{trunc(u['text'].replace(chr(10), ' '), 200)}」")
+            gist = "；".join(f"第 {cl['turn']} 步 {call_gist(cl)}" for cl in r.get("calls") or []
+                            if cl.get("name") != "tell_user")
+            out.append(f"- 工具调用：{gist or '无'}")
+            out.append(f"- 结束：{f['stop']}，共 {f['steps']} 次模型调用"
+                       + ("，最终回复派了子任务" if f["dispatched"] else "") + "。")
+            if f["repeats"]:
+                out.append("- 最终回复重复了先说的那句。")
+            out += ["", "最终回复：", ""]
+            out += fenced(trunc(f["final"] or "（没有最终回复）", 2500), "text")
+            out.append("")
+    usage = meta.get("usage_total") or {}
+    out += ["## 用量", "",
+            f"共 {len(results)} 遍运行，{meta.get('llm_calls_total')} 次模型调用；输入 {usage.get('prompt_tokens')} token"
+            f"（缓存 {usage.get('cached_tokens')}），输出 {usage.get('completion_tokens')} token"
+            f"（推理 {usage.get('reasoning_tokens')}）。", ""]
+    return "\n".join(out)
+
+
 # ---------------- ticket 127: parallel dispatch ----------------
 
 
@@ -8728,6 +9050,13 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
                                   suite=PAR_SUITE):
             job["case_id"] = run_id
             jobs.append(job)
+    # Ticket 137.
+    tlcases = {c["id"]: c for c in tell_cases()}
+    tell_scripts = {"tell-question": ("i-question", "tell-run"), "tell-empty": ("n-short", "tell-empty")}
+    for run_id, (case_id, script) in tell_scripts.items():
+        for job in make_tell_jobs([tlcases[case_id]], snow, mykeys, ga_lang, set(), 1, script):
+            job["case_id"] = run_id
+            jobs.append(job)
     real_home = os.path.expanduser("~")
     home_canary = os.path.join(real_home, "entry-layer-eval-sbx-canary")
     results = run_jobs(jobs, python, 3, keep_temp)
@@ -8748,6 +9077,7 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
     dry_test_memo([r for r in results if r["id"].startswith("memo-")], memo_scripts, mcases, snow, check)
     dry_test_crit([r for r in results if r["id"].startswith("crit-")], crit_scripts, crcases, check)
     dry_test_par([r for r in results if r["id"].startswith("par-")], par_scripts, pcases, crcases, check)
+    dry_test_tell([r for r in results if r["id"].startswith("tell-")], tlcases, check)
     sbx_results = [r for r in results if r["id"].startswith("sbx-")]
     entry_results = [r for r in results if r["variant"] in VARIANTS]
     dispatch_results = [r for r in results if r["variant"] in DISPATCH_VARIANTS
@@ -8801,6 +9131,50 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
                   "carried Main Chat text")
     print("DRY TEST " + ("PASSED" if ok else "FAILED"))
     return 0 if ok else 1
+
+
+def dry_test_tell(results: list[dict[str, Any]], cases: dict[str, dict[str, Any]], check: Any) -> None:
+    """Ticket 137: the runner's tool is offered and answered with its
+    result; the interjection reaches the step after the one it was written
+    at, in the runner's words; the line is recorded at its step and
+    counted against no cap; the judge reads it."""
+    print("tell-user (ticket 137)")
+    from runner import tell_user as tell_user_mod
+
+    by_id = {r["id"]: r for r in results}
+    r = by_id.get("tell-question")
+    check(r is not None and r["status"] == "ok", f"tell-question ran ({r and r.get('error', '')[:300]})")
+    if r and r["status"] == "ok":
+        reqs = r["requests"]
+        tools = [t.get("function", t).get("name") for t in reqs[0].get("tools", [])]
+        check("tell_user" in tools and tools.count("tell_user") == 1, f"tell_user offered once ({tools})")
+        offered = next(t for t in reqs[0]["tools"] if t.get("function", t).get("name") == "tell_user")
+        check(offered.get("function", offered).get("description") == tell_user_mod.DESCRIPTION_EN,
+              "the runner's own description")
+        preamble = interjection_preamble()
+        check(preamble.startswith("The user sent this while you were working.") and "\\" not in preamble,
+              f"Core's preamble read from the Rust source ({preamble[:60]}…)")
+        check(r["interjected_at"] == 1, f"written at the end of step 1 ({r['interjected_at']})")
+        second = json.dumps(reqs[1], ensure_ascii=False)
+        check(preamble in second and "扫描件存成 PDF 好还是存成 PNG 好" in second
+              and "[MASTER]" in second, "the next step's prompt carries it, as GA appends it")
+        check(preamble not in json.dumps(reqs[0], ensure_ascii=False), "not before it was said")
+        third = json.dumps(reqs[2], ensure_ascii=False)
+        check(tell_user_mod.SENT["msg"] in third, "the model reads the runner's result")
+        check([(t["turn"], t["message"]) for t in r["told"]] == [(2, "PDF 更适合扫描件。文件还在数。")],
+              f"the line recorded at its step ({r['told']})")
+        check(r["tool_calls"] == 2, f"two tool calls besides it ({r['tool_calls']})")
+        f = tell_facts(r, cases["i-question"])
+        check(f["verdict"] == "用了" and f["calls_after"] == 1 and f["stop"] == "final_reply"
+              and not f["repeats"], f"judged as used, went on, no repeat ({f})")
+    r = by_id.get("tell-empty")
+    check(r is not None and r["status"] == "ok", "tell-empty ran")
+    if r and r["status"] == "ok":
+        check(r["interjected_at"] is None, "a plain case writes nothing into intervene")
+        check(tell_user_mod.EMPTY["msg"] in json.dumps(r["requests"][1], ensure_ascii=False),
+              "an empty line gets the runner's refusal")
+        f = tell_facts(r, cases["n-short"])
+        check(f["told"] == 0 and f["verdict"] == "合格（没用）", f"an empty line is no line ({f})")
 
 
 def dry_test_sandbox(results: list[dict[str, Any]], scripts: dict[tuple[str, str], str],
@@ -11519,7 +11893,7 @@ def main() -> int:
     ap.add_argument("--dry-test", action="store_true", help="verify interception, no model")
     ap.add_argument("--render-only", action="store_true", help="rebuild the .md from the .json")
     ap.add_argument("--suite", choices=("entry", "dispatch", "wake", "schedule", "todo", "chat", "memo", CRIT_SUITE,
-                                        PAR_SUITE),
+                                        PAR_SUITE, TELL_SUITE),
                     default="entry",
                     help="entry: cases.json WITHOUT / WITH; dispatch: dispatch-cases.json T / C / P; "
                          "wake: wake/cases.json under the wordings of wake/wording.md; "
@@ -11528,7 +11902,7 @@ def main() -> int:
                          "memo: memo/cases.json (ticket 96); "
                          "dispatch-criterion: dispatch-criterion/cases.json under the old and new prompts (ticket 115); "
                          "dispatch-parallel: dispatch-parallel/cases.json and ticket 115's cases under the new prompt "
-                         "(ticket 127)")
+                         "(ticket 127); tell-user: tell-user/cases.json, the main chat's tell_user (ticket 137)")
     ap.add_argument("--variant", default="all",
                     help="entry: without | with | both; dispatch: comma list of T,C,P; "
                          "wake: comma list of wording names; dispatch-criterion: old,new; or all")
@@ -11567,7 +11941,9 @@ def main() -> int:
         return dry_test(args.python, args.ga_lang, args.keep_temp)
 
     if args.repeats is None:
-        args.repeats = CRIT_REPEATS if args.suite in (CRIT_SUITE, PAR_SUITE) else WAKE_REPEATS
+        args.repeats = (CRIT_REPEATS if args.suite in (CRIT_SUITE, PAR_SUITE)
+                        else TELL_REPEATS if args.suite == TELL_SUITE else WAKE_REPEATS)
+    tell = args.suite == TELL_SUITE
     dispatch = args.suite == "dispatch"
     par = args.suite == PAR_SUITE
     crit = args.suite == CRIT_SUITE or par
@@ -11577,7 +11953,9 @@ def main() -> int:
     memo = args.suite == "memo"
     sched = args.suite == "schedule" or todo or chat or memo
     sandbox_mode = dispatch and args.mode == "sandbox"
-    if par:
+    if tell:
+        suite_files = (TELL_CASES, TELL_JSON, TELL_MD, TELL_VARIANTS, render_tell_md)
+    elif par:
         suite_files = (PAR_CASES, PAR_JSON, PAR_MD, PAR_VARIANTS, render_par_md)
     elif crit:
         suite_files = (CRIT_CASES, CRIT_JSON, CRIT_MD, CRIT_VARIANTS, render_crit_md)
@@ -11601,6 +11979,7 @@ def main() -> int:
         suite_files = (CASES, RESULTS_JSON, RESULTS_MD, VARIANTS, render_md)
     cases_path, results_json, results_md, all_variants, render = suite_files
     all_cases = (chat_cases() if chat else par_cases() if par else crit_cases() if crit
+                 else tell_cases() if tell
                  else json.loads(cases_path.read_text(encoding="utf-8"))["cases"])
     if args.render_only:
         data = json.loads(results_json.read_text(encoding="utf-8"))
@@ -11613,6 +11992,8 @@ def main() -> int:
         fail(f"unknown case ids: {sorted(wanted - {c['id'] for c in cases})}")
     if sched:
         variants = ["manual"]
+    elif tell and args.variant == "all":
+        variants = ["r2"]
     elif wake and args.variant == "all":
         variants = ["draft"]
     elif args.variant in ("all", "both"):
@@ -11652,6 +12033,9 @@ def main() -> int:
     elif crit:
         jobs = make_crit_jobs(cases, variants, now.astimezone(), mykeys, args.ga_lang, allowed, args.repeats,
                               first=args.first_repeat, suite=args.suite)
+    elif tell:
+        jobs = make_tell_jobs(cases, now.astimezone(), mykeys, args.ga_lang, allowed, args.repeats,
+                              first=args.first_repeat, variants=variants)
     elif wake:
         jobs = make_wake_jobs(cases, variants, now, mykeys, args.ga_lang, allowed, args.repeats)
     elif dispatch:
@@ -11694,13 +12078,15 @@ def main() -> int:
                 write_composed(r, "", WAKE_COMPOSED_DIR)
             elif crit:
                 write_composed(r, "", PAR_COMPOSED_DIR if par else CRIT_COMPOSED_DIR)
+            elif tell:
+                write_composed(r, "", TELL_COMPOSED_DIR)
             else:
                 write_composed(r, "dispatch." if dispatch else "")
         r.pop("request", None)
 
     merged: list[dict[str, Any]] = []
     previous_meta: dict[str, Any] = {}
-    if (wanted or wake or sched or crit) and results_json.is_file():
+    if (wanted or wake or sched or crit or tell) and results_json.is_file():
         previous = json.loads(results_json.read_text(encoding="utf-8"))
         merged, previous_meta = previous["results"], previous.get("meta", {})
     fresh = {(r["id"], r["variant"]) for r in results}
@@ -11715,7 +12101,7 @@ def main() -> int:
     order = {c["id"]: i for i, c in enumerate(all_cases)}
     if sched:
         merged.sort(key=lambda r: (order.get(r["id"], 99), r.get("repeat", 0)))
-    elif wake or crit:
+    elif wake or crit or tell:
         merged.sort(key=lambda r: (order.get(r["id"], 99), list(all_variants).index(r["wording"])
                                    if r.get("wording") in all_variants else 99, r.get("repeat", 0)))
     else:
@@ -11865,7 +12251,23 @@ def main() -> int:
             "manual": "docs/managed-ga-runtime/galley-assistant-manual/",
             "manual_sha": manual_sha(),
         })
-    if (wake or sched or crit) and (previous_meta.get("superseded_runs") or (args.supersede and replaced)):
+    if tell:
+        data["meta"].update({
+            "suite": "tell-user (ticket 137, main chat PRD ruling 186 point 2): tell-user/cases.json under the main "
+                     "chat prompt of today (dispatch-criterion/galley-prompt/main_chat.v4.txt) with ticket 135's "
+                     "guard, ticket 115's sandbox, the runner's tell_user entry offered (runner/tell_user.py through "
+                     "GaSession.offer_tool) and answered with its result; an interject case's words written into "
+                     "GA's intervene at the end of its step, as the runner composes them (Core's "
+                     "INTERJECTION_PREAMBLE, runner/interject.py compose)",
+            "model_access": f"API key 接入，模型 id {args.model_id}" if not args.mykey else source,
+            "repeats": args.repeats,
+            "tool_cap": TELL_TOOL_CAP,
+            "ends_the_run": {"ask_user": "ask_user"},
+            "interjection_preamble": interjection_preamble(),
+            "manual": "docs/managed-ga-runtime/galley-assistant-manual/",
+            "manual_sha": manual_sha(),
+        })
+    if (wake or sched or crit or tell) and (previous_meta.get("superseded_runs") or (args.supersede and replaced)):
         groups = previous_meta.get("superseded_runs") or []
         groups = [groups] if isinstance(groups, dict) else list(groups)
         if args.supersede and replaced:

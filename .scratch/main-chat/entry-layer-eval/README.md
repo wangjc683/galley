@@ -15,6 +15,7 @@
 - `memo/`：票 96 的备忘套件（见「备忘（票 96）」一节）。
 - `dispatch-criterion/`：票 115 的派活判据套件（见「派活判据（票 115）」一节）。
 - `dispatch-parallel/`：票 127 的并行派活套件（见「并行派活（票 127）」一节）。
+- `tell-user/`：票 137 的「先说一句」套件（见「先说一句（票 137）」一节）。
 - 票 134 在这两套里加了 v2（本票的派活条款，`dispatch-criterion/galley-prompt/main_chat.v2.txt`，第一轮措辞留在 `main_chat.v2-r1.txt`），在 `wake/` 里加了成品贴回的两条用例和 `core` 措辞（见「派活判据（票 115）」「并行派活（票 127）」「叫醒措辞评测（票 30）」三节里票 134 的部分）。第三轮加了 v3（裁决 184），第四轮加了 v4（裁决 185，`main_chat.v4.txt`，与 `core/src/managed_prompt.rs` 的入口层一字不差，第一轮措辞留在 `main_chat.v4-r1.txt`）；第四轮起 v3、v4 的运行带上票 135 的硬闸（浏览器工具回硬闸那句话，运行接着走），见「派活判据（票 115）」里第四轮那一节。
 
 ## 怎么跑
@@ -1066,3 +1067,36 @@ v4 提示词（`dispatch-criterion/galley-prompt/main_chat.v4.txt`，最终措�
 - 不留 key：key 只在内存里，经 stdin 交给 worker；请求记录只存请求体不存请求头；写结果前把 key 字符串整体替换掉；worker 日志随临时目录删除。
 - 不留本机路径：写结果前把系统临时目录换成 `$TMPDIR`，把跑 worker 的解释器路径换成 `$PYTHON`、它的安装目录换成 `$PYTHON_ROOT`（票 41 起；之前的结果里还留着解释器路径）。
 - 设 `PYTHONDONTWRITEBYTECODE=1`，不在 `managed-ga/code/` 下留 `__pycache__`。
+
+## 先说一句（票 137）
+
+主对话 PRD 裁决 186 第 2 条：主对话的模型有一个 runner 自己加的工具 `tell_user`，一轮中间先给用户发一句、这一轮接着做。量三件：插话后手上的事还要做几步时用不用；没人插话、事情也不长时会不会滥用；用了之后接着做的那段对不对。`run.py --suite tell-user`。
+
+- **提示词**：主对话今天的那份（`dispatch-criterion/galley-prompt/main_chat.v4.txt`；票 134 第四轮之后 `managed_prompt.rs` 的主对话部分没改过），加票 135 的浏览器闸（runner 的原话，运行接着走）。
+- **工具**：runner 自己的声明与结果（`runner/tell_user.py`，经 `GaSession.offer_tool` 补进 `agentmain.TOOLS_SCHEMA`，同真实 runner）；`tell_user` 不算进每次运行的工具调用上限（12 次）。三组：r1 是第一版说明（它是什么、什么时候有用）；r2 是现在的（加半句事实：在最后回复之前，它写的别的话用户都看不到）；r3 是 r2 加上改过的插话开场白（Core 的 `INTERJECTION_PREAMBLE` 在选项里加上这只手），只评测用，产品没改。
+- **插话**：照 runner 的写法（Core 的开场白读自 `core/src/interject.rs`，`runner/interject.py` 的 `compose`），在用例写的那一步结束时写进 GA 的 `intervene`，下一步的提示里读到。
+- **用例**（`tell-user/cases.json`，8 条，人名虚构）：插话 4 条（手上的事还长时问一件不相干的事、问「还要多久？」、改方向、交代一件要记的事），不插话 4 条（两条短事、两条长事）。第一轮的两条插话用例手上的事一步就做完，测不到「还要做几步」，改长后重跑，原结果在 `meta.superseded_runs`。
+- **判定**（`tell_facts`）：插话用例看读到插话之后有没有先说一句；不插话的短事用了算「不必要地用了」，长事调用工具的每一步都发算「每步都发」。另记：调用工具的那几步里写的字（主对话不画，没人看到）、说了之后又做了几次工具调用、回复有没有重复那句、有没有派子任务。
+- **`--dry-test` 加的**（`dry_test_tell`）：工具只提供一次、说明是 runner 的原话；开场白读自 Rust 源码；插话在第 1 步结束时写进、第 2 步的提示里有、第 1 步没有；模型读到 runner 的结果；那句记在它那一步、不算进工具调用；空消息回 runner 的拒绝、不算一句。
+- **怎么跑**：
+
+```bash
+PY=/Library/Frameworks/Python.framework/Versions/3.14/bin/python3
+export PYTHONDONTWRITEBYTECODE=1
+$PY .scratch/main-chat/entry-layer-eval/run.py --dry-test
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite tell-user --variant r2 --parallel 8            # 8 × 3 = 24 次运行
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite tell-user --variant r3 --cases i-question,i-howlong,i-todo,i-correction
+```
+
+### 结果（2026-11-03，gpt-6.1-sol，推理强度 high）
+
+66 次运行（现行 60 次，被替换的 6 次），181 次模型调用，输入 1,196,014 token（缓存 601,088），输出 60,084 token。详见 `tell-user/results.md`。
+
+- **滥用：没有**。不插话的 4 条在 r1、r2 下各 3 遍，24 遍一次都没用（两条短事直接答；两条长事里，分类整理 6 遍都派了子任务，等 80 秒看文件夹 6 遍自己做完，都没发进展）。
+- **插话后用不用：很少**。用了的只有「还要多久？」：r1 0/3，r2 1/3，r3 1/3。其余是这样处理的：
+  - 手上的事长（分类整理、报销清单）：现在的派活条款下 12 遍都把活派给子任务，插话在派活的那条回复里一起答了（问的格式问题当场答，要记的事先记进待办再回复，多花 3 步、约 1 分钟）；主对话自己不再接着做，这只手用不上。
+  - 「还要多久？」：没用的 7 遍都在调用工具的那一步里写了「还需要约 80 秒……」，主对话不画那段字，用户看不到（三点下面那一行会显示那一步 `<summary>` 的后半句，有时恰好是「还需约一分钟」）。r2 加了「在最后回复之前，你写的别的话用户都看不到」，仍有 2/3 这样写。
+  - 改方向（「只数 PDF 和图片就行」）：9 遍都直接按新范围做完、在回复里说明，没有先说一句；这件事一两步就完，合理。
+- **用了之后接着做：对**。用了的 2 遍在读到插话的那一步先说（「还需要约 80 秒……」「还需要约 1 分钟……」），接着做完 4 次检查，最终回复给出结果、不重复那句。
+- **说明措辞**：r1 → r2 只在「还要多久？」上多用了 1 遍；r3 的开场白没有再多。票 139 把派活条款收成几句判断以后（主对话会更常自己做长活），这一套应该重跑。
+

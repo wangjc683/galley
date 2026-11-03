@@ -272,6 +272,40 @@ layer says so; a guard in the runner makes it hold:
 - Attach mode is untouched (Rule 1): without `GALLEY_RUNTIME_KIND=managed`
   the guard is inert even if the mark were set.
 
+### The Main Chat Can Tell You Something Mid-Run
+
+GA's loop gives a run one reply. The main chat's model has one more tool,
+`tell_user`, that sends the user a message now while the run goes on (main
+chat PRD ruling 186 point 2, ticket 137,
+`.scratch/main-chat/issues/137-say-a-line-mid-run.md`; `runner/tell_user.py`):
+
+- **Not in GA's files**: GA's tool list (`assets/tools_schema*.json`) is
+  shared by every managed runner, and only the main chat gets this tool, so
+  there is no managed patch. Under the same mark and runtime test as the
+  browser guard, the runner adds the tool's entry to `agentmain.TOOLS_SCHEMA`
+  before every `put_task` (`GaSession.offer_tool`; a model switch reloads
+  GA's list, hence every run) and `WorkbenchHandler.dispatch` answers the
+  call before GA's own dispatch (GA has no `do_tell_user`). The entry says
+  what the tool is and when it helps, and the fact it rests on: "Send the
+  user a message right away, without ending your turn; until your final
+  reply, nothing else you write reaches them. Useful when the user says
+  something while you are working, or when what you are doing will take a
+  while and they would want to know how it is going." (its Chinese pair
+  beside GA's Chinese tool list). One parameter, `message`.
+- **What the model reads back**: `{"status": "success", "msg": "Sent to the
+  user. Carry on; your turn has not ended."}` with GA's usual next prompt;
+  an empty message, or a run already over (a stop racing it), gets GA's
+  error envelope and sends nothing.
+- **Where it goes**: the bridge sends the IPC event `tell_user` (under the
+  run's completion lock, never after `run_complete`); Core writes it as a
+  Galley message right after the step that said it (`core/src/tell_user.rs`,
+  [IPC](../ipc-protocol.md) §4.21), and the desktop draws it as a bubble of
+  its own while the typing bubble goes on below it. A replayed history has
+  it where the model said it.
+- Workbench sessions, subtasks and the IM channels have no such tool; there,
+  and in attach mode, a call to it reaches GA, which answers that it knows no
+  such tool.
+
 ### Subtask Reports
 
 A subtask's result comes back to the main chat by itself (ticket 29,
