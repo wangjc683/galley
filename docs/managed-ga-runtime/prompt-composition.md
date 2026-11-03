@@ -439,7 +439,7 @@ What you noted about the user, oldest first, each with the day you last noted or
   tested never to carry it). Data: outside the static budget and the prompt
   hash.
 
-### Main Chat Background (main chat subtasks only)
+### Subtask Background (main chat subtasks only)
 
 Since ticket 138 (`.scratch/main-chat/issues/138-subtask-carries-the-chat.md`,
 main chat PRD ruling 186) a subtask the main chat dispatched is told the
@@ -451,17 +451,17 @@ section after its state block (`section_in` in
 record stored one):
 
 ```text
-## Main Chat Background
+## Background: The User's Chat With Galley
 
-This conversation is a subtask that the user's main chat handed you; below are the main chat's last turns with the user, as they stood at that moment. Read them as background, not as a conversation to continue: your first message, the instructions, is what to do and wins where they differ, and what you hand back goes to the main chat, as it says.
+This conversation is a subtask handed to you from the user's chat with Galley; below are that chat's last turns, as they stood at that moment. Read them as background, not as a conversation to continue: your first message, the instructions, is what to do and wins where they differ, and what you hand back goes to that chat, as it says.
 
 <turn at="<YYYY-MM-DD HH:MM>">
 <user>
 <the user's message>
 </user>
-<main-chat>
+<galley>
 <every reply up to the next user message>
-</main-chat>
+</galley>
 </turn>
 ```
 
@@ -473,6 +473,10 @@ This conversation is a subtask that the user's main chat handed you; below are t
   as the carried turns' in the Main Chat section. A user message's images
   are named by count only (`[2 images attached]`): the section carries no
   image, and a local path would break admission rule 4.
+- **Words**: neither the heading, the two sentences nor the tags say "main
+  chat" (main chat PRD ruling 173: an internal term). The subtask's output
+  is on the user's screen and the model copies the words it is given; to
+  the model it is the user's chat with Galley.
 - **Why the prompt, not the conversation**: the desktop's first user
   message stays the instructions and the replay stays the subtask's own
   rows, and the model reads the turns as someone else's conversation, not
@@ -484,7 +488,8 @@ This conversation is a subtask that the user's main chat handed you; below are t
 - **Cost**: the section rides every request of the subtask, a stable
   prefix the provider can cache, and GA never trims it the way it trims
   history. At most 15,000 characters of turns (the carry's cap) plus the
-  markup.
+  markup; measured on the main chat's dispatches of 2026-10-21 to 11-03
+  (7 replies), a median of 7,006 characters and a maximum of 8,991.
 - **Switch**: none. A subtask dispatched before ticket 138, a workbench
   session, IM and attach mode never carry it. Data: outside the static
   budget and the prompt hash.

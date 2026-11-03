@@ -293,8 +293,8 @@ pub(crate) fn compose_im_runtime_prompt(app_version: &str) -> String {
 }
 
 /// A main chat subtask's variant (ticket 138): the workbench prompt, byte
-/// for byte, with its state block followed by `background`, the "Main
-/// Chat Background" section its dispatch stored
+/// for byte, with its state block followed by `background`, the section
+/// of the main chat's last turns its dispatch stored
 /// ([`crate::subtask_background::prompt_section`]). A subtask without
 /// one gets [`compose_runtime_prompt`].
 pub(crate) fn compose_subtask_runtime_prompt(app_version: &str, background: &str) -> String {

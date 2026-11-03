@@ -14,9 +14,12 @@
 //!   window is a new segment's opening ([`crate::session_runner::carry`])
 //!   read up to the dispatching reply instead of up to a boundary: the
 //!   last [`CARRY_TURNS`] turns, at most `CARRY_MAX_CHARS` characters, cut
-//!   the carry's way. Only the reply's own segment (from the latest
-//!   boundary not after it), and nothing after the reply. Rows read as
-//!   the main chat's replay reads them ([`crate::subtask::mark_rows`]):
+//!   the carry's way, whichever segment they are in, and nothing after the
+//!   reply. That is what the main chat's runner holds when it dispatches
+//!   (its segment opens with the turns before the boundary), and the
+//!   first message after a break ("book it as we said") leans on exactly
+//!   those turns (ticket 138 follow-up). Rows read as the main chat's
+//!   replay reads them ([`crate::subtask::mark_rows`]):
 //!   replies without their instructions, a report as its lines. The
 //!   dispatching reply keeps what it said before its tags and loses the
 //!   tags, with no marker line: the instructions are the subtask's first
@@ -113,28 +116,21 @@ impl SubtaskBackground {
 }
 
 /// The background for the subtasks of the main chat reply on
-/// `reply_turn`: the turns of its segment up to and including it (see
-/// the module docs).
+/// `reply_turn`: the last turns up to and including it, across segment
+/// boundaries (see the module docs).
 pub async fn take(
     galley: &SqliteGalley,
     main_chat: &SessionId,
     reply_turn: i64,
 ) -> Result<SubtaskBackground, GalleyError> {
-    let segment_start = galley
-        .main_chat_segment_starts(main_chat)
-        .await?
-        .into_iter()
-        .filter(|start| *start <= reply_turn)
-        .max()
-        .unwrap_or(0);
     // Read from the oldest turn the window can take, as the carry does;
     // a turn counts when its reply comes before the bound, and the
-    // dispatching reply sits on `reply_turn`.
+    // dispatching reply sits on `reply_turn`. None counts: nothing to
+    // read but the reply's own index.
     let from = galley
         .main_chat_carry_from(main_chat, reply_turn + 1, CARRY_TURNS as i64)
         .await?
-        .unwrap_or(segment_start)
-        .max(segment_start);
+        .unwrap_or(reply_turn);
     let mut rows = galley.persisted_message_rows_from(main_chat, from).await?;
     rows.retain(|row| row.turn_index <= reply_turn);
     let mut dispatches = crate::subtask::named_dispatches(galley, main_chat).await?;
@@ -178,17 +174,19 @@ pub async fn snapshot(
     }
 }
 
-/// The section's heading.
-pub const SECTION_HEADING: &str = "## Main Chat Background";
+/// The section's heading. Neither it nor the words under it say "main
+/// chat": the subtask's output is on the user's screen and the model
+/// copies the words it is given (main chat PRD ruling 173: "main chat" is
+/// an internal term; to the model it is "your chat with Galley").
+pub const SECTION_HEADING: &str = "## Background: The User's Chat With Galley";
 
 /// What the section says the turns are, before them.
-const SECTION_INTRO: &str = "This conversation is a subtask that the user's main chat handed \
-you; below are the main chat's last turns with the user, as they stood at that moment. Read \
-them as background, not as a conversation to continue: your first message, the instructions, \
-is what to do and wins where they differ, and what you hand back goes to the main chat, as it \
-says.";
+const SECTION_INTRO: &str = "This conversation is a subtask handed to you from the user's chat \
+with Galley; below are that chat's last turns, as they stood at that moment. Read them as \
+background, not as a conversation to continue: your first message, the instructions, is what to \
+do and wins where they differ, and what you hand back goes to that chat, as it says.";
 
-/// The "Main Chat Background" section for `background`, its times in
+/// The "Background: The User's Chat With Galley" section for `background`, its times in
 /// `tz` to the minute; `None` when it is empty.
 pub fn section_in<Tz: chrono::TimeZone>(background: &SubtaskBackground, tz: &Tz) -> Option<String>
 where
@@ -209,7 +207,7 @@ where
         }
         let _ = write!(
             section,
-            "\n\n<turn at=\"{at}\">\n<user>\n{user}\n</user>\n<main-chat>\n{reply}\n</main-chat>\n</turn>",
+            "\n\n<turn at=\"{at}\">\n<user>\n{user}\n</user>\n<galley>\n{reply}\n</galley>\n</turn>",
             at = local_minute(&turn.said_at, tz),
             reply = turn.reply.trim(),
         );
@@ -318,12 +316,12 @@ mod tests {
         assert!(section.starts_with(&format!("{SECTION_HEADING}\n\n{SECTION_INTRO}\n\n")));
         assert!(section.contains(
             "<turn at=\"2026-11-03 09:58\">\n<user>\n周五去上海\n[2 images attached]\n</user>\n\
-             <main-chat>\n好。\n</main-chat>\n</turn>"
+             <galley>\n好。\n</galley>\n</turn>"
         ));
         assert!(!section.contains("/a.png"));
         assert!(section.ends_with(
             "<turn at=\"2026-11-03 10:05\">\n<user>\n帮我订周五的高铁\n</user>\n\
-             <main-chat>\n好，去订了。\n</main-chat>\n</turn>"
+             <galley>\n好，去订了。\n</galley>\n</turn>"
         ));
         // An unreadable time is kept as written.
         let odd = SubtaskBackground {
@@ -334,19 +332,36 @@ mod tests {
             .contains("<turn at=\"2026-11-03 02:05\">"));
     }
 
-    /// The intro is the ticket's two sentences: it is the main chat's,
-    /// read-only, and the instructions win.
+    /// The intro is the ticket's two sentences: it is the user's chat
+    /// with Galley, read-only, and the instructions win.
     #[test]
     fn the_intro_says_read_only_and_the_instructions_win() {
         assert_eq!(SECTION_INTRO.matches(". ").count() + 1, 2);
         for words in [
-            "main chat",
+            "the user's chat with Galley",
             "background",
             "not as a conversation to continue",
             "wins where they differ",
-            "goes to the main chat",
+            "goes to that chat",
         ] {
             assert!(SECTION_INTRO.contains(words), "{words}");
+        }
+    }
+
+    /// Ruling 173: the model copies what it is given, and "main chat" is
+    /// an internal term; nothing the section adds around the turns says
+    /// it, in any spelling.
+    #[test]
+    fn the_section_never_says_main_chat() {
+        let background = SubtaskBackground {
+            turns: vec![turn(2, "2026-11-03T01:00:00Z", "问", "答")],
+        };
+        let section = section_in(&background, &chrono::Utc)
+            .expect("a section")
+            .to_lowercase();
+        assert!(section.starts_with("## background: the user's chat with galley\n\n"));
+        for internal in ["main chat", "main-chat", "main_chat", "mainchat"] {
+            assert!(!section.contains(internal), "{internal}");
         }
     }
 

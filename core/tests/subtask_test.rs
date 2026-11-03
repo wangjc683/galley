@@ -1143,7 +1143,7 @@ const WORKBENCH_PROMPT: &str = "workbench prompt";
 
 /// [`FakeEnv`] plus the one thing `prepare_managed_spawn_args` does for a
 /// subtask (ticket 138), through the function it calls: the runtime
-/// prompt gains the "Main Chat Background" section the dispatch stored,
+/// prompt gains the background section the dispatch stored,
 /// read when the runner spawns. Times in UTC.
 struct BackgroundEnv {
     galley: SqliteGalley,
@@ -1217,13 +1217,13 @@ fn user_and_reply(background: &SubtaskBackground) -> Vec<(&str, &str)> {
         .collect()
 }
 
-/// The window is the dispatching reply's segment up to the reply, read
-/// as the main chat's replay reads it: an earlier reply names its
-/// subtask, the dispatching one loses its tags with no marker, nothing
-/// from before the boundary or after the reply. Every subtask of the
-/// reply is told the same.
+/// The window is what the main chat's runner holds up to the reply —
+/// its segment, opened by the turns before the boundary (ticket 138
+/// follow-up) — read as the main chat's replay reads it: an earlier reply
+/// names its subtask, the dispatching one loses its tags with no marker,
+/// nothing after the reply. Every subtask of the reply is told the same.
 #[tokio::test]
-async fn the_background_is_the_segment_up_to_the_dispatching_reply() {
+async fn the_background_is_the_last_turns_up_to_the_dispatching_reply() {
     let (_pool, galley) = with_main_chat().await;
     let main = SessionId(MAIN.into());
     let before = exchange(&galley, MAIN, "上一段说的", "上一段的回复", None).await;
@@ -1269,6 +1269,8 @@ async fn the_background_is_the_segment_up_to_the_dispatching_reply() {
     assert_eq!(
         user_and_reply(&background),
         vec![
+            // Before the boundary: the segment opens with it.
+            ("上一段说的", "上一段的回复"),
             (
                 "先查报价",
                 format!("好。\n\n[subtask {earlier_id}: 报价]").as_str()
@@ -1281,22 +1283,30 @@ async fn the_background_is_the_segment_up_to_the_dispatching_reply() {
         ]
     );
     assert_eq!(stored_background(&galley, &hotel).await, Some(background));
-    // The earlier subtask was told the segment as it stood then: its own
-    // reply's turn alone.
+    // The earlier subtask was told the main chat as it stood then: the
+    // turn its segment opened with, and its own reply's.
     assert_eq!(
         user_and_reply(&stored_background(&galley, &earlier_id).await.expect("one")),
-        vec![("先查报价", "好。")]
+        vec![("上一段说的", "上一段的回复"), ("先查报价", "好。")]
     );
 }
 
-/// The carry's limits hold: the last ten turns, and a latest turn over
-/// the cap alone, cut where the carry cuts it.
+/// The carry's limits hold: the last ten turns, whichever segment they
+/// are in, and a latest turn over the cap alone, cut where the carry cuts
+/// it.
 #[tokio::test]
 async fn the_background_keeps_the_carrys_ten_turns_and_its_cap() {
     let (_pool, galley) = with_main_chat().await;
+    let mut last = 0;
     for i in 0..11 {
-        exchange(&galley, MAIN, &format!("第{i}句"), &format!("回{i}"), None).await;
+        last = exchange(&galley, MAIN, &format!("第{i}句"), &format!("回{i}"), None).await;
     }
+    // The user comes back after a break: the dispatching message opens a
+    // segment, and leans on the turns before it.
+    galley
+        .record_main_chat_segment(&SessionId(MAIN.into()), last + 1)
+        .await
+        .expect("boundary");
     exchange(
         &galley,
         MAIN,
@@ -1374,9 +1384,10 @@ async fn every_runner_of_a_subtask_is_told_the_same_background() {
     let section = first[0]
         .strip_prefix(&format!("{WORKBENCH_PROMPT}\n\n{SECTION_HEADING}\n\n"))
         .expect("the section follows the workbench prompt");
-    assert!(section
-        .contains("<user>\n周五要去上海开会\n</user>\n<main-chat>\n好的，记下了。\n</main-chat>"));
-    assert!(section.contains("<user>\n帮我订高铁\n</user>\n<main-chat>\n去订了。\n</main-chat>"));
+    assert!(
+        section.contains("<user>\n周五要去上海开会\n</user>\n<galley>\n好的，记下了。\n</galley>")
+    );
+    assert!(section.contains("<user>\n帮我订高铁\n</user>\n<galley>\n去订了。\n</galley>"));
     assert!(!section.contains("上午出发"));
     assert_eq!(
         runner.user_messages(&sub),
