@@ -1,6 +1,6 @@
 # 126 子任务的标题由主对话写在标签上
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-03 快进合入：`865810e8`、`3c706422`。代理在 worktree 跑过 cargo test 1296 条、vitest 2722 条、dry-test 968 条检查，全过；主会话两次 rebase（到 `4c75d9a0`、`bcba4a66`）后复跑 typecheck、lint、diff --check 干净，vitest 247 个文件 2759 条过；合入后 Core 重编起来，二进制里有新标签那句。偏离票面主会话认可：叫醒报告也读会话当前标题；`<subtask >` 算标签；流式输出时压住还没写完的属性；入口层预算 3931 → 4049。代理报的风险：没写标题的子任务多一次自动起标题的调用、第一份报告多半赶在新标题之前；标题里有 `>` 时开标签提前结束，指令开头带残片；已有子任务不回填。文档没跟上：`docs/managed-ga-runtime/prompt-composition.md:467` 的标签写法与预算记录（从票 115 起没补）、`runtime-modes-and-sessions.md:169/176/198`。等 JC 真机：派出去的子任务标题是不是几个字）
 
 来源：[主对话 PRD](../PRD.md) 裁决 175。改 Core（解析标签、建子任务会话、回放）、Core 与 GUI 剥标签的两份实现、入口层派活那一句、它们的测试，和评测加载器认标签的地方；不动 Agent API 结构、迁移、手册、runner。只影响内置运行时；外置没有主对话，零变化。之后由同一个代理接着做票 [127](./127-parallel-dispatch.md)，两张票改同一段提示词。
 
