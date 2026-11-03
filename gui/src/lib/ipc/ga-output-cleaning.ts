@@ -16,8 +16,9 @@ const GA_TAG_PATTERNS: RegExp[] = [
   /<goal-status>[\s\S]*?<\/goal-status>/g,
   // Galley's own tag (main chat ticket 06a): work the main chat hands to
   // a subtask. Core starts it when the reply's run ends and shows it as
-  // a card under the reply — never as answer prose.
-  /<subtask>[\s\S]*?<\/subtask>/g,
+  // a card under the reply — never as answer prose. The opener may carry
+  // attributes (`<subtask title="…">`, ticket 126); SUBTASK_OPEN.
+  /<subtask(?:\s[^>]*)?>[\s\S]*?<\/subtask>/g,
   // Galley's own tag (main chat tickets 29 / 31): a round Core woke the
   // main chat for (a subtask finished, asks or failed) whose only reply
   // is this says nothing to the user — it sent the subtask back or
@@ -25,9 +26,13 @@ const GA_TAG_PATTERNS: RegExp[] = [
   /<\s*\/?\s*no-reply\s*\/?\s*>/gi,
 ];
 
-/** An unclosed `<subtask>`: everything from it on is instructions that
- * never went anywhere, not answer prose (`cleanFinalAnswer`). */
-const SUBTASK_OPEN = "<subtask>";
+/** A `<subtask>` opener, bare or with attributes (`<subtask title="…">`,
+ * main chat ticket 126): `<subtask`, then `>`, or whitespace and anything
+ * up to the first `>`; `<subtasks>` is not one. Core reads the tags with
+ * the same opener (core/src/subtask.rs). An unclosed one: everything from
+ * it on is instructions that never went anywhere, not answer prose
+ * (`cleanFinalAnswer`). */
+const SUBTASK_OPEN = /<subtask(?:\s[^>]*)?>/;
 
 /** The silent-reply tag `<no-reply/>` (main chat tickets 29 / 31), as
  * models write it: any case, spaces inside, `<no-reply>` and a stray
@@ -80,7 +85,7 @@ export function isSummaryOnlyReply(text: string): boolean {
   return (
     !!text &&
     !NO_REPLY_TAG.test(text) &&
-    !text.includes(SUBTASK_OPEN) &&
+    !SUBTASK_OPEN.test(text) &&
     cleanFinalAnswer(text).trim() === ""
   );
 }
@@ -249,7 +254,7 @@ export function cleanFinalAnswer(text: string): string {
   if (!text) return "";
   let out = text;
   for (const p of GA_TAG_PATTERNS) out = out.replace(p, "");
-  const subtaskOpen = out.indexOf(SUBTASK_OPEN);
+  const subtaskOpen = out.search(SUBTASK_OPEN);
   if (subtaskOpen !== -1) out = out.slice(0, subtaskOpen);
   out = out.replace(LLM_RUNNING_MARKER, "");
   out = out.replace(TOOL_ACTION_LINE, "");
@@ -285,7 +290,7 @@ export function finalAnswerFileRefs(text: string): string[] {
   if (!text || !text.includes("[FILE:")) return [];
   let out = text;
   for (const p of GA_TAG_PATTERNS) out = out.replace(p, "");
-  const subtaskOpen = out.indexOf(SUBTASK_OPEN);
+  const subtaskOpen = out.search(SUBTASK_OPEN);
   if (subtaskOpen !== -1) out = out.slice(0, subtaskOpen);
   const paths: string[] = [];
   for (const match of out.matchAll(FILE_REF_PATH_PATTERN)) {
@@ -436,7 +441,10 @@ export function cleanPartialContent(text: string): string {
       ) ||
       // `<no-reply/>` on its way, spaces and the slash included
       // ("<no-re", "<no-reply /").
-      NO_REPLY_PARTIAL.test(tail);
+      NO_REPLY_PARTIAL.test(tail) ||
+      // A subtask opener whose attributes are still streaming
+      // (`<subtask title="整理`, ticket 126): its title is no prose.
+      /^subtask\s/.test(tail);
     if (couldBeTag) out = out.slice(0, lastLt);
   }
 
@@ -683,7 +691,7 @@ export function extractPreamble(text: string): string | undefined {
   segment = segment.replace(/<tool_use>[\s\S]*?<\/tool_use>/g, "");
   segment = segment.replace(/<file_content[^>]*>[\s\S]*?<\/file_content>/g, "");
   segment = segment.replace(/<next-suggestion>[\s\S]*?<\/next-suggestion>/g, "");
-  segment = segment.replace(/<subtask>[\s\S]*?<\/subtask>/g, "");
+  segment = segment.replace(/<subtask(?:\s[^>]*)?>[\s\S]*?<\/subtask>/g, "");
   segment = segment.replace(/<\s*\/?\s*no-reply\s*\/?\s*>/gi, "");
   // Frontend / dispatch markers that occasionally leak into raw
   // response content (see cleanPartialContent for the full set; we

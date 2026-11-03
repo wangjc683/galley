@@ -18,11 +18,12 @@ use std::path::{Path, PathBuf};
 const ASK_USER_TOOL_CALLS_COL: &str =
     "CASE WHEN tool_calls LIKE '%ask_user%' THEN tool_calls END AS ask_user_tool_calls";
 
-/// Provenance a rename stamps onto `sessions.title_source`. See
-/// migration `038_session_title_source.sql` for the full value set —
-/// `seed` and `auto` are never chosen by a rename caller directly
-/// (`seed` comes from clearing the title, `auto` from
-/// [`SqliteGalley::try_apply_auto_title`]).
+/// Provenance a rename stamps onto `sessions.title_source`, and a
+/// subtask's creation (main chat ticket 126,
+/// [`SqliteGalley::create_subtask_session`]). See migration
+/// `038_session_title_source.sql` for the full value set — `seed` and
+/// `auto` are never chosen by a rename caller directly (`seed` comes from
+/// clearing the title, `auto` from [`SqliteGalley::try_apply_auto_title`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenameTitleSource {
     User,
@@ -30,7 +31,7 @@ pub enum RenameTitleSource {
 }
 
 impl RenameTitleSource {
-    fn as_sql(self) -> &'static str {
+    pub(super) fn as_sql(self) -> &'static str {
         match self {
             Self::User => "user",
             Self::Derived => "derived",

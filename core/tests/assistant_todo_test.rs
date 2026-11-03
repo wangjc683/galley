@@ -18,7 +18,7 @@ use galley_core_lib::api::{
 use galley_core_lib::assistant_todo::{
     assistant_todo, AssistantTodo, TodoCreator, TodoKind, TodoState,
 };
-use galley_core_lib::db::{MainChatSeed, PersistAssistantMessage, SqliteGalley};
+use galley_core_lib::db::{MainChatSeed, PersistAssistantMessage, RenameTitleSource, SqliteGalley};
 use galley_core_lib::runner_manager::RunnerManager;
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
@@ -86,6 +86,7 @@ async fn subtask(
             Origin::subtask(),
             &SessionId(parent.into()),
             Some(format!("{title}\n细节")),
+            RenameTitleSource::User,
         )
         .await
         .expect("subtask");

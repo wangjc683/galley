@@ -114,7 +114,49 @@ FAKE_DISPATCH_RESULTS: dict[str, Any] = {
     "P": {"subtask_id": "s-sub0001", "status": "running"},
 }
 CLI_DISPATCH_RE = re.compile(r"subtask[\s'\",]+start\b")
-SUBTASK_TAG_RE = re.compile(r"<subtask>([\s\S]*?)</subtask>")
+# Ticket 126 (main chat PRD ruling 175): the opener may carry attributes,
+# `<subtask title="a few words">`, read as Core reads it (subtask.rs
+# parse_subtask_tags; the turn derivation's SUBTASK_OPEN): `<subtask`, then
+# `>`, or whitespace and anything up to the first `>`; `<subtasks>` is no
+# tag. `\s` is JavaScript's. SUBTASK_TAG_RE keeps its one group, the body.
+JS_SPACE = "[\t\n\x0b\x0c\r \xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]"
+SUBTASK_TAG_RE = re.compile(rf"<subtask(?:{JS_SPACE}[^>]*)?>([\s\S]*?)</subtask>")
+SUBTASK_OPEN_RE = re.compile(rf"<subtask(?:{JS_SPACE}[^>]*)?>")
+SUBTASK_FULL_RE = re.compile(rf"<subtask({JS_SPACE}[^>]*)?>([\s\S]*?)</subtask>")
+# subtask.rs TITLE_ATTRIBUTE: whitespace, one title="…" (double quotes, no
+# quote or line break in it), optional whitespace; anything else after the
+# name is a tag without a title.
+SUBTASK_TITLE_RE = re.compile(rf'\A{JS_SPACE}+title="([^"\r\n]*)"{JS_SPACE}*\Z')
+# session_title::TITLE_DERIVE_MAX, in UTF-16 units.
+TITLE_DERIVE_MAX = 80
+
+
+def derive_title_from_text(text: str) -> str:
+    """session_title::derive_title_from_text: whitespace runs as one space,
+    trimmed, cut at TITLE_DERIVE_MAX UTF-16 units with an ellipsis."""
+    one_line = re.sub(rf"{JS_SPACE}+", " ", text).strip(" ")
+    units = 0
+    for i, ch in enumerate(one_line):
+        units += 2 if ord(ch) > 0xFFFF else 1
+        if units > TITLE_DERIVE_MAX:
+            return one_line[:i] + "…"
+    return one_line
+
+
+def subtask_tag_title(attributes: str | None) -> str | None:
+    """subtask::tag_title: the cleaned title an opener's attributes carry,
+    None without a well-formed one or when nothing is left of it."""
+    m = SUBTASK_TITLE_RE.match(attributes or "")
+    return (derive_title_from_text(m.group(1)) or None) if m else None
+
+
+def read_subtask_tags(text: str) -> list[dict[str, Any]]:
+    """The closed `<subtask>` tags of a reply, in order, each with its
+    title (None when it carried none) and its body, trimmed."""
+    return [{"title": subtask_tag_title(m.group(1)), "brief": m.group(2).strip()}
+            for m in SUBTASK_FULL_RE.finditer(text)]
+
+
 DISPATCH_FIRSTSTOP_JSON = HERE / "dispatch-results-firststop.json"
 DISPATCH_FIRSTSTOP_MD = HERE / "dispatch-results-firststop.md"
 
@@ -3306,7 +3348,7 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
             call("<summary>Look first</summary>\n先看看有哪些发票。",
                  ("code_run", {"script": "import os\nprint(sorted(os.listdir(os.path.expanduser('~/Downloads'))))"})),
             call("<summary>Hand off</summary>\n下载文件夹里有十来张发票和收据，交给子任务归档，好了告诉你。\n"
-                 "<subtask>把 ~/Downloads 里的发票和收据（发票_阿里云_2026-08.pdf、Invoice_Figma_2026-09.pdf 等）"
+                 "<subtask title=\"归档发票\">把 ~/Downloads 里的发票和收据（发票_阿里云_2026-08.pdf、Invoice_Figma_2026-09.pdf 等）"
                  "按类型归档到 ~/Downloads/发票/ 下，交回归档后的清单和路径</subtask>")],
         "crit-web": [call("<summary>Look it up</summary>\n查一下。", ("web_scan", {"tabs_only": True}))],
         "crit-mid-tag": [
@@ -3786,16 +3828,19 @@ def build_result(job: dict[str, Any], rec: dict[str, Any], done: Any, latency: f
             # tags of the run's final answer (a reply with no tool call,
             # subtask::pending_reply), each one a subtask. A tag in a reply
             # that also called a tool is listed apart: Core never reads it.
+            # Ticket 126: each tag's title too (None for a tag without one).
             final = stop == "final_reply"
-            briefs = [m.strip() for m in SUBTASK_TAG_RE.findall(reply)] if final else []
-            mid = [{"turn": x["turn"], "brief": m.strip()} for x in (responses if not final else responses[:-1])
-                   for m in SUBTASK_TAG_RE.findall(x["content"])]
+            tags = read_subtask_tags(reply) if final else []
+            briefs = [t["brief"] for t in tags]
+            mid = [{"turn": x["turn"], **t} for x in (responses if not final else responses[:-1])
+                   for t in read_subtask_tags(x["content"])]
             result.update({
                 "crit_variant": job["crit_variant"],
                 "should_dispatch": job["should_dispatch"],
                 "tool_calls": len(rec["calls"]),
                 "dispatch": {"dispatched": bool(briefs), "via": "tag" if briefs else None,
                              "brief": briefs[0] if briefs else None, "briefs": briefs,
+                             "titles": [t["title"] for t in tags],
                              "lookups_before": len(rec["calls"]) if briefs else None,
                              "count": len(briefs), "in_final": bool(briefs), "mid_tags": mid},
                 "first_reply": responses[0]["content"] if responses else "",
@@ -4828,7 +4873,7 @@ def wake_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         reasons.append("没走到最终回复：" + STOP_LABELS.get(stop, str(stop)))
     if held:
         reasons.append("用了会卡住主对话的命令：" + "、".join(sorted(set(held))))
-    if "session new" in names or "<subtask>" in reply:
+    if "session new" in names or SUBTASK_OPEN_RE.search(reply):
         if exp.get("no_subtask_tag", True):
             reasons.append("自己重开了活（session new 或 <subtask>）")
     if exp["send"]:
@@ -5492,7 +5537,7 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         reasons.append("没走到最终回复：" + STOP_LABELS.get(stop, str(stop)))
     if held:
         reasons.append("用了会卡住主对话的命令：" + "、".join(sorted(set(held))))
-    if "session new" in names or "<subtask>" in reply:
+    if "session new" in names or SUBTASK_OPEN_RE.search(reply):
         reasons.append("开了子任务或新会话")
     for words, flags in creates:
         if flags.get("target") != "assistant":
@@ -6444,7 +6489,7 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
     cap = exp.get("subtasks_max")
     if "session new" in names:
         reasons.append("开了子任务或新会话")
-    elif cap is None and "<subtask>" in reply:
+    elif cap is None and SUBTASK_OPEN_RE.search(reply):
         reasons.append("开了子任务或新会话")
     elif cap is not None and len(subtask_tags) > cap:
         reasons.append(f"最多派 {cap} 件子任务，派了 {len(subtask_tags)} 件")
@@ -10061,6 +10106,26 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
         print(f"    {case_id}: {crit_cell(r, cases[case_id])}")
         return f
 
+    # Ticket 126: tags read as Core reads them (subtask.rs's
+    # a_tag_may_carry_a_title), titles cleaned the same way.
+    tags = read_subtask_tags('<subtask title="整理发票">归档发票</subtask>\n'
+                             '<subtask \t title="  截图   归档 " >截图</subtask>\n'
+                             '<subtask title="">空标题</subtask><subtask title="   ">空白</subtask>'
+                             "<subtask title='单引号'>单引号</subtask>"
+                             '<subtask title="改名" kind="file">别的属性</subtask>'
+                             '<subtask title="没收尾>写坏</subtask>'
+                             '<subtask\ntitle="换行之后">换行</subtask><subtask>  不带  </subtask>'
+                             "<subtasks>不是</subtasks>")
+    check([(t["title"], t["brief"]) for t in tags]
+          == [("整理发票", "归档发票"), ("截图 归档", "截图"), (None, "空标题"), (None, "空白"), (None, "单引号"),
+              (None, "别的属性"), (None, "写坏"), ("换行之后", "换行"), (None, "不带")],
+          f"tags with and without a title, as Core reads them ({tags})")
+    long_title = read_subtask_tags(f'<subtask title="{"长" * 100}">x</subtask>')[0]["title"]
+    check(len(long_title) == 81 and long_title.endswith("…") and derive_title_from_text("😀" * 41) == "😀" * 40 + "…",
+          "a title is cut at 80 UTF-16 units, like a derived title")
+    check(not SUBTASK_OPEN_RE.search("见 <subtasks> 一节") and SUBTASK_OPEN_RE.search('a <subtask title="x">'),
+          "an opener with attributes is one, <subtasks> is not")
+
     # Should not be handed off.
     f = judged(synth("q-weather", True, brief="查厦门明天天气"), "q-weather")
     check(f["pass"] is False and f["verdict"] == "不合格", f"a question handed off: fails ({f['verdict']})")
@@ -10131,8 +10196,9 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
                   f"the final reply's tag read after one call, its instructions kept ({d})")
             check(f["pass"] is True and f["label"] == "最终回复派了（之前 1 次工具调用）",
                   f"an errand handed off after a look: passes ({crit_cell(r, case)})")
-            check("<subtask>" not in "".join(reply_lines(r["final_reply"])),
+            check(not SUBTASK_OPEN_RE.search("".join(reply_lines(r["final_reply"]))),
                   "the tag is not in the reply as shown")
+            check(d["titles"] == ["归档发票"], f"the tag's title read (ticket 126: {d['titles']})")
             if case_id == "midway-invoices":
                 check(f["found_in_brief"] is True, "midway: the instructions name what it found")
         elif script == "crit-web":

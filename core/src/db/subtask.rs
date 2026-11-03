@@ -77,7 +77,8 @@ pub struct TodoSubtaskRow {
     pub session_id: String,
     pub title: String,
     pub last_activity_at: String,
-    /// The first line of the instructions, from the dispatch record.
+    /// The title at dispatch, from the dispatch record: the tag's, or the
+    /// instructions' first line (ticket 126).
     pub dispatch_title: Option<String>,
     /// Its runner did not start ([`SubtaskFailure::StartFailed`]).
     pub start_failed: bool,
@@ -157,9 +158,12 @@ fn count_send_backs(rows: Vec<SendBackRow>) -> HashMap<String, u32> {
 
 impl SqliteGalley {
     /// Create a subtask: its session row (with `origin`, the subtask
-    /// origin, and `parent_session_id`) and, when given, its first user
-    /// message, in one transaction, as `session.new` writes a session and
-    /// its task. Nothing is announced here (the caller does,
+    /// origin, `parent_session_id`, and its title stamped `title_source`)
+    /// and, when given, its first user message, in one transaction, as
+    /// `session.new` writes a session and its task. A title the tag gave
+    /// is `user`; a first line standing in for one is `derived`, which the
+    /// auto-title watcher replaces after the first run (ticket 126). Nothing
+    /// is announced here (the caller does,
     /// [`crate::session_writes::announce_session`]).
     pub async fn create_subtask_session(
         &self,
@@ -167,11 +171,13 @@ impl SqliteGalley {
         origin: Origin,
         parent_session_id: &SessionId,
         first_message: Option<String>,
+        title_source: RenameTitleSource,
     ) -> Result<(SessionBrief, Option<MessageBrief>)> {
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
         let brief = insert_session_row_inner(&mut tx, &input, &origin).await?;
-        sqlx::query("UPDATE sessions SET parent_session_id = ? WHERE id = ?")
+        sqlx::query("UPDATE sessions SET parent_session_id = ?, title_source = ? WHERE id = ?")
             .bind(parent_session_id.as_str())
+            .bind(title_source.as_sql())
             .bind(brief.id.as_str())
             .execute(&mut *tx)
             .await
@@ -330,6 +336,29 @@ impl SqliteGalley {
                 }
                 dispatch
             })
+            .collect())
+    }
+
+    /// The current titles of the sessions `parent_session_id`'s replies
+    /// started, by session id (ticket 126): a subtask is named by its
+    /// session's title while the session is there, which the auto-title
+    /// watcher may have replaced since the record was written.
+    pub async fn subtask_session_titles(
+        &self,
+        parent_session_id: &SessionId,
+    ) -> Result<HashMap<String, String>> {
+        let rows: Vec<(String, String)> = sqlx::query_as(
+            "SELECT s.id, s.title FROM sessions s \
+             WHERE s.id IN (SELECT session_id FROM subtask_dispatches \
+                            WHERE parent_session_id = ? AND session_id IS NOT NULL)",
+        )
+        .bind(parent_session_id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(rows
+            .into_iter()
+            .filter(|(_, title)| !title.trim().is_empty())
             .collect())
     }
 

@@ -3,17 +3,18 @@
 //! rulings 9, 25, 52, 53).
 //!
 //! The main chat's entry layer tells the model to end a reply with
-//! `<subtask>what to do</subtask>` for the work it hands off (which work,
-//! since ticket 115 an errand rather than a question, is the layer's to
-//! say: [`crate::managed_prompt`]). Nothing about the tag
-//! reaches the engine: when the reply's run settles, Core reads it from
-//! the persisted reply and starts each tag as a **subtask** — an ordinary
-//! managed session whose parent is the main chat, whose origin is
-//! `subtask` and whose first user message is the instructions, started
-//! the way Core's send ([`crate::session_send`]) starts a message: the
-//! run gate, a runner on the shared path, the dispatch. The desktop shows
-//! it as a card under that reply, not in the sidebar; the card's record
-//! is announced as soon as the session and its message exist.
+//! `<subtask title="a few words">what to do</subtask>` for the work it
+//! hands off (which work, since ticket 115 an errand rather than a
+//! question, is the layer's to say: [`crate::managed_prompt`]). Nothing
+//! about the tag reaches the engine: when the reply's run settles, Core
+//! reads it from the persisted reply and starts each tag as a
+//! **subtask** — an ordinary managed session whose parent is the main
+//! chat, whose origin is `subtask` and whose first user message is the
+//! instructions, started the way Core's send ([`crate::session_send`])
+//! starts a message: the run gate, a runner on the shared path, the
+//! dispatch. The desktop shows it as a card under that reply, not in the
+//! sidebar; the card's record is announced as soon as the session and its
+//! message exist.
 //!
 //! - **Which replies**: the main chat's only ([`pending_reply`]); a tag in
 //!   any other session is text. The reply is the run's final answer (no
@@ -25,6 +26,17 @@
 //! - **One tag, one subtask** (ruling 53), in reply order. An empty tag,
 //!   an unclosed one, or a session that could not be created or started
 //!   is recorded with why ([`SubtaskFailure`]), never retried.
+//! - **Its title** (ticket 126, PRD ruling 175): the tag may carry one,
+//!   `<subtask title="a few words">`, which the model writes for the
+//!   user's list; the session gets it as a title of its own (`user`).
+//!   Without one, or with one that is empty or malformed, the title is
+//!   the instructions' first line ([`subtask_title`]), recorded as
+//!   `derived` so the auto-title watcher ([`crate::auto_title`]) replaces
+//!   it after the first run. Wherever a subtask whose session exists is
+//!   named — its card, the to-do list, ⌘K, the replay line below, its
+//!   report — the session's current title is read; the record's
+//!   (`subtask_dispatches.title`, the title at dispatch) only where no
+//!   session was made.
 //! - **Not in the text**: the turn derivation strips the tag from the
 //!   final answer and the preamble, and an unclosed one with everything
 //!   after it (`turn_persistence::derive`, mirrored by the GUI's
@@ -32,8 +44,9 @@
 //! - **Replay** ([`mark_replay_rows`]): when the main chat's runner is
 //!   given its history back (a segment and the turns it carries over),
 //!   the instructions are left out and the reply ends with one line per
-//!   tag, `[subtask <id>: <title>]` or `[subtask not started: <why>]`, so
-//!   the model can look a subtask up by its id (`session show <id>`).
+//!   tag, `[subtask <id>: <title>]` (the session's current title) or
+//!   `[subtask not started: <why>]`, so the model can look a subtask up
+//!   by its id (`session show <id>`).
 //! - **Promotion** ([`promote_after_user_send`]): a non-answer message the
 //!   user sends in a subtask from the desktop or the phone makes it an
 //!   ordinary conversation. CLI, supervisor and scheduled sends never
@@ -54,7 +67,7 @@ use crate::api::{
     SessionId, SubtaskDispatch, SubtaskDispatchedPayload, SubtaskFailure, ASSISTANT_SUPERVISOR,
     SUBTASK_DISPATCHED_EVENT,
 };
-use crate::db::{PersistedMessageRow, SqliteGalley};
+use crate::db::{PersistedMessageRow, RenameTitleSource, SqliteGalley};
 use crate::error::GalleyError;
 use crate::ipc::{IpcCommand, UserMessageCommand};
 use crate::notify::{notify, Notifier};
@@ -67,6 +80,7 @@ use crate::session_writes::{
     announce_session, SESSION_CREATED_EXTERNAL_EVENT, SESSION_UPDATED_EXTERNAL_EVENT,
 };
 use crate::subtask_report::SubtaskReports;
+use crate::turn_persistence::{js_regex, SUBTASK_BLOCK, SUBTASK_OPEN};
 use regex::Regex;
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -80,20 +94,46 @@ pub const VIA_SUBTASK: &str = "subtask";
 /// `via` of the `session-updated-external` that announces a promotion.
 pub const VIA_SUBTASK_PROMOTED: &str = "subtask-promoted";
 
-const OPEN: &str = "<subtask>";
 const CLOSE: &str = "</subtask>";
 
 // ---------------- the tags ----------------
 
-/// One `<subtask>` tag of a reply.
+/// One `<subtask>` tag of a reply. `title` is the one the tag carried,
+/// cleaned ([`tag_title`]); `None` when it carried none, or an empty or
+/// malformed one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SubtaskTag {
     /// The instructions, trimmed.
-    Instructions(String),
+    Instructions {
+        instructions: String,
+        title: Option<String>,
+    },
     /// Nothing but whitespace between the tags.
     Empty,
     /// Opened and never closed: what follows it, trimmed.
-    Unclosed(String),
+    Unclosed {
+        partial: String,
+        title: Option<String>,
+    },
+}
+
+/// What may follow `<subtask` for the tag to carry a title (ticket 126):
+/// whitespace, one `title="…"` (double quotes, no quote or line break in
+/// the value), optional whitespace. Anything else after the name — other
+/// attributes, single quotes, a broken value — leaves the tag a tag
+/// without a title. `\s` is JavaScript's, as in [`SUBTASK_OPEN`].
+static TITLE_ATTRIBUTE: LazyLock<Regex> =
+    LazyLock::new(|| js_regex(r#"\A\s+title="([^"\r\n]*)"\s*\z"#));
+
+/// The title an opener's attributes carry (what follows `<subtask`, up
+/// to its `>`): one line of at most
+/// [`crate::session_title::TITLE_DERIVE_MAX`] UTF-16 units, whitespace
+/// runs as one space ([`crate::session_title::derive_title_from_text`]).
+/// `None` without a well-formed `title`, or when nothing is left of it.
+pub fn tag_title(attributes: &str) -> Option<String> {
+    let value = TITLE_ATTRIBUTE.captures(attributes)?.get(1)?.as_str();
+    let title = crate::session_title::derive_title_from_text(value);
+    (!title.is_empty()).then_some(title)
 }
 
 /// GA's and Galley's other tag blocks, which may quote `<subtask>` (a
@@ -110,15 +150,11 @@ static OTHER_TAG_BLOCKS: LazyLock<[Regex; 5]> = LazyLock::new(|| {
     .map(|pattern| Regex::new(pattern).expect("tag pattern compiles"))
 });
 
-/// A complete `<subtask>` block, paired the way the turn derivation pairs
-/// it (an opener with the next closer).
-static SUBTASK_BLOCK: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?s)<subtask>.*?</subtask>").expect("subtask pattern compiles"));
-
-/// The reply's `<subtask>` tags, in order. Each opener pairs with the
-/// next closer (what the display strips is exactly what is read here); an
-/// opener with no closer after it takes the rest of the reply and ends
-/// the list.
+/// The reply's `<subtask>` tags, in order. An opener is the turn
+/// derivation's ([`SUBTASK_OPEN`]: `<subtask>`, or `<subtask` with
+/// attributes up to the first `>`), and each pairs with the next closer
+/// (what the display strips is exactly what is read here); an opener with
+/// no closer after it takes the rest of the reply and ends the list.
 pub fn parse_subtask_tags(content: &str) -> Vec<SubtaskTag> {
     let mut text = content.to_string();
     for re in OTHER_TAG_BLOCKS.iter() {
@@ -126,20 +162,27 @@ pub fn parse_subtask_tags(content: &str) -> Vec<SubtaskTag> {
     }
     let mut tags = Vec::new();
     let mut rest = text.as_str();
-    while let Some(open) = rest.find(OPEN) {
-        let body_start = open + OPEN.len();
+    while let Some(open) = SUBTASK_OPEN.captures(rest) {
+        let body_start = open.get(0).map_or(0, |m| m.end());
+        let title = open.get(1).and_then(|m| tag_title(m.as_str()));
         match rest[body_start..].find(CLOSE) {
             Some(close) => {
                 let body = rest[body_start..body_start + close].trim();
                 tags.push(if body.is_empty() {
                     SubtaskTag::Empty
                 } else {
-                    SubtaskTag::Instructions(body.to_string())
+                    SubtaskTag::Instructions {
+                        instructions: body.to_string(),
+                        title,
+                    }
                 });
                 rest = &rest[body_start + close + CLOSE.len()..];
             }
             None => {
-                tags.push(SubtaskTag::Unclosed(rest[body_start..].trim().to_string()));
+                tags.push(SubtaskTag::Unclosed {
+                    partial: rest[body_start..].trim().to_string(),
+                    title,
+                });
                 break;
             }
         }
@@ -198,8 +241,8 @@ fn one_line(text: &str) -> String {
 /// unclosed `<subtask>` and what follows it.
 pub fn strip_subtask_tags(content: &str) -> String {
     let mut text = SUBTASK_BLOCK.replace_all(content, "").into_owned();
-    if let Some(open) = text.find(OPEN) {
-        text.truncate(open);
+    if let Some(open) = SUBTASK_OPEN.find(&text) {
+        text.truncate(open.start());
     }
     text
 }
@@ -231,7 +274,7 @@ pub fn mark_rows(rows: &mut [PersistedMessageRow], dispatches: &[SubtaskDispatch
             .filter(|d| d.turn_index == row.turn_index)
             .map(replay_marker)
             .collect();
-        if markers.is_empty() && !row.content.contains(OPEN) {
+        if markers.is_empty() && !SUBTASK_OPEN.is_match(&row.content) {
             continue;
         }
         let mut content = strip_subtask_tags(&row.content).trim_end().to_string();
@@ -245,13 +288,22 @@ pub fn mark_rows(rows: &mut [PersistedMessageRow], dispatches: &[SubtaskDispatch
     }
 }
 
-/// [`mark_rows`] with the main chat's dispatches read from the database.
+/// [`mark_rows`] with the main chat's dispatches read from the database,
+/// each named by its session's current title (ticket 126: the auto-title
+/// watcher may have replaced a first line since); the record's title
+/// only for a tag that made no session, or one since deleted.
 pub async fn mark_replay_rows(
     galley: &SqliteGalley,
     main_chat: &SessionId,
     rows: &mut [PersistedMessageRow],
 ) -> Result<(), GalleyError> {
-    let dispatches = galley.subtask_dispatches(main_chat).await?;
+    let mut dispatches = galley.subtask_dispatches(main_chat).await?;
+    let titles = galley.subtask_session_titles(main_chat).await?;
+    for dispatch in &mut dispatches {
+        if let Some(title) = dispatch.session_id.as_ref().and_then(|id| titles.get(id)) {
+            dispatch.title.clone_from(title);
+        }
+    }
     mark_rows(rows, &dispatches);
     Ok(())
 }
@@ -295,7 +347,7 @@ pub async fn pending_reply(
     let Some(reply) = galley.latest_reply(&sid).await? else {
         return Ok(None);
     };
-    if !reply.content.contains(OPEN) || !is_final_answer(reply.tool_calls.as_deref()) {
+    if !SUBTASK_OPEN.is_match(&reply.content) || !is_final_answer(reply.tool_calls.as_deref()) {
         return Ok(None);
     }
     if galley
@@ -444,15 +496,15 @@ async fn dispatch_tag(
         created_at: crate::runner_manager::queue::now_iso(),
         send_backs: 0,
     };
-    let (title, instructions) = match tag {
+    let (title, title_source, instructions) = match tag {
         SubtaskTag::Empty => {
             let dispatch = record(String::new(), None, Some(SubtaskFailure::Empty), None);
             settle(host, &dispatch).await;
             return dispatch;
         }
-        SubtaskTag::Unclosed(partial) => {
+        SubtaskTag::Unclosed { partial, title } => {
             let dispatch = record(
-                subtask_title(&partial),
+                title.unwrap_or_else(|| subtask_title(&partial)),
                 None,
                 Some(SubtaskFailure::Unclosed),
                 None,
@@ -460,10 +512,23 @@ async fn dispatch_tag(
             settle(host, &dispatch).await;
             return dispatch;
         }
-        SubtaskTag::Instructions(instructions) => (subtask_title(&instructions), instructions),
+        // The model's title is the session's own; a first line stands in
+        // until the auto-title watcher replaces it (ticket 126).
+        SubtaskTag::Instructions {
+            instructions,
+            title: Some(title),
+        } => (title, RenameTitleSource::User, instructions),
+        SubtaskTag::Instructions {
+            instructions,
+            title: None,
+        } => (
+            subtask_title(&instructions),
+            RenameTitleSource::Derived,
+            instructions,
+        ),
     };
     let (session_id, message) =
-        match create_subtask(host, parent, parent_id, &title, &instructions).await {
+        match create_subtask(host, parent, parent_id, &title, title_source, &instructions).await {
             Ok(created) => created,
             Err(detail) => {
                 let dispatch = record(title, None, Some(SubtaskFailure::StartFailed), Some(detail));
@@ -516,15 +581,17 @@ fn announce(host: &RunnerHost<'_>, dispatch: &SubtaskDispatch) {
     );
 }
 
-/// The subtask's row and its first message, the instructions, written
-/// together on the main chat's model (as `session.new` writes a session
-/// and its task), then announced: the row created, the message pending.
-/// Returns the session id and the message, or why it could not be made.
+/// The subtask's row (`title` stamped `title_source`) and its first
+/// message, the instructions, written together on the main chat's model
+/// (as `session.new` writes a session and its task), then announced: the
+/// row created, the message pending. Returns the session id and the
+/// message, or why it could not be made.
 async fn create_subtask(
     host: &RunnerHost<'_>,
     parent: Option<&SessionBrief>,
     parent_id: &str,
     title: &str,
+    title_source: RenameTitleSource,
     instructions: &str,
 ) -> Result<(String, MessageBrief), String> {
     let id = crate::socket_listener::mint_session_id();
@@ -546,6 +613,7 @@ async fn create_subtask(
             Origin::subtask(),
             &SessionId(parent_id.to_string()),
             Some(instructions.to_string()),
+            title_source,
         )
         .await
         .map_err(|e| e.to_string())?;
@@ -701,6 +769,20 @@ pub async fn promote_after_user_send(
 mod tests {
     use super::*;
 
+    fn untitled(instructions: &str) -> SubtaskTag {
+        SubtaskTag::Instructions {
+            instructions: instructions.into(),
+            title: None,
+        }
+    }
+
+    fn titled(title: &str, instructions: &str) -> SubtaskTag {
+        SubtaskTag::Instructions {
+            instructions: instructions.into(),
+            title: Some(title.into()),
+        }
+    }
+
     #[test]
     fn every_tag_is_read_in_order() {
         let reply = "好，交给子任务。\n<subtask>把下载文件夹里的 PDF 分类\n发票一类</subtask>\n\
@@ -708,9 +790,9 @@ mod tests {
         assert_eq!(
             parse_subtask_tags(reply),
             vec![
-                SubtaskTag::Instructions("把下载文件夹里的 PDF 分类\n发票一类".into()),
+                untitled("把下载文件夹里的 PDF 分类\n发票一类"),
                 SubtaskTag::Empty,
-                SubtaskTag::Instructions("查三家报价".into()),
+                untitled("查三家报价"),
             ]
         );
         assert!(parse_subtask_tags("no tags here").is_empty());
@@ -721,15 +803,74 @@ mod tests {
         assert_eq!(
             parse_subtask_tags("<subtask>a</subtask> then <subtask>half written\n<subtask>b"),
             vec![
-                SubtaskTag::Instructions("a".into()),
-                SubtaskTag::Unclosed("half written\n<subtask>b".into()),
+                untitled("a"),
+                SubtaskTag::Unclosed {
+                    partial: "half written\n<subtask>b".into(),
+                    title: None,
+                },
             ]
         );
         // An opener pairs with the next closer, as the display strips it.
         assert_eq!(
             parse_subtask_tags("<subtask>a <subtask>b</subtask>"),
-            vec![SubtaskTag::Instructions("a <subtask>b".into())]
+            vec![untitled("a <subtask>b")]
         );
+    }
+
+    /// Ticket 126: `<subtask title="…">` carries the title; a tag whose
+    /// attributes are anything else is still a tag, without one.
+    #[test]
+    fn a_tag_may_carry_a_title() {
+        let reply = "两件交出去了。\n\
+                     <subtask title=\"整理发票\">把下载文件夹里的发票按月份归档</subtask>\n\
+                     <subtask \t title=\"  截图   归档 \" >把桌面截图按日期放进文件夹</subtask>\n\
+                     <subtask title=\"\">空标题</subtask>\n\
+                     <subtask title=\"   \">只有空白</subtask>\n\
+                     <subtask title='单引号'>单引号</subtask>\n\
+                     <subtask title=\"改名\" kind=\"file\">别的属性</subtask>\n\
+                     <subtask kind=\"file\" title=\"改名\">属性在前</subtask>\n\
+                     <subtask title=\"没收尾>属性写坏</subtask>\n\
+                     <subtask\ntitle=\"换行之后\">开标签里换行</subtask>";
+        assert_eq!(
+            parse_subtask_tags(reply),
+            vec![
+                titled("整理发票", "把下载文件夹里的发票按月份归档"),
+                titled("截图 归档", "把桌面截图按日期放进文件夹"),
+                untitled("空标题"),
+                untitled("只有空白"),
+                untitled("单引号"),
+                untitled("别的属性"),
+                untitled("属性在前"),
+                untitled("属性写坏"),
+                titled("换行之后", "开标签里换行"),
+            ]
+        );
+        // A title is one line of at most 80 UTF-16 units, like a derived
+        // title.
+        let long = format!("<subtask title=\"{}\">x</subtask>", "长".repeat(100));
+        let SubtaskTag::Instructions {
+            title: Some(title), ..
+        } = &parse_subtask_tags(&long)[0]
+        else {
+            panic!("a titled tag");
+        };
+        assert_eq!(title.chars().count(), 81);
+        assert!(title.ends_with('…'));
+        // An unclosed tag keeps its title; an empty one is empty.
+        assert_eq!(
+            parse_subtask_tags("<subtask title=\"订票\">订周五的高铁"),
+            vec![SubtaskTag::Unclosed {
+                partial: "订周五的高铁".into(),
+                title: Some("订票".into()),
+            }]
+        );
+        assert_eq!(
+            parse_subtask_tags("<subtask title=\"订票\">  </subtask>"),
+            vec![SubtaskTag::Empty]
+        );
+        // `<subtask` followed by neither `>` nor whitespace is no tag.
+        assert!(parse_subtask_tags("见 <subtasks>x</subtasks> 一节").is_empty());
+        assert!(parse_subtask_tags("<subtask-title>x</subtask>").is_empty());
     }
 
     #[test]
@@ -873,6 +1014,23 @@ mod tests {
         assert_eq!(rows[3].content, "不客气。");
         // Tags with nothing recorded are still left out.
         assert_eq!(rows[4].content, "提到 ，只剩这句。");
+    }
+
+    /// Ticket 126: a titled tag is left out of the replay like a bare one.
+    #[test]
+    fn the_replay_leaves_titled_tags_out_too() {
+        let mut rows =
+            vec![
+            row(
+                3,
+                "assistant",
+                "好。\n<subtask title=\"整理发票\">归档发票</subtask>\n<subtask title=\"x\">没写完",
+            ),
+            row(4, "assistant", "提到 <subtask title=\"y\">但没派</subtask>，只剩这句。"),
+        ];
+        mark_rows(&mut rows, &[dispatch(3, 0, Some("s-sub-1"), None, None)]);
+        assert_eq!(rows[0].content, "好。\n\n[subtask s-sub-1: 把 PDF 分类]");
+        assert_eq!(rows[1].content, "提到 ，只剩这句。");
     }
 
     #[test]

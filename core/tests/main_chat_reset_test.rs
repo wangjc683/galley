@@ -28,7 +28,8 @@ use galley_core_lib::api::{
     RuntimeKind, SessionId, SubtaskDispatch,
 };
 use galley_core_lib::db::{
-    PersistAssistantMessage, SqliteGalley, MAIN_CHAT_GREETING_EN, MAIN_CHAT_GREETING_ZH,
+    PersistAssistantMessage, RenameTitleSource, SqliteGalley, MAIN_CHAT_GREETING_EN,
+    MAIN_CHAT_GREETING_ZH,
 };
 use galley_core_lib::ipc::IpcCommand;
 use galley_core_lib::main_chat_reset::{
@@ -510,6 +511,7 @@ async fn subtask(
             Origin::subtask(),
             &SessionId(parent.into()),
             Some(format!("子任务 {id} 要做的事")),
+            RenameTitleSource::User,
         )
         .await
         .expect("subtask");

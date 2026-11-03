@@ -447,6 +447,16 @@ look it up with the Galley CLI (search, then
 /// and `unasked.md` do not repeat it (`unasked.md`'s "longer work goes to
 /// a subtask" is for what the model does unasked, a step ahead of a note
 /// or in the morning review, which no one is waiting for).
+///
+/// Ticket 126 (main chat PRD ruling 175): the tag carries a title,
+/// `<subtask title="a few words">`, in the user's language, naming the
+/// errand. The card, the to-do list's 「Galley 在办」 and ⌘K show it from
+/// the moment the subtask is dispatched; without it Core titled every
+/// subtask by the instructions' first line cut at 80 characters, and the
+/// instructions are usually one long paragraph. A tag without a title
+/// still works ([`crate::subtask`]): the first line stands in until the
+/// auto-title watcher replaces it after the first run, which for a
+/// subtask is mostly when its work is done.
 fn main_chat_entry_layer(manual_dir: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
@@ -457,7 +467,9 @@ them what you are doing meanwhile. An errand they hand you, where what
 comes back is a thing or a change rather than an answer (files sorted or
 renamed, a template or a report drafted, a booking), goes to a subtask
 once it takes more than two or three steps, and so does anything they ask
-you to hand off: end your reply with <subtask>what to do</subtask>.
+you to hand off: end your reply with
+<subtask title="a few words">what to do</subtask>. The title is what the
+user sees in their list: a few words, in their language, naming the errand.
 Galley starts it after this reply, as a separate conversation that cannot
 see this one, so write everything it needs: the goal, the facts the user
 gave, what you have found so far, and what to hand back, with the evidence
@@ -1380,7 +1392,8 @@ mod tests {
     /// handed off, and so is one the user asks to hand off; one found
     /// partway through hands off the rest, what was found so far in the
     /// instructions; this conversation's own material, a to-do, a
-    /// reminder or a memo stay here.
+    /// reminder or a memo stay here. Ticket 126 (ruling 175): the tag
+    /// carries a short title in the user's language.
     #[test]
     fn main_chat_entry_layer_answers_questions_and_hands_errands_to_a_subtask() {
         let main =
@@ -1398,9 +1411,14 @@ mod tests {
             .contains("comes back is a thing or a change rather than an answer (files sorted or"));
         assert!(main
             .contains("once it takes more than two or three steps, and so does anything they ask"));
-        assert!(
-            main.contains("you to hand off: end your reply with <subtask>what to do</subtask>.")
-        );
+        assert!(main.contains("you to hand off: end your reply with"));
+        // Ticket 126: the tag carries a title for the user's list.
+        assert!(main.contains(
+            "<subtask title=\"a few words\">what to do</subtask>. The title is what the"
+        ));
+        assert!(main.contains(
+            "user sees in their list: a few words, in their language, naming the errand."
+        ));
         assert!(main
             .contains("see this one, so write everything it needs: the goal, the facts the user"));
         assert!(main.contains(
@@ -1432,7 +1450,7 @@ mod tests {
         let clause = main.find("Answer what the user asks you yourself").unwrap();
         assert!(layer < clause, "the clause closes the entry layer");
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
-            assert!(!prompt.contains("<subtask>"));
+            assert!(!prompt.contains("<subtask"));
         }
     }
 
@@ -1630,7 +1648,14 @@ mod tests {
     /// cannot tell how long work will take before it starts, so a
     /// ten-minute errand (sorting invoices) ran here while questions that
     /// read several websites were rightly answered here only by chance.
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 3931;
+    /// Raised 3931 → 4049 by ticket 126 (main chat PRD ruling 175): +118
+    /// bytes. The tag carries a title, ` title="a few words"` (+20), and
+    /// a sentence says what it is for: what the user sees in their list,
+    /// a few words in their language naming the errand (+98). Without it
+    /// Core titled a subtask by its instructions' first line cut at 80
+    /// characters, and the instructions are mostly one paragraph: every
+    /// subtask on JC's machine was titled with 81 characters.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 4049;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {
@@ -2556,6 +2581,7 @@ mod tests {
                 Origin::subtask(),
                 &SessionId("s-main".into()),
                 Some("查物流\n单号 JD0123456789".into()),
+                crate::db::RenameTitleSource::User,
             )
             .await
             .expect("subtask");

@@ -31,7 +31,7 @@ use galley_core_lib::api::{
     SubtaskDispatch, SubtaskFailure, ASSISTANT_SUPERVISOR, SUBTASK_DISPATCHED_EVENT,
     SUBTASK_REPORT_SUPERVISOR, SUBTASK_REPORT_UNDELIVERED_EVENT,
 };
-use galley_core_lib::db::{MainChatSeed, PersistAssistantMessage, SqliteGalley};
+use galley_core_lib::db::{MainChatSeed, PersistAssistantMessage, RenameTitleSource, SqliteGalley};
 use galley_core_lib::ipc::{HistoryLoadedEvent, IpcCommand, IpcEvent, ReadyEvent};
 use galley_core_lib::notify::Notifier;
 use galley_core_lib::runner_manager::{
@@ -120,6 +120,7 @@ async fn subtask(galley: &SqliteGalley, id: &str, title: &str) {
             Origin::subtask(),
             &SessionId(MAIN.into()),
             Some(format!("{title}\n细节")),
+            RenameTitleSource::User,
         )
         .await
         .expect("subtask");
@@ -528,6 +529,34 @@ async fn drain(
 }
 
 // ---------------- which runs report ----------------
+
+/// Ticket 126: a report names the subtask by its session's title now (the
+/// auto-title watcher may have replaced the first line it was dispatched
+/// under), not the record's.
+#[tokio::test]
+async fn a_report_names_the_subtask_by_its_current_title() {
+    let (pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let reports = SubtaskReports::new();
+    finished_subtask(
+        &galley,
+        &runner,
+        "s-sub",
+        "把下载文件夹里的 PDF 按内容分类",
+        "分好了。",
+    )
+    .await;
+    sqlx::query("UPDATE sessions SET title = '整理 PDF', title_source = 'auto' WHERE id = 's-sub'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    drain(&reports, &galley, &runner, complete("s-sub")).await;
+
+    let waiting = reports.waiting(MAIN);
+    assert_eq!(waiting.len(), 1);
+    assert_eq!(waiting[0].title, "整理 PDF");
+}
 
 #[tokio::test]
 async fn a_finished_subtask_reports_its_final_answer() {

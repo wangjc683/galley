@@ -362,7 +362,9 @@ pub struct SubtaskReport {
     pub main_chat_id: String,
     /// `None` for a tag that started no session.
     pub subtask_id: Option<String>,
-    /// The dispatch record's title (the instructions' first line).
+    /// The subtask's title: its session's current one (ticket 126: the
+    /// auto-title watcher may have replaced a first line), the dispatch
+    /// record's for a tag that started no session.
     pub title: String,
     /// How many times the assistant sent it back
     /// ([`SqliteGalley::subtask_send_backs`]); the round is one more.
@@ -953,7 +955,8 @@ pub async fn report_for_run_end(
         _ => return Ok(None),
     }
     let (title, send_backs) = match galley.subtask_dispatch_for_session(&sid).await? {
-        Some(dispatch) => (dispatch.title, dispatch.send_backs),
+        Some(dispatch) if session.title.trim().is_empty() => (dispatch.title, dispatch.send_backs),
+        Some(dispatch) => (session.title.clone(), dispatch.send_backs),
         None => (
             session.title.clone(),
             galley.subtask_send_backs(&sid).await?,

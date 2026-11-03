@@ -408,6 +408,28 @@
       "preamble": "先把它打回去。",
       "telemetry": null,
       "visibility": "visible"
+    },
+    "titled-subtask-tags-stay-out-of-the-answer": {
+      "content": "两件都交出去了。\n<subtask title=\"整理发票\">把下载文件夹里的发票按月份归档。</subtask>\n<subtask\ttitle='坏的' kind=\"x\">把截图按日期放好</subtask>\n<subtask title=\"改名\">把合同改名，可这段没写完",
+      "toolCalls": "[]",
+      "toolResults": "[]",
+      "thinking": null,
+      "finalAnswer": "两件都交出去了。",
+      "summary": "交给子任务",
+      "preamble": null,
+      "telemetry": null,
+      "visibility": "visible"
+    },
+    "titled-subtask-tags-stay-out-of-a-preamble": {
+      "content": "先看一下下载文件夹。<subtask title=\"分类\">不该在这里</subtask>\n<subtask title=\"整理\">也没写完",
+      "toolCalls": "[{\"args\":{\"code\":\"ls ~/Downloads\"},\"toolName\":\"code_run\"}]",
+      "toolResults": "[{\"content\":\"a.pdf\"}]",
+      "thinking": null,
+      "finalAnswer": "先看一下下载文件夹。",
+      "summary": "看一下下载文件夹",
+      "preamble": "先看一下下载文件夹。",
+      "telemetry": null,
+      "visibility": "visible"
     }
   }
 }

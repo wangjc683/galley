@@ -22,7 +22,7 @@ use galley_core_lib::api::{
     CreateSessionInput, GalleyApi, MessageVisibility, Origin, OriginVia, RuntimeKind, SessionId,
     SubtaskDispatch, SubtaskFailure,
 };
-use galley_core_lib::db::{MainChatSeed, PersistAssistantMessage, SqliteGalley};
+use galley_core_lib::db::{MainChatSeed, PersistAssistantMessage, RenameTitleSource, SqliteGalley};
 use galley_core_lib::ipc::{HistoryLoadedEvent, IpcCommand, IpcEvent, ReadyEvent};
 use galley_core_lib::notify::Notifier;
 use galley_core_lib::runner_manager::{
@@ -490,6 +490,7 @@ async fn bare_subtask(galley: &SqliteGalley, id: &str) {
             Origin::subtask(),
             &SessionId(MAIN.into()),
             None,
+            RenameTitleSource::User,
         )
         .await
         .expect("subtask");
@@ -662,6 +663,112 @@ async fn one_tag_one_subtask_and_every_tag_is_recorded() {
 
     // The reply is not dispatched again.
     assert_eq!(pending_reply(&galley, MAIN).await.unwrap(), None);
+}
+
+/// Ticket 126 (PRD ruling 175): a tag's title is the subtask's own title
+/// (`user`, the auto-title watcher leaves it); a tag without one, or with
+/// a malformed one, is titled by its first line as `derived`, which the
+/// watcher may replace. Several tags of one reply each start.
+#[tokio::test]
+async fn a_titled_tag_names_its_subtask_and_an_untitled_one_waits_for_a_title() {
+    let (_pool, galley) = with_main_chat().await;
+    exchange(
+        &galley,
+        MAIN,
+        "发票按月归档，截图按日期放好",
+        "两件交出去了。\n\
+         <subtask title=\"整理发票\">把下载文件夹里的发票按月份归档到「发票/年-月」。\n交回归档后的清单。</subtask>\n\
+         <subtask>把桌面上的截图按日期放进文件夹，交回文件夹路径</subtask>\n\
+         <subtask title='单引号'>把「文档/合同」里的 PDF 改名成「日期-对方」</subtask>",
+        None,
+    )
+    .await;
+    let runner = Runner::default();
+    let dispatches = settle(&galley, &runner, Arc::new(Recorder::default())).await;
+
+    let titles: Vec<(&str, bool)> = dispatches
+        .iter()
+        .map(|d| {
+            (
+                d.title.as_str(),
+                d.failure.is_none() && d.session_id.is_some(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        titles,
+        vec![
+            ("整理发票", true),
+            ("把桌面上的截图按日期放进文件夹，交回文件夹路径", true),
+            ("把「文档/合同」里的 PDF 改名成「日期-对方」", true),
+        ]
+    );
+    assert_eq!(runner.spawned.lock().unwrap().len(), 3);
+    let ids: Vec<String> = dispatches
+        .iter()
+        .map(|d| d.session_id.clone().unwrap())
+        .collect();
+    let mut sources = Vec::new();
+    for id in &ids {
+        sources.push(galley.session_title_source(id).await.unwrap().unwrap());
+    }
+    assert_eq!(sources, ["user", "derived", "derived"]);
+    let brief = galley
+        .session_brief(SessionId(ids[0].clone()))
+        .await
+        .unwrap();
+    assert_eq!(brief.title, "整理发票");
+    // The instructions are the tag's body; the title stays out of them.
+    assert_eq!(
+        runner.user_messages(&ids[0]),
+        vec!["把下载文件夹里的发票按月份归档到「发票/年-月」。\n交回归档后的清单。".to_string()]
+    );
+
+    // The auto-title watcher's write: refused for the tag's title, taken
+    // for a first line.
+    let sid = |i: usize| SessionId(ids[i].clone());
+    assert!(galley
+        .try_apply_auto_title(&sid(0), "别的名字")
+        .await
+        .unwrap()
+        .is_none());
+    assert_eq!(
+        galley
+            .try_apply_auto_title(&sid(1), "截图归档")
+            .await
+            .unwrap()
+            .map(|b| b.title),
+        Some("截图归档".into())
+    );
+
+    // The record keeps the title at dispatch; the replay names each
+    // subtask by its session's title now.
+    assert_eq!(
+        galley
+            .subtask_dispatches(&SessionId(MAIN.into()))
+            .await
+            .unwrap()[1]
+            .title,
+        "把桌面上的截图按日期放进文件夹，交回文件夹路径"
+    );
+    exchange(&galley, MAIN, "谢谢", "不客气。", None).await;
+    let cold = Runner::default();
+    let env = FakeEnv;
+    ensure_session_runner(
+        &host(&galley, &cold, &env, Arc::new(Recorder::default())),
+        MAIN,
+        opening(),
+    )
+    .await
+    .expect("restore");
+    let reply = format!(
+        "两件交出去了。\n\n[subtask {}: 整理发票]\n[subtask {}: 截图归档]\n\
+         [subtask {}: 把「文档/合同」里的 PDF 改名成「日期-对方」]",
+        ids[0], ids[1], ids[2]
+    );
+    let mut expected = turn("发票按月归档，截图按日期放好", &reply);
+    expected.extend(turn("谢谢", "不客气。"));
+    assert_eq!(cold.load_histories(), vec![expected]);
 }
 
 #[tokio::test]

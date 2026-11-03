@@ -62,7 +62,7 @@ const JS_SPACE_CLASS: &str = r"[\t\n\x0B\x0C\r \xA0\x{1680}\x{2000}-\x{200A}\x{2
 /// Compile a pattern written with JS's `\s`. Only used for patterns
 /// without `^` / `$` / `.` outside `(?s)` — those carry no other
 /// semantic difference from JS.
-fn js_regex(pattern: &str) -> Regex {
+pub(crate) fn js_regex(pattern: &str) -> Regex {
     Regex::new(&pattern.replace(r"\s", JS_SPACE_CLASS)).expect("turn derivation regex compiles")
 }
 
@@ -87,7 +87,7 @@ static GA_TAG_BLOCKS: LazyLock<[Regex; 8]> = LazyLock::new(|| {
         js_regex(r"(?s)<file_content[^>]*>.*?</file_content>"),
         js_regex(r"(?s)<next-suggestion>.*?</next-suggestion>"),
         js_regex(r"(?s)<goal-status>.*?</goal-status>"),
-        js_regex(r"(?s)<subtask>.*?</subtask>"),
+        SUBTASK_BLOCK.clone(),
         js_regex(r"(?i)<\s*/?\s*no-reply\s*/?\s*>"),
     ]
 });
@@ -96,10 +96,20 @@ static GA_TAG_BLOCKS: LazyLock<[Regex; 8]> = LazyLock::new(|| {
 /// `extractPreamble` does not strip.
 const GOAL_STATUS_BLOCK: usize = 5;
 
-/// `SUBTASK_OPEN`: an unclosed `<subtask>` and everything after it are
-/// instructions that never went anywhere (main chat ticket 06a), not
-/// answer prose.
-const SUBTASK_OPEN: &str = "<subtask>";
+/// `SUBTASK_OPEN`: a `<subtask>` opener, bare or with attributes
+/// (`<subtask title="…">`, main chat ticket 126): `<subtask`, then `>`,
+/// or whitespace and anything up to the first `>`; `<subtasks>` is not
+/// one. An unclosed one and everything after it are instructions that
+/// never went anywhere (ticket 06a), not answer prose. Group 1 is what
+/// follows the name: [`crate::subtask`] reads the title there, so what
+/// it reads is exactly what this strips.
+pub(crate) static SUBTASK_OPEN: LazyLock<Regex> =
+    LazyLock::new(|| js_regex(r"<subtask(\s[^>]*)?>"));
+
+/// The `subtask` entry of `GA_TAG_PATTERNS` ([`GA_TAG_BLOCKS`]): a
+/// [`SUBTASK_OPEN`] opener paired with the next `</subtask>`.
+pub(crate) static SUBTASK_BLOCK: LazyLock<Regex> =
+    LazyLock::new(|| js_regex(r"(?s)<subtask(?:\s[^>]*)?>.*?</subtask>"));
 
 /// `FILE_REF_PATTERN`.
 static FILE_REF: LazyLock<Regex> = LazyLock::new(|| js_regex(r"\[FILE:[^\]]+\]"));
@@ -297,8 +307,8 @@ pub(crate) fn clean_final_answer(text: &str) -> String {
         return String::new();
     }
     let mut out = strip_ga_tag_blocks(text, None);
-    if let Some(open) = out.find(SUBTASK_OPEN) {
-        out.truncate(open);
+    if let Some(open) = SUBTASK_OPEN.find(&out) {
+        out.truncate(open.start());
     }
     out = replace_line_anchored(&out, llm_running_marker_at);
     out = replace_line_anchored(&out, action_line_at);
@@ -524,6 +534,32 @@ mod tests {
         assert_eq!(
             extract_preamble("先打回去。<no-reply/>"),
             Some("先打回去。".into())
+        );
+    }
+
+    /// Main chat ticket 126: a `<subtask>` with a title (or any other
+    /// attribute) goes like a bare one, closed or not; `<subtasks>` is
+    /// text.
+    #[test]
+    fn a_subtask_tag_with_a_title_is_stripped_like_a_bare_one() {
+        assert_eq!(
+            clean_final_answer(
+                "交给子任务了。\n<subtask title=\"整理发票\">把发票按月份归档</subtask>\n\
+                 <subtask\ttitle='坏的'>另一件</subtask>"
+            ),
+            "交给子任务了。"
+        );
+        assert_eq!(
+            clean_final_answer("派出去了。<subtask title=\"整理下载\">没写完"),
+            "派出去了。"
+        );
+        assert_eq!(
+            extract_preamble("先看看。<subtask title=\"a\">x</subtask><subtask title=\"b\">y"),
+            Some("先看看。".into())
+        );
+        assert_eq!(
+            clean_final_answer("列表 <subtasks> 不是标签"),
+            "列表 <subtasks> 不是标签"
         );
     }
 

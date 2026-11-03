@@ -37,6 +37,11 @@ mod derive;
 /// a row (deleting a main chat message, `crate::message_delete`).
 pub(crate) use derive::js_trim;
 
+/// The `<subtask>` tag as the display strips it, for [`crate::subtask`]
+/// to read and strip the same text, and JavaScript's `\s` for the title
+/// it reads in the opener (main chat ticket 126).
+pub(crate) use derive::{js_regex, SUBTASK_BLOCK, SUBTASK_OPEN};
+
 use crate::api::{GalleyApi, MessageTelemetry, MessageVisibility, SessionId};
 use crate::db::{PersistAssistantMessage, SqliteGalley};
 use crate::error::GalleyError;

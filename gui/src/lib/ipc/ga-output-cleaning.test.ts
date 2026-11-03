@@ -179,6 +179,51 @@ describe("subtask tag stripping", () => {
     );
     expect(extractPreamble("先看一下。<subtask>没写完")).toBe("先看一下。");
   });
+
+  // Ticket 126: the main chat writes the subtask's title on the tag.
+  it("strips a tag that carries a title, closed or not", async () => {
+    const { stripGATags } = await import("@/lib/ipc/ga-output-cleaning");
+    const titled =
+      '交给子任务了。\n<subtask title="整理发票">把发票按月份归档</subtask>\n' +
+      "<subtask\ttitle='坏的' kind=\"x\">另一件</subtask>";
+    for (const clean of [cleanFinalAnswer, cleanPartialContent, stripGATags]) {
+      const out = clean(titled);
+      expect(out).toContain("交给子任务了。");
+      expect(out).not.toContain("subtask");
+      expect(out).not.toContain("整理发票");
+      expect(out).not.toContain("归档");
+    }
+    expect(
+      cleanFinalAnswer('派出去了。\n<subtask title="整理下载">没写完'),
+    ).toBe("派出去了。");
+    expect(
+      extractPreamble(
+        '先看一下。<subtask title="a">x</subtask><subtask title="b">y',
+      ),
+    ).toBe("先看一下。");
+    expect(
+      isSummaryOnlyReply(
+        '<summary>派活</summary><subtask title="a">x</subtask>',
+      ),
+    ).toBe(false);
+    // Not a tag.
+    expect(cleanFinalAnswer("见 <subtasks> 一节")).toBe("见 <subtasks> 一节");
+  });
+
+  it("holds back a titled opener while it streams", () => {
+    expect(cleanPartialContent('派出去了。\n<subtask title="整理')).toBe(
+      "派出去了。\n",
+    );
+    expect(cleanPartialContent("派出去了。\n<subtask ")).toBe("派出去了。\n");
+    expect(
+      cleanPartialContent('派出去了。\n<subtask title="整理发票">把发票'),
+    ).toBe("派出去了。\n");
+    expect(
+      cleanPartialContent(
+        '派出去了。\n<subtask title="整理发票">把发票</subtask>\n好',
+      ),
+    ).toBe("派出去了。\n\n好");
+  });
 });
 
 // Main chat tickets 29 / 31: a report round's reply that says nothing

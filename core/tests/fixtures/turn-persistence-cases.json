@@ -554,6 +554,34 @@
         "absoluteTurnIndex": 35,
         "timestamp": "2026-10-07T08:00:35+00:00"
       }
+    },
+    {
+      "name": "titled-subtask-tags-stay-out-of-the-answer",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 1,
+        "summary": "交给子任务",
+        "toolCalls": [],
+        "toolResults": [],
+        "responseContent": "两件都交出去了。\n<subtask title=\"整理发票\">把下载文件夹里的发票按月份归档。</subtask>\n<subtask\ttitle='坏的' kind=\"x\">把截图按日期放好</subtask>\n<subtask title=\"改名\">把合同改名，可这段没写完",
+        "exitReason": { "result": "CURRENT_TASK_DONE", "data": null },
+        "absoluteTurnIndex": 36,
+        "timestamp": "2026-10-07T08:00:36+00:00"
+      }
+    },
+    {
+      "name": "titled-subtask-tags-stay-out-of-a-preamble",
+      "turnEnd": {
+        "sessionId": "s-golden",
+        "turnIndex": 2,
+        "summary": "看一下下载文件夹",
+        "toolCalls": [{ "toolName": "code_run", "args": { "code": "ls ~/Downloads" } }],
+        "toolResults": [{ "content": "a.pdf" }],
+        "responseContent": "先看一下下载文件夹。<subtask title=\"分类\">不该在这里</subtask>\n<subtask title=\"整理\">也没写完",
+        "exitReason": null,
+        "absoluteTurnIndex": 37,
+        "timestamp": "2026-10-07T08:00:37+00:00"
+      }
     }
   ]
 }
