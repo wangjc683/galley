@@ -75,7 +75,7 @@ function isDisabled(button: string): boolean {
 }
 
 const DELETES = [
-  "主对话的聊天记录，包括它派出去、还没变成普通对话的子任务和附件",
+  "这段对话的聊天记录，包括它派出去、还没变成普通对话的子任务和附件",
   "它的长期记忆（所有对话和 IM 共用，其他对话里的它也会一起忘）",
   "迁移前的自动备份",
 ];
@@ -86,30 +86,37 @@ const KEEPS = [
   "模型、渠道和其他设置",
 ];
 
-describe("the 重置主对话 row", () => {
+describe("the 重置和 Galley 的对话 row", () => {
   it("is the last row of 更多 on the managed runtime with a main chat", () => {
     const html = runtime();
-    const row = buttonWith(html, "重置主对话");
-    expect(row).toContain("清空主对话和它的长期记忆，回到刚装好时");
+    const row = buttonWith(html, "重置和 Galley 的对话");
+    expect(row).toContain("清空和 Galley 的对话与它的长期记忆，回到刚装好时");
     expect(isDisabled(row)).toBe(false);
     // Destructive last: after 设置向导, 接入外部 GA and 高级诊断.
     for (const before of ["设置向导", "接入外部 GA", "高级诊断"]) {
-      expect(html.indexOf("重置主对话")).toBeGreaterThan(html.indexOf(before));
+      expect(html.indexOf("重置和 Galley 的对话")).toBeGreaterThan(
+        html.indexOf(before),
+      );
     }
   });
 
   it("is not there on the external runtime, nor without a main chat", () => {
     expect(runtime({ activeRuntimeKind: "external" })).not.toContain(
-      "重置主对话",
+      "重置和 Galley 的对话",
     );
-    expect(runtime({ hasMainChat: false })).not.toContain("重置主对话");
+    expect(runtime({ hasMainChat: false })).not.toContain(
+      "重置和 Galley 的对话",
+    );
   });
 
   it("is disabled while a conversation runs, saying so in place of the description", () => {
-    const row = buttonWith(runtime({ hasRunningSessions: true }), "重置主对话");
+    const row = buttonWith(
+      runtime({ hasRunningSessions: true }),
+      "重置和 Galley 的对话",
+    );
     expect(isDisabled(row)).toBe(true);
-    expect(row).toContain("有对话正在运行，结束后才能重置主对话");
-    expect(row).not.toContain("清空主对话和它的长期记忆");
+    expect(row).toContain("有对话正在运行，结束后才能重置");
+    expect(row).not.toContain("清空和 Galley 的对话与它的长期记忆");
   });
 
   it("reads in English", () => {
@@ -126,9 +133,9 @@ describe("the 重置主对话 row", () => {
         />
       </CopyProvider>,
     );
-    expect(html).toContain("Reset main chat");
+    expect(html).toContain("Reset your chat with Galley");
     expect(html).toContain(
-      "Clear the main chat and its long-term memory, back to a fresh install",
+      "Clear your chat with Galley and what it remembers, back to a fresh install",
     );
   });
 });
@@ -143,8 +150,8 @@ describe("the confirm", () => {
       />,
     );
     for (const line of [
-      "重置主对话？",
-      "主对话会清空，从问候重新开始；它记住的关于你的事、学会的做事方法也会清掉，回到刚装好时。",
+      "重置和 Galley 的对话？",
+      "和 Galley 的对话会清空，从问候重新开始；它记住的关于你的事、学会的做事方法也会清掉，回到刚装好时。",
       "会删除",
       ...DELETES,
       "不会删除",
@@ -171,8 +178,8 @@ describe("the confirm", () => {
       </CopyProvider>,
     );
     for (const line of [
-      "Reset the main chat?",
-      "The main chat's messages, including its attachments and the subtasks it sent out that haven't become ordinary conversations",
+      "Reset your chat with Galley?",
+      "This chat's messages, including its attachments and the subtasks it sent out that haven't become ordinary conversations",
       "The engine's logs (deleted automatically after 30 days; until then it may still read them when it looks back through history)",
       "Hold 5 s to reset",
     ]) {
@@ -200,7 +207,7 @@ describe("the confirm", () => {
     );
     expect(isDisabled(buttonWith(html, "按住 5 秒重置"))).toBe(true);
     expect(isDisabled(buttonWith(html, "取消"))).toBe(false);
-    expect(html).toContain("有对话正在运行，结束后才能重置主对话");
+    expect(html).toContain("有对话正在运行，结束后才能重置");
   });
 
   it("a failure says why, with its detail to copy", () => {
@@ -210,7 +217,7 @@ describe("the confirm", () => {
         failure={{ kind: "running", detail: '{"error":"running"}' }}
       />,
     );
-    expect(running).toContain("有对话正在运行，结束后才能重置主对话。");
+    expect(running).toContain("有对话正在运行，结束后才能重置。");
     expect(running).toContain("复制详情");
 
     const other = text(
@@ -219,7 +226,7 @@ describe("the confirm", () => {
         failure={{ kind: "other", detail: '{"error":"failed"}' }}
       />,
     );
-    expect(other).toContain("没能重置主对话。");
+    expect(other).toContain("没能重置和 Galley 的对话。");
     expect(other).toContain("复制详情");
     expect(other).not.toContain("有对话正在运行");
   });

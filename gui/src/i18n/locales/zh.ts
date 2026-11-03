@@ -289,8 +289,8 @@ export const zhCopy = {
     replyPlaceholder: "回复…",
     send: "发送",
     gone: "这个子任务已经删除",
-    notStartedEmpty: "没有开始：主对话没写要做什么",
-    notStartedUnclosed: "没有开始：主对话没写完要做什么",
+    notStartedEmpty: "没有开始：Galley 没写要做什么",
+    notStartedUnclosed: "没有开始：Galley 没写完要做什么",
     couldNotStart: (detail: string) => `没能启动：${detail}`,
     couldNotStartBare: "没能启动",
     failed: (message: string) => `出错：${message}`,
@@ -315,9 +315,9 @@ export const zhCopy = {
   },
   /** 助手（主聊天 PRD 裁决 60–65，票 18）：内置运行时的主对话在界面上
    * 是一个叫 Galley 的人。侧栏顶上一张助手卡片（IM 会话列表里的一行），
-   * 开着它时主区顶栏是它的身份行；底下仍是那一条主对话。「主对话」是
-   * 内部用语，界面其余几处（输入框忙时、子任务卡片、设置里的重置）还没
-   * 改名，叫法另定。外置运行时没有助手。 */
+   * 开着它时主区顶栏是它的身份行；底下仍是那一条主对话。「主对话」「主聊天」
+   * 是内部用语，不进界面：这条对话没有自己的名字，名字就是 Galley；非把它
+   * 当物件说不可时写「和 Galley 的对话」（裁决 173）。外置运行时没有助手。 */
   assistant: {
     /** 助手的名字：侧栏卡片、主区顶栏的身份行、子任务面包屑、⌘K 共用。 */
     name: "Galley",
@@ -476,7 +476,7 @@ export const zhCopy = {
     findInChat: "查找聊天记录…",
     rename: "重命名",
     /** 主对话标题菜单的最后一项，弹出设置里那个按住 5 秒的确认框（票 28）。 */
-    resetMainChat: "重置主对话…",
+    resetMainChat: "重置和 Galley 的对话…",
   },
   browserControlAttention: {
     message: "让 Galley 用你已登录的浏览器办事：查资料、填表单、操作网页后台。",
@@ -739,9 +739,7 @@ export const zhCopy = {
     noLLMs: "没有可用的模型配置。",
     // 只搜一个对话（⌘F、标题菜单的「查找聊天记录」，票 28）：输入框前的范围
     // 标签、占位文字、标签上 × 的无障碍名，与不到两个字时的提示。
-    scopeMainChat: "在主对话里",
     scopeThisChat: "在这个对话里",
-    findInMainChat: "查找主对话…",
     findInThisChat: "查找这个对话…",
     dropScope: "改为搜索全部",
     findHint: "输入至少两个字开始查找",
@@ -914,15 +912,15 @@ export const zhCopy = {
       // 「更多」最后一行与它的确认弹窗（2026-10-14，主聊天票 15、裁决 59；
       // 弹窗两个列表用 JC 同日定的 A 版）。
       resetMainChat: {
-        title: "重置主对话",
-        description: "清空主对话和它的长期记忆，回到刚装好时",
-        runningBlock: "有对话正在运行，结束后才能重置主对话",
-        dialogTitle: "重置主对话？",
+        title: "重置和 Galley 的对话",
+        description: "清空和 Galley 的对话与它的长期记忆，回到刚装好时",
+        runningBlock: "有对话正在运行，结束后才能重置",
+        dialogTitle: "重置和 Galley 的对话？",
         dialogBody:
-          "主对话会清空，从问候重新开始；它记住的关于你的事、学会的做事方法也会清掉，回到刚装好时。",
+          "和 Galley 的对话会清空，从问候重新开始；它记住的关于你的事、学会的做事方法也会清掉，回到刚装好时。",
         deletesLabel: "会删除",
         deletes: [
-          "主对话的聊天记录，包括它派出去、还没变成普通对话的子任务和附件",
+          "这段对话的聊天记录，包括它派出去、还没变成普通对话的子任务和附件",
           // 待办是这条对话的副产品（主聊天票 39 的数据层，票 42 的文案）。
           "待办里你要办的事和挂在上面的提醒（它自己要回头查的提醒和例行留着）",
           // 备忘也是这条对话的副产品（主聊天票 95 的数据层，票 97 的文案）。
@@ -941,8 +939,8 @@ export const zhCopy = {
         hold: "按住 5 秒重置",
         holdHint: "要按住不放",
         resetting: "正在重置…",
-        failedRunning: "有对话正在运行，结束后才能重置主对话。",
-        failed: "没能重置主对话。",
+        failedRunning: "有对话正在运行，结束后才能重置。",
+        failed: "没能重置和 Galley 的对话。",
         copyDetails: "复制详情",
         copied: "已复制",
       },

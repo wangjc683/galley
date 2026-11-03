@@ -242,9 +242,7 @@ export function CommandPalette(props: CommandPaletteProps) {
           weight="thin"
           className="pointer-events-none absolute left-4 top-4 text-ink-muted"
         />
-        {scope && (
-          <ScopeTag scope={scope} onDrop={() => props.onDropScope?.()} />
-        )}
+        {scope && <ScopeTag onDrop={() => props.onDropScope?.()} />}
         <Command.Input
           value={search}
           onValueChange={setSearch}
@@ -268,9 +266,7 @@ export function CommandPalette(props: CommandPaletteProps) {
           className={scope ? "cmdk-input-scoped" : undefined}
           placeholder={
             scope
-              ? scope.mainChat
-                ? copy.command.findInMainChat
-                : copy.command.findInThisChat
+              ? copy.command.findInThisChat
               : page === "switch-llm"
                 ? copy.command.searchLLM
                 : copy.command.search
@@ -609,18 +605,12 @@ function EmptyHint({
 // ---------------- Scoped: one conversation ----------------
 
 /**
- * The scope before the input: 「在主对话里」 / 「在这个对话里」 and a ×
- * that drops it (Backspace in the empty input does too). Its cell takes
- * the input's 48px and bottom rule, so the line under the row runs on.
- * The × keeps the focus in the input.
+ * The scope before the input: 「在这个对话里」, in the main chat too
+ * (PRD ruling 173), and a × that drops it (Backspace in the empty input
+ * does too). Its cell takes the input's 48px and bottom rule, so the
+ * line under the row runs on. The × keeps the focus in the input.
  */
-function ScopeTag({
-  scope,
-  onDrop,
-}: {
-  scope: PaletteScope;
-  onDrop: () => void;
-}) {
+function ScopeTag({ onDrop }: { onDrop: () => void }) {
   const copy = useCopy();
   return (
     <div className="flex h-12 shrink-0 items-center border-b border-line pl-11">
@@ -628,9 +618,7 @@ function ScopeTag({
         data-role="palette-scope"
         className="inline-flex h-6 items-center gap-1 rounded-sm border border-line bg-app pl-2 pr-1 text-[12.5px] text-ink"
       >
-        {scope.mainChat
-          ? copy.command.scopeMainChat
-          : copy.command.scopeThisChat}
+        {copy.command.scopeThisChat}
         <button
           type="button"
           aria-label={copy.command.dropScope}

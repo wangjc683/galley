@@ -104,12 +104,12 @@ function menu(props: { title: string; mainChat: boolean }) {
   return { body, items };
 }
 
-const RESET_REASON = "有对话正在运行，结束后才能重置主对话";
+const RESET_REASON = "有对话正在运行，结束后才能重置";
 
 describe("the title menu's find and reset", () => {
   it("main chat: find, a separator, then reset", () => {
     const { body, items } = menu({ title: "Galley", mainChat: true });
-    expect(items).toEqual(["查找聊天记录…", "─", "重置主对话…"]);
+    expect(items).toEqual(["查找聊天记录…", "─", "重置和 Galley 的对话…"]);
     // ⌘F as the sidebar writes ⌘N, after the name.
     const find = body.slice(0, body.indexOf("</div>"));
     expect(find).toContain(
@@ -117,13 +117,13 @@ describe("the title menu's find and reset", () => {
     );
     expect(find).toContain(`>${formatShortcut("Mod+F")}</span>`);
     expect(body).not.toContain(RESET_REASON);
-    expect(body).not.toMatch(/data-disabled=""[^>]*>.*重置主对话/);
+    expect(body).not.toMatch(/data-disabled=""[^>]*>.*重置和 Galley 的对话/);
   });
 
   it("any other conversation: find and rename, no separator, no reset", () => {
     const { body, items } = menu({ title: "订机票", mainChat: false });
     expect(items).toEqual(["查找聊天记录…", "重命名"]);
-    expect(body).not.toContain("重置主对话");
+    expect(body).not.toContain("重置和 Galley 的对话");
   });
 
   it("greys the reset while a conversation runs and says why", () => {
@@ -131,7 +131,7 @@ describe("the title menu's find and reset", () => {
     const { body } = menu({ title: "Galley", mainChat: true });
     const reset = body.slice(body.lastIndexOf("<div data-test-menu-item"));
     expect(reset).toMatch(/^<div data-test-menu-item="" data-disabled="">/);
-    expect(reset).toContain("重置主对话…");
+    expect(reset).toContain("重置和 Galley 的对话…");
     expect(reset).toContain(RESET_REASON);
   });
 
@@ -139,6 +139,6 @@ describe("the title menu's find and reset", () => {
     seed.runtime = "external";
     const { body, items } = menu({ title: "Galley", mainChat: true });
     expect(items).toEqual(["查找聊天记录…"]);
-    expect(body).not.toContain("重置主对话");
+    expect(body).not.toContain("重置和 Galley 的对话");
   });
 });

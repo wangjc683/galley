@@ -56,7 +56,7 @@ function seed(extra: { promoted?: boolean } = {}): void {
     sessions: [
       makeSession({
         id: MAIN,
-        title: "主聊天",
+        title: "Galley",
         mainChat: true,
         gaRuntimeKind: "managed",
       }),
@@ -432,7 +432,7 @@ describe("the assistant's reply to a report", () => {
         "replyDone",
         {
           title: "回复完成",
-          body: "主聊天 · 汇报子任务结果",
+          body: "Galley · 汇报子任务结果",
           throttleKey: `reply:${MAIN}`,
         },
       ],
@@ -535,7 +535,7 @@ describe("the assistant's reply to a report", () => {
           "replyDone",
           {
             title: "回复完成",
-            body: "主聊天 · 派子任务查船票",
+            body: "Galley · 派子任务查船票",
             throttleKey: `reply:${MAIN}`,
           },
         ],

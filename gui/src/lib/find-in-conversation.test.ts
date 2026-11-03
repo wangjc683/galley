@@ -12,7 +12,7 @@ import { resetStores } from "@/test/store-reset";
  */
 const main = makeSession({
   id: "s-main",
-  title: "主聊天",
+  title: "Galley",
   mainChat: true,
   gaRuntimeKind: "managed",
 });
@@ -38,7 +38,7 @@ describe("⌘F", () => {
     findInOpenConversation();
     expect(palette()).toEqual({
       open: true,
-      scope: { sessionId: "s-main", mainChat: true },
+      scope: { sessionId: "s-main" },
     });
 
     useUiStore.getState().setPaletteOpen(false);
@@ -46,7 +46,7 @@ describe("⌘F", () => {
     findInOpenConversation();
     expect(palette()).toEqual({
       open: true,
-      scope: { sessionId: "s-flight", mainChat: false },
+      scope: { sessionId: "s-flight" },
     });
   });
 
@@ -86,7 +86,7 @@ describe("⌘F", () => {
     openConversation("s-flight", "main");
     useUiStore.getState().togglePalette();
     findInOpenConversation();
-    expect(palette().scope).toEqual({ sessionId: "s-flight", mainChat: false });
+    expect(palette().scope).toEqual({ sessionId: "s-flight" });
     useUiStore.getState().dropPaletteScope();
     expect(palette()).toEqual({ open: true, scope: null });
   });

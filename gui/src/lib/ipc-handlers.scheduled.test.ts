@@ -50,7 +50,7 @@ function seed(): void {
     sessions: [
       makeSession({
         id: MAIN,
-        title: "主聊天",
+        title: "Galley",
         mainChat: true,
         gaRuntimeKind: "managed",
       }),

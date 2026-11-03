@@ -18,9 +18,9 @@ import type { RuntimeKind, Session } from "@/types/session";
  * and the palette call them.
  */
 export interface PaletteScope {
+  /** The conversation. Its label is 「在这个对话里」 whichever it is: the
+   * main chat has no name of its own on screen (PRD ruling 173). */
   sessionId: string;
-  /** The main chat: 「在主对话里」, otherwise 「在这个对话里」. */
-  mainChat: boolean;
 }
 
 export interface PaletteState {
@@ -48,7 +48,7 @@ export function openConversationScope({
   if (screen !== "main" || settingsOpen || !activeSessionId) return null;
   const session = sessions.find((s) => s.id === activeSessionId);
   if (!session || session.status === "archived") return null;
-  return { sessionId: session.id, mainChat: session.mainChat === true };
+  return { sessionId: session.id };
 }
 
 /**

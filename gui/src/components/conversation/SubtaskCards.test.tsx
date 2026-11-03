@@ -227,7 +227,7 @@ describe("a subtask card", () => {
     expect(html).toContain('data-subtask-state="notStarted"');
     // No title to show: it says what it is.
     expect(html).toContain(">子任务<");
-    expect(html).toContain(">没有开始：主对话没写完要做什么<");
+    expect(html).toContain(">没有开始：Galley 没写完要做什么<");
     expect(html).not.toContain(">打开<");
   });
 

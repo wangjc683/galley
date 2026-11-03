@@ -131,7 +131,7 @@ const managed = (id: string, extra: Partial<Session> = {}) =>
     ...extra,
   });
 
-const mainChat = managed("s-main", { title: "主聊天", mainChat: true });
+const mainChat = managed("s-main", { title: "Galley", mainChat: true });
 const sideChat = managed("s-side", {
   title: "订机票",
   origin: { via: "gui" },

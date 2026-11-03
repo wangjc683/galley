@@ -427,7 +427,7 @@ export const enCopy: AppCopy = {
     moreConversationActions: (title) => `${title} · More conversation actions`,
     findInChat: "Find in chat…",
     rename: "Rename",
-    resetMainChat: "Reset main chat…",
+    resetMainChat: "Reset your chat with Galley…",
   },
   browserControlAttention: {
     message:
@@ -688,9 +688,7 @@ export const enCopy: AppCopy = {
     notFound: "No match found.",
     askDirectly: "Ask directly with Enter?",
     noLLMs: "No models configured.",
-    scopeMainChat: "In main chat",
     scopeThisChat: "In this chat",
-    findInMainChat: "Find in main chat…",
     findInThisChat: "Find in this chat…",
     dropScope: "Search everywhere",
     findHint: "Type two or more characters to find",
@@ -871,17 +869,16 @@ export const enCopy: AppCopy = {
       uninitialized: "not initialized",
       notGenerated: "not generated",
       resetMainChat: {
-        title: "Reset main chat",
+        title: "Reset your chat with Galley",
         description:
-          "Clear the main chat and its long-term memory, back to a fresh install",
-        runningBlock:
-          "A conversation is running; reset the main chat after it finishes",
-        dialogTitle: "Reset the main chat?",
+          "Clear your chat with Galley and what it remembers, back to a fresh install",
+        runningBlock: "A conversation is running; reset after it finishes",
+        dialogTitle: "Reset your chat with Galley?",
         dialogBody:
-          "The main chat is emptied and starts over from its greeting. What it remembers about you and the ways of working it has learned are cleared too, back to a fresh install.",
+          "Your chat with Galley is emptied and starts over from its greeting. What it remembers about you and the ways of working it has learned are cleared too, back to a fresh install.",
         deletesLabel: "Deleted",
         deletes: [
-          "The main chat's messages, including its attachments and the subtasks it sent out that haven't become ordinary conversations",
+          "This chat's messages, including its attachments and the subtasks it sent out that haven't become ordinary conversations",
           "Your to-dos and the reminders on them (its own reminders and routines stay)",
           "Its memos: what it noted about you",
           "Its long-term memory (shared by every conversation and IM chat, so it forgets in those too)",
@@ -900,8 +897,8 @@ export const enCopy: AppCopy = {
         holdHint: "Keep holding",
         resetting: "Resetting…",
         failedRunning:
-          "A conversation is running. You can reset the main chat after it finishes.",
-        failed: "Couldn't reset the main chat.",
+          "A conversation is running. You can reset after it finishes.",
+        failed: "Couldn't reset your chat with Galley.",
         copyDetails: "Copy details",
         copied: "Copied",
       },

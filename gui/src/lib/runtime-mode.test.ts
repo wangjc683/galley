@@ -107,7 +107,7 @@ describe("switchRuntimeKind", () => {
       command === "get_or_create_main_chat"
         ? {
             id: "s-main",
-            title: "主聊天",
+            title: "Galley",
             status: "idle",
             lastActivityAt: "2026-10-12T08:00:00.000Z",
             createdAt: "2026-10-12T08:00:00.000Z",

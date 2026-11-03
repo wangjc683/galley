@@ -136,8 +136,8 @@ describe("merging dispatch records", () => {
 describe("the card's state", () => {
   it("never started: the dispatch's reason, and nothing to open", () => {
     for (const [failure, text] of [
-      ["empty", "没有开始：主对话没写要做什么"],
-      ["unclosed", "没有开始：主对话没写完要做什么"],
+      ["empty", "没有开始：Galley 没写要做什么"],
+      ["unclosed", "没有开始：Galley 没写完要做什么"],
     ] as const) {
       const state = deriveSubtaskCard(
         dispatch({ sessionId: null, failure, title: "" }),

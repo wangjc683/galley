@@ -231,7 +231,7 @@ describe("the fallback for an undelivered report", () => {
     );
     expect(notStarted).toMatchObject({
       kind: "subtaskFailed",
-      body: "子任务 · 没有开始：主对话没写要做什么",
+      body: "子任务 · 没有开始：Galley 没写要做什么",
       throttleKey: "subtask-failed:s-main:4:0",
     });
   });

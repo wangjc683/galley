@@ -17,7 +17,7 @@ import { getTauriMocks } from "@/test/setup";
 
 const main = makeSession({
   id: "s-main",
-  title: "主聊天",
+  title: "Galley",
   mainChat: true,
   gaRuntimeKind: "managed",
 });
@@ -25,8 +25,8 @@ const flight = makeSession({ id: "s-flight", title: "订机票" });
 const archived = makeSession({ id: "s-old", status: "archived" });
 const sessions = [main, flight, archived];
 
-const MAIN: PaletteScope = { sessionId: "s-main", mainChat: true };
-const FLIGHT: PaletteScope = { sessionId: "s-flight", mainChat: false };
+const MAIN: PaletteScope = { sessionId: "s-main" };
+const FLIGHT: PaletteScope = { sessionId: "s-flight" };
 
 describe("openConversationScope (what ⌘F finds in)", () => {
   const open = (overrides: {
@@ -42,7 +42,7 @@ describe("openConversationScope (what ⌘F finds in)", () => {
       ...overrides,
     });
 
-  it("is the conversation open in the main area, the main chat told apart", () => {
+  it("is the conversation open in the main area, the main chat like any other", () => {
     expect(open({ activeSessionId: "s-main" })).toEqual(MAIN);
     expect(open({ activeSessionId: "s-flight" })).toEqual(FLIGHT);
   });

@@ -29,7 +29,7 @@ const NOW = "2026-10-14T08:00:00.000Z";
 
 const NEW_MAIN: SessionBriefWire = {
   id: "s-new-main",
-  title: "主聊天",
+  title: "Galley",
   status: "idle",
   turnCount: 0,
   lastActivityAt: NOW,

@@ -71,7 +71,7 @@ afterEach(() => {
 
 const mainChat = makeSession({
   id: "s-main",
-  title: "主聊天",
+  title: "Galley",
   mainChat: true,
   gaRuntimeKind: "managed",
   summary: "查厦门明天的天气",

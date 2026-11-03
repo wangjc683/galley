@@ -168,7 +168,7 @@ describe("opening a session after live turns landed (ticket 113)", () => {
       sessions: [
         makeSession({
           id: MAIN,
-          title: "主聊天",
+          title: "Galley",
           mainChat: true,
           gaRuntimeKind: "managed",
           turnCount: 1,

@@ -84,8 +84,8 @@ vi.mock("cmdk", () => {
   };
 });
 
-const MAIN: PaletteScope = { sessionId: "s-main", mainChat: true };
-const FLIGHT: PaletteScope = { sessionId: "s-flight", mainChat: false };
+const MAIN: PaletteScope = { sessionId: "s-main" };
+const FLIGHT: PaletteScope = { sessionId: "s-flight" };
 const sessions = [makeSession({ id: "s-flight", title: "订周五去上海的机票" })];
 
 function palette(scope: PaletteScope | null, onDropScope = () => {}) {
@@ -106,11 +106,13 @@ afterEach(() => {
 });
 
 describe("the palette inside one conversation", () => {
-  it("names the main chat before the input and finds only in it", () => {
+  it("says 在这个对话里 before the input in the main chat too, and finds only in it", () => {
+    // PRD ruling 173: the main chat has no name of its own on screen.
     const html = palette(MAIN);
-    expect(html).toMatch(/data-role="palette-scope"[^>]*>在主对话里<button/);
+    expect(html).toMatch(/data-role="palette-scope"[^>]*>在这个对话里<button/);
     expect(html).toContain('aria-label="改为搜索全部"');
-    expect(html).toContain('placeholder="查找主对话…"');
+    expect(html).toContain('placeholder="查找这个对话…"');
+    expect(html).not.toContain("主对话");
     expect(html).toContain('class="cmdk-input-scoped"');
     // Only its message hits: no recent sessions, no actions, no new chat.
     expect(html).not.toContain("最近会话");
@@ -141,8 +143,8 @@ describe("the palette inside one conversation", () => {
         />
       </CopyProvider>,
     );
-    expect(html).toMatch(/data-role="palette-scope"[^>]*>In main chat<button/);
-    expect(html).toContain('placeholder="Find in main chat…"');
+    expect(html).toMatch(/data-role="palette-scope"[^>]*>In this chat<button/);
+    expect(html).toContain('placeholder="Find in this chat…"');
   });
 
   it("drops the scope on Backspace in the empty input, not while an IME composes", () => {
@@ -220,7 +222,7 @@ describe("ScopedResults", () => {
   const hit = (overrides: Partial<MessageSearchHit>): MessageSearchHit => ({
     messageId: "m",
     sessionId: "s-main",
-    sessionTitle: "主聊天",
+    sessionTitle: "Galley",
     role: "user",
     turnIndex: 0,
     snippet: "",
@@ -274,7 +276,9 @@ describe("ScopedResults", () => {
   it("dates each hit where ⌘K writes the session title, the snippet under it", () => {
     const html = results({});
     expect(html).toContain("在对话内容中");
-    expect(html).not.toContain("主聊天");
+    // Every hit shares the session title, so the first line is the date,
+    // not the title.
+    expect(html).not.toContain("Galley");
     const firstLines = [
       ...html.matchAll(
         /<div class="truncate text-\[12\.5px\] text-ink-soft">([^<]*)</g,
