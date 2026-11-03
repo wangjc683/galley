@@ -1,6 +1,6 @@
 # 129 叫醒那一轮出错时，它带着的子任务报告改发「没送到」
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-03 快进合入 `e0a8f0ee`（JC：「可以，现在合入 129」）。代理在 worktree 跑过 cargo test 1299 条（`subtask_report_test` 18 条，新加 3 条在旧代码上都失败）、rustfmt 动过的三个文件干净、diff --check 干净；主会话看过 `subtask_report.rs` 的 diff，rebase 到 `5a120541` 只多了文档提交。偏离票面主会话认可：事件的文档注释改了（旧的说报告一定留着再试）；没起成的标签有会话的才发、空标签与没闭合的没有 id 不发，同 runner 没收下那条路；定时任务开的会话的报告也发，桌面不当子任务、忽略。代理报的风险：①子任务在问你、报告在主对话等你回答时先告诉过一次、后来送它的叫醒又失败，按「只告诉一次」不再告诉，卡片里的提问可能停在「Galley 正在处理」没人接（三件事接连才会）；②失败那一轮在跑时同一件又来一份新报告，旧的照发没送到，之后可能多一条通知（同现有路径）。看到没改：`core/src/message_queue.rs` 约 `:166` 与 `:213` 的注释仍说 `record_wake_run_end` 只管到点任务。dev 版不发系统通知，等正式包真机）
 
 来源：[主对话 PRD](../PRD.md) 裁决 178。只改 Core（`core/src/subtask_report.rs` 及其测试，必要时 `core/src/notify.rs` 一类的事件定义处），GUI 现成的「没送到」处理不改；不动 runner、CLI、Agent API、迁移、提示词与手册。只影响内置运行时。
 
