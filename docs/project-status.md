@@ -909,7 +909,10 @@ answered with its sources (ruling 185); it talks, explains, gives its
 view, answers from the conversation, keeps the notebook and takes a
 read-only look on the computer itself, and handing off it does not cite
 the rule (ticket 134, entry layer; eval v4: a browser as the first tool
-0 of 72 runs, rule talk 0 of 72). A
+0 of 72 runs, rule talk 0 of 72). A subtask the main chat dispatches carries the main
+chat's last turns (up to 10, 15,000 characters, the ones its runner holds)
+as read-only background in its runtime prompt, stored with the dispatch
+record (ruling 186, ticket 138, migration 056). A
 reminder that says to check something hands the check to a subtask and
 stays silent until it is back; the morning review's look-ups go the same
 way (ruling 184 point 9; `wake.md`, `unasked.md`). Answer-like results
