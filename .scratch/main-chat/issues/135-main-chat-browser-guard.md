@@ -1,6 +1,6 @@
 # 135 主对话的浏览器硬闸：一调浏览器工具就回「交给子任务」
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-03 叠在票 134 上快进合入 `b58bfe1b`。主会话验收：读过 `runner/handlers.py` 的 `_main_chat_refuses` 与 Core 的标记，只对内置主对话生效、外置不动（Rule 1）；合并后的全量测试同票 134。要真机看：模型被闸挡回后会不会照说明派出去、会不会换另一个浏览器工具再试；条款下它本来很少去碰浏览器（评测 v3 0/60），闸可能很久撞不上一次）
 
 来源：[主对话 PRD](../PRD.md) 裁决 184 第 4 条。只影响内置运行时的主对话；子任务、工作台会话、IM 渠道、外置运行时零变化。改 Core（给主对话的 runner 多一个标记）、runner（handler 据此拦）、测试与文档；不动 GUI、CLI、Agent API、迁移、内置 GA 补丁栈。
 

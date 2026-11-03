@@ -894,15 +894,24 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Release-scope truth is `git log v0.7.5..HEAD`. Nothing user-facing yet
-since `v0.7.5` (2026-11-03). In flight: main chat PRD ruling 183, ticket
-134: the main chat hands everything past a step or two to a subtask (a
-single fact, a quick conversion and a follow-up the conversation already
-answers stay), keeps what comes back as one thing in one tag, and pastes
-answer-like results back in full (entry layer and the manual's
-`subtasks.md`; managed only; eval running in a worktree). JC's 「两分钟」
-is a guess up front (ruling 183 point 6); the Core two-minute nudge waits
-on a signal in deferred. GA baseline `a9a36b4` -> `d66509b` (target
+Release-scope truth is `git log v0.7.5..HEAD`. Merged since `v0.7.5`
+(2026-11-03), not dogfooded yet: the main chat does not go online (main
+chat PRD ruling 184, replacing 183's sort by the nature of the request):
+anything that needs the web, the weather included, and anything that
+changes things on the user's computer or accounts goes to a subtask; it
+talks, answers from what it knows or from the conversation, keeps the
+notebook and takes a read-only look on the computer itself (ticket 134,
+entry layer; eval v3: a browser as the first tool 0 of 60 runs). A
+reminder that says to check something hands the check to a subtask and
+stays silent until it is back; the morning review's look-ups go the same
+way (ruling 184 point 9; `wake.md`, `unasked.md`). Answer-like results
+come back in full: the manual's `subtasks.md` and Core's wake note (ruling
+183 point 4). In the managed runtime the main chat's runner refuses
+browser tools (`GALLEY_MAIN_CHAT`, ticket 135); going online through
+`code_run` is not caught and waits on a signal in deferred (ruling 184
+point 10). The GUI draws `Bash` / `PowerShell` calls as `code_run`
+(baseline ticket 02), and a step whose heading falls back reads a lone
+tool's name instead of 「调用了 code_run」 (baseline ticket 03). GA baseline `a9a36b4` -> `d66509b` (target
 `v0.7.6`, [devlog](./devlog/2026-11-03-ga-upstream-upgrade-a9a36b4-to-d66509b.md)):
 upstream anchored L0 to the code dir, which would have switched off managed
 memory distillation; patch `0001` points it at the state root, so Feishu,
