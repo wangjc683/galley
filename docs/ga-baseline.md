@@ -15,18 +15,134 @@ audited against.
 
 ## Current Baseline
 
-Locked commit: `a9a36b4b219593369de01c3e5973e56ac02e568b`
+Locked commit: `d66509bf09f6dd356704a257744a1d7ff899f8f9`
 
-- Tree hash: `f039f97493294d9bc74f832e5de60b9042230226`
+- Tree hash: `009430679a2d3587a4b7ffd51fda89df92fa7bbe`
 - Source: `lsdefine/GenericAgent` upstream `main`
-- Date audited: 2026-10-26
-- Shipped in: `v0.7.1` (2026-10-26; audited after `v0.7.0`), `v0.7.2` (2026-10-27; upstream `main` unchanged), `v0.7.3` (2026-10-28; upstream `main` at `e4d956f`, audit skipped: only `frontends/conductor.py` and `memory/` seed files changed), `v0.7.4` (2026-10-30; upstream `main` still at `e4d956f`), `v0.7.5` (2026-11-03; upstream `main` 17 commits past `e4d956f`, audit deferred to its own round: `llmcore.py` split into `legacy_llmcore.py` where patches `0007` and `0030` sit)
+- Date audited: 2026-11-03
+- Shipped in: not yet; audited for `v0.7.6` (after `v0.7.5`)
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
-- Previous baseline: `b70079dce7d7768338a17c693f67b9d8dac541b5`
+- Previous baseline: `a9a36b4b219593369de01c3e5973e56ac02e568b`
+  (tree `f039f97493294d9bc74f832e5de60b9042230226`, audited 2026-10-26,
+  shipped `v0.7.1` … `v0.7.5`)
+- Delta (`a9a36b4..d66509b` = 29 commits, one of them a merge): 27 files,
+  +786 / −307. Engine core: `llmcore.py` +13 / −140 plus the new
+  `legacy_llmcore.py` (+145), `ga.py` +4 / −2, `agent_loop.py` +1.
+  `agentmain.py` and root `pyproject.toml` had **zero diff** (`GA_DEPS`
+  untouched). The rest is frontends no Galley process loads (`conductor`,
+  `hub`, `hub_p2p`, `p2p_ws_client`, `slash_cmds`, `tui_v3`, `tuiapp_v2`,
+  two comments in `desktop_bridge.py`), `ga_cli/cli.py`, `hub.pyw` renamed
+  `service_manager.pyw`, assets and `mykey` templates, `README.md`, and
+  seven `memory/` seed files.
+- Result: **one managed-runtime break, fixed in patch `0001`; no Galley
+  code change** (one runner test added). Upstream `1a44b3f` anchors the
+  L0 path in `do_start_long_term_update` to the code dir, and the managed
+  code dir ships without `memory/`: unpatched, every managed session's
+  memory distillation would get "Memory Management SOP not found. Do not
+  update memory." `0001` gains one hunk that points the line at the state
+  root, which also closes the older gap where Feishu, Telegram and Discord
+  could not read L0. No patch hunk sat in the code upstream moved into
+  `legacy_llmcore.py`. The stack was re-exported with
+  `rebase-managed-ga-patches.sh` (no conflict; only hunk headers of
+  `0001`, `0002`, `0003`, `0008` moved), then `0001`'s new hunk was added
+  on its chain commit and the stack exported again; `legacy_llmcore.py`
+  joined `scripts/managed-ga-normalize-files.txt` (upstream's trailing
+  space moved there from `llmcore.py`). The rebuilt payload's
+  diff against the previous one equals upstream's `a9a36b4..d66509b` diff
+  line for line in 27 of 28 changed files; `ga.py` differs by that one
+  line.
+- Standing guard re-run: `grep -rn "hub.connect" managed-ga/code/` shows
+  the same hits as the last audit (`agentmain.py --reflect`, `hub.py`
+  itself, `stapp.py`, `frontends/desktop_bridge.py` `make_agent`), none on
+  Galley's path.
+- Devlog: [GA upstream upgrade a9a36b4 -> d66509b](./devlog/2026-11-03-ga-upstream-upgrade-a9a36b4-to-d66509b.md)
+
+New in the `a9a36b4` -> `d66509b` range:
+
+- `ga.py` — **L0 is looked up beside the code** (upstream `1a44b3f`,
+  `do_start_long_term_update`): `./memory/memory_management_sop.md`
+  (relative to the process cwd) became
+  `os.path.join(script_dir, 'memory', …)`. Managed state lives under
+  `GALLEY_GA_STATE_ROOT` (`0001`), and `build-managed-ga.sh` excludes
+  `memory/` from the code payload. Before, the cwd happened to match on
+  the desktop (Core spawns the runner with no cwd, the bridge `chdir`s to
+  the state root) and in WeChat, but not in Feishu, Telegram and Discord
+  (they `chdir` into `im/<platform>`). `0001` now rewrites the line to
+  `state_path('memory', 'memory_management_sop.md')`
+  (`managed-ga/code/ga.py:542`). Checked with the bundled Python against
+  three trees: the previous payload reads L0 only with the cwd in the
+  state root; `d66509b` without the hunk reads it nowhere; the new payload
+  reads it from the state root, `im/<platform>` and any other cwd.
+  `runner/tests/test_managed_ga_l0_path.py` runs the tool in a child
+  process from the state root and from `im/feishu`; both cases fail
+  against the tree without the hunk. External GA: upstream's intent (L0
+  beside the user's checkout, whatever the cwd); Galley does not touch it.
+- `llmcore.py` / `legacy_llmcore.py` — **text-protocol sessions moved
+  out** (upstream `4ca9028`): `ClaudeSession`, `LLMSession` and
+  `ToolClient` now live in `legacy_llmcore.py`, which imports `llmcore`
+  and hangs the three names back on it; `llmcore.py` ends with
+  `try: import legacy_llmcore`. The moved code is line for line the old
+  code with `llmcore.` prefixes. Every name the moved classes call that a
+  patch changes (`_write_llm_log` `0001`, `tryparse` `0002`,
+  `_parse_claude_sse` `0016` / `0017` / `0030`, `_stream_with_retry`
+  `0021`, `auto_make_url` `0027`) stays in `llmcore` and is looked up at
+  call time. Probe (bundled Python, three import orders: the runner's
+  `llmcore` first, attach mode's `agentmain` first, `legacy_llmcore`
+  first): one `llmcore` module, `llmcore.ToolClient` and
+  `agentmain.ToolClient` are the `legacy_llmcore` class, native keys still
+  build `NativeToolClient`, non-native keys and a non-native mixin build
+  `legacy_llmcore.ToolClient`. Managed never takes the legacy path:
+  Galley only emits `native_claude_config_<n>` / `native_oai_config_<n>`
+  (`runner/managed_runtime.py`). For an external `mykey` with legacy
+  entries upstream prints `[Legacy] …` on every client rebuild; the
+  runner's stdout forwarder drops it (only `Backend Error` and
+  `[LLM Retry]` lines go to stderr) and the Settings GA probe reads only
+  its last `{` line.
+- `llmcore.py` — **`claude_compat`** (upstream `be17b0a`,
+  `NativeClaudeSession`, `_cc_system`): `off` / `simple` / `half`, with
+  the old `fake_cc_system_prompt: true` mapped to `simple`. Galley sets
+  the old key (Kimi preset, the Settings toggle) and never the new one
+  (only a free-form advanced override could). With the key absent, true
+  or false, and an empty or non-empty system prompt, the request body
+  and headers (minus the random session id and metadata) are byte-equal
+  between the previous and new payload. `half` adds
+  `assets/cc_system_template.txt`, which ships in the payload.
+- `agent_loop.py` — **`Bash` / `PowerShell` calls run as `code_run`**
+  (upstream `5ec4b12`, `BaseHandler.dispatch`): the model's `command`
+  becomes the script; before, the call was an unknown tool. The recorded
+  tool call keeps the name `Bash` and the original arguments, so
+  `toolName` reaches Core and the GUI as `Bash`. Core derives nothing
+  from it beyond "not `no_tool`"; the GUI draws the name-only pill meant
+  for unknown tools (preview from `command`) and the assistant face reads
+  it as thinking rather than working. `WorkbenchHandler.dispatch` skips
+  its turn_start emit for it (no `do_Bash`), which the bridge's own
+  emitters already cover. Neither handler path in Galley overrides the
+  mapping.
+- `ga.py` — **whole writes of L1 are refused** (upstream `754acfd`,
+  `do_file_write`): any path containing `global_mem_insight.txt`, every
+  mode. Checked under a managed state root: `../memory/…` and the
+  absolute path are refused, `file_patch` still edits L1. Nothing Galley
+  ships asks the model for a whole L1 write.
+- `ga.py` — the memory-distill prompt drops "不得为缩短而丢失关键事实、
+  适用条件和踩坑信息" and adds "非必要不可增加触发词" (upstream `4ca9028`).
+  No patch touches it and nothing in Galley reads it.
+- `memory/` — seven existing seed files changed (L0's
+  `memory_management_sop.md`, `vision_sop.md`, `vision_api.template.py`,
+  `L4_raw_sessions/compress_session.py`, and from the `e4d956f` part
+  `ljqCtrl_sop.md`, `macljqCtrl.py`, `ocr_utils.py`). Missing-only seeding
+  (`copy_missing_tree`) gives them to new installs and to a main-chat
+  reset, not to existing managed state. `macljqCtrl.py` and `ocr_utils.py`
+  cannot run under the bundled Python before or after (no `numpy`, no
+  PyObjC).
+
+Carried forward from the `b70079d` -> `a9a36b4` range (2026-10-26):
+
+- Previous-previous baseline: `b70079dce7d7768338a17c693f67b9d8dac541b5`
   (tree `bf14c4fd4387c65759f534bb972ebff019ac12a1`, audited 2026-10-22,
   shipped `v0.7.0`)
+- `a9a36b4` shipped in `v0.7.1` (2026-10-26; audited after `v0.7.0`), `v0.7.2` (2026-10-27; upstream `main` unchanged), `v0.7.3` (2026-10-28; upstream `main` at `e4d956f`, audit skipped: only `frontends/conductor.py` and `memory/` seed files changed), `v0.7.4` (2026-10-30; upstream `main` still at `e4d956f`), `v0.7.5` (2026-11-03; upstream `main` 17 commits past `e4d956f`, audit deferred to its own round: `llmcore.py` split into `legacy_llmcore.py` where patches `0007` and `0030` sit)
 - Delta (`b70079d..a9a36b4` = 2 commits): one file, `ga.py` +4 / −2, two
   bug fixes in tool handlers. `agent_loop.py`, `agentmain.py`,
   `llmcore.py` and root `pyproject.toml` had **zero diff** (`GA_DEPS`
@@ -38,10 +154,6 @@ Locked commit: `a9a36b4b219593369de01c3e5973e56ac02e568b`
   re-exported with `rebase-managed-ga-patches.sh`; only those three hunk
   headers changed, no patch body. The rebuilt payload's diff against the
   previous one equals upstream's `b70079d..a9a36b4` diff line for line.
-- Standing guard re-run: `grep -rn "hub.connect" managed-ga/code/` shows
-  the same hits as the last audit (`agentmain.py --reflect`, `hub.py`
-  itself, `stapp.py`, `frontends/desktop_bridge.py` `make_agent`), none on
-  Galley's path.
 - Devlog: [GA upstream upgrade b70079d -> a9a36b4](./devlog/2026-10-26-ga-upstream-upgrade-b70079d-to-a9a36b4.md)
 
 New in the `b70079d` -> `a9a36b4` range:
@@ -159,7 +271,8 @@ New in the `5205f40` -> `b70079d` range:
   prompt still asks for a distillation; the model can still reach L0
   through the L1 pointer (`../memory/…` from `temp/`). Reproduced on the
   rebuilt payload with the bundled Python. Not changed in this upgrade;
-  see the devlog for the options.
+  see the devlog for the options. (Closed by the `d66509b` bump, where
+  `0001` points the line at the state root.)
 - `memory/ui_detect.py` — RapidOCR is built with `det_use_cuda` /
   `rec_use_cuda` / `cls_use_cuda` set (`b70079d`). Seed file, missing-only,
   like the line above. The bundle cannot import `ui_detect` at all, before
@@ -1156,7 +1269,8 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     read) into `TurnEndEvent.responseThinking`. Re-check on upgrade that
     Native* `ask` still fills it from thinking blocks, falling back to a
     prompted `<think(ing)>` block it moves out of `content`, and that
-    `ToolClient._parse_mixed_response` still sets it.
+    `ToolClient._parse_mixed_response` still sets it (in `legacy_llmcore.py`
+    since `d66509b`, hung back on `llmcore`).
 15. The display queue and ask_user payload the managed Discord,
     Telegram and Feishu frontends read (Discord: patches `0023` and `0026`;
     Telegram: patch `0024`; all 2026-09-30; Feishu: patch `0029`,

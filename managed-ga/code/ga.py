@@ -421,6 +421,8 @@ class GenericAgentHandler(BaseHandler):
         mode = args.get("mode", "overwrite")  # overwrite/append/prepend
         action_str = {"prepend": "Prepending to", "append": "Appending to"}.get(mode, "Overwriting")
         yield f"[Action] {action_str} file: {os.path.basename(path)}\n"
+        if 'global_mem_insight.txt' in path:
+            return StepOutcome({"status": "error", "msg": "L1 must be patched carefully, no whole write! See template in assets/, the patch should be **short**, **literal** index, **general** enough to reuse next time in different context!"}, next_prompt="\n")
 
         def extract_robust_content(text):
             tags = re.findall(r"<file_content[^>]*>(.*?)</file_content>", text, re.DOTALL)
@@ -533,11 +535,11 @@ class GenericAgentHandler(BaseHandler):
     def do_start_long_term_update(self, args, response):
         '''Agent觉得当前任务完成后有重要信息需要记忆时调用此工具。'''
         prompt = get_global_memory() + '''【记忆提纯】任务完成或到达重要检查点后，按L0提取最近一次任务中【事实验证成功且长期有效】的环境事实、用户偏好、重要步骤；已在整理则不重复启动。
-先读后patch，将已验证、长期有用且难以重建的新知识融入旧条目，合并重复、压缩冗述，不堆叠流水账。以更少文字保留更高复用价值；不得为缩短而丢失关键事实、适用条件和踩坑信息。无提纯价值则跳过，索引按需同步。
+先读后patch，将已验证、长期有用且难以重建的新知识融入旧条目，合并重复、压缩冗述，不堆叠流水账。以更少文字保留更高复用价值；无提纯价值则跳过，索引按需同步，非必要不可增加触发词。
 禁止：临时状态、推理过程、未验证信息、通用常识、易重建细节；不得将模型推测或建议记作用户要求。
 记忆整理仅是内部收尾；完成或跳过后，仍须向用户报告原任务结果。'''
         yield "[Info] Start distilling good memory for long-term storage.\n"
-        path = './memory/memory_management_sop.md'
+        path = state_path('memory', 'memory_management_sop.md')  # Galley: memory/ is in the state root, not beside the code
         if os.path.exists(path): result = 'This is L0:\n' + file_read(path, show_linenos=False)
         else: result = "Memory Management SOP not found. Do not update memory."
         if (l1 := load_L1()) and len(l1) > 6000: result += 'L1 (insight or index) is too large, follow L0 and cleanup sop to fix it!'

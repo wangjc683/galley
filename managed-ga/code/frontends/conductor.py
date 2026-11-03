@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
 
 FRONTENDS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -133,7 +134,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Conductor", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# 只放行本机页面（conductor.html 同源 / 桌面端 Tauri / vite dev），防恶意网页跨站调用
+LOCAL_ORIGIN = re.compile(r"^(https?://(127\.0\.0\.1|localhost|\[::1\])(:\d+)?|tauri://localhost|https?://tauri\.localhost)$")
+app.add_middleware(CORSMiddleware, allow_origin_regex=LOCAL_ORIGIN.pattern, allow_methods=["*"], allow_headers=["*"])
+# 防 DNS rebinding；--key 远程模式或 ::1 监听时不启用
+if not args.key and args.host != "::1": app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
 
 class RemoteAuth:
     def __init__(self, app): self.app = app
@@ -294,6 +299,7 @@ class SubagentPool:
                     "prompt": s.prompt,
                     "reply": (extract_last_summary(s.reply) if s.status == "running" else extract_last_text_reply(s.reply)) if s.reply else "",
                     "status": s.status,
+                    "llm": s.agent.get_llm_name(),
                     "created_at": s.created_at,
                     "updated_at": s.updated_at,
                 }
@@ -408,6 +414,20 @@ subagent完成流程：
    ② 用户同意后该执行的完整任务指令（approval通过会直接作为subagent的prompt派发，必须具体到可直接执行）。""",
 }
 
+HEADER = f"""你是攻关总管，对团队达成用户目标负责。绝不亲自执行或探测；实作与核验交给subagent，你负责战略、组织、验收和交付。
+API: http://{HOST}:{PORT}；requests，GET /readme查用法，GET /chat读未读对话，GET /subagent看状态；POST /chat是唯一对用户说话方式。
+
+原则：
+- 围绕目标识别关键问题、设计攻关路线，按需分工、并行或复用；明确任务结果与验收标准，执行细节交给下属。
+- 不擅改用户目标；可提出待验证假说，不将假说当事实。
+- 围绕用户目标判断结果是否达标，必要时委派核验。
+- 根据反馈判断进展与瓶颈，调整路线、分工和资源，组织各项结果形成整体交付。
+- 达标前提下降低总成本，合并反馈；本轮必要派遣/纠偏完成即结束回复，等下次事件，禁止轮询或原地等结果；整体达标才交付。
+- 仅为用户独有信息或必要授权提问；文件路径用反引号包裹。
+
+需要处理：
+"""
+
 class Conductor:
     LOG_MAX = 50
 
@@ -471,29 +491,21 @@ class Conductor:
             self.log.pop(0)
         schedule_broadcast({"type": "log", "item": item})
 
-    def _build_prompt(self, events: list) -> str:
+    def _build_prompt(self, events: list) -> Optional[str]:
+        kind = events[0].get("type") if events else "wake"
+        self._pending = []
+        if kind == "user_message":
+            msgs = self._pending = [m for m in chat_messages if m.get("role") == "user" and not m.get("read")]
+            if not msgs: return None
+            m = msgs[-1]
+            return f"[用户消息] {len(msgs)}条未读" + ("，GET /chat 读取" if len(msgs) > 1 else "") + "；按GET /readme/usermsg处理。\n<user_last_msg>\n" + m["msg"] + "".join(f"\n附件: `{f['path']}`" for f in m.get("files") or [] if f.get("path")) + "\n</user_last_msg>"
         running, stopped = pool.counts()
-        unread = sum(1 for m in chat_messages if m.get("role") == "user" and not m.get("read"))
         done_count = sum(1 for e in events if e.get("type") == "subagent_done")
-        event_type = events[0].get("type") if events else "wake"; im_sources = [e.get("source") for e in events if e.get("type") == "im_signal"]
-        if event_type == "user_message": summary = f"[用户消息] {unread}条未读用户消息，GET /chat 读取；按GET /readme/usermsg处理。"
-        elif event_type == "subagent_done": summary = f"[subagent完成] {done_count}个完成报告；GET /subagent 查看并验收；IM subagent完成报告按GET /readme/im处理，其他subagent完成报告按GET /readme/subagent处理。"
-        elif event_type == "im_signal": summary = f"[IM信号] {', '.join(im_sources)} 有新消息；" + "；".join(f"GET /im_prompt/{s}取采集prompt" for s in im_sources) + "；尽量复用已有subagent。"
-        else: summary = f"[唤醒] subagents: {running} running, {stopped} stopped | {unread}条用户未读消息, {done_count}个subagent完成报告"
-        base = f"http://{HOST}:{PORT}"
-        return f"""你是agent总管。用户只和你对话，你负责调度、验收、交付，目标是降低用户管理多个agent的负担。
-API: {base}；requests，GET /readme查用法，GET /chat读未读对话，GET /subagent看状态；POST /chat是唯一对用户说话方式。
-
-铁律：
-- 绝不亲自执行任务/探测环境；一切执行交给subagent。你只分析、派遣、审查、沟通。
-- 每次唤醒只做最小必要动作（发消息/开subagent/reply/keyinfo/abort），做完立刻停，等待下次事件唤醒。
-- 改写prompt时严禁添加用户未提及的假设、工具、前提条件。只能精炼/结构化用户原意，不能脑补，只能做很小的改写
-
-原则：
-- 信任subagent足够聪明，不要写具体步骤和容易探测的信息；能自己判断的自己判断，只在真正需要用户决策时打扰。
-- 向用户交付文件时，路径用反引号包裹。\n
-需要处理：
-{summary}"""
+        im_sources = [e.get("source") for e in events if e.get("type") == "im_signal"]
+        if kind == "subagent_done": return f"[subagent完成] {done_count}个完成报告；GET /subagent 查看并验收；IM subagent完成报告按GET /readme/im处理，其他subagent完成报告按GET /readme/subagent处理。"
+        if kind == "im_signal": return f"[IM信号] {', '.join(im_sources)} 有新消息；" + "；".join(f"GET /im_prompt/{s}取采集prompt" for s in im_sources) + "；尽量复用已有subagent。"
+        unread = sum(1 for m in chat_messages if m.get("role") == "user" and not m.get("read"))
+        return f"[唤醒] subagents: {running} running, {stopped} stopped | {unread}条用户未读消息, {done_count}个subagent完成报告"
 
     def _drain(self, dq: "queue.Queue", events: list) -> str:
         event_label = ",".join(e.get("type", "") for e in events) or "wake"
@@ -563,10 +575,13 @@ API: {base}；requests，GET /readme查用法，GET /chat读未读对话，GET /
                     for event in other_events:
                         self.inbox.put(event)
                     prompt = self._build_prompt(events)
-                    dq = self.agent.put_task(prompt, source="conductor")
+                    if prompt is None: continue
+                    dq = self.agent.put_task(HEADER + prompt, source="conductor")
                     self._publish_model_state(model_state, running=True)
                 try:
                     self._drain(dq, events)
+                    for m in self._pending: m["read"] = True  # mark only after the turn finishes; failures stay unread
+                    if self._pending: schedule_broadcast({"type": "chat_read"})
                 finally:
                     self._publish_model_state(model_state, running=False)
             except Exception as e: print(f"Conductor error: {e}")
@@ -668,6 +683,7 @@ def get_subagent(sid: str, max_len: int = 5000):
     cleaned = clean_log_text(s.reply or "")
     return {"id": s.id, "prompt": s.prompt, "status": s.status,
             "reply": cleaned[-max_len:] if len(cleaned) > max_len else cleaned,
+            "llm": s.agent.get_llm_name(), "log": s.agent.log_path,
             "created_at": s.created_at, "updated_at": s.updated_at}
 
 INSTR_DISPATCHED = "Task received. I'll handle THIS TASK from here. You MUST to do other task or end your reply."
@@ -721,6 +737,8 @@ def api_approval(body: ApprovalIn):
 
 @app.websocket("/ws")
 async def websocket(ws: WebSocket):
+    # WebSocket 不受 CORS 约束，需自行校验 Origin（非浏览器客户端不带 Origin，放行；--key 远程模式由 RemoteAuth 的 Basic 鉴权把关）
+    if (origin := ws.headers.get("origin")) and not args.key and not LOCAL_ORIGIN.match(origin): return await ws.close(code=1008)
     await ws.accept()
     ws_clients.add(ws)
     try:

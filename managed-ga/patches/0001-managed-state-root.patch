@@ -74,16 +74,19 @@ diff --git a/ga.py b/ga.py
 @@ -160 +164 @@ def log_memory_access(path):
 -    stats_file = os.path.join(script_dir, 'memory/file_access_stats.json')
 +    stats_file = state_path('memory', 'file_access_stats.json')
-@@ -579 +583 @@ def load_L1():
+@@ -520 +524 @@ class GenericAgentHandler(BaseHandler):
+-        path = os.path.join(script_dir, 'memory', 'memory_management_sop.md')
++        path = state_path('memory', 'memory_management_sop.md')  # Galley: memory/ is in the state root, not beside the code
+@@ -581 +585 @@ def load_L1():
 -        with open(os.path.join(script_dir, 'memory/global_mem_insight.txt'), 'r', encoding='utf-8', errors='replace') as f: content = f.read()
 +        with open(state_path('memory', 'global_mem_insight.txt'), 'r', encoding='utf-8', errors='replace') as f: content = f.read()
-@@ -589 +593 @@ def get_global_memory():
+@@ -591 +595 @@ def get_global_memory():
 -        prompt += f'cwd = {os.path.join(script_dir, "temp")} (./)\n'
 +        prompt += f'cwd = {state_path("temp")} (./)\n'
 diff --git a/llmcore.py b/llmcore.py
 --- a/llmcore.py
 +++ b/llmcore.py
-@@ -1082 +1082,2 @@ def _write_llm_log(label, content, log_path=None, model=''):
+@@ -950 +950,2 @@ def _write_llm_log(label, content, log_path=None, model=''):
 -        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f'temp/model_responses/model_responses_{os.getpid()}.txt')
 +        state_root = os.path.abspath(os.environ.get('GALLEY_GA_STATE_ROOT') or os.path.dirname(os.path.abspath(__file__)))
 +        log_path = os.path.join(state_root, f'temp/model_responses/model_responses_{os.getpid()}.txt')

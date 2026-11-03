@@ -2,8 +2,40 @@
 
 Patch stack id: `galley-managed-ga-patches-v1`
 
-Last replay verified: `2026-11-02` against upstream
-`a9a36b4b219593369de01c3e5973e56ac02e568b` (28-patch stack through `0030`;
+Last replay verified: `2026-11-03` against upstream
+`d66509bf09f6dd356704a257744a1d7ff899f8f9` (28-patch stack through `0030`;
+GA baseline bump from `a9a36b4`,
+[devlog](../../docs/devlog/2026-11-03-ga-upstream-upgrade-a9a36b4-to-d66509b.md)).
+Upstream split `llmcore.py`'s text-protocol sessions into
+`legacy_llmcore.py`; no hunk of the nine `llmcore.py` patches sat in the
+moved code. `rebase-managed-ga-patches.sh` replayed the stack on `a9a36b4`,
+byte-verified it against the checked-in payload, rebased it onto `d66509b`
+with no conflict and re-exported it: only hunk headers of `0001`
+(`load_L1`, `get_global_memory`, `_write_llm_log`), `0002` (`tryparse`
+and its helper block), `0003` (`get_global_memory`) and `0008`
+(`NativeToolClient`) moved, no patch body. Then, in the script's work
+repo, `0001`'s chain commit was amended with one more `ga.py` line,
+`do_start_long_term_update`'s L0 path (`os.path.join(script_dir,
+'memory', …)` from upstream `1a44b3f`, which the managed code dir ships
+without) rewritten to `state_path('memory', 'memory_management_sop.md')`;
+the 27 later commits were replayed on it and the stack exported with
+`--export-only`. One line for one, so no later hunk moved and `0001` is
+the only patch whose body changed (one hunk added).
+`legacy_llmcore.py` joined `scripts/managed-ga-normalize-files.txt`: it
+carries the trailing space and final blank line `llmcore.py` used to (that
+file was already on the list), which `git diff --check` flagged.
+`build-managed-ga.sh` applied all 28 from a clean clone of `d66509b`
+(clean `git status`) and its `py_compile` sweep passed. Re-running
+`rebase-managed-ga-patches.sh` with the manifest at `d66509b` replayed the
+new stack, matched the payload byte for byte and exported all 28 patches
+byte-identical to the checked-in ones. The rebuilt
+payload's diff against the previous one covers 28 files under `code/` and
+`state-seed/` (the `hub.pyw` rename counted as a delete and an add); 27
+equal upstream's `a9a36b4..d66509b` diff line for line (the image byte for
+byte) and `ga.py` differs by that one line. `check-managed-ga-payload.mjs`
+and `check-ga-baseline-drift.mjs` passed.
+
+Previous replay (`2026-11-02`, `a9a36b4`, 28-patch stack through `0030`;
 same baseline, `0007` amended in place for main chat ticket 122, the token
 wait,
 `.scratch/main-chat/issues/122-token-wait-and-visible-errors.md`). First
@@ -460,7 +492,7 @@ Current patches:
 
 | Patch | Upstream files | Reason | Rebase risk | Removal condition |
 |---|---|---|---|---|
-| `0001-managed-state-root.patch` | `agentmain.py`, `ga.py`, `llmcore.py`, `frontends/continue_cmd.py`, `assets/ga_ultraplan.py`, `frontends/workspace_cmd.py`, `plugins/project_mode.py` | Keep Galley-managed user state under `Application Support/app.galley/managed-ga-state` instead of the shipped code payload, including model response logs, long prompt temp files, `/continue` cache, UltraPlan run artifacts, Workspace registry/session maps, and Project Mode project memory files. | Medium: upstream may rename state paths, model response logging, continue-session cache paths, UltraPlan run directories, workspace storage, or project-mode storage paths. | Remove when GenericAgent supports an explicit state root / profile path upstream. |
+| `0001-managed-state-root.patch` | `agentmain.py`, `ga.py`, `llmcore.py`, `frontends/continue_cmd.py`, `assets/ga_ultraplan.py`, `frontends/workspace_cmd.py`, `plugins/project_mode.py` | Keep Galley-managed user state under `Application Support/app.galley/managed-ga-state` instead of the shipped code payload, including model response logs, long prompt temp files, `/continue` cache, UltraPlan run artifacts, Workspace registry/session maps, and Project Mode project memory files. Since the `d66509b` baseline also the L0 path `start_long_term_update` reads (`memory/memory_management_sop.md`), which upstream `1a44b3f` anchors to the code dir. | Medium: upstream may rename state paths, model response logging, continue-session cache paths, UltraPlan run directories, workspace storage, or project-mode storage paths. | Remove when GenericAgent supports an explicit state root / profile path upstream. |
 | `0002-repair-windows-path-tool-json.patch` | `llmcore.py` | Keep managed GA tolerant when models copy Windows paths into `path` / `file_path` / `filepath` tool JSON fields with raw backslashes or doubled quotes. | Low: touches only fallback text-tool JSON parsing for path fields. | Remove when GenericAgent upstream normalizes Windows path values or handles these malformed tool JSON cases. |
 | `0003-normalize-asset-path-joins.patch` | `agentmain.py`, `ga.py` | Join managed GA bundled asset paths with platform path segments so Windows verbatim paths never mix `\\?\` with `/`. | Low: only wraps existing `assets` reads behind an `asset_path` helper. | Remove when upstream stops using slash-containing asset path strings under `script_dir`. |
 | `0004-managed-wechat-state-paths.patch` | `frontends/wechatapp.py` | Let Galley's managed IM launcher keep WeChat token and temp files under Galley managed state instead of `~/.wxbot` / bundled code paths. | Low: two path constants near module startup. | Remove when upstream WeChat frontend supports explicit token/temp paths. |

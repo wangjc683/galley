@@ -23,7 +23,10 @@ live in [refactor](./archive/refactor/README.md).
   shipped `v0.7.0`, on top of `5205f40` (audited 2026-10-18, never shipped
   on its own; upstream's new mykey store broke the managed loader, fixed in
   the runner); `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` `v0.5.1` …
-  `v0.6.0`, `efb3bc6` before it `v0.4.11` … `v0.5.0`. See
+  `v0.6.0`, `efb3bc6` before it `v0.4.11` … `v0.5.0`. Audited on main,
+  not yet shipped: `d66509b` (2026-11-03; `llmcore.py`'s text protocol
+  split into `legacy_llmcore.py`, one `0001` hunk so managed memory
+  distillation still reads L0, no Galley code change). See
   [GA baseline](./ga-baseline.md).
 - Product shape: a personal assistant on the user's own computer that
   scales into a local agent team (since `v0.7.0`; before it, a dual-native
@@ -899,8 +902,11 @@ answers stay), keeps what comes back as one thing in one tag, and pastes
 answer-like results back in full (entry layer and the manual's
 `subtasks.md`; managed only; eval running in a worktree). JC's 「两分钟」
 is a guess up front (ruling 183 point 6); the Core two-minute nudge waits
-on a signal in deferred. The GA baseline bump (upstream 17 commits past
-`e4d956f`) is its own round, target `v0.7.6`.
+on a signal in deferred. GA baseline `a9a36b4` -> `d66509b` (target
+`v0.7.6`, [devlog](./devlog/2026-11-03-ga-upstream-upgrade-a9a36b4-to-d66509b.md)):
+upstream anchored L0 to the code dir, which would have switched off managed
+memory distillation; patch `0001` points it at the state root, so Feishu,
+Telegram and Discord now read L0 too. Not dogfooded in dev.
 
 **Owed from the `v0.7.5` smoke** (the list is in the release devlog). S1
 and S3 passed by JC's word: the reply notification read 「Galley · …」 and
@@ -1030,7 +1036,9 @@ AI 助手」 without saying it is Galley (the role word is still 助手; only th
 IM entry layer says 助理) and item 14's reply repeats its verdict in a closing
 line, both for one `0.7.x` prompt ticket with its eval; Feishu, Telegram and
 Discord memory distillation cannot read L0 (`ga.py:538` opens a relative
-path from the channel's working directory), older than this release; the
+path from the channel's working directory), older than this release (on
+main since the `d66509b` bump, where `0001` reads L0 from the state root,
+they can); the
 comment at `core/src/migration_backup.rs:13` says the opposite of its test.
 
 Carried forward. The README screenshots were re-shot (v3, 2026-10-21).

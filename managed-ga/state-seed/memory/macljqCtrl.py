@@ -1,5 +1,5 @@
 """
-macljqCtrl —— ljqCtrl 的 macOS 等价实现 (Quartz CGEvent + screencapture)。
+macljqCtrl —— ljqCtrl 的 macOS 等价实现 (Quartz 键鼠与进程内截图)。
 与 ljqCtrl.py API 镜像对齐, 跨平台代码可写 `import macljqCtrl as ljqCtrl`。
 
 CRITICAL: 严禁 import pyautogui。
@@ -28,7 +28,7 @@ API 快速参考:
   - ListWindows(name=None) -> [dict]: 枚举窗口(替代 win32gui), 返回号/标题/应用/物理bbox
   - ActivateApp(name): 激活应用到前台(替代 win32gui.SetForegroundWindow)
 """
-import os, sys, time, subprocess, tempfile, math
+import time, subprocess, math
 import numpy as np
 
 try:
@@ -157,10 +157,10 @@ _MODS = {
 
 def _key_tap(keycode, flags=0):
     down = Quartz.CGEventCreateKeyboardEvent(None, keycode, True)
-    if flags: Quartz.CGEventSetFlags(down, flags)
+    Quartz.CGEventSetFlags(down, flags)
     _post(down)
     up = Quartz.CGEventCreateKeyboardEvent(None, keycode, False)
-    if flags: Quartz.CGEventSetFlags(up, flags)
+    Quartz.CGEventSetFlags(up, flags)
     _post(up)
 
 def Press(cmd, staytime=0):
@@ -207,27 +207,29 @@ def Paste(text):
     set_clipboard(text); time.sleep(0.05); Press('cmd+v')
 
 
-# ---------- 截图 (screencapture, 输出物理像素) ----------
+# ---------- 截图 (进程内 Quartz, 输出物理像素) ----------
+def _capture(rect, options, window=Quartz.kCGNullWindowID):
+    from io import BytesIO
+    from AppKit import NSBitmapImageRep, NSPNGFileType
+    flags = Quartz.kCGWindowImageBestResolution | Quartz.kCGWindowImageBoundsIgnoreFraming
+    cg = Quartz.CGWindowListCreateImage(rect, options, window, flags)
+    if cg is None:
+        raise RuntimeError('截图失败：请检查当前 Python 的录屏权限及目标窗口')
+    rep = NSBitmapImageRep.alloc().initWithCGImage_(cg)
+    data = rep.representationUsingType_properties_(NSPNGFileType, {})
+    with Image.open(BytesIO(bytes(data))) as img:
+        return img.copy()
+
+
 def GrabScreen(bbox=None):
-    """全屏或区域截图 -> PIL Image。bbox=(l,u,r,b) 物理像素坐标。
-    传 bbox 后图内坐标相对裁剪原点; 转屏幕绝对坐标用 CropToScreen, 勿手搓 screencapture -R。
-    """
-    fd, fn = tempfile.mkstemp(suffix='.png'); os.close(fd)
-    try:
-        if bbox:
-            l, u, r, b = bbox
-            # screencapture -R 用逻辑点; 转换 物理->逻辑
-            lx, ly = l*dpi_scale, u*dpi_scale
-            lw, lh = (r-l)*dpi_scale, (b-u)*dpi_scale
-            cmd = ['/usr/sbin/screencapture','-x','-t','png',
-                   f'-R{lx:.0f},{ly:.0f},{lw:.0f},{lh:.0f}', fn]
-        else:
-            cmd = ['/usr/sbin/screencapture','-x','-t','png', fn]
-        subprocess.run(cmd, check=True, capture_output=True)
-        return Image.open(fn).copy()
-    finally:
-        try: os.remove(fn)
-        except Exception: pass
+    """全屏或区域截图 -> PIL Image；bbox=(l,u,r,b)物理像素，图内点用CropToScreen转换。"""
+    rect = Quartz.CGRectInfinite
+    if bbox is not None:
+        l, u, r, b = bbox
+        if r <= l or b <= u:
+            raise ValueError('bbox must have positive width and height')
+        rect = Quartz.CGRectMake(l*dpi_scale, u*dpi_scale, (r-l)*dpi_scale, (b-u)*dpi_scale)
+    return _capture(rect, Quartz.kCGWindowListOptionOnScreenOnly)
 
 def ScreenCapAt(x, y, r=100):
     """物理坐标(x,y)为中心±r 截图 -> PIL Image。"""
@@ -247,14 +249,7 @@ def GrabWindow(win):
         ws = ListWindows(win)
         if not ws: raise RuntimeError(f'window not found: {win}')
         win = ws[0]['id']
-    fd, fn = tempfile.mkstemp(suffix='.png'); os.close(fd)
-    try:
-        subprocess.run(['/usr/sbin/screencapture','-x','-o','-l',str(win),'-t','png',fn],
-                       check=True, capture_output=True)
-        return Image.open(fn).copy()
-    finally:
-        try: os.remove(fn)
-        except Exception: pass
+    return _capture(Quartz.CGRectNull, Quartz.kCGWindowListOptionIncludingWindow, int(win))
 
 # ---------- 窗口枚举 / 激活 (替代 win32gui) ----------
 def ListWindows(name=None):

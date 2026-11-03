@@ -16,6 +16,7 @@ assets/global_mem_insight_template.txt
 assets/global_mem_insight_template_en.txt
 ga.py
 llmcore.py
+legacy_llmcore.py
 frontends/continue_cmd.py
 assets/tmwd_cdp_bridge/background.js
 assets/tmwd_cdp_bridge/content.js
