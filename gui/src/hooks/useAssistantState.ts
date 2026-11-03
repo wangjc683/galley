@@ -8,6 +8,7 @@ import {
   assistantState,
   type AssistantState,
   lastVisibleMessage,
+  ownAssistantState,
 } from "@/lib/assistant";
 import {
   readComposerDraft,
@@ -21,9 +22,11 @@ import type { Turn } from "@/types/conversation";
 import type { Session } from "@/types/session";
 
 /**
- * The assistant's state for its sidebar card and its header identity
- * (lib/assistant.ts): the main chat's live status, its unpromoted
- * subtasks' questions and errors, its unread mark. `subtasks` are the
+ * The assistant's state for its sidebar card's avatar and name and its
+ * header identity (lib/assistant.ts): the main chat's live status, its
+ * unpromoted subtasks' questions and errors, its unread mark. The
+ * card's second line speaks from the main chat's own
+ * (`useOwnAssistantState`, ruling 176 point 5). `subtasks` are the
  * main chat's unpromoted subtasks. `open` is the main chat itself on
  * screen — its header identity always, the card while the main chat is
  * the open session (one of its subtasks is not: its conversation is not
@@ -52,6 +55,34 @@ export function useAssistantState({
         subtaskAttention.kind === "error" || subtaskAttention.kind === "ask"
           ? subtaskAttention.kind
           : undefined,
+      hasUnread: mainChat.hasUnread,
+      open,
+      errorCount: mainChat.errorCount,
+    },
+    copy,
+  );
+}
+
+/**
+ * The main chat on its own, its subtasks left out (lib/assistant.ts
+ * `ownAssistantState`; main chat PRD ruling 176 point 5, ticket 128):
+ * what the sidebar card's second line, and the running words' reads,
+ * speak from. A subtask that asks or fails says so on its own row under
+ * the card.
+ */
+export function useOwnAssistantState({
+  mainChat,
+  open,
+}: {
+  mainChat: Session;
+  open: boolean;
+}): AssistantState {
+  const copy = useCopy();
+  const view = useSessionStatusView(mainChat);
+  return ownAssistantState(
+    {
+      status: view.status,
+      hasPendingAskUser: view.hasPendingAskUser,
       hasUnread: mainChat.hasUnread,
       open,
       errorCount: mainChat.errorCount,

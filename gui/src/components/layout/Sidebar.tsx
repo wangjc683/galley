@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { useSidebarProjectsCollapsed } from "@/hooks/useSidebarProjectsCollapsed";
+import { useSidebarSubtasks } from "@/hooks/useSidebarSubtasks";
 import { useCopy } from "@/lib/i18n";
 import { findMainChat } from "@/lib/main-chat";
 import { sortProjectsForNavigation } from "@/lib/projects";
@@ -24,6 +25,7 @@ import { SidebarFooter } from "./sidebar/SidebarFooter";
 import { SidebarHeader } from "./sidebar/SidebarHeader";
 import { SidebarQuickActions } from "./sidebar/SidebarQuickActions";
 import { SidebarOtherSources } from "./sidebar/SidebarSideChats";
+import { SidebarSubtaskRows } from "./sidebar/SidebarSubtaskRows";
 import { SidebarSectionsList } from "./sidebar/SidebarTimeline";
 
 export interface SidebarProps {
@@ -103,6 +105,9 @@ export interface SidebarProps {
   /** Count of archived sessions. Not rendered as a numeral — it only
    * decides whether the footer exists at all (0 → no footer row). */
   archivedCount?: number;
+  /** 「还有 N 件在办」 under the assistant's card → open the to-do panel,
+   * these subtasks lit (main chat ticket 128). */
+  onShowSubtasks?: (ids: readonly string[]) => void;
 }
 
 /**
@@ -138,7 +143,9 @@ export interface SidebarProps {
  * sticky first row (sidebar/SidebarAssistant.tsx); the buckets hold what a person
  * started, and agent-started sessions outside projects fold into
  * 「其他来源 N」. The main chat and its unpromoted subtasks are never
- * listed. The whole sidebar can collapse (AppShell,
+ * listed there: the subtasks Galley has in hand hang under its card,
+ * above the line (ticket 128, ruling 176; sidebar/SidebarSubtaskRows.tsx).
+ * The whole sidebar can collapse (AppShell,
  * header/SidebarCollapseToggle.tsx).
  *
  * Without a main chat (the external runtime) it is the sidebar as it
@@ -179,13 +186,15 @@ export function Sidebar({
   onOpenEarlier,
   onOpenArchived,
   archivedCount = 0,
+  onShowSubtasks,
 }: SidebarProps) {
   const copy = useCopy();
   const mainChat = useMemo(() => findMainChat(sessions), [sessions]);
   // The list never holds the main chat (its card stands above it) nor a
   // subtask the user has not written in yet (ticket 06a): that one is a
-  // card under the main chat reply that sent it, and its states reach
-  // the assistant's card instead.
+  // card under the main chat reply that sent it, its states reach the
+  // assistant's avatar, and while Galley has it in hand it hangs under
+  // the card (ticket 128).
   const listSessions = useMemo(
     () =>
       sessions.filter((s) => s.id !== mainChat?.id && !isUnpromotedSubtask(s)),
@@ -195,13 +204,19 @@ export function Sidebar({
     () => unpromotedSubtasksOf(sessions, mainChat?.id),
     [sessions, mainChat],
   );
-  // An open subtask keeps the assistant's card selected: the selected
-  // place must be in the sidebar (layout-and-chrome.md), and the
-  // subtask is not.
+  // The subtasks Galley has in hand, under its card (ticket 128, ruling
+  // 176): what needs you, then at most five more.
+  const subtaskRows = useSidebarSubtasks(mainChatSubtasks);
+  // An open subtask with a row of its own there is that row's to select
+  // (a conversation row, ruling 176 point 6); one without — done, or
+  // behind 「还有 N 件在办」 — keeps the assistant's card selected: the
+  // selected place must be in the sidebar (layout-and-chrome.md), and
+  // only once.
   const mainChatSelected =
     !!mainChat &&
     (activeId === mainChat.id ||
-      mainChatSubtasks.some((s) => s.id === activeId));
+      (mainChatSubtasks.some((s) => s.id === activeId) &&
+        !subtaskRows.rows.some((row) => row.id === activeId)));
   // The sectioned sidebar is the main chat's (its collapse lives in
   // AppShell); the external runtime keeps the sidebar as it was.
   const sectioned = mainChat !== undefined;
@@ -461,6 +476,10 @@ export function Sidebar({
         //
         // The card's focus ring, 2px outside it, lies in this block's own
         // 6px foot, which nothing painted later reaches.
+        //
+        // Under the card, above the line, the subtasks Galley has in hand
+        // (ticket 128, ruling 176): none, and the block is the card alone,
+        // as before.
         <div className="border-b border-line-strong pb-1.5 pt-2">
           <SidebarAssistantCard
             mainChat={mainChat}
@@ -468,6 +487,12 @@ export function Sidebar({
             selected={mainChatSelected}
             open={activeId === mainChat.id}
             onOpen={() => handleSelectSession(mainChat.id)}
+          />
+          <SidebarSubtaskRows
+            subtasks={subtaskRows}
+            activeId={activeId}
+            onOpen={handleSelectSession}
+            onMore={onShowSubtasks}
           />
         </div>
       ) : (

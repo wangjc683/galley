@@ -1,0 +1,286 @@
+import * as Tooltip from "@radix-ui/react-tooltip";
+import { renderToStaticMarkup } from "react-dom/server";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import type { TodoItem, TodoState } from "@/lib/assistant-todo";
+import { CopyProvider } from "@/lib/i18n";
+import { makeSession } from "@/test/factories";
+import type { Session } from "@/types/session";
+
+import { Sidebar } from "./Sidebar";
+
+/**
+ * The subtasks Galley has in hand, under its card (main chat ticket 128,
+ * PRD ruling 176). lib/sidebar-subtasks.test.ts covers which and in what
+ * order; this is where they stand and how they draw.
+ */
+
+// Static rendering reads the to-do store's first state; Galley's group
+// is seeded here instead, through the real grouping.
+const todo = vi.hoisted(() => ({ items: [] as TodoItem[] }));
+vi.mock("@/hooks/useSidebarSubtasks", async () => {
+  const { sidebarSubtasks } = await import("@/lib/sidebar-subtasks");
+  return {
+    useSidebarSubtasks: (subtasks: Session[]) =>
+      sidebarSubtasks(todo.items, subtasks),
+  };
+});
+
+afterEach(() => {
+  todo.items = [];
+});
+
+const managed = (id: string, extra: Partial<Session> = {}) =>
+  makeSession({
+    id,
+    title: `title-${id}`,
+    gaRuntimeKind: "managed",
+    runtimeKind: "managed",
+    ...extra,
+  });
+
+const mainChat = managed("s-main", { title: "Galley", mainChat: true });
+const sideChat = managed("s-side", { title: "订机票", origin: { via: "gui" } });
+/** A subtask session started `minute` minutes past 09:00. */
+const subtask = (id: string, title: string, minute: number) =>
+  managed(id, {
+    title,
+    origin: { via: "subtask" },
+    parentSessionId: "s-main",
+    createdAt: new Date(Date.UTC(2026, 10, 3, 9, minute)).toISOString(),
+  });
+const item = (id: string, state: TodoState): TodoItem => ({
+  kind: "subtask",
+  id,
+  text: id,
+  state,
+  createdBy: "assistant",
+});
+
+const invoices = subtask("s-inv", "整理下载文件夹里的发票", 1);
+const notes = subtask("s-notes", "把会议纪要整理成一页", 2);
+const vacuums = subtask("s-vac", "比较三款扫地机器人的价格", 3);
+
+function render(
+  sessions: Session[],
+  opts: {
+    activeId?: string;
+    language?: "zh-CN" | "en-US";
+    onShowSubtasks?: (ids: readonly string[]) => void;
+  } = {},
+) {
+  return renderToStaticMarkup(
+    <CopyProvider language={opts.language ?? "zh-CN"}>
+      <Tooltip.Provider>
+        <Sidebar
+          sessions={sessions}
+          activeId={opts.activeId}
+          expandedProjectIds={[]}
+          onNewChat={() => {}}
+          onSelectSession={() => {}}
+          onArchiveSession={() => {}}
+          onShowSubtasks={opts.onShowSubtasks}
+        />
+      </Tooltip.Provider>
+    </CopyProvider>,
+  );
+}
+
+const CARD = 'data-role="assistant-card"';
+const ROWS = 'data-role="sidebar-subtasks"';
+const ROW = 'data-role="sidebar-subtask"';
+const MORE = 'data-role="sidebar-subtasks-more"';
+/** The card's block: 8px over the card, 6px under it, the strong line
+ * its foot. */
+const BLOCK = '<div class="border-b border-line-strong pb-1.5 pt-2">';
+const SCROLL = '<div class="scrollbar-stable';
+
+/** The card's block, from its opening tag to the scrolling list. */
+const blockOf = (html: string) =>
+  html.slice(html.indexOf(BLOCK), html.indexOf(SCROLL));
+/** The opening tag of the element carrying `needle`. */
+const tagWith = (html: string, needle: string) => {
+  const i = html.indexOf(needle);
+  return html.slice(html.lastIndexOf("<", i), html.indexOf(">", i) + 1);
+};
+/** Each subtask row's opening tag, in order. */
+const rowTags = (html: string) => {
+  const tags: string[] = [];
+  for (
+    let i = html.indexOf(ROW + " ");
+    i >= 0;
+    i = html.indexOf(ROW + " ", i + 1)
+  ) {
+    tags.push(html.slice(html.lastIndexOf("<", i), html.indexOf(">", i) + 1));
+  }
+  return tags;
+};
+const count = (html: string, needle: string) => html.split(needle).length - 1;
+
+describe("nothing in hand", () => {
+  it("leaves the card's block as it was: the card alone", () => {
+    for (const sessions of [
+      [mainChat, sideChat],
+      // Subtasks the sidebar has, none of them in Galley's group: done.
+      [mainChat, sideChat, invoices, notes],
+    ]) {
+      const block = blockOf(render(sessions));
+      expect(block.startsWith(BLOCK)).toBe(true);
+      expect(count(block, "<button")).toBe(1);
+      expect(block).toContain(CARD);
+      expect(block.endsWith("</button></div>")).toBe(true);
+      expect(block).not.toContain(ROWS);
+    }
+    // Identical to the pixel: the same markup with or without them.
+    expect(blockOf(render([mainChat, sideChat, invoices, notes]))).toBe(
+      blockOf(render([mainChat, sideChat])),
+    );
+  });
+
+  it("lists nothing on the external runtime, which has no card", () => {
+    todo.items = [item("s-inv", "running")];
+    const html = render([sideChat, { ...invoices, gaRuntimeKind: "external" }]);
+    expect(html).not.toContain(ROWS);
+  });
+});
+
+describe("in hand", () => {
+  it("hangs the rows under the card, inside its block, above the strong line", () => {
+    todo.items = [item("s-inv", "running")];
+    const html = render([mainChat, sideChat, invoices]);
+    const block = blockOf(html);
+    expect(block.indexOf(CARD)).toBeLessThan(block.indexOf(ROWS));
+    expect(block.endsWith("</button></div></div>")).toBe(true);
+    // 6px under the card.
+    expect(tagWith(html, ROWS)).toContain('class="mt-1.5"');
+    // Never in the workbench's list.
+    expect(html.slice(html.indexOf(SCROLL))).not.toContain(
+      "整理下载文件夹里的发票",
+    );
+  });
+
+  it("puts what needs you first with its word; running says none", () => {
+    todo.items = [
+      item("s-inv", "running"),
+      item("s-notes", "failed"),
+      item("s-vac", "asking"),
+    ];
+    const html = render([mainChat, sideChat, invoices, notes, vacuums]);
+    const tags = rowTags(html);
+    expect(tags.map((t) => /data-subtask-id="([^"]+)"/.exec(t)?.[1])).toEqual([
+      "s-notes",
+      "s-vac",
+      "s-inv",
+    ]);
+    expect(tags.map((t) => /aria-label="([^"]+)"/.exec(t)?.[1])).toEqual([
+      "子任务：把会议纪要整理成一页，出错",
+      "子任务：比较三款扫地机器人的价格，等你回复",
+      "子任务：整理下载文件夹里的发票",
+    ]);
+    const words = html.split('data-role="sidebar-subtask-state"').slice(1);
+    expect(words).toHaveLength(2);
+    expect(words[0]).toMatch(/^ class="[^"]*font-medium text-error">出错</);
+    expect(words[1]).toMatch(
+      /^ class="[^"]*font-medium text-warning">等你回复</,
+    );
+  });
+
+  it("draws a single-line session row: the glyph column, 13px, a cut title that fades", () => {
+    todo.items = [item("s-inv", "running"), item("s-vac", "stopped")];
+    const html = render([mainChat, sideChat, invoices, vacuums]);
+    const [running, stopped] = rowTags(html);
+    for (const tag of [running, stopped]) {
+      expect(tag).toContain('type="button"');
+      expect(tag).toContain("mx-1.5");
+      expect(tag).toContain("min-h-8");
+      expect(tag).toContain("grid-cols-[16px_minmax(0,1fr)]");
+      expect(tag).toContain("hover:bg-hover");
+      expect(tag).not.toContain("aria-current");
+    }
+    const title = html.split('data-role="sidebar-subtask-title"').slice(1);
+    expect(title[0]).toMatch(
+      /truncate-fade min-w-0 text-\[13px\] text-ink-soft font-semibold/,
+    );
+    expect(title[1]).toMatch(/text-ink-soft font-medium/);
+    // No menu, no ⋯.
+    expect(blockOf(html)).not.toContain('aria-label="更多"');
+  });
+
+  it("selects the open subtask's row, and the card steps back", () => {
+    todo.items = [item("s-inv", "running"), item("s-vac", "asking")];
+    const html = render([mainChat, sideChat, invoices, vacuums], {
+      activeId: "s-inv",
+    });
+    const inv = rowTags(html).find((t) => t.includes('"s-inv"'))!;
+    expect(inv).toContain('aria-current="page"');
+    expect(inv).toContain("bg-selected shadow-[var(--shadow-selected)]");
+    expect(inv).not.toContain("hover:bg-hover");
+    expect(count(html, 'aria-current="page"')).toBe(1);
+    expect(tagWith(html, CARD)).not.toContain("aria-current");
+  });
+
+  it("keeps the card selected for the main chat, and for a subtask without a row", () => {
+    // Six running: the sixth is behind 「还有 1 件在办」.
+    const six = Array.from({ length: 6 }, (_, i) =>
+      subtask(`s-r${i}`, `差事 ${i}`, 10 + i),
+    );
+    todo.items = six.map((s) => item(s.id, "running"));
+    for (const activeId of ["s-main", "s-r5"]) {
+      const html = render([mainChat, sideChat, ...six], { activeId });
+      expect(tagWith(html, CARD)).toContain('aria-current="page"');
+      expect(count(html, 'aria-current="page"')).toBe(1);
+    }
+    // A done subtask, open from its card: no row, the card.
+    const done = subtask("s-done", "已办完的差事", 0);
+    const html = render([mainChat, sideChat, ...six, done], {
+      activeId: "s-done",
+    });
+    expect(tagWith(html, CARD)).toContain('aria-current="page"');
+  });
+
+  it("folds what does not need you past five into 「还有 N 件在办」", () => {
+    const seven = Array.from({ length: 7 }, (_, i) =>
+      subtask(`s-r${i}`, `差事 ${i}`, 10 + i),
+    );
+    todo.items = [
+      ...seven.map((s) => item(s.id, "running")),
+      item("s-vac", "asking"),
+    ];
+    const html = render([mainChat, sideChat, ...seven, vacuums], {
+      onShowSubtasks: () => {},
+    });
+    expect(rowTags(html)).toHaveLength(6);
+    expect(tagWith(html, MORE)).toMatch(/^<button type="button"/);
+    expect(html).toContain(">还有 2 件在办</span>");
+    // Its name is its words.
+    expect(tagWith(html, MORE)).not.toContain("aria-label");
+    // Not wired: words only, no button that does nothing.
+    const bare = render([mainChat, sideChat, ...seven, vacuums]);
+    expect(tagWith(bare, MORE)).toMatch(/^<div /);
+  });
+
+  it("speaks English", () => {
+    const seven = Array.from({ length: 7 }, (_, i) =>
+      subtask(`s-r${i}`, `Errand ${i}`, 10 + i),
+    );
+    todo.items = [
+      ...seven.map((s) => item(s.id, "running")),
+      item("s-vac", "asking"),
+    ];
+    const html = render(
+      [mainChat, sideChat, ...seven, { ...vacuums, title: "Compare vacuums" }],
+      { language: "en-US" },
+    );
+    expect(html).toContain(
+      'aria-label="Subtask: Compare vacuums, Waiting for you"',
+    );
+    expect(html).toContain('aria-label="Subtask: Errand 0"');
+    expect(html).toContain(">2 more in progress</span>");
+  });
+
+  it("says 「子任务」 for a subtask with no title", () => {
+    todo.items = [{ ...item("s-inv", "running"), text: "" }];
+    const html = render([mainChat, sideChat, { ...invoices, title: "" }]);
+    expect(tagWith(html, ROW)).toContain('aria-label="子任务：子任务"');
+  });
+});

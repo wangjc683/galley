@@ -688,21 +688,37 @@ describe("the assistant's card", () => {
     );
   });
 
-  it("says 「等你回复」 alone when the question is not at hand, and a subtask's in its words", () => {
+  it("says 「等你回复」 alone when the question is not at hand", () => {
     live.set("s-main", { hasPendingAskUser: true });
     const plain = lineOf(render([used, sideChat]));
     expect(textOf(plain)).toBe("等你回复");
     expect(plain).toContain("font-medium text-warning");
-    live.clear();
+  });
+
+  // Ruling 176 point 5 (ticket 128): a subtask asking or failing says so
+  // on its own row under the card; the second line goes on with what it
+  // says without it, while the avatar and the name still carry it.
+  it("leaves a subtask's question or error to its row, the avatar and the name still carrying it", () => {
     card.question = "这个不是它的";
-    attentionKind.set("s-sub", "ask");
-    expect(textOf(lineOf(render([used, sideChat, subtask])))).toBe(
-      "子任务在问你",
-    );
+    card.lastMessage = { fromUser: false, text: "我派了一个子任务去查" };
+    for (const kind of ["ask", "error"] as const) {
+      attentionKind.set("s-sub", kind);
+      const html = render([used, sideChat, subtask]);
+      expect(textOf(lineOf(html))).toBe("我派了一个子任务去查");
+      expect(html).not.toContain("子任务在问你");
+      expect(html).not.toContain("子任务出错");
+      expect(tagWith(html, CARD)).toContain(`data-state="${kind}"`);
+      expect(between(html, CARD, "</button>")).toContain(`data-kind="${kind}"`);
+      expect(between(html, CARD, "</button>")).toMatch(
+        /font-semibold[^>]*>Galley</,
+      );
+    }
+    // Running, the line says Galley's own work.
+    live.set("s-main", { status: "running" });
     attentionKind.set("s-sub", "error");
-    expect(textOf(lineOf(render([used, sideChat, subtask])))).toBe(
-      "子任务出错",
-    );
+    const running = render([used, sideChat, subtask]);
+    expect(textOf(lineOf(running))).toBe("正在工作…");
+    expect(tagWith(running, CARD)).toContain('data-state="error"');
   });
 
   it("shows no draft while the main chat is open: it is in the composer", () => {

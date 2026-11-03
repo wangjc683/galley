@@ -300,9 +300,16 @@ export const zhCopy = {
     roundPrefix: (round: number) => `第 ${round} 轮 · `,
     /** 子任务第一条消息（Galley 写的说明）上方的来源图标，提示与读屏同一句（工作台对话 PRD 裁决 8）。 */
     galleyCreated: "Galley 创建",
-    /** 子任务在问你、出错时，状态汇到侧栏的助手卡片与顶栏的身份行（裁决 30）。 */
+    /** 子任务在问你、出错时，顶栏身份行的第二行（裁决 30）；侧栏助手卡片的
+     * 第二行 2026-11-03 起不写，那一行由子任务行自己说（裁决 176 第 5 条）。 */
     sidebarWaiting: "子任务在问你",
     sidebarErrored: "子任务出错",
+    /** 侧栏助理区、助手卡片下面的子任务行（裁决 176，票 128）：每行的无障碍名，
+     * 要你处理的接状态字（侧栏的「等你回复」「出错」）。 */
+    sidebarRowLabel: (title: string, state?: string) =>
+      state ? `子任务：${title}，${state}` : `子任务：${title}`,
+    /** 同一块：不要你处理的超过 5 件时，末尾那一行，点了打开待办面板（裁决 176 第 2 条）。 */
+    sidebarMore: (count: number) => `还有 ${count} 件在办`,
     /** 系统通知标题：在问你、出错一律通知；完成只在跑了 2 分钟以上时通知。 */
     notifyAsking: "子任务在问你",
     notifyDone: "子任务完成",

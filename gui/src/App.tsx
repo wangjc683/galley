@@ -40,6 +40,7 @@ import { findMainChat, openMainChat } from "@/lib/main-chat";
 import {
   closeTodoPanel,
   openTodoPanel,
+  showSubtasksInTodo,
   todoView,
   toggleTodoPanel,
 } from "@/lib/todo-open";
@@ -633,6 +634,13 @@ function App() {
             onEditProject={(id) => setEditingProjectId(id)}
             onDeleteProject={(id) => setDeletingProjectId(id)}
             onArchiveSessions={(ids) => archiveSessionsBulk(ids)}
+            // 「还有 N 件在办」 under Galley's card (ticket 128): the panel
+            // where you are, as ⌘K opens it, those subtasks lit.
+            onShowSubtasks={
+              todoEntryShown
+                ? (ids) => showSubtasksInTodo(todoPanel, ids)
+                : undefined
+            }
           />
         }
         main={

@@ -5,6 +5,7 @@ import {
   assistantCardLine,
   assistantState,
   lastVisibleMessage,
+  ownAssistantState,
   plainLine,
 } from "@/lib/assistant";
 import { copyForLanguage } from "@/lib/i18n";
@@ -96,15 +97,39 @@ describe("the assistant's state, in a session row's priority", () => {
   });
 });
 
+describe("the main chat on its own (ruling 176 point 5)", () => {
+  it("leaves a subtask's question or error out, and nothing else", () => {
+    const own = (input: Partial<AssistantStateInput>) =>
+      ownAssistantState({ ...base, ...input }, zh);
+    expect(own({ subtaskState: "ask" })).toEqual(state());
+    expect(own({ subtaskState: "error" })).toEqual(state());
+    expect(own({ status: "running", subtaskState: "error" })).toEqual(
+      state({ status: "running" }),
+    );
+    expect(own({ hasUnread: true, subtaskState: "ask" })).toEqual(
+      state({ hasUnread: true }),
+    );
+    // Its own question and error stay its own.
+    expect(own({ hasPendingAskUser: true, subtaskState: "error" })).toEqual(
+      state({ hasPendingAskUser: true }),
+    );
+    expect(own({ status: "error", subtaskState: "ask" })).toEqual(
+      state({ status: "error" }),
+    );
+  });
+});
+
 describe("the card's second line: error > question > running > draft > last message", () => {
   const last = { fromUser: false, text: "好的，明早九点提醒你。" };
   const draft = { text: "下周三的会", imageCount: 0 };
+  // The card speaks from the main chat's own state (ruling 176 point 5,
+  // ticket 128): a subtask's question or error is its row's to say.
   const line = (
     input: Partial<AssistantStateInput>,
     extra: Partial<Parameters<typeof assistantCardLine>[1]> = {},
   ) =>
     assistantCardLine(
-      state(input),
+      ownAssistantState({ ...base, ...input }, zh),
       {
         question: "去哪个花市？",
         draft,
@@ -119,10 +144,6 @@ describe("the card's second line: error > question > running > draft > last mess
     expect(line({ status: "error", hasPendingAskUser: true })).toEqual({
       kind: "error",
       text: "出错",
-    });
-    expect(line({ subtaskState: "error" })).toEqual({
-      kind: "error",
-      text: "子任务出错",
     });
   });
 
@@ -139,12 +160,6 @@ describe("the card's second line: error > question > running > draft > last mess
         text: "等你回复",
       });
     }
-    // A subtask's question is the subtask's to quote.
-    expect(line({ subtaskState: "ask" })).toEqual({
-      kind: "ask",
-      prefix: null,
-      text: "子任务在问你",
-    });
     // The question runs on in one plain line.
     expect(
       line(
@@ -234,13 +249,44 @@ describe("the card's second line: error > question > running > draft > last mess
       text: "去哪个花市？",
     });
     expect(line({ status: "error" })).toEqual({ kind: "error", text: "出错" });
-    expect(line({ subtaskState: "ask" })).toMatchObject({
-      text: "子任务在问你",
-    });
-    expect(line({ subtaskState: "error" })).toMatchObject({
-      text: "子任务出错",
-    });
     expect(line({})).toMatchObject({ kind: "draft", text: "下周三的会" });
+  });
+
+  // Ruling 176 point 5 (ticket 128), overturning ticket 06a's
+  // 「子任务在问你」 / 「子任务出错」 here: the subtask's row under the card
+  // says it; the line says what it says without it.
+  it("leaves a subtask's question or error to its row: the line goes on as without it", () => {
+    const quiet: Partial<AssistantStateInput>[] = [
+      {},
+      { hasUnread: true },
+      { status: "running" },
+      { hasPendingAskUser: true },
+      { status: "error" },
+    ];
+    for (const input of quiet) {
+      for (const subtaskState of ["ask", "error"] as const) {
+        for (const open of [true, false]) {
+          expect(line({ ...input, subtaskState }, { open })).toEqual(
+            line(input, { open }),
+          );
+        }
+      }
+    }
+    for (const subtaskState of ["ask", "error"] as const) {
+      expect(line({ subtaskState })).toEqual({
+        kind: "draft",
+        prefix: "草稿：",
+        text: "下周三的会",
+      });
+      expect(line({ subtaskState }, { draft: null })).toEqual({
+        kind: "message",
+        prefix: null,
+        text: "好的，明早九点提醒你。",
+      });
+      expect(
+        line({ subtaskState, status: "running" }, { typing: true }),
+      ).toEqual({ kind: "running", text: "正在输入…" });
+    }
   });
 
   // Rulings 107, 110 (tickets 55, 58): a round Core woke it for says it

@@ -12,6 +12,7 @@ import {
   useAssistantLastMessage,
   useAssistantState,
   useComposerDraft,
+  useOwnAssistantState,
   usePendingQuestion,
 } from "@/hooks/useAssistantState";
 import {
@@ -154,7 +155,12 @@ function lineText(line: AssistantCardLine): string {
  *   (「正在工作…」) > an unsent draft (「草稿：」) > the last message
  *   (「你：」 for the user's own)
  *
- * (lib/assistant.ts). Running, it says only what the screen does not
+ * (lib/assistant.ts) — the main chat's own (ruling 176 point 5, ticket
+ * 128): a subtask asking or failing has its own row under the card and
+ * says so there, so the line no longer writes 「子任务在问你」 /
+ * 「子任务出错」 and goes on with what it says without it; the avatar's
+ * mark, the name's weight and the header's line still sum the subtasks
+ * up. Running, it says only what the screen does not
  * (main chat PRD rulings 134, 135): in a round you started 「正在工作…」
  * with the main chat on screen (the dots and the line under them are
  * right there); away from it 「正在输入…」 while it writes, else
@@ -209,7 +215,10 @@ export function SidebarAssistantCard({
   const copy = useCopy();
   const language = useLanguage();
   const dayStamp = useDayStamp();
+  // The avatar and the name sum up the subtasks; the second line speaks
+  // for the main chat alone (ruling 176 point 5).
   const state = useAssistantState({ mainChat, subtasks, open });
+  const own = useOwnAssistantState({ mainChat, open });
   const question = usePendingQuestion(mainChat.id);
   // No key while it is open: its draft is in the composer right there,
   // and typing there then never re-renders the card.
@@ -217,12 +226,12 @@ export function SidebarAssistantCard({
   // Running, a round Core woke it for says 「正在输入…」 only while the
   // conversation shows its dots, else the last message, the live round's
   // steps skipped (rulings 107, 110).
-  const typing = useAssistantTyping(mainChat.id, state.kind === "running");
+  const typing = useAssistantTyping(mainChat.id, own.kind === "running");
   // A round you started says 「正在工作…」; away from the main chat
   // 「正在输入…」 while it writes and the whole minutes from one on
   // (rulings 134, 135). The minutes re-render the card only when one
   // turns.
-  const round = useAssistantRound(mainChat.id, state.kind === "running");
+  const round = useAssistantRound(mainChat.id, own.kind === "running");
   const ownRound = round === "own" || round === "own-writing";
   const minutes = useAssistantRunMinutes(mainChat.id, ownRound);
   const working = ownRound
@@ -230,7 +239,7 @@ export function SidebarAssistantCard({
     : undefined;
   const lastMessage = useAssistantLastMessage(mainChat);
   const line = assistantCardLine(
-    state,
+    own,
     { question, draft, lastMessage, open, typing, working },
     copy,
   );

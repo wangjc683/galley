@@ -292,6 +292,9 @@ export const enCopy: AppCopy = {
     galleyCreated: "Created by Galley",
     sidebarWaiting: "A subtask is asking you",
     sidebarErrored: "A subtask failed",
+    sidebarRowLabel: (title, state) =>
+      state ? `Subtask: ${title}, ${state}` : `Subtask: ${title}`,
+    sidebarMore: (count) => `${count} more in progress`,
     notifyAsking: "A subtask is asking you",
     notifyDone: "Subtask done",
     notifyFailed: "Subtask failed",

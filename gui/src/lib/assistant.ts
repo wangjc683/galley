@@ -21,7 +21,10 @@ import type { SessionStatus } from "@/types/session";
  *   - The card's second line (`assistantCardLine`) is what a chat list
  *     says: the last message, or a state when there is one — an error
  *     over a question over running over an unsent draft over the last
- *     message. Running, it says only what the screen does not (main chat
+ *     message. Only the main chat's own (`ownAssistantState`, main chat
+ *     PRD ruling 176 point 5): a subtask asking or failing says so on
+ *     its own row under the card (ticket 128), and the card's avatar
+ *     and name still carry it. Running, it says only what the screen does not (main chat
  *     PRD rulings 134, 135): in a round you started 「正在工作…」 with the
  *     main chat on screen; away from it 「正在输入…」 while it writes
  *     (an IM chat list's way), else 「正在工作…」, from a minute on
@@ -39,7 +42,8 @@ import type { SessionStatus } from "@/types/session";
  *   - The header's second line (`AssistantState.line`) is what a chat's
  *     own title bar says: only a state that needs you — waiting for a
  *     reply (not the question: it is right below, in the conversation),
- *     an error, a subtask's. Nothing at rest, and nothing while it runs
+ *     an error, a subtask's (「子任务在问你」, 「子任务出错」: the header
+ *     has no subtask rows beside it). Nothing at rest, and nothing while it runs
  *     (rulings 134, 135: the header was where nobody looked). The last
  *     message and the draft are both on screen there already.
  *
@@ -72,8 +76,8 @@ export interface AssistantState {
    * it runs, for a new reply and at rest. */
   line: AssistantLine | null;
   /** The error or the question is an unpromoted subtask's, not the main
-   * chat's own (its words say so; the card then has no question to
-   * quote). */
+   * chat's own (the header's words say so; the card's line speaks from
+   * `ownAssistantState` since ruling 176 and so never meets one). */
   fromSubtask: boolean;
 }
 
@@ -149,6 +153,22 @@ export function assistantState(
   return ASSISTANT_IDLE;
 }
 
+/**
+ * The main chat on its own, its subtasks' questions and errors left out:
+ * what the card's second line speaks from (main chat PRD ruling 176
+ * point 5, ticket 128). A subtask that asks or fails has its own row
+ * under the card, which says so; the line goes back to what it says
+ * without it — Galley's own state, the draft, the last message. The
+ * avatar's mark and the name's weight still sum the subtasks up
+ * (`assistantState`), and so does the header's line.
+ */
+export function ownAssistantState(
+  input: AssistantStateInput,
+  copy: AppCopy,
+): AssistantState {
+  return assistantState({ ...input, subtaskState: undefined }, copy);
+}
+
 // ---- The card's second line ------------------------------------------
 
 /** The last message in the conversation, as the card shows it. */
@@ -170,11 +190,11 @@ export interface AssistantLastMessage {
  * What the card's second line says, its prefix in its own colour —
  * running, only what the screen does not (rulings 134, 135; below); with
  * the main chat on screen otherwise only the last message, whatever the
- * state (ruling 104):
+ * state (ruling 104). The state is the main chat's own
+ * (`ownAssistantState`, ruling 176 point 5): no subtask's words here.
  *
- *   error    「出错」 / 「出错 · N」 / 「子任务出错」          red
- *   ask      「等你回复：」 + the question, or 「等你回复」,   amber prefix
- *            or 「子任务在问你」
+ *   error    「出错」 / 「出错 · N」                         red
+ *   ask      「等你回复：」 + the question, or 「等你回复」    amber prefix
  *   running  「正在工作…」 / 「正在工作 · N 分钟」 /             brand
  *            「正在输入…」 (`workingLine`); a woken round
  *            「正在输入…」 or the last message
