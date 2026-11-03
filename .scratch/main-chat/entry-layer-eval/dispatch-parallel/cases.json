@@ -1,0 +1,40 @@
+{
+  "_note": "票 127（主对话 PRD 裁决 174）：几件互不相干的差事，或一件能拆成互不依赖的几块，一块一个标签、同一条回复派出去；问题不拆，要用同一个标签页或同一批文件的不拆。只在 new（main 加上票 126、127 的主对话提示词，galley-prompt/main_chat.new.txt）下跑。cases 是本票的 6 条：tags 是最终回复里该有的标签数（exact 正好几个，min 至少几个），should_dispatch 由它定（大于 0 为 true）；home_files 是放进假 HOME 的文件（相对 HOME，内容是占位文字），让用户说的文件夹在沙盒里真的有。reuse 指向票 115 的 16 条，原样带进来，按票 115 的判定看有没有退步。每个标签都要有 title，清理后（同 Core 的 subtask::tag_title）不超过 20 个字符，不能与派活说明第一行一模一样。",
+  "reuse": "dispatch-criterion/cases.json",
+  "cases": [
+    {"id": "p-three-errands", "group": "几件差事", "message": "帮我把下载文件夹里的发票按月份归档，把桌面上的截图按日期放进文件夹，再把「文档/合同」里的 PDF 改名成「日期-对方」",
+     "tags": {"exact": 3}, "note": "三件互不相干的差事：一件一个标签，同一条回复派出去。",
+     "home_files": {
+       "Desktop/截图 2026-10-28 上午10.02.11.png": "placeholder screenshot",
+       "Desktop/截图 2026-10-30 下午4.15.40.png": "placeholder screenshot",
+       "Desktop/截图 2026-11-01 晚上9.03.27.png": "placeholder screenshot",
+       "Documents/合同/星河设计服务合同.pdf": "%PDF-1.4\n% placeholder fixture\n% Service contract: Xinghe Design, signed 2026-03-15\n%%EOF\n",
+       "Documents/合同/青木物业租赁协议.pdf": "%PDF-1.4\n% placeholder fixture\n% Lease: Qingmu Property, signed 2026-05-02\n%%EOF\n",
+       "Documents/合同/远山贸易采购合同.pdf": "%PDF-1.4\n% placeholder fixture\n% Purchase contract: Yuanshan Trading, signed 2026-08-20\n%%EOF\n"
+     }},
+    {"id": "p-split-one", "group": "一件拆几块", "message": "把「客户」文件夹下 A、B、C 三个子文件夹各自整理出一份文件清单",
+     "tags": {"min": 2}, "note": "一件差事拆成互不依赖的三块（三个子文件夹）：至少两个标签。",
+     "home_files": {
+       "Documents/客户/A/报价单_2026-09.xlsx": "placeholder",
+       "Documents/客户/A/会议纪要_2026-10-12.docx": "placeholder",
+       "Documents/客户/A/合同扫描件.pdf": "placeholder",
+       "Documents/客户/B/需求说明书_v2.docx": "placeholder",
+       "Documents/客户/B/设计稿_首页.png": "placeholder",
+       "Documents/客户/C/发票_2026-10.pdf": "placeholder",
+       "Documents/客户/C/对账单_2026Q3.xlsx": "placeholder",
+       "Documents/客户/C/项目周报_第42周.md": "placeholder"
+     }},
+    {"id": "p-same-tab", "group": "同一个标签页", "message": "在京东把购物车里那三样东西下单",
+     "tags": {"exact": 1}, "note": "三样东西在同一个购物车、同一个标签页里下单：不拆，一个标签。"},
+    {"id": "p-same-files", "group": "同一批文件", "message": "把下载文件夹里的 PDF 先去重，再按内容分类",
+     "tags": {"exact": 1}, "note": "去重与分类动的是同一批文件，后一步要等前一步：不拆，一个标签。下载文件夹里多放两份重复的 PDF。",
+     "home_files": {
+       "Downloads/发票_阿里云_2026-08 (1).pdf": "%PDF-1.4\n% placeholder fixture\n% Invoice: Alibaba Cloud ECS, August 2026, CNY 1,284.00\n%%EOF\n",
+       "Downloads/Invoice_GitHub_2026-10 (1).pdf": "%PDF-1.4\n% placeholder fixture\n% Invoice: GitHub Team, October 2026, USD 44.00\n%%EOF\n"
+     }},
+    {"id": "p-question-parts", "group": "问题不拆", "message": "新赛季西部和东部各有哪几支队能进季后赛？",
+     "tags": {"exact": 0}, "note": "在问、在等答案：自己答，不因为问了两部分就拆成子任务。"},
+    {"id": "p-errand-and-question", "group": "差事加问题", "message": "帮我订周五去厦门的高铁票，顺便告诉我厦门这周末天气怎么样",
+     "tags": {"exact": 1}, "note": "订票是差事，一个标签派出去；天气是在问，自己答。"}
+  ]
+}

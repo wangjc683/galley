@@ -457,6 +457,21 @@ look it up with the Galley CLI (search, then
 /// still works ([`crate::subtask`]): the first line stands in until the
 /// auto-title watcher replaces it after the first run, which for a
 /// subtask is mostly when its work is done.
+///
+/// Ticket 127 (main chat PRD ruling 174): several errands that do not
+/// depend on each other, or one that splits into parts that do not, go
+/// out as one tag per part in the same reply, and run at the same time.
+/// Core has started every tag of a reply as its own subtask since ticket
+/// 06a (ruling 53), but the layer only ever spoke of "a tag"; on another
+/// machine a model that wanted work done side by side went around it with
+/// `galley session new`, whose session gets no card and wakes no one
+/// (`cli.md` says not to). A question is not split, for ruling 160's
+/// reasons above: a subtask starts from nothing and costs more than it
+/// saves when someone is waiting for an answer. Parts that need the same
+/// browser tab or the same files stay in one tag: GA's own rule for its
+/// subagents, "键鼠不可共享；浏览器避免同tab" (`memory/subagent.md`). No cap
+/// on the count: Core sets none on subtasks running at once. "Galley
+/// starts it" became "starts each", so the sentence after it still reads.
 fn main_chat_entry_layer(manual_dir: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
@@ -470,7 +485,11 @@ once it takes more than two or three steps, and so does anything they ask
 you to hand off: end your reply with
 <subtask title="a few words">what to do</subtask>. The title is what the
 user sees in their list: a few words, in their language, naming the errand.
-Galley starts it after this reply, as a separate conversation that cannot
+When the user hands you several errands that do not depend on each other,
+or one errand splits into parts that do not, write one tag per part in the
+same reply: they run at the same time. Keep in one tag the parts that need
+the same browser tab or the same files, and do not split a question.
+Galley starts each after this reply, as a separate conversation that cannot
 see this one, so write everything it needs: the goal, the facts the user
 gave, what you have found so far, and what to hand back, with the evidence
 for it (a confirmation number, a file path, a link, a screenshot path).
@@ -1393,7 +1412,10 @@ mod tests {
     /// partway through hands off the rest, what was found so far in the
     /// instructions; this conversation's own material, a to-do, a
     /// reminder or a memo stay here. Ticket 126 (ruling 175): the tag
-    /// carries a short title in the user's language.
+    /// carries a short title in the user's language. Ticket 127 (ruling
+    /// 174): independent errands, or independent parts of one, one tag
+    /// each in the same reply; a question and parts that share a browser
+    /// tab or files are not split; no cap on the count.
     #[test]
     fn main_chat_entry_layer_answers_questions_and_hands_errands_to_a_subtask() {
         let main =
@@ -1418,6 +1440,22 @@ mod tests {
         ));
         assert!(main.contains(
             "user sees in their list: a few words, in their language, naming the errand."
+        ));
+        // Ticket 127: several independent errands, or independent parts
+        // of one, as one tag each in the same reply; no cap on the count.
+        assert!(main
+            .contains("When the user hands you several errands that do not depend on each other,"));
+        assert!(main.contains(
+            "or one errand splits into parts that do not, write one tag per part in the"
+        ));
+        assert!(main.contains(
+            "same reply: they run at the same time. Keep in one tag the parts that need"
+        ));
+        assert!(
+            main.contains("the same browser tab or the same files, and do not split a question.")
+        );
+        assert!(main.contains(
+            "Galley starts each after this reply, as a separate conversation that cannot"
         ));
         assert!(main
             .contains("see this one, so write everything it needs: the goal, the facts the user"));
@@ -1447,6 +1485,8 @@ mod tests {
         assert!(!main.contains("Do quick work yourself"));
         let layer = main.find("Main Chat Entry Layer").unwrap();
         assert!(!main[layer..].contains("websites"));
+        // Ticket 127: no cap on how many subtasks go out at once.
+        assert!(!main[layer..].contains("at most"));
         let clause = main.find("Answer what the user asks you yourself").unwrap();
         assert!(layer < clause, "the clause closes the entry layer");
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
@@ -1654,8 +1694,17 @@ mod tests {
     /// a few words in their language naming the errand (+98). Without it
     /// Core titled a subtask by its instructions' first line cut at 80
     /// characters, and the instructions are mostly one paragraph: every
-    /// subtask on JC's machine was titled with 81 characters.
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 4049;
+    /// subtask on JC's machine was titled with 81 characters. Raised
+    /// 4049 → 4344 by ticket 127 (main chat PRD ruling 174): +295 bytes.
+    /// A sentence after the tag's: several errands that do not depend on
+    /// each other, or one that splits into parts that do not, one tag per
+    /// part in the same reply, running at the same time; parts that need
+    /// the same browser tab or files kept together, a question not split
+    /// (+293). "Galley starts it" became "starts each" (+2). Core always
+    /// started every tag of a reply, but the layer spoke of one tag only,
+    /// and a model that wanted work done side by side opened sessions with
+    /// `session new` instead, which get no card and wake no one.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 4344;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {

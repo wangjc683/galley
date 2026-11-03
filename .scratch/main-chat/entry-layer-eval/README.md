@@ -14,6 +14,7 @@
 - `chat/`：票 60 的闲聊组（见「它自己判断要不要跟进（票 60）」一节），票 63、64 重跑。
 - `memo/`：票 96 的备忘套件（见「备忘（票 96）」一节）。
 - `dispatch-criterion/`：票 115 的派活判据套件（见「派活判据（票 115）」一节）。
+- `dispatch-parallel/`：票 127 的并行派活套件（见「并行派活（票 127）」一节）。
 
 ## 怎么跑
 
@@ -829,6 +830,42 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --suite dispatch-criterion --vari
 - **顺带看到的**：new 派之前常先读 `subtasks.md`（7 条里 5 条），问答之前常先读 `web_setup_sop.md` 或 GA 的 `global_mem.txt`。`e-invoices` 两组都在派之前记了一件待办（明天 17:00 截止、15:00 提醒），派活说明里写了待办 id。
 - **用量**：32 次运行，80 次模型调用（old 40、new 40）；工具调用 old 29、new 33；提示 480,394 token（命中缓存 225,408），输出 37,926。
 - **没测到的**：问答在浏览器第一步就停下，看不到「看了好几个网站之后」会不会改派（10-28 前后那批 NBA 问答的情形）；每条只跑一遍；`results.md` 的截断原来在 `scrub` 之前做，一段被截短的临时目录路径没被换掉，改成先换再截后重出（`results.json` 本来就是干净的）。
+
+## 并行派活（票 127）
+
+主对话 PRD 裁决 174：几件互不相干的差事，或一件能拆成互不依赖的几块，一块一个标签、同一条回复派出去，同时跑；问题不拆，要用同一个浏览器标签页或同一批文件的不拆；判据仍是裁决 160。入口层派活那一段在票 126 改过的标签那句（`<subtask title="a few words">`，裁决 175）后面加了这一句，手册 `cli.md` 补一句「要同时做几件，就写几个标签」。`run.py --suite dispatch-parallel`。
+
+- **为什么是新套件**：票面允许在 `dispatch-criterion` 里加用例或新建套件。这一票只跑新提示词，`dispatch-criterion/results.json` 是票 115 的历史结果，按 `run.py` 的写法新跑的结果会并进那份文件、`results.md` 也会重出，所以另开 `dispatch-parallel/`，自己的用例、提示词与结果，沙盒、假 `galley` 与判定沿用票 115 那套（`make_crit_jobs`、`crit_facts`）。
+- **提示词**：`dispatch-parallel/galley-prompt/main_chat.new.txt`，照「怎么跑」的办法由 `compose_main_chat_runtime_prompt` 写出（临时测试，跑完删掉），占位与 `dispatch-criterion/galley-prompt/` 相同，版本号 0.7.4。同一个临时测试在票 126 之前的代码上写出的就是 `dispatch-criterion/galley-prompt/main_chat.new.txt`；这一份与它只差派活那一段（`--dry-test` 核对）。不跑旧提示词对照。
+- **用例**（`dispatch-parallel/cases.json`）：票面那 6 条，`tags` 写最终回复里该有的标签数（`exact` 正好几个，`min` 至少几个），`should_dispatch` 由它定；`reuse` 指向票 115 的 16 条，`par_cases` 把它们原样接在后面（消息、标注、上下文都读 `dispatch-criterion/cases.json`，不另抄一份）。本票的用例另有 `home_files`：用户说到的文件夹（桌面的截图、「文档/合同」、「客户」下的 A / B / C、下载文件夹里两份重复的 PDF）放进假 HOME，内容是占位文字；不放的话模型去看会扑空，派不派就成了沙盒的问题。
+- **判定**（`par_facts`）：先照票 115（`crit_facts`：最终回复里有标签才算派；该派的没派，三次工具调用以内自己做完算合规、超过算不合格、停在浏览器或问用户单列；不该派的派了不合格）。本票 6 条在最终回复派了的，再看标签数和每个标签的 `title`（票 126 起 `run.py` 照 Core 读出标签的标题，`read_subtask_tags`）：要有；清理后（同 `subtask::tag_title`）不超过 20 个字符；不能与派活说明第一行一模一样（原样的第一行，或 Core 会取的那一行，`subtask_first_line`）。标签数或标题不对都算不合格。票 115 的 16 条照票 115 判（`regressed`：现在判不合格的就是退步），标题单列一栏。
+- **`--dry-test` 加的**（`dry_test_par`）：用例（6 条逐字照票面、16 条与票 115 相同）；提示词（与票 115 的 new 只差派活那一段，带标题的标签、并行那一句、裁决 160 的几句都在，没有数量上限）；判定（三件三个标签过、少一个不过、至少两个、同一个标签页拆成两个不过、没写标题、标题超长、标题就是第一行、问题停在浏览器过、问题拆成子任务不过、差事加问题停在浏览器单列、票 115 的用例照旧判且标题单列）；假模型在真沙盒里走三遍：先看桌面与「文档/合同」（`home_files` 真的在）再在最终回复里写三个带标题的标签，一个不带标题的标签，一个问题停在浏览器；再出一份 `results.md`。
+- **怎么跑**：
+
+```bash
+PY=/Library/Frameworks/Python.framework/Versions/3.14/bin/python3
+export PYTHONDONTWRITEBYTECODE=1
+$PY .scratch/main-chat/entry-layer-eval/run.py --dry-test
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite dispatch-parallel --model-id mm_1792576875658 --parallel 4   # 22 次运行
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite dispatch-parallel --cases p-three-errands,p-split-one,p-same-tab,p-same-files,p-question-parts,p-errand-and-question --first-repeat 2   # 本票 6 条各补一遍
+```
+
+### 结果（2026-11-03，gpt-6.1-sol，推理强度 high）
+
+模型 `mm_1792576875658`（API key 接入的 gpt-6.1-sol，同票 115）。先 `--dry-test`（不连模型，全过），再跑 22 条各一遍；本票 6 条又各补跑一遍（`--first-repeat 2`），看同一提示词下的波动。28 次运行没有失败、超时与断连（单次 6–122 秒）；没有改措辞。
+
+| 组 | 运行 | 合格 | 不合格 | 单列 |
+| --- | --- | --- | --- | --- |
+| 本票 6 条 | 12 | 9 | 0 | 3 |
+| 票 115 的 16 条 | 16 | 15 | 0 | 1 |
+
+- **几件差事、一件拆几块**：`p-three-errands` 两遍都在最终回复写了 3 个标签（发票、截图、合同各一个）；`p-split-one` 两遍都按 A、B、C 写了 3 个标签，派之前先看了「客户」文件夹在哪，派活说明里写了找到的路径。
+- **不拆的**：`p-same-files` 两遍都是 1 个标签（先去重再分类）；`p-same-tab` 第 2 遍 1 个标签，第 1 遍读了浏览器规范后自己开浏览器去看购物车，运行停在那里（单列；摘要说「提交订单前会请你确认」，像是要在主对话里自己下单）；`p-question-parts` 两遍都自己查（停在浏览器，算它自己在做），没有拆成子任务。
+- **差事加问题**：`p-errand-and-question` 两遍都先自己查天气，运行停在浏览器（单列），天气没有派出去；第 2 遍的回复先问了从哪个城市出发、周五哪个时段：消息里没有出发地，订票还派不了。沙盒里浏览器不执行，查完天气以后订票派不派，这一套看不到。
+- **标题**：派出去的 21 个标签都有 `title`，清理后 6–14 个字符，没有一个与派活说明第一行相同，都用中文（「发票按月份归档」「整理 A 文件清单」「京东购物车下单」等）。
+- **票 115 的 16 条**：没有退步。不该派的 9 条都没派；该派的 7 条里 6 条在最终回复派了，`big-quotes` 第一次调用就问用户要三家的官网链接（单列；票 115 的 new 那一遍是派了，说明里写了三家在对话历史里搜不到）。
+- **用量**：28 次运行，61 次模型调用（本票 6 条 24 次，票 115 的 16 条 37 次）；工具调用 52 次；提示 352,167 token（命中缓存 146,048），输出 21,614。
+- **没测到的**：要先查一下才回复的用例（问答、差事加问题）都停在浏览器那一步，看不到最终回复；没有跑旧提示词对照，所以说不出并行那一句对单件差事有没有影响，只能看票 115 的 16 条没有退步。
 
 ## 安全措施
 

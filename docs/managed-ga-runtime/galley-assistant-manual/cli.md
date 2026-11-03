@@ -70,7 +70,8 @@ Write:
 - `memo add`, `update`, `delete`: see `memo.md`.
 
 Start new work with the `<subtask>` tag, not `session new`: only a subtask
-wakes you when it is done.
+wakes you when it is done. To do several things at once, write several
+tags.
 
 Never use `session wait`, `session follow`, `session watch` or
 `project follow` in the main chat. They hold this conversation until the

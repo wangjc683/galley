@@ -286,6 +286,26 @@ CRIT_COMPOSED_DIR = CRIT_DIR / "composed"
 CRIT_VARIANTS = ("old", "new")
 CRIT_DUMP_CASES = ("e-invoices", "q-east")
 CRIT_REPEATS = 1
+# Ticket 127 (main chat PRD ruling 174): several errands that do not
+# depend on each other, or one that splits into parts that do not, one
+# tag per part in the same reply; a question is not split, nor parts that
+# need the same browser tab or the same files. Only the prompt with
+# tickets 126 and 127 (dispatch-parallel/galley-prompt/main_chat.new.txt),
+# the ticket's six cases and ticket 115's sixteen, reused as they are, in
+# ticket 115's sandbox (the six may put files of their own in the fake
+# HOME), judged as ticket 115 judged, plus each new case's tag count and
+# every tag's title (ticket 126: there, at most PAR_TITLE_MAX characters
+# once cleaned, not the instructions' first line).
+PAR_SUITE = "dispatch-parallel"
+PAR_DIR = HERE / PAR_SUITE
+PAR_CASES = PAR_DIR / "cases.json"
+PAR_PROMPT_DIR = PAR_DIR / "galley-prompt"
+PAR_JSON = PAR_DIR / "results.json"
+PAR_MD = PAR_DIR / "results.md"
+PAR_COMPOSED_DIR = PAR_DIR / "composed"
+PAR_VARIANTS = ("new",)
+PAR_DUMP_CASES = ("p-three-errands", "p-errand-and-question")
+PAR_TITLE_MAX = 20
 # api::memo::MEMO_TEXT_MAX_CHARS, MEMO_TOTAL_MAX_CHARS.
 MEMO_TEXT_MAX_CHARS, MEMO_TOTAL_MAX_CHARS = 100, 2000
 # ga.py NO_BROWSER_CONNECTION_MSG: what GA's browser tools return with no
@@ -3351,6 +3371,19 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                  "<subtask title=\"归档发票\">把 ~/Downloads 里的发票和收据（发票_阿里云_2026-08.pdf、Invoice_Figma_2026-09.pdf 等）"
                  "按类型归档到 ~/Downloads/发票/ 下，交回归档后的清单和路径</subtask>")],
         "crit-web": [call("<summary>Look it up</summary>\n查一下。", ("web_scan", {"tabs_only": True}))],
+        # Ticket 127: a look at the case's own folders in the fake HOME,
+        # then three titled tags in the final reply; a bare tag at once.
+        "par-three-tags": [
+            call("<summary>Look first</summary>\n先看看。",
+                 ("code_run", {"script": "import os\nh = os.path.expanduser('~')\n"
+                                         "print(sorted(os.listdir(h + '/Desktop')), "
+                                         "sorted(os.listdir(h + '/Documents/合同')))"})),
+            call("<summary>Hand off</summary>\n三件分头交给子任务，好了告诉你。\n"
+                 "<subtask title=\"发票按月归档\">把 ~/Downloads 里的发票按月份归档到 ~/Downloads/发票/年-月/</subtask>\n"
+                 "<subtask title=\"截图按日期整理\">把桌面上的截图按日期放进文件夹</subtask>\n"
+                 "<subtask title=\"合同改名\">把 ~/Documents/合同 里的 PDF 改名成「日期-对方」</subtask>")],
+        "par-untitled": [
+            call("<summary>Hand off</summary>\n交给子任务去下单。\n<subtask>在京东把购物车里那三样东西下单</subtask>")],
         "crit-mid-tag": [
             call("<summary>Hand off, then look</summary>\n交给子任务。\n<subtask>把 ~/Downloads 里的 PDF 按内容分类</subtask>",
                  ("code_run", {"script": "import os\nprint(len(os.listdir(os.path.expanduser('~/Downloads'))))"})),
@@ -3821,9 +3854,9 @@ def build_result(job: dict[str, Any], rec: dict[str, Any], done: Any, latency: f
             "stop_reason": stop,
             "final_reply": reply,
         })
-        if job.get("suite") in ("schedule", "todo", "chat", "memo", CRIT_SUITE):
+        if job.get("suite") in ("schedule", "todo", "chat", "memo", CRIT_SUITE, PAR_SUITE):
             result.update({"suite": job["suite"], "now": job["now"], "started_at": rec.get("started_at")})
-        if job.get("suite") == CRIT_SUITE:
+        if job.get("suite") in (CRIT_SUITE, PAR_SUITE):
             # Ticket 115: a dispatch is what Core starts: the `<subtask>`
             # tags of the run's final answer (a reply with no tool call,
             # subtask::pending_reply), each one a subtask. A tag in a reply
@@ -4011,6 +4044,11 @@ def build_sandbox(run_dir: Path, python: str, wake: dict[str, Any] | None = None
                 write_screenshot(downloads / name, content["png"])
             else:
                 (downloads / name).write_text(content, encoding="utf-8")
+        # Ticket 127: a case's own files anywhere in the fake HOME (the
+        # folders its message names), relative to HOME.
+        for name, content in (wake.get("home_files") or {}).items():
+            (home / name).parent.mkdir(parents=True, exist_ok=True)
+            (home / name).write_text(content, encoding="utf-8")
     (root / "tmp").mkdir()
     (root / "log").mkdir()
     (root / "bin").mkdir()
@@ -4134,7 +4172,7 @@ def run_job(job: dict[str, Any], python: str, workdir: Path) -> dict[str, Any]:
         # What the manual's directory held when the run ended (a part the
         # model wrote or removed would show here).
         result["manual_files"] = sorted(os.listdir(job["manual_dir"]))
-    if job.get("suite") in ("schedule", "todo", "chat", "memo", CRIT_SUITE):
+    if job.get("suite") in ("schedule", "todo", "chat", "memo", CRIT_SUITE, PAR_SUITE):
         # What the fake galley ended with (tasks and to-dos made, changed,
         # cancelled; since ticket 96 memos and their writes), and what it
         # started with.
@@ -4320,26 +4358,49 @@ def crit_cases() -> list[dict[str, Any]]:
     return out
 
 
-def crit_prompt(case: dict[str, Any], variant: str, now: datetime) -> str:
+def par_cases() -> list[dict[str, Any]]:
+    """Ticket 127: dispatch-parallel/cases.json's six cases, then ticket
+    115's sixteen (its `reuse`, read as crit_cases reads them), numbered
+    anew. A new case's `tags` is its expected count in the final reply,
+    `exact` or `min`; it should be handed off when that is above 0."""
+    spec = json.loads(PAR_CASES.read_text(encoding="utf-8"))
+    if spec.get("reuse") != f"{CRIT_SUITE}/{CRIT_CASES.name}":
+        fail(f"{PAR_CASES.name}: reuse should name {CRIT_SUITE}/{CRIT_CASES.name}")
+    out = []
+    for c in spec["cases"]:
+        want = c.get("tags") or {}
+        if (not c.get("message") or len(want) != 1 or set(want) - {"exact", "min"}
+                or "should_dispatch" in c or c.get("history")):
+            fail(f"{PAR_CASES.name}: {c['id']}: a message and tags (exact or min), nothing else decides")
+        out.append(dict(c, history=[], should_dispatch=next(iter(want.values())) > 0))
+    out += crit_cases()
+    return [dict(c, no=n) for n, c in enumerate(out, 1)]
+
+
+def crit_prompt(case: dict[str, Any], variant: str, now: datetime, suite: str = CRIT_SUITE) -> str:
     """Ticket 115: the main chat prompt of `variant` (old: main's before
-    the ticket; new: the ticket's), as the schedule suites fill theirs."""
-    if variant not in CRIT_VARIANTS:
-        fail(f"no prompt {variant!r} for the {CRIT_SUITE} suite")
-    return sched_prompt(case, now, CRIT_PROMPT_DIR / f"main_chat.{variant}.txt")
+    the ticket; new: the ticket's), as the schedule suites fill theirs.
+    Ticket 127's suite has one, new: main with tickets 126 and 127."""
+    variants, prompt_dir = (PAR_VARIANTS, PAR_PROMPT_DIR) if suite == PAR_SUITE else (CRIT_VARIANTS, CRIT_PROMPT_DIR)
+    if variant not in variants:
+        fail(f"no prompt {variant!r} for the {suite} suite")
+    return sched_prompt(case, now, prompt_dir / f"main_chat.{variant}.txt")
 
 
 def make_crit_jobs(cases: list[dict[str, Any]], variants: list[str], now: datetime, mykeys: dict[str, Any],
                    ga_lang: str, allowed_hosts: set[str], repeats: int, dry: str | None = None,
-                   first: int = 1) -> list[dict[str, Any]]:
+                   first: int = 1, suite: str = CRIT_SUITE) -> list[dict[str, Any]]:
     """Ticket 115: each case under each prompt, `repeats` times numbered
     from `first`. The to-do suite's sandbox and fake galley with nothing
     in it (a to-do it notes lands there), the manual in the state root,
     the dispatch suite's ~/Downloads, at most 8 tool calls; a browser
-    tool or ask_user ends the run. `now` is local and aware."""
+    tool or ask_user ends the run. `now` is local and aware. Ticket 127's
+    suite (`suite`) the same, with a case's `home_files` in the fake HOME."""
+    dump = PAR_DUMP_CASES if suite == PAR_SUITE else CRIT_DUMP_CASES
     jobs = []
     for case in cases:
         for variant in variants:
-            prompt = crit_prompt(case, variant, now)
+            prompt = crit_prompt(case, variant, now, suite)
             for n in range(first, first + repeats):
                 jobs.append({
                     "case_id": case["id"],
@@ -4347,7 +4408,7 @@ def make_crit_jobs(cases: list[dict[str, Any]], variants: list[str], now: dateti
                     "wording": variant,
                     "crit_variant": variant,
                     "repeat": n,
-                    "suite": CRIT_SUITE,
+                    "suite": suite,
                     "now": now.isoformat(timespec="seconds"),
                     "should_dispatch": case["should_dispatch"],
                     "message": case["message"],
@@ -4356,12 +4417,13 @@ def make_crit_jobs(cases: list[dict[str, Any]], variants: list[str], now: dateti
                     "mykeys": mykeys,
                     "ga_lang": ga_lang,
                     "allowed_hosts": sorted(allowed_hosts),
-                    "keep_request": (case["id"] in CRIT_DUMP_CASES and n == first) or bool(dry),
+                    "keep_request": (case["id"] in dump and n == first) or bool(dry),
                     "dry": dry,
                     "sandbox": True,
                     "tool_cap": SANDBOX_TOOL_CAP,
                     "wake": {"fixture": sched_fixture(case, now), "files": {}, "help": str(SCHED_CLI_HELP),
-                             "extra_exec": list(SCHED_EXTRA_EXEC), "dispatch_fixtures": True},
+                             "extra_exec": list(SCHED_EXTRA_EXEC), "dispatch_fixtures": True,
+                             "home_files": case.get("home_files") or {}},
                 })
     return jobs
 
@@ -7884,6 +7946,220 @@ def summarize_usage(results: list[dict[str, Any]]) -> dict[str, int]:
                 (u.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0)
     return total
 
+# ---------------- ticket 127: parallel dispatch ----------------
+
+
+def subtask_first_line(instructions: str) -> str:
+    """subtask::subtask_title: the instructions' first line without the
+    Markdown a model may open it with, cut like a derived title."""
+    for line in instructions.split("\n"):
+        line = line.strip().lstrip("#>-*+").replace("**", "").strip()
+        if line:
+            return derive_title_from_text(line)
+    return derive_title_from_text(instructions)
+
+
+def title_problems(title: str | None, brief: str) -> list[str]:
+    """Ticket 127's rule for a tag's title (ticket 126 wrote it on the tag):
+    there; at most PAR_TITLE_MAX characters once cleaned (it arrives
+    cleaned, subtask::tag_title); not the instructions' first line, raw or
+    as Core would have derived it."""
+    if not title:
+        return ["没写 title"]
+    out = []
+    if len(title) > PAR_TITLE_MAX:
+        out.append(f"title 有 {len(title)} 个字符，超过 {PAR_TITLE_MAX}")
+    first = next((line.strip() for line in brief.split("\n") if line.strip()), "")
+    if title in (first, subtask_first_line(brief)):
+        out.append("title 与派活说明第一行一模一样")
+    return out
+
+
+def par_expected(case: dict[str, Any]) -> str:
+    want = case.get("tags")
+    if not want:
+        return "派" if case["should_dispatch"] else "不派"
+    if "min" in want:
+        return f"至少 {want['min']} 个标签"
+    return "不派（0 个标签）" if want["exact"] == 0 else f"{want['exact']} 个标签"
+
+
+def par_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
+    """Ticket 127: ticket 115's verdict (crit_facts: should it go at all),
+    then for one of the ticket's six cases handed off in the final reply
+    the number of tags (`tags`: exact or min) and every tag's title
+    (title_problems); a wrong count or a bad title fails it. Ticket 115's
+    sixteen keep ticket 115's verdict (`regressed`: one that fails it now);
+    their titles are judged and listed beside it."""
+    f = crit_facts(r, case)
+    d = r.get("dispatch") or {}
+    tags = list(zip(d.get("titles") or [None] * len(d.get("briefs") or []), d.get("briefs") or []))
+    problems = [f"第 {k} 个：{p}" for k, (t, b) in enumerate(tags, 1) for p in title_problems(t, b or "")]
+    f = dict(f, titles=[t for t, _ in tags], title_problems=problems,
+             titles_ok=(not problems) if tags else None, new_case=bool(case.get("tags")))
+    want = case.get("tags")
+    if not want:
+        return dict(f, regressed=f["pass"] is False)
+    if f["category"] != "dispatched" or not case["should_dispatch"]:
+        return f
+    n = d.get("count", len(tags))
+    count_ok = n == want["exact"] if "exact" in want else n >= want["min"]
+    label = f"最终回复派了 {n} 个标签（之前 {f['tool_calls']} 次工具调用）"
+    if not count_ok:
+        label += f"，应该：{par_expected(case)}"
+    if count_ok and not problems:
+        return dict(f, label=label, count_ok=True)
+    return dict(f, label=label, count_ok=count_ok, **{"pass": False}, verdict="不合格")
+
+
+def par_titles_cell(f: dict[str, Any]) -> str:
+    if not f.get("titles"):
+        return "—"
+    shown = "、".join(f"「{t}」" if t else "（无）" for t in f["titles"])
+    return shown + ("" if f["titles_ok"] else "：" + "；".join(f["title_problems"]))
+
+
+def render_par_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
+    """Ticket 127: a table (each case's expectation, what the run did, the
+    titles), the tallies with ticket 115's sixteen apart (did any regress),
+    then each case with its message, note, its files and every run: the
+    tags with their titles and instructions in full, the calls, the final
+    reply. Text is scrubbed before it is cut."""
+    meta = data["meta"]
+    results = data["results"]
+    by_case: dict[str, list[dict[str, Any]]] = {}
+    for r in results:
+        by_case.setdefault(r["id"], []).append(r)
+    for runs in by_case.values():
+        runs.sort(key=lambda r: r.get("repeat", 0))
+    model = meta.get("model") or {}
+    out = [
+        "# 并行派活评测结果（票 127）",
+        "",
+        f"模型：{model.get('name')}（{meta.get('model_access', '')}），推理强度 "
+        f"{(model.get('options') or {}).get('reasoning_effort', '默认')}；运行于 {meta.get('ran_at')}"
+        + (f"，补跑 {len(meta['partial_reruns'])} 次" if meta.get("partial_reruns") else "") + "。",
+        "",
+        "- **提示词**：只跑 new，即 main 加上票 126（标签带 `title`）与票 127（几件互不相干的差事一件一个标签、同一条回复派出去；"
+        "问题不拆，同一个标签页、同一批文件不拆）的主对话提示词，由 Rust 的 `compose_main_chat_runtime_prompt` 生成"
+        "（`galley-prompt/main_chat.new.txt`）。不跑旧提示词对照。",
+        "- **用例**：本票 6 条（前 6 行），另把票 115 的 16 条原样带进来，看有没有退步。",
+        "- **沙盒**：同票 115（待办评测的沙盒与假 `galley`，手册在状态根，`~/Downloads` 是派活对照那套占位文件，"
+        f"每次运行最多 {SANDBOX_TOOL_CAP} 次工具调用，浏览器工具与 `ask_user` 不执行、运行停在那里）；"
+        "本票的用例另把用户说到的文件夹放进假 HOME（`cases.json` 的 `home_files`）。",
+        "- **判定**：先照票 115（最终回复里有标签才算派；该派的没派：三次工具调用以内自己做完算合规、超过算不合格、"
+        "停在浏览器或问用户单列；不该派的派了不合格）。本票的 6 条在最终回复派了的，再看标签数（正好几个或至少几个）"
+        f"与每个标签的 `title`：要有，清理后不超过 {PAR_TITLE_MAX} 个字符，不能与派活说明第一行一模一样；"
+        "标签数或标题不对都算不合格。票 115 的 16 条照票 115 判，标题单列一栏。",
+        "",
+        "回复正文去掉了 `<summary>`、`<next-suggestion>` 与 `<subtask>` 标签（派活说明单列全文），"
+        "工具参数与返回在这里截断，全文见 results.json。",
+        "",
+        "## 一览",
+        "",
+        "| # | 用例 | 组 | 应该 | 结果 | 标题 |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    tally = {k: dict.fromkeys(CRIT_VERDICTS + ("未运行",), 0) for k in ("new", "old")}
+    regressed: list[str] = []
+    bad_titles: list[str] = []
+    for case in cases:
+        runs = by_case.get(case["id"]) or []
+        key = "new" if case.get("tags") else "old"
+        if not runs:
+            tally[key]["未运行"] += 1
+        cells, titles = [], []
+        for r in runs:
+            f = par_facts(r, case)
+            w = f["verdict"]
+            tally[key][w if w in tally[key] else "合格" if w.startswith("合格") else "单列"] += 1
+            cells.append(f"{f['label']}：{w}")
+            titles.append(par_titles_cell(f))
+            if f.get("regressed"):
+                regressed.append(case["id"])
+            if f.get("titles_ok") is False:
+                bad_titles.append(case["id"])
+        cell = "<br>".join(cells).replace("|", "\\|") or "未运行"
+        title_cell = "<br>".join(titles).replace("|", "\\|") or "—"
+        out.append(f"| {case['no']} | {case['id']} | {case['group']} | {par_expected(case)} | {cell} | {title_cell} |")
+    out += [""]
+    for key, name in (("new", "本票 6 条"), ("old", "票 115 的 16 条")):
+        t = tally[key]
+        shown = [k for k in CRIT_VERDICTS + ("未运行",) if t[k] or k in ("合格", "不合格")]
+        out.append(f"- **{name}**：" + "，".join(f"{k} {t[k]}" for k in shown) + "。")
+    out.append("- **票 115 的 16 条有没有退步**（该自己答的派了、该派的没派）："
+               + ("、".join(regressed) if regressed else "没有") + "。")
+    out.append("- **标题不合规的**：" + ("、".join(sorted(set(bad_titles))) if bad_titles else "没有") + "。")
+    out += [""]
+    if meta.get("superseded_runs"):
+        out += ["被替换的运行原样留在 results.json 的 `meta.superseded_runs`："]
+        for g in meta["superseded_runs"]:
+            out.append(f"- {g.get('at')}：{g.get('reason')}（{len(g.get('runs') or [])} 次）")
+        out += [""]
+    for case in cases:
+        out += [f"## {case['no']}. {case['id']}（{case['group']}；应该：{par_expected(case)}）", "",
+                f"**消息**：{case['message']}", ""]
+        if case.get("note"):
+            out += [f"**说明**：{case['note']}", ""]
+        if case.get("home_files"):
+            out += ["**假 HOME 里放的文件**：" + "；".join(f"`~/{x}`" for x in case["home_files"]), ""]
+        if case["history"]:
+            out += ["**上下文**（同一段里前面的轮次）：", ""]
+            for m in case["history"]:
+                who = "用户" if m["role"] == "user" else "助理"
+                quoted = f"> **{who}**：" + m["content"].replace("\n", "\n> ")
+                out += [re.sub(r"[ \t]+$", "", quoted, flags=re.MULTILINE), ">"]
+            out[-1] = ""
+        for r in by_case.get(case["id"]) or [None]:
+            out += ["### new" + (f"（第 {r['repeat']} 遍）" if r and r.get("repeat", 1) != 1 else ""), ""]
+            if r is None:
+                out += ["（未运行）", ""]
+                continue
+            f = par_facts(r, case)
+            out += [f"**结果**：{f['label']}；{f['verdict']}。工具调用 {f['tool_calls']} 次。结束："
+                    f"{STOP_LABELS.get(r.get('stop_reason') or '', r.get('stop_reason'))}。", ""]
+            if r.get("status") != "ok":
+                out += [f"（{trunc(scrub(r.get('error') or ''), 600)}）", ""]
+                continue
+            d = r.get("dispatch") or {}
+            titles = d.get("titles") or [None] * len(d.get("briefs") or [])
+            for k, (title, brief) in enumerate(zip(titles, d.get("briefs") or []), 1):
+                problems = title_problems(title, brief or "")
+                out += [f"标签 {k}：title " + (f"「{title}」" if title else "（没写）")
+                        + ("" if not problems else "（" + "；".join(problems) + "）") + "，派活说明：", ""]
+                out += fenced(brief or "（空）")
+            for m in d.get("mid_tags") or []:
+                out += [f"{CRIT_MID_TAG}，在第 {m['turn']} 轮回复（title "
+                        + (f"「{m.get('title')}」" if m.get("title") else "没写") + "）：", ""] + fenced(m["brief"] or "（空）")
+            if f["todos_added"]:
+                out += ["记下的待办：" + "；".join(f"「{x}」" for x in f["todos_added"]), ""]
+            ch = f["downloads_changes"]
+            if ch.get("removed") or ch.get("added"):
+                out += [f"下载文件夹：移走或删除 {len(ch.get('removed') or [])} 个，新增 {len(ch.get('added') or [])} 个。", ""]
+            made = [x for x in f["home_added"] if "/Downloads/" not in x]
+            if made:
+                out += ["在假 HOME 里新建的文件：" + "；".join(f"`{x}`" for x in made), ""]
+            calls = r.get("calls") or []
+            if calls:
+                out += ["工具调用（按顺序）：", ""]
+                for c in calls:
+                    out += [f"{c['n']}. {call_gist(c)}：{outcome_label(c.get('outcome', ''))}", ""]
+                    args = dict(c["args"])
+                    script = args.pop("script", None) or args.pop("code", None)
+                    if args:
+                        out += fenced(trunc(scrub(json.dumps(args, ensure_ascii=False, indent=1)), 600), "json")
+                    if script:
+                        out += fenced(trunc(scrub(str(script)), 1200), "")
+                    if "result" in c:
+                        res = c["result"]
+                        res_text = res if isinstance(res, str) else json.dumps(res, ensure_ascii=False, indent=1)
+                        out += ["   返回：", ""] + fenced(trunc(scrub(res_text), 500), "")
+            out += ["最终回复：" if r.get("stop_reason") == "final_reply" else "最后一条回复：", ""]
+            out += reply_lines(r.get("final_reply")) or ["（空）", ""]
+            if r.get("next_suggestion"):
+                out += [f"建议：{r['next_suggestion']}", ""]
+    return "\n".join(out).rstrip() + "\n"
+
 
 # ======================================================================
 # Dry test
@@ -8019,6 +8295,16 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
         for job in make_crit_jobs([crcases[case_id]], [variant], snow, mykeys, ga_lang, set(), 1, script):
             job["case_id"] = run_id
             jobs.append(job)
+    # Ticket 127.
+    pcases = {c["id"]: c for c in par_cases()}
+    par_scripts = {"par-three": ("p-three-errands", "new", "par-three-tags"),
+                   "par-untitled": ("p-same-tab", "new", "par-untitled"),
+                   "par-question": ("p-question-parts", "new", "crit-web")}
+    for run_id, (case_id, variant, script) in par_scripts.items():
+        for job in make_crit_jobs([pcases[case_id]], [variant], snow, mykeys, ga_lang, set(), 1, script,
+                                  suite=PAR_SUITE):
+            job["case_id"] = run_id
+            jobs.append(job)
     real_home = os.path.expanduser("~")
     home_canary = os.path.join(real_home, "entry-layer-eval-sbx-canary")
     results = run_jobs(jobs, python, 3, keep_temp)
@@ -8038,6 +8324,7 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
     dry_test_chat([r for r in results if r["id"].startswith("chat-")], chat_scripts, ccases, check)
     dry_test_memo([r for r in results if r["id"].startswith("memo-")], memo_scripts, mcases, snow, check)
     dry_test_crit([r for r in results if r["id"].startswith("crit-")], crit_scripts, crcases, check)
+    dry_test_par([r for r in results if r["id"].startswith("par-")], par_scripts, pcases, crcases, check)
     sbx_results = [r for r in results if r["id"].startswith("sbx-")]
     entry_results = [r for r in results if r["variant"] in VARIANTS]
     dispatch_results = [r for r in results if r["variant"] in DISPATCH_VARIANTS
@@ -10242,6 +10529,147 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
           "results.md renders (every case in the table, the instructions in full)")
 
 
+def dry_test_par(results: list[dict[str, Any]], scripts: dict[str, tuple[str, str, str]],
+                 cases: dict[str, dict[str, Any]], crit: dict[str, dict[str, Any]], check: Any) -> None:
+    """Ticket 127: the cases (the ticket's six word for word, ticket 115's
+    sixteen as they are), the prompt (ticket 115's new one with tickets
+    126 and 127's sentences, nothing else), the judge (counts, titles,
+    ticket 115's verdicts kept) and the runs (the case's files in the fake
+    HOME, three titled tags read, a bare tag judged, a question at the
+    browser), then results.md."""
+    print(f"{PAR_SUITE} (prompt, cases, judge)")
+    want = {"p-three-errands": ("帮我把下载文件夹里的发票按月份归档，把桌面上的截图按日期放进文件夹，再把「文档/合同」里的 PDF 改名成"
+                                "「日期-对方」", {"exact": 3}),
+            "p-split-one": ("把「客户」文件夹下 A、B、C 三个子文件夹各自整理出一份文件清单", {"min": 2}),
+            "p-same-tab": ("在京东把购物车里那三样东西下单", {"exact": 1}),
+            "p-same-files": ("把下载文件夹里的 PDF 先去重，再按内容分类", {"exact": 1}),
+            "p-question-parts": ("新赛季西部和东部各有哪几支队能进季后赛？", {"exact": 0}),
+            "p-errand-and-question": ("帮我订周五去厦门的高铁票，顺便告诉我厦门这周末天气怎么样", {"exact": 1})}
+    ordered = sorted(cases.values(), key=lambda c: c["no"])
+    check([c["id"] for c in ordered[:6]] == list(want)
+          and all((c["message"], c["tags"]) == want[c["id"]] for c in ordered[:6])
+          and [c["id"] for c in ordered[6:]] == list(crit)
+          and all(c["message"] == crit[c["id"]]["message"] and c["should_dispatch"] == crit[c["id"]]["should_dispatch"]
+                  for c in ordered[6:])
+          and [c["should_dispatch"] for c in ordered[:6]] == [True, True, True, True, False, True],
+          "the ticket's six cases word for word, then ticket 115's sixteen as they are")
+    new_t = (PAR_PROMPT_DIR / "main_chat.new.txt").read_text(encoding="utf-8")
+    crit_t = (CRIT_PROMPT_DIR / "main_chat.new.txt").read_text(encoding="utf-8")
+
+    def clause(text: str) -> str:
+        a = text.index("Answer what the user asks you yourself")
+        return text[a:text.index("cannot see.", a) + len("cannot see.")]
+
+    check(new_t.replace(clause(new_t), "<clause>") == crit_t.replace(clause(crit_t), "<clause>"),
+          "ticket 115's new prompt but for the dispatch clause")
+    flat = re.sub(r"\s+", " ", clause(new_t))
+    check(all(w in flat for w in (
+        'end your reply with <subtask title="a few words">what to do</subtask>.',
+        "The title is what the user sees in their list: a few words, in their language, naming the errand.",
+        "When the user hands you several errands that do not depend on each other, or one errand splits into parts "
+        "that do not, write one tag per part in the same reply: they run at the same time.",
+        "Keep in one tag the parts that need the same browser tab or the same files, and do not split a question.",
+        "they are waiting for that answer", "more than two or three steps", "If a question turns into an errand partway"))
+          and "<subtask>what to do</subtask>" not in flat and not re.search(r"at most \w+ (tags|subtasks)", flat),
+          "the clause: the titled tag, the parallel sentence, ruling 160's test kept, no cap on the count")
+    text = crit_prompt(cases["p-three-errands"], "new", datetime(2026, 11, 3, 12, 0).astimezone(), PAR_SUITE)
+    check(not re.search(r"__(?!MANUAL_DIR__)[A-Z_]+__", text) and text.count("__MANUAL_DIR__") == 1
+          and "### In Hand" not in text and f"session `{SESSION_ID}`" in text,
+          "segment facts filled, no In Hand, the manual's directory left for the run")
+
+    def synth(case_id: str, tags: list[tuple[str | None, str]] | None = None, stop: str = "final_reply",
+              calls: int = 0) -> dict[str, Any]:
+        names = ["code_run"] * calls
+        if calls and stop in CRIT_UNDECIDED:
+            names[-1] = "web_scan" if stop == "web_tool" else "ask_user"
+        tags = tags or []
+        return {"id": case_id, "variant": "new-1", "status": "ok", "stop_reason": stop,
+                "calls": [{"n": i, "turn": i, "name": n, "args": {}} for i, n in enumerate(names, 1)],
+                "dispatch": {"dispatched": bool(tags), "brief": tags[0][1] if tags else None,
+                             "briefs": [b for _, b in tags], "titles": [t for t, _ in tags],
+                             "lookups_before": calls if tags else None, "count": len(tags),
+                             "in_final": bool(tags), "mid_tags": []}}
+
+    def judged(r: dict[str, Any]) -> dict[str, Any]:
+        f = par_facts(r, cases[r["id"]])
+        print(f"    {r['id']}: {f['label']}：{f['verdict']}；{par_titles_cell(f)}")
+        return f
+
+    three = [("发票归档", "把发票按月份归档"), ("截图整理", "把截图按日期放好"), ("合同改名", "把合同改名")]
+    f = judged(synth("p-three-errands", three, calls=1))
+    check(f["pass"] is True and f["count_ok"] and f["titles_ok"], "three tags with titles: passes")
+    f = judged(synth("p-three-errands", three[:2]))
+    check(f["pass"] is False and "应该：3 个标签" in f["label"], "two of three: fails on the count")
+    f = judged(synth("p-split-one", three))
+    check(f["pass"] is True, "at least two of A, B, C: three pass")
+    f = judged(synth("p-split-one", three[:1]))
+    check(f["pass"] is False, "one tag where at least two are expected: fails")
+    f = judged(synth("p-same-tab", three[:2]))
+    check(f["pass"] is False, "the same tab split in two: fails")
+    f = judged(synth("p-same-tab", [(None, "在京东把购物车里那三样东西下单")]))
+    check(f["pass"] is False and f["title_problems"] == ["第 1 个：没写 title"], "a tag without a title: fails")
+    f = judged(synth("p-same-files", [("把下载文件夹里的 PDF 先去重，再按内容分类", "把下载文件夹里的 PDF 先去重，再按内容分类\n细节")]))
+    check(f["pass"] is False and any("超过 20" in x for x in f["title_problems"])
+          and any("第一行" in x for x in f["title_problems"]), "a long title, the first line itself: fails on both")
+    f = judged(synth("p-same-files", [("PDF 去重", "## PDF 去重\n去重，再分类")]))
+    check(f["pass"] is False and any("第一行" in x for x in f["title_problems"]),
+          "a title that is the first line as Core would derive it: fails")
+    f = judged(synth("p-question-parts", stop="web_tool", calls=1))
+    check(f["pass"] is True and f["titles_ok"] is None, "a question at the browser: it is answering it, passes")
+    f = judged(synth("p-question-parts", [("西部季后赛", "查西部"), ("东部季后赛", "查东部")]))
+    check(f["pass"] is False and f["verdict"] == "不合格", "a question split into subtasks: fails")
+    f = judged(synth("p-errand-and-question", [("订厦门高铁", "订周五去厦门的高铁票")], calls=2))
+    check(f["pass"] is True, "the booking handed off, one tag: passes")
+    f = judged(synth("p-errand-and-question", stop="web_tool", calls=1))
+    check(f["pass"] is None and f["verdict"] == "单列", "the errand case at the browser: listed apart")
+    f = judged(synth("e-invoices", [("整理发票", "把下载文件夹里的发票整理好")]))
+    check(f["pass"] is True and f["regressed"] is False and f["titles_ok"], "ticket 115's errand handed off, titled")
+    f = judged(synth("q-weather", [("查天气", "查厦门天气")]))
+    check(f["regressed"] is True, "ticket 115's question handed off: a regression")
+    f = judged(synth("e-template", [(None, "做模板")]))
+    check(f["pass"] is True and f["titles_ok"] is False and not f["regressed"],
+          "ticket 115's case keeps ticket 115's verdict, its title listed apart")
+    by_run = {r["id"]: r for r in results}
+    for run_id, (case_id, variant, script) in sorted(scripts.items()):
+        r = by_run.get(run_id)
+        print(f"{PAR_SUITE} {run_id} ({case_id} / {variant}, {script})")
+        check(r is not None and r["status"] == "ok",
+              f"run completed (status {r and r['status']} {(r or {}).get('error', '')[:300]})")
+        if r is None or r["status"] != "ok":
+            continue
+        case = cases[case_id]
+        system = r["requests"][0]["messages"][0]["content"]
+        check(r.get("suite") == PAR_SUITE and r["variant"] == "new-1" and "write one tag per part" in system
+              and '<subtask title="a few words">' in system and "__MANUAL_DIR__" not in system
+              and r.get("manual_files") == [x.name for x in manual_parts()],
+              "the new prompt, the manual's parts in the state root")
+        check(not r["do_calls"] and not r["blocked"] and not r["canaries"] and not r["sandbox"]["refused"],
+              f"nothing ran outside the sandbox ({r['do_calls']}, {r['blocked']}, {r['canaries']})")
+        f = par_facts(dict(r, id=case_id), case)
+        if script == "par-three-tags":
+            listed = str((r.get("calls") or [{}])[0].get("result"))
+            check("截图 2026-10-28 上午10.02.11.png" in listed and "星河设计服务合同.pdf" in listed,
+                  "the case's files are in the fake HOME, listed for real in the sandbox")
+            d = r["dispatch"]
+            check(d["count"] == 3 and d["titles"] == ["发票按月归档", "截图按日期整理", "合同改名"]
+                  and d["in_final"] and not d["mid_tags"], f"three tags and their titles read ({d})")
+            check(f["pass"] is True and f["titles_ok"] and f["label"].startswith("最终回复派了 3 个标签"),
+                  f"three errands, three titled tags: passes ({f['label']})")
+            check(not SUBTASK_OPEN_RE.search("".join(reply_lines(r["final_reply"]))),
+                  "no tag in the reply as shown")
+        elif script == "par-untitled":
+            check(f["pass"] is False and f["title_problems"] == ["第 1 个：没写 title"],
+                  f"a bare tag fails on its title ({f['label']}; {f['title_problems']})")
+        elif script == "crit-web":
+            check(f["pass"] is True and r["stop_reason"] == "web_tool", "a question at the browser: passes")
+    shown = [dict(r, id=scripts[r["id"]][0]) for r in results if r["id"] in scripts and r["status"] == "ok"]
+    md = render_par_md({"meta": {"model": {"name": "dry", "options": {}}, "model_access": "dry", "ran_at": "dry"},
+                        "results": shown}, sorted(cases.values(), key=lambda c: c["no"]))
+    check("## 一览" in md and all(f"| {c['id']} |" in md for c in cases.values()) and "「发票按月归档」" in md
+          and "没写 title" in md and "未运行" in md and "有没有退步" in md and "~/Desktop/" in md,
+          "results.md renders (every case in the table, the titles, the case's files)")
+
+
 def dry_test_dispatch(results: list[dict[str, Any]], scripts: dict[tuple[str, str], str],
                       check: Any) -> None:
     """Ticket 06 paths: T's tag, C's CLI dispatch answered with a fake
@@ -10319,14 +10747,17 @@ def main() -> int:
     ap.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--dry-test", action="store_true", help="verify interception, no model")
     ap.add_argument("--render-only", action="store_true", help="rebuild the .md from the .json")
-    ap.add_argument("--suite", choices=("entry", "dispatch", "wake", "schedule", "todo", "chat", "memo", CRIT_SUITE),
+    ap.add_argument("--suite", choices=("entry", "dispatch", "wake", "schedule", "todo", "chat", "memo", CRIT_SUITE,
+                                        PAR_SUITE),
                     default="entry",
                     help="entry: cases.json WITHOUT / WITH; dispatch: dispatch-cases.json T / C / P; "
                          "wake: wake/cases.json under the wordings of wake/wording.md; "
                          "schedule: schedule/cases.json (ticket 36); todo: todo/cases.json (ticket 41); "
                          "chat: cases.json under today's main chat prompt, judged by chat/cases.json (ticket 60); "
                          "memo: memo/cases.json (ticket 96); "
-                         "dispatch-criterion: dispatch-criterion/cases.json under the old and new prompts (ticket 115)")
+                         "dispatch-criterion: dispatch-criterion/cases.json under the old and new prompts (ticket 115); "
+                         "dispatch-parallel: dispatch-parallel/cases.json and ticket 115's cases under the new prompt "
+                         "(ticket 127)")
     ap.add_argument("--variant", default="all",
                     help="entry: without | with | both; dispatch: comma list of T,C,P; "
                          "wake: comma list of wording names; dispatch-criterion: old,new; or all")
@@ -10365,16 +10796,19 @@ def main() -> int:
         return dry_test(args.python, args.ga_lang, args.keep_temp)
 
     if args.repeats is None:
-        args.repeats = CRIT_REPEATS if args.suite == CRIT_SUITE else WAKE_REPEATS
+        args.repeats = CRIT_REPEATS if args.suite in (CRIT_SUITE, PAR_SUITE) else WAKE_REPEATS
     dispatch = args.suite == "dispatch"
-    crit = args.suite == CRIT_SUITE
+    par = args.suite == PAR_SUITE
+    crit = args.suite == CRIT_SUITE or par
     wake = args.suite == "wake"
     todo = args.suite == "todo"
     chat = args.suite == "chat"
     memo = args.suite == "memo"
     sched = args.suite == "schedule" or todo or chat or memo
     sandbox_mode = dispatch and args.mode == "sandbox"
-    if crit:
+    if par:
+        suite_files = (PAR_CASES, PAR_JSON, PAR_MD, PAR_VARIANTS, render_par_md)
+    elif crit:
         suite_files = (CRIT_CASES, CRIT_JSON, CRIT_MD, CRIT_VARIANTS, render_crit_md)
     elif memo:
         suite_files = (MEMO_CASES, MEMO_JSON, MEMO_MD, ("manual",), render_memo_md)
@@ -10395,7 +10829,7 @@ def main() -> int:
     else:
         suite_files = (CASES, RESULTS_JSON, RESULTS_MD, VARIANTS, render_md)
     cases_path, results_json, results_md, all_variants, render = suite_files
-    all_cases = (chat_cases() if chat else crit_cases() if crit
+    all_cases = (chat_cases() if chat else par_cases() if par else crit_cases() if crit
                  else json.loads(cases_path.read_text(encoding="utf-8"))["cases"])
     if args.render_only:
         data = json.loads(results_json.read_text(encoding="utf-8"))
@@ -10446,7 +10880,7 @@ def main() -> int:
                                first=args.first_repeat, suite=args.suite)
     elif crit:
         jobs = make_crit_jobs(cases, variants, now.astimezone(), mykeys, args.ga_lang, allowed, args.repeats,
-                              first=args.first_repeat)
+                              first=args.first_repeat, suite=args.suite)
     elif wake:
         jobs = make_wake_jobs(cases, variants, now, mykeys, args.ga_lang, allowed, args.repeats)
     elif dispatch:
@@ -10488,7 +10922,7 @@ def main() -> int:
             elif wake:
                 write_composed(r, "", WAKE_COMPOSED_DIR)
             elif crit:
-                write_composed(r, "", CRIT_COMPOSED_DIR)
+                write_composed(r, "", PAR_COMPOSED_DIR if par else CRIT_COMPOSED_DIR)
             else:
                 write_composed(r, "dispatch." if dispatch else "")
         r.pop("request", None)
@@ -10617,7 +11051,13 @@ def main() -> int:
         })
     if crit:
         data["meta"].update({
-            "suite": "dispatch-criterion (ticket 115, main chat PRD ruling 160): dispatch-criterion/cases.json under "
+            "suite": "dispatch-parallel (ticket 127, main chat PRD ruling 174): the six cases of "
+                     "dispatch-parallel/cases.json (their home_files in the fake HOME) and ticket 115's sixteen, under "
+                     "one main chat prompt composed by the real Rust code (galley-prompt/main_chat.new.txt: main with "
+                     "tickets 126 and 127), ticket 115's sandbox and judge, plus each new case's tag count and every "
+                     f"tag's title (there, at most {PAR_TITLE_MAX} characters, not the instructions' first line)"
+            if par else
+                     "dispatch-criterion (ticket 115, main chat PRD ruling 160): dispatch-criterion/cases.json under "
                      "two main chat prompts composed by the real Rust code (galley-prompt/main_chat.old.txt: main's "
                      "before the ticket; main_chat.new.txt: the ticket's), the assistant manual's parts in the state "
                      "root, the to-do suite's sandbox and fake galley with nothing in it, the dispatch suite's "
