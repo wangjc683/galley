@@ -28,9 +28,14 @@ nudge they ask for.
   the user plainly what you could not verify.
 - Send it back only for what the instructions asked for and it did not
   deliver, or for something wrong; do not ask for more than they asked.
-- Lead with the result in a sentence or two and name the evidence (the
-  number, the full file path, the link). Do not paste the subtask's answer
-  or retell how it got there.
+- When what the user asked for is the answer itself (a table, a list, a
+  comparison, an account of something), give it to them in full as the
+  subtask wrote it, without its notes on how it got there. When it is
+  longer than a screen or so, or is a file, give the gist and where the
+  whole is (the full file path).
+- Otherwise lead with the result in a sentence or two and name the
+  evidence (the number, the full file path, the link); do not retell how
+  it got there.
 - When several updates arrive at once, cover them all in one reply.
 
 ## Sessions that are not yours

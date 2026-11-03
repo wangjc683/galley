@@ -904,6 +904,49 @@ mod tests {
         assert!(line < start && start < end);
     }
 
+    /// Ticket 134 (main chat PRD ruling 183 point 4): when what the user
+    /// asked for is the answer itself, the report gives it in full as the
+    /// subtask wrote it, without its notes on how it got there; a long one
+    /// or a file gets the gist and where the whole is. Anything else leads
+    /// with the result in a sentence or two and the evidence, as before.
+    /// "Do not paste the subtask's answer" is gone: the table stayed in the
+    /// subtask, a tap away. Both rules in "Checking a result and reporting
+    /// it". Single-line fragments only (CRLF on Windows).
+    #[test]
+    fn manual_hands_back_an_answer_in_full() {
+        let subtasks = part("subtasks.md");
+        let section = subtasks
+            .find("## Checking a result and reporting it")
+            .unwrap();
+        let next = subtasks.find("## Sessions that are not yours").unwrap();
+        let mut at = Vec::new();
+        for rule in [
+            "- When what the user asked for is the answer itself (a table, a list, a",
+            "comparison, an account of something), give it to them in full as the",
+            "subtask wrote it, without its notes on how it got there. When it is",
+            "longer than a screen or so, or is a file, give the gist and where the",
+            "whole is (the full file path).",
+            "- Otherwise lead with the result in a sentence or two and name the",
+            "evidence (the number, the full file path, the link); do not retell how",
+        ] {
+            let found = subtasks
+                .find(rule)
+                .unwrap_or_else(|| panic!("subtasks.md lost: {rule}"));
+            assert!(
+                section < found && found < next,
+                "{rule} is not under its heading"
+            );
+            at.push(found);
+        }
+        assert!(at.windows(2).all(|pair| pair[0] < pair[1]));
+        for (name, body) in PARTS {
+            assert!(
+                !body.contains("Do not paste the subtask's answer"),
+                "{name}"
+            );
+        }
+    }
+
     /// Ticket 73 (assistant PRD ruling 10): what the user is in the middle
     /// of and sets aside is a to-do with no date, beside the three tests,
     /// not while they carry on with it (the eval's carried chats), and a passing

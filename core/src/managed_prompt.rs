@@ -362,8 +362,9 @@ look it up with the Galley CLI (search, then
 /// wording is the `T` clause the same eval compared against a CLI command
 /// and a native tool (`dispatch-clauses.md`), plus one sentence steering
 /// away from GA's file-based subagent SOP, which the model read on its
-/// own in that comparison. Since ticket 115 (below) what goes is decided
-/// by whether the user is waiting, not by how long the work would take.
+/// own in that comparison. Ticket 115 (below) decided what goes by
+/// whether the user is waiting, not by how long the work would take;
+/// since ticket 134 (below) everything past a step or two goes.
 ///
 /// Ticket 30 (assistant PRD rulings 2, 3, 8) closed the loop: the
 /// instructions also name the evidence to hand back, Galley wakes the
@@ -472,35 +473,71 @@ look it up with the Galley CLI (search, then
 /// subagents, "键鼠不可共享；浏览器避免同tab" (`memory/subagent.md`). No cap
 /// on the count: Core sets none on subtasks running at once. "Galley
 /// starts it" became "starts each", so the sentence after it still reads.
+///
+/// Ticket 134 (main chat PRD ruling 183, amending ruling 160's points 2
+/// and 3) moved the line. Only what takes a step or two is answered
+/// here: a single fact (the weather, a score, whether someone is
+/// injured), a quick look on the user's computer (what is in a folder;
+/// added after the eval's first round sent such a look out as "a list"
+/// to hand back), a quick conversion, a follow-up this conversation
+/// already answers. Everything bigger goes to a subtask, so the chat
+/// stays free for the user: a thing to hand back (a table, a list, a
+/// comparison, a report, a file), a change on their computer or
+/// accounts, and a question or story that needs several places looked
+/// up (what happened in some event, a ranking, a prediction). Under
+/// ruling 160 a
+/// comparison of two headphones as a table, asked in the v0.7.5 draft's
+/// smoke test, held the main chat for 13 steps and four minutes, as that
+/// clause allowed; JC would rather have the chat free than the answer
+/// sooner. "Simple" is what is asked for, not how fast it goes (asking
+/// for the weather took 8 steps), and the minutes he named cannot be seen
+/// before the work starts, so the line is "several places looked up".
+/// The cost is accepted: a subtask starts from nothing, takes two to
+/// three times the steps, and its report takes a wake. Ticket 127's "do
+/// not split a question" became: keep in one tag what has to come back
+/// as one thing (a comparison, one table, one report, the answer to one
+/// question), and split off only parts whose results each stand on their
+/// own. A follow-up can go out now, so the instructions also carry what
+/// this conversation already settled that the request leans on (the
+/// subtask cannot see it). "A question that turns into an errand" became
+/// anything taken for quick that turns out bigger. When what comes back
+/// is the answer itself, the model pastes it back in full (`subtasks.md`,
+/// same ruling): the wake already carries the subtask's final answer.
 fn main_chat_entry_layer(manual_dir: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
 
-Answer what the user asks you yourself, even when it takes a few minutes
-of looking things up: they are waiting for that answer, and Galley shows
-them what you are doing meanwhile. An errand they hand you, where what
-comes back is a thing or a change rather than an answer (files sorted or
-renamed, a template or a report drafted, a booking), goes to a subtask
-once it takes more than two or three steps, and so does anything they ask
-you to hand off: end your reply with
+Answer yourself only what takes a step or two: a single fact (the
+weather, a score, whether someone is injured), a quick look on their
+computer (what is in a folder), a quick conversion, a follow-up you can
+answer from what is already in this conversation.
+Everything bigger goes to a subtask, so this chat stays free for the
+user: a thing to hand back (a table, a list, a comparison, a report, a
+file), a change on their computer or accounts (files sorted or renamed, a
+booking, a form filled), and a question or story that needs several
+places looked up (what happened in some event, a ranking, a prediction).
+So does anything they ask you to hand off. End your reply with
 <subtask title="a few words">what to do</subtask>. The title is what the
 user sees in their list: a few words, in their language, naming the errand.
 When the user hands you several errands that do not depend on each other,
-or one errand splits into parts that do not, write one tag per part in the
-same reply: they run at the same time. Keep in one tag the parts that need
-the same browser tab or the same files, and do not split a question.
+or one errand splits into parts whose results each stand on their own,
+write one tag per part in the same reply: they run at the same time. Keep
+in one tag what has to come back as one thing (a comparison, one table,
+one report, the answer to one question) and the parts that need the same
+browser tab or the same files.
 Galley starts each after this reply, as a separate conversation that cannot
 see this one, so write everything it needs: the goal, the facts the user
-gave, what you have found so far, and what to hand back, with the evidence
-for it (a confirmation number, a file path, a link, a screenshot path).
+gave, what this conversation already settled that the request leans on,
+what you have found so far, and what to hand back, with the evidence for
+it (a confirmation number, a file path, a link, a screenshot path).
 Tell the user in a sentence that it is on its way. When it finishes, asks
 something or fails, Galley wakes you to check it and tell the user, so do
-not wait on it or watch it. If a question turns into an errand partway
-through, stop there and hand the rest over the same way. Do it yourself
-when the errand's material is this conversation (writing up what you two
-discussed), and when it is a to-do, a reminder or a memo. Use this, not
-the file-based subagent in your memory (subagent.md), which the user
-cannot see.
+not wait on it or watch it. If something you took for quick turns out
+bigger partway through, stop there and hand the rest over the same way.
+Do it yourself when the errand's material is this conversation (writing up
+what you two discussed), and when it is a to-do, a reminder or a memo. Use
+this, not the file-based subagent in your memory (subagent.md), which the
+user cannot see.
 
 Note what the user has to do (a deadline, a call, a flight, a purchase),
 what they are in the middle of and set aside to come back to,
@@ -1405,35 +1442,52 @@ mod tests {
     /// subagent. Main chat only, like the rest of the layer. Ticket 30:
     /// the instructions name the evidence to hand back, and Galley wakes
     /// the model instead of it looking the subtask up when asked. Ticket
-    /// 115 (main chat PRD ruling 160): what goes is decided by whether
-    /// the user is waiting, not by how long it would keep the chat busy —
-    /// a question is answered here, an errand past two or three steps is
-    /// handed off, and so is one the user asks to hand off; one found
-    /// partway through hands off the rest, what was found so far in the
-    /// instructions; this conversation's own material, a to-do, a
-    /// reminder or a memo stay here. Ticket 126 (ruling 175): the tag
-    /// carries a short title in the user's language. Ticket 127 (ruling
-    /// 174): independent errands, or independent parts of one, one tag
-    /// each in the same reply; a question and parts that share a browser
-    /// tab or files are not split; no cap on the count.
+    /// 126 (ruling 175): the tag carries a short title in the user's
+    /// language. Ticket 127 (ruling 174): independent errands, or
+    /// independent parts of one, one tag each in the same reply; parts
+    /// that share a browser tab or files are not split; no cap on the
+    /// count. Ticket 134 (main chat PRD ruling 183, in place of ticket
+    /// 115's "whether the user is waiting"): only what takes a step or two
+    /// is answered here (a single fact, a quick conversion, a follow-up
+    /// this conversation answers); a thing to hand back, a change on the
+    /// user's computer or accounts, and a question or story that needs
+    /// several places looked up go to a subtask, and so does anything the
+    /// user asks to hand off; what has to come back as one thing stays in
+    /// one tag; the instructions carry what this conversation settled;
+    /// anything that turns out bigger partway hands off the rest; this
+    /// conversation's own material, a to-do, a reminder or a memo stay
+    /// here.
     #[test]
-    fn main_chat_entry_layer_answers_questions_and_hands_errands_to_a_subtask() {
+    fn main_chat_entry_layer_answers_only_quick_things_and_hands_the_rest_to_a_subtask() {
         let main =
             compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
         // Single-line fragments only (a Windows checkout makes the raw
         // string CRLF).
-        assert!(main
-            .contains("Answer what the user asks you yourself, even when it takes a few minutes"));
-        assert!(main
-            .contains("of looking things up: they are waiting for that answer, and Galley shows"));
+        // Ticket 134: what is answered here.
+        assert!(main.contains("Answer yourself only what takes a step or two: a single fact (the"));
         assert!(
-            main.contains("them what you are doing meanwhile. An errand they hand you, where what")
+            main.contains("weather, a score, whether someone is injured), a quick look on their")
+        );
+        // The eval's first round: a look at the Downloads folder went out
+        // as "a list" to hand back (dispatch-criterion, quick-downloads).
+        assert!(main
+            .contains("computer (what is in a folder), a quick conversion, a follow-up you can"));
+        assert!(main.contains("answer from what is already in this conversation."));
+        // Ticket 134: what goes, so the chat stays free.
+        assert!(
+            main.contains("Everything bigger goes to a subtask, so this chat stays free for the")
+        );
+        assert!(
+            main.contains("user: a thing to hand back (a table, a list, a comparison, a report, a")
         );
         assert!(main
-            .contains("comes back is a thing or a change rather than an answer (files sorted or"));
+            .contains("file), a change on their computer or accounts (files sorted or renamed, a"));
+        assert!(
+            main.contains("booking, a form filled), and a question or story that needs several")
+        );
         assert!(main
-            .contains("once it takes more than two or three steps, and so does anything they ask"));
-        assert!(main.contains("you to hand off: end your reply with"));
+            .contains("places looked up (what happened in some event, a ranking, a prediction)."));
+        assert!(main.contains("So does anything they ask you to hand off. End your reply with"));
         // Ticket 126: the tag carries a title for the user's list.
         assert!(main.contains(
             "<subtask title=\"a few words\">what to do</subtask>. The title is what the"
@@ -1443,51 +1497,64 @@ mod tests {
         ));
         // Ticket 127: several independent errands, or independent parts
         // of one, as one tag each in the same reply; no cap on the count.
+        // Ticket 134: a part splits off only when its result stands on its
+        // own, and what has to come back as one thing stays in one tag.
         assert!(main
             .contains("When the user hands you several errands that do not depend on each other,"));
-        assert!(main.contains(
-            "or one errand splits into parts that do not, write one tag per part in the"
-        ));
-        assert!(main.contains(
-            "same reply: they run at the same time. Keep in one tag the parts that need"
-        ));
         assert!(
-            main.contains("the same browser tab or the same files, and do not split a question.")
+            main.contains("or one errand splits into parts whose results each stand on their own,")
         );
+        assert!(main
+            .contains("write one tag per part in the same reply: they run at the same time. Keep"));
+        assert!(main
+            .contains("in one tag what has to come back as one thing (a comparison, one table,"));
+        assert!(main
+            .contains("one report, the answer to one question) and the parts that need the same"));
+        assert!(main.contains("browser tab or the same files."));
         assert!(main.contains(
             "Galley starts each after this reply, as a separate conversation that cannot"
         ));
         assert!(main
             .contains("see this one, so write everything it needs: the goal, the facts the user"));
-        assert!(main.contains(
-            "gave, what you have found so far, and what to hand back, with the evidence"
-        ));
+        // Ticket 134: a follow-up can go out, so what it leans on goes too.
         assert!(main
-            .contains("for it (a confirmation number, a file path, a link, a screenshot path)."));
+            .contains("gave, what this conversation already settled that the request leans on,"));
+        assert!(main
+            .contains("what you have found so far, and what to hand back, with the evidence for"));
+        assert!(
+            main.contains("it (a confirmation number, a file path, a link, a screenshot path).")
+        );
         assert!(main
             .contains("something or fails, Galley wakes you to check it and tell the user, so do"));
         assert!(
-            main.contains("not wait on it or watch it. If a question turns into an errand partway")
+            main.contains("not wait on it or watch it. If something you took for quick turns out")
         );
         assert!(main
-            .contains("through, stop there and hand the rest over the same way. Do it yourself"));
+            .contains("bigger partway through, stop there and hand the rest over the same way."));
+        assert!(main.contains(
+            "Do it yourself when the errand's material is this conversation (writing up"
+        ));
+        assert!(main.contains(
+            "what you two discussed), and when it is a to-do, a reminder or a memo. Use"
+        ));
         assert!(main
-            .contains("when the errand's material is this conversation (writing up what you two"));
-        assert!(main
-            .contains("discussed), and when it is a to-do, a reminder or a memo. Use this, not"));
-        assert!(
-            main.contains("the file-based subagent in your memory (subagent.md), which the user")
-        );
+            .contains("this, not the file-based subagent in your memory (subagent.md), which the"));
         assert!(!main.contains("look it up when they ask"));
-        // The test it replaced: how long the work would keep the chat
-        // busy, several websites among the reasons to hand it off.
+        // The tests it replaced: how long the work would keep the chat
+        // busy, several websites among the reasons to hand it off (ticket
+        // 115); a question answered here however long it takes, and never
+        // split (tickets 115 and 127).
         assert!(!main.contains("keep this chat busy"));
         assert!(!main.contains("Do quick work yourself"));
+        assert!(!main.contains("even when it takes a few minutes"));
+        assert!(!main.contains("do not split a question"));
         let layer = main.find("Main Chat Entry Layer").unwrap();
         assert!(!main[layer..].contains("websites"));
         // Ticket 127: no cap on how many subtasks go out at once.
         assert!(!main[layer..].contains("at most"));
-        let clause = main.find("Answer what the user asks you yourself").unwrap();
+        let clause = main
+            .find("Answer yourself only what takes a step or two")
+            .unwrap();
         assert!(layer < clause, "the clause closes the entry layer");
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(!prompt.contains("<subtask"));
@@ -1703,8 +1770,31 @@ mod tests {
     /// (+293). "Galley starts it" became "starts each" (+2). Core always
     /// started every tag of a reply, but the layer spoke of one tag only,
     /// and a model that wanted work done side by side opened sessions with
-    /// `session new` instead, which get no card and wake no one.
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 4344;
+    /// `session new` instead, which get no card and wake no one. Raised
+    /// 4344 → 4729 by ticket 134 (main chat PRD ruling 183): +385 bytes.
+    /// The opening answers here only what takes a step or two, named (a
+    /// single fact with three examples, a quick conversion, a follow-up
+    /// this conversation answers), and sends everything bigger to a
+    /// subtask so the chat stays free, by kind with examples (a thing to
+    /// hand back, a change on the user's computer or accounts, a question
+    /// or story that needs several places looked up), in place of
+    /// answering every question however long it takes and handing off
+    /// errands past two or three steps (+203). The split sentence keeps in
+    /// one tag what has to come back as one thing, with examples, in place
+    /// of "do not split a question", and splits only parts whose results
+    /// stand on their own (+102). The instructions carry what this
+    /// conversation already settled that the request leans on (+66): a
+    /// follow-up can go out now, and the subtask cannot see the
+    /// conversation. "If a question turns into an errand" became anything
+    /// taken for quick that turns out bigger (+14). Under ruling 160 a
+    /// two-headphone comparison held the main chat for four minutes; JC
+    /// would rather have it free (ruling 183 point 3). Of the opening,
+    /// +54 came from the eval's first round: "a quick look on their
+    /// computer (what is in a folder)" among what is answered here. Without
+    /// it 「帮我看看下载文件夹里有哪些超过 1GB 的文件」, one look at a
+    /// folder, went to a subtask in all three runs as "a list" to hand
+    /// back: 4675 → 4729.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 4729;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {

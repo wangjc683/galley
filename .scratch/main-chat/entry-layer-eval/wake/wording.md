@@ -138,3 +138,70 @@ The subtask "{title}" could not be started: {why}. Tell the user in a sentence, 
 ```text
 Reply once, covering all of them.
 ```
+
+## core
+
+票 134：Core 今天（`core/src/subtask_report.rs` 的 `report_paragraph`）的写法，逐字。与 `v2` 不同处：核对指令时先指它的第一条消息（`--around`），写命令都带 `--ensure-runner`（票 63），停在步数上限那件是「send it on」。最后回答超过 3,000 字时截断并写明怎么读全，同 Core 的 `cut`（这一条 `run.py` 的 `wake_note` 对每版措辞都做）。`done`、`done_send_back` 与表头由 `--dry-test` 拿 `done_paragraph`（与 `schedule/rust-samples.json` 里 Rust 的输出逐字核对过的移植）核对；其余几段照源码抄，评测没用到。
+
+### header
+
+```text
+[Galley — not a message from the user] A subtask you started has an update. Act on it, then reply to the user. Do not mention this note.
+```
+
+### done
+
+```text
+Subtask `{id}` "{title}" (round {round}) finished. Its final answer:
+<<<
+{answer}
+>>>
+Check it against what you asked for in its instructions (its first message: `session show {id} --around=msg_{id}_0_user`; its last steps: `session show {id} --tail=40`). If it holds, tell the user the result in a sentence or two and name the evidence (a confirmation number, a file path, a link).
+```
+
+### done_send_back
+
+```text
+If something is missing or wrong, send it back with `session send {id} "<what is missing>" --supervisor=galley-assistant --reason="send back" --ensure-runner` and end your reply with exactly <no-reply/> and nothing else.
+```
+
+### done_capped
+
+```text
+It has been sent back {send_backs} times already: do not send it back again. Tell the user what it found and what is still missing.
+```
+
+### asking
+
+```text
+Subtask `{id}` "{title}" is asking: "{question}"{options}.
+If the user already told you the answer, or it plainly follows from what they asked for, answer with `session send {id} "<answer>" --supervisor=galley-assistant --reason="answer" --ensure-runner` and end your reply with exactly <no-reply/>. If it involves money, sending something to someone, anything that cannot be undone, or something only the user has (a code sent to their phone, a password), ask the user in a sentence, and pass their answer on the same way when they reply.
+```
+
+### step_limit
+
+```text
+Subtask `{id}` "{title}" (round {round}) paused at the engine's step limit, mid-work. The last thing it said:
+<<<
+{last_text}
+>>>
+If it is getting somewhere, send it on with `session send {id} "continue" --supervisor=galley-assistant --reason="continue" --ensure-runner` and end your reply with exactly <no-reply/>; this counts as a round. Otherwise tell the user how far it got.
+```
+
+### error
+
+```text
+Subtask `{id}` "{title}" stopped on an error: {detail}. Tell the user in a sentence what failed and what you suggest. Do not start it again unless they ask.
+```
+
+### not_started
+
+```text
+The subtask "{title}" could not be started: {why}. Tell the user in a sentence, and offer to try again.
+```
+
+### footer
+
+```text
+Reply once, covering all of them.
+```

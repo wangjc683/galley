@@ -450,31 +450,38 @@ that finishes a task and restates the result. The layer says three things:
   the core prompt's reply shape as the IM layer).
 - **Pick up what a break left open** (ticket 11's carried turns) when the
   user comes back to it, without recapping it unasked.
-- **Hand errands to a subtask** (ticket 06a, PRD rulings 52, 53; the test
-  since ticket 115, main chat PRD ruling 160): what the user asks is
-  answered in the main chat, even when it takes a few minutes of looking
-  things up (they are waiting for it, and the progress line shows what it
-  is doing); an errand they hand over, where what comes back is a thing or
-  a change rather than an answer (files sorted or renamed, a template or a
-  report drafted, a booking), goes to a subtask once it takes more than two
-  or three steps, and so does anything they ask to hand off; a question
-  that turns into an errand partway hands the rest over; an errand whose
-  material is this conversation (a subtask cannot see it), and a to-do, a
-  reminder or a memo, stay. Until ticket 115 the test was "work that would
-  keep the chat busy for a long time (many steps, several websites, a long
-  batch of files)", quick work staying: the model cannot tell how long work
-  will take before it starts, and in two weeks it never handed work off on
-  its own. A hand-off ends the reply with
+- **Hand everything past a step or two to a subtask** (ticket 06a, PRD
+  rulings 52, 53; the test since ticket 134, main chat PRD ruling 183):
+  only what takes a step or two is answered in the main chat (a single
+  fact, a quick look on the user's computer, a quick conversion, a
+  follow-up this conversation already answers); everything bigger goes to
+  a subtask so the chat stays free: a thing to hand back (a table, a list,
+  a comparison, a report, a file), a change on their computer or accounts,
+  a question or story that needs several places looked up, and anything
+  they ask to hand off; anything taken for quick that turns out bigger
+  partway hands the rest over; an errand whose material is this
+  conversation (a subtask cannot see it), and a to-do, a reminder or a
+  memo, stay. Until ticket 115 the test was "work that would keep the chat
+  busy for a long time (many steps, several websites, a long batch of
+  files)", quick work staying: the model cannot tell how long work will
+  take before it starts, and in two weeks it never handed work off on its
+  own. From ticket 115 to ticket 134 (ruling 160) a question was answered
+  here however long it took and only errands went; ruling 183 moved the
+  line after a two-headphone comparison held the chat for four minutes. A
+  hand-off ends the reply with
   `<subtask title="a few words">what to do</subtask>` (the title since
   ticket 126, main chat PRD ruling 175: what the user sees in their list, a
   few words in their language naming the errand; without one Core keeps the
   first line as a derived title for the auto-title to replace); several
-  errands that do not depend on each other, or parts of one that do not, go
-  out as one tag each in the same reply and run at the same time, while a
-  question is never split and parts that need the same browser tab or the
-  same files stay in one tag (ticket 127, ruling 174);
-  the instructions carry the goal, the facts the user gave, what it has
-  found so far (ticket 115) and what to hand back, with the evidence for it
+  errands that do not depend on each other, or parts of one whose results
+  each stand on their own, go out as one tag each in the same reply and run
+  at the same time, while what has to come back as one thing (a comparison,
+  one table, one report, the answer to one question) and parts that need
+  the same browser tab or the same files stay in one tag (ticket 127,
+  ruling 174; ticket 134, ruling 183);
+  the instructions carry the goal, the facts the user gave, what this
+  conversation already settled that the request leans on (ticket 134), what
+  it has found so far (ticket 115) and what to hand back, with the evidence for it
   (ticket 30: a confirmation number, a file path, a link, a screenshot
   path), since the subtask cannot see the main chat; one sentence tells
   the user it is on its way. Since
@@ -749,7 +756,7 @@ that finishes a task and restates the result. The layer says three things:
   after writing memory. Ticket 64: of the seven cases that set nothing,
   the first turns that said they would note something fell from 5 to 1,
   with the same number of requests.
-- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 4344, no headroom,
+- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 4729, no headroom,
   `\r` not counted, measured with an empty manual directory (the user's state
   root does not count, as for the IM layer). 827 for the 03d layer;
   ticket 06a added 619 for the dispatch clause (the `T` text 522, the
@@ -778,7 +785,12 @@ that finishes a task and restates the result. The layer says three things:
   the user is waiting, ruling 160): 3931; ticket 126 added 118 (the tag's
   `title` and the sentence on what it is for, ruling 175): 4049; ticket 127
   added 295 (one tag per independent errand, run at the same time, ruling
-  174): 4344.
+  174): 4344; ticket 134 added 385 (everything past a step or two to a
+  subtask, what stays here and what goes named +203, of which the quick
+  look on the user's computer +54 came from the eval's first round; one tag
+  for what comes back as one thing +102; what the conversation settled in
+  the instructions +66; anything that turns out bigger +14, ruling 183):
+  4729.
   Behavior, but main chat only, so it stays out of the static budget and
   the prompt hash.
 
