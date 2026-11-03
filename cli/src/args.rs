@@ -743,10 +743,12 @@ pub(crate) enum SessionCmd {
     /// Send a user message into a session. Persists the message with the
     /// supplied origin and dispatches it to the live runner; a mid-run
     /// send is held in Galley Core's queue (`dispatch: "queued"`) and
-    /// runs when the current task finishes. While the agent waits on an
-    /// `ask_user` question (`live.askPending`), a send is the answer and
-    /// dispatches at once, ahead of queued messages. Requires Galley
-    /// Core (exit 4 if the socket isn't reachable).
+    /// runs when the current task finishes; to the main chat, the running
+    /// task reads it at its next step (`dispatch: "interjected"`). While
+    /// the agent waits on an `ask_user` question (`live.askPending`), a
+    /// send is the answer and dispatches at once, ahead of queued
+    /// messages. Requires Galley Core (exit 4 if the socket isn't
+    /// reachable).
     Send {
         /// Session id.
         id: String,

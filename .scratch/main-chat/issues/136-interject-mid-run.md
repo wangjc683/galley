@@ -128,3 +128,49 @@ git diff --check
 - 退回：这一轮的回复落在你这句之上（它写那条回复时没看到你这句），你的气泡留在原处不动，下一轮开始时认领为下一轮的开头，回复跟在后面。这时回复不在对话末尾，不做「三点长成回复」的过渡，三点原地淡出。
 - 叫醒的轮次（子任务汇报、到点提醒、巡看）里你插了话：从这一刻起按「你开的一轮」画三点与进展小字（原来只在它写字时出三点），因为你在等它了。
 - 工作台的队列条与排队、带图片的发送、`/btw`、回答提问、停止键、停止中的排队，都不变。
+
+## 报告
+
+（2026-11-03，执行代理。分支 `t136-interject-mid-run`，已 rebase 到 main `84d4dd6e`（含票 134 第四轮与票 138），无冲突。）
+
+### 做成了什么
+
+照上面「设计」一节做的，没有偏离；没有新开迁移（插话行靠 `sequence > 0` 区分，不占 `turn_index`），所以没碰手写迁移列表，与票 138 的 056 不冲突。
+
+- **runner**：新 `runner/interject.py`（这一轮的账：写什么进 `intervene`、哪一步读走了哪几句、结束时退回哪几句；GA 读完到清空之间新到的会写回去）；`ga_session.py` 加 `set_intervene` / `injected_intervene`（耦合点写进文件头）；`workbench_bridge.py` 接 `interject` 命令（只在一轮在跑、内置运行时、`GALLEY_MAIN_CHAT=1` 时收），`_on_turn_end` 在这一步 `turn_end` 之后报 `interject_delivered`，一轮结束的每个出口（自然结束、停止、斜杠命令、没报结束的兜底）都在 `run_complete` 前清 `intervene` 并报 `interject_returned`，新一轮开始前再清一次。
+- **Core**：新 `core/src/interject.rs`（判「内置主对话」、交给 runner、把读到的写库并广播）；队列项加 `interjected` / `clientRequestId`；`queue_offer_interjection`（一轮开着、没在停止、队里只有插话才插话）；发出 `abort` 到这一轮结束之间记为停止中，照旧排队；runner watcher 收 `interject_delivered` 时取出、写在那一步之后（`sequence` 2 起，`persist_interjections`）；drain 取到没读到的插话时照常发下一轮，上一轮停在提问上就作为回答（`ask_user_response`）；每次开新一轮后把队里剩下的插话再交一次。「一轮的开头」的七处查询加 `sequence = 0`（`latest_user_turn_index`、待办 / 备忘 / 定时的 settle、`latest_run_replies` / `latest_run_last_reply`）与分页的 `run_opener_at_or_before`；删除一条消息把插话算作这一轮的成员。
+- **入口一致**：GUI 的 `send_user_message`（`outcome: "interjected"`）、socket `session send`（`dispatch: "interjected"`，加法；`--jump` 不插话）、手机（`SendOutcome::Interjected`、`Dispatch::Interjected`、`QueuedMessage.interjected`、`message.persisted` 的 `queueId`，Swift 包同步）。
+- **GUI**：队列快照里标了 `interjected` 的项由 `syncInterjections` 画成对话末尾你的气泡（放发送动效），队列条不画（`queueBarItems`）；等它的时候落下的步骤与回复插在它前面；`user-message-persisted` 带 `queueId` 时原地认领（读到：成员；退回：下一轮的开头，不再放第二次发送动效）；`buildRunGroups` 把插话当成员、`segmentClosers` 不在插话处切段（用时、token 照算）；进展小字跨过插话接着说；恢复时 `sequence > 0` 的用户行读成插话、步数不重来；回复不在末尾时不做三点交接；叫醒的一轮里你插了话，按你开的一轮画三点与那一行；侧栏卡片的最后一条把待读的插话算作你的话。
+- **文档**：`docs/architecture.md`、`docs/ipc-protocol.md`（§4.19、§4.20、§5.15）、`gui/src/types/ipc.ts` 镜像、`docs/agent-api/session-commands.md` §5.5a 与 `stability-and-versioning.md` 的 `dispatch` 表、Supervisor SOP 与 reference（含 `.claude` / `.agents` 两份技能副本，`Last synced` 改到 2026-11-03）、`docs/ga-baseline.md` 契约面第 21 项、`docs/design/conversation.md`「在跑时你说的话：插话」、CLI `session send` 的帮助文字。
+
+### 碰到的并行区域
+
+- `core/src/subtask.rs`、`core/src/subtask_report.rs` 各加一行 `queue_id: None`（`UserMessagePersistedPayload` 新字段）；`core/src/db/subtask.rs` 两处查询加 `sequence = 0` 并改了文档注释。rebase 时与票 138 无文本冲突。
+- 没碰 `core/src/managed_prompt.rs`、`runner/handlers.py`（插话的提示语在 `core/src/interject.rs` 的 `INTERJECTION_PREAMBLE`；runner 里只 `import` 了 `handlers.MAIN_CHAT_ENV`）。
+
+### 验证（rebase 到 `84d4dd6e` 之后，数字照抄输出）
+
+- `cargo test --manifest-path core/Cargo.toml --workspace`：47 组 `test result`，合计 1328 passed，0 failed（改 CLI 帮助文字后又跑 `-p galley-cli`：104 passed，0 failed）
+- `.venv/bin/python -m pytest`：`694 passed, 6 deselected`
+- `.venv/bin/python -m mypy runner`：`Success: no issues found in 39 source files`
+- `.venv/bin/ruff check runner`：`All checks passed!`
+- `pnpm --dir gui typecheck`、`pnpm --dir gui lint`：通过
+- `TZ=UTC pnpm --dir gui exec vitest run`：`Test Files 252 passed (252)`，`Tests 2797 passed (2797)`
+- `node scripts/check-docs-links.mjs`：`docs link gate OK: 493 files checked.`；另跑 `check-supervisor-sop-drift`、`check-ipc-protocol-drift`（17 events、9 commands 三边对齐）、`check-ga-baseline-drift`、`check-version-consistency`：都过
+- `ios/GalleyRemote/swift-test.sh`：`73 tests in 7 suites passed`
+- `git diff --check`：无输出
+- 只对自己改过的 Rust 文件跑 `rustfmt --check`（原本干净的几个整篇格式化），GUI 旧文件只格式化自己的 hunk。
+
+新测试覆盖：主对话跑着时发送 → 交给 runner、不另开一轮（`an_interjection_lands_after_the_step_that_read_it`，含落库位置、只交一次、广播带 `queueId` 与 `clientRequestId`、冷启动回放为 user / assistant / user / assistant）；同一步几句合成一段（`runner/tests/test_interject.py`）；没送到的退回、恰好跑一次（`an_interjection_the_run_never_read_goes_out_next_exactly_once`）；停在提问上作为回答（`an_interjection_unread_when_the_run_asks_is_the_answer`）；工作台照旧排队（`a_workbench_session_still_queues`）；CLI 入口（`socket_session_send_interjects_into_the_main_chat`）；「一轮的开头」查询跳过插话（`an_interjection_opens_no_run`）；队列状态机（插话不越过普通排队项、停止中照旧排队、按 id 取出）；runner 一轮结束清 `intervene` 并上报、外置与非主对话永远不写（参数化）、命令与结束赛跑只退回一次；GUI 的顺序、原地认领、退回时回复在上、进展小字跨过插话、恢复、队列条（`gui/src/stores/messages.interject.test.ts`、`gui/src/lib/interject.test.ts`）。带图片照旧拒绝排队由原有测试覆盖（路径没改）。
+
+### Open risks（看到但没改的）
+
+1. **退回时的画法是我定的**：它正写最后一步时你说的话，这一轮的回复落在你这句之上，你的气泡不动、下一轮的回复在下面；不做三点交接、三点原地淡出，再起一轮时三点重新淡入，中间可能有一下空。设计一节写了理由（库里顺序与回放都得这样），没上切换器，需要 JC 在 dev 里看。一步就答的问题（最常见）里，你补的话几乎都会走这条。
+2. **停在提问上时，没读到的插话直接当回答**：这是我加的规则（队列对普通排队项是挡住的，galley#30）。「上海的」正好对；若你插的是另一件事，它会被当成对提问的回答。
+3. **叫醒的一轮里插话后改画三点与那一行**：扩了裁决 107 / 110 的「叫醒那一轮只在写字时出三点」，理由是你在等它了。可能与 JC 的预期不同。
+4. **连发气泡**：插话让你连着的几条气泡变常见（每条底下都有 30px 的行），telegram-details 裁决 6 说过连发变常见时重比组内圆角与间距，这次没比。
+5. **GUI 不会因为队列快照里没了某项就撤掉待读的气泡**：项离开队列只有两条路（写库、或 Core 重启），所以没做撤掉；若以后队列条给插话加「撤回 / 编辑」，要补这一条。drain 把退回的项发出时，项先出队、再写库，这几毫秒里另一次发送的快照不含它；因为不撤，画面不受影响，但第二次快照到达时那条气泡还没认领，属正常。
+6. **`_done_hooks` 假设**：「循环结束的那次回调读到的不算送到」靠 `exit_reason` 判，前提是 GA 与 Galley 都不往 `_done_hooks` 里加东西（现在确实没有，写进了 `docs/ga-baseline.md` 第 21 项，升级基线要复核）。
+7. **插话在 carry 里开一个 turn**：沿用 carry 现有「每条 user 行开一个 turn」的定义（同 `ask_user` 的回答），新段开头会把一轮插过话的对话算成两个 turn，`CARRY_TURNS` 实际覆盖的轮数少一点；票 138 的子任务背景同一定义。
+8. **手机端只改了协议**：`message.persisted` 的 `message.sequence` 来自 `MessageBrief`，仍是 `null`；手机要靠 `dispatch: "interjected"` 认出插话，冷读 `session.messages` 时看 `sequence > 0`。手机 App 本身还没有对话画法，没做。
+9. **真模型没跑**：模型读到 `[MASTER] The user sent this while you were working. …` 后实际怎么决定（接着做、改方向、交出去先回）没验证，留给 dev 真机走。

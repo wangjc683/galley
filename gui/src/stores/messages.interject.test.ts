@@ -18,12 +18,16 @@ const SID = "s-main";
 function step(summary: string, final: string | null = null): AgentTurn {
   return {
     role: "agent",
-    tools: final
-      ? [{ id: "t", name: "no_tool", status: "success" }]
-      : [{ id: "t", name: "file_read", status: "success" }],
+    tools: [
+      {
+        id: "t",
+        name: final ? "no_tool" : "file_read",
+        status: "success-historical",
+      },
+    ],
     finalAnswer: final,
     summary,
-  } as AgentTurn;
+  };
 }
 
 function item(queueId: string, text: string): QueuedMessage {
