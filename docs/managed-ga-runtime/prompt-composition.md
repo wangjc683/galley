@@ -464,7 +464,15 @@ that finishes a task and restates the result. The layer says three things:
   keep the chat busy for a long time (many steps, several websites, a long
   batch of files)", quick work staying: the model cannot tell how long work
   will take before it starts, and in two weeks it never handed work off on
-  its own. A hand-off ends the reply with `<subtask>what to do</subtask>`;
+  its own. A hand-off ends the reply with
+  `<subtask title="a few words">what to do</subtask>` (the title since
+  ticket 126, main chat PRD ruling 175: what the user sees in their list, a
+  few words in their language naming the errand; without one Core keeps the
+  first line as a derived title for the auto-title to replace); several
+  errands that do not depend on each other, or parts of one that do not, go
+  out as one tag each in the same reply and run at the same time, while a
+  question is never split and parts that need the same browser tab or the
+  same files stay in one tag (ticket 127, ruling 174);
   the instructions carry the goal, the facts the user gave, what it has
   found so far (ticket 115) and what to hand back, with the evidence for it
   (ticket 30: a confirmation number, a file path, a link, a screenshot
@@ -741,7 +749,7 @@ that finishes a task and restates the result. The layer says three things:
   after writing memory. Ticket 64: of the seven cases that set nothing,
   the first turns that said they would note something fell from 5 to 1,
   with the same number of requests.
-- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 3383, no headroom,
+- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 4344, no headroom,
   `\r` not counted, measured with an empty manual directory (the user's state
   root does not count, as for the IM layer). 827 for the 03d layer;
   ticket 06a added 619 for the dispatch clause (the `T` text 522, the
@@ -766,7 +774,11 @@ that finishes a task and restates the result. The layer says three things:
   `memo.md` in the manual list +58): 3339; ticket 98 added 44 (the
   interest given a count to see it by, the same thing asked about three
   times, in place of "an interest you notice in what they keep asking
-  too"): 3383.
+  too"): 3383; ticket 115 added 548 (the dispatch clause rewritten to whether
+  the user is waiting, ruling 160): 3931; ticket 126 added 118 (the tag's
+  `title` and the sentence on what it is for, ruling 175): 4049; ticket 127
+  added 295 (one tag per independent errand, run at the same time, ruling
+  174): 4344.
   Behavior, but main chat only, so it stays out of the static budget and
   the prompt hash.
 

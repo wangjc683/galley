@@ -885,9 +885,26 @@ once the first turn is in, and a flick past the first turn stops there
 (main chat PRD rulings 170–172, ticket 123; all conversations, GUI only;
 JC flicked it nine times in tauri dev with a probe, 2026-11-02). Scrolling
 back the main chat, a capsule at the top says which day you are on, not
-while that is today (ruling 171, ticket 124; JC looked). Owed:
+while that is today (ruling 171, ticket 124; JC looked). On screen the
+main chat has no name of its own: it is Galley in both languages, so the
+reply and question notifications read 「Galley · …」, and the reset and the
+find scope say 「重置和 Galley 的对话」 and 「在这个对话里」 (main chat PRD
+ruling 173, ticket 125; migration 055 renames the stored title 「主聊天」;
+JC looked). Several errands that do not depend on each other go out as one
+subtask each in the same reply and run at the same time, each named on its
+tag in a few words (rulings 174 and 175, tickets 126 and 127; eval: three
+errands gave three tags both times, 21 titles of 6–14 characters; JC sent
+two in tauri dev, 2026-11-03). Galley's subtasks that are running or
+asking you are listed under its card in the sidebar; one that stops leaves
+at once, and a subtask's error no longer counts as needing you (rulings 176
+and 177, ticket 128). The subtask card under a reply is a one-line receipt
+in the to-do card's frame (ruling 179, ticket 130). A wake turn that ends
+on an error now tells the desktop its subtask reports were not delivered,
+so a failed subtask still notifies (ruling 178, ticket 129). Owed:
 ticket 04's second real-machine step, stopping a workbench run you watch
-(no workbench run in the database since the merge). Still owed from
+(no workbench run in the database since the merge); the running and asking
+states of ticket 130's card; the notifications of tickets 125 and 129, which
+a dev build does not send. Still owed from
 `v0.7.2`'s scope: ticket 98's noticed interest (the 「看你……常问」 memo has
 no live record yet).
 

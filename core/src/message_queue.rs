@@ -161,8 +161,10 @@ pub async fn dispatch_queued_message(
 /// waiting reports — the one just reported to, and this session if it is
 /// a main chat that took no queued message, so the user's queued
 /// messages go before a report ([`crate::subtask_report::spawn_wake_if_due`]).
-/// Before the queue step, too: a main chat turn that a wake for due
-/// scheduled tasks started settles them
+/// Before the queue step, too: a main chat turn that a wake started
+/// settles what it carried — due scheduled tasks delivered or handed to a
+/// notification, subtask reports told to the desktop as undelivered when
+/// the turn ended on an error (ticket 129)
 /// ([`crate::subtask_report::record_wake_run_end`]), and the tasks the
 /// assistant made in the run get its reply's turn
 /// ([`SqliteGalley::settle_scheduled_created_in`], ticket 33), as do the
@@ -211,8 +213,9 @@ pub fn spawn_queue_drain_task(
             let report_to =
                 crate::subtask_report::record_run_end(&reports, &galley, manager.as_ref(), &signal)
                     .await;
-            // Due scheduled tasks a wake carried: delivered, or not
-            // (ticket 33). Then the tasks the assistant made in the run.
+            // What a wake carried: due scheduled tasks delivered, or not
+            // (ticket 33); subtask reports undelivered when the turn
+            // failed (ticket 129). Then the tasks the assistant made in the run.
             crate::subtask_report::record_wake_run_end(
                 &reports,
                 &galley,

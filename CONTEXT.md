@@ -206,8 +206,9 @@ silently dropped argument (2026-07-11 decision; see devlog).
 ## Subtask reports
 
 - **Subtask** — a session the main chat's reply dispatched with a
-  `<subtask>` tag (`core/src/subtask.rs`): `parentSessionId` is the main
-  chat; **promoted** (an ordinary conversation) once the user writes in it.
+  `<subtask>` tag (`core/src/subtask.rs`; its `title` attribute names it,
+  main chat PRD ruling 175): `parentSessionId` is the main chat;
+  **promoted** (an ordinary conversation) once the user writes in it.
 - **Subtask report** (a **wake**) — Core waking the main chat for one turn
   when a subtask's run ends: finished, asking, at the step limit, failed,
   or never started; not when stopped (`core/src/subtask_report.rs`,
@@ -221,7 +222,8 @@ silently dropped argument (2026-07-11 decision; see devlog).
   `SubtaskDispatch.sendBacks`; the wake asks it to stop at two.
 - **Silent reply** — the assistant's reply to a wake that is only
   `<no-reply/>` (stripped like `<subtask>`); nothing is drawn or notified.
-- **Undelivered** — a report that could not be sent
+- **Undelivered** — a report that could not be sent, or whose wake turn
+  ended on an error before replying (ruling 178)
   (`subtask-report-undelivered`); the desktop falls back to the subtask's
   own notification.
 

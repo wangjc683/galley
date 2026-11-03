@@ -166,8 +166,9 @@ is unaffected.
 The main chat hands long work to **subtasks** (ticket 06a,
 `.scratch/main-chat/issues/06a-subtask-dispatch-and-cards.md`, PRD rulings
 52, 53; `core/src/subtask.rs`). Its entry layer tells the model to end such a
-reply with `<subtask>what to do</subtask>`
-([prompt composition](./prompt-composition.md#main-chat-entry-layer)); nothing
+reply with `<subtask title="a few words">what to do</subtask>`, one tag per
+independent errand (title since ticket 126, parallel tags since ticket 127;
+[prompt composition](./prompt-composition.md#main-chat-entry-layer)); nothing
 about the tag reaches GA, which keeps no subtask tool and no patch for it.
 
 - **When**: the queue drain task, on the main chat's `RunComplete` and
