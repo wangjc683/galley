@@ -27,6 +27,14 @@ import { SidebarQuickActions } from "./sidebar/SidebarQuickActions";
 import { SidebarOtherSources } from "./sidebar/SidebarSideChats";
 import { SidebarSubtaskRows } from "./sidebar/SidebarSubtaskRows";
 import { SidebarSectionsList } from "./sidebar/SidebarTimeline";
+// TEMP variant switcher (main chat 128): the trial.
+import { SubtaskRowsTrial } from "@/dev/subtask-rows-trial";
+
+// TEMP variant switcher (main chat 128): in a dev build the rows under
+// Galley's card go through the trial (its pill, looks B / C, demo data;
+// src/dev/subtask-rows-trial.tsx); a production build draws them as
+// written.
+const SubtaskRows = import.meta.env.DEV ? SubtaskRowsTrial : SidebarSubtaskRows;
 
 export interface SidebarProps {
   sessions: Session[];
@@ -488,7 +496,7 @@ export function Sidebar({
             open={activeId === mainChat.id}
             onOpen={() => handleSelectSession(mainChat.id)}
           />
-          <SidebarSubtaskRows
+          <SubtaskRows
             subtasks={subtaskRows}
             activeId={activeId}
             onOpen={handleSelectSession}
