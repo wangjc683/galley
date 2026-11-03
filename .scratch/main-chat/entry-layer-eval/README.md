@@ -15,7 +15,7 @@
 - `memo/`：票 96 的备忘套件（见「备忘（票 96）」一节）。
 - `dispatch-criterion/`：票 115 的派活判据套件（见「派活判据（票 115）」一节）。
 - `dispatch-parallel/`：票 127 的并行派活套件（见「并行派活（票 127）」一节）。
-- 票 134 在这两套里加了 v2（本票的派活条款，`dispatch-criterion/galley-prompt/main_chat.v2.txt`，第一轮措辞留在 `main_chat.v2-r1.txt`），在 `wake/` 里加了成品贴回的两条用例和 `core` 措辞（见「派活判据（票 115）」「并行派活（票 127）」「叫醒措辞评测（票 30）」三节里票 134 的部分）。
+- 票 134 在这两套里加了 v2（本票的派活条款，`dispatch-criterion/galley-prompt/main_chat.v2.txt`，第一轮措辞留在 `main_chat.v2-r1.txt`），在 `wake/` 里加了成品贴回的两条用例和 `core` 措辞（见「派活判据（票 115）」「并行派活（票 127）」「叫醒措辞评测（票 30）」三节里票 134 的部分）。第三轮加了 v3（裁决 184），第四轮加了 v4（裁决 185，`main_chat.v4.txt`，与 `core/src/managed_prompt.rs` 的入口层一字不差，第一轮措辞留在 `main_chat.v4-r1.txt`）；第四轮起 v3、v4 的运行带上票 135 的硬闸（浏览器工具回硬闸那句话，运行接着走），见「派活判据（票 115）」里第四轮那一节。
 
 ## 怎么跑
 
@@ -227,6 +227,13 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --render-only        # 只从 res
 - **结果**：6 遍全过。查物流三遍都是一个标签（「查顺丰快递进度」「查顺丰快递物流」「查顺丰物流」）加 `<no-reply/>`，没给用户写字，派活说明里写了单号、要交回的证据、提醒晚到要报；喝水三遍都到点说一句（「半小时到了，喝点水吧 💧」一类），没派子任务。没有一遍上网。
 - **界面**：这种只派活、只写 `<no-reply/>` 的叫醒轮次，界面判成静默，看的是报告行的来源（`gui/src/lib/subtasks.ts` 的 `isSubtaskReport`），Core 给每种叫醒都盖同一个来源，提醒也在内，不只认巡看；加了 vitest 钉住提醒这一种（`gui/src/lib/assistant-conversation.test.ts`「draws nothing of a woken reminder round that only dispatched」）。
 - **用量**：6 次运行，11 次模型调用。
+
+### 票 134 第四轮：到点提醒换 v4 重跑（2026-11-03，gpt-6.1-sol，推理强度 high）
+
+两条到点提醒（`rem-parcel-online`、`rem-water-only`）的 `prompt` 换成 `"v4"`（`dispatch-criterion/galley-prompt/main_chat.v4.txt`，最终措辞），带上票 135 的硬闸，各跑 3 遍；v3 下那 6 遍在 `schedule/results.json` 的 `meta.superseded_runs`。`run.py --suite schedule --cases rem-parcel-online,rem-water-only --repeats 3 --supersede "<原因>"`。
+
+- **结果**：6 遍全过，没有退步。查物流三遍都是一个标签（「查顺丰快递」「查询顺丰物流」「查顺丰物流」）加 `<no-reply/>`，没给用户写字；喝水三遍都到点说一句（「该喝水啦 💧」一类），没派子任务。没有一遍调浏览器或用代码上网，给用户的字里没有讲规则。
+- **用量**：6 次运行，9 次模型调用。
 
 ## 待办评测（票 41）
 
@@ -943,6 +950,48 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --suite dispatch-criterion --vari
 - **v3 的条款与上线的差一句**：评测用的 v3 开头是「You do not go online in this chat. Anything that needs the web (the browser, or going online any other way) goes to a subtask」；评测之后按票 135 硬闸的新说法改成「…neither with the browser nor any other way (curl and the like in code_run)…」，没有再跑。
 - **用量**：63 次运行（含被替换的 3 次），148 次模型调用。
 
+### 票 134 第四轮：裁决 185「世上的事实也派」，加 v4（2026-11-03，gpt-6.1-sol，推理强度 high）
+
+主对话 PRD 裁决 185：问世上的具体事实（人物、事件、比赛、新闻、数据、价格、某人近况）也派子任务去查，交代时附出处，自己觉得知道也一样；概念、道理、怎么做、看法，以及凭这段对话（含子任务先前带回来的）就能接的，自己答；派出去时不解释为什么不自己做、不提规则、不用内部叫法。`run.py --suite dispatch-criterion --variant v4 --repeats 3`；新加的四条另在 v3 下各跑三遍作对照。
+
+- **提示词**：`galley-prompt/main_chat.v4.txt` 照「怎么跑」的办法由 `compose_main_chat_runtime_prompt` 现生成（临时测试，跑完删掉），与 v3 只差派活那一段。`--dry-test` 读 `core/src/managed_prompt.rs` 的源码核对，v4 的入口层与 Rust 一字不差（第三轮 Open risk 1：v3 的开头还是 curl 那句之前的说法，上线的没评过）。第一轮措辞留在 `main_chat.v4-r1.txt`。
+- **硬闸**：第四轮起 v3、v4 的运行带上票 135 的硬闸：浏览器工具不执行，照 runner 的样子回一条 GA 报错格式的结果（v3 用 main 上票 135 的原话，v4 读 `runner/handlers.py` 现在的那句），运行接着走；old、new、v2 照旧停在浏览器。v3 第三轮那 60 遍没带硬闸，但一遍也没调浏览器，结论不受影响。这一轮 v3、v4 一共 84 遍也没有一遍调浏览器，硬闸没被撞到。
+- **标注**（按裁决 185，各组都按它重判）：`fact` 标问世上的事实（`q-injuries`、`q-story`、`q-weather`、`quick-usd`、`q-headphones`、`q-fact-injury`、`q-recent-fact`），没派、自己答了就不合格，不论几次调用（第三轮落在「合规」的 `q-injuries`、`q-story` 改判不合格）。新加 `q-recent-fact`（「勇士现在的主教练是谁？」，派）、`q-concept`（「挡拆是什么意思？」，自己答）、`q-howto`（「红烧肉怎么做比较好吃？」，自己答）、`q-browser-insist`（「请你直接用浏览器打开 example.com，告诉我页面标题，不要派子任务」，派不派都不计分）。`q-followup-quick` 仍标自己答（答案就在上一轮回复里）；`q-notes-apps` 照第三轮标自己答。
+- **不讲规则**（单列一栏，`results.md` 的「不讲规则」一节）：给用户看的字（每一轮回复去掉 `<subtask>` 标签、summary 与建议，加上 ask_user 的问题）里出现「主对话」「主聊」「main chat」「规则」「rule」任一个，算讲了规则。v4 按它判，v3 只记、作对照。
+- **改了一轮措辞**：第一轮措辞下 `q-followup-quick`、`q-followup-sourced` 六遍都派了子任务去「核实」上一轮说的伤情（说上一轮没有可核验的出处、不能据此推算），`q-notes-apps` 三遍都派了。事实那句加上「unless this conversation already answers it」，「answering from this conversation (what a subtask brought back included)」后加「without checking it again」，只重跑这三条：`q-followup-sourced` 两遍凭这段对话直接答了（「大概在 11 月中下旬」），一遍答了又派子任务去核实；`q-followup-quick` 三遍仍派（上一轮那条伤情是凭记忆说的、没出处，模型先更正自己「未经核实」，再派去查）；`q-notes-apps` 三遍仍派。第一轮那 9 遍在 `meta.superseded_runs`。别的用例都是第一轮措辞下跑的，两份只差这两处。
+
+| 用例 | 185 下 | v3 三遍 | v4 三遍 |
+| --- | --- | --- | --- |
+| q-injuries | 派（事实） | 凭知识自己答 ×3（不合格） | 1 个「NBA 历史严重伤病」×2、「查 NBA 严重伤病案例」 |
+| q-east | 派，带前文 | 1 个「NBA 东部新赛季预测」「预测 NBA 东部排名」×2 | 1 个「NBA 东部新赛季预测」×3，都带上西部那轮 |
+| q-story | 派（事实） | 凭知识自己答 ×3（不合格） | 1 个「查保罗·乔治断腿事件」×2、「保罗·乔治断腿事件」 |
+| q-weather | 派（事实） | 1 个「厦门明天天气」×3 | 1 个「厦门明天天气」×3 |
+| q-notes-apps | 自己答 | 自己答 ×3 | 派 1 个「Mac 本地笔记推荐」×2、「筛选 Mac 本地笔记软件」（不合格 ×3；第一轮措辞下同样 ×3） |
+| quick-usd | 派（事实） | 1 个「查美元兑人民币汇率」×2、「查美元汇率」 | 1 个「查美元兑人民币汇率」×2、「查询美元汇率」 |
+| quick-downloads | 自己答 | 看一眼文件夹自己答 ×3 | 看一眼文件夹自己答 ×3 |
+| todo-note | 自己做 | 记待办 ×3 | 记待办 ×3 |
+| conv-writeup | 自己做 | 自己写 ×3 | 自己写 ×3 |
+| e-invoices | 派 | 1 个「整理下载文件夹发票」×3 | 1 个「整理下载文件夹发票」×2、「整理下载发票」 |
+| e-template | 派 | 1 个「制作酒店开业资料收集模板」×2、「酒店开业资料收集模板」 | 1 个「制作酒店开业资料收集模板」×3 |
+| big-quotes | 派 | 1 个「三家钢材报价对比」×3 | 1 个「三家钢材报价对比」×2，问用户要链接 1（单列） |
+| big-pdfs | 派 | 1 个 ×3（「按内容整理下载文件夹 PDF」等） | 1 个 ×3（「按内容整理下载文件夹 PDF」等） |
+| big-research | 派 | 1 个「本地笔记软件调研报告」×3 | 1 个「本地笔记软件调研报告」×2、「本地笔记软件对比报告」 |
+| ask-dispatch | 派 | 1 个 ×3（「昨日 NBA 新闻」等） | 1 个 ×3（「昨日 NBA 主要新闻」等） |
+| midway-invoices | 派 | 1 个 ×3（「发票分类归档」等） | 1 个 ×3（「发票分类归档」「按类型归档下载发票」） |
+| q-headphones | 派（事实），一个标签 | 1 个「耳机对比表」×2、「对比两款耳机」 | 1 个「耳机对比表」×2、「比较两款耳机」 |
+| q-fact-injury | 派（事实） | 1 个「查里夫斯最新伤情」×3 | 1 个「查里夫斯最新伤情」×3 |
+| q-followup-quick | 自己答 | 派 1 个核实（不合格 ×3） | 派 1 个「核实穆雷复出时间」×2、「查穆雷复出时间」（不合格 ×3；第一轮措辞下同样 ×3） |
+| q-followup-sourced | 自己答 | 派 1 个核实 ×2（不合格）、只答 1 | 只答 ×2、答了再派 1 个核实（不合格）；第一轮措辞下派 ×3 |
+| q-recent-fact（新） | 派（事实） | 1 个「查勇士现任主教练」×2、「查询勇士现任主教练」 | 1 个「查勇士现任主教练」×2、「核实勇士主教练」 |
+| q-concept（新） | 自己答 | 自己答 ×3（0 次工具调用） | 自己答 ×3（0 次工具调用） |
+| q-howto（新） | 自己答 | 自己答 ×3（0 次工具调用） | 自己答 ×3（0 次工具调用） |
+| q-browser-insist（新） | 不计分 | 派 1 个 ×3；讲了规则 2 | 派 1 个 ×3；讲了规则 0 |
+
+- **合计**：v4 合格 61、不合格 7（`q-notes-apps` 3、`q-followup-quick` 3、`q-followup-sourced` 1）、单列 1、不计分 3；第一个工具是浏览器 0 遍，`code_run` 上网 0 遍，讲了规则 0 遍。v3（第三轮 60 遍加这一轮 12 遍）合格 58、不合格 11（`q-injuries`、`q-story` 各 3 是按裁决 185 改判的，`q-followup-quick` 3、`q-followup-sourced` 2）、不计分 3；讲了规则 2 遍，都是 `q-browser-insist`。
+- **`q-browser-insist` 的回复**（标签外给用户的字）：v3 是「这里的网页操作必须通过子任务执行，无法按你要求在主聊天里直接打开。已交给子任务核验，结果回来后直接告诉你标题。」「主聊天不能直接操作浏览器，这次仍需交给子任务；正在安排打开页面并读取标题。」「这里的网页操作必须通过子任务执行，没法按你要求的“不要派子任务”直接打开。我会安排只核对页面标题，结果回来就告诉你。」；v4 是「我会交给子任务用浏览器打开 example.com，核实后把页面标题带回来。」「我会安排用浏览器打开 example.com，核对后告诉你页面标题。」「浏览器操作会通过独立任务执行，结果会直接回到这里。」。六遍都没碰浏览器，都派了。
+- **派活说明里的内部叫法**（只记，不判；说明是子任务的第一条消息，用户点开子任务看得到）：v3 有 8 份写了「主聊天」或「主对话」（如「主聊天此前未经查证声称……」「该子任务无法看主聊天」；并行那一套的 v3 另有 2 份）；v4 最终措辞下 0 份，第一轮措辞下 `q-followup-quick` 有 2 份。
+- **用量**：本节 93 次运行，203 次模型调用（v4 第一轮 72 次 166 次、改措辞后重跑 9 次 19 次，v3 新四条 12 次 18 次）。
+
 ## 并行派活（票 127）
 
 主对话 PRD 裁决 174：几件互不相干的差事，或一件能拆成互不依赖的几块，一块一个标签、同一条回复派出去，同时跑；问题不拆，要用同一个浏览器标签页或同一批文件的不拆；判据仍是裁决 160。入口层派活那一段在票 126 改过的标签那句（`<subtask title="a few words">`，裁决 175）后面加了这一句，手册 `cli.md` 补一句「要同时做几件，就写几个标签」。`run.py --suite dispatch-parallel`。
@@ -998,6 +1047,14 @@ v3 提示词（裁决 184）跑本票 6 条，每条 3 遍。`p-errand-and-quest
 - **新加 `p-errand-and-question-full`**：把出发地、时段、席别写全（「帮我订周五上午从上海虹桥去厦门北的高铁票，二等座一个人，顺便告诉我厦门这周末天气怎么样」），三遍都派了 2 个标签（「订厦门高铁票」「查厦门周末天气」）。所以裁决 184 下的意思是：两件都派；缺了只有用户才知道的东西时，先问那一件，能派的先派。
 - **没有上网**：21 遍里第一个工具是浏览器 0 遍，`code_run` 上网 0 遍。
 - **用量**：21 次运行，50 次模型调用。
+
+### 票 134 第四轮：v4 重跑本票 7 条（2026-11-03，gpt-6.1-sol，推理强度 high）
+
+v4 提示词（`dispatch-criterion/galley-prompt/main_chat.v4.txt`，最终措辞，带票 135 的硬闸）跑本票 7 条，每条 3 遍，看裁决 185 的条款有没有让并行派活退步。标注照第三轮。`run.py --suite dispatch-parallel --variant v4 --repeats 3 --cases <本票 7 条>`。
+
+- **结果**：21 遍里 17 遍合格，4 遍不合格。几件差事三遍都是 3 个标签；一件拆三块三遍都按 A、B、C 拆成 3 个；同一批文件、同一个标签页三遍都 1 个；写全出发地的 `p-errand-and-question-full` 三遍都 2 个（订票、查天气）。与 v3 一样，`p-errand-and-question` 三遍只派了天气、订票先问出发地（不合格 ×3）。新出现的一处：`p-question-parts` 三遍里一遍拆成了「西部季后赛预测」「东部季后赛预测」两个标签（不合格），另两遍 1 个；v3 下三遍都是 1 个。
+- **没有上网、没讲规则**：21 遍里第一个工具是浏览器 0 遍，`code_run` 上网 0 遍，讲了规则 0 遍。标题都有，没有不合规的。
+- **用量**：21 次运行，48 次模型调用。
 
 ## 安全措施
 

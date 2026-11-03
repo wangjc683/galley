@@ -364,9 +364,10 @@ look it up with the Galley CLI (search, then
 /// away from GA's file-based subagent SOP, which the model read on its
 /// own in that comparison. Ticket 115 (below) decided what goes by
 /// whether the user is waiting, not by how long the work would take;
-/// ticket 134 (below) first sent everything past a step or two, and since
+/// ticket 134 (below) first sent everything past a step or two, since
 /// its third round (ruling 184) whatever needs the web or changes things
-/// goes.
+/// goes, and since its fourth (ruling 185) a question about a fact in the
+/// world goes too.
 ///
 /// Ticket 30 (assistant PRD rulings 2, 3, 8) closed the loop: the
 /// instructions also name the evidence to hand back, Galley wakes the
@@ -530,20 +531,49 @@ look it up with the Galley CLI (search, then
 /// far" in the instructions). The title, the parallel sentence (what
 /// comes back as one thing stays in one tag, ruling 183 point 5), the
 /// instructions, "on its way", no waiting and the subagent sentence stay.
+///
+/// Ticket 134's fourth round (main chat PRD ruling 185) sends a question
+/// about a fact in the world to a subtask too (a person, an event, a
+/// game, the news, a figure, a price, how someone is doing lately), even
+/// one the model thinks it knows, its sources asked for and given with
+/// the answer; one this conversation already answers stays, and is
+/// answered from it without checking again (added after the eval's first
+/// round, where a follow-up whose answer was in the turn before went out
+/// to a subtask to check that turn, six times in six). Under the line
+/// above, "does this need the web" was answered by "do I know this": on
+/// the dev machine 「讲讲保罗·乔治断腿那件事」 took 42 seconds from memory,
+/// no tool and no source, and in the third round's eval both such stories
+/// were answered from memory every time; what happened after the model's
+/// training can read to it as known too. The model now asks what kind of
+/// thing is asked, which it can tell, not whether it knows it. What stays
+/// here narrows from "answering from what you know" to explaining an
+/// idea, a reason or how to do something and giving its view; answering
+/// from this conversation stays, what a subtask brought back included.
+/// The hand-off sentence gains what not
+/// to say (ruling 185 point 4): not why it is not done here, no rule, and
+/// not "the main chat", an inner name (ruling 173). On the dev machine,
+/// asked to open a page itself, the model told the user 「这个主聊的规则要求
+/// 网页访问必须交给子任务」. The runner's guard (ticket 135) says the same
+/// and no longer opens with "This is the main chat".
 fn main_chat_entry_layer(manual_dir: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
 
 You do not go online in this chat, neither with the browser nor any
 other way (curl and the like in code_run). Anything that needs the web
-goes to a subtask, always, the weather or a score included. So does
-anything that changes things on the user's computer or accounts (files
-sorted, renamed or written, an order placed, a form filled, something
-sent), and anything they ask you to hand off. Everything else you do
-yourself: talking, answering from what you know or from this
-conversation, to-dos, reminders and memos, the time, a read-only look on
-their computer (what is in a folder), and writing up what you two
-discussed, even into a file (a subtask cannot see this conversation).
+goes to a subtask, always, the weather or a score included. So does a
+question about a fact in the world (a person, an event, a game, the news,
+a figure, a price, how someone is doing lately), even one you think you
+know, unless this conversation already answers it; ask for its sources,
+and give them with the answer. So does anything that changes things on
+the user's computer or accounts (files sorted, renamed or written, an
+order placed, a form filled, something sent), and anything they ask you
+to hand off. Everything else you do yourself: talking, explaining an
+idea, a reason or how to do something, giving your view, answering from
+this conversation (what a subtask brought back included) without
+checking it again, to-dos, reminders and memos, the time, a read-only
+look on their computer (what is in a folder), and writing up what you
+two discussed, even into a file (a subtask cannot see this conversation).
 To hand something off, end your reply with
 <subtask title="a few words">what to do</subtask>. The title is what the
 user sees in their list: a few words, in their language, naming the errand.
@@ -558,10 +588,11 @@ see this one, so write everything it needs: the goal, the facts the user
 gave, what this conversation already settled that the request leans on,
 what you have found so far, and what to hand back, with the evidence for
 it (a confirmation number, a file path, a link, a screenshot path).
-Tell the user in a sentence that it is on its way. When it finishes, asks
-something or fails, Galley wakes you to check it and tell the user, so do
-not wait on it or watch it. Use this, not the file-based subagent in your
-memory (subagent.md), which the user cannot see.
+Tell the user in a sentence that it is on its way; do not explain why it
+is not done here, cite a rule, or call this chat the main chat. When it
+finishes, asks something or fails, Galley wakes you to check it and tell
+the user, so do not wait on it or watch it. Use this, not the file-based
+subagent in your memory (subagent.md), which the user cannot see.
 
 Note what the user has to do (a deadline, a call, a flight, a purchase),
 what they are in the middle of and set aside to come back to,
@@ -1478,9 +1509,14 @@ mod tests {
     /// included, and so does whatever changes things on the user's
     /// computer or accounts and whatever the user asks to hand off;
     /// everything else stays here, a read-only look on the computer and
-    /// this conversation's own material among it.
+    /// this conversation's own material among it. Ticket 134's fourth
+    /// round (ruling 185): a question about a fact in the world goes too,
+    /// even one the model thinks it knows, with its sources; what stays
+    /// is explaining, its view and answering from this conversation, not
+    /// answering from what it knows; handing off, it says nothing of why,
+    /// of a rule or of "the main chat".
     #[test]
-    fn main_chat_entry_layer_hands_the_web_and_changes_to_a_subtask() {
+    fn main_chat_entry_layer_hands_the_web_facts_and_changes_to_a_subtask() {
         let main =
             compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
         // Single-line fragments only (a Windows checkout makes the raw
@@ -1494,29 +1530,47 @@ mod tests {
             main.contains("other way (curl and the like in code_run). Anything that needs the web")
         );
         assert!(
-            main.contains("goes to a subtask, always, the weather or a score included. So does")
+            main.contains("goes to a subtask, always, the weather or a score included. So does a")
+        );
+        // Ruling 185: so does a fact in the world, known or not, with its
+        // sources; not one this conversation already answers (the fourth
+        // round's eval: a follow-up went out to check the turn before).
+        assert!(main
+            .contains("question about a fact in the world (a person, an event, a game, the news,"));
+        assert!(main
+            .contains("a figure, a price, how someone is doing lately), even one you think you"));
+        assert!(main
+            .contains("know, unless this conversation already answers it; ask for its sources,"));
+        assert!(
+            main.contains("and give them with the answer. So does anything that changes things on")
         );
         // Ruling 184: so do changes on the user's computer or accounts, and
         // whatever they ask to hand off.
         assert!(
-            main.contains("anything that changes things on the user's computer or accounts (files")
+            main.contains("the user's computer or accounts (files sorted, renamed or written, an")
         );
-        assert!(
-            main.contains("sorted, renamed or written, an order placed, a form filled, something")
-        );
-        assert!(
-            main.contains("sent), and anything they ask you to hand off. Everything else you do")
-        );
-        // Ruling 184: everything else stays here.
-        assert!(main.contains("yourself: talking, answering from what you know or from this"));
         assert!(main
-            .contains("conversation, to-dos, reminders and memos, the time, a read-only look on"));
-        assert!(main.contains("their computer (what is in a folder), and writing up what you two"));
+            .contains("order placed, a form filled, something sent), and anything they ask you"));
+        assert!(
+            main.contains("to hand off. Everything else you do yourself: talking, explaining an")
+        );
+        // Ruling 184: everything else stays here; ruling 185: explaining
+        // and a view in place of answering from what it knows, and this
+        // conversation taken as it stands.
+        assert!(main
+            .contains("idea, a reason or how to do something, giving your view, answering from"));
+        assert!(main.contains("this conversation (what a subtask brought back included) without"));
+        assert!(
+            main.contains("checking it again, to-dos, reminders and memos, the time, a read-only")
+        );
+        assert!(
+            main.contains("look on their computer (what is in a folder), and writing up what you")
+        );
         // The eval's first round: a write-up of this conversation into a
         // file on the desktop went out once in three as a file written.
-        assert!(
-            main.contains("discussed, even into a file (a subtask cannot see this conversation).")
-        );
+        assert!(main
+            .contains("two discussed, even into a file (a subtask cannot see this conversation)."));
+        assert!(!main.contains("answering from what you know"));
         assert!(main.contains("To hand something off, end your reply with"));
         // Ticket 126: the tag carries a title for the user's list.
         assert!(main.contains(
@@ -1554,11 +1608,17 @@ mod tests {
         assert!(
             main.contains("it (a confirmation number, a file path, a link, a screenshot path).")
         );
+        // Ruling 185 point 4: handing off, nothing of why, a rule or the
+        // inner name (ruling 173).
         assert!(main
-            .contains("something or fails, Galley wakes you to check it and tell the user, so do"));
+            .contains("Tell the user in a sentence that it is on its way; do not explain why it"));
         assert!(main
-            .contains("not wait on it or watch it. Use this, not the file-based subagent in your"));
-        assert!(main.contains("memory (subagent.md), which the user cannot see."));
+            .contains("is not done here, cite a rule, or call this chat the main chat. When it"));
+        assert!(main
+            .contains("finishes, asks something or fails, Galley wakes you to check it and tell"));
+        assert!(main
+            .contains("the user, so do not wait on it or watch it. Use this, not the file-based"));
+        assert!(main.contains("subagent in your memory (subagent.md), which the user cannot see."));
         assert!(!main.contains("look it up when they ask"));
         // The lines it replaced: how long the work would keep the chat busy
         // (ticket 06a), whether the user is waiting (ticket 115), a step or
@@ -1831,8 +1891,25 @@ mod tests {
     /// opening says going online any other way, curl and the like in
     /// `code_run`, is out too, as ticket 135's guard now says; the guard
     /// catches the browser tools only, so the words are what keep
-    /// `code_run` off the web.
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 4524;
+    /// `code_run` off the web. Raised 4524 → 4912 by ticket 134's fourth
+    /// round (main chat PRD ruling 185): +388 bytes. A question about a
+    /// fact in the world goes to a subtask too, with seven examples, even
+    /// one the model thinks it knows, its sources asked for and given with
+    /// the answer (+214): under ruling 184 a story it took for known was
+    /// told from memory, with no source. "Answering from what you know or
+    /// from this conversation" became explaining an idea, a reason or how
+    /// to do something, giving its view, and answering from this
+    /// conversation with what a subtask brought back counted in it (+88).
+    /// Telling the user it is on its way, it does not explain why it is
+    /// not done here, cite a rule, or call this chat the main chat (+86):
+    /// on the dev machine it told the user 「这个主聊的规则要求……」.
+    /// Raised 4912 → 4983 by the fourth round's eval (+71): a fact this
+    /// conversation already answers stays (", unless this conversation
+    /// already answers it", +45), and answering from this conversation is
+    /// done "without checking it again" (+26). Without them a follow-up
+    /// whose answer was in the turn before (「那他大概什么时候能复出？」) went
+    /// out to a subtask in all six runs, to check that turn.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 4983;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {

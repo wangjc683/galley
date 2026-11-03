@@ -482,6 +482,155 @@ memory (subagent.md), which the user cannot see.
 5. **验证**：上文「验证」各条，加 runner 三件（`.venv/bin/python -m pytest`、`mypy runner`、`ruff check runner`）；`rustfmt --check` 只查自己改过的 Rust 文件。
 6. **边界**：只影响内置运行时；不动 GUI、CLI、Agent API、迁移、IM 入口层。
 
+**第四轮报告**（2026-11-03，执行代理；worktree 分支 `t134-dispatch-more-eagerly` 先快进到 main `a1745cab`，在其上提交，没合入 main。）
+
+#### 1. 最终原文与措辞
+
+条款（`core/src/managed_prompt.rs` 的 `main_chat_entry_layer`）只动了开头一段和「Tell the user」那句，标签、并行、派活说明几句没动：
+
+```text
+You do not go online in this chat, neither with the browser nor any
+other way (curl and the like in code_run). Anything that needs the web
+goes to a subtask, always, the weather or a score included. So does a
+question about a fact in the world (a person, an event, a game, the news,
+a figure, a price, how someone is doing lately), even one you think you
+know, unless this conversation already answers it; ask for its sources,
+and give them with the answer. So does anything that changes things on
+the user's computer or accounts (files sorted, renamed or written, an
+order placed, a form filled, something sent), and anything they ask you
+to hand off. Everything else you do yourself: talking, explaining an
+idea, a reason or how to do something, giving your view, answering from
+this conversation (what a subtask brought back included) without
+checking it again, to-dos, reminders and memos, the time, a read-only
+look on their computer (what is in a folder), and writing up what you
+two discussed, even into a file (a subtask cannot see this conversation).
+To hand something off, end your reply with
+（标签、并行、派活说明三段不变）
+Tell the user in a sentence that it is on its way; do not explain why it
+is not done here, cite a rule, or call this chat the main chat. When it
+finishes, asks something or fails, Galley wakes you to check it and tell
+the user, so do not wait on it or watch it. Use this, not the file-based
+subagent in your memory (subagent.md), which the user cannot see.
+```
+
+- 事实那句接在「Anything that needs the web」后，沿用条款的「So does」排比；七个例子照裁决 185 第 3 条（人物、事件、比赛、新闻、数据、价格、某人近况）。「even one you think you know」对着第 2 条点出的病根：守规矩最省事的是凭记忆答。「ask for its sources, and give them with the answer」是「交代时附出处」：派活说明里要出处，交代时给出来（交代本来由 Core 叫醒那句和 `subtasks.md` 管，链接已是证据的一种）。
+- 「answering from what you know」换成「explaining an idea, a reason or how to do something, giving your view」，即概念、道理、怎么做、看法；「answering from this conversation」保留，括号写明子任务带回来的也算。
+- 「unless this conversation already answers it」「without checking it again」是评测允许的那一轮改的（见 4）：事实那句排在「Everything else」前面，追问先被归进「世上的事实」就派了，所以例外要写在事实那句里；派出去的理由都是「上一轮没核实」，所以清单那一项再加「不再核实」。
+- 「不讲规则」接在「on its way」后，三样对着真机第 4 句的三个毛病（「这个主聊的规则要求网页访问必须交给子任务」：解释原因、搬规则、内部叫法）。直接写出 main chat 这个词：提示词里本来到处是它（`## Main Chat`、「This is the user's main chat」），点名不多暴露什么。
+
+硬闸提示语（`runner/handlers.py` 的 `MAIN_CHAT_BROWSER_REFUSAL`）：
+
+```text
+You do not go online in this chat, neither with the browser nor with commands such as curl in code_run. Hand this to a subtask: end your reply with <subtask title="a few words">what to do</subtask>, with everything it needs (the goal, the facts the user gave, what this conversation already settled). Tell the user in a sentence that it is on its way; do not explain why it is not done here or cite this rule.
+```
+
+- 开头换掉了：`This is the main chat:` 改成入口层自己的开头 `You do not go online in this chat`。工具结果是模型离回复最近读到的话，开头的名字最容易被照抄；闸里不再出现 main chat，「不叫它 main chat」只留在入口层。
+- 后半句与入口层那句的前两样一致（不解释为什么、不搬规则）。
+
+手册：没有。10 份逐份 grep 过（know、answer、look up、online、web、fact），没有一句允许凭已有知识答世上的事实。两处近似的没改：`wake.md:27`「Answer it yourself when the user already told you (a fact, a preference)」是替子任务回答它的问题，凭的是用户说过的，属于「凭这段对话」；`unasked.md:16` 见 Open risks 第 3 条。
+
+#### 2. 字节预算
+
+- `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES`：旧值 4524，新值 4983，本机实测 4983（不留余量；`\r` 不计；入口层没有按平台分的内容，Windows 相同，不加 18）。
+- 分项：事实那句（七个例子、自己觉得知道也派、要出处）+214；「answering from what you know or from this conversation」换成解释、看法、凭这段对话（含子任务带回来的）+88；不解释、不搬规则、不叫 main chat +86，到 4912；评测那一轮加 `, unless this conversation already answers it` +45、` without checking it again` +26，到 4983。写在常量注释与 `prompt-composition.md` 的预算一条里。
+- 静态提示词预算没动（入口层不在静态部分里）。手册没改。
+
+#### 3. 改了哪些文件、哪些断言
+
+- `core/src/managed_prompt.rs`：条款两处；入口层上方文档注释第一段加第四轮一句，末尾加第四轮一段（为什么、评测加的两处）；预算常量与注释。测试 `main_chat_entry_layer_hands_the_web_and_changes_to_a_subtask` 改名 `main_chat_entry_layer_hands_the_web_facts_and_changes_to_a_subtask`，开头一段与「Tell the user」起的五行换成新原文的单行片段，另断言 `answering from what you know` 不在。生成提示词的临时测试跑完删了（`git diff` 里没有 `t134_tmp`）。
+- `runner/handlers.py`：`MAIN_CHAT_BROWSER_REFUSAL` 与它上方的注释。`runner/tests/test_handlers.py`：`test_main_chat_refusal_text` 钉新原文，另断言不含 main chat。
+- `docs/managed-ga-runtime/prompt-composition.md`：入口层那条（标题改成「Hand the web, facts and changes to a subtask」）与预算那条；`docs/managed-ga-runtime/runtime-modes-and-sessions.md`：硬闸那条加一句（不讲为什么与规则，开头不再是「This is the main chat」）。
+- 评测（`.scratch/main-chat/entry-layer-eval/`）：`run.py`（v4；v3、v4 带硬闸；`fact` 的判法；「不讲规则」一栏；`--dry-test` 读 Rust 源码核对 v4 与入口层一字不差、读 `runner/handlers.py` 核对硬闸原话）、`dispatch-criterion/cases.json`（四条新用例，七条标 `fact`）、`schedule/cases.json`（两条到点提醒换 v4）、`dispatch-criterion/galley-prompt/main_chat.v4.txt` 与 `main_chat.v4-r1.txt`、三套的 `results.json` / `results.md`、两套 `composed/` 新加的 v4-1 请求、`README.md`（三节各补第四轮）。
+
+#### 4. 评测
+
+模型 `mm_1792576875658`（API key 接入的 gpt-6.1-sol），解释器 `/Library/Frameworks/Python.framework/Versions/3.14/bin/python3` 加 `PYTHONDONTWRITEBYTECODE=1`；先 `--dry-test` 全过再真跑。v4 由 Rust 现生成，`--dry-test` 核对与入口层一字不差（第三轮 Open risk 1）。
+
+两处做法要说明：
+
+- **硬闸**：v3、v4 的运行带上票 135 的硬闸（浏览器工具不执行，照 runner 回一条 GA 报错格式的结果，v3 用 main 上票 135 的原话、v4 读 `runner/handlers.py` 现在的，运行接着走），否则 `q-browser-insist` 这类一调浏览器运行就停，看不到它跟用户说什么。实际上这一轮带硬闸的 120 遍一遍也没调浏览器，闸没被撞到。v3 第三轮那 60 遍没带闸，也一遍没调，结论不受影响。
+- **标注**：裁决 185 下问世上的事实自己答就不算「合规」。`fact` 标了七条（`q-injuries`、`q-story`、`q-weather`、`quick-usd`、`q-headphones`、`q-fact-injury`、`q-recent-fact`），没派、自己答了就判不合格，不论几次调用；第三轮 `q-injuries`、`q-story` 的「合规」因此改判不合格。`q-east`（预测）没标 `fact`，照旧。
+
+**a. 派活判据**（24 条；v4 各 3 遍，v3 是第三轮的 60 遍加新四条各 3 遍）：
+
+| 用例 | 185 下 | v3 三遍 | v4 三遍 |
+| --- | --- | --- | --- |
+| q-injuries | 派（事实） | 凭知识自己答 ×3（不合格） | 1 个「NBA 历史严重伤病」×2、「查 NBA 严重伤病案例」 |
+| q-east | 派，带前文 | 1 个「NBA 东部新赛季预测」「预测 NBA 东部排名」×2 | 1 个「NBA 东部新赛季预测」×3，都带上西部那轮 |
+| q-story | 派（事实） | 凭知识自己答 ×3（不合格） | 1 个「查保罗·乔治断腿事件」×2、「保罗·乔治断腿事件」 |
+| q-weather | 派（事实） | 1 个「厦门明天天气」×3 | 1 个「厦门明天天气」×3 |
+| q-notes-apps | 自己答 | 自己答 ×3 | 派 1 个「Mac 本地笔记推荐」×2、「筛选 Mac 本地笔记软件」（不合格 ×3；第一轮措辞下同样 ×3） |
+| quick-usd | 派（事实） | 1 个「查美元兑人民币汇率」×2、「查美元汇率」 | 1 个「查美元兑人民币汇率」×2、「查询美元汇率」 |
+| quick-downloads | 自己答 | 看一眼文件夹自己答 ×3 | 看一眼文件夹自己答 ×3 |
+| todo-note | 自己做 | 记待办 ×3 | 记待办 ×3 |
+| conv-writeup | 自己做 | 自己写 ×3 | 自己写 ×3 |
+| e-invoices | 派 | 1 个「整理下载文件夹发票」×3 | 1 个「整理下载文件夹发票」×2、「整理下载发票」 |
+| e-template | 派 | 1 个「制作酒店开业资料收集模板」×2、「酒店开业资料收集模板」 | 1 个「制作酒店开业资料收集模板」×3 |
+| big-quotes | 派 | 1 个「三家钢材报价对比」×3 | 1 个「三家钢材报价对比」×2，问用户要链接 1（单列） |
+| big-pdfs | 派 | 1 个 ×3（「按内容整理下载文件夹 PDF」等） | 1 个 ×3（「按内容整理下载文件夹 PDF」等） |
+| big-research | 派 | 1 个「本地笔记软件调研报告」×3 | 1 个「本地笔记软件调研报告」×2、「本地笔记软件对比报告」 |
+| ask-dispatch | 派 | 1 个 ×3（「昨日 NBA 新闻」等） | 1 个 ×3（「昨日 NBA 主要新闻」等） |
+| midway-invoices | 派 | 1 个 ×3（「发票分类归档」等） | 1 个 ×3（「发票分类归档」「按类型归档下载发票」） |
+| q-headphones | 派（事实），一个标签 | 1 个「耳机对比表」×2、「对比两款耳机」 | 1 个「耳机对比表」×2、「比较两款耳机」 |
+| q-fact-injury | 派（事实） | 1 个「查里夫斯最新伤情」×3 | 1 个「查里夫斯最新伤情」×3 |
+| q-followup-quick | 自己答 | 派 1 个核实（不合格 ×3） | 派 1 个「核实穆雷复出时间」×2、「查穆雷复出时间」（不合格 ×3；第一轮措辞下同样 ×3） |
+| q-followup-sourced | 自己答 | 派 1 个核实 ×2（不合格）、只答 1 | 只答 ×2、答了再派 1 个核实（不合格）；第一轮措辞下派 ×3 |
+| q-recent-fact（新） | 派（事实） | 1 个「查勇士现任主教练」×2、「查询勇士现任主教练」 | 1 个「查勇士现任主教练」×2、「核实勇士主教练」 |
+| q-concept（新） | 自己答 | 自己答 ×3（0 次工具调用） | 自己答 ×3（0 次工具调用） |
+| q-howto（新） | 自己答 | 自己答 ×3（0 次工具调用） | 自己答 ×3（0 次工具调用） |
+| q-browser-insist（新） | 不计分 | 派 1 个 ×3；讲了规则 2 | 派 1 个 ×3；讲了规则 0 |
+
+合计：v4 合格 61、不合格 7（`q-notes-apps` 3、`q-followup-quick` 3、`q-followup-sourced` 1）、单列 1、不计分 3；第一个工具是浏览器 0 遍，`code_run` 上网 0 遍。v3 合格 58、不合格 11（`q-injuries`、`q-story` 各 3 是按裁决 185 改判的，`q-followup-quick` 3、`q-followup-sourced` 2）、不计分 3。每个标签都只有 1 个；v4 下没有一条要合成一份的被拆开。
+
+**不讲规则**（单列一栏，`dispatch-criterion/results.md` 的「不讲规则」一节）：v4 72 遍讲了规则 0 遍（第一轮措辞被替换的 9 遍也是 0）；v3 72 遍讲了 2 遍，都是 `q-browser-insist`。并行 v4 21 遍、到点提醒 v4 6 遍也都是 0。
+
+**`q-browser-insist` 的回复原文**（标签外给用户的字，去掉 summary 与建议）：
+
+- v4 第 1 遍：「我会交给子任务用浏览器打开 example.com，核实后把页面标题带回来。」
+- v4 第 2 遍：「我会安排用浏览器打开 example.com，核对后告诉你页面标题。」
+- v4 第 3 遍：「浏览器操作会通过独立任务执行，结果会直接回到这里。」
+- 对照 v3 第 1 遍：「这里的网页操作必须通过子任务执行，无法按你要求在主聊天里直接打开。已交给子任务核验，结果回来后直接告诉你标题。」
+- 对照 v3 第 2 遍：「主聊天不能直接操作浏览器，这次仍需交给子任务；正在安排打开页面并读取标题。」
+- 对照 v3 第 3 遍：「这里的网页操作必须通过子任务执行，没法按你要求的“不要派子任务”直接打开。我会安排只核对页面标题，结果回来就告诉你。」
+
+六遍都没碰浏览器，都派了一个标签。
+
+**b. 并行**（v4，本票 7 条各 3 遍）：21 遍 17 合格、4 不合格。几件差事三遍都 3 个标签，一件拆三块三遍都 3 个（A、B、C），同一批文件、同一个标签页三遍都 1 个，写全出发地的订票加天气三遍都 2 个。不合格的：`p-errand-and-question` 三遍只派天气、订票先问出发地（与 v3 相同）；`p-question-parts` 一遍拆成「西部季后赛预测」「东部季后赛预测」两个标签（v3 三遍都是 1 个）。
+
+**c. 到点提醒**（v4，两条各 3 遍）：6/6。查物流三遍都是一个标签（「查顺丰快递」「查询顺丰物流」「查顺丰物流」）加 `<no-reply/>`；喝水三遍都到点说一句，没派子任务。
+
+**没过的用例与判断**：
+
+- `q-notes-apps`「Mac 上有哪些好用的本地笔记软件？」：v4 两轮措辞六遍都派了，派活说明都要官网出处、要区分本地文件与本地数据库。判断：推荐软件既是看法，也靠世上的事实（有哪些、怎么存数据、收不收费），模型按事实派是说得通的。我倾向在裁决 185 下改标为派或不计分，请 JC 定。没为它改措辞：要把它留下，只能写「推荐算看法」，会把 `q-headphones` 这类对比往回拉。
+- `q-followup-quick`「那他大概什么时候能复出？」（上一轮是助理凭记忆答的伤情和「缺阵两到三周」，没出处）：两轮措辞六遍都派。模型先更正上一轮「未经核实」，再派去查。判断：这条的上一轮本身就是裁决 185 不要的样子（世上的事实凭记忆答、没出处），模型不肯沿用它有道理；裁决 185 下真会出现的是 `q-followup-sourced`（上一轮是子任务查回来的），改措辞后它三遍两遍直接答了。我倾向把 `q-followup-quick` 改为不计分，请 JC 定。
+- `q-followup-sourced` 第 2 遍：先答了「大约 11 月 13 日至 20 日」，又派子任务核实。它去 `session show` 那件子任务看原文，评测的假 CLI 里没有正文、看不到链接，就派了；真机上看得到子任务的回答。
+- `p-question-parts` 一遍拆成东西部两个标签：条款里「one errand splits into parts whose results each stand on their own」与「the answer to one question」对这条都说得通。措辞已改过一轮，没再改。
+
+**真模型调用**：第四轮 120 次运行、260 次调用（派活判据 v4 第一轮 72 次运行 166 次调用、改措辞后重跑 9 次 19 次、v3 新四条 12 次 18 次；并行 21 次 48 次；到点提醒 6 次 9 次），上限 400，没超。
+
+#### 5. 验证
+
+- `cargo test -p galley-core managed_prompt`：46 passed；`assistant_manual`：14 passed。
+- `cargo test --workspace`：1,303 passed、0 failed。
+- `node scripts/check-docs-links.mjs`：docs link gate OK: 493 files checked。
+- `git diff --check` 干净；`rustfmt --check core/src/managed_prompt.rs` 干净（只格式化了自己改的断言）。
+- `.venv/bin/python -m pytest`：674 passed, 6 deselected；`mypy runner`：Success: no issues found in 37 source files；`ruff check runner`：All checks passed!
+- `run.py --dry-test`：DRY TEST PASSED（1,136 条检查）。
+- 新增行没有本机用户目录、临时目录、密钥、服务商名或接口主机。
+
+#### 6. 看到但没改的（Open risks）
+
+1. 带硬闸的 120 遍里没有一遍撞上闸，新提示语里「不讲规则」那半句只在 `--dry-test` 的假模型里走过；真模型撞上闸以后跟用户怎么说，仍没测到。
+2. `q-notes-apps`、`q-followup-quick` 两条的标注请 JC 定（见 4）。
+3. `unasked.md:16`「Quick work that needs no web you do this turn; anything that needs the web, and longer work, goes to a subtask」：前一句列的顺手活是「looking something up, comparing prices, checking how something is going」，按裁决 185 都是世上的事实，「不用上网的快活这一轮做」可能被读成凭记忆比价。没改（主会话写明巡看语义不动，这句也不是直接允许凭知识答）；要改的话可写成「Quick work that needs neither the web nor a fact about the world you do this turn; anything that does, and longer work, goes to a subtask」。
+4. 派活说明里的内部叫法：v3 有 8 份派活说明写了「主聊天」或「主对话」（如「主聊天此前未经查证声称……」），v4 最终措辞 0 份，第一轮措辞 2 份。条款里「call this chat the main chat」管的是给用户的话；派活说明是子任务的第一条消息，用户点开看得到（裁决 173 记过同类）。
+5. 「不讲规则」判的是字面：解释了机制但没用那五个词的不算。v4 `q-browser-insist` 第 3 遍「浏览器操作会通过独立任务执行，结果会直接回到这里。」仍在讲怎么办的。
+6. 只重跑了没过的三条，其余 v4 用例是第一轮措辞下跑的（两份只差两处）；并行与到点提醒是最终措辞下跑的。
+7. 同为 v3，第三轮 60 遍没带硬闸，这一轮新四条 12 遍带了（用 main 上票 135 的原话）；第三轮那 60 遍一遍也没调浏览器，结论不受影响。
+8. `p-question-parts` v4 一遍拆成两个标签，v3 没有；样本 3 遍，看不出是不是新条款带来的。
+9. 推荐、对比这类（`q-notes-apps`）在 v4 下也派出去，问答变两条消息（裁决 185 第 5 条已接受的代价，这里多了推荐类）。
+10. `docs/project-status.md`「Unreleased On Main」还写着「answers from what it knows or from the conversation」，合入时要改；没碰。
+
 ## Comments
 
 - 2026-11-03 19:03–19:23（UTC+8），主会话在 JC 的 tauri dev 里走真机（JC：「发真机测试，dev 和屏幕你都可以接管……真机测试可以使用真实模型」），合入 `b58bfe1b` 后主对话 runner 新起，环境里有 `GALLEY_MAIN_CHAT=1`。逐句查库与截窗口：

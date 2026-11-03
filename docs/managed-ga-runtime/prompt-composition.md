@@ -453,19 +453,26 @@ that finishes a task and restates the result. The layer says three things:
   the core prompt's reply shape as the IM layer).
 - **Pick up what a break left open** (ticket 11's carried turns) when the
   user comes back to it, without recapping it unasked.
-- **Hand the web and changes to a subtask** (ticket 06a, PRD rulings 52,
-  53; the test since ticket 134's third round, main chat PRD ruling 184):
+- **Hand the web, facts and changes to a subtask** (ticket 06a, PRD
+  rulings 52, 53; the test since ticket 134's third and fourth rounds,
+  main chat PRD rulings 184, 185):
   the main chat does not go online, neither with the browser nor any other
   way (curl and the like in `code_run`); anything that needs the web goes
-  to a subtask, always, the weather or a score included, and so does
-  anything that changes things on the user's computer or accounts (files
-  sorted, renamed or written, an order placed, a form filled, something
-  sent) and anything the user asks to hand off. Everything else stays:
-  talking, answering from what it knows or from this conversation, to-dos,
-  reminders and memos, the time, a read-only look on the computer, and
-  writing up what the two discussed, even into a file (a subtask cannot
-  see this conversation). Ticket 135's runner guard answers a browser
-  tool in the main chat with the same hand-off instead of running it;
+  to a subtask, always, the weather or a score included, and so does a
+  question about a fact in the world (a person, an event, a game, the
+  news, a figure, a price, how someone is doing lately), even one the
+  model thinks it knows, unless this conversation already answers it, its
+  sources asked for and given with the answer, and anything that changes
+  things on the user's computer or accounts (files sorted, renamed or
+  written, an order placed, a form filled, something sent) and anything
+  the user asks to hand off. Everything else stays: talking, explaining
+  an idea, a reason or how to do something, giving its view, answering
+  from this conversation (what a subtask brought back included) without
+  checking it again, to-dos, reminders and memos, the time, a read-only
+  look on the computer, and writing up what the two discussed, even into
+  a file (a subtask cannot see this conversation). Ticket 135's runner
+  guard answers a browser tool in the main chat with the same hand-off
+  instead of running it;
   `code_run` it cannot tell apart, so there the words do the work. Until
   ticket 115 the test was "work that would keep the chat busy for a long
   time (many steps, several websites, a long batch of files)", quick work
@@ -474,7 +481,10 @@ that finishes a task and restates the result. The layer says three things:
   answered here however long it took and only errands went; ruling 183
   then sent everything past a step or two, by kind, and its eval kept
   needing new examples; ruling 184 draws the line by what the work
-  touches, which the model can tell up front. A hand-off ends the reply
+  touches, which the model can tell up front; under it the model answered
+  "does this need the web" by whether it thought it knew, and told stories
+  from memory with no source, so ruling 185 adds what is asked: a fact in
+  the world. A hand-off ends the reply
   with
   `<subtask title="a few words">what to do</subtask>` (the title since
   ticket 126, main chat PRD ruling 175: what the user sees in their list, a
@@ -491,7 +501,9 @@ that finishes a task and restates the result. The layer says three things:
   it has found so far (ticket 115) and what to hand back, with the evidence for it
   (ticket 30: a confirmation number, a file path, a link, a screenshot
   path), since the subtask cannot see the main chat; one sentence tells
-  the user it is on its way. Since
+  the user it is on its way, without why it is not done here, a rule, or
+  "the main chat" (ruling 185 point 4; the name is internal, ruling 173),
+  and the runner guard's text says the same. Since
   ticket 30 (assistant PRD rulings 2, 8) the clause no longer says "its
   card shows the progress, and you can look it up when they ask": Galley
   wakes the model when a subtask finishes, asks or fails, to check it and
@@ -763,7 +775,7 @@ that finishes a task and restates the result. The layer says three things:
   after writing memory. Ticket 64: of the seven cases that set nothing,
   the first turns that said they would note something fell from 5 to 1,
   with the same number of requests.
-- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 4524, no headroom,
+- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 4983, no headroom,
   `\r` not counted, measured with an empty manual directory (the user's state
   root does not count, as for the IM layer). 827 for the 03d layer;
   ticket 06a added 619 for the dispatch clause (the `T` text 522, the
@@ -801,7 +813,13 @@ that finishes a task and restates the result. The layer says three things:
   work touches +6, the sentence keeping this conversation's material and
   the notes folded into it −146, "turns out bigger" gone −114): 4475;
   the third round's eval added ", even into a file" (+18) and the words on
-  curl in `code_run` (+31): 4524.
+  curl in `code_run` (+31): 4524; its fourth round added 388 (ruling 185:
+  a question about a fact in the world to a subtask, known or not, with
+  its sources +214; "answering from what you know" narrowed to explaining
+  and a view, with what a subtask brought back counted as this
+  conversation +88; nothing to the user of why, a rule or "the main chat"
+  +86): 4912; its eval added 71 (a fact this conversation already answers
+  stays +45, answered from it "without checking it again" +26): 4983.
   Behavior, but main chat only, so it stays out of the static budget and
   the prompt hash.
 

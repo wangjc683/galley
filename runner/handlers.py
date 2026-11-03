@@ -78,14 +78,19 @@ BROWSER_TOOL_PREFIX = "web_"
 # `do_file_write`), which the desktop draws as a failed tool.
 # It says the main chat does not go online at all, not only that the
 # browser is off: refused here, the model could otherwise reach for curl
-# in `code_run`, which this guard does not see.
+# in `code_run`, which this guard does not see. Main chat PRD ruling 185
+# point 4: the user hears that it is on its way, not why it is not done
+# here or that a rule says so. It opens with the entry layer's own words
+# for this ("You do not go online in this chat"), not "This is the main
+# chat": the model passed that name on to the user as 「主聊」 (an inner
+# name, ruling 173).
 MAIN_CHAT_BROWSER_REFUSAL = (
-    "This is the main chat: you do not go online here, neither with the "
-    "browser nor with commands such as curl in code_run. Hand this to a "
-    'subtask: end your reply with <subtask title="a few words">what to do'
-    "</subtask>, with everything it needs (the goal, the facts the user gave, "
-    "what this conversation already settled). Tell the user in a sentence "
-    "that it is on its way."
+    "You do not go online in this chat, neither with the browser nor with "
+    "commands such as curl in code_run. Hand this to a subtask: end your "
+    'reply with <subtask title="a few words">what to do</subtask>, with '
+    "everything it needs (the goal, the facts the user gave, what this "
+    "conversation already settled). Tell the user in a sentence that it is "
+    "on its way; do not explain why it is not done here or cite this rule."
 )
 
 

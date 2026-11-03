@@ -234,10 +234,13 @@ layer says so; a guard in the runner makes it hold:
   not go online at all, neither with the browser nor with commands such as
   `curl` in `code_run`, and telling it to hand the work to a subtask with
   `<subtask title="…">`, with everything the subtask needs, and to tell the
-  user in a sentence; `next_prompt` is `"\n"`, as in GA's own refusal of a
-  whole-file L1 write. Each attempt costs one step. The wake rounds (subtask
-  reports, the morning review) run in the main chat and do not browse
-  either.
+  user in a sentence, without why it is not done here or the rule (main
+  chat PRD ruling 185 point 4; since then it opens "You do not go online
+  in this chat", the entry layer's words, not "This is the main chat", a
+  name the model passed on to the user); `next_prompt` is `"\n"`, as in
+  GA's own refusal of a whole-file L1 write. Each attempt costs one step.
+  The wake rounds (subtask reports, the morning review) run in the main
+  chat and do not browse either.
 - **Still a step**: the turn signal goes out and the call and its result
   reach `turn_end` like any tool's, so `messages.tool_calls` keeps the
   `web_*` call and `messages.tool_results` the refusal; the desktop draws it

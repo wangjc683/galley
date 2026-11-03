@@ -30,6 +30,8 @@
 
 注 10：票 105 补跑：「按时叫醒」第 1 遍排在第 23 个，比叫醒消息写的到点时刻晚了约 4 分钟才开跑，它看了钟、照实说「晚了约 5 分钟」，判成不过（票 64、73 都见过的排队晚到），这一条单独补跑一遍。被替换的 1 次运行原样留在 results.json 的 `meta.superseded_runs[9]` 里。
 
+注 11：票 134 第四轮：两条到点提醒换成 v4 提示词（带票 135 的硬闸）重跑，这是 v3 下的 6 遍被替换的 6 次运行原样留在 results.json 的 `meta.superseded_runs[10]` 里。
+
 ## 票 105 重跑（2026-10-28，gpt-6.1-sol，推理强度 high）
 
 上一次是票 73 的结果，这一次是票 105 改了手册 `reminders.md` 之后（主对话 PRD 裁决 151：原文第一行写给用户看，像待办的标题，不写时间、不写「用户要求」「提醒用户」、不用第三人称；需要时空一行，再写到点时自己要的；`schedule update --prompt` 同样写），同一个模型（API key 接入的 gpt-6.1-sol，`mm_1792576875658`）。入口层、Core 的叫醒说明、`galley-prompt/`、`rust-samples.json`、`cli-help.json` 都没动。三条叫醒用例（`wake-on-time`、`wake-late`、`wake-obsolete`）预先放着的任务原文换成了新写法（第一行给人、空行、写给自己的，内容不变），叫醒消息照 Core 的措辞把全文交给它，让叫醒那一侧在新写法下也测到。这张表比的是原有判定（第一行另见下一节「票 105：第一行」），两次都用现在的原有判定重判。请求次数是每次运行的模型调用数（GA 的轮数），用时是整次运行的墙钟时间；读手册的字节是返回给模型的工具结果的字节数，「轮」是读手册的那几次落在几个模型轮次里（一轮里并发读几份算一轮）。
@@ -246,12 +248,12 @@
 | 13 | wake-late | 2 | todo list；sessions search 王经理 --runtime all --all | 这条提醒晚了 **9 小时**才送到。现在若方便，给王经理回个电话，把下周合同签约的具体日期、时间，以及需要提前准备的材料一起确认好。 | 67 | 读了（第 1 次调用）：wake.md、reminders.md、todos-change.md；1 次 1 轮，11798 字节 | — | — | 过 |
 | 14 | wake-obsolete | 1 | — | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、reminders.md；1 次 1 轮，13705 字节 | — | — | 过 |
 | 14 | wake-obsolete | 2 | todo list；schedule list | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、reminders.md；1 次 1 轮，13705 字节 | — | — | 过 |
-| 15 | rem-parcel-online | 1 | — | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md；2 次 1 轮，9074 字节 | — | — | 过 |
-| 15 | rem-parcel-online | 2 | — | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，8775 字节 | — | — | 过 |
-| 15 | rem-parcel-online | 3 | — | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md；2 次 1 轮，9074 字节 | — | — | 过 |
-| 16 | rem-water-only | 1 | — | 半小时到了，喝点水吧 💧 | 12 | 没读（没写） | — | — | 过 |
-| 16 | rem-water-only | 2 | — | 到时间啦，喝点水吧 💧 | 11 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，8771 字节 | — | — | 过 |
-| 16 | rem-water-only | 3 | — | 半小时到啦，喝点水吧 💧 | 12 | 读了（第 1 次调用）：wake.md；1 次 1 轮，6673 字节 | — | — | 过 |
+| 15 | rem-parcel-online | 1 | — | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，8775 字节 | — | — | 过 |
+| 15 | rem-parcel-online | 2 | — | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，8779 字节 | — | — | 过 |
+| 15 | rem-parcel-online | 3 | — | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，8767 字节 | — | — | 过 |
+| 16 | rem-water-only | 1 | — | 到点啦，喝口水，润润嗓子吧。💧 | 15 | 没读（没写） | — | — | 过 |
+| 16 | rem-water-only | 2 | — | 该喝水啦，喝几口水吧 💧 | 12 | 没读（没写） | — | — | 过 |
+| 16 | rem-water-only | 3 | — | 该喝水啦 💧 先放下手头的事，喝几口水吧。 | 21 | 没读（没写） | — | — | 过 |
 
 ## 1. report-wed（该记待办）
 
@@ -1018,14 +1020,14 @@ Act on it now: tell the user what is of use to them now, in a sentence or two (n
 
 已有的定时任务（运行那一刻的时间）：
 
-- `sched_3b8e6d2a9c4f7105` 2026-11-03T10:16:56+00:00，已到点：查顺丰快递到哪了 ⏎ 单号 SF1402 7735 8861，上顺丰官网查物流，到了就告诉用户去取。
+- `sched_3b8e6d2a9c4f7105` 2026-11-03T12:52:39+00:00，已到点：查顺丰快递到哪了 ⏎ 单号 SF1402 7735 8861，上顺丰官网查物流，到了就告诉用户去取。
 
 叫醒消息：
 
 ```text
 [Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.
 
-Reminder `sched_3b8e6d2a9c4f7105` (one-off) came due. Planned for 2026-11-03 18:16 (Tue), local time. What you noted when you set it:
+Reminder `sched_3b8e6d2a9c4f7105` (one-off) came due. Planned for 2026-11-03 20:52 (Tue), local time. What you noted when you set it:
 <<<
 查顺丰快递到哪了
 
@@ -1035,23 +1037,6 @@ Act on it now: tell the user what is of use to them now, in a sentence or two (n
 ```
 
 ### 第 1 遍：过
-
-工具调用：
-
-1. file_read（wake.md）
-2. file_read（subtasks.md）
-
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；2 次 1 轮，9074 字节；建前查过：—；手册版本：`a376d29d`。
-
-新建：无；删除：无；改动：无。
-
-回复（去掉 summary 与建议标签）：
-
-```text
-<no-reply/>
-```
-
-### 第 2 遍：过
 
 工具调用：
 
@@ -1067,15 +1052,29 @@ Act on it now: tell the user what is of use to them now, in a sentence or two (n
 <no-reply/>
 ```
 
+### 第 2 遍：过
+
+工具调用：
+
+1. code_run
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，8779 字节；建前查过：—；手册版本：`a376d29d`。
+
+新建：无；删除：无；改动：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+<no-reply/>
+```
+
 ### 第 3 遍：过
 
 工具调用：
 
-1. file_read（wake.md）
-2. file_read（subtasks.md）
-3. file_read（global_mem.txt）
+1. code_run
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；2 次 1 轮，9074 字节；建前查过：—；手册版本：`a376d29d`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，8767 字节；建前查过：—；手册版本：`a376d29d`。
 
 新建：无；删除：无；改动：无。
 
@@ -1097,14 +1096,14 @@ Act on it now: tell the user what is of use to them now, in a sentence or two (n
 
 已有的定时任务（运行那一刻的时间）：
 
-- `sched_9a1c5e7b3d2f8406` 2026-11-03T10:16:56+00:00，已到点：喝水 ⏎ 用户半小时前让我到点提醒他喝水。
+- `sched_9a1c5e7b3d2f8406` 2026-11-03T12:52:39+00:00，已到点：喝水 ⏎ 用户半小时前让我到点提醒他喝水。
 
 叫醒消息：
 
 ```text
 [Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.
 
-Reminder `sched_9a1c5e7b3d2f8406` (one-off) came due. Planned for 2026-11-03 18:16 (Tue), local time. What you noted when you set it:
+Reminder `sched_9a1c5e7b3d2f8406` (one-off) came due. Planned for 2026-11-03 20:52 (Tue), local time. What you noted when you set it:
 <<<
 喝水
 
@@ -1122,43 +1121,35 @@ Act on it now: tell the user what is of use to them now, in a sentence or two (n
 回复（去掉 summary 与建议标签）：
 
 ```text
-半小时到了，喝点水吧 💧
+到点啦，喝口水，润润嗓子吧。💧
 ```
 
 建议标签：半小时后再提醒我喝水
 
 ### 第 2 遍：过
 
-工具调用：
-
-1. code_run
-
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，8771 字节；建前查过：—；手册版本：`a376d29d`。
+结束：以最终回复结束；读手册：没读（没写）；建前查过：—；手册版本：`a376d29d`。
 
 新建：无；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-到时间啦，喝点水吧 💧
+该喝水啦，喝几口水吧 💧
 ```
 
 建议标签：半小时后再提醒我喝水
 
 ### 第 3 遍：过
 
-工具调用：
-
-1. file_read（wake.md）
-
-结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md；1 次 1 轮，6673 字节；建前查过：—；手册版本：`a376d29d`。
+结束：以最终回复结束；读手册：没读（没写）；建前查过：—；手册版本：`a376d29d`。
 
 新建：无；删除：无；改动：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-半小时到啦，喝点水吧 💧
+该喝水啦 💧 先放下手头的事，喝几口水吧。
 ```
 
-建议标签：再过半小时提醒我喝水
+建议标签：半小时后再提醒我喝水

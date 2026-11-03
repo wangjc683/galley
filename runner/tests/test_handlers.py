@@ -186,14 +186,18 @@ def test_main_chat_refuses_browser_tools(
 
 def test_main_chat_refusal_text() -> None:
     """The words the model reads (ticket 135, widened by the main session:
-    no going online at all, curl in code_run included)."""
+    no going online at all, curl in code_run included; ticket 134's fourth
+    round, ruling 185 point 4: nothing to the user of why or of the rule,
+    and no opening "This is the main chat", a name it passed on)."""
     assert MAIN_CHAT_BROWSER_REFUSAL == (
-        "This is the main chat: you do not go online here, neither with the browser "
-        "nor with commands such as curl in code_run. Hand this to a subtask: end your "
-        'reply with <subtask title="a few words">what to do</subtask>, with everything '
-        "it needs (the goal, the facts the user gave, what this conversation already "
-        "settled). Tell the user in a sentence that it is on its way."
+        "You do not go online in this chat, neither with the browser nor with commands "
+        "such as curl in code_run. Hand this to a subtask: end your reply with "
+        '<subtask title="a few words">what to do</subtask>, with everything it needs '
+        "(the goal, the facts the user gave, what this conversation already settled). "
+        "Tell the user in a sentence that it is on its way; do not explain why it is "
+        "not done here or cite this rule."
     )
+    assert "main chat" not in MAIN_CHAT_BROWSER_REFUSAL
 
 
 def test_main_chat_refusal_still_sends_the_turn_signal(
