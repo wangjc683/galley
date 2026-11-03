@@ -46,10 +46,10 @@ import { cn } from "@/lib/utils";
  * docs/design/layout-and-chrome.md 「子任务」 entry's 「待真机定」 line.
  */
 
-type Look = "A" | "B" | "C";
+type Look = "A" | "B" | "B2" | "C";
 type Data = "real" | "one" | "three" | "seven";
 
-const LOOKS: readonly Look[] = ["A", "B", "C"];
+const LOOKS: readonly Look[] = ["A", "B", "B2", "C"];
 const DATA: readonly Data[] = ["real", "one", "three", "seven"];
 const DATA_NAMES: Record<Data, string> = {
   real: "真实",
@@ -63,6 +63,14 @@ const LOOK_CSS: Record<Look, string> = {
   B: [
     '[data-role="sidebar-subtask"]{min-height:1.75rem;padding-top:0.25rem;padding-bottom:0.25rem}',
     '[data-role="sidebar-subtask-title"]{font-size:12px}',
+  ].join(""),
+  // B2 (11-03, JC leans to B): B, and a running row's title at medium
+  // weight. Every listed row is running or needs you, so semibold says
+  // nothing here; only the rows that need you keep it.
+  B2: [
+    '[data-role="sidebar-subtask"]{min-height:1.75rem;padding-top:0.25rem;padding-bottom:0.25rem}',
+    '[data-role="sidebar-subtask-title"]{font-size:12px}',
+    '[data-role="sidebar-subtask"][data-state="running"] [data-role="sidebar-subtask-title"]{font-weight:500}',
   ].join(""),
   C: '[data-role="sidebar-subtasks"]{padding-left:1.5rem}',
 };
