@@ -307,3 +307,73 @@ README 三节（「派活判据（票 115）」「并行派活（票 127）」�
 10. `dispatch-parallel` 的 v2 没重跑带进来的 19 条（理由见 4），与票面「重跑全部用例」不同。
 11. `dispatch-criterion/composed/` 的 `e-invoices.new-1.txt`、`q-east.new-1.txt` 被这次的 new-1 覆盖（new 换了提示词），票 115 的版本只在 git 历史里。
 12. 裁决 183 第 6 条（main 上 `236f5702`，在本分支的基点之后）要本票的评测量两个误判方向。快的「讲讲」被派出去：`q-notes-apps`（凭自己知道就能答的推荐）v2 三遍都派了，其余 7 条该自己答的在最终措辞下没有一遍派出去（`quick-downloads` 在第一轮措辞下三遍都派了，见 1）。慢的事实题留下：沙盒里浏览器不执行，`q-weather`、`q-fact-injury` 停在第 1–2 次调用，量不出自己答要多久，这个方向本评测测不到，要等真机。
+
+### 第二轮（2026-11-03，主会话要求：Core 的叫醒说明一并改）
+
+第一轮 Open risks 第 1 条属实：Core 叫醒消息里子任务完成那段（`core/src/subtask_report.rs` 的 `report_paragraph`）写着「If it holds, tell the user the result in a sentence or two and name the evidence」，每一件派出去的答案都经过它，与手册新那条正面冲突。裁决 183 第 4 条原写「只改手册」，11-03 已更正。
+
+**新句子**（逐字）：
+
+```text
+If it holds, tell the user what they asked for, as `subtasks.md` says: the answer itself in full when it is a table, a list, a comparison or an account of something; otherwise the result in a sentence or two with the evidence (a confirmation number, a file path, a link).
+```
+
+规则写在手册一处，叫醒消息点名 `subtasks.md`，同时把两种情形各说半句，免得没读手册时又退回「一两句」。依据：本票评测的 21 次叫醒运行（两轮，含被替换的），每一遍都读了 `subtasks.md`，最晚在第 4 次工具调用，多数在第 1–2 次。定时任务那段（「Tell the user the result in a sentence or two」）没动，`wake.md` 对定时任务也是这么写的。
+
+**改了哪些文件、哪些断言**：
+
+- `core/src/subtask_report.rs`：上面那句，加一段注释说为什么改。测试 `one_report_has_the_opening_and_no_closing` 加断言钉住新句，并断言没有「tell the user the result in a sentence or two」；`a_mix_of_kinds_opens_in_general` 加断言：定时任务那段不提 `subtasks.md`。全仓 grep 过 `core/src`、`core/tests`，原来没有测试钉旧句。
+- 评测里的 Core 原文镜像：`wake/wording.md` 的 `core`、`run.py` 的 `done_paragraph`、`schedule/rust-samples.json` 里带完成那段的两条样本、`todo/cases.json` 里两条带过来的叫醒消息（`review-handed-over`、`review-done-not-noted`，`--dry-test` 要它们与 Core 原话一致；它们以前的结果是旧原话下跑的）。用临时 Rust 测试写出 `report_text` 的原文（第 1 轮一件、打回两次后超长被截断的一件），与 `done_paragraph` 和 `core` 措辞逐字相同，测试跑完删掉。
+- `w-long` 的固定数据：回答开头逐张列出 5 张截图的完整路径和各自写着什么，每天一个必去、其余可选，景点之间默认坐出租车，门到门的换乘，不换城市的雨天备选，回程按航班分两种，没核实的写明待核实；3,205 字，叫醒消息里照样被截断。
+
+**评测**（v2 提示词，Core 新原话，各 3 遍；被替换的 6 次在 `wake/results.json` 的 `meta.superseded_runs`）：
+
+| 运行 | 结果 | 模型调用 |
+| --- | --- | --- |
+| `w-table` 第 1 遍 | 过：整张表原样贴回，结论自己写成两条，截图用 `[FILE:…]` 交出 | 7 |
+| `w-table` 第 2 遍 | 不过：一直想读出截图里的字（查 OCR、读图片），做到 10 次工具调用上限，没回复 | 10 |
+| `w-table` 第 3 遍 | 过：整张表原样贴回，另加「核验说明」 | 8 |
+| `w-long` 第 1 遍 | 过：读了全文，自己把完整攻略写成一个文件，回复给概览表、预算和要紧的几条，`[FILE:…]` 交出全文 | 7 |
+| `w-long` 第 2 遍 | 不过：打回子任务（下车位置、不可避免的步行与台阶没核实） | 10 |
+| `w-long` 第 3 遍 | 不过：也一直想读截图，做到上限 | 11 |
+
+`w-table` 第 1 遍回复原文：
+
+```text
+两款耳机的对比如下。**数字以官网为准；规格截图文件已确认存在，但本轮未能读取图中文字作独立复核。**
+
+| 项目 | 声岚 S7 | 北极星 HP-60 |
+| --- | --- | --- |
+| 价格 | 2,499 元 | 3,199 元 |
+| 类型 | 开放式头戴 | 封闭式头戴 |
+| 驱动单元 | 50 mm 动圈 | 45 mm 平板振膜 |
+| 阻抗 | 32 Ω | 64 Ω |
+| 灵敏度 | 102 dB/mW | 96 dB/mW |
+| 重量 | 285 g | 390 g |
+| 线材与接口 | 可换线，3.5 mm + 4.4 mm 平衡 | 可换线，3.5 mm + 6.35 mm 转接 |
+| 佩戴 | 头梁轻、夹力小，适合长时间听 | 耳罩厚、隔音好，夹力偏大 |
+
+- **声岚 S7**：更轻、相对容易驱动，适合在家等安静环境长时间听；开放式结构不适合需要隔音或避免漏音的场合。
+- **北极星 HP-60**：封闭式结构更适合有隔音需求的人，但重量更大、驱动要求相对更高，是否需要耳放还要结合播放设备和实际音量判断。
+
+两款耳机的规格页截图：
+
+[FILE:~/Downloads/耳机规格/声岚_S7_规格.png]
+
+[FILE:~/Downloads/耳机规格/北极星_HP-60_规格.png]
+```
+
+`w-long` 第 1 遍的回复在 `wake/results.md`（1,193 字：七天概览表、预算、给长辈的几条，末尾 `[FILE:…/关西七日游攻略_长辈慢游版.md]` 与一段「需要说明」）。
+
+真模型调用：第二轮 53 次（上限 80）；两轮合计 442 次。
+
+验证（rebase 到 main 之后）：见下一段提交说明前的检查，结果写在这里：`cargo test --workspace`、`managed_prompt`、`assistant_manual`、`subtask_report` 三组过滤、改过的 Rust 文件 `rustfmt --check`、`check-docs-links`、`git diff --check`，`run.py --dry-test` 全过。
+
+**第二轮看到的（Open risks）**：
+
+1. 验收想读截图：6 遍里 2 遍做到工具调用上限也没回复，都在找 OCR、读 PNG。沙盒里没有能读图的工具，真机上 GA 能不能读图、会不会也这样耗步数，要真机看；手册写着核不了就明说，模型没照做。
+2. 主对话把长回答自己写成一个文件再交出（`w-long` 第 1 遍），没有说「全文在子任务里」；手册说的是「where the whole is (the full file path)」，模型读成要有一个文件。多写一个文件算不算想要的，请 JC 定。
+3. `w-table` 第 1 遍的 `[FILE:~/Downloads/…]` 用的是 `~`，入口层要的是绝对路径，卡片可能画不出来（第 3 遍写的是绝对路径）。
+4. 按严格验收打回仍会发生（`w-long` 第 2 遍）：派活更积极以后，答案型结果多一轮打回、更晚到的风险还在。
+5. `todo/cases.json` 两条用例带过来的叫醒消息换成了新原话，它们的旧结果是旧原话下跑的，重跑那两条时会有差别。
+6. 叫醒评测的结束标签写「达到 8 次上限」，叫醒这一套的上限其实是 10 次（`STOP_LABELS` 用的是派活套件的常数），是评测脚本的旧问题，没改。

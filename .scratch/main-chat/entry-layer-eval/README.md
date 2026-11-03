@@ -137,6 +137,20 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --render-only        # 只从 res
 - **顺带看到的**：模型验收很严，答案型的结果也照「证据」去核：截图读不出字就打回或写「仍待核实」，`w-table` 过的两遍都写明截图文件在、但读不出字没能逐项复核。叫醒消息里 Core 的原话还是「tell the user the result in a sentence or two」，贴回的两遍是照手册做的，没有被这句压住；`wake.md` 的「Do what it says」没改。
 - **用量**：本节 15 次运行，93 次模型调用（保留 6 次 48 次，被替换 9 次 45 次）。
 
+#### 第二轮：Core 的叫醒说明也改（2026-11-03）
+
+第一轮的「Open risks」第 1 条：Core 叫醒消息里完成那段写着「If it holds, tell the user the result in a sentence or two and name the evidence」，与手册新那条正面冲突，每一件派出去的答案都要经过它（主对话 PRD 裁决 183 第 4 条 11-03 更正）。第二轮把这句改成「If it holds, tell the user what they asked for, as `subtasks.md` says: the answer itself in full when it is a table, a list, a comparison or an account of something; otherwise the result in a sentence or two with the evidence (a confirmation number, a file path, a link).」（`core/src/subtask_report.rs`）；定时任务那段照旧给要点。评测里跟着改的：`wording.md` 的 `core`、`run.py` 的 `done_paragraph`、`schedule/rust-samples.json` 里带完成那段的两条样本、`todo/cases.json` 里两条带过来的叫醒消息（`--dry-test` 要它们与 Core 的原话一致）。改完用临时 Rust 测试写出 Core 的原文，与 `done_paragraph`、`core` 措辞逐字相同（跑完删掉）。
+
+`w-long` 的回答又改了一次，满足它的派活说明：开头逐张列出 5 张截图的完整路径和各自写着什么、每天一个必去其余可选、景点之间默认坐出租车、门到门的换乘、不换城市的雨天备选、回程按航班分两种。两条各重跑 3 遍，被替换的 6 次在 `meta.superseded_runs`。
+
+| 用例 | 过 | 怎么交代的 |
+| --- | --- | --- |
+| `w-table` | 2/3 | 两遍都把 8 行的表原样贴回，没带「一共打开 7 个页面」，结论按自己的话写成两条，另说截图读不出字、数字以官网为准，末尾用 `[FILE:…]` 交出两张截图；第 2 遍一直想读出截图里的字（查 OCR、读图片），做到 10 次工具调用的上限，没回复 |
+| `w-long` | 1/3 | 第 1 遍：读了全文（`session show --tail=1`），自己把完整攻略写成一个文件，回复给一张七天概览表、预算和几条要紧的，`[FILE:…]` 交出全文，并说酒店信息只能当候选；第 2 遍打回（下车位置、不可避免的步行与台阶没核实）；第 3 遍也一直想读截图，做到上限 |
+
+- **结论**：叫醒消息不再压着手册以后，走到交代的 3 遍（`w-table` 2、`w-long` 1）都照新规则交代：表整张贴回，长的给要点并说全文在哪。没走到交代的 3 遍，2 遍卡在验收想读截图（沙盒里没有能读图的工具，真机有没有要看），1 遍按严格的验收打回。
+- **用量**：6 次运行，53 次模型调用（`w-table` 7、10、8，`w-long` 7、10、11）。
+
 ## 定时与提醒评测（票 36）
 
 （票 41 起这一节在手册里并进「To-dos and reminders」，提示词、样本与 CLI 帮助已重新写出；票 44 把「只要提醒一下」和「要办完的事」分开判，加了一条用例，结果是票 44 的重跑，见本节末；票 105 加了第一行的判定并重跑，见「第一行写给用户看（票 105）」一节。）

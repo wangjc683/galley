@@ -1925,8 +1925,11 @@ def done_paragraph(d: dict[str, Any]) -> str:
             f"<<<\n{report_cut(d['answer'], sid)}\n>>>\n"
             "Check it against what you asked for in its instructions (its first message: "
             f"`session show {sid} --around=msg_{sid}_0_user`; its last steps: `session show {sid} --tail=40`). "
-            "If it holds, tell the user the result in a sentence or two and name the evidence (a confirmation "
-            f"number, a file path, a link). {nxt}")
+            # Ticket 134 (ruling 183 point 4): the answer in full when it is
+            # what the user asked for, as subtasks.md says.
+            "If it holds, tell the user what they asked for, as `subtasks.md` says: the answer itself in full when "
+            "it is a table, a list, a comparison or an account of something; otherwise the result in a sentence or "
+            f"two with the evidence (a confirmation number, a file path, a link). {nxt}")
 
 
 def note_opening(d: dict[str, Any]) -> str:

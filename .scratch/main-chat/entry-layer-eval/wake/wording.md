@@ -141,7 +141,7 @@ Reply once, covering all of them.
 
 ## core
 
-票 134：Core 今天（`core/src/subtask_report.rs` 的 `report_paragraph`）的写法，逐字。与 `v2` 不同处：核对指令时先指它的第一条消息（`--around`），写命令都带 `--ensure-runner`（票 63），停在步数上限那件是「send it on」。最后回答超过 3,000 字时截断并写明怎么读全，同 Core 的 `cut`（这一条 `run.py` 的 `wake_note` 对每版措辞都做）。`done`、`done_send_back` 与表头由 `--dry-test` 拿 `done_paragraph`（与 `schedule/rust-samples.json` 里 Rust 的输出逐字核对过的移植）核对；其余几段照源码抄，评测没用到。
+票 134：Core 今天（`core/src/subtask_report.rs` 的 `report_paragraph`，票 134 第二轮改过完成那段的交代）的写法，逐字。与 `v2` 不同处：核对指令时先指它的第一条消息（`--around`），写命令都带 `--ensure-runner`（票 63），停在步数上限那件是「send it on」。最后回答超过 3,000 字时截断并写明怎么读全，同 Core 的 `cut`（这一条 `run.py` 的 `wake_note` 对每版措辞都做）。`done`、`done_send_back` 与表头由 `--dry-test` 拿 `done_paragraph`（与 `schedule/rust-samples.json` 里 Rust 的输出逐字核对过的移植）核对；其余几段照源码抄，评测没用到。
 
 ### header
 
@@ -156,7 +156,7 @@ Subtask `{id}` "{title}" (round {round}) finished. Its final answer:
 <<<
 {answer}
 >>>
-Check it against what you asked for in its instructions (its first message: `session show {id} --around=msg_{id}_0_user`; its last steps: `session show {id} --tail=40`). If it holds, tell the user the result in a sentence or two and name the evidence (a confirmation number, a file path, a link).
+Check it against what you asked for in its instructions (its first message: `session show {id} --around=msg_{id}_0_user`; its last steps: `session show {id} --tail=40`). If it holds, tell the user what they asked for, as `subtasks.md` says: the answer itself in full when it is a table, a list, a comparison or an account of something; otherwise the result in a sentence or two with the evidence (a confirmation number, a file path, a link).
 ```
 
 ### done_send_back

@@ -695,14 +695,23 @@ fn report_paragraph(report: &SubtaskReport) -> String {
                      else."
                 )
             };
+            // Ticket 134 (main chat PRD ruling 183 point 4): when what the
+            // user asked for is the answer itself it goes to them in full,
+            // as `subtasks.md` says (a long one or a file: the gist and
+            // where the whole is); "tell the user the result in a sentence
+            // or two" here had overruled the manual on every dispatched
+            // answer. A scheduled task's run keeps its gist
+            // (`scheduled_session_paragraph`, as `wake.md` says).
             format!(
                 "Subtask `{id}` \"{title}\" (round {round}) finished. Its final answer:\n\
                  <<<\n{}\n>>>\n\
                  Check it against what you asked for in its instructions (its first \
                  message: `session show {id} --around=msg_{id}_0_user`; its last steps: \
-                 `session show {id} --tail=40`). If it holds, \
-                 tell the user the result in a sentence or two and name the evidence \
-                 (a confirmation number, a file path, a link). {next}",
+                 `session show {id} --tail=40`). If it holds, tell the user what they \
+                 asked for, as `subtasks.md` says: the answer itself in full when it is \
+                 a table, a list, a comparison or an account of something; otherwise the \
+                 result in a sentence or two with the evidence (a confirmation number, a \
+                 file path, a link). {next}",
                 cut(answer, id)
             )
         }
@@ -2194,6 +2203,9 @@ mod tests {
              Its final answer:\n<<<\n今天的摘要\n>>>\nTell the user the result in a sentence \
              or two."
         ));
+        // Ticket 134: a scheduled run keeps its gist; only a subtask's
+        // answer is handed back in full.
+        assert!(!alone.contains("subtasks.md"));
         assert!(!alone.contains("send it back"));
         assert_eq!(
             replay_lines(std::slice::from_ref(&scheduled)),
@@ -2375,6 +2387,16 @@ mod tests {
         );
         assert!(text.contains("<<<\n分好了：发票 3 份。\n>>>"));
         assert!(text.contains("`session show s-1 --tail=40`"));
+        // Ticket 134 (ruling 183 point 4): an answer the user asked for goes
+        // to them in full, as the manual says; the note no longer says "a
+        // sentence or two" for everything.
+        assert!(text.contains(
+            "If it holds, tell the user what they asked for, as `subtasks.md` says: the \
+             answer itself in full when it is a table, a list, a comparison or an account \
+             of something; otherwise the result in a sentence or two with the evidence (a \
+             confirmation number, a file path, a link)."
+        ));
+        assert!(!text.contains("tell the user the result in a sentence or two"));
         // The instructions are the subtask's first message (turn 0), which
         // a long run pushes out of the last 40 (ticket 30's eval).
         assert!(text.contains("its first message: `session show s-1 --around=msg_s-1_0_user`"));
